@@ -50,14 +50,12 @@ import Data.Functor.Product
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.Fail (MonadFail)
 import qualified Control.Monad.Fail as Fail
-import Unsafe.Coerce
 import System.Directory
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.UTF8 as BL
 
-import Data.Binding.Hobbits
+import Data.Binding.Hobbits hiding (sym)
 
 import Data.Parameterized.BoolRepr
 import qualified Data.Parameterized.Context as Ctx
@@ -109,9 +107,9 @@ import Prettyprinter
 -- | Extract out the contents of the 'Right' of an 'Either', calling 'fail' if
 -- the 'Either' is a 'Left'. The supplied 'String' describes the action (in
 -- "ing" form, as in, "parsing") that was performed to create this 'Either'.
-failOnLeft :: (MonadFail m, Show err) => String -> Either err a -> m a
-failOnLeft action (Left err) = Fail.fail ("Error" ++ action ++ ": " ++ show err)
-failOnLeft _ (Right a) = return a
+-- failOnLeft :: (MonadFail m, Show err) => String -> Either err a -> m a
+-- failOnLeft action (Left err) = Fail.fail ("Error" ++ action ++ ": " ++ show err)
+-- failOnLeft _ (Right a) = return a
 
 -- | Extract out the contents of the 'Just' of a 'Maybe' wrapped in a
 -- `MonadFail`, calling 'fail' on the given string if the `Maybe` is a
@@ -261,7 +259,7 @@ heapster_init_env _bic _opts mod_str llvm_filename =
 load_sawcore_from_file :: BuiltinContext -> Options -> String -> TopLevel ()
 load_sawcore_from_file _ _ mod_filename =
   do sc <- getSharedContext
-     (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
+     (saw_mod, _) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
 
 heapster_init_env_from_file :: BuiltinContext -> Options -> String -> String ->
@@ -497,7 +495,7 @@ heapster_define_reachability_perm _bic _opts henv
                   MNil :>: ValPerm_Named npn (namesToExprs
                                               (ns :>: n1)) NoPermOffset :>:
                   ValPerm_Var n2 NoPermOffset)
-                (nus (cruCtxProxies args :>: Proxy) $ \(ns :>: n1 :>: n2) ->
+                (nus (cruCtxProxies args :>: Proxy) $ \(ns :>: _n1 :>: n2) ->
                   ValPerm_Named npn (namesToExprs (ns :>: n2)) NoPermOffset)
               put_ident <-
                 parseAndInsDef henv ("put" ++ nm) put_fun_tp put_fun_str
@@ -569,8 +567,8 @@ heapster_add_block_hints henv nm blks hintF =
          failOnNothing ("Block ID " ++ show blk ++
                         " not found in function " ++ nm)
                        (fmapF BlockID <$> Ctx.intIndex blk (Ctx.size blocks))
-     env' <- foldM (\env (Some blkID) ->
-                     permEnvAddHint env <$> Hint_Block <$>
+     env' <- foldM (\env' (Some blkID) ->
+                     permEnvAddHint env' <$> Hint_Block <$>
                      BlockHint h blocks blkID <$>
                      hintF cfg blkID)
        env blkIDs
@@ -581,7 +579,7 @@ heapster_add_block_hints henv nm blks hintF =
 heapster_block_entry_hint :: BuiltinContext -> Options -> HeapsterEnv ->
                              String -> Int -> String -> String -> String ->
                              TopLevel ()
-heapster_block_entry_hint bic opts henv nm blk top_args_str ghosts_str perms_str =
+heapster_block_entry_hint _bic _opts henv nm blk top_args_str ghosts_str perms_str =
   do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
      Some top_args_p <-
        parseParsedCtxString "top-level argument context" env top_args_str
@@ -663,15 +661,15 @@ heapster_assume_fun_rename _bic _opts henv nm nm_to perms_string term_string =
      withKnownNat w $ withLeqProof leq_proof $ do
         SomeFunPerm fun_perm <-
           parseFunPermStringMaybeRust "permissions" w env args ret perms_string
-        env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
+        env' <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
         fun_typ <- liftIO $ translateCompleteFunPerm sc env fun_perm
         term_ident <- parseAndInsDef henv nm_to fun_typ term_string
-        let env' = permEnvAddGlobalSymFun env
-                                          (GlobalSymbol $ fromString nm)
-                                          w
-                                          fun_perm
-                                          (globalOpenTerm term_ident)
-        liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+        let env'' = permEnvAddGlobalSymFun env'
+                                           (GlobalSymbol $ fromString nm)
+                                           w
+                                           fun_perm
+                                           (globalOpenTerm term_ident)
+        liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env''
 
 -- | Assume that the given named function has the supplied type and translates
 -- to a SAW core definition given by name
@@ -692,7 +690,6 @@ heapster_assume_fun_multi _bic _opts henv nm perms_terms_strings =
      leq_proof <- case decideLeq (knownNat @1) w of
        Left pf -> return pf
        Right _ -> fail "LLVM arch width is 0!"
-     env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
      (Some (cargs :: CtxRepr cargs),
       Some (ret :: TypeRepr ret)) <- lookupFunctionType lm nm
      let args = mkCruCtx cargs
@@ -726,7 +723,7 @@ heapster_typecheck_mut_funs bic opts henv =
 heapster_typecheck_mut_funs_rename ::
   BuiltinContext -> Options -> HeapsterEnv ->
   [(String, String, String)] -> TopLevel ()
-heapster_typecheck_mut_funs_rename bic opts henv fn_names_and_perms =
+heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
   do let (fst_nm, _, _) = head fn_names_and_perms
      Some lm <- failOnNothing ("Could not find symbol definition: " ++ fst_nm)
                               (lookupModDefiningSym henv fst_nm)
@@ -807,9 +804,9 @@ heapster_export_coq _bic _opts henv filename =
 
 heapster_parse_test :: BuiltinContext -> Options -> Some LLVMModule ->
                        String -> String ->  TopLevel ()
-heapster_parse_test bic opts some_lm@(Some lm) fn_name perms_string =
+heapster_parse_test _bic _opts _some_lm@(Some lm) fn_name perms_string =
   do let env = heapster_default_env -- FIXME: env should be an argument
-     let arch = llvmModuleArchRepr lm
+     let _arch = llvmModuleArchRepr lm
      AnyCFG cfg <-
        failOnNothing ("Could not find symbol: " ++ fn_name) $
        lookupFunctionCFG lm fn_name
