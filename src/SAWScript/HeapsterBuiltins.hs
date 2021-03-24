@@ -97,6 +97,7 @@ import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.SAWTranslation
 import Verifier.SAW.Heapster.PermParser
+import Verifier.SAW.Heapster.ParsedCtx
 
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
