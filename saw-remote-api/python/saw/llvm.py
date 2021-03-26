@@ -468,24 +468,24 @@ def cryptol(data : Any) -> 'CryptolTerm':
     """Returns a ``CryptolTerm`` wrapper around ``data``."""
     return CryptolTerm(data)
 
-def elem(base: SetupVal, index: int) -> 'ElemVal':
+def elem(base: SetupVal, index: int) -> SetupVal:
     """Returns an ``ElemVal`` using the index ``index`` of the array ``base``."""
     return ElemVal(base, index)
 
-def field(base : SetupVal, field_name : str) -> 'FieldVal':
+def field(base : SetupVal, field_name : str) -> SetupVal:
     """Returns a ``FieldVal`` using the field ``field_name`` of the struct ``base``."""
     return FieldVal(base, field_name)
 
-def global_initializer(name: str) -> 'GlobalInitializerVal':
+def global_initializer(name: str) -> SetupVal:
     """Returns a ``GlobalInitializerVal`` representing the value of the initializer of a named global ``name``."""
     return GlobalInitializerVal(name)
 
 # It's tempting to name this `global` to mirror SAWScript's `llvm_global`,
 # but that would clash with the Python keyword `global`.
-def global_var(name: str) -> 'GlobalVarVal':
+def global_var(name: str) -> SetupVal:
     """Returns a ``GlobalVarVal`` representing a pointer to the named global ``name``."""
     return GlobalVarVal(name)
 
-def struct(*fields : SetupVal) -> StructVal:
+def struct(*fields : SetupVal) -> SetupVal:
     """Returns a ``StructVal`` with fields ``fields``."""
     return StructVal(list(fields))
