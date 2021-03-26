@@ -127,7 +127,7 @@ class StructVal(SetupVal):
         self.fields = fields
 
     def to_json(self) -> Any:
-        return {'setup value': 'struct', 'fields': [fld.to_json() for fld in self.fields]}
+        return {'setup value': 'tuple', 'elements': [fld.to_json() for fld in self.fields]}
 
 class ElemVal(SetupVal):
     base : SetupVal
