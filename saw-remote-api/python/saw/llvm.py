@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from cryptol import cryptoltypes
 from saw.llvm_types import LLVMType
+from saw.utils import deprecated
 from dataclasses import dataclass
 import dataclasses
 import re
@@ -406,8 +407,10 @@ class Contract:
         else:
             raise Exception("wrong state")
 
-
+    @deprecated
     def proclaim(self, proposition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
+        """DEPRECATED: Use ``precondition`` or ``postcondition`` instead. This method will
+        eventually be removed."""
         if not isinstance(proposition, CryptolTerm):
             condition = Condition(CryptolTerm(proposition))
         else:
@@ -418,6 +421,34 @@ class Contract:
             self.__post_state.conditions.append(condition)
         else:
             raise Exception("wrong state")
+
+    def precondition(self, proposition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
+        """Establishes ``proposition`` as a precondition for the function ```Contract```
+        being specified.
+
+        Preconditions must be specified before ``execute_func`` is called in the contract specification."""
+        if not isinstance(proposition, CryptolTerm):
+            condition = Condition(CryptolTerm(proposition))
+        else:
+            condition = Condition(proposition)
+        if self.__state == 'pre':
+            self.__pre_state.conditions.append(condition)
+        else:
+            raise Exception("preconditions must be specified before execute_func is called in the contract")
+
+    def postcondition(self, proposition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
+        """Establishes ``proposition`` as a postcondition for the function ```Contract```
+        being specified.
+
+        Postconditions must be specified after ``execute_func`` is called in the contract specification."""
+        if not isinstance(proposition, CryptolTerm):
+            condition = Condition(CryptolTerm(proposition))
+        else:
+            condition = Condition(proposition)
+        if self.__state == 'post':
+            self.__post_state.conditions.append(condition)
+        else:
+            raise Exception("postconditions must be specified after execute_func is called in the contract")
 
     def returns(self, val : Union[Void,SetupVal]) -> None:
         if self.__state == 'post':

@@ -33,8 +33,8 @@ class RotlContract(Contract):
     def specification(self) -> None:
         value = self.fresh_var(i32, "value")
         shift = self.fresh_var(i32, "shift")
-        self.proclaim(shift > cryptol("0"))
-        self.proclaim(shift < cryptol("32"))
+        self.precondition(shift > cryptol("0"))
+        self.precondition(shift < cryptol("32"))
 
         self.execute_func(value, shift)
 
