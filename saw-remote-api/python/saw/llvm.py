@@ -171,6 +171,10 @@ class GlobalVarVal(SetupVal):
     def to_json(self) -> Any:
         return {'setup value': 'global lvalue', 'name': self.name}
 
+class NullVal(SetupVal):
+    def to_json(self) -> Any:
+        return {'setup value': 'null'}
+
 name_regexp = re.compile('^(?P<prefix>.*[^0-9])?(?P<number>[0-9]+)?$')
 
 def next_name(x : str) -> str:
@@ -485,6 +489,10 @@ def global_initializer(name: str) -> SetupVal:
 def global_var(name: str) -> SetupVal:
     """Returns a ``GlobalVarVal`` representing a pointer to the named global ``name``."""
     return GlobalVarVal(name)
+
+def null() -> SetupVal:
+    """Returns a ``NullVal`` representing a null pointer value."""
+    return NullVal()
 
 def struct(*fields : SetupVal) -> SetupVal:
     """Returns a ``StructVal`` with fields ``fields``."""
