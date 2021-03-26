@@ -153,6 +153,24 @@ class FieldVal(SetupVal):
         return {'setup value': 'field',
                 'base': self.base.to_json(), 'field': self.field_name}
 
+class GlobalInitializerVal(SetupVal):
+    name : str
+
+    def __init__(self, name : str) -> None:
+        self.name = name
+
+    def to_json(self) -> Any:
+        return {'setup value': 'global initializer', 'name': self.name}
+
+class GlobalVarVal(SetupVal):
+    name : str
+
+    def __init__(self, name : str) -> None:
+        self.name = name
+
+    def to_json(self) -> Any:
+        return {'setup value': 'global lvalue', 'name': self.name}
+
 name_regexp = re.compile('^(?P<prefix>.*[^0-9])?(?P<number>[0-9]+)?$')
 
 def next_name(x : str) -> str:
@@ -457,6 +475,16 @@ def elem(base: SetupVal, index: int) -> 'ElemVal':
 def field(base : SetupVal, field_name : str) -> 'FieldVal':
     """Returns a ``FieldVal`` using the field ``field_name`` of the struct ``base``."""
     return FieldVal(base, field_name)
+
+def global_initializer(name: str) -> 'GlobalInitializerVal':
+    """Returns a ``GlobalInitializerVal`` representing the value of the initializer of a named global ``name``."""
+    return GlobalInitializerVal(name)
+
+# It's tempting to name this `global` to mirror SAWScript's `llvm_global`,
+# but that would clash with the Python keyword `global`.
+def global_var(name: str) -> 'GlobalVarVal':
+    """Returns a ``GlobalVarVal`` representing a pointer to the named global ``name``."""
+    return GlobalVarVal(name)
 
 def struct(*fields : SetupVal) -> StructVal:
     """Returns a ``StructVal`` with fields ``fields``."""
