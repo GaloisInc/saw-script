@@ -171,6 +171,20 @@ class GlobalVarVal(SetupVal):
     def to_json(self) -> Any:
         return {'setup value': 'global lvalue', 'name': self.name}
 
+class NullVal(SetupVal):
+    def to_json(self) -> Any:
+        return {'setup value': 'null'}
+
+class ArrayVal(SetupVal):
+    elements : List[SetupVal]
+
+    def __init__(self, elements : List[SetupVal]) -> None:
+        self.elements = elements
+
+    def to_json(self) -> Any:
+        return {'setup value': 'array',
+                'elements': [element.to_json() for element in self.elements]}
+
 name_regexp = re.compile('^(?P<prefix>.*[^0-9])?(?P<number>[0-9]+)?$')
 
 def next_name(x : str) -> str:
@@ -462,6 +476,10 @@ class Contract:
             return self.__cached_json
 
 
+def array_val(element: SetupVal, *elements: SetupVal) -> SetupVal:
+    """Returns an ``ArrayVal`` representing an array with the given arguments as elements.
+    The array must be non-empty, and as a result, at least one argument must be provided."""
+    return ArrayVal([element] + list(elements))
 
 # FIXME Is `Any` too permissive here -- can we be a little more precise?
 def cryptol(data : Any) -> 'CryptolTerm':
@@ -485,6 +503,10 @@ def global_initializer(name: str) -> SetupVal:
 def global_var(name: str) -> SetupVal:
     """Returns a ``GlobalVarVal`` representing a pointer to the named global ``name``."""
     return GlobalVarVal(name)
+
+def null() -> SetupVal:
+    """Returns a ``NullVal`` representing a null pointer value."""
+    return NullVal()
 
 def struct(*fields : SetupVal) -> SetupVal:
     """Returns a ``StructVal`` with fields ``fields``."""
