@@ -541,7 +541,7 @@ heapster_define_llvmshape _bic _opts henv nm w_int args_str sh_str =
      Some args_ctx <- parseParsedCtxString "argument types" env args_str
      let args = parsedCtxCtx args_ctx
      mb_sh <- parseExprInCtxString env (LLVMShapeRepr w) args_ctx sh_str
-     let env' = withKnownNat w $ permEnvAddNamedShape env nm args mb_sh
+     let env' = withKnownNat w $ permEnvAddDefinedShape env nm args mb_sh
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Add Heapster type-checking hint for some blocks in a function given by
