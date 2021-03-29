@@ -1,13 +1,12 @@
 from pathlib import Path
 import unittest
 from saw import *
-from saw.llvm import Contract, cryptol, null
-import saw.llvm_types as ty
+from saw.llvm import Contract, cryptol, null, i32
 
 
 class FContract1(Contract):
     def specification(self):
-        p = self.alloc(ty.i32)
+        p = self.alloc(i32)
 
         self.execute_func(p)
 

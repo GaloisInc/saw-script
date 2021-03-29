@@ -1,11 +1,10 @@
 from abc import ABCMeta, abstractmethod
 from cryptol import cryptoltypes
-from saw.llvm_types import LLVMType
 from saw.utils import deprecated
 from dataclasses import dataclass
 import dataclasses
 import re
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set, Union, overload
 from typing_extensions import Literal
 import inspect
 import uuid
@@ -23,6 +22,26 @@ class SetupVal(metaclass=ABCMeta):
         N.B., should be a JSON object with a ``'setup value'`` field with a unique tag which the
         server will dispatch on to then interpret the rest of the JSON object.``"""
         pass
+
+    @overload
+    def __getitem__(self, key : int) -> 'ElemVal':
+        pass
+    @overload
+    def __getitem__(self, key : str) -> 'FieldVal':
+        pass
+    def __getitem__(self, key : Union[int,str]) -> 'SetupVal':
+        """``SetupVal`` element indexing and field access.
+        :param key: If ``key`` is an integer, a ``SetupVal`` corresponding to accessing the element
+                    at that index is returned. If ``key`` is a string, a ``SetupVal`` corresponding
+                    to accessing a field with that name is returned.
+        """
+        if isinstance(key, int):
+            return elem(self, key)
+        elif isinstance(key, str):
+            return field(self, key)
+        else:
+            raise ValueError(f'{key!r} is not a valid element index or field name.')
+
 
 class NamedSetupVal(SetupVal):
     """Represents those ``SetupVal``s which are a named reference to some value, e.e., a variable
@@ -65,7 +84,7 @@ class CryptolTerm(SetupVal):
 class FreshVar(NamedSetupVal):
     __name : Optional[str]
 
-    def __init__(self, spec : 'Contract', type : LLVMType, suggested_name : Optional[str] = None) -> None:
+    def __init__(self, spec : 'Contract', type : 'LLVMType', suggested_name : Optional[str] = None) -> None:
         self.__name = suggested_name
         self.spec = spec
         self.type = type
@@ -100,7 +119,7 @@ class FreshVar(NamedSetupVal):
 class Allocated(NamedSetupVal):
     name : Optional[str]
 
-    def __init__(self, spec : 'Contract', type : LLVMType, *,
+    def __init__(self, spec : 'Contract', type : 'LLVMType', *,
                  mutable : bool = True, alignment : Optional[int] = None) -> None:
         self.name = None
         self.spec = spec
@@ -228,7 +247,7 @@ class PointsTo:
     """The workhorse for ``points_to``.
     """
     def __init__(self, pointer : SetupVal, target : SetupVal, *,
-                 check_target_type : Union[PointerType, LLVMType, None] = PointerType(),
+                 check_target_type : Union[PointerType, 'LLVMType', None] = PointerType(),
                  condition : Optional[Condition] = None) -> None:
         self.pointer = pointer
         self.target = target
@@ -343,7 +362,7 @@ class Contract:
         self.__used_names.add(new_name)
         return new_name
 
-    def fresh_var(self, type : LLVMType, suggested_name : Optional[str] = None) -> FreshVar:
+    def fresh_var(self, type : 'LLVMType', suggested_name : Optional[str] = None) -> FreshVar:
         """Declares a fresh variable of type ``type`` (with name ``suggested_name`` if provided and available)."""
         fresh_name = self.get_fresh_name('x' if suggested_name is None else self.get_fresh_name(suggested_name))
         v = FreshVar(self, type, fresh_name)
@@ -355,7 +374,7 @@ class Contract:
             raise Exception("wrong state")
         return v
 
-    def alloc(self, type : LLVMType, *, read_only : bool = False,
+    def alloc(self, type : 'LLVMType', *, read_only : bool = False,
                                         alignment : Optional[int] = None,
                                         points_to : Optional[SetupVal] = None) -> SetupVal:
         """Allocates a pointer of type ``type``.
@@ -384,7 +403,7 @@ class Contract:
         return a
 
     def points_to(self, pointer : SetupVal, target : SetupVal, *,
-                  check_target_type : Union[PointerType, LLVMType, None] = PointerType(),
+                  check_target_type : Union[PointerType, 'LLVMType', None] = PointerType(),
                   condition : Optional[Condition] = None) -> None:
         """Declare that the memory location indicated by the ``pointer``
         contains the ``target``.
@@ -506,39 +525,151 @@ class Contract:
 
             return self.__cached_json
 
+class LLVMType(metaclass=ABCMeta):
+    @abstractmethod
+    def to_json(self) -> Any: pass
 
-def array_val(element: SetupVal, *elements: SetupVal) -> SetupVal:
-    """Returns an ``ArrayVal`` representing an array with the given arguments as elements.
-    The array must be non-empty, and as a result, at least one argument must be provided."""
-    return ArrayVal([element] + list(elements))
+class LLVMIntType(LLVMType):
+    def __init__(self, width : int) -> None:
+        self.width = width
 
-# FIXME Is `Any` too permissive here -- can we be a little more precise?
-def cryptol(data : Any) -> 'CryptolTerm':
-    """Returns a ``CryptolTerm`` wrapper around ``data``."""
-    return CryptolTerm(data)
+    def to_json(self) -> Any:
+        return {'type': 'primitive type', 'primitive': 'integer', 'size': self.width}
 
-def elem(base: SetupVal, index: int) -> SetupVal:
-    """Returns an ``ElemVal`` using the index ``index`` of the array ``base``."""
-    return ElemVal(base, index)
+class LLVMArrayType(LLVMType):
+    def __init__(self, elemtype : 'LLVMType', size : int) -> None:
+        self.size = size
+        self.elemtype = elemtype
 
-def field(base : SetupVal, field_name : str) -> SetupVal:
-    """Returns a ``FieldVal`` using the field ``field_name`` of the struct ``base``."""
-    return FieldVal(base, field_name)
+    def to_json(self) -> Any:
+        return { 'type': 'array',
+                 'element type': self.elemtype.to_json(),
+                 'size': self.size }
 
-def global_initializer(name: str) -> SetupVal:
-    """Returns a ``GlobalInitializerVal`` representing the value of the initializer of a named global ``name``."""
-    return GlobalInitializerVal(name)
+class LLVMPointerType(LLVMType):
+    def __init__(self, points_to : 'LLVMType') -> None:
+        self.points_to = points_to
+
+    def to_json(self) -> Any:
+        return {'type': 'pointer', 'to type': self.points_to.to_json()}
+
+class LLVMAliasType(LLVMType):
+    def __init__(self, name : str) -> None:
+        self.name = name
+
+    def to_json(self) -> Any:
+        return {'type': 'type alias',
+                'alias of': self.name}
+
+class LLVMStructType(LLVMType):
+    def __init__(self, field_types : List[LLVMType]) -> None:
+        self.field_types = field_types
+
+    def to_json(self) -> Any:
+        return {'type': 'struct',
+                'fields': [fld_ty.to_json() for fld_ty in self.field_types]}
+
+class LLVMPackedStructType(LLVMType):
+    def __init__(self, field_types : List[LLVMType]) -> None:
+        self.field_types = field_types
+
+    def to_json(self) -> Any:
+        return {'type': 'packed struct',
+                'fields': [fld_ty.to_json() for fld_ty in self.field_types]}
+
+
+##################################################
+# Helpers for value construction
+##################################################
 
 # It's tempting to name this `global` to mirror SAWScript's `llvm_global`,
 # but that would clash with the Python keyword `global`.
 def global_var(name: str) -> SetupVal:
-    """Returns a ``GlobalVarVal`` representing a pointer to the named global ``name``."""
+    """Returns a pointer to the named global ``name`` (i.e., a ``GlobalVarVal``)."""
     return GlobalVarVal(name)
 
+# FIXME Is `Any` too permissive here -- can we be a little more precise?
+def cryptol(data : Any) -> 'CryptolTerm':
+    """Constructs a Cryptol value from ``data`` (i.e., a ``CryptolTerm``, which is also a ``SetupVal``).
+
+    ``data`` should be a string literal representing Cryptol syntax or the result of a Cryptol-realted server computation."""
+    return CryptolTerm(data)
+
+def array(*elements: SetupVal) -> SetupVal:
+    """Returns an array with the provided ``elements`` (i.e., an ``ArrayVal``).
+
+    N.B., one or more ``elements`` must be provided.""" # FIXME why? document this here when we figure it out.
+    if len(elements) == 0:
+        raise ValueError('An array must be constructed with one or more elements')
+    for e in elements:
+        if not isinstance(e, SetupVal):
+            raise ValueError('array expected a SetupVal, but got {e!r}')
+    return ArrayVal(list(elements))
+
+def elem(base: SetupVal, index: int) -> SetupVal:
+    """Returns the value of the array element at position ``index`` in ``base`` (i.e., an ``ElemVal``).
+
+    Can also be created by using an ``int`` indexing key on a ``SetupVal``: ``base[index]``."""
+    if not isinstance(base, SetupVal):
+        raise ValueError('elem expected a SetupVal, but got {base!r}')
+    if not isinstance(index, int):
+        raise ValueError('elem expected an int, but got {index!r}')
+    return ElemVal(base, index)
+
+def field(base : SetupVal, field_name : str) -> SetupVal:
+    """Returns the value of struct ``base``'s field ``field_name`` (i.e., a ``FieldVal``).
+
+    Can also be created by using a ``str`` indexing key on a ``SetupVal``: ``base[field_name]``."""
+    if not isinstance(base, SetupVal):
+        raise ValueError('field expected a SetupVal, but got {base!r}')
+    if not isinstance(field_name, str):
+        raise ValueError('field expected a str, but got {field_name!r}')
+    return FieldVal(base, field_name)
+
+def global_initializer(name: str) -> SetupVal:
+    """Returns the initializer value of a named global ``name`` (i.e., a ``GlobalInitializerVal``)."""
+    if not isinstance(name, str):
+        raise ValueError('global_initializer expected a str naming a global value, but got {name!r}')
+    return GlobalInitializerVal(name)
+
 def null() -> SetupVal:
-    """Returns a ``NullVal`` representing a null pointer value."""
+    """Returns a null pointer value (i.e., a ``NullVal``)."""
     return NullVal()
 
 def struct(*fields : SetupVal) -> SetupVal:
-    """Returns a ``StructVal`` with fields ``fields``."""
+    """Returns an LLVM structure value with the given ``fields`` (i.e., a ``StructVal``)."""
+    for field in fields:
+        if not isinstance(field, SetupVal):
+            raise ValueError('struct expected a SetupVal, but got {field!r}')
     return StructVal(list(fields))
+
+
+
+##################################################
+# Helpers for type construction
+##################################################
+
+i8  = LLVMIntType(8)
+i16 = LLVMIntType(16)
+i32 = LLVMIntType(32)
+i64 = LLVMIntType(64)
+
+def array_ty(size : int, ty : 'LLVMType') -> 'LLVMArrayType':
+    """``[size x ty]``, i.e. an array of ``size`` elements of type ``ty``."""
+    return LLVMArrayType(ty, size)
+
+def ptr_ty(ty : 'LLVMType') -> 'LLVMPointerType':
+    """``ty*``, i.e. a pointer to a value of type ``ty``."""
+    return LLVMPointerType(ty)
+
+def alias_ty(name : str) -> 'LLVMAliasType':
+    """An LLVM type alias (i.e., ``name``)."""
+    return LLVMAliasType(name)
+
+def struct_ty(*field_types : LLVMType) -> 'LLVMStructType':
+    """An LLVM struct type with fields of type ``field_types``."""
+    return LLVMStructType(list(field_types))
+
+def packed_struct_ty(*field_types : LLVMType) -> 'LLVMPackedStructType':
+    """An LLVM packed struct type with fields of type ``field_types``."""
+    return LLVMPackedStructType(list(field_types))

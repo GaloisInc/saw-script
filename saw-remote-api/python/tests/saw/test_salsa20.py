@@ -2,9 +2,7 @@ from pathlib import Path
 import unittest
 from cryptol.cryptoltypes import to_cryptol
 from saw import *
-from saw.llvm import Contract, void, SetupVal, FreshVar, cryptol
-from saw.llvm_types import i8, i32, LLVMType, LLVMArrayType
-
+from saw.llvm import Contract, void, SetupVal, FreshVar, cryptol, i8, i32, LLVMType, LLVMArrayType
 
 
 def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None) -> Tuple[FreshVar, SetupVal]:

@@ -1,21 +1,20 @@
 from pathlib import Path
 import unittest
 from saw import *
-from saw.llvm import Contract, array_val, elem, void
-import saw.llvm_types as ty
+from saw.llvm import Contract, array, array_ty, void, i32
 
 
 class ArraySwapContract(Contract):
     def specification(self):
-        a0 = self.fresh_var(ty.i32, "a0")
-        a1 = self.fresh_var(ty.i32, "a1")
-        a  = self.alloc(ty.array(2, ty.i32),
-                        points_to=array_val(a0, a1))
+        a0 = self.fresh_var(i32, "a0")
+        a1 = self.fresh_var(i32, "a1")
+        a  = self.alloc(array_ty(2, i32),
+                        points_to=array(a0, a1))
 
         self.execute_func(a)
 
-        self.points_to(elem(a, 0), a1)
-        self.points_to(elem(a, 1), a0)
+        self.points_to(a[0], a1)
+        self.points_to(a[1], a0)
         self.returns(void)
 
 
