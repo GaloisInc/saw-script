@@ -34,3 +34,8 @@ packages:
     deps/argo/tasty-script-exitcode
     deps/cryptol/cryptol-remote-api
     deps/language-rust
+
+source-repository-package
+    type: git
+    location: https://github.com/eddywestbrook/hobbits.git
+    tag: f65daf99ff84310b5de28fc4a44418c17126ae42
