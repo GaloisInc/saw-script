@@ -149,7 +149,7 @@ sawVectorDefinitionsModule (TranslationConfiguration {..}) =
   mkModuleName [vectorModule]
 
 cryptolPrimitivesModule :: ModuleName
-cryptolPrimitivesModule = mkModuleName ["CryptolPrimitivesForSAWCORE"]
+cryptolPrimitivesModule = mkModuleName ["CryptolPrimitivesForSAWCore"]
 
 sawCoreScaffoldingModule :: ModuleName
 sawCoreScaffoldingModule = mkModuleName ["SAWCoreScaffolding"]
