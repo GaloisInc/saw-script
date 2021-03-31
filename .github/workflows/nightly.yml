@@ -3,7 +3,8 @@ on:
   push:
     branches: ["actions/**"]
   schedule:
-    - cron: "0 0 * * *"
+    # 10am UTC -> 2/3am PST
+    - cron: "0 10 * * *"
   workflow_dispatch:
     inputs:
       publishNightly:
