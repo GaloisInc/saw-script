@@ -1,6 +1,5 @@
 import saw
-from saw.llvm import Contract, void
-from saw.llvm_types import i32
+from saw.llvm import Contract, void, i32
 
 import unittest
 from pathlib import Path

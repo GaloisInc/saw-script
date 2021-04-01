@@ -1,8 +1,7 @@
 from pathlib import Path
 import unittest
 from saw import *
-from saw.llvm import Contract, FreshVar, SetupVal, cryptol, struct
-from saw.llvm_types import LLVMType, array, i8, i64
+from saw.llvm import Contract, FreshVar, SetupVal, cryptol, struct, LLVMType, array_ty, i8, i64
 from typing import Tuple
 
 
@@ -21,7 +20,7 @@ def int_to_64_cryptol(length: int):
 
 
 def buffer_type(length: int) -> LLVMType:
-    return array(8 + length, i8)
+    return array_ty(8 + length, i8)
 
 
 def alloc_buffer_aligned(spec: Contract, length: int) -> SetupVal:
@@ -52,7 +51,7 @@ class BufferCopySpec(Contract):
         self.length = length
 
     def specification(self) -> None:
-        data = self.fresh_var(array(self.length, i8), "data")
+        data = self.fresh_var(array_ty(self.length, i8), "data")
         buf  = alloc_pointsto_buffer_readonly(self, self.length, data)
 
         self.execute_func(buf)

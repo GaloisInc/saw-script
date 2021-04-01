@@ -2,9 +2,8 @@ from pathlib import Path
 import unittest
 from saw import *
 from saw.exceptions import VerificationError
-from saw.llvm import Contract, LLVMType, PointerType, cryptol, void
+from saw.llvm import Contract, LLVMType, PointerType, cryptol, void, i32, array_ty
 from typing import Union
-import saw.llvm_types as ty
 
 
 class FPointsToContract(Contract):
@@ -13,8 +12,8 @@ class FPointsToContract(Contract):
         self.check_x_type = check_x_type
 
     def specification(self) -> None:
-        x = self.fresh_var(ty.array(2, ty.i32), "x")
-        p = self.alloc(ty.array(4, ty.i32))
+        x = self.fresh_var(array_ty(2, i32), "x")
+        p = self.alloc(array_ty(4, i32))
         self.points_to(p, x, check_target_type = self.check_x_type)
 
         self.execute_func(p)
@@ -41,7 +40,7 @@ class PointsToAtTypeTest(unittest.TestCase):
         result = llvm_verify(mod, "f", FPointsToContract(None))
         self.assertIs(result.is_success(), True)
 
-        result = llvm_verify(mod, "f", FPointsToContract(ty.array(2, ty.i32)))
+        result = llvm_verify(mod, "f", FPointsToContract(array_ty(2, i32)))
         self.assertIs(result.is_success(), True)
 
         # with self.assertRaises(VerificationError):
