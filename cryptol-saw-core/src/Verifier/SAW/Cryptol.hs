@@ -620,20 +620,20 @@ proveProp sc env prop =
           -> do n' <- importType sc env n
                 scGlobalApply sc "Cryptol.PLiteralSeqBool" [n']
 
-        -- instance LiteralLessThan val Bit
+        -- instance (2 >= val) => LiteralLessThan val Bit
         (C.pIsLiteralLessThan -> Just (_, C.tIsBit -> True))
           -> do scGlobalApply sc "Cryptol.PLiteralBit" []
         -- instance LiteralLessThan val Integer
         (C.pIsLiteralLessThan -> Just (_, C.tIsInteger -> True))
           -> do scGlobalApply sc "Cryptol.PLiteralInteger" []
-        -- instance Literal val (Z n)
+        -- instance (fin n, n >= 1, n >= val) LiteralLessThan val (Z n)
         (C.pIsLiteralLessThan -> Just (_, C.tIsIntMod -> Just n))
           -> do n' <- importType sc env n
                 scGlobalApply sc "Cryptol.PLiteralIntModNum" [n']
         -- instance Literal val Rational
         (C.pIsLiteralLessThan -> Just (_, C.tIsRational -> True))
           -> do scGlobalApply sc "Cryptol.PLiteralRational" []
-        -- instance (fin n, n >= width val) => Literal val [n]
+        -- instance (fin n, n >= lg2 val) => Literal val [n]
         (C.pIsLiteralLessThan -> Just (_, C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
                 scGlobalApply sc "Cryptol.PLiteralSeqBool" [n']
