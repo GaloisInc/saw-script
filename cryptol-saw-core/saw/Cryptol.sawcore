@@ -941,6 +941,8 @@ PRoundRational =
 -- Literal class
 
 -- Compared to Cryptol class 'Literal val a', we omit the 'val' parameter here.
+-- As 'PLiteral' and 'PLiteralLessThan' are definitionally equal in saw-core,
+-- the same dictionary constructors do double duty for both type classes.
 
 PLiteral : (a : sort 0) -> sort 0;
 PLiteral a = Nat -> a;
