@@ -1489,6 +1489,9 @@ PRoundFloat e p =
   , roundToEven = \(x : TCFloat e p) -> error Integer "Unimplemented: roundToEven Float"
   };
 
+PLiteralFloat : (e p : Num) -> PLiteral (TCFloat e p);
+PLiteralFloat e p = \ (x : Nat) -> error (TCFloat e p) "Unimplemented: Literal Float";
+
 ecFpNaN : (e : Num) -> (p : Num) -> TCFloat e p;
 ecFpNaN e p = error (TCFloat e p) "Unimplemented: fpNaN";
 

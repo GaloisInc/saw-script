@@ -619,6 +619,11 @@ proveProp sc env prop =
         (C.pIsLiteral -> Just (_, C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
                 scGlobalApply sc "Cryptol.PLiteralSeqBool" [n']
+        -- instance ValidFloat e p => Literal val (Float e p) (with extra constraints)
+        (C.pIsLiteral -> Just (_, C.tIsFloat -> Just (e, p)))
+          -> do e' <- importType sc env e
+                p' <- importType sc env p
+                scGlobalApply sc "Cryptol.PLiteralFloat" [e', p']
 
         -- instance (2 >= val) => LiteralLessThan val Bit
         (C.pIsLiteralLessThan -> Just (_, C.tIsBit -> True))
@@ -637,6 +642,11 @@ proveProp sc env prop =
         (C.pIsLiteralLessThan -> Just (_, C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
                 scGlobalApply sc "Cryptol.PLiteralSeqBool" [n']
+        -- instance ValidFloat e p => Literal val (Float e p) (with extra constraints)
+        (C.pIsLiteralLessThan -> Just (_, C.tIsFloat -> Just (e, p)))
+          -> do e' <- importType sc env e
+                p' <- importType sc env p
+                scGlobalApply sc "Cryptol.PLiteralFloat" [e', p']
 
         _ -> do panic "proveProp" [pretty prop]
 
