@@ -161,10 +161,10 @@ insertSupers prop fs v m
 -- arbitrarily to 'inf', so that we can ignore that parameter when
 -- matching dictionaries.
 normalizeProp :: C.Prop -> C.Prop
-normalizeProp prop =
-  case C.pIsLiteral prop of
-    Just (_, a) -> C.pLiteral C.tInf a
-    Nothing -> prop
+normalizeProp prop
+  | Just (_, a) <- C.pIsLiteral prop = C.pLiteral C.tInf a
+  | Just (_, a) <- C.pIsLiteralLessThan prop = C.pLiteralLessThan C.tInf a
+  | otherwise = prop
 
 --------------------------------------------------------------------------------
 
