@@ -377,10 +377,10 @@ literalLessThanInteger = [0..<val]
 literalLessThanRational : {val} (fin val) => [val]Rational
 literalLessThanRational = [0..<val]
 
-/* instance (fin n, n >= val) => LiteralLessThan val (Z n) */
+/* instance (fin n, n >= 1, n >= val) => LiteralLessThan val (Z n) */
 literalLessThanZ : {val, n} (fin n, n >= 1, n >= val) => [val](Z n)
 literalLessThanZ = [0..<val]
 
 /* instance (fin n, n >= width val) => LiteralLessThan val [n] */
-literalLessThanWord : {val, n} (fin val, fin n, n >= width val) => [val][n]
+literalLessThanWord : {val, n} (fin n, n >= lg2 val) => [val][n]
 literalLessThanWord = [0..<val]
