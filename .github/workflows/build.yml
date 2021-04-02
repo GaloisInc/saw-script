@@ -101,9 +101,8 @@ jobs:
         run: .github/ci.sh build
         continue-on-error: false
 
-      - uses: GaloisInc/.github/actions/cabal-collect-bins@lisanna/cabal-collect-bins
+      - uses: GaloisInc/.github/actions/cabal-collect-bins@v1
         id: cabal-test-suites
-        continue-on-error: true
         with:
           targets: |
             integration_tests
