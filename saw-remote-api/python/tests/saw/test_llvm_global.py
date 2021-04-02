@@ -2,7 +2,6 @@ from pathlib import Path
 import unittest
 from saw import *
 from saw.llvm import Contract, global_initializer, global_var
-import saw.llvm_types as ty
 
 
 class FContract(Contract):
