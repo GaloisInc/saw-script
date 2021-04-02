@@ -61,9 +61,9 @@ class EvaluateGoal(ProofTactic):
 
 # TODO: add "simplify"
 
-class AssumeUnsat(ProofTactic):
+class Admit(ProofTactic):
   def to_json(self) -> Any:
-    return { "tactic": "assume unsat" }
+    return { "tactic": "admit" }
 
 class BetaReduceGoal(ProofTactic):
   def to_json(self) -> Any:
