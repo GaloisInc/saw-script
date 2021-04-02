@@ -10,7 +10,10 @@ module SAWServer.ProofScript
   ) where
 
 import Control.Applicative ( Alternative(empty) )
+import Control.Exception ( throw )
+import Control.Lens ( view )
 import Control.Monad (foldM)
+import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import Data.Aeson
     ( (.:), (.:?),
       withObject,
@@ -18,11 +21,12 @@ import Data.Aeson
       FromJSON(parseJSON),
       KeyValue((.=)),
       ToJSON(toJSON) )
-import Data.Maybe (maybeToList)
+import Data.Maybe ( fromMaybe )
 import Data.Text (Text)
 
 import qualified Argo
 import qualified Argo.Doc as Doc
+import CryptolServer.Data.Expression ( Expression, getCryptolExpr )
 import qualified SAWScript.Builtins as SB
 import qualified SAWScript.Value as SV
 import SAWServer
@@ -32,7 +36,9 @@ import SAWServer
       setServerVal,
       getServerVal,
       getSimpset,
-      getTerm )
+      sawBIC,
+      sawTopLevelRW)
+import SAWServer.CryptolExpression ( CryptolModuleException(..), getTypedTermOfCExp )
 import SAWServer.Exceptions ( notASimpset )
 import SAWServer.OK ( OK, ok )
 import SAWServer.TopLevel ( tl )
@@ -62,7 +68,7 @@ data ProofTactic
   | BetaReduceGoal
   | EvaluateGoal [String]
   | Simplify ServerName
-  | AssumeUnsat
+  | Admit
   | Trivial
 
 newtype ProofScript = ProofScript [ProofTactic]
@@ -71,7 +77,7 @@ instance FromJSON Prover where
   parseJSON =
     withObject "prover" $ \o -> do
       (name :: String) <- o .: "name"
-      let unints = maybeToList <$> o .:? "uninterpreted functions"
+      let unints = fromMaybe [] <$> o .:? "uninterpreted functions"
       case name of
         "abc"            -> pure ABC_Internal
         "internal-abc"   -> pure ABC_Internal
@@ -104,7 +110,7 @@ instance FromJSON ProofTactic where
         "beta reduce goal" -> pure BetaReduceGoal
         "evalute goal"     -> EvaluateGoal <$> o .: "uninterpreted functions"
         "simplify"         -> Simplify <$> o .: "rules"
-        "assume unsat"     -> pure AssumeUnsat
+        "admit"            -> pure Admit
         "trivial"          -> pure Trivial
         _                  -> empty
 
@@ -149,24 +155,24 @@ makeSimpset params = do
   setServerVal (ssResult params) ss
   ok
 
-data ProveParams =
+data ProveParams cryptolExpr =
   ProveParams
-  { ppScript   :: ProofScript
-  , ppTermName :: ServerName
+  { ppScript :: ProofScript
+  , ppGoal   :: cryptolExpr
   }
 
-instance FromJSON ProveParams where
+instance (FromJSON cryptolExpr) => FromJSON (ProveParams cryptolExpr) where
   parseJSON =
     withObject "SAW/prove params" $ \o ->
     ProveParams <$> o .: "script"
-                <*> o .: "term"
+                <*> o .: "goal"
 
-instance Doc.DescribedParams ProveParams where
+instance Doc.DescribedParams (ProveParams cryptolExpr) where
   parameterFieldDescription =
     [ ("script",
        Doc.Paragraph [Doc.Text "Script to use to prove the term."])
-    , ("term",
-       Doc.Paragraph [Doc.Text "The term to interpret as a theorm and prove."])
+    , ("goal",
+       Doc.Paragraph [Doc.Text "The goal to interpret as a theorm and prove."])
     ]
 
 --data CexValue = CexValue String TypedTerm
@@ -189,9 +195,17 @@ proveDescr =
   Doc.Paragraph [ Doc.Text "Attempt to prove the given term representing a"
                 , Doc.Text " theorem, given a proof script context."]
 
-prove :: ProveParams -> Argo.Command SAWState ProveResult
+prove :: ProveParams Expression -> Argo.Command SAWState ProveResult
 prove params = do
-  t <- getTerm (ppTermName params)
+  state <- Argo.getState
+  fileReader <- Argo.getFileReader
+  let cenv = SV.rwCryptol (view sawTopLevelRW state)
+      bic = view sawBIC state
+  cexp <- getCryptolExpr (ppGoal params)
+  (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader (SV.biSharedContext bic) cenv cexp
+  t <- case eterm of
+         Right (t, _) -> return t -- TODO: report warnings
+         Left err -> throw $ CryptolModuleException err warnings
   proofScript <- interpretProofScript (ppScript params)
   res <- tl $ SB.provePrim proofScript t
   case res of
@@ -217,7 +231,7 @@ interpretProofScript (ProofScript ts) = go ts
             W4_Yices unints       -> return $ SB.w4_unint_yices unints
             W4_Z3 unints          -> return $ SB.w4_unint_z3 unints
         go [Trivial]                  = return $ SB.trivial
-        go [AssumeUnsat]              = return $ SB.assumeUnsat
+        go [Admit]                    = return $ SB.assumeUnsat -- TODO: admit
         go (BetaReduceGoal : rest)    = do
           m <- go rest
           return (SB.beta_reduce_goal >> m)

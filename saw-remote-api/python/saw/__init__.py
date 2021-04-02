@@ -8,6 +8,7 @@ import signal
 import atexit
 from distutils.spawn import find_executable
 
+from cryptol import cryptoltypes
 from . import connection
 from argo_client.connection import ServerConnection
 from . import llvm
@@ -421,6 +422,10 @@ def llvm_verify(module: LLVMModule,
 
     return result
 
+def prove(goal: cryptoltypes.CryptolJSON,
+          proof_script: Optional[proofscript.ProofScript] = None):
+    return __get_designated_connection().prove(cryptoltypes.to_cryptol(goal),
+                                               proof_script.to_json()).result()
 
 @atexit.register
 def script_exit() -> None:

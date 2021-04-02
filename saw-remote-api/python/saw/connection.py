@@ -161,7 +161,7 @@ class SAWConnection:
                     lemmas: List[str],
                     check_sat: bool,
                     contract: Any,
-                    script: Any,
+                    script: ProofScript,
                     lemma_name: str) -> Command:
         self.most_recent_result = \
             LLVMVerify(self, module, function, lemmas, check_sat, contract, script, lemma_name)
@@ -174,4 +174,8 @@ class SAWConnection:
                     lemma_name: str) -> Command:
         self.most_recent_result = \
             LLVMAssume(self, module, function, contract, lemma_name)
+        return self.most_recent_result
+
+    def prove(self, goal, proof_script):
+        self.most_recent_result = Prove(self, goal, proof_script)
         return self.most_recent_result
