@@ -161,10 +161,10 @@ insertSupers prop fs v m
 -- arbitrarily to 'inf', so that we can ignore that parameter when
 -- matching dictionaries.
 normalizeProp :: C.Prop -> C.Prop
-normalizeProp prop =
-  case C.pIsLiteral prop of
-    Just (_, a) -> C.pLiteral C.tInf a
-    Nothing -> prop
+normalizeProp prop
+  | Just (_, a) <- C.pIsLiteral prop = C.pLiteral C.tInf a
+  | Just (_, a) <- C.pIsLiteralLessThan prop = C.pLiteralLessThan C.tInf a
+  | otherwise = prop
 
 --------------------------------------------------------------------------------
 
@@ -196,26 +196,27 @@ importTFun sc tf =
 importPC :: SharedContext -> C.PC -> IO Term
 importPC sc pc =
   case pc of
-    C.PEqual     -> panic "importPC PEqual" []
-    C.PNeq       -> panic "importPC PNeq" []
-    C.PGeq       -> panic "importPC PGeq" []
-    C.PFin       -> panic "importPC PFin" []
-    C.PHas _     -> panic "importPC PHas" []
-    C.PPrime     -> panic "importPC PPrime" []
-    C.PZero      -> scGlobalDef sc "Cryptol.PZero"
-    C.PLogic     -> scGlobalDef sc "Cryptol.PLogic"
-    C.PRing      -> scGlobalDef sc "Cryptol.PRing"
-    C.PIntegral  -> scGlobalDef sc "Cryptol.PIntegral"
-    C.PField     -> scGlobalDef sc "Cryptol.PField"
-    C.PRound     -> scGlobalDef sc "Cryptol.PRound"
-    C.PEq        -> scGlobalDef sc "Cryptol.PEq"
-    C.PCmp       -> scGlobalDef sc "Cryptol.PCmp"
-    C.PSignedCmp -> scGlobalDef sc "Cryptol.PSignedCmp"
-    C.PLiteral   -> scGlobalDef sc "Cryptol.PLiteral"
-    C.PAnd       -> panic "importPC PAnd" []
-    C.PTrue      -> panic "importPC PTrue" []
-    C.PFLiteral  -> panic "importPC PFLiteral" []
-    C.PValidFloat -> panic "importPC PValidFloat" []
+    C.PEqual           -> panic "importPC PEqual" []
+    C.PNeq             -> panic "importPC PNeq" []
+    C.PGeq             -> panic "importPC PGeq" []
+    C.PFin             -> panic "importPC PFin" []
+    C.PHas _           -> panic "importPC PHas" []
+    C.PPrime           -> panic "importPC PPrime" []
+    C.PZero            -> scGlobalDef sc "Cryptol.PZero"
+    C.PLogic           -> scGlobalDef sc "Cryptol.PLogic"
+    C.PRing            -> scGlobalDef sc "Cryptol.PRing"
+    C.PIntegral        -> scGlobalDef sc "Cryptol.PIntegral"
+    C.PField           -> scGlobalDef sc "Cryptol.PField"
+    C.PRound           -> scGlobalDef sc "Cryptol.PRound"
+    C.PEq              -> scGlobalDef sc "Cryptol.PEq"
+    C.PCmp             -> scGlobalDef sc "Cryptol.PCmp"
+    C.PSignedCmp       -> scGlobalDef sc "Cryptol.PSignedCmp"
+    C.PLiteral         -> scGlobalDef sc "Cryptol.PLiteral"
+    C.PLiteralLessThan -> scGlobalDef sc "Cryptol.PLiteralLessThan"
+    C.PAnd             -> panic "importPC PAnd" []
+    C.PTrue            -> panic "importPC PTrue" []
+    C.PFLiteral        -> panic "importPC PFLiteral" []
+    C.PValidFloat      -> panic "importPC PValidFloat" []
 
 -- | Translate size types to SAW values of type Num, value types to SAW types of sort 0.
 importType :: SharedContext -> Env -> C.Type -> IO Term
@@ -261,6 +262,9 @@ importType sc env ty =
             C.PLiteral -> -- we omit first argument to class Literal
               do a <- go (tyargs !! 1)
                  scGlobalApply sc "Cryptol.PLiteral" [a]
+            C.PLiteralLessThan -> -- we omit first argument to class LiteralLessThan
+              do a <- go (tyargs !! 1)
+                 scGlobalApply sc "Cryptol.PLiteralLessThan" [a]
             _ ->
               do pc' <- importPC sc pc
                  tyargs' <- traverse go tyargs
@@ -277,16 +281,17 @@ importType sc env ty =
 isErasedProp :: C.Prop -> Bool
 isErasedProp prop =
   case prop of
-    C.TCon (C.PC C.PZero     ) _ -> False
-    C.TCon (C.PC C.PLogic    ) _ -> False
-    C.TCon (C.PC C.PRing     ) _ -> False
-    C.TCon (C.PC C.PIntegral ) _ -> False
-    C.TCon (C.PC C.PField    ) _ -> False
-    C.TCon (C.PC C.PRound    ) _ -> False
-    C.TCon (C.PC C.PEq       ) _ -> False
-    C.TCon (C.PC C.PCmp      ) _ -> False
-    C.TCon (C.PC C.PSignedCmp) _ -> False
-    C.TCon (C.PC C.PLiteral  ) _ -> False
+    C.TCon (C.PC C.PZero           ) _ -> False
+    C.TCon (C.PC C.PLogic          ) _ -> False
+    C.TCon (C.PC C.PRing           ) _ -> False
+    C.TCon (C.PC C.PIntegral       ) _ -> False
+    C.TCon (C.PC C.PField          ) _ -> False
+    C.TCon (C.PC C.PRound          ) _ -> False
+    C.TCon (C.PC C.PEq             ) _ -> False
+    C.TCon (C.PC C.PCmp            ) _ -> False
+    C.TCon (C.PC C.PSignedCmp      ) _ -> False
+    C.TCon (C.PC C.PLiteral        ) _ -> False
+    C.TCon (C.PC C.PLiteralLessThan) _ -> False
     _ -> True
 
 importPropsType :: SharedContext -> Env -> [C.Prop] -> C.Type -> IO Term
@@ -614,6 +619,34 @@ proveProp sc env prop =
         (C.pIsLiteral -> Just (_, C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
                 scGlobalApply sc "Cryptol.PLiteralSeqBool" [n']
+        -- instance ValidFloat e p => Literal val (Float e p) (with extra constraints)
+        (C.pIsLiteral -> Just (_, C.tIsFloat -> Just (e, p)))
+          -> do e' <- importType sc env e
+                p' <- importType sc env p
+                scGlobalApply sc "Cryptol.PLiteralFloat" [e', p']
+
+        -- instance (2 >= val) => LiteralLessThan val Bit
+        (C.pIsLiteralLessThan -> Just (_, C.tIsBit -> True))
+          -> do scGlobalApply sc "Cryptol.PLiteralBit" []
+        -- instance LiteralLessThan val Integer
+        (C.pIsLiteralLessThan -> Just (_, C.tIsInteger -> True))
+          -> do scGlobalApply sc "Cryptol.PLiteralInteger" []
+        -- instance (fin n, n >= 1, n >= val) LiteralLessThan val (Z n)
+        (C.pIsLiteralLessThan -> Just (_, C.tIsIntMod -> Just n))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PLiteralIntModNum" [n']
+        -- instance Literal val Rational
+        (C.pIsLiteralLessThan -> Just (_, C.tIsRational -> True))
+          -> do scGlobalApply sc "Cryptol.PLiteralRational" []
+        -- instance (fin n, n >= lg2 val) => Literal val [n]
+        (C.pIsLiteralLessThan -> Just (_, C.tIsSeq -> Just (n, C.tIsBit -> True)))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PLiteralSeqBool" [n']
+        -- instance ValidFloat e p => Literal val (Float e p) (with extra constraints)
+        (C.pIsLiteralLessThan -> Just (_, C.tIsFloat -> Just (e, p)))
+          -> do e' <- importType sc env e
+                p' <- importType sc env p
+                scGlobalApply sc "Cryptol.PLiteralFloat" [e', p']
 
         _ -> do panic "proveProp" [pretty prop]
 
@@ -718,12 +751,17 @@ prelPrims =
   , ("updateEnd",    flip scGlobalDef "Cryptol.ecUpdateEnd")   -- {n, a, ix} (fin n, Integral ix) => [n]a -> ix -> a -> [n]a
 
     -- -- Enumerations
-  , ("fromTo",       flip scGlobalDef "Cryptol.ecFromTo")
+  , ("fromTo",         flip scGlobalDef "Cryptol.ecFromTo")
     --                            -- fromTo : {first, last, bits, a}
     --                            --           ( fin last, fin bits, last >== first,
     --                            --             Literal first a, Literal last a)
     --                            --        => [1 + (last - first)]a
-  , ("fromThenTo",   flip scGlobalDef "Cryptol.ecFromThenTo")
+  , ("fromToLessThan", flip scGlobalDef "Cryptol.ecFromToLessThan")
+    --                            -- fromToLessThan : {first, bound, a}
+    --                            --                   ( fin first, bound >= first,
+    --                            --                     LiteralLessThan bound a)
+    --                            --                => [bound - first]a
+  , ("fromThenTo",     flip scGlobalDef "Cryptol.ecFromThenTo")
     --                            -- fromThenTo : {first, next, last, a, len}
     --                            --              ( fin first, fin next, fin last
     --                            --              , Literal first a, Literal next a, Literal last a

@@ -941,9 +941,14 @@ PRoundRational =
 -- Literal class
 
 -- Compared to Cryptol class 'Literal val a', we omit the 'val' parameter here.
+-- As 'PLiteral' and 'PLiteralLessThan' are definitionally equal in saw-core,
+-- the same dictionary constructors do double duty for both type classes.
 
 PLiteral : (a : sort 0) -> sort 0;
 PLiteral a = Nat -> a;
+
+PLiteralLessThan : (a : sort 0) -> sort 0;
+PLiteralLessThan a = Nat -> a;
 
 PLiteralSeqBool : (n : Num) -> PLiteral (seq n Bool);
 PLiteralSeqBool n =
@@ -1343,6 +1348,24 @@ ecFromTo =
             gen (addNat 1 (subNat last first)) a
                 (\ (i : Nat) -> pa (addNat i first))));
 
+ecFromToLessThan :
+  (first bound : Num) -> (a : sort 0) -> PLiteralLessThan a -> seq (tcSub bound first) a;
+ecFromToLessThan first bound a =
+  finNumRec
+    (\ (first:Num) -> PLiteralLessThan a ->
+       seq (tcSub bound first) a)
+    (\ (first:Nat) ->
+       Num#rec
+         (\ (bound:Num) -> PLiteralLessThan a ->
+            seq (tcSub bound (TCNum first)) a)
+         (\ (bound:Nat) -> \ (pa : PLiteralLessThan a) ->
+            gen (subNat bound first) a
+                (\ (i : Nat) -> pa (addNat i first)))
+         (\ (pa : PLiteralLessThan a) ->
+            MkStream a (\ (i : Nat) -> pa (addNat i first)))
+         bound)
+    first;
+
 ecFromThenTo :
   (first next last : Num) -> (a : sort 0) -> (len : Num) ->
   PLiteral a -> PLiteral a -> PLiteral a -> seq len a;
@@ -1465,6 +1488,9 @@ PRoundFloat e p =
   , roundAway   = \(x : TCFloat e p) -> error Integer "Unimplemented: roundAway Float"
   , roundToEven = \(x : TCFloat e p) -> error Integer "Unimplemented: roundToEven Float"
   };
+
+PLiteralFloat : (e p : Num) -> PLiteral (TCFloat e p);
+PLiteralFloat e p = \ (x : Nat) -> error (TCFloat e p) "Unimplemented: Literal Float";
 
 ecFpNaN : (e : Num) -> (p : Num) -> TCFloat e p;
 ecFpNaN e p = error (TCFloat e p) "Unimplemented: fpNaN";
