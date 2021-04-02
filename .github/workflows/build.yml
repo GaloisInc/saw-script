@@ -109,9 +109,7 @@ jobs:
           targets: |
             integration_tests
             cryptol-saw-core-tc-test
-          dest: cabal-test-suites-bins
-
-      - uses: mxschmitt/action-tmate@v3
+          dest: dist-tests
 
       - name: "Upload Artifact: bin/abc"
         if: |
@@ -122,12 +120,12 @@ jobs:
           path: ${{ steps.abc.outputs.path }}
           name: abc-${{ runner.os }}
 
-      - name: "Upload Artifact: cabal-test-suites-bins"
+      - name: "Upload Artifact: dist-tests"
         uses: actions/upload-artifact@v2
         if: "matrix.ghc == '8.6.5'"
         with:
-          path: cabal-test-suites-bins
-          name: cabal-test-suites-bins-${{ matrix.os }}
+          path: dist-tests
+          name: dist-tests-${{ matrix.os }}
 
       - shell: bash
         run: .github/ci.sh setup_dist_bins
@@ -248,11 +246,11 @@ jobs:
           matrix.suite == 'integration_tests'
         run: chmod +x dist/bin/*
 
-      - name: "Download Artifact: cabal-test-suites-bins"
+      - name: "Download Artifact: dist-tests"
         uses: actions/download-artifact@v2
         with:
-          name: cabal-test-suites-bins-${{ matrix.os }}
-          path: cabal-test-suites-bins
+          name: dist-tests-${{ matrix.os }}
+          path: dist-tests
 
       - uses: actions/setup-java@v1
         if: "matrix.suite == 'integration_tests'"
@@ -266,7 +264,7 @@ jobs:
         shell: bash
         run: |
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
-          cabal-test-suites-bins/${{ matrix.suite }}
+          dist-tests/${{ matrix.suite }}
 
   docker:
     runs-on: ubuntu-18.04
