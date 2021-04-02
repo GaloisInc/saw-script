@@ -251,6 +251,10 @@ jobs:
           name: dist-tests-${{ matrix.os }}
           path: dist-tests
 
+      - shell: bash
+        if: runner.os != 'Windows'
+        run: chmod +x dist-tests/*
+
       - uses: actions/setup-java@v1
         if: "matrix.suite == 'integration_tests'"
         with:
