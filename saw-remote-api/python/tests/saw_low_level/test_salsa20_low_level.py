@@ -2,7 +2,6 @@ from pathlib import Path
 import unittest
 import saw
 from saw.llvm import *
-from saw.llvm_types import i8, i32, LLVMArrayType
 from saw.proofscript import *
 
 

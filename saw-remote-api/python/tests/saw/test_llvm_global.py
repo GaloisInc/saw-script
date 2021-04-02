@@ -1,22 +1,20 @@
 from pathlib import Path
 import unittest
 from saw import *
-from saw.llvm import Contract, cryptol, struct, void, i32, array_ty, struct_ty
+from saw.llvm import Contract, global_initializer, global_var
 
 
 class FContract(Contract):
     def specification(self):
-        ty = array_ty(2, array_ty(4, i32))
-        i  = self.fresh_var(ty, "w.i")
-        pw = self.alloc(struct_ty(ty), points_to = struct(i))
+        x_init = global_initializer("x")
+        self.points_to(global_var("x"), x_init)
 
-        self.execute_func(pw)
+        self.execute_func()
 
-        self.points_to(pw, struct(cryptol('zero:[2][4][32]')))
-        self.returns(void)
+        self.returns(x_init)
 
 
-class LLVMStructTest(unittest.TestCase):
+class LLVMGlobalTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
@@ -26,9 +24,9 @@ class LLVMStructTest(unittest.TestCase):
     def tearDownClass(self):
         disconnect()
 
-    def test_llvm_struct(self):
+    def test_llvm_global(self):
         if __name__ == "__main__": view(LogResults())
-        bcname = str(Path('tests','saw','test-files', 'llvm_struct_type.bc'))
+        bcname = str(Path('tests','saw','test-files', 'llvm_global.bc'))
         mod = llvm_load_module(bcname)
 
         result = llvm_verify(mod, 'f', FContract())

@@ -1,17 +1,16 @@
 from pathlib import Path
 import unittest
 from saw import *
-from saw.llvm import Contract, cryptol, void
-import saw.llvm_types as ty
+from saw.llvm import Contract, cryptol, void, i8, ptr_ty
 
 
 class FContract(Contract):
     def specification(self):
-        x = self.alloc(ty.ptr(ty.i8))
+        x = self.alloc(ptr_ty(i8))
 
         self.execute_func(x)
 
-        p = self.alloc(ty.i8)
+        p = self.alloc(i8)
         self.points_to(x, p)
         self.points_to(p, cryptol("42 : [8]"))
         self.returns(void)

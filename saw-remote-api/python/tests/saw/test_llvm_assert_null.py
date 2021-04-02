@@ -1,29 +1,26 @@
 from pathlib import Path
 import unittest
 from saw import *
-from saw.llvm import Contract, elem, field, i32, alias_ty
+from saw.llvm import Contract, cryptol, null, i32
+
 
 class FContract1(Contract):
     def specification(self):
-        tp = self.alloc(alias_ty('struct.t'))
-        b = self.fresh_var(i32, "b")
-        self.points_to(field(field(tp, "n"), "b"), b)
+        p = self.alloc(i32)
 
-        self.execute_func(tp)
+        self.execute_func(p)
 
-        self.returns(b)
+        self.returns(cryptol("0 : [32]"))
+
 
 class FContract2(Contract):
     def specification(self):
-        tp = self.alloc(alias_ty('struct.t'))
-        b = self.fresh_var(i32, "b")
-        self.points_to(elem(elem(tp, 1), 1), b)
+        self.execute_func(null())
 
-        self.execute_func(tp)
+        self.returns(cryptol("1 : [32]"))
 
-        self.returns(b)
 
-class LLVMNestedStructTest(unittest.TestCase):
+class LLVMAssertNullTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
@@ -33,10 +30,9 @@ class LLVMNestedStructTest(unittest.TestCase):
     def tearDownClass(self):
         disconnect()
 
-    def test_llvm_struct(self):
+    def test_llvm_assert_null(self):
         if __name__ == "__main__": view(LogResults())
-
-        bcname = str(Path('tests','saw','test-files', 'nested_struct.bc'))
+        bcname = str(Path('tests','saw','test-files', 'llvm_assert_null.bc'))
         mod = llvm_load_module(bcname)
 
         result = llvm_verify(mod, 'f', FContract1())
@@ -44,6 +40,7 @@ class LLVMNestedStructTest(unittest.TestCase):
 
         result = llvm_verify(mod, 'f', FContract2())
         self.assertIs(result.is_success(), True)
+
 
 if __name__ == "__main__":
     unittest.main()
