@@ -243,7 +243,7 @@ jobs:
         if: |
           runner.os != 'Windows' &&
           matrix.suite == 'integration_tests'
-        run: chmod +x dist/bin/*
+        run: chmod +x bin/*
 
       - name: "Download Artifact: dist-tests"
         uses: actions/download-artifact@v2
