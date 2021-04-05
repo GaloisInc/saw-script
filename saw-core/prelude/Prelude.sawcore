@@ -115,6 +115,7 @@ data Eq (t : sort 1) (x : t) : t -> Prop where {
     Refl : Eq t x x;
   }
 
+
 -- The eliminator for the Eq type at sort 1, assuming the usual parameter-index
 -- structure of the Eq type
 Eq__rec : (t : sort 1) -> (x : t) -> (p : (y : t) -> Eq t x y -> sort 1) ->
@@ -745,6 +746,32 @@ eqNatPrec : (x y : Nat) -> eqNat (Succ x) (Succ y) -> eqNat x y;
 eqNatPrec x y eq' =
   eq_cong Nat (Succ x) (Succ y) eq' Nat pred;
 
+-- | Propositional less than or equal to; defined the same way as in Coq
+data IsLeNat (n:Nat) : Nat -> Prop where {
+  IsLeNat_base : IsLeNat n n;
+  IsLeNat_succ : (m:Nat) -> IsLeNat n m -> IsLeNat n (Succ m);
+}
+
+-- | m < n is defined as m+1 <= n (as in Coq)
+IsLtNat : Nat -> Nat -> Prop;
+IsLtNat m n = IsLeNat (Succ m) n;
+
+-- | Test if m < n or n <= m
+-- FIXME: implement this!
+primitive natCompareLe : (m n : Nat) -> Either (IsLtNat m n) (IsLeNat n m);
+
+-- | Test if m = n
+-- FIXME: implement this!
+primitive proveEqNat : (m n : Nat) -> Maybe (Eq Nat m n);
+
+-- | Try to prove x <= y (FIXME: implement this from natCompareLe!)
+primitive proveLeNat : (x y : Nat) -> Maybe (IsLeNat x y);
+
+-- | Try to prove x < y
+proveLtNat : (x y : Nat) -> Maybe (IsLtNat x y);
+proveLtNat x y = proveLeNat (Succ x) y;
+
+
 -- | Addition
 addNat : Nat -> Nat -> Nat;
 addNat x y =
@@ -1087,7 +1114,12 @@ axiom bvAddZeroL : (n : Nat) -> (x : Vec n Bool) -> Eq (Vec n Bool) (bvAdd n (bv
 axiom bvAddZeroR : (n : Nat) -> (x : Vec n Bool) -> Eq (Vec n Bool) (bvAdd n x (bvNat n 0)) x;
 
 primitive bvNeg : (n : Nat) -> Vec n Bool -> Vec n Bool;
+
 primitive bvSub : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
+
+bvSBorrow : (n : Nat) -> Vec (Succ n) Bool -> Vec (Succ n) Bool -> Bool;
+bvSBorrow n x y = and (xor (msb n x) (msb n y)) (xor (msb n x) (msb n (bvSub (Succ n) x y)));
+
 primitive bvMul : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 primitive bvLg2 : (n : Nat) -> Vec n Bool -> Vec n Bool;
 
@@ -1394,6 +1426,108 @@ List__rec :
   (l : List a) -> P l;
 List__rec a P f1 f2 l = List#rec a P f1 f2 l;
 
+unfoldList : (a:sort 0) -> List a -> Either #() (a * List a * #());
+unfoldList a l =
+  List__rec a (\ (_:List a) -> Either #() (a * List a * #()))
+  (Left #() (a * List a * #()) ())
+  (\ (x:a) (l:List a) (_:Either #() (a * List a * #())) ->
+     Right #() (a * List a * #()) (x, l, ()))
+  l;
+
+foldList : (a:sort 0) -> Either #() (a * List a * #()) -> List a;
+foldList a =
+  either #() (a * List a * #()) (List a)
+         (\ (_ : #()) -> Nil a)
+         (\ (tup : (a * List a * #())) ->
+            Cons a tup.(1) tup.(2).(1));
+
+
+--------------------------------------------------------------------------------
+-- Lists of 64-bit words (for testing Heapster)
+
+data W64List : sort 0 where {
+  W64Nil : W64List;
+  W64Cons : Vec 64 Bool -> W64List -> W64List;
+}
+
+unfoldedW64List : sort 0;
+unfoldedW64List =
+  Either #()
+  (Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) * W64List * #());
+
+unfoldW64List : W64List -> unfoldedW64List;
+unfoldW64List l =
+  W64List#rec (\ (_:W64List) -> unfoldedW64List)
+  (Left #() (Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) * W64List * #()) ())
+  (\ (bv:Vec 64 Bool) (l':W64List) (_:unfoldedW64List) ->
+     Right #() (Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) * W64List * #())
+               (exists (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) bv (),
+                l', ()))
+  l;
+
+foldW64List : unfoldedW64List -> W64List;
+foldW64List =
+  either #() (Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) * W64List * #())
+         W64List
+         (\ (_:#()) -> W64Nil)
+         (\ (bv_l:(Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #())
+                   * W64List * #())) ->
+            W64Cons (Sigma_proj1 (Vec 64 Bool)
+                                 (\ (_:Vec 64 Bool) -> #()) bv_l.(1))
+                    bv_l.(2).(1));
+
+
+--------------------------------------------------------------------------------
+-- Vector operations with built-in casts of their resulting lengths
+
+-- Decide equality on two bitvectors, returning a proof if they are equal
+primitive bvEqWithProof : (n : Nat) -> (v1 v2 : Vec n Bool) ->
+                          Maybe (Eq (Vec n Bool) v1 v2);
+
+-- Compare two bitvectors with bvult, returning a proof if bvult succeeds
+bvultWithProof : (n : Nat) -> (v1 v2 : Vec n Bool) ->
+                 Maybe (Eq Bool (bvult n v1 v2) True);
+bvultWithProof n v1 v2 =
+  iteDep (\ (b:Bool) -> Maybe (Eq Bool b True)) (bvult n v1 v2)
+         (Just (Eq Bool True True) (Refl Bool True))
+         (Nothing (Eq Bool False True));
+
+-- Compare two bitvectors with bvule, returning a proof if bvule succeeds
+bvuleWithProof : (n : Nat) -> (v1 v2 : Vec n Bool) ->
+                 Maybe (Eq Bool (bvule n v1 v2) True);
+bvuleWithProof n v1 v2 =
+  iteDep (\ (b:Bool) -> Maybe (Eq Bool b True)) (bvule n v1 v2)
+         (Just (Eq Bool True True) (Refl Bool True))
+         (Nothing (Eq Bool False True));
+
+-- Convert a proof of bitvector equality to one of Nat equality
+primitive bvEqToEqNat : (n : Nat) -> (v1 v2 : Vec n Bool) ->
+                        Eq (Vec n Bool) v1 v2 ->
+                        eqNat (bvToNat n v1) (bvToNat n v2);
+
+-- Convert a proof of bitvector less-than to one of Nat less-than
+primitive bvultToIsLtNat : (n : Nat) -> (v1 v2 : Vec n Bool) ->
+                           Eq Bool (bvult n v1 v2) True ->
+                           IsLtNat (bvToNat n v1) (bvToNat n v2);
+
+-- | Index a vector using a proof that the index is in the range of the vector
+-- FIXME: atWithDefault should maybe use this...?
+primitive atWithProof : (n : Nat) -> (a : sort 0) -> a -> Vec n a ->
+                        (i : Nat) -> IsLtNat i n -> a;
+
+-- Set the value at index i in a vector using a proof that i is in range
+primitive updWithProof : (n : Nat) -> (a : sort 0) -> Vec n a ->
+                         (i : Nat) -> a -> IsLtNat i n -> Vec n a;
+
+-- Take a slice of a vector using a proof that the slice is in range
+primitive sliceWithProof : (a : sort 0) -> (n off len : Nat) ->
+                           IsLeNat (addNat off len) n -> Vec n a -> Vec len a;
+
+-- Update a slice of a vector using a proof that the slice is in range
+primitive updSliceWithProof : (a : sort 0) -> (n off len : Nat) ->
+                              IsLeNat (addNat off len) n ->
+                              Vec n a -> Vec len a -> Vec n a;
+
 
 --------------------------------------------------------------------------------
 -- Computation monad
@@ -1413,47 +1547,204 @@ primitive errorM : (a:sort 0) -> CompM a;
 -- run the second computation
 primitive catchM : (a:sort 0) -> CompM a -> CompM a -> CompM a;
 
--- Lists of input and output types for letRecM
-data InputOutputTypes : sort 1 where {
-  TypesNil : InputOutputTypes;
-  TypesCons : sort 0 -> sort 0 -> InputOutputTypes -> InputOutputTypes;
+-- We can define fixM as let rec f x = ... in f
+primitive fixM : (a:sort 0) -> (b:a -> sort 0) ->
+                 (((x:a) -> CompM (b x)) -> ((x:a) -> CompM (b x))) ->
+                 (x:a) -> CompM (b x);
+-- fixM a b fn x = letRecM1 a b b fn (\ (f:a -> CompM b) -> f x);
+
+-- A representation of the type (x1:A1) -> ... -> (xn:An) -> CompM (B x1 ... xn)
+data LetRecType : sort 1 where {
+  LRT_Ret : sort 0 -> LetRecType;
+  LRT_Fun : (a:sort 0) -> (a -> LetRecType) -> LetRecType;
 }
 
--- Compute the type of a nested tuple of monadic functions, by converting list
--- [(a1,b1),(a2,b2),...] into ((a1 -> CompM b1), ((a2 -> CompM b2), ...))
-letRecFuns : InputOutputTypes -> sort 0;
-letRecFuns tps =
-  InputOutputTypes#rec
-    (\ (tps:InputOutputTypes) -> sort 0)
-    #()
-    (\ (a b:sort 0) (_:InputOutputTypes) (fun_tp:sort 0) ->
-       #((a -> CompM b), fun_tp))
-    tps;
+-- Convert a LetRecType to the type it represents
+lrtToType : LetRecType -> sort 0;
+lrtToType lrt =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> sort 0)
+  (\ (b:sort 0) -> CompM b)
+  (\ (a:sort 0) (_: a -> LetRecType) (b: a -> sort 0) -> (x:a) -> b x)
+  lrt;
+
+-- NOTE: the following are needed to define multiFixM instead of making it a
+-- primitive, which we are keeping commented here in case that is needed
+{-
+-- Convert the argument types of a LetRecType to their "flat" version of the
+-- form { x1:A1 & { x2:A2 & ... { xn:An & unit } ... }}
+lrtToFlatArgs : LetRecType -> sort 0;
+lrtToFlatArgs lrt =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> sort 0)
+  (\ (_:sort 0) -> #())
+  (\ (a:sort 0) (_: a -> LetRecType) (b: a -> sort 0) -> Sigma a b)
+  lrt;
+
+-- Get the dependent return type fun (args:lrtToFlatArgs) => B x.1 ... of a
+-- LetRecType in terms of the flat arguments
+lrtToFlatRet : (lrt:LetRecType) -> lrtToFlatArgs lrt -> sort 0;
+lrtToFlatRet lrt =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> lrtToFlatArgs lrt -> sort 0)
+  (\ (a:sort 0) (_:#()) -> a)
+  (\ (a:sort 0) (lrtF: a -> LetRecType)
+      (retF: (x:a) -> lrtToFlatArgs (lrtF x) -> sort 0)
+      (args: Sigma a (\ (x:a) -> lrtToFlatArgs (lrtF x))) ->
+      retF (Sigma_proj1 a (\ (x:a) -> lrtToFlatArgs (lrtF x)) args)
+           (Sigma_proj2 a (\ (x:a) -> lrtToFlatArgs (lrtF x)) args))
+  lrt;
+
+-- Extract out the "flat" version of a LetRecType
+lrtToFlatType : LetRecType -> sort 0;
+lrtToFlatType lrt = (args:lrtToFlatArgs lrt) -> CompM (lrtToFlatRet lrt args);
+
+
+-- "Flatten" a function described by a LetRecType
+flattenLRTFun : (lrt:LetRecType) -> lrtToType lrt -> lrtToFlatType lrt;
+flattenLRTFun lrt =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> lrtToType lrt -> lrtToFlatType lrt)
+  (\ (b:sort 0) (f:CompM b) (_:#()) -> f)
+  (\ (a:sort 0) (lrtF: a -> LetRecType)
+     (restF: (x:a) -> lrtToType (lrtF x) -> lrtToFlatType (lrtF x))
+     (f: lrtToType (LRT_Fun a lrtF)) (args:lrtToFlatArgs (LRT_Fun a lrtF)) ->
+     restF (Sigma_proj1 a (\ (x:a) -> lrtToFlatArgs (lrtF x)) args)
+           (f (Sigma_proj1 a (\ (x:a) -> lrtToFlatArgs (lrtF x)) args))
+           (Sigma_proj2 a (\ (x:a) -> lrtToFlatArgs (lrtF x)) args))
+  lrt;
+
+-- "Unflatten" a function described by a LetRecType
+unflattenLRTFun : (lrt:LetRecType) -> lrtToFlatType lrt -> lrtToType lrt;
+unflattenLRTFun lrt =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> lrtToFlatType lrt -> lrtToType lrt)
+  (\ (b:sort 0) (f:#() -> CompM b) -> f ())
+  (\ (a:sort 0) (lrtF: a -> LetRecType)
+     (restF: (x:a) -> lrtToFlatType (lrtF x) -> lrtToType (lrtF x))
+     (f: lrtToFlatType (LRT_Fun a lrtF)) (x:a) ->
+     restF x (\ (args:lrtToFlatArgs (lrtF x)) ->
+                f (exists a (\ (y:a) -> lrtToFlatArgs (lrtF y)) x args)))
+  lrt;
+-}
+
+-- A list of 0 or more LetRecTypes
+data LetRecTypes : sort 1 where {
+  LRT_Nil : LetRecTypes;
+  LRT_Cons : LetRecType -> LetRecTypes -> LetRecTypes;
+}
+
+-- Build the function type lrtToType lrt1 -> ... -> lrtToType lrtn -> b from the
+-- LetRecTypes list [lrt1, ..., lrtn]
+lrtPi : LetRecTypes -> sort 0 -> sort 0;
+lrtPi lrts b =
+  LetRecTypes#rec
+  (\ (lrts:LetRecTypes) -> sort 0)
+  b
+  (\ (lrt:LetRecType) (_:LetRecTypes) (rest:sort 0) -> lrtToType lrt -> rest)
+  lrts;
+
+-- Build the product type (lrtToType lrt1, ..., lrtToType lrtn) from the
+-- LetRecTypes list [lrt1, ..., lrtn]
+lrtTupleType : LetRecTypes -> sort 0;
+lrtTupleType lrts =
+  LetRecTypes#rec
+  (\ (lrts:LetRecTypes) -> sort 0)
+  #()
+  (\ (lrt:LetRecType) (_:LetRecTypes) (rest:sort 0) -> #(lrtToType lrt, rest))
+  lrts;
+
+-- NOTE: the following are needed to define multiFixM instead of making it a
+-- primitive, which we are keeping commented here in case that is needed
+{-
+-- Construct a multi-arity function of type lrtPi lrts B from one of type
+-- lrtTupleType lrts -> B
+lrtLambda : (lrts:LetRecTypes) -> (B:sort 0) -> (lrtTupleType lrts -> B) -> lrtPi lrts B;
+lrtLambda top_lrts B =
+  LetRecTypes#rec
+  (\ (lrts:LetRecTypes) -> (lrtTupleType lrts -> B) -> lrtPi lrts B)
+  (\ (F:#() -> B) -> F ())
+  (\ (lrt:LetRecType) (lrts:LetRecTypes)
+     (rest:(lrtTupleType lrts -> B) -> lrtPi lrts B)
+     (F:lrtTupleType (LRT_Cons lrt lrts) -> B) (f:lrtToType lrt) ->
+    rest (\ (fs:lrtTupleType lrts) -> F (f, fs)))
+  top_lrts;
+
+-- Apply a multi-arity function of type lrtPi lrts B to an lrtTupleType lrts
+lrtApply : (lrts:LetRecTypes) -> (B:sort 0) -> lrtPi lrts B -> lrtTupleType lrts -> B;
+lrtApply top_lrts B =
+  LetRecTypes#rec
+  (\ (lrts:LetRecTypes) -> lrtPi lrts B -> lrtTupleType lrts -> B)
+  (\ (F:B) (_:#()) -> F)
+  (\ (lrt:LetRecType) (lrts:LetRecTypes) (rest:lrtPi lrts B -> lrtTupleType lrts -> B)
+      (F:lrtPi (LRT_Cons lrt lrts) B) (fs:lrtTupleType (LRT_Cons lrt lrts)) ->
+    rest (F fs.(1)) fs.(2))
+  top_lrts;
+
+-- Build a multi-argument fixed-point of type A1 -> ... -> An -> CompM B
+multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
+               lrtToType lrt;
+multiArgFixM lrt F =
+  unflattenLRTFun
+    lrt
+    (fixM (lrtToFlatArgs lrt) (lrtToFlatRet lrt)
+          (\ (f:lrtToFlatType lrt) ->
+             flattenLRTFun lrt (F (unflattenLRTFun lrt f))));
+
+-- Construct a mutual fixed-point over tuples of LRT functions
+multiTupleFixM : (lrts:LetRecTypes) -> (lrtTupleType lrts -> lrtTupleType lrts) ->
+                 lrtTupleType lrts;
+multiTupleFixM top_lrts =
+  LetRecTypes#rec
+  (\ (lrts:LetRecTypes) -> (lrtTupleType lrts -> lrtTupleType lrts) -> lrtTupleType lrts)
+  (\ (_:#() -> #()) -> ())
+  (\ (lrt:LetRecType) (lrts:LetRecTypes)
+     (restF: (lrtTupleType lrts -> lrtTupleType lrts) -> lrtTupleType lrts)
+     (F:lrtTupleType (LRT_Cons lrt lrts) -> lrtTupleType (LRT_Cons lrt lrts)) ->
+     (multiArgFixM lrt (\ (f:lrtToType lrt) ->
+                          (F (f, restF (\ (fs:lrtTupleType lrts) ->
+                                          (F (f, fs)).(2)))).(1)),
+      restF (\ (fs:lrtTupleType lrts) ->
+               (F (multiArgFixM lrt
+                     (\ (f:lrtToType lrt) ->
+                        (F (f, restF (\ (fs:lrtTupleType lrts) ->
+                                        (F (f, fs)).(2)))).(1)),
+                   fs)).(2))))
+  top_lrts;
+
+-- A nicer version of multiTupleFixM that abstracts the functions one at a time
+multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
+            lrtTupleType lrts;
+multiFixM lrts F =
+  multiTupleFixM lrts (\ (fs:lrtTupleType lrts) -> lrtApply lrts (lrtTupleType lrts) F fs);
+
+-- A letrec construct for binding 0 or more mutually recursive functions
+letRecM : (lrts : LetRecTypes) -> (B:sort 0) -> lrtPi lrts (lrtTupleType lrts) ->
+          lrtPi lrts (CompM B) -> CompM B;
+letRecM lrts B F body = lrtApply lrts (CompM B) body (multiFixM lrts F);
+-}
+
+-- Construct a fixed-point for a tuple of mutually-recursive functions
+primitive multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
+                      lrtTupleType lrts;
 
 -- This is like let rec in ML: letRecM defs body defines N recursive functions
 -- in terms of themselves using defs, and then passes them to body. We use this
 -- instead of the more standard fixM because it offers a more compact
 -- representation, and because fixM messes with functional extensionality by
 -- introducing an irreducible term at function type.
-primitive letRecM : (tps : InputOutputTypes) -> (b : sort 0) ->
-                    (letRecFuns tps -> letRecFuns tps) ->
-                    (letRecFuns tps -> CompM b) -> CompM b;
+primitive letRecM : (lrts : LetRecTypes) -> (b : sort 0) ->
+                    (lrtPi lrts (lrtTupleType lrts)) ->
+                    (lrtPi lrts (CompM b)) -> CompM b;
 
 -- This is let rec with exactly one binding
 letRecM1 : (a b c : sort 0) -> ((a -> CompM b) -> (a -> CompM b)) ->
            ((a -> CompM b) -> CompM c) -> CompM c;
 letRecM1 a b c fn body =
   letRecM
-    (TypesCons a b TypesNil) c
-    (\ (funs:#((a -> CompM b), #())) -> (fn funs.1, ()))
-    (\ (funs:#((a -> CompM b), #())) -> body funs.1);
-
--- We can define fixM as let rec f x = ... in f
-fixM : (a b:sort 0) -> ((a -> CompM b) -> (a -> CompM b)) -> a -> CompM b;
-fixM a b f x =
-  letRecM (TypesCons a b TypesNil) b
-          (\ (funs:#((a -> CompM b), #())) -> (f funs.1, ()))
-          (\ (funs:#((a -> CompM b), #())) -> funs.1 x);
+    (LRT_Cons (LRT_Fun a (\ (_:a) -> LRT_Ret b)) LRT_Nil) c
+    (\ (f:a -> CompM b) -> (fn f, ()))
+    (\ (f:a -> CompM b) -> body f);
 
 
 -- Test computations
@@ -1487,11 +1778,12 @@ test_fun4 x =
 test_fun4 : Vec 64 Bool -> CompM (Vec 64 Bool);
 test_fun4 x =
   letRecM
-    (TypesCons (Vec 64 Bool) (Vec 64 Bool) TypesNil) (Vec 64 Bool)
-    (\ (funs:#((Vec 64 Bool -> CompM (Vec 64 Bool)), #())) ->
+    (LRT_Cons (Vec 64 Bool) (\ (_:Vec 64 Bool) -> LRT_Ret (Vec 64 Bool))
+     LRT_Nil)
+    (Vec 64 Bool)
+    (\ (f:(Vec 64 Bool -> CompM (Vec 64 Bool))) ->
       ((\ (y:Vec 64 Bool) -> returnM (Vec 64 Bool) (bvNat 64 0)), ()))
-    (\ (funs:#((Vec 64 Bool -> CompM (Vec 64 Bool)), #())) ->
-      funs.1 x);
+    (\ (f:(Vec 64 Bool -> CompM (Vec 64 Bool))) -> f x);
 -}
 
 -- let rec f = f in f x
@@ -1506,15 +1798,18 @@ test_fun5 x =
 test_fun6 : Vec 64 Bool -> CompM (Vec 64 Bool);
 test_fun6 x =
   letRecM
-    (TypesCons (Vec 64 Bool) (Vec 64 Bool)
-      (TypesCons (Vec 64 Bool) (Vec 64 Bool) TypesNil))
+    (LRT_Cons
+      (LRT_Fun (Vec 64 Bool) (\ (_:Vec 64 Bool) -> LRT_Ret (Vec 64 Bool)))
+      (LRT_Cons
+        (LRT_Fun (Vec 64 Bool) (\ (_:Vec 64 Bool) -> LRT_Ret (Vec 64 Bool)))
+        LRT_Nil))
     (Vec 64 Bool)
-    (\ (funs:#((Vec 64 Bool -> CompM (Vec 64 Bool)),
-                 #((Vec 64 Bool -> CompM (Vec 64 Bool)), #()))) ->
-      (funs.2, (funs.1, ())))
-    (\ (funs:#((Vec 64 Bool -> CompM (Vec 64 Bool)),
-                 #((Vec 64 Bool -> CompM (Vec 64 Bool)), #()))) ->
-      funs.1 x);
+    (\ (f1:(Vec 64 Bool -> CompM (Vec 64 Bool)))
+       (f2:(Vec 64 Bool -> CompM (Vec 64 Bool))) ->
+      (f2, (f1, ())))
+    (\ (f1:(Vec 64 Bool -> CompM (Vec 64 Bool)))
+       (f2:(Vec 64 Bool -> CompM (Vec 64 Bool))) ->
+      f1 x);
 
 --------------------------------------------------------------------------------
 -- SMT Array
