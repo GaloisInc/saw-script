@@ -13,7 +13,7 @@ data SetupValTag
   | TagNullValue
   | TagCryptol
   | TagArrayValue
-  | TagStructValue
+  | TagTupleValue
   | TagFieldLValue
   | TagElemLValue
   | TagGlobalInit
@@ -27,7 +27,7 @@ instance FromJSON SetupValTag where
       "null" -> pure TagNullValue
       "Cryptol" -> pure TagCryptol
       "array" -> pure TagArrayValue
-      "struct" -> pure TagStructValue
+      "tuple" -> pure TagTupleValue
       "field" -> pure TagFieldLValue
       "element lvalue" -> pure TagElemLValue
       "global initializer" -> pure TagGlobalInit
@@ -44,7 +44,7 @@ instance FromJSON cryptolExpr => FromJSON (CrucibleSetupVal cryptolExpr) where
           TagNullValue -> pure NullValue
           TagCryptol -> CryptolExpr <$> o .: "expression"
           TagArrayValue -> ArrayValue <$> o .: "elements"
-          TagStructValue -> StructValue <$> o .: "fields"
+          TagTupleValue -> TupleValue <$> o .: "elements"
           TagFieldLValue -> FieldLValue <$> o .: "base" <*> o .: "field"
           TagElemLValue -> ElementLValue <$> o .: "base" <*> o .: "index"
           TagGlobalInit -> GlobalInitializer <$> o .: "name"
