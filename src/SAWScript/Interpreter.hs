@@ -2879,6 +2879,16 @@ primitives = Map.fromList
     , " contain the supplied string as a substring"
     ]
 
+  , prim "heapster_find_trait_method_symbol"
+    "HeapsterEnv -> String -> TopLevel String"
+    (bicVal heapster_find_trait_method_symbol)
+    Experimental
+    [ "Search for a symbol in any module contained in a HeapsterEnv that"
+    , "corresponds to the given trait method implementation. The search"
+    , "string should be of the form: trait::method<type>, e.g."
+    , "core::fmt::Debug::fmt<Foo>"
+    ]
+
   , prim "heapster_assume_fun"
     "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_assume_fun)

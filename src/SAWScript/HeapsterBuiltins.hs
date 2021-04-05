@@ -33,6 +33,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_join_point_hint
        , heapster_find_symbol
        , heapster_find_symbols
+       , heapster_find_trait_method_symbol
        , heapster_assume_fun
        , heapster_assume_fun_rename
        , heapster_assume_fun_multi
@@ -641,6 +642,10 @@ heapster_find_symbol bic opts henv str =
     [] -> fail ("No symbol found matching string: " ++ str)
     _ -> fail ("Found multiple symbols matching string " ++ str ++ ": " ++
                concat (intersperse ", " $ map show syms))
+
+heapster_find_trait_method_symbol :: BuiltinContext -> Options ->
+                                     HeapsterEnv -> String -> TopLevel String
+heapster_find_trait_method_symbol _bic _opts henv str = undefined
 
 -- | Assume that the given named function has the supplied type and translates
 -- to a SAW core definition given by the second name
