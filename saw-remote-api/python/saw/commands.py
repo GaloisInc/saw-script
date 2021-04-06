@@ -43,8 +43,8 @@ class LLVMLoadModule(SAWCommand):
             connection
         )
 
-    def process_result(self, _res : Any) -> Any:
-        return None
+    def process_result(self, res : Any) -> Any:
+        return res
 
 class LLVMAssume(SAWCommand):
     def __init__(
@@ -83,8 +83,8 @@ class LLVMVerify(SAWCommand):
                   'lemma name': lemma_name}
         super(LLVMVerify, self).__init__('SAW/LLVM/verify', params, connection)
 
-    def process_result(self, _res : Any) -> Any:
-        return None
+    def process_result(self, res : Any) -> Any:
+        return res
 
 class Prove(SAWCommand):
     def __init__(

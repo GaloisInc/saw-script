@@ -47,17 +47,8 @@ class IdContract(Contract):
 
 
 class LLVMStructTest(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(self):
-        connect(reset_server=True)
-
-    @classmethod
-    def tearDownClass(self):
-        disconnect()
-
-
     def test_llvm_struct(self):
+        connect(reset_server=True)
         if __name__ == "__main__": view(LogResults())
         bcname = str(Path('tests','saw','test-files', 'llvm_struct.bc'))
         mod = llvm_load_module(bcname)
