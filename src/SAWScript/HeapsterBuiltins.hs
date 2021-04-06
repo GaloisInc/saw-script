@@ -46,6 +46,7 @@ import Data.Maybe
 import qualified Data.Map as Map
 import Data.String
 import Data.List
+import Data.List.Extra (splitOn)
 import Data.IORef
 import Data.Functor.Product
 import Control.Lens
@@ -645,7 +646,15 @@ heapster_find_symbol bic opts henv str =
 
 heapster_find_trait_method_symbol :: BuiltinContext -> Options ->
                                      HeapsterEnv -> String -> TopLevel String
-heapster_find_trait_method_symbol _bic _opts henv str = undefined
+heapster_find_trait_method_symbol bic opts henv str =
+  heapster_find_symbol bic opts henv queryStr
+  where
+    (traitMethod, instType) = span (/= '<') str
+    (colonTrait, method) = let (revMethod, revTrait) = span (/= ':') (reverse traitMethod)
+                      in ((reverse . drop 2) revTrait, reverse revMethod)
+    trait = intercalate ".." $ splitOn "::" colonTrait
+    unbracketedType = (init . tail) instType
+    queryStr = unbracketedType <> "$u20$as$u20$" <> trait <> "$GT$" <> (show . length) method <> method
 
 -- | Assume that the given named function has the supplied type and translates
 -- to a SAW core definition given by the second name
