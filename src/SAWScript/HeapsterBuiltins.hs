@@ -644,17 +644,31 @@ heapster_find_symbol bic opts henv str =
     _ -> fail ("Found multiple symbols matching string " ++ str ++ ": " ++
                concat (intersperse ", " $ map show syms))
 
+-- | Search for a symbol name in any LLVM module in a 'HeapsterEnv' that
+-- corresponds to the supplied string, which should be of the form:
+-- "trait::method<type>". Fails if there is not exactly one such symbol.
 heapster_find_trait_method_symbol :: BuiltinContext -> Options ->
                                      HeapsterEnv -> String -> TopLevel String
 heapster_find_trait_method_symbol bic opts henv str =
   heapster_find_symbol bic opts henv queryStr
   where
     (traitMethod, instType) = span (/= '<') str
-    (colonTrait, method) = let (revMethod, revTrait) = span (/= ':') (reverse traitMethod)
-                      in ((reverse . drop 2) revTrait, reverse revMethod)
+
+    (colonTrait, method) =
+      let (revMethod, revTrait) = span (/= ':') (reverse traitMethod)
+      in ((reverse . drop 2) revTrait, reverse revMethod)
+
     trait = intercalate ".." $ splitOn "::" colonTrait
+
+    -- TODO: This can fail on ill-formed queries. Needs to be better.
     unbracketedType = (init . tail) instType
-    queryStr = unbracketedType <> "$u20$as$u20$" <> trait <> "$GT$" <> (show . length) method <> method
+
+    queryStr = unbracketedType
+            <> "$u20$as$u20$"
+            <> trait
+            <> "$GT$"
+            <> (show . length) method
+            <> method
 
 -- | Assume that the given named function has the supplied type and translates
 -- to a SAW core definition given by the second name
