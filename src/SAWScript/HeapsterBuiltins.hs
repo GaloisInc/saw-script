@@ -650,7 +650,17 @@ heapster_find_symbol bic opts henv str =
 heapster_find_trait_method_symbol :: BuiltinContext -> Options ->
                                      HeapsterEnv -> String -> TopLevel String
 heapster_find_trait_method_symbol bic opts henv str =
-  heapster_find_symbol bic opts henv queryStr
+  if length instType > 2 then
+    let unbracketedType = (init . tail) instType
+        queryStr = unbracketedType
+                <> "$u20$as$u20$"
+                <> trait
+                <> "$GT$"
+                <> (show . length) method
+                <> method
+    in heapster_find_symbol bic opts henv queryStr
+  else
+    fail ("Ill-formed query string: " ++ str)
   where
     (traitMethod, instType) = span (/= '<') str
 
@@ -659,16 +669,6 @@ heapster_find_trait_method_symbol bic opts henv str =
       in ((reverse . drop 2) revTrait, reverse revMethod)
 
     trait = intercalate ".." $ splitOn "::" colonTrait
-
-    -- TODO: This can fail on ill-formed queries. Needs to be better.
-    unbracketedType = (init . tail) instType
-
-    queryStr = unbracketedType
-            <> "$u20$as$u20$"
-            <> trait
-            <> "$GT$"
-            <> (show . length) method
-            <> method
 
 -- | Assume that the given named function has the supplied type and translates
 -- to a SAW core definition given by the second name
