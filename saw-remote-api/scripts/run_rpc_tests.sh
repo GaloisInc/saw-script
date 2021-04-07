@@ -13,6 +13,10 @@ function run_test {
 echo "Setting up python environment for remote server clients..."
 poetry install
 
+echo "Typechecking code with mypy..."
+# Don't run mypy on tests/ yet, as it doesn't play well with mypy. See #1125.
+run_test poetry run mypy saw/
+
 export SAW_SERVER=$(which saw-remote-api)
 if [[ ! -x "$SAW_SERVER" ]]; then
   echo "could not locate saw-remote-api executable - try executing with cabal v2-exec"
