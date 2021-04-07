@@ -650,7 +650,7 @@ heapster_find_symbol bic opts henv str =
 heapster_find_trait_method_symbol :: BuiltinContext -> Options ->
                                      HeapsterEnv -> String -> TopLevel String
 heapster_find_trait_method_symbol bic opts henv str =
-  if length instType > 2 then
+  if length instType >= 2 then
     let unbracketedType = (init . tail) instType
         queryStr = unbracketedType
                 <> "$u20$as$u20$"
