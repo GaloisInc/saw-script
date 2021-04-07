@@ -22,11 +22,12 @@ import Data.Aeson
       KeyValue((.=)),
       ToJSON(toJSON) )
 import Data.Maybe ( fromMaybe )
-import Data.Text (Text)
+import Data.Text (Text, pack)
+import Numeric (showHex)
 
 import qualified Argo
 import qualified Argo.Doc as Doc
-import CryptolServer.Data.Expression ( Expression, getCryptolExpr )
+import qualified CryptolServer.Data.Expression as CE
 import qualified SAWScript.Builtins as SB
 import qualified SAWScript.Value as SV
 import SAWServer
@@ -42,6 +43,7 @@ import SAWServer.CryptolExpression ( CryptolModuleException(..), getTypedTermOfC
 import SAWServer.Exceptions ( notASimpset )
 import SAWServer.OK ( OK, ok )
 import SAWServer.TopLevel ( tl )
+import Verifier.SAW.FiniteValue (FirstOrderValue(..))
 import Verifier.SAW.Rewriter (addSimp, emptySimpset)
 import Verifier.SAW.TermNet (merge)
 import Verifier.SAW.TypedTerm (TypedTerm(..))
@@ -175,33 +177,44 @@ instance Doc.DescribedParams (ProveParams cryptolExpr) where
        Doc.Paragraph [Doc.Text "The goal to interpret as a theorm and prove."])
     ]
 
---data CexValue = CexValue String TypedTerm
+data CexValue = CexValue String CE.Expression
 
 data ProveResult
   = ProofValid
-  | ProofInvalid -- [CexValue]
+  | ProofInvalid [CexValue]
 
---instance ToJSON CexValue where
---  toJSON (CexValue n t) = object [ "name" .= n, "value" .= t ]
+instance ToJSON CexValue where
+  toJSON (CexValue n v) = object [ "name" .= n, "value" .= v ]
 
 instance ToJSON ProveResult where
   toJSON ProofValid = object [ "status" .= ("valid" :: Text)]
-  toJSON ProofInvalid {-cex-} =
-    object [ "status" .= ("invalid" :: Text) ] -- , "counterexample" .= cex]
-
+  toJSON (ProofInvalid cex) =
+    object [ "status" .= ("invalid" :: Text), "counterexample" .= cex]
 
 proveDescr :: Doc.Block
 proveDescr =
   Doc.Paragraph [ Doc.Text "Attempt to prove the given term representing a"
                 , Doc.Text " theorem, given a proof script context."]
 
-prove :: ProveParams Expression -> Argo.Command SAWState ProveResult
+exportFirstOrderExpr :: FirstOrderValue -> CE.Expression
+exportFirstOrderExpr fv =
+  case fv of
+    FOVBit b      -> CE.Bit b
+    FOVInt i      -> CE.Integer i
+    FOVIntMod m i -> CE.IntegerModulo i (fromIntegral m)
+    FOVWord w x   -> CE.Num CE.Hex (pack (showHex x "")) (fromIntegral w)
+    FOVVec _t vs  -> CE.Sequence (map exportFirstOrderExpr vs)
+    FOVArray{}    -> error $ "exportFirstOrderExpr: unsupported FOT Array"
+    FOVTuple vs   -> CE.Tuple (map exportFirstOrderExpr vs)
+    FOVRec _vm    -> error $ "exportFirstOrderExpr: unsupported record value"
+
+prove :: ProveParams CE.Expression -> Argo.Command SAWState ProveResult
 prove params = do
   state <- Argo.getState
   fileReader <- Argo.getFileReader
   let cenv = SV.rwCryptol (view sawTopLevelRW state)
       bic = view sawBIC state
-  cexp <- getCryptolExpr (ppGoal params)
+  cexp <- CE.getCryptolExpr (ppGoal params)
   (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader (SV.biSharedContext bic) cenv cexp
   t <- case eterm of
          Right (t, _) -> return t -- TODO: report warnings
@@ -210,7 +223,8 @@ prove params = do
   res <- tl $ SB.provePrim proofScript t
   case res of
     SV.Valid _ -> return ProofValid
-    SV.InvalidMulti _  _ -> return ProofInvalid
+    SV.InvalidMulti _ cex ->
+      return $ ProofInvalid $ map (\(n, fov) -> CexValue n (exportFirstOrderExpr fov)) cex
 
 interpretProofScript :: ProofScript -> Argo.Command SAWState (SV.ProofScript SV.SatResult)
 interpretProofScript (ProofScript ts) = go ts
