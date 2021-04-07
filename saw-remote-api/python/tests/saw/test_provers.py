@@ -6,6 +6,9 @@ import unittest
 from pathlib import Path
 
 
+def cry(exp):
+    return cryptoltypes.CryptolLiteral(exp)
+
 class ProverTest(unittest.TestCase):
 
     @classmethod
@@ -21,13 +24,16 @@ class ProverTest(unittest.TestCase):
 
         if __name__ == "__main__": saw.view(saw.LogResults())
 
-        self.assertTrue(saw.prove(cryptoltypes.CryptolLiteral('True'), ProofScript([abc])))
-        self.assertTrue(saw.prove(cryptoltypes.CryptolLiteral('True'), ProofScript([yices([])])))
-        self.assertTrue(saw.prove(cryptoltypes.CryptolLiteral('True'), ProofScript([z3([])])))
+        simple_thm = cry('\(x:[8]) -> x != x+1')
+        self.assertTrue(saw.prove(simple_thm, ProofScript([abc])))
+        self.assertTrue(saw.prove(simple_thm, ProofScript([yices([])])))
+        self.assertTrue(saw.prove(simple_thm, ProofScript([z3([])])))
 
-        self.assertTrue(saw.prove(cryptoltypes.CryptolLiteral('True'), ProofScript([Admit()])))
+        self.assertTrue(saw.prove(simple_thm, ProofScript([Admit()])))
+        self.assertTrue(saw.prove(cry('True'), ProofScript([Trivial()])))
 
-        self.assertFalse(saw.prove(cryptoltypes.CryptolLiteral('False'), ProofScript([z3([])])))
+        simple_non_thm = cry('\(x:[8]) -> x == x+1')
+        self.assertFalse(saw.prove(simple_non_thm, ProofScript([z3([])])))
 
 
 if __name__ == "__main__":
