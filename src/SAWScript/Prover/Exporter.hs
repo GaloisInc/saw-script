@@ -39,7 +39,7 @@ module SAWScript.Prover.Exporter
 
 import Data.Foldable(toList)
 
-import Control.Monad.Except (runExceptT, throwError)
+import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
