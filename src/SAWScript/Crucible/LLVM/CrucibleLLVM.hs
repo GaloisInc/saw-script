@@ -35,6 +35,7 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
   , EndianForm(..)
     -- * Re-exports from "Lang.Crucible.LLVM.Extension"
   , ArchWidth
+  , LLVMArch
     -- * Re-exports from "Lang.Crucible.LLVM.Intrinsics"
   , LLVM
   , llvmTypeCtx
@@ -142,7 +143,7 @@ import Lang.Crucible.LLVM.DataLayout
    integerAlignment, floatAlignment, fromAlignment, intWidthSize, ptrBitwidth)
 
 import Lang.Crucible.LLVM.Extension
-  (ArchWidth)
+  (ArchWidth, LLVMArch)
 
 import Lang.Crucible.LLVM.Intrinsics
   (LLVM, register_llvm_overrides, llvmIntrinsicTypes)

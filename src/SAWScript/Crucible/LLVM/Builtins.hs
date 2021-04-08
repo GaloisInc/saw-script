@@ -149,7 +149,6 @@ import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
 -- crucible-llvm
 import qualified Lang.Crucible.LLVM.ArraySizeProfile as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
-import           Lang.Crucible.LLVM.Extension (LLVM)
 import qualified Lang.Crucible.LLVM.Bytes as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
@@ -435,7 +434,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
 
           return $ SomeLLVM extracted_method_spec
 
-setupValueAsExtCns :: SetupValue (Crucible.LLVM arch) -> Maybe (ExtCns Term)
+setupValueAsExtCns :: SetupValue (LLVM arch) -> Maybe (ExtCns Term)
 setupValueAsExtCns =
   \case
     SetupTerm term -> asExtCns $ ttTerm term
@@ -1001,10 +1000,10 @@ registerOverride ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch, Crucible.HasLLVMAnn Sym) =>
   Options                    ->
   LLVMCrucibleContext arch       ->
-  Crucible.SimContext (SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) ->
+  Crucible.SimContext (SAWCruciblePersonality Sym) Sym Crucible.LLVM ->
   W4.ProgramLoc              ->
   [MS.CrucibleMethodSpecIR (LLVM arch)]     ->
-  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret ()
+  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp args ret ()
 registerOverride opts cc sim_ctx top_loc cs =
   do let sym = cc^.ccBackend
      sc <- saw_ctx <$> liftIO (Common.sawCoreState sym)
@@ -1041,7 +1040,7 @@ registerInvariantOverride ::
   W4.ProgramLoc ->
   HashMap Crucible.SomeHandle [Crucible.BreakpointName] ->
   [MS.CrucibleMethodSpecIR (LLVM arch)] ->
-  IO (Crucible.ExecutionFeature (SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp)
+  IO (Crucible.ExecutionFeature (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp)
 registerInvariantOverride opts cc top_loc all_breakpoints cs =
   do sc <- saw_ctx <$> Common.sawCoreState (cc^.ccBackend)
      let name = (head cs) ^. csName
@@ -1073,7 +1072,7 @@ withCfg ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
   String ->
-  (forall blocks init ret . Crucible.CFG (Crucible.LLVM arch) blocks init ret -> IO a) ->
+  (forall blocks init ret . Crucible.CFG Crucible.LLVM blocks init ret -> IO a) ->
   IO a
 withCfg context name k =
   do let function_id = L.Symbol name
@@ -1085,7 +1084,7 @@ withCfgAndBlockId ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
-  (forall blocks init args ret . Crucible.CFG (Crucible.LLVM arch) blocks init ret -> Crucible.BlockID blocks args -> IO a) ->
+  (forall blocks init args ret . Crucible.CFG Crucible.LLVM blocks init ret -> Crucible.BlockID blocks args -> IO a) ->
   IO a
 withCfgAndBlockId context method_spec k =
   case method_spec ^. csParentName of
@@ -1102,7 +1101,7 @@ withBreakpointCfgAndBlockId ::
   LLVMCrucibleContext arch ->
   String ->
   String ->
-  (forall blocks init args ret . Crucible.CFG (Crucible.LLVM arch) blocks init ret -> Crucible.BlockID blocks args -> IO a) ->
+  (forall blocks init args ret . Crucible.CFG Crucible.LLVM blocks init ret -> Crucible.BlockID blocks args -> IO a) ->
   IO a
 withBreakpointCfgAndBlockId context name parent k =
   do let breakpoint_name = Crucible.BreakpointName $ Text.pack name
@@ -1476,7 +1475,7 @@ runCFG simCtx globals h cfg args =
 
 extractFromLLVMCFG ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
-  Options -> SharedContext -> LLVMCrucibleContext arch -> Crucible.AnyCFG (Crucible.LLVM arch) -> IO TypedTerm
+  Options -> SharedContext -> LLVMCrucibleContext arch -> Crucible.AnyCFG Crucible.LLVM -> IO TypedTerm
 extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
   do let sym = cc^.ccBackend
      st <- Common.sawCoreState sym
@@ -1778,7 +1777,7 @@ symTypeAlias _ = Nothing
 llvm_alloc_internal ::
   L.Type  ->
   LLVMAllocSpec  ->
-  CrucibleSetup (Crucible.LLVM arch) (AllLLVM SetupValue)
+  CrucibleSetup (LLVM arch) (AllLLVM SetupValue)
 llvm_alloc_internal lty spec =
   do cctx <- getLLVMCrucibleContext
      let ?lc = ccTypeCtx cctx

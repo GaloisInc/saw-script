@@ -158,7 +158,7 @@ data AIGProxy where
   AIGProxy :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Proxy l g -> AIGProxy
 
 data SAW_CFG where
-  LLVM_CFG :: Crucible.AnyCFG (Crucible.LLVM arch) -> SAW_CFG
+  LLVM_CFG :: Crucible.AnyCFG Crucible.LLVM -> SAW_CFG
   JVM_CFG :: Crucible.AnyCFG JVM -> SAW_CFG
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
@@ -560,7 +560,7 @@ newtype LLVMCrucibleSetupM a =
     { runLLVMCrucibleSetupM ::
         forall arch.
         (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-        CrucibleSetup (Crucible.LLVM arch) a
+        CrucibleSetup (CMSLLVM.LLVM arch) a
     }
   deriving Functor
 
