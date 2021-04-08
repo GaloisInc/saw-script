@@ -39,11 +39,12 @@ module SAWScript.Prover.Exporter
 
 import Data.Foldable(toList)
 
-import Control.Monad.Except (runExceptT, throwError)
+import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
 import Data.Parameterized.Nonce (globalNonceGenerator)
+import Data.Parameterized.Some (Some(..))
 import Data.Set (Set)
 import qualified Data.SBV.Dynamic as SBV
 import System.IO
@@ -81,7 +82,7 @@ import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
-import What4.Protocol.VerilogWriter (exprVerilog)
+import What4.Protocol.VerilogWriter (exprsVerilog)
 import What4.Solver.Adapter
 import qualified What4.SWord as W4Sim
 
@@ -245,7 +246,7 @@ writeVerilogSAT sc path satq = liftIO $
                    Just ft -> return ft
      argTys' <- traverse f argTys
 
-     edoc <- runExceptT $ exprVerilog sym bval "f"
+     edoc <- runExceptT $ exprsVerilog sym [Some bval] "f"
      case edoc of
        Left err -> fail $ "Failed to translate to Verilog: " ++ err
        Right doc -> do
@@ -255,16 +256,28 @@ writeVerilogSAT sc path satq = liftIO $
          hClose h
      return (argNames, argTys')
 
+flattenSValue :: W4Sim.SValue sym -> IO [Some (W4.SymExpr sym)]
+flattenSValue (Sim.VBool b) = return [Some b]
+flattenSValue (Sim.VWord (W4Sim.DBV w)) = return [Some w]
+flattenSValue (Sim.VPair l r) =
+  do lv <- Sim.force l
+     rv <- Sim.force r
+     ls <- flattenSValue lv
+     rs <- flattenSValue rv
+     return (ls ++ rs)
+flattenSValue (Sim.VVector ts) =
+  do vs <- mapM Sim.force ts
+     es <- mapM flattenSValue vs
+     return (concat es)
+flattenSValue sval = fail $ "write_verilog: unsupported result type: " ++ show sval
+
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
   sym <- newSAWCoreBackend sc
   st  <- sawCoreState sym
-  (_, (_, bval)) <- W4Sim.w4EvalAny sym st sc mempty mempty t
-  edoc <- runExceptT $
-    case bval of
-      Sim.VBool b -> exprVerilog sym b "f"
-      Sim.VWord (W4Sim.DBV w) -> exprVerilog sym w "f"
-      _ -> throwError $ "write_verilog: unsupported result type: " ++ show bval
+  (_, (_, sval)) <- W4Sim.w4EvalAny sym st sc mempty mempty t
+  es <- flattenSValue sval
+  edoc <- runExceptT $ exprsVerilog sym es "f"
   case edoc of
     Left err -> fail $ "Failed to translate to Verilog: " ++ err
     Right doc -> do

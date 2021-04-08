@@ -18,4 +18,9 @@ z3 w4_offline_smtlib2.prove0.smt2 | grep "^unsat$"
 z3 write_smtlib2_w4_sat.smt2 | grep "^sat$"
 z3 write_smtlib2_w4_unsat.smt2 | grep "^unsat$"
 
+abc -q "%read write_verilog_seqt.v; %blast; &write seqt.aig"
+abc -q "%read write_verilog_tupt.v; %blast; &write tupt.aig"
+abc -q "cec seqt.aig tupt.aig"
+
 rm -f ${CEX}
+rm -f *.v *.aig *.smt2
