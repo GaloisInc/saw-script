@@ -76,9 +76,10 @@ import qualified SAWScript.Crucible.Common.Override as O
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
 import SAWScript.Crucible.LLVM.Builtins
-import SAWScript.Crucible.LLVM.MethodSpecIR
+import SAWScript.Crucible.LLVM.MethodSpecIR hiding (LLVM)
 import SAWScript.Crucible.LLVM.ResolveSetupValue
 import qualified SAWScript.Crucible.LLVM.Override as LO
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as LMS (LLVM)
 
 import qualified What4.Config as W4
 import qualified What4.Expr as W4
@@ -126,7 +127,7 @@ import qualified Data.ElfEdit as Elf
 -- ** Utility type synonyms and functions
 
 type LLVMArch = C.LLVM.X86 64
-type LLVM = C.LLVM.LLVM LLVMArch
+type LLVM = LMS.LLVM LLVMArch
 type LLVMOverrideMatcher = O.OverrideMatcher LLVM
 type Regs = Assignment (C.RegValue' Sym) (Macaw.MacawCrucibleRegTypes Macaw.X86_64)
 type Register = Macaw.X86Reg (Macaw.BVType 64)
@@ -526,7 +527,7 @@ buildMethodSpec lm nm loc checkSat setup =
     (mtargs, mtret) <- case (,) <$> mapM (llvmTypeToMemType lc) args <*> mapM (llvmTypeToMemType lc) ret of
       Left err -> fail err
       Right x -> pure x
-    let initialMethodSpec = MS.makeCrucibleMethodSpecIR @(C.LLVM.LLVM (C.LLVM.X86 64))
+    let initialMethodSpec = MS.makeCrucibleMethodSpecIR @LLVM
           methodId mtargs mtret programLoc lm
     view Setup.csMethodSpec <$> execStateT (runLLVMCrucibleSetupM setup)
       (Setup.makeCrucibleSetupState cc initialMethodSpec)

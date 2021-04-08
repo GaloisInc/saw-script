@@ -30,8 +30,9 @@ Stability   : provisional
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 
 module SAWScript.Crucible.LLVM.MethodSpecIR
-  ( -- * LLVMMethodId
-    LLVMMethodId(..)
+  ( LLVM
+    -- * LLVMMethodId
+  , LLVMMethodId(..)
   , llvmMethodParent
   , llvmMethodName
   , csName
@@ -143,18 +144,20 @@ import           Verifier.SAW.TypedTerm
 --------------------------------------------------------------------------------
 -- ** Language features
 
-type instance MS.HasSetupNull (CL.LLVM _) = 'True
-type instance MS.HasSetupStruct (CL.LLVM _) = 'True
-type instance MS.HasSetupArray (CL.LLVM _) = 'True
-type instance MS.HasSetupElem (CL.LLVM _) = 'True
-type instance MS.HasSetupField (CL.LLVM _) = 'True
-type instance MS.HasSetupGlobal (CL.LLVM _) = 'True
-type instance MS.HasSetupGlobalInitializer (CL.LLVM _) = 'True
+data LLVM (arch :: CL.LLVMArch)
 
-type instance MS.HasGhostState (CL.LLVM _) = 'True
+type instance MS.HasSetupNull (LLVM _) = 'True
+type instance MS.HasSetupStruct (LLVM _) = 'True
+type instance MS.HasSetupArray (LLVM _) = 'True
+type instance MS.HasSetupElem (LLVM _) = 'True
+type instance MS.HasSetupField (LLVM _) = 'True
+type instance MS.HasSetupGlobal (LLVM _) = 'True
+type instance MS.HasSetupGlobalInitializer (LLVM _) = 'True
 
-type instance MS.TypeName (CL.LLVM arch) = CL.Ident
-type instance MS.ExtType (CL.LLVM arch) = CL.MemType
+type instance MS.HasGhostState (LLVM _) = 'True
+
+type instance MS.TypeName (LLVM arch) = CL.Ident
+type instance MS.ExtType (LLVM arch) = CL.MemType
 
 --------------------------------------------------------------------------------
 -- *** LLVMMethodId
@@ -167,16 +170,16 @@ data LLVMMethodId =
 
 makeLenses ''LLVMMethodId
 
-csName :: Lens' (MS.CrucibleMethodSpecIR (CL.LLVM arch)) String
+csName :: Lens' (MS.CrucibleMethodSpecIR (LLVM arch)) String
 csName = MS.csMethod . llvmMethodName
 
-csParentName :: Lens' (MS.CrucibleMethodSpecIR (CL.LLVM arch)) (Maybe String)
+csParentName :: Lens' (MS.CrucibleMethodSpecIR (LLVM arch)) (Maybe String)
 csParentName = MS.csMethod . llvmMethodParent
 
 instance PPL.Pretty LLVMMethodId where
   pretty = PPL.pretty . view llvmMethodName
 
-type instance MS.MethodId (CL.LLVM _) = LLVMMethodId
+type instance MS.MethodId (LLVM _) = LLVMMethodId
 
 --------------------------------------------------------------------------------
 -- *** LLVMAllocSpec
@@ -194,7 +197,7 @@ data LLVMAllocSpec =
 
 makeLenses ''LLVMAllocSpec
 
-type instance MS.AllocSpec (CL.LLVM _) = LLVMAllocSpec
+type instance MS.AllocSpec (LLVM _) = LLVMAllocSpec
 
 mutIso :: Iso' CL.Mutability Bool
 mutIso =
@@ -262,7 +265,7 @@ instance TestEquality LLVMModule where
   -- is sufficient to guarantee equality of two 'LLVMModule' values.
   testEquality m1 m2 = testEquality (modTrans m1) (modTrans m2)
 
-type instance MS.Codebase (CL.LLVM arch) = LLVMModule arch
+type instance MS.Codebase (LLVM arch) = LLVMModule arch
 
 showLLVMModule :: LLVMModule arch -> String
 showLLVMModule (LLVMModule name m _) =
@@ -310,13 +313,13 @@ instance Crucible.IntrinsicClass Sym MS.GhostValue where
 --------------------------------------------------------------------------------
 -- ** CrucibleContext
 
-type instance MS.CrucibleContext (CL.LLVM arch) = LLVMCrucibleContext arch
+type instance MS.CrucibleContext (LLVM arch) = LLVMCrucibleContext arch
 
 data LLVMCrucibleContext arch =
   LLVMCrucibleContext
   { _ccLLVMModule      :: LLVMModule arch
   , _ccBackend         :: Sym
-  , _ccLLVMSimContext  :: Crucible.SimContext (SAWCruciblePersonality Sym) Sym (CL.LLVM arch)
+  , _ccLLVMSimContext  :: Crucible.SimContext (SAWCruciblePersonality Sym) Sym CL.LLVM
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
   , _ccBasicSS         :: Simpset
   }
@@ -338,13 +341,13 @@ ccTypeCtx = view CL.llvmTypeCtx . ccLLVMContext
 --------------------------------------------------------------------------------
 -- ** PointsTo
 
-type instance MS.PointsTo (CL.LLVM arch) = LLVMPointsTo arch
+type instance MS.PointsTo (LLVM arch) = LLVMPointsTo arch
 
 data LLVMPointsTo arch =
-  LLVMPointsTo ProgramLoc (Maybe TypedTerm) (MS.SetupValue (CL.LLVM arch)) (LLVMPointsToValue arch)
+  LLVMPointsTo ProgramLoc (Maybe TypedTerm) (MS.SetupValue (LLVM arch)) (LLVMPointsToValue arch)
 
 data LLVMPointsToValue arch
-  = ConcreteSizeValue (MS.SetupValue (CL.LLVM arch))
+  = ConcreteSizeValue (MS.SetupValue (LLVM arch))
   | SymbolicSizeValue TypedTerm TypedTerm
 
 ppPointsTo :: LLVMPointsTo arch -> PPL.Doc ann
@@ -366,7 +369,7 @@ instance PPL.Pretty (LLVMPointsToValue arch) where
 --------------------------------------------------------------------------------
 -- ** AllocGlobal
 
-type instance MS.AllocGlobal (CL.LLVM arch) = LLVMAllocGlobal arch
+type instance MS.AllocGlobal (LLVM arch) = LLVMAllocGlobal arch
 
 data LLVMAllocGlobal arch = LLVMAllocGlobal ProgramLoc L.Symbol
 
@@ -431,7 +434,7 @@ initialDefCrucibleMethodSpecIR ::
   L.Define ->
   ProgramLoc ->
   Maybe String ->
-  Either SetupError (MS.CrucibleMethodSpecIR (CL.LLVM arch))
+  Either SetupError (MS.CrucibleMethodSpecIR (LLVM arch))
 initialDefCrucibleMethodSpecIR llvmModule def loc parent = do
   args <- resolveArgs (L.typedType <$> L.defArgs def)
   ret <- resolveRetTy (L.defRetType def)
@@ -445,7 +448,7 @@ initialDeclCrucibleMethodSpecIR ::
   L.Declare ->
   ProgramLoc ->
   Maybe String ->
-  Either SetupError (MS.CrucibleMethodSpecIR (CL.LLVM arch))
+  Either SetupError (MS.CrucibleMethodSpecIR (LLVM arch))
 initialDeclCrucibleMethodSpecIR llvmModule dec loc parent = do
   args <- resolveArgs (L.decArgs dec)
   ret <- resolveRetTy (L.decRetType dec)
@@ -459,7 +462,7 @@ initialCrucibleSetupState ::
   L.Define ->
   ProgramLoc ->
   Maybe String ->
-  Either SetupError (Setup.CrucibleSetupState (CL.LLVM arch))
+  Either SetupError (Setup.CrucibleSetupState (LLVM arch))
 initialCrucibleSetupState cc def loc parent = do
   ms <- initialDefCrucibleMethodSpecIR (cc ^. ccLLVMModule) def loc parent
   return $ Setup.makeCrucibleSetupState cc ms
@@ -470,7 +473,7 @@ initialCrucibleSetupStateDecl ::
   L.Declare ->
   ProgramLoc ->
   Maybe String ->
-  Either SetupError (Setup.CrucibleSetupState (CL.LLVM arch))
+  Either SetupError (Setup.CrucibleSetupState (LLVM arch))
 initialCrucibleSetupStateDecl cc dec loc parent = do
   ms <- initialDeclCrucibleMethodSpecIR (cc ^. ccLLVMModule) dec loc parent
   return $ Setup.makeCrucibleSetupState cc ms
@@ -487,20 +490,20 @@ initialCrucibleSetupStateDecl cc dec loc parent = do
 -- equivalent to this definition:
 -- @
 -- data AllLLVM t =
---   MkAllLLVM { getAllLLVM :: forall arch. t (CL.LLVM arch) }
+--   MkAllLLVM { getAllLLVM :: forall arch. t (LLVM arch) }
 -- @
 -- But they preserve the instances from 'All' and 'Compose'.
-type AllLLVM t = All (Compose t CL.LLVM)
+type AllLLVM t = All (Compose t LLVM)
 
 -- This doesn't work :(
 --
--- pattern AllLLVM :: (forall arch. t (CL.LLVM arch)) -> AllLLVM t
+-- pattern AllLLVM :: (forall arch. t (LLVM arch)) -> AllLLVM t
 -- pattern AllLLVM x = All (Compose x)
 
-mkAllLLVM :: forall t. (forall arch. t (CL.LLVM arch)) -> AllLLVM t
+mkAllLLVM :: forall t. (forall arch. t (LLVM arch)) -> AllLLVM t
 mkAllLLVM x = All (Compose x)
 
-getAllLLVM :: forall t. AllLLVM t -> (forall arch. t (CL.LLVM arch))
+getAllLLVM :: forall t. AllLLVM t -> (forall arch. t (LLVM arch))
 getAllLLVM (All (Compose x)) = x
 
 -- Constructors for 'SetupValue' which are architecture-polymorphic
@@ -538,17 +541,17 @@ anySetupGlobalInitializer globalName =
 -- The following type synonym and associated constructor/destructor are
 -- equivalent to this definition:
 -- @
--- data SomeLLVM t = forall arch. MkSomeLLVM (t (CL.LLVM arch))
+-- data SomeLLVM t = forall arch. MkSomeLLVM (t (LLVM arch))
 -- @
 -- But they preserve the instances from 'Some' and 'Compose'.
-type SomeLLVM t = Some (Compose t CL.LLVM)
+type SomeLLVM t = Some (Compose t LLVM)
 
-pattern SomeLLVM :: t (CL.LLVM arch) -> SomeLLVM t
+pattern SomeLLVM :: t (LLVM arch) -> SomeLLVM t
 pattern SomeLLVM x = Some (Compose x)
 {-# COMPLETE SomeLLVM #-}
 
-mkSomeLLVM :: t (CL.LLVM arch) -> SomeLLVM t
+mkSomeLLVM :: t (LLVM arch) -> SomeLLVM t
 mkSomeLLVM x = Some (Compose x)
 
-getSomeLLVM :: forall t. (forall arch. t (CL.LLVM arch)) -> AllLLVM t
+getSomeLLVM :: forall t. (forall arch. t (LLVM arch)) -> AllLLVM t
 getSomeLLVM x = All (Compose x)
