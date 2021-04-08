@@ -53,6 +53,16 @@ class VerificationResult(metaclass=ABCMeta):
     @abstractmethod
     def is_success(self) -> bool: ...
 
+class ProofResult(metaclass=ABCMeta):
+    goal: proofscript.ProofScript
+    valid: bool
+    counterexample: Any
+
+    def is_valid(self) -> bool:
+        return self.valid
+
+    def get_counterexample(self) -> Any:
+        return self.counterexample
 
 @dataclass
 class VerificationSucceeded(VerificationResult):
@@ -423,9 +433,20 @@ def llvm_verify(module: LLVMModule,
     return result
 
 def prove(goal: cryptoltypes.CryptolJSON,
-          proof_script: Optional[proofscript.ProofScript] = None):
-    return __get_designated_connection().prove(cryptoltypes.to_cryptol(goal),
-                                               proof_script.to_json()).result()
+          proof_script: proofscript.ProofScript) -> ProofResult:
+    conn = __get_designated_connection()
+    res = conn.prove(cryptoltypes.to_cryptol(goal),
+                     proof_script.to_json()).result()
+    pr = ProofResult()
+    if res['status'] == 'valid':
+        pr.valid = True
+    elif res['status'] == 'invalid':
+        pr.valid = False
+    else:
+        raise ValueError("Unknown proof result " + str(res))
+    if 'counterexample' in res:
+        pr.counterexample = res['counterexample']
+    return pr
 
 @atexit.register
 def script_exit() -> None:

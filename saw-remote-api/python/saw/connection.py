@@ -176,6 +176,8 @@ class SAWConnection:
             LLVMAssume(self, module, function, contract, lemma_name)
         return self.most_recent_result
 
-    def prove(self, goal, proof_script):
+    def prove(self,
+              goal: cryptoltypes.CryptolJSON,
+              proof_script: ProofScript) -> Command:
         self.most_recent_result = Prove(self, goal, proof_script)
         return self.most_recent_result

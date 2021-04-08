@@ -97,12 +97,7 @@ class Prove(SAWCommand):
         super(Prove, self).__init__('SAW/prove', params, connection)
 
     def process_result(self, res : Any) -> Any:
-        if res['status'] == 'valid':
-            return True
-        elif res['status'] == 'invalid':
-            return False
-        else:
-            raise ValueError("Unknown proof result " + str(res))
+        return res
 
 class SAWReset(argo.Notification):
     def __init__(self, connection : argo.HasProtocolState) -> None:
