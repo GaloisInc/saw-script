@@ -32,6 +32,7 @@ module Verifier.SAW.CryptolEnv
   , InputText(..)
   , lookupIn
   , resolveIdentifier
+  , meSolverConfig
   )
   where
 
@@ -466,6 +467,18 @@ bindInteger (ident, n) env =
 
 --------------------------------------------------------------------------------
 
+-- FIXME: This definition was copied from a local declaration inside
+-- function 'defaultRW' in module 'Cryptol.REPL.Monad'. The cryptol
+-- package should probably export it so we don't have to copy it.
+meSolverConfig :: ME.ModuleEnv -> TM.SolverConfig
+meSolverConfig env =
+  TM.SolverConfig
+  { TM.solverPath = "z3"
+  , TM.solverArgs = [ "-smt2", "-in" ]
+  , TM.solverVerbose = 0
+  , TM.solverPreludePath = ME.meSearchPath env
+  }
+
 resolveIdentifier ::
   (?fileReader :: FilePath -> IO ByteString) =>
   CryptolEnv -> Text -> IO (Maybe T.Name)
@@ -480,7 +493,7 @@ resolveIdentifier env nm =
   nameEnv = getNamingEnv env
 
   doResolve pnm =
-    SMT.withSolver (ME.meSolverConfig modEnv) $ \s ->
+    SMT.withSolver (meSolverConfig modEnv) $ \s ->
     do let minp = MM.ModuleInput True (pure defaultEvalOpts) ?fileReader modEnv
        (res, _ws) <- MM.runModuleM (minp s) $
           MM.interactive (MB.rename interactiveName nameEnv (MR.renameVar pnm))
@@ -646,7 +659,7 @@ liftModuleM ::
   ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
 liftModuleM env m =
   do let minp = MM.ModuleInput True (pure defaultEvalOpts) ?fileReader env
-     SMT.withSolver (ME.meSolverConfig env) $ \s ->
+     SMT.withSolver (meSolverConfig env) $ \s ->
        MM.runModuleM (minp s) m >>= moduleCmdResult
 
 defaultEvalOpts :: E.EvalOpts
