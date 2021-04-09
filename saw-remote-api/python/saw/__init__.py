@@ -59,9 +59,20 @@ class ProofResult(metaclass=ABCMeta):
     counterexample: Any
 
     def is_valid(self) -> bool:
+        """Returns @True@ in the case where the given proof goal is valid, or true for
+        all possible values of any symbolic variables that it contains. Returns
+        @False@ if the goal can possibly be false for any value of symbolic
+        variables it contains. In this latter case, the @get_counterexample@
+        function will return the variable values for which the goal evaluates
+        to false.
+        """
         return self.valid
 
     def get_counterexample(self) -> Any:
+        """In the case where @is_valid@ returns @False@, this function returns the
+        counterexample that provides the values for symbolic variables that
+        lead to it being false. If @is_valid@ returns @True@, returns @None@.
+        """
         return self.counterexample
 
 @dataclass
@@ -434,6 +445,11 @@ def llvm_verify(module: LLVMModule,
 
 def prove(goal: cryptoltypes.CryptolJSON,
           proof_script: proofscript.ProofScript) -> ProofResult:
+    """Atempts to prove that the expression given as the first argument, @goal@, is
+    true for all possible values of free symbolic variables. Uses the proof
+    script (potentially specifying an automated prover) provided by the second
+    argument.
+    """
     conn = __get_designated_connection()
     res = conn.prove(cryptoltypes.to_cryptol(goal),
                      proof_script.to_json()).result()
