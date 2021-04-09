@@ -358,7 +358,7 @@ def llvm_verify(module: LLVMModule,
     if lemmas is None:
         lemmas = []
     if script is None:
-        script = proofscript.ProofScript([proofscript.abc])
+        script = proofscript.ProofScript([proofscript.UseProver(proofscript.ABC())])
 
     lemma_name_hint = contract.__class__.__name__ + "_" + function
     name = llvm.uniquify(lemma_name_hint, __used_server_names)

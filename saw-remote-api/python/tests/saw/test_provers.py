@@ -20,20 +20,20 @@ class ProverTest(unittest.TestCase):
         saw.reset_server()
         saw.disconnect()
 
-    def test_provers(self):
+    def test_provers_low_level(self):
 
         if __name__ == "__main__": saw.view(saw.LogResults())
 
         simple_thm = cry('\(x:[8]) -> x != x+1')
-        self.assertTrue(saw.prove(simple_thm, ProofScript([abc])).is_valid())
-        self.assertTrue(saw.prove(simple_thm, ProofScript([yices([])])).is_valid())
-        self.assertTrue(saw.prove(simple_thm, ProofScript([z3([])])).is_valid())
+        self.assertTrue(saw.prove(simple_thm, ProofScript([UseProver(ABC())])).is_valid())
+        self.assertTrue(saw.prove(simple_thm, ProofScript([UseProver(Yices([]))])).is_valid())
+        self.assertTrue(saw.prove(simple_thm, ProofScript([UseProver(Z3([]))])).is_valid())
 
         self.assertTrue(saw.prove(simple_thm, ProofScript([Admit()])).is_valid())
         self.assertTrue(saw.prove(cry('True'), ProofScript([Trivial()])).is_valid())
 
         simple_non_thm = cry('\(x:[8]) -> x != 5')
-        pr = saw.prove(simple_non_thm, ProofScript([z3([])]))
+        pr = saw.prove(simple_non_thm, ProofScript([UseProver(Z3([]))]))
         self.assertFalse(pr.is_valid())
         cex = pr.get_counterexample()
         self.assertEqual(cex[0]['value']['data'], '5')

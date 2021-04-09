@@ -112,17 +112,18 @@ class ProofScript:
   def to_json(self) -> Any:
     return { 'tactics': [t.to_json() for t in self.tactics] }
 
-abc = UseProver(ABC())
-abc_smtlib = UseProver(ABC_SMTLib())
-abc_verilog = UseProver(ABC_Verilog())
-rme = UseProver(RME())
-boolector = UseProver(Boolector())
+# TODO examine and decide on consistent interface for solver helpers
+# abc = UseProver(ABC())
+# abc_smtlib = UseProver(ABC_SMTLib())
+# abc_verilog = UseProver(ABC_Verilog())
+# rme = UseProver(RME())
+# boolector = UseProver(Boolector())
 
-def cvc4(unints : List[str]) -> ProofTactic:
-  return UseProver(CVC4(unints))
+# def cvc4(unints : List[str]) -> ProofTactic:
+#   return UseProver(CVC4(unints))
 
-def yices(unints : List[str]) -> ProofTactic:
-  return UseProver(Yices(unints))
+# def yices(unints : List[str]) -> ProofTactic:
+#   return UseProver(Yices(unints))
 
-def z3(unints : List[str]) -> ProofTactic:
-  return UseProver(Z3(unints))
+# def z3(unints : List[str]) -> ProofTactic:
+#   return UseProver(Z3(unints))
