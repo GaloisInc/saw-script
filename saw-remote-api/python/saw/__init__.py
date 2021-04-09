@@ -59,6 +59,7 @@ class ProofResult(metaclass=ABCMeta):
     counterexample: Any
 
     def is_valid(self) -> bool:
+        """Returns ``True`` if the goal was successfully proved, otherwise returns ``False``."""
         return self.valid
 
     def get_counterexample(self) -> Any:
@@ -434,6 +435,7 @@ def llvm_verify(module: LLVMModule,
 
 def prove(goal: cryptoltypes.CryptolJSON,
           proof_script: proofscript.ProofScript) -> ProofResult:
+    """Attempts to prove ``goal`` via the provided ``proof_script``."""
     conn = __get_designated_connection()
     res = conn.prove(cryptoltypes.to_cryptol(goal),
                      proof_script.to_json()).result()

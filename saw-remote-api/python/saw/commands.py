@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, Set, Union, overload
 
 from cryptol import cryptoltypes
 from . import exceptions
-from saw.proofscript import *
+from .proofscript import *
 
 from typing import Any, List
 

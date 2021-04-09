@@ -5,6 +5,7 @@ from distutils.spawn import find_executable
 from argo_client.connection import ServerConnection, DynamicSocketProcess, HttpProcess, ManagedProcess
 from argo_client.interaction import Interaction, Command
 from .commands import *
+from .proofscript import ProofScript
 
 from typing import Optional, Union, Any, List
 
@@ -179,5 +180,6 @@ class SAWConnection:
     def prove(self,
               goal: cryptoltypes.CryptolJSON,
               proof_script: ProofScript) -> Command:
+        """Attempts to prove ``goal`` via the provided ``proof_script``."""
         self.most_recent_result = Prove(self, goal, proof_script)
         return self.most_recent_result
