@@ -8,6 +8,8 @@ import signal
 import atexit
 from distutils.spawn import find_executable
 
+import cryptol
+
 from cryptol import cryptoltypes
 from . import connection
 from argo_client.connection import ServerConnection
@@ -461,7 +463,8 @@ def prove(goal: cryptoltypes.CryptolJSON,
     else:
         raise ValueError("Unknown proof result " + str(res))
     if 'counterexample' in res:
-        pr.counterexample = res['counterexample']
+        pr.counterexample = [ (arg['name'], cryptol.from_cryptol_arg(arg['value']))
+                              for arg in res['counterexample'] ]
     return pr
 
 @atexit.register

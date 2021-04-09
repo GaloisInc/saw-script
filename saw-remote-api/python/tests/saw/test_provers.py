@@ -1,4 +1,5 @@
 from cryptol import cryptoltypes
+from cryptol.bitvector import BV
 import saw
 from saw.proofscript import *
 
@@ -36,7 +37,7 @@ class ProverTest(unittest.TestCase):
         pr = saw.prove(simple_non_thm, ProofScript([z3([])]))
         self.assertFalse(pr.is_valid())
         cex = pr.get_counterexample()
-        self.assertEqual(cex[0]['value']['data'], '5')
+        self.assertEqual(cex, [('x', BV(8, 0x05))])
 
 
 if __name__ == "__main__":
