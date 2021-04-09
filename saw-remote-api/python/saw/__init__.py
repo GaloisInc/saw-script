@@ -58,7 +58,7 @@ class VerificationResult(metaclass=ABCMeta):
 class ProofResult(metaclass=ABCMeta):
     goal: proofscript.ProofScript
     valid: bool
-    counterexample: Any
+    counterexample: Optional[Any]
 
     def is_valid(self) -> bool:
         """Returns @True@ in the case where the given proof goal is valid, or true for
@@ -465,6 +465,8 @@ def prove(goal: cryptoltypes.CryptolJSON,
     if 'counterexample' in res:
         pr.counterexample = [ (arg['name'], cryptol.from_cryptol_arg(arg['value']))
                               for arg in res['counterexample'] ]
+    else:
+        pr.counterexample = None
     return pr
 
 @atexit.register
