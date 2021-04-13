@@ -37,6 +37,7 @@ import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -508,6 +509,34 @@ goal_eval unints =
      unintSet <- resolveNames unints
      prop' <- io (evalProp sc unintSet (goalProp goal))
      return (prop', EvalEvidence unintSet)
+
+extract_uninterp :: [String] -> TypedTerm -> TopLevel (TypedTerm, [(String,[(TypedTerm,TypedTerm)])])
+extract_uninterp unints tt =
+  do sc <- getSharedContext
+     idxs <- mapM (resolveName sc) unints
+     let unintSet = Set.fromList idxs
+     (tm, repls) <- io (Prover.w4_extract_uninterp sc unintSet (ttTerm tt))
+     tt' <- io (mkTypedTerm sc tm)
+
+     -- printOutLnTop Info "====== Replacement values ======"
+     -- forM_ (zip unints idxs) $ \(nm,idx) ->
+     --   do printOutLnTop Info ("== Values for " ++ nm ++ " ==")
+     --      let ls = fromMaybe [] (Map.lookup idx repls)
+     --      forM_ ls $ \(e,vs) ->
+     --        do es  <- show_term e
+     --           vss <- show_term vs
+     --           printOutLnTop Info (unwords ["output:", es, "inputs:", vss])
+     -- printOutLnTop Info "====== End Replacement values ======"
+
+     replList <- io $
+        forM (zip unints idxs) $ \(nm,idx) ->
+           do let ls = fromMaybe [] (Map.lookup idx repls)
+              xs <- forM ls $ \(e,vs) ->
+                      do e'  <- mkTypedTerm sc e
+                         vs' <- mkTypedTerm sc vs
+                         pure (e',vs')
+              pure (nm,xs)
+     pure (tt', replList)
 
 beta_reduce_goal :: ProofScript ()
 beta_reduce_goal =
