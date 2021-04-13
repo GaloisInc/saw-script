@@ -26,7 +26,7 @@ import           Verifier.SAW.Name
 import           Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
-import SAWScript.Proof(Prop, propToSATQuery, propSize, goalProp, ProofGoal, goalType, goalNum)
+import SAWScript.Proof(Prop, propToSATQuery, propSize, goalProp, ProofGoal, goalType, goalNum, CEX)
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import qualified SAWScript.Prover.Exporter as Exporter
 import SAWScript.Prover.Util (liftCexBB)
@@ -42,13 +42,12 @@ proveABC ::
   AIG.Proxy l g ->
   SharedContext ->
   Prop ->
-  IO (Maybe [(String, FirstOrderValue)], SolverStats)
+  IO (Maybe CEX, SolverStats)
 proveABC proxy sc goal =
   do satq <- propToSATQuery sc mempty goal
      BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \be lit shapes ->
        do let (ecs,fts) = unzip shapes
-          let nms = map (Text.unpack . toShortName . ecName) ecs
-          res <- getModel nms fts =<< AIG.checkSat be lit
+          res <- getModel ecs fts =<< AIG.checkSat be lit
           let stats = solverStats "ABC" (propSize goal)
           return (res, stats)
 
@@ -83,7 +82,7 @@ w4AbcVerilog :: MonadIO m =>
   SharedContext ->
   Bool ->
   Prop ->
-  m (Maybe [(String, FirstOrderValue)], SolverStats)
+  m (Maybe CEX, SolverStats)
 w4AbcVerilog unints sc _hashcons goal = liftIO $
        -- Create temporary files
     do let tpl = "abc_verilog.v"
@@ -136,7 +135,7 @@ abcSatExternal :: MonadIO m =>
   String ->
   [String] ->
   ProofGoal ->
-  m (Maybe [(String,FirstOrderValue)], SolverStats)
+  m (Maybe CEX, SolverStats)
 abcSatExternal proxy sc doCNF execName args g = liftIO $
   do satq <- propToSATQuery sc mempty (goalProp g)
      let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
@@ -162,11 +161,12 @@ abcSatExternal proxy sc doCNF execName args g = liftIO $
            let bs = parseDimacsSolution variables vls
            let r = liftCexBB (map snd shapes) bs
                argNames = map (Text.unpack . toShortName . ecName . fst) shapes
+               ecs = map fst shapes
            case r of
              Left msg -> fail $ "Can't parse counterexample: " ++ msg
              Right vs
-               | length argNames == length vs -> do
-                 return (Just (zip argNames (map toFirstOrderValue vs)), stats)
+               | length ecs == length vs -> do
+                 return (Just (zip ecs (map toFirstOrderValue vs)), stats)
                | otherwise -> fail $ unwords ["external SAT results do not match expected arguments", show argNames, show vs]
          (["s UNSATISFIABLE"], []) ->
            return (Nothing, stats)

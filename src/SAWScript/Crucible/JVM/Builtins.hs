@@ -55,6 +55,7 @@ import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
+import qualified Data.Text as Text
 import qualified Data.Vector as V
 import           Data.Void (absurd)
 import           Prettyprinter
@@ -92,6 +93,7 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 
 import Verifier.SAW.FiniteValue (ppFirstOrderValue)
+import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedTerm
@@ -182,7 +184,7 @@ jvm_verify ::
   [CrucibleMethodSpecIR] {- ^ overrides -} ->
   Bool {- ^ path sat checking -} ->
   JVMSetupM () ->
-  ProofScript SatResult ->
+  ProofScript () ->
   TopLevel CrucibleMethodSpecIR
 jvm_verify cls nm lemmas checkSat setup tactic =
   do cb <- getJavaCodebase
@@ -256,7 +258,7 @@ jvm_unsafe_assume_spec cls nm setup =
 verifyObligations ::
   JVMCrucibleContext ->
   CrucibleMethodSpecIR ->
-  ProofScript SatResult ->
+  ProofScript () ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
   [(String, Term)] ->
   TopLevel SolverStats
@@ -268,20 +270,24 @@ verifyObligations cc mspec tactic assumes asserts =
      let nm = mspec ^. csMethodName
      stats <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) -> do
        goal   <- io $ scImplies sc assume assert
-       goal'  <- io $ predicateToProp sc Universal goal
+       goal'  <- io $ boolToProp sc [] goal -- TODO, generalize over inputs
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
            proofgoal = ProofGoal n "vc" goalname goal'
-       r      <- evalStateT tactic (startProof proofgoal)
-       case r of
-         Unsat stats -> return stats
-         SatMulti stats vals -> do
+       res <- runProofScript tactic proofgoal
+       case res of
+         ValidProof stats _thm -> return stats -- TODO, do something with these theorems!
+         InvalidProof stats vals _pst -> do
            printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
            printOutLnTop Info (show stats)
            printOutLnTop OnlyCounterExamples "----------Counterexample----------"
            opts <- sawPPOpts <$> rwPPOpts <$> getTopLevelRW
-           let showAssignment (name, val) = "  " ++ name ++ ": " ++ show (ppFirstOrderValue opts val)
+           let showEC ec = Text.unpack (toShortName (ecName ec))
+           let showAssignment (name, val) = "  " ++ showEC name ++ ": " ++ show (ppFirstOrderValue opts val)
            mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
            io $ fail "Proof failed." -- Mirroring behavior of llvm_verify
+         UnfinishedProof pst ->
+           io $ fail $ "Proof failed " ++ show (length (psGoals pst)) ++ " goals remaining."
+
      printOutLnTop Info $ unwords ["Proof succeeded!", nm]
      return (mconcat stats)
 

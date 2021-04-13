@@ -24,6 +24,7 @@ import qualified Argo
 import qualified Argo.Doc as Doc
 import qualified SAWScript.Builtins as SB
 import qualified SAWScript.Value as SV
+import qualified SAWScript.Proof as PF
 import SAWServer
     ( ServerVal(VTerm, VSimpset),
       ServerName,
@@ -170,10 +171,11 @@ prove params = do
   proofScript <- interpretProofScript (ppScript params)
   res <- tl $ SB.provePrim proofScript t
   case res of
-    SV.Valid _ -> return ProofValid
-    SV.InvalidMulti _  _ -> return ProofInvalid
+    PF.ValidProof{}      -> return ProofValid
+    PF.InvalidProof{}    -> return ProofInvalid
+    PF.UnfinishedProof{} -> return ProofInvalid
 
-interpretProofScript :: ProofScript -> Argo.Command SAWState (SV.ProofScript SV.SatResult)
+interpretProofScript :: ProofScript -> Argo.Command SAWState (SV.ProofScript ())
 interpretProofScript (ProofScript ts) = go ts
   where go [UseProver ABC]            = return $ SB.proveABC
         go [UseProver (CVC4 unints)]  = return $ SB.proveUnintCVC4 unints

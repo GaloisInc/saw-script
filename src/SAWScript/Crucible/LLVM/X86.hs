@@ -57,6 +57,7 @@ import Data.Parameterized.Context hiding (view)
 
 import Verifier.SAW.CryptolEnv
 import Verifier.SAW.FiniteValue
+import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 
@@ -285,7 +286,7 @@ llvm_verify_x86 ::
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
-  ProofScript SatResult {- ^ Tactic used to use when discharging goals -} ->
+  ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
@@ -926,7 +927,7 @@ checkGoals ::
   Sym ->
   Options ->
   SharedContext ->
-  ProofScript SatResult ->
+  ProofScript () ->
   TopLevel SolverStats
 checkGoals sym opts sc tactic = do
   gs <- liftIO $ getGoals sym
@@ -938,18 +939,23 @@ checkGoals sym opts sc tactic = do
   stats <- forM (zip [0..] gs) $ \(n, g) -> do
     term <- liftIO $ gGoal sc g
     let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
-    r <- evalStateT tactic $ startProof proofgoal
-    case r of
-      Unsat stats -> return stats
-      SatMulti stats vals -> do
+    res <- runProofScript tactic proofgoal
+    case res of
+      ValidProof stats _thm -> return stats -- TODO do something with these theorems
+      UnfinishedProof pst -> do
+        printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
+        printOutLnTop Info (show (psStats pst))
+        throwTopLevel $ "Proof failed: " ++ show (length (psGoals pst)) ++ " goals remaining."
+      InvalidProof stats vals _pst -> do
         printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
         printOutLnTop Info (show stats)
         printOutLnTop OnlyCounterExamples "----------Counterexample----------"
         ppOpts <- sawPPOpts . rwPPOpts <$> getTopLevelRW
         case vals of
           [] -> printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
-          _ -> let showAssignment (name, val) =
-                     mconcat [ " ", name, ": ", show $ ppFirstOrderValue ppOpts val ]
+          _ -> let showEC ec = Text.unpack (toShortName (ecName ec)) in
+               let showAssignment (ec, val) =
+                     mconcat [ " ", showEC ec, ": ", show $ ppFirstOrderValue ppOpts val ]
                in mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
         printOutLnTop OnlyCounterExamples "----------------------------------"
         throwTopLevel "Proof failed."

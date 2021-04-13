@@ -9,7 +9,6 @@ import System.Directory
 
 import           Data.Maybe
 import           Data.Set ( Set )
-import qualified Data.Text as Text
 import           Control.Monad
 
 import qualified Data.SBV.Dynamic as SBV
@@ -18,9 +17,8 @@ import qualified Data.SBV.Internals as SBV
 import qualified Verifier.SAW.Simulator.SBV as SBVSim
 
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.FiniteValue
 
-import SAWScript.Proof(Prop, propSize, propToSATQuery)
+import SAWScript.Proof(Prop, propSize, propToSATQuery, CEX)
 import SAWScript.Prover.SolverStats
 
 -- | Bit-blast a proposition and check its validity using SBV.
@@ -32,7 +30,7 @@ proveUnintSBV ::
   Maybe Integer {- ^ Timeout in milliseconds -} ->
   SharedContext {- ^ Context for working with terms -} ->
   Prop          {- ^ A proposition to be proved -} ->
-  IO (Maybe [(String, FirstOrderValue)], SolverStats)
+  IO (Maybe CEX, SolverStats)
     -- ^ (example/counter-example, solver statistics)
 proveUnintSBV conf unintSet timeout sc goal =
   do p <- findExecutable . SBV.executable $ SBV.solver conf
@@ -56,7 +54,7 @@ proveUnintSBV conf unintSet timeout sc goal =
 
        SBV.Satisfiable {} ->
          do let dict = SBV.getModelDictionary r
-                r'   = SBVSim.getLabels labels dict (map Text.unpack argNames)
+                r'   = SBVSim.getLabels labels dict argNames
             return (r', stats)
 
        SBV.SatExtField {} -> fail "Prover returned model in extension field"
@@ -75,7 +73,7 @@ prepNegatedSBV ::
   SharedContext ->
   Set VarIndex {- ^ Uninterpreted function names -} ->
   Prop     {- ^ Proposition to prove -} ->
-  IO ([SBVSim.Labeler], [Text.Text], SBV.Symbolic SBV.SVal)
+  IO ([SBVSim.Labeler], [ExtCns Term], SBV.Symbolic SBV.SVal)
 prepNegatedSBV sc unintSet goal =
   do satq <- propToSATQuery sc unintSet goal
      SBVSim.sbvSATQuery sc mempty satq
