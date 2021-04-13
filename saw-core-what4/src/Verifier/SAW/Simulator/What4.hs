@@ -40,7 +40,6 @@
 
 module Verifier.SAW.Simulator.What4
   ( w4Solve
-  , w4SolveBasic
   , SymFnCache
   , TypedExpr(..)
   , SValue
@@ -867,11 +866,11 @@ w4Solve :: forall sym.
   sym ->
   SharedContext ->
   SATQuery ->
-  IO ([String], [FirstOrderType], [Labeler sym], SBool sym)
+  IO ([ExtCns Term], [FirstOrderType], [Labeler sym], SBool sym)
 w4Solve sym sc satq =
   do t <- satQueryAsTerm sc satq
      let varList  = Map.toList (satVariables satq)
-     let argNames = map (Text.unpack . toShortName . ecName . fst) varList
+     let argNames = map fst varList
      let argTys   = map snd varList
      vars <- evalStateT (traverse (traverse (newVarFOT sym)) varList) 0
      let lbls     = map (fst . snd) vars

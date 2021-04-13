@@ -25,9 +25,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 module Verifier.SAW.Simulator.SBV
-  ( sbvSolve
-  , sbvSolveBasic
-  , sbvSATQuery
+  ( sbvSATQuery
   , SValue
   , Labeler(..)
   , sbvCodeGen_definition
@@ -43,7 +41,6 @@ import Data.SBV.Dynamic
 import Verifier.SAW.Simulator.SBV.SWord
 
 import Control.Lens ((<&>))
-import qualified Control.Arrow as A
 
 import Data.Bits
 import Data.IORef
@@ -632,42 +629,7 @@ mkUninterpreted :: Kind -> [SVal] -> String -> SVal
 mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
   where nm' = "|" ++ nm ++ "|" -- enclose name to allow primes and other non-alphanum chars
 
-asPredType :: TValue SBV -> IO [TValue SBV]
-asPredType v =
-  case v of
-    VBoolType -> return []
-    VPiType v1 f ->
-      do v2 <- f (error "asPredType: unsupported dependent SAW-Core type")
-         vs <- asPredType v2
-         return (v1 : vs)
-    _ -> fail $ "non-boolean result type: " ++ show v
-
-vAsFirstOrderType :: TValue SBV -> Maybe FirstOrderType
-vAsFirstOrderType v =
-  case v of
-    VBoolType
-      -> return FOTBit
-    VIntType
-      -> return FOTInt
-    VIntModType n
-      -> return (FOTIntMod n)
-    VVecType n v2
-      -> FOTVec n <$> vAsFirstOrderType v2
-    VUnitType
-      -> return (FOTTuple [])
-    VPairType v1 v2
-      -> do t1 <- vAsFirstOrderType v1
-            t2 <- vAsFirstOrderType v2
-            case t2 of
-              FOTTuple ts -> return (FOTTuple (t1 : ts))
-              _ -> return (FOTTuple [t1, t2])
-
-    VRecordType tps
-      -> (FOTRec <$> Map.fromList <$>
-          mapM (\(f,tp) -> (f,) <$> vAsFirstOrderType tp) tps)
-    _ -> Nothing
-
-sbvSATQuery :: SharedContext -> Map Ident SValue -> SATQuery -> IO ([Labeler], [Text.Text], Symbolic SBool)
+sbvSATQuery :: SharedContext -> Map Ident SValue -> SATQuery -> IO ([Labeler], [ExtCns Term], Symbolic SBool)
 sbvSATQuery sc addlPrims query =
   do true <- liftIO (scBool sc True)
      t <- liftIO (foldM (scAnd sc) true (satAsserts query))
@@ -678,11 +640,9 @@ sbvSATQuery sc addlPrims query =
        flip evalStateT 0 $ unzip <$>
        mapM (newVars . snd) qvars
 
-     let varNames = map (toShortName . ecName . fst) qvars
-
      m <- liftIO (scGetModuleMap sc)
 
-     return (labels, varNames,
+     return (labels, map fst qvars,
        do vars' <- sequence vars
           let varMap = Map.fromList (zip (map (ecVarIndex . fst) qvars) vars')
 
@@ -703,29 +663,6 @@ sbvSATQuery sc addlPrims query =
             _ -> fail $ "sbvSATQuery: non-boolean result type. " ++ show bval
       )
 
-sbvSolve :: SharedContext
-         -> Map Ident SValue
-         -> Set VarIndex
-         -> Term
-         -> IO ([Maybe Labeler], Symbolic SBool)
-sbvSolve sc addlPrims unintSet t = do
-  let eval = sbvSolveBasic sc addlPrims unintSet
-  ty <- eval =<< scTypeOf sc t
-  let lamNames = map (Text.unpack . fst) (fst (R.asLambdaList t))
-  let varNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
-  let argNames = zipWith (++) varNames (map ("_" ++) lamNames ++ repeat "")
-  argTs <- asPredType (toTValue ty)
-  (labels, vars) <-
-    flip evalStateT 0 $ unzip <$>
-    sequence (zipWith newVarsForType argTs argNames)
-  bval <- eval t
-  let prd = do
-              bval' <- traverse (fmap ready) vars >>= (liftIO . applyAll bval)
-              case bval' of
-                VBool b -> return b
-                _ -> fail $ "sbvSolve: non-boolean result type. " ++ show bval'
-  return (labels, prd)
-
 data Labeler
    = BoolLabel String
    | IntegerLabel String
@@ -738,21 +675,8 @@ data Labeler
 nextId :: StateT Int IO String
 nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
 
---unzipMap :: Map k (a, b) -> (Map k a, Map k b)
---unzipMap m = (fmap fst m, fmap snd m)
-
-myfun ::(Map FieldName (Labeler, Symbolic SValue)) -> (Map FieldName Labeler, Map FieldName (Symbolic SValue))
-myfun = fmap fst A.&&& fmap snd
-
-newVarsForType :: TValue SBV -> String -> StateT Int IO (Maybe Labeler, Symbolic SValue)
-newVarsForType v nm =
-  case vAsFirstOrderType v of
-    Just fot ->
-      do (l, sv) <- newVars fot
-         return (Just l, sv)
-    Nothing ->
-      do sv <- lift $ parseUninterpreted [] nm v
-         return (Nothing, return sv)
+unzipMap :: Map k (a, b) -> (Map k a, Map k b)
+unzipMap m = (fmap fst m, fmap snd m)
 
 newVars :: FirstOrderType -> StateT Int IO (Labeler, Symbolic SValue)
 newVars FOTBit = nextId <&> \s-> (BoolLabel s, vBool <$> existsSBool s)
@@ -770,20 +694,20 @@ newVars (FOTTuple ts) = do
   (labels, vals) <- V.unzip <$> traverse newVars (V.fromList ts)
   return (TupleLabel labels, vTuple <$> traverse (fmap ready) (V.toList vals))
 newVars (FOTRec tm) = do
-  (labels, vals) <- myfun <$> (traverse newVars tm :: StateT Int IO (Map FieldName (Labeler, Symbolic SValue)))
+  (labels, vals) <- unzipMap <$> (traverse newVars tm :: StateT Int IO (Map FieldName (Labeler, Symbolic SValue)))
   return (RecLabel labels, vRecord <$> traverse (fmap ready) (vals :: (Map FieldName (Symbolic SValue))))
 
 
 getLabels ::
   [Labeler] ->
   Map String CV ->
-  [String] -> Maybe [(String,FirstOrderValue)]
+  [ExtCns Term] -> Maybe [(ExtCns Term,FirstOrderValue)]
 
-getLabels ls d argNames
-  | length argNames == length xs = Just (zip argNames xs)
+getLabels ls d args
+  | length args == length xs = Just (zip args xs)
   | otherwise = error $ unwords
                 [ "SBV SAT results do not match expected arguments "
-                , show argNames, show xs]
+                , show (map (toShortName . ecName) args), show xs]
 
   where
   xs = fmap getLabel ls
