@@ -127,10 +127,10 @@ Definition EmptyVec := Vector.nil.
 
 Definition coerceVec (a : sort 0) (m n : Nat) (eq : Eq Nat m n) (v : Vec m a) : Vec n a :=
   match
-    identity_sym eq in identity _ n'
+    eq_sym eq in eq _ n'
     return Vec n' a -> Vec n a
   with
-  | identity_refl => fun x => x
+  | eq_refl => fun x => x
   end v.
 
 Theorem gen_add m n T : forall f, gen (m + n) T f = Vector.append (gen m T f) (gen n T (fun x => f (m + x))).
@@ -171,7 +171,7 @@ Definition zipWithFunctional
            (a b c : Type) (f : a -> b -> c) (n : Nat) (xs : Vec n a) (ys : Vec n b) :=
   VectorDef.map (fun p => f (fst p) (snd p)) (zipFunctional _ _ _ _ xs ys).
 
-Definition bitvector (n : Nat) : Type := Vector.t bool n.
+Notation bitvector n := (Vec n Bool).
 
 (* NOTE BITS are stored in reverse order than bitvector *)
 Definition bvToBITS {size : nat} : bitvector size -> BITS size
@@ -181,22 +181,12 @@ Arguments bvToBITS : simpl never.
 
 (* NOTE BITS are stored in reverse order than bitvector *)
 Definition bitsToBv {size : nat} : BITS size -> bitvector size
-  := tuple_foldl_dep bool bitvector size (fun _ bv b => Vector.cons _ b _ bv) (Vector.nil _).
+  := tuple_foldl_dep bool (fun n => bitvector n) size (fun _ bv b => Vector.cons _ b _ bv) (Vector.nil _).
 
 Arguments bitsToBv : simpl never.
 
 Definition joinLSB {n} (v : bitvector n) (lsb : bool) : bitvector n.+1 :=
   Vector.shiftin lsb v.
-
-(* NOTE This can cause Coq to stack overflow, avoid it as much as possible! *)
-Fixpoint bvNat (size : Nat) (number : Nat) : bitvector size :=
-  bitsToBv (fromNat number).
-(*   if size is size'.+1 *)
-(*   then joinLSB (bvNat size' (number./2)) (odd number) *)
-(*   else Vector.nil _ *)
-(* . *)
-
-(* Arguments bvNat : simpl never. *)
 
 Definition bvToNatFolder (n : nat) (b : bool) := b + n.*2.
 
@@ -207,6 +197,12 @@ Fixpoint bvToNat (size : Nat) (v : bitvector size) : Nat :=
 Definition intToBv (n : Nat) (z : Z) : bitvector n := bitsToBv (fromZ z).
 
 Arguments intToBv : simpl never.
+
+(* NOTE This can cause Coq to stack overflow, avoid it as much as possible! *)
+Definition bvNat (size : Nat) (number : Nat) : bitvector size :=
+  intToBv size (Z.of_nat number).
+
+Arguments bvNat /.
 
 Definition bvToInt (n : Nat) (b : bitvector n) : Z := toPosZ (bvToBITS b).
 

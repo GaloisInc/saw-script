@@ -923,3 +923,10 @@ Lemma refinesM_assumingM_l {A} (P:Prop) (m1 m2 : CompM A) :
 Proof.
   apply refinesM_forallM_l.
 Qed.
+
+(* NOTE: the other direction does not hold *)
+Lemma assumingM_bindM {A B} (P:Prop) (m: CompM A) (Q: A -> CompM B) :
+  refinesM ((assumingM P m) >>= Q) (assumingM P (m >>= Q)).
+Proof.
+  apply forallM_bindM.
+Qed.

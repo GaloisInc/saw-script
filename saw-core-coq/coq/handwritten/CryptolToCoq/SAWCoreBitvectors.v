@@ -3,15 +3,23 @@
  ***)
 
 From Coq Require Import Program.Basics.
+From Coq Require        Program.Equality.
 From Coq Require Import Vectors.Vector.
+From Coq Require Import Logic.Eqdep.
 
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
+From CryptolToCoq Require Import CompMExtra.
 
 Import SAWCorePrelude.
 
-Create HintDb SAWCoreBitvectors.
+(* A duplicate from `Program.Equality`, because importing that
+   module directly gives us a conflict with the `~=` notation... *)
+Tactic Notation "dependent" "destruction" ident(H) := 
+  Equality.do_depelim' ltac:(fun hyp => idtac) ltac:(fun hyp => Equality.do_case hyp) H.
+
+Create HintDb SAWCoreBitvectors_eqs.
 
 
 (* Computing opaque bitvector functions *)
@@ -65,22 +73,24 @@ Ltac compute_bv_funs_tac H t compute_bv_binrel compute_bv_binop
     end
   end.
 
-Ltac unfold_bv_funs := unfold bvultWithProof, bvuleWithProof,
+Ltac unfold_bv_funs := unfold bvNat, bvultWithProof, bvuleWithProof,
                               bvsge, bvsgt, bvuge, bvugt, bvSCarry, bvSBorrow,
                               xor, xorb.
 
 Tactic Notation "compute_bv_funs" :=
-  unfold_bv_funs; repeat match goal with
-                         | |- ?t => let H := fresh "H" in
-                                    try (compute_bv_funs_tac H t compute_bv_binrel_in_goal compute_bv_binop_in_goal compute_bv_unrel_in_goal compute_bv_unop_in_goal)
-                         end.
+  unfold_bv_funs;
+  repeat match goal with
+         | |- ?t => let H := fresh "H" in
+                    try (compute_bv_funs_tac H t compute_bv_binrel_in_goal compute_bv_binop_in_goal compute_bv_unrel_in_goal compute_bv_unop_in_goal)
+         end.
 
 Tactic Notation "compute_bv_funs" "in" ident(H) :=
-  unfold_bv_funs; repeat match goal with
-                  | H': ?t |- _ => match H' with
-                                   | H => try (compute_bv_funs_tac H t compute_bv_binrel_in compute_bv_binop_in compute_bv_unrel_in compute_bv_unop_in)
-                                   end
-                  end.
+  unfold_bv_funs;
+  repeat match goal with
+         | H': ?t |- _ => match H' with
+                          | H => try (compute_bv_funs_tac H t compute_bv_binrel_in compute_bv_binop_in compute_bv_unrel_in compute_bv_unop_in)
+                          end
+         end.
 
 
 (** Bitvector maximum and minimum values **)
@@ -105,25 +115,21 @@ Definition bvumin w : bitvector w := gen w _ (fun _ => false).
 Definition isBvsle w a b : Prop := bvsle w a b = true.
 Definition isBvsle_def w a b : bvsle w a b = true <-> isBvsle w a b := reflexivity _.
 Definition isBvsle_def_opp w a b : bvslt w a b = false <-> isBvsle w b a. Admitted.
-Hint Rewrite isBvsle_def isBvsle_def_opp : SAWCoreBitvectors.
 Instance PreOrder_isBvsle w : PreOrder (isBvsle w). Admitted.
 
 Definition isBvslt w a b : Prop := bvslt w a b = true.
 Definition isBvslt_def w a b : bvslt w a b = true <-> isBvslt w a b := reflexivity _.
 Definition isBvslt_def_opp w a b : bvsle w a b = false <-> isBvslt w b a. Admitted.
-Hint Rewrite isBvslt_def isBvslt_def_opp : SAWCoreBitvectors.
 Instance PreOrder_isBvslt w : PreOrder (isBvslt w). Admitted.
 
 Definition isBvule w a b : Prop := bvule w a b = true.
 Definition isBvule_def w a b : bvule w a b = true <-> isBvule w a b := reflexivity _.
 Definition isBvule_def_opp w a b : bvult w a b = false <-> isBvule w b a. Admitted.
-Hint Rewrite isBvule_def isBvule_def_opp : SAWCoreBitvectors.
 Instance PreOrder_isBvule w : PreOrder (isBvule w). Admitted.
 
 Definition isBvult w a b : Prop := bvult w a b = true.
 Definition isBvult_def w a b : bvult w a b = true <-> isBvult w a b := reflexivity _.
 Definition isBvult_def_opp w a b : bvule w a b = false <-> isBvult w b a. Admitted.
-Hint Rewrite isBvult_def isBvult_def_opp : SAWCoreBitvectors.
 Instance PreOrder_isBvult w : PreOrder (isBvult w). Admitted.
 
 
@@ -173,55 +179,34 @@ Definition isBvsle_antisymm w a b : isBvsle w a b -> isBvsle w b a -> a = b.
 Admitted.
 
 
-(** Lemmas about bitvector equality **)
-
-Lemma bvEq_eq  w a b : bvEq w a b = true <-> a = b. Admitted.
-Lemma bvEq_neq w a b : bvEq w a b = false <-> a <> b. Admitted.
-Hint Rewrite bvEq_eq bvEq_neq : SAWCoreBitvectors.
-
-Lemma bv_eq_if_true (b : bool) : (if b then intToBv 1 1 else intToBv 1 0) = intToBv 1 1 <-> b = true.
-Proof. split; intro H; destruct b; reflexivity || inversion H. Qed.
-Lemma bv_eq_if_false (b : bool) : (if b then intToBv 1 1 else intToBv 1 0) = intToBv 1 0 <-> b = false.
-Proof. split; intro H; destruct b; reflexivity || inversion H. Qed.
-
-Hint Rewrite bv_eq_if_true bv_eq_if_false : SAWCoreBitvectors.
-
-Lemma bv_neq_if_true (b : bool) : (if b then intToBv 1 1 else intToBv 1 0) <> intToBv 1 1 <-> b = false.
-Proof.
-  split; intro H; destruct b; try reflexivity || inversion H.
-  - pose (H0 := H (reflexivity _)); inversion H0.
-  - intro H0; inversion H0.
-Qed.
-
-Lemma bv_neq_if_false (b : bool) : (if b then intToBv 1 1 else intToBv 1 0) <> intToBv 1 0 <-> b = true.
-Proof.
-  split; intro H; destruct b; try reflexivity || inversion H.
-  - pose (H0 := H (reflexivity _)); inversion H0.
-  - intro H0; inversion H0.
-Qed.
-
-Hint Rewrite bv_neq_if_true bv_neq_if_false : SAWCoreBitvectors.
-
-
 (** Lemmas about bitvector addition **)
 
-Lemma bvAdd_id_l w a : bvAdd w (intToBv w 0) a = a. Admitted.
-Lemma bvAdd_id_r w a : bvAdd w a (intToBv w 0) = a. Admitted.
-Lemma bvAdd_comm w a b : bvAdd w a b = bvAdd w b a. Admitted.
-Lemma bvAdd_assoc w a b c : bvAdd w (bvAdd w a b) c = bvAdd w a (bvAdd w b c). Admitted.
+Lemma bvAdd_id_l w a : bvAdd w (intToBv w 0) a = a.
+Admitted.
+
+Lemma bvAdd_id_r w a : bvAdd w a (intToBv w 0) = a.
+Admitted.
+
+Hint Rewrite bvAdd_id_l bvAdd_id_r : SAWCoreBitvectors_eqs.
+
+Lemma bvAdd_comm w a b : bvAdd w a b = bvAdd w b a.
+Admitted.
+
+Lemma bvAdd_assoc w a b c : bvAdd w (bvAdd w a b) c = bvAdd w a (bvAdd w b c).
+Admitted.
 
 
-(** Lemmas about subtraction, negation, and sign bits **)
+(** Lemmas about bitvector subtraction, negation, and sign bits **)
 
 Lemma bvSub_zero_bvNeg w a : bvSub w (intToBv w 0) a = bvNeg w a.
 Admitted.
 
-Hint Rewrite bvSub_zero_bvNeg : SAWCoreBitvectors.
+Hint Rewrite bvSub_zero_bvNeg : SAWCoreBitvectors_eqs.
 
 Lemma bvNeg_msb w a : msb w (bvNeg (Succ w) a) = not (msb w a).
 Admitted.
 
-Hint Rewrite bvNeg_msb : SAWCoreBitvectors.
+Hint Rewrite bvNeg_msb : SAWCoreBitvectors_eqs.
 
 Lemma bvslt_bvSub_r w a b : isBvslt w a b <-> isBvslt w (intToBv w 0) (bvSub w b a).
 Admitted.
@@ -245,67 +230,371 @@ Lemma bvule_msb_r w a b : isBvule (Succ w) a b -> msb w b = false -> msb w a = f
 Admitted.
 
 
-(** Other rewriting hints not directly involving bitvectors **)
+(** Some general lemmas about boolean equality **)
 
-Lemma and_bool_eq_true_lemma (b c : bool) : and b c = true <-> (b = true) /\ (c = true).
+Lemma boolEq_eq a b : boolEq a b = true <-> a = b.
+Proof. split; destruct a, b; easy. Qed.
+
+Lemma boolEq_neq a b : boolEq a b = false <-> a <> b.
+Proof. split; destruct a, b; easy. Qed.
+
+Lemma boolEq_refl a : boolEq a a = true.
+Proof. destruct a; easy. Qed.
+
+Lemma and_bool_eq_true b c : and b c = true <-> (b = true) /\ (c = true).
 Proof.
   split.
   - destruct b, c; auto.
   - intro; destruct H; destruct b, c; auto.
 Qed.
 
-Lemma and_bool_eq_false_lemma (b c : bool) : and b c = false <-> (b = false) \/ (c = false).
+Lemma and_bool_eq_false b c : and b c = false <-> (b = false) \/ (c = false).
 Proof.
   split.
   - destruct b, c; auto.
   - intro; destruct H; destruct b, c; auto.
 Qed.
 
-Hint Rewrite and_bool_eq_true_lemma and_bool_eq_false_lemma : SAWCoreBitvectors.
-
-Lemma or_bool_eq_true_lemma (b c : bool) : or b c = true <-> (b = true) \/ (c = true).
+Lemma or_bool_eq_true b c : or b c = true <-> (b = true) \/ (c = true).
 Proof.
   split.
   - destruct b, c; auto.
   - intro; destruct H; destruct b, c; auto.
 Qed.
 
-Lemma or_bool_eq_false_lemma (b c : bool) : or b c = false <-> (b = false) /\ (c = false).
+Lemma or_bool_eq_false b c : or b c = false <-> (b = false) /\ (c = false).
 Proof.
   split.
   - destruct b, c; auto.
   - intro; destruct H; destruct b, c; auto.
 Qed.
 
-Hint Rewrite or_bool_eq_true_lemma or_bool_eq_false_lemma : SAWCoreBitvectors.
-
-Lemma not_bool_eq_true_lemma (b : bool) : not b = true <-> b = false.
+Lemma not_bool_eq_true b : not b = true <-> b = false.
 Proof. split; destruct b; auto. Qed.
 
-Lemma not_bool_eq_false_lemma (b : bool) : not b = false <-> b = true.
+Lemma not_bool_eq_false b : not b = false <-> b = true.
 Proof. split; destruct b; auto. Qed.
 
-Hint Rewrite not_bool_eq_true_lemma not_bool_eq_false_lemma : SAWCoreBitvectors.
 
-(* Lemma sym_bool_true_eq_lemma (b : bool) : true = b <-> b = true. *)
-(* Proof. split; auto. Qed. *)
+(** Lemmas about bitvector equality **)
 
-(* Lemma sym_bool_false_eq_lemma (b : bool) : false = b <-> b = false. *)
-(* Proof. split; auto. Qed. *)
+Lemma bvEq_cons w h0 h1 a0 a1 :
+  bvEq (S w) (VectorDef.cons _ h0 w a0) (VectorDef.cons _ h1 w a1) =
+  and (boolEq h0 h1) (bvEq w a0 a1).
+Proof. reflexivity. Qed.
 
-(* Hint Rewrite sym_bool_true_eq_lemma sym_bool_false_eq_lemma : SAWCoreBitvectors. *)
+Lemma bvEq_refl w a : bvEq w a a = true.
+Proof.
+  induction a; eauto.
+  rewrite bvEq_cons, boolEq_refl, IHa; eauto.
+Qed.
 
-Lemma boolEq_eq  a b : boolEq a b = true <-> a = b. Admitted.
-Lemma boolEq_neq a b : boolEq a b = false <-> a <> b. Admitted.
-Hint Rewrite boolEq_eq boolEq_neq : SAWCoreBitvectors.
+Lemma bvEq_eq  w a b : bvEq w a b = true <-> a = b.
+Proof.
+  split; intro; induction a; dependent destruction b; eauto.
+  - rewrite bvEq_cons, and_bool_eq_true in H.
+    destruct H; rewrite boolEq_eq in H; apply IHa in H0.
+    subst; reflexivity.
+  - injection H as; apply inj_pair2 in H0; subst.
+    rewrite bvEq_cons, and_bool_eq_true; split.
+    + apply boolEq_refl.
+    + apply bvEq_refl.
+Qed.
 
-Lemma bool_eq_if_true (b : bool) : (if b then true else false) = true <-> b = true.
-Proof. split; intro H; destruct b; reflexivity || inversion H. Qed.
-Lemma bool_eq_if_false (b : bool) : (if b then true else false) = false <-> b = false.
-Proof. split; intro H; destruct b; reflexivity || inversion H. Qed.
-Lemma bool_eq_if_inv_true (b : bool) : (if b then false else true) = true <-> b = false.
-Proof. split; intro H; destruct b; reflexivity || inversion H. Qed.
-Lemma bool_eq_if_inv_false (b : bool) : (if b then false else true) = false <-> b = true.
-Proof. split; intro H; destruct b; reflexivity || inversion H. Qed.
+(* the other direction only holds if we assume LEM *)
+Lemma bvEq_neq w a b : bvEq w a b = false -> a <> b.
+Proof.
+  intro; induction a; dependent destruction b; eauto.
+  intro; injection H0 as; apply inj_pair2 in H1.
+  rewrite bvEq_cons, and_bool_eq_false in H.
+  destruct H; [ rewrite boolEq_neq in H | apply IHa in H ].
+  all: contradiction.
+Qed.
 
-Hint Rewrite bool_eq_if_true bool_eq_if_false bool_eq_if_false bool_eq_if_true : SAWCoreBitvectors.
+
+(** Proof automation - computing and rewriting bv funs **)
+
+Hint Extern 1 (StartAutomation _) => progress compute_bv_funs: refinesFun.
+
+Lemma true_eq_scaffolding_true : Datatypes.true = SAWCoreScaffolding.true.
+Proof. reflexivity. Qed.
+Lemma false_eq_scaffolding_false : Datatypes.false = SAWCoreScaffolding.false.
+Proof. reflexivity. Qed.
+
+Hint Rewrite true_eq_scaffolding_true false_eq_scaffolding_false : SAWCoreBitvectors_eqs.
+
+Ltac FreshIntroArg_bv_eq T :=
+  let e := fresh in
+    IntroArg_intro e;
+    compute_bv_funs in e;
+    match T with
+    | bool => (* try rewrite e; *)
+              autorewrite with SAWCoreBitvectors_eqs in e;
+              simpl in e; try fold true in e; try fold false in e
+    end;
+    apply (IntroArg_fold If _ _ e); clear e.
+
+Hint Extern 1 (FreshIntroArg _ (@eq ?T _ _) _) =>
+  progress (FreshIntroArg_bv_eq T) : refinesFun.
+
+
+(** Proof automation - IntroArg rules **)
+
+Lemma IntroArg_bvEq_eq n w a b goal :
+  IntroArg n (a = b) (fun _ => goal) ->
+  IntroArg n (SAWCorePrelude.bvEq w a b = true) (fun _ => goal).
+Proof. intros H eq; apply H, bvEq_eq; eauto. Qed.
+Lemma IntroArg_bvEq_neq n w a b goal :
+  IntroArg n (a <> b) (fun _ => goal) ->
+  IntroArg n (SAWCorePrelude.bvEq w a b = false) (fun _ => goal).
+Proof. intros H eq; apply H, bvEq_neq; eauto. Qed.
+
+(* Hint Extern 1 (IntroArg _ (SAWCorePrelude.bvEq _ _ _ = true) _) => *)
+(*    simple apply IntroArg_bvEq_eq : refinesFun. *)
+(* Hint Extern 1 (IntroArg _ (SAWCorePrelude.bvEq _ _ _ = false) _) => *)
+(*    simple apply IntroArg_bvEq_neq : refinesFun. *)
+
+Lemma IntroArg_bv_eq_if_true n (b : bool) goal :
+  IntroArg n (b = true) (fun _ => goal) ->
+  IntroArg n ((if b then intToBv 1 1 else intToBv 1 0) = intToBv 1 1) (fun _ => goal).
+Proof. intros H eq; apply H; destruct b; easy. Qed.
+Lemma IntroArg_bv_eq_if_false n (b : bool) goal :
+  IntroArg n (b = false) (fun _ => goal) ->
+  IntroArg n ((if b then intToBv 1 1 else intToBv 1 0) = intToBv 1 0) (fun _ => goal).
+Proof. intros H eq; apply H; destruct b; easy. Qed.
+Lemma IntroArg_bv_neq_if_true n (b : bool) goal :
+  IntroArg n (b = false) (fun _ => goal) ->
+  IntroArg n ((if b then intToBv 1 1 else intToBv 1 0) <> intToBv 1 1) (fun _ => goal).
+Proof. intros H eq; apply H; destruct b; easy. Qed.
+Lemma IntroArg_bv_neq_if_false n (b : bool) goal :
+  IntroArg n (b = true) (fun _ => goal) ->
+  IntroArg n ((if b then intToBv 1 1 else intToBv 1 0) <> intToBv 1 0) (fun _ => goal).
+Proof. intros H eq; apply H; destruct b; easy. Qed.
+
+(* Hint Extern 1 (IntroArg _ ((if _ then intToBv 1 (-1) else intToBv 1 0) = intToBv 1 1) _) => *)
+(*    simple apply IntroArg_bv_eq_if_true : refinesFun. *)
+(* Hint Extern 1 (IntroArg _ ((if _ then intToBv 1 (-1) else intToBv 1 0) = intToBv 1 0) _) => *)
+(*    simple apply IntroArg_bv_eq_if_false : refinesFun. *)
+(* Hint Extern 1 (IntroArg _ ((if _ then intToBv 1 (-1) else intToBv 1 0) <> intToBv 1 1) _) => *)
+(*    simple apply IntroArg_bv_neq_if_true : refinesFun. *)
+(* Hint Extern 1 (IntroArg _ ((if _ then intToBv 1 (-1) else intToBv 1 0) <> intToBv 1 0) _) => *)
+(*    simple apply IntroArg_bv_neq_if_false : refinesFun. *)
+
+Lemma IntroArg_and_bool_eq_true n (b c : bool) goal :
+  IntroArg n (b = true) (fun _ => FreshIntroArg n (c = true) (fun _ => goal)) ->
+  IntroArg n (and b c = true) (fun _ => goal).
+Proof.
+  intros H eq; apply H; apply and_bool_eq_true in eq; destruct eq; eauto.
+Qed.
+Lemma IntroArg_and_bool_eq_false n (b c : bool) goal :
+  IntroArg n (b = false) (fun _ => goal) ->
+  IntroArg n (c = false) (fun _ => goal) ->
+  IntroArg n (and b c = false) (fun _ => goal).
+Proof.
+  intros Hl Hr eq; apply and_bool_eq_false in eq.
+  destruct eq; [ apply Hl | apply Hr ]; eauto.
+Qed.
+
+(* Hint Extern 1 (IntroArg _ (and _ _ = true) _) => *)
+(*    simple apply IntroArg_and_bool_eq_true : refinesFun. *)
+(* Hint Extern 1 (IntroArg _ (and _ _ = false) _) => *)
+(*    simple apply IntroArg_and_bool_eq_false : refinesFun. *)
+
+Lemma IntroArg_or_bool_eq_true n (b c : bool) goal :
+  IntroArg n (b = true) (fun _ => goal) ->
+  IntroArg n (c = true) (fun _ => goal) ->
+  IntroArg n (or b c = true) (fun _ => goal).
+Proof.
+  intros Hl Hr eq; apply or_bool_eq_true in eq.
+  destruct eq; [ apply Hl | apply Hr ]; eauto.
+Qed.
+Lemma IntroArg_or_bool_eq_false n (b c : bool) goal :
+  IntroArg n (b = false) (fun _ => FreshIntroArg n (c = false) (fun _ => goal)) ->
+  IntroArg n (or b c = false) (fun _ => goal).
+Proof.
+  intros H eq; apply H; apply or_bool_eq_false in eq; destruct eq; eauto.
+Qed.
+
+(* Hint Extern 1 (IntroArg _ (or _ _ = true) _) => *)
+(*    simple apply IntroArg_or_bool_eq_true : refinesFun. *)
+(* Hint Extern 1 (IntroArg _ (or _ _ = false) _) => *)
+(*    simple apply IntroArg_or_bool_eq_false : refinesFun. *)
+
+Lemma IntroArg_not_bool_eq_true n (b : bool) goal :
+  IntroArg n (b = false) (fun _ => goal) ->
+  IntroArg n (not b = true) (fun _ => goal).
+Proof. intros H eq; apply H, not_bool_eq_true; eauto. Qed.
+Lemma IntroArg_not_bool_eq_false n (b : bool) goal :
+  IntroArg n (b = true) (fun _ => goal) ->
+  IntroArg n (not b = false) (fun _ => goal).
+Proof. intros H eq; apply H, not_bool_eq_false; eauto. Qed.
+
+(* Hint Extern 1 (IntroArg _ (not _ = true) _) => *)
+(*    simple apply IntroArg_not_bool_eq_true : refinesFun. *)
+(* Hint Extern 1 (IntroArg _ (not _ = false) _) => *)
+(*    simple apply IntroArg_not_bool_eq_false : refinesFun. *)
+
+Lemma IntroArg_boolEq_eq n a b goal :
+  IntroArg n (a = b) (fun _ => goal) ->
+  IntroArg n (boolEq a b = true) (fun _ => goal).
+Proof. intros H eq; apply H, boolEq_eq; eauto. Qed.
+Lemma IntroArg_boolEq_neq n a b goal :
+  IntroArg n (a <> b) (fun _ => goal) ->
+  IntroArg n (boolEq a b = false) (fun _ => goal).
+Proof. intros H eq; apply H, boolEq_neq; eauto. Qed.
+
+(* Hint Extern 1 (IntroArg _ (boolEq _ _ = true) _) => *)
+(*    simple apply IntroArg_boolEq_eq : refinesFun. *)
+(* Hint Extern 1 (IntroArg _ (boolEq _ _ = false) _) => *)
+(*    simple apply IntroArg_boolEq_neq : refinesFun. *)
+
+Lemma IntroArg_bool_eq_if_true n (b : bool) goal :
+  IntroArg n (b = true) (fun _ => goal) ->
+  IntroArg n ((if b then true else false) = true) (fun _ => goal).
+Proof. intros H eq; apply H; destruct b; eauto. Qed.
+Lemma IntroArg_bool_eq_if_false n (b : bool) goal :
+  IntroArg n (b = false) (fun _ => goal) ->
+  IntroArg n ((if b then true else false) = false) (fun _ => goal).
+Proof. intros H eq; apply H; destruct b; eauto. Qed.
+Lemma IntroArg_bool_eq_if_inv_true n (b : bool) goal :
+  IntroArg n (b = false) (fun _ => goal) ->
+  IntroArg n ((if b then false else true) = true) (fun _ => goal).
+Proof. intros H eq; apply H; destruct b; eauto. Qed.
+Lemma IntroArg_bool_eq_if_inv_false n (b : bool) goal :
+  IntroArg n (b = true) (fun _ => goal) ->
+  IntroArg n ((if b then false else true) = false) (fun _ => goal).
+Proof. intros H eq; apply H; destruct b; eauto. Qed.
+
+(* Hint Extern 1 (IntroArg _ ((if _ then true else false) = true) _) => *)
+(*    simple apply IntroArg_bool_eq_if_true : refinesFun. *)
+(* Hint Extern 1 (IntroArg _ ((if _ then true else false) = false) _) => *)
+(*    simple apply IntroArg_bool_eq_if_false : refinesFun. *)
+(* Hint Extern 1 (IntroArg _ ((if _ then false else true) = true) _) => *)
+(*    simple apply IntroArg_bool_eq_if_inv_true : refinesFun. *)
+(* Hint Extern 1 (IntroArg _ ((if _ then false else true) = false) _) => *)
+(*    simple apply IntroArg_bool_eq_if_inv_false : refinesFun. *)
+
+Hint Extern 1 (IntroArg _ (@eq bool ?x ?y) _) =>
+  lazymatch y with
+  | true => lazymatch x with
+    | SAWCorePrelude.bvEq _ _ _ => simple apply IntroArg_bvEq_eq
+    | and _ _ => simple apply IntroArg_and_bool_eq_true
+    | or _ _ => simple apply IntroArg_or_bool_eq_true
+    | not _ => simple apply IntroArg_not_bool_eq_true
+    | boolEq _ _ => simple apply IntroArg_boolEq_eq
+    | if _ then true else false => simple apply IntroArg_bool_eq_if_true
+    | if _ then false else true => simple apply IntroArg_bool_eq_if_inv_true
+    end
+  | false => lazymatch x with
+    | SAWCorePrelude.bvEq _ _ _ => simple apply IntroArg_bvEq_neq
+    | and _ _ => simple apply IntroArg_and_bool_eq_false
+    | or _ _ => simple apply IntroArg_or_bool_eq_false
+    | not _ => simple apply IntroArg_not_bool_eq_false
+    | boolEq _ _ => simple apply IntroArg_boolEq_neq
+    | if _ then true else false => simple apply IntroArg_bool_eq_if_false
+    | if _ then false else true => simple apply IntroArg_bool_eq_if_inv_false
+    end
+  end : refinesFun.
+
+Hint Extern 1 (IntroArg _ (@eq (bitvector _) ?x ?y) _) =>
+  lazymatch constr:(x = y) with
+  | (if _ then intToBv 1 (-1) else intToBv 1 0) = intToBv 1 1 => simple apply IntroArg_bv_eq_if_true
+  | (if _ then intToBv 1 (-1) else intToBv 1 0) = intToBv 1 0 => simple apply IntroArg_bv_eq_if_false
+  end : refinesFun.
+
+Hint Extern 1 (IntroArg _ (~ (@eq (bitvector _) ?x ?y)) _) =>
+  lazymatch constr:(x <> y) with
+  | (if _ then intToBv 1 (-1) else intToBv 1 0) <> intToBv 1 1 => simple apply IntroArg_bv_neq_if_true
+  | (if _ then intToBv 1 (-1) else intToBv 1 0) <> intToBv 1 0 => simple apply IntroArg_bv_neq_if_false
+  end : refinesFun.
+
+(* these show up as the unfolded versions of `bvultWithProof` and `bvuleWithProof` *)
+Lemma IntroArg_iteDep_Maybe_Eq_true n t f x (goal : Prop)
+  : IntroArg n (t = x) (fun _ => goal) ->
+    IntroArg n (iteDep (fun b => Maybe (b = true)) true t f = x) (fun _ => goal).
+Proof. intros H eq; apply H; eauto. Qed.
+Lemma IntroArg_iteDep_Maybe_Eq_false n t f x (goal : Prop)
+  : IntroArg n (f = x) (fun _ => goal) ->
+    IntroArg n (iteDep (fun b => Maybe (b = true)) false t f = x) (fun _ => goal).
+Proof. intros H eq; apply H; eauto. Qed.
+
+Hint Extern 1 (IntroArg _ (iteDep (fun _ => Maybe (Eq _ _ _)) true _ _ = _) _) =>
+   simple apply IntroArg_iteDep_Maybe_Eq_true : refinesFun.
+Hint Extern 1 (IntroArg _ (iteDep (fun _ => Maybe (Eq _ _ _)) false _ _ = _) _) =>
+simple apply IntroArg_iteDep_Maybe_Eq_false : refinesFun.
+Hint Extern 1 (IntroArg _ (iteDep (fun _ => Maybe (Eq _ _ _)) Datatypes.true _ _ = _) _) =>
+   simple apply IntroArg_iteDep_Maybe_Eq_true : refinesFun.
+Hint Extern 1 (IntroArg _ (iteDep (fun _ => Maybe (Eq _ _ _)) Datatypes.false _ _ = _) _) =>
+   simple apply IntroArg_iteDep_Maybe_Eq_false : refinesFun.
+
+Lemma IntroArg_isBvsle_def n w a b goal
+  : IntroArg n (isBvsle w a b) (fun _ => goal) ->
+    IntroArg n (bvsle w a b = true) (fun _ => goal).
+Proof. intros H eq; apply H, isBvsle_def; eauto. Qed.
+Lemma IntroArg_isBvsle_def_opp n w a b goal
+  : IntroArg n (isBvsle w b a) (fun _ => goal) ->
+    IntroArg n (bvslt w a b = false) (fun _ => goal).
+Proof. intros H eq; apply H, isBvsle_def_opp; eauto. Qed.
+
+(* Hint Extern 3 (IntroArg _ (bvsle _ _ _ = true) _) => *)
+(*    simple apply IntroArg_isBvsle_def : refinesFun. *)
+(* Hint Extern 3 (IntroArg _ (bvslt _ _ _ = false) _) => *)
+(*    simple apply IntroArg_isBvsle_def_opp : refinesFun. *)
+
+Lemma IntroArg_isBvslt_def n w a b goal
+  : IntroArg n (isBvslt w a b) (fun _ => goal) ->
+    IntroArg n (bvslt w a b = true) (fun _ => goal).
+Proof. intros H eq; apply H, isBvslt_def; eauto. Qed.
+Lemma IntroArg_isBvslt_def_opp n w a b goal
+  : IntroArg n (isBvslt w b a) (fun _ => goal) ->
+    IntroArg n (bvsle w a b = false) (fun _ => goal).
+Proof. intros H eq; apply H, isBvslt_def_opp; eauto. Qed.
+
+(* Hint Extern 3 (IntroArg _ (bvslt  _ _ = true) _) => *)
+(*    simple apply IntroArg_isBvslt_def : refinesFun. *)
+(* Hint Extern 3 (IntroArg _ (bvsle _ _ _ = false) _) => *)
+(*    simple apply IntroArg_isBvslt_def_opp : refinesFun. *)
+
+Lemma IntroArg_isBvule_def n w a b goal
+  : IntroArg n (isBvule w a b) (fun _ => goal) ->
+    IntroArg n (bvule w a b = true) (fun _ => goal).
+Proof. intros H eq; apply H, isBvule_def; eauto. Qed.
+Lemma IntroArg_isBvule_def_opp n w a b goal
+  : IntroArg n (isBvule w b a) (fun _ => goal) ->
+    IntroArg n (bvult w a b = false) (fun _ => goal).
+Proof. intros H eq; apply H, isBvule_def_opp; eauto. Qed.
+
+(* Hint Extern 3 (IntroArg _ (bvule _ _ _ = true) _) => *)
+(*    simple apply IntroArg_isBvule_def : refinesFun. *)
+(* Hint Extern 3 (IntroArg _ (bvult _ _ _ = false) _) => *)
+(*    simple apply IntroArg_isBvule_def_opp : refinesFun. *)
+
+Lemma IntroArg_isBvult_def n w a b goal
+  : IntroArg n (isBvult w a b) (fun _ => goal) ->
+    IntroArg n (bvult w a b = true) (fun _ => goal).
+Proof. intros H eq; apply H, isBvult_def; eauto. Qed.
+Lemma IntroArg_isBvult_def_opp n w a b goal
+  : IntroArg n (isBvult w b a) (fun _ => goal) ->
+    IntroArg n (bvule w a b = false) (fun _ => goal).
+Proof. intros H eq; apply H, isBvult_def_opp; eauto. Qed.
+
+(* Hint Extern 3 (IntroArg _ (bvult _ _ _ = true) _) => *)
+(*    simple apply IntroArg_isBvult_def : refinesFun. *)
+(* Hint Extern 3 (IntroArg _ (bvule _ _ _ = false) _) => *)
+(*    simple apply IntroArg_isBvult_def_opp : refinesFun. *)
+
+Hint Extern 3 (IntroArg _ (@eq bool ?x ?y) _) =>
+  lazymatch y with
+  | true => lazymatch x with
+    | bvsle _ _ _ => simple apply IntroArg_isBvsle_def
+    | bvslt _ _ _ => simple apply IntroArg_isBvslt_def
+    | bvule _ _ _ => simple apply IntroArg_isBvule_def
+    | bvult _ _ _ => simple apply IntroArg_isBvult_def
+    end
+  | false => lazymatch x with
+    | bvsle _ _ _ => simple apply IntroArg_isBvslt_def_opp
+    | bvslt _ _ _ => simple apply IntroArg_isBvsle_def_opp
+    | bvule _ _ _ => simple apply IntroArg_isBvult_def_opp
+    | bvult _ _ _ => simple apply IntroArg_isBvule_def_opp
+    end
+  end : refinesFun.

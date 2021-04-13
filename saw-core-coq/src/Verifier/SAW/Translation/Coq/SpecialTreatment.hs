@@ -266,9 +266,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("Eq",      mapsTo sawDefinitionsModule "Eq")
   , ("Eq__rec", mapsTo sawDefinitionsModule "Eq__rec")
   , ("Refl",    mapsTo sawDefinitionsModule "Refl")
-  , ("EqP",      mapsTo sawDefinitionsModule "EqP")
-  , ("EqP__rec", mapsTo sawDefinitionsModule "EqP__rec")
-  , ("ReflP",    mapsTo sawDefinitionsModule "ReflP")
   ]
 
   -- Strings
@@ -444,12 +441,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Nil", replace (Coq.ExplVar "Datatypes.nil"))
   , ("Cons", replace (Coq.ExplVar "Datatypes.cons"))
   , ("List__rec", replace (Coq.ExplVar "Datatypes.list_rect"))
-  ]
-
-  -- Definitions that depend on axioms currently skipped
-  ++
-  [ ("composeM",   skip)
-  , ("letRecFuns", skip)
   ]
 
 constantsRenamingMap :: [(String, String)] -> Map.Map String String

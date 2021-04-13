@@ -26,11 +26,8 @@ Definition UnitType    := unit.
 Definition UnitType__rec := unit_rect.
 
 Definition Bool   := bool.
-Definition Eq     := identity.
-Definition Eq__rec  := identity_rect.
-Definition Refl   := identity_refl.
-Definition EqP     := @eq.
-Definition ReflP  := @eq_refl.
+Definition Eq     := @eq.
+Definition Refl   := @eq_refl.
 Definition true      := true.
 Definition ite (a : Type) (b : Bool) (t e : a) : a := if b then t else e.
 Definition and    := andb.
@@ -42,7 +39,7 @@ Definition boolEq := Coq.Bool.Bool.eqb.
 
 (* SAW uses an alternate form of eq_rect where the motive function P also
 depends on the equality proof itself *)
-Definition EqP__rec (A : Type) (x : A) (P: forall y, x=y -> Type) (p:P x eq_refl) y (e:x=y) :
+Definition Eq__rec (A : Type) (x : A) (P: forall y, x=y -> Type) (p:P x eq_refl) y (e:x=y) :
   P y e.
   dependent inversion e; assumption.
 Defined.
@@ -52,52 +49,11 @@ Proof.
   destruct b1, b2; reflexivity.
 Qed.
 
-Definition coerce (a b : sort 0) (eq : Eq (sort 0) a b) (x : a) : b :=
-  match eq in identity _ a' return a' with
-  | identity_refl _ => x
+Definition coerce (a b : sort 0) (p : Eq (sort 0) a b) (x : a) : b :=
+  match p in eq _ a' return a' with
+  | eq_refl _ => x
   end
 .
-
-(** Typeclass for `eq` **)
-(* NOTE: SAW core prelude's eq is not being used much by the translation at the
-moment, so we skip it.  The following type class declaration could be used if
-one wanted to translate `eq`.  However, it would require more work in the
-translation, because calls to `eq T a b` in SAW must be translated to either `eq
-a b` or `@eq T _ a b`, where the underscore stands for the dictionary.  As a
-result, this would not be an identifier-to-identifier translation, but rather a
-term-to-term translation, and would require knowing the number of arguments
-expected before the dicitonary. *)
-(*
-Class eqClass `(a : Type) :=
-  {
-    eq : a -> a -> bool;
-    eq_refl : forall (x : a), Eq Bool (eq x x) True;
-  }.
-
-Global Instance eqClassBool : eqClass Bool :=
-  {
-    eq := boolEq;
-  }.
-+ destruct x; reflexivity.
-Defined.
-
-Theorem eq_Bool : Eq (Bool -> Bool -> Bool) eq boolEq.
-Proof.
-  reflexivity.
-Qed.
-
-Global Instance eqClass_sawVec (n : nat) (a : Type) `(A : eqClass a) : eqClass (sawVec n a) :=
-  {
-    eq := Vector.eqb _ eq;
-  }.
-+ induction 0 as [|? ? ? IH].
-  - reflexivity.
-  - simpl.
-    rewrite eq_refl.
-    rewrite IH.
-    reflexivity.
-Defined.
-*)
 
 (* SAW's prelude defines iteDep as a Bool eliminator whose arguments are
 reordered to look more like if-then-else. *)
@@ -105,43 +61,43 @@ Definition iteDep (P : Bool -> Type) (b : Bool) : P true -> P false -> P b :=
   fun Ptrue Pfalse => bool_rect P Ptrue Pfalse b.
 
 Definition ite_eq_iteDep : forall (a : Type) (b : Bool) (x y : a),
-    @identity a (ite a b x y) (iteDep (fun _ => a) b x y).
+    @eq a (ite a b x y) (iteDep (fun _ => a) b x y).
 Proof.
   reflexivity.
 Defined.
 
-Definition iteDep_True : forall (p : Bool -> Type), forall (f1 : p true), forall (f2 : p false), (@identity (p true) (iteDep p true f1 f2)) f1.
+Definition iteDep_True : forall (p : Bool -> Type), forall (f1 : p true), forall (f2 : p false), (@eq (p true) (iteDep p true f1 f2)) f1.
 Proof.
   reflexivity.
 Defined.
 
-Definition iteDep_False : forall (p : Bool -> Type), forall (f1 : p true), forall (f2 : p false), (@identity (p false) (iteDep p false f1 f2)) f2.
+Definition iteDep_False : forall (p : Bool -> Type), forall (f1 : p true), forall (f2 : p false), (@eq (p false) (iteDep p false f1 f2)) f2.
 Proof.
   reflexivity.
 Defined.
 
-Definition not__eq (b : Bool) : @identity Bool (not b) (ite Bool b false true).
+Definition not__eq (b : Bool) : @eq Bool (not b) (ite Bool b false true).
 Proof.
   reflexivity.
 Defined.
 
-Definition and__eq (b1 b2 : Bool) : @identity Bool (and b1 b2) (ite Bool b1 b2 false).
+Definition and__eq (b1 b2 : Bool) : @eq Bool (and b1 b2) (ite Bool b1 b2 false).
 Proof.
   reflexivity.
 Defined.
 
-Definition or__eq (b1 b2 : Bool) : @identity Bool (or b1 b2) (ite Bool b1 true b2).
+Definition or__eq (b1 b2 : Bool) : @eq Bool (or b1 b2) (ite Bool b1 true b2).
 Proof.
   reflexivity.
 Defined.
 
-Definition xor__eq (b1 b2 : Bool) : @identity Bool (xor b1 b2) (ite Bool b1 (not b2) b2).
+Definition xor__eq (b1 b2 : Bool) : @eq Bool (xor b1 b2) (ite Bool b1 (not b2) b2).
 Proof.
   destruct b1; destruct b2; reflexivity.
 Defined.
 
 (*
-Definition eq__eq (b1 b2 : Bool) : @identity Bool (eq b1 b2) (ite Bool b1 b2 (not b2)).
+Definition eq__eq (b1 b2 : Bool) : @eq Bool (eq b1 b2) (ite Bool b1 b2 (not b2)).
 Proof.
   destruct b1; destruct b2; reflexivity.
 Defined.
