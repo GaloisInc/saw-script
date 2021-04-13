@@ -6,14 +6,20 @@
 
 module SAWScript.Prover.What4 where
 
+import Control.Monad (forM)
 import System.IO
 
+import           Data.IORef
 import           Data.Set (Set)
+import qualified Data.Map as Map
+--import qualified Data.Text as Text
+import           Data.Parameterized.TraversableFC
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
 
 import           SAWScript.Proof(Prop, propToSATQuery, propSize, CEX)
+import           SAWScript.Crucible.Common
 import           SAWScript.Prover.SolverStats
 
 import Data.Parameterized.Nonce
@@ -22,10 +28,15 @@ import           What4.Config
 import           What4.Solver
 import           What4.Interface
 import           What4.Expr.GroundEval
+--import           Verifier.SAW.Recognizer
+import qualified Verifier.SAW.Simulator.Concrete as Sim
+import qualified Verifier.SAW.Simulator.Value as Sim
 import qualified Verifier.SAW.Simulator.What4 as W
+import qualified Verifier.SAW.Simulator.What4.ReturnTrip as W
 import           Verifier.SAW.Simulator.What4.FirstOrder
-import qualified What4.Expr.Builder as B
 
+import qualified What4.Expr.Builder as B
+import           What4.SWord (SWord(..))
 
 ----------------------------------------------------------------
 
@@ -179,3 +190,41 @@ printValue _ f (Just (W.TypedExpr (ty :: BaseTypeRepr ty) (bv :: B.Expr t ty)), 
   gv <- groundEval f @ty bv
   putStr $ orig ++ "=?"
   print (groundToFOV ty gv)
+
+
+w4_extract_uninterp :: SharedContext -> Set VarIndex -> Term -> IO (Term, Map.Map VarIndex [(Term,Term)])
+w4_extract_uninterp sc unintSet tm =
+  do tp <- scTypeOf sc tm
+     modmap <- scGetModuleMap sc
+
+     fot <- case Sim.asFirstOrderTypeValue (Sim.evalSharedTerm modmap mempty mempty tp) of
+              Just fot -> pure fot
+              Nothing  -> fail (unwords ["extract_uninterp, expected first-order type", showTerm tp])
+
+     sym <- newSAWCoreBackend sc
+     st <- sawCoreState sym
+
+     ref <- newIORef mempty
+     (v, replaceMap) <- W.w4ReplaceUninterp sym st sc modmap mempty ref unintSet tm
+
+     tm' <- case (fot, v) of
+              (FOTBit          , Sim.VBool b)       -> W.toSC sym st b
+              (FOTVec _n FOTBit, Sim.VWord ZBV)     -> scBvConst sc 0 0
+              (FOTVec _n FOTBit, Sim.VWord (DBV w)) -> W.toSC sym st w
+              (FOTIntMod _,      Sim.VIntMod m i)   ->
+                do m' <- scNat sc m
+                   i' <- W.toSC sym st i
+                   scToIntMod sc m' i'
+              (FOTVec _n _t    , _) -> fail "extract_uninterp: TODO, vectors"
+              (FOTArray _ _    , _) -> fail "extract_uninterp: TODO, arrays"
+              (FOTTuple _ts    , _) -> fail "extract_uninterp: TODO, tuples"
+              (FOTRec _fs      , _) -> fail "extract_uninterp: TODO, records"
+
+              _ -> fail ("extract_uninterp: type/value mismatch " ++ show fot ++ "; " ++ show v)
+
+     replacements <- flip traverse replaceMap $ \vals ->
+                       forM vals $ \(ec,W.UnintApp _nm vs _tps) ->
+                         do ectm <- scExtCns sc ec
+                            vs' <- scTuple sc =<< foldMapFC (\x -> (:[]) <$> W.toSC sym st x) vs
+                            return (ectm, vs')
+     pure (tm',replacements)
