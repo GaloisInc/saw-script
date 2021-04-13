@@ -56,6 +56,9 @@ module Verifier.SAW.Simulator.What4
 
   , valueToSymExpr
   , symExprToValue
+
+  , w4ReplaceUninterp
+  , UnintApp(..)
   ) where
 
 
@@ -66,6 +69,7 @@ import Data.Bits
 import Data.IORef
 import Data.List (genericTake)
 import Data.Map (Map)
+import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -85,12 +89,12 @@ import Numeric.Natural (Natural)
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.Simulator as Sim
 import qualified Verifier.SAW.Simulator.Prims as Prims
+import Verifier.SAW.Term.Functor
 import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
-import Verifier.SAW.TypedAST (FieldName, ModuleMap, toShortName, ctorPrimName, identBaseName)
-
+import Verifier.SAW.TypedAST (ModuleMap, ctorPrimName)
 -- what4
 import qualified What4.Expr.Builder as B
 import           What4.Expr.GroundEval
@@ -1160,6 +1164,121 @@ w4EvalBasic sym st sc m addlPrims ref unintSet t =
               ]
      cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral primHandler
      Sim.evalSharedTerm cfg t
+
+
+w4ReplaceUninterp ::
+  forall n st fs.
+  B.ExprBuilder n st fs ->
+  SAWCoreState n ->
+  SharedContext ->
+  ModuleMap ->
+  Map Ident (SPrim (B.ExprBuilder n st fs)) {- ^ additional primitives -} ->
+  IORef (SymFnCache (B.ExprBuilder n st fs)) {- ^ cache for uninterpreted function symbols -} ->
+  Set VarIndex {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
+  Term {- ^ term to simulate -} ->
+  IO (SValue (B.ExprBuilder n st fs), ReplaceUninterpMap n)
+w4ReplaceUninterp sym st sc mmap addlPrims ref unintSet t =
+  do mapref <- newIORef mempty
+     let extcns tf ec@(EC ix nm ty)
+           | Set.member ix unintSet = replaceUninterp sc sym st mapref ec
+           | otherwise =
+               do trm <- ArgTermConst <$> scTermF sc tf
+                  parseUninterpretedSAW sym st sc ref trm
+                     (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
+     let uninterpreted _tf ec
+           | Set.member (ecVarIndex ec) unintSet = Just (replaceUninterp sc sym st mapref ec)
+           | otherwise                           = Nothing
+     let neutral _env nt = fail ("w4ReplaceUninterp: could not evaluate neutral term: " ++ show nt)
+     let primHandler pn msg env _tv =
+            fail $ unlines
+              [ "Could not evaluate primitive " ++ show (primName pn)
+              , "On argument " ++ show (length env)
+              , Text.unpack msg
+              ]
+     cfg <- Sim.evalGlobal' mmap (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral primHandler
+     t' <- Sim.evalSharedTerm cfg t
+     m' <- readIORef mapref
+     return (t',m')
+
+type ReplaceUninterpMap n = Map VarIndex [(ExtCns Term, UnintApp (B.Expr n))]
+
+replaceUninterp ::
+  forall n st fs.
+  SharedContext ->
+  B.ExprBuilder n st fs ->
+  SAWCoreState n ->
+  IORef (ReplaceUninterpMap n) ->
+  ExtCns (TValue (What4 (B.ExprBuilder n st fs))) ->
+  IO (SValue (B.ExprBuilder n st fs))
+replaceUninterp sc sym scst mapref ec =
+    do let app0 = mkUnintApp (Text.unpack (toShortName (ecName ec)))
+       loop app0 (ecType ec)
+  where
+    recordApp :: ExtCns Term -> UnintApp (B.Expr n) -> IO ()
+    recordApp ec' app =
+      modifyIORef mapref (Map.alter (Just . ((ec',app):) . fromMaybe []) (ecVarIndex ec))
+
+    base ::
+      UnintApp (SymExpr (B.ExprBuilder n st fs)) ->
+      TValue (What4 (B.ExprBuilder n st fs)) ->
+      W.BaseTypeRepr btp ->
+      IO (B.Expr n btp)
+
+    base app@(UnintApp nm _args _tys) ty bty =
+      -- Make a fresh uninterepted constant to stand for the result of applying
+      -- this function, remember the arguments that were applied
+      do tyterm <- termOfTValue sc ty
+         ec' <- scFreshEC sc (Text.pack nm) tyterm
+         recordApp ec' app
+
+         ecterm' <- scFlatTermF sc (ExtCns ec')
+         bindSAWTerm sym scst bty ecterm'
+
+    loop ::
+      UnintApp (SymExpr (B.ExprBuilder n st fs)) ->
+      TValue (What4 (B.ExprBuilder n st fs)) ->
+      IO (SValue (B.ExprBuilder n st fs))
+    loop app ty =
+      case ty of
+        VPiType nm _t1 pibody ->
+          return $ VFun nm $ \x ->
+            do x' <- force x
+               app' <- applyUnintApp sym app x'
+               t2 <- applyPiBody pibody (ready x')
+               loop app' t2
+
+        VBoolType -> VBool <$> base app ty BaseBoolRepr
+
+        VIntType -> VInt  <$> base app ty BaseIntegerRepr
+
+        -- 0 width bitvector is a constant
+        VVecType 0 VBoolType -> return $ VWord ZBV
+
+        VVecType n VBoolType
+          | Just (Some (PosNat w)) <- somePosNat n ->
+          (VWord . DBV) <$> base app ty (BaseBVRepr w)
+
+        VVecType n ety | n >= 0 ->
+          do let mkElem i =
+                   do let app' = suffixUnintApp ("_a" ++ show i) app
+                      loop app' ety
+             xs <- traverse mkElem (genericTake n [(0::Integer) ..])
+             return (VVector (V.fromList (map ready xs)))
+
+        VArrayType ity ety
+          | Just (Some idx_repr) <- valueAsBaseType ity
+          , Just (Some elm_repr) <- valueAsBaseType ety
+          -> (VArray . SArray) <$> base app ty (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
+
+        VUnitType -> return VUnit
+
+        VPairType ty1 ty2 ->
+          do x1 <- loop (suffixUnintApp "_L" app) ty1
+             x2 <- loop (suffixUnintApp "_R" app) ty2
+             return (VPair (ready x1) (ready x2))
+
+        _ -> fail $ "could not extract uninterpreted symbol of type " ++ show ty
+
 
 -- | Evaluate a saw-core term to a What4 value for the purposes of
 --   using it as an input for symbolic simulation.  This will evaluate
