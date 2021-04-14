@@ -263,7 +263,7 @@ SAW/prove (command)
   
   
 
-``term``
+``goal``
   The term to interpret as a theorm and prove.
   
   
