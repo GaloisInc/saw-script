@@ -27,7 +27,6 @@ class ProverTest(unittest.TestCase):
 
         simple_thm = cry('\(x:[8]) -> x != x+1')
         self.assertTrue(saw.prove(simple_thm, ProofScript([abc])).is_valid())
-        self.assertTrue(saw.prove(simple_thm, ProofScript([yices([])])).is_valid())
         self.assertTrue(saw.prove(simple_thm, ProofScript([z3([])])).is_valid())
 
         self.assertTrue(saw.prove(simple_thm, ProofScript([Admit()])).is_valid())
