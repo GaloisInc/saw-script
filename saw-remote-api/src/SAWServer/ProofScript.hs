@@ -10,9 +10,9 @@ module SAWServer.ProofScript
   ) where
 
 import Control.Applicative ( Alternative(empty) )
-import Control.Exception ( throw )
+import Control.Exception ( Exception, throw )
 import Control.Lens ( view )
-import Control.Monad (foldM)
+import Control.Monad (foldM, forM)
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import Data.Aeson
     ( (.:), (.:?),
@@ -22,11 +22,12 @@ import Data.Aeson
       KeyValue((.=)),
       ToJSON(toJSON) )
 import Data.Maybe ( fromMaybe )
-import Data.Text (Text)
+import Data.Text (Text, pack)
+import Numeric (showHex)
 
 import qualified Argo
 import qualified Argo.Doc as Doc
-import CryptolServer.Data.Expression ( Expression, getCryptolExpr )
+import CryptolServer.Data.Expression ( Expression(..), Encoding(..), getCryptolExpr )
 import qualified SAWScript.Builtins as SB
 import qualified SAWScript.Value as SV
 import qualified SAWScript.Proof as PF
@@ -43,6 +44,8 @@ import SAWServer.CryptolExpression ( CryptolModuleException(..), getTypedTermOfC
 import SAWServer.Exceptions ( notASimpset )
 import SAWServer.OK ( OK, ok )
 import SAWServer.TopLevel ( tl )
+import Verifier.SAW.FiniteValue (FirstOrderValue(..))
+import Verifier.SAW.Name (ecName, toShortName)
 import Verifier.SAW.Rewriter (addSimp, emptySimpset)
 import Verifier.SAW.TermNet (merge)
 import Verifier.SAW.TypedTerm (TypedTerm(..))
@@ -177,25 +180,47 @@ instance Doc.DescribedParams (ProveParams cryptolExpr) where
        Doc.Paragraph [Doc.Text "The goal to interpret as a theorm and prove."])
     ]
 
---data CexValue = CexValue String TypedTerm
+data CexValue = CexValue Text Expression
 
 data ProveResult
   = ProofValid
-  | ProofInvalid -- [CexValue]
+  | ProofInvalid [CexValue]
+  | ProofUnknown
 
---instance ToJSON CexValue where
---  toJSON (CexValue n t) = object [ "name" .= n, "value" .= t ]
+instance ToJSON CexValue where
+  toJSON (CexValue n t) = object [ "name" .= n, "value" .= t ]
 
 instance ToJSON ProveResult where
   toJSON ProofValid = object [ "status" .= ("valid" :: Text)]
-  toJSON ProofInvalid {-cex-} =
-    object [ "status" .= ("invalid" :: Text) ] -- , "counterexample" .= cex]
+  toJSON ProofUnknown = object [ "status" .= ("unknown" :: Text)]
+  toJSON (ProofInvalid cex) =
+    object [ "status" .= ("invalid" :: Text), "counterexample" .= cex]
 
 
 proveDescr :: Doc.Block
 proveDescr =
   Doc.Paragraph [ Doc.Text "Attempt to prove the given term representing a"
                 , Doc.Text " theorem, given a proof script context."]
+
+exportFirstOrderExpression :: FirstOrderValue -> Either String Expression
+exportFirstOrderExpression fv =
+  case fv of
+    FOVBit b    -> return $ Bit b
+    FOVInt i    -> return $ Integer i
+    FOVIntMod m i -> return $ IntegerModulo i (toInteger m)
+    FOVWord w x -> return $ Num Hex (pack (showHex x "")) (toInteger w)
+    FOVVec _t vs -> Sequence <$> mapM exportFirstOrderExpression vs
+    FOVArray{}  -> Left "exportFirstOrderExpression: unsupported type: Array"
+    FOVTuple vs -> Tuple <$> mapM exportFirstOrderExpression vs
+    FOVRec _vm  -> Left "exportFirstOrderExpression: unsupported type: Record"
+
+
+data ProveException = ProveException String
+
+instance Show ProveException where
+    show (ProveException msg) = "Exception in `prove` command: " ++ msg
+
+instance Exception ProveException
 
 prove :: ProveParams Expression -> Argo.Command SAWState ProveResult
 prove params = do
@@ -211,9 +236,18 @@ prove params = do
   proofScript <- interpretProofScript (ppScript params)
   res <- tl $ SB.provePrim proofScript t
   case res of
-    PF.ValidProof{}      -> return ProofValid
-    PF.InvalidProof{}    -> return ProofInvalid
-    PF.UnfinishedProof{} -> return ProofInvalid
+    PF.ValidProof{} ->
+      return ProofValid
+    PF.InvalidProof _ cex _ ->
+      do cexVals <- forM cex $
+                      \(ec, v) ->
+                         do e <- case exportFirstOrderExpression v of
+                                   Left err -> throw $ ProveException err
+                                   Right e -> return e
+                            return $ CexValue (toShortName (ecName ec)) e
+         return $ ProofInvalid $ cexVals
+    PF.UnfinishedProof{} ->
+      return ProofUnknown
 
 interpretProofScript :: ProofScript -> Argo.Command SAWState (SV.ProofScript ())
 interpretProofScript (ProofScript ts) = go ts
@@ -248,4 +282,4 @@ interpretProofScript (ProofScript ts) = go ts
           ss <- getSimpset sn
           m <- go rest
           return (SB.simplifyGoal ss >> m)
-        go _ = error "malformed proof script"
+        go _ = throw $ ProveException "malformed proof script"
