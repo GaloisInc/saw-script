@@ -39,6 +39,7 @@ module SAWScript.Prover.Exporter
 
 import Data.Foldable(toList)
 
+import Control.Monad (unless)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import qualified Data.AIG as AIG
@@ -47,11 +48,13 @@ import Data.Parameterized.Nonce (globalNonceGenerator)
 import Data.Parameterized.Some (Some(..))
 import Data.Set (Set)
 import qualified Data.SBV.Dynamic as SBV
+import System.Directory (removeFile)
 import System.IO
 import Data.Text.Prettyprint.Doc.Render.Text
 import Prettyprinter (vcat)
 
 import Cryptol.Utils.PP(pretty)
+import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
 import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule)
 import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
@@ -124,6 +127,30 @@ writeAIG proxy sc f t = do
   io $ do
     aig <- bitblastPrim proxy sc t
     AIG.writeAiger f aig
+
+withABCVerilog :: SharedContext -> FilePath -> Term -> (FilePath -> String) -> TopLevel ()
+withABCVerilog sc baseName t buildCmd =
+  do let verilogFile = baseName ++ ".v"
+     write_verilog sc verilogFile t
+     liftIO $
+       do (out, err) <- readProcessExitIfFailure "abc" ["-q", buildCmd verilogFile]
+          unless (null out) $ putStrLn "ABC output:" >> putStrLn out
+          unless (null err) $ putStrLn "ABC errors:" >> putStrLn err
+          removeFile verilogFile
+
+-- | Write a @Term@ representing a an arbitrary function to an AIG file
+-- by using ABC to convert a Verilog file.
+writeAIGviaVerilog :: SharedContext -> FilePath -> Term -> TopLevel ()
+writeAIGviaVerilog sc aigFile t =
+  withABCVerilog sc aigFile t $
+      \verilogFile -> "%read " ++ verilogFile ++ "; %blast; &write " ++ aigFile
+
+-- | Write a @Term@ representing a an arbitrary function to a CNF file
+-- by using ABC to convert a Verilog file.
+writeCNFviaVerilog :: SharedContext -> FilePath -> Term -> TopLevel ()
+writeCNFviaVerilog sc cnfFile t =
+  withABCVerilog sc cnfFile t $
+      \verilogFile -> "%read " ++ verilogFile ++ "; %blast; &write_cnf " ++ cnfFile
 
 -- | Like @writeAIG@, but takes an additional 'Integer' argument
 -- specifying the number of input and output bits to be interpreted as
