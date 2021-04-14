@@ -141,6 +141,10 @@ class SAWConnection:
         self.most_recent_result = CryptolLoadFile(self, filename)
         return self.most_recent_result
 
+    def create_ghost_variable(self, name: str) -> Command:
+        self.most_recent_result = CreateGhostVariable(self, name)
+        return self.most_recent_result
+
     def llvm_load_module(self, name: str, bitcode_file: str)  -> Command:
         self.most_recent_result = LLVMLoadModule(self, name, bitcode_file)
         return self.most_recent_result

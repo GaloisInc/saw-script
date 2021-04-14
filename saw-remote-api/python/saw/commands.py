@@ -33,6 +33,17 @@ class CryptolLoadModule(SAWCommand):
     def process_result(self, _res : Any) -> Any:
         return None
 
+class CreateGhostVariable(SAWCommand):
+    def __init__(self, connection : argo.HasProtocolState, name : str) -> None:
+        super(CreateGhostVariable, self).__init__(
+            'SAW/create ghost variable',
+            {'name': name},
+            connection
+        )
+
+    def process_result(self, _res : Any) -> Any:
+        return None
+
 class LLVMLoadModule(SAWCommand):
     def __init__(self, connection : argo.HasProtocolState,
                  name : str,

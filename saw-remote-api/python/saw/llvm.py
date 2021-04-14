@@ -268,6 +268,15 @@ class PointsTo:
                 "check points to type": check_target_type_json,
                 "condition": self.condition.to_json() if self.condition is not None else self.condition}
 
+class GhostValue:
+    """TODO"""
+    def __init__(self, name: str, value: CryptolTerm) -> None:
+        self.name = name
+        self.value = value
+
+    def to_json(self) -> Any:
+        return {"server name": self.name,
+                "value": self.value.to_json()}
 
 @dataclass
 class State:
@@ -276,12 +285,14 @@ class State:
     conditions : List[Condition] = dataclasses.field(default_factory=list)
     allocated : List[Allocated] = dataclasses.field(default_factory=list)
     points_to : List[PointsTo] = dataclasses.field(default_factory=list)
+    ghost_values : List[GhostValue] = dataclasses.field(default_factory=list)
 
     def to_json(self) -> Any:
         return {'variables': [v.to_init_json() for v in self.fresh],
                 'conditions': [c.to_json() for c in self.conditions],
                 'allocated': [a.to_init_json() for a in self.allocated],
-                'points to': [p.to_json() for p in self.points_to]
+                'points to': [p.to_json() for p in self.points_to],
+                'ghost values': [g.to_json() for g in self.ghost_values]
                }
 
 ContractState = \
@@ -423,6 +434,16 @@ class Contract:
             self.__pre_state.points_to.append(pt)
         elif self.__state == 'post':
             self.__post_state.points_to.append(pt)
+        else:
+            raise Exception("wrong state")
+
+    def ghost_value(self, name: str, value: CryptolTerm) -> None:
+        """TODO"""
+        gv = GhostValue(name, value)
+        if self.__state == 'pre':
+            self.__pre_state.ghost_values.append(gv)
+        elif self.__state == 'post':
+            self.__post_state.ghost_values.append(gv)
         else:
             raise Exception("wrong state")
 

@@ -346,6 +346,10 @@ def cryptol_load_file(filename: str) -> None:
     __get_designated_connection().cryptol_load_file(filename).result()
     return None
 
+def create_ghost_variable(name: str) -> None:
+    __get_designated_connection().create_ghost_variable(name)
+    return None
+
 
 @dataclass
 class LLVMModule:

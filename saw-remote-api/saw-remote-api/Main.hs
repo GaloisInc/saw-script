@@ -16,6 +16,9 @@ import SAWServer.CryptolSetup
       cryptolLoadModule,
       cryptolLoadFileDescr,
       cryptolLoadFile )
+import SAWServer.Ghost
+    ( createGhostVariableDescr,
+      createGhostVariable )
 --import SAWServer.JVMCrucibleSetup
 --import SAWServer.JVMVerify
 import SAWServer.LLVMCrucibleSetup
@@ -94,6 +97,10 @@ sawMethods =
      llvmAssumeDescr
      llvmAssume
   -- General
+  , Argo.command
+     "SAW/create ghost variable"
+     createGhostVariableDescr
+     createGhostVariable
   , Argo.command
      "SAW/make simpset"
      makeSimpsetDescr

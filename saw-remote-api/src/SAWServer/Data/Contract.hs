@@ -9,13 +9,13 @@ module SAWServer.Data.Contract
   , Contract(..)
   , ContractVar(..)
   , Allocated(..)
-  , GhostPointsTo(..)
+  , GhostValue(..)
   , PointsTo(..)
   ) where
 
 import Control.Applicative
 import Data.Aeson (FromJSON(..), withObject, withText, (.:), (.:?))
-import Data.Maybe (maybeToList)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
 import SAWScript.Crucible.LLVM.Builtins (CheckPointsToType(..))
@@ -33,13 +33,13 @@ data Contract ty cryptolExpr =
     { preVars       :: [ContractVar ty]
     , preConds      :: [cryptolExpr]
     , preAllocated  :: [Allocated ty]
-    , preGhostPointsTos  :: [GhostPointsTo cryptolExpr]
+    , preGhostValues  :: [GhostValue cryptolExpr]
     , prePointsTos  :: [PointsTo ty cryptolExpr]
     , argumentVals  :: [CrucibleSetupVal cryptolExpr]
     , postVars      :: [ContractVar ty]
     , postConds     :: [cryptolExpr]
     , postAllocated :: [Allocated ty]
-    , postGhostPointsTos :: [GhostPointsTo cryptolExpr]
+    , postGhostValues :: [GhostValue cryptolExpr]
     , postPointsTos :: [PointsTo ty cryptolExpr]
     , returnVal     :: Maybe (CrucibleSetupVal cryptolExpr)
     }
@@ -73,8 +73,8 @@ data CheckAgainstTag
   | TagCheckAgainstCastedType
 
 
-data GhostPointsTo cryptolExpr =
-  GhostPointsTo
+data GhostValue cryptolExpr =
+  GhostValue
     { ghostVarName :: ServerName
     , ghostValue   :: cryptolExpr
     } deriving stock (Functor, Foldable, Traversable)
@@ -87,11 +87,11 @@ instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (PointsTo ty cryptolExp
                <*> o .:? "check points to type"
                <*> o .:? "condition"
 
-instance FromJSON cryptolExpr => FromJSON (GhostPointsTo cryptolExpr) where
+instance FromJSON cryptolExpr => FromJSON (GhostValue cryptolExpr) where
   parseJSON =
     withObject "ghost variable value" $ \o ->
-      GhostPointsTo <$> o .: "server name"
-                    <*> o .: "value"
+      GhostValue <$> o .: "server name"
+                 <*> o .: "value"
 
 instance FromJSON ty => FromJSON (Allocated ty) where
   parseJSON =
@@ -114,13 +114,13 @@ instance (FromJSON ty, FromJSON e) => FromJSON (Contract ty e) where
     Contract <$> o .:  "pre vars"
              <*> o .:  "pre conds"
              <*> o .:  "pre allocated"
-             <*> (maybeToList <$> o .:? "pre ghost vars")
+             <*> (fromMaybe [] <$> o .:? "pre ghost values")
              <*> o .:  "pre points tos"
              <*> o .:  "argument vals"
              <*> o .:  "post vars"
              <*> o .:  "post conds"
              <*> o .:  "post allocated"
-             <*> (maybeToList <$> o .:? "post ghost vars")
+             <*> (fromMaybe [] <$> o .:? "post ghost values")
              <*> o .:  "post points tos"
              <*> o .:? "return val"
 
