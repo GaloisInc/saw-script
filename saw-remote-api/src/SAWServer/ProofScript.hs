@@ -82,6 +82,7 @@ instance FromJSON Prover where
       case name of
         "abc"            -> pure ABC_Internal
         "internal-abc"   -> pure ABC_Internal
+        "boolector"      -> SBV_Boolector <$> unints
         "rme"            -> pure RME
         "sbv-abc"        -> pure SBV_ABC_SMTLib
         "sbv-boolector"  -> SBV_Boolector <$> unints
