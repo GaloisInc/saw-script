@@ -61,8 +61,8 @@ vcCounterexample sc opts (EqualityCheck nm impNode specNode) evalFn =
          sv = exportValueWithSchema sschema sn
          opts' = SV.cryptolPPOpts opts
      -- Grr. Different pretty-printers.
-     lv_doc <- CV.runEval mempty (CV.ppValue CV.Concrete opts' lv)
-     sv_doc <- CV.runEval mempty (CV.ppValue CV.Concrete opts' sv)
+     lv_doc <- CV.runEval mempty (CV.ppValue CV.Concrete opts' =<< lv)
+     sv_doc <- CV.runEval mempty (CV.ppValue CV.Concrete opts' =<< sv)
 
      return $
        vcat

@@ -89,6 +89,7 @@ import           SAWScript.Crucible.LLVM.Skeleton.Builtins
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
+import Verifier.SAW.CryptolEnv (meSolverConfig)
 import qualified Cryptol.Eval as V (PPOpts(..))
 import qualified Cryptol.Backend.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)

@@ -340,7 +340,7 @@ evaluate sc t =
 
 evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
 evaluateTypedTerm sc (TypedTerm schema trm) =
-  exportValueWithSchema schema <$> evaluate sc trm
+  C.runEval mempty . exportValueWithSchema schema =<< evaluate sc trm
 
 applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x
