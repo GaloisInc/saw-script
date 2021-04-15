@@ -23,7 +23,7 @@ class ABC_SBV(Prover):
 
 class Boolector(Prover):
   def to_json(self) -> Any:
-    return { "name": "w4-boolector" }
+    return { "name": "boolector" }
 
 class Boolector_SBV(Prover):
   def to_json(self) -> Any:
