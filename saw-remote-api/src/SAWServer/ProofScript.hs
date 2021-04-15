@@ -84,25 +84,25 @@ instance FromJSON Prover where
       let unints = fromMaybe [] <$> o .:? "uninterpreted functions"
       case name of
         "abc"            -> pure ABC_Internal
-        "internal-abc"   -> pure ABC_Internal
         "boolector"      -> SBV_Boolector <$> unints
+        "cvc4"           -> SBV_CVC4  <$> unints
+        "internal-abc"   -> pure ABC_Internal
+        "mathsat"        -> SBV_MathSAT <$> unints
         "rme"            -> pure RME
         "sbv-abc"        -> pure SBV_ABC_SMTLib
         "sbv-boolector"  -> SBV_Boolector <$> unints
         "sbv-cvc4"       -> SBV_CVC4  <$> unints
-        "cvc4"           -> SBV_CVC4  <$> unints
         "sbv-mathsat"    -> SBV_MathSAT <$> unints
-        "mathsat"        -> SBV_MathSAT <$> unints
         "sbv-yices"      -> SBV_Yices <$> unints
-        "yices"          -> SBV_Yices <$> unints
         "sbv-z3"         -> SBV_Z3    <$> unints
-        "z3"             -> SBV_Z3    <$> unints
-        "w4-abc-verilog" -> pure W4_ABC_Verilog
         "w4-abc-smtlib"  -> pure W4_ABC_SMTLib
+        "w4-abc-verilog" -> pure W4_ABC_Verilog
         "w4-boolector"   -> W4_Boolector <$> unints
         "w4-cvc4"        -> W4_CVC4   <$> unints
         "w4-yices"       -> W4_Yices  <$> unints
         "w4-z3"          -> W4_Z3     <$> unints
+        "yices"          -> SBV_Yices <$> unints
+        "z3"             -> SBV_Z3    <$> unints
         _                -> empty
 
 instance FromJSON ProofTactic where
