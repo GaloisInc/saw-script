@@ -263,8 +263,8 @@ SAW/prove (command)
   
   
 
-``term``
-  The term to interpret as a theorm and prove.
+``goal``
+  The goal to interpret as a theorm and prove.
   
   
 Attempt to prove the given term representing a theorem, given a proof script context.

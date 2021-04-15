@@ -8,6 +8,9 @@ import signal
 import atexit
 from distutils.spawn import find_executable
 
+import cryptol
+
+from cryptol import cryptoltypes
 from . import connection
 from argo_client.connection import ServerConnection
 from . import llvm
@@ -52,6 +55,27 @@ class VerificationResult(metaclass=ABCMeta):
     @abstractmethod
     def is_success(self) -> bool: ...
 
+class ProofResult(metaclass=ABCMeta):
+    goal: proofscript.ProofScript
+    valid: bool
+    counterexample: Optional[Any]
+
+    def is_valid(self) -> bool:
+        """Returns `True` in the case where the given proof goal is valid, or true for
+        all possible values of any symbolic variables that it contains. Returns
+        `False` if the goal can possibly be false for any value of symbolic
+        variables it contains. In this latter case, the `get_counterexample`
+        function will return the variable values for which the goal evaluates
+        to false.
+        """
+        return self.valid
+
+    def get_counterexample(self) -> Any:
+        """In the case where `is_valid` returns `False`, this function returns the
+        counterexample that provides the values for symbolic variables that
+        lead to it being false. If `is_valid` returns `True`, returns `None`.
+        """
+        return self.counterexample
 
 @dataclass
 class VerificationSucceeded(VerificationResult):
@@ -421,6 +445,29 @@ def llvm_verify(module: LLVMModule,
 
     return result
 
+def prove(goal: cryptoltypes.CryptolJSON,
+          proof_script: proofscript.ProofScript) -> ProofResult:
+    """Atempts to prove that the expression given as the first argument, `goal`, is
+    true for all possible values of free symbolic variables. Uses the proof
+    script (potentially specifying an automated prover) provided by the second
+    argument.
+    """
+    conn = __get_designated_connection()
+    res = conn.prove(cryptoltypes.to_cryptol(goal),
+                     proof_script.to_json()).result()
+    pr = ProofResult()
+    if res['status'] == 'valid':
+        pr.valid = True
+    elif res['status'] == 'invalid':
+        pr.valid = False
+    else:
+        raise ValueError("Unknown proof result " + str(res))
+    if 'counterexample' in res:
+        pr.counterexample = [ (arg['name'], cryptol.from_cryptol_arg(arg['value']))
+                              for arg in res['counterexample'] ]
+    else:
+        pr.counterexample = None
+    return pr
 
 @atexit.register
 def script_exit() -> None:

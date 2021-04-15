@@ -1,5 +1,9 @@
 import argo_client.interaction as argo
+from typing import Any, Dict, List, Optional, Set, Union, overload
+
+from cryptol import cryptoltypes
 from . import exceptions
+from saw.proofscript import *
 
 from typing import Any, List
 
@@ -68,7 +72,7 @@ class LLVMVerify(SAWCommand):
             lemmas : List[str],
             check_sat : bool,
             setup : Any,
-            script : str,
+            script : ProofScript,
             lemma_name : str) -> None:
         params = {'module': module,
                   'function': function,
@@ -81,6 +85,19 @@ class LLVMVerify(SAWCommand):
 
     def process_result(self, _res : Any) -> Any:
         return None
+
+class Prove(SAWCommand):
+    def __init__(
+            self,
+            connection : argo.HasProtocolState,
+            goal : cryptoltypes.CryptolJSON,
+            script : ProofScript) -> None:
+        params = {'goal': goal,
+                  'script': script}
+        super(Prove, self).__init__('SAW/prove', params, connection)
+
+    def process_result(self, res : Any) -> Any:
+        return res
 
 class SAWReset(argo.Notification):
     def __init__(self, connection : argo.HasProtocolState) -> None:
