@@ -58,7 +58,7 @@ import SAWServer
       setServerVal )
 import SAWServer.Data.Contract
     ( PointsTo(PointsTo),
-      GhostPointsTo(..),
+      GhostValue(..),
       Allocated(Allocated),
       ContractVar(ContractVar),
       Contract(preVars, preConds, preAllocated, prePointsTos,
@@ -132,7 +132,7 @@ interpretJVMSetup fileReader bic cenv0 ss = evalStateT (traverse_ go ss) (mempty
       lift (jvm_alloc_object c) >>= save name . Val
     go (SetupAlloc _ ty _ Nothing) =
       error $ "cannot allocate type: " ++ show ty
-    go (SetupGhostPointsTo src tgt) = get >>= \env -> lift $
+    go (SetupGhostValue _serverName _displayName _v) = get >>= \env -> lift $
          error "nyi: ghost points-to"
     go (SetupPointsTo src tgt _chkTgt _cond) = get >>= \env -> lift $
       do _ptr <- getSetupVal env src

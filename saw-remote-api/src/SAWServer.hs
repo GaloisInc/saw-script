@@ -37,7 +37,6 @@ import qualified Data.AIG as AIG
 #endif
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
 import qualified Lang.Crucible.JVM as CJ
-import qualified Text.LLVM.AST as LLVM
 import qualified Lang.JVM.Codebase as JSS
 import qualified Verifier.SAW.CryptolEnv as CryptolEnv
 import Verifier.SAW.Module (emptyModule)
@@ -50,7 +49,6 @@ import SAWScript.Crucible.LLVM.Builtins (CheckPointsToType)
 import SAWScript.Crucible.LLVM.X86 (defaultStackBaseAlign)
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS (CrucibleMethodSpecIR, GhostGlobal)
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModule)
-import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Options (defaultOptions)
 import SAWScript.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
@@ -104,7 +102,7 @@ data SetupStep ty
   = SetupReturn (CrucibleSetupVal CryptolAST) -- ^ The return value
   | SetupFresh ServerName Text ty -- ^ Server name to save in, debug name, fresh variable type
   | SetupAlloc ServerName ty Bool (Maybe Int) -- ^ Server name to save in, type of allocation, mutability, alignment
-  | SetupGhostPointsTo ServerName CryptolAST -- ^ Variable, term
+  | SetupGhostValue ServerName Text CryptolAST -- ^ Variable, term
   | SetupPointsTo (CrucibleSetupVal CryptolAST)
                   (CrucibleSetupVal CryptolAST)
                   (Maybe (CheckPointsToType ty))

@@ -8,6 +8,7 @@ import Data.Aeson (FromJSON(..), withObject, (.:))
 
 import Argo
 import qualified Argo.Doc as Doc
+import Data.Text (Text)
 import Control.Monad.State
 import Data.Parameterized.Classes (knownRepr)
 
@@ -21,26 +22,28 @@ createGhostVariableDescr :: Doc.Block
 createGhostVariableDescr =
   Doc.Paragraph [Doc.Text "Create a ghost global variable to represent proof-specific program state."]
 
-freshGhost :: ServerName -> Command SAWState GhostGlobal
-freshGhost (ServerName name) =
+freshGhost :: Text -> Command SAWState GhostGlobal
+freshGhost name =
   do allocator <- getHandleAlloc
      liftIO (freshGlobalVar allocator name knownRepr)
 
 createGhostVariable :: CreateGhostParams -> Command SAWState OK
-createGhostVariable (CreateGhostParams name) =
-  do setServerVal name =<< freshGhost name
+createGhostVariable (CreateGhostParams displayName serverName) =
+  do setServerVal serverName =<< freshGhost displayName
      ok
 
 data CreateGhostParams
-  = CreateGhostParams ServerName
+  = CreateGhostParams Text ServerName
 
 instance FromJSON CreateGhostParams where
   parseJSON =
     withObject "parameters for creating a ghost variable" $ \o ->
-    CreateGhostParams <$> o .: "name"
+    CreateGhostParams <$> o .: "display name" <*> o.: "server name"
 
 instance Doc.DescribedParams CreateGhostParams where
   parameterFieldDescription =
-    [ ("name",
-       Doc.Paragraph [Doc.Text "The name to assign to the ghost variable for later reference."])
+    [ ("display name",
+       Doc.Paragraph [Doc.Text "The name to assign to the ghost variable for display."])
+    , ("server name",
+       Doc.Paragraph [Doc.Text "The server name to use to access the ghost variable later."])
     ]
