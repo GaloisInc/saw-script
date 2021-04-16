@@ -1,8 +1,7 @@
 from pathlib import Path
 import unittest
 from saw import *
-from saw.llvm import Contract, SetupVal, FreshVar, cryptol, struct, LLVMType, void
-import saw.llvm_types as ty
+from saw.llvm import Contract, SetupVal, FreshVar, cryptol, struct, LLVMType, void, array_ty, i32, alias_ty
 
 
 def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None) -> Tuple[FreshVar, SetupVal]:
@@ -17,8 +16,8 @@ def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None) -> Tu
 
 class SetContract(Contract):
     def specification(self):
-        (_, x_p) = ptr_to_fresh(self, ty.array(2, ty.i32), "x")
-        p = self.alloc(ty.alias('struct.s'), points_to=struct(x_p))
+        (_, x_p) = ptr_to_fresh(self, array_ty(2, i32), "x")
+        p = self.alloc(alias_ty('struct.s'), points_to=struct(x_p))
 
         self.execute_func(p)
 
@@ -29,8 +28,8 @@ class SetContract(Contract):
 
 class AddContract(Contract):
     def specification(self):
-        (x, x_p) = ptr_to_fresh(self, ty.array(2, ty.i32), "x")
-        p = self.alloc(ty.alias('struct.s'), points_to=struct(x_p))
+        (x, x_p) = ptr_to_fresh(self, array_ty(2, i32), "x")
+        p = self.alloc(alias_ty('struct.s'), points_to=struct(x_p))
 
         self.execute_func(p)
 
@@ -39,8 +38,8 @@ class AddContract(Contract):
 
 class IdContract(Contract):
     def specification(self):
-        (x, x_p) = ptr_to_fresh(self, ty.array(2, ty.i32), "x")
-        p = self.alloc(ty.alias('struct.s'), points_to=struct(x_p))
+        (x, x_p) = ptr_to_fresh(self, array_ty(2, i32), "x")
+        p = self.alloc(alias_ty('struct.s'), points_to=struct(x_p))
 
         self.execute_func(p)
 
@@ -48,17 +47,8 @@ class IdContract(Contract):
 
 
 class LLVMStructTest(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(self):
-        connect(reset_server=True)
-
-    @classmethod
-    def tearDownClass(self):
-        disconnect()
-
-
     def test_llvm_struct(self):
+        connect(reset_server=True)
         if __name__ == "__main__": view(LogResults())
         bcname = str(Path('tests','saw','test-files', 'llvm_struct.bc'))
         mod = llvm_load_module(bcname)

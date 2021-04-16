@@ -149,7 +149,6 @@ import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
 -- crucible-llvm
 import qualified Lang.Crucible.LLVM.ArraySizeProfile as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
-import           Lang.Crucible.LLVM.Extension (LLVM)
 import qualified Lang.Crucible.LLVM.Bytes as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
@@ -269,7 +268,7 @@ llvm_verify ::
   [SomeLLVM MS.CrucibleMethodSpecIR] ->
   Bool                   ->
   LLVMCrucibleSetupM ()      ->
-  ProofScript SatResult  ->
+  ProofScript () ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 llvm_verify (Some lm) nm lemmas checkSat setup tactic =
   do lemmas' <- checkModuleCompatibility lm lemmas
@@ -289,7 +288,7 @@ llvm_unsafe_assume_spec (Some lm) nm setup =
      returnProof $ SomeLLVM method_spec
 
 llvm_array_size_profile ::
-  ProofScript SatResult  ->
+  ProofScript () ->
   Some LLVMModule ->
   String ->
   [SomeLLVM MS.CrucibleMethodSpecIR] ->
@@ -326,7 +325,7 @@ llvm_compositional_extract ::
   [SomeLLVM MS.CrucibleMethodSpecIR] ->
   Bool {- ^ check sat -} ->
   LLVMCrucibleSetupM () ->
-  ProofScript SatResult ->
+  ProofScript () ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
   do lemmas' <- checkModuleCompatibility lm lemmas
@@ -435,7 +434,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
 
           return $ SomeLLVM extracted_method_spec
 
-setupValueAsExtCns :: SetupValue (Crucible.LLVM arch) -> Maybe (ExtCns Term)
+setupValueAsExtCns :: SetupValue (LLVM arch) -> Maybe (ExtCns Term)
 setupValueAsExtCns =
   \case
     SetupTerm term -> asExtCns $ ttTerm term
@@ -518,7 +517,7 @@ verifyMethodSpec ::
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   [MS.CrucibleMethodSpecIR (LLVM arch)] ->
   Bool ->
-  ProofScript SatResult ->
+  ProofScript () ->
   Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
   TopLevel (MS.CrucibleMethodSpecIR (LLVM arch), OverrideState (LLVM arch))
 verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
@@ -585,7 +584,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
 
 verifyObligations :: LLVMCrucibleContext arch
                   -> MS.CrucibleMethodSpecIR (LLVM arch)
-                  -> ProofScript SatResult
+                  -> ProofScript ()
                   -> [Crucible.LabeledPred Term Crucible.AssumptionReason]
                   -> [(String, Term)]
                   -> TopLevel SolverStats
@@ -598,13 +597,16 @@ verifyObligations cc mspec tactic assumes asserts =
      stats <-
        forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) ->
        do goal   <- io $ scImplies sc assume assert
-          goal'  <- io $ predicateToProp sc Universal goal
+          goal'  <- io $ boolToProp sc [] goal
           let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
               proofgoal = ProofGoal n "vc" goalname goal'
-          r <- evalStateT tactic (startProof proofgoal)
-          case r of
-            Unsat stats -> return stats
-            SatMulti stats vals ->
+          res <- runProofScript tactic proofgoal
+          case res of
+            ValidProof stats _thm -> return stats -- TODO do something with these theorems
+            UnfinishedProof pst ->
+              do printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
+                 throwTopLevel $ "Proof failed " ++ show (length (psGoals pst)) ++ " goals remaining."
+            InvalidProof stats vals _pst ->
               do printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
                  printOutLnTop Info (show stats)
                  printOutLnTop OnlyCounterExamples "----------Counterexample----------"
@@ -612,7 +614,8 @@ verifyObligations cc mspec tactic assumes asserts =
                  if null vals then
                    printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
                  else
-                   let showAssignment (name, val) = "  " ++ name ++ ": " ++ show (ppFirstOrderValue opts val) in
+                   let showEC ec = Text.unpack (toShortName (ecName ec)) in
+                   let showAssignment (ec, val) = "  " ++ showEC ec ++ ": " ++ show (ppFirstOrderValue opts val) in
                    mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
                  printOutLnTop OnlyCounterExamples "----------------------------------"
                  throwTopLevel "Proof failed." -- Mirroring behavior of llvm_verify
@@ -746,25 +749,30 @@ verifyPrestate opts cc mspec globals =
 assumptionsContainContradiction ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
-  ProofScript SatResult ->
+  ProofScript () ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
   TopLevel Bool
 assumptionsContainContradiction cc tactic assumptions =
   do
+     let sym = cc^.ccBackend
+     st <- io $ Common.sawCoreState sym
+     let sc  = saw_ctx st
      pgl <- io $
       do
-         let sym = cc^.ccBackend
-         st <- Common.sawCoreState sym
-         let sc  = saw_ctx st
          -- conjunction of all assumptions
          assume <- scAndList sc (toListOf (folded . Crucible.labeledPred) assumptions)
          -- implies falsehood
          goal  <- scImplies sc assume =<< toSC sym st (W4.falsePred sym)
-         goal' <- predicateToProp sc Universal goal
+         goal' <- boolToProp sc [] goal
          return $ ProofGoal 0 "vc" "vacuousness check" goal'
-     evalStateT tactic (startProof pgl) >>= \case
-       Unsat _stats -> return True
-       SatMulti _stats _vals -> return False
+     res <- runProofScript tactic pgl
+     case res of
+       ValidProof _ _     -> return True
+       InvalidProof _ _ _ -> return False
+       UnfinishedProof _  ->
+         -- TODO? is this the right behavior?
+         do printOutLnTop Warn "Could not determine if preconditions are vacuous"
+            return True
 
 -- | Given a list of assumptions, computes and displays a smallest subset of
 -- them that are contradictory among each themselves.  This is **not**
@@ -772,7 +780,7 @@ assumptionsContainContradiction cc tactic assumptions =
 computeMinimalContradictingCore ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
-  ProofScript SatResult ->
+  ProofScript () ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
   TopLevel ()
 computeMinimalContradictingCore cc tactic assumes =
@@ -793,7 +801,7 @@ computeMinimalContradictingCore cc tactic assumes =
 checkAssumptionsForContradictions ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
-  ProofScript SatResult ->
+  ProofScript () ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
   TopLevel ()
 checkAssumptionsForContradictions cc tactic assumes =
@@ -1001,10 +1009,10 @@ registerOverride ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch, Crucible.HasLLVMAnn Sym) =>
   Options                    ->
   LLVMCrucibleContext arch       ->
-  Crucible.SimContext (SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) ->
+  Crucible.SimContext (SAWCruciblePersonality Sym) Sym Crucible.LLVM ->
   W4.ProgramLoc              ->
   [MS.CrucibleMethodSpecIR (LLVM arch)]     ->
-  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret ()
+  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp args ret ()
 registerOverride opts cc sim_ctx top_loc cs =
   do let sym = cc^.ccBackend
      sc <- saw_ctx <$> liftIO (Common.sawCoreState sym)
@@ -1041,7 +1049,7 @@ registerInvariantOverride ::
   W4.ProgramLoc ->
   HashMap Crucible.SomeHandle [Crucible.BreakpointName] ->
   [MS.CrucibleMethodSpecIR (LLVM arch)] ->
-  IO (Crucible.ExecutionFeature (SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp)
+  IO (Crucible.ExecutionFeature (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp)
 registerInvariantOverride opts cc top_loc all_breakpoints cs =
   do sc <- saw_ctx <$> Common.sawCoreState (cc^.ccBackend)
      let name = (head cs) ^. csName
@@ -1073,7 +1081,7 @@ withCfg ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
   String ->
-  (forall blocks init ret . Crucible.CFG (Crucible.LLVM arch) blocks init ret -> IO a) ->
+  (forall blocks init ret . Crucible.CFG Crucible.LLVM blocks init ret -> IO a) ->
   IO a
 withCfg context name k =
   do let function_id = L.Symbol name
@@ -1085,7 +1093,7 @@ withCfgAndBlockId ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
-  (forall blocks init args ret . Crucible.CFG (Crucible.LLVM arch) blocks init ret -> Crucible.BlockID blocks args -> IO a) ->
+  (forall blocks init args ret . Crucible.CFG Crucible.LLVM blocks init ret -> Crucible.BlockID blocks args -> IO a) ->
   IO a
 withCfgAndBlockId context method_spec k =
   case method_spec ^. csParentName of
@@ -1102,7 +1110,7 @@ withBreakpointCfgAndBlockId ::
   LLVMCrucibleContext arch ->
   String ->
   String ->
-  (forall blocks init args ret . Crucible.CFG (Crucible.LLVM arch) blocks init ret -> Crucible.BlockID blocks args -> IO a) ->
+  (forall blocks init args ret . Crucible.CFG Crucible.LLVM blocks init ret -> Crucible.BlockID blocks args -> IO a) ->
   IO a
 withBreakpointCfgAndBlockId context name parent k =
   do let breakpoint_name = Crucible.BreakpointName $ Text.pack name
@@ -1476,7 +1484,7 @@ runCFG simCtx globals h cfg args =
 
 extractFromLLVMCFG ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
-  Options -> SharedContext -> LLVMCrucibleContext arch -> Crucible.AnyCFG (Crucible.LLVM arch) -> IO TypedTerm
+  Options -> SharedContext -> LLVMCrucibleContext arch -> Crucible.AnyCFG Crucible.LLVM -> IO TypedTerm
 extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
   do let sym = cc^.ccBackend
      st <- Common.sawCoreState sym
@@ -1778,7 +1786,7 @@ symTypeAlias _ = Nothing
 llvm_alloc_internal ::
   L.Type  ->
   LLVMAllocSpec  ->
-  CrucibleSetup (Crucible.LLVM arch) (AllLLVM SetupValue)
+  CrucibleSetup (LLVM arch) (AllLLVM SetupValue)
 llvm_alloc_internal lty spec =
   do cctx <- getLLVMCrucibleContext
      let ?lc = ccTypeCtx cctx

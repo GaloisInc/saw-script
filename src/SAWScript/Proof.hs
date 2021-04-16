@@ -7,6 +7,7 @@ Stability   : provisional
 -}
 
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -56,20 +57,26 @@ module SAWScript.Proof
 
   , Quantification(..)
   , predicateToProp
+  , boolToProp
 
   , ProofState
   , psTimeout
   , psGoals
+  , psStats
   , setProofTimeout
   , ProofGoal(..)
   , startProof
   , finishProof
 
+  , CEX
+  , ProofResult(..)
+  , SolveResult(..)
+
   , predicateToSATQuery
   ) where
 
 import qualified Control.Monad.Fail as F
-import           Control.Monad.State
+import           Control.Monad.Except
 import           Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import           Data.Set (Set)
@@ -84,23 +91,25 @@ import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.TypedTerm
+import Verifier.SAW.FiniteValue (FirstOrderValue)
 import Verifier.SAW.Term.Pretty (SawDoc)
 import Verifier.SAW.SCTypeCheck (scTypeCheckError)
 
 import Verifier.SAW.Simulator.Concrete (evalSharedTerm)
-import Verifier.SAW.Simulator.Value (asFirstOrderTypeValue)
+import Verifier.SAW.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..))
 
+import SAWScript.Position
 import SAWScript.Prover.SolverStats
 import SAWScript.Crucible.Common as Common
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
 import qualified Verifier.SAW.Simulator.What4.ReturnTrip as W4Sim
 
--- | A proposition is a saw-core type (i.e. a term of type @sort n@
--- for some @n@). In particular, this includes any pi type whose
--- result type is a proposition. The argument of a pi type represents
+-- | A proposition is a saw-core type of type `Prop`.
+-- In particular, this includes any pi type whose result
+-- type is a proposition. The argument of a pi type represents
 -- a universally quantified variable.
 newtype Prop = Prop Term
-  -- INVARIANT: The type of the given term is a sort
+  -- INVARIANT: The type of the given term is `Prop`
 
 unProp :: Prop -> Term
 unProp (Prop tm) = tm
@@ -110,10 +119,25 @@ unProp (Prop tm) = tm
 --   is a sort.
 termToProp :: SharedContext -> Term -> IO Prop
 termToProp sc tm =
-   do ty <- scWhnf sc =<< scTypeOf sc tm
-      case asSort ty of
-        Nothing -> fail $ unlines [ "termToProp: Term is not a proposition", showTerm tm ]
-        Just _s -> return (Prop tm)
+   do mmap <- scGetModuleMap sc
+      ty <- scTypeOf sc tm
+      case evalSharedTerm mmap mempty mempty ty of
+        TValue (VSort s) | s == propSort -> return (Prop tm)
+        _ -> fail $ unlines [ "termToProp: Term is not a proposition", showTerm tm, showTerm ty ]
+
+
+-- | Turn a boolean-valued saw-core term into a proposition by asserting
+--   that it is equal to the true boolean value.  Generalize the proposition
+--   by universally quantifing over the variables given in the list.
+boolToProp :: SharedContext -> [ExtCns Term] -> Term -> IO Prop
+boolToProp sc vars tm =
+  do mmap <- scGetModuleMap sc
+     ty <- scTypeOf sc tm
+     case evalSharedTerm mmap mempty mempty ty of
+       TValue VBoolType ->
+         do p0 <- scEqTrue sc tm
+            Prop <$> scGeneralizeExts sc vars p0
+       _ -> fail $ unlines [ "boolToProp: Term is not a boolean", showTerm tm, showTerm ty ]
 
 -- | Return the saw-core term that represents this proposition.
 propToTerm :: SharedContext -> Prop -> IO Term
@@ -271,7 +295,7 @@ data Evidence
     -- | This type of evidence is produced when the given proposition
     --   has been explicitly assumed without other evidence at the
     --   user's direction.
-  | Admitted Prop
+  | Admitted String Pos Prop -- TODO, Text instead?
 
     -- | This type of evidence is produced when a given proposition is trivially
     --   true.
@@ -334,9 +358,6 @@ thmEvidence :: Theorem -> Evidence
 thmEvidence (LocalAssumption p) = LocalAssumptionEvidence p
 thmEvidence Theorem{ _thmEvidence = e } = e
 
-impossibleEvidence :: [Evidence] -> IO Evidence
-impossibleEvidence _ = fail "impossibleEvidence: attempted to check an impossible proof!"
-
 splitEvidence :: [Evidence] -> IO Evidence
 splitEvidence [e1,e2] = pure (SplitEvidence e1 e2)
 splitEvidence _ = fail "splitEvidence: expected two evidence values"
@@ -380,12 +401,14 @@ constructTheorem sc p e =
        }
 
 -- | Admit the given theorem without evidence.
-admitTheorem :: Prop -> Theorem
-admitTheorem p =
+--   The provided message allows the user to
+--   explain why this proposition is being admitted.
+admitTheorem :: String -> Pos -> Prop -> Theorem
+admitTheorem msg pos p =
   Theorem
   { _thmProp      = p
   , _thmStats     = solverStats "ADMITTED" (propSize p)
-  , _thmEvidence  = Admitted p
+  , _thmEvidence  = Admitted msg pos p
   }
 
 -- | Construct a theorem that an external solver has proved.
@@ -411,6 +434,7 @@ data ProofGoal =
 data Quantification = Existential | Universal
   deriving Eq
 
+
 -- | Convert a term with a function type of any arity into a pi type.
 -- Negate the term if the result type is @Bool@ and the quantification
 -- is 'Existential'.
@@ -426,7 +450,7 @@ predicateToProp sc quant = loop []
         do (argTs, resT) <- asPiList <$> scTypeOf' sc env t
            let toPi [] t0 =
                  case asBoolType resT of
-                   Nothing -> return t0 -- TODO: check quantification  TODO2: should this just be an error?
+                   Nothing -> fail $ unlines ["predicateToProp : Expected boolean result type but got", showTerm resT]
                    Just () ->
                      case quant of
                        Universal -> scEqTrue sc t0
@@ -455,6 +479,9 @@ psTimeout = _psTimeout
 
 psGoals :: ProofState -> [ProofGoal]
 psGoals = _psGoals
+
+psStats :: ProofState -> SolverStats
+psStats = _psStats
 
 -- | Verify that the given evidence in fact supports
 --   the given proposition.
@@ -505,10 +532,11 @@ checkEvidence sc = check mempty
                , showTerm p'
                ]
 
-      Admitted (Prop p') ->
+      Admitted msg pos (Prop p') ->
         do ok <- scConvertible sc False ptm p'
            unless ok $ fail $ unlines
-               [ "Admitted proof does not match the required proposition"
+               [ "Admitted proof does not match the required proposition " ++ show pos
+               , msg
                , showTerm ptm
                , showTerm p'
                ]
@@ -618,8 +646,8 @@ startProof g = ProofState [g] (goalProp g) mempty Nothing passthroughEvidence
 --   and validate the computed evidence to ensure that it supports the original
 --   proposition.  If successful, return the completed @Theorem@ and a summary
 --   of solver resources used in the proof.
-finishProof :: SharedContext -> ProofState -> IO (SolverStats, Maybe Theorem)
-finishProof sc (ProofState gs concl stats _ checkEv) =
+finishProof :: SharedContext -> ProofState -> IO ProofResult
+finishProof sc ps@(ProofState gs concl stats _ checkEv) =
   case gs of
     [] ->
       do e <- checkEv []
@@ -629,9 +657,23 @@ finishProof sc (ProofState gs concl stats _ checkEv) =
                    , _thmStats = stats
                    , _thmEvidence = e
                    }
-         pure (stats, Just thm)
+         pure (ValidProof stats thm)
     _ : _ ->
-         pure (stats, Nothing)
+         pure (UnfinishedProof ps)
+
+-- | A type describing counterexamples.
+type CEX = [(ExtCns Term, FirstOrderValue)]
+
+-- | The results that can occur after a proof attempt.
+data ProofResult
+  = -- | The proof was completed and results in a theorem
+    ValidProof SolverStats Theorem
+    -- | The proof failed, and we found a counterexample to
+    --   one of the proof's subgoals.
+  | InvalidProof SolverStats CEX ProofState
+    -- | The proof was not completed, but we did not find
+    --   a counterexample.
+  | UnfinishedProof ProofState
 
 -- | A @Tactic@ is a computation that examines, simplifies
 --   and/or solves a proof goal.  Given a goal, it does some
@@ -640,23 +682,23 @@ finishProof sc (ProofState gs concl stats _ checkEv) =
 --   evidence for the original goal when given evidence for the generated
 --   subgoal.  An important special case is a tactic that returns 0 subgoals,
 --   and therefore completely solves the goal.
-newtype Tactic m a = Tactic
-    { runTactic :: ProofGoal -> m (a, SolverStats, [ProofGoal], [Evidence] -> IO Evidence) }
+newtype Tactic m a =
+  Tactic (ProofGoal -> ExceptT (SolverStats, CEX) m (a, SolverStats, [ProofGoal], [Evidence] -> IO Evidence))
 
 -- | Choose the first subgoal in the current proof state and apply the given
 --   proof tactic.
-withFirstGoal :: F.MonadFail m => Tactic m a -> StateT ProofState m a
-withFirstGoal f =
-  StateT $ \(ProofState goals concl stats timeout evidenceCont) ->
-  case goals of
-    [] -> fail "ProofScript failed: no subgoal"
-    g : gs -> do
-      (x, stats', gs', buildTacticEvidence) <- runTactic f g
-      let evidenceCont' es =
-              do let (es1, es2) = splitAt (length gs') es
-                 e <- buildTacticEvidence es1
-                 evidenceCont (e:es2)
-      return (x, ProofState (gs' <> gs) concl (stats <> stats') timeout evidenceCont')
+withFirstGoal :: F.MonadFail m => Tactic m a -> ProofState -> m (Either (SolverStats, CEX) (a, ProofState))
+withFirstGoal (Tactic f) (ProofState goals concl stats timeout evidenceCont) =
+     case goals of
+       [] -> fail "ProofScript failed: no subgoal"
+       g : gs -> runExceptT (f g) >>= \case
+         Left cex -> return (Left cex)
+         Right (x, stats', gs', buildTacticEvidence) ->
+           do let evidenceCont' es =
+                      do let (es1, es2) = splitAt (length gs') es
+                         e <- buildTacticEvidence es1
+                         evidenceCont (e:es2)
+              return (Right (x, ProofState (gs' <> gs) concl (stats <> stats') timeout evidenceCont'))
 
 predicateToSATQuery :: SharedContext -> Set VarIndex -> Term -> IO SATQuery
 predicateToSATQuery sc unintSet tm0 =
@@ -859,18 +901,25 @@ tacticTrivial _sc = Tactic \goal ->
 --   but do not alter the proof state.
 tacticId :: Monad m => (ProofGoal -> m ()) -> Tactic m ()
 tacticId f = Tactic \gl ->
-  do f gl
+  do lift (f gl)
      return ((), mempty, [gl], passthroughEvidence)
 
+data SolveResult
+  = SolveSuccess Evidence
+  | SolveCounterexample CEX
+  | SolveUnknown
+
 -- | Attempt to solve the given goal, usually via an automatic solver.
---   If the goal is discharged, return evidence for the goal.  Otherwise,
---   the goal will be considered unsolvable.
-tacticSolve :: Monad m => (ProofGoal -> m (a, SolverStats, Maybe Evidence)) -> Tactic m a
+--   If the goal is discharged, return evidence for the goal.  If there
+--   is a counterexample for the goal, the counterexample will be used
+--   to indicate the goal is unsolvable. Otherwise, the goal will remain unchanged.
+tacticSolve :: Monad m => (ProofGoal -> m (SolverStats, SolveResult)) -> Tactic m ()
 tacticSolve f = Tactic \gl ->
-  do (a, stats, me) <- f gl
-     case me of
-       Nothing -> return (a, stats, [gl], impossibleEvidence)
-       Just e  -> return (a, stats, [], leafEvidence e)
+  do (stats, sres) <- lift (f gl)
+     case sres of
+       SolveSuccess e -> return ((), stats, [], leafEvidence e)
+       SolveUnknown   -> return ((), stats, [gl], passthroughEvidence)
+       SolveCounterexample cex -> throwError (stats, cex)
 
 -- | Attempt to simplify a proof goal via computation, rewriting or similar.
 --   The tactic should return a new proposition to prove and a method for
@@ -878,5 +927,5 @@ tacticSolve f = Tactic \gl ->
 --   the original goal.
 tacticChange :: Monad m => (ProofGoal -> m (Prop, Evidence -> Evidence)) -> Tactic m ()
 tacticChange f = Tactic \gl ->
-  do (p, ef) <- f gl
+  do (p, ef) <- lift (f gl)
      return ((), mempty, [ gl{ goalProp = p } ], updateEvidence ef)

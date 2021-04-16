@@ -29,9 +29,9 @@ setup(
     zip_safe=False,
     install_requires=[
         "BitVector==3.4.9",
-        "mypy==0.790",
+        "mypy==0.812",
         "mypy-extensions==0.4.3",
-        "argo-client==0.0.3",
+        "argo-client==0.0.4",
     ],
     classifiers=[
         "Development Status :: 3 - Alpha",

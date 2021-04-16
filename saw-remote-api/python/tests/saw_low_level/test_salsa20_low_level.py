@@ -2,7 +2,6 @@ from pathlib import Path
 import unittest
 import saw
 from saw.llvm import *
-from saw.llvm_types import i8, i32, LLVMArrayType
 from saw.proofscript import *
 
 
@@ -11,6 +10,7 @@ from saw.proofscript import *
 class Salsa20LowLevelTest(unittest.TestCase):
     def test_salsa20(self):
         c = saw.connection.connect(reset_server=True)
+
         if __name__ == "__main__": saw.view(saw.LogResults())
 
         bcname = str(Path('tests','saw','test-files', 'salsa20.bc'))
@@ -216,7 +216,6 @@ class Salsa20LowLevelTest(unittest.TestCase):
         c.llvm_verify('m', 's20_hash', ['dr_ov'], False, hash_contract, prover, 'hash_ov').result()
         c.llvm_verify('m', 's20_expand32', ['hash_ov'], False, expand_contract, prover, 'expand_ov').result()
         c.llvm_verify('m', 's20_crypt32', ['expand_ov'], False, crypt_contract(63), prover, 'crypt_ov').result()
-        c.disconnect()
 
 if __name__ == "__main__":
     unittest.main()

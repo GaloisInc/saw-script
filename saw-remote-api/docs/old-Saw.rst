@@ -269,10 +269,32 @@ A proof script is represented as a JSON object with a single field:
   containing a tag named ``tactic``, with any further fields determined by this tag. These tag values can be:
 
   ``use prover``
-    Apply an external prover to the goal. There is an additional field ``prover`` which is a JSON object
-    with a field ``name`` specifying what prover to use (one of ``abc``, ``cvc4``, ``rme``, ``yices``, or ``z3``),
-    and a field ``uninterpreted functions`` when ``name`` is one of ``cvc4``, ``yices``, or ``z3``. This
-    field is a list of names of functions taken as uninterpreted/abstract.
+    Apply an external prover to the goal. There is an additional field
+    ``prover`` which is a JSON object with a field ``name`` specifying
+    what prover to use, and an optional field ``uninterpreted
+    functions``. This second field is a list of names of functions taken
+    as uninterpreted/abstract. The ``name`` field can be one of the following:
+
+    * ``abc``: Default version of ABC (which may change)
+    * ``boolector``: Default version of Boolector (which may change)
+    * ``cvc4``: Default version of ABC (which may change); supports uninterpreted functions
+    * ``internal-abc``: Linked-in version of the ABC library
+    * ``mathsat``: Default version of MathSAT (which may change); supports uninterpreted functions
+    * ``rme``: Internal implementation of Reed-Muller Expansion
+    * ``sbv-abc``: ABC through SMT-Lib2 using the SBV library
+    * ``sbv-boolector``: Boolector through SMT-Lib2 using the SBV library
+    * ``sbv-cvc4``: CVC4 through SMT-Lib2 using the SBV library; supports uninterpreted functions
+    * ``sbv-mathsat``: MathSAT through SMT-Lib2 using the SBV library; supports uninterpreted functions
+    * ``sbv-yices``: Yices through SMT-Lib2 using the SBV library; supports uninterpreted functions
+    * ``sbv-z3``: Z3 through SMT-Lib2 using the SBV library; supports uninterpreted functions
+    * ``w4-abc-verilog``: ABC through Verilog using the What4 library
+    * ``w4-abc-smtlib``: ABC through SMT-Lib2 using the What4 library
+    * ``w4-boolector``: Boolector through SMT-Lib2 using the What4 library
+    * ``w4-cvc4``: CVC4 through SMT-Lib2 using the What4 library; supports uninterpreted functions
+    * ``w4-yices``: Yices through its native format using the What4 library; supports uninterpreted functions
+    * ``w4-z3``: Z3 through SMT-Lib2 using the What4 library; supports uninterpreted functions
+    * ``yices``: Default version of Yices (which may change); supports uninterpreted functions
+    * ``z3``: Default version of Z3 (which may change); supports uninterpreted functions
 
   ``unfold``
     Unfold terms in the context/goal. There is an additional field ``names``, a list of the names bound on
@@ -288,9 +310,8 @@ A proof script is represented as a JSON object with a single field:
   ``simplify``
     Simplify the context/goal. There is an additional field ``rules``, a name bound to a simpset on the server.
 
-  ``assume unsat``
-    Assume the goal is unsatisfiable, which in the current implementation of SAW should be interpreted as
-    assuming the property being checked to be true. This is likely to change in the future.
+  ``admit``
+    Admit the goal as valid without checking.
 
   ``trivial``
     States that the goal should be trivially true (either the constant ``True`` or a function that immediately

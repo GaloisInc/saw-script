@@ -24,3 +24,11 @@ write_smtlib2_w4 "write_smtlib2_w4_sat.smt2" q_sat;
 fails (prove_print sbv_abc q_sat);
 fails (prove_print w4_abc_smtlib2 q_sat);
 fails (prove_print w4_abc_verilog q_sat);
+
+// A function that returns a sequence
+let seqt = {{ \(x:[8]) (y:[8]) -> [x + y, x - y] }};
+write_verilog "write_verilog_seqt.v" seqt;
+
+// A function that returns a tuple
+let tupt = {{ \(x:[8]) (y:[8]) -> (x + y, x - y) }};
+write_verilog "write_verilog_tupt.v" tupt;

@@ -13,20 +13,17 @@ function run_test {
 echo "Setting up python environment for remote server clients..."
 poetry install
 
-# Ask cabal where the server is, and if that does work... check
-# the places CI will place the executable as a backup
-export SAW_SERVER=$(cabal v2-exec which saw-remote-api)
-if [[ -x "$SAW_SERVER" ]]; then
-  echo "using saw-remote-api at $SAW_SERVER"
-elif [[ -x "$DIR/../../dist/bin/saw-remote-api" ]]; then
-  export SAW_SERVER="$DIR/../../dist/bin/saw-remote-api"
-  echo "using saw-remote-api at $SAW_SERVER"
-elif [[ -x "$DIR/../../dist/bin/saw-remote-api.exe" ]]; then
-  export SAW_SERVER="$DIR/../../dist/bin/saw-remote-api.exe"
-  echo "using saw-remote-api at $SAW_SERVER"
-else
-  echo "could not locate saw-remote-api executable"
-  exit 1
+echo "Typechecking code with mypy..."
+# Don't run mypy on tests/ yet, as it doesn't play well with mypy. See #1125.
+run_test poetry run mypy saw/
+
+export SAW_SERVER=$(which saw-remote-api)
+if [[ ! -x "$SAW_SERVER" ]]; then
+  export SAW_SERVER=$(cabal v2-exec which saw-remote-api)
+  if [[ ! -x "$SAW_SERVER" ]]; then
+    echo "could not locate saw-remote-api executable"
+    exit 1
+  fi
 fi
 
 echo "Running saw-remote-api tests..."

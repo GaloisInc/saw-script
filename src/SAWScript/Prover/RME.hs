@@ -1,17 +1,15 @@
 module SAWScript.Prover.RME where
 
 import qualified Data.Map as Map
-import qualified Data.Text as Text
 
 import qualified Data.RME as RME
 
-import Verifier.SAW.Name
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
 
 import qualified Verifier.SAW.Simulator.RME as RME
 
-import SAWScript.Proof(Prop, propToSATQuery, propSize)
+import SAWScript.Proof(Prop, propToSATQuery, propSize, CEX)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
 
@@ -19,7 +17,7 @@ import SAWScript.Prover.Util
 proveRME ::
   SharedContext {- ^ Context for working with terms -} ->
   Prop          {- ^ A proposition to be proved -} ->
-  IO (Maybe [(String, FirstOrderValue)], SolverStats)
+  IO (Maybe CEX, SolverStats)
 proveRME sc goal =
   do satq <- propToSATQuery sc mempty goal
      RME.withBitBlastedSATQuery sc Map.empty satq $ \lit shapes ->
@@ -35,6 +33,6 @@ proveRME sc goal =
                 Left err -> fail $ "Can't parse counterexample: " ++ err
                 Right vs
                   | length shapes == length vs -> do
-                    let model = zip (map (Text.unpack . toShortName . ecName . fst) shapes) (map toFirstOrderValue vs)
+                    let model = zip (map fst shapes) (map toFirstOrderValue vs)
                     return (Just model, stats)
                   | otherwise -> fail $ unwords ["RME SAT results do not match expected arguments", show shapes, show vs]

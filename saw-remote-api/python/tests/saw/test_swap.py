@@ -1,6 +1,5 @@
 import saw
-from saw.llvm import Contract, void
-from saw.llvm_types import i32
+from saw.llvm import Contract, void, i32
 
 import unittest
 from pathlib import Path
@@ -24,17 +23,8 @@ class Swap(Contract):
 
 
 class SwapEasyTest(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(self):
-        saw.connect(reset_server=True)
-
-    @classmethod
-    def tearDownClass(self):
-        saw.reset_server()
-        saw.disconnect()
-
     def test_swap(self):
+        saw.connect(reset_server=True)
 
         if __name__ == "__main__": saw.view(saw.LogResults())
         swap_bc = str(Path('tests','saw','test-files', 'swap.bc'))

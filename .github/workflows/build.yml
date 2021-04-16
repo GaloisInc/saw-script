@@ -12,6 +12,13 @@ on:
 
 env:
   CACHE_VERSION: 1
+  # Solver versions - also update in the following locations:
+  # ./saw/Dockerfile
+  # ./saw-remote-api/Dockerfile
+  # ./s2nTests/docker/saw.dockerfile
+  Z3_VERSION: "4.8.10"
+  CVC4_VERSION: "4.1.8"
+  YICES_VERSION: "2.6.2"
 
 jobs:
   outputs:
@@ -59,10 +66,11 @@ jobs:
         exclude:
           - os: windows-latest
             ghc: "8.8.4"
-    name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
     env:
       RELEASE: ${{ needs.outputs.outputs.release }}
     continue-on-error: ${{ matrix.continue-on-error }}
+    outputs:
+      cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -84,7 +92,8 @@ jobs:
           restore-keys: |
             ${{ env.CACHE_VERSION }}-cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
-      - shell: bash
+      - id: abc
+        shell: bash
         run: .github/ci.sh build_abc
         if: runner.os != 'Windows'
 
@@ -92,41 +101,32 @@ jobs:
         run: .github/ci.sh build
         continue-on-error: false
 
-      - shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          Z3_VERSION: "4.8.10"
-          CVC4_VERSION: "4.1.8"
-          YICES_VERSION: "2.6.2"
+      - uses: GaloisInc/.github/actions/cabal-collect-bins@v1
+        id: cabal-test-suites
+        with:
+          targets: |
+            integration_tests
+            cryptol-saw-core-tc-test
+          dest: dist-tests
+
+      - name: "Upload Artifact: bin/abc"
+        if: |
+          matrix.ghc == '8.6.5' &&
+          runner.os != 'Windows'
+        uses: actions/upload-artifact@v2
+        with:
+          path: ${{ steps.abc.outputs.path }}
+          name: abc-${{ runner.os }}
+
+      - name: "Upload Artifact: dist-tests"
+        uses: actions/upload-artifact@v2
+        if: "matrix.ghc == '8.6.5'"
+        with:
+          path: dist-tests
+          name: dist-tests-${{ matrix.os }}
 
       - shell: bash
         run: .github/ci.sh setup_dist_bins
-
-
-      - uses: actions/setup-python@v2
-        with:
-          python-version: '3.9'
-      - uses: abatilo/actions-poetry@v2.0.0
-        with:
-          poetry-version: 1.1.5
-      - shell: bash
-        run: |
-          saw-remote-api/scripts/run_rpc_tests.sh
-          saw-remote-api/scripts/check_docs.sh
-        if: runner.os != 'Windows'
-
-      - uses: actions/setup-java@v1
-        with:
-          java-version: "8"
-          java-package: jdk
-          architecture: x64
-
-      - shell: bash
-        id: test
-        continue-on-error: ${{ matrix.continue-on-error }}
-        name: Integration Tests
-        run: |
-          .github/ci.sh test_dist
 
       - if: >-
           env.RELEASE && matrix.ghc == '8.6.5'
@@ -134,19 +134,141 @@ jobs:
           .github/ci.sh build_cryptol
           .github/ci.sh extract_exe "cryptol" "dist/bin" "deps/cryptol/dist-newstyle"
 
-      - if: >-
-          env.RELEASE && matrix.ghc == '8.6.5'
+      - name: "Upload Artifact: dist/bin"
+        if: "matrix.ghc == '8.6.5'"
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
           name: ${{ runner.os }}-bins
 
-      - name: Upload artifacts
+      - name: "Upload Artifact: dist/bin/saw"
         if: "matrix.os == 'ubuntu-18.04'"
         uses: actions/upload-artifact@v2
         with:
           name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
           path: "dist/bin/saw"
+
+  saw-remote-api-tests:
+    runs-on: ${{ matrix.os }}
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - test: saw-remote-api/scripts/run_rpc_tests.sh
+            os: ubuntu-18.04
+          - test: saw-remote-api/scripts/run_rpc_tests.sh
+            os: macos-latest
+          - test: saw-remote-api/scripts/check_docs.sh
+            os: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+
+      - name: "Download Artifact: dist/bin"
+        uses: actions/download-artifact@v2
+        with:
+          name: "${{ runner.os }}-bins"
+          path: dist/bin
+
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - uses: abatilo/actions-poetry@v2.0.0
+        with:
+          poetry-version: 1.1.5
+
+      - name: ${{ matrix.test }}
+        shell: bash
+        run: |
+          chmod +x dist/bin/*
+          export PATH="$PWD/dist/bin:$PATH"
+          ${{ matrix.test }}
+
+  cabal-test:
+    runs-on: ${{ matrix.os }}
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
+        os: [ubuntu-18.04]
+        continue-on-error: [false]
+        include:
+          - suite: integration_tests
+            os: macos-latest
+            continue-on-error: true
+          - suite: integration_tests
+            os: windows-latest
+            continue-on-error: true
+        exclude:
+          - suite: integration_tests
+            os: macos-latest
+            continue-on-error: false
+          - suite: integration_tests
+            os: windows-latest
+            continue-on-error: false
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+
+      - name: "Download Artifact: dist/bin"
+        uses: actions/download-artifact@v2
+        with:
+          name: "${{ runner.os }}-bins"
+          path: dist/bin
+
+      - shell: bash
+        if: "runner.os != 'Windows'"
+        run: chmod +x dist/bin/*
+
+      - name: "Download Artifact: bin/abc"
+        if: |
+          runner.os != 'Windows' &&
+          matrix.suite == 'integration_tests'
+        uses: actions/download-artifact@v2
+        with:
+          path: bin
+          name: abc-${{ runner.os }}
+
+      - shell: bash
+        if: |
+          runner.os != 'Windows' &&
+          matrix.suite == 'integration_tests'
+        run: chmod +x bin/*
+
+      - name: "Download Artifact: dist-tests"
+        uses: actions/download-artifact@v2
+        with:
+          name: dist-tests-${{ matrix.os }}
+          path: dist-tests
+
+      - shell: bash
+        if: runner.os != 'Windows'
+        run: chmod +x dist-tests/*
+
+      - uses: actions/setup-java@v1
+        if: "matrix.suite == 'integration_tests'"
+        with:
+          java-version: "8"
+          java-package: jdk
+          architecture: x64
+
+      - name: ${{ matrix.suite }}
+        continue-on-error: ${{ matrix.continue-on-error }}
+        shell: bash
+        run: |
+          export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
+          dist-tests/${{ matrix.suite }}
 
   docker:
     runs-on: ubuntu-18.04
@@ -251,7 +373,8 @@ jobs:
           git submodule update --init
           git -C deps/abcBridge submodule update --init
 
-      - uses: actions/download-artifact@v2
+      - name: "Download Artifact: dist/bin"
+        uses: actions/download-artifact@v2
         with:
           path: dist/bin
           name: ${{ runner.os }}-bins
@@ -265,7 +388,8 @@ jobs:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh zip_dist
 
-      - uses: actions/upload-artifact@v2
+      - name: "Upload Artifact: ${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64.tar.gz"
+        uses: actions/upload-artifact@v2
         with:
           name: ${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64
           path: "${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64.tar.gz*"
@@ -278,6 +402,11 @@ jobs:
   # - dependencies through `needs:` are validated, CI will fail if it's invalid
   mergify:
     runs-on: ubuntu-latest
-    needs: [build, s2n-tests]
+    needs:
+      - build
+      - saw-remote-api-tests
+      - cabal-test
+      - docker-server-test
+      - s2n-tests
     steps:
       - run: "true"

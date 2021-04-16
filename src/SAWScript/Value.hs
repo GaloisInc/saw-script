@@ -38,7 +38,7 @@ import Control.Applicative (Applicative)
 import Control.Lens
 import Control.Monad.Fail (MonadFail(..))
 import Control.Monad.Catch (MonadThrow(..), MonadMask(..), MonadCatch(..))
-import Control.Monad.Except (ExceptT(..), runExceptT)
+import Control.Monad.Except (ExceptT(..), runExceptT, MonadError(..))
 import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
@@ -76,6 +76,7 @@ import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.Crucible.LLVM.Skeleton
 
+import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
@@ -158,7 +159,7 @@ data AIGProxy where
   AIGProxy :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Proxy l g -> AIGProxy
 
 data SAW_CFG where
-  LLVM_CFG :: Crucible.AnyCFG (Crucible.LLVM arch) -> SAW_CFG
+  LLVM_CFG :: Crucible.AnyCFG Crucible.LLVM -> SAW_CFG
   JVM_CFG :: Crucible.AnyCFG JVM -> SAW_CFG
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
@@ -166,19 +167,11 @@ data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      }
   deriving Generic
 
-data ProofResult
-  = Valid SolverStats
-  | InvalidMulti SolverStats [(String, FirstOrderValue)]
-    deriving (Show)
-
 data SatResult
   = Unsat SolverStats
-  | SatMulti SolverStats [(String, FirstOrderValue)]
+  | Sat SolverStats [(ExtCns Term, FirstOrderValue)]
+  | SatUnknown
     deriving (Show)
-
-flipSatResult :: SatResult -> ProofResult
-flipSatResult (Unsat stats) = Valid stats
-flipSatResult (SatMulti stats t) = InvalidMulti stats t
 
 isVUnit :: Value -> Bool
 isVUnit (VTuple []) = True
@@ -223,24 +216,30 @@ showBraces s = showString "{" . s . showString "}"
 showsProofResult :: PPOpts -> ProofResult -> ShowS
 showsProofResult opts r =
   case r of
-    Valid _ -> showString "Valid"
-    InvalidMulti _ ts -> showString "Invalid: [" . showMulti "" ts
+    ValidProof _ _ -> showString "Valid"
+    InvalidProof _ ts _ -> showString "Invalid: [" . showMulti "" ts
+    UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining" 
   where
     opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
-    showEqn (x, t) = showString x . showString " = " . showVal t
+    showEqn (x, t) = showEC x . showString " = " . showVal t
+    showEC ec = showString (unpack (toShortName (ecName ec)))
+
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
+
 
 showsSatResult :: PPOpts -> SatResult -> ShowS
 showsSatResult opts r =
   case r of
     Unsat _ -> showString "Unsat"
-    SatMulti _ ts -> showString "Sat: [" . showMulti "" ts
+    Sat _ ts -> showString "Sat: [" . showMulti "" ts
+    SatUnknown  -> showString "Unknown"
   where
     opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
-    showEqn (x, t) = showString x . showString " = " . showVal t
+    showEC ec = showString (unpack (toShortName (ecName ec)))
+    showEqn (x, t) = showEC x . showString " = " . showVal t
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
@@ -560,7 +559,7 @@ newtype LLVMCrucibleSetupM a =
     { runLLVMCrucibleSetupM ::
         forall arch.
         (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-        CrucibleSetup (Crucible.LLVM arch) a
+        CrucibleSetup (CMSLLVM.LLVM arch) a
     }
   deriving Functor
 
@@ -592,7 +591,34 @@ newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
   deriving (Applicative, Functor, Monad)
 
 --
-type ProofScript a = StateT ProofState TopLevel a
+newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
+ deriving (Functor, Applicative, Monad)
+
+runProofScript :: ProofScript a -> ProofGoal -> TopLevel ProofResult
+runProofScript (ProofScript m) gl =
+  do (r,pstate) <- runStateT (runExceptT m) (startProof gl)
+     case r of
+       Left (stats,cex) -> return (InvalidProof stats cex pstate)
+       Right _ ->
+         do sc <- getSharedContext
+            io (finishProof sc pstate)
+
+scriptTopLevel :: TopLevel a -> ProofScript a
+scriptTopLevel m = ProofScript (lift (lift m))
+
+instance MonadIO ProofScript where
+  liftIO m = ProofScript (liftIO m)
+
+instance MonadFail ProofScript where
+  fail msg = ProofScript (fail msg)
+
+instance MonadState ProofState ProofScript where
+  get = ProofScript get
+  put x = ProofScript (put x)
+
+instance MonadError (SolverStats, CEX) ProofScript where
+  throwError cex = ProofScript (throwError cex)
+  catchError (ProofScript m) f = ProofScript (catchError m (unProofScript . f))
 
 -- IsValue class ---------------------------------------------------------------
 
@@ -664,15 +690,15 @@ instance FromValue a => FromValue (TopLevel a) where
       fromValue m2
     fromValue _ = error "fromValue TopLevel"
 
-instance IsValue a => IsValue (StateT ProofState TopLevel a) where
+instance IsValue a => IsValue (ProofScript a) where
     toValue m = VProofScript (fmap toValue m)
 
-instance FromValue a => FromValue (StateT ProofState TopLevel a) where
+instance FromValue a => FromValue (ProofScript a) where
     fromValue (VProofScript m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind _pos m1 v2) = do
       v1 <- fromValue m1
-      m2 <- lift $ applyValue v2 v1
+      m2 <- scriptTopLevel $ applyValue v2 v1
       fromValue m2
     fromValue _ = error "fromValue ProofScript"
 
@@ -928,7 +954,7 @@ addTrace str val =
   case val of
     VLambda        f -> VLambda        (\x -> addTrace str `fmap` addTraceTopLevel str (f x))
     VTopLevel      m -> VTopLevel      (addTrace str `fmap` addTraceTopLevel str m)
-    VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceStateT str m)
+    VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceProofScript str m)
     VBind pos v1 v2  -> VBind pos      (addTrace str v1) (addTrace str v2)
     VLLVMCrucibleSetup (LLVMCrucibleSetupM m) -> VLLVMCrucibleSetup $ LLVMCrucibleSetupM $
         addTrace str `fmap` underStateT (addTraceTopLevel str) m
@@ -955,6 +981,9 @@ addTraceIO str action = X.catches action
 -- | Similar to 'addTraceIO', but for state monads built from 'TopLevel'.
 addTraceStateT :: String -> StateT s TopLevel a -> StateT s TopLevel a
 addTraceStateT str = underStateT (addTraceTopLevel str)
+
+addTraceProofScript :: String -> ProofScript a -> ProofScript a
+addTraceProofScript str (ProofScript m) = ProofScript (underExceptT (underStateT (addTraceTopLevel str)) m)
 
 -- | Similar to 'addTraceIO', but for reader monads built from 'TopLevel'.
 addTraceReaderT :: String -> ReaderT s TopLevel a -> ReaderT s TopLevel a

@@ -66,8 +66,8 @@ A remote server for `SAW <https://saw.galois.com/>`_ for verifying programs with
 Methods
 -------
 
-SAW RPC Server (command)
-~~~~~~~~~~~~~~~~~~~~~~~~
+SAW/Cryptol/load module (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 ``module name``
@@ -77,8 +77,8 @@ SAW RPC Server (command)
 Load the specified Cryptol module.
 
 
-SAW RPC Server (command)
-~~~~~~~~~~~~~~~~~~~~~~~~
+SAW/Cryptol/load file (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 ``file``
@@ -88,8 +88,8 @@ SAW RPC Server (command)
 Load the given file as a Cryptol module.
 
 
-SAW RPC Server (command)
-~~~~~~~~~~~~~~~~~~~~~~~~
+SAW/Cryptol/save term (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 ``name``
@@ -104,8 +104,8 @@ SAW RPC Server (command)
 Save a term to be referenced later by name.
 
 
-SAW RPC Server (command)
-~~~~~~~~~~~~~~~~~~~~~~~~
+SAW/LLVM/load module (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 ``name``
@@ -120,8 +120,8 @@ SAW RPC Server (command)
 Load the specified LLVM module.
 
 
-SAW RPC Server (command)
-~~~~~~~~~~~~~~~~~~~~~~~~
+SAW/LLVM/verify (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 ``module``
@@ -161,8 +161,8 @@ SAW RPC Server (command)
 Verify the named LLVM function meets its specification.
 
 
-SAW RPC Server (command)
-~~~~~~~~~~~~~~~~~~~~~~~~
+SAW/LLVM/verify x86 (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 ``module``
@@ -212,8 +212,8 @@ SAW RPC Server (command)
 Verify an x86 function from an ELF file for use as an override in an LLVM verification meets its specification.
 
 
-SAW RPC Server (command)
-~~~~~~~~~~~~~~~~~~~~~~~~
+SAW/LLVM/assume (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 ``module``
@@ -238,8 +238,8 @@ SAW RPC Server (command)
 Assume the function meets its specification.
 
 
-SAW RPC Server (command)
-~~~~~~~~~~~~~~~~~~~~~~~~
+SAW/make simpset (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 ``elements``
@@ -254,8 +254,8 @@ SAW RPC Server (command)
 Create a simplification rule set from the given rules.
 
 
-SAW RPC Server (command)
-~~~~~~~~~~~~~~~~~~~~~~~~
+SAW/prove (command)
+~~~~~~~~~~~~~~~~~~~
 
 
 ``script``
@@ -263,14 +263,14 @@ SAW RPC Server (command)
   
   
 
-``term``
-  The term to interpret as a theorm and prove.
+``goal``
+  The goal to interpret as a theorm and prove.
   
   
 Attempt to prove the given term representing a theorem, given a proof script context.
 
 
-SAW RPC Server (command)
+SAW/set option (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -281,8 +281,8 @@ SAW RPC Server (command)
 Set a SAW option in the server.
 
 
-SAW RPC Server (notification)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+SAW/clear state (notification)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 ``state to clear``
@@ -292,8 +292,8 @@ SAW RPC Server (notification)
 Clear a particular state from the SAW server (making room for subsequent/unrelated states).
 
 
-SAW RPC Server (notification)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+SAW/clear all states (notification)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 No parameters
 

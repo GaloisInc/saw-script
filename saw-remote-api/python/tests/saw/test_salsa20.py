@@ -2,9 +2,7 @@ from pathlib import Path
 import unittest
 from cryptol.cryptoltypes import to_cryptol
 from saw import *
-from saw.llvm import Contract, void, SetupVal, FreshVar, cryptol
-from saw.llvm_types import i8, i32, LLVMType, LLVMArrayType
-
+from saw.llvm import Contract, void, SetupVal, FreshVar, cryptol, i8, i32, LLVMType, LLVMArrayType
 
 
 def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None) -> Tuple[FreshVar, SetupVal]:
@@ -33,8 +31,8 @@ class RotlContract(Contract):
     def specification(self) -> None:
         value = self.fresh_var(i32, "value")
         shift = self.fresh_var(i32, "shift")
-        self.proclaim(shift > cryptol("0"))
-        self.proclaim(shift < cryptol("32"))
+        self.precondition(shift > cryptol("0"))
+        self.precondition(shift < cryptol("32"))
 
         self.execute_func(value, shift)
 
@@ -123,16 +121,8 @@ class Salsa20CryptContract(Contract):
         self.points_to(m_p, cryptol("Salsa20_encrypt")((k, v, m)))
 
 class Salsa20EasyTest(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(self):
-        connect(reset_server=True)
-
-    @classmethod
-    def tearDownClass(self):
-        disconnect()
-
     def test_salsa20(self):
+        connect(reset_server=True)
         if __name__ == "__main__": view(LogResults())
 
         bcname = str(Path('tests','saw','test-files', 'salsa20.bc'))

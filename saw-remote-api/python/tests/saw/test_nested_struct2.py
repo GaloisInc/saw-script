@@ -3,11 +3,13 @@ import unittest
 from saw import *
 from saw.llvm import Contract, elem, field, i32, alias_ty
 
+# like test_nested_struct.py but using cute __getitem__ indexing on SetupVals
+
 class FContract1(Contract):
     def specification(self):
         tp = self.alloc(alias_ty('struct.t'))
         b = self.fresh_var(i32, "b")
-        self.points_to(field(field(tp, "n"), "b"), b)
+        self.points_to(tp['n']['b'], b)
 
         self.execute_func(tp)
 
@@ -17,7 +19,7 @@ class FContract2(Contract):
     def specification(self):
         tp = self.alloc(alias_ty('struct.t'))
         b = self.fresh_var(i32, "b")
-        self.points_to(elem(elem(tp, 1), 1), b)
+        self.points_to(tp[1][1], b)
 
         self.execute_func(tp)
 

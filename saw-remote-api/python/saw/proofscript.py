@@ -9,6 +9,26 @@ class ABC(Prover):
   def to_json(self) -> Any:
     return { "name": "abc" }
 
+class ABC_Verilog(Prover):
+  def to_json(self) -> Any:
+    return { "name": "w4-abc-verilog" }
+
+class ABC_SMTLib(Prover):
+  def to_json(self) -> Any:
+    return { "name": "w4-abc-smtlib" }
+
+class ABC_SBV(Prover):
+  def to_json(self) -> Any:
+    return { "name": "sbv-abc" }
+
+class Boolector(Prover):
+  def to_json(self) -> Any:
+    return { "name": "boolector" }
+
+class Boolector_SBV(Prover):
+  def to_json(self) -> Any:
+    return { "name": "sbv-boolector" }
+
 class RME(Prover):
   def to_json(self) -> Any:
     return { "name": "rme" }
@@ -23,15 +43,27 @@ class UnintProver(Prover):
 
 class CVC4(UnintProver):
   def __init__(self, unints : List[str]) -> None:
-    super().__init__("cvc4", unints)
+    super().__init__("w4-cvc4", unints)
 
 class Yices(UnintProver):
   def __init__(self, unints : List[str]) -> None:
-    super().__init__("yices", unints)
+    super().__init__("w4-yices", unints)
 
 class Z3(UnintProver):
   def __init__(self, unints : List[str]) -> None:
-    super().__init__("z3", unints)
+    super().__init__("w4-z3", unints)
+
+class CVC4_SBV(UnintProver):
+  def __init__(self, unints : List[str]) -> None:
+    super().__init__("sbv-cvc4", unints)
+
+class Yices_SBV(UnintProver):
+  def __init__(self, unints : List[str]) -> None:
+    super().__init__("sbv-yices", unints)
+
+class Z3_SBV(UnintProver):
+  def __init__(self, unints : List[str]) -> None:
+    super().__init__("sbv-z3", unints)
 
 class ProofTactic(metaclass=ABCMeta):
   @abstractmethod
@@ -61,9 +93,9 @@ class EvaluateGoal(ProofTactic):
 
 # TODO: add "simplify"
 
-class AssumeUnsat(ProofTactic):
+class Admit(ProofTactic):
   def to_json(self) -> Any:
-    return { "tactic": "assume unsat" }
+    return { "tactic": "admit" }
 
 class BetaReduceGoal(ProofTactic):
   def to_json(self) -> Any:
@@ -81,7 +113,10 @@ class ProofScript:
     return { 'tactics': [t.to_json() for t in self.tactics] }
 
 abc = UseProver(ABC())
+abc_smtlib = UseProver(ABC_SMTLib())
+abc_verilog = UseProver(ABC_Verilog())
 rme = UseProver(RME())
+boolector = UseProver(Boolector())
 
 def cvc4(unints : List[str]) -> ProofTactic:
   return UseProver(CVC4(unints))

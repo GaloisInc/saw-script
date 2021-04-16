@@ -1,5 +1,6 @@
 {-# Language GADTs #-}
 {-# Language ImplicitParams #-}
+{-# Language NamedFieldPuns #-}
 {-# Language OverloadedStrings #-}
 {-# Language ViewPatterns #-}
 {-# Language ExplicitForAll #-}
@@ -38,11 +39,12 @@ module SAWScript.Prover.Exporter
 
 import Data.Foldable(toList)
 
-import Control.Monad.Except (runExceptT, throwError)
+import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
 import Data.Parameterized.Nonce (globalNonceGenerator)
+import Data.Parameterized.Some (Some(..))
 import Data.Set (Set)
 import qualified Data.SBV.Dynamic as SBV
 import System.IO
@@ -80,7 +82,7 @@ import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
-import What4.Protocol.VerilogWriter (exprVerilog)
+import What4.Protocol.VerilogWriter (exprsVerilog)
 import What4.Solver.Adapter
 import qualified What4.SWord as W4Sim
 
@@ -113,9 +115,8 @@ proveWithPropExporter exporter path goal =
 
 writeAIG_SAT :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> SATQuery -> TopLevel ()
 writeAIG_SAT proxy sc f satq = io $
-  do t  <- satQueryAsTerm sc satq
-     BBSim.withBitBlastedPred proxy sc mempty t $ \g l _vars -> do
-       AIG.writeAiger f (AIG.Network g [l])
+  BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \g l _vars ->
+    AIG.writeAiger f (AIG.Network g [l])
 
 -- | Write a @Term@ representing a an arbitrary function to an AIG file.
 writeAIG :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> TopLevel ()
@@ -181,8 +182,7 @@ writeAIGComputedLatches proxy sc file term numLatches =
 
 writeCNF :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> SATQuery -> TopLevel ()
 writeCNF proxy sc f satq = io $
-  do t  <- satQueryAsTerm sc satq
-     _ <- BBSim.withBitBlastedPred proxy sc mempty t $ \g l _vars -> AIG.writeCNF g l f
+  do _ <- BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \g l _vars -> AIG.writeCNF g l f
      return ()
 
 write_cnf :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
@@ -235,7 +235,7 @@ writeCore path t = io $ writeFile path (scWriteExternal t)
 write_verilog :: SharedContext -> FilePath -> Term -> TopLevel ()
 write_verilog sc path t = io $ writeVerilog sc path t
 
-writeVerilogSAT :: MonadIO m => SharedContext -> FilePath -> SATQuery -> m ([String],[FiniteType])
+writeVerilogSAT :: MonadIO m => SharedContext -> FilePath -> SATQuery -> m ([ExtCns Term],[FiniteType])
 writeVerilogSAT sc path satq = liftIO $
   do sym <- newSAWCoreBackend sc
      (argNames, argTys, _lbls, bval) <- W.w4Solve sym sc satq
@@ -244,7 +244,7 @@ writeVerilogSAT sc path satq = liftIO $
                    Just ft -> return ft
      argTys' <- traverse f argTys
 
-     edoc <- runExceptT $ exprVerilog sym bval "f"
+     edoc <- runExceptT $ exprsVerilog sym [Some bval] "f"
      case edoc of
        Left err -> fail $ "Failed to translate to Verilog: " ++ err
        Right doc -> do
@@ -254,16 +254,28 @@ writeVerilogSAT sc path satq = liftIO $
          hClose h
      return (argNames, argTys')
 
+flattenSValue :: W4Sim.SValue sym -> IO [Some (W4.SymExpr sym)]
+flattenSValue (Sim.VBool b) = return [Some b]
+flattenSValue (Sim.VWord (W4Sim.DBV w)) = return [Some w]
+flattenSValue (Sim.VPair l r) =
+  do lv <- Sim.force l
+     rv <- Sim.force r
+     ls <- flattenSValue lv
+     rs <- flattenSValue rv
+     return (ls ++ rs)
+flattenSValue (Sim.VVector ts) =
+  do vs <- mapM Sim.force ts
+     es <- mapM flattenSValue vs
+     return (concat es)
+flattenSValue sval = fail $ "write_verilog: unsupported result type: " ++ show sval
+
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
   sym <- newSAWCoreBackend sc
   st  <- sawCoreState sym
-  (_, (_, bval)) <- W4Sim.w4EvalAny sym st sc mempty mempty t
-  edoc <- runExceptT $
-    case bval of
-      Sim.VBool b -> exprVerilog sym b "f"
-      Sim.VWord (W4Sim.DBV w) -> exprVerilog sym w "f"
-      _ -> throwError $ "write_verilog: unsupported result type: " ++ show bval
+  (_, (_, sval)) <- W4Sim.w4EvalAny sym st sc mempty mempty t
+  es <- flattenSValue sval
+  edoc <- runExceptT $ exprsVerilog sym es "f"
   case edoc of
     Left err -> fail $ "Failed to translate to Verilog: " ++ err
     Right doc -> do
@@ -283,10 +295,28 @@ coqTranslationConfiguration ::
   [String] ->
   Coq.TranslationConfiguration
 coqTranslationConfiguration notations skips = Coq.TranslationConfiguration
-  { Coq.notations          = notations
+  { Coq.notations = notations
   , Coq.monadicTranslation = False
-  , Coq.skipDefinitions    = skips
-  , Coq.vectorModule       = "SAWCoreVectorsAsCoqVectors"
+  , Coq.postPreamble = []
+  , Coq.skipDefinitions = skips
+  , Coq.vectorModule = "SAWCoreVectorsAsCoqVectors"
+  }
+
+withImportSAWCorePrelude :: Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
+withImportSAWCorePrelude config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
+  config { Coq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToCoq Require Import SAWCorePrelude."
+   , "Import SAWCorePrelude."
+   ]
+  }
+
+withImportCryptolPrimitivesForSAWCore ::
+  Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
+withImportCryptolPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
+  config { Coq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToCoq Require Import CryptolPrimitivesForSAWCore."
+   , "Import CryptolPrimitivesForSAWCore."
+   ]
   }
 
 writeCoqTerm ::
@@ -297,7 +327,10 @@ writeCoqTerm ::
   Term ->
   TopLevel ()
 writeCoqTerm name notations skips path t = do
-  let configuration = coqTranslationConfiguration notations skips
+  let configuration =
+        withImportSAWCorePrelude $
+        withImportCryptolPrimitivesForSAWCore $
+        coqTranslationConfiguration notations skips
   case Coq.translateTermAsDeclImports configuration name t of
     Left err -> throwTopLevel $ "Error translating: " ++ show err
     Right doc -> io $ case path of
@@ -331,7 +364,10 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   (cm, _) <- loadCryptolModule sc env inputFile
   let cryptolPreludeDecls = map Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
-  let configuration = coqTranslationConfiguration notations skips
+  let configuration =
+        withImportSAWCorePrelude $
+        withImportCryptolPrimitivesForSAWCore $
+        coqTranslationConfiguration notations skips
   case Coq.translateCryptolModule configuration cryptolPreludeDecls cm of
     Left e -> putStrLn $ show e
     Right cmDoc ->
@@ -376,13 +412,11 @@ writeCoqCryptolPrimitivesForSAWCore outputFile notations skips = do
   () <- scLoadCryptolModule sc
   () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrimitivesForSAWCore"]))
   m  <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
-  let configuration = coqTranslationConfiguration notations skips
+  let configuration =
+        withImportSAWCorePrelude $
+        coqTranslationConfiguration notations skips
   let doc = Coq.translateSAWModule configuration m
-  let extraPreamble = vcat $
-        [ "From CryptolToCoq Require Import SAWCorePrelude."
-        , "Import SAWCorePrelude."
-        ]
-  writeFile outputFile (show . vcat $ [ Coq.preamblePlus configuration extraPreamble
+  writeFile outputFile (show . vcat $ [ Coq.preamble configuration
                                       , doc
                                       ])
 

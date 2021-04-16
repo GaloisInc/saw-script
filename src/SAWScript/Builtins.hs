@@ -27,6 +27,7 @@ import Data.Functor
 import Control.Applicative
 import Data.Monoid
 #endif
+import Control.Monad.Except (MonadError(..))
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 import qualified Control.Exception as Ex
@@ -60,7 +61,7 @@ import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
   ( FiniteType(..), readFiniteValue
   , FirstOrderValue(..)
-  , toFirstOrderValue, scFirstOrderValue
+  , scFirstOrderValue
   )
 import Verifier.SAW.SATQuery
 import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
@@ -199,7 +200,7 @@ dsecPrint sc t1 t2 = SV.getProxy >>= \(SV.AIGProxy proxy) -> do
     -- The '-w' here may be overkill ...
     abcDsec path1 path2 = printf "abc -c 'read %s; dsec -v -w %s;'" path1 path2
 
-cecPrim :: AIGNetwork -> AIGNetwork -> TopLevel SV.ProofResult
+cecPrim :: AIGNetwork -> AIGNetwork -> TopLevel ProofResult
 cecPrim (SV.AIGNetwork x) (SV.AIGNetwork y) = do
   y' <- case cast y of
           Just n -> return n
@@ -208,10 +209,10 @@ cecPrim (SV.AIGNetwork x) (SV.AIGNetwork y) = do
   res <- io $ AIG.cec x y'
   let stats = solverStats "ABC" 0 -- TODO, count the size of the networks...
   case res of
-    AIG.Valid -> return $ SV.Valid stats
+    AIG.Valid -> return $ ValidProof stats (error "cecPrim: deprecated function!")
     AIG.Invalid bs
-      | Just fv <- readFiniteValue (FTVec (fromIntegral (length bs)) FTBit) bs ->
-           return $ SV.InvalidMulti stats [("x", toFirstOrderValue fv)]
+      | Just _fv <- readFiniteValue (FTVec (fromIntegral (length bs)) FTBit) bs ->
+           return $ InvalidProof stats [] (error "cecPRim : deprecated function!")
       | otherwise -> fail "cec: impossible, could not parse counterexample"
     AIG.VerifyUnknown -> fail "cec: unknown result "
 
@@ -327,10 +328,19 @@ readCore path = do
   sc <- getSharedContext
   io (mkTypedTerm sc =<< scReadExternal sc =<< readFile path)
 
-quickcheckGoal :: SharedContext -> Integer -> ProofScript SV.SatResult
+execTactic :: Tactic TopLevel a -> ProofScript a
+execTactic tac =
+  do st <- get
+     SV.scriptTopLevel (withFirstGoal tac st) >>= \case
+       Left cex -> throwError cex
+       Right (x,st') ->
+         do put st'
+            return x
+
+quickcheckGoal :: SharedContext -> Integer -> ProofScript ()
 quickcheckGoal sc n = do
-  opts <- Control.Monad.State.lift getOptions
-  withFirstGoal $ tacticSolve $ \goal -> io $ do
+  opts <- SV.scriptTopLevel getOptions
+  execTactic $ tacticSolve $ \goal -> io $ do
     printOutLn opts Warn $ "WARNING: using quickcheck to prove goal..."
     hFlush stdout
     satq <- propToSATQuery sc mempty (goalProp goal)
@@ -339,35 +349,44 @@ quickcheckGoal sc n = do
     runManyTests testGen n >>= \case
        Nothing ->
          do printOutLn opts Info $ "checked " ++ show n ++ " cases."
-            return (SV.Unsat stats, stats, Just (QuickcheckEvidence n (goalProp goal)))
-       Just cex ->
-         let cex' = [ (Text.unpack (toShortName (ecName ec)), v) | (ec,v) <- cex ]
-          in return (SV.SatMulti stats cex', stats, Nothing)
+            return (stats, SolveSuccess (QuickcheckEvidence n (goalProp goal)))
+       Just cex -> return (stats, SolveCounterexample cex)
 
-assumeValid :: ProofScript SV.ProofResult
+assumeValid :: ProofScript ()
 assumeValid =
-  withFirstGoal $ tacticSolve $ \goal ->
+  execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is valid"
+     pos <- SV.getPosition
+     let admitMsg = "assumeValid: " ++ goalName goal
      let stats = solverStats "ADMITTED" (propSize (goalProp goal))
-     return (SV.Valid stats, stats, Just (Admitted (goalProp goal)))
+     return (stats, SolveSuccess (Admitted admitMsg pos (goalProp goal)))
 
-assumeUnsat :: ProofScript SV.SatResult
+assumeUnsat :: ProofScript ()
 assumeUnsat =
-  withFirstGoal $ tacticSolve $ \goal ->
+  execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is unsat"
+     pos <- SV.getPosition
+     let admitMsg = "assumeUnsat: " ++ goalName goal
      let stats = solverStats "ADMITTED" (propSize (goalProp goal))
-     return (SV.Unsat stats, stats, Just (Admitted (goalProp goal)))
+     return (stats, SolveSuccess (Admitted admitMsg pos (goalProp goal)))
 
-trivial :: ProofScript SV.SatResult
+admitProof :: String -> ProofScript ()
+admitProof msg =
+  execTactic $ tacticSolve $ \goal ->
+  do printOutLnTop Warn $ "WARNING: admitting goal " ++ goalName goal
+     pos <- SV.getPosition
+     let stats = solverStats "ADMITTED" (propSize (goalProp goal))
+     return (stats, SolveSuccess (Admitted msg pos (goalProp goal)))
+
+trivial :: ProofScript ()
 trivial =
-  do sc <- lift getSharedContext
-     withFirstGoal (tacticTrivial sc)
-     pure (SV.Unsat mempty)
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticTrivial sc)
 
 split_goal :: ProofScript ()
 split_goal =
-  do sc <- lift getSharedContext
-     withFirstGoal (tacticSplit sc)
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticSplit sc)
 
 getTopLevelPPOpts :: TopLevel PPOpts
 getTopLevelPPOpts = do
@@ -393,7 +412,7 @@ print_term_depth d t =
 
 print_goal :: ProofScript ()
 print_goal =
-  withFirstGoal $ tacticId $ \goal ->
+  execTactic $ tacticId $ \goal ->
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
      output <- liftIO (scShowTerm sc opts =<< propToTerm sc (goalProp goal))
@@ -402,7 +421,7 @@ print_goal =
 
 print_goal_depth :: Int -> ProofScript ()
 print_goal_depth n =
-  withFirstGoal $ tacticId $ \goal ->
+  execTactic $ tacticId $ \goal ->
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
      let opts' = opts { ppMaxDepth = Just n }
@@ -412,7 +431,7 @@ print_goal_depth n =
 
 printGoalConsts :: ProofScript ()
 printGoalConsts =
-  withFirstGoal $ tacticId $ \goal ->
+  execTactic $ tacticId $ \goal ->
   do sc <- getSharedContext
      tm <- io (propToTerm sc (goalProp goal))
      mapM_ (printOutLnTop Info) $
@@ -422,7 +441,7 @@ printGoalConsts =
 
 printGoalSize :: ProofScript ()
 printGoalSize =
-  withFirstGoal $ tacticId $ \goal ->
+  execTactic $ tacticId $ \goal ->
   do sc <- getSharedContext
      t  <- io (propToTerm sc (goalProp goal))
      printOutLnTop Info $ "Goal shared size: " ++ show (scSharedSize t)
@@ -468,7 +487,7 @@ resolveName sc nm =
 
 unfoldGoal :: [String] -> ProofScript ()
 unfoldGoal unints =
-  withFirstGoal $ tacticChange $ \goal ->
+  execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
      unints' <- resolveNames unints
      prop' <- io (unfoldProp sc unints' (goalProp goal))
@@ -476,14 +495,14 @@ unfoldGoal unints =
 
 simplifyGoal :: Simpset -> ProofScript ()
 simplifyGoal ss =
-  withFirstGoal $ tacticChange $ \goal ->
+  execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
      prop' <- io (simplifyProp sc ss (goalProp goal))
      return (prop', RewriteEvidence ss)
 
 goal_eval :: [String] -> ProofScript ()
 goal_eval unints =
-  withFirstGoal $ tacticChange $ \goal ->
+  execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
      unintSet <- resolveNames unints
      prop' <- io (evalProp sc unintSet (goalProp goal))
@@ -491,67 +510,67 @@ goal_eval unints =
 
 beta_reduce_goal :: ProofScript ()
 beta_reduce_goal =
-  withFirstGoal $ tacticChange $ \goal ->
+  execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
      prop' <- io (betaReduceProp sc (goalProp goal))
      return (prop', id)
 
 goal_apply :: Theorem -> ProofScript ()
 goal_apply thm =
-  do sc <- lift getSharedContext
-     withFirstGoal (tacticApply sc thm)
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticApply sc thm)
 
 goal_assume :: ProofScript Theorem
 goal_assume =
-  do sc <- lift getSharedContext
-     withFirstGoal (tacticAssume sc)
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticAssume sc)
 
 goal_intro :: String -> ProofScript TypedTerm
 goal_intro s =
-  do sc <- lift getSharedContext
-     withFirstGoal (tacticIntro sc s)
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticIntro sc s)
 
 goal_insert :: Theorem -> ProofScript ()
 goal_insert thm =
-  do sc <- lift getSharedContext
-     withFirstGoal (tacticCut sc thm)
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticCut sc thm)
 
 goal_num_when :: Int -> ProofScript () -> ProofScript ()
 goal_num_when n script =
-  StateT $ \s ->
-  case psGoals s of
-    g : _ | goalNum g == n -> runStateT script s
-    _ -> return ((), s)
+  do s <- get
+     case psGoals s of
+       g : _ | goalNum g == n -> script
+       _ -> return ()
 
 goal_when :: String -> ProofScript () -> ProofScript ()
 goal_when str script =
-  StateT $ \s ->
-  case psGoals s of
-    g : _ | str `isInfixOf` goalName g -> runStateT script s
-    _ -> return ((), s)
+  do s <- get
+     case psGoals s of
+       g : _ | str `isInfixOf` goalName g -> script
+       _ -> return ()
 
-goal_num_ite :: Int -> ProofScript SV.SatResult -> ProofScript SV.SatResult -> ProofScript SV.SatResult
+goal_num_ite :: Int -> ProofScript SV.Value -> ProofScript SV.Value -> ProofScript SV.Value
 goal_num_ite n s1 s2 =
-  StateT $ \s ->
-  case psGoals s of
-       g : _ | goalNum g == n -> runStateT s1 s
-       _ -> runStateT s2 s
+  do s <- get
+     case psGoals s of
+          g : _ | goalNum g == n -> s1
+          _ -> s2
 
 -- | Bit-blast a proposition and check its validity using ABC.
-proveABC :: ProofScript SV.SatResult
+proveABC :: ProofScript ()
 proveABC = do
-  SV.AIGProxy proxy <- lift SV.getProxy
+  SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
   wrapProver (Prover.proveABC proxy)
 
-satExternal :: Bool -> String -> [String] -> ProofScript SV.SatResult
+satExternal :: Bool -> String -> [String] -> ProofScript ()
 satExternal doCNF execName args =
-  withFirstGoal $ tacticSolve $ \g ->
+  execTactic $ tacticSolve $ \g ->
     do SV.AIGProxy proxy <- SV.getProxy
        sc <- SV.getSharedContext
        (mb, stats) <- Prover.abcSatExternal proxy sc doCNF execName args g
        case mb of
-         Nothing -> return (SV.Unsat stats, stats, Just (SolverEvidence stats (goalProp g)))
-         Just a  -> return (SV.SatMulti stats a, stats, Nothing)
+         Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
+         Just a  -> return (stats, SolveCounterexample a)
 
 writeAIGPrim :: FilePath -> Term -> TopLevel ()
 writeAIGPrim f t = do
@@ -572,7 +591,7 @@ writeSAIGComputedPrim f t n = do
   Prover.writeSAIG proxy sc f t n
 
 -- | Bit-blast a proposition check its validity using the RME library.
-proveRME :: ProofScript SV.SatResult
+proveRME :: ProofScript ()
 proveRME = wrapProver Prover.proveRME
 
 codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> TopLevel ()
@@ -583,135 +602,133 @@ codegenSBV sc path unints fname (TypedTerm _schema t) =
 
 -- | Bit-blast a proposition and check its validity using SBV.
 -- (Currently ignores satisfying assignments.)
-proveSBV :: SBV.SMTConfig -> ProofScript SV.SatResult
+proveSBV :: SBV.SMTConfig -> ProofScript ()
 proveSBV conf = proveUnintSBV conf []
 
 -- | Bit-blast a proposition and check its validity using SBV.
 -- (Currently ignores satisfying assignments.) Constants with names in
 -- @unints@ are kept as uninterpreted functions.
-proveUnintSBV :: SBV.SMTConfig -> [String] -> ProofScript SV.SatResult
+proveUnintSBV :: SBV.SMTConfig -> [String] -> ProofScript ()
 proveUnintSBV conf unints =
   do timeout <- psTimeout <$> get
-     unintSet <- lift $ resolveNames unints
+     unintSet <- SV.scriptTopLevel (resolveNames unints)
      wrapProver (Prover.proveUnintSBV conf unintSet timeout)
 
 applyProverToGoal :: (SharedContext
-                      -> Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats))
+                      -> Prop -> IO (Maybe CEX, SolverStats))
                      -> SharedContext
                      -> ProofGoal
-                     -> TopLevel (SV.SatResult, SolverStats, Maybe Evidence)
+                     -> TopLevel (SolverStats, SolveResult)
 applyProverToGoal f sc g = do
   (mb, stats) <- io $ f sc (goalProp g)
   case mb of
-    Nothing -> return (SV.Unsat stats, stats, Just (SolverEvidence stats (goalProp g)))
-    Just a  -> return (SV.SatMulti stats a, stats, Nothing)
-
+    Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
+    Just a  -> return (stats, SolveCounterexample a)
 
 wrapProver ::
-  ( SharedContext ->
-    Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
-  ProofScript SV.SatResult
+  (SharedContext -> Prop -> IO (Maybe CEX, SolverStats)) ->
+  ProofScript ()
 wrapProver f = do
-  sc <- lift $ SV.getSharedContext
-  withFirstGoal $ tacticSolve $ applyProverToGoal f sc
+  sc <- SV.scriptTopLevel SV.getSharedContext
+  execTactic $ tacticSolve $ applyProverToGoal f sc
 
 wrapW4Prover ::
   ( Set VarIndex -> SharedContext -> Bool ->
-    Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
+    Prop -> IO (Maybe CEX, SolverStats)) ->
   [String] ->
-  ProofScript SV.SatResult
+  ProofScript ()
 wrapW4Prover f unints = do
-  hashConsing <- lift $ gets SV.rwWhat4HashConsing
-  unintSet <- lift $ resolveNames unints
+  hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
+  unintSet <- SV.scriptTopLevel $ resolveNames unints
   wrapProver $ \sc -> f unintSet sc hashConsing
 
 wrapW4ProveExporter ::
   ( Set VarIndex -> SharedContext -> Bool -> FilePath ->
-    Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
+    Prop -> IO (Maybe CEX, SolverStats)) ->
   [String] ->
   String ->
   String ->
-  ProofScript SV.SatResult
+  ProofScript ()
 wrapW4ProveExporter f unints path ext = do
-  hashConsing <- lift $ gets SV.rwWhat4HashConsing
-  sc <- lift $ SV.getSharedContext
-  unintSet <- lift $ resolveNames unints
-  withFirstGoal $ tacticSolve $ \g -> do
+  hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
+  sc <- SV.scriptTopLevel $ SV.getSharedContext
+  unintSet <- SV.scriptTopLevel $ resolveNames unints
+  execTactic $ tacticSolve $ \g -> do
     let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
     applyProverToGoal (\s -> f unintSet s hashConsing file) sc g
 
 --------------------------------------------------
-proveABC_SBV :: ProofScript SV.SatResult
+proveABC_SBV :: ProofScript ()
 proveABC_SBV = proveSBV SBV.abc
 
-proveBoolector :: ProofScript SV.SatResult
+proveBoolector :: ProofScript ()
 proveBoolector = proveSBV SBV.boolector
 
-proveZ3 :: ProofScript SV.SatResult
+proveZ3 :: ProofScript ()
 proveZ3 = proveSBV SBV.z3
 
-proveCVC4 :: ProofScript SV.SatResult
+proveCVC4 :: ProofScript ()
 proveCVC4 = proveSBV SBV.cvc4
 
-proveMathSAT :: ProofScript SV.SatResult
+proveMathSAT :: ProofScript ()
 proveMathSAT = proveSBV SBV.mathSAT
 
-proveYices :: ProofScript SV.SatResult
+proveYices :: ProofScript ()
 proveYices = proveSBV SBV.yices
 
-proveUnintBoolector :: [String] -> ProofScript SV.SatResult
+proveUnintBoolector :: [String] -> ProofScript ()
 proveUnintBoolector = proveUnintSBV SBV.boolector
 
-proveUnintZ3 :: [String] -> ProofScript SV.SatResult
+proveUnintZ3 :: [String] -> ProofScript ()
 proveUnintZ3 = proveUnintSBV SBV.z3
 
-proveUnintCVC4 :: [String] -> ProofScript SV.SatResult
+proveUnintCVC4 :: [String] -> ProofScript ()
 proveUnintCVC4 = proveUnintSBV SBV.cvc4
 
-proveUnintMathSAT :: [String] -> ProofScript SV.SatResult
+proveUnintMathSAT :: [String] -> ProofScript ()
 proveUnintMathSAT = proveUnintSBV SBV.mathSAT
 
-proveUnintYices :: [String] -> ProofScript SV.SatResult
+proveUnintYices :: [String] -> ProofScript ()
 proveUnintYices = proveUnintSBV SBV.yices
 
 
 --------------------------------------------------
-w4_abc_smtlib2 :: ProofScript SV.SatResult
+w4_abc_smtlib2 :: ProofScript ()
 w4_abc_smtlib2 = wrapW4Prover Prover.proveWhat4_abc []
 
-w4_boolector :: ProofScript SV.SatResult
+w4_boolector :: ProofScript ()
 w4_boolector = wrapW4Prover Prover.proveWhat4_boolector []
 
-w4_z3 :: ProofScript SV.SatResult
+w4_z3 :: ProofScript ()
 w4_z3 = wrapW4Prover Prover.proveWhat4_z3 []
 
-w4_cvc4 :: ProofScript SV.SatResult
+w4_cvc4 :: ProofScript ()
 w4_cvc4 = wrapW4Prover Prover.proveWhat4_cvc4 []
 
-w4_yices :: ProofScript SV.SatResult
+w4_yices :: ProofScript ()
 w4_yices = wrapW4Prover Prover.proveWhat4_yices []
 
-w4_unint_boolector :: [String] -> ProofScript SV.SatResult
+w4_unint_boolector :: [String] -> ProofScript ()
 w4_unint_boolector = wrapW4Prover Prover.proveWhat4_boolector
 
-w4_unint_z3 :: [String] -> ProofScript SV.SatResult
+w4_unint_z3 :: [String] -> ProofScript ()
 w4_unint_z3 = wrapW4Prover Prover.proveWhat4_z3
 
-w4_unint_cvc4 :: [String] -> ProofScript SV.SatResult
+w4_unint_cvc4 :: [String] -> ProofScript ()
 w4_unint_cvc4 = wrapW4Prover Prover.proveWhat4_cvc4
 
-w4_unint_yices :: [String] -> ProofScript SV.SatResult
+w4_unint_yices :: [String] -> ProofScript ()
 w4_unint_yices = wrapW4Prover Prover.proveWhat4_yices
 
-offline_w4_unint_z3 :: [String] -> String -> ProofScript SV.SatResult
+offline_w4_unint_z3 :: [String] -> String -> ProofScript ()
 offline_w4_unint_z3 unints path =
      wrapW4ProveExporter Prover.proveExportWhat4_z3 unints path ".smt2"
 
-offline_w4_unint_cvc4 :: [String] -> String -> ProofScript SV.SatResult
+offline_w4_unint_cvc4 :: [String] -> String -> ProofScript ()
 offline_w4_unint_cvc4 unints path =
      wrapW4ProveExporter Prover.proveExportWhat4_cvc4 unints path ".smt2"
 
-offline_w4_unint_yices :: [String] -> String -> ProofScript SV.SatResult
+offline_w4_unint_yices :: [String] -> String -> ProofScript ()
 offline_w4_unint_yices unints path =
      wrapW4ProveExporter Prover.proveExportWhat4_yices unints path ".smt2"
 
@@ -721,57 +738,57 @@ proveWithSATExporter ::
   String ->
   String ->
   String ->
-  ProofScript SV.SatResult
+  ProofScript ()
 proveWithSATExporter exporter unintSet path sep ext =
-  withFirstGoal $ tacticSolve $ \g ->
+  execTactic $ tacticSolve $ \g ->
   do let file = path ++ sep ++ goalType g ++ show (goalNum g) ++ ext
      stats <- Prover.proveWithSATExporter exporter unintSet file (goalProp g)
-     return (SV.Unsat stats, stats, Just (SolverEvidence stats (goalProp g)))
+     return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
 
 proveWithPropExporter ::
   (SharedContext -> FilePath -> Prop -> TopLevel a) ->
   String ->
   String ->
   String ->
-  ProofScript SV.SatResult
+  ProofScript ()
 proveWithPropExporter exporter path sep ext =
-  withFirstGoal $ tacticSolve $ \g ->
+  execTactic $ tacticSolve $ \g ->
   do let file = path ++ sep ++ goalType g ++ show (goalNum g) ++ ext
      stats <- Prover.proveWithPropExporter exporter file (goalProp g)
-     return (SV.Unsat stats, stats, Just (SolverEvidence stats (goalProp g)))
+     return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
 
-offline_aig :: FilePath -> ProofScript SV.SatResult
+offline_aig :: FilePath -> ProofScript ()
 offline_aig path = do
-  SV.AIGProxy proxy <- lift $ SV.getProxy
+  SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
   proveWithSATExporter (Prover.writeAIG_SAT proxy) mempty path "." ".aig"
 
-offline_cnf :: FilePath -> ProofScript SV.SatResult
+offline_cnf :: FilePath -> ProofScript ()
 offline_cnf path = do
-  SV.AIGProxy proxy <- lift $ SV.getProxy
+  SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
   proveWithSATExporter (Prover.writeCNF proxy) mempty path "." ".cnf"
 
-offline_coq :: FilePath -> ProofScript SV.SatResult
+offline_coq :: FilePath -> ProofScript ()
 offline_coq path = proveWithPropExporter (const (Prover.writeCoqProp "goal" [] [])) path "_" ".v"
 
-offline_extcore :: FilePath -> ProofScript SV.SatResult
+offline_extcore :: FilePath -> ProofScript ()
 offline_extcore path = proveWithPropExporter (const Prover.writeCoreProp) path "." ".extcore"
 
-offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
+offline_smtlib2 :: FilePath -> ProofScript ()
 offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2 mempty path "." ".smt2"
 
-w4_offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
+w4_offline_smtlib2 :: FilePath -> ProofScript ()
 w4_offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2What4 mempty path "." ".smt2"
 
-offline_unint_smtlib2 :: [String] -> FilePath -> ProofScript SV.SatResult
+offline_unint_smtlib2 :: [String] -> FilePath -> ProofScript ()
 offline_unint_smtlib2 unints path =
-  do unintSet <- lift $ resolveNames unints
+  do unintSet <- SV.scriptTopLevel $ resolveNames unints
      proveWithSATExporter Prover.writeSMTLib2 unintSet path "." ".smt2"
 
-offline_verilog :: FilePath -> ProofScript SV.SatResult
+offline_verilog :: FilePath -> ProofScript ()
 offline_verilog path =
   proveWithSATExporter Prover.writeVerilogSAT mempty path "." ".v"
 
-w4_abc_verilog :: ProofScript SV.SatResult
+w4_abc_verilog :: ProofScript ()
 w4_abc_verilog = wrapW4Prover Prover.w4AbcVerilog []
 
 set_timeout :: Integer -> ProofScript ()
@@ -779,46 +796,61 @@ set_timeout to = modify (setProofTimeout to)
 
 -- | Translate a @Term@ representing a theorem for input to the
 -- given validity-checking script and attempt to prove it.
-provePrim :: ProofScript SV.SatResult
-          -> TypedTerm -> TopLevel SV.ProofResult
+provePrim ::
+  ProofScript () ->
+  TypedTerm ->
+  TopLevel ProofResult
 provePrim script t = do
   io $ checkBooleanSchema (ttSchema t)
   sc <- getSharedContext
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   let goal = ProofGoal 0 "prove" "prove" prop
-  (r, pstate) <- runStateT script (startProof goal)
-  io (finishProof sc pstate) >>= \case
-    (_stats, Just _) -> return ()
-    (_stats, Nothing) ->
-      printOutLnTop Info $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)"
-  return (SV.flipSatResult r)
+  res <- SV.runProofScript script goal
+  case res of
+    UnfinishedProof pst ->
+      printOutLnTop Info $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)"
+    _ -> return ()
+  return res
 
-provePrintPrim :: ProofScript SV.SatResult
-               -> TypedTerm -> TopLevel Theorem
+provePrintPrim ::
+  ProofScript () ->
+  TypedTerm ->
+  TopLevel Theorem
 provePrintPrim script t = do
   sc <- getSharedContext
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   let goal = ProofGoal 0 "prove" "prove" prop
-  (r, pstate) <- runStateT script (startProof goal)
   opts <- rwPPOpts <$> getTopLevelRW
-  io (finishProof sc pstate) >>= \case
-    (_,Just thm) -> do
-      printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) $ ttTerm t)
-      SV.returnProof thm
-    (_,Nothing) -> fail $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
-                     ++ SV.showsProofResult opts (SV.flipSatResult r) ""
+  res <- SV.runProofScript script goal
+  let failProof pst =
+         fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
+                          ++ SV.showsProofResult opts res ""
+  case res of
+    ValidProof _stats thm ->
+      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) $ ttTerm t)
+         SV.returnProof thm
+    InvalidProof _stats _cex pst -> failProof pst
+    UnfinishedProof pst -> failProof pst
 
-satPrim :: ProofScript SV.SatResult -> TypedTerm
-        -> TopLevel SV.SatResult
+satPrim ::
+  ProofScript () ->
+  TypedTerm ->
+  TopLevel SV.SatResult
 satPrim script t =
   do io $ checkBooleanSchema (ttSchema t)
      sc <- getSharedContext
      prop <- io $ predicateToProp sc Existential (ttTerm t)
      let goal = ProofGoal 0 "sat" "sat" prop
-     evalStateT script (startProof goal)
+     res <- SV.runProofScript script goal
+     case res of
+       InvalidProof stats cex _ -> return (SV.Sat stats cex)
+       ValidProof stats _thm -> return (SV.Unsat stats)
+       UnfinishedProof _ -> return SV.SatUnknown
 
-satPrintPrim :: ProofScript SV.SatResult
-             -> TypedTerm -> TopLevel ()
+satPrintPrim ::
+  ProofScript () ->
+  TypedTerm ->
+  TopLevel ()
 satPrintPrim script t = do
   result <- satPrim script t
   opts <- rwPPOpts <$> getTopLevelRW
@@ -828,8 +860,7 @@ satPrintPrim script t = do
 -- 'Integer' parameter is the number of random tests to run.
 quickCheckPrintPrim :: Options -> SharedContext -> Integer -> TypedTerm -> IO ()
 quickCheckPrintPrim opts sc numTests tt =
-  do let tm = ttTerm tt
-     prop <- predicateToProp sc Universal tm
+  do prop <- predicateToProp sc Universal (ttTerm tt)
      satq <- propToSATQuery sc mempty prop
      testGen <- prepareSATQuery sc satq
      runManyTests testGen numTests >>= \case
@@ -935,14 +966,15 @@ check_term t = do
 
 check_goal :: ProofScript ()
 check_goal =
-  StateT $ \pfst ->
-  case psGoals pfst of
-    [] -> fail "ProofScript failed: no subgoal"
-    g : _ ->
-      do sc <- getSharedContext
-         tm <- io (propToTerm sc (goalProp g))
-         check_term tm
-         return ((), pfst)
+  do pfst <- get
+     case psGoals pfst of
+       [] -> fail "ProofScript failed: no subgoal"
+       g : _ ->
+         SV.scriptTopLevel $
+         do sc <- getSharedContext
+            tm <- io (propToTerm sc (goalProp g))
+            check_term tm
+            return ()
 
 fixPos :: Pos
 fixPos = PosInternal "FIXME"
@@ -1009,29 +1041,42 @@ toValueCase prim =
   SV.VLambda $ \v2 ->
   prim (SV.fromValue b) v1 v2
 
-caseProofResultPrim :: SV.ProofResult
-                    -> SV.Value -> SV.Value
-                    -> TopLevel SV.Value
+caseProofResultPrim ::
+  ProofResult ->
+  SV.Value {- ^ valid case -} ->
+  SV.Value {- ^ invalid/unknown case -} ->
+  TopLevel SV.Value
 caseProofResultPrim pr vValid vInvalid = do
   sc <- getSharedContext
   case pr of
-    SV.Valid _ -> return vValid
-    SV.InvalidMulti _ pairs -> do
+    ValidProof _ thm ->
+      SV.applyValue vValid (SV.toValue thm)
+    InvalidProof _ pairs _pst -> do
       let fov = FOVTuple (map snd pairs)
       tt <- io $ typedTermOfFirstOrderValue sc fov
       SV.applyValue vInvalid (SV.toValue tt)
+    UnfinishedProof _ -> do
+      tt <- io $ typedTermOfFirstOrderValue sc (FOVTuple [])
+      SV.applyValue vInvalid (SV.toValue tt)
 
-caseSatResultPrim :: SV.SatResult
-                  -> SV.Value -> SV.Value
-                  -> TopLevel SV.Value
+caseSatResultPrim ::
+  SV.SatResult ->
+  SV.Value {- ^ unsat case -} ->
+  SV.Value {- ^ sat/unknown case -} ->
+  TopLevel SV.Value
 caseSatResultPrim sr vUnsat vSat = do
   sc <- getSharedContext
   case sr of
     SV.Unsat _ -> return vUnsat
-    SV.SatMulti _ pairs -> do
+    SV.Sat _ pairs -> do
       let fov = FOVTuple (map snd pairs)
       tt <- io $ typedTermOfFirstOrderValue sc fov
       SV.applyValue vSat (SV.toValue tt)
+    SV.SatUnknown -> do
+      let fov = FOVTuple []
+      tt <- io $ typedTermOfFirstOrderValue sc fov
+      SV.applyValue vSat (SV.toValue tt)
+
 
 envCmd :: TopLevel ()
 envCmd = do
@@ -1231,25 +1276,28 @@ parse_core input = do
   sc <- getSharedContext
   io $ mkTypedTerm sc t
 
-prove_core :: ProofScript SV.SatResult -> String -> TopLevel Theorem
+prove_core :: ProofScript () -> String -> TopLevel Theorem
 prove_core script input =
   do sc <- getSharedContext
      t <- parseCore input
      p <- io (termToProp sc t)
-     (r', pstate) <- runStateT script (startProof (ProofGoal 0 "prove" "prove" p))
-     let r = SV.flipSatResult r'
      opts <- rwPPOpts <$> getTopLevelRW
-     io (finishProof sc pstate) >>= \case
-       (_,Just thm) -> SV.returnProof thm
-       (_,Nothing)  -> fail $ "prove_core: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
-                         ++ SV.showsProofResult opts r ""
+     res <- SV.runProofScript script (ProofGoal 0 "prove" "prove" p)
+     let failProof pst =
+            fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
+                                  ++ SV.showsProofResult opts res ""
+     case res of
+       ValidProof _ thm -> SV.returnProof thm
+       InvalidProof _ _ pst -> failProof pst
+       UnfinishedProof pst  -> failProof pst
 
 core_axiom :: String -> TopLevel Theorem
 core_axiom input =
   do sc <- getSharedContext
+     pos <- SV.getPosition
      t <- parseCore input
      p <- io (termToProp sc t)
-     SV.returnProof (admitTheorem p)
+     SV.returnProof (admitTheorem "core_axiom" pos p)
 
 core_thm :: String -> TopLevel Theorem
 core_thm input =

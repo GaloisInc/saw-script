@@ -2,12 +2,14 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional, Set, Union, Tuple, Any, IO
 import uuid
-import os
 import sys
-import signal
+import time
 import atexit
 from distutils.spawn import find_executable
 
+import cryptol
+
+from cryptol import cryptoltypes
 from . import connection
 from argo_client.connection import ServerConnection
 from . import llvm
@@ -52,6 +54,27 @@ class VerificationResult(metaclass=ABCMeta):
     @abstractmethod
     def is_success(self) -> bool: ...
 
+class ProofResult(metaclass=ABCMeta):
+    goal: proofscript.ProofScript
+    valid: bool
+    counterexample: Optional[Any]
+
+    def is_valid(self) -> bool:
+        """Returns `True` in the case where the given proof goal is valid, or true for
+        all possible values of any symbolic variables that it contains. Returns
+        `False` if the goal can possibly be false for any value of symbolic
+        variables it contains. In this latter case, the `get_counterexample`
+        function will return the variable values for which the goal evaluates
+        to false.
+        """
+        return self.valid
+
+    def get_counterexample(self) -> Any:
+        """In the case where `is_valid` returns `False`, this function returns the
+        counterexample that provides the values for symbolic variables that
+        lead to it being false. If `is_valid` returns `True`, returns `None`.
+        """
+        return self.counterexample
 
 @dataclass
 class VerificationSucceeded(VerificationResult):
@@ -105,7 +128,7 @@ class AssumptionFailed(VerificationFailed):
 
 # FIXME cryptol_path isn't always used...?
 def connect(command: Union[str, ServerConnection, None] = None,
-            *, 
+            *,
             cryptol_path: Optional[str] = None,
             persist: bool = False,
             url : Optional[str] = None,
@@ -165,11 +188,12 @@ def connect(command: Union[str, ServerConnection, None] = None,
                 except ProcessLookupError:
                     pass
         atexit.register(print_if_still_running)
+    time.sleep(0.1)
 
 
 def reset() -> None:
     """Reset the current SAW connection to the initial state.
-    
+
     If the connection is inactive, ``connect()`` is called to initialize it."""
     if __designated_connection is not None:
         __designated_connection.reset()
@@ -178,13 +202,14 @@ def reset() -> None:
 
 def reset_server() -> None:
     """Reset the SAW server, clearing all states.
-    
+
     If the connection is inactive, ``connect()`` is called to initialize it."""
     if __designated_connection is not None:
         __designated_connection.reset_server()
     else:
         connect()
-        __designated_connection.reset_server()
+        if __designated_connection is not None:
+            __designated_connection.reset_server()
 
 def disconnect() -> None:
     global __designated_connection
@@ -318,7 +343,7 @@ def view(v: View) -> None:
 
 
 def cryptol_load_file(filename: str) -> None:
-    __get_designated_connection().cryptol_load_file(filename)
+    __get_designated_connection().cryptol_load_file(filename).result()
     return None
 
 
@@ -353,11 +378,10 @@ def llvm_verify(module: LLVMModule,
 
     result: VerificationResult
     conn = __get_designated_connection()
-    conn_snapshot = conn.snapshot()
 
     global __global_success
     global __designated_views
-    
+
     try:
         res = conn.llvm_verify(module.server_name,
                                function,
@@ -366,6 +390,7 @@ def llvm_verify(module: LLVMModule,
                                contract.to_json(),
                                script.to_json(),
                                name)
+
         stdout = res.stdout()
         stderr = res.stderr()
         result = VerificationSucceeded(server_name=name,
@@ -375,27 +400,11 @@ def llvm_verify(module: LLVMModule,
                                        stderr=stderr)
     # If the verification did not succeed...
     except exceptions.VerificationError as err:
-        # roll back to snapshot because the current connection's
-        # latest result is now a verification exception!
-        __set_designated_connection(conn_snapshot)
-        conn = __get_designated_connection()
-        # Assume the verification succeeded
-        try:
-            conn.llvm_assume(module.server_name,
-                             function,
-                             contract.to_json(),
-                             name).result()
-            result = VerificationFailed(server_name=name,
-                                        assumptions=lemmas,
-                                        contract=contract,
-                                        exception=err)
-        # If something stopped us from even **assuming**...
-        except exceptions.VerificationError as err:
-            __set_designated_connection(conn_snapshot)
-            result = AssumptionFailed(server_name=name,
-                                      assumptions=lemmas,
-                                      contract=contract,
-                                      exception=err)
+        # FIXME add the goal as an assumption if it failed...?
+        result = VerificationFailed(server_name=name,
+                                    assumptions=lemmas,
+                                    contract=contract,
+                                    exception=err)
     # If something else went wrong...
     except Exception as err:
         __global_success = False
@@ -420,6 +429,29 @@ def llvm_verify(module: LLVMModule,
 
     return result
 
+def prove(goal: cryptoltypes.CryptolJSON,
+          proof_script: proofscript.ProofScript) -> ProofResult:
+    """Atempts to prove that the expression given as the first argument, `goal`, is
+    true for all possible values of free symbolic variables. Uses the proof
+    script (potentially specifying an automated prover) provided by the second
+    argument.
+    """
+    conn = __get_designated_connection()
+    res = conn.prove(cryptoltypes.to_cryptol(goal),
+                     proof_script.to_json()).result()
+    pr = ProofResult()
+    if res['status'] == 'valid':
+        pr.valid = True
+    elif res['status'] == 'invalid':
+        pr.valid = False
+    else:
+        raise ValueError("Unknown proof result " + str(res))
+    if 'counterexample' in res:
+        pr.counterexample = [ (arg['name'], cryptol.from_cryptol_arg(arg['value']))
+                              for arg in res['counterexample'] ]
+    else:
+        pr.counterexample = None
+    return pr
 
 @atexit.register
 def script_exit() -> None:

@@ -90,8 +90,7 @@ instance Show SAWTask where
 data CrucibleSetupVal e
   = NullValue
   | ArrayValue [CrucibleSetupVal e]
-  | StructValue [CrucibleSetupVal e]
-  -- | TupleValue [CrucibleSetupVal e]
+  | TupleValue [CrucibleSetupVal e]
   -- | RecordValue [(String, CrucibleSetupVal e)]
   | FieldLValue (CrucibleSetupVal e) String
   | ElementLValue (CrucibleSetupVal e) Int

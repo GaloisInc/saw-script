@@ -1,15 +1,14 @@
 from pathlib import Path
 import unittest
 from saw import *
-from saw.llvm import Contract, cryptol, struct, void
-import saw.llvm_types as ty
+from saw.llvm import Contract, cryptol, struct, void, i32, array_ty, struct_ty
 
 
 class FContract(Contract):
     def specification(self):
-        array_ty = ty.array(2, ty.array(4, ty.i32))
-        i  = self.fresh_var(array_ty, "w.i")
-        pw = self.alloc(ty.struct_type(array_ty), points_to = struct(i))
+        ty = array_ty(2, array_ty(4, i32))
+        i  = self.fresh_var(ty, "w.i")
+        pw = self.alloc(struct_ty(ty), points_to = struct(i))
 
         self.execute_func(pw)
 
@@ -18,16 +17,8 @@ class FContract(Contract):
 
 
 class LLVMStructTest(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(self):
-        connect(reset_server=True)
-
-    @classmethod
-    def tearDownClass(self):
-        disconnect()
-
     def test_llvm_struct(self):
+        connect(reset_server=True)
         if __name__ == "__main__": view(LogResults())
         bcname = str(Path('tests','saw','test-files', 'llvm_struct_type.bc'))
         mod = llvm_load_module(bcname)

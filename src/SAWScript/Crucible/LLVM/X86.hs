@@ -18,6 +18,7 @@ Stability   : provisional
 {-# Language TypeApplications #-}
 {-# Language GADTs #-}
 {-# Language DataKinds #-}
+{-# Language RankNTypes #-}
 {-# Language ConstraintKinds #-}
 {-# Language GeneralizedNewtypeDeriving #-}
 {-# Language TemplateHaskell #-}
@@ -56,6 +57,7 @@ import Data.Parameterized.Context hiding (view)
 
 import Verifier.SAW.CryptolEnv
 import Verifier.SAW.FiniteValue
+import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 
@@ -76,9 +78,10 @@ import qualified SAWScript.Crucible.Common.Override as O
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
 import SAWScript.Crucible.LLVM.Builtins
-import SAWScript.Crucible.LLVM.MethodSpecIR
+import SAWScript.Crucible.LLVM.MethodSpecIR hiding (LLVM)
 import SAWScript.Crucible.LLVM.ResolveSetupValue
 import qualified SAWScript.Crucible.LLVM.Override as LO
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as LMS (LLVM)
 
 import qualified What4.Config as W4
 import qualified What4.Expr as W4
@@ -126,7 +129,7 @@ import qualified Data.ElfEdit as Elf
 -- ** Utility type synonyms and functions
 
 type LLVMArch = C.LLVM.X86 64
-type LLVM = C.LLVM.LLVM LLVMArch
+type LLVM = LMS.LLVM LLVMArch
 type LLVMOverrideMatcher = O.OverrideMatcher LLVM
 type Regs = Assignment (C.RegValue' Sym) (Macaw.MacawCrucibleRegTypes Macaw.X86_64)
 type Register = Macaw.X86Reg (Macaw.BVType 64)
@@ -227,6 +230,50 @@ cryptolUninterpreted env nm sc xs =
       ]
     Right t -> liftIO $ scApplyAll sc t xs
 
+llvmPointerBlock :: C.LLVM.LLVMPtr sym w -> W4.SymNat sym
+llvmPointerBlock = fst . C.LLVM.llvmPointerView
+llvmPointerOffset :: C.LLVM.LLVMPtr sym w -> W4.SymBV sym w
+llvmPointerOffset = snd . C.LLVM.llvmPointerView
+
+-- | Compare pointers that are not valid LLVM pointers. Comparing the offsets
+-- as unsigned bitvectors is not sound, because of overflow (e.g. `base - 1` is
+-- less than `base`, but -1 is not less than 0 when compared as unsigned). It
+-- is safe to allow a small negative offset, because each pointer base is
+-- mapped to an address that is not in the first page (4K), which is never
+-- mapped on X86_64 Linux. Specifically, assume pointer1 = (base1, offset1) and
+-- pointer2 = (base2, offset2), and size1 is the size of the allocation of
+-- base1 and size2 is the size of the allocation of base2. If offset1 is in the
+-- interval [-4096, size1], and offset2 is in the interval [-4096, size2], then
+-- the unsigned comparison between pointer1 and pointer2 is equivalent with the
+-- unsigned comparison between offset1 + 4096 and offset2 + 4096.
+doPtrCmp ::
+  (sym -> W4.SymBV sym w -> W4.SymBV sym w -> IO (W4.Pred sym)) ->
+  Macaw.PtrOp sym w (C.RegValue sym C.BoolType)
+doPtrCmp f = Macaw.ptrOp $ \sym mem w xPtr xBits yPtr yBits x y -> do
+  let ptr_as_bv_for_cmp ptr = do
+        page_size <- W4.bvLit sym (W4.bvWidth $ llvmPointerOffset ptr) $
+          BV.mkBV (W4.bvWidth $ llvmPointerOffset ptr) 4096
+        ptr_as_bv <- W4.bvAdd sym (llvmPointerOffset ptr) page_size
+        is_valid <- Macaw.isValidPtr sym mem w ptr
+        is_negative_offset <- W4.bvIsNeg sym (llvmPointerOffset ptr)
+        is_not_overflow <- W4.notPred sym =<< W4.bvIsNeg sym ptr_as_bv
+        ok <- W4.orPred sym is_valid
+          =<< W4.andPred sym is_negative_offset is_not_overflow
+        return (ptr_as_bv, ok)
+  both_bits <- W4.andPred sym xBits yBits
+  both_ptrs <- W4.andPred sym xPtr yPtr
+  same_region <- W4.natEq sym (llvmPointerBlock x) (llvmPointerBlock y)
+  (x_ptr_as_bv, ok_x) <- ptr_as_bv_for_cmp x
+  (y_ptr_as_bv, ok_y) <- ptr_as_bv_for_cmp y
+  ok_both_ptrs <- W4.andPred sym both_ptrs
+    =<< W4.andPred sym same_region
+    =<< W4.andPred sym ok_x ok_y
+  res_both_bits <- f sym (llvmPointerOffset x) (llvmPointerOffset y)
+  res_both_ptrs <- f sym x_ptr_as_bv y_ptr_as_bv
+  undef <- Macaw.mkUndefinedBool sym "ptr_cmp"
+  W4.itePred sym both_bits res_both_bits
+    =<< W4.itePred sym ok_both_ptrs res_both_ptrs undef
+
 -------------------------------------------------------------------------------
 -- ** Entrypoint
 
@@ -240,7 +287,7 @@ llvm_verify_x86 ::
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
-  ProofScript SatResult {- ^ Tactic used to use when discharging goals -} ->
+  ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
@@ -266,6 +313,12 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesKeyGenAssist sfs) $ cryptolUninterpreted cenv "aeskeygenassist"
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesIMC sfs) $ cryptolUninterpreted cenv "aesimc"
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnClMul sfs) $ cryptolUninterpreted cenv "clmul"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShasigma0 sfs) $ cryptolUninterpreted cenv "sigma_0"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShasigma1 sfs) $ cryptolUninterpreted cenv "sigma_1"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaSigma0 sfs) $ cryptolUninterpreted cenv "SIGMA_0"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaSigma1 sfs) $ cryptolUninterpreted cenv "SIGMA_1"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaCh sfs) $ cryptolUninterpreted cenv "Ch"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaMaj sfs) $ cryptolUninterpreted cenv "Maj"
 
       let preserved = Set.fromList . catMaybes $ stringToReg . Text.toLower . Text.pack <$> rwPreservedRegs rw
       (C.SomeCFG cfg, elf, relf, addr, cfgs) <- liftIO $ buildCFG opts halloc preserved path nm
@@ -330,6 +383,17 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
                       , show $ W4.ppExpr off
                       ]
         noExtraValidityPred _ _ _ _ = return Nothing
+        defaultMacawExtensions_x86_64 = Macaw.macawExtensions
+          (Macaw.x86_64MacawEvalFn sfs) mvar
+          (mkGlobalMap . Map.singleton 0 $ preState ^. x86GlobalBase)
+          funcLookup
+          noExtraValidityPred
+        sawMacawExtensions = defaultMacawExtensions_x86_64
+          { C.extensionExec = \s0 st -> case s0 of
+              Macaw.PtrLt w x y -> doPtrCmp W4.bvUlt st mvar w x y
+              Macaw.PtrLeq w x y -> doPtrCmp W4.bvUle st mvar w x y
+              _ -> (C.extensionExec defaultMacawExtensions_x86_64) s0 st
+          }
         ctx :: C.SimContext (Macaw.MacawSimulatorState Sym) Sym (Macaw.MacawExt Macaw.X86_64)
         ctx = C.SimContext
               { C._ctxSymInterface = sym
@@ -337,10 +401,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
               , C.ctxIntrinsicTypes = C.LLVM.llvmIntrinsicTypes
               , C.simHandleAllocator = halloc
               , C.printHandle = stdout
-              , C.extensionImpl =
-                Macaw.macawExtensions (Macaw.x86_64MacawEvalFn sfs) mvar
-                (mkGlobalMap . Map.singleton 0 $ preState ^. x86GlobalBase)
-                funcLookup noExtraValidityPred
+              , C.extensionImpl = sawMacawExtensions
               , C._functionBindings = C.FnBindings $ C.insertHandleMap (C.cfgHandle cfg) (C.UseCFG cfg $ C.postdomInfo cfg) C.emptyHandleMap
               , C._cruciblePersonality = Macaw.MacawSimulatorState
               , C._profilingMetrics = Map.empty
@@ -476,7 +537,7 @@ buildMethodSpec lm nm loc checkSat setup =
     (mtargs, mtret) <- case (,) <$> mapM (llvmTypeToMemType lc) args <*> mapM (llvmTypeToMemType lc) ret of
       Left err -> fail err
       Right x -> pure x
-    let initialMethodSpec = MS.makeCrucibleMethodSpecIR @(C.LLVM.LLVM (C.LLVM.X86 64))
+    let initialMethodSpec = MS.makeCrucibleMethodSpecIR @LLVM
           methodId mtargs mtret programLoc lm
     view Setup.csMethodSpec <$> execStateT (runLLVMCrucibleSetupM setup)
       (Setup.makeCrucibleSetupState cc initialMethodSpec)
@@ -881,7 +942,7 @@ checkGoals ::
   Sym ->
   Options ->
   SharedContext ->
-  ProofScript SatResult ->
+  ProofScript () ->
   TopLevel SolverStats
 checkGoals sym opts sc tactic = do
   gs <- liftIO $ getGoals sym
@@ -893,18 +954,23 @@ checkGoals sym opts sc tactic = do
   stats <- forM (zip [0..] gs) $ \(n, g) -> do
     term <- liftIO $ gGoal sc g
     let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
-    r <- evalStateT tactic $ startProof proofgoal
-    case r of
-      Unsat stats -> return stats
-      SatMulti stats vals -> do
+    res <- runProofScript tactic proofgoal
+    case res of
+      ValidProof stats _thm -> return stats -- TODO do something with these theorems
+      UnfinishedProof pst -> do
+        printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
+        printOutLnTop Info (show (psStats pst))
+        throwTopLevel $ "Proof failed: " ++ show (length (psGoals pst)) ++ " goals remaining."
+      InvalidProof stats vals _pst -> do
         printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
         printOutLnTop Info (show stats)
         printOutLnTop OnlyCounterExamples "----------Counterexample----------"
         ppOpts <- sawPPOpts . rwPPOpts <$> getTopLevelRW
         case vals of
           [] -> printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
-          _ -> let showAssignment (name, val) =
-                     mconcat [ " ", name, ": ", show $ ppFirstOrderValue ppOpts val ]
+          _ -> let showEC ec = Text.unpack (toShortName (ecName ec)) in
+               let showAssignment (ec, val) =
+                     mconcat [ " ", showEC ec, ": ", show $ ppFirstOrderValue ppOpts val ]
                in mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
         printOutLnTop OnlyCounterExamples "----------------------------------"
         throwTopLevel "Proof failed."

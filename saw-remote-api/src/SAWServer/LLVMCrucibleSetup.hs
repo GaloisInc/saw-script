@@ -163,7 +163,7 @@ interpretLLVMSetup fileReader bic cenv0 ss =
     getSetupVal env (ArrayValue elts) =
       do elts' <- mapM (getSetupVal env) elts
          LLVMCrucibleSetupM $ return $ CMS.anySetupArray elts'
-    getSetupVal env (StructValue elts) =
+    getSetupVal env (TupleValue elts) =
       do elts' <- mapM (getSetupVal env) elts
          LLVMCrucibleSetupM $ return $ CMS.anySetupStruct False elts'
     getSetupVal env (FieldLValue base fld) =
