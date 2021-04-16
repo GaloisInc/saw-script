@@ -360,6 +360,11 @@ def cryptol_load_file(filename: str) -> None:
     return None
 
 def create_ghost_variable(name: str) -> llvm.GhostVariable:
+    """Create a ghost variable that can be used to invent state useful to
+    verification but that doesn't exist in the concrete state of the program.
+    This state can be referred to using the `c.ghost_value` method for some
+    `Contract` object `c`.
+    """
     server_name = __fresh_server_name(name)
     __get_designated_connection().create_ghost_variable(name, server_name)
     return llvm.GhostVariable(name, server_name)
@@ -381,6 +386,10 @@ def llvm_assume(module: LLVMModule,
                 function: str,
                 contract: llvm.Contract,
                 lemma_name_hint: Optional[str] = None) -> VerificationResult:
+    """Assume that the given function satisfies the given contract. Returns an
+    override linking the function and contract that can be passed as an
+    argument in calls to `llvm_verify`
+    """
     if lemma_name_hint is None:
         lemma_name_hint = contract.__class__.__name__ + "_" + function
     name = __fresh_server_name(lemma_name_hint)

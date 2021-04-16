@@ -142,6 +142,10 @@ class SAWConnection:
         return self.most_recent_result
 
     def create_ghost_variable(self, name: str, server_name: str) -> Command:
+        """Create an instance of the `CreateGhostVariable` command. Documentation on
+        the purpose and use of this command is associated with the top-level
+        `create_ghost_variable` function.
+        """
         self.most_recent_result = CreateGhostVariable(self, name, server_name)
         return self.most_recent_result
 
@@ -166,9 +170,9 @@ class SAWConnection:
                     function: str,
                     contract: Any,
                     lemma_name: str) -> Command:
-        """Assume that the given function satisfies the given contract. Returns an
-        override linking the function and contract that can be passed as an
-        argument to further calls to `llvm_verify`
+        """Create an instance of the `LLVMAssume` command. Documentation on the purpose
+        and use of this command is associated with the top-level `llvm_assume`
+        function.
         """
         self.most_recent_result = \
             LLVMAssume(self, module, function, contract, lemma_name)
@@ -177,10 +181,8 @@ class SAWConnection:
     def prove(self,
               goal: cryptoltypes.CryptolJSON,
               proof_script: ProofScript) -> Command:
-        """Atempts to prove that the expression given as the first argument, `goal`, is
-        true for all possible values of free symbolic variables. Uses the proof
-        script (potentially specifying an automated prover) provided by the
-        second argument.
+        """Create an instance of the `Prove` command. Documentation on the purpose and
+        use of this command is associated with the top-level `prove` function.
         """
         self.most_recent_result = Prove(self, goal, proof_script)
         return self.most_recent_result
