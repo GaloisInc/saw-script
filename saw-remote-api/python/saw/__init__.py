@@ -115,20 +115,17 @@ class VerificationFailed(VerificationResult):
 
 
 @dataclass
-class AssumptionSucceeded(VerificationResult):
+class AssumptionSucceeded(VerificationSucceeded):
     def __init__(self,
                  server_name: str,
                  contract: llvm.Contract,
                  stdout: str,
                  stderr: str) -> None:
-        self.server_name = server_name
-        self.contract = contract
-        self._unique_id = uuid.uuid4()
-        self.stdout = stdout
-        self.stderr = stderr
-
-    def is_success(self) -> bool:
-        return True
+        super().__init__(server_name,
+                         [],
+                         contract,
+                         stdout,
+                         stderr)
 
 @dataclass
 class AssumptionFailed(VerificationFailed):
@@ -389,9 +386,8 @@ def llvm_assume(module: LLVMModule,
     name = __fresh_server_name(lemma_name_hint)
 
     result: VerificationResult
-    conn = __get_designated_connection()
-    conn_snapshot = conn.snapshot()
     try:
+        conn = __get_designated_connection()
         res = conn.llvm_assume(module.server_name,
                                function,
                                contract.to_json(),
@@ -404,7 +400,6 @@ def llvm_assume(module: LLVMModule,
         # If something stopped us from even **assuming**...
     except exceptions.VerificationError as err:
         __global_success = False
-        __set_designated_connection(conn_snapshot)
         result = AssumptionFailed(server_name=name,
                                   assumptions=[],
                                   contract=contract,
