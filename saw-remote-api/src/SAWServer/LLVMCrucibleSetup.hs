@@ -81,7 +81,7 @@ newtype ServerSetupVal = Val (CMS.AllLLVM MS.SetupValue)
 compileLLVMContract ::
   (FilePath -> IO ByteString) ->
   BuiltinContext ->
-  (Map ServerName CMS.GhostGlobal) ->
+  Map ServerName CMS.GhostGlobal ->
   CryptolEnv ->
   Contract JSONLLVMType (P.Expr P.PName) ->
   LLVMCrucibleSetupM ()
