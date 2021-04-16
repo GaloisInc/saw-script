@@ -39,17 +39,9 @@ class FContract(Contract):
 
 class GhostTest(unittest.TestCase):
 
-    @classmethod
-    def setUpClass(self):
-        saw.connect(reset_server=True)
-
-    @classmethod
-    def tearDownClass(self):
-        saw.reset_server()
-        saw.disconnect()
-
     def test_ghost(self):
 
+        saw.connect(reset_server=True)
         if __name__ == "__main__": saw.view(saw.LogResults())
         ghost_bc = str(Path('tests','saw','test-files', 'ghost.bc'))
 
