@@ -50,6 +50,7 @@ import Data.Set (Set)
 import qualified Data.SBV.Dynamic as SBV
 import System.Directory (removeFile)
 import System.IO
+import System.IO.Temp(emptySystemTempFile)
 import Data.Text.Prettyprint.Doc.Render.Text
 import Prettyprinter (vcat)
 
@@ -130,7 +131,7 @@ writeAIG proxy sc f t = do
 
 withABCVerilog :: SharedContext -> FilePath -> Term -> (FilePath -> String) -> TopLevel ()
 withABCVerilog sc baseName t buildCmd =
-  do let verilogFile = baseName ++ ".v"
+  do verilogFile <- liftIO $ emptySystemTempFile (baseName ++ ".v")
      write_verilog sc verilogFile t
      liftIO $
        do (out, err) <- readProcessExitIfFailure "abc" ["-q", buildCmd verilogFile]
