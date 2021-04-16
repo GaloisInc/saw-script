@@ -166,6 +166,10 @@ class SAWConnection:
                     function: str,
                     contract: Any,
                     lemma_name: str) -> Command:
+        """Assume that the given function satisfies the given contract. Returns an
+        override linking the function and contract that can be passed as an
+        argument to further calls to `llvm_verify`
+        """
         self.most_recent_result = \
             LLVMAssume(self, module, function, contract, lemma_name)
         return self.most_recent_result
@@ -173,7 +177,7 @@ class SAWConnection:
     def prove(self,
               goal: cryptoltypes.CryptolJSON,
               proof_script: ProofScript) -> Command:
-        """Atempts to prove that the expression given as the first argument, @goal@, is
+        """Atempts to prove that the expression given as the first argument, `goal`, is
         true for all possible values of free symbolic variables. Uses the proof
         script (potentially specifying an automated prover) provided by the
         second argument.
