@@ -12,12 +12,17 @@ module SAWScript.Prover.Exporter
 
     -- * External formats
   , writeAIG
+  , writeAIGviaVerilog
+  , writeAIG_SATviaVerilog
   , writeAIG_SAT
   , writeSAIG
   , writeSAIGInferLatches
   , writeAIGComputedLatches
   , writeCNF
+  , writeCNFviaVerilog
+  , writeCNF_SATviaVerilog
   , write_cnf
+  , write_cnf_external
   , writeSMTLib2
   , writeSMTLib2What4
   , write_smtlib2
@@ -139,12 +144,24 @@ withABCVerilog sc baseName t buildCmd =
           unless (null err) $ putStrLn "ABC errors:" >> putStrLn err
           removeFile verilogFile
 
+-- | Write a @SATQuery@ to an AIG file by using ABC to convert a Verilog
+-- file.
+writeAIG_SATviaVerilog :: SharedContext -> FilePath -> SATQuery -> TopLevel ()
+writeAIG_SATviaVerilog sc f query =
+  writeAIGviaVerilog sc f =<< liftIO (satQueryAsTerm sc query)
+
 -- | Write a @Term@ representing a an arbitrary function to an AIG file
 -- by using ABC to convert a Verilog file.
 writeAIGviaVerilog :: SharedContext -> FilePath -> Term -> TopLevel ()
 writeAIGviaVerilog sc aigFile t =
   withABCVerilog sc aigFile t $
       \verilogFile -> "%read " ++ verilogFile ++ "; %blast; &write " ++ aigFile
+
+-- | Write a @SATQuery@ to a CNF file by using ABC to convert a Verilog
+-- file.
+writeCNF_SATviaVerilog :: SharedContext -> FilePath -> SATQuery -> TopLevel ()
+writeCNF_SATviaVerilog sc f query =
+  writeCNFviaVerilog sc f =<< liftIO (satQueryAsTerm sc query)
 
 -- | Write a @Term@ representing a an arbitrary function to a CNF file
 -- by using ABC to convert a Verilog file.
@@ -219,6 +236,11 @@ write_cnf sc f (TypedTerm schema t) = do
   AIGProxy proxy <- getProxy
   satq <- io (predicateToSATQuery sc mempty t)
   writeCNF proxy sc f satq
+
+write_cnf_external :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
+write_cnf_external sc f (TypedTerm schema t) = do
+  liftIO $ checkBooleanSchema schema
+  writeCNFviaVerilog sc f t
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
 -- function returning a boolean) to an SMT-Lib version 2 file. The goal
