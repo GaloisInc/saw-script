@@ -26,7 +26,7 @@ features:
 * The new `jvm_static_field_is` function allows describing the contents
   of static variables in method specifications.
 
-* The verification code initializes all JVM classes at start so that
+* The verification code initializes all JVM classes at the start so that
   initializers don't run at arbitray intermediate points and and clobber
   static field values specified in preconditions. This means, however,
   that any proofs about Java code are under the assumption that all
