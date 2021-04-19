@@ -23,16 +23,8 @@ class FPointsToContract(Contract):
 
 
 class PointsToAtTypeTest(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(self):
-        connect(reset_server=True)
-
-    @classmethod
-    def tearDownClass(self):
-        disconnect()
-
     def test_points_to_at_type(self):
+        connect(reset_server=True)
         if __name__ == "__main__": view(LogResults())
         bcname = str(Path('tests','saw','test-files', 'points_to_at_type.bc'))
         mod = llvm_load_module(bcname)

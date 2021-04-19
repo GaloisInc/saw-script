@@ -238,6 +238,22 @@ SAW/LLVM/assume (command)
 Assume the function meets its specification.
 
 
+SAW/create ghost variable (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+``display name``
+  The name to assign to the ghost variable for display.
+  
+  
+
+``server name``
+  The server name to use to access the ghost variable later.
+  
+  
+Create a ghost global variable to represent proof-specific program state.
+
+
 SAW/make simpset (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 

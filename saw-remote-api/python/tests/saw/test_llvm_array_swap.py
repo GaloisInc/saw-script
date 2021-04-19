@@ -19,16 +19,8 @@ class ArraySwapContract(Contract):
 
 
 class LLVMArraySwapTest(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(self):
-        connect(reset_server=True)
-
-    @classmethod
-    def tearDownClass(self):
-        disconnect()
-
     def test_llvm_array_swap(self):
+        connect(reset_server=True)
         if __name__ == "__main__": view(LogResults())
         bcname = str(Path('tests','saw','test-files', 'llvm_array_swap.bc'))
         mod = llvm_load_module(bcname)
