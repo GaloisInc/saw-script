@@ -33,9 +33,12 @@ import Lang.Crucible.Types
 import qualified What4.Expr.Builder as W4
 import qualified What4.Interface as W4
 import qualified What4.Partial as W4
+import qualified What4.SWord as W4
 
 import qualified Verifier.SAW.SharedTerm as SAW
+import qualified Verifier.SAW.Simulator.MonadLazy as SAW
 import qualified Verifier.SAW.Simulator.Value as SAW
+import Verifier.SAW.Simulator.What4 (SValue)
 import qualified Verifier.SAW.Simulator.What4 as SAW
 
 import Mir.Intrinsics
@@ -266,16 +269,83 @@ termToExpr :: forall sym t st fs.
     SAW.Term ->
     IO (Some (W4.SymExpr sym))
 termToExpr sym sc varMap term = do
+    sv <- termToSValue sym sc varMap term
+    case SAW.valueToSymExpr sv of
+        Just x -> return x
+        Nothing -> error $ "termToExpr: failed to convert SValue"
+
+-- | Convert a `SAW.Term` into a Crucible `RegValue`.  Requires a `TypeShape`
+-- giving the expected MIR/Crucible type in order to distinguish cases like
+-- `(A, (B, C))` vs `(A, B, C)` (these are the same type in saw-core).
+termToReg :: forall sym t st fs tp.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+    sym ->
+    SAW.SharedContext ->
+    Map SAW.VarIndex (Some (W4.Expr t)) ->
+    SAW.Term ->
+    TypeShape tp ->
+    IO (RegValue sym tp)
+termToReg sym sc varMap term shp = do
+    sv <- termToSValue sym sc varMap term
+    go shp sv
+  where
+    go :: forall tp'. TypeShape tp' -> SValue sym -> IO (RegValue sym tp')
+    go shp sv = case (shp, sv) of
+        (UnitShape _, SAW.VUnit) -> return ()
+        (PrimShape _ BaseBoolRepr, SAW.VBool b) -> return b
+        (PrimShape _ (BaseBVRepr w), SAW.VWord (W4.DBV e))
+          | Just Refl <- testEquality (W4.exprType e) (BaseBVRepr w) -> return e
+        (TupleShape _ _ flds, _) -> do
+            svs <- tupleToListRev (Ctx.sizeInt $ Ctx.size flds) [] sv
+            goTuple flds svs
+        _ -> error $ "termToReg: type error: need to produce " ++ show (shapeType shp) ++
+            ", but simulator returned " ++ show sv
+
+    -- | Convert an `SValue` tuple (built from nested `VPair`s) into a list of
+    -- the inner `SValue`s, in reverse order.
+    tupleToListRev :: Int -> [SValue sym] -> SValue sym -> IO [SValue sym]
+    tupleToListRev 2 acc (SAW.VPair x y) = do
+        x' <- SAW.force x
+        y' <- SAW.force y
+        return $ y' : x' : acc
+    tupleToListRev n acc (SAW.VPair x xs) | n > 2 = do
+        x' <- SAW.force x
+        xs' <- SAW.force xs
+        tupleToListRev (n - 1) (x' : acc) xs'
+    tupleToListRev n _ _ = error $ "bad tuple size " ++ show n
+    tupleToListRev n _ v = error $ "termToReg: expected tuple of " ++ show n ++
+        " elements, but got " ++ show v
+
+    goTuple :: forall ctx.
+        Assignment FieldShape ctx ->
+        [SValue sym] ->
+        IO (RegValue sym (StructType ctx))
+    goTuple Empty [] = return Empty
+    goTuple (flds :> fld) (sv : svs) = do
+        rv <- goField fld sv
+        rvs <- goTuple flds svs
+        return (rvs :> RV rv)
+
+    goField :: forall tp'. FieldShape tp' -> SValue sym -> IO (RegValue sym tp')
+    goField (ReqField shp) sv = go shp sv
+    goField (OptField shp) sv = W4.justPartExpr sym <$> go shp sv
+
+-- | Common code for termToExpr and termToReg
+termToSValue :: forall sym t st fs.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+    sym ->
+    SAW.SharedContext ->
+    Map SAW.VarIndex (Some (W4.Expr t)) ->
+    SAW.Term ->
+    IO (SAW.SValue sym)
+termToSValue sym sc varMap term = do
     let convert (Some expr) = case SAW.symExprToValue (W4.exprType expr) expr of
             Just x -> return x
             Nothing -> error $ "termToExpr: failed to convert var  of what4 type " ++
                 show (W4.exprType expr)
     ecMap <- mapM convert varMap
     ref <- newIORef mempty
-    sv <- SAW.w4SolveBasic sym sc mempty ecMap ref mempty term
-    case SAW.valueToSymExpr sv of
-        Just x -> return x
-        Nothing -> error $ "termToExpr: failed to convert SValue"
+    SAW.w4SolveBasic sym sc mempty ecMap ref mempty term
 
 -- | Convert a `SAW.Term` to a `W4.Pred`.  If the term doesn't have boolean
 -- type, this will raise an error.

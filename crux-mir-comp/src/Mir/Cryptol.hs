@@ -11,7 +11,7 @@
 module Mir.Cryptol
 where
 
-import Control.Lens (use)
+import Control.Lens (use, (^.), (^?), _Wrapped, ix)
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
@@ -38,8 +38,9 @@ import Crux
 import Crux.Types
 
 import Mir.DefId
-import Mir.Generator (CollectionState)
+import Mir.Generator (CollectionState, collection)
 import Mir.Intrinsics
+import qualified Mir.Mir as M
 import Mir.Overrides (getString)
 
 import qualified Verifier.SAW.Cryptol.Prelude as SAW
@@ -49,7 +50,7 @@ import qualified Verifier.SAW.SharedTerm as SAW
 import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
 import qualified Verifier.SAW.TypedTerm as SAW
 
-import Mir.Compositional.Convert (visitExprVars, termToExpr)
+import Mir.Compositional.Convert
 
 import Debug.Trace
 
@@ -62,7 +63,7 @@ cryptolOverrides ::
     Text ->
     CFG MIR blocks args ret ->
     Maybe (OverrideSim (p sym) sym MIR rtp a r ())
-cryptolOverrides _symOnline _cs name cfg
+cryptolOverrides _symOnline cs name cfg
 
   | (normDefId "crucible::cryptol::load" <> "::_inst") `Text.isPrefixOf` name
   , Empty
@@ -71,8 +72,14 @@ cryptolOverrides _symOnline _cs name cfg
       <- cfgArgTypes cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "cryptol_load" (cfgReturnType cfg) $ do
+        let tyArg = cs ^? collection . M.intrinsics . ix (textId name) .
+                M.intrInst . M.inSubsts . _Wrapped . ix 0
+        sig <- case tyArg of
+            Just (M.TyFnPtr sig) -> return sig
+            _ -> error $ "expected TyFnPtr argument, but got " ++ show tyArg
+
         RegMap (Empty :> RegEntry _tpr modulePathStr :> RegEntry _tpr' nameStr) <- getOverrideArgs
-        cryptolLoad (cfgReturnType cfg) modulePathStr nameStr
+        cryptolLoad (cs ^. collection) sig (cfgReturnType cfg) modulePathStr nameStr
 
   | otherwise = Nothing
 
@@ -80,17 +87,21 @@ cryptolOverrides _symOnline _cs name cfg
 cryptolLoad ::
     forall sym p t st fs rtp a r tp .
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    M.Collection ->
+    M.FnSig ->
     TypeRepr tp ->
     RegValue sym (MirSlice (BVType 8)) ->
     RegValue sym (MirSlice (BVType 8)) ->
     OverrideSim (p sym) sym MIR rtp a r (RegValue sym tp)
-cryptolLoad (FunctionHandleRepr argsCtx retTpr) modulePathStr nameStr = do
+cryptolLoad col sig (FunctionHandleRepr argsCtx retTpr) modulePathStr nameStr = do
     modulePath <- getString modulePathStr >>= \x -> case x of
         Just s -> return $ Text.unpack s
         Nothing -> fail "cryptol::load module path must not be symbolic"
     name <- getString nameStr >>= \x -> case x of
         Just s -> return $ Text.unpack s
         Nothing -> fail "cryptol::load function name must not be symbolic"
+
+    let retShp = tyToShapeEq col (sig ^. M.fsreturn_ty) retTpr
 
     -- TODO share a single SharedContext across all calls
     sc <- liftIO $ SAW.mkSharedContext
@@ -107,11 +118,11 @@ cryptolLoad (FunctionHandleRepr argsCtx retTpr) modulePathStr nameStr = do
     let fnName = "cryptol_" ++ modulePath ++ "_" ++ name
     fh <- liftIO $ mkHandle' halloc (fromString fnName) argsCtx retTpr
     bindFnHandle fh $ UseOverride $ mkOverride' (handleName fh) (handleReturnType fh) $
-        cryptolRun sc scs fnName retTpr (SAW.ttTerm tt)
+        cryptolRun sc scs fnName retShp (SAW.ttTerm tt)
 
     return $ HandleFnVal fh
 
-cryptolLoad tpr _ _ = fail $ "cryptol::load: bad function type " ++ show tpr
+cryptolLoad _ _ tpr _ _ = fail $ "cryptol::load: bad function type " ++ show tpr
 
 
 cryptolRun ::
@@ -120,10 +131,10 @@ cryptolRun ::
     SAW.SharedContext ->
     SAW.SAWCoreState t ->
     String ->
-    TypeRepr tp ->
+    TypeShape tp ->
     SAW.Term ->
     OverrideSim (p sym) sym MIR rtp a r (RegValue sym tp)
-cryptolRun sc scs name retTpr funcTerm = do
+cryptolRun sc scs name retShp funcTerm = do
     sym <- getSymInterface
 
     visitCache <- liftIO $ (W4.newIdxCache :: IO (W4.IdxCache t (Const ())))
@@ -146,10 +157,5 @@ cryptolRun sc scs name retTpr funcTerm = do
     appTerm <- liftIO $ SAW.scApplyAll sc funcTerm args 
 
     w4VarMap <- liftIO $ readIORef w4VarMapRef
-    Some expr <- liftIO $ termToExpr sym sc w4VarMap appTerm
-    Refl <- case testEquality (baseToType $ W4.exprType expr) retTpr of
-        Just x -> return x
-        Nothing -> fail $
-            "type error: expected " ++ name ++ " to return " ++ show retTpr ++
-                ", but it returned " ++ show (W4.exprType expr) ++ " instead"
-    return expr
+    rv <- liftIO $ termToReg sym sc w4VarMap appTerm retShp
+    return rv
