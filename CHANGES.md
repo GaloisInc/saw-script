@@ -55,7 +55,7 @@ writing specification blocks:
 * Two new functions, `llvm_points_to_at_type` and
   `llvm_conditional_points_to_at_type`, mirror `llvm_points_to` and
   `llvm_conditional_points_to`, but cast the pointer to a different
-  type. This may be useful when reading or writing a prefix of larger
+  type. This may be useful when reading or writing a prefix of a larger
   array, for example.
 
 * Support for using ABC as an external process is more complete:
