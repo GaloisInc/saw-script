@@ -14,8 +14,7 @@ module SAWServer.Data.Contract
   ) where
 
 import Control.Applicative
-import Data.Aeson (FromJSON(..), withObject, withText, (.:), (.:?))
-import Data.Maybe (fromMaybe)
+import Data.Aeson (FromJSON(..), withObject, withText, (.:), (.:?), (.!=))
 import Data.Text (Text)
 
 import SAWScript.Crucible.LLVM.Builtins (CheckPointsToType(..))
@@ -114,13 +113,13 @@ instance (FromJSON ty, FromJSON e) => FromJSON (Contract ty e) where
     Contract <$> o .:  "pre vars"
              <*> o .:  "pre conds"
              <*> o .:  "pre allocated"
-             <*> (fromMaybe [] <$> o .:? "pre ghost values")
+             <*> o .:? "pre ghost values" .!= []
              <*> o .:  "pre points tos"
              <*> o .:  "argument vals"
              <*> o .:  "post vars"
              <*> o .:  "post conds"
              <*> o .:  "post allocated"
-             <*> (fromMaybe [] <$> o .:? "post ghost values")
+             <*> o .:? "post ghost values" .!= []
              <*> o .:  "post points tos"
              <*> o .:? "return val"
 
