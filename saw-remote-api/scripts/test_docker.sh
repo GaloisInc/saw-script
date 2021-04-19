@@ -6,10 +6,10 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 TAG=${1:-saw-remote-api}
 
-pushd $DIR/..
+pushd $DIR
 
 docker run --name=saw-remote-api -d \
-  -v $PWD/saw-remote-api/python/tests/saw/test-files:/home/saw/tests/saw/test-files \
+  -v $PWD/python/tests/saw/test-files:/home/saw/tests/saw/test-files \
   -p 8080:8080 \
   "$TAG"
 
@@ -22,7 +22,7 @@ popd
 
 sleep 5 # let the server catch its breath and be ready for requests
 
-pushd $DIR/../python
+pushd $DIR/python
 
 NUM_FAILS=0
 function run_test {

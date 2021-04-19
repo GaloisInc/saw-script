@@ -119,6 +119,7 @@ build() {
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
   cabal v2-configure -j --enable-tests
+  git status --porcelain
   pkgs=(saw)
   if $IS_WIN; then
     echo "flags: -builtin-abc" >> cabal.project.local
