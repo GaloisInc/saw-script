@@ -2800,7 +2800,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_reachability_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> String -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_reachability_perm)
     Experimental
     [ "heapster_define_recursive_perm env name arg_ctx value_type"
