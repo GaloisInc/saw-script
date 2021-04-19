@@ -551,64 +551,6 @@ condTerm sc (MS.SetupCond_Pred _loc tt) = do
 condTerm _ (MS.SetupCond_Ghost _ _ _ _) = do
     error $ "learnCond: SetupCond_Ghost is not supported"
 
--- | Convert a `SAW.Term` into a `W4.Expr`.
-termToExpr :: forall sym t st fs.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
-    sym ->
-    SAW.SharedContext ->
-    Map SAW.VarIndex (Some (W4.Expr t)) ->
-    SAW.Term ->
-    IO (Some (W4.SymExpr sym))
-termToExpr sym sc varMap term = do
-    let convert (Some expr) = case SAW.symExprToValue (W4.exprType expr) expr of
-            Just x -> return x
-            Nothing -> error $ "termToExpr: failed to convert var  of what4 type " ++
-                show (W4.exprType expr)
-    ecMap <- mapM convert varMap
-    ref <- newIORef mempty
-    sv <- SAW.w4SolveBasic sym sc mempty ecMap ref mempty term
-    case SAW.valueToSymExpr sv of
-        Just x -> return x
-        Nothing -> error $ "termToExpr: failed to convert SValue"
-
--- | Convert a `SAW.Term` to a `W4.Pred`.  If the term doesn't have boolean
--- type, this will raise an error.
-termToPred :: forall sym t st fs.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
-    sym ->
-    SAW.SharedContext ->
-    Map SAW.VarIndex (Some (W4.Expr t)) ->
-    SAW.Term ->
-    IO (W4.Pred sym)
-termToPred sym sc varMap term = do
-    Some expr <- termToExpr sym sc varMap term
-    case W4.exprType expr of
-        BaseBoolRepr -> return expr
-        btpr -> error $ "termToPred: got result of type " ++ show btpr ++ ", not BaseBoolRepr"
-
--- | Convert a `SAW.Term` representing a type to a `W4.BaseTypeRepr`.
-termToType :: forall sym t st fs.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
-    sym ->
-    SAW.SharedContext ->
-    SAW.Term ->
-    IO (Some W4.BaseTypeRepr)
-termToType sym sc term = do
-    ref <- newIORef mempty
-    sv <- SAW.w4SolveBasic sym sc mempty mempty ref mempty term
-    tv <- case sv of
-        SAW.TValue tv -> return tv
-        _ -> error $ "termToType: bad SValue"
-    case tv of
-        SAW.VBoolType -> return $ Some BaseBoolRepr
-        SAW.VVecType w SAW.VBoolType -> do
-            Some w <- return $ mkNatRepr w
-            LeqProof <- case testLeq (knownNat @1) w of
-                Just x -> return x
-                Nothing -> error "termToPred: zero-width bitvector"
-            return $ Some $ BaseBVRepr w
-        _ -> error $ "termToType: bad SValue"
-
 
 checkDisjoint ::
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>

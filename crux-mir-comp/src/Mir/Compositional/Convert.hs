@@ -1,9 +1,11 @@
 {-# LANGUAGE DataKinds #-}
+{-# Language FlexibleContexts #-}
 {-# Language GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- | Conversions between Crucible `RegValue`s and SAW `Term`s.
 module Mir.Compositional.Convert
@@ -13,6 +15,8 @@ import Control.Lens ((^.), (^..), each)
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Functor.Const
+import Data.IORef
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
 import qualified Data.Parameterized.Context as Ctx
@@ -20,6 +24,7 @@ import Data.Parameterized.Some
 import Data.Parameterized.TraversableFC
 import Data.Set (Set)
 import qualified Data.Set as Set
+import GHC.Stack (HasCallStack)
 
 import Lang.Crucible.Backend
 import Lang.Crucible.Simulator.RegValue
@@ -28,6 +33,10 @@ import Lang.Crucible.Types
 import qualified What4.Expr.Builder as W4
 import qualified What4.Interface as W4
 import qualified What4.Partial as W4
+
+import qualified Verifier.SAW.SharedTerm as SAW
+import qualified Verifier.SAW.Simulator.Value as SAW
+import qualified Verifier.SAW.Simulator.What4 as SAW
 
 import Mir.Intrinsics
 import qualified Mir.Mir as M
@@ -246,3 +255,62 @@ readPartExprMaybe _sym W4.Unassigned = return Nothing
 readPartExprMaybe _sym (W4.PE p v)
   | Just True <- W4.asConstantPred p = return $ Just v
   | otherwise = return Nothing
+
+
+-- | Convert a `SAW.Term` into a `W4.Expr`.
+termToExpr :: forall sym t st fs.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+    sym ->
+    SAW.SharedContext ->
+    Map SAW.VarIndex (Some (W4.Expr t)) ->
+    SAW.Term ->
+    IO (Some (W4.SymExpr sym))
+termToExpr sym sc varMap term = do
+    let convert (Some expr) = case SAW.symExprToValue (W4.exprType expr) expr of
+            Just x -> return x
+            Nothing -> error $ "termToExpr: failed to convert var  of what4 type " ++
+                show (W4.exprType expr)
+    ecMap <- mapM convert varMap
+    ref <- newIORef mempty
+    sv <- SAW.w4SolveBasic sym sc mempty ecMap ref mempty term
+    case SAW.valueToSymExpr sv of
+        Just x -> return x
+        Nothing -> error $ "termToExpr: failed to convert SValue"
+
+-- | Convert a `SAW.Term` to a `W4.Pred`.  If the term doesn't have boolean
+-- type, this will raise an error.
+termToPred :: forall sym t st fs.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+    sym ->
+    SAW.SharedContext ->
+    Map SAW.VarIndex (Some (W4.Expr t)) ->
+    SAW.Term ->
+    IO (W4.Pred sym)
+termToPred sym sc varMap term = do
+    Some expr <- termToExpr sym sc varMap term
+    case W4.exprType expr of
+        BaseBoolRepr -> return expr
+        btpr -> error $ "termToPred: got result of type " ++ show btpr ++ ", not BaseBoolRepr"
+
+-- | Convert a `SAW.Term` representing a type to a `W4.BaseTypeRepr`.
+termToType :: forall sym t st fs.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+    sym ->
+    SAW.SharedContext ->
+    SAW.Term ->
+    IO (Some W4.BaseTypeRepr)
+termToType sym sc term = do
+    ref <- newIORef mempty
+    sv <- SAW.w4SolveBasic sym sc mempty mempty ref mempty term
+    tv <- case sv of
+        SAW.TValue tv -> return tv
+        _ -> error $ "termToType: bad SValue"
+    case tv of
+        SAW.VBoolType -> return $ Some BaseBoolRepr
+        SAW.VVecType w SAW.VBoolType -> do
+            Some w <- return $ mkNatRepr w
+            LeqProof <- case testLeq (knownNat @1) w of
+                Just x -> return x
+                Nothing -> error "termToPred: zero-width bitvector"
+            return $ Some $ BaseBVRepr w
+        _ -> error $ "termToType: bad SValue"

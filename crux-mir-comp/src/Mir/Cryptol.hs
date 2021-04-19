@@ -44,14 +44,12 @@ import Mir.Overrides (getString)
 
 import qualified Verifier.SAW.Cryptol.Prelude as SAW
 import qualified Verifier.SAW.CryptolEnv as SAW
-import qualified Verifier.SAW.Prelude as SAW
 import qualified Verifier.SAW.Recognizer as SAW
 import qualified Verifier.SAW.SharedTerm as SAW
 import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
 import qualified Verifier.SAW.TypedTerm as SAW
 
-import Mir.Compositional.Convert (visitExprVars)
-import Mir.Compositional.Override (termToExpr)
+import Mir.Compositional.Convert (visitExprVars, termToExpr)
 
 import Debug.Trace
 
