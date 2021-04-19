@@ -94,6 +94,11 @@ more complete support for LLVM verification, including:
 
 * Support for array value literals.
 
+* Support for specifying the value of individual struct fields and array
+  elements.
+
+* Support for specifying the alignment of allocations.
+
 The most recent version of the Python client is now in the `saw-script`
 repository and available from `PyPI` with `pip install saw`.
 
