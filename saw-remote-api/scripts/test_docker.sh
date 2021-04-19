@@ -1,20 +1,15 @@
 #!/bin/bash
 
-echo "Building and testing saw-remote-api docker image..."
+echo "Testing saw-remote-api docker image..."
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 TAG=${1:-saw-remote-api}
 
-pushd $DIR/../..
-
-docker build -t saw-remote-api --file saw-remote-api/Dockerfile .
-popd
-
 pushd $DIR/..
 
 docker run --name=saw-remote-api -d \
-  -v $PWD/python/tests/saw/test-files:/home/saw/tests/saw/test-files \
+  -v $PWD/saw-remote-api/python/tests/saw/test-files:/home/saw/tests/saw/test-files \
   -p 8080:8080 \
   "$TAG"
 

@@ -193,11 +193,9 @@ sign() {
 }
 
 zip_dist() {
-  : "${VERSION?VERSION is required as an environment variable}"
-  name="${name:-"saw-$VERSION-$RUNNER_OS-x86_64"}"
-  mv dist "$name"
+  name="$1"
+  cp -r dist "$name"
   tar -czf "$name".tar.gz "$name"
-  [[ -f "$name".tar.gz.sig ]] && [[ -f "$name".tar.gz ]]
 }
 
 output() { echo "::set-output name=$1::$2"; }
