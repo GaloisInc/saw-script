@@ -55,7 +55,7 @@ jobs:
         os: [ubuntu-18.04]
         # ghc: ["8.6.5", "8.8.4", "8.10.3"]
         ghc: ["8.6.5"]
-        include:
+        # include:
         #   - os: macos-latest
         #     ghc: "8.6.5"
         #   - os: macos-latest
