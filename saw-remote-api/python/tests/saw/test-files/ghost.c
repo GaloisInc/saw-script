@@ -1,1 +1,0 @@
-../../../../../intTests/test_ghost/test.c
