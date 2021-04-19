@@ -27,7 +27,7 @@ features:
   of static variables in method specifications.
 
 * The verification code initializes all JVM classes at the start so that
-  initializers don't run at arbitray intermediate points and and clobber
+  initializers don't run at arbitrary intermediate points and clobber
   static field values specified in preconditions. This means, however,
   that any proofs about Java code are under the assumption that all
   class initializers have run before the method under analysis executes.
