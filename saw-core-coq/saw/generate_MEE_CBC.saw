@@ -1,2 +1,0 @@
-enable_experimental;
-write_coq_cryptol_module "../cryptol/MEE_CBC.cry" "../coq/generated/MEE_CBC.v" [] [];
