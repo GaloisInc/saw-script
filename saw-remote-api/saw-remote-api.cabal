@@ -79,6 +79,7 @@ library
                    SAWServer.Data.LLVMType,
                    SAWServer.Data.SetupValue,
                    SAWServer.Exceptions,
+                   SAWServer.Ghost,
                    SAWServer.JVMCrucibleSetup,
                    SAWServer.JVMVerify,
                    SAWServer.LLVMCrucibleSetup,
