@@ -1,4 +1,4 @@
-# Unreleased version
+# Version 0.8
 
 ## New Features
 
@@ -15,17 +15,125 @@ When the path to Java is known, SAW can automatically add system-related
 JAR files to the JAR path, which eliminates the need to manually specify
 these files with `-j`.
 
-SAWScript includes two new functions, `llvm_struct_type` and
-`llvm_packed_struct_type`, for constructing an LLVM struct type from a list
-of other LLVM types. This is not to be confused with the existing `llvm_struct`
-function, which takes a string as an argument and returns the corresponding
-alias type (which is often, but not necessarily, defined as a struct type).
-To avoid confusion, a new `llvm_alias` function has been introduced, and
-`llvm_struct` is now a synonym for `llvm_alias`. The `llvm_struct` function
-continues to be available for now.
+The Crucible-based interface to Java verification is now strictly an
+improvement over the older code base, with the addition of several
+features:
 
-SAWScript includes a new `llvm_pointer : LLVMType -> LLVMType` function for
-constructing LLVM pointer types.
+* Performance of JVM verification is significantly better, as a result
+  of removing some unnecessary instances of rewriting. This improves
+  performance of LLVM verification, as well.
+
+* The new `jvm_static_field_is` function allows describing the contents
+  of static variables in method specifications.
+
+* The verification code initializes all JVM classes at start so that
+  initializers don't run at arbitray intermediate points and and clobber
+  static field values specified in preconditions. This means, however,
+  that any proofs about Java code are under the assumption that all
+  class initializers have run before the method under analysis executes.
+
+Now that the Crucible-based verification infrastructure is sufficiently
+expressive and performant, we have removed all dependencies on the old
+`jvm-verifier` library.
+
+On the LLVM side, SAWScript includes a variety of new functions for
+writing specification blocks:
+
+* The `llvm_struct_type` and `llvm_packed_struct_type` functions each
+  construct an LLVM struct type from a list of other LLVM types. This is
+  not to be confused with the existing `llvm_struct` function, which
+  takes a string as an argument and returns the corresponding alias type
+  (which is often, but not necessarily, defined as a struct type).
+
+* To avoid confusion, a new `llvm_alias` function now exists, and
+  `llvm_struct` is now a synonym for `llvm_alias`. The `llvm_struct`
+  function continues to be available for now.
+
+* The `llvm_pointer : LLVMType -> LLVMType` function allows construction
+  of arbitrary LLVM pointer types.
+
+* Two new functions, `llvm_points_to_at_type` and
+  `llvm_conditional_points_to_at_type`, mirror `llvm_points_to` and
+  `llvm_conditional_points_to`, but cast the pointer to a different
+  type. This may be useful when reading or writing a prefix of larger
+  array, for example.
+
+* Support for using ABC as an external process is more complete:
+
+    * SAW can now generate Verilog with multiple outputs (from `Term`
+      values that have tuple or vector result types, for example).
+
+    * The new commands `write_aig_external` and `write_cnf_external`
+      generate AIG and CNF files, respectively, by first writing Verilog
+      and then using the available `abc` executable to bit-blast to the
+      lower-level representation. Corresponding proof tactics,
+      `offline_aig_external` and `offline_cnf_external` also exist.
+
+These changes are in preparation for removing the linked-in copy of ABC
+in a future release.
+
+The `saw-remote-api` RPC server and associated Python client now have
+more complete support for LLVM verification, including:
+
+* More complete points-to declarations, matching what is currently
+  available in SAWScript.
+
+* Support for more provers, including the full range of SBV-based and
+  What4-based provers available in SAWScript.
+
+* Support for ghost variables.
+
+* Support for assuming LLVM contracts directly (rather than the previous
+  behavior which would temporarily assume that failed verifications
+  succeeded to determine whether higher-level verifications would still
+  succeed).
+
+* Support for global variables and initializers.
+
+* Support for null pointers.
+
+* Support for array value literals.
+
+The most recent version of the Python client is now in the `saw-script`
+repository and available from `PyPI` with `pip install saw`.
+
+Docker images for SAW are now located on
+[GitHub](https://github.com/orgs/galoisinc/packages/container/package/saw)
+instead of [DockerHub](https://hub.docker.com/r/galoisinc/saw/).
+
+## Changes
+
+The proof management infrastructure in SAWScript is simpler and more
+consistent than before. Many of these changes are internal, to make the
+code less error-prone and easier to maintain in the future. Several are
+user-facing, though:
+
+* The `caseProofResult` command now passes a `Theorem` argument to the
+  first function argument, allowing its use as a rewrite rule, for
+  example.
+
+* A new `admit` tactic exists, which takes a `String` argument
+  describing why the user has decided omit proof of the goal. This
+  replaces the `assume_unsat` and `assume_valid` tactics, which we now
+  recommend against. They will be officially deprecated in a future
+  release, and removed after that.
+
+* Prover tactics (e.g., `yices`) now return `ProofScript ()` instead of
+  `ProofScript SatResult`.
+
+## Bug Fixes
+
+* Verilog generated from rotation operations is now in correct Verilog
+  syntax.
+
+* Closed issues #9, #25, #39, #41, #54, #55, #69, #81, #90, #92, #124,
+  #136, #144, #149, #152, #159, #271, #285, #323, #353, #377, #382,
+  #431, #446, #631, #652, #739, #740, #861, #901, #908, #924, #930,
+  #951, #962, #971, #985, #991, #993, #994, #995, #996, #1003, #1006,
+  #1009, #1021, #1022, #1023, #1031, #1032, #1050, #1051, #1052, #1055,
+  #1056, #1058, #1061, #1062, #1067, #1073, #1083, #1085, #1090, #1091,
+  #1096, #1099, #1101, #1119, #1122, #1123, #1127, #1128, #1132, #1163,
+  and #1164.
 
 # Version 0.7
 
