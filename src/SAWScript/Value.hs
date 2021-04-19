@@ -37,7 +37,8 @@ import Control.Applicative (Applicative)
 #endif
 import Control.Lens
 import Control.Monad.Fail (MonadFail(..))
-import Control.Monad.Catch (MonadThrow(..), MonadMask(..), MonadCatch(..))
+import Control.Monad.Catch (MonadThrow(..), MonadMask(..),
+                            MonadCatch(..), catches, Handler(..))
 import Control.Monad.Except (ExceptT(..), runExceptT, MonadError(..))
 import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X
@@ -75,6 +76,7 @@ import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.Crucible.LLVM.Skeleton
+import SAWScript.X86 (X86Unsupported(..), X86Error(..))
 
 import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.CryptolEnv as CEnv
@@ -423,7 +425,16 @@ runTopLevel :: TopLevel a -> TopLevelRO -> TopLevelRW -> IO (a, TopLevelRW)
 runTopLevel (TopLevel m) ro rw = runStateT (runReaderT m ro) rw
 
 io :: IO a -> TopLevel a
-io = liftIO
+io f = liftIO f
+       `catches`
+       [ Handler (\(ex :: X86Unsupported) -> handleX86Unsupported ex)
+       , Handler (\(ex :: X86Error) -> handleX86Error ex)
+       ]
+  where
+    handleX86Unsupported (X86Unsupported s) =
+      throwTopLevel $ "Unsupported x86 feature: " ++ s
+    handleX86Error (X86Error s) =
+      throwTopLevel $ "Error in x86 code: " ++ s
 
 throwTopLevel :: String -> TopLevel a
 throwTopLevel msg = do
