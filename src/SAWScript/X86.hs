@@ -264,8 +264,11 @@ getElf path =
        Right (Elf.SomeElf hdr)
          | Elf.ELFCLASS64 <- Elf.headerClass (Elf.header hdr) -> pure hdr
          | otherwise -> unsupported "32-bit ELF format"
-       Left _ -> malformed "Invalid ELF header"
-
+       Left (off, msg) -> malformed $ mconcat [ "Invalid ELF header at offset "
+                                              , show off
+                                              , ": "
+                                              , msg
+                                              ]
 
 
 -- | Extract a Macaw "memory" from an ELF file and resolve symbols.

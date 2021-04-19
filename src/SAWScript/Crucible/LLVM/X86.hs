@@ -321,7 +321,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaMaj sfs) $ cryptolUninterpreted cenv "Maj"
 
       let preserved = Set.fromList . catMaybes $ stringToReg . Text.toLower . Text.pack <$> rwPreservedRegs rw
-      (C.SomeCFG cfg, elf, relf, addr, cfgs) <- liftIO $ buildCFG opts halloc preserved path nm
+      (C.SomeCFG cfg, elf, relf, addr, cfgs) <- io $ buildCFG opts halloc preserved path nm
       addrInt <- if Macaw.segmentBase (Macaw.segoffSegment addr) == 0
         then pure . toInteger $ Macaw.segmentOffset (Macaw.segoffSegment addr) + Macaw.segoffOffset addr
         else fail $ mconcat ["Address of \"", nm, "\" is not an absolute address"]
@@ -352,9 +352,9 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
 
       let ?lc = modTrans llvmModule ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
 
-      emptyState <- liftIO $ initialState sym opts sc cc elf relf methodSpec globsyms maxAddr
+      emptyState <- io $ initialState sym opts sc cc elf relf methodSpec globsyms maxAddr
       balign <- integerToAlignment $ rwStackBaseAlign rw
-      (env, preState) <- liftIO . runX86Sim emptyState $ setupMemory globsyms balign
+      (env, preState) <- io . runX86Sim emptyState $ setupMemory globsyms balign
 
       let
         funcLookup = Macaw.LookupFunctionHandle $ \st _mem regs -> do
