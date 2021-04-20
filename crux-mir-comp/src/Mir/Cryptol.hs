@@ -15,6 +15,7 @@ import Control.Lens (use, (^.), (^?), _Wrapped, ix)
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
+import Data.Foldable
 import Data.Functor.Const
 import Data.IORef
 import Data.Map (Map)
@@ -202,6 +203,10 @@ regToTerm sym sc scs name visitCache w4VarMapRef shp rv = go shp rv
         (TupleShape _ _ flds, rvs) -> do
             terms <- Ctx.zipWithM (\fld (RV rv) -> Const <$> goField fld rv) flds rvs
             liftIO $ SAW.scTuple sc (toListFC getConst terms)
+        (ArrayShape _ _ shp, vec) -> do
+            terms <- goVector shp vec
+            tyTerm <- shapeToTerm sc shp
+            liftIO $ SAW.scVector sc tyTerm terms
         _ -> fail $
             "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)
 
@@ -213,3 +218,40 @@ regToTerm sym sc scs name visitCache w4VarMapRef shp rv = go shp rv
         rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
         go shp rv'
     goField (ReqField shp) rv = go shp rv
+
+    goVector :: forall tp.
+        TypeShape tp ->
+        MirVector sym tp ->
+        OverrideSim (p sym) sym MIR rtp a r [SAW.Term]
+    goVector shp (MirVector_Vector v) = mapM (go shp) $ toList v
+    goVector shp (MirVector_PartialVector pv) = do
+        forM (toList pv) $ \rv -> do
+            rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
+            go shp rv'
+    goVector shp (MirVector_Array _) = fail $
+        "regToTerm: MirVector_Array not supported"
+
+shapeToTerm :: forall tp m.
+    (MonadIO m, MonadFail m) =>
+    SAW.SharedContext ->
+    TypeShape tp ->
+    m SAW.Term
+shapeToTerm sc shp = go shp
+  where
+    go :: forall tp. TypeShape tp -> m SAW.Term
+    go (UnitShape _) = liftIO $ SAW.scUnitType sc
+    go (PrimShape _ BaseBoolRepr) = liftIO $ SAW.scBoolType sc
+    go (PrimShape _ (BaseBVRepr w)) = liftIO $ SAW.scBitvector sc (natValue w) 
+    go (TupleShape _ _ flds) = do
+        tys <- toListFC getConst <$> traverseFC (\x -> Const <$> goField x) flds
+        liftIO $ SAW.scTupleType sc tys
+    go (ArrayShape (M.TyArray _ n) _ shp) = do
+        ty <- go shp
+        n <- liftIO $ SAW.scNat sc (fromIntegral n)
+        liftIO $ SAW.scVecType sc n ty
+    go shp = fail $ "shapeToTerm: unsupported type " ++ show (shapeType shp)
+
+    goField :: forall tp. FieldShape tp -> m SAW.Term
+    goField (OptField shp) = go shp
+    goField (ReqField shp) = go shp
+
