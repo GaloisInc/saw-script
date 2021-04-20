@@ -126,6 +126,11 @@ user-facing, though:
 * Prover tactics (e.g., `yices`) now return `ProofScript ()` instead of
   `ProofScript SatResult`.
 
+* `Simpset`s can now contain "permutative" rewrite rules, where a rule
+  is permutative if each side of the equality could represent the same
+  set of terms and therefore the rule could repeatedly apply forever. A
+  term ordering is used to prevent looping when these rules are applied.
+
 ## Bug Fixes
 
 * Verilog generated from rotation operations is now in correct Verilog
