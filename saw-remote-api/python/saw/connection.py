@@ -5,7 +5,6 @@ from distutils.spawn import find_executable
 from argo_client.connection import ServerConnection, DynamicSocketProcess, HttpProcess, ManagedProcess
 from argo_client.interaction import Interaction, Command
 from .commands import *
-
 from typing import Optional, Union, Any, List
 
 # FIXME cryptol_path isn't always used...?
@@ -88,7 +87,7 @@ class SAWConnection:
 
     def reset(self) -> None:
         """Resets the connection, causing its unique state on the server to be freed (if applicable).
-        
+
         After a reset a connection may be treated as if it were a fresh connection with the server if desired."""
         SAWReset(self)
         self.most_recent_result = None
@@ -102,10 +101,10 @@ class SAWConnection:
         """Clears the state from the server and closes any underlying
         server/connection process launched by this object."""
         self.reset()
-        if not self.persist:
-            if self.proc and (pid := self.proc.pid()):
-                os.killpg(os.getpgid(pid), signal.SIGKILL)
-                self.proc = None
+        if not self.persist and self.proc and (pid := self.proc.pid()):
+            pgid = os.getpgid(pid)
+            os.kill(pgid, signal.SIGKILL)
+            self.proc = None
 
 
     def __del__(self) -> None:
@@ -115,7 +114,7 @@ class SAWConnection:
         if not self.persist:
             if self.proc and (pid := self.proc.pid()):
                 os.killpg(os.getpgid(pid), signal.SIGKILL)
-        
+
 
     def pid(self) -> Optional[int]:
         """Return the PID of the running server process."""
@@ -131,15 +130,6 @@ class SAWConnection:
         else:
             return False
 
-    def snapshot(self) -> SAWConnection:
-        """Return a ``SAWConnection`` that has the same process and state as
-        the current connection. The new connection's state will be
-        independent of the current state.
-        """
-        copy = SAWConnection(self.server_connection)
-        copy.most_recent_result = self.most_recent_result
-        return copy
-
     def protocol_state(self) -> Any:
         if self.most_recent_result is None:
             return None
@@ -149,6 +139,14 @@ class SAWConnection:
     # Protocol messages
     def cryptol_load_file(self, filename: str) -> Command:
         self.most_recent_result = CryptolLoadFile(self, filename)
+        return self.most_recent_result
+
+    def create_ghost_variable(self, name: str, server_name: str) -> Command:
+        """Create an instance of the `CreateGhostVariable` command. Documentation on
+        the purpose and use of this command is associated with the top-level
+        `create_ghost_variable` function.
+        """
+        self.most_recent_result = CreateGhostVariable(self, name, server_name)
         return self.most_recent_result
 
     def llvm_load_module(self, name: str, bitcode_file: str)  -> Command:
@@ -172,6 +170,10 @@ class SAWConnection:
                     function: str,
                     contract: Any,
                     lemma_name: str) -> Command:
+        """Create an instance of the `LLVMAssume` command. Documentation on the purpose
+        and use of this command is associated with the top-level `llvm_assume`
+        function.
+        """
         self.most_recent_result = \
             LLVMAssume(self, module, function, contract, lemma_name)
         return self.most_recent_result
@@ -179,10 +181,8 @@ class SAWConnection:
     def prove(self,
               goal: cryptoltypes.CryptolJSON,
               proof_script: ProofScript) -> Command:
-        """Atempts to prove that the expression given as the first argument, @goal@, is
-        true for all possible values of free symbolic variables. Uses the proof
-        script (potentially specifying an automated prover) provided by the
-        second argument.
+        """Create an instance of the `Prove` command. Documentation on the purpose and
+        use of this command is associated with the top-level `prove` function.
         """
         self.most_recent_result = Prove(self, goal, proof_script)
         return self.most_recent_result

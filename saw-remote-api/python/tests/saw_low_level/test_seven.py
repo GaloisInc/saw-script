@@ -5,9 +5,7 @@ from saw.proofscript import *
 
 class SevenTest(unittest.TestCase):
     def test_seven(self):
-
         c = saw.connection.connect(reset_server=True)
-        c.reset()
         if __name__ == "__main__": saw.view(saw.LogResults())
 
         seven_bc = str(Path('tests','saw','test-files', 'seven.bc'))
@@ -29,7 +27,6 @@ class SevenTest(unittest.TestCase):
 
         prover = ProofScript([abc]).to_json()
         c.llvm_verify('m', 'seven', [], False, contract, prover, 'ok').result()
-        c.disconnect()
 
 if __name__ == "__main__":
     unittest.main()

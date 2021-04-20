@@ -762,10 +762,18 @@ offline_aig path = do
   SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
   proveWithSATExporter (Prover.writeAIG_SAT proxy) mempty path "." ".aig"
 
+offline_aig_external :: FilePath -> ProofScript ()
+offline_aig_external path =
+  proveWithSATExporter Prover.writeAIG_SATviaVerilog mempty path "." ".aig"
+
 offline_cnf :: FilePath -> ProofScript ()
 offline_cnf path = do
   SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
   proveWithSATExporter (Prover.writeCNF proxy) mempty path "." ".cnf"
+
+offline_cnf_external :: FilePath -> ProofScript ()
+offline_cnf_external path =
+  proveWithSATExporter Prover.writeCNF_SATviaVerilog mempty path "." ".cnf"
 
 offline_coq :: FilePath -> ProofScript ()
 offline_coq path = proveWithPropExporter (const (Prover.writeCoqProp "goal" [] [])) path "_" ".v"
