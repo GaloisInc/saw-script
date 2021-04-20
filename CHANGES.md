@@ -99,9 +99,6 @@ more complete support for LLVM verification, including:
 
 * Support for specifying the alignment of allocations.
 
-The most recent version of the Python client is now in the `saw-script`
-repository and available from `PyPI` with `pip install saw`.
-
 Docker images for SAW are now located on
 [GitHub](https://github.com/orgs/galoisinc/packages/container/package/saw)
 instead of [DockerHub](https://hub.docker.com/r/galoisinc/saw/).
