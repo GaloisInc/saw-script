@@ -14,6 +14,7 @@ where
 import Control.Lens ((^.), (^..), each)
 import Control.Monad
 import Control.Monad.IO.Class
+import Data.Foldable
 import Data.Functor.Const
 import Data.IORef
 import Data.Map (Map)
@@ -24,6 +25,7 @@ import Data.Parameterized.Some
 import Data.Parameterized.TraversableFC
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Vector as V
 import GHC.Stack (HasCallStack)
 
 import Lang.Crucible.Backend
@@ -298,6 +300,13 @@ termToReg sym sc varMap term shp = do
         (TupleShape _ _ flds, _) -> do
             svs <- tupleToListRev (Ctx.sizeInt $ Ctx.size flds) [] sv
             goTuple flds svs
+        (ArrayShape (M.TyArray _ n) _ shp, SAW.VVector thunks) -> do
+            svs <- mapM SAW.force $ toList thunks
+            when (length svs /= n) $ fail $
+                "termToReg: type error: expected an array of length " ++ show n ++
+                    ", but simulator returned " ++ show (length svs) ++ " elements"
+            v <- V.fromList <$> mapM (go shp) svs
+            return $ MirVector_Vector v
         _ -> error $ "termToReg: type error: need to produce " ++ show (shapeType shp) ++
             ", but simulator returned " ++ show sv
 
