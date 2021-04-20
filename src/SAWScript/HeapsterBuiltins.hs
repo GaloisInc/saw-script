@@ -28,6 +28,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_define_reachability_perm
        , heapster_define_perm
        , heapster_define_llvmshape
+       , heapster_define_rust_type
        , heapster_block_entry_hint
        , heapster_gen_block_perms_hint
        , heapster_join_point_hint
@@ -530,6 +531,10 @@ heapster_define_llvmshape _bic _opts henv nm w_int args_str sh_str =
      mb_sh <- parseExprInCtxString env (LLVMShapeRepr w) args_ctx sh_str
      let env' = withKnownNat w $ permEnvAddDefinedShape env nm args mb_sh
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+heapster_define_rust_type :: BuiltinContext -> Options -> HeapsterEnv ->
+                             String -> TopLevel ()
+heapster_define_rust_type _bic _opts _henv _str = fail "Not yet implemented"
 
 -- | Add Heapster type-checking hint for some blocks in a function given by
 -- name. The blocks to receive the hint are those specified in the list, or all
