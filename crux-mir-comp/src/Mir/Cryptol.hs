@@ -101,6 +101,7 @@ cryptolLoad col sig (FunctionHandleRepr argsCtx retTpr) modulePathStr nameStr = 
         Just s -> return $ Text.unpack s
         Nothing -> fail "cryptol::load function name must not be symbolic"
 
+    let argShps = map (tyToShape col) (sig ^. M.fsarg_tys)
     let retShp = tyToShapeEq col (sig ^. M.fsreturn_ty) retTpr
 
     -- TODO share a single SharedContext across all calls
@@ -118,7 +119,7 @@ cryptolLoad col sig (FunctionHandleRepr argsCtx retTpr) modulePathStr nameStr = 
     let fnName = "cryptol_" ++ modulePath ++ "_" ++ name
     fh <- liftIO $ mkHandle' halloc (fromString fnName) argsCtx retTpr
     bindFnHandle fh $ UseOverride $ mkOverride' (handleName fh) (handleReturnType fh) $
-        cryptolRun sc scs fnName retShp (SAW.ttTerm tt)
+        cryptolRun sc scs fnName argShps retShp (SAW.ttTerm tt)
 
     return $ HandleFnVal fh
 
@@ -131,31 +132,68 @@ cryptolRun ::
     SAW.SharedContext ->
     SAW.SAWCoreState t ->
     String ->
+    [Some TypeShape] ->
     TypeShape tp ->
     SAW.Term ->
     OverrideSim (p sym) sym MIR rtp a r (RegValue sym tp)
-cryptolRun sc scs name retShp funcTerm = do
+cryptolRun sc scs name argShps retShp funcTerm = do
     sym <- getSymInterface
 
     visitCache <- liftIO $ (W4.newIdxCache :: IO (W4.IdxCache t (Const ())))
     w4VarMapRef <- liftIO $ newIORef (Map.empty :: Map SAW.VarIndex (Some (W4.Expr t)))
 
     RegMap argsCtx <- getOverrideArgs
-    args <- forM (toListFC (\re -> Some re) argsCtx) $ \(Some (RegEntry tpr val)) -> do
-        case asBaseType tpr of
-            AsBaseType btpr -> do
-                visitExprVars visitCache val $ \var -> do
-                    let expr = W4.BoundVarExpr var
-                    term <- liftIO $ SAW.toSC sym scs expr
-                    ec <- case SAW.asExtCns term of
-                        Just ec -> return ec
-                        Nothing -> error "eval on BoundVarExpr produced non-ExtCns?"
-                    liftIO $ modifyIORef w4VarMapRef $ Map.insert (SAW.ecVarIndex ec) (Some expr)
-                liftIO $ SAW.toSC sym scs val
-            NotBaseType -> fail $
-                "type error: " ++ name ++ " got argument of non-base type " ++ show tpr
+    args <- forM (zip argShps (toListFC (\re -> Some re) argsCtx)) $
+        \(Some argShp, Some (RegEntry tpr val)) -> do
+            Refl <- case testEquality (shapeType argShp) tpr of
+                Just x -> return x
+                Nothing -> fail $
+                    "type error: " ++ name ++ " expected argument of type " ++
+                        show (shapeType argShp) ++ ", but got " ++ show tpr
+            regToTerm sym sc scs name visitCache w4VarMapRef argShp val
     appTerm <- liftIO $ SAW.scApplyAll sc funcTerm args 
 
     w4VarMap <- liftIO $ readIORef w4VarMapRef
     rv <- liftIO $ termToReg sym sc w4VarMap appTerm retShp
     return rv
+
+  where
+
+exprToTerm :: forall sym p t st fs tp rtp a r.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    sym ->
+    SAW.SharedContext ->
+    SAW.SAWCoreState t ->
+    W4.IdxCache t (Const ()) ->
+    IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
+    W4.Expr t tp ->
+    OverrideSim (p sym) sym MIR rtp a r SAW.Term
+exprToTerm sym sc scs visitCache w4VarMapRef val = do
+    visitExprVars visitCache val $ \var -> do
+        let expr = W4.BoundVarExpr var
+        term <- liftIO $ SAW.toSC sym scs expr
+        ec <- case SAW.asExtCns term of
+            Just ec -> return ec
+            Nothing -> error "eval on BoundVarExpr produced non-ExtCns?"
+        liftIO $ modifyIORef w4VarMapRef $ Map.insert (SAW.ecVarIndex ec) (Some expr)
+    liftIO $ SAW.toSC sym scs val
+
+regToTerm :: forall sym p t st fs tp rtp a r.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    sym ->
+    SAW.SharedContext ->
+    SAW.SAWCoreState t ->
+    String ->
+    W4.IdxCache t (Const ()) ->
+    IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
+    TypeShape tp ->
+    RegValue sym tp ->
+    OverrideSim (p sym) sym MIR rtp a r SAW.Term
+regToTerm sym sc scs name visitCache w4VarMapRef shp rv = go shp rv
+  where
+    go :: TypeShape tp -> RegValue sym tp -> OverrideSim (p sym) sym MIR rtp a r SAW.Term
+    go shp rv = case (shp, rv) of
+        (UnitShape _, ()) -> liftIO $ SAW.scUnitValue sc
+        (PrimShape _ btpr, expr) -> exprToTerm sym sc scs visitCache w4VarMapRef expr
+        _ -> fail $
+            "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)
