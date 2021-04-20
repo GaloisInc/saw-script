@@ -127,9 +127,9 @@ user-facing, though:
   `ProofScript SatResult`.
 
 * `Simpset`s can now contain "permutative" rewrite rules, where a rule
-  is permutative if each side of the equality is an instance of the
-  other. A term ordering is used to prevent looping when these rules are
-  applied.
+  is permutative if each side of the equality could represent the same
+  set of terms and therefore the rule could repeatedly apply forever. A
+  term ordering is used to prevent looping when these rules are applied.
 
 ## Bug Fixes
 
