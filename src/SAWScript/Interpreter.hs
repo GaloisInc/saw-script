@@ -992,6 +992,15 @@ primitives = Map.fromList
     , "bits to a finite number of bits."
     ]
 
+  , prim "write_aig_external"  "String -> Term -> TopLevel ()"
+    (scVal writeAIGviaVerilog)
+    Current
+    [ "Write out a representation of a term in binary AIGER format. The"
+    , "term must be representable as a function from a finite number of"
+    , "bits to a finite number of bits. Uses ABC to convert an intermediate"
+    , "Verilog file."
+    ]
+
   , prim "write_saig"          "String -> Term -> TopLevel ()"
     (pureVal writeSAIGPrim)
     Current
@@ -1023,6 +1032,11 @@ primitives = Map.fromList
 
   , prim "write_cnf"           "String -> Term -> TopLevel ()"
     (scVal write_cnf)
+    Current
+    [ "Write the given term to the named file in CNF format." ]
+
+  , prim "write_cnf_external"  "String -> Term -> TopLevel ()"
+    (scVal write_cnf_external)
     Current
     [ "Write the given term to the named file in CNF format." ]
 
@@ -1396,10 +1410,24 @@ primitives = Map.fromList
     Current
     [ "Write the current goal to the given file in AIGER format." ]
 
+  , prim "offline_aig_external" "String -> ProofScript ()"
+    (pureVal offline_aig_external)
+    Current
+    [ "Write the current goal to the given file in AIGER format."
+    , "Uses ABC and an intermediate Verilog file."
+    ]
+
   , prim "offline_cnf"         "String -> ProofScript ()"
     (pureVal offline_cnf)
     Current
     [ "Write the current goal to the given file in CNF format." ]
+
+  , prim "offline_cnf_external" "String -> ProofScript ()"
+    (pureVal offline_cnf_external)
+    Current
+    [ "Write the current goal to the given file in CNF format."
+    , "Uses ABC and an intermediate Verilog file."
+    ]
 
   , prim "offline_extcore"     "String -> ProofScript ()"
     (pureVal offline_extcore)
