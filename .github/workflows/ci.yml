@@ -223,16 +223,21 @@ jobs:
       matrix:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
         os: [ubuntu-18.04]
+        continue-on-error: [false]
         include:
           - suite: integration_tests
             os: macos-latest
+            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
           - suite: integration_tests
             os: windows-latest
+            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
         exclude:
           - suite: integration_tests
             os: macos-latest
+            continue-on-error: false
           - suite: integration_tests
             os: windows-latest
+            continue-on-error: false
     steps:
       - uses: actions/checkout@v2
         with:
@@ -281,6 +286,7 @@ jobs:
           architecture: x64
 
       - name: ${{ matrix.suite }}
+        continue-on-error: ${{ matrix.continue-on-error }}
         shell: bash
         run: |
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
