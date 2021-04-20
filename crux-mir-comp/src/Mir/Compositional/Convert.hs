@@ -307,6 +307,17 @@ termToReg sym sc varMap term shp = do
                     ", but simulator returned " ++ show (length svs) ++ " elements"
             v <- V.fromList <$> mapM (go shp) svs
             return $ MirVector_Vector v
+        -- Special case: saw-core/cryptol doesn't distinguish bitvectors from
+        -- vectors of booleans, so it may return `VWord` (bitvector) where an
+        -- array of `bool` is expected.
+        (ArrayShape (M.TyArray _ n) _ (PrimShape _ BaseBoolRepr), SAW.VWord (W4.DBV e))
+          | Just (Some w) <- someNat n,
+            Just LeqProof <- testLeq (knownNat @1) w,
+            Just Refl <- testEquality (W4.exprType e) (BaseBVRepr w) -> do
+            v <- V.generateM n $ \i -> do
+                -- Cryptol bitvectors are MSB-first, but What4 uses LSB-first.
+                liftIO $ W4.testBitBV sym (fromIntegral $ n - i - 1) e
+            return $ MirVector_Vector v
         _ -> error $ "termToReg: type error: need to produce " ++ show (shapeType shp) ++
             ", but simulator returned " ++ show sv
 
