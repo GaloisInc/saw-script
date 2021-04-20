@@ -102,10 +102,10 @@ jobs:
 
       - if: needs.config.outputs.release == 'true'
         shell: bash
-        run: >
-          sed
-            -e 's/^hashText = .*$/hashText = ""/'
-            -e '/import GitRev.*$/d'
+        run: |
+          sed -i \
+            -e 's/^hashText = .*$/hashText = ""/' \
+            -e '/import GitRev.*$/d' \
             saw/SAWScript/Version.hs
 
       - id: abc
