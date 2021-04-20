@@ -100,6 +100,14 @@ jobs:
           restore-keys: |
             ${{ env.CACHE_VERSION }}-cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
+      - if: needs.config.outputs.release == 'true'
+        shell: bash
+        run: >
+          sed
+            -e 's/^hashText = .*$/hashText = ""/'
+            -e '/import GitRev.*$/d'
+            saw/SAWScript/Version.hs
+
       - id: abc
         shell: bash
         run: .github/ci.sh build_abc
