@@ -24,6 +24,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 
 import Data.Parameterized.Context (pattern Empty, pattern (:>))
+import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.NatRepr
 import Data.Parameterized.TraversableFC
 
@@ -191,9 +192,24 @@ regToTerm :: forall sym p t st fs tp rtp a r.
     OverrideSim (p sym) sym MIR rtp a r SAW.Term
 regToTerm sym sc scs name visitCache w4VarMapRef shp rv = go shp rv
   where
-    go :: TypeShape tp -> RegValue sym tp -> OverrideSim (p sym) sym MIR rtp a r SAW.Term
+    go :: forall tp.
+        TypeShape tp ->
+        RegValue sym tp ->
+        OverrideSim (p sym) sym MIR rtp a r SAW.Term
     go shp rv = case (shp, rv) of
         (UnitShape _, ()) -> liftIO $ SAW.scUnitValue sc
-        (PrimShape _ btpr, expr) -> exprToTerm sym sc scs visitCache w4VarMapRef expr
+        (PrimShape _ _, expr) -> exprToTerm sym sc scs visitCache w4VarMapRef expr
+        (TupleShape _ _ flds, rvs) -> do
+            terms <- Ctx.zipWithM (\fld (RV rv) -> Const <$> goField fld rv) flds rvs
+            liftIO $ SAW.scTuple sc (toListFC getConst terms)
         _ -> fail $
             "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)
+
+    goField :: forall tp.
+        FieldShape tp ->
+        RegValue sym tp ->
+        OverrideSim (p sym) sym MIR rtp a r SAW.Term
+    goField (OptField shp) rv = do
+        rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
+        go shp rv'
+    goField (ReqField shp) rv = go shp rv
