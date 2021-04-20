@@ -41,6 +41,7 @@ library
                  template-haskell,
                  saw-core,
                  saw-core-what4,
+                 cryptol,
                  cryptol-saw-core,
                  saw-script
 

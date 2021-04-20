@@ -31,6 +31,9 @@ import Data.Parameterized.TraversableFC
 
 import qualified What4.Expr.Builder as W4
 
+import Cryptol.TypeCheck.AST as Cry
+import Cryptol.Utils.PP as Cry
+
 import Lang.Crucible.Backend
 import Lang.Crucible.CFG.Core
 import Lang.Crucible.FunctionHandle
@@ -43,6 +46,7 @@ import Mir.DefId
 import Mir.Generator (CollectionState, collection)
 import Mir.Intrinsics
 import qualified Mir.Mir as M
+import qualified Mir.PP as M
 import Mir.Overrides (getString)
 
 import qualified Verifier.SAW.Cryptol.Prelude as SAW
@@ -114,6 +118,10 @@ cryptolLoad col sig (FunctionHandleRepr argsCtx retTpr) modulePathStr nameStr = 
     ce <- liftIO $ SAW.initCryptolEnv sc
     (m, ce') <- liftIO $ SAW.loadCryptolModule sc ce modulePath
     tt <- liftIO $ SAW.lookupCryptolModule m name
+
+    case typecheckFnSig sig argShps (Some retShp) (SAW.ttSchema tt) of
+        Left err -> fail $ "error loading " ++ show name ++ ": " ++ err
+        Right () -> return ()
 
     scs <- liftIO $ SAW.newSAWCoreState sc
 
@@ -255,3 +263,62 @@ shapeToTerm sc shp = go shp
     goField (OptField shp) = go shp
     goField (ReqField shp) = go shp
 
+
+typecheckFnSig ::
+    M.FnSig ->
+    [Some TypeShape] ->
+    Some TypeShape ->
+    Cry.Schema ->
+    Either String ()
+typecheckFnSig fnSig argShps retShp sch@(Cry.Forall [] [] ty) = go 0 argShps ty
+  where
+    go :: Int -> [Some TypeShape] -> Cry.Type -> Either String ()
+    go _ [] ty | Some retShp' <- retShp = goOne "return value" retShp' ty
+    go i (Some argShp : argShps) (Cry.tNoUser -> Cry.TCon (Cry.TC Cry.TCFun) [argTy, ty']) = do
+        goOne ("argument " ++ show i) argShp argTy
+        go (i + 1) argShps ty'
+    go i argShps _ = Left $
+        "not enough arguments: Cryptol function signature " ++ show (Cry.pp sch) ++
+        " has " ++ show i ++ " arguments, but Rust signature " ++ M.fmt fnSig ++
+        " requires " ++ show (i + length argShps)
+
+    goOne :: forall tp. String -> TypeShape tp -> Cry.Type -> Either String ()
+    goOne desc shp ty = case (shp, ty) of
+        (_, Cry.TUser _ _ ty') -> goOne desc shp ty'
+        (UnitShape _, Cry.TCon (Cry.TC (Cry.TCTuple 0)) []) -> Right ()
+        (PrimShape _ BaseBoolRepr, Cry.TCon (Cry.TC Cry.TCBit) []) -> Right ()
+        (PrimShape _ (BaseBVRepr w),
+            Cry.TCon (Cry.TC Cry.TCSeq) [
+                Cry.tNoUser -> Cry.TCon (Cry.TC (Cry.TCNum n)) [],
+                Cry.tNoUser -> Cry.TCon (Cry.TC Cry.TCBit) []])
+          | fromIntegral (intValue w) == n -> Right ()
+          | otherwise -> typeErr desc shp ty $
+            "bitvector width " ++ show n ++ " does not match " ++ show (intValue w)
+        (TupleShape _ _ flds, Cry.TCon (Cry.TC (Cry.TCTuple n)) tys)
+          | Ctx.sizeInt (Ctx.size flds) == n -> do
+            let flds' = toListFC Some flds
+            zipWithM_ (\(Some fld) ty -> goOneField desc fld ty) flds' tys
+          | otherwise -> typeErr desc shp ty $
+            "tuple size " ++ show n ++ " does not match " ++ show (Ctx.sizeInt $ Ctx.size flds)
+        (ArrayShape (M.TyArray _ n) _ shp,
+            Cry.TCon (Cry.TC Cry.TCSeq) [
+                Cry.tNoUser -> Cry.TCon (Cry.TC (Cry.TCNum n')) [],
+                ty'])
+          | fromIntegral n == n' -> goOne desc shp ty'
+          | otherwise -> typeErr desc shp ty $
+            "array length " ++ show n' ++ " does not match " ++ show n
+        _ -> typeErr desc shp ty ""
+
+    typeErr :: forall tp. String -> TypeShape tp -> Cry.Type -> String -> Either String ()
+    typeErr desc shp ty extra = Left $
+            "type mismatch in " ++ desc ++ ": Cryptol type " ++ show (Cry.pp ty) ++
+            " does not match Rust type " ++ M.fmt (shapeMirTy shp) ++
+            (if not (null extra) then ": " ++ extra else "")
+
+    goOneField :: forall tp. String -> FieldShape tp -> Cry.Type -> Either String ()
+    goOneField desc (OptField shp) ty = goOne desc shp ty
+    goOneField desc (ReqField shp) ty = goOne desc shp ty
+
+typecheckFnSig _ argShps retShp sch = Left $
+    "polymorphic Cryptol functions are not supported (got signature: " ++
+        show (Cry.pp sch) ++ ")"
