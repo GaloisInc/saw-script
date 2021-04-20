@@ -2,9 +2,8 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional, Set, Union, Tuple, Any, IO
 import uuid
-import os
 import sys
-import signal
+import time
 import atexit
 from distutils.spawn import find_executable
 
@@ -116,6 +115,19 @@ class VerificationFailed(VerificationResult):
 
 
 @dataclass
+class AssumptionSucceeded(VerificationSucceeded):
+    def __init__(self,
+                 server_name: str,
+                 contract: llvm.Contract,
+                 stdout: str,
+                 stderr: str) -> None:
+        super().__init__(server_name,
+                         [],
+                         contract,
+                         stdout,
+                         stderr)
+
+@dataclass
 class AssumptionFailed(VerificationFailed):
     def __init__(self,
                  server_name: str,
@@ -129,7 +141,7 @@ class AssumptionFailed(VerificationFailed):
 
 # FIXME cryptol_path isn't always used...?
 def connect(command: Union[str, ServerConnection, None] = None,
-            *, 
+            *,
             cryptol_path: Optional[str] = None,
             persist: bool = False,
             url : Optional[str] = None,
@@ -189,11 +201,12 @@ def connect(command: Union[str, ServerConnection, None] = None,
                 except ProcessLookupError:
                     pass
         atexit.register(print_if_still_running)
+    time.sleep(0.1)
 
 
 def reset() -> None:
     """Reset the current SAW connection to the initial state.
-    
+
     If the connection is inactive, ``connect()`` is called to initialize it."""
     if __designated_connection is not None:
         __designated_connection.reset()
@@ -202,7 +215,7 @@ def reset() -> None:
 
 def reset_server() -> None:
     """Reset the SAW server, clearing all states.
-    
+
     If the connection is inactive, ``connect()`` is called to initialize it."""
     if __designated_connection is not None:
         __designated_connection.reset_server()
@@ -343,8 +356,18 @@ def view(v: View) -> None:
 
 
 def cryptol_load_file(filename: str) -> None:
-    __get_designated_connection().cryptol_load_file(filename)
+    __get_designated_connection().cryptol_load_file(filename).result()
     return None
+
+def create_ghost_variable(name: str) -> llvm.GhostVariable:
+    """Create a ghost variable that can be used to invent state useful to
+    verification but that doesn't exist in the concrete state of the program.
+    This state can be referred to using the `c.ghost_value` method for some
+    `Contract` object `c`.
+    """
+    server_name = __fresh_server_name(name)
+    __get_designated_connection().create_ghost_variable(name, server_name)
+    return llvm.GhostVariable(name, server_name)
 
 
 @dataclass
@@ -359,6 +382,45 @@ def llvm_load_module(bitcode_file: str) -> LLVMModule:
     return LLVMModule(bitcode_file, name)
 
 
+def llvm_assume(module: LLVMModule,
+                function: str,
+                contract: llvm.Contract,
+                lemma_name_hint: Optional[str] = None) -> VerificationResult:
+    """Assume that the given function satisfies the given contract. Returns an
+    override linking the function and contract that can be passed as an
+    argument in calls to `llvm_verify`
+    """
+    if lemma_name_hint is None:
+        lemma_name_hint = contract.__class__.__name__ + "_" + function
+    name = __fresh_server_name(lemma_name_hint)
+
+    result: VerificationResult
+    try:
+        conn = __get_designated_connection()
+        res = conn.llvm_assume(module.server_name,
+                               function,
+                               contract.to_json(),
+                               name)
+        result = AssumptionSucceeded(server_name=name,
+                                     contract=contract,
+                                     stdout=res.stdout(),
+                                     stderr=res.stderr())
+        __global_success = True
+        # If something stopped us from even **assuming**...
+    except exceptions.VerificationError as err:
+        __global_success = False
+        result = AssumptionFailed(server_name=name,
+                                  assumptions=[],
+                                  contract=contract,
+                                  exception=err)
+    except Exception as err:
+        __global_success = False
+        for view in __designated_views:
+            view.on_python_exception(err)
+        raise err from None
+
+    return result
+
 def llvm_verify(module: LLVMModule,
                 function: str,
                 contract: llvm.Contract,
@@ -371,18 +433,17 @@ def llvm_verify(module: LLVMModule,
         lemmas = []
     if script is None:
         script = proofscript.ProofScript([proofscript.abc])
+    if lemma_name_hint is None:
+        lemma_name_hint = contract.__class__.__name__ + "_" + function
 
-    lemma_name_hint = contract.__class__.__name__ + "_" + function
-    name = llvm.uniquify(lemma_name_hint, __used_server_names)
-    __used_server_names.add(name)
+    name = __fresh_server_name(lemma_name_hint)
 
     result: VerificationResult
     conn = __get_designated_connection()
-    conn_snapshot = conn.snapshot()
 
     global __global_success
     global __designated_views
-    
+
     try:
         res = conn.llvm_verify(module.server_name,
                                function,
@@ -391,6 +452,7 @@ def llvm_verify(module: LLVMModule,
                                contract.to_json(),
                                script.to_json(),
                                name)
+
         stdout = res.stdout()
         stderr = res.stderr()
         result = VerificationSucceeded(server_name=name,
@@ -400,27 +462,11 @@ def llvm_verify(module: LLVMModule,
                                        stderr=stderr)
     # If the verification did not succeed...
     except exceptions.VerificationError as err:
-        # roll back to snapshot because the current connection's
-        # latest result is now a verification exception!
-        __set_designated_connection(conn_snapshot)
-        conn = __get_designated_connection()
-        # Assume the verification succeeded
-        try:
-            conn.llvm_assume(module.server_name,
-                             function,
-                             contract.to_json(),
-                             name).result()
-            result = VerificationFailed(server_name=name,
-                                        assumptions=lemmas,
-                                        contract=contract,
-                                        exception=err)
-        # If something stopped us from even **assuming**...
-        except exceptions.VerificationError as err:
-            __set_designated_connection(conn_snapshot)
-            result = AssumptionFailed(server_name=name,
-                                      assumptions=lemmas,
-                                      contract=contract,
-                                      exception=err)
+        # FIXME add the goal as an assumption if it failed...?
+        result = VerificationFailed(server_name=name,
+                                    assumptions=lemmas,
+                                    contract=contract,
+                                    exception=err)
     # If something else went wrong...
     except Exception as err:
         __global_success = False

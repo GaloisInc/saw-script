@@ -19,8 +19,11 @@ run_test poetry run mypy saw/
 
 export SAW_SERVER=$(which saw-remote-api)
 if [[ ! -x "$SAW_SERVER" ]]; then
-  echo "could not locate saw-remote-api executable - try executing with cabal v2-exec"
-  exit 1
+  export SAW_SERVER=$(cabal v2-exec which saw-remote-api)
+  if [[ ! -x "$SAW_SERVER" ]]; then
+    echo "could not locate saw-remote-api executable"
+    exit 1
+  fi
 fi
 
 echo "Running saw-remote-api tests..."

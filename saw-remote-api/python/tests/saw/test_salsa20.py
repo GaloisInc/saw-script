@@ -121,16 +121,8 @@ class Salsa20CryptContract(Contract):
         self.points_to(m_p, cryptol("Salsa20_encrypt")((k, v, m)))
 
 class Salsa20EasyTest(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(self):
-        connect(reset_server=True)
-
-    @classmethod
-    def tearDownClass(self):
-        disconnect()
-
     def test_salsa20(self):
+        connect(reset_server=True)
         if __name__ == "__main__": view(LogResults())
 
         bcname = str(Path('tests','saw','test-files', 'salsa20.bc'))
