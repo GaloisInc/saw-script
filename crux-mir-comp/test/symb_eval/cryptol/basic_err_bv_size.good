@@ -1,0 +1,9 @@
+test basic_err_bv_size/3a1fbbbh::test[0]: FAILED
+
+failures:
+
+---- basic_err_bv_size/3a1fbbbh::test[0] counterexamples ----
+Failure for test/symb_eval/cryptol/basic_err_bv_size.rs:8:52: 8:61: error: in basic_err_bv_size/3a1fbbbh::test[0]
+error loading "addByte": type mismatch in argument 1: Cryptol type [8] does not match Rust type u16: bitvector width 8 does not match 16
+
+[Crux] Overall status: Invalid.

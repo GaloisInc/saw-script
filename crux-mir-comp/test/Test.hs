@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# Language OverloadedStrings #-}
@@ -26,6 +27,7 @@ import           Test.Tasty.ExpectedFailure (expectFailBecause)
 import qualified Mir.Language as Mir
 
 import qualified Mir.Compositional as Mir
+import qualified Mir.Cryptol as Mir
 
 import qualified Crux as Crux
 import qualified Crux.Config.Common as Crux
@@ -88,8 +90,11 @@ runCrux rustFile outHandle mode = do
                    Mir.defaultMirOptions { Mir.printResultOnly = (mode == RcmConcrete),
                                            Mir.defaultRlibsDir = "../deps/crucible/crux-mir/rlibs" })
     let ?outputConfig = Crux.OutputConfig False outHandle outHandle quiet
-    _exitCode <- Mir.runTestsWithExtraOverrides Mir.compositionalOverrides options
+    _exitCode <- Mir.runTestsWithExtraOverrides overrides options
     return ()
+  where
+    overrides :: Mir.BindExtraOverridesFn
+    overrides = Mir.compositionalOverrides `Mir.orOverride` Mir.cryptolOverrides
 
 getOutputDir :: FilePath -> FilePath
 getOutputDir rustFile = takeDirectory rustFile </> "out"

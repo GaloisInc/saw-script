@@ -1,0 +1,14 @@
+addByte : [8] -> [8] -> [8]
+addByte x y = x + y
+
+tupleArg : ([8], [8]) -> [8]
+tupleArg (x, y) = x + y
+
+tupleRet : [8] -> [8] -> ([8], [8])
+tupleRet x y = (x + y, x - y)
+
+arrayArg : [2][8] -> [8]
+arrayArg [x, y] = x + y
+
+arrayRet : [8] -> [8] -> [2][8]
+arrayRet x y = [x + y, x - y]

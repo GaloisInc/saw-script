@@ -1,0 +1,9 @@
+test basic_err_mismatch/3a1fbbbh::test[0]: FAILED
+
+failures:
+
+---- basic_err_mismatch/3a1fbbbh::test[0] counterexamples ----
+Failure for test/symb_eval/cryptol/basic_err_mismatch.rs:8:51: 8:60: error: in basic_err_mismatch/3a1fbbbh::test[0]
+error loading "addByte": type mismatch in argument 1: Cryptol type [8] does not match Rust type ()
+
+[Crux] Overall status: Invalid.

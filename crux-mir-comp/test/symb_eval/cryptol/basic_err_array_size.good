@@ -1,0 +1,9 @@
+test basic_err_array_size/3a1fbbbh::test[0]: FAILED
+
+failures:
+
+---- basic_err_array_size/3a1fbbbh::test[0] counterexamples ----
+Failure for test/symb_eval/cryptol/basic_err_array_size.rs:8:52: 8:62: error: in basic_err_array_size/3a1fbbbh::test[0]
+error loading "arrayArg": type mismatch in argument 0: Cryptol type [2][8] does not match Rust type u8: array length 2 does not match 3
+
+[Crux] Overall status: Invalid.
