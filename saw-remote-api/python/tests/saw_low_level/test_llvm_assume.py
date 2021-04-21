@@ -1,6 +1,6 @@
 from pathlib import Path
-import saw
-from saw.proofscript import *
+import saw_client as saw
+from saw_client.proofscript import *
 import unittest
 import sys
 

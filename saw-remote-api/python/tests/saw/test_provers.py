@@ -1,7 +1,7 @@
 from cryptol import cryptoltypes
 from cryptol.bitvector import BV
-import saw
-from saw.proofscript import *
+import saw_client as saw
+from saw_client.proofscript import *
 
 import unittest
 from pathlib import Path
@@ -12,16 +12,8 @@ def cry(exp):
 
 class ProverTest(unittest.TestCase):
 
-    @classmethod
-    def setUpClass(self):
-        saw.connect(reset_server=True)
-
-    @classmethod
-    def tearDownClass(self):
-        saw.reset_server()
-        saw.disconnect()
-
     def test_provers(self):
+        saw.connect(reset_server=True)
 
         if __name__ == "__main__": saw.view(saw.LogResults())
 

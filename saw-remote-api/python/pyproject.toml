@@ -1,8 +1,14 @@
 [tool.poetry]
-name = "saw"
-version = "0.0.1"
-description = "SAW client"
+name = "saw-client"
+version = "0.8.1"
+readme = "README.md"
+description = "SAW client for the SAW 0.8 RPC server"
 authors = ["Andrew Kent <andrew@galois.com>", "Aaron Tomb <atomb@galois.com>"]
+license = "BSD License"
+include = [
+    "LICENSE",
+    "mypy.ini",
+]
 
 [tool.poetry.dependencies]
 python = "^3.8"
