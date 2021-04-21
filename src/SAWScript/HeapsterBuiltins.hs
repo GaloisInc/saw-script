@@ -532,9 +532,25 @@ heapster_define_llvmshape _bic _opts henv nm w_int args_str sh_str =
      let env' = withKnownNat w $ permEnvAddDefinedShape env nm args mb_sh
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
+-- | Define a new named LLVM shape from a Rust type declaration
 heapster_define_rust_type :: BuiltinContext -> Options -> HeapsterEnv ->
                              String -> TopLevel ()
-heapster_define_rust_type _bic _opts _henv _str = fail "Not yet implemented"
+heapster_define_rust_type _bic _opts henv str =
+  -- NOTE: Looking at first LLVM module to determine pointer width. Need to
+  -- think more to determine if this is always a safe thing to do (e.g. are
+  -- there ever circumstances where different modules have different pointer
+  -- widths?)
+  do Some lm <- failOnNothing ("No LLVM modules found")
+                              (listToMaybe $ heapsterEnvLLVMModules henv)
+     let w = llvmModuleArchReprWidth lm
+     leq_proof <- case decideLeq (knownNat @1) w of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is 0!"
+     env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
+     withKnownNat w $ withLeqProof leq_proof $
+       do nsh <- parseRustTypeString env w str
+          let env' = permEnvAddNamedShape env nsh
+          liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Add Heapster type-checking hint for some blocks in a function given by
 -- name. The blocks to receive the hint are those specified in the list, or all
