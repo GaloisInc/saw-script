@@ -4,7 +4,7 @@ test ptr_offset_rev/3a1fbbbh::use_f[0]: FAILED
 failures:
 
 ---- ptr_offset_rev/3a1fbbbh::use_f[0] counterexamples ----
-Failure for ./lib/crucible/lib.rs:36:41: 36:58 !test/symb_eval/comp/ptr_offset_rev.rs:64:5: 64:31: error: in ptr_offset_rev/3a1fbbbh::use_f[0]
+Failure for ./lib/crucible/lib.rs:37:41: 37:58 !test/symb_eval/comp/ptr_offset_rev.rs:64:5: 64:31: error: in ptr_offset_rev/3a1fbbbh::use_f[0]
 MIR assertion at test/symb_eval/comp/ptr_offset_rev.rs:64:5:
 	b2 < 10
 

@@ -6,7 +6,7 @@ test override_test_indep/3a1fbbbh::use_f3[0]: ok
 failures:
 
 ---- override_test_indep/3a1fbbbh::use_f2[0] counterexamples ----
-Failure for ./lib/crucible/lib.rs:36:41: 36:58 !test/symb_eval/comp/override_test_indep.rs:57:5: 57:30: error: in override_test_indep/3a1fbbbh::use_f2[0]
+Failure for ./lib/crucible/lib.rs:37:41: 37:58 !test/symb_eval/comp/override_test_indep.rs:57:5: 57:30: error: in override_test_indep/3a1fbbbh::use_f2[0]
 MIR assertion at test/symb_eval/comp/override_test_indep.rs:57:5:
 	d < 10
 
