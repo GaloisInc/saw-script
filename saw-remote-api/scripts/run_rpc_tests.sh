@@ -15,7 +15,7 @@ poetry install
 
 echo "Typechecking code with mypy..."
 # Don't run mypy on tests/ yet, as it doesn't play well with mypy. See #1125.
-run_test poetry run mypy saw/
+run_test poetry run mypy saw_client/
 
 export SAW_SERVER=$(which saw-remote-api)
 if [[ ! -x "$SAW_SERVER" ]]; then

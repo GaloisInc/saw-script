@@ -23,7 +23,7 @@ git submodule update --init
 cd saw-remote-api/python
 ```
 5. Install and setup some version of the `saw-remote-api` server and update any
-   relevant environment variables as needed (see `saw.connect()` documentation
+   relevant environment variables as needed (see `saw_client.connect()` documentation
    for the various ways a server can be connected to).
    E.g., here is how the docker image of the server might be used:
 ```
@@ -72,11 +72,11 @@ either as a local executable or running in docker image listening on a port.
 
 ## Connecting with a server in a script
 
-Connecting to a server in a Python script is accomplished via the `saw.connect`
+Connecting to a server in a Python script is accomplished via the `saw_client.connect`
 method. Its accompanying Python doc strings describe the various ways it can be
 used. Below is a brief summary:
 
-`saw.connect()`, when provided no arguments, will attempt the following in order:
+`saw_client.connect()`, when provided no arguments, will attempt the following in order:
 
 1. If the environment variable ``SAW_SERVER`` is set and refers to an
    executable, it is assumed to be a `saw-remote-api` executable and will be
@@ -91,7 +91,7 @@ Additional arguments and options are documented with the function.
 
 Notable, the `reset_server` keyword can be used to connect to a running server
 and reset it, ensuring states from previous scrips have been cleared. E.g.,
-`saw.connect(reset_server=True)`.
+`saw_client.connect(reset_server=True)`.
 
 
 ## Acquiring a SAW Server
@@ -116,7 +116,7 @@ find...)
 
 ### Server docker images
 
-Docker images for the saw server are currently uploaded to
+Docker images for the SAW server are currently uploaded to
 [DockerHub](https://hub.docker.com/r/galoisinc/saw-remote-api).
 
 These images are set up to run as HTTP `saw-remote-api` servers, e.g.:
@@ -174,7 +174,7 @@ If leveraging environment variables is undesirable, the scripts themselves can
 specify a command to launch the server, e.g.:
 
 ```
-saw.connect(COMMAND)
+saw_client.connect(COMMAND)
 ```
 
 where `COMMAND` is a command to launch a new SAW server in socket mode.
@@ -182,7 +182,7 @@ where `COMMAND` is a command to launch a new SAW server in socket mode.
 Or a server URL can be specified directly in the script, e.g.:
 
 ```
-saw.connect(url=URL)
+saw_client.connect(url=URL)
 ```
 
 where `URL` is a URL for a running SAW server in HTTP mode.
@@ -191,10 +191,10 @@ where `URL` is a URL for a running SAW server in HTTP mode.
 
 To ensure any previous server state is cleared when running a SAW Python script
 against a persistent server (e.g., one running in HTTP mode in a different process),
-the `reset_server` keyword can be passed to `saw.connect()`. E.g.,
+the `reset_server` keyword can be passed to `saw_client.connect()`. E.g.,
 
 ```
-saw.connect(url="http://localhost:8080/", reset_server=True)
+saw_client.connect(url="http://localhost:8080/", reset_server=True)
 ```
 
 will connect to a SAW server running at `http://localhost:8080/` and will
