@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "saw-client"
-version = "0.0.1"
+version = "0.8.0"
 description = "SAW client for the SAW 0.8 RPC server"
 authors = ["Andrew Kent <andrew@galois.com>", "Aaron Tomb <atomb@galois.com>"]
 
