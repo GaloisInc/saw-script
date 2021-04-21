@@ -40,6 +40,7 @@
 
 module Verifier.SAW.Simulator.What4
   ( w4Solve
+  , w4SolveBasic
   , SymFnCache
   , TypedExpr(..)
   , SValue
@@ -51,6 +52,9 @@ module Verifier.SAW.Simulator.What4
 
   , w4SimulatorEval
   , NeutralTermException(..)
+
+  , valueToSymExpr
+  , symExprToValue
   ) where
 
 
