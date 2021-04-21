@@ -14,7 +14,7 @@ include = [
 python = "^3.8"
 requests = "^2.25.1"
 BitVector = "^3.4.9"
-cryptol = "2.11.0"
+cryptol = { path = "../../deps/cryptol/cryptol-remote-api/python/", develop = true }
 argo-client = "0.0.4"
 
 [tool.poetry.dev-dependencies]
