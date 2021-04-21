@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from cryptol import cryptoltypes
-from saw.utils import deprecated
+from .utils import deprecated
 from dataclasses import dataclass
 import dataclasses
 import re

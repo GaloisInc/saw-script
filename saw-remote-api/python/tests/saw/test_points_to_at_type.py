@@ -1,8 +1,8 @@
 from pathlib import Path
 import unittest
-from saw import *
-from saw.exceptions import VerificationError
-from saw.llvm import Contract, LLVMType, PointerType, cryptol, void, i32, array_ty
+from saw_client import *
+from saw_client.exceptions import VerificationError
+from saw_client.llvm import Contract, LLVMType, PointerType, cryptol, void, i32, array_ty
 from typing import Union
 
 

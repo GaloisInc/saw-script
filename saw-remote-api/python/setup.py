@@ -10,9 +10,9 @@ def get_README():
     return content
 
 setup(
-    name="saw",
+    name="saw-client",
     python_requires=">=3.7",
-    version="0.0.1",
+    version="0.8.0",
     url="https://github.com/GaloisInc/saw-script",
     project_urls={
         "Source": "https://github.com/GaloisInc/saw/tree/main/saw-remote-api/python",
@@ -24,8 +24,8 @@ setup(
     long_description_content_type="text/markdown",
     author="Galois, Inc.",
     author_email="andrew@galois.com",
-    packages=["saw"],
-    package_data={"saw": ["py.typed"]},
+    packages=["saw_client"],
+    package_data={"saw_client": ["py.typed"]},
     zip_safe=False,
     install_requires=[
         "BitVector==3.4.9",
