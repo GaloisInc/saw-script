@@ -8,11 +8,4 @@ import Mir.Cryptol (cryptolOverrides)
 
 main :: IO ()
 main = Mir.mainWithExtraOverrides $
-    compositionalOverrides `orOverride` cryptolOverrides
-
-orOverride ::
-    Mir.BindExtraOverridesFn -> Mir.BindExtraOverridesFn -> Mir.BindExtraOverridesFn
-orOverride f g symOnline cs name cfg =
-    case f symOnline cs name cfg of
-        Just x -> Just x
-        Nothing -> g symOnline cs name cfg
+    compositionalOverrides `Mir.orOverride` cryptolOverrides
