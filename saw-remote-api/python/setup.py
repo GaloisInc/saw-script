@@ -12,7 +12,7 @@ def get_README():
 setup(
     name="saw-client",
     python_requires=">=3.7",
-    version="0.8.0",
+    version="0.8.0.99",
     url="https://github.com/GaloisInc/saw-script",
     project_urls={
         "Source": "https://github.com/GaloisInc/saw/tree/main/saw-remote-api/python",
