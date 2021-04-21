@@ -48,7 +48,7 @@ jobs:
           .github/ci.sh output tag $EVENT_TAG
           .github/ci.sh output schedule $EVENT_SCHEDULE
           .github/ci.sh output publish $({ $EVENT_TAG || $EVENT_SCHEDULE; } && echo true || echo false)
-          .github/ci.sh output release $RELEASE
+          .github/ci.sh output release $({ $RELEASE || [[ "refs/heads/release-$(.github/ci.sh ver)" == "${{ github.event.ref }}" ]]; } && echo true || echo false)
           .github/ci.sh output retention-days $($RELEASE && echo 90 || echo 5)
 
   build:
@@ -384,7 +384,7 @@ jobs:
           docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:nightly
           docker push ${{ matrix.image }}:nightly
 
-      - if: needs.config.outputs.event-tag == 'true'
+      - if: needs.config.outputs.release == 'true'
         name: ${{ matrix.image }}:${{ needs.config.outputs.version }}
         run: |
           docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:${{ needs.config.outputs.version }}
