@@ -280,7 +280,8 @@ verifyObligations cc mspec tactic assumes asserts =
        goal'  <- io $ boolToProp sc [] goal -- TODO, generalize over inputs
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
            proofgoal = ProofGoal n "vc" goalname goal'
-       res <- runProofScript tactic proofgoal
+       res <- runProofScript tactic proofgoal $ Text.unwords
+                 ["JVM verification condition:", Text.pack (show n), Text.pack goalname]
        case res of
          ValidProof stats _thm -> return stats -- TODO, do something with these theorems!
          InvalidProof stats vals _pst -> do

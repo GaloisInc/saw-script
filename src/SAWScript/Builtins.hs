@@ -358,7 +358,7 @@ assumeValid =
   execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is valid"
      pos <- SV.getPosition
-     let admitMsg = "assumeValid: " ++ goalName goal
+     let admitMsg = "assumeValid: " <> Text.pack (goalName goal)
      let stats = solverStats "ADMITTED" (propSize (goalProp goal))
      return (stats, SolveSuccess (Admitted admitMsg pos (goalProp goal)))
 
@@ -367,11 +367,11 @@ assumeUnsat =
   execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is unsat"
      pos <- SV.getPosition
-     let admitMsg = "assumeUnsat: " ++ goalName goal
+     let admitMsg = "assumeUnsat: " <> Text.pack (goalName goal)
      let stats = solverStats "ADMITTED" (propSize (goalProp goal))
      return (stats, SolveSuccess (Admitted admitMsg pos (goalProp goal)))
 
-admitProof :: String -> ProofScript ()
+admitProof :: Text -> ProofScript ()
 admitProof msg =
   execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: admitting goal " ++ goalName goal
@@ -524,7 +524,8 @@ goal_apply thm =
 goal_assume :: ProofScript Theorem
 goal_assume =
   do sc <- SV.scriptTopLevel getSharedContext
-     execTactic (tacticAssume sc)
+     pos <- SV.scriptTopLevel SV.getPosition
+     execTactic (tacticAssume sc pos)
 
 goal_intro :: Text -> ProofScript TypedTerm
 goal_intro s =
@@ -814,10 +815,11 @@ provePrim script t = do
   sc <- getSharedContext
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   let goal = ProofGoal 0 "prove" "prove" prop
-  res <- SV.runProofScript script goal
+  res <- SV.runProofScript script goal "prove_prim"
   case res of
     UnfinishedProof pst ->
       printOutLnTop Info $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)"
+    ValidProof _ thm -> SV.recordProof thm
     _ -> return ()
   return res
 
@@ -830,7 +832,7 @@ provePrintPrim script t = do
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   let goal = ProofGoal 0 "prove" "prove" prop
   opts <- rwPPOpts <$> getTopLevelRW
-  res <- SV.runProofScript script goal
+  res <- SV.runProofScript script goal "prove_print_prim"
   let failProof pst =
          fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                           ++ SV.showsProofResult opts res ""
@@ -850,7 +852,7 @@ satPrim script t =
      sc <- getSharedContext
      prop <- io $ predicateToProp sc Existential (ttTerm t)
      let goal = ProofGoal 0 "sat" "sat" prop
-     res <- SV.runProofScript script goal
+     res <- SV.runProofScript script goal "sat"
      case res of
        InvalidProof stats cex _ -> return (SV.Sat stats cex)
        ValidProof stats _thm -> return (SV.Unsat stats)
@@ -1019,7 +1021,6 @@ lambdas vars tt =
 
 -- | Apply the given Term to the given values, and evaluate to a
 -- final value.
--- TODO: Take (ExtCns, FiniteValue) instead of (Term, FiniteValue)
 cexEvalFn :: SharedContext -> [(ExtCns Term, FirstOrderValue)] -> Term
           -> IO Concrete.CValue
 cexEvalFn sc args tm = do
@@ -1289,7 +1290,7 @@ prove_core script input =
      t <- parseCore input
      p <- io (termToProp sc t)
      opts <- rwPPOpts <$> getTopLevelRW
-     res <- SV.runProofScript script (ProofGoal 0 "prove" "prove" p)
+     res <- SV.runProofScript script (ProofGoal 0 "prove" "prove" p) "prove_core"
      let failProof pst =
             fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                                   ++ SV.showsProofResult opts res ""
@@ -1304,13 +1305,14 @@ core_axiom input =
      pos <- SV.getPosition
      t <- parseCore input
      p <- io (termToProp sc t)
-     SV.returnProof (admitTheorem "core_axiom" pos p)
+     SV.returnProof (admitTheorem "core_axiom" p pos "core_axiom")
 
 core_thm :: String -> TopLevel Theorem
 core_thm input =
   do t <- parseCore input
      sc <- getSharedContext
-     thm <- io (proofByTerm sc t)
+     pos <- SV.getPosition
+     thm <- io (proofByTerm sc t pos "core_thm")
      SV.returnProof thm
 
 get_opt :: Int -> TopLevel String

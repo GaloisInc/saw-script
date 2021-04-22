@@ -220,7 +220,7 @@ showsProofResult opts r =
   case r of
     ValidProof _ _ -> showString "Valid"
     InvalidProof _ ts _ -> showString "Invalid: [" . showMulti "" ts
-    UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining" 
+    UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining"
   where
     opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
@@ -488,10 +488,12 @@ putTopLevelRW :: TopLevelRW -> TopLevel ()
 putTopLevelRW rw = TopLevel (put rw)
 
 returnProof :: IsValue v => v -> TopLevel v
-returnProof v = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
-  return v
+returnProof v = recordProof v >> return v
+
+recordProof :: IsValue v => v -> TopLevel ()
+recordProof v =
+  do rw <- getTopLevelRW
+     putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
 
 -- | Access the current state of Java Class translation
 getJVMTrans :: TopLevel  CJ.JVMContext
@@ -605,9 +607,10 @@ newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
 newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
  deriving (Functor, Applicative, Monad)
 
-runProofScript :: ProofScript a -> ProofGoal -> TopLevel ProofResult
-runProofScript (ProofScript m) gl =
-  do (r,pstate) <- runStateT (runExceptT m) (startProof gl)
+runProofScript :: ProofScript a -> ProofGoal -> Text -> TopLevel ProofResult
+runProofScript (ProofScript m) gl rsn =
+  do pos <- getPosition
+     (r,pstate) <- runStateT (runExceptT m) (startProof gl pos rsn)
      case r of
        Left (stats,cex) -> return (InvalidProof stats cex pstate)
        Right _ ->

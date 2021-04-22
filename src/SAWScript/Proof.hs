@@ -33,6 +33,8 @@ module SAWScript.Proof
   , thmProp
   , thmStats
   , thmEvidence
+  , thmLocation
+  , thmReason
 
   , admitTheorem
   , solverTheorem
@@ -243,9 +245,11 @@ data Theorem =
   { _thmProp :: Prop
   , _thmStats :: SolverStats
   , _thmEvidence :: Evidence
+  , _thmLocation :: Pos
+  , _thmReason   :: Text
   } -- INVARIANT: the provided evidence is valid for the included proposition
 
-  | LocalAssumption Prop
+  | LocalAssumption Prop Pos
       -- This constructor is used to construct "hypothetical" theorems that
       -- are intended to be used in local scopes when proving implications.
 
@@ -260,9 +264,9 @@ data Theorem =
 --   propositions and quickchecked propositions as valid.
 validateTheorem :: SharedContext -> Theorem -> IO ()
 
-validateTheorem _sc (LocalAssumption p) =
+validateTheorem _sc (LocalAssumption p loc) =
    fail $ unlines
-     [ "Illegal use of unbound local hypothesis"
+     [ "Illegal use of unbound local hypothesis generated at " ++ show loc
      , showTerm (unProp p)
      ]
 
@@ -295,7 +299,7 @@ data Evidence
     -- | This type of evidence is produced when the given proposition
     --   has been explicitly assumed without other evidence at the
     --   user's direction.
-  | Admitted String Pos Prop -- TODO, Text instead?
+  | Admitted Text Pos Prop
 
     -- | This type of evidence is produced when a given proposition is trivially
     --   true.
@@ -345,18 +349,28 @@ data Evidence
 
 -- | The the proposition proved by a given theorem.
 thmProp :: Theorem -> Prop
-thmProp (LocalAssumption p) = p
+thmProp (LocalAssumption p _loc) = p
 thmProp Theorem{ _thmProp = p } = p
 
 -- | Retrieve any solver stats from the proved theorem.
 thmStats :: Theorem -> SolverStats
-thmStats (LocalAssumption _) = mempty
+thmStats (LocalAssumption _ _) = mempty
 thmStats Theorem{ _thmStats = stats } = stats
 
 -- | Retrive the evidence associated with this theorem.
 thmEvidence :: Theorem -> Evidence
-thmEvidence (LocalAssumption p) = LocalAssumptionEvidence p
+thmEvidence (LocalAssumption p _) = LocalAssumptionEvidence p
 thmEvidence Theorem{ _thmEvidence = e } = e
+
+-- | The source location that generated this theorem
+thmLocation :: Theorem -> Pos
+thmLocation (LocalAssumption _p loc) = loc
+thmLocation Theorem{ _thmLocation = loc } = loc
+
+-- | Describes the reason this theorem was generated
+thmReason :: Theorem -> Text
+thmReason (LocalAssumption _ _) = "local assumption"
+thmReason Theorem{ _thmReason = r } = r
 
 splitEvidence :: [Evidence] -> IO Evidence
 splitEvidence [e1,e2] = pure (SplitEvidence e1 e2)
@@ -375,8 +389,8 @@ cutEvidence thm [e] = pure (CutEvidence thm e)
 cutEvidence _ _ = fail "cutEvidence: expected one evidence value"
 
 -- | Construct a theorem directly via a proof term.
-proofByTerm :: SharedContext -> Term -> IO Theorem
-proofByTerm sc prf =
+proofByTerm :: SharedContext -> Term -> Pos -> Text -> IO Theorem
+proofByTerm sc prf loc rsn =
   do ty <- scTypeOf sc prf
      p  <- termToProp sc ty
      return
@@ -384,40 +398,48 @@ proofByTerm sc prf =
        { _thmProp      = p
        , _thmStats     = mempty
        , _thmEvidence  = ProofTerm prf
+       , _thmLocation  = loc
+       , _thmReason    = rsn
        }
 
 -- | Construct a theorem directly from a proposition and evidence
 --   for that proposition.  The evidence will be validated to
 --   check that it supports the given proposition; if not, an
 --   error will be raised.
-constructTheorem :: SharedContext -> Prop -> Evidence -> IO Theorem
-constructTheorem sc p e =
+constructTheorem :: SharedContext -> Prop -> Evidence -> Pos -> Text -> IO Theorem
+constructTheorem sc p e loc rsn =
   do checkEvidence sc e p
      return
        Theorem
        { _thmProp  = p
        , _thmStats = mempty
        , _thmEvidence = e
+       , _thmLocation = loc
+       , _thmReason   = rsn
        }
 
 -- | Admit the given theorem without evidence.
 --   The provided message allows the user to
 --   explain why this proposition is being admitted.
-admitTheorem :: String -> Pos -> Prop -> Theorem
-admitTheorem msg pos p =
+admitTheorem :: Text -> Prop -> Pos -> Text -> Theorem
+admitTheorem msg p loc rsn =
   Theorem
-  { _thmProp      = p
-  , _thmStats     = solverStats "ADMITTED" (propSize p)
-  , _thmEvidence  = Admitted msg pos p
+  { _thmProp        = p
+  , _thmStats       = solverStats "ADMITTED" (propSize p)
+  , _thmEvidence    = Admitted msg loc p
+  , _thmLocation    = loc
+  , _thmReason      = rsn
   }
 
 -- | Construct a theorem that an external solver has proved.
-solverTheorem :: Prop -> SolverStats -> Theorem
-solverTheorem p stats =
+solverTheorem :: Prop -> SolverStats -> Pos -> Text -> Theorem
+solverTheorem p stats loc rsn =
   Theorem
   { _thmProp      = p
   , _thmStats     = stats
   , _thmEvidence  = SolverEvidence stats p
+  , _thmLocation  = loc
+  , _thmReason    = rsn
   }
 
 -- | A @ProofGoal@ contains a proposition to be proved, along with
@@ -468,7 +490,7 @@ predicateToProp sc quant = loop []
 data ProofState =
   ProofState
   { _psGoals :: [ProofGoal]
-  , _psConcl :: Prop
+  , _psConcl :: (Prop,Pos,Text)
   , _psStats :: SolverStats
   , _psTimeout :: Maybe Integer
   , _psEvidence :: [Evidence] -> IO Evidence
@@ -500,9 +522,10 @@ checkEvidence sc = check mempty
            ]
 
     checkTheorem :: Set Term -> Theorem -> IO ()
-    checkTheorem hyps (LocalAssumption p) =
+    checkTheorem hyps (LocalAssumption p loc) =
        unless (Set.member (unProp p) hyps) $ fail $ unlines
           [ "Attempt to reference a local hypothesis that is not in scope"
+          , "Generated at " ++ show loc
           , showTerm (unProp p)
           ]
     checkTheorem _hyps Theorem{} = return ()
@@ -536,7 +559,7 @@ checkEvidence sc = check mempty
         do ok <- scConvertible sc False ptm p'
            unless ok $ fail $ unlines
                [ "Admitted proof does not match the required proposition " ++ show pos
-               , msg
+               , Text.unpack msg
                , showTerm ptm
                , showTerm p'
                ]
@@ -639,15 +662,15 @@ setProofTimeout :: Integer -> ProofState -> ProofState
 setProofTimeout to ps = ps { _psTimeout = Just to }
 
 -- | Initialize a proof state with a single goal to prove.
-startProof :: ProofGoal -> ProofState
-startProof g = ProofState [g] (goalProp g) mempty Nothing passthroughEvidence
+startProof :: ProofGoal -> Pos -> Text -> ProofState
+startProof g pos rsn = ProofState [g] (goalProp g,pos,rsn) mempty Nothing passthroughEvidence
 
 -- | Attempt to complete a proof by checking that all subgoals have been discharged,
 --   and validate the computed evidence to ensure that it supports the original
 --   proposition.  If successful, return the completed @Theorem@ and a summary
 --   of solver resources used in the proof.
 finishProof :: SharedContext -> ProofState -> IO ProofResult
-finishProof sc ps@(ProofState gs concl stats _ checkEv) =
+finishProof sc ps@(ProofState gs (concl,loc,rsn) stats _ checkEv) =
   case gs of
     [] ->
       do e <- checkEv []
@@ -656,6 +679,8 @@ finishProof sc ps@(ProofState gs concl stats _ checkEv) =
                    { _thmProp = concl
                    , _thmStats = stats
                    , _thmEvidence = e
+                   , _thmLocation = loc
+                   , _thmReason = rsn
                    }
          pure (ValidProof stats thm)
     _ : _ ->
@@ -849,14 +874,14 @@ tacticIntro sc usernm = Tactic \goal ->
 --   hypothesis.  Return a @Theorem@ representing this local assumption.
 --   This hypothesis should only be used for proving subgoals arising
 --   from this call to @tacticAssume@ or evidence verification will later fail.
-tacticAssume :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m Theorem
-tacticAssume _sc = Tactic \goal ->
+tacticAssume :: (F.MonadFail m, MonadIO m) => SharedContext -> Pos -> Tactic m Theorem
+tacticAssume _sc loc = Tactic \goal ->
   case asPi (unProp (goalProp goal)) of
     Just (_nm, tp, body)
       | looseVars body == emptyBitSet ->
           do let goal' = goal{ goalProp = Prop body }
              let p     = Prop tp
-             let thm'  = LocalAssumption p
+             let thm'  = LocalAssumption p loc
              return (thm', mempty, [goal'], assumeEvidence p)
 
     _ -> fail "assume tactic failed: not a function, or a dependent function"

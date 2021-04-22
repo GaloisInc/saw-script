@@ -601,7 +601,8 @@ verifyObligations cc mspec tactic assumes asserts =
           goal'  <- io $ boolToProp sc [] goal
           let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
               proofgoal = ProofGoal n "vc" goalname goal'
-          res <- runProofScript tactic proofgoal
+          res <- runProofScript tactic proofgoal $ Text.unwords
+                    ["LLVM verification condition", Text.pack (show n), Text.pack goalname]
           case res of
             ValidProof stats _thm -> return stats -- TODO do something with these theorems
             UnfinishedProof pst ->
@@ -766,7 +767,7 @@ assumptionsContainContradiction cc tactic assumptions =
          goal  <- scImplies sc assume =<< toSC sym st (W4.falsePred sym)
          goal' <- boolToProp sc [] goal
          return $ ProofGoal 0 "vc" "vacuousness check" goal'
-     res <- runProofScript tactic pgl
+     res <- runProofScript tactic pgl $ "vacuousness check"
      case res of
        ValidProof _ _     -> return True
        InvalidProof _ _ _ -> return False
