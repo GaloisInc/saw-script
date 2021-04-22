@@ -105,6 +105,7 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
 import           Control.Lens
 import           Control.Monad (when)
 import           Data.Functor.Compose (Compose(..))
+import qualified Data.Text as Text
 import           Data.Type.Equality (TestEquality(..))
 import qualified Prettyprinter as PPL
 import qualified Text.LLVM.AST as L
@@ -254,7 +255,8 @@ loadLLVMModule file halloc =
        Left err -> return (Left err)
        Right llvm_mod ->
          do let ?optLoopMerge = False
-            Some mtrans <- CL.translateModule halloc llvm_mod
+            memVar <- CL.mkMemVar (Text.pack "saw:llvm_memory") halloc
+            Some mtrans <- CL.translateModule halloc memVar llvm_mod
             return (Right (Some (LLVMModule file llvm_mod mtrans)))
 
 instance TestEquality LLVMModule where
