@@ -2783,7 +2783,7 @@ primitives = Map.fromList
     , " [ p1, ..., pn ] trans_tp fold_fun unfold_fun defines an recursive named"
     , " Heapster permission named nm with arguments parsed from args_ctx and"
     , " type parsed from value_type that translates to the named type"
-    , " trans_tp. The resulting permission is equivalent to he permission"
+    , " trans_tp. The resulting permission is equivalent to the permission"
     , " p1 \\/ ... \\/ pn, where the pi can contain name."
     ]
 
@@ -2795,8 +2795,19 @@ primitives = Map.fromList
     , " [ p1, ..., pn ] defines an recursive named Heapster permission named"
     , " nm with arguments parsed from args_ctx and type parsed from value_type"
     , " that translates to the appropriate IRT type. The resulting permission"
-    , " is equivalent to he permission p1 \\/ ... \\/ pn, where the pi can"
+    , " is equivalent to the permission p1 \\/ ... \\/ pn, where the pi can"
     , " contain name."
+    ]
+
+  , prim "heapster_define_irt_recursive_shape"
+    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_irt_recursive_shape)
+    Experimental
+    [ "heapster_define_irt_recursive_shape env name w arg_ctx body_sh"
+    , " defines a recursive named Heapser shape named nm with arguments"
+    , " parsed from args_ctx and width w that translates to the appropriate"
+    , " IRT type. The resulting shape is equivalent to the shape body_sh,"
+    , " where body_sh can contain name."
     ]
 
   , prim "heapster_define_reachability_perm"
