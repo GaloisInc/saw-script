@@ -613,7 +613,7 @@ heapster_define_rust_type _bic _opts henv str =
        Right _ -> fail "LLVM arch width is 0!"
      env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
      withKnownNat w $ withLeqProof leq_proof $
-       do nsh <- parseRustTypeString env w str
+       do SomeNamedShape nsh <- parseRustTypeString env w str
           let env' = permEnvAddNamedShape env nsh
           liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
