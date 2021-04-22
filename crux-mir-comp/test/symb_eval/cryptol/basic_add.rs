@@ -1,16 +1,18 @@
 extern crate crucible;
 use crucible::*;
 
-const PATH: &str = "test/symb_eval/cryptol/basic.cry";
+cryptol! {
+    path "test/symb_eval/cryptol/basic.cry";
+
+    fn add_byte(x: u8, y: u8) -> u8 = "addByte";
+}
 
 #[crux_test]
 fn test() {
     let x = u8::symbolic("x");
     let y = u8::symbolic("y");
     let expected = x.wrapping_add(y);
-
-    let f: fn(u8, u8) -> u8 = cryptol::load(PATH, "addByte");
-    let actual = f(x, y);
+    let actual = add_byte(x, y);
 
     crucible_assert!(
         actual == expected,
