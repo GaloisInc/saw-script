@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
-from saw import *
-from saw.llvm import Contract, array, array_ty, void, i32
+from saw_client import *
+from saw_client.llvm import Contract, array, array_ty, void, i32
 
 
 class ArraySwapContract(Contract):

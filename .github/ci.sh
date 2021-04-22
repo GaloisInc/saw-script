@@ -105,20 +105,12 @@ install_yices() {
   rm -rf "yices$ext" "yices-$YICES_VERSION"
 }
 
-install_yasm() {
-  is_exe "$BIN" "yasm" && return
-  case "$RUNNER_OS" in
-    Linux) sudo apt-get update -q && sudo apt-get install -y yasm ;;
-    macOS) brew install yasm ;;
-    Windows) choco install yasm ;;
-  esac
-}
-
 build() {
   ghc_ver="$(ghc --numeric-version)"
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
   cabal v2-configure -j --enable-tests
+  git status --porcelain
   pkgs=(saw)
   if $IS_WIN; then
     echo "flags: -builtin-abc" >> cabal.project.local
@@ -126,7 +118,7 @@ build() {
   else
     pkgs+=(saw-remote-api)
   fi
-  tee -a cabal.project > /dev/null < cabal.project.ci
+  tee -a cabal.project.local > /dev/null < cabal.project.ci
   if ! retry cabal v2-build "$@" "${pkgs[@]}"; then
     if [[ "$RUNNER_OS" == "macOS" ]]; then
       echo "Working around a dylib issue on macos by removing the cache and trying again"
@@ -155,11 +147,10 @@ install_system_deps() {
   install_z3 &
   install_cvc4 &
   install_yices &
-  install_yasm &
   wait
   export PATH="$BIN:$PATH"
   echo "$BIN" >> "$GITHUB_PATH"
-  is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" yices && is_exe "$BIN" yasm
+  is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" yices
 }
 
 build_cryptol() {
@@ -193,12 +184,9 @@ sign() {
 }
 
 zip_dist() {
-  : "${VERSION?VERSION is required as an environment variable}"
-  name="${name:-"saw-$VERSION-$RUNNER_OS-x86_64"}"
-  mv dist "$name"
+  name="$1"
+  cp -r dist "$name"
   tar -czf "$name".tar.gz "$name"
-  sign "$name".tar.gz
-  [[ -f "$name".tar.gz.sig ]] && [[ -f "$name".tar.gz ]]
 }
 
 output() { echo "::set-output name=$1::$2"; }

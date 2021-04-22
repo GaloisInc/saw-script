@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
-from saw import *
-from saw.llvm import Contract, global_initializer, global_var
+from saw_client import *
+from saw_client.llvm import Contract, global_initializer, global_var
 
 
 class FContract(Contract):

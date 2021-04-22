@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
-from saw import *
-from saw.llvm import Contract, elem, field, i32, alias_ty
+from saw_client import *
+from saw_client.llvm import Contract, elem, field, i32, alias_ty
 
 # like test_nested_struct.py but using cute __getitem__ indexing on SetupVals
 
