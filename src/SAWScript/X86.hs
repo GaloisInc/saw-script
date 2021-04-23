@@ -29,7 +29,6 @@ module SAWScript.X86
 
 import Control.Lens (toListOf, folded, (^.))
 import Control.Exception(Exception(..),throwIO)
-import Control.Monad.ST (stToIO)
 import Control.Monad.IO.Class(liftIO)
 
 import qualified Data.BitVector.Sized as BV
@@ -201,7 +200,7 @@ proof fileReader archi file mbCry globs fun =
      sym <- newSAWCoreBackend sc
      let ?fileReader = fileReader
      cenv <- loadCry sym mbCry
-     mvar <- mkMemVar halloc
+     mvar <- mkMemVar "saw_x86:llvm_memory" halloc
      proofWithOptions Options
        { fileName = file
        , function = fun
@@ -521,7 +520,7 @@ makeCFG ::
   MemSegmentOff 64 ->
   IO TheCFG
 makeCFG opts elf name addr =
-  do (_,Some funInfo) <- stToIO $ analyzeFunction quiet addr UserRequest empty
+  do (_,Some funInfo) <- return $ analyzeFunction addr UserRequest empty
      -- writeFile "MACAW.cfg" (show (pretty funInfo))
      mkFunCFG x86 (allocator opts) cruxName posFn funInfo
   where
@@ -608,13 +607,6 @@ x86 = x86_64MacawSymbolicFns
 --   DF in $rFLAGS is clear one entry and return.
 -- "Red zone" 128 bytes past the end of the stack %rsp.
 --    * not modified by interrupts
-
-
---------------------------------------------------------------------------------
--- Logging
-quiet :: Applicative m => a -> m ()
-quiet _ = pure ()
-
 
 
 --------------------------------------------------------------------------------

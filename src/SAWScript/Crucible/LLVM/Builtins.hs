@@ -545,7 +545,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
                  }
                Nothing -> mem0
 
-     let globals1 = Crucible.llvmGlobals (ccLLVMContext cc) mem
+     let globals1 = Crucible.llvmGlobals mvar mem
 
      -- construct the initial state for verifications
      opts <- getOptions
@@ -1353,7 +1353,7 @@ setupLLVMCrucibleContext pathSat lm action =
                mem <- Crucible.populateConstGlobals sym (Crucible.globalInitMap mtrans)
                         =<< Crucible.initializeMemoryConstGlobals sym ctx llvm_mod
 
-               let globals  = Crucible.llvmGlobals ctx mem
+               let globals  = Crucible.llvmGlobals (Crucible.llvmMemVar ctx) mem
 
                let setupMem =
                      do -- register the callable override functions
