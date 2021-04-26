@@ -1,0 +1,15 @@
+-Q generated/CryptolToCoq   CryptolToCoq
+-Q handwritten/CryptolToCoq CryptolToCoq
+
+generated/CryptolToCoq/CryptolPrimitivesForSAWCore.v
+generated/CryptolToCoq/SAWCorePrelude.v
+
+handwritten/CryptolToCoq/CompM.v
+handwritten/CryptolToCoq/CompMExtra.v
+handwritten/CryptolToCoq/CoqVectorsExtra.v
+handwritten/CryptolToCoq/CryptolPrimitivesForSAWCoreExtra.v
+handwritten/CryptolToCoq/SAWCoreBitvectors.v
+handwritten/CryptolToCoq/SAWCorePrelude_proofs.v
+handwritten/CryptolToCoq/SAWCorePreludeExtra.v
+handwritten/CryptolToCoq/SAWCoreScaffolding.v
+handwritten/CryptolToCoq/SAWCoreVectorsAsCoqVectors.v
