@@ -18,7 +18,7 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Functor
 
-mkCryptolSimpset :: SharedContext -> IO Simpset
+mkCryptolSimpset :: SharedContext -> IO (Simpset a)
 mkCryptolSimpset sc =
   do m <- scFindModule sc cryptolModuleName
      scSimpset sc (cryptolDefs m) [] []
