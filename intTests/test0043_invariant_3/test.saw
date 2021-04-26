@@ -1,0 +1,28 @@
+m <- llvm_load_module "test.bc";
+
+let ptr_to_fresh n ty = do {
+  p <- llvm_alloc ty;
+  x <- llvm_fresh_var n ty;
+  llvm_points_to p (llvm_term x);
+  return (p, x);
+};
+
+let count_n_spec = do {
+  n <- llvm_fresh_var "n" (llvm_int 64);
+  llvm_execute_func [llvm_term n];
+  llvm_return (llvm_term n);
+};
+
+let inv_spec = do {
+  (pn, n) <- ptr_to_fresh "n" (llvm_int 64);
+  (pc, c) <- ptr_to_fresh "c" (llvm_int 64);
+  (pi, i) <- ptr_to_fresh "i" (llvm_int 64);
+  llvm_precond {{ 0 <= i /\ i <= n }};
+  llvm_execute_func [pn, pc, pi];
+  llvm_return (llvm_term {{ c + (n - i) }});
+};
+
+inv <- llvm_unsafe_assume_spec m "__breakpoint__inv#count_n" inv_spec;
+llvm_verify m "__breakpoint__inv#count_n" [inv] false inv_spec abc;
+llvm_verify m "count_n" [inv] false count_n_spec abc;
+

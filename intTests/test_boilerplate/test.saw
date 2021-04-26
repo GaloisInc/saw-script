@@ -1,0 +1,12 @@
+enable_experimental;
+
+MODULE <- llvm_load_module "test.bc";
+let profile_setup = do {
+  llvm_points_to (llvm_global "GLOBAL") (llvm_global_initializer "GLOBAL");
+  llvm_execute_func [];
+};
+profiles <- llvm_array_size_profile MODULE "entrypoint" profile_setup;
+print profiles;
+llvm_boilerplate_info MODULE profiles;
+llvm_boilerplate "test_boilerplate.saw" MODULE profiles;
+include "test_boilerplate.saw";

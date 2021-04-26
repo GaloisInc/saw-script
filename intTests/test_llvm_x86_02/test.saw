@@ -1,0 +1,14 @@
+enable_experimental;
+
+m <- llvm_load_module "test.bc";
+
+let increment_setup = do {
+  ptr <- llvm_alloc (llvm_int 64);
+  val <- llvm_fresh_var "val" (llvm_int 64);
+  llvm_points_to ptr (llvm_term val);
+  llvm_execute_func [ptr];
+  valprime <- llvm_fresh_var "val'" (llvm_int 64);
+  llvm_points_to ptr (llvm_term valprime);
+  llvm_postcond {{ valprime == val }};
+};
+fails (llvm_verify_x86 m "./test" "increment" [] false increment_setup w4);

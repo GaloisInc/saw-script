@@ -1,0 +1,13 @@
+enable_experimental;
+c <- java_load_class "Test0023";
+fails (
+  jvm_verify c "id" [] false
+    do {
+      this <- jvm_alloc_object "Test0023";
+      x <- jvm_fresh_var "x" java_int;
+      jvm_precond {{ x > 5 }};
+      jvm_execute_func [this, jvm_term x];
+      jvm_return (jvm_term {{ 6 : [32] }});
+    }
+    abc
+  );

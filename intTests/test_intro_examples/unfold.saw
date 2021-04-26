@@ -1,0 +1,11 @@
+let {{ f x y = (x : [8]) + y }};
+let {{ g x y = 2 * (f x y) }};
+let {{ h x y = (f x y) + (f x y) }};
+let {{ prop x y = g x y == h x y }};
+print "Original f:";
+print_term {{ f }};
+print "Unfolded f:";
+let t = unfold_term ["f"] {{ f }};
+print_term t;
+print "Simplified f:";
+print_term (rewrite (cryptol_ss ()) t);

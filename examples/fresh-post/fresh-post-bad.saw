@@ -1,0 +1,15 @@
+let whoknows_spec : CrucibleSetup () = do {
+  llvm_execute_func [];
+  y <- llvm_fresh_var "y" (llvm_int 32);
+  llvm_postcond {{ y < 0x0000FFFF }};
+  llvm_return (llvm_term y);
+};
+
+let bad_spec : CrucibleSetup () = do {
+  llvm_execute_func [];
+  llvm_return (llvm_term {{0:[32]}});
+};
+
+m <- llvm_load_module "source.bc";
+whoknows <- llvm_unsafe_assume_spec m "whoknows" whoknows_spec;
+fails (llvm_verify m "bad" [whoknows] false bad_spec abc);

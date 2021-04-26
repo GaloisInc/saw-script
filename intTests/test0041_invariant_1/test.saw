@@ -1,0 +1,24 @@
+m <- llvm_load_module "test.bc";
+
+let ptr_to_fresh n ty = do {
+  p <- llvm_alloc ty;
+  x <- llvm_fresh_var n ty;
+  llvm_points_to p (llvm_term x);
+  return (p, x);
+};
+
+let add2_spec = do {
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_execute_func [llvm_term x];
+  llvm_return (llvm_term {{ x + 2 }});
+};
+
+let inv_spec = do {
+  (px, x) <- ptr_to_fresh "x" (llvm_int 64);
+  llvm_execute_func [px];
+  llvm_return (llvm_term {{ x + 1 }});
+};
+
+inv <- llvm_verify m "__breakpoint__inv#add2" [] false inv_spec abc;
+llvm_verify m "add2" [inv] false add2_spec abc;
+

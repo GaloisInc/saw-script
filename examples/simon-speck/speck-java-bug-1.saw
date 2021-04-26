@@ -1,0 +1,26 @@
+/*
+ * Copyright (c) 2013-2016 Galois, Inc.
+ * Distributed under the terms of the BSD3 license (see LICENSE file)
+ */
+
+enable_deprecated;
+
+print "Importing Speck Cryptol";
+import "speck.cry";
+
+print "Extracting Speck 64/128 Java encrypt & decrypt terms";
+jse <- java_load_class "SpeckEngine";
+jkey_64_128 <- fresh_symbolic "key" {| [16][8] |};
+jio_64_128 <- fresh_symbolic "io" {| [8][8] |};
+let jinputs_64_128 = [ ("blockSizeBits", {{ 64 : [32] }}) , ("key", jkey_64_128), ("io", jio_64_128) ];
+let joutputs_64_128 = [ "io" ];
+jencrypt_64_128 <- java_symexec jse "encrypt" jinputs_64_128 joutputs_64_128 true;
+print "Proving Speck 64/128 Java encrypt is equivalent to Cryptol specification";
+jencrypt_64_128_thm <- abstract_symbolic {{ 
+  (\(x: [8][8]) (y: ([32],[32])) -> (join x == (y.0 # y.1)))
+    jencrypt_64_128
+    (Speck64_128 (split (join jkey_64_128) : [4][32]) (join (take`{4} jio_64_128), join (drop`{4} jio_64_128)))
+}} ;
+prove_print abc jencrypt_64_128_thm;
+
+

@@ -1,0 +1,110 @@
+print "Bitwise operations &&";
+prove_print w4 {{ (0x0F && 131) == 3 }};
+print ".";
+prove_print w4 {{ (0x0F || 131) == 143 }};
+print ".";
+prove_print w4 {{ (0x0F ^ 0xFF) == 240 }};
+print "this is a bug";
+prove_print w4 {{ ~0x0F == 240 }};
+
+
+print "Arithmetic +";
+prove_print w4 {{ (12:[8]) + 32 == 44 }};
+print ".";
+prove_print w4 {{ (252:[8]) + 32 == 28 }};
+
+print "Arithmetic -";
+prove_print w4 {{ (12:[8]) - 3 == 9 }};
+print ".";
+prove_print w4 {{ (12:[8]) - 32 == 236 }};
+
+print "Arithmetic *";
+prove_print w4 {{ (12:[8]) * 3 == 36 }};
+print ".";
+prove_print w4 {{ (12:[8]) * 200 == 96 }};
+
+print "Arithmetic /";
+prove_print w4 {{ (12:[4]) / 3 == 4 }};
+print ".";
+prove_print w4 {{ (12:[4]) / -3 == 0 }};
+
+print "Arithmetic %";
+prove_print w4 {{ (19:[8]) % 3 == 1 }};
+print ".";
+prove_print w4 {{ (-19:[8]) % 3 == 0 }};
+
+print "Arithmetic lg2";
+prove_print w4 {{ lg2 (8:[8]) == 3 }};
+print ".";
+prove_print w4 {{ lg2 (-8:[8]) == 8 }};
+
+print "Sequences";
+
+prove_print w4 {{ (4:[4]) # (4:[4]) == (68:[8]) }};
+print ".";
+prove_print w4 {{ \(x:[2]) (y:[3]) -> take (x # y) == x }};
+print ".";
+prove_print w4 {{ \(x:[2]) (y:[3]) -> drop (x # y) == y }};
+print ".";
+prove_print w4 {{ \(x:[4]) (y:[1]) -> tail (y # x) == x }};
+print ".";
+prove_print w4 {{ join [2:[2],3:[2]] == 11 }};
+print ".";
+prove_print w4 {{ split 0xFFFF == [15, 15, 15, 15] }};
+print ".";
+prove_print w4 {{ \(x:[7]) -> reverse (reverse x) == x }};
+
+print "Sequences @";
+
+prove_print w4 {{ [1,2,3:[8]]@ 0 == 1 }};
+print ".";
+prove_print w4 {{ [1,2,3:[8]]@ 1 == 2 }};
+print ".";
+prove_print w4 {{ [1,2,3:[8]]@ (2:[2]) == 3 }};
+print ".";
+prove_print w4 {{ [1,2,3:[8]]@ (2:[8]) == 3 }};
+print ".";
+fails (prove_print w4 {{ [1,2,3:[8]]@ 5 == 3 }});
+
+print "Sequences !";
+
+prove_print w4 {{ [1,2,3:[8]]! 0 == 3 }};
+print ".";
+prove_print w4 {{ [1,2,3:[8]]! 1 == 2 }};
+print ".";
+prove_print w4 {{ [1,2,3:[8]]! (2:[2]) == 1 }};
+print ".";
+prove_print w4 {{ [1,2,3:[8]]! (2:[8]) == 1 }};
+print ".";
+fails (prove_print w4 {{ [1,2,3:[8]]! 5 == 1 }});
+
+print "Shifting, rotating";
+
+prove_print w4 {{ (16:[8]) >> 3 == 2 }};
+print ".";
+prove_print w4 {{ (15:[8]) >> 3 == 1 }};
+print ".";
+prove_print w4 {{ 0xF0 >> 4 == 15 }};
+print ".";
+prove_print w4 {{ 0xF0 >> 8 == 0 }};
+
+prove_print w4 {{ (15:[8]) << 3 == 120 }};
+print ".";
+prove_print w4 {{ (15:[8]) << 7 == 128 }};
+print ".";
+prove_print w4 {{ (1:[8]) << 8 == 0 }};
+print ".";
+prove_print w4 {{ (128:[8]) <<< 2 == 2 }};
+print ".";
+prove_print w4 {{ (2:[8]) >>> 2 == 128 }};
+print ".";
+prove_print w4 {{ (4:[8]) >>> 3 == 128 }};
+
+
+print "Misc";
+prove_print w4 {{ min (4:[8]) 5 == 4 }};
+print ".";
+prove_print w4 {{ max (4:[8]) 5 == 5 }};
+
+
+print "Done";

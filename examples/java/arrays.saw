@@ -1,0 +1,81 @@
+enable_experimental;
+
+c <- java_load_class "ArrayTest";
+
+copy_ms <-
+jvm_verify c "copy" [] false
+  do {
+    this <- jvm_alloc_object "ArrayTest";
+    a_ref <- jvm_alloc_array 10 java_int;
+    b_ref <- jvm_alloc_array 10 java_int;
+    a <- jvm_fresh_var "a" (java_array 10 java_int);
+    jvm_array_is a_ref a;
+    jvm_execute_func [this, a_ref, b_ref];
+    jvm_array_is b_ref a;
+  }
+  abc;
+
+unit_ms <-
+jvm_verify c "unit" [] false
+  do {
+    this <- jvm_alloc_object "ArrayTest";
+    a_ref <- jvm_alloc_array 10 java_int;
+    jvm_execute_func [this, a_ref];
+    jvm_array_is a_ref {{ [1, 0, 0, 0, 0, 0, 0, 0, 0, 0] : [10][32] }};
+  }
+  abc;
+
+clear_ms <-
+jvm_verify c "clear" [] false
+  do {
+    this <- jvm_alloc_object "ArrayTest";
+    a_ref <- jvm_alloc_array 10 java_int;
+    jvm_execute_func [this, a_ref];
+    jvm_array_is a_ref {{ zero : [10][32] }};
+  }
+  abc;
+
+sum_ms <-
+jvm_verify c "sum" [] false
+  do {
+    this <- jvm_alloc_object "ArrayTest";
+    a_ref <- jvm_alloc_array 10 java_int;
+    a <- jvm_fresh_var "a" (java_array 10 java_int);
+    jvm_array_is a_ref a;
+    jvm_execute_func [this, a_ref];
+    jvm_return (jvm_term {{ sum a }});
+  }
+  abc;
+
+comp_ms <-
+jvm_verify c "comp" [unit_ms] false
+  do {
+    this <- jvm_alloc_object "ArrayTest";
+    a_ref <- jvm_alloc_array 10 java_int;
+    jvm_execute_func [this, a_ref];
+    jvm_array_is a_ref {{ [1, 0, 0, 0, 0, 0, 0, 0, 0, 0] : [10][32] }};
+  }
+  abc;
+
+/*
+// FIXME: jvm_extract does not yet support array types for input/output.
+
+enable_deprecated;
+
+let sum_setup' : JavaSetup () = do { java_var "a" (java_array 10 java_int); return (); };
+
+let id_setup : JavaSetup () = do { java_var "a" (java_array 10 java_int); return (); };
+
+let main : TopLevel () = do {
+    print "Extracting model of sum, which has type:";
+    sum_tm <- java_extract c "sum" sum_setup';
+    id_tm <- java_extract c "arr_id" id_setup;
+    check_term sum_tm;
+    print "Running sum on ten 1 inputs:";
+    print {{ sum_tm [1, 1, 1, 1, 1, 1, 1, 1, 1, 1] }};
+    check_term id_tm;
+    print "Running arr_id on ten increasing inputs:";
+    print {{ id_tm [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }};
+    print "Done.";
+};
+*/

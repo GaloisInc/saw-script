@@ -1,0 +1,19 @@
+let alloc_init ty v = do {
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
+    return p;
+};
+
+let f_spec = do {
+    a <- llvm_fresh_var "a" (llvm_int 32);
+    b <- llvm_fresh_var "b" (llvm_int 32);
+    x <- llvm_fresh_var "x" (llvm_int 32);
+    z <- llvm_fresh_var "z" (llvm_int 32);
+    let s = (llvm_term {{ (x, (a, b), z) }});
+    p <- alloc_init (llvm_alias "struct.t") s;
+    llvm_execute_func [p];
+    llvm_return (llvm_term {{ b }});
+};
+
+m <- llvm_load_module "nested.bc";
+llvm_verify m "f" [] false f_spec abc;

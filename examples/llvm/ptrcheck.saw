@@ -1,0 +1,19 @@
+m <- llvm_load_module "ptrcheck.bc";
+
+let alloc_init ty v = do {
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
+    return (x, p);
+};
+
+llvm_verify m "f" [] false do {
+    (s, sp) <- ptr_to_fresh "s" (llvm_alias "struct.s");
+    llvm_execute_func [sp];
+    llvm_return (llvm_term {{ 0 : [32] }});
+} abc;

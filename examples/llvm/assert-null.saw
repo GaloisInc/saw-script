@@ -1,0 +1,14 @@
+let f_spec1 = do {
+    p <- llvm_alloc (llvm_int 32);
+    llvm_execute_func [p];
+    llvm_return (llvm_term {{ 0 : [32] }});
+};
+
+let f_spec2 = do {
+    llvm_execute_func [llvm_null];
+    llvm_return (llvm_term {{ 1 : [32] }});
+};
+
+m <- llvm_load_module "assert-null.bc";
+llvm_verify m "f" [] false f_spec1 abc;
+llvm_verify m "f" [] false f_spec2 abc;

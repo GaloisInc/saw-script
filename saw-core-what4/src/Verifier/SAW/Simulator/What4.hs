@@ -52,6 +52,9 @@ module Verifier.SAW.Simulator.What4
 
   , w4SimulatorEval
   , NeutralTermException(..)
+
+  , valueToSymExpr
+  , symExprToValue
   ) where
 
 
@@ -867,11 +870,11 @@ w4Solve :: forall sym.
   sym ->
   SharedContext ->
   SATQuery ->
-  IO ([String], [FirstOrderType], [Labeler sym], SBool sym)
+  IO ([ExtCns Term], [FirstOrderType], [Labeler sym], SBool sym)
 w4Solve sym sc satq =
   do t <- satQueryAsTerm sc satq
      let varList  = Map.toList (satVariables satq)
-     let argNames = map (Text.unpack . toShortName . ecName . fst) varList
+     let argNames = map fst varList
      let argTys   = map snd varList
      vars <- evalStateT (traverse (traverse (newVarFOT sym)) varList) 0
      let lbls     = map (fst . snd) vars
@@ -925,7 +928,7 @@ vAsFirstOrderType v =
     _ -> Nothing
 
 valueAsBaseType :: IsSymExprBuilder sym => TValue (What4 sym) -> Maybe (Some W.BaseTypeRepr)
-valueAsBaseType v = fmap fotToBaseType $ vAsFirstOrderType v
+valueAsBaseType v = fotToBaseType =<< vAsFirstOrderType v
 
 ------------------------------------------------------------------------------
 
@@ -974,6 +977,7 @@ myfun = fmap fst A.&&& fmap snd
 
 data Labeler sym
   = BaseLabel (TypedExpr sym)
+  | ZeroWidthBVLabel
   | IntModLabel Natural (SymInteger sym)
   | VecLabel (Vector (Labeler sym))
   | TupleLabel (Vector (Labeler sym))
@@ -987,6 +991,9 @@ newVarFOT sym (FOTTuple ts) = do
   (labels,vals) <- V.unzip <$> traverse (newVarFOT sym) (V.fromList ts)
   args <- traverse (return . ready) (V.toList vals)
   return (TupleLabel labels, vTuple args)
+
+newVarFOT _sym (FOTVec 0 FOTBit)
+  = return (ZeroWidthBVLabel, VWord ZBV)
 
 newVarFOT sym (FOTVec n tp)
   | tp /= FOTBit
@@ -1006,17 +1013,18 @@ newVarFOT sym (FOTIntMod n)
        return (IntModLabel n si, VIntMod n si)
 
 newVarFOT sym fot
-  | Some r <- fotToBaseType fot
+  | Just (Some r) <- fotToBaseType fot
   = do nm <- nextId
        te <- lift $ freshVar sym r nm
        sv <- lift $ typedToSValue te
        return (BaseLabel te, sv)
-
+  | otherwise
+  = fail ("Cannot create What4 variable of type: " ++ show fot)
 
 
 typedToSValue :: (IsExpr (SymExpr sym)) => TypedExpr sym -> IO (SValue sym)
 typedToSValue (TypedExpr ty expr) =
-  maybe (fail "Cannot handle") return $ symExprToValue ty expr
+  maybe (fail ("Cannot handle " ++ show ty)) return $ symExprToValue ty expr
 
 getLabelValues ::
   forall sym t.
@@ -1033,6 +1041,7 @@ getLabelValues f =
       FOVRec <$> traverse (getLabelValues f) labels
     IntModLabel n x ->
       FOVIntMod n <$> groundEval f x
+    ZeroWidthBVLabel -> pure $ FOVWord 0 0
     BaseLabel (TypedExpr ty bv) ->
       do gv <- groundEval f bv
          case (groundToFOV ty gv) of

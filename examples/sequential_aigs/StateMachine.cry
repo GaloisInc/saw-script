@@ -1,0 +1,159 @@
+module StateMachine where
+
+// A state machine is function of type '(i, s) -> (o, s)',
+// with input type 'i', state type 's', and output type 'o'.
+type SM i o s = (i, s) -> (o, s)
+
+// To run a state machine for 'n' steps, a sequence of 'n'
+// input values must be provided; the initial state is always
+// seeded with 'zero : s'.
+run : {n, i, s, o} (Zero s) => SM i o s -> [n]i -> [n](o,s)
+run sm is = oss
+  where
+  states = [zero] # [ os.1 | os <- oss ]
+  oss = [ sm (i, s) | i <- is | s <- states ]
+
+eval : {n, i, s, o} (Zero s) => SM i o s -> [n]i -> [n](o)
+eval sm is = [ os.0 | os <- run sm is ]
+
+exec : {n, i, s, o} (Zero s) => SM i o s -> [n]i -> [n](s)
+exec sm is = [ os.1 | os <- run sm is ]
+
+// Two state machines are equivalent if their output streams agree
+// on all input streams. This function checks equivalence at specific
+// finite input sequences.
+equiv : {n, i, s1, s2, o} (Cmp o, fin n, Zero s1, Zero s2)
+     => SM i o s1 -> SM i o s2 -> [n]i -> Bool
+equiv sm1 sm2 is = all [ o1 == o2 | o1 <- eval sm1 is | o2 <- eval sm2 is ]
+  where
+  all : {m} (fin m) => [m]Bool -> Bool
+  all xs = its ! 0
+    where
+    its = [True] # [ x && it | x <- xs | it <- its ]
+
+// Because the initial state is always seeded with 'zero : s', it's
+// common to have boilerplate code which sets up the "real" initial state.
+// This combinator takes the place of that boilerplate.
+init_with : {i, o, s} s -> SM i o s -> SM i o (Bool, s)
+init_with s_initial sm (i, (started, s)) = (o, (True, s''))
+  where
+  s' = if started then s else s_initial
+  (o, s'') = sm (i, s')
+
+// A more general initializer which unifies 'init_with' above and
+// 'mk_loop' below.
+//
+// The function 'mk_s_initial' computes the initial state from the
+// first type-'a' input to the state machine, where the input type 'i'
+// has been extended with initializer input type 'a' to '(a, i)'.
+// Note that all type-'a' inputs after the first will be ignored, so
+// this could cause unnecessary work for the prover (e.g. ABC) if it's
+// unable to realize that these inputs are irrelevant.
+init : {a, i, o, s}
+  (a -> s) -> SM i o s -> SM (a, i) o (Bool, s)
+init mk_s_initial sm ((a, i), (started, s)) = (o, (True, s''))
+  where
+  s' = if started then s else mk_s_initial a
+  (o, s'') = sm (i, s')
+
+////////////////////////////////////////////////////////////////
+// Miters.
+//
+// The HWMCC (Hardware Model Checking Competition) provers consider
+// AIG outputs to represent "safety properties" which are "violated"
+// when the output bit is 1. If the circuit has multiple output bits,
+// then each one is considered a separate safety property. Some
+// provers, e.g. tip, will attempt to prove each property separately.
+
+// Miter two statemachines for lock-step equivalence. See also
+// 'miter_loops' below for an eventual-equivalence miter for loops.
+miter : {i, o, s1, s2} (Cmp o) =>
+  SM i o s1 -> SM i o s2 -> SM i Bool (s1, s2)
+miter sm1 sm2 (i, (s1, s2)) = (o, (s1', s2'))
+  where
+  (o1, s1') = sm1 (i, s1)
+  (o2, s2') = sm2 (i, s2)
+  o = o1 != o2
+
+// For checking equivalence via miters using sequential equivalence
+// checking: the underlying state machines are equal when their miter
+// is equal to the const_false state machine.
+const_false : {i} SM i Bool [1]
+const_false (_, _) = (False, zero)
+
+// For comparison to 'const_false' in a miter, to ensure that a given
+// command works on miters. Some ABC commands, e.g. 'dsec', compare
+// the current circuit to itself when given only one argument, leading
+// to false positives when mistakenly using 'dsec' to verify miters.
+const_true : {i} SM i Bool [1]
+const_true (_, _) = (True, zero)
+
+// Pass (the SAIG for) these miters to a verifier to see if it works
+// on miters.  Create the SAIG with 'write_saig'.
+//
+// The verification should fail.
+sat_miter : SM [1] Bool ([1], [1])
+sat_miter = miter const_true const_false
+// The verification should succeed.
+unsat_miter : SM [1] Bool ([1], [1])
+unsat_miter = miter const_true const_true
+
+////////////////////////////////////////////////////////////////
+// Loops.
+//
+// We can model loops with SAIGs that ignore their input and act like
+// step functions, producing dummy output until they are done looping,
+// at which point they produce a constant stream of their result. We
+// can then compare loops for equivalence by checking they eventually
+// stabilize to the same constant output stream.
+
+// A loop has no input, only a state. The output includes a bool
+// indicating whether the loop has terminated or not.
+type Body o s = s -> ((Bool, o), s)
+
+// In order to prove that two loops are equivalent for all initial
+// states using sequential equivalence checking, we add an input
+// stream and compute the initial state from the first stream element.
+mk_loop : {i,o,s} (i -> s) -> Body o s -> SM i (Bool, o) (Bool, s)
+mk_loop initializer body (i, (started, s)) = (o, (True, s''))
+  where
+  s' = if started then s else initializer i
+  (o, s'') = body s'
+
+// Run a loop for 'n' steps, seeded with input 'i'.
+run_loop : {n, i, o, s} (fin n, n >= 1, Zero i, Zero s) =>
+  SM i o s -> i -> [n](o, s)
+run_loop loop i = run loop ([i] # zero)
+
+// Sequential equivalence checking (SEC) is lock-step equivalence, so
+// to compare two loop using SEC we need to ensure that both loops
+// produce their output in the same step. We can achieve this via a
+// biased product of streams, which doesn't produce any output until
+// both internal streams have, at which point it duplicates the stream
+// it's biased towards.
+//
+// However, this sounds like a computability theoretic construction --
+// i.e. it shows something is possible, not that it's feasible in
+// practice -- and I'm not optimistic that ABC will magically be able
+// to check the equivalence of such biased joins quickly.
+sync_loops : {i, o, s1, s2} (Zero o) =>
+  [1] -> SM i (Bool, o) s1 -> SM i (Bool, o) s2 -> SM i (Bool, o) (s1, s2)
+sync_loops bias l1 l2 (i, (s1, s2)) = ((done, o'), (s1', s2'))
+  where
+  ((done1, o1), s1') = l1 (i, s1)
+  ((done2, o2), s2') = l2 (i, s2)
+  o = [o1, o2] @ bias
+  done = done1 && done2
+  o' = if done then o else zero
+
+// Alternatively, we can build a synced miter: run both loops until
+// they produce output, and then compare the output for equality.  If
+// two loops are equivalent their miter will be 'const False'.
+miter_loops : {i, o, s1, s2} (Cmp o) =>
+  SM i (Bool, o) s1 -> SM i (Bool, o) s2 -> SM i Bool (s1, s2)
+miter_loops l1 l2 (i, (s1, s2)) = (o', (s1', s2'))
+  where
+  ((done1, o1), s1') = l1 (i, s1)
+  ((done2, o2), s2') = l2 (i, s2)
+  done = done1 && done2
+  o' = if done then o1 != o2 else False

@@ -1,0 +1,24 @@
+*\#*
+*~
+.DS_Store
+.cabal-sandbox
+cabal.sandbox.config
+.ghc.environment.x86_64-darwin-*
+s2nTests
+
+# vim swap files
+.*.swp
+.*.swo
+
+**/*.a
+**/*.o
+
+.dockerignore
+Dockerfile*
+*.dockerfile
+docker-compose.yml
+
+**/.git
+**/.stack-work
+**/dist
+**/dist-newstyle

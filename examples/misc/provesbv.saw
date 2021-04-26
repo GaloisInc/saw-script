@@ -1,0 +1,3 @@
+t <- read_sbv "add_comm.sbv" [];
+r <- prove abc t;
+print r;

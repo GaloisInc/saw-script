@@ -1,0 +1,34 @@
+version: '3'
+services:
+  saw-script:
+    build:
+      context: ..
+      dockerfile: ${PWD:-.}/docker/saw.dockerfile
+    entrypoint: ["cp", "/usr/local/bin/saw", "/saw-bin"]
+    user: root
+    volumes:
+      - ${PWD:-}/bin:/saw-bin:rw
+
+  s2n:
+    build:
+      context: .
+      dockerfile: ${PWD:-.}/docker/s2n.dockerfile
+    image: s2n
+    volumes:
+      - ${PWD:-.}/bin:/saw-bin:rw
+
+  awslc:
+    build:
+      context: .
+      dockerfile: ${PWD:-.}/docker/awslc.dockerfile
+    image: awslc
+    volumes:
+      - ${PWD:-.}/bin:/saw-bin:rw
+
+  blst:
+    build:
+      context: .
+      dockerfile: ${PWD:-.}/docker/blst.dockerfile
+    image: blst
+    volumes:
+      - ${PWD:-.}/bin:/saw-bin:rw

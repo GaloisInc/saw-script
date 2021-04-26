@@ -1,0 +1,12 @@
+enable_experimental;
+
+c <- java_load_class "ClassType";
+
+jvm_verify c "id" [] false
+  do {
+    this <- jvm_alloc_object "ClassType";
+    x_ref <- jvm_alloc_object "java.lang.Object";
+    jvm_execute_func [this, x_ref];
+    jvm_return (jvm_term {{ 0 : [32] }});
+  }
+  abc;

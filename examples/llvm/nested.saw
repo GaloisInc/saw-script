@@ -1,0 +1,18 @@
+let f_spec = do {
+    tp <- llvm_alloc (llvm_alias "struct.t");
+    b <- llvm_fresh_var "b" (llvm_int 32);
+
+    // The following will work if nested.bc is compiled with debug info
+    // with Clang 3.7 or greater
+    llvm_points_to (llvm_field (llvm_field tp "n") "b") (llvm_term b);
+
+    // The following can be a workaround if debug info is not available
+    //llvm_points_to (llvm_elem (llvm_elem tp 1) 1) (llvm_term b);
+
+    llvm_execute_func [tp];
+    llvm_return (llvm_term b);
+};
+
+m <- llvm_load_module "nested.bc";
+
+llvm_verify m "f" [] false f_spec abc;

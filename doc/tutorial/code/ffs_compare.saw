@@ -1,0 +1,30 @@
+import "ffs.cry";
+j <- java_load_class "FFS";
+java_ffs_ref <- jvm_extract j "ffs_ref";
+java_ffs_imp <- jvm_extract j "ffs_imp";
+
+l <- llvm_load_module "ffs.bc";
+c_ffs_ref <- llvm_extract l "ffs_ref";
+c_ffs_imp <- llvm_extract l "ffs_imp";
+
+print "java ref <-> java imp";
+let thm1 = {{ \x -> java_ffs_ref x == java_ffs_imp x }};
+prove_print abc thm1;
+
+print "c ref <-> c imp";
+let thm2 = {{ \x -> c_ffs_ref x == c_ffs_imp x }};
+prove_print abc thm2;
+
+print "java imp <-> c imp";
+let thm3 = {{ \x -> java_ffs_imp x == c_ffs_imp x }};
+prove_print abc thm3;
+
+print "cryptol imp <-> c imp";
+let thm4 = {{ \x -> ffs_imp x == c_ffs_imp x }};
+prove_print abc thm4;
+
+print "cryptol imp <-> cryptol ref";
+let thm5 = {{ \x -> ffs_imp x == ffs_ref x }};
+prove_print abc thm5;
+
+print "Done.";

@@ -1,0 +1,15 @@
+enable_experimental;
+
+c <- java_load_class "Get";
+
+jvm_verify c "get" [] false
+  do {
+    this <- jvm_alloc_object "Get";
+    a <- jvm_alloc_array 4 java_int;
+    j <- jvm_fresh_var "j" java_int;
+    jvm_precond {{ j <= 3 }};
+    jvm_execute_func [this, a, jvm_term j];
+    // TODO: Update spec to say `a` is modified but not specified
+    jvm_return (jvm_term {{ j }});
+  }
+  abc;

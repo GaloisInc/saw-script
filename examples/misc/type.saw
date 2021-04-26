@@ -1,0 +1,3 @@
+let map : (a -> b) -> [a] -> [b] = undefined;
+
+let main = return 1;

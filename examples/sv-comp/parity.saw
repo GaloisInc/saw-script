@@ -1,0 +1,8 @@
+include "sv-comp.saw";
+
+m <- llvm_load_module "parity.bc";
+let assume = llvm_unsafe_assume_spec m;
+error_ov <- assume "__VERIFIER_error" error_spec;
+nondet_int_ov <- assume "__VERIFIER_nondet_uint" nondet_int_spec;
+let ovs = [error_ov, nondet_int_ov];
+llvm_verify m "main" ovs true main_spec yices;

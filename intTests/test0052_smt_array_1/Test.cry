@@ -1,0 +1,10 @@
+module ArrayTest where
+
+import Array
+
+lookup_update_axiom_1 : Array [64] [64] -> [64] -> [64] -> Bit
+lookup_update_axiom_1 a i e = arrayLookup (arrayUpdate a i e) i == e
+
+lookup_update_axiom_2 : Array [64] [64] -> [64] -> [64] -> [64] -> Bit
+lookup_update_axiom_2 a i j e = i != j ==> arrayLookup (arrayUpdate a j e) i == arrayLookup a i
+

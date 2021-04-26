@@ -1,0 +1,33 @@
+m <- llvm_load_module "test.bc";
+
+let ptr_to_fresh n ty = do {
+  p <- llvm_alloc ty;
+  x <- llvm_fresh_var n ty;
+  llvm_points_to p (llvm_term x);
+  return (p, x);
+};
+
+let len = 100;
+
+let array_inc_spec = do {
+  (pa, a) <- ptr_to_fresh "a" (llvm_array len (llvm_int 8));
+  let n = llvm_term {{ `len : [64] }};
+  llvm_execute_func [pa, n];
+};
+
+let inv_spec = do {
+  (pa, a) <- ptr_to_fresh "a" (llvm_array len (llvm_int 8));
+  ppa <- llvm_alloc (llvm_int 64);
+  llvm_points_to ppa pa;
+  let n = llvm_term {{ `len : [64] }};
+  pn <- llvm_alloc (llvm_int 64);
+  llvm_points_to pn n;
+  (pi, i) <- ptr_to_fresh "i" (llvm_int 64);
+  llvm_precond {{ 0 <= i /\ i <= `len }};
+  llvm_execute_func [ppa, pn, pi];
+};
+
+inv <- llvm_unsafe_assume_spec m "__breakpoint__inv#array_inc" inv_spec;
+llvm_verify m "__breakpoint__inv#array_inc" [inv] false inv_spec abc;
+llvm_verify m "array_inc" [inv] false array_inc_spec abc;
+

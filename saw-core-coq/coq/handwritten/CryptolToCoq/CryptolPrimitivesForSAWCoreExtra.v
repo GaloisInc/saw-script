@@ -10,7 +10,7 @@ Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCorePreludeExtra.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.
-Import CryptolPrimitives.
+Import CryptolPrimitivesForSAWCore.
 
 Import ListNotations.
 

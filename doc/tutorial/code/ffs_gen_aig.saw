@@ -1,0 +1,11 @@
+cls <- java_load_class "FFS";
+bc <- llvm_load_module "ffs.bc";
+java_ffs_ref <- jvm_extract cls "ffs_ref";
+java_ffs_imp <- jvm_extract cls "ffs_imp";
+c_ffs_ref <- llvm_extract bc "ffs_ref";
+c_ffs_imp <- llvm_extract bc "ffs_imp";
+write_aig "java_ffs_ref.aig" java_ffs_ref;
+write_aig "java_ffs_imp.aig" java_ffs_imp;
+write_aig "c_ffs_ref.aig" c_ffs_ref;
+write_aig "c_ffs_imp.aig" c_ffs_imp;
+print "Done.";

@@ -1,0 +1,15 @@
+// NOTE: in the current design, contradictions are indicated as a warning
+// message, so the following script should succeed, but contain a message about
+// the detected contradiction in its output.
+
+let bad_spec = do {
+    a <- llvm_fresh_var "a" (llvm_int 32);
+    llvm_precond {{ a == 0 }};
+    llvm_precond {{ a == 1 }};
+    llvm_execute_func [llvm_term a];
+    llvm_postcond {{ a == 2 }};
+};
+
+m <- llvm_load_module "test.bc";
+
+llvm_verify m "double_imp" [] true bad_spec z3;
