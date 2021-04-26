@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
-from saw import *
-from saw.llvm import Contract, cryptol, struct, void, i32, array_ty, struct_ty
+from saw_client import *
+from saw_client.llvm import Contract, cryptol, struct, void, i32, array_ty, struct_ty
 
 
 class FContract(Contract):

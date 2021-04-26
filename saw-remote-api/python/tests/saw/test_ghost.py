@@ -1,5 +1,5 @@
-import saw
-from saw.llvm import Contract, CryptolTerm, cryptol, void, i32, GhostVariable
+import saw_client as saw
+from saw_client.llvm import Contract, CryptolTerm, cryptol, void, i32, GhostVariable
 
 import unittest
 from pathlib import Path

@@ -1,5 +1,5 @@
-import saw
-from saw.llvm import Contract, void, i32
+import saw_client as saw
+from saw_client.llvm import Contract, void, i32
 
 import unittest
 from pathlib import Path

@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
-from saw import *
-from saw.llvm import Contract, FreshVar, SetupVal, cryptol, struct, LLVMType, array_ty, i8, i64
+from saw_client import *
+from saw_client.llvm import Contract, FreshVar, SetupVal, cryptol, struct, LLVMType, array_ty, i8, i64
 from typing import Tuple
 
 

@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
-import saw
-from saw.proofscript import *
+import saw_client as saw
+from saw_client.proofscript import *
 
 
 class SwapLowLevelTest(unittest.TestCase):

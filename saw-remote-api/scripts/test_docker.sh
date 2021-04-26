@@ -1,20 +1,17 @@
 #!/bin/bash
 
-echo "Building and testing saw-remote-api docker image..."
+echo "Testing saw-remote-api docker image..."
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-pushd $DIR/../..
-
-docker build -t saw-remote-api --file saw-remote-api/Dockerfile .
-popd
+TAG=${1:-saw-remote-api}
 
 pushd $DIR/..
 
 docker run --name=saw-remote-api -d \
   -v $PWD/python/tests/saw/test-files:/home/saw/tests/saw/test-files \
   -p 8080:8080 \
-  saw-remote-api
+  "$TAG"
 
 if (( $? != 0 )); then
   echo "Failed to launch docker container"
