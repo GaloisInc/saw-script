@@ -1,0 +1,12 @@
+let {{
+    f x y = (x : [8]) + y
+    g x y = (y : [8]) + x
+    h x y = (f x y) + (g x y)
+}};
+f_eq_g <- prove_print abc {{ \x y -> f x y == g x y }};
+print f_eq_g;
+t1 <- unfold_term ["h"] {{ \x y -> h x y == 2*(f x y) }};
+print_term t1;
+t2 <- rewrite (addsimp f_eq_g empty_ss) t1;
+print_term t2;
+prove_print (unint_yices ["g"]) t2;

@@ -1,0 +1,15 @@
+m <- llvm_load_module "xor-swap.bc";
+let ptr_to_fresh nm ty = do {
+    x <- llvm_fresh_var nm ty;
+    p <- llvm_alloc ty;
+    llvm_points_to p (llvm_term x);
+    return (x, p);
+};
+let swap_spec = do {
+    (x, xp) <- ptr_to_fresh "x" (llvm_int 32);
+    (y, yp) <- ptr_to_fresh "y" (llvm_int 32);
+    llvm_execute_func [xp, yp];
+    llvm_points_to xp (llvm_term y);
+    llvm_points_to yp (llvm_term x);
+};
+llvm_verify m "swap_xor" [] true swap_spec abc;

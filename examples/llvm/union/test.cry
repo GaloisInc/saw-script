@@ -1,0 +1,53 @@
+type Alg = [32]
+INC_1 = 0 : Alg
+INC_2 = 1 : Alg
+
+type Inc_1_st =
+  { x : [32]
+  }
+
+type Inc_2_st =
+  { x : [32]
+  , y : [32]
+  }
+
+type UNION_BITS = 32+32
+
+// The 'bits' field contains a enough bits to hold the largest type in
+// the union, i.e. 'Inc_2_st'.
+
+type St =
+  { alg : Alg
+  , bits : [UNION_BITS]
+  }
+
+bits_to_inc_1_st : [UNION_BITS] -> Inc_1_st
+bits_to_inc_1_st bits = { x = take`{32} bits }
+
+// We need the original bits to supply the bits we dropped when
+// translating to 'Inc_1_st'. Alternatively, we could add another
+// field to 'Inc_1_st' to hold the extra, otherwise unused bits.
+inc_1_st_to_bits : [UNION_BITS] -> Inc_1_st -> [UNION_BITS]
+inc_1_st_to_bits bits st = st.x # drop`{32} bits
+
+bits_to_inc_2_st : [UNION_BITS] -> Inc_2_st
+bits_to_inc_2_st bits = { x = take`{32} bits, y = drop`{32} bits }
+inc_2_st_to_bits : Inc_2_st -> [UNION_BITS]
+inc_2_st_to_bits st = st.x # st.y
+
+inc : St -> St
+inc st = { alg = st.alg, bits = bits }
+  where
+    bits =
+      if st.alg == INC_1 then
+        inc_1_st_to_bits st.bits
+          (inc_1 (bits_to_inc_1_st st.bits))
+      else
+        inc_2_st_to_bits
+          (inc_2 (bits_to_inc_2_st st.bits))
+
+inc_1 : Inc_1_st -> Inc_1_st
+inc_1 st = { x = st.x + 1 }
+
+inc_2 : Inc_2_st -> Inc_2_st
+inc_2 st = { x = st.x + 1, y = st.y + 1}

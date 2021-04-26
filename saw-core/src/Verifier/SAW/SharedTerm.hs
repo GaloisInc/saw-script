@@ -918,7 +918,13 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         Pi _ tp rhs -> do
           ltp <- sort tp
           rtp <- toSort =<< lift (scTypeOf' sc (tp : env) rhs)
-          lift $ scSort sc (max ltp rtp)
+
+          -- NOTE: the rule for type-checking Pi types is that (Pi x a b) is a Prop
+          -- when b is a Prop (this is a forall proposition), otherwise it is a
+          -- (Type (max (sortOf a) (sortOf b)))
+          let srt = if rtp == propSort then propSort else max ltp rtp
+
+          lift $ scSort sc srt
         LocalVar i
           | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)

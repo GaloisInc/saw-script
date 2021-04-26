@@ -1,0 +1,19 @@
+enable_experimental;
+
+m <- llvm_load_module "test.bc";
+
+let addvar_setup = do {
+  llvm_alloc_global "var";
+  var <- llvm_fresh_var "var" (llvm_int 64);
+  llvm_points_to (llvm_global "var") (llvm_term {{ 2 : [64] }});
+
+  ptr <- llvm_alloc (llvm_int 64);
+  val <- llvm_fresh_var "val" (llvm_int 64);
+  llvm_points_to ptr (llvm_term val);
+
+  llvm_execute_func [ptr];
+
+  valprime <- llvm_fresh_var "_val" (llvm_int 64);
+  llvm_points_to ptr (llvm_term valprime);
+};
+llvm_verify_x86 m "./test" "addvar" [] false addvar_setup w4;

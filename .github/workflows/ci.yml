@@ -1,0 +1,460 @@
+name: SAWScript
+on:
+  push:
+    tags: ["v?[0-9]+.[0-9]+(.[0-9]+)?"]
+    branches: [master, "release-**"]
+  pull_request:
+  schedule:
+    - cron: "0 10 * * *" # 10am UTC -> 2/3am PST
+  workflow_dispatch:
+
+env:
+  CACHE_VERSION: 1
+  # Solver versions - also update in the following locations:
+  # ./saw/Dockerfile
+  # ./saw-remote-api/Dockerfile
+  # ./s2nTests/docker/saw.dockerfile
+  Z3_VERSION: "4.8.10"
+  CVC4_VERSION: "4.1.8"
+  YICES_VERSION: "2.6.2"
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.config.outputs.name }}
+      version: ${{ steps.config.outputs.version }}
+      event-tag: ${{ steps.config.outputs.tag }}
+      event-schedule: ${{ steps.config.outputs.schedule }}
+      publish: ${{ steps.config.outputs.publish }}
+      release: ${{ steps.config.outputs.release }}
+      retention-days: ${{ steps.config.outputs.retention-days }}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: config
+        id: config
+        env:
+          EVENT_TAG: ${{ startsWith(github.event.ref, 'refs/tags/') }}
+          EVENT_SCHEDULE: ${{ github.event_name == 'schedule' }}
+          EVENT_DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
+          RELEASE: ${{ startsWith(github.event.ref, 'refs/heads/release-') }}
+        run: |
+          set -x
+          .github/ci.sh output name saw-$(.github/ci.sh ver)
+          .github/ci.sh output version $(.github/ci.sh ver)
+          .github/ci.sh output tag $EVENT_TAG
+          .github/ci.sh output schedule $EVENT_SCHEDULE
+          .github/ci.sh output publish $({ $EVENT_TAG || $EVENT_SCHEDULE; } && echo true || echo false)
+          .github/ci.sh output release $([[ "refs/heads/release-$(.github/ci.sh ver)" == "${{ github.event.ref }}" ]] && echo true || echo false)
+          .github/ci.sh output retention-days $($RELEASE && echo 90 || echo 5)
+
+  build:
+    runs-on: ${{ matrix.os }}
+    needs: [config]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-18.04]
+        ghc: ["8.6.5", "8.8.4", "8.10.3"]
+        include:
+          - os: macos-latest
+            ghc: "8.6.5"
+          - os: macos-latest
+            ghc: "8.8.4"
+          - os: windows-latest
+            ghc: "8.6.5"
+        exclude:
+          - os: windows-latest
+            ghc: "8.8.4"
+    outputs:
+      cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
+    steps:
+
+      - uses: actions/checkout@v2
+      - run: |
+          git submodule update --init
+          git -C deps/abcBridge submodule update --init
+
+      - id: config
+        shell: bash
+        run: |
+          NAME="${{ needs.config.outputs.name }}-${{ runner.os }}-x86_64"
+          .github/ci.sh output name $NAME
+          echo "NAME=${{ needs.config.outputs.name }}-${{ runner.os }}-x86_64" >> $GITHUB_ENV
+
+      - uses: haskell/actions/setup@v1
+        id: setup-haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+
+      - uses: actions/cache@v2
+        name: Cache cabal store
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: ${{ env.CACHE_VERSION }}-cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.CACHE_VERSION }}-cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
+
+      - if: needs.config.outputs.release == 'true'
+        shell: bash
+        run: |
+          sed -i.bak \
+            -e 's/^hashText = .*$/hashText = ""/' \
+            -e '/import GitRev.*$/d' \
+            saw/SAWScript/Version.hs
+          rm -f saw/SAWScript/Version.hs.bak
+
+      - id: abc
+        shell: bash
+        run: .github/ci.sh build_abc
+        if: runner.os != 'Windows'
+
+      - shell: bash
+        run: .github/ci.sh build
+
+      - uses: GaloisInc/.github/actions/cabal-collect-bins@v1
+        id: cabal-test-suites
+        with:
+          targets: |
+            integration_tests
+            cryptol-saw-core-tc-test
+          dest: dist-tests
+
+      - if: |
+          matrix.ghc == '8.6.5' &&
+          runner.os != 'Windows'
+        uses: actions/upload-artifact@v2
+        with:
+          path: ${{ steps.abc.outputs.path }}
+          name: abc-${{ runner.os }}
+
+      - uses: actions/upload-artifact@v2
+        if: "matrix.ghc == '8.6.5'"
+        with:
+          path: dist-tests
+          name: dist-tests-${{ matrix.os }}
+
+      - shell: bash
+        run: .github/ci.sh setup_dist_bins
+
+      - shell: bash
+        run: .github/ci.sh bundle_files
+
+      - shell: bash
+        run: .github/ci.sh zip_dist $NAME
+
+      - if: matrix.ghc == '8.6.5' && needs.config.outputs.release == 'true'
+        shell: bash
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: .github/ci.sh sign $NAME.tar.gz
+
+      - if: matrix.ghc == '8.6.5'
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
+          path: "${{ steps.config.outputs.name }}.tar.gz*"
+          if-no-files-found: error
+          retention-days: ${{ needs.config.outputs.retention-days }}
+
+      - if: "matrix.ghc == '8.6.5'"
+        uses: actions/upload-artifact@v2
+        with:
+          path: dist/bin
+          name: ${{ runner.os }}-bins
+
+      - if: "matrix.os == 'ubuntu-18.04'"
+        uses: actions/upload-artifact@v2
+        with:
+          name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
+          path: "dist/bin/saw"
+
+  saw-remote-api-tests:
+    runs-on: ${{ matrix.os }}
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - test: saw-remote-api/scripts/run_rpc_tests.sh
+            os: ubuntu-18.04
+          - test: saw-remote-api/scripts/run_rpc_tests.sh
+            os: macos-latest
+          - test: saw-remote-api/scripts/check_docs.sh
+            os: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: "${{ runner.os }}-bins"
+          path: dist/bin
+
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - uses: abatilo/actions-poetry@v2.0.0
+        with:
+          poetry-version: 1.1.5
+
+      - name: ${{ matrix.test }}
+        shell: bash
+        run: |
+          chmod +x dist/bin/*
+          export PATH="$PWD/dist/bin:$PATH"
+          ${{ matrix.test }}
+
+  cabal-test:
+    runs-on: ${{ matrix.os }}
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
+        os: [ubuntu-18.04]
+        continue-on-error: [false]
+        include:
+          - suite: integration_tests
+            os: macos-latest
+            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
+          - suite: integration_tests
+            os: windows-latest
+            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
+        exclude:
+          - suite: integration_tests
+            os: macos-latest
+            continue-on-error: false
+          - suite: integration_tests
+            os: windows-latest
+            continue-on-error: false
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: "${{ runner.os }}-bins"
+          path: dist/bin
+
+      - shell: bash
+        if: "runner.os != 'Windows'"
+        run: chmod +x dist/bin/*
+
+      - if: |
+          runner.os != 'Windows' &&
+          matrix.suite == 'integration_tests'
+        uses: actions/download-artifact@v2
+        with:
+          path: bin
+          name: abc-${{ runner.os }}
+
+      - shell: bash
+        if: |
+          runner.os != 'Windows' &&
+          matrix.suite == 'integration_tests'
+        run: chmod +x bin/*
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-tests-${{ matrix.os }}
+          path: dist-tests
+
+      - shell: bash
+        if: runner.os != 'Windows'
+        run: chmod +x dist-tests/*
+
+      - uses: actions/setup-java@v1
+        if: "matrix.suite == 'integration_tests'"
+        with:
+          java-version: "8"
+          java-package: jdk
+          architecture: x64
+
+      - name: ${{ matrix.suite }}
+        continue-on-error: ${{ matrix.continue-on-error }}
+        shell: bash
+        run: |
+          export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
+          dist-tests/${{ matrix.suite }}
+
+  build-push-image:
+    runs-on: ubuntu-latest
+    needs: [config]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - file: saw/Dockerfile
+            image: ghcr.io/galoisinc/saw
+            cache: ghcr.io/galoisinc/cache-saw
+          - file: saw-remote-api/Dockerfile
+            image: ghcr.io/galoisinc/saw-remote-api
+            cache: ghcr.io/galoisinc/cache-saw-remote-api
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          git submodule update --init
+          git -C deps/abcBridge submodule update --init
+
+      - uses: rlespinasse/github-slug-action@v3.x
+
+      - id: common-tag
+        run: |
+          echo "::set-output name=common-tag::$GITHUB_REF_SLUG"
+          echo "COMMON_TAG=$GITHUB_REF_SLUG" >> $GITHUB_ENV
+
+      - uses: docker/setup-buildx-action@v1
+
+      - uses: crazy-max/ghaction-docker-meta@v1
+        name: Labels
+        id: labels
+        with:
+          images: ${{ matrix.image }}
+
+      - uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - if: needs.config.outputs.release == 'true'
+        shell: bash
+        run: |
+          sed -i.bak \
+            -e 's/^hashText = .*$/hashText = ""/' \
+            -e '/import GitRev.*$/d' \
+            saw/SAWScript/Version.hs
+          rm -f saw/SAWScript/Version.hs.bak
+
+      - uses: docker/build-push-action@v2
+        with:
+          context: .
+          tags: ${{ matrix.image }}:${{ steps.common-tag.outputs.common-tag }}
+          labels: ${{ steps.labels.outputs.labels }}
+          load: true
+          push: false
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.build-args }}
+          cache-from: |
+            type=registry,ref=${{ matrix.cache }}:${{ steps.prefix.outputs.prefix }}master
+            type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }}
+
+      - name: Cache image build
+        uses: docker/build-push-action@v2
+        continue-on-error: true  # Tolerate cache upload failures - this should be handled better
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.build-args }}
+          cache-to: type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }},mode=max
+
+      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
+        uses: abatilo/actions-poetry@v2.0.0
+        with:
+          poetry-version: 1.1.5
+
+      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
+        name: Test saw-remote-api
+        run: ./saw-remote-api/scripts/test_docker.sh ${{ matrix.image }}:$COMMON_TAG
+
+      - if: needs.config.outputs.event-schedule == 'true'
+        name: ${{ matrix.image }}:nightly
+        run: |
+          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:nightly
+          docker push ${{ matrix.image }}:nightly
+
+      - if: needs.config.outputs.release == 'true'
+        name: ${{ matrix.image }}:${{ needs.config.outputs.version }}
+        run: |
+          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:${{ needs.config.outputs.version }}
+          docker push ${{ matrix.image }}:${{ needs.config.outputs.version }}
+          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:latest
+          docker push ${{ matrix.image }}:latest
+
+  s2n-tests:
+    name: "Test s2n proofs"
+    timeout-minutes: 60
+    needs: build
+    runs-on: ubuntu-18.04
+    strategy:
+      fail-fast: false
+      matrix:
+        s2n-target:
+          - hmac
+          - drbg
+          - sike
+          - bike
+          - tls
+          - hmac-failure
+          - awslc
+          - blst
+        ghc: ["8.6.5", "8.8.4", "8.10.3"]
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          mkdir -p s2nTests/bin
+
+      - name: Download previously-built SAW
+        uses: actions/download-artifact@v2
+        with:
+          name: "saw-Linux-${{ matrix.ghc }}"
+          path: ./s2nTests/bin
+
+      - shell: bash
+        working-directory: s2nTests
+        run: |
+          docker-compose pull
+          grep -h '^FROM' docker/*.dockerfile | sort -u | awk '{print $2}' | xargs -n1 -P8 docker pull
+
+      - uses: satackey/action-docker-layer-caching@v0.0.11
+        continue-on-error: true
+
+      - shell: bash
+        name: "make s2n"
+        working-directory: s2nTests
+        run: docker-compose build s2n
+
+      - shell: bash
+        name: "s2n tests: ${{ matrix.s2n-target }}"
+        working-directory: s2nTests
+        run: |
+          chmod +x bin/saw
+          make ${{ matrix.s2n-target }}
+
+  # Indicates sufficient CI success for the purposes of mergify merging the pull
+  # request, see .github/mergify.yml. This is done instead of enumerating each
+  # instance of each job in the mergify configuration for a number of reasons:
+  # - continue-on-error is respected, won't block merge
+  # - changes to jobs or job instances don't require a mergify config update
+  # - dependencies through `needs:` are validated, CI will fail if it's invalid
+  mergify:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - saw-remote-api-tests
+      - cabal-test
+      - build-push-image
+      - s2n-tests
+    steps:
+      - run: "true"

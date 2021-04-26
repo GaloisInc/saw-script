@@ -43,36 +43,38 @@ import What4.Expr.GroundEval
 ---------------------------------------------------------------------
 
 -- | Convert a type expression from SAW-core to What4
-fotToBaseType :: FirstOrderType -> Some BaseTypeRepr
+fotToBaseType :: FirstOrderType -> Maybe (Some BaseTypeRepr)
 fotToBaseType FOTBit
-  = Some BaseBoolRepr
+  = Just (Some BaseBoolRepr)
 fotToBaseType FOTInt
-  = Some BaseIntegerRepr
+  = Just (Some BaseIntegerRepr)
 fotToBaseType (FOTIntMod _n)
-  = Some BaseIntegerRepr
+  = Just (Some BaseIntegerRepr)
 fotToBaseType (FOTVec nat FOTBit)
   | Just (Some (PosNat nr)) <- somePosNat nat
-  = Some (BaseBVRepr nr)
-  | otherwise  -- 0-width bit vector is 0
-  = Some BaseIntegerRepr
-fotToBaseType (FOTVec nat fot)
-  | Some assn <- listToAssn (replicate (fromIntegral nat) fot)
-  = Some (BaseStructRepr assn)
-fotToBaseType (FOTArray fot1 fot2)
-  | Some ty1 <- fotToBaseType fot1
-  , Some ty2 <- fotToBaseType fot2
-  = Some $ BaseArrayRepr (Empty :> ty1) ty2
-fotToBaseType (FOTTuple fots)
-  | Some assn <- listToAssn fots
-  = Some (BaseStructRepr assn)
-fotToBaseType (FOTRec _)
-  = error "TODO: convert to What4 records ?!"
+  = Just (Some (BaseBVRepr nr))
+  | otherwise = Nothing
 
-listToAssn :: [FirstOrderType] -> Some (Assignment BaseTypeRepr)
-listToAssn [] = Some empty
+fotToBaseType (FOTVec nat fot)
+  | Just (Some assn) <- listToAssn (replicate (fromIntegral nat) fot)
+  = Just (Some (BaseStructRepr assn))
+fotToBaseType (FOTArray fot1 fot2)
+  | Just (Some ty1) <- fotToBaseType fot1
+  , Just (Some ty2) <- fotToBaseType fot2
+  = Just (Some (BaseArrayRepr (Empty :> ty1) ty2))
+fotToBaseType (FOTTuple fots)
+  | Just (Some assn) <- listToAssn fots
+  = Just (Some (BaseStructRepr assn))
+
+-- TODO: convert to What4 records ?!
+fotToBaseType _ = Nothing
+
+listToAssn :: [FirstOrderType] -> Maybe (Some (Assignment BaseTypeRepr))
+listToAssn [] = Just (Some empty)
 listToAssn (fot:rest) =
   case (fotToBaseType fot, listToAssn rest) of
-    (Some bt, Some assn) -> Some $ extend assn bt
+    (Just (Some bt), Just (Some assn)) -> Just (Some (extend assn bt))
+    _ -> Nothing
 
 ---------------------------------------------------------------------
 -- | Convert a type expression from What4 to SAW-core

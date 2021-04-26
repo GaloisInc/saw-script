@@ -1,0 +1,20 @@
+let alloc_init ty v = do {
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
+    return (x, p);
+};
+
+let {{
+    /* * guard type for given args */
+    type guard args_t = args_t -> Bit
+
+    /* * signature of a pure function with arguments and return types */
+    type signature return_t args_t =
+        args_t -> (return_t, args_t)
+}};

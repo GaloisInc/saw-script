@@ -1,0 +1,25 @@
+/* 
+ * TODO: one issue is that not all benchmarks include prototypes for all
+ * functions
+ */
+
+let error_spec = do {
+    llvm_precond {{ False }};
+    llvm_execute_func [];
+};
+
+let assume_spec = do {
+    p <- llvm_fresh_var "p" (llvm_int 32);
+    llvm_execute_func [llvm_term p];
+    llvm_postcond {{ p != 0 }};
+};
+
+let nondet_int_spec = do {
+    llvm_execute_func [];
+    x <- llvm_fresh_var "x" (llvm_int 32);
+    llvm_return (llvm_term x);
+};
+
+let main_spec = do {
+    llvm_execute_func [];
+};

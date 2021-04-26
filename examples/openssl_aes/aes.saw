@@ -1,0 +1,33 @@
+// Use CRYPTOLPATH to locate AES specification.
+import "AES128TBox.cry";
+
+let i8 = llvm_int 8;
+
+let alloc_init ty v = do {
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
+    return (x, p);
+};
+
+let aes_spec = do {
+  (msg, msgp) <- ptr_to_fresh "in" (llvm_array 16 i8);
+  (key, keyp) <- ptr_to_fresh "key" (llvm_array 16 i8);
+  outp <- llvm_alloc (llvm_array 16 i8);
+  llvm_execute_func [msgp, outp, keyp];
+  let {{
+    key' = split (join key) : [4][32]
+    msg' = split (join msg) : [4][32]
+    res  = split (join (aesEncrypt msg' key')) : [16][8]
+  }};
+  llvm_points_to outp (llvm_term {{ res }});
+  llvm_return (llvm_term {{ 0 : [32] }});
+};
+
+m <- llvm_load_module "aes_all.bc";
+llvm_verify m "aes_encrypt" [] false aes_spec abc;

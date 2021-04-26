@@ -1,0 +1,5 @@
+import "Test.cry";
+
+prove_print (w4_unint_yices []) {{ lookup_update_axiom_1 }};
+prove_print (w4_unint_yices []) {{ lookup_update_axiom_2 }};
+

@@ -23,7 +23,6 @@ module Verifier.SAW.Simulator.RME
   , toBool
   , toWord
   , runIdentity
-  , withBitBlastedPred
   , withBitBlastedSATQuery
   ) where
 
@@ -46,8 +45,7 @@ import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
-import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType, FirstOrderType, toFiniteType)
-import qualified Verifier.SAW.Recognizer as R
+import Verifier.SAW.FiniteValue (FiniteType(..), FirstOrderType, toFiniteType)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST (ModuleMap)
 import Verifier.SAW.Utils (panic)
@@ -396,31 +394,6 @@ bitBlastBasic m addlPrims ecMap t = runIdentity $ do
                    Nothing -> error ("RME: unknown ExtCns: " ++ show (ecName ec)))
          (const Nothing)
   Sim.evalSharedTerm cfg t
-
-asPredType :: SharedContext -> Term -> IO [Term]
-asPredType sc t = do
-  t' <- scWhnf sc t
-  case t' of
-    (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> asPredType sc t2
-    (R.asBoolType -> Just ())    -> return []
-    _                            -> panic "Verifier.SAW.Simulator.RME.asPredType" ["non-boolean result type:", showTerm t']
-
-withBitBlastedPred ::
-  SharedContext ->
-  Map Ident RValue ->
-  Term ->
-  (RME -> [FiniteType] -> IO a) -> IO a
-withBitBlastedPred sc addlPrims t c = do
-  ty <- scTypeOf sc t
-  argTs <- asPredType sc ty
-  shapes <- traverse (asFiniteType sc) argTs
-  modmap <- scGetModuleMap sc
-  let vars = evalState (traverse newVars' shapes) 0
-  let bval = bitBlastBasic modmap addlPrims mempty t
-  let bval' = runIdentity $ applyAll bval vars
-  case bval' of
-    VBool anf -> c anf shapes
-    _ -> panic "Verifier.SAW.Simulator.RME.bitBlast" ["non-boolean result type."]
 
 
 processVar ::

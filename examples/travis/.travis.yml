@@ -1,0 +1,60 @@
+# This script is taken from the AES-GCM-SIV-proof repository.
+# It can be seen in action there:
+# https://github.com/GaloisInc/AES-GCM-SIV-proof
+
+sudo: required
+dist: trusty
+language: c
+
+# This line will save everything in the deps
+# directory at the conclusion of a successful run
+# Future runs will download that directory
+# Scripts that install dependency to the directory
+# should check to see if the dependency exists first
+cache:
+    directories:
+        - deps
+
+# Install the necessary clang and LLVM. 4.0 is possible
+# But currently requires adding a repository
+addons:
+  apt:
+    packages:
+      - clang-3.8
+      - llvm-3.8
+
+
+#The following two options set up the build matrix
+#This one will spawn two Travis VMs, both on Linux
+
+#Each will have one of the env lines set
+os:
+  - linux
+
+env:
+  - SAWPROOF=ref-128
+  - SAWPROOF=ref-256
+
+install:
+# It's often nice, if you have multiple scripts,
+# to put them into a hidden directory as follows
+#  - . .travis/install_saw.sh
+# In this case, we'll leave everything in the same
+# directory
+# That file is reusable and commented as well
+- . .travis/install_saw.sh
+
+# If you're not familiar with bash, the "." at the
+# start of this command executes the script in this
+# environment, giving Travis access to the path variable
+# that the script sets
+
+script:
+# The project this works on has two directories,
+# one named ref-128 and one named ref-256. We move to
+# that directory and run make.
+
+# travis_wait is only necessary if one of your proofs will take longer
+# than 10 minutes to succeed.
+  - cd proof/$SAWPROOF
+  - travis_wait 50 make

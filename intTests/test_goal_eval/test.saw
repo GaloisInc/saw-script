@@ -1,0 +1,25 @@
+// This is a regression test for GaloisInc/saw-script#985.
+// It uses `goal_eval` and then calls `goal_intro` to enforce
+// that `goal_eval` has preserved the explicit quantifiers in
+// the goal.
+
+enable_experimental;
+
+let prop = {{ \(xs:[4][8]) (ys:([8],[8])) -> sum xs == ys.0 * ys.1 }};
+
+prove
+  do {
+    goal_intro "z";
+    assume_unsat;
+  }
+  prop;
+
+prove
+  do {
+    goal_eval;
+    goal_intro "z";
+    assume_unsat;
+  }
+  prop;
+
+print "Done";

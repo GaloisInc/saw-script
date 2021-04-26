@@ -1,0 +1,43 @@
+enable_experimental;
+
+c <- java_load_class "Fields";
+
+ms_setx <-
+jvm_verify c "setx" [] false
+  do {
+    this <- jvm_alloc_object "Fields";
+    newx <- jvm_fresh_var "newx" java_int;
+    jvm_execute_func [this, jvm_term newx];
+    jvm_field_is this "x" (jvm_term newx);
+  }
+  abc;
+
+ms_sety <-
+jvm_verify c "sety" [] false
+  do {
+    this <- jvm_alloc_object "Fields";
+    newy <- jvm_fresh_var "newy" java_long;
+    jvm_execute_func [this, jvm_term newy];
+    jvm_field_is this "y" (jvm_term newy);
+  }
+  abc;
+
+ms_unitx <-
+jvm_verify c "unitx" [] false
+  do {
+    this <- jvm_alloc_object "Fields";
+    jvm_execute_func [this];
+    jvm_field_is this "x" (jvm_term {{ 1 : [32] }});
+  }
+  abc;
+
+ms_unity <-
+jvm_verify c "unity" [] false
+  do {
+    this <- jvm_alloc_object "Fields";
+    jvm_execute_func [this];
+    jvm_field_is this "y" (jvm_term {{ 1 : [64] }});
+  }
+  abc;
+
+print "Done.";

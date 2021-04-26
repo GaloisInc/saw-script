@@ -642,7 +642,7 @@ and_triv2 (x : Bool) : Eq Bool (and (not x) x) False =
 --------------------------------------------------------------------------------
 -- Converting Booleans to Propositions
 
-EqTrue : Bool -> sort 1;
+EqTrue : Bool -> Prop;
 EqTrue x = Eq Bool x True;
 
 TrueI : EqTrue True;

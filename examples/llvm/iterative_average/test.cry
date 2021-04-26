@@ -1,0 +1,37 @@
+// Imperative, iterative average.
+
+type State =
+  { sum : [32]
+  , len : [32]
+  }
+
+init : State
+init =
+  { sum = 0
+  , len = 0
+  }
+
+updatef : {n} (fin n, 32 >= width n) => State -> [n][32] -> State
+updatef st xs =
+  { sum = st.sum + sum
+  , len = st.len + `n
+  }
+  where
+    sum = sums!0
+    sums = [ 0 ] # [ acc + x | acc <- sums | x <- xs ]
+
+digest : State -> [32]
+digest st = st.sum / st.len
+
+// Pure average.
+
+avg : {n} (fin n, 32 >= width n) => [n][32] -> [32]
+avg xs = sum / `n
+  where
+    sum = sums!0
+    sums = [ 0 ] # [ acc + x | acc <- sums | x <- xs ]
+
+// Tests.
+
+imp_correct : {n} (fin n, 32 >= width n) => [n][32] -> Bool
+property imp_correct xs = avg xs == digest (updatef init xs)

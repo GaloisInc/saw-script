@@ -1,0 +1,42 @@
+enable_deprecated;
+import "../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry" as chacha20;
+
+// -----------------------------------------------------------------------------
+// -- Proofs -------------------------------------------------------------------
+
+print "loading LLVM bitcode...";
+mod <- llvm_load_module "chacha20.bc";
+
+let alloc_init ty v = do {
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
+    return (x, p);
+};
+
+let i8 = llvm_int 8;
+let i32 = llvm_int 32;
+
+let stream_spec len = do {
+  outp <- llvm_alloc (llvm_array len i8);
+  (key, keyp) <- ptr_to_fresh "key" (llvm_array 32 i8);
+  (nonce, noncep) <- ptr_to_fresh "nonce" (llvm_array 12 i8);
+  counter <- llvm_fresh_var "counter" i32;
+
+  llvm_execute_func [ outp
+                    , llvm_term {{ `len : [64] }}
+                    , llvm_term counter
+                    , noncep
+                    , keyp
+                    ];
+
+  llvm_points_to outp (llvm_term {{ chacha20::stream key counter nonce : [len][8] }});
+};
+
+print "running verification...";
+time (llvm_llvm_verify mod "crypto_stream_chacha20" [] true (stream_spec 256) abc);

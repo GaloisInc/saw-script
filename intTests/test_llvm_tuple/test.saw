@@ -1,0 +1,25 @@
+// This is a test demonstrating the use of `llvm_points_to` with a
+// struct pointer and a single Cryptol term of tuple type.
+// https://github.com/GaloisInc/saw-script/issues/159
+
+bc <- llvm_load_module "test.bc";
+
+let i8 = llvm_int 8;
+let i16 = llvm_int 16;
+
+let {{
+  swap_spec : ([4][8], [16], [16]) -> ([4][8], [16], [16])
+  swap_spec (xs, y, z) = (reverse xs, z, y)
+}};
+
+swap_ov <-
+  llvm_verify bc "swap" [] false
+    do {
+      let t = llvm_alias "struct.triple";
+      p <- llvm_alloc t;
+      x <- llvm_fresh_var "x" t;
+      llvm_points_to p (llvm_term x);
+      llvm_execute_func [p];
+      llvm_points_to p (llvm_term {{ swap_spec x }});
+    }
+    z3;

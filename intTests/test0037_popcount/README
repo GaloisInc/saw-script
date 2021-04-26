@@ -1,0 +1,2 @@
+These tests exercise the popcount, count leading zeros and
+count trailing zeros primitives.

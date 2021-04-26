@@ -1,0 +1,5 @@
+// `offline_smtlib2` takes a formula to prove universally
+prove (offline_smtlib2 "prove") {{ \(x:[8]) (y:[8]) -> x == y ==> x+y == x+x }};
+
+// `write_smtlib2` takes a formula to prove existentially
+write_smtlib2 "sat.smt2" {{ \(x:[8]) -> x != 0 /\ x+x == x }};

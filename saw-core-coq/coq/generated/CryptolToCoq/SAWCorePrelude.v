@@ -311,7 +311,7 @@ Definition and_triv1 : forall (x : @SAWCoreScaffolding.Bool), @SAWCoreScaffoldin
 Definition and_triv2 : forall (x : @SAWCoreScaffolding.Bool), @SAWCoreScaffolding.Eq (@SAWCoreScaffolding.Bool) (@SAWCoreScaffolding.and (@SAWCoreScaffolding.not x) x) (@SAWCoreScaffolding.false) :=
   fun (x : @SAWCoreScaffolding.Bool) => @SAWCoreScaffolding.iteDep (fun (b : @SAWCoreScaffolding.Bool) => @SAWCoreScaffolding.Eq (@SAWCoreScaffolding.Bool) (@SAWCoreScaffolding.and (@SAWCoreScaffolding.not b) b) (@SAWCoreScaffolding.false)) x (@trans (@SAWCoreScaffolding.Bool) (@SAWCoreScaffolding.and (@SAWCoreScaffolding.not (@SAWCoreScaffolding.true)) (@SAWCoreScaffolding.true)) (@SAWCoreScaffolding.not (@SAWCoreScaffolding.true)) (@SAWCoreScaffolding.false) (@and_True2 (@SAWCoreScaffolding.not (@SAWCoreScaffolding.true))) not_True) (@and_False2 (@SAWCoreScaffolding.not (@SAWCoreScaffolding.false))).
 
-Definition EqTrue : @SAWCoreScaffolding.Bool -> Type :=
+Definition EqTrue : @SAWCoreScaffolding.Bool -> Prop :=
   fun (x : @SAWCoreScaffolding.Bool) => @SAWCoreScaffolding.Eq (@SAWCoreScaffolding.Bool) x (@SAWCoreScaffolding.true).
 
 Definition TrueI : @EqTrue (@SAWCoreScaffolding.true) :=

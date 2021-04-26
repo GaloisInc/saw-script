@@ -1,0 +1,32 @@
+import "dotprod.cry";
+
+let alloc_init ty v = do {
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
+    return (x, p);
+};
+
+let dotprod_spec n = do {
+    let nt = llvm_term {{ `n : [32] }};
+    (xs, xsp) <- ptr_to_fresh "xs" (llvm_array n (llvm_int 32));
+    (ys, ysp) <- ptr_to_fresh "ys" (llvm_array n (llvm_int 32));
+    let xval = llvm_struct_value [ xsp, nt ];
+    let yval = llvm_struct_value [ ysp, nt ];
+    xp <- alloc_init (llvm_alias "struct.vec_t") xval;
+    yp <- alloc_init (llvm_alias "struct.vec_t") yval;
+    llvm_execute_func [xp, yp];
+    llvm_return (llvm_term {{ dotprod xs ys }});
+};
+
+m <- llvm_load_module "dotprod_struct.bc";
+
+enable_crucible_profiling "prof";
+dotprod_ov <- llvm_verify m "dotprod_struct" [] true (dotprod_spec 2) z3;
+llvm_verify m "dotprod_wrap" [dotprod_ov] true (dotprod_spec 2) z3;
+disable_crucible_profiling;

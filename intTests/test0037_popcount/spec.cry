@@ -1,0 +1,11 @@
+
+popcount : {n} (n >= 1, fin n) => [n] -> [n]
+popcount x = foldr (+) zero [ if b then 1 else 0 | b <- x ]
+
+clz : {n} fin n => [n] -> [n]
+clz x = foldr f `n [ (b,i) | i <- [0 ...] | b <- x ]
+ where
+ f (b,i) r = if b then i else r
+
+ctz : {n} fin n => [n] -> [n]
+ctz x = clz (reverse x)

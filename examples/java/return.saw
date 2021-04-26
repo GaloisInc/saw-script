@@ -1,0 +1,38 @@
+enable_experimental;
+
+c <- java_load_class "Return";
+
+let fill_spec =
+  do {
+    x <- jvm_fresh_var "x" java_int;
+    jvm_execute_func [jvm_term x];
+    aref <- jvm_alloc_array 5 java_int;
+    jvm_array_is aref {{ [x, x, x, x, x] }};
+    jvm_return aref;
+  };
+
+fill_ov <- jvm_verify c "fill" [] false fill_spec abc;
+jvm_verify c "fillwrap" [fill_ov] false fill_spec abc;
+
+let newSimple_spec =
+  do {
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [jvm_term x, jvm_term y];
+    ref <- jvm_alloc_object "SimpleObj";
+    jvm_field_is ref "x" (jvm_term x);
+    jvm_field_is ref "y" (jvm_term y);
+    jvm_return ref;
+  };
+
+newSimple_ov <- jvm_verify c "newSimple" [] false newSimple_spec abc;
+jvm_verify c "newSimpleWrap" [newSimple_ov] false newSimple_spec abc;
+
+jvm_verify c "newSimpleWrap2" [newSimple_ov] false
+  do {
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [jvm_term x, jvm_term y];
+    jvm_return (jvm_term {{ 2 : [32] }});
+  }
+  abc;

@@ -1,0 +1,77 @@
+import "imports.cry";
+
+let identity_spec n : CrucibleSetup () = do {
+  llvm_execute_func [llvm_term n];
+  llvm_return (llvm_term n);
+};
+
+let example_spec : CrucibleSetup () = do {
+  llvm_execute_func [];
+  llvm_return (llvm_term {{3:[32]}});
+};
+
+let alloc_init ty v = do {
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
+    return (x, p);
+};
+
+let sum_spec n : CrucibleSetup() = do {
+  (arr,arrp) <- ptr_to_fresh "arr" (llvm_array n (llvm_int 32));
+
+  llvm_execute_func[arrp, llvm_term {{ `n:[32]}}];
+  llvm_return (llvm_term {{ mysum arr }});
+  llvm_points_to arrp (llvm_term arr);
+};
+
+let example_sums : CrucibleSetup() = do {
+  llvm_execute_func[];
+  llvm_return (llvm_term {{ 70:[32] }});
+};
+
+let set_myglobal n : CrucibleSetup() = do {
+  llvm_alloc_global "myglobal";
+  old <- llvm_fresh_var "old" (llvm_int 32);
+  llvm_precond {{ old < 1000 }};
+  llvm_points_to (llvm_global "myglobal") (llvm_term old);
+  llvm_execute_func[llvm_term {{ `n : [32] }}];
+  llvm_points_to (llvm_global "myglobal")
+                     (llvm_term {{ `n + old*old : [32] }});
+};
+
+let myglobal_example : CrucibleSetup() = do {
+  llvm_alloc_global "myglobal";
+  llvm_execute_func[];
+  llvm_return (llvm_term {{ 120 : [32] }});
+  llvm_points_to (llvm_global "myglobal")
+                 (llvm_term {{ 120 : [32] }});
+};
+
+let main : TopLevel () = do {
+
+    m <- llvm_load_module "source.bc";
+    id1 <- llvm_verify m "identity" [] false (identity_spec {{1:[32]}}) abc;
+    id2 <- llvm_verify m "identity" [] false (identity_spec {{2:[32]}}) abc;
+    llvm_verify m "example"     [id1,id2] false example_spec z3;
+    //llvm_verify "bad_example" [id1,id2] false example_spec (do { print_goal; assume_unsat; });
+
+    sum3  <- llvm_verify m "sum" [] false (sum_spec  3) z3;
+    sum6  <- llvm_verify m "sum" [] false (sum_spec  6) z3;
+    sum10 <- llvm_verify m "sum" [] false (sum_spec 10) z3;
+    sum12 <- llvm_verify m "sum" [] false (sum_spec 12) z3;
+    llvm_verify m "example_sums" [sum3,sum12, sum6,sum10] false example_sums z3;
+
+    set10 <- llvm_verify m "add_myglobal" [] false (set_myglobal 10) z3;
+    set20 <- llvm_verify m "add_myglobal" [] false (set_myglobal 20) z3;
+    set30 <- llvm_verify m "add_myglobal" [] false (set_myglobal 30) z3;
+    llvm_verify m "myglobal_example" [set10,set20,set30] false myglobal_example z3;
+    llvm_verify m "myglobal_example" [set20,set30,set10] false myglobal_example z3;
+    llvm_verify m "myglobal_example" [set30,set10,set20] false myglobal_example z3;
+    print "done";
+};

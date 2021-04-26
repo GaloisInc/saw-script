@@ -1,0 +1,31 @@
+let alloc_init ty v = do {
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
+    return (x, p);
+};
+
+let clear_setup = do {
+    llvm_alloc_global "g";
+    llvm_execute_func [];
+    llvm_points_to (llvm_global "g") (llvm_term {{ 0 : [32] }});
+};
+
+let set_setup = do {
+    llvm_alloc_global "g";
+    x <- llvm_fresh_var "x" (llvm_int 32);
+    llvm_execute_func [llvm_term x];
+    llvm_points_to (llvm_global "g") (llvm_term x);
+};
+
+let main : TopLevel () = do {
+    m <- llvm_load_module "global.bc";
+    llvm_verify m "clear" [] false clear_setup abc;
+    llvm_verify m "set" [] false set_setup abc;
+    print "Done.";
+};

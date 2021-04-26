@@ -1,0 +1,26 @@
+// This test checks whether we can verify a spec that says a function
+// returns a fresh pointer, when in actuality the function returns
+// NULL. It is a regression test for saw-script issue #640.
+// https://github.com/GaloisInc/saw-script/issues/640
+
+bc <- llvm_load_module "test.bc";
+
+let i64 = llvm_int 64;
+
+fails (
+  llvm_verify bc "foo" [] false
+    do {
+      llvm_execute_func [];
+      x <- llvm_alloc i64;
+      llvm_return x;
+    }
+    z3
+  );
+
+bar_ov1 <-
+  llvm_verify bc "bar" [] false
+    do {
+      llvm_execute_func [];
+      llvm_return (llvm_term {{ 1 : [32] }});
+    }
+    z3;
