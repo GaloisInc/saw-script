@@ -323,7 +323,7 @@ data LLVMCrucibleContext arch =
   , _ccBackend         :: Sym
   , _ccLLVMSimContext  :: Crucible.SimContext (SAWCruciblePersonality Sym) Sym CL.LLVM
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
-  , _ccBasicSS         :: Simpset
+  , _ccBasicSS         :: Simpset ()
   }
 
 makeLenses ''LLVMCrucibleContext

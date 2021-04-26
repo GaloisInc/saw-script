@@ -1557,7 +1557,7 @@ primitives = Map.fromList
     ,  "goals 'prop1' and 'prop2'." ]
 
   , prim "empty_ss"            "Simpset"
-    (pureVal emptySimpset)
+    (pureVal (emptySimpset :: SAWSimpset))
     Current
     [ "The empty simplification rule set, containing no rules." ]
 

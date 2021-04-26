@@ -286,8 +286,8 @@ replacePrim pat replace t = do
     unless c $ fail $ unlines
       [ "terms do not have convertible types", show tpat, show ty1, show trepl, show ty2 ]
 
-  let ss = emptySimpset
-  t' <- io $ replaceTerm sc ss (tpat, trepl) (ttTerm t)
+  let ss = emptySimpset :: SV.SAWSimpset
+  (_,t') <- io $ replaceTerm sc ss (tpat, trepl) (ttTerm t)
 
   io $ do
     ty  <- scTypeOf sc (ttTerm t)
@@ -494,11 +494,11 @@ unfoldGoal unints =
      prop' <- io (unfoldProp sc unints' (goalProp goal))
      return (prop', UnfoldEvidence unints')
 
-simplifyGoal :: Simpset -> ProofScript ()
+simplifyGoal :: SV.SAWSimpset -> ProofScript ()
 simplifyGoal ss =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
-     prop' <- io (simplifyProp sc ss (goalProp goal))
+     (_,prop') <- io (simplifyProp sc ss (goalProp goal))
      return (prop', RewriteEvidence ss)
 
 goal_eval :: [String] -> ProofScript ()
@@ -882,26 +882,26 @@ quickCheckPrintPrim opts sc numTests tt =
                "----------Counterexample----------\n" ++
                showList cex' ""
 
-cryptolSimpset :: TopLevel Simpset
+cryptolSimpset :: TopLevel SV.SAWSimpset
 cryptolSimpset =
   do sc <- getSharedContext
      io $ Cryptol.mkCryptolSimpset sc
 
-addPreludeEqs :: [Text] -> Simpset -> TopLevel Simpset
+addPreludeEqs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addPreludeEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Prelude"])
 
-addCryptolEqs :: [Text] -> Simpset -> TopLevel Simpset
+addCryptolEqs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addCryptolEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Cryptol"])
 
-add_core_defs :: Text -> [Text] -> Simpset -> TopLevel Simpset
+add_core_defs :: Text -> [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 add_core_defs modname names ss =
   do sc <- getSharedContext
      defs <- io $ mapM (getDef sc) names -- FIXME: warn if not found
@@ -915,16 +915,16 @@ add_core_defs modname names ss =
         Just d -> return d
         Nothing -> fail $ Text.unpack $ modname <> " definition " <> n <> " not found"
 
-add_prelude_defs :: [Text] -> Simpset -> TopLevel Simpset
+add_prelude_defs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 add_prelude_defs = add_core_defs "Prelude"
 
-add_cryptol_defs :: [Text] -> Simpset -> TopLevel Simpset
+add_cryptol_defs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 add_cryptol_defs = add_core_defs "Cryptol"
 
-rewritePrim :: Simpset -> TypedTerm -> TopLevel TypedTerm
+rewritePrim :: SV.SAWSimpset -> TypedTerm -> TopLevel TypedTerm
 rewritePrim ss (TypedTerm schema t) = do
   sc <- getSharedContext
-  t' <- io $ rewriteSharedTerm sc ss t
+  (_,t') <- io $ rewriteSharedTerm sc ss t
   return (TypedTerm schema t')
 
 unfold_term :: [String] -> TypedTerm -> TopLevel TypedTerm
@@ -940,23 +940,23 @@ beta_reduce_term (TypedTerm schema t) = do
   t' <- io $ betaNormalize sc t
   return (TypedTerm schema t')
 
-addsimp :: Theorem -> Simpset -> TopLevel Simpset
+addsimp :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimp thm ss =
   do sc <- getSharedContext
-     io (propToRewriteRule sc (thmProp thm)) >>= \case
+     io (propToRewriteRule sc (thmProp thm) (Just ())) >>= \case
        Nothing -> fail "addsimp: theorem not an equation"
        Just rule -> pure (addRule rule ss)
 
-addsimp' :: Term -> Simpset -> TopLevel Simpset
+addsimp' :: Term -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimp' t ss =
-  case ruleOfProp t of
+  case ruleOfProp t Nothing of -- TODO!! track this as an axiom?
     Nothing -> fail "addsimp': theorem not an equation"
     Just rule -> pure (addRule rule ss)
 
-addsimps :: [Theorem] -> Simpset -> TopLevel Simpset
+addsimps :: [Theorem] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimps thms ss = foldM (flip addsimp) ss thms
 
-addsimps' :: [Term] -> Simpset -> TopLevel Simpset
+addsimps' :: [Term] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimps' ts ss = foldM (flip addsimp') ss ts
 
 print_type :: Term -> TopLevel ()

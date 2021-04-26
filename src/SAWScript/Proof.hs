@@ -146,9 +146,9 @@ propToTerm :: SharedContext -> Prop -> IO Term
 propToTerm _sc (Prop tm) = pure tm
 
 -- | Attempt to interpret a proposition as a rewrite rule.
-propToRewriteRule :: SharedContext -> Prop -> IO (Maybe (RewriteRule))
-propToRewriteRule _sc (Prop tm) =
-  case ruleOfProp tm of
+propToRewriteRule :: SharedContext -> Prop -> Maybe a -> IO (Maybe (RewriteRule a))
+propToRewriteRule _sc (Prop tm) ann =
+  case ruleOfProp tm ann of
     Nothing -> pure Nothing
     Just r  -> pure (Just r)
 
@@ -173,10 +173,10 @@ unfoldProp sc unints (Prop tm) =
      return (Prop tm')
 
 -- | Rewrite the proposition using the provided Simpset
-simplifyProp :: SharedContext -> Simpset -> Prop -> IO Prop
+simplifyProp :: Ord a => SharedContext -> Simpset a -> Prop -> IO (Set a, Prop)
 simplifyProp sc ss (Prop tm) =
-  do tm' <- rewriteSharedTerm sc ss tm
-     return (Prop tm')
+  do (a, tm') <- rewriteSharedTerm sc ss tm
+     return (a, Prop tm')
 
 -- | Evaluate the given proposition by round-tripping
 --   through the What4 formula representation.  This will
@@ -332,7 +332,7 @@ data Evidence
     -- | This type of evidence is used to modify a goal to prove via rewriting.
     --   The goal to prove is rewritten by the given simpset; then the provided
     --   evidence is used to check the modified goal.
-  | RewriteEvidence Simpset Evidence
+  | RewriteEvidence (Simpset ()) Evidence
 
     -- | This type of evidence is used to modify a goal to prove via unfolding
     --   constant definitions.  The goal to prove is modified by unfolding
@@ -608,7 +608,7 @@ checkEvidence sc = check mempty
            check hyps e' p'
 
       RewriteEvidence ss e' ->
-        do p' <- simplifyProp sc ss p
+        do (_,p') <- simplifyProp sc ss p -- TODO, remember the annotations!
            check hyps e' p'
 
       EvalEvidence vars e' ->

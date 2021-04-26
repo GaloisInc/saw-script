@@ -126,7 +126,7 @@ data Value
     -- operations in these monads can fail at runtime.
   | VTopLevel (TopLevel Value)
   | VProofScript (ProofScript Value)
-  | VSimpset Simpset
+  | VSimpset SAWSimpset
   | VTheorem Theorem
   -----
   | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
@@ -154,6 +154,8 @@ data Value
   | VCFG SAW_CFG
   | VGhostVar CMS.GhostGlobal
 
+type SAWSimpset = Simpset ()
+
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
 
@@ -165,7 +167,7 @@ data SAW_CFG where
   JVM_CFG :: Crucible.AnyCFG JVM -> SAW_CFG
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
-                                     , biBasicSS       :: Simpset
+                                     , biBasicSS       :: SAWSimpset
                                      }
   deriving Generic
 
@@ -245,7 +247,7 @@ showsSatResult opts r =
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
-showSimpset :: PPOpts -> Simpset -> String
+showSimpset :: PPOpts -> Simpset a -> String
 showSimpset opts ss =
   unlines ("Rewrite Rules" : "=============" : map (show . ppRule) (listRules ss))
   where
@@ -382,7 +384,7 @@ data TopLevelRO =
   , roPosition      :: SS.Pos
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
-  , roBasicSS       :: Simpset
+  , roBasicSS       :: SAWSimpset
   }
 
 data TopLevelRW =
@@ -459,7 +461,7 @@ getOptions = TopLevel (asks roOptions)
 getProxy :: TopLevel AIGProxy
 getProxy = TopLevel (asks roProxy)
 
-getBasicSS :: TopLevel Simpset
+getBasicSS :: TopLevel SAWSimpset
 getBasicSS = TopLevel (asks roBasicSS)
 
 localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
@@ -870,10 +872,10 @@ instance FromValue Bool where
     fromValue (VBool b) = b
     fromValue _ = error "fromValue Bool"
 
-instance IsValue Simpset where
+instance IsValue SAWSimpset where
     toValue ss = VSimpset ss
 
-instance FromValue Simpset where
+instance FromValue SAWSimpset where
     fromValue (VSimpset ss) = ss
     fromValue _ = error "fromValue Simpset"
 
