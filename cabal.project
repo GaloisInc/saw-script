@@ -2,19 +2,19 @@ packages:
     saw-script.cabal
     saw-remote-api
     crux-mir-comp
+    cryptol-saw-core
+    rme
+    saw-core
+    saw-core-aig
+    saw-core-sbv
+    saw-core-what4
+    saw-core-coq
     deps/llvm-pretty
     deps/llvm-pretty-bc-parser
     deps/jvm-parser
     deps/aig
     deps/abcBridge
     deps/cryptol
-    deps/saw-core/cryptol-saw-core
-    deps/saw-core/rme
-    deps/saw-core/saw-core
-    deps/saw-core/saw-core-aig
-    deps/saw-core/saw-core-sbv
-    deps/saw-core/saw-core-what4
-    deps/saw-core/saw-core-coq
     deps/what4/what4
     deps/crucible/crucible
     deps/crucible/crucible-jvm
