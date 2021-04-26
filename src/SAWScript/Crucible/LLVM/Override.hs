@@ -763,7 +763,7 @@ enforcePointerValidity sc cc loc ss =
             addAssert c $ Crucible.SimError loc $
               Crucible.AssertFailureSimError msg ""
 
-       | (LLVMAllocSpec mut _pty alignment psz _ploc fresh, ptr) <- mems
+       | (LLVMAllocSpec mut _pty alignment psz _ploc fresh _sym_sz, ptr) <- mems
        , not fresh -- Fresh symbolic pointers are not assumed to be valid; don't check them
        ]
 
@@ -823,8 +823,8 @@ enforceDisjointAllocSpec ::
   (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
 enforceDisjointAllocSpec sc cc sym loc
-  (LLVMAllocSpec pmut _pty _palign psz ploc pfresh, p)
-  (LLVMAllocSpec qmut _qty _qalign qsz qloc qfresh, q)
+  (LLVMAllocSpec pmut _pty _palign psz ploc pfresh _p_sym_sz, p)
+  (LLVMAllocSpec qmut _qty _qalign qsz qloc qfresh _q_sym_sz, q)
   | (pmut, qmut) == (Crucible.Immutable, Crucible.Immutable) =
     pure () -- Read-only allocations may alias each other
   | pfresh || qfresh =
@@ -856,7 +856,7 @@ enforceDisjointAllocGlobal ::
   (LLVMAllocGlobal arch, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
 enforceDisjointAllocGlobal sym loc
-  (LLVMAllocSpec _pmut _pty _palign psz ploc _pfresh, p)
+  (LLVMAllocSpec _pmut _pty _palign psz ploc _pfresh _p_sym_sz, p)
   (LLVMAllocGlobal qloc (L.Symbol qname), q) =
   do let Crucible.LLVMPointer pblk _ = p
      let Crucible.LLVMPointer qblk _ = q
@@ -1438,17 +1438,58 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
                   ]
             case maybe_allocation_array of
               Just (ok, arr, sz)
-                | Crucible.LLVMPointer _ off <- ptr1
-                , Just 0 <- BV.asUnsigned <$> W4.asBV off ->
+                | Crucible.LLVMPointer _ off <- ptr1 ->
                 do addAssert ok $ Crucible.SimError loc $ Crucible.GenericSimError $ show errMsg
+                   sub <- OM (use termSub)
                    st <- liftIO (sawCoreState sym)
-                   arr_tm <- liftIO $ toSC sym st arr
-                   instantiateExtMatchTerm sc cc (spec ^. MS.csLoc) prepost arr_tm (ttTerm expected_arr_tm)
+
+                   ptr_width_tm <- liftIO $ scNat sc $ natValue ?ptrWidth
+                   off_type_tm <- liftIO $ scBitvector sc $ natValue ?ptrWidth
+                   off_tm <- liftIO $ toSC sym st off
+                   foo_arr_tm <- liftIO $ toSC sym st arr
+
+                   arr_tm <- liftIO $ case BV.asUnsigned <$> W4.asBV off of
+                     Just 0 -> return foo_arr_tm
+                     _ ->
+                       do byte_width_tm <- scNat sc 8
+                          byte_type_tm <- scBitvector sc 8
+
+                          zero_off_tm <- scBvNat sc ptr_width_tm =<< scNat sc 0
+                          zero_byte_tm <- scBvNat sc byte_width_tm =<< scNat sc 0
+                          zero_arr_const_tm <- scArrayConstant sc off_type_tm byte_type_tm zero_byte_tm
+
+                          instantiated_expected_sz_tm <- scInstantiateExt sc sub $ ttTerm expected_sz_tm
+                          scArrayCopy sc ptr_width_tm byte_type_tm zero_arr_const_tm zero_off_tm foo_arr_tm off_tm instantiated_expected_sz_tm
+
+                   instantiateExtMatchTerm sc cc loc prepost arr_tm (ttTerm expected_arr_tm)
+
                    sz_tm <- liftIO $ toSC sym st sz
-                   instantiateExtMatchTerm sc cc (spec ^. MS.csLoc) prepost sz_tm (ttTerm expected_sz_tm)
+                   foo_tm <- liftIO $ scBvAdd sc ptr_width_tm off_tm (ttTerm expected_sz_tm)
+                   bar_tm <- liftIO $ scBvULe sc ptr_width_tm foo_tm sz_tm
+                   learnPred sc cc loc prepost bar_tm
+
                    return Nothing
 
-              _ -> return $ Just errMsg
+              -- _ ->
+              --   do expected_sz_bv <- liftIO $ resolveSAWSymBV cc (knownNat @64) (ttTerm expected_sz_tm)
+              --      case BV.asUnsigned <$> W4.asBV expected_sz_bv of
+              --        Just expected_sz ->
+              --          do res <- liftIO $ Crucible.loadRaw sym mem ptr1 (Crucible.arrayType (fromIntegral expected_sz) (Crucible.bitvectorType 1)) Crucible.noAlignment
+              --             case res of
+              --               Crucible.NoErr pred_ res_val -> do
+              --                 addAssert pred_ $ Crucible.SimError loc $ Crucible.AssertFailureSimError (show errMsg) ""
+              --                 -- realTerm <- valueToSC sym loc (show errMsg) tval res_val
+              --                 -- instantiateExtMatchTerm sc cc (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
+              --                 -- arr_tm <- memArrayToSawCoreTerm cc
+
+              --                 -- instantiateExtMatchTerm sc cc loc prepost arr_tm (ttTerm expected_arr_tm)
+
+              --      return Nothing
+
+              --        Nothing -> return $ Just errMsg
+              _ -> do
+                liftIO $ putStrLn $ show $ Crucible.ppMem $ Crucible.memImplHeap mem
+                return $ Just errMsg
 
 ------------------------------------------------------------------------
 
@@ -1609,13 +1650,13 @@ invalidateMutableAllocs opts sc cc cs = do
 -- | Perform an allocation as indicated by an @llvm_alloc@ or
 -- @llvm_fresh_pointer@ statement from the postcondition section.
 executeAllocation ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options                        ->
   SharedContext ->
   LLVMCrucibleContext arch          ->
   (AllocIndex, LLVMAllocSpec) ->
   OverrideMatcher (LLVM arch) RW ()
-executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc fresh)
+executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc fresh symSz)
   | fresh =
   do ptr <- liftIO $ executeFreshPointer cc var
      OM (setupValueSub %= Map.insert var ptr)
@@ -1633,7 +1674,15 @@ executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc fres
      let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
      (ptr, mem') <- liftIO $
        Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
-     writeGlobal memVar mem'
+     mem'' <- liftIO $ if symSz
+       then
+         do arr <- W4.freshConstant
+              sym
+              (W4.systemSymbol "arr!")
+              (W4.BaseArrayRepr (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth) (W4.BaseBVRepr (W4.knownNat @8)))
+            Crucible.doArrayConstStore sym mem' ptr alignment arr sz'
+       else return mem'
+     writeGlobal memVar mem''
      assignVar cc loc var ptr
 
 ------------------------------------------------------------------------

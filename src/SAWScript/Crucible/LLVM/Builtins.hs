@@ -1012,7 +1012,7 @@ doAlloc ::
   AllocIndex ->
   LLVMAllocSpec ->
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
-doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz loc fresh)
+doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz loc fresh _symSz)
   | fresh = liftIO $ executeFreshPointer cc i
   | otherwise =
   StateT $ \mem ->
@@ -1913,6 +1913,7 @@ llvm_alloc_with_mutability_and_size mut sz alignment lty =
        , _allocSpecBytes = sz''
        , _allocSpecLoc = loc
        , _allocSpecFresh = False
+       , _allocSpecSymSz = False
        }
 
 llvm_alloc ::
@@ -2008,6 +2009,7 @@ llvm_symbolic_alloc ro align_bytes sz =
            , _allocSpecBytes = sz
            , _allocSpecLoc = loc
            , _allocSpecFresh = False
+           , _allocSpecSymSz = True
            }
      n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?= spec
@@ -2057,6 +2059,7 @@ constructFreshPointer mid loc memTy =
                      , _allocSpecBytes = sz
                      , _allocSpecLoc = loc
                      , _allocSpecFresh = True
+                     , _allocSpecSymSz = False
                      }
      -- TODO: refactor
      case mid of
@@ -2189,9 +2192,9 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
        do let ?lc = ccTypeCtx cc
           st <- get
           let rs = st ^. Setup.csResolvedState
-          if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
-            then throwCrucibleSetup loc "Multiple points-to preconditions on same pointer"
-            else Setup.csResolvedState %= MS.markResolved ptr []
+          -- if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
+          --   then throwCrucibleSetup loc "Multiple points-to preconditions on same pointer"
+          --   else Setup.csResolvedState %= MS.markResolved ptr []
           let env = MS.csAllocations (st ^. Setup.csMethodSpec)
               nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
           ptrTy <- typeOfSetupValue cc env nameEnv ptr

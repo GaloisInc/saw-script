@@ -24,7 +24,8 @@ import           Lang.Crucible.Simulator.Profiling
 import           Lang.Crucible.Backend (AbortExecReason(..), ppAbortExecReason, IsSymInterface)
 import           Lang.Crucible.Backend.Online
 import qualified Data.Parameterized.Nonce as Nonce
-import qualified What4.Solver.Yices as Yices
+import qualified What4.Solver.Z3 as Z3
+import qualified What4.Protocol.SMTLib2 as SMT2
 import qualified What4.Config as W4
 import qualified What4.Expr as W4
 import qualified What4.Interface as W4
@@ -40,7 +41,7 @@ import Verifier.SAW.SharedTerm as SC
 import Verifier.SAW.Simulator.What4.ReturnTrip (SAWCoreState, newSAWCoreState)
 
 -- | The symbolic backend we use for SAW verification
-type Sym = OnlineBackendUserSt Nonce.GlobalNonceGenerator Yices.Connection SAWCoreState (W4.Flags W4.FloatReal)
+type Sym = OnlineBackendUserSt Nonce.GlobalNonceGenerator (SMT2.Writer Z3.Z3) SAWCoreState (W4.Flags W4.FloatReal)
 
 data SAWCruciblePersonality sym = SAWCruciblePersonality
 
@@ -48,8 +49,8 @@ data SAWCruciblePersonality sym = SAWCruciblePersonality
 newSAWCoreBackend :: SC.SharedContext -> IO Sym
 newSAWCoreBackend sc =
   do st <- newSAWCoreState sc
-     sym <- newOnlineBackend W4.FloatRealRepr Nonce.globalNonceGenerator Yices.yicesDefaultFeatures st
-     W4.extendConfig Yices.yicesOptions (W4.getConfiguration sym)
+     sym <- newOnlineBackend W4.FloatRealRepr Nonce.globalNonceGenerator (SMT2.defaultFeatures Z3.Z3) st
+     W4.extendConfig Z3.z3Options (W4.getConfiguration sym)
      return sym
 
 sawCoreState :: Sym -> IO (SAWCoreState Nonce.GlobalNonceGenerator)
