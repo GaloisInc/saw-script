@@ -1,0 +1,41 @@
+name:               saw-core-coq
+version:            0.1
+license:            BSD3
+license-file:       LICENSE
+author:             Galois, Inc.
+maintainer:         atomb@galois.com
+copyright:          (c) 2018 Galois Inc.
+category:           Formal Methods
+build-type:         Simple
+cabal-version:      >= 1.8
+synopsis:           SAWCore backend for Coq
+description:
+  A backend for translating terms in the SAWCore intermediate language
+  into the syntax of Coq
+
+library
+  build-depends:
+    base == 4.*,
+    cryptol,
+    cryptol-saw-core,
+    containers,
+    interpolate,
+    lens,
+    mtl,
+    prettyprinter,
+    saw-core,
+    text,
+    parameterized-utils,
+    bv-sized,
+    vector
+  hs-source-dirs: src
+  exposed-modules:
+     Language.Coq.AST
+     Language.Coq.Pretty
+     Verifier.SAW.Translation.Coq
+     Verifier.SAW.Translation.Coq.CryptolModule
+     Verifier.SAW.Translation.Coq.SAWModule
+     Verifier.SAW.Translation.Coq.Monad
+     Verifier.SAW.Translation.Coq.Term
+     Verifier.SAW.Translation.Coq.SpecialTreatment
+  ghc-options: -Wall -Werror
