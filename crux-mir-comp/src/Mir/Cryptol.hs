@@ -1,8 +1,10 @@
 {-# Language DataKinds #-}
 {-# Language GADTs #-}
 {-# Language ImplicitParams #-}
+{-# Language KindSignatures #-}
 {-# Language OverloadedStrings #-}
 {-# Language PatternSynonyms #-}
+{-# Language PolyKinds #-}
 {-# Language RankNTypes #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language TypeApplications #-}
@@ -24,7 +26,7 @@ import Data.String (fromString)
 import Data.Text (Text)
 import qualified Data.Text as Text
 
-import Data.Parameterized.Context (pattern Empty, pattern (:>))
+import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.NatRepr
 import Data.Parameterized.TraversableFC
@@ -43,7 +45,8 @@ import Crux
 import Crux.Types
 
 import Mir.DefId
-import Mir.Generator (CollectionState, collection)
+import Mir.Generator (CollectionState, collection, MirHandle(..))
+import qualified Mir.Generator as M
 import Mir.Intrinsics
 import qualified Mir.Mir as M
 import qualified Mir.PP as M
@@ -87,6 +90,30 @@ cryptolOverrides _symOnline cs name cfg
         RegMap (Empty :> RegEntry _tpr modulePathStr :> RegEntry _tpr' nameStr) <- getOverrideArgs
         cryptolLoad (cs ^. collection) sig (cfgReturnType cfg) modulePathStr nameStr
 
+  | (normDefId "crucible::cryptol::override_" <> "::_inst") `Text.isPrefixOf` name
+  , Empty
+      :> UnitRepr
+      :> MirSliceRepr (BVRepr (testEquality (knownNat @8) -> Just Refl))
+      :> MirSliceRepr (BVRepr (testEquality (knownNat @8) -> Just Refl))
+      <- cfgArgTypes cfg
+  , UnitRepr <- cfgReturnType cfg
+  = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
+    mkOverride' "cryptol_override_" UnitRepr $ do
+        let tyArg = cs ^? collection . M.intrinsics . ix (textId name) .
+                M.intrInst . M.inSubsts . _Wrapped . ix 0
+        fnDefId <- case tyArg of
+            Just (M.TyFnDef defId) -> return defId
+            _ -> error $ "expected TyFnDef argument, but got " ++ show tyArg
+        mh <- case cs ^? M.handleMap . ix fnDefId of
+            Just mh -> return mh
+            _ -> error $ "failed to get function definition for " ++ show fnDefId
+
+        RegMap (Empty
+          :> RegEntry _ ()
+          :> RegEntry _tpr modulePathStr
+          :> RegEntry _tpr' nameStr) <- getOverrideArgs
+        cryptolOverride (cs ^. collection) mh modulePathStr nameStr
+
   | otherwise = Nothing
 
 
@@ -100,15 +127,83 @@ cryptolLoad ::
     RegValue sym (MirSlice (BVType 8)) ->
     OverrideSim (p sym) sym MIR rtp a r (RegValue sym tp)
 cryptolLoad col sig (FunctionHandleRepr argsCtx retTpr) modulePathStr nameStr = do
-    modulePath <- getString modulePathStr >>= \x -> case x of
-        Just s -> return $ Text.unpack s
-        Nothing -> fail "cryptol::load module path must not be symbolic"
-    name <- getString nameStr >>= \x -> case x of
-        Just s -> return $ Text.unpack s
-        Nothing -> fail "cryptol::load function name must not be symbolic"
+    modulePath <- loadString modulePathStr "cryptol::load module path"
+    name <- loadString nameStr "cryptol::load function name"
+    LoadedCryptolFunc argShps retShp run <- loadCryptolFunc col sig modulePath name
 
-    let argShps = map (tyToShape col) (sig ^. M.fsarg_tys)
-    let retShp = tyToShapeEq col (sig ^. M.fsreturn_ty) retTpr
+    let argsCtx' = fmapFC shapeType argShps
+    let retTpr' = shapeType retShp
+    (Refl, Refl) <- case (testEquality argsCtx argsCtx', testEquality retTpr retTpr') of
+        (Just x, Just y) -> return (x, y)
+        _ -> fail $ "signature mismatch: " ++ show (argsCtx', retTpr') ++ " != " ++
+            show (argsCtx, retTpr)
+
+    halloc <- simHandleAllocator <$> use stateContext
+    let fnName = "cryptol_" <> modulePath <> "_" <> name
+    fh <- liftIO $ mkHandle' halloc (fromString $ Text.unpack fnName) argsCtx retTpr
+    bindFnHandle fh $ UseOverride $ mkOverride' (handleName fh) (handleReturnType fh) $
+        run
+
+    return $ HandleFnVal fh
+
+cryptolLoad _ _ tpr _ _ = fail $ "cryptol::load: bad function type " ++ show tpr
+
+loadString ::
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    RegValue sym (MirSlice (BVType 8)) ->
+    String ->
+    OverrideSim (p sym) sym MIR rtp a r Text
+loadString str desc = getString str >>= \x -> case x of
+    Just s -> return s
+    Nothing -> fail $ desc ++ " must not be symbolic"
+
+
+cryptolOverride ::
+    forall sym p t st fs rtp a r .
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    M.Collection ->
+    MirHandle ->
+    RegValue sym (MirSlice (BVType 8)) ->
+    RegValue sym (MirSlice (BVType 8)) ->
+    OverrideSim (p sym) sym MIR rtp a r ()
+cryptolOverride col (MirHandle _ sig fh) modulePathStr nameStr = do
+    modulePath <- loadString modulePathStr "cryptol::load module path"
+    name <- loadString nameStr "cryptol::load function name"
+    LoadedCryptolFunc argShps retShp run <- loadCryptolFunc col sig modulePath name
+
+    let argsCtx = handleArgTypes fh
+    let retTpr = handleReturnType fh
+    let argsCtx' = fmapFC shapeType argShps
+    let retTpr' = shapeType retShp
+    (Refl, Refl) <- case (testEquality argsCtx argsCtx', testEquality retTpr retTpr') of
+        (Just x, Just y) -> return (x, y)
+        _ -> fail $ "signature mismatch: " ++ show (argsCtx', retTpr') ++ " != " ++
+            show (argsCtx, retTpr)
+
+    bindFnHandle fh $ UseOverride $ mkOverride' (handleName fh) (handleReturnType fh) $
+        run
+
+
+data LoadedCryptolFunc sym = forall args ret . LoadedCryptolFunc
+    { _lcfArgs :: Assignment TypeShape args
+    , _lcfRet :: TypeShape ret
+    , _lcfRun :: forall p rtp r.
+        HasModel p => OverrideSim (p sym) sym MIR rtp args r (RegValue sym ret)
+    }
+
+-- | Load a Cryptol function, returning an `OverrideSim` action that can be
+-- used to run the function.
+loadCryptolFunc ::
+    forall sym p t st fs rtp a r .
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    M.Collection ->
+    M.FnSig ->
+    Text ->
+    Text ->
+    OverrideSim (p sym) sym MIR rtp a r (LoadedCryptolFunc sym)
+loadCryptolFunc col sig modulePath name = do
+    Some argShps <- return $ listToCtx $ map (tyToShape col) (sig ^. M.fsarg_tys)
+    Some retShp <- return $ tyToShape col (sig ^. M.fsreturn_ty)
 
     -- TODO share a single SharedContext across all calls
     sc <- liftIO $ SAW.mkSharedContext
@@ -116,36 +211,45 @@ cryptolLoad col sig (FunctionHandleRepr argsCtx retTpr) modulePathStr nameStr = 
     liftIO $ SAW.scLoadCryptolModule sc
     let ?fileReader = BS.readFile
     ce <- liftIO $ SAW.initCryptolEnv sc
-    (m, ce') <- liftIO $ SAW.loadCryptolModule sc ce modulePath
-    tt <- liftIO $ SAW.lookupCryptolModule m name
+    (m, _ce') <- liftIO $ SAW.loadCryptolModule sc ce (Text.unpack modulePath)
+    tt <- liftIO $ SAW.lookupCryptolModule m (Text.unpack name)
 
-    case typecheckFnSig sig argShps (Some retShp) (SAW.ttSchema tt) of
+    case typecheckFnSig sig (toListFC Some argShps) (Some retShp) (SAW.ttSchema tt) of
         Left err -> fail $ "error loading " ++ show name ++ ": " ++ err
         Right () -> return ()
 
     scs <- liftIO $ SAW.newSAWCoreState sc
+    let fnName = "cryptol_" <> modulePath <> "_" <> name
+    return $ LoadedCryptolFunc argShps retShp $
+        cryptolRun sc scs (Text.unpack fnName) argShps retShp (SAW.ttTerm tt)
 
+  where
+    listToCtx :: forall k (f :: k -> *). [Some f] -> Some (Assignment f)
+    listToCtx xs = go xs (Some Empty)
+      where
+        go :: forall k (f :: k -> *). [Some f] -> Some (Assignment f) -> Some (Assignment f)
+        go [] acc = acc
+        go (Some x : xs) (Some acc) = go xs (Some $ acc :> x)
+
+{-
     halloc <- simHandleAllocator <$> use stateContext
     let fnName = "cryptol_" ++ modulePath ++ "_" ++ name
     fh <- liftIO $ mkHandle' halloc (fromString fnName) argsCtx retTpr
     bindFnHandle fh $ UseOverride $ mkOverride' (handleName fh) (handleReturnType fh) $
-        cryptolRun sc scs fnName argShps retShp (SAW.ttTerm tt)
+-}
 
-    return $ HandleFnVal fh
-
-cryptolLoad _ _ tpr _ _ = fail $ "cryptol::load: bad function type " ++ show tpr
 
 
 cryptolRun ::
-    forall sym p t st fs rtp a r tp .
+    forall sym p t st fs rtp r args ret .
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
     SAW.SharedContext ->
     SAW.SAWCoreState t ->
     String ->
-    [Some TypeShape] ->
-    TypeShape tp ->
+    Assignment TypeShape args ->
+    TypeShape ret ->
     SAW.Term ->
-    OverrideSim (p sym) sym MIR rtp a r (RegValue sym tp)
+    OverrideSim (p sym) sym MIR rtp args r (RegValue sym ret)
 cryptolRun sc scs name argShps retShp funcTerm = do
     sym <- getSymInterface
 
@@ -153,21 +257,16 @@ cryptolRun sc scs name argShps retShp funcTerm = do
     w4VarMapRef <- liftIO $ newIORef (Map.empty :: Map SAW.VarIndex (Some (W4.Expr t)))
 
     RegMap argsCtx <- getOverrideArgs
-    args <- forM (zip argShps (toListFC (\re -> Some re) argsCtx)) $
-        \(Some argShp, Some (RegEntry tpr val)) -> do
-            Refl <- case testEquality (shapeType argShp) tpr of
-                Just x -> return x
-                Nothing -> fail $
-                    "type error: " ++ name ++ " expected argument of type " ++
-                        show (shapeType argShp) ++ ", but got " ++ show tpr
-            regToTerm sym sc scs name visitCache w4VarMapRef argShp val
-    appTerm <- liftIO $ SAW.scApplyAll sc funcTerm args 
+    argTermsCtx <- Ctx.zipWithM
+        (\shp (RegEntry _ val) ->
+            Const <$> regToTerm sym sc scs name visitCache w4VarMapRef shp val)
+        argShps argsCtx
+    let argTerms = toListFC getConst argTermsCtx
+    appTerm <- liftIO $ SAW.scApplyAll sc funcTerm argTerms
 
     w4VarMap <- liftIO $ readIORef w4VarMapRef
     rv <- liftIO $ termToReg sym sc w4VarMap appTerm retShp
     return rv
-
-  where
 
 exprToTerm :: forall sym p t st fs tp rtp a r.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
@@ -178,7 +277,7 @@ exprToTerm :: forall sym p t st fs tp rtp a r.
     IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
     W4.Expr t tp ->
     OverrideSim (p sym) sym MIR rtp a r SAW.Term
-exprToTerm sym sc scs visitCache w4VarMapRef val = do
+exprToTerm sym _sc scs visitCache w4VarMapRef val = do
     visitExprVars visitCache val $ \var -> do
         let expr = W4.BoundVarExpr var
         term <- liftIO $ SAW.toSC sym scs expr
@@ -236,7 +335,7 @@ regToTerm sym sc scs name visitCache w4VarMapRef shp rv = go shp rv
         forM (toList pv) $ \rv -> do
             rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
             go shp rv'
-    goVector shp (MirVector_Array _) = fail $
+    goVector _shp (MirVector_Array _) = fail $
         "regToTerm: MirVector_Array not supported"
 
 shapeToTerm :: forall tp m.
@@ -319,6 +418,6 @@ typecheckFnSig fnSig argShps retShp sch@(Cry.Forall [] [] ty) = go 0 argShps ty
     goOneField desc (OptField shp) ty = goOne desc shp ty
     goOneField desc (ReqField shp) ty = goOne desc shp ty
 
-typecheckFnSig _ argShps retShp sch = Left $
+typecheckFnSig _ _ _ sch = Left $
     "polymorphic Cryptol functions are not supported (got signature: " ++
         show (Cry.pp sch) ++ ")"
