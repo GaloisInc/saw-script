@@ -105,51 +105,49 @@ upd _ _ (Vec t v) i e = Vec t (v V.// [(i, e)])
 ----------------------------------------
 -- Bitvector operations
 
--- bvNat : (n : Nat) -> Nat -> Vec n Bool;
 bvNat :: Int -> Integer -> BitVector
 bvNat w x = bv w x
 
--- bvAdd : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
-bvAdd, bvSub, bvMul :: Natural -> BitVector -> BitVector -> BitVector
-bvAdd _ (BV w x) (BV _ y) = bv w (x + y)
-bvSub _ (BV w x) (BV _ y) = bv w (x - y)
-bvMul _ (BV w x) (BV _ y) = bv w (x * y)
+bvAdd, bvSub, bvMul :: BitVector -> BitVector -> BitVector
+bvAdd (BV w x) (BV _ y) = bv w (x + y)
+bvSub (BV w x) (BV _ y) = bv w (x - y)
+bvMul (BV w x) (BV _ y) = bv w (x * y)
 
-bvNeg :: Natural -> BitVector -> BitVector
-bvNeg _ x@(BV w _) = bv w $ negate $ signed x
+bvNeg :: BitVector -> BitVector
+bvNeg x@(BV w _) = bv w $ negate $ signed x
 
-bvAnd, bvOr, bvXor :: Int -> BitVector -> BitVector -> BitVector
-bvAnd _ (BV w x) (BV _ y) = BV w (x .&. y)
-bvOr  _ (BV w x) (BV _ y) = BV w (x .|. y)
-bvXor _ (BV w x) (BV _ y) = BV w (x `xor` y)
+bvAnd, bvOr, bvXor :: BitVector -> BitVector -> BitVector
+bvAnd (BV w x) (BV _ y) = BV w (x .&. y)
+bvOr  (BV w x) (BV _ y) = BV w (x .|. y)
+bvXor (BV w x) (BV _ y) = BV w (x `xor` y)
 
-bvNot :: Int -> BitVector -> BitVector
-bvNot _ (BV w x) = BV w (x `xor` bitMask w)
+bvNot :: BitVector -> BitVector
+bvNot (BV w x) = BV w (x `xor` bitMask w)
 
 bvEq, bvult, bvule, bvugt, bvuge, bvsgt, bvsge, bvslt, bvsle
-    :: Int -> BitVector -> BitVector -> Bool
-bvEq  _ x y = unsigned x == unsigned y
-bvugt _ x y = unsigned x >  unsigned y
-bvuge _ x y = unsigned x >= unsigned y
-bvult _ x y = unsigned x <  unsigned y
-bvule _ x y = unsigned x <= unsigned y
-bvsgt _ x y = signed x >  signed y
-bvsge _ x y = signed x >= signed y
-bvslt _ x y = signed x <  signed y
-bvsle _ x y = signed x <= signed y
+    :: BitVector -> BitVector -> Bool
+bvEq  x y = unsigned x == unsigned y
+bvugt x y = unsigned x >  unsigned y
+bvuge x y = unsigned x >= unsigned y
+bvult x y = unsigned x <  unsigned y
+bvule x y = unsigned x <= unsigned y
+bvsgt x y = signed x >  signed y
+bvsge x y = signed x >= signed y
+bvslt x y = signed x <  signed y
+bvsle x y = signed x <= signed y
 
-bvPopcount :: Int -> BitVector -> BitVector
-bvPopcount _ (BV w x) = BV w (toInteger (popCount x))
+bvPopcount :: BitVector -> BitVector
+bvPopcount (BV w x) = BV w (toInteger (popCount x))
 
-bvCountLeadingZeros :: Int -> BitVector -> BitVector
-bvCountLeadingZeros _ (BV w x) = BV w (toInteger (go 0))
+bvCountLeadingZeros :: BitVector -> BitVector
+bvCountLeadingZeros (BV w x) = BV w (toInteger (go 0))
  where
  go !i
    | i < w && testBit x (w - i - 1) == False = go (i+1)
    | otherwise = i
 
-bvCountTrailingZeros :: Int -> BitVector -> BitVector
-bvCountTrailingZeros _ (BV w x) = BV w (toInteger (go 0))
+bvCountTrailingZeros :: BitVector -> BitVector
+bvCountTrailingZeros (BV w x) = BV w (toInteger (go 0))
  where
  go !i
    | i < w && testBit x i == False = go (i+1)
@@ -164,8 +162,8 @@ bvCountTrailingZeros _ (BV w x) = BV w (toInteger (go 0))
 
 -- | @at@ specialized to BitVector (big-endian)
 -- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
-at_bv :: Int -> () -> BitVector -> Natural -> Bool
-at_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromIntegral i)
+at_bv :: BitVector -> Natural -> Bool
+at_bv x i = testBit (unsigned x) (width x - 1 - fromIntegral i)
 
 -- | @set@ specialized to BitVector (big-endian)
 -- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
@@ -175,48 +173,48 @@ at_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromIntegral i)
 
 -- | @append@ specialized to BitVector (big-endian)
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
-append_bv :: Int -> Int -> () -> BitVector -> BitVector -> BitVector
-append_bv _ _ _ (BV m x) (BV n y) = BV (m + n) (shiftL x n .|. y)
+append_bv :: BitVector -> BitVector -> BitVector
+append_bv (BV m x) (BV n y) = BV (m + n) (shiftL x n .|. y)
 -- little-endian version:
 -- append_bv _ _ _ (BV m x) (BV n y) = BV (m + n) (x .|. shiftL y m)
 
 -- bvToNat : (n : Nat) -> Vec n Bool -> Nat;
-bvToNat :: Int -> BitVector -> Integer
-bvToNat _ (BV _ x) = x
+bvToNat :: BitVector -> Integer
+bvToNat (BV _ x) = x
 
 -- bvAddWithCarry : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool * Vec n Bool;
-bvAddWithCarry :: Int -> BitVector -> BitVector -> (Bool, BitVector)
-bvAddWithCarry _ (BV w x) (BV _ y) = (testBit z w, bv w z)
+bvAddWithCarry :: BitVector -> BitVector -> (Bool, BitVector)
+bvAddWithCarry (BV w x) (BV _ y) = (testBit z w, bv w z)
     where z = x + y
 
-bvUDiv :: Int -> BitVector -> BitVector -> Maybe BitVector
-bvUDiv _ (BV w x) (BV _ y)
+bvUDiv :: BitVector -> BitVector -> Maybe BitVector
+bvUDiv (BV w x) (BV _ y)
   | y == 0    = Nothing
   | otherwise = Just (bv w (x `quot` y))
 
-bvURem :: Int -> BitVector -> BitVector -> Maybe BitVector
-bvURem _ (BV w x) (BV _ y)
+bvURem :: BitVector -> BitVector -> Maybe BitVector
+bvURem (BV w x) (BV _ y)
   | y == 0    = Nothing
   | otherwise = Just (bv w (x `rem` y))
 
-bvSDiv :: Int -> BitVector -> BitVector -> Maybe BitVector
-bvSDiv _ x y
+bvSDiv :: BitVector -> BitVector -> Maybe BitVector
+bvSDiv x y
   | unsigned y == 0 = Nothing
   | otherwise       = Just (bv (width x) (signed x `quot` signed y))
 
-bvSRem :: Int -> BitVector -> BitVector -> Maybe BitVector
-bvSRem _ x y
+bvSRem :: BitVector -> BitVector -> Maybe BitVector
+bvSRem x y
   | unsigned y == 0 = Nothing
   | otherwise       = Just (bv (width x) (signed x `rem` signed y))
 
-bvShl :: Int -> BitVector -> Int -> BitVector
-bvShl _ (BV w x) i = bv w (x `shiftL` i)
+bvShl :: BitVector -> Int -> BitVector
+bvShl (BV w x) i = bv w (x `shiftL` i)
 
-bvShr :: Int -> BitVector -> Int -> BitVector
-bvShr _ (BV w x) i = bv w (x `shiftR` i)
+bvShr :: BitVector -> Int -> BitVector
+bvShr (BV w x) i = bv w (x `shiftR` i)
 
-bvSShr :: Int -> BitVector -> Int -> BitVector
-bvSShr _ x i = bv (width x) (signed x `shiftR` i)
+bvSShr :: BitVector -> Int -> BitVector
+bvSShr x i = bv (width x) (signed x `shiftR` i)
 
 -- bvTrunc : (m n : Nat) -> Vec (addNat m n) Bool -> Vec n Bool;
 bvTrunc :: Int -> Int -> BitVector -> BitVector
@@ -232,21 +230,21 @@ bvSExt m n x = bv (m + n + 1) (signed x)
 
 -- | @take@ specialized to BitVector (big-endian)
 -- take :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
-take_bv :: () -> Int -> Int -> BitVector -> BitVector
-take_bv _ m n (BV _ x) = bv m (x `shiftR` n)
+take_bv :: Int -> Int -> BitVector -> BitVector
+take_bv m n (BV _ x) = bv m (x `shiftR` n)
 -- little-endian version:
--- take_bv _ m _ (BV _ x) = bv m x
+-- take_bv m _ (BV _ x) = bv m x
 
 -- | @vDrop@ specialized to BitVector (big-endian)
 -- drop :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec n a;
-drop_bv :: () -> Int -> Int -> BitVector -> BitVector
-drop_bv _ _ n (BV _ x) = bv n x
+drop_bv :: Int -> Int -> BitVector -> BitVector
+drop_bv _ n (BV _ x) = bv n x
 -- little-endian version:
 -- drop_bv _ m n (BV _ x) = BV n (x `shiftR` m)
 
 -- | @slice@ specialized to BitVector
-slice_bv :: () -> Int -> Int -> Int -> BitVector -> BitVector
-slice_bv _ _ n o (BV _ x) = bv n (shiftR x o)
+slice_bv :: Int -> Int -> Int -> BitVector -> BitVector
+slice_bv _ n o (BV _ x) = bv n (shiftR x o)
 -- little-endian version:
 -- slice_bv _ i n _ (BV _ x) = bv n (shiftR x i)
 

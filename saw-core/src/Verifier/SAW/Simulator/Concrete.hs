@@ -161,8 +161,8 @@ prims =
   , Prims.bpBvAt    = pure2 Prim.bvAt
   , Prims.bpBvLit   = pure2 Prim.bv
   , Prims.bpBvSize  = Prim.width
-  , Prims.bpBvJoin  = pure2 (Prim.append_bv undefined undefined undefined)
-  , Prims.bpBvSlice = pure3 (\m n x -> Prim.slice_bv () m n (Prim.width x - m - n) x)
+  , Prims.bpBvJoin  = pure2 Prim.append_bv
+  , Prims.bpBvSlice = pure3 (\m n x -> Prim.slice_bv m n (Prim.width x - m - n) x)
     -- Conditionals
   , Prims.bpMuxBool  = pure3 ite
   , Prims.bpMuxWord  = pure3 ite
@@ -177,30 +177,30 @@ prims =
   , Prims.bpXor    = pure2 (/=)
   , Prims.bpBoolEq = pure2 (==)
     -- Bitvector logical
-  , Prims.bpBvNot  = pure1 (Prim.bvNot undefined)
-  , Prims.bpBvAnd  = pure2 (Prim.bvAnd undefined)
-  , Prims.bpBvOr   = pure2 (Prim.bvOr  undefined)
-  , Prims.bpBvXor  = pure2 (Prim.bvXor undefined)
+  , Prims.bpBvNot  = pure1 Prim.bvNot
+  , Prims.bpBvAnd  = pure2 Prim.bvAnd
+  , Prims.bpBvOr   = pure2 Prim.bvOr 
+  , Prims.bpBvXor  = pure2 Prim.bvXor
     -- Bitvector arithmetic
-  , Prims.bpBvNeg  = pure1 (Prim.bvNeg undefined)
-  , Prims.bpBvAdd  = pure2 (Prim.bvAdd undefined)
-  , Prims.bpBvSub  = pure2 (Prim.bvSub undefined)
-  , Prims.bpBvMul  = pure2 (Prim.bvMul undefined)
-  , Prims.bpBvUDiv = divOp (Prim.bvUDiv undefined)
-  , Prims.bpBvURem = divOp (Prim.bvURem undefined)
-  , Prims.bpBvSDiv = divOp (Prim.bvSDiv undefined)
-  , Prims.bpBvSRem = divOp (Prim.bvSRem undefined)
+  , Prims.bpBvNeg  = pure1 Prim.bvNeg
+  , Prims.bpBvAdd  = pure2 Prim.bvAdd
+  , Prims.bpBvSub  = pure2 Prim.bvSub
+  , Prims.bpBvMul  = pure2 Prim.bvMul
+  , Prims.bpBvUDiv = divOp Prim.bvUDiv
+  , Prims.bpBvURem = divOp Prim.bvURem
+  , Prims.bpBvSDiv = divOp Prim.bvSDiv
+  , Prims.bpBvSRem = divOp Prim.bvSRem
   , Prims.bpBvLg2  = pure1 Prim.bvLg2
     -- Bitvector comparisons
-  , Prims.bpBvEq   = pure2 (Prim.bvEq  undefined)
-  , Prims.bpBvsle  = pure2 (Prim.bvsle undefined)
-  , Prims.bpBvslt  = pure2 (Prim.bvslt undefined)
-  , Prims.bpBvule  = pure2 (Prim.bvule undefined)
-  , Prims.bpBvult  = pure2 (Prim.bvult undefined)
-  , Prims.bpBvsge  = pure2 (Prim.bvsge undefined)
-  , Prims.bpBvsgt  = pure2 (Prim.bvsgt undefined)
-  , Prims.bpBvuge  = pure2 (Prim.bvuge undefined)
-  , Prims.bpBvugt  = pure2 (Prim.bvugt undefined)
+  , Prims.bpBvEq   = pure2 Prim.bvEq 
+  , Prims.bpBvsle  = pure2 Prim.bvsle
+  , Prims.bpBvslt  = pure2 Prim.bvslt
+  , Prims.bpBvule  = pure2 Prim.bvule
+  , Prims.bpBvult  = pure2 Prim.bvult
+  , Prims.bpBvsge  = pure2 Prim.bvsge
+  , Prims.bpBvsgt  = pure2 Prim.bvsgt
+  , Prims.bpBvuge  = pure2 Prim.bvuge
+  , Prims.bpBvugt  = pure2 Prim.bvugt
     -- Bitvector shift/rotate
   , Prims.bpBvRolInt = pure2 bvRotateL
   , Prims.bpBvRorInt = pure2 bvRotateR
@@ -211,9 +211,9 @@ prims =
   , Prims.bpBvShl    = pure3 (\b x y -> bvShiftL b x (unsigned y))
   , Prims.bpBvShr    = pure3 (\b x y -> bvShiftR b x (unsigned y))
     -- Bitvector misc
-  , Prims.bpBvPopcount = pure1 (Prim.bvPopcount undefined)
-  , Prims.bpBvCountLeadingZeros = pure1 (Prim.bvCountLeadingZeros undefined)
-  , Prims.bpBvCountTrailingZeros = pure1 (Prim.bvCountTrailingZeros undefined)
+  , Prims.bpBvPopcount = pure1 Prim.bvPopcount
+  , Prims.bpBvCountLeadingZeros = pure1 Prim.bvCountLeadingZeros
+  , Prims.bpBvCountTrailingZeros = pure1 Prim.bvCountTrailingZeros
   , Prims.bpBvForall = unsupportedConcretePrimitive "bvForall"
 
     -- Integer operations
@@ -245,9 +245,9 @@ constMap =
   flip Map.union (Prims.constMap prims) $
   Map.fromList
   -- Shifts
-  [ ("Prelude.bvShl" , bvShiftOp (Prim.bvShl undefined))
-  , ("Prelude.bvShr" , bvShiftOp (Prim.bvShr undefined))
-  , ("Prelude.bvSShr", bvShiftOp (Prim.bvSShr undefined))
+  [ ("Prelude.bvShl" , bvShiftOp Prim.bvShl)
+  , ("Prelude.bvShr" , bvShiftOp Prim.bvShr)
+  , ("Prelude.bvSShr", bvShiftOp Prim.bvSShr)
   -- Integers
   , ("Prelude.intToNat", Prims.intToNatOp)
   , ("Prelude.natToInt", Prims.natToIntOp)
@@ -291,7 +291,7 @@ intToBvOp =
   Prims.intFun "intToBv x" $ \x -> return $
     VWord $
      if n >= 0 then bv (fromIntegral n) x
-               else bvNeg n $ bv (fromIntegral n) $ negate x
+               else bvNeg $ bv (fromIntegral n) $ negate x
 
 ------------------------------------------------------------
 -- BitVector operations

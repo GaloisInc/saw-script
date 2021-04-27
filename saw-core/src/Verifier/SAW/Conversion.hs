@@ -686,10 +686,10 @@ at_bvNat = globalConv "Prelude.at" Prim.at_bv
 atWithDefault_bvNat :: Conversion
 atWithDefault_bvNat =
   Conversion $
-  (\(_ :*: n :*: a :*: d :*: x :*: i) ->
-    if fromIntegral i < width x then mkBool (Prim.at_bv n a x i) else return d) <$>
+  (\(_ :*: _n :*: _a :*: d :*: x :*: i) ->
+    if fromIntegral i < width x then mkBool (Prim.at_bv x i) else return d) <$>
   (asGlobalDef "Prelude.atWithDefault" <:>
-   defaultMatcher <:> defaultMatcher <:> asAny <:> asBvNatLit <:> asAnyNatLit)
+   asAny <:> asAny <:> asAny <:> asBvNatLit <:> asAnyNatLit)
 
 take_bvNat :: Conversion
 take_bvNat = globalConv "Prelude.take" Prim.take_bv
