@@ -39,10 +39,11 @@ import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Time.Clock
 import Data.Typeable
 
-import qualified Data.Text as Text
 import System.Directory
 import qualified System.Environment
 import qualified System.Exit as Exit
@@ -884,40 +885,38 @@ cryptolSimpset =
   do sc <- getSharedContext
      io $ Cryptol.mkCryptolSimpset sc
 
-addPreludeEqs :: [String] -> Simpset
-              -> TopLevel Simpset
+addPreludeEqs :: [Text] -> Simpset -> TopLevel Simpset
 addPreludeEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Prelude"])
 
-addCryptolEqs :: [String] -> Simpset
-              -> TopLevel Simpset
+addCryptolEqs :: [Text] -> Simpset -> TopLevel Simpset
 addCryptolEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Cryptol"])
 
-add_core_defs :: String -> [String] -> Simpset -> TopLevel Simpset
+add_core_defs :: Text -> [Text] -> Simpset -> TopLevel Simpset
 add_core_defs modname names ss =
   do sc <- getSharedContext
      defs <- io $ mapM (getDef sc) names -- FIXME: warn if not found
      defRules <- io $ concat <$> (mapM (scDefRewriteRules sc) defs)
      return (addRules defRules ss)
   where
-    qualify = mkIdent (mkModuleName [Text.pack modname])
+    qualify = mkIdent (mkModuleName [modname])
     getDef sc n =
       scFindDef sc (qualify n) >>= \maybe_def ->
       case maybe_def of
         Just d -> return d
-        Nothing -> fail $ modname ++ " definition " ++ n ++ " not found"
+        Nothing -> fail $ Text.unpack modname ++ " definition " ++ Text.unpack n ++ " not found"
 
-add_prelude_defs :: [String] -> Simpset -> TopLevel Simpset
+add_prelude_defs :: [Text] -> Simpset -> TopLevel Simpset
 add_prelude_defs = add_core_defs "Prelude"
 
-add_cryptol_defs :: [String] -> Simpset -> TopLevel Simpset
+add_cryptol_defs :: [Text] -> Simpset -> TopLevel Simpset
 add_cryptol_defs = add_core_defs "Cryptol"
 
 rewritePrim :: Simpset -> TypedTerm -> TopLevel TypedTerm

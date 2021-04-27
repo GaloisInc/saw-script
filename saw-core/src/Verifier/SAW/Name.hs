@@ -25,7 +25,6 @@ module Verifier.SAW.Name
   , moduleNamePieces
    -- * Identifiers
   , Ident(identModule, identBaseName), identName, mkIdent
-  , mkIdentText
   , parseIdent
   , isIdent
   , identText
@@ -130,24 +129,20 @@ instance Read Ident where
     let (str1, str2) = break (not . isIdChar) str in
     [(parseIdent str1, str2)]
 
-mkIdent :: ModuleName -> String -> Ident
-mkIdent m s = Ident m (Text.pack s)
-
-mkIdentText :: ModuleName -> Text -> Ident
-mkIdentText m s = Ident m s
+mkIdent :: ModuleName -> Text -> Ident
+mkIdent m s = Ident m s
 
 -- | Parse a fully qualified identifier.
 parseIdent :: String -> Ident
 parseIdent s0 =
     case reverse (breakEach s0) of
       (_:[]) -> internalError $ "parseIdent given empty module name."
-      (nm:rMod) -> mkIdent (mkModuleName (reverse (map Text.pack rMod))) nm
+      (nm:rMod) -> mkIdent (mkModuleName (reverse rMod)) nm
       _ -> internalError $ "parseIdent given bad identifier " ++ show s0
   where breakEach s =
           case break (=='.') s of
-            (h,[]) -> [h]
-            (h,'.':r) -> h : breakEach r
-            _ -> internalError "parseIdent.breakEach failed"
+            (h, []) -> [Text.pack h]
+            (h, _ : r) -> Text.pack h : breakEach r
 
 instance IsString Ident where
   fromString = parseIdent
