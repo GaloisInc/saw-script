@@ -151,7 +151,7 @@ bvShiftOp bvOp natOp =
   strictFun $ \y ->
     case y of
       VNat n   -> return (vWord (natOp x n))
-      VToNat v -> fmap vWord (bvOp x =<< toWord v)
+      VBVToNat _ v -> fmap vWord (bvOp x =<< toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.BitBlast.shiftOp", show y]
 
 lvSShr :: LitVector l -> Natural -> LitVector l
@@ -400,7 +400,7 @@ streamGetOp be =
   strictFun $ \xs -> return $
   strictFun $ \case
     VNat n -> lookupBStream xs n
-    VToNat w ->
+    VBVToNat _ w ->
        do bs <- toWord w
           AIG.muxInteger (lazyMux be (muxBVal be)) ((2 ^ AIG.length bs) - 1) bs (lookupBStream xs)
     v -> fail (unlines ["Verifier.SAW.Simulator.BitBlast.streamGetOp", "Expected Nat value", show v])

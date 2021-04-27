@@ -184,6 +184,12 @@ readBackValue sc cfg = loop
     loop _ VUnit = scUnitValue sc
 
     loop _ (VNat n) = scNat sc n
+    loop _ (VBVToNat w n) =
+      do tm <- loop (VVecType (fromIntegral w) VBoolType) n
+         scBvToNat sc (fromIntegral w) tm
+    loop _ (VIntToNat i) =
+      do tm <- loop VIntType i
+         scIntToNat sc tm
 
     loop _ (VBool (Left tm)) = return tm
     loop _ (VBool (Right b)) = scBool sc b

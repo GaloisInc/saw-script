@@ -340,7 +340,7 @@ intToNatOp sym =
         do z <- W.intLit sym 0
            pneg <- W.intLt sym i z
            i' <- W.intIte sym pneg z i
-           pure (VToNat (VInt i'))
+           pure (VIntToNat (VInt i'))
 
 -- primitive natToInt :: Nat -> Integer;
 natToIntOp :: forall sym. Sym sym => sym -> SValue sym
@@ -415,7 +415,7 @@ bvShiftOp sym bvOp natOp =
     case y of
       VNat i   -> VWord <$> natOp x j
         where j = toInteger i `min` SW.bvWidth x
-      VToNat v -> VWord <$> (bvOp x =<< toWord sym v)
+      VBVToNat _ v -> VWord <$> (bvOp x =<< toWord sym v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.What4.bvShiftOp", show y]
 
 -- bvShl : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
@@ -527,7 +527,7 @@ streamGetOp sym =
   strictFun $ \xs -> return $
   strictFun $ \case
     VNat n -> lookupSStream xs n
-    VToNat w ->
+    VBVToNat _ w ->
       do ilv <- toWord sym w
          selectV sym (lazyMux @sym (muxBVal sym)) ((2 ^ SW.bvWidth ilv) - 1) (lookupSStream xs) ilv
     v -> Prims.panic "streamGetOp" ["Expected Nat value", show v]

@@ -425,7 +425,9 @@ bvNatOp bp =
 
 -- bvToNat : (n : Nat) -> Vec n Bool -> Nat;
 bvToNatOp :: VMonad l => Value l
-bvToNatOp = constFun $ pureFun VToNat
+bvToNatOp =
+  natFun' "bvToNat" $ \n -> return $
+  pureFun (VBVToNat (fromIntegral n)) -- TODO, bad fromIntegral
 
 -- coerce :: (a b :: sort 0) -> Eq (sort 0) a b -> a -> b;
 coerceOp :: VMonad l => Value l
@@ -441,11 +443,11 @@ coerceOp =
 -- | Return the number of bits necessary to represent the given value,
 -- which should be a value of type Nat.
 natSize :: BasePrims l -> Value l -> Natural
-natSize bp val =
+natSize _bp val =
   case val of
     VNat n -> widthNat n
-    VToNat (VVector v) -> fromIntegral (V.length v)
-    VToNat (VWord w) -> fromIntegral (bpBvSize bp w)
+    VBVToNat n _ -> fromIntegral n -- TODO, remove this fromIntegral 
+    VIntToNat _ -> error "natSize: symbolic integer"
     _ -> panic "natSize: expected Nat"
 
 -- | Convert the given value (which should be of type Nat) to a word
@@ -455,9 +457,9 @@ natToWord :: (VMonad l, Show (Extra l)) => BasePrims l -> Int -> Value l -> MWor
 natToWord bp w val =
   case val of
     VNat n -> bpBvLit bp w (toInteger n)
-    VToNat v ->
+    VIntToNat _i -> error "natToWord of VIntToNat TODO!"
+    VBVToNat xsize v ->
       do x <- toWord (bpPack bp) v
-         let xsize = bpBvSize bp x
          case compare xsize w of
            GT -> panic "natToWord: not enough bits"
            EQ -> return x
@@ -495,7 +497,7 @@ subNatOp bp =
          lt <- bpBvult bp x1 x2
          z <- bpBvLit bp (fromInteger w) 0
          d <- bpBvSub bp x1 x2
-         VToNat . VWord <$> bpMuxWord bp lt z d
+         VBVToNat (fromInteger w) . VWord <$> bpMuxWord bp lt z d -- TODO, boo fromInteger
 
 -- mulNat :: Nat -> Nat -> Nat;
 mulNatOp :: VMonad l => Value l
@@ -649,7 +651,7 @@ atWithDefaultOp bp =
           VVector xv -> force (vecIdx d xv (fromIntegral i)) -- FIXME dangerous fromIntegral
           VWord xw -> VBool <$> bpBvAt bp xw (fromIntegral i) -- FIXME dangerous fromIntegral
           _ -> panic "atOp: expected vector"
-      VToNat i -> do
+      VBVToNat _sz i -> do
         iv <- toBits (bpUnpack bp) i
         case x of
           VVector xv ->
@@ -657,6 +659,10 @@ atWithDefaultOp bp =
           VWord xw ->
             selectV (lazyMuxValue bp) (fromIntegral n - 1) (liftM VBool . bpBvAt bp xw) iv -- FIXME dangerous fromIntegral
           _ -> panic "atOp: expected vector"
+
+      VIntToNat _i ->
+        error "atWithDefault: symbolic integer TODO"
+
       _ -> panic $ "atOp: expected Nat, got " ++ show idx
 
 -- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
@@ -672,18 +678,20 @@ updOp bp =
         | toInteger i < toInteger (V.length xv)
            -> return (VVector (xv V.// [(fromIntegral i, y)]))
         | otherwise                   -> return (VVector xv)
-      VToNat (VWord w) ->
-        do let wsize = bpBvSize bp w
-               f i = do b <- bpBvEq bp w =<< bpBvLit bp wsize (toInteger i)
+      VBVToNat wsize (VWord w) ->
+        do let f i = do b <- bpBvEq bp w =<< bpBvLit bp wsize (toInteger i)
                         if wsize < 64 && toInteger i >= 2 ^ wsize
                           then return (xv V.! i)
                           else delay (lazyMuxValue bp b (force y) (force (xv V.! i)))
            yv <- V.generateM (V.length xv) f
            return (VVector yv)
-      VToNat (VVector iv) ->
+      VBVToNat _sz (VVector iv) ->
         do let update i = return (VVector (xv V.// [(i, y)]))
            iv' <- V.mapM (liftM toBool . force) iv
            selectV (lazyMuxValue bp) (fromIntegral n - 1) update iv' -- FIXME dangerous fromIntegral
+
+      VIntToNat _ -> error "updOp: symbolic integer TODO"
+
       _ -> panic $ "updOp: expected Nat, got " ++ show idx
 
 -- primitive EmptyVec :: (a :: sort 0) -> Vec 0 a;
@@ -790,7 +798,7 @@ expByNatOp bp =
   pureFun $ \mul ->
   pureFun $ \x   ->
   strictFun $ \case
-    VToNat w ->
+    VBVToNat _sz w ->
       do let loop acc [] = return acc
              loop acc (b:bs)
                | Just False <- bpAsBool bp b
@@ -807,6 +815,8 @@ expByNatOp bp =
                     loop acc' bs
 
          loop one . V.toList =<< toBits (bpUnpack bp) w
+
+    VIntToNat _ -> error "expByNat: symbolic integer"
 
     VNat n ->
       do let loop acc [] = return acc
@@ -864,7 +874,7 @@ shiftOp bp vecOp wordIntOp wordOp =
             zb <- toBool <$> force z
             VWord <$> wordIntOp zb xw (toInteger (min i n))
           _ -> panic $ "shiftOp: " ++ show xs
-      VToNat (VVector iv) -> do
+      VBVToNat _sz (VVector iv) -> do
         bs <- V.toList <$> traverse (fmap toBool . force) iv
         case xs of
           VVector xv -> VVector <$> shifter muxVector (\v i -> return (vecOp z v i)) xv bs
@@ -872,7 +882,7 @@ shiftOp bp vecOp wordIntOp wordOp =
             zb <- toBool <$> force z
             VWord <$> shifter (bpMuxWord bp) (wordIntOp zb) xw bs
           _ -> panic $ "shiftOp: " ++ show xs
-      VToNat (VWord iw) ->
+      VBVToNat _sz (VWord iw) ->
         case xs of
           VVector xv -> do
             bs <- V.toList <$> bpUnpack bp iw
@@ -881,6 +891,9 @@ shiftOp bp vecOp wordIntOp wordOp =
             zb <- toBool <$> force z
             VWord <$> wordOp zb xw iw
           _ -> panic $ "shiftOp: " ++ show xs
+
+      VIntToNat _i -> error "shiftOp: symbolic integer TODO"
+
       _ -> panic $ "shiftOp: " ++ show y
   where
     muxVector :: VBool l -> Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
@@ -908,13 +921,13 @@ rotateOp bp vecOp wordIntOp wordOp =
           VVector xv -> return $ VVector (vecOp xv (toInteger i))
           VWord xw -> VWord <$> wordIntOp xw (toInteger i)
           _ -> panic $ "rotateOp: " ++ show xs
-      VToNat (VVector iv) -> do
+      VBVToNat _sz (VVector iv) -> do
         bs <- V.toList <$> traverse (fmap toBool . force) iv
         case xs of
           VVector xv -> VVector <$> shifter muxVector (\v i -> return (vecOp v i)) xv bs
           VWord xw -> VWord <$> shifter (bpMuxWord bp) wordIntOp xw bs
           _ -> panic $ "rotateOp: " ++ show xs
-      VToNat (VWord iw) ->
+      VBVToNat _sz (VWord iw) ->
         case xs of
           VVector xv -> do
             bs <- V.toList <$> bpUnpack bp iw
@@ -922,6 +935,9 @@ rotateOp bp vecOp wordIntOp wordOp =
           VWord xw -> do
             VWord <$> wordOp xw iw
           _ -> panic $ "rotateOp: " ++ show xs
+
+      VIntToNat _i -> error "rotateOp: symbolic integer TODO"
+
       _ -> panic $ "rotateOp: " ++ show y
   where
     muxVector :: VBool l -> Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
@@ -1266,7 +1282,8 @@ muxValue bp b = value
     value x@(VWord _)       y                 = toVector (bpUnpack bp) x >>= \xv -> value (VVector xv) y
     value x                 y@(VWord _)       = toVector (bpUnpack bp) y >>= \yv -> value x (VVector yv)
     value x@(VNat _)        y                 = nat x y
-    value x@(VToNat _)      y                 = nat x y
+    value x@(VBVToNat _ _)  y                 = nat x y
+    value x@(VIntToNat _)   y                 = nat x y
     value (TValue x)        (TValue y)        = TValue <$> tvalue x y
     value x                 y                 =
       panic $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: "
@@ -1293,7 +1310,7 @@ muxValue bp b = value
                 (panic "muxValue" ["width too large", show w])
          x1 <- natToWord bp (fromInteger w) v1
          x2 <- natToWord bp (fromInteger w) v2
-         VToNat . VWord <$> bpMuxWord bp b x1 x2
+         VBVToNat (fromInteger w) . VWord <$> bpMuxWord bp b x1 x2
 
 -- fix :: (a :: sort 0) -> (a -> a) -> a;
 fixOp :: (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) => Value l

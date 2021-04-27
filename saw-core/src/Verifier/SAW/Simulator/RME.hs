@@ -127,7 +127,8 @@ bvShiftOp op =
   pureFun $ \y ->
     case y of
       VNat n   -> vWord (op x (toInteger n))
-      VToNat v -> vWord (genShift muxRMEV op x (toWord v))
+      VBVToNat _sz v -> vWord (genShift muxRMEV op x (toWord v))
+      VIntToNat _i   -> error "RME.shiftOp: intToNat TODO"
       _        -> error $ unwords ["Verifier.SAW.Simulator.RME.shiftOp", show y]
 
 ------------------------------------------------------------
@@ -345,7 +346,8 @@ streamGetOp =
   pureFun $ \xs ->
   strictFun $ \case
     VNat n -> pure $ IntTrie.apply (toStream xs) (toInteger n)
-    VToNat bv ->
+    VIntToNat _i -> error "RME.streamGetOp : symbolic integer TODO"
+    VBVToNat _sz bv ->
       do let trie = toStream xs
              loop k [] = IntTrie.apply trie k
              loop k (b:bs)

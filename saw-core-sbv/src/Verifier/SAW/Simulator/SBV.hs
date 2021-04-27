@@ -350,7 +350,7 @@ bvShiftOp bvOp natOp =
     case y of
       VNat i | j < toInteger (maxBound :: Int) -> return (vWord (natOp x (fromInteger j)))
         where j = toInteger i `min` toInteger (intSizeOf x)
-      VToNat v -> fmap (vWord . bvOp x) (toWord v)
+      VBVToNat _ v -> fmap (vWord . bvOp x) (toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.SBV.bvShiftOp", show y]
 
 -- bvShl : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
@@ -383,7 +383,7 @@ intToNatOp =
       Nothing ->
         let z  = svInteger KUnbounded 0
             i' = svIte (svLessThan i z) z i
-         in pure (VToNat (VInt i'))
+         in pure (VIntToNat (VInt i'))
 
 -- primitive natToInt :: Nat -> Integer;
 natToIntOp :: SValue
@@ -497,7 +497,7 @@ streamGetOp =
   strictFun $ \xs -> return $
   strictFun $ \case
     VNat n -> lookupSStream xs n
-    VToNat w ->
+    VBVToNat _ w ->
       do ilv <- toWord w
          selectV (lazyMux muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
     v -> Prims.panic "SBV.streamGetOp" ["Expected Nat value", show v]

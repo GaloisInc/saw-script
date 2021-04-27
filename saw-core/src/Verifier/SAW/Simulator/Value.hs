@@ -56,7 +56,8 @@ data Value l
   | VVector !(Vector (Thunk l))
   | VBool (VBool l)
   | VWord (VWord l)
-  | VToNat (Value l)
+  | VBVToNat !Int (Value l) -- TODO: don't use @Int@ for this, use @Natural@
+  | VIntToNat (Value l)
   | VNat !Natural
   | VInt (VInt l)
   | VIntMod !Natural (VInt l)
@@ -157,7 +158,8 @@ instance Show (Extra l) => Show (Value l) where
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"
       VWord _        -> showString "<<bitvector>>"
-      VToNat x       -> showString "bvToNat " . showParen True (shows x)
+      VBVToNat n x   -> showString "bvToNat " . shows n . showString " " . showParen True (shows x)
+      VIntToNat x    -> showString "intToNat " . showParen True (shows x)
       VNat n         -> shows n
       VInt _         -> showString "<<integer>>"
       VIntMod n _    -> showString ("<<Z " ++ show n ++ ">>")
