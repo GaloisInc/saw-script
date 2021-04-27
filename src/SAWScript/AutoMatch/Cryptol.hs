@@ -16,6 +16,8 @@ import Data.List hiding (sort)
 import Data.Maybe
 import Data.Ord
 
+import Verifier.SAW.CryptolEnv (meSolverConfig)
+
 import Cryptol.Eval (EvalOpts(..))
 import qualified Cryptol.ModuleSystem as M
 import Cryptol.ModuleSystem.Name
@@ -33,7 +35,7 @@ getDeclsCryptol path = do
    modEnv <- M.initialModuleEnv
    let minp = M.ModuleInput True (pure evalOpts) BS.readFile modEnv
    (result, warnings) <-
-     SMT.withSolver (M.meSolverConfig modEnv) $ \s ->
+     SMT.withSolver (meSolverConfig modEnv) $ \s ->
      M.loadModuleByPath path (minp s)
    return $ do
       forM_ warnings $ liftF . flip Warning () . pretty
