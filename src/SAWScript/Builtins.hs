@@ -911,7 +911,7 @@ add_core_defs modname names ss =
       scFindDef sc (qualify n) >>= \maybe_def ->
       case maybe_def of
         Just d -> return d
-        Nothing -> fail $ Text.unpack modname ++ " definition " ++ Text.unpack n ++ " not found"
+        Nothing -> fail $ Text.unpack $ modname <> " definition " <> n <> " not found"
 
 add_prelude_defs :: [Text] -> Simpset -> TopLevel Simpset
 add_prelude_defs = add_core_defs "Prelude"
