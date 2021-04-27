@@ -76,6 +76,7 @@ library
      Verifier.SAW.SCTypeCheck
      Verifier.SAW.Simulator
      Verifier.SAW.Simulator.Concrete
+     Verifier.SAW.Simulator.TermModel
      Verifier.SAW.Simulator.MonadLazy
      Verifier.SAW.Simulator.Prims
      Verifier.SAW.Simulator.RME
