@@ -53,7 +53,6 @@ module Verifier.SAW.Name
 import           Control.Exception (assert)
 import           Data.Char
 import           Data.Hashable
-import qualified Data.List as L
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -91,10 +90,10 @@ moduleNamePieces (ModuleName x) = Text.splitOn (Text.pack ".") x
 
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
-mkModuleName :: [String] -> ModuleName
+mkModuleName :: [Text] -> ModuleName
 mkModuleName [] = error "internal: mkModuleName given empty module name"
-mkModuleName nms = assert (all isCtor nms) $ ModuleName (Text.pack s)
-  where s = L.intercalate "." (reverse nms)
+mkModuleName nms = assert (all (isCtor . Text.unpack) nms) $ ModuleName s
+  where s = Text.intercalate "." (reverse nms)
 
 preludeName :: ModuleName
 preludeName = mkModuleName ["Prelude"]
@@ -142,7 +141,7 @@ parseIdent :: String -> Ident
 parseIdent s0 =
     case reverse (breakEach s0) of
       (_:[]) -> internalError $ "parseIdent given empty module name."
-      (nm:rMod) -> mkIdent (mkModuleName (reverse rMod)) nm
+      (nm:rMod) -> mkIdent (mkModuleName (reverse (map Text.pack rMod))) nm
       _ -> internalError $ "parseIdent given bad identifier " ++ show s0
   where breakEach s =
           case break (=='.') s of

@@ -907,7 +907,7 @@ add_core_defs modname names ss =
      defRules <- io $ concat <$> (mapM (scDefRewriteRules sc) defs)
      return (addRules defRules ss)
   where
-    qualify = mkIdent (mkModuleName [modname])
+    qualify = mkIdent (mkModuleName [Text.pack modname])
     getDef sc n =
       scFindDef sc (qualify n) >>= \maybe_def ->
       case maybe_def of

@@ -16,11 +16,11 @@ instance FromJSON JSONModuleName where
     where
       literal =
         withText "module name as string" $
-        pure . JSONModuleName . mkModuleName . map T.unpack . T.splitOn "."
+        pure . JSONModuleName . mkModuleName . T.splitOn "."
       structured =
         withArray "module name as list of parts" $ \v ->
         do parts <- traverse parseJSON (V.toList v)
-           pure $ JSONModuleName $ mkModuleName $ map T.unpack parts
+           pure $ JSONModuleName $ mkModuleName parts
 
 instance ToJSON JSONModuleName where
   toJSON (JSONModuleName n) = toJSON (show n)
