@@ -364,6 +364,7 @@ streamGetOp =
   pureFun $ \xs ->
   strictFun $ \case
     VNat n -> return $ IntTrie.apply (toStream xs) (toInteger n)
-    VToNat w -> return $ IntTrie.apply (toStream xs) (unsigned (toWord w))
+    VIntToNat (VInt i) -> return $ IntTrie.apply (toStream xs) i
+    VBVToNat _ w -> return $ IntTrie.apply (toStream xs) (unsigned (toWord w))
     n -> Prims.panic "Verifier.SAW.Simulator.Concrete.streamGetOp"
                ["Expected Nat value", show n]
