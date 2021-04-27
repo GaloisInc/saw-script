@@ -52,10 +52,9 @@ import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModu
 import SAWScript.Options (defaultOptions)
 import SAWScript.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
-import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts)
+import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts, SAWSimpset)
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
-import Verifier.SAW.Rewriter (Simpset)
 import qualified Cryptol.Utils.Ident as Cryptol
 
 import qualified Argo
@@ -276,7 +275,7 @@ data CrucibleSetupTypeRepr :: Type -> Type where
 
 data ServerVal
   = VTerm TypedTerm
-  | VSimpset Simpset
+  | VSimpset SAWSimpset
   | VType Cryptol.Schema
   | VCryptolModule CryptolModule -- from SAW, includes Term mappings
   | VJVMClass JSS.Class
@@ -306,7 +305,7 @@ class IsServerVal a where
 instance IsServerVal TypedTerm where
   toServerVal = VTerm
 
-instance IsServerVal Simpset where
+instance IsServerVal SAWSimpset where
   toServerVal = VSimpset
 
 instance IsServerVal Cryptol.Schema where
@@ -403,7 +402,7 @@ getLLVMMethodSpecIR n =
        VLLVMMethodSpecIR ir -> return ir
        _other -> Argo.raise (notAnLLVMMethodSpecIR n)
 
-getSimpset :: ServerName -> Argo.Command SAWState Simpset
+getSimpset :: ServerName -> Argo.Command SAWState SAWSimpset
 getSimpset n =
   do v <- getServerVal n
      case v of
