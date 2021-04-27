@@ -38,6 +38,7 @@ import qualified Data.IntMap                                   as IntMap
 import           Data.List                                     (intersperse, sortOn)
 import           Data.Maybe                                    (fromMaybe)
 import qualified Data.Set                                      as Set
+import           Data.String                                   (IsString(..))
 import qualified Data.Text                                     as Text
 import           Prelude                                       hiding (fail)
 import           Prettyprinter
@@ -63,7 +64,7 @@ traceTerm ctx t a = trace (ctx ++ ": " ++ showTerm t) a
 
 data TranslationState = TranslationState
 
-  { _globalDeclarations :: [String]
+  { _globalDeclarations :: [Coq.Ident]
   -- ^ Some Cryptol terms seem to capture the name and body of some functions
   -- they use (whether from the Cryptol prelude, or previously defined in the
   -- same file).  We want to translate those exactly once, so we need to keep
@@ -106,6 +107,7 @@ makeLenses ''TranslationState
 reservedIdents :: Set.Set Coq.Ident
 reservedIdents =
   Set.fromList $
+  map fromString $
   concatMap words $
   [ "_ Axiom CoFixpoint Definition Fixpoint Hypothesis IF Parameter Prop"
   , "SProp Set Theorem Type Variable as at by cofix discriminated else"
@@ -115,10 +117,10 @@ reservedIdents =
 
 -- | Extract the list of names from a list of Coq declarations.  Not all
 -- declarations have names, e.g. comments and code snippets come without names.
-namedDecls :: [Coq.Decl] -> [String]
+namedDecls :: [Coq.Decl] -> [Coq.Ident]
 namedDecls = concatMap filterNamed
   where
-    filterNamed :: Coq.Decl -> [String]
+    filterNamed :: Coq.Decl -> [Coq.Ident]
     filterNamed (Coq.Axiom n _)                               = [n]
     filterNamed (Coq.Comment _)                               = []
     filterNamed (Coq.Definition n _ _ _)                      = [n]
@@ -129,7 +131,7 @@ namedDecls = concatMap filterNamed
 -- translation state.
 getNamesOfAllDeclarations ::
   TermTranslationMonad m =>
-  m [String]
+  m [Coq.Ident]
 getNamesOfAllDeclarations = view allDeclarations <$> get
   where
     allDeclarations =
@@ -140,7 +142,7 @@ type TermTranslationMonad m = TranslationMonad TranslationState m
 runTermTranslationMonad ::
   TranslationConfiguration ->
   Maybe ModuleName ->
-  [String] ->
+  [Coq.Ident] ->
   [Coq.Ident] ->
   (forall m. TermTranslationMonad m => m a) ->
   Either (TranslationError Term) (a, TranslationState)
@@ -162,6 +164,7 @@ translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Coq.Ter
 translateIdentWithArgs i args =
   (view currentModule <$> get) >>= \cur_modname ->
   let identToCoq ident =
+        fromString $
         if Just (identModule ident) == cur_modname then identName ident else
           show (translateModuleName (identModule ident))
           ++ "." ++ identName ident in
@@ -221,7 +224,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     RecursorApp d parameters motive eliminators indices termEliminated ->
       do maybe_d_trans <- translateIdentToIdent d
          rect_var <- case maybe_d_trans of
-           Just i -> return $ Coq.Var (show i ++ "_rect")
+           Just i -> return $ Coq.Var (fromString (show i ++ "_rect"))
            Nothing ->
              errorTermM ("Recursor for " ++ show d ++
                          " cannot be translated because the datatype " ++
@@ -338,7 +341,7 @@ translatePi binders body = withLocalLocalEnvironment $ do
 -- | Translate a local name from a saw-core binder into a fresh Coq identifier.
 translateLocalIdent :: TermTranslationMonad m => LocalName -> m Coq.Ident
 translateLocalIdent x = freshVariant ident0
-  where ident0 = Text.unpack x -- TODO: use some string encoding to ensure lexically valid Coq identifiers
+  where ident0 = fromString (Text.unpack x) -- TODO: use some string encoding to ensure lexically valid Coq identifiers
 
 -- | Find an fresh, as-yet-unused variant of the given Coq identifier.
 freshVariant :: TermTranslationMonad m => Coq.Ident -> m Coq.Ident
@@ -351,7 +354,7 @@ freshVariant x =
      return ident
 
 nextVariant :: Coq.Ident -> Coq.Ident
-nextVariant = reverse . go . reverse
+nextVariant (Coq.Ident s) = fromString (reverse (go (reverse s)))
   where
     go :: String -> String
     go (c : cs)
@@ -563,8 +566,8 @@ defaultTermForType typ = do
 translateTermToDocWith ::
   TranslationConfiguration ->
   Maybe ModuleName ->
-  [String] ->
-  [String] ->
+  [Coq.Ident] ->
+  [Coq.Ident] ->
   (Coq.Term -> Doc ann) ->
   Term ->
   Either (TranslationError Term) (Doc ann)
@@ -582,7 +585,7 @@ translateTermToDocWith configuration mn globalDecls localEnv f t = do
 translateDefDoc ::
   TranslationConfiguration ->
   Maybe ModuleName ->
-  [String] ->
+  [Coq.Ident] ->
   Coq.Ident -> Term ->
   Either (TranslationError Term) (Doc ann)
 translateDefDoc configuration mn globalDecls name =

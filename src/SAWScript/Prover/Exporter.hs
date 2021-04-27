@@ -52,6 +52,7 @@ import qualified Data.ByteString as BS
 import Data.Parameterized.Nonce (globalNonceGenerator)
 import Data.Parameterized.Some (Some(..))
 import Data.Set (Set)
+import Data.String (IsString(..))
 import qualified Data.SBV.Dynamic as SBV
 import System.Directory (removeFile)
 import System.IO
@@ -345,10 +346,10 @@ coqTranslationConfiguration ::
   [String] ->
   Coq.TranslationConfiguration
 coqTranslationConfiguration notations skips = Coq.TranslationConfiguration
-  { Coq.notations = notations
+  { Coq.notations = map (fmap fromString) notations
   , Coq.monadicTranslation = False
   , Coq.postPreamble = []
-  , Coq.skipDefinitions = skips
+  , Coq.skipDefinitions = map fromString skips
   , Coq.vectorModule = "SAWCoreVectorsAsCoqVectors"
   }
 
@@ -381,7 +382,7 @@ writeCoqTerm name notations skips path t = do
         withImportSAWCorePrelude $
         withImportCryptolPrimitivesForSAWCore $
         coqTranslationConfiguration notations skips
-  case Coq.translateTermAsDeclImports configuration name t of
+  case Coq.translateTermAsDeclImports configuration (fromString name) t of
     Left err -> throwTopLevel $ "Error translating: " ++ show err
     Right doc -> io $ case path of
       "" -> print doc
@@ -413,7 +414,7 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   env <- initCryptolEnv sc
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   (cm, _) <- loadCryptolModule sc env inputFile
-  let cryptolPreludeDecls = map Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
+  let cryptolPreludeDecls = map (fromString . Coq.moduleDeclName) (moduleDecls cryptolPrimitivesForSAWCoreModule)
   let configuration =
         withImportSAWCorePrelude $
         withImportCryptolPrimitivesForSAWCore $

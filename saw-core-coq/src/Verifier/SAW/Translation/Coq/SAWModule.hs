@@ -28,6 +28,7 @@ import           Control.Lens                                  (makeLenses, view
 import qualified Control.Monad.Except                          as Except
 import           Control.Monad.Reader                          hiding (fail)
 import           Control.Monad.State                           hiding (fail)
+import           Data.String                                   (IsString(..))
 import           Prelude                                       hiding (fail)
 import           Prettyprinter                                 (Doc)
 
@@ -70,7 +71,7 @@ translateCtor inductiveParameters (Ctor {..}) = do
   maybe_constructorName <-
     liftTermTranslationMonad $ TermTranslation.translateIdentToIdent ctorName
   let constructorName = case maybe_constructorName of
-        Just n -> identName n
+        Just n -> fromString (identName n)
         Nothing -> error "translateCtor: unexpected translation for constructor"
   constructorType <-
     -- Unfortunately, `ctorType` qualifies the inductive type's name in the
@@ -95,9 +96,9 @@ translateDataType (DataType {..}) =
   DefReplace  str          -> return $ Coq.Snippet str
   DefSkip                  -> return $ skipped dtName
   where
-    translateNamed :: ModuleTranslationMonad m => Coq.Ident -> m Coq.Decl
+    translateNamed :: ModuleTranslationMonad m => String -> m Coq.Decl
     translateNamed name = do
-      let inductiveName = name
+      let inductiveName = fromString name
       (inductiveParameters, inductiveIndices) <-
         liftTermTranslationMonad $ do
         ps <- TermTranslation.translateParams dtParams
@@ -134,8 +135,8 @@ translateDef (Def {..}) = {- trace ("translateDef " ++ show defIdent) $ -} do
   where
 
     translateAccordingly :: ModuleTranslationMonad m => DefSiteTreatment -> m Coq.Decl
-    translateAccordingly  DefPreserve             = translateNamed $ identName defIdent
-    translateAccordingly (DefRename _ targetName) = translateNamed $ targetName
+    translateAccordingly  DefPreserve             = translateNamed $ fromString $ identName defIdent
+    translateAccordingly (DefRename _ targetName) = translateNamed $ fromString $ targetName
     translateAccordingly (DefReplace  str)        = return $ Coq.Snippet str
     translateAccordingly  DefSkip                 = return $ skipped defIdent
 

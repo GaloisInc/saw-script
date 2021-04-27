@@ -27,6 +27,7 @@ module Verifier.SAW.Translation.Coq.SpecialTreatment where
 import           Control.Lens                       (_1, _2, over)
 import           Control.Monad.Reader               (ask)
 import qualified Data.Map                           as Map
+import           Data.String                        (IsString(..))
 import           Data.String.Interpolate            (i)
 import qualified Data.Text                          as Text
 import           Prelude                            hiding (fail)
@@ -452,16 +453,16 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("letRecFuns", skip)
   ]
 
-constantsRenamingMap :: [(String, String)] -> Map.Map String String
+constantsRenamingMap :: [(String, Coq.Ident)] -> Map.Map String Coq.Ident
 constantsRenamingMap notations = Map.fromList notations
 
 -- TODO: Now that ExtCns contains a unique identifier, it might make sense
 -- to check those here to avoid some captures?
-translateConstant :: [(String, String)] -> ExtCns e -> String
+translateConstant :: [(String, Coq.Ident)] -> ExtCns e -> Coq.Ident
 translateConstant notations (EC {..}) =
   Map.findWithDefault
-    (Text.unpack (toShortName ecName))
-    (Text.unpack (toShortName ecName))
+    (fromString (Text.unpack (toShortName ecName)))
+    (fromString (Text.unpack (toShortName ecName)))
     (constantsRenamingMap notations) -- TODO short name doesn't seem right
 
 zipSnippet :: String

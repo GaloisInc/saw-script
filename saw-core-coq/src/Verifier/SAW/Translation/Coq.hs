@@ -131,7 +131,7 @@ translateSAWModule configuration m =
      ]
 
 translateCryptolModule ::
-  TranslationConfiguration -> [String] -> CryptolModule -> Either (TranslationError Term) (Doc ann)
+  TranslationConfiguration -> [Coq.Ident] -> CryptolModule -> Either (TranslationError Term) (Doc ann)
 translateCryptolModule configuration globalDecls m =
   let decls = CryptolModuleTranslation.translateCryptolModule
               configuration
