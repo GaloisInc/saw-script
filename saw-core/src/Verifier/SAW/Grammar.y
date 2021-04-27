@@ -338,7 +338,7 @@ mkTupleProj t _ =
 
 -- | Parse a term as a dotted list of strings
 parseModuleName :: Term -> Maybe [Text]
-parseModuleName (RecordProj t str) = (++ [str]) <$> parseModuleName t
+parseModuleName (RecordProj t fname) = (++ [fname]) <$> parseModuleName t
 parseModuleName _ = Nothing
 
 -- | Parse a qualified recursor @M1.M2...Mn.d#rec@
