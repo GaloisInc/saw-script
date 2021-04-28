@@ -7,6 +7,8 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
+{-# LANGUAGE OverloadedStrings #-}
+
 module Verifier.SAW.Prelude.Constants where
 
 import Verifier.SAW.Term.Functor

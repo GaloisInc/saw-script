@@ -43,7 +43,6 @@ import Prettyprinter hiding (Doc)
 import Verifier.SAW.Utils (internalError)
 
 import Verifier.SAW.Module
-import Verifier.SAW.Name (mkIdentText)
 import Verifier.SAW.Position
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm
@@ -178,7 +177,7 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
          Just mnm -> return mnm
          Nothing -> getModuleName
      m <- liftTCM scFindModule mnm
-     let dt_ident = mkIdentText mnm str
+     let dt_ident = mkIdent mnm str
      dt <- case findDataType m str of
        Just d -> return d
        Nothing -> throwTCError $ NoSuchDataType dt_ident
@@ -330,7 +329,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
 
      -- Step 4: add the definition to the current module
      mnm <- getModuleName
-     let ident = mkIdentText mnm nm
+     let ident = mkIdent mnm nm
      t <- liftTCM scConstant' (ModuleIdentifier ident) def_tm def_tp
      liftTCM scRegisterGlobal ident t
      liftTCM scModifyModule mnm $ \m ->
@@ -350,7 +349,7 @@ processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
    do typed_tp <- typeInferComplete tp
       void $ ensureSort $ typedType typed_tp
       mnm <- getModuleName
-      let ident = mkIdentText mnm nm
+      let ident = mkIdent mnm nm
       let nmi = ModuleIdentifier ident
       i <- liftTCM scFreshGlobalVar
       liftTCM scRegisterName i nmi
@@ -406,7 +405,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
 
   -- Step 4: Add d as an empty datatype, so we can typecheck the constructors
   mnm <- getModuleName
-  let dtName = mkIdentText mnm nm
+  let dtName = mkIdent mnm nm
   let dt = DataType { dtCtors = [], .. }
   liftTCM scModifyModule mnm (\m -> beginDataType m dt)
 
@@ -432,8 +431,8 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
             let tp = typedVal typed_tp in
             case mkCtorArgStruct dtName p_ctx ix_ctx tp of
               Just arg_struct ->
-                liftTCM scBuildCtor dtName (mkIdentText mnm c)
-                (map (mkIdentText mnm . fst) typed_ctors)
+                liftTCM scBuildCtor dtName (mkIdent mnm c)
+                (map (mkIdent mnm . fst) typed_ctors)
                 arg_struct
               Nothing -> err ("Malformed type form constructor: " ++ show c)
 

@@ -111,7 +111,7 @@ import           What4.ProgramLoc (ProgramLoc(..))
 
 data Value
   = VBool Bool
-  | VString String
+  | VString Text
   | VInteger Integer
   | VArray [Value]
   | VTuple [Value]
@@ -529,7 +529,7 @@ extendEnv sc x mt md v rw =
          VCryptolModule m ->
            pure $ CEnv.bindCryptolModule (modname, m) ce
          VString s ->
-           do tt <- typedTermOfString sc s
+           do tt <- typedTermOfString sc (unpack s)
               pure $ CEnv.bindTypedTerm (ident, tt) ce
          _ ->
            pure ce
@@ -831,17 +831,17 @@ instance FromValue Cryptol.Schema where
     fromValue _ = error "fromValue Schema"
 
 instance IsValue String where
-    toValue n = VString n
+    toValue n = VString (pack n)
 
 instance FromValue String where
-    fromValue (VString n) = n
+    fromValue (VString n) = unpack n
     fromValue _ = error "fromValue String"
 
 instance IsValue Text where
-    toValue n = VString $ unpack n
+    toValue n = VString n
 
 instance FromValue Text where
-    fromValue (VString n) = pack n
+    fromValue (VString n) = n
     fromValue _ = error "fromValue Text"
 
 instance IsValue Integer where

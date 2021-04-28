@@ -25,7 +25,6 @@ module Verifier.SAW.Name
   , moduleNamePieces
    -- * Identifiers
   , Ident(identModule, identBaseName), identName, mkIdent
-  , mkIdentText
   , parseIdent
   , isIdent
   , identText
@@ -53,7 +52,6 @@ module Verifier.SAW.Name
 import           Control.Exception (assert)
 import           Data.Char
 import           Data.Hashable
-import qualified Data.List as L
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -91,10 +89,10 @@ moduleNamePieces (ModuleName x) = Text.splitOn (Text.pack ".") x
 
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
-mkModuleName :: [String] -> ModuleName
+mkModuleName :: [Text] -> ModuleName
 mkModuleName [] = error "internal: mkModuleName given empty module name"
-mkModuleName nms = assert (all isCtor nms) $ ModuleName (Text.pack s)
-  where s = L.intercalate "." (reverse nms)
+mkModuleName nms = assert (all (isCtor . Text.unpack) nms) $ ModuleName s
+  where s = Text.intercalate "." (reverse nms)
 
 preludeName :: ModuleName
 preludeName = mkModuleName ["Prelude"]
@@ -131,11 +129,8 @@ instance Read Ident where
     let (str1, str2) = break (not . isIdChar) str in
     [(parseIdent str1, str2)]
 
-mkIdent :: ModuleName -> String -> Ident
-mkIdent m s = Ident m (Text.pack s)
-
-mkIdentText :: ModuleName -> Text -> Ident
-mkIdentText m s = Ident m s
+mkIdent :: ModuleName -> Text -> Ident
+mkIdent m s = Ident m s
 
 -- | Parse a fully qualified identifier.
 parseIdent :: String -> Ident
@@ -146,9 +141,8 @@ parseIdent s0 =
       _ -> internalError $ "parseIdent given bad identifier " ++ show s0
   where breakEach s =
           case break (=='.') s of
-            (h,[]) -> [h]
-            (h,'.':r) -> h : breakEach r
-            _ -> internalError "parseIdent.breakEach failed"
+            (h, []) -> [Text.pack h]
+            (h, _ : r) -> Text.pack h : breakEach r
 
 instance IsString Ident where
   fromString = parseIdent
