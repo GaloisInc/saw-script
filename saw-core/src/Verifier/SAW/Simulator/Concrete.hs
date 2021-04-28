@@ -32,8 +32,6 @@ import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
 --import Data.Traversable
-import Data.Vector (Vector)
-import qualified Data.Vector as V
 
 import Verifier.SAW.Prim (BitVector(..), signed, bv, bvNeg)
 import qualified Verifier.SAW.Prim as Prim
@@ -86,19 +84,9 @@ toBool x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toBool", show x]
 vWord :: BitVector -> CValue
 vWord x = VWord x
 
--- | Conversion from list of bits to integer (big-endian)
-bvToInteger :: Vector Bool -> Integer
-bvToInteger = V.foldl' (\x b -> if b then 2*x+1 else 2*x) 0
-
-unpackBitVector :: BitVector -> Vector Bool
-unpackBitVector x = V.generate (Prim.width x) (Prim.bvAt x)
-
-packBitVector :: Vector Bool -> BitVector
-packBitVector v = BV (V.length v) (bvToInteger v)
-
 toWord :: CValue -> BitVector
 toWord (VWord x) = x
-toWord (VVector vv) = packBitVector (fmap (toBool . runIdentity . force) vv)
+toWord (VVector vv) = Prim.packBitVector (fmap (toBool . runIdentity . force) vv)
 toWord x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toWord", show x]
 
 vStream :: IntTrie CValue -> CValue
@@ -156,8 +144,8 @@ prims :: Prims.BasePrims Concrete
 prims =
   Prims.BasePrims
   { Prims.bpAsBool  = Just
-  , Prims.bpUnpack  = pure1 unpackBitVector
-  , Prims.bpPack    = pure1 packBitVector
+  , Prims.bpUnpack  = pure1 Prim.unpackBitVector
+  , Prims.bpPack    = pure1 Prim.packBitVector
   , Prims.bpBvAt    = pure2 Prim.bvAt
   , Prims.bpBvLit   = pure2 Prim.bv
   , Prims.bpBvSize  = Prim.width

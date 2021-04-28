@@ -56,6 +56,16 @@ signed (BV w x)
 bvAt :: BitVector -> Int -> Bool
 bvAt (BV w x) i = testBit x (w - 1 - i)
 
+-- | Conversion from list of bits to integer (big-endian)
+bvToInteger :: Vector Bool -> Integer
+bvToInteger = V.foldl' (\x b -> if b then 2*x+1 else 2*x) 0
+
+unpackBitVector :: BitVector -> Vector Bool
+unpackBitVector x = V.generate (width x) (bvAt x)
+
+packBitVector :: Vector Bool -> BitVector
+packBitVector v = BV (V.length v) (bvToInteger v)
+
 ------------------------------------------------------------
 -- Primitive operations
 
