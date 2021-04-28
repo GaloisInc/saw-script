@@ -42,6 +42,7 @@ import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
 import Data.Set ( Set )
+import qualified Data.Text as Text
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory, hasDrive, (</>))
 import System.Process (readProcess)
@@ -171,7 +172,7 @@ interpret env expr =
     let ?fileReader = BS.readFile in
     case expr of
       SS.Bool b              -> return $ VBool b
-      SS.String s            -> return $ VString s
+      SS.String s            -> return $ VString (Text.pack s)
       SS.Int z               -> return $ VInteger z
       SS.Code str            -> do sc <- getSharedContext
                                    cenv <- fmap rwCryptol (getMergedEnv env)
@@ -605,7 +606,7 @@ set_color b = do
   putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsColor = b' } }
 
 print_value :: Value -> TopLevel ()
-print_value (VString s) = printOutLnTop Info s
+print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
   sc <- getSharedContext
   cenv <- fmap rwCryptol getTopLevelRW

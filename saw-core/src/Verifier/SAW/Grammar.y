@@ -337,8 +337,8 @@ mkTupleProj t _ =
      return (badTerm (pos t))
 
 -- | Parse a term as a dotted list of strings
-parseModuleName :: Term -> Maybe [String]
-parseModuleName (RecordProj t str) = (++ [Text.unpack str]) <$> parseModuleName t
+parseModuleName :: Term -> Maybe [Text]
+parseModuleName (RecordProj t fname) = (++ [fname]) <$> parseModuleName t
 parseModuleName _ = Nothing
 
 -- | Parse a qualified recursor @M1.M2...Mn.d#rec@
@@ -359,7 +359,7 @@ parseTupleSelector t i =
 -- module name given first.
 mkPosModuleName :: [PosPair Text] -> PosPair ModuleName
 mkPosModuleName [] = error "internal: Unexpected empty module name"
-mkPosModuleName l = PosPair p (mkModuleName (fmap Text.unpack nms))
+mkPosModuleName l = PosPair p (mkModuleName nms)
   where nms = fmap val l
         p = pos (last l)
 }

@@ -143,7 +143,7 @@ declareTypedNameFun sc_fun mnm nm apply_p tp =
   let th_nm = (if apply_p then "scApply" else "sc") ++ show mnm ++ "_" ++ Text.unpack nm in
   declareTermApplyFun th_nm (length $ fst $ Un.asPiList tp) $ \sc ts ->
   [| $(sc_fun) $(varE sc)
-   (mkIdent mnm $(stringE (Text.unpack nm)))
+   (mkIdent mnm (Text.pack $(stringE (Text.unpack nm))))
    $(ts) |]
 
 -- | Declare a Haskell function
