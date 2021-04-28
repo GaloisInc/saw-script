@@ -146,7 +146,7 @@ compMModule = mkModuleName ["CompM"]
 
 sawVectorDefinitionsModule :: TranslationConfiguration -> ModuleName
 sawVectorDefinitionsModule (TranslationConfiguration {..}) =
-  mkModuleName [vectorModule]
+  mkModuleName [Text.pack vectorModule]
 
 cryptolPrimitivesModule :: ModuleName
 cryptolPrimitivesModule = mkModuleName ["CryptolPrimitivesForSAWCore"]

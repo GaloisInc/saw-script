@@ -5,6 +5,8 @@ Maintainer  : GaloisInc
 Stability   : provisional
 -}
 
+{-# LANGUAGE OverloadedStrings #-}
+
 module SAWScript.Prover.Rewrite where
 
 import Verifier.SAW.Rewriter
