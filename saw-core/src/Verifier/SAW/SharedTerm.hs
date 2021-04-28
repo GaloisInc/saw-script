@@ -185,6 +185,7 @@ module Verifier.SAW.SharedTerm
     -- *** IntMod
   , scIntModType
   , scToIntMod
+  , scFromIntMod
     -- *** Vectors
   , scAppend
   , scJoin
@@ -1828,6 +1829,12 @@ scIntModType sc n = scGlobalApply sc "Prelude.IntMod" [n]
 -- > toIntMod : (n : Nat) -> Integer -> IntMod n;
 scToIntMod :: SharedContext -> Term -> Term -> IO Term
 scToIntMod sc n x = scGlobalApply sc "Prelude.toIntMod" [n, x]
+
+-- | Convert an integer mod n to an integer.
+--
+-- > fromIntMod : (n : Nat) -> IntMod n -> Integer;
+scFromIntMod :: SharedContext -> Term -> Term -> IO Term
+scFromIntMod sc n x = scGlobalApply sc "Prelude.fromIntMod" [n, x]
 
 
 -- Primitive operations on bitvectors
