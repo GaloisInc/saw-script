@@ -18,6 +18,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Term.Pretty
   ( SawDoc
+  , renderSawDoc
   , SawStyle(..)
   , PPOpts(..)
   , defaultPPOpts

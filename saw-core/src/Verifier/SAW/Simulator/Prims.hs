@@ -26,13 +26,12 @@ import GHC.Stack( HasCallStack )
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import Control.Monad (foldM, liftM, zipWithM, unless)
+import Control.Monad (liftM, zipWithM, unless)
 import Control.Monad.Fix (MonadFix(mfix))
 import Data.Bits
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
-import Data.Traversable
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
@@ -126,7 +125,7 @@ data BasePrims l =
   , bpIntMin :: VInt l -> VInt l -> MInt l
   , bpIntMax :: VInt l -> VInt l -> MInt l
     -- Array operations
-  , bpArrayConstant :: TValue l -> Value l -> MArray l
+  , bpArrayConstant :: TValue l -> TValue l -> Value l -> MArray l
   , bpArrayLookup :: VArray l -> Value l -> MValue l
   , bpArrayUpdate :: VArray l -> Value l -> Value l -> MArray l
   , bpArrayEq :: VArray l -> VArray l -> MBool l
@@ -603,6 +602,7 @@ genOp =
       else liftM VVector $ V.generateM (fromIntegral n) g
 
 -- eq :: (a :: sort 0) -> a -> a -> Bool
+{-
 eqOp :: forall l. (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
 eqOp bp =
   constFun $ pureFun $ \v1 -> strictFun $ \v2 -> VBool <$> go v1 v2
@@ -636,6 +636,8 @@ eqOp bp =
       do v1 <- force thunk1
          v2 <- force thunk2
          go v1 v2
+-}
+
 
 -- atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
 atWithDefaultOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
@@ -843,6 +845,7 @@ expByNatOp bp =
 -- Shifts and Rotates
 
 -- | Barrel-shifter algorithm. Takes a list of bits in big-endian order.
+--   TODO use Natural instead of Integer
 shifter :: Monad m => (b -> a -> a -> m a) -> (a -> Integer -> m a) -> a -> [b] -> m a
 shifter mux op = go
   where
@@ -856,6 +859,7 @@ shifter mux op = go
 shiftOp :: forall l.
   (VMonadLazy l, Show (Extra l)) =>
   BasePrims l ->
+  -- TODO use Natural instead of Integer
   (Thunk l -> Vector (Thunk l) -> Integer -> Vector (Thunk l)) ->
   (VBool l -> VWord l -> Integer -> MWord l) ->
   (VBool l -> VWord l -> VWord l -> MWord l) ->
@@ -906,6 +910,7 @@ shiftOp bp vecOp wordIntOp wordOp =
 rotateOp :: forall l.
   (VMonadLazy l, Show (Extra l)) =>
   BasePrims l ->
+  --   TODO use Natural instead of Integer?
   (Vector (Thunk l) -> Integer -> Vector (Thunk l)) ->
   (VWord l -> Integer -> MWord l) ->
   (VWord l -> VWord l -> MWord l) ->
@@ -1276,8 +1281,8 @@ muxValue bp b = value
     value (VIntMod n x)     (VIntMod _ y)     = VIntMod n <$> bpMuxInt bp b x y
     value (VNat m)          (VNat n)          | m == n = return $ VNat m
     value (VString x)       (VString y)       | x == y = return $ VString x
-    value (VFloat x)        (VFloat y)        | x == y = return $ VFloat x
-    value (VDouble x)       (VDouble y)       | x == y = return $ VDouble y
+--    value (VFloat x)        (VFloat y)        | x == y = return $ VFloat x
+--    value (VDouble x)       (VDouble y)       | x == y = return $ VDouble y
     value (VExtra x)        (VExtra y)        = VExtra <$> bpMuxExtra bp b x y
     value x@(VWord _)       y                 = toVector (bpUnpack bp) x >>= \xv -> value (VVector xv) y
     value x                 y@(VWord _)       = toVector (bpUnpack bp) y >>= \yv -> value x (VVector yv)
@@ -1330,9 +1335,9 @@ arrayTypeOp = pureFun $ \a -> pureFun $ \b -> TValue (VArrayType (toTValue a) (t
 arrayConstantOp :: VMonad l => BasePrims l -> Value l
 arrayConstantOp bp =
   pureFun $ \a ->
-  constFun $
+  pureFun $ \b ->
   strictFun $ \e ->
-    VArray <$> (bpArrayConstant bp) (toTValue a) e
+    VArray <$> (bpArrayConstant bp) (toTValue a) (toTValue b) e
 
 -- arrayLookup :: (a b :: sort 0) -> (Array a b) -> a -> b;
 arrayLookupOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l

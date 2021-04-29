@@ -38,6 +38,7 @@ import Verifier.SAW.FiniteValue (FiniteType(..), FirstOrderType(..))
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Utils (panic)
+import Verifier.SAW.Term.Pretty (SawDoc, renderSawDoc)
 
 import Verifier.SAW.Simulator.MonadLazy
 
@@ -63,8 +64,8 @@ data Value l
   | VIntMod !Natural (VInt l)
   | VArray (VArray l)
   | VString !Text
-  | VFloat !Float
-  | VDouble !Double
+--  | VFloat !Float
+--  | VDouble !Double
   | VRecordValue ![(FieldName, Thunk l)]
   | VExtra (Extra l)
   | TValue (TValue l)
@@ -82,6 +83,25 @@ data TValue l
   | VDataType !Ident ![Value l]
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
+
+
+-- | Neutral terms represent computations that are blocked
+--   because some internal term cannot be evaluated
+--   (e.g., because it is a variable, because it's definition
+--   is being hidden, etc.)
+data NeutralTerm
+  = NeutralBox Term -- the thing blocking evaluation
+  | NeutralPairLeft NeutralTerm   -- left pair projection
+  | NeutralPairRight NeutralTerm  -- right pair projection
+  | NeutralRecordProj NeutralTerm FieldName -- record projection
+  | NeutralApp NeutralTerm Term -- function application
+  | NeutralRecursor -- recursor application
+      Ident  -- inductive type being eliminated
+      [Term] -- parameters of the inductive type
+      Term   -- return type (AKA intent, AKA motive)
+      [(Ident,Term)] -- elimination functions for the constructors
+      [Term] -- indices for the inductive type
+      NeutralTerm -- argument being elminated
 
 type Thunk l = Lazy (EvalM l) (Value l)
 
@@ -164,8 +184,8 @@ instance Show (Extra l) => Show (Value l) where
       VInt _         -> showString "<<integer>>"
       VIntMod n _    -> showString ("<<Z " ++ show n ++ ">>")
       VArray{}       -> showString "<<array>>"
-      VFloat float   -> shows float
-      VDouble double -> shows double
+--      VFloat float   -> shows float
+--      VDouble double -> shows double
       VString s      -> shows s
       VRecordValue [] -> showString "{}"
       VRecordValue ((fld,_):_) ->
@@ -324,3 +344,43 @@ suffixTValue tv =
     VDataType {} -> Nothing
     VRecordType {} -> Nothing
     VSort {} -> Nothing
+
+
+neutralToTerm :: NeutralTerm -> Term
+neutralToTerm = loop 
+  where
+  loop (NeutralBox tm) = tm
+  loop (NeutralPairLeft nt) =
+    Unshared (FTermF (PairLeft (loop nt)))
+  loop (NeutralPairRight nt) =
+    Unshared (FTermF (PairRight (loop nt)))
+  loop (NeutralRecordProj nt f) =
+    Unshared (FTermF (RecordProj (loop nt) f))
+  loop (NeutralApp nt arg) =
+    Unshared (App (loop nt) arg)
+  loop (NeutralRecursor d ps p_ret cs_fs ixs x) =
+    Unshared (FTermF (RecursorApp d ps p_ret cs_fs ixs (loop x)))
+
+neutralToSharedTerm :: SharedContext -> NeutralTerm -> IO Term
+neutralToSharedTerm sc = loop
+  where
+  loop (NeutralBox tm) = pure tm
+  loop (NeutralPairLeft nt) =
+    scFlatTermF sc . PairLeft =<< loop nt
+  loop (NeutralPairRight nt) =
+    scFlatTermF sc . PairRight =<< loop nt
+  loop (NeutralRecordProj nt f) =
+    do tm <- loop nt
+       scFlatTermF sc (RecordProj tm f)
+  loop (NeutralApp nt arg) =
+    do tm <- loop nt
+       scApply sc tm arg
+  loop (NeutralRecursor d ps p_ret cs_fs ixs nt) =
+    do tm <- loop nt
+       scFlatTermF sc (RecursorApp d ps p_ret cs_fs ixs tm)
+
+ppNeutral :: PPOpts -> NeutralTerm -> SawDoc
+ppNeutral opts = ppTerm opts . neutralToTerm
+
+instance Show NeutralTerm where
+  show = renderSawDoc defaultPPOpts . ppNeutral defaultPPOpts
