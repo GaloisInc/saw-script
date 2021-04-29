@@ -27,18 +27,17 @@ import GHC.Stack( HasCallStack )
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import Control.Monad (liftM, unless, foldM, zipWithM)
+import Control.Monad (liftM, unless)
 import Control.Monad.Fix (MonadFix(mfix))
 import Data.Bits
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
-import Data.Traversable
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import Verifier.SAW.Term.Functor (Ident, alistAllFields, primType)
+import Verifier.SAW.Term.Functor (Ident, primType)
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Prim
 import qualified Verifier.SAW.Prim as Prim
@@ -127,7 +126,7 @@ data BasePrims l =
   , bpIntMin :: VInt l -> VInt l -> MInt l
   , bpIntMax :: VInt l -> VInt l -> MInt l
     -- Array operations
-  , bpArrayConstant :: TValue l -> Value l -> MArray l
+  , bpArrayConstant :: TValue l -> TValue l -> Value l -> MArray l
   , bpArrayLookup :: VArray l -> Value l -> MValue l
   , bpArrayUpdate :: VArray l -> Value l -> Value l -> MArray l
   , bpArrayEq :: VArray l -> VArray l -> MBool l
@@ -603,40 +602,6 @@ genOp =
       panic ("Verifier.SAW.Simulator.gen: vector size too large: " ++ show n)
       else liftM VVector $ V.generateM (fromIntegral n) g
 
--- eq :: (a :: sort 0) -> a -> a -> Bool
-eqOp :: forall l. (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
-eqOp bp =
-  constFun $ pureFun $ \v1 -> strictFun $ \v2 -> VBool <$> go v1 v2
-  where
-    go :: Value l -> Value l -> MBool l
-    go VUnit VUnit = return (bpTrue bp)
-    go (VPair x1 x2) (VPair y1 y2) =
-      do b1 <- go' x1 y1
-         b2 <- go' x2 y2
-         bpAnd bp b1 b2
-    go (VWord w1) (VWord w2) = bpBvEq bp w1 w2
-    go (VVector v1) (VVector v2) =
-      do bs <- sequence $ zipWith go' (V.toList v1) (V.toList v2)
-         foldM (bpAnd bp) (bpTrue bp) bs
-    go x1 (VVector v2) =
-      do v1 <- toVector (bpUnpack bp) x1
-         go (VVector v1) (VVector v2)
-    go (VVector v1) x2 =
-      do v2 <- toVector (bpUnpack bp) x2
-         go (VVector v1) (VVector v2)
-    go (VRecordValue elems1) (VRecordValue
-                              (alistAllFields (map fst elems1) -> Just elems2)) =
-      zipWithM go' (map snd elems1) elems2 >>= foldM (bpAnd bp) (bpTrue bp)
-    go (VBool b1) (VBool b2) = bpBoolEq bp b1 b2
-    go (VInt i1) (VInt i2) = bpIntEq bp i1 i2
-    go (VArray f1) (VArray f2) = bpArrayEq bp f1 f2
-    go x1 x2 = panic $ "eq: invalid arguments: " ++ show (x1, x2)
-
-    go' :: Thunk l -> Thunk l -> MBool l
-    go' thunk1 thunk2 =
-      do v1 <- force thunk1
-         v2 <- force thunk2
-         go v1 v2
 
 -- atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
 atWithDefaultOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
@@ -845,6 +810,7 @@ expByNatOp bp =
 -- Shifts and Rotates
 
 -- | Barrel-shifter algorithm. Takes a list of bits in big-endian order.
+--   TODO use Natural instead of Integer
 shifter :: Monad m => (b -> a -> a -> m a) -> (a -> Integer -> m a) -> a -> [b] -> m a
 shifter mux op = go
   where
@@ -858,6 +824,7 @@ shifter mux op = go
 shiftOp :: forall l.
   (HasCallStack, VMonadLazy l, Show (Extra l)) =>
   BasePrims l ->
+  -- TODO use Natural instead of Integer
   (Thunk l -> Vector (Thunk l) -> Integer -> Vector (Thunk l)) ->
   (VBool l -> VWord l -> Integer -> MWord l) ->
   (VBool l -> VWord l -> VWord l -> MWord l) ->
@@ -909,6 +876,7 @@ shiftOp bp vecOp wordIntOp wordOp =
 rotateOp :: forall l.
   (HasCallStack, VMonadLazy l, Show (Extra l)) =>
   BasePrims l ->
+  --   TODO use Natural instead of Integer?
   (Vector (Thunk l) -> Integer -> Vector (Thunk l)) ->
   (VWord l -> Integer -> MWord l) ->
   (VWord l -> VWord l -> MWord l) ->
@@ -1385,9 +1353,9 @@ arrayTypeOp = pureFun $ \a -> pureFun $ \b -> TValue (VArrayType (toTValue a) (t
 arrayConstantOp :: VMonad l => BasePrims l -> Value l
 arrayConstantOp bp =
   pureFun $ \a ->
-  constFun $
+  pureFun $ \b ->
   strictFun $ \e ->
-    VArray <$> (bpArrayConstant bp) (toTValue a) e
+    VArray <$> (bpArrayConstant bp) (toTValue a) (toTValue b) e
 
 -- arrayLookup :: (a b :: sort 0) -> (Array a b) -> a -> b;
 arrayLookupOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l

@@ -23,15 +23,11 @@ module Verifier.SAW.Simulator.Concrete
        , runIdentity
        ) where
 
---import Control.Applicative
---import Control.Monad (zipWithM, (<=<))
 import Control.Monad.Identity
-import Data.Bits
 import Data.IntTrie (IntTrie)
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
---import Data.Traversable
 
 import Verifier.SAW.Prim (BitVector(..), signed, bv, bvNeg)
 import qualified Verifier.SAW.Prim as Prim
@@ -43,15 +39,14 @@ import Verifier.SAW.SharedTerm
 
 ------------------------------------------------------------
 
--- type ExtCnsEnv = VarIndex -> String -> CValue
-
 -- | Evaluator for shared terms.
 evalSharedTerm :: ModuleMap -> Map Ident CValue -> Map VarIndex CValue -> Term -> CValue
 evalSharedTerm m addlPrims ecVals t =
   runIdentity $ do
-    cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns (const Nothing)
+    cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns (const Nothing) neutral
     Sim.evalSharedTerm cfg t
   where
+    neutral _env nt = return $ Prim.userError $ "Cannot evaluate neutral term\n" ++ show nt
     extcns ec =
       case Map.lookup (ecVarIndex ec) ecVals of
         Just v  -> return v
@@ -95,20 +90,6 @@ vStream x = VExtra (CStream x)
 toStream :: CValue -> IntTrie CValue
 toStream (VExtra (CStream x)) = x
 toStream x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toStream", show x]
-
-{-
-flattenBValue :: CValue -> BitVector
-flattenBValue (VExtra (BBool l)) = return (AIG.replicate 1 l)
-flattenBValue (VWord lv) = return lv
-flattenBValue (VExtra (CStream _ _)) = error "Verifier.SAW.Simulator.Concrete.flattenBValue: CStream"
-flattenBValue (VVector vv) =
-  AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
-flattenBValue (VTuple vv) =
-  AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
-flattenBValue (VRecord m) =
-  AIG.concat <$> traverse (flattenBValue <=< force) (Map.elems m)
-flattenBValue _ = error $ unwords ["Verifier.SAW.Simulator.Concrete.flattenBValue: unsupported value"]
--}
 
 wordFun :: (BitVector -> CValue) -> CValue
 wordFun f = pureFun (\x -> f (toWord x))
@@ -190,14 +171,14 @@ prims =
   , Prims.bpBvuge  = pure2 (Prim.bvuge undefined)
   , Prims.bpBvugt  = pure2 (Prim.bvugt undefined)
     -- Bitvector shift/rotate
-  , Prims.bpBvRolInt = pure2 bvRotateL
-  , Prims.bpBvRorInt = pure2 bvRotateR
-  , Prims.bpBvShlInt = pure3 bvShiftL
-  , Prims.bpBvShrInt = pure3 bvShiftR
-  , Prims.bpBvRol    = pure2 (\x y -> bvRotateL x (unsigned y))
-  , Prims.bpBvRor    = pure2 (\x y -> bvRotateR x (unsigned y))
-  , Prims.bpBvShl    = pure3 (\b x y -> bvShiftL b x (unsigned y))
-  , Prims.bpBvShr    = pure3 (\b x y -> bvShiftR b x (unsigned y))
+  , Prims.bpBvRolInt = pure2 Prim.bvRotateL
+  , Prims.bpBvRorInt = pure2 Prim.bvRotateR
+  , Prims.bpBvShlInt = pure3 Prim.bvShiftL
+  , Prims.bpBvShrInt = pure3 Prim.bvShiftR
+  , Prims.bpBvRol    = pure2 (\x y -> Prim.bvRotateL x (unsigned y))
+  , Prims.bpBvRor    = pure2 (\x y -> Prim.bvRotateR x (unsigned y))
+  , Prims.bpBvShl    = pure3 (\b x y -> Prim.bvShiftL b x (unsigned y))
+  , Prims.bpBvShr    = pure3 (\b x y -> Prim.bvShiftR b x (unsigned y))
     -- Bitvector misc
   , Prims.bpBvPopcount = pure1 (Prim.bvPopcount undefined)
   , Prims.bpBvCountLeadingZeros = pure1 (Prim.bvCountLeadingZeros undefined)
@@ -280,27 +261,6 @@ intToBvOp =
     VWord $
      if n >= 0 then bv (fromIntegral n) x
                else bvNeg n $ bv (fromIntegral n) $ negate x
-
-------------------------------------------------------------
--- BitVector operations
-
-bvRotateL :: BitVector -> Integer -> BitVector
-bvRotateL (BV w x) i = Prim.bv w ((x `shiftL` j) .|. (x `shiftR` (w - j)))
-  where j = fromInteger (i `mod` toInteger w)
-
-bvRotateR :: BitVector -> Integer -> BitVector
-bvRotateR w i = bvRotateL w (- i)
-
-bvShiftL :: Bool -> BitVector -> Integer -> BitVector
-bvShiftL c (BV w x) i = Prim.bv w ((x `shiftL` j) .|. c')
-  where c' = if c then (1 `shiftL` j) - 1 else 0
-        j = fromInteger (i `min` toInteger w)
-
-bvShiftR :: Bool -> BitVector -> Integer -> BitVector
-bvShiftR c (BV w x) i = Prim.bv w (c' .|. (x `shiftR` j))
-  where c' = if c then (full `shiftL` (w - j)) .&. full else 0
-        full = (1 `shiftL` w) - 1
-        j = fromInteger (i `min` toInteger w)
 
 ------------------------------------------------------------
 

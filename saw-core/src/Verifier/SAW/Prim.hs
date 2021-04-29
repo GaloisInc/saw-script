@@ -275,6 +275,36 @@ lg2rem n = (k+1, 2*d+r)
   where (q, r) = n `divMod` 2
         (k, d) = lg2rem q
 
+------------------------------------------------------------
+-- BitVector shift/rotate
+
+bvRotateL :: BitVector -> Integer -> BitVector
+bvRotateL (BV w x) i = bv w ((x `shiftL` j) .|. (x `shiftR` (w - j)))
+  where j = fromInteger (i `mod` toInteger w)
+
+bvRotateR :: BitVector -> Integer -> BitVector
+bvRotateR w i = bvRotateL w (- i)
+
+bvShiftL ::
+  Bool {- ^ bit value to shift in -} ->
+  BitVector {- ^ value to shift -} ->
+  Integer {- ^ amount to shift by -} ->
+  BitVector
+bvShiftL c (BV w x) i = bv w ((x `shiftL` j) .|. c')
+  where c' = if c then (1 `shiftL` j) - 1 else 0
+        j = fromInteger (i `min` toInteger w)
+
+bvShiftR ::
+  Bool {- ^ bit value to shift in -} ->
+  BitVector {- ^ value to shift -} ->
+  Integer {- ^ amount to shift by -} ->
+  BitVector
+bvShiftR c (BV w x) i = bv w (c' .|. (x `shiftR` j))
+  where c' = if c then (full `shiftL` (w - j)) .&. full else 0
+        full = (1 `shiftL` w) - 1
+        j = fromInteger (i `min` toInteger w)
+
+
 ----------------------------------------
 -- Errors
 

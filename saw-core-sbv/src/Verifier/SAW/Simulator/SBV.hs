@@ -581,7 +581,8 @@ sbvSolveBasic sc addlPrims unintSet t = do
   let uninterpreted ec
         | Set.member (ecVarIndex ec) unintSet = Just (extcns ec)
         | otherwise                           = Nothing
-  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted
+  let neutral _env nt = fail ("sbvSolveBasic: could not evaluate neutral term: " ++ show nt)
+  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted neutral
   Sim.evalSharedTerm cfg t
 
 parseUninterpreted :: [SVal] -> String -> TValue SBV -> IO SValue
@@ -658,8 +659,9 @@ sbvSATQuery sc addlPrims query =
           let uninterpreted ec
                 | Set.member (ecVarIndex ec) unintSet = Just (mkUninterp ec)
                 | otherwise                           = Nothing
+          let neutral _env nt = fail ("sbvSATQuery: could not evaluate neutral term: " ++ show nt)
 
-          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted)
+          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted neutral)
           bval <- liftIO (Sim.evalSharedTerm cfg t)
 
           case bval of

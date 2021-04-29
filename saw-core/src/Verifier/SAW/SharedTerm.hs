@@ -215,6 +215,7 @@ module Verifier.SAW.SharedTerm
   , scBvShl, scBvShr, scBvSShr
   , scBvUExt, scBvSExt
   , scBvTrunc
+  , scBvLg2
   , scBvPopcount
   , scBvCountLeadingZeros
   , scBvCountTrailingZeros
@@ -224,6 +225,7 @@ module Verifier.SAW.SharedTerm
   , scArrayConstant
   , scArrayLookup
   , scArrayUpdate
+  , scArrayEq
     -- ** Utilities
 --  , scTrue
 --  , scFalse
@@ -2005,6 +2007,12 @@ scBvSRem sc n x y = scGlobalApply sc "Prelude.bvSRem" [n, x, y]
 scBvSDiv :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSDiv sc n x y = scGlobalApply sc "Prelude.bvSDiv" [n, x, y]
 
+-- | Create a term applying the lg2 bitvector primitive.
+--
+-- > bvLg2 : (n : Nat) -> Vec n Bool -> Vec n Bool;
+scBvLg2 :: SharedContext -> Term -> Term -> IO Term
+scBvLg2 sc n x = scGlobalApply sc "Prelude.bvLg2" [n, x]
+
 -- | Create a term applying the population count bitvector primitive.
 --
 -- > bvPopcount : (n : Nat) -> Vec n Bool -> Vec n Bool;
@@ -2168,14 +2176,14 @@ scUpdBvFun sc n a f i v = scGlobalApply sc "Prelude.updBvFun" [n, a, f, i, v]
 scArrayType :: SharedContext -> Term -> Term -> IO Term
 scArrayType sc a b = scGlobalApply sc "Prelude.Array" [a, b]
 
--- Create a term computing a constant array, given an index type, element type,
+-- | Create a term computing a constant array, given an index type, element type,
 -- and element (all as 'Term's).
 --
 -- > arrayConstant : (a b : sort 0) -> b -> (Array a b);
 scArrayConstant :: SharedContext -> Term -> Term -> Term -> IO Term
 scArrayConstant sc a b e = scGlobalApply sc "Prelude.arrayConstant" [a, b, e]
 
--- Create a term computing the value at a particular index of an array.
+-- | Create a term computing the value at a particular index of an array.
 --
 -- > arrayLookup : (a b : sort 0) -> (Array a b) -> a -> b;
 scArrayLookup :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
@@ -2186,6 +2194,12 @@ scArrayLookup sc a b f i = scGlobalApply sc "Prelude.arrayLookup" [a, b, f, i]
 -- > arrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
 scArrayUpdate :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
 scArrayUpdate sc a b f i e = scGlobalApply sc "Prelude.arrayUpdate" [a, b, f, i, e]
+
+-- | Create a term computing the equality of two arrays.
+--
+-- > arrayEq : (a b : sort 0) -> (Array a b) -> (Array a b) -> Bool;
+scArrayEq :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
+scArrayEq sc a b x y = scGlobalApply sc "Prelude.arrayEq" [a, b, x, y]
 
 ------------------------------------------------------------
 -- | The default instance of the SharedContext operations.

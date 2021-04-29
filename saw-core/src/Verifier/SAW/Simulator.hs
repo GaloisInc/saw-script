@@ -85,6 +85,11 @@ data SimulatorConfig l =
   -- ^ Interpretation of constructor terms. 'Nothing' indicates that
   -- the constructor is treated as normal. 'Just' replaces the
   -- constructor with a custom implementation.
+  , simNeutral :: Env l -> NeutralTerm -> MValue l
+  -- ^ Handler that fires if the simulator encounters a term that it
+  --   cannot otherwise evaluate because it is blocked. For some simulators,
+  --   this is just an error condition; for others, sensible action can
+  --   be taken.
   , simModMap :: ModuleMap
   }
 
@@ -121,9 +126,11 @@ evalTermF :: forall l. (VMonadLazy l, Show (Extra l)) =>
           -> TermF Term -> OpenValue l
 evalTermF cfg lam recEval tf env =
   case tf of
-    App t1 t2               -> do v <- recEval t1
-                                  x <- recEvalDelay t2
-                                  apply v x
+    App t1 t2               -> recEval t1 >>= \case
+                                 VFun _ f ->
+                                   do x <- recEvalDelay t2
+                                      f x
+                                 _ -> simNeutral cfg env (NeutralApp (NeutralBox t1) t2)
     Lambda nm tp t          -> do v <- toTValue <$> recEval tp
                                   return $ VFun nm (\x -> lam t ((x,v) : env))
     Pi nm t1 t2             -> do v <- toTValue <$> recEval t1
@@ -147,16 +154,25 @@ evalTermF cfg lam recEval tf env =
              simPrimitive cfg pn'
 
         UnitValue           -> return VUnit
+
         UnitType            -> return $ TValue VUnitType
+
         PairValue x y       -> do tx <- recEvalDelay x
                                   ty <- recEvalDelay y
                                   return $ VPair tx ty
+
         PairType x y        -> do vx <- toTValue <$> recEval x
                                   vy <- toTValue <$> recEval y
                                   return $ TValue $ VPairType vx vy
 
-        PairLeft x          -> valPairLeft =<< recEval x
-        PairRight x         -> valPairRight =<< recEval x
+        PairLeft x          -> recEval x >>= \case
+                                 VPair l _r -> force l
+                                 _ -> simNeutral cfg env (NeutralPairLeft (NeutralBox x))
+
+        PairRight x         -> recEval x >>= \case
+                                 VPair _l r -> force r
+                                 _ -> simNeutral cfg env (NeutralPairRight (NeutralBox x))
+
         CtorApp c ps ts     -> do c'  <- traverse (fmap toTValue . recEval) c
                                   ps' <- mapM recEvalDelay ps
                                   ts' <- mapM recEvalDelay ts
@@ -190,7 +206,7 @@ evalTermF cfg lam recEval tf env =
              es  <- traverse f (recursorElims rec)
              pure (VRecursor d ps m mty es)
 
-        RecursorApp rectm _ixs arg ->
+        RecursorApp rectm ixs arg ->
           do rec <- recEval rectm
              case rec of
                VRecursor d ps motive motiveTy ps_fs ->
@@ -204,18 +220,27 @@ evalTermF cfg lam recEval tf env =
                               lam (ctorIotaTemplate ctor) allArgs
 
                         | otherwise -> panic ("evalRecursorApp: could not find info for constructor: " ++ show ctor)
-                      Nothing -> panic "evalRecursorApp: expected constructor"
-               _ -> panic "evalRecursorApp: expected recursor value"
+                      Nothing -> simNeutral cfg env (NeutralRecursorArg rectm ixs (NeutralBox arg))
+               _ -> simNeutral cfg env (NeutralRecursor (NeutralBox rectm) ixs arg)
 
         RecordType elem_tps ->
           TValue . VRecordType <$> traverse (traverse (fmap toTValue . recEval)) elem_tps
+
         RecordValue elems   ->
           VRecordValue <$> mapM (\(fld,t) -> (fld,) <$> recEvalDelay t) elems
-        RecordProj t fld    -> recEval t >>= flip valRecordProj fld
+
+        RecordProj t fld    -> recEval t >>= \case
+                                 v@VRecordValue{} -> valRecordProj v fld
+                                 _ -> simNeutral cfg env (NeutralRecordProj (NeutralBox t) fld)
+
         Sort s              -> return $ TValue (VSort s)
+
         NatLit n            -> return $ VNat n
+
         ArrayValue _ tv     -> liftM VVector $ mapM recEvalDelay tv
+
         StringLit s         -> return $ VString s
+
         ExtCns ec           -> do ec' <- traverse (fmap toTValue . recEval) ec
                                   simExtCns cfg tf ec'
   where
@@ -259,6 +284,7 @@ processRecArgs _ _ _ _ = panic "processRegArgs" ["Expected Pi type!"::String]
   Map Ident (ValueIn Id l) ->
   (ExtCns (TValueIn Id l) -> MValueIn Id l) ->
   (ExtCns (TValueIn Id l) -> Maybe (MValueIn Id l)) ->
+  (EnvIn Id l -> NeutralTerm -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal ::
   Show (Extra l) =>
@@ -266,14 +292,16 @@ processRecArgs _ _ _ _ = panic "processRegArgs" ["Expected Pi type!"::String]
   Map Ident (ValueIn IO l) ->
   (ExtCns (TValueIn IO l) -> MValueIn IO l) ->
   (ExtCns (TValueIn IO l) -> Maybe (MValueIn IO l)) ->
+  (EnvIn IO l -> NeutralTerm -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
 evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               ModuleMap -> Map Ident (Value l) ->
               (ExtCns (TValue l) -> MValue l) ->
               (ExtCns (TValue l) -> Maybe (EvalM l (Value l))) ->
+              (Env l -> NeutralTerm -> MValue l) ->
               EvalM l (SimulatorConfig l)
-evalGlobal modmap prims extcns uninterpreted =
-  evalGlobal' modmap prims (const extcns) (const uninterpreted)
+evalGlobal modmap prims extcns uninterpreted neutral =
+  evalGlobal' modmap prims (const extcns) (const uninterpreted) neutral
 
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
@@ -281,6 +309,7 @@ evalGlobal modmap prims extcns uninterpreted =
   Map Ident (ValueIn Id l) ->
   (TermF Term -> ExtCns (TValueIn Id l) -> MValueIn Id l) ->
   (TermF Term -> ExtCns (TValueIn Id l) -> Maybe (MValueIn Id l)) ->
+  (EnvIn Id l -> NeutralTerm -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
@@ -288,6 +317,7 @@ evalGlobal modmap prims extcns uninterpreted =
   Map Ident (ValueIn IO l) ->
   (TermF Term -> ExtCns (TValueIn IO l) -> MValueIn IO l) ->
   (TermF Term -> ExtCns (TValueIn IO l) -> Maybe (MValueIn IO l)) ->
+  (EnvIn IO l -> NeutralTerm -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
 -- | A variant of 'evalGlobal' that lets the uninterpreted function
 -- symbol and external-constant callbacks have access to the 'TermF'.
@@ -300,10 +330,12 @@ evalGlobal' ::
   (TermF Term -> ExtCns (TValue l) -> MValue l) ->
   -- | Overrides for Constant terms (e.g. uninterpreted functions)
   (TermF Term -> ExtCns (TValue l) -> Maybe (MValue l)) ->
+  -- | Handler for neutral terms
+  (Env l -> NeutralTerm -> MValue l) ->
   EvalM l (SimulatorConfig l)
-evalGlobal' modmap prims extcns constant =
+evalGlobal' modmap prims extcns constant neutral =
   do checkPrimitives modmap prims
-     return (SimulatorConfig primitive extcns constant' ctors modmap)
+     return (SimulatorConfig primitive extcns constant' ctors neutral modmap)
   where
     constant' :: TermF Term -> ExtCns (TValue l) -> Maybe (MValue l)
     constant' tf ec =
@@ -349,7 +381,6 @@ checkPrimitives modmap prims = do
 
         unimplementedPrims = Set.toList $ Set.difference primSet implementedPrims
         overridePrims = Set.toList $ Set.intersection defSet implementedPrims
-
 
 ----------------------------------------------------------------------
 -- The evaluation strategy for SharedTerms involves two memo tables:

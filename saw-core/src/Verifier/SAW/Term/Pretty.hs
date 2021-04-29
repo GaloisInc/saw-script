@@ -18,6 +18,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Term.Pretty
   ( SawDoc
+  , renderSawDoc
   , SawStyle(..)
   , PPOpts(..)
   , defaultPPOpts
@@ -37,7 +38,6 @@ module Verifier.SAW.Term.Pretty
   , OccurrenceMap
   , shouldMemoizeTerm
   , ppName
-  , renderSawDoc
   ) where
 
 import Data.Maybe (isJust)

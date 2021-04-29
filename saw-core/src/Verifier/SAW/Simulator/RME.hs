@@ -63,10 +63,11 @@ evalSharedTerm :: ModuleMap -> Map Ident RValue -> Term -> RValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-           extcns (const Nothing)
+           extcns (const Nothing) neutral
     Sim.evalSharedTerm cfg t
   where
     extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
+    neutral _env nt = return $ Prim.userError $ "Could not evaluate neutral term\n:" ++ show nt
 
 ------------------------------------------------------------
 -- Values
@@ -392,11 +393,14 @@ bitBlastBasic :: ModuleMap
               -> Term
               -> RValue
 bitBlastBasic m addlPrims ecMap t = runIdentity $ do
+  let neutral _env nt = return $ Prim.userError $ "Could not evaluate neutral term\n:" ++ show nt
+
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
          (\ec -> case Map.lookup (ecVarIndex ec) ecMap of
                    Just v -> pure v
                    Nothing -> error ("RME: unknown ExtCns: " ++ show (ecName ec)))
          (const Nothing)
+         neutral
   Sim.evalSharedTerm cfg t
 
 
