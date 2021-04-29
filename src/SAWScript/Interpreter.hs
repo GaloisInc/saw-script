@@ -2840,6 +2840,14 @@ primitives = Map.fromList
     , " such that nm<x1,...,xn> is equivalent to the permission p."
     ]
 
+  , prim "heapster_define_rust_type"
+    "HeapsterEnv -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_rust_type)
+    Experimental
+    [ "heapster_define_rust_type env tp defines a Heapster LLVM shape from tp,"
+    , "a string representing a top-level struct or enum definition."
+    ]
+
   , prim "heapster_block_entry_hint"
     "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_block_entry_hint)
