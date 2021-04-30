@@ -38,6 +38,7 @@ import Verifier.SAW.FiniteValue (FiniteType(..), FirstOrderType(..))
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Utils (panic)
+import Verifier.SAW.Term.Pretty
 
 import Verifier.SAW.Simulator.MonadLazy
 
@@ -49,7 +50,7 @@ Values are parameterized by the /name/ of an instantiation.
 The concrete parameters to use are computed from the name using
 a collection of type families (e.g., 'EvalM', 'VBool', etc.). -}
 data Value l
-  = VFun !(Thunk l -> MValue l)
+  = VFun !LocalName !(Thunk l -> MValue l)
   | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
   | VCtorApp !Ident !(Vector (Thunk l))
@@ -75,12 +76,31 @@ data TValue l
   | VIntType
   | VIntModType !Natural
   | VArrayType !(TValue l) !(TValue l)
-  | VPiType !(TValue l) !(Thunk l -> EvalM l (TValue l))
+  | VPiType LocalName !(TValue l) !(Thunk l -> EvalM l (TValue l))
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
   | VDataType !Ident ![Value l]
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
+  | VTyTerm !Sort !Term
+
+-- | Neutral terms represent computations that are blocked
+--   because some internal term cannot be evaluated
+--   (e.g., because it is a variable, because it's definition
+--   is being hidden, etc.)
+data NeutralTerm
+  = NeutralBox Term -- the thing blocking evaluation
+  | NeutralPairLeft NeutralTerm   -- left pair projection
+  | NeutralPairRight NeutralTerm  -- right pair projection
+  | NeutralRecordProj NeutralTerm FieldName -- record projection
+  | NeutralApp NeutralTerm Term -- function application
+  | NeutralRecursor -- recursor application
+      Ident  -- inductive type being eliminated
+      [Term] -- parameters of the inductive type
+      Term   -- return type (AKA intent, AKA motive)
+      [(Ident,Term)] -- elimination functions for the constructors
+      [Term] -- indices for the inductive type
+      NeutralTerm -- argument being elminated
 
 type Thunk l = Lazy (EvalM l) (Value l)
 
@@ -133,13 +153,15 @@ type instance Extra (WithM m l) = Extra l
 --------------------------------------------------------------------------------
 
 strictFun :: VMonad l => (Value l -> MValue l) -> Value l
-strictFun f = VFun (\x -> force x >>= f)
+-- TODO, make callers provide a name?
+strictFun f = VFun "x" (\x -> force x >>= f)
 
 pureFun :: VMonad l => (Value l -> Value l) -> Value l
-pureFun f = VFun (\x -> liftM f (force x))
+-- TODO, make callers provide a name?
+pureFun f = VFun "x" (\x -> liftM f (force x))
 
 constFun :: VMonad l => Value l -> Value l
-constFun x = VFun (\_ -> return x)
+constFun x = VFun "_" (\_ -> return x)
 
 toTValue :: HasCallStack => Value l -> TValue l
 toTValue (TValue x) = x
@@ -180,7 +202,7 @@ instance Show (Extra l) => Show (TValue l) where
       VIntType       -> showString "Integer"
       VIntModType n  -> showParen True (showString "IntMod " . shows n)
       VArrayType{}   -> showString "Array"
-      VPiType t _    -> showParen True
+      VPiType _ t _    -> showParen True
                         (shows t . showString " -> ...")
       VUnitType      -> showString "#()"
       VPairType x y  -> showParen True (shows x . showString " * " . shows y)
@@ -193,6 +215,8 @@ instance Show (Extra l) => Show (TValue l) where
       VVecType n a   -> showString "Vec " . shows n
                         . showString " " . showParen True (showsPrec p a)
       VSort s        -> shows s
+
+      VTyTerm _ tm   -> shows tm
 
 data Nil = Nil
 
@@ -235,8 +259,8 @@ valRecordProj v _ =
   ["Not a record value:", show v]
 
 apply :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
-apply (VFun f) x = f x
-apply (TValue (VPiType _ f)) x = TValue <$> f x
+apply (VFun _ f) x = f x
+apply (TValue (VPiType _ _ f)) x = TValue <$> f x
 apply v _x = panic "Verifier.SAW.Simulator.Value.apply" ["Not a function value:", show v]
 
 applyAll :: (VMonad l, Show (Extra l)) => Value l -> [Thunk l] -> MValue l
@@ -296,6 +320,7 @@ asFirstOrderTypeTValue v =
     VPiType{}   -> Nothing
     VDataType{} -> Nothing
     VSort{}     -> Nothing
+    VTyTerm{}   -> Nothing
 
 -- | A (partial) injective mapping from type values to strings. These
 -- are intended to be useful as suffixes for names of type instances
@@ -313,7 +338,7 @@ suffixTValue tv =
       do a' <- suffixTValue a
          b' <- suffixTValue b
          Just ("_Array" ++ a' ++ b')
-    VPiType _ _ -> Nothing
+    VPiType _ _ _ -> Nothing
     VUnitType -> Just "_Unit"
     VPairType a b ->
       do a' <- suffixTValue a
@@ -322,3 +347,43 @@ suffixTValue tv =
     VDataType {} -> Nothing
     VRecordType {} -> Nothing
     VSort {} -> Nothing
+    VTyTerm{} -> Nothing
+
+neutralToTerm :: NeutralTerm -> Term
+neutralToTerm = loop
+  where
+  loop (NeutralBox tm) = tm
+  loop (NeutralPairLeft nt) =
+    Unshared (FTermF (PairLeft (loop nt)))
+  loop (NeutralPairRight nt) =
+    Unshared (FTermF (PairRight (loop nt)))
+  loop (NeutralRecordProj nt f) =
+    Unshared (FTermF (RecordProj (loop nt) f))
+  loop (NeutralApp nt arg) =
+    Unshared (App (loop nt) arg)
+  loop (NeutralRecursor d ps p_ret cs_fs ixs x) =
+    Unshared (FTermF (RecursorApp d ps p_ret cs_fs ixs (loop x)))
+
+neutralToSharedTerm :: SharedContext -> NeutralTerm -> IO Term
+neutralToSharedTerm sc = loop
+  where
+  loop (NeutralBox tm) = pure tm
+  loop (NeutralPairLeft nt) =
+    scFlatTermF sc . PairLeft =<< loop nt
+  loop (NeutralPairRight nt) =
+    scFlatTermF sc . PairRight =<< loop nt
+  loop (NeutralRecordProj nt f) =
+    do tm <- loop nt
+       scFlatTermF sc (RecordProj tm f)
+  loop (NeutralApp nt arg) =
+    do tm <- loop nt
+       scApply sc tm arg
+  loop (NeutralRecursor d ps p_ret cs_fs ixs nt) =
+    do tm <- loop nt
+       scFlatTermF sc (RecursorApp d ps p_ret cs_fs ixs tm)
+
+ppNeutral :: PPOpts -> NeutralTerm -> SawDoc
+ppNeutral opts = ppTerm opts . neutralToTerm
+
+instance Show NeutralTerm where
+  show = renderSawDoc defaultPPOpts . ppNeutral defaultPPOpts

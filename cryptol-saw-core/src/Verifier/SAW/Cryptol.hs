@@ -1590,7 +1590,7 @@ asCryptolTypeValue v =
       case C.tIsTuple t2 of
         Just ts -> return (C.tTuple (t1 : ts))
         Nothing -> return (C.tTuple [t1, t2])
-    SC.VPiType v1 f -> do
+    SC.VPiType _nm v1 f -> do
       case v1 of
         -- if we see that the parameter is a Cryptol.Num, it's a
         -- pretty good guess that it originally was a

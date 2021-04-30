@@ -120,9 +120,9 @@ evalTermF cfg lam recEval tf env =
     App t1 t2               -> do v <- recEval t1
                                   x <- recEvalDelay t2
                                   apply v x
-    Lambda _ _ t            -> return $ VFun (\x -> lam t (x : env))
-    Pi _ t1 t2              -> do v <- toTValue <$> recEval t1
-                                  return $ TValue $ VPiType v (\x -> toTValue <$> lam t2 (x : env))
+    Lambda nm _ t           -> return $ VFun nm (\x -> lam t (x : env))
+    Pi nm t1 t2             -> do v <- toTValue <$> recEval t1
+                                  return $ TValue $ VPiType nm v (\x -> toTValue <$> lam t2 (x : env))
     LocalVar i              -> force (env !! i)
     Constant ec t           -> do ec' <- traverse (fmap toTValue . recEval) ec
                                   maybe (recEval t) id (simConstant cfg tf ec')

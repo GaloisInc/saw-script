@@ -731,7 +731,7 @@ parseUninterpreted ::
   TValue (What4 sym) -> IO (SValue sym)
 parseUninterpreted sym ref app ty =
   case ty of
-    VPiType _ f
+    VPiType _ _ f
       -> return $
          strictFun $ \x -> do
            app' <- applyUnintApp sym app x
@@ -852,7 +852,7 @@ applyUnintApp sym app0 v =
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     TValue (suffixTValue -> Just s)
                               -> return (suffixUnintApp s app0)
-    VFun _ ->
+    VFun _ _ ->
       fail $
       "Cannot create uninterpreted higher-order function " ++
       show (stringOfUnintApp app0)
@@ -888,7 +888,7 @@ w4Solve sym sc satq =
 argTypes :: IsSymExprBuilder sym => TValue (What4 sym) -> IO [TValue (What4 sym)]
 argTypes v =
   case v of
-    VPiType v1 f ->
+    VPiType _nm v1 f ->
       do x <- delay (fail "argTypes: unsupported dependent SAW-Core type")
          v2 <- f x
          vs <- argTypes v2
@@ -1178,7 +1178,7 @@ parseUninterpretedSAW ::
   IO (SValue (B.ExprBuilder n st fs))
 parseUninterpretedSAW sym st sc ref trm app ty =
   case ty of
-    VPiType t1 f
+    VPiType _nm t1 f
       -> return $
          strictFun $ \x -> do
            app' <- applyUnintApp sym app x
