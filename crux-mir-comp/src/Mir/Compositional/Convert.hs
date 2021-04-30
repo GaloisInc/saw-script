@@ -6,6 +6,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 
 -- | Conversions between Crucible `RegValue`s and SAW `Term`s.
 module Mir.Compositional.Convert
@@ -25,6 +26,7 @@ import Data.Parameterized.Some
 import Data.Parameterized.TraversableFC
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Vector (Vector)
 import qualified Data.Vector as V
 import GHC.Stack (HasCallStack)
 
@@ -35,7 +37,7 @@ import Lang.Crucible.Types
 import qualified What4.Expr.Builder as W4
 import qualified What4.Interface as W4
 import qualified What4.Partial as W4
-import qualified What4.SWord as W4
+import qualified What4.SWord as W4 (SWord(..))
 
 import qualified Verifier.SAW.SharedTerm as SAW
 import qualified Verifier.SAW.Simulator.MonadLazy as SAW
@@ -104,9 +106,9 @@ tyToShape col ty = go ty
         _ -> error $ "tyToShape: " ++ show ty ++ " NYI"
 
     goPrim :: M.Ty -> Some TypeShape
-    goPrim ty | Some tpr <- tyToRepr ty, AsBaseType btpr <- asBaseType tpr =
+    goPrim ty | Some tpr <- tyToRepr col ty, AsBaseType btpr <- asBaseType tpr =
         Some $ PrimShape ty btpr
-    goPrim ty | Some tpr <- tyToRepr ty =
+    goPrim ty | Some tpr <- tyToRepr col ty =
         error $ "tyToShape: type " ++ show ty ++ " produced non-primitive type " ++ show tpr
 
     goUnit :: M.Ty -> Some TypeShape
@@ -134,7 +136,7 @@ tyToShape col ty = go ty
     goRef :: M.Ty -> M.Ty -> M.Mutability -> Some TypeShape
     goRef ty ty' _ | isUnsized ty' = error $
         "tyToShape: fat pointer " ++ show ty ++ " NYI"
-    goRef ty ty' _ | Some tpr <- tyToRepr ty' = Some $ RefShape ty ty' tpr
+    goRef ty ty' _ | Some tpr <- tyToRepr col ty' = Some $ RefShape ty ty' tpr
 
 -- | Given a `Ty` and the result of `tyToRepr ty`, produce a `TypeShape` with
 -- the same index `tp`.  Raises an `error` if the `TypeRepr` doesn't match
@@ -297,6 +299,13 @@ termToReg sym sc varMap term shp = do
         (PrimShape _ BaseBoolRepr, SAW.VBool b) -> return b
         (PrimShape _ (BaseBVRepr w), SAW.VWord (W4.DBV e))
           | Just Refl <- testEquality (W4.exprType e) (BaseBVRepr w) -> return e
+        (PrimShape _ (BaseBVRepr w), SAW.VVector v)
+          | intValue w == fromIntegral (V.length v) -> do
+            bits <- forM v $ SAW.force >=> \x -> case x of
+                SAW.VBool b -> return b
+                _ -> fail $ "termToReg: type error: need to produce " ++ show (shapeType shp) ++
+                    ", but simulator returned a vector containing " ++ show x
+            buildBitVector w bits
         (TupleShape _ _ flds, _) -> do
             svs <- tupleToListRev (Ctx.sizeInt $ Ctx.size flds) [] sv
             goTuple flds svs
@@ -349,6 +358,33 @@ termToReg sym sc varMap term shp = do
     goField :: forall tp'. FieldShape tp' -> SValue sym -> IO (RegValue sym tp')
     goField (ReqField shp) sv = go shp sv
     goField (OptField shp) sv = W4.justPartExpr sym <$> go shp sv
+
+    -- | Build a bitvector from a vector of bits.  The length of the vector is
+    -- required to match `w`.
+    buildBitVector :: forall w. (1 <= w) =>
+        NatRepr w -> Vector (W4.Pred sym) -> IO (W4.SymExpr sym (BaseBVType w))
+    buildBitVector w v = do
+        bvs <- mapM (\b -> W4.bvFill sym (knownNat @1) b) $ toList v
+        case bvs of
+            [] -> error $ "buildBitVector: expected " ++ show w ++ " bits, but got 0"
+            (bv : bvs') -> do
+                Some bv' <- go (knownNat @1) bv bvs'
+                Refl <- case testEquality (W4.exprType bv') (BaseBVRepr w) of
+                    Just x -> return x
+                    Nothing -> error $ "buildBitVector: expected " ++ show (BaseBVRepr w) ++
+                        ", but got " ++ show (W4.exprType bv')
+                return bv'
+      where
+        go :: forall w. (1 <= w) =>
+            NatRepr w ->
+            W4.SymExpr sym (BaseBVType w) ->
+            [W4.SymExpr sym (BaseBVType 1)] ->
+            IO (Some (W4.SymExpr sym))
+        go _ bv [] = return $ Some bv
+        go w bv (b : bs)
+          | LeqProof <- addPrefixIsLeq w (knownNat @1) = do
+            bv' <- W4.bvConcat sym bv b
+            go (addNat w (knownNat @1)) bv' bs
 
 -- | Common code for termToExpr and termToReg
 termToSValue :: forall sym t st fs.

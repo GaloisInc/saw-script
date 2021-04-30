@@ -34,6 +34,7 @@ import Data.Parameterized.TraversableFC
 import qualified What4.Expr.Builder as W4
 
 import Cryptol.TypeCheck.AST as Cry
+import Cryptol.Utils.Ident as Cry
 import Cryptol.Utils.PP as Cry
 
 import Lang.Crucible.Backend
@@ -211,8 +212,12 @@ loadCryptolFunc col sig modulePath name = do
     liftIO $ SAW.scLoadCryptolModule sc
     let ?fileReader = BS.readFile
     ce <- liftIO $ SAW.initCryptolEnv sc
-    (m, _ce') <- liftIO $ SAW.loadCryptolModule sc ce (Text.unpack modulePath)
-    tt <- liftIO $ SAW.lookupCryptolModule m (Text.unpack name)
+    let modName = Cry.textToModName modulePath
+    ce' <- liftIO $ SAW.importModule sc ce (Right modName) Nothing SAW.PublicAndPrivate Nothing
+    -- (m, _ce') <- liftIO $ SAW.loadCryptolModule sc ce (Text.unpack modulePath)
+    -- tt <- liftIO $ SAW.lookupCryptolModule m (Text.unpack name)
+    tt <- liftIO $ SAW.parseTypedTerm sc ce' $
+        SAW.InputText (Text.unpack name) "<string>" 1 1
 
     case typecheckFnSig sig (toListFC Some argShps) (Some retShp) (SAW.ttSchema tt) of
         Left err -> fail $ "error loading " ++ show name ++ ": " ++ err
