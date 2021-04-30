@@ -446,9 +446,11 @@ bitBlastBasic :: AIG.IsAIG l g
               -> Term
               -> IO (BValue (l s))
 bitBlastBasic be m addlPrims ecMap t = do
+  let neutral nt = fail ("bitBlastBasic: could not evaluate neutral term: " ++ show nt)
   cfg <- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims be))
          (bitBlastExtCns ecMap)
          (const Nothing)
+         neutral
   Sim.evalSharedTerm cfg t
 
 bitBlastExtCns ::
