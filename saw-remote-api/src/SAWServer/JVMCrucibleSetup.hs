@@ -26,7 +26,6 @@ import Data.Foldable ( traverse_ )
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe ( maybeToList )
-import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
@@ -120,7 +119,7 @@ interpretJVMSetup fileReader bic cenv0 ss = evalStateT (traverse_ go ss) (mempty
     go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= jvm_return
     -- TODO: do we really want two names here?
     go (SetupFresh name@(ServerName n) debugName ty) =
-      do t <- lift $ jvm_fresh_var (T.unpack debugName) ty
+      do t <- lift $ jvm_fresh_var debugName ty
          (env, cenv) <- get
          put (env, CEnv.bindTypedTerm (mkIdent n, t) cenv)
          save name (Val (MS.SetupTerm t))

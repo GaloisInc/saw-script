@@ -10,6 +10,7 @@ module Verifier.SAW.TypedTerm where
 import Control.Monad (foldM)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Text (Text)
 
 import Cryptol.ModuleSystem.Name (nameIdent)
 import qualified Cryptol.TypeCheck.AST as C
@@ -62,7 +63,7 @@ applyTypedTerms :: SharedContext -> TypedTerm -> [TypedTerm] -> IO TypedTerm
 applyTypedTerms sc = foldM (applyTypedTerm sc)
 
 -- | Create an abstract defined constant with the specified name and body.
-defineTypedTerm :: SharedContext -> String -> TypedTerm -> IO TypedTerm
+defineTypedTerm :: SharedContext -> Text -> TypedTerm -> IO TypedTerm
 defineTypedTerm sc name (TypedTerm schema t) =
   do ty <- scTypeOf sc t
      TypedTerm schema <$> scConstant sc name t ty
