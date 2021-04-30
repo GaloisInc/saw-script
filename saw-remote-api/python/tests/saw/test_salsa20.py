@@ -7,7 +7,7 @@ from saw_client.llvm import Contract, void, SetupVal, FreshVar, cryptol, i8, i32
 
 def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None) -> Tuple[FreshVar, SetupVal]:
     """Add to``Contract`` ``c`` an allocation of a pointer of type ``ty`` initialized to an unknown fresh value.
-    
+
     :returns A fresh variable bound to the pointers initial value and the newly allocated pointer. (The fresh
              variable will be assigned ``name`` if provided/available.)"""
     var = c.fresh_var(ty, name)
@@ -15,7 +15,7 @@ def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None) -> Tu
     return (var, ptr)
 
 def oneptr_update_func(c : Contract, ty : LLVMType, fn_name : str) -> None:
-    """Upcates contract ``c`` to declare calling it with a pointer of type ``ty``
+    """Updates contract ``c`` to declare calling it with a pointer of type ``ty``
     updates that pointer with the result, which is equal to calling the
     Cryptol function ``fn_name``."""
     (x, x_p) = ptr_to_fresh(c, ty)
@@ -92,8 +92,8 @@ class ExpandContract(Contract):
     def specification(self):
         k = self.fresh_var(LLVMArrayType(i8, 32))
         n = self.fresh_var(LLVMArrayType(i8, 16))
-        k_p = self.alloc(LLVMArrayType(i8, 32))
-        n_p = self.alloc(LLVMArrayType(i8, 16))
+        k_p = self.alloc(LLVMArrayType(i8, 32), read_only = True)
+        n_p = self.alloc(LLVMArrayType(i8, 16), read_only = True)
         ks_p = self.alloc(LLVMArrayType(i8, 64))
         self.points_to(k_p, k)
         self.points_to(n_p, n)
@@ -117,8 +117,8 @@ class Salsa20CryptContract(Contract):
 
         self.execute_func(k_p, v_p, cryptol('0 : [32]'), m_p, cryptol(f'{self.size!r} : [32]'))
 
-        self.returns(cryptol('0 : [32]'))
         self.points_to(m_p, cryptol("Salsa20_encrypt")((k, v, m)))
+        self.returns(cryptol('0 : [32]'))
 
 class Salsa20EasyTest(unittest.TestCase):
     def test_salsa20(self):
@@ -146,8 +146,12 @@ class Salsa20EasyTest(unittest.TestCase):
         self.assertIs(hash_result.is_success(), True)
         expand_result = llvm_verify(mod, 's20_expand32', ExpandContract(), lemmas=[hash_result])
         self.assertIs(expand_result.is_success(), True)
-        crypt_result = llvm_verify(mod, 's20_crypt32', Salsa20CryptContract(63), lemmas=[expand_result])
-        self.assertIs(crypt_result.is_success(), True)
+        crypt_result_63 = llvm_verify(mod, 's20_crypt32', Salsa20CryptContract(63), lemmas=[expand_result])
+        self.assertIs(crypt_result_63.is_success(), True)
+        crypt_result_64 = llvm_verify(mod, 's20_crypt32', Salsa20CryptContract(64), lemmas=[expand_result])
+        self.assertIs(crypt_result_64.is_success(), True)
+        crypt_result_65 = llvm_verify(mod, 's20_crypt32', Salsa20CryptContract(65), lemmas=[expand_result])
+        self.assertIs(crypt_result_65.is_success(), True)
 
 if __name__ == "__main__":
     unittest.main()
