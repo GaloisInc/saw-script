@@ -29,6 +29,7 @@ import Data.IORef
 import qualified Data.Vector as V
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import Numeric.Natural
 
 import Verifier.SAW.Prim (BitVector(..))
@@ -37,7 +38,7 @@ import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.TypedAST
-         (ModuleMap, DataType(..), findCtorInMap, ctorType, ctorNumParams)
+       (ModuleMap, DataType(..), findCtorInMap, ctorType, ctorNumParams, toShortName)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Utils (panic)
 
@@ -47,8 +48,8 @@ import Verifier.SAW.Utils (panic)
 normalizeSharedTerm ::
   SharedContext ->
   ModuleMap ->
-  Map Ident TmValue ->
-  Map VarIndex TmValue ->
+  Map Ident TmValue {- ^ additional primitives -} ->
+  Map VarIndex TmValue {- ^ ExtCns values -} ->
   Term ->
   IO Term
 normalizeSharedTerm sc m addlPrims ecVals t =
@@ -71,6 +72,7 @@ normalizeSharedTerm sc m addlPrims ecVals t =
         Nothing ->
           do ec' <- traverse (readBackTValue sc cfg) ec
              tm <- scExtCns sc ec'
+             putStrLn $ unwords ["Reflecting", show (toShortName (ecName ec)), show (ecVarIndex ec), show (ecType ec')]
              reflectTerm sc cfg (ecType ec) tm
 
 ------------------------------------------------------------
@@ -143,8 +145,10 @@ readBackTValue sc cfg = loop
       VPiType{} ->
         do (ecs, tm) <- readBackPis tv
            scGeneralizeExts sc ecs tm
+      VTyTerm _s tm ->
+        pure tm
 
-  readBackDataType (VPiType t f) (v:vs) =
+  readBackDataType (VPiType _nm t f) (v:vs) =
     do v' <- readBackValue sc cfg t v
        t' <- f (ready v)
        vs' <- readBackDataType t' vs
@@ -152,9 +156,9 @@ readBackTValue sc cfg = loop
   readBackDataType (VSort _s) [] = return []
   readBackDataType _ _ = panic "readBackTValue" ["Arity mismatch in data type in readback"]
 
-  readBackPis (VPiType t f) =
+  readBackPis (VPiType nm t f) =
     do t' <- loop t
-       ec <- scFreshEC sc "x" t'
+       ec <- scFreshEC sc (Text.unpack nm) t'
        ecTm <- scExtCns sc ec
        ecVal <- delay (reflectTerm sc cfg t ecTm)
        body <- f ecVal
@@ -185,10 +189,10 @@ reflectTerm sc cfg = loop
          b' <- readBackTValue sc cfg b
          return (VArray (TMArray a a' b b' tm))
 
-    VSort _s -> TValue <$> evalType cfg tm
+    VSort s -> pure (TValue (VTyTerm s tm))
 
-    VPiType t tf ->
-      return (VFun (\x ->
+    VPiType nm t tf ->
+      return (VFun nm (\x ->
         do v <- force x
            tbody <- tf x
            xtm <- readBackValue sc cfg t v
@@ -212,7 +216,7 @@ reflectTerm sc cfg = loop
     VRecordType{} -> return (VExtra (VExtraTerm tv tm))
     VPairType{} -> return (VExtra (VExtraTerm tv tm))
     VDataType{} -> return (VExtra (VExtraTerm tv tm))
-
+    VTyTerm{} -> return (VExtra (VExtraTerm tv tm))
 
 readBackValue :: SharedContext -> Sim.SimulatorConfig TermModel -> TValue TermModel -> Value TermModel -> IO Term
 readBackValue sc cfg = loop
@@ -258,6 +262,7 @@ readBackValue sc cfg = loop
 
     loop tv@VPiType{} v@VFun{} =
       do (ecs, tm) <- readBackFuns tv v
+         putStrLn $ unlines $ ["Readback fun!"] ++ map (\ec -> "  " ++ show ec) ecs ++ ["  " ++ showTerm tm]
          scAbstractExts sc ecs tm
 
     loop (VPairType t1 t2) (VPair v1 v2) =
@@ -293,7 +298,7 @@ readBackValue sc cfg = loop
 
     loop tv _v = panic "readBackValue" ["type mismatch", show tv]
 
-    readBackCtorArgs cnm (VPiType tv tf) (v:vs) =
+    readBackCtorArgs cnm (VPiType _nm tv tf) (v:vs) =
       do v' <- force v
          t  <- loop tv v'
          ty <- tf (ready v')
@@ -303,9 +308,9 @@ readBackValue sc cfg = loop
     readBackCtorArgs cnm _ _ = panic "readBackCtorArgs" ["constructor type mismatch", show cnm]
 
 
-    readBackFuns (VPiType tv tf) (VFun f) =
+    readBackFuns (VPiType _ tv tf) (VFun nm f) =
       do t' <- readBackTValue sc cfg tv
-         ec <- scFreshEC sc "x" t'
+         ec <- scFreshEC sc (Text.unpack nm) t'
          ecTm <- scExtCns sc ec
          ecVal <- delay (reflectTerm sc cfg tv ecTm)
          tbody <- tf ecVal
@@ -502,10 +507,10 @@ prims sc cfg =
                   a   <- scBoolType sc
                   tm  <- scAppend sc xn' yn' a xtm ytm
                   return (xn+yn, tm)
-        in binOp sc wordValue f Prim.append_bv
+        in binOp sc wordValue f (Prim.append_bv undefined undefined ())
 
   , Prims.bpBvSlice = \m n -> \case
-         Right bv -> pure . Right $! Prim.slice_bv m n (Prim.width bv - m - n) bv
+         Right bv -> pure . Right $! Prim.slice_bv () m n (Prim.width bv - m - n) bv
          Left  (w,tm) ->
            do m' <- scNat sc (fromIntegral m)
               n' <- scNat sc (fromIntegral n)
@@ -563,32 +568,32 @@ prims sc cfg =
   , Prims.bpBoolEq = binOp sc scBool scBoolEq (==)
 
     -- Bitvector logical
-  , Prims.bpBvNot  = bvUnOp  sc scBvNot Prim.bvNot
-  , Prims.bpBvAnd  = bvBinOp sc scBvAnd Prim.bvAnd
-  , Prims.bpBvOr   = bvBinOp sc scBvOr  Prim.bvOr
-  , Prims.bpBvXor  = bvBinOp sc scBvXor Prim.bvXor
+  , Prims.bpBvNot  = bvUnOp  sc scBvNot (Prim.bvNot undefined)
+  , Prims.bpBvAnd  = bvBinOp sc scBvAnd (Prim.bvAnd undefined)
+  , Prims.bpBvOr   = bvBinOp sc scBvOr  (Prim.bvOr  undefined)
+  , Prims.bpBvXor  = bvBinOp sc scBvXor (Prim.bvXor undefined)
 
     -- Bitvector arithmetic
-  , Prims.bpBvNeg  = bvUnOp  sc scBvNeg  Prim.bvNeg
-  , Prims.bpBvAdd  = bvBinOp sc scBvAdd  Prim.bvAdd
-  , Prims.bpBvSub  = bvBinOp sc scBvSub  Prim.bvSub
-  , Prims.bpBvMul  = bvBinOp sc scBvMul  Prim.bvMul
-  , Prims.bpBvUDiv = bvDivOp sc scBvUDiv Prim.bvUDiv
-  , Prims.bpBvURem = bvDivOp sc scBvURem Prim.bvURem
-  , Prims.bpBvSDiv = bvDivOp sc scBvSDiv Prim.bvSDiv
-  , Prims.bpBvSRem = bvDivOp sc scBvSRem Prim.bvSRem
+  , Prims.bpBvNeg  = bvUnOp  sc scBvNeg  (Prim.bvNeg  undefined)
+  , Prims.bpBvAdd  = bvBinOp sc scBvAdd  (Prim.bvAdd  undefined)
+  , Prims.bpBvSub  = bvBinOp sc scBvSub  (Prim.bvSub  undefined)
+  , Prims.bpBvMul  = bvBinOp sc scBvMul  (Prim.bvMul  undefined)
+  , Prims.bpBvUDiv = bvDivOp sc scBvUDiv (Prim.bvUDiv undefined)
+  , Prims.bpBvURem = bvDivOp sc scBvURem (Prim.bvURem undefined)
+  , Prims.bpBvSDiv = bvDivOp sc scBvSDiv (Prim.bvSDiv undefined)
+  , Prims.bpBvSRem = bvDivOp sc scBvSRem (Prim.bvSRem undefined)
   , Prims.bpBvLg2  = bvUnOp  sc scBvLg2  Prim.bvLg2
 
     -- Bitvector comparisons
-  , Prims.bpBvEq   = bvCmpOp sc scBvEq  Prim.bvEq
-  , Prims.bpBvsle  = bvCmpOp sc scBvSLe Prim.bvsle
-  , Prims.bpBvslt  = bvCmpOp sc scBvSLt Prim.bvslt
-  , Prims.bpBvule  = bvCmpOp sc scBvULe Prim.bvule
-  , Prims.bpBvult  = bvCmpOp sc scBvULt Prim.bvult
-  , Prims.bpBvsge  = bvCmpOp sc scBvSGe Prim.bvsge
-  , Prims.bpBvsgt  = bvCmpOp sc scBvSGt Prim.bvsgt
-  , Prims.bpBvuge  = bvCmpOp sc scBvUGe Prim.bvuge
-  , Prims.bpBvugt  = bvCmpOp sc scBvUGt Prim.bvugt
+  , Prims.bpBvEq   = bvCmpOp sc scBvEq  (Prim.bvEq  undefined)
+  , Prims.bpBvsle  = bvCmpOp sc scBvSLe (Prim.bvsle undefined)
+  , Prims.bpBvslt  = bvCmpOp sc scBvSLt (Prim.bvslt undefined)
+  , Prims.bpBvule  = bvCmpOp sc scBvULe (Prim.bvule undefined)
+  , Prims.bpBvult  = bvCmpOp sc scBvULt (Prim.bvult undefined)
+  , Prims.bpBvsge  = bvCmpOp sc scBvSGe (Prim.bvsge undefined)
+  , Prims.bpBvsgt  = bvCmpOp sc scBvSGt (Prim.bvsgt undefined)
+  , Prims.bpBvuge  = bvCmpOp sc scBvUGe (Prim.bvuge undefined)
+  , Prims.bpBvugt  = bvCmpOp sc scBvUGt (Prim.bvugt undefined)
 
     -- Bitvector shift/rotate
   , Prims.bpBvShlInt = \c x amt ->
@@ -688,9 +693,9 @@ prims sc cfg =
              return (Left (n,tm))
 
     -- Bitvector misc
-  , Prims.bpBvPopcount = bvUnOp sc scBvPopcount Prim.bvPopcount
-  , Prims.bpBvCountLeadingZeros = bvUnOp sc scBvCountLeadingZeros Prim.bvCountLeadingZeros
-  , Prims.bpBvCountTrailingZeros = bvUnOp sc scBvCountTrailingZeros Prim.bvCountTrailingZeros
+  , Prims.bpBvPopcount = bvUnOp sc scBvPopcount (Prim.bvPopcount undefined)
+  , Prims.bpBvCountLeadingZeros = bvUnOp sc scBvCountLeadingZeros (Prim.bvCountLeadingZeros undefined)
+  , Prims.bpBvCountTrailingZeros = bvUnOp sc scBvCountTrailingZeros (Prim.bvCountTrailingZeros undefined)
 
   , Prims.bpBvForall = \n f ->
       do bvty <- scBitvector sc n
@@ -753,9 +758,9 @@ constMap sc cfg = Map.union (Map.fromList localPrims) (Prims.constMap pms)
 
   localPrims =
     -- Shifts
-    [ ("Prelude.bvShl" , bvShiftOp sc cfg id   scBvShl  Prim.bvShl)
-    , ("Prelude.bvShr" , bvShiftOp sc cfg id   scBvShr  Prim.bvShr)
-    , ("Prelude.bvSShr", bvShiftOp sc cfg succ scBvSShr Prim.bvSShr)
+    [ ("Prelude.bvShl" , bvShiftOp sc cfg id   scBvShl  (Prim.bvShl undefined))
+    , ("Prelude.bvShr" , bvShiftOp sc cfg id   scBvShr  (Prim.bvShr undefined))
+    , ("Prelude.bvSShr", bvShiftOp sc cfg succ scBvSShr (Prim.bvSShr undefined))
 
     -- Integers
     , ("Prelude.intToNat", intToNatOp sc)
