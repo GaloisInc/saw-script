@@ -68,6 +68,7 @@ import Language.JVM.Common (ppFldId)
 
 import Data.List (intercalate)
 import Data.List.Split
+import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Text.Read hiding (lift)
@@ -209,7 +210,7 @@ data LogicExpr =
             }
   deriving (Show)
 
-scJavaValue :: SharedContext -> Term -> String -> IO Term
+scJavaValue :: SharedContext -> Term -> Text -> IO Term
 scJavaValue sc ty name = do
   scFreshGlobal sc name ty
 

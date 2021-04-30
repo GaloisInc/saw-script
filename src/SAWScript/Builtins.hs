@@ -130,7 +130,7 @@ showPrim v = do
   opts <- fmap rwPPOpts getTopLevelRW
   return (SV.showsPrecValue opts 0 v "")
 
-definePrim :: String -> TypedTerm -> TopLevel TypedTerm
+definePrim :: Text -> TypedTerm -> TopLevel TypedTerm
 definePrim name (TypedTerm schema rhs) =
   do sc <- getSharedContext
      ty <- io $ Cryptol.importSchema sc Cryptol.emptyEnv schema
@@ -526,7 +526,7 @@ goal_assume =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticAssume sc)
 
-goal_intro :: String -> ProofScript TypedTerm
+goal_intro :: Text -> ProofScript TypedTerm
 goal_intro s =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticIntro sc s)
@@ -986,7 +986,7 @@ check_goal =
 fixPos :: Pos
 fixPos = PosInternal "FIXME"
 
-freshSymbolicPrim :: String -> C.Schema -> TopLevel TypedTerm
+freshSymbolicPrim :: Text -> C.Schema -> TopLevel TypedTerm
 freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
   sc <- getSharedContext
   cty <- io $ Cryptol.importType sc Cryptol.emptyEnv ct

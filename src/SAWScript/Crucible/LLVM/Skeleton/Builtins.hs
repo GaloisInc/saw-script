@@ -202,7 +202,7 @@ buildArg arg idx
         $ arg ^. argSkelType . typeSkelLLVMType
       pure (Just val, Nothing, arg ^. argSkelName)
   where
-    ident = maybe ("arg" <> show idx) Text.unpack $ arg ^. argSkelName
+    ident = maybe ("arg" <> Text.pack (show idx)) id $ arg ^. argSkelName
 
 skeleton_prestate ::
   FunctionSkeleton ->
@@ -237,7 +237,7 @@ rebuildArg (arg, prearg) idx
             -> LLVM.Array (fromIntegral $ s ^. sizeGuessElems) pt
           | otherwise -> pt
         _ -> pt
-      ident = maybe ("arg" <> show idx) Text.unpack nm
+      ident = maybe ("arg" <> Text.pack (show idx)) id nm
     in do
       val' <- llvm_fresh_var ident t
       llvm_points_to True ptr $ anySetupTerm val'
@@ -255,7 +255,7 @@ skeleton_poststate skel prestate = do
   case skel ^. funSkelRet . typeSkelLLVMType of
     LLVM.PrimType LLVM.Void -> pure ()
     t -> do
-      ret <- llvm_fresh_var ("return value of " <> (Text.unpack $ skel ^. funSkelName)) t
+      ret <- llvm_fresh_var ("return value of " <> (skel ^. funSkelName)) t
       llvm_return $ anySetupTerm ret
   pure $ SkeletonState{..}
 

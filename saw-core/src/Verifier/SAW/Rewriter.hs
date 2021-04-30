@@ -68,7 +68,6 @@ import qualified Data.List as List
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import qualified Data.Text as Text
 import Control.Monad.Trans.Writer.Strict
 import Numeric.Natural
 
@@ -222,7 +221,7 @@ scMatch sc pat term =
              let fvy = looseVars y `intersectBitSets` (completeBitSet depth)
              guard (fvy `unionBitSets` fvj == fvj)
              let fixVar t (nm, ty) =
-                   do v <- scFreshGlobal sc (Text.unpack nm) ty
+                   do v <- scFreshGlobal sc nm ty
                       let Just ec = R.asExtCns v
                       t' <- instantiateVar sc 0 v t
                       return (t', ec)
@@ -882,7 +881,7 @@ doHoistIfs sc ss hoistCache itePat = go
        goF _ (Pi nm tp body) = goBinder scPi nm tp body
 
        goBinder close nm tp body = do
-           (ec, body') <- scOpenTerm sc (Text.unpack nm) tp 0 body
+           (ec, body') <- scOpenTerm sc nm tp 0 body
            (body'', conds) <- go body'
            let (stuck, float) = List.partition (\(_,ecs) -> Set.member ec ecs) conds
 
