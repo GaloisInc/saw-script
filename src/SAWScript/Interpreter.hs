@@ -1198,6 +1198,11 @@ primitives = Map.fromList
     Current
     [ "Apply the given simplifier rule set to the current goal." ]
 
+  , prim "normalize_term"      "Term -> Term"
+    (funVal1 normalize_term)
+    Experimental
+    [ "normalize the given term by evaluation" ]
+
   , prim "goal_eval"           "ProofScript ()"
     (pureVal (goal_eval []))
     Current

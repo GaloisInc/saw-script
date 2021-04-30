@@ -74,6 +74,7 @@ import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (prepareSATQuery, runManyTests)
 import Verifier.SAW.TypedAST
+import qualified Verifier.SAW.Simulator.TermModel as TM
 
 import SAWScript.Position
 
@@ -484,6 +485,14 @@ resolveName sc nm =
  where
  tnm = Text.pack nm
  fallback = fst <$> io (scResolveUnambiguous sc tnm)
+
+
+normalize_term :: TypedTerm -> TopLevel TypedTerm
+normalize_term tt =
+  do sc <- getSharedContext
+     modmap <- io (scGetModuleMap sc)
+     tm' <- io (TM.normalizeSharedTerm sc modmap mempty mempty (ttTerm tt))
+     pure tt{ ttTerm = tm' }
 
 
 unfoldGoal :: [String] -> ProofScript ()
