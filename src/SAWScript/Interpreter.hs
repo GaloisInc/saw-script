@@ -1218,6 +1218,11 @@ primitives = Map.fromList
     Experimental
     [ "hoist ifs in the current proof goal" ]
 
+  , prim "normalize_term"      "Term -> Term"
+    (funVal1 normalize_term)
+    Experimental
+    [ "Normalize the given term by performing evaluation in SAWCore." ]
+
   , prim "goal_eval"           "ProofScript ()"
     (pureVal (goal_eval []))
     Current
