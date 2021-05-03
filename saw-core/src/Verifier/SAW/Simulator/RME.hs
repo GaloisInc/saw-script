@@ -157,7 +157,7 @@ prims =
   , Prims.bpMuxBool  = pure3 RME.mux
   , Prims.bpMuxWord  = pure3 muxRMEV
   , Prims.bpMuxInt   = pure3 muxInt
-  , Prims.bpMuxExtra = pure3 muxExtra
+  , Prims.bpMuxExtra = \tp -> pure3 (muxExtra tp)
     -- Booleans
   , Prims.bpTrue   = RME.true
   , Prims.bpFalse  = RME.false
@@ -281,11 +281,13 @@ muxInt b x y =
     Just c -> if c then x else y
     Nothing -> if x == y then x else error $ "muxRValue: VInt " ++ show (x, y)
 
-muxExtra :: RME -> RExtra -> RExtra -> RExtra
-muxExtra b (AStream xs) (AStream ys) = AStream (muxRValue b <$> xs <*> ys)
+muxExtra :: TValue ReedMuller -> RME -> RExtra -> RExtra -> RExtra
+muxExtra (VDataType "Prelude.Stream" [TValue tp]) b (AStream xs) (AStream ys) =
+  AStream (muxRValue tp b <$> xs <*> ys)
+muxExtra tp _ _ _ = panic "RME.muxExtra" ["type mismatch", show tp]
 
-muxRValue :: RME -> RValue -> RValue -> RValue
-muxRValue b x y = runIdentity $ Prims.muxValue prims b x y
+muxRValue :: TValue ReedMuller -> RME -> RValue -> RValue -> RValue
+muxRValue tp b x y = runIdentity $ Prims.muxValue prims tp b x y
 
 -- | Signed shift right simply copies the high order bit
 --   into the shifted places.  We special case the zero
@@ -342,7 +344,7 @@ mkStreamOp =
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: RValue
 streamGetOp =
-  constFun $
+  strictFun $ \(toTValue -> tp) -> return $
   pureFun $ \xs ->
   strictFun $ \case
     VNat n -> pure $ IntTrie.apply (toStream xs) (toInteger n)
@@ -356,7 +358,7 @@ streamGetOp =
                | Just False <- RME.isBool b
                = loop k0 bs
                | otherwise
-               = muxRValue b (loop k1 bs) (loop k0 bs)
+               = muxRValue tp b (loop k1 bs) (loop k0 bs)
               where
                k0 = k `shiftL` 1
                k1 = k0 + 1

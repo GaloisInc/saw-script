@@ -73,6 +73,8 @@ import Verifier.SAW.FiniteValue
             , fovVec, firstOrderTypeOf, asFirstOrderType
             )
 
+import Verifier.SAW.Utils (panic)
+
 data SBV
 
 type instance EvalM SBV = IO
@@ -493,13 +495,13 @@ mkStreamOp =
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: SValue
 streamGetOp =
-  constFun $
+  strictFun $ \(toTValue -> tp) -> return $
   strictFun $ \xs -> return $
   strictFun $ \case
     VNat n -> lookupSStream xs n
     VBVToNat _ w ->
       do ilv <- toWord w
-         selectV (lazyMux muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
+         selectV (lazyMux (muxBVal tp)) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
     v -> Prims.panic "SBV.streamGetOp" ["Expected Nat value", show v]
 
 
@@ -554,16 +556,17 @@ sLg2 x = go 0
 ------------------------------------------------------------
 -- Ite ops
 
-muxBVal :: SBool -> SValue -> SValue -> IO SValue
+muxBVal :: TValue SBV -> SBool -> SValue -> SValue -> IO SValue
 muxBVal = Prims.muxValue prims
 
-muxSbvExtra :: SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
-muxSbvExtra c x y =
+muxSbvExtra :: TValue SBV -> SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
+muxSbvExtra (VDataType "Prelude.Stream" [TValue tp]) c x y =
   do let f i = do xi <- lookupSbvExtra x i
                   yi <- lookupSbvExtra y i
-                  muxBVal c xi yi
+                  muxBVal tp c xi yi
      r <- newIORef Map.empty
      return (SStream f r)
+muxSbvExtra tp _ _ _ = panic "muxSbvExtra" ["Type mismatch", show tp]
 
 ------------------------------------------------------------
 -- External interface
