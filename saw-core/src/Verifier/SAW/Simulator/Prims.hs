@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.Prims
@@ -26,7 +27,7 @@ import GHC.Stack( HasCallStack )
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import Control.Monad (liftM, zipWithM, unless)
+import Control.Monad (liftM, unless)
 import Control.Monad.Fix (MonadFix(mfix))
 import Data.Bits
 import Data.Map (Map)
@@ -36,7 +37,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import Verifier.SAW.Term.Functor (Ident, alistAllFields)
+import Verifier.SAW.Term.Functor (Ident)
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Prim
 import qualified Verifier.SAW.Prim as Prim
@@ -63,7 +64,7 @@ data BasePrims l =
   , bpMuxBool  :: VBool l -> VBool l -> VBool l -> MBool l
   , bpMuxWord  :: VBool l -> VWord l -> VWord l -> MWord l
   , bpMuxInt   :: VBool l -> VInt l -> VInt l -> MInt l
-  , bpMuxExtra :: VBool l -> Extra l -> Extra l -> EvalM l (Extra l)
+  , bpMuxExtra :: TValue l -> VBool l -> Extra l -> Extra l -> EvalM l (Extra l)
     -- Booleans
   , bpTrue   :: VBool l
   , bpFalse  :: VBool l
@@ -445,7 +446,7 @@ natSize :: BasePrims l -> Value l -> Natural
 natSize _bp val =
   case val of
     VNat n -> widthNat n
-    VBVToNat n _ -> fromIntegral n -- TODO, remove this fromIntegral 
+    VBVToNat n _ -> fromIntegral n -- TODO, remove this fromIntegral
     VIntToNat _ -> error "natSize: symbolic integer"
     _ -> panic "natSize: expected Nat"
 
@@ -643,7 +644,7 @@ eqOp bp =
 atWithDefaultOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
 atWithDefaultOp bp =
   natFun $ \n -> return $
-  constFun $
+  strictFun $ \(toTValue -> tp) -> return $
   VFun "d" $ \d -> return $
   strictFun $ \x -> return $
   strictFun $ \idx ->
@@ -657,9 +658,9 @@ atWithDefaultOp bp =
         iv <- toBits (bpUnpack bp) i
         case x of
           VVector xv ->
-            selectV (lazyMuxValue bp) (fromIntegral n - 1) (force . vecIdx d xv) iv -- FIXME dangerous fromIntegral
+            selectV (lazyMuxValue bp (VVecType n tp)) (fromIntegral n - 1) (force . vecIdx d xv) iv -- FIXME dangerous fromIntegral
           VWord xw ->
-            selectV (lazyMuxValue bp) (fromIntegral n - 1) (liftM VBool . bpBvAt bp xw) iv -- FIXME dangerous fromIntegral
+            selectV (lazyMuxValue bp (VVecType n tp)) (fromIntegral n - 1) (liftM VBool . bpBvAt bp xw) iv -- FIXME dangerous fromIntegral
           _ -> panic "atOp: expected vector"
 
       VIntToNat _i ->
@@ -671,7 +672,7 @@ atWithDefaultOp bp =
 updOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
 updOp bp =
   natFun $ \n -> return $
-  constFun $
+  strictFun $ \(toTValue -> tp) -> return $
   vectorFun (bpUnpack bp) $ \xv -> return $
   strictFun $ \idx -> return $
   VFun "y" $ \y ->
@@ -684,13 +685,13 @@ updOp bp =
         do let f i = do b <- bpBvEq bp w =<< bpBvLit bp wsize (toInteger i)
                         if wsize < 64 && toInteger i >= 2 ^ wsize
                           then return (xv V.! i)
-                          else delay (lazyMuxValue bp b (force y) (force (xv V.! i)))
+                          else delay (lazyMuxValue bp tp b (force y) (force (xv V.! i)))
            yv <- V.generateM (V.length xv) f
            return (VVector yv)
       VBVToNat _sz (VVector iv) ->
         do let update i = return (VVector (xv V.// [(i, y)]))
            iv' <- V.mapM (liftM toBool . force) iv
-           selectV (lazyMuxValue bp) (fromIntegral n - 1) update iv' -- FIXME dangerous fromIntegral
+           selectV (lazyMuxValue bp (VVecType n tp)) (fromIntegral n - 1) update iv' -- FIXME dangerous fromIntegral
 
       VIntToNat _ -> error "updOp: symbolic integer TODO"
 
@@ -795,7 +796,7 @@ vZipOp unpack =
 -- primitive expByNat : (a:sort 0) -> a -> (a -> a -> a) -> a -> Nat -> a;
 expByNatOp :: (MonadLazy (EvalM l), VMonad l, Show (Extra l)) => BasePrims l -> Value l
 expByNatOp bp =
-  constFun $
+  strictFun $ \(toTValue -> tp) -> return $
   pureFun $ \one ->
   pureFun $ \mul ->
   pureFun $ \x   ->
@@ -813,7 +814,7 @@ expByNatOp bp =
                | otherwise
                = do sq   <- applyAll mul [ ready acc, ready acc ]
                     sq_x <- applyAll mul [ ready sq, ready x ]
-                    acc' <- muxValue bp b sq_x sq
+                    acc' <- muxValue bp tp b sq_x sq
                     loop acc' bs
 
          loop one . V.toList =<< toBits (bpUnpack bp) w
@@ -857,7 +858,7 @@ shifter mux op = go
 
 -- shift{L,R} :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
 shiftOp :: forall l.
-  (VMonadLazy l, Show (Extra l)) =>
+  (HasCallStack, VMonadLazy l, Show (Extra l)) =>
   BasePrims l ->
   -- TODO use Natural instead of Integer
   (Thunk l -> Vector (Thunk l) -> Integer -> Vector (Thunk l)) ->
@@ -866,7 +867,7 @@ shiftOp :: forall l.
   Value l
 shiftOp bp vecOp wordIntOp wordOp =
   natFun $ \n -> return $
-  constFun $
+  strictFun $ \(toTValue -> tp) -> return $
   VFun "z" $ \z -> return $
   strictFun $ \xs -> return $
   strictFun $ \y ->
@@ -881,7 +882,7 @@ shiftOp bp vecOp wordIntOp wordOp =
       VBVToNat _sz (VVector iv) -> do
         bs <- V.toList <$> traverse (fmap toBool . force) iv
         case xs of
-          VVector xv -> VVector <$> shifter muxVector (\v i -> return (vecOp z v i)) xv bs
+          VVector xv -> VVector <$> shifter (muxVector n tp) (\v i -> return (vecOp z v i)) xv bs
           VWord xw -> do
             zb <- toBool <$> force z
             VWord <$> shifter (bpMuxWord bp) (wordIntOp zb) xw bs
@@ -890,7 +891,7 @@ shiftOp bp vecOp wordIntOp wordOp =
         case xs of
           VVector xv -> do
             bs <- V.toList <$> bpUnpack bp iw
-            VVector <$> shifter muxVector (\v i -> return (vecOp z v i)) xv bs
+            VVector <$> shifter (muxVector n tp) (\v i -> return (vecOp z v i)) xv bs
           VWord xw -> do
             zb <- toBool <$> force z
             VWord <$> wordOp zb xw iw
@@ -900,15 +901,16 @@ shiftOp bp vecOp wordIntOp wordOp =
 
       _ -> panic $ "shiftOp: " ++ show y
   where
-    muxVector :: VBool l -> Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
-    muxVector b v1 v2 = toVector (bpUnpack bp) =<< muxVal b (VVector v1) (VVector v2)
+    muxVector :: Natural -> TValue l -> VBool l ->
+      Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
+    muxVector n tp b v1 v2 = toVector (bpUnpack bp) =<< muxVal (VVecType n tp) b (VVector v1) (VVector v2)
 
-    muxVal :: VBool l -> Value l -> Value l -> MValue l
+    muxVal :: TValue l -> VBool l -> Value l -> Value l -> MValue l
     muxVal = muxValue bp
 
 -- rotate{L,R} :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
 rotateOp :: forall l.
-  (VMonadLazy l, Show (Extra l)) =>
+  (HasCallStack, VMonadLazy l, Show (Extra l)) =>
   BasePrims l ->
   --   TODO use Natural instead of Integer?
   (Vector (Thunk l) -> Integer -> Vector (Thunk l)) ->
@@ -916,8 +918,8 @@ rotateOp :: forall l.
   (VWord l -> VWord l -> MWord l) ->
   Value l
 rotateOp bp vecOp wordIntOp wordOp =
-  constFun $
-  constFun $
+  natFun $ \n -> return $
+  strictFun $ \(toTValue -> tp) -> return $
   strictFun $ \xs -> return $
   strictFun $ \y ->
     case y of
@@ -929,14 +931,14 @@ rotateOp bp vecOp wordIntOp wordOp =
       VBVToNat _sz (VVector iv) -> do
         bs <- V.toList <$> traverse (fmap toBool . force) iv
         case xs of
-          VVector xv -> VVector <$> shifter muxVector (\v i -> return (vecOp v i)) xv bs
+          VVector xv -> VVector <$> shifter (muxVector n tp) (\v i -> return (vecOp v i)) xv bs
           VWord xw -> VWord <$> shifter (bpMuxWord bp) wordIntOp xw bs
           _ -> panic $ "rotateOp: " ++ show xs
       VBVToNat _sz (VWord iw) ->
         case xs of
           VVector xv -> do
             bs <- V.toList <$> bpUnpack bp iw
-            VVector <$> shifter muxVector (\v i -> return (vecOp v i)) xv bs
+            VVector <$> shifter (muxVector n tp) (\v i -> return (vecOp v i)) xv bs
           VWord xw -> do
             VWord <$> wordOp xw iw
           _ -> panic $ "rotateOp: " ++ show xs
@@ -945,10 +947,11 @@ rotateOp bp vecOp wordIntOp wordOp =
 
       _ -> panic $ "rotateOp: " ++ show y
   where
-    muxVector :: VBool l -> Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
-    muxVector b v1 v2 = toVector (bpUnpack bp) =<< muxVal b (VVector v1) (VVector v2)
+    muxVector :: HasCallStack => Natural -> TValue l -> VBool l ->
+      Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
+    muxVector n tp b v1 v2 = toVector (bpUnpack bp) =<< muxVal (VVecType n tp) b (VVector v1) (VVector v2)
 
-    muxVal :: VBool l -> Value l -> Value l -> MValue l
+    muxVal :: HasCallStack => TValue l -> VBool l -> Value l -> Value l -> MValue l
     muxVal = muxValue bp
 
 vRotateL :: Vector a -> Integer -> Vector a
@@ -1237,62 +1240,86 @@ errorOp =
 ------------------------------------------------------------
 -- Conditionals
 
-iteOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
+iteOp :: (HasCallStack, VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
 iteOp bp =
-  constFun $
+  strictFun $ \(toTValue -> tp) -> return $
   strictFun $ \b -> return $
   VFun "x" $ \x -> return $
-  VFun "y" $ \y -> lazyMuxValue bp (toBool b) (force x) (force y)
+  VFun "y" $ \y -> lazyMuxValue bp tp (toBool b) (force x) (force y)
 
 lazyMuxValue ::
-  (VMonadLazy l, Show (Extra l)) =>
-  BasePrims l -> VBool l -> MValue l -> MValue l -> MValue l
-lazyMuxValue bp b x y =
+  (HasCallStack, VMonadLazy l, Show (Extra l)) =>
+  BasePrims l ->
+  TValue l ->
+  VBool l -> MValue l -> MValue l -> MValue l
+lazyMuxValue bp tp b x y =
   case bpAsBool bp b of
     Just True  -> x
     Just False -> y
     Nothing ->
       do x' <- x
          y' <- y
-         muxValue bp b x' y'
+         muxValue bp tp b x' y'
 
 muxValue :: forall l.
-  (VMonadLazy l, Show (Extra l)) =>
-  BasePrims l -> VBool l -> Value l -> Value l -> MValue l
-muxValue bp b = value
+  (HasCallStack, VMonadLazy l, Show (Extra l)) =>
+  BasePrims l ->
+  TValue l ->
+  VBool l -> Value l -> Value l -> MValue l
+muxValue bp tp0 b = value tp0
   where
-    value :: Value l -> Value l -> MValue l
-    value (VFun nm f)       (VFun _ g)        = return $ VFun nm $ \a -> do
-                                                  x <- f a
-                                                  y <- g a
-                                                  value x y
-    value VUnit             VUnit             = return VUnit
-    value (VPair x1 x2)     (VPair y1 y2)     = VPair <$> thunk x1 y1 <*> thunk x2 y2
-    value (VRecordValue elems1) (VRecordValue
-                                 (alistAllFields (map fst elems1) ->
-                                  Just elems2)) =
-      VRecordValue <$>
-      zipWithM (\(f,th1) th2 -> (f,) <$> thunk th1 th2) elems1 elems2
-    value (VCtorApp i xv)   (VCtorApp j yv)   | i == j = VCtorApp i <$> thunks xv yv
-    value (VVector xv)      (VVector yv)      = VVector <$> thunks xv yv
-    value (VBool x)         (VBool y)         = VBool <$> bpMuxBool bp b x y
-    value (VWord x)         (VWord y)         = VWord <$> bpMuxWord bp b x y
-    value (VInt x)          (VInt y)          = VInt <$> bpMuxInt bp b x y
-    value (VIntMod n x)     (VIntMod _ y)     = VIntMod n <$> bpMuxInt bp b x y
-    value (VNat m)          (VNat n)          | m == n = return $ VNat m
-    value (VString x)       (VString y)       | x == y = return $ VString x
---    value (VFloat x)        (VFloat y)        | x == y = return $ VFloat x
---    value (VDouble x)       (VDouble y)       | x == y = return $ VDouble y
-    value (VExtra x)        (VExtra y)        = VExtra <$> bpMuxExtra bp b x y
-    value x@(VWord _)       y                 = toVector (bpUnpack bp) x >>= \xv -> value (VVector xv) y
-    value x                 y@(VWord _)       = toVector (bpUnpack bp) y >>= \yv -> value x (VVector yv)
-    value x@(VNat _)        y                 = nat x y
-    value x@(VBVToNat _ _)  y                 = nat x y
-    value x@(VIntToNat _)   y                 = nat x y
-    value (TValue x)        (TValue y)        = TValue <$> tvalue x y
-    value x                 y                 =
+    value :: TValue l -> Value l -> Value l -> MValue l
+    value _ (VNat m)  (VNat n)      | m == n = return $ VNat m
+    value _ (VString x) (VString y) | x == y = return $ VString x
+
+    value (VPiType _ _tp tf) (VFun nm f) (VFun _ g) =
+        return $ VFun nm $ \a ->
+           do tp' <- tf a
+              x <- f a
+              y <- g a
+              value tp' x y
+
+    value VUnitType VUnit VUnit = return VUnit
+    value (VPairType t1 t2) (VPair x1 x2) (VPair y1 y2) =
+      VPair <$> thunk t1 x1 y1 <*> thunk t2 x2 y2
+
+    value (VRecordType fs) (VRecordValue elems1) (VRecordValue elems2) =
+      do let em1 = Map.fromList elems1
+         let em2 = Map.fromList elems2
+         let build (f,tp) = case (Map.lookup f em1, Map.lookup f em2) of
+                              (Just v1, Just v2) ->
+                                 do v <- thunk tp v1 v2
+                                    pure (f,v)
+                              _ -> panic "muxValue" ["Record field missing!", show f]
+         VRecordValue <$> traverse build fs
+
+-- TODO, fix datatypes!
+--    value (VDataType _nm _ps) (VCtorApp i xv) (VCtorApp j yv)
+--      | i == j = VCtorApp i <$> muxCtorArgs i xv yv
+
+    value (VVecType _ tp) (VVector xv) (VVector yv) =
+      VVector <$> thunks tp xv yv
+
+    value tp (VExtra x) (VExtra y) =
+      VExtra <$> bpMuxExtra bp tp b x y
+
+    value _ (VBool x)         (VBool y)         = VBool <$> bpMuxBool bp b x y
+    value _ (VWord x)         (VWord y)         = VWord <$> bpMuxWord bp b x y
+    value _ (VInt x)          (VInt y)          = VInt <$> bpMuxInt bp b x y
+    value _ (VIntMod n x)     (VIntMod _ y)     = VIntMod n <$> bpMuxInt bp b x y
+
+    value tp x@(VWord _)       y                = toVector (bpUnpack bp) x >>= \xv -> value tp (VVector xv) y
+    value tp x                 y@(VWord _)      = toVector (bpUnpack bp) y >>= \yv -> value tp x (VVector yv)
+
+    value _ x@(VNat _)        y                 = nat x y
+    value _ x@(VBVToNat _ _)  y                 = nat x y
+    value _ x@(VIntToNat _)   y                 = nat x y
+
+    value _ (TValue x)        (TValue y)        = TValue <$> tvalue x y
+
+    value tp x                y                 =
       panic $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: "
-      ++ show x ++ " " ++ show y
+      ++ show x ++ " " ++ show y ++ " " ++ show tp
 
     tvalue :: TValue l -> TValue l -> EvalM l (TValue l)
     tvalue (VSort x)         (VSort y)         | x == y = return $ VSort y
@@ -1300,13 +1327,13 @@ muxValue bp b = value
       panic $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: "
       ++ show x ++ " " ++ show y
 
-    thunks :: Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
-    thunks xv yv
-      | V.length xv == V.length yv = V.zipWithM thunk xv yv
+    thunks :: TValue l -> Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
+    thunks tp xv yv
+      | V.length xv == V.length yv = V.zipWithM (thunk tp) xv yv
       | otherwise                  = panic "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments"
 
-    thunk :: Thunk l -> Thunk l -> EvalM l (Thunk l)
-    thunk x y = delay $ do x' <- force x; y' <- force y; value x' y'
+    thunk :: TValue l -> Thunk l -> Thunk l -> EvalM l (Thunk l)
+    thunk tp x y = delay $ do x' <- force x; y' <- force y; value tp x' y'
 
     nat :: Value l -> Value l -> MValue l
     nat v1 v2 =

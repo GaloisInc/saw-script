@@ -38,7 +38,7 @@ import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.TypedAST
-       (ModuleMap, DataType(..), findCtorInMap, ctorType, ctorNumParams, toShortName)
+       (ModuleMap, DataType(..), findCtorInMap, ctorType, ctorNumParams) -- toShortName
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Utils (panic)
 
@@ -62,7 +62,9 @@ normalizeSharedTerm sc m addlPrims ecVals t =
   where
     neutral cfg nt =
       do tm <- neutralToSharedTerm sc nt
-         ty <- scTypeOf sc tm
+         ty <- scTypeOf sc tm -- TODO! This is a problem for open terms...
+                              -- maybe we can make it so VExtra terms don't need
+                              -- to carry their types
          tyv <- evalType cfg ty
          pure (VExtra (VExtraTerm tyv tm))
 
@@ -72,7 +74,6 @@ normalizeSharedTerm sc m addlPrims ecVals t =
         Nothing ->
           do ec' <- traverse (readBackTValue sc cfg) ec
              tm <- scExtCns sc ec'
-             putStrLn $ unwords ["Reflecting", show (toShortName (ecName ec)), show (ecVarIndex ec), show (ecType ec')]
              reflectTerm sc cfg (ecType ec) tm
 
 ------------------------------------------------------------
@@ -262,7 +263,6 @@ readBackValue sc cfg = loop
 
     loop tv@VPiType{} v@VFun{} =
       do (ecs, tm) <- readBackFuns tv v
-         putStrLn $ unlines $ ["Readback fun!"] ++ map (\ec -> "  " ++ show ec) ecs ++ ["  " ++ showTerm tm]
          scAbstractExts sc ecs tm
 
     loop (VPairType t1 t2) (VPair v1 v2) =
@@ -350,10 +350,6 @@ intTerm sc (Right i) = scIntegerConst sc i
 extraTerm :: VExtra -> IO Term
 extraTerm (VStream _tp tm _ _) = pure tm
 extraTerm (VExtraTerm _ tm) = pure tm
-
-extraType :: VExtra -> IO (TValue TermModel)
-extraType (VExtraTerm tp _tm) = pure tp
-extraType (VStream tp _tm _fn _cache) = pure (VDataType "Prelude.Stream" [TValue tp])
 
 unOp ::
   SharedContext ->
@@ -548,12 +544,11 @@ prims sc cfg =
               a  <- scIntegerType sc
               Left <$> scIte sc a tm x' y'
 
-  , Prims.bpMuxExtra = \c x y ->
+  , Prims.bpMuxExtra = \tp c x y ->
        case c of
          Right b -> if b then pure x else pure y
          Left tm ->
-           do tp <- extraType x
-              x' <- extraTerm x
+           do x' <- extraTerm x
               y' <- extraTerm y
               a  <- readBackTValue sc cfg tp
               VExtraTerm tp <$> scIte sc a tm x' y'
