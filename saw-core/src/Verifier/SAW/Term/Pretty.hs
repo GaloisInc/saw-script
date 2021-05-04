@@ -119,23 +119,13 @@ data Prec
   | PrecProd   -- ^ Nonterminal 'ProductTerm'
   | PrecApp    -- ^ Nonterminal 'AppTerm'
   | PrecArg    -- ^ Nonterminal 'AtomTerm'
+  deriving (Eq, Ord)
 
 -- | Test if the first precedence "contains" the second, meaning that terms at
 -- the latter precedence level can be printed in the context of the former
 -- without parentheses.
---
--- NOTE: we write this explicitly here, instead of generating it from an 'Ord'
--- instance, so that readers of this code understand it and know what it is.
 precContains :: Prec -> Prec -> Bool
-precContains _ PrecArg = True
-precContains PrecArg _ = False
-precContains _ PrecApp = True
-precContains PrecApp _ = False
-precContains _ PrecProd = True
-precContains PrecProd _ = False
-precContains _ PrecLambda = True
-precContains PrecLambda _ = False
-precContains PrecNone PrecNone = True
+precContains x y = x <= y
 
 -- | Optionally print parentheses around a document, iff the incoming, outer
 -- precedence (listed first) contains (as in 'precContains') the required
