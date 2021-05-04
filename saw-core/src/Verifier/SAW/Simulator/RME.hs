@@ -22,20 +22,18 @@ module Verifier.SAW.Simulator.RME
   , RExtra(..)
   , toBool
   , toWord
-  , runIdentity
   , withBitBlastedSATQuery
   ) where
 
-import Control.Monad.Identity
 import Control.Monad.State
 import Data.Bits
-import Data.IntTrie (IntTrie)
-import qualified Data.IntTrie as IntTrie
+import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as V
+import Numeric.Natural
 
 import Data.RME (RME)
 import qualified Data.RME as RME
@@ -59,9 +57,8 @@ import Data.Traversable
 ------------------------------------------------------------
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: ModuleMap -> Map Ident RValue -> Term -> RValue
-evalSharedTerm m addlPrims t =
-  runIdentity $ do
+evalSharedTerm :: ModuleMap -> Map Ident RValue -> Term -> IO RValue
+evalSharedTerm m addlPrims t = do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
            extcns (const Nothing) neutral
     Sim.evalSharedTerm cfg t
@@ -74,7 +71,7 @@ evalSharedTerm m addlPrims t =
 
 data ReedMuller
 
-type instance EvalM ReedMuller = Identity
+type instance EvalM ReedMuller = IO
 type instance VBool ReedMuller = RME
 type instance VWord ReedMuller = Vector RME
 type instance VInt  ReedMuller = Integer
@@ -84,10 +81,11 @@ type instance Extra ReedMuller = RExtra
 type RValue = Value ReedMuller
 type RThunk = Thunk ReedMuller
 
-data RExtra = AStream (IntTrie RValue)
+data RExtra =
+  AStream (Natural -> IO RValue) (IORef (Map Natural RValue))
 
 instance Show RExtra where
-  show (AStream _) = "<stream>"
+  show AStream{} = "<stream>"
 
 vBool :: RME -> RValue
 vBool b = VBool b
@@ -99,20 +97,13 @@ toBool x = error $ unwords ["Verifier.SAW.Simulator.RME.toBool", show x]
 vWord :: Vector RME -> RValue
 vWord x = VWord x
 
-toWord :: RValue -> Vector RME
-toWord (VWord x) = x
-toWord (VVector vv) = fmap (toBool . runIdentity . force) vv
+toWord :: RValue -> IO (Vector RME)
+toWord (VWord x) = pure x
+toWord (VVector vv) = traverse (\x -> toBool <$> force x) vv
 toWord x = error $ unwords ["Verifier.SAW.Simulator.RME.toWord", show x]
 
-vStream :: IntTrie RValue -> RValue
-vStream x = VExtra (AStream x)
-
-toStream :: RValue -> IntTrie RValue
-toStream (VExtra (AStream x)) = x
-toStream x = error $ unwords ["Verifier.SAW.Simulator.RME.toStream", show x]
-
 wordFun :: (Vector RME -> RValue) -> RValue
-wordFun f = pureFun (\x -> f (toWord x))
+wordFun f = strictFun (\x -> f <$> (toWord x))
 
 genShift :: (a -> b -> b -> b) -> (b -> Integer -> b) -> b -> Vector a -> b
 genShift cond f x0 v = go x0 (V.toList v)
@@ -125,10 +116,10 @@ bvShiftOp :: (Vector RME -> Integer -> Vector RME) -> RValue
 bvShiftOp op =
   constFun $
   wordFun $ \x ->
-  pureFun $ \y ->
+  strictFun $ \y ->
     case y of
-      VNat n   -> vWord (op x (toInteger n))
-      VBVToNat _sz v -> vWord (genShift muxRMEV op x (toWord v))
+      VNat n   -> pure (vWord (op x (toInteger n)))
+      VBVToNat _sz v -> vWord . genShift muxRMEV op x <$> toWord v
       VIntToNat _i   -> error "RME.shiftOp: intToNat TODO"
       _        -> error $ unwords ["Verifier.SAW.Simulator.RME.shiftOp", show y]
 
@@ -147,8 +138,8 @@ prims :: Prims.BasePrims ReedMuller
 prims =
   Prims.BasePrims
   { Prims.bpAsBool  = RME.isBool
-  , Prims.bpUnpack  = Identity
-  , Prims.bpPack    = Identity
+  , Prims.bpUnpack  = pure
+  , Prims.bpPack    = pure
   , Prims.bpBvAt    = pure2 (V.!)
   , Prims.bpBvLit   = pure2 RMEV.integer
   , Prims.bpBvSize  = V.length
@@ -158,7 +149,7 @@ prims =
   , Prims.bpMuxBool  = pure3 RME.mux
   , Prims.bpMuxWord  = pure3 muxRMEV
   , Prims.bpMuxInt   = pure3 muxInt
-  , Prims.bpMuxExtra = \tp -> pure3 (muxExtra tp)
+  , Prims.bpMuxExtra = muxExtra
     -- Booleans
   , Prims.bpTrue   = RME.true
   , Prims.bpFalse  = RME.false
@@ -282,13 +273,17 @@ muxInt b x y =
     Just c -> if c then x else y
     Nothing -> if x == y then x else error $ "muxRValue: VInt " ++ show (x, y)
 
-muxExtra :: TValue ReedMuller -> RME -> RExtra -> RExtra -> RExtra
-muxExtra (VDataType "Prelude.Stream" [TValue tp]) b (AStream xs) (AStream ys) =
-  AStream (muxRValue tp b <$> xs <*> ys)
+muxExtra :: TValue ReedMuller -> RME -> RExtra -> RExtra -> IO RExtra
+muxExtra (VDataType "Prelude.Stream" [TValue tp]) b s1 s2 =
+  do r <- newIORef mempty
+     let fn n = do x <- lookupRExtra s1 n
+                   y <- lookupRExtra s2 n
+                   muxRValue tp b x y
+     pure (AStream fn r)
 muxExtra tp _ _ _ = panic "RME.muxExtra" ["type mismatch", show tp]
 
-muxRValue :: TValue ReedMuller -> RME -> RValue -> RValue -> RValue
-muxRValue tp b x y = runIdentity $ Prims.muxValue prims tp b x y
+muxRValue :: TValue ReedMuller -> RME -> RValue -> RValue -> IO RValue
+muxRValue tp b x y = Prims.muxValue prims tp b x y
 
 -- | Signed shift right simply copies the high order bit
 --   into the shifted places.  We special case the zero
@@ -335,12 +330,28 @@ intModUnOp f =
 
 ----------------------------------------
 
+lookupRExtra :: RExtra -> Natural -> IO RValue
+lookupRExtra (AStream f r) i =
+  do m <- readIORef r
+     case Map.lookup i m of
+       Just v -> pure v
+       Nothing ->
+         do v <- f i
+            modifyIORef' r (Map.insert i v)
+            pure v
+
+lookupStream :: RValue -> Natural -> IO RValue
+lookupStream (VExtra ex) n = lookupRExtra ex n
+lookupStream _ _ = panic "RME.lookupStream" ["Expected stream value"]
+
 -- MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
 mkStreamOp :: RValue
 mkStreamOp =
   constFun $
-  pureFun $ \f ->
-  vStream (fmap (\n -> runIdentity (apply f (ready (VNat n)))) IntTrie.identity)
+  strictFun $ \f ->
+    do r <- newIORef mempty
+       let fn n = apply f (ready (VNat n))
+       pure (VExtra (AStream fn r))
 
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: RValue
@@ -348,26 +359,25 @@ streamGetOp =
   strictFun $ \(toTValue -> tp) -> return $
   pureFun $ \xs ->
   strictFun $ \case
-    VNat n -> pure $ IntTrie.apply (toStream xs) (toInteger n)
-    VIntToNat _i -> error "RME.streamGetOp : symbolic integer TODO"
+    VNat n -> lookupStream xs n
     VBVToNat _sz bv ->
-      do let trie = toStream xs
-             loop k [] = IntTrie.apply trie k
+      do let loop k [] = lookupStream xs k
              loop k (b:bs)
                | Just True <- RME.isBool b
                = loop k1 bs
                | Just False <- RME.isBool b
                = loop k0 bs
                | otherwise
-               = muxRValue tp b (loop k1 bs) (loop k0 bs)
+               = do s1 <- loop k1 bs
+                    s2 <- loop 0 bs
+                    muxRValue tp b s1 s2
               where
                k0 = k `shiftL` 1
                k1 = k0 + 1
-         pure $ loop (0::Integer) (V.toList (toWord bv))
+         loop (0::Natural) . V.toList =<< toWord bv
 
     v -> panic "Verifer.SAW.Simulator.RME.streamGetOp"
                [ "Expected Nat value", show v ]
-
 
 ------------------------------------------------------------
 -- Generating variables for arguments
@@ -391,8 +401,8 @@ bitBlastBasic :: ModuleMap
               -> Map Ident RValue
               -> Map VarIndex RValue
               -> Term
-              -> RValue
-bitBlastBasic m addlPrims ecMap t = runIdentity $ do
+              -> IO RValue
+bitBlastBasic m addlPrims ecMap t = do
   let neutral nt = return $ Prim.userError $ "Could not evaluate neutral term\n:" ++ show nt
 
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
@@ -426,7 +436,7 @@ withBitBlastedSATQuery sc addlPrims satq cont =
      modmap <- scGetModuleMap sc
      let vars = evalState (traverse (traverse newVars) varShapes) 0
      let varMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) <- vars ]
-     let bval = bitBlastBasic modmap addlPrims varMap t
+     bval <- bitBlastBasic modmap addlPrims varMap t
      case bval of
        VBool anf -> cont anf varShapes
        _ -> panic "Verifier.SAW.Simulator.RME.bitBlast" ["non-boolean result type."]
