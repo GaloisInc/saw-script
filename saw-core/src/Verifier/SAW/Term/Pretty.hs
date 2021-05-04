@@ -114,9 +114,10 @@ depthAllowed _ _ = True
 
 -- | Precedence levels, each of which corresponds to a parsing nonterminal
 data Prec
-  = PrecNone   -- ^ Nonterminal 'Term'
+  = PrecNone   -- ^ Nonterminal 'Term' or "sepBy(Term, ',')"
+  | PrecTerm   -- ^ Nonterminal 'Term'
   | PrecLambda -- ^ Nonterminal 'LTerm'
-  | PrecProd   -- ^ Nonterminal 'ProductTerm'
+  | PrecProd   -- ^ Nonterminal 'ProdTerm'
   | PrecApp    -- ^ Nonterminal 'AppTerm'
   | PrecArg    -- ^ Nonterminal 'AtomTerm'
   deriving (Eq, Ord)
@@ -416,7 +417,7 @@ ppFlatTermF prec tf =
     Primitive ec  -> annotate PrimitiveStyle <$> ppBestName (ecName ec)
     UnitValue     -> return "(-empty-)"
     UnitType      -> return "#(-empty-)"
-    PairValue x y -> ppPair prec <$> ppTerm' PrecLambda x <*> ppTerm' PrecNone y
+    PairValue x y -> ppPair prec <$> ppTerm' PrecTerm x <*> ppTerm' PrecNone y
     PairType x y  -> ppPairType prec <$> ppTerm' PrecApp x <*> ppTerm' PrecProd y
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
@@ -428,7 +429,7 @@ ppFlatTermF prec tf =
     RecursorApp d params p_ret cs_fs ixs arg ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          p_ret_pp <- ppTerm' PrecArg p_ret
-         fs_pp <- mapM (ppTerm' PrecNone . snd) cs_fs
+         fs_pp <- mapM (ppTerm' PrecTerm . snd) cs_fs
          ixs_pp <- mapM (ppTerm' PrecArg) ixs
          arg_pp <- ppTerm' PrecArg arg
          return $
@@ -439,14 +440,14 @@ ppFlatTermF prec tf =
              cs_fs fs_pp]
             ++ ixs_pp ++ [arg_pp])
     RecordType alist ->
-      ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecNone t) alist
+      ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
     RecordValue alist ->
-      ppRecord False <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecNone t) alist
+      ppRecord False <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
     RecordProj e fld -> ppProj fld <$> ppTerm' PrecArg e
     Sort s -> return $ viaShow s
     NatLit i -> ppNat <$> (ppOpts <$> ask) <*> return (toInteger i)
     ArrayValue _ args   ->
-      ppArrayValue <$> mapM (ppTerm' PrecNone) (V.toList args)
+      ppArrayValue <$> mapM (ppTerm' PrecTerm) (V.toList args)
     StringLit s -> return $ viaShow s
     ExtCns cns -> annotate ExtCnsStyle <$> ppBestName (ecName cns)
 
@@ -608,7 +609,7 @@ ppWithBoundCtx [] m = (mempty ,) <$> m
 ppWithBoundCtx ((x,tp):ctx) m =
   (\tp_d (x', (ctx_d, ret)) ->
     (parens (ppTypeConstraint (pretty x') tp_d) <+> ctx_d, ret))
-  <$> ppTerm' PrecNone tp <*> withBoundVarM x (ppWithBoundCtx ctx m)
+  <$> ppTerm' PrecTerm tp <*> withBoundVarM x (ppWithBoundCtx ctx m)
 
 -- | Pretty-print a term, also adding let-bindings for all subterms that occur
 -- more than once at the same binding level
@@ -625,7 +626,7 @@ ppTermInCtx :: PPOpts -> [LocalName] -> Term -> SawDoc
 ppTermInCtx opts ctx trm =
   runPPM opts emptySAWNamingEnv $
   flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
-  ppTermWithMemoTable PrecNone True trm
+  ppTermWithMemoTable PrecTerm True trm
 
 renderSawDoc :: PPOpts -> SawDoc -> String
 renderSawDoc ppOpts doc =
@@ -646,7 +647,7 @@ scPrettyTermInCtx opts ctx trm =
   renderSawDoc opts $
   runPPM opts emptySAWNamingEnv $
   flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
-  ppTermWithMemoTable PrecNone False trm
+  ppTermWithMemoTable PrecTerm False trm
 
 
 -- | Pretty-print a term and render it to a string
@@ -662,7 +663,7 @@ showTerm t = scPrettyTerm defaultPPOpts t
 -- more than once at the same binding level
 ppTermWithNames :: PPOpts -> SAWNamingEnv -> Term -> SawDoc
 ppTermWithNames opts ne trm =
-  runPPM opts ne $ ppTermWithMemoTable PrecNone True trm
+  runPPM opts ne $ ppTermWithMemoTable PrecTerm True trm
 
 showTermWithNames :: PPOpts -> SAWNamingEnv -> Term -> String
 showTermWithNames opts ne trm =
@@ -696,10 +697,10 @@ ppPPModule opts (PPModule importNames decls) =
        ppWithBoundCtx dtIndices (return $ viaShow dtSort) <*>
        mapM (\(ctorName,ctorType) ->
               ppTypeConstraint (ppIdent ctorName) <$>
-              ppTerm' PrecNone ctorType)
+              ppTerm' PrecTerm ctorType)
        dtCtors)
     ppDecl (PPDefDecl defIdent defType defBody) =
-      ppDef (ppIdent defIdent) <$> ppTerm' PrecNone defType <*>
+      ppDef (ppIdent defIdent) <$> ppTerm' PrecTerm defType <*>
       case defBody of
-        Just body -> Just <$> ppTerm' PrecNone body
+        Just body -> Just <$> ppTerm' PrecTerm body
         Nothing -> return Nothing
