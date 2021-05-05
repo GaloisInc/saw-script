@@ -1408,26 +1408,33 @@ proveEq sc env t1 t2
            aEq <- proveEq sc env a1 a2
            bEq <- proveEq sc env b1 b2
            scGlobalApply sc "Cryptol.fun_cong" [a1', a2', b1', b2', aEq, bEq]
-      (C.tIsTuple -> Just (a1 : ts1), C.tIsTuple -> Just (a2 : ts2))
-        | length ts1 == length ts2 ->
-          do let b1 = C.tTuple ts1
-                 b2 = C.tTuple ts2
-             a1' <- importType sc env a1
-             a2' <- importType sc env a2
-             b1' <- importType sc env b1
-             b2' <- importType sc env b2
-             aEq <- proveEq sc env a1 a2
-             bEq <- proveEq sc env b1 b2
-             if b1 == b2
-               then scGlobalApply sc "Cryptol.pair_cong1" [a1', a2', b1', aEq]
-               else if a1 == a2
-                    then scGlobalApply sc "Cryptol.pair_cong2" [a1', b1', b2', bEq]
-                    else scGlobalApply sc "Cryptol.pair_cong" [a1', a2', b1', b2', aEq, bEq]
+      (tIsPair -> Just (a1, b1), tIsPair -> Just (a2, b2)) ->
+        do a1' <- importType sc env a1
+           a2' <- importType sc env a2
+           b1' <- importType sc env b1
+           b2' <- importType sc env b2
+           aEq <- proveEq sc env a1 a2
+           bEq <- proveEq sc env b1 b2
+           if b1 == b2
+             then scGlobalApply sc "Cryptol.pair_cong1" [a1', a2', b1', aEq]
+             else if a1 == a2
+                  then scGlobalApply sc "Cryptol.pair_cong2" [a1', b1', b2', bEq]
+                  else scGlobalApply sc "Cryptol.pair_cong" [a1', a2', b1', b2', aEq, bEq]
       (C.tIsRec -> Just tm1, C.tIsRec -> Just tm2)
         | map fst (C.canonicalFields tm1) == map fst (C.canonicalFields tm2) ->
           proveEq sc env (C.tTuple (map snd (C.canonicalFields tm1))) (C.tTuple (map snd (C.canonicalFields tm2)))
       (_, _) ->
         panic "proveEq" ["Internal type error:", pretty t1, pretty t2]
+
+-- | Deconstruct a cryptol tuple type as a pair according to the
+-- saw-core tuple type encoding.
+tIsPair :: C.Type -> Maybe (C.Type, C.Type)
+tIsPair t =
+  do ts <- C.tIsTuple t
+     case ts of
+       [] -> Nothing
+       [t1, t2] -> Just (t1, t2)
+       t1 : ts' -> Just (t1, C.tTuple ts')
 
 --------------------------------------------------------------------------------
 -- List comprehensions
