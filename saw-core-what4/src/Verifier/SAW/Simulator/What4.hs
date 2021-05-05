@@ -1359,6 +1359,10 @@ mkArgTerm sc ty val =
          x <- scCtorApp sc i xs
          return (ArgTermConst x)
 
+    (_, TValue tval) ->
+      do x <- termOfTValue sc tval
+         pure (ArgTermConst x)
+
     _ -> fail $ "could not create uninterpreted function argument of type " ++ show ty
 
 termOfTValue :: SharedContext -> TValue (What4 sym) -> IO Term
