@@ -635,10 +635,11 @@ sbvSATQuery sc addlPrims query =
      t <- liftIO (foldM (scAnd sc) true (satAsserts query))
      let qvars = Map.toList (satVariables query)
      let unintSet = satUninterp query
+     let ecVars (ec, fot) = newVars (Text.unpack (toShortName (ecName ec))) fot
 
      (labels, vars) <-
        flip evalStateT 0 $ unzip <$>
-       mapM (newVars . snd) qvars
+       mapM ecVars qvars
 
      m <- liftIO (scGetModuleMap sc)
 
@@ -674,29 +675,41 @@ data Labeler
      deriving (Show)
 
 nextId :: StateT Int IO String
-nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
+nextId = ST.get >>= (\s -> modify (+1) >> return ("x" ++ show s))
+
+nextId' :: String -> StateT Int IO String
+nextId' nm = nextId <&> \s -> s ++ "_" ++ nm
 
 unzipMap :: Map k (a, b) -> (Map k a, Map k b)
 unzipMap m = (fmap fst m, fmap snd m)
 
-newVars :: FirstOrderType -> StateT Int IO (Labeler, Symbolic SValue)
-newVars FOTBit = nextId <&> \s-> (BoolLabel s, vBool <$> existsSBool s)
-newVars FOTInt = nextId <&> \s-> (IntegerLabel s, vInteger <$> existsSInteger s)
-newVars (FOTIntMod n) = nextId <&> \s-> (IntegerLabel s, VIntMod n <$> existsSInteger s)
-newVars (FOTVec n FOTBit) =
-  if n == 0
-    then pure (ZeroWidthWordLabel, pure (vWord (literalSWord 0 0)))
-    else nextId <&> \s-> (WordLabel s, vWord <$> existsSWord s (fromIntegral n))
-newVars (FOTVec n tp) = do
-  (labels, vals) <- V.unzip <$> V.replicateM (fromIntegral n) (newVars tp)
-  return (VecLabel labels, VVector <$> traverse (fmap ready) vals)
-newVars (FOTArray{}) = fail "FOTArray unimplemented for backend"
-newVars (FOTTuple ts) = do
-  (labels, vals) <- V.unzip <$> traverse newVars (V.fromList ts)
-  return (TupleLabel labels, vTuple <$> traverse (fmap ready) (V.toList vals))
-newVars (FOTRec tm) = do
-  (labels, vals) <- unzipMap <$> (traverse newVars tm :: StateT Int IO (Map FieldName (Labeler, Symbolic SValue)))
-  return (RecLabel labels, vRecord <$> traverse (fmap ready) (vals :: (Map FieldName (Symbolic SValue))))
+newVars :: String -> FirstOrderType -> StateT Int IO (Labeler, Symbolic SValue)
+newVars nm fot =
+  case fot of
+    FOTBit ->
+      nextId' nm <&> \s -> (BoolLabel s, vBool <$> existsSBool s)
+    FOTInt ->
+      nextId' nm <&> \s -> (IntegerLabel s, vInteger <$> existsSInteger s)
+    FOTIntMod n ->
+      nextId' nm <&> \s -> (IntegerLabel s, VIntMod n <$> existsSInteger s)
+    FOTVec 0 FOTBit ->
+      pure (ZeroWidthWordLabel, pure (vWord (literalSWord 0 0)))
+    FOTVec n FOTBit ->
+      nextId' nm <&> \s -> (WordLabel s, vWord <$> existsSWord s (fromIntegral n))
+    FOTVec n tp ->
+      do let f i = newVars (nm ++ "." ++ show i) tp
+         (labels, vals) <- V.unzip <$> V.generateM (fromIntegral n) f
+         pure (VecLabel labels, VVector <$> traverse (fmap ready) vals)
+    FOTArray{} ->
+      fail "FOTArray unimplemented for backend"
+    FOTTuple ts ->
+      do let f i t = newVars (nm ++ "." ++ show i) t
+         (labels, vals) <- V.unzip <$> V.imapM f (V.fromList ts)
+         pure (TupleLabel labels, vTuple <$> traverse (fmap ready) (V.toList vals))
+    FOTRec tm ->
+      do let f k t = newVars (nm ++ "." ++ Text.unpack k) t
+         (labels, vals) <- unzipMap <$> (Map.traverseWithKey f tm)
+         pure (RecLabel labels, vRecord <$> traverse (fmap ready) vals)
 
 
 getLabels ::
