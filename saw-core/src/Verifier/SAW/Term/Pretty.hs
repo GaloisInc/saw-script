@@ -114,12 +114,12 @@ depthAllowed _ _ = True
 
 -- | Precedence levels, each of which corresponds to a parsing nonterminal
 data Prec
-  = PrecNone   -- ^ Nonterminal 'Term' or "sepBy(Term, ',')"
-  | PrecTerm   -- ^ Nonterminal 'Term'
-  | PrecLambda -- ^ Nonterminal 'LTerm'
-  | PrecProd   -- ^ Nonterminal 'ProdTerm'
-  | PrecApp    -- ^ Nonterminal 'AppTerm'
-  | PrecArg    -- ^ Nonterminal 'AtomTerm'
+  = PrecCommas -- ^ Nonterminal @sepBy(Term, \',\')@
+  | PrecTerm   -- ^ Nonterminal @Term@
+  | PrecLambda -- ^ Nonterminal @LTerm@
+  | PrecProd   -- ^ Nonterminal @ProdTerm@
+  | PrecApp    -- ^ Nonterminal @AppTerm@
+  | PrecArg    -- ^ Nonterminal @AtomTerm@
   deriving (Eq, Ord)
 
 -- | Test if the first precedence "contains" the second, meaning that terms at
@@ -337,7 +337,7 @@ ppLetBlock defs body =
 
 -- | Pretty-print pairs as "(x, y)"
 ppPair :: Prec -> SawDoc -> SawDoc -> SawDoc
-ppPair prec x y = ppParensPrec prec PrecNone (group (vcat [x <> pretty ',', y]))
+ppPair prec x y = ppParensPrec prec PrecCommas (group (vcat [x <> pretty ',', y]))
 
 -- | Pretty-print pair types as "x * y"
 ppPairType :: Prec -> SawDoc -> SawDoc -> SawDoc
@@ -417,7 +417,7 @@ ppFlatTermF prec tf =
     Primitive ec  -> annotate PrimitiveStyle <$> ppBestName (ecName ec)
     UnitValue     -> return "(-empty-)"
     UnitType      -> return "#(-empty-)"
-    PairValue x y -> ppPair prec <$> ppTerm' PrecTerm x <*> ppTerm' PrecNone y
+    PairValue x y -> ppPair prec <$> ppTerm' PrecTerm x <*> ppTerm' PrecCommas y
     PairType x y  -> ppPairType prec <$> ppTerm' PrecApp x <*> ppTerm' PrecProd y
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
