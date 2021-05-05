@@ -37,6 +37,7 @@ import           Data.Char                                     (isDigit)
 import qualified Data.IntMap                                   as IntMap
 import           Data.List                                     (intersperse, sortOn)
 import           Data.Maybe                                    (fromMaybe)
+import qualified Data.Map                                      as Map
 import qualified Data.Set                                      as Set
 import qualified Data.Text                                     as Text
 import           Prelude                                       hiding (fail)
@@ -217,8 +218,25 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     -- TODO: maybe have more customizable translation of data types
     DataTypeApp n is as -> translateIdentWithArgs n (is ++ as)
     CtorApp n is as -> translateIdentWithArgs n (is ++ as)
+
+    RecursorType _d _params motive motiveTy ->
+      -- type of the motive looks like
+      --      (ix1 : _) -> ... -> (ixn : _) -> d ps ixs -> sort
+      -- to get the type of the recursor, we compute
+      --      (ix1 : _) -> ... -> (ixn : _) -> (x:d ps ixs) -> motive ixs x
+      do let (bs, _srt) = asPiList motiveTy
+         (varsT,bindersT) <- unzip <$>
+           (forM bs $ \ (b, bType) -> do
+             bTypeT <- translateTerm bType
+             b' <- freshenAndBindName b
+             return (Coq.Var b', Coq.PiBinder (Just b') bTypeT))
+
+         motiveT <- translateTerm motive
+         let bodyT = Coq.App motiveT varsT
+         return $ Coq.Pi bindersT bodyT
+
     -- TODO: support this next!
-    RecursorApp d parameters motive eliminators indices termEliminated ->
+    Recursor (CompiledRecursor d parameters motive _motiveTy eliminators elimOrder) ->
       do maybe_d_trans <- translateIdentToIdent d
          rect_var <- case maybe_d_trans of
            Just i -> return $ Coq.Var (show i ++ "_rect")
@@ -226,10 +244,23 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
              errorTermM ("Recursor for " ++ show d ++
                          " cannot be translated because the datatype " ++
                          "is mapped to an arbitrary Coq term")
-         let args =
-               parameters ++ [motive] ++ map snd eliminators
-               ++ indices ++ [termEliminated]
-         Coq.App rect_var <$> mapM translateTerm args
+
+         let fnd c = case Map.lookup c eliminators of
+                       Just (e,_ety) -> translateTerm e
+                       Nothing -> errorTermM
+                          ("Recursor eliminator missing eliminator for constructor " ++ show c)
+
+         ps <- mapM translateTerm parameters
+         m  <- translateTerm motive
+         elimlist <- mapM fnd elimOrder
+
+         pure (Coq.App rect_var (ps ++ [m] ++ elimlist))
+
+    RecursorApp rec indices termEliminated ->
+      do rec' <- translateTerm rec
+         let args = indices ++ [termEliminated]
+         Coq.App rec' <$> mapM translateTerm args
+
     Sort s -> pure (Coq.Sort (translateSort s))
     NatLit i -> pure (Coq.NatLit (toInteger i))
     ArrayValue (asBoolType -> Just ()) (traverse asBool -> Just bits)

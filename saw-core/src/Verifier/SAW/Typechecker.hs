@@ -185,16 +185,18 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
      case typed_args of
        (splitAt (length $ dtParams dt) ->
         (params,
-         p_ret :
+         motive :
          (splitAt (length $ dtCtors dt) ->
           (elims,
            (splitAt (length $ dtIndices dt) ->
             (ixs, arg : rem_args)))))) ->
-         do let cs_fs = zip (map ctorName $ dtCtors dt) elims
-            typed_r <- typeInferComplete (RecursorApp dt_ident params
-                                          p_ret cs_fs ixs arg)
+         do crec    <- compileRecursor dt params motive elims
+            rec     <- typeInferComplete (Recursor crec)
+            typed_r <- typeInferComplete (RecursorApp rec ixs arg)
             inferApplyAll typed_r rem_args
+
        _ -> throwTCError $ NotFullyAppliedRec dt_ident
+
 typeInferCompleteTerm (Un.Recursor _ _) =
   error "typeInferComplete: found a bare Recursor, which should never happen!"
 
@@ -431,9 +433,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
             let tp = typedVal typed_tp in
             case mkCtorArgStruct dtName p_ctx ix_ctx tp of
               Just arg_struct ->
-                liftTCM scBuildCtor dtName (mkIdent mnm c)
-                (map (mkIdent mnm . fst) typed_ctors)
-                arg_struct
+                liftTCM scBuildCtor dtName (mkIdent mnm c) arg_struct
               Nothing -> err ("Malformed type form constructor: " ++ show c)
 
   -- Step 6: complete the datatype with the given ctors

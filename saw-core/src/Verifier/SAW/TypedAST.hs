@@ -57,6 +57,7 @@ module Verifier.SAW.TypedAST
  , zipWithFlatTermF
  , freesTermF
  , termToPat
+ , CompiledRecursor(..)
 
  , PPOpts(..)
  , defaultPPOpts

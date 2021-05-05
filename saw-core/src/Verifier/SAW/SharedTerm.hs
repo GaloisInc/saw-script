@@ -280,6 +280,7 @@ import Text.URI
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
 import Verifier.SAW.Name
+import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Term.Functor
@@ -287,6 +288,7 @@ import Verifier.SAW.Term.CtxTerm
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Unique
+
 
 #if !MIN_VERSION_base(4,8,0)
 countTrailingZeros :: (FiniteBits b) => b -> Int
@@ -593,6 +595,7 @@ instance MonadIO ShCtxM where
 instance MonadTerm ShCtxM where
   mkTermF tf = ask >>= \sc -> liftIO $ scTermF sc tf
   liftTerm n i t = ask >>= \sc -> liftIO $ incVars sc n i t
+  whnfTerm t = ask >>= \sc -> liftIO $ scWhnf sc t
   substTerm n subst t = ask >>= \sc -> liftIO $ instantiateVarList sc n subst t
 
 -- | Test whether a 'DataType' can be eliminated to the given sort. The rules
@@ -611,10 +614,13 @@ allowedElimSort dt s =
 -- | Build a 'Ctor' from a 'CtorArgStruct' and a list of the other constructor
 -- names of the 'DataType'. Note that we cannot look up the latter information,
 -- as 'scBuildCtor' is called during construction of the 'DataType'.
-scBuildCtor :: SharedContext -> Ident -> Ident -> [Ident] ->
-               CtorArgStruct d params ixs ->
-               IO Ctor
-scBuildCtor sc d c ctor_names arg_struct =
+scBuildCtor ::
+  SharedContext ->
+  Ident {- ^ data type name -} ->
+  Ident {- ^ constructor name -} ->
+  CtorArgStruct d params ixs {- ^ constructor formal arguments -} ->
+  IO Ctor
+scBuildCtor sc d c arg_struct =
   do
     -- Step 1: build the types for the constructor and its eliminator
     tp <- scShCtxM sc $ ctxCtorType d arg_struct
@@ -622,25 +628,37 @@ scBuildCtor sc d c ctor_names arg_struct =
 
     -- Step 2: build free variables for params, p_ret, the elims, and the ctor
     -- arguments
-    let num_params = bindingsLength $ ctorParams arg_struct
+    -- let num_params = bindingsLength $ ctorParams arg_struct
     let num_args =
           case arg_struct of
             CtorArgStruct {..} -> bindingsLength ctorArgs
-    let total_vars_minus_1 = num_params + length ctor_names + num_args
-    vars <- reverse <$> mapM (scLocalVar sc) [0 .. total_vars_minus_1]
+
+    vars <- reverse <$> mapM (scLocalVar sc) (take num_args [0 ..])
+    elim_var <- scLocalVar sc num_args
+    rec_var  <- scLocalVar sc (num_args+1)
+
     -- Step 3: pass these variables to ctxReduceRecursor to build the
     -- ctorIotaReduction field
-    iota_red <-
-      scShCtxM sc $
-      ctxReduceRecursor d (take num_params vars) (vars !! num_params)
-      (zip ctor_names (drop (num_params + 1) vars)) c
-      (drop (num_params + 1 + length ctor_names) vars) arg_struct
+    iota_red <- scShCtxM sc $
+      ctxReduceRecursor rec_var elim_var vars arg_struct
+
+    -- Step 4: build the API function that shuffles the terms around in the
+    -- correct way.
+    let iota_fun rec cs_fs args =
+          do let elim = case Map.lookup c cs_fs of
+                          Just e -> e
+                          Nothing -> panic "ctorIotaReduction"
+                                       ["no eliminator for constructor", show c]
+             instantiateVarList sc 0 (reverse ([rec,elim]++args)) iota_red
+
     -- Finally, return the required Ctor record
     return $ Ctor { ctorName = c, ctorArgStruct = arg_struct,
                     ctorDataTypeName = d, ctorType = tp,
                     ctorElimTypeFun =
                       (\ps p_ret -> scShCtxM sc $ elim_tp_fun ps p_ret),
-                    ctorIotaReduction = iota_red }
+                    ctorIotaTemplate  = iota_red,
+                    ctorIotaReduction = iota_fun
+                  }
 
 -- | Given a datatype @d@, parameters @p1,..,pn@ for @d@, and a "motive"
 -- function @p_ret@ of type
@@ -666,6 +684,7 @@ scRecursorRetTypeType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
 scRecursorRetTypeType sc dt params s =
   scShCtxM sc $ mkPRetTp (dtName dt) (dtParams dt) (dtIndices dt) params s
 
+
 -- | Reduce an application of a recursor. This is known in the Coq literature as
 -- an iota reduction. More specifically, the call
 --
@@ -679,24 +698,18 @@ scRecursorRetTypeType sc dt params s =
 -- on one of the @xi@. These recursive calls only exist for those arguments
 -- @xi@. See the documentation for 'ctxReduceRecursor' and the
 -- 'ctorIotaReduction' field for more details.
-scReduceRecursor :: SharedContext -> Ident -> [Term] -> Term ->
-                    [(Ident,Term)] -> Ident -> [Term] -> IO Term
-scReduceRecursor sc d params p_ret cs_fs c args =
-  do dt <- scRequireDataType sc d
-     -- This is to sort the eliminators by DataType order
-     elims <-
-       mapM (\c' -> case lookup (ctorName c') cs_fs of
-                Just elim -> return elim
-                Nothing ->
-                  fail ("scReduceRecursor: no eliminator for constructor: "
-                        ++ show c')) $
-       dtCtors dt
-     ctor <- scRequireCtor sc c
+scReduceRecursor ::
+  SharedContext ->
+  Term {- ^ recusor term -} ->
+  CompiledRecursor Term ->
+  Ident {- ^ constructor name -} ->
+  [Term] {- ^ constructor arguments -} ->
+  IO Term
+scReduceRecursor sc rec crec c args =
+  do ctor <- scRequireCtor sc c
      -- The ctorIotaReduction field caches the result of iota reduction, which
      -- we just substitute into to perform the reduction
-     instantiateVarList sc 0 (reverse $ params ++ [p_ret] ++ elims ++ args)
-       (ctorIotaReduction ctor)
-
+     ctorIotaReduction ctor rec (fmap fst $ recursorElims crec) args
 
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form
@@ -706,7 +719,7 @@ data WHNFElim
   = ElimApp Term
   | ElimProj FieldName
   | ElimPair Bool
-  | ElimRecursor Ident [Term] Term [(Ident,Term)] [Term]
+  | ElimRecursor Term (CompiledRecursor Term) [Term]
 
 -- | Test if a term is a constructor application that should be converted to a
 -- natural number literal. Specifically, test if a term is not already a natural
@@ -744,23 +757,20 @@ scWhnf sc t0 =
     go xs                     (convertsToNat    -> Just k) = scFlatTermF sc (NatLit k) >>= go xs
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go xs                     (asRecordSelector -> Just (t, n)) = go (ElimProj n : xs) t
-    go xs                     (asPairSelector -> Just (t, i)) = go (ElimPair i : xs) t
-    go (ElimApp x : xs)       (asLambda -> Just (_, _, body))   = instantiateVar sc 0 x body >>= go xs
+    go xs                     (asPairSelector -> Just (t, i))   = go (ElimPair i : xs) t
+    go (ElimApp x : xs)       (asLambda -> Just (_, _, body))   = betaReduce xs [x] body
     go (ElimPair i : xs)      (asPairValue -> Just (a, b))      = go xs (if i then b else a)
     go (ElimProj fld : xs)    (asRecordValue -> Just elems)     = case Map.lookup fld elems of
                                                                     Just t -> go xs t
                                                                     Nothing ->
                                                                       error "scWhnf: field missing in record"
-    go (ElimRecursor d ps
-        p_ret cs_fs _ : xs)   (asCtorOrNat ->
-                               Just (c, _, args))               = (scReduceRecursor sc d ps
-                                                                   p_ret cs_fs c args) >>= go xs
+    go (ElimRecursor rec crec _ : xs)
+                              (asCtorOrNat ->
+                               Just (c, _, args))               = scReduceRecursor sc rec crec c args >>= go xs
 
     go xs                     (asGlobalDef -> Just c)           = scRequireDef sc c >>= tryDef c xs
     go xs                     (asRecursorApp ->
-                               Just (d, params, p_ret, cs_fs, ixs,
-                                     arg))                      = go (ElimRecursor d params p_ret
-                                                                      cs_fs ixs : xs) arg
+                                Just (rec, crec, ixs, arg))     = go (ElimRecursor rec crec ixs : xs) arg
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
                                                                      t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
@@ -768,10 +778,10 @@ scWhnf sc t0 =
                                                                      b' <- memo b
                                                                      t' <- scPairType sc a' b'
                                                                      foldM reapply t' xs
-    go xs                     (asRecordType -> Just elems)   = do elems' <-
-                                                                    mapM (\(i,t) -> (i,) <$> memo t) (Map.assocs elems)
-                                                                  t' <- scRecordType sc elems'
-                                                                  foldM reapply t' xs
+    go xs                     (asRecordType -> Just elems)      = do elems' <- mapM (\(i,t) -> (i,) <$> memo t)
+                                                                                    (Map.assocs elems)
+                                                                     t' <- scRecordType sc elems'
+                                                                     foldM reapply t' xs
     go xs                     (asPi -> Just (x,aty,rty))        = do aty' <- memo aty
                                                                      rty' <- memo rty
                                                                      t' <- scPi sc x aty' rty'
@@ -782,12 +792,19 @@ scWhnf sc t0 =
     go xs                     (asConstant -> Just (_,body))     = do go xs body
     go xs                     t                                 = foldM reapply t xs
 
+    betaReduce :: (?cache :: Cache IO TermIndex Term) =>
+      [WHNFElim] -> [Term] -> Term -> IO Term
+    betaReduce (ElimApp x : xs) vs (asLambda -> Just (_,_,body)) =
+      betaReduce xs (x:vs) body
+    betaReduce xs vs body =
+      instantiateVarList sc 0 vs body >>= go xs
+
     reapply :: Term -> WHNFElim -> IO Term
     reapply t (ElimApp x) = scApply sc t x
     reapply t (ElimProj i) = scRecordSelect sc t i
     reapply t (ElimPair i) = scPairSelector sc t i
-    reapply t (ElimRecursor d ps p_ret cs_fs ixs) =
-      scFlatTermF sc (RecursorApp d ps p_ret cs_fs ixs t)
+    reapply t (ElimRecursor rec _crec ixs) =
+      scFlatTermF sc (RecursorApp rec ixs t)
 
     tryDef :: (?cache :: Cache IO TermIndex Term) =>
               Ident -> [WHNFElim] -> Def -> IO Term
@@ -840,8 +857,7 @@ scConvertibleEval sc eval unfoldConst tm1 tm2 = do
               pure (&&) <*> go c ty1 ty2 <*> go c body1 body2
 
        -- final catch-all case
-       goF _c x y = return $ alphaEquiv (Unshared x) (Unshared y)
-
+       goF _c _x _y = return False
 
 -- | Test if two terms are convertible using 'scWhnf' for evaluation
 scConvertible :: SharedContext
@@ -961,8 +977,23 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         DataTypeApp dt params args -> do
           t <- lift $ scTypeOfDataType sc dt
           lift $ foldM (reducePi sc) t (params ++ args)
-        RecursorApp _ _ p_ret _ ixs arg ->
-          lift $ scApplyAll sc p_ret (ixs ++ [arg])
+        RecursorType _d _ps _motive motive_ty -> do
+          s <- sort motive_ty
+          lift $ scSort sc s
+        Recursor rec -> do
+          mty <- memo (recursorMotive rec)
+          lift $ scFlatTermF sc $
+             RecursorType (recursorDataType rec)
+                          (recursorParams rec)
+                          (recursorMotive rec)
+                          mty
+        RecursorApp rec ixs arg ->
+          do tp <- (liftIO . scWhnf sc) =<< memo rec
+             case asRecursorType tp of
+               Just (_d, _ps, motive, _motivety) ->
+                 lift $ scApplyAll sc motive (ixs ++ [arg])
+               _ -> fail "Expected recursor type in recursor application"
+
         RecordType elems ->
           do max_s <- maximum <$> mapM (sort . snd) elems
              lift $ scSort sc max_s

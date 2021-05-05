@@ -34,6 +34,7 @@ import Prelude hiding (mapM)
 import Control.Applicative ((<$>))
 #endif
 import Control.Monad (foldM, liftM)
+--import Control.Monad.IO.Class
 import Control.Monad.Fix (MonadFix(mfix))
 import Control.Monad.Identity (Identity)
 import qualified Control.Monad.State as State
@@ -90,8 +91,11 @@ data SimulatorConfig l =
 ------------------------------------------------------------
 -- Evaluation of terms
 
+type Env l = [Thunk l]
+type EnvIn m l = Env (WithM m l)
+
 -- | Meaning of an open term, parameterized by environment of bound variables
-type OpenValue l = [Thunk l] -> MValue l
+type OpenValue l = Env l -> MValue l
 
 {-# SPECIALIZE
   evalTermF :: Show (Extra l) =>
@@ -161,12 +165,40 @@ evalTermF cfg lam recEval tf env =
                                     Nothing ->
                                       pure $ VCtorApp ident (V.fromList (ps' ++ ts'))
         DataTypeApp i ps ts -> TValue . VDataType i <$> mapM recEval (ps ++ ts)
-        RecursorApp _d ps p_ret cs_fs _ixs arg ->
-          do ps_th <- mapM recEvalDelay ps
-             p_ret_th <- recEvalDelay p_ret
-             cs_fs_th <- mapM (\(c,f) -> (c,) <$> recEvalDelay f) cs_fs
-             arg_v <- recEval arg
-             evalRecursorApp (simModMap cfg) lam ps_th p_ret_th cs_fs_th arg_v
+
+        RecursorType d ps m mtp ->
+          TValue <$> (VRecursorType d <$>
+            mapM recEval ps <*>
+            recEval m <*>
+            (toTValue <$> recEval mtp))
+
+        Recursor rec ->
+          do let f (e,ety) = do v  <- recEvalDelay e
+                                ty <- toTValue <$> recEval ety
+                                pure (v,ty)
+             ps  <- traverse recEval (recursorParams rec)
+             m   <- recEval (recursorMotive rec)
+             mty <- toTValue <$> recEval (recursorMotiveTy rec)
+             es  <- traverse f (recursorElims rec)
+             pure (VRecursor (recursorDataType rec) ps m mty es)
+
+        RecursorApp rectm _ixs arg ->
+          do rec <- recEval rectm
+             case rec of
+               VRecursor _d ps _motive _motiveTy ps_fs ->
+                 do arg_v <- recEval arg
+                    case findConstructor arg_v of
+                      Nothing -> panic "evalRecursorApp: expected constructor"
+                      Just (c,all_args_vs)
+                        | Just ctor <- findCtorInMap (simModMap cfg) c
+                        , Just (elim,_elimTy) <- Map.lookup c ps_fs ->
+                           do let args = drop (length ps) $ V.toList all_args_vs
+                              lam (ctorIotaTemplate ctor) (reverse ([ready rec,elim] ++ args))
+       
+                        | otherwise -> panic ("evalRecursorApp: could not find info for constructor: " ++ show c)
+
+               _ -> panic "evalRecursorApp: expected recursor value"
+
         RecordType elem_tps ->
           TValue . VRecordType <$> traverse (traverse (fmap toTValue . recEval)) elem_tps
         RecordValue elems   ->
@@ -281,42 +313,11 @@ checkPrimitives modmap prims = do
         overridePrims = Set.toList $ Set.intersection defSet implementedPrims
 
 
--- | Evaluate a recursor application given a recursive way to evaluate terms,
--- the current 'RecursorInfo' structure, and thunks for the @p_ret@, eliminators
--- for the current inductive type, and the value being pattern-matched
-evalRecursorApp :: (VMonad l, Show (Extra l)) =>
-                   ModuleMap -> (Term -> OpenValue l) ->
-                   [Thunk l] -> Thunk l -> [(Ident, Thunk l)] -> Value l ->
-                   MValue l
-evalRecursorApp modmap lam ps p_ret cs_fs (VCtorApp c all_args)
-  | Just ctor <- findCtorInMap modmap c
-  , Just dt <- findDataTypeInMap modmap (ctorDataTypeName ctor)
-  = do elims <-
-         mapM (\c' -> case lookup (ctorName c') cs_fs of
-                  Just elim -> return elim
-                  Nothing ->
-                    panic ("evalRecursorApp: internal error: "
-                          ++ "constructor not found in its own datatype: "
-                          ++ show c')) $
-         dtCtors dt
-       let args = drop (length ps) $ V.toList all_args
-       lam (ctorIotaReduction ctor) (reverse $ ps ++ [p_ret] ++ elims ++ args)
-evalRecursorApp _ _ _ _ _ (VCtorApp c _) =
-  panic $ ("evalRecursorApp: could not find info for constructor: " ++ show c)
-evalRecursorApp modmap lam ps p_ret cs_fs (VNat 0) =
-  evalRecursorApp modmap lam ps p_ret cs_fs (VCtorApp "Prelude.Zero" V.empty)
-evalRecursorApp modmap lam ps p_ret cs_fs (VNat i) =
-  evalRecursorApp modmap lam ps p_ret cs_fs
-  (VCtorApp "Prelude.Succ" (V.singleton $ ready $ VNat $ i-1))
-
-evalRecursorApp _modmap _lam _ps _p_ret _cs_fs (VBVToNat _ _bv) =
-  panic $ "evalRecursorApp: VBVToNat!"
-
-evalRecursorApp _modmap _lam _ps _p_ret _cs_fs (VIntToNat _i) =
-  panic $ "evalRecursorApp: VIntToNat!"
-
-evalRecursorApp _ _ _ _ _ v =
-  panic $ "evalRecursorApp: non-constructor value: " ++ show v
+findConstructor :: VMonadLazy l => Value l -> Maybe (Ident, V.Vector (Thunk l))
+findConstructor (VCtorApp c args) = Just (c, args)
+findConstructor (VNat 0)          = Just ("Prelude.Zero", V.empty)
+findConstructor (VNat i)          = Just ("Prelude.Succ", V.singleton (ready (VNat (i-1))))
+findConstructor _                 = Nothing
 
 
 ----------------------------------------------------------------------
@@ -409,13 +410,13 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf []
   SimulatorConfigIn IO l ->
   IntMap (ThunkIn IO l) ->
   Term ->
-  [ThunkIn IO l] ->
+  EnvIn IO l ->
   IO (IntMap (ThunkIn IO l)) #-}
 
 -- | Precomputing the memo table for open subterms in the current context.
 mkMemoLocal :: forall l. (VMonadLazy l, Show (Extra l)) =>
                SimulatorConfig l -> IntMap (Thunk l) ->
-               Term -> [Thunk l] -> EvalM l (IntMap (Thunk l))
+               Term -> Env l -> EvalM l (IntMap (Thunk l))
 mkMemoLocal cfg memoClosed t env = go memoClosed t
   where
     go :: IntMap (Thunk l) -> Term -> EvalM l (IntMap (Thunk l))

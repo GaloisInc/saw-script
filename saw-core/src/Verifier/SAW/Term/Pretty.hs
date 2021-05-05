@@ -49,6 +49,7 @@ import Data.Foldable (Foldable)
 import qualified Data.Foldable as Fold
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
+import qualified Data.Map as Map
 import qualified Data.Vector as V
 import Numeric (showIntAtBase)
 import Prettyprinter
@@ -423,23 +424,38 @@ ppFlatTermF prec tf =
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
 
-    CtorApp c params args ->
-      ppAppList prec (annotate CtorAppStyle (ppIdent c)) <$> mapM (ppTerm' PrecArg) (params ++ args)
-    DataTypeApp dt params args ->
-      ppAppList prec (annotate DataTypeStyle (ppIdent dt)) <$> mapM (ppTerm' PrecArg) (params ++ args)
-    RecursorApp d params p_ret cs_fs ixs arg ->
+    RecursorType d params motive _motiveTy ->
       do params_pp <- mapM (ppTerm' PrecArg) params
-         p_ret_pp <- ppTerm' PrecArg p_ret
-         fs_pp <- mapM (ppTerm' PrecTerm . snd) cs_fs
-         ixs_pp <- mapM (ppTerm' PrecArg) ixs
-         arg_pp <- ppTerm' PrecArg arg
+         motive_pp <- ppTerm' PrecArg motive
+         return $
+           ppAppList prec (annotate RecursorStyle (ppIdent d <> "#recType"))
+             (params_pp ++ [motive_pp])
+
+    Recursor (CompiledRecursor d params motive _motiveTy cs_fs _) ->
+      do params_pp <- mapM (ppTerm' PrecArg) params
+         motive_pp <- ppTerm' PrecArg motive
+         fs_pp <- traverse (ppTerm' PrecTerm . fst) cs_fs
          return $
            ppAppList prec (annotate RecursorStyle (ppIdent d <> "#rec"))
-           (params_pp ++ [p_ret_pp] ++
-            [tupled $
-             zipWith (\(c,_) f_pp -> vsep [ppIdent c, "=>", f_pp])
-             cs_fs fs_pp]
-            ++ ixs_pp ++ [arg_pp])
+             (params_pp ++
+              [motive_pp
+              , tupled $
+                  [ vsep [ppIdent c, "=>", f_pp]
+                  | (c,f_pp) <- Map.toList fs_pp
+                  ]
+              ])
+
+    RecursorApp rec ixs arg ->
+      do rec_pp <- ppTerm' PrecApp rec
+         ixs_pp <- mapM (ppTerm' PrecArg) ixs
+         arg_pp <- ppTerm' PrecArg arg
+         return $ ppAppList prec rec_pp (ixs_pp ++ [arg_pp])
+
+    CtorApp c params args ->
+      ppAppList prec (annotate CtorAppStyle (ppIdent c)) <$> mapM (ppTerm' PrecArg) (params ++ args)
+
+    DataTypeApp dt params args ->
+      ppAppList prec (annotate DataTypeStyle (ppIdent dt)) <$> mapM (ppTerm' PrecArg) (params ++ args)
     RecordType alist ->
       ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
     RecordValue alist ->
