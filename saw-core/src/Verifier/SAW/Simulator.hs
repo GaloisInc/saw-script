@@ -36,7 +36,6 @@ import Control.Applicative ((<$>))
 #endif
 import Control.Monad (foldM, liftM)
 import Control.Monad.Fix (MonadFix(mfix))
-import Control.Monad.Identity (Identity)
 import qualified Control.Monad.State as State
 import Data.Foldable (foldlM)
 import qualified Data.Set as Set
@@ -55,8 +54,6 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 
 import Verifier.SAW.Simulator.Value
-
-type Id = Identity
 
 type ThunkIn m l           = Thunk (WithM m l)
 type OpenValueIn m l       = OpenValue (WithM m l)
@@ -98,14 +95,6 @@ data SimulatorConfig l =
 
 -- | Meaning of an open term, parameterized by environment of bound variables
 type OpenValue l = [Thunk l] -> MValue l
-
-{-# SPECIALIZE
-  evalTermF :: Show (Extra l) =>
-    SimulatorConfigIn Id l ->
-    (Term -> OpenValueIn Id l) ->
-    (Term -> MValueIn Id l) ->
-    TermF Term ->
-    OpenValueIn Id l #-}
 
 {-# SPECIALIZE
   evalTermF :: Show (Extra l) =>
@@ -211,14 +200,6 @@ evalTermF cfg lam recEval tf env =
 {-# SPECIALIZE evalGlobal ::
   Show (Extra l) =>
   ModuleMap ->
-  Map Ident (ValueIn Id l) ->
-  (ExtCns (TValueIn Id l) -> MValueIn Id l) ->
-  (ExtCns (TValueIn Id l) -> Maybe (MValueIn Id l)) ->
-  (NeutralTerm -> MValueIn Id l) ->
-  Id (SimulatorConfigIn Id l) #-}
-{-# SPECIALIZE evalGlobal ::
-  Show (Extra l) =>
-  ModuleMap ->
   Map Ident (ValueIn IO l) ->
   (ExtCns (TValueIn IO l) -> MValueIn IO l) ->
   (ExtCns (TValueIn IO l) -> Maybe (MValueIn IO l)) ->
@@ -233,14 +214,6 @@ evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
 evalGlobal modmap prims extcns uninterpreted neutral =
   evalGlobal' modmap prims (const extcns) (const uninterpreted) neutral
 
-{-# SPECIALIZE evalGlobal' ::
-  Show (Extra l) =>
-  ModuleMap ->
-  Map Ident (ValueIn Id l) ->
-  (TermF Term -> ExtCns (TValueIn Id l) -> MValueIn Id l) ->
-  (TermF Term -> ExtCns (TValueIn Id l) -> Maybe (MValueIn Id l)) ->
-  (NeutralTerm -> MValueIn Id l) ->
-  Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
   ModuleMap ->
@@ -360,8 +333,6 @@ evalRecursorApp _modmap _lam _ps _p_ret _cs_fs _tm = return Nothing
 -- binder.
 
 {-# SPECIALIZE evalSharedTerm ::
-  Show (Extra l) => SimulatorConfigIn Id l -> Term -> MValueIn Id l #-}
-{-# SPECIALIZE evalSharedTerm ::
   Show (Extra l) => SimulatorConfigIn IO l -> Term -> MValueIn IO l #-}
 
 -- | Evaluator for shared terms.
@@ -371,9 +342,6 @@ evalSharedTerm cfg t = do
   memoClosed <- mkMemoClosed cfg t
   evalOpen cfg memoClosed t []
 
-{-# SPECIALIZE mkMemoClosed ::
-  Show (Extra l) =>
-  SimulatorConfigIn Id l -> Term -> Id (IntMap (ThunkIn Id l)) #-}
 {-# SPECIALIZE mkMemoClosed ::
   Show (Extra l) =>
   SimulatorConfigIn IO l -> Term -> IO (IntMap (ThunkIn IO l)) #-}
@@ -401,12 +369,6 @@ mkMemoClosed cfg t =
 
 {-# SPECIALIZE evalClosedTermF ::
   Show (Extra l) =>
-  SimulatorConfigIn Id l ->
-  IntMap (ThunkIn Id l) ->
-  TermF Term ->
-  MValueIn Id l #-}
-{-# SPECIALIZE evalClosedTermF ::
-  Show (Extra l) =>
   SimulatorConfigIn IO l ->
   IntMap (ThunkIn IO l) ->
   TermF Term ->
@@ -426,13 +388,6 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf []
         Just x -> force x
         Nothing -> panic "evalClosedTermF: internal error"
 
-{-# SPECIALIZE mkMemoLocal ::
-  Show (Extra l) =>
-  SimulatorConfigIn Id l ->
-  IntMap (ThunkIn Id l) ->
-  Term ->
-  [ThunkIn Id l] ->
-  Id (IntMap (ThunkIn Id l)) #-}
 {-# SPECIALIZE mkMemoLocal ::
   Show (Extra l) =>
   SimulatorConfigIn IO l ->
@@ -470,13 +425,6 @@ mkMemoLocal cfg memoClosed t env = go memoClosed t
 
 {-# SPECIALIZE evalLocalTermF ::
   Show (Extra l) =>
-  SimulatorConfigIn Id l ->
-  IntMap (ThunkIn Id l) ->
-  IntMap (ThunkIn Id l) ->
-  TermF Term ->
-  OpenValueIn Id l #-}
-{-# SPECIALIZE evalLocalTermF ::
-  Show (Extra l) =>
   SimulatorConfigIn IO l ->
   IntMap (ThunkIn IO l) ->
   IntMap (ThunkIn IO l) ->
@@ -495,13 +443,6 @@ evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam recEval tf0 
       case IMap.lookup i memoLocal of
         Just x -> force x
         Nothing -> panic "evalLocalTermF: internal error"
-
-{-# SPECIALIZE evalOpen ::
-  Show (Extra l) =>
-  SimulatorConfigIn Id l ->
-  IntMap (ThunkIn Id l) ->
-  Term ->
-  OpenValueIn Id l #-}
 
 {-# SPECIALIZE evalOpen ::
   Show (Extra l) =>

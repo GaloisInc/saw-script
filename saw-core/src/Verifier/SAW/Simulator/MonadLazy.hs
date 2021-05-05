@@ -14,7 +14,7 @@ import Data.IORef
 
 newtype Lazy m a = Lazy (m a)
 
-class Monad m => MonadLazy m where
+class MonadIO m => MonadLazy m where
   delay :: m a -> m (Lazy m a)
 
 force :: Lazy m a -> m a
@@ -22,9 +22,6 @@ force (Lazy m) = m
 
 ready :: Monad m => a -> Lazy m a
 ready x = Lazy (return x)
-
-instance MonadLazy Identity where
-  delay m = return (Lazy m)
 
 instance MonadLazy IO where
   delay = delayIO
