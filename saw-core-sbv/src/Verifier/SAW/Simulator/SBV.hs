@@ -667,6 +667,7 @@ data Labeler
    = BoolLabel String
    | IntegerLabel String
    | WordLabel String
+   | ZeroWidthWordLabel
    | VecLabel (Vector Labeler)
    | TupleLabel (Vector Labeler)
    | RecLabel (Map FieldName Labeler)
@@ -684,7 +685,7 @@ newVars FOTInt = nextId <&> \s-> (IntegerLabel s, vInteger <$> existsSInteger s)
 newVars (FOTIntMod n) = nextId <&> \s-> (IntegerLabel s, VIntMod n <$> existsSInteger s)
 newVars (FOTVec n FOTBit) =
   if n == 0
-    then nextId <&> \s-> (WordLabel s, return (vWord (literalSWord 0 0)))
+    then pure (ZeroWidthWordLabel, pure (vWord (literalSWord 0 0)))
     else nextId <&> \s-> (WordLabel s, vWord <$> existsSWord s (fromIntegral n))
 newVars (FOTVec n tp) = do
   (labels, vals) <- V.unzip <$> V.replicateM (fromIntegral n) (newVars tp)
@@ -717,6 +718,8 @@ getLabels ls d args
 
   getLabel (WordLabel s)    = FOVWord (cvKind cv) (cvToInteger cv)
     where cv = d Map.! s
+
+  getLabel ZeroWidthWordLabel = FOVWord 0 0
 
   getLabel (VecLabel ns)
     | V.null ns = error "getLabel of empty vector"
