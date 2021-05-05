@@ -614,9 +614,13 @@ allowedElimSort dt s =
 -- | Build a 'Ctor' from a 'CtorArgStruct' and a list of the other constructor
 -- names of the 'DataType'. Note that we cannot look up the latter information,
 -- as 'scBuildCtor' is called during construction of the 'DataType'.
-scBuildCtor :: SharedContext -> Ident -> Ident -> [Ident] ->
-               CtorArgStruct d params ixs ->
-               IO Ctor
+scBuildCtor ::
+  SharedContext ->
+  Ident {- ^ data type name -} ->
+  Ident {- ^ constructor name -} ->
+  [Ident] {- ^ list of all construtor names -} ->
+  CtorArgStruct d params ixs {- ^ constructor formal arguments -} ->
+  IO Ctor
 scBuildCtor sc d c ctor_names arg_struct =
   do
     -- Step 1: build the types for the constructor and its eliminator
@@ -631,6 +635,7 @@ scBuildCtor sc d c ctor_names arg_struct =
             CtorArgStruct {..} -> bindingsLength ctorArgs
     let total_vars_minus_1 = num_params + length ctor_names + num_args
     vars <- reverse <$> mapM (scLocalVar sc) [0 .. total_vars_minus_1]
+
     -- Step 3: pass these variables to ctxReduceRecursor to build the
     -- ctorIotaReduction field
     iota_red <-
@@ -638,12 +643,25 @@ scBuildCtor sc d c ctor_names arg_struct =
       ctxReduceRecursor d (take num_params vars) (vars !! num_params)
       (zip ctor_names (drop (num_params + 1) vars)) c
       (drop (num_params + 1 + length ctor_names) vars) arg_struct
+
+    -- Step 4: build the API function that shuffles the terms around in the
+    -- correct way.
+    let iota_fun params p_ret cs_fs args =
+          do let fnd cnm = case lookup cnm cs_fs of
+                             Just e  -> e
+                             Nothing -> panic "ctorIotaReduction"
+                                         ["no eliminator for constructor", show cnm]
+             let elims = map fnd ctor_names
+             instantiateVarList sc 0 (reverse $ params ++ [p_ret] ++ elims ++ args) iota_red
+
     -- Finally, return the required Ctor record
     return $ Ctor { ctorName = c, ctorArgStruct = arg_struct,
                     ctorDataTypeName = d, ctorType = tp,
                     ctorElimTypeFun =
                       (\ps p_ret -> scShCtxM sc $ elim_tp_fun ps p_ret),
-                    ctorIotaReduction = iota_red }
+                    ctorIotaTemplate  = iota_red,
+                    ctorIotaReduction = iota_fun
+                  }
 
 -- | Given a datatype @d@, parameters @p1,..,pn@ for @d@, and a "motive"
 -- function @p_ret@ of type
@@ -684,21 +702,14 @@ scRecursorRetTypeType sc dt params s =
 -- 'ctorIotaReduction' field for more details.
 scReduceRecursor :: SharedContext -> Ident -> [Term] -> Term ->
                     [(Ident,Term)] -> Ident -> [Term] -> IO Term
-scReduceRecursor sc d params p_ret cs_fs c args =
-  do dt <- scRequireDataType sc d
-     -- This is to sort the eliminators by DataType order
-     elims <-
-       mapM (\c' -> case lookup (ctorName c') cs_fs of
-                Just elim -> return elim
-                Nothing ->
-                  fail ("scReduceRecursor: no eliminator for constructor: "
-                        ++ show c')) $
-       dtCtors dt
-     ctor <- scRequireCtor sc c
+scReduceRecursor sc _d params p_ret cs_fs c args =
+  do ctor <- scRequireCtor sc c
      -- The ctorIotaReduction field caches the result of iota reduction, which
      -- we just substitute into to perform the reduction
-     instantiateVarList sc 0 (reverse $ params ++ [p_ret] ++ elims ++ args)
-       (ctorIotaReduction ctor)
+     ctorIotaReduction ctor params p_ret cs_fs args
+
+--     instantiateVarList sc 0 (reverse $ params ++ [p_ret] ++ elims ++ args)
+--       (ctorIotaReduction ctor)
 
 
 --------------------------------------------------------------------------------

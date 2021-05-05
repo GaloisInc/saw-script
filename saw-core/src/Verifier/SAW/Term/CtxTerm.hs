@@ -680,7 +680,8 @@ data CtorArg d ixs ctx a where
   -- parameters of @d@ (not given here), and the @ei@ are the type indices of
   -- @d@.
   RecursiveArg ::
-    Bindings CtxTerm ctx zs -> CtxTerms (CtxInvApp ctx zs) ixs ->
+    Bindings CtxTerm ctx zs ->
+    CtxTerms (CtxInvApp ctx zs) ixs ->
     CtorArg d ixs ctx (Typ (Arrows zs d))
 
 -- | A structure that defines the parameters, arguments, and return type indices
@@ -949,9 +950,16 @@ mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
 -- where @[ps/params,xs/args]@ substitutes the concrete parameters @pi@ for the
 -- parameter variables of the inductive type and the earlier constructor
 -- arguments @xs@ for the remaining free variables.
-ctxReduceRecursor :: MonadTerm m => Ident -> [Term] -> Term ->
-                     [(Ident,Term)] -> Ident -> [Term] ->
-                     CtorArgStruct d params ixs -> m Term
+ctxReduceRecursor ::
+  MonadTerm m =>
+  Ident  {- ^ data type name -} ->
+  [Term] {- ^ data type parameters -} ->
+  Term   {- ^ elimination motive -} ->
+  [(Ident,Term)] {- ^ constructor eliminator functions -} ->
+  Ident  {- ^ constructor name  -} ->
+  [Term] {- ^ constructor actual arguments -}  ->
+  CtorArgStruct d params ixs {- ^ constructor formal argument descriptor -} ->
+  m Term
 ctxReduceRecursor d params p_ret cs_fs c c_args (CtorArgStruct{..}) =
   (case (invertCtxTerms <$> ctxTermsForBindings ctorParams params,
          ctxTermsForBindings ctorArgs c_args,
