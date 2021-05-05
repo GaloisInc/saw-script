@@ -57,9 +57,9 @@ vcCounterexample sc opts (EqualityCheck nm impNode specNode) evalFn =
      let lschema = (C.Forall [] [] lct)
          sschema = (C.Forall [] [] sct)
      unless (lschema == sschema) $ fail "Mismatched schemas in counterexample"
-     let lv = exportValueWithSchema lschema ln
-         sv = exportValueWithSchema sschema sn
-         opts' = SV.cryptolPPOpts opts
+     lv <- exportValueWithSchema lschema ln
+     sv <- exportValueWithSchema sschema sn
+     let opts' = SV.cryptolPPOpts opts
      -- Grr. Different pretty-printers.
      lv_doc <- CV.runEval mempty (CV.ppValue CV.Concrete opts' lv)
      sv_doc <- CV.runEval mempty (CV.ppValue CV.Concrete opts' sv)

@@ -197,9 +197,10 @@ w4_extract_uninterp sc unintSet tm =
   do tp <- scTypeOf sc tm
      modmap <- scGetModuleMap sc
 
-     fot <- case Sim.asFirstOrderTypeValue (Sim.evalSharedTerm modmap mempty mempty tp) of
-              Just fot -> pure fot
-              Nothing  -> fail (unwords ["extract_uninterp, expected first-order type", showTerm tp])
+     fot <- do v <- Sim.evalSharedTerm modmap mempty mempty tp
+               case Sim.asFirstOrderTypeValue v of
+                 Just fot -> pure fot
+                 Nothing  -> fail (unwords ["extract_uninterp, expected first-order type", showTerm tp])
 
      sym <- newSAWCoreBackend sc
      st <- sawCoreState sym

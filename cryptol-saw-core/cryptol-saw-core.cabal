@@ -39,6 +39,7 @@ library
     saw-core-what4,
     what4,
     sbv,
+    transformers,
     vector,
     text,
     executable-path,

@@ -1076,7 +1076,7 @@ cexEvalFn sc args tm = do
 
   tm' <- scInstantiateExt sc argMap tm
   modmap <- scGetModuleMap sc
-  return $ Concrete.evalSharedTerm modmap mempty mempty tm'
+  Concrete.evalSharedTerm modmap mempty mempty tm'
 
 toValueCase :: (SV.FromValue b) =>
                (b -> SV.Value -> SV.Value -> TopLevel SV.Value)

@@ -252,8 +252,8 @@ resolveBitvectorTerm sym w tm =
              -- concretely evaluate if it is a closed term
              [] ->
                do modmap <- scGetModuleMap sc
-                  let v = Concrete.evalSharedTerm modmap mempty mempty tm
-                  pure (Just (Prim.unsigned (Concrete.toWord v)))
+                  bv <- Concrete.toWord =<< Concrete.evalSharedTerm modmap mempty mempty tm
+                  pure (Just (Prim.unsigned bv))
              _ -> return Nothing
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
@@ -267,7 +267,7 @@ resolveBoolTerm sym tm =
              -- concretely evaluate if it is a closed term
              [] ->
                do modmap <- scGetModuleMap sc
-                  let v = Concrete.evalSharedTerm modmap mempty mempty tm
+                  v <- Concrete.evalSharedTerm modmap mempty mempty tm
                   pure (Just (Concrete.toBool v))
              _ -> return Nothing
      case mx of

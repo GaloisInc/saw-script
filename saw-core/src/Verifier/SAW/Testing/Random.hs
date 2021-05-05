@@ -80,7 +80,7 @@ execTest sc mmap vars tm =
              do argMap0 <- traverse (scFirstOrderValue sc) testVec
                 let argMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) <- Map.toList argMap0 ]
                 scInstantiateExt sc argMap tm
-     case evalSharedTerm mmap Map.empty Map.empty tm' of
+     liftIO (evalSharedTerm mmap Map.empty Map.empty tm') >>= \case
        -- satisfaible, return counterexample
        VBool True  -> return (Just (Map.toList testVec))
        -- not satisfied by this test vector

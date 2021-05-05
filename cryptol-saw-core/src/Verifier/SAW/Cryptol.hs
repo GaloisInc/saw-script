@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -16,13 +17,14 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Cryptol where
 
-import Control.Monad (foldM, join, unless)
+import Control.Monad (foldM, join, unless, mzero, zipWithM)
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Maybe
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
 import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe (fromMaybe)
-import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -1553,7 +1555,7 @@ pIsNeq ty = case C.tNoUser ty of
 --------------------------------------------------------------------------------
 -- Utilities
 
-asCryptolTypeValue :: SC.TValue SC.Concrete -> Maybe C.Type
+asCryptolTypeValue :: SC.TValue SC.Concrete -> MaybeT IO C.Type
 asCryptolTypeValue v =
   case v of
     SC.VBoolType -> return C.tBit
@@ -1569,7 +1571,7 @@ asCryptolTypeValue v =
     SC.VDataType "Prelude.Stream" [v1] ->
       case v1 of
         SC.TValue tv -> C.tSeq C.tInf <$> asCryptolTypeValue tv
-        _ -> Nothing
+        _ -> mzero
     SC.VUnitType -> return (C.tTuple [])
     SC.VPairType v1 v2 -> do
       t1 <- asCryptolTypeValue v1
@@ -1593,19 +1595,24 @@ asCryptolTypeValue v =
           let msg = unwords ["asCryptolTypeValue: can't infer a Cryptol type"
                             ,"for a dependent SAW-Core type."
                             ]
-          let v2 = SC.runIdentity (f (error msg))
+          v2 <- liftIO (f (error msg))
           t1 <- asCryptolTypeValue v1
           t2 <- asCryptolTypeValue v2
           return (C.tFun t1 t2)
-    _ -> Nothing
+    _ -> mzero
 
 -- | Deprecated.
 scCryptolType :: SharedContext -> Term -> IO C.Type
 scCryptolType sc t =
   do modmap <- scGetModuleMap sc
-     case SC.evalSharedTerm modmap Map.empty Map.empty t of
-       SC.TValue (asCryptolTypeValue -> Just ty) -> return ty
-       _ -> panic "scCryptolType" ["scCryptolType: unsupported type " ++ showTerm t]
+     tm <- SC.evalSharedTerm modmap Map.empty Map.empty t
+     let err = panic "scCryptolType" ["scCryptolType: unsupported type " ++ showTerm t]
+     case tm of
+       SC.TValue tv ->
+         runMaybeT (asCryptolTypeValue tv) >>= \case
+           Just ty -> return ty
+           Nothing -> err
+       _ -> err
 
 -- | Deprecated.
 scCryptolEq :: SharedContext -> Term -> Term -> IO Term
@@ -1639,22 +1646,22 @@ scCryptolEq sc x y =
 
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.
-exportValueWithSchema :: C.Schema -> SC.CValue -> V.Value
+exportValueWithSchema :: C.Schema -> SC.CValue -> IO V.Value
 exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalValType mempty ty) v
-exportValueWithSchema _ _ = V.VPoly mempty (error "exportValueWithSchema")
+exportValueWithSchema _ _ = pure (V.VPoly mempty (error "exportValueWithSchema"))
 -- TODO: proper support for polymorphic values
 
-exportValue :: TV.TValue -> SC.CValue -> V.Value
+exportValue :: TV.TValue -> SC.CValue -> IO V.Value
 exportValue ty v = case ty of
 
   TV.TVBit ->
-    V.VBit (SC.toBool v)
+    pure (V.VBit (SC.toBool v))
 
   TV.TVInteger ->
-    V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
+    pure (V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer"))
 
   TV.TVIntMod _modulus ->
-    V.VInteger (case v of SC.VIntMod _ x -> x; _ -> error "exportValue: expected intmod")
+    pure (V.VInteger (case v of SC.VIntMod _ x -> x; _ -> error "exportValue: expected intmod"))
 
   TV.TVArray{} -> error $ "exportValue: (on array type " ++ show ty ++ ")"
 
@@ -1664,30 +1671,30 @@ exportValue ty v = case ty of
 
   TV.TVSeq _ e ->
     case v of
-      SC.VWord w -> V.word V.Concrete (toInteger (width w)) (unsigned w)
+      SC.VWord w -> pure (V.word V.Concrete (toInteger (width w)) (unsigned w))
       SC.VVector xs
-        | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) (V.ready (V.LargeBitsVal (fromIntegral (Vector.length xs))
-                            (V.finiteSeqMap . map (V.ready . V.VBit . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)))
-        | otherwise   -> V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap $
-                            map (V.ready . exportValue e . SC.runIdentity . force) $ Vector.toList xs
+        | TV.isTBit e -> pure $ V.VWord (toInteger (Vector.length xs)) (V.ready (V.LargeBitsVal (fromIntegral (Vector.length xs))
+                            (V.finiteSeqMap . map (\x -> V.VBit . SC.toBool <$> liftIO (force x)) $ Fold.toList xs)))
+        | otherwise   -> pure $ V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap $
+                            map (\x -> liftIO (exportValue e =<< force x)) $ Vector.toList xs
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
   -- infinite streams
   TV.TVStream e ->
     case v of
-      SC.VExtra (SC.CStream trie) -> V.VStream (V.IndexSeqMap $ \i -> V.ready $ exportValue e (IntTrie.apply trie i))
+      SC.VExtra st -> pure $ V.VStream (V.IndexSeqMap $ \i -> liftIO (exportValue e =<< SC.lookupCExtra st (fromInteger i)))
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
   -- tuples
-  TV.TVTuple etys -> V.VTuple (exportTupleValue etys v)
+  TV.TVTuple etys -> V.VTuple <$> exportTupleValue etys v
 
   -- records
   TV.TVRec fields ->
-      V.VRecord (C.recordFromFieldsWithDisplay (C.displayOrder fields) $ exportRecordValue (C.canonicalFields fields) v)
+      V.VRecord . C.recordFromFieldsWithDisplay (C.displayOrder fields) <$> exportRecordValue (C.canonicalFields fields) v
 
   -- functions
   TV.TVFun _aty _bty ->
-    V.VFun mempty (error "exportValue: TODO functions")
+    pure $ V.VFun mempty (error "exportValue: TODO functions")
 
   -- abstract types
   TV.TVAbstract{} ->
@@ -1698,29 +1705,39 @@ exportValue ty v = case ty of
     exportValue (TV.TVRec fields) v
 
 
-exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
+exportTupleValue :: [TV.TValue] -> SC.CValue -> IO [V.Eval V.Value]
 exportTupleValue tys v =
   case (tys, v) of
-    ([]    , SC.VUnit    ) -> []
-    ([t]   , _           ) -> [V.ready $ exportValue t v]
-    (t : ts, SC.VPair x y) -> (V.ready $ exportValue t (run x)) : exportTupleValue ts (run y)
-    _                      -> error $ "exportValue: expected tuple"
-  where
-    run = SC.runIdentity . force
+    ([]    , SC.VUnit    ) -> pure []
+    ([t]   , _           ) ->
+       do v' <- exportValue t v
+          pure [V.ready v']
+    (t : ts, SC.VPair x y) ->
+       do v1 <- exportValue t =<< force x
+          v2 <- exportTupleValue ts =<< force y
+          pure (V.ready v1:v2)
+    _ -> error $ "exportValue: expected tuple"
 
-exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.Value)]
+exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> IO [(C.Ident, V.Eval V.Value)]
 exportRecordValue fields v =
   case (fields, v) of
-    ([]         , SC.VUnit    ) -> []
-    ([(n, t)]   , _           ) -> [(n, V.ready $ exportValue t v)]
+    ([]         , SC.VUnit    ) -> pure []
+
+    ([(n, t)]   , _           ) ->
+       do v' <- exportValue t v
+          pure [(n,V.ready v')]
+
     ((n, t) : ts, SC.VPair x y) ->
-      (n, V.ready $ exportValue t (run x)) : exportRecordValue ts (run y)
+       do v1 <- exportValue t =<< force x
+          v2 <- exportRecordValue ts =<< force y
+          pure ((n,V.ready v1):v2)
+
     (_, SC.VRecordValue (alistAllFields
                          (map (C.identText . fst) fields) -> Just ths)) ->
-      zipWith (\(n,t) x -> (n, V.ready $ exportValue t (run x))) fields ths
-    _                              -> error $ "exportValue: expected record"
-  where
-    run = SC.runIdentity . force
+      zipWithM (\(n,t) x -> do v' <- exportValue t =<< force x; pure (n,V.ready v'))
+         fields ths
+
+    _  -> error $ "exportValue: expected record"
 
 fvAsBool :: FirstOrderValue -> Bool
 fvAsBool (FOVBit b) = b

@@ -121,7 +121,7 @@ termToProp :: SharedContext -> Term -> IO Prop
 termToProp sc tm =
    do mmap <- scGetModuleMap sc
       ty <- scTypeOf sc tm
-      case evalSharedTerm mmap mempty mempty ty of
+      evalSharedTerm mmap mempty mempty ty >>= \case
         TValue (VSort s) | s == propSort -> return (Prop tm)
         _ -> fail $ unlines [ "termToProp: Term is not a proposition", showTerm tm, showTerm ty ]
 
@@ -133,7 +133,7 @@ boolToProp :: SharedContext -> [ExtCns Term] -> Term -> IO Prop
 boolToProp sc vars tm =
   do mmap <- scGetModuleMap sc
      ty <- scTypeOf sc tm
-     case evalSharedTerm mmap mempty mempty ty of
+     evalSharedTerm mmap mempty mempty ty >>= \case
        TValue VBoolType ->
          do p0 <- scEqTrue sc tm
             Prop <$> scGeneralizeExts sc vars p0
@@ -712,18 +712,18 @@ predicateToSATQuery sc unintSet tm0 =
               }
   where
     evalFOT mmap t =
-      asFirstOrderTypeValue (evalSharedTerm mmap mempty mempty t)
+      asFirstOrderTypeValue <$> evalSharedTerm mmap mempty mempty t
 
     filterFirstOrderVars _ fovars absvars [] = pure (fovars, absvars)
     filterFirstOrderVars mmap fovars absvars (e:es) =
-      case evalFOT mmap (ecType e) of
+      evalFOT mmap (ecType e) >>= \case
         Nothing  -> filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es
         Just fot -> filterFirstOrderVars mmap (Map.insert e fot fovars) absvars es
 
     processTerm mmap vars tm =
       case asLambda tm of
         Just (lnm,tp,body) ->
-          case evalFOT mmap tp of
+          evalFOT mmap tp >>= \case
             Nothing -> fail ("predicateToSATQuery: expected first order type: " ++ showTerm tp)
             Just fot ->
               do ec  <- scFreshEC sc (Text.unpack lnm) tp
@@ -758,11 +758,11 @@ propToSATQuery sc unintSet prop =
 
   where
     evalFOT mmap t =
-      asFirstOrderTypeValue (evalSharedTerm mmap mempty mempty t)
+      asFirstOrderTypeValue <$> evalSharedTerm mmap mempty mempty t
 
     filterFirstOrderVars _ fovars absvars [] = pure (fovars, absvars)
     filterFirstOrderVars mmap fovars absvars (e:es) =
-      case evalFOT mmap (ecType e) of
+      evalFOT mmap (ecType e) >>= \case
          Nothing  -> filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es
          Just fot -> filterFirstOrderVars mmap (Map.insert e fot fovars) absvars es
 
@@ -776,7 +776,7 @@ propToSATQuery sc unintSet prop =
             -- TODO? Allow universal hypotheses...
 
           | otherwise ->
-              case evalFOT mmap tp of
+              evalFOT mmap tp >>= \case
                 Nothing -> fail ("propToSATQuery: expected first order type: " ++ showTerm tp)
                 Just fot ->
                   do ec  <- scFreshEC sc (Text.unpack lnm) tp

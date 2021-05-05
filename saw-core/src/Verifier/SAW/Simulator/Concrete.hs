@@ -20,14 +20,13 @@ module Verifier.SAW.Simulator.Concrete
        , CExtra(..)
        , toBool
        , toWord
-       , runIdentity
+       , lookupCExtra
        ) where
 
-import Control.Monad.Identity
-import Data.IntTrie (IntTrie)
-import qualified Data.IntTrie as IntTrie
+import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Numeric.Natural
 
 import Verifier.SAW.Prim (BitVector(..), signed, bv, bvNeg)
 import qualified Verifier.SAW.Prim as Prim
@@ -40,9 +39,8 @@ import Verifier.SAW.SharedTerm
 ------------------------------------------------------------
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: ModuleMap -> Map Ident CValue -> Map VarIndex CValue -> Term -> CValue
-evalSharedTerm m addlPrims ecVals t =
-  runIdentity $ do
+evalSharedTerm :: ModuleMap -> Map Ident CValue -> Map VarIndex CValue -> Term -> IO CValue
+evalSharedTerm m addlPrims ecVals t = do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns (const Nothing) neutral
     Sim.evalSharedTerm cfg t
   where
@@ -57,7 +55,7 @@ evalSharedTerm m addlPrims ecVals t =
 
 data Concrete
 
-type instance EvalM Concrete = Identity
+type instance EvalM Concrete = IO
 type instance VBool Concrete = Bool
 type instance VWord Concrete = BitVector
 type instance VInt  Concrete = Integer
@@ -66,11 +64,11 @@ type instance Extra Concrete = CExtra
 
 type CValue = Value Concrete -- (WithM Identity Concrete)
 
-data CExtra
-  = CStream (IntTrie CValue)
+data CExtra =
+  CStream (Natural -> IO CValue) (IORef (Map Natural CValue))
 
 instance Show CExtra where
-  show (CStream _) = "<stream>"
+  show CStream{} = "<stream>"
 
 toBool :: CValue -> Bool
 toBool (VBool b) = b
@@ -79,20 +77,13 @@ toBool x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toBool", show x]
 vWord :: BitVector -> CValue
 vWord x = VWord x
 
-toWord :: CValue -> BitVector
-toWord (VWord x) = x
-toWord (VVector vv) = Prim.packBitVector (fmap (toBool . runIdentity . force) vv)
+toWord :: CValue -> IO BitVector
+toWord (VWord x) = pure x
+toWord (VVector vv) = Prim.packBitVector <$> traverse (\x -> toBool <$> force x) vv
 toWord x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toWord", show x]
 
-vStream :: IntTrie CValue -> CValue
-vStream x = VExtra (CStream x)
-
-toStream :: CValue -> IntTrie CValue
-toStream (VExtra (CStream x)) = x
-toStream x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toStream", show x]
-
 wordFun :: (BitVector -> CValue) -> CValue
-wordFun f = pureFun (\x -> f (toWord x))
+wordFun f = strictFun (\x -> f <$> toWord x)
 
 -- | op : (n : Nat) -> Vec n Bool -> Nat -> Vec n Bool
 bvShiftOp :: (BitVector -> Int -> BitVector) -> CValue
@@ -115,7 +106,7 @@ pure2 f x y = pure (f x y)
 pure3 :: Applicative f => (a -> b -> c -> d) -> a -> b -> c -> f d
 pure3 f x y z = pure (f x y z)
 
-divOp :: (a -> b -> Maybe c) -> a -> b -> Identity c
+divOp :: (a -> b -> Maybe c) -> a -> b -> IO c
 divOp f x y = maybe Prim.divideByZero pure (f x y)
 
 ite :: Bool -> a -> a -> a
@@ -298,12 +289,29 @@ intModUnOp f =
 
 ------------------------------------------------------------
 
+
+lookupCExtra :: CExtra -> Natural -> IO CValue
+lookupCExtra (CStream f r) i =
+  do m <- readIORef r
+     case Map.lookup i m of
+       Just v -> pure v
+       Nothing ->
+         do v <- f i
+            modifyIORef' r (Map.insert i v)
+            pure v
+
+lookupStream :: CValue -> Natural -> IO CValue
+lookupStream (VExtra ex) n = lookupCExtra ex n
+lookupStream _ _ = Prims.panic "Concrete.lookupStream" ["Expected stream value" :: String]
+
 -- MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
 mkStreamOp :: CValue
 mkStreamOp =
   constFun $
-  pureFun $ \f ->
-  vStream (fmap (\n -> runIdentity (apply f (ready (VNat n)))) IntTrie.identity)
+  strictFun $ \f ->
+    do r <- newIORef mempty
+       let fn n = apply f (ready (VNat n))
+       pure (VExtra (CStream fn r))
 
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: CValue
@@ -311,8 +319,8 @@ streamGetOp =
   constFun $
   pureFun $ \xs ->
   strictFun $ \case
-    VNat n -> return $ IntTrie.apply (toStream xs) (toInteger n)
-    VIntToNat (VInt i) -> return $ IntTrie.apply (toStream xs) i
-    VBVToNat _ w -> return $ IntTrie.apply (toStream xs) (unsigned (toWord w))
+    VNat n -> lookupStream xs n
+    VIntToNat (VInt i) -> lookupStream xs (fromInteger (max 0 i))
+    VBVToNat _ w -> lookupStream xs . fromInteger . unsigned =<< toWord w
     n -> Prims.panic "Verifier.SAW.Simulator.Concrete.streamGetOp"
                ["Expected Nat value", show n]

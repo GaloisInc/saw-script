@@ -335,12 +335,12 @@ tupleLookupValue _ _ = error "tupleLookupValue"
 
 evaluate :: SharedContext -> Term -> IO Concrete.CValue
 evaluate sc t =
-  (\modmap -> Concrete.evalSharedTerm modmap mempty mempty t) <$>
-  scGetModuleMap sc
+  do modmap <- scGetModuleMap sc
+     Concrete.evalSharedTerm modmap mempty mempty t
 
 evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
 evaluateTypedTerm sc (TypedTerm schema trm) =
-  exportValueWithSchema schema <$> evaluate sc trm
+  exportValueWithSchema schema =<< evaluate sc trm
 
 applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x
