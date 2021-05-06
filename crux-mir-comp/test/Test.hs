@@ -16,6 +16,7 @@ import           System.FilePath
 import           System.IO (IOMode(..), Handle, withFile, hClose, hGetContents, hGetLine, openFile)
 import           System.IO.Temp (withSystemTempFile)
 
+import           System.Environment (setEnv)
 import qualified System.Process as Proc
 
 import           Test.Tasty (defaultMain, testGroup, TestTree)
@@ -90,6 +91,7 @@ runCrux rustFile outHandle mode = do
                    Mir.defaultMirOptions { Mir.printResultOnly = (mode == RcmConcrete),
                                            Mir.defaultRlibsDir = "../deps/crucible/crux-mir/rlibs" })
     let ?outputConfig = Crux.OutputConfig False outHandle outHandle quiet
+    setEnv "CRYPTOLPATH" "."
     _exitCode <- Mir.runTestsWithExtraOverrides overrides options
     return ()
   where

@@ -1,7 +1,7 @@
 extern crate crucible;
 use crucible::*;
 
-const PATH: &str = "test/symb_eval/cryptol/basic.cry";
+const PATH: &str = "test::symb_eval::cryptol::basic";
 
 #[crux_test]
 fn test() {

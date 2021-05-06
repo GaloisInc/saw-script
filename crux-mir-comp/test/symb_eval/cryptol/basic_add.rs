@@ -2,7 +2,7 @@ extern crate crucible;
 use crucible::*;
 
 cryptol! {
-    path "test/symb_eval/cryptol/basic.cry";
+    path "test::symb_eval::cryptol::basic";
 
     fn add_byte(x: u8, y: u8) -> u8 = "addByte";
 }

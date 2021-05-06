@@ -1,3 +1,5 @@
+module test::symb_eval::cryptol::basic where
+
 addByte : [8] -> [8] -> [8]
 addByte x y = x + y
 
