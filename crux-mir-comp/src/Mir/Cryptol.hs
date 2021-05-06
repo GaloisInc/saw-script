@@ -282,15 +282,13 @@ exprToTerm :: forall sym p t st fs tp rtp a r.
     IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
     W4.Expr t tp ->
     OverrideSim (p sym) sym MIR rtp a r SAW.Term
-exprToTerm sym _sc scs visitCache w4VarMapRef val = do
-    visitExprVars visitCache val $ \var -> do
-        let expr = W4.BoundVarExpr var
-        term <- liftIO $ SAW.toSC sym scs expr
-        ec <- case SAW.asExtCns term of
-            Just ec -> return ec
-            Nothing -> error "eval on BoundVarExpr produced non-ExtCns?"
-        liftIO $ modifyIORef w4VarMapRef $ Map.insert (SAW.ecVarIndex ec) (Some expr)
-    liftIO $ SAW.toSC sym scs val
+exprToTerm sym sc scs visitCache w4VarMapRef val = do
+    liftIO $ do
+        ty <- SAW.baseSCType sym sc (W4.exprType val)
+        ec <- SAW.scFreshEC sc "w4expr" ty
+        modifyIORef w4VarMapRef $ Map.insert (SAW.ecVarIndex ec) (Some val)
+        term <- SAW.scExtCns sc ec
+        return term
 
 regToTerm :: forall sym p t st fs tp rtp a r.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
