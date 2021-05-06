@@ -47,7 +47,7 @@ import qualified Verifier.SAW.Simulator.What4 as SAW
 
 import Mir.Intrinsics
 import qualified Mir.Mir as M
-import Mir.TransTy (tyToRepr, canInitialize, isUnsized)
+import Mir.TransTy (tyToRepr, canInitialize, isUnsized, reprTransparentFieldTy)
 
 
 -- | TypeShape is used to classify MIR `Ty`s and their corresponding
@@ -68,6 +68,7 @@ data TypeShape (tp :: CrucibleType) where
     TupleShape :: M.Ty -> [M.Ty] -> Assignment FieldShape ctx -> TypeShape (StructType ctx)
     ArrayShape :: M.Ty -> M.Ty -> TypeShape tp -> TypeShape (MirVectorType tp)
     StructShape :: M.Ty -> [M.Ty] -> Assignment FieldShape ctx -> TypeShape AnyType
+    TransparentShape :: M.Ty -> TypeShape tp -> TypeShape tp
     -- | Note that RefShape contains only a TypeRepr for the pointee type, not
     -- a TypeShape.  None of our operations need to recurse inside pointers,
     -- and also this saves us from some infinite recursion.
@@ -98,8 +99,10 @@ tyToShape col ty = go ty
         M.TyFnDef _ -> goUnit ty
         M.TyArray ty' _ | Some shp <- go ty' -> Some $ ArrayShape ty ty' shp
         M.TyAdt nm _ _ -> case Map.lookup nm (col ^. M.adts) of
-            Just (M.Adt _ M.Struct [v] _ _) -> goStruct ty (v ^.. M.vfields . each . M.fty)
-            Just (M.Adt _ ak _ _ _) -> error $ "tyToShape: AdtKind " ++ show ak ++ " NYI"
+            Just adt | Just ty' <- reprTransparentFieldTy col adt ->
+                mapSome (TransparentShape ty) $ go ty'
+            Just (M.Adt _ M.Struct [v] _ _ _ _) -> goStruct ty (v ^.. M.vfields . each . M.fty)
+            Just (M.Adt _ ak _ _ _ _ _) -> error $ "tyToShape: AdtKind " ++ show ak ++ " NYI"
             Nothing -> error $ "tyToShape: bad adt: " ++ show ty
         M.TyRef ty' mutbl -> goRef ty ty' mutbl
         M.TyRawPtr ty' mutbl -> goRef ty ty' mutbl
@@ -129,7 +132,7 @@ tyToShape col ty = go ty
         loop (ty:tys) flds | Some fld <- goField ty = loop tys (flds :> fld)
 
     goField :: M.Ty -> Some FieldShape
-    goField ty | Some shp <- go ty = case canInitialize ty of
+    goField ty | Some shp <- go ty = case canInitialize col ty of
         True -> Some $ ReqField shp
         False -> Some $ OptField shp
 
@@ -158,6 +161,7 @@ shapeType shp = go shp
     go (TupleShape _ _ flds) = StructRepr $ fmapFC fieldShapeType flds
     go (ArrayShape _ _ shp) = MirVectorRepr $ shapeType shp
     go (StructShape _ _ _flds) = AnyRepr
+    go (TransparentShape _ shp) = go shp
     go (RefShape _ _ tpr) = MirReferenceRepr tpr
 
 fieldShapeType :: FieldShape tp -> TypeRepr tp
@@ -170,6 +174,7 @@ shapeMirTy (PrimShape ty _) = ty
 shapeMirTy (TupleShape ty _ _) = ty
 shapeMirTy (ArrayShape ty _ _) = ty
 shapeMirTy (StructShape ty _ _) = ty
+shapeMirTy (TransparentShape ty _) = ty
 shapeMirTy (RefShape ty _ _) = ty
 
 fieldShapeMirTy :: FieldShape tp -> M.Ty

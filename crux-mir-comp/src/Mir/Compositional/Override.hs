@@ -390,6 +390,7 @@ matchArg sym eval allocSpecs shp rv sv = go shp rv sv
       | otherwise = error $ "matchArg: type error: expected " ++ show shpTpr ++
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
+    go (TransparentShape _ shp) rv sv = go shp rv sv
     go (RefShape refTy _ tpr) ref (MS.SetupVar alloc) =
         goRef refTy tpr ref alloc 0
     go (RefShape refTy _ tpr) ref (MS.SetupElem () (MS.SetupVar alloc) idx) =
@@ -507,6 +508,7 @@ setupToReg sym sc termSub regMap allocMap shp sv = go shp sv
         return $ MirVector_Vector $ V.fromList rvs
     go (StructShape _ _ flds) (MS.SetupStruct _ False svs) =
         AnyValue (StructRepr $ fmapFC fieldShapeType flds) <$> goFields flds svs
+    go (TransparentShape _ shp) sv = go shp sv
     go (RefShape _ _ tpr) (MS.SetupVar alloc) = case Map.lookup alloc allocMap of
         Just (Some ptr) -> case testEquality tpr (ptr ^. mpType) of
             Just Refl -> return $ ptr ^. mpRef

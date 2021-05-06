@@ -518,6 +518,7 @@ regToSetup sym p eval shp rv = go shp rv
       | otherwise = error $ "regToSetup: type error: expected " ++ show shpTpr ++
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
+    go (TransparentShape _ shp) rv = go shp rv
     go (RefShape refTy ty' tpr) ref = do
         partIdxLen <- lift $ mirRef_indexAndLenSim ref
         optIdxLen <- liftIO $ readPartExprMaybe sym partIdxLen

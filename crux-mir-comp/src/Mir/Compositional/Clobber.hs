@@ -60,6 +60,7 @@ clobberSymbolic sym loc nameStr shp rv = go shp rv
       | otherwise = error $ "clobberSymbolic: type error: expected " ++ show shpTpr ++
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
+    go (TransparentShape _ shp) rv = go shp rv
     go shp _rv = error $ "clobberSymbolic: " ++ show (shapeType shp) ++ " NYI"
 
     goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
@@ -93,6 +94,8 @@ clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
         MirVector_Array _ -> error $ "clobberSymbolic: MirVector_Array is unsupported"
     go shp@(StructShape (CTyUnsafeCell _) _ _) rv =
         clobberSymbolic sym loc nameStr shp rv
+    go shp@(TransparentShape (CTyUnsafeCell _) _) rv =
+        clobberSymbolic sym loc nameStr shp rv
     go (TupleShape _ _ flds) rvs =
         Ctx.zipWithM goField flds rvs
     go (StructShape _ _ flds) (AnyValue tpr rvs)
@@ -100,6 +103,7 @@ clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
       | otherwise = error $ "clobberSymbolic: type error: expected " ++ show shpTpr ++
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
+    go (TransparentShape _ shp) rv = go shp rv
     -- Since this ref is in immutable memory, whatever behavior we're
     -- approximating with this clobber can't possibly modify it.
     go (RefShape _ _ _tpr) rv = return rv
