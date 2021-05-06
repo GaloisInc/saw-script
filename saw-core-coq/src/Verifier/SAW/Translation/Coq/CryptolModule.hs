@@ -7,6 +7,7 @@ import           Control.Lens                       (over, set, view)
 import           Control.Monad                      (forM)
 import           Control.Monad.State                (modify)
 import qualified Data.Map                           as Map
+import           Data.String                        (IsString(..))
 
 import           Cryptol.ModuleSystem.Name
 import           Cryptol.Utils.Ident
@@ -22,7 +23,7 @@ translateTypedTermMap tm = forM (Map.assocs tm) translateAndRegisterEntry
   where
     translateAndRegisterEntry (name, symbol) = do
       let t = ttTerm symbol
-      let nameStr = unpackIdent (nameIdent name)
+      let nameStr = fromString (unpackIdent (nameIdent name))
       term <- TermTranslation.withLocalLocalEnvironment $ do
         modify $ set TermTranslation.localEnvironment [nameStr]
         TermTranslation.translateTerm t
@@ -31,7 +32,7 @@ translateTypedTermMap tm = forM (Map.assocs tm) translateAndRegisterEntry
       return decl
 
 translateCryptolModule ::
-  TranslationConfiguration -> [String] -> CryptolModule -> Either (TranslationError Term) [Coq.Decl]
+  TranslationConfiguration -> [Coq.Ident] -> CryptolModule -> Either (TranslationError Term) [Coq.Decl]
 translateCryptolModule configuration globalDecls (CryptolModule _ tm) =
   case TermTranslation.runTermTranslationMonad
        configuration
