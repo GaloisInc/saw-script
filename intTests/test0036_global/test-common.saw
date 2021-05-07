@@ -1,0 +1,31 @@
+let init_global name val = do {
+  llvm_alloc_global name;
+  llvm_points_to (llvm_global name) val;
+};
+
+let f_spec (x_pre : Int) = do {
+    y <- llvm_fresh_var "y" (llvm_int 32);
+    init_global "x" (llvm_term {{ `(x_pre) : [32] }});
+    llvm_execute_func [llvm_term y];
+    let x_post = {{ `(x_pre) + 1 : [32] }};
+    llvm_points_to (llvm_global "x") (llvm_term x_post);
+    llvm_return (llvm_term {{ x_post + y : [32] }});
+};
+
+let g_spec (x_pre : Int) = do {
+    z <- llvm_fresh_var "z" (llvm_int 32);
+    init_global "x" (llvm_term {{ `(x_pre) : [32] }});
+    llvm_execute_func [llvm_term z];
+    let x_post = {{ `(x_pre) + 2 : [32] }};
+    llvm_points_to (llvm_global "x") (llvm_term x_post);
+    llvm_return (llvm_term {{ x_post + z : [32] }});
+};
+
+let h_spec (x_pre : Int) = do {
+    w <- llvm_fresh_var "w" (llvm_int 32);
+    init_global "x" (llvm_term {{ `(x_pre) : [32] }});
+    llvm_execute_func [llvm_term w];
+    let x_post = {{ `(x_pre) + 3 : [32] }};
+    llvm_points_to (llvm_global "x") (llvm_term x_post);
+    llvm_return (llvm_term {{ x_post + `(x_pre) + 1 + w : [32] }});
+};
