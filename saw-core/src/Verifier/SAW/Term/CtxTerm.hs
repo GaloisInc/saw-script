@@ -960,57 +960,92 @@ ctxReduceRecursor ::
   [Term] {- ^ constructor actual arguments -}  ->
   CtorArgStruct d params ixs {- ^ constructor formal argument descriptor -} ->
   m Term
-ctxReduceRecursor d params p_ret cs_fs c c_args (CtorArgStruct{..}) =
+ctxReduceRecursor d params motive cs_fs c c_args (CtorArgStruct{..}) =
   (case (invertCtxTerms <$> ctxTermsForBindings ctorParams params,
          ctxTermsForBindings ctorArgs c_args,
          ctxAppNilEq (invertBindings ctorParams)) of
     (Just paramsCtx, Just argsCtx, Refl) ->
-      do let fi =
-                case lookup c cs_fs of
-                  Just f -> f
-                  Nothing ->
-                    error ("ctxReduceRecursor: eliminator missing for constructor "
-                           ++ show c)
-         args <- mk_args paramsCtx paramsCtx argsCtx ctorArgs
-         foldM (\f arg -> mkTermF $ App f arg) fi args
+
+      ctxReduceRecursor_ d
+        paramsCtx (CtxTerm motive) (fmap (fmap CtxTerm) cs_fs)
+        c argsCtx ctorArgs
+
     (Nothing, _, _) ->
       error "ctxReduceRecursor: wrong number of parameters!"
     (_, Nothing, _) ->
       error "ctxReduceRecursor: wrong number of constructor arguments!"
   )
-  where
-    mk_args :: (MonadTerm m, EmptyCtx <+> ctx ~ ctx) =>
-               CtxTermsCtx EmptyCtx params -> CtxTermsCtx EmptyCtx ctx ->
-               CtxTerms EmptyCtx args -> Bindings (CtorArg d ixs) ctx args ->
+
+ctxReduceRecursor_ :: forall m amb d params ixs motive elim args.
+  MonadTerm m =>
+  Ident {- ^ data type name -} ->
+  CtxTermsCtx amb params ->
+  CtxTerm amb motive ->
+  [(Ident, CtxTerm amb elim)] ->
+  Ident {- ^ constructor name -} ->
+  CtxTerms amb args {- ^ constructor actual arguments -} ->
+  Bindings (CtorArg d ixs) (amb <+> params) args
+    {- ^ telescope describing the constructor arguments -} ->
+  m Term
+ctxReduceRecursor_ d ps motive elims c args0 argCtx =
+  do args <- mk_args ps args0 argCtx
+     foldM (\f arg -> mkTermF $ App f arg) fi args
+
+ where
+    -- look up the constructor eliminator associated with this constructor
+    fi = case lookup c elims of
+           Just f -> unAmb f
+           Nothing ->
+             error ("ctxReduceRecursor: eliminator missing for constructor "
+                    ++ show c)
+
+    unAmb :: forall tp. CtxTerm amb tp -> Term
+    unAmb (CtxTerm t) = t
+
+    mk_args :: forall ctx xs.
+               CtxTermsCtx amb ctx ->  -- already processed parameters/arguments
+               CtxTerms    amb xs ->   -- remaining actual arguments to process
+               Bindings (CtorArg d ixs) (amb<+>ctx) xs ->
+                 -- telescope for typing the actual arguments
                m [Term]
-    mk_args _ _ _ NoBind = return []
-    mk_args ps pre_xs (CtxTermsCons x xs) (Bind _ (ConstArg _) args) =
-      (elimClosedTerm x :) <$>
-      mk_args ps (CtxTermsCtxCons pre_xs x) xs args
-    mk_args ps pre_xs (CtxTermsCons x xs) (Bind _ (RecursiveArg zs ixs) args) =
-      do zs' <- ctxSubstInBindings pre_xs InvNoBind NoBind zs
+    -- no more arguments to process
+    mk_args _ _ NoBind = return []
+
+    -- process an argument that is not a recursive call
+    mk_args pre_xs (CtxTermsCons x xs) (Bind _ (ConstArg _) args) =
+      do tl <- mk_args (CtxTermsCtxCons pre_xs x) xs args
+         pure (unAmb x : tl)
+
+    -- process an argument that is a recursive call
+    mk_args pre_xs (CtxTermsCons x xs) (Bind _ (RecursiveArg zs ixs) args) =
+      do zs'  <- ctxSubstInBindings pre_xs InvNoBind NoBind zs
          ixs' <- ctxSubstInBindings pre_xs InvNoBind zs ixs
-         (elimClosedTerm x :) <$>
-           ((:) <$> mk_rec_arg ps zs' ixs' x <*>
-            mk_args ps (CtxTermsCtxCons pre_xs x) xs args)
+         recx <- mk_rec_arg zs' ixs' x
+         tl   <- mk_args (CtxTermsCtxCons pre_xs x) xs args
+         pure (unAmb x : recx : tl)
 
     -- Build an individual recursive call, given the parameters, the bindings
     -- for the RecursiveArg, and the argument we are going to recurse on
-    mk_rec_arg :: MonadTerm m => CtxTermsCtx EmptyCtx params ->
-                  Bindings CtxTerm EmptyCtx zs -> CtxTerms (CtxInv zs) ixs ->
-                  CtxTerm EmptyCtx a -> m Term
-    mk_rec_arg ps zs_ctx ixs x =
-      elimClosedTerm <$> ctxLambda zs_ctx
-      (\zs ->
-        ctxRecursorAppM d (ctxLift InvNoBind zs_ctx ps)
-        (mkLiftedClosedTerm zs_ctx p_ret)
-        (forM cs_fs (\(c',f) -> (c',) <$> mkLiftedClosedTerm zs_ctx f))
-        (return $ invertCtxTerms ixs)
-        (ctxApplyMulti
-         -- FIXME: can we do this without a cast? mk_rec_arg should specify that
-         -- the input type for x is (Arrows zs a)...
-         (fmap (castCtxTerm Proxy Proxy) (ctxLift InvNoBind zs_ctx x))
-         (return zs)))
+    mk_rec_arg :: forall zs.
+      Bindings CtxTerm amb zs ->         -- telescope describing the zs
+      CtxTerms (CtxInvApp amb zs) ixs -> -- actual values for the indicies, shifted under zs
+      CtxTerm amb (Arrows zs d) ->       -- actual value in recursive position
+      m Term
+    mk_rec_arg zs_ctx ixs x = unAmb <$>
+      -- eta expand over the zs
+      ctxLambda zs_ctx (\zs ->
+        -- lift x into the context of zs and apply
+        let xapp :: m (CtxTerm (CtxInvApp amb zs) d)
+            xapp = ctxApplyMulti
+                     (ctxLift InvNoBind zs_ctx x)
+                     (return zs) in
+        -- apply the recursor to the data type value
+        ctxRecursorAppM d
+          (ctxLift InvNoBind zs_ctx ps)     -- params
+          (ctxLift InvNoBind zs_ctx motive) -- motive
+          (forM elims (\(c',f) -> (c',) <$> ctxLift InvNoBind zs_ctx f)) -- ctor eliminators
+          (return $ invertCtxTerms ixs) -- indices
+          xapp) -- recursor argument
 
 
 --
