@@ -436,7 +436,7 @@ ppFlatTermF prec tf =
       ppAppList prec (annotate CtorAppStyle (ppIdent c)) <$> mapM (ppTerm' PrecArg) (params ++ args)
     DataTypeApp dt params args ->
       ppAppList prec (annotate DataTypeStyle (ppIdent dt)) <$> mapM (ppTerm' PrecArg) (params ++ args)
-    RecursorApp d params p_ret cs_fs ixs arg ->
+    RecursorApp (CompiledRecursor d params p_ret cs_fs) ixs arg ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          p_ret_pp <- ppTerm' PrecArg p_ret
          fs_pp <- mapM (ppTerm' PrecNone . snd) cs_fs

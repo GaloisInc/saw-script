@@ -145,7 +145,7 @@ scWriteExternal t0 =
               unwords ("Ctor" : show i : map show ps ++ argsep : map show es)
             DataTypeApp i ps es -> pure $
               unwords ("Data" : show i : map show ps ++ argsep : map show es)
-            RecursorApp i ps p_ret cs_fs ixs e -> pure $
+            RecursorApp (CompiledRecursor i ps p_ret cs_fs) ixs e -> pure $
               unwords (["Recursor" , show i] ++ map show ps ++
                        [argsep, show p_ret, show cs_fs] ++
                        map show ixs ++ [show e])
@@ -245,13 +245,14 @@ scReadExternal sc input =
         ("Recursor" : i :
          (separateArgs ->
           Just (ps, p_ret : cs_fs : (splitLast -> Just (ixs, arg))))) ->
-          FTermF <$>
-          (RecursorApp (parseIdent i) <$>
-           traverse readIdx ps <*>
-           readIdx p_ret <*>
-           (traverse (traverse getTerm) =<< readM cs_fs) <*>
-           traverse readIdx ixs <*>
-           readIdx arg)
+            do rec <- CompiledRecursor (parseIdent i) <$>
+                        traverse readIdx ps <*>
+                        readIdx p_ret <*>
+                        (traverse (traverse getTerm) =<< readM cs_fs)
+               app <- RecursorApp rec <$>
+                        traverse readIdx ixs <*>
+                        readIdx arg
+               pure (FTermF app)
         ["RecordType", elem_tps] ->
           FTermF <$> (RecordType <$> (traverse (traverse getTerm) =<< readM elem_tps))
         ["Record", elems] ->

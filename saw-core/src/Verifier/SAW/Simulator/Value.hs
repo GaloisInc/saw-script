@@ -96,10 +96,7 @@ data NeutralTerm
   | NeutralRecordProj NeutralTerm FieldName -- record projection
   | NeutralApp NeutralTerm Term -- function application
   | NeutralRecursor -- recursor application
-      Ident  -- inductive type being eliminated
-      [Term] -- parameters of the inductive type
-      Term   -- return type (AKA intent, AKA motive)
-      [(Ident,Term)] -- elimination functions for the constructors
+      (CompiledRecursor Term)
       [Term] -- indices for the inductive type
       NeutralTerm -- argument being elminated
 
@@ -363,8 +360,8 @@ neutralToTerm = loop
     Unshared (FTermF (RecordProj (loop nt) f))
   loop (NeutralApp nt arg) =
     Unshared (App (loop nt) arg)
-  loop (NeutralRecursor d ps p_ret cs_fs ixs x) =
-    Unshared (FTermF (RecursorApp d ps p_ret cs_fs ixs (loop x)))
+  loop (NeutralRecursor rec ixs x) =
+    Unshared (FTermF (RecursorApp rec ixs (loop x)))
 
 neutralToSharedTerm :: SharedContext -> NeutralTerm -> IO Term
 neutralToSharedTerm sc = loop
@@ -380,9 +377,9 @@ neutralToSharedTerm sc = loop
   loop (NeutralApp nt arg) =
     do tm <- loop nt
        scApply sc tm arg
-  loop (NeutralRecursor d ps p_ret cs_fs ixs nt) =
+  loop (NeutralRecursor rec ixs nt) =
     do tm <- loop nt
-       scFlatTermF sc (RecursorApp d ps p_ret cs_fs ixs tm)
+       scFlatTermF sc (RecursorApp rec ixs tm)
 
 ppNeutral :: PPOpts -> NeutralTerm -> SawDoc
 ppNeutral opts = ppTerm opts . neutralToTerm

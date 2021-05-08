@@ -35,6 +35,7 @@ import Prelude hiding (mapM)
 import Control.Applicative ((<$>))
 #endif
 import Control.Monad (foldM, liftM)
+--import Control.Monad.IO.Class
 import Control.Monad.Fix (MonadFix(mfix))
 import qualified Control.Monad.State as State
 import Data.Foldable (foldlM)
@@ -93,8 +94,11 @@ data SimulatorConfig l =
 ------------------------------------------------------------
 -- Evaluation of terms
 
+type Env l = [Thunk l]
+type EnvIn m l = Env (WithM m l)
+
 -- | Meaning of an open term, parameterized by environment of bound variables
-type OpenValue l = [Thunk l] -> MValue l
+type OpenValue l = Env l -> MValue l
 
 {-# SPECIALIZE
   evalTermF :: Show (Extra l) =>
@@ -163,14 +167,28 @@ evalTermF cfg lam recEval tf env =
 
         DataTypeApp i ps ts -> TValue . VDataType i <$> mapM recEval (ps ++ ts)
 
-        RecursorApp d ps p_ret cs_fs ixs arg ->
+        RecursorApp crec@(CompiledRecursor _d ps p_ret cs_fs) ixs arg ->
           do ps_th <- mapM recEvalDelay ps
              p_ret_th <- recEvalDelay p_ret
              cs_fs_th <- mapM (\(c,f) -> (c,) <$> recEvalDelay f) cs_fs
              arg_v <- recEval arg
-             evalRecursorApp (simModMap cfg) lam ps_th p_ret_th cs_fs_th arg_v >>= \case
-               Just res -> pure res
-               Nothing -> simNeutral cfg (NeutralRecursor d ps p_ret cs_fs ixs (NeutralBox arg))
+             case findConstructor arg_v of
+               Nothing -> simNeutral cfg (NeutralRecursor crec ixs (NeutralBox arg))
+               Just (c,all_args_vs)
+                 | Just ctor <- findCtorInMap (simModMap cfg) c
+                 , Just dt <- findDataTypeInMap (simModMap cfg) (ctorDataTypeName ctor) ->
+
+                    do elims <- mapM (\c' -> case lookup c cs_fs_th of
+                                   Just elim -> return elim
+                                   Nothing ->
+                                     panic ("evalRecursorApp: internal error: "
+                                           ++ "constructor not found in its own datatype: "
+                                           ++ show c')) $ dtCtors dt
+
+                       let args = drop (length ps) $ V.toList all_args_vs
+                       lam (ctorIotaTemplate ctor) (reverse $ ps_th ++ [p_ret_th] ++ elims ++ args)
+
+                 | otherwise -> panic ("evalRecursorApp: could not find info for constructor: " ++ show c)
 
         RecordType elem_tps ->
           TValue . VRecordType <$> traverse (traverse (fmap toTValue . recEval)) elem_tps
@@ -286,39 +304,11 @@ checkPrimitives modmap prims = do
         overridePrims = Set.toList $ Set.intersection defSet implementedPrims
 
 
--- | Evaluate a recursor application given a recursive way to evaluate terms,
--- the current 'RecursorInfo' structure, and thunks for the @p_ret@, eliminators
--- for the current inductive type, and the value being pattern-matched
-evalRecursorApp :: (VMonad l, Show (Extra l)) =>
-                   ModuleMap -> (Term -> OpenValue l) ->
-                   [Thunk l] -> Thunk l -> [(Ident, Thunk l)] -> Value l ->
-                   EvalM l (Maybe (Value l))
-evalRecursorApp modmap lam ps p_ret cs_fs (VCtorApp c all_args)
-  | Just ctor <- findCtorInMap modmap c
-  , Just dt <- findDataTypeInMap modmap (ctorDataTypeName ctor)
-  = do elims <-
-         mapM (\c' -> case lookup (ctorName c') cs_fs of
-                  Just elim -> return elim
-                  Nothing ->
-                    panic ("evalRecursorApp: internal error: "
-                          ++ "constructor not found in its own datatype: "
-                          ++ show c')) $
-         dtCtors dt
-       let args = drop (length ps) $ V.toList all_args
-       Just <$> lam (ctorIotaReduction ctor) (reverse $ ps ++ [p_ret] ++ elims ++ args)
-
-evalRecursorApp _ _ _ _ _ (VCtorApp c _) =
-  panic $ ("evalRecursorApp: could not find info for constructor: " ++ show c)
-
-evalRecursorApp modmap lam ps p_ret cs_fs (VNat 0) =
-  evalRecursorApp modmap lam ps p_ret cs_fs
-    (VCtorApp "Prelude.Zero" V.empty)
-
-evalRecursorApp modmap lam ps p_ret cs_fs (VNat i) =
-  evalRecursorApp modmap lam ps p_ret cs_fs
-    (VCtorApp "Prelude.Succ" (V.singleton $ ready $ VNat $ i-1))
-
-evalRecursorApp _modmap _lam _ps _p_ret _cs_fs _tm = return Nothing
+findConstructor :: VMonadLazy l => Value l -> Maybe (Ident, V.Vector (Thunk l))
+findConstructor (VCtorApp c args) = Just (c, args)
+findConstructor (VNat 0)          = Just ("Prelude.Zero", V.empty)
+findConstructor (VNat i)          = Just ("Prelude.Succ", V.singleton (ready (VNat (i-1))))
+findConstructor _                 = Nothing
 
 
 ----------------------------------------------------------------------
@@ -393,13 +383,13 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf []
   SimulatorConfigIn IO l ->
   IntMap (ThunkIn IO l) ->
   Term ->
-  [ThunkIn IO l] ->
+  EnvIn IO l ->
   IO (IntMap (ThunkIn IO l)) #-}
 
 -- | Precomputing the memo table for open subterms in the current context.
 mkMemoLocal :: forall l. (VMonadLazy l, Show (Extra l)) =>
                SimulatorConfig l -> IntMap (Thunk l) ->
-               Term -> [Thunk l] -> EvalM l (IntMap (Thunk l))
+               Term -> Env l -> EvalM l (IntMap (Thunk l))
 mkMemoLocal cfg memoClosed t env = go memoClosed t
   where
     go :: IntMap (Thunk l) -> Term -> EvalM l (IntMap (Thunk l))

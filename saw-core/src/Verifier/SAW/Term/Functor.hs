@@ -40,6 +40,7 @@ module Verifier.SAW.Term.Functor
   , NameInfo(..)
   , toShortName
   , toAbsoluteName
+  , CompiledRecursor(..)
     -- * Terms and associated operations
   , TermIndex
   , Term(..)
@@ -167,7 +168,8 @@ data FlatTermF e
     -- * The elimination function for each constructor of that inductive type;
     -- * The indices for that inductive type; AND
     -- * The argument that is being eliminated / pattern-matched
-  | RecursorApp !Ident [e] e [(Ident,e)] [e] e
+    -- * A compiled map of iota conersions for each constructor
+  | RecursorApp (CompiledRecursor e) [e] e
 
     -- | Non-dependent record types, i.e., N-ary tuple types with named
     -- fields. These are considered equal up to reordering of fields. Actual
@@ -197,6 +199,20 @@ data FlatTermF e
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
 instance Hashable e => Hashable (FlatTermF e) -- automatically derived
+
+-- Capture more type information here so we can
+--  use it during evaluation time to remember the
+--  types of the parameters, motive and eliminator functions.
+data CompiledRecursor e =
+  CompiledRecursor
+  { recursorDataType :: Ident
+  , recursorParams   :: [e]
+  , recursorMotive   :: e
+  , recursorElims    :: [(Ident, e)]
+  }
+ deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
+
+instance Hashable e => Hashable (CompiledRecursor e) -- automatically derived
 
 -- | Test if the association list used in a 'RecordType' or 'RecordValue' uses
 -- precisely the given field names and no more. If so, return the values
@@ -234,13 +250,18 @@ zipWithFlatTermF f = go
       | cx == cy = Just $ CtorApp cx (zipWith f psx psy) (zipWith f lx ly)
     go (DataTypeApp dx psx lx) (DataTypeApp dy psy ly)
       | dx == dy = Just $ DataTypeApp dx (zipWith f psx psy) (zipWith f lx ly)
-    go (RecursorApp d1 ps1 p1 cs_fs1 ixs1 x1) (RecursorApp d2 ps2 p2 cs_fs2 ixs2 x2)
+    go (RecursorApp (CompiledRecursor d1 ps1 p1 cs_fs1) ixs1 x1)
+       (RecursorApp (CompiledRecursor d2 ps2 p2 cs_fs2) ixs2 x2)
       | d1 == d2
       , Just fs2 <- alistAllFields (map fst cs_fs1) cs_fs2
       = Just $
-        RecursorApp d1 (zipWith f ps1 ps2) (f p1 p2)
-        (zipWith (\(c,f1) f2 -> (c, f f1 f2)) cs_fs1 fs2)
-        (zipWith f ixs1 ixs2) (f x1 x2)
+        RecursorApp
+          (CompiledRecursor d1
+            (zipWith f ps1 ps2)
+            (f p1 p2)
+            (zipWith (\(c,f1) f2 -> (c, f f1 f2)) cs_fs1 fs2))
+          (zipWith f ixs1 ixs2)
+          (f x1 x2)
 
     go (RecordType elems1) (RecordType elems2)
       | Just vals2 <- alistAllFields (map fst elems1) elems2 =

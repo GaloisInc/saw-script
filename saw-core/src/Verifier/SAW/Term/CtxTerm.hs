@@ -66,6 +66,7 @@ module Verifier.SAW.Term.CtxTerm
     -- * Computing with Eliminators
   , mkPRetTp
   , ctxCtorElimType, mkCtorElimTypeFun, ctxReduceRecursor
+  , ctxReduceRecursorRaw
     -- * Parsing and Building Constructor Types
   , mkCtorArgStruct
   ) where
@@ -349,6 +350,7 @@ splitCtxTermsCtx (InvBind ctx _ _) (CtxTermsCtxCons ts t) =
 class Monad m => MonadTerm m where
   mkTermF :: TermF Term -> m Term
   liftTerm :: DeBruijnIndex -> DeBruijnIndex -> Term -> m Term
+  whnfTerm :: Term -> m Term
   substTerm :: DeBruijnIndex -> [Term] -> Term -> m Term
                -- ^ NOTE: the first term in the list is substituted for the most
                -- recently-bound variable, i.e., deBruijn index 0
@@ -401,6 +403,11 @@ ctxApply fm argm =
   do CtxTerm f <- fm
      CtxTerm arg <- argm
      CtxTerm <$> mkTermF (App f arg)
+
+ctxWhnf :: MonadTerm m => m (CtxTerm ctx a) -> m (CtxTerm ctx a)
+ctxWhnf xm =
+  do CtxTerm x <- xm
+     CtxTerm <$> whnfTerm x
 
 -- | Apply two 'CtxTerm's, using a 'Proxy' to tell GHC the types
 ctxApplyProxy :: MonadTerm m => Proxy a -> Proxy b ->
@@ -538,18 +545,23 @@ ctxCtorAppM _d c paramsM argsM =
     (ctxTermsCtxToListUnsafe <$> argsM)))
 
 -- | Build an application of a recursor as a 'CtxTerm'
-ctxRecursorAppM :: MonadTerm m => Ident -> m (CtxTermsCtx ctx params) ->
-                   m (CtxTerm ctx p_ret) -> m [(Ident, CtxTerm ctx elim)] ->
-                   m (CtxTermsCtx ctx ixs) -> m (CtxTerm ctx arg) ->
-                   m (CtxTerm ctx a)
-ctxRecursorAppM d paramsM pretM cs_fsM ixsM argM =
-  CtxTerm <$>
-  (mkFlatTermF =<<
-   (RecursorApp d <$> (ctxTermsCtxToListUnsafe <$> paramsM) <*>
-    (unCtxTermUnsafe <$> pretM) <*>
-    (map (\(c,f) -> (c, unCtxTermUnsafe f)) <$> cs_fsM) <*>
-    (ctxTermsCtxToListUnsafe <$> ixsM) <*>
-    (unCtxTermUnsafe <$> argM)))
+ctxRecursorAppM :: MonadTerm m =>
+  DataIdent d ->
+  m (CtxTermsCtx ctx params) ->
+  m (CtxTerm ctx p_ret) ->
+  m [(Ident, CtxTerm ctx elim)] ->
+  m (CtxTermsCtx ctx ixs) ->
+  m (CtxTerm ctx d) ->
+  m (CtxTerm ctx a)
+ctxRecursorAppM (DataIdent d) paramsM pretM cs_fsM ixsM argM =
+  do cmp <- CompiledRecursor d <$>
+              (ctxTermsCtxToListUnsafe <$> paramsM) <*>
+              (unCtxTermUnsafe <$> pretM) <*>
+              (map (\(c,f) -> (c, unCtxTermUnsafe f)) <$> cs_fsM)
+     rec <- RecursorApp cmp <$>
+              (ctxTermsCtxToListUnsafe <$> ixsM) <*>
+              (unCtxTermUnsafe <$> argM)
+     CtxTerm <$> mkFlatTermF rec
 
 
 --
@@ -695,6 +707,7 @@ data CtorArgStruct d params ixs =
     ctorIndices :: CtxTerms (CtxInvApp (CtxInv params) args) ixs,
     dataTypeIndices :: Bindings CtxTerm (CtxInv params) ixs
   }
+
 
 -- | Convert a 'CtorArg' into the type that it represents, given a context of
 -- the parameters and of the previous arguments
@@ -907,10 +920,6 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
 -- for the given constructor. We return the substitution function in the monad
 -- so that we only call 'ctxCtorElimType' once but can call the function many
 -- times, in order to amortize the overhead of 'ctxCtorElimType'.
---
--- NOTE: Because this function is defined *before* the @SharedTerm@ module, it
--- cannot call the normalization function @scWHNF@ defined in that module, and
--- so the terms return by the function it generates are not normalized.
 mkCtorElimTypeFun :: MonadTerm m => Ident -> Ident ->
                      CtorArgStruct d params ixs -> m ([Term] -> Term -> m Term)
 mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
@@ -918,6 +927,7 @@ mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
      case ctxAppNilEq (invertBindings ctorParams) of
        Refl ->
          return $ \params p_ret ->
+         whnfTerm =<<
          case ctxTermsForBindings ctorParams params of
            Nothing -> error "ctorElimTypeFun: wrong number of parameters!"
            Just paramsCtx ->
@@ -950,7 +960,7 @@ mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
 -- where @[ps/params,xs/args]@ substitutes the concrete parameters @pi@ for the
 -- parameter variables of the inductive type and the earlier constructor
 -- arguments @xs@ for the remaining free variables.
-ctxReduceRecursor ::
+ctxReduceRecursor :: forall m d params ixs.
   MonadTerm m =>
   Ident  {- ^ data type name -} ->
   [Term] {- ^ data type parameters -} ->
@@ -960,15 +970,31 @@ ctxReduceRecursor ::
   [Term] {- ^ constructor actual arguments -}  ->
   CtorArgStruct d params ixs {- ^ constructor formal argument descriptor -} ->
   m Term
-ctxReduceRecursor d params motive cs_fs c c_args (CtorArgStruct{..}) =
+ctxReduceRecursor d params motive cs_fs c c_args CtorArgStruct{..} =
   (case (invertCtxTerms <$> ctxTermsForBindings ctorParams params,
          ctxTermsForBindings ctorArgs c_args,
          ctxAppNilEq (invertBindings ctorParams)) of
     (Just paramsCtx, Just argsCtx, Refl) ->
 
-      ctxReduceRecursor_ d
-        paramsCtx (CtxTerm motive) (fmap (fmap CtxTerm) cs_fs)
-        c argsCtx ctorArgs
+      do let d' = DataIdent d :: DataIdent d
+             a  = Proxy :: Proxy ()
+             elims = fmap (fmap mkClosedTerm) cs_fs
+
+             -- look up the constructor eliminator associated with this constructor
+             fi = case lookup c elims of
+                    Just f -> f
+                    Nothing -> error $ unwords
+                      ["ctxReduceRecursor: eliminator missing for constructor",show c]
+
+         rec <- ctxAbstractRecursor d' a
+                  paramsCtx
+                  (mkClosedTerm motive)
+                  elims
+                  dataTypeIndices
+
+         ctorArgs' <- ctxSubstInBindings paramsCtx InvNoBind NoBind ctorArgs
+
+         ctxReduceRecursor_ a rec fi argsCtx ctorArgs'
 
     (Nothing, _, _) ->
       error "ctxReduceRecursor: wrong number of parameters!"
@@ -976,29 +1002,70 @@ ctxReduceRecursor d params motive cs_fs c c_args (CtorArgStruct{..}) =
       error "ctxReduceRecursor: wrong number of constructor arguments!"
   )
 
-ctxReduceRecursor_ :: forall m amb d params ixs motive elim args.
+ctxAbstractRecursor :: forall m d a params motive elim ixs.
+  (MonadTerm m, EmptyCtx <+> params ~ params)  =>
+  DataIdent d ->
+  Proxy a ->
+  CtxTermsCtx EmptyCtx params ->
+  CtxTerm EmptyCtx motive ->
+  [(Ident, CtxTerm EmptyCtx elim)] ->
+  Bindings CtxTerm params ixs ->
+  m (CtxTerm EmptyCtx (Arrows ixs (d -> a)))
+ctxAbstractRecursor d Proxy ps motive cs_fs dataTypeIndices =
+   do dti <- ctxSubstInBindings ps InvNoBind NoBind dataTypeIndices
+      ps' <- ctxLift InvNoBind dti ps
+      ctxLambda dti (\ixs ->
+         do dtp <- ctxDataTypeM d
+                     (return ps')
+                     (return (invertCtxTerms ixs))
+            ctxLambda1 "x" dtp (\(x :: CtxTerm (CtxInv ixs ::> d) d) ->
+              let up :: CtxTerm EmptyCtx tp -> m (CtxTerm (CtxInv ixs ::> d) tp)
+                  up tm = ctxLift InvNoBind (Bind "x" dtp NoBind) =<<
+                            ctxLift InvNoBind dti tm in
+              ctxRecursorAppM d
+                (ctxLift InvNoBind (Bind "x" dtp NoBind) ps')
+                (up motive)
+                (forM cs_fs (\(c',f) ->
+                  do f' <- up f
+                     pure (c',f')))
+                (ctxLift InvNoBind (Bind "x" dtp NoBind) (invertCtxTerms ixs))
+                (return x)
+                  :: m (CtxTerm (CtxInv ixs ::> d) a)
+                  -- The typing here is very fiddly, this signature
+                  --  seems to be necessary.
+               ))
+
+ctxReduceRecursorRaw :: forall m d params ixs.
   MonadTerm m =>
-  Ident {- ^ data type name -} ->
-  CtxTermsCtx amb params ->
-  CtxTerm amb motive ->
-  [(Ident, CtxTerm amb elim)] ->
-  Ident {- ^ constructor name -} ->
+  Term {- ^ abstracted recursor -} ->
+  Term {- ^ constructor elimnator function -} ->
+  [Term] {- ^ constructor arguments -} ->
+  CtorArgStruct d params ixs {- ^ constructor formal argument descriptor -} ->
+  m Term
+ctxReduceRecursorRaw rec elimf c_args CtorArgStruct{..} =
+  let inctx :: Term -> CtxTerm (CtxInv params) tp
+      inctx = CtxTerm
+   in
+  case ctxTermsForBindingsOpen ctorArgs c_args of
+     Just argsCtx ->
+       ctxReduceRecursor_ Proxy (inctx rec) (inctx elimf) argsCtx ctorArgs
+     Nothing ->
+       error "ctxReduceRecursorRaw: wrong number of constructor arguments!"
+
+ctxReduceRecursor_ :: forall m amb d a ixs elim args.
+  MonadTerm m =>
+  Proxy a ->
+  CtxTerm amb (Arrows ixs (d -> a)) ->
+  CtxTerm amb elim  {- ^ constructor eliminator function -} ->
   CtxTerms amb args {- ^ constructor actual arguments -} ->
-  Bindings (CtorArg d ixs) (amb <+> params) args
+  Bindings (CtorArg d ixs) amb args
     {- ^ telescope describing the constructor arguments -} ->
   m Term
-ctxReduceRecursor_ d ps motive elims c args0 argCtx =
-  do args <- mk_args ps args0 argCtx
-     foldM (\f arg -> mkTermF $ App f arg) fi args
+ctxReduceRecursor_ _ rec fi args0 argCtx =
+  do args <- mk_args CtxTermsCtxNil args0 argCtx
+     whnfTerm =<< foldM (\f arg -> mkTermF $ App f arg) (unAmb fi) args
 
  where
-    -- look up the constructor eliminator associated with this constructor
-    fi = case lookup c elims of
-           Just f -> unAmb f
-           Nothing ->
-             error ("ctxReduceRecursor: eliminator missing for constructor "
-                    ++ show c)
-
     unAmb :: forall tp. CtxTerm amb tp -> Term
     unAmb (CtxTerm t) = t
 
@@ -1034,18 +1101,19 @@ ctxReduceRecursor_ d ps motive elims c args0 argCtx =
     mk_rec_arg zs_ctx ixs x = unAmb <$>
       -- eta expand over the zs
       ctxLambda zs_ctx (\zs ->
+        -- lift rec into the contex and apply indices
+        let recapp :: m (CtxTerm (CtxInvApp amb zs) (d -> a))
+            recapp = ctxApplyMulti
+                        (ctxLift InvNoBind zs_ctx rec)
+                        (return ixs) in
+
         -- lift x into the context of zs and apply
         let xapp :: m (CtxTerm (CtxInvApp amb zs) d)
             xapp = ctxApplyMulti
                      (ctxLift InvNoBind zs_ctx x)
                      (return zs) in
-        -- apply the recursor to the data type value
-        ctxRecursorAppM d
-          (ctxLift InvNoBind zs_ctx ps)     -- params
-          (ctxLift InvNoBind zs_ctx motive) -- motive
-          (forM elims (\(c',f) -> (c',) <$> ctxLift InvNoBind zs_ctx f)) -- ctor eliminators
-          (return $ invertCtxTerms ixs) -- indices
-          xapp) -- recursor argument
+
+        ctxWhnf (ctxApply recapp xapp))
 
 
 --
@@ -1057,8 +1125,10 @@ class UsesDataType a where
   usesDataType :: DataIdent d -> a -> Bool
 
 instance UsesDataType (TermF Term) where
-  usesDataType (DataIdent d) (FTermF (DataTypeApp d' _ _)) | d' == d = True
-  usesDataType (DataIdent d) (FTermF (RecursorApp d' _ _ _ _ _)) | d' == d = True
+  usesDataType (DataIdent d) (FTermF (DataTypeApp d' _ _))
+    | d' == d = True
+  usesDataType (DataIdent d) (FTermF (RecursorApp rec _ _))
+    | recursorDataType rec == d = True
   usesDataType d tf = any (usesDataType d) tf
 
 instance UsesDataType Term where

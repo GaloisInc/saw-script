@@ -218,7 +218,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     DataTypeApp n is as -> translateIdentWithArgs n (is ++ as)
     CtorApp n is as -> translateIdentWithArgs n (is ++ as)
     -- TODO: support this next!
-    RecursorApp d parameters motive eliminators indices termEliminated ->
+    RecursorApp (CompiledRecursor d parameters motive eliminators) indices termEliminated ->
       do maybe_d_trans <- translateIdentToIdent d
          rect_var <- case maybe_d_trans of
            Just i -> return $ Coq.Var (show i ++ "_rect")

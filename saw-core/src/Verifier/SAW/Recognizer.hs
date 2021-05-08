@@ -273,11 +273,10 @@ asDataTypeParams t = do DataTypeApp c ps args <- asFTermF t; return (c,ps,args)
 asDataType :: Recognizer Term (Ident, [Term])
 asDataType t = do DataTypeApp c ps args <- asFTermF t; return (c,ps ++ args)
 
-asRecursorApp :: Recognizer Term (Ident,[Term],Term,
-                                               [(Ident,Term)],[Term],Term)
+asRecursorApp :: Recognizer Term (CompiledRecursor Term, [Term], Term)
 asRecursorApp t =
-  do RecursorApp d params p_ret cs_fs ixs arg <- asFTermF t;
-     return (d, params, p_ret, cs_fs, ixs, arg)
+  do RecursorApp rec ixs arg <- asFTermF t
+     return (rec, ixs, arg)
 
 isDataType :: Ident -> Recognizer [Term] a -> Recognizer Term a
 isDataType i p t = do

@@ -596,6 +596,7 @@ instance MonadIO ShCtxM where
 instance MonadTerm ShCtxM where
   mkTermF tf = ask >>= \sc -> liftIO $ scTermF sc tf
   liftTerm n i t = ask >>= \sc -> liftIO $ incVars sc n i t
+  whnfTerm t = ask >>= \sc -> liftIO $ scWhnf sc t
   substTerm n subst t = ask >>= \sc -> liftIO $ instantiateVarList sc n subst t
 
 -- | Test whether a 'DataType' can be eliminated to the given sort. The rules
@@ -700,17 +701,17 @@ scRecursorRetTypeType sc dt params s =
 -- on one of the @xi@. These recursive calls only exist for those arguments
 -- @xi@. See the documentation for 'ctxReduceRecursor' and the
 -- 'ctorIotaReduction' field for more details.
-scReduceRecursor :: SharedContext -> Ident -> [Term] -> Term ->
-                    [(Ident,Term)] -> Ident -> [Term] -> IO Term
-scReduceRecursor sc _d params p_ret cs_fs c args =
+scReduceRecursor ::
+  SharedContext ->
+  CompiledRecursor Term ->
+  Ident {- ^ constructor name -} ->
+  [Term] {- ^ constructor arguments -} ->
+  IO Term
+scReduceRecursor sc (CompiledRecursor _d params p_ret cs_fs) c args =
   do ctor <- scRequireCtor sc c
      -- The ctorIotaReduction field caches the result of iota reduction, which
      -- we just substitute into to perform the reduction
      ctorIotaReduction ctor params p_ret cs_fs args
-
---     instantiateVarList sc 0 (reverse $ params ++ [p_ret] ++ elims ++ args)
---       (ctorIotaReduction ctor)
-
 
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form
@@ -720,7 +721,7 @@ data WHNFElim
   = ElimApp Term
   | ElimProj FieldName
   | ElimPair Bool
-  | ElimRecursor Ident [Term] Term [(Ident,Term)] [Term]
+  | ElimRecursor (CompiledRecursor Term) [Term]
 
 -- | Test if a term is a constructor application that should be converted to a
 -- natural number literal. Specifically, test if a term is not already a natural
@@ -758,23 +759,20 @@ scWhnf sc t0 =
     go xs                     (convertsToNat    -> Just k) = scFlatTermF sc (NatLit k) >>= go xs
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go xs                     (asRecordSelector -> Just (t, n)) = go (ElimProj n : xs) t
-    go xs                     (asPairSelector -> Just (t, i)) = go (ElimPair i : xs) t
-    go (ElimApp x : xs)       (asLambda -> Just (_, _, body))   = instantiateVar sc 0 x body >>= go xs
+    go xs                     (asPairSelector -> Just (t, i))   = go (ElimPair i : xs) t
+    go (ElimApp x : xs)       (asLambda -> Just (_, _, body))   = betaReduce xs [x] body
     go (ElimPair i : xs)      (asPairValue -> Just (a, b))      = go xs (if i then b else a)
     go (ElimProj fld : xs)    (asRecordValue -> Just elems)     = case Map.lookup fld elems of
                                                                     Just t -> go xs t
                                                                     Nothing ->
                                                                       error "scWhnf: field missing in record"
-    go (ElimRecursor d ps
-        p_ret cs_fs _ : xs)   (asCtorOrNat ->
-                               Just (c, _, args))               = (scReduceRecursor sc d ps
-                                                                   p_ret cs_fs c args) >>= go xs
+    go (ElimRecursor rec _ : xs)
+                              (asCtorOrNat ->
+                               Just (c, _, args))               = scReduceRecursor sc rec c args >>= go xs
 
     go xs                     (asGlobalDef -> Just c)           = scRequireDef sc c >>= tryDef c xs
     go xs                     (asRecursorApp ->
-                               Just (d, params, p_ret, cs_fs, ixs,
-                                     arg))                      = go (ElimRecursor d params p_ret
-                                                                      cs_fs ixs : xs) arg
+                               Just (rec, ixs, arg))            = go (ElimRecursor rec ixs : xs) arg
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
                                                                      t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
@@ -782,10 +780,10 @@ scWhnf sc t0 =
                                                                      b' <- memo b
                                                                      t' <- scPairType sc a' b'
                                                                      foldM reapply t' xs
-    go xs                     (asRecordType -> Just elems)   = do elems' <-
-                                                                    mapM (\(i,t) -> (i,) <$> memo t) (Map.assocs elems)
-                                                                  t' <- scRecordType sc elems'
-                                                                  foldM reapply t' xs
+    go xs                     (asRecordType -> Just elems)      = do elems' <- mapM (\(i,t) -> (i,) <$> memo t)
+                                                                                    (Map.assocs elems)
+                                                                     t' <- scRecordType sc elems'
+                                                                     foldM reapply t' xs
     go xs                     (asPi -> Just (x,aty,rty))        = do aty' <- memo aty
                                                                      rty' <- memo rty
                                                                      t' <- scPi sc x aty' rty'
@@ -796,12 +794,19 @@ scWhnf sc t0 =
     go xs                     (asConstant -> Just (_,body))     = do go xs body
     go xs                     t                                 = foldM reapply t xs
 
+    betaReduce :: (?cache :: Cache IO TermIndex Term) =>
+      [WHNFElim] -> [Term] -> Term -> IO Term
+    betaReduce (ElimApp x : xs) vs (asLambda -> Just (_,_,body)) =
+      betaReduce xs (x:vs) body
+    betaReduce xs vs body =
+      instantiateVarList sc 0 vs body >>= go xs
+
     reapply :: Term -> WHNFElim -> IO Term
     reapply t (ElimApp x) = scApply sc t x
     reapply t (ElimProj i) = scRecordSelect sc t i
     reapply t (ElimPair i) = scPairSelector sc t i
-    reapply t (ElimRecursor d ps p_ret cs_fs ixs) =
-      scFlatTermF sc (RecursorApp d ps p_ret cs_fs ixs t)
+    reapply t (ElimRecursor rec ixs) =
+      scFlatTermF sc (RecursorApp rec ixs t)
 
     tryDef :: (?cache :: Cache IO TermIndex Term) =>
               Ident -> [WHNFElim] -> Def -> IO Term
@@ -975,8 +980,8 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         DataTypeApp dt params args -> do
           t <- lift $ scTypeOfDataType sc dt
           lift $ foldM (reducePi sc) t (params ++ args)
-        RecursorApp _ _ p_ret _ ixs arg ->
-          lift $ scApplyAll sc p_ret (ixs ++ [arg])
+        RecursorApp rec ixs arg ->
+          lift $ scApplyAll sc (recursorMotive rec) (ixs ++ [arg])
         RecordType elems ->
           do max_s <- maximum <$> mapM (sort . snd) elems
              lift $ scSort sc max_s
