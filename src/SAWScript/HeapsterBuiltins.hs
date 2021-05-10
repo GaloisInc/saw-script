@@ -58,8 +58,10 @@ import qualified Control.Monad.Fail as Fail
 import System.Directory
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.UTF8 as BL
+import GHC.TypeLits
 
 import Data.Binding.Hobbits hiding (sym)
+import qualified Data.Type.RList as RL
 
 import Data.Parameterized.BoolRepr
 import qualified Data.Parameterized.Context as Ctx
@@ -433,8 +435,8 @@ heapster_define_irt_recursive_shape :: BuiltinContext -> Options -> HeapsterEnv 
                                       TopLevel ()
 heapster_define_irt_recursive_shape _bic _opts henv nm w_int args_str body_str =
   do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-     Some (Pair w LeqProof) <-
-       failOnNothing "Shape width must be positive" $ someNatGeq1 w_int
+     SomeKnownNatGeq1 w <-
+       failOnNothing "Shape width must be positive" $ someKnownNatGeq1 w_int
      sc <- getSharedContext
 
      -- Parse the arguments
@@ -443,52 +445,83 @@ heapster_define_irt_recursive_shape _bic _opts henv nm w_int args_str body_str =
          mnm = heapsterEnvSAWModule henv
          trans_ident = mkSafeIdent mnm (nm ++ "_IRT")
 
-     -- Use permEnvAddRecPermM to tie the knot of adding a recursive
-     -- permission whose cases and fold/unfold identifiers depend on that
-     -- recursive permission being defined
-     env' <- withKnownNat w $
-       permEnvAddRecShapeM env nm args trans_ident
-       (\_ tmp_env ->
-         parseExprInCtxString tmp_env (LLVMShapeRepr w) args_ctx body_str)
-       (\nmsh nmsh_unf tmp_env -> liftIO $
-         do let nmsh_fld = nus (cruCtxProxies args) (\ns ->
-                             PExpr_NamedShape Nothing Nothing
-                                              nmsh (namesToExprs ns))
-            -- translate the list of type variables
-            (TypedTerm ls_tm ls_tp, ixs) <-
-              translateCompleteShapeIRTTyVars sc tmp_env nmsh
-            let ls_ident = mkSafeIdent mnm (nm ++ "_IRTTyVars")
-            scInsertDef sc mnm ls_ident ls_tp ls_tm
-            -- translate the type description
-            (TypedTerm d_tm d_tp) <-
-              translateCompleteIRTDesc sc tmp_env ls_ident args nmsh_unf ixs
-            let d_ident = mkSafeIdent mnm (nm ++ "_IRTDesc")
-            scInsertDef sc mnm d_ident d_tp d_tm
-            -- translate the final definition
-            (TypedTerm tp_tm tp_tp) <-
-              translateCompleteIRTDef sc tmp_env ls_ident d_ident args
-            scInsertDef sc mnm trans_ident tp_tp tp_tm
-            -- translate the fold and unfold functions
-            fold_fun_tp <-
-              translateCompletePureFun sc tmp_env args
-                (singletonValuePerms . ValPerm_LLVMBlockShape <$> nmsh_unf)
-                (ValPerm_LLVMBlockShape <$> nmsh_fld)
-            unfold_fun_tp <-
-              translateCompletePureFun sc tmp_env args
-                (singletonValuePerms . ValPerm_LLVMBlockShape <$> nmsh_fld)
-                (ValPerm_LLVMBlockShape <$> nmsh_unf)
-            fold_fun_tm <-
-              translateCompleteIRTFoldFun sc tmp_env ls_ident d_ident
-                                          trans_ident args
-            unfold_fun_tm <-
-              translateCompleteIRTUnfoldFun sc tmp_env ls_ident d_ident
-                                            trans_ident args
-            let fold_ident   = mkSafeIdent mnm ("fold"   ++ nm ++ "_IRT")
-            let unfold_ident = mkSafeIdent mnm ("unfold" ++ nm ++ "_IRT")
-            scInsertDef sc mnm fold_ident   fold_fun_tp   fold_fun_tm
-            scInsertDef sc mnm unfold_ident unfold_fun_tp unfold_fun_tm
-            return (fold_ident, unfold_ident))
+     -- Parse the body
+     let tmp_nsh = partialRecShape w nm args Nothing trans_ident
+         tmp_env = permEnvAddNamedShape env tmp_nsh
+         mb_args = nus (cruCtxProxies args) namesToExprs
+     body <- parseExprInCtxString tmp_env (LLVMShapeRepr w) args_ctx body_str
+     abs_body <-
+       failOnNothing "recursive shape applied to different arguments in its body" $
+         fmap (mbCombine RL.typeCtxProxies) . mbMaybe $
+           mbMap2 (abstractNS nm args) mb_args body
+
+     -- Add the named shape to scope using the functions from IRTTranslation.hs
+     env' <- liftIO $ addIRTRecShape sc mnm env nm args abs_body trans_ident
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+-- | A temporary named recursive shape with `error`s for `fold_ident`,
+-- `unfold_ident`, and optionally `body`.
+partialRecShape :: NatRepr w -> String -> CruCtx args ->
+                   Maybe (Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w))) ->
+                   Ident -> NamedShape 'True args w
+partialRecShape _ nm args mb_body trans_ident =
+  let body_err = error "Analyzing recursive shape cases before it is defined!"
+      fold_err = error "Folding recursive shape before it is defined!"
+      unfold_err = error "Unfolding recursive shape before it is defined!"
+  in NamedShape nm args $ RecShapeBody (fromMaybe body_err mb_body)
+                                       trans_ident fold_err unfold_err
+
+-- | Given a named recursive shape name, arguments, body, and `trans_ident`,
+-- insert its definition and definitions for its fold and unfold functions
+-- using the functions in `IRTTranslation.hs`. Returns a modified
+-- `PermEnv` with the new named shape added.
+addIRTRecShape :: (1 <= w, KnownNat w) => SharedContext -> ModuleName ->
+                  PermEnv -> String -> CruCtx args ->
+                  Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w)) ->
+                  Ident -> IO PermEnv
+addIRTRecShape sc mnm env nm args body trans_ident =
+  do let tmp_nsh = partialRecShape knownNat nm args (Just body) trans_ident
+         tmp_env = permEnvAddNamedShape env tmp_nsh
+         nsh_unf = unfoldNamedShape tmp_nsh <$>
+                     nus (cruCtxProxies args) namesToExprs
+         nsh_fld = nus (cruCtxProxies args) $ \ns ->
+                     PExpr_NamedShape Nothing Nothing tmp_nsh (namesToExprs ns)
+     -- translate the list of type variables
+     (TypedTerm ls_tm ls_tp, ixs) <-
+       translateCompleteShapeIRTTyVars sc tmp_env tmp_nsh
+     let ls_ident = mkSafeIdent mnm (nm ++ "_IRTTyVars")
+     scInsertDef sc mnm ls_ident ls_tp ls_tm
+     -- translate the type description
+     (TypedTerm d_tm d_tp) <-
+       translateCompleteIRTDesc sc tmp_env ls_ident args nsh_unf ixs
+     let d_ident = mkSafeIdent mnm (nm ++ "_IRTDesc")
+     scInsertDef sc mnm d_ident d_tp d_tm
+     -- translate the final definition
+     (TypedTerm tp_tm tp_tp) <-
+       translateCompleteIRTDef sc tmp_env ls_ident d_ident args
+     scInsertDef sc mnm trans_ident tp_tp tp_tm
+     -- translate the fold and unfold functions
+     fold_fun_tp <-
+       translateCompletePureFun sc tmp_env args
+         (singletonValuePerms . ValPerm_LLVMBlockShape <$> nsh_unf)
+         (ValPerm_LLVMBlockShape <$> nsh_fld)
+     unfold_fun_tp <-
+       translateCompletePureFun sc tmp_env args
+         (singletonValuePerms . ValPerm_LLVMBlockShape <$> nsh_fld)
+         (ValPerm_LLVMBlockShape <$> nsh_unf)
+     fold_fun_tm <-
+       translateCompleteIRTFoldFun sc tmp_env ls_ident d_ident
+                                   trans_ident args
+     unfold_fun_tm <-
+       translateCompleteIRTUnfoldFun sc tmp_env ls_ident d_ident
+                                     trans_ident args
+     let fold_ident   = mkSafeIdent mnm ("fold"   ++ nm ++ "_IRT")
+     let unfold_ident = mkSafeIdent mnm ("unfold" ++ nm ++ "_IRT")
+     scInsertDef sc mnm fold_ident   fold_fun_tp   fold_fun_tm
+     scInsertDef sc mnm unfold_ident unfold_fun_tp unfold_fun_tm
+     let nsh = NamedShape nm args $
+                 RecShapeBody body trans_ident fold_ident unfold_ident
+     return $ permEnvAddNamedShape env nsh
 
 -- | Define a new reachability permission
 heapster_define_reachability_perm :: BuiltinContext -> Options -> HeapsterEnv ->
