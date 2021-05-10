@@ -165,6 +165,7 @@ data TCError
   | DeclError Text String
   | ErrorPos Pos TCError
   | ErrorCtx LocalName Term TCError
+  | ExpectedRecursor TypedTerm
 
 -- | Throw a type-checking error
 throwTCError :: TCError -> TCM a
@@ -230,7 +231,7 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     ppWithPos [ return ("Type of constant " ++ show n), ishow rty
               , return "doesn't match declared type", ishow ty ]
   helper (MalformedRecursor trm reason) =
-      ppWithPos [ return "Malformed recursor application",
+      ppWithPos [ return "Malformed recursor",
                   ishow trm, return reason ]
   helper (DeclError nm reason) =
     ppWithPos [ return ("Malformed declaration for " ++ show nm), return reason ]
@@ -238,6 +239,8 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     local (\(ctx,_) -> (ctx, Just p)) $ helper err
   helper (ErrorCtx x _ err) =
     local (\(ctx,p) -> (x:ctx, p)) $ helper err
+  helper (ExpectedRecursor ttm) =
+    ppWithPos [ return "Expected recursor value", ishow (typedVal ttm), ishow (typedType ttm)]
 
   ishow :: Term -> PPErrM String
   ishow tm =
@@ -477,8 +480,27 @@ instance TypeInfer (FlatTermF TypedTerm) where
        -- t' <- typeCheckWHNF t
        foldM applyPiTyped (ctorType ctor) (params ++ args)
 
+  typeInfer (RecursorType d ps motive _mty) =
+    do s <- inferRecursorType d ps motive
+       liftTCM scSort s
+
+  typeInfer (Recursor rec) =
+    inferRecursor rec
+
   typeInfer (RecursorApp rec ixs arg) =
-    inferRecursorApp rec ixs arg
+    do let motive   = typedVal (recursorMotive rec)
+       let motiveTy = typedType (recursorMotive rec)
+
+       -- Apply the indices to the type of the motive
+       -- to check the types of the `ixs` and `arg`, and
+       -- ensure that the result is fully applied
+       _s <- ensureSort =<< foldM applyPiTyped motiveTy (ixs ++ [arg])
+    
+       -- return the type (p_ret ixs arg)
+       liftTCM scTypeCheckWHNF =<<
+         liftTCM scApplyAll motive (map typedVal (ixs ++ [arg]))
+
+    --inferRecursorApp rec ixs arg
 
   typeInfer (RecordType elems) =
     -- NOTE: record types are always predicative, i.e., non-Propositional, so we
@@ -561,19 +583,97 @@ areConvertible :: Term -> Term -> TCM Bool
 areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 
 
+inferRecursorType ::
+  Ident       {- ^ data type name -} ->
+  [TypedTerm] {- ^ data type parameters -} ->
+  TypedTerm   {- ^ elimination motive -} ->
+  TCM Sort
+inferRecursorType d params motive =
+  do maybe_dt <- liftTCM scFindDataType d
+     dt <- case maybe_dt of
+       Just dt -> return dt
+       Nothing -> throwTCError $ NoSuchDataType d
+
+     let mk_err str =
+           MalformedRecursor
+           (Unshared $ fmap typedVal $ FTermF $
+             Recursor (CompiledRecursor d params motive mempty))
+            str
+
+     -- Check that the params have the correct types by making sure
+     -- they correspond to the input types of dt
+     unless (length params == length (dtParams dt)) $
+       throwTCError $ mk_err "Incorrect number of parameters"
+     _ <- foldM applyPiTyped (dtType dt) params
+
+     -- Get the type of p_ret and make sure that it is of the form
+     --
+     -- (ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s
+     --
+     -- for some allowed sort s, where the Ix are the indices of of dt
+     motive_srt <-
+       case asPiList (typedType motive) of
+         (_, (asSort -> Just s)) -> return s
+         _ -> throwTCError $ mk_err "Motive function should return a sort"
+     motive_req <-
+       liftTCM scRecursorRetTypeType dt (map typedVal params) motive_srt
+     -- Technically this is an equality test, not a subtype test, but we
+     -- use the precise sort used in the motive, so they are the same, and
+     -- checkSubtype is handy...
+     checkSubtype motive motive_req
+     unless (allowedElimSort dt motive_srt)  $
+       throwTCError $ mk_err "Disallowed propositional elimination"
+
+     return motive_srt
+
+
+inferRecursor ::
+  CompiledRecursor TypedTerm ->
+  TCM Term
+inferRecursor rec =
+  do let mk_err str =
+           MalformedRecursor
+            (Unshared $ fmap typedVal $ FTermF $ Recursor rec)
+            str
+
+     let d      = recursorDataType rec
+     let params = recursorParams rec
+     let motive = recursorMotive rec
+     let cs_fs  = recursorElims rec
+
+     -- Check that the parameters and motive are correct for the given
+     -- data type
+     _s <- inferRecursorType d params motive
+
+     -- Check that the elimination functions each have the right types, and
+     -- that we have exactly one for each constructor of dt
+     cs_fs_tps <-
+       liftTCM scRecursorElimTypes d (map typedVal params) (typedVal motive)
+     case map fst (Map.toList cs_fs) \\ map fst cs_fs_tps of
+       [] -> return ()
+       cs -> throwTCError $ mk_err ("Extra constructors: " ++ show cs)
+     forM_ cs_fs_tps $ \(c,req_tp) ->
+       case Map.lookup c cs_fs of
+         Nothing ->
+           throwTCError $ mk_err ("Missing constructor: " ++ show c)
+         Just f -> checkSubtype f req_tp
+
+     -- return the type of this recursor
+     liftTCM scFlatTermF
+       (RecursorType d (map typedVal params) (typedVal motive) (typedType motive))
+
+
 inferAndCompileRecursor ::
   Ident       {- ^ data type name -} ->
   [TypedTerm] {- ^ data type parameters -} ->
   TypedTerm   {- ^ elimination motive -} ->
-  [(Ident,TypedTerm)] {- ^ constructor eliminators -} ->
+  Map Ident TypedTerm {- ^ constructor eliminators -} ->
   TCM (CompiledRecursor TypedTerm)
 inferAndCompileRecursor d params p_ret cs_fs =
   do let mk_err str =
            MalformedRecursor
            (Unshared $ fmap typedVal $ FTermF $
-             RecursorApp (CompiledRecursor d params p_ret cs_fs)
-             []
-             (TypedTerm (Unshared (FTermF (UnitValue))) (Unshared (FTermF (UnitType)))))
+             Recursor (CompiledRecursor d params p_ret cs_fs))
             str
      maybe_dt <- liftTCM scFindDataType d
      dt <- case maybe_dt of
@@ -608,11 +708,11 @@ inferAndCompileRecursor d params p_ret cs_fs =
      -- that we have exactly one for each constructor of dt
      cs_fs_tps <-
        liftTCM scRecursorElimTypes d (map typedVal params) (typedVal p_ret)
-     case map fst cs_fs \\ map fst cs_fs_tps of
+     case map fst (Map.toList cs_fs) \\ map fst cs_fs_tps of
        [] -> return ()
        cs -> throwTCError $ mk_err ("Extra constructors: " ++ show cs)
      forM_ cs_fs_tps $ \(c,req_tp) ->
-       case lookup c cs_fs of
+       case Map.lookup c cs_fs of
          Nothing ->
            throwTCError $ mk_err ("Missing constructor: " ++ show c)
          Just f -> checkSubtype f req_tp
@@ -626,20 +726,22 @@ inferAndCompileRecursor d params p_ret cs_fs =
          }
 
 -- | Infer the type of a recursor application
-inferRecursorApp ::
-  CompiledRecursor TypedTerm ->
+_inferRecursorApp ::
+  TypedTerm   {- ^ recursor term -} ->
   [TypedTerm] {- ^ data type indices -} ->
   TypedTerm   {- ^ recursor argument -} ->
   TCM Term
-inferRecursorApp rec ixs arg =
-  do let motive   = typedVal (recursorMotive rec)
-     let motiveTy = typedType (recursorMotive rec)
-
-     -- Apply the indices to the type of the motive
-     -- to check the types of the `ixs` and `arg`, and
-     -- ensure that the result is fully applied
-     _s <- ensureSort =<< foldM applyPiTyped motiveTy (ixs ++ [arg])
-
-     -- return the type (p_ret ixs arg)
-     liftTCM scTypeCheckWHNF =<<
-       liftTCM scApplyAll motive (map typedVal (ixs ++ [arg]))
+_inferRecursorApp rec ixs arg =
+  do recty <- typeCheckWHNF (typedType rec)
+     case asRecursorType recty of
+       Nothing -> throwTCError (ExpectedRecursor rec)
+       Just (_d, _ps, motive, motiveTy) -> do
+    
+         -- Apply the indices to the type of the motive
+         -- to check the types of the `ixs` and `arg`, and
+         -- ensure that the result is fully applied
+         _s <- ensureSort =<< foldM applyPiTyped motiveTy (ixs ++ [arg])
+    
+         -- return the type (p_ret ixs arg)
+         liftTCM scTypeCheckWHNF =<<
+           liftTCM scApplyAll motive (map typedVal (ixs ++ [arg]))

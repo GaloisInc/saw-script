@@ -37,6 +37,7 @@ import           Data.Char                                     (isDigit)
 import qualified Data.IntMap                                   as IntMap
 import           Data.List                                     (intersperse, sortOn)
 import           Data.Maybe                                    (fromMaybe)
+import qualified Data.Map                                      as Map
 import qualified Data.Set                                      as Set
 import qualified Data.Text                                     as Text
 import           Prelude                                       hiding (fail)
@@ -217,8 +218,15 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     -- TODO: maybe have more customizable translation of data types
     DataTypeApp n is as -> translateIdentWithArgs n (is ++ as)
     CtorApp n is as -> translateIdentWithArgs n (is ++ as)
+
+    RecursorType _d _params motive _motiveTy ->
+      -- motive looks like: (\ ix0, ..., ixn, arg -> body)
+      -- to get the type of the recursor, transform the lambdas into Pis
+      do let (bs, body) = asLambdaList motive
+         translatePi bs body
+
     -- TODO: support this next!
-    RecursorApp (CompiledRecursor d parameters motive eliminators) indices termEliminated ->
+    Recursor (CompiledRecursor d parameters motive eliminators) ->
       do maybe_d_trans <- translateIdentToIdent d
          rect_var <- case maybe_d_trans of
            Just i -> return $ Coq.Var (show i ++ "_rect")
@@ -226,10 +234,15 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
              errorTermM ("Recursor for " ++ show d ++
                          " cannot be translated because the datatype " ++
                          "is mapped to an arbitrary Coq term")
-         let args =
-               parameters ++ [motive] ++ map snd eliminators
-               ++ indices ++ [termEliminated]
+         let args = parameters ++ [motive] ++ map snd (Map.toList eliminators) -- TODO, this isn't right, we need these in declaration order
          Coq.App rect_var <$> mapM translateTerm args
+
+    RecursorApp rec indices termEliminated ->
+      do rec' <- flatTermFToExpr (Recursor rec)
+         --rec' <- translateTerm rec
+         let args = indices ++ [termEliminated]
+         Coq.App rec' <$> mapM translateTerm args
+
     Sort s -> pure (Coq.Sort (translateSort s))
     NatLit i -> pure (Coq.NatLit (toInteger i))
     ArrayValue (asBoolType -> Just ()) (traverse asBool -> Just bits)

@@ -38,7 +38,9 @@ import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.TypedAST
-       (ModuleMap, DataType(..), findCtorInMap, ctorType, ctorNumParams) -- toShortName
+       ( ModuleMap, DataType(..), findCtorInMap, ctorType, ctorNumParams
+       , FlatTermF(..)
+       ) -- toShortName
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Utils (panic)
 
@@ -141,21 +143,28 @@ readBackTValue sc cfg = loop
       VDataType nm vs ->
         do dt <- scRequireDataType sc nm
            dtTy <- evalType cfg (dtType dt)
-           vs' <- readBackDataType dtTy vs
+           vs' <- readBackDataTypeParams dtTy vs
            scDataTypeApp sc nm vs'
       VPiType{} ->
         do (ecs, tm) <- readBackPis tv
            scGeneralizeExts sc ecs tm
+      VRecursorType d ps m mty ->
+        do dt <- scRequireDataType sc d
+           dtTy <- evalType cfg (dtType dt)
+           ps'  <- readBackDataTypeParams dtTy ps
+           m'   <- readBackValue sc cfg mty m
+           mty' <- loop mty
+           scFlatTermF sc (RecursorType d ps' m' mty')
       VTyTerm _s tm ->
         pure tm
 
-  readBackDataType (VPiType _nm t f) (v:vs) =
+  readBackDataTypeParams (VPiType _nm t f) (v:vs) =
     do v' <- readBackValue sc cfg t v
        t' <- f (ready v)
-       vs' <- readBackDataType t' vs
+       vs' <- readBackDataTypeParams t' vs
        return (v':vs')
-  readBackDataType (VSort _s) [] = return []
-  readBackDataType _ _ = panic "readBackTValue" ["Arity mismatch in data type in readback"]
+  readBackDataTypeParams (VSort _s) [] = return []
+  readBackDataTypeParams _ _ = panic "readBackTValue" ["Arity mismatch in data type in readback"]
 
   readBackPis (VPiType nm t f) =
     do t' <- loop t
@@ -217,6 +226,7 @@ reflectTerm sc cfg = loop
     VRecordType{} -> return (VExtra (VExtraTerm tv tm))
     VPairType{} -> return (VExtra (VExtraTerm tv tm))
     VDataType{} -> return (VExtra (VExtraTerm tv tm))
+    VRecursorType{} -> return (VExtra (VExtraTerm tv tm))
     VTyTerm{} -> return (VExtra (VExtraTerm tv tm))
 
 readBackValue :: SharedContext -> Sim.SimulatorConfig TermModel -> TValue TermModel -> Value TermModel -> IO Term

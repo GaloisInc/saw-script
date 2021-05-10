@@ -678,6 +678,9 @@ rewriteSharedTermTypeSafe sc ss t0 =
           -- a term to become ill-typed
           CtorApp{}        -> return ftf
           DataTypeApp{}    -> return ftf -- could treat same as CtorApp
+
+          RecursorType{}   -> return ftf
+          Recursor{}       -> return ftf
           RecursorApp{}    -> return ftf -- could treat same as CtorApp
 
           RecordType{}     -> traverse rewriteAll ftf

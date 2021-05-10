@@ -159,16 +159,24 @@ data FlatTermF e
     -- an inductively-defined type; the parameters (of the inductive type to
     -- which this constructor belongs) and indices are kept separate
   | CtorApp !Ident ![e] ![e]
+
+    -- | The type of a recursor, which is specified by the datatype name,
+    --   the parameters to the data type, the motive function, and the
+    --   type of the motive function.
+  | RecursorType Ident ![e] !e !e
+
+    -- | A recursor, which is specified by giving the datatype name,
+    --   the parameters to the datatype, a motive and elimiation functions
+    --   for each constructor. A recursor can be used with the special
+    --   @RecursorApp@ term, which provides the datatype indices and
+    --   actual argument to the eliminator.
+  | Recursor (CompiledRecursor e)
+
     -- | An eliminator / pattern-matching function for an inductively-defined
     -- type, given by:
-    -- * The (identifier of the) inductive type it eliminates;
-    -- * The parameters of that inductive type;
-    -- * The return type, also called the "intent", given by a function from
-    --   type indices of the inductive type to a type;
-    -- * The elimination function for each constructor of that inductive type;
-    -- * The indices for that inductive type; AND
+    -- * The recursor value;
+    -- * The indices for the inductive type; AND
     -- * The argument that is being eliminated / pattern-matched
-    -- * A compiled map of iota conersions for each constructor
   | RecursorApp (CompiledRecursor e) [e] e
 
     -- | Non-dependent record types, i.e., N-ary tuple types with named
@@ -208,7 +216,7 @@ data CompiledRecursor e =
   { recursorDataType :: Ident
   , recursorParams   :: [e]
   , recursorMotive   :: e
-  , recursorElims    :: [(Ident, e)]
+  , recursorElims    :: Map Ident e
   }
  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
@@ -228,6 +236,13 @@ alistAllFields (fld:flds) alist
     deleteField f ((f',_):rest) | f == f' = rest
     deleteField f (x:rest) = x : deleteField f rest
 alistAllFields _ _ = Nothing
+
+zipRec :: (x -> y -> z) -> CompiledRecursor x -> CompiledRecursor y -> Maybe (CompiledRecursor z)
+zipRec f (CompiledRecursor d1 ps1 m1 es1) (CompiledRecursor d2 ps2 m2 es2)
+  | d1 == d2, Map.keysSet es1 == Map.keysSet es2
+  = Just $ CompiledRecursor d1 (zipWith f ps1 ps2) (f m1 m2) (Map.intersectionWith f es1 es2)
+
+  | otherwise = Nothing
 
 -- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
 -- pointwise to immediate subterms, if the two 'FlatTermF's are the same
@@ -250,18 +265,18 @@ zipWithFlatTermF f = go
       | cx == cy = Just $ CtorApp cx (zipWith f psx psy) (zipWith f lx ly)
     go (DataTypeApp dx psx lx) (DataTypeApp dy psy ly)
       | dx == dy = Just $ DataTypeApp dx (zipWith f psx psy) (zipWith f lx ly)
-    go (RecursorApp (CompiledRecursor d1 ps1 p1 cs_fs1) ixs1 x1)
-       (RecursorApp (CompiledRecursor d2 ps2 p2 cs_fs2) ixs2 x2)
+
+    go (RecursorType d1 ps1 m1 mty1) (RecursorType d2 ps2 m2 mty2)
       | d1 == d2
-      , Just fs2 <- alistAllFields (map fst cs_fs1) cs_fs2
-      = Just $
-        RecursorApp
-          (CompiledRecursor d1
-            (zipWith f ps1 ps2)
-            (f p1 p2)
-            (zipWith (\(c,f1) f2 -> (c, f f1 f2)) cs_fs1 fs2))
-          (zipWith f ixs1 ixs2)
-          (f x1 x2)
+      = Just $ RecursorType d1 (zipWith f ps1 ps2) (f m1 m2) (f mty1 mty2)
+
+    go (Recursor rec1) (Recursor rec2) = Recursor <$> zipRec f rec1 rec2
+
+    go (RecursorApp rec1 ixs1 x1) (RecursorApp rec2 ixs2 x2) =
+        RecursorApp <$>
+          (zipRec f rec1 rec2) <*>
+          pure (zipWith f ixs1 ixs2) <*> 
+          pure (f x1 x2)
 
     go (RecordType elems1) (RecordType elems2)
       | Just vals2 <- alistAllFields (map fst elems1) elems2 =

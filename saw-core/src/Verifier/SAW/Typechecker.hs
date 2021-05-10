@@ -35,6 +35,7 @@ import Control.Applicative
 #endif
 import Control.Monad.State
 import Data.List (findIndex)
+import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Vector as V
 
@@ -191,7 +192,9 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
           (elims,
            (splitAt (length $ dtIndices dt) ->
             (ixs, arg : rem_args)))))) ->
-         do let cs_fs = zip (map ctorName $ dtCtors dt) elims
+         do let cs_fs = Map.fromList (zip (map ctorName $ dtCtors dt) elims)
+            --rec <- typeInferComplete (Recursor (CompiledRecursor dt_ident params p_ret cs_fs))
+            --typed_r <- typeInferComplete (RecursorApp rec ixs arg)
             comp_rec <- inferAndCompileRecursor dt_ident params p_ret cs_fs
             typed_r <- typeInferComplete (RecursorApp comp_rec ixs arg)
             inferApplyAll typed_r rem_args

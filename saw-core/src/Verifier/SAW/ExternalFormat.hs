@@ -49,9 +49,9 @@ separateArgs args =
     Nothing -> Nothing
 
 -- | Split the last element from the rest of a list, for non-empty lists
-splitLast :: [a] -> Maybe ([a], a)
-splitLast [] = Nothing
-splitLast xs = Just (take (length xs - 1) xs, last xs)
+_splitLast :: [a] -> Maybe ([a], a)
+_splitLast [] = Nothing
+_splitLast xs = Just (take (length xs - 1) xs, last xs)
 
 type WriteM = State.State (Map TermIndex Int, Map VarIndex NameInfo, [String], Int)
 
@@ -145,10 +145,23 @@ scWriteExternal t0 =
               unwords ("Ctor" : show i : map show ps ++ argsep : map show es)
             DataTypeApp i ps es -> pure $
               unwords ("Data" : show i : map show ps ++ argsep : map show es)
-            RecursorApp (CompiledRecursor i ps p_ret cs_fs) ixs e -> pure $
+
+            RecursorType{} -> undefined
+            Recursor{} -> undefined
+            RecursorApp{} -> undefined
+{-
+            RecursorType d ps motive motive_ty -> pure $
+              unwords (["RecursorType", show d] ++
+                       map show ps ++
+                       [argsep, show motive, show motive_ty])
+            Recursor (CompiledRecursor i ps p_ret cs_fs) -> pure $
               unwords (["Recursor" , show i] ++ map show ps ++
-                       [argsep, show p_ret, show cs_fs] ++
+                       [argsep, show p_ret, show (Map.toList cs_fs)])
+            RecursorApp rec ixs e -> pure $
+              unwords (["RecursorApp", show rec] ++
                        map show ixs ++ [show e])
+-}
+
             RecordType elem_tps -> pure $ unwords ["RecordType", show elem_tps]
             RecordValue elems   -> pure $ unwords ["Record", show elems]
             RecordProj e prj    -> pure $ unwords ["RecordProj", show e, Text.unpack prj]
@@ -242,17 +255,30 @@ scReadExternal sc input =
           FTermF <$> (CtorApp (parseIdent i) <$> traverse readIdx ps <*> traverse readIdx es)
         ("Data" : i : (separateArgs -> Just (ps, es))) ->
           FTermF <$> (DataTypeApp (parseIdent i) <$> traverse readIdx ps <*> traverse readIdx es)
+{-
+        ("RecursorType" : i :
+         (separateArgs ->
+          Just (ps, [motive,motive_ty]))) ->
+            do tp <- RecursorType (parseIdent i) <$>
+                       traverse readIdx ps <*>
+                       readIdx motive <*>
+                       readIdx motive_ty
+               pure (FTermF tp)
         ("Recursor" : i :
          (separateArgs ->
-          Just (ps, p_ret : cs_fs : (splitLast -> Just (ixs, arg))))) ->
+          Just (ps, [p_ret, cs_fs]))) ->
             do rec <- CompiledRecursor (parseIdent i) <$>
                         traverse readIdx ps <*>
                         readIdx p_ret <*>
-                        (traverse (traverse getTerm) =<< readM cs_fs)
-               app <- RecursorApp rec <$>
+                        (Map.fromList <$> (traverse (traverse getTerm) =<< readM cs_fs))
+               pure (FTermF (Recursor rec))
+        ("RecursorApp" : rec : (splitLast -> Just (ixs, arg))) ->
+            do app <- RecursorApp <$>
+                        readIdx rec <*>
                         traverse readIdx ixs <*>
                         readIdx arg
                pure (FTermF app)
+-}
         ["RecordType", elem_tps] ->
           FTermF <$> (RecordType <$> (traverse (traverse getTerm) =<< readM elem_tps))
         ["Record", elems] ->

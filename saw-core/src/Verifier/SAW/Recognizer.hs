@@ -42,6 +42,7 @@ module Verifier.SAW.Recognizer
   , asDataType
   , asDataTypeParams
   , asRecursorApp
+  , asRecursorType
   , isDataType
   , asNat
   , asBvNat
@@ -273,9 +274,15 @@ asDataTypeParams t = do DataTypeApp c ps args <- asFTermF t; return (c,ps,args)
 asDataType :: Recognizer Term (Ident, [Term])
 asDataType t = do DataTypeApp c ps args <- asFTermF t; return (c,ps ++ args)
 
+asRecursorType :: Recognizer Term (Ident, [Term], Term, Term)
+asRecursorType t =
+  do RecursorType d ps motive motive_ty <- asFTermF t
+     return (d,ps,motive,motive_ty)
+
 asRecursorApp :: Recognizer Term (CompiledRecursor Term, [Term], Term)
 asRecursorApp t =
   do RecursorApp rec ixs arg <- asFTermF t
+     --Recursor rec' <- asFTermF rec
      return (rec, ixs, arg)
 
 isDataType :: Ident -> Recognizer [Term] a -> Recognizer Term a

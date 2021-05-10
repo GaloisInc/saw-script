@@ -72,6 +72,8 @@ module Verifier.SAW.Term.CtxTerm
   ) where
 
 import Data.Kind(Type)
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Proxy
 import Data.Type.Equality
 import Control.Monad
@@ -549,7 +551,7 @@ ctxRecursorAppM :: MonadTerm m =>
   DataIdent d ->
   m (CtxTermsCtx ctx params) ->
   m (CtxTerm ctx p_ret) ->
-  m [(Ident, CtxTerm ctx elim)] ->
+  m (Map Ident (CtxTerm ctx elim)) ->
   m (CtxTermsCtx ctx ixs) ->
   m (CtxTerm ctx d) ->
   m (CtxTerm ctx a)
@@ -557,11 +559,14 @@ ctxRecursorAppM (DataIdent d) paramsM pretM cs_fsM ixsM argM =
   do cmp <- CompiledRecursor d <$>
               (ctxTermsCtxToListUnsafe <$> paramsM) <*>
               (unCtxTermUnsafe <$> pretM) <*>
-              (map (\(c,f) -> (c, unCtxTermUnsafe f)) <$> cs_fsM)
-     rec <- RecursorApp cmp <$>
+              (fmap unCtxTermUnsafe <$> cs_fsM)
+     --rec <- mkFlatTermF (Recursor cmp)
+
+     app <- RecursorApp cmp <$>
               (ctxTermsCtxToListUnsafe <$> ixsM) <*>
               (unCtxTermUnsafe <$> argM)
-     CtxTerm <$> mkFlatTermF rec
+
+     CtxTerm <$> mkFlatTermF app
 
 
 --
@@ -965,7 +970,7 @@ ctxReduceRecursor :: forall m d params ixs.
   Ident  {- ^ data type name -} ->
   [Term] {- ^ data type parameters -} ->
   Term   {- ^ elimination motive -} ->
-  [(Ident,Term)] {- ^ constructor eliminator functions -} ->
+  Map Ident Term {- ^ constructor eliminator functions -} ->
   Ident  {- ^ constructor name  -} ->
   [Term] {- ^ constructor actual arguments -}  ->
   CtorArgStruct d params ixs {- ^ constructor formal argument descriptor -} ->
@@ -978,10 +983,10 @@ ctxReduceRecursor d params motive cs_fs c c_args CtorArgStruct{..} =
 
       do let d' = DataIdent d :: DataIdent d
              a  = Proxy :: Proxy ()
-             elims = fmap (fmap mkClosedTerm) cs_fs
+             elims = fmap mkClosedTerm cs_fs
 
              -- look up the constructor eliminator associated with this constructor
-             fi = case lookup c elims of
+             fi = case Map.lookup c elims of
                     Just f -> f
                     Nothing -> error $ unwords
                       ["ctxReduceRecursor: eliminator missing for constructor",show c]
@@ -1008,7 +1013,7 @@ ctxAbstractRecursor :: forall m d a params motive elim ixs.
   Proxy a ->
   CtxTermsCtx EmptyCtx params ->
   CtxTerm EmptyCtx motive ->
-  [(Ident, CtxTerm EmptyCtx elim)] ->
+  Map Ident (CtxTerm EmptyCtx elim) ->
   Bindings CtxTerm params ixs ->
   m (CtxTerm EmptyCtx (Arrows ixs (d -> a)))
 ctxAbstractRecursor d Proxy ps motive cs_fs dataTypeIndices =
@@ -1025,9 +1030,7 @@ ctxAbstractRecursor d Proxy ps motive cs_fs dataTypeIndices =
               ctxRecursorAppM d
                 (ctxLift InvNoBind (Bind "x" dtp NoBind) ps')
                 (up motive)
-                (forM cs_fs (\(c',f) ->
-                  do f' <- up f
-                     pure (c',f')))
+                (traverse up cs_fs)
                 (ctxLift InvNoBind (Bind "x" dtp NoBind) (invertCtxTerms ixs))
                 (return x)
                   :: m (CtxTerm (CtxInv ixs ::> d) a)
@@ -1127,7 +1130,9 @@ class UsesDataType a where
 instance UsesDataType (TermF Term) where
   usesDataType (DataIdent d) (FTermF (DataTypeApp d' _ _))
     | d' == d = True
-  usesDataType (DataIdent d) (FTermF (RecursorApp rec _ _))
+  usesDataType (DataIdent d) (FTermF (RecursorType d' _ _ _))
+    | d' == d = True
+  usesDataType (DataIdent d) (FTermF (Recursor rec))
     | recursorDataType rec == d = True
   usesDataType d tf = any (usesDataType d) tf
 

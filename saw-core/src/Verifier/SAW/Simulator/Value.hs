@@ -64,9 +64,8 @@ data Value l
   | VIntMod !Natural (VInt l)
   | VArray (VArray l)
   | VString !Text
---  | VFloat !Float
---  | VDouble !Double
   | VRecordValue ![(FieldName, Thunk l)]
+  | VRecursor (CompiledRecursor (Value l))
   | VExtra (Extra l)
   | TValue (TValue l)
 
@@ -83,6 +82,11 @@ data TValue l
   | VDataType !Ident ![Value l]
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
+  | VRecursorType
+     !Ident      -- data type name
+     ![Value l]  -- data type parameters
+     !(Value l)  -- motive function
+     !(TValue l) -- type of motive function
   | VTyTerm !Sort !Term
 
 -- | Neutral terms represent computations that are blocked
@@ -95,8 +99,15 @@ data NeutralTerm
   | NeutralPairRight NeutralTerm  -- right pair projection
   | NeutralRecordProj NeutralTerm FieldName -- record projection
   | NeutralApp NeutralTerm Term -- function application
-  | NeutralRecursor -- recursor application
+{-
+  | NeutralRecursor
+      NeutralTerm -- recursor value
+      [Term] -- indices for the inductive type
+      Term   -- argument being eliminated
+-}
+  | NeutralRecursorArg -- recursor application
       (CompiledRecursor Term)
+      --Term   -- recursor value
       [Term] -- indices for the inductive type
       NeutralTerm -- argument being elminated
 
@@ -183,12 +194,11 @@ instance Show (Extra l) => Show (Value l) where
       VInt _         -> showString "<<integer>>"
       VIntMod n _    -> showString ("<<Z " ++ show n ++ ">>")
       VArray{}       -> showString "<<array>>"
---      VFloat float   -> shows float
---      VDouble double -> shows double
       VString s      -> shows s
       VRecordValue [] -> showString "{}"
       VRecordValue ((fld,_):_) ->
         showString "{" . showString (Text.unpack fld) . showString " = _, ...}"
+      VRecursor rec  -> showString "<<recursor: " . shows (recursorDataType rec) . showString ">>"
       VExtra x       -> showsPrec p x
       TValue x       -> showsPrec p x
     where
@@ -214,6 +224,7 @@ instance Show (Extra l) => Show (TValue l) where
       VVecType n a   -> showString "Vec " . shows n
                         . showString " " . showParen True (showsPrec p a)
       VSort s        -> shows s
+      VRecursorType{} -> showString "RecursorType"
 
       VTyTerm _ tm   -> shows tm
 
@@ -319,6 +330,7 @@ asFirstOrderTypeTValue v =
     VPiType{}   -> Nothing
     VDataType{} -> Nothing
     VSort{}     -> Nothing
+    VRecursorType{} -> Nothing
     VTyTerm{}   -> Nothing
 
 -- | A (partial) injective mapping from type values to strings. These
@@ -346,7 +358,9 @@ suffixTValue tv =
     VDataType {} -> Nothing
     VRecordType {} -> Nothing
     VSort {} -> Nothing
+    VRecursorType{} -> Nothing
     VTyTerm{} -> Nothing
+
 
 neutralToTerm :: NeutralTerm -> Term
 neutralToTerm = loop 
@@ -360,8 +374,10 @@ neutralToTerm = loop
     Unshared (FTermF (RecordProj (loop nt) f))
   loop (NeutralApp nt arg) =
     Unshared (App (loop nt) arg)
-  loop (NeutralRecursor rec ixs x) =
+  loop (NeutralRecursorArg rec ixs x) =
     Unshared (FTermF (RecursorApp rec ixs (loop x)))
+--  loop (NeutralRecursor rec ixs x) =
+--    Unshared (FTermF (RecursorApp (loop rec) ixs x))
 
 neutralToSharedTerm :: SharedContext -> NeutralTerm -> IO Term
 neutralToSharedTerm sc = loop
@@ -377,7 +393,10 @@ neutralToSharedTerm sc = loop
   loop (NeutralApp nt arg) =
     do tm <- loop nt
        scApply sc tm arg
-  loop (NeutralRecursor rec ixs nt) =
+--  loop (NeutralRecursor nt ixs x) =
+--    do tm <- loop nt
+--       scFlatTermF sc (RecursorApp tm ixs x)
+  loop (NeutralRecursorArg rec ixs nt) =
     do tm <- loop nt
        scFlatTermF sc (RecursorApp rec ixs tm)
 

@@ -149,7 +149,7 @@ data Ctor =
   , ctorIotaReduction ::
        [Term] {- ^ data type parameters -} ->
        Term   {- ^ elimination motive -} ->
-       [(Ident,Term)] {- ^ constructor eliminators -} ->
+       Map Ident Term {- ^ constructor eliminators -} ->
        [Term] {- ^ constructor arguments -} ->
        IO Term
     -- ^ Cached functon for computing the result of one step of iota

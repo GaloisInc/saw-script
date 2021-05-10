@@ -641,19 +641,24 @@ scBuildCtor sc d c ctor_names arg_struct =
     -- ctorIotaReduction field
     iota_red <-
       scShCtxM sc $
-      ctxReduceRecursor d (take num_params vars) (vars !! num_params)
-      (zip ctor_names (drop (num_params + 1) vars)) c
-      (drop (num_params + 1 + length ctor_names) vars) arg_struct
+      ctxReduceRecursor
+        d
+        (take num_params vars)
+        (vars !! num_params)
+        (Map.fromList (zip ctor_names (drop (num_params + 1) vars)))
+        c
+        (drop (num_params + 1 + length ctor_names) vars)
+        arg_struct
 
     -- Step 4: build the API function that shuffles the terms around in the
     -- correct way.
     let iota_fun params p_ret cs_fs args =
-          do let fnd cnm = case lookup cnm cs_fs of
+          do let fnd cnm = case Map.lookup cnm cs_fs of
                              Just e  -> e
                              Nothing -> panic "ctorIotaReduction"
                                          ["no eliminator for constructor", show cnm]
              let elims = map fnd ctor_names
-             instantiateVarList sc 0 (reverse $ params ++ [p_ret] ++ elims ++ args) iota_red
+             instantiateVarList sc 0 (reverse (params ++ [p_ret] ++ elims ++ args)) iota_red
 
     -- Finally, return the required Ctor record
     return $ Ctor { ctorName = c, ctorArgStruct = arg_struct,
@@ -687,6 +692,7 @@ scRecursorElimTypes sc d_id params p_ret =
 scRecursorRetTypeType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
 scRecursorRetTypeType sc dt params s =
   scShCtxM sc $ mkPRetTp (dtName dt) (dtParams dt) (dtIndices dt) params s
+
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
 -- an iota reduction. More specifically, the call
@@ -806,7 +812,8 @@ scWhnf sc t0 =
     reapply t (ElimProj i) = scRecordSelect sc t i
     reapply t (ElimPair i) = scPairSelector sc t i
     reapply t (ElimRecursor rec ixs) =
-      scFlatTermF sc (RecursorApp rec ixs t)
+      do --rectm <- scFlatTermF sc (Recursor rec)
+         scFlatTermF sc (RecursorApp rec ixs t)
 
     tryDef :: (?cache :: Cache IO TermIndex Term) =>
               Ident -> [WHNFElim] -> Def -> IO Term
@@ -980,8 +987,26 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         DataTypeApp dt params args -> do
           t <- lift $ scTypeOfDataType sc dt
           lift $ foldM (reducePi sc) t (params ++ args)
+        RecursorType _d _ps _motive motive_ty -> do
+          s <- sort motive_ty
+          lift $ scSort sc s
+        Recursor rec -> do
+          mty <- memo (recursorMotive rec)
+          lift $ scFlatTermF sc $
+             RecursorType (recursorDataType rec)
+                          (recursorParams rec)
+                          (recursorMotive rec)
+                          mty
         RecursorApp rec ixs arg ->
           lift $ scApplyAll sc (recursorMotive rec) (ixs ++ [arg])
+
+{-
+          do tp <- (liftIO . scWhnf sc) =<< memo rec
+             case asRecursorType tp of
+               Just (_d, _ps, motive, _motivety) ->
+                 lift $ scApplyAll sc motive (ixs ++ [arg])
+               _ -> fail "Expected recursor type in recursor application"
+-}
         RecordType elems ->
           do max_s <- maximum <$> mapM (sort . snd) elems
              lift $ scSort sc max_s
