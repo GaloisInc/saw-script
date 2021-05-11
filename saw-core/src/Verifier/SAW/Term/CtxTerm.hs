@@ -560,9 +560,9 @@ ctxRecursorAppM (DataIdent d) paramsM pretM cs_fsM ixsM argM =
               (ctxTermsCtxToListUnsafe <$> paramsM) <*>
               (unCtxTermUnsafe <$> pretM) <*>
               (fmap unCtxTermUnsafe <$> cs_fsM)
-     --rec <- mkFlatTermF (Recursor cmp)
+     rec <- mkFlatTermF (Recursor cmp)
 
-     app <- RecursorApp cmp <$>
+     app <- RecursorApp rec <$>
               (ctxTermsCtxToListUnsafe <$> ixsM) <*>
               (unCtxTermUnsafe <$> argM)
 

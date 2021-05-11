@@ -168,18 +168,21 @@ evalTermF cfg lam recEval tf env =
         DataTypeApp i ps ts -> TValue . VDataType i <$> mapM recEval (ps ++ ts)
 
         RecursorType d ps m mtp ->
-          do ps'  <- mapM recEval ps
-             m'   <- recEval m
-             mtp' <- toTValue <$> recEval mtp
-             pure $ TValue $  VRecursorType d ps' m' mtp'
+          VRecursorType d <$>
+            mapM recEval ps <*>
+            recEval m <*>
+            (toTValue <$> recEval mtp)
 
-        Recursor rec -> VRecursor <$> traverse recEval rec
+        Recursor rec ->
+          VRecursor (recursorDataType rec) <$>
+            traverse recEval (recursorParams rec) <*>
+            recEval (recursorMotive rec) <*>
+            traverse recEvalDelay (recursorElims rec)
 
-{-
         RecursorApp rectm ixs arg ->
           do rec <- recEval rectm
              case rec of
-               VRecursor crec ->
+               VRecursor _d ps motive ps_fs ->
                  do arg_v <- recEval arg
                     case findConstructor arg_v of
                       Nothing -> simNeutral cfg (NeutralRecursorArg rectm ixs (NeutralBox arg))
@@ -187,43 +190,18 @@ evalTermF cfg lam recEval tf env =
                         | Just ctor <- findCtorInMap (simModMap cfg) c
                         , Just dt <- findDataTypeInMap (simModMap cfg) (ctorDataTypeName ctor) ->
        
-                           do let ps_th    = recursorParams crec
-                              let p_ret_th = recursorMotive crec
-                              elims <- mapM (\c' -> case Map.lookup c (recursorElims crec) of
-                                          Just elim -> return (ready elim)
+                           do elims <- mapM (\c' -> case Map.lookup c ps_fs of
+                                          Just elim -> return elim
                                           Nothing ->
                                             panic ("evalRecursorApp: internal error: "
                                                   ++ "constructor not found in its own datatype: "
                                                   ++ show c')) $ dtCtors dt
-                              let args = drop (length ps_th) $ V.toList all_args_vs
-                              lam (ctorIotaTemplate ctor) (reverse ((map ready ps_th) ++ [ready p_ret_th] ++ elims ++ args))
+                              let args = drop (length ps) $ V.toList all_args_vs
+                              lam (ctorIotaTemplate ctor) (reverse ((map ready ps) ++ [ready motive] ++ elims ++ args))
        
                         | otherwise -> panic ("evalRecursorApp: could not find info for constructor: " ++ show c)
 
                _ -> simNeutral cfg (NeutralRecursor (NeutralBox rectm) ixs arg)
--}
-        RecursorApp crec@(CompiledRecursor _d ps p_ret cs_fs) ixs arg ->
-          do ps_th <- mapM recEvalDelay ps
-             p_ret_th <- recEvalDelay p_ret
-             cs_fs_th <- traverse recEvalDelay cs_fs
-             arg_v <- recEval arg
-             case findConstructor arg_v of
-               Nothing -> simNeutral cfg (NeutralRecursorArg crec ixs (NeutralBox arg))
-               Just (c,all_args_vs)
-                 | Just ctor <- findCtorInMap (simModMap cfg) c
-                 , Just dt <- findDataTypeInMap (simModMap cfg) (ctorDataTypeName ctor) ->
-
-                    do elims <- mapM (\c' -> case Map.lookup c cs_fs_th of
-                                   Just elim -> return elim
-                                   Nothing ->
-                                     panic ("evalRecursorApp: internal error: "
-                                           ++ "constructor not found in its own datatype: "
-                                           ++ show c')) $ dtCtors dt
-
-                       let args = drop (length ps) $ V.toList all_args_vs
-                       lam (ctorIotaTemplate ctor) (reverse $ ps_th ++ [p_ret_th] ++ elims ++ args)
-
-                 | otherwise -> panic ("evalRecursorApp: could not find info for constructor: " ++ show c)
 
         RecordType elem_tps ->
           TValue . VRecordType <$> traverse (traverse (fmap toTValue . recEval)) elem_tps

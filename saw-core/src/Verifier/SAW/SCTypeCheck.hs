@@ -39,7 +39,6 @@ module Verifier.SAW.SCTypeCheck
   , typeInferCompleteWHNF
   , TypeInferCtx(..)
   , typeInferCompleteInCtx
-  , inferAndCompileRecursor
   , checkSubtype
   , ensureSort
   , applyPiTyped
@@ -488,19 +487,7 @@ instance TypeInfer (FlatTermF TypedTerm) where
     inferRecursor rec
 
   typeInfer (RecursorApp rec ixs arg) =
-    do let motive   = typedVal (recursorMotive rec)
-       let motiveTy = typedType (recursorMotive rec)
-
-       -- Apply the indices to the type of the motive
-       -- to check the types of the `ixs` and `arg`, and
-       -- ensure that the result is fully applied
-       _s <- ensureSort =<< foldM applyPiTyped motiveTy (ixs ++ [arg])
-    
-       -- return the type (p_ret ixs arg)
-       liftTCM scTypeCheckWHNF =<<
-         liftTCM scApplyAll motive (map typedVal (ixs ++ [arg]))
-
-    --inferRecursorApp rec ixs arg
+    inferRecursorApp rec ixs arg
 
   typeInfer (RecordType elems) =
     -- NOTE: record types are always predicative, i.e., non-Propositional, so we
@@ -663,75 +650,13 @@ inferRecursor rec =
        (RecursorType d (map typedVal params) (typedVal motive) (typedType motive))
 
 
-inferAndCompileRecursor ::
-  Ident       {- ^ data type name -} ->
-  [TypedTerm] {- ^ data type parameters -} ->
-  TypedTerm   {- ^ elimination motive -} ->
-  Map Ident TypedTerm {- ^ constructor eliminators -} ->
-  TCM (CompiledRecursor TypedTerm)
-inferAndCompileRecursor d params p_ret cs_fs =
-  do let mk_err str =
-           MalformedRecursor
-           (Unshared $ fmap typedVal $ FTermF $
-             Recursor (CompiledRecursor d params p_ret cs_fs))
-            str
-     maybe_dt <- liftTCM scFindDataType d
-     dt <- case maybe_dt of
-       Just dt -> return dt
-       Nothing -> throwTCError $ NoSuchDataType d
-
-     -- Check that the params have the correct types by making sure
-     -- they correspond to the input types of dt
-     unless (length params == length (dtParams dt)) $
-       throwTCError $ mk_err "Incorrect number of parameters"
-     _ <- foldM applyPiTyped (dtType dt) params
-
-     -- Get the type of p_ret and make sure that it is of the form
-     --
-     -- (ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s
-     --
-     -- for some allowed sort s, where the Ix are the indices of of dt
-     p_ret_s <-
-       case asPiList (typedType p_ret) of
-         (_, (asSort -> Just s)) -> return s
-         _ -> throwTCError $ mk_err "Motive function should return a sort"
-     p_ret_tp_req <-
-       liftTCM scRecursorRetTypeType dt (map typedVal params) p_ret_s
-     -- Technically this is an equality test, not a subtype test, but we
-     -- use the precise sort used in p_ret, so they are the same, and
-     -- checkSubtype is handy...
-     checkSubtype p_ret p_ret_tp_req
-     if allowedElimSort dt p_ret_s then return ()
-       else throwTCError $ mk_err "Disallowed propositional elimination"
-
-     -- Check that the elimination functions each have the right types, and
-     -- that we have exactly one for each constructor of dt
-     cs_fs_tps <-
-       liftTCM scRecursorElimTypes d (map typedVal params) (typedVal p_ret)
-     case map fst (Map.toList cs_fs) \\ map fst cs_fs_tps of
-       [] -> return ()
-       cs -> throwTCError $ mk_err ("Extra constructors: " ++ show cs)
-     forM_ cs_fs_tps $ \(c,req_tp) ->
-       case Map.lookup c cs_fs of
-         Nothing ->
-           throwTCError $ mk_err ("Missing constructor: " ++ show c)
-         Just f -> checkSubtype f req_tp
-
-     return
-       CompiledRecursor
-         { recursorDataType = d
-         , recursorParams   = params
-         , recursorMotive   = p_ret
-         , recursorElims    = cs_fs
-         }
-
 -- | Infer the type of a recursor application
-_inferRecursorApp ::
+inferRecursorApp ::
   TypedTerm   {- ^ recursor term -} ->
   [TypedTerm] {- ^ data type indices -} ->
   TypedTerm   {- ^ recursor argument -} ->
   TCM Term
-_inferRecursorApp rec ixs arg =
+inferRecursorApp rec ixs arg =
   do recty <- typeCheckWHNF (typedType rec)
      case asRecursorType recty of
        Nothing -> throwTCError (ExpectedRecursor rec)

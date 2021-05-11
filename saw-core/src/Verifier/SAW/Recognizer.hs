@@ -282,8 +282,8 @@ asRecursorType t =
 asRecursorApp :: Recognizer Term (CompiledRecursor Term, [Term], Term)
 asRecursorApp t =
   do RecursorApp rec ixs arg <- asFTermF t
-     --Recursor rec' <- asFTermF rec
-     return (rec, ixs, arg)
+     Recursor rec' <- asFTermF rec
+     return (rec', ixs, arg)
 
 isDataType :: Ident -> Recognizer [Term] a -> Recognizer Term a
 isDataType i p t = do

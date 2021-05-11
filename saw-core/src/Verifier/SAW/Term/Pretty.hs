@@ -455,8 +455,7 @@ ppFlatTermF prec tf =
               ])
 
     RecursorApp rec ixs arg ->
-      do --rec_pp <- ppTerm' PrecApp rec
-         rec_pp <- ppFlatTermF prec (Recursor rec)
+      do rec_pp <- ppTerm' PrecApp rec
          ixs_pp <- mapM (ppTerm' PrecArg) ixs
          arg_pp <- ppTerm' PrecArg arg
          return $ ppAppList prec rec_pp (ixs_pp ++ [arg_pp])

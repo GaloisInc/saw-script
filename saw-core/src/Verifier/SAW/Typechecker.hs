@@ -193,10 +193,8 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
            (splitAt (length $ dtIndices dt) ->
             (ixs, arg : rem_args)))))) ->
          do let cs_fs = Map.fromList (zip (map ctorName $ dtCtors dt) elims)
-            --rec <- typeInferComplete (Recursor (CompiledRecursor dt_ident params p_ret cs_fs))
-            --typed_r <- typeInferComplete (RecursorApp rec ixs arg)
-            comp_rec <- inferAndCompileRecursor dt_ident params p_ret cs_fs
-            typed_r <- typeInferComplete (RecursorApp comp_rec ixs arg)
+            rec <- typeInferComplete (Recursor (CompiledRecursor dt_ident params p_ret cs_fs))
+            typed_r <- typeInferComplete (RecursorApp rec ixs arg)
             inferApplyAll typed_r rem_args
        _ -> throwTCError $ NotFullyAppliedRec dt_ident
 typeInferCompleteTerm (Un.Recursor _ _) =

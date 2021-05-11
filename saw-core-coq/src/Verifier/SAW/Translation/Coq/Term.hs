@@ -238,8 +238,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
          Coq.App rect_var <$> mapM translateTerm args
 
     RecursorApp rec indices termEliminated ->
-      do rec' <- flatTermFToExpr (Recursor rec)
-         --rec' <- translateTerm rec
+      do rec' <- translateTerm rec
          let args = indices ++ [termEliminated]
          Coq.App rec' <$> mapM translateTerm args
 

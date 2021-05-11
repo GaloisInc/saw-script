@@ -177,7 +177,7 @@ data FlatTermF e
     -- * The recursor value;
     -- * The indices for the inductive type; AND
     -- * The argument that is being eliminated / pattern-matched
-  | RecursorApp (CompiledRecursor e) [e] e
+  | RecursorApp e [e] e
 
     -- | Non-dependent record types, i.e., N-ary tuple types with named
     -- fields. These are considered equal up to reordering of fields. Actual
@@ -273,10 +273,10 @@ zipWithFlatTermF f = go
     go (Recursor rec1) (Recursor rec2) = Recursor <$> zipRec f rec1 rec2
 
     go (RecursorApp rec1 ixs1 x1) (RecursorApp rec2 ixs2 x2) =
-        RecursorApp <$>
-          (zipRec f rec1 rec2) <*>
-          pure (zipWith f ixs1 ixs2) <*> 
-          pure (f x1 x2)
+        Just $ RecursorApp
+          (f rec1 rec2)
+          (zipWith f ixs1 ixs2)
+          (f x1 x2)
 
     go (RecordType elems1) (RecordType elems2)
       | Just vals2 <- alistAllFields (map fst elems1) elems2 =

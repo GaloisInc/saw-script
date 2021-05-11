@@ -65,7 +65,11 @@ data Value l
   | VArray (VArray l)
   | VString !Text
   | VRecordValue ![(FieldName, Thunk l)]
-  | VRecursor (CompiledRecursor (Value l))
+  | VRecursor
+     !Ident -- data type ident
+     ![Value l]  -- data type parameters
+     !(Value l)  -- motive function
+     !(Map Ident (Thunk l)) -- constructor eliminators
   | VExtra (Extra l)
   | TValue (TValue l)
 
@@ -99,15 +103,12 @@ data NeutralTerm
   | NeutralPairRight NeutralTerm  -- right pair projection
   | NeutralRecordProj NeutralTerm FieldName -- record projection
   | NeutralApp NeutralTerm Term -- function application
-{-
   | NeutralRecursor
       NeutralTerm -- recursor value
       [Term] -- indices for the inductive type
       Term   -- argument being eliminated
--}
   | NeutralRecursorArg -- recursor application
-      (CompiledRecursor Term)
-      --Term   -- recursor value
+      Term   -- recursor value
       [Term] -- indices for the inductive type
       NeutralTerm -- argument being elminated
 
@@ -198,7 +199,7 @@ instance Show (Extra l) => Show (Value l) where
       VRecordValue [] -> showString "{}"
       VRecordValue ((fld,_):_) ->
         showString "{" . showString (Text.unpack fld) . showString " = _, ...}"
-      VRecursor rec  -> showString "<<recursor: " . shows (recursorDataType rec) . showString ">>"
+      VRecursor d _ _ _ -> showString "<<recursor: " . shows d . showString ">>"
       VExtra x       -> showsPrec p x
       TValue x       -> showsPrec p x
     where

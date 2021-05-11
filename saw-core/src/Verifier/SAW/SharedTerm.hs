@@ -812,8 +812,8 @@ scWhnf sc t0 =
     reapply t (ElimProj i) = scRecordSelect sc t i
     reapply t (ElimPair i) = scPairSelector sc t i
     reapply t (ElimRecursor rec ixs) =
-      do --rectm <- scFlatTermF sc (Recursor rec)
-         scFlatTermF sc (RecursorApp rec ixs t)
+      do rectm <- scFlatTermF sc (Recursor rec)
+         scFlatTermF sc (RecursorApp rectm ixs t)
 
     tryDef :: (?cache :: Cache IO TermIndex Term) =>
               Ident -> [WHNFElim] -> Def -> IO Term
@@ -998,15 +998,12 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
                           (recursorMotive rec)
                           mty
         RecursorApp rec ixs arg ->
-          lift $ scApplyAll sc (recursorMotive rec) (ixs ++ [arg])
-
-{-
           do tp <- (liftIO . scWhnf sc) =<< memo rec
              case asRecursorType tp of
                Just (_d, _ps, motive, _motivety) ->
                  lift $ scApplyAll sc motive (ixs ++ [arg])
                _ -> fail "Expected recursor type in recursor application"
--}
+
         RecordType elems ->
           do max_s <- maximum <$> mapM (sort . snd) elems
              lift $ scSort sc max_s
