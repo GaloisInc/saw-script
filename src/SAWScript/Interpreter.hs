@@ -606,7 +606,7 @@ set_color b = do
   putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsColor = b' } }
 
 print_value :: Value -> TopLevel ()
-print_value (VString s) = printOutLnTop Info s
+print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
   sc <- getSharedContext
   cenv <- fmap rwCryptol getTopLevelRW

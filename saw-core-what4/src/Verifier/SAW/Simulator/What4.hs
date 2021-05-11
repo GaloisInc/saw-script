@@ -1188,7 +1188,7 @@ replaceUninterp sc sym scst mapref ec =
       -- Make a fresh uninterepted constant to stand for the result of applying
       -- this function, remember the arguments that were applied
       do tyterm <- termOfTValue sc ty
-         ec' <- scFreshEC sc nm tyterm
+         ec' <- scFreshEC sc (Text.pack nm) tyterm
          recordApp ec' app
 
          ecterm' <- scFlatTermF sc (ExtCns ec')
