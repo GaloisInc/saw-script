@@ -188,7 +188,7 @@ evalProp sc unints (Prop p) =
          Just t -> pure t
          Nothing -> fail "goal_eval: expected EqTrue"
 
-     ecs <- traverse (\(nm, ty) -> scFreshEC sc (Text.unpack nm) ty) args
+     ecs <- traverse (\(nm, ty) -> scFreshEC sc nm ty) args
      vars <- traverse (scExtCns sc) ecs
      t0 <- instantiateVarList sc 0 (reverse vars) body'
 
@@ -726,7 +726,7 @@ predicateToSATQuery sc unintSet tm0 =
           case evalFOT mmap tp of
             Nothing -> fail ("predicateToSATQuery: expected first order type: " ++ showTerm tp)
             Just fot ->
-              do ec  <- scFreshEC sc (Text.unpack lnm) tp
+              do ec  <- scFreshEC sc lnm tp
                  etm <- scExtCns sc ec
                  body' <- instantiateVar sc 0 etm body
                  processTerm mmap (Map.insert ec fot vars) body'
@@ -779,7 +779,7 @@ propToSATQuery sc unintSet prop =
               case evalFOT mmap tp of
                 Nothing -> fail ("propToSATQuery: expected first order type: " ++ showTerm tp)
                 Just fot ->
-                  do ec  <- scFreshEC sc (Text.unpack lnm) tp
+                  do ec  <- scFreshEC sc lnm tp
                      etm <- scExtCns sc ec
                      body' <- instantiateVar sc 0 etm body
                      processTerm mmap (Map.insert ec fot vars) xs body'
@@ -830,12 +830,12 @@ goalApply sc rule goal = applyFirst (asPiLists (unProp rule))
 --   for the binder.  Return the generated fresh term.
 tacticIntro :: (F.MonadFail m, MonadIO m) =>
   SharedContext ->
-  String {- ^ Name to give to the variable.  If empty, will be chosen automatically from the goal. -} ->
+  Text {- ^ Name to give to the variable.  If empty, will be chosen automatically from the goal. -} ->
   Tactic m TypedTerm
 tacticIntro sc usernm = Tactic \goal ->
   case asPi (unProp (goalProp goal)) of
     Just (nm, tp, body) ->
-      do let name = if null usernm then Text.unpack nm else usernm
+      do let name = if Text.null usernm then nm else usernm
          xv <- liftIO $ scFreshEC sc name tp
          x  <- liftIO $ scExtCns sc xv
          tt <- liftIO $ mkTypedTerm sc x

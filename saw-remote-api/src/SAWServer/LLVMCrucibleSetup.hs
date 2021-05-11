@@ -25,7 +25,6 @@ import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.ByteString (ByteString)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
@@ -102,7 +101,7 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
        Nothing -> return ()
   where
     setupFresh (ContractVar n dn ty) =
-      do t <- llvm_fresh_var (T.unpack dn) (llvmType ty)
+      do t <- llvm_fresh_var dn (llvmType ty)
          return (n, t)
 
     setupState allocs (env, cenv) vars =

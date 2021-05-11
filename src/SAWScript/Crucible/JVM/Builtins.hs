@@ -55,6 +55,7 @@ import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
+import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 import           Data.Void (absurd)
@@ -955,7 +956,7 @@ typeOfJavaType jty =
 -- | Generate a fresh variable term. The name will be used when
 -- pretty-printing the variable in debug output.
 jvm_fresh_var ::
-  String              {- ^ variable name    -} ->
+  Text                {- ^ variable name    -} ->
   JavaType            {- ^ variable type    -} ->
   JVMSetupM TypedTerm {- ^ fresh typed term -}
 jvm_fresh_var name jty =

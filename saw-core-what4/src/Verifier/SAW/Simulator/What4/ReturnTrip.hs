@@ -49,6 +49,7 @@ import           Data.Ratio
 import           Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import           Data.Word(Word64)
+import           Data.Text (Text)
 import qualified Data.Text as Text
 
 import           What4.BaseTypes
@@ -148,7 +149,7 @@ baseSCType sym sc bt =
 
 -- | Create a new symbolic variable.
 sawCreateVar :: SAWCoreState n
-             -> String                                       -- ^ the name of the variable
+             -> Text -- ^ the name of the variable
              -> SC.Term
              -> IO SC.Term
 sawCreateVar st nm tp = do
@@ -539,7 +540,7 @@ evaluateExpr sym st sc cache = f []
         B.UninterpVarKind -> do
           tp <- baseSCType sym sc (B.bvarType bv)
           SAWExpr <$> sawCreateVar st nm tp
-            where nm = Text.unpack $ solverSymbolAsText $ B.bvarName bv
+            where nm = solverSymbolAsText $ B.bvarName bv
         B.LatchVarKind ->
           unsupported sym "SAW backend does not support latch variables"
         B.QuantifierVarKind -> do

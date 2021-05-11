@@ -1193,6 +1193,9 @@ parseUninterpretedSAW sym st sc ref trm app ty =
     VIntType
       -> VInt  <$> mkUninterpretedSAW sym st ref trm app BaseIntegerRepr
 
+    VIntModType n
+      -> VIntMod n <$> mkUninterpretedSAW sym st ref (ArgTermFromIntMod n trm) app BaseIntegerRepr
+
     -- 0 width bitvector is a constant
     VVecType 0 VBoolType
       -> return $ VWord ZBV
@@ -1247,6 +1250,8 @@ mkUninterpretedSAW sym st ref trm (UnintApp nm args tys) ret =
 data ArgTerm
   = ArgTermVar
   | ArgTermBVZero -- ^ scBvNat 0 0
+  | ArgTermToIntMod Natural ArgTerm -- ^ toIntMod n x
+  | ArgTermFromIntMod Natural ArgTerm -- ^ fromIntMod n x
   | ArgTermVector Term [ArgTerm] -- ^ element type, elements
   | ArgTermUnit
   | ArgTermPair ArgTerm ArgTerm
@@ -1278,6 +1283,16 @@ reconstructArgTerm atrm sc ts =
           do z <- scNat sc 0
              x <- scBvNat sc z z
              return (x, ts0)
+        ArgTermToIntMod n at1 ->
+          do n' <- scNat sc n
+             (x1, ts1) <- parse at1 ts0
+             x <- scToIntMod sc n' x1
+             pure (x, ts1)
+        ArgTermFromIntMod n at1 ->
+          do n' <- scNat sc n
+             (x1, ts1) <- parse at1 ts0
+             x <- scFromIntMod sc n' x1
+             pure (x, ts1)
         ArgTermVector ty ats ->
           do (xs, ts1) <- parseList ats ts0
              x <- scVector sc ty xs
@@ -1336,6 +1351,7 @@ mkArgTerm sc ty val =
     (_, VWord ZBV)       -> return ArgTermBVZero     -- 0-width bitvector is a constant
     (_, VWord (DBV _))   -> return ArgTermVar
     (VUnitType, VUnit)   -> return ArgTermUnit
+    (VIntModType n, VIntMod _ _) -> pure (ArgTermToIntMod n ArgTermVar)
 
     (VVecType _ ety, VVector vv) ->
       do vs <- traverse force (V.toList vv)
@@ -1358,6 +1374,10 @@ mkArgTerm sc ty val =
       do xs <- traverse (termOfSValue sc <=< force) (V.toList vv)
          x <- scCtorApp sc i xs
          return (ArgTermConst x)
+
+    (_, TValue tval) ->
+      do x <- termOfTValue sc tval
+         pure (ArgTermConst x)
 
     _ -> fail $ "could not create uninterpreted function argument of type " ++ show ty
 

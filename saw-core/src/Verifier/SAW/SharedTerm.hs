@@ -185,6 +185,7 @@ module Verifier.SAW.SharedTerm
     -- *** IntMod
   , scIntModType
   , scToIntMod
+  , scFromIntMod
     -- *** Vectors
   , scAppend
   , scJoin
@@ -392,17 +393,16 @@ scShowTerm sc opts t =
      pure (showTermWithNames opts env t)
 
 -- | Create a global variable with the given identifier (which may be "_") and type.
-scFreshEC :: SharedContext -> String -> a -> IO (ExtCns a)
-scFreshEC sc x tp = do
-  i   <- scFreshGlobalVar sc
-  let x' = Text.pack x
-  let uri = scFreshNameURI x' i
-  let nmi = ImportedName uri [x',Text.pack (x <> "#" <>  show i)]
-  scRegisterName sc i nmi
-  pure (EC i nmi tp)
+scFreshEC :: SharedContext -> Text -> a -> IO (ExtCns a)
+scFreshEC sc x tp =
+  do i <- scFreshGlobalVar sc
+     let uri = scFreshNameURI x i
+     let nmi = ImportedName uri [x, x <> "#" <>  Text.pack (show i)]
+     scRegisterName sc i nmi
+     pure (EC i nmi tp)
 
 -- | Create a global variable with the given identifier (which may be "_") and type.
-scFreshGlobal :: SharedContext -> String -> Term -> IO Term
+scFreshGlobal :: SharedContext -> Text -> Term -> IO Term
 scFreshGlobal sc x tp = scExtCns sc =<< scFreshEC sc x tp
 
 -- | Returns shared term associated with ident.
@@ -1213,7 +1213,7 @@ scSort sc s = scFlatTermF sc (Sort s)
 scNat :: SharedContext -> Natural -> IO Term
 scNat sc n = scFlatTermF sc (NatLit n)
 
--- | Create a literal term (of saw-core type @String@) from a 'String'.
+-- | Create a literal term (of saw-core type @String@) from a 'Text'.
 scString :: SharedContext -> Text -> IO Term
 scString sc s = scFlatTermF sc (StringLit s)
 
@@ -1324,7 +1324,7 @@ scFunAll :: SharedContext
          -> IO Term
 scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 
--- | Create a lambda term from a parameter name (as a 'String'), parameter type
+-- | Create a lambda term from a parameter name (as a 'LocalName'), parameter type
 -- (as a 'Term'), and a body. Regarding deBruijn indices, in the body of the
 -- function, an index of 0 refers to the bound parameter.
 scLambda :: SharedContext
@@ -1378,7 +1378,7 @@ scLocalVar sc i = scTermF sc (LocalVar i)
 -- indices. If the body contains any ExtCns variables, they will be
 -- abstracted over and reapplied to the resulting constant.
 scConstant :: SharedContext
-           -> String -- ^ The name
+           -> Text   -- ^ The name
            -> Term   -- ^ The body
            -> Term   -- ^ The type
            -> IO Term
@@ -1829,6 +1829,12 @@ scIntModType sc n = scGlobalApply sc "Prelude.IntMod" [n]
 -- > toIntMod : (n : Nat) -> Integer -> IntMod n;
 scToIntMod :: SharedContext -> Term -> Term -> IO Term
 scToIntMod sc n x = scGlobalApply sc "Prelude.toIntMod" [n, x]
+
+-- | Convert an integer mod n to an integer.
+--
+-- > fromIntMod : (n : Nat) -> IntMod n -> Integer;
+scFromIntMod :: SharedContext -> Term -> Term -> IO Term
+scFromIntMod sc n x = scGlobalApply sc "Prelude.fromIntMod" [n, x]
 
 
 -- Primitive operations on bitvectors
@@ -2337,7 +2343,7 @@ scTreeSize = fst . go (0, Map.empty)
 -- | `openTerm sc nm ty i body` replaces the loose deBruijn variable `i`
 --   with a fresh external constant (with name `nm`, and type `ty`) in `body`.
 scOpenTerm :: SharedContext
-         -> String
+         -> Text
          -> Term
          -> DeBruijnIndex
          -> Term

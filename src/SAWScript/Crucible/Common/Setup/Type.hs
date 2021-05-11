@@ -35,6 +35,7 @@ module SAWScript.Crucible.Common.Setup.Type
 import           Control.Lens
 import           Control.Monad.State (StateT)
 import           Control.Monad.IO.Class (MonadIO(liftIO))
+import           Data.Text (Text)
 
 import qualified Cryptol.TypeCheck.Type as Cryptol (Type)
 import qualified Verifier.SAW.Cryptol as Cryptol (importType, emptyEnv)
@@ -101,7 +102,7 @@ addCondition cond = currentState . MS.csConditions %= (cond : )
 freshTypedExtCns ::
   MonadIO m =>
   SharedContext {- ^ shared context -} ->
-  String        {- ^ variable name  -} ->
+  Text          {- ^ variable name  -} ->
   Cryptol.Type  {- ^ variable type  -} ->
   CrucibleSetupT arch m TypedExtCns
 freshTypedExtCns sc name cty =
@@ -116,7 +117,7 @@ freshTypedExtCns sc name cty =
 freshVariable ::
   MonadIO m =>
   SharedContext {- ^ shared context -} ->
-  String        {- ^ variable name  -} ->
+  Text          {- ^ variable name  -} ->
   Cryptol.Type  {- ^ variable type  -} ->
   CrucibleSetupT arch m TypedTerm
 freshVariable sc name cty =

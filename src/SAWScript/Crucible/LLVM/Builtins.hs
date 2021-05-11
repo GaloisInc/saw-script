@@ -106,6 +106,7 @@ import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Set as Set
 import           Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
+import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 import           Prettyprinter
@@ -1439,7 +1440,7 @@ setupArg sc sym ecRef tp = do
     freshGlobal cty sc_tp =
       do ecs <- readIORef ecRef
          let len = Seq.length ecs
-         ec <- scFreshEC sc ("arg_"++show len) sc_tp
+         ec <- scFreshEC sc ("arg_" <> Text.pack (show len)) sc_tp
          writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
          scFlatTermF sc (ExtCns ec)
 
@@ -1649,7 +1650,7 @@ cryptolTypeOfActual dl mt =
 -- | Generate a fresh variable term. The name will be used when
 -- pretty-printing the variable in debug output.
 llvm_fresh_var ::
-  String                  {- ^ variable name    -} ->
+  Text                    {- ^ variable name    -} ->
   L.Type                  {- ^ variable type    -} ->
   LLVMCrucibleSetupM TypedTerm {- ^ fresh typed term -}
 llvm_fresh_var name lty =
@@ -1665,7 +1666,7 @@ llvm_fresh_var name lty =
        Just cty -> Setup.freshVariable sc name cty
 
 llvm_fresh_cryptol_var ::
-  String ->
+  Text ->
   Cryptol.Schema ->
   LLVMCrucibleSetupM TypedTerm
 llvm_fresh_cryptol_var name s =
