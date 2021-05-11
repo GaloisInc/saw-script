@@ -710,7 +710,7 @@ scReduceRecursor sc rec crec c args =
   do ctor <- scRequireCtor sc c
      -- The ctorIotaReduction field caches the result of iota reduction, which
      -- we just substitute into to perform the reduction
-     ctorIotaReduction ctor rec (recursorElims crec) args
+     ctorIotaReduction ctor rec (fmap fst $ recursorElims crec) args
 
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form

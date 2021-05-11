@@ -219,14 +219,24 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     DataTypeApp n is as -> translateIdentWithArgs n (is ++ as)
     CtorApp n is as -> translateIdentWithArgs n (is ++ as)
 
-    RecursorType _d _params motive _motiveTy ->
-      -- motive looks like: (\ ix0, ..., ixn, arg -> body)
-      -- to get the type of the recursor, transform the lambdas into Pis
-      do let (bs, body) = asLambdaList motive
-         translatePi bs body
+    RecursorType _d _params motive motiveTy ->
+      -- type of the motive looks like
+      --      (ix1 : _) -> ... -> (ixn : _) -> d ps ixs -> sort
+      -- to get the type of the recursor, we compute
+      --      (ix1 : _) -> ... -> (ixn : _) -> (x:d ps ixs) -> motive ixs x
+      do let (bs, _srt) = asPiList motiveTy
+         (varsT,bindersT) <- unzip <$>
+           (forM bs $ \ (b, bType) -> do
+             bTypeT <- translateTerm bType
+             b' <- freshenAndBindName b
+             return (Coq.Var b', Coq.PiBinder (Just b') bTypeT))
+
+         motiveT <- translateTerm motive
+         let bodyT = Coq.App motiveT varsT
+         return $ Coq.Pi bindersT bodyT
 
     -- TODO: support this next!
-    Recursor (CompiledRecursor d parameters motive eliminators) ->
+    Recursor (CompiledRecursor d parameters motive _motiveTy eliminators elimOrder) ->
       do maybe_d_trans <- translateIdentToIdent d
          rect_var <- case maybe_d_trans of
            Just i -> return $ Coq.Var (show i ++ "_rect")
@@ -234,8 +244,17 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
              errorTermM ("Recursor for " ++ show d ++
                          " cannot be translated because the datatype " ++
                          "is mapped to an arbitrary Coq term")
-         let args = parameters ++ [motive] ++ map snd (Map.toList eliminators) -- TODO, this isn't right, we need these in declaration order
-         Coq.App rect_var <$> mapM translateTerm args
+
+         let fnd c = case Map.lookup c eliminators of
+                       Just (e,_ety) -> translateTerm e
+                       Nothing -> errorTermM
+                          ("Recursor eliminator missing eliminator for constructor " ++ show c)
+
+         ps <- mapM translateTerm parameters
+         m  <- translateTerm motive
+         elimlist <- mapM fnd elimOrder
+
+         pure (Coq.App rect_var (ps ++ [m] ++ elimlist))
 
     RecursorApp rec indices termEliminated ->
       do rec' <- translateTerm rec

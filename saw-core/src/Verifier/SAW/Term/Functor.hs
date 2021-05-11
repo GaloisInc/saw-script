@@ -216,7 +216,9 @@ data CompiledRecursor e =
   { recursorDataType :: Ident
   , recursorParams   :: [e]
   , recursorMotive   :: e
-  , recursorElims    :: Map Ident e
+  , recursorMotiveTy :: e
+  , recursorElims    :: Map Ident (e, e) -- eliminator functions and their types
+  , recursorCtorOrder :: [Ident]
   }
  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
@@ -237,10 +239,18 @@ alistAllFields (fld:flds) alist
     deleteField f (x:rest) = x : deleteField f rest
 alistAllFields _ _ = Nothing
 
+zipPair :: (x -> y -> z) -> (x,x) -> (y,y) -> (z,z)
+zipPair f (x1,x2) (y1,y2) = (f x1 y1, f x2 y2)
+
 zipRec :: (x -> y -> z) -> CompiledRecursor x -> CompiledRecursor y -> Maybe (CompiledRecursor z)
-zipRec f (CompiledRecursor d1 ps1 m1 es1) (CompiledRecursor d2 ps2 m2 es2)
-  | d1 == d2, Map.keysSet es1 == Map.keysSet es2
-  = Just $ CompiledRecursor d1 (zipWith f ps1 ps2) (f m1 m2) (Map.intersectionWith f es1 es2)
+zipRec f (CompiledRecursor d1 ps1 m1 mty1 es1 ord1) (CompiledRecursor d2 ps2 m2 mty2 es2 ord2)
+  | d1 == d2, Map.keysSet es1 == Map.keysSet es2, ord1 == ord2
+  = Just $ CompiledRecursor d1
+              (zipWith f ps1 ps2)
+              (f m1 m2)
+              (f mty1 mty2)
+              (Map.intersectionWith (zipPair f) es1 es2)
+              ord1
 
   | otherwise = Nothing
 

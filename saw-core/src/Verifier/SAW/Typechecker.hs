@@ -35,7 +35,6 @@ import Control.Applicative
 #endif
 import Control.Monad.State
 import Data.List (findIndex)
-import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Vector as V
 
@@ -187,16 +186,18 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
      case typed_args of
        (splitAt (length $ dtParams dt) ->
         (params,
-         p_ret :
+         motive :
          (splitAt (length $ dtCtors dt) ->
           (elims,
            (splitAt (length $ dtIndices dt) ->
             (ixs, arg : rem_args)))))) ->
-         do let cs_fs = Map.fromList (zip (map ctorName $ dtCtors dt) elims)
-            rec <- typeInferComplete (Recursor (CompiledRecursor dt_ident params p_ret cs_fs))
+         do crec    <- compileRecursor dt params motive elims
+            rec     <- typeInferComplete (Recursor crec)
             typed_r <- typeInferComplete (RecursorApp rec ixs arg)
             inferApplyAll typed_r rem_args
+
        _ -> throwTCError $ NotFullyAppliedRec dt_ident
+
 typeInferCompleteTerm (Un.Recursor _ _) =
   error "typeInferComplete: found a bare Recursor, which should never happen!"
 

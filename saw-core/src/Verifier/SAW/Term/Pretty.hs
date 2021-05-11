@@ -433,17 +433,17 @@ ppFlatTermF prec tf =
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
 
-    RecursorType d params motive _ ->
+    RecursorType d params motive _motiveTy ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
          return $
            ppAppList prec (annotate RecursorStyle (ppIdent d <> "#recType"))
              (params_pp ++ [motive_pp])
 
-    Recursor (CompiledRecursor d params motive cs_fs) ->
+    Recursor (CompiledRecursor d params motive _motiveTy cs_fs _) ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
-         fs_pp <- traverse (ppTerm' PrecNone) cs_fs
+         fs_pp <- traverse (ppTerm' PrecNone . fst) cs_fs
          return $
            ppAppList prec (annotate RecursorStyle (ppIdent d <> "#rec"))
              (params_pp ++

@@ -69,7 +69,8 @@ data Value l
      !Ident -- data type ident
      ![Value l]  -- data type parameters
      !(Value l)  -- motive function
-     !(Map Ident (Thunk l)) -- constructor eliminators
+     !(TValue l) -- type of motive
+     !(Map Ident (Thunk l, TValue l)) -- constructor eliminators and their types
   | VExtra (Extra l)
   | TValue (TValue l)
 
@@ -199,7 +200,8 @@ instance Show (Extra l) => Show (Value l) where
       VRecordValue [] -> showString "{}"
       VRecordValue ((fld,_):_) ->
         showString "{" . showString (Text.unpack fld) . showString " = _, ...}"
-      VRecursor d _ _ _ -> showString "<<recursor: " . shows d . showString ">>"
+      VRecursor d _ _ _ _
+                     -> showString "<<recursor: " . shows d . showString ">>"
       VExtra x       -> showsPrec p x
       TValue x       -> showsPrec p x
     where

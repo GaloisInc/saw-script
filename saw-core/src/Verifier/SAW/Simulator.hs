@@ -174,21 +174,25 @@ evalTermF cfg lam recEval tf env =
             (toTValue <$> recEval mtp))
 
         Recursor rec ->
-          VRecursor (recursorDataType rec) <$>
-            traverse recEval (recursorParams rec) <*>
-            recEval (recursorMotive rec) <*>
-            traverse recEvalDelay (recursorElims rec)
+          do let f (e,ety) = do v  <- recEvalDelay e
+                                ty <- toTValue <$> recEval ety
+                                pure (v,ty)
+             ps  <- traverse recEval (recursorParams rec)
+             m   <- recEval (recursorMotive rec)
+             mty <- toTValue <$> recEval (recursorMotiveTy rec)
+             es  <- traverse f (recursorElims rec)
+             pure (VRecursor (recursorDataType rec) ps m mty es)
 
         RecursorApp rectm ixs arg ->
           do rec <- recEval rectm
              case rec of
-               VRecursor _d ps _motive ps_fs ->
+               VRecursor _d ps _motive _motiveTy ps_fs ->
                  do arg_v <- recEval arg
                     case findConstructor arg_v of
                       Nothing -> simNeutral cfg (NeutralRecursorArg rectm ixs (NeutralBox arg))
                       Just (c,all_args_vs)
                         | Just ctor <- findCtorInMap (simModMap cfg) c
-                        , Just elim <- Map.lookup c ps_fs ->
+                        , Just (elim,_elimTy) <- Map.lookup c ps_fs ->
                            do let args = drop (length ps) $ V.toList all_args_vs
                               lam (ctorIotaTemplate ctor) (reverse ([ready rec,elim] ++ args))
        
