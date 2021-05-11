@@ -168,10 +168,10 @@ evalTermF cfg lam recEval tf env =
         DataTypeApp i ps ts -> TValue . VDataType i <$> mapM recEval (ps ++ ts)
 
         RecursorType d ps m mtp ->
-          VRecursorType d <$>
+          TValue <$> (VRecursorType d <$>
             mapM recEval ps <*>
             recEval m <*>
-            (toTValue <$> recEval mtp)
+            (toTValue <$> recEval mtp))
 
         Recursor rec ->
           VRecursor (recursorDataType rec) <$>
@@ -182,22 +182,15 @@ evalTermF cfg lam recEval tf env =
         RecursorApp rectm ixs arg ->
           do rec <- recEval rectm
              case rec of
-               VRecursor _d ps motive ps_fs ->
+               VRecursor _d ps _motive ps_fs ->
                  do arg_v <- recEval arg
                     case findConstructor arg_v of
                       Nothing -> simNeutral cfg (NeutralRecursorArg rectm ixs (NeutralBox arg))
                       Just (c,all_args_vs)
                         | Just ctor <- findCtorInMap (simModMap cfg) c
-                        , Just dt <- findDataTypeInMap (simModMap cfg) (ctorDataTypeName ctor) ->
-       
-                           do elims <- mapM (\c' -> case Map.lookup c ps_fs of
-                                          Just elim -> return elim
-                                          Nothing ->
-                                            panic ("evalRecursorApp: internal error: "
-                                                  ++ "constructor not found in its own datatype: "
-                                                  ++ show c')) $ dtCtors dt
-                              let args = drop (length ps) $ V.toList all_args_vs
-                              lam (ctorIotaTemplate ctor) (reverse ((map ready ps) ++ [ready motive] ++ elims ++ args))
+                        , Just elim <- Map.lookup c ps_fs ->
+                           do let args = drop (length ps) $ V.toList all_args_vs
+                              lam (ctorIotaTemplate ctor) (reverse ([ready rec,elim] ++ args))
        
                         | otherwise -> panic ("evalRecursorApp: could not find info for constructor: " ++ show c)
 

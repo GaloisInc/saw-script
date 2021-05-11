@@ -279,11 +279,11 @@ asRecursorType t =
   do RecursorType d ps motive motive_ty <- asFTermF t
      return (d,ps,motive,motive_ty)
 
-asRecursorApp :: Recognizer Term (CompiledRecursor Term, [Term], Term)
+asRecursorApp :: Recognizer Term (Term, CompiledRecursor Term, [Term], Term)
 asRecursorApp t =
   do RecursorApp rec ixs arg <- asFTermF t
-     Recursor rec' <- asFTermF rec
-     return (rec', ixs, arg)
+     Recursor crec <- asFTermF rec
+     return (rec, crec, ixs, arg)
 
 isDataType :: Ident -> Recognizer [Term] a -> Recognizer Term a
 isDataType i p t = do

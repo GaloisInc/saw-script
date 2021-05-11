@@ -377,8 +377,8 @@ neutralToTerm = loop
     Unshared (App (loop nt) arg)
   loop (NeutralRecursorArg rec ixs x) =
     Unshared (FTermF (RecursorApp rec ixs (loop x)))
---  loop (NeutralRecursor rec ixs x) =
---    Unshared (FTermF (RecursorApp (loop rec) ixs x))
+  loop (NeutralRecursor rec ixs x) =
+    Unshared (FTermF (RecursorApp (loop rec) ixs x))
 
 neutralToSharedTerm :: SharedContext -> NeutralTerm -> IO Term
 neutralToSharedTerm sc = loop
@@ -394,9 +394,9 @@ neutralToSharedTerm sc = loop
   loop (NeutralApp nt arg) =
     do tm <- loop nt
        scApply sc tm arg
---  loop (NeutralRecursor nt ixs x) =
---    do tm <- loop nt
---       scFlatTermF sc (RecursorApp tm ixs x)
+  loop (NeutralRecursor nt ixs x) =
+    do tm <- loop nt
+       scFlatTermF sc (RecursorApp tm ixs x)
   loop (NeutralRecursorArg rec ixs nt) =
     do tm <- loop nt
        scFlatTermF sc (RecursorApp rec ixs tm)

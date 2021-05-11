@@ -369,7 +369,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _) =
                   return (mkRewriteRule ctxt l x)
          Just <$> traverse mkRule (Map.assocs m)
     (R.asApplyAll ->
-     (R.asRecursorApp -> Just (rec, _ixs, R.asLocalVar -> Just i),
+     (R.asRecursorApp -> Just (rec, crec, _ixs, R.asLocalVar -> Just i),
       more)) ->
       do let ctxt1 = reverse (drop (i+1) (reverse ctxt))
          let ctxt2 = reverse (take i (reverse ctxt))
@@ -398,18 +398,20 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _) =
                   -- and rhs in context @ctxt'@.
                   lhs' <- adjust lhs
 
-                  rec' <- traverse adjust rec
+                  rec'  <- adjust rec
+                  crec' <- traverse adjust crec
                   args' <- traverse (incVars sc 0 i) args
                   more' <- traverse adjust more
                   let cn = ctorName ctor
-                  rhs1 <- scReduceRecursor sc rec' cn args'
+
+                  rhs1 <- scReduceRecursor sc rec' crec' cn args'
                   rhs2 <- scApplyAll sc rhs1 more'
                   rhs3 <- betaReduce rhs2
                   -- re-fold recursive occurrences of the original rhs
                   let ss = addRule (mkRewriteRule ctxt rhs lhs) emptySimpset
                   rhs' <- rewriteSharedTerm sc ss rhs3
                   return (mkRewriteRule ctxt' lhs' rhs')
-         dt <- scRequireDataType sc (recursorDataType rec)
+         dt <- scRequireDataType sc (recursorDataType crec)
          rules <- traverse ctorRule (dtCtors dt)
          return (Just rules)
     _ -> return Nothing
@@ -520,11 +522,11 @@ asRecordRedex t =
 -- constructor application; specifically, this function recognizes
 --
 -- > RecursorApp rec _ (CtorApp c _ args)
-asIotaRedex :: R.Recognizer Term (CompiledRecursor Term, Ident, [Term])
+asIotaRedex :: R.Recognizer Term (Term, CompiledRecursor Term, Ident, [Term])
 asIotaRedex t =
-  do (rec, _, arg) <- R.asRecursorApp t
+  do (rec, crec, _, arg) <- R.asRecursorApp t
      (c, _, args) <- asCtorOrNat arg
-     return (rec, c, args)
+     return (rec, crec, c, args)
 
 
 ----------------------------------------------------------------------
@@ -575,8 +577,8 @@ reduceSharedTerm :: SharedContext -> Term -> Maybe (IO Term)
 reduceSharedTerm sc (asBetaRedex -> Just (_, _, body, arg)) = Just (instantiateVar sc 0 arg body)
 reduceSharedTerm _ (asPairRedex -> Just t) = Just (return t)
 reduceSharedTerm _ (asRecordRedex -> Just t) = Just (return t)
-reduceSharedTerm sc (asIotaRedex -> Just (rec, c, args)) =
-  Just $ scReduceRecursor sc rec c args
+reduceSharedTerm sc (asIotaRedex -> Just (rec, crec, c, args)) =
+  Just $ scReduceRecursor sc rec crec c args
 reduceSharedTerm _ _ = Nothing
 
 -- | Rewriter for shared terms

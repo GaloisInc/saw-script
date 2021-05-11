@@ -433,9 +433,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
             let tp = typedVal typed_tp in
             case mkCtorArgStruct dtName p_ctx ix_ctx tp of
               Just arg_struct ->
-                liftTCM scBuildCtor dtName (mkIdentText mnm c)
-                (map (mkIdentText mnm . fst) typed_ctors)
-                arg_struct
+                liftTCM scBuildCtor dtName (mkIdentText mnm c) arg_struct
               Nothing -> err ("Malformed type form constructor: " ++ show c)
 
   -- Step 6: complete the datatype with the given ctors

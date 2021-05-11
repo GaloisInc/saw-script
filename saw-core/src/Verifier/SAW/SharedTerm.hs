@@ -619,10 +619,9 @@ scBuildCtor ::
   SharedContext ->
   Ident {- ^ data type name -} ->
   Ident {- ^ constructor name -} ->
-  [Ident] {- ^ list of all construtor names -} ->
   CtorArgStruct d params ixs {- ^ constructor formal arguments -} ->
   IO Ctor
-scBuildCtor sc d c ctor_names arg_struct =
+scBuildCtor sc d c arg_struct =
   do
     -- Step 1: build the types for the constructor and its eliminator
     tp <- scShCtxM sc $ ctxCtorType d arg_struct
@@ -630,35 +629,28 @@ scBuildCtor sc d c ctor_names arg_struct =
 
     -- Step 2: build free variables for params, p_ret, the elims, and the ctor
     -- arguments
-    let num_params = bindingsLength $ ctorParams arg_struct
+    -- let num_params = bindingsLength $ ctorParams arg_struct
     let num_args =
           case arg_struct of
             CtorArgStruct {..} -> bindingsLength ctorArgs
-    let total_vars_minus_1 = num_params + length ctor_names + num_args
-    vars <- reverse <$> mapM (scLocalVar sc) [0 .. total_vars_minus_1]
+
+    vars <- reverse <$> mapM (scLocalVar sc) (take num_args [0 ..])
+    elim_var <- scLocalVar sc num_args
+    rec_var  <- scLocalVar sc (num_args+1)
 
     -- Step 3: pass these variables to ctxReduceRecursor to build the
     -- ctorIotaReduction field
-    iota_red <-
-      scShCtxM sc $
-      ctxReduceRecursor
-        d
-        (take num_params vars)
-        (vars !! num_params)
-        (Map.fromList (zip ctor_names (drop (num_params + 1) vars)))
-        c
-        (drop (num_params + 1 + length ctor_names) vars)
-        arg_struct
+    iota_red <- scShCtxM sc $
+      ctxReduceRecursor rec_var elim_var vars arg_struct
 
     -- Step 4: build the API function that shuffles the terms around in the
     -- correct way.
-    let iota_fun params p_ret cs_fs args =
-          do let fnd cnm = case Map.lookup cnm cs_fs of
-                             Just e  -> e
-                             Nothing -> panic "ctorIotaReduction"
-                                         ["no eliminator for constructor", show cnm]
-             let elims = map fnd ctor_names
-             instantiateVarList sc 0 (reverse (params ++ [p_ret] ++ elims ++ args)) iota_red
+    let iota_fun rec cs_fs args =
+          do let elim = case Map.lookup c cs_fs of
+                          Just e -> e
+                          Nothing -> panic "ctorIotaReduction"
+                                       ["no eliminator for constructor", show c]
+             instantiateVarList sc 0 (reverse ([rec,elim]++args)) iota_red
 
     -- Finally, return the required Ctor record
     return $ Ctor { ctorName = c, ctorArgStruct = arg_struct,
@@ -709,15 +701,16 @@ scRecursorRetTypeType sc dt params s =
 -- 'ctorIotaReduction' field for more details.
 scReduceRecursor ::
   SharedContext ->
+  Term {- ^ recusor term -} ->
   CompiledRecursor Term ->
   Ident {- ^ constructor name -} ->
   [Term] {- ^ constructor arguments -} ->
   IO Term
-scReduceRecursor sc (CompiledRecursor _d params p_ret cs_fs) c args =
+scReduceRecursor sc rec crec c args =
   do ctor <- scRequireCtor sc c
      -- The ctorIotaReduction field caches the result of iota reduction, which
      -- we just substitute into to perform the reduction
-     ctorIotaReduction ctor params p_ret cs_fs args
+     ctorIotaReduction ctor rec (recursorElims crec) args
 
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form
@@ -727,7 +720,7 @@ data WHNFElim
   = ElimApp Term
   | ElimProj FieldName
   | ElimPair Bool
-  | ElimRecursor (CompiledRecursor Term) [Term]
+  | ElimRecursor Term (CompiledRecursor Term) [Term]
 
 -- | Test if a term is a constructor application that should be converted to a
 -- natural number literal. Specifically, test if a term is not already a natural
@@ -772,13 +765,13 @@ scWhnf sc t0 =
                                                                     Just t -> go xs t
                                                                     Nothing ->
                                                                       error "scWhnf: field missing in record"
-    go (ElimRecursor rec _ : xs)
+    go (ElimRecursor rec crec _ : xs)
                               (asCtorOrNat ->
-                               Just (c, _, args))               = scReduceRecursor sc rec c args >>= go xs
+                               Just (c, _, args))               = scReduceRecursor sc rec crec c args >>= go xs
 
     go xs                     (asGlobalDef -> Just c)           = scRequireDef sc c >>= tryDef c xs
     go xs                     (asRecursorApp ->
-                               Just (rec, ixs, arg))            = go (ElimRecursor rec ixs : xs) arg
+                                Just (rec, crec, ixs, arg))     = go (ElimRecursor rec crec ixs : xs) arg
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
                                                                      t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
@@ -811,9 +804,8 @@ scWhnf sc t0 =
     reapply t (ElimApp x) = scApply sc t x
     reapply t (ElimProj i) = scRecordSelect sc t i
     reapply t (ElimPair i) = scPairSelector sc t i
-    reapply t (ElimRecursor rec ixs) =
-      do rectm <- scFlatTermF sc (Recursor rec)
-         scFlatTermF sc (RecursorApp rectm ixs t)
+    reapply t (ElimRecursor rec _crec ixs) =
+      scFlatTermF sc (RecursorApp rec ixs t)
 
     tryDef :: (?cache :: Cache IO TermIndex Term) =>
               Ident -> [WHNFElim] -> Def -> IO Term
@@ -866,8 +858,7 @@ scConvertibleEval sc eval unfoldConst tm1 tm2 = do
               pure (&&) <*> go c ty1 ty2 <*> go c body1 body2
 
        -- final catch-all case
-       goF _c x y = return $ alphaEquiv (Unshared x) (Unshared y)
-
+       goF _c _x _y = return False
 
 -- | Test if two terms are convertible using 'scWhnf' for evaluation
 scConvertible :: SharedContext
