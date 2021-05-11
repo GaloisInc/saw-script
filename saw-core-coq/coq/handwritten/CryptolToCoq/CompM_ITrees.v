@@ -9,6 +9,9 @@ From Paco Require Import paco.
 Infix ">>=" := ITree.bind (at level 58, left associativity).
 Notation "m1 >> m2" := (m1 >>= fun _ => m2) (at level 58, left associativity).
 
+
+(** * `itree_spec` **)
+
 Variant SpecEvent (E:Type -> Type) (A:Type) : Type :=
 | Spec_vis : E A -> SpecEvent E A
 | Spec_forall : SpecEvent E A
@@ -20,10 +23,13 @@ Arguments Spec_forall {E A}.
 Arguments Spec_exists {E A}.
 
 (* An ITree that defines a set of ITrees *)
-Definition itree_spec E A : Type := itree (SpecEvent E) A.
+Notation itree_spec E := (itree (SpecEvent E)).
 
 (* The body of an itree_spec, inside the observe projection *)
-Definition itree_spec' E A : Type := itree' (SpecEvent E) A.
+Notation itree_spec' E A := (itree' (SpecEvent E) A).
+
+
+(** * `satisfies` **)
 
 Inductive satisfiesF {E A} (satisfies : itree_spec E A -> itree E A -> Prop)
   : itree_spec' E A -> itree' E A -> Prop :=
@@ -48,7 +54,7 @@ Inductive satisfiesF {E A} (satisfies : itree_spec E A -> itree E A -> Prop)
     satisfiesF satisfies (VisF Spec_exists spec) (observe tree)
 .
 
-Hint Constructors satisfiesF.
+Hint Constructors satisfiesF : core.
 
 Instance Proper_satisfies_satisfiesF {E A} :
   Proper (pointwise_relation _ (pointwise_relation _ Basics.impl) ==>
@@ -72,7 +78,6 @@ Qed.
 
 Definition satisfies_ {E A} satisfies spec tree :=
   @satisfiesF E A satisfies (observe spec) (observe tree).
-
 
 Lemma satisfies__mono E A : monotone2 (@satisfies_ E A).
 Proof.
@@ -102,6 +107,9 @@ Instance Proper_observing_satisfies E A :
 Proof.
   apply Proper_observing_paco2_satisfies_impl.
 Qed.
+
+
+(** * `satisfies` is proper wrt `eutt` **)
 
 Ltac simpobs x := apply simpobs in x.
 
@@ -276,80 +284,103 @@ Proof.
   - symmetry in HPQ. symmetry in Ht12. eapply satisfies_eutt_spec_r; eauto. eapply satisfies_eutt_spec_l; eauto.
 Qed.
 
-(* infinte forall exist chains *)
 
-CoFixpoint top_spec {E: Type -> Type} {A : Type} : itree_spec E A := Vis Spec_forall (fun _ : unit => top_spec).
+(** * `refines` and `refines_eq` **)
 
-Lemma top_spec_is_top : forall E R (t : itree E R), satisfies top_spec t.
+Definition refines {E A} (s1 s2 : itree_spec E A) : Prop :=
+  forall t, satisfies s1 t -> satisfies s2 t.
+
+Infix "|=" := refines (at level 70, no associativity).
+
+Instance PreOrder_refines E A : PreOrder (@refines E A).
 Proof.
-  intros E R. pcofix CIH. intros. pfold. red. cbn. constructor. intros. right. auto.
+  split; repeat intro; eauto.
 Qed.
 
-Definition bottom_spec {E : Type -> Type} {A : Type} : itree_spec E A := Vis Spec_exists (fun v : void => match v with end).
-
-Lemma bottom_spec_is_bottom : forall E R (t : itree E R), ~ satisfies bottom_spec t.
+Instance Proper_observing_refines E A :
+  Proper (observing eq ==> observing eq ==> iff) (@refines E A).
 Proof.
-  intros E R t Hcontra. punfold Hcontra. red in Hcontra. cbn in *. dependent induction Hcontra; eauto.
-  destruct H as [ [] _ ].
+  split; repeat intro.
+  - rewrite <- H0. apply H1. rewrite H. eauto.
+  - rewrite H0. apply H1. rewrite <- H. eauto.
 Qed.
 
-Definition and_spec {E : Type -> Type} {A : Type} (P Q : itree_spec E A) :=
-  Vis Spec_forall (fun b : bool => if b then P else Q).
-
-Definition or_spec {E : Type -> Type} {A : Type} (P Q : itree_spec E A) :=
-  Vis Spec_exists (fun b : bool => if b then P else Q).
-
-Lemma and_spec_is_and : forall E R (t : itree E R) (P Q : itree_spec E R),
-    satisfies (and_spec P Q) t <-> (satisfies P t /\ satisfies Q t).
+Instance Proper_eutt_refines E A :
+  Proper (eutt eq ==> eutt eq ==> iff) (@refines E A).
 Proof.
-  split; [split | idtac]; intros.
-  - punfold H. red in H. pfold. red. cbn in H. dependent induction H.
-    + rewrite <- x. constructor. eauto.
-    + simpobs x. rewrite <- itree_eta in x. pclearbot. pstep_reverse.
-      specialize (H true). cbn in *. rewrite x. auto.
-  - punfold H. red in H. pfold. red. cbn in H. dependent induction H.
-    + rewrite <- x. constructor. eauto.
-    + simpobs x. rewrite <- itree_eta in x. pclearbot. pstep_reverse.
-      specialize (H false). cbn in *. rewrite x. auto.
-  - destruct H. pfold. red. cbn. constructor. intros; destruct x; left; auto.
+  split; repeat intro.
+  - rewrite <- H0. apply H1. rewrite H. eauto.
+  - rewrite H0. apply H1. rewrite <- H. eauto.
 Qed.
 
-Lemma or_spec_is_or : forall E R (t : itree E R) (P Q : itree_spec E R),
-    satisfies (or_spec P Q) t <-> (satisfies P t \/ satisfies Q t).
+Definition refines_eq {E A} (s1 s2 : itree_spec E A) := s1 |= s2 /\ s2 |= s1.
+
+Infix "~=" := refines_eq (at level 70, no associativity).
+
+Instance Equivalence_refines_eq E A : Equivalence (@refines_eq E A).
 Proof.
-  split; intros; [idtac | destruct H] .
-  - punfold H. red in H. cbn in *. dependent induction H; [ simpobs x | idtac ].
-    + setoid_rewrite x. setoid_rewrite tau_eutt. eapply IHsatisfiesF; eauto.
-    + simpobs x. rewrite <- itree_eta in x. setoid_rewrite x.
-      destruct H as [ [ | ] H ]; pclearbot; eauto.
-  - pfold. red. cbn. constructor. exists true. auto.
-  - pfold. red. cbn. constructor. exists false. auto.
+  split; repeat intro.
+  - split; reflexivity.
+  - split; destruct H; eauto.
+  - split; destruct H, H0.
+    + rewrite H; exact H0.
+    + rewrite H2; exact H1.
 Qed.
 
-Lemma or_spec_bind : forall E R S (P Q : itree_spec E R) (k : R -> itree_spec E S),
-    (or_spec P Q) >>= k ≈ or_spec (P >>= k) (Q >>= k).
+Instance Proper_observing_refines_eq E A :
+  Proper (observing eq ==> observing eq ==> iff) (@refines_eq E A).
 Proof.
-  intros. unfold or_spec. rewrite bind_vis. pfold. constructor.
-  intros; left.
-  enough ( (if v then P else Q) >>= k ≈ if v then P >>= k else Q >>= k ); auto.
-  destruct v; reflexivity.
+  split; repeat intro; unfold refines_eq.
+  - rewrite <- H, <- H0; eauto.
+  - rewrite H, H0; eauto.
 Qed.
 
-Lemma and_spec_bind : forall E R S (P Q : itree_spec E R) (k : R -> itree_spec E S),
-    (and_spec P Q) >>= k ≈ and_spec (P >>= k) (Q >>= k).
+Instance Proper_eutt_refines_eq E A :
+  Proper (eutt eq ==> eutt eq ==> iff) (@refines_eq E A).
 Proof.
-  intros. unfold and_spec.
-  pfold. red. cbn. constructor.
-  intros; left.
-  enough ( (if v then P else Q) >>= k ≈ if v then P >>= k else Q >>= k ); auto.
-  destruct v; reflexivity.
+  split; repeat intro; unfold refines_eq.
+  - rewrite <- H, <- H0; eauto.
+  - rewrite H, H0; eauto.
 Qed.
 
-(*
-Definition imp_spec {E R} (P Q : itree_spec E R) := 
-  Vis Spec_forall (fun _ : satisfies P t => Q)
-*)
+Instance Proper_refines_eq_refines E A :
+  Proper (refines_eq ==> refines_eq ==> iff) (@refines E A).
+Proof.
+  split; destruct H, H0; intro.
+  - rewrite H1, <- H0; eauto.
+  - rewrite H, <- H2; eauto.
+Qed.
 
+
+(** * `refinesFun` and `refinesFun_eq` **)
+
+Definition refinesFun {E A B} := pointwise_relation A (@refines E B).
+Hint Unfold refinesFun : core.
+
+Infix "|=1" := refinesFun (at level 70, no associativity).
+
+Instance PreOrder_refinesFun E A B : PreOrder (@refinesFun E A B).
+Proof.
+  split; intro.
+  - intro; reflexivity.
+  - do 5 intro; transitivity (y a); eauto.
+Qed.
+
+Definition refinesFun_eq {E A B} := pointwise_relation A (@refines_eq E B).
+Hint Unfold refinesFun_eq : core.
+
+Infix "~=1" := refinesFun_eq (at level 70, no associativity).
+
+Instance Equivalence_refinesFun_eq E A B : Equivalence (@refinesFun_eq E A B).
+Proof.
+  split; intro.
+  - intro; reflexivity.
+  - do 3 intro; symmetry; eauto.
+  - do 5 intro; transitivity (y a); eauto.
+Qed.
+
+
+(** * `bind` is proper w.r.t. `refines` **)
 
 (* The proposition that a is returned by an itree along some path *)
 Inductive is_itree_retval' {E A} : itree' E A -> A -> Prop :=
@@ -369,7 +400,6 @@ Proof.
   intros m1 m2 [ em ] a1 a2 ea. rewrite <- ea. unfold is_itree_retval.
   rewrite em. reflexivity.
 Qed.
-
 
 Lemma bind_satisfies_bind E A B (P:itree_spec E A) (Q:A -> itree_spec E B)
       (m:itree E A) (f:A -> itree E B) :
@@ -425,6 +455,298 @@ Proof.
     - intros. apply satsQ.
       rewrite <- (observing_intros _ _ _ e_obsm). assumption. }
 Qed.
+
+Instance Proper_refines_bind {E A B} :
+  Proper ((pointwise_relation A refines) ==> @refines E A ==> @refines E B) ITree.bind'.
+Proof.
+  repeat intro; unfold pointwise_relation in H; unfold refines in *.
+  revert x y H y0 H0 t H1. pcofix CIH; intros.
+  case_eq (observe x0); intros; simpl.
+  - rewrite (observing_intros eq x0 (Ret r0) H) in H2.
+    rewrite unfold_bind in H2; simpl in H2.
+    specialize (H0 _ t H2).
+    replace t with (Ret r0 >> t) by admit.
+    (* eapply bind_satisfies_bind. *)
+    admit.
+  - admit.
+  - admit.
+Admitted.
+
+Instance Proper_refines_eq_bind {E A B} :
+  Proper ((pointwise_relation A refines_eq) ==> @refines_eq E A ==> @refines_eq E B) ITree.bind'.
+Proof.
+  split; apply Proper_refines_bind; eauto.
+  - intro; destruct (H a); eauto.
+  - destruct H0; eauto.
+  - intro; destruct (H a); eauto.
+  - destruct H0; eauto.
+Qed.
+
+
+(** * `mrec` and `refines` **)
+
+Lemma refines_mrec {D E} (ctx : D ~> itree (D +' SpecEvent E))
+                         (g : D ~> itree_spec E) :
+  (forall T d, interp (case_ g ITree.trigger) (ctx T d) |= g T d) ->
+  (forall T d, mrec ctx d |= g T d).
+Proof.
+  (* Recall: mrec ctx d ≈ interp (case_ (mrec ctx) ITree.trigger) (ctx T d) *)
+  intros. pcofix CIH. intros.
+  unfold refines in H.
+  rewrite mrec_as_interp in H1; unfold mrecursive in H1.
+Admitted.
+
+
+(** * `forall` and `exists` specs **)
+
+Notation forall_spec k := (Vis Spec_forall k).
+
+Lemma forall_spec_is_forall {E A B} (k : A -> itree_spec E B) t :
+    satisfies (forall_spec k) t <-> forall a, satisfies (k a) t.
+Proof.
+  split; intros.
+  - punfold H. red in H. pfold. red. cbn in H. dependent induction H.
+    + rewrite <- x. constructor. eauto.
+    + simpobs x. rewrite <- itree_eta in x. pclearbot. pstep_reverse.
+      rewrite x. auto.
+  - pfold. red. cbn. constructor. intros. specialize (H x). left. auto.
+Qed.
+
+(* Hey, this now holds in both directions with itrees! *)
+Lemma forall_spec_bind {E A B C} (k1 : A -> itree_spec E B) (k2 : B -> itree_spec E C) :
+    (forall_spec k1) >>= k2 ≈ forall_spec (fun a => (k1 a) >>= k2).
+Proof.
+  rewrite bind_vis. pfold. constructor.
+  intros; left. apply Reflexive_eqit; eauto.
+Qed.
+
+Lemma refines_forall_spec_r {E A B} P (Q : A -> itree_spec E B) :
+  (forall a, P |= Q a) -> P |= forall_spec Q.
+Proof.
+  repeat intro.
+  apply forall_spec_is_forall.
+  intro; apply H; eauto.
+Qed.
+
+Lemma refines_forall_spec_l {E A B} (P : A -> itree_spec E B) Q a :
+  P a |= Q -> forall_spec P |= Q.
+Proof.
+  repeat intro.
+  eapply forall_spec_is_forall in H0.
+  apply H; eauto.
+Qed.
+
+Notation exists_spec k := (Vis Spec_exists k).
+
+Lemma exists_spec_is_exists {E A B} (k : A -> itree_spec E B) t :
+  satisfies (exists_spec k) t <-> exists a, satisfies (k a) t.
+Proof.
+  split; intros.
+  - punfold H. red in H. cbn in *. dependent induction H; [ simpobs x | idtac ].
+    + setoid_rewrite x. setoid_rewrite tau_eutt. eapply IHsatisfiesF; eauto.
+    + simpobs x. rewrite <- itree_eta in x. setoid_rewrite x.
+      destruct H; pclearbot; eauto.
+  - pfold. red. cbn. constructor.
+    destruct H; exists x; auto.
+Qed.
+
+Lemma exists_spec_bind {E A B C} (k1 : A -> itree_spec E B) (k2 : B -> itree_spec E C) :
+    (exists_spec k1) >>= k2 ≈ exists_spec (fun a => k1 a >>= k2).
+Proof.
+  rewrite bind_vis. pfold. constructor.
+  intros; left. apply Reflexive_eqit; eauto.
+Qed.
+
+Lemma refines_exists_spec_r {E A B} P (Q : A -> itree_spec E B) a :
+  P |= Q a -> P |= exists_spec Q.
+Proof.
+  repeat intro.
+  apply exists_spec_is_exists.
+  exists a; auto.
+Qed.
+
+Lemma refines_exists_spec_l {E A B} (P : A -> itree_spec E B) Q :
+  (forall a, P a |= Q) -> exists_spec P |= Q.
+Proof.
+  repeat intro.
+  apply exists_spec_is_exists in H0; destruct H0.
+  apply (H x); auto.
+Qed.
+
+Lemma refines_exists_spec_lr {E A B} (P Q : A -> itree_spec E B) :
+  (forall a, P a |= Q a) -> exists_spec P |= exists_spec Q.
+Proof.
+  repeat intro.
+  apply exists_spec_is_exists.
+  apply exists_spec_is_exists in H0; destruct H0.
+  exists x; apply (H x); auto.
+Qed.
+
+
+(** * `top` and `bottom` specs **)
+
+CoFixpoint top_spec {E A} : itree_spec E A :=
+  forall_spec (fun _ : unit => top_spec).
+
+Lemma top_spec_is_top {E A} (t : itree E A) : satisfies top_spec t.
+Proof.
+  pcofix CIH. intros. pfold. red. cbn. constructor. intros. right. auto.
+Qed.
+
+Lemma refines_top_spec_r {E A} (k : itree_spec E A) : k |= top_spec.
+Proof.
+  repeat intro. apply top_spec_is_top.
+Qed.
+
+Definition bottom_spec {E A} : itree_spec E A :=
+  exists_spec (fun v : void => match v with end).
+
+Lemma bottom_spec_is_bottom {E A} (t : itree E A) : ~ satisfies bottom_spec t.
+Proof.
+  intros Hcontra. punfold Hcontra. red in Hcontra. cbn in *. dependent induction Hcontra; eauto.
+  destruct H as [ [] _ ].
+Qed.
+
+Lemma refines_bottom_spec_l {E A} (k : itree_spec E A) : bottom_spec |= k.
+Proof.
+  repeat intro. apply bottom_spec_is_bottom in H. inversion H.
+Qed.
+
+
+(** * `and` and `or` specs **)
+
+Definition and_spec {E A} (P Q : itree_spec E A) :=
+  forall_spec (fun b : bool => if b then P else Q).
+
+Lemma and_spec_is_and {E A} (t : itree E A) (P Q : itree_spec E A) :
+    satisfies (and_spec P Q) t <-> (satisfies P t /\ satisfies Q t).
+Proof.
+  split; intros; [split | destruct H].
+  - apply (proj1 (forall_spec_is_forall _ _) H true).
+  - apply (proj1 (forall_spec_is_forall _ _) H false).
+  - apply forall_spec_is_forall; destruct a; eauto.
+Qed.
+
+Lemma and_spec_bind {E A B} (P Q : itree_spec E A) (k : A -> itree_spec E B) :
+    (and_spec P Q) >>= k ≈ and_spec (P >>= k) (Q >>= k).
+Proof.
+  unfold and_spec.
+  rewrite forall_spec_bind.
+  apply eqit_Vis.
+  destruct u; reflexivity.
+Qed.
+
+Lemma refines_and_spec_r {E A} k (P Q : itree_spec E A) :
+  k |= P -> k |= Q -> k |= and_spec P Q.
+Proof.
+  intros; apply refines_forall_spec_r.
+  destruct a; eauto.
+Qed.
+
+Lemma refines_and_spec_l {E A} (P Q : itree_spec E A) k :
+  P |= k \/ Q |= k -> and_spec P Q |= k.
+Proof.
+  destruct 1.
+  - apply (refines_forall_spec_l _ _ true); eauto.
+  - apply (refines_forall_spec_l _ _ false); eauto.
+Qed.
+
+Definition or_spec {E A} (P Q : itree_spec E A) :=
+  exists_spec (fun b : bool => if b then P else Q).
+
+Lemma or_spec_is_or {E A} (t : itree E A) (P Q : itree_spec E A) :
+    satisfies (or_spec P Q) t <-> (satisfies P t \/ satisfies Q t).
+Proof.
+  split; intros; [|destruct H].
+  - pose proof (proj1 (exists_spec_is_exists _ _) H).
+    destruct H0 as [[]]; eauto.
+  - apply exists_spec_is_exists; exists true; eauto.
+  - apply exists_spec_is_exists; exists false; eauto.
+Qed.
+
+Lemma or_spec_bind {E A B} (P Q : itree_spec E A) (k : A -> itree_spec E B) :
+    (or_spec P Q) >>= k ≈ or_spec (P >>= k) (Q >>= k).
+Proof.
+  unfold or_spec.
+  rewrite exists_spec_bind.
+  apply eqit_Vis.
+  destruct u; reflexivity.
+Qed.
+
+Lemma refines_or_spec_r {E A} k (P Q : itree_spec E A) :
+  k |= P \/ k |= Q -> k |= or_spec P Q.
+Proof.
+  destruct 1.
+  - apply (refines_exists_spec_r _ _ true); eauto.
+  - apply (refines_exists_spec_r _ _ false); eauto.
+Qed.
+
+Lemma refines_or_spec_l {E A} (P Q : itree_spec E A) k :
+  P |= k -> Q |= k -> or_spec P Q |= k.
+Proof.
+  intros; apply refines_exists_spec_l.
+  destruct a; eauto.
+Qed.
+
+
+(** * `assert` and `assuming` specs **)
+
+Definition assert_spec {E} (P : Prop) : itree_spec E unit :=
+  exists_spec (fun pf : P => Ret tt).
+
+Lemma iwish {E A} (P : Prop) (k : itree_spec E A) :
+  exists_spec (fun pf : P => k) ~= assert_spec P >> k.
+Proof.
+  split; unfold assert_spec;
+  rewrite bind_vis;
+  eapply refines_exists_spec_lr; intro;
+  rewrite bind_ret_l; reflexivity.
+Qed.
+
+Definition assert_spec_refines_eq {E} (P : Prop) (pf : P) :
+  @assert_spec E P ~= Ret tt.
+Proof.
+  split; repeat intro.
+  - apply exists_spec_is_exists in H; destruct H; eauto.
+  - apply exists_spec_is_exists; exists pf; eauto.
+Qed.
+
+Lemma refines_bind_assert_spec_r {E A} (P : Prop) (k1 k2 : itree_spec E A) :
+  P -> k1 |= k2 -> k1 |= assert_spec P >> k2.
+Proof.
+  intros pf ?.
+  rewrite <- iwish.
+  apply refines_exists_spec_r; eauto.
+Qed.
+
+Lemma refinesM_bindM_assertM_l {A} (P:Prop) (m1 m2: CompM A) :
+  (P -> m1 |= m2) -> assertM P >> m1 |= m2.
+Proof.
+  intro H. unfold assertM; rewrite existsM_bindM.
+  apply refinesM_existsM_l.
+  rewrite returnM_bindM; assumption.
+Qed.
+
+Definition assumingM {A} (P:Prop) (m:CompM A) : CompM A :=
+  forallM (fun pf:P => m).
+
+Lemma refinesM_assumingM_r {A} (P:Prop) (m1 m2: CompM A) :
+  (P -> m1 |= m2) -> m1 |= assumingM P m2.
+Proof.
+  apply refinesM_forallM_r.
+Qed.
+
+Lemma refinesM_assumingM_l {A} (P:Prop) (m1 m2 : CompM A) :
+  P -> m1 |= m2 -> assumingM P m1 |= m2.
+Proof.
+  apply refinesM_forallM_l.
+Qed.
+
+
+
+
+
+(** * misc. stuff below **)
 
 Notation " x : T <- m1 ;; m2" := (ITree.bind m1 (fun x : T=> m2) ) (at level 40).
 

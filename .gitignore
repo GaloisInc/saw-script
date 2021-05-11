@@ -28,3 +28,4 @@ intTests/test*/*.out
 intTests/test_crucible_jvm/Stat.class
 intTests/test_profiling/prof
 intTests/test_smtlib/*.smt2
+saw-core-coq/coq/.Makefile.coq.d

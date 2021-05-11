@@ -688,6 +688,9 @@ eitherCong1 : (t x y : sort 0) -> Eq (sort 0) x y ->
 eitherCong1 t x y eq =
   eq_cong (sort 0) x y eq (sort 0) (\ (y':sort 0) -> Either t y');
 
+boolToEither : Bool -> Either #() #();
+boolToEither b = ite (Either #() #()) b (Left #() #() ()) (Right #() #() ());
+
 
 --------------------------------------------------------------------------------
 -- Maybe
@@ -896,6 +899,12 @@ if0Nat a n x y = natCase (\ (_:Nat) -> a) x (\ (_:Nat) -> y) n;
 primitive expByNat : (a:sort 0) -> a -> (a -> a -> a) -> a -> Nat -> a;
 
 --------------------------------------------------------------------------------
+-- Operations on string values
+
+primitive equalString : String -> String -> Bool;
+
+
+--------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
 primitive Vec : Nat -> sort 0 -> sort 0;
 
@@ -1061,6 +1070,9 @@ primitive bvNat : (n : Nat) -> Nat -> Vec n Bool;
 -- | Satisfies @bvNat n (bvToNat n x) = x@.
 primitive bvToNat : (n : Nat) -> Vec n Bool -> Nat;
 
+axiom bvNat_bvToNat_id : (n : Nat) -> (x : Vec n Bool) ->
+                         Eq (Vec n Bool) (bvNat n (bvToNat n x)) x;
+
 bvAt : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> Vec w Bool
      -> a;
 bvAt n a w xs i = at n a xs (bvToNat w i);
@@ -1080,6 +1092,10 @@ bvShiftL n a w z xs i = shiftL n a z xs (bvToNat w i);
 
 bvShiftR : (n : Nat) -> (a : sort 0) -> (w : Nat) -> a -> Vec n a -> Vec w Bool -> Vec n a;
 bvShiftR n a w z xs i = shiftR n a z xs (bvToNat w i);
+
+-- A version of bvShiftR that uses the 0th element of the input Vec as the default shift value
+bvSShiftR : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec (Succ n) a -> Vec w Bool -> Vec (Succ n) a;
+bvSShiftR n a w xs i = bvShiftR (Succ n) a w (at (Succ n) a xs 0) xs i;
 
 primitive bvAdd : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 
@@ -1410,6 +1426,10 @@ Sigma_proj2 (a : sort 0) (b : a -> sort 0)
       (\ (p : Sigma a b) -> b (Sigma_proj1 a b p))
       (\ (pa : a) (pb : b pa) -> pb);
 
+uncurrySigma : (a : sort 0) -> (b : a -> sort 0) -> (c : sort 0) ->
+               ((pa : a) -> b pa -> c) -> Sigma a b -> c;
+uncurrySigma a b c = Sigma__rec a b (\ (_:Sigma a b) -> c);
+
 
 --------------------------------------------------------------------------------
 -- Lists
@@ -1440,6 +1460,33 @@ foldList a =
          (\ (_ : #()) -> Nil a)
          (\ (tup : (a * List a * #())) ->
             Cons a tup.(1) tup.(2).(1));
+
+-- A list of types, i.e. `List (sort 0)` if `List` was universe polymorphic
+data ListSort : sort 1
+  where {
+    LS_Nil : ListSort;
+    LS_Cons : sort 0 -> ListSort -> ListSort;
+  }
+
+ListSort__rec : (P : ListSort -> sort 1) -> P LS_Nil ->
+                ((A:sort 0) -> (l:ListSort) -> P l -> P (LS_Cons A l)) ->
+                (l:ListSort) -> P l;
+ListSort__rec P f1 f2 l = ListSort#rec P f1 f2 l;
+
+-- The sort at the given index in a ListSort or `Eq Bool True False` if
+--  the index is out of bounds
+listSortGet : ListSort -> Nat -> sort 0;
+listSortGet = ListSort__rec (\ (_:ListSort) -> Nat -> sort 0)
+  (\ (_:Nat) -> Eq Bool True False)
+  (\ (A:sort 0) (_:ListSort) (rec : Nat -> sort 0) ->
+     Nat_cases (sort 0) A (\ (n:Nat) (_:sort 0) -> rec n));
+
+-- A ListSort with the first n (or all, if n > length) entries removed
+listSortDrop : ListSort -> Nat -> ListSort;
+listSortDrop = ListSort__rec (\ (_:ListSort) -> Nat -> ListSort)
+  (\ (_:Nat) -> LS_Nil)
+  (\ (_:sort 0) (Ds:ListSort) (rec : Nat -> ListSort) ->
+     Nat_cases ListSort Ds (\ (n:Nat) (_ : ListSort) -> rec n));
 
 
 --------------------------------------------------------------------------------
@@ -1510,9 +1557,14 @@ primitive bvultToIsLtNat : (n : Nat) -> (v1 v2 : Vec n Bool) ->
                            Eq Bool (bvult n v1 v2) True ->
                            IsLtNat (bvToNat n v1) (bvToNat n v2);
 
+-- Generate a vector using a proof that the index is in the range of the vector
+-- FIXME: Like the below, gen should maybe use this...?
+primitive genWithProof : (n : Nat) -> (a : sort 0) ->
+                         ((i : Nat) -> IsLtNat i n -> a) -> Vec n a;
+
 -- | Index a vector using a proof that the index is in the range of the vector
 -- FIXME: atWithDefault should maybe use this...?
-primitive atWithProof : (n : Nat) -> (a : sort 0) -> a -> Vec n a ->
+primitive atWithProof : (n : Nat) -> (a : sort 0) -> Vec n a ->
                         (i : Nat) -> IsLtNat i n -> a;
 
 -- Set the value at index i in a vector using a proof that i is in range
@@ -1530,6 +1582,364 @@ primitive updSliceWithProof : (a : sort 0) -> (n off len : Nat) ->
 
 
 --------------------------------------------------------------------------------
+-- Vectors indexed by bitvectors
+
+-- Helper definition to write the proposition that x <u y
+is_bvult : (n:Nat) -> (x y:Vec n Bool) -> Prop;
+is_bvult n x y = Eq Bool (bvult n x y) True;
+
+-- Helper definition to write the proposition that x <=u y
+is_bvule : (n:Nat) -> (x y:Vec n Bool) -> Prop;
+is_bvule n x y = Eq Bool (bvule n x y) True;
+
+-- Axiom: x <u 0 never hold
+axiom not_bvult_zero : (n:Nat) -> (x:Vec n Bool) ->
+                       Eq Bool (bvult n x (bvNat n 0)) False;
+
+-- Axiom: x <=u y <u z implies x <u z
+axiom trans_bvult_bvule : (n:Nat) -> (x y z:Vec n Bool) ->
+                          is_bvult n x y -> is_bvule n y z -> is_bvult n x z;
+
+axiom bvult_sub_add_bvult : (n:Nat) -> (x y z:Vec n Bool) ->
+                            is_bvule n y z -> is_bvult n x (bvSub n z y) ->
+                            is_bvult n (bvAdd n y x) z;
+
+-- When comparing a nat and a bitvector, IsLtNat and is_bvult are equivalent
+axiom IsLtNat_to_bvult : (n : Nat) -> (x : Vec n Bool) -> (i : Nat) ->
+                         IsLtNat i (bvToNat n x) -> is_bvult n (bvNat n i) x;
+axiom bvult_to_IsLtNat : (n : Nat) -> (x : Vec n Bool) -> (i : Nat) ->
+                         is_bvult n (bvNat n i) x -> IsLtNat i (bvToNat n x);
+
+-- The type of a bitvector-indexed array of length len : Vec n Bool
+BVVec : (n:Nat) -> Vec n Bool -> sort 0 -> sort 0;
+BVVec n len = Vec (bvToNat n len);
+
+-- Generate a BVVec of length len whose elements are given by a function
+genBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+           ((i:Vec n Bool) -> is_bvult n i len -> a) ->
+           BVVec n len a;
+genBVVec n len a f =
+  genWithProof (bvToNat n len) a
+    (\(i:Nat) (pf:IsLtNat i (bvToNat n len)) -> 
+      f (bvNat n i) (IsLtNat_to_bvult n len i pf));
+
+-- Ex Falso Quodlibet: if True = False then anything is possible
+efq : (a : sort 0) -> Eq Bool True False -> a;
+efq a contra =
+  coerce
+    #() a
+    (trans
+     (sort 0) #() (ite (sort 0) True #() a) a
+     (sym (sort 0) (ite (sort 0) True #() a) #()
+           (ite_true (sort 0) #() a))
+     (trans
+      (sort 0) (ite (sort 0) True #() a) (ite (sort 0) False #() a) a
+      (eq_cong Bool True False contra (sort 0)
+               (\ (b:Bool) -> ite (sort 0) b #() a))
+      (ite_false (sort 0) #() a)
+      ))
+    ();
+
+-- Generate an empty BVVec
+emptyBVVec : (n : Nat) -> (a : sort 0) -> BVVec n (bvNat n 0) a;
+emptyBVVec n a =
+  genBVVec n (bvNat n 0) a
+           (\ (i:Vec n Bool) (pf:is_bvult n i (bvNat n 0)) ->
+              efq a (trans Bool True (bvult n i (bvNat n 0)) False
+                            (sym Bool (bvult n i (bvNat n 0)) True pf)
+                            (not_bvult_zero n i)));
+
+-- Generate a BVVec by repeating a single element
+repeatBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) -> a ->
+              BVVec n len a;
+repeatBVVec n len a x =
+  genBVVec n len a (\ (i:Vec n Bool) (_:is_bvult n i len) -> x);
+
+-- Generate a BVVec with 1 element
+singletonBVVec : (n : Nat) -> (a : sort 0) -> a -> BVVec n (bvNat n 1) a;
+singletonBVVec n a x = repeatBVVec n (bvNat n 1) a x;
+
+-- Read the ixth element of a BVVec, assuming that ix < len
+atBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+          BVVec n len a -> (ix : Vec n Bool) ->
+          is_bvult n ix len -> a;
+atBVVec n len a x ix pf =
+  atWithProof (bvToNat n len) a x (bvToNat n ix)
+    (bvult_to_IsLtNat n len (bvToNat n ix)
+      (trans Bool (bvult n (bvNat n (bvToNat n ix)) len) (bvult n ix len) True
+        (eq_cong (Vec n Bool) (bvNat n (bvToNat n ix)) ix
+          (bvNat_bvToNat_id n ix) Bool (\(y:Vec n Bool) -> bvult n y len))
+        pf));
+
+-- Indexing a generated BVVec just returns the generating function
+axiom at_gen_BVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+                     (f : (i:Vec n Bool) -> is_bvult n i len -> a) ->
+                     (ix : Vec n Bool) -> (pf : is_bvult n ix len) ->
+                     Eq a (atBVVec n len a (genBVVec n len a f) ix pf) (f ix pf);
+
+-- Generating a BVVec by indexing another just returns the other BVVec
+axiom gen_at_BVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+                     (x : BVVec n len a) ->
+                     Eq (BVVec n len a) (genBVVec n len a (atBVVec n len a x)) x;
+
+-- Update the value at a specific index in a BVVec
+updBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+           BVVec n len a -> (ix : Vec n Bool) ->
+           is_bvult n ix len -> a -> BVVec n len a;
+updBVVec n len a v ix pf elem =
+  genBVVec n len a (\ (i:Vec n Bool) (_:is_bvult n i len) ->
+                      ite a (bvEq n i ix) elem (atBVVec n len a v ix pf));
+
+-- Adjust the value at a specific index in a BVVec by applying a function
+adjustBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+              BVVec n len a -> (a -> a) -> Vec n Bool ->
+              BVVec n len a;
+adjustBVVec n len a v f ix =
+  genBVVec n len a (\ (i:Vec n Bool) (pf:is_bvult n i len) ->
+                      ite a (bvEq n i ix)
+                          (f (atBVVec n len a v i pf))
+                          (atBVVec n len a v i pf));
+
+-- Take the first i elements of a BVVec, assuming i <= len
+takeBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+            (i : Vec n Bool) -> is_bvule n i len ->
+            BVVec n len a -> BVVec n i a;
+takeBVVec n len a i pf v =
+  genBVVec n i a
+    (\ (j:Vec n Bool) (pf2:is_bvult n j i) ->
+       atBVVec n len a v j (trans_bvult_bvule n j i len pf2 pf));
+
+-- Drop the first i elements of a BVVec, assuming i <= len
+dropBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+            (i : Vec n Bool) -> is_bvule n i len ->
+            BVVec n len a -> BVVec n (bvSub n len i) a;
+dropBVVec n len a i pf v =
+  genBVVec n (bvSub n len i) a
+    (\ (j:Vec n Bool) (pf2:is_bvult n j (bvSub n len i)) ->
+       atBVVec n len a v (bvAdd n i j) (bvult_sub_add_bvult n j i len pf pf2));
+
+-- Combined drop and take
+sliceBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+             (start' len' : Vec n Bool) -> is_bvule n start' len ->
+             is_bvule n len' (bvSub n len start') ->
+             BVVec n len a -> BVVec n len' a;
+sliceBVVec n len a start' len' pf1 pf2 v =
+  takeBVVec n (bvSub n len start') a len' pf2
+    (dropBVVec n len a start' pf1 v);
+
+-- Update a slice of a BVVec
+updSliceBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+                BVVec n len a -> (start' len' : Vec n Bool) ->
+                BVVec n len' a -> BVVec n len a;
+updSliceBVVec n len a v start' len' v_sub =
+  genBVVec n len a
+    (\ (i:Vec n Bool) (pf:is_bvult n i len) ->
+       ite a (bvule n start' i)
+           (maybe (is_bvult n (bvSub n i start') len') a
+              (atBVVec n len a v i pf)
+              (\ (pf_sub:is_bvult n (bvSub n i start') len') ->
+                 atBVVec n len' a v_sub (bvSub n i start') pf_sub)
+              (bvultWithProof n (bvSub n i start') len'))
+           (atBVVec n len a v i pf));
+
+
+--------------------------------------------------------------------------------
+-- Iso-recursive types
+
+data IRTDesc (As:ListSort) : sort 0 where {
+  IRT_varD   : Nat -> IRTDesc As; -- an IRTDesc var
+  IRT_mu     : IRTDesc As -> IRTDesc As; -- binds a varD
+  IRT_Either : IRTDesc As -> IRTDesc As -> IRTDesc As;
+  IRT_prod   : IRTDesc As -> IRTDesc As -> IRTDesc As;
+  IRT_sigT   : (i:Nat) -> (listSortGet As i -> IRTDesc As) -> IRTDesc As;
+  IRT_BVVec  : (n:Nat) -> Vec n Bool -> (D:IRTDesc As) -> IRTDesc As;
+  IRT_unit   : IRTDesc As;
+  IRT_empty  : IRTDesc As;
+  IRT_varT   : (i:Nat) -> IRTDesc As; -- a sort var, i.e. an index into `As`
+}
+
+IRTDesc__rec : (As:ListSort) -> (P : IRTDesc As -> sort 1) ->
+               ((i:Nat) -> P (IRT_varD As i)) ->
+               ((D:IRTDesc As) -> P D -> P (IRT_mu As D)) ->
+               ((Dl:IRTDesc As) -> P Dl -> (Dr:IRTDesc As) -> P Dr ->
+                  P (IRT_Either As Dl Dr)) ->
+               ((Dl:IRTDesc As) -> P Dl -> (Dr:IRTDesc As) -> P Dr ->
+                  P (IRT_prod As Dl Dr)) ->
+               ((i:Nat) -> (Df : listSortGet As i -> IRTDesc As) ->
+                  ((a:listSortGet As i) -> P (Df a)) -> P (IRT_sigT As i Df)) ->
+               ((n:Nat) -> (len:Vec n Bool) -> (D:IRTDesc As) -> P D ->
+                  P (IRT_BVVec As n len D)) ->
+               P (IRT_unit As) -> P (IRT_empty As) ->
+               ((i:Nat) -> P (IRT_varT As i)) ->
+               (D:IRTDesc As) -> P D;
+IRTDesc__rec As P f1 f2 f3 f4 f5 f6 f7 f8 f9 D = IRTDesc#rec As P f1 f2 f3 f4 f5 f6 f7 f8 f9 D;
+
+-- A list of substitutions for a context of iso-recursive type descriptions
+data IRTSubsts (As:ListSort) : sort 0 where {
+  IRTs_Nil : IRTSubsts As;
+  IRTs_Cons : IRTDesc As -> IRTSubsts As -> IRTSubsts As;
+}
+
+IRTSubsts__rec : (As:ListSort) -> (P : IRTSubsts As -> sort 1) -> P (IRTs_Nil As) ->
+                 ((D:IRTDesc As) -> (Ds:IRTSubsts As) -> P Ds -> P (IRTs_Cons As D Ds)) ->
+                 (Ds:IRTSubsts As) -> P Ds;
+IRTSubsts__rec As P f1 f2 Ds = IRTSubsts#rec As P f1 f2 Ds;
+
+-- The IRTDesc at the given index in an IRTSubsts or IRT_empty if the
+-- index is out of bounds
+atIRTs : (As:ListSort) -> IRTSubsts As -> Nat -> IRTDesc As;
+atIRTs As = IRTSubsts__rec As (\ (_:IRTSubsts As) -> Nat -> IRTDesc As)
+  (\ (_:Nat) -> IRT_empty As)
+  (\ (D:IRTDesc As) (_:IRTSubsts As) (rec : Nat -> IRTDesc As) ->
+     Nat_cases (IRTDesc As) D (\ (n:Nat) (_:IRTDesc As) -> rec n));
+
+-- A IRTSubsts with the first n (or all, if n > length) entries removed
+dropIRTs : (As:ListSort) -> IRTSubsts As -> Nat -> IRTSubsts As;
+dropIRTs As = IRTSubsts__rec As (\ (_:IRTSubsts As) -> Nat -> IRTSubsts As)
+  (\ (_:Nat) -> IRTs_Nil As)
+  (\ (_:IRTDesc As) (Ds:IRTSubsts As) (rec : Nat -> IRTSubsts As) ->
+     Nat_cases (IRTSubsts As) Ds (\ (n:Nat) (_ : IRTSubsts As) -> rec n));
+
+-- The type corresponding to an iso-recursive type description
+data IRT (As:ListSort) : IRTSubsts As -> IRTDesc As -> sort 0 where {
+  IRT_elemD    : (Ds:IRTSubsts As) -> (i:Nat) ->
+                 IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i) ->
+                 IRT As Ds (IRT_varD As i);
+  IRT_fold     : (Ds:IRTSubsts As) -> (D:IRTDesc As) ->
+                 IRT As (IRTs_Cons As (IRT_mu As D) Ds) D -> IRT As Ds (IRT_mu As D);
+  IRT_Left     : (Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
+                 IRT As Ds Dl -> IRT As Ds (IRT_Either As Dl Dr);
+  IRT_Right    : (Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
+                 IRT As Ds Dr -> IRT As Ds (IRT_Either As Dl Dr);
+  IRT_pair     : (Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
+                 IRT As Ds Dl -> IRT As Ds Dr -> IRT As Ds (IRT_prod As Dl Dr);
+  IRT_existT   : (Ds:IRTSubsts As) -> (i:Nat) -> (Df : listSortGet As i -> IRTDesc As) ->
+                 (a:listSortGet As i) -> IRT As Ds (Df a) -> IRT As Ds (IRT_sigT As i Df);
+  IRT_genBVVec : (Ds:IRTSubsts As) -> (n:Nat) -> (len:Vec n Bool) -> (D:IRTDesc As) ->
+                 ((i:Vec n Bool) -> is_bvult n i len -> IRT As Ds D) -> IRT As Ds (IRT_BVVec As n len D);
+  IRT_tt       : (Ds:IRTSubsts As) -> IRT As Ds (IRT_unit As);
+  IRT_elemT    : (Ds:IRTSubsts As) -> (i:Nat) ->
+                 listSortGet As i -> IRT As Ds (IRT_varT As i);
+}
+
+IRT__rec : (As:ListSort) -> (P : (Ds:IRTSubsts As) -> (D:IRTDesc As) -> IRT As Ds D -> sort 1) ->
+           ((Ds:IRTSubsts As) -> (i:Nat) ->
+              (x:IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i)) ->
+              P (dropIRTs As Ds (Succ i)) (atIRTs As Ds i) x ->
+              P Ds (IRT_varD As i) (IRT_elemD As Ds i x)) ->
+           ((Ds:IRTSubsts As) -> (D:IRTDesc As) ->
+              (x:IRT As (IRTs_Cons As (IRT_mu As D) Ds) D) ->
+              P (IRTs_Cons As (IRT_mu As D) Ds) D x ->
+              P Ds (IRT_mu As D) (IRT_fold As Ds D x)) ->
+           ((Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) -> (xl:IRT As Ds Dl) ->
+              P Ds Dl xl -> P Ds (IRT_Either As Dl Dr) (IRT_Left As Ds Dl Dr xl)) ->
+           ((Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) -> (xr:IRT As Ds Dr) ->
+              P Ds Dr xr -> P Ds (IRT_Either As Dl Dr) (IRT_Right As Ds Dl Dr xr)) ->
+           ((Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
+              (xl:IRT As Ds Dl) -> P Ds Dl xl ->
+              (xr:IRT As Ds Dr) -> P Ds Dr xr ->
+              P Ds (IRT_prod As Dl Dr) (IRT_pair As Ds Dl Dr xl xr)) ->
+           ((Ds:IRTSubsts As) -> (i:Nat) -> (Df : listSortGet As i -> IRTDesc As) ->
+              (a:listSortGet As i) -> (xf:IRT As Ds (Df a)) -> P Ds (Df a) xf ->
+              P Ds (IRT_sigT As i Df) (IRT_existT As Ds i Df a xf)) ->
+           ((Ds:IRTSubsts As) -> (n:Nat) -> (len:Vec n Bool) -> (D:IRTDesc As) ->
+              (xg : (i:Vec n Bool) -> is_bvult n i len -> IRT As Ds D) ->
+              ((i:Vec n Bool) -> (pf:is_bvult n i len) -> P Ds D (xg i pf)) ->
+              P Ds (IRT_BVVec As n len D) (IRT_genBVVec As Ds n len D xg)) ->
+           ((Ds:IRTSubsts As) -> P Ds (IRT_unit As) (IRT_tt As Ds)) ->
+           ((Ds:IRTSubsts As) -> (i:Nat) -> (a:listSortGet As i) ->
+              P Ds (IRT_varT As i) (IRT_elemT As Ds i a)) ->
+           (Ds:IRTSubsts As) -> (D:IRTDesc As) -> (x:IRT As Ds D) -> P Ds D x;
+IRT__rec As P f1 f2 f3 f4 f5 f6 f7 f8 f9 Ds D x = IRT#rec As P f1 f2 f3 f4 f5 f6 f7 f8 f9 Ds D x;
+
+-- The type of a once-unfolded iso-recursive type
+UnfoldedIRT : (As:ListSort) -> IRTSubsts As -> IRTDesc As -> sort 0;
+UnfoldedIRT As Ds D = IRTDesc__rec As (\ (_:IRTDesc As) -> IRTSubsts As -> sort 0)
+  (\ (i:Nat) (Ds:IRTSubsts As) ->
+      IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i))
+  (\ (D:IRTDesc As) (rec : IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
+      rec (IRTs_Cons As (IRT_mu As D) Ds))
+  (\ (_:IRTDesc As) (recl : IRTSubsts As -> sort 0)
+     (_:IRTDesc As) (recr : IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
+      Either (recl Ds) (recr Ds))
+  (\ (_:IRTDesc As) (recl : IRTSubsts As -> sort 0)
+     (_:IRTDesc As) (recr : IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
+      recl Ds * recr Ds)
+  (\ (i:Nat) (_ : listSortGet As i -> IRTDesc As)
+     (recf : listSortGet As i -> IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
+      Sigma (listSortGet As i) (\ (a:listSortGet As i) -> recf a Ds))
+  (\ (n:Nat) (len:Vec n Bool) (_:IRTDesc As)
+     (rec : IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
+      BVVec n len (rec Ds))
+  (\ (_:IRTSubsts As) -> #())
+  (\ (_:IRTSubsts As) -> Eq Bool True False)
+  (\ (i:Nat) (_:IRTSubsts As) -> listSortGet As i) D Ds;
+
+-- `fold` and `unfold` for IRTs
+
+unfoldIRT : (As:ListSort) -> (Ds:IRTSubsts As) -> (D:IRTDesc As) ->
+            IRT As Ds D -> UnfoldedIRT As Ds D;
+unfoldIRT As = IRT__rec As (\ (Ds:IRTSubsts As) (D:IRTDesc As) (_:IRT As Ds D) -> UnfoldedIRT As Ds D)
+  (\ (Ds:IRTSubsts As) (i:Nat) (x:IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i))
+     (_:UnfoldedIRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i)) -> x)
+  (\ (Ds:IRTSubsts As) (D:IRTDesc As) (_:IRT As (IRTs_Cons As (IRT_mu As D) Ds) D)
+     (rec: UnfoldedIRT As (IRTs_Cons As (IRT_mu As D) Ds) D) -> rec)
+  (\ (Ds:IRTSubsts As) (Dl:IRTDesc As) (Dr:IRTDesc As)
+     (_:IRT As Ds Dl) (recl:UnfoldedIRT As Ds Dl) ->
+      Left (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr) recl)
+  (\ (Ds:IRTSubsts As) (Dl:IRTDesc As) (Dr:IRTDesc As)
+     (_:IRT As Ds Dr) (recr:UnfoldedIRT As Ds Dr) ->
+      Right (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr) recr)
+  (\ (Ds:IRTSubsts As) (Dl:IRTDesc As) (Dr:IRTDesc As)
+     (_:IRT As Ds Dl) (recl:UnfoldedIRT As Ds Dl)
+     (_:IRT As Ds Dr) (recr:UnfoldedIRT As Ds Dr) ->
+      (recl, recr))
+  (\ (Ds:IRTSubsts As) (i:Nat) (Df : listSortGet As i -> IRTDesc As) (a:listSortGet As i)
+     (_:IRT As Ds (Df a)) (recf:UnfoldedIRT As Ds (Df a)) ->
+      exists (listSortGet As i) (\ (a:listSortGet As i) -> UnfoldedIRT As Ds (Df a)) a recf)
+  (\ (Ds:IRTSubsts As) (n:Nat) (len:Vec n Bool) (D:IRTDesc As)
+     (_ : (i:Vec n Bool) -> is_bvult n i len -> IRT As Ds D)
+     (recg : (i:Vec n Bool) -> is_bvult n i len -> UnfoldedIRT As Ds D) ->
+      genBVVec n len (UnfoldedIRT As Ds D) recg)
+  (\ (Ds:IRTSubsts As) -> ())
+  (\ (Ds:IRTSubsts As) (i:Nat) (a:listSortGet As i) -> a);
+
+foldIRT : (As:ListSort) -> (Ds:IRTSubsts As) -> (D:IRTDesc As) ->
+          UnfoldedIRT As Ds D -> IRT As Ds D;
+foldIRT As Ds D = IRTDesc__rec As (\ (D:IRTDesc As) -> (Ds:IRTSubsts As) -> UnfoldedIRT As Ds D -> IRT As Ds D)
+  (\ (i:Nat) (Ds:IRTSubsts As) (x:IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i)) ->
+      IRT_elemD As Ds i x)
+  (\ (D:IRTDesc As) (rec : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds D -> IRT As Ds D)
+     (Ds:IRTSubsts As) (x:UnfoldedIRT As (IRTs_Cons As (IRT_mu As D) Ds) D) ->
+      IRT_fold As Ds D (rec (IRTs_Cons As (IRT_mu As D) Ds) x))
+  (\ (Dl:IRTDesc As) (recl : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds Dl -> IRT As Ds Dl)
+     (Dr:IRTDesc As) (recr : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds Dr -> IRT As Ds Dr)
+     (Ds:IRTSubsts As) (x:Either (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr)) ->
+      either (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr) (IRT As Ds (IRT_Either As Dl Dr))
+             (\ (xl:UnfoldedIRT As Ds Dl) -> IRT_Left  As Ds Dl Dr (recl Ds xl))
+             (\ (xr:UnfoldedIRT As Ds Dr) -> IRT_Right As Ds Dl Dr (recr Ds xr)) x)
+  (\ (Dl:IRTDesc As) (recl : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds Dl -> IRT As Ds Dl)
+     (Dr:IRTDesc As) (recr : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds Dr -> IRT As Ds Dr)
+     (Ds:IRTSubsts As) (x:UnfoldedIRT As Ds Dl * UnfoldedIRT As Ds Dr) ->
+      uncurry (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr) (IRT As Ds (IRT_prod As Dl Dr))
+              (\ (xl:UnfoldedIRT As Ds Dl) (xr:UnfoldedIRT As Ds Dr) ->
+                  IRT_pair As Ds Dl Dr (recl Ds xl) (recr Ds xr)) x)
+  (\ (i:Nat) (Df : listSortGet As i -> IRTDesc As)
+     (recf : (a:listSortGet As i) -> (Ds:IRTSubsts As) -> UnfoldedIRT As Ds (Df a) -> IRT As Ds (Df a))
+     (Ds:IRTSubsts As) (x:Sigma (listSortGet As i) (\ (a:listSortGet As i) -> UnfoldedIRT As Ds (Df a))) ->
+      uncurrySigma (listSortGet As i) (\ (a:listSortGet As i) -> UnfoldedIRT As Ds (Df a)) (IRT As Ds (IRT_sigT As i Df))
+                   (\ (a:listSortGet As i) (xf:UnfoldedIRT As Ds (Df a)) ->
+                       IRT_existT As Ds i Df a (recf a Ds xf)) x)
+  (\ (n:Nat) (len:Vec n Bool) (D:IRTDesc As) (recg : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds D -> IRT As Ds D)
+     (Ds:IRTSubsts As) (x : BVVec n len (UnfoldedIRT As Ds D)) ->
+      IRT_genBVVec As Ds n len D (\ (i:Vec n Bool) (pf:is_bvult n i len) ->
+                                     recg Ds (atBVVec n len (UnfoldedIRT As Ds D) x i pf)))
+  (\ (Ds:IRTSubsts As) (x:#()) -> IRT_tt As Ds)
+  (\ (Ds:IRTSubsts As) (x:Eq Bool True False) -> efq (IRT As Ds (IRT_empty As)) x)
+  (\ (i:Nat) (Ds:IRTSubsts As) (x:listSortGet As i) -> IRT_elemT As Ds i x) D Ds;
+
+
+--------------------------------------------------------------------------------
 -- Computation monad
 
 primitive CompM : sort 0 -> sort 0;
@@ -1537,15 +1947,27 @@ primitive CompM : sort 0 -> sort 0;
 primitive returnM : (a:sort 0) -> a -> CompM a;
 primitive bindM : (a b:sort 0) -> CompM a -> (a -> CompM b) -> CompM b;
 
+-- Compose two monadic functions
 composeM : (a b c: sort 0) -> (a -> CompM b) -> (b -> CompM c) -> a -> CompM c;
 composeM a b c f g x = bindM b c (f x) g;
 
+-- Tuple a type onto the input and output types of a monadic function
+tupleCompMFunBoth : (a b c: sort 0) -> (a -> CompM b) -> (c * a -> CompM (c * b));
+tupleCompMFunBoth a b c f =
+  \ (x:c * a) ->
+    bindM b (c * b) (f x.(2)) (\ (y:b) -> returnM (c*b) (x.(1), y));
+
+-- Tuple a valu onto the output of a monadic function
+tupleCompMFunOut : (a b c: sort 0) -> c -> (a -> CompM b) -> (a -> CompM (c * b));
+tupleCompMFunOut a b c x f =
+  \ (y:a) -> bindM b (c*b) (f y) (\ (z:b) -> returnM (c*b) (x,z));
+
 -- Raise an error in the computation monad
-primitive errorM : (a:sort 0) -> CompM a;
+primitive errorM : (a:sort 0) -> String -> CompM a;
 
 -- Run the first computation, and, if it raises an error, catch the error and
 -- run the second computation
-primitive catchM : (a:sort 0) -> CompM a -> CompM a -> CompM a;
+-- primitive catchM : (a:sort 0) -> CompM a -> CompM a -> CompM a;
 
 -- We can define fixM as let rec f x = ... in f
 primitive fixM : (a:sort 0) -> (b:a -> sort 0) ->
