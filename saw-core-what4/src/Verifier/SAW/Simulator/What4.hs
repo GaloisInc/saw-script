@@ -848,7 +848,7 @@ applyUnintApp sym app0 v =
     VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
-    VCtorApp i xv             -> foldM (applyUnintApp sym) app' =<< traverse force xv
+    VCtorApp i ps xv          -> foldM (applyUnintApp sym) app' =<< traverse force (ps++xv)
                                    where app' = suffixUnintApp ("_" ++ identName i) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     TValue (suffixTValue -> Just s)
@@ -1128,7 +1128,6 @@ w4EvalBasic sym st sc m addlPrims ref unintSet t =
      cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted
      Sim.evalSharedTerm cfg t
 
-
 -- | Evaluate a saw-core term to a What4 value for the purposes of
 --   using it as an input for symbolic simulation.  This will evaluate
 --   primitives, but will cancel evaluation and return the associated
@@ -1371,8 +1370,8 @@ mkArgTerm sc ty val =
          xs <- sequence [ mkArgTerm sc t v | (t, v) <- zip (map snd tys) vs ]
          return (ArgTermRecord (zip tags xs))
 
-    (_, VCtorApp i vv) ->
-      do xs <- traverse (termOfSValue sc <=< force) (V.toList vv)
+    (_, VCtorApp i ps vv) ->
+      do xs <- traverse (termOfSValue sc <=< force) (ps ++ vv)
          x <- scCtorApp sc i xs
          return (ArgTermConst x)
 
