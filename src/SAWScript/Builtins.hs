@@ -37,6 +37,7 @@ import qualified Data.IntMap as IntMap
 import Data.IORef
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -539,6 +540,47 @@ goal_eval unints =
      unintSet <- resolveNames unints
      prop' <- io (evalProp sc unintSet (goalProp goal))
      return (prop', EvalEvidence unintSet)
+
+extract_uninterp :: [String] -> TypedTerm -> TopLevel (TypedTerm, [(String,[(TypedTerm,TypedTerm)])])
+extract_uninterp unints tt =
+  do sc <- getSharedContext
+     idxs <- mapM (resolveName sc) unints
+     let unintSet = Set.fromList idxs
+     mmap <- io (scGetModuleMap sc)
+     (tm, repls) <- io (TM.extractUninterp sc mmap mempty mempty unintSet (ttTerm tt))
+     tt' <- io (mkTypedTerm sc tm)
+
+     let f = traverse $ \(ec,vs) ->
+               do ectm <- scExtCns sc ec
+                  vs'  <- filterCryTerms sc vs
+                  pure (ectm, vs')
+     repls' <- io (traverse f repls)
+
+     replList <- io $
+        forM (zip unints idxs) $ \(nm,idx) ->
+           do let ls = fromMaybe [] (Map.lookup idx repls')
+              xs <- forM ls $ \(e,vs) ->
+                      do e'  <- mkTypedTerm sc e
+                         vs' <- tupleTypedTerm sc vs
+                         pure (e',vs')
+              pure (nm,xs)
+
+     pure (tt', replList)
+
+filterCryTerms :: SharedContext -> [Term] -> IO [TypedTerm]
+filterCryTerms sc = loop
+  where
+  loop [] = pure []
+  loop (x:xs) =
+    do tp <- Cryptol.scCryptolType sc =<< scTypeOf sc x
+       case tp of
+         Just (Right cty) ->
+           do let x' = TypedTerm (TypedTermSchema (C.tMono cty)) x
+              xs' <- loop xs
+              pure (x':xs')
+
+         _ -> loop xs
+
 
 beta_reduce_goal :: ProofScript ()
 beta_reduce_goal =

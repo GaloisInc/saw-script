@@ -19,12 +19,14 @@ module Verifier.SAW.Simulator.TermModel
        , VExtra(..)
        , readBackValue, readBackTValue
        , normalizeSharedTerm
+       , extractUninterp
        ) where
 
 import Control.Monad
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Data.IORef
+import Data.Maybe (fromMaybe)
 import qualified Data.Vector as V
 import Data.Map (Map)
 import qualified Data.Map as Map
