@@ -321,6 +321,7 @@ verifyPrestate ::
       Crucible.SymGlobalState Sym)
 verifyPrestate cc mspec globals0 =
   do let sym = cc^.jccBackend
+     let jc = cc^.jccJVMContext
      let preallocs = mspec ^. MS.csPreState . MS.csAllocs
      let tyenv = MS.csAllocations mspec
      let nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
@@ -330,9 +331,15 @@ verifyPrestate cc mspec globals0 =
 
      --let cvar = CJ.dynamicClassTable (cc^.jccJVMContext)
      --let Just mem = Crucible.lookupGlobal lvar globals
+     let postPointsTos = mspec ^. MS.csPostState . MS.csPointsTos
+
+     -- make static fields mentioned in post-state section writable
+     let updatedStaticFields = [ fid | JVMPointsToStatic _ fid _ <- postPointsTos ]
+     let makeWritable gs fid = CJ.doStaticFieldWritable sym jc gs fid (W4.truePred sym)
+     globals0' <- liftIO $ foldM makeWritable globals0 updatedStaticFields
 
      -- Allocate objects in memory for each 'jvm_alloc'
-     (env, globals1) <- runStateT (traverse (doAlloc cc . snd) preallocs) globals0
+     (env, globals1) <- runStateT (traverse (doAlloc cc . snd) preallocs) globals0'
 
      globals2 <- setupPrePointsTos mspec cc env (mspec ^. MS.csPreState . MS.csPointsTos) globals1
      cs <- setupPrestateConditions mspec cc env (mspec ^. MS.csPreState . MS.csConditions)
@@ -746,7 +753,10 @@ setupGlobalState sym jc =
   do classTab <- setupDynamicClassTable sym jc
      let classTabVar = CJ.dynamicClassTable jc
      let globals0 = Crucible.insertGlobal classTabVar classTab Crucible.emptyGlobals
-     let declareGlobal var = Crucible.insertGlobal var CJ.unassignedJVMValue
+     let writable = W4.falsePred sym -- static fields default to read-only
+     let declareGlobal info =
+           Crucible.insertGlobal (CJ.staticFieldWritable info) writable .
+           Crucible.insertGlobal (CJ.staticFieldValue info) CJ.unassignedJVMValue
      return $ foldr declareGlobal globals0 (Map.elems (CJ.staticFields jc))
 
 setupDynamicClassTable :: Sym -> CJ.JVMContext -> IO (Crucible.RegValue Sym CJ.JVMClassTableType)
