@@ -546,6 +546,42 @@ extract_uninterp unints tt =
               pure (nm,xs)
      pure (tt', replList)
 
+extract_uninterp2 :: [String] -> TypedTerm -> TopLevel (TypedTerm, [(String,[(TypedTerm,TypedTerm)])])
+extract_uninterp2 unints tt =
+  do sc <- getSharedContext
+     idxs <- mapM (resolveName sc) unints
+     let unintSet = Set.fromList idxs
+     mmap <- io (scGetModuleMap sc)
+     (tm, repls) <- io (TM.extractUninterp sc mmap mempty mempty unintSet (ttTerm tt))
+     tt' <- io (mkTypedTerm sc tm)
+
+     let f = traverse $ \(ec,_vs) ->
+               do ectm <- scExtCns sc ec
+                  --vs'  <- scTuple sc vs
+                  pure ectm -- , vs')
+     repls' <- io (traverse f repls)
+
+     -- printOutLnTop Info "====== Replacement values ======"
+     -- forM_ (zip unints idxs) $ \(nm,idx) ->
+     --   do printOutLnTop Info ("== Values for " ++ nm ++ " ==")
+     --      let ls = fromMaybe [] (Map.lookup idx repls')
+     --      forM_ ls $ \(e,vs) ->
+     --        do es  <- show_term e
+     --           vss <- show_term vs
+     --           printOutLnTop Info (unwords ["output:", es, "inputs:", vss])
+     -- printOutLnTop Info "====== End Replacement values ======"
+
+     replList <- io $
+        forM (zip unints idxs) $ \(nm,idx) ->
+           do let ls = fromMaybe [] (Map.lookup idx repls')
+              xs <- forM ls $ \e -> -- \(e,vs) ->
+                      do e'  <- mkTypedTerm sc e
+                         vs' <- mkTypedTerm sc =<< scUnitValue sc  -- vs
+                         pure (e',vs')
+              pure (nm,xs)
+
+     pure (tt', replList)
+
 beta_reduce_goal :: ProofScript ()
 beta_reduce_goal =
   execTactic $ tacticChange $ \goal ->

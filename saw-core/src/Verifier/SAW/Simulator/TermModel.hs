@@ -20,14 +20,18 @@ module Verifier.SAW.Simulator.TermModel
        , VExtra(..)
        , readBackValue, readBackTValue
        , normalizeSharedTerm
+       , extractUninterp
        ) where
 
 import Control.Monad
 import Control.Monad.Fix
 import Data.IORef
+import Data.Maybe (fromMaybe)
 import qualified Data.Vector as V
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Numeric.Natural
 
@@ -38,12 +42,77 @@ import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.TypedAST
        ( ModuleMap, DataType(..), findCtorInMap, ctorType, ctorNumParams
-       , FlatTermF(..)
+       , FlatTermF(..), toShortName
        )
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Utils (panic)
 
 ------------------------------------------------------------
+
+type ReplaceUninterpMap = Map VarIndex [(ExtCns Term, [Term])]
+
+
+extractUninterp ::
+  SharedContext ->
+  ModuleMap ->
+  Map Ident TmValue {- ^ additional primitives -} ->
+  Map VarIndex TmValue {- ^ ExtCns values -} ->
+  Set VarIndex {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
+  Term ->
+  IO (Term, ReplaceUninterpMap)
+extractUninterp sc m addlPrims ecVals unintSet t =
+  do mapref <- newIORef mempty
+     cfg <- mfix (\cfg -> Sim.evalGlobal m (Map.union (constMap sc cfg) addlPrims)
+                             (extcns cfg mapref) (uninterpreted cfg mapref) (neutral cfg))
+     v <- Sim.evalSharedTerm cfg t
+     tv <- evalType cfg =<< scTypeOf sc t
+     t' <- readBackValue sc cfg tv v
+     replMap <- readIORef mapref
+     return (t', replMap)
+
+ where
+    uninterpreted cfg mapref ec@(EC ix _nm _ty)
+      | Set.member ix unintSet = Just (replace sc cfg mapref ec)
+      | otherwise = Nothing
+
+    extcns cfg mapref ec@(EC ix _nm ty)
+      | Set.member ix unintSet = replace sc cfg mapref ec
+      | otherwise =
+          case Map.lookup ix ecVals of
+            Just v  -> return v
+            Nothing ->
+              do ec' <- traverse (readBackTValue sc cfg) ec
+                 tm <- scExtCns sc ec'
+                 reflectTerm sc cfg ty tm
+
+    neutral cfg env nt =
+      do env' <- traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
+         tm   <- instantiateVarList sc 0 env' =<< neutralToSharedTerm sc nt
+         tyv  <- evalType cfg =<< scTypeOf sc tm
+         reflectTerm sc cfg tyv tm
+
+
+replace ::
+  SharedContext ->
+  Sim.SimulatorConfig TermModel ->
+  IORef ReplaceUninterpMap ->
+  ExtCns (TValue TermModel) ->
+  IO (Value TermModel)
+replace sc cfg mapref ec = loop [] (ecType ec)
+  where
+    loop :: [Term] -> TValue TermModel -> IO (Value TermModel)
+    loop env (VPiType nm xty f) =
+        return $ VFun nm $ \x ->
+          do ty <- f x
+             xtm <- readBackValue sc cfg xty =<< force x
+             loop (xtm:env) ty
+
+    loop env ty =
+      do let args = reverse env
+         ty' <- readBackTValue sc cfg ty
+         newec <- scFreshEC sc (Text.unpack (toShortName (ecName ec))) ty'
+         modifyIORef mapref (Map.alter (Just . ((newec,args):) . fromMaybe []) (ecVarIndex ec))
+         reflectTerm sc cfg ty =<< scFlatTermF sc (ExtCns newec)
 
 
 normalizeSharedTerm ::

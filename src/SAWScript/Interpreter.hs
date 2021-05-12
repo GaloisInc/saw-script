@@ -901,6 +901,12 @@ primitives = Map.fromList
     [ "Docs TODO!!"
     ]
 
+  , prim "extract_uninterp2" "[String] -> Term -> TopLevel (Term, [(String,[(Term, Term)])])"
+    (pureVal extract_uninterp2)
+    Experimental
+    [ "Docs TODO!!"
+    ]
+
   , prim "sbv_uninterpreted"   "String -> Term -> TopLevel Uninterp"
     (pureVal sbvUninterpreted)
     Deprecated
