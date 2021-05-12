@@ -786,10 +786,13 @@ executeAllocation opts cc (var, (loc, alloc)) =
      let halloc = cc^.jccHandleAllocator
      sym <- Ov.getSymInterface
      globals <- OM (use overrideGlobals)
+     let mut = True -- allocate objects/arrays from post-state as mutable
      (ptr, globals') <-
        case alloc of
-         AllocObject cname -> liftIO $ CJ.doAllocateObject sym halloc jc cname globals
-         AllocArray len elemTy -> liftIO $ CJ.doAllocateArray sym halloc jc len elemTy globals
+         AllocObject cname ->
+           liftIO $ CJ.doAllocateObject sym halloc jc cname (const mut) globals
+         AllocArray len elemTy ->
+           liftIO $ CJ.doAllocateArray sym halloc jc len elemTy (const mut) globals
      OM (overrideGlobals .= globals')
      assignVar cc loc var ptr
 

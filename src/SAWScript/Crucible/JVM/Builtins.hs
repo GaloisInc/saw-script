@@ -55,6 +55,7 @@ import           Data.Function
 import           Data.List
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.Maybe (fromMaybe)
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
@@ -322,6 +323,7 @@ verifyPrestate ::
 verifyPrestate cc mspec globals0 =
   do let sym = cc^.jccBackend
      let jc = cc^.jccJVMContext
+     let halloc = cc^.jccHandleAllocator
      let preallocs = mspec ^. MS.csPreState . MS.csAllocs
      let tyenv = MS.csAllocations mspec
      let nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
@@ -338,8 +340,29 @@ verifyPrestate cc mspec globals0 =
      let makeWritable gs fid = CJ.doStaticFieldWritable sym jc gs fid (W4.truePred sym)
      globals0' <- liftIO $ foldM makeWritable globals0 updatedStaticFields
 
+     -- determine which arrays and instance fields need to be writable
+     let addUpdates pt (as, es, fs) =
+           case pt of
+             JVMPointsToField _ a fid _ -> (as, es, Map.insertWith (++) a [fid] fs)
+             JVMPointsToStatic{} -> (as, es, fs)
+             JVMPointsToElem _ a i _ -> (as, Map.insertWith (++) a [i] es, fs)
+             JVMPointsToArray _ a _ -> (Set.insert a as, es, fs)
+     let (updatedArrays, updatedElems, updatedFields) =
+           foldr addUpdates (Set.empty, Map.empty, Map.empty) postPointsTos
+
      -- Allocate objects in memory for each 'jvm_alloc'
-     (env, globals1) <- runStateT (traverse (doAlloc cc . snd) preallocs) globals0'
+     let doAlloc a (_loc, alloc) =
+           case alloc of
+             AllocObject cname ->
+               StateT (CJ.doAllocateObject sym halloc jc cname (flip elem fids))
+               where fids = fromMaybe [] (Map.lookup a updatedFields)
+             AllocArray len ty ->
+               StateT (CJ.doAllocateArray sym halloc jc len ty writable)
+               where
+                 writable
+                   | Set.member a updatedArrays = const True
+                   | otherwise = maybe (const False) (flip elem) (Map.lookup a updatedElems)
+     (env, globals1) <- runStateT (Map.traverseWithKey doAlloc preallocs) globals0'
 
      globals2 <- setupPrePointsTos mspec cc env (mspec ^. MS.csPreState . MS.csPointsTos) globals1
      cs <- setupPrestateConditions mspec cc env (mspec ^. MS.csPreState . MS.csConditions)
@@ -503,21 +526,6 @@ assertEqualVals cc v1 v2 =
   do let sym = cc^.jccBackend
      st <- sawCoreState sym
      toSC sym st =<< equalValsPred cc v1 v2
-
---------------------------------------------------------------------------------
-
-doAlloc ::
-  JVMCrucibleContext ->
-  Allocation ->
-  StateT (Crucible.SymGlobalState Sym) IO JVMRefVal
-doAlloc cc alloc =
-  case alloc of
-    AllocObject cname -> StateT (CJ.doAllocateObject sym halloc jc cname)
-    AllocArray len ty -> StateT (CJ.doAllocateArray sym halloc jc len ty)
-  where
-    sym = cc^.jccBackend
-    halloc = cc^.jccHandleAllocator
-    jc = cc^.jccJVMContext
 
 --------------------------------------------------------------------------------
 
