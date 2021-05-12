@@ -25,7 +25,6 @@ module Verifier.SAW.Simulator.TermModel
 import Control.Monad
 import Control.Monad.Fix
 import Data.IORef
---import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -40,7 +39,7 @@ import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.TypedAST
        ( ModuleMap, DataType(..), findCtorInMap, ctorType, ctorNumParams
        , FlatTermF(..)
-       ) -- toShortName
+       )
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Utils (panic)
 
@@ -62,13 +61,11 @@ normalizeSharedTerm sc m addlPrims ecVals t =
      readBackValue sc cfg tv v
 
   where
-    neutral cfg _env nt =
-      do tm <- neutralToSharedTerm sc nt
-         ty <- scTypeOf sc tm -- TODO! This is a problem for open terms...
-                              -- maybe we can make it so VExtra terms don't need
-                              -- to carry their types
-         tyv <- evalType cfg ty
-         pure (VExtra (VExtraTerm tyv tm))
+    neutral cfg env nt =
+      do env' <- traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
+         tm   <- instantiateVarList sc 0 env' =<< neutralToSharedTerm sc nt
+         tyv  <- evalType cfg =<< scTypeOf sc tm
+         reflectTerm sc cfg tyv tm
 
     extcns cfg ec =
       case Map.lookup (ecVarIndex ec) ecVals of
@@ -223,11 +220,11 @@ reflectTerm sc cfg = loop
                       ready <$> reflectTerm sc cfg t tm'
          pure (VVector vs)
 
-    VRecordType{} -> return (VExtra (VExtraTerm tv tm))
-    VPairType{} -> return (VExtra (VExtraTerm tv tm))
-    VDataType{} -> return (VExtra (VExtraTerm tv tm))
+    VRecordType{}   -> return (VExtra (VExtraTerm tv tm))
+    VPairType{}     -> return (VExtra (VExtraTerm tv tm))
+    VDataType{}     -> return (VExtra (VExtraTerm tv tm))
     VRecursorType{} -> return (VExtra (VExtraTerm tv tm))
-    VTyTerm{} -> return (VExtra (VExtraTerm tv tm))
+    VTyTerm{}       -> return (VExtra (VExtraTerm tv tm))
 
 readBackValue :: SharedContext -> Sim.SimulatorConfig TermModel -> TValue TermModel -> Value TermModel -> IO Term
 readBackValue sc cfg = loop
@@ -267,9 +264,6 @@ readBackValue sc cfg = loop
 
     loop _ (VExtra (VExtraTerm _tp tm)) = return tm
     loop _ (VExtra (VStream _tp tm _fn _cache))  = return tm
-
---    loop _ (VFloat _f) = fail "readBackValue: TODO float"
---    loop _ (VDouble _f) = fail "readBackValue: TODO float"
 
     loop tv@VPiType{} v@VFun{} =
       do (ecs, tm) <- readBackFuns tv v
