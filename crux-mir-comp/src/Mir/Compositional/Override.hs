@@ -147,7 +147,6 @@ runSpec cs mh ms = do
 
     sc <- liftIO $ SAW.mkSharedContext
     liftIO $ SAW.scLoadPreludeModule sc
-    scs <- liftIO $ SAW.newSAWCoreState sc
 
     -- `eval` converts `W4.Expr`s to `SAW.Term`s.  We take what4 exprs from the
     -- context (e.g., in the actual arguments passed to the override) and
@@ -155,23 +154,9 @@ runSpec cs mh ms = do
     -- Later, we need to convert some SAWCore terms back to what4, so during
     -- this conversion, we also build up a mapping from SAWCore variables
     -- (`SAW.ExtCns`) to what4 ones (`W4.ExprBoundVar`).
-    visitCache <- W4.newIdxCache
     w4VarMapRef <- liftIO $ newIORef Map.empty
-    let eval' :: forall tp. W4.Expr t tp -> IO SAW.Term
-        eval' x = SAW.toSC sym scs x
-        eval :: forall tp. W4.Expr t tp -> IO SAW.Term
-        eval x = do
-            -- When translating W4 vars to SAW `ExtCns`s, also record the
-            -- reverse mapping into `w4VarMapRef` so the reverse translation
-            -- can be done later on.
-            visitExprVars visitCache x $ \var -> do
-                let expr = W4.BoundVarExpr var
-                term <- eval' expr
-                ec <- case SAW.asExtCns term of
-                    Just ec -> return ec
-                    Nothing -> error "eval on BoundVarExpr produced non-ExtCns?"
-                liftIO $ modifyIORef w4VarMapRef $ Map.insert (SAW.ecVarIndex ec) (Some expr)
-            eval' x
+    let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
+        eval x = exprToTerm sym sc w4VarMapRef x
 
     -- Generate fresh variables for use in postconditions and result.  The
     -- result, `postFreshTermSub`, maps MethodSpec `VarIndex`es to `Term`s
