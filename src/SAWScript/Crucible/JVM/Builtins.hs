@@ -34,6 +34,7 @@ module SAWScript.Crucible.JVM.Builtins
     , jvm_modifies_field
     , jvm_modifies_static_field
     , jvm_modifies_elem
+    , jvm_modifies_array
     , jvm_field_is
     , jvm_static_field_is
     , jvm_elem_is
@@ -476,7 +477,7 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
           do let lhs' = lookupAllocIndex env lhs
              rhs' <- maybe (pure CJ.unassignedJVMValue) injectSetupVal rhs
              CJ.doArrayStore sym mem lhs' idx rhs'
-        JVMPointsToArray _loc lhs rhs ->
+        JVMPointsToArray _loc lhs (Just rhs) ->
           do sc <- saw_ctx <$> sawCoreState sym
              let lhs' = lookupAllocIndex env lhs
              (_ety, tts) <-
@@ -486,6 +487,8 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
                  Just x -> pure x
              rhs' <- traverse (injectSetupVal . MS.SetupTerm) tts
              doEntireArrayStore sym mem lhs' rhs'
+        JVMPointsToArray _loc _lhs Nothing ->
+          pure mem -- This should probably never occur in the prestate section.
 
 -- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
@@ -1146,11 +1149,22 @@ generic_elem_is ptr idx mval =
        X.throwM $ JVMElemMultiple ptr' idx
      Setup.addPointsTo pt
 
+jvm_modifies_array ::
+  SetupValue {- ^ array reference -} ->
+  JVMSetupM ()
+jvm_modifies_array ptr = generic_array_is ptr Nothing
+
 jvm_array_is ::
   SetupValue {- ^ array reference -} ->
   TypedTerm {- ^ array value -} ->
   JVMSetupM ()
-jvm_array_is ptr val =
+jvm_array_is ptr val = generic_array_is ptr (Just val)
+
+generic_array_is ::
+  SetupValue {- ^ array reference -} ->
+  Maybe TypedTerm {- ^ array value -} ->
+  JVMSetupM ()
+generic_array_is ptr mval =
   JVMSetupM $
   do loc <- SS.toW4Loc "jvm_array_is" <$> lift getPosition
      ptr' <-
@@ -1163,17 +1177,21 @@ jvm_array_is ptr val =
        case snd (lookupAllocIndex env ptr') of
          AllocObject cname -> X.throwM $ JVMElemNonArray (J.ClassType cname)
          AllocArray len elTy -> pure (len, elTy)
-     let schema = ttSchema val
-     let checkVal =
-           do ty <- Cryptol.isMono schema
-              (n, a) <- Cryptol.tIsSeq ty
-              guard (Cryptol.tIsNum n == Just (toInteger len))
-              jty <- toJVMType (Cryptol.evalValType mempty a)
-              guard (registerCompatible elTy jty)
-     case checkVal of
-       Nothing -> X.throwM (JVMArrayTypeMismatch len elTy schema)
-       Just () -> pure ()
-     let pt = JVMPointsToArray loc ptr' val
+     case mval of
+       Nothing -> pure ()
+       Just val ->
+         case checkVal of
+           Nothing -> X.throwM (JVMArrayTypeMismatch len elTy schema)
+           Just () -> pure ()
+         where
+           schema = ttSchema val
+           checkVal =
+             do ty <- Cryptol.isMono schema
+                (n, a) <- Cryptol.tIsSeq ty
+                guard (Cryptol.tIsNum n == Just (toInteger len))
+                jty <- toJVMType (Cryptol.evalValType mempty a)
+                guard (registerCompatible elTy jty)
+     let pt = JVMPointsToArray loc ptr' mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMArrayMultiple ptr'

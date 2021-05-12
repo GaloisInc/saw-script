@@ -2731,6 +2731,18 @@ primitives = Map.fromList
     , "nothing about the new value."
     ]
 
+  , prim "jvm_modifies_array" "JVMValue -> JVMSetup ()"
+    (pureVal jvm_modifies_array)
+    Experimental
+    [ "Declare that the indicated array's elements contain unspecified"
+    , "values."
+    , ""
+    , "This lets users write partial specifications of JVM methods."
+    , "In the post-state section (after `jvm_execute_func`), it"
+    , "states that the method may modify the array elements, but says"
+    , "nothing about the new values."
+    ]
+
   , prim "jvm_field_is" "JVMValue -> String -> JVMValue -> JVMSetup ()"
     (pureVal jvm_field_is)
     Experimental

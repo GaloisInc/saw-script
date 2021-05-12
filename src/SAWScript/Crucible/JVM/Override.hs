@@ -692,7 +692,7 @@ learnPointsTo opts sc cc spec prepost pt = do
          v <- liftIO $ projectJVMVal sym ty ("array load " ++ show idx ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
-    JVMPointsToArray loc ptr tt ->
+    JVMPointsToArray loc ptr (Just tt) ->
       do (len, ety) <-
            case Cryptol.isMono (ttSchema tt) of
              Nothing -> fail "jvm_array_is: invalid polymorphic value"
@@ -846,7 +846,7 @@ executePointsTo opts sc cc spec pt = do
          globals' <- liftIO $ CJ.doArrayStore sym globals rval idx dyn
          OM (overrideGlobals .= globals')
 
-    JVMPointsToArray _loc ptr tt ->
+    JVMPointsToArray _loc ptr (Just tt) ->
       do (_ety, tts) <-
            liftIO (destVecTypedTerm sc tt) >>=
            \case
@@ -856,6 +856,15 @@ executePointsTo opts sc cc spec pt = do
          vs <- traverse (injectSetupValueJVM sym opts cc sc spec . MS.SetupTerm) tts
          globals' <- liftIO $ doEntireArrayStore sym globals rval vs
          OM (overrideGlobals .= globals')
+
+    JVMPointsToArray _loc ptr Nothing ->
+      case Map.lookup ptr (MS.csAllocations spec) of
+        Just (_, AllocArray len _) ->
+          do let vs = replicate len CJ.unassignedJVMValue
+             rval <- resolveAllocIndexJVM ptr
+             globals' <- liftIO $ doEntireArrayStore sym globals rval vs
+             OM (overrideGlobals .= globals')
+        _ -> panic "JVMSetup" ["executePointsTo", "expected array allocation"]
 
 injectSetupValueJVM ::
   Sym                  ->
