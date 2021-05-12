@@ -9,7 +9,11 @@ jvm_verify c "get" [] false
     j <- jvm_fresh_var "j" java_int;
     jvm_precond {{ j <= 3 }};
     jvm_execute_func [this, a, jvm_term j];
-    // TODO: Update spec to say `a` is modified but not specified
+    // TODO: Add declaration to say that the entire array is modified.
+    jvm_modifies_elem a 0;
+    jvm_modifies_elem a 1;
+    jvm_modifies_elem a 2;
+    jvm_modifies_elem a 3;
     jvm_return (jvm_term {{ j }});
   }
   abc;
