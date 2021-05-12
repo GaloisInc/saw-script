@@ -2,6 +2,7 @@
 {-# Language FlexibleContexts #-}
 {-# Language GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -44,6 +45,7 @@ import qualified Verifier.SAW.Simulator.MonadLazy as SAW
 import qualified Verifier.SAW.Simulator.Value as SAW
 import Verifier.SAW.Simulator.What4 (SValue)
 import qualified Verifier.SAW.Simulator.What4 as SAW
+import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW (baseSCType)
 
 import Mir.Intrinsics
 import qualified Mir.Mir as M
@@ -445,3 +447,92 @@ termToType sym sc term = do
                 Nothing -> error "termToPred: zero-width bitvector"
             return $ Some $ BaseBVRepr w
         _ -> error $ "termToType: bad SValue"
+
+
+exprToTerm :: forall sym t st fs tp m.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, MonadIO m, MonadFail m) =>
+    sym ->
+    SAW.SharedContext ->
+    IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
+    W4.Expr t tp ->
+    m SAW.Term
+exprToTerm sym sc w4VarMapRef val = liftIO $ do
+    ty <- SAW.baseSCType sym sc (W4.exprType val)
+    ec <- SAW.scFreshEC sc "w4expr" ty
+    modifyIORef w4VarMapRef $ Map.insert (SAW.ecVarIndex ec) (Some val)
+    term <- SAW.scExtCns sc ec
+    return term
+
+regToTerm :: forall sym t st fs tp m.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, MonadIO m, MonadFail m) =>
+    sym ->
+    SAW.SharedContext ->
+    String ->
+    IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
+    TypeShape tp ->
+    RegValue sym tp ->
+    m SAW.Term
+regToTerm sym sc name w4VarMapRef shp rv = go shp rv
+  where
+    go :: forall tp.
+        TypeShape tp ->
+        RegValue sym tp ->
+        m SAW.Term
+    go shp rv = case (shp, rv) of
+        (UnitShape _, ()) -> liftIO $ SAW.scUnitValue sc
+        (PrimShape _ _, expr) -> exprToTerm sym sc w4VarMapRef expr
+        (TupleShape _ _ flds, rvs) -> do
+            terms <- Ctx.zipWithM (\fld (RV rv) -> Const <$> goField fld rv) flds rvs
+            liftIO $ SAW.scTuple sc (toListFC getConst terms)
+        (ArrayShape _ _ shp, vec) -> do
+            terms <- goVector shp vec
+            tyTerm <- shapeToTerm sc shp
+            liftIO $ SAW.scVector sc tyTerm terms
+        _ -> fail $
+            "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)
+
+    goField :: forall tp.
+        FieldShape tp ->
+        RegValue sym tp ->
+        m SAW.Term
+    goField (OptField shp) rv = do
+        rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
+        go shp rv'
+    goField (ReqField shp) rv = go shp rv
+
+    goVector :: forall tp.
+        TypeShape tp ->
+        MirVector sym tp ->
+        m [SAW.Term]
+    goVector shp (MirVector_Vector v) = mapM (go shp) $ toList v
+    goVector shp (MirVector_PartialVector pv) = do
+        forM (toList pv) $ \rv -> do
+            rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
+            go shp rv'
+    goVector _shp (MirVector_Array _) = fail $
+        "regToTerm: MirVector_Array not supported"
+
+shapeToTerm :: forall tp m.
+    (MonadIO m, MonadFail m) =>
+    SAW.SharedContext ->
+    TypeShape tp ->
+    m SAW.Term
+shapeToTerm sc shp = go shp
+  where
+    go :: forall tp. TypeShape tp -> m SAW.Term
+    go (UnitShape _) = liftIO $ SAW.scUnitType sc
+    go (PrimShape _ BaseBoolRepr) = liftIO $ SAW.scBoolType sc
+    go (PrimShape _ (BaseBVRepr w)) = liftIO $ SAW.scBitvector sc (natValue w) 
+    go (TupleShape _ _ flds) = do
+        tys <- toListFC getConst <$> traverseFC (\x -> Const <$> goField x) flds
+        liftIO $ SAW.scTupleType sc tys
+    go (ArrayShape (M.TyArray _ n) _ shp) = do
+        ty <- go shp
+        n <- liftIO $ SAW.scNat sc (fromIntegral n)
+        liftIO $ SAW.scVecType sc n ty
+    go shp = fail $ "shapeToTerm: unsupported type " ++ show (shapeType shp)
+
+    goField :: forall tp. FieldShape tp -> m SAW.Term
+    goField (OptField shp) = go shp
+    goField (ReqField shp) = go shp
+

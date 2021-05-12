@@ -17,7 +17,6 @@ import Control.Lens (use, (^.), (^?), _Wrapped, ix)
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
-import Data.Foldable
 import Data.Functor.Const
 import Data.IORef
 import Data.Map (Map)
@@ -55,9 +54,7 @@ import Mir.Overrides (getString)
 
 import qualified Verifier.SAW.Cryptol.Prelude as SAW
 import qualified Verifier.SAW.CryptolEnv as SAW
-import qualified Verifier.SAW.Recognizer as SAW
 import qualified Verifier.SAW.SharedTerm as SAW
-import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
 import qualified Verifier.SAW.TypedTerm as SAW
 
 import Mir.Compositional.Convert
@@ -223,10 +220,9 @@ loadCryptolFunc col sig modulePath name = do
         Left err -> fail $ "error loading " ++ show name ++ ": " ++ err
         Right () -> return ()
 
-    scs <- liftIO $ SAW.newSAWCoreState sc
     let fnName = "cryptol_" <> modulePath <> "_" <> name
     return $ LoadedCryptolFunc argShps retShp $
-        cryptolRun sc scs (Text.unpack fnName) argShps retShp (SAW.ttTerm tt)
+        cryptolRun sc (Text.unpack fnName) argShps retShp (SAW.ttTerm tt)
 
   where
     listToCtx :: forall k (f :: k -> *). [Some f] -> Some (Assignment f)
@@ -249,22 +245,20 @@ cryptolRun ::
     forall sym p t st fs rtp r args ret .
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
     SAW.SharedContext ->
-    SAW.SAWCoreState t ->
     String ->
     Assignment TypeShape args ->
     TypeShape ret ->
     SAW.Term ->
     OverrideSim (p sym) sym MIR rtp args r (RegValue sym ret)
-cryptolRun sc scs name argShps retShp funcTerm = do
+cryptolRun sc name argShps retShp funcTerm = do
     sym <- getSymInterface
 
-    visitCache <- liftIO $ (W4.newIdxCache :: IO (W4.IdxCache t (Const ())))
     w4VarMapRef <- liftIO $ newIORef (Map.empty :: Map SAW.VarIndex (Some (W4.Expr t)))
 
     RegMap argsCtx <- getOverrideArgs
     argTermsCtx <- Ctx.zipWithM
         (\shp (RegEntry _ val) ->
-            Const <$> regToTerm sym sc scs name visitCache w4VarMapRef shp val)
+            Const <$> regToTerm sym sc name w4VarMapRef shp val)
         argShps argsCtx
     let argTerms = toListFC getConst argTermsCtx
     appTerm <- liftIO $ SAW.scApplyAll sc funcTerm argTerms
@@ -272,98 +266,6 @@ cryptolRun sc scs name argShps retShp funcTerm = do
     w4VarMap <- liftIO $ readIORef w4VarMapRef
     rv <- liftIO $ termToReg sym sc w4VarMap appTerm retShp
     return rv
-
-exprToTerm :: forall sym p t st fs tp rtp a r.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
-    sym ->
-    SAW.SharedContext ->
-    SAW.SAWCoreState t ->
-    W4.IdxCache t (Const ()) ->
-    IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
-    W4.Expr t tp ->
-    OverrideSim (p sym) sym MIR rtp a r SAW.Term
-exprToTerm sym sc scs visitCache w4VarMapRef val = do
-    liftIO $ do
-        ty <- SAW.baseSCType sym sc (W4.exprType val)
-        ec <- SAW.scFreshEC sc "w4expr" ty
-        modifyIORef w4VarMapRef $ Map.insert (SAW.ecVarIndex ec) (Some val)
-        term <- SAW.scExtCns sc ec
-        return term
-
-regToTerm :: forall sym p t st fs tp rtp a r.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
-    sym ->
-    SAW.SharedContext ->
-    SAW.SAWCoreState t ->
-    String ->
-    W4.IdxCache t (Const ()) ->
-    IORef (Map SAW.VarIndex (Some (W4.Expr t))) ->
-    TypeShape tp ->
-    RegValue sym tp ->
-    OverrideSim (p sym) sym MIR rtp a r SAW.Term
-regToTerm sym sc scs name visitCache w4VarMapRef shp rv = go shp rv
-  where
-    go :: forall tp.
-        TypeShape tp ->
-        RegValue sym tp ->
-        OverrideSim (p sym) sym MIR rtp a r SAW.Term
-    go shp rv = case (shp, rv) of
-        (UnitShape _, ()) -> liftIO $ SAW.scUnitValue sc
-        (PrimShape _ _, expr) -> exprToTerm sym sc scs visitCache w4VarMapRef expr
-        (TupleShape _ _ flds, rvs) -> do
-            terms <- Ctx.zipWithM (\fld (RV rv) -> Const <$> goField fld rv) flds rvs
-            liftIO $ SAW.scTuple sc (toListFC getConst terms)
-        (ArrayShape _ _ shp, vec) -> do
-            terms <- goVector shp vec
-            tyTerm <- shapeToTerm sc shp
-            liftIO $ SAW.scVector sc tyTerm terms
-        _ -> fail $
-            "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)
-
-    goField :: forall tp.
-        FieldShape tp ->
-        RegValue sym tp ->
-        OverrideSim (p sym) sym MIR rtp a r SAW.Term
-    goField (OptField shp) rv = do
-        rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
-        go shp rv'
-    goField (ReqField shp) rv = go shp rv
-
-    goVector :: forall tp.
-        TypeShape tp ->
-        MirVector sym tp ->
-        OverrideSim (p sym) sym MIR rtp a r [SAW.Term]
-    goVector shp (MirVector_Vector v) = mapM (go shp) $ toList v
-    goVector shp (MirVector_PartialVector pv) = do
-        forM (toList pv) $ \rv -> do
-            rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
-            go shp rv'
-    goVector _shp (MirVector_Array _) = fail $
-        "regToTerm: MirVector_Array not supported"
-
-shapeToTerm :: forall tp m.
-    (MonadIO m, MonadFail m) =>
-    SAW.SharedContext ->
-    TypeShape tp ->
-    m SAW.Term
-shapeToTerm sc shp = go shp
-  where
-    go :: forall tp. TypeShape tp -> m SAW.Term
-    go (UnitShape _) = liftIO $ SAW.scUnitType sc
-    go (PrimShape _ BaseBoolRepr) = liftIO $ SAW.scBoolType sc
-    go (PrimShape _ (BaseBVRepr w)) = liftIO $ SAW.scBitvector sc (natValue w) 
-    go (TupleShape _ _ flds) = do
-        tys <- toListFC getConst <$> traverseFC (\x -> Const <$> goField x) flds
-        liftIO $ SAW.scTupleType sc tys
-    go (ArrayShape (M.TyArray _ n) _ shp) = do
-        ty <- go shp
-        n <- liftIO $ SAW.scNat sc (fromIntegral n)
-        liftIO $ SAW.scVecType sc n ty
-    go shp = fail $ "shapeToTerm: unsupported type " ++ show (shapeType shp)
-
-    goField :: forall tp. FieldShape tp -> m SAW.Term
-    goField (OptField shp) = go shp
-    goField (ReqField shp) = go shp
 
 
 typecheckFnSig ::
