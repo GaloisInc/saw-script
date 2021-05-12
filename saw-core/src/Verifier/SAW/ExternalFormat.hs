@@ -49,9 +49,9 @@ separateArgs args =
     Nothing -> Nothing
 
 -- | Split the last element from the rest of a list, for non-empty lists
-_splitLast :: [a] -> Maybe ([a], a)
-_splitLast [] = Nothing
-_splitLast xs = Just (take (length xs - 1) xs, last xs)
+splitLast :: [a] -> Maybe ([a], a)
+splitLast [] = Nothing
+splitLast xs = Just (take (length xs - 1) xs, last xs)
 
 type WriteM = State.State (Map TermIndex Int, Map VarIndex NameInfo, [String], Int)
 
@@ -146,21 +146,19 @@ scWriteExternal t0 =
             DataTypeApp i ps es -> pure $
               unwords ("Data" : show i : map show ps ++ argsep : map show es)
 
-            RecursorType{} -> undefined
-            Recursor{} -> undefined
-            RecursorApp{} -> undefined
-{-
             RecursorType d ps motive motive_ty -> pure $
               unwords (["RecursorType", show d] ++
                        map show ps ++
                        [argsep, show motive, show motive_ty])
-            Recursor (CompiledRecursor i ps p_ret cs_fs) -> pure $
+            Recursor (CompiledRecursor i ps motive motive_ty cs_fs ctorOrder) -> pure $
               unwords (["Recursor" , show i] ++ map show ps ++
-                       [argsep, show p_ret, show (Map.toList cs_fs)])
+                       [ argsep, show motive, show motive_ty
+                       , show (Map.toList cs_fs)
+                       , show ctorOrder
+                       ])
             RecursorApp rec ixs e -> pure $
               unwords (["RecursorApp", show rec] ++
                        map show ixs ++ [show e])
--}
 
             RecordType elem_tps -> pure $ unwords ["RecordType", show elem_tps]
             RecordValue elems   -> pure $ unwords ["Record", show elems]
@@ -221,6 +219,15 @@ scReadExternal sc input =
     readIdx :: String -> ReadM Term
     readIdx tok = getTerm =<< readM tok
 
+    readElimsMap :: String -> ReadM (Map Ident (Term,Term))
+    readElimsMap str =
+      do (ls :: [(Ident,(Int,Int))]) <- readM str
+         elims  <- forM ls (\(c,(e,ty)) ->
+                    do e'  <- getTerm e
+                       ty' <- getTerm ty
+                       pure (c, (e',ty')))
+         pure (Map.fromList elims)
+
     readEC :: String -> String -> ReadM (ExtCns Term)
     readEC i t =
       do vi <- readM i
@@ -255,7 +262,7 @@ scReadExternal sc input =
           FTermF <$> (CtorApp (parseIdent i) <$> traverse readIdx ps <*> traverse readIdx es)
         ("Data" : i : (separateArgs -> Just (ps, es))) ->
           FTermF <$> (DataTypeApp (parseIdent i) <$> traverse readIdx ps <*> traverse readIdx es)
-{-
+
         ("RecursorType" : i :
          (separateArgs ->
           Just (ps, [motive,motive_ty]))) ->
@@ -266,11 +273,13 @@ scReadExternal sc input =
                pure (FTermF tp)
         ("Recursor" : i :
          (separateArgs ->
-          Just (ps, [p_ret, cs_fs]))) ->
+          Just (ps, [motive, motiveTy, elims, ctorOrder]))) ->
             do rec <- CompiledRecursor (parseIdent i) <$>
                         traverse readIdx ps <*>
-                        readIdx p_ret <*>
-                        (Map.fromList <$> (traverse (traverse getTerm) =<< readM cs_fs))
+                        readIdx motive <*>
+                        readIdx motiveTy <*>
+                        readElimsMap elims <*>
+                        readM ctorOrder
                pure (FTermF (Recursor rec))
         ("RecursorApp" : rec : (splitLast -> Just (ixs, arg))) ->
             do app <- RecursorApp <$>
@@ -278,7 +287,7 @@ scReadExternal sc input =
                         traverse readIdx ixs <*>
                         readIdx arg
                pure (FTermF app)
--}
+
         ["RecordType", elem_tps] ->
           FTermF <$> (RecordType <$> (traverse (traverse getTerm) =<< readM elem_tps))
         ["Record", elems] ->
