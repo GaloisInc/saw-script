@@ -45,7 +45,7 @@ import qualified Data.Map as Map
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IMap
 import Data.Traversable
-import qualified Data.Vector as V
+--import qualified Data.Vector as V
 --import qualified Debug.Trace as Debug
 
 import qualified Verifier.SAW.Utils as Panic (panic)
@@ -83,7 +83,7 @@ data SimulatorConfig l =
   -- ^ Interpretation of constructor terms. 'Nothing' indicates that
   -- the constructor is treated as normal. 'Just' replaces the
   -- constructor with a custom implementation.
-  , simNeutral :: NeutralTerm -> MValue l
+  , simNeutral :: Env l -> NeutralTerm -> MValue l
   -- ^ Handler that fires if the simulator encounters a term that it
   --   cannot otherwise evaluate because it is blocked. For some simulators,
   --   this is just an error condition; for others, sensible action can
@@ -94,7 +94,7 @@ data SimulatorConfig l =
 ------------------------------------------------------------
 -- Evaluation of terms
 
-type Env l = [Thunk l]
+type Env l = [(Thunk l, TValue l)]
 type EnvIn m l = Env (WithM m l)
 
 -- | Meaning of an open term, parameterized by environment of bound variables
@@ -120,12 +120,13 @@ evalTermF cfg lam recEval tf env =
                                  VFun _ f ->
                                    do x <- recEvalDelay t2
                                       f x
-                                 _ -> simNeutral cfg (NeutralApp (NeutralBox t1) t2)
+                                 _ -> simNeutral cfg env (NeutralApp (NeutralBox t1) t2)
 
-    Lambda nm _ t           -> return $ VFun nm (\x -> lam t (x : env))
+    Lambda nm tp t          -> do v <- toTValue <$> recEval tp
+                                  return $ VFun nm (\x -> lam t ((x,v) : env))
     Pi nm t1 t2             -> do v <- toTValue <$> recEval t1
-                                  return $ TValue $ VPiType nm v (\x -> toTValue <$> lam t2 (x : env))
-    LocalVar i              -> force (env !! i)
+                                  return $ TValue $ VPiType nm v (\x -> toTValue <$> lam t2 ((x,v) : env))
+    LocalVar i              -> force (fst (env !! i))
     Constant ec t           -> do ec' <- traverse (fmap toTValue . recEval) ec
                                   maybe (recEval t) id (simConstant cfg tf ec')
     FTermF ftf              ->
@@ -150,11 +151,11 @@ evalTermF cfg lam recEval tf env =
 
         PairLeft x          -> recEval x >>= \case
                                  VPair l _r -> force l
-                                 _ -> simNeutral cfg (NeutralPairLeft (NeutralBox x))
+                                 _ -> simNeutral cfg env (NeutralPairLeft (NeutralBox x))
 
         PairRight x         -> recEval x >>= \case
                                  VPair _l r -> force r
-                                 _ -> simNeutral cfg (NeutralPairRight (NeutralBox x))
+                                 _ -> simNeutral cfg env (NeutralPairRight (NeutralBox x))
 
         CtorApp ident ps ts -> do ps' <- mapM recEvalDelay ps
                                   ts' <- mapM recEvalDelay ts
@@ -163,7 +164,7 @@ evalTermF cfg lam recEval tf env =
                                       do v <- mv
                                          foldM apply v (ps' ++ ts')
                                     Nothing ->
-                                      pure $ VCtorApp ident (V.fromList (ps' ++ ts'))
+                                      pure $ VCtorApp ident ps' ts'
 
         DataTypeApp i ps ts -> TValue . VDataType i <$> mapM recEval (ps ++ ts)
 
@@ -186,19 +187,20 @@ evalTermF cfg lam recEval tf env =
         RecursorApp rectm ixs arg ->
           do rec <- recEval rectm
              case rec of
-               VRecursor _d ps _motive _motiveTy ps_fs ->
+               VRecursor d ps motive motiveTy ps_fs ->
                  do arg_v <- recEval arg
                     case findConstructor arg_v of
-                      Nothing -> simNeutral cfg (NeutralRecursorArg rectm ixs (NeutralBox arg))
-                      Just (c,all_args_vs)
+                      Nothing -> simNeutral cfg env (NeutralRecursorArg rectm ixs (NeutralBox arg))
+                      Just (c,_ps,args)
                         | Just ctor <- findCtorInMap (simModMap cfg) c
-                        , Just (elim,_elimTy) <- Map.lookup c ps_fs ->
-                           do let args = drop (length ps) $ V.toList all_args_vs
-                              lam (ctorIotaTemplate ctor) (reverse ([ready rec,elim] ++ args))
-       
+                        , Just (elim,elimTy) <- Map.lookup c ps_fs ->
+                           do let recTy = VRecursorType d ps motive motiveTy
+                              ctorTy <- toTValue <$> lam (ctorType ctor) []
+                              allArgs <- processRecArgs ps args ctorTy [(elim,elimTy),(ready rec,recTy)]
+                              lam (ctorIotaTemplate ctor) allArgs
                         | otherwise -> panic ("evalRecursorApp: could not find info for constructor: " ++ show c)
 
-               _ -> simNeutral cfg (NeutralRecursor (NeutralBox rectm) ixs arg)
+               _ -> simNeutral cfg env (NeutralRecursor (NeutralBox rectm) ixs arg)
 
         RecordType elem_tps ->
           TValue . VRecordType <$> traverse (traverse (fmap toTValue . recEval)) elem_tps
@@ -208,7 +210,7 @@ evalTermF cfg lam recEval tf env =
 
         RecordProj t fld    -> recEval t >>= \case
                                  v@VRecordValue{} -> valRecordProj v fld
-                                 _ -> simNeutral cfg (NeutralRecordProj (NeutralBox t) fld)
+                                 _ -> simNeutral cfg env (NeutralRecordProj (NeutralBox t) fld)
 
         Sort s              -> return $ TValue (VSort s)
 
@@ -225,19 +227,36 @@ evalTermF cfg lam recEval tf env =
     recEvalDelay = delay . recEval
 
 
+processRecArgs ::
+  VMonadLazy l =>
+  [Value l] ->
+  [Thunk l] ->
+  TValue l ->
+  Env l ->
+  EvalM l (Env l)
+processRecArgs (p:ps) args (VPiType _ _ f) env =
+  do tp' <- f (ready p)
+     processRecArgs ps args tp' env
+processRecArgs [] (x:xs) (VPiType _ tp f) env =
+  do tp' <- f x
+     processRecArgs [] xs tp' ((x,tp):env)
+processRecArgs [] [] _ env = pure env
+processRecArgs _ _ _ _ = panic "processRegArgs" ["Expected Pi type!"::String]
+
+
 {-# SPECIALIZE evalGlobal ::
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (ValueIn IO l) ->
   (ExtCns (TValueIn IO l) -> MValueIn IO l) ->
   (ExtCns (TValueIn IO l) -> Maybe (MValueIn IO l)) ->
-  (NeutralTerm -> MValueIn IO l) ->
+  (EnvIn IO l -> NeutralTerm -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
 evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               ModuleMap -> Map Ident (Value l) ->
               (ExtCns (TValue l) -> MValue l) ->
               (ExtCns (TValue l) -> Maybe (EvalM l (Value l))) ->
-              (NeutralTerm -> MValue l) ->
+              (Env l -> NeutralTerm -> MValue l) ->
               EvalM l (SimulatorConfig l)
 evalGlobal modmap prims extcns uninterpreted neutral =
   evalGlobal' modmap prims (const extcns) (const uninterpreted) neutral
@@ -248,7 +267,7 @@ evalGlobal modmap prims extcns uninterpreted neutral =
   Map Ident (ValueIn IO l) ->
   (TermF Term -> ExtCns (TValueIn IO l) -> MValueIn IO l) ->
   (TermF Term -> ExtCns (TValueIn IO l) -> Maybe (MValueIn IO l)) ->
-  (NeutralTerm -> MValueIn IO l) ->
+  (EnvIn IO l -> NeutralTerm -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
 -- | A variant of 'evalGlobal' that lets the uninterpreted function
 -- symbol and external-constant callbacks have access to the 'TermF'.
@@ -262,7 +281,7 @@ evalGlobal' ::
   -- | Overrides for Constant terms (e.g. uninterpreted functions)
   (TermF Term -> ExtCns (TValue l) -> Maybe (MValue l)) ->
   -- | Handler for neutral terms
-  (NeutralTerm -> MValue l) ->
+  (Env l -> NeutralTerm -> MValue l) ->
   EvalM l (SimulatorConfig l)
 evalGlobal' modmap prims extcns constant neutral =
   do checkPrimitives modmap prims
@@ -314,10 +333,10 @@ checkPrimitives modmap prims = do
         overridePrims = Set.toList $ Set.intersection defSet implementedPrims
 
 
-findConstructor :: VMonadLazy l => Value l -> Maybe (Ident, V.Vector (Thunk l))
-findConstructor (VCtorApp c args) = Just (c, args)
-findConstructor (VNat 0)          = Just ("Prelude.Zero", V.empty)
-findConstructor (VNat i)          = Just ("Prelude.Succ", V.singleton (ready (VNat (i-1))))
+findConstructor :: VMonadLazy l => Value l -> Maybe (Ident, [Thunk l], [Thunk l])
+findConstructor (VCtorApp c ps xs) = Just (c, ps, xs)
+findConstructor (VNat 0)          = Just ("Prelude.Zero", [], [])
+findConstructor (VNat i)          = Just ("Prelude.Succ", [], [ready (VNat (i-1))])
 findConstructor _                 = Nothing
 
 

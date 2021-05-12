@@ -271,7 +271,7 @@ flattenSValue nm v = do
         VIntMod 0 si              -> return ([si], "")
         VIntMod n si              -> return ([svRem si (svInteger KUnbounded (toInteger n))], "")
         VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
-        VCtorApp i (V.toList->ts) -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) ts
+        VCtorApp i ps ts          -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) (ps++ts)
                                         return (concat xss, "_" ++ identName i ++ concat ss)
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
@@ -581,7 +581,7 @@ sbvSolveBasic sc addlPrims unintSet t = do
   let uninterpreted ec
         | Set.member (ecVarIndex ec) unintSet = Just (extcns ec)
         | otherwise                           = Nothing
-  let neutral nt = fail ("sbvSolveBasic: could not evaluate neutral term: " ++ show nt)
+  let neutral _env nt = fail ("sbvSolveBasic: could not evaluate neutral term: " ++ show nt)
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted neutral
   Sim.evalSharedTerm cfg t
 
@@ -658,7 +658,7 @@ sbvSATQuery sc addlPrims query =
           let uninterpreted ec
                 | Set.member (ecVarIndex ec) unintSet = Just (mkUninterp ec)
                 | otherwise                           = Nothing
-          let neutral nt = fail ("sbvSATQuery: could not evaluate neutral term: " ++ show nt)
+          let neutral _env nt = fail ("sbvSATQuery: could not evaluate neutral term: " ++ show nt)
 
           cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted neutral)
           bval <- liftIO (Sim.evalSharedTerm cfg t)

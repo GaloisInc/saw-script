@@ -44,7 +44,7 @@ evalSharedTerm m addlPrims ecVals t = do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns (const Nothing) neutral
     Sim.evalSharedTerm cfg t
   where
-    neutral nt = return $ Prim.userError $ "Cannot evaluate neutral term\n" ++ show nt
+    neutral _env nt = return $ Prim.userError $ "Cannot evaluate neutral term\n" ++ show nt
     extcns ec =
       case Map.lookup (ecVarIndex ec) ecVals of
         Just v  -> return v

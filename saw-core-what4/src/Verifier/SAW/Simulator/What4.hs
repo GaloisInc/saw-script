@@ -681,7 +681,7 @@ w4SolveBasic sym sc addlPrims ecMap ref unintSet t =
      let uninterpreted ec
            | Set.member (ecVarIndex ec) unintSet = Just (extcns ec)
            | otherwise                           = Nothing
-     let neutral nt = fail ("w4SolveBasic: could not evaluate neutral term: " ++ show nt)
+     let neutral _ nt = fail ("w4SolveBasic: could not evaluate neutral term: " ++ show nt)
      cfg <- Sim.evalGlobal m (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral
      Sim.evalSharedTerm cfg t
 
@@ -855,7 +855,7 @@ applyUnintApp sym app0 v =
     VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
-    VCtorApp i xv             -> foldM (applyUnintApp sym) app' =<< traverse force xv
+    VCtorApp i ps xv          -> foldM (applyUnintApp sym) app' =<< traverse force (ps++xv)
                                    where app' = suffixUnintApp ("_" ++ identName i) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     TValue (suffixTValue -> Just s)
@@ -1132,7 +1132,7 @@ w4EvalBasic sym st sc m addlPrims ref unintSet t =
      let uninterpreted tf ec
            | Set.member (ecVarIndex ec) unintSet = Just (extcns tf ec)
            | otherwise                           = Nothing
-     let neutral nt = fail ("w4EvalBasic: could not evaluate neutral term: " ++ show nt)
+     let neutral _env nt = fail ("w4EvalBasic: could not evaluate neutral term: " ++ show nt)
      cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral
      Sim.evalSharedTerm cfg t
 
@@ -1159,7 +1159,7 @@ w4ReplaceUninterp sym st sc mmap addlPrims ref unintSet t =
      let uninterpreted _tf ec
            | Set.member (ecVarIndex ec) unintSet = Just (replaceUninterp sc sym st mapref ec)
            | otherwise                           = Nothing
-     let neutral nt = fail ("w4ReplaceUninterp: could not evaluate neutral term: " ++ show nt)
+     let neutral _env nt = fail ("w4ReplaceUninterp: could not evaluate neutral term: " ++ show nt)
      cfg <- Sim.evalGlobal' mmap (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral
      t' <- Sim.evalSharedTerm cfg t
      m' <- readIORef mapref
@@ -1268,7 +1268,7 @@ w4SimulatorEval sym st sc m addlPrims ref constantFilter t =
               parseUninterpretedSAW sym st sc ref trm (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
      let uninterpreted _tf ec =
           if constantFilter ec then Nothing else Just (X.throwIO (NeutralTermEx (ecName ec)))
-     let neutral nt = fail ("w4SimulatorEval: could not evaluate neutral term: " ++ show nt)
+     let neutral _env nt = fail ("w4SimulatorEval: could not evaluate neutral term: " ++ show nt)
      res <- X.try $ do
               cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral
               Sim.evalSharedTerm cfg t
@@ -1472,8 +1472,8 @@ mkArgTerm sc ty val =
          xs <- sequence [ mkArgTerm sc t v | (t, v) <- zip (map snd tys) vs ]
          return (ArgTermRecord (zip tags xs))
 
-    (_, VCtorApp i vv) ->
-      do xs <- traverse (termOfSValue sc <=< force) (V.toList vv)
+    (_, VCtorApp i ps vv) ->
+      do xs <- traverse (termOfSValue sc <=< force) (ps ++ vv)
          x <- scCtorApp sc i xs
          return (ArgTermConst x)
 

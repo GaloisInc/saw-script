@@ -62,7 +62,7 @@ normalizeSharedTerm sc m addlPrims ecVals t =
      readBackValue sc cfg tv v
 
   where
-    neutral cfg nt =
+    neutral cfg _env nt =
       do tm <- neutralToSharedTerm sc nt
          ty <- scTypeOf sc tm -- TODO! This is a problem for open terms...
                               -- maybe we can make it so VExtra terms don't need
@@ -285,14 +285,13 @@ readBackValue sc cfg = loop
          vs' <- traverse (loop tp <=< force) (V.toList vs)
          scVectorReduced sc tp' vs'
 
-    loop (VDataType _nm _ps) (VCtorApp cnm vs) =
+    loop (VDataType _nm _ps) (VCtorApp cnm ps vs) =
       case findCtorInMap (Sim.simModMap cfg) cnm of
         Nothing -> panic "readBackValue" ["Could not find constructor info", show cnm]
         Just ctor ->
           do tyv <- evalType cfg (ctorType ctor)
-             vs' <- readBackCtorArgs ctor tyv (V.toList vs)
-             let (ps,args) = splitAt (ctorNumParams ctor) vs'
-             scCtorAppParams sc cnm ps args
+             (ps',vs') <- splitAt (ctorNumParams ctor) <$> readBackCtorArgs ctor tyv (ps++vs)
+             scCtorAppParams sc cnm ps' vs'
 
     loop (VRecordType fs) (VRecordValue vs) =
       do let fm = Map.fromList fs

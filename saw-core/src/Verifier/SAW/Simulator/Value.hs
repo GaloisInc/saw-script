@@ -53,7 +53,7 @@ data Value l
   = VFun !LocalName !(Thunk l -> MValue l)
   | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
-  | VCtorApp !Ident !(Vector (Thunk l))
+  | VCtorApp !Ident ![Thunk l] ![Thunk l]
   | VVector !(Vector (Thunk l))
   | VBool (VBool l)
   | VWord (VWord l)
@@ -184,9 +184,7 @@ instance Show (Extra l) => Show (Value l) where
       VFun {}        -> showString "<<fun>>"
       VUnit          -> showString "()"
       VPair{}        -> showString "<<tuple>>"
-      VCtorApp s xv
-        | V.null xv  -> shows s
-        | otherwise  -> shows s . showList (toList xv)
+      VCtorApp s _ps _xv -> shows s
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"
       VWord _        -> showString "<<bitvector>>"
