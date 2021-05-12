@@ -1970,7 +1970,7 @@ scBvSDiv sc n x y = scGlobalApply sc "Prelude.bvSDiv" [n, x, y]
 --
 -- > bvLg2 : (n : Nat) -> Vec n Bool -> Vec n Bool;
 scBvLg2 :: SharedContext -> Term -> Term -> IO Term
-scBvLg2 sc n x = scGlobalApply sc "Prelide.bvLg2" [n, x]
+scBvLg2 sc n x = scGlobalApply sc "Prelude.bvLg2" [n, x]
 
 -- | Create a term applying the population count bitvector primitive.
 --
