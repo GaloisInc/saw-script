@@ -658,9 +658,9 @@ atWithDefaultOp bp =
         iv <- toBits (bpUnpack bp) i
         case x of
           VVector xv ->
-            selectV (lazyMuxValue bp (VVecType n tp)) (fromIntegral n - 1) (force . vecIdx d xv) iv -- FIXME dangerous fromIntegral
+            selectV (lazyMuxValue bp tp) (fromIntegral n - 1) (force . vecIdx d xv) iv -- FIXME dangerous fromIntegral
           VWord xw ->
-            selectV (lazyMuxValue bp (VVecType n tp)) (fromIntegral n - 1) (liftM VBool . bpBvAt bp xw) iv -- FIXME dangerous fromIntegral
+            selectV (lazyMuxValue bp tp) (fromIntegral n - 1) (liftM VBool . bpBvAt bp xw) iv -- FIXME dangerous fromIntegral
           _ -> panic "atOp: expected vector"
 
       VIntToNat _i ->
