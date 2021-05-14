@@ -198,7 +198,7 @@ runSpec cs mh ms = do
                     ": no arg at index " ++ show i
                 Just x -> return x
             let shp = tyToShapeEq col ty tpr
-            matchArg sym eval (ms ^. MS.csPreState . MS.csAllocs) shp rv sv
+            matchArg sym sc eval (ms ^. MS.csPreState . MS.csAllocs) shp rv sv
 
         -- Match PointsTo SetupValues against accessible memory.
         --
@@ -223,7 +223,7 @@ runSpec cs mh ms = do
                 ref' <- lift $ mirRef_offsetSim (ptr ^. mpType) (ptr ^. mpRef) iSym
                 rv <- lift $ readMirRefSim (ptr ^. mpType) ref'
                 let shp = tyToShapeEq col ty (ptr ^. mpType)
-                matchArg sym eval (ms ^. MS.csPreState . MS.csAllocs) shp rv sv
+                matchArg sym sc eval (ms ^. MS.csPreState . MS.csAllocs) shp rv sv
 
 
         -- Validity checks
@@ -343,11 +343,12 @@ matchArg ::
     forall sym t st fs tp.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
     sym ->
+    SAW.SharedContext ->
     (forall tp'. W4.Expr t tp' -> IO SAW.Term) ->
     Map MS.AllocIndex (Some MirAllocSpec) ->
     TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
     MirOverrideMatcher sym ()
-matchArg sym eval allocSpecs shp rv sv = go shp rv sv
+matchArg sym sc eval allocSpecs shp rv sv = go shp rv sv
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MirOverrideMatcher sym ()
@@ -355,14 +356,36 @@ matchArg sym eval allocSpecs shp rv sv = go shp rv sv
     go (PrimShape _ _btpr) expr (MS.SetupTerm tt) = do
         loc <- use MS.osLocation
         exprTerm <- liftIO $ eval expr
-        var <- case SAW.asExtCns $ SAW.ttTerm tt of
-            Just ec -> return $ SAW.ecVarIndex ec
+        case SAW.asExtCns $ SAW.ttTerm tt of
+            Just ec -> do
+                let var = SAW.ecVarIndex ec
+                sub <- use MS.termSub
+                when (Map.member var sub) $
+                    MS.failure loc MS.NonlinearPatternNotSupported
+                MS.termSub %= Map.insert var exprTerm
             Nothing -> do
-                MS.failure loc $ MS.BadTermMatch (SAW.ttTerm tt) exprTerm
-        sub <- use MS.termSub
-        when (Map.member var sub) $
-            MS.failure loc MS.NonlinearPatternNotSupported
-        MS.termSub %= Map.insert var exprTerm
+                -- If the `TypedTerm` is a constant, we want to assert that the
+                -- argument `expr` matches the constant.
+                --
+                -- For now, this is the case that fires for the length fields
+                -- of slices.  This means the slice length must exactly match
+                -- the length used in the MethodSpec, or else the spec must
+                -- specifically handle symbolic lengths in some range.  It
+                -- would be nice to allow any longer slice length, but it's not
+                -- clear how to do that soundly (the function might branch on
+                -- the length of the slice, for instance).
+                Some val <- liftIO $ termToExpr sym sc mempty (SAW.ttTerm tt)
+                Refl <- case testEquality (W4.exprType expr) (W4.exprType val) of
+                    Just x -> return x
+                    Nothing -> error $ "type mismatch: concrete argument type " ++
+                        show (W4.exprType expr) ++ " doesn't match SetupValue type " ++
+                        show (W4.exprType val)
+                eq <- liftIO $ W4.isEq sym expr val
+                MS.addAssert eq $ SimError loc $
+                    AssertFailureSimError
+                        ("mismatch on " ++ show (W4.exprType expr) ++ ": expected " ++
+                            show (W4.printSymExpr val))
+                        ""
     go (TupleShape _ _ flds) rvs (MS.SetupStruct () False svs) = goFields flds rvs svs
     go (ArrayShape _ _ shp) vec (MS.SetupArray () svs) = case vec of
         MirVector_Vector v -> zipWithM_ (go shp) (toList v) svs

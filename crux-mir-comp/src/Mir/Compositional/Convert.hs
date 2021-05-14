@@ -139,6 +139,14 @@ tyToShape col ty = go ty
         False -> Some $ OptField shp
 
     goRef :: M.Ty -> M.Ty -> M.Mutability -> Some TypeShape
+    goRef ty (M.TySlice ty') mutbl | Some tpr <- tyToRepr col ty' = Some $
+        TupleShape ty [ptrTy, usizeTy]
+            (Empty
+                :> ReqField (RefShape ptrTy ty' tpr)
+                :> ReqField (PrimShape usizeTy BaseUsizeRepr))
+      where
+        ptrTy = M.TyRawPtr ty' mutbl
+        usizeTy = M.TyUint M.USize
     goRef ty ty' _ | isUnsized ty' = error $
         "tyToShape: fat pointer " ++ show ty ++ " NYI"
     goRef ty ty' _ | Some tpr <- tyToRepr col ty' = Some $ RefShape ty ty' tpr
@@ -146,7 +154,7 @@ tyToShape col ty = go ty
 -- | Given a `Ty` and the result of `tyToRepr ty`, produce a `TypeShape` with
 -- the same index `tp`.  Raises an `error` if the `TypeRepr` doesn't match
 -- `tyToRepr ty`.
-tyToShapeEq :: M.Collection -> M.Ty -> TypeRepr tp -> TypeShape tp
+tyToShapeEq :: HasCallStack => M.Collection -> M.Ty -> TypeRepr tp -> TypeShape tp
 tyToShapeEq col ty tpr | Some shp <- tyToShape col ty =
     case testEquality (shapeType shp) tpr of
         Just Refl -> shp
