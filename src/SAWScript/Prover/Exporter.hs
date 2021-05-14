@@ -6,6 +6,8 @@
 {-# Language ExplicitForAll #-}
 {-# Language FlexibleContexts #-}
 {-# Language TypeApplications #-}
+{-# Language ParallelListComp #-}
+{-# Language TupleSections #-}
 module SAWScript.Prover.Exporter
   ( proveWithSATExporter
   , proveWithPropExporter
@@ -73,7 +75,7 @@ import Verifier.SAW.Recognizer (asPi)
 import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.Translation.Coq as Coq
-import Verifier.SAW.TypedAST (mkModuleName)
+import Verifier.SAW.TypedAST (mkModuleName, toShortName)
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.Value as Sim
@@ -91,6 +93,7 @@ import SAWScript.Prover.What4
 import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
+import qualified What4.Interface as W4
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
 import What4.Protocol.VerilogWriter (exprsVerilog)
 import What4.Solver.Adapter
@@ -289,16 +292,21 @@ write_verilog sc path t = io $ writeVerilog sc path t
 writeVerilogSAT :: MonadIO m => SharedContext -> FilePath -> SATQuery -> m ([ExtCns Term],[FiniteType])
 writeVerilogSAT sc path satq = liftIO $
   do sym <- newSAWCoreBackend sc
+     -- For SAT checking, we don't care what order the variables are in,
+     -- but only that we can correctly keep track of the connection
+     -- between inputs and assignments.
      let varList  = Map.toList (satVariables satq)
      let argNames = map fst varList
      let argTys = map snd varList
-     (_varMap, bval) <- W.w4Solve sym sc satq
+     (vars, bval) <- W.w4Solve sym sc satq
      let f fot = case toFiniteType fot of
                    Nothing -> fail $ "writeVerilogSAT: Unsupported argument type " ++ show fot
                    Just ft -> return ft
+     let argSValues = map (snd . snd) vars
+     let argSValueNames = zip argSValues (map (toShortName . ecName) argNames)
      argTys' <- traverse f argTys
-
-     let ins = [] -- TODO
+     let mkInput (v, nm) = map (,nm) <$> flattenSValue v
+     ins <- concat <$> mapM mkInput argSValueNames
      edoc <- runExceptT $ exprsVerilog sym ins [Some bval] "f"
      case edoc of
        Left err -> fail $ "Failed to translate to Verilog: " ++ err
@@ -328,6 +336,10 @@ writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
   sym <- newSAWCoreBackend sc
   st  <- sawCoreState sym
+  -- For writing Verilog in the general case, it's convenient for any
+  -- lambda-bound inputs to appear first in the module input list, in
+  -- order, followed by free variables (probably in the order seen
+  -- during traversal, because that's at least _a_ deterministic order).
   (argNames, (lbls, sval)) <- W4Sim.w4EvalAny sym st sc mempty mempty t
   es <- flattenSValue sval
   let ins = [] -- TODO
