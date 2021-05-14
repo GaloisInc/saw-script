@@ -1,0 +1,10 @@
+test subst_output/3a1fbbbh::use_f[0]: FAILED
+
+failures:
+
+---- subst_output/3a1fbbbh::use_f[0] counterexamples ----
+Failure for ./lib/crucible/lib.rs:37:41: 37:58 !test/symb_eval/comp/subst_output.rs:32:5: 32:31: error: in subst_output/3a1fbbbh::use_f[0]
+MIR assertion at test/symb_eval/comp/subst_output.rs:32:5:
+	b0 == a
+
+[Crux] Overall status: Invalid.

@@ -19,9 +19,11 @@ import qualified Data.BitVector.Sized as BV
 import Data.Foldable
 import Data.Functor.Const
 import Data.IORef
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
 import Data.Parameterized.Nonce
+import Data.Parameterized.Pair
 import Data.Parameterized.Some
 import Data.Parameterized.TraversableFC
 import Data.Sequence (Seq)
@@ -41,6 +43,7 @@ import Lang.Crucible.Simulator
 import Lang.Crucible.Types
 
 import qualified Verifier.SAW.Prelude as SAW
+import qualified Verifier.SAW.Recognizer as SAW (asExtCns)
 import qualified Verifier.SAW.SharedTerm as SAW
 import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
 import qualified Verifier.SAW.TypedTerm as SAW
@@ -72,6 +75,12 @@ data MethodSpecBuilder sym t = MethodSpecBuilder
     , _msbNextAlloc :: MS.AllocIndex
     , _msbSnapshotFrame :: FrameIdentifier
     , _msbVisitCache :: W4.IdxCache t (Const ())
+    -- | Substitutions to apply to the entire `MethodSpec` after construction.
+    -- These are generated in place of equality postconditions to improve
+    -- performance.  Variables that appear on the LHS of an entry here will be
+    -- removed from the `MethodSpec`'s fresh variable lists.  Substitutions are
+    -- applied in the order listed.
+    , _msbSubsts :: [(SAW.ExtCns SAW.Term, SAW.Term)]
     }
 
 data StateExtra sym t = StateExtra
@@ -104,6 +113,7 @@ initMethodSpecBuilder cs sc eval spec snap cache = MethodSpecBuilder
     , _msbNextAlloc = MS.AllocIndex 0
     , _msbSnapshotFrame = snap
     , _msbVisitCache = cache
+    , _msbSubsts = []
     }
 
 initStateExtra :: StateExtra sym t
@@ -362,20 +372,77 @@ gatherAsserts msb = do
                     ") references variable " ++ show v ++ " (" ++ show (W4.bvarName v) ++ " at " ++
                     show (W4.bvarLoc v) ++ "), which does not appear in the function args"
             Right x -> map fst x
+    newVars <- liftIO $ gatherVars sym [Some (MethodSpecValue BoolRepr pred) | pred <- asserts']
+    let postVars' = Set.union (msb ^. msbPost . seVars) newVars
+    let postOnlyVars = postVars' `Set.difference` (msb ^. msbPre . seVars)
+
+    (asserts'', substs) <- liftIO $
+        gatherSubsts postOnlyVars vars [] [] asserts'
+    substTerms <- forM substs $ \(Pair var expr) -> do
+        varTerm <- liftIO $ eval $ W4.BoundVarExpr var
+        varEc <- case SAW.asExtCns varTerm of
+            Just ec -> return ec
+            Nothing -> error $ "eval of BoundVarExpr produced non-ExtCns ?" ++ show varTerm
+        exprTerm <- liftIO $ eval expr
+        return (varEc, exprTerm)
 
     let loc = msb ^. msbSpec . MS.csLoc
-    assertConds <- liftIO $ forM asserts' $ \pred -> do
+    assertConds <- liftIO $ forM asserts'' $ \pred -> do
         tt <- eval pred >>= SAW.mkTypedTerm sc
         return $ MS.SetupCond_Pred loc tt
-    newVars <- liftIO $ gatherVars sym [Some (MethodSpecValue BoolRepr pred) | pred <- asserts']
 
     return $ msb
         & msbSpec . MS.csPostState . MS.csConditions %~ (++ assertConds)
-        & msbPost . seVars %~ Set.union newVars
+        & msbPost . seVars .~ postVars'
+        & msbSubsts %~ (++ substTerms)
+
   where
     sc = msb ^. msbSharedContext
     eval :: forall tp. W4.Expr t tp -> IO SAW.Term
     eval = msb ^. msbEval
+
+    -- | Find assertions of the form `var == expr` that are suitable for
+    -- performing substitutions, and separate them from the list of assertions.
+    gatherSubsts ::
+        Set (Some (W4.ExprBoundVar t)) ->
+        Set (Some (W4.ExprBoundVar t)) ->
+        [W4.Expr t BaseBoolType] ->
+        [Pair (W4.ExprBoundVar t) (W4.Expr t)] ->
+        [W4.Expr t BaseBoolType] ->
+        IO ([W4.Expr t BaseBoolType], [Pair (W4.ExprBoundVar t) (W4.Expr t)])
+    gatherSubsts _lhsOk _rhsOk accPreds accSubsts [] =
+        return (reverse accPreds, reverse accSubsts)
+    gatherSubsts lhsOk rhsOk accPreds accSubsts (pred : preds)
+      | Just (Pair var expr) <- asVarEqExpr pred = do
+        rhsSeenRef <- newIORef Set.empty
+        cache <- W4.newIdxCache
+        visitExprVars cache expr $ \var -> modifyIORef rhsSeenRef $ Set.insert (Some var)
+        rhsSeen <- readIORef rhsSeenRef
+        let lhsOk' = Set.delete (Some var) lhsOk
+        let rhsOk' = Set.delete (Some var) rhsOk
+        -- We can't use `pred` as a substitution if the RHS contains variables
+        -- that were deleted by a previous substitution.  Otherwise we'd end up
+        -- re-introducing a deleted variable.  We also can't do substitutions
+        -- where the RHS expression contains the LHS variable, which is why we
+        -- check against `rhsOk'` here instead of `rhsOk`.
+        if rhsSeen `Set.isSubsetOf` rhsOk' then
+            gatherSubsts lhsOk' rhsOk' accPreds (Pair var expr : accSubsts) preds
+          else
+            gatherSubsts lhsOk rhsOk (pred : accPreds) accSubsts preds
+      | otherwise =
+        gatherSubsts lhsOk rhsOk (pred : accPreds) accSubsts preds
+      where
+        asVarEqExpr pred
+          | Just (W4.BaseEq _btpr x y) <- W4.asApp pred
+          , W4.BoundVarExpr v <- x
+          , Set.member (Some v) lhsOk
+          = Just (Pair v y)
+          | Just (W4.BaseEq _btpr x y) <- W4.asApp pred
+          , W4.BoundVarExpr v <- y
+          , Set.member (Some v) lhsOk
+          = Just (Pair v x)
+          | otherwise = Nothing
+
 
 -- | Collect all the symbolic variables that appear in `vals`.
 gatherVars ::
@@ -461,10 +528,11 @@ finish msb = do
             & MS.csPreState . MS.csAllocs .~ preAllocs
             & MS.csPostState . MS.csFreshVars .~ postVars'
             & MS.csPostState . MS.csAllocs .~ postAllocs
-    nonce <- liftIO $ freshNonce ng
+    sm <- liftIO $ buildSubstMap (msb ^. msbSharedContext) (msb ^. msbSubsts)
+    ms' <- liftIO $ substMethodSpec (msb ^. msbSharedContext) sm ms
 
-    let ms' = MethodSpec (msb ^. msbCollectionState) ms
-    return $ M.MethodSpec ms' (indexValue nonce)
+    nonce <- liftIO $ freshNonce ng
+    return $ M.MethodSpec (MethodSpec (msb ^. msbCollectionState) ms') (indexValue nonce)
 
   where
     sc = msb ^. msbSharedContext
@@ -478,6 +546,80 @@ finish msb = do
         case SAW.asTypedExtCns tt of
             Just x -> return x
             Nothing -> error $ "BoundVarExpr translated to non-ExtCns term? " ++ show tt
+
+
+buildSubstMap ::
+    SAW.SharedContext ->
+    [(SAW.ExtCns SAW.Term, SAW.Term)] ->
+    IO (Map SAW.VarIndex SAW.Term)
+buildSubstMap sc substs = go Map.empty substs
+  where
+    go sm [] = return sm
+    go sm ((ec, term) : substs) = do
+        -- Rewrite the RHSs of previous substitutions using the current one.
+        let sm1 = Map.singleton (SAW.ecVarIndex ec) term
+        sm' <- mapM (SAW.scInstantiateExt sc sm1) sm
+        -- Add the current subst and continue.
+        go (Map.insert (SAW.ecVarIndex ec) term sm') substs
+
+substMethodSpec ::
+    SAW.SharedContext ->
+    Map SAW.VarIndex SAW.Term ->
+    MIRMethodSpec ->
+    IO MIRMethodSpec
+substMethodSpec sc sm ms = do
+    preState' <- goState $ ms ^. MS.csPreState
+    postState' <- goState $ ms ^. MS.csPostState
+    argBindings' <- mapM goArg $ ms ^. MS.csArgBindings
+    retValue' <- mapM goSetupValue $ ms ^. MS.csRetValue
+    return $ ms
+        & MS.csPreState .~ preState'
+        & MS.csPostState .~ postState'
+        & MS.csArgBindings .~ argBindings'
+        & MS.csRetValue .~ retValue'
+
+  where
+    goState ss = do
+        pointsTos' <- mapM goPointsTo $ ss ^. MS.csPointsTos
+        conditions' <- mapM goSetupCondition $ ss ^. MS.csConditions
+        let freshVars' =
+                filter (\tec -> not $ Map.member (SAW.ecVarIndex $ SAW.tecExt tec) sm) $
+                    ss ^. MS.csFreshVars
+        return $ ss
+            & MS.csPointsTos .~ pointsTos'
+            & MS.csConditions .~ conditions'
+            & MS.csFreshVars .~ freshVars'
+
+    goArg (ty, sv) = do
+        sv' <- goSetupValue sv
+        return (ty, sv')
+
+    goPointsTo (MirPointsTo alloc svs) = MirPointsTo alloc <$> mapM goSetupValue svs
+
+    goSetupValue sv = case sv of
+        MS.SetupVar _ -> return sv
+        MS.SetupTerm tt -> MS.SetupTerm <$> goTypedTerm tt
+        MS.SetupNull _ -> return sv
+        MS.SetupStruct b packed svs -> MS.SetupStruct b packed <$> mapM goSetupValue svs
+        MS.SetupArray b svs -> MS.SetupArray b <$> mapM goSetupValue svs
+        MS.SetupElem b sv idx -> MS.SetupElem b <$> goSetupValue sv <*> pure idx
+        MS.SetupField b sv name -> MS.SetupField b <$> goSetupValue sv <*> pure name
+        MS.SetupGlobal _ _ -> return sv
+        MS.SetupGlobalInitializer _ _ -> return sv
+
+    goSetupCondition (MS.SetupCond_Equal loc sv1 sv2) =
+        MS.SetupCond_Equal loc <$> goSetupValue sv1 <*> goSetupValue sv2
+    goSetupCondition (MS.SetupCond_Pred loc tt) =
+        MS.SetupCond_Pred loc <$> goTypedTerm tt
+    goSetupCondition (MS.SetupCond_Ghost b loc gg tt) =
+        MS.SetupCond_Ghost b loc gg <$> goTypedTerm tt
+
+    goTypedTerm tt = do
+        term' <- goTerm $ SAW.ttTerm tt
+        return $ tt { SAW.ttTerm = term' }
+
+    goTerm term = SAW.scInstantiateExt sc sm term
+
 
 
 -- RegValue -> SetupValue conversion
