@@ -59,6 +59,7 @@ import qualified Data.SBV.Dynamic as SBV
 import System.Directory (removeFile)
 import System.IO
 import System.IO.Temp(emptySystemTempFile)
+import Data.Text (pack)
 import Data.Text.Prettyprint.Doc.Render.Text
 import Prettyprinter (vcat)
 
@@ -340,9 +341,10 @@ writeVerilog sc path t = do
   -- lambda-bound inputs to appear first in the module input list, in
   -- order, followed by free variables (probably in the order seen
   -- during traversal, because that's at least _a_ deterministic order).
-  (argNames, (lbls, sval)) <- W4Sim.w4EvalAny sym st sc mempty mempty t
+  (argNames, args, (_, sval)) <- W4Sim.w4EvalAny sym st sc mempty mempty t
   es <- flattenSValue sval
-  let ins = [] -- TODO
+  let mkInput (v, nm) = map (, pack nm) <$> flattenSValue v
+  ins <- concat <$> mapM mkInput (zip args argNames)
   edoc <- runExceptT $ exprsVerilog sym ins es "f"
   case edoc of
     Left err -> fail $ "Failed to translate to Verilog: " ++ err

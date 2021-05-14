@@ -1057,7 +1057,9 @@ w4EvalAny ::
   SAWCoreState n ->
   SharedContext ->
   Map Ident (SValue (B.ExprBuilder n st fs)) -> Set VarIndex -> Term ->
-  IO ([String], ([Maybe (Labeler (B.ExprBuilder n st fs))], SValue (B.ExprBuilder n st fs)))
+  IO ([String],
+      [SValue (B.ExprBuilder n st fs)],
+      ([Maybe (Labeler (B.ExprBuilder n st fs))], SValue (B.ExprBuilder n st fs)))
 w4EvalAny sym st sc ps unintSet t =
   do modmap <- scGetModuleMap sc
      ref <- newIORef Map.empty
@@ -1085,7 +1087,7 @@ w4EvalAny sym st sc ps unintSet t =
      let vars'' = fmap ready vars
      bval' <- applyAll bval vars''
 
-     return (argNames, (bvs, bval'))
+     return (argNames, vars, (bvs, bval'))
 
 w4Eval ::
   forall n st fs.
@@ -1095,7 +1097,7 @@ w4Eval ::
   Map Ident (SValue (B.ExprBuilder n st fs)) -> Set VarIndex -> Term ->
   IO ([String], ([Maybe (Labeler (B.ExprBuilder n st fs))], SBool (B.ExprBuilder n st fs)))
 w4Eval sym st sc ps uintSet t =
-  do (argNames, (bvs, bval)) <- w4EvalAny sym st sc ps uintSet t
+  do (argNames, _, (bvs, bval)) <- w4EvalAny sym st sc ps uintSet t
      case bval of
        VBool b -> return (argNames, (bvs, b))
        _ -> fail $ "w4Eval: non-boolean result type. " ++ show bval
