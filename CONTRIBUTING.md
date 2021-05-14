@@ -40,7 +40,7 @@ We recommend building and testing using these files unless your explicit
 goal is to assess compatibility with different library versions. To do
 so, run the following before building or testing:
 
-    ln -s `cabal.GHC-<VER>.config cabal.project.freeze
+    ln -s cabal.GHC-<VER>.config cabal.project.freeze
 
 ## Running and Creating Tests
 
@@ -90,7 +90,7 @@ The top-level repository directories are:
   queries using the [SBV](http://leventerkok.github.io/sbv/) library.
 
 * `saw-core-what4` - A library for translating SAWCore predicates to
-  solver queries using the [What4](https://github.com/galoisinc/what4)
+  solver queries using the [What4](https://github.com/GaloisInc/what4)
   library.
 
 * `cryptol-saw-core` - A library for translating
@@ -133,7 +133,15 @@ In short:
   requires successful completion of a CI workflow including a wide
   variety of tests. Branches must be up-to-date with `master` before
   merging.
-  
+
+- A PR is normally merged by the author of the PR following a review
+  acceptance and valid CI completion. This allows the author to
+  determine when they are fully ready for the merge to be performed. We
+  suggest the use of Mergify (see below) although the merge can also be
+  performed manually, and if you as an author do not have merge
+  permissions, please indicate this in a comment when asking for
+  reviews.
+
 ## Using Mergify
 
 Due to the requirement that PRs pass CI and code review and are
@@ -143,50 +151,6 @@ this burden we use the [Mergify](https://mergify.io/) tool. It
 automatically queues up CI runs and merges PRs once CI and code review
 have succeeded. To indicate that a PR is ready for Mergify to merge, add
 the `ready-to-merge` label.
-
-# Releases
-
-We take the stability and reliability of our releases very seriously. To
-that end, our release process is based on principles of _automation_,
-_reproducibility_, and _assurance_.
-
-Automation is essential for reducing the possibility of human error. The
-checklist for a successful release is fairly lengthy, and most of the
-steps need not be done by hand. The real points of judgment for an
-individual release are deciding _when_ the codebase is ready to be
-released, not _how_ it is released.
-
-Reproducibility is essential for fixing bugs both in hotfixes and future
-mainline development. If we cannot reproduce the circumstances of a
-release, we might not be able to reproduce bugs that are reported by
-users of that release. Bugs are often very particular about the
-environment where they will arise, so it is critical to make the
-environment of a release consistent.
-
-## Creating releases
-
-The release process is:
-
-1. Make sure the `release-n.n` branch is in a release/ready state, including:
-   - successful build artifacts across all platforms,
-   - successful tests on all test suites, and
-   - an up-to-date [CHANGES.md](CHANGES.md) file.
-1. Create a draft release on GitHub
-1. Make a commit on the `release-n.n` branch updating the version in the
-   `saw-script.cabal` file to `n.n`. This will trigger a build.
-1. Once the build is done, download the release artifacts from the
-   outputs of the build. These are `.zip` files containing `.tar.gz` and
-   `.sig` files.
-1. Unpack the `.zip` files and attach the `.tar.gz` and `.sig` files to
-   the draft release.
-1. Publish the release. This will add a tag to the release branch, as
-   well.
-1. Announce the release and update release-relevant information in the following places:
-
-    - <http://saw.galois.com>
-    - <saw@galois.com>
-    - <saw-users@galois.com>
-    - @galois on Twitter (for major releases)
 
 # Copyright and License
 
