@@ -2695,6 +2695,42 @@ primitives = Map.fromList
 
     -- TODO: jvm_alloc_multiarray
 
+  , prim "jvm_modifies_field" "JVMValue -> String -> JVMSetup ()"
+    (pureVal jvm_modifies_field)
+    Experimental
+    [ "Declare that the indicated object (first argument) has a field"
+    , "(second argument) containing an unspecified value."
+    , ""
+    , "This lets users write partial specifications of JVM methods."
+    , "In the post-state section (after `jvm_execute_func`), this"
+    , "states that the method may modify the field, but says"
+    , "nothing about the new value."
+    ]
+
+  , prim "jvm_modifies_static_field" "String -> JVMSetup ()"
+    (pureVal jvm_modifies_static_field)
+    Experimental
+    [ "Declare that the named static field contains an unspecified"
+    , "value."
+    , ""
+    , "This lets users write partial specifications of JVM methods."
+    , "In the post-state section (after `jvm_execute_func`), it"
+    , "states that the method may modify the static field, but says"
+    , "nothing about the new value."
+    ]
+
+  , prim "jvm_modifies_elem" "JVMValue -> Int -> JVMSetup ()"
+    (pureVal jvm_modifies_elem)
+    Experimental
+    [ "Declare that the indicated array (first argument) has an element"
+    , "(second argument) containing an unspecified value."
+    , ""
+    , "This lets users write partial specifications of JVM methods."
+    , "In the post-state section (after `jvm_execute_func`), it"
+    , "states that the method may modify the array element, but says"
+    , "nothing about the new value."
+    ]
+
   , prim "jvm_field_is" "JVMValue -> String -> JVMValue -> JVMSetup ()"
     (pureVal jvm_field_is)
     Experimental
