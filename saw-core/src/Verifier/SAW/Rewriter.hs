@@ -82,6 +82,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.TermNet as Net
+import Verifier.SAW.Prelude.Constants
 
 data RewriteRule a
   = RewriteRule { ctxt :: [Term], lhs :: Term, rhs :: Term, permutative :: Bool, annotation :: Maybe a }
@@ -152,8 +153,8 @@ first_order_match pat term = match pat term Map.empty
 asConstantNat :: Term -> Maybe Natural
 asConstantNat t =
   case R.asCtor t of
-    Just (i, []) | i == "Prelude.Zero" -> Just 0
-    Just (i, [x]) | i == "Prelude.Succ" -> (+ 1) <$> asConstantNat x
+    Just (i, [])  | primName i == preludeZeroIdent -> Just 0
+    Just (i, [x]) | primName i == preludeSuccIdent -> (+ 1) <$> asConstantNat x
     _ ->
       do let (f, xs) = R.asApplyAll t
          i <- R.asGlobalDef f
@@ -299,8 +300,8 @@ ruleOfTerm t ann =
     case unwrapTermF t of
       -- NOTE: this assumes the Coq-style equality type Eq X x y, where both X
       -- (the type of x and y) and x are parameters, and y is an index
-      FTermF (DataTypeApp ident [_, x] [y])
-          | ident == eqIdent -> mkRewriteRule [] x y ann
+      FTermF (DataTypeApp dt [_, x] [y])
+          | primName dt == eqIdent -> mkRewriteRule [] x y ann
       Pi _ ty body -> rule { ctxt = ty : ctxt rule }
           where rule = ruleOfTerm body ann
       _ -> error "ruleOfSharedTerm: Illegal argument"
@@ -395,7 +396,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ ann) =
                   -- Build a fully-applied constructor @c@ in context @ctxt1 ++ argTs@.
                   params2 <- traverse (incVars sc 0 nargs) params1
                   args <- traverse (scLocalVar sc) (reverse (take nargs [0..]))
-                  c <- scCtorAppParams sc (ctorName ctor) params2 args
+                  c <- scCtorAppParams sc (ctorPrimName ctor) params2 args
                   -- Build the list of types of the new context.
                   let ctxt' = ctxt1 ++ argTs ++ ctxt2
                   -- Define function to adjust indices on a term from
@@ -412,16 +413,15 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ ann) =
                   crec' <- traverse adjust crec
                   args' <- traverse (incVars sc 0 i) args
                   more' <- traverse adjust more
-                  let cn = ctorName ctor
 
-                  rhs1 <- scReduceRecursor sc rec' crec' cn args'
+                  rhs1 <- scReduceRecursor sc rec' crec' (ctorPrimName ctor) args'
                   rhs2 <- scApplyAll sc rhs1 more'
                   rhs3 <- betaReduce rhs2
                   -- re-fold recursive occurrences of the original rhs
                   let ss = addRule (mkRewriteRule ctxt rhs lhs Nothing) emptySimpset
                   (_,rhs') <- rewriteSharedTerm sc (ss :: Simpset ()) rhs3
                   return (mkRewriteRule ctxt' lhs' rhs' ann)
-         dt <- scRequireDataType sc (recursorDataType crec)
+         dt <- scRequireDataType sc (primName (recursorDataType crec))
          rules <- traverse ctorRule (dtCtors dt)
          return (Just rules)
     _ -> return Nothing
@@ -532,12 +532,17 @@ asRecordRedex t =
 -- constructor application; specifically, this function recognizes
 --
 -- > RecursorApp rec _ (CtorApp c _ args)
-asIotaRedex :: R.Recognizer Term (Term, CompiledRecursor Term, Ident, [Term])
+asIotaRedex :: R.Recognizer Term (Term, CompiledRecursor Term, PrimName Term, [Term])
 asIotaRedex t =
   do (rec, crec, _, arg) <- R.asRecursorApp t
-     (c, _, args) <- asCtorOrNat arg
+     (c, _, args) <- R.asCtorParams arg
      return (rec, crec, c, args)
 
+asNatIotaRedex :: R.Recognizer Term (Term, CompiledRecursor Term, Natural)
+asNatIotaRedex t =
+  do (rec, crec, _, arg) <- R.asRecursorApp t
+     n <- R.asNat arg
+     return (rec, crec, n)
 
 ----------------------------------------------------------------------
 -- Bottom-up rewriting
@@ -589,6 +594,8 @@ reduceSharedTerm _ (asPairRedex -> Just t) = Just (return t)
 reduceSharedTerm _ (asRecordRedex -> Just t) = Just (return t)
 reduceSharedTerm sc (asIotaRedex -> Just (rec, crec, c, args)) =
   Just $ scReduceRecursor sc rec crec c args
+reduceSharedTerm sc (asNatIotaRedex -> Just (rec, crec, n)) =
+  Just $ scReduceNatRecursor sc rec crec n
 reduceSharedTerm _ _ = Nothing
 
 -- | Rewriter for shared terms.  The annotations of any used rules are collected

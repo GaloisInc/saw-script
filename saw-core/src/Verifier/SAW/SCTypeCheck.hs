@@ -50,7 +50,6 @@ import Control.Monad.Except
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 
-import Data.List ( (\\) )
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -158,8 +157,8 @@ data TCError
   | EmptyVectorLit
   | NoSuchDataType Ident
   | NoSuchCtor Ident
-  | NotFullyAppliedRec Ident
-  | BadParamsOrArgsLength Bool Ident [Term] [Term]
+  | NotFullyAppliedRec (PrimName Term)
+  | BadParamsOrArgsLength Bool (PrimName Term) [Term] [Term]
   | BadConstType NameInfo Term Term
   | MalformedRecursor Term String
   | DeclError Text String
@@ -437,7 +436,7 @@ instance TypeInfer (TermF TypedTerm) where
 -- a term has already been labeled with its (most general) type.
 instance TypeInfer (FlatTermF TypedTerm) where
   typeInfer (Primitive ec) =
-    typeCheckWHNF $ typedVal $ ecType ec
+    typeCheckWHNF $ typedVal $ primType ec
   typeInfer UnitValue = liftTCM scUnitType
   typeInfer UnitType = liftTCM scSort (mkSort 0)
   typeInfer (PairValue (TypedTerm _ tx) (TypedTerm _ ty)) =
@@ -458,38 +457,27 @@ instance TypeInfer (FlatTermF TypedTerm) where
   typeInfer (DataTypeApp d params args) =
     -- Look up the DataType structure, check the length of the params and args,
     -- and then apply the cached Pi type of dt to params and args
-    do maybe_dt <- liftTCM scFindDataType d
-       dt <- case maybe_dt of
-         Just dt -> return dt
-         Nothing -> throwTCError $ NoSuchDataType d
-       let err =
-             BadParamsOrArgsLength True d
-             (map typedVal params) (map typedVal args)
+    do dt <- liftTCM scRequireDataType (primName d)
        if length params == length (dtParams dt) &&
           length args == length (dtIndices dt) then return () else
-         throwTCError err
+         throwTCError $
+         BadParamsOrArgsLength True (fmap typedVal d) (map typedVal params) (map typedVal args)
+
        -- NOTE: we assume dtType is already well-typed and in WHNF
        -- _ <- inferSort t
        -- t' <- typeCheckWHNF t
-       foldM (applyPiTyped err) (dtType dt) (params ++ args)
+       foldM (applyPiTyped (error "TODO")) (dtType dt) (params ++ args)
 
   typeInfer (CtorApp c params args) =
     -- Look up the Ctor structure, check the length of the params and args, and
     -- then apply the cached Pi type of ctor to params and args
-    do maybe_ctor <- liftTCM scFindCtor c
-       ctor <- case maybe_ctor of
-         Just ctor -> return ctor
-         Nothing -> throwTCError $ NoSuchCtor c
-       let err =
-             BadParamsOrArgsLength False c
-             (map typedVal params) (map typedVal args)
+    do ctor <- liftTCM scRequireCtor (primName c)
        if length params == ctorNumParams ctor &&
           length args == ctorNumArgs ctor then return () else
-         throwTCError err
+         throwTCError $
+         BadParamsOrArgsLength False (fmap typedVal c) (map typedVal params) (map typedVal args)
        -- NOTE: we assume ctorType is already well-typed and in WHNF
-       -- _ <- inferSort t
-       -- t' <- typeCheckWHNF t
-       foldM (applyPiTyped err) (ctorType ctor) (params ++ args)
+       foldM (applyPiTyped (error "TODO")) (ctorType ctor) (params ++ args)
 
   typeInfer (RecursorType d ps motive mty) =
     do s <- inferRecursorType d ps motive mty
@@ -584,16 +572,13 @@ areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 
 
 inferRecursorType ::
-  Ident       {- ^ data type name -} ->
+  PrimName TypedTerm {- ^ data type name -} ->
   [TypedTerm] {- ^ data type parameters -} ->
   TypedTerm   {- ^ elimination motive -} ->
   TypedTerm   {- ^ type of the elimination motive -} ->
   TCM Sort
 inferRecursorType d params motive motiveTy =
-  do maybe_dt <- liftTCM scFindDataType d
-     dt <- case maybe_dt of
-       Just dt -> return dt
-       Nothing -> throwTCError $ NoSuchDataType d
+  do dt <- liftTCM scRequireDataType (primName d)
 
      let mk_err str =
            MalformedRecursor
@@ -639,14 +624,18 @@ compileRecursor dt params motive cs_fs =
   do motiveTy <- typeInferComplete (typedType motive)
      cs_fs' <- forM cs_fs (\e -> do ety <- typeInferComplete (typedType e)
                                     pure (e,ety))
-     let d = dtName dt
-     let ctorOrder = map ctorName (dtCtors dt)
-     let elims = Map.fromList (zip ctorOrder cs_fs')
+     d <- traverse typeInferComplete (dtPrimName dt)
+     let ctorVarIxs = map ctorVarIndex (dtCtors dt)
+     ctorOrder <- traverse (traverse typeInferComplete) (map ctorPrimName (dtCtors dt))
+     let elims = Map.fromList (zip ctorVarIxs cs_fs')
      let rec = CompiledRecursor d params motive motiveTy elims ctorOrder
      let mk_err str =
            MalformedRecursor
             (Unshared $ fmap typedVal $ FTermF $ Recursor rec)
             str
+
+     unless (length cs_fs == length (dtCtors dt)) $
+       throwTCError $ mk_err "Extra constructors"
 
      -- Check that the parameters and motive are correct for the given datatype
      _s <- inferRecursorType d params motive motiveTy
@@ -654,12 +643,10 @@ compileRecursor dt params motive cs_fs =
      -- Check that the elimination functions each have the right types, and
      -- that we have exactly one for each constructor of dt
      elims_tps <-
-       liftTCM scRecursorElimTypes d (map typedVal params) (typedVal motive)
-     case map fst (Map.toList elims) \\ map fst elims_tps of
-       [] -> return ()
-       cs -> throwTCError $ mk_err ("Extra constructors: " ++ show cs)
+       liftTCM scRecursorElimTypes (fmap typedVal d) (map typedVal params) (typedVal motive)
+
      forM_ elims_tps $ \(c,req_tp) ->
-       case Map.lookup c elims of
+       case Map.lookup (primVarIndex c) elims of
          Nothing ->
            throwTCError $ mk_err ("Missing constructor: " ++ show c)
          Just (f,_fty) -> checkSubtype f req_tp

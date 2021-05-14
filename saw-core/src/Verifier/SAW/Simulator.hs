@@ -2,6 +2,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE RankNTypes #-}
@@ -71,7 +72,7 @@ panic msg = Panic.panic "Verifier.SAW.Simulator" [msg]
 
 data SimulatorConfig l =
   SimulatorConfig
-  { simPrimitive :: Ident -> MValue l
+  { simPrimitive :: PrimName (TValue l) -> MValue l
   -- ^ Interpretation of 'Primitive' terms.
   , simExtCns :: TermF Term -> ExtCns (TValue l) -> MValue l
   -- ^ Interpretation of 'ExtCns' terms.
@@ -79,8 +80,8 @@ data SimulatorConfig l =
   -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
   -- the body of the constant should be evaluated. 'Just' indicates
   -- that the constant's definition should be overridden.
-  , simCtorApp :: Ident -> Maybe (MValue l)
-  -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
+  , simCtorApp :: PrimName (TValue l) -> Maybe (MValue l)
+  -- ^ Interpretation of constructor terms. 'Nothing' indicates that
   -- the constructor is treated as normal. 'Just' replaces the
   -- constructor with a custom implementation.
   , simModMap :: ModuleMap
@@ -140,11 +141,10 @@ evalTermF cfg lam recEval tf env =
                                   maybe (recEval t) id (simConstant cfg tf ec')
     FTermF ftf              ->
       case ftf of
-        Primitive ec ->
-          do ec' <- traverse (fmap toTValue . recEval) ec
-             case ecName ec' of
-               ModuleIdentifier ident -> simPrimitive cfg ident
-               _ -> simExtCns cfg tf ec'
+        Primitive pn ->
+          do pn' <- traverse (fmap toTValue . recEval) pn
+             simPrimitive cfg pn'
+
         UnitValue           -> return VUnit
         UnitType            -> return $ TValue VUnitType
         PairValue x y       -> do tx <- recEvalDelay x
@@ -156,19 +156,24 @@ evalTermF cfg lam recEval tf env =
 
         PairLeft x          -> valPairLeft =<< recEval x
         PairRight x         -> valPairRight =<< recEval x
-        CtorApp ident ps ts -> do ps' <- mapM recEvalDelay ps
+        CtorApp c ps ts     -> do c'  <- traverse (fmap toTValue . recEval) c
+                                  ps' <- mapM recEvalDelay ps
                                   ts' <- mapM recEvalDelay ts
-                                  case simCtorApp cfg ident of
+                                  case simCtorApp cfg c' of
                                     Just mv ->
                                       do v <- mv
                                          foldM apply v (ps' ++ ts')
                                     Nothing ->
-                                      pure $ VCtorApp ident ps' ts'
+                                      pure $ VCtorApp c' ps' ts'
 
-        DataTypeApp i ps ts -> TValue . VDataType i <$> mapM recEval (ps ++ ts)
+        DataTypeApp d ps ts -> do d' <- traverse (fmap toTValue . recEval) d
+                                  ps' <- mapM recEval ps
+                                  ts' <- mapM recEval ts
+                                  pure (TValue (VDataType d' ps' ts'))
 
         RecursorType d ps m mtp ->
-          TValue <$> (VRecursorType d <$>
+          TValue <$> (VRecursorType <$>
+            traverse (fmap toTValue . recEval) d <*>
             mapM recEval ps <*>
             recEval m <*>
             (toTValue <$> recEval mtp))
@@ -177,27 +182,31 @@ evalTermF cfg lam recEval tf env =
           do let f (e,ety) = do v  <- recEvalDelay e
                                 ty <- toTValue <$> recEval ety
                                 pure (v,ty)
+             d   <- traverse (fmap toTValue . recEval) (recursorDataType rec)
              ps  <- traverse recEval (recursorParams rec)
              m   <- recEval (recursorMotive rec)
              mty <- toTValue <$> recEval (recursorMotiveTy rec)
              es  <- traverse f (recursorElims rec)
-             pure (VRecursor (recursorDataType rec) ps m mty es)
+             pure (VRecursor d ps m mty es)
 
         RecursorApp rectm _ixs arg ->
           do rec <- recEval rectm
              case rec of
                VRecursor d ps motive motiveTy ps_fs ->
-                 do arg_v <- recEval arg
-                    case findConstructor arg_v of
-                      Nothing -> panic "evalRecursorApp: expected constructor"
-                      Just (c,_ps,args)
-                        | Just ctor <- findCtorInMap (simModMap cfg) c
-                        , Just (elim,elimTy) <- Map.lookup c ps_fs ->
-                           do let recTy = VRecursorType d ps motive motiveTy
-                              ctorTy <- toTValue <$> lam (ctorType ctor) []
-                              allArgs <- processRecArgs ps args ctorTy [(elim,elimTy),(ready rec,recTy)]
-                              lam (ctorIotaTemplate ctor) allArgs
-                        | otherwise -> panic ("evalRecursorApp: could not find info for constructor: " ++ show c)
+                 recEval arg >>= \case
+                   VCtorApp c _ps args
+                     | Just ctor <- findCtorInMap (simModMap cfg) (primName c)
+                     , Just (elim,elimTy) <- Map.lookup (primVarIndex c) ps_fs ->
+                       do let recTy = VRecursorType d ps motive motiveTy
+                          ctorTy <- toTValue <$> lam (ctorType ctor) []
+                          allArgs <- processRecArgs ps args ctorTy [(elim,elimTy),(ready rec,recTy)]
+                          lam (ctorIotaTemplate ctor) allArgs
+
+                     |  otherwise -> panic ("evalRecursorApp: could not find info for constructor: " ++ show c)
+
+                   VNat n -> undefined n
+
+                   _ -> panic "evalRecursorApp: expected constructor"
 
                _ -> panic "evalRecursorApp: expected recursor value"
 
@@ -295,14 +304,14 @@ evalGlobal' modmap prims extcns constant =
             ModuleIdentifier ident -> pure <$> Map.lookup ident prims
             _ -> Nothing
 
-    ctors :: Ident -> Maybe (MValue l)
-    ctors ident = pure <$> Map.lookup ident prims
+    ctors :: PrimName (TValue l) -> Maybe (MValue l)
+    ctors pn = pure <$> Map.lookup (primName pn) prims
 
-    primitive :: Ident -> MValue l
-    primitive ident =
-      case Map.lookup ident prims of
+    primitive :: PrimName (TValue l) -> MValue l
+    primitive pn =
+      case Map.lookup (primName pn) prims of
         Just v -> pure v
-        Nothing -> panic $ "Unimplemented global: " ++ show ident
+        Nothing -> panic $ "Unimplemented global: " ++ show (primName pn)
 
 -- | Check that all the primitives declared in the given module
 --   are implemented, and that terms with implementations are not
@@ -330,13 +339,6 @@ checkPrimitives modmap prims = do
 
         unimplementedPrims = Set.toList $ Set.difference primSet implementedPrims
         overridePrims = Set.toList $ Set.intersection defSet implementedPrims
-
-
-findConstructor :: VMonadLazy l => Value l -> Maybe (Ident, [Thunk l], [Thunk l])
-findConstructor (VCtorApp c ps xs) = Just (c, ps, xs)
-findConstructor (VNat 0)          = Just ("Prelude.Zero", [], [])
-findConstructor (VNat i)          = Just ("Prelude.Succ", [], [ready (VNat (i-1))])
-findConstructor _                 = Nothing
 
 
 ----------------------------------------------------------------------

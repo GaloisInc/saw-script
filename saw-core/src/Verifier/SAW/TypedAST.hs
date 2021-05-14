@@ -43,8 +43,10 @@ module Verifier.SAW.TypedAST
  , allModuleAxioms
    -- * Data types and definitions.
  , DataType(..)
+ , dtPrimName
  , Ctor(..)
  , ctorNumParams
+ , ctorPrimName
  , CtorArg(..)
  , Def(..)
  , DefQualifier(..)
@@ -76,6 +78,7 @@ module Verifier.SAW.TypedAST
  , FieldName
  , LocalName
  , ExtCns(..)
+ , PrimName(..)
  , VarIndex
    -- * Utility functions
   , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets

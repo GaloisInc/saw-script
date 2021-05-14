@@ -102,15 +102,17 @@ inferResolveNameApp n args =
          do t <- typeInferComplete (LocalVar i :: TermF TypedTerm)
             inferApplyAll t args
        (_, Just (ResolvedCtor ctor)) ->
-         let (params, ctor_args) = splitAt (ctorNumParams ctor) args in
-         -- NOTE: typeInferComplete will check that we have the correct number
-         -- of arguments
-         typeInferComplete (CtorApp (ctorName ctor) params ctor_args)
+         do let (params, ctor_args) = splitAt (ctorNumParams ctor) args
+            c <- traverse typeInferComplete (ctorPrimName ctor)
+            -- NOTE: typeInferComplete will check that we have the correct number
+            -- of arguments
+            typeInferComplete (CtorApp c params ctor_args)
        (_, Just (ResolvedDataType dt)) ->
-         let (params, ixs) = splitAt (length $ dtParams dt) args in
-         -- NOTE: typeInferComplete will check that we have the correct number
-         -- of indices
-         typeInferComplete (DataTypeApp (dtName dt) params ixs)
+         do let (params, ixs) = splitAt (length $ dtParams dt) args
+            d <- traverse typeInferComplete (dtPrimName dt)
+            -- NOTE: typeInferComplete will check that we have the correct number
+            -- of indices
+            typeInferComplete (DataTypeApp d params ixs)
        (_, Just (ResolvedDef d)) ->
          do t <- liftTCM scGlobalDef (defIdent d)
             f <- TypedTerm t <$> liftTCM scTypeOf t
@@ -195,7 +197,7 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
             typed_r <- typeInferComplete (RecursorApp rec ixs arg)
             inferApplyAll typed_r rem_args
 
-       _ -> throwTCError $ NotFullyAppliedRec dt_ident
+       _ -> throwTCError $ NotFullyAppliedRec (dtPrimName dt)
 
 typeInferCompleteTerm (Un.Recursor _ _) =
   error "typeInferComplete: found a bare Recursor, which should never happen!"
@@ -352,12 +354,11 @@ processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
       void $ ensureSort $ typedType typed_tp
       mnm <- getModuleName
       let ident = mkIdent mnm nm
-      let nmi = ModuleIdentifier ident
       i <- liftTCM scFreshGlobalVar
-      liftTCM scRegisterName i nmi
+      liftTCM scRegisterName i (ModuleIdentifier ident)
       let def_tp = typedVal typed_tp
-      let ec = EC i nmi def_tp
-      t <- liftTCM scFlatTermF (Primitive ec)
+      let pn = PrimName i ident def_tp
+      t <- liftTCM scFlatTermF (Primitive pn)
       liftTCM scRegisterGlobal ident t
       liftTCM scModifyModule mnm $ \m ->
         insDef m $ Def { defIdent = ident,
@@ -408,6 +409,9 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   -- Step 4: Add d as an empty datatype, so we can typecheck the constructors
   mnm <- getModuleName
   let dtName = mkIdent mnm nm
+  dtVarIndex <- liftTCM scFreshGlobalVar
+  liftTCM scRegisterName dtVarIndex (ModuleIdentifier dtName)
+
   let dt = DataType { dtCtors = [], .. }
   liftTCM scModifyModule mnm (\m -> beginDataType m dt)
 
@@ -431,9 +435,9 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
                 Nothing -> error ("Internal error: type of the type of" ++
                                   " constructor is not a sort!")) >>
             let tp = typedVal typed_tp in
-            case mkCtorArgStruct dtName p_ctx ix_ctx tp of
+            case mkCtorArgStruct (dtPrimName dt) p_ctx ix_ctx tp of
               Just arg_struct ->
-                liftTCM scBuildCtor dtName (mkIdent mnm c) arg_struct
+                liftTCM scBuildCtor (dtPrimName dt) (mkIdent mnm c) arg_struct
               Nothing -> err ("Malformed type form constructor: " ++ show c)
 
   -- Step 6: complete the datatype with the given ctors

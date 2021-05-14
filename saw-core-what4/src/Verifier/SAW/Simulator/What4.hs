@@ -88,7 +88,7 @@ import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
-import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName, toShortName)
+import Verifier.SAW.TypedAST (FieldName, ModuleMap, toShortName, ctorPrimName, identBaseName)
 
 -- what4
 import qualified What4.Expr.Builder as B
@@ -544,7 +544,7 @@ muxBVal sym = Prims.muxValue (prims sym)
 
 muxWhat4Extra :: forall sym. Sym sym =>
   sym -> TValue (What4 sym) -> SBool sym -> What4Extra sym -> What4Extra sym -> IO (What4Extra sym)
-muxWhat4Extra sym (VDataType "Prelude.Stream" [TValue tp]) c x y =
+muxWhat4Extra sym (VDataType (primName -> "Prelude.Stream") [TValue tp] [] ) c x y =
   do let f i = do xi <- lookupSStream (VExtra x) i
                   yi <- lookupSStream (VExtra y) i
                   muxBVal sym tp c xi yi
@@ -849,7 +849,7 @@ applyUnintApp sym app0 v =
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
     VCtorApp i ps xv          -> foldM (applyUnintApp sym) app' =<< traverse force (ps++xv)
-                                   where app' = suffixUnintApp ("_" ++ identName i) app0
+                                   where app' = suffixUnintApp ("_" ++ (Text.unpack (identBaseName (primName i)))) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     TValue (suffixTValue -> Just s)
                               -> return (suffixUnintApp s app0)
@@ -1371,8 +1371,10 @@ mkArgTerm sc ty val =
          return (ArgTermRecord (zip tags xs))
 
     (_, VCtorApp i ps vv) ->
-      do xs <- traverse (termOfSValue sc <=< force) (ps ++ vv)
-         x <- scCtorApp sc i xs
+      do ctor <- scRequireCtor sc (primName i)
+         ps' <- traverse (termOfSValue sc <=< force) ps
+         vv' <- traverse (termOfSValue sc <=< force) vv
+         x   <- scCtorAppParams sc (ctorPrimName ctor) ps' vv'
          return (ArgTermConst x)
 
     (_, TValue tval) ->

@@ -28,9 +28,11 @@ module Verifier.SAW.Module
   , Ctor(..)
   , ctorNumParams
   , ctorNumArgs
+  , ctorPrimName
   , DataType(..)
   , dtNumParams
   , dtNumIndices
+  , dtPrimName
     -- * Modules
   , Module
   , ModuleDecl(..)
@@ -124,9 +126,11 @@ data Ctor =
   Ctor
   { ctorName :: !Ident
     -- ^ The name of this constructor
+  , ctorVarIndex :: !VarIndex
+    -- ^ Unique var index for this constructor
   , ctorArgStruct :: CtorArgStruct d params ixs
     -- ^ Arguments to the constructor
-  , ctorDataTypeName :: Ident
+  , ctorDataType :: !(PrimName Term)
     -- ^ The datatype this constructor belongs to
   , ctorType :: Term
     -- ^ Cached type of the constructor, which should always be equal to
@@ -148,7 +152,7 @@ data Ctor =
     -- datatype @d@
   , ctorIotaReduction ::
        Term   {- ^ eliminator term -} ->
-       Map Ident Term {- ^ constructor eliminators -} ->
+       Map VarIndex Term {- ^ constructor eliminators -} ->
        [Term] {- ^ constructor arguments -} ->
        IO Term
     -- ^ Cached functon for computing the result of one step of iota
@@ -177,6 +181,9 @@ ctorNumArgs :: Ctor -> Int
 ctorNumArgs (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
   bindingsLength ctorArgs
 
+-- | Compute the ExtCns that uniquely references a constructor
+ctorPrimName :: Ctor -> PrimName Term
+ctorPrimName ctor = PrimName (ctorVarIndex ctor) (ctorName ctor) (ctorType ctor)
 
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y)
@@ -198,6 +205,8 @@ data DataType =
   DataType
   { dtName :: Ident
     -- ^ The name of this datatype
+  , dtVarIndex :: !VarIndex
+    -- ^ Unique var index for this data type
   , dtParams :: [(LocalName, Term)]
     -- ^ The context of parameters of this datatype
   , dtIndices :: [(LocalName, Term)]
@@ -222,6 +231,10 @@ dtNumParams dt = length $ dtParams dt
 -- | Return the number of indices of a datatype
 dtNumIndices :: DataType -> Int
 dtNumIndices dt = length $ dtIndices dt
+
+-- | Compute the ExtCns that uniquely references a datatype
+dtPrimName :: DataType -> PrimName Term
+dtPrimName dt = PrimName (dtVarIndex dt) (dtName dt) (dtType dt)
 
 instance Eq DataType where
   (==) = lift2 dtName (==)

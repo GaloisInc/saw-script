@@ -27,6 +27,7 @@ module Verifier.SAW.SharedTerm
   , Ident, mkIdent
   , VarIndex
   , ExtCns(..)
+  , PrimName(..)
   , NameInfo(..)
   , ppName
     -- * Shared terms
@@ -73,6 +74,7 @@ module Verifier.SAW.SharedTerm
   , scRecursorElimTypes
   , scRecursorRetTypeType
   , scReduceRecursor
+  , scReduceNatRecursor
   , allowedElimSort
   , scBuildCtor
     -- ** Modules
@@ -138,7 +140,6 @@ module Verifier.SAW.SharedTerm
   , scVecType
   , scVectorReduced
     -- ** Normalization
-  , asCtorOrNat
   , scWhnf
   , scConvertibleEval
   , scConvertible
@@ -437,12 +438,12 @@ scApply sc f = scTermF sc . App f
 -- | Applies the constructor with the given name to the list of parameters and
 -- arguments. This version does no checking against the module.
 scDataTypeAppParams :: SharedContext
-                    -> Ident  -- ^ The constructor name
+                    -> PrimName Term -- ^ The data type
                     -> [Term] -- ^ The parameters
                     -> [Term] -- ^ The arguments
                     -> IO Term
-scDataTypeAppParams sc ident params args =
-  scFlatTermF sc (DataTypeApp ident params args)
+scDataTypeAppParams sc d params args =
+  scFlatTermF sc (DataTypeApp d params args)
 
 -- | Applies the constructor with the given name to the list of
 -- arguments. This version does no checking against the module.
@@ -450,17 +451,17 @@ scDataTypeApp :: SharedContext -> Ident -> [Term] -> IO Term
 scDataTypeApp sc d_id args =
   do d <- scRequireDataType sc d_id
      let (params,args') = splitAt (length (dtParams d)) args
-     scDataTypeAppParams sc d_id params args'
+     scDataTypeAppParams sc (dtPrimName d) params args'
 
 -- | Applies the constructor with the given name to the list of parameters and
 -- arguments. This version does no checking against the module.
 scCtorAppParams :: SharedContext
-                -> Ident  -- ^ The constructor name
+                -> PrimName Term  -- ^ The constructor name
                 -> [Term] -- ^ The parameters
                 -> [Term] -- ^ The arguments
                 -> IO Term
-scCtorAppParams sc ident params args =
-  scFlatTermF sc (CtorApp ident params args)
+scCtorAppParams sc c params args =
+  scFlatTermF sc (CtorApp c params args)
 
 -- | Applies the constructor with the given name to the list of
 -- arguments. This version does no checking against the module.
@@ -468,7 +469,7 @@ scCtorApp :: SharedContext -> Ident -> [Term] -> IO Term
 scCtorApp sc c_id args =
   do ctor <- scRequireCtor sc c_id
      let (params,args') = splitAt (ctorNumParams ctor) args
-     scCtorAppParams sc c_id params args'
+     scCtorAppParams sc (ctorPrimName ctor) params args'
 
 -- | Get the current 'ModuleMap'
 scGetModuleMap :: SharedContext -> IO ModuleMap
@@ -549,7 +550,6 @@ scRequireCtor sc i =
     Just ctor -> return ctor
     Nothing -> fail ("Could not find constructor: " ++ show i)
 
-
 -- SharedContext implementation.
 
 type AppCache = TermFMap Term
@@ -616,15 +616,20 @@ allowedElimSort dt s =
 -- as 'scBuildCtor' is called during construction of the 'DataType'.
 scBuildCtor ::
   SharedContext ->
-  Ident {- ^ data type name -} ->
+  PrimName Term {- ^ data type -} ->
   Ident {- ^ constructor name -} ->
   CtorArgStruct d params ixs {- ^ constructor formal arguments -} ->
   IO Ctor
 scBuildCtor sc d c arg_struct =
   do
-    -- Step 1: build the types for the constructor and its eliminator
+    -- Step 0: allocate a fresh unique varaible index for this constructor
+    varidx <- scFreshGlobalVar sc
+    scRegisterName sc varidx (ModuleIdentifier c)
+
+    -- Step 1: build the types for the constructor
     tp <- scShCtxM sc $ ctxCtorType d arg_struct
-    elim_tp_fun <- scShCtxM sc $ mkCtorElimTypeFun d c arg_struct
+    let cec = PrimName varidx c tp
+    elim_tp_fun <- scShCtxM sc $ mkCtorElimTypeFun d cec arg_struct
 
     -- Step 2: build free variables for params, p_ret, the elims, and the ctor
     -- arguments
@@ -645,20 +650,23 @@ scBuildCtor sc d c arg_struct =
     -- Step 4: build the API function that shuffles the terms around in the
     -- correct way.
     let iota_fun rec cs_fs args =
-          do let elim = case Map.lookup c cs_fs of
+          do let elim = case Map.lookup varidx cs_fs of
                           Just e -> e
                           Nothing -> panic "ctorIotaReduction"
                                        ["no eliminator for constructor", show c]
              instantiateVarList sc 0 (reverse ([rec,elim]++args)) iota_red
 
     -- Finally, return the required Ctor record
-    return $ Ctor { ctorName = c, ctorArgStruct = arg_struct,
-                    ctorDataTypeName = d, ctorType = tp,
-                    ctorElimTypeFun =
-                      (\ps p_ret -> scShCtxM sc $ elim_tp_fun ps p_ret),
-                    ctorIotaTemplate  = iota_red,
-                    ctorIotaReduction = iota_fun
-                  }
+    return $ Ctor
+      { ctorName = c
+      , ctorVarIndex = varidx
+      , ctorArgStruct = arg_struct
+      , ctorDataType = d
+      , ctorType = tp
+      , ctorElimTypeFun = \ps p_ret -> scShCtxM sc $ elim_tp_fun ps p_ret
+      , ctorIotaTemplate  = iota_red
+      , ctorIotaReduction = iota_fun
+      }
 
 -- | Given a datatype @d@, parameters @p1,..,pn@ for @d@, and a "motive"
 -- function @p_ret@ of type
@@ -669,20 +677,24 @@ scBuildCtor sc d c arg_struct =
 -- for those indices, return the requires types of elimination functions for
 -- each constructor of @d@. See the documentation of the 'Ctor' type and/or the
 -- 'ctxCtorElimType' function for more details.
-scRecursorElimTypes :: SharedContext -> Ident -> [Term] -> Term ->
-                       IO [(Ident, Term)]
-scRecursorElimTypes sc d_id params p_ret =
-  do d <- scRequireDataType sc d_id
-     forM (dtCtors d) $ \ctor ->
+scRecursorElimTypes ::
+  SharedContext ->
+  PrimName Term ->
+  [Term] ->
+  Term ->
+  IO [(PrimName Term, Term)]
+scRecursorElimTypes sc d params p_ret =
+  do dt <- scRequireDataType sc (primName d)
+     forM (dtCtors dt) $ \ctor ->
        do elim_type <- ctorElimTypeFun ctor params p_ret >>= scWhnf sc
-          return (ctorName ctor, elim_type)
+          return (ctorPrimName ctor, elim_type)
 
 
 -- | Generate the type @(ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s@
 -- given @d@, @params@, and the sort @s@
 scRecursorRetTypeType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
 scRecursorRetTypeType sc dt params s =
-  scShCtxM sc $ mkPRetTp (dtName dt) (dtParams dt) (dtIndices dt) params s
+  scShCtxM sc $ mkPRetTp (dtPrimName dt) (dtParams dt) (dtIndices dt) params s
 
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
@@ -702,14 +714,29 @@ scReduceRecursor ::
   SharedContext ->
   Term {- ^ recusor term -} ->
   CompiledRecursor Term ->
-  Ident {- ^ constructor name -} ->
+  PrimName Term {- ^ constructor name -} ->
   [Term] {- ^ constructor arguments -} ->
   IO Term
 scReduceRecursor sc rec crec c args =
-  do ctor <- scRequireCtor sc c
-     -- The ctorIotaReduction field caches the result of iota reduction, which
-     -- we just substitute into to perform the reduction
-     ctorIotaReduction ctor rec (fmap fst $ recursorElims crec) args
+   do ctor <- scRequireCtor sc (primName c)
+      -- The ctorIotaReduction field caches the result of iota reduction, which
+      -- we just substitute into to perform the reduction
+      ctorIotaReduction ctor rec (fmap fst $ recursorElims crec) args
+
+scReduceNatRecursor ::
+  SharedContext ->
+  Term {- ^ recusor term -} ->
+  CompiledRecursor Term ->
+  Natural ->
+  IO Term
+scReduceNatRecursor sc rec crec n
+  | n == 0 =
+     do ctor <- scRequireCtor sc preludeZeroIdent
+        ctorIotaReduction ctor rec (fmap fst $ recursorElims crec) []
+
+  | otherwise =
+     do ctor <- scRequireCtor sc preludeSuccIdent
+        ctorIotaReduction ctor rec (fmap fst $ recursorElims crec) [(Unshared (FTermF (NatLit (pred n))))]
 
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form
@@ -729,8 +756,10 @@ convertsToNat :: Term -> Maybe Natural
 convertsToNat (asFTermF -> Just (NatLit _)) = Nothing
 convertsToNat t = helper t where
   helper (asFTermF -> Just (NatLit k)) = return k
-  helper (asCtor -> Just (z, [])) | z == preludeZeroIdent = return 0
-  helper (asCtor -> Just (s, [t'])) | s == preludeSuccIdent = (1+) <$> helper t'
+  helper (asCtor -> Just (z, []))
+    | primName z == preludeZeroIdent = return 0
+  helper (asCtor -> Just (s, [t']))
+    | primName s == preludeSuccIdent = (1+) <$> helper t'
   helper _ = Nothing
 
 
@@ -765,8 +794,11 @@ scWhnf sc t0 =
                                                                     Nothing ->
                                                                       error "scWhnf: field missing in record"
     go (ElimRecursor rec crec _ : xs)
-                              (asCtorOrNat ->
+                              (asCtorParams ->
                                Just (c, _, args))               = scReduceRecursor sc rec crec c args >>= go xs
+
+    go (ElimRecursor rec crec _ : xs)
+                              (asNat -> Just n)                 = scReduceNatRecursor sc rec crec n >>= go xs
 
     go xs                     (asGlobalDef -> Just c)           = scRequireDef sc c >>= tryDef c xs
     go xs                     (asRecursorApp ->
@@ -786,8 +818,10 @@ scWhnf sc t0 =
                                                                      rty' <- memo rty
                                                                      t' <- scPi sc x aty' rty'
                                                                      foldM reapply t' xs
-    go xs                     (asDataType -> Just (c,args))     = do args' <- mapM memo args
-                                                                     t' <- scDataTypeApp sc c args'
+    go xs                     (asDataTypeParams ->
+                                 Just (d,ps,args))              = do ps' <- mapM memo ps
+                                                                     args' <- mapM memo args
+                                                                     t' <- scDataTypeAppParams sc d ps' args'
                                                                      foldM reapply t' xs
     go xs                     (asConstant -> Just (_,body))     = do go xs body
     go xs                     t                                 = foldM reapply t xs
@@ -950,7 +984,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
            -> State.StateT (Map TermIndex Term) IO Term
     ftermf tf =
       case tf of
-        Primitive ec -> return $ ecType ec
+        Primitive ec -> return (primType ec)
         UnitValue -> lift $ scUnitType sc
         UnitType -> lift $ scSort sc (mkSort 0)
         PairValue x y -> do
@@ -972,11 +1006,9 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
             Just (_, t2) -> return t2
             Nothing -> fail "scTypeOf: type error: expected pair type"
         CtorApp c params args -> do
-          t <- lift $ scTypeOfCtor sc c
-          lift $ foldM (reducePi sc) t (params ++ args)
+          lift $ foldM (reducePi sc) (primType c) (params ++ args)
         DataTypeApp dt params args -> do
-          t <- lift $ scTypeOfDataType sc dt
-          lift $ foldM (reducePi sc) t (params ++ args)
+          lift $ foldM (reducePi sc) (primType dt) (params ++ args)
         RecursorType _d _ps _motive motive_ty -> do
           s <- sort motive_ty
           lift $ scSort sc s
@@ -1518,7 +1550,9 @@ scBoolType sc = scGlobalDef sc "Prelude.Bool"
 
 -- | Create a term representing the prelude Natural type.
 scNatType :: SharedContext -> IO Term
-scNatType sc = scFlatTermF sc preludeNatType
+scNatType sc =
+ do dt <- scRequireDataType sc preludeNatIdent
+    scFlatTermF sc (DataTypeApp (dtPrimName dt) [] [])
 
 -- | Create a term representing a vector type, from a term giving the length
 -- and a term giving the element type.

@@ -38,7 +38,6 @@ module Verifier.SAW.Recognizer
   , asRecordSelector
   , asCtorParams
   , asCtor
-  , asCtorOrNat
   , asDataType
   , asDataTypeParams
   , asRecursorApp
@@ -71,7 +70,6 @@ module Verifier.SAW.Recognizer
   , asArrayType
   ) where
 
-import Control.Applicative
 import Control.Lens
 import Control.Monad
 import Data.Map (Map)
@@ -92,10 +90,6 @@ instance Field2 (a :*: b) (a :*: b') b b' where
   _2 k (a :*: b) = (a :*:) <$> indexed k (1 :: Int) b
 
 type Recognizer t a = t -> Maybe a
-
--- | Tries both recognizers.
-orElse :: Recognizer t a -> Recognizer t a -> Recognizer t a
-orElse f g t = f t <|> g t
 
 -- | Recognizes the head and tail of a list, and returns head.
 (<:) :: Recognizer t a -> Recognizer [t] () -> Recognizer [t] a
@@ -129,7 +123,7 @@ asModuleIdentifier (EC _ nmi _) =
 asGlobalDef :: Recognizer Term Ident
 asGlobalDef t =
   case unwrapTermF t of
-    FTermF (Primitive ec) -> asModuleIdentifier ec
+    FTermF (Primitive pn) -> Just (primName pn)
     Constant ec _ -> asModuleIdentifier ec
     _ -> Nothing
 
@@ -245,36 +239,22 @@ asRecordSelector t = do
 
 -- | Test whether a term is an application of a constructor, and, if so, return
 -- the constructor, its parameters, and its arguments
-asCtorParams :: Recognizer Term (Ident, [Term], [Term])
+asCtorParams :: Recognizer Term (PrimName Term, [Term], [Term])
 asCtorParams t = do CtorApp c ps args <- asFTermF t; return (c,ps,args)
 
--- | Just like 'asCtorParams', but treat natural number literals as constructor
--- applications, i.e., @0@ becomes the constructor @Zero@, and any non-zero
--- literal @k@ becomes @Succ (k-1)@
-asCtorOrNat :: Recognizer Term (Ident, [Term], [Term])
-asCtorOrNat = asCtorParams `orElse` (asNatLit >=> helper) where
-  asNatLit (unwrapTermF -> FTermF (NatLit i)) = return i
-  asNatLit _ = Nothing
-  helper 0 = return (preludeZeroIdent, [], [])
-  helper k =
-    if k > 0 then
-      return (preludeSuccIdent, [], [Unshared (FTermF (NatLit $ k-1))])
-    else error "asCtorOrNat: negative natural number literal!"
-
-
 -- | A version of 'asCtorParams' that combines the parameters and normal args
-asCtor :: Recognizer Term (Ident, [Term])
+asCtor :: Recognizer Term (PrimName Term, [Term])
 asCtor t = do CtorApp c ps args <- asFTermF t; return (c,ps ++ args)
 
 -- | A version of 'asDataType' that returns the parameters separately
-asDataTypeParams :: Recognizer Term (Ident, [Term], [Term])
+asDataTypeParams :: Recognizer Term (PrimName Term, [Term], [Term])
 asDataTypeParams t = do DataTypeApp c ps args <- asFTermF t; return (c,ps,args)
 
 -- | A version of 'asDataTypeParams' that combines the params and normal args
-asDataType :: Recognizer Term (Ident, [Term])
+asDataType :: Recognizer Term (PrimName Term, [Term])
 asDataType t = do DataTypeApp c ps args <- asFTermF t; return (c,ps ++ args)
 
-asRecursorType :: Recognizer Term (Ident, [Term], Term, Term)
+asRecursorType :: Recognizer Term (PrimName Term, [Term], Term, Term)
 asRecursorType t =
   do RecursorType d ps motive motive_ty <- asFTermF t
      return (d,ps,motive,motive_ty)
@@ -285,15 +265,17 @@ asRecursorApp t =
      Recursor crec <- asFTermF rec
      return (rec, crec, ixs, arg)
 
-isDataType :: Ident -> Recognizer [Term] a -> Recognizer Term a
+isDataType :: PrimName Term -> Recognizer [Term] a -> Recognizer Term a
 isDataType i p t = do
   (o,l) <- asDataType t
   if i == o then p l else Nothing
 
 asNat :: Recognizer Term Natural
 asNat (unwrapTermF -> FTermF (NatLit i)) = return i
-asNat (asCtor -> Just (c, [])) | c == "Prelude.Zero" = return 0
-asNat (asCtor -> Just (c, [asNat -> Just i])) | c == "Prelude.Succ" = return (i+1)
+asNat (asCtor -> Just (c, []))
+  | primName c == preludeZeroIdent = return 0
+asNat (asCtor -> Just (c, [asNat -> Just i]))
+  | primName c == preludeSuccIdent = return (i+1)
 asNat _ = Nothing
 
 asBvNat :: Recognizer Term (Natural :*: Natural)
@@ -386,7 +368,7 @@ asEq :: Recognizer Term (Term, Term, Term)
 asEq t =
   do (o, l) <- asDataType t
      case l of
-       [a, x, y] | "Prelude.Eq" == o -> return (a, x, y)
+       [a, x, y] | "Prelude.Eq" == primName o -> return (a, x, y)
        _ -> Nothing
 
 asEqTrue :: Recognizer Term Term

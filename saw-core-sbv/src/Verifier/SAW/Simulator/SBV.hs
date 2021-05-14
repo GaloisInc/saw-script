@@ -67,7 +67,7 @@ import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, identName, toShortName)
+import Verifier.SAW.TypedAST (FieldName, toShortName, identBaseName)
 import Verifier.SAW.FiniteValue
             (FirstOrderType(..), FirstOrderValue(..)
             , fovVec, firstOrderTypeOf, asFirstOrderType
@@ -272,7 +272,7 @@ flattenSValue nm v = do
         VIntMod n si              -> return ([svRem si (svInteger KUnbounded (toInteger n))], "")
         VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
         VCtorApp i ps ts          -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) (ps++ts)
-                                        return (concat xss, "_" ++ identName i ++ concat ss)
+                                        return (concat xss, "_" ++ (Text.unpack (identBaseName (primName i))) ++ concat ss)
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
                                   -> return ([], s)
@@ -560,7 +560,7 @@ muxBVal :: TValue SBV -> SBool -> SValue -> SValue -> IO SValue
 muxBVal = Prims.muxValue prims
 
 muxSbvExtra :: TValue SBV -> SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
-muxSbvExtra (VDataType "Prelude.Stream" [TValue tp]) c x y =
+muxSbvExtra (VDataType (primName -> "Prelude.Stream") [TValue tp] []) c x y =
   do let f i = do xi <- lookupSbvExtra x i
                   yi <- lookupSbvExtra y i
                   muxBVal tp c xi yi

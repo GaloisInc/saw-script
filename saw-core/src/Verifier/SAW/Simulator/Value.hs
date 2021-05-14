@@ -53,7 +53,7 @@ data Value l
   = VFun !LocalName !(Thunk l -> MValue l)
   | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
-  | VCtorApp !Ident ![Thunk l] ![Thunk l]
+  | VCtorApp !(PrimName (TValue l)) ![Thunk l] ![Thunk l]
   | VVector !(Vector (Thunk l))
   | VBool (VBool l)
   | VWord (VWord l)
@@ -66,11 +66,11 @@ data Value l
   | VString !Text
   | VRecordValue ![(FieldName, Thunk l)]
   | VRecursor
-     !Ident -- data type ident
+     !(PrimName (TValue l)) -- data type ident
      ![Value l]  -- data type parameters
      !(Value l)  -- motive function
      !(TValue l) -- type of motive
-     !(Map Ident (Thunk l, TValue l)) -- constructor eliminators and their types
+     !(Map VarIndex (Thunk l, TValue l)) -- constructor eliminators and their types
   | VExtra (Extra l)
   | TValue (TValue l)
 
@@ -84,11 +84,11 @@ data TValue l
   | VPiType LocalName !(TValue l) !(PiBody l)
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
-  | VDataType !Ident ![Value l]
+  | VDataType !(PrimName (TValue l)) ![Value l] ![Value l]
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
   | VRecursorType
-     !Ident      -- data type name
+     !(PrimName (TValue l)) -- data type name
      ![Value l]  -- data type parameters
      !(Value l)  -- motive function
      !(TValue l) -- type of motive function
@@ -188,7 +188,7 @@ instance Show (Extra l) => Show (Value l) where
       VFun {}        -> showString "<<fun>>"
       VUnit          -> showString "()"
       VPair{}        -> showString "<<tuple>>"
-      VCtorApp s _ps _xv -> shows s
+      VCtorApp s _ps _xv -> shows (primName s)
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"
       VWord _        -> showString "<<bitvector>>"
@@ -220,9 +220,9 @@ instance Show (Extra l) => Show (TValue l) where
                         (shows t . showString " -> ...")
       VUnitType      -> showString "#()"
       VPairType x y  -> showParen True (shows x . showString " * " . shows y)
-      VDataType s vs
-        | null vs    -> shows s
-        | otherwise  -> shows s . showList vs
+      VDataType s ps vs
+        | null (ps++vs) -> shows s
+        | otherwise  -> shows s . showList (ps++vs)
       VRecordType [] -> showString "{}"
       VRecordType ((fld,_):_) ->
         showString "{" . showString (Text.unpack fld) . showString " :: _, ...}"

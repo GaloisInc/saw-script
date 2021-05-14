@@ -61,6 +61,7 @@ import qualified Data.IntMap.Strict as IntMap
 
 import Verifier.SAW.Name
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Utils (panic)
 
 --------------------------------------------------------------------------------
 -- * Doc annotations
@@ -416,7 +417,7 @@ ppDataType d (params, ((d_ctx,d_tp), ctors)) =
 ppFlatTermF :: Prec -> FlatTermF Term -> PPM SawDoc
 ppFlatTermF prec tf =
   case tf of
-    Primitive ec  -> annotate PrimitiveStyle <$> ppBestName (ecName ec)
+    Primitive ec  -> annotate PrimitiveStyle <$> ppBestName (ModuleIdentifier (primName ec))
     UnitValue     -> return "(-empty-)"
     UnitType      -> return "#(-empty-)"
     PairValue x y -> ppPair prec <$> ppTerm' PrecTerm x <*> ppTerm' PrecCommas y
@@ -427,23 +428,24 @@ ppFlatTermF prec tf =
     RecursorType d params motive _motiveTy ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
+         nm <- ppBestName (ModuleIdentifier (primName d))
          return $
-           ppAppList prec (annotate RecursorStyle (ppIdent d <> "#recType"))
+           ppAppList prec (annotate RecursorStyle (nm <> "#recType"))
              (params_pp ++ [motive_pp])
 
-    Recursor (CompiledRecursor d params motive _motiveTy cs_fs _) ->
+    Recursor (CompiledRecursor d params motive _motiveTy cs_fs ctorOrder) ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          motive_pp <- ppTerm' PrecArg motive
          fs_pp <- traverse (ppTerm' PrecTerm . fst) cs_fs
+         nm <- ppBestName (ModuleIdentifier (primName d))
+         f_pps <- forM ctorOrder $ \ec ->
+                    do cnm <- ppBestName (ModuleIdentifier (primName ec))
+                       case Map.lookup (primVarIndex ec) fs_pp of
+                         Just f_pp -> pure $ vsep [cnm, "=>", f_pp]
+                         Nothing -> panic "ppFlatTerm" ["missing constructor", show cnm]
          return $
-           ppAppList prec (annotate RecursorStyle (ppIdent d <> "#rec"))
-             (params_pp ++
-              [motive_pp
-              , tupled $
-                  [ vsep [ppIdent c, "=>", f_pp]
-                  | (c,f_pp) <- Map.toList fs_pp
-                  ]
-              ])
+           ppAppList prec (annotate RecursorStyle (nm <> "#rec"))
+             (params_pp ++ [motive_pp, tupled f_pps])
 
     RecursorApp rec ixs arg ->
       do rec_pp <- ppTerm' PrecApp rec
@@ -452,10 +454,13 @@ ppFlatTermF prec tf =
          return $ ppAppList prec rec_pp (ixs_pp ++ [arg_pp])
 
     CtorApp c params args ->
-      ppAppList prec (annotate CtorAppStyle (ppIdent c)) <$> mapM (ppTerm' PrecArg) (params ++ args)
+      do cnm <- ppBestName (ModuleIdentifier (primName c))
+         ppAppList prec (annotate CtorAppStyle cnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
 
     DataTypeApp dt params args ->
-      ppAppList prec (annotate DataTypeStyle (ppIdent dt)) <$> mapM (ppTerm' PrecArg) (params ++ args)
+      do dnm <- ppBestName (ModuleIdentifier (primName dt))
+         ppAppList prec (annotate DataTypeStyle dnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
+
     RecordType alist ->
       ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
     RecordValue alist ->

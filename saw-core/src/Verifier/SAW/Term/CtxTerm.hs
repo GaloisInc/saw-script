@@ -97,7 +97,8 @@ data Typ (a :: Type)
 -- | An identifier for a datatype that is statically associated with Haskell
 -- type @d@. Again, we cannot capture all of the SAW type system in Haskell, so
 -- we simplify datatypes to arbitrary Haskell types.
-newtype DataIdent d = DataIdent Ident
+newtype DataIdent d = DataIdent (PrimName Term)
+  -- Invariant, the type of datatypes is always a closed term
 
 -- | Append a list of types to a context, i.e., "invert" the list of types,
 -- putting the last type on the "outside", and append it. The way to think of
@@ -506,8 +507,11 @@ ctxAsPiMulti (ctxAsPi -> Just (CtxPi x tp body)) =
 ctxAsPiMulti t = CtxMultiPi NoBind t
 
 -- | Build an application of a datatype as a 'CtxTerm'
-ctxDataTypeM :: MonadTerm m => DataIdent d -> m (CtxTermsCtx ctx params) ->
-                m (CtxTermsCtx ctx ixs) -> m (CtxTerm ctx (Typ d))
+ctxDataTypeM :: MonadTerm m =>
+  DataIdent d ->
+  m (CtxTermsCtx ctx params) ->
+  m (CtxTermsCtx ctx ixs) ->
+  m (CtxTerm ctx (Typ d))
 ctxDataTypeM (DataIdent d) paramsM ixsM =
   CtxTerm <$>
   (mkFlatTermF =<<
@@ -532,9 +536,12 @@ ctxAsDataTypeApp _ _ _ _ = Nothing
 
 
 -- | Build an application of a constructor as a 'CtxTerm'
-ctxCtorAppM :: MonadTerm m => DataIdent d -> Ident ->
-               m (CtxTermsCtx ctx params) ->
-               m (CtxTermsCtx ctx args) -> m (CtxTerm ctx d)
+ctxCtorAppM :: MonadTerm m =>
+  DataIdent d ->
+  PrimName Term ->
+  m (CtxTermsCtx ctx params) ->
+  m (CtxTermsCtx ctx args) ->
+  m (CtxTerm ctx d)
 ctxCtorAppM _d c paramsM argsM =
   CtxTerm <$>
   (mkFlatTermF =<<
@@ -727,7 +734,7 @@ ctxCtorArgBindings d params prevs (Bind x arg args) =
 
 -- | Compute the type of a constructor from the name of its datatype and its
 -- 'CtorArgStruct'
-ctxCtorType :: MonadTerm m => Ident -> CtorArgStruct d params ixs -> m Term
+ctxCtorType :: MonadTerm m => PrimName Term -> CtorArgStruct d params ixs -> m Term
 ctxCtorType d (CtorArgStruct{..}) =
   elimClosedTerm <$>
   (ctxPi ctorParams $ \params ->
@@ -764,9 +771,13 @@ ctxPRetTp (_ :: Proxy (Typ a)) (d :: DataIdent d) params ixs s =
 
 -- | Like 'ctxPRetTp', but also take in a list of parameters and substitute them
 -- for the parameter variables returned by that function
-mkPRetTp ::
-  MonadTerm m => Ident -> [(LocalName, Term)] -> [(LocalName, Term)] ->
-  [Term] -> Sort -> m Term
+mkPRetTp :: MonadTerm m =>
+  PrimName Term ->
+  [(LocalName, Term)] ->
+  [(LocalName, Term)] ->
+  [Term] ->
+  Sort ->
+  m Term
 mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =
   case ctxBindingsOfTerms untyped_p_ctx of
     ExistsTp p_ctx ->
@@ -812,10 +823,12 @@ mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =
 -- since it depends on fields of the 'CtorArgStruct', so, instead, the result is
 -- just casted to whatever type the caller specifies.
 ctxCtorElimType :: MonadTerm m =>
-                   Proxy (Typ ret) -> Proxy (Typ a) -> DataIdent d -> Ident ->
-                   CtorArgStruct d params ixs ->
-                   m (CtxTerm (CtxInv params ::>
-                               (Arrows ixs (d -> Typ a))) (Typ ret))
+  Proxy (Typ ret) ->
+  Proxy (Typ a) ->
+  DataIdent d ->
+  PrimName Term ->
+  CtorArgStruct d params ixs ->
+  m (CtxTerm (CtxInv params ::>(Arrows ixs (d -> Typ a))) (Typ ret))
 ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
   (CtorArgStruct{..}) =
   (do let params = invertBindings ctorParams
@@ -841,15 +854,14 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
   -- Note that, technically, this function also takes in recursive calls, so has
   -- a slightly richer type, but we are not going to try to compute this richer
   -- type in Haskell land.
-  helper :: MonadTerm m => Proxy (Typ a) -> DataIdent d ->
-            InvBindings CtxTerm EmptyCtx (ps ::> Arrows ixs (d -> Typ a)) ->
-            InvBindings CtxTerm (ps ::> Arrows ixs (d -> Typ a)) prevs ->
-            Bindings (CtorArg d ixs) ((ps ::>
-                                       Arrows ixs (d -> Typ a)) <+> prevs) args ->
-            CtxTerms (CtxInvApp ((ps ::> Arrows ixs (d -> Typ a)) <+>
-                                 prevs) args) ixs ->
-            m (CtxTerm ((ps ::> Arrows ixs (d -> Typ a)) <+> prevs)
-               (Typ (Arrows args a)))
+  helper :: MonadTerm m =>
+    Proxy (Typ a) ->
+    DataIdent d ->
+    InvBindings CtxTerm EmptyCtx (ps ::> Arrows ixs (d -> Typ a)) ->
+    InvBindings CtxTerm (ps ::> Arrows ixs (d -> Typ a)) prevs ->
+    Bindings (CtorArg d ixs) ((ps ::> Arrows ixs (d -> Typ a)) <+> prevs) args ->
+    CtxTerms (CtxInvApp ((ps ::> Arrows ixs (d -> Typ a)) <+> prevs) args) ixs ->
+    m (CtxTerm ((ps ::> Arrows ixs (d -> Typ a)) <+> prevs) (Typ (Arrows args a)))
   helper _a d params_pret prevs NoBind ret_ixs =
     -- If we are finished with our arguments, construct the final result type
     -- (p_ret ret_ixs (c params prevs))
@@ -911,8 +923,11 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
 -- for the given constructor. We return the substitution function in the monad
 -- so that we only call 'ctxCtorElimType' once but can call the function many
 -- times, in order to amortize the overhead of 'ctxCtorElimType'.
-mkCtorElimTypeFun :: MonadTerm m => Ident -> Ident ->
-                     CtorArgStruct d params ixs -> m ([Term] -> Term -> m Term)
+mkCtorElimTypeFun :: MonadTerm m =>
+  PrimName Term {- ^ data type -} ->
+  PrimName Term {- ^ constructor type -} ->
+  CtorArgStruct d params ixs ->
+  m ([Term] -> Term -> m Term)
 mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
   do ctxElimType <- ctxCtorElimType Proxy Proxy (DataIdent d) c argStruct
      case ctxAppNilEq (invertBindings ctorParams) of
@@ -1165,9 +1180,12 @@ mkCtorArgsIxs _ _ _ _ _ = Nothing
 -- constructor type is allowed to have the parameters but not the indices free.
 -- Test that the constructor type is an allowed type for a constructor of this
 -- datatype, and, if so, build a 'CtorArgStruct' for it.
-mkCtorArgStruct :: Ident -> Bindings CtxTerm EmptyCtx params ->
-                   Bindings CtxTerm (CtxInv params) ixs -> Term ->
-                   Maybe (CtorArgStruct d params ixs)
+mkCtorArgStruct ::
+  PrimName Term ->
+  Bindings CtxTerm EmptyCtx params ->
+  Bindings CtxTerm (CtxInv params) ixs ->
+  Term ->
+  Maybe (CtorArgStruct d params ixs)
 mkCtorArgStruct d params dt_ixs ctor_tp =
   case mkCtorArgsIxs (DataIdent d) params dt_ixs InvNoBind (CtxTerm ctor_tp) of
     Just (CtorArgsIxs args ctor_ixs) ->

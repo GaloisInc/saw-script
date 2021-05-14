@@ -203,10 +203,7 @@ flatTermFToExpr ::
   m Coq.Term
 flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
   case tf of
-    Primitive (EC _ nmi _) ->
-      case nmi of
-        ModuleIdentifier i -> translateIdent i
-        ImportedName{} -> errorTermM "Invalid name for saw-core primitive"
+    Primitive pn  -> translateIdent (primName pn)
     UnitValue     -> pure (Coq.Var "tt")
     UnitType      -> pure (Coq.Var "unit")
     PairValue x y -> Coq.App (Coq.Var "pair") <$> traverse translateTerm [x, y]
@@ -216,8 +213,8 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     PairRight t   ->
       Coq.App <$> pure (Coq.Var "SAWCoreScaffolding.snd") <*> traverse translateTerm [t]
     -- TODO: maybe have more customizable translation of data types
-    DataTypeApp n is as -> translateIdentWithArgs n (is ++ as)
-    CtorApp n is as -> translateIdentWithArgs n (is ++ as)
+    DataTypeApp n is as -> translateIdentWithArgs (primName n) (is ++ as)
+    CtorApp n is as -> translateIdentWithArgs (primName n) (is ++ as)
 
     RecursorType _d _params motive motiveTy ->
       -- type of the motive looks like
@@ -237,7 +234,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
 
     -- TODO: support this next!
     Recursor (CompiledRecursor d parameters motive _motiveTy eliminators elimOrder) ->
-      do maybe_d_trans <- translateIdentToIdent d
+      do maybe_d_trans <- translateIdentToIdent (primName d)
          rect_var <- case maybe_d_trans of
            Just i -> return $ Coq.Var (show i ++ "_rect")
            Nothing ->
@@ -245,7 +242,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
                          " cannot be translated because the datatype " ++
                          "is mapped to an arbitrary Coq term")
 
-         let fnd c = case Map.lookup c eliminators of
+         let fnd c = case Map.lookup (primVarIndex c) eliminators of
                        Just (e,_ety) -> translateTerm e
                        Nothing -> errorTermM
                           ("Recursor eliminator missing eliminator for constructor " ++ show c)
