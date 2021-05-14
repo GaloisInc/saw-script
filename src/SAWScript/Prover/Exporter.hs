@@ -93,7 +93,6 @@ import SAWScript.Prover.What4
 import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
-import qualified What4.Interface as W4
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
 import What4.Protocol.VerilogWriter (exprsVerilog)
 import What4.Solver.Adapter
