@@ -6,7 +6,6 @@
 {-# Language ExplicitForAll #-}
 {-# Language FlexibleContexts #-}
 {-# Language TypeApplications #-}
-{-# Language ParallelListComp #-}
 {-# Language TupleSections #-}
 module SAWScript.Prover.Exporter
   ( proveWithSATExporter
