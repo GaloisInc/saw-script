@@ -51,6 +51,7 @@ import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
 import Data.Parameterized.Nonce (globalNonceGenerator)
 import Data.Parameterized.Some (Some(..))
+import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.SBV.Dynamic as SBV
 import System.Directory (removeFile)
@@ -275,7 +276,7 @@ writeSMTLib2 sc f satq = io $
 writeSMTLib2What4 :: SharedContext -> FilePath -> SATQuery -> TopLevel ()
 writeSMTLib2What4 sc f satq = io $
   do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
-     (_argNames, _argTys, _labels, lit) <- W.w4Solve sym sc satq
+     (_varMap, lit) <- W.w4Solve sym sc satq
      withFile f WriteMode $ \h ->
        writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features sym h [lit]
 
@@ -288,13 +289,17 @@ write_verilog sc path t = io $ writeVerilog sc path t
 writeVerilogSAT :: MonadIO m => SharedContext -> FilePath -> SATQuery -> m ([ExtCns Term],[FiniteType])
 writeVerilogSAT sc path satq = liftIO $
   do sym <- newSAWCoreBackend sc
-     (argNames, argTys, _lbls, bval) <- W.w4Solve sym sc satq
+     let varList  = Map.toList (satVariables satq)
+     let argNames = map fst varList
+     let argTys = map snd varList
+     (_varMap, bval) <- W.w4Solve sym sc satq
      let f fot = case toFiniteType fot of
                    Nothing -> fail $ "writeVerilogSAT: Unsupported argument type " ++ show fot
                    Just ft -> return ft
      argTys' <- traverse f argTys
 
-     edoc <- runExceptT $ exprsVerilog sym [Some bval] "f"
+     let ins = [] -- TODO
+     edoc <- runExceptT $ exprsVerilog sym ins [Some bval] "f"
      case edoc of
        Left err -> fail $ "Failed to translate to Verilog: " ++ err
        Right doc -> do
@@ -323,9 +328,10 @@ writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
   sym <- newSAWCoreBackend sc
   st  <- sawCoreState sym
-  (_, (_, sval)) <- W4Sim.w4EvalAny sym st sc mempty mempty t
+  (argNames, (lbls, sval)) <- W4Sim.w4EvalAny sym st sc mempty mempty t
   es <- flattenSValue sval
-  edoc <- runExceptT $ exprsVerilog sym es "f"
+  let ins = [] -- TODO
+  edoc <- runExceptT $ exprsVerilog sym ins es "f"
   case edoc of
     Left err -> fail $ "Failed to translate to Verilog: " ++ err
     Right doc -> do
