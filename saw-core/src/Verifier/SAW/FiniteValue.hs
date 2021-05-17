@@ -309,27 +309,41 @@ scFirstOrderValue sc fv =
 
 -- Parsing values from lists of booleans ---------------------------------------
 
-readFiniteValue' :: FiniteType -> S.StateT [Bool] Maybe FiniteValue
-readFiniteValue' ft =
+data Endianness
+  = BigEndian
+  | LittleEndian
+
+readFiniteValue' :: Endianness -> FiniteType -> S.StateT [Bool] Maybe FiniteValue
+readFiniteValue' en ft =
   case ft of
     FTBit      -> do bs <- S.get
                      case bs of
                        []      -> S.lift Nothing
                        b : bs' -> S.put bs' >> return (FVBit b)
-    FTVec n t  -> fvVec t <$> S.replicateM (fromIntegral n) (readFiniteValue' t)
-    FTTuple ts -> FVTuple <$> traverse readFiniteValue' ts
-    FTRec tm   -> FVRec <$> traverse readFiniteValue' tm
+    FTVec n t  -> (fvVec t . fixup) <$> S.replicateM (fromIntegral n) (readFiniteValue' en t)
+                    where fixup = case (t, en) of
+                                    (FTBit, LittleEndian) -> reverse
+                                    _ -> id
+    FTTuple ts -> FVTuple <$> traverse (readFiniteValue' en) ts
+    FTRec tm   -> FVRec <$> traverse (readFiniteValue' en) tm
 
 readFiniteValues :: [FiniteType] -> [Bool] -> Maybe [FiniteValue]
 readFiniteValues ts bs = do
-  (vs, rest) <- S.runStateT (traverse readFiniteValue' ts) bs
+  (vs, rest) <- S.runStateT (traverse (readFiniteValue' BigEndian) ts) bs
+  case rest of
+    [] -> return vs
+    _ -> Nothing
+
+readFiniteValuesLE :: [FiniteType] -> [Bool] -> Maybe [FiniteValue]
+readFiniteValuesLE ts bs = do
+  (vs, rest) <- S.runStateT (traverse (readFiniteValue' LittleEndian) ts) bs
   case rest of
     [] -> return vs
     _ -> Nothing
 
 readFiniteValue :: FiniteType -> [Bool] -> Maybe FiniteValue
 readFiniteValue t bs = do
-  (v, rest) <- S.runStateT (readFiniteValue' t) bs
+  (v, rest) <- S.runStateT (readFiniteValue' BigEndian t) bs
   case rest of
     [] -> return v
     _ -> Nothing

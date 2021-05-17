@@ -93,7 +93,10 @@ import SAWScript.Prover.What4
 import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
+import What4.Config (extendConfig)
+import What4.Interface (getConfiguration)
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
+import What4.Protocol.SMTLib2.Response (smtParseOptions)
 import What4.Protocol.VerilogWriter (exprsVerilog)
 import What4.Solver.Adapter
 import qualified What4.SWord as W4Sim
@@ -279,8 +282,10 @@ writeSMTLib2What4 :: SharedContext -> FilePath -> SATQuery -> TopLevel ()
 writeSMTLib2What4 sc f satq = io $
   do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
      (_varMap, lit) <- W.w4Solve sym sc satq
+     let cfg = getConfiguration sym
+     extendConfig smtParseOptions cfg
      withFile f WriteMode $ \h ->
-       writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features sym h [lit]
+       writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features Nothing sym h [lit]
 
 writeCore :: FilePath -> Term -> TopLevel ()
 writeCore path t = io $ writeFile path (scWriteExternal t)
