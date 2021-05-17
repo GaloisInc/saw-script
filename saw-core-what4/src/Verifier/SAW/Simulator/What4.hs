@@ -731,11 +731,11 @@ parseUninterpreted ::
   TValue (What4 sym) -> IO (SValue sym)
 parseUninterpreted sym ref app ty =
   case ty of
-    VPiType _ _ f
+    VPiType _ _ body
       -> return $
          strictFun $ \x -> do
            app' <- applyUnintApp sym app x
-           t2 <- f (ready x)
+           t2 <- applyPiBody body (ready x)
            parseUninterpreted sym ref app' t2
 
     VBoolType
@@ -888,9 +888,9 @@ w4Solve sym sc satq =
 argTypes :: IsSymExprBuilder sym => TValue (What4 sym) -> IO [TValue (What4 sym)]
 argTypes v =
   case v of
-    VPiType _nm v1 f ->
+    VPiType _nm v1 body ->
       do x <- delay (fail "argTypes: unsupported dependent SAW-Core type")
-         v2 <- f x
+         v2 <- applyPiBody body x
          vs <- argTypes v2
          return (v1 : vs)
     _ -> return []
@@ -1178,13 +1178,13 @@ parseUninterpretedSAW ::
   IO (SValue (B.ExprBuilder n st fs))
 parseUninterpretedSAW sym st sc ref trm app ty =
   case ty of
-    VPiType _nm t1 f
+    VPiType _nm t1 body
       -> return $
          strictFun $ \x -> do
            app' <- applyUnintApp sym app x
            arg <- mkArgTerm sc t1 x
            let trm' = ArgTermApply trm arg
-           t2 <- f (ready x)
+           t2 <- applyPiBody body (ready x)
            parseUninterpretedSAW sym st sc ref trm' app' t2
 
     VBoolType

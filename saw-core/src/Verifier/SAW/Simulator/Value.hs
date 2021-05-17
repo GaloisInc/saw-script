@@ -76,13 +76,17 @@ data TValue l
   | VIntType
   | VIntModType !Natural
   | VArrayType !(TValue l) !(TValue l)
-  | VPiType LocalName !(TValue l) !(Thunk l -> EvalM l (TValue l))
+  | VPiType LocalName !(TValue l) !(PiBody l)
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
   | VDataType !Ident ![Value l]
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
   | VTyTerm !Sort !Term
+
+data PiBody l
+  = VDependentPi !(Thunk l -> EvalM l (TValue l))
+  | VNondependentPi !(TValue l)
 
 -- | Neutral terms represent computations that are blocked
 --   because some internal term cannot be evaluated
@@ -260,11 +264,17 @@ valRecordProj v _ =
 
 apply :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
 apply (VFun _ f) x = f x
-apply (TValue (VPiType _ _ f)) x = TValue <$> f x
+apply (TValue (VPiType _ _ body)) x = TValue <$> applyPiBody body x
+
 apply v _x = panic "Verifier.SAW.Simulator.Value.apply" ["Not a function value:", show v]
 
 applyAll :: (VMonad l, Show (Extra l)) => Value l -> [Thunk l] -> MValue l
 applyAll = foldM apply
+
+{-# INLINE applyPiBody #-}
+applyPiBody :: VMonad l => PiBody l -> Thunk l -> EvalM l (TValue l)
+applyPiBody (VDependentPi f) x    = f x
+applyPiBody (VNondependentPi t) _ = pure t
 
 asFiniteTypeValue :: Value l -> Maybe FiniteType
 asFiniteTypeValue v =

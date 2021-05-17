@@ -584,11 +584,11 @@ sbvSolveBasic sc addlPrims unintSet t = do
 parseUninterpreted :: [SVal] -> String -> TValue SBV -> IO SValue
 parseUninterpreted cws nm ty =
   case ty of
-    (VPiType _ _ f)
+    (VPiType _ _ body)
       -> return $
          strictFun $ \x -> do
            (cws', suffix) <- flattenSValue nm x
-           t2 <- f (ready x)
+           t2 <- applyPiBody body (ready x)
            parseUninterpreted (cws ++ cws') (nm ++ suffix) t2
 
     VBoolType

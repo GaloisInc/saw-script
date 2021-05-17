@@ -57,6 +57,7 @@ import Verifier.SAW.Cryptol.Panic
 import Verifier.SAW.Conversion
 import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import qualified Verifier.SAW.Simulator.Concrete as SC
+import qualified Verifier.SAW.Simulator.Value as SC
 import Verifier.SAW.Prim (BitVector(..))
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
@@ -1590,7 +1591,7 @@ asCryptolTypeValue v =
       case C.tIsTuple t2 of
         Just ts -> return (C.tTuple (t1 : ts))
         Nothing -> return (C.tTuple [t1, t2])
-    SC.VPiType _nm v1 f -> do
+    SC.VPiType _nm v1 (SC.VDependentPi _) ->
       case v1 of
         -- if we see that the parameter is a Cryptol.Num, it's a
         -- pretty good guess that it originally was a
@@ -1602,14 +1603,16 @@ asCryptolTypeValue v =
                            ]
           in error msg
             -- otherwise we issue a generic error about dependent type inference
-        _ -> do
-          let msg = unwords ["asCryptolTypeValue: can't infer a Cryptol type"
-                            ,"for a dependent SAW-Core type."
-                            ]
-          let v2 = SC.runIdentity (f (error msg))
-          t1 <- asCryptolTypeValue v1
-          t2 <- asCryptolTypeValue v2
-          return (C.tFun t1 t2)
+        _ ->
+          error $ unwords ["asCryptolTypeValue: can't infer a Cryptol type"
+                          ,"for a dependent SAW-Core type."
+                          ]
+
+    SC.VPiType _nm v1 (SC.VNondependentPi v2) ->
+      do t1 <- asCryptolTypeValue v1
+         t2 <- asCryptolTypeValue v2
+         return (C.tFun t1 t2)
+
     _ -> Nothing
 
 -- | Deprecated.
