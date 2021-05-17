@@ -141,6 +141,62 @@ jvm_verify test "next" [] false
     jvm_return (jvm_term ctr');
   } z3;
 
+print "jvm_static_field_is with non-monomorphic type";
+check_fails test "next"
+  do {
+    let ctr = {{ 0 }};
+    jvm_static_field_is "counter" (jvm_term ctr);
+    jvm_execute_func [];
+    let ctr' = {{ 1 }};
+    jvm_static_field_is "counter" (jvm_term ctr');
+    jvm_return (jvm_term ctr');
+  };
+
+print "jvm_static_field_is with non-jvm type";
+check_fails test "next"
+  do {
+    let ctr = {{ 0 : Integer }};
+    jvm_static_field_is "counter" (jvm_term ctr);
+    jvm_execute_func [];
+    let ctr' = {{ ctr + 1 }};
+    jvm_static_field_is "counter" (jvm_term ctr');
+    jvm_return (jvm_term ctr');
+  };
+
+print "jvm_static_field_is with wrong type";
+check_fails test "next"
+  do {
+    let ctr = {{ 0 : [32] }};
+    jvm_static_field_is "counter" (jvm_term ctr);
+    jvm_execute_func [];
+    let ctr' = {{ ctr + 1 }};
+    jvm_static_field_is "counter" (jvm_term ctr');
+    jvm_return (jvm_term ctr');
+  };
+
+print "jvm_static_field_is with non-existent field name";
+check_fails test "next"
+  do {
+    ctr <- jvm_fresh_var "ctr" java_long;
+    jvm_static_field_is "count" (jvm_term ctr);
+    jvm_execute_func [];
+    let ctr' = {{ ctr + 1 }};
+    jvm_static_field_is "count" (jvm_term ctr');
+    jvm_return (jvm_term ctr');
+  };
+
+print "jvm_static_field_is with previous jvm_static_field_is on same field";
+check_fails test "next"
+  do {
+    ctr <- jvm_fresh_var "ctr" java_long;
+    jvm_static_field_is "counter" (jvm_term ctr);
+    jvm_static_field_is "counter" (jvm_term ctr);
+    jvm_execute_func [];
+    let ctr' = {{ ctr + 1 }};
+    jvm_static_field_is "counter" (jvm_term ctr');
+    jvm_return (jvm_term ctr');
+  };
+
 print "jvm_modifies_static_field in pre-state section";
 check_fails test "next"
   do {
