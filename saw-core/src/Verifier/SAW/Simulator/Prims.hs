@@ -38,7 +38,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import Verifier.SAW.Term.Functor (Ident, alistAllFields)
+import Verifier.SAW.Term.Functor (Ident, alistAllFields, primType)
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Prim
 import qualified Verifier.SAW.Prim as Prim
@@ -1257,6 +1257,7 @@ lazyMuxValue bp tp b x y =
          y' <- y
          muxValue bp tp b x' y'
 
+
 muxValue :: forall l.
   (HasCallStack, VMonadLazy l, Show (Extra l)) =>
   BasePrims l ->
@@ -1289,9 +1290,12 @@ muxValue bp tp0 b = value tp0
                               _ -> panic "muxValue" ["Record field missing!", show f]
          VRecordValue <$> traverse build fs
 
--- TODO, fix datatypes!
---    value (VDataType _nm _ps) (VCtorApp i xv) (VCtorApp j yv)
---      | i == j = VCtorApp i <$> muxCtorArgs i xv yv
+    value (VDataType _nm _ps _ixs) (VCtorApp i ps xv) (VCtorApp j _ yv)
+      | i == j = VCtorApp i ps <$> ctorArgs (primType i) ps xv yv
+      | otherwise =
+      -- TODO, should not be a panic
+      panic $ "Verifier.SAW.Simulator.Prims.iteOp: cannot mux different data constructors "
+                ++ show i ++ " " ++ show j
 
     value (VVecType _ tp) (VVector xv) (VVector yv) =
       VVector <$> thunks tp xv yv
@@ -1316,6 +1320,29 @@ muxValue bp tp0 b = value tp0
     value tp x                y                 =
       panic $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: "
       ++ show x ++ " " ++ show y ++ " " ++ show tp
+
+
+    ctorArgs :: TValue l -> [Thunk l] -> [Thunk l] -> [Thunk l] -> EvalM l [Thunk l]
+
+    -- consume the data type parameters and compute the type of the constructor
+    ctorArgs (VPiType _nm _t1 body) (p:ps) xs ys =
+      do t' <- applyPiBody body p
+         ctorArgs t' ps xs ys
+
+    -- mux the arguments one at a time, as long as the constructor type is not
+    -- a dependent function
+    ctorArgs (VPiType _nm t1 (VNondependentPi t2)) [] (x:xs) (y:ys)=
+      do z  <- thunk t1 x y
+         zs <- ctorArgs t2 [] xs ys
+         pure (z:zs)
+    ctorArgs _ [] [] [] = pure []
+
+    -- TODO, shouldn't be a panic
+    ctorArgs (VPiType _nm _t1 (VDependentPi _)) [] _ _ =
+      panic $ "Verifier.SAW.Simulator.Prims.iteOp: cannot mux constructors with dependent types"
+
+    ctorArgs _ _ _ _ =
+      panic $ "Verifier.SAW.Simulator.Prims.iteOp: constructor arguments mismtch"
 
     tvalue :: TValue l -> TValue l -> EvalM l (TValue l)
     tvalue (VSort x)         (VSort y)         | x == y = return $ VSort y
