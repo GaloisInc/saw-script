@@ -52,6 +52,7 @@ import qualified Verifier.SAW.Utils as Panic (panic)
 import Verifier.SAW.Module
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
+import Verifier.SAW.Prelude.Constants
 
 import Verifier.SAW.Simulator.Value
 
@@ -193,21 +194,17 @@ evalTermF cfg lam recEval tf env =
           do rec <- recEval rectm
              case rec of
                VRecursor d ps motive motiveTy ps_fs ->
-                 recEval arg >>= \case
-                   VCtorApp c _ps args
-                     | Just ctor <- findCtorInMap (simModMap cfg) (primName c)
-                     , Just (elim,elimTy) <- Map.lookup (primVarIndex c) ps_fs ->
-                       do let recTy = VRecursorType d ps motive motiveTy
-                          ctorTy <- toTValue <$> lam (ctorType ctor) []
-                          allArgs <- processRecArgs ps args ctorTy [(elim,elimTy),(ready rec,recTy)]
-                          lam (ctorIotaTemplate ctor) allArgs
+                 do argv <- recEval arg
+                    case evalConstructor argv of
+                      Just (ctor, args)
+                        | Just (elim,elimTy) <- Map.lookup (ctorVarIndex ctor) ps_fs
+                        -> do let recTy = VRecursorType d ps motive motiveTy
+                              ctorTy <- toTValue <$> lam (ctorType ctor) []
+                              allArgs <- processRecArgs ps args ctorTy [(elim,elimTy),(ready rec,recTy)]
+                              lam (ctorIotaTemplate ctor) allArgs
 
-                     |  otherwise -> panic ("evalRecursorApp: could not find info for constructor: " ++ show c)
-
-                   VNat n -> undefined n
-
-                   _ -> panic "evalRecursorApp: expected constructor"
-
+                        | otherwise -> panic ("evalRecursorApp: could not find info for constructor: " ++ show ctor)
+                      Nothing -> panic "evalRecursorApp: expected constructor"
                _ -> panic "evalRecursorApp: expected recursor value"
 
         RecordType elem_tps ->
@@ -222,6 +219,19 @@ evalTermF cfg lam recEval tf env =
         ExtCns ec           -> do ec' <- traverse (fmap toTValue . recEval) ec
                                   simExtCns cfg tf ec'
   where
+    evalConstructor :: Value l -> Maybe (Ctor, [Thunk l])
+    evalConstructor (VCtorApp c _ps args) =
+       do ctor <- findCtorInMap (simModMap cfg) (primName c)
+          Just (ctor, args)
+    evalConstructor (VNat 0) =
+       do ctor <- findCtorInMap (simModMap cfg) preludeZeroIdent
+          Just (ctor, [])
+    evalConstructor (VNat n) =
+       do ctor <- findCtorInMap (simModMap cfg) preludeSuccIdent
+          Just (ctor, [ ready (VNat (pred n)) ])
+    evalConstructor _ =
+       Nothing
+
     recEvalDelay :: Term -> EvalM l (Thunk l)
     recEvalDelay = delay . recEval
 
