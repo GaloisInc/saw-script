@@ -56,7 +56,7 @@ import           Data.Function
 import           Data.List
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Maybe (fromMaybe)
+import           Data.Maybe (fromMaybe, isNothing)
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
@@ -107,6 +107,7 @@ import Verifier.SAW.TypedTerm
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
 import SAWScript.Exceptions
+import SAWScript.Panic
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
@@ -466,16 +467,16 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
     doPointsTo :: Crucible.SymGlobalState Sym -> JVMPointsTo -> IO (Crucible.SymGlobalState Sym)
     doPointsTo mem pt =
       case pt of
-        JVMPointsToField _loc lhs fid rhs ->
+        JVMPointsToField _loc lhs fid (Just rhs) ->
           do let lhs' = lookupAllocIndex env lhs
-             rhs' <- maybe (pure CJ.unassignedJVMValue) injectSetupVal rhs
+             rhs' <- injectSetupVal rhs
              CJ.doFieldStore sym mem lhs' fid rhs'
-        JVMPointsToStatic _loc fid rhs ->
-          do rhs' <- maybe (pure CJ.unassignedJVMValue) injectSetupVal rhs
+        JVMPointsToStatic _loc fid (Just rhs) ->
+          do rhs' <- injectSetupVal rhs
              CJ.doStaticFieldStore sym jc mem fid rhs'
-        JVMPointsToElem _loc lhs idx rhs ->
+        JVMPointsToElem _loc lhs idx (Just rhs) ->
           do let lhs' = lookupAllocIndex env lhs
-             rhs' <- maybe (pure CJ.unassignedJVMValue) injectSetupVal rhs
+             rhs' <- injectSetupVal rhs
              CJ.doArrayStore sym mem lhs' idx rhs'
         JVMPointsToArray _loc lhs (Just rhs) ->
           do sc <- saw_ctx <$> sawCoreState sym
@@ -487,8 +488,8 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
                  Just x -> pure x
              rhs' <- traverse (injectSetupVal . MS.SetupTerm) tts
              doEntireArrayStore sym mem lhs' rhs'
-        JVMPointsToArray _loc _lhs Nothing ->
-          pure mem -- This should probably never occur in the prestate section.
+        _ ->
+          panic "setupPrePointsTo" ["invalid invariant", "jvm_modifies in pre-state"]
 
 -- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
@@ -829,17 +830,21 @@ data JVMSetupError
   | JVMFieldMultiple AllocIndex J.FieldId
   | JVMFieldFailure String -- TODO: switch to a more structured type
   | JVMFieldTypeMismatch J.FieldId J.Type
+  | JVMFieldModifyPrestate AllocIndex J.FieldId
   | JVMStaticMultiple J.FieldId
   | JVMStaticFailure String -- TODO: switch to a more structured type
   | JVMStaticTypeMismatch J.FieldId J.Type
+  | JVMStaticModifyPrestate J.FieldId
   | JVMElemNonReference SetupValue Int
   | JVMElemNonArray J.Type
   | JVMElemInvalidIndex J.Type Int Int -- element type, length, index
   | JVMElemTypeMismatch Int J.Type J.Type -- index, expected, found
   | JVMElemMultiple AllocIndex Int -- reference and array index
+  | JVMElemModifyPrestate AllocIndex Int
   | JVMArrayNonReference SetupValue
   | JVMArrayTypeMismatch Int J.Type Cryptol.Schema
   | JVMArrayMultiple AllocIndex
+  | JVMArrayModifyPrestate AllocIndex
   | JVMArgTypeMismatch Int J.Type J.Type -- argument position, expected, found
   | JVMArgNumberWrong Int Int -- number expected, number found
   | JVMReturnUnexpected J.Type -- found
@@ -871,6 +876,8 @@ instance Show JVMSetupError where
         , "Expected type: " ++ show (J.fieldIdType fid)
         , "Given type: " ++ show found
         ]
+      JVMFieldModifyPrestate _ptr fid ->
+        "jvm_modifies_field: Invalid use before jvm_execute_func (" ++ J.fieldIdName fid ++ ")"
       JVMStaticMultiple fid ->
         "jvm_static_field_is: Multiple specifications for the same static field (" ++ J.fieldIdName fid ++ ")"
       JVMStaticFailure msg ->
@@ -882,6 +889,8 @@ instance Show JVMSetupError where
         , "Expected type: " ++ show (J.fieldIdType fid)
         , "Given type: " ++ show found
         ]
+      JVMStaticModifyPrestate fid ->
+        "jvm_modifies_static_field: Invalid use before jvm_execute_func (" ++ J.fieldIdName fid ++ ")"
       JVMElemNonReference ptr idx ->
         unlines
         [ "jvm_elem_is: Left-hand side is not a valid object reference"
@@ -905,6 +914,8 @@ instance Show JVMSetupError where
         ]
       JVMElemMultiple _ptr idx ->
         "jvm_elem_is: Multiple specifications for the same array index (" ++ show idx ++ ")"
+      JVMElemModifyPrestate _ptr idx ->
+        "jvm_modifies_elem: Invalid use before jvm_execute_func (" ++ show idx ++ ")"
       JVMArrayNonReference ptr ->
         unlines
         [ "jvm_array_is: Left-hand side is not a valid object reference"
@@ -919,6 +930,8 @@ instance Show JVMSetupError where
         ]
       JVMArrayMultiple _ptr ->
         "jvm_array_is: Multiple specifications for the same array reference"
+      JVMArrayModifyPrestate _ptr ->
+        "jvm_modifies_array: Invalid use before jvm_execute_func"
       JVMArgTypeMismatch i expected found ->
         unlines
         [ "jvm_execute_func: Argument type mismatch"
@@ -1055,6 +1068,8 @@ generic_field_is ptr fname mval =
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMFieldMultiple ptr' fid
+     when (st ^. Setup.csPrePost == PreState && isNothing mval) $
+       X.throwM $ JVMFieldModifyPrestate ptr' fid
      Setup.addPointsTo pt
 
 jvm_modifies_static_field ::
@@ -1100,6 +1115,8 @@ generic_static_field_is fname mval =
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMStaticMultiple fid
+     when (st ^. Setup.csPrePost == PreState && isNothing mval) $
+       X.throwM $ JVMStaticModifyPrestate fid
      Setup.addPointsTo pt
 
 jvm_modifies_elem ::
@@ -1147,6 +1164,8 @@ generic_elem_is ptr idx mval =
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMElemMultiple ptr' idx
+     when (st ^. Setup.csPrePost == PreState && isNothing mval) $
+       X.throwM $ JVMElemModifyPrestate ptr' idx
      Setup.addPointsTo pt
 
 jvm_modifies_array ::
@@ -1195,6 +1214,8 @@ generic_array_is ptr mval =
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMArrayMultiple ptr'
+     when (st ^. Setup.csPrePost == PreState && isNothing mval) $
+       X.throwM $ JVMArrayModifyPrestate ptr'
      Setup.addPointsTo pt
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
