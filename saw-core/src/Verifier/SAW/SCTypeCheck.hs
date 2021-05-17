@@ -159,6 +159,7 @@ data TCError
   | NoSuchCtor Ident
   | NotFullyAppliedRec (PrimName Term)
   | BadParamsOrArgsLength Bool (PrimName Term) [Term] [Term]
+  | BadRecursorApp Term [Term] Term
   | BadConstType NameInfo Term Term
   | MalformedRecursor Term String
   | DeclError Text String
@@ -211,6 +212,10 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (BadRecordField n ty) =
       ppWithPos [ return ("Bad record field (" ++ show n ++ ") for type")
                 , ishow ty ]
+  helper (BadRecursorApp rec ixs arg) =
+      ppWithPos [ return "Type mismatch in recursor application"
+                , ishow (Unshared $ FTermF $ RecursorApp rec ixs arg)
+                ]
   helper (DanglingVar n) =
       ppWithPos [ return ("Dangling bound variable index: " ++ show n)]
   helper (UnboundName str) = ppWithPos [ return ("Unbound name: " ++ show str)]
@@ -458,26 +463,25 @@ instance TypeInfer (FlatTermF TypedTerm) where
     -- Look up the DataType structure, check the length of the params and args,
     -- and then apply the cached Pi type of dt to params and args
     do dt <- liftTCM scRequireDataType (primName d)
-       if length params == length (dtParams dt) &&
-          length args == length (dtIndices dt) then return () else
-         throwTCError $
-         BadParamsOrArgsLength True (fmap typedVal d) (map typedVal params) (map typedVal args)
+       let err = BadParamsOrArgsLength True (fmap typedVal d) (map typedVal params) (map typedVal args)
+       unless (length params == length (dtParams dt) &&
+               length args == length (dtIndices dt))
+              (throwTCError err)
 
        -- NOTE: we assume dtType is already well-typed and in WHNF
-       -- _ <- inferSort t
-       -- t' <- typeCheckWHNF t
-       foldM (applyPiTyped (error "TODO")) (dtType dt) (params ++ args)
+       foldM (applyPiTyped err) (dtType dt) (params ++ args)
 
   typeInfer (CtorApp c params args) =
     -- Look up the Ctor structure, check the length of the params and args, and
     -- then apply the cached Pi type of ctor to params and args
     do ctor <- liftTCM scRequireCtor (primName c)
-       if length params == ctorNumParams ctor &&
-          length args == ctorNumArgs ctor then return () else
-         throwTCError $
-         BadParamsOrArgsLength False (fmap typedVal c) (map typedVal params) (map typedVal args)
+       let err = BadParamsOrArgsLength False (fmap typedVal c) (map typedVal params) (map typedVal args)
+       unless (length params == ctorNumParams ctor &&
+               length args == ctorNumArgs ctor)
+              (throwTCError err)
+
        -- NOTE: we assume ctorType is already well-typed and in WHNF
-       foldM (applyPiTyped (error "TODO")) (ctorType ctor) (params ++ args)
+       foldM (applyPiTyped err) (ctorType ctor) (params ++ args)
 
   typeInfer (RecursorType d ps motive mty) =
     do s <- inferRecursorType d ps motive mty
@@ -683,10 +687,9 @@ inferRecursorApp rec ixs arg =
          -- to check the types of the `ixs` and `arg`, and
          -- ensure that the result is fully applied
 
-         _s <- ensureSort =<<
-                  foldM (applyPiTyped (error "Internal type-checking error: unexpected non-pi type!"))
-                     motiveTy (ixs ++ [arg])
-    
+         let err = BadRecursorApp (typedVal rec) (fmap typedVal ixs) (typedVal arg)
+         _s <- ensureSort =<< foldM (applyPiTyped err) motiveTy (ixs ++ [arg])
+
          -- return the type (p_ret ixs arg)
          liftTCM scTypeCheckWHNF =<<
            liftTCM scApplyAll motive (map typedVal (ixs ++ [arg]))
