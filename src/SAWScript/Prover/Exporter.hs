@@ -344,7 +344,7 @@ writeVerilog sc path t = do
   -- lambda-bound inputs to appear first in the module input list, in
   -- order, followed by free variables (probably in the order seen
   -- during traversal, because that's at least _a_ deterministic order).
-  (argNames, args, (_, sval)) <- W4Sim.w4EvalAny sym st sc mempty mempty t
+  (argNames, args, _, sval) <- W4Sim.w4EvalAny sym st sc mempty mempty t
   es <- flattenSValue sval
   let mkInput (v, nm) = map (, pack nm) <$> flattenSValue v
   ins <- concat <$> mapM mkInput (zip args argNames)
