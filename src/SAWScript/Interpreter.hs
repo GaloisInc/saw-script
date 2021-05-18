@@ -1608,20 +1608,24 @@ primitives = Map.fromList
     Current
     [ "Add a proved equality theorem to a given simplification rule set." ]
 
-  , prim "addsimp'"            "Term -> Simpset -> Simpset"
-    (funVal2 addsimp')
-    Current
-    [ "Add an arbitrary equality term to a given simplification rule set." ]
-
   , prim "addsimps"            "[Theorem] -> Simpset -> Simpset"
     (funVal2 addsimps)
     Current
     [ "Add proved equality theorems to a given simplification rule set." ]
 
+  , prim "addsimp'"            "Term -> Simpset -> Simpset"
+    (funVal2 addsimp')
+    Deprecated
+    [ "Add an arbitrary equality term to a given simplification rule set."
+    , "Use `admit` or `core_axiom` and `addsimp` instead."
+    ]
+
   , prim "addsimps'"           "[Term] -> Simpset -> Simpset"
     (funVal2 addsimps')
-    Current
-    [ "Add arbitrary equality terms to a given simplification rule set." ]
+    Deprecated
+    [ "Add arbitrary equality terms to a given simplification rule set."
+    , "Use `admit` or `core_axiom` and `addsimps` instead."
+    ]
 
   , prim "rewrite"             "Simpset -> Term -> Term"
     (funVal2 rewritePrim)
