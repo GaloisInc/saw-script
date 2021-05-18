@@ -1,33 +1,31 @@
-function Join_and_copy(type)
-  if a:type ==# 'V' " only do stuff in line-wise visual mode
-    normal! `<v`>y
-    split __scratch__
-    setlocal buftype=nofile
-    setlocal bufhidden=delete
-    normal! p
-    call DeleteBlank()
-    " join lines and yank:
-    normal! ggVGJyy
-    q " close scratch split
-  endif
-endfunction
-
-function DeleteBlank()
+function! DeleteBlank()
   %g/^\s*\n/d
   %g/^\n/d
   %g/^\s*\/\/.*\n/d
   %s/\/\/.*\n/\r/eg " remove end-of-line comments
 endfunction
 
+function! CreateSplit()
+  normal! `<v`>y
+  split __scratch__
+  setlocal buftype=nofile
+  setlocal bufhidden=delete
+  normal! p
+  call DeleteBlank()
+endfunction
 
-function Copy(type)
+function! Join_and_copy(type)
   if a:type ==# 'V' " only do stuff in line-wise visual mode
-    normal! `<v`>y
-    split __scratch__
-    setlocal buftype=nofile
-    setlocal bufhidden=delete
-    normal! p
-    call DeleteBlank()
+    call CreateSplit()
+    " join lines and yank:
+    normal! ggVGJyy
+    q " close scratch split
+  endif
+endfunction
+
+function! Copy(type)
+  if a:type ==# 'V' " only do stuff in line-wise visual mode
+    call CreateSplit()
     %s/\n/\\\r/g " add backslash at end of lines
     " remove last line (is blank)
     normal! Gdd
