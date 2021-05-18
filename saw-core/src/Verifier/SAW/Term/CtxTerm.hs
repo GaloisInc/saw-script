@@ -943,29 +943,30 @@ mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
              InvNoBind NoBind ctxElimType
 
 
--- | Reduce an application of a recursor. This is known in the Coq literature as
--- an iota reduction. More specifically, the call
+-- | Reduce an application of a recursor to a particular constructor.
+-- This is known in the Coq literature as an iota reduction. More specifically,
+-- the call
 --
--- > ctxReduceRecursor d [p1, .., pn] P [(c1,f1), .., (cm,fm)] ci [x1, .., xk]
+-- > ctxReduceRecursor rec f_c [x1, .., xk]
 --
--- reduces the term @(RecursorApp d ps P cs_fs ixs (CtorApp ci ps xs))@ to
+-- reduces the term @(RecursorApp rec ixs (CtorApp c ps xs))@ to
 --
--- > fi x1 (maybe rec_tm_1) .. xk (maybe rec_tm_k)
+-- > f_c x1 (maybe rec_tm_1) .. xk (maybe rec_tm_k)
 --
--- where @maybe rec_tm_i@ indicates an optional recursive call of the recursor
--- on one of the @xi@. These recursive calls only exist for those arguments @xi@
--- that are recursive arguments, i.e., that are specified with 'RecursiveArg',
--- and are omitted for non-recursive arguments specified by 'ConstArg'.
+-- where @f_c@ is the eliminator function associated to the constructor @c@ by the
+-- recursor value @rec@.  Here @maybe rec_tm_i@ indicates an optional recursive call
+-- of the recursor on one of the @xi@. These recursive calls only exist for those
+-- arguments @xi@ that are recursive arguments, i.e., that are specified with
+-- 'RecursiveArg', and are omitted for non-recursive arguments specified by 'ConstArg'.
 --
 -- Specifically, for a @'RecursiveArg' zs ixs@ argument @xi@, which has type
 -- @\(z1::Z1) -> .. -> d p1 .. pn ix1 .. ixp@, we build the recursive call
 --
--- > \(z1::[ps/params,xs/args]Z1) -> .. ->
--- >   RecursorApp d ps P cs_fs [ps/params,xs/args]ixs (xi z1 ... zn)
+-- > \(z1::[xs/args]Z1) -> .. ->
+-- >   RecursorApp rec [xs/args]ixs (xi z1 ... zn)
 --
--- where @[ps/params,xs/args]@ substitutes the concrete parameters @pi@ for the
--- parameter variables of the inductive type and the earlier constructor
--- arguments @xs@ for the remaining free variables.
+-- where @[xs/args]@ substitutes the concrete values for the earlier
+-- constructor arguments @xs@ for the remaining free variables.
 
 ctxReduceRecursor :: forall m d params ixs.
   MonadTerm m =>
@@ -985,11 +986,15 @@ ctxReduceRecursor rec elimf c_args CtorArgStruct{..} =
        error "ctxReduceRecursorRaw: wrong number of constructor arguments!"
 
 
+-- | This operation does the real work of building the
+--   iota reduction for @ctxReduceRecursor@.  We assume
+--   the input terms we are given live in an ambient
+--   context @amb@.
 ctxReduceRecursor_ :: forall m amb d ixs elim args.
   MonadTerm m =>
-  CtxTerm amb (Rec d) ->
-  CtxTerm amb elim ->
-  CtxTerms amb args {- ^ constructor actual arguments -} ->
+  CtxTerm  amb (Rec d) {- ^ recursor value eliminatiting data type d -}->
+  CtxTerm  amb elim    {- ^ eliminator function for the constructor -} ->
+  CtxTerms amb args    {- ^ constructor actual arguments -} ->
   Bindings (CtorArg d ixs) amb args
     {- ^ telescope describing the constructor arguments -} ->
   m Term
@@ -998,6 +1003,7 @@ ctxReduceRecursor_ rec fi args0 argCtx =
      whnfTerm =<< foldM (\f arg -> mkTermF $ App f arg) (unAmb fi) args
 
  where
+   -- extract a raw term into the ambient context
     unAmb :: forall tp. CtxTerm amb tp -> Term
     unAmb (CtxTerm t) = t
 

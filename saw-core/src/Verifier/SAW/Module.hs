@@ -151,24 +151,25 @@ data Ctor =
     -- where the @ps@ are the parameters and the @ix@s are the indices of
     -- datatype @d@
   , ctorIotaReduction ::
-       Term   {- ^ eliminator term -} ->
+       Term   {- ^ recursor term -} ->
        Map VarIndex Term {- ^ constructor eliminators -} ->
        [Term] {- ^ constructor arguments -} ->
        IO Term
     -- ^ Cached functon for computing the result of one step of iota
     --   reduction of the term
     --
-    -- > RecursorApp d params p_ret elims ixs (c params args)
+    -- > RecursorApp rec ixs (c params args)
     --
-    -- where @params@, @p_ret@, @elims@, and @args@ are distinct free variables,
-    -- in that order, so that the last @arg@ is the most recently-bound
-    -- variable, i.e., has deBruijn index 0.  This means that an iota reduction
-    -- of the above recursor application can be performed by passing the
-    -- concrete parameters, eliminators, and constructor arguments to this function.
-    -- Note that we are assuming that the @elims@ are in the same order as they are
-    -- listed in the corresponding 'DataType' for this constructor.
+    --   The arguments to this function are the recusor value, the
+    --   the map from the recursor that maps constructors to eliminator
+    --   functions, and the arguments to the constructor.
 
   , ctorIotaTemplate :: Term
+    -- ^ Cached term used for computing iota reductions.  It has free variables
+    --   @rec@, @elim@ and @args@, in that order so that the last @arg@ is the
+    --   most recently-bound variable with deBruijn index 0.  The @rec@ variable
+    --   represents the recursor value, @elim@ represents the eliminator function
+    --   for the constructor, and @args@ represent the arguments to this constructor.
   }
 
 -- | Return the number of parameters of a constructor

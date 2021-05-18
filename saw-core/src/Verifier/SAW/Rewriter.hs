@@ -532,12 +532,19 @@ asRecordRedex t =
 -- constructor application; specifically, this function recognizes
 --
 -- > RecursorApp rec _ (CtorApp c _ args)
+--
+-- Note that this function does not recognize applications of
+-- recursors to concrete Nat values; see @asNatIotaRedex@.
 asIotaRedex :: R.Recognizer Term (Term, CompiledRecursor Term, PrimName Term, [Term])
 asIotaRedex t =
   do (rec, crec, _, arg) <- R.asRecursorApp t
      (c, _, args) <- R.asCtorParams arg
      return (rec, crec, c, args)
 
+-- | An iota redex whose argument is a concrete nautral number; specifically,
+--   this function recognizes
+--
+--   > RecursorApp rec _ n
 asNatIotaRedex :: R.Recognizer Term (Term, CompiledRecursor Term, Natural)
 asNatIotaRedex t =
   do (rec, crec, _, arg) <- R.asRecursorApp t

@@ -625,17 +625,18 @@ scBuildCtor ::
 scBuildCtor sc d c arg_struct =
   do
     -- Step 0: allocate a fresh unique varaible index for this constructor
+    -- and register its name in the naming environment
     varidx <- scFreshGlobalVar sc
     scRegisterName sc varidx (ModuleIdentifier c)
 
-    -- Step 1: build the types for the constructor
+    -- Step 1: build the types for the constructor and the type required
+    -- of its eliminator functions
     tp <- scShCtxM sc $ ctxCtorType d arg_struct
     let cec = PrimName varidx c tp
     elim_tp_fun <- scShCtxM sc $ mkCtorElimTypeFun d cec arg_struct
 
-    -- Step 2: build free variables for params, p_ret, the elims, and the ctor
-    -- arguments
-    -- let num_params = bindingsLength $ ctorParams arg_struct
+    -- Step 2: build free variables for rec, elim and the
+    -- constructor argument variables
     let num_args =
           case arg_struct of
             CtorArgStruct {..} -> bindingsLength ctorArgs
@@ -645,7 +646,7 @@ scBuildCtor sc d c arg_struct =
     rec_var  <- scLocalVar sc (num_args+1)
 
     -- Step 3: pass these variables to ctxReduceRecursor to build the
-    -- ctorIotaReduction field
+    -- ctorIotaTemplate field
     iota_red <- scShCtxM sc $
       ctxReduceRecursor rec_var elim_var vars arg_struct
 
@@ -702,9 +703,9 @@ scRecursorRetTypeType sc dt params s =
 -- | Reduce an application of a recursor. This is known in the Coq literature as
 -- an iota reduction. More specifically, the call
 --
--- > scReduceRecursor sc d [p1, .., pn] P [(c1,f1), .., (cm,fm)] ci [x1, .., xk]
+-- > scReduceRecursor sc rec crec ci [x1, .., xk]
 --
--- reduces the term @(RecursorApp d ps P cs_fs ixs (CtorApp ci ps xs))@ to
+-- reduces the term @(RecursorApp rec ixs (CtorApp ci ps xs))@ to
 --
 -- > fi x1 (maybe rec_tm_1) .. xk (maybe rec_tm_k)
 --
@@ -715,7 +716,7 @@ scRecursorRetTypeType sc dt params s =
 scReduceRecursor ::
   SharedContext ->
   Term {- ^ recusor term -} ->
-  CompiledRecursor Term ->
+  CompiledRecursor Term {- ^ concrete data included in the recursor term -} ->
   PrimName Term {- ^ constructor name -} ->
   [Term] {- ^ constructor arguments -} ->
   IO Term
@@ -725,11 +726,16 @@ scReduceRecursor sc rec crec c args =
       -- we just substitute into to perform the reduction
       ctorIotaReduction ctor rec (fmap fst $ recursorElims crec) args
 
+-- | Reduce an application of a recursor to a concrete nat value.
+--   The given recursor value is assumed to be correctly-typed
+--   for the @Nat@ datatype.  It will reduce using either the
+--   elimiation function for @Zero@ or @Succ@, depending on
+--   the concrete value of the @Nat@.
 scReduceNatRecursor ::
   SharedContext ->
   Term {- ^ recusor term -} ->
-  CompiledRecursor Term ->
-  Natural ->
+  CompiledRecursor Term {- ^ concrete data included in the recursor term -} ->
+  Natural {- ^ Concrete natural value to eliminate -} ->
   IO Term
 scReduceNatRecursor sc rec crec n
   | n == 0 =
@@ -1015,12 +1021,11 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           s <- sort motive_ty
           lift $ scSort sc s
         Recursor rec -> do
-          mty <- memo (recursorMotive rec)
           lift $ scFlatTermF sc $
              RecursorType (recursorDataType rec)
                           (recursorParams rec)
                           (recursorMotive rec)
-                          mty
+                          (recursorMotiveTy rec)
         RecursorApp rec ixs arg ->
           do tp <- (liftIO . scWhnf sc) =<< memo rec
              case asRecursorType tp of
