@@ -1,8 +1,8 @@
 function! DeleteBlank()
-  %g/^\s*\n/d
-  %g/^\n/d
-  %g/^\s*\/\/.*\n/d
-  %s/\/\/.*\n/\r/eg " remove end-of-line comments
+  keepp %g/^\s*\n/d
+  keepp %g/^\n/d
+  keepp %g/^\s*\/\/.*\n/d
+  keepp %s/\/\/.*\n/\r/eg " remove end-of-line comments
 endfunction
 
 function! CreateSplit()
