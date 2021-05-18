@@ -16,8 +16,6 @@ import Data.List hiding (sort)
 import Data.Maybe
 import Data.Ord
 
-import Verifier.SAW.CryptolEnv (meSolverConfig)
-
 import Cryptol.Eval (EvalOpts(..))
 import qualified Cryptol.ModuleSystem as M
 import Cryptol.ModuleSystem.Name
