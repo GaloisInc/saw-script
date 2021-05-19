@@ -1,4 +1,3 @@
-enable_experimental;
 c <- java_load_class "Test";
 
 jvm_verify c "addBoolean" [] false
