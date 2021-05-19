@@ -527,6 +527,7 @@ scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
             Lambda _ t1 _ | not doBinders -> [t1]
             Pi _ t1 _     | not doBinders -> [t1]
             Constant{}                    -> []
+            FTermF (Primitive _)          -> []
             tf                            -> Fold.toList tf
 
 -- | Return true if the printing of the given term should be memoized; we do not

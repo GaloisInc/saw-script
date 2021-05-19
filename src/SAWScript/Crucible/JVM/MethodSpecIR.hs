@@ -123,7 +123,7 @@ data JVMPointsTo
   = JVMPointsToField ProgramLoc MS.AllocIndex J.FieldId (Maybe (MS.SetupValue CJ.JVM))
   | JVMPointsToStatic ProgramLoc J.FieldId (Maybe (MS.SetupValue CJ.JVM))
   | JVMPointsToElem ProgramLoc MS.AllocIndex Int (Maybe (MS.SetupValue CJ.JVM))
-  | JVMPointsToArray ProgramLoc MS.AllocIndex TypedTerm
+  | JVMPointsToArray ProgramLoc MS.AllocIndex (Maybe TypedTerm)
 
 overlapPointsTo :: JVMPointsTo -> JVMPointsTo -> Bool
 overlapPointsTo =
@@ -165,7 +165,7 @@ ppPointsTo =
     JVMPointsToArray _loc ptr val ->
       MS.ppAllocIndex ptr
       PPL.<+> PPL.pretty "points to"
-      PPL.<+> MS.ppTypedTerm val
+      PPL.<+> opt MS.ppTypedTerm val
   where
     opt = maybe (PPL.pretty "<unspecified>")
 
