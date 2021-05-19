@@ -15,7 +15,6 @@ saw-script.
 
 */
 
-enable_experimental;
 test <- java_load_class "Test";
 
 print test;

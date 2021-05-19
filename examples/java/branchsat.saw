@@ -1,5 +1,3 @@
-enable_experimental;
-
 c <- java_load_class "BranchTest";
 
 // FIXME: make this terminate with the symbolic precondition

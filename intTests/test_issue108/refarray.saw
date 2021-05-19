@@ -1,4 +1,3 @@
-enable_experimental;
 Test_class <- java_load_class "RefArray";
 let test1_spec : JVMSetup() = do {
   x <- jvm_fresh_var "x" java_int;
