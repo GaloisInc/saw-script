@@ -1,5 +1,3 @@
-enable_experimental;
-
 c <- java_load_class "Get";
 
 jvm_verify c "get" [] false

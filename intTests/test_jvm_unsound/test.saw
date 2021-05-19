@@ -5,7 +5,6 @@
 // that such a verification will fail.
 // https://github.com/GaloisInc/saw-script/issues/900
 
-enable_experimental;
 c <- java_load_class "Test";
 
 let set_spec_1 =
