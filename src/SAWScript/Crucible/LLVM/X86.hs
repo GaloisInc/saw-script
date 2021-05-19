@@ -41,10 +41,10 @@ import Data.Foldable (foldlM)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
 import qualified Data.Text as Text
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
-import qualified Data.Set as Set
-import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
@@ -288,7 +288,7 @@ llvm_verify_x86 ::
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
-  TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
+  TopLevel (SomeLLVM MS.ProvedSpec)
 llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
@@ -449,9 +449,11 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
             ar
         C.TimeoutResult{} -> fail "Execution timed out"
 
-      stats <- checkGoals sym opts sc tactic
+      (stats,thms) <- checkGoals sym opts sc tactic
 
-      returnProof $ SomeLLVM (methodSpec & MS.csSolverStats .~ stats)
+      ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats thms mempty)
+      returnProof $ SomeLLVM ps
+
   | otherwise = fail "LLVM module must be 64-bit"
 
 --------------------------------------------------------------------------------
@@ -943,7 +945,7 @@ checkGoals ::
   Options ->
   SharedContext ->
   ProofScript () ->
-  TopLevel SolverStats
+  TopLevel (SolverStats, Set TheoremNonce)
 checkGoals sym opts sc tactic = do
   gs <- liftIO $ getGoals sym
   liftIO . printOutLn opts Info $ mconcat
@@ -951,13 +953,13 @@ checkGoals sym opts sc tactic = do
     , show $ length gs
     , " goals"
     ]
-  stats <- forM (zip [0..] gs) $ \(n, g) -> do
+  outs <- forM (zip [0..] gs) $ \(n, g) -> do
     term <- liftIO $ gGoal sc g
     let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
     res <- runProofScript tactic proofgoal $ Text.unwords
               ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))]
     case res of
-      ValidProof stats _thm -> return stats -- TODO do something with these theorems
+      ValidProof stats thm -> return (stats, thmNonce thm)
       UnfinishedProof pst -> do
         printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
         printOutLnTop Info (show (psStats pst))
@@ -976,4 +978,7 @@ checkGoals sym opts sc tactic = do
         printOutLnTop OnlyCounterExamples "----------------------------------"
         throwTopLevel "Proof failed."
   liftIO $ printOutLn opts Info "All goals succeeded"
-  return (mconcat stats)
+
+  let stats = mconcat (map fst outs)
+  let thms  = mconcat (map (Set.singleton . snd) outs)
+  return (stats, thms)

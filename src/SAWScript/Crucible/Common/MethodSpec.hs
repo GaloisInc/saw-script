@@ -26,12 +26,15 @@ module SAWScript.Crucible.Common.MethodSpec where
 import           Data.Constraint (Constraint)
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.Set (Set)
 import           Data.Void (Void)
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 import           Control.Lens
 import           Data.Kind (Type)
 import qualified Prettyprinter as PP
+
+import           Data.Parameterized.Nonce
 
 -- what4
 import           What4.ProgramLoc (ProgramLoc(plSourceLoc), Position)
@@ -48,6 +51,7 @@ import           Verifier.SAW.SharedTerm as SAWVerifier
 import           SAWScript.Options
 import           SAWScript.Prover.SolverStats
 import           SAWScript.Utils (bullets)
+import           SAWScript.Proof (TheoremNonce)
 
 -- | How many allocations have we made in this method spec?
 newtype AllocIndex = AllocIndex Int
@@ -373,12 +377,42 @@ data CrucibleMethodSpecIR ext =
   , _csArgBindings     :: Map Integer (ExtType ext, SetupValue ext) -- ^ function arguments
   , _csRetValue        :: Maybe (SetupValue ext) -- ^ function return value
   , _csGlobalAllocs    :: [AllocGlobal ext] -- ^ globals allocated
-  , _csSolverStats     :: SolverStats -- ^ statistics about the proof that produced this
   , _csCodebase        :: Codebase ext -- ^ the codebase this spec was verified against
   , _csLoc             :: ProgramLoc -- ^ where in the SAWscript was this spec?
   }
 
 makeLenses ''CrucibleMethodSpecIR
+
+data ProofMethod
+  = SpecAdmitted
+  | SpecProved
+
+type SpecNonce ext = Nonce GlobalNonceGenerator (ProvedSpec ext)
+
+data ProvedSpec ext =
+  ProvedSpec
+  { _psSpecIdent   :: Nonce GlobalNonceGenerator (ProvedSpec ext)
+  , _psProofMethod :: ProofMethod
+  , _psSpec        :: CrucibleMethodSpecIR ext
+  , _psSolverStats :: SolverStats -- ^ statistics about the proof that produced this
+  , _psTheoremDeps :: Set TheoremNonce -- ^ theorems depended on by this proof
+  , _psSpecDeps    :: Set (SpecNonce ext)
+                        -- ^ Other proved specifications this proof depends on
+  }
+
+makeLenses ''ProvedSpec
+
+mkProvedSpec ::
+  ProofMethod ->
+  CrucibleMethodSpecIR ext ->
+  SolverStats ->
+  Set TheoremNonce ->
+  Set (SpecNonce ext) ->
+  IO (ProvedSpec ext)
+mkProvedSpec m mspec stats thms sps =
+  do n <- freshNonce globalNonceGenerator
+     let ps = ProvedSpec n m mspec stats thms sps
+     return ps
 
 -- TODO: remove when what4 switches to prettyprinter
 prettyPosition :: Position -> PP.Doc ann
@@ -428,7 +462,6 @@ makeCrucibleMethodSpecIR meth args ret loc code = do
     ,_csArgBindings     = Map.empty
     ,_csRetValue        = Nothing
     ,_csGlobalAllocs    = []
-    ,_csSolverStats     = mempty
     ,_csLoc             = loc
     ,_csCodebase        = code
     }

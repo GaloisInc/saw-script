@@ -132,7 +132,8 @@ import SAWScript.Crucible.JVM.ResolveSetupValue
 import SAWScript.Crucible.JVM.BuiltinsJVM ()
 
 type SetupValue = MS.SetupValue CJ.JVM
-type CrucibleMethodSpecIR = MS.CrucibleMethodSpecIR CJ.JVM
+type Lemma = MS.ProvedSpec CJ.JVM
+type MethodSpec = MS.CrucibleMethodSpecIR CJ.JVM
 type SetupCondition = MS.SetupCondition CJ.JVM
 
 -- TODO: something useful with the global pair?
@@ -188,11 +189,11 @@ excludedRefs = Set.fromList
 jvm_verify ::
   J.Class ->
   String {- ^ method name -} ->
-  [CrucibleMethodSpecIR] {- ^ overrides -} ->
+  [Lemma] {- ^ overrides -} ->
   Bool {- ^ path sat checking -} ->
   JVMSetupM () ->
   ProofScript () ->
-  TopLevel CrucibleMethodSpecIR
+  TopLevel Lemma
 jvm_verify cls nm lemmas checkSat setup tactic =
   do cb <- getJavaCodebase
      opts <- getOptions
@@ -241,16 +242,19 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      _ <- io $ Crucible.popAssumptionFrame sym frameIdent
 
      -- attempt to verify the proof obligations
-     stats <- verifyObligations cc methodSpec tactic assumes asserts
+     (stats,thms) <- verifyObligations cc methodSpec tactic assumes asserts
      io $ writeFinalProfile
-     returnProof (methodSpec & MS.csSolverStats .~ stats)
+
+     let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas)
+     ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats thms lemmaSet)
+     returnProof ps
 
 
 jvm_unsafe_assume_spec ::
   J.Class          ->
   String          {- ^ Name of the method -} ->
   JVMSetupM () {- ^ Boundary specification -} ->
-  TopLevel CrucibleMethodSpecIR
+  TopLevel Lemma
 jvm_unsafe_assume_spec cls nm setup =
   do cc <- setupCrucibleContext cls
      cb <- getJavaCodebase
@@ -260,22 +264,24 @@ jvm_unsafe_assume_spec cls nm setup =
      let loc = SS.toW4Loc "_SAW_assume_spec" pos
      let st0 = initialCrucibleSetupState cc (cls', method) loc
      ms <- (view Setup.csMethodSpec) <$> execStateT (runJVMSetupM setup) st0
-     returnProof ms
+
+     ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty)
+     returnProof ps
 
 verifyObligations ::
   JVMCrucibleContext ->
-  CrucibleMethodSpecIR ->
+  MethodSpec ->
   ProofScript () ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
   [(String, Term)] ->
-  TopLevel SolverStats
+  TopLevel (SolverStats, Set TheoremNonce)
 verifyObligations cc mspec tactic assumes asserts =
   do let sym = cc^.jccBackend
      st <- io $ sawCoreState sym
      let sc = saw_ctx st
      assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
      let nm = mspec ^. csMethodName
-     stats <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) -> do
+     outs <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) -> do
        goal   <- io $ scImplies sc assume assert
        goal'  <- io $ boolToProp sc [] goal -- TODO, generalize over inputs
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
@@ -283,7 +289,7 @@ verifyObligations cc mspec tactic assumes asserts =
        res <- runProofScript tactic proofgoal $ Text.unwords
                  ["JVM verification condition:", Text.pack (show n), Text.pack goalname]
        case res of
-         ValidProof stats _thm -> return stats -- TODO, do something with these theorems!
+         ValidProof stats thm -> return (stats, thmNonce thm)
          InvalidProof stats vals _pst -> do
            printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
            printOutLnTop Info (show stats)
@@ -297,7 +303,10 @@ verifyObligations cc mspec tactic assumes asserts =
            io $ fail $ "Proof failed " ++ show (length (psGoals pst)) ++ " goals remaining."
 
      printOutLnTop Info $ unwords ["Proof succeeded!", nm]
-     return (mconcat stats)
+
+     let stats = mconcat (map fst outs)
+     let thms  = mconcat (map (Set.singleton . snd) outs)
+     return (stats, thms)
 
 -- | Evaluate the precondition part of a Crucible method spec:
 --
@@ -317,7 +326,7 @@ verifyObligations cc mspec tactic assumes asserts =
 -- memory).
 verifyPrestate ::
   JVMCrucibleContext ->
-  CrucibleMethodSpecIR ->
+  MethodSpec ->
   Crucible.SymGlobalState Sym ->
   IO ([(J.Type, JVMVal)],
       [Crucible.LabeledPred Term Crucible.AssumptionReason],
@@ -412,8 +421,8 @@ storageType ty =
     J.ClassType{} -> STRef
 
 resolveArguments ::
-  JVMCrucibleContext          ->
-  CrucibleMethodSpecIR     ->
+  JVMCrucibleContext ->
+  MethodSpec ->
   Map AllocIndex JVMRefVal ->
   IO [(J.Type, JVMVal)]
 resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
@@ -448,10 +457,10 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
 -- function spec, write the given value to the address of the given
 -- pointer.
 setupPrePointsTos ::
-  CrucibleMethodSpecIR     ->
-  JVMCrucibleContext          ->
+  MethodSpec ->
+  JVMCrucibleContext ->
   Map AllocIndex JVMRefVal ->
-  [JVMPointsTo]               ->
+  [JVMPointsTo] ->
   Crucible.SymGlobalState Sym ->
   IO (Crucible.SymGlobalState Sym)
 setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
@@ -494,10 +503,10 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
 
 -- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
-  CrucibleMethodSpecIR        ->
-  JVMCrucibleContext             ->
-  Map AllocIndex JVMRefVal    ->
-  [SetupCondition]            ->
+  MethodSpec ->
+  JVMCrucibleContext ->
+  Map AllocIndex JVMRefVal ->
+  [SetupCondition] ->
   IO [Crucible.LabeledPred Term Crucible.AssumptionReason]
 setupPrestateConditions mspec cc env = aux []
   where
@@ -548,7 +557,7 @@ registerOverride ::
   JVMCrucibleContext ->
   Crucible.SimContext (SAWCruciblePersonality Sym) Sym CJ.JVM ->
   W4.ProgramLoc ->
-  [CrucibleMethodSpecIR] ->
+  [MethodSpec] ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
 registerOverride opts cc _ctx top_loc cs =
   do let sym = cc^.jccBackend
@@ -575,15 +584,15 @@ registerOverride opts cc _ctx top_loc cs =
 --------------------------------------------------------------------------------
 
 verifySimulate ::
-  Options                       ->
-  JVMCrucibleContext               ->
+  Options ->
+  JVMCrucibleContext ->
   [Crucible.GenericExecutionFeature Sym] ->
-  CrucibleMethodSpecIR          ->
-  [(a, JVMVal)]                 ->
+  MethodSpec ->
+  [(a, JVMVal)] ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
-  W4.ProgramLoc                 ->
-  [CrucibleMethodSpecIR]        ->
-  Crucible.SymGlobalState Sym   ->
+  W4.ProgramLoc ->
+  [Lemma] ->
+  Crucible.SymGlobalState Sym ->
   Bool {- ^ path sat checking -} ->
   IO (Maybe (J.Type, JVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
@@ -614,7 +623,8 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
                 do liftIO $ putStrLn "registering standard overrides"
                    _ <- Strict.runStateT (mapM_ CJ.register_jvm_override CJ.stdOverrides) jc
                    liftIO $ putStrLn "registering user-provided overrides"
-                   mapM_ (registerOverride opts cc simctx top_loc) (groupOn (view csMethodName) lemmas)
+                   mapM_ (registerOverride opts cc simctx top_loc)
+                           (groupOn (view csMethodName) (map (view MS.psSpec) lemmas))
                    liftIO $ putStrLn "registering assumptions"
                    liftIO $ do
                      preds <- (traverse . Crucible.labeledPred) (resolveSAWPred cc) assumes
@@ -685,8 +695,8 @@ scAndList sc = conj . filter nontrivial
 --------------------------------------------------------------------------------
 
 verifyPoststate ::
-  JVMCrucibleContext                   {- ^ crucible context                             -} ->
-  CrucibleMethodSpecIR              {- ^ specification                                -} ->
+  JVMCrucibleContext                {- ^ crucible context                             -} ->
+  MethodSpec                        {- ^ specification                                -} ->
   Map AllocIndex JVMRefVal          {- ^ allocation substitution                      -} ->
   Crucible.SymGlobalState Sym       {- ^ global variables                             -} ->
   Maybe (J.Type, JVMVal)            {- ^ optional return value                        -} ->

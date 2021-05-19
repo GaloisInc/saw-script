@@ -32,8 +32,8 @@ import SAWScript.Prover.SolverStats
 import qualified Verifier.SAW.Term.Pretty as PP
 import What4.ProgramLoc (ProgramLoc(plSourceLoc))
 
-type JVMTheorem =  CMS.CrucibleMethodSpecIR CJ.JVM
-type LLVMTheorem = CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR
+type JVMTheorem =  CMS.ProvedSpec CJ.JVM
+type LLVMTheorem = CMSLLVM.SomeLLVM CMS.ProvedSpec
 
 data VerificationSummary =
   VerificationSummary
@@ -45,8 +45,8 @@ data VerificationSummary =
 vsVerifSolvers :: VerificationSummary -> Set.Set String
 vsVerifSolvers vs =
   Set.unions $
-  map (\ms -> solverStatsSolvers (ms ^. csSolverStats)) (vsJVMMethodSpecs vs) ++
-  map (\(CMSLLVM.SomeLLVM ms) -> solverStatsSolvers (ms ^. csSolverStats)) (vsLLVMMethodSpecs vs)
+  map (\ms -> solverStatsSolvers (ms ^. psSolverStats)) (vsJVMMethodSpecs vs) ++
+  map (\(CMSLLVM.SomeLLVM ms) -> solverStatsSolvers (ms ^. psSolverStats)) (vsLLVMMethodSpecs vs)
 
 vsTheoremSolvers :: VerificationSummary -> Set.Set String
 vsTheoremSolvers = Set.unions . map getSolvers . vsTheorems
@@ -59,19 +59,19 @@ computeVerificationSummary :: [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> Veri
 computeVerificationSummary = VerificationSummary
 
 -- TODO: we could make things instances of a ToJSON typeclass instead of using the two methods below.
-msToJSON :: forall ext . Pretty (MethodId ext) => CMS.CrucibleMethodSpecIR ext -> Value
+msToJSON :: forall ext . Pretty (MethodId ext) => CMS.ProvedSpec ext -> Value
 msToJSON cms = object [
     ("type" .= ("method" :: String))
-    , ("method" .= (show $ pretty $ cms ^. csMethod))
-    , ("loc" .= (show $ pretty $ plSourceLoc $ cms ^. csLoc))
-    , ("status" .= (statusString $ cms ^. csSolverStats))
+    , ("method" .= (show $ pretty $ cms ^. psSpec.csMethod))
+    , ("loc" .= (show $ pretty $ plSourceLoc $ cms ^. psSpec.csLoc))
+    , ("status" .= (statusString $ cms ^. psSolverStats))
     , ("specification" .= ("unknown" :: String)) -- TODO
   ]
 
 thmToJSON :: Theorem -> Value
 thmToJSON thm = object [
     ("type" .= ("property" :: String))
-    , ("loc" .= ("unknown" :: String)) -- TODO: Theorem has no attached location information
+    , ("loc" .= (show $ thmLocation thm))
     , ("status" .= (statusString $ thmStats thm))
     , ("term" .= (show $ ppProp PP.defaultPPOpts $ thmProp thm))
   ]
@@ -103,9 +103,9 @@ prettyVerificationSummary vs@(VerificationSummary jspecs lspecs thms) =
       sectionWithItems _ _ [] = mempty
       sectionWithItems nm prt items =
         vsep [section nm, "", vsep (map prt items)]
-      verifStatus s = if Set.null (solverStatsSolvers (s ^. CMS.csSolverStats))
-                      then "assumed"
-                      else "verified"
+      verifStatus s = case s ^. CMS.psProofMethod of
+                        CMS.SpecAdmitted -> "assumed"
+                        CMS.SpecProved   -> "verified"
       -- TODO: ultimately the goal is for the following to summarize all
       -- preconditions made by this verification, but we need to extract
       -- a bunch more information for that to be meaningful.
@@ -117,14 +117,14 @@ prettyVerificationSummary vs@(VerificationSummary jspecs lspecs thms) =
       prettyJVMSpecs ss =
         sectionWithItems "JVM Methods Analyzed" prettyJVMSpec ss
       prettyJVMSpec s =
-        vsep [ item (fromString (s ^. CMSJVM.csMethodName))
+        vsep [ item (fromString (s ^. CMS.psSpec.CMSJVM.csMethodName))
              -- , subitem (condStatus s)
              , subitem (verifStatus s)
              ]
       prettyLLVMSpecs ss =
         sectionWithItems "LLVM Functions Analyzed" prettyLLVMSpec ss
       prettyLLVMSpec (CMSLLVM.SomeLLVM s) =
-        vsep [ item (fromString (s ^. CMSLLVM.csName))
+        vsep [ item (fromString (s ^. CMS.psSpec.CMSLLVM.csName))
              -- , subitem (condStatus s)
              , subitem (verifStatus s)
              ]

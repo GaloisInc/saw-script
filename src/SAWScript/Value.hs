@@ -130,11 +130,11 @@ data Value
   | VTheorem Theorem
   -----
   | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
-  | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR)
+  | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
   | VLLVMCrucibleSetupValue (CMSLLVM.AllLLVM CMS.SetupValue)
   -----
   | VJVMSetup !(JVMSetupM Value)
-  | VJVMMethodSpec !(CMS.CrucibleMethodSpecIR CJ.JVM)
+  | VJVMMethodSpec !(CMS.ProvedSpec CJ.JVM)
   | VJVMSetupValue !(CMS.SetupValue CJ.JVM)
   -----
   | VLLVMModuleSkeleton ModuleSkeleton
@@ -767,19 +767,19 @@ instance FromValue SAW_CFG where
     fromValue (VCFG t) = t
     fromValue _ = error "fromValue CFG"
 
-instance IsValue (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR) where
+instance IsValue (CMSLLVM.SomeLLVM CMS.ProvedSpec) where
     toValue mir = VLLVMCrucibleMethodSpec mir
 
-instance FromValue (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR) where
+instance FromValue (CMSLLVM.SomeLLVM CMS.ProvedSpec) where
     fromValue (VLLVMCrucibleMethodSpec mir) = mir
-    fromValue _ = error "fromValue CrucibleMethodSpecIR"
+    fromValue _ = error "fromValue ProvedSpec LLVM"
 
-instance IsValue (CMS.CrucibleMethodSpecIR CJ.JVM) where
+instance IsValue (CMS.ProvedSpec CJ.JVM) where
     toValue t = VJVMMethodSpec t
 
-instance FromValue (CMS.CrucibleMethodSpecIR CJ.JVM) where
+instance FromValue (CMS.ProvedSpec CJ.JVM) where
     fromValue (VJVMMethodSpec t) = t
-    fromValue _ = error "fromValue CrucibleMethodSpecIR"
+    fromValue _ = error "fromValue ProvedSpec JVM"
 
 instance IsValue ModuleSkeleton where
     toValue s = VLLVMModuleSkeleton s
