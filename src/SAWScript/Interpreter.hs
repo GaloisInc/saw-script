@@ -34,7 +34,7 @@ import Control.Applicative
 import Data.Traversable hiding ( mapM )
 #endif
 import qualified Control.Exception as X
-import Control.Monad (unless, (>=>))
+import Control.Monad ((>=>))
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
 import Data.Foldable (foldrM)
@@ -611,8 +611,6 @@ print_value (VTerm t) = do
   sc <- getSharedContext
   cenv <- fmap rwCryptol getTopLevelRW
   let cfg = meSolverConfig (CEnv.eModuleEnv cenv)
-  unless (null (getAllExts (ttTerm t))) $
-    fail "term contains symbolic variables"
   sawopts <- getOptions
   t' <- io $ defaultTypedTerm sawopts sc cfg t
   opts <- fmap rwPPOpts getTopLevelRW
@@ -896,6 +894,12 @@ primitives = Map.fromList
     [ "Take a list of 'fresh_symbolic' variable and another term containing"
     , "those variables, and return a new lambda abstraction over the list of"
     , "variables."
+    ]
+
+  , prim "extract_uninterp" "[String] -> Term -> TopLevel (Term, [(String,[(Term, Term)])])"
+    (pureVal extract_uninterp)
+    Experimental
+    [ "Docs TODO!!"
     ]
 
   , prim "sbv_uninterpreted"   "String -> Term -> TopLevel Uninterp"
