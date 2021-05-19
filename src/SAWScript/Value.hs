@@ -154,7 +154,7 @@ data Value
   | VCFG SAW_CFG
   | VGhostVar CMS.GhostGlobal
 
-type SAWSimpset = Simpset ()
+type SAWSimpset = Simpset TheoremNonce
 
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
@@ -385,6 +385,7 @@ data TopLevelRO =
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
   , roBasicSS       :: SAWSimpset
+  , roTheoremDB     :: TheoremDB
   }
 
 data TopLevelRW =
@@ -617,7 +618,8 @@ runProofScript (ProofScript m) gl rsn =
        Left (stats,cex) -> return (InvalidProof stats cex pstate)
        Right _ ->
          do sc <- getSharedContext
-            io (finishProof sc pstate)
+            db <- roTheoremDB <$> getTopLevelRO
+            io (finishProof sc db pstate)
 
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))

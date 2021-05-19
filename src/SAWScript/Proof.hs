@@ -29,12 +29,18 @@ module SAWScript.Proof
   , ppProp
   , propToSATQuery
 
+  , TheoremDB
+  , newTheoremDB
+
   , Theorem
   , thmProp
   , thmStats
   , thmEvidence
   , thmLocation
   , thmReason
+  , thmNonce
+  , thmDepends
+  , TheoremNonce
 
   , admitTheorem
   , solverTheorem
@@ -79,12 +85,15 @@ module SAWScript.Proof
 
 import qualified Control.Monad.Fail as F
 import           Control.Monad.Except
+import           Data.IORef
 import           Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as Text
+
+import Data.Parameterized.Nonce
 
 import Verifier.SAW.Prelude (scApplyPrelude_False)
 import Verifier.SAW.Recognizer
@@ -105,6 +114,7 @@ import SAWScript.Prover.SolverStats
 import SAWScript.Crucible.Common as Common
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
 import qualified Verifier.SAW.Simulator.What4.ReturnTrip as W4Sim
+import SAWScript.Panic(panic)
 
 -- | A proposition is a saw-core type of type `Prop`.
 -- In particular, this includes any pi type whose result
@@ -237,6 +247,8 @@ prettyProp opts (Prop tm) = scPrettyTerm opts tm
 ppProp :: PPOpts -> Prop -> SawDoc
 ppProp opts (Prop tm) = ppTerm opts tm
 
+type TheoremNonce = Nonce GlobalNonceGenerator Theorem
+
 -- | A theorem is a proposition which has been wrapped in a
 --   constructor indicating that it has already been proved,
 --   and contains @Evidence@ for its truth.
@@ -247,11 +259,29 @@ data Theorem =
   , _thmEvidence :: Evidence
   , _thmLocation :: Pos
   , _thmReason   :: Text
+  , _thmNonce    :: TheoremNonce
+  , _thmDepends  :: Set TheoremNonce
   } -- INVARIANT: the provided evidence is valid for the included proposition
 
-  | LocalAssumption Prop Pos
+  | LocalAssumption Prop Pos TheoremNonce
       -- This constructor is used to construct "hypothetical" theorems that
       -- are intended to be used in local scopes when proving implications.
+
+data TheoremDB =
+  TheoremDB
+  -- TODO, maybe this should be a summary or something simpler?
+  { theoremMap :: IORef (Map.Map TheoremNonce Theorem)
+  }
+
+newTheoremDB :: IO TheoremDB
+newTheoremDB = TheoremDB <$> newIORef mempty
+
+recordTheorem :: TheoremDB -> Theorem -> IO Theorem
+recordTheorem _ (LocalAssumption _ pos _) =
+  panic "recordTheorem" ["Tried to record a local assumption as a top-level", show pos]
+recordTheorem db thm@Theorem{ _thmNonce = n } =
+  do modifyIORef (theoremMap db) (Map.insert n thm)
+     return thm
 
 -- | Check that the purported theorem is valid.
 --
@@ -262,16 +292,19 @@ data Theorem =
 --   does not totally guarantee the theorem is true, as it does
 --   not rerun any solver-provided proofs, and it accepts admitted
 --   propositions and quickchecked propositions as valid.
-validateTheorem :: SharedContext -> Theorem -> IO ()
+validateTheorem :: SharedContext -> TheoremDB -> Theorem -> IO ()
 
-validateTheorem _sc (LocalAssumption p loc) =
+validateTheorem _ _ (LocalAssumption p loc _n) =
    fail $ unlines
      [ "Illegal use of unbound local hypothesis generated at " ++ show loc
      , showTerm (unProp p)
      ]
 
-validateTheorem sc Theorem{ _thmProp = p, _thmEvidence = e } =
-   checkEvidence sc e p
+validateTheorem sc db Theorem{ _thmProp = p, _thmEvidence = e, _thmDepends = thmDep } =
+   do deps <- checkEvidence sc db e p
+      unless (Set.isSubsetOf deps thmDep)
+             (fail $ unlines ["Theorem failed to declare its depencences correctly"
+                             , show deps, show thmDep ])
 
 -- | This datatype records evidence for the truth of a proposition.
 data Evidence
@@ -282,7 +315,7 @@ data Evidence
     -- | This type of evidence refers to a local assumption that
     --   must have been introduced by a surrounding @AssumeEvidence@
     --   constructor.
-  | LocalAssumptionEvidence Prop
+  | LocalAssumptionEvidence Prop TheoremNonce
 
     -- | This type of evidence is produced when the given proposition
     --   has been dispatched to a solver which has indicated that it
@@ -320,7 +353,7 @@ data Evidence
     --   proposition must match the hypothesis of the goal, and the included
     --   evidence must match the conclusion of the goal.  The proposition is
     --   allowed to appear inside the evidence as a local assumption.
-  | AssumeEvidence Prop Evidence
+  | AssumeEvidence TheoremNonce Prop Evidence
 
     -- | This type of evidence is used to prove a universally-quantified statement.
   | ForallEvidence (ExtCns Term) Evidence
@@ -332,7 +365,7 @@ data Evidence
     -- | This type of evidence is used to modify a goal to prove via rewriting.
     --   The goal to prove is rewritten by the given simpset; then the provided
     --   evidence is used to check the modified goal.
-  | RewriteEvidence (Simpset ()) Evidence
+  | RewriteEvidence (Simpset TheoremNonce) Evidence
 
     -- | This type of evidence is used to modify a goal to prove via unfolding
     --   constant definitions.  The goal to prove is modified by unfolding
@@ -349,36 +382,45 @@ data Evidence
 
 -- | The the proposition proved by a given theorem.
 thmProp :: Theorem -> Prop
-thmProp (LocalAssumption p _loc) = p
+thmProp (LocalAssumption p _loc _n) = p
 thmProp Theorem{ _thmProp = p } = p
 
 -- | Retrieve any solver stats from the proved theorem.
 thmStats :: Theorem -> SolverStats
-thmStats (LocalAssumption _ _) = mempty
+thmStats (LocalAssumption _ _ _) = mempty
 thmStats Theorem{ _thmStats = stats } = stats
 
 -- | Retrive the evidence associated with this theorem.
 thmEvidence :: Theorem -> Evidence
-thmEvidence (LocalAssumption p _) = LocalAssumptionEvidence p
+thmEvidence (LocalAssumption p _ n) = LocalAssumptionEvidence p n
 thmEvidence Theorem{ _thmEvidence = e } = e
 
 -- | The source location that generated this theorem
 thmLocation :: Theorem -> Pos
-thmLocation (LocalAssumption _p loc) = loc
+thmLocation (LocalAssumption _p loc _) = loc
 thmLocation Theorem{ _thmLocation = loc } = loc
 
 -- | Describes the reason this theorem was generated
 thmReason :: Theorem -> Text
-thmReason (LocalAssumption _ _) = "local assumption"
+thmReason (LocalAssumption _ _ _) = "local assumption"
 thmReason Theorem{ _thmReason = r } = r
+
+-- | Returns a unique identifier for this theorem
+thmNonce :: Theorem -> TheoremNonce
+thmNonce (LocalAssumption _ _ n) = n
+thmNonce Theorem{ _thmNonce = n } = n
+
+thmDepends :: Theorem -> Set TheoremNonce
+thmDepends LocalAssumption{} = mempty
+thmDepends Theorem { _thmDepends = s } = s
 
 splitEvidence :: [Evidence] -> IO Evidence
 splitEvidence [e1,e2] = pure (SplitEvidence e1 e2)
 splitEvidence _ = fail "splitEvidence: expected two evidence values"
 
-assumeEvidence :: Prop -> [Evidence] -> IO Evidence
-assumeEvidence p [e] = pure (AssumeEvidence p e)
-assumeEvidence _ _ = fail "assumeEvidence: expected one evidence value"
+assumeEvidence :: TheoremNonce -> Prop -> [Evidence] -> IO Evidence
+assumeEvidence n p [e] = pure (AssumeEvidence n p e)
+assumeEvidence _ _ _ = fail "assumeEvidence: expected one evidence value"
 
 forallEvidence :: ExtCns Term -> [Evidence] -> IO Evidence
 forallEvidence x [e] = pure (ForallEvidence x e)
@@ -389,58 +431,72 @@ cutEvidence thm [e] = pure (CutEvidence thm e)
 cutEvidence _ _ = fail "cutEvidence: expected one evidence value"
 
 -- | Construct a theorem directly via a proof term.
-proofByTerm :: SharedContext -> Term -> Pos -> Text -> IO Theorem
-proofByTerm sc prf loc rsn =
+proofByTerm :: SharedContext -> TheoremDB -> Term -> Pos -> Text -> IO Theorem
+proofByTerm sc db prf loc rsn =
   do ty <- scTypeOf sc prf
      p  <- termToProp sc ty
-     return
+     n  <- freshNonce globalNonceGenerator
+     recordTheorem db
        Theorem
        { _thmProp      = p
        , _thmStats     = mempty
        , _thmEvidence  = ProofTerm prf
        , _thmLocation  = loc
        , _thmReason    = rsn
+       , _thmNonce     = n
+       , _thmDepends   = mempty
        }
 
 -- | Construct a theorem directly from a proposition and evidence
 --   for that proposition.  The evidence will be validated to
 --   check that it supports the given proposition; if not, an
 --   error will be raised.
-constructTheorem :: SharedContext -> Prop -> Evidence -> Pos -> Text -> IO Theorem
-constructTheorem sc p e loc rsn =
-  do checkEvidence sc e p
-     return
+constructTheorem :: SharedContext -> TheoremDB -> Prop -> Evidence -> Pos -> Text -> IO Theorem
+constructTheorem sc db p e loc rsn =
+  do deps <- checkEvidence sc db e p
+     n  <- freshNonce globalNonceGenerator
+     recordTheorem db
        Theorem
        { _thmProp  = p
        , _thmStats = mempty
        , _thmEvidence = e
        , _thmLocation = loc
        , _thmReason   = rsn
+       , _thmNonce    = n
+       , _thmDepends  = deps
        }
 
 -- | Admit the given theorem without evidence.
 --   The provided message allows the user to
 --   explain why this proposition is being admitted.
-admitTheorem :: Text -> Prop -> Pos -> Text -> Theorem
-admitTheorem msg p loc rsn =
-  Theorem
-  { _thmProp        = p
-  , _thmStats       = solverStats "ADMITTED" (propSize p)
-  , _thmEvidence    = Admitted msg loc p
-  , _thmLocation    = loc
-  , _thmReason      = rsn
-  }
+admitTheorem :: TheoremDB -> Text -> Prop -> Pos -> Text -> IO Theorem
+admitTheorem db msg p loc rsn =
+  do n  <- freshNonce globalNonceGenerator
+     recordTheorem db
+       Theorem
+       { _thmProp        = p
+       , _thmStats       = solverStats "ADMITTED" (propSize p)
+       , _thmEvidence    = Admitted msg loc p
+       , _thmLocation    = loc
+       , _thmReason      = rsn
+       , _thmNonce       = n
+       , _thmDepends     = mempty
+       }
 
 -- | Construct a theorem that an external solver has proved.
-solverTheorem :: Prop -> SolverStats -> Pos -> Text -> Theorem
-solverTheorem p stats loc rsn =
-  Theorem
-  { _thmProp      = p
-  , _thmStats     = stats
-  , _thmEvidence  = SolverEvidence stats p
-  , _thmLocation  = loc
-  , _thmReason    = rsn
-  }
+solverTheorem :: TheoremDB -> Prop -> SolverStats -> Pos -> Text -> IO Theorem
+solverTheorem db p stats loc rsn =
+  do n  <- freshNonce globalNonceGenerator
+     recordTheorem db
+       Theorem
+       { _thmProp      = p
+       , _thmStats     = stats
+       , _thmEvidence  = SolverEvidence stats p
+       , _thmLocation  = loc
+       , _thmReason    = rsn
+       , _thmNonce     = n
+       , _thmDepends   = mempty
+       }
 
 -- | A @ProofGoal@ contains a proposition to be proved, along with
 -- some metadata.
@@ -505,32 +561,39 @@ psGoals = _psGoals
 psStats :: ProofState -> SolverStats
 psStats = _psStats
 
--- | Verify that the given evidence in fact supports
---   the given proposition.
-checkEvidence :: SharedContext -> Evidence -> Prop -> IO ()
-checkEvidence sc = check mempty
+-- | Verify that the given evidence in fact supports the given proposition.
+--   Returns the identifers of all the theorems depened on while checking evidence.
+checkEvidence :: SharedContext -> TheoremDB -> Evidence -> Prop -> IO (Set TheoremNonce)
+checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap db)
+                                 check hyps e p
+
   where
-    checkApply _hyps (Prop p) [] = return p
+    checkApply _hyps (Prop p) [] = return (mempty, p)
     checkApply hyps (Prop p) (e:es)
       | Just (_lnm, tp, body) <- asPi p
       , looseVars body == emptyBitSet
-      = do check hyps e =<< termToProp sc tp
-           checkApply hyps (Prop body) es
+      = do d1 <- check hyps e =<< termToProp sc tp
+           (d2,p') <- checkApply hyps (Prop body) es
+           return (Set.union d1 d2, p')
       | otherwise = fail $ unlines
            [ "Apply evidence mismatch: non-function or dependent function"
            , showTerm p
            ]
 
-    checkTheorem :: Set Term -> Theorem -> IO ()
-    checkTheorem hyps (LocalAssumption p loc) =
-       unless (Set.member (unProp p) hyps) $ fail $ unlines
+    checkTheorem :: Set TheoremNonce -> Theorem -> IO ()
+    checkTheorem hyps (LocalAssumption p loc n) =
+       unless (Set.member n hyps) $ fail $ unlines
           [ "Attempt to reference a local hypothesis that is not in scope"
           , "Generated at " ++ show loc
           , showTerm (unProp p)
           ]
     checkTheorem _hyps Theorem{} = return ()
 
-    check :: Set Term -> Evidence -> Prop -> IO ()
+    check ::
+      Set TheoremNonce ->
+      Evidence ->
+      Prop ->
+      IO (Set TheoremNonce)
     check hyps e p@(Prop ptm) = case e of
       ProofTerm tm ->
         do ty <- scTypeCheckError sc tm
@@ -540,12 +603,14 @@ checkEvidence sc = check mempty
                , showTerm ptm
                , showTerm tm
                ]
+           return mempty
 
-      LocalAssumptionEvidence (Prop l) ->
-        unless (Set.member l hyps) $ fail $ unlines
+      LocalAssumptionEvidence (Prop l) n ->
+        do unless (Set.member n hyps) $ fail $ unlines
              [ "Illegal use of local hypothesis"
              , showTerm l
              ]
+           return (Set.singleton n)
 
       SolverEvidence _stats (Prop p') ->
         do ok <- scConvertible sc False ptm p'
@@ -554,6 +619,7 @@ checkEvidence sc = check mempty
                , showTerm ptm
                , showTerm p'
                ]
+           return mempty
 
       Admitted msg pos (Prop p') ->
         do ok <- scConvertible sc False ptm p'
@@ -563,6 +629,7 @@ checkEvidence sc = check mempty
                , showTerm ptm
                , showTerm p'
                ]
+           return mempty
 
       QuickcheckEvidence _n (Prop p') ->
         do ok <- scConvertible sc False ptm p'
@@ -571,12 +638,14 @@ checkEvidence sc = check mempty
                , showTerm ptm
                , showTerm p'
                ]
+           return mempty
 
       TrivialEvidence ->
-        unless (propIsTrivial p) $ fail $ unlines
-            [ "Proposition is not trivial"
-            , showTerm ptm
-            ]
+        do unless (propIsTrivial p) $ fail $ unlines
+             [ "Proposition is not trivial"
+             , showTerm ptm
+             ]
+           return mempty
 
       SplitEvidence e1 e2 ->
         splitProp sc p >>= \case
@@ -585,37 +654,45 @@ checkEvidence sc = check mempty
                        , showTerm ptm
                        ]
           Just (p1,p2) ->
-            do check hyps e1 p1
-               check hyps e2 p2
+            do d1 <- check hyps e1 p1
+               d2 <- check hyps e2 p2
+               return (Set.union d1 d2)
 
       ApplyEvidence thm es ->
         do checkTheorem hyps thm
-           p' <- checkApply hyps (thmProp thm) es
+           (d,p') <- checkApply hyps (thmProp thm) es
            ok <- scConvertible sc False ptm p'
            unless ok $ fail $ unlines
                [ "Apply evidence does not match the required proposition"
                , showTerm ptm
                , showTerm p'
                ]
+           return (Set.insert (thmNonce thm) d)
 
       CutEvidence thm e' ->
         do checkTheorem hyps thm
            p' <- scFun sc (unProp (thmProp thm)) ptm
-           check hyps e' (Prop p')
+           d <- check hyps e' (Prop p')
+           return (Set.insert (thmNonce thm) d)
 
       UnfoldEvidence vars e' ->
         do p' <- unfoldProp sc vars p
            check hyps e' p'
 
       RewriteEvidence ss e' ->
-        do (_,p') <- simplifyProp sc ss p -- TODO, remember the annotations!
-           check hyps e' p'
+        do (d1,p') <- simplifyProp sc ss p
+           unless (Set.isSubsetOf d1 hyps) $ fail $ unlines
+             [ "Rewrite step used theorem not in hypothesis database"
+             , show (Set.difference d1 hyps)
+             ]
+           d2 <- check hyps e' p'
+           return (Set.union d1 d2)
 
       EvalEvidence vars e' ->
         do p' <- evalProp sc vars p
            check hyps e' p'
 
-      AssumeEvidence (Prop p') e' ->
+      AssumeEvidence n (Prop p') e' ->
         case asPi ptm of
           Nothing -> fail $ unlines ["Assume evidence expected function prop", showTerm ptm]
           Just (_lnm, ty, body) ->
@@ -629,7 +706,8 @@ checkEvidence sc = check mempty
                    [ "Assume evidence cannot be used on a dependent proposition"
                    , showTerm ptm
                    ]
-               check (Set.insert p' hyps) e' (Prop body)
+               d <- check (Set.insert n hyps) e' (Prop body)
+               return (Set.delete n d)
 
       ForallEvidence x e' ->
         case asPi ptm of
@@ -669,18 +747,22 @@ startProof g pos rsn = ProofState [g] (goalProp g,pos,rsn) mempty Nothing passth
 --   and validate the computed evidence to ensure that it supports the original
 --   proposition.  If successful, return the completed @Theorem@ and a summary
 --   of solver resources used in the proof.
-finishProof :: SharedContext -> ProofState -> IO ProofResult
-finishProof sc ps@(ProofState gs (concl,loc,rsn) stats _ checkEv) =
+finishProof :: SharedContext -> TheoremDB -> ProofState -> IO ProofResult
+finishProof sc db ps@(ProofState gs (concl,loc,rsn) stats _ checkEv) =
   case gs of
     [] ->
       do e <- checkEv []
-         checkEvidence sc e concl
-         let thm = Theorem
+         deps <- checkEvidence sc db e concl
+         n <- freshNonce globalNonceGenerator
+         thm <- recordTheorem db
+                   Theorem
                    { _thmProp = concl
                    , _thmStats = stats
                    , _thmEvidence = e
                    , _thmLocation = loc
                    , _thmReason = rsn
+                   , _thmNonce = n
+                   , _thmDepends = deps
                    }
          pure (ValidProof stats thm)
     _ : _ ->
@@ -881,8 +963,9 @@ tacticAssume _sc loc = Tactic \goal ->
       | looseVars body == emptyBitSet ->
           do let goal' = goal{ goalProp = Prop body }
              let p     = Prop tp
-             let thm'  = LocalAssumption p loc
-             return (thm', mempty, [goal'], assumeEvidence p)
+             n <- liftIO (freshNonce globalNonceGenerator)
+             let thm'  = LocalAssumption p loc n
+             return (thm', mempty, [goal'], assumeEvidence n p)
 
     _ -> fail "assume tactic failed: not a function, or a dependent function"
 

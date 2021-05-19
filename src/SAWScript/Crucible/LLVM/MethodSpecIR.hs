@@ -135,6 +135,8 @@ import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 
+import           SAWScript.Proof (TheoremNonce)
+
 import           Verifier.SAW.Simulator.What4.ReturnTrip ( toSC, saw_ctx )
 
 import           Verifier.SAW.Rewriter (Simpset)
@@ -323,7 +325,7 @@ data LLVMCrucibleContext arch =
   , _ccBackend         :: Sym
   , _ccLLVMSimContext  :: Crucible.SimContext (SAWCruciblePersonality Sym) Sym CL.LLVM
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
-  , _ccBasicSS         :: Simpset ()
+  , _ccBasicSS         :: Simpset TheoremNonce
   }
 
 makeLenses ''LLVMCrucibleContext

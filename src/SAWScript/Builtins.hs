@@ -943,13 +943,14 @@ beta_reduce_term (TypedTerm schema t) = do
 addsimp :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimp thm ss =
   do sc <- getSharedContext
-     io (propToRewriteRule sc (thmProp thm) (Just ())) >>= \case
+     io (propToRewriteRule sc (thmProp thm) (Just (thmNonce thm))) >>= \case
        Nothing -> fail "addsimp: theorem not an equation"
        Just rule -> pure (addRule rule ss)
 
+-- TODO: remove this, it implicitly adds axioms
 addsimp' :: Term -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimp' t ss =
-  case ruleOfProp t Nothing of -- TODO!! track this as an axiom?
+  case ruleOfProp t Nothing of
     Nothing -> fail "addsimp': theorem not an equation"
     Just rule -> pure (addRule rule ss)
 
@@ -1305,14 +1306,17 @@ core_axiom input =
      pos <- SV.getPosition
      t <- parseCore input
      p <- io (termToProp sc t)
-     SV.returnProof (admitTheorem "core_axiom" p pos "core_axiom")
+     db <- roTheoremDB <$> getTopLevelRO
+     thm <- io (admitTheorem db "core_axiom" p pos "core_axiom")
+     SV.returnProof thm
 
 core_thm :: String -> TopLevel Theorem
 core_thm input =
   do t <- parseCore input
      sc <- getSharedContext
      pos <- SV.getPosition
-     thm <- io (proofByTerm sc t pos "core_thm")
+     db <- roTheoremDB <$> getTopLevelRO
+     thm <- io (proofByTerm sc db t pos "core_thm")
      SV.returnProof thm
 
 get_opt :: Int -> TopLevel String

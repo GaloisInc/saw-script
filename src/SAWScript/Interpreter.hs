@@ -62,6 +62,7 @@ import SAWScript.Parser (parseSchema)
 import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
+import SAWScript.Proof (newTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Conversion
@@ -436,6 +437,7 @@ buildTopLevelEnv proxy opts =
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
+       thmDB <- newTheoremDB
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roSharedContext = sc
@@ -446,6 +448,7 @@ buildTopLevelEnv proxy opts =
                    , roProxy = proxy
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
+                   , roTheoremDB = thmDB
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
