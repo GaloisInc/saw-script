@@ -596,7 +596,7 @@ verifyObligations :: LLVMCrucibleContext arch
                   -> MS.CrucibleMethodSpecIR (LLVM arch)
                   -> ProofScript ()
                   -> [Crucible.LabeledPred Term Crucible.AssumptionReason]
-                  -> [(String, Term)]
+                  -> [(String, W4.ProgramLoc, Term)]
                   -> TopLevel (SolverStats, Set TheoremNonce)
 verifyObligations cc mspec tactic assumes asserts =
   do let sym = cc^.ccBackend
@@ -605,12 +605,12 @@ verifyObligations cc mspec tactic assumes asserts =
      assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
      let nm  = mspec ^. csName
      outs <-
-       forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) ->
+       forM (zip [(0::Int)..] asserts) $ \(n, (msg, ploc, assert)) ->
        do goal   <- io $ scImplies sc assume assert
           goal'  <- io $ boolToProp sc [] goal
           let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
               proofgoal = ProofGoal n "vc" goalname goal'
-          res <- runProofScript tactic proofgoal $ Text.unwords
+          res <- runProofScript tactic proofgoal (Just ploc) $ Text.unwords
                     ["LLVM verification condition", Text.pack (show n), Text.pack goalname]
           case res of
             ValidProof stats thm -> return (stats, thmNonce thm)
@@ -779,7 +779,7 @@ assumptionsContainContradiction cc tactic assumptions =
          goal  <- scImplies sc assume =<< toSC sym st (W4.falsePred sym)
          goal' <- boolToProp sc [] goal
          return $ ProofGoal 0 "vc" "vacuousness check" goal'
-     res <- runProofScript tactic pgl $ "vacuousness check"
+     res <- runProofScript tactic pgl Nothing "vacuousness check"
      case res of
        ValidProof _ _     -> return True
        InvalidProof _ _ _ -> return False
@@ -1253,7 +1253,7 @@ verifyPoststate ::
   Map AllocIndex (LLVMPtr wptr)     {- ^ allocation substitution                      -} ->
   Crucible.SymGlobalState Sym       {- ^ global variables                             -} ->
   Maybe (Crucible.MemType, LLVMVal) {- ^ optional return value                        -} ->
-  TopLevel ([(String, Term)], OverrideState (LLVM arch))         {- ^ generated labels and verification conditions -}
+  TopLevel ([(String, W4.ProgramLoc, Term)], OverrideState (LLVM arch)) {- ^ generated labels and verification conditions -}
 verifyPoststate cc mspec env0 globals ret =
   do poststateLoc <- toW4Loc "_SAW_verify_poststate" <$> getPosition
      sc <- getSharedContext
@@ -1293,12 +1293,12 @@ verifyPoststate cc mspec env0 globals ret =
   where
     sym = cc^.ccBackend
 
-    verifyObligation sc (Crucible.ProofGoal hyps (Crucible.LabeledPred concl err)) =
+    verifyObligation sc (Crucible.ProofGoal hyps (Crucible.LabeledPred concl err@(Crucible.SimError loc _))) =
       do st <- Common.sawCoreState sym
          hypTerm <- toSC sym st =<< W4.andAllOf sym (folded . Crucible.labeledPred) hyps
          conclTerm  <- toSC sym st concl
          obligation <- scImplies sc hypTerm conclTerm
-         return (unlines ["safety assertion:", show err], obligation)
+         return (unlines ["safety assertion:", show err], loc, obligation)
 
     matchResult opts sc =
       case (ret, mspec ^. MS.csRetValue) of

@@ -956,7 +956,7 @@ checkGoals sym opts sc tactic = do
   outs <- forM (zip [0..] gs) $ \(n, g) -> do
     term <- liftIO $ gGoal sc g
     let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
-    res <- runProofScript tactic proofgoal $ Text.unwords
+    res <- runProofScript tactic proofgoal (Just (gLoc g)) $ Text.unwords
               ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))]
     case res of
       ValidProof stats thm -> return (stats, thmNonce thm)

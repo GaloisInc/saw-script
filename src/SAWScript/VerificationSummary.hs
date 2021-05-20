@@ -16,11 +16,13 @@ module SAWScript.VerificationSummary
   ) where
 
 import Control.Lens ((^.))
+import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.String
 import Prettyprinter
-import Data.Aeson (encode, (.=), Value(..), object)
+import Data.Aeson (encode, (.=), Value(..), object, toJSON)
 import qualified Data.ByteString.Lazy.UTF8 as BLU
+import Data.Parameterized.Nonce
 
 import qualified Lang.Crucible.JVM as CJ
 import SAWScript.Crucible.Common.MethodSpec
@@ -30,7 +32,8 @@ import qualified SAWScript.Crucible.JVM.MethodSpecIR as CMSJVM
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import qualified Verifier.SAW.Term.Pretty as PP
-import What4.ProgramLoc (ProgramLoc(plSourceLoc))
+import What4.ProgramLoc (ProgramLoc(..))
+import What4.FunctionName
 
 type JVMTheorem =  CMS.ProvedSpec CJ.JVM
 type LLVMTheorem = CMSLLVM.SomeLLVM CMS.ProvedSpec
@@ -55,30 +58,54 @@ vsTheoremSolvers = Set.unions . map getSolvers . vsTheorems
 vsAllSolvers :: VerificationSummary -> Set.Set String
 vsAllSolvers vs = Set.union (vsVerifSolvers vs) (vsTheoremSolvers vs)
 
-computeVerificationSummary :: [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> VerificationSummary
-computeVerificationSummary = VerificationSummary
+computeVerificationSummary :: TheoremDB -> [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> IO VerificationSummary
+computeVerificationSummary db js ls thms =
+  do let roots = mconcat (
+                [ j ^. psTheoremDeps | j <- js ] ++
+                [ l ^. psTheoremDeps | CMSLLVM.SomeLLVM l <- ls ] ++
+                [ Set.singleton (thmNonce t) | t <- thms ])
+     thms' <- Map.elems <$> reachableTheorems db roots
+     pure (VerificationSummary js ls thms')
 
 -- TODO: we could make things instances of a ToJSON typeclass instead of using the two methods below.
 msToJSON :: forall ext . Pretty (MethodId ext) => CMS.ProvedSpec ext -> Value
 msToJSON cms = object [
     ("type" .= ("method" :: String))
+    , ("id" .= (indexValue $ cms ^. psSpecIdent))
     , ("method" .= (show $ pretty $ cms ^. psSpec.csMethod))
     , ("loc" .= (show $ pretty $ plSourceLoc $ cms ^. psSpec.csLoc))
-    , ("status" .= (statusString $ cms ^. psSolverStats))
-    , ("specification" .= ("unknown" :: String)) -- TODO
+    , ("status" .= case cms ^. psProofMethod of
+                     SpecAdmitted -> "assumed" :: String
+                     SpecProved   -> "verified")
+--    , ("specification" .= ("unknown" :: String)) -- TODO
+    , ("dependencies" .= toJSON
+                           (map indexValue (Set.toList (cms ^. psSpecDeps)) ++
+                            map indexValue (Set.toList (cms ^. psTheoremDeps))))
   ]
 
 thmToJSON :: Theorem -> Value
-thmToJSON thm = object [
+thmToJSON thm = object ([
     ("type" .= ("property" :: String))
+    , ("id" .= (indexValue $ thmNonce thm))
     , ("loc" .= (show $ thmLocation thm))
-    , ("status" .= (statusString $ thmStats thm))
-    , ("term" .= (show $ ppProp PP.defaultPPOpts $ thmProp thm))
+    , ("status" .= (statusString thm))
+    , ("reason" .= (thmReason thm))
+--    , ("term" .= (show $ ppProp PP.defaultPPOpts $ thmProp thm))
+    , ("dependencies" .= toJSON (map indexValue (Set.toList (thmDepends thm))))
+  ] ++ case thmProgramLoc thm of
+         Nothing -> []
+         Just ploc -> [("ploc" .= plocToJSON ploc)]
+  )
+
+plocToJSON :: ProgramLoc -> Value
+plocToJSON ploc = object
+  [ "function" .= toJSON (functionName (plFunction ploc))
+  , "loc"      .= show (plSourceLoc ploc)
   ]
 
-statusString :: SolverStats -> String
-statusString stats = if ((Set.null s) || (Set.member "ADMITTED" s)) then "assumed" else "verified"
-  where s = solverStatsSolvers stats
+statusString :: Theorem -> String
+statusString thm = if (Set.member "ADMITTED" s) then "assumed" else "verified"
+  where s = solverStatsSolvers (thmStats thm)
 
 jsonVerificationSummary :: VerificationSummary -> String
 jsonVerificationSummary (VerificationSummary jspecs lspecs thms) =

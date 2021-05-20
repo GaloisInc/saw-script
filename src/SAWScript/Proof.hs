@@ -31,12 +31,14 @@ module SAWScript.Proof
 
   , TheoremDB
   , newTheoremDB
+  , reachableTheorems
 
   , Theorem
   , thmProp
   , thmStats
   , thmEvidence
   , thmLocation
+  , thmProgramLoc
   , thmReason
   , thmNonce
   , thmDepends
@@ -87,6 +89,7 @@ import qualified Control.Monad.Fail as F
 import           Control.Monad.Except
 import           Data.IORef
 import           Data.Maybe (fromMaybe)
+import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
@@ -108,6 +111,8 @@ import Verifier.SAW.SCTypeCheck (scTypeCheckError)
 
 import Verifier.SAW.Simulator.Concrete (evalSharedTerm)
 import Verifier.SAW.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..))
+
+import What4.ProgramLoc (ProgramLoc)
 
 import SAWScript.Position
 import SAWScript.Prover.SolverStats
@@ -258,6 +263,7 @@ data Theorem =
   , _thmStats :: SolverStats
   , _thmEvidence :: Evidence
   , _thmLocation :: Pos
+  , _thmProgramLoc :: Maybe ProgramLoc
   , _thmReason   :: Text
   , _thmNonce    :: TheoremNonce
   , _thmDepends  :: Set TheoremNonce
@@ -282,6 +288,23 @@ recordTheorem _ (LocalAssumption _ pos _) =
 recordTheorem db thm@Theorem{ _thmNonce = n } =
   do modifyIORef (theoremMap db) (Map.insert n thm)
      return thm
+
+reachableTheorems :: TheoremDB -> Set TheoremNonce -> IO (Map TheoremNonce Theorem)
+reachableTheorems db roots =
+  do m <- readIORef (theoremMap db)
+     pure $! Set.foldl' (loop m) mempty roots
+
+ where
+   loop m visited curr
+     | Just _ <- Map.lookup curr visited = visited
+
+     | Just thm <- Map.lookup curr m =
+         Set.foldl' (loop m)
+            (Map.insert curr thm visited)
+            (thmDepends thm)
+
+     | otherwise = visited -- TODO? maybe panic here?
+
 
 -- | Check that the purported theorem is valid.
 --
@@ -395,10 +418,16 @@ thmEvidence :: Theorem -> Evidence
 thmEvidence (LocalAssumption p _ n) = LocalAssumptionEvidence p n
 thmEvidence Theorem{ _thmEvidence = e } = e
 
--- | The source location that generated this theorem
+-- | The SAW source location that generated this theorem
 thmLocation :: Theorem -> Pos
 thmLocation (LocalAssumption _p loc _) = loc
 thmLocation Theorem{ _thmLocation = loc } = loc
+
+-- | The program location (if any) of the program under
+--   verification giving rise to this theorem
+thmProgramLoc :: Theorem -> Maybe ProgramLoc
+thmProgramLoc (LocalAssumption{}) = Nothing
+thmProgramLoc Theorem{ _thmProgramLoc = ploc } = ploc
 
 -- | Describes the reason this theorem was generated
 thmReason :: Theorem -> Text
@@ -442,6 +471,7 @@ proofByTerm sc db prf loc rsn =
        , _thmStats     = mempty
        , _thmEvidence  = ProofTerm prf
        , _thmLocation  = loc
+       , _thmProgramLoc = Nothing
        , _thmReason    = rsn
        , _thmNonce     = n
        , _thmDepends   = mempty
@@ -451,8 +481,16 @@ proofByTerm sc db prf loc rsn =
 --   for that proposition.  The evidence will be validated to
 --   check that it supports the given proposition; if not, an
 --   error will be raised.
-constructTheorem :: SharedContext -> TheoremDB -> Prop -> Evidence -> Pos -> Text -> IO Theorem
-constructTheorem sc db p e loc rsn =
+constructTheorem ::
+  SharedContext ->
+  TheoremDB ->
+  Prop ->
+  Evidence ->
+  Pos ->
+  Maybe ProgramLoc ->
+  Text ->
+  IO Theorem
+constructTheorem sc db p e loc ploc rsn =
   do deps <- checkEvidence sc db e p
      n  <- freshNonce globalNonceGenerator
      recordTheorem db
@@ -461,6 +499,7 @@ constructTheorem sc db p e loc rsn =
        , _thmStats = mempty
        , _thmEvidence = e
        , _thmLocation = loc
+       , _thmProgramLoc = ploc
        , _thmReason   = rsn
        , _thmNonce    = n
        , _thmDepends  = deps
@@ -469,7 +508,13 @@ constructTheorem sc db p e loc rsn =
 -- | Admit the given theorem without evidence.
 --   The provided message allows the user to
 --   explain why this proposition is being admitted.
-admitTheorem :: TheoremDB -> Text -> Prop -> Pos -> Text -> IO Theorem
+admitTheorem ::
+  TheoremDB ->
+  Text ->
+  Prop ->
+  Pos ->
+  Text ->
+  IO Theorem
 admitTheorem db msg p loc rsn =
   do n  <- freshNonce globalNonceGenerator
      recordTheorem db
@@ -478,13 +523,20 @@ admitTheorem db msg p loc rsn =
        , _thmStats       = solverStats "ADMITTED" (propSize p)
        , _thmEvidence    = Admitted msg loc p
        , _thmLocation    = loc
+       , _thmProgramLoc  = Nothing
        , _thmReason      = rsn
        , _thmNonce       = n
        , _thmDepends     = mempty
        }
 
 -- | Construct a theorem that an external solver has proved.
-solverTheorem :: TheoremDB -> Prop -> SolverStats -> Pos -> Text -> IO Theorem
+solverTheorem ::
+  TheoremDB ->
+  Prop ->
+  SolverStats ->
+  Pos ->
+  Text ->
+  IO Theorem
 solverTheorem db p stats loc rsn =
   do n  <- freshNonce globalNonceGenerator
      recordTheorem db
@@ -494,6 +546,7 @@ solverTheorem db p stats loc rsn =
        , _thmEvidence  = SolverEvidence stats p
        , _thmLocation  = loc
        , _thmReason    = rsn
+       , _thmProgramLoc = Nothing
        , _thmNonce     = n
        , _thmDepends   = mempty
        }
@@ -546,7 +599,7 @@ predicateToProp sc quant = loop []
 data ProofState =
   ProofState
   { _psGoals :: [ProofGoal]
-  , _psConcl :: (Prop,Pos,Text)
+  , _psConcl :: (Prop,Pos,Maybe ProgramLoc,Text)
   , _psStats :: SolverStats
   , _psTimeout :: Maybe Integer
   , _psEvidence :: [Evidence] -> IO Evidence
@@ -740,15 +793,16 @@ setProofTimeout :: Integer -> ProofState -> ProofState
 setProofTimeout to ps = ps { _psTimeout = Just to }
 
 -- | Initialize a proof state with a single goal to prove.
-startProof :: ProofGoal -> Pos -> Text -> ProofState
-startProof g pos rsn = ProofState [g] (goalProp g,pos,rsn) mempty Nothing passthroughEvidence
+startProof :: ProofGoal -> Pos -> Maybe ProgramLoc -> Text -> ProofState
+startProof g pos ploc rsn =
+  ProofState [g] (goalProp g,pos,ploc,rsn) mempty Nothing passthroughEvidence
 
 -- | Attempt to complete a proof by checking that all subgoals have been discharged,
 --   and validate the computed evidence to ensure that it supports the original
 --   proposition.  If successful, return the completed @Theorem@ and a summary
 --   of solver resources used in the proof.
 finishProof :: SharedContext -> TheoremDB -> ProofState -> IO ProofResult
-finishProof sc db ps@(ProofState gs (concl,loc,rsn) stats _ checkEv) =
+finishProof sc db ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv) =
   case gs of
     [] ->
       do e <- checkEv []
@@ -760,6 +814,7 @@ finishProof sc db ps@(ProofState gs (concl,loc,rsn) stats _ checkEv) =
                    , _thmStats = stats
                    , _thmEvidence = e
                    , _thmLocation = loc
+                   , _thmProgramLoc = ploc
                    , _thmReason = rsn
                    , _thmNonce = n
                    , _thmDepends = deps

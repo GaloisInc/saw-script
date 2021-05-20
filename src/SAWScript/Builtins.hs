@@ -815,7 +815,7 @@ provePrim script t = do
   sc <- getSharedContext
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   let goal = ProofGoal 0 "prove" "prove" prop
-  res <- SV.runProofScript script goal "prove_prim"
+  res <- SV.runProofScript script goal Nothing "prove_prim"
   case res of
     UnfinishedProof pst ->
       printOutLnTop Info $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)"
@@ -832,7 +832,7 @@ provePrintPrim script t = do
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   let goal = ProofGoal 0 "prove" "prove" prop
   opts <- rwPPOpts <$> getTopLevelRW
-  res <- SV.runProofScript script goal "prove_print_prim"
+  res <- SV.runProofScript script goal Nothing "prove_print_prim"
   let failProof pst =
          fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                           ++ SV.showsProofResult opts res ""
@@ -852,7 +852,7 @@ satPrim script t =
      sc <- getSharedContext
      prop <- io $ predicateToProp sc Existential (ttTerm t)
      let goal = ProofGoal 0 "sat" "sat" prop
-     res <- SV.runProofScript script goal "sat"
+     res <- SV.runProofScript script goal Nothing "sat"
      case res of
        InvalidProof stats cex _ -> return (SV.Sat stats cex)
        ValidProof stats _thm -> return (SV.Unsat stats)
@@ -1291,7 +1291,7 @@ prove_core script input =
      t <- parseCore input
      p <- io (termToProp sc t)
      opts <- rwPPOpts <$> getTopLevelRW
-     res <- SV.runProofScript script (ProofGoal 0 "prove" "prove" p) "prove_core"
+     res <- SV.runProofScript script (ProofGoal 0 "prove" "prove" p) Nothing "prove_core"
      let failProof pst =
             fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                                   ++ SV.showsProofResult opts res ""
@@ -1435,5 +1435,6 @@ summarize_verification =
      let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
-         summary = computeVerificationSummary jspecs lspecs thms
+     db <- roTheoremDB <$> getTopLevelRO
+     summary <- io (computeVerificationSummary db jspecs lspecs thms)
      io $ putStrLn $ prettyVerificationSummary summary

@@ -610,10 +610,10 @@ newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
 newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
  deriving (Functor, Applicative, Monad)
 
-runProofScript :: ProofScript a -> ProofGoal -> Text -> TopLevel ProofResult
-runProofScript (ProofScript m) gl rsn =
+runProofScript :: ProofScript a -> ProofGoal -> Maybe ProgramLoc -> Text -> TopLevel ProofResult
+runProofScript (ProofScript m) gl ploc rsn =
   do pos <- getPosition
-     (r,pstate) <- runStateT (runExceptT m) (startProof gl pos rsn)
+     (r,pstate) <- runStateT (runExceptT m) (startProof gl pos ploc rsn)
      case r of
        Left (stats,cex) -> return (InvalidProof stats cex pstate)
        Right _ ->
