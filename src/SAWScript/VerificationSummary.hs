@@ -89,15 +89,30 @@ thmToJSON thm = object ([
     ("type" .= ("property" :: String))
     , ("id" .= (indexValue $ thmNonce thm))
     , ("loc" .= (show $ thmLocation thm))
-    , ("status" .= (statusString thm))
     , ("reason" .= (thmReason thm))
---    , ("term" .= (show $ ppProp PP.defaultPPOpts $ thmProp thm))
     , ("dependencies" .= toJSON (map indexValue (Set.toList (thmDepends thm))))
     , ("elapsedtime"  .= toJSON (thmElapsedTime thm))
-  ] ++ case thmProgramLoc thm of
+  ] ++ theoremStatus
+    ++ case thmProgramLoc thm of
          Nothing -> []
          Just ploc -> [("ploc" .= plocToJSON ploc)]
   )
+ where
+  theoremStatus = case thmSummary thm of
+      ProvedTheorem stats ->
+        [ ("status"  .= ("verified" :: String))
+        , ("provers" .= toJSON (Set.toList (solverStatsSolvers stats)))
+        ]
+      TestedTheorem n ->
+        [ ("status"   .= ("tested" :: String))
+        , ("numtests" .= toJSON n)
+        ]
+      AdmittedTheorem msg ->
+        [ ("status"   .= ("assumed" :: String))
+        , ("admitmsg" .= msg)
+        ]
+
+--    , ("term" .= (show $ ppProp PP.defaultPPOpts $ thmProp thm))
 
 plocToJSON :: ProgramLoc -> Value
 plocToJSON ploc = object
@@ -105,9 +120,6 @@ plocToJSON ploc = object
   , "loc"      .= show (plSourceLoc ploc)
   ]
 
-statusString :: Theorem -> String
-statusString thm = if (Set.member "ADMITTED" s) then "assumed" else "verified"
-  where s = solverStatsSolvers (thmStats thm)
 
 jsonVerificationSummary :: VerificationSummary -> String
 jsonVerificationSummary (VerificationSummary jspecs lspecs thms) =

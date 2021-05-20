@@ -43,7 +43,9 @@ module SAWScript.Proof
   , thmNonce
   , thmDepends
   , thmElapsedTime
+  , thmSummary
   , TheoremNonce
+  , TheoremSummary(..)
 
   , admitTheorem
   , solverTheorem
@@ -270,6 +272,7 @@ data Theorem =
   , _thmNonce    :: TheoremNonce
   , _thmDepends  :: Set TheoremNonce
   , _thmElapsedTime :: NominalDiffTime
+  , _thmSummary :: TheoremSummary
   } -- INVARIANT: the provided evidence is valid for the included proposition
 
   | LocalAssumption Prop Pos TheoremNonce
@@ -327,10 +330,27 @@ validateTheorem _ _ (LocalAssumption p loc _n) =
      ]
 
 validateTheorem sc db Theorem{ _thmProp = p, _thmEvidence = e, _thmDepends = thmDep } =
-   do deps <- checkEvidence sc db e p
+   do (deps,_) <- checkEvidence sc db e p
       unless (Set.isSubsetOf deps thmDep)
              (fail $ unlines ["Theorem failed to declare its depencences correctly"
                              , show deps, show thmDep ])
+
+data TheoremSummary
+  = AdmittedTheorem Text
+  | TestedTheorem Integer
+  | ProvedTheorem SolverStats
+
+instance Monoid TheoremSummary where
+  mempty = ProvedTheorem mempty
+
+instance Semigroup TheoremSummary where
+  AdmittedTheorem msg <> _ = AdmittedTheorem msg
+  _ <> AdmittedTheorem msg = AdmittedTheorem msg
+  TestedTheorem x <> TestedTheorem y = TestedTheorem (min x y)
+  TestedTheorem x <> _ = TestedTheorem x
+  _ <> TestedTheorem y = TestedTheorem y
+  ProvedTheorem s1 <> ProvedTheorem s2 = ProvedTheorem (s1<>s2)
+
 
 -- | This datatype records evidence for the truth of a proposition.
 data Evidence
@@ -452,6 +472,10 @@ thmElapsedTime :: Theorem -> NominalDiffTime
 thmElapsedTime LocalAssumption{} = 0
 thmElapsedTime Theorem{ _thmElapsedTime = tm } = tm
 
+thmSummary :: Theorem -> TheoremSummary
+thmSummary LocalAssumption{} = mempty
+thmSummary Theorem { _thmSummary = sy } = sy
+
 splitEvidence :: [Evidence] -> IO Evidence
 splitEvidence [e1,e2] = pure (SplitEvidence e1 e2)
 splitEvidence _ = fail "splitEvidence: expected two evidence values"
@@ -485,6 +509,7 @@ proofByTerm sc db prf loc rsn =
        , _thmNonce     = n
        , _thmDepends   = mempty
        , _thmElapsedTime = 0
+       , _thmSummary = ProvedTheorem mempty
        }
 
 -- | Construct a theorem directly from a proposition and evidence
@@ -502,7 +527,7 @@ constructTheorem ::
   NominalDiffTime ->
   IO Theorem
 constructTheorem sc db p e loc ploc rsn elapsed =
-  do deps <- checkEvidence sc db e p
+  do (deps,sy) <- checkEvidence sc db e p
      n  <- freshNonce globalNonceGenerator
      recordTheorem db
        Theorem
@@ -515,6 +540,7 @@ constructTheorem sc db p e loc ploc rsn elapsed =
        , _thmNonce    = n
        , _thmDepends  = deps
        , _thmElapsedTime = elapsed
+       , _thmSummary  = sy
        }
 
 -- | Admit the given theorem without evidence.
@@ -540,6 +566,7 @@ admitTheorem db msg p loc rsn =
        , _thmNonce       = n
        , _thmDepends     = mempty
        , _thmElapsedTime = 0
+       , _thmSummary     = AdmittedTheorem msg
        }
 
 -- | Construct a theorem that an external solver has proved.
@@ -564,6 +591,7 @@ solverTheorem db p stats loc rsn elapsed =
        , _thmNonce     = n
        , _thmDepends   = mempty
        , _thmElapsedTime = elapsed
+       , _thmSummary = ProvedTheorem stats
        }
 
 -- | A @ProofGoal@ contains a proposition to be proved, along with
@@ -632,18 +660,18 @@ psStats = _psStats
 
 -- | Verify that the given evidence in fact supports the given proposition.
 --   Returns the identifers of all the theorems depened on while checking evidence.
-checkEvidence :: SharedContext -> TheoremDB -> Evidence -> Prop -> IO (Set TheoremNonce)
+checkEvidence :: SharedContext -> TheoremDB -> Evidence -> Prop -> IO (Set TheoremNonce, TheoremSummary)
 checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap db)
                                  check hyps e p
 
   where
-    checkApply _hyps (Prop p) [] = return (mempty, p)
+    checkApply _hyps (Prop p) [] = return (mempty, mempty, p)
     checkApply hyps (Prop p) (e:es)
       | Just (_lnm, tp, body) <- asPi p
       , looseVars body == emptyBitSet
-      = do d1 <- check hyps e =<< termToProp sc tp
-           (d2,p') <- checkApply hyps (Prop body) es
-           return (Set.union d1 d2, p')
+      = do (d1,sy1) <- check hyps e =<< termToProp sc tp
+           (d2,sy2,p') <- checkApply hyps (Prop body) es
+           return (Set.union d1 d2, sy1 <> sy2, p')
       | otherwise = fail $ unlines
            [ "Apply evidence mismatch: non-function or dependent function"
            , showTerm p
@@ -662,7 +690,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
       Set TheoremNonce ->
       Evidence ->
       Prop ->
-      IO (Set TheoremNonce)
+      IO (Set TheoremNonce, TheoremSummary)
     check hyps e p@(Prop ptm) = case e of
       ProofTerm tm ->
         do ty <- scTypeCheckError sc tm
@@ -672,23 +700,23 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
                , showTerm ptm
                , showTerm tm
                ]
-           return mempty
+           return (mempty, ProvedTheorem mempty)
 
       LocalAssumptionEvidence (Prop l) n ->
         do unless (Set.member n hyps) $ fail $ unlines
              [ "Illegal use of local hypothesis"
              , showTerm l
              ]
-           return (Set.singleton n)
+           return (Set.singleton n, ProvedTheorem mempty)
 
-      SolverEvidence _stats (Prop p') ->
+      SolverEvidence stats (Prop p') ->
         do ok <- scConvertible sc False ptm p'
            unless ok $ fail $ unlines
                [ "Solver proof does not prove the required proposition"
                , showTerm ptm
                , showTerm p'
                ]
-           return mempty
+           return (mempty, ProvedTheorem stats)
 
       Admitted msg pos (Prop p') ->
         do ok <- scConvertible sc False ptm p'
@@ -698,16 +726,16 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
                , showTerm ptm
                , showTerm p'
                ]
-           return mempty
+           return (mempty, AdmittedTheorem msg)
 
-      QuickcheckEvidence _n (Prop p') ->
+      QuickcheckEvidence n (Prop p') ->
         do ok <- scConvertible sc False ptm p'
            unless ok $ fail $ unlines
                [ "Quickcheck evidence does not match the required proposition"
                , showTerm ptm
                , showTerm p'
                ]
-           return mempty
+           return (mempty, TestedTheorem n)
 
       TrivialEvidence ->
         do unless (propIsTrivial p) $ fail $ unlines
@@ -725,24 +753,24 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
           Just (p1,p2) ->
             do d1 <- check hyps e1 p1
                d2 <- check hyps e2 p2
-               return (Set.union d1 d2)
+               return (d1 <> d2)
 
       ApplyEvidence thm es ->
         do checkTheorem hyps thm
-           (d,p') <- checkApply hyps (thmProp thm) es
+           (d,sy,p') <- checkApply hyps (thmProp thm) es
            ok <- scConvertible sc False ptm p'
            unless ok $ fail $ unlines
                [ "Apply evidence does not match the required proposition"
                , showTerm ptm
                , showTerm p'
                ]
-           return (Set.insert (thmNonce thm) d)
+           return (Set.insert (thmNonce thm) d, sy)
 
       CutEvidence thm e' ->
         do checkTheorem hyps thm
            p' <- scFun sc (unProp (thmProp thm)) ptm
-           d <- check hyps e' (Prop p')
-           return (Set.insert (thmNonce thm) d)
+           (d,sy) <- check hyps e' (Prop p')
+           return (Set.insert (thmNonce thm) d, sy)
 
       UnfoldEvidence vars e' ->
         do p' <- unfoldProp sc vars p
@@ -754,8 +782,8 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
              [ "Rewrite step used theorem not in hypothesis database"
              , show (Set.difference d1 hyps)
              ]
-           d2 <- check hyps e' p'
-           return (Set.union d1 d2)
+           (d2,sy) <- check hyps e' p'
+           return (Set.union d1 d2, sy)
 
       EvalEvidence vars e' ->
         do p' <- evalProp sc vars p
@@ -775,8 +803,8 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
                    [ "Assume evidence cannot be used on a dependent proposition"
                    , showTerm ptm
                    ]
-               d <- check (Set.insert n hyps) e' (Prop body)
-               return (Set.delete n d)
+               (d,sy) <- check (Set.insert n hyps) e' (Prop body)
+               return (Set.delete n d, sy)
 
       ForallEvidence x e' ->
         case asPi ptm of
@@ -823,7 +851,7 @@ finishProof sc db ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv start) 
   case gs of
     [] ->
       do e <- checkEv []
-         deps <- checkEvidence sc db e concl
+         (deps,sy) <- checkEvidence sc db e concl
          n <- freshNonce globalNonceGenerator
          end <- getCurrentTime
          thm <- recordTheorem db
@@ -837,6 +865,7 @@ finishProof sc db ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv start) 
                    , _thmNonce = n
                    , _thmDepends = deps
                    , _thmElapsedTime = diffUTCTime end start
+                   , _thmSummary = sy
                    }
          pure (ValidProof stats thm)
     _ : _ ->
