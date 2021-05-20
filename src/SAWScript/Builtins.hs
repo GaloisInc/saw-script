@@ -1438,3 +1438,13 @@ summarize_verification =
      db <- roTheoremDB <$> getTopLevelRO
      summary <- io (computeVerificationSummary db jspecs lspecs thms)
      io $ putStrLn $ prettyVerificationSummary summary
+
+summarize_verification_json :: String -> TopLevel ()
+summarize_verification_json fpath =
+  do values <- rwProofs <$> getTopLevelRW
+     let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
+         lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
+         thms    = [ t | SV.VTheorem t <- values ]
+     db <- roTheoremDB <$> getTopLevelRO
+     summary <- io (computeVerificationSummary db jspecs lspecs thms)
+     io (writeFile fpath (jsonVerificationSummary summary))

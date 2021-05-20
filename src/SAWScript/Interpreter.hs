@@ -2910,6 +2910,13 @@ primitives = Map.fromList
     [ "Print a human-readable summary of all verifications performed"
     , "so far."
     ]
+
+  , prim "summarize_verification_json" "String -> TopLevel ()"
+    (pureVal summarize_verification_json)
+    Experimental
+    [ "Print a JSON summary of all verifications performed"
+    , "so far into the named file."
+    ]
   ]
 
   where
