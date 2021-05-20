@@ -42,6 +42,7 @@ module SAWScript.Proof
   , thmReason
   , thmNonce
   , thmDepends
+  , thmElapsedTime
   , TheoremNonce
 
   , admitTheorem
@@ -95,6 +96,7 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as Text
+import           Data.Time.Clock
 
 import Data.Parameterized.Nonce
 
@@ -267,6 +269,7 @@ data Theorem =
   , _thmReason   :: Text
   , _thmNonce    :: TheoremNonce
   , _thmDepends  :: Set TheoremNonce
+  , _thmElapsedTime :: NominalDiffTime
   } -- INVARIANT: the provided evidence is valid for the included proposition
 
   | LocalAssumption Prop Pos TheoremNonce
@@ -439,9 +442,15 @@ thmNonce :: Theorem -> TheoremNonce
 thmNonce (LocalAssumption _ _ n) = n
 thmNonce Theorem{ _thmNonce = n } = n
 
+-- | Returns the set of theorem identifiers that this theorem depends on
 thmDepends :: Theorem -> Set TheoremNonce
 thmDepends LocalAssumption{} = mempty
 thmDepends Theorem { _thmDepends = s } = s
+
+-- | Returns the amount of time elapsed during the proof of this theorem
+thmElapsedTime :: Theorem -> NominalDiffTime
+thmElapsedTime LocalAssumption{} = 0
+thmElapsedTime Theorem{ _thmElapsedTime = tm } = tm
 
 splitEvidence :: [Evidence] -> IO Evidence
 splitEvidence [e1,e2] = pure (SplitEvidence e1 e2)
@@ -475,6 +484,7 @@ proofByTerm sc db prf loc rsn =
        , _thmReason    = rsn
        , _thmNonce     = n
        , _thmDepends   = mempty
+       , _thmElapsedTime = 0
        }
 
 -- | Construct a theorem directly from a proposition and evidence
@@ -489,8 +499,9 @@ constructTheorem ::
   Pos ->
   Maybe ProgramLoc ->
   Text ->
+  NominalDiffTime ->
   IO Theorem
-constructTheorem sc db p e loc ploc rsn =
+constructTheorem sc db p e loc ploc rsn elapsed =
   do deps <- checkEvidence sc db e p
      n  <- freshNonce globalNonceGenerator
      recordTheorem db
@@ -503,6 +514,7 @@ constructTheorem sc db p e loc ploc rsn =
        , _thmReason   = rsn
        , _thmNonce    = n
        , _thmDepends  = deps
+       , _thmElapsedTime = elapsed
        }
 
 -- | Admit the given theorem without evidence.
@@ -527,6 +539,7 @@ admitTheorem db msg p loc rsn =
        , _thmReason      = rsn
        , _thmNonce       = n
        , _thmDepends     = mempty
+       , _thmElapsedTime = 0
        }
 
 -- | Construct a theorem that an external solver has proved.
@@ -536,8 +549,9 @@ solverTheorem ::
   SolverStats ->
   Pos ->
   Text ->
+  NominalDiffTime ->
   IO Theorem
-solverTheorem db p stats loc rsn =
+solverTheorem db p stats loc rsn elapsed =
   do n  <- freshNonce globalNonceGenerator
      recordTheorem db
        Theorem
@@ -549,6 +563,7 @@ solverTheorem db p stats loc rsn =
        , _thmProgramLoc = Nothing
        , _thmNonce     = n
        , _thmDepends   = mempty
+       , _thmElapsedTime = elapsed
        }
 
 -- | A @ProofGoal@ contains a proposition to be proved, along with
@@ -603,6 +618,7 @@ data ProofState =
   , _psStats :: SolverStats
   , _psTimeout :: Maybe Integer
   , _psEvidence :: [Evidence] -> IO Evidence
+  , _psStartTime :: UTCTime
   }
 
 psTimeout :: ProofState -> Maybe Integer
@@ -793,21 +809,23 @@ setProofTimeout :: Integer -> ProofState -> ProofState
 setProofTimeout to ps = ps { _psTimeout = Just to }
 
 -- | Initialize a proof state with a single goal to prove.
-startProof :: ProofGoal -> Pos -> Maybe ProgramLoc -> Text -> ProofState
+startProof :: ProofGoal -> Pos -> Maybe ProgramLoc -> Text -> IO ProofState
 startProof g pos ploc rsn =
-  ProofState [g] (goalProp g,pos,ploc,rsn) mempty Nothing passthroughEvidence
+  do start <- getCurrentTime
+     pure (ProofState [g] (goalProp g,pos,ploc,rsn) mempty Nothing passthroughEvidence start)
 
 -- | Attempt to complete a proof by checking that all subgoals have been discharged,
 --   and validate the computed evidence to ensure that it supports the original
 --   proposition.  If successful, return the completed @Theorem@ and a summary
 --   of solver resources used in the proof.
 finishProof :: SharedContext -> TheoremDB -> ProofState -> IO ProofResult
-finishProof sc db ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv) =
+finishProof sc db ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv start) =
   case gs of
     [] ->
       do e <- checkEv []
          deps <- checkEvidence sc db e concl
          n <- freshNonce globalNonceGenerator
+         end <- getCurrentTime
          thm <- recordTheorem db
                    Theorem
                    { _thmProp = concl
@@ -818,6 +836,7 @@ finishProof sc db ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv) =
                    , _thmReason = rsn
                    , _thmNonce = n
                    , _thmDepends = deps
+                   , _thmElapsedTime = diffUTCTime end start
                    }
          pure (ValidProof stats thm)
     _ : _ ->
@@ -850,7 +869,7 @@ newtype Tactic m a =
 -- | Choose the first subgoal in the current proof state and apply the given
 --   proof tactic.
 withFirstGoal :: F.MonadFail m => Tactic m a -> ProofState -> m (Either (SolverStats, CEX) (a, ProofState))
-withFirstGoal (Tactic f) (ProofState goals concl stats timeout evidenceCont) =
+withFirstGoal (Tactic f) (ProofState goals concl stats timeout evidenceCont start) =
      case goals of
        [] -> fail "ProofScript failed: no subgoal"
        g : gs -> runExceptT (f g) >>= \case
@@ -860,7 +879,7 @@ withFirstGoal (Tactic f) (ProofState goals concl stats timeout evidenceCont) =
                       do let (es1, es2) = splitAt (length gs') es
                          e <- buildTacticEvidence es1
                          evidenceCont (e:es2)
-              return (Right (x, ProofState (gs' <> gs) concl (stats <> stats') timeout evidenceCont'))
+              return (Right (x, ProofState (gs' <> gs) concl (stats <> stats') timeout evidenceCont' start))
 
 predicateToSATQuery :: SharedContext -> Set VarIndex -> Term -> IO SATQuery
 predicateToSATQuery sc unintSet tm0 =

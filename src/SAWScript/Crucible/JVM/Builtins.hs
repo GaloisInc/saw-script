@@ -62,6 +62,7 @@ import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
 import           Data.Text (Text)
 import qualified Data.Text as Text
+import           Data.Time.Clock (getCurrentTime, diffUTCTime)
 import qualified Data.Vector as V
 import           Data.Void (absurd)
 import           Prettyprinter
@@ -195,7 +196,8 @@ jvm_verify ::
   ProofScript () ->
   TopLevel Lemma
 jvm_verify cls nm lemmas checkSat setup tactic =
-  do cb <- getJavaCodebase
+  do start <- io getCurrentTime
+     cb <- getJavaCodebase
      opts <- getOptions
      -- allocate all of the handles/static vars that are referenced
      -- (directly or indirectly) by this class
@@ -246,7 +248,9 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      io $ writeFinalProfile
 
      let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas)
-     ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats thms lemmaSet)
+     end <- io getCurrentTime
+     let diff = diffUTCTime end start
+     ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats thms lemmaSet diff)
      returnProof ps
 
 
@@ -265,7 +269,7 @@ jvm_unsafe_assume_spec cls nm setup =
      let st0 = initialCrucibleSetupState cc (cls', method) loc
      ms <- (view Setup.csMethodSpec) <$> execStateT (runJVMSetupM setup) st0
 
-     ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty)
+     ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty 0)
      returnProof ps
 
 verifyObligations ::

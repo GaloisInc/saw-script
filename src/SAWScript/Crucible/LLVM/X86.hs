@@ -45,6 +45,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
+import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
@@ -292,6 +293,7 @@ llvm_verify_x86 ::
 llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
+      start <- io getCurrentTime
       let ?ptrWidth = knownNat @64
       let ?recordLLVMAnnotation = \_ _ -> return ()
       sc <- getSharedContext
@@ -451,7 +453,9 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
 
       (stats,thms) <- checkGoals sym opts sc tactic
 
-      ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats thms mempty)
+      end <- io getCurrentTime
+      let diff = diffUTCTime end start
+      ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats thms mempty diff)
       returnProof $ SomeLLVM ps
 
   | otherwise = fail "LLVM module must be 64-bit"

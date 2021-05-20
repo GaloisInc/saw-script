@@ -27,7 +27,9 @@ import           Data.Constraint (Constraint)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
+import           Data.Time.Clock
 import           Data.Void (Void)
+
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 import           Control.Lens
@@ -398,6 +400,7 @@ data ProvedSpec ext =
   , _psTheoremDeps :: Set TheoremNonce -- ^ theorems depended on by this proof
   , _psSpecDeps    :: Set (SpecNonce ext)
                         -- ^ Other proved specifications this proof depends on
+  , _psElapsedTime :: NominalDiffTime -- ^ The time elapsed during the proof of this specification
   }
 
 makeLenses ''ProvedSpec
@@ -408,10 +411,11 @@ mkProvedSpec ::
   SolverStats ->
   Set TheoremNonce ->
   Set (SpecNonce ext) ->
+  NominalDiffTime ->
   IO (ProvedSpec ext)
-mkProvedSpec m mspec stats thms sps =
+mkProvedSpec m mspec stats thms sps elapsed =
   do n <- freshNonce globalNonceGenerator
-     let ps = ProvedSpec n m mspec stats thms sps
+     let ps = ProvedSpec n m mspec stats thms sps elapsed
      return ps
 
 -- TODO: remove when what4 switches to prettyprinter

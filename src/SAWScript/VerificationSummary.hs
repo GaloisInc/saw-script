@@ -81,6 +81,7 @@ msToJSON cms = object [
     , ("dependencies" .= toJSON
                            (map indexValue (Set.toList (cms ^. psSpecDeps)) ++
                             map indexValue (Set.toList (cms ^. psTheoremDeps))))
+    , ("elapsedtime"  .= toJSON (cms ^. psElapsedTime))
   ]
 
 thmToJSON :: Theorem -> Value
@@ -92,6 +93,7 @@ thmToJSON thm = object ([
     , ("reason" .= (thmReason thm))
 --    , ("term" .= (show $ ppProp PP.defaultPPOpts $ thmProp thm))
     , ("dependencies" .= toJSON (map indexValue (Set.toList (thmDepends thm))))
+    , ("elapsedtime"  .= toJSON (thmElapsedTime thm))
   ] ++ case thmProgramLoc thm of
          Nothing -> []
          Just ploc -> [("ploc" .= plocToJSON ploc)]

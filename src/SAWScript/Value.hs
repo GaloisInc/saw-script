@@ -613,7 +613,8 @@ newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX
 runProofScript :: ProofScript a -> ProofGoal -> Maybe ProgramLoc -> Text -> TopLevel ProofResult
 runProofScript (ProofScript m) gl ploc rsn =
   do pos <- getPosition
-     (r,pstate) <- runStateT (runExceptT m) (startProof gl pos ploc rsn)
+     ps <- io (startProof gl pos ploc rsn)
+     (r,pstate) <- runStateT (runExceptT m) ps
      case r of
        Left (stats,cex) -> return (InvalidProof stats cex pstate)
        Right _ ->

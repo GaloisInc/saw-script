@@ -109,6 +109,7 @@ import           Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import           Data.Text (Text)
 import qualified Data.Text as Text
+import           Data.Time.Clock (getCurrentTime, diffUTCTime)
 import qualified Data.Vector as V
 import           Prettyprinter
 import           System.IO
@@ -273,11 +274,14 @@ llvm_verify ::
   ProofScript () ->
   TopLevel (SomeLLVM MS.ProvedSpec)
 llvm_verify (Some lm) nm lemmas checkSat setup tactic =
-  do lemmas' <- checkModuleCompatibility lm lemmas
+  do start <- io getCurrentTime
+     lemmas' <- checkModuleCompatibility lm lemmas
      withMethodSpec checkSat lm nm setup $ \cc method_spec ->
        do (stats, deps, _) <- verifyMethodSpec cc method_spec lemmas' checkSat tactic Nothing
           let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas')
-          ps <- io (MS.mkProvedSpec MS.SpecProved method_spec stats deps lemmaSet)
+          end <- io getCurrentTime
+          let diff = diffUTCTime end start
+          ps <- io (MS.mkProvedSpec MS.SpecProved method_spec stats deps lemmaSet diff)
           returnProof $ SomeLLVM ps
 
 llvm_unsafe_assume_spec ::
@@ -289,7 +293,7 @@ llvm_unsafe_assume_spec (Some lm) nm setup =
   withMethodSpec False lm nm setup $ \_ method_spec ->
   do printOutLnTop Info $
        unwords ["Assume override", (method_spec ^. csName)]
-     ps <- io (MS.mkProvedSpec MS.SpecAdmitted method_spec mempty mempty mempty)
+     ps <- io (MS.mkProvedSpec MS.SpecAdmitted method_spec mempty mempty mempty 0)
      returnProof $ SomeLLVM ps
 
 llvm_array_size_profile ::
@@ -333,7 +337,8 @@ llvm_compositional_extract ::
   ProofScript () ->
   TopLevel (SomeLLVM MS.ProvedSpec)
 llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
-  do lemmas' <- checkModuleCompatibility lm lemmas
+  do start <- io getCurrentTime
+     lemmas' <- checkModuleCompatibility lm lemmas
      withMethodSpec checkSat lm nm setup $ \cc method_spec ->
        do let value_input_parameters = mapMaybe
                 (\(_, setup_value) -> setupValueAsExtCns setup_value)
@@ -439,7 +444,10 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           putTopLevelRW rw'
 
           let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas')
-          ps <- io (MS.mkProvedSpec MS.SpecProved extracted_method_spec stats deps lemmaSet)
+
+          end <- io getCurrentTime
+          let diff = diffUTCTime end start
+          ps <- io (MS.mkProvedSpec MS.SpecProved extracted_method_spec stats deps lemmaSet diff)
           return $ SomeLLVM ps
 
 setupValueAsExtCns :: SetupValue (LLVM arch) -> Maybe (ExtCns Term)
