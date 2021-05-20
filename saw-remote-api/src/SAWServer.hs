@@ -47,11 +47,12 @@ import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
 import SAWScript.Crucible.LLVM.Builtins (CheckPointsToType)
 import SAWScript.Crucible.LLVM.X86 (defaultStackBaseAlign)
-import qualified SAWScript.Crucible.Common.MethodSpec as CMS (CrucibleMethodSpecIR, GhostGlobal)
+import qualified SAWScript.Crucible.Common.MethodSpec as CMS (ProvedSpec, GhostGlobal)
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModule)
 import SAWScript.Options (defaultOptions)
 import SAWScript.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
+import SAWScript.Proof (newTheoremDB)
 import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts, SAWSimpset)
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
@@ -188,6 +189,7 @@ initialState readFileFn =
      halloc <- Crucible.newHandleAllocator
      jvmTrans <- CJ.mkInitialJVMContext halloc
      cwd <- getCurrentDirectory
+     db <- newTheoremDB
      let ro = TopLevelRO
                 { roSharedContext = sc
                 , roJavaCodebase = jcb
@@ -201,6 +203,7 @@ initialState readFileFn =
 #endif
                 , roInitWorkDir = cwd
                 , roBasicSS = ss
+                , roTheoremDB = db
                 }
          rw = TopLevelRW
                 { rwValues = mempty
@@ -282,8 +285,8 @@ data ServerVal
   | VJVMCrucibleSetup (Pair CrucibleSetupTypeRepr JVMSetupM)
   | VLLVMCrucibleSetup (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
   | VLLVMModule (Some CMS.LLVMModule)
-  | VJVMMethodSpecIR (CMS.CrucibleMethodSpecIR CJ.JVM)
-  | VLLVMMethodSpecIR (CMS.SomeLLVM CMS.CrucibleMethodSpecIR)
+  | VJVMMethodSpecIR (CMS.ProvedSpec CJ.JVM)
+  | VLLVMMethodSpecIR (CMS.SomeLLVM CMS.ProvedSpec)
   | VGhostVar CMS.GhostGlobal
 
 instance Show ServerVal where
@@ -314,10 +317,10 @@ instance IsServerVal Cryptol.Schema where
 instance IsServerVal CryptolModule where
   toServerVal = VCryptolModule
 
-instance IsServerVal (CMS.CrucibleMethodSpecIR CJ.JVM) where
+instance IsServerVal (CMS.ProvedSpec CJ.JVM) where
   toServerVal = VJVMMethodSpecIR
 
-instance IsServerVal (CMS.SomeLLVM CMS.CrucibleMethodSpecIR) where
+instance IsServerVal (CMS.SomeLLVM CMS.ProvedSpec) where
   toServerVal = VLLVMMethodSpecIR
 
 instance IsServerVal JSS.Class where
@@ -374,7 +377,7 @@ getJVMClass n =
        VJVMClass c -> return c
        _other -> Argo.raise (notAJVMClass n)
 
-getJVMMethodSpecIR :: ServerName -> Argo.Command SAWState (CMS.CrucibleMethodSpecIR CJ.JVM)
+getJVMMethodSpecIR :: ServerName -> Argo.Command SAWState (CMS.ProvedSpec CJ.JVM)
 getJVMMethodSpecIR n =
   do v <- getServerVal n
      case v of
@@ -395,7 +398,7 @@ getLLVMSetup n =
        VLLVMCrucibleSetup setup -> return setup
        _other -> Argo.raise (notAnLLVMSetup n)
 
-getLLVMMethodSpecIR :: ServerName -> Argo.Command SAWState (CMS.SomeLLVM CMS.CrucibleMethodSpecIR)
+getLLVMMethodSpecIR :: ServerName -> Argo.Command SAWState (CMS.SomeLLVM CMS.ProvedSpec)
 getLLVMMethodSpecIR n =
   do v <- getServerVal n
      case v of
