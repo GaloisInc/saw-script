@@ -309,8 +309,8 @@ reachableTheorems db roots =
             (Map.insert curr thm visited)
             (thmDepends thm)
 
-     | otherwise = visited -- TODO? maybe panic here?
-
+     | otherwise =
+         panic "reachableTheorems" ["Could not find theorem with identifier", show (indexValue curr)]
 
 -- | Check that the purported theorem is valid.
 --
