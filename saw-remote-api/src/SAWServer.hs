@@ -24,7 +24,7 @@ import Data.Parameterized.Some ( Some(..) )
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Crypto.Hash as Hash
-import qualified Crypto.Hash.Conduit as Hash
+--import qualified Crypto.Hash.Conduit as Hash
 import System.Directory (getCurrentDirectory)
 import System.IO.Silently (silence)
 
@@ -38,7 +38,7 @@ import qualified Data.AIG as AIG
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
 import qualified Lang.Crucible.JVM as CJ
 import qualified Lang.JVM.Codebase as JSS
-import qualified Verifier.SAW.CryptolEnv as CryptolEnv
+--import qualified Verifier.SAW.CryptolEnv as CryptolEnv
 import Verifier.SAW.Module (emptyModule)
 import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule)
 import Verifier.SAW.Term.Functor (mkModuleName)
@@ -59,7 +59,7 @@ import Verifier.SAW.Rewriter (Simpset)
 import qualified Cryptol.Utils.Ident as Cryptol
 
 import qualified Argo
-import qualified CryptolServer (validateServerState, ServerState(..))
+--import qualified CryptolServer (validateServerState, ServerState(..))
 import SAWServer.Exceptions
     ( serverValNotFound,
       notAnLLVMModule,
@@ -230,27 +230,28 @@ initialState readFileFn =
 -- recompute a cached result, the cached result may be used even if it is
 -- associated with stale filesystem state. See the discussion of this issue at:
 -- https://github.com/GaloisInc/argo/pull/70#discussion_r412462908
-validateSAWState :: SAWState -> IO Bool
-validateSAWState sawState =
-  checkAll
-    [ CryptolServer.validateServerState cryptolState
-    , checkAll $ map (uncurry checkHash) (M.assocs (view trackedFiles sawState))
-    ]
-  where
-    checkAll [] = pure True
-    checkAll (c : cs) =
-      do result <- c
-         if result
-           then checkAll cs
-           else pure False
 
-    checkHash path hash =
-      do currentHash <- Hash.hashFile path
-         pure (currentHash == hash)
+-- validateSAWState :: SAWState -> IO Bool
+-- validateSAWState sawState =
+--   checkAll
+--     [ CryptolServer.validateServerState cryptolState
+--     , checkAll $ map (uncurry checkHash) (M.assocs (view trackedFiles sawState))
+--     ]
+--   where
+--     checkAll [] = pure True
+--     checkAll (c : cs) =
+--       do result <- c
+--          if result
+--            then checkAll cs
+--            else pure False
 
-    cryptolState =
-      CryptolServer.ServerState Nothing
-        (CryptolEnv.eModuleEnv . rwCryptol . view sawTopLevelRW $ sawState)
+--     checkHash path hash =
+--       do currentHash <- Hash.hashFile path
+--          pure (currentHash == hash)
+
+--     cryptolState =
+--       CryptolServer.ServerState Nothing
+--         (CryptolEnv.eModuleEnv . rwCryptol . view sawTopLevelRW $ sawState)
 
 
 newtype SAWEnv =

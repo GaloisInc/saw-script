@@ -1,5 +1,3 @@
-enable_experimental;
-
 c <- java_load_class "Get";
 
 jvm_verify c "get" [] false
@@ -9,7 +7,7 @@ jvm_verify c "get" [] false
     j <- jvm_fresh_var "j" java_int;
     jvm_precond {{ j <= 3 }};
     jvm_execute_func [this, a, jvm_term j];
-    // TODO: Update spec to say `a` is modified but not specified
+    jvm_modifies_array a;
     jvm_return (jvm_term {{ j }});
   }
   abc;

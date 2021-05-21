@@ -1,4 +1,3 @@
-enable_experimental;
 let add_spec = do {
     x <- jvm_fresh_var "x" java_int;
     y <- jvm_fresh_var "y" java_int;

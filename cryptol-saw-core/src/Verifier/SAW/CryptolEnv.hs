@@ -32,6 +32,7 @@ module Verifier.SAW.CryptolEnv
   , InputText(..)
   , lookupIn
   , resolveIdentifier
+  , meSolverConfig
   )
   where
 
@@ -152,7 +153,7 @@ nameMatcher xs =
     case modNameChunks (textToModName (pack xs)) of
       []  -> const False
       [x] -> (packIdent x ==) . MN.nameIdent
-      cs -> let m = MN.Declared (packModName (map pack (init cs))) MN.UserName
+      cs -> let m = MN.Declared (C.TopModule (packModName (map pack (init cs)))) MN.UserName
                 i = packIdent (last cs)
              in \n -> MN.nameIdent n == i && MN.nameInfo n == m
 
@@ -252,7 +253,7 @@ getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
           syms = case vis of
                    OnlyPublic       -> MI.ifPublic ifc
                    PublicAndPrivate -> MI.ifPublic ifc `mappend` M.ifPrivate ifc
-      return $ MN.interpImport i syms
+      return $ MN.interpImportIface i syms
 
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
 getAllIfaceDecls me = mconcat (map (both . ME.lmInterface) (ME.getLoadedModules (ME.meLoadedModules me)))
@@ -363,13 +364,13 @@ loadCryptolModule sc env path = do
   newCryEnv <- C.importTopLevelDeclGroups sc oldCryEnv newDeclGroups
   newTermEnv <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
 
-  let names = MEx.eBinds (T.mExports m) -- :: Set T.Name
+  let names = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
   let tm' = Map.filterWithKey (\k _ -> Set.member k names) $
             Map.intersectionWith TypedTerm types newTermEnv
   let env' = env { eModuleEnv = modEnv''
                  , eTermEnv = newTermEnv
                  }
-  let sm' = Map.filterWithKey (\k _ -> Set.member k (MEx.eTypes (T.mExports m))) (T.mTySyns m)
+  let sm' = Map.filterWithKey (\k _ -> Set.member k (MEx.exported C.NSType (T.mExports m))) (T.mTySyns m)
   return (CryptolModule sm' tm', env')
 
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
@@ -429,7 +430,7 @@ bindIdent ident env = (name, env')
     modEnv = eModuleEnv env
     supply = ME.meSupply modEnv
     fixity = Nothing
-    (name, supply') = MN.mkDeclared interactiveName MN.UserName ident fixity P.emptyRange supply
+    (name, supply') = MN.mkDeclared C.NSValue (C.TopModule interactiveName) MN.UserName ident fixity P.emptyRange supply
     modEnv' = modEnv { ME.meSupply = supply' }
     env' = env { eModuleEnv = modEnv' }
 
@@ -466,6 +467,9 @@ bindInteger (ident, n) env =
 
 --------------------------------------------------------------------------------
 
+meSolverConfig :: ME.ModuleEnv -> TM.SolverConfig
+meSolverConfig env = TM.defaultSolverConfig (ME.meSearchPath env)
+
 resolveIdentifier ::
   (?fileReader :: FilePath -> IO ByteString) =>
   CryptolEnv -> Text -> IO (Maybe T.Name)
@@ -480,10 +484,10 @@ resolveIdentifier env nm =
   nameEnv = getNamingEnv env
 
   doResolve pnm =
-    SMT.withSolver (ME.meSolverConfig modEnv) $ \s ->
+    SMT.withSolver (meSolverConfig modEnv) $ \s ->
     do let minp = MM.ModuleInput True (pure defaultEvalOpts) ?fileReader modEnv
        (res, _ws) <- MM.runModuleM (minp s) $
-          MM.interactive (MB.rename interactiveName nameEnv (MR.renameVar pnm))
+          MM.interactive (MB.rename interactiveName nameEnv (MR.renameVar MR.NameUse pnm))
        case res of
          Left _ -> pure Nothing
          Right (x,_) -> pure (Just x)
@@ -544,18 +548,12 @@ parseDecls sc env input = do
     -- Convert from 'Decl' to 'TopDecl' so that types will be generalized
     let topdecls = [ P.Decl (P.TopLevel P.Public Nothing d) | d <- npdecls ]
 
-    -- Label each TopDecl with the "interactive" module for unique name generation
-    let (mdecls :: [MN.InModule (P.TopDecl P.PName)]) = map (MN.InModule interactiveName) topdecls
-    nameEnv1 <- MN.liftSupply (MN.namingEnv' mdecls)
-
     -- Resolve names
-    let nameEnv = nameEnv1 `MR.shadowing` getNamingEnv env
-    (rdecls :: [P.TopDecl T.Name]) <- MM.interactive (MB.rename interactiveName nameEnv (traverse MR.rename topdecls))
+    (_nenv, rdecls) <- MM.interactive (MB.rename interactiveName (getNamingEnv env) (MR.renameTopDecls interactiveName topdecls))
 
     -- Create a Module to contain the declarations
     let rmodule = P.Module { P.mName = P.Located P.emptyRange interactiveName
                            , P.mInstance = Nothing
-                           , P.mImports = []
                            , P.mDecls = rdecls
                            }
 
@@ -623,7 +621,7 @@ declareName env mname input = do
   let modEnv = eModuleEnv env
   (cname, modEnv') <-
     liftModuleM modEnv $ MM.interactive $
-    MN.liftSupply (MN.mkDeclared mname MN.UserName (P.getIdent pname) Nothing P.emptyRange)
+    MN.liftSupply (MN.mkDeclared C.NSValue (C.TopModule mname) MN.UserName (P.getIdent pname) Nothing P.emptyRange)
   let env' = env { eModuleEnv = modEnv' }
   return (cname, env')
 
@@ -646,7 +644,7 @@ liftModuleM ::
   ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
 liftModuleM env m =
   do let minp = MM.ModuleInput True (pure defaultEvalOpts) ?fileReader env
-     SMT.withSolver (ME.meSolverConfig env) $ \s ->
+     SMT.withSolver (meSolverConfig env) $ \s ->
        MM.runModuleM (minp s) m >>= moduleCmdResult
 
 defaultEvalOpts :: E.EvalOpts

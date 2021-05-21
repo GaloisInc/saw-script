@@ -25,6 +25,9 @@ import qualified Cryptol.TypeCheck.AST as AST
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import Cryptol.Utils.PP
 
+import Verifier.SAW.CryptolEnv( meSolverConfig )
+
+
 -- | Parse a Cryptol module into a list of declarations
 --   Yields an Interaction so that we can talk to the user about what went wrong
 getDeclsCryptol :: FilePath -> IO (Interaction (Maybe [Decl]))
@@ -33,7 +36,7 @@ getDeclsCryptol path = do
    modEnv <- M.initialModuleEnv
    let minp = M.ModuleInput True (pure evalOpts) BS.readFile modEnv
    (result, warnings) <-
-     SMT.withSolver (M.meSolverConfig modEnv) $ \s ->
+     SMT.withSolver (meSolverConfig modEnv) $ \s ->
      M.loadModuleByPath path (minp s)
    return $ do
       forM_ warnings $ liftF . flip Warning () . pretty

@@ -89,7 +89,6 @@ import           SAWScript.Crucible.LLVM.Skeleton.Builtins
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
-import Cryptol.ModuleSystem.Env (meSolverConfig)
 import qualified Cryptol.Eval as V (PPOpts(..))
 import qualified Cryptol.Backend.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
@@ -610,7 +609,7 @@ print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
   sc <- getSharedContext
   cenv <- fmap rwCryptol getTopLevelRW
-  let cfg = meSolverConfig (CEnv.eModuleEnv cenv)
+  let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
   unless (null (getAllExts (ttTerm t))) $
     fail "term contains symbolic variables"
   sawopts <- getOptions
@@ -2668,14 +2667,14 @@ primitives = Map.fromList
 
   , prim "jvm_fresh_var" "String -> JavaType -> JVMSetup Term"
     (pureVal jvm_fresh_var)
-    Experimental
+    Current
     [ "Create a fresh variable for use within a JVM specification. The"
     , "name is used only for pretty-printing."
     ]
 
   , prim "jvm_alloc_object" "String -> JVMSetup JVMValue"
     (pureVal jvm_alloc_object)
-    Experimental
+    Current
     [ "Declare that an instance of the given class should be allocated in a"
     , "JVM specification. Before `jvm_execute_func`, this states that the"
     , "method expects the object to be allocated before it runs. After"
@@ -2685,7 +2684,7 @@ primitives = Map.fromList
 
   , prim "jvm_alloc_array" "Int -> JavaType -> JVMSetup JVMValue"
     (pureVal jvm_alloc_array)
-    Experimental
+    Current
     [ "Declare that an array of the given size and element type should be"
     , "allocated in a JVM specification. Before `jvm_execute_func`, this"
     , "states that the method expects the array to be allocated before it"
@@ -2697,7 +2696,7 @@ primitives = Map.fromList
 
   , prim "jvm_modifies_field" "JVMValue -> String -> JVMSetup ()"
     (pureVal jvm_modifies_field)
-    Experimental
+    Current
     [ "Declare that the indicated object (first argument) has a field"
     , "(second argument) containing an unspecified value."
     , ""
@@ -2709,7 +2708,7 @@ primitives = Map.fromList
 
   , prim "jvm_modifies_static_field" "String -> JVMSetup ()"
     (pureVal jvm_modifies_static_field)
-    Experimental
+    Current
     [ "Declare that the named static field contains an unspecified"
     , "value."
     , ""
@@ -2721,7 +2720,7 @@ primitives = Map.fromList
 
   , prim "jvm_modifies_elem" "JVMValue -> Int -> JVMSetup ()"
     (pureVal jvm_modifies_elem)
-    Experimental
+    Current
     [ "Declare that the indicated array (first argument) has an element"
     , "(second argument) containing an unspecified value."
     , ""
@@ -2731,9 +2730,21 @@ primitives = Map.fromList
     , "nothing about the new value."
     ]
 
+  , prim "jvm_modifies_array" "JVMValue -> JVMSetup ()"
+    (pureVal jvm_modifies_array)
+    Current
+    [ "Declare that the indicated array's elements contain unspecified"
+    , "values."
+    , ""
+    , "This lets users write partial specifications of JVM methods."
+    , "In the post-state section (after `jvm_execute_func`), it"
+    , "states that the method may modify the array elements, but says"
+    , "nothing about the new values."
+    ]
+
   , prim "jvm_field_is" "JVMValue -> String -> JVMValue -> JVMSetup ()"
     (pureVal jvm_field_is)
-    Experimental
+    Current
     [ "Declare that the indicated object (first argument) has a field"
     , "(second argument) containing the given value (third argument)."
     , ""
@@ -2745,7 +2756,7 @@ primitives = Map.fromList
 
   , prim "jvm_static_field_is" "String -> JVMValue -> JVMSetup ()"
     (pureVal jvm_static_field_is)
-    Experimental
+    Current
     [ "Declare that the named static field contains the given value."
     , "By default the field name is assumed to belong to the same class"
     , "as the method being specified. Static fields belonging to other"
@@ -2760,7 +2771,7 @@ primitives = Map.fromList
 
   , prim "jvm_elem_is" "JVMValue -> Int -> JVMValue -> JVMSetup ()"
     (pureVal jvm_elem_is)
-    Experimental
+    Current
     [ "Declare that the indicated array (first argument) has an element"
     , "(second argument) containing the given value (third argument)."
     , ""
@@ -2772,7 +2783,7 @@ primitives = Map.fromList
 
   , prim "jvm_array_is" "JVMValue -> Term -> JVMSetup ()"
     (pureVal jvm_array_is)
-    Experimental
+    Current
     [ "Declare that the indicated array reference (first argument) contains"
     , "the given sequence of values (second argument)."
     , ""
@@ -2784,21 +2795,21 @@ primitives = Map.fromList
 
   , prim "jvm_precond" "Term -> JVMSetup ()"
     (pureVal jvm_precond)
-    Experimental
+    Current
     [ "State that the given predicate is a pre-condition on execution of the"
     , "method being verified."
     ]
 
   , prim "jvm_postcond" "Term -> JVMSetup ()"
     (pureVal jvm_postcond)
-    Experimental
+    Current
     [ "State that the given predicate is a post-condition of execution of the"
     , "method being verified."
     ]
 
   , prim "jvm_execute_func" "[JVMValue] -> JVMSetup ()"
     (pureVal jvm_execute_func)
-    Experimental
+    Current
     [ "Specify the given list of values as the arguments of the method."
     ,  ""
     , "The jvm_execute_func statement also serves to separate the pre-state"
@@ -2810,7 +2821,7 @@ primitives = Map.fromList
 
   , prim "jvm_return" "JVMValue -> JVMSetup ()"
     (pureVal jvm_return)
-    Experimental
+    Current
     [ "Specify the given value as the return value of the method. A"
     , "jvm_return statement is required if and only if the method"
     , "has a non-void return type." ]
@@ -2818,7 +2829,7 @@ primitives = Map.fromList
   , prim "jvm_verify"
     "JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec"
     (pureVal jvm_verify)
-    Experimental
+    Current
     [ "Verify the JVM method named by the second parameter in the class"
     , "specified by the first. The third parameter lists the JVMSpec values"
     , "returned by previous calls to use as overrides. The fourth (Bool)"
@@ -2831,7 +2842,7 @@ primitives = Map.fromList
   , prim "jvm_unsafe_assume_spec"
     "JavaClass -> String -> JVMSetup () -> TopLevel JVMSpec"
     (pureVal jvm_unsafe_assume_spec)
-    Experimental
+    Current
     [ "Return a JVMSpec corresponding to a JVMSetup block, as would be"
     , "returned by jvm_verify but without performing any verification."
     ]
@@ -2839,13 +2850,13 @@ primitives = Map.fromList
   , prim "jvm_null"
     "JVMValue"
     (pureVal (CMS.SetupNull () :: CMS.SetupValue CJ.JVM))
-    Experimental
+    Current
     [ "A JVMValue representing a null pointer value." ]
 
   , prim "jvm_term"
     "Term -> JVMValue"
     (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue CJ.JVM))
-    Experimental
+    Current
     [ "Construct a `JVMValue` from a `Term`." ]
 
     ---------------------------------------------------------------------
