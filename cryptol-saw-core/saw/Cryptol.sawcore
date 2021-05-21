@@ -1208,22 +1208,37 @@ ecCat =
          -- Case for (TCNum m, TCInf)
          (\ (a:sort 0) -> streamAppend a m));
 
-ecSplitAt : (m n : Num) -> (a : sort 0) -> seq (tcAdd m n) a ->
-             #(seq m a, seq n a);
-ecSplitAt =
-  finNumRec
-    (\ (m:Num) -> (n:Num) -> (a:sort 0) -> seq (tcAdd m n) a ->
-       #(seq m a, seq n a))
+ecTake : (m n : Num) -> (a : sort 0) -> seq (tcAdd m n) a -> seq m a;
+ecTake =
+  Num_rec
+    (\ (m:Num) -> (n:Num) -> (a:sort 0) -> seq (tcAdd m n) a -> seq m a)
+
     (\ (m:Nat) ->
        Num_rec
-         (\ (n:Num) -> (a:sort 0) -> seq (tcAdd (TCNum m) n) a ->
-            #(Vec m a, seq n a))
-         -- The case (TCNum n, TCNum m)
-         (\ (n:Nat) -> \ (a:sort 0) -> \ (xs: Vec (addNat m n) a) ->
-            (take a m n xs, drop a m n xs))
+         (\ (n:Num) -> (a:sort 0) -> seq (tcAdd (TCNum m) n) a -> Vec m a)
+         -- The case (TCNum m, TCNum n)
+         (\ (n:Nat) -> \ (a:sort 0) -> \ (xs: Vec (addNat m n) a) -> take a m n xs)
          -- The case (TCNum m, infinity)
-         (\ (a:sort 0) -> \ (xs: Stream a) ->
-            (streamTake a m xs, streamDrop a m xs)));
+         (\ (a:sort 0) -> \ (xs: Stream a) -> streamTake a m xs))
+
+    (Num_rec
+      (\ (n:Num) -> (a:sort 0) -> seq (tcAdd TCInf n) a -> Stream a)
+        -- The case (TCInf, TCNum n)
+	(\ (n:Nat) -> \ (a:sort 0) -> \ (xs:Stream a) -> xs)
+	-- The case (TCInf, TCInf)
+	(\ (a:sort 0) -> \ (xs:Stream a) -> xs));
+
+ecDrop : (m n : Num) -> (a : sort 0) -> seq (tcAdd m n) a -> seq n a;
+ecDrop =
+  finNumRec
+    (\ (m:Num) -> (n:Num) -> (a:sort 0) -> seq (tcAdd m n) a -> seq n a)
+    (\ (m:Nat) ->
+       Num_rec
+         (\ (n:Num) -> (a:sort 0) -> seq (tcAdd (TCNum m) n) a -> seq n a)
+         -- The case (TCNum n, TCNum m)
+         (\ (n:Nat) -> \ (a:sort 0) -> \ (xs: Vec (addNat m n) a) -> drop a m n xs)
+         -- The case (TCNum m, infinity)
+         (\ (a:sort 0) -> \ (xs: Stream a) -> streamDrop a m xs));
 
 ecJoin : (m n : Num) -> (a : sort 0) -> seq m (seq n a) -> seq (tcMul m n) a;
 ecJoin m =

@@ -55,6 +55,7 @@ import Cryptol.Parser (ParseError,ppError)
 import Cryptol.Parser.NoInclude (IncludeError,ppIncludeError)
 import Cryptol.Parser.NoPat (Error)
 import qualified Cryptol.TypeCheck.AST as T
+import Cryptol.Utils.Ident (Namespace(..))
 import Cryptol.Utils.PP
 
 #if !MIN_VERSION_base(4,8,0)
@@ -297,13 +298,13 @@ getNewtypes = do
 getExprNames :: REPL [String]
 getExprNames =
   do fNames <- fmap getNamingEnv getCryptolEnv
-     return (map (show . pp) (Map.keys (MN.neExprs fNames)))
+     return (map (show . pp) (Map.keys (MN.namespaceMap NSValue fNames)))
 
 -- | Get visible type signature names.
 getTypeNames :: REPL [String]
 getTypeNames  =
   do fNames <- fmap getNamingEnv getCryptolEnv
-     return (map (show . pp) (Map.keys (MN.neTypes fNames)))
+     return (map (show . pp) (Map.keys (MN.namespaceMap NSType fNames)))
 
 getPropertyNames :: REPL [String]
 getPropertyNames =
