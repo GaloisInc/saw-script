@@ -38,3 +38,7 @@ write_verilog "write_verilog_seqt.v" seqt;
 // A function that returns a tuple
 let tupt = {{ \(x:[8]) (y:[8]) -> (x + y, x - y) }};
 write_verilog "write_verilog_tupt.v" tupt;
+
+// Check that Verilog counterexamples are in the right order
+sr <- sat w4_abc_verilog {{ \(x:[2][2][8]) -> \(y:[32]) -> y == 0x81050fff /\ x == [[2,3],[4,5]] }};
+caseSatResult sr undefined (\t -> prove_print yices {{ t == ([[0x02,0x03],[0x04,0x05]], 0x81050fff) }});

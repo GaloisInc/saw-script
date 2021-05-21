@@ -870,19 +870,16 @@ w4Solve :: forall sym.
   sym ->
   SharedContext ->
   SATQuery ->
-  IO ([ExtCns Term], [FirstOrderType], [Labeler sym], SBool sym)
+  IO ([(ExtCns Term, (Labeler sym, SValue sym))], SBool sym)
 w4Solve sym sc satq =
   do t <- satQueryAsTerm sc satq
      let varList  = Map.toList (satVariables satq)
-     let argNames = map fst varList
-     let argTys   = map snd varList
      vars <- evalStateT (traverse (traverse (newVarFOT sym)) varList) 0
-     let lbls     = map (fst . snd) vars
      let varMap   = Map.fromList [ (ecVarIndex ec, v) | (ec, (_,v)) <- vars ]
      ref <- newIORef Map.empty
      bval <- w4SolveBasic sym sc mempty varMap ref (satUninterp satq) t
      case bval of
-       VBool v -> return (argNames, argTys, lbls, v)
+       VBool v -> return (vars, v)
        _ -> fail $ "w4Solve: non-boolean result type. " ++ show bval
 
 --
@@ -1060,7 +1057,10 @@ w4EvalAny ::
   SAWCoreState n ->
   SharedContext ->
   Map Ident (SValue (B.ExprBuilder n st fs)) -> Set VarIndex -> Term ->
-  IO ([String], ([Maybe (Labeler (B.ExprBuilder n st fs))], SValue (B.ExprBuilder n st fs)))
+  IO ([String],
+      [SValue (B.ExprBuilder n st fs)],
+      [Maybe (Labeler (B.ExprBuilder n st fs))],
+      SValue (B.ExprBuilder n st fs))
 w4EvalAny sym st sc ps unintSet t =
   do modmap <- scGetModuleMap sc
      ref <- newIORef Map.empty
@@ -1088,7 +1088,7 @@ w4EvalAny sym st sc ps unintSet t =
      let vars'' = fmap ready vars
      bval' <- applyAll bval vars''
 
-     return (argNames, (bvs, bval'))
+     return (argNames, vars, bvs, bval')
 
 w4Eval ::
   forall n st fs.
@@ -1098,7 +1098,7 @@ w4Eval ::
   Map Ident (SValue (B.ExprBuilder n st fs)) -> Set VarIndex -> Term ->
   IO ([String], ([Maybe (Labeler (B.ExprBuilder n st fs))], SBool (B.ExprBuilder n st fs)))
 w4Eval sym st sc ps uintSet t =
-  do (argNames, (bvs, bval)) <- w4EvalAny sym st sc ps uintSet t
+  do (argNames, _, bvs, bval) <- w4EvalAny sym st sc ps uintSet t
      case bval of
        VBool b -> return (argNames, (bvs, b))
        _ -> fail $ "w4Eval: non-boolean result type. " ++ show bval

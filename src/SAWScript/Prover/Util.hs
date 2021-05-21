@@ -28,3 +28,10 @@ liftCexBB tys bs =
   case readFiniteValues tys bs of
     Nothing -> Left "Failed to lift counterexample"
     Just fvs -> Right fvs
+
+-- | Lift a counterexample containing little-endian words
+liftLECexBB :: [FiniteType] -> [Bool] -> Either String [FiniteValue]
+liftLECexBB tys bs =
+  case readFiniteValuesLE tys bs of
+    Nothing -> Left "Failed to lift counterexample"
+    Just fvs -> Right fvs

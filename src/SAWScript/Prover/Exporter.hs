@@ -6,6 +6,7 @@
 {-# Language ExplicitForAll #-}
 {-# Language FlexibleContexts #-}
 {-# Language TypeApplications #-}
+{-# Language TupleSections #-}
 module SAWScript.Prover.Exporter
   ( proveWithSATExporter
   , proveWithPropExporter
@@ -51,11 +52,13 @@ import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
 import Data.Parameterized.Nonce (globalNonceGenerator)
 import Data.Parameterized.Some (Some(..))
+import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.SBV.Dynamic as SBV
 import System.Directory (removeFile)
 import System.IO
 import System.IO.Temp(emptySystemTempFile)
+import Data.Text (pack)
 import Data.Text.Prettyprint.Doc.Render.Text
 import Prettyprinter (vcat)
 
@@ -72,7 +75,7 @@ import Verifier.SAW.Recognizer (asPi)
 import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.Translation.Coq as Coq
-import Verifier.SAW.TypedAST (mkModuleName)
+import Verifier.SAW.TypedAST (mkModuleName, toShortName)
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.Value as Sim
@@ -90,7 +93,10 @@ import SAWScript.Prover.What4
 import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
+import What4.Config (extendConfig)
+import What4.Interface (getConfiguration)
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
+import What4.Protocol.SMTLib2.Response (smtParseOptions)
 import What4.Protocol.VerilogWriter (exprsVerilog)
 import What4.Solver.Adapter
 import qualified What4.SWord as W4Sim
@@ -275,9 +281,11 @@ writeSMTLib2 sc f satq = io $
 writeSMTLib2What4 :: SharedContext -> FilePath -> SATQuery -> TopLevel ()
 writeSMTLib2What4 sc f satq = io $
   do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
-     (_argNames, _argTys, _labels, lit) <- W.w4Solve sym sc satq
+     (_varMap, lit) <- W.w4Solve sym sc satq
+     let cfg = getConfiguration sym
+     extendConfig smtParseOptions cfg
      withFile f WriteMode $ \h ->
-       writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features sym h [lit]
+       writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features Nothing sym h [lit]
 
 writeCore :: FilePath -> Term -> TopLevel ()
 writeCore path t = io $ writeFile path (scWriteExternal t)
@@ -288,13 +296,22 @@ write_verilog sc path t = io $ writeVerilog sc path t
 writeVerilogSAT :: MonadIO m => SharedContext -> FilePath -> SATQuery -> m ([ExtCns Term],[FiniteType])
 writeVerilogSAT sc path satq = liftIO $
   do sym <- newSAWCoreBackend sc
-     (argNames, argTys, _lbls, bval) <- W.w4Solve sym sc satq
+     -- For SAT checking, we don't care what order the variables are in,
+     -- but only that we can correctly keep track of the connection
+     -- between inputs and assignments.
+     let varList  = Map.toList (satVariables satq)
+     let argNames = map fst varList
+     let argTys = map snd varList
+     (vars, bval) <- W.w4Solve sym sc satq
      let f fot = case toFiniteType fot of
                    Nothing -> fail $ "writeVerilogSAT: Unsupported argument type " ++ show fot
                    Just ft -> return ft
+     let argSValues = map (snd . snd) vars
+     let argSValueNames = zip argSValues (map (toShortName . ecName) argNames)
      argTys' <- traverse f argTys
-
-     edoc <- runExceptT $ exprsVerilog sym [Some bval] "f"
+     let mkInput (v, nm) = map (,nm) <$> flattenSValue v
+     ins <- concat <$> mapM mkInput argSValueNames
+     edoc <- runExceptT $ exprsVerilog sym ins [Some bval] "f"
      case edoc of
        Left err -> fail $ "Failed to translate to Verilog: " ++ err
        Right doc -> do
@@ -323,9 +340,15 @@ writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
   sym <- newSAWCoreBackend sc
   st  <- sawCoreState sym
-  (_, (_, sval)) <- W4Sim.w4EvalAny sym st sc mempty mempty t
+  -- For writing Verilog in the general case, it's convenient for any
+  -- lambda-bound inputs to appear first in the module input list, in
+  -- order, followed by free variables (probably in the order seen
+  -- during traversal, because that's at least _a_ deterministic order).
+  (argNames, args, _, sval) <- W4Sim.w4EvalAny sym st sc mempty mempty t
   es <- flattenSValue sval
-  edoc <- runExceptT $ exprsVerilog sym es "f"
+  let mkInput (v, nm) = map (, pack nm) <$> flattenSValue v
+  ins <- concat <$> mapM mkInput (zip args argNames)
+  edoc <- runExceptT $ exprsVerilog sym ins es "f"
   case edoc of
     Left err -> fail $ "Failed to translate to Verilog: " ++ err
     Right doc -> do
