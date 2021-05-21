@@ -448,7 +448,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           end <- io getCurrentTime
           let diff = diffUTCTime end start
           ps <- io (MS.mkProvedSpec MS.SpecProved extracted_method_spec stats deps lemmaSet diff)
-          return $ SomeLLVM ps
+          returnProof (SomeLLVM ps)
 
 setupValueAsExtCns :: SetupValue (LLVM arch) -> Maybe (ExtCns Term)
 setupValueAsExtCns =
