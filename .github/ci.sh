@@ -113,8 +113,6 @@ build() {
   git status --porcelain
   pkgs=(saw)
   if $IS_WIN; then
-    echo "flags: -builtin-abc" >> cabal.project.local
-    echo "constraints: cryptol-saw-core -build-css" >> cabal.project.local
   else
     pkgs+=(saw-remote-api)
   fi

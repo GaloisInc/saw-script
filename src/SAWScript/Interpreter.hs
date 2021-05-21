@@ -985,13 +985,6 @@ primitives = Map.fromList
     , "You must have an 'abc' executable on your PATH to use this command."
     ]
 
-  , prim "cec"                 "AIG -> AIG -> TopLevel ProofResult"
-    (pureVal cecPrim)
-    Deprecated
-    [ "Perform a Combinatorial Equivalence Check between two AIGs."
-    , "The AIGs must have the same number of inputs and outputs."
-    ]
-
   , prim "bitblast"            "Term -> TopLevel AIG"
     (pureVal bbPrim)
     Deprecated
@@ -1334,7 +1327,7 @@ primitives = Map.fromList
     ]
 
   , prim "abc"                 "ProofScript ()"
-    (pureVal proveABC)
+    (pureVal w4_abc_smtlib2)
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
