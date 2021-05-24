@@ -43,7 +43,6 @@ import Lang.Crucible.FunctionHandle
 import Lang.Crucible.Simulator
 
 import Crux
-import Crux.Types
 
 import Mir.DefId
 import Mir.Generator (CollectionState, collection, MirHandle(..))

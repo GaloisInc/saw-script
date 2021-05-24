@@ -49,9 +49,6 @@ import Lang.Crucible.Types
 import qualified Verifier.SAW.Prelude as SAW
 import qualified Verifier.SAW.Recognizer as SAW
 import qualified Verifier.SAW.SharedTerm as SAW
-import qualified Verifier.SAW.Simulator.Value as SAW
-import qualified Verifier.SAW.Simulator.What4 as SAW
-import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
 import qualified Verifier.SAW.Term.Functor as SAW
 import qualified Verifier.SAW.TypedTerm as SAW
 

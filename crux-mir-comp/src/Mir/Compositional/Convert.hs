@@ -263,6 +263,7 @@ visitExprVars cache e f = go Set.empty e
             W4.FnApp _ _ -> error "unexpected FnApp"
         W4.AppExpr ae ->
             void $ W4.traverseApp (\e' -> go bound e' >> return e') $ W4.appExprApp ae
+        W4.FloatExpr _ _ _ -> return ()
         W4.StringExpr _ _ -> return ()
         W4.BoolExpr _ _ -> return ()
         W4.SemiRingLiteral _ _ _ -> return ()
@@ -360,7 +361,7 @@ termToReg sym sc varMap term shp = do
         x' <- SAW.force x
         xs' <- SAW.force xs
         tupleToListRev (n - 1) (x' : acc) xs'
-    tupleToListRev n _ _ = error $ "bad tuple size " ++ show n
+    tupleToListRev n _ _ | n < 2 = error $ "bad tuple size " ++ show n
     tupleToListRev n _ v = error $ "termToReg: expected tuple of " ++ show n ++
         " elements, but got " ++ show v
 
@@ -373,6 +374,7 @@ termToReg sym sc varMap term shp = do
         rv <- goField fld sv
         rvs <- goTuple flds svs
         return (rvs :> RV rv)
+    goTuple _ _ = fail "termToReg: mismatched tuple size"
 
     goField :: forall tp'. FieldShape tp' -> SValue sym -> IO (RegValue sym tp')
     goField (ReqField shp) sv = go shp sv
