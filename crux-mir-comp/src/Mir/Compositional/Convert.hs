@@ -140,12 +140,16 @@ tyToShape col ty = go ty
 
     goRef :: M.Ty -> M.Ty -> M.Mutability -> Some TypeShape
     goRef ty (M.TySlice ty') mutbl | Some tpr <- tyToRepr col ty' = Some $
-        TupleShape ty [ptrTy, usizeTy]
+        TupleShape ty [refTy, usizeTy]
             (Empty
-                :> ReqField (RefShape ptrTy ty' tpr)
+                :> ReqField (RefShape refTy ty' tpr)
                 :> ReqField (PrimShape usizeTy BaseUsizeRepr))
       where
-        ptrTy = M.TyRawPtr ty' mutbl
+        -- We use a ref (of the same mutability as `ty`) when possible, to
+        -- avoid unnecessary clobbering.
+        refTy = case ty of
+            M.TyRef _ _ -> M.TyRef ty' mutbl
+            _ -> M.TyRef ty' mutbl
         usizeTy = M.TyUint M.USize
     goRef ty ty' _ | isUnsized ty' = error $
         "tyToShape: fat pointer " ++ show ty ++ " NYI"
