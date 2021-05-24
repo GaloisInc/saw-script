@@ -31,6 +31,7 @@ import Data.Parameterized.NatRepr
 import Data.Parameterized.TraversableFC
 
 import qualified What4.Expr.Builder as W4
+import qualified What4.Partial as W4
 
 import Cryptol.TypeCheck.AST as Cry
 import Cryptol.Utils.Ident as Cry
@@ -55,11 +56,11 @@ import Mir.Overrides (getString)
 import qualified Verifier.SAW.Cryptol.Prelude as SAW
 import qualified Verifier.SAW.CryptolEnv as SAW
 import qualified Verifier.SAW.SharedTerm as SAW
+import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
+import qualified Verifier.SAW.Recognizer as SAW (asExtCns)
 import qualified Verifier.SAW.TypedTerm as SAW
 
 import Mir.Compositional.Convert
-
-import Debug.Trace
 
 
 cryptolOverrides ::
@@ -111,6 +112,22 @@ cryptolOverrides _symOnline cs name cfg
           :> RegEntry _tpr modulePathStr
           :> RegEntry _tpr' nameStr) <- getOverrideArgs
         cryptolOverride (cs ^. collection) mh modulePathStr nameStr
+
+  | (normDefId "crucible::cryptol::munge" <> "::_inst") `Text.isPrefixOf` name
+  , Empty :> tpr <- cfgArgTypes cfg
+  , tpr' <- cfgReturnType cfg
+  , Just Refl <- testEquality tpr tpr'
+  = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
+    mkOverride' "cryptol_munge" tpr $ do
+        let tyArg = cs ^? collection . M.intrinsics . ix (textId name) .
+                M.intrInst . M.inSubsts . _Wrapped . ix 0
+        shp <- case tyArg of
+            Just ty -> return $ tyToShapeEq (cs ^. collection) ty tpr
+            _ -> error $ "impossible: missing type argument for cryptol::munge()"
+
+        sym <- getSymInterface
+        RegMap (Empty :> RegEntry _ rv) <- getOverrideArgs
+        liftIO $ munge sym shp rv
 
   | otherwise = Nothing
 
@@ -266,6 +283,73 @@ cryptolRun sc name argShps retShp funcTerm = do
     w4VarMap <- liftIO $ readIORef w4VarMapRef
     rv <- liftIO $ termToReg sym sc w4VarMap appTerm retShp
     return rv
+
+
+munge :: forall sym t st fs tp.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    sym -> TypeShape tp -> RegValue sym tp -> IO (RegValue sym tp)
+munge sym shp rv = do
+    sc <- SAW.mkSharedContext
+    SAW.scLoadPreludeModule sc
+
+    scs <- SAW.newSAWCoreState sc
+    visitCache <- W4.newIdxCache
+    w4VarMapRef <- newIORef Map.empty
+
+    let eval' :: forall tp. W4.Expr t tp -> IO SAW.Term
+        eval' x = SAW.toSC sym scs x
+        eval :: forall tp. W4.Expr t tp -> IO SAW.Term
+        eval x = do
+            -- When translating W4 vars to SAW `ExtCns`s, also record the
+            -- reverse mapping into `w4VarMapRef` so the reverse translation
+            -- can be done later on.
+            visitExprVars visitCache x $ \var -> do
+                let expr = W4.BoundVarExpr var
+                term <- eval' expr
+                ec <- case SAW.asExtCns term of
+                    Just ec -> return ec
+                    Nothing -> error "eval on BoundVarExpr produced non-ExtCns?"
+                modifyIORef w4VarMapRef $ Map.insert (SAW.ecVarIndex ec) (Some expr)
+            eval' x
+        uneval :: TypeShape (BaseToType btp) -> SAW.Term -> IO (W4.Expr t btp)
+        uneval shp t = do
+            w4VarMap <- readIORef w4VarMapRef
+            termToReg sym sc w4VarMap t shp
+
+    let go :: forall tp. TypeShape tp -> RegValue sym tp -> IO (RegValue sym tp)
+        go (UnitShape _) () = return ()
+        go shp@(PrimShape _ _) expr = eval expr >>= uneval shp
+        go (TupleShape _ _ flds) rvs = goFields flds rvs
+        go (ArrayShape _ _ shp) vec = case vec of
+            MirVector_Vector v -> MirVector_Vector <$> mapM (go shp) v
+            MirVector_PartialVector pv -> do
+                pv' <- forM pv $ \p -> do
+                    rv <- readMaybeType sym "vector element" (shapeType shp) p
+                    W4.justPartExpr sym <$> go shp rv
+                return $ MirVector_PartialVector pv'
+            MirVector_Array _ -> error $ "munge: MirVector_Array NYI"
+        -- TODO: StructShape
+        go (TransparentShape _ shp) rv = go shp rv
+        -- TODO: RefShape
+        go shp _ = error $ "munge: " ++ show (shapeType shp) ++ " NYI"
+
+        goFields :: forall ctx.
+            Assignment FieldShape ctx ->
+            Assignment (RegValue' sym) ctx ->
+            IO (Assignment (RegValue' sym) ctx)
+        goFields Empty Empty = return Empty
+        goFields (flds :> fld) (rvs :> RV rv) = do
+            rvs' <- goFields flds rvs
+            rv' <- goField fld rv
+            return $ rvs' :> RV rv'
+
+        goField :: forall tp. FieldShape tp -> RegValue sym tp -> IO (RegValue sym tp)
+        goField (ReqField shp) rv = go shp rv
+        goField (OptField shp) rv = do
+            rv' <- readMaybeType sym "field" (shapeType shp) rv
+            W4.justPartExpr sym <$> go shp rv'
+
+    go shp rv
 
 
 typecheckFnSig ::
