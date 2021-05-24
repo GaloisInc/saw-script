@@ -20,8 +20,6 @@ module Verifier.SAW.Simulator.RME
   ( evalSharedTerm
   , RValue, Value(..)
   , RExtra(..)
-  , toBool
-  , toWord
   , runIdentity
   , withBitBlastedSATQuery
   ) where
@@ -34,6 +32,7 @@ import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
@@ -59,15 +58,21 @@ import Data.Traversable
 ------------------------------------------------------------
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: ModuleMap -> Map Ident RValue -> Term -> RValue
+evalSharedTerm :: ModuleMap -> Map Ident RPrim -> Term -> RValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-           extcns (const Nothing) neutral
+           extcns (const Nothing) neutral primHandler
     Sim.evalSharedTerm cfg t
   where
     extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
     neutral _env nt = return $ Prim.userError $ "Could not evaluate neutral term\n:" ++ show nt
+    primHandler pn msg env _tv =
+      return $ Prim.userError $ unlines
+        [ "Could not evaluate primitive " ++ show (primName pn)
+        , "On argument " ++ show (length env)
+        , Text.unpack msg
+        ]
 
 ------------------------------------------------------------
 -- Values
@@ -82,6 +87,7 @@ type instance VArray ReedMuller = ()
 type instance Extra ReedMuller = RExtra
 
 type RValue = Value ReedMuller
+type RPrim  = Prims.Prim ReedMuller
 type RThunk = Thunk ReedMuller
 
 data RExtra = AStream (IntTrie RValue)
@@ -111,8 +117,8 @@ toStream :: RValue -> IntTrie RValue
 toStream (VExtra (AStream x)) = x
 toStream x = error $ unwords ["Verifier.SAW.Simulator.RME.toStream", show x]
 
-wordFun :: (Vector RME -> RValue) -> RValue
-wordFun f = pureFun (\x -> f (toWord x))
+wordFun :: (Vector RME -> RPrim) -> RPrim
+wordFun f = Prims.strictFun (\x -> f (toWord x))
 
 genShift :: (a -> b -> b -> b) -> (b -> Integer -> b) -> b -> Vector a -> b
 genShift cond f x0 v = go x0 (V.toList v)
@@ -121,11 +127,12 @@ genShift cond f x0 v = go x0 (V.toList v)
     go x (y : ys) = go (cond y (f x (2 ^ length ys)) x) ys
 
 -- | op : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
-bvShiftOp :: (Vector RME -> Integer -> Vector RME) -> RValue
+bvShiftOp :: (Vector RME -> Integer -> Vector RME) -> RPrim
 bvShiftOp op =
-  constFun $
+  Prims.constFun $
   wordFun $ \x ->
-  pureFun $ \y ->
+  Prims.strictFun $ \y ->
+  Prims.PrimValue $
     case y of
       VNat n   -> vWord (op x (toInteger n))
       VBVToNat _sz v -> vWord (genShift muxRMEV op x (toWord v))
@@ -229,7 +236,7 @@ prims =
 unsupportedRMEPrimitive :: String -> a
 unsupportedRMEPrimitive = Prim.unsupportedPrimitive "RME"
 
-constMap :: Map Ident RValue
+constMap :: Map Ident RPrim
 constMap =
   Map.union (Prims.constMap prims) $
   Map.fromList
@@ -259,18 +266,18 @@ constMap =
   ]
 
 -- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
-bvToIntOp :: RValue
+bvToIntOp :: RPrim
 bvToIntOp = unsupportedRMEPrimitive "bvToIntOp"
 
 -- primitive sbvToInt : (n : Nat) -> Vec n Bool -> Integer;
-sbvToIntOp :: RValue
+sbvToIntOp :: RPrim
 sbvToIntOp = unsupportedRMEPrimitive "sbvToIntOp"
 
 -- primitive intToBv : (n : Nat) -> Integer -> Vec n Bool;
-intToBvOp :: RValue
+intToBvOp :: RPrim
 intToBvOp =
-  Prims.natFun' "intToBv n" $ \n -> return $
-  Prims.intFun "intToBv x" $ \x -> return $
+  Prims.natFun $ \n ->
+  Prims.intFun $ \x -> Prims.PrimValue $
     VWord (V.reverse (V.generate (fromIntegral n) (RME.constant . testBit x)))
 
 muxRMEV :: RME -> Vector RME -> Vector RME -> Vector RME
@@ -301,53 +308,53 @@ vSignedShiftR xs i
 
 ------------------------------------------------------------
 
-toIntModOp :: RValue
+toIntModOp :: RPrim
 toIntModOp =
-  Prims.natFun $ \n -> return $
-  Prims.intFun "toIntModOp" $ \x -> return $
-  VIntMod n (x `mod` toInteger n)
+  Prims.natFun $ \n -> 
+  Prims.intFun $ \x ->
+    Prims.PrimValue (VIntMod n (x `mod` toInteger n))
 
-fromIntModOp :: RValue
+fromIntModOp :: RPrim
 fromIntModOp =
-  constFun $
-  Prims.intModFun "fromIntModOp" $ \x -> return $
-  VInt x
+  Prims.constFun $
+  Prims.intModFun $ \x -> 
+    Prims.PrimValue (VInt x)
 
-intModEqOp :: RValue
+intModEqOp :: RPrim
 intModEqOp =
-  constFun $
-  Prims.intModFun "intModEqOp" $ \x -> return $
-  Prims.intModFun "intModEqOp" $ \y -> return $
-  VBool (RME.constant (x == y))
+  Prims.constFun $
+  Prims.intModFun $ \x ->
+  Prims.intModFun $ \y ->
+    Prims.PrimValue (VBool (RME.constant (x == y)))
 
-intModBinOp :: (Integer -> Integer -> Integer) -> RValue
+intModBinOp :: (Integer -> Integer -> Integer) -> RPrim
 intModBinOp f =
-  Prims.natFun $ \n -> return $
-  Prims.intModFun "intModBinOp x" $ \x -> return $
-  Prims.intModFun "intModBinOp y" $ \y -> return $
-  VIntMod n (f x y `mod` toInteger n)
+  Prims.natFun $ \n ->
+  Prims.intModFun $ \x ->
+  Prims.intModFun $ \y ->
+    Prims.PrimValue (VIntMod n (f x y `mod` toInteger n))
 
-intModUnOp :: (Integer -> Integer) -> RValue
+intModUnOp :: (Integer -> Integer) -> RPrim
 intModUnOp f =
-  Prims.natFun $ \n -> return $
-  Prims.intModFun "intModUnOp" $ \x -> return $
-  VIntMod n (f x `mod` toInteger n)
+  Prims.natFun $ \n ->
+  Prims.intModFun $ \x ->
+    Prims.PrimValue (VIntMod n (f x `mod` toInteger n))
 
 ----------------------------------------
 
 -- MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
-mkStreamOp :: RValue
+mkStreamOp :: RPrim
 mkStreamOp =
-  constFun $
-  pureFun $ \f ->
-  vStream (fmap (\n -> runIdentity (apply f (ready (VNat n)))) IntTrie.identity)
+  Prims.constFun $
+  Prims.strictFun $ \f ->
+    Prims.PrimValue (vStream (fmap (\n -> runIdentity (apply f (ready (VNat n)))) IntTrie.identity))
 
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
-streamGetOp :: RValue
+streamGetOp :: RPrim
 streamGetOp =
-  strictFun $ \(toTValue -> tp) -> return $
-  pureFun $ \xs ->
-  strictFun $ \case
+  Prims.tvalFun   $ \tp ->
+  Prims.strictFun $ \xs ->
+  Prims.strictFun $ \ix -> Prims.Prim $ case ix of
     VNat n -> pure $ IntTrie.apply (toStream xs) (toInteger n)
     VIntToNat _i -> error "RME.streamGetOp : symbolic integer TODO"
     VBVToNat _sz bv ->
@@ -365,8 +372,8 @@ streamGetOp =
                k1 = k0 + 1
          pure $ loop (0::Integer) (V.toList (toWord bv))
 
-    v -> panic "Verifer.SAW.Simulator.RME.streamGetOp"
-               [ "Expected Nat value", show v ]
+    _ -> panic "Verifer.SAW.Simulator.RME.streamGetOp"
+               [ "Expected Nat value", show ix ]
 
 
 ------------------------------------------------------------
@@ -388,12 +395,18 @@ newVars' shape = ready <$> newVars shape
 -- Bit-blasting primitives.
 
 bitBlastBasic :: ModuleMap
-              -> Map Ident RValue
+              -> Map Ident RPrim
               -> Map VarIndex RValue
               -> Term
               -> RValue
 bitBlastBasic m addlPrims ecMap t = runIdentity $ do
   let neutral _env nt = return $ Prim.userError $ "Could not evaluate neutral term\n:" ++ show nt
+  let primHandler pn msg env _tv =
+         return $ Prim.userError $ unlines
+           [ "Could not evaluate primitive " ++ show (primName pn)
+           , "On argument " ++ show (length env)
+           , Text.unpack msg
+           ]
 
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
          (\ec -> case Map.lookup (ecVarIndex ec) ecMap of
@@ -401,6 +414,7 @@ bitBlastBasic m addlPrims ecMap t = runIdentity $ do
                    Nothing -> error ("RME: unknown ExtCns: " ++ show (ecName ec)))
          (const Nothing)
          neutral
+         primHandler
   Sim.evalSharedTerm cfg t
 
 
@@ -414,7 +428,7 @@ processVar (ec, fot) =
 
 withBitBlastedSATQuery ::
   SharedContext ->
-  Map Ident RValue ->
+  Map Ident RPrim ->
   SATQuery ->
   (RME -> [(ExtCns Term, FiniteType)] -> IO a) ->
   IO a
