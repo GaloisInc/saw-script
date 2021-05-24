@@ -17,6 +17,7 @@ module SAWScript.Proof
   , splitProp
   , unfoldProp
   , simplifyProp
+  , hoistIfsInGoal
   , evalProp
   , betaReduceProp
   , falseProp
@@ -175,6 +176,18 @@ simplifyProp :: SharedContext -> Simpset -> Prop -> IO Prop
 simplifyProp sc ss (Prop tm) =
   do tm' <- rewriteSharedTerm sc ss tm
      return (Prop tm')
+
+hoistIfsInGoal :: SharedContext -> Prop -> IO Prop
+hoistIfsInGoal sc p =
+  case asEqTrue pTerm of
+    Just t -> do
+      tm <- hoistIfs sc t
+      eqTm <- scEqTrue sc tm
+      newP <- termToProp sc eqTm
+      return newP
+    Nothing -> fail "hoist_ifs: expected EqTrue"
+  where
+    pTerm = unProp p
 
 -- | Evaluate the given proposition by round-tripping
 --   through the What4 formula representation.  This will
