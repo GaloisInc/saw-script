@@ -281,9 +281,7 @@ cryptolRun sc name argShps retShp funcTerm = do
     appTerm <- liftIO $ SAW.scApplyAll sc funcTerm argTerms
 
     w4VarMap <- liftIO $ readIORef w4VarMapRef
-    rv <- liftIO $ termToReg sym sc w4VarMap appTerm retShp
-    return rv
-
+    liftIO $ termToReg sym sc w4VarMap appTerm retShp
 
 munge :: forall sym t st fs tp.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
