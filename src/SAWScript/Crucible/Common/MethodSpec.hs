@@ -153,7 +153,15 @@ ppTypedTerm :: TypedTerm -> PP.Doc ann
 ppTypedTerm (TypedTerm tp tm) =
   PP.unAnnotate (ppTerm defaultPPOpts tm)
   PP.<+> PP.pretty ":" PP.<+>
-  PP.viaShow (Cryptol.ppPrec 0 tp)
+  ppTypedTermType tp
+
+ppTypedTermType :: TypedTermType -> PP.Doc ann
+ppTypedTermType (TypedTermSchema sch) =
+  PP.viaShow (Cryptol.ppPrec 0 sch)
+ppTypedTermType (TypedTermKind k) =
+  PP.viaShow (Cryptol.ppPrec 0 k)
+ppTypedTermType (TypedTermOther tp) =
+  PP.unAnnotate (ppTerm defaultPPOpts tp)
 
 ppTypedExtCns :: TypedExtCns -> PP.Doc ann
 ppTypedExtCns (TypedExtCns tp ec) =

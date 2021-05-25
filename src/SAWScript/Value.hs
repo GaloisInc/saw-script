@@ -341,8 +341,12 @@ evaluate sc t =
   scGetModuleMap sc
 
 evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
-evaluateTypedTerm sc (TypedTerm schema trm) =
+evaluateTypedTerm sc (TypedTerm (TypedTermSchema schema) trm) =
   C.runEval mempty . exportValueWithSchema schema =<< evaluate sc trm
+evaluateTypedTerm sc (TypedTerm tp _) =
+  fail $ unlines [ "Could not evaluate term with type"
+                 , show (CMS.ppTypedTermType tp)
+                 ]
 
 applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x
@@ -559,7 +563,7 @@ typedTermOfString sc str =
      let scChar c = scApply sc bvNat8 =<< scNat sc (fromIntegral (fromEnum c))
      ts <- traverse scChar str
      trm <- scVector sc byteT ts
-     pure (TypedTerm schema trm)
+     pure (TypedTerm (TypedTermSchema schema) trm)
 
 
 -- Other SAWScript Monads ------------------------------------------------------

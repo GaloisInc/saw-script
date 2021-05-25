@@ -46,7 +46,6 @@ import qualified Text.LLVM.AST as L
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
-import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.NatRepr
@@ -70,7 +69,7 @@ import Verifier.SAW.Simulator.What4.ReturnTrip
 import Text.LLVM.DebugUtils as L
 
 import           SAWScript.Crucible.Common (Sym, sawCoreState)
-import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..))
+import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..), ppTypedTermType)
 
 import SAWScript.Crucible.LLVM.MethodSpecIR
 
@@ -182,15 +181,15 @@ typeOfSetupValue' cc env nameEnv val =
         Just spec ->
           return (Crucible.PtrType (Crucible.MemType (spec ^. allocSpecType)))
     SetupTerm tt ->
-      case ttSchema tt of
-        Cryptol.Forall [] [] ty ->
+      case ttType tt of
+        TypedTermSchema (Cryptol.Forall [] [] ty) ->
           case toLLVMType dl (Cryptol.evalValType mempty ty) of
             Left err -> fail (toLLVMTypeErrToString err)
             Right memTy -> return memTy
-        s -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
-                            , "instead got:"
-                            , show (Cryptol.pp s)
-                            ]
+        tp -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
+                             , "instead got:"
+                             , show (ppTypedTermType tp)
+                             ]
     SetupStruct () packed vs ->
       do memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
          let si = Crucible.mkStructInfo dl packed memTys
@@ -359,10 +358,14 @@ resolveTypedTerm ::
   TypedTerm       ->
   IO LLVMVal
 resolveTypedTerm cc tm =
-  case ttSchema tm of
-    Cryptol.Forall [] [] ty ->
+  case ttType tm of
+    TypedTermSchema (Cryptol.Forall [] [] ty) ->
       resolveSAWTerm cc (Cryptol.evalValType mempty ty) (ttTerm tm)
-    _ -> fail "resolveSetupVal: expected monomorphic term"
+    tp -> fail $ unlines
+            [ "resolveSetupVal: expected monomorphic term"
+            , "instead got term with type"
+            , show (ppTypedTermType tp)
+            ]
 
 resolveSAWPred ::
   LLVMCrucibleContext arch ->
@@ -683,8 +686,8 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
 
         _ -> fail $ "unexpected cryptol type: " ++ show cryptol_type
 
-  case ttSchema typed_term of
-    Cryptol.Forall [] [] cryptol_type -> do
+  case ttType typed_term of
+    TypedTermSchema (Cryptol.Forall [] [] cryptol_type) -> do
       let evaluated_type = Cryptol.evalValType mempty cryptol_type
       fresh_array_const <- scFreshGlobal saw_context "arr"
         =<< scArrayType saw_context offset_type_term byte_type_term

@@ -550,7 +550,7 @@ matchArg ::
   OverrideMatcher CJ.JVM w ()
 
 matchArg opts sc cc cs prepost actual expectedTy expected@(MS.SetupTerm expectedTT)
-  | Cryptol.Forall [] [] tyexpr <- ttSchema expectedTT
+  | TypedTermSchema (Cryptol.Forall [] [] tyexpr) <- ttType expectedTT
   , Right tval <- Cryptol.evalType mempty tyexpr
   = do sym <- Ov.getSymInterface
        failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
@@ -694,7 +694,7 @@ learnPointsTo opts sc cc spec prepost pt = do
 
     JVMPointsToArray loc ptr (Just tt) ->
       do (len, ety) <-
-           case Cryptol.isMono (ttSchema tt) of
+           case ttIsMono (ttType tt) of
              Nothing -> fail "jvm_array_is: invalid polymorphic value"
              Just cty ->
                case Cryptol.tIsSeq cty of
@@ -891,7 +891,7 @@ doEntireArrayStore sym glob ref vs = foldM store glob (zip [0..] vs)
 -- along with a list of its projected components. Return 'Nothing' if
 -- the 'TypedTerm' does not have a vector type.
 destVecTypedTerm :: SharedContext -> TypedTerm -> IO (Maybe (Cryptol.Type, [TypedTerm]))
-destVecTypedTerm sc (TypedTerm schema t) =
+destVecTypedTerm sc (TypedTerm ttp t) =
   case asVec of
     Nothing -> pure Nothing
     Just (len, ety) ->
@@ -899,10 +899,10 @@ destVecTypedTerm sc (TypedTerm schema t) =
          ty_tm <- Cryptol.importType sc Cryptol.emptyEnv ety
          idxs <- traverse (scNat sc) (map fromInteger [0 .. len-1])
          ts <- traverse (scAt sc len_tm ty_tm t) idxs
-         pure $ Just (ety, map (TypedTerm (Cryptol.tMono ety)) ts)
+         pure $ Just (ety, map (TypedTerm (TypedTermSchema (Cryptol.tMono ety))) ts)
   where
     asVec =
-      do ty <- Cryptol.isMono schema
+      do ty <- ttIsMono ttp
          (n, a) <- Cryptol.tIsSeq ty
          n' <- Cryptol.tIsNum n
          Just (n', a)
