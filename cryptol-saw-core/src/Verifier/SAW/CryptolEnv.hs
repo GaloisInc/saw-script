@@ -366,7 +366,7 @@ loadCryptolModule sc env path = do
 
   let names = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
   let tm' = Map.filterWithKey (\k _ -> Set.member k names) $
-            Map.intersectionWith TypedTerm types newTermEnv
+            Map.intersectionWith (\t x -> TypedTerm (TypedTermSchema t) x) types newTermEnv
   let env' = env { eModuleEnv = modEnv''
                  , eTermEnv = newTermEnv
                  }
@@ -375,13 +375,18 @@ loadCryptolModule sc env path = do
 
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
-  env { eExtraNames = flip (foldr addName) (Map.keys tm) $
+  env { eExtraNames = flip (foldr addName) (Map.keys tm') $
                       flip (foldr addTSyn) (Map.keys sm) $ eExtraNames env
       , eExtraTSyns = Map.union sm (eExtraTSyns env)
-      , eExtraTypes = Map.union (fmap (\(TypedTerm s _) -> s) tm) (eExtraTypes env)
-      , eTermEnv    = Map.union (fmap (\(TypedTerm _ t) -> t) tm) (eTermEnv env)
+      , eExtraTypes = Map.union (fmap fst tm') (eExtraTypes env)
+      , eTermEnv    = Map.union (fmap snd tm') (eTermEnv env)
       }
   where
+    -- select out those typed terms that have Cryptol schemas
+    tm' = Map.mapMaybe f tm
+    f (TypedTerm (TypedTermSchema s) x) = Just (s,x)
+    f _ = Nothing
+
     addName name = MN.shadowing (MN.singletonE (P.mkQual modName (MN.nameIdent name)) name)
     addTSyn name = MN.shadowing (MN.singletonT (P.mkQual modName (MN.nameIdent name)) name)
 
@@ -435,7 +440,7 @@ bindIdent ident env = (name, env')
     env' = env { eModuleEnv = modEnv' }
 
 bindTypedTerm :: (Ident, TypedTerm) -> CryptolEnv -> CryptolEnv
-bindTypedTerm (ident, TypedTerm schema trm) env =
+bindTypedTerm (ident, TypedTerm (TypedTermSchema schema) trm) env =
   env' { eExtraNames = MR.shadowing (MN.singletonE pname name) (eExtraNames env)
        , eExtraTypes = Map.insert name schema (eExtraTypes env)
        , eTermEnv    = Map.insert name trm (eTermEnv env)
@@ -443,6 +448,10 @@ bindTypedTerm (ident, TypedTerm schema trm) env =
   where
     pname = P.mkUnqual ident
     (name, env') = bindIdent ident env
+
+-- Only bind terms that have Cryptol schemas
+bindTypedTerm _ env = env
+
 
 bindType :: (Ident, T.Schema) -> CryptolEnv -> CryptolEnv
 bindType (ident, T.Forall [] [] ty) env =
@@ -528,7 +537,7 @@ parseTypedTerm sc env input = do
 
   -- Translate
   trm <- translateExpr sc env' expr
-  return (TypedTerm schema trm)
+  return (TypedTerm (TypedTermSchema schema) trm)
 
 parseDecls ::
   (?fileReader :: FilePath -> IO ByteString) =>

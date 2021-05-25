@@ -54,15 +54,13 @@ import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
 
 import Verifier.SAW.Cryptol.Panic
-import Verifier.SAW.Conversion
 import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import qualified Verifier.SAW.Simulator.Concrete as SC
 import qualified Verifier.SAW.Simulator.Value as SC
 import Verifier.SAW.Prim (BitVector(..))
-import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.MonadLazy (force)
-import Verifier.SAW.TypedAST (mkSort, mkModuleName, FieldName, LocalName)
+import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
 
 import GHC.Stack
 
@@ -1567,91 +1565,58 @@ pIsNeq ty = case C.tNoUser ty of
 --------------------------------------------------------------------------------
 -- Utilities
 
-asCryptolTypeValue :: SC.TValue SC.Concrete -> Maybe C.Type
+asCryptolTypeValue :: SC.TValue SC.Concrete -> Maybe (Either C.Kind C.Type)
 asCryptolTypeValue v =
   case v of
-    SC.VBoolType -> return C.tBit
-    SC.VIntType -> return C.tInteger
-    SC.VIntModType n -> return (C.tIntMod (C.tNum n))
+    SC.VBoolType -> return (Right C.tBit)
+    SC.VIntType -> return (Right C.tInteger)
+    SC.VIntModType n -> return (Right (C.tIntMod (C.tNum n)))
     SC.VArrayType v1 v2 -> do
-      t1 <- asCryptolTypeValue v1
-      t2 <- asCryptolTypeValue v2
-      return $ C.tArray t1 t2
+      Right t1 <- asCryptolTypeValue v1
+      Right t2 <- asCryptolTypeValue v2
+      return (Right (C.tArray t1 t2))
     SC.VVecType n v2 -> do
-      t2 <- asCryptolTypeValue v2
-      return (C.tSeq (C.tNum n) t2)
-    SC.VDataType "Prelude.Stream" [v1] ->
-      case v1 of
-        SC.TValue tv -> C.tSeq C.tInf <$> asCryptolTypeValue tv
-        _ -> Nothing
-    SC.VUnitType -> return (C.tTuple [])
+      Right t2 <- asCryptolTypeValue v2
+      return (Right (C.tSeq (C.tNum n) t2))
+
+    SC.VDataType "Prelude.Stream" [SC.TValue v1] ->
+        do Right t1 <- asCryptolTypeValue v1
+           return (Right (C.tSeq C.tInf t1))
+
+    SC.VDataType "Cryptol.Num" [] ->
+      return (Left C.KNum)
+
+    SC.VDataType _ _ -> Nothing
+
+    SC.VUnitType -> return (Right (C.tTuple []))
     SC.VPairType v1 v2 -> do
-      t1 <- asCryptolTypeValue v1
-      t2 <- asCryptolTypeValue v2
+      Right t1 <- asCryptolTypeValue v1
+      Right t2 <- asCryptolTypeValue v2
       case C.tIsTuple t2 of
-        Just ts -> return (C.tTuple (t1 : ts))
-        Nothing -> return (C.tTuple [t1, t2])
-    SC.VPiType _nm v1 (SC.VDependentPi _) ->
-      case v1 of
-        -- if we see that the parameter is a Cryptol.Num, it's a
-        -- pretty good guess that it originally was a
-        -- polymorphic number type.
-        SC.VDataType "Cryptol.Num" [] ->
-          let msg= unwords ["asCryptolTypeValue: can't infer a polymorphic Cryptol"
-                           ,"type. Please, make sure all numeric types are"
-                           ,"specialized before constructing a typed term."
-                           ]
-          in error msg
-            -- otherwise we issue a generic error about dependent type inference
-        _ ->
-          error $ unwords ["asCryptolTypeValue: can't infer a Cryptol type"
-                          ,"for a dependent SAW-Core type."
-                          ]
+        Just ts -> return (Right (C.tTuple (t1 : ts)))
+        Nothing -> return (Right (C.tTuple [t1, t2]))
 
     SC.VPiType _nm v1 (SC.VNondependentPi v2) ->
-      do t1 <- asCryptolTypeValue v1
-         t2 <- asCryptolTypeValue v2
-         return (C.tFun t1 t2)
+      do Right t1 <- asCryptolTypeValue v1
+         Right t2 <- asCryptolTypeValue v2
+         return (Right (C.tFun t1 t2))
 
-    _ -> Nothing
+    SC.VSort s
+      | s == mkSort 0 -> return (Left C.KType)
+      | otherwise     -> Nothing
 
--- | Deprecated.
-scCryptolType :: SharedContext -> Term -> IO C.Type
+    -- TODO?
+    SC.VPiType _nm _v1 (SC.VDependentPi _) -> Nothing
+    SC.VRecordType{} -> Nothing
+    SC.VTyTerm{} -> Nothing
+
+
+scCryptolType :: SharedContext -> Term -> IO (Maybe (Either C.Kind C.Type))
 scCryptolType sc t =
   do modmap <- scGetModuleMap sc
      case SC.evalSharedTerm modmap Map.empty Map.empty t of
-       SC.TValue (asCryptolTypeValue -> Just ty) -> return ty
-       _ -> panic "scCryptolType" ["scCryptolType: unsupported type " ++ showTerm t]
-
--- | Deprecated.
-scCryptolEq :: SharedContext -> Term -> Term -> IO Term
-scCryptolEq sc x y =
-  do rules <- concat <$> traverse defRewrites defs
-     let ss = addConvs natConversions (addRules rules emptySimpset :: Simpset ())
-     tx <- scTypeOf sc x >>= rewriteSharedTerm sc ss >>= scCryptolType sc . snd
-     ty <- scTypeOf sc y >>= rewriteSharedTerm sc ss >>= scCryptolType sc . snd
-     unless (tx == ty) $
-       panic "scCryptolEq"
-                 [ "scCryptolEq: type mismatch between"
-                 , pretty tx
-                 , "and"
-                 , pretty ty
-                 ]
-
-     -- Actually apply the equality function, along with the Eq class dictionary
-     t <- scTypeOf sc x
-     c <- scCryptolType sc t
-     k <- importType sc emptyEnv c
-     eqPrf <- proveProp sc emptyEnv (C.pEq c)
-     scGlobalApply sc "Cryptol.ecEq" [k, eqPrf, x, y]
-
-  where
-    defs = map (mkIdent (mkModuleName ["Cryptol"])) ["seq", "ty"]
-    defRewrites ident =
-      do maybe_def <- scFindDef sc ident
-         case maybe_def of
-           Nothing -> return []
-           Just def -> scDefRewriteRules sc def
+       SC.TValue tv -> return (asCryptolTypeValue tv)
+       _ -> return Nothing
 
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.
