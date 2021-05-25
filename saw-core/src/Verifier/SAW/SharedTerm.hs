@@ -1624,7 +1624,7 @@ scIte sc t b x y = scGlobalApply sc "Prelude.ite" [t, b, x, y]
 -- > append : (m n : Nat) -> (e : sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
 scAppend :: SharedContext -> Term -> Term -> Term ->
             Term -> Term -> IO Term
-scAppend sc t m n x y = scGlobalApply sc "Prelude.append" [m, n, t, x, y]
+scAppend sc m n t x y = scGlobalApply sc "Prelude.append" [m, n, t, x, y]
 
 -- | Create a term applying @Prelude.join@ to a vector of vectors.
 --
