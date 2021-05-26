@@ -82,6 +82,7 @@ data TValue l
   | VIntModType !Natural
   | VArrayType !(TValue l) !(TValue l)
   | VPiType LocalName !(TValue l) !(PiBody l)
+  | VStringType
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
   | VDataType !(PrimName (TValue l)) ![Value l] ![Value l]
@@ -198,6 +199,7 @@ instance Show (Extra l) => Show (TValue l) where
   showsPrec p v =
     case v of
       VBoolType      -> showString "Bool"
+      VStringType    -> showString "String"
       VIntType       -> showString "Integer"
       VIntModType n  -> showParen True (showString "IntMod " . shows n)
       VArrayType{}   -> showString "Array"
@@ -323,6 +325,7 @@ asFirstOrderTypeTValue v =
       FOTRec . Map.fromList <$>
         mapM (traverse asFirstOrderTypeTValue) elem_tps
 
+    VStringType   -> Nothing
     VPiType{}   -> Nothing
     VDataType{} -> Nothing
     VSort{}     -> Nothing
@@ -351,6 +354,8 @@ suffixTValue tv =
       do a' <- suffixTValue a
          b' <- suffixTValue b
          Just ("_Pair" ++ a' ++ b')
+
+    VStringType -> Nothing
     VDataType {} -> Nothing
     VRecordType {} -> Nothing
     VSort {} -> Nothing

@@ -1636,6 +1636,7 @@ asCryptolTypeValue v =
 
     -- TODO?
     SC.VPiType _nm _v1 (SC.VDependentPi _) -> Nothing
+    SC.VStringType -> Nothing
     SC.VRecordType{} -> Nothing
     SC.VRecursorType{} -> Nothing
     SC.VTyTerm{} -> Nothing

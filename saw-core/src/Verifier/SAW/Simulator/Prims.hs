@@ -32,6 +32,7 @@ module Verifier.SAW.Simulator.Prims
 , intFun
 , intModFun
 , tvalFun
+, stringFun
 , wordFun
 , vectorFun
 , Pack
@@ -132,6 +133,11 @@ intModFun = PrimFilterFun "expected IntMod" r
 tvalFun :: VMonad l => (TValue l -> Prim l) -> Prim l
 tvalFun = PrimFilterFun "expected type value" r
   where r (TValue tv) = pure tv
+        r _ = mzero
+
+stringFun :: VMonad l => (Text -> Prim l) -> Prim l
+stringFun = PrimFilterFun "expected string value" r
+  where r (VString x) = pure x
         r _ = mzero
 
 -- | A primitive that requires a packed word argument
@@ -346,11 +352,16 @@ constMap bp = Map.fromList
   , ("Prelude.coerce", coerceOp)
   , ("Prelude.bvNat", bvNatOp bp)
   , ("Prelude.bvToNat", bvToNatOp)
-  , ("Prelude.error", errorOp)
   , ("Prelude.fix", fixOp)
+  , ("Prelude.error", errorOp)
+
+  -- Strings
+  , ("Prelude.String", PrimValue (TValue VStringType))
+  , ("Prelude.equalString", equalStringOp bp)
+
   -- Overloaded
   , ("Prelude.ite", iteOp bp)
-  , ("Prelude.iteDep", iteOp bp)
+  , ("Prelude.iteDep", iteDepOp bp)
   -- SMT Arrays
   , ("Prelude.Array", arrayTypeOp)
   , ("Prelude.arrayConstant", arrayConstantOp bp)
@@ -635,6 +646,15 @@ natCaseOp =
     then force z
     else do s' <- force s
             apply s' (ready (VNat (n - 1)))
+
+--------------------------------------------------------------------------------
+-- Strings
+
+equalStringOp :: VMonad l => BasePrims l -> Prim l
+equalStringOp bp =
+  stringFun $ \x ->
+  stringFun $ \y ->
+    Prim (VBool <$> bpBool bp (x == y))
 
 --------------------------------------------------------------------------------
 
@@ -1051,20 +1071,32 @@ natToIntOp = natFun $ \x -> PrimValue $ VInt (toInteger x)
 errorOp :: VMonad l => Prim l
 errorOp =
   constFun $
-  strictFun $ \x -> Prim $
-  case x of
-    VString s -> Prim.userError (Text.unpack s)
-    _ -> Prim.userError "unknown error"
+  stringFun $ \msg ->
+  Prim $ Prim.userError (Text.unpack msg)
 
 ------------------------------------------------------------
 -- Conditionals
+
+iteDepOp :: (HasCallStack, VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
+iteDepOp bp =
+  primFun $ \_p ->
+  boolFun $ \b ->
+  primFun $ \x ->
+  primFun $ \y ->
+  Prim $
+    case bpAsBool bp b of
+      Just True  -> force x
+      Just False -> force y
+      Nothing ->
+        unsupportedPrimitive "Symbolic backend" "iteDep" 
 
 iteOp :: (HasCallStack, VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
 iteOp bp =
   tvalFun $ \tp ->
   boolFun $ \b ->
   primFun $ \x ->
-  primFun $ \y -> Prim $
+  primFun $ \y ->
+  Prim $
     lazyMuxValue bp tp b (force x) (force y)
 
 lazyMuxValue ::
