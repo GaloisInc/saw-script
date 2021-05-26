@@ -39,7 +39,7 @@ import Verifier.SAW.CryptolEnv
       translateExpr,
       CryptolEnv(eExtraTypes, eExtraTSyns, eModuleEnv) )
 import Verifier.SAW.SharedTerm (SharedContext)
-import Verifier.SAW.TypedTerm(TypedTerm(..))
+import Verifier.SAW.TypedTerm(TypedTerm(..),TypedTermType(..))
 
 import qualified Argo
 import CryptolServer.Data.Expression (Expression, getCryptolExpr)
@@ -86,7 +86,7 @@ getTypedTermOfCExp fileReader sc cenv expr =
        (Right ((checkedExpr, schema), modEnv'), ws) ->
          do let env' = cenv { eModuleEnv = modEnv' }
             trm <- liftIO $ translateExpr sc env' checkedExpr
-            return (Right (TypedTerm schema trm, modEnv'), ws)
+            return (Right (TypedTerm (TypedTermSchema schema) trm, modEnv'), ws)
        (Left err, ws) -> return (Left err, ws)
 
 moduleCmdResult :: ModuleRes a -> Argo.Command SAWState (a, ModuleEnv)
