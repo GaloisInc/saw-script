@@ -187,6 +187,11 @@ module Verifier.SAW.SharedTerm
   , scIntModType
   , scToIntMod
   , scFromIntMod
+  , scIntModEq
+  , scIntModAdd
+  , scIntModSub
+  , scIntModMul
+  , scIntModNeg
     -- *** Vectors
   , scAppend
   , scJoin
@@ -1909,6 +1914,36 @@ scToIntMod sc n x = scGlobalApply sc "Prelude.toIntMod" [n, x]
 -- > fromIntMod : (n : Nat) -> IntMod n -> Integer;
 scFromIntMod :: SharedContext -> Term -> Term -> IO Term
 scFromIntMod sc n x = scGlobalApply sc "Prelude.fromIntMod" [n, x]
+
+-- | Equality test on the @IntMod@ type
+--
+-- > intModEq  : (n : Nat) -> IntMod n -> IntMod n -> Bool;
+scIntModEq :: SharedContext -> Term -> Term -> Term -> IO Term
+scIntModEq sc n x y = scGlobalApply sc "Prelude.intModEq" [n,x,y]
+
+-- | Addition of @IntMod@ values
+--
+-- > intModAdd : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
+scIntModAdd :: SharedContext -> Term -> Term -> Term -> IO Term
+scIntModAdd sc n x y = scGlobalApply sc "Prelude.intModAdd" [n,x,y]
+
+-- | Subtraction of @IntMod@ values
+--
+-- > intModSub : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
+scIntModSub :: SharedContext -> Term -> Term -> Term -> IO Term
+scIntModSub sc n x y = scGlobalApply sc "Prelude.intModSub" [n,x,y]
+
+-- | Multiplication of @IntMod@ values
+--
+-- > intModMul : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
+scIntModMul :: SharedContext -> Term -> Term -> Term -> IO Term
+scIntModMul sc n x y = scGlobalApply sc "Prelude.intModMul" [n,x,y]
+
+-- | Negation (additive inverse) of @IntMod@ values
+--
+-- > intModNeg : (n : Nat) -> IntMod n -> IntMod n;
+scIntModNeg :: SharedContext -> Term -> Term -> IO Term
+scIntModNeg sc n x = scGlobalApply sc "Prelude.intModNeg" [n,x]
 
 
 -- Primitive operations on bitvectors
