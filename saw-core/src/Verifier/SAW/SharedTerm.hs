@@ -240,6 +240,7 @@ module Verifier.SAW.SharedTerm
   , getConstantSet
   , scInstantiateExt
   , scAbstractExts
+  , scAbstractExtsEtaCollapse
   , scGeneralizeExts
   , incVars
   , scUnfoldConstants
@@ -2357,6 +2358,28 @@ scAbstractExts sc exts x = loop (zip (inits exts) exts)
 
     -- base case, convert all the exts in the body of x into deBruijn variables
     loop [] = scExtsToLocals sc exts x
+
+
+-- | Abstract over the given list of external constants by wrapping
+--   the given term with lambdas and replacing the external constant
+--   occurrences with the appropriate local variables.  However,
+--   the term will be eta-collapsed as far as possible, so unnecessary
+--   lambdas will simply be omitted.
+scAbstractExtsEtaCollapse :: SharedContext -> [ExtCns Term] -> Term -> IO Term
+scAbstractExtsEtaCollapse sc = \exts tm -> loop (reverse exts) tm
+  where
+    -- we eta-collapsed all the variables, nothing more to do
+    loop [] tm = pure tm
+
+    -- the final variable to abstract is applied to the
+    -- term, and does not appear elsewhere in the term,
+    -- so we can eta-collapse.
+    loop (ec:exts) (asApp -> Just (f,asExtCns -> Just ec'))
+      | ec == ec', not (Set.member ec (getAllExtSet f))
+      = loop exts f
+
+    -- cannot eta-collapse, do abstraction as usual
+    loop exts tm = scAbstractExts sc (reverse exts) tm
 
 
 -- | Generalize over the given list of external constants by wrapping
