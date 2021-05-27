@@ -47,7 +47,7 @@ import qualified Verifier.SAW.TypedTerm as SAW
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 
-import Crux.Types (Model)
+import Crux.Types (HasModel)
 
 import Mir.DefId
 import Mir.Generator (CollectionState, collection)
@@ -172,14 +172,14 @@ instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
 -- MethodSpecBuilder implementation.  This is the code that actually runs when
 -- Rust invokes `msb.add_arg(...)` or similar.
 
-builderNew :: forall sym t st fs rtp.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+builderNew :: forall sym p t st fs rtp.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
     CollectionState ->
     -- | `DefId` of the `builder_new` monomorphization.  Its `Instance` should
     -- have one type argument, which is the `TyFnDef` of the function that the
     -- spec applies to.
     DefId ->
-    OverrideSim (Model sym) sym MIR rtp
+    OverrideSim (p sym) sym MIR rtp
         EmptyCtx MethodSpecBuilderType (MethodSpecBuilder sym t)
 builderNew cs defId = do
     sym <- getSymInterface
@@ -214,10 +214,10 @@ builderNew cs defId = do
 -- As a side effect, this clobbers any mutable memory reachable through the
 -- argument.  For example, if `argRef` points to an `&mut i32`, the `i32` will
 -- be overwritten with a fresh symbolic variable.
-addArg :: forall sym t st fs rtp args ret tp.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+addArg :: forall sym p t st fs rtp args ret tp.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
     TypeRepr tp -> MirReferenceMux sym tp -> MethodSpecBuilder sym t ->
-    OverrideSim (Model sym) sym MIR rtp args ret (MethodSpecBuilder sym t)
+    OverrideSim (p sym) sym MIR rtp args ret (MethodSpecBuilder sym t)
 addArg tpr argRef msb = execBuilderT msb $ do
     sym <- lift $ getSymInterface
     loc <- liftIO $ W4.getCurrentProgramLoc sym

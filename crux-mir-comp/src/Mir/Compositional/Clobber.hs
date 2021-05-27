@@ -24,7 +24,7 @@ import Lang.Crucible.Simulator
 import Lang.Crucible.Types
 
 import qualified Crux.Model as Crux
-import Crux.Types (Model)
+import Crux.Types (HasModel(..))
 
 import Mir.Generator (CollectionState, collection, staticMap, StaticVar(..))
 import Mir.Intrinsics hiding (MethodSpec, MethodSpecBuilder)
@@ -38,14 +38,14 @@ import Mir.Compositional.Convert
 -- Helper functions for generating clobbering PointsTos
 
 -- | Replace each primitive value within `rv` with a fresh symbolic variable.
-clobberSymbolic :: forall sym t st fs tp rtp args ret.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+clobberSymbolic :: forall sym p t st fs tp rtp args ret.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p, HasCallStack) =>
     sym -> ProgramLoc -> String -> TypeShape tp -> RegValue sym tp ->
-    OverrideSim (Model sym) sym MIR rtp args ret (RegValue sym tp)
+    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
 clobberSymbolic sym loc nameStr shp rv = go shp rv
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp ->
-        OverrideSim (Model sym) sym MIR rtp args ret (RegValue sym tp)
+        OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
     go (UnitShape _) () = return ()
     go shp@(PrimShape _ _btpr) _rv = freshSymbolic sym loc nameStr shp
     go (ArrayShape _ _ shp) mirVec = case mirVec of
@@ -63,7 +63,7 @@ clobberSymbolic sym loc nameStr shp rv = go shp rv
     go shp _rv = error $ "clobberSymbolic: " ++ show (shapeType shp) ++ " NYI"
 
     goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
-        OverrideSim (Model sym) sym MIR rtp args ret (RegValue' sym tp)
+        OverrideSim (p sym) sym MIR rtp args ret (RegValue' sym tp)
     goField (ReqField shp) (RV rv) = RV <$> go shp rv
     goField (OptField shp) (RV rv) = do
         rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
@@ -74,14 +74,14 @@ clobberSymbolic sym loc nameStr shp rv = go shp rv
 -- inside an `UnsafeCell<T>` wrapper can still be modified even with only
 -- immutable (`&`) access.  So this function modifies only the portions of `rv`
 -- that lie within an `UnsafeCell` and leaves the rest unchanged.
-clobberImmutSymbolic :: forall sym t st fs tp rtp args ret.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+clobberImmutSymbolic :: forall sym p t st fs tp rtp args ret.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p, HasCallStack) =>
     sym -> ProgramLoc -> String -> TypeShape tp -> RegValue sym tp ->
-    OverrideSim (Model sym) sym MIR rtp args ret (RegValue sym tp)
+    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
 clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp ->
-        OverrideSim (Model sym) sym MIR rtp args ret (RegValue sym tp)
+        OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
     go (UnitShape _) () = return ()
     -- If we reached a leaf value without entering an `UnsafeCell`, then
     -- there's nothing to change.
@@ -105,7 +105,7 @@ clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
     go (RefShape _ _ _tpr) rv = return rv
 
     goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
-        OverrideSim (Model sym) sym MIR rtp args ret (RegValue' sym tp)
+        OverrideSim (p sym) sym MIR rtp args ret (RegValue' sym tp)
     goField (ReqField shp) (RV rv) = RV <$> go shp rv
     goField (OptField shp) (RV rv) = do
         rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
@@ -113,19 +113,19 @@ clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
         return $ RV $ W4.justPartExpr sym rv''
 
 -- | Construct a fresh symbolic `RegValue` of type `tp`.
-freshSymbolic :: forall sym t st fs tp rtp args ret.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+freshSymbolic :: forall sym p t st fs tp rtp args ret.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p, HasCallStack) =>
     sym -> ProgramLoc -> String -> TypeShape tp ->
-    OverrideSim (Model sym) sym MIR rtp args ret (RegValue sym tp)
+    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
 freshSymbolic sym loc nameStr shp = go shp
   where
     go :: forall tp. TypeShape tp ->
-        OverrideSim (Model sym) sym MIR rtp args ret (RegValue sym tp)
+        OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
     go (UnitShape _) = return ()
     go (PrimShape _ btpr) = do
         let nameSymbol = W4.safeSymbol nameStr
         expr <- liftIO $ W4.freshConstant sym nameSymbol btpr
-        stateContext . cruciblePersonality %= Crux.addVar loc nameStr btpr expr
+        stateContext . cruciblePersonality . personalityModel %= Crux.addVar loc nameStr btpr expr
         return expr
     go (ArrayShape (M.TyArray _ len) _ shp) =
         MirVector_Vector <$> V.replicateM len (go shp)
@@ -150,10 +150,10 @@ freshSymbolic sym loc nameStr shp = go shp
 -- invalid ref value is not enough, since the function we're approximating
 -- might write through the old ref before replacing it with a new one.
 
-clobberGlobals :: forall sym t st fs rtp args ret.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+clobberGlobals :: forall sym p t st fs rtp args ret.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p, HasCallStack) =>
     sym -> ProgramLoc -> String -> CollectionState ->
-    OverrideSim (Model sym) sym MIR rtp args ret ()
+    OverrideSim (p sym) sym MIR rtp args ret ()
 clobberGlobals sym loc nameStr cs = do
     forM_ (Map.toList $ cs ^. staticMap) $ \(defId, StaticVar gv) -> do
         let static = case cs ^? collection . M.statics . ix defId of
@@ -168,10 +168,10 @@ clobberGlobals sym loc nameStr cs = do
         rv' <- clobber shp rv
         writeGlobal gv rv'
 
-clobberGlobalsOverride :: forall sym t st fs rtp args ret.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+clobberGlobalsOverride :: forall sym p t st fs rtp args ret.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p, HasCallStack) =>
     CollectionState ->
-    OverrideSim (Model sym) sym MIR rtp args ret ()
+    OverrideSim (p sym) sym MIR rtp args ret ()
 clobberGlobalsOverride cs = do
     sym <- getSymInterface
     loc <- liftIO $ W4.getCurrentProgramLoc sym

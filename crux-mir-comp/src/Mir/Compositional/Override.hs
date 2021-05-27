@@ -59,7 +59,7 @@ import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Override as MS
 
 import qualified Crux.Model as Crux
-import Crux.Types (Model)
+import Crux.Types (HasModel(..))
 
 import Mir.Generator
 import Mir.Intrinsics hiding (MethodSpec)
@@ -70,8 +70,9 @@ import Mir.Compositional.Convert
 import Mir.Compositional.MethodSpec
 
 
-type MirOverrideMatcher sym a = forall rorw rtp args ret.
-    MS.OverrideMatcher' sym MIR rorw (OverrideSim (Model sym) sym MIR rtp args ret) a
+type MirOverrideMatcher sym a = forall p rorw rtp args ret.
+    HasModel p =>
+    MS.OverrideMatcher' sym MIR rorw (OverrideSim (p sym) sym MIR rtp args ret) a
 
 data MethodSpec = MethodSpec 
     { _msCollectionState :: CollectionState
@@ -88,9 +89,9 @@ instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) => MethodSpecImpl sy
 -- | Pretty-print a MethodSpec.  This wraps `ppMethodSpec` and returns the
 -- result as a Rust string.
 printSpec ::
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
     MethodSpec ->
-    OverrideSim (Model sym) sym MIR rtp args ret (RegValue sym (MirSlice (BVType 8)))
+    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym (MirSlice (BVType 8)))
 printSpec ms = do
     let str = show $ MS.ppMethodSpec (ms ^. msSpec)
     let bytes = Text.encodeUtf8 $ Text.pack str
@@ -111,9 +112,9 @@ printSpec ms = do
 -- the current test, calls to the subject function will be replaced with
 -- `runSpec`.
 enable ::
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
     MethodSpec ->
-    OverrideSim (Model sym) sym MIR rtp args ret ()
+    OverrideSim (p sym) sym MIR rtp args ret ()
 enable ms = do
     let funcName = ms ^. msSpec . MS.csMethod
     MirHandle _name _sig mh <- case cs ^? handleMap . ix funcName of
@@ -130,10 +131,10 @@ enable ms = do
 
 -- | "Run" a MethodSpec: assert its preconditions, create fresh symbolic
 -- variables for its outputs, and assert its postconditions.
-runSpec :: forall sym t st fs args ret rtp.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+runSpec :: forall sym p t st fs args ret rtp.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
     CollectionState -> FnHandle args ret -> MIRMethodSpec ->
-    OverrideSim (Model sym) sym MIR rtp args ret (RegValue sym ret)
+    OverrideSim (p sym) sym MIR rtp args ret (RegValue sym ret)
 runSpec cs mh ms = do
     let col = cs ^. collection
     sym <- getSymInterface
@@ -189,7 +190,7 @@ runSpec cs mh ms = do
         let nameSymbol = W4.safeSymbol nameStr
         Some btpr <- liftIO $ termToType sym sc (SAW.ecType ec)
         expr <- liftIO $ W4.freshConstant sym nameSymbol btpr
-        stateContext . cruciblePersonality %= Crux.addVar loc nameStr btpr expr
+        stateContext . cruciblePersonality . personalityModel %= Crux.addVar loc nameStr btpr expr
         term <- liftIO $ eval expr
         return (SAW.ecVarIndex ec, term)
 
