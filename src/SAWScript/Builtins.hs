@@ -495,12 +495,16 @@ resolveName sc nm =
 
 
 normalize_term :: TypedTerm -> TopLevel TypedTerm
-normalize_term tt =
+normalize_term tt = normalize_term_opaque [] tt
+
+normalize_term_opaque :: [String] -> TypedTerm -> TopLevel TypedTerm
+normalize_term_opaque opaque tt =
   do sc <- getSharedContext
      modmap <- io (scGetModuleMap sc)
-     tm' <- io (TM.normalizeSharedTerm sc modmap mempty mempty (ttTerm tt))
+     idxs <- mapM (resolveName sc) opaque
+     let opaqueSet = Set.fromList idxs
+     tm' <- io (TM.normalizeSharedTerm sc modmap mempty mempty opaqueSet (ttTerm tt))
      pure tt{ ttTerm = tm' }
-
 
 unfoldGoal :: [String] -> ProofScript ()
 unfoldGoal unints =

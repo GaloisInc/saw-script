@@ -122,29 +122,36 @@ normalizeSharedTerm ::
   ModuleMap ->
   Map Ident TmPrim {- ^ additional primitives -} ->
   Map VarIndex TmValue {- ^ ExtCns values -} ->
+  Set VarIndex {- ^ opaque constants -} ->
   Term ->
   IO Term
-normalizeSharedTerm sc m addlPrims ecVals t =
-  do cfg <- mfix (\cfg -> Sim.evalGlobal m (Map.union (constMap sc cfg) addlPrims)
-                             (extcns cfg) (const Nothing) (neutral cfg) (primHandler cfg))
+normalizeSharedTerm sc m addlPrims ecVals opaqueSet t =
+  do cfg <- mfix (\cfg -> Sim.evalGlobal' m (Map.union (constMap sc cfg) addlPrims)
+                              (extcns cfg) (constants cfg) (neutral cfg) (primHandler cfg))
      v <- Sim.evalSharedTerm cfg t
      tv <- evalType cfg =<< scTypeOf sc t
      readBackValue sc cfg tv v
 
   where
+    constants cfg tf ec
+      | Set.member (ecVarIndex ec) opaqueSet = Just $
+          do tm <- scTermF sc tf
+             reflectTerm sc cfg (ecType ec) tm
+
+      | otherwise = Nothing
+
+    extcns cfg tf ec =
+      case Map.lookup (ecVarIndex ec) ecVals of
+        Just v  -> return v
+        Nothing ->
+          do tm <- scTermF sc tf
+             reflectTerm sc cfg (ecType ec) tm
+
     neutral cfg env nt =
       do env' <- traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
          tm   <- instantiateVarList sc 0 env' =<< neutralToSharedTerm sc nt
          tyv  <- evalType cfg =<< scTypeOf sc tm
          reflectTerm sc cfg tyv tm
-
-    extcns cfg ec =
-      case Map.lookup (ecVarIndex ec) ecVals of
-        Just v  -> return v
-        Nothing ->
-          do ec' <- traverse (readBackTValue sc cfg) ec
-             tm <- scExtCns sc ec'
-             reflectTerm sc cfg (ecType ec) tm
 
     primHandler cfg pn _msg env tp =
       do pn'  <- traverse (readBackTValue sc cfg) pn

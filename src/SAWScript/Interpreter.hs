@@ -1237,6 +1237,13 @@ primitives = Map.fromList
     Experimental
     [ "Normalize the given term by performing evaluation in SAWCore." ]
 
+  , prim "normalize_term_opaque" "[String] -> Term -> Term"
+    (funVal2 normalize_term_opaque)
+    Experimental
+    [ "Normalize the given term by performing evaluation in SAWCore."
+    , "The named values will be treated opauqely and not unfolded during evaluation."
+    ]
+
   , prim "goal_eval"           "ProofScript ()"
     (pureVal (goal_eval []))
     Current
