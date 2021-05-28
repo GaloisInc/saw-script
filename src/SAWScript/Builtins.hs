@@ -505,9 +505,8 @@ hoistIfsInGoalPrim :: ProofScript ()
 hoistIfsInGoalPrim =
   execTactic $ tacticChange $ \goal ->
     do sc <- getSharedContext
-       let tac = \sctx g -> hoistIfsInGoal sctx g
-       p <- io $ tac sc (goalProp goal)
-       return (p, InternalTacticEvidence "hoistIfsInGoal" tac)
+       p <- io $ hoistIfsInGoal sc (goalProp goal)
+       return (p, InternalTacticEvidence "hoistIfsInGoal" hoistIfsInGoal)
 
 goal_eval :: [String] -> ProofScript ()
 goal_eval unints =

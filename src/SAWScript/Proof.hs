@@ -184,7 +184,7 @@ hoistIfsInGoal sc p =
       tm <- hoistIfs sc t
       eqTm <- scEqTrue sc tm
       termToProp sc eqTm
-    Nothing -> fail "hoist_ifs: expected EqTrue"
+    Nothing -> fail "hoistIfsInGoal: expected EqTrue"
 
 -- | Evaluate the given proposition by round-tripping
 --   through the What4 formula representation.  This will
