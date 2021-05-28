@@ -178,13 +178,19 @@ simplifyProp sc ss (Prop tm) =
      return (Prop tm')
 
 hoistIfsInGoal :: SharedContext -> Prop -> IO Prop
-hoistIfsInGoal sc p =
-  case asEqTrue (unProp p) of -- peel off eqTrue to avoid getting ite terms above it
-    Just t -> do
-      tm <- hoistIfs sc t
-      eqTm <- scEqTrue sc tm
-      termToProp sc eqTm
-    Nothing -> fail "hoistIfsInGoal: expected EqTrue"
+hoistIfsInGoal sc (Prop p) = do
+  let (args, body) = asPiList p
+  body' <-
+    case asEqTrue body of
+      Just t -> pure t
+      Nothing -> fail "hoistIfsInGoal: expected EqTrue"
+  ecs <- traverse (\(nm, ty) -> scFreshEC sc nm ty) args
+  vars <- traverse (scExtCns sc) ecs
+  t0 <- instantiateVarList sc 0 (reverse vars) body'
+  t1 <- hoistIfs sc t0
+  t2 <- scEqTrue sc t1
+  t3 <- scGeneralizeExts sc ecs t2
+  return (Prop t3)
 
 -- | Evaluate the given proposition by round-tripping
 --   through the What4 formula representation.  This will
