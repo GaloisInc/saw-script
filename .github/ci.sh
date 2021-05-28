@@ -161,7 +161,6 @@ build_cryptol() {
 bundle_files() {
   mkdir -p dist dist/{bin,doc,examples,include,lib}
 
-  cp deps/abcBridge/abc-build/copyright.txt dist/ABC_LICENSE
   cp LICENSE README.md dist/
   $IS_WIN || chmod +x dist/bin/*
 

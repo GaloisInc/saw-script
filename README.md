@@ -86,7 +86,6 @@ build using `build.sh`; see
 [Manual Installation](#manual-installation) above. Key automatically
 downloaded dependencies include:
 
-* `deps/abcBridge/`:        [Haskell bindings for ABC](https://github.com/GaloisInc/abcBridge)
 * `deps/crucible/`:         [Crucible symbolic execution engine](https://github.com/GaloisInc/crucible)
 * `deps/cryptol/`:          [Cryptol](https://github.com/GaloisInc/cryptol)
 
@@ -129,7 +128,6 @@ systems and Windows systems end up with different package dependencies.
 Specifically, we remove lines for the following packages or flags:
 
 ```
-abcBridge
 cryptol-saw-core
 regex-posix
 saw-remote-api
