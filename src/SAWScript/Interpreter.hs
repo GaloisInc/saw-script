@@ -961,15 +961,15 @@ primitives = Map.fromList
 
   , prim "load_aig"            "String -> TopLevel AIG"
     (pureVal loadAIGPrim)
-    Deprecated
+    Current
     [ "Read an AIG file in binary AIGER format, yielding an AIG value." ]
   , prim "save_aig"            "String -> AIG -> TopLevel ()"
     (pureVal saveAIGPrim)
-    Deprecated
+    Current
     [ "Write an AIG to a file in binary AIGER format." ]
   , prim "save_aig_as_cnf"     "String -> AIG -> TopLevel ()"
     (pureVal saveAIGasCNFPrim)
-    Deprecated
+    Current
     [ "Write an AIG representing a boolean function to a file in DIMACS"
     , "CNF format."
     ]
@@ -987,7 +987,7 @@ primitives = Map.fromList
 
   , prim "bitblast"            "Term -> TopLevel AIG"
     (pureVal bbPrim)
-    Deprecated
+    Current
     [ "Translate a term into an AIG.  The term must be representable as a"
     , "function from a finite number of bits to a finite number of bits."
     ]
