@@ -179,15 +179,12 @@ simplifyProp sc ss (Prop tm) =
 
 hoistIfsInGoal :: SharedContext -> Prop -> IO Prop
 hoistIfsInGoal sc p =
-  case asEqTrue pTerm of
+  case asEqTrue (unProp p) of -- peel off eqTrue to avoid getting ite terms above it
     Just t -> do
       tm <- hoistIfs sc t
       eqTm <- scEqTrue sc tm
-      newP <- termToProp sc eqTm
-      return newP
+      termToProp sc eqTm
     Nothing -> fail "hoist_ifs: expected EqTrue"
-  where
-    pTerm = unProp p
 
 -- | Evaluate the given proposition by round-tripping
 --   through the What4 formula representation.  This will
@@ -356,7 +353,7 @@ data Evidence
     --   evidence is use to check the modified goal.
   | EvalEvidence (Set VarIndex) Evidence
 
-  | InternalTacticEvidence (SharedContext -> Prop -> IO Prop) Evidence
+  | InternalTacticEvidence String (SharedContext -> Prop -> IO Prop) Evidence
 
 -- | The the proposition proved by a given theorem.
 thmProp :: Theorem -> Prop
@@ -603,7 +600,7 @@ checkEvidence sc = check mempty
         do p' <- simplifyProp sc ss p
            check hyps e' p'
 
-      InternalTacticEvidence tac e' ->
+      InternalTacticEvidence _ tac e' ->
         do p' <- tac sc p
            check hyps e' p'
 
