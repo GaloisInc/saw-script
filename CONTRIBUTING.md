@@ -159,10 +159,3 @@ Copyright 2011-2021 [Galois, Inc.](https://galois.com)
 Licensed under the BSD 3-Clause License; you may not use this work
 except in compliance with the License. A copy of the License is included
 in the [LICENSE](LICENSE) file.
-
-# Code of Conduct
-
-This project adheres to the [Contributor Covenant code of
-conduct](CODE_OF_CONDUCT.md). By participating, you are expected to
-uphold this code. Please report unacceptable behavior to
-[saw@galois.com](mailto:saw@galois.com).
