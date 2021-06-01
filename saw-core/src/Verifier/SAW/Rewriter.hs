@@ -281,6 +281,12 @@ vecEqIdent = mkIdent (mkModuleName ["Prelude"]) "vecEq"
 equalNatIdent :: Ident
 equalNatIdent = mkIdent (mkModuleName ["Prelude"]) "equalNat"
 
+intEqIdent :: Ident
+intEqIdent = mkIdent (mkModuleName ["Prelude"]) "intEq"
+
+intModEqIdent :: Ident
+intModEqIdent = mkIdent (mkModuleName ["Prelude"]) "intModEq"
+
 -- | Converts a universally quantified equality proposition from a
 -- Term representation to a RewriteRule.
 ruleOfTerm :: Term -> RewriteRule
@@ -307,7 +313,7 @@ rulePermutes lhs rhs =
 
 mkRewriteRule :: [Term] -> Term -> Term  -> RewriteRule
 mkRewriteRule c l r =
-    RewriteRule {ctxt = c, lhs = l, rhs = r , permutative = rulePermutes l r} 
+    RewriteRule {ctxt = c, lhs = l, rhs = r , permutative = rulePermutes l r}
 
 -- | Converts a universally quantified equality proposition between the
 -- two given terms to a RewriteRule.
@@ -332,6 +338,10 @@ ruleOfProp (R.asApplyAll -> (R.isGlobalDef equalNatIdent -> Just (), [x, y])) =
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) =
   Just $ mkRewriteRule [] x y
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) =
+  Just $ mkRewriteRule [] x y
+ruleOfProp (R.asApplyAll -> (R.isGlobalDef intEqIdent -> Just (), [x, y])) =
+  Just $ mkRewriteRule [] x y
+ruleOfProp (R.asApplyAll -> (R.isGlobalDef intModEqIdent -> Just (), [_, x, y])) =
   Just $ mkRewriteRule [] x y
 ruleOfProp (unwrapTermF -> Constant _ body) = ruleOfProp body
 ruleOfProp (R.asEq -> Just (_, x, y)) =
