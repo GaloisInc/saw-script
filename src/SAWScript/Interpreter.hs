@@ -1640,6 +1640,17 @@ primitives = Map.fromList
     Current
     [ "Reduce the given term to beta-normal form." ]
 
+  , prim "term_eval"           "Term -> Term"
+    (funVal1 (term_eval []))
+    Current
+    [ "Evaluate the term to a first-order combination of primitives." ]
+
+  , prim "term_eval_unint"     "[String] -> Term -> Term"
+    (funVal2 term_eval)
+    Current
+    [ "Evaluate the term to a first-order combination of primitives."
+    , "Leave the given names, as defined with 'define', as uninterpreted." ]
+
   , prim "cryptol_load"        "String -> TopLevel CryptolModule"
     (pureVal (cryptol_load BS.readFile))
     Current
