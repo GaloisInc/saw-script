@@ -359,7 +359,7 @@ data Evidence
     --   evidence is use to check the modified goal.
   | EvalEvidence (Set VarIndex) Evidence
 
-  | InternalTacticEvidence String (SharedContext -> Prop -> IO Prop) Evidence
+  | HoistIfsEvidence Evidence
 
 -- | The the proposition proved by a given theorem.
 thmProp :: Theorem -> Prop
@@ -606,8 +606,8 @@ checkEvidence sc = check mempty
         do p' <- simplifyProp sc ss p
            check hyps e' p'
 
-      InternalTacticEvidence _ tac e' ->
-        do p' <- tac sc p
+      HoistIfsEvidence e' ->
+        do p' <- hoistIfsInGoal sc p
            check hyps e' p'
 
       EvalEvidence vars e' ->
