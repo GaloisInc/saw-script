@@ -359,6 +359,8 @@ data Evidence
     --   evidence is use to check the modified goal.
   | EvalEvidence (Set VarIndex) Evidence
 
+    -- | This type of evidence is used to modify a goal to prove by applying
+    -- 'hoistIfsInGoal'.
   | HoistIfsEvidence Evidence
 
 -- | The the proposition proved by a given theorem.
