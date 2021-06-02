@@ -373,7 +373,7 @@ resolveSAWPred cc tm = do
      st <- sawCoreState sym
      let sc = saw_ctx st
      let ss = cc^.ccBasicSS
-     tm' <- rewriteSharedTerm sc ss tm
+     (_,tm') <- rewriteSharedTerm sc ss tm
      mx <- case getAllExts tm' of
              -- concretely evaluate if it is a closed term
              [] -> do modmap <- scGetModuleMap sc

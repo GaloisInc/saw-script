@@ -18,5 +18,5 @@ import Verifier.SAW.Conversion
 scConst :: SharedContext -> Text -> Term -> IO Term
 scConst sc name t = do
   ty <- scTypeOf sc t
-  ty' <- rewriteSharedTerm sc (addConvs natConversions emptySimpset) ty
+  (_,ty') <- rewriteSharedTerm sc (addConvs natConversions emptySimpset :: Simpset ()) ty
   scConstant sc name t ty'

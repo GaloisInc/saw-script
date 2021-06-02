@@ -126,15 +126,15 @@ data Value
     -- operations in these monads can fail at runtime.
   | VTopLevel (TopLevel Value)
   | VProofScript (ProofScript Value)
-  | VSimpset Simpset
+  | VSimpset SAWSimpset
   | VTheorem Theorem
   -----
   | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
-  | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR)
+  | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
   | VLLVMCrucibleSetupValue (CMSLLVM.AllLLVM CMS.SetupValue)
   -----
   | VJVMSetup !(JVMSetupM Value)
-  | VJVMMethodSpec !(CMS.CrucibleMethodSpecIR CJ.JVM)
+  | VJVMMethodSpec !(CMS.ProvedSpec CJ.JVM)
   | VJVMSetupValue !(CMS.SetupValue CJ.JVM)
   -----
   | VLLVMModuleSkeleton ModuleSkeleton
@@ -154,6 +154,8 @@ data Value
   | VCFG SAW_CFG
   | VGhostVar CMS.GhostGlobal
 
+type SAWSimpset = Simpset TheoremNonce
+
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
 
@@ -165,7 +167,7 @@ data SAW_CFG where
   JVM_CFG :: Crucible.AnyCFG JVM -> SAW_CFG
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
-                                     , biBasicSS       :: Simpset
+                                     , biBasicSS       :: SAWSimpset
                                      }
   deriving Generic
 
@@ -220,7 +222,7 @@ showsProofResult opts r =
   case r of
     ValidProof _ _ -> showString "Valid"
     InvalidProof _ ts _ -> showString "Invalid: [" . showMulti "" ts
-    UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining" 
+    UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining"
   where
     opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
@@ -245,7 +247,7 @@ showsSatResult opts r =
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
-showSimpset :: PPOpts -> Simpset -> String
+showSimpset :: PPOpts -> Simpset a -> String
 showSimpset opts ss =
   unlines ("Rewrite Rules" : "=============" : map (show . ppRule) (listRules ss))
   where
@@ -382,7 +384,8 @@ data TopLevelRO =
   , roPosition      :: SS.Pos
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
-  , roBasicSS       :: Simpset
+  , roBasicSS       :: SAWSimpset
+  , roTheoremDB     :: TheoremDB
   }
 
 data TopLevelRW =
@@ -459,7 +462,7 @@ getOptions = TopLevel (asks roOptions)
 getProxy :: TopLevel AIGProxy
 getProxy = TopLevel (asks roProxy)
 
-getBasicSS :: TopLevel Simpset
+getBasicSS :: TopLevel SAWSimpset
 getBasicSS = TopLevel (asks roBasicSS)
 
 localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
@@ -488,10 +491,12 @@ putTopLevelRW :: TopLevelRW -> TopLevel ()
 putTopLevelRW rw = TopLevel (put rw)
 
 returnProof :: IsValue v => v -> TopLevel v
-returnProof v = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
-  return v
+returnProof v = recordProof v >> return v
+
+recordProof :: IsValue v => v -> TopLevel ()
+recordProof v =
+  do rw <- getTopLevelRW
+     putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
 
 -- | Access the current state of Java Class translation
 getJVMTrans :: TopLevel  CJ.JVMContext
@@ -605,14 +610,17 @@ newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
 newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
  deriving (Functor, Applicative, Monad)
 
-runProofScript :: ProofScript a -> ProofGoal -> TopLevel ProofResult
-runProofScript (ProofScript m) gl =
-  do (r,pstate) <- runStateT (runExceptT m) (startProof gl)
+runProofScript :: ProofScript a -> ProofGoal -> Maybe ProgramLoc -> Text -> TopLevel ProofResult
+runProofScript (ProofScript m) gl ploc rsn =
+  do pos <- getPosition
+     ps <- io (startProof gl pos ploc rsn)
+     (r,pstate) <- runStateT (runExceptT m) ps
      case r of
        Left (stats,cex) -> return (InvalidProof stats cex pstate)
        Right _ ->
          do sc <- getSharedContext
-            io (finishProof sc pstate)
+            db <- roTheoremDB <$> getTopLevelRO
+            io (finishProof sc db pstate)
 
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))
@@ -760,19 +768,19 @@ instance FromValue SAW_CFG where
     fromValue (VCFG t) = t
     fromValue _ = error "fromValue CFG"
 
-instance IsValue (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR) where
+instance IsValue (CMSLLVM.SomeLLVM CMS.ProvedSpec) where
     toValue mir = VLLVMCrucibleMethodSpec mir
 
-instance FromValue (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR) where
+instance FromValue (CMSLLVM.SomeLLVM CMS.ProvedSpec) where
     fromValue (VLLVMCrucibleMethodSpec mir) = mir
-    fromValue _ = error "fromValue CrucibleMethodSpecIR"
+    fromValue _ = error "fromValue ProvedSpec LLVM"
 
-instance IsValue (CMS.CrucibleMethodSpecIR CJ.JVM) where
+instance IsValue (CMS.ProvedSpec CJ.JVM) where
     toValue t = VJVMMethodSpec t
 
-instance FromValue (CMS.CrucibleMethodSpecIR CJ.JVM) where
+instance FromValue (CMS.ProvedSpec CJ.JVM) where
     fromValue (VJVMMethodSpec t) = t
-    fromValue _ = error "fromValue CrucibleMethodSpecIR"
+    fromValue _ = error "fromValue ProvedSpec JVM"
 
 instance IsValue ModuleSkeleton where
     toValue s = VLLVMModuleSkeleton s
@@ -867,10 +875,10 @@ instance FromValue Bool where
     fromValue (VBool b) = b
     fromValue _ = error "fromValue Bool"
 
-instance IsValue Simpset where
+instance IsValue SAWSimpset where
     toValue ss = VSimpset ss
 
-instance FromValue Simpset where
+instance FromValue SAWSimpset where
     fromValue (VSimpset ss) = ss
     fromValue _ = error "fromValue Simpset"
 
