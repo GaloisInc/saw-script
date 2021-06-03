@@ -154,7 +154,6 @@ makeSimpset params = do
         v <- getServerVal n
         case v of
           VSimpset ss' -> return (merge ss ss')
-          VTerm t -> return (addSimp (ttTerm t) ss)
           _ -> Argo.raise (notASimpset n)
   ss <- foldM add emptySimpset (ssElements params)
   setServerVal (ssResult params) ss

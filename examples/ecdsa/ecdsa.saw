@@ -289,7 +289,7 @@ let ss0 = add_prelude_eqs [ "bvShiftL_bvShl"
                           , "bvShiftR_bvShr"
                           ] cry_ss;
 
-let crule t = rewrite ss0 t;
+let assume_rule t = prove_print (admit "assume rule") (rewrite ss0 t);
 let prove_rule t = prove_print abc (rewrite ss0 t);
 
 let ss1 = add_prelude_eqs
@@ -365,16 +365,19 @@ ec_join_split_768 <- prove_rule {{ \x -> ec_join768 (ec_split768 x) == x }};
 ec_split_join_768 <- prove_rule {{ \x -> ec_split768 (ec_join768 x) == x }};
 
 // Axiomatic rules: For now, we assume these without proof.
-let mul_java_elim = crule {{ \(a:[768]) -> \(x:[384]) -> \(y:[384]) ->
-                     mul_java::mul_java (a, x, y) == p384_field::p384_safe_product (x, y) }};
-let sq_java_elim = crule {{ \(a:[768]) -> \(x:[384]) ->
-                     mul_java::sq_java (a, x) == p384_field::p384_safe_product (x, x) }};
+mul_java_elim <- assume_rule
+  {{ \(a:[768]) -> \(x:[384]) -> \(y:[384]) ->
+       mul_java::mul_java (a, x, y) == p384_field::p384_safe_product (x, y) }};
+
+sq_java_elim <- assume_rule
+  {{ \(a:[768]) -> \(x:[384]) ->
+       mul_java::sq_java (a, x) == p384_field::p384_safe_product (x, x) }};
 
 let basic_simps  = [ ec_join_split
                    , at12, at24
                    ];
 let ss3 = addsimps basic_simps ss2;
-let ss4 = addsimps' [mul_java_elim, sq_java_elim] ss3;
+let ss4 = addsimps [mul_java_elim, sq_java_elim] ss3;
 let ss = add_prelude_defs
   [ "bvUpd"
   , "bvAt"

@@ -1624,9 +1624,9 @@ scCryptolType sc t =
 scCryptolEq :: SharedContext -> Term -> Term -> IO Term
 scCryptolEq sc x y =
   do rules <- concat <$> traverse defRewrites defs
-     let ss = addConvs natConversions (addRules rules emptySimpset)
-     tx <- scTypeOf sc x >>= rewriteSharedTerm sc ss >>= scCryptolType sc
-     ty <- scTypeOf sc y >>= rewriteSharedTerm sc ss >>= scCryptolType sc
+     let ss = addConvs natConversions (addRules rules emptySimpset :: Simpset ())
+     tx <- scTypeOf sc x >>= rewriteSharedTerm sc ss >>= scCryptolType sc . snd
+     ty <- scTypeOf sc y >>= rewriteSharedTerm sc ss >>= scCryptolType sc . snd
      unless (tx == ty) $
        panic "scCryptolEq"
                  [ "scCryptolEq: type mismatch between"

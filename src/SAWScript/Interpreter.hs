@@ -34,7 +34,7 @@ import Control.Applicative
 import Data.Traversable hiding ( mapM )
 #endif
 import qualified Control.Exception as X
-import Control.Monad (unless, (>=>))
+import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
 import Data.Foldable (foldrM)
@@ -62,6 +62,7 @@ import SAWScript.Parser (parseSchema)
 import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
+import SAWScript.Proof (newTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Conversion
@@ -364,11 +365,12 @@ interpretStmt printBinds stmt =
 writeVerificationSummary :: TopLevel ()
 writeVerificationSummary = do
   do
+    db <- roTheoremDB <$> getTopLevelRO
     values <- rwProofs <$> getTopLevelRW
     let jspecs  = [ s | VJVMMethodSpec s <- values ]
         lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
         thms    = [ t | VTheorem t <- values ]
-        summary = computeVerificationSummary jspecs lspecs thms
+    summary <- io (computeVerificationSummary db jspecs lspecs thms)
     opts <- roOptions <$> getTopLevelRO
     dir <- roInitWorkDir <$> getTopLevelRO
     case summaryFile opts of
@@ -380,11 +382,12 @@ writeVerificationSummary = do
                        Pretty -> prettyVerificationSummary
         in io $ writeFile f' $ formatSummary summary
 
-interpretFile :: FilePath -> TopLevel ()
-interpretFile file = do
+interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
+interpretFile file runMain = do
   opts <- getOptions
   stmts <- io $ SAWScript.Import.loadFile opts file
   mapM_ stmtWithPrint stmts
+  when runMain interpretMain
   writeVerificationSummary
   where
     stmtWithPrint s = do let withPos str = unlines $
@@ -436,6 +439,7 @@ buildTopLevelEnv proxy opts =
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
+       thmDB <- newTheoremDB
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roSharedContext = sc
@@ -446,6 +450,7 @@ buildTopLevelEnv proxy opts =
                    , roProxy = proxy
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
+                   , roTheoremDB = thmDB
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -485,7 +490,7 @@ processFile proxy opts file = do
   oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
   setCurrentDirectory (takeDirectory file')
-  _ <- runTopLevel (interpretFile file' >> interpretMain) ro rw
+  _ <- runTopLevel (interpretFile file' True) ro rw
             `X.catch` (handleException opts)
   setCurrentDirectory oldpath
   return ()
@@ -583,7 +588,7 @@ include_value file = do
   oldpath <- io $ getCurrentDirectory
   file' <- io $ canonicalizePath file
   io $ setCurrentDirectory (takeDirectory file')
-  interpretFile file'
+  interpretFile file' False
   io $ setCurrentDirectory oldpath
 
 set_ascii :: Bool -> TopLevel ()
@@ -1562,7 +1567,7 @@ primitives = Map.fromList
     ,  "goals 'prop1' and 'prop2'." ]
 
   , prim "empty_ss"            "Simpset"
-    (pureVal emptySimpset)
+    (pureVal (emptySimpset :: SAWSimpset))
     Current
     [ "The empty simplification rule set, containing no rules." ]
 
@@ -1613,20 +1618,24 @@ primitives = Map.fromList
     Current
     [ "Add a proved equality theorem to a given simplification rule set." ]
 
-  , prim "addsimp'"            "Term -> Simpset -> Simpset"
-    (funVal2 addsimp')
-    Current
-    [ "Add an arbitrary equality term to a given simplification rule set." ]
-
   , prim "addsimps"            "[Theorem] -> Simpset -> Simpset"
     (funVal2 addsimps)
     Current
     [ "Add proved equality theorems to a given simplification rule set." ]
 
+  , prim "addsimp'"            "Term -> Simpset -> Simpset"
+    (funVal2 addsimp')
+    Deprecated
+    [ "Add an arbitrary equality term to a given simplification rule set."
+    , "Use `admit` or `core_axiom` and `addsimp` instead."
+    ]
+
   , prim "addsimps'"           "[Term] -> Simpset -> Simpset"
     (funVal2 addsimps')
-    Current
-    [ "Add arbitrary equality terms to a given simplification rule set." ]
+    Deprecated
+    [ "Add arbitrary equality terms to a given simplification rule set."
+    , "Use `admit` or `core_axiom` and `addsimps` instead."
+    ]
 
   , prim "rewrite"             "Simpset -> Term -> Term"
     (funVal2 rewritePrim)
@@ -2905,6 +2914,13 @@ primitives = Map.fromList
     Experimental
     [ "Print a human-readable summary of all verifications performed"
     , "so far."
+    ]
+
+  , prim "summarize_verification_json" "String -> TopLevel ()"
+    (pureVal summarize_verification_json)
+    Experimental
+    [ "Print a JSON summary of all verifications performed"
+    , "so far into the named file."
     ]
   ]
 
