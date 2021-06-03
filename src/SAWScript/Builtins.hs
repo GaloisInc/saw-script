@@ -501,6 +501,13 @@ simplifyGoal ss =
      (_,prop') <- io (simplifyProp sc ss (goalProp goal))
      return (prop', RewriteEvidence ss)
 
+hoistIfsInGoalPrim :: ProofScript ()
+hoistIfsInGoalPrim =
+  execTactic $ tacticChange $ \goal ->
+    do sc <- getSharedContext
+       p <- io $ hoistIfsInGoal sc (goalProp goal)
+       return (p, HoistIfsEvidence)
+
 goal_eval :: [String] -> ProofScript ()
 goal_eval unints =
   execTactic $ tacticChange $ \goal ->

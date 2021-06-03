@@ -1199,6 +1199,11 @@ primitives = Map.fromList
     Current
     [ "Apply the given simplifier rule set to the current goal." ]
 
+  , prim "hoist_ifs_in_goal"            "ProofScript ()"
+    (pureVal hoistIfsInGoalPrim)
+    Experimental
+    [ "hoist ifs in the current proof goal" ]
+
   , prim "goal_eval"           "ProofScript ()"
     (pureVal (goal_eval []))
     Current

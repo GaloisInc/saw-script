@@ -17,6 +17,7 @@ module SAWScript.Proof
   , splitProp
   , unfoldProp
   , simplifyProp
+  , hoistIfsInGoal
   , evalProp
   , betaReduceProp
   , falseProp
@@ -196,6 +197,21 @@ simplifyProp :: Ord a => SharedContext -> Simpset a -> Prop -> IO (Set a, Prop)
 simplifyProp sc ss (Prop tm) =
   do (a, tm') <- rewriteSharedTerm sc ss tm
      return (a, Prop tm')
+
+hoistIfsInGoal :: SharedContext -> Prop -> IO Prop
+hoistIfsInGoal sc (Prop p) = do
+  let (args, body) = asPiList p
+  body' <-
+    case asEqTrue body of
+      Just t -> pure t
+      Nothing -> fail "hoistIfsInGoal: expected EqTrue"
+  ecs <- traverse (\(nm, ty) -> scFreshEC sc nm ty) args
+  vars <- traverse (scExtCns sc) ecs
+  t0 <- instantiateVarList sc 0 (reverse vars) body'
+  t1 <- hoistIfs sc t0
+  t2 <- scEqTrue sc t1
+  t3 <- scGeneralizeExts sc ecs t2
+  return (Prop t3)
 
 -- | Evaluate the given proposition by round-tripping
 --   through the What4 formula representation.  This will
@@ -425,6 +441,10 @@ data Evidence
     --   uninterpreted (i.e., will not be unfolded).  Then, the provided
     --   evidence is use to check the modified goal.
   | EvalEvidence (Set VarIndex) Evidence
+
+    -- | This type of evidence is used to modify a goal to prove by applying
+    -- 'hoistIfsInGoal'.
+  | HoistIfsEvidence Evidence
 
 -- | The the proposition proved by a given theorem.
 thmProp :: Theorem -> Prop
@@ -784,6 +804,10 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
              ]
            (d2,sy) <- check hyps e' p'
            return (Set.union d1 d2, sy)
+
+      HoistIfsEvidence e' ->
+        do p' <- hoistIfsInGoal sc p
+           check hyps e' p'
 
       EvalEvidence vars e' ->
         do p' <- evalProp sc vars p
