@@ -27,7 +27,6 @@ import Data.ByteString (ByteString)
 import Data.Map (Map)
 import qualified Data.Map as Map
 
-import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
 import qualified Data.LLVM.BitCode as LLVM
 import qualified SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
@@ -56,6 +55,7 @@ import SAWServer as Server
     ( ServerName(..),
       SAWState,
       CrucibleSetupVal(..),
+      CryptolAST,
       sawTask,
       getHandleAlloc,
       setServerVal )
@@ -83,7 +83,7 @@ compileLLVMContract ::
   BuiltinContext ->
   Map ServerName CMS.GhostGlobal ->
   CryptolEnv ->
-  Contract JSONLLVMType (P.Expr P.PName) ->
+  Contract JSONLLVMType CryptolAST ->
   LLVMCrucibleSetupM ()
 compileLLVMContract fileReader bic ghostEnv cenv0 c =
   do allocsPre <- mapM setupAlloc (preAllocated c)
@@ -146,7 +146,7 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
 
     getTypedTerm ::
       CryptolEnv ->
-      P.Expr P.PName ->
+      CryptolAST ->
       LLVMCrucibleSetupM TypedTerm
     getTypedTerm cenv expr = LLVMCrucibleSetupM $
       do (res, warnings) <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
@@ -156,7 +156,7 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
 
     getSetupVal ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
-      CrucibleSetupVal (P.Expr P.PName) ->
+      CrucibleSetupVal CryptolAST ->
       LLVMCrucibleSetupM (CMS.AllLLVM MS.SetupValue)
     getSetupVal _ NullValue = LLVMCrucibleSetupM $ return CMS.anySetupNull
     getSetupVal env (ArrayValue elts) =

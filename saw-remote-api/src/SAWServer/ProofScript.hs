@@ -30,7 +30,7 @@ import Numeric (showHex)
 
 import qualified Argo
 import qualified Argo.Doc as Doc
-import CryptolServer.Data.Expression ( Expression(..), Encoding(..), getCryptolExpr )
+import CryptolServer.Data.Expression ( Expression(..), Encoding(..) )
 import qualified SAWScript.Builtins as SB
 import qualified SAWScript.Value as SV
 import qualified SAWScript.Proof as PF
@@ -43,7 +43,7 @@ import SAWServer
       getSimpset,
       sawBIC,
       sawTopLevelRW)
-import SAWServer.CryptolExpression ( CryptolModuleException(..), getTypedTermOfCExp )
+import SAWServer.CryptolExpression ( CryptolModuleException(..), getCryptolExpr, getTypedTermOfCExp )
 import SAWServer.Exceptions ( notASimpset )
 import SAWServer.OK ( OK, ok )
 import SAWServer.TopLevel ( tl )

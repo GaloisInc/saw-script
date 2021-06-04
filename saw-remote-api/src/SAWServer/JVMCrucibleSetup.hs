@@ -28,7 +28,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe ( maybeToList )
 
-import qualified Cryptol.Parser.AST as P
+
 import Cryptol.Utils.Ident (mkIdent)
 import qualified Lang.Crucible.JVM as CJ
 import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
@@ -54,6 +54,7 @@ import SAWServer
       SAWState,
       SetupStep(..),
       CrucibleSetupVal(CryptolExpr, NullValue, NamedValue),
+      CryptolAST,
       sawTask,
       setServerVal )
 import SAWServer.Data.Contract
@@ -91,7 +92,7 @@ compileJVMContract ::
   (FilePath -> IO ByteString) ->
   BuiltinContext ->
   CryptolEnv ->
-  Contract JavaType (P.Expr P.PName) ->
+  Contract JavaType CryptolAST ->
   JVMSetupM ()
 compileJVMContract fileReader bic cenv c = interpretJVMSetup fileReader bic cenv steps
   where
@@ -150,7 +151,7 @@ interpretJVMSetup fileReader bic cenv0 ss = evalStateT (traverse_ go ss) (mempty
 
     getSetupVal ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
-      CrucibleSetupVal (P.Expr P.PName) ->
+      CrucibleSetupVal CryptolAST ->
       JVMSetupM (MS.SetupValue CJ.JVM)
     getSetupVal _ NullValue = JVMSetupM $ return $ MS.SetupNull ()
                               {-
@@ -181,7 +182,7 @@ interpretJVMSetup fileReader bic cenv0 ss = evalStateT (traverse_ go ss) (mempty
 
     getTypedTerm ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
-      P.Expr P.PName ->
+      CryptolAST ->
       JVMSetupM TypedTerm
     getTypedTerm (_, cenv) expr = JVMSetupM $ liftIO $
       do (res, warnings) <- getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr

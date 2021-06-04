@@ -28,6 +28,7 @@ import qualified Crypto.Hash as Hash
 import System.Directory (getCurrentDirectory)
 import System.IO.Silently (silence)
 
+import Cryptol.ModuleSystem.Name (Name)
 import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 #if USE_BUILTIN_ABC
@@ -55,7 +56,7 @@ import SAWScript.Prover.Rewrite (basic_ss)
 import SAWScript.Proof (newTheoremDB)
 import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts, SAWSimpset)
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
-import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
+import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm, CryptolEnv)
 import qualified Cryptol.Utils.Ident as Cryptol
 
 import qualified Argo
@@ -72,7 +73,7 @@ import SAWServer.Exceptions
 
 type SAWCont = (SAWEnv, SAWTask)
 
-type CryptolAST = P.Expr P.PName
+type CryptolAST = P.Expr Name
 
 data SAWTask
   = ProofScriptTask
@@ -151,6 +152,11 @@ sawTopLevelRW = lens _sawTopLevelRW (\v rw -> v { _sawTopLevelRW = rw })
 trackedFiles :: Lens' SAWState (Map FilePath (Hash.Digest Hash.SHA256))
 trackedFiles = lens _trackedFiles (\v tf -> v { _trackedFiles = tf })
 
+
+sawCryptolEnv :: Lens' SAWState CryptolEnv
+sawCryptolEnv = lens getter setter
+  where getter = rwCryptol . _sawTopLevelRW
+        setter = (\s cenv -> s { _sawTopLevelRW =  (_sawTopLevelRW s) { rwCryptol = cenv } })
 
 pushTask :: SAWTask -> Argo.Command SAWState ()
 pushTask t = Argo.modifyState mod
