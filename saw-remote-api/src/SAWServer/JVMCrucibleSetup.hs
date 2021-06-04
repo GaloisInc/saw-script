@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PartialTypeSignatures #-}
@@ -76,11 +77,12 @@ instance FromJSON StartJVMSetupParams where
     withObject "params for \"SAW/Crucible setup\"" $ \o ->
     StartJVMSetupParams <$> o .: "name"
 
-instance Doc.DescribedParams StartJVMSetupParams where
+instance Doc.DescribedMethod StartJVMSetupParams OK where
   parameterFieldDescription =
     [ ("name",
        Doc.Paragraph [Doc.Text "The name of the item to setup on the server."])
     ]
+  resultFieldDescription = []
 
 newtype ServerSetupVal = Val (SetupValue CJ.JVM)
 
@@ -210,10 +212,11 @@ jvmLoadClass (JVMLoadClassParams serverName cname) =
             setServerVal serverName c
             ok
 
-instance Doc.DescribedParams JVMLoadClassParams where
+instance Doc.DescribedMethod JVMLoadClassParams OK where
   parameterFieldDescription =
     [ ("name",
         Doc.Paragraph [Doc.Text "The name of the class on the server."])
     , ("class",
       Doc.Paragraph [Doc.Text "The java class to load."])
     ]
+  resultFieldDescription = []

@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 module SAWServer.Ghost
   ( createGhostVariable
@@ -40,10 +41,11 @@ instance FromJSON CreateGhostParams where
     withObject "parameters for creating a ghost variable" $ \o ->
     CreateGhostParams <$> o .: "display name" <*> o.: "server name"
 
-instance Doc.DescribedParams CreateGhostParams where
+instance Doc.DescribedMethod CreateGhostParams OK where
   parameterFieldDescription =
     [ ("display name",
        Doc.Paragraph [Doc.Text "The name to assign to the ghost variable for display."])
     , ("server name",
        Doc.Paragraph [Doc.Text "The server name to use to access the ghost variable later."])
     ]
+  resultFieldDescription = []

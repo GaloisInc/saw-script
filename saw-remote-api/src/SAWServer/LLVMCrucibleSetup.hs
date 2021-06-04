@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PartialTypeSignatures #-}
@@ -188,13 +189,15 @@ instance FromJSON LLVMLoadModuleParams where
     LLVMLoadModuleParams <$> o .: "name" <*> o .: "bitcode file"
 
 
-instance Doc.DescribedParams LLVMLoadModuleParams where
+instance Doc.DescribedMethod LLVMLoadModuleParams OK where
   parameterFieldDescription =
     [ ("name",
         Doc.Paragraph [Doc.Text "The name to refer to the loaded module by later."])
     , ("bitcode file",
        Doc.Paragraph [Doc.Text "The file containing the bitcode LLVM module to load."])
     ]
+  resultFieldDescription = []
+
 
 llvmLoadModuleDescr :: Doc.Block
 llvmLoadModuleDescr =
