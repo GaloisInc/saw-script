@@ -16,7 +16,7 @@ id : (a : sort 0) -> a -> a;
 id _ x = x;
 
 -- FIXME: We eventually need to remove this, as it violates soundness...
-primitive fix : (a : sort 0) -> (a -> a) -> a;
+primitive fix : (a : sort 1) -> (a -> a) -> a;
 
 
 -- FIXME: below are some defined data-types that could be used in place of
