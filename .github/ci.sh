@@ -111,10 +111,10 @@ build() {
   cabal v2-update
   cabal v2-configure -j --enable-tests
   git status --porcelain
-  pkgs=(saw)
   if $IS_WIN; then
+    pkgs=(saw)
   else
-    pkgs+=(saw-remote-api)
+    pkgs=(saw saw-remote-api)
   fi
   tee -a cabal.project.local > /dev/null < cabal.project.ci
   if ! retry cabal v2-build "$@" "${pkgs[@]}"; then
