@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module SAWServer.VerifyCommon
@@ -14,6 +15,7 @@ import Data.Aeson (FromJSON(..), withObject, (.:))
 import CryptolServer.Data.Expression ( Expression )
 import SAWServer ( ServerName )
 import SAWServer.Data.Contract ( Contract )
+import SAWServer.OK ( OK )
 import SAWServer.ProofScript ( ProofScript )
 
 data VerifyParams ty =
@@ -60,7 +62,7 @@ instance (FromJSON ty) => FromJSON (VerifyParams ty) where
                  <*> o .: "lemma name"
 
 
-instance Doc.DescribedParams (VerifyParams a) where
+instance Doc.DescribedMethod (VerifyParams a) OK where
   parameterFieldDescription =
     [ ("module",
         Doc.Paragraph [Doc.Text "The module of the function being verified."])
@@ -77,6 +79,7 @@ instance Doc.DescribedParams (VerifyParams a) where
     , ("lemma name",
        Doc.Paragraph [Doc.Text "The name to refer to this verification/contract by later."])
     ]
+  resultFieldDescription = []
 
 instance FromJSON X86Alloc where
   parseJSON =
@@ -99,7 +102,7 @@ instance (FromJSON ty) => FromJSON (X86VerifyParams ty) where
                     <*> o .: "script"
                     <*> o .: "lemma name"
 
-instance Doc.DescribedParams (X86VerifyParams a) where
+instance Doc.DescribedMethod (X86VerifyParams a) OK where
   parameterFieldDescription =
     [ ("module",
         Doc.Paragraph [Doc.Text "The LLVM  module of the caller."])
@@ -120,6 +123,7 @@ instance Doc.DescribedParams (X86VerifyParams a) where
     , ("lemma name",
        Doc.Paragraph [Doc.Text "The name to refer to this verification/contract by later."])
     ]
+  resultFieldDescription = []
 
 data AssumeParams ty =
   AssumeParams
@@ -138,7 +142,7 @@ instance (FromJSON ty) => FromJSON (AssumeParams ty) where
                  <*> o .: "contract"
                  <*> o .: "lemma name"
 
-instance Doc.DescribedParams (AssumeParams a) where
+instance Doc.DescribedMethod (AssumeParams a) OK where
   parameterFieldDescription =
     [ ("module",
         Doc.Paragraph [Doc.Text "The LLVM  module containing the function."])
@@ -149,3 +153,4 @@ instance Doc.DescribedParams (AssumeParams a) where
     , ("lemma name",
        Doc.Paragraph [Doc.Text "The name to refer to this assumed contract by later."])
     ]
+  resultFieldDescription = []
