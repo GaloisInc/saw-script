@@ -59,6 +59,7 @@ import System.Directory
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.UTF8 as BL
 import GHC.TypeLits
+import Data.Text (Text)
 
 import Data.Binding.Hobbits hiding (sym)
 import qualified Data.Type.RList as RL
@@ -146,7 +147,7 @@ lookupFunctionDecl lm nm =
   find ((fromString nm ==) . L.decName) $ L.modDeclares $ modAST lm
 
 -- | Look up the Crucible CFG for a defined symbol in an 'LLVMModule'
-lookupFunctionCFG :: LLVMModule arch -> String -> Maybe (AnyCFG (LLVM arch))
+lookupFunctionCFG :: LLVMModule arch -> String -> Maybe (AnyCFG Lang.Crucible.LLVM.Extension.LLVM)
 lookupFunctionCFG lm nm =
   snd <$> Map.lookup (fromString nm) (cfgMap $ modTrans lm)
 
@@ -188,7 +189,7 @@ lookupModContainingSym env nm =
 
 -- | An LLVM module plus a CFG for a specific function in that module
 data ModuleAndCFG arch =
-  ModuleAndCFG (LLVMModule arch) (AnyCFG (LLVM arch))
+  ModuleAndCFG (LLVMModule arch) (AnyCFG Lang.Crucible.LLVM.Extension.LLVM)
 
 -- | Look up the LLVM module and associated CFG for a symobl
 lookupLLVMSymbolModAndCFG :: HeapsterEnv -> String -> Maybe (Some ModuleAndCFG)
@@ -241,7 +242,7 @@ parseAndInsDef henv nm term_tp term_string =
          pure term_ident
 
 
-heapster_init_env :: BuiltinContext -> Options -> String -> String ->
+heapster_init_env :: BuiltinContext -> Options -> Text -> String ->
                      TopLevel HeapsterEnv
 heapster_init_env _bic _opts mod_str llvm_filename =
   do llvm_mod <- llvm_load_module llvm_filename
@@ -929,8 +930,8 @@ heapster_export_coq _bic _opts henv filename =
      sc <- getSharedContext
      saw_mod <- liftIO $ scFindModule sc $ heapsterEnvSAWModule henv
      let coq_doc =
-           vcat [preamblePlus coq_trans_conf
-                 (pretty ("From CryptolToCoq Require Import SAWCorePrelude." :: String)),
+           vcat [preamble coq_trans_conf {
+                   postPreamble = "From CryptolToCoq Require Import SAWCorePrelude."},
                  translateSAWModule coq_trans_conf saw_mod]
      liftIO $ writeFile filename (show coq_doc)
 

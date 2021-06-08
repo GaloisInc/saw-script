@@ -829,14 +829,14 @@ provePrintPrim script t = do
   sc <- getSharedContext
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   let goal = ProofGoal 0 "prove" "prove" prop
-  opts <- rwPPOpts <$> getTopLevelRW
+  opts <- SV.sawPPOpts . rwPPOpts <$> getTopLevelRW
   res <- SV.runProofScript script goal
   let failProof pst =
          fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
-                          ++ SV.showsProofResult opts res ""
+                          ++ showsProofResult opts res ""
   case res of
     ValidProof _stats thm ->
-      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) $ ttTerm t)
+      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm opts $ ttTerm t)
          SV.returnProof thm
     InvalidProof _stats _cex pst -> failProof pst
     UnfinishedProof pst -> failProof pst
@@ -1288,11 +1288,11 @@ prove_core script input =
   do sc <- getSharedContext
      t <- parseCore input
      p <- io (termToProp sc t)
-     opts <- rwPPOpts <$> getTopLevelRW
+     opts <- SV.sawPPOpts . rwPPOpts <$> getTopLevelRW
      res <- SV.runProofScript script (ProofGoal 0 "prove" "prove" p)
      let failProof pst =
             fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
-                                  ++ SV.showsProofResult opts res ""
+                                  ++ showsProofResult opts res ""
      case res of
        ValidProof _ thm -> SV.returnProof thm
        InvalidProof _ _ pst -> failProof pst

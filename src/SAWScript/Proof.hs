@@ -70,6 +70,8 @@ module SAWScript.Proof
 
   , CEX
   , ProofResult(..)
+  , showsProofResult
+
   , SolveResult(..)
 
   , predicateToSATQuery
@@ -91,7 +93,7 @@ import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.TypedTerm
-import Verifier.SAW.FiniteValue (FirstOrderValue)
+import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Term.Pretty (SawDoc)
 import Verifier.SAW.SCTypeCheck (scTypeCheckError)
 
@@ -929,3 +931,17 @@ tacticChange :: Monad m => (ProofGoal -> m (Prop, Evidence -> Evidence)) -> Tact
 tacticChange f = Tactic \gl ->
   do (p, ef) <- lift (f gl)
      return ((), mempty, [ gl{ goalProp = p } ], updateEvidence ef)
+
+showsProofResult :: PPOpts -> ProofResult -> ShowS
+showsProofResult opts r =
+  case r of
+    SAWScript.Proof.ValidProof _ _ -> showString "Valid"
+    SAWScript.Proof.InvalidProof _ ts _ -> showString "Invalid: [" . showMulti "" ts
+    SAWScript.Proof.UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining" 
+  where
+    showVal t = shows (ppFirstOrderValue opts t)
+    showEqn (x, t) = showEC x . showString " = " . showVal t
+    showEC ec = showString (Text.unpack (toShortName (ecName ec)))
+
+    showMulti _ [] = showString "]"
+    showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
