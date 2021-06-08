@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 module SAWServer.SaveTerm
   ( saveTerm
@@ -32,10 +33,11 @@ instance FromJSON SaveTermParams where
     SaveTermParams <$> o .: "name"
                    <*> o .: "expression"
 
-instance Doc.DescribedParams SaveTermParams where
+instance Doc.DescribedMethod SaveTermParams OK where
   parameterFieldDescription =
     [ ("name",
        Doc.Paragraph [Doc.Text "The name to assign to the expression for later reference."])
     , ("expression",
        Doc.Paragraph [Doc.Text "The expression to save."])
     ]
+  resultFieldDescription = []

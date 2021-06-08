@@ -1,5 +1,7 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 module SAWServer.ProofScript
   ( ProofScript(..)
   , interpretProofScript
@@ -23,6 +25,7 @@ import Data.Aeson
       ToJSON(toJSON) )
 import Data.Maybe ( fromMaybe )
 import Data.Text (Text, pack)
+import Data.Typeable (Proxy(..), typeRep)
 import Numeric (showHex)
 
 import qualified Argo
@@ -135,13 +138,14 @@ instance FromJSON MakeSimpsetParams where
     MakeSimpsetParams <$> o .: "elements"
                       <*> o .: "result"
 
-instance Doc.DescribedParams MakeSimpsetParams where
+instance Doc.DescribedMethod MakeSimpsetParams OK where
   parameterFieldDescription =
     [ ("elements",
        Doc.Paragraph [Doc.Text "The items to include in the simpset."])
     , ("result",
        Doc.Paragraph [Doc.Text "The name to assign to this simpset."])
     ]
+  resultFieldDescription = []
 
 
 makeSimpsetDescr :: Doc.Block
@@ -171,12 +175,28 @@ instance (FromJSON cryptolExpr) => FromJSON (ProveParams cryptolExpr) where
     ProveParams <$> o .: "script"
                 <*> o .: "goal"
 
-instance Doc.DescribedParams (ProveParams cryptolExpr) where
+instance Doc.DescribedMethod (ProveParams cryptolExpr) ProveResult where
   parameterFieldDescription =
     [ ("script",
        Doc.Paragraph [Doc.Text "Script to use to prove the term."])
     , ("goal",
        Doc.Paragraph [Doc.Text "The goal to interpret as a theorm and prove."])
+    ]
+  resultFieldDescription =
+    [ ("status",
+      Doc.Paragraph [ Doc.Text "A string (one of "
+                    , Doc.Literal "valid", Doc.Literal ", ", Doc.Literal "invalid"
+                    , Doc.Text ", or ", Doc.Literal "unknown"
+                    , Doc.Text ") indicating whether the proof went through successfully or not."
+                    ])
+    , ("counterexample",
+      Doc.Paragraph [ Doc.Text "Only used if the ", Doc.Literal "status"
+                    , Doc.Text " is ", Doc.Literal "invalid"
+                    , Doc.Text ". An array of objects where each object has a ", Doc.Literal "name"
+                    , Doc.Text " string and a "
+                    , Doc.Link (Doc.TypeDesc (typeRep (Proxy @Expression))) "JSON Cryptol expression"
+                    , Doc.Text " ", Doc.Literal "value", Doc.Text "."
+                    ])
     ]
 
 data CexValue = CexValue Text Expression
