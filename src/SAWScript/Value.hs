@@ -37,8 +37,9 @@ import Control.Applicative (Applicative)
 #endif
 import Control.Lens
 import Control.Monad.Fail (MonadFail(..))
-import Control.Monad.Catch (MonadThrow(..), MonadMask(..), MonadCatch(..))
-import Control.Monad.Except (ExceptT(..), runExceptT)
+import Control.Monad.Catch (MonadThrow(..), MonadMask(..),
+                            MonadCatch(..), catches, Handler(..))
+import Control.Monad.Except (ExceptT(..), runExceptT, MonadError(..))
 import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
@@ -76,7 +77,9 @@ import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.Crucible.LLVM.Skeleton
+import SAWScript.X86 (X86Unsupported(..), X86Error(..))
 
+import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
@@ -112,7 +115,7 @@ import Verifier.SAW.Heapster.Permissions
 
 data Value
   = VBool Bool
-  | VString String
+  | VString Text
   | VInteger Integer
   | VArray [Value]
   | VTuple [Value]
@@ -163,7 +166,7 @@ data AIGProxy where
   AIGProxy :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Proxy l g -> AIGProxy
 
 data SAW_CFG where
-  LLVM_CFG :: Crucible.AnyCFG (Crucible.LLVM arch) -> SAW_CFG
+  LLVM_CFG :: Crucible.AnyCFG Crucible.LLVM -> SAW_CFG
   JVM_CFG :: Crucible.AnyCFG JVM -> SAW_CFG
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
@@ -188,19 +191,11 @@ showHeapsterEnv env =
           Some lm -> CMSLLVM.showLLVMModule lm) $
   heapsterEnvLLVMModules env
 
-data ProofResult
-  = Valid SolverStats
-  | InvalidMulti SolverStats [(String, FirstOrderValue)]
-    deriving (Show)
-
 data SatResult
   = Unsat SolverStats
-  | SatMulti SolverStats [(String, FirstOrderValue)]
+  | Sat SolverStats [(ExtCns Term, FirstOrderValue)]
+  | SatUnknown
     deriving (Show)
-
-flipSatResult :: SatResult -> ProofResult
-flipSatResult (Unsat stats) = Valid stats
-flipSatResult (SatMulti stats t) = InvalidMulti stats t
 
 isVUnit :: Value -> Bool
 isVUnit (VTuple []) = True
@@ -242,27 +237,17 @@ showBrackets s = showString "[" . s . showString "]"
 showBraces :: ShowS -> ShowS
 showBraces s = showString "{" . s . showString "}"
 
-showsProofResult :: PPOpts -> ProofResult -> ShowS
-showsProofResult opts r =
-  case r of
-    Valid _ -> showString "Valid"
-    InvalidMulti _ ts -> showString "Invalid: [" . showMulti "" ts
-  where
-    opts' = sawPPOpts opts
-    showVal t = shows (ppFirstOrderValue opts' t)
-    showEqn (x, t) = showString x . showString " = " . showVal t
-    showMulti _ [] = showString "]"
-    showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
-
 showsSatResult :: PPOpts -> SatResult -> ShowS
 showsSatResult opts r =
   case r of
     Unsat _ -> showString "Unsat"
-    SatMulti _ ts -> showString "Sat: [" . showMulti "" ts
+    Sat _ ts -> showString "Sat: [" . showMulti "" ts
+    SatUnknown  -> showString "Unknown"
   where
     opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
-    showEqn (x, t) = showString x . showString " = " . showVal t
+    showEC ec = showString (unpack (toShortName (ecName ec)))
+    showEqn (x, t) = showEC x . showString " = " . showVal t
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
@@ -302,9 +287,9 @@ showsPrecValue opts p v =
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset ss -> showString (showSimpset opts ss)
     VProofScript {} -> showString "<<proof script>>"
-    VTheorem (Theorem (Prop t) _stats) ->
+    VTheorem thm ->
       showString "Theorem " .
-      showParen True (showString (SAWCorePP.scPrettyTerm opts' t))
+      showParen True (showString (prettyProp opts' (thmProp thm)))
     VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
     VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
     VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
@@ -318,7 +303,7 @@ showsPrecValue opts p v =
     VLLVMModule (Some m) -> showString (CMSLLVM.showLLVMModule m)
     VHeapsterEnv env -> showString (showHeapsterEnv env)
     VJavaClass c -> shows (prettyClass c)
-    VProofResult r -> showsProofResult opts r
+    VProofResult r -> showsProofResult opts' r
     VSatResult r -> showsSatResult opts r
     VUninterp u -> showString "Uninterp: " . shows u
     VAIG _ -> showString "<<AIG>>"
@@ -357,7 +342,7 @@ tupleLookupValue _ _ = error "tupleLookupValue"
 
 evaluate :: SharedContext -> Term -> IO Concrete.CValue
 evaluate sc t =
-  (\modmap -> Concrete.evalSharedTerm modmap mempty t) <$>
+  (\modmap -> Concrete.evalSharedTerm modmap mempty mempty t) <$>
   scGetModuleMap sc
 
 evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
@@ -424,8 +409,13 @@ data TopLevelRW =
   , rwCrucibleAssertThenAssume :: Bool
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
+
+  -- FIXME: These might be better split into "simulator hash-consing" and "tactic hash-consing"
   , rwWhat4HashConsing :: Bool
+  , rwWhat4HashConsingX86 :: Bool
+
   , rwPreservedRegs :: [String]
+  , rwStackBaseAlign :: Integer
   }
 
 newtype TopLevel a =
@@ -442,7 +432,16 @@ runTopLevel :: TopLevel a -> TopLevelRO -> TopLevelRW -> IO (a, TopLevelRW)
 runTopLevel (TopLevel m) ro rw = runStateT (runReaderT m ro) rw
 
 io :: IO a -> TopLevel a
-io = liftIO
+io f = liftIO f
+       `catches`
+       [ Handler (\(ex :: X86Unsupported) -> handleX86Unsupported ex)
+       , Handler (\(ex :: X86Error) -> handleX86Error ex)
+       ]
+  where
+    handleX86Unsupported (X86Unsupported s) =
+      throwTopLevel $ "Unsupported x86 feature: " ++ s
+    handleX86Error (X86Error s) =
+      throwTopLevel $ "Error in x86 code: " ++ s
 
 throwTopLevel :: String -> TopLevel a
 throwTopLevel msg = do
@@ -537,7 +536,7 @@ extendEnv sc x mt md v rw =
          VCryptolModule m ->
            pure $ CEnv.bindCryptolModule (modname, m) ce
          VString s ->
-           do tt <- typedTermOfString sc s
+           do tt <- typedTermOfString sc (unpack s)
               pure $ CEnv.bindTypedTerm (ident, tt) ce
          _ ->
            pure ce
@@ -578,7 +577,7 @@ newtype LLVMCrucibleSetupM a =
     { runLLVMCrucibleSetupM ::
         forall arch.
         (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-        CrucibleSetup (Crucible.LLVM arch) a
+        CrucibleSetup (CMSLLVM.LLVM arch) a
     }
   deriving Functor
 
@@ -610,7 +609,34 @@ newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
   deriving (Applicative, Functor, Monad)
 
 --
-type ProofScript a = StateT ProofState TopLevel a
+newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
+ deriving (Functor, Applicative, Monad)
+
+runProofScript :: ProofScript a -> ProofGoal -> TopLevel ProofResult
+runProofScript (ProofScript m) gl =
+  do (r,pstate) <- runStateT (runExceptT m) (startProof gl)
+     case r of
+       Left (stats,cex) -> return (SAWScript.Proof.InvalidProof stats cex pstate)
+       Right _ ->
+         do sc <- getSharedContext
+            io (finishProof sc pstate)
+
+scriptTopLevel :: TopLevel a -> ProofScript a
+scriptTopLevel m = ProofScript (lift (lift m))
+
+instance MonadIO ProofScript where
+  liftIO m = ProofScript (liftIO m)
+
+instance MonadFail ProofScript where
+  fail msg = ProofScript (fail msg)
+
+instance MonadState ProofState ProofScript where
+  get = ProofScript get
+  put x = ProofScript (put x)
+
+instance MonadError (SolverStats, CEX) ProofScript where
+  throwError cex = ProofScript (throwError cex)
+  catchError (ProofScript m) f = ProofScript (catchError m (unProofScript . f))
 
 -- IsValue class ---------------------------------------------------------------
 
@@ -682,15 +708,15 @@ instance FromValue a => FromValue (TopLevel a) where
       fromValue m2
     fromValue _ = error "fromValue TopLevel"
 
-instance IsValue a => IsValue (StateT ProofState TopLevel a) where
+instance IsValue a => IsValue (ProofScript a) where
     toValue m = VProofScript (fmap toValue m)
 
-instance FromValue a => FromValue (StateT ProofState TopLevel a) where
+instance FromValue a => FromValue (ProofScript a) where
     fromValue (VProofScript m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind _pos m1 v2) = do
       v1 <- fromValue m1
-      m2 <- lift $ applyValue v2 v1
+      m2 <- scriptTopLevel $ applyValue v2 v1
       fromValue m2
     fromValue _ = error "fromValue ProofScript"
 
@@ -812,17 +838,17 @@ instance FromValue Cryptol.Schema where
     fromValue _ = error "fromValue Schema"
 
 instance IsValue String where
-    toValue n = VString n
+    toValue n = VString (pack n)
 
 instance FromValue String where
-    fromValue (VString n) = n
+    fromValue (VString n) = unpack n
     fromValue _ = error "fromValue String"
 
 instance IsValue Text where
-    toValue n = VString $ unpack n
+    toValue n = VString n
 
 instance FromValue Text where
-    fromValue (VString n) = pack n
+    fromValue (VString n) = n
     fromValue _ = error "fromValue Text"
 
 instance IsValue Integer where
@@ -953,7 +979,7 @@ addTrace str val =
   case val of
     VLambda        f -> VLambda        (\x -> addTrace str `fmap` addTraceTopLevel str (f x))
     VTopLevel      m -> VTopLevel      (addTrace str `fmap` addTraceTopLevel str m)
-    VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceStateT str m)
+    VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceProofScript str m)
     VBind pos v1 v2  -> VBind pos      (addTrace str v1) (addTrace str v2)
     VLLVMCrucibleSetup (LLVMCrucibleSetupM m) -> VLLVMCrucibleSetup $ LLVMCrucibleSetupM $
         addTrace str `fmap` underStateT (addTraceTopLevel str) m
@@ -980,6 +1006,9 @@ addTraceIO str action = X.catches action
 -- | Similar to 'addTraceIO', but for state monads built from 'TopLevel'.
 addTraceStateT :: String -> StateT s TopLevel a -> StateT s TopLevel a
 addTraceStateT str = underStateT (addTraceTopLevel str)
+
+addTraceProofScript :: String -> ProofScript a -> ProofScript a
+addTraceProofScript str (ProofScript m) = ProofScript (underExceptT (underStateT (addTraceTopLevel str)) m)
 
 -- | Similar to 'addTraceIO', but for reader monads built from 'TopLevel'.
 addTraceReaderT :: String -> ReaderT s TopLevel a -> ReaderT s TopLevel a

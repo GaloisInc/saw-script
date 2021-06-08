@@ -67,5 +67,8 @@ llvm_alias n = LLVM.Alias (fromString n)
 llvm_packed_struct_type :: [LLVM.Type] -> LLVM.Type
 llvm_packed_struct_type = LLVM.PackedStruct
 
+llvm_pointer :: LLVM.Type -> LLVM.Type
+llvm_pointer = LLVM.PtrTo
+
 llvm_struct_type :: [LLVM.Type] -> LLVM.Type
 llvm_struct_type = LLVM.Struct

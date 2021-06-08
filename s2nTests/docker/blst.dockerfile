@@ -5,7 +5,7 @@ RUN pip3 install wllvm
 
 RUN git clone https://github.com/GaloisInc/blst-verification.git /workdir && \
     cd /workdir && \
-    git checkout c2c9c8bc07c50eec29250a4b8d03b17b9a3c1f3b && \
+    git checkout 05d29b0e9d826053185e5bdba287045aab0b4669 && \
     git config --file=.gitmodules submodule.blst.url https://github.com/supranational/blst && \
     git submodule sync && \
     git submodule update --init

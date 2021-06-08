@@ -1,4 +1,5 @@
 SAW?=../../bin/saw
+JAVAC?=javac
 SAWS=$(wildcard *.saw)
 OUTS=$(SAWS:.saw=.out)
 
@@ -10,7 +11,7 @@ run: all ${OUTS}
 	clang -emit-llvm -c $< -o $@
 
 %.class: %.java
-	javac -g $<
+	${JAVAC} -g $<
 
 %.out: %.saw
 	${SAW} $< 2>&1 | tee $@

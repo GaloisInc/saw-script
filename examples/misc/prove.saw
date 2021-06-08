@@ -5,6 +5,6 @@
 let f = {{ \ (x : [8]) -> (x + x) == (1 * x) }};
 r <- prove abc f;
 caseProofResult r
-  (print "Q.E.D.")
+  (\thm -> print "Q.E.D.")
   (\v -> do { print "Oops." ; print v; print {{ f v }}; });
 print "Done.";

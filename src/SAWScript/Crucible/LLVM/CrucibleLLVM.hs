@@ -35,6 +35,7 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
   , EndianForm(..)
     -- * Re-exports from "Lang.Crucible.LLVM.Extension"
   , ArchWidth
+  , LLVMArch
     -- * Re-exports from "Lang.Crucible.LLVM.Intrinsics"
   , LLVM
   , llvmTypeCtx
@@ -129,6 +130,7 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
   , pattern PtrRepr
   , ppPtr
   , projectLLVM_bv
+  , mkMemVar
   ) where
 
 import Lang.Crucible.LLVM
@@ -142,7 +144,7 @@ import Lang.Crucible.LLVM.DataLayout
    integerAlignment, floatAlignment, fromAlignment, intWidthSize, ptrBitwidth)
 
 import Lang.Crucible.LLVM.Extension
-  (ArchWidth)
+  (ArchWidth, LLVMArch)
 
 import Lang.Crucible.LLVM.Intrinsics
   (LLVM, register_llvm_overrides, llvmIntrinsicTypes)
@@ -170,7 +172,7 @@ import Lang.Crucible.LLVM.MemModel
   (Mem, MemImpl, doResolveGlobal, storeRaw, storeConstRaw, mallocRaw, mallocConstRaw,
    ppMem, packMemValue, unpackMemValue, buildDisjointRegionsAssertion,
    doLoad, doStore, loadRaw, doPtrAddOffset, assertSafe, isZero, testEqual,
-   emptyMem, doMalloc,
+   emptyMem, doMalloc, mkMemVar,
    LLVMVal(..),
    LLVMPtr, HasPtrWidth, ptrToPtrVal, mkNullPointer, ptrIsNull, ppPtr, ptrEq,
    pattern LLVMPointerRepr, LLVMPointerType,

@@ -50,7 +50,7 @@ vsVerifSolvers vs =
 
 vsTheoremSolvers :: VerificationSummary -> Set.Set String
 vsTheoremSolvers = Set.unions . map getSolvers . vsTheorems
-  where getSolvers (Theorem _ ss) = solverStatsSolvers ss
+  where getSolvers thm = solverStatsSolvers (thmStats thm)
 
 vsAllSolvers :: VerificationSummary -> Set.Set String
 vsAllSolvers vs = Set.union (vsVerifSolvers vs) (vsTheoremSolvers vs)
@@ -73,7 +73,7 @@ thmToJSON thm = object [
     ("type" .= ("property" :: String))
     , ("loc" .= ("unknown" :: String)) -- TODO: Theorem has no attached location information
     , ("status" .= (statusString $ thmStats thm))
-    , ("term" .= (show $ PP.ppTerm PP.defaultPPOpts $ unProp $ thmProp thm))
+    , ("term" .= (show $ ppProp PP.defaultPPOpts $ thmProp thm))
   ]
 
 statusString :: SolverStats -> String
@@ -134,7 +134,7 @@ prettyVerificationSummary vs@(VerificationSummary jspecs lspecs thms) =
         vsep [ if Set.null (solverStatsSolvers (thmStats t))
                then "Axiom:"
                else "Theorem:"
-             , code (indent 2 (PP.ppTerm PP.defaultPPOpts (unProp (thmProp t))))
+             , code (indent 2 (ppProp PP.defaultPPOpts (thmProp t)))
              , ""
              ]
       prettySolvers ss =

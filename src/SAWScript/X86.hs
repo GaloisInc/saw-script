@@ -29,7 +29,6 @@ module SAWScript.X86
 
 import Control.Lens (toListOf, folded, (^.))
 import Control.Exception(Exception(..),throwIO)
-import Control.Monad.ST (stToIO)
 import Control.Monad.IO.Class(liftIO)
 
 import qualified Data.BitVector.Sized as BV
@@ -69,6 +68,7 @@ import Lang.Crucible.Simulator.EvalStmt(executeCrucible)
 import Lang.Crucible.Simulator.ExecutionTree
           (ExecResult(..), SimContext(..), FnState(..)
           , ExecState(InitialState)
+          , FunctionBindings(..)
           )
 import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
 import Lang.Crucible.Backend
@@ -131,7 +131,7 @@ import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 
 -- SAWScript
 import SAWScript.X86Spec hiding (Prop)
-import SAWScript.Proof(predicateToProp, Quantification(Universal), Prop)
+import SAWScript.Proof(boolToProp, Prop)
 import SAWScript.Crucible.Common (newSAWCoreBackend, sawCoreState)
 
 
@@ -200,7 +200,7 @@ proof fileReader archi file mbCry globs fun =
      sym <- newSAWCoreBackend sc
      let ?fileReader = fileReader
      cenv <- loadCry sym mbCry
-     mvar <- mkMemVar halloc
+     mvar <- mkMemVar "saw_x86:llvm_memory" halloc
      proofWithOptions Options
        { fileName = file
        , function = fun
@@ -263,8 +263,11 @@ getElf path =
        Right (Elf.SomeElf hdr)
          | Elf.ELFCLASS64 <- Elf.headerClass (Elf.header hdr) -> pure hdr
          | otherwise -> unsupported "32-bit ELF format"
-       Left _ -> malformed "Invalid ELF header"
-
+       Left (off, msg) -> malformed $ mconcat [ "Invalid ELF header at offset "
+                                              , show off
+                                              , ": "
+                                              , msg
+                                              ]
 
 
 -- | Extract a Macaw "memory" from an ELF file and resolve symbols.
@@ -475,9 +478,8 @@ doSim opts elf sfs name (globs,overs) st checkPost =
                               , simHandleAllocator = allocator opts
                               , printHandle = stdout
                               , extensionImpl = macawExtensions (x86_64MacawEvalFn sfs) mvar globs (callHandler overs sym) noExtraValidityPred
-                              , _functionBindings =
-                                   insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) $
-                                   emptyHandleMap
+                              , _functionBindings = FnBindings $
+                                insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) emptyHandleMap
                               , _cruciblePersonality = MacawSimulatorState
                               , _profilingMetrics = Map.empty
                               }
@@ -518,7 +520,7 @@ makeCFG ::
   MemSegmentOff 64 ->
   IO TheCFG
 makeCFG opts elf name addr =
-  do (_,Some funInfo) <- stToIO $ analyzeFunction quiet addr UserRequest empty
+  do (_,Some funInfo) <- return $ analyzeFunction addr UserRequest empty
      -- writeFile "MACAW.cfg" (show (pretty funInfo))
      mkFunCFG x86 (allocator opts) cruxName posFn funInfo
   where
@@ -540,7 +542,7 @@ data Goal = Goal
 
 -- | The proposition that needs proving (i.e., assumptions imply conclusion)
 gGoal :: SharedContext -> Goal -> IO Prop
-gGoal sc g0 = predicateToProp sc Universal [] =<< go (gAssumes g)
+gGoal sc g0 = boolToProp sc [] =<< go (gAssumes g)
   where
   g = g0 { gAssumes = mapMaybe skip (gAssumes g0) }
 
@@ -605,13 +607,6 @@ x86 = x86_64MacawSymbolicFns
 --   DF in $rFLAGS is clear one entry and return.
 -- "Red zone" 128 bytes past the end of the stack %rsp.
 --    * not modified by interrupts
-
-
---------------------------------------------------------------------------------
--- Logging
-quiet :: Applicative m => a -> m ()
-quiet _ = pure ()
-
 
 
 --------------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-![Build Status](https://github.com/actions/GaloisInc/saw-script/workflows/.github/workflows/nightly.yml/badge.svg)
+[![Build Status](https://github.com/GaloisInc/saw-script/workflows/Nightly%20Builds/badge.svg)](https://github.com/GaloisInc/saw-script/actions?query=event%3Aschedule)
 
 # SAWScript
 
@@ -17,7 +17,9 @@ describes the breadth of SAWScript's features.
 
 ## Precompiled Binaries
 
-Precompiled SAWScript binaries for a variety of platforms are available on the [releases page](https://github.com/GaloisInc/saw-script/releases).
+Precompiled SAWScript binaries for a variety of platforms are available
+on the [releases
+page](https://github.com/GaloisInc/saw-script/releases).
 
 ## Getting Z3
 
@@ -27,7 +29,7 @@ solver](https://github.com/Z3Prover/z3) installed.  You can download Z3
 binaries for a variety of platforms from their [releases
 page](https://github.com/Z3Prover/z3/releases).
 
-We currently recommend Z3 4.8.7. If you plan to use path satisfiability
+We currently recommend Z3 4.8.10. If you plan to use path satisfiability
 checking, you'll also need Yices version 2.6.1 or newer.
 
 After installation, make sure that `z3` (or `z3.exe` on Windows)
@@ -68,7 +70,7 @@ SAW can analyze LLVM programs (usually derived from C, but potentially
 for other languages). The only tool strictly required for this is a
 compiler that can generate LLVM bitcode, such as `clang`. However,
 having the full LLVM tool suite available can be useful. We have tested
-SAW with LLVM and `clang` versions from 3.5 to 9.0, as well as the
+SAW with LLVM and `clang` versions from 3.5 to 11.0, as well as the
 version of `clang` bundled with Apple Xcode. We welcome bug reports on
 any failure to parse bitcode from LLVM versions in that range.
 
@@ -87,7 +89,6 @@ downloaded dependencies include:
 * `deps/abcBridge/`:        [Haskell bindings for ABC](https://github.com/GaloisInc/abcBridge)
 * `deps/crucible/`:         [Crucible symbolic execution engine](https://github.com/GaloisInc/crucible)
 * `deps/cryptol/`:          [Cryptol](https://github.com/GaloisInc/cryptol)
-* `deps/saw-core/`:         [SAWCore intermediate language](https://github.com/GaloisInc/saw-core), used by CSS, JSS, and SAWScript
 
 ## For SAW developers
 

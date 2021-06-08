@@ -8,11 +8,11 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 module SAWServer.JVMCrucibleSetup
-  ( startJVMSetup
-  , jvmLoadClass
+  ( jvmLoadClass
   , compileJVMContract
   ) where
 
+import Control.Exception (throw)
 import Control.Lens ( view )
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import Control.Monad.State
@@ -23,11 +23,9 @@ import Control.Monad.State
 import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.ByteString (ByteString)
 import Data.Foldable ( traverse_ )
-import Data.Functor (($>))
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe ( maybeToList )
-import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
@@ -55,27 +53,21 @@ import SAWServer
       SAWState,
       SetupStep(..),
       CrucibleSetupVal(CryptolExpr, NullValue, NamedValue),
-      SAWTask(JVMSetup),
       sawTask,
-      pushTask,
       setServerVal )
 import SAWServer.Data.Contract
     ( PointsTo(PointsTo),
+      GhostValue(..),
       Allocated(Allocated),
       ContractVar(ContractVar),
       Contract(preVars, preConds, preAllocated, prePointsTos,
                argumentVals, postVars, postConds, postAllocated, postPointsTos,
                returnVal) )
 import SAWServer.Data.SetupValue ()
-import SAWServer.CryptolExpression (getTypedTermOfCExp)
+import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
 import SAWServer.Exceptions ( notAtTopLevel )
 import SAWServer.OK ( OK, ok )
 import SAWServer.TopLevel ( tl )
-
-startJVMSetup :: StartJVMSetupParams -> Argo.Command SAWState OK
-startJVMSetup (StartJVMSetupParams n) =
-  do pushTask (JVMSetup n [])
-     ok
 
 newtype StartJVMSetupParams
   = StartJVMSetupParams ServerName
@@ -127,7 +119,7 @@ interpretJVMSetup fileReader bic cenv0 ss = evalStateT (traverse_ go ss) (mempty
     go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= jvm_return
     -- TODO: do we really want two names here?
     go (SetupFresh name@(ServerName n) debugName ty) =
-      do t <- lift $ jvm_fresh_var (T.unpack debugName) ty
+      do t <- lift $ jvm_fresh_var debugName ty
          (env, cenv) <- get
          put (env, CEnv.bindTypedTerm (mkIdent n, t) cenv)
          save name (Val (MS.SetupTerm t))
@@ -139,6 +131,8 @@ interpretJVMSetup fileReader bic cenv0 ss = evalStateT (traverse_ go ss) (mempty
       lift (jvm_alloc_object c) >>= save name . Val
     go (SetupAlloc _ ty _ Nothing) =
       error $ "cannot allocate type: " ++ show ty
+    go (SetupGhostValue _serverName _displayName _v) = get >>= \env -> lift $
+         error "nyi: ghost points-to"
     go (SetupPointsTo src tgt _chkTgt _cond) = get >>= \env -> lift $
       do _ptr <- getSetupVal env src
          _tgt' <- getSetupVal env tgt
@@ -179,24 +173,20 @@ interpretJVMSetup fileReader bic cenv0 ss = evalStateT (traverse_ go ss) (mempty
         Val x -> return x -- TODO add cases for the server values that
                           -- are not coming from the setup monad
                           -- (e.g. surrounding context)
-    getSetupVal (_, cenv) (CryptolExpr expr) = JVMSetupM $
-      do res <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
-         -- TODO: add warnings (snd res)
-         case fst res of
-           Right (t, _) -> return (MS.SetupTerm t)
-           Left err -> error $ "Cryptol error: " ++ show err -- TODO: report properly
+    getSetupVal env (CryptolExpr expr) =
+      do t <- getTypedTerm env expr
+         return (MS.SetupTerm t)
     getSetupVal _ _sv = error $ "unrecognized setup value" -- ++ show sv
 
     getTypedTerm ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
       P.Expr P.PName ->
       JVMSetupM TypedTerm
-    getTypedTerm (_, cenv) expr = JVMSetupM $
-      do res <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
-         -- TODO: add warnings (snd res)
-         case fst res of
-           Right (t, _) -> return t
-           Left err -> error $ "Cryptol error: " ++ show err -- TODO: report properly
+    getTypedTerm (_, cenv) expr = JVMSetupM $ liftIO $
+      do (res, warnings) <- getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
+         case res of
+           Right (t, _) -> return t -- TODO: Report warnings
+           Left err -> throw $ CryptolModuleException err warnings
 
     resolve env name =
        case Map.lookup name env of

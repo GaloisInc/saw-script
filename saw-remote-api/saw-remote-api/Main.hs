@@ -6,11 +6,19 @@ import qualified Argo.DefaultMain as Argo (defaultMain)
 import qualified Argo.Doc as Doc
 
 import SAWServer ( SAWState, initialState )
+import SAWServer.ClearState
+    ( clearStateDescr,
+      clearState,
+      clearAllStatesDescr,
+      clearAllStates )
 import SAWServer.CryptolSetup
     ( cryptolLoadModuleDescr,
       cryptolLoadModule,
       cryptolLoadFileDescr,
       cryptolLoadFile )
+import SAWServer.Ghost
+    ( createGhostVariableDescr,
+      createGhostVariable )
 --import SAWServer.JVMCrucibleSetup
 --import SAWServer.JVMVerify
 import SAWServer.LLVMCrucibleSetup
@@ -90,6 +98,10 @@ sawMethods =
      llvmAssume
   -- General
   , Argo.command
+     "SAW/create ghost variable"
+     createGhostVariableDescr
+     createGhostVariable
+  , Argo.command
      "SAW/make simpset"
      makeSimpsetDescr
      makeSimpset
@@ -101,4 +113,12 @@ sawMethods =
      "SAW/set option"
      setOptionDescr
      setOption
+  , Argo.notification
+     "SAW/clear state"
+     clearStateDescr
+     clearState
+  , Argo.notification
+     "SAW/clear all states"
+     clearAllStatesDescr
+     clearAllStates
   ]

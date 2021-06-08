@@ -22,9 +22,6 @@
 [submodule "deps/parameterized-utils"]
 	path = deps/parameterized-utils
 	url = https://github.com/GaloisInc/parameterized-utils.git
-[submodule "deps/saw-core"]
-	path = deps/saw-core
-	url = https://github.com/GaloisInc/saw-core.git
 [submodule "deps/flexdis86"]
 	path = deps/flexdis86
 	url = https://github.com/GaloisInc/flexdis86.git

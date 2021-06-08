@@ -100,9 +100,7 @@ install_yices() {
     mv "yices-$YICES_VERSION"/bin/*.exe "$BIN"
   else
     tar -xzf "yices$ext"
-    pushd "yices-$YICES_VERSION" || exit
-    sudo ./install-yices
-    popd || exit
+    (cd "yices-$YICES_VERSION" && sudo ./install-yices)
   fi
   rm -rf "yices$ext" "yices-$YICES_VERSION"
 }
@@ -120,6 +118,8 @@ build() {
   ghc_ver="$(ghc --numeric-version)"
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
+  cabal v2-configure -j --enable-tests
+  git status --porcelain
   pkgs=(saw)
   if $IS_WIN; then
     echo "flags: -builtin-abc" >> cabal.project.local
@@ -127,7 +127,7 @@ build() {
   else
     pkgs+=(saw-remote-api)
   fi
-  tee -a cabal.project > /dev/null < cabal.project.ci
+  tee -a cabal.project.local > /dev/null < cabal.project.ci
   if ! retry cabal v2-build "$@" "${pkgs[@]}"; then
     if [[ "$RUNNER_OS" == "macOS" ]]; then
       echo "Working around a dylib issue on macos by removing the cache and trying again"
@@ -144,38 +144,29 @@ build_abc() {
   case "$RUNNER_OS" in
     Linux) os="Linux" ;;
     macOS) os="OSX" ;;
-    Windows) return ;;
+    Windows) os="Windows" ;;
   esac
-  pushd deps/abcBridge
-  $IS_WIN || scripts/build-abc.sh $arch $os
-  cp abc-build/abc $BIN/abc
-  popd
+  (cd deps/abcBridge &&
+    scripts/build-abc.sh $arch $os &&
+    cp abc-build/abc $BIN/abc)
+  output path $BIN/abc
 }
 
 install_system_deps() {
   install_z3 &
   install_cvc4 &
   install_yices &
-  install_yasm &
   wait
-  export PATH=$PWD/$BIN:$PATH
+  export PATH="$BIN:$PATH"
   echo "$BIN" >> "$GITHUB_PATH"
-  is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" yices && is_exe "$BIN" yasm
-}
-
-test_dist() {
-  pushd intTests
-  env
-  LOUD=true ./runtests.sh
-  sh -c "! grep '<failure>' results.xml"
+  is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" yices
 }
 
 build_cryptol() {
   is_exe "dist/bin" "cryptol" && return
-  pushd deps/cryptol
-  git submodule update --init
-  .github/ci.sh build
-  popd
+  (cd deps/cryptol &&
+    git submodule update --init &&
+    .github/ci.sh build)
 }
 
 bundle_files() {
@@ -202,12 +193,9 @@ sign() {
 }
 
 zip_dist() {
-  : "${VERSION?VERSION is required as an environment variable}"
-  name="${name:-"saw-$VERSION-$RUNNER_OS-x86_64"}"
-  mv dist "$name"
+  name="$1"
+  cp -r dist "$name"
   tar -czf "$name".tar.gz "$name"
-  sign "$name".tar.gz
-  [[ -f "$name".tar.gz.sig ]] && [[ -f "$name".tar.gz ]]
 }
 
 output() { echo "::set-output name=$1::$2"; }

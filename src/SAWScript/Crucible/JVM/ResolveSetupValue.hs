@@ -43,9 +43,11 @@ import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4
 
-import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
+
+import qualified Verifier.SAW.Prim as Prim
+import qualified Verifier.SAW.Simulator.Concrete as Concrete
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
@@ -59,10 +61,6 @@ import qualified What4.Partial as W4
 -- crucible-jvm
 import qualified Lang.Crucible.JVM as CJ
 
--- sbv
-import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord, toBool)
-import qualified Data.SBV.Dynamic as SBV (svAsInteger, svAsBool)
-
 -- jvm-parser
 import qualified Language.JVM.Parser as J
 
@@ -70,7 +68,6 @@ import SAWScript.Crucible.Common
 import SAWScript.Crucible.Common.MethodSpec (AllocIndex(..))
 
 import SAWScript.Panic
-import SAWScript.Prover.Rewrite
 import SAWScript.Crucible.JVM.MethodSpecIR
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 
@@ -241,7 +238,6 @@ resolveSAWTerm cc tp tm =
   where
     sym = cc^.jccBackend
 
--- TODO: Instead of evaluating in SBV backend, just evaluate in W4 backend directly.
 resolveBitvectorTerm ::
   forall w.
   (1 W4.<= w) =>
@@ -252,35 +248,31 @@ resolveBitvectorTerm ::
 resolveBitvectorTerm sym w tm =
   do st <- sawCoreState sym
      let sc = saw_ctx st
-     --ss <- basic_ss sc
-     --tm' <- rewriteSharedTerm sc ss tm
-     let tm' = tm
-     mx <- case getAllExts tm' of
+     mx <- case getAllExts tm of
+             -- concretely evaluate if it is a closed term
              [] ->
-               do -- Evaluate in SBV to test whether 'tm' is a concrete value
-                  sbv <- SBV.toWord =<< SBV.sbvSolveBasic sc Map.empty mempty tm'
-                  return (SBV.svAsInteger sbv)
+               do modmap <- scGetModuleMap sc
+                  let v = Concrete.evalSharedTerm modmap mempty mempty tm
+                  pure (Just (Prim.unsigned (Concrete.toWord v)))
              _ -> return Nothing
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
-       Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm'
+       Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm
 
--- TODO: Instead of evaluating in SBV backend, just evaluate in W4 backend directly.
 resolveBoolTerm :: Sym -> Term -> IO (W4.Pred Sym)
 resolveBoolTerm sym tm =
   do st <- sawCoreState sym
      let sc = saw_ctx st
-     ss <- basic_ss sc
-     tm' <- rewriteSharedTerm sc ss tm
-     mx <- case getAllExts tm' of
+     mx <- case getAllExts tm of
+             -- concretely evaluate if it is a closed term
              [] ->
-               do -- Evaluate in SBV to test whether 'tm' is a concrete value
-                  sbv <- SBV.toBool <$> SBV.sbvSolveBasic sc Map.empty mempty tm'
-                  return (SBV.svAsBool sbv)
+               do modmap <- scGetModuleMap sc
+                  let v = Concrete.evalSharedTerm modmap mempty mempty tm
+                  pure (Just (Concrete.toBool v))
              _ -> return Nothing
      case mx of
        Just x  -> return (W4.backendPred sym x)
-       Nothing -> bindSAWTerm sym st W4.BaseBoolRepr tm'
+       Nothing -> bindSAWTerm sym st W4.BaseBoolRepr tm
 
 toJVMType :: Cryptol.TValue -> Maybe J.Type
 toJVMType tp =

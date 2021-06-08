@@ -9,16 +9,11 @@ module SAWScript.Prover.What4 where
 import System.IO
 
 import           Data.Set (Set)
-import           Control.Monad(filterM)
-import           Data.Maybe (catMaybes)
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
 
-import Verifier.SAW.Recognizer(asPi)
-
-import           SAWScript.Proof(Prop, propToPredicate)
-import           SAWScript.Prover.Rewrite(rewriteEqs)
+import           SAWScript.Proof(Prop, propToSATQuery, propSize, CEX)
 import           SAWScript.Prover.SolverStats
 
 import Data.Parameterized.Nonce
@@ -55,7 +50,7 @@ proveWhat4_sym ::
   SharedContext ->
   Bool ->
   Prop ->
-  IO (Maybe [(String, FirstOrderValue)], SolverStats)
+  IO (Maybe CEX, SolverStats)
 proveWhat4_sym solver un sc hashConsing t =
   do sym <- setupWhat4_sym hashConsing
      proveWhat4_solver solver sym un sc t
@@ -67,7 +62,7 @@ proveExportWhat4_sym ::
   Bool ->
   FilePath ->
   Prop ->
-  IO (Maybe [(String, FirstOrderValue)], SolverStats)
+  IO (Maybe CEX, SolverStats)
 proveExportWhat4_sym solver un sc hashConsing outFilePath t =
   do sym <- setupWhat4_sym hashConsing
 
@@ -86,7 +81,7 @@ proveWhat4_z3, proveWhat4_boolector, proveWhat4_cvc4,
   SharedContext {- ^ Context for working with terms -} ->
   Bool          {- ^ Hash-consing of What4 terms -}->
   Prop          {- ^ A proposition to be proved -} ->
-  IO (Maybe [(String, FirstOrderValue)], SolverStats)
+  IO (Maybe CEX, SolverStats)
 
 proveWhat4_z3        = proveWhat4_sym z3Adapter
 proveWhat4_boolector = proveWhat4_sym boolectorAdapter
@@ -103,7 +98,7 @@ proveExportWhat4_z3, proveExportWhat4_boolector, proveExportWhat4_cvc4,
   Bool          {- ^ Hash-consing of ExportWhat4 terms -}->
   FilePath      {- ^ Path of file to write SMT to -}->
   Prop          {- ^ A proposition to be proved -} ->
-  IO (Maybe [(String, FirstOrderValue)], SolverStats)
+  IO (Maybe CEX, SolverStats)
 
 proveExportWhat4_z3        = proveExportWhat4_sym z3Adapter
 proveExportWhat4_boolector = proveExportWhat4_sym boolectorAdapter
@@ -119,26 +114,24 @@ setupWhat4_solver :: forall st t ff.
   Set VarIndex       {- ^ Uninterpreted functions -} ->
   SharedContext      {- ^ Context for working with terms -} ->
   Prop               {- ^ A proposition to be proved/checked. -} ->
-  IO ( [String]
-     , [Maybe (W.Labeler (B.ExprBuilder t st ff))]
+  IO ( [ExtCns Term]
+     , [W.Labeler (B.ExprBuilder t st ff)]
      , Pred (B.ExprBuilder t st ff)
      , SolverStats)
 setupWhat4_solver solver sym unintSet sc goal =
   do
-     -- convert goal to lambda term
-     term <- propToPredicate sc goal
      -- symbolically evaluate
-     (t', argNames, (bvs,lit0)) <- prepWhat4 sym sc unintSet term
-
-     lit <- notPred sym lit0
+     satq <- propToSATQuery sc unintSet goal
+     (argNames, _argTys, bvs, lit) <- W.w4Solve sym sc satq
 
      extendConfig (solver_adapter_config_options solver)
                   (getConfiguration sym)
 
      let stats = solverStats ("W4 ->" ++ solver_adapter_name solver)
-                             (scSharedSize t')
+                             (propSize goal)
 
      return (argNames, bvs, lit, stats)
+
 
 -- | Check the validity of a proposition using What4.
 proveWhat4_solver :: forall st t ff.
@@ -147,7 +140,7 @@ proveWhat4_solver :: forall st t ff.
   Set VarIndex       {- ^ Uninterpreted functions -} ->
   SharedContext      {- ^ Context for working with terms -} ->
   Prop               {- ^ A proposition to be proved/checked. -} ->
-  IO (Maybe [(String, FirstOrderValue)], SolverStats)
+  IO (Maybe CEX, SolverStats)
   -- ^ (example/counter-example, solver statistics)
 proveWhat4_solver solver sym unintSet sc goal =
   do
@@ -163,34 +156,19 @@ proveWhat4_solver solver sym unintSet sc goal =
          Sat (gndEvalFcn,_) -> do
            mvals <- mapM (getValues @(B.ExprBuilder t st ff) gndEvalFcn)
                          (zip bvs argNames)
-           return (Just (catMaybes mvals), stats) where
+           return (Just mvals, stats) where
 
          Unsat _ -> return (Nothing, stats)
 
          Unknown -> fail "Prover returned Unknown"
 
 
-prepWhat4 ::
-  forall sym. (IsSymExprBuilder sym) =>
-  sym -> SharedContext -> Set VarIndex -> Term ->
-  IO (Term, [String], ([Maybe (W.Labeler sym)], Pred sym))
-prepWhat4 sym sc unintSet t0 = do
-  -- Abstract over all non-function ExtCns variables
-  let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
-  exts <- filterM nonFun (getAllExts t0)
 
-  t' <- scAbstractExts sc exts t0 >>= rewriteEqs sc
-
-  (argNames, lit) <- W.w4Solve sym sc mempty unintSet t'
-  return (t', argNames, lit)
-
-
-getValues :: forall sym gt. (SymExpr sym ~ B.Expr gt) => GroundEvalFn gt ->
-  (Maybe (W.Labeler sym), String) -> IO (Maybe (String, FirstOrderValue))
-getValues _ (Nothing, _) = return Nothing
-getValues f (Just labeler, orig) = do
+getValues :: forall sym gt a. (SymExpr sym ~ B.Expr gt) => GroundEvalFn gt ->
+  (W.Labeler sym, a) -> IO (a, FirstOrderValue)
+getValues f (labeler, orig) = do
   fov <- W.getLabelValues f labeler
-  return $ Just (orig,fov)
+  return (orig, fov)
 
 
 -- | For debugging
