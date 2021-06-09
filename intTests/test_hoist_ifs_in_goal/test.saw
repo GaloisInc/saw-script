@@ -1,0 +1,22 @@
+enable_experimental;
+
+let {{
+  f : Integer -> Integer
+  f x = undefined
+  g : Integer -> Integer
+  g x = undefined
+}};
+
+let prop = {{ \c x y -> f (if c then g x else g y) == if c then x else y }};
+
+l1 <- prove_print assume_unsat {{ \x -> f (g x) == x }};
+
+prove
+  (do {
+    hoist_ifs_in_goal;
+    simplify (addsimps [l1] empty_ss);
+    w4;
+  })
+  prop;
+
+print "Done";

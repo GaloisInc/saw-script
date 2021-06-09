@@ -35,6 +35,8 @@ import Text.URI
 
 import qualified Cryptol.Eval.Type as TV
 import qualified Cryptol.Backend.Monad as V
+import qualified Cryptol.Backend.SeqMap as V
+import qualified Cryptol.Backend.WordValue as V
 import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
@@ -45,6 +47,7 @@ import qualified Cryptol.ModuleSystem.Name as C
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..), mkIdent, prelPrim, floatPrim, arrayPrim
   , ModName, modNameToText, identText, interactiveName
+  , ModPath(..), modPathSplit
   )
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
@@ -740,7 +743,8 @@ prelPrims =
 
     -- -- Sequences primitives
   , ("#",            flip scGlobalDef "Cryptol.ecCat")         -- {a,b,d} (fin a) => [a] d -> [b] d -> [a + b] d
-  , ("splitAt",      flip scGlobalDef "Cryptol.ecSplitAt")     -- {a,b,c} (fin a) => [a+b] c -> ([a]c,[b]c)
+  , ("take",         flip scGlobalDef "Cryptol.ecTake")        -- {front, back, a} [front + back]a -> [front]a
+  , ("drop",         flip scGlobalDef "Cryptol.ecDrop")        -- {front, back, a} (fin front) => [front + back]a -> [back]a
   , ("join",         flip scGlobalDef "Cryptol.ecJoin")        -- {a,b,c} (fin b) => [a][b]c -> [a * b]c
   , ("split",        flip scGlobalDef "Cryptol.ecSplit")       -- {a,b,c} (fin b) => [a * b] c -> [a][b] c
   , ("reverse",      flip scGlobalDef "Cryptol.ecReverse")     -- {a,b} (fin a) => [a] b -> [a] b
@@ -1231,18 +1235,20 @@ importName cnm =
   case C.nameInfo cnm of
     C.Parameter -> fail ("Cannot import non-top-level name: " ++ show cnm)
     C.Declared modNm _
-      | modNm == C.interactiveName ->
+      | modNm == C.TopModule C.interactiveName ->
           let shortNm = C.identText (C.nameIdent cnm)
               aliases = [shortNm]
               uri = cryptolURI [shortNm] (Just (C.nameUnique cnm))
            in pure (ImportedName uri aliases)
 
       | otherwise ->
-          let modNmTxt  = C.modNameToText modNm
-              modNms = Text.splitOn "::" modNmTxt
-              shortNm = C.identText (C.nameIdent cnm)
-              aliases = [shortNm, modNmTxt <> "::" <> shortNm]
-              uri = cryptolURI (modNms ++ [shortNm]) Nothing
+          let (topMod, nested) = C.modPathSplit modNm
+              modNmTxt = C.modNameToText topMod
+              modNms   = (Text.splitOn "::" modNmTxt) ++ map C.identText nested
+              shortNm  = C.identText (C.nameIdent cnm)
+              longNm   = Text.intercalate "::" ([modNmTxt] ++ map C.identText nested ++ [shortNm])
+              aliases  = [shortNm, longNm]
+              uri      = cryptolURI (modNms ++ [shortNm]) Nothing
            in pure (ImportedName uri aliases)
 
 -- | Currently this imports declaration groups by inlining all the
@@ -1618,9 +1624,9 @@ scCryptolType sc t =
 scCryptolEq :: SharedContext -> Term -> Term -> IO Term
 scCryptolEq sc x y =
   do rules <- concat <$> traverse defRewrites defs
-     let ss = addConvs natConversions (addRules rules emptySimpset)
-     tx <- scTypeOf sc x >>= rewriteSharedTerm sc ss >>= scCryptolType sc
-     ty <- scTypeOf sc y >>= rewriteSharedTerm sc ss >>= scCryptolType sc
+     let ss = addConvs natConversions (addRules rules emptySimpset :: Simpset ())
+     tx <- scTypeOf sc x >>= rewriteSharedTerm sc ss >>= scCryptolType sc . snd
+     ty <- scTypeOf sc y >>= rewriteSharedTerm sc ss >>= scCryptolType sc . snd
      unless (tx == ty) $
        panic "scCryptolEq"
                  [ "scCryptolEq: type mismatch between"
@@ -1646,22 +1652,22 @@ scCryptolEq sc x y =
 
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.
-exportValueWithSchema :: C.Schema -> SC.CValue -> V.Value
+exportValueWithSchema :: C.Schema -> SC.CValue -> V.Eval V.Value
 exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalValType mempty ty) v
-exportValueWithSchema _ _ = V.VPoly mempty (error "exportValueWithSchema")
+exportValueWithSchema _ _ = pure (V.VPoly mempty (error "exportValueWithSchema"))
 -- TODO: proper support for polymorphic values
 
-exportValue :: TV.TValue -> SC.CValue -> V.Value
+exportValue :: TV.TValue -> SC.CValue -> V.Eval V.Value
 exportValue ty v = case ty of
 
   TV.TVBit ->
-    V.VBit (SC.toBool v)
+    pure (V.VBit (SC.toBool v))
 
   TV.TVInteger ->
-    V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
+    pure (V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer"))
 
   TV.TVIntMod _modulus ->
-    V.VInteger (case v of SC.VIntMod _ x -> x; _ -> error "exportValue: expected intmod")
+    pure (V.VInteger (case v of SC.VIntMod _ x -> x; _ -> error "exportValue: expected intmod"))
 
   TV.TVArray{} -> error $ "exportValue: (on array type " ++ show ty ++ ")"
 
@@ -1673,28 +1679,29 @@ exportValue ty v = case ty of
     case v of
       SC.VWord w -> V.word V.Concrete (toInteger (width w)) (unsigned w)
       SC.VVector xs
-        | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) (V.ready (V.LargeBitsVal (fromIntegral (Vector.length xs))
-                            (V.finiteSeqMap . map (V.ready . V.VBit . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)))
-        | otherwise   -> V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap $
-                            map (V.ready . exportValue e . SC.runIdentity . force) $ Vector.toList xs
+        | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) <$>
+            V.bitmapWordVal V.Concrete (toInteger (Vector.length xs))
+                 (V.finiteSeqMap V.Concrete . map (V.ready . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)
+        | otherwise   -> pure . V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap V.Concrete $
+                            map (\x -> exportValue e (SC.runIdentity (force x))) (Vector.toList xs)
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
   -- infinite streams
   TV.TVStream e ->
     case v of
-      SC.VExtra (SC.CStream trie) -> V.VStream (V.IndexSeqMap $ \i -> V.ready $ exportValue e (IntTrie.apply trie i))
+      SC.VExtra (SC.CStream trie) -> pure $ V.VStream (V.indexSeqMap $ \i -> exportValue e (IntTrie.apply trie i))
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
   -- tuples
-  TV.TVTuple etys -> V.VTuple (exportTupleValue etys v)
+  TV.TVTuple etys -> pure $ V.VTuple $ exportTupleValue etys v
 
   -- records
   TV.TVRec fields ->
-      V.VRecord (C.recordFromFieldsWithDisplay (C.displayOrder fields) $ exportRecordValue (C.canonicalFields fields) v)
+      pure . V.VRecord . C.recordFromFieldsWithDisplay (C.displayOrder fields) $ exportRecordValue (C.canonicalFields fields) v
 
   -- functions
   TV.TVFun _aty _bty ->
-    V.VFun mempty (error "exportValue: TODO functions")
+    pure $ V.VFun mempty (error "exportValue: TODO functions")
 
   -- abstract types
   TV.TVAbstract{} ->
@@ -1709,8 +1716,8 @@ exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
   case (tys, v) of
     ([]    , SC.VUnit    ) -> []
-    ([t]   , _           ) -> [V.ready $ exportValue t v]
-    (t : ts, SC.VPair x y) -> (V.ready $ exportValue t (run x)) : exportTupleValue ts (run y)
+    ([t]   , _           ) -> [exportValue t v]
+    (t : ts, SC.VPair x y) -> (exportValue t (run x)) : exportTupleValue ts (run y)
     _                      -> error $ "exportValue: expected tuple"
   where
     run = SC.runIdentity . force
@@ -1719,12 +1726,11 @@ exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.
 exportRecordValue fields v =
   case (fields, v) of
     ([]         , SC.VUnit    ) -> []
-    ([(n, t)]   , _           ) -> [(n, V.ready $ exportValue t v)]
-    ((n, t) : ts, SC.VPair x y) ->
-      (n, V.ready $ exportValue t (run x)) : exportRecordValue ts (run y)
+    ([(n, t)]   , _           ) -> [(n, exportValue t v)]
+    ((n, t) : ts, SC.VPair x y) -> (n, exportValue t (run x)) : exportRecordValue ts (run y)
     (_, SC.VRecordValue (alistAllFields
                          (map (C.identText . fst) fields) -> Just ths)) ->
-      zipWith (\(n,t) x -> (n, V.ready $ exportValue t (run x))) fields ths
+      zipWith (\(n,t) x -> (n, exportValue t (run x))) fields ths
     _                              -> error $ "exportValue: expected record"
   where
     run = SC.runIdentity . force
@@ -1733,20 +1739,23 @@ fvAsBool :: FirstOrderValue -> Bool
 fvAsBool (FOVBit b) = b
 fvAsBool _ = error "fvAsBool: expected FOVBit value"
 
-exportFirstOrderValue :: FirstOrderValue -> V.Value
+exportFirstOrderValue :: FirstOrderValue -> V.Eval V.Value
 exportFirstOrderValue fv =
   case fv of
-    FOVBit b    -> V.VBit b
-    FOVInt i    -> V.VInteger i
-    FOVIntMod _ i -> V.VInteger i
-    FOVWord w x -> V.word V.Concrete (toInteger w) x
+    FOVBit b      -> pure (V.VBit b)
+    FOVInt i      -> pure (V.VInteger i)
+    FOVIntMod _ i -> pure (V.VInteger i)
+    FOVWord w x   -> V.word V.Concrete (toInteger w) x
     FOVVec t vs
-      | t == FOTBit -> V.VWord len (V.ready (V.LargeBitsVal len (V.finiteSeqMap . map (V.ready . V.VBit . fvAsBool) $ vs)))
-      | otherwise   -> V.VSeq  len (V.finiteSeqMap (map (V.ready . exportFirstOrderValue) vs))
+      | t == FOTBit -> V.VWord len <$> (V.bitmapWordVal V.Concrete len
+                          (V.finiteSeqMap V.Concrete . map (V.ready . fvAsBool) $ vs))
+      | otherwise   -> pure (V.VSeq len (V.finiteSeqMap V.Concrete (map exportFirstOrderValue vs)))
       where len = toInteger (length vs)
     FOVArray{}  -> error $ "exportFirstOrderValue: unsupported FOT Array"
-    FOVTuple vs -> V.VTuple (map (V.ready . exportFirstOrderValue) vs)
-    FOVRec vm   -> V.VRecord $ C.recordFromFields [ (C.mkIdent n, V.ready $ exportFirstOrderValue v) | (n, v) <- Map.assocs vm ]
+    FOVTuple vs -> pure $ V.VTuple $ map exportFirstOrderValue vs
+    FOVRec vm   ->
+      do let vm' = fmap exportFirstOrderValue vm
+         pure $ V.VRecord $ C.recordFromFields [ (C.mkIdent n, v) | (n, v) <- Map.assocs vm' ]
 
 importFirstOrderValue :: FirstOrderType -> V.Value -> IO FirstOrderValue
 importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
@@ -1755,7 +1764,7 @@ importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
   go t v = case (t,v) of
     (FOTBit         , V.VBit b)        -> return (FOVBit b)
     (FOTInt         , V.VInteger i)    -> return (FOVInt i)
-    (FOTVec _ FOTBit, V.VWord w wv)    -> FOVWord (fromIntegral w) . V.bvVal <$> (V.asWordVal V.Concrete =<< wv)
+    (FOTVec _ FOTBit, V.VWord w wv)    -> FOVWord (fromIntegral w) . V.bvVal <$> (V.asWordVal V.Concrete wv)
     (FOTVec _ ty    , V.VSeq len xs)   -> FOVVec ty <$> traverse (go ty =<<) (V.enumerateSeqMap len xs)
     (FOTTuple tys   , V.VTuple xs)     -> FOVTuple <$> traverse (\(ty, x) -> go ty =<< x) (zip tys xs)
     (FOTRec fs      , V.VRecord xs)    ->

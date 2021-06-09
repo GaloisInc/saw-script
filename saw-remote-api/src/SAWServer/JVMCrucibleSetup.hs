@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PartialTypeSignatures #-}
@@ -57,7 +58,6 @@ import SAWServer
       setServerVal )
 import SAWServer.Data.Contract
     ( PointsTo(PointsTo),
-      GhostValue(..),
       Allocated(Allocated),
       ContractVar(ContractVar),
       Contract(preVars, preConds, preAllocated, prePointsTos,
@@ -77,11 +77,12 @@ instance FromJSON StartJVMSetupParams where
     withObject "params for \"SAW/Crucible setup\"" $ \o ->
     StartJVMSetupParams <$> o .: "name"
 
-instance Doc.DescribedParams StartJVMSetupParams where
+instance Doc.DescribedMethod StartJVMSetupParams OK where
   parameterFieldDescription =
     [ ("name",
        Doc.Paragraph [Doc.Text "The name of the item to setup on the server."])
     ]
+  resultFieldDescription = []
 
 newtype ServerSetupVal = Val (SetupValue CJ.JVM)
 
@@ -131,7 +132,7 @@ interpretJVMSetup fileReader bic cenv0 ss = evalStateT (traverse_ go ss) (mempty
       lift (jvm_alloc_object c) >>= save name . Val
     go (SetupAlloc _ ty _ Nothing) =
       error $ "cannot allocate type: " ++ show ty
-    go (SetupGhostValue _serverName _displayName _v) = get >>= \env -> lift $
+    go (SetupGhostValue _serverName _displayName _v) = get >>= \_env -> lift $
          error "nyi: ghost points-to"
     go (SetupPointsTo src tgt _chkTgt _cond) = get >>= \env -> lift $
       do _ptr <- getSetupVal env src
@@ -211,10 +212,11 @@ jvmLoadClass (JVMLoadClassParams serverName cname) =
             setServerVal serverName c
             ok
 
-instance Doc.DescribedParams JVMLoadClassParams where
+instance Doc.DescribedMethod JVMLoadClassParams OK where
   parameterFieldDescription =
     [ ("name",
         Doc.Paragraph [Doc.Text "The name of the class on the server."])
     , ("class",
       Doc.Paragraph [Doc.Text "The java class to load."])
     ]
+  resultFieldDescription = []

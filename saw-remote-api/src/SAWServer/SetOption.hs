@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 module SAWServer.SetOption
@@ -54,7 +55,7 @@ instance FromJSON SetOptionParams where
     withObject "parameters for setting options" $ \o -> o .: "option" >>= parseOption o
 
 
-instance Doc.DescribedParams SetOptionParams where
+instance Doc.DescribedMethod SetOptionParams OK where
   parameterFieldDescription =
     [ ("option",
        Doc.Paragraph [Doc.Text "The option to set and its accompanying value (i.e., true or false); one of the following:"
@@ -63,3 +64,4 @@ instance Doc.DescribedParams SetOptionParams where
                      , Doc.Literal "What4 hash consing"
                      ])
     ]
+  resultFieldDescription = []

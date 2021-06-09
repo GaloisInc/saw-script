@@ -19,7 +19,7 @@ import Data.Maybe (fromMaybe)
 import Cryptol.Eval (EvalOpts(..))
 import Cryptol.ModuleSystem (ModuleError, ModuleInput(..), ModuleRes, ModuleWarning)
 import Cryptol.ModuleSystem.Base (genInferInput, getPrimMap, noPat, rename)
-import Cryptol.ModuleSystem.Env (ModuleEnv, meSolverConfig)
+import Cryptol.ModuleSystem.Env (ModuleEnv)
 import Cryptol.ModuleSystem.Interface (noIfaceParams)
 import Cryptol.ModuleSystem.Monad (ModuleM, interactive, runModuleM, setNameSeeds, setSupply, typeCheckWarnings, typeCheckingFailed)
 import qualified Cryptol.ModuleSystem.Renamer as MR
@@ -35,6 +35,7 @@ import SAWScript.Value (biSharedContext, TopLevelRW(..))
 import Verifier.SAW.CryptolEnv
     ( getAllIfaceDecls,
       getNamingEnv,
+      meSolverConfig,
       translateExpr,
       CryptolEnv(eExtraTypes, eExtraTSyns, eModuleEnv) )
 import Verifier.SAW.SharedTerm (SharedContext)

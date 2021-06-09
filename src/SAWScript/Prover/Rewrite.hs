@@ -18,7 +18,7 @@ import Verifier.SAW.Term.Functor(preludeName, mkIdent, Ident, mkModuleName)
 import Verifier.SAW.Conversion
 import Verifier.SAW.SharedTerm(SharedContext,scFindDef)
 
-basic_ss :: SharedContext -> IO Simpset
+basic_ss :: SharedContext -> IO (Simpset a)
 basic_ss sc =
   do rs1 <- concat <$> traverse (defRewrites sc) defs
      rs2 <- scEqsRewriteRules sc eqs
@@ -69,7 +69,7 @@ basic_ss sc =
 
 
 
-defRewrites :: SharedContext -> Ident -> IO [RewriteRule]
+defRewrites :: SharedContext -> Ident -> IO [RewriteRule a]
 defRewrites sc ident =
   scFindDef sc ident >>= \maybe_def ->
   case maybe_def of

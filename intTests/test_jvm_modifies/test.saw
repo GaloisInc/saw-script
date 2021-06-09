@@ -1,0 +1,169 @@
+c <- java_load_class "Test";
+
+////////////////////////////////////////////////////////////////////////////////
+// Specs with missing side effects
+
+print "Verification fails for add1 spec with missing side effect.";
+fails (
+  jvm_verify c "add1" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [this, jvm_term x, jvm_term y];
+    jvm_return (jvm_term {{ x + y }});
+  } z3
+  );
+
+print "Verification fails for add2 spec with missing side effect.";
+fails (
+  jvm_verify c "add2" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [this, jvm_term x, jvm_term y];
+    jvm_return (jvm_term {{ x + y }});
+  } z3
+  );
+
+print "Verification fails for add3 spec with missing side effect.";
+fails (
+  jvm_verify c "add3" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    arr <- jvm_alloc_array 2 java_int;
+    jvm_field_is this "c" arr;
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [this, jvm_term x, jvm_term y];
+    jvm_return (jvm_term {{ x + y }});
+  } z3
+  );
+
+////////////////////////////////////////////////////////////////////////////////
+// Full specifications with side effects
+
+let spec1 =
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [this, jvm_term x, jvm_term y];
+    jvm_field_is this "a" (jvm_term x);
+    jvm_return (jvm_term {{ x + y }});
+  };
+
+let spec2 =
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [this, jvm_term x, jvm_term y];
+    jvm_static_field_is "b" (jvm_term x);
+    jvm_return (jvm_term {{ x + y }});
+  };
+
+let spec3 =
+  do {
+    this <- jvm_alloc_object "Test";
+    arr <- jvm_alloc_array 2 java_int;
+    jvm_field_is this "c" arr;
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [this, jvm_term x, jvm_term y];
+    jvm_elem_is arr 1 (jvm_term x);
+    jvm_return (jvm_term {{ x + y }});
+  };
+
+print "Verification succeeds for complete add1 spec.";
+add1_full <- jvm_verify c "add1" [] false spec1 z3;
+
+print "Verification succeeds for complete add2 spec.";
+add2_full <- jvm_verify c "add2" [] false spec2 z3;
+
+print "Verification succeeds for complete add3 spec.";
+add3_full <- jvm_verify c "add3" [] false spec3 z3;
+
+////////////////////////////////////////////////////////////////////////////////
+// Partial specifications with jvm_modifies
+
+print "Verification succeeds for partial add1 spec (jvm_modifies_field).";
+add1_part <-
+  jvm_verify c "add1" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [this, jvm_term x, jvm_term y];
+    jvm_modifies_field this "a";
+    jvm_return (jvm_term {{ x + y }});
+  } z3;
+
+print "Verification succeeds for partial add2 spec (jvm_modifies_static_field).";
+add2_part <-
+  jvm_verify c "add2" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [this, jvm_term x, jvm_term y];
+    jvm_modifies_static_field "b";
+    jvm_return (jvm_term {{ x + y }});
+  } z3;
+
+print "Verification succeeds for partial add3 spec (jvm_modifies_elem).";
+add3_part <-
+  jvm_verify c "add3" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    arr <- jvm_alloc_array 2 java_int;
+    jvm_field_is this "c" arr;
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [this, jvm_term x, jvm_term y];
+    jvm_modifies_elem arr 1;
+    jvm_return (jvm_term {{ x + y }});
+  } z3;
+
+print "Verification succeeds for partial add3 spec (jvm_modifies_array).";
+add3_part_a <-
+  jvm_verify c "add3" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    arr <- jvm_alloc_array 2 java_int;
+    jvm_field_is this "c" arr;
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [this, jvm_term x, jvm_term y];
+    jvm_modifies_array arr;
+    jvm_return (jvm_term {{ x + y }});
+  } z3;
+
+////////////////////////////////////////////////////////////////////////////////
+// Compositional verification with full specs
+
+print "Compositional verification succeeds with full add1 spec.";
+wrap1_full <- jvm_verify c "wrap1" [add1_full] false spec1 z3;
+
+print "Compositional verification succeeds with full add1 spec.";
+wrap2_full <- jvm_verify c "wrap2" [add2_full] false spec2 z3;
+
+print "Compositional verification succeeds with full add1 spec.";
+wrap3_full <- jvm_verify c "wrap3" [add3_full] false spec3 z3;
+
+////////////////////////////////////////////////////////////////////////////////
+// Compositional verification with partial specs
+
+// TODO: Improve misleading "Ill-formed value for type int" error message.
+
+print "Compositional verification fails with partial add1 spec.";
+fails (jvm_verify c "wrap1" [add1_part] false spec1 z3);
+
+print "Compositional verification fails with partial add2 spec.";
+fails (jvm_verify c "wrap2" [add2_part] false spec2 z3);
+
+print "Compositional verification fails with partial add3 spec.";
+fails (jvm_verify c "wrap3" [add3_part] false spec3 z3);
+
+print "DONE!";

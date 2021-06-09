@@ -34,7 +34,7 @@ import Control.Applicative
 import Data.Traversable hiding ( mapM )
 #endif
 import qualified Control.Exception as X
-import Control.Monad (unless, (>=>))
+import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
 import Data.Foldable (foldrM)
@@ -63,6 +63,7 @@ import SAWScript.Parser (parseSchema)
 import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
+import SAWScript.Proof (newTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Conversion
@@ -90,7 +91,6 @@ import           SAWScript.Crucible.LLVM.Skeleton.Builtins
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
-import Cryptol.ModuleSystem.Env (meSolverConfig)
 import qualified Cryptol.Eval as V (PPOpts(..))
 import qualified Cryptol.Backend.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
@@ -366,11 +366,12 @@ interpretStmt printBinds stmt =
 writeVerificationSummary :: TopLevel ()
 writeVerificationSummary = do
   do
+    db <- roTheoremDB <$> getTopLevelRO
     values <- rwProofs <$> getTopLevelRW
     let jspecs  = [ s | VJVMMethodSpec s <- values ]
         lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
         thms    = [ t | VTheorem t <- values ]
-        summary = computeVerificationSummary jspecs lspecs thms
+    summary <- io (computeVerificationSummary db jspecs lspecs thms)
     opts <- roOptions <$> getTopLevelRO
     dir <- roInitWorkDir <$> getTopLevelRO
     case summaryFile opts of
@@ -382,11 +383,12 @@ writeVerificationSummary = do
                        Pretty -> prettyVerificationSummary
         in io $ writeFile f' $ formatSummary summary
 
-interpretFile :: FilePath -> TopLevel ()
-interpretFile file = do
+interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
+interpretFile file runMain = do
   opts <- getOptions
   stmts <- io $ SAWScript.Import.loadFile opts file
   mapM_ stmtWithPrint stmts
+  when runMain interpretMain
   writeVerificationSummary
   where
     stmtWithPrint s = do let withPos str = unlines $
@@ -438,6 +440,7 @@ buildTopLevelEnv proxy opts =
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
+       thmDB <- newTheoremDB
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roSharedContext = sc
@@ -448,6 +451,7 @@ buildTopLevelEnv proxy opts =
                    , roProxy = proxy
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
+                   , roTheoremDB = thmDB
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -487,7 +491,7 @@ processFile proxy opts file = do
   oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
   setCurrentDirectory (takeDirectory file')
-  _ <- runTopLevel (interpretFile file' >> interpretMain) ro rw
+  _ <- runTopLevel (interpretFile file' True) ro rw
             `X.catch` (handleException opts)
   setCurrentDirectory oldpath
   return ()
@@ -585,7 +589,7 @@ include_value file = do
   oldpath <- io $ getCurrentDirectory
   file' <- io $ canonicalizePath file
   io $ setCurrentDirectory (takeDirectory file')
-  interpretFile file'
+  interpretFile file' False
   io $ setCurrentDirectory oldpath
 
 set_ascii :: Bool -> TopLevel ()
@@ -611,7 +615,7 @@ print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
   sc <- getSharedContext
   cenv <- fmap rwCryptol getTopLevelRW
-  let cfg = meSolverConfig (CEnv.eModuleEnv cenv)
+  let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
   unless (null (getAllExts (ttTerm t))) $
     fail "term contains symbolic variables"
   sawopts <- getOptions
@@ -1196,6 +1200,11 @@ primitives = Map.fromList
     Current
     [ "Apply the given simplifier rule set to the current goal." ]
 
+  , prim "hoist_ifs_in_goal"            "ProofScript ()"
+    (pureVal hoistIfsInGoalPrim)
+    Experimental
+    [ "hoist ifs in the current proof goal" ]
+
   , prim "goal_eval"           "ProofScript ()"
     (pureVal (goal_eval []))
     Current
@@ -1559,7 +1568,7 @@ primitives = Map.fromList
     ,  "goals 'prop1' and 'prop2'." ]
 
   , prim "empty_ss"            "Simpset"
-    (pureVal emptySimpset)
+    (pureVal (emptySimpset :: SAWSimpset))
     Current
     [ "The empty simplification rule set, containing no rules." ]
 
@@ -1610,20 +1619,24 @@ primitives = Map.fromList
     Current
     [ "Add a proved equality theorem to a given simplification rule set." ]
 
-  , prim "addsimp'"            "Term -> Simpset -> Simpset"
-    (funVal2 addsimp')
-    Current
-    [ "Add an arbitrary equality term to a given simplification rule set." ]
-
   , prim "addsimps"            "[Theorem] -> Simpset -> Simpset"
     (funVal2 addsimps)
     Current
     [ "Add proved equality theorems to a given simplification rule set." ]
 
+  , prim "addsimp'"            "Term -> Simpset -> Simpset"
+    (funVal2 addsimp')
+    Deprecated
+    [ "Add an arbitrary equality term to a given simplification rule set."
+    , "Use `admit` or `core_axiom` and `addsimp` instead."
+    ]
+
   , prim "addsimps'"           "[Term] -> Simpset -> Simpset"
     (funVal2 addsimps')
-    Current
-    [ "Add arbitrary equality terms to a given simplification rule set." ]
+    Deprecated
+    [ "Add arbitrary equality terms to a given simplification rule set."
+    , "Use `admit` or `core_axiom` and `addsimps` instead."
+    ]
 
   , prim "rewrite"             "Simpset -> Term -> Term"
     (funVal2 rewritePrim)
@@ -2669,14 +2682,14 @@ primitives = Map.fromList
 
   , prim "jvm_fresh_var" "String -> JavaType -> JVMSetup Term"
     (pureVal jvm_fresh_var)
-    Experimental
+    Current
     [ "Create a fresh variable for use within a JVM specification. The"
     , "name is used only for pretty-printing."
     ]
 
   , prim "jvm_alloc_object" "String -> JVMSetup JVMValue"
     (pureVal jvm_alloc_object)
-    Experimental
+    Current
     [ "Declare that an instance of the given class should be allocated in a"
     , "JVM specification. Before `jvm_execute_func`, this states that the"
     , "method expects the object to be allocated before it runs. After"
@@ -2686,7 +2699,7 @@ primitives = Map.fromList
 
   , prim "jvm_alloc_array" "Int -> JavaType -> JVMSetup JVMValue"
     (pureVal jvm_alloc_array)
-    Experimental
+    Current
     [ "Declare that an array of the given size and element type should be"
     , "allocated in a JVM specification. Before `jvm_execute_func`, this"
     , "states that the method expects the array to be allocated before it"
@@ -2696,9 +2709,57 @@ primitives = Map.fromList
 
     -- TODO: jvm_alloc_multiarray
 
+  , prim "jvm_modifies_field" "JVMValue -> String -> JVMSetup ()"
+    (pureVal jvm_modifies_field)
+    Current
+    [ "Declare that the indicated object (first argument) has a field"
+    , "(second argument) containing an unspecified value."
+    , ""
+    , "This lets users write partial specifications of JVM methods."
+    , "In the post-state section (after `jvm_execute_func`), this"
+    , "states that the method may modify the field, but says"
+    , "nothing about the new value."
+    ]
+
+  , prim "jvm_modifies_static_field" "String -> JVMSetup ()"
+    (pureVal jvm_modifies_static_field)
+    Current
+    [ "Declare that the named static field contains an unspecified"
+    , "value."
+    , ""
+    , "This lets users write partial specifications of JVM methods."
+    , "In the post-state section (after `jvm_execute_func`), it"
+    , "states that the method may modify the static field, but says"
+    , "nothing about the new value."
+    ]
+
+  , prim "jvm_modifies_elem" "JVMValue -> Int -> JVMSetup ()"
+    (pureVal jvm_modifies_elem)
+    Current
+    [ "Declare that the indicated array (first argument) has an element"
+    , "(second argument) containing an unspecified value."
+    , ""
+    , "This lets users write partial specifications of JVM methods."
+    , "In the post-state section (after `jvm_execute_func`), it"
+    , "states that the method may modify the array element, but says"
+    , "nothing about the new value."
+    ]
+
+  , prim "jvm_modifies_array" "JVMValue -> JVMSetup ()"
+    (pureVal jvm_modifies_array)
+    Current
+    [ "Declare that the indicated array's elements contain unspecified"
+    , "values."
+    , ""
+    , "This lets users write partial specifications of JVM methods."
+    , "In the post-state section (after `jvm_execute_func`), it"
+    , "states that the method may modify the array elements, but says"
+    , "nothing about the new values."
+    ]
+
   , prim "jvm_field_is" "JVMValue -> String -> JVMValue -> JVMSetup ()"
     (pureVal jvm_field_is)
-    Experimental
+    Current
     [ "Declare that the indicated object (first argument) has a field"
     , "(second argument) containing the given value (third argument)."
     , ""
@@ -2710,7 +2771,7 @@ primitives = Map.fromList
 
   , prim "jvm_static_field_is" "String -> JVMValue -> JVMSetup ()"
     (pureVal jvm_static_field_is)
-    Experimental
+    Current
     [ "Declare that the named static field contains the given value."
     , "By default the field name is assumed to belong to the same class"
     , "as the method being specified. Static fields belonging to other"
@@ -2725,7 +2786,7 @@ primitives = Map.fromList
 
   , prim "jvm_elem_is" "JVMValue -> Int -> JVMValue -> JVMSetup ()"
     (pureVal jvm_elem_is)
-    Experimental
+    Current
     [ "Declare that the indicated array (first argument) has an element"
     , "(second argument) containing the given value (third argument)."
     , ""
@@ -2737,7 +2798,7 @@ primitives = Map.fromList
 
   , prim "jvm_array_is" "JVMValue -> Term -> JVMSetup ()"
     (pureVal jvm_array_is)
-    Experimental
+    Current
     [ "Declare that the indicated array reference (first argument) contains"
     , "the given sequence of values (second argument)."
     , ""
@@ -2749,21 +2810,21 @@ primitives = Map.fromList
 
   , prim "jvm_precond" "Term -> JVMSetup ()"
     (pureVal jvm_precond)
-    Experimental
+    Current
     [ "State that the given predicate is a pre-condition on execution of the"
     , "method being verified."
     ]
 
   , prim "jvm_postcond" "Term -> JVMSetup ()"
     (pureVal jvm_postcond)
-    Experimental
+    Current
     [ "State that the given predicate is a post-condition of execution of the"
     , "method being verified."
     ]
 
   , prim "jvm_execute_func" "[JVMValue] -> JVMSetup ()"
     (pureVal jvm_execute_func)
-    Experimental
+    Current
     [ "Specify the given list of values as the arguments of the method."
     ,  ""
     , "The jvm_execute_func statement also serves to separate the pre-state"
@@ -2775,7 +2836,7 @@ primitives = Map.fromList
 
   , prim "jvm_return" "JVMValue -> JVMSetup ()"
     (pureVal jvm_return)
-    Experimental
+    Current
     [ "Specify the given value as the return value of the method. A"
     , "jvm_return statement is required if and only if the method"
     , "has a non-void return type." ]
@@ -2783,7 +2844,7 @@ primitives = Map.fromList
   , prim "jvm_verify"
     "JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec"
     (pureVal jvm_verify)
-    Experimental
+    Current
     [ "Verify the JVM method named by the second parameter in the class"
     , "specified by the first. The third parameter lists the JVMSpec values"
     , "returned by previous calls to use as overrides. The fourth (Bool)"
@@ -2796,7 +2857,7 @@ primitives = Map.fromList
   , prim "jvm_unsafe_assume_spec"
     "JavaClass -> String -> JVMSetup () -> TopLevel JVMSpec"
     (pureVal jvm_unsafe_assume_spec)
-    Experimental
+    Current
     [ "Return a JVMSpec corresponding to a JVMSetup block, as would be"
     , "returned by jvm_verify but without performing any verification."
     ]
@@ -2804,13 +2865,13 @@ primitives = Map.fromList
   , prim "jvm_null"
     "JVMValue"
     (pureVal (CMS.SetupNull () :: CMS.SetupValue CJ.JVM))
-    Experimental
+    Current
     [ "A JVMValue representing a null pointer value." ]
 
   , prim "jvm_term"
     "Term -> JVMValue"
     (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue CJ.JVM))
-    Experimental
+    Current
     [ "Construct a `JVMValue` from a `Term`." ]
 
     ---------------------------------------------------------------------
@@ -3107,6 +3168,13 @@ primitives = Map.fromList
     Experimental
     [ "Print a human-readable summary of all verifications performed"
     , "so far."
+    ]
+
+  , prim "summarize_verification_json" "String -> TopLevel ()"
+    (pureVal summarize_verification_json)
+    Experimental
+    [ "Print a JSON summary of all verifications performed"
+    , "so far into the named file."
     ]
   ]
 

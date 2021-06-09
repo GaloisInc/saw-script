@@ -29,7 +29,7 @@ import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import SAWScript.Proof(Prop, propToSATQuery, propSize, goalProp, ProofGoal, goalType, goalNum, CEX)
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import qualified SAWScript.Prover.Exporter as Exporter
-import SAWScript.Prover.Util (liftCexBB)
+import SAWScript.Prover.Util (liftCexBB, liftLECexBB)
 
 -- crucible-jvm
 -- TODO, very weird import
@@ -105,12 +105,11 @@ w4AbcVerilog unints sc _hashcons goal = liftIO $
        let stats = solverStats "abc_verilog" (propSize goal)
        res <- if all isSpace cexText
               then return Nothing
-                      -- NB: reverse bits to get bit-order convention right
-              else do bits <- reverse <$> parseAigerCex cexText
-                      case liftCexBB (reverse argTys) bits of
+              else do bits <- parseAigerCex cexText
+                      case liftLECexBB argTys bits of
                         Left parseErr -> fail parseErr
                         Right vs -> return $ Just model
-                          where model = zip argNames (map toFirstOrderValue (reverse vs))
+                          where model = zip argNames (map toFirstOrderValue vs)
        return (res, stats)
 
 parseAigerCex :: String -> IO [Bool]

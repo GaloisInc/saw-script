@@ -4,6 +4,7 @@ packages:
     crux-mir-comp
     cryptol-saw-core
     rme
+    verif-viewer
     saw-core
     saw-core-aig
     saw-core-sbv
@@ -17,9 +18,11 @@ packages:
     deps/cryptol
     deps/what4/what4
     deps/crucible/crucible
+    deps/crucible/crucible-concurrency
     deps/crucible/crucible-jvm
     deps/crucible/crucible-llvm
     deps/crucible/crucible-saw
+    deps/crucible/crucible-syntax
     deps/crucible/crux
     deps/crucible/crux-mir
     deps/parameterized-utils

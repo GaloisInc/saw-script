@@ -135,7 +135,7 @@ import Cryptol.ModuleSystem.Name(Name)
 import Cryptol.ModuleSystem.Interface(ifTySyns)
 import Cryptol.TypeCheck.AST(TySyn(tsDef))
 import Cryptol.TypeCheck.TypePat(aNat)
-import Cryptol.Utils.PP(alwaysQualify,runDoc,pp)
+import Cryptol.Utils.PP(render,pp)
 import Cryptol.Utils.Patterns(matchMaybe)
 
 import SAWScript.Crucible.Common (Sym, sawCoreState)
@@ -1249,7 +1249,7 @@ lookupCry x mp =
                               )
     Right a -> Right a
 
-  where ppName = show . runDoc alwaysQualify . pp
+  where ppName = render . pp
 
 
 

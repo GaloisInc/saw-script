@@ -544,7 +544,7 @@ typeCheckWHNF = liftTCM scTypeCheckWHNF
 -- | The 'IO' version of 'typeCheckWHNF'
 scTypeCheckWHNF :: SharedContext -> Term -> IO Term
 scTypeCheckWHNF sc t =
-  do t' <- rewriteSharedTerm sc (addConvs natConversions emptySimpset) t
+  do (_, t') <- rewriteSharedTerm sc (addConvs natConversions emptySimpset :: Simpset ()) t
      scWhnf sc t'
 
 -- | Check that one type is a subtype of another, assuming both arguments are

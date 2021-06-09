@@ -1,3 +1,25 @@
+# Unreleased version
+
+## New Features
+
+Several improvements have been made to JVM verification:
+
+* For method specs that do not specify a final value for a field or
+  array element, it is now enforced that the method must leave that
+  field or element unmodified. This ensures soundness of the resulting
+  override for use in compositional verification.
+
+* New JVM setup commands have been introduced for writing partial
+  specifications: `jvm_modifies_field`, `jvm_modifies_static_field`,
+  `jvm_modifies_elem`, and `jvm_modifies_array`. Used in the
+  post-condition section of a spec, these declare that the field or
+  array in question may be modified by the method in an unspecified
+  manner.
+
+* All `jvm_` functions have all been promoted from "experimental" to
+  "current" status, so that `enable_experimental` is no longer
+  necessary for JVM verification.
+
 # Version 0.8
 
 ## New Features

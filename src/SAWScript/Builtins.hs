@@ -90,7 +90,7 @@ import qualified Data.SBV.Dynamic as SBV
 import qualified Data.AIG as AIG
 
 -- cryptol
-import qualified Cryptol.ModuleSystem.Env as C (meSolverConfig, meSearchPath)
+import qualified Cryptol.ModuleSystem.Env as C (meSearchPath)
 import qualified Cryptol.TypeCheck as C (SolverConfig)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.PP as C (ppWithNames, pp, text, (<+>))
@@ -286,8 +286,8 @@ replacePrim pat replace t = do
     unless c $ fail $ unlines
       [ "terms do not have convertible types", show tpat, show ty1, show trepl, show ty2 ]
 
-  let ss = emptySimpset
-  t' <- io $ replaceTerm sc ss (tpat, trepl) (ttTerm t)
+  let ss = emptySimpset :: SV.SAWSimpset
+  (_,t') <- io $ replaceTerm sc ss (tpat, trepl) (ttTerm t)
 
   io $ do
     ty  <- scTypeOf sc (ttTerm t)
@@ -358,7 +358,7 @@ assumeValid =
   execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is valid"
      pos <- SV.getPosition
-     let admitMsg = "assumeValid: " ++ goalName goal
+     let admitMsg = "assumeValid: " <> Text.pack (goalName goal)
      let stats = solverStats "ADMITTED" (propSize (goalProp goal))
      return (stats, SolveSuccess (Admitted admitMsg pos (goalProp goal)))
 
@@ -367,11 +367,11 @@ assumeUnsat =
   execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is unsat"
      pos <- SV.getPosition
-     let admitMsg = "assumeUnsat: " ++ goalName goal
+     let admitMsg = "assumeUnsat: " <> Text.pack (goalName goal)
      let stats = solverStats "ADMITTED" (propSize (goalProp goal))
      return (stats, SolveSuccess (Admitted admitMsg pos (goalProp goal)))
 
-admitProof :: String -> ProofScript ()
+admitProof :: Text -> ProofScript ()
 admitProof msg =
   execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: admitting goal " ++ goalName goal
@@ -494,12 +494,19 @@ unfoldGoal unints =
      prop' <- io (unfoldProp sc unints' (goalProp goal))
      return (prop', UnfoldEvidence unints')
 
-simplifyGoal :: Simpset -> ProofScript ()
+simplifyGoal :: SV.SAWSimpset -> ProofScript ()
 simplifyGoal ss =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
-     prop' <- io (simplifyProp sc ss (goalProp goal))
+     (_,prop') <- io (simplifyProp sc ss (goalProp goal))
      return (prop', RewriteEvidence ss)
+
+hoistIfsInGoalPrim :: ProofScript ()
+hoistIfsInGoalPrim =
+  execTactic $ tacticChange $ \goal ->
+    do sc <- getSharedContext
+       p <- io $ hoistIfsInGoal sc (goalProp goal)
+       return (p, HoistIfsEvidence)
 
 goal_eval :: [String] -> ProofScript ()
 goal_eval unints =
@@ -524,7 +531,8 @@ goal_apply thm =
 goal_assume :: ProofScript Theorem
 goal_assume =
   do sc <- SV.scriptTopLevel getSharedContext
-     execTactic (tacticAssume sc)
+     pos <- SV.scriptTopLevel SV.getPosition
+     execTactic (tacticAssume sc pos)
 
 goal_intro :: Text -> ProofScript TypedTerm
 goal_intro s =
@@ -814,10 +822,11 @@ provePrim script t = do
   sc <- getSharedContext
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   let goal = ProofGoal 0 "prove" "prove" prop
-  res <- SV.runProofScript script goal
+  res <- SV.runProofScript script goal Nothing "prove_prim"
   case res of
     UnfinishedProof pst ->
       printOutLnTop Info $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)"
+    ValidProof _ thm -> SV.recordProof thm
     _ -> return ()
   return res
 
@@ -829,14 +838,14 @@ provePrintPrim script t = do
   sc <- getSharedContext
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   let goal = ProofGoal 0 "prove" "prove" prop
-  opts <- SV.sawPPOpts . rwPPOpts <$> getTopLevelRW
-  res <- SV.runProofScript script goal
+  opts <- rwPPOpts <$> getTopLevelRW
+  res <- SV.runProofScript script goal Nothing "prove_print_prim"
   let failProof pst =
          fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
-                          ++ showsProofResult opts res ""
+                          ++ SV.showsProofResult opts res ""
   case res of
     ValidProof _stats thm ->
-      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm opts $ ttTerm t)
+      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) $ ttTerm t)
          SV.returnProof thm
     InvalidProof _stats _cex pst -> failProof pst
     UnfinishedProof pst -> failProof pst
@@ -850,7 +859,7 @@ satPrim script t =
      sc <- getSharedContext
      prop <- io $ predicateToProp sc Existential (ttTerm t)
      let goal = ProofGoal 0 "sat" "sat" prop
-     res <- SV.runProofScript script goal
+     res <- SV.runProofScript script goal Nothing "sat"
      case res of
        InvalidProof stats cex _ -> return (SV.Sat stats cex)
        ValidProof stats _thm -> return (SV.Unsat stats)
@@ -880,26 +889,26 @@ quickCheckPrintPrim opts sc numTests tt =
                "----------Counterexample----------\n" ++
                showList cex' ""
 
-cryptolSimpset :: TopLevel Simpset
+cryptolSimpset :: TopLevel SV.SAWSimpset
 cryptolSimpset =
   do sc <- getSharedContext
      io $ Cryptol.mkCryptolSimpset sc
 
-addPreludeEqs :: [Text] -> Simpset -> TopLevel Simpset
+addPreludeEqs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addPreludeEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Prelude"])
 
-addCryptolEqs :: [Text] -> Simpset -> TopLevel Simpset
+addCryptolEqs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addCryptolEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Cryptol"])
 
-add_core_defs :: Text -> [Text] -> Simpset -> TopLevel Simpset
+add_core_defs :: Text -> [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 add_core_defs modname names ss =
   do sc <- getSharedContext
      defs <- io $ mapM (getDef sc) names -- FIXME: warn if not found
@@ -913,16 +922,16 @@ add_core_defs modname names ss =
         Just d -> return d
         Nothing -> fail $ Text.unpack $ modname <> " definition " <> n <> " not found"
 
-add_prelude_defs :: [Text] -> Simpset -> TopLevel Simpset
+add_prelude_defs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 add_prelude_defs = add_core_defs "Prelude"
 
-add_cryptol_defs :: [Text] -> Simpset -> TopLevel Simpset
+add_cryptol_defs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 add_cryptol_defs = add_core_defs "Cryptol"
 
-rewritePrim :: Simpset -> TypedTerm -> TopLevel TypedTerm
+rewritePrim :: SV.SAWSimpset -> TypedTerm -> TopLevel TypedTerm
 rewritePrim ss (TypedTerm schema t) = do
   sc <- getSharedContext
-  t' <- io $ rewriteSharedTerm sc ss t
+  (_,t') <- io $ rewriteSharedTerm sc ss t
   return (TypedTerm schema t')
 
 unfold_term :: [String] -> TypedTerm -> TopLevel TypedTerm
@@ -938,23 +947,24 @@ beta_reduce_term (TypedTerm schema t) = do
   t' <- io $ betaNormalize sc t
   return (TypedTerm schema t')
 
-addsimp :: Theorem -> Simpset -> TopLevel Simpset
+addsimp :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimp thm ss =
   do sc <- getSharedContext
-     io (propToRewriteRule sc (thmProp thm)) >>= \case
+     io (propToRewriteRule sc (thmProp thm) (Just (thmNonce thm))) >>= \case
        Nothing -> fail "addsimp: theorem not an equation"
        Just rule -> pure (addRule rule ss)
 
-addsimp' :: Term -> Simpset -> TopLevel Simpset
+-- TODO: remove this, it implicitly adds axioms
+addsimp' :: Term -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimp' t ss =
-  case ruleOfProp t of
+  case ruleOfProp t Nothing of
     Nothing -> fail "addsimp': theorem not an equation"
     Just rule -> pure (addRule rule ss)
 
-addsimps :: [Theorem] -> Simpset -> TopLevel Simpset
+addsimps :: [Theorem] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimps thms ss = foldM (flip addsimp) ss thms
 
-addsimps' :: [Term] -> Simpset -> TopLevel Simpset
+addsimps' :: [Term] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimps' ts ss = foldM (flip addsimp') ss ts
 
 print_type :: Term -> TopLevel ()
@@ -1019,7 +1029,6 @@ lambdas vars tt =
 
 -- | Apply the given Term to the given values, and evaluate to a
 -- final value.
--- TODO: Take (ExtCns, FiniteValue) instead of (Term, FiniteValue)
 cexEvalFn :: SharedContext -> [(ExtCns Term, FirstOrderValue)] -> Term
           -> IO Concrete.CValue
 cexEvalFn sc args tm = do
@@ -1147,7 +1156,7 @@ eval_int :: TypedTerm -> TopLevel Integer
 eval_int t = do
   sc <- getSharedContext
   cenv <- fmap rwCryptol getTopLevelRW
-  let cfg = C.meSolverConfig (CEnv.eModuleEnv cenv)
+  let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
   unless (null (getAllExts (ttTerm t))) $
     fail "term contains symbolic variables"
   opts <- getOptions
@@ -1288,11 +1297,11 @@ prove_core script input =
   do sc <- getSharedContext
      t <- parseCore input
      p <- io (termToProp sc t)
-     opts <- SV.sawPPOpts . rwPPOpts <$> getTopLevelRW
-     res <- SV.runProofScript script (ProofGoal 0 "prove" "prove" p)
+     opts <- rwPPOpts <$> getTopLevelRW
+     res <- SV.runProofScript script (ProofGoal 0 "prove" "prove" p) Nothing "prove_core"
      let failProof pst =
             fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
-                                  ++ showsProofResult opts res ""
+                                  ++ SV.showsProofResult opts res ""
      case res of
        ValidProof _ thm -> SV.returnProof thm
        InvalidProof _ _ pst -> failProof pst
@@ -1304,13 +1313,17 @@ core_axiom input =
      pos <- SV.getPosition
      t <- parseCore input
      p <- io (termToProp sc t)
-     SV.returnProof (admitTheorem "core_axiom" pos p)
+     db <- roTheoremDB <$> getTopLevelRO
+     thm <- io (admitTheorem db "core_axiom" p pos "core_axiom")
+     SV.returnProof thm
 
 core_thm :: String -> TopLevel Theorem
 core_thm input =
   do t <- parseCore input
      sc <- getSharedContext
-     thm <- io (proofByTerm sc t)
+     pos <- SV.getPosition
+     db <- roTheoremDB <$> getTopLevelRO
+     thm <- io (proofByTerm sc db t pos "core_thm")
      SV.returnProof thm
 
 get_opt :: Int -> TopLevel String
@@ -1429,5 +1442,16 @@ summarize_verification =
      let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
-         summary = computeVerificationSummary jspecs lspecs thms
+     db <- roTheoremDB <$> getTopLevelRO
+     summary <- io (computeVerificationSummary db jspecs lspecs thms)
      io $ putStrLn $ prettyVerificationSummary summary
+
+summarize_verification_json :: String -> TopLevel ()
+summarize_verification_json fpath =
+  do values <- rwProofs <$> getTopLevelRW
+     let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
+         lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
+         thms    = [ t | SV.VTheorem t <- values ]
+     db <- roTheoremDB <$> getTopLevelRO
+     summary <- io (computeVerificationSummary db jspecs lspecs thms)
+     io (writeFile fpath (jsonVerificationSummary summary))

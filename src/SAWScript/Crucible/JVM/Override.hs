@@ -672,27 +672,27 @@ learnPointsTo opts sc cc spec prepost pt = do
   globals <- OM (use overrideGlobals)
   case pt of
 
-    JVMPointsToField loc ptr fid val ->
+    JVMPointsToField loc ptr fid (Just val) ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doFieldLoad sym globals rval fid
          v <- liftIO $ projectJVMVal sym ty ("field load " ++ J.fieldIdName fid ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
-    JVMPointsToStatic loc fid val ->
+    JVMPointsToStatic loc fid (Just val) ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          dyn <- liftIO $ CJ.doStaticFieldLoad sym jc globals fid
          v <- liftIO $ projectJVMVal sym ty ("static field load " ++ J.fieldIdName fid ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
-    JVMPointsToElem loc ptr idx val ->
+    JVMPointsToElem loc ptr idx (Just val) ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doArrayLoad sym globals rval idx
          v <- liftIO $ projectJVMVal sym ty ("array load " ++ show idx ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
-    JVMPointsToArray loc ptr tt ->
+    JVMPointsToArray loc ptr (Just tt) ->
       do (len, ety) <-
            case Cryptol.isMono (ttSchema tt) of
              Nothing -> fail "jvm_array_is: invalid polymorphic value"
@@ -722,6 +722,10 @@ learnPointsTo opts sc cc spec prepost pt = do
          ts <- traverse load [0 .. fromInteger len - 1]
          realTerm <- liftIO $ scVector sc ety_tm ts
          matchTerm sc cc loc prepost realTerm (ttTerm tt)
+
+    -- If the right-hand-side is 'Nothing', this is indicates a "modifies" declaration,
+    -- which should probably not appear in the pre-state section, and has no effect.
+    _ -> pure ()
 
 ------------------------------------------------------------------------
 
@@ -782,10 +786,13 @@ executeAllocation opts cc (var, (loc, alloc)) =
      let halloc = cc^.jccHandleAllocator
      sym <- Ov.getSymInterface
      globals <- OM (use overrideGlobals)
+     let mut = True -- allocate objects/arrays from post-state as mutable
      (ptr, globals') <-
        case alloc of
-         AllocObject cname -> liftIO $ CJ.doAllocateObject sym halloc jc cname globals
-         AllocArray len elemTy -> liftIO $ CJ.doAllocateArray sym halloc jc len elemTy globals
+         AllocObject cname ->
+           liftIO $ CJ.doAllocateObject sym halloc jc cname (const mut) globals
+         AllocArray len elemTy ->
+           liftIO $ CJ.doAllocateArray sym halloc jc len elemTy (const mut) globals
      OM (overrideGlobals .= globals')
      assignVar cc loc var ptr
 
@@ -823,23 +830,23 @@ executePointsTo opts sc cc spec pt = do
   case pt of
 
     JVMPointsToField _loc ptr fid val ->
-      do dyn <- injectSetupValueJVM sym opts cc sc spec val
+      do dyn <- maybe (pure CJ.unassignedJVMValue) (injectSetupValueJVM sym opts cc sc spec) val
          rval <- resolveAllocIndexJVM ptr
          globals' <- liftIO $ CJ.doFieldStore sym globals rval fid dyn
          OM (overrideGlobals .= globals')
 
     JVMPointsToStatic _loc fid val ->
-      do dyn <- injectSetupValueJVM sym opts cc sc spec val
+      do dyn <- maybe (pure CJ.unassignedJVMValue) (injectSetupValueJVM sym opts cc sc spec) val
          globals' <- liftIO $ CJ.doStaticFieldStore sym jc globals fid dyn
          OM (overrideGlobals .= globals')
 
     JVMPointsToElem _loc ptr idx val ->
-      do dyn <- injectSetupValueJVM sym opts cc sc spec val
+      do dyn <- maybe (pure CJ.unassignedJVMValue) (injectSetupValueJVM sym opts cc sc spec) val
          rval <- resolveAllocIndexJVM ptr
          globals' <- liftIO $ CJ.doArrayStore sym globals rval idx dyn
          OM (overrideGlobals .= globals')
 
-    JVMPointsToArray _loc ptr tt ->
+    JVMPointsToArray _loc ptr (Just tt) ->
       do (_ety, tts) <-
            liftIO (destVecTypedTerm sc tt) >>=
            \case
@@ -849,6 +856,15 @@ executePointsTo opts sc cc spec pt = do
          vs <- traverse (injectSetupValueJVM sym opts cc sc spec . MS.SetupTerm) tts
          globals' <- liftIO $ doEntireArrayStore sym globals rval vs
          OM (overrideGlobals .= globals')
+
+    JVMPointsToArray _loc ptr Nothing ->
+      case Map.lookup ptr (MS.csAllocations spec) of
+        Just (_, AllocArray len _) ->
+          do let vs = replicate len CJ.unassignedJVMValue
+             rval <- resolveAllocIndexJVM ptr
+             globals' <- liftIO $ doEntireArrayStore sym globals rval vs
+             OM (overrideGlobals .= globals')
+        _ -> panic "JVMSetup" ["executePointsTo", "expected array allocation"]
 
 injectSetupValueJVM ::
   Sym                  ->

@@ -9,9 +9,11 @@ module SAWScript.Prover.What4 where
 import System.IO
 
 import           Data.Set (Set)
+import qualified Data.Map as Map
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
+import Verifier.SAW.SATQuery (SATQuery(..))
 
 import           SAWScript.Proof(Prop, propToSATQuery, propSize, CEX)
 import           SAWScript.Prover.SolverStats
@@ -122,7 +124,10 @@ setupWhat4_solver solver sym unintSet sc goal =
   do
      -- symbolically evaluate
      satq <- propToSATQuery sc unintSet goal
-     (argNames, _argTys, bvs, lit) <- W.w4Solve sym sc satq
+     let varList  = Map.toList (satVariables satq)
+     let argNames = map fst varList
+     (varMap, lit) <- W.w4Solve sym sc satq
+     let bvs = map (fst . snd) varMap
 
      extendConfig (solver_adapter_config_options solver)
                   (getConfiguration sym)

@@ -15,7 +15,6 @@ saw-script.
 
 */
 
-enable_experimental;
 test <- java_load_class "Test";
 
 print test;
@@ -118,6 +117,94 @@ check_fails test "get"
     jvm_field_is this "val" (jvm_term {{ 0 : [64] }});
     jvm_execute_func [this];
     jvm_return (jvm_term val);
+  };
+
+print "jvm_modifies_field in pre-state section";
+check_fails test "get"
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_modifies_field this "val";
+    jvm_execute_func [this];
+    jvm_return (jvm_term val);
+  };
+
+print "Working spec for method 'next'";
+jvm_verify test "next" [] false
+  do {
+    ctr <- jvm_fresh_var "ctr" java_long;
+    jvm_static_field_is "counter" (jvm_term ctr);
+    jvm_execute_func [];
+    let ctr' = {{ ctr + 1 }};
+    jvm_static_field_is "counter" (jvm_term ctr');
+    jvm_return (jvm_term ctr');
+  } z3;
+
+print "jvm_static_field_is with non-monomorphic type";
+check_fails test "next"
+  do {
+    let ctr = {{ 0 }};
+    jvm_static_field_is "counter" (jvm_term ctr);
+    jvm_execute_func [];
+    let ctr' = {{ 1 }};
+    jvm_static_field_is "counter" (jvm_term ctr');
+    jvm_return (jvm_term ctr');
+  };
+
+print "jvm_static_field_is with non-jvm type";
+check_fails test "next"
+  do {
+    let ctr = {{ 0 : Integer }};
+    jvm_static_field_is "counter" (jvm_term ctr);
+    jvm_execute_func [];
+    let ctr' = {{ ctr + 1 }};
+    jvm_static_field_is "counter" (jvm_term ctr');
+    jvm_return (jvm_term ctr');
+  };
+
+print "jvm_static_field_is with wrong type";
+check_fails test "next"
+  do {
+    let ctr = {{ 0 : [32] }};
+    jvm_static_field_is "counter" (jvm_term ctr);
+    jvm_execute_func [];
+    let ctr' = {{ ctr + 1 }};
+    jvm_static_field_is "counter" (jvm_term ctr');
+    jvm_return (jvm_term ctr');
+  };
+
+print "jvm_static_field_is with non-existent field name";
+check_fails test "next"
+  do {
+    ctr <- jvm_fresh_var "ctr" java_long;
+    jvm_static_field_is "count" (jvm_term ctr);
+    jvm_execute_func [];
+    let ctr' = {{ ctr + 1 }};
+    jvm_static_field_is "count" (jvm_term ctr');
+    jvm_return (jvm_term ctr');
+  };
+
+print "jvm_static_field_is with previous jvm_static_field_is on same field";
+check_fails test "next"
+  do {
+    ctr <- jvm_fresh_var "ctr" java_long;
+    jvm_static_field_is "counter" (jvm_term ctr);
+    jvm_static_field_is "counter" (jvm_term ctr);
+    jvm_execute_func [];
+    let ctr' = {{ ctr + 1 }};
+    jvm_static_field_is "counter" (jvm_term ctr');
+    jvm_return (jvm_term ctr');
+  };
+
+print "jvm_modifies_static_field in pre-state section";
+check_fails test "next"
+  do {
+    ctr <- jvm_fresh_var "ctr" java_long;
+    jvm_modifies_static_field "counter";
+    jvm_execute_func [];
+    let ctr' = {{ ctr + 1 }};
+    jvm_static_field_is "counter" (jvm_term ctr');
+    jvm_return (jvm_term ctr');
   };
 
 print "Working spec for method 'lookup'";
@@ -229,6 +316,17 @@ check_fails test "lookup"
     x <- jvm_fresh_var "x" java_long;
     jvm_elem_is arr 2 (jvm_term x);
     jvm_elem_is arr 2 (jvm_term {{ 0 : [64] }});
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term x);
+  };
+
+print "jvm_modifies_elem in pre-state section";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    let idx = {{ 2 : [32] }};
+    x <- jvm_fresh_var "x" java_long;
+    jvm_modifies_elem arr 2;
     jvm_execute_func [arr, jvm_term idx];
     jvm_return (jvm_term x);
   };
@@ -354,6 +452,17 @@ check_fails test "lookup"
     let idx = {{ 2 : [32] }};
     jvm_execute_func [arr, jvm_term idx];
     jvm_return (jvm_term {{ xs @ idx }});
+  };
+
+print "jvm_modifies_array in pre-state section";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    let idx = {{ 2 : [32] }};
+    x <- jvm_fresh_var "x" java_long;
+    jvm_modifies_array arr;
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term x);
   };
 
 print "Working spec for method 'set'";
