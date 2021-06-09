@@ -10,6 +10,7 @@ packages:
     saw-core-sbv
     saw-core-what4
     saw-core-coq
+    heapster-saw
     deps/llvm-pretty
     deps/llvm-pretty-bc-parser
     deps/jvm-parser
@@ -34,7 +35,6 @@ packages:
     deps/macaw/x86_symbolic
     deps/elf-edit
     deps/dwarf
-    deps/heapster-saw
     deps/argo/argo
     deps/argo/tasty-script-exitcode
     deps/cryptol/cryptol-remote-api
