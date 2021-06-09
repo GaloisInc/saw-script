@@ -864,9 +864,12 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
      let endianness =
            llvmDataLayout (modTrans lm ^. transContext ^. llvmTypeCtx)
            ^. intLayout
-     leq_proof <- case decideLeq (knownNat @1) w of
+     LeqProof <- case decideLeq (knownNat @16) w of
        Left pf -> return pf
-       Right _ -> fail "LLVM arch width is 0!"
+       Right _ -> fail "LLVM arch width is < 16!"
+     LeqProof <- case decideLeq (knownNat @1) w of
+       Left pf -> return pf
+       Right _ -> fail "PANIC: 1 > 16!"
      env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
      some_cfgs_and_perms <- forM fn_names_and_perms $ \(nm, nm_to, perms_string) ->
        do AnyCFG cfg <-
@@ -877,14 +880,15 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
           SomeFunPerm fun_perm <-
             tracePretty (pretty ("Fun args:" :: String) <+>
                          permPretty emptyPPInfo args) $
-            withKnownNat w $ withLeqProof leq_proof $
+            withKnownNat w $
             parseFunPermStringMaybeRust "permissions" w env args ret perms_string
           return (SomeCFGAndPerm (GlobalSymbol $
                                   fromString nm) nm_to cfg fun_perm)
      sc <- getSharedContext
      let saw_modname = heapsterEnvSAWModule henv
-     env' <- liftIO $ withKnownNat w $ withLeqProof leq_proof $
-       tcTranslateAddCFGs sc saw_modname w env endianness some_cfgs_and_perms
+     env' <- liftIO $
+       let ?ptrWidth = w in
+       tcTranslateAddCFGs sc saw_modname env endianness some_cfgs_and_perms
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
