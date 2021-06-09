@@ -25,7 +25,7 @@ Portability : portable
 module Verifier.SAW.Translation.Coq.SpecialTreatment where
 
 import           Control.Lens                       (_1, _2, over)
-import           Control.Monad.Reader               (ask)
+import           Control.Monad.Reader               (asks)
 import qualified Data.Map                           as Map
 import           Data.String.Interpolate            (i)
 import qualified Data.Text                          as Text
@@ -70,10 +70,10 @@ translateModuleName mn =
   Map.findWithDefault mn mn moduleRenamingMap
 
 findSpecialTreatment ::
-  TranslationConfigurationMonad m =>
+  TranslationConfigurationMonad r m =>
   Ident -> m IdentSpecialTreatment
 findSpecialTreatment ident = do
-  configuration <- ask
+  configuration <- asks translationConfiguration
   let moduleMap =
         Map.findWithDefault Map.empty (identModule ident) (specialTreatmentMap configuration)
   let defaultTreatment =
