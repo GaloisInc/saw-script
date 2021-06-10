@@ -16,7 +16,7 @@ Description:
 library
   build-depends:
     base == 4.*,
-    array ^>= 0.5.4,
+    array ^>= 0.5.3,
     saw-core,
     crucible,
     crucible-llvm,
