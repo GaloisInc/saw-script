@@ -84,7 +84,6 @@ module SAWScript.Proof
 
   , CEX
   , ProofResult(..)
-
   , SolveResult(..)
 
   , predicateToSATQuery
