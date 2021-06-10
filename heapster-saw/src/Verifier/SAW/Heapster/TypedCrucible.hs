@@ -220,8 +220,8 @@ typedFnHandleRetType (TypedFnHandle _ h) = handleReturnType h
 
 -- | As in standard Crucible, blocks are identified by membership proofs that
 -- their input arguments are in the @blocks@ list
-type TypedBlockID =
-  Member -- :: RList (RList CrucibleType) -> RList CrucibleType -> Type
+type TypedBlockID (a :: RList (RList CrucibleType)) =
+  Member a -- :: (b :: RList CrucibleType) -> Type
 
 -- | All of our blocks have multiple entry points, for different inferred types,
 -- so a "typed" 'BlockID' is a normal Crucible 'BlockID' (which is just an index
@@ -3851,7 +3851,7 @@ tcCFG w env endianness fun_perm cfg =
            , tpcfgEntryID =
                TypedEntryID (stLookupBlockID (cfgEntryBlockID cfg) init_st) 0 }
   where
-    main_loop :: [Some (TypedBlockID blocks)] ->
+    main_loop :: [Some (TypedBlockID blocks :: RList CrucibleType -> Type)] ->
                  TopPermCheckM ext cblocks blocks tops ret
                  (TypedBlockMap TransPhase ext blocks tops ret)
     main_loop nodes =
