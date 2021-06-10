@@ -221,13 +221,13 @@ typedFnHandleRetType (TypedFnHandle _ h) = handleReturnType h
 -- | As in standard Crucible, blocks are identified by membership proofs that
 -- their input arguments are in the @blocks@ list
 type TypedBlockID =
-  Member :: RList (RList CrucibleType) -> RList CrucibleType -> Type
+  Member -- :: RList (RList CrucibleType) -> RList CrucibleType -> Type
 
 -- | All of our blocks have multiple entry points, for different inferred types,
 -- so a "typed" 'BlockID' is a normal Crucible 'BlockID' (which is just an index
 -- into the @blocks@ context of contexts) plus an 'Int' specifying which entry
 -- point to that block
-data TypedEntryID blocks args =
+data TypedEntryID (blocks :: RList (RList CrucibleType)) (args :: RList CrucibleType) =
   TypedEntryID { entryBlockID :: TypedBlockID blocks args, entryIndex :: Int }
   deriving Eq
 
@@ -1280,7 +1280,7 @@ typedEntryCallerSite siteID (typedEntryCallers -> callers) =
 data TypedBlockSort = JoinSort | MultiEntrySort
 
 -- | A typed Crucible block is a list of typed entrypoints to that block
-data TypedBlock phase ext blocks tops ret args =
+data TypedBlock phase ext (blocks :: RList (RList CrucibleType)) tops ret args =
   forall cargs. (CtxToRList cargs ~ args) =>
   TypedBlock
   {
@@ -2508,7 +2508,7 @@ tcBlockID blkID = stLookupBlockID blkID <$> top_get
 -- 'PermExpr' value that we can use as an @eq(e)@ permission on the output of
 -- the expression
 tcExpr ::
-  forall ext arch tp cblocks blocks tops ret ps.
+  forall ext tp cblocks blocks tops ret ps.
   (PermCheckExtC ext, KnownRepr ExtRepr ext) =>
   App ext RegWithVal tp ->
   StmtPermCheckM ext cblocks blocks tops ret ps ps
@@ -2715,7 +2715,7 @@ tcEmitStmt ctx loc stmt =
 
 
 tcEmitStmt' ::
-  forall arch ext ctx ctx' cblocks blocks tops ret.
+  forall ext ctx ctx' cblocks blocks tops ret.
   (PermCheckExtC ext, KnownRepr ExtRepr ext) =>
   CtxTrans ctx ->
   ProgramLoc ->

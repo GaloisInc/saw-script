@@ -9,7 +9,6 @@
 {-# Language TypeOperators #-}
 {-# Language DataKinds #-}
 {-# Language ViewPatterns #-}
-{-# Language ImportQualifiedPost #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language KindSignatures #-}
 {-# Options_GHC -Wno-unused-foralls #-}
@@ -43,9 +42,9 @@ import Data.Binding.Hobbits.MonadBind
 
 import Prettyprinter hiding (comma, space)
 
-import Data.Type.RList qualified as RL
+import qualified Data.Type.RList as RL
 import Data.Parameterized.Some (Some(Some), mapSome)
-import Data.Parameterized.Context qualified as Ctx
+import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.BoolRepr (BoolRepr(TrueRepr))
 
 import Lang.Crucible.Types

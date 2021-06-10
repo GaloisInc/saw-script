@@ -19,6 +19,7 @@ module Verifier.SAW.Heapster.PermParser (
 
 import Data.List
 import GHC.TypeLits
+import qualified Control.Monad.Fail as Fail
 import Data.Binding.Hobbits
 
 import Data.Parameterized.Some
@@ -48,7 +49,7 @@ type Parser p = [Located Token] -> Either ParseError p
 -- | Harness for running the lexer, parser, and type-checker.
 -- Human-readable errors are raised through 'fail'.
 runParser ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   String                {- ^ object name                -} ->
   PermEnv               {- ^ permission environment     -} ->
   Parser p              {- ^ parser                     -} ->
@@ -106,7 +107,7 @@ pointEnd str = end ++ "\n" ++ (' ' <$ end) ++ "^"
 -- | Parse a permission set @x1:p1, x2:p2, ...@ for the variables in the
 -- supplied context
 parsePermsString ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   String                {- ^ object name                -} ->
   PermEnv               {- ^ permission environment     -} ->
   ParsedCtx ctx         {- ^ parsed context             -} ->
@@ -118,7 +119,7 @@ parsePermsString nm env ctx =
 -- | Parse a permission of the given type within the given context and with
 -- the given named permission variables in scope
 parsePermInCtxString ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   String                {- ^ object name                -} ->
   PermEnv               {- ^ permission environment     -} ->
   ParsedCtx ctx         {- ^ parsed context             -} ->
@@ -131,7 +132,7 @@ parsePermInCtxString nm env ctx tp =
 -- | Parse a sequence of atomic permissions within the given context and with
 -- the given named permission variables in scope
 parseAtomicPermsInCtxString ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   String                {- ^ object name                -} ->
   PermEnv               {- ^ permission environment     -} ->
   ParsedCtx ctx         {- ^ parsed context             -} ->
@@ -143,7 +144,7 @@ parseAtomicPermsInCtxString nm env ctx tp =
 
 -- | Parse a 'FunPerm' named by the first 'String' from the second 'String'
 parseFunPermString ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   String                {- ^ object name                -} ->
   PermEnv               {- ^ permission environment     -} ->
   CruCtx args           {- ^ argument types             -} ->
@@ -157,7 +158,7 @@ parseFunPermString nm env args ret =
 -- the second 'String' and return a 'ParsedCtx', which contains both the
 -- variable names @xi@ and their types @tpi@
 parseParsedCtxString ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   String                {- ^ object name                -} ->
   PermEnv               {- ^ permission environment     -} ->
   String                {- ^ input text                 -} ->
@@ -166,7 +167,7 @@ parseParsedCtxString nm env = runParser nm env parseCtx tcCtx
 
 -- | Parse a type context named by the first 'String' from the second 'String'
 parseCtxString ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   String                {- ^ object name                -} ->
   PermEnv               {- ^ permission environment     -} ->
   String                {- ^ input text                 -} ->
@@ -176,7 +177,7 @@ parseCtxString nm env str =
 
 -- | Parse a type named by the first 'String' from the second 'String'
 parseTypeString ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   String                {- ^ object name                -} ->
   PermEnv               {- ^ permission environment     -} ->
   String                {- ^ input text                 -} ->
@@ -185,7 +186,7 @@ parseTypeString nm env = runParser nm env parseType tcType
 
 -- | Parse an expression of a given type from a 'String'
 parseExprInCtxString ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   PermEnv -> TypeRepr a -> ParsedCtx ctx -> String -> m (Mb ctx (PermExpr a))
 parseExprInCtxString env tp ctx =
   runParser (permPrettyString emptyPPInfo tp) env parseExpr
@@ -197,7 +198,7 @@ parseExprInCtxString env tp ctx =
 -- syntax, which begins with an angle bracket. The @w@ argument gives the bit
 -- width of pointers in the current architecture.
 parseFunPermStringMaybeRust ::
-  (1 <= w, KnownNat w, MonadFail m) =>
+  (1 <= w, KnownNat w, Fail.MonadFail m) =>
   String                {- ^ object name                -} ->
   prx w                 {- ^ pointer bit-width proxy    -} ->
   PermEnv               {- ^ permission environment     -} ->
@@ -215,7 +216,7 @@ parseFunPermStringMaybeRust nm w env args ret str =
 -- The @w@ argument gives the bit width of pointers in the current\
 -- architecture.
 parseRustTypeString ::
-  (1 <= w, KnownNat w, MonadFail m) =>
+  (1 <= w, KnownNat w, Fail.MonadFail m) =>
   PermEnv               {- ^ permission environment     -} ->
   prx w                 {- ^ pointer bit-width proxy    -} ->
   String                {- ^ input text                 -} ->

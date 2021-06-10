@@ -31,7 +31,7 @@ import System.FilePath
 import GHC.TypeNats
 import Data.Functor.Product
 import Control.Lens hiding ((:>), Index, Empty, ix, op)
-
+import qualified Control.Monad.Fail as Fail
 import Data.Binding.Hobbits
 import qualified Data.Type.RList as RL
 
@@ -448,7 +448,7 @@ instance NuMatchingAny1 f => NuMatchingAny1 (Typed f) where
   nuMatchingAny1Proof = nuMatchingProof
 
 -- | Cast an existential 'Typed' to a particular type or raise an error
-castTypedM :: MonadFail m => String -> TypeRepr a -> Some (Typed f) -> m (f a)
+castTypedM :: Fail.MonadFail m => String -> TypeRepr a -> Some (Typed f) -> m (f a)
 castTypedM _ tp (Some (Typed tp' f))
   | Just Refl <- testEquality tp tp' = return f
 castTypedM str tp (Some (Typed tp' _)) =

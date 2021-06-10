@@ -46,6 +46,7 @@ import Control.Monad.Reader hiding (ap)
 import Control.Monad.Writer hiding (ap)
 import Control.Monad.Trans.Maybe
 import qualified Data.Vector as V
+import qualified Control.Monad.Fail as Fail
 
 import What4.ProgramLoc
 import What4.Interface (StringLiteral(..))
@@ -277,7 +278,7 @@ newtype TransM info (ctx :: RList CrucibleType) a =
   TransM { unTransM :: Reader (info ctx) a }
   deriving (Functor, Applicative, Monad)
 
-instance MonadFail (TransM info ctx) where
+instance Fail.MonadFail (TransM info ctx) where
   fail = error
 
 -- | The run function for the 'TransM' monad

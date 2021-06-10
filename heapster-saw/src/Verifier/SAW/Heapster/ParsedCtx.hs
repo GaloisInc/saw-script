@@ -1,4 +1,3 @@
-{-# Language ImportQualifiedPost #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language GADTs #-}
 {-# Language TypeOperators #-}
@@ -8,7 +7,7 @@ import Data.Functor.Constant
 
 import Data.Binding.Hobbits
 
-import Data.Type.RList qualified as RL
+import qualified Data.Type.RList as RL
 
 import Data.Parameterized.Some (Some(Some))
 

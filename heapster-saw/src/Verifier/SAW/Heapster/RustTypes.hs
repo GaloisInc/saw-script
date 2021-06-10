@@ -38,6 +38,7 @@ import Control.Applicative
 import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Monad.Trans.Maybe
+import qualified Control.Monad.Fail as Fail
 
 import Data.Parameterized.BoolRepr
 import Data.Parameterized.Some
@@ -86,7 +87,7 @@ newtype RustConvM a =
   deriving (Functor, Applicative, Monad,
             MonadError String, MonadReader RustConvInfo)
 
-instance MonadFail RustConvM where
+instance Fail.MonadFail RustConvM where
   fail = RustConvM . throwError
 
 instance MonadBind RustConvM where
@@ -99,7 +100,7 @@ atSpan span m =
 
 -- | Run a Rust conversion computation with the given 'RustConvInfo', lifting
 -- any errors into the outer monad
-runLiftRustConvM :: MonadFail m => RustConvInfo -> RustConvM a -> m a
+runLiftRustConvM :: Fail.MonadFail m => RustConvInfo -> RustConvM a -> m a
 runLiftRustConvM info (RustConvM m) =
   case runExcept (runReaderT m info) of
     Left err -> fail err
@@ -908,7 +909,7 @@ rsConvertFun _ _ _ _ = fail "rsConvertFun: unsupported Rust function type"
 -- > <generics> (T1,...,Tn) -> T
 --
 -- and convert it to a Heapster function permission
-parseFunPermFromRust :: (MonadFail m, 1 <= w, KnownNat w) =>
+parseFunPermFromRust :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
                         PermEnv -> prx w -> CruCtx args -> TypeRepr ret ->
                         String -> m (SomeFunPerm args ret)
 parseFunPermFromRust env w args ret str
@@ -939,7 +940,7 @@ parseFunPermFromRust _ _ _ _ str =
 -- | Parse a polymorphic Rust type declaration and convert it to a Heapster
 -- shape
 -- Note: No CruCtx / TypeRepr as arguments for now
-parseNamedShapeFromRustDecl :: (MonadFail m, 1 <= w, KnownNat w) =>
+parseNamedShapeFromRustDecl :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
                                PermEnv -> prx w -> String ->
                                m SomeNamedShape
 parseNamedShapeFromRustDecl env w str
