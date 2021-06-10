@@ -46,7 +46,7 @@ setup_dist_bins() {
   fi
   extract_exe "saw" "dist/bin"
   export PATH=$PWD/dist/bin:$PATH
-  echo "$PWD/dist/bin" >> $GITHUB_PATH
+  echo "$PWD/dist/bin" >> "$GITHUB_PATH"
   strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
 }
 
@@ -61,8 +61,8 @@ install_z3() {
   curl -o z3.zip -sL "https://github.com/Z3Prover/z3/releases/download/z3-$Z3_VERSION/z3-$Z3_VERSION-x64-$file"
 
   if $IS_WIN; then 7z x -bd z3.zip; else unzip z3.zip; fi
-  cp z3-*/bin/z3$EXT $BIN/z3$EXT
-  $IS_WIN || chmod +x $BIN/z3
+  cp z3-*/bin/z3$EXT "$BIN/z3$EXT"
+  $IS_WIN || chmod +x "$BIN/z3"
   rm z3.zip
 }
 
@@ -148,8 +148,8 @@ build_abc() {
   esac
   (cd deps/abcBridge &&
     scripts/build-abc.sh $arch $os &&
-    cp abc-build/abc $BIN/abc)
-  output path $BIN/abc
+    cp abc-build/abc "$BIN/abc")
+  output path "$BIN/abc"
 }
 
 install_system_deps() {
