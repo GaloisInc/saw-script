@@ -88,10 +88,7 @@ jobs:
           .github/ci.sh output name $NAME
           echo "NAME=${{ needs.config.outputs.name }}-${{ runner.os }}-x86_64" >> $GITHUB_ENV
 
-      - shell: bash
-        run: sudo apt-get update
-
-      - uses: haskell/actions/setup@v1
+      - uses: haskell/actions/setup@v1.1
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
