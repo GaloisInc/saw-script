@@ -1327,7 +1327,7 @@ primitives = Map.fromList
     ]
 
   , prim "abc"                 "ProofScript ()"
-    (pureVal w4_abc_smtlib2)
+    (pureVal w4_abc_verilog)
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
@@ -1535,7 +1535,7 @@ primitives = Map.fromList
 
   , prim "w4_abc_smtlib2"        "ProofScript ()"
     (pureVal w4_abc_smtlib2)
-    Experimental
+    Current
     [ "Use the ABC theorem prover as an external process to prove the"
     , "current goal, with SMT-Lib2 as an interchange format, generated"
     , "using the What4 backend."
@@ -1543,7 +1543,7 @@ primitives = Map.fromList
 
   , prim "w4_abc_verilog"        "ProofScript ()"
     (pureVal w4_abc_verilog)
-    Experimental
+    Current
     [ "Use the ABC theorem prover as an external process to prove the"
     , "current goal, with Verilog as an interchange format, generated"
     , "using the What4 backend."
