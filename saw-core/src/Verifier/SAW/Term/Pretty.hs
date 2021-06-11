@@ -539,10 +539,6 @@ shouldMemoizeTerm t =
     FTermF Primitive{} -> False
     FTermF UnitValue -> False
     FTermF UnitType -> False
-    FTermF (PairValue e e') -> (shouldMemoizeTerm e || shouldMemoizeTerm e')
-    FTermF (PairLeft e) -> shouldMemoizeTerm e
-    FTermF (PairRight e) -> shouldMemoizeTerm e
- 
     FTermF (CtorApp _ [] []) -> False
     FTermF (DataTypeApp _ [] []) -> False
     FTermF Sort{} -> False
