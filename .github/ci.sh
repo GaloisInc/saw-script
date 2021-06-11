@@ -61,8 +61,8 @@ install_z3() {
   curl -o z3.zip -sL "https://github.com/Z3Prover/z3/releases/download/z3-$Z3_VERSION/z3-$Z3_VERSION-x64-$file"
 
   if $IS_WIN; then 7z x -bd z3.zip; else unzip z3.zip; fi
-  cp z3-*/bin/z3$EXT "$BIN/z3$EXT"
-  $IS_WIN || chmod +x "$BIN/z3"
+  cp z3-*/bin/z3$EXT $BIN/z3$EXT
+  $IS_WIN || chmod +x $BIN/z3
   rm z3.zip
 }
 
@@ -105,15 +105,6 @@ install_yices() {
   rm -rf "yices$ext" "yices-$YICES_VERSION"
 }
 
-install_yasm() {
-  is_exe "$BIN" "yasm" && return
-  if [[ "$RUNNER_OS" = "Linux" ]]; then
-    sudo apt-get update -q && sudo apt-get install -y yasm
-  else
-    brew install yasm
-  fi
-}
-
 build() {
   ghc_ver="$(ghc --numeric-version)"
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
@@ -132,9 +123,9 @@ build() {
     if [[ "$RUNNER_OS" == "macOS" ]]; then
       echo "Working around a dylib issue on macos by removing the cache and trying again"
       cabal v2-clean
-      retry cabal v2-build "$@" saw jss
+      retry cabal v2-build "$@" "${pkgs[@]}"
     else
-      exit 1
+      return 1
     fi
   fi
 }
@@ -148,8 +139,8 @@ build_abc() {
   esac
   (cd deps/abcBridge &&
     scripts/build-abc.sh $arch $os &&
-    cp abc-build/abc "$BIN/abc")
-  output path "$BIN/abc"
+    cp abc-build/abc $BIN/abc)
+  output path $BIN/abc
 }
 
 install_system_deps() {

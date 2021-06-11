@@ -62,13 +62,13 @@ jobs:
             cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}
 
       - shell: bash
-        run: .github/ci-heapster.sh build_abc
+        run: .github/ci.sh build_abc
 
       - shell: bash
-        run: .github/ci-heapster.sh build
+        run: .github/ci.sh build
 
       - shell: bash
-        run: .github/ci-heapster.sh setup_dist_bins
+        run: .github/ci.sh setup_dist_bins
 
       - run: git submodule update --init deps/saw-core-coq
       - name: Build deps/saw-core-coq/coq
@@ -79,7 +79,7 @@ jobs:
           make -j2
 
       - shell: bash
-        run: .github/ci-heapster.sh install_system_deps
+        run: .github/ci.sh install_system_deps
         env:
           Z3_VERSION: "4.8.8"
           CVC4_VERSION: "4.1.8"
