@@ -35,8 +35,8 @@ proveUnintSBV ::
   TopLevel (Maybe CEX, SolverStats)
     -- ^ (example/counter-example, solver statistics)
 proveUnintSBV conf unintSet timeout goal =
-  getSharedContext >>= \sc ->
-  io $ proveUnintSBVIO sc conf unintSet timeout goal
+  do sc <- getSharedContext
+     io $ proveUnintSBVIO sc conf unintSet timeout goal
 
 proveUnintSBVIO ::
   SharedContext ->

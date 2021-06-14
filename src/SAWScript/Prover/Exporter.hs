@@ -162,8 +162,9 @@ withABCVerilog baseName t buildCmd =
 -- file.
 writeAIG_SATviaVerilog :: FilePath -> SATQuery -> TopLevel ()
 writeAIG_SATviaVerilog f query =
-  getSharedContext >>= \sc ->
-  writeAIGviaVerilog f =<< liftIO (satQueryAsTerm sc query)
+  do sc <- getSharedContext
+     t <- liftIO (satQueryAsTerm sc query)
+     writeAIGviaVerilog f t
 
 -- | Write a @Term@ representing a an arbitrary function to an AIG file
 -- by using ABC to convert a Verilog file.
@@ -176,8 +177,9 @@ writeAIGviaVerilog aigFile t =
 -- file.
 writeCNF_SATviaVerilog :: FilePath -> SATQuery -> TopLevel ()
 writeCNF_SATviaVerilog f query =
-  getSharedContext >>= \sc ->
-  writeCNFviaVerilog f =<< liftIO (satQueryAsTerm sc query)
+  do sc <- getSharedContext
+     t <- liftIO (satQueryAsTerm sc query)
+     writeCNFviaVerilog f t
 
 -- | Write a @Term@ representing a an arbitrary function to a CNF file
 -- by using ABC to convert a Verilog file.
