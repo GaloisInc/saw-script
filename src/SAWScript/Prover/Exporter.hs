@@ -47,7 +47,6 @@ import Data.Foldable(toList)
 
 import Control.Monad (unless)
 import Control.Monad.Except (runExceptT)
-import Control.Monad.IO.Class (liftIO, MonadIO)
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
 import Data.Parameterized.Nonce (globalNonceGenerator)
@@ -121,8 +120,7 @@ proveWithPropExporter ::
   Prop ->
   TopLevel SolverStats
 proveWithPropExporter exporter path goal =
-  do sc <- getSharedContext
-     _ <- exporter path goal
+  do _ <- exporter path goal
      let stats = solverStats ("offline: "++ path) (propSize goal)
      return stats
 
@@ -149,10 +147,10 @@ writeAIG f t = do
 
 withABCVerilog :: FilePath -> Term -> (FilePath -> String) -> TopLevel ()
 withABCVerilog baseName t buildCmd =
-  do verilogFile <- liftIO $ emptySystemTempFile (baseName ++ ".v")
+  do verilogFile <- io $ emptySystemTempFile (baseName ++ ".v")
      sc <- getSharedContext
      write_verilog sc verilogFile t
-     liftIO $
+     io $
        do (out, err) <- readProcessExitIfFailure "abc" ["-q", buildCmd verilogFile]
           unless (null out) $ putStrLn "ABC output:" >> putStrLn out
           unless (null err) $ putStrLn "ABC errors:" >> putStrLn err
@@ -163,7 +161,7 @@ withABCVerilog baseName t buildCmd =
 writeAIG_SATviaVerilog :: FilePath -> SATQuery -> TopLevel ()
 writeAIG_SATviaVerilog f query =
   do sc <- getSharedContext
-     t <- liftIO (satQueryAsTerm sc query)
+     t <- io (satQueryAsTerm sc query)
      writeAIGviaVerilog f t
 
 -- | Write a @Term@ representing a an arbitrary function to an AIG file
@@ -178,7 +176,7 @@ writeAIGviaVerilog aigFile t =
 writeCNF_SATviaVerilog :: FilePath -> SATQuery -> TopLevel ()
 writeCNF_SATviaVerilog f query =
   do sc <- getSharedContext
-     t <- liftIO (satQueryAsTerm sc query)
+     t <- io (satQueryAsTerm sc query)
      writeCNFviaVerilog f t
 
 -- | Write a @Term@ representing a an arbitrary function to a CNF file
@@ -253,15 +251,14 @@ writeCNF f satq =
 
 write_cnf :: FilePath -> TypedTerm -> TopLevel ()
 write_cnf f (TypedTerm schema t) = do
-  liftIO $ checkBooleanSchema schema
-  AIGProxy proxy <- getProxy
+  io $ checkBooleanSchema schema
   sc <- getSharedContext
   satq <- io (predicateToSATQuery sc mempty t)
   writeCNF f satq
 
 write_cnf_external :: FilePath -> TypedTerm -> TopLevel ()
 write_cnf_external f (TypedTerm schema t) = do
-  liftIO $ checkBooleanSchema schema
+  io $ checkBooleanSchema schema
   writeCNFviaVerilog f t
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
@@ -312,7 +309,7 @@ write_verilog :: SharedContext -> FilePath -> Term -> TopLevel ()
 write_verilog sc path t = io $ writeVerilog sc path t
 
 writeVerilogSAT :: FilePath -> SATQuery -> TopLevel [(ExtCns Term, FiniteType)]
-writeVerilogSAT path satq = getSharedContext >>= \sc -> liftIO $
+writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
   do sym <- newSAWCoreBackend sc
      -- For SAT checking, we don't care what order the variables are in,
      -- but only that we can correctly keep track of the connection

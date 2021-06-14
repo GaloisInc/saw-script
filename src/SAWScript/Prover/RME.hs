@@ -5,7 +5,6 @@ import qualified Data.Map as Map
 
 import qualified Data.RME as RME
 
-import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
 
 import qualified Verifier.SAW.Simulator.RME as RME

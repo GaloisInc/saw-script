@@ -11,7 +11,6 @@ import System.Directory
 import           Data.Maybe
 import           Data.Set ( Set )
 import           Control.Monad
-import           Control.Monad.IO.Class
 
 import qualified Data.SBV.Dynamic as SBV
 import qualified Data.SBV.Internals as SBV
