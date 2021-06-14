@@ -1,5 +1,6 @@
 module SAWScript.Prover.ABC
   ( proveABC
+  , w4AbcAIGER
   , w4AbcVerilog
   , abcSatExternal
   ) where
@@ -23,6 +24,7 @@ import qualified Data.AIG as AIG
 
 import           Verifier.SAW.FiniteValue
 import           Verifier.SAW.Name
+import           Verifier.SAW.SATQuery
 import           Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
@@ -30,6 +32,7 @@ import SAWScript.Proof(Prop, propToSATQuery, propSize, goalProp, ProofGoal, goal
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import qualified SAWScript.Prover.Exporter as Exporter
 import SAWScript.Prover.Util (liftCexBB, liftLECexBB)
+import SAWScript.Value
 
 -- crucible-jvm
 -- TODO, very weird import
@@ -40,10 +43,9 @@ import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 proveABC ::
   (AIG.IsAIG l g) =>
   AIG.Proxy l g ->
-  SharedContext ->
   Prop ->
-  IO (Maybe CEX, SolverStats)
-proveABC proxy sc goal =
+  TopLevel (Maybe CEX, SolverStats)
+proveABC proxy goal = getSharedContext >>= \sc -> liftIO $
   do satq <- propToSATQuery sc mempty goal
      BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \be lit shapes ->
        do let (ecs,fts) = unzip shapes
@@ -77,29 +79,50 @@ getModel argNames shapes satRes =
     AIG.SatUnknown -> fail "Unknown result from ABC"
 
 
-w4AbcVerilog :: MonadIO m =>
+w4AbcVerilog ::
   Set VarIndex ->
-  SharedContext ->
   Bool ->
   Prop ->
-  m (Maybe CEX, SolverStats)
-w4AbcVerilog unints sc _hashcons goal = liftIO $
+  TopLevel (Maybe CEX, SolverStats)
+w4AbcVerilog = w4AbcExternal Exporter.writeVerilogSAT cmd
+  where cmd tmp tmpCex = "%read " ++ tmp ++
+                         "; %blast; &sweep -C 5000; &syn4; &cec -m; write_aiger_cex " ++
+                         tmpCex
+
+w4AbcAIGER ::
+  Set VarIndex ->
+  Bool ->
+  Prop ->
+  TopLevel (Maybe CEX, SolverStats)
+w4AbcAIGER =
+  do w4AbcExternal Exporter.writeAIG_SAT cmd
+  where cmd tmp tmpCex = "read_aiger " ++ tmp ++ "; sat; write_cex " ++ tmpCex
+
+w4AbcExternal ::
+  (FilePath -> SATQuery -> TopLevel [(ExtCns Term, FiniteType)]) ->
+  (String -> String -> String) ->
+  Set VarIndex ->
+  Bool ->
+  Prop ->
+  TopLevel (Maybe CEX, SolverStats)
+w4AbcExternal exporter argFn unints _hashcons goal =
        -- Create temporary files
     do let tpl = "abc_verilog.v"
            tplCex = "abc_verilog.cex"
-       tmp <- emptySystemTempFile tpl
-       tmpCex <- emptySystemTempFile tplCex
+       sc <- getSharedContext
+       tmp <- liftIO $ emptySystemTempFile tpl
+       tmpCex <- liftIO $ emptySystemTempFile tplCex
 
-       satq <- propToSATQuery sc unints goal
-       (argNames, argTys) <- Exporter.writeVerilogSAT sc tmp satq
+       satq <- liftIO $ propToSATQuery sc unints goal
+       (argNames, argTys) <- unzip <$> exporter tmp satq
 
        -- Run ABC and remove temporaries
        let execName = "abc"
-           args = ["-q", "%read " ++ tmp ++"; %blast; &sweep -C 5000; &syn4; &cec -m; write_aiger_cex " ++ tmpCex]
-       (_out, _err) <- readProcessExitIfFailure execName args
-       cexText <- readFile tmpCex
-       removeFile tmp
-       removeFile tmpCex
+           args = ["-q", argFn tmp tmpCex]
+       (_out, _err) <- liftIO $ readProcessExitIfFailure execName args
+       cexText <- liftIO $ readFile tmpCex
+       liftIO $ removeFile tmp
+       liftIO $ removeFile tmpCex
 
        -- Parse and report results
        let stats = solverStats "abc_verilog" (propSize goal)
@@ -115,6 +138,12 @@ w4AbcVerilog unints sc _hashcons goal = liftIO $
 parseAigerCex :: String -> IO [Bool]
 parseAigerCex text =
   case lines text of
+    -- Output from `write_cex`
+    [cex] ->
+      case words cex of
+        [bits] -> mapM bitToBool (reverse bits)
+        _ -> fail $ "invalid counterexample line: " ++ cex
+    -- Output from `write_aiger_cex`
     [_, cex] ->
       case words cex of
         [bits, _] -> mapM bitToBool bits

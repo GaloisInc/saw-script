@@ -975,7 +975,7 @@ primitives = Map.fromList
     ]
 
   , prim "dsec_print"                "Term -> Term -> TopLevel ()"
-    (scVal dsecPrint)
+    (pureVal dsecPrint)
     Current
     [ "Use ABC's 'dsec' command to compare two terms as SAIGs."
     , "The terms must have a type as described in ':help write_saig',"
@@ -1011,7 +1011,7 @@ primitives = Map.fromList
     ]
 
   , prim "write_aig_external"  "String -> Term -> TopLevel ()"
-    (scVal writeAIGviaVerilog)
+    (pureVal writeAIGviaVerilog)
     Current
     [ "Write out a representation of a term in binary AIGER format. The"
     , "term must be representable as a function from a finite number of"
@@ -1049,22 +1049,22 @@ primitives = Map.fromList
     ]
 
   , prim "write_cnf"           "String -> Term -> TopLevel ()"
-    (scVal write_cnf)
+    (pureVal write_cnf)
     Current
     [ "Write the given term to the named file in CNF format." ]
 
   , prim "write_cnf_external"  "String -> Term -> TopLevel ()"
-    (scVal write_cnf_external)
+    (pureVal write_cnf_external)
     Current
     [ "Write the given term to the named file in CNF format." ]
 
   , prim "write_smtlib2"       "String -> Term -> TopLevel ()"
-    (scVal write_smtlib2)
+    (pureVal write_smtlib2)
     Current
     [ "Write the given term to the named file in SMT-Lib version 2 format." ]
 
   , prim "write_smtlib2_w4"    "String -> Term -> TopLevel ()"
-    (scVal write_smtlib2_w4)
+    (pureVal write_smtlib2_w4)
     Current
     [ "Write the given term to the named file in SMT-Lib version 2 format,"
     , "using the What4 backend instead of the SBV backend."
@@ -1327,7 +1327,7 @@ primitives = Map.fromList
     ]
 
   , prim "abc"                 "ProofScript ()"
-    (pureVal w4_abc_verilog)
+    (pureVal w4_abc_aiger)
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
@@ -1531,6 +1531,14 @@ primitives = Map.fromList
     Current
     [ "Prove the current goal using What4 (CVC4 backend). Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
+    ]
+
+  , prim "w4_abc_aiger"        "ProofScript ()"
+    (pureVal w4_abc_aiger)
+    Current
+    [ "Use the ABC theorem prover as an external process to prove the"
+    , "current goal, with AIGER as an interchange format, generated"
+    , "using the What4 backend."
     ]
 
   , prim "w4_abc_smtlib2"        "ProofScript ()"

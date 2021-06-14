@@ -1,5 +1,6 @@
 module SAWScript.Prover.RME where
 
+import Control.Monad.IO.Class
 import qualified Data.Map as Map
 
 import qualified Data.RME as RME
@@ -12,13 +13,13 @@ import qualified Verifier.SAW.Simulator.RME as RME
 import SAWScript.Proof(Prop, propToSATQuery, propSize, CEX)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
+import SAWScript.Value
 
 -- | Bit-blast a proposition and check its validity using RME.
 proveRME ::
-  SharedContext {- ^ Context for working with terms -} ->
   Prop          {- ^ A proposition to be proved -} ->
-  IO (Maybe CEX, SolverStats)
-proveRME sc goal =
+  TopLevel (Maybe CEX, SolverStats)
+proveRME goal = getSharedContext >>= \sc -> liftIO $
   do satq <- propToSATQuery sc mempty goal
      RME.withBitBlastedSATQuery sc Map.empty satq $ \lit shapes ->
        let stats = solverStats "RME" (propSize goal)

@@ -1,5 +1,6 @@
 module SAWScript.Prover.SBV
   ( proveUnintSBV
+  , proveUnintSBVIO
   , SBV.SMTConfig
   , SBV.z3, SBV.cvc4, SBV.yices, SBV.mathSAT, SBV.boolector
   , prepNegatedSBV
@@ -10,6 +11,7 @@ import System.Directory
 import           Data.Maybe
 import           Data.Set ( Set )
 import           Control.Monad
+import           Control.Monad.IO.Class
 
 import qualified Data.SBV.Dynamic as SBV
 import qualified Data.SBV.Internals as SBV
@@ -20,6 +22,7 @@ import Verifier.SAW.SharedTerm
 
 import SAWScript.Proof(Prop, propSize, propToSATQuery, CEX)
 import SAWScript.Prover.SolverStats
+import SAWScript.Value
 
 -- | Bit-blast a proposition and check its validity using SBV.
 -- Constants with names in @unints@ are kept as uninterpreted
@@ -28,11 +31,22 @@ proveUnintSBV ::
   SBV.SMTConfig {- ^ SBV configuration -} ->
   Set VarIndex  {- ^ Uninterpreted functions -} ->
   Maybe Integer {- ^ Timeout in milliseconds -} ->
-  SharedContext {- ^ Context for working with terms -} ->
+  Prop          {- ^ A proposition to be proved -} ->
+  TopLevel (Maybe CEX, SolverStats)
+    -- ^ (example/counter-example, solver statistics)
+proveUnintSBV conf unintSet timeout goal =
+  getSharedContext >>= \sc ->
+  io $ proveUnintSBVIO sc conf unintSet timeout goal
+
+proveUnintSBVIO ::
+  SharedContext ->
+  SBV.SMTConfig {- ^ SBV configuration -} ->
+  Set VarIndex  {- ^ Uninterpreted functions -} ->
+  Maybe Integer {- ^ Timeout in milliseconds -} ->
   Prop          {- ^ A proposition to be proved -} ->
   IO (Maybe CEX, SolverStats)
     -- ^ (example/counter-example, solver statistics)
-proveUnintSBV conf unintSet timeout sc goal =
+proveUnintSBVIO sc conf unintSet timeout goal =
   do p <- findExecutable . SBV.executable $ SBV.solver conf
      unless (isJust p) . fail $ mconcat
        [ "Unable to locate the executable \""
