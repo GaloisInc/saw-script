@@ -101,6 +101,6 @@ let main : TopLevel () = do {
     s20encrypt_65 <- llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 65) yices;
 
     djb    <- llvm_load_module "djb/salsa20.bc";
-    s20djb <- llvm_verify djb "salsa20_wordtobyte" [] false salsa20_djb_setup     abc;
+    s20djb <- llvm_verify djb "salsa20_wordtobyte" [] false salsa20_djb_setup     w4_abc_verilog;
     print "Done!";
 };
