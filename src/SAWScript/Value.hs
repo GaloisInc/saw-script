@@ -343,7 +343,7 @@ evaluate sc t =
 evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
 evaluateTypedTerm sc (TypedTerm (TypedTermSchema schema) trm) =
   C.runEval mempty . exportValueWithSchema schema =<< evaluate sc trm
-evaluateTypedTerm sc (TypedTerm tp _) =
+evaluateTypedTerm _sc (TypedTerm tp _) =
   fail $ unlines [ "Could not evaluate term with type"
                  , show (CMS.ppTypedTermType tp)
                  ]
