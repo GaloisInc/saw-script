@@ -19,7 +19,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -yq \
 RUN curl https://i.jpillora.com/chisel! | bash
 
 # Install GHC
-ARG GHCVER="8.10.3"
+ARG GHCVER="8.6.5"
 ENV GHCUP_INSTALL_BASE_PREFIX=/opt \
     PATH=/opt/.ghcup/bin:$PATH
 RUN curl -o /usr/local/bin/ghcup "https://downloads.haskell.org/~ghcup/0.1.14/x86_64-linux-ghcup-0.1.14" && \
