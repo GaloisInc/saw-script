@@ -54,7 +54,10 @@ import Data.Functor.Product
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
+#if !MIN_VERSION_base(4,11,0)
+-- Control.Monad.Fail import is redundant since GHC 8.8.1
 import qualified Control.Monad.Fail as Fail
+#endif
 import System.Directory
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.UTF8 as BL
@@ -117,6 +120,8 @@ import Prettyprinter
 -- failOnLeft :: (MonadFail m, Show err) => String -> Either err a -> m a
 -- failOnLeft action (Left err) = Fail.fail ("Error" ++ action ++ ": " ++ show err)
 -- failOnLeft _ (Right a) = return a
+
+instance MonadFail
 
 -- | Extract out the contents of the 'Just' of a 'Maybe' wrapped in a
 -- `MonadFail`, calling 'fail' on the given string if the `Maybe` is a

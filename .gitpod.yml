@@ -1,0 +1,49 @@
+image:
+  file: .gitpod.Dockerfile
+vscode:
+  extensions:
+    - haskell.haskell
+    - justusadam.language-haskell
+tasks:
+  - name: TCP Tunnel
+    command: chisel server --socks5
+  - name: SSH Server
+    command: |
+      [ -f /workspace/dropbear.hostkey ] || dropbearkey -t rsa -f /workspace/dropbear.hostkey
+      dropbear -r /workspace/dropbear.hostkey -F -E -s -p 2222 -P ~/dropbear.pid
+  - command: |
+      cabal v2-update
+      test -e cabal.project.freeze && exit 0
+      FREEZE=cabal.GHC-$(ghc --numeric-version).config
+      test -e $FREEZE && ln -s $FREEZE cabal.project.freeze
+  - command: |
+      ssh-keygen -q -t rsa -N '' -f ~/.ssh/id_rsa
+      echo
+      SSH_KEY=~/.ssh/id_rsa.$(basename $(gp url))
+      echo "Paste the below script into your local shell to connect."
+      echo "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
+      echo
+      echo "cat <<EOF >$SSH_KEY"
+      cat ~/.ssh/id_rsa
+      echo "EOF"
+      if test -z "$SSH_PUBKEY"; then
+          echo "SSH_PUBKEY not set, skipping ~/.ssh/authorized_keys update"
+      else
+          echo "$SSH_PUBKEY" >> ~/.ssh/authorized_keys
+      fi
+
+      echo "curl https://i.jpillora.com/chisel! | bash"
+      echo "ssh \\"
+      echo "  -o ProxyCommand='chisel client $(gp url 8080) stdio:%h:%p' \\"
+      echo "  gitpod@localhost -p 2222"
+      echo
+      echo "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+      echo "Paste the above script into your local shell to connect."
+ports:
+  - port: 8080
+  - port: 2222
+    onOpen: ignore
+  - port: 2375
+    onOpen: ignore
+  - port: 43022
+    onOpen: ignore
