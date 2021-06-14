@@ -128,25 +128,25 @@ w4AbcExternal exporter argFn unints _hashcons goal =
        let stats = solverStats "abc_verilog" (propSize goal)
        res <- if all isSpace cexText
               then return Nothing
-              else do bits <- parseAigerCex cexText
-                      case liftLECexBB argTys bits of
+              else do cex <- liftIO $ parseAigerCex cexText argTys
+                      case cex of
                         Left parseErr -> fail parseErr
                         Right vs -> return $ Just model
                           where model = zip argNames (map toFirstOrderValue vs)
        return (res, stats)
 
-parseAigerCex :: String -> IO [Bool]
-parseAigerCex text =
+parseAigerCex :: String -> [FiniteType] -> IO (Either String [FiniteValue])
+parseAigerCex text tys =
   case lines text of
     -- Output from `write_cex`
     [cex] ->
       case words cex of
-        [bits] -> mapM bitToBool (reverse bits)
+        [bits] -> liftCexBB tys <$> mapM bitToBool bits
         _ -> fail $ "invalid counterexample line: " ++ cex
     -- Output from `write_aiger_cex`
     [_, cex] ->
       case words cex of
-        [bits, _] -> mapM bitToBool bits
+        [bits, _] -> liftLECexBB tys <$> mapM bitToBool bits
         _ -> fail $ "invalid counterexample line: " ++ cex
     _ -> fail $ "invalid counterexample text: " ++ text
   where
