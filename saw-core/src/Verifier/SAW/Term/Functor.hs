@@ -168,7 +168,7 @@ data FlatTermF e
   | RecursorType !(PrimName e) ![e] !e !e
 
     -- | A recursor, which is specified by giving the datatype name,
-    --   the parameters to the datatype, a motive and elimiation functions
+    --   the parameters to the datatype, a motive and elimination functions
     --   for each constructor. A recursor can be used with the special
     --   @RecursorApp@ term, which provides the datatype indices and
     --   actual argument to the eliminator.

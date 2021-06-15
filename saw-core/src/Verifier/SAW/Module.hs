@@ -155,7 +155,7 @@ data Ctor =
        Map VarIndex Term {- ^ constructor eliminators -} ->
        [Term] {- ^ constructor arguments -} ->
        IO Term
-    -- ^ Cached functon for computing the result of one step of iota
+    -- ^ Cached function for computing the result of one step of iota
     --   reduction of the term
     --
     -- > RecursorApp rec ixs (c params args)

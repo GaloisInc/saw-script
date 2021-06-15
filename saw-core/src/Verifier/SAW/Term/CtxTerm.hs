@@ -72,8 +72,6 @@ module Verifier.SAW.Term.CtxTerm
   ) where
 
 import Data.Kind(Type)
---import Data.Map (Map)
---import qualified Data.Map as Map
 import Data.Proxy
 import Data.Type.Equality
 import Control.Monad
