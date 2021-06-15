@@ -65,7 +65,8 @@ module Verifier.SAW.Term.CtxTerm
   , CtorArg(..), CtorArgStruct(..), ctxCtorArgType, ctxCtorType
     -- * Computing with Eliminators
   , mkPRetTp
-  , ctxCtorElimType, mkCtorElimTypeFun, ctxReduceRecursor
+  , ctxCtorElimType, mkCtorElimTypeFun
+  , ctxReduceRecursor
     -- * Parsing and Building Constructor Types
   , mkCtorArgStruct
   ) where
@@ -94,7 +95,8 @@ data Typ (a :: Type)
 -- | An identifier for a datatype that is statically associated with Haskell
 -- type @d@. Again, we cannot capture all of the SAW type system in Haskell, so
 -- we simplify datatypes to arbitrary Haskell types.
-newtype DataIdent d = DataIdent Ident
+newtype DataIdent d = DataIdent (PrimName Term)
+  -- Invariant, the type of datatypes is always a closed term
 
 -- | Append a list of types to a context, i.e., "invert" the list of types,
 -- putting the last type on the "outside", and append it. The way to think of
@@ -349,6 +351,7 @@ splitCtxTermsCtx (InvBind ctx _ _) (CtxTermsCtxCons ts t) =
 class Monad m => MonadTerm m where
   mkTermF :: TermF Term -> m Term
   liftTerm :: DeBruijnIndex -> DeBruijnIndex -> Term -> m Term
+  whnfTerm :: Term -> m Term
   substTerm :: DeBruijnIndex -> [Term] -> Term -> m Term
                -- ^ NOTE: the first term in the list is substituted for the most
                -- recently-bound variable, i.e., deBruijn index 0
@@ -502,8 +505,11 @@ ctxAsPiMulti (ctxAsPi -> Just (CtxPi x tp body)) =
 ctxAsPiMulti t = CtxMultiPi NoBind t
 
 -- | Build an application of a datatype as a 'CtxTerm'
-ctxDataTypeM :: MonadTerm m => DataIdent d -> m (CtxTermsCtx ctx params) ->
-                m (CtxTermsCtx ctx ixs) -> m (CtxTerm ctx (Typ d))
+ctxDataTypeM :: MonadTerm m =>
+  DataIdent d ->
+  m (CtxTermsCtx ctx params) ->
+  m (CtxTermsCtx ctx ixs) ->
+  m (CtxTerm ctx (Typ d))
 ctxDataTypeM (DataIdent d) paramsM ixsM =
   CtxTerm <$>
   (mkFlatTermF =<<
@@ -528,29 +534,31 @@ ctxAsDataTypeApp _ _ _ _ = Nothing
 
 
 -- | Build an application of a constructor as a 'CtxTerm'
-ctxCtorAppM :: MonadTerm m => DataIdent d -> Ident ->
-               m (CtxTermsCtx ctx params) ->
-               m (CtxTermsCtx ctx args) -> m (CtxTerm ctx d)
+ctxCtorAppM :: MonadTerm m =>
+  DataIdent d ->
+  PrimName Term ->
+  m (CtxTermsCtx ctx params) ->
+  m (CtxTermsCtx ctx args) ->
+  m (CtxTerm ctx d)
 ctxCtorAppM _d c paramsM argsM =
   CtxTerm <$>
   (mkFlatTermF =<<
    (CtorApp c <$> (ctxTermsCtxToListUnsafe <$> paramsM) <*>
     (ctxTermsCtxToListUnsafe <$> argsM)))
 
--- | Build an application of a recursor as a 'CtxTerm'
-ctxRecursorAppM :: MonadTerm m => Ident -> m (CtxTermsCtx ctx params) ->
-                   m (CtxTerm ctx p_ret) -> m [(Ident, CtxTerm ctx elim)] ->
-                   m (CtxTermsCtx ctx ixs) -> m (CtxTerm ctx arg) ->
-                   m (CtxTerm ctx a)
-ctxRecursorAppM d paramsM pretM cs_fsM ixsM argM =
-  CtxTerm <$>
-  (mkFlatTermF =<<
-   (RecursorApp d <$> (ctxTermsCtxToListUnsafe <$> paramsM) <*>
-    (unCtxTermUnsafe <$> pretM) <*>
-    (map (\(c,f) -> (c, unCtxTermUnsafe f)) <$> cs_fsM) <*>
-    (ctxTermsCtxToListUnsafe <$> ixsM) <*>
-    (unCtxTermUnsafe <$> argM)))
+data Rec d
 
+ctxRecursorAppM :: MonadTerm m =>
+  m (CtxTerm ctx (Rec d)) ->
+  m (CtxTermsCtx ctx ixs) ->
+  m (CtxTerm ctx d) ->
+  m (CtxTerm ctx a)
+ctxRecursorAppM recM ixsM argM =
+  do app <- RecursorApp <$>
+              (unCtxTermUnsafe <$> recM) <*>
+              (ctxTermsCtxToListUnsafe <$> ixsM) <*>
+              (unCtxTermUnsafe <$> argM)
+     CtxTerm <$> mkFlatTermF app
 
 --
 -- * Generalized Lifting and Substitution
@@ -680,7 +688,8 @@ data CtorArg d ixs ctx a where
   -- parameters of @d@ (not given here), and the @ei@ are the type indices of
   -- @d@.
   RecursiveArg ::
-    Bindings CtxTerm ctx zs -> CtxTerms (CtxInvApp ctx zs) ixs ->
+    Bindings CtxTerm ctx zs ->
+    CtxTerms (CtxInvApp ctx zs) ixs ->
     CtorArg d ixs ctx (Typ (Arrows zs d))
 
 -- | A structure that defines the parameters, arguments, and return type indices
@@ -694,6 +703,7 @@ data CtorArgStruct d params ixs =
     ctorIndices :: CtxTerms (CtxInvApp (CtxInv params) args) ixs,
     dataTypeIndices :: Bindings CtxTerm (CtxInv params) ixs
   }
+
 
 -- | Convert a 'CtorArg' into the type that it represents, given a context of
 -- the parameters and of the previous arguments
@@ -722,7 +732,7 @@ ctxCtorArgBindings d params prevs (Bind x arg args) =
 
 -- | Compute the type of a constructor from the name of its datatype and its
 -- 'CtorArgStruct'
-ctxCtorType :: MonadTerm m => Ident -> CtorArgStruct d params ixs -> m Term
+ctxCtorType :: MonadTerm m => PrimName Term -> CtorArgStruct d params ixs -> m Term
 ctxCtorType d (CtorArgStruct{..}) =
   elimClosedTerm <$>
   (ctxPi ctorParams $ \params ->
@@ -759,9 +769,13 @@ ctxPRetTp (_ :: Proxy (Typ a)) (d :: DataIdent d) params ixs s =
 
 -- | Like 'ctxPRetTp', but also take in a list of parameters and substitute them
 -- for the parameter variables returned by that function
-mkPRetTp ::
-  MonadTerm m => Ident -> [(LocalName, Term)] -> [(LocalName, Term)] ->
-  [Term] -> Sort -> m Term
+mkPRetTp :: MonadTerm m =>
+  PrimName Term ->
+  [(LocalName, Term)] ->
+  [(LocalName, Term)] ->
+  [Term] ->
+  Sort ->
+  m Term
 mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =
   case ctxBindingsOfTerms untyped_p_ctx of
     ExistsTp p_ctx ->
@@ -807,10 +821,12 @@ mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =
 -- since it depends on fields of the 'CtorArgStruct', so, instead, the result is
 -- just casted to whatever type the caller specifies.
 ctxCtorElimType :: MonadTerm m =>
-                   Proxy (Typ ret) -> Proxy (Typ a) -> DataIdent d -> Ident ->
-                   CtorArgStruct d params ixs ->
-                   m (CtxTerm (CtxInv params ::>
-                               (Arrows ixs (d -> Typ a))) (Typ ret))
+  Proxy (Typ ret) ->
+  Proxy (Typ a) ->
+  DataIdent d ->
+  PrimName Term ->
+  CtorArgStruct d params ixs ->
+  m (CtxTerm (CtxInv params ::>(Arrows ixs (d -> Typ a))) (Typ ret))
 ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
   (CtorArgStruct{..}) =
   (do let params = invertBindings ctorParams
@@ -836,15 +852,14 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
   -- Note that, technically, this function also takes in recursive calls, so has
   -- a slightly richer type, but we are not going to try to compute this richer
   -- type in Haskell land.
-  helper :: MonadTerm m => Proxy (Typ a) -> DataIdent d ->
-            InvBindings CtxTerm EmptyCtx (ps ::> Arrows ixs (d -> Typ a)) ->
-            InvBindings CtxTerm (ps ::> Arrows ixs (d -> Typ a)) prevs ->
-            Bindings (CtorArg d ixs) ((ps ::>
-                                       Arrows ixs (d -> Typ a)) <+> prevs) args ->
-            CtxTerms (CtxInvApp ((ps ::> Arrows ixs (d -> Typ a)) <+>
-                                 prevs) args) ixs ->
-            m (CtxTerm ((ps ::> Arrows ixs (d -> Typ a)) <+> prevs)
-               (Typ (Arrows args a)))
+  helper :: MonadTerm m =>
+    Proxy (Typ a) ->
+    DataIdent d ->
+    InvBindings CtxTerm EmptyCtx (ps ::> Arrows ixs (d -> Typ a)) ->
+    InvBindings CtxTerm (ps ::> Arrows ixs (d -> Typ a)) prevs ->
+    Bindings (CtorArg d ixs) ((ps ::> Arrows ixs (d -> Typ a)) <+> prevs) args ->
+    CtxTerms (CtxInvApp ((ps ::> Arrows ixs (d -> Typ a)) <+> prevs) args) ixs ->
+    m (CtxTerm ((ps ::> Arrows ixs (d -> Typ a)) <+> prevs) (Typ (Arrows args a)))
   helper _a d params_pret prevs NoBind ret_ixs =
     -- If we are finished with our arguments, construct the final result type
     -- (p_ret ret_ixs (c params prevs))
@@ -906,17 +921,17 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
 -- for the given constructor. We return the substitution function in the monad
 -- so that we only call 'ctxCtorElimType' once but can call the function many
 -- times, in order to amortize the overhead of 'ctxCtorElimType'.
---
--- NOTE: Because this function is defined *before* the @SharedTerm@ module, it
--- cannot call the normalization function @scWHNF@ defined in that module, and
--- so the terms return by the function it generates are not normalized.
-mkCtorElimTypeFun :: MonadTerm m => Ident -> Ident ->
-                     CtorArgStruct d params ixs -> m ([Term] -> Term -> m Term)
+mkCtorElimTypeFun :: MonadTerm m =>
+  PrimName Term {- ^ data type -} ->
+  PrimName Term {- ^ constructor type -} ->
+  CtorArgStruct d params ixs ->
+  m ([Term] -> Term -> m Term)
 mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
   do ctxElimType <- ctxCtorElimType Proxy Proxy (DataIdent d) c argStruct
      case ctxAppNilEq (invertBindings ctorParams) of
        Refl ->
          return $ \params p_ret ->
+         whnfTerm =<<
          case ctxTermsForBindings ctorParams params of
            Nothing -> error "ctorElimTypeFun: wrong number of parameters!"
            Just paramsCtx ->
@@ -926,83 +941,108 @@ mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
              InvNoBind NoBind ctxElimType
 
 
--- | Reduce an application of a recursor. This is known in the Coq literature as
--- an iota reduction. More specifically, the call
+-- | Reduce an application of a recursor to a particular constructor.
+-- This is known in the Coq literature as an iota reduction. More specifically,
+-- the call
 --
--- > ctxReduceRecursor d [p1, .., pn] P [(c1,f1), .., (cm,fm)] ci [x1, .., xk]
+-- > ctxReduceRecursor rec f_c [x1, .., xk]
 --
--- reduces the term @(RecursorApp d ps P cs_fs ixs (CtorApp ci ps xs))@ to
+-- reduces the term @(RecursorApp rec ixs (CtorApp c ps xs))@ to
 --
--- > fi x1 (maybe rec_tm_1) .. xk (maybe rec_tm_k)
+-- > f_c x1 (maybe rec_tm_1) .. xk (maybe rec_tm_k)
 --
--- where @maybe rec_tm_i@ indicates an optional recursive call of the recursor
--- on one of the @xi@. These recursive calls only exist for those arguments @xi@
--- that are recursive arguments, i.e., that are specified with 'RecursiveArg',
--- and are omitted for non-recursive arguments specified by 'ConstArg'.
+-- where @f_c@ is the eliminator function associated to the constructor @c@ by the
+-- recursor value @rec@.  Here @maybe rec_tm_i@ indicates an optional recursive call
+-- of the recursor on one of the @xi@. These recursive calls only exist for those
+-- arguments @xi@ that are recursive arguments, i.e., that are specified with
+-- 'RecursiveArg', and are omitted for non-recursive arguments specified by 'ConstArg'.
 --
 -- Specifically, for a @'RecursiveArg' zs ixs@ argument @xi@, which has type
 -- @\(z1::Z1) -> .. -> d p1 .. pn ix1 .. ixp@, we build the recursive call
 --
--- > \(z1::[ps/params,xs/args]Z1) -> .. ->
--- >   RecursorApp d ps P cs_fs [ps/params,xs/args]ixs (xi z1 ... zn)
+-- > \(z1::[xs/args]Z1) -> .. ->
+-- >   RecursorApp rec [xs/args]ixs (xi z1 ... zn)
 --
--- where @[ps/params,xs/args]@ substitutes the concrete parameters @pi@ for the
--- parameter variables of the inductive type and the earlier constructor
--- arguments @xs@ for the remaining free variables.
-ctxReduceRecursor :: MonadTerm m => Ident -> [Term] -> Term ->
-                     [(Ident,Term)] -> Ident -> [Term] ->
-                     CtorArgStruct d params ixs -> m Term
-ctxReduceRecursor d params p_ret cs_fs c c_args (CtorArgStruct{..}) =
-  (case (invertCtxTerms <$> ctxTermsForBindings ctorParams params,
-         ctxTermsForBindings ctorArgs c_args,
-         ctxAppNilEq (invertBindings ctorParams)) of
-    (Just paramsCtx, Just argsCtx, Refl) ->
-      do let fi =
-                case lookup c cs_fs of
-                  Just f -> f
-                  Nothing ->
-                    error ("ctxReduceRecursor: eliminator missing for constructor "
-                           ++ show c)
-         args <- mk_args paramsCtx paramsCtx argsCtx ctorArgs
-         foldM (\f arg -> mkTermF $ App f arg) fi args
-    (Nothing, _, _) ->
-      error "ctxReduceRecursor: wrong number of parameters!"
-    (_, Nothing, _) ->
-      error "ctxReduceRecursor: wrong number of constructor arguments!"
-  )
-  where
-    mk_args :: (MonadTerm m, EmptyCtx <+> ctx ~ ctx) =>
-               CtxTermsCtx EmptyCtx params -> CtxTermsCtx EmptyCtx ctx ->
-               CtxTerms EmptyCtx args -> Bindings (CtorArg d ixs) ctx args ->
+-- where @[xs/args]@ substitutes the concrete values for the earlier
+-- constructor arguments @xs@ for the remaining free variables.
+
+ctxReduceRecursor :: forall m d params ixs.
+  MonadTerm m =>
+  Term {- ^ abstracted recursor -} ->
+  Term {- ^ constructor elimnator function -} ->
+  [Term] {- ^ constructor arguments -} ->
+  CtorArgStruct d params ixs {- ^ constructor formal argument descriptor -} ->
+  m Term
+ctxReduceRecursor rec elimf c_args CtorArgStruct{..} =
+  let inctx :: Term -> CtxTerm (CtxInv params) tp
+      inctx = CtxTerm
+   in
+  case ctxTermsForBindingsOpen ctorArgs c_args of
+     Just argsCtx ->
+       ctxReduceRecursor_ (inctx rec) (inctx elimf) argsCtx ctorArgs
+     Nothing ->
+       error "ctxReduceRecursorRaw: wrong number of constructor arguments!"
+
+
+-- | This operation does the real work of building the
+--   iota reduction for @ctxReduceRecursor@.  We assume
+--   the input terms we are given live in an ambient
+--   context @amb@.
+ctxReduceRecursor_ :: forall m amb d ixs elim args.
+  MonadTerm m =>
+  CtxTerm  amb (Rec d) {- ^ recursor value eliminatiting data type d -}->
+  CtxTerm  amb elim    {- ^ eliminator function for the constructor -} ->
+  CtxTerms amb args    {- ^ constructor actual arguments -} ->
+  Bindings (CtorArg d ixs) amb args
+    {- ^ telescope describing the constructor arguments -} ->
+  m Term
+ctxReduceRecursor_ rec fi args0 argCtx =
+  do args <- mk_args CtxTermsCtxNil args0 argCtx
+     whnfTerm =<< foldM (\f arg -> mkTermF $ App f arg) (unAmb fi) args
+
+ where
+   -- extract a raw term into the ambient context
+    unAmb :: forall tp. CtxTerm amb tp -> Term
+    unAmb (CtxTerm t) = t
+
+    mk_args :: forall ctx xs.
+               CtxTermsCtx amb ctx ->  -- already processed parameters/arguments
+               CtxTerms    amb xs ->   -- remaining actual arguments to process
+               Bindings (CtorArg d ixs) (amb<+>ctx) xs ->
+                 -- telescope for typing the actual arguments
                m [Term]
-    mk_args _ _ _ NoBind = return []
-    mk_args ps pre_xs (CtxTermsCons x xs) (Bind _ (ConstArg _) args) =
-      (elimClosedTerm x :) <$>
-      mk_args ps (CtxTermsCtxCons pre_xs x) xs args
-    mk_args ps pre_xs (CtxTermsCons x xs) (Bind _ (RecursiveArg zs ixs) args) =
-      do zs' <- ctxSubstInBindings pre_xs InvNoBind NoBind zs
+    -- no more arguments to process
+    mk_args _ _ NoBind = return []
+
+    -- process an argument that is not a recursive call
+    mk_args pre_xs (CtxTermsCons x xs) (Bind _ (ConstArg _) args) =
+      do tl <- mk_args (CtxTermsCtxCons pre_xs x) xs args
+         pure (unAmb x : tl)
+
+    -- process an argument that is a recursive call
+    mk_args pre_xs (CtxTermsCons x xs) (Bind _ (RecursiveArg zs ixs) args) =
+      do zs'  <- ctxSubstInBindings pre_xs InvNoBind NoBind zs
          ixs' <- ctxSubstInBindings pre_xs InvNoBind zs ixs
-         (elimClosedTerm x :) <$>
-           ((:) <$> mk_rec_arg ps zs' ixs' x <*>
-            mk_args ps (CtxTermsCtxCons pre_xs x) xs args)
+         recx <- mk_rec_arg zs' ixs' x
+         tl   <- mk_args (CtxTermsCtxCons pre_xs x) xs args
+         pure (unAmb x : recx : tl)
 
     -- Build an individual recursive call, given the parameters, the bindings
     -- for the RecursiveArg, and the argument we are going to recurse on
-    mk_rec_arg :: MonadTerm m => CtxTermsCtx EmptyCtx params ->
-                  Bindings CtxTerm EmptyCtx zs -> CtxTerms (CtxInv zs) ixs ->
-                  CtxTerm EmptyCtx a -> m Term
-    mk_rec_arg ps zs_ctx ixs x =
-      elimClosedTerm <$> ctxLambda zs_ctx
-      (\zs ->
-        ctxRecursorAppM d (ctxLift InvNoBind zs_ctx ps)
-        (mkLiftedClosedTerm zs_ctx p_ret)
-        (forM cs_fs (\(c',f) -> (c',) <$> mkLiftedClosedTerm zs_ctx f))
-        (return $ invertCtxTerms ixs)
-        (ctxApplyMulti
-         -- FIXME: can we do this without a cast? mk_rec_arg should specify that
-         -- the input type for x is (Arrows zs a)...
-         (fmap (castCtxTerm Proxy Proxy) (ctxLift InvNoBind zs_ctx x))
-         (return zs)))
+    mk_rec_arg :: forall zs.
+      Bindings CtxTerm amb zs ->         -- telescope describing the zs
+      CtxTerms (CtxInvApp amb zs) ixs -> -- actual values for the indicies, shifted under zs
+      CtxTerm amb (Arrows zs d) ->       -- actual value in recursive position
+      m Term
+    mk_rec_arg zs_ctx ixs x = unAmb <$>
+      -- eta expand over the zs and apply the RecursorApp form
+      ctxLambda zs_ctx (\zs ->
+        ctxRecursorAppM
+          (ctxLift InvNoBind zs_ctx rec)
+          (return (invertCtxTerms ixs))
+          (ctxApplyMulti
+            (ctxLift InvNoBind zs_ctx x)
+            (return zs)))
 
 
 --
@@ -1014,8 +1054,12 @@ class UsesDataType a where
   usesDataType :: DataIdent d -> a -> Bool
 
 instance UsesDataType (TermF Term) where
-  usesDataType (DataIdent d) (FTermF (DataTypeApp d' _ _)) | d' == d = True
-  usesDataType (DataIdent d) (FTermF (RecursorApp d' _ _ _ _ _)) | d' == d = True
+  usesDataType (DataIdent d) (FTermF (DataTypeApp d' _ _))
+    | d' == d = True
+  usesDataType (DataIdent d) (FTermF (RecursorType d' _ _ _))
+    | d' == d = True
+  usesDataType (DataIdent d) (FTermF (Recursor rec))
+    | recursorDataType rec == d = True
   usesDataType d tf = any (usesDataType d) tf
 
 instance UsesDataType Term where
@@ -1140,9 +1184,12 @@ mkCtorArgsIxs _ _ _ _ _ = Nothing
 -- constructor type is allowed to have the parameters but not the indices free.
 -- Test that the constructor type is an allowed type for a constructor of this
 -- datatype, and, if so, build a 'CtorArgStruct' for it.
-mkCtorArgStruct :: Ident -> Bindings CtxTerm EmptyCtx params ->
-                   Bindings CtxTerm (CtxInv params) ixs -> Term ->
-                   Maybe (CtorArgStruct d params ixs)
+mkCtorArgStruct ::
+  PrimName Term ->
+  Bindings CtxTerm EmptyCtx params ->
+  Bindings CtxTerm (CtxInv params) ixs ->
+  Term ->
+  Maybe (CtorArgStruct d params ixs)
 mkCtorArgStruct d params dt_ixs ctor_tp =
   case mkCtorArgsIxs (DataIdent d) params dt_ixs InvNoBind (CtxTerm ctor_tp) of
     Just (CtorArgsIxs args ctor_ixs) ->

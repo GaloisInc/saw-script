@@ -1579,14 +1579,14 @@ asCryptolTypeValue v =
       Right t2 <- asCryptolTypeValue v2
       return (Right (C.tSeq (C.tNum n) t2))
 
-    SC.VDataType "Prelude.Stream" [SC.TValue v1] ->
+    SC.VDataType (primName -> "Prelude.Stream") [SC.TValue v1] [] ->
         do Right t1 <- asCryptolTypeValue v1
            return (Right (C.tSeq C.tInf t1))
 
-    SC.VDataType "Cryptol.Num" [] ->
+    SC.VDataType (primName -> "Cryptol.Num") [] [] ->
       return (Left C.KNum)
 
-    SC.VDataType _ _ -> Nothing
+    SC.VDataType _ _ _ -> Nothing
 
     SC.VUnitType -> return (Right (C.tTuple []))
     SC.VPairType v1 v2 -> do
@@ -1608,6 +1608,7 @@ asCryptolTypeValue v =
     -- TODO?
     SC.VPiType _nm _v1 (SC.VDependentPi _) -> Nothing
     SC.VRecordType{} -> Nothing
+    SC.VRecursorType{} -> Nothing
     SC.VTyTerm{} -> Nothing
 
 

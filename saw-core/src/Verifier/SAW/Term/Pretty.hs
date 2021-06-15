@@ -18,6 +18,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Term.Pretty
   ( SawDoc
+  , renderSawDoc
   , SawStyle(..)
   , PPOpts(..)
   , defaultPPOpts
@@ -37,7 +38,6 @@ module Verifier.SAW.Term.Pretty
   , OccurrenceMap
   , shouldMemoizeTerm
   , ppName
-  , renderSawDoc
   ) where
 
 import Data.Maybe (isJust)
@@ -49,6 +49,7 @@ import Data.Foldable (Foldable)
 import qualified Data.Foldable as Fold
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
+import qualified Data.Map as Map
 import qualified Data.Vector as V
 import Numeric (showIntAtBase)
 import Prettyprinter
@@ -60,6 +61,7 @@ import qualified Data.IntMap.Strict as IntMap
 
 import Verifier.SAW.Name
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Utils (panic)
 
 --------------------------------------------------------------------------------
 -- * Doc annotations
@@ -415,7 +417,7 @@ ppDataType d (params, ((d_ctx,d_tp), ctors)) =
 ppFlatTermF :: Prec -> FlatTermF Term -> PPM SawDoc
 ppFlatTermF prec tf =
   case tf of
-    Primitive ec  -> annotate PrimitiveStyle <$> ppBestName (ecName ec)
+    Primitive ec  -> annotate PrimitiveStyle <$> ppBestName (ModuleIdentifier (primName ec))
     UnitValue     -> return "(-empty-)"
     UnitType      -> return "#(-empty-)"
     PairValue x y -> ppPair prec <$> ppTerm' PrecTerm x <*> ppTerm' PrecCommas y
@@ -423,23 +425,42 @@ ppFlatTermF prec tf =
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
 
-    CtorApp c params args ->
-      ppAppList prec (annotate CtorAppStyle (ppIdent c)) <$> mapM (ppTerm' PrecArg) (params ++ args)
-    DataTypeApp dt params args ->
-      ppAppList prec (annotate DataTypeStyle (ppIdent dt)) <$> mapM (ppTerm' PrecArg) (params ++ args)
-    RecursorApp d params p_ret cs_fs ixs arg ->
+    RecursorType d params motive _motiveTy ->
       do params_pp <- mapM (ppTerm' PrecArg) params
-         p_ret_pp <- ppTerm' PrecArg p_ret
-         fs_pp <- mapM (ppTerm' PrecTerm . snd) cs_fs
+         motive_pp <- ppTerm' PrecArg motive
+         nm <- ppBestName (ModuleIdentifier (primName d))
+         return $
+           ppAppList prec (annotate RecursorStyle (nm <> "#recType"))
+             (params_pp ++ [motive_pp])
+
+    Recursor (CompiledRecursor d params motive _motiveTy cs_fs ctorOrder) ->
+      do params_pp <- mapM (ppTerm' PrecArg) params
+         motive_pp <- ppTerm' PrecArg motive
+         fs_pp <- traverse (ppTerm' PrecTerm . fst) cs_fs
+         nm <- ppBestName (ModuleIdentifier (primName d))
+         f_pps <- forM ctorOrder $ \ec ->
+                    do cnm <- ppBestName (ModuleIdentifier (primName ec))
+                       case Map.lookup (primVarIndex ec) fs_pp of
+                         Just f_pp -> pure $ vsep [cnm, "=>", f_pp]
+                         Nothing -> panic "ppFlatTerm" ["missing constructor", show cnm]
+         return $
+           ppAppList prec (annotate RecursorStyle (nm <> "#rec"))
+             (params_pp ++ [motive_pp, tupled f_pps])
+
+    RecursorApp r ixs arg ->
+      do rec_pp <- ppTerm' PrecApp r
          ixs_pp <- mapM (ppTerm' PrecArg) ixs
          arg_pp <- ppTerm' PrecArg arg
-         return $
-           ppAppList prec (annotate RecursorStyle (ppIdent d <> "#rec"))
-           (params_pp ++ [p_ret_pp] ++
-            [tupled $
-             zipWith (\(c,_) f_pp -> vsep [ppIdent c, "=>", f_pp])
-             cs_fs fs_pp]
-            ++ ixs_pp ++ [arg_pp])
+         return $ ppAppList prec rec_pp (ixs_pp ++ [arg_pp])
+
+    CtorApp c params args ->
+      do cnm <- ppBestName (ModuleIdentifier (primName c))
+         ppAppList prec (annotate CtorAppStyle cnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
+
+    DataTypeApp dt params args ->
+      do dnm <- ppBestName (ModuleIdentifier (primName dt))
+         ppAppList prec (annotate DataTypeStyle dnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
+
     RecordType alist ->
       ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
     RecordValue alist ->

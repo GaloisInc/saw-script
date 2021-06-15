@@ -88,7 +88,7 @@ import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
-import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName, toShortName)
+import Verifier.SAW.TypedAST (FieldName, ModuleMap, toShortName, ctorPrimName, identBaseName)
 
 -- what4
 import qualified What4.Expr.Builder as B
@@ -335,7 +335,7 @@ intToNatOp sym =
         do z <- W.intLit sym 0
            pneg <- W.intLt sym i z
            i' <- W.intIte sym pneg z i
-           pure (VToNat (VInt i'))
+           pure (VIntToNat (VInt i'))
 
 -- primitive natToInt :: Nat -> Integer;
 natToIntOp :: forall sym. Sym sym => sym -> SValue sym
@@ -410,7 +410,7 @@ bvShiftOp sym bvOp natOp =
     case y of
       VNat i   -> VWord <$> natOp x j
         where j = toInteger i `min` SW.bvWidth x
-      VToNat v -> VWord <$> (bvOp x =<< toWord sym v)
+      VBVToNat _ v -> VWord <$> (bvOp x =<< toWord sym v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.What4.bvShiftOp", show y]
 
 -- bvShl : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
@@ -518,13 +518,13 @@ mkStreamOp =
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: forall sym. Sym sym => sym -> SValue sym
 streamGetOp sym =
-  constFun $
+  strictFun $ \(toTValue -> tp) -> return $
   strictFun $ \xs -> return $
   strictFun $ \case
     VNat n -> lookupSStream xs n
-    VToNat w ->
+    VBVToNat _ w ->
       do ilv <- toWord sym w
-         selectV sym (lazyMux @sym (muxBVal sym)) ((2 ^ SW.bvWidth ilv) - 1) (lookupSStream xs) ilv
+         selectV sym (lazyMux @sym (muxBVal sym tp)) ((2 ^ SW.bvWidth ilv) - 1) (lookupSStream xs) ilv
     v -> Prims.panic "streamGetOp" ["Expected Nat value", show v]
 
 lookupSStream :: SValue sym -> Natural -> IO (SValue sym)
@@ -539,17 +539,18 @@ lookupSStream _ _ = fail "expected Stream"
 
 
 muxBVal :: forall sym. Sym sym =>
-  sym -> SBool sym -> SValue sym -> SValue sym -> IO (SValue sym)
+  sym -> TValue (What4 sym) -> SBool sym -> SValue sym -> SValue sym -> IO (SValue sym)
 muxBVal sym = Prims.muxValue (prims sym)
 
 muxWhat4Extra :: forall sym. Sym sym =>
-  sym -> SBool sym -> What4Extra sym -> What4Extra sym -> IO (What4Extra sym)
-muxWhat4Extra sym c x y =
+  sym -> TValue (What4 sym) -> SBool sym -> What4Extra sym -> What4Extra sym -> IO (What4Extra sym)
+muxWhat4Extra sym (VDataType (primName -> "Prelude.Stream") [TValue tp] [] ) c x y =
   do let f i = do xi <- lookupSStream (VExtra x) i
                   yi <- lookupSStream (VExtra y) i
-                  muxBVal sym c xi yi
+                  muxBVal sym tp c xi yi
      r <- newIORef Map.empty
      return (SStream f r)
+muxWhat4Extra _ tp _ _ _ = panic "muxWhat4Extra" ["Type mismatch", show tp]
 
 
 -- | Lifts a strict mux operation to a lazy mux
@@ -589,9 +590,10 @@ arrayConstant ::
   W.IsSymExprBuilder sym =>
   sym ->
   TValue (What4 sym) ->
+  TValue (What4 sym) ->
   SValue sym ->
   IO (SArray sym)
-arrayConstant sym ity elm
+arrayConstant sym ity _elTy elm
   | Just (Some idx_repr) <- valueAsBaseType ity
   , Just (Some elm_expr) <- valueToSymExpr elm =
     SArray <$> W.constantArray sym (Ctx.Empty Ctx.:> idx_repr) elm_expr
@@ -674,7 +676,8 @@ w4SolveBasic sym sc addlPrims ecMap ref unintSet t =
      let uninterpreted ec
            | Set.member (ecVarIndex ec) unintSet = Just (extcns ec)
            | otherwise                           = Nothing
-     cfg <- Sim.evalGlobal m (constMap sym `Map.union` addlPrims) extcns uninterpreted
+     let neutral _ nt = fail ("w4SolveBasic: could not evaluate neutral term: " ++ show nt)
+     cfg <- Sim.evalGlobal m (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral
      Sim.evalSharedTerm cfg t
 
 
@@ -847,8 +850,8 @@ applyUnintApp sym app0 v =
     VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
-    VCtorApp i xv             -> foldM (applyUnintApp sym) app' =<< traverse force xv
-                                   where app' = suffixUnintApp ("_" ++ identName i) app0
+    VCtorApp i ps xv          -> foldM (applyUnintApp sym) app' =<< traverse force (ps++xv)
+                                   where app' = suffixUnintApp ("_" ++ (Text.unpack (identBaseName (primName i)))) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     TValue (suffixTValue -> Just s)
                               -> return (suffixUnintApp s app0)
@@ -1124,9 +1127,9 @@ w4EvalBasic sym st sc m addlPrims ref unintSet t =
      let uninterpreted tf ec
            | Set.member (ecVarIndex ec) unintSet = Just (extcns tf ec)
            | otherwise                           = Nothing
-     cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted
+     let neutral _env nt = fail ("w4EvalBasic: could not evaluate neutral term: " ++ show nt)
+     cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral
      Sim.evalSharedTerm cfg t
-
 
 -- | Evaluate a saw-core term to a What4 value for the purposes of
 --   using it as an input for symbolic simulation.  This will evaluate
@@ -1151,8 +1154,9 @@ w4SimulatorEval sym st sc m addlPrims ref constantFilter t =
               parseUninterpretedSAW sym st sc ref trm (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
      let uninterpreted _tf ec =
           if constantFilter ec then Nothing else Just (X.throwIO (NeutralTermEx (ecName ec)))
+     let neutral _env nt = fail ("w4SimulatorEval: could not evaluate neutral term: " ++ show nt)
      res <- X.try $ do
-              cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted
+              cfg <- Sim.evalGlobal' m (constMap sym `Map.union` addlPrims) extcns uninterpreted neutral
               Sim.evalSharedTerm cfg t
      case res of
        Left (NeutralTermEx nmi) -> pure (Left nmi)
@@ -1370,9 +1374,11 @@ mkArgTerm sc ty val =
          xs <- sequence [ mkArgTerm sc t v | (t, v) <- zip (map snd tys) vs ]
          return (ArgTermRecord (zip tags xs))
 
-    (_, VCtorApp i vv) ->
-      do xs <- traverse (termOfSValue sc <=< force) (V.toList vv)
-         x <- scCtorApp sc i xs
+    (_, VCtorApp i ps vv) ->
+      do ctor <- scRequireCtor sc (primName i)
+         ps' <- traverse (termOfSValue sc <=< force) ps
+         vv' <- traverse (termOfSValue sc <=< force) vv
+         x   <- scCtorAppParams sc (ctorPrimName ctor) ps' vv'
          return (ArgTermConst x)
 
     (_, TValue tval) ->

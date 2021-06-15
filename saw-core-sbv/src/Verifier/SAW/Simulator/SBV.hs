@@ -67,11 +67,13 @@ import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, identName, toShortName)
+import Verifier.SAW.TypedAST (FieldName, toShortName, identBaseName)
 import Verifier.SAW.FiniteValue
             (FirstOrderType(..), FirstOrderValue(..)
             , fovVec, firstOrderTypeOf, asFirstOrderType
             )
+
+import Verifier.SAW.Utils (panic)
 
 data SBV
 
@@ -269,8 +271,8 @@ flattenSValue nm v = do
         VIntMod 0 si              -> return ([si], "")
         VIntMod n si              -> return ([svRem si (svInteger KUnbounded (toInteger n))], "")
         VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
-        VCtorApp i (V.toList->ts) -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) ts
-                                        return (concat xss, "_" ++ identName i ++ concat ss)
+        VCtorApp i ps ts          -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) (ps++ts)
+                                        return (concat xss, "_" ++ (Text.unpack (identBaseName (primName i))) ++ concat ss)
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
                                   -> return ([], s)
@@ -350,7 +352,7 @@ bvShiftOp bvOp natOp =
     case y of
       VNat i | j < toInteger (maxBound :: Int) -> return (vWord (natOp x (fromInteger j)))
         where j = toInteger i `min` toInteger (intSizeOf x)
-      VToNat v -> fmap (vWord . bvOp x) (toWord v)
+      VBVToNat _ v -> fmap (vWord . bvOp x) (toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.SBV.bvShiftOp", show y]
 
 -- bvShl : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
@@ -383,7 +385,7 @@ intToNatOp =
       Nothing ->
         let z  = svInteger KUnbounded 0
             i' = svIte (svLessThan i z) z i
-         in pure (VToNat (VInt i'))
+         in pure (VIntToNat (VInt i'))
 
 -- primitive natToInt :: Nat -> Integer;
 natToIntOp :: SValue
@@ -493,13 +495,13 @@ mkStreamOp =
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: SValue
 streamGetOp =
-  constFun $
+  strictFun $ \(toTValue -> tp) -> return $
   strictFun $ \xs -> return $
   strictFun $ \case
     VNat n -> lookupSStream xs n
-    VToNat w ->
+    VBVToNat _ w ->
       do ilv <- toWord w
-         selectV (lazyMux muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
+         selectV (lazyMux (muxBVal tp)) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
     v -> Prims.panic "SBV.streamGetOp" ["Expected Nat value", show v]
 
 
@@ -554,16 +556,17 @@ sLg2 x = go 0
 ------------------------------------------------------------
 -- Ite ops
 
-muxBVal :: SBool -> SValue -> SValue -> IO SValue
+muxBVal :: TValue SBV -> SBool -> SValue -> SValue -> IO SValue
 muxBVal = Prims.muxValue prims
 
-muxSbvExtra :: SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
-muxSbvExtra c x y =
+muxSbvExtra :: TValue SBV -> SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
+muxSbvExtra (VDataType (primName -> "Prelude.Stream") [TValue tp] []) c x y =
   do let f i = do xi <- lookupSbvExtra x i
                   yi <- lookupSbvExtra y i
-                  muxBVal c xi yi
+                  muxBVal tp c xi yi
      r <- newIORef Map.empty
      return (SStream f r)
+muxSbvExtra tp _ _ _ = panic "muxSbvExtra" ["Type mismatch", show tp]
 
 ------------------------------------------------------------
 -- External interface
@@ -578,7 +581,8 @@ sbvSolveBasic sc addlPrims unintSet t = do
   let uninterpreted ec
         | Set.member (ecVarIndex ec) unintSet = Just (extcns ec)
         | otherwise                           = Nothing
-  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted
+  let neutral _env nt = fail ("sbvSolveBasic: could not evaluate neutral term: " ++ show nt)
+  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted neutral
   Sim.evalSharedTerm cfg t
 
 parseUninterpreted :: [SVal] -> String -> TValue SBV -> IO SValue
@@ -655,8 +659,9 @@ sbvSATQuery sc addlPrims query =
           let uninterpreted ec
                 | Set.member (ecVarIndex ec) unintSet = Just (mkUninterp ec)
                 | otherwise                           = Nothing
+          let neutral _env nt = fail ("sbvSATQuery: could not evaluate neutral term: " ++ show nt)
 
-          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted)
+          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted neutral)
           bval <- liftIO (Sim.evalSharedTerm cfg t)
 
           case bval of

@@ -357,9 +357,9 @@ applyCompFun (CompFunMark f mark) t =
 -- | Take in an @InputOutputTypes@ list (as a SAW core term) and build a fresh
 -- function variable for each pair of input and output types in it
 mkFunVarsForTps :: Term -> MRM [LocalFunName]
-mkFunVarsForTps (asCtor -> Just ("Prelude.TypesNil", [])) =
+mkFunVarsForTps (asCtor -> Just (primName -> "Prelude.TypesNil", [])) =
   return []
-mkFunVarsForTps (asCtor -> Just ("Prelude.TypesCons", [a, b, tps])) =
+mkFunVarsForTps (asCtor -> Just (primName -> "Prelude.TypesCons", [a, b, tps])) =
   do compM <- liftSC1 scGlobalDef "Prelude.CompM"
      comp_b <- liftSC2 scApply compM b
      tp <- liftSC3 scPi "x" a comp_b

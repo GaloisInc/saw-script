@@ -53,19 +53,24 @@ data Value l
   = VFun !LocalName !(Thunk l -> MValue l)
   | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
-  | VCtorApp !Ident !(Vector (Thunk l))
+  | VCtorApp !(PrimName (TValue l)) ![Thunk l] ![Thunk l]
   | VVector !(Vector (Thunk l))
   | VBool (VBool l)
   | VWord (VWord l)
-  | VToNat (Value l)
+  | VBVToNat !Int (Value l) -- TODO: don't use @Int@ for this, use @Natural@
+  | VIntToNat (Value l)
   | VNat !Natural
   | VInt (VInt l)
   | VIntMod !Natural (VInt l)
   | VArray (VArray l)
   | VString !Text
-  | VFloat !Float
-  | VDouble !Double
   | VRecordValue ![(FieldName, Thunk l)]
+  | VRecursor
+     !(PrimName (TValue l)) -- data type ident
+     ![Value l]  -- data type parameters
+     !(Value l)  -- motive function
+     !(TValue l) -- type of motive
+     !(Map VarIndex (Thunk l, TValue l)) -- constructor eliminators and their types
   | VExtra (Extra l)
   | TValue (TValue l)
 
@@ -79,9 +84,14 @@ data TValue l
   | VPiType LocalName !(TValue l) !(PiBody l)
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
-  | VDataType !Ident ![Value l]
+  | VDataType !(PrimName (TValue l)) ![Value l] ![Value l]
   | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
+  | VRecursorType
+     !(PrimName (TValue l)) -- data type name
+     ![Value l]  -- data type parameters
+     !(Value l)  -- motive function
+     !(TValue l) -- type of motive function
   | VTyTerm !Sort !Term
 
 data PiBody l
@@ -98,11 +108,12 @@ data NeutralTerm
   | NeutralPairRight NeutralTerm  -- right pair projection
   | NeutralRecordProj NeutralTerm FieldName -- record projection
   | NeutralApp NeutralTerm Term -- function application
-  | NeutralRecursor -- recursor application
-      Ident  -- inductive type being eliminated
-      [Term] -- parameters of the inductive type
-      Term   -- return type (AKA intent, AKA motive)
-      [(Ident,Term)] -- elimination functions for the constructors
+  | NeutralRecursor
+      NeutralTerm -- recursor value
+      [Term] -- indices for the inductive type
+      Term   -- argument being eliminated
+  | NeutralRecursorArg -- recursor application
+      Term   -- recursor value
       [Term] -- indices for the inductive type
       NeutralTerm -- argument being elminated
 
@@ -177,23 +188,22 @@ instance Show (Extra l) => Show (Value l) where
       VFun {}        -> showString "<<fun>>"
       VUnit          -> showString "()"
       VPair{}        -> showString "<<tuple>>"
-      VCtorApp s xv
-        | V.null xv  -> shows s
-        | otherwise  -> shows s . showList (toList xv)
+      VCtorApp s _ps _xv -> shows (primName s)
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"
       VWord _        -> showString "<<bitvector>>"
-      VToNat x       -> showString "bvToNat " . showParen True (shows x)
+      VBVToNat n x   -> showString "bvToNat " . shows n . showString " " . showParen True (shows x)
+      VIntToNat x    -> showString "intToNat " . showParen True (shows x)
       VNat n         -> shows n
       VInt _         -> showString "<<integer>>"
       VIntMod n _    -> showString ("<<Z " ++ show n ++ ">>")
       VArray{}       -> showString "<<array>>"
-      VFloat float   -> shows float
-      VDouble double -> shows double
       VString s      -> shows s
       VRecordValue [] -> showString "{}"
       VRecordValue ((fld,_):_) ->
         showString "{" . showString (Text.unpack fld) . showString " = _, ...}"
+      VRecursor d _ _ _ _
+                     -> showString "<<recursor: " . shows d . showString ">>"
       VExtra x       -> showsPrec p x
       TValue x       -> showsPrec p x
     where
@@ -210,15 +220,16 @@ instance Show (Extra l) => Show (TValue l) where
                         (shows t . showString " -> ...")
       VUnitType      -> showString "#()"
       VPairType x y  -> showParen True (shows x . showString " * " . shows y)
-      VDataType s vs
-        | null vs    -> shows s
-        | otherwise  -> shows s . showList vs
+      VDataType s ps vs
+        | null (ps++vs) -> shows s
+        | otherwise  -> shows s . showList (ps++vs)
       VRecordType [] -> showString "{}"
       VRecordType ((fld,_):_) ->
         showString "{" . showString (Text.unpack fld) . showString " :: _, ...}"
       VVecType n a   -> showString "Vec " . shows n
                         . showString " " . showParen True (showsPrec p a)
       VSort s        -> shows s
+      VRecursorType{} -> showString "RecursorType"
 
       VTyTerm _ tm   -> shows tm
 
@@ -330,6 +341,7 @@ asFirstOrderTypeTValue v =
     VPiType{}   -> Nothing
     VDataType{} -> Nothing
     VSort{}     -> Nothing
+    VRecursorType{} -> Nothing
     VTyTerm{}   -> Nothing
 
 -- | A (partial) injective mapping from type values to strings. These
@@ -357,7 +369,9 @@ suffixTValue tv =
     VDataType {} -> Nothing
     VRecordType {} -> Nothing
     VSort {} -> Nothing
+    VRecursorType{} -> Nothing
     VTyTerm{} -> Nothing
+
 
 neutralToTerm :: NeutralTerm -> Term
 neutralToTerm = loop
@@ -371,8 +385,10 @@ neutralToTerm = loop
     Unshared (FTermF (RecordProj (loop nt) f))
   loop (NeutralApp nt arg) =
     Unshared (App (loop nt) arg)
-  loop (NeutralRecursor d ps p_ret cs_fs ixs x) =
-    Unshared (FTermF (RecursorApp d ps p_ret cs_fs ixs (loop x)))
+  loop (NeutralRecursorArg r ixs x) =
+    Unshared (FTermF (RecursorApp r ixs (loop x)))
+  loop (NeutralRecursor r ixs x) =
+    Unshared (FTermF (RecursorApp (loop r) ixs x))
 
 neutralToSharedTerm :: SharedContext -> NeutralTerm -> IO Term
 neutralToSharedTerm sc = loop
@@ -388,9 +404,12 @@ neutralToSharedTerm sc = loop
   loop (NeutralApp nt arg) =
     do tm <- loop nt
        scApply sc tm arg
-  loop (NeutralRecursor d ps p_ret cs_fs ixs nt) =
+  loop (NeutralRecursor nt ixs x) =
     do tm <- loop nt
-       scFlatTermF sc (RecursorApp d ps p_ret cs_fs ixs tm)
+       scFlatTermF sc (RecursorApp tm ixs x)
+  loop (NeutralRecursorArg r ixs nt) =
+    do tm <- loop nt
+       scFlatTermF sc (RecursorApp r ixs tm)
 
 ppNeutral :: PPOpts -> NeutralTerm -> SawDoc
 ppNeutral opts = ppTerm opts . neutralToTerm

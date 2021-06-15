@@ -42,6 +42,7 @@ module Verifier.SAW.SCTypeCheck
   , checkSubtype
   , ensureSort
   , applyPiTyped
+  , compileRecursor
   ) where
 
 import Control.Applicative
@@ -49,7 +50,6 @@ import Control.Monad.Except
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 
-import Data.List ( (\\) )
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -157,13 +157,16 @@ data TCError
   | EmptyVectorLit
   | NoSuchDataType Ident
   | NoSuchCtor Ident
-  | NotFullyAppliedRec Ident
-  | BadParamsOrArgsLength Bool Ident [Term] [Term]
+  | NotFullyAppliedRec (PrimName Term)
+  | BadParamsOrArgsLength Bool (PrimName Term) [Term] [Term]
+  | BadRecursorApp Term [Term] Term
   | BadConstType NameInfo Term Term
   | MalformedRecursor Term String
   | DeclError Text String
   | ErrorPos Pos TCError
   | ErrorCtx LocalName Term TCError
+  | ExpectedRecursor TypedTerm
+
 
 -- | Throw a type-checking error
 throwTCError :: TCError -> TCM a
@@ -209,6 +212,10 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (BadRecordField n ty) =
       ppWithPos [ return ("Bad record field (" ++ show n ++ ") for type")
                 , ishow ty ]
+  helper (BadRecursorApp r ixs arg) =
+      ppWithPos [ return "Type mismatch in recursor application"
+                , ishow (Unshared $ FTermF $ RecursorApp r ixs arg)
+                ]
   helper (DanglingVar n) =
       ppWithPos [ return ("Dangling bound variable index: " ++ show n)]
   helper (UnboundName str) = ppWithPos [ return ("Unbound name: " ++ show str)]
@@ -234,7 +241,7 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     ppWithPos [ return ("Type of constant " ++ show n), ishow rty
               , return "doesn't match declared type", ishow ty ]
   helper (MalformedRecursor trm reason) =
-      ppWithPos [ return "Malformed recursor application",
+      ppWithPos [ return "Malformed recursor",
                   ishow trm, return reason ]
   helper (DeclError nm reason) =
     ppWithPos [ return ("Malformed declaration for " ++ show nm), return reason ]
@@ -242,6 +249,8 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     local (\(ctx,_) -> (ctx, Just p)) $ helper err
   helper (ErrorCtx x _ err) =
     local (\(ctx,p) -> (x:ctx, p)) $ helper err
+  helper (ExpectedRecursor ttm) =
+    ppWithPos [ return "Expected recursor value", ishow (typedVal ttm), ishow (typedType ttm)]
 
   ishow :: Term -> PPErrM String
   ishow tm =
@@ -432,7 +441,7 @@ instance TypeInfer (TermF TypedTerm) where
 -- a term has already been labeled with its (most general) type.
 instance TypeInfer (FlatTermF TypedTerm) where
   typeInfer (Primitive ec) =
-    typeCheckWHNF $ typedVal $ ecType ec
+    typeCheckWHNF $ typedVal $ primType ec
   typeInfer UnitValue = liftTCM scUnitType
   typeInfer UnitType = liftTCM scSort (mkSort 0)
   typeInfer (PairValue (TypedTerm _ tx) (TypedTerm _ ty)) =
@@ -453,41 +462,37 @@ instance TypeInfer (FlatTermF TypedTerm) where
   typeInfer (DataTypeApp d params args) =
     -- Look up the DataType structure, check the length of the params and args,
     -- and then apply the cached Pi type of dt to params and args
-    do maybe_dt <- liftTCM scFindDataType d
-       dt <- case maybe_dt of
-         Just dt -> return dt
-         Nothing -> throwTCError $ NoSuchDataType d
-       let err =
-             BadParamsOrArgsLength True d
-             (map typedVal params) (map typedVal args)
-       if length params == length (dtParams dt) &&
-          length args == length (dtIndices dt) then return () else
-         throwTCError err
+    do dt <- liftTCM scRequireDataType (primName d)
+       let err = BadParamsOrArgsLength True (fmap typedVal d) (map typedVal params) (map typedVal args)
+       unless (length params == length (dtParams dt) &&
+               length args == length (dtIndices dt))
+              (throwTCError err)
+
        -- NOTE: we assume dtType is already well-typed and in WHNF
-       -- _ <- inferSort t
-       -- t' <- typeCheckWHNF t
        foldM (applyPiTyped err) (dtType dt) (params ++ args)
 
   typeInfer (CtorApp c params args) =
     -- Look up the Ctor structure, check the length of the params and args, and
     -- then apply the cached Pi type of ctor to params and args
-    do maybe_ctor <- liftTCM scFindCtor c
-       ctor <- case maybe_ctor of
-         Just ctor -> return ctor
-         Nothing -> throwTCError $ NoSuchCtor c
-       let err =
-             BadParamsOrArgsLength False c
-             (map typedVal params) (map typedVal args)
-       if length params == ctorNumParams ctor &&
-          length args == ctorNumArgs ctor then return () else
-         throwTCError err
+    do ctor <- liftTCM scRequireCtor (primName c)
+       let err = BadParamsOrArgsLength False (fmap typedVal c) (map typedVal params) (map typedVal args)
+       unless (length params == ctorNumParams ctor &&
+               length args == ctorNumArgs ctor)
+              (throwTCError err)
+
        -- NOTE: we assume ctorType is already well-typed and in WHNF
-       -- _ <- inferSort t
-       -- t' <- typeCheckWHNF t
        foldM (applyPiTyped err) (ctorType ctor) (params ++ args)
 
-  typeInfer (RecursorApp d params p_ret cs_fs ixs arg) =
-    inferRecursorApp d params p_ret cs_fs ixs arg
+  typeInfer (RecursorType d ps motive mty) =
+    do s <- inferRecursorType d ps motive mty
+       liftTCM scSort s
+
+  typeInfer (Recursor rec) =
+    inferRecursor rec
+
+  typeInfer (RecursorApp r ixs arg) =
+    inferRecursorApp r ixs arg
+
   typeInfer (RecordType elems) =
     -- NOTE: record types are always predicative, i.e., non-Propositional, so we
     -- ensure below that we return at least sort 0
@@ -569,67 +574,122 @@ isSubtype t1' t2' = areConvertible t1' t2'
 areConvertible :: Term -> Term -> TCM Bool
 areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 
--- | Infer the type of a recursor application
-inferRecursorApp :: Ident -> [TypedTerm] -> TypedTerm ->
-                    [(Ident,TypedTerm)] -> [TypedTerm] -> TypedTerm ->
-                    TCM Term
-inferRecursorApp d params p_ret cs_fs ixs arg =
-  do let mk_err str =
+
+inferRecursorType ::
+  PrimName TypedTerm {- ^ data type name -} ->
+  [TypedTerm] {- ^ data type parameters -} ->
+  TypedTerm   {- ^ elimination motive -} ->
+  TypedTerm   {- ^ type of the elimination motive -} ->
+  TCM Sort
+inferRecursorType d params motive motiveTy =
+  do dt <- liftTCM scRequireDataType (primName d)
+
+     let mk_err str =
            MalformedRecursor
            (Unshared $ fmap typedVal $ FTermF $
-            RecursorApp d params p_ret cs_fs ixs arg) str
-     maybe_dt <- liftTCM scFindDataType d
-     dt <- case maybe_dt of
-       Just dt -> return dt
-       Nothing -> throwTCError $ NoSuchDataType d
+             Recursor (CompiledRecursor d params motive motiveTy mempty []))
+            str
 
-     -- Check that the params and ixs have the correct types by making sure
+     -- Check that the params have the correct types by making sure
      -- they correspond to the input types of dt
-     if length params == length (dtParams dt) &&
-        length ixs == length (dtIndices dt) then return () else
-       throwTCError $ mk_err "Incorrect number of params or indices"
-     _ <-
-       -- applyPiTyped cannot fail, because we have already checked the number
-       -- of params and indices
-       foldM (applyPiTyped
-              (error "Internal type-checking error: unexpected non-pi type!"))
-       (dtType dt) (params ++ ixs)
+     unless (length params == length (dtParams dt)) $
+       throwTCError $ mk_err "Incorrect number of parameters"
+     _ <- foldM (applyPiTyped (mk_err "Incorrect data type signature"))
+                (dtType dt) params
 
      -- Get the type of p_ret and make sure that it is of the form
      --
      -- (ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s
      --
      -- for some allowed sort s, where the Ix are the indices of of dt
-     p_ret_s <-
-       case asPiList (typedType p_ret) of
+     motive_srt <-
+       case asPiList (typedType motive) of
          (_, (asSort -> Just s)) -> return s
          _ -> throwTCError $ mk_err "Motive function should return a sort"
-     p_ret_tp_req <-
-       liftTCM scRecursorRetTypeType dt (map typedVal params) p_ret_s
+     motive_req <-
+       liftTCM scRecursorRetTypeType dt (map typedVal params) motive_srt
      -- Technically this is an equality test, not a subtype test, but we
-     -- use the precise sort used in p_ret, so they are the same, and
+     -- use the precise sort used in the motive, so they are the same, and
      -- checkSubtype is handy...
-     checkSubtype p_ret p_ret_tp_req
-     if allowedElimSort dt p_ret_s then return ()
-       else throwTCError $ mk_err "Disallowed propositional elimination"
+     checkSubtype motive motive_req
+     unless (allowedElimSort dt motive_srt)  $
+       throwTCError $ mk_err "Disallowed propositional elimination"
+
+     return motive_srt
+
+
+compileRecursor ::
+  DataType ->
+  [TypedTerm] {- ^ datatype parameters -} ->
+  TypedTerm   {- ^ elimination motive -} ->
+  [TypedTerm] {- ^ constructor eliminators -} ->
+  TCM (CompiledRecursor TypedTerm)
+compileRecursor dt params motive cs_fs =
+  do motiveTy <- typeInferComplete (typedType motive)
+     cs_fs' <- forM cs_fs (\e -> do ety <- typeInferComplete (typedType e)
+                                    pure (e,ety))
+     d <- traverse typeInferComplete (dtPrimName dt)
+     let ctorVarIxs = map ctorVarIndex (dtCtors dt)
+     ctorOrder <- traverse (traverse typeInferComplete) (map ctorPrimName (dtCtors dt))
+     let elims = Map.fromList (zip ctorVarIxs cs_fs')
+     let rec = CompiledRecursor d params motive motiveTy elims ctorOrder
+     let mk_err str =
+           MalformedRecursor
+            (Unshared $ fmap typedVal $ FTermF $ Recursor rec)
+            str
+
+     unless (length cs_fs == length (dtCtors dt)) $
+       throwTCError $ mk_err "Extra constructors"
+
+     -- Check that the parameters and motive are correct for the given datatype
+     _s <- inferRecursorType d params motive motiveTy
 
      -- Check that the elimination functions each have the right types, and
      -- that we have exactly one for each constructor of dt
-     cs_fs_tps <-
-       liftTCM scRecursorElimTypes d (map typedVal params) (typedVal p_ret)
-     case map fst cs_fs \\ map fst cs_fs_tps of
-       [] -> return ()
-       cs -> throwTCError $ mk_err ("Extra constructors: " ++ show cs)
-     forM_ cs_fs_tps $ \(c,req_tp) ->
-       case lookup c cs_fs of
+     elims_tps <-
+       liftTCM scRecursorElimTypes (fmap typedVal d) (map typedVal params) (typedVal motive)
+
+     forM_ elims_tps $ \(c,req_tp) ->
+       case Map.lookup (primVarIndex c) elims of
          Nothing ->
            throwTCError $ mk_err ("Missing constructor: " ++ show c)
-         Just f -> checkSubtype f req_tp
+         Just (f,_fty) -> checkSubtype f req_tp
 
-     -- Finally, check that arg has type (d params ixs), and return the
-     -- type (p_ret ixs arg)
-     arg_req_tp <-
-       liftTCM scFlatTermF $ fmap typedVal $ DataTypeApp d params ixs
-     checkSubtype arg arg_req_tp
-     liftTCM scApplyAll (typedVal p_ret) (map typedVal (ixs ++ [arg])) >>=
-       liftTCM scTypeCheckWHNF
+     return rec
+
+
+inferRecursor ::
+  CompiledRecursor TypedTerm ->
+  TCM Term
+inferRecursor rec =
+  do let d      = recursorDataType rec
+     let params = recursorParams rec
+     let motive = recursorMotive rec
+     let motiveTy = recursorMotiveTy rec
+
+     -- return the type of this recursor
+     liftTCM scFlatTermF $ fmap typedVal $
+       RecursorType d params motive motiveTy
+
+-- | Infer the type of a recursor application
+inferRecursorApp ::
+  TypedTerm   {- ^ recursor term -} ->
+  [TypedTerm] {- ^ data type indices -} ->
+  TypedTerm   {- ^ recursor argument -} ->
+  TCM Term
+inferRecursorApp r ixs arg =
+  do recty <- typeCheckWHNF (typedType r)
+     case asRecursorType recty of
+       Nothing -> throwTCError (ExpectedRecursor r)
+       Just (_d, _ps, motive, motiveTy) -> do
+
+         -- Apply the indices to the type of the motive
+         -- to check the types of the `ixs` and `arg`, and
+         -- ensure that the result is fully applied
+
+         let err = BadRecursorApp (typedVal r) (fmap typedVal ixs) (typedVal arg)
+         _s <- ensureSort =<< foldM (applyPiTyped err) motiveTy (ixs ++ [arg])
+
+         -- return the type (p_ret ixs arg)
+         liftTCM scTypeCheckWHNF =<<
+           liftTCM scApplyAll motive (map typedVal (ixs ++ [arg]))
