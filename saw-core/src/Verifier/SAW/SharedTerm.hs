@@ -705,7 +705,7 @@ scRecursorRetTypeType sc dt params s =
 --
 -- > scReduceRecursor sc rec crec ci [x1, .., xk]
 --
--- reduces the term @(RecursorApp rec ixs (CtorApp ci ps xs))@ to
+-- reduces the term @(RecursorApp r ixs (CtorApp ci ps xs))@ to
 --
 -- > fi x1 (maybe rec_tm_1) .. xk (maybe rec_tm_k)
 --
@@ -720,11 +720,11 @@ scReduceRecursor ::
   PrimName Term {- ^ constructor name -} ->
   [Term] {- ^ constructor arguments -} ->
   IO Term
-scReduceRecursor sc rec crec c args =
+scReduceRecursor sc r crec c args =
    do ctor <- scRequireCtor sc (primName c)
       -- The ctorIotaReduction field caches the result of iota reduction, which
       -- we just substitute into to perform the reduction
-      ctorIotaReduction ctor rec (fmap fst $ recursorElims crec) args
+      ctorIotaReduction ctor r (fmap fst $ recursorElims crec) args
 
 -- | Reduce an application of a recursor to a concrete nat value.
 --   The given recursor value is assumed to be correctly-typed
@@ -810,7 +810,7 @@ scWhnf sc t0 =
 
     go xs                     (asGlobalDef -> Just c)           = scRequireDef sc c >>= tryDef c xs
     go xs                     (asRecursorApp ->
-                                Just (rec, crec, ixs, arg))     = go (ElimRecursor rec crec ixs : xs) arg
+                                Just (r, crec, ixs, arg))       = go (ElimRecursor r crec ixs : xs) arg
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
                                                                      t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
@@ -845,8 +845,8 @@ scWhnf sc t0 =
     reapply t (ElimApp x) = scApply sc t x
     reapply t (ElimProj i) = scRecordSelect sc t i
     reapply t (ElimPair i) = scPairSelector sc t i
-    reapply t (ElimRecursor rec _crec ixs) =
-      scFlatTermF sc (RecursorApp rec ixs t)
+    reapply t (ElimRecursor r _crec ixs) =
+      scFlatTermF sc (RecursorApp r ixs t)
 
     tryDef :: (?cache :: Cache IO TermIndex Term) =>
               Ident -> [WHNFElim] -> Def -> IO Term
@@ -1026,8 +1026,8 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
                           (recursorParams rec)
                           (recursorMotive rec)
                           (recursorMotiveTy rec)
-        RecursorApp rec ixs arg ->
-          do tp <- (liftIO . scWhnf sc) =<< memo rec
+        RecursorApp r ixs arg ->
+          do tp <- (liftIO . scWhnf sc) =<< memo r
              case asRecursorType tp of
                Just (_d, _ps, motive, _motivety) ->
                  lift $ scApplyAll sc motive (ixs ++ [arg])

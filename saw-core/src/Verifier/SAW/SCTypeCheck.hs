@@ -212,9 +212,9 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (BadRecordField n ty) =
       ppWithPos [ return ("Bad record field (" ++ show n ++ ") for type")
                 , ishow ty ]
-  helper (BadRecursorApp rec ixs arg) =
+  helper (BadRecursorApp r ixs arg) =
       ppWithPos [ return "Type mismatch in recursor application"
-                , ishow (Unshared $ FTermF $ RecursorApp rec ixs arg)
+                , ishow (Unshared $ FTermF $ RecursorApp r ixs arg)
                 ]
   helper (DanglingVar n) =
       ppWithPos [ return ("Dangling bound variable index: " ++ show n)]
@@ -490,8 +490,8 @@ instance TypeInfer (FlatTermF TypedTerm) where
   typeInfer (Recursor rec) =
     inferRecursor rec
 
-  typeInfer (RecursorApp rec ixs arg) =
-    inferRecursorApp rec ixs arg
+  typeInfer (RecursorApp r ixs arg) =
+    inferRecursorApp r ixs arg
 
   typeInfer (RecordType elems) =
     -- NOTE: record types are always predicative, i.e., non-Propositional, so we
@@ -677,17 +677,17 @@ inferRecursorApp ::
   [TypedTerm] {- ^ data type indices -} ->
   TypedTerm   {- ^ recursor argument -} ->
   TCM Term
-inferRecursorApp rec ixs arg =
-  do recty <- typeCheckWHNF (typedType rec)
+inferRecursorApp r ixs arg =
+  do recty <- typeCheckWHNF (typedType r)
      case asRecursorType recty of
-       Nothing -> throwTCError (ExpectedRecursor rec)
+       Nothing -> throwTCError (ExpectedRecursor r)
        Just (_d, _ps, motive, motiveTy) -> do
 
          -- Apply the indices to the type of the motive
          -- to check the types of the `ixs` and `arg`, and
          -- ensure that the result is fully applied
 
-         let err = BadRecursorApp (typedVal rec) (fmap typedVal ixs) (typedVal arg)
+         let err = BadRecursorApp (typedVal r) (fmap typedVal ixs) (typedVal arg)
          _s <- ensureSort =<< foldM (applyPiTyped err) motiveTy (ixs ++ [arg])
 
          -- return the type (p_ret ixs arg)

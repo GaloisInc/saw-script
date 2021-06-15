@@ -195,28 +195,28 @@ evalTermF cfg lam recEval tf env =
             recEval m <*>
             (toTValue <$> recEval mtp))
 
-        Recursor rec ->
+        Recursor r ->
           do let f (e,ety) = do v  <- recEvalDelay e
                                 ty <- toTValue <$> recEval ety
                                 pure (v,ty)
-             d   <- traverse (fmap toTValue . recEval) (recursorDataType rec)
-             ps  <- traverse recEval (recursorParams rec)
-             m   <- recEval (recursorMotive rec)
-             mty <- toTValue <$> recEval (recursorMotiveTy rec)
-             es  <- traverse f (recursorElims rec)
+             d   <- traverse (fmap toTValue . recEval) (recursorDataType r)
+             ps  <- traverse recEval (recursorParams r)
+             m   <- recEval (recursorMotive r)
+             mty <- toTValue <$> recEval (recursorMotiveTy r)
+             es  <- traverse f (recursorElims r)
              pure (VRecursor d ps m mty es)
 
         RecursorApp rectm ixs arg ->
-          do rec <- recEval rectm
-             case rec of
+          do r <- recEval rectm
+             case r of
                VRecursor d ps motive motiveTy ps_fs ->
                  do argv <- recEval arg
                     case evalConstructor argv of
                       Just (ctor, args)
                         | Just (elim,elimTy) <- Map.lookup (ctorVarIndex ctor) ps_fs
-                        -> do let recTy = VRecursorType d ps motive motiveTy
+                        -> do let rTy = VRecursorType d ps motive motiveTy
                               ctorTy <- toTValue <$> lam (ctorType ctor) []
-                              allArgs <- processRecArgs ps args ctorTy [(elim,elimTy),(ready rec,recTy)]
+                              allArgs <- processRecArgs ps args ctorTy [(elim,elimTy),(ready r,rTy)]
                               lam (ctorIotaTemplate ctor) allArgs
 
                         | otherwise -> panic ("evalRecursorApp: could not find info for constructor: " ++ show ctor)

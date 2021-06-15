@@ -193,8 +193,8 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
            (splitAt (length $ dtIndices dt) ->
             (ixs, arg : rem_args)))))) ->
          do crec    <- compileRecursor dt params motive elims
-            rec     <- typeInferComplete (Recursor crec)
-            typed_r <- typeInferComplete (RecursorApp rec ixs arg)
+            r       <- typeInferComplete (Recursor crec)
+            typed_r <- typeInferComplete (RecursorApp r ixs arg)
             inferApplyAll typed_r rem_args
 
        _ -> throwTCError $ NotFullyAppliedRec (dtPrimName dt)

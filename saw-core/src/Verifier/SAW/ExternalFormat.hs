@@ -173,8 +173,8 @@ scWriteExternal t0 =
                        , show (Map.toList cs_fs)
                        , show (map (\ec -> (primVarIndex ec, primType ec)) ctorOrder)
                        ])
-            RecursorApp rec ixs e -> pure $
-              unwords (["RecursorApp", show rec] ++
+            RecursorApp r ixs e -> pure $
+              unwords (["RecursorApp", show r] ++
                        map show ixs ++ [show e])
 
             RecordType elem_tps -> pure $ unwords ["RecordType", show elem_tps]
@@ -328,9 +328,9 @@ scReadExternal sc input =
                         readElimsMap elims <*>
                         readCtorList ctorOrder
                pure (FTermF (Recursor rec))
-        ("RecursorApp" : rec : (splitLast -> Just (ixs, arg))) ->
+        ("RecursorApp" : r : (splitLast -> Just (ixs, arg))) ->
             do app <- RecursorApp <$>
-                        readIdx rec <*>
+                        readIdx r <*>
                         traverse readIdx ixs <*>
                         readIdx arg
                pure (FTermF app)
