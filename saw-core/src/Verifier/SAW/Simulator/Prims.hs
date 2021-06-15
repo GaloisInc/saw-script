@@ -316,7 +316,7 @@ toWord pack (VVector vv) = pack =<< V.mapM (liftM toBool . force) vv
 toWord _ x = panic $ unwords ["Verifier.SAW.Simulator.toWord", show x]
 
 toWordPred :: (VMonad l, Show (Extra l)) => Value l -> VWord l -> MBool l
-toWordPred (VFun f) = fmap toBool . f . ready . VWord
+toWordPred (VFun _ f) = fmap toBool . f . ready . VWord
 toWordPred x = panic $ unwords ["Verifier.SAW.Simulator.toWordPred", show x]
 
 toBits :: (VMonad l, Show (Extra l)) => Unpack l -> Value l ->
@@ -433,7 +433,7 @@ coerceOp =
   constFun $
   constFun $
   constFun $
-  VFun force
+  VFun "x" force
 
 ------------------------------------------------------------
 -- Nat primitives
@@ -573,8 +573,8 @@ ltNatOp bp =
 natCaseOp :: (VMonad l, Show (Extra l)) => Value l
 natCaseOp =
   constFun $
-  VFun $ \z -> return $
-  VFun $ \s -> return $
+  VFun "z"  $ \z -> return $
+  VFun "s" $ \s -> return $
   natFun' "natCase" $ \n ->
     if n == 0
     then force z
@@ -640,7 +640,7 @@ atWithDefaultOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
 atWithDefaultOp bp =
   natFun $ \n -> return $
   constFun $
-  VFun $ \d -> return $
+  VFun "d" $ \d -> return $
   strictFun $ \x -> return $
   strictFun $ \idx ->
     case idx of
@@ -666,7 +666,7 @@ updOp bp =
   constFun $
   vectorFun (bpUnpack bp) $ \xv -> return $
   strictFun $ \idx -> return $
-  VFun $ \y ->
+  VFun "y" $ \y ->
     case idx of
       VNat i
         | toInteger i < toInteger (V.length xv)
@@ -853,7 +853,7 @@ shiftOp :: forall l.
 shiftOp bp vecOp wordIntOp wordOp =
   natFun $ \n -> return $
   constFun $
-  VFun $ \z -> return $
+  VFun "z" $ \z -> return $
   strictFun $ \xs -> return $
   strictFun $ \y ->
     case y of
@@ -1113,7 +1113,7 @@ foldrOp unpack =
   constFun $
   constFun $
   strictFun $ \f -> return $
-  VFun $ \z -> return $
+  VFun "z" $ \z -> return $
   strictFun $ \xs -> do
     let g x m = do fx <- apply f x
                    y <- delay m
@@ -1220,8 +1220,8 @@ iteOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
 iteOp bp =
   constFun $
   strictFun $ \b -> return $
-  VFun $ \x -> return $
-  VFun $ \y -> lazyMuxValue bp (toBool b) (force x) (force y)
+  VFun "x" $ \x -> return $
+  VFun "y" $ \y -> lazyMuxValue bp (toBool b) (force x) (force y)
 
 lazyMuxValue ::
   (VMonadLazy l, Show (Extra l)) =>
@@ -1241,7 +1241,7 @@ muxValue :: forall l.
 muxValue bp b = value
   where
     value :: Value l -> Value l -> MValue l
-    value (VFun f)          (VFun g)          = return $ VFun $ \a -> do
+    value (VFun nm f)       (VFun _ g)        = return $ VFun nm $ \a -> do
                                                   x <- f a
                                                   y <- g a
                                                   value x y

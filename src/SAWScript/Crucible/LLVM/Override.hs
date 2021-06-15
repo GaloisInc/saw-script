@@ -1071,7 +1071,7 @@ matchArg opts sc cc cs prepost actual expectedTy expected = do
     Just mem -> pure mem
   case (actual, expectedTy, expected) of
     (_, _, SetupTerm expectedTT)
-      | Cryptol.Forall [] [] tyexpr <- ttSchema expectedTT
+      | TypedTermSchema (Cryptol.Forall [] [] tyexpr) <- ttType expectedTT
       , Right tval <- Cryptol.evalType mempty tyexpr
         -> do sym      <- Ov.getSymInterface
               failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
@@ -1308,14 +1308,20 @@ learnGhost ::
   MS.GhostGlobal                                            ->
   TypedTerm                                              ->
   OverrideMatcher (LLVM arch) md ()
-learnGhost sc cc loc prepost var expected =
-  do actual <- readGlobal var
-     when (ttSchema actual /= ttSchema expected) $ fail $ unlines $
+learnGhost sc cc loc prepost var (TypedTerm (TypedTermSchema schEx) tmEx) =
+  do (sch,tm) <- readGlobal var
+     when (sch /= schEx) $ fail $ unlines $
        [ "Ghost variable had the wrong type:"
-       , "- Expected: " ++ show (Cryptol.pp (ttSchema expected))
-       , "- Actual:   " ++ show (Cryptol.pp (ttSchema actual))
+       , "- Expected: " ++ show (Cryptol.pp schEx)
+       , "- Actual:   " ++ show (Cryptol.pp sch)
        ]
-     instantiateExtMatchTerm sc cc loc prepost (ttTerm actual) (ttTerm expected)
+     instantiateExtMatchTerm sc cc loc prepost tm tmEx
+learnGhost _sc _cc _loc _prepost _var (TypedTerm tp _)
+  = fail $ unlines
+      [ "Ghost variable expected value has improper type"
+      , "expected Cryptol schema type, but got"
+      , show (MS.ppTypedTermType tp)
+      ]
 
 ------------------------------------------------------------------------
 
@@ -1634,10 +1640,16 @@ executeGhost ::
   MS.GhostGlobal ->
   TypedTerm ->
   OverrideMatcher (LLVM arch) RW ()
-executeGhost sc var val =
+executeGhost sc var (TypedTerm (TypedTermSchema sch) tm) =
   do s <- OM (use termSub)
-     t <- liftIO (ttTermLens (scInstantiateExt sc s) val)
-     writeGlobal var t
+     tm' <- liftIO (scInstantiateExt sc s tm)
+     writeGlobal var (sch,tm')
+executeGhost _sc _var (TypedTerm tp _) =
+  fail $ unlines
+    [ "executeGhost: improper value type"
+    , "expected Cryptol schema type, but got"
+    , show (MS.ppTypedTermType tp)
+    ]
 
 ------------------------------------------------------------------------
 

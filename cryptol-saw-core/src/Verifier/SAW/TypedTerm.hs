@@ -5,6 +5,7 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE PatternGuards #-}
 module Verifier.SAW.TypedTerm where
 
 import Control.Monad (foldM)
@@ -32,29 +33,50 @@ import Verifier.SAW.SharedTerm
 
 data TypedTerm =
   TypedTerm
-  { ttSchema :: C.Schema
+  { ttType :: TypedTermType
   , ttTerm :: Term
   }
   deriving Show
 
+
+-- | The different notion of Cryptol types that
+--   as SAWCore term might have.
+data TypedTermType
+  = TypedTermSchema C.Schema
+  | TypedTermKind   C.Kind
+  | TypedTermOther  Term
+ deriving Show
+
+
 ttTermLens :: Functor f => (Term -> f Term) -> TypedTerm -> f TypedTerm
 ttTermLens f tt = tt `seq` fmap (\x -> tt{ttTerm = x}) (f (ttTerm tt))
 
--- | Deprecated.
+ttIsMono :: TypedTermType -> Maybe C.Type
+ttIsMono ttp =
+  case ttp of
+    TypedTermSchema sch -> C.isMono sch
+    _ -> Nothing
+
 mkTypedTerm :: SharedContext -> Term -> IO TypedTerm
 mkTypedTerm sc trm = do
   ty <- scTypeOf sc trm
   ct <- scCryptolType sc ty
-  return $ TypedTerm (C.Forall [] [] ct) trm
+  let ttt = case ct of
+        Nothing        -> TypedTermOther ty
+        Just (Left k)  -> TypedTermKind k
+        Just (Right t) -> TypedTermSchema (C.tMono t)
+  return (TypedTerm ttt trm)
 
 -- | Apply a function-typed 'TypedTerm' to an argument. This operation
 -- fails if the first 'TypedTerm' does not have a monomorphic function
 -- type.
 applyTypedTerm :: SharedContext -> TypedTerm -> TypedTerm -> IO TypedTerm
-applyTypedTerm sc (TypedTerm schema1 t1) (TypedTerm _schema2 t2) =
-  case C.tIsFun =<< C.isMono schema1 of
-    Nothing -> fail "applyTypedTerm: not a function type"
-    Just (_, cty') -> TypedTerm (C.tMono cty') <$> scApply sc t1 t2
+applyTypedTerm sc (TypedTerm tp t1) (TypedTerm _ t2)
+  | Just (_,cty') <- C.tIsFun =<< ttIsMono tp
+  = TypedTerm (TypedTermSchema (C.tMono cty')) <$> scApply sc t1 t2
+
+-- TODO? extend this to allow explicit application of types?
+applyTypedTerm _ _ _ = fail "applyTypedTerm: not a (monomorphic) function type"
 
 -- | Apply a 'TypedTerm' to a list of arguments. This operation fails
 -- if the first 'TypedTerm' does not have a function type of
@@ -72,23 +94,24 @@ defineTypedTerm sc name (TypedTerm schema t) =
 -- fails if any 'TypedTerm' in the list has a polymorphic type.
 tupleTypedTerm :: SharedContext -> [TypedTerm] -> IO TypedTerm
 tupleTypedTerm sc tts =
-  case traverse (C.isMono . ttSchema) tts of
+  case traverse (ttIsMono . ttType) tts of
     Nothing -> fail "tupleTypedTerm: invalid polymorphic term"
     Just ctys ->
-      TypedTerm (C.tMono (C.tTuple ctys)) <$> scTuple sc (map ttTerm tts)
+      TypedTerm (TypedTermSchema (C.tMono (C.tTuple ctys))) <$>
+        scTuple sc (map ttTerm tts)
 
 -- | Given a 'TypedTerm' with a tuple type, return a list of its
 -- projected components. This operation fails if the 'TypedTerm' does
 -- not have a tuple type.
 destTupleTypedTerm :: SharedContext -> TypedTerm -> IO [TypedTerm]
-destTupleTypedTerm sc (TypedTerm schema t) =
-  case C.tIsTuple =<< C.isMono schema of
+destTupleTypedTerm sc (TypedTerm tp t) =
+  case C.tIsTuple =<< ttIsMono tp of
     Nothing -> fail "asTupleTypedTerm: not a tuple type"
     Just ctys ->
       do let len = length ctys
          let idxs = take len [1 ..]
          ts <- traverse (\i -> scTupleSelector sc t i len) idxs
-         pure $ zipWith TypedTerm (map C.tMono ctys) ts
+         pure $ zipWith TypedTerm (map (TypedTermSchema . C.tMono) ctys) ts
 
 -- First order types and values ------------------------------------------------
 
@@ -117,7 +140,7 @@ typedTermOfFirstOrderValue sc fov =
   do let fot = firstOrderTypeOf fov
      let cty = cryptolTypeOfFirstOrderType fot
      t <- scFirstOrderValue sc fov
-     pure $ TypedTerm (C.tMono cty) t
+     pure $ TypedTerm (TypedTermSchema (C.tMono cty)) t
 
 -- Typed external constants ----------------------------------------------------
 
@@ -130,23 +153,32 @@ data TypedExtCns =
 
 -- | Recognize 'TypedTerm's that are external constants.
 asTypedExtCns :: TypedTerm -> Maybe TypedExtCns
-asTypedExtCns (TypedTerm schema t) =
-  do cty <- C.isMono schema
+asTypedExtCns (TypedTerm tp t) =
+  do cty <- ttIsMono tp
      ec <- asExtCns t
      pure $ TypedExtCns cty ec
 
 -- | Make a 'TypedTerm' from a 'TypedExtCns'.
 typedTermOfExtCns :: SharedContext -> TypedExtCns -> IO TypedTerm
 typedTermOfExtCns sc (TypedExtCns cty ec) =
-  TypedTerm (C.tMono cty) <$> scExtCns sc ec
+  TypedTerm (TypedTermSchema (C.tMono cty)) <$> scExtCns sc ec
 
 abstractTypedExts :: SharedContext -> [TypedExtCns] -> TypedTerm -> IO TypedTerm
-abstractTypedExts sc tecs (TypedTerm (C.Forall params props ty) trm) =
+abstractTypedExts sc tecs (TypedTerm (TypedTermSchema (C.Forall params props ty)) trm) =
   do let tys = map tecType tecs
      let exts = map tecExt tecs
      let ty' = foldr C.tFun ty tys
      trm' <- scAbstractExts sc exts trm
-     pure $ TypedTerm (C.Forall params props ty') trm'
+     pure $ TypedTerm (TypedTermSchema (C.Forall params props ty')) trm'
+abstractTypedExts sc tecs (TypedTerm (TypedTermKind k) trm) =
+  do let exts = map tecExt tecs
+     trm' <- scAbstractExts sc exts trm
+     pure $ TypedTerm (TypedTermKind k) trm'
+abstractTypedExts sc tecs (TypedTerm (TypedTermOther _tp) trm) =
+  do let exts = map tecExt tecs
+     trm' <- scAbstractExts sc exts trm
+     tp'  <- scTypeOf sc trm'
+     pure $ TypedTerm (TypedTermOther tp') trm'
 
 -- Typed modules ---------------------------------------------------------------
 
@@ -162,9 +194,12 @@ showCryptolModule (CryptolModule sm tm) =
   unlines $
     (if Map.null sm then [] else
        "Type Synonyms" : "=============" : map showTSyn (Map.elems sm) ++ [""]) ++
-    "Symbols" : "=======" : map showBinding (Map.assocs tm)
+    "Symbols" : "=======" : concatMap showBinding (Map.assocs tm)
   where
     showTSyn (C.TySyn name params _props rhs _doc) =
       "    " ++ unwords (pretty (nameIdent name) : map pretty params) ++ " = " ++ pretty rhs
-    showBinding (name, TypedTerm schema _) =
-      "    " ++ pretty (nameIdent name) ++ " : " ++ pretty schema
+
+    showBinding (name, TypedTerm (TypedTermSchema schema) _) =
+      ["    " ++ pretty (nameIdent name) ++ " : " ++ pretty schema]
+    showBinding _ =
+      []

@@ -841,7 +841,7 @@ primitives = Map.fromList
     [ "Print the type of the given term." ]
 
   , prim "type"                "Term -> Type"
-    (pureVal ttSchema)
+    (funVal1 term_type)
     Current
     [ "Return the type of the given term." ]
 
