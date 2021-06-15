@@ -344,15 +344,15 @@ instance Net.Pattern Term where
 termToPat :: Term -> Net.Pat
 termToPat t =
     case unwrapTermF t of
-      Constant ec _             -> Net.Atom (toAbsoluteName (ecName ec))
+      Constant ec _             -> Net.Atom (toShortName (ecName ec))
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
-      FTermF (Primitive ec)     -> Net.Atom (toAbsoluteName (ecName ec))
+      FTermF (Primitive ec)     -> Net.Atom (toShortName (ecName ec))
       FTermF (Sort s)           -> Net.Atom (Text.pack ('*' : show s))
       FTermF (NatLit _)         -> Net.Var
       FTermF (DataTypeApp c ps ts) ->
-        foldl Net.App (Net.Atom (identText c)) (map termToPat (ps ++ ts))
+        foldl Net.App (Net.Atom (identBaseName c)) (map termToPat (ps ++ ts))
       FTermF (CtorApp c ps ts)   ->
-        foldl Net.App (Net.Atom (identText c)) (map termToPat (ps ++ ts))
+        foldl Net.App (Net.Atom (identBaseName c)) (map termToPat (ps ++ ts))
       _                         -> Net.Var
 
 unwrapTermF :: Term -> TermF Term
