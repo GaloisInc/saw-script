@@ -28,6 +28,7 @@ import Data.IntTrie (IntTrie)
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 
 import Verifier.SAW.Prim (BitVector(..), signed, bv, bvNeg)
 import qualified Verifier.SAW.Prim as Prim
@@ -36,14 +37,14 @@ import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.TypedAST (ModuleMap)
 import Verifier.SAW.SharedTerm
-
+import Verifier.SAW.Utils (panic)
 ------------------------------------------------------------
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: ModuleMap -> Map Ident CValue -> Map VarIndex CValue -> Term -> CValue
+evalSharedTerm :: ModuleMap -> Map Ident CPrim -> Map VarIndex CValue -> Term -> CValue
 evalSharedTerm m addlPrims ecVals t =
   runIdentity $ do
-    cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns (const Nothing) neutral
+    cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns (const Nothing) neutral primHandler
     Sim.evalSharedTerm cfg t
   where
     neutral _env nt = return $ Prim.userError $ "Cannot evaluate neutral term\n" ++ show nt
@@ -51,6 +52,12 @@ evalSharedTerm m addlPrims ecVals t =
       case Map.lookup (ecVarIndex ec) ecVals of
         Just v  -> return v
         Nothing -> return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
+    primHandler pn msg env _tv =
+      return $ Prim.userError $ unlines
+        [ "Could not evaluate primitive " ++ show (primName pn)
+        , "On argument " ++ show (length env)
+        , Text.unpack msg
+        ]
 
 ------------------------------------------------------------
 -- Values
@@ -65,6 +72,7 @@ type instance VArray Concrete = ()
 type instance Extra Concrete = CExtra
 
 type CValue = Value Concrete -- (WithM Identity Concrete)
+type CPrim  = Prims.Prim Concrete
 
 data CExtra
   = CStream (IntTrie CValue)
@@ -91,15 +99,15 @@ toStream :: CValue -> IntTrie CValue
 toStream (VExtra (CStream x)) = x
 toStream x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toStream", show x]
 
-wordFun :: (BitVector -> CValue) -> CValue
-wordFun f = pureFun (\x -> f (toWord x))
+wordFun :: (BitVector -> CPrim) -> CPrim
+wordFun f = Prims.strictFun (\x -> f (toWord x))
 
 -- | op : (n : Nat) -> Vec n Bool -> Nat -> Vec n Bool
-bvShiftOp :: (BitVector -> Int -> BitVector) -> CValue
+bvShiftOp :: (BitVector -> Int -> BitVector) -> CPrim
 bvShiftOp natOp =
-  constFun $
+  Prims.constFun $
   wordFun $ \x ->
-  pureFun $ \y ->
+  Prims.strictFun $ \y -> Prims.PrimValue $
     case y of
       VNat n | toInteger n < toInteger (maxBound :: Int) -> vWord (natOp x (fromIntegral n))
       _      -> error $ unwords ["Verifier.SAW.Simulator.Concrete.shiftOp", show y]
@@ -209,7 +217,7 @@ prims =
 unsupportedConcretePrimitive :: String -> a
 unsupportedConcretePrimitive = Prim.unsupportedPrimitive "concrete"
 
-constMap :: Map Ident CValue
+constMap :: Map Ident CPrim
 constMap =
   flip Map.union (Prims.constMap prims) $
   Map.fromList
@@ -242,77 +250,77 @@ constMap =
 ------------------------------------------------------------
 
 -- primitive bvToNat : (n : Nat) -> Vec n Bool -> Nat;
-bvToNatOp :: CValue
-bvToNatOp = constFun $ wordFun $ VNat . fromInteger . unsigned
+bvToNatOp :: CPrim
+bvToNatOp = Prims.constFun $ wordFun $ Prims.PrimValue . VNat . fromInteger . unsigned
 
 -- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
-bvToIntOp :: CValue
-bvToIntOp = constFun $ wordFun $ VInt . unsigned
+bvToIntOp :: CPrim
+bvToIntOp = Prims.constFun $ wordFun $ Prims.PrimValue . VInt . unsigned
 
 -- primitive sbvToInt : (n : Nat) -> Vec n Bool -> Integer;
-sbvToIntOp :: CValue
-sbvToIntOp = constFun $ wordFun $ VInt . signed
+sbvToIntOp :: CPrim
+sbvToIntOp = Prims.constFun $ wordFun $ Prims.PrimValue . VInt . signed
 
 -- primitive intToBv : (n : Nat) -> Integer -> Vec n Bool;
-intToBvOp :: CValue
+intToBvOp :: CPrim
 intToBvOp =
-  Prims.natFun' "intToBv n" $ \n -> return $
-  Prims.intFun "intToBv x" $ \x -> return $
-    VWord $
+  Prims.natFun $ \n ->
+  Prims.intFun $ \x ->
+    Prims.PrimValue $ VWord $
      if n >= 0 then bv (fromIntegral n) x
                else bvNeg n $ bv (fromIntegral n) $ negate x
 
 ------------------------------------------------------------
 
-toIntModOp :: CValue
+toIntModOp :: CPrim
 toIntModOp =
-  Prims.natFun $ \n -> return $
-  Prims.intFun "toIntModOp" $ \x -> return $
-  VIntMod n (x `mod` toInteger n)
+  Prims.natFun $ \n ->
+  Prims.intFun $ \x ->
+    Prims.PrimValue $ VIntMod n (x `mod` toInteger n)
 
-fromIntModOp :: CValue
+fromIntModOp :: CPrim
 fromIntModOp =
-  constFun $
-  Prims.intModFun "fromIntModOp" $ \x -> pure $
-  VInt x
+  Prims.constFun $
+  Prims.intModFun $ \x ->
+    Prims.PrimValue $ VInt x
 
-intModEqOp :: CValue
+intModEqOp :: CPrim
 intModEqOp =
-  constFun $
-  Prims.intModFun "intModEqOp" $ \x -> return $
-  Prims.intModFun "intModEqOp" $ \y -> return $
-  VBool (x == y)
+  Prims.constFun $
+  Prims.intModFun $ \x ->
+  Prims.intModFun $ \y ->
+    Prims.PrimValue $ VBool (x == y)
 
-intModBinOp :: (Integer -> Integer -> Integer) -> CValue
+intModBinOp :: (Integer -> Integer -> Integer) -> CPrim
 intModBinOp f =
-  Prims.natFun $ \n -> return $
-  Prims.intModFun "intModBinOp x" $ \x -> return $
-  Prims.intModFun "intModBinOp y" $ \y -> return $
-  VIntMod n (f x y `mod` toInteger n)
+  Prims.natFun $ \n ->
+  Prims.intModFun $ \x ->
+  Prims.intModFun $ \y ->
+    Prims.PrimValue $ VIntMod n (f x y `mod` toInteger n)
 
-intModUnOp :: (Integer -> Integer) -> CValue
+intModUnOp :: (Integer -> Integer) -> CPrim
 intModUnOp f =
-  Prims.natFun $ \n -> return $
-  Prims.intModFun "intModUnOp" $ \x -> return $
-  VIntMod n (f x `mod` toInteger n)
+  Prims.natFun $ \n ->
+  Prims.intModFun $ \x ->
+    Prims.PrimValue $ VIntMod n (f x `mod` toInteger n)
 
 ------------------------------------------------------------
 
 -- MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
-mkStreamOp :: CValue
+mkStreamOp :: CPrim
 mkStreamOp =
-  constFun $
-  pureFun $ \f ->
-  vStream (fmap (\n -> runIdentity (apply f (ready (VNat n)))) IntTrie.identity)
+  Prims.constFun $
+  Prims.strictFun $ \f -> Prims.PrimValue $
+    vStream (fmap (\n -> runIdentity (apply f (ready (VNat n)))) IntTrie.identity)
 
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
-streamGetOp :: CValue
+streamGetOp :: CPrim
 streamGetOp =
-  constFun $
-  pureFun $ \xs ->
-  strictFun $ \case
+  Prims.constFun $
+  Prims.strictFun $ \xs ->
+  Prims.strictFun $ \ix -> Prims.Prim $ case ix of
     VNat n -> return $ IntTrie.apply (toStream xs) (toInteger n)
     VIntToNat (VInt i) -> return $ IntTrie.apply (toStream xs) i
     VBVToNat _ w -> return $ IntTrie.apply (toStream xs) (unsigned (toWord w))
-    n -> Prims.panic "Verifier.SAW.Simulator.Concrete.streamGetOp"
+    n -> panic "Verifier.SAW.Simulator.Concrete.streamGetOp"
                ["Expected Nat value", show n]

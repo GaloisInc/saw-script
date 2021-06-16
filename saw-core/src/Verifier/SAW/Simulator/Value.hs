@@ -23,7 +23,7 @@ module Verifier.SAW.Simulator.Value
 
 import Prelude hiding (mapM)
 
-import Control.Monad (foldM, liftM, mapM)
+import Control.Monad (foldM, mapM)
 import Data.Kind (Type)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -166,21 +166,6 @@ type instance VArray (WithM m l) = VArray l
 type instance Extra (WithM m l) = Extra l
 
 --------------------------------------------------------------------------------
-
-strictFun :: VMonad l => (Value l -> MValue l) -> Value l
--- TODO, make callers provide a name?
-strictFun f = VFun "x" (\x -> force x >>= f)
-
-pureFun :: VMonad l => (Value l -> Value l) -> Value l
--- TODO, make callers provide a name?
-pureFun f = VFun "x" (\x -> liftM f (force x))
-
-constFun :: VMonad l => Value l -> Value l
-constFun x = VFun "_" (\_ -> return x)
-
-toTValue :: HasCallStack => Value l -> TValue l
-toTValue (TValue x) = x
-toTValue _ = panic "Verifier.SAW.Simulator.Value.toTValue" ["Not a type value"]
 
 instance Show (Extra l) => Show (Value l) where
   showsPrec p v =
