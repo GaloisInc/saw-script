@@ -142,10 +142,10 @@ evalTermF cfg lam recEval tf env =
                                     if inBitSet 0 (looseVars t2) then
                                       pure (VDependentPi (\x -> toTValue <$> lam t2 ((x,v) : env)))
                                     else
-                                      do val <- delay (panic "evalTermF"
-                                                         ["nondependent Pi type forced its value"
-                                                         , showTerm (Unshared tf)])
-                                         VNondependentPi . toTValue <$> lam t2 ((val,v) : env)
+                                      do -- put dummy values in the environment; the term should never reference them
+                                         let val = ready VUnit
+                                         let tp  = VUnitType
+                                         VNondependentPi . toTValue <$> lam t2 ((val,tp):env)
                                   return $ TValue $ VPiType nm v body
 
     LocalVar i              -> force (fst (env !! i))

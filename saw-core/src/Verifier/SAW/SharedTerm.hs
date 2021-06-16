@@ -187,6 +187,11 @@ module Verifier.SAW.SharedTerm
   , scIntModType
   , scToIntMod
   , scFromIntMod
+  , scIntModEq
+  , scIntModAdd
+  , scIntModSub
+  , scIntModMul
+  , scIntModNeg
     -- *** Vectors
   , scAppend
   , scJoin
@@ -240,6 +245,7 @@ module Verifier.SAW.SharedTerm
   , getConstantSet
   , scInstantiateExt
   , scAbstractExts
+  , scAbstractExtsEtaCollapse
   , scGeneralizeExts
   , incVars
   , scUnfoldConstants
@@ -1624,7 +1630,7 @@ scIte sc t b x y = scGlobalApply sc "Prelude.ite" [t, b, x, y]
 -- > append : (m n : Nat) -> (e : sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
 scAppend :: SharedContext -> Term -> Term -> Term ->
             Term -> Term -> IO Term
-scAppend sc t m n x y = scGlobalApply sc "Prelude.append" [m, n, t, x, y]
+scAppend sc m n t x y = scGlobalApply sc "Prelude.append" [m, n, t, x, y]
 
 -- | Create a term applying @Prelude.join@ to a vector of vectors.
 --
@@ -1908,6 +1914,36 @@ scToIntMod sc n x = scGlobalApply sc "Prelude.toIntMod" [n, x]
 -- > fromIntMod : (n : Nat) -> IntMod n -> Integer;
 scFromIntMod :: SharedContext -> Term -> Term -> IO Term
 scFromIntMod sc n x = scGlobalApply sc "Prelude.fromIntMod" [n, x]
+
+-- | Equality test on the @IntMod@ type
+--
+-- > intModEq  : (n : Nat) -> IntMod n -> IntMod n -> Bool;
+scIntModEq :: SharedContext -> Term -> Term -> Term -> IO Term
+scIntModEq sc n x y = scGlobalApply sc "Prelude.intModEq" [n,x,y]
+
+-- | Addition of @IntMod@ values
+--
+-- > intModAdd : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
+scIntModAdd :: SharedContext -> Term -> Term -> Term -> IO Term
+scIntModAdd sc n x y = scGlobalApply sc "Prelude.intModAdd" [n,x,y]
+
+-- | Subtraction of @IntMod@ values
+--
+-- > intModSub : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
+scIntModSub :: SharedContext -> Term -> Term -> Term -> IO Term
+scIntModSub sc n x y = scGlobalApply sc "Prelude.intModSub" [n,x,y]
+
+-- | Multiplication of @IntMod@ values
+--
+-- > intModMul : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
+scIntModMul :: SharedContext -> Term -> Term -> Term -> IO Term
+scIntModMul sc n x y = scGlobalApply sc "Prelude.intModMul" [n,x,y]
+
+-- | Negation (additive inverse) of @IntMod@ values
+--
+-- > intModNeg : (n : Nat) -> IntMod n -> IntMod n;
+scIntModNeg :: SharedContext -> Term -> Term -> IO Term
+scIntModNeg sc n x = scGlobalApply sc "Prelude.intModNeg" [n,x]
 
 
 -- Primitive operations on bitvectors
@@ -2357,6 +2393,28 @@ scAbstractExts sc exts x = loop (zip (inits exts) exts)
 
     -- base case, convert all the exts in the body of x into deBruijn variables
     loop [] = scExtsToLocals sc exts x
+
+
+-- | Abstract over the given list of external constants by wrapping
+--   the given term with lambdas and replacing the external constant
+--   occurrences with the appropriate local variables.  However,
+--   the term will be eta-collapsed as far as possible, so unnecessary
+--   lambdas will simply be omitted.
+scAbstractExtsEtaCollapse :: SharedContext -> [ExtCns Term] -> Term -> IO Term
+scAbstractExtsEtaCollapse sc = \exts tm -> loop (reverse exts) tm
+  where
+    -- we eta-collapsed all the variables, nothing more to do
+    loop [] tm = pure tm
+
+    -- the final variable to abstract is applied to the
+    -- term, and does not appear elsewhere in the term,
+    -- so we can eta-collapse.
+    loop (ec:exts) (asApp -> Just (f,asExtCns -> Just ec'))
+      | ec == ec', not (Set.member ec (getAllExtSet f))
+      = loop exts f
+
+    -- cannot eta-collapse, do abstraction as usual
+    loop exts tm = scAbstractExts sc (reverse exts) tm
 
 
 -- | Generalize over the given list of external constants by wrapping

@@ -1218,6 +1218,14 @@ eval_list t = do
   ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
   return (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
 
+default_typed_term :: TypedTerm -> TopLevel TypedTerm
+default_typed_term tt = do
+  sc <- getSharedContext
+  cenv <- fmap rwCryptol getTopLevelRW
+  let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
+  opts <- getOptions
+  io $ defaultTypedTerm opts sc cfg tt
+
 -- | Default the values of the type variables in a typed term.
 defaultTypedTerm :: Options -> SharedContext -> C.SolverConfig -> TypedTerm -> IO TypedTerm
 defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
