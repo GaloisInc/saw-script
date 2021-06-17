@@ -20,6 +20,10 @@ Several improvements have been made to JVM verification:
   "current" status, so that `enable_experimental` is no longer
   necessary for JVM verification.
 
+A new `enable_lax_pointer_ordering` function exists, which relaxes the
+restrictions that Crucible imposes on comparisons between pointers from
+different allocation blocks.
+
 # Version 0.8
 
 ## New Features

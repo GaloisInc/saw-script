@@ -475,6 +475,7 @@ buildTopLevelEnv proxy opts =
                    , rwCrucibleAssertThenAssume = False
                    , rwProfilingFile = Nothing
                    , rwLaxArith = False
+                   , rwLaxPointerOrdering = False
                    , rwWhat4HashConsing = False
                    , rwWhat4HashConsingX86 = False
                    , rwPreservedRegs = []
@@ -542,6 +543,11 @@ enable_lax_arithmetic :: TopLevel ()
 enable_lax_arithmetic = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxArith = True }
+
+enable_lax_pointer_ordering :: TopLevel ()
+enable_lax_pointer_ordering = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxPointerOrdering = True }
 
 enable_what4_hash_consing :: TopLevel ()
 enable_what4_hash_consing = do
@@ -763,6 +769,11 @@ primitives = Map.fromList
     (pureVal enable_lax_arithmetic)
     Current
     [ "Enable lax rules for arithmetic overflow in Crucible." ]
+
+  , prim "enable_lax_pointer_ordering" "TopLevel ()"
+    (pureVal enable_lax_pointer_ordering)
+    Current
+    [ "Enable lax rules for pointer ordering comparisons in Crucible." ]
 
   , prim "enable_what4_hash_consing" "TopLevel ()"
     (pureVal enable_what4_hash_consing)
