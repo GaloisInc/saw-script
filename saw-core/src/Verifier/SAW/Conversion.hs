@@ -265,15 +265,15 @@ asCtor :: ArgsMatchable v a => Ident -> v a -> Matcher a
 asCtor o = resolveArgs $ Matcher (Net.Atom (identText o)) match
   where match t = do
           CtorApp c params l <- R.asFTermF t
-          guard (c == o)
+          guard (o == primName c)
           return (params ++ l)
 
 -- | Match a datatype.
-asDataType :: ArgsMatchable v a => Ident -> v a -> Matcher a
-asDataType o = resolveArgs $ Matcher (Net.Atom (identText o)) match
+asDataType :: ArgsMatchable v a => PrimName a -> v a -> Matcher a
+asDataType o = resolveArgs $ Matcher (Net.Atom (identText (primName o))) match
   where match t = do
           DataTypeApp dt params l <- R.asFTermF t
-          guard (dt == o)
+          guard (primVarIndex dt == primVarIndex o)
           return (params ++ l)
 
 -- | Match any sort.
@@ -400,14 +400,17 @@ mkTupleSelector i t
   | i > 1  = mkTermF (FTermF (PairRight t)) >>= mkTupleSelector (i - 1)
   | otherwise = panic "Verifier.SAW.Conversion.mkTupleSelector" ["non-positive index:", show i]
 
-mkCtor :: Ident -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
+mkCtor :: PrimName Term -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
 mkCtor i paramsB argsB =
   do params <- sequence paramsB
      args <- sequence argsB
      mkTermF $ FTermF $ CtorApp i params args
 
-mkDataType :: Ident -> [TermBuilder Term] -> [TermBuilder Term] ->
-              TermBuilder Term
+mkDataType ::
+  PrimName Term ->
+  [TermBuilder Term] ->
+  [TermBuilder Term] ->
+  TermBuilder Term
 mkDataType i paramsB argsB =
   do params <- sequence paramsB
      args <- sequence argsB

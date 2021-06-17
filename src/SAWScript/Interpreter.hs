@@ -640,11 +640,11 @@ readSchema str =
 
 data Primitive
   = Primitive
-    { primName :: SS.LName
-    , primType :: SS.Schema
-    , primLife :: PrimitiveLifecycle
-    , primDoc  :: [String]
-    , primFn   :: Options -> BuiltinContext -> Value
+    { primitiveName :: SS.LName
+    , primitiveType :: SS.Schema
+    , primitiveLife :: PrimitiveLifecycle
+    , primitiveDoc  :: [String]
+    , primitiveFn   :: Options -> BuiltinContext -> Value
     }
 
 primitives :: Map SS.LName Primitive
@@ -841,7 +841,7 @@ primitives = Map.fromList
     [ "Print the type of the given term." ]
 
   , prim "type"                "Term -> Type"
-    (pureVal ttSchema)
+    (funVal1 term_type)
     Current
     [ "Return the type of the given term." ]
 
@@ -901,6 +901,11 @@ primitives = Map.fromList
     , "those variables, and return a new lambda abstraction over the list of"
     , "variables."
     ]
+
+  , prim "default_term" "Term -> Term"
+    (funVal1 default_typed_term)
+    Experimental
+    [ "Apply Cryptol defaulting rules to the given term." ]
 
   , prim "sbv_uninterpreted"   "String -> Term -> TopLevel Uninterp"
     (pureVal sbvUninterpreted)
@@ -2928,11 +2933,11 @@ primitives = Map.fromList
     prim :: String -> String -> (Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
          -> (SS.LName, Primitive)
     prim name ty fn lc doc = (qname, Primitive
-                                     { primName = qname
-                                     , primType = readSchema ty
-                                     , primDoc  = doc
-                                     , primFn   = fn
-                                     , primLife = lc
+                                     { primitiveName = qname
+                                     , primitiveType = readSchema ty
+                                     , primitiveDoc  = doc
+                                     , primitiveFn   = fn
+                                     , primitiveLife = lc
                                      })
       where qname = qualify name
 
@@ -2962,14 +2967,14 @@ filterAvail ::
   Map SS.LName Primitive ->
   Map SS.LName Primitive
 filterAvail primsAvail =
-  Map.filter (\p -> primLife p `Set.member` primsAvail)
+  Map.filter (\p -> primitiveLife p `Set.member` primsAvail)
 
 primTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
-primTypeEnv primsAvail = fmap primType (filterAvail primsAvail primitives)
+primTypeEnv primsAvail = fmap primitiveType (filterAvail primsAvail primitives)
 
 valueEnv :: Set PrimitiveLifecycle -> Options -> BuiltinContext -> Map SS.LName Value
 valueEnv primsAvail opts bic = fmap f (filterAvail primsAvail primitives)
-  where f p = (primFn p) opts bic
+  where f p = (primitiveFn p) opts bic
 
 -- | Map containing the formatted documentation string for each
 -- saw-script primitive.
@@ -2978,7 +2983,7 @@ primDocEnv primsAvail =
   Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList prims ]
     where
       prims = filterAvail primsAvail primitives
-      tag p = case primLife p of
+      tag p = case primitiveLife p of
                 Current -> []
                 Deprecated -> ["DEPRECATED", ""]
                 Experimental -> ["EXPERIMENTAL", ""]
@@ -2987,9 +2992,9 @@ primDocEnv primsAvail =
                 , "-----------"
                 , ""
                 ] ++ tag p ++
-                [ "    " ++ getVal n ++ " : " ++ SS.pShow (primType p)
+                [ "    " ++ getVal n ++ " : " ++ SS.pShow (primitiveType p)
                 , ""
-                ] ++ primDoc p
+                ] ++ primitiveDoc p
 
 qualify :: String -> Located SS.Name
 qualify s = Located s s (SS.PosInternal "coreEnv")

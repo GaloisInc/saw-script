@@ -115,6 +115,7 @@ import SAWScript.TopLevel
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
 
+import SAWScript.Crucible.Common.MethodSpec (ppTypedTermType)
 import SAWScript.Prover.Util(checkBooleanSchema)
 import SAWScript.Prover.SolverStats
 import qualified SAWScript.Prover.SBV as Prover
@@ -131,11 +132,16 @@ showPrim v = do
   return (SV.showsPrecValue opts 0 v "")
 
 definePrim :: Text -> TypedTerm -> TopLevel TypedTerm
-definePrim name (TypedTerm schema rhs) =
+definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
   do sc <- getSharedContext
      ty <- io $ Cryptol.importSchema sc Cryptol.emptyEnv schema
      t <- io $ scConstant sc name rhs ty
-     return $ TypedTerm schema t
+     return $ TypedTerm (TypedTermSchema schema) t
+definePrim _name (TypedTerm tp _) =
+  fail $ unlines
+    [ "Expected term with Cryptol schema type, but got"
+    , show (ppTypedTermType tp)
+    ]
 
 sbvUninterpreted :: String -> Term -> TopLevel Uninterp
 sbvUninterpreted s t = return $ Uninterp (s, t)
@@ -150,7 +156,7 @@ readBytes path = do
   xs <- io $ mapM (scBvConst sc 8 . toInteger) bytes
   trm <- io $ scVector sc e xs
   let schema = C.Forall [] [] (C.tSeq (C.tNum len) (C.tSeq (C.tNum (8::Int)) C.tBit))
-  return (TypedTerm schema trm)
+  return (TypedTerm (TypedTermSchema schema) trm)
 
 readSBV :: FilePath -> [Uninterp] -> TopLevel TypedTerm
 readSBV path unintlst =
@@ -166,7 +172,7 @@ readSBV path unintlst =
              printOutLnTop Error $ unlines $
              ("Type error reading " ++ path ++ ":") : prettyTCError err
            Right _ -> return () -- TODO: check that it matches 'schema'?
-       return (TypedTerm schema trm)
+       return (TypedTerm (TypedTermSchema schema) trm)
     where
       unintmap = Map.fromList $ map getUninterp unintlst
 
@@ -257,7 +263,7 @@ readAIGPrim f = do
   et <- io $ readAIG proxy opts sc f
   case et of
     Left err -> fail $ "Reading AIG failed: " ++ err
-    Right (inLen, outLen, t) -> pure $ TypedTerm schema t
+    Right (inLen, outLen, t) -> pure $ TypedTerm (TypedTermSchema schema) t
       where
         t1 = C.tWord (C.tNum inLen)
         t2 = C.tWord (C.tNum outLen)
@@ -507,6 +513,15 @@ hoistIfsInGoalPrim =
     do sc <- getSharedContext
        p <- io $ hoistIfsInGoal sc (goalProp goal)
        return (p, HoistIfsEvidence)
+
+term_type :: TypedTerm -> TopLevel C.Schema
+term_type tt =
+  case ttType tt of
+    TypedTermSchema sch -> pure sch
+    tp -> fail $ unlines
+            [ "Term does not have a Cryptol type"
+            , show (ppTypedTermType tp)
+            ]
 
 goal_eval :: [String] -> ProofScript ()
 goal_eval unints =
@@ -818,7 +833,7 @@ provePrim ::
   TypedTerm ->
   TopLevel ProofResult
 provePrim script t = do
-  io $ checkBooleanSchema (ttSchema t)
+  io $ checkBooleanSchema (ttType t)
   sc <- getSharedContext
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   let goal = ProofGoal 0 "prove" "prove" prop
@@ -855,7 +870,7 @@ satPrim ::
   TypedTerm ->
   TopLevel SV.SatResult
 satPrim script t =
-  do io $ checkBooleanSchema (ttSchema t)
+  do io $ checkBooleanSchema (ttType t)
      sc <- getSharedContext
      prop <- io $ predicateToProp sc Existential (ttTerm t)
      let goal = ProofGoal 0 "sat" "sat" prop
@@ -1001,7 +1016,7 @@ freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
   sc <- getSharedContext
   cty <- io $ Cryptol.importType sc Cryptol.emptyEnv ct
   tm <- io $ scFreshGlobal sc x cty
-  return $ TypedTerm schema tm
+  return $ TypedTerm (TypedTermSchema schema) tm
 freshSymbolicPrim _ _ =
   fail "Can't create fresh symbolic variable of non-ground type."
 
@@ -1144,8 +1159,8 @@ failsPrim m = TopLevel $ do
 eval_bool :: TypedTerm -> TopLevel Bool
 eval_bool t = do
   sc <- getSharedContext
-  case ttSchema t of
-    C.Forall [] [] (C.tIsBit -> True) -> return ()
+  case ttType t of
+    TypedTermSchema (C.Forall [] [] (C.tIsBit -> True)) -> return ()
     _ -> fail "eval_bool: not type Bit"
   unless (null (getAllExts (ttTerm t))) $
     fail "eval_bool: term contains symbolic variables"
@@ -1161,8 +1176,8 @@ eval_int t = do
     fail "term contains symbolic variables"
   opts <- getOptions
   t' <- io $ defaultTypedTerm opts sc cfg t
-  case ttSchema t' of
-    C.Forall [] [] (isInteger -> True) -> return ()
+  case ttType t' of
+    TypedTermSchema (C.Forall [] [] (isInteger -> True)) -> return ()
     _ -> fail "eval_int: argument is not a finite bitvector"
   v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t'
   io $ C.runEval mempty (C.bvVal <$> C.fromVWord C.Concrete "eval_int" v)
@@ -1177,41 +1192,50 @@ list_term :: [TypedTerm] -> TopLevel TypedTerm
 list_term [] = fail "list_term: invalid empty list"
 list_term tts@(tt0 : _) =
   do sc <- getSharedContext
-     let schema = ttSchema tt0
-     unless (all (schema ==) (map ttSchema tts)) $
+     a <- case ttType tt0 of
+            TypedTermSchema (C.Forall [] [] a) -> return a
+            _ -> fail "list_term: not a monomorphic element type"
+     let eqa (TypedTermSchema (C.Forall [] [] x)) = a == x
+         eqa _ = False
+     unless (all eqa (map ttType tts)) $
        fail "list_term: non-uniform element types"
-     a <-
-       case schema of
-         C.Forall [] [] a -> return a
-         _ -> fail "list_term: not a monomorphic element type"
+
      a' <- io $ Cryptol.importType sc Cryptol.emptyEnv a
      trm <- io $ scVectorReduced sc a' (map ttTerm tts)
      let n = C.tNum (length tts)
-     return (TypedTerm (C.tMono (C.tSeq n a)) trm)
+     return (TypedTerm (TypedTermSchema (C.tMono (C.tSeq n a))) trm)
 
 eval_list :: TypedTerm -> TopLevel [TypedTerm]
 eval_list t = do
   sc <- getSharedContext
   (n, a) <-
-    case ttSchema t of
-      C.Forall [] [] (C.tIsSeq -> Just (C.tIsNum -> Just n, a)) -> return (n, a)
+    case ttType t of
+      TypedTermSchema (C.Forall [] [] (C.tIsSeq -> Just (C.tIsNum -> Just n, a))) -> return (n, a)
       _ -> fail "eval_list: not a monomorphic array type"
   n' <- io $ scNat sc (fromInteger n)
   a' <- io $ Cryptol.importType sc Cryptol.emptyEnv a
   idxs <- io $ traverse (scNat sc) $ map fromInteger [0 .. n - 1]
   ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
-  return (map (TypedTerm (C.tMono a)) ts)
+  return (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
+
+default_typed_term :: TypedTerm -> TopLevel TypedTerm
+default_typed_term tt = do
+  sc <- getSharedContext
+  cenv <- fmap rwCryptol getTopLevelRW
+  let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
+  opts <- getOptions
+  io $ defaultTypedTerm opts sc cfg tt
 
 -- | Default the values of the type variables in a typed term.
 defaultTypedTerm :: Options -> SharedContext -> C.SolverConfig -> TypedTerm -> IO TypedTerm
-defaultTypedTerm opts sc cfg tt@(TypedTerm schema trm)
+defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
   | null (C.sVars schema) = return tt
   | otherwise = do
   mdefault <- C.withSolver cfg (\s -> C.defaultReplExpr s undefined schema)
   let inst = do (soln, _) <- mdefault
                 mapM (`lookup` soln) (C.sVars schema)
   case inst of
-    Nothing -> return (TypedTerm schema trm)
+    Nothing -> return (TypedTerm (TypedTermSchema schema) trm)
     Just tys -> do
       let vars = C.sVars schema
       let nms = C.addTNames vars IntMap.empty
@@ -1229,7 +1253,7 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm schema trm)
       let props = map (plainSubst su) (C.sProps schema)
       trm'' <- foldM dischargeProp trm' props
       let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))
-      return (TypedTerm schema' trm'')
+      return (TypedTerm (TypedTermSchema schema') trm'')
   where
     warnDefault ns (x,t) =
       printOutLn opts Info $ show $ C.text "Assuming" C.<+> C.ppWithNames ns (x :: C.TParam) C.<+> C.text "=" C.<+> C.pp t
@@ -1244,6 +1268,9 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm schema trm)
         C.TRec fs      -> C.TRec (fmap (plainSubst s) fs)
         C.TVar x       -> C.apSubst s (C.TVar x)
         C.TNewtype nt ts -> C.TNewtype nt (fmap (plainSubst s) ts)
+
+defaultTypedTerm _opts _sc _cfg tt = return tt
+
 
 eval_size :: C.Schema -> TopLevel Integer
 eval_size s =
@@ -1366,7 +1393,7 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
       s' <- io $ CEnv.parseSchema cenv' (noLoc s)
       t' <- io $ scGlobalDef sc i
       putTopLevelRW $ rw { rwCryptol = cenv' }
-      return (n', TypedTerm s' t')
+      return (n', TypedTerm (TypedTermSchema s') t')
 
 cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CryptolModule
 cryptol_load fileReader path = do
