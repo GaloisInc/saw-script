@@ -199,6 +199,8 @@ jobs:
         with:
           ocaml-compiler: 4.09.x  # coq-bits claims to support < 4.10 only
 
+      - run: opam repo add coq-released https://coq.inria.fr/opam/released
+
       - run: opam install --unlock-base -y coq=8.12.2 coq-bits=1.0.0
 
       - working-directory: ${{ matrix.target }}
