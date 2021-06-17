@@ -201,6 +201,12 @@ jobs:
           name: "${{ runner.os }}-bins"
           path: dist/bin
 
+      - if: runner.os != 'Windows'
+        uses: actions/download-artifact@v2
+        with:
+          path: bin
+          name: abc-${{ runner.os }}
+
       - uses: actions/setup-python@v2
         with:
           python-version: '3.9'
@@ -213,7 +219,7 @@ jobs:
         shell: bash
         run: |
           chmod +x dist/bin/*
-          export PATH="$PWD/dist/bin:$PATH"
+          export PATH="$PWD/dist/bin:$PWD/bin:$PATH"
           ${{ matrix.test }}
 
   cabal-test:
@@ -256,18 +262,14 @@ jobs:
         if: "runner.os != 'Windows'"
         run: chmod +x dist/bin/*
 
-      - if: |
-          runner.os != 'Windows' &&
-          matrix.suite == 'integration_tests'
+      - if: runner.os != 'Windows'
         uses: actions/download-artifact@v2
         with:
           path: bin
           name: abc-${{ runner.os }}
 
       - shell: bash
-        if: |
-          runner.os != 'Windows' &&
-          matrix.suite == 'integration_tests'
+        if: runner.os != 'Windows'
         run: chmod +x bin/*
 
       - uses: actions/download-artifact@v2
@@ -420,6 +422,11 @@ jobs:
         with:
           name: "saw-Linux-${{ matrix.ghc }}"
           path: ./s2nTests/bin
+
+      - uses: actions/download-artifact@v2
+        with:
+          path: ./s2nTests/bin
+          name: abc-${{ runner.os }}
 
       - shell: bash
         working-directory: s2nTests
