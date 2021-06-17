@@ -61,14 +61,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-18.04]
-        ghc: ["8.6.5", "8.8.4", "8.10.3"]
+        ghc: ["8.8.4", "8.10.3"]
         include:
           - os: macos-latest
-            ghc: "8.6.5"
-          - os: macos-latest
             ghc: "8.8.4"
-          - os: windows-latest
-            ghc: "8.6.5"
         exclude:
           - os: windows-latest
             ghc: "8.8.4"
@@ -129,7 +125,7 @@ jobs:
           dest: dist-tests
 
       - if: |
-          matrix.ghc == '8.6.5' &&
+          matrix.ghc == '8.8.4' &&
           runner.os != 'Windows'
         uses: actions/upload-artifact@v2
         with:
@@ -137,7 +133,7 @@ jobs:
           name: abc-${{ runner.os }}
 
       - uses: actions/upload-artifact@v2
-        if: "matrix.ghc == '8.6.5'"
+        if: "matrix.ghc == '8.8.4'"
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
@@ -151,14 +147,14 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist $NAME
 
-      - if: matrix.ghc == '8.6.5' && needs.config.outputs.release == 'true'
+      - if: matrix.ghc == '8.8.4' && needs.config.outputs.release == 'true'
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME.tar.gz
 
-      - if: matrix.ghc == '8.6.5'
+      - if: matrix.ghc == '8.8.4'
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -166,7 +162,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: "matrix.ghc == '8.6.5'"
+      - if: "matrix.ghc == '8.8.4'"
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
@@ -442,7 +438,7 @@ jobs:
           - hmac-failure
           - awslc
           - blst
-        ghc: ["8.6.5", "8.8.4", "8.10.3"]
+        ghc: ["8.8.4", "8.10.3"]
     steps:
       - uses: actions/checkout@v2
       - run: |
