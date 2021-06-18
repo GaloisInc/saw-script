@@ -46,4 +46,4 @@ RUN git clone https://github.com/GaloisInc/saw-script.git && \
   mkdir -p /home/heapster/.local/bin && \
   ln -sf `cabal exec which saw` /home/heapster/.local/bin/saw
 
-RUN eval $(opam env) && cd /home/heapster/saw-script/deps/saw-core-coq/coq && make
+RUN eval $(opam env) && cd /home/heapster/saw-script/saw-core-coq/coq && make
