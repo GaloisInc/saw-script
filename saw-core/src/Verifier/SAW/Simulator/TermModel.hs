@@ -50,16 +50,18 @@ type ReplaceUninterpMap = Map VarIndex [(ExtCns Term, [Term])]
 
 
 extractUninterp ::
+  (?recordEC :: BoundECRecorder) =>
   SharedContext ->
   ModuleMap ->
   Map Ident TmPrim {- ^ additional primitives -} ->
   Map VarIndex TmValue {- ^ ExtCns values -} ->
-  Set VarIndex {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
+  Set VarIndex {- ^ 'unints' Constants in this set are kept uninterpreted -} ->
+  Set VarIndex {- ^ 'opaque' Constants in this set are not evaluated -} ->
   Term ->
   IO (Term, ReplaceUninterpMap)
-extractUninterp sc m addlPrims ecVals unintSet t =
+extractUninterp sc m addlPrims ecVals unintSet opaqueSet t =
   do mapref <- newIORef mempty
-     cfg <- mfix (\cfg -> Sim.evalGlobal m (Map.union (constMap sc cfg) addlPrims)
+     cfg <- mfix (\cfg -> Sim.evalGlobal' m (Map.union (constMap sc cfg) addlPrims)
                              (extcns cfg mapref) (uninterpreted cfg mapref) (neutral cfg) (primHandler cfg))
      v <- Sim.evalSharedTerm cfg t
      tv <- evalType cfg =<< scTypeOf sc t
@@ -68,18 +70,20 @@ extractUninterp sc m addlPrims ecVals unintSet t =
      return (t', replMap)
 
  where
-    uninterpreted cfg mapref ec@(EC ix _nm _ty)
+    uninterpreted cfg mapref tf ec@(EC ix _nm ty)
+      | Set.member ix opaqueSet = Just $
+          do tm <- scTermF sc tf
+             reflectTerm sc cfg ty tm
       | Set.member ix unintSet = Just (replace sc cfg mapref ec)
       | otherwise = Nothing
 
-    extcns cfg mapref ec@(EC ix _nm ty)
+    extcns cfg mapref tf ec@(EC ix _nm ty)
       | Set.member ix unintSet = replace sc cfg mapref ec
       | otherwise =
           case Map.lookup ix ecVals of
             Just v  -> return v
             Nothing ->
-              do ec' <- traverse (readBackTValue sc cfg) ec
-                 tm <- scExtCns sc ec'
+              do tm <- scTermF sc tf
                  reflectTerm sc cfg ty tm
 
     neutral cfg env nt =
@@ -96,6 +100,7 @@ extractUninterp sc m addlPrims ecVals unintSet t =
          reflectTerm sc cfg tp f
 
 replace ::
+  (?recordEC :: BoundECRecorder) =>
   SharedContext ->
   Sim.SimulatorConfig TermModel ->
   IORef ReplaceUninterpMap ->
@@ -126,7 +131,8 @@ normalizeSharedTerm ::
   Term ->
   IO Term
 normalizeSharedTerm sc m addlPrims ecVals opaqueSet t =
-  do cfg <- mfix (\cfg -> Sim.evalGlobal' m (Map.union (constMap sc cfg) addlPrims)
+  do let ?recordEC = \_ec -> return ()
+     cfg <- mfix (\cfg -> Sim.evalGlobal' m (Map.union (constMap sc cfg) addlPrims)
                               (extcns cfg) (constants cfg) (neutral cfg) (primHandler cfg))
      v <- Sim.evalSharedTerm cfg t
      tv <- evalType cfg =<< scTypeOf sc t
@@ -135,12 +141,14 @@ normalizeSharedTerm sc m addlPrims ecVals opaqueSet t =
   where
     constants cfg tf ec
       | Set.member (ecVarIndex ec) opaqueSet = Just $
-          do tm <- scTermF sc tf
+          do let ?recordEC = \_ec -> return ()
+             tm <- scTermF sc tf
              reflectTerm sc cfg (ecType ec) tm
 
       | otherwise = Nothing
 
     extcns cfg tf ec =
+      let ?recordEC = \_ec -> return () in
       case Map.lookup (ecVarIndex ec) ecVals of
         Just v  -> return v
         Nothing ->
@@ -148,13 +156,15 @@ normalizeSharedTerm sc m addlPrims ecVals opaqueSet t =
              reflectTerm sc cfg (ecType ec) tm
 
     neutral cfg env nt =
-      do env' <- traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
+      do let ?recordEC = \_ec -> return ()
+         env' <- traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
          tm   <- instantiateVarList sc 0 env' =<< neutralToSharedTerm sc nt
          tyv  <- evalType cfg =<< scTypeOf sc tm
          reflectTerm sc cfg tyv tm
 
     primHandler cfg pn _msg env tp =
-      do pn'  <- traverse (readBackTValue sc cfg) pn
+      do let ?recordEC = \_ec -> return ()
+         pn'  <- traverse (readBackTValue sc cfg) pn
          args <- reverse <$> traverse (\(x,ty) -> readBackValue sc cfg ty =<< force x) env
          prim <- scFlatTermF sc (Primitive pn')
          f    <- foldM (scApply sc) prim args
@@ -190,7 +200,13 @@ data TermModelArray =
     Term -- term of type @Array a b@ (closed term!)
 
 
-readBackTValue :: SharedContext -> Sim.SimulatorConfig TermModel -> TValue TermModel -> IO Term
+type BoundECRecorder = ExtCns Term -> IO ()
+
+readBackTValue :: (?recordEC :: BoundECRecorder) =>
+  SharedContext ->
+  Sim.SimulatorConfig TermModel ->
+  TValue TermModel ->
+  IO Term
 readBackTValue sc cfg = loop
   where
   loop tv =
@@ -246,6 +262,7 @@ readBackTValue sc cfg = loop
   readBackPis (VPiType nm t pibody) =
     do t' <- loop t
        ec <- scFreshEC sc nm t'
+       ?recordEC ec
        ecTm <- scExtCns sc ec
        ecVal <- delay (reflectTerm sc cfg t ecTm)
        body <- applyPiBody pibody ecVal
@@ -263,6 +280,7 @@ evalType cfg tm =
     _ -> panic "evalType" ["Expected type value"]
 
 reflectTerm ::
+  (?recordEC :: BoundECRecorder) =>
   SharedContext ->
   Sim.SimulatorConfig TermModel ->
   TValue TermModel ->
@@ -315,6 +333,7 @@ reflectTerm sc cfg = loop
 -- | Given a value, which must have the given type,
 --   reconstruct a closed term representing the value.
 readBackValue ::
+  (?recordEC :: BoundECRecorder) =>
   SharedContext ->
   Sim.SimulatorConfig TermModel ->
   TValue TermModel ->
@@ -403,6 +422,7 @@ readBackValue sc cfg = loop
     readBackFuns (VPiType _ tv pibody) (VFun nm f) =
       do t' <- readBackTValue sc cfg tv
          ec <- scFreshEC sc nm t'
+         ?recordEC ec
          ecTm <- scExtCns sc ec
          ecVal <- delay (reflectTerm sc cfg tv ecTm)
          tbody <- applyPiBody pibody ecVal
@@ -546,7 +566,8 @@ bvCmpOp sc termOp valOp = binOp sc wordValue termOp' valOp
       do n' <- scNat sc n
          termOp sc n' x y
 
-prims :: SharedContext -> Sim.SimulatorConfig TermModel -> Prims.BasePrims TermModel
+prims :: (?recordEC :: BoundECRecorder) =>
+  SharedContext -> Sim.SimulatorConfig TermModel -> Prims.BasePrims TermModel
 prims sc cfg =
   Prims.BasePrims
   { Prims.bpAsBool  = \case
@@ -786,6 +807,7 @@ prims sc cfg =
   , Prims.bpBvForall = \n f ->
       do bvty <- scBitvector sc n
          ec   <- scFreshEC sc "x" bvty
+         ?recordEC ec
          ecTm <- scExtCns sc ec
          res  <- f (Left (n,ecTm))
          case res of
@@ -837,7 +859,7 @@ prims sc cfg =
   }
 
 
-constMap :: SharedContext -> Sim.SimulatorConfig TermModel -> Map Ident TmPrim
+constMap :: (?recordEC :: BoundECRecorder) => SharedContext -> Sim.SimulatorConfig TermModel -> Map Ident TmPrim
 constMap sc cfg = Map.union (Map.fromList localPrims) (Prims.constMap pms)
   where
   pms = prims sc cfg
@@ -870,7 +892,7 @@ constMap sc cfg = Map.union (Map.fromList localPrims) (Prims.constMap pms)
     , ("Prelude.expByNat", Prims.expByNatOp pms)
     ]
 
-errorOp :: SharedContext -> Sim.SimulatorConfig TermModel -> TmPrim
+errorOp :: (?recordEC :: BoundECRecorder) => SharedContext -> Sim.SimulatorConfig TermModel -> TmPrim
 errorOp sc cfg =
   Prims.tvalFun   $ \tv ->
   Prims.stringFun $ \msg ->
@@ -909,7 +931,7 @@ natToIntOp sc = Prims.PrimFilterFun "natToInt" f (Prims.PrimValue . VInt)
       pure . Right $! Prim.unsigned bv
 
     f (VBVToNat _ (VWord (Left (n,tm)))) =
-      Left <$> liftIO 
+      Left <$> liftIO
        (do n' <- scNat sc n
            scBvToInt sc n' tm)
 
@@ -952,6 +974,7 @@ sbvToIntOp _sc _cfg =
 
 -- | (n : Nat) -> Vec n Bool -> Nat -> Vec n Bool
 bvShiftOp ::
+  (?recordEC :: BoundECRecorder) =>
   SharedContext ->
   Sim.SimulatorConfig TermModel ->
   (Natural -> Natural) ->
