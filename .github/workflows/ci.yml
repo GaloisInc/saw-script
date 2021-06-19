@@ -65,6 +65,8 @@ jobs:
         include:
           - os: macos-latest
             ghc: "8.8.4"
+          - os: windows-latest
+            ghc: "8.8.4"
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
