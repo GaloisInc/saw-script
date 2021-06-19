@@ -5,7 +5,7 @@ Makefile.coq: _CoqProject
 
 include Makefile.coq
 
-SAW=cabal run saw
+SAW=saw
 
 %.bc: %.c
 	clang -emit-llvm -g -c $<
