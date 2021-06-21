@@ -204,7 +204,7 @@ jobs:
       - if: runner.os != 'Windows'
         uses: actions/download-artifact@v2
         with:
-          path: bin
+          path: dist/bin
           name: abc-${{ runner.os }}
 
       - uses: actions/setup-python@v2
@@ -219,7 +219,7 @@ jobs:
         shell: bash
         run: |
           chmod +x dist/bin/*
-          export PATH="$PWD/dist/bin:$PWD/bin:$PATH"
+          export PATH="$PWD/dist/bin:$PATH"
           ${{ matrix.test }}
 
   cabal-test:
@@ -446,7 +446,7 @@ jobs:
         name: "s2n tests: ${{ matrix.s2n-target }}"
         working-directory: s2nTests
         run: |
-          chmod +x bin/saw
+          chmod +x bin/*
           make ${{ matrix.s2n-target }}
 
   # Indicates sufficient CI success for the purposes of mergify merging the pull
