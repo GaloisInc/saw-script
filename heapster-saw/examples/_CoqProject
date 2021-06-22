@@ -1,5 +1,5 @@
--Q ../../saw-core/saw-core-coq/coq/generated/CryptolToCoq   CryptolToCoq
--Q ../../saw-core/saw-core-coq/coq/handwritten/CryptolToCoq   CryptolToCoq
+-Q ../../saw-core-coq/coq/generated/CryptolToCoq   CryptolToCoq
+-Q ../../saw-core-coq/coq/handwritten/CryptolToCoq   CryptolToCoq
 -Q . Examples
 
 linked_list.v
