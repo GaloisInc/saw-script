@@ -45,8 +45,9 @@ import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks, local)
-import Control.Monad.State (MonadState, StateT(..), get, gets, put)
+import Control.Monad.State (MonadState(..), StateT(..), get, gets, put)
 import Control.Monad.Trans.Class (MonadTrans(lift))
+import Data.IORef
 import Data.List ( intersperse )
 import qualified Data.Map as M
 import Data.Map ( Map )
@@ -420,17 +421,25 @@ data TopLevelRW =
   }
 
 newtype TopLevel a =
-  TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
+  TopLevel (ReaderT TopLevelRO (ReaderT (IORef TopLevelRW) IO) a)
   deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow, MonadCatch, MonadMask)
 
 deriving instance MonadReader TopLevelRO TopLevel
-deriving instance MonadState TopLevelRW TopLevel
+
+instance MonadState TopLevelRW TopLevel where
+  get = TopLevel (lift (ReaderT readIORef))
+  put s = TopLevel (lift (ReaderT (flip writeIORef s)))
+  state f = TopLevel (lift (ReaderT (flip atomicModifyIORef (swap . f))))
+    where swap (x, y) = (y, x)
+
 instance Wrapped (TopLevel a) where
+
 instance MonadFail TopLevel where
   fail = throwTopLevel
 
-runTopLevel :: TopLevel a -> TopLevelRO -> TopLevelRW -> IO (a, TopLevelRW)
-runTopLevel (TopLevel m) ro rw = runStateT (runReaderT m ro) rw
+runTopLevel :: TopLevel a -> TopLevelRO -> IORef TopLevelRW -> IO a
+runTopLevel (TopLevel m) ro ref =
+  runReaderT (runReaderT m ro) ref
 
 io :: IO a -> TopLevel a
 io f = liftIO f
@@ -490,10 +499,10 @@ getTopLevelRO :: TopLevel TopLevelRO
 getTopLevelRO = TopLevel ask
 
 getTopLevelRW :: TopLevel TopLevelRW
-getTopLevelRW = TopLevel get
+getTopLevelRW = get
 
 putTopLevelRW :: TopLevelRW -> TopLevel ()
-putTopLevelRW rw = TopLevel (put rw)
+putTopLevelRW rw = put rw
 
 returnProof :: IsValue v => v -> TopLevel v
 returnProof v = recordProof v >> return v
@@ -504,8 +513,8 @@ recordProof v =
      putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
 
 -- | Access the current state of Java Class translation
-getJVMTrans :: TopLevel  CJ.JVMContext
-getJVMTrans = TopLevel (gets rwJVMTrans)
+getJVMTrans :: TopLevel CJ.JVMContext
+getJVMTrans = gets rwJVMTrans
 
 -- | Access the current state of Java Class translation
 putJVMTrans :: CJ.JVMContext -> TopLevel ()
@@ -1016,7 +1025,7 @@ addTraceReaderT str = underReaderT (addTraceTopLevel str)
 -- | Similar to 'addTraceIO', but for the 'TopLevel' monad.
 addTraceTopLevel :: String -> TopLevel a -> TopLevel a
 addTraceTopLevel str action = action & _Wrapped' %~
-  underReaderT (underStateT (liftIO . addTraceIO str))
+  underReaderT (underReaderT (liftIO . addTraceIO str))
 
 data SkeletonState = SkeletonState
   { _skelArgs :: [(Maybe TypedTerm, Maybe (CMSLLVM.AllLLVM CMS.SetupValue), Maybe Text)]

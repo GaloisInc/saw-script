@@ -29,12 +29,12 @@ import Data.Monoid
 #endif
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State
-import Control.Monad.Reader (ask)
 import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
+import Data.IORef
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -1145,10 +1145,11 @@ timePrim a = do
   return r
 
 failsPrim :: TopLevel SV.Value -> TopLevel ()
-failsPrim m = TopLevel $ do
-  topRO <- ask
-  topRW <- Control.Monad.State.get
-  x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
+failsPrim m = do
+  topRO <- getTopLevelRO
+  topRW <- getTopLevelRW
+  ref <- liftIO $ newIORef topRW
+  x <- liftIO $ Ex.try (runTopLevel m topRO ref)
   case x of
     Left (ex :: Ex.SomeException) ->
       do liftIO $ putStrLn "== Anticipated failure message =="
