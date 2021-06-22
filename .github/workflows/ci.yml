@@ -221,8 +221,9 @@ jobs:
           chmod +x dist/bin/*
           export PATH="$PWD/dist/bin:$PATH"
           echo "$PWD/dist/bin" >> "$GITHUB_PATH"
-          abc -h
+          abc -h || true
           yices --version
+          yices-smt2 --version
           saw --version
           saw-remote-api --help
           ${{ matrix.test }}
