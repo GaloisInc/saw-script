@@ -29,7 +29,6 @@ import Data.Monoid
 #endif
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State
-import Control.Monad.Reader (ask)
 import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
@@ -1145,9 +1144,9 @@ timePrim a = do
   return r
 
 failsPrim :: TopLevel SV.Value -> TopLevel ()
-failsPrim m = TopLevel $ do
-  topRO <- ask
-  topRW <- Control.Monad.State.get
+failsPrim m = do
+  topRO <- getTopLevelRO
+  topRW <- getTopLevelRW
   x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
   case x of
     Left (ex :: Ex.SomeException) ->
