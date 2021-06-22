@@ -310,9 +310,8 @@ jobs:
             cache: ghcr.io/galoisinc/cache-saw-remote-api
     steps:
       - uses: actions/checkout@v2
-      - run: |
-          git submodule update --init
-          git -C deps/abcBridge submodule update --init
+        with:
+          submodules: true
 
       - uses: rlespinasse/github-slug-action@v3.x
 
