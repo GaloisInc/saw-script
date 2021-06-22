@@ -206,7 +206,7 @@ class Salsa20LowLevelTest(unittest.TestCase):
                 "return val": zero
             }
 
-        prover = ProofScript([yices([])]).to_json()
+        prover = ProofScript([z3([])]).to_json()
 
         c.llvm_verify('m', 'rotl', [], False, rotl_contract, prover, 'rotl_ov').result()
         c.llvm_verify('m', 's20_quarterround', ['rotl_ov'], False, qr_contract, prover, 'qr_ov').result()
