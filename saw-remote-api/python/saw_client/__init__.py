@@ -432,7 +432,7 @@ def llvm_verify(module: LLVMModule,
     if lemmas is None:
         lemmas = []
     if script is None:
-        script = proofscript.ProofScript([proofscript.yices([])])
+        script = proofscript.ProofScript([proofscript.z3([])])
     if lemma_name_hint is None:
         lemma_name_hint = contract.__class__.__name__ + "_" + function
 
