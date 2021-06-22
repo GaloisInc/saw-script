@@ -20,25 +20,15 @@ jobs:
     env:
       COQ_VERSION: ${{ matrix.coq }}
       # coq-bits claims to support < 4.10 only
-      OCAML_VERSION: 4.09.1
+      OCAML_VERSION: 4.09.x
       COQBITS_VERSION: 1.0.0
     steps:
-
       - uses: actions/checkout@v2
 
-      - name: Cache ~/.opam
-        uses: actions/cache@v2
-        with:
-          path: ~/.opam
-          key: opam-${{ runner.os }}-${{ env.OCAML_VERSION }}-${{ env.COQ_VERSION }}-${{ env.COQBITS_VERSION }}
-
-      # NOTE: this action is marked as experimental by their author, but it is
-      # much faster than avsm@setup-ocaml@v1.  However, if this one ever becomes
-      # problematic, it should suffice to switch back to that version.
       - name: Set up ocaml and opam
-        uses: actions-ml/setup-ocaml@df8c831c6c1e49804621d6e09c4ab9235da31fb5
+        uses: ocaml/setup-ocaml@v2
         with:
-          ocaml-version: ${{ env.OCAML_VERSION }}
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
 
       - name: Install coq
         shell: bash
@@ -56,6 +46,5 @@ jobs:
         shell: bash
         working-directory: saw-core-coq/coq
         run: |
-          eval $(opam env)
-          coq_makefile -f _CoqProject -o Makefile.coq
-          make -j2
+          opam exec -- coq_makefile -f _CoqProject -o Makefile.coq
+          opam exec -- make -j2
