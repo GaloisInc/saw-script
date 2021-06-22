@@ -961,21 +961,21 @@ primitives = Map.fromList
 
   , prim "load_aig"            "String -> TopLevel AIG"
     (pureVal loadAIGPrim)
-    Deprecated
+    Current
     [ "Read an AIG file in binary AIGER format, yielding an AIG value." ]
   , prim "save_aig"            "String -> AIG -> TopLevel ()"
     (pureVal saveAIGPrim)
-    Deprecated
+    Current
     [ "Write an AIG to a file in binary AIGER format." ]
   , prim "save_aig_as_cnf"     "String -> AIG -> TopLevel ()"
     (pureVal saveAIGasCNFPrim)
-    Deprecated
+    Current
     [ "Write an AIG representing a boolean function to a file in DIMACS"
     , "CNF format."
     ]
 
   , prim "dsec_print"                "Term -> Term -> TopLevel ()"
-    (scVal dsecPrint)
+    (pureVal dsecPrint)
     Current
     [ "Use ABC's 'dsec' command to compare two terms as SAIGs."
     , "The terms must have a type as described in ':help write_saig',"
@@ -985,16 +985,9 @@ primitives = Map.fromList
     , "You must have an 'abc' executable on your PATH to use this command."
     ]
 
-  , prim "cec"                 "AIG -> AIG -> TopLevel ProofResult"
-    (pureVal cecPrim)
-    Deprecated
-    [ "Perform a Combinatorial Equivalence Check between two AIGs."
-    , "The AIGs must have the same number of inputs and outputs."
-    ]
-
   , prim "bitblast"            "Term -> TopLevel AIG"
     (pureVal bbPrim)
-    Deprecated
+    Current
     [ "Translate a term into an AIG.  The term must be representable as a"
     , "function from a finite number of bits to a finite number of bits."
     ]
@@ -1018,7 +1011,7 @@ primitives = Map.fromList
     ]
 
   , prim "write_aig_external"  "String -> Term -> TopLevel ()"
-    (scVal writeAIGviaVerilog)
+    (pureVal writeAIGviaVerilog)
     Current
     [ "Write out a representation of a term in binary AIGER format. The"
     , "term must be representable as a function from a finite number of"
@@ -1056,22 +1049,22 @@ primitives = Map.fromList
     ]
 
   , prim "write_cnf"           "String -> Term -> TopLevel ()"
-    (scVal write_cnf)
+    (pureVal write_cnf)
     Current
     [ "Write the given term to the named file in CNF format." ]
 
   , prim "write_cnf_external"  "String -> Term -> TopLevel ()"
-    (scVal write_cnf_external)
+    (pureVal write_cnf_external)
     Current
     [ "Write the given term to the named file in CNF format." ]
 
   , prim "write_smtlib2"       "String -> Term -> TopLevel ()"
-    (scVal write_smtlib2)
+    (pureVal write_smtlib2)
     Current
     [ "Write the given term to the named file in SMT-Lib version 2 format." ]
 
   , prim "write_smtlib2_w4"    "String -> Term -> TopLevel ()"
-    (scVal write_smtlib2_w4)
+    (pureVal write_smtlib2_w4)
     Current
     [ "Write the given term to the named file in SMT-Lib version 2 format,"
     , "using the What4 backend instead of the SBV backend."
@@ -1334,7 +1327,7 @@ primitives = Map.fromList
     ]
 
   , prim "abc"                 "ProofScript ()"
-    (pureVal proveABC)
+    (pureVal w4_abc_aiger)
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
@@ -1540,9 +1533,17 @@ primitives = Map.fromList
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
+  , prim "w4_abc_aiger"        "ProofScript ()"
+    (pureVal w4_abc_aiger)
+    Current
+    [ "Use the ABC theorem prover as an external process to prove the"
+    , "current goal, with AIGER as an interchange format, generated"
+    , "using the What4 backend."
+    ]
+
   , prim "w4_abc_smtlib2"        "ProofScript ()"
     (pureVal w4_abc_smtlib2)
-    Experimental
+    Current
     [ "Use the ABC theorem prover as an external process to prove the"
     , "current goal, with SMT-Lib2 as an interchange format, generated"
     , "using the What4 backend."
@@ -1550,7 +1551,7 @@ primitives = Map.fromList
 
   , prim "w4_abc_verilog"        "ProofScript ()"
     (pureVal w4_abc_verilog)
-    Experimental
+    Current
     [ "Use the ABC theorem prover as an external process to prove the"
     , "current goal, with Verilog as an interchange format, generated"
     , "using the What4 backend."

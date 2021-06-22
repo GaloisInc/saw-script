@@ -73,11 +73,8 @@ import System.IO.Error (isUserError, ioeGetErrorString)
 
 import Verifier.SAW.SharedTerm (Term)
 import Verifier.SAW.CryptolEnv
-#ifdef USE_BUILTIN_ABC
-import qualified Data.ABC.GIA as GIA
-#else
 import qualified Data.AIG as AIG
-#endif
+import qualified Data.AIG.CompactGraph as AIG
 
 --------------------
 
@@ -88,11 +85,7 @@ import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..))
 import SAWScript.Value (AIGProxy(..))
 import Verifier.SAW (SharedContext)
 
-#ifdef USE_BUILTIN_ABC
-deriving instance Typeable GIA.Proxy
-#else
 deriving instance Typeable AIG.Proxy
-#endif
 
 -- REPL Environment ------------------------------------------------------------
 
@@ -107,11 +100,7 @@ data Refs = Refs
 -- | Initial, empty environment.
 defaultRefs :: Bool -> Options -> IO Refs
 defaultRefs isBatch opts =
-#ifdef USE_BUILTIN_ABC
-  do (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy GIA.proxy) opts
-#else
-  do (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy AIG.basicProxy) opts
-#endif
+  do (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy AIG.compactProxy) opts
      contRef <- newIORef True
      batchRef <- newIORef isBatch
      roRef <- newIORef ro

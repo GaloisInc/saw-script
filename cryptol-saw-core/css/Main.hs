@@ -19,13 +19,16 @@ import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import           Cryptol.Utils.PP
 import           Cryptol.Utils.Logger (quietLogger)
 
+import qualified Data.AIG.CompactGraph as AIG
+import qualified Data.AIG.Interface as AIG
+import qualified Data.AIG.Operations as AIG
+
 import qualified Verifier.SAW.Cryptol as C
 import           Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Cryptol.Prelude as C
 import           Verifier.SAW.CryptolEnv (schemaNoUser, meSolverConfig)
 
 
-import qualified Data.ABC as ABC
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
 import qualified Paths_cryptol_saw_core as Paths
@@ -120,8 +123,8 @@ processModule menv fout funcName = do
 
 writeAIG :: SharedContext -> FilePath -> Term -> IO ()
 writeAIG sc f t = do
-  BBSim.withBitBlastedTerm ABC.giaNetwork sc mempty t $ \be ls -> do
-  ABC.writeAiger f (ABC.Network be (ABC.bvToList ls))
+  BBSim.withBitBlastedTerm AIG.compactProxy sc mempty t $ \be ls -> do
+  AIG.writeAiger f (AIG.Network be (AIG.bvToList ls))
 
 extractCryptol :: SharedContext -> CM.ModuleEnv -> String -> IO Term
 extractCryptol sc modEnv input = do

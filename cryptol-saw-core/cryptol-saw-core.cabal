@@ -16,10 +16,6 @@ Description:
 extra-source-files:
     saw/Cryptol.sawcore
 
-flag build-css
-  description: Build the css executable
-  default: True
-
 library
   build-depends:
     aig,
@@ -54,15 +50,12 @@ library
   GHC-options: -Wall -Werror
 
 executable css
-  if !flag(build-css)
-     buildable: False
-
   other-modules:
     Paths_cryptol_saw_core
 
   build-depends:
+    aig,
     array,
-    abcBridge,
     base,
     bytestring,
     containers,

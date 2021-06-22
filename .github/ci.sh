@@ -111,12 +111,10 @@ build() {
   cabal v2-update
   cabal v2-configure -j --enable-tests
   git status --porcelain
-  pkgs=(saw)
   if $IS_WIN; then
-    echo "flags: -builtin-abc" >> cabal.project.local
-    echo "constraints: cryptol-saw-core -build-css" >> cabal.project.local
+    pkgs=(saw)
   else
-    pkgs+=(saw-remote-api)
+    pkgs=(saw saw-remote-api)
   fi
   tee -a cabal.project.local > /dev/null < cabal.project.ci
   if ! retry cabal v2-build "$@" "${pkgs[@]}"; then
@@ -163,7 +161,6 @@ build_cryptol() {
 bundle_files() {
   mkdir -p dist dist/{bin,doc,examples,include,lib}
 
-  cp deps/abcBridge/abc-build/copyright.txt dist/ABC_LICENSE
   cp LICENSE README.md dist/
   $IS_WIN || chmod +x dist/bin/*
 
