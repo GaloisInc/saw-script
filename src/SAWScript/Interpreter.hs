@@ -38,6 +38,7 @@ import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
 import Data.Foldable (foldrM)
+import Data.IORef
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -277,7 +278,9 @@ interpretStmts env stmts =
              interpretStmts env' ss
 
 stmtInterpreter :: StmtInterpreter
-stmtInterpreter ro rw stmts = fmap fst $ runTopLevel (interpretStmts emptyLocal stmts) ro rw
+stmtInterpreter ro rw stmts =
+  do ref <- newIORef rw
+     runTopLevel (interpretStmts emptyLocal stmts) ro ref
 
 processStmtBind :: Bool -> SS.Pattern -> Maybe SS.Type -> SS.Expr -> TopLevel ()
 processStmtBind printBinds pat _mc expr = do -- mx mt
@@ -491,7 +494,8 @@ processFile proxy opts file = do
   oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
   setCurrentDirectory (takeDirectory file')
-  _ <- runTopLevel (interpretFile file' True) ro rw
+  ref <- newIORef rw
+  _ <- runTopLevel (interpretFile file' True) ro ref
             `X.catch` (handleException opts)
   setCurrentDirectory oldpath
   return ()

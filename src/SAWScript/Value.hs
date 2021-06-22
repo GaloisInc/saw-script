@@ -437,12 +437,9 @@ instance Wrapped (TopLevel a) where
 instance MonadFail TopLevel where
   fail = throwTopLevel
 
-runTopLevel :: TopLevel a -> TopLevelRO -> TopLevelRW -> IO (a, TopLevelRW)
-runTopLevel (TopLevel m) ro rw =
-  do ref <- newIORef rw
-     x <- runReaderT (runReaderT m ro) ref
-     rw' <- readIORef ref
-     pure (x, rw')
+runTopLevel :: TopLevel a -> TopLevelRO -> IORef TopLevelRW -> IO a
+runTopLevel (TopLevel m) ro ref =
+  runReaderT (runReaderT m ro) ref
 
 io :: IO a -> TopLevel a
 io f = liftIO f

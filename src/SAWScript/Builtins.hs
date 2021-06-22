@@ -34,6 +34,7 @@ import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
+import Data.IORef
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -1147,7 +1148,8 @@ failsPrim :: TopLevel SV.Value -> TopLevel ()
 failsPrim m = do
   topRO <- getTopLevelRO
   topRW <- getTopLevelRW
-  x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
+  ref <- liftIO $ newIORef topRW
+  x <- liftIO $ Ex.try (runTopLevel m topRO ref)
   case x of
     Left (ex :: Ex.SomeException) ->
       do liftIO $ putStrLn "== Anticipated failure message =="
