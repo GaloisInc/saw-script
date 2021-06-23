@@ -67,7 +67,7 @@ import qualified What4.Solver.Yices as Yices
 import Verifier.SAW.SharedTerm(Term, SharedContext, mkSharedContext, scImplies)
 
 -- cryptol-saw-core
-import Verifier.SAW.TypedTerm (TypedTerm(..), abstractTypedExts)
+import Verifier.SAW.TypedTerm (TypedTerm(..), abstractTypedExts, TypedTermType(..))
 
 -- saw-core-what4
 import Verifier.SAW.Simulator.What4.ReturnTrip
@@ -183,7 +183,7 @@ jvm_extract c mname = do
                     case baseCryptolType bt of
                       Nothing -> failure
                       Just cty -> return cty
-              let tt = TypedTerm (Cryptol.tMono cty) t
+              let tt = TypedTerm (TypedTermSchema (Cryptol.tMono cty)) t
               abstractTypedExts sc (toList ecs) tt
             Crucible.AbortedResult _ _ar -> do
               fail $ unlines [ "Symbolic execution failed." ]

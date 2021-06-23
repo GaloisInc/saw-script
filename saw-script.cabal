@@ -122,7 +122,6 @@ library
     SAWScript.Options
     SAWScript.Panic
     SAWScript.Parser
-    SAWScript.PathVC
     SAWScript.Proof
     SAWScript.Position
     SAWScript.SBVParser
@@ -132,7 +131,6 @@ library
     SAWScript.MGU
     SAWScript.Utils
     SAWScript.Value
-    SAWScript.VerificationCheck
 
     SAWScript.HeapsterBuiltins
 

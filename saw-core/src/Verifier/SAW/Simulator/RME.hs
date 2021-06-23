@@ -63,10 +63,11 @@ evalSharedTerm :: ModuleMap -> Map Ident RValue -> Term -> RValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-           extcns (const Nothing)
+           extcns (const Nothing) neutral
     Sim.evalSharedTerm cfg t
   where
     extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
+    neutral _env nt = return $ Prim.userError $ "Could not evaluate neutral term\n:" ++ show nt
 
 ------------------------------------------------------------
 -- Values
@@ -127,7 +128,8 @@ bvShiftOp op =
   pureFun $ \y ->
     case y of
       VNat n   -> vWord (op x (toInteger n))
-      VToNat v -> vWord (genShift muxRMEV op x (toWord v))
+      VBVToNat _sz v -> vWord (genShift muxRMEV op x (toWord v))
+      VIntToNat _i   -> error "RME.shiftOp: intToNat TODO"
       _        -> error $ unwords ["Verifier.SAW.Simulator.RME.shiftOp", show y]
 
 ------------------------------------------------------------
@@ -156,7 +158,7 @@ prims =
   , Prims.bpMuxBool  = pure3 RME.mux
   , Prims.bpMuxWord  = pure3 muxRMEV
   , Prims.bpMuxInt   = pure3 muxInt
-  , Prims.bpMuxExtra = pure3 muxExtra
+  , Prims.bpMuxExtra = \tp -> pure3 (muxExtra tp)
     -- Booleans
   , Prims.bpTrue   = RME.true
   , Prims.bpFalse  = RME.false
@@ -280,11 +282,13 @@ muxInt b x y =
     Just c -> if c then x else y
     Nothing -> if x == y then x else error $ "muxRValue: VInt " ++ show (x, y)
 
-muxExtra :: RME -> RExtra -> RExtra -> RExtra
-muxExtra b (AStream xs) (AStream ys) = AStream (muxRValue b <$> xs <*> ys)
+muxExtra :: TValue ReedMuller -> RME -> RExtra -> RExtra -> RExtra
+muxExtra (VDataType (primName -> "Prelude.Stream") [TValue tp] []) b (AStream xs) (AStream ys) =
+  AStream (muxRValue tp b <$> xs <*> ys)
+muxExtra tp _ _ _ = panic "RME.muxExtra" ["type mismatch", show tp]
 
-muxRValue :: RME -> RValue -> RValue -> RValue
-muxRValue b x y = runIdentity $ Prims.muxValue prims b x y
+muxRValue :: TValue ReedMuller -> RME -> RValue -> RValue -> RValue
+muxRValue tp b x y = runIdentity $ Prims.muxValue prims tp b x y
 
 -- | Signed shift right simply copies the high order bit
 --   into the shifted places.  We special case the zero
@@ -341,11 +345,12 @@ mkStreamOp =
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: RValue
 streamGetOp =
-  constFun $
+  strictFun $ \(toTValue -> tp) -> return $
   pureFun $ \xs ->
   strictFun $ \case
     VNat n -> pure $ IntTrie.apply (toStream xs) (toInteger n)
-    VToNat bv ->
+    VIntToNat _i -> error "RME.streamGetOp : symbolic integer TODO"
+    VBVToNat _sz bv ->
       do let trie = toStream xs
              loop k [] = IntTrie.apply trie k
              loop k (b:bs)
@@ -354,7 +359,7 @@ streamGetOp =
                | Just False <- RME.isBool b
                = loop k0 bs
                | otherwise
-               = muxRValue b (loop k1 bs) (loop k0 bs)
+               = muxRValue tp b (loop k1 bs) (loop k0 bs)
               where
                k0 = k `shiftL` 1
                k1 = k0 + 1
@@ -388,11 +393,14 @@ bitBlastBasic :: ModuleMap
               -> Term
               -> RValue
 bitBlastBasic m addlPrims ecMap t = runIdentity $ do
+  let neutral _env nt = return $ Prim.userError $ "Could not evaluate neutral term\n:" ++ show nt
+
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
          (\ec -> case Map.lookup (ecVarIndex ec) ecMap of
                    Just v -> pure v
                    Nothing -> error ("RME: unknown ExtCns: " ++ show (ecName ec)))
          (const Nothing)
+         neutral
   Sim.evalSharedTerm cfg t
 
 

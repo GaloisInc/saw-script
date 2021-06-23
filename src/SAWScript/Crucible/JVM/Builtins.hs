@@ -864,6 +864,7 @@ data JVMSetupError
   | JVMArgNumberWrong Int Int -- number expected, number found
   | JVMReturnUnexpected J.Type -- found
   | JVMReturnTypeMismatch J.Type J.Type -- expected, found
+  | JVMNonValueType TypedTermType
 
 instance X.Exception JVMSetupError where
   toException = topLevelExceptionToException
@@ -970,6 +971,11 @@ instance Show JVMSetupError where
         [ "jvm_return: Return type mismatch"
         , "Expected type: " ++ show expected
         , "Given type: " ++ show found
+        ]
+      JVMNonValueType tp ->
+        unlines
+        [ "Expected term with value type, but got"
+        , show (MS.ppTypedTermType tp)
         ]
 
 -- | Returns Cryptol type of actual type if it is an array or
@@ -1214,17 +1220,19 @@ generic_array_is ptr mval =
      case mval of
        Nothing -> pure ()
        Just val ->
-         case checkVal of
-           Nothing -> X.throwM (JVMArrayTypeMismatch len elTy schema)
-           Just () -> pure ()
-         where
-           schema = ttSchema val
-           checkVal =
-             do ty <- Cryptol.isMono schema
-                (n, a) <- Cryptol.tIsSeq ty
-                guard (Cryptol.tIsNum n == Just (toInteger len))
-                jty <- toJVMType (Cryptol.evalValType mempty a)
-                guard (registerCompatible elTy jty)
+         do schema <- case ttType val of
+              TypedTermSchema sch -> pure sch
+              tp -> X.throwM (JVMNonValueType tp)
+            let checkVal =
+                  do ty <- Cryptol.isMono schema
+                     (n, a) <- Cryptol.tIsSeq ty
+                     guard (Cryptol.tIsNum n == Just (toInteger len))
+                     jty <- toJVMType (Cryptol.evalValType mempty a)
+                     guard (registerCompatible elTy jty)
+            case checkVal of
+              Nothing -> X.throwM (JVMArrayTypeMismatch len elTy schema)
+              Just () -> pure ()
+
      let pt = JVMPointsToArray loc ptr' mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $

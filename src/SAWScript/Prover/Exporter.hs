@@ -63,7 +63,6 @@ import Data.Text (pack)
 import Data.Text.Prettyprint.Doc.Render.Text
 import Prettyprinter (vcat)
 
-import Cryptol.Utils.PP(pretty)
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
 import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule)
@@ -87,6 +86,7 @@ import qualified Verifier.SAW.Simulator.What4 as W
 import qualified Verifier.SAW.UntypedAST as Un
 
 import SAWScript.Crucible.Common
+import SAWScript.Crucible.Common.MethodSpec (ppTypedTermType)
 import SAWScript.Proof (Prop, propSize, propToTerm, predicateToSATQuery, propToSATQuery)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
@@ -201,7 +201,7 @@ writeSAIGInferLatches proxy sc file tt = do
       "writeSAIGInferLatches: " ++ why ++ ":\n" ++
       "term must have type of the form '(i, s) -> (o, s)',\n" ++
       "where 'i', 's', and 'o' are all fixed-width types,\n" ++
-      "but type of term is:\n" ++ (pretty . ttSchema $ tt)
+      "but type of term is:\n" ++ (show . ppTypedTermType . ttType $ tt)
 
     -- Decompose type as '(i, s) -> (o, s)' and return 's'.
     getStateType :: Term -> TopLevel FiniteType
