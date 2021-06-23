@@ -179,7 +179,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        target: ["saw-core-coq/coq", "heapster-saw/examples"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -202,7 +201,10 @@ jobs:
 
       - run: opam install --unlock-base -y coq=8.12.2 coq-bits=1.0.0
 
-      - working-directory: ${{ matrix.target }}
+      - working-directory: saw-core-coq/coq
+        run: PATH="$PWD/dist/bin:$PATH" opam exec -- make -j
+
+      - working-directory: heapster-saw/examples
         run: PATH="$PWD/dist/bin:$PATH" opam exec -- make -j
 
   saw-remote-api-tests:
