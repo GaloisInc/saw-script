@@ -64,6 +64,7 @@ import Verifier.SAW.TypedTerm
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
+import SAWScript.Position
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
@@ -350,7 +351,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
         ]
 
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
-      methodSpec <- buildMethodSpec llvmModule nm (show addr) checkSat setup
+      methodSpec <- buildMethodSpec llvmModule nm checkSat setup
 
       let ?lc = modTrans llvmModule ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
 
@@ -525,16 +526,16 @@ buildCFG opts halloc preserved path nm = do
 buildMethodSpec ::
   LLVMModule LLVMArch ->
   String {- ^ Name of method -} ->
-  String {- ^ Source location for method spec (here, we use the address) -} ->
   Bool {- ^ check sat -} ->
   LLVMCrucibleSetupM () ->
   TopLevel (MS.CrucibleMethodSpecIR LLVM)
-buildMethodSpec lm nm loc checkSat setup =
+buildMethodSpec lm nm checkSat setup =
   setupLLVMCrucibleContext checkSat lm $ \cc -> do
     let methodId = LLVMMethodId nm Nothing
+    pos <- getPosition
     let programLoc =
           W4.mkProgramLoc (W4.functionNameFromText $ Text.pack nm)
-          . W4.OtherPos $ Text.pack loc
+          . W4.plSourceLoc $ toW4Loc "buildMethodSpec" pos
     let lc = modTrans lm ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
     opts <- getOptions
     (args, ret) <- case llvmSignature opts lm nm of

@@ -578,8 +578,11 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      printOutLnTop Info $
        unwords ["Simulating", (methodSpec ^. csName) , "..."]
      top_loc <- toW4Loc "llvm_verify" <$> getPosition
+     unusedLemmasRef <- io $ newIORef $ Set.fromList
+                           $ map (\ps -> let cs = ps^.MS.psSpec in (cs^.MS.csMethod, cs^.MS.csLoc))
+                                 lemmas
      (ret, globals3) <-
-       io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp
+       io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp unusedLemmasRef
 
      -- collect the proof obligations
      (asserts, post_override_state) <-
@@ -589,11 +592,29 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      -- restore previous assumption state
      _ <- io $ Crucible.popAssumptionFrame sym frameIdent
 
+     unusedLemmas <- io $ readIORef unusedLemmasRef
+     unless (null unusedLemmas) $
+       printOutLnTop Info $ unlines $
+         [ "The following overrides were not used:"
+         ] ++ map (\(meth, loc) -> "\t" ++ meth^.llvmMethodName ++
+                    " (defined at " ++ show (W4.plSourceLoc loc) ++ ")")
+                  (toList unusedLemmas)
+
      -- attempt to verify the proof obligations
      printOutLnTop Info $
        unwords ["Checking proof obligations", (methodSpec ^. csName), "..."]
      (stats, deps) <- verifyObligations cc methodSpec tactic assumes asserts
      io $ writeFinalProfile
+
+     {-
+     unusedLemmas <- io $ readIORef unusedLemmasRef
+     unless (null unusedLemmas) $
+       printOutLnTop Info $ unlines $
+         [ "The following overrides were not used:"
+         ] ++ map (\(meth, loc) -> "\t" ++ meth^.llvmMethodName ++
+                    " (defined at " ++ show (W4.plSourceLoc loc) ++ ")")
+                  (toList unusedLemmas)
+     -}
 
      return ( stats
             , deps
@@ -1040,9 +1061,10 @@ registerOverride ::
   LLVMCrucibleContext arch       ->
   Crucible.SimContext (SAWCruciblePersonality Sym) Sym Crucible.LLVM ->
   W4.ProgramLoc              ->
+  IORef (Set (LLVMMethodId, W4.ProgramLoc)) ->
   [MS.CrucibleMethodSpecIR (LLVM arch)]     ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp args ret ()
-registerOverride opts cc sim_ctx top_loc cs =
+registerOverride opts cc sim_ctx top_loc unusedLemmasRef cs =
   do let sym = cc^.ccBackend
      sc <- saw_ctx <$> liftIO (Common.sawCoreState sym)
      let fstr = (head cs)^.csName
@@ -1063,7 +1085,7 @@ registerOverride opts cc sim_ctx top_loc cs =
               Crucible.bindFnHandle h
                 $ Crucible.UseOverride
                 $ Crucible.mkOverride' fn_name retType
-                $ methodSpecHandler opts sc cc top_loc cs h
+                $ methodSpecHandler opts sc cc top_loc cs h unusedLemmasRef
               mem <- Crucible.readGlobal mvar
               let bindPtr m decl =
                     do printOutLn opts Info $ "  variant `" ++ show (L.decName decl) ++ "`"
@@ -1077,9 +1099,10 @@ registerInvariantOverride ::
   LLVMCrucibleContext arch ->
   W4.ProgramLoc ->
   HashMap Crucible.SomeHandle [Crucible.BreakpointName] ->
+  IORef (Set (LLVMMethodId, W4.ProgramLoc)) ->
   [MS.CrucibleMethodSpecIR (LLVM arch)] ->
   IO (Crucible.ExecutionFeature (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp)
-registerInvariantOverride opts cc top_loc all_breakpoints cs =
+registerInvariantOverride opts cc top_loc all_breakpoints unusedLemmasRef cs =
   do sc <- saw_ctx <$> Common.sawCoreState (cc^.ccBackend)
      let name = (head cs) ^. csName
      parent <-
@@ -1101,7 +1124,7 @@ registerInvariantOverride opts cc top_loc all_breakpoints cs =
             breakpoint_name
             arg_types
             ret_type
-            (methodSpecHandler opts sc cc top_loc cs hInvariant)
+            (methodSpecHandler opts sc cc top_loc cs hInvariant unusedLemmasRef)
             all_breakpoints
 
 --------------------------------------------------------------------------------
@@ -1161,8 +1184,9 @@ verifySimulate ::
   Crucible.SymGlobalState Sym ->
   Bool ->
   Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
+  IORef (Set (LLVMMethodId, W4.ProgramLoc)) ->
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
-verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp =
+verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp unusedLemmasRef =
   withCfgAndBlockId cc mspec $ \cfg entryId ->
   do let argTys = Crucible.blockInputs $
            Crucible.getBlock entryId $ Crucible.cfgBlockMap cfg
@@ -1192,7 +1216,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
 
      invariantExecFeatures <-
        mapM
-       (registerInvariantOverride opts cc top_loc (HashMap.fromList breakpoints))
+       (registerInvariantOverride opts cc top_loc (HashMap.fromList breakpoints) unusedLemmasRef)
        (groupOn (view csName) invLemmas)
 
      additionalFeatures <-
@@ -1206,7 +1230,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
      let initExecState =
            Crucible.InitialState simCtx globals Crucible.defaultAbortHandler retTy $
            Crucible.runOverrideSim retTy $
-           do mapM_ (registerOverride opts cc simCtx top_loc)
+           do mapM_ (registerOverride opts cc simCtx top_loc unusedLemmasRef)
                     (groupOn (view csName) funcLemmas)
               liftIO $
                 do preds <- (traverse . Crucible.labeledPred) (resolveSAWPred cc) assumes

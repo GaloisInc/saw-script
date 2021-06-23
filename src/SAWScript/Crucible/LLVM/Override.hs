@@ -63,6 +63,7 @@ import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_, toList)
+import           Data.IORef
 import           Data.List
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -376,9 +377,10 @@ methodSpecHandler ::
   [MS.CrucibleMethodSpecIR (LLVM arch)]
     {- ^ specification for current function override  -} ->
   Crucible.FnHandle args ret {- ^ the handle for this function -} ->
+  IORef (Set (LLVMMethodId, W4.ProgramLoc)) ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp args ret
      (Crucible.RegValue Sym ret)
-methodSpecHandler opts sc cc top_loc css h = do
+methodSpecHandler opts sc cc top_loc css h unusedLemmasRef = do
   let fnName = head css ^. csName
   liftIO $ printOutLn opts Info $ unwords
     [ "Matching"
@@ -483,6 +485,7 @@ methodSpecHandler opts sc cc top_loc css h = do
                             (Crucible.LabeledPred asum
                               (Crucible.AssumptionReason (st^.osLocation) "override postcondition"))
                        Crucible.writeGlobals (st'^.overrideGlobals)
+                       liftIO $ modifyIORef' unusedLemmasRef $ Set.delete (cs^.MS.csMethod, cs^.MS.csLoc)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
            , Just (W4.plSourceLoc (cs ^. MS.csLoc))
            )
