@@ -180,6 +180,7 @@ type TmPrim  = Prims.Prim TermModel
 
 type instance EvalM  TermModel = IO
 type instance VBool  TermModel = Either Term Bool
+-- VWord records the bitwidth together with the term in the @Left@ case
 type instance VWord  TermModel = Either (Natural, Term) BitVector
 type instance VInt   TermModel = Either Term Integer
 type instance VArray TermModel = TermModelArray
