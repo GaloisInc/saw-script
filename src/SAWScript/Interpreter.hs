@@ -54,6 +54,7 @@ import SAWScript.AST (Located(..),Import(..))
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
+import SAWScript.HeapsterBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
 import SAWScript.Options
@@ -2901,6 +2902,259 @@ primitives = Map.fromList
     Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
     , " to ask if two monadic terms are equal" ]
+
+  , prim "heapster_init_env"
+    "String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env)
+    Experimental
+    [ "Create a new Heapster environment with the given SAW module name"
+    , " from the named LLVM bitcode file."
+    ]
+
+  , prim "heapster_init_env_from_file"
+    "String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env_from_file)
+    Experimental
+    [ "Create a new Heapster environment from the named LLVM bitcode file,"
+    , " initialized with the module in the given SAW core file."
+    ]
+
+  , prim "load_sawcore_from_file"
+    "String -> TopLevel ()"
+    (bicVal load_sawcore_from_file)
+    Experimental
+    [ "Load a SAW core module from a file"
+    ]
+
+  , prim "heapster_init_env_for_files"
+    "String -> [String] -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env_for_files)
+    Experimental
+    [ "Create a new Heapster environment from the named LLVM bitcode files,"
+    , " initialized with the module in the given SAW core file."
+    ]
+
+  , prim "heapster_get_cfg"
+    "HeapsterEnv -> String -> TopLevel CFG"
+    (bicVal heapster_get_cfg)
+    Experimental
+    [ "Extract out the Crucible CFG associated with a symbol in a"
+    , " Heapster environemnt"
+    ]
+
+  , prim "heapster_define_opaque_perm"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_opaque_perm)
+    Experimental
+    [ "heapster_define_opaque_perm nm args tp trans defines an opaque named"
+    , " Heapster permission named nm with arguments parsed from args and type"
+    , " parsed from tp that translates to the named type trans"
+    ]
+
+  , prim "heapster_define_recursive_perm"
+    "HeapsterEnv -> String -> String -> String -> [String] -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_recursive_perm)
+    Experimental
+    [ "heapster_define_recursive_perm env name arg_ctx value_type"
+    , " [ p1, ..., pn ] trans_tp fold_fun unfold_fun defines an recursive named"
+    , " Heapster permission named nm with arguments parsed from args_ctx and"
+    , " type parsed from value_type that translates to the named type"
+    , " trans_tp. The resulting permission is equivalent to the permission"
+    , " p1 \\/ ... \\/ pn, where the pi can contain name."
+    ]
+
+  , prim "heapster_define_irt_recursive_perm"
+    "HeapsterEnv -> String -> String -> String -> [String] -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_irt_recursive_perm)
+    Experimental
+    [ "heapster_define_irt_recursive_perm env name arg_ctx value_type"
+    , " [ p1, ..., pn ] defines an recursive named Heapster permission named"
+    , " nm with arguments parsed from args_ctx and type parsed from value_type"
+    , " that translates to the appropriate IRT type. The resulting permission"
+    , " is equivalent to the permission p1 \\/ ... \\/ pn, where the pi can"
+    , " contain name."
+    ]
+
+  , prim "heapster_define_irt_recursive_shape"
+    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_irt_recursive_shape)
+    Experimental
+    [ "heapster_define_irt_recursive_shape env name w arg_ctx body_sh"
+    , " defines a recursive named Heapser shape named nm with arguments"
+    , " parsed from args_ctx and width w that translates to the appropriate"
+    , " IRT type. The resulting shape is equivalent to the shape body_sh,"
+    , " where body_sh can contain name."
+    ]
+
+  , prim "heapster_define_reachability_perm"
+    "HeapsterEnv -> String -> String -> String -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_reachability_perm)
+    Experimental
+    [ "heapster_define_recursive_perm env name arg_ctx value_type"
+    , " [ p1, ..., pn ] trans_tp fold_fun unfold_fun defines an recursive named"
+    , " Heapster permission named nm with arguments parsed from args_ctx and"
+    , " type parsed from value_type that translates to the named type"
+    , " trans_tp. The resulting permission is equivalent to he permission"
+    , " p1 \\/ ... \\/ pn, where the pi can contain name."
+    ]
+
+  , prim "heapster_define_perm"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_perm)
+    Experimental
+    [ "heapster_define_perm nm args tp p defines a Heapster permission named"
+    , " nm with arguments x1,...,xn parsed from args and type parsed from tp"
+    , " such that nm<x1,...,xn> is equivalent to the permission p."
+    ]
+
+  , prim "heapster_define_llvmshape"
+    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_llvmshape)
+    Experimental
+    [ "heapster_define_llvmshape nm w args sh defines a Heapster LLVM shape"
+    , " nm with type llvmshape w and arguments x1,...,xn parsed from args"
+    , " such that nm<x1,...,xn> is equivalent to the permission p."
+    ]
+
+  , prim "heapster_define_rust_type"
+    "HeapsterEnv -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_rust_type)
+    Experimental
+    [ "heapster_define_rust_type env tp defines a Heapster LLVM shape from tp,"
+    , "a string representing a top-level struct or enum definition."
+    ]
+
+  , prim "heapster_block_entry_hint"
+    "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel ()"
+    (bicVal heapster_block_entry_hint)
+    Experimental
+    [ "heapster_block_entry_hint env nm block top_args ghosts perms adds a hint"
+    , " to the Heapster type-checker that Crucible block number block in nm"
+    , " should have permissions perms on its inputs, assuming that top_args"
+    , " lists the top-level ghost and normal arguments to function nm and"
+    , " ghosts gives the ghost arguments to block"
+    ]
+
+  , prim "heapster_gen_block_perms_hint"
+    "HeapsterEnv -> String -> [Int] -> TopLevel ()"
+    (bicVal heapster_gen_block_perms_hint)
+    Experimental
+    [ "heapster_gen_block_perms_hint env nm blocks adds a hint to the Heapster"
+    , " type-checker to *generalize* (recursively replace all instances of"
+    , " eq(const) with (exists x. eq(x))) all permissions on the inputs of the"
+    , " given Crucible blocks numbers. If the given list is empty, do so for"
+    , " every block in the CFG."
+    ]
+
+  , prim "heapster_join_point_hint"
+    "HeapsterEnv -> String -> [Int] -> TopLevel ()"
+    (bicVal heapster_join_point_hint)
+    Experimental
+    [ "heapster_join_point_hint env nm blocks adds a hint to the Heapster"
+    , " type-checker to make a join point at each of the given block numbers,"
+    , " meaning that all entries to the given blocks are merged into a single"
+    , " entrypoint, whose permissions are given by the first call to the block."
+    , " If the given list is empty, do so for every block in the CFG."
+    ]
+
+  , prim "heapster_find_symbol"
+    "HeapsterEnv -> String -> TopLevel String"
+    (bicVal heapster_find_symbol)
+    Experimental
+    [ "Search for a symbol in any module contained in a HeapsterEnv that"
+    , " contains the supplied string as a substring. Raise an error if there"
+    , " is not exactly one such symbol"
+    ]
+
+  , prim "heapster_find_symbols"
+    "HeapsterEnv -> String -> TopLevel [String]"
+    (bicVal heapster_find_symbols)
+    Experimental
+    [ "Search for all symbols in any module contained in a HeapsterEnv that"
+    , " contain the supplied string as a substring"
+    ]
+
+  , prim "heapster_find_trait_method_symbol"
+    "HeapsterEnv -> String -> TopLevel String"
+    (bicVal heapster_find_trait_method_symbol)
+    Experimental
+    [ "Search for a symbol in any module contained in a HeapsterEnv that"
+    , "corresponds to the given trait method implementation. The search"
+    , "string should be of the form: trait::method<type>, e.g."
+    , "core::fmt::Debug::fmt<Foo>"
+    ]
+
+  , prim "heapster_assume_fun"
+    "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_assume_fun)
+    Experimental
+    [ "heapster_assume_fun nm perms trans assumes that function nm has"
+    , " permissions perms and translates to the SAW core term trans"
+    ]
+
+  , prim "heapster_assume_fun_rename"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_assume_fun_rename)
+    Experimental
+    [ "heapster_assume_fun_rename nm nm_t perms trans assumes that function nm"
+    , " has permissions perms and translates to the SAW core term trans. If"
+    , " trans is not an identifier then it is bound to the defined name nm_to."
+    ]
+
+  , prim "heapster_assume_fun_multi"
+    "HeapsterEnv -> String -> [(String, String)] -> TopLevel HeapsterEnv"
+    (bicVal heapster_assume_fun_multi)
+    Experimental
+    [ "heapster_assume_fun_multi nm [(perm1, trans1), ...] assumes that function"
+    , " nm can be typed with 0 or more permissions, each with the corresponding"
+    , " translation to SAW core"
+    ]
+
+  , prim "heapster_typecheck_fun"
+    "HeapsterEnv -> String -> String -> TopLevel ()"
+    (bicVal heapster_typecheck_fun)
+    Experimental
+    [ "Translate an LLVM function to a SAW core term using Heapster"
+    , " type-checking, and store the result in the current Heapster SAW module."
+    ]
+
+  , prim "heapster_typecheck_fun_rename"
+    "HeapsterEnv -> String -> String -> String -> TopLevel ()"
+    (bicVal heapster_typecheck_fun_rename)
+    Experimental
+    [ "Translate the LLVM function named by the first String to a SAW core term"
+    , " using Heapster type-checking, and store the result in the current"
+    , " Heapster SAW module as a definition named with the second string."
+    ]
+
+  , prim "heapster_typecheck_mut_funs"
+    "HeapsterEnv -> [(String, String)] -> TopLevel ()"
+    (bicVal heapster_typecheck_mut_funs)
+    Experimental
+    [ "Translate a set of mutually recursive LLVM function to a set of SAW "
+    , "core terms using Heapster type-checking. Store the results in the "
+    , "current Heapster SAW module."
+    ]
+
+  , prim "heapster_print_fun_trans"
+    "HeapsterEnv -> String -> TopLevel ()"
+    (bicVal heapster_print_fun_trans)
+    Experimental
+    [ "Print the translation to SAW of a function that has been type-checked."
+    ]
+
+  , prim "heapster_export_coq"
+    "HeapsterEnv -> String -> TopLevel ()"
+    (bicVal heapster_export_coq)
+    Experimental
+    [ "Export a Heapster environment to a Coq file" ]
+
+  , prim "heapster_parse_test"
+    "LLVMModule -> String -> String -> TopLevel ()"
+    (bicVal heapster_parse_test)
+    Experimental
+    [ "Parse and print back a set of Heapster permissions for a function"
+    ]
 
     ---------------------------------------------------------------------
 

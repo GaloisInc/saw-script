@@ -1,0 +1,137 @@
+enable_experimental;
+env <- heapster_init_env_from_file "rust_data.sawcore" "rust_data.bc";
+
+/***
+ *** Types
+ ***/
+
+// Integer types
+heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
+heapster_define_perm env "int32" " " "llvmptr 32" "exists x:bv 32.eq(llvmword(x))";
+heapster_define_perm env "int8" " " "llvmptr 8" "exists x:bv 8.eq(llvmword(x))";
+heapster_define_perm env "int1" " " "llvmptr 1" "exists x:bv 1.eq(llvmword(x))";
+
+heapster_define_llvmshape env "u64" 64 "" "fieldsh(int64<>)";
+heapster_define_llvmshape env "u32" 64 "" "fieldsh(32,int32<>)";
+
+// bool type
+heapster_define_llvmshape env "bool" 64 "" "fieldsh(1,int1<>)";
+
+// Result type
+heapster_define_rust_type env "pub enum Result<X,Y> { Ok (X), Err (Y) }";
+
+// Sum type
+heapster_define_rust_type env "pub enum Sum<X,Y> { Left (X), Right (Y) }";
+
+// List type
+heapster_define_llvmshape env "List" 64 "L:perm(llvmptr 64),X:llvmshape 64" "(fieldsh(eq(llvmword(0)))) orsh (fieldsh(eq(llvmword(1)));X;fieldsh(L))";
+heapster_define_recursive_perm env "ListPerm" "X:llvmshape 64, Xlen:bv 64, rw:rwmodality, l:lifetime" "llvmptr 64" ["[l]memblock(rw,0,Xlen + 16,List<ListPerm<X,Xlen,rw,l>,X>)"] "\\ (X:sort 0) (_:Vec 64 Bool) -> List X" "\\ (X:sort 0) (_:Vec 64 Bool) -> foldListPermH X" "\\ (X:sort 0) (_:Vec 64 Bool) -> unfoldListPermH X";
+
+// The String type
+heapster_define_llvmshape env "String" 64 "" "exsh cap:bv 64. ptrsh(arraysh(cap,1,[(8,int8<>)]));fieldsh(int64<>);fieldsh(eq(llvmword(cap)))";
+
+// The TwoValues, ThreeValues, FourValues, and FiveValues types
+heapster_define_rust_type env "pub struct TwoValues(u32,u32);";
+heapster_define_rust_type env "pub struct ThreeValues(u32,u32,u32);";
+heapster_define_rust_type env "pub struct FourValues(u32,u32,u32,u32);";
+heapster_define_rust_type env "pub struct FiveValues(u32,u32,u32,u32,u32);";
+
+// MixedStruct type
+// heapster_define_llvmshape env "MixedStruct" 64 "" "String<>;fieldsh(64,int64<>);fieldsh(64,int64<>)";
+heapster_define_rust_type env "pub struct MixedStruct { pub s: String, pub i1: u64, pub i2: u64, }";
+
+// TrueEnum type
+heapster_define_rust_type env "pub enum TrueEnum { Foo, Bar, Baz }";
+
+/***
+ *** Assumed Functions
+ ***/
+
+// exchange_malloc
+exchange_malloc_sym <- heapster_find_symbol env "15exchange_malloc";
+//heapster_assume_fun_rename env exchange_malloc_sym "exchange_malloc" "(len:bv 64).arg0:eq(llvmword(len)),arg1:true -o ret:array(0,<len,*1,[(W,0,8) |-> true])" "\\ (len:Vec 64 Bool) -> returnM (BVVec 64 len #()) (repeatBVVec 64 len #() ())";
+heapster_assume_fun_rename env exchange_malloc_sym "exchange_malloc" "(len:bv 64).arg0:eq(llvmword(len)),arg1:true -o ret:memblock(W,0,len,emptysh)" "\\ (len:Vec 64 Bool) -> returnM #() ()";
+
+// memcpy
+heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64" "(rw:rwmodality, l1:lifetime, l2:lifetime, sh:llvmshape 64, b:llvmblock 64, len:bv 64).arg0:[l1]memblock(W,0,len,sh), arg1:[l2]memblock(rw,0,len,eqsh(b)), arg2:eq(llvmword(len))  -o  arg0:[l1]memblock(W,0,len,eqsh(b)), arg1:[l2]memblock(rw,0,len,eqsh(b))" "\\ (X:sort 0) (len:Vec 64 Bool) (x:X) (_:#()) -> returnM (#() * #() * #()) ((),(),())";
+
+// <str as alloc::string::ToString>::to_string
+to_string_str <- heapster_find_symbol env "$LT$str$u20$as$u20$alloc..string..ToString$GT$9to_string";
+// NOTE: this is the more incorrect version, with no lifetime argument and no shapes
+//heapster_assume_fun_rename env to_string_str "to_string_str" "(len:bv 64). arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:exists len':bv 64. ptr((W,0) |-> array(0,<len',*1,[(W,0,8) |-> int8<>])) * ptr((W,8) |-> int64<>) * ptr((W,16) |-> eq(llvmword(len')))" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len int8Trans) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #()) len (str, mkInt64Trans len, ()))";
+
+// NOTE: this is the incorrect version, with no lifetime argument
+heapster_assume_fun_rename env to_string_str "to_string_str" "(len:bv 64). arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:memblock(W,0,24,String<>)" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len int8Trans) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #()) len (str, mkInt64Trans len, ()))";
+
+// FIXME: this is the correct version, with a lifetime argument
+//heapster_assume_fun_rename env to_string_str "to_string_str" "(ps:lowned_perm,l:lifetime,len:bv 64). l:lowned ps, arg0:[l]memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[[l](R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o l:lowned ps, arg0:[l]memblock(W,0,24,String<>)" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len int8Trans) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #()) len (str, mkInt64Trans len, ()))";
+
+
+/***
+ *** Type-Checked Functions
+ ***/
+
+// bool_and
+bool_and_sym <- heapster_find_symbol env "8bool_and";
+heapster_typecheck_fun_rename env bool_and_sym "bool_and" "<> fn (bool,bool) -> bool";
+
+// mk_two_values
+// FIXME: this requires type-checking to split a 64-bit field into 2 32-bit fields
+/*
+mk_two_values_sym <- heapster_find_symbol env "13mk_two_values";
+heapster_typecheck_fun_rename env mk_two_values_sym "mk_two_values" "<> fn (u32,u32) -> TwoValues";
+*/
+
+// test_result
+test_result_sym <- heapster_find_symbol env "11test_result";
+heapster_typecheck_fun_rename env test_result_sym "test_result" "<'a> fn (r:&'a Result<u64,u64>) -> bool";
+//heapster_typecheck_fun_rename env test_result_sym "test_result" "().arg0:memblock(R,0,16,Result<fieldsh(int64<>),fieldsh(int64<>)>) -o ret:int1<>";
+
+// test_sum_impl
+test_sum_impl_sym <- heapster_find_symbol env "13test_sum_impl";
+heapster_typecheck_fun_rename env test_sum_impl_sym "test_sum_impl" "().arg0:memblock(R,0,16,Sum<fieldsh(int64<>),fieldsh(int64<>)>) -o ret:int1<>";
+
+// NOTE: Fails because of `clone` in the implementation
+// MixedStruct::get_s
+// mixed_struct_get_s <- heapster_find_symbol env "11MixedStruct5get_s";
+// heapster_typecheck_fun_rename env mixed_struct_get_s "MixedStruct_get_s" "<'a> fn (m:&'a MixedStruct) -> String";
+
+// MixedStruct::get_i1
+mixed_struct_get_i1 <- heapster_find_symbol env "11MixedStruct6get_i1";
+heapster_typecheck_fun_rename env mixed_struct_get_i1 "MixedStruct_get_i1" "<'a> fn (m:&'a MixedStruct) -> u64";
+
+// MixedStruct::get_i2
+mixed_struct_get_i2 <- heapster_find_symbol env "11MixedStruct6get_i2";
+heapster_typecheck_fun_rename env mixed_struct_get_i2 "MixedStruct_get_i2" "<'a> fn (m:&'a MixedStruct) -> u64";
+
+cycle_true_enum_sym <- heapster_find_symbol env "15cycle_true_enum";
+// NOTE: This typecheck requires full(er) support for disjunctive shapes, which Heapster currently lacks
+// heapster_typecheck_fun_rename env cycle_true_enum_sym "cycle_true_enum" "<'a> fn (te:&'a TrueEnum) -> TrueEnum";
+
+// list_is_empty
+list_is_empty_sym <- heapster_find_symbol env "13list_is_empty";
+heapster_typecheck_fun_rename env list_is_empty_sym "list_is_empty" "(rw:rwmodality).arg0:ListPerm<fieldsh(int64<>),8,rw,always> -o ret:int1<>";
+
+// list_head
+list_head_sym <- heapster_find_symbol env "9list_head";
+heapster_typecheck_fun_rename env list_head_sym "list_head" "(rw:rwmodality).arg0:ListPerm<fieldsh(int64<>),8,rw,always> -o ret:memblock(W,0,16,Result<fieldsh(int64<>),emptysh>)";
+
+// list_head_impl
+list_head_impl_sym <- heapster_find_symbol env "14list_head_impl";
+heapster_typecheck_fun_rename env list_head_impl_sym "list_head_impl" "(rw:rwmodality).arg0:ListPerm<fieldsh(int64<>),8,rw,always> -o ret:(struct(eq(llvmword(0)),exists z:bv 64. eq(llvmword(z)))) or (struct(eq(llvmword(1)),true))";
+
+// StrStruct::new
+str_struct_new <- heapster_find_symbol env "9StrStruct3new";
+
+// FIXME: this is the simplified version, that returns ptr permissions
+//heapster_typecheck_fun_rename env str_struct_new "str_struct_new" "(len:bv 64).arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:exists len':bv 64. ptr((W,0) |-> array(0,<len',*1,[(R,0,8) |-> int8<>])) * ptr((W,8) |-> int64<>) * ptr((W,16) |-> eq(llvmword(len')))";
+
+// FIXME: this is the correct version, with the String shape
+heapster_typecheck_fun_rename env str_struct_new "str_struct_new" "(len:bv 64).arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:memblock(W,0,24,String<>)";
+
+
+/***
+ *** Export to Coq
+ ***/
+
+heapster_export_coq env "rust_data.v";

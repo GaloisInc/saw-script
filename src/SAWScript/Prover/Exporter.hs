@@ -32,6 +32,7 @@ module SAWScript.Prover.Exporter
   , writeCoqCryptolModule
   , writeCoqSAWCorePrelude
   , writeCoqTerm
+  , coqTranslationConfiguration
   , writeCoqProp
   , writeCore
   , writeVerilog

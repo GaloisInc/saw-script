@@ -88,6 +88,7 @@ import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
 import qualified Verifier.SAW.SharedTerm as SAWCorePP (PPOpts(..), defaultPPOpts,
                                                        ppTerm, scPrettyTerm)
 import Verifier.SAW.TypedTerm
+import Verifier.SAW.Term.Functor (ModuleName)
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
@@ -107,6 +108,8 @@ import qualified Lang.Crucible.JVM as CJ
 import Lang.Crucible.LLVM.ArraySizeProfile
 
 import           What4.ProgramLoc (ProgramLoc(..))
+
+import Verifier.SAW.Heapster.Permissions
 
 -- Values ----------------------------------------------------------------------
 
@@ -148,6 +151,7 @@ data Value
   | VCryptolModule CryptolModule
   | VJavaClass JSS.Class
   | VLLVMModule (Some CMSLLVM.LLVMModule)
+  | VHeapsterEnv HeapsterEnv
   | VSatResult SatResult
   | VProofResult ProofResult
   | VUninterp Uninterp
@@ -171,6 +175,23 @@ data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      , biBasicSS       :: SAWSimpset
                                      }
   deriving Generic
+
+-- | All the context maintained by Heapster
+data HeapsterEnv = HeapsterEnv {
+  heapsterEnvSAWModule :: ModuleName,
+  -- ^ The SAW module containing all our Heapster definitions
+  heapsterEnvPermEnvRef :: IORef PermEnv,
+  -- ^ The current permissions environment
+  heapsterEnvLLVMModules :: [Some CMSLLVM.LLVMModule]
+  -- ^ The list of underlying 'LLVMModule's that we are translating
+  }
+
+showHeapsterEnv :: HeapsterEnv -> String
+showHeapsterEnv env =
+  concat $ intersperse "\n\n" $
+  map (\some_lm -> case some_lm of
+          Some lm -> CMSLLVM.showLLVMModule lm) $
+  heapsterEnvLLVMModules env
 
 data SatResult
   = Unsat SolverStats
@@ -298,6 +319,7 @@ showsPrecValue opts p v =
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
     VLLVMModule (Some m) -> showString (CMSLLVM.showLLVMModule m)
+    VHeapsterEnv env -> showString (showHeapsterEnv env)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
     VSatResult r -> showsSatResult opts r
@@ -630,7 +652,7 @@ runProofScript (ProofScript m) gl ploc rsn =
      ps <- io (startProof gl pos ploc rsn)
      (r,pstate) <- runStateT (runExceptT m) ps
      case r of
-       Left (stats,cex) -> return (InvalidProof stats cex pstate)
+       Left (stats,cex) -> return (SAWScript.Proof.InvalidProof stats cex pstate)
        Right _ ->
          do sc <- getSharedContext
             db <- roTheoremDB <$> getTopLevelRO
@@ -947,6 +969,13 @@ instance IsValue (CMSLLVM.LLVMModule arch) where
 instance FromValue (Some CMSLLVM.LLVMModule) where
     fromValue (VLLVMModule m) = m
     fromValue _ = error "fromValue CMSLLVM.LLVMModule"
+
+instance IsValue HeapsterEnv where
+    toValue m = VHeapsterEnv m
+
+instance FromValue HeapsterEnv where
+    fromValue (VHeapsterEnv m) = m
+    fromValue _ = error "fromValue HeapsterEnv"
 
 instance IsValue ProofResult where
    toValue r = VProofResult r
