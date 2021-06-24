@@ -933,7 +933,7 @@ primitives = Map.fromList
     , "The second argument is a list of values to treat as opaque; they will not be unfolded during evaluation."
     , "The third argument is the term to extract from."
     , ""
-    , "This operation will return pair, consisting of a rewritten term and a list of replacements."
+    , "This operation will return a pair, consisting of a rewritten term and a list of replacements."
     , "The rewritten term will have each fully-applied occurrence of the named functions replaced"
     , "by a fresh constant of the return type of the function. The list of replacements consists"
     , "of pairs (one for each named function) giving the name of that function and the replacement"
@@ -1247,7 +1247,7 @@ primitives = Map.fromList
     (funVal2 normalize_term_opaque)
     Experimental
     [ "Normalize the given term by performing evaluation in SAWCore."
-    , "The named values will be treated opauqely and not unfolded during evaluation."
+    , "The named values will be treated opaquely and not unfolded during evaluation."
     ]
 
   , prim "goal_eval"           "ProofScript ()"
