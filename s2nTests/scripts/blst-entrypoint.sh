@@ -4,6 +4,7 @@ set -xe
 cd /workdir
 ./scripts/install.sh
 cp /saw-bin/saw bin/saw
+cp /saw-bin/abc bin/abc
 
 export PATH=/workdir/bin:$PATH
 export CRYPTOLPATH=/workdir/cryptol-specs:/workdir/spec

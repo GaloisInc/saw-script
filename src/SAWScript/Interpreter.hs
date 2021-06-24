@@ -38,6 +38,7 @@ import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
 import Data.Foldable (foldrM)
+import Data.IORef
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -278,7 +279,9 @@ interpretStmts env stmts =
              interpretStmts env' ss
 
 stmtInterpreter :: StmtInterpreter
-stmtInterpreter ro rw stmts = fmap fst $ runTopLevel (interpretStmts emptyLocal stmts) ro rw
+stmtInterpreter ro rw stmts =
+  do ref <- newIORef rw
+     runTopLevel (interpretStmts emptyLocal stmts) ro ref
 
 processStmtBind :: Bool -> SS.Pattern -> Maybe SS.Type -> SS.Expr -> TopLevel ()
 processStmtBind printBinds pat _mc expr = do -- mx mt
@@ -476,6 +479,7 @@ buildTopLevelEnv proxy opts =
                    , rwCrucibleAssertThenAssume = False
                    , rwProfilingFile = Nothing
                    , rwLaxArith = False
+                   , rwLaxPointerOrdering = False
                    , rwWhat4HashConsing = False
                    , rwWhat4HashConsingX86 = False
                    , rwPreservedRegs = []
@@ -491,7 +495,8 @@ processFile proxy opts file = do
   oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
   setCurrentDirectory (takeDirectory file')
-  _ <- runTopLevel (interpretFile file' True) ro rw
+  ref <- newIORef rw
+  _ <- runTopLevel (interpretFile file' True) ro ref
             `X.catch` (handleException opts)
   setCurrentDirectory oldpath
   return ()
@@ -543,6 +548,11 @@ enable_lax_arithmetic :: TopLevel ()
 enable_lax_arithmetic = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxArith = True }
+
+enable_lax_pointer_ordering :: TopLevel ()
+enable_lax_pointer_ordering = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxPointerOrdering = True }
 
 enable_what4_hash_consing :: TopLevel ()
 enable_what4_hash_consing = do
@@ -765,6 +775,11 @@ primitives = Map.fromList
     Current
     [ "Enable lax rules for arithmetic overflow in Crucible." ]
 
+  , prim "enable_lax_pointer_ordering" "TopLevel ()"
+    (pureVal enable_lax_pointer_ordering)
+    Current
+    [ "Enable lax rules for pointer ordering comparisons in Crucible." ]
+
   , prim "enable_what4_hash_consing" "TopLevel ()"
     (pureVal enable_what4_hash_consing)
     Current
@@ -903,6 +918,11 @@ primitives = Map.fromList
     , "variables."
     ]
 
+  , prim "default_term" "Term -> Term"
+    (funVal1 default_typed_term)
+    Experimental
+    [ "Apply Cryptol defaulting rules to the given term." ]
+
   , prim "sbv_uninterpreted"   "String -> Term -> TopLevel Uninterp"
     (pureVal sbvUninterpreted)
     Deprecated
@@ -942,21 +962,21 @@ primitives = Map.fromList
 
   , prim "load_aig"            "String -> TopLevel AIG"
     (pureVal loadAIGPrim)
-    Deprecated
+    Current
     [ "Read an AIG file in binary AIGER format, yielding an AIG value." ]
   , prim "save_aig"            "String -> AIG -> TopLevel ()"
     (pureVal saveAIGPrim)
-    Deprecated
+    Current
     [ "Write an AIG to a file in binary AIGER format." ]
   , prim "save_aig_as_cnf"     "String -> AIG -> TopLevel ()"
     (pureVal saveAIGasCNFPrim)
-    Deprecated
+    Current
     [ "Write an AIG representing a boolean function to a file in DIMACS"
     , "CNF format."
     ]
 
   , prim "dsec_print"                "Term -> Term -> TopLevel ()"
-    (scVal dsecPrint)
+    (pureVal dsecPrint)
     Current
     [ "Use ABC's 'dsec' command to compare two terms as SAIGs."
     , "The terms must have a type as described in ':help write_saig',"
@@ -966,16 +986,9 @@ primitives = Map.fromList
     , "You must have an 'abc' executable on your PATH to use this command."
     ]
 
-  , prim "cec"                 "AIG -> AIG -> TopLevel ProofResult"
-    (pureVal cecPrim)
-    Deprecated
-    [ "Perform a Combinatorial Equivalence Check between two AIGs."
-    , "The AIGs must have the same number of inputs and outputs."
-    ]
-
   , prim "bitblast"            "Term -> TopLevel AIG"
     (pureVal bbPrim)
-    Deprecated
+    Current
     [ "Translate a term into an AIG.  The term must be representable as a"
     , "function from a finite number of bits to a finite number of bits."
     ]
@@ -999,7 +1012,7 @@ primitives = Map.fromList
     ]
 
   , prim "write_aig_external"  "String -> Term -> TopLevel ()"
-    (scVal writeAIGviaVerilog)
+    (pureVal writeAIGviaVerilog)
     Current
     [ "Write out a representation of a term in binary AIGER format. The"
     , "term must be representable as a function from a finite number of"
@@ -1037,22 +1050,22 @@ primitives = Map.fromList
     ]
 
   , prim "write_cnf"           "String -> Term -> TopLevel ()"
-    (scVal write_cnf)
+    (pureVal write_cnf)
     Current
     [ "Write the given term to the named file in CNF format." ]
 
   , prim "write_cnf_external"  "String -> Term -> TopLevel ()"
-    (scVal write_cnf_external)
+    (pureVal write_cnf_external)
     Current
     [ "Write the given term to the named file in CNF format." ]
 
   , prim "write_smtlib2"       "String -> Term -> TopLevel ()"
-    (scVal write_smtlib2)
+    (pureVal write_smtlib2)
     Current
     [ "Write the given term to the named file in SMT-Lib version 2 format." ]
 
   , prim "write_smtlib2_w4"    "String -> Term -> TopLevel ()"
-    (scVal write_smtlib2_w4)
+    (pureVal write_smtlib2_w4)
     Current
     [ "Write the given term to the named file in SMT-Lib version 2 format,"
     , "using the What4 backend instead of the SBV backend."
@@ -1315,7 +1328,7 @@ primitives = Map.fromList
     ]
 
   , prim "abc"                 "ProofScript ()"
-    (pureVal proveABC)
+    (pureVal w4_abc_aiger)
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
@@ -1521,9 +1534,17 @@ primitives = Map.fromList
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
+  , prim "w4_abc_aiger"        "ProofScript ()"
+    (pureVal w4_abc_aiger)
+    Current
+    [ "Use the ABC theorem prover as an external process to prove the"
+    , "current goal, with AIGER as an interchange format, generated"
+    , "using the What4 backend."
+    ]
+
   , prim "w4_abc_smtlib2"        "ProofScript ()"
     (pureVal w4_abc_smtlib2)
-    Experimental
+    Current
     [ "Use the ABC theorem prover as an external process to prove the"
     , "current goal, with SMT-Lib2 as an interchange format, generated"
     , "using the What4 backend."
@@ -1531,7 +1552,7 @@ primitives = Map.fromList
 
   , prim "w4_abc_verilog"        "ProofScript ()"
     (pureVal w4_abc_verilog)
-    Experimental
+    Current
     [ "Use the ABC theorem prover as an external process to prove the"
     , "current goal, with Verilog as an interchange format, generated"
     , "using the What4 backend."

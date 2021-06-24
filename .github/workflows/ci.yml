@@ -233,6 +233,12 @@ jobs:
           name: "${{ runner.os }}-bins"
           path: dist/bin
 
+      - if: runner.os != 'Windows'
+        uses: actions/download-artifact@v2
+        with:
+          path: dist/bin
+          name: abc-${{ runner.os }}
+
       - uses: actions/setup-python@v2
         with:
           python-version: '3.9'
@@ -246,6 +252,12 @@ jobs:
         run: |
           chmod +x dist/bin/*
           export PATH="$PWD/dist/bin:$PATH"
+          echo "$PWD/dist/bin" >> "$GITHUB_PATH"
+          abc -h || true
+          yices --version
+          yices-smt2 --version
+          saw --version
+          saw-remote-api --help
           ${{ matrix.test }}
 
   cabal-test:
@@ -288,18 +300,14 @@ jobs:
         if: "runner.os != 'Windows'"
         run: chmod +x dist/bin/*
 
-      - if: |
-          runner.os != 'Windows' &&
-          matrix.suite == 'integration_tests'
+      - if: runner.os != 'Windows'
         uses: actions/download-artifact@v2
         with:
           path: bin
           name: abc-${{ runner.os }}
 
       - shell: bash
-        if: |
-          runner.os != 'Windows' &&
-          matrix.suite == 'integration_tests'
+        if: runner.os != 'Windows'
         run: chmod +x bin/*
 
       - uses: actions/download-artifact@v2
@@ -340,9 +348,8 @@ jobs:
             cache: ghcr.io/galoisinc/cache-saw-remote-api
     steps:
       - uses: actions/checkout@v2
-      - run: |
-          git submodule update --init
-          git -C deps/abcBridge submodule update --init
+        with:
+          submodules: true
 
       - uses: rlespinasse/github-slug-action@v3.x
 
@@ -453,6 +460,11 @@ jobs:
           name: "saw-Linux-${{ matrix.ghc }}"
           path: ./s2nTests/bin
 
+      - uses: actions/download-artifact@v2
+        with:
+          path: ./s2nTests/bin
+          name: abc-${{ runner.os }}
+
       - shell: bash
         working-directory: s2nTests
         run: |
@@ -471,7 +483,7 @@ jobs:
         name: "s2n tests: ${{ matrix.s2n-target }}"
         working-directory: s2nTests
         run: |
-          chmod +x bin/saw
+          chmod +x bin/*
           make ${{ matrix.s2n-target }}
 
   # Indicates sufficient CI success for the purposes of mergify merging the pull

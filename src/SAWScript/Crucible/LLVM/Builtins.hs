@@ -1341,6 +1341,7 @@ setupLLVMCrucibleContext pathSat lm action =
      smt_array_memory_model_enabled <- gets rwSMTArrayMemoryModel
      crucible_assert_then_assume_enabled <- gets rwCrucibleAssertThenAssume
      what4HashConsing <- gets rwWhat4HashConsing
+     laxPointerOrdering <- gets rwLaxPointerOrdering
      Crucible.llvmPtrWidth ctx $ \wptr ->
        Crucible.withPtrWidth wptr $
        do let ?lc = ctx^.Crucible.llvmTypeCtx
@@ -1377,8 +1378,11 @@ setupLLVMCrucibleContext pathSat lm action =
                  crucible_assert_then_assume_enabled
 
                let bindings = Crucible.fnBindingsFromList []
+               let memOpts  = Crucible.defaultMemOptions
+                                { Crucible.laxPointerOrdering = laxPointerOrdering
+                                }
                let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
-                                 bindings (Crucible.llvmExtensionImpl Crucible.defaultMemOptions)
+                                 bindings (Crucible.llvmExtensionImpl memOpts)
                                  Common.SAWCruciblePersonality
                mem <- Crucible.populateConstGlobals sym (Crucible.globalInitMap mtrans)
                         =<< Crucible.initializeMemoryConstGlobals sym ctx llvm_mod

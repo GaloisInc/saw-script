@@ -15,7 +15,6 @@ packages:
     deps/llvm-pretty-bc-parser
     deps/jvm-parser
     deps/aig
-    deps/abcBridge
     deps/cryptol
     deps/what4/what4
     deps/crucible/crucible

@@ -19,10 +19,6 @@ custom-setup
     , filepath
     , process
 
-flag builtin-abc
-  description: Link with ABC as a static library
-  default: True
-
 library
   default-language: Haskell2010
   build-depends:
@@ -218,15 +214,9 @@ executable saw
     , saw-core
     , heapster-saw
     , cryptol-saw-core
+    , aig
 
-  if flag(builtin-abc)
-    cpp-options: -DUSE_BUILTIN_ABC
-    build-depends: abcBridge
-    GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count -pgmlc++
-    extra-libraries:      stdc++
-  else
-    build-depends: aig
-    GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count
+  GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count
 
 test-suite integration_tests
   type: exitcode-stdio-1.0

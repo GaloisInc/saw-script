@@ -45,7 +45,8 @@ import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, single
 import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..))
 import qualified Cryptol.Utils.Ident as C
-  ( Ident, PrimIdent(..), mkIdent, prelPrim, floatPrim, arrayPrim
+  ( Ident, PrimIdent(..), mkIdent
+  , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
   , ModName, modNameToText, identText, interactiveName
   , ModPath(..), modPathSplit
   )
@@ -654,7 +655,7 @@ proveProp sc env prop =
 
 importPrimitive :: SharedContext -> Env -> C.Name -> C.Schema -> IO Term
 importPrimitive sc env n sch
-  | Just nm <- C.asPrim n, Just term <- Map.lookup nm (prelPrims <> arrayPrims <> floatPrims) = term sc
+  | Just nm <- C.asPrim n, Just term <- Map.lookup nm allPrims = term sc
   | Just nm <- C.asPrim n, Just expr <- Map.lookup nm (envRefPrims env) =
       do t <- importSchema sc env sch
          e <- importExpr sc env expr
@@ -662,6 +663,9 @@ importPrimitive sc env n sch
          scConstant' sc nmi e t
   | Just nm <- C.asPrim n = panic "Unknown Cryptol primitive name" [show nm]
   | otherwise = panic "Improper Cryptol primitive name" [show n]
+
+allPrims :: Map C.PrimIdent (SharedContext -> IO Term)
+allPrims = prelPrims <> arrayPrims <> floatPrims <> suiteBPrims <> primeECPrims
 
 prelPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 prelPrims =
@@ -817,6 +821,31 @@ floatPrims =
   , ("fpSqrt",         flip scGlobalDef "Cryptol.fpSqrt")
   ]
 
+suiteBPrims :: Map C.PrimIdent (SharedContext -> IO Term)
+suiteBPrims =
+  Map.fromList $
+  first C.suiteBPrim <$>
+  [ ("AESEncRound",      flip scGlobalDef "Cryptol.AESEncRound")
+  , ("AESEncFinalRound", flip scGlobalDef "Cryptol.AESEncFinalRound")
+  , ("AESDecRound",      flip scGlobalDef "Cryptol.AESDecRound")
+  , ("AESDecFinalRound", flip scGlobalDef "Cryptol.AESDecFinalRound")
+  , ("AESInvMixColumns", flip scGlobalDef "Cryptol.AESInvMixColumns")
+  , ("AESKeyExpand",     flip scGlobalDef "Cryptol.AESKeyExpand")
+  , ("processSHA2_224",  flip scGlobalDef "Cryptol.processSHA2_224")
+  , ("processSHA2_256",  flip scGlobalDef "Cryptol.processSHA2_256")
+  , ("processSHA2_384",  flip scGlobalDef "Cryptol.processSHA2_384")
+  , ("processSHA2_512",  flip scGlobalDef "Cryptol.processSHA2_512")
+  ]
+
+primeECPrims :: Map C.PrimIdent (SharedContext -> IO Term)
+primeECPrims =
+  Map.fromList $
+  first C.primeECPrim <$>
+  [ ("ec_double",      flip scGlobalDef "Cryptol.ec_double")
+  , ("ec_add_nonzero", flip scGlobalDef "Cryptol.ec_add_nonzero")
+  , ("ec_mult",        flip scGlobalDef "Cryptol.ec_mult")
+  , ("ec_twin_mult",   flip scGlobalDef "Cryptol.ec_twin_mult")
+  ]
 
 -- | Convert a Cryptol expression to a SAW-Core term. Calling
 -- 'scTypeOf' on the result of @'importExpr' sc env expr@ must yield a
@@ -1607,6 +1636,7 @@ asCryptolTypeValue v =
 
     -- TODO?
     SC.VPiType _nm _v1 (SC.VDependentPi _) -> Nothing
+    SC.VStringType -> Nothing
     SC.VRecordType{} -> Nothing
     SC.VRecursorType{} -> Nothing
     SC.VTyTerm{} -> Nothing

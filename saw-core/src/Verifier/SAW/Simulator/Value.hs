@@ -23,7 +23,7 @@ module Verifier.SAW.Simulator.Value
 
 import Prelude hiding (mapM)
 
-import Control.Monad (foldM, liftM, mapM)
+import Control.Monad (foldM, mapM)
 import Data.Kind (Type)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -82,6 +82,7 @@ data TValue l
   | VIntModType !Natural
   | VArrayType !(TValue l) !(TValue l)
   | VPiType LocalName !(TValue l) !(PiBody l)
+  | VStringType
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
   | VDataType !(PrimName (TValue l)) ![Value l] ![Value l]
@@ -167,21 +168,6 @@ type instance Extra (WithM m l) = Extra l
 
 --------------------------------------------------------------------------------
 
-strictFun :: VMonad l => (Value l -> MValue l) -> Value l
--- TODO, make callers provide a name?
-strictFun f = VFun "x" (\x -> force x >>= f)
-
-pureFun :: VMonad l => (Value l -> Value l) -> Value l
--- TODO, make callers provide a name?
-pureFun f = VFun "x" (\x -> liftM f (force x))
-
-constFun :: VMonad l => Value l -> Value l
-constFun x = VFun "_" (\_ -> return x)
-
-toTValue :: HasCallStack => Value l -> TValue l
-toTValue (TValue x) = x
-toTValue _ = panic "Verifier.SAW.Simulator.Value.toTValue" ["Not a type value"]
-
 instance Show (Extra l) => Show (Value l) where
   showsPrec p v =
     case v of
@@ -213,6 +199,7 @@ instance Show (Extra l) => Show (TValue l) where
   showsPrec p v =
     case v of
       VBoolType      -> showString "Bool"
+      VStringType    -> showString "String"
       VIntType       -> showString "Integer"
       VIntModType n  -> showParen True (showString "IntMod " . shows n)
       VArrayType{}   -> showString "Array"
@@ -338,6 +325,7 @@ asFirstOrderTypeTValue v =
       FOTRec . Map.fromList <$>
         mapM (traverse asFirstOrderTypeTValue) elem_tps
 
+    VStringType   -> Nothing
     VPiType{}   -> Nothing
     VDataType{} -> Nothing
     VSort{}     -> Nothing
@@ -366,6 +354,8 @@ suffixTValue tv =
       do a' <- suffixTValue a
          b' <- suffixTValue b
          Just ("_Pair" ++ a' ++ b')
+
+    VStringType -> Nothing
     VDataType {} -> Nothing
     VRecordType {} -> Nothing
     VSort {} -> Nothing
