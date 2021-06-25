@@ -6200,6 +6200,15 @@ permEnvAddDefinedShape env nm args mb_sh =
           SomeNamedShape (NamedShape nm args $
                           DefinedShapeBody mb_sh) : permEnvNamedShapes env }
 
+-- | Add an opaque LLVM shape to a permission environment
+permEnvAddOpaqueShape :: (1 <= w, KnownNat w) => PermEnv -> String ->
+                         CruCtx args -> Mb args (PermExpr (BVType w)) ->
+                         Ident -> PermEnv
+permEnvAddOpaqueShape env nm args mb_len tp_id =
+  env { permEnvNamedShapes =
+          SomeNamedShape (NamedShape nm args $
+                          OpaqueShapeBody mb_len tp_id) : permEnvNamedShapes env }
+
 -- | Add a global symbol with a function permission to a 'PermEnv'
 permEnvAddGlobalSymFun :: (1 <= w, KnownNat w) => PermEnv -> GlobalSymbol ->
                           f w -> FunPerm ghosts args ret -> OpenTerm -> PermEnv
