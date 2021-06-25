@@ -5720,7 +5720,8 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
     , Nothing <- psubstLookup psubst memb
     , Just off <- partialSubst psubst (fmap llvmBlockOffset mb_bp)
     , Just i <- findIndex (isLLVMAtomicPermWithOffset off) ps
-    , Just len1 <- llvmAtomicPermLen (ps!!i) ->
+    , Just len1 <- llvmAtomicPermLen (ps!!i)
+    , not (bvIsZero len1) ->
 
       -- Build existential memblock perms with fresh variables for shapes, where
       -- the first one has the length of the atomic perm we found and the other

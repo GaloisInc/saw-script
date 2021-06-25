@@ -17,6 +17,9 @@ heapster_define_llvmshape env "u32" 64 "" "fieldsh(32,int32<>)";
 // bool type
 heapster_define_llvmshape env "bool" 64 "" "fieldsh(1,int1<>)";
 
+// Box type
+heapster_define_llvmshape env "Box" 64 "T:llvmshape 64" "ptrsh(T)";
+
 // Result type
 heapster_define_rust_type env "pub enum Result<X,Y> { Ok (X), Err (Y) }";
 
@@ -24,8 +27,9 @@ heapster_define_rust_type env "pub enum Result<X,Y> { Ok (X), Err (Y) }";
 heapster_define_rust_type env "pub enum Sum<X,Y> { Left (X), Right (Y) }";
 
 // List type
-heapster_define_llvmshape env "List" 64 "L:perm(llvmptr 64),X:llvmshape 64" "(fieldsh(eq(llvmword(0)))) orsh (fieldsh(eq(llvmword(1)));X;fieldsh(L))";
-heapster_define_recursive_perm env "ListPerm" "X:llvmshape 64, Xlen:bv 64, rw:rwmodality, l:lifetime" "llvmptr 64" ["[l]memblock(rw,0,Xlen + 16,List<ListPerm<X,Xlen,rw,l>,X>)"] "\\ (X:sort 0) (_:Vec 64 Bool) -> List X" "\\ (X:sort 0) (_:Vec 64 Bool) -> foldListPermH X" "\\ (X:sort 0) (_:Vec 64 Bool) -> unfoldListPermH X";
+//heapster_define_llvmshape env "List" 64 "L:perm(llvmptr 64),X:llvmshape 64" "(fieldsh(eq(llvmword(0)))) orsh (fieldsh(eq(llvmword(1)));X;fieldsh(L))";
+//heapster_define_recursive_perm env "ListPerm" "X:llvmshape 64, Xlen:bv 64, rw:rwmodality, l:lifetime" "llvmptr 64" ["[l]memblock(rw,0,Xlen + 16,List<ListPerm<X,Xlen,rw,l>,X>)"] "\\ (X:sort 0) (_:Vec 64 Bool) -> List X" "\\ (X:sort 0) (_:Vec 64 Bool) -> foldListPermH X" "\\ (X:sort 0) (_:Vec 64 Bool) -> unfoldListPermH X";
+heapster_define_rust_type env "pub enum List<X> { Nil, Cons (X,Box<List<X>>) }";
 
 // The String type
 heapster_define_llvmshape env "String" 64 "" "exsh cap:bv 64. ptrsh(arraysh(cap,1,[(8,int8<>)]));fieldsh(int64<>);fieldsh(eq(llvmword(cap)))";
@@ -110,15 +114,18 @@ cycle_true_enum_sym <- heapster_find_symbol env "15cycle_true_enum";
 
 // list_is_empty
 list_is_empty_sym <- heapster_find_symbol env "13list_is_empty";
-heapster_typecheck_fun_rename env list_is_empty_sym "list_is_empty" "(rw:rwmodality).arg0:ListPerm<fieldsh(int64<>),8,rw,always> -o ret:int1<>";
+heapster_typecheck_fun_rename env list_is_empty_sym "list_is_empty" "<'a> fn (l: &'a List<u64>) -> bool";
+//heapster_typecheck_fun_rename env list_is_empty_sym "list_is_empty" "(rw:rwmodality).arg0:ListPerm<fieldsh(int64<>),8,rw,always> -o ret:int1<>";
 
 // list_head
 list_head_sym <- heapster_find_symbol env "9list_head";
-heapster_typecheck_fun_rename env list_head_sym "list_head" "(rw:rwmodality).arg0:ListPerm<fieldsh(int64<>),8,rw,always> -o ret:memblock(W,0,16,Result<fieldsh(int64<>),emptysh>)";
+heapster_typecheck_fun_rename env list_head_sym "list_head" "<'a> fn (l: &'a List<u64>) -> Box<Sum<u64,()>>";
+//heapster_typecheck_fun_rename env list_head_sym "list_head" "(rw:rwmodality).arg0:List<fieldsh(int64<>),8,rw,always> -o ret:memblock(W,0,16,Result<fieldsh(int64<>),emptysh>)";
 
 // list_head_impl
 list_head_impl_sym <- heapster_find_symbol env "14list_head_impl";
-heapster_typecheck_fun_rename env list_head_impl_sym "list_head_impl" "(rw:rwmodality).arg0:ListPerm<fieldsh(int64<>),8,rw,always> -o ret:(struct(eq(llvmword(0)),exists z:bv 64. eq(llvmword(z)))) or (struct(eq(llvmword(1)),true))";
+//heapster_typecheck_fun_rename env list_head_impl_sym "list_head_impl" "<'a> fn (l: &'a List<u64>) -> Result<u64,()>";
+//heapster_typecheck_fun_rename env list_head_impl_sym "list_head_impl" "(rw:rwmodality).arg0:List<fieldsh(int64<>),8,rw,always> -o ret:(struct(eq(llvmword(0)),exists z:bv 64. eq(llvmword(z)))) or (struct(eq(llvmword(1)),true))";
 
 // StrStruct::new
 str_struct_new <- heapster_find_symbol env "9StrStruct3new";

@@ -5842,6 +5842,15 @@ instance AbstractVars (NamedPermName ns args a) where
 -- * Abstracting out named shapes
 ----------------------------------------------------------------------
 
+-- | An existentially quantified, partially defined LLVM shape applied to
+-- some arguments
+data SomePartialNamedShape w where
+  NonRecShape :: String -> CruCtx args -> Mb args (PermExpr (LLVMShapeType w))
+              -> SomePartialNamedShape w
+  RecShape :: String -> CruCtx args
+           -> Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w))
+           -> SomePartialNamedShape w
+
 -- | An existentially quantified LLVM shape applied to some arguments
 data SomeNamedShapeApp w where
   SomeNamedShapeApp :: String -> CruCtx args -> PermExprs args ->
