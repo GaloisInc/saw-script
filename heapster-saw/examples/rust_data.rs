@@ -288,6 +288,10 @@ pub fn my_hash_insert (m: &mut HashMap<u64,u64>, x:u64, y:u64) -> Option<u64> {
     return m.insert (x,y);
 }
 
+pub fn my_hash_insert_void (m: &mut HashMap<u64,u64>, x:u64, y:u64) -> () {
+    m.insert (x,y);
+}
+
 /* Insert a mapping into m from the greatest of x and y to the other */
 pub fn hash_map_insert_gt_to_le (m: &mut HashMap<u64,u64>, x:u64, y:u64) -> () {
     if x > y {
