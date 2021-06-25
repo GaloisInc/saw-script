@@ -923,6 +923,26 @@ primitives = Map.fromList
     Experimental
     [ "Apply Cryptol defaulting rules to the given term." ]
 
+  , prim "extract_uninterp" "[String] -> [String] -> Term -> TopLevel (Term, [(String,[(Term, Term)])])"
+    (pureVal extract_uninterp)
+    Experimental
+    [ "Given a list of names of functions to treat as uninterpreted and a term, find all occurrences"
+    , "of the named functions and extract them."
+    , ""
+    , "The first argument is the list of \'uninterpreted\' functions to extract."
+    , "The second argument is a list of values to treat as opaque; they will not be unfolded during evaluation."
+    , "The third argument is the term to extract from."
+    , ""
+    , "This operation will return a pair, consisting of a rewritten term and a list of replacements."
+    , "The rewritten term will have each fully-applied occurrence of the named functions replaced"
+    , "by a fresh constant of the return type of the function. The list of replacements consists"
+    , "of pairs (one for each named function) giving the name of that function and the replacement"
+    , "values for that function. The replacement values are a list of pairs of terms, one for each"
+    , "occurence that was replaced.  The first term in each  pair gives the fresh constant appearing"
+    , "in the rewritten term.  The second term will be a tuple containing the arguments to the"
+    , "replaced function."
+    ]
+
   , prim "sbv_uninterpreted"   "String -> Term -> TopLevel Uninterp"
     (pureVal sbvUninterpreted)
     Deprecated
@@ -1217,6 +1237,18 @@ primitives = Map.fromList
     (pureVal hoistIfsInGoalPrim)
     Experimental
     [ "hoist ifs in the current proof goal" ]
+
+  , prim "normalize_term"      "Term -> Term"
+    (funVal1 normalize_term)
+    Experimental
+    [ "Normalize the given term by performing evaluation in SAWCore." ]
+
+  , prim "normalize_term_opaque" "[String] -> Term -> Term"
+    (funVal2 normalize_term_opaque)
+    Experimental
+    [ "Normalize the given term by performing evaluation in SAWCore."
+    , "The named values will be treated opaquely and not unfolded during evaluation."
+    ]
 
   , prim "goal_eval"           "ProofScript ()"
     (pureVal (goal_eval []))

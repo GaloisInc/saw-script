@@ -37,6 +37,7 @@ import qualified Data.IntMap as IntMap
 import Data.IORef
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -74,6 +75,7 @@ import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (prepareSATQuery, runManyTests)
 import Verifier.SAW.TypedAST
+import qualified Verifier.SAW.Simulator.TermModel as TM
 
 import SAWScript.Position
 
@@ -492,6 +494,18 @@ resolveName sc nm =
  fallback = fst <$> io (scResolveUnambiguous sc tnm)
 
 
+normalize_term :: TypedTerm -> TopLevel TypedTerm
+normalize_term tt = normalize_term_opaque [] tt
+
+normalize_term_opaque :: [String] -> TypedTerm -> TopLevel TypedTerm
+normalize_term_opaque opaque tt =
+  do sc <- getSharedContext
+     modmap <- io (scGetModuleMap sc)
+     idxs <- mapM (resolveName sc) opaque
+     let opaqueSet = Set.fromList idxs
+     tm' <- io (TM.normalizeSharedTerm sc modmap mempty mempty opaqueSet (ttTerm tt))
+     pure tt{ ttTerm = tm' }
+
 unfoldGoal :: [String] -> ProofScript ()
 unfoldGoal unints =
   execTactic $ tacticChange $ \goal ->
@@ -530,6 +544,76 @@ goal_eval unints =
      unintSet <- resolveNames unints
      prop' <- io (evalProp sc unintSet (goalProp goal))
      return (prop', EvalEvidence unintSet)
+
+extract_uninterp ::
+  [String] {- ^ uninterpred identifiers -} ->
+  [String] {- ^ opaque identifiers -} ->
+  TypedTerm ->
+  TopLevel (TypedTerm, [(String,[(TypedTerm,TypedTerm)])])
+extract_uninterp unints opaques tt =
+  do sc <- getSharedContext
+     idxs <- mapM (resolveName sc) unints
+     let unintSet = Set.fromList idxs
+     mmap <- io (scGetModuleMap sc)
+
+     opaqueSet <- Set.fromList <$> mapM (resolveName sc) opaques
+
+     boundECRef <- io (newIORef Set.empty)
+     let ?recordEC = \ec -> modifyIORef boundECRef (Set.insert ec)
+     (tm, repls) <- io (TM.extractUninterp sc mmap mempty mempty unintSet opaqueSet (ttTerm tt))
+     boundECSet <- io (readIORef boundECRef)
+     let tt' = tt{ ttTerm = tm }
+
+     let f = traverse $ \(ec,vs) ->
+               do ectm <- scExtCns sc ec
+                  vs'  <- filterCryTerms sc vs
+                  pure (ectm, vs')
+     repls' <- io (traverse f repls)
+
+     usedECRef <- io (newIORef Set.empty)
+     replList <- io $
+        forM (zip unints idxs) $ \(nm,idx) ->
+           do let ls = fromMaybe [] (Map.lookup idx repls')
+              xs <- forM ls $ \(e,vs) ->
+                      do e'  <- mkTypedTerm sc e
+                         vs' <- tupleTypedTerm sc vs
+                         modifyIORef usedECRef (Set.union (getAllExtSet (ttTerm vs')))
+                         pure (e',vs')
+              pure (nm,xs)
+     usedECSet <- io (readIORef usedECRef)
+
+     let boundAndUsed = Set.intersection boundECSet usedECSet
+     unless (Set.null boundAndUsed)
+       (do ppOpts <- getTopLevelPPOpts
+           vs <- io $ forM (Set.toList boundAndUsed) $ \ec ->
+                              do pptm <- scPrettyTerm ppOpts <$> scExtCns sc ec
+                                 let ppty = scPrettyTerm ppOpts (ecType ec)
+                                 return (pptm <> " : " <> ppty)
+           printOutLnTop Warn $ unlines $
+             [ "WARNING: extracted arguments reference captured variables!"
+             , "This usually means one of functions you extracted was used in a higher-order way"
+             , "that could not be fully unrolled, or the expression depends on lambda-bound variables."
+             , "The results of reasoning about this extraction may be unexpected."
+             , "The affected variables are:"
+             ] ++ (map ("  "++) vs))
+
+     pure (tt', replList)
+
+
+filterCryTerms :: SharedContext -> [Term] -> IO [TypedTerm]
+filterCryTerms sc = loop
+  where
+  loop [] = pure []
+  loop (x:xs) =
+    do tp <- Cryptol.scCryptolType sc =<< scTypeOf sc x
+       case tp of
+         Just (Right cty) ->
+           do let x' = TypedTerm (TypedTermSchema (C.tMono cty)) x
+              xs' <- loop xs
+              pure (x':xs')
+
+         _ -> loop xs
+
 
 beta_reduce_goal :: ProofScript ()
 beta_reduce_goal =
