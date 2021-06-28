@@ -2714,10 +2714,7 @@ partialSubstForceM mb_e caller =
      case partialSubst psubst mb_e of
        Just e -> pure e
        Nothing ->
-        implFailM' $ PartialSubstitutionError
-          (\i -> sep [pretty ("Incomplete susbtitution in " ++ caller ++
-                              " for: "),
-                      permPretty i mb_e])
+        implFailM' $ PartialSubstitutionError caller mb_e
 
 -- | Modify the current partial substitution
 modifyPSubst :: (PartialSubst vars -> PartialSubst vars) ->
@@ -3666,7 +3663,7 @@ implEndLifetimeM :: NuMatchingAny1 r => Proxy ps -> ExprVar LifetimeType ->
 implEndLifetimeM ps l ps_in ps_out@(lownedPermsToDistPerms -> Just dps_out) =
   implSimplM ps (SImpl_EndLifetime l ps_in ps_out) >>>
   recombinePermsPartial ps dps_out
-implEndLifetimeM _ _ _ _ = implFailM "implEndLifetimeM: lownedPermsToDistPerms"
+implEndLifetimeM _ _ _ _ = implFailM' $ LifetimeError EndLifetimeError
 
 
 -- | Save a permission for later by splitting it into part that is in the
@@ -3962,9 +3959,7 @@ implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                         PExpr_ExShape _mb_sh }) =
   implSimplM Proxy (SImpl_ElimLLVMBlockEx x bp)
 implElimLLVMBlock _ bp =
-  implTraceM (\i -> pretty "Could not eliminate permission" <+>
-                    permPretty i (Perm_LLVMBlock bp)) >>>=
-  implFailM
+  implFailM' $ MemBlockError bp
 
 -- | Eliminate a @memblock@ permission on the top of the stack and recombine it,
 -- if this is possible; otherwise fail
@@ -3993,9 +3988,7 @@ getLifetimeCurrentPerms (PExpr_Var l) =
       case some_cur_perms of
         Some cur_perms -> pure $ Some $ CurrentTransPerms cur_perms l
     _ ->
-      implTraceM (\i -> pretty "Could not prove lifetime is current:" <+>
-                        permPretty i l) >>=
-      implFailM
+      implFailM' $ LifetimeError (LifetimeCurrentError l)
 
 -- | Prove the permissions represented by a 'LifetimeCurrentPerms'
 proveLifetimeCurrent :: NuMatchingAny1 r => LifetimeCurrentPerms ps_l ->
@@ -4205,16 +4198,6 @@ recombineLifetimeCurrentPerms (CurrentTransPerms cur_perms l) =
 -- * Proving Equalities
 ----------------------------------------------------------------------
 
--- | Fail when trying to prove an equality
-proveEqFail :: (NuMatchingAny1 r, PermPretty (f a)) => f a -> Mb vars (f a) ->
-               ImplM vars s r ps ps any
-proveEqFail e mb_e =
-  implTraceM (\i ->
-               sep [pretty "proveEq" <> colon <+> pretty "Could not prove",
-                    sep [permPretty i e <+>
-                         pretty "=" <+> permPretty i mb_e]]) >>>=
-  implFailM
-
 -- | Typeclass for the generic function that tries to extend the current partial
 -- substitution to unify an expression with an expression pattern and returns a
 -- proof of the equality on success
@@ -4251,7 +4234,7 @@ instance ProveEq (LLVMFramePerm w) where
       do eqp1 <- proveEq e mb_e
          eqp2 <- proveEq fperms mb_fperms
          pure (liftA2 (\x y -> (x,i):y) eqp1 eqp2)
-  proveEq perms mb = proveEqFail perms mb
+  proveEq perms mb = implFailM' $ EqualityProofError perms mb
 
 instance ProveEq (LLVMBlockPerm w) where
   proveEq bp mb_bp =
@@ -4325,7 +4308,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
           Just _ -> proveEqH psubst e mb_e
           Nothing -> getVarEqPerm y >>= \case
             Just _ -> proveEqH psubst e mb_e
-            Nothing -> proveEqFail e mb_e
+            Nothing -> implFailM' $ EqualityProofError e mb_e
 
   -- To prove x=e, try to see if x:eq(e') and proceed by transitivity
   (PExpr_Var x, _) ->
@@ -4333,7 +4316,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
     Just e' ->
       proveEq e' mb_e >>= \eqp2 ->
       pure (someEqProofTrans (someEqProofPerm x e' True) eqp2)
-    Nothing -> proveEqFail e mb_e
+    Nothing -> implFailM' $ EqualityProofError e mb_e
 
   -- To prove e=x, try to see if x:eq(e') and proceed by transitivity
   (_, [nuMP| PExpr_Var z |])
@@ -4342,7 +4325,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
         Just e' ->
           proveEq e (fmap (const e') mb_e) >>= \eqp ->
           pure (someEqProofTrans eqp (someEqProofPerm x e' False))
-        Nothing -> proveEqFail e mb_e
+        Nothing -> implFailM' $ EqualityProofError e mb_e
 
   -- FIXME: if proving word(e1)=word(e2) for ground e2, we could add an assertion
   -- that e1=e2 using a BVProp_Eq
@@ -4362,7 +4345,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
   -- FIXME: add cases to prove struct(es1)=struct(es2)
 
   -- Otherwise give up!
-  _ -> proveEqFail e mb_e
+  _ -> implFailM' $ EqualityProofError e mb_e
 
 
 -- | Build a proof on the top of the stack that @x:eq(e)@. Assume that all @x@
@@ -5967,7 +5950,7 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
              lownedPermsToDistPerms ps_inR', lownedPermsToDistPerms ps_outR') of
           (Just dps_inL, Just dps_outL, Just dps_inR, Just dps_outR) ->
             pure (dps_inL, dps_outL, dps_inR, dps_outR)
-          _ -> implFailM "proveVarAtomicImpl: lownedPermsToDistPerms")
+          _ -> implFailM' $ LifetimeError ImplicationLifetimeError)
       >>>= \(dps_inL, dps_outL, dps_inR, dps_outR) ->
       localProveVars (RL.append ps1 dps_inR) dps_inL >>>= \impl_in ->
       localProveVars (RL.append ps2 dps_outL) dps_outR >>>= \impl_out ->
@@ -6100,12 +6083,7 @@ proveVarConjImpl x ps mb_ps =
                            mb_ps' mb_p) "proveVarConjImpl") >>>= \(ps',p) ->
       implInsertConjM x p ps' i
     Nothing ->
-      implTraceM
-      (\i ->
-        sep [PP.fillSep [PP.pretty
-             "Could not determine enough variables to prove permissions:",
-             permPretty i (fmap ValPerm_Conj mb_ps)]]) >>>=
-      implFailM
+      implFailM' $ InsufficientVariablesError (fmap ValPerm_Conj mb_ps)
 
 
 ----------------------------------------------------------------------
@@ -6429,11 +6407,7 @@ proveExVarImpl _ mb_x mb_p@(mbMatch -> [nuMP| ValPerm_Conj [Perm_LLVMFrame _] |]
 
 -- Otherwise we fail
 proveExVarImpl _ mb_x mb_p =
-  implTraceM (\i -> pretty "proveExVarImpl: existential variable" <+>
-                    permPretty i mb_x <+>
-                    pretty "not resolved when trying to prove:" <> softline <>
-                    permPretty i mb_p) >>>=
-  implFailM
+  implFailM' $ ExistentialError mb_x mb_p
 
 
 ----------------------------------------------------------------------
@@ -6587,14 +6561,7 @@ proveVarsImplAppendInt ps =
       proveVarsImplAppendInt (mbMap2 appendDistPerms ps1 ps2) >>>
       implMoveUpM cur_perms (mbDistPermsToProxies ps1) x (mbDistPermsToProxies ps2)
     _ ->
-
-
-      implTraceM
-      (\i ->
-        sep [PP.fillSep [PP.pretty
-             "Could not determine enough variables to prove permissions:",
-             permPretty i ps]]) >>>=
-      implFailM
+      implFailM' $ InsufficientVariablesError ps
 
 -- | Prove a list of existentially-quantified distinguished permissions and put
 -- those proofs onto the stack. This is the same as 'proveVarsImplAppendInt'
@@ -6696,12 +6663,23 @@ proveVarImpl x mb_p = proveVarsImplAppend $ fmap (distPerms1 x) mb_p
 -- Error handling and debugging
 
 data ImplError where
-    FatalError :: (PPInfo -> PP.Doc ann) -> ImplError
-    NoFrameInScopeError :: ImplError
-    ArrayStepError :: ImplError
-    MuUnfoldError :: ImplError
-    FunctionPermissionError :: ImplError
-    PartialSubstitutionError :: (PPInfo -> PP.Doc ann) -> ImplError
+  FatalError :: (PPInfo -> PP.Doc ann) -> ImplError
+  NoFrameInScopeError :: ImplError
+  ArrayStepError :: ImplError
+  MuUnfoldError :: ImplError
+  FunctionPermissionError :: ImplError
+  PartialSubstitutionError :: PermPretty p => String -> p -> ImplError
+  LifetimeError :: LifetimeErrorType -> ImplError
+  MemBlockError :: (1 <= w, KnownNat w) => LLVMBlockPerm w -> ImplError
+  EqualityProofError :: (PermPretty e, PermPretty mb_e) => e -> mb_e -> ImplError
+  InsufficientVariablesError :: PermPretty p => p -> ImplError
+  ExistentialError :: (PermPretty x, PermPretty p) => x -> p -> ImplError
+  ImplVariableError :: (PPInfo -> PP.Doc ann) -> ImplError
+
+data LifetimeErrorType where
+  EndLifetimeError :: LifetimeErrorType
+  ImplicationLifetimeError :: LifetimeErrorType
+  LifetimeCurrentError :: PermPretty p => p -> LifetimeErrorType
 
 class ErrorPretty a where
   ppErrorFn :: a -> PPInfo -> String
@@ -6714,14 +6692,35 @@ instance ErrorPretty ImplError where
       "Tried to unfold a mu on the left after unfolding on the right"
     ppErrorFn FunctionPermissionError _ =
       "Could not find function permission"
+    ppErrorFn (PartialSubstitutionError caller mb_e) pp = renderDoc $
+      sep [pretty ("Incomplete susbtitution in " ++ caller ++ " for: "),
+           permPretty pp mb_e]
+    ppErrorFn (LifetimeError EndLifetimeError) _ =
+      "implEndLifetimeM: lownedPermsToDistPerms"
+    ppErrorFn (LifetimeError ImplicationLifetimeError) _ =
+      "proveVarAtomicImpl: lownedPermsToDistPerms"
+    ppErrorFn (LifetimeError (LifetimeCurrentError l)) pp = renderDoc $
+      pretty "Could not prove lifetime is current:" <+>
+      permPretty pp l
+    ppErrorFn (MemBlockError bp) pp = renderDoc $
+      pretty "Could not eliminate permission" <+>
+      permPretty pp (Perm_LLVMBlock bp)
+    ppErrorFn (EqualityProofError e mb_e) pp = renderDoc $
+      sep [pretty "proveEq" <> colon <+> pretty "Could not prove",
+           sep [permPretty pp e <+>
+                pretty "=" <+> permPretty pp mb_e]]
+    ppErrorFn (InsufficientVariablesError ps) pp = renderDoc $
+      sep [PP.fillSep [PP.pretty
+            "Could not determine enough variables to prove permissions:",
+           permPretty pp ps]]
+    ppErrorFn (ExistentialError mb_x mb_p) pp = renderDoc $
+      pretty "proveExVarImpl: existential variable" <+>
+      permPretty pp mb_x <+>
+      pretty "not resolved when trying to prove:" <> softline <>
+      permPretty pp mb_p
+    ppErrorFn (ImplVariableError f) pp = renderDoc $ f pp
 
 -- | Terminate the current proof branch with a failure
-implFailM :: NuMatchingAny1 r => String -> ImplM vars s r ps_any ps a
-implFailM str =
-  use implStateFailPrefix >>>= \prefix ->
-  implTraceM (const $ pretty (prefix ++ "Implication failed")) >>>
-  implApplyImpl1 (Impl1_Fail (prefix ++ str)) MNil
-
 implFailM' :: NuMatchingAny1 r => ImplError -> ImplM vars s r ps_any ps a
 implFailM' err =
   use implStateFailPrefix >>>= \prefix ->
@@ -6733,10 +6732,9 @@ implFailM' err =
 implFailVarM :: NuMatchingAny1 r => String -> ExprVar tp -> ValuePerm tp ->
                 Mb vars (ValuePerm tp) -> ImplM vars s r ps_any ps a
 implFailVarM f x p mb_p =
-  implTraceM (\i ->
-               sep [pretty f <> colon <+> pretty "Could not prove",
-                    ppImpl i x p mb_p]) >>>=
-  implFailM
+  implFailM' $ ImplVariableError (\i ->
+                 sep [pretty f <> colon <+> pretty "Could not prove",
+                    ppImpl i x p mb_p])
 
 -- | Emit debugging output using the current 'PPInfo' if the 'implStateDoTrace'
 -- flag is set
@@ -6749,3 +6747,4 @@ implTraceM f =
   where
     fn True  = trace
     fn False = const id
+
