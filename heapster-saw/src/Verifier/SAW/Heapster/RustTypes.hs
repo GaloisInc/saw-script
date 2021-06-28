@@ -50,7 +50,7 @@ import qualified Data.Binding.Hobbits.NameSet as NameSet
 
 import Language.Rust.Syntax
 import Language.Rust.Parser
-import Language.Rust.Data.Ident (Ident(..), mkIdent, name)
+import Language.Rust.Data.Ident (Ident(..), name)
 
 import Prettyprinter as PP
 
@@ -72,14 +72,16 @@ data SomeLLVMPerm =
 $(mkNuMatching [t| SomeLLVMPerm |])
 
 -- | Info used for converting Rust types to shapes
+-- NOTE: @rciRecType@ should probably have some info about lifetimes
 data RustConvInfo =
   RustConvInfo { rciPermEnv :: PermEnv,
-                 rciCtx :: [(String, TypedName)] }
+                 rciCtx :: [(String, TypedName)],
+                 rciRecType :: Maybe (RustName, [RustName], TypedName) }
 
 -- | The default, top-level 'RustConvInfo' for a given 'PermEnv'
 mkRustConvInfo :: PermEnv -> RustConvInfo
 mkRustConvInfo env =
-  RustConvInfo { rciPermEnv = env, rciCtx = [] }
+  RustConvInfo { rciPermEnv = env, rciCtx = [], rciRecType = Nothing }
 
 -- | The Rust conversion monad is just a state-error monad
 newtype RustConvM a =
@@ -129,20 +131,30 @@ rustCtx1 name tp = MNil :>: Pair (Constant name) tp
 rustCtxCtx :: RustCtx ctx -> CruCtx ctx
 rustCtxCtx = cruCtxOfTypes . RL.map (\(Pair _ tp) -> tp)
 
+-- | Extend a 'RustCtx' with a single binding on the right
+rustCtxCons :: RustCtx ctx -> String -> TypeRepr a -> RustCtx (ctx :> a)
+rustCtxCons ctx nm tp = ctx :>: Pair (Constant nm) tp
+
 -- | Build a 'RustCtx' from the given variable names, all having the same type
 rustCtxOfNames :: TypeRepr a -> [String] -> Some RustCtx
 rustCtxOfNames tp =
   foldl (\(Some ctx) name -> Some (ctx :>: Pair (Constant name) tp)) (Some MNil)
 
--- | Run a 'RustConvM' computation in a context of bound type-level variables
-inRustCtx :: NuMatching a => RustCtx ctx -> RustConvM a ->
-             RustConvM (Mb ctx a)
-inRustCtx ctx m =
-  mbM $ nuMulti (RL.map (\_-> Proxy) ctx) $ \ns ->
+-- | Run a 'RustConvM' computation in a context of bound type-level variables,
+-- where the bound names are passed to the computation
+inRustCtxF :: NuMatching a => RustCtx ctx -> (RAssign Name ctx -> RustConvM a) ->
+              RustConvM (Mb ctx a)
+inRustCtxF ctx m =
+  mbM $ nuMulti (RL.map (\_ -> Proxy) ctx) $ \ns ->
   let ns_ctx =
         RL.toList $ RL.map2 (\n (Pair (Constant str) tp) ->
                               Constant (str, Some (Typed tp n))) ns ctx in
-  local (\info -> info { rciCtx = ns_ctx ++ rciCtx info }) m
+  local (\info -> info { rciCtx = ns_ctx ++ rciCtx info }) (m ns)
+
+-- | Run a 'RustConvM' computation in a context of bound type-level variables
+inRustCtx :: NuMatching a => RustCtx ctx -> RustConvM a ->
+             RustConvM (Mb ctx a)
+inRustCtx ctx m = inRustCtxF ctx (const m)
 
 -- | Class for a generic "conversion from Rust" function, given the bit width of
 -- the pointer type
@@ -252,7 +264,7 @@ namedTypeTable w =
 
 -- | A fully qualified Rust path without any of the parameters; e.g.,
 -- @Foo<X>::Bar<Y,Z>::Baz@ just becomes @[Foo,Bar,Baz]@
-newtype RustName = RustName [Ident]
+newtype RustName = RustName [Ident] deriving (Eq)
 
 instance Show RustName where
   show (RustName ids) = concat $ intersperse "::" $ map show ids
@@ -278,6 +290,31 @@ rsPathName (Path _ segments _) =
 rsPathParams :: Path a -> [PathParameters a]
 rsPathParams (Path _ segments _) =
   mapMaybe (\(PathSegment _ maybe_params _) -> maybe_params) segments
+
+-- | Get the 'RustName' of a type, if it's a 'PathTy'
+tyName :: Ty a -> Maybe RustName
+tyName (PathTy _ path _) = Just $ rsPathName path
+tyName _ = Nothing
+
+-- | Decide whether a Rust type is named (i.e. a 'PathTy')
+isNamedType :: Ty a -> Bool
+isNamedType (PathTy _ _ _) = True
+isNamedType _ = False
+
+-- | Decide whether 'PathParameters' are all named types (angle-bracketed only)
+isNamedParams :: PathParameters a -> Bool
+isNamedParams (AngleBracketed _ tys _ _) = all isNamedType tys
+isNamedParams _ = error "Parenthesized types not supported"
+
+-- | Get all of the 'RustName's of path parameters, if they're angle-bracketed
+pParamNames :: PathParameters a -> [RustName]
+pParamNames (AngleBracketed _ tys _ _) = mapMaybe tyName tys
+pParamNames _ = error "Parenthesized types not supported"
+
+-- | Modify a 'RustConvM' to be run with a recursive type
+withRecType :: (1 <= w, KnownNat w) => RustName -> [RustName] -> Name (LLVMShapeType w) ->
+               RustConvM a -> RustConvM a
+withRecType rust_n rust_ns rec_n = local (\info -> info { rciRecType = Just (rust_n, rust_ns, Some (Typed knownRepr rec_n)) })
 
 
 ----------------------------------------------------------------------
@@ -320,12 +357,27 @@ instance RsConvert w (Ty Span) (PermExpr (LLVMShapeType w)) where
        sh <- rsConvert w tp'
        return $ PExpr_PtrShape (Just PExpr_Read) (Just l) sh
   rsConvert w (PathTy Nothing path _) =
-    do someShapeFn <- rsConvert w (rsPathName path)
-       someTypedArgs <- rsConvert w (rsPathParams path)
-       case tryApplySomeShapeFun someShapeFn someTypedArgs of
-         Just shTp -> return shTp
-         Nothing ->
-           fail $ renderDoc $ pretty "Failed to apply shape funtion to arguments"
+    do mrec <- asks rciRecType
+       case mrec of
+         Just (rec_n, rec_arg_ns, sh_nm)
+           | rec_n == rsPathName path &&
+             all isNamedParams (rsPathParams path) &&
+             rec_arg_ns == concatMap pParamNames (rsPathParams path) ->
+             PExpr_Var <$> castTypedM "TypedName" (LLVMShapeRepr (natRepr w)) sh_nm
+         Just (rec_n, _, _)
+           | rec_n == rsPathName path -> fail "Arguments do not match"
+         _ ->
+           do someShapeFn@(SomeShapeFun expected _ ) <- rsConvert w (rsPathName path)
+              someTypedArgs@(Some tyArgs) <- rsConvert w (rsPathParams path)
+              let actual = typedPermExprsCtx tyArgs
+              case tryApplySomeShapeFun someShapeFn someTypedArgs of
+                Just shTp -> return shTp
+                Nothing ->
+                  fail $ renderDoc $ fillSep
+                  [ pretty "Converting PathTy: " <+> pretty (show $ rsPathName path)
+                  , pretty "Expected arguments:" <+> pretty expected
+                  , pretty "Actual arguments:" <+> pretty actual
+                  ]
   rsConvert (w :: prx w) (BareFn _ abi rust_ls2 fn_tp span) =
     do Some3FunPerm fun_perm <- rsConvertMonoFun w span abi rust_ls2 fn_tp
        let args = funPermArgs fun_perm
@@ -335,6 +387,9 @@ instance RsConvert w (Ty Span) (PermExpr (LLVMShapeType w)) where
            Perm_LLVMFunPtr
            (FunctionHandleRepr (cruCtxToRepr args) (funPermRet fun_perm)) $
            ValPerm_Conj1 $ Perm_Fun fun_perm
+  rsConvert w (TupTy tys _) =
+    do tyShs <- mapM (rsConvert w) tys
+       return $ foldr PExpr_SeqShape PExpr_EmptyShape tyShs
   rsConvert _ tp = fail ("Rust type not supported: " ++ show tp)
 
 instance RsConvert w (Arg Span) (PermExpr (LLVMShapeType w)) where
@@ -360,11 +415,27 @@ isRecursiveDef item =
     _ -> False
 
   where
-    -- TODO: I hate this, it needs to be better
-    isBoxed :: Ident -> Ty Span -> Bool
-    isBoxed i (PathTy _ (Path _ [PathSegment box (Just (AngleBracketed _ [PathTy _ (Path _ [PathSegment i' _ _] _) _] _ _)) _] _) _) =
-      box == mkIdent "Box" && i == i'
-    isBoxed _ _ = False
+    tyContainsName :: Ident -> Ty Span -> Bool
+    tyContainsName i ty =
+      case ty of
+        Slice t _                  -> tyContainsName i t
+        Language.Rust.Syntax.Array t _ _ -> tyContainsName i t
+        Ptr _ t _                  -> tyContainsName i t
+        Rptr _ _ t _               -> tyContainsName i t
+        TupTy ts _                 -> any (tyContainsName i) ts
+        PathTy _ (Path _ segs _) _ -> any (segContainsName i) segs
+        ParenTy t _                -> tyContainsName i t
+        _                          -> False
+
+    segContainsName :: Ident -> PathSegment Span -> Bool
+    segContainsName i (PathSegment i' mParams _) =
+      i == i' || case mParams of
+                   Nothing -> False
+                   Just params -> paramsContainName i params
+
+    paramsContainName :: Ident -> PathParameters Span -> Bool
+    paramsContainName i (AngleBracketed _ tys _ _) = any (tyContainsName i) tys
+    paramsContainName _ (Parenthesized _ _ _) = error "Parenthesized types not supported"
 
     typeOf :: StructField Span -> Ty Span
     typeOf (StructField _ _ t _ _) = t
@@ -373,31 +444,34 @@ isRecursiveDef item =
     getVD (Variant _ _ vd _ _) = vd
 
     containsName :: Ident -> VariantData Span -> Bool
-    containsName i (StructD fields _) = any (isBoxed i) $ typeOf <$> fields
-    containsName i (TupleD fields _) = any (isBoxed i) $ typeOf <$> fields
+    containsName i (StructD fields _) = any (tyContainsName i) $ typeOf <$> fields
+    containsName i (TupleD fields _) = any (tyContainsName i) $ typeOf <$> fields
     containsName _ (UnitD _) = False
 
-instance RsConvert w (Item Span) SomeNamedShape where
-  rsConvert w s@(StructItem _ _ ident vd generics _)
-    | isRecursiveDef s = error "Recursive struct definitions not yet supported"
+-- | NOTE: The translation of recursive types ignores lifetime parameters for now
+instance RsConvert w (Item Span) (SomePartialNamedShape w) where
+  rsConvert w s@(StructItem _ _ ident vd generics@(Generics _ tys _ _) _)
+    | isRecursiveDef s =
+      do Some ctx <- rsConvert w generics
+         let ctx' = rustCtxCons ctx (name ident) (LLVMShapeRepr $ natRepr w)
+             tyIdents = (\(TyParam _ i _ _ _) -> [i]) <$> tys
+         sh <- inRustCtxF ctx' $ \(_ :>: rec_n) -> withRecType (RustName [ident]) (RustName <$> tyIdents) rec_n $ rsConvert w vd
+         return $ RecShape (name ident) (rustCtxCtx ctx) sh
     | otherwise =
       do Some ctx <- rsConvert w generics
          sh <- inRustCtx ctx $ rsConvert w vd
-         let nsh = NamedShape { namedShapeName = name ident
-                              , namedShapeArgs = rustCtxCtx ctx
-                              , namedShapeBody = DefinedShapeBody sh
-                              }
-         return $ SomeNamedShape nsh
-  rsConvert w e@(Enum _ _ ident variants generics _)
-    | isRecursiveDef e = error "Recursive enum definitions not yet supported"
+         return $ NonRecShape (name ident) (rustCtxCtx ctx) sh
+  rsConvert w e@(Enum _ _ ident variants generics@(Generics _ tys _ _) _)
+    | isRecursiveDef e =
+      do Some ctx <- rsConvert w generics
+         let ctx' = rustCtxCons ctx (name ident) (LLVMShapeRepr $ natRepr w)
+             tyIdents = (\(TyParam _ i _ _ _) -> [i]) <$> tys
+         sh <- inRustCtxF ctx' $ \(_ :>: rec_n) -> withRecType (RustName [ident]) (RustName <$> tyIdents) rec_n $ rsConvert w variants
+         return $ RecShape (name ident) (rustCtxCtx ctx) sh
     | otherwise =
       do Some ctx <- rsConvert w generics
          sh <- inRustCtx ctx $ rsConvert w variants
-         let nsh = NamedShape { namedShapeName = name ident
-                              , namedShapeArgs = rustCtxCtx ctx
-                              , namedShapeBody = DefinedShapeBody sh
-                              }
-         return $ SomeNamedShape nsh
+         return $ NonRecShape (name ident) (rustCtxCtx ctx) sh
   rsConvert _ item = fail ("Top-level item not supported: " ++ show item)
 
 instance RsConvert w [Variant Span] (PermExpr (LLVMShapeType w)) where
@@ -942,7 +1016,7 @@ parseFunPermFromRust _ _ _ _ str =
 -- Note: No CruCtx / TypeRepr as arguments for now
 parseNamedShapeFromRustDecl :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
                                PermEnv -> prx w -> String ->
-                               m SomeNamedShape
+                               m (SomePartialNamedShape w)
 parseNamedShapeFromRustDecl env w str
   | Right item <- parse @(Item Span) (inputStreamFromString str) =
     runLiftRustConvM (mkRustConvInfo env) $ rsConvert w item

@@ -357,9 +357,10 @@ instance IRTTyVars (PermExpr (LLVMShapeType w)) where
              , [nuMP| Nothing |] <- mbMatch maybe_rw
              , [nuMP| Nothing |] <- mbMatch maybe_l
              -> return ([], IRTRecVar)
-           IRTRecShapeName _ _
-             -> throwError $ "recursive shape applied to different"
-                             ++ " arguments in its definition!"
+           IRTRecShapeName _ nmsh_rec
+             | mbLift $ (namedShapeName nmsh_rec ==) . namedShapeName <$> nmsh
+               -> throwError $ "recursive shape applied to different"
+                               ++ " arguments in its definition!"
            _ -> case mbMatch $ namedShapeBody <$> nmsh of
                   [nuMP| DefinedShapeBody _ |] ->
                     irtTyVars (mbMap2 unfoldNamedShape nmsh args)
