@@ -37,6 +37,7 @@ library
     filepath,
     language-rust,
     hobbits ^>= 1.4,
+    aeson ^>= 1.5
   hs-source-dirs: src
   build-tool-depends:
     alex:alex,
@@ -44,6 +45,7 @@ library
   exposed-modules:
     Verifier.SAW.Heapster.CruUtil
     Verifier.SAW.Heapster.GenMonad
+    Verifier.SAW.Heapster.IDESupport
     Verifier.SAW.Heapster.Implication
     Verifier.SAW.Heapster.IRTTranslation
     Verifier.SAW.Heapster.Lexer

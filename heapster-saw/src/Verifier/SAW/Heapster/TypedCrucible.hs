@@ -458,7 +458,7 @@ data TypedLLVMStmt ret ps_in ps_out where
   -- Type:
   -- > ps, x:ptr((rw,0) |-> p), cur_ps
   -- > -o ps, x:ptr((rw,0) |-> eq(ret)), ret:p, cur_ps
-  TypedLLVMLoad :: 
+  TypedLLVMLoad ::
     (HasPtrWidth w, 1 <= sz, KnownNat sz) =>
     !(TypedReg (LLVMPointerType w)) ->
     !(LLVMFieldPerm w sz) ->
@@ -530,7 +530,7 @@ data TypedLLVMStmt ret ps_in ps_out where
   -- referred to by a function pointer, assuming we know it has one:
   --
   -- Type: @x:llvm_funptr(p) -o ret:p@
-  TypedLLVMLoadHandle :: 
+  TypedLLVMLoadHandle ::
     HasPtrWidth w =>
     !(TypedReg (LLVMPointerType w)) ->
     !(TypeRepr (FunctionHandleType cargs ret)) ->
@@ -1315,7 +1315,7 @@ entryByID entryID =
   (\blk -> (blk ^. typedBlockEntries) !! entryIndex entryID)
   (\blk e -> over typedBlockEntries (replaceNth (entryIndex entryID) e) blk)
 
--- | Build an empty 'TypedBlock' 
+-- | Build an empty 'TypedBlock'
 emptyBlockOfSort :: Assignment CtxRepr cblocks -> TypedBlockSort ->
                     Block ext cblocks ret cargs ->
                     TypedBlock TCPhase ext (CtxCtxToRList
@@ -1536,6 +1536,10 @@ data TypedCFG
                  !(TypedBlockMap TransPhase ext blocks (ghosts :++: inits) ret)
              , tpcfgEntryID :: !(TypedEntryID blocks inits)
              }
+
+data SomeTypedCFG ext where
+  SomeTypedCFG :: PermCheckExtC ext =>
+    TypedCFG ext blocks ghosts inits ret -> SomeTypedCFG ext
 
 -- | Get the input permissions for a 'CFG'
 tpcfgInputPerms :: TypedCFG ext blocks ghosts inits ret ->
@@ -1831,7 +1835,7 @@ runPermCheckM entryID args ghosts mb_perms_in m =
   let (tops_args, ghosts_ns) = RL.split Proxy ghosts_prxs ns
       (tops_ns, args_ns) = RL.split Proxy args_prxs tops_args
       st = emptyPermCheckState (distPermSet perms_in) tops_ns entryID in
-  
+
   let go x = runGenStateContT x st (\_ () -> pure ()) in
   go $
   setVarTypes "top" tops_ns stTopCtx >>>
@@ -2447,7 +2451,7 @@ ppCruRegAndPerms ctx r =
 -- their permissions, the variables in those permissions etc., as in
 -- 'varPermsTransFreeVars'
 getRelevantPerms :: [SomeName CrucibleType] ->
-                    PermCheckM ext cblocks blocks tops ret r ps r ps 
+                    PermCheckM ext cblocks blocks tops ret r ps r ps
                       (Some DistPerms)
 getRelevantPerms (namesListToNames -> SomeRAssign ns) =
   gets stCurPerms >>>= \perms ->
@@ -2758,7 +2762,7 @@ tcEmitStmt' ctx loc (CallHandle ret freg_untyped _args_ctx args_untyped) =
         _ -> pure Nothing
       _ -> pure []) >>>= \maybe_fun_perms ->
   (stmtEmbedImplM $ foldr1WithDefault implCatchM
-   (implFailMsgM "Could not find function permission")
+   (implFailM' FunctionPermissionError)
    (mapMaybe (fmap pure) maybe_fun_perms)) >>>= \some_fun_perm ->
   case some_fun_perm of
     SomeFunPerm fun_perm ->
