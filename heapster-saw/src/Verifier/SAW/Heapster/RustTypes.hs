@@ -580,16 +580,16 @@ un3SomeFunPerm args ret (Some3FunPerm fun_perm)
   , Just Refl <- testEquality ret (funPermRet fun_perm) =
     return $ SomeFunPerm fun_perm
 un3SomeFunPerm args ret (Some3FunPerm fun_perm) =
-  fail $ renderDoc $ fillSep
-  [pretty "Incorrect LLVM type for function permission:",
-   permPretty emptyPPInfo fun_perm,
-   pretty "Expected type:"
-   <+> permPretty emptyPPInfo args <+> pretty "=>"
-   <+> permPretty emptyPPInfo ret,
-   pretty "Actual type:"
-   <+> permPretty emptyPPInfo (funPermArgs fun_perm)
-   <+> pretty "=>" <+> permPretty emptyPPInfo (funPermRet fun_perm)
-   ]
+  fail $ renderDoc $ vsep
+  [ pretty "Incorrect LLVM type for function permission:"
+  , permPretty emptyPPInfo fun_perm
+  , pretty "Expected type:"
+    <+> PP.group (permPretty emptyPPInfo args) <+> pretty "=>"
+    <+> PP.group (permPretty emptyPPInfo ret)
+  , pretty "Actual type:"
+    <+> PP.group (permPretty emptyPPInfo (funPermArgs fun_perm))
+    <+> pretty "=>"
+    <+> PP.group (permPretty emptyPPInfo (funPermRet fun_perm)) ]
 
 -- | Build a function permission from an 'ArgLayout' plus return permission
 funPerm3FromArgLayout :: ArgLayout -> TypeRepr ret -> ValuePerm ret ->
