@@ -232,7 +232,7 @@ loadCryptolFunc col sig modulePath name = do
     tt <- liftIO $ SAW.parseTypedTerm sc ce' $
         SAW.InputText (Text.unpack name) "<string>" 1 1
 
-    case typecheckFnSig sig (toListFC Some argShps) (Some retShp) (SAW.ttSchema tt) of
+    case typecheckFnSig sig (toListFC Some argShps) (Some retShp) (SAW.ttType tt) of
         Left err -> fail $ "error loading " ++ show name ++ ": " ++ err
         Right () -> return ()
 
@@ -353,9 +353,10 @@ typecheckFnSig ::
     M.FnSig ->
     [Some TypeShape] ->
     Some TypeShape ->
-    Cry.Schema ->
+    SAW.TypedTermType ->
     Either String ()
-typecheckFnSig fnSig argShps retShp sch@(Cry.Forall [] [] ty) = go 0 argShps ty
+typecheckFnSig fnSig argShps retShp (SAW.TypedTermSchema sch@(Cry.Forall [] [] ty)) =
+    go 0 argShps ty
   where
     go :: Int -> [Some TypeShape] -> Cry.Type -> Either String ()
     go _ [] ty | Some retShp' <- retShp = goOne "return value" retShp' ty
@@ -404,6 +405,9 @@ typecheckFnSig fnSig argShps retShp sch@(Cry.Forall [] [] ty) = go 0 argShps ty
     goOneField desc (OptField shp) ty = goOne desc shp ty
     goOneField desc (ReqField shp) ty = goOne desc shp ty
 
-typecheckFnSig _ _ _ sch = Left $
+typecheckFnSig _ _ _ (SAW.TypedTermSchema sch) = Left $
     "polymorphic Cryptol functions are not supported (got signature: " ++
         show (Cry.pp sch) ++ ")"
+
+typecheckFnSig _ _ _ ttt = Left $
+    "internal error: unsupported TypedTermType variant: " ++ show ttt
