@@ -2714,9 +2714,10 @@ partialSubstForceM mb_e caller =
      case partialSubst psubst mb_e of
        Just e -> pure e
        Nothing ->
-         implTraceM (\i -> sep [pretty ("Incomplete susbtitution in " ++ caller
-                                        ++ " for:"),
-                                permPretty i mb_e]) >>= implFailM
+        implFailM' $ PartialSubstitutionError
+          (\i -> sep [pretty ("Incomplete susbtitution in " ++ caller ++
+                              " for: "),
+                      permPretty i mb_e])
 
 -- | Modify the current partial substitution
 modifyPSubst :: (PartialSubst vars -> PartialSubst vars) ->
@@ -2782,7 +2783,7 @@ implRecFlagCaseM m1 m2 =
 implSetRecRecurseRightM :: NuMatchingAny1 r => ImplM vars s r ps ps ()
 implSetRecRecurseRightM =
   use implStateRecRecurseFlag >>= \case
-    RecLeft -> implFailMsgM "Tried to unfold a mu on the right after unfolding on the left"
+    RecLeft -> implFailM' MuUnfoldError
     _ -> implStateRecRecurseFlag .= RecRight
 
 -- | Set the recursive recursion flag to indicate recursion on the left, or fail
@@ -2791,7 +2792,7 @@ implSetRecRecurseLeftM :: NuMatchingAny1 r => ImplM vars s r ps ps ()
 implSetRecRecurseLeftM =
   use implStateRecRecurseFlag >>= \case
     RecRight ->
-      implFailMsgM "Tried to unfold a mu on the left after unfolding on the right"
+      implFailM' MuUnfoldError
     _ -> implStateRecRecurseFlag .= RecLeft
 
 -- | Look up the 'NamedPerm' structure for a named permssion
@@ -2962,18 +2963,6 @@ implApplyImpl1 impl1 mb_ms =
         implSetNameTypes ns ctx >>>
         f ns)
 
--- | Emit debugging output using the current 'PPInfo' if the 'implStateDoTrace'
--- flag is set
-implTraceM :: (PPInfo -> PP.Doc ann) -> ImplM vars s r ps ps String
-implTraceM f =
-  do do_trace <- use implStateDoTrace
-     doc <- uses implStatePPInfo f
-     let str = renderDoc doc
-     fn do_trace str (pure str)
-  where
-    fn True  = trace
-    fn False = const id
-
 -- | Run an 'ImplM' computation with 'implStateDoTrace' temporarily disabled
 implWithoutTracingM :: ImplM vars s r ps_out ps_in a ->
                        ImplM vars s r ps_out ps_in a
@@ -2984,18 +2973,6 @@ implWithoutTracingM m =
   (implStateDoTrace .= saved) >>
   pure a
 
--- | Terminate the current proof branch with a failure
-implFailM :: NuMatchingAny1 r => String -> ImplM vars s r ps_any ps a
-implFailM str =
-  use implStateFailPrefix >>>= \prefix ->
-  implTraceM (const $ pretty (prefix ++ "Implication failed")) >>>
-  implApplyImpl1 (Impl1_Fail (prefix ++ str)) MNil
-
--- | Call 'implFailM' and also output a debugging message
-implFailMsgM :: NuMatchingAny1 r => String -> ImplM vars s r ps_any ps a
-implFailMsgM msg =
-  implTraceM (const $ pretty msg) >>>= implFailM
-
 -- | Pretty print an implication @x:p -o (vars).p'@
 ppImpl :: PPInfo -> ExprVar tp -> ValuePerm tp ->
           Mb (vars :: RList CrucibleType) (ValuePerm tp) -> PP.Doc ann
@@ -3003,15 +2980,6 @@ ppImpl i x p mb_p =
   sep [PP.group (permPretty i x <> PP.colon <> PP.align (permPretty i p)),
        PP.pretty "-o",
        PP.group (PP.align (permPretty i mb_p))]
-
--- | Terminate the current proof branch with a failure proving @x:p -o mb_p@
-implFailVarM :: NuMatchingAny1 r => String -> ExprVar tp -> ValuePerm tp ->
-                Mb vars (ValuePerm tp) -> ImplM vars s r ps_any ps a
-implFailVarM f x p mb_p =
-  implTraceM (\i ->
-               sep [pretty f <> colon <+> pretty "Could not prove",
-                    ppImpl i x p mb_p]) >>>=
-  implFailM
 
 -- | Produce a branching proof tree that performs the first implication and, if
 -- that one fails, falls back on the second. If 'pruneFailingBranches' is set,
@@ -4600,7 +4568,7 @@ solveForPermListImpl ps_l mb_ps = case mbMatch mb_ps of
     pure (Some MNil)
 
 concatSomeRAssign :: [Some (RAssign f)] -> Some (RAssign f)
-concatSomeRAssign = foldl apSomeRAssign (Some MNil) 
+concatSomeRAssign = foldl apSomeRAssign (Some MNil)
 -- foldl is intentional, appending RAssign matches on the second argument
 
 apSomeRAssign :: Some (RAssign f) -> Some (RAssign f) -> Some (RAssign f)
@@ -5054,7 +5022,7 @@ proveVarLLVMArray_ArrayStep x ps ap i ap_lhs
 
 -- Otherwise we don't know what to do so we fail
 proveVarLLVMArray_ArrayStep _x _ps _ap _i _ap_lhs =
-  implFailMsgM "proveVarLLVMArray_ArrayStep"
+  implFailM' ArrayStepError
 
 
 ----------------------------------------------------------------------
@@ -6457,7 +6425,7 @@ proveExVarImpl _ mb_x mb_p@(mbMatch -> [nuMP| ValPerm_Conj [Perm_LLVMFrame _] |]
         getVarVarM memb >>>= \n' ->
         proveVarImplInt n' mb_p >>> pure n'
       Nothing ->
-        implFailMsgM "proveExVarImpl: No LLVM frame pointer in scope"
+        implFailM' NoFrameInScopeError
 
 -- Otherwise we fail
 proveExVarImpl _ mb_x mb_p =
@@ -6619,6 +6587,8 @@ proveVarsImplAppendInt ps =
       proveVarsImplAppendInt (mbMap2 appendDistPerms ps1 ps2) >>>
       implMoveUpM cur_perms (mbDistPermsToProxies ps1) x (mbDistPermsToProxies ps2)
     _ ->
+
+
       implTraceM
       (\i ->
         sep [PP.fillSep [PP.pretty
@@ -6720,3 +6690,62 @@ proveVarsImplVarEVars mb_ps =
 proveVarImpl :: NuMatchingAny1 r => ExprVar a -> Mb vars (ValuePerm a) ->
                 ImplM vars s r (ps :> a) ps ()
 proveVarImpl x mb_p = proveVarsImplAppend $ fmap (distPerms1 x) mb_p
+
+
+--------------------------------------------------------------------------------
+-- Error handling and debugging
+
+data ImplError where
+    FatalError :: (PPInfo -> PP.Doc ann) -> ImplError
+    NoFrameInScopeError :: ImplError
+    ArrayStepError :: ImplError
+    MuUnfoldError :: ImplError
+    FunctionPermissionError :: ImplError
+    PartialSubstitutionError :: (PPInfo -> PP.Doc ann) -> ImplError
+
+class ErrorPretty a where
+  ppErrorFn :: a -> PPInfo -> String
+
+instance ErrorPretty ImplError where
+    ppErrorFn (FatalError f) pp = renderDoc $ f pp
+    ppErrorFn NoFrameInScopeError _ = "No LLVM frame in scope"
+    ppErrorFn ArrayStepError _ = "Error proving array permissions"
+    ppErrorFn MuUnfoldError _ =
+      "Tried to unfold a mu on the left after unfolding on the right"
+    ppErrorFn FunctionPermissionError _ =
+      "Could not find function permission"
+
+-- | Terminate the current proof branch with a failure
+implFailM :: NuMatchingAny1 r => String -> ImplM vars s r ps_any ps a
+implFailM str =
+  use implStateFailPrefix >>>= \prefix ->
+  implTraceM (const $ pretty (prefix ++ "Implication failed")) >>>
+  implApplyImpl1 (Impl1_Fail (prefix ++ str)) MNil
+
+implFailM' :: NuMatchingAny1 r => ImplError -> ImplM vars s r ps_any ps a
+implFailM' err =
+  use implStateFailPrefix >>>= \prefix ->
+  uses implStatePPInfo (ppErrorFn err) >>>= \doc ->
+    let msg = prefix <> doc
+    in implTraceM (const $ pretty msg) >>> implApplyImpl1 (Impl1_Fail msg) MNil
+
+-- | Terminate the current proof branch with a failure proving @x:p -o mb_p@
+implFailVarM :: NuMatchingAny1 r => String -> ExprVar tp -> ValuePerm tp ->
+                Mb vars (ValuePerm tp) -> ImplM vars s r ps_any ps a
+implFailVarM f x p mb_p =
+  implTraceM (\i ->
+               sep [pretty f <> colon <+> pretty "Could not prove",
+                    ppImpl i x p mb_p]) >>>=
+  implFailM
+
+-- | Emit debugging output using the current 'PPInfo' if the 'implStateDoTrace'
+-- flag is set
+implTraceM :: (PPInfo -> PP.Doc ann) -> ImplM vars s r ps ps String
+implTraceM f =
+  do do_trace <- use implStateDoTrace
+     doc <- uses implStatePPInfo f
+     let str = renderDoc doc
+     fn do_trace str (pure str)
+  where
+    fn True  = trace
+    fn False = const id

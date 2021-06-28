@@ -43,6 +43,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_print_fun_trans
        , heapster_export_coq
        , heapster_parse_test
+       , heapster_dump_ide_info
        ) where
 
 import Data.Maybe
@@ -106,6 +107,7 @@ import Verifier.SAW.Heapster.SAWTranslation
 import Verifier.SAW.Heapster.IRTTranslation
 import Verifier.SAW.Heapster.PermParser
 import Verifier.SAW.Heapster.ParsedCtx
+import qualified Verifier.SAW.Heapster.IDESupport as HIDE
 
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
@@ -338,7 +340,7 @@ heapster_define_recursive_perm _bic _opts henv
        Some args_ctx <- parseParsedCtxString "argument types" env args_str
        let args = parsedCtxCtx args_ctx
        Some tp <- parseTypeString "permission type" env tp_str
-       trans_tp <- liftIO $ 
+       trans_tp <- liftIO $
          translateCompleteTypeInCtx sc env args (nus (cruCtxProxies args) $
                                                  const $ ValuePermRepr tp)
        trans_ident <- parseAndInsDef henv nm trans_tp trans_str
@@ -548,7 +550,7 @@ heapster_define_reachability_perm _bic _opts henv
               _ -> Fail.fail "Incorrect type for last argument of reachability perm"
        let args_ctx = appendParsedCtx pre_args_ctx last_args_ctx
        let args = parsedCtxCtx args_ctx
-       trans_tp <- liftIO $ 
+       trans_tp <- liftIO $
          translateCompleteTypeInCtx sc env args (nus (cruCtxProxies args) $
                                                  const $ ValuePermRepr tp)
        trans_tp_ident <- parseAndInsDef henv nm trans_tp trans_tp_str
@@ -876,7 +878,7 @@ heapster_typecheck_mut_funs :: BuiltinContext -> Options -> HeapsterEnv ->
                                [(String, String)] -> TopLevel ()
 heapster_typecheck_mut_funs bic opts henv =
   heapster_typecheck_mut_funs_rename bic opts henv .
-  map (\(nm, perms_string) -> (nm, nm, perms_string)) 
+  map (\(nm, perms_string) -> (nm, nm, perms_string))
 
 heapster_typecheck_mut_funs_rename ::
   BuiltinContext -> Options -> HeapsterEnv ->
@@ -911,10 +913,11 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
                                   fromString nm) nm_to cfg fun_perm)
      sc <- getSharedContext
      let saw_modname = heapsterEnvSAWModule henv
-     env' <- liftIO $
+     (env', tcfgs) <- liftIO $
        let ?ptrWidth = w in
        tcTranslateAddCFGs sc saw_modname env endianness some_cfgs_and_perms
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+     liftIO $ modifyIORef (heapsterEnvTCFGs henv) (\old -> map Some tcfgs ++ old)
 
 
 heapster_typecheck_fun :: BuiltinContext -> Options -> HeapsterEnv ->
@@ -932,7 +935,7 @@ heapster_typecheck_fun_rename bic opts henv fn_name fn_name_to perms_string =
 heapster_typecheck_fun_rs :: BuiltinContext -> Options -> HeapsterEnv ->
                              String -> String -> TopLevel ()
 heapster_typecheck_fun_rs bic opts henv fn_name perms_string =
-  heapster_typecheck_fun bic opts henv 
+  heapster_typecheck_fun bic opts henv
 
 heapster_typecheck_fun_rename_rs :: BuiltinContext -> Options -> HeapsterEnv ->
                                     String -> String -> String -> TopLevel ()
@@ -977,3 +980,10 @@ heapster_parse_test _bic _opts _some_lm@(Some lm) fn_name perms_string =
      SomeFunPerm fun_perm <- parseFunPermString "permissions" env args
                                                 ret perms_string
      liftIO $ putStrLn $ permPrettyString emptyPPInfo fun_perm
+
+heapster_dump_ide_info :: BuiltinContext -> Options -> HeapsterEnv -> String -> TopLevel ()
+heapster_dump_ide_info bic opts henv filename = do
+  -- heapster_typecheck_mut_funs bic opts henv [(fnName, perms)]
+  penv <- io $ readIORef (heapsterEnvPermEnvRef henv)
+  tcfgs <- io $ readIORef (heapsterEnvTCFGs henv)
+  io $ HIDE.printIDEInfo penv tcfgs filename emptyPPInfo
