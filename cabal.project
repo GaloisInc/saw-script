@@ -4,16 +4,17 @@ packages:
     crux-mir-comp
     cryptol-saw-core
     rme
+    verif-viewer
     saw-core
     saw-core-aig
     saw-core-sbv
     saw-core-what4
     saw-core-coq
+    heapster-saw
     deps/llvm-pretty
     deps/llvm-pretty-bc-parser
     deps/jvm-parser
     deps/aig
-    deps/abcBridge
     deps/cryptol
     deps/what4/what4
     deps/crucible/crucible
@@ -36,3 +37,9 @@ packages:
     deps/argo/argo
     deps/argo/tasty-script-exitcode
     deps/cryptol/cryptol-remote-api
+    deps/language-rust
+
+source-repository-package
+    type: git
+    location: https://github.com/eddywestbrook/hobbits.git
+    tag: e5918895396b6bcee2fc39f6bd0d77a90a52ba5f

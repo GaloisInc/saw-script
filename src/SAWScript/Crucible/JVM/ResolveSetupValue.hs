@@ -89,6 +89,7 @@ type SetupValue = MS.SetupValue CJ.JVM
 data JVMTypeOfError
   = JVMPolymorphicType Cryptol.Schema
   | JVMNonRepresentableType Cryptol.Type
+  | JVMInvalidTypedTerm TypedTermType
 
 instance Show JVMTypeOfError where
   show (JVMPolymorphicType s) =
@@ -101,6 +102,11 @@ instance Show JVMTypeOfError where
     unlines
     [ "Type not representable in JVM:"
     , show (Cryptol.pp ty)
+    ]
+  show (JVMInvalidTypedTerm tp) =
+    unlines
+    [ "Expected typed term with Cryptol represnentable type, but got"
+    , show (MS.ppTypedTermType tp)
     ]
 
 instance X.Exception JVMTypeOfError
@@ -119,12 +125,13 @@ typeOfSetupValue _cc env _nameEnv val =
         Nothing -> panic "JVMSetup" ["typeOfSetupValue", "Unresolved prestate variable:" ++ show i]
         Just (_, alloc) -> return (allocationType alloc)
     MS.SetupTerm tt ->
-      case ttSchema tt of
-        Cryptol.Forall [] [] ty ->
+      case ttType tt of
+        TypedTermSchema (Cryptol.Forall [] [] ty) ->
           case toJVMType (Cryptol.evalValType mempty ty) of
             Nothing -> X.throwM (JVMNonRepresentableType ty)
             Just jty -> return jty
-        s -> X.throwM (JVMPolymorphicType s)
+        TypedTermSchema s -> X.throwM (JVMPolymorphicType s)
+        tp -> X.throwM (JVMInvalidTypedTerm tp)
 
     MS.SetupNull () ->
       -- We arbitrarily set the type of NULL to java.lang.Object,
@@ -175,10 +182,14 @@ resolveTypedTerm ::
   TypedTerm       ->
   IO JVMVal
 resolveTypedTerm cc tm =
-  case ttSchema tm of
-    Cryptol.Forall [] [] ty ->
+  case ttType tm of
+    TypedTermSchema (Cryptol.Forall [] [] ty) ->
       resolveSAWTerm cc (Cryptol.evalValType mempty ty) (ttTerm tm)
-    _ -> fail "resolveSetupVal: expected monomorphic term"
+    tp -> fail $ unlines
+            [ "resolveSetupVal: expected monomorphic term"
+            , "but got a term of type"
+            , show (MS.ppTypedTermType tp)
+            ]
 
 resolveSAWPred ::
   JVMCrucibleContext ->

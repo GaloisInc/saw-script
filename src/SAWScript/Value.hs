@@ -45,8 +45,9 @@ import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks, local)
-import Control.Monad.State (MonadState, StateT(..), get, gets, put)
+import Control.Monad.State (MonadState(..), StateT(..), get, gets, put)
 import Control.Monad.Trans.Class (MonadTrans(lift))
+import Data.IORef
 import Data.List ( intersperse )
 import qualified Data.Map as M
 import Data.Map ( Map )
@@ -87,6 +88,7 @@ import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
 import qualified Verifier.SAW.SharedTerm as SAWCorePP (PPOpts(..), defaultPPOpts,
                                                        ppTerm, scPrettyTerm)
 import Verifier.SAW.TypedTerm
+import Verifier.SAW.Term.Functor (ModuleName)
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
@@ -107,6 +109,8 @@ import Lang.Crucible.LLVM.ArraySizeProfile
 
 import           What4.ProgramLoc (ProgramLoc(..))
 
+import Verifier.SAW.Heapster.Permissions
+
 -- Values ----------------------------------------------------------------------
 
 data Value
@@ -126,15 +130,15 @@ data Value
     -- operations in these monads can fail at runtime.
   | VTopLevel (TopLevel Value)
   | VProofScript (ProofScript Value)
-  | VSimpset Simpset
+  | VSimpset SAWSimpset
   | VTheorem Theorem
   -----
   | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
-  | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR)
+  | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
   | VLLVMCrucibleSetupValue (CMSLLVM.AllLLVM CMS.SetupValue)
   -----
   | VJVMSetup !(JVMSetupM Value)
-  | VJVMMethodSpec !(CMS.CrucibleMethodSpecIR CJ.JVM)
+  | VJVMMethodSpec !(CMS.ProvedSpec CJ.JVM)
   | VJVMSetupValue !(CMS.SetupValue CJ.JVM)
   -----
   | VLLVMModuleSkeleton ModuleSkeleton
@@ -147,12 +151,15 @@ data Value
   | VCryptolModule CryptolModule
   | VJavaClass JSS.Class
   | VLLVMModule (Some CMSLLVM.LLVMModule)
+  | VHeapsterEnv HeapsterEnv
   | VSatResult SatResult
   | VProofResult ProofResult
   | VUninterp Uninterp
   | VAIG AIGNetwork
   | VCFG SAW_CFG
   | VGhostVar CMS.GhostGlobal
+
+type SAWSimpset = Simpset TheoremNonce
 
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
@@ -165,9 +172,26 @@ data SAW_CFG where
   JVM_CFG :: Crucible.AnyCFG JVM -> SAW_CFG
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
-                                     , biBasicSS       :: Simpset
+                                     , biBasicSS       :: SAWSimpset
                                      }
   deriving Generic
+
+-- | All the context maintained by Heapster
+data HeapsterEnv = HeapsterEnv {
+  heapsterEnvSAWModule :: ModuleName,
+  -- ^ The SAW module containing all our Heapster definitions
+  heapsterEnvPermEnvRef :: IORef PermEnv,
+  -- ^ The current permissions environment
+  heapsterEnvLLVMModules :: [Some CMSLLVM.LLVMModule]
+  -- ^ The list of underlying 'LLVMModule's that we are translating
+  }
+
+showHeapsterEnv :: HeapsterEnv -> String
+showHeapsterEnv env =
+  concat $ intersperse "\n\n" $
+  map (\some_lm -> case some_lm of
+          Some lm -> CMSLLVM.showLLVMModule lm) $
+  heapsterEnvLLVMModules env
 
 data SatResult
   = Unsat SolverStats
@@ -220,7 +244,7 @@ showsProofResult opts r =
   case r of
     ValidProof _ _ -> showString "Valid"
     InvalidProof _ ts _ -> showString "Invalid: [" . showMulti "" ts
-    UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining" 
+    UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining"
   where
     opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
@@ -245,7 +269,7 @@ showsSatResult opts r =
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
-showSimpset :: PPOpts -> Simpset -> String
+showSimpset :: PPOpts -> Simpset a -> String
 showSimpset opts ss =
   unlines ("Rewrite Rules" : "=============" : map (show . ppRule) (listRules ss))
   where
@@ -295,6 +319,7 @@ showsPrecValue opts p v =
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
     VLLVMModule (Some m) -> showString (CMSLLVM.showLLVMModule m)
+    VHeapsterEnv env -> showString (showHeapsterEnv env)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
     VSatResult r -> showsSatResult opts r
@@ -339,8 +364,12 @@ evaluate sc t =
   scGetModuleMap sc
 
 evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
-evaluateTypedTerm sc (TypedTerm schema trm) =
+evaluateTypedTerm sc (TypedTerm (TypedTermSchema schema) trm) =
   C.runEval mempty . exportValueWithSchema schema =<< evaluate sc trm
+evaluateTypedTerm _sc (TypedTerm tp _) =
+  fail $ unlines [ "Could not evaluate term with type"
+                 , show (CMS.ppTypedTermType tp)
+                 ]
 
 applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x
@@ -382,7 +411,8 @@ data TopLevelRO =
   , roPosition      :: SS.Pos
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
-  , roBasicSS       :: Simpset
+  , roBasicSS       :: SAWSimpset
+  , roTheoremDB     :: TheoremDB
   }
 
 data TopLevelRW =
@@ -402,6 +432,7 @@ data TopLevelRW =
   , rwCrucibleAssertThenAssume :: Bool
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
+  , rwLaxPointerOrdering :: Bool
 
   -- FIXME: These might be better split into "simulator hash-consing" and "tactic hash-consing"
   , rwWhat4HashConsing :: Bool
@@ -412,17 +443,25 @@ data TopLevelRW =
   }
 
 newtype TopLevel a =
-  TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
+  TopLevel (ReaderT TopLevelRO (ReaderT (IORef TopLevelRW) IO) a)
   deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow, MonadCatch, MonadMask)
 
 deriving instance MonadReader TopLevelRO TopLevel
-deriving instance MonadState TopLevelRW TopLevel
+
+instance MonadState TopLevelRW TopLevel where
+  get = TopLevel (lift (ReaderT readIORef))
+  put s = TopLevel (lift (ReaderT (flip writeIORef s)))
+  state f = TopLevel (lift (ReaderT (flip atomicModifyIORef (swap . f))))
+    where swap (x, y) = (y, x)
+
 instance Wrapped (TopLevel a) where
+
 instance MonadFail TopLevel where
   fail = throwTopLevel
 
-runTopLevel :: TopLevel a -> TopLevelRO -> TopLevelRW -> IO (a, TopLevelRW)
-runTopLevel (TopLevel m) ro rw = runStateT (runReaderT m ro) rw
+runTopLevel :: TopLevel a -> TopLevelRO -> IORef TopLevelRW -> IO a
+runTopLevel (TopLevel m) ro ref =
+  runReaderT (runReaderT m ro) ref
 
 io :: IO a -> TopLevel a
 io f = liftIO f
@@ -459,7 +498,7 @@ getOptions = TopLevel (asks roOptions)
 getProxy :: TopLevel AIGProxy
 getProxy = TopLevel (asks roProxy)
 
-getBasicSS :: TopLevel Simpset
+getBasicSS :: TopLevel SAWSimpset
 getBasicSS = TopLevel (asks roBasicSS)
 
 localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
@@ -482,20 +521,22 @@ getTopLevelRO :: TopLevel TopLevelRO
 getTopLevelRO = TopLevel ask
 
 getTopLevelRW :: TopLevel TopLevelRW
-getTopLevelRW = TopLevel get
+getTopLevelRW = get
 
 putTopLevelRW :: TopLevelRW -> TopLevel ()
-putTopLevelRW rw = TopLevel (put rw)
+putTopLevelRW rw = put rw
 
 returnProof :: IsValue v => v -> TopLevel v
-returnProof v = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
-  return v
+returnProof v = recordProof v >> return v
+
+recordProof :: IsValue v => v -> TopLevel ()
+recordProof v =
+  do rw <- getTopLevelRW
+     putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
 
 -- | Access the current state of Java Class translation
-getJVMTrans :: TopLevel  CJ.JVMContext
-getJVMTrans = TopLevel (gets rwJVMTrans)
+getJVMTrans :: TopLevel CJ.JVMContext
+getJVMTrans = gets rwJVMTrans
 
 -- | Access the current state of Java Class translation
 putJVMTrans :: CJ.JVMContext -> TopLevel ()
@@ -554,7 +595,7 @@ typedTermOfString sc str =
      let scChar c = scApply sc bvNat8 =<< scNat sc (fromIntegral (fromEnum c))
      ts <- traverse scChar str
      trm <- scVector sc byteT ts
-     pure (TypedTerm schema trm)
+     pure (TypedTerm (TypedTermSchema schema) trm)
 
 
 -- Other SAWScript Monads ------------------------------------------------------
@@ -605,14 +646,17 @@ newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
 newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
  deriving (Functor, Applicative, Monad)
 
-runProofScript :: ProofScript a -> ProofGoal -> TopLevel ProofResult
-runProofScript (ProofScript m) gl =
-  do (r,pstate) <- runStateT (runExceptT m) (startProof gl)
+runProofScript :: ProofScript a -> ProofGoal -> Maybe ProgramLoc -> Text -> TopLevel ProofResult
+runProofScript (ProofScript m) gl ploc rsn =
+  do pos <- getPosition
+     ps <- io (startProof gl pos ploc rsn)
+     (r,pstate) <- runStateT (runExceptT m) ps
      case r of
-       Left (stats,cex) -> return (InvalidProof stats cex pstate)
+       Left (stats,cex) -> return (SAWScript.Proof.InvalidProof stats cex pstate)
        Right _ ->
          do sc <- getSharedContext
-            io (finishProof sc pstate)
+            db <- roTheoremDB <$> getTopLevelRO
+            io (finishProof sc db pstate)
 
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))
@@ -760,19 +804,19 @@ instance FromValue SAW_CFG where
     fromValue (VCFG t) = t
     fromValue _ = error "fromValue CFG"
 
-instance IsValue (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR) where
+instance IsValue (CMSLLVM.SomeLLVM CMS.ProvedSpec) where
     toValue mir = VLLVMCrucibleMethodSpec mir
 
-instance FromValue (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR) where
+instance FromValue (CMSLLVM.SomeLLVM CMS.ProvedSpec) where
     fromValue (VLLVMCrucibleMethodSpec mir) = mir
-    fromValue _ = error "fromValue CrucibleMethodSpecIR"
+    fromValue _ = error "fromValue ProvedSpec LLVM"
 
-instance IsValue (CMS.CrucibleMethodSpecIR CJ.JVM) where
+instance IsValue (CMS.ProvedSpec CJ.JVM) where
     toValue t = VJVMMethodSpec t
 
-instance FromValue (CMS.CrucibleMethodSpecIR CJ.JVM) where
+instance FromValue (CMS.ProvedSpec CJ.JVM) where
     fromValue (VJVMMethodSpec t) = t
-    fromValue _ = error "fromValue CrucibleMethodSpecIR"
+    fromValue _ = error "fromValue ProvedSpec JVM"
 
 instance IsValue ModuleSkeleton where
     toValue s = VLLVMModuleSkeleton s
@@ -867,10 +911,10 @@ instance FromValue Bool where
     fromValue (VBool b) = b
     fromValue _ = error "fromValue Bool"
 
-instance IsValue Simpset where
+instance IsValue SAWSimpset where
     toValue ss = VSimpset ss
 
-instance FromValue Simpset where
+instance FromValue SAWSimpset where
     fromValue (VSimpset ss) = ss
     fromValue _ = error "fromValue Simpset"
 
@@ -925,6 +969,13 @@ instance IsValue (CMSLLVM.LLVMModule arch) where
 instance FromValue (Some CMSLLVM.LLVMModule) where
     fromValue (VLLVMModule m) = m
     fromValue _ = error "fromValue CMSLLVM.LLVMModule"
+
+instance IsValue HeapsterEnv where
+    toValue m = VHeapsterEnv m
+
+instance FromValue HeapsterEnv where
+    fromValue (VHeapsterEnv m) = m
+    fromValue _ = error "fromValue HeapsterEnv"
 
 instance IsValue ProofResult where
    toValue r = VProofResult r
@@ -1003,7 +1054,7 @@ addTraceReaderT str = underReaderT (addTraceTopLevel str)
 -- | Similar to 'addTraceIO', but for the 'TopLevel' monad.
 addTraceTopLevel :: String -> TopLevel a -> TopLevel a
 addTraceTopLevel str action = action & _Wrapped' %~
-  underReaderT (underStateT (liftIO . addTraceIO str))
+  underReaderT (underReaderT (liftIO . addTraceIO str))
 
 data SkeletonState = SkeletonState
   { _skelArgs :: [(Maybe TypedTerm, Maybe (CMSLLVM.AllLLVM CMS.SetupValue), Maybe Text)]

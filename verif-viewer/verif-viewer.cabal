@@ -1,0 +1,54 @@
+Name:               verif-viewer
+Version:            0.1
+License:            BSD3
+License-file:       LICENSE
+Author:             Galois, Inc.
+Maintainer:         rdockins@galois.com
+Copyright:          (c) 2021 Galois Inc.
+Category:           Formal Methods
+Build-type:         Simple
+cabal-version:      >= 1.8
+Synopsis:           Verification Summary Viewer
+Description:
+  Translate JSON verification summaries into GraphViz format
+  to produce a graph-based view of a verification effort.
+
+library
+  build-tools:
+    alex >= 3.1.3,
+    happy >= 1.9.6
+
+  build-depends:
+    base == 4.*,
+    aeson,
+    attoparsec,
+    fgl,
+    graphviz,
+    text
+  hs-source-dirs: src
+  exposed-modules:
+    
+
+  GHC-options: -Wall -Werror -Wcompat
+  if impl(ghc == 8.0.1)
+    ghc-options: -Wno-redundant-constraints
+  GHC-prof-options: -fprof-auto -fprof-cafs
+  extensions:
+    DeriveFunctor
+    GeneralizedNewtypeDeriving
+    ImplicitParams
+    ViewPatterns
+
+executable verif-viewer
+  main-is: VerifViewer.hs
+  hs-source-dirs: tools
+  build-depends:
+      base >= 4
+    , aeson
+    , attoparsec
+    , containers
+    , text
+    , verif-viewer
+    , bytestring
+    , time
+    , graphviz

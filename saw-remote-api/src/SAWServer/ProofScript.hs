@@ -1,5 +1,7 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 module SAWServer.ProofScript
   ( ProofScript(..)
   , interpretProofScript
@@ -23,6 +25,7 @@ import Data.Aeson
       ToJSON(toJSON) )
 import Data.Maybe ( fromMaybe )
 import Data.Text (Text, pack)
+import Data.Typeable (Proxy(..), typeRep)
 import Numeric (showHex)
 
 import qualified Argo
@@ -51,8 +54,7 @@ import Verifier.SAW.TermNet (merge)
 import Verifier.SAW.TypedTerm (TypedTerm(..))
 
 data Prover
-  = ABC_Internal
-  | RME
+  = RME
   | SBV_ABC_SMTLib
   | SBV_Boolector [String]
   | SBV_CVC4 [String]
@@ -83,10 +85,9 @@ instance FromJSON Prover where
       (name :: String) <- o .: "name"
       let unints = fromMaybe [] <$> o .:? "uninterpreted functions"
       case name of
-        "abc"            -> pure ABC_Internal
+        "abc"            -> pure W4_ABC_SMTLib
         "boolector"      -> SBV_Boolector <$> unints
         "cvc4"           -> SBV_CVC4  <$> unints
-        "internal-abc"   -> pure ABC_Internal
         "mathsat"        -> SBV_MathSAT <$> unints
         "rme"            -> pure RME
         "sbv-abc"        -> pure SBV_ABC_SMTLib
@@ -135,13 +136,14 @@ instance FromJSON MakeSimpsetParams where
     MakeSimpsetParams <$> o .: "elements"
                       <*> o .: "result"
 
-instance Doc.DescribedParams MakeSimpsetParams where
+instance Doc.DescribedMethod MakeSimpsetParams OK where
   parameterFieldDescription =
     [ ("elements",
        Doc.Paragraph [Doc.Text "The items to include in the simpset."])
     , ("result",
        Doc.Paragraph [Doc.Text "The name to assign to this simpset."])
     ]
+  resultFieldDescription = []
 
 
 makeSimpsetDescr :: Doc.Block
@@ -154,7 +156,6 @@ makeSimpset params = do
         v <- getServerVal n
         case v of
           VSimpset ss' -> return (merge ss ss')
-          VTerm t -> return (addSimp (ttTerm t) ss)
           _ -> Argo.raise (notASimpset n)
   ss <- foldM add emptySimpset (ssElements params)
   setServerVal (ssResult params) ss
@@ -172,12 +173,28 @@ instance (FromJSON cryptolExpr) => FromJSON (ProveParams cryptolExpr) where
     ProveParams <$> o .: "script"
                 <*> o .: "goal"
 
-instance Doc.DescribedParams (ProveParams cryptolExpr) where
+instance Doc.DescribedMethod (ProveParams cryptolExpr) ProveResult where
   parameterFieldDescription =
     [ ("script",
        Doc.Paragraph [Doc.Text "Script to use to prove the term."])
     , ("goal",
        Doc.Paragraph [Doc.Text "The goal to interpret as a theorm and prove."])
+    ]
+  resultFieldDescription =
+    [ ("status",
+      Doc.Paragraph [ Doc.Text "A string (one of "
+                    , Doc.Literal "valid", Doc.Literal ", ", Doc.Literal "invalid"
+                    , Doc.Text ", or ", Doc.Literal "unknown"
+                    , Doc.Text ") indicating whether the proof went through successfully or not."
+                    ])
+    , ("counterexample",
+      Doc.Paragraph [ Doc.Text "Only used if the ", Doc.Literal "status"
+                    , Doc.Text " is ", Doc.Literal "invalid"
+                    , Doc.Text ". An array of objects where each object has a ", Doc.Literal "name"
+                    , Doc.Text " string and a "
+                    , Doc.Link (Doc.TypeDesc (typeRep (Proxy @Expression))) "JSON Cryptol expression"
+                    , Doc.Text " ", Doc.Literal "value", Doc.Text "."
+                    ])
     ]
 
 data CexValue = CexValue Text Expression
@@ -253,7 +270,6 @@ interpretProofScript :: ProofScript -> Argo.Command SAWState (SV.ProofScript ())
 interpretProofScript (ProofScript ts) = go ts
   where go [UseProver p]            =
           case p of
-            ABC_Internal          -> return $ SB.proveABC
             RME                   -> return $ SB.proveRME
             SBV_ABC_SMTLib        -> return $ SB.proveABC_SBV
             SBV_Boolector unints  -> return $ SB.proveUnintBoolector unints

@@ -1,5 +1,6 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module SAWServer.CryptolSetup
@@ -53,12 +54,12 @@ instance FromJSON CryptolLoadModuleParams where
     withObject "params for \"SAW/Cryptol setup/load module\"" $ \o ->
     CryptolLoadModuleParams . textToModName <$> o .: "module name"
 
-instance Doc.DescribedParams CryptolLoadModuleParams where
+instance Doc.DescribedMethod CryptolLoadModuleParams OK where
   parameterFieldDescription =
     [ ("module name",
        Doc.Paragraph [Doc.Text "Name of module to load."])
     ]
-
+  resultFieldDescription = []
 
 cryptolLoadFileDescr :: Doc.Block
 cryptolLoadFileDescr =
@@ -88,8 +89,9 @@ instance FromJSON CryptolLoadFileParams where
     withObject "params for \"SAW/Cryptol setup/load file\"" $ \o ->
     CryptolLoadFileParams . T.unpack <$> o .: "file"
 
-instance Doc.DescribedParams CryptolLoadFileParams where
+instance Doc.DescribedMethod CryptolLoadFileParams OK where
   parameterFieldDescription =
     [ ("file",
        Doc.Paragraph [Doc.Text "File to load as a Cryptol module."])
     ]
+  resultFieldDescription = []

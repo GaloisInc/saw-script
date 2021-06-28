@@ -36,10 +36,12 @@ module Verifier.SAW.Term.Functor
   , FieldName
   , LocalName
   , ExtCns(..)
+  , PrimName(..)
   , VarIndex
   , NameInfo(..)
   , toShortName
   , toAbsoluteName
+  , CompiledRecursor(..)
     -- * Terms and associated operations
   , TermIndex
   , Term(..)
@@ -141,7 +143,7 @@ maxSort ss = maximum ss
 --     zipWithFlatTermF!
 data FlatTermF e
     -- | A primitive or axiom without a definition.
-  = Primitive !(ExtCns e)
+  = Primitive !(PrimName e)
 
     -- Tuples are represented as nested pairs, grouped to the right,
     -- terminated with unit at the end.
@@ -153,21 +155,31 @@ data FlatTermF e
   | PairRight e
 
     -- | An inductively-defined type, applied to parameters and type indices
-  | DataTypeApp !Ident ![e] ![e]
+  | DataTypeApp !(PrimName e) ![e] ![e]
+
     -- | An application of a constructor to its arguments, i.e., an element of
     -- an inductively-defined type; the parameters (of the inductive type to
     -- which this constructor belongs) and indices are kept separate
-  | CtorApp !Ident ![e] ![e]
+  | CtorApp !(PrimName e) ![e] ![e]
+
+    -- | The type of a recursor, which is specified by the datatype name,
+    --   the parameters to the data type, the motive function, and the
+    --   type of the motive function.
+  | RecursorType !(PrimName e) ![e] !e !e
+
+    -- | A recursor, which is specified by giving the datatype name,
+    --   the parameters to the datatype, a motive and elimination functions
+    --   for each constructor. A recursor can be used with the special
+    --   @RecursorApp@ term, which provides the datatype indices and
+    --   actual argument to the eliminator.
+  | Recursor (CompiledRecursor e)
+
     -- | An eliminator / pattern-matching function for an inductively-defined
     -- type, given by:
-    -- * The (identifier of the) inductive type it eliminates;
-    -- * The parameters of that inductive type;
-    -- * The return type, also called the "intent", given by a function from
-    --   type indices of the inductive type to a type;
-    -- * The elimination function for each constructor of that inductive type;
-    -- * The indices for that inductive type; AND
+    -- * The recursor value;
+    -- * The indices for the inductive type; AND
     -- * The argument that is being eliminated / pattern-matched
-  | RecursorApp !Ident [e] e [(Ident,e)] [e] e
+  | RecursorApp e [e] e
 
     -- | Non-dependent record types, i.e., N-ary tuple types with named
     -- fields. These are considered equal up to reordering of fields. Actual
@@ -198,6 +210,22 @@ data FlatTermF e
 
 instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 
+-- Capture more type information here so we can
+--  use it during evaluation time to remember the
+--  types of the parameters, motive and eliminator functions.
+data CompiledRecursor e =
+  CompiledRecursor
+  { recursorDataType  :: PrimName e
+  , recursorParams    :: [e]
+  , recursorMotive    :: e
+  , recursorMotiveTy  :: e
+  , recursorElims     :: Map VarIndex (e, e) -- eliminator functions and their types
+  , recursorCtorOrder :: [PrimName e]
+  }
+ deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
+
+instance Hashable e => Hashable (CompiledRecursor e) -- automatically derived
+
 -- | Test if the association list used in a 'RecordType' or 'RecordValue' uses
 -- precisely the given field names and no more. If so, return the values
 -- associated with those field names, in the order given in the input, and
@@ -213,6 +241,29 @@ alistAllFields (fld:flds) alist
     deleteField f (x:rest) = x : deleteField f rest
 alistAllFields _ _ = Nothing
 
+zipPair :: (x -> y -> z) -> (x,x) -> (y,y) -> (z,z)
+zipPair f (x1,x2) (y1,y2) = (f x1 y1, f x2 y2)
+
+zipPrimName :: (x -> y -> z) -> PrimName x -> PrimName y -> Maybe (PrimName z)
+zipPrimName f (PrimName v1 ident x) (PrimName v2 _ y)
+  | v1 == v2 = Just (PrimName v1 ident (f x y))
+  | otherwise = Nothing
+
+zipRec :: (x -> y -> z) -> CompiledRecursor x -> CompiledRecursor y -> Maybe (CompiledRecursor z)
+zipRec f (CompiledRecursor d1 ps1 m1 mty1 es1 ord1) (CompiledRecursor d2 ps2 m2 mty2 es2 ord2)
+  | Map.keysSet es1 == Map.keysSet es2
+  = do d <- zipPrimName f d1 d2
+       ord <- sequence (zipWith (zipPrimName f) ord1 ord2)
+       pure $ CompiledRecursor
+              d
+              (zipWith f ps1 ps2)
+              (f m1 m2)
+              (f mty1 mty2)
+              (Map.intersectionWith (zipPair f) es1 es2)
+              ord
+
+  | otherwise = Nothing
+
 -- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
 -- pointwise to immediate subterms, if the two 'FlatTermF's are the same
 -- constructor; otherwise, return 'Nothing' if they use different constructors
@@ -220,9 +271,7 @@ zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y ->
                     Maybe (FlatTermF z)
 zipWithFlatTermF f = go
   where
-    go (Primitive (EC xi xn xt)) (Primitive (EC yi _ yt))
-      | xi == yi = Just (Primitive (EC xi xn (f xt yt)))
-
+    go (Primitive pn1) (Primitive pn2) = Primitive <$> zipPrimName f pn1 pn2
     go UnitValue UnitValue = Just UnitValue
     go UnitType UnitType = Just UnitType
     go (PairValue x1 x2) (PairValue y1 y2) = Just (PairValue (f x1 y1) (f x2 y2))
@@ -230,17 +279,25 @@ zipWithFlatTermF f = go
     go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
     go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
 
-    go (CtorApp cx psx lx) (CtorApp cy psy ly)
-      | cx == cy = Just $ CtorApp cx (zipWith f psx psy) (zipWith f lx ly)
-    go (DataTypeApp dx psx lx) (DataTypeApp dy psy ly)
-      | dx == dy = Just $ DataTypeApp dx (zipWith f psx psy) (zipWith f lx ly)
-    go (RecursorApp d1 ps1 p1 cs_fs1 ixs1 x1) (RecursorApp d2 ps2 p2 cs_fs2 ixs2 x2)
-      | d1 == d2
-      , Just fs2 <- alistAllFields (map fst cs_fs1) cs_fs2
-      = Just $
-        RecursorApp d1 (zipWith f ps1 ps2) (f p1 p2)
-        (zipWith (\(c,f1) f2 -> (c, f f1 f2)) cs_fs1 fs2)
-        (zipWith f ixs1 ixs2) (f x1 x2)
+    go (CtorApp cx psx lx) (CtorApp cy psy ly) =
+      do c <- zipPrimName f cx cy
+         Just $ CtorApp c (zipWith f psx psy) (zipWith f lx ly)
+    go (DataTypeApp dx psx lx) (DataTypeApp dy psy ly) =
+      do d <- zipPrimName f dx dy
+         Just $ DataTypeApp d (zipWith f psx psy) (zipWith f lx ly)
+
+    go (RecursorType d1 ps1 m1 mty1) (RecursorType d2 ps2 m2 mty2) =
+      do d <- zipPrimName f d1 d2
+         Just $ RecursorType d (zipWith f ps1 ps2) (f m1 m2) (f mty1 mty2)
+
+    go (Recursor rec1) (Recursor rec2) =
+      Recursor <$> zipRec f rec1 rec2
+
+    go (RecursorApp rec1 ixs1 x1) (RecursorApp rec2 ixs2 x2) =
+        Just $ RecursorApp
+          (f rec1 rec2)
+          (zipWith f ixs1 ixs2)
+          (f x1 x2)
 
     go (RecordType elems1) (RecordType elems2)
       | Just vals2 <- alistAllFields (map fst elems1) elems2 =
@@ -346,13 +403,13 @@ termToPat t =
     case unwrapTermF t of
       Constant ec _             -> Net.Atom (toAbsoluteName (ecName ec))
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
-      FTermF (Primitive ec)     -> Net.Atom (toAbsoluteName (ecName ec))
+      FTermF (Primitive pn)     -> Net.Atom (identText (primName pn))
       FTermF (Sort s)           -> Net.Atom (Text.pack ('*' : show s))
       FTermF (NatLit _)         -> Net.Var
       FTermF (DataTypeApp c ps ts) ->
-        foldl Net.App (Net.Atom (identText c)) (map termToPat (ps ++ ts))
+        foldl Net.App (Net.Atom (identText (primName c))) (map termToPat (ps ++ ts))
       FTermF (CtorApp c ps ts)   ->
-        foldl Net.App (Net.Atom (identText c)) (map termToPat (ps ++ ts))
+        foldl Net.App (Net.Atom (identText (primName c))) (map termToPat (ps ++ ts))
       _                         -> Net.Var
 
 unwrapTermF :: Term -> TermF Term

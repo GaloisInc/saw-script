@@ -13,39 +13,37 @@ The server supports three transport methods:
 
 
 ``stdio``
-  in which the server communicates over ``stdin`` and ``stdout``
+  in which the server communicates over ``stdin`` and ``stdout`` using `netstrings. <http://cr.yp.to/proto/netstrings.txt>`_
   
   
 
-Socket
-  in which the server communicates over ``stdin`` and ``stdout``
+``socket``
+  in which the server communicates over a socket using `netstrings. <http://cr.yp.to/proto/netstrings.txt>`_
   
   
 
-HTTP
-  in which the server communicates over HTTP
+``http``
+  in which the server communicates over a socket using HTTP.
   
   
-In both ``stdio`` and socket mode, messages are delimited using `netstrings. <http://cr.yp.to/proto/netstrings.txt>`_
-
 
 Application State
 ~~~~~~~~~~~~~~~~~
 
 According to the JSON-RPC specification, the ``params`` field in a message object must be an array or object. In this protocol, it is always an object. While each message may specify its own arguments, every message has a parameter field named ``state``.
 
-When the first message is sent from the client to the server, the ``state`` parameter should be initialized to the JSON null value ``null``. Replies from the server may contain a new state that should be used in subsequent requests, so that state changes executed by the request are visible. Prior versions of this protocol represented the initial state as the empty array ``[]``, but this is now deprecated and will be removed.
+When the first message is sent from the client to the server, the ``state`` parameter should be initialized to the JSON null value ``null``. Replies from the server may contain a new state that should be used in subsequent requests, so that state changes executed by the request are visible.
 
 In particular, per JSON-RPC, non-error replies are always a JSON object that contains a ``result`` field. The result field always contains an ``answer`` field and a ``state`` field, as well as ``stdout`` and ``stderr``.
 
 
 ``answer``
-  The value returned as a response to the request (the precise contents depend on which request was sent)
+  The value returned as a response to the request (the precise contents depend on which request was sent).
   
   
 
 ``state``
-  The state, to be sent in subsequent requests. If the server did not modify its state in response to the command, then this state may be the same as the one sent by the client.
+  The state, to be sent in subsequent requests. If the server did not modify its state in response to the command, then this state may be the same as the one sent by the client. When a new state is in a server response, the previous state may no longer be available for requests.
   
   
 
@@ -69,27 +67,52 @@ Methods
 SAW/Cryptol/load module (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+Load the specified Cryptol module.
+
+Parameter fields
+++++++++++++++++
+
 
 ``module name``
   Name of module to load.
   
   
-Load the specified Cryptol module.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 SAW/Cryptol/load file (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Load the given file as a Cryptol module.
+
+Parameter fields
+++++++++++++++++
 
 
 ``file``
   File to load as a Cryptol module.
   
   
-Load the given file as a Cryptol module.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 SAW/Cryptol/save term (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Save a term to be referenced later by name.
+
+Parameter fields
+++++++++++++++++
 
 
 ``name``
@@ -101,11 +124,21 @@ SAW/Cryptol/save term (command)
   The expression to save.
   
   
-Save a term to be referenced later by name.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 SAW/LLVM/load module (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Load the specified LLVM module.
+
+Parameter fields
+++++++++++++++++
 
 
 ``name``
@@ -117,11 +150,21 @@ SAW/LLVM/load module (command)
   The file containing the bitcode LLVM module to load.
   
   
-Load the specified LLVM module.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 SAW/LLVM/verify (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Verify the named LLVM function meets its specification.
+
+Parameter fields
+++++++++++++++++
 
 
 ``module``
@@ -158,11 +201,21 @@ SAW/LLVM/verify (command)
   The name to refer to this verification/contract by later.
   
   
-Verify the named LLVM function meets its specification.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 SAW/LLVM/verify x86 (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Verify an x86 function from an ELF file for use as an override in an LLVM verification meets its specification.
+
+Parameter fields
+++++++++++++++++
 
 
 ``module``
@@ -209,11 +262,21 @@ SAW/LLVM/verify x86 (command)
   The name to refer to this verification/contract by later.
   
   
-Verify an x86 function from an ELF file for use as an override in an LLVM verification meets its specification.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 SAW/LLVM/assume (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Assume the function meets its specification.
+
+Parameter fields
+++++++++++++++++
 
 
 ``module``
@@ -235,11 +298,21 @@ SAW/LLVM/assume (command)
   The name to refer to this assumed contract by later.
   
   
-Assume the function meets its specification.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 SAW/create ghost variable (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Create a ghost global variable to represent proof-specific program state.
+
+Parameter fields
+++++++++++++++++
 
 
 ``display name``
@@ -251,11 +324,21 @@ SAW/create ghost variable (command)
   The server name to use to access the ghost variable later.
   
   
-Create a ghost global variable to represent proof-specific program state.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 SAW/make simpset (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Create a simplification rule set from the given rules.
+
+Parameter fields
+++++++++++++++++
 
 
 ``elements``
@@ -267,11 +350,21 @@ SAW/make simpset (command)
   The name to assign to this simpset.
   
   
-Create a simplification rule set from the given rules.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 SAW/prove (command)
 ~~~~~~~~~~~~~~~~~~~
+
+Attempt to prove the given term representing a theorem, given a proof script context.
+
+Parameter fields
+++++++++++++++++
 
 
 ``script``
@@ -283,37 +376,80 @@ SAW/prove (command)
   The goal to interpret as a theorm and prove.
   
   
-Attempt to prove the given term representing a theorem, given a proof script context.
+
+Return fields
++++++++++++++
+
+
+``status``
+  A string (one of ``valid````, ````invalid``, or ``unknown``) indicating whether the proof went through successfully or not.
+  
+  
+
+``counterexample``
+  Only used if the ``status`` is ``invalid``. An array of objects where each object has a ``name`` string and a :ref:`JSON Cryptol expression <Expression>` ``value``.
+  
+  
 
 
 SAW/set option (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
+Set a SAW option in the server.
+
+Parameter fields
+++++++++++++++++
+
 
 ``option``
-  The option to set and its accompanying value (i.e., true or false); one of the following:``lax arithmetic``, ``SMT array memory model``, or ``What4 hash consing``
+  The option to set and its accompanying value (i.e., true or false); one of the following:``lax arithmetic``, ``lax pointer ordering``, ``SMT array memory model``, or ``What4 hash consing``
   
   
-Set a SAW option in the server.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 SAW/clear state (notification)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Clear a particular state from the SAW server (making room for subsequent/unrelated states).
+
+Parameter fields
+++++++++++++++++
 
 
 ``state to clear``
   The state to clear from the server to make room for other unrelated states.
   
   
-Clear a particular state from the SAW server (making room for subsequent/unrelated states).
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 SAW/clear all states (notification)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+Clear all states from the SAW server (making room for subsequent/unrelated states).
+
+Parameter fields
+++++++++++++++++
+
 No parameters
 
-Clear all states from the SAW server (making room for subsequent/unrelated states).
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 

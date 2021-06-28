@@ -40,6 +40,7 @@ module Verifier.SAW.Name
   , VarIndex
   , ExtCns(..)
   , scFreshNameURI
+  , PrimName(..)
     -- * Naming Environments
   , SAWNamingEnv(..)
   , emptySAWNamingEnv
@@ -233,6 +234,29 @@ instance Ord (ExtCns e) where
 
 instance Hashable (ExtCns e) where
   hashWithSalt x ec = hashWithSalt x (ecVarIndex ec)
+
+
+-- Primitive Names ------------------------------------------------------------
+
+-- | Names of SAWCore primitives, data types and data type constructors.
+data PrimName e =
+  PrimName
+  { primVarIndex :: !VarIndex
+  , primName     :: !Ident
+  , primType     :: e
+  }
+  deriving (Show, Functor, Foldable, Traversable)
+
+instance Eq (PrimName e) where
+  x == y = primVarIndex x == primVarIndex y
+
+instance Ord (PrimName e) where
+  compare x y = compare (primVarIndex x) (primVarIndex y)
+
+instance Hashable (PrimName e) where
+  hashWithSalt x pn = hashWithSalt x (primVarIndex pn)
+
+
 
 scFreshNameURI :: Text -> VarIndex -> URI
 scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to constructed name URI", show nm, show i]) $

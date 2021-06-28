@@ -34,10 +34,11 @@ import Control.Applicative
 import Data.Traversable hiding ( mapM )
 #endif
 import qualified Control.Exception as X
-import Control.Monad (unless, (>=>))
+import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
 import Data.Foldable (foldrM)
+import Data.IORef
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -53,6 +54,7 @@ import SAWScript.AST (Located(..),Import(..))
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
+import SAWScript.HeapsterBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
 import SAWScript.Options
@@ -62,6 +64,7 @@ import SAWScript.Parser (parseSchema)
 import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
+import SAWScript.Proof (newTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Conversion
@@ -276,7 +279,9 @@ interpretStmts env stmts =
              interpretStmts env' ss
 
 stmtInterpreter :: StmtInterpreter
-stmtInterpreter ro rw stmts = fmap fst $ runTopLevel (interpretStmts emptyLocal stmts) ro rw
+stmtInterpreter ro rw stmts =
+  do ref <- newIORef rw
+     runTopLevel (interpretStmts emptyLocal stmts) ro ref
 
 processStmtBind :: Bool -> SS.Pattern -> Maybe SS.Type -> SS.Expr -> TopLevel ()
 processStmtBind printBinds pat _mc expr = do -- mx mt
@@ -364,11 +369,12 @@ interpretStmt printBinds stmt =
 writeVerificationSummary :: TopLevel ()
 writeVerificationSummary = do
   do
+    db <- roTheoremDB <$> getTopLevelRO
     values <- rwProofs <$> getTopLevelRW
     let jspecs  = [ s | VJVMMethodSpec s <- values ]
         lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
         thms    = [ t | VTheorem t <- values ]
-        summary = computeVerificationSummary jspecs lspecs thms
+    summary <- io (computeVerificationSummary db jspecs lspecs thms)
     opts <- roOptions <$> getTopLevelRO
     dir <- roInitWorkDir <$> getTopLevelRO
     case summaryFile opts of
@@ -380,11 +386,12 @@ writeVerificationSummary = do
                        Pretty -> prettyVerificationSummary
         in io $ writeFile f' $ formatSummary summary
 
-interpretFile :: FilePath -> TopLevel ()
-interpretFile file = do
+interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
+interpretFile file runMain = do
   opts <- getOptions
   stmts <- io $ SAWScript.Import.loadFile opts file
   mapM_ stmtWithPrint stmts
+  when runMain interpretMain
   writeVerificationSummary
   where
     stmtWithPrint s = do let withPos str = unlines $
@@ -436,6 +443,7 @@ buildTopLevelEnv proxy opts =
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
+       thmDB <- newTheoremDB
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roSharedContext = sc
@@ -446,6 +454,7 @@ buildTopLevelEnv proxy opts =
                    , roProxy = proxy
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
+                   , roTheoremDB = thmDB
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -470,6 +479,7 @@ buildTopLevelEnv proxy opts =
                    , rwCrucibleAssertThenAssume = False
                    , rwProfilingFile = Nothing
                    , rwLaxArith = False
+                   , rwLaxPointerOrdering = False
                    , rwWhat4HashConsing = False
                    , rwWhat4HashConsingX86 = False
                    , rwPreservedRegs = []
@@ -485,7 +495,8 @@ processFile proxy opts file = do
   oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
   setCurrentDirectory (takeDirectory file')
-  _ <- runTopLevel (interpretFile file' >> interpretMain) ro rw
+  ref <- newIORef rw
+  _ <- runTopLevel (interpretFile file' True) ro ref
             `X.catch` (handleException opts)
   setCurrentDirectory oldpath
   return ()
@@ -538,6 +549,11 @@ enable_lax_arithmetic = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxArith = True }
 
+enable_lax_pointer_ordering :: TopLevel ()
+enable_lax_pointer_ordering = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxPointerOrdering = True }
+
 enable_what4_hash_consing :: TopLevel ()
 enable_what4_hash_consing = do
   rw <- getTopLevelRW
@@ -583,7 +599,7 @@ include_value file = do
   oldpath <- io $ getCurrentDirectory
   file' <- io $ canonicalizePath file
   io $ setCurrentDirectory (takeDirectory file')
-  interpretFile file'
+  interpretFile file' False
   io $ setCurrentDirectory oldpath
 
 set_ascii :: Bool -> TopLevel ()
@@ -635,11 +651,11 @@ readSchema str =
 
 data Primitive
   = Primitive
-    { primName :: SS.LName
-    , primType :: SS.Schema
-    , primLife :: PrimitiveLifecycle
-    , primDoc  :: [String]
-    , primFn   :: Options -> BuiltinContext -> Value
+    { primitiveName :: SS.LName
+    , primitiveType :: SS.Schema
+    , primitiveLife :: PrimitiveLifecycle
+    , primitiveDoc  :: [String]
+    , primitiveFn   :: Options -> BuiltinContext -> Value
     }
 
 primitives :: Map SS.LName Primitive
@@ -759,6 +775,11 @@ primitives = Map.fromList
     Current
     [ "Enable lax rules for arithmetic overflow in Crucible." ]
 
+  , prim "enable_lax_pointer_ordering" "TopLevel ()"
+    (pureVal enable_lax_pointer_ordering)
+    Current
+    [ "Enable lax rules for pointer ordering comparisons in Crucible." ]
+
   , prim "enable_what4_hash_consing" "TopLevel ()"
     (pureVal enable_what4_hash_consing)
     Current
@@ -836,7 +857,7 @@ primitives = Map.fromList
     [ "Print the type of the given term." ]
 
   , prim "type"                "Term -> Type"
-    (pureVal ttSchema)
+    (funVal1 term_type)
     Current
     [ "Return the type of the given term." ]
 
@@ -897,6 +918,31 @@ primitives = Map.fromList
     , "variables."
     ]
 
+  , prim "default_term" "Term -> Term"
+    (funVal1 default_typed_term)
+    Experimental
+    [ "Apply Cryptol defaulting rules to the given term." ]
+
+  , prim "extract_uninterp" "[String] -> [String] -> Term -> TopLevel (Term, [(String,[(Term, Term)])])"
+    (pureVal extract_uninterp)
+    Experimental
+    [ "Given a list of names of functions to treat as uninterpreted and a term, find all occurrences"
+    , "of the named functions and extract them."
+    , ""
+    , "The first argument is the list of \'uninterpreted\' functions to extract."
+    , "The second argument is a list of values to treat as opaque; they will not be unfolded during evaluation."
+    , "The third argument is the term to extract from."
+    , ""
+    , "This operation will return a pair, consisting of a rewritten term and a list of replacements."
+    , "The rewritten term will have each fully-applied occurrence of the named functions replaced"
+    , "by a fresh constant of the return type of the function. The list of replacements consists"
+    , "of pairs (one for each named function) giving the name of that function and the replacement"
+    , "values for that function. The replacement values are a list of pairs of terms, one for each"
+    , "occurence that was replaced.  The first term in each  pair gives the fresh constant appearing"
+    , "in the rewritten term.  The second term will be a tuple containing the arguments to the"
+    , "replaced function."
+    ]
+
   , prim "sbv_uninterpreted"   "String -> Term -> TopLevel Uninterp"
     (pureVal sbvUninterpreted)
     Deprecated
@@ -936,21 +982,21 @@ primitives = Map.fromList
 
   , prim "load_aig"            "String -> TopLevel AIG"
     (pureVal loadAIGPrim)
-    Deprecated
+    Current
     [ "Read an AIG file in binary AIGER format, yielding an AIG value." ]
   , prim "save_aig"            "String -> AIG -> TopLevel ()"
     (pureVal saveAIGPrim)
-    Deprecated
+    Current
     [ "Write an AIG to a file in binary AIGER format." ]
   , prim "save_aig_as_cnf"     "String -> AIG -> TopLevel ()"
     (pureVal saveAIGasCNFPrim)
-    Deprecated
+    Current
     [ "Write an AIG representing a boolean function to a file in DIMACS"
     , "CNF format."
     ]
 
   , prim "dsec_print"                "Term -> Term -> TopLevel ()"
-    (scVal dsecPrint)
+    (pureVal dsecPrint)
     Current
     [ "Use ABC's 'dsec' command to compare two terms as SAIGs."
     , "The terms must have a type as described in ':help write_saig',"
@@ -960,16 +1006,9 @@ primitives = Map.fromList
     , "You must have an 'abc' executable on your PATH to use this command."
     ]
 
-  , prim "cec"                 "AIG -> AIG -> TopLevel ProofResult"
-    (pureVal cecPrim)
-    Deprecated
-    [ "Perform a Combinatorial Equivalence Check between two AIGs."
-    , "The AIGs must have the same number of inputs and outputs."
-    ]
-
   , prim "bitblast"            "Term -> TopLevel AIG"
     (pureVal bbPrim)
-    Deprecated
+    Current
     [ "Translate a term into an AIG.  The term must be representable as a"
     , "function from a finite number of bits to a finite number of bits."
     ]
@@ -993,7 +1032,7 @@ primitives = Map.fromList
     ]
 
   , prim "write_aig_external"  "String -> Term -> TopLevel ()"
-    (scVal writeAIGviaVerilog)
+    (pureVal writeAIGviaVerilog)
     Current
     [ "Write out a representation of a term in binary AIGER format. The"
     , "term must be representable as a function from a finite number of"
@@ -1031,22 +1070,22 @@ primitives = Map.fromList
     ]
 
   , prim "write_cnf"           "String -> Term -> TopLevel ()"
-    (scVal write_cnf)
+    (pureVal write_cnf)
     Current
     [ "Write the given term to the named file in CNF format." ]
 
   , prim "write_cnf_external"  "String -> Term -> TopLevel ()"
-    (scVal write_cnf_external)
+    (pureVal write_cnf_external)
     Current
     [ "Write the given term to the named file in CNF format." ]
 
   , prim "write_smtlib2"       "String -> Term -> TopLevel ()"
-    (scVal write_smtlib2)
+    (pureVal write_smtlib2)
     Current
     [ "Write the given term to the named file in SMT-Lib version 2 format." ]
 
   , prim "write_smtlib2_w4"    "String -> Term -> TopLevel ()"
-    (scVal write_smtlib2_w4)
+    (pureVal write_smtlib2_w4)
     Current
     [ "Write the given term to the named file in SMT-Lib version 2 format,"
     , "using the What4 backend instead of the SBV backend."
@@ -1194,6 +1233,23 @@ primitives = Map.fromList
     Current
     [ "Apply the given simplifier rule set to the current goal." ]
 
+  , prim "hoist_ifs_in_goal"            "ProofScript ()"
+    (pureVal hoistIfsInGoalPrim)
+    Experimental
+    [ "hoist ifs in the current proof goal" ]
+
+  , prim "normalize_term"      "Term -> Term"
+    (funVal1 normalize_term)
+    Experimental
+    [ "Normalize the given term by performing evaluation in SAWCore." ]
+
+  , prim "normalize_term_opaque" "[String] -> Term -> Term"
+    (funVal2 normalize_term_opaque)
+    Experimental
+    [ "Normalize the given term by performing evaluation in SAWCore."
+    , "The named values will be treated opaquely and not unfolded during evaluation."
+    ]
+
   , prim "goal_eval"           "ProofScript ()"
     (pureVal (goal_eval []))
     Current
@@ -1304,7 +1360,7 @@ primitives = Map.fromList
     ]
 
   , prim "abc"                 "ProofScript ()"
-    (pureVal proveABC)
+    (pureVal w4_abc_aiger)
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
@@ -1510,9 +1566,17 @@ primitives = Map.fromList
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
+  , prim "w4_abc_aiger"        "ProofScript ()"
+    (pureVal w4_abc_aiger)
+    Current
+    [ "Use the ABC theorem prover as an external process to prove the"
+    , "current goal, with AIGER as an interchange format, generated"
+    , "using the What4 backend."
+    ]
+
   , prim "w4_abc_smtlib2"        "ProofScript ()"
     (pureVal w4_abc_smtlib2)
-    Experimental
+    Current
     [ "Use the ABC theorem prover as an external process to prove the"
     , "current goal, with SMT-Lib2 as an interchange format, generated"
     , "using the What4 backend."
@@ -1520,7 +1584,7 @@ primitives = Map.fromList
 
   , prim "w4_abc_verilog"        "ProofScript ()"
     (pureVal w4_abc_verilog)
-    Experimental
+    Current
     [ "Use the ABC theorem prover as an external process to prove the"
     , "current goal, with Verilog as an interchange format, generated"
     , "using the What4 backend."
@@ -1557,7 +1621,7 @@ primitives = Map.fromList
     ,  "goals 'prop1' and 'prop2'." ]
 
   , prim "empty_ss"            "Simpset"
-    (pureVal emptySimpset)
+    (pureVal (emptySimpset :: SAWSimpset))
     Current
     [ "The empty simplification rule set, containing no rules." ]
 
@@ -1608,20 +1672,24 @@ primitives = Map.fromList
     Current
     [ "Add a proved equality theorem to a given simplification rule set." ]
 
-  , prim "addsimp'"            "Term -> Simpset -> Simpset"
-    (funVal2 addsimp')
-    Current
-    [ "Add an arbitrary equality term to a given simplification rule set." ]
-
   , prim "addsimps"            "[Theorem] -> Simpset -> Simpset"
     (funVal2 addsimps)
     Current
     [ "Add proved equality theorems to a given simplification rule set." ]
 
+  , prim "addsimp'"            "Term -> Simpset -> Simpset"
+    (funVal2 addsimp')
+    Deprecated
+    [ "Add an arbitrary equality term to a given simplification rule set."
+    , "Use `admit` or `core_axiom` and `addsimp` instead."
+    ]
+
   , prim "addsimps'"           "[Term] -> Simpset -> Simpset"
     (funVal2 addsimps')
-    Current
-    [ "Add arbitrary equality terms to a given simplification rule set." ]
+    Deprecated
+    [ "Add arbitrary equality terms to a given simplification rule set."
+    , "Use `admit` or `core_axiom` and `addsimps` instead."
+    ]
 
   , prim "rewrite"             "Simpset -> Term -> Term"
     (funVal2 rewritePrim)
@@ -2867,6 +2935,276 @@ primitives = Map.fromList
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
     , " to ask if two monadic terms are equal" ]
 
+  , prim "heapster_init_env"
+    "String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env)
+    Experimental
+    [ "Create a new Heapster environment with the given SAW module name"
+    , " from the named LLVM bitcode file."
+    ]
+
+  , prim "heapster_init_env_from_file"
+    "String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env_from_file)
+    Experimental
+    [ "Create a new Heapster environment from the named LLVM bitcode file,"
+    , " initialized with the module in the given SAW core file."
+    ]
+
+  , prim "load_sawcore_from_file"
+    "String -> TopLevel ()"
+    (bicVal load_sawcore_from_file)
+    Experimental
+    [ "Load a SAW core module from a file"
+    ]
+
+  , prim "heapster_init_env_for_files"
+    "String -> [String] -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env_for_files)
+    Experimental
+    [ "Create a new Heapster environment from the named LLVM bitcode files,"
+    , " initialized with the module in the given SAW core file."
+    ]
+
+  , prim "heapster_get_cfg"
+    "HeapsterEnv -> String -> TopLevel CFG"
+    (bicVal heapster_get_cfg)
+    Experimental
+    [ "Extract out the Crucible CFG associated with a symbol in a"
+    , " Heapster environemnt"
+    ]
+
+  , prim "heapster_define_opaque_perm"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_opaque_perm)
+    Experimental
+    [ "heapster_define_opaque_perm nm args tp trans defines an opaque named"
+    , " Heapster permission named nm with arguments parsed from args and type"
+    , " parsed from tp that translates to the named type trans"
+    ]
+
+  , prim "heapster_define_recursive_perm"
+    "HeapsterEnv -> String -> String -> String -> [String] -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_recursive_perm)
+    Experimental
+    [ "heapster_define_recursive_perm env name arg_ctx value_type"
+    , " [ p1, ..., pn ] trans_tp fold_fun unfold_fun defines an recursive named"
+    , " Heapster permission named nm with arguments parsed from args_ctx and"
+    , " type parsed from value_type that translates to the named type"
+    , " trans_tp. The resulting permission is equivalent to the permission"
+    , " p1 \\/ ... \\/ pn, where the pi can contain name."
+    ]
+
+  , prim "heapster_define_irt_recursive_perm"
+    "HeapsterEnv -> String -> String -> String -> [String] -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_irt_recursive_perm)
+    Experimental
+    [ "heapster_define_irt_recursive_perm env name arg_ctx value_type"
+    , " [ p1, ..., pn ] defines an recursive named Heapster permission named"
+    , " nm with arguments parsed from args_ctx and type parsed from value_type"
+    , " that translates to the appropriate IRT type. The resulting permission"
+    , " is equivalent to the permission p1 \\/ ... \\/ pn, where the pi can"
+    , " contain name."
+    ]
+
+  , prim "heapster_define_irt_recursive_shape"
+    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_irt_recursive_shape)
+    Experimental
+    [ "heapster_define_irt_recursive_shape env name w arg_ctx body_sh"
+    , " defines a recursive named Heapser shape named nm with arguments"
+    , " parsed from args_ctx and width w that translates to the appropriate"
+    , " IRT type. The resulting shape is equivalent to the shape body_sh,"
+    , " where body_sh can contain name."
+    ]
+
+  , prim "heapster_define_reachability_perm"
+    "HeapsterEnv -> String -> String -> String -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_reachability_perm)
+    Experimental
+    [ "heapster_define_recursive_perm env name arg_ctx value_type"
+    , " [ p1, ..., pn ] trans_tp fold_fun unfold_fun defines an recursive named"
+    , " Heapster permission named nm with arguments parsed from args_ctx and"
+    , " type parsed from value_type that translates to the named type"
+    , " trans_tp. The resulting permission is equivalent to he permission"
+    , " p1 \\/ ... \\/ pn, where the pi can contain name."
+    ]
+
+  , prim "heapster_define_perm"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_perm)
+    Experimental
+    [ "heapster_define_perm nm args tp p defines a Heapster permission named"
+    , " nm with arguments x1,...,xn parsed from args and type parsed from tp"
+    , " such that nm<x1,...,xn> is equivalent to the permission p."
+    ]
+
+  , prim "heapster_define_llvmshape"
+    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_llvmshape)
+    Experimental
+    [ "heapster_define_llvmshape nm w args sh defines a Heapster LLVM shape"
+    , " nm with type llvmshape w and arguments x1,...,xn parsed from args"
+    , " such that nm<x1,...,xn> is equivalent to the permission p."
+    ]
+
+  , prim "heapster_define_opaque_llvmshape"
+    "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_opaque_llvmshape)
+    Experimental
+    [ "heapster_define_opaque_llvmshape henv nm w args len tp defines a Heapster"
+    , " LLVM shape that is opaque, meaning it acts as a sort of shape axiom, where"
+    , " Heapster does not know or care about the contents of memory of this shape"
+    , " but instead treats that memory as an opaque object, defined only by its"
+    , " length and its translation to a SAW core type."
+    , ""
+    , " The henv argument is the Heapster environment this new shape is added to,"
+    , " nm is its name, args is a context of argument variables for this shape,"
+    , " len is an expression for the length of the shape in terms of the arguments,"
+    , " and tp gives the translation of the shape as a SAW core type over the"
+    , " translation of the arguments to SAW core variables."
+    ]
+
+  , prim "heapster_define_rust_type"
+    "HeapsterEnv -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_rust_type)
+    Experimental
+    [ "heapster_define_rust_type env tp defines a Heapster LLVM shape from tp,"
+    , "a string representing a top-level struct or enum definition."
+    ]
+
+  , prim "heapster_block_entry_hint"
+    "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel ()"
+    (bicVal heapster_block_entry_hint)
+    Experimental
+    [ "heapster_block_entry_hint env nm block top_args ghosts perms adds a hint"
+    , " to the Heapster type-checker that Crucible block number block in nm"
+    , " should have permissions perms on its inputs, assuming that top_args"
+    , " lists the top-level ghost and normal arguments to function nm and"
+    , " ghosts gives the ghost arguments to block"
+    ]
+
+  , prim "heapster_gen_block_perms_hint"
+    "HeapsterEnv -> String -> [Int] -> TopLevel ()"
+    (bicVal heapster_gen_block_perms_hint)
+    Experimental
+    [ "heapster_gen_block_perms_hint env nm blocks adds a hint to the Heapster"
+    , " type-checker to *generalize* (recursively replace all instances of"
+    , " eq(const) with (exists x. eq(x))) all permissions on the inputs of the"
+    , " given Crucible blocks numbers. If the given list is empty, do so for"
+    , " every block in the CFG."
+    ]
+
+  , prim "heapster_join_point_hint"
+    "HeapsterEnv -> String -> [Int] -> TopLevel ()"
+    (bicVal heapster_join_point_hint)
+    Experimental
+    [ "heapster_join_point_hint env nm blocks adds a hint to the Heapster"
+    , " type-checker to make a join point at each of the given block numbers,"
+    , " meaning that all entries to the given blocks are merged into a single"
+    , " entrypoint, whose permissions are given by the first call to the block."
+    , " If the given list is empty, do so for every block in the CFG."
+    ]
+
+  , prim "heapster_find_symbol"
+    "HeapsterEnv -> String -> TopLevel String"
+    (bicVal heapster_find_symbol)
+    Experimental
+    [ "Search for a symbol in any module contained in a HeapsterEnv that"
+    , " contains the supplied string as a substring. Raise an error if there"
+    , " is not exactly one such symbol"
+    ]
+
+  , prim "heapster_find_symbols"
+    "HeapsterEnv -> String -> TopLevel [String]"
+    (bicVal heapster_find_symbols)
+    Experimental
+    [ "Search for all symbols in any module contained in a HeapsterEnv that"
+    , " contain the supplied string as a substring"
+    ]
+
+  , prim "heapster_find_trait_method_symbol"
+    "HeapsterEnv -> String -> TopLevel String"
+    (bicVal heapster_find_trait_method_symbol)
+    Experimental
+    [ "Search for a symbol in any module contained in a HeapsterEnv that"
+    , "corresponds to the given trait method implementation. The search"
+    , "string should be of the form: trait::method<type>, e.g."
+    , "core::fmt::Debug::fmt<Foo>"
+    ]
+
+  , prim "heapster_assume_fun"
+    "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_assume_fun)
+    Experimental
+    [ "heapster_assume_fun nm perms trans assumes that function nm has"
+    , " permissions perms and translates to the SAW core term trans"
+    ]
+
+  , prim "heapster_assume_fun_rename"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_assume_fun_rename)
+    Experimental
+    [ "heapster_assume_fun_rename nm nm_t perms trans assumes that function nm"
+    , " has permissions perms and translates to the SAW core term trans. If"
+    , " trans is not an identifier then it is bound to the defined name nm_to."
+    ]
+
+  , prim "heapster_assume_fun_multi"
+    "HeapsterEnv -> String -> [(String, String)] -> TopLevel HeapsterEnv"
+    (bicVal heapster_assume_fun_multi)
+    Experimental
+    [ "heapster_assume_fun_multi nm [(perm1, trans1), ...] assumes that function"
+    , " nm can be typed with 0 or more permissions, each with the corresponding"
+    , " translation to SAW core"
+    ]
+
+  , prim "heapster_typecheck_fun"
+    "HeapsterEnv -> String -> String -> TopLevel ()"
+    (bicVal heapster_typecheck_fun)
+    Experimental
+    [ "Translate an LLVM function to a SAW core term using Heapster"
+    , " type-checking, and store the result in the current Heapster SAW module."
+    ]
+
+  , prim "heapster_typecheck_fun_rename"
+    "HeapsterEnv -> String -> String -> String -> TopLevel ()"
+    (bicVal heapster_typecheck_fun_rename)
+    Experimental
+    [ "Translate the LLVM function named by the first String to a SAW core term"
+    , " using Heapster type-checking, and store the result in the current"
+    , " Heapster SAW module as a definition named with the second string."
+    ]
+
+  , prim "heapster_typecheck_mut_funs"
+    "HeapsterEnv -> [(String, String)] -> TopLevel ()"
+    (bicVal heapster_typecheck_mut_funs)
+    Experimental
+    [ "Translate a set of mutually recursive LLVM function to a set of SAW "
+    , "core terms using Heapster type-checking. Store the results in the "
+    , "current Heapster SAW module."
+    ]
+
+  , prim "heapster_print_fun_trans"
+    "HeapsterEnv -> String -> TopLevel ()"
+    (bicVal heapster_print_fun_trans)
+    Experimental
+    [ "Print the translation to SAW of a function that has been type-checked."
+    ]
+
+  , prim "heapster_export_coq"
+    "HeapsterEnv -> String -> TopLevel ()"
+    (bicVal heapster_export_coq)
+    Experimental
+    [ "Export a Heapster environment to a Coq file" ]
+
+  , prim "heapster_parse_test"
+    "LLVMModule -> String -> String -> TopLevel ()"
+    (bicVal heapster_parse_test)
+    Experimental
+    [ "Parse and print back a set of Heapster permissions for a function"
+    ]
+
     ---------------------------------------------------------------------
 
   , prim "sharpSAT"  "Term -> TopLevel Integer"
@@ -2901,17 +3239,24 @@ primitives = Map.fromList
     [ "Print a human-readable summary of all verifications performed"
     , "so far."
     ]
+
+  , prim "summarize_verification_json" "String -> TopLevel ()"
+    (pureVal summarize_verification_json)
+    Experimental
+    [ "Print a JSON summary of all verifications performed"
+    , "so far into the named file."
+    ]
   ]
 
   where
     prim :: String -> String -> (Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
          -> (SS.LName, Primitive)
     prim name ty fn lc doc = (qname, Primitive
-                                     { primName = qname
-                                     , primType = readSchema ty
-                                     , primDoc  = doc
-                                     , primFn   = fn
-                                     , primLife = lc
+                                     { primitiveName = qname
+                                     , primitiveType = readSchema ty
+                                     , primitiveDoc  = doc
+                                     , primitiveFn   = fn
+                                     , primitiveLife = lc
                                      })
       where qname = qualify name
 
@@ -2941,14 +3286,14 @@ filterAvail ::
   Map SS.LName Primitive ->
   Map SS.LName Primitive
 filterAvail primsAvail =
-  Map.filter (\p -> primLife p `Set.member` primsAvail)
+  Map.filter (\p -> primitiveLife p `Set.member` primsAvail)
 
 primTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
-primTypeEnv primsAvail = fmap primType (filterAvail primsAvail primitives)
+primTypeEnv primsAvail = fmap primitiveType (filterAvail primsAvail primitives)
 
 valueEnv :: Set PrimitiveLifecycle -> Options -> BuiltinContext -> Map SS.LName Value
 valueEnv primsAvail opts bic = fmap f (filterAvail primsAvail primitives)
-  where f p = (primFn p) opts bic
+  where f p = (primitiveFn p) opts bic
 
 -- | Map containing the formatted documentation string for each
 -- saw-script primitive.
@@ -2957,7 +3302,7 @@ primDocEnv primsAvail =
   Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList prims ]
     where
       prims = filterAvail primsAvail primitives
-      tag p = case primLife p of
+      tag p = case primitiveLife p of
                 Current -> []
                 Deprecated -> ["DEPRECATED", ""]
                 Experimental -> ["EXPERIMENTAL", ""]
@@ -2966,9 +3311,9 @@ primDocEnv primsAvail =
                 , "-----------"
                 , ""
                 ] ++ tag p ++
-                [ "    " ++ getVal n ++ " : " ++ SS.pShow (primType p)
+                [ "    " ++ getVal n ++ " : " ++ SS.pShow (primitiveType p)
                 , ""
-                ] ++ primDoc p
+                ] ++ primitiveDoc p
 
 qualify :: String -> Located SS.Name
 qualify s = Located s s (SS.PosInternal "coreEnv")
