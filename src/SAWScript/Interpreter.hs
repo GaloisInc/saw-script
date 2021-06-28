@@ -3048,6 +3048,23 @@ primitives = Map.fromList
     , " such that nm<x1,...,xn> is equivalent to the permission p."
     ]
 
+  , prim "heapster_define_opaque_llvmshape"
+    "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_opaque_llvmshape)
+    Experimental
+    [ "heapster_define_opaque_llvmshape henv nm w args len tp defines a Heapster"
+    , " LLVM shape that is opaque, meaning it acts as a sort of shape axiom, where"
+    , " Heapster does not know or care about the contents of memory of this shape"
+    , " but instead treats that memory as an opaque object, defined only by its"
+    , " length and its translation to a SAW core type."
+    , ""
+    , " The henv argument is the Heapster environment this new shape is added to,"
+    , " nm is its name, args is a context of argument variables for this shape,"
+    , " len is an expression for the length of the shape in terms of the arguments,"
+    , " and tp gives the translation of the shape as a SAW core type over the"
+    , " translation of the arguments to SAW core variables."
+    ]
+
   , prim "heapster_define_rust_type"
     "HeapsterEnv -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_rust_type)

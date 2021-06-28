@@ -29,6 +29,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_define_reachability_perm
        , heapster_define_perm
        , heapster_define_llvmshape
+       , heapster_define_opaque_llvmshape
        , heapster_define_rust_type
        , heapster_block_entry_hint
        , heapster_gen_block_perms_hint
@@ -617,7 +618,8 @@ heapster_define_perm _bic _opts henv nm args_str tp_str perm_string =
      let env' = permEnvAddDefinedPerm env nm args tp_perm perm
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
--- | Define a new named llvm shape with the given name, arguments, and width
+-- | Define a new named llvm shape with the given name, pointer width,
+-- arguments, and definition as a shape
 heapster_define_llvmshape :: BuiltinContext -> Options -> HeapsterEnv ->
                              String -> Int -> String -> String ->
                              TopLevel ()
@@ -629,6 +631,29 @@ heapster_define_llvmshape _bic _opts henv nm w_int args_str sh_str =
      let args = parsedCtxCtx args_ctx
      mb_sh <- parseExprInCtxString env (LLVMShapeRepr w) args_ctx sh_str
      let env' = withKnownNat w $ permEnvAddDefinedShape env nm args mb_sh
+     liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+-- | Define a new opaque llvm shape with the given name, pointer width,
+-- arguments, expression for the length in bytes, and SAW core expression for a
+-- type-level function from the Heapster translations of the argument types to a
+-- SAW core type
+heapster_define_opaque_llvmshape :: BuiltinContext -> Options -> HeapsterEnv ->
+                                    String -> Int -> String -> String -> String ->
+                                    TopLevel ()
+heapster_define_opaque_llvmshape _bic _opts henv nm w_int args_str len_str tp_str =
+  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     (Some (Pair w LeqProof)) <-
+       failOnNothing "Shape width must be positive" $ someNatGeq1 w_int
+     Some args_ctx <- parseParsedCtxString "argument types" env args_str
+     let args = parsedCtxCtx args_ctx
+     mb_len <- parseExprInCtxString env (BVRepr w) args_ctx len_str
+     sc <- getSharedContext
+     tp_tp <- liftIO $
+       translateCompleteTypeInCtx sc env args (nus (cruCtxProxies args) $
+                                               const $ ValuePermRepr $
+                                               LLVMShapeRepr w)
+     tp_id <- parseAndInsDef henv nm tp_tp tp_str
+     let env' = withKnownNat w $ permEnvAddOpaqueShape env nm args mb_len tp_id
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Define a new named LLVM shape from a Rust type declaration

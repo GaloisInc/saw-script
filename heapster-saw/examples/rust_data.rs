@@ -142,6 +142,10 @@ impl Sum<u64,u64> {
     pub extern fn mk_u64_sum_left_extern (x:u64) -> Self {
         Sum::Left (x)
     }
+
+    pub fn mk_u64_sum_left_add3 (x:&u64, y:u64, z:u64) -> Self {
+        Sum::Left (*x+y+z)
+    }
 }
 
 pub fn mk_string_sum_left (x:&str) -> Sum<String,u64> {
@@ -272,5 +276,27 @@ impl List<u64> {
             List::Nil => Err (()),
             List::Cons (x,_) => Ok (*x)
         }
+    }
+}
+
+/* Dummy function to figure out the size of a HashMap */
+pub fn test_hash_map_size (x:(HashMap<u64,u64>, u64)) -> u64 {
+    let (_,u) = x; return u;
+}
+
+pub fn my_hash_insert (m: &mut HashMap<u64,u64>, x:u64, y:u64) -> Option<u64> {
+    return m.insert (x,y);
+}
+
+pub fn my_hash_insert_void (m: &mut HashMap<u64,u64>, x:u64, y:u64) -> () {
+    m.insert (x,y);
+}
+
+/* Insert a mapping into m from the greatest of x and y to the other */
+pub fn hash_map_insert_gt_to_le (m: &mut HashMap<u64,u64>, x:u64, y:u64) -> () {
+    if x > y {
+        m.insert (x, y);
+    } else {
+        m.insert (y, x);
     }
 }
