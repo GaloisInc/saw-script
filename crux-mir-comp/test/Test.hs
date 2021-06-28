@@ -90,7 +90,8 @@ runCrux rustFile outHandle mode = do
                                         Crux.branchCoverage = (mode == RcmCoverage) } ,
                    Mir.defaultMirOptions { Mir.printResultOnly = (mode == RcmConcrete),
                                            Mir.defaultRlibsDir = "../deps/crucible/crux-mir/rlibs" })
-    let ?outputConfig = Crux.OutputConfig False outHandle outHandle quiet
+    let ?outputConfig = Crux.mkOutputConfig False outHandle outHandle $
+                        Just (fst options)
     setEnv "CRYPTOLPATH" "."
     _exitCode <- Mir.runTestsWithExtraOverrides overrides options
     return ()
