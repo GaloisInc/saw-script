@@ -4,8 +4,9 @@ test ptr_offset/3a1fbbbh::use_f[0]: FAILED
 failures:
 
 ---- ptr_offset/3a1fbbbh::use_f[0] counterexamples ----
-Failure for ./lib/crucible/lib.rs:37:41: 37:58 !test/symb_eval/comp/ptr_offset.rs:64:5: 64:31: error: in ptr_offset/3a1fbbbh::use_f[0]
-MIR assertion at test/symb_eval/comp/ptr_offset.rs:64:5:
-	b2 < 10
+[Crux] Found counterexample for verification goal
+[Crux]   ./lib/crucible/lib.rs:37:41: 37:58 !test/symb_eval/comp/ptr_offset.rs:64:5: 64:31: error: in ptr_offset/3a1fbbbh::use_f[0]
+[Crux]   MIR assertion at test/symb_eval/comp/ptr_offset.rs:64:5:
+[Crux]   	b2 < 10
 
 [Crux] Overall status: Invalid.
