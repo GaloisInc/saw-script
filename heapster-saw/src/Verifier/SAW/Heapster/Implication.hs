@@ -2714,7 +2714,7 @@ partialSubstForceM mb_e caller =
      case partialSubst psubst mb_e of
        Just e -> pure e
        Nothing ->
-        implFailM' $ PartialSubstitutionError caller mb_e
+        implFailM $ PartialSubstitutionError caller mb_e
 
 -- | Modify the current partial substitution
 modifyPSubst :: (PartialSubst vars -> PartialSubst vars) ->
@@ -2780,7 +2780,7 @@ implRecFlagCaseM m1 m2 =
 implSetRecRecurseRightM :: NuMatchingAny1 r => ImplM vars s r ps ps ()
 implSetRecRecurseRightM =
   use implStateRecRecurseFlag >>= \case
-    RecLeft -> implFailM' MuUnfoldError
+    RecLeft -> implFailM MuUnfoldError
     _ -> implStateRecRecurseFlag .= RecRight
 
 -- | Set the recursive recursion flag to indicate recursion on the left, or fail
@@ -2789,7 +2789,7 @@ implSetRecRecurseLeftM :: NuMatchingAny1 r => ImplM vars s r ps ps ()
 implSetRecRecurseLeftM =
   use implStateRecRecurseFlag >>= \case
     RecRight ->
-      implFailM' MuUnfoldError
+      implFailM MuUnfoldError
     _ -> implStateRecRecurseFlag .= RecLeft
 
 -- | Look up the 'NamedPerm' structure for a named permssion
@@ -3208,7 +3208,7 @@ implElimLLVMBlockToEq x bp =
   pure y
 
 -- | Try to prove a proposition about bitvectors dynamically, failing as in
--- 'implFailM' if the proposition does not hold
+-- 'implFailM if the proposition does not hold
 implTryProveBVProp :: (1 <= w, KnownNat w, NuMatchingAny1 r) =>
                       ExprVar (LLVMPointerType w) -> BVProp w ->
                       ImplM vars s r (ps :> LLVMPointerType w) ps ()
@@ -3663,7 +3663,7 @@ implEndLifetimeM :: NuMatchingAny1 r => Proxy ps -> ExprVar LifetimeType ->
 implEndLifetimeM ps l ps_in ps_out@(lownedPermsToDistPerms -> Just dps_out) =
   implSimplM ps (SImpl_EndLifetime l ps_in ps_out) >>>
   recombinePermsPartial ps dps_out
-implEndLifetimeM _ _ _ _ = implFailM' $ LifetimeError EndLifetimeError
+implEndLifetimeM _ _ _ _ = implFailM $ LifetimeError EndLifetimeError
 
 
 -- | Save a permission for later by splitting it into part that is in the
@@ -3959,7 +3959,7 @@ implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                         PExpr_ExShape _mb_sh }) =
   implSimplM Proxy (SImpl_ElimLLVMBlockEx x bp)
 implElimLLVMBlock _ bp =
-  implFailM' $ MemBlockError bp
+  implFailM $ MemBlockError bp
 
 -- | Eliminate a @memblock@ permission on the top of the stack and recombine it,
 -- if this is possible; otherwise fail
@@ -3988,7 +3988,7 @@ getLifetimeCurrentPerms (PExpr_Var l) =
       case some_cur_perms of
         Some cur_perms -> pure $ Some $ CurrentTransPerms cur_perms l
     _ ->
-      implFailM' $ LifetimeError (LifetimeCurrentError l)
+      implFailM $ LifetimeError (LifetimeCurrentError l)
 
 -- | Prove the permissions represented by a 'LifetimeCurrentPerms'
 proveLifetimeCurrent :: NuMatchingAny1 r => LifetimeCurrentPerms ps_l ->
@@ -4234,7 +4234,7 @@ instance ProveEq (LLVMFramePerm w) where
       do eqp1 <- proveEq e mb_e
          eqp2 <- proveEq fperms mb_fperms
          pure (liftA2 (\x y -> (x,i):y) eqp1 eqp2)
-  proveEq perms mb = implFailM' $ EqualityProofError perms mb
+  proveEq perms mb = implFailM $ EqualityProofError perms mb
 
 instance ProveEq (LLVMBlockPerm w) where
   proveEq bp mb_bp =
@@ -4308,7 +4308,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
           Just _ -> proveEqH psubst e mb_e
           Nothing -> getVarEqPerm y >>= \case
             Just _ -> proveEqH psubst e mb_e
-            Nothing -> implFailM' $ EqualityProofError e mb_e
+            Nothing -> implFailM $ EqualityProofError e mb_e
 
   -- To prove x=e, try to see if x:eq(e') and proceed by transitivity
   (PExpr_Var x, _) ->
@@ -4316,7 +4316,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
     Just e' ->
       proveEq e' mb_e >>= \eqp2 ->
       pure (someEqProofTrans (someEqProofPerm x e' True) eqp2)
-    Nothing -> implFailM' $ EqualityProofError e mb_e
+    Nothing -> implFailM $ EqualityProofError e mb_e
 
   -- To prove e=x, try to see if x:eq(e') and proceed by transitivity
   (_, [nuMP| PExpr_Var z |])
@@ -4325,7 +4325,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
         Just e' ->
           proveEq e (fmap (const e') mb_e) >>= \eqp ->
           pure (someEqProofTrans eqp (someEqProofPerm x e' False))
-        Nothing -> implFailM' $ EqualityProofError e mb_e
+        Nothing -> implFailM $ EqualityProofError e mb_e
 
   -- FIXME: if proving word(e1)=word(e2) for ground e2, we could add an assertion
   -- that e1=e2 using a BVProp_Eq
@@ -4345,7 +4345,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
   -- FIXME: add cases to prove struct(es1)=struct(es2)
 
   -- Otherwise give up!
-  _ -> implFailM' $ EqualityProofError e mb_e
+  _ -> implFailM $ EqualityProofError e mb_e
 
 
 -- | Build a proof on the top of the stack that @x:eq(e)@. Assume that all @x@
@@ -5005,7 +5005,7 @@ proveVarLLVMArray_ArrayStep x ps ap i ap_lhs
 
 -- Otherwise we don't know what to do so we fail
 proveVarLLVMArray_ArrayStep _x _ps _ap _i _ap_lhs =
-  implFailM' ArrayStepError
+  implFailM ArrayStepError
 
 
 ----------------------------------------------------------------------
@@ -5950,7 +5950,7 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
              lownedPermsToDistPerms ps_inR', lownedPermsToDistPerms ps_outR') of
           (Just dps_inL, Just dps_outL, Just dps_inR, Just dps_outR) ->
             pure (dps_inL, dps_outL, dps_inR, dps_outR)
-          _ -> implFailM' $ LifetimeError ImplicationLifetimeError)
+          _ -> implFailM $ LifetimeError ImplicationLifetimeError)
       >>>= \(dps_inL, dps_outL, dps_inR, dps_outR) ->
       localProveVars (RL.append ps1 dps_inR) dps_inL >>>= \impl_in ->
       localProveVars (RL.append ps2 dps_outL) dps_outR >>>= \impl_out ->
@@ -6083,7 +6083,7 @@ proveVarConjImpl x ps mb_ps =
                            mb_ps' mb_p) "proveVarConjImpl") >>>= \(ps',p) ->
       implInsertConjM x p ps' i
     Nothing ->
-      implFailM' $ InsufficientVariablesError (fmap ValPerm_Conj mb_ps)
+      implFailM $ InsufficientVariablesError (fmap ValPerm_Conj mb_ps)
 
 
 ----------------------------------------------------------------------
@@ -6403,11 +6403,11 @@ proveExVarImpl _ mb_x mb_p@(mbMatch -> [nuMP| ValPerm_Conj [Perm_LLVMFrame _] |]
         getVarVarM memb >>>= \n' ->
         proveVarImplInt n' mb_p >>> pure n'
       Nothing ->
-        implFailM' NoFrameInScopeError
+        implFailM NoFrameInScopeError
 
 -- Otherwise we fail
 proveExVarImpl _ mb_x mb_p =
-  implFailM' $ ExistentialError mb_x mb_p
+  implFailM $ ExistentialError mb_x mb_p
 
 
 ----------------------------------------------------------------------
@@ -6561,7 +6561,7 @@ proveVarsImplAppendInt ps =
       proveVarsImplAppendInt (mbMap2 appendDistPerms ps1 ps2) >>>
       implMoveUpM cur_perms (mbDistPermsToProxies ps1) x (mbDistPermsToProxies ps2)
     _ ->
-      implFailM' $ InsufficientVariablesError ps
+      implFailM $ InsufficientVariablesError ps
 
 -- | Prove a list of existentially-quantified distinguished permissions and put
 -- those proofs onto the stack. This is the same as 'proveVarsImplAppendInt'
@@ -6682,49 +6682,49 @@ data LifetimeErrorType where
   LifetimeCurrentError :: PermPretty p => p -> LifetimeErrorType
 
 class ErrorPretty a where
-  ppErrorFn :: a -> PPInfo -> String
+  ppError :: a -> PPInfo -> String
 
 instance ErrorPretty ImplError where
-    ppErrorFn (FatalError f) pp = renderDoc $ f pp
-    ppErrorFn NoFrameInScopeError _ = "No LLVM frame in scope"
-    ppErrorFn ArrayStepError _ = "Error proving array permissions"
-    ppErrorFn MuUnfoldError _ =
-      "Tried to unfold a mu on the left after unfolding on the right"
-    ppErrorFn FunctionPermissionError _ =
-      "Could not find function permission"
-    ppErrorFn (PartialSubstitutionError caller mb_e) pp = renderDoc $
-      sep [pretty ("Incomplete susbtitution in " ++ caller ++ " for: "),
-           permPretty pp mb_e]
-    ppErrorFn (LifetimeError EndLifetimeError) _ =
-      "implEndLifetimeM: lownedPermsToDistPerms"
-    ppErrorFn (LifetimeError ImplicationLifetimeError) _ =
-      "proveVarAtomicImpl: lownedPermsToDistPerms"
-    ppErrorFn (LifetimeError (LifetimeCurrentError l)) pp = renderDoc $
-      pretty "Could not prove lifetime is current:" <+>
-      permPretty pp l
-    ppErrorFn (MemBlockError bp) pp = renderDoc $
-      pretty "Could not eliminate permission" <+>
-      permPretty pp (Perm_LLVMBlock bp)
-    ppErrorFn (EqualityProofError e mb_e) pp = renderDoc $
-      sep [pretty "proveEq" <> colon <+> pretty "Could not prove",
-           sep [permPretty pp e <+>
-                pretty "=" <+> permPretty pp mb_e]]
-    ppErrorFn (InsufficientVariablesError ps) pp = renderDoc $
-      sep [PP.fillSep [PP.pretty
-            "Could not determine enough variables to prove permissions:",
-           permPretty pp ps]]
-    ppErrorFn (ExistentialError mb_x mb_p) pp = renderDoc $
-      pretty "proveExVarImpl: existential variable" <+>
-      permPretty pp mb_x <+>
-      pretty "not resolved when trying to prove:" <> softline <>
-      permPretty pp mb_p
-    ppErrorFn (ImplVariableError f) pp = renderDoc $ f pp
+  ppError (FatalError f) pp = renderDoc $ f pp
+  ppError NoFrameInScopeError _ = "No LLVM frame in scope"
+  ppError ArrayStepError _ = "Error proving array permissions"
+  ppError MuUnfoldError _ =
+    "Tried to unfold a mu on the left after unfolding on the right"
+  ppError FunctionPermissionError _ =
+    "Could not find function permission"
+  ppError (PartialSubstitutionError caller mb_e) pp = renderDoc $
+    sep [pretty ("Incomplete susbtitution in " ++ caller ++ " for: "),
+          permPretty pp mb_e]
+  ppError (LifetimeError EndLifetimeError) _ =
+    "implEndLifetimeM: lownedPermsToDistPerms"
+  ppError (LifetimeError ImplicationLifetimeError) _ =
+    "proveVarAtomicImpl: lownedPermsToDistPerms"
+  ppError (LifetimeError (LifetimeCurrentError l)) pp = renderDoc $
+    pretty "Could not prove lifetime is current:" <+>
+    permPretty pp l
+  ppError (MemBlockError bp) pp = renderDoc $
+    pretty "Could not eliminate permission" <+>
+    permPretty pp (Perm_LLVMBlock bp)
+  ppError (EqualityProofError e mb_e) pp = renderDoc $
+    sep [pretty "proveEq" <> colon <+> pretty "Could not prove",
+          sep [permPretty pp e <+>
+              pretty "=" <+> permPretty pp mb_e]]
+  ppError (InsufficientVariablesError ps) pp = renderDoc $
+    sep [PP.fillSep [PP.pretty
+          "Could not determine enough variables to prove permissions:",
+          permPretty pp ps]]
+  ppError (ExistentialError mb_x mb_p) pp = renderDoc $
+    pretty "proveExVarImpl: existential variable" <+>
+    permPretty pp mb_x <+>
+    pretty "not resolved when trying to prove:" <> softline <>
+    permPretty pp mb_p
+  ppError (ImplVariableError f) pp = renderDoc $ f pp
 
 -- | Terminate the current proof branch with a failure
-implFailM' :: NuMatchingAny1 r => ImplError -> ImplM vars s r ps_any ps a
-implFailM' err =
+implFailM :: NuMatchingAny1 r => ImplError -> ImplM vars s r ps_any ps a
+implFailM err =
   use implStateFailPrefix >>>= \prefix ->
-  uses implStatePPInfo (ppErrorFn err) >>>= \doc ->
+  uses implStatePPInfo (ppError err) >>>= \doc ->
     let msg = prefix <> doc
     in implTraceM (const $ pretty msg) >>> implApplyImpl1 (Impl1_Fail msg) MNil
 
@@ -6732,7 +6732,7 @@ implFailM' err =
 implFailVarM :: NuMatchingAny1 r => String -> ExprVar tp -> ValuePerm tp ->
                 Mb vars (ValuePerm tp) -> ImplM vars s r ps_any ps a
 implFailVarM f x p mb_p =
-  implFailM' $ ImplVariableError (\i ->
+  implFailM $ ImplVariableError (\i ->
                  sep [pretty f <> colon <+> pretty "Could not prove",
                     ppImpl i x p mb_p])
 

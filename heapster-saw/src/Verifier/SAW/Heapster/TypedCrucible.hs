@@ -1962,11 +1962,7 @@ getAtomicOrWordLLVMPerms r =
                                                recombinePerm x p) >>>
       pure (Left e_word)
     _ ->
-      stmtFailM (\i ->
-                  sep [pretty "getAtomicOrWordLLVMPerms:",
-                       pretty "Needed atomic permissions for" <+> permPretty i r,
-                       pretty "but found" <+>
-                       permPretty i p])
+      stmtFailM $ AtomicPermError r p
 
 
 -- | Like 'getAtomicOrWordLLVMPerms', but fail if an equality permission to a
@@ -1982,11 +1978,8 @@ getAtomicLLVMPerms r =
   case eith of
     Right ps -> pure ps
     Left e ->
-      stmtFailM (\i ->
-                  sep [pretty "getAtomicLLVMPerms:",
-                       pretty "Needed atomic permissions for" <+> permPretty i r,
-                       pretty "but found" <+>
-                       permPretty i (ValPerm_Eq $ PExpr_LLVMWord e)])
+      stmtFailM $ AtomicPermError r (ValPerm_Eq $ PExpr_LLVMWord e)
+
 
 data SomeExprVarFrame where
   SomeExprVarFrame ::
@@ -2056,32 +2049,6 @@ setVarTypes :: String -> RAssign Name tps -> CruCtx tps ->
 setVarTypes _ _ CruCtxNil = pure ()
 setVarTypes str (xs :>: x) (CruCtxCons tps tp) =
   setVarTypes str xs tps >>> setVarType str x tp
-
--- | Get the current 'PPInfo'
-permGetPPInfo :: PermCheckM ext cblocks blocks tops ret r ps r ps PPInfo
-permGetPPInfo = gets stPPInfo
-
--- | Get the current prefix string to give context to error messages
-getErrorPrefix :: PermCheckM ext cblocks blocks tops ret r ps r ps (Doc ())
-getErrorPrefix = gets (fromMaybe emptyDoc . stErrPrefix)
-
--- | Emit debugging output using the current 'PPInfo'
-stmtTraceM :: (PPInfo -> Doc ()) ->
-              PermCheckM ext cblocks blocks tops ret r ps r ps String
-stmtTraceM f =
-  do doc <- f <$> permGetPPInfo
-     let str = renderDoc doc
-     trace str (pure str)
-
--- | Failure in the statement permission-checking monad
-stmtFailM :: (PPInfo -> Doc ()) -> PermCheckM ext cblocks blocks tops ret r1 ps1
-             (TypedStmtSeq ext blocks tops ret ps2) ps2 a
-stmtFailM msg =
-  getErrorPrefix >>>= \err_prefix ->
-  stmtTraceM (\i -> err_prefix <> line <>
-                    pretty "Type-checking failure:" <> softline <> msg i) >>>= \str ->
-  gabortM (return $ TypedImplStmt $ AnnotPermImpl str $
-           PermImpl_Step (Impl1_Fail "") MbPermImpls_Nil)
 
 -- | FIXME HERE: Make 'ImplM' quantify over any underlying monad, so that we do
 -- not have to use 'traversePermImpl' after we run an 'ImplM'
@@ -2320,9 +2287,7 @@ convertRegType ext loc reg (LLVMPointerRepr w1) (LLVMPointerRepr w2) =
   convertRegType ext loc reg1 (BVRepr w1) (BVRepr w2) >>>= \reg2 ->
   convertRegType ext loc reg2 (BVRepr w2) (LLVMPointerRepr w2)
 convertRegType _ _ x tp1 tp2 =
-  stmtFailM (\i -> pretty "Could not cast" <+> permPretty i x
-                   <+> pretty "from" <+> pretty (show tp1)
-                   <+> pretty "to" <+> pretty (show tp2))
+  stmtFailM $ RegisterConversionError x tp1 tp2
 
 
 -- | Extract the bitvector of size @sz@ at offset @off@ from a larger bitvector
@@ -2762,7 +2727,7 @@ tcEmitStmt' ctx loc (CallHandle ret freg_untyped _args_ctx args_untyped) =
         _ -> pure Nothing
       _ -> pure []) >>>= \maybe_fun_perms ->
   (stmtEmbedImplM $ foldr1WithDefault implCatchM
-   (implFailM' FunctionPermissionError)
+   (implFailM FunctionPermissionError)
    (mapMaybe (fmap pure) maybe_fun_perms)) >>>= \some_fun_perm ->
   case some_fun_perm of
     SomeFunPerm fun_perm ->
@@ -2786,7 +2751,7 @@ tcEmitStmt' ctx loc (Assert reg msg) =
   let treg = tcReg ctx reg in
   getRegEqualsExpr treg >>= \case
     PExpr_Bool True -> pure ctx
-    PExpr_Bool False -> stmtFailM (\_ -> pretty "Failed assertion")
+    PExpr_Bool False -> stmtFailM FailedAssertionError
     _ -> ctx <$ emitStmt CruCtxNil loc (TypedAssert (tcReg ctx reg) (tcReg ctx msg))
 
 tcEmitStmt' _ _ _ = error "tcEmitStmt: unsupported statement"
@@ -2811,8 +2776,7 @@ tcEmitLLVMSetExpr ctx loc (LLVM_PointerExpr w blk_reg off_reg) =
       emitLLVMStmt knownRepr loc (ConstructLLVMWord toff_reg) >>>= \x ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx x)
-    _ -> stmtFailM (\i -> pretty "LLVM_PointerExpr: Non-zero pointer block: "
-                          <> permPretty i tblk_reg)
+    _ -> stmtFailM $ NonZeroPointerBlockError tblk_reg
 
 -- Type-check the LLVM value destructor that gets the block value, by either
 -- proving a permission eq(llvmword e) and returning block 0 or proving
@@ -2905,14 +2869,15 @@ tcEmitLLVMSetExpr ctx loc (LLVM_SideConditions tp conds reg) =
   foldr
   (\(LLVMSideCondition cond_reg ub) rest_m ->
     let tcond_reg = tcReg ctx cond_reg
-        err_str = renderDoc (pretty "Undefined behavior: " <> softline <> UB.explain ub) in
+        err_msg = pretty "Undefined behavior" <> softline <> UB.explain ub in
+        -- err_str = renderDoc (pretty "Undefined behavior: " <> softline <> UB.explain ub) in
     getRegEqualsExpr tcond_reg >>= \case
       PExpr_Bool True ->
         rest_m
-      PExpr_Bool False -> stmtFailM (\_ -> pretty err_str)
+      PExpr_Bool False -> stmtFailM $ UndefinedBehaviorError err_msg
       _ ->
         emitStmt knownRepr loc (TypedSetRegPermExpr knownRepr $
-                                PExpr_String err_str) >>>= \(_ :>: str_var) ->
+                                PExpr_String (renderDoc err_msg)) >>>= \(_ :>: str_var) ->
         stmtRecombinePerms >>>
         emitStmt CruCtxNil loc (TypedAssert tcond_reg $
                                 TypedReg str_var) >>>= \_ ->
@@ -2924,7 +2889,7 @@ tcEmitLLVMSetExpr ctx loc (LLVM_SideConditions tp conds reg) =
     pure (addCtxName ctx ret))
   conds
 tcEmitLLVMSetExpr _ctx _loc X86Expr{} =
-  stmtFailM (\_ -> pretty "X86Expr not supported")
+  stmtFailM X86ExprError
 
 
 
@@ -3096,14 +3061,11 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_Alloca w _ sz_reg _ _) =
       stmtRecombinePerms >>>
       pure (addCtxName ctx y)
     (_, _, Nothing) ->
-      stmtFailM (\i -> pretty "LLVM_Alloca: non-constant size for"
-                       <+> permPretty i sz_treg)
+      stmtFailM $ AllocaError (AllocaNonConstantError sz_treg)
     (Just fp, p, _) ->
-      stmtFailM (\i -> pretty "LLVM_Alloca: expected LLVM frame perm for "
-                       <+> permPretty i fp <> pretty ", found perm"
-                       <+> permPretty i p)
+      stmtFailM $ AllocaError (AllocaFramePermError fp p)
     (Nothing, _, _) ->
-      stmtFailM (const $ pretty "LLVM_Alloca: no frame pointer set")
+      stmtFailM $ AllocaError AllocaFramePtrError
 
 -- Type-check a push frame instruction
 tcEmitLLVMStmt _arch ctx loc (LLVM_PushFrame _ _) =
@@ -3131,7 +3093,7 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PopFrame _) =
                                     fp fperms del_perms) >>>= \y ->
         modify (\st -> st { stExtState = PermCheckExtState_LLVM Nothing }) >>>
         pure (addCtxName ctx y)
-    _ -> stmtFailM (const $ pretty "LLVM_PopFrame: no frame perms")
+    _ -> stmtFailM $ PopFrameError
 
 -- Type-check a pointer offset instruction by emitting OffsetLLVMValue
 tcEmitLLVMStmt _arch ctx loc (LLVM_PtrAddOffset _w _ ptr off) =
@@ -3161,7 +3123,7 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_LoadHandle _ _ ptr args ret) =
         (TypedLLVMLoadHandle tptr tp p) >>>= \ret' ->
         stmtRecombinePerms >>>
         pure (addCtxName ctx ret')
-    _ -> stmtFailM (const $ pretty "LLVM_PopFrame: no function pointer perms")
+    _ -> stmtFailM LoadHandleError
 
 -- Type-check a ResolveGlobal instruction by looking up the global symbol
 tcEmitLLVMStmt _arch ctx loc (LLVM_ResolveGlobal w _ gsym) =
@@ -3173,8 +3135,7 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_ResolveGlobal w _ gsym) =
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret)
     Nothing ->
-      stmtFailM (const $ pretty ("LLVM_ResolveGlobal: no perms for global "
-                                 ++ globalSymbolName gsym))
+      stmtFailM $ ResolveGlobalError gsym
 
 {-
 tcEmitLLVMStmt _arch ctx loc (LLVM_PtrLe _ r1 r2) =
@@ -3327,9 +3288,7 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
     -- If we don't know any relationship between the two registers, then we
     -- fail, because there is no way to compare pointers in the translation
     _ ->
-      stmtFailM (\i ->
-                  sep [pretty "Could not compare LLVM pointer values",
-                       permPretty i x1, pretty "and", permPretty i x2])
+      stmtFailM $ PointerComparisonError x1 x2
 
 tcEmitLLVMStmt _arch _ctx _loc stmt =
   error ("tcEmitLLVMStmt: unimplemented statement - " ++ show (ppApp (\_ -> mempty) stmt))
@@ -3868,3 +3827,92 @@ tcCFG w env endianness fun_perm cfg =
                         (visitBlock >=>
                          assign (stBlockMap . member tpBlkID))) >>
           main_loop nodes
+
+--------------------------------------------------------------------------------
+-- Error handling and logging
+
+data StmtError where
+  AtomicPermError :: (PermPretty r, PermPretty p) => r -> p -> StmtError
+  RegisterConversionError
+    :: (PermPretty x, Show tp1, Show tp2)
+    => x -> tp1 -> tp2 -> StmtError
+  FailedAssertionError :: StmtError
+  NonZeroPointerBlockError :: (PermPretty tblk_reg) => tblk_reg -> StmtError
+  UndefinedBehaviorError :: Doc () -> StmtError
+  X86ExprError :: StmtError
+  AllocaError :: AllocaErrorType -> StmtError
+  PopFrameError :: StmtError
+  LoadHandleError :: StmtError
+  ResolveGlobalError :: GlobalSymbol -> StmtError
+  PointerComparisonError :: (PermPretty x1, PermPretty x2) => x1 -> x2 -> StmtError
+
+data AllocaErrorType where
+  AllocaNonConstantError :: PermPretty sz_treg => sz_treg -> AllocaErrorType
+  AllocaFramePermError
+    :: (PermPretty fp, PermPretty p)
+    => fp -> p -> AllocaErrorType
+  AllocaFramePtrError :: AllocaErrorType
+
+instance ErrorPretty StmtError where
+  ppError (AtomicPermError r p) pp = renderDoc $
+    sep [pretty "getAtomicOrWordLLVMPerms:",
+         pretty "Needed atomic permissions for" <+> permPretty pp r,
+         pretty "but found" <+>
+         permPretty pp p]
+  ppError (RegisterConversionError x tp1 tp2) pp = renderDoc $
+    pretty "Could not cast" <+> permPretty pp x <+>
+    pretty "from" <+> pretty (show tp1) <+>
+    pretty "to" <+> pretty (show tp2)
+  ppError FailedAssertionError _ = "Failed assertion"
+  ppError (NonZeroPointerBlockError tblk_reg) pp = renderDoc $
+    pretty "LLVM_PointerExpr: Non-zero pointer block: " <>
+    permPretty pp tblk_reg
+  ppError (UndefinedBehaviorError doc) _ = renderDoc doc
+  ppError X86ExprError _ = "X86Expr not supported"
+  ppError (AllocaError (AllocaNonConstantError sz_treg)) pp = renderDoc $
+    pretty "LLVM_Alloca: non-constant size for" <+>
+    permPretty pp sz_treg
+  ppError (AllocaError (AllocaFramePermError fp p)) pp = renderDoc $
+    pretty "LLVM_Alloca: expected LLVM frame perm for " <+>
+    permPretty pp fp <> pretty ", found perm" <+>
+    permPretty pp p
+  ppError (AllocaError AllocaFramePtrError) _ =
+    "LLVM_Alloca: no frame pointer set"
+  ppError PopFrameError _ =
+    "LLVM_PopFrame: no frame perms"
+  ppError LoadHandleError _ =
+    "LLVM_LoadHandle: no function pointer perms"
+  ppError (ResolveGlobalError gsym) _ =
+    "LLVM_ResolveGlobal: no perms for global " ++
+    globalSymbolName gsym
+  ppError (PointerComparisonError x1 x2) pp = renderDoc $
+    sep [pretty "Could not compare LLVM pointer values",
+         permPretty pp x1, pretty "and", permPretty pp x2]
+
+
+-- | Get the current 'PPInfo'
+permGetPPInfo :: PermCheckM ext cblocks blocks tops ret r ps r ps PPInfo
+permGetPPInfo = gets stPPInfo
+
+-- | Get the current prefix string to give context to error messages
+getErrorPrefix :: PermCheckM ext cblocks blocks tops ret r ps r ps (Doc ())
+getErrorPrefix = gets (fromMaybe emptyDoc . stErrPrefix)
+
+-- | Emit debugging output using the current 'PPInfo'
+stmtTraceM :: (PPInfo -> Doc ()) ->
+              PermCheckM ext cblocks blocks tops ret r ps r ps String
+stmtTraceM f =
+  do doc <- f <$> permGetPPInfo
+     let str = renderDoc doc
+     trace str (pure str)
+
+-- | Failure in the statement permission-checking monad
+stmtFailM :: StmtError -> PermCheckM ext cblocks blocks tops ret r1 ps1
+             (TypedStmtSeq ext blocks tops ret ps2) ps2 a
+stmtFailM err =
+  getErrorPrefix >>>= \err_prefix ->
+  stmtTraceM (\i -> err_prefix <> line <>
+                    pretty "Type-checking failure:" <> softline <>
+                    pretty (ppError err i)) >>>= \str ->
+  gabortM (return $ TypedImplStmt $ AnnotPermImpl str $
+           PermImpl_Step (Impl1_Fail "") MbPermImpls_Nil)
