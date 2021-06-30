@@ -50,6 +50,9 @@ heapster_define_rust_type env "pub struct MixedStruct { pub s: String, pub i1: u
 // TrueEnum type
 heapster_define_rust_type env "pub enum TrueEnum { Foo, Bar, Baz }";
 
+// Opaque type for Vec<T>
+//heapster_define_opaque_llvmshape env "Vec" 64 "T:llvmshape 64" "24" "\\ (T:sort 0) -> List T";
+
 // Opaque type for HashMap<T,U>
 heapster_define_opaque_llvmshape env "HashMap" 64 "T:llvmshape 64, U:llvmshape 64" "56" "\\ (T:sort 0) (U:sort 0) -> List (T * U)";
 
@@ -79,22 +82,10 @@ heapster_assume_fun_rename env to_string_str "to_string_str" "(len:bv 64). arg0:
 
 
 // HashMap::insert
-/*
-my_hash_insert_void_sym <- heapster_find_symbol env "19my_hash_insert_void";
-heapster_assume_fun_rename env my_hash_insert_void_sym "hashmap_u64_u64_insert_void" "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> ()" "\\ (l,k,v) -> Cons (k,v) l";
-*/
-
-/*
 // FIXME: we currently pretend this always returns None
-// FIXME: also, the layout is currently broken for return type of Option<u64>
-my_hash_insert_sym <- heapster_find_symbol env "14my_hash_insert";
-heapster_assume_fun_rename env my_hash_insert_sym "hashmap_u64_u64_insert" "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>" "\\ (l,k,v) -> Cons (k,v) l";
-*/
-
-/*
 hashmap_u64_u64_insert_sym <- heapster_find_symbol env "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert";
-heapster_assume_fun_rename env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert" "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>" "\\ (l,k,v) -> Cons (k,v) l";
-*/
+heapster_assume_fun_rename env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert" "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>" "\\ (endl:HashMap int64Trans int64Trans * #() -> CompM (HashMap int64Trans int64Trans * #())) (h:HashMap int64Trans int64Trans) (k:int64Trans) (v:int64Trans) -> returnM ((#() -> CompM (HashMap int64Trans int64Trans * #())) * Either #() int64Trans * #()) ((\\ (_:#()) -> returnM (HashMap int64Trans int64Trans * #()) (Cons (int64Trans * int64Trans) (k,v) h, ())), Left #() int64Trans (), ())";
+
 
 /***
  *** Type-Checked Functions
@@ -149,7 +140,7 @@ heapster_typecheck_fun_rename env list_head_sym "list_head" "<'a> fn (l: &'a Lis
 
 // list_head_impl
 list_head_impl_sym <- heapster_find_symbol env "14list_head_impl";
-//heapster_typecheck_fun_rename env list_head_impl_sym "list_head_impl" "<'a> fn (l: &'a List<u64>) -> Result<u64,()>";
+heapster_typecheck_fun_rename env list_head_impl_sym "list_head_impl" "<'a> fn (l: &'a List<u64>) -> Result<u64,()>";
 //heapster_typecheck_fun_rename env list_head_impl_sym "list_head_impl" "(rw:rwmodality).arg0:List<fieldsh(int64<>),8,rw,always> -o ret:(struct(eq(llvmword(0)),exists z:bv 64. eq(llvmword(z)))) or (struct(eq(llvmword(1)),true))";
 
 // StrStruct::new

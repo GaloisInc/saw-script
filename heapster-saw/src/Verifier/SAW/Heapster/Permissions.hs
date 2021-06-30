@@ -2964,6 +2964,57 @@ isConjPerm (ValPerm_Named n _ _) = nameSortIsConj (namedPermNameSort n)
 isConjPerm (ValPerm_Var _ _) = False
 isConjPerm (ValPerm_Conj _) = True
 
+-- | Return a struct permission where all fields have @true@ permissions
+trueStructAtomicPerm :: Assignment prx ctx -> AtomicPerm (StructType ctx)
+trueStructAtomicPerm =
+  Perm_Struct . RL.map (const ValPerm_True). assignToRList
+
+-- | Take two list of atomic struct permissions, one for structs with fields
+-- given by @ctx1@ and one with those given by @ctx2@, and append them pointwise
+-- to get a list of atomic struct permissions whose fields are given by the
+-- append @ctx1 <+> ctx2@. If one list is shorter than the other, fill it out
+-- with struct permissions @struct (true, ..., true)@ of all @true@ permissions.
+-- This only works if both lists have only 'Perm_Struct' permissions, and
+-- otherwise return 'Nothing'.
+tryAppendStructAPerms :: Assignment prx1 ctx1 -> Assignment prx2 ctx2 ->
+                         [AtomicPerm (StructType ctx1)] ->
+                         [AtomicPerm (StructType ctx2)] ->
+                         Maybe [AtomicPerm (StructType (ctx1 <+> ctx2))]
+tryAppendStructAPerms _ _ [] [] = return []
+tryAppendStructAPerms ctx1 ctx2 (Perm_Struct fs_ps:ps) (Perm_Struct fs_qs:qs) =
+  (Perm_Struct (assignToRListAppend ctx1 ctx2 fs_ps fs_qs) :) <$>
+  tryAppendStructAPerms ctx1 ctx2 ps qs
+tryAppendStructAPerms ctx1 ctx2 [] qs =
+  tryAppendStructAPerms ctx1 ctx2 [trueStructAtomicPerm ctx1] qs
+tryAppendStructAPerms ctx1 ctx2 ps [] =
+  tryAppendStructAPerms ctx1 ctx2 ps [trueStructAtomicPerm ctx2]
+tryAppendStructAPerms _ _ _ _ = mzero
+
+-- | Try to append struct permissions for structs with fields given by @ctx1@
+-- and @ctx2@ to get a permission for structs with fields given by the append
+-- @ctx1 <+> ctx2@ of these two contexts. Return 'Nothing' if this is not
+-- possible.
+tryAppendStructPerms :: Assignment prx1 ctx1 -> Assignment prx2 ctx2 ->
+                        ValuePerm (StructType ctx1) ->
+                        ValuePerm (StructType ctx2) ->
+                        Maybe (ValuePerm (StructType (ctx1 <+> ctx2)))
+tryAppendStructPerms ctx1 ctx2 (ValPerm_Or p1 p2) q =
+  ValPerm_Or <$> tryAppendStructPerms ctx1 ctx2 p1 q <*>
+  tryAppendStructPerms ctx1 ctx2 p2 q
+tryAppendStructPerms ctx1 ctx2 p (ValPerm_Or q1 q2) =
+  ValPerm_Or <$> tryAppendStructPerms ctx1 ctx2 p q1 <*>
+  tryAppendStructPerms ctx1 ctx2 p q2
+tryAppendStructPerms ctx1 ctx2 (ValPerm_Exists mb_p) q =
+  ValPerm_Exists <$> mbMaybe (flip fmap mb_p $ \p ->
+                               tryAppendStructPerms ctx1 ctx2 p q)
+tryAppendStructPerms ctx1 ctx2 p (ValPerm_Exists mb_q) =
+  ValPerm_Exists <$> mbMaybe (flip fmap mb_q $ \q ->
+                               tryAppendStructPerms ctx1 ctx2 p q)
+tryAppendStructPerms ctx1 ctx2 (ValPerm_Conj ps) (ValPerm_Conj qs) =
+  ValPerm_Conj <$> tryAppendStructAPerms ctx1 ctx2 ps qs
+tryAppendStructPerms _ _ _ _ = mzero
+
+
 -- | Helper function to build a 'Perm_LLVMFunPtr' from a 'FunPerm'
 mkPermLLVMFunPtr :: (1 <= w, KnownNat w) => f w -> FunPerm ghosts args ret ->
                     AtomicPerm (LLVMPointerType w)
