@@ -270,14 +270,16 @@ namedTypeTable w =
 -- @Foo<X>::Bar<Y,Z>::Baz@ just becomes @[Foo,Bar,Baz]@
 newtype RustName = RustName [Ident] deriving (Eq)
 
+-- | Convert a 'RustName' to a string by interspersing "::"
+flattenRustName :: RustName -> String
+flattenRustName (RustName ids) = concat $ intersperse "::" $ map name ids
+
 instance Show RustName where
-  show (RustName ids) = concat $ intersperse "::" $ map show ids
+  show = show . flattenRustName
 
 instance RsConvert w RustName (SomeShapeFun w) where
-  rsConvert w (RustName elems) =
-    -- FIXME: figure out how to actually resolve names; for now we just look at
-    -- the last string component...
-    do let str = name $ last elems
+  rsConvert w nm =
+    do let str = flattenRustName nm
        env <- rciPermEnv <$> ask
        case lookupNamedShape env str of
          Just nmsh -> namedShapeShapeFun (natRepr w) nmsh
