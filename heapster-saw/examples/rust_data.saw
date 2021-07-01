@@ -57,7 +57,9 @@ heapster_define_opaque_llvmshape env "Vec" 64 "T:llvmshape 64" "24" "\\ (T:sort 
 heapster_define_opaque_llvmshape env "HashMap" 64 "T:llvmshape 64, U:llvmshape 64" "56" "\\ (T:sort 0) (U:sort 0) -> List (T * U)";
 
 // Tree<X> type
-heapster_define_rust_type env "pub enum Tree<X> { Leaf (X), Node (Vec<Tree<X>>) }";
+// FIXME: this does not work yet because Heapster cannot yet handle recursive types
+// where the type being defined is passed to an opaque or recursvie type
+//heapster_define_rust_type env "pub enum Tree<X> { Leaf (X), Node (Vec<Tree<X>>) }";
 
 
 
