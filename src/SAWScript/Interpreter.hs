@@ -620,6 +620,11 @@ set_color b = do
   let b' = b && useColor opts
   putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsColor = b' } }
 
+set_min_sharing :: Int -> TopLevel ()
+set_min_sharing b = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsMinSharing = b } }
+
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
@@ -810,6 +815,12 @@ primitives = Map.fromList
     (pureVal set_color)
     Current
     [ "Select whether to pretty-print SAWCore terms using color." ]
+
+  , prim "set_min_sharing"     "Int -> TopLevel ()"
+    (pureVal set_min_sharing)
+    Current
+    [ "Set the number times a subterm must be shared for it to be"
+    ,  "let-bound in printer output." ]
 
   , prim "set_timeout"         "Int -> ProofScript ()"
     (pureVal set_timeout)
