@@ -44,6 +44,9 @@ Definition foldList_IRT : forall (e0 : Type), forall (p0 : @SAWCorePrelude.Eithe
 Definition unfoldList_IRT : forall (e0 : Type), forall (p0 : @List_IRT e0), @SAWCorePrelude.Either (prod unit unit) (prod unit (prod e0 (prod (@List_IRT e0) unit))) :=
   fun (e0 : Type) => @SAWCorePrelude.unfoldIRT (@List_IRTTyVars e0) (@SAWCorePrelude.IRTs_Nil (@List_IRTTyVars e0)) (@List_IRTDesc e0).
 
+Definition Vec0 : forall (e0 : Type), Type :=
+  fun (T : Type) => @Datatypes.list T.
+
 Definition HashMap : forall (e0 : Type), forall (e1 : Type), Type :=
   fun (T : Type) (U : Type) => @Datatypes.list (prod T U).
 

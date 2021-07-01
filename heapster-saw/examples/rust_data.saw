@@ -51,10 +51,16 @@ heapster_define_rust_type env "pub struct MixedStruct { pub s: String, pub i1: u
 heapster_define_rust_type env "pub enum TrueEnum { Foo, Bar, Baz }";
 
 // Opaque type for Vec<T>
-//heapster_define_opaque_llvmshape env "Vec" 64 "T:llvmshape 64" "24" "\\ (T:sort 0) -> List T";
+heapster_define_opaque_llvmshape env "Vec" 64 "T:llvmshape 64" "24" "\\ (T:sort 0) -> List T";
 
 // Opaque type for HashMap<T,U>
 heapster_define_opaque_llvmshape env "HashMap" 64 "T:llvmshape 64, U:llvmshape 64" "56" "\\ (T:sort 0) (U:sort 0) -> List (T * U)";
+
+// Tree<X> type
+// FIXME: this does not work yet because Heapster cannot yet handle recursive types
+// where the type being defined is passed to an opaque or recursvie type
+//heapster_define_rust_type env "pub enum Tree<X> { Leaf (X), Node (Vec<Tree<X>>) }";
+
 
 
 /***

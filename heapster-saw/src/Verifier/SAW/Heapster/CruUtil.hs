@@ -82,6 +82,16 @@ traverseRAssign :: Applicative m => (forall x. f x -> m (g x)) ->
 traverseRAssign _ MNil = pure MNil
 traverseRAssign f (xs :>: x) = (:>:) <$> traverseRAssign f xs <*> f x
 
+-- FIXME HERE: this should move to Hobbits
+instance Closable a => Closable (Maybe a) where
+  toClosed Nothing = $(mkClosed [| Nothing |])
+  toClosed (Just a) = $(mkClosed [| Just |]) `clApply` toClosed a
+
+-- FIXME HERE: this should move to Hobbits
+instance (Closable a, Closable b) => Closable (a,b) where
+  toClosed (a,b) =
+    $(mkClosed [| (,) |]) `clApply` toClosed a `clApply` toClosed b
+
 
 ----------------------------------------------------------------------
 -- * Helper Functions for 'NatRepr' and 'KnownNat'

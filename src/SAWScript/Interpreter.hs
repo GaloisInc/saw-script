@@ -3084,6 +3084,16 @@ primitives = Map.fromList
     , "a string representing a top-level struct or enum definition."
     ]
 
+  , prim "heapster_define_rust_type_qual"
+    "HeapsterEnv -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_rust_type_qual)
+    Experimental
+    [ "heapster_define_rust_type_qual env crate tp defines a Heapster LLVM"
+    , " shape from tp, a string representing a top-level Rust struct or enum"
+    , " definition. The type is qualified by crate, meaning that \"crate::\""
+    , " is prepended to its name."
+    ]
+
   , prim "heapster_block_entry_hint"
     "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_block_entry_hint)

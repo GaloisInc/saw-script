@@ -287,3 +287,31 @@ pub fn hash_map_insert_gt_to_le (m: &mut HashMap<u64,u64>, x:u64, y:u64) -> () {
         m.insert (y, x);
     }
 }
+
+/* A tree whose internal nodes contain vectors of children */
+pub enum Tree<X> {
+    Leaf (X),
+    Node (Vec<Tree<X>>)
+}
+
+pub fn tree_is_leaf (t: &Tree<u64>) -> bool {
+    match *t {
+        Tree::Leaf (_) => true,
+        Tree::Node (_) => false
+    }
+}
+
+/* Sum all leaves in a tree */
+/*
+pub fn tree_sum (t: &Tree<u64>) -> u64 {
+    let mut acc = 0;
+    match *t {
+        Tree::Leaf (x) => x,
+        Tree::Node (children) =>
+            for u in children {
+                acc += tree_sum (u);
+            }
+            acc;
+    }
+}
+*/

@@ -5,7 +5,8 @@ Makefile.coq: _CoqProject
 
 include Makefile.coq
 
-SAW=saw
+# If the saw executable is available, use it, otherwise fall back on cabal run saw
+SAW=$(shell which saw || echo cabal run saw)
 
 %.bc: %.c
 	clang -emit-llvm -g -c $<
