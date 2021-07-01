@@ -1290,6 +1290,14 @@ eval_list t = do
   ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
   return (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
 
+term_theories :: [String] -> TypedTerm -> TopLevel [String]
+term_theories unints t = do
+  sc <- getSharedContext
+  unintSet <- resolveNames unints
+  hashConsing <- gets SV.rwWhat4HashConsing
+  prop <- io (predicateToProp sc Universal (ttTerm t))
+  Prover.what4Theories unintSet hashConsing prop
+
 default_typed_term :: TypedTerm -> TopLevel TypedTerm
 default_typed_term tt = do
   sc <- getSharedContext
