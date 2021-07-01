@@ -123,7 +123,7 @@ import Prettyprinter
 -- | Extract out the contents of the 'Just' of a 'Maybe' wrapped in a
 -- `MonadFail`, calling 'fail' on the given string if the `Maybe` is a
 -- `Nothing`.
-failOnNothing :: MonadFail m => String -> Maybe a -> m a
+failOnNothing :: Fail.MonadFail m => String -> Maybe a -> m a
 failOnNothing err_str Nothing = Fail.fail err_str
 failOnNothing _ (Just a) = return a
 
