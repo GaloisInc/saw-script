@@ -1658,6 +1658,89 @@ ecArrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
 ecArrayUpdate = arrayUpdate;
 
 --------------------------------------------------------------------------------
+-- Suite-B Primitives
+
+AESEncRound : Vec 4 (Vec 32 Bool) -> Vec 4 (Vec 32 Bool);
+AESEncRound x =
+  error (Vec 4 (Vec 32 Bool)) "Unimplemented: AESEncRound";
+
+AESEncFinalRound : Vec 4 (Vec 32 Bool) -> Vec 4 (Vec 32 Bool);
+AESEncFinalRound x =
+  error (Vec 4 (Vec 32 Bool)) "Unimplemented: AESEncFinalRound";
+
+AESDecRound : Vec 4 (Vec 32 Bool) -> Vec 4 (Vec 32 Bool);
+AESDecRound x =
+  error (Vec 4 (Vec 32 Bool)) "Unimplemented: AESDecRound";
+
+AESDecFinalRound : Vec 4 (Vec 32 Bool) -> Vec 4 (Vec 32 Bool);
+AESDecFinalRound x =
+  error (Vec 4 (Vec 32 Bool)) "Unimplemented: AESDecFinalRound";
+
+AESInvMixColumns : Vec 4 (Vec 32 Bool) -> Vec 4 (Vec 32 Bool);
+AESInvMixColumns x =
+  error (Vec 4 (Vec 32 Bool)) "Unimplemented: AESInvMixColumns";
+
+AESKeyExpand :
+  (k : Num) ->
+  seq k (Vec 32 Bool) ->
+  seq (tcMul (TCNum 4) (tcAdd (TCNum 7) k)) (Vec 32 Bool);
+AESKeyExpand k x =
+  error
+    (seq (tcMul (TCNum 4) (tcAdd (TCNum 7) k)) (Vec 32 Bool))
+    "Unimplemented: AESKeyExpand";
+
+processSHA2_224 : (n : Num) -> seq n (Vec 16 (Vec 32 Bool)) -> Vec 7 (Vec 32 Bool);
+processSHA2_224 n x =
+  error (Vec 7 (Vec 32 Bool)) "Unimplemented: processSHA2_224";
+
+processSHA2_256 : (n : Num) -> seq n (Vec 16 (Vec 32 Bool)) -> Vec 8 (Vec 32 Bool);
+processSHA2_256 n x =
+  error (Vec 8 (Vec 32 Bool)) "Unimplemented: processSHA2_256";
+
+processSHA2_384 : (n : Num) -> seq n (Vec 16 (Vec 64 Bool)) -> Vec 6 (Vec 64 Bool);
+processSHA2_384 n x =
+  error (Vec 6 (Vec 64 Bool)) "Unimplemented: processSHA2_384";
+
+processSHA2_512 : (n : Num) -> seq n (Vec 16 (Vec 64 Bool)) -> Vec 8 (Vec 64 Bool);
+processSHA2_512 n x =
+  error (Vec 8 (Vec 64 Bool)) "Unimplemented: processSHA2_512";
+
+--------------------------------------------------------------------------------
+-- Prime-EC Primitives
+
+ec_double :
+  (p : Num) ->
+  IntModNum p * IntModNum p * IntModNum p ->
+  IntModNum p * IntModNum p * IntModNum p;
+ec_double p x =
+  error (IntModNum p * IntModNum p * IntModNum p) "Unimplemented: ec_double";
+
+ec_add_nonzero :
+  (p : Num) ->
+  IntModNum p * IntModNum p * IntModNum p ->
+  IntModNum p * IntModNum p * IntModNum p ->
+  IntModNum p * IntModNum p * IntModNum p;
+ec_add_nonzero p x y =
+  error (IntModNum p * IntModNum p * IntModNum p) "Unimplemented: ec_add_nonzero";
+
+ec_mult :
+  (p : Num) ->
+  IntModNum p ->
+  IntModNum p * IntModNum p * IntModNum p ->
+  IntModNum p * IntModNum p * IntModNum p;
+ec_mult p x y =
+  error (IntModNum p * IntModNum p * IntModNum p) "Unimplemented: ec_mult";
+
+ec_twin_mult :
+  (p : Num) ->
+  IntModNum p ->
+  IntModNum p * IntModNum p * IntModNum p ->
+  IntModNum p * IntModNum p * IntModNum p ->
+  IntModNum p * IntModNum p * IntModNum p;
+ec_twin_mult p x y z =
+  error (IntModNum p * IntModNum p * IntModNum p) "Unimplemented: ec_twin_mult";
+
+--------------------------------------------------------------------------------
 -- Rewrite rules
 
 axiom replicate_False : (n : Nat) -> Eq (Vec n Bool) (replicate n Bool False) (bvNat n 0);

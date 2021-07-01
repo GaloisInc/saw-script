@@ -281,7 +281,7 @@ mrProvable bool_prop =
      bool_prop' <- liftSC2 scImplies path_prop bool_prop
      sc <- mrSC <$> get
      prop <- liftIO (boolToProp sc [] bool_prop')
-     (smt_res, _) <- liftSC1 (SBV.proveUnintSBV smt_conf mempty timeout) prop
+     (smt_res, _) <- liftIO (SBV.proveUnintSBVIO sc smt_conf mempty timeout prop)
      case smt_res of
        Just _ -> return False
        Nothing -> return True
@@ -357,9 +357,9 @@ applyCompFun (CompFunMark f mark) t =
 -- | Take in an @InputOutputTypes@ list (as a SAW core term) and build a fresh
 -- function variable for each pair of input and output types in it
 mkFunVarsForTps :: Term -> MRM [LocalFunName]
-mkFunVarsForTps (asCtor -> Just ("Prelude.TypesNil", [])) =
+mkFunVarsForTps (asCtor -> Just (primName -> "Prelude.TypesNil", [])) =
   return []
-mkFunVarsForTps (asCtor -> Just ("Prelude.TypesCons", [a, b, tps])) =
+mkFunVarsForTps (asCtor -> Just (primName -> "Prelude.TypesCons", [a, b, tps])) =
   do compM <- liftSC1 scGlobalDef "Prelude.CompM"
      comp_b <- liftSC2 scApply compM b
      tp <- liftSC3 scPi "x" a comp_b

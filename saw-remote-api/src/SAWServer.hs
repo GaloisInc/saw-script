@@ -218,6 +218,7 @@ initialState readFileFn =
                 , rwProfilingFile = Nothing
                 , rwCrucibleAssertThenAssume = False
                 , rwLaxArith = False
+                , rwLaxPointerOrdering = False
                 , rwWhat4HashConsing = False
                 , rwWhat4HashConsingX86 = False
                 , rwStackBaseAlign = defaultStackBaseAlign

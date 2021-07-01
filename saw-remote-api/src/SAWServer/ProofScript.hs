@@ -54,8 +54,7 @@ import Verifier.SAW.TermNet (merge)
 import Verifier.SAW.TypedTerm (TypedTerm(..))
 
 data Prover
-  = ABC_Internal
-  | RME
+  = RME
   | SBV_ABC_SMTLib
   | SBV_Boolector [String]
   | SBV_CVC4 [String]
@@ -86,10 +85,9 @@ instance FromJSON Prover where
       (name :: String) <- o .: "name"
       let unints = fromMaybe [] <$> o .:? "uninterpreted functions"
       case name of
-        "abc"            -> pure ABC_Internal
+        "abc"            -> pure W4_ABC_SMTLib
         "boolector"      -> SBV_Boolector <$> unints
         "cvc4"           -> SBV_CVC4  <$> unints
-        "internal-abc"   -> pure ABC_Internal
         "mathsat"        -> SBV_MathSAT <$> unints
         "rme"            -> pure RME
         "sbv-abc"        -> pure SBV_ABC_SMTLib
@@ -272,7 +270,6 @@ interpretProofScript :: ProofScript -> Argo.Command SAWState (SV.ProofScript ())
 interpretProofScript (ProofScript ts) = go ts
   where go [UseProver p]            =
           case p of
-            ABC_Internal          -> return $ SB.proveABC
             RME                   -> return $ SB.proveRME
             SBV_ABC_SMTLib        -> return $ SB.proveABC_SBV
             SBV_Boolector unints  -> return $ SB.proveUnintBoolector unints

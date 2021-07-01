@@ -45,7 +45,8 @@ import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, single
 import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..))
 import qualified Cryptol.Utils.Ident as C
-  ( Ident, PrimIdent(..), mkIdent, prelPrim, floatPrim, arrayPrim
+  ( Ident, PrimIdent(..), mkIdent
+  , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
   , ModName, modNameToText, identText, interactiveName
   , ModPath(..), modPathSplit
   )
@@ -54,14 +55,13 @@ import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
 
 import Verifier.SAW.Cryptol.Panic
-import Verifier.SAW.Conversion
 import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import qualified Verifier.SAW.Simulator.Concrete as SC
+import qualified Verifier.SAW.Simulator.Value as SC
 import Verifier.SAW.Prim (BitVector(..))
-import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.MonadLazy (force)
-import Verifier.SAW.TypedAST (mkSort, mkModuleName, FieldName, LocalName)
+import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
 
 import GHC.Stack
 
@@ -655,7 +655,7 @@ proveProp sc env prop =
 
 importPrimitive :: SharedContext -> Env -> C.Name -> C.Schema -> IO Term
 importPrimitive sc env n sch
-  | Just nm <- C.asPrim n, Just term <- Map.lookup nm (prelPrims <> arrayPrims <> floatPrims) = term sc
+  | Just nm <- C.asPrim n, Just term <- Map.lookup nm allPrims = term sc
   | Just nm <- C.asPrim n, Just expr <- Map.lookup nm (envRefPrims env) =
       do t <- importSchema sc env sch
          e <- importExpr sc env expr
@@ -663,6 +663,9 @@ importPrimitive sc env n sch
          scConstant' sc nmi e t
   | Just nm <- C.asPrim n = panic "Unknown Cryptol primitive name" [show nm]
   | otherwise = panic "Improper Cryptol primitive name" [show n]
+
+allPrims :: Map C.PrimIdent (SharedContext -> IO Term)
+allPrims = prelPrims <> arrayPrims <> floatPrims <> suiteBPrims <> primeECPrims
 
 prelPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 prelPrims =
@@ -818,6 +821,31 @@ floatPrims =
   , ("fpSqrt",         flip scGlobalDef "Cryptol.fpSqrt")
   ]
 
+suiteBPrims :: Map C.PrimIdent (SharedContext -> IO Term)
+suiteBPrims =
+  Map.fromList $
+  first C.suiteBPrim <$>
+  [ ("AESEncRound",      flip scGlobalDef "Cryptol.AESEncRound")
+  , ("AESEncFinalRound", flip scGlobalDef "Cryptol.AESEncFinalRound")
+  , ("AESDecRound",      flip scGlobalDef "Cryptol.AESDecRound")
+  , ("AESDecFinalRound", flip scGlobalDef "Cryptol.AESDecFinalRound")
+  , ("AESInvMixColumns", flip scGlobalDef "Cryptol.AESInvMixColumns")
+  , ("AESKeyExpand",     flip scGlobalDef "Cryptol.AESKeyExpand")
+  , ("processSHA2_224",  flip scGlobalDef "Cryptol.processSHA2_224")
+  , ("processSHA2_256",  flip scGlobalDef "Cryptol.processSHA2_256")
+  , ("processSHA2_384",  flip scGlobalDef "Cryptol.processSHA2_384")
+  , ("processSHA2_512",  flip scGlobalDef "Cryptol.processSHA2_512")
+  ]
+
+primeECPrims :: Map C.PrimIdent (SharedContext -> IO Term)
+primeECPrims =
+  Map.fromList $
+  first C.primeECPrim <$>
+  [ ("ec_double",      flip scGlobalDef "Cryptol.ec_double")
+  , ("ec_add_nonzero", flip scGlobalDef "Cryptol.ec_add_nonzero")
+  , ("ec_mult",        flip scGlobalDef "Cryptol.ec_mult")
+  , ("ec_twin_mult",   flip scGlobalDef "Cryptol.ec_twin_mult")
+  ]
 
 -- | Convert a Cryptol expression to a SAW-Core term. Calling
 -- 'scTypeOf' on the result of @'importExpr' sc env expr@ must yield a
@@ -1566,89 +1594,60 @@ pIsNeq ty = case C.tNoUser ty of
 --------------------------------------------------------------------------------
 -- Utilities
 
-asCryptolTypeValue :: SC.TValue SC.Concrete -> Maybe C.Type
+asCryptolTypeValue :: SC.TValue SC.Concrete -> Maybe (Either C.Kind C.Type)
 asCryptolTypeValue v =
   case v of
-    SC.VBoolType -> return C.tBit
-    SC.VIntType -> return C.tInteger
-    SC.VIntModType n -> return (C.tIntMod (C.tNum n))
+    SC.VBoolType -> return (Right C.tBit)
+    SC.VIntType -> return (Right C.tInteger)
+    SC.VIntModType n -> return (Right (C.tIntMod (C.tNum n)))
     SC.VArrayType v1 v2 -> do
-      t1 <- asCryptolTypeValue v1
-      t2 <- asCryptolTypeValue v2
-      return $ C.tArray t1 t2
+      Right t1 <- asCryptolTypeValue v1
+      Right t2 <- asCryptolTypeValue v2
+      return (Right (C.tArray t1 t2))
     SC.VVecType n v2 -> do
-      t2 <- asCryptolTypeValue v2
-      return (C.tSeq (C.tNum n) t2)
-    SC.VDataType "Prelude.Stream" [v1] ->
-      case v1 of
-        SC.TValue tv -> C.tSeq C.tInf <$> asCryptolTypeValue tv
-        _ -> Nothing
-    SC.VUnitType -> return (C.tTuple [])
-    SC.VPairType v1 v2 -> do
-      t1 <- asCryptolTypeValue v1
-      t2 <- asCryptolTypeValue v2
-      case C.tIsTuple t2 of
-        Just ts -> return (C.tTuple (t1 : ts))
-        Nothing -> return (C.tTuple [t1, t2])
-    SC.VPiType v1 f -> do
-      case v1 of
-        -- if we see that the parameter is a Cryptol.Num, it's a
-        -- pretty good guess that it originally was a
-        -- polymorphic number type.
-        SC.VDataType "Cryptol.Num" [] ->
-          let msg= unwords ["asCryptolTypeValue: can't infer a polymorphic Cryptol"
-                           ,"type. Please, make sure all numeric types are"
-                           ,"specialized before constructing a typed term."
-                           ]
-          in error msg
-            -- otherwise we issue a generic error about dependent type inference
-        _ -> do
-          let msg = unwords ["asCryptolTypeValue: can't infer a Cryptol type"
-                            ,"for a dependent SAW-Core type."
-                            ]
-          let v2 = SC.runIdentity (f (error msg))
-          t1 <- asCryptolTypeValue v1
-          t2 <- asCryptolTypeValue v2
-          return (C.tFun t1 t2)
-    _ -> Nothing
+      Right t2 <- asCryptolTypeValue v2
+      return (Right (C.tSeq (C.tNum n) t2))
 
--- | Deprecated.
-scCryptolType :: SharedContext -> Term -> IO C.Type
+    SC.VDataType (primName -> "Prelude.Stream") [SC.TValue v1] [] ->
+        do Right t1 <- asCryptolTypeValue v1
+           return (Right (C.tSeq C.tInf t1))
+
+    SC.VDataType (primName -> "Cryptol.Num") [] [] ->
+      return (Left C.KNum)
+
+    SC.VDataType _ _ _ -> Nothing
+
+    SC.VUnitType -> return (Right (C.tTuple []))
+    SC.VPairType v1 v2 -> do
+      Right t1 <- asCryptolTypeValue v1
+      Right t2 <- asCryptolTypeValue v2
+      case C.tIsTuple t2 of
+        Just ts -> return (Right (C.tTuple (t1 : ts)))
+        Nothing -> return (Right (C.tTuple [t1, t2]))
+
+    SC.VPiType _nm v1 (SC.VNondependentPi v2) ->
+      do Right t1 <- asCryptolTypeValue v1
+         Right t2 <- asCryptolTypeValue v2
+         return (Right (C.tFun t1 t2))
+
+    SC.VSort s
+      | s == mkSort 0 -> return (Left C.KType)
+      | otherwise     -> Nothing
+
+    -- TODO?
+    SC.VPiType _nm _v1 (SC.VDependentPi _) -> Nothing
+    SC.VStringType -> Nothing
+    SC.VRecordType{} -> Nothing
+    SC.VRecursorType{} -> Nothing
+    SC.VTyTerm{} -> Nothing
+
+
+scCryptolType :: SharedContext -> Term -> IO (Maybe (Either C.Kind C.Type))
 scCryptolType sc t =
   do modmap <- scGetModuleMap sc
      case SC.evalSharedTerm modmap Map.empty Map.empty t of
-       SC.TValue (asCryptolTypeValue -> Just ty) -> return ty
-       _ -> panic "scCryptolType" ["scCryptolType: unsupported type " ++ showTerm t]
-
--- | Deprecated.
-scCryptolEq :: SharedContext -> Term -> Term -> IO Term
-scCryptolEq sc x y =
-  do rules <- concat <$> traverse defRewrites defs
-     let ss = addConvs natConversions (addRules rules emptySimpset :: Simpset ())
-     tx <- scTypeOf sc x >>= rewriteSharedTerm sc ss >>= scCryptolType sc . snd
-     ty <- scTypeOf sc y >>= rewriteSharedTerm sc ss >>= scCryptolType sc . snd
-     unless (tx == ty) $
-       panic "scCryptolEq"
-                 [ "scCryptolEq: type mismatch between"
-                 , pretty tx
-                 , "and"
-                 , pretty ty
-                 ]
-
-     -- Actually apply the equality function, along with the Eq class dictionary
-     t <- scTypeOf sc x
-     c <- scCryptolType sc t
-     k <- importType sc emptyEnv c
-     eqPrf <- proveProp sc emptyEnv (C.pEq c)
-     scGlobalApply sc "Cryptol.ecEq" [k, eqPrf, x, y]
-
-  where
-    defs = map (mkIdent (mkModuleName ["Cryptol"])) ["seq", "ty"]
-    defRewrites ident =
-      do maybe_def <- scFindDef sc ident
-         case maybe_def of
-           Nothing -> return []
-           Just def -> scDefRewriteRules sc def
+       SC.TValue tv -> return (asCryptolTypeValue tv)
+       _ -> return Nothing
 
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.

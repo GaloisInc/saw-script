@@ -114,6 +114,7 @@ import qualified Text.PrettyPrint.HughesPJ as PP
 
 import qualified Data.LLVM.BitCode as LLVM
 
+import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import           Data.Parameterized.All (All(All))
@@ -300,19 +301,19 @@ showLLVMModule (LLVMModule name m _) =
 -- ** Ghost state
 
 instance Crucible.IntrinsicClass Sym MS.GhostValue where
-  type Intrinsic Sym MS.GhostValue ctx = TypedTerm
-  muxIntrinsic sym _ _namerep _ctx prd thn els =
-    do when (ttSchema thn /= ttSchema els) $ fail $ unlines $
+  type Intrinsic Sym MS.GhostValue ctx = (Cryptol.Schema, Term)
+  muxIntrinsic sym _ _namerep _ctx prd (thnSch,thn) (elsSch,els) =
+    do when (thnSch /= elsSch) $ fail $ unlines $
          [ "Attempted to mux ghost variables of different types:"
-         , show (Cryptol.pp (ttSchema thn))
-         , show (Cryptol.pp (ttSchema els))
+         , show (Cryptol.pp thnSch)
+         , show (Cryptol.pp elsSch)
          ]
        st <- sawCoreState sym
        let sc  = saw_ctx st
        prd' <- toSC sym st prd
-       typ  <- scTypeOf sc (ttTerm thn)
-       res  <- scIte sc typ prd' (ttTerm thn) (ttTerm els)
-       return thn { ttTerm = res }
+       typ  <- scTypeOf sc thn
+       res  <- scIte sc typ prd' thn els
+       return (thnSch, res)
 
 --------------------------------------------------------------------------------
 -- ** CrucibleContext

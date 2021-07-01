@@ -10,6 +10,7 @@ on:
 
 env:
   CACHE_VERSION: 1
+
   # Solver versions - also update in the following locations:
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
@@ -17,6 +18,8 @@ env:
   Z3_VERSION: "4.8.10"
   CVC4_VERSION: "4.1.8"
   YICES_VERSION: "2.6.2"
+
+  OCAML_VERSION: 4.09.x
 
 jobs:
   config:
@@ -58,15 +61,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-18.04]
-        ghc: ["8.6.5", "8.8.4", "8.10.3"]
+        ghc: ["8.8.4", "8.10.3"]
         include:
           - os: macos-latest
-            ghc: "8.6.5"
-          - os: macos-latest
             ghc: "8.8.4"
-          - os: windows-latest
-            ghc: "8.6.5"
-        exclude:
           - os: windows-latest
             ghc: "8.8.4"
     outputs:
@@ -126,7 +124,7 @@ jobs:
           dest: dist-tests
 
       - if: |
-          matrix.ghc == '8.6.5' &&
+          matrix.ghc == '8.8.4' &&
           runner.os != 'Windows'
         uses: actions/upload-artifact@v2
         with:
@@ -134,7 +132,7 @@ jobs:
           name: abc-${{ runner.os }}
 
       - uses: actions/upload-artifact@v2
-        if: "matrix.ghc == '8.6.5'"
+        if: "matrix.ghc == '8.8.4'"
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
@@ -148,14 +146,14 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist $NAME
 
-      - if: matrix.ghc == '8.6.5' && needs.config.outputs.release == 'true'
+      - if: matrix.ghc == '8.8.4' && needs.config.outputs.release == 'true'
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME.tar.gz
 
-      - if: matrix.ghc == '8.6.5'
+      - if: matrix.ghc == '8.8.4'
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -163,7 +161,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: "matrix.ghc == '8.6.5'"
+      - if: "matrix.ghc == '8.8.4'"
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
@@ -174,6 +172,40 @@ jobs:
         with:
           name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
           path: "dist/bin/saw"
+
+  ocaml-tests:
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: "${{ runner.os }}-bins"
+          path: dist/bin
+
+      - uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: 4.09.x  # coq-bits claims to support < 4.10 only
+
+      - run: opam repo add coq-released https://coq.inria.fr/opam/released
+
+      - run: opam install --unlock-base -y coq=8.12.2 coq-bits=1.0.0
+
+      - working-directory: saw-core-coq/coq
+        run: PATH="$PWD/dist/bin:$PATH" opam exec -- make -j
+
+      - working-directory: heapster-saw/examples
+        run: PATH="$PWD/dist/bin:$PATH" opam exec -- make -j
 
   saw-remote-api-tests:
     runs-on: ${{ matrix.os }}
@@ -201,6 +233,12 @@ jobs:
           name: "${{ runner.os }}-bins"
           path: dist/bin
 
+      - if: runner.os != 'Windows'
+        uses: actions/download-artifact@v2
+        with:
+          path: dist/bin
+          name: abc-${{ runner.os }}
+
       - uses: actions/setup-python@v2
         with:
           python-version: '3.9'
@@ -214,6 +252,12 @@ jobs:
         run: |
           chmod +x dist/bin/*
           export PATH="$PWD/dist/bin:$PATH"
+          echo "$PWD/dist/bin" >> "$GITHUB_PATH"
+          abc -h || true
+          yices --version
+          yices-smt2 --version
+          saw --version
+          saw-remote-api --help
           ${{ matrix.test }}
 
   cabal-test:
@@ -256,18 +300,14 @@ jobs:
         if: "runner.os != 'Windows'"
         run: chmod +x dist/bin/*
 
-      - if: |
-          runner.os != 'Windows' &&
-          matrix.suite == 'integration_tests'
+      - if: runner.os != 'Windows'
         uses: actions/download-artifact@v2
         with:
           path: bin
           name: abc-${{ runner.os }}
 
       - shell: bash
-        if: |
-          runner.os != 'Windows' &&
-          matrix.suite == 'integration_tests'
+        if: runner.os != 'Windows'
         run: chmod +x bin/*
 
       - uses: actions/download-artifact@v2
@@ -308,9 +348,8 @@ jobs:
             cache: ghcr.io/galoisinc/cache-saw-remote-api
     steps:
       - uses: actions/checkout@v2
-      - run: |
-          git submodule update --init
-          git -C deps/abcBridge submodule update --init
+        with:
+          submodules: true
 
       - uses: rlespinasse/github-slug-action@v3.x
 
@@ -409,7 +448,7 @@ jobs:
           - hmac-failure
           - awslc
           - blst
-        ghc: ["8.6.5", "8.8.4", "8.10.3"]
+        ghc: ["8.8.4", "8.10.3"]
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -420,6 +459,11 @@ jobs:
         with:
           name: "saw-Linux-${{ matrix.ghc }}"
           path: ./s2nTests/bin
+
+      - uses: actions/download-artifact@v2
+        with:
+          path: ./s2nTests/bin
+          name: abc-${{ runner.os }}
 
       - shell: bash
         working-directory: s2nTests
@@ -439,7 +483,7 @@ jobs:
         name: "s2n tests: ${{ matrix.s2n-target }}"
         working-directory: s2nTests
         run: |
-          chmod +x bin/saw
+          chmod +x bin/*
           make ${{ matrix.s2n-target }}
 
   # Indicates sufficient CI success for the purposes of mergify merging the pull
@@ -452,6 +496,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
+      - ocaml-tests
       - saw-remote-api-tests
       - cabal-test
       - build-push-image

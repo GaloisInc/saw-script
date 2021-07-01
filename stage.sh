@@ -48,7 +48,6 @@ if [ "${OS}" != "Windows_NT" ]; then
   strip "$BIN"/*
 fi
 
-cp deps/abcBridge/abc-build/copyright.txt     ${TARGET}/ABC_LICENSE
 cp LICENSE                                    ${TARGET}/LICENSE
 cp README.md                                  ${TARGET}/README.md
 cp "$BIN"/cryptol                             ${TARGET}/bin
