@@ -1988,16 +1988,17 @@ data NamedShapeBody b args w where
   -- | A recursive shape body has a one-step unfolding to a shape, which can
   -- refer to the shape itself via the last bound variable; it also has
   -- identifiers for the type it is translated to, along with fold and unfold
-  -- functions for mapping to and from this type
+  -- functions for mapping to and from this type. The fold and unfold functions
+  -- can be undefined if we are in the process of defining this recusive shape.
   RecShapeBody :: Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w)) ->
-                  Ident -> Ident -> Ident ->
+                  Ident -> Maybe (Ident, Ident) ->
                   NamedShapeBody 'True args w
 
 deriving instance Eq (NamedShapeBody b args w)
 
 -- | Test if a 'NamedShape' is recursive
 namedShapeIsRecursive :: NamedShape b args w -> Bool
-namedShapeIsRecursive (NamedShape _ _ (RecShapeBody _ _ _ _)) = True
+namedShapeIsRecursive (NamedShape _ _ (RecShapeBody _ _ _)) = True
 namedShapeIsRecursive _ = False
 
 -- | Get a 'BoolRepr' for the Boolean flag for whether a named shape can be
@@ -2005,7 +2006,7 @@ namedShapeIsRecursive _ = False
 namedShapeCanUnfoldRepr :: NamedShape b args w -> BoolRepr b
 namedShapeCanUnfoldRepr (NamedShape _ _ (DefinedShapeBody _)) = TrueRepr
 namedShapeCanUnfoldRepr (NamedShape _ _ (OpaqueShapeBody _ _)) = FalseRepr
-namedShapeCanUnfoldRepr (NamedShape _ _ (RecShapeBody _ _ _ _)) = TrueRepr
+namedShapeCanUnfoldRepr (NamedShape _ _ (RecShapeBody _ _ _)) = TrueRepr
 
 -- | Whether a 'NamedShape' can be unfolded
 namedShapeCanUnfold :: NamedShape b args w -> Bool
@@ -3245,7 +3246,7 @@ llvmShapeLength (PExpr_NamedShape _ _ (NamedShape _ _
                                        (OpaqueShapeBody mb_len _)) args) =
   Just $ subst (substOfExprs args) mb_len
 llvmShapeLength (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
-                                            (RecShapeBody _ _ _ _)) args) =
+                                            (RecShapeBody _ _ _)) args) =
   -- FIXME: if the recursive shape contains itself *not* under a pointer, then
   -- this could diverge
   llvmShapeLength (unfoldNamedShape nmsh args)
@@ -3395,7 +3396,7 @@ unfoldNamedShape :: KnownNat w => NamedShape 'True args w -> PermExprs args ->
                     PermExpr (LLVMShapeType w)
 unfoldNamedShape (NamedShape _ _ (DefinedShapeBody mb_sh)) args =
   subst (substOfExprs args) mb_sh
-unfoldNamedShape sh@(NamedShape _ _ (RecShapeBody mb_sh _ _ _)) args =
+unfoldNamedShape sh@(NamedShape _ _ (RecShapeBody mb_sh _ _)) args =
   subst (substOfExprs (args :>: PExpr_NamedShape Nothing Nothing sh args)) mb_sh
 
 -- | Unfold a named shape and apply 'modalizeShape' to the result
@@ -4354,7 +4355,7 @@ shapeIsCopyable rw (PExpr_NamedShape maybe_rw' _ nmsh args) =
     -- HACK: the real computation we want to perform is to assume nmsh is copyable
     -- and prove it is under that assumption; to accomplish this, we substitute
     -- the empty shape for the recursive shape
-    RecShapeBody mb_sh _ _ _ ->
+    RecShapeBody mb_sh _ _ ->
       shapeIsCopyable rw $ subst (substOfExprs (args :>: PExpr_EmptyShape)) mb_sh
 shapeIsCopyable _ (PExpr_EqShape _) = True
 shapeIsCopyable rw (PExpr_PtrShape maybe_rw' _ sh) =
@@ -4640,7 +4641,7 @@ instance FreeVars (NamedShape b args w) where
 instance FreeVars (NamedShapeBody b args w) where
   freeVars (DefinedShapeBody mb_sh) = freeVars mb_sh
   freeVars (OpaqueShapeBody mb_len _) = freeVars mb_len
-  freeVars (RecShapeBody mb_sh _ _ _) = freeVars mb_sh
+  freeVars (RecShapeBody mb_sh _ _) = freeVars mb_sh
 
 
 -- | Test if an expression @e@ is a /determining/ expression, meaning that
@@ -4971,11 +4972,10 @@ genSubstNSB px s mb_body = case mbMatch mb_body of
       DefinedShapeBody <$> genSubstMb px s mb_sh
     [nuMP| OpaqueShapeBody mb_len trans_id |] ->
       OpaqueShapeBody <$> genSubstMb px s mb_len <*> return (mbLift trans_id)
-    [nuMP| RecShapeBody mb_sh trans_id fold_id unfold_id |] ->
+    [nuMP| RecShapeBody mb_sh trans_id fold_ids |] ->
       RecShapeBody <$> genSubstMb (px :>: Proxy) s mb_sh
                    <*> return (mbLift trans_id)
-                   <*> return (mbLift fold_id)
-                   <*> return (mbLift unfold_id)
+                   <*> return (mbLift fold_ids)
 
 instance SubstVar s m => Substable s (NamedPermName ns args a) m where
   genSubst _ mb_rpn = return $ mbLift mb_rpn
@@ -5873,12 +5873,11 @@ instance AbstractVars (NamedShapeBody b args w) where
     absVarsReturnH ns1 ns2 ($(mkClosed [| \i l -> OpaqueShapeBody l i |])
                              `clApply` toClosed trans_id)
     `clMbMbApplyM` abstractPEVars ns1 ns2 mb_len
-  abstractPEVars ns1 ns2 (RecShapeBody mb_sh trans_id fold_id unfold_id) =
+  abstractPEVars ns1 ns2 (RecShapeBody mb_sh trans_id fold_ids) =
     absVarsReturnH ns1 ns2 ($(mkClosed
-                              [| \i1 i2 i3 l -> RecShapeBody l i1 i2 i3 |])
+                              [| \i1 i2 l -> RecShapeBody l i1 i2 |])
                              `clApply` toClosed trans_id
-                             `clApply` toClosed fold_id
-                             `clApply` toClosed unfold_id)
+                             `clApply` toClosed fold_ids)
     `clMbMbApplyM` abstractPEVars ns1 ns2 mb_sh
 
 instance AbstractVars (NamedPermName ns args a) where

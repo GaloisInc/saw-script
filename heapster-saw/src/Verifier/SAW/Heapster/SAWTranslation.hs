@@ -786,7 +786,7 @@ instance TransInfo info =>
         [nuMP| OpaqueShapeBody _ trans_id |] ->
           ETrans_Term <$> applyOpenTermMulti (globalOpenTerm $ mbLift trans_id) <$>
           transTerms <$> translate args
-        [nuMP| RecShapeBody _ trans_id _ _ |] ->
+        [nuMP| RecShapeBody _ trans_id _ |] ->
           ETrans_Term <$> applyOpenTermMulti (globalOpenTerm $ mbLift trans_id) <$>
           transTerms <$> translate args
     [nuMP| PExpr_EqShape _ |] -> return $ ETrans_Term unitTypeOpenTerm
@@ -2744,10 +2744,14 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
   -- translations of the arguments plus the translations of the proofs of the
   -- permissions
   [nuMP| SImpl_IntroLLVMBlockNamed _ bp nmsh |]
-    | [nuMP| RecShapeBody _ _ fold_id _ |] <- mbMatch $ fmap namedShapeBody nmsh
+    | [nuMP| RecShapeBody _ _ fold_ids |] <- mbMatch $ fmap namedShapeBody nmsh
     , [nuMP| PExpr_NamedShape _ _ _ args |] <- mbMatch $ fmap llvmBlockShape bp ->
       do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
          args_trans <- translate args
+         fold_id <-
+           case fold_ids of
+             [nuP| Just (fold_id,_) |] -> return fold_id
+             _ -> error "Folding recursive shape before it is defined!"
          withPermStackM id
            (\(pctx :>: ptrans_x) ->
              pctx :>: typeTransF ttrans [applyOpenTermMulti
@@ -2770,10 +2774,14 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
   -- translations of the arguments plus the translations of the proofs of the
   -- permissions
   [nuMP| SImpl_ElimLLVMBlockNamed _ bp nmsh |]
-    | [nuMP| RecShapeBody _ _ _ unfold_id |] <- mbMatch $ fmap namedShapeBody nmsh
+    | [nuMP| RecShapeBody _ _ fold_ids |] <- mbMatch $ fmap namedShapeBody nmsh
     , [nuMP| PExpr_NamedShape _ _ _ args |] <- mbMatch $ fmap llvmBlockShape bp ->
       do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
          args_trans <- translate args
+         unfold_id <-
+           case fold_ids of
+             [nuP| Just (_,unfold_id) |] -> return unfold_id
+             _ -> error "Unfolding recursive shape before it is defined!"
          withPermStackM id
            (\(pctx :>: ptrans_x) ->
              pctx :>: typeTransF ttrans [applyOpenTermMulti

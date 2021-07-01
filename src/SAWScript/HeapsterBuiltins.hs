@@ -229,7 +229,8 @@ parseTermFromString nm term_string = do
 findUnusedIdent :: Module -> String -> Ident
 findUnusedIdent m str =
   fromJust $ find (isNothing . Mod.resolveName m . identBaseName) $
-  map (mkSafeIdent (moduleName m)) $ (str : map ((str ++) . show) [0..])
+  map (mkSafeIdent (moduleName m)) $
+  (str : map ((str ++) . show) [(0::Int) ..])
 
 -- | Parse the second given string as a term, check that it has the given type,
 -- and, if the parsed term is not already an identifier, add it as a definition
@@ -477,11 +478,10 @@ partialRecShape :: NatRepr w -> String -> CruCtx args ->
                    Maybe (Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w))) ->
                    Ident -> NamedShape 'True args w
 partialRecShape _ nm args mb_body trans_ident =
-  let body_err = error "Analyzing recursive shape cases before it is defined!"
-      fold_err = error "Folding recursive shape before it is defined!"
-      unfold_err = error "Unfolding recursive shape before it is defined!"
-  in NamedShape nm args $ RecShapeBody (fromMaybe body_err mb_body)
-                                       trans_ident fold_err unfold_err
+  let body_err =
+        error "Analyzing recursive shape cases before it is defined!" in
+  NamedShape nm args $
+  RecShapeBody (fromMaybe body_err mb_body) trans_ident Nothing
 
 -- | Given a named recursive shape name, arguments, body, and `trans_ident`,
 -- insert its definition and definitions for its fold and unfold functions
@@ -532,7 +532,7 @@ addIRTRecShape sc mnm env nm args body trans_ident =
      scInsertDef sc mnm fold_ident   fold_fun_tp   fold_fun_tm
      scInsertDef sc mnm unfold_ident unfold_fun_tp unfold_fun_tm
      let nsh = NamedShape nm args $
-                 RecShapeBody body trans_ident fold_ident unfold_ident
+                 RecShapeBody body trans_ident (Just (fold_ident, unfold_ident))
      return $ permEnvAddNamedShape env nsh
 
 -- | Define a new reachability permission
