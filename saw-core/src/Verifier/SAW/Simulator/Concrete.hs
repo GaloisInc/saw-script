@@ -132,7 +132,8 @@ ite b x y = if b then x else y
 prims :: Prims.BasePrims Concrete
 prims =
   Prims.BasePrims
-  { Prims.bpAsBool  = Just
+  { Prims.bpIsSymbolicEvaluator = False
+  , Prims.bpAsBool  = Just
   , Prims.bpUnpack  = pure1 Prim.unpackBitVector
   , Prims.bpPack    = pure1 Prim.packBitVector
   , Prims.bpBvAt    = pure2 Prim.bvAt

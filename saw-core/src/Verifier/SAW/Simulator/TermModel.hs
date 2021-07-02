@@ -571,7 +571,9 @@ prims :: (?recordEC :: BoundECRecorder) =>
   SharedContext -> Sim.SimulatorConfig TermModel -> Prims.BasePrims TermModel
 prims sc cfg =
   Prims.BasePrims
-  { Prims.bpAsBool  = \case
+  { Prims.bpIsSymbolicEvaluator = False
+
+  , Prims.bpAsBool  = \case
        Left _  -> Nothing
        Right b -> Just b
 
