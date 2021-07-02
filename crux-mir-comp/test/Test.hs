@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# Language OverloadedStrings #-}
@@ -15,6 +16,7 @@ import           System.FilePath
 import           System.IO (IOMode(..), Handle, withFile, hClose, hGetContents, hGetLine, openFile)
 import           System.IO.Temp (withSystemTempFile)
 
+import           System.Environment (setEnv)
 import qualified System.Process as Proc
 
 import           Test.Tasty (defaultMain, testGroup, TestTree)
@@ -26,6 +28,7 @@ import           Test.Tasty.ExpectedFailure (expectFailBecause)
 import qualified Mir.Language as Mir
 
 import qualified Mir.Compositional as Mir
+import qualified Mir.Cryptol as Mir
 
 import qualified Crux as Crux
 import qualified Crux.Config.Common as Crux
@@ -87,9 +90,14 @@ runCrux rustFile outHandle mode = do
                                         Crux.branchCoverage = (mode == RcmCoverage) } ,
                    Mir.defaultMirOptions { Mir.printResultOnly = (mode == RcmConcrete),
                                            Mir.defaultRlibsDir = "../deps/crucible/crux-mir/rlibs" })
-    let ?outputConfig = Crux.OutputConfig False outHandle outHandle quiet
-    _exitCode <- Mir.runTestsWithExtraOverrides Mir.compositionalOverrides options
+    let ?outputConfig = Crux.mkOutputConfig False outHandle outHandle $
+                        Just (fst options)
+    setEnv "CRYPTOLPATH" "."
+    _exitCode <- Mir.runTestsWithExtraOverrides overrides options
     return ()
+  where
+    overrides :: Mir.BindExtraOverridesFn
+    overrides = Mir.compositionalOverrides `Mir.orOverride` Mir.cryptolOverrides
 
 getOutputDir :: FilePath -> FilePath
 getOutputDir rustFile = takeDirectory rustFile </> "out"
