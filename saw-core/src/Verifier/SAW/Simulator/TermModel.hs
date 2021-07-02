@@ -192,7 +192,7 @@ data VExtra
        Term               -- term value (closed term!)
 
 instance Show VExtra where
-  show (VExtraTerm _ tm) = show tm
+  show (VExtraTerm ty tm) = "<extra> " ++ showTerm tm ++ " : " ++ show ty
 
 data TermModelArray =
   TMArray
@@ -873,6 +873,7 @@ constMap sc cfg = Map.union (Map.fromList localPrims) (Prims.constMap pms)
 
     -- Integers
     , ("Prelude.intToNat", intToNatOp sc)
+    , ("Prelude.bvToNat" , bvToNatOp sc)
     , ("Prelude.natToInt", natToIntOp sc)
     , ("Prelude.intToBv" , intToBvOp sc)
     , ("Prelude.bvToInt" , bvToIntOp sc cfg)
@@ -912,6 +913,16 @@ intToNatOp _sc =
   case x of
     VInt (Right i) -> pure . VNat $! fromInteger (max 0 i)
     _ -> pure (VIntToNat x)
+
+-- bvToNat : (n : Nat) -> Vec n Bool -> Nat;
+bvToNatOp :: SharedContext -> TmPrim
+bvToNatOp _sc =
+  Prims.natFun $ \n ->
+  Prims.strictFun $ \x ->
+  Prims.PrimValue $
+    case x of
+      VWord (Right bv) -> VNat (fromInteger (unsigned bv))
+      _ -> VBVToNat (fromIntegral n) x
 
 -- natToInt : Nat -> Integer;
 natToIntOp :: SharedContext -> TmPrim
