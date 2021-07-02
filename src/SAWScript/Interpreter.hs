@@ -620,6 +620,11 @@ set_color b = do
   let b' = b && useColor opts
   putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsColor = b' } }
 
+set_min_sharing :: Int -> TopLevel ()
+set_min_sharing b = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsMinSharing = b } }
+
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
@@ -810,6 +815,12 @@ primitives = Map.fromList
     (pureVal set_color)
     Current
     [ "Select whether to pretty-print SAWCore terms using color." ]
+
+  , prim "set_min_sharing"     "Int -> TopLevel ()"
+    (pureVal set_min_sharing)
+    Current
+    [ "Set the number times a subterm must be shared for it to be"
+    ,  "let-bound in printer output." ]
 
   , prim "set_timeout"         "Int -> ProofScript ()"
     (pureVal set_timeout)
@@ -3071,6 +3082,16 @@ primitives = Map.fromList
     Experimental
     [ "heapster_define_rust_type env tp defines a Heapster LLVM shape from tp,"
     , "a string representing a top-level struct or enum definition."
+    ]
+
+  , prim "heapster_define_rust_type_qual"
+    "HeapsterEnv -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_rust_type_qual)
+    Experimental
+    [ "heapster_define_rust_type_qual env crate tp defines a Heapster LLVM"
+    , " shape from tp, a string representing a top-level Rust struct or enum"
+    , " definition. The type is qualified by crate, meaning that \"crate::\""
+    , " is prepended to its name."
     ]
 
   , prim "heapster_block_entry_hint"

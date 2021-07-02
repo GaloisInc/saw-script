@@ -77,12 +77,99 @@ askExprCtxTerms = exprCtxToTerms <$> infoCtx <$> ask
 
 
 ----------------------------------------------------------------------
--- The monad for translating IRT type variables
+-- * Names of the recursive permission or shape being defined
 ----------------------------------------------------------------------
 
+-- | The name of the recursive permission or shape being defined
 data IRTRecName args where
   IRTRecPermName :: NamedPermName ns args tp -> IRTRecName args
   IRTRecShapeName :: NatRepr w -> NamedShape 'True args w -> IRTRecName args
+
+-- | Generic function to test if an object contains an 'IRTRecName'
+class ContainsIRTRecName a where
+  containsIRTRecName :: IRTRecName args -> a -> Bool
+
+instance ContainsIRTRecName a => ContainsIRTRecName [a] where
+  containsIRTRecName n = any (containsIRTRecName n)
+
+instance ContainsIRTRecName a => ContainsIRTRecName (Mb ctx a) where
+  containsIRTRecName n = mbLift . fmap (containsIRTRecName n)
+
+instance ContainsIRTRecName (PermExpr a) where
+  containsIRTRecName (IRTRecShapeName w nm_sh) (PExpr_NamedShape _ _ nm_sh' _)
+    | Just Refl <- testEquality w (natRepr nm_sh')
+    , Just _ <- namedShapeEq nm_sh nm_sh' = True
+  containsIRTRecName n (PExpr_NamedShape _ _ _ args) =
+    containsIRTRecName n args
+  containsIRTRecName n (PExpr_PtrShape _ _ sh) = containsIRTRecName n sh
+  containsIRTRecName n (PExpr_FieldShape fsh) = containsIRTRecName n fsh
+  containsIRTRecName n (PExpr_ArrayShape _ _ fshs) = containsIRTRecName n fshs
+  containsIRTRecName n (PExpr_SeqShape sh1 sh2) =
+    containsIRTRecName n sh1 || containsIRTRecName n sh2
+  containsIRTRecName n (PExpr_OrShape sh1 sh2) =
+    containsIRTRecName n sh1 || containsIRTRecName n sh2
+  containsIRTRecName n (PExpr_ExShape mb_sh) =
+    mbLift $ fmap (containsIRTRecName n) mb_sh
+  containsIRTRecName n (PExpr_ValPerm p) = containsIRTRecName n p
+  containsIRTRecName _ _ = False
+
+instance ContainsIRTRecName (RAssign PermExpr tps) where
+  containsIRTRecName _ MNil = False
+  containsIRTRecName n (es :>: e) =
+    containsIRTRecName n es || containsIRTRecName n e
+
+instance ContainsIRTRecName (LLVMFieldShape a) where
+  containsIRTRecName n (LLVMFieldShape p) = containsIRTRecName n p
+
+instance ContainsIRTRecName (ValuePerm a) where
+  containsIRTRecName n (ValPerm_Eq e) = containsIRTRecName n e
+  containsIRTRecName n (ValPerm_Or p1 p2) =
+    containsIRTRecName n p1 || containsIRTRecName n p2
+  containsIRTRecName n (ValPerm_Exists mb_p) =
+    mbLift $ fmap (containsIRTRecName n) mb_p
+  containsIRTRecName (IRTRecPermName npn) (ValPerm_Named npn' _ _)
+    | Just _ <- testNamedPermNameEq npn npn' = True
+  containsIRTRecName n (ValPerm_Named _ args _) =
+    containsIRTRecName n args
+  containsIRTRecName _ (ValPerm_Var _ _) = False
+  containsIRTRecName n (ValPerm_Conj ps) = containsIRTRecName n ps
+
+instance ContainsIRTRecName (RAssign ValuePerm tps) where
+  containsIRTRecName _ MNil = False
+  containsIRTRecName n (ps :>: p) =
+    containsIRTRecName n ps || containsIRTRecName n p
+
+instance ContainsIRTRecName (AtomicPerm a) where
+  containsIRTRecName n (Perm_LLVMField fp) = containsIRTRecName n fp
+  containsIRTRecName n (Perm_LLVMArray arrp) =
+    containsIRTRecName n (llvmArrayFields arrp)
+  containsIRTRecName n (Perm_LLVMBlock bp) =
+    containsIRTRecName n (llvmBlockShape bp)
+  containsIRTRecName _ (Perm_LLVMFree _) = False
+  containsIRTRecName _ (Perm_LLVMFunPtr _ _) = False
+  containsIRTRecName n (Perm_LLVMBlockShape sh) = containsIRTRecName n sh
+  containsIRTRecName _ Perm_IsLLVMPtr = False
+  containsIRTRecName (IRTRecPermName npn) (Perm_NamedConj npn' _ _)
+    | Just _ <- testNamedPermNameEq npn npn' = True
+  containsIRTRecName n (Perm_NamedConj _ args _) = containsIRTRecName n args
+  containsIRTRecName n (Perm_LLVMFrame fperm) =
+    containsIRTRecName n (map fst fperm)
+  containsIRTRecName _ (Perm_LOwned _ _) = False
+  containsIRTRecName _ (Perm_LCurrent _) = False
+  containsIRTRecName n (Perm_Struct ps) = containsIRTRecName n ps
+  containsIRTRecName _ (Perm_Fun _) = False
+  containsIRTRecName _ (Perm_BVProp _) = False
+
+instance ContainsIRTRecName (LLVMArrayField w) where
+  containsIRTRecName n (LLVMArrayField fp) = containsIRTRecName n fp
+
+instance ContainsIRTRecName (LLVMFieldPerm w sz) where
+  containsIRTRecName n fp = containsIRTRecName n $ llvmFieldContents fp
+
+
+----------------------------------------------------------------------
+-- * The monad for translating IRT type variables
+----------------------------------------------------------------------
 
 data IRTTyVarsTransCtx args ext =
   IRTTyVarsTransCtx
@@ -150,7 +237,7 @@ irtTSubstExt x =
 
 
 ----------------------------------------------------------------------
--- Trees for keeping track of IRT variable indices
+-- * Trees for keeping track of IRT variable indices
 ----------------------------------------------------------------------
 
 data IRTVarTree a = IRTVarsNil
@@ -174,7 +261,7 @@ setIRTVarIdxs tree = evalState (mapM (\_ -> nextIdx) tree) 0
 
 
 ----------------------------------------------------------------------
--- Translating IRT type variables
+-- * Translating IRT type variables
 ----------------------------------------------------------------------
 
 -- | Given the name of a recursive permission being defined and its argument
@@ -357,12 +444,16 @@ instance IRTTyVars (PermExpr (LLVMShapeType w)) where
              , [nuMP| Nothing |] <- mbMatch maybe_rw
              , [nuMP| Nothing |] <- mbMatch maybe_l
              -> return ([], IRTRecVar)
-           IRTRecShapeName _ _
-             -> throwError $ "recursive shape applied to different"
-                             ++ " arguments in its definition!"
+           IRTRecShapeName _ nmsh_rec
+             | mbLift $ (namedShapeName nmsh_rec ==) . namedShapeName <$> nmsh
+               -> throwError $ "recursive shape applied to different"
+                               ++ " arguments in its definition!"
            _ -> case mbMatch $ namedShapeBody <$> nmsh of
                   [nuMP| DefinedShapeBody _ |] ->
                     irtTyVars (mbMap2 unfoldNamedShape nmsh args)
+                  _ | containsIRTRecName n_rec mb_sh ->
+                      throwError ("recursive shape passed to an opaque or"
+                                  ++ " recursive shape in its definition!")
                   _ -> do sh' <- irtTSubstExt mb_sh
                           let sh_trans = transTupleTerm <$> translate sh'
                           return ([sh_trans], IRTVar ())
@@ -395,7 +486,7 @@ instance IRTTyVars (RAssign ValuePerm ps) where
 
 
 ----------------------------------------------------------------------
--- The IRTDesc translation monad
+-- * The IRTDesc translation monad
 ----------------------------------------------------------------------
 
 -- | Contextual info for translating IRT type descriptions
@@ -461,7 +552,7 @@ irtCtor c all_args =
 
 
 ----------------------------------------------------------------------
--- Translating IRT type descriptions
+-- * Translating IRT type descriptions
 ----------------------------------------------------------------------
 
 -- | Given an identifier whose definition in the shared context is the first
@@ -635,7 +726,7 @@ instance IRTDescs (RAssign ValuePerm ps) where
 
 
 ----------------------------------------------------------------------
--- Translating IRT definitions
+-- * Translating IRT definitions
 ----------------------------------------------------------------------
 
 -- | Given identifiers whose definitions in the shared context are the results
