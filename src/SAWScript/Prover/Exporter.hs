@@ -60,6 +60,7 @@ import System.IO
 import System.IO.Temp(emptySystemTempFile)
 import Data.Text (pack)
 import Data.Text.Prettyprint.Doc.Render.Text
+import qualified Data.Vector as V
 import Prettyprinter (vcat)
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
@@ -94,7 +95,7 @@ import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
 import What4.Config (extendConfig)
-import What4.Interface (getConfiguration)
+import What4.Interface (getConfiguration, IsSymExprBuilder)
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
 import What4.Protocol.SMTLib2.Response (smtParseOptions)
 import What4.Protocol.VerilogWriter (exprsVerilog)
@@ -325,7 +326,7 @@ writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
      let argSValues = map (snd . snd) vars
      let argSValueNames = zip argSValues (map (toShortName . ecName) argNames)
      argTys' <- traverse f argTys
-     let mkInput (v, nm) = map (,nm) <$> flattenSValue v
+     let mkInput (v, nm) = map (,nm) <$> flattenSValue sym v
      ins <- concat <$> mapM mkInput argSValueNames
      edoc <- runExceptT $ exprsVerilog sym ins [Some bval] "f"
      case edoc of
@@ -337,20 +338,28 @@ writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
          hClose h
      return (zip argNames argTys')
 
-flattenSValue :: W4Sim.SValue sym -> IO [Some (W4.SymExpr sym)]
-flattenSValue (Sim.VBool b) = return [Some b]
-flattenSValue (Sim.VWord (W4Sim.DBV w)) = return [Some w]
-flattenSValue (Sim.VPair l r) =
+flattenSValue :: IsSymExprBuilder sym => sym -> W4Sim.SValue sym -> IO [Some (W4.SymExpr sym)]
+flattenSValue _ (Sim.VBool b) = return [Some b]
+flattenSValue _ (Sim.VWord (W4Sim.DBV w)) = return [Some w]
+flattenSValue sym (Sim.VPair l r) =
   do lv <- Sim.force l
      rv <- Sim.force r
-     ls <- flattenSValue lv
-     rs <- flattenSValue rv
+     ls <- flattenSValue sym lv
+     rs <- flattenSValue sym rv
      return (ls ++ rs)
-flattenSValue (Sim.VVector ts) =
+flattenSValue sym (Sim.VVector ts) =
   do vs <- mapM Sim.force ts
-     es <- mapM flattenSValue vs
-     return (concat es)
-flattenSValue sval = fail $ "write_verilog: unsupported result type: " ++ show sval
+     let getBool (Sim.VBool b) = Just b
+         getBool _ = Nothing
+         mbs = V.map getBool vs
+     case sequence mbs of
+       Just bs ->
+         do w <- W4Sim.bvPackBE sym bs
+            case w of
+              W4Sim.DBV bv -> return [Some bv]
+              W4Sim.ZBV -> fail "write_verilog: bitvectors of size zero unsupported"
+       Nothing -> concat <$> mapM (flattenSValue sym) vs
+flattenSValue _ sval = fail $ "write_verilog: unsupported result type: " ++ show sval
 
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
@@ -361,8 +370,8 @@ writeVerilog sc path t = do
   -- order, followed by free variables (probably in the order seen
   -- during traversal, because that's at least _a_ deterministic order).
   (argNames, args, _, sval) <- W4Sim.w4EvalAny sym st sc mempty mempty t
-  es <- flattenSValue sval
-  let mkInput (v, nm) = map (, pack nm) <$> flattenSValue v
+  es <- flattenSValue sym sval
+  let mkInput (v, nm) = map (, pack nm) <$> flattenSValue sym v
   ins <- concat <$> mapM mkInput (zip args argNames)
   edoc <- runExceptT $ exprsVerilog sym ins es "f"
   case edoc of
