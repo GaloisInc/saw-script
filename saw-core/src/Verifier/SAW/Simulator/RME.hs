@@ -153,7 +153,8 @@ pure3 f x y z = pure (f x y z)
 prims :: Prims.BasePrims ReedMuller
 prims =
   Prims.BasePrims
-  { Prims.bpAsBool  = RME.isBool
+  { Prims.bpIsSymbolicEvaluator = True
+  , Prims.bpAsBool  = RME.isBool
   , Prims.bpUnpack  = Identity
   , Prims.bpPack    = Identity
   , Prims.bpBvAt    = pure2 (V.!)

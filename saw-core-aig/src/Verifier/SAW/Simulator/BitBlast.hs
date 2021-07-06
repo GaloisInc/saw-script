@@ -170,7 +170,8 @@ pure3 f x y z = pure (f x y z)
 prims :: AIG.IsAIG l g => g s -> Prims.BasePrims (BitBlast (l s))
 prims be =
   Prims.BasePrims
-  { Prims.bpAsBool  = AIG.asConstant be
+  { Prims.bpIsSymbolicEvaluator = True
+  , Prims.bpAsBool  = AIG.asConstant be
     -- Bitvectors
   , Prims.bpUnpack  = pure1 vFromLV
   , Prims.bpPack    = pure1 lvFromV

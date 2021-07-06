@@ -218,7 +218,7 @@ instance Show (Extra l) => Show (TValue l) where
       VSort s        -> shows s
       VRecursorType{} -> showString "RecursorType"
 
-      VTyTerm _ tm   -> shows tm
+      VTyTerm _ tm   -> showString "TyTerm (" . (\x -> showTerm tm ++ x) . showString ")"
 
 data Nil = Nil
 
