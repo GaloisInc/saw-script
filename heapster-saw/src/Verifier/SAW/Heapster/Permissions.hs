@@ -2792,8 +2792,8 @@ $(mkNuMatching [t| forall ps. LifetimeCurrentPerms ps |])
 instance NuMatchingAny1 LOwnedPerm where
   nuMatchingAny1Proof = nuMatchingProof
 
-instance NuMatchingAny1 DistPerms where
-  nuMatchingAny1Proof = nuMatchingProof
+-- instance NuMatchingAny1 DistPerms where
+--   nuMatchingAny1Proof = nuMatchingProof
 
 instance Liftable RWModality where
   mbLift mb_rw = case mbMatch mb_rw of

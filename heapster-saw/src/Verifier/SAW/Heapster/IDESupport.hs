@@ -120,7 +120,7 @@ instance ExtractLogEntries (PermImpl1 ps_in ps_outs) where
   extractLogEntries (Impl1_Fail err) =
     -- The error message is available further up the stack, so we just leave it
     -- empty here
-    reader $ \(_, loc) -> [LogError (snd $ ppLoc loc) err]
+    reader $ \(_, loc) -> [LogError (snd $ ppLoc loc) (ppError err)]
   extractLogEntries _ = return []
 
 instance ExtractLogEntries
