@@ -290,6 +290,9 @@ boolEqIdent = mkIdent (mkModuleName ["Prelude"]) "boolEq"
 vecEqIdent :: Ident
 vecEqIdent = mkIdent (mkModuleName ["Prelude"]) "vecEq"
 
+arrayEqIdent :: Ident
+arrayEqIdent = mkIdent (mkModuleName ["Prelude"]) "arrayEq"
+
 equalNatIdent :: Ident
 equalNatIdent = mkIdent (mkModuleName ["Prelude"]) "equalNat"
 
@@ -344,6 +347,8 @@ ruleOfProp (R.asApplyAll -> (R.isGlobalDef equalNatIdent -> Just (), [x, y])) an
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) ann =
   Just $ mkRewriteRule [] x y ann
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) ann =
+  Just $ mkRewriteRule [] x y ann
+ruleOfProp (R.asApplyAll -> (R.isGlobalDef arrayEqIdent -> Just (), [_, _, x, y])) ann =
   Just $ mkRewriteRule [] x y ann
 ruleOfProp (unwrapTermF -> Constant _ body) ann = ruleOfProp body ann
 ruleOfProp (R.asEq -> Just (_, x, y)) ann =

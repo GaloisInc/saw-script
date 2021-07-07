@@ -231,6 +231,9 @@ module Verifier.SAW.SharedTerm
   , scArrayLookup
   , scArrayUpdate
   , scArrayEq
+  , scArrayCopy
+  , scArraySet
+  , scArrayRangeEq
     -- ** Utilities
 --  , scTrue
 --  , scFalse
@@ -2230,7 +2233,7 @@ scArrayConstant sc a b e = scGlobalApply sc "Prelude.arrayConstant" [a, b, e]
 scArrayLookup :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
 scArrayLookup sc a b f i = scGlobalApply sc "Prelude.arrayLookup" [a, b, f, i]
 
--- Create a term computing an array updated at a particular index.
+-- | Create a term computing an array updated at a particular index.
 --
 -- > arrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
 scArrayUpdate :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
@@ -2241,6 +2244,18 @@ scArrayUpdate sc a b f i e = scGlobalApply sc "Prelude.arrayUpdate" [a, b, f, i,
 -- > arrayEq : (a b : sort 0) -> (Array a b) -> (Array a b) -> Bool;
 scArrayEq :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
 scArrayEq sc a b x y = scGlobalApply sc "Prelude.arrayEq" [a, b, x, y]
+
+-- > arrayCopy : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> Array (Vec n Bool) a -> Vec n Bool -> Vec n Bool -> Array (Vec n Bool) a;
+scArrayCopy :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
+scArrayCopy sc n a f i g j l = scGlobalApply sc "Prelude.arrayCopy" [n, a, f, i, g, j, l]
+
+-- > arraySet : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> a -> Vec n Bool -> Array (Vec n Bool) a;
+scArraySet :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
+scArraySet sc n a f i e l = scGlobalApply sc "Prelude.arraySet" [n, a, f, i, e, l]
+
+-- > arrayRangeEq : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> Array (Vec n Bool) a -> Vec n Bool -> Vec n Bool -> Bool;
+scArrayRangeEq :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
+scArrayRangeEq sc n a f i g j l = scGlobalApply sc "Prelude.arrayRangeEq" [n, a, f, i, g, j, l]
 
 ------------------------------------------------------------
 -- | The default instance of the SharedContext operations.
