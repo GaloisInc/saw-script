@@ -20,16 +20,16 @@ module Verifier.SAW.OpenTerm (
   -- * Open terms and converting to closed terms
   OpenTerm(..), completeOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
-  closedOpenTerm, flatOpenTerm, sortOpenTerm, natOpenTerm,
+  closedOpenTerm, failOpenTerm, openTermType,
+  flatOpenTerm, sortOpenTerm, natOpenTerm,
   unitOpenTerm, unitTypeOpenTerm,
   stringLitOpenTerm, stringTypeOpenTerm,
   pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
-  applyOpenTerm, applyOpenTermMulti,
+  applyOpenTerm, applyOpenTermMulti, applyPiOpenTerm,
   lambdaOpenTerm, lambdaOpenTermMulti, piOpenTerm, piOpenTermMulti,
-  arrowOpenTerm,
-  letOpenTerm,
+  arrowOpenTerm, letOpenTerm,
   -- * Monadic operations for building terms with binders
   OpenTermM(..), completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
@@ -65,6 +65,17 @@ completeOpenTermType sc (OpenTerm termM) =
 -- | Embed a closed 'Term' into an 'OpenTerm'
 closedOpenTerm :: Term -> OpenTerm
 closedOpenTerm t = OpenTerm $ typeInferComplete t
+
+-- | Build an 'OpenTerm' that 'fail's in the underlying monad when completed
+failOpenTerm :: String -> OpenTerm
+failOpenTerm str = OpenTerm $ fail str
+
+-- | Return type type of an 'OpenTerm' as an 'OpenTerm
+openTermType :: OpenTerm -> OpenTerm
+openTermType (OpenTerm m) =
+  OpenTerm $ do TypedTerm _ tp <- m
+                tp_tp <- liftTCM scTypeOf tp
+                return (TypedTerm tp tp_tp)
 
 -- | Build an 'OpenTerm' from a 'FlatTermF'
 flatOpenTerm :: FlatTermF OpenTerm -> OpenTerm
@@ -159,6 +170,17 @@ applyOpenTerm (OpenTerm f) (OpenTerm arg) =
 -- | Apply an 'OpenTerm' to 0 or more arguments
 applyOpenTermMulti :: OpenTerm -> [OpenTerm] -> OpenTerm
 applyOpenTermMulti = foldl applyOpenTerm
+
+-- | Compute the output type of applying a function to an argument. That is,
+-- given @f@ and @arg@, compute the type of @f arg@.
+applyPiOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
+applyPiOpenTerm (OpenTerm m_f) (OpenTerm m_arg) =
+  OpenTerm $
+  do f <- m_f
+     arg <- m_arg
+     ret <- applyPiTyped (NotFuncTypeInApp f arg) (typedType f) arg
+     ret_tp <- liftTCM scTypeOf ret
+     return (TypedTerm ret ret_tp)
 
 -- | Build an 'OpenTerm' for the top variable in the current context, by
 -- building the 'TCM' computation which checks how much longer the context has
