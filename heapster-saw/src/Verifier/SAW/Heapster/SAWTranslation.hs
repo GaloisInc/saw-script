@@ -1803,8 +1803,10 @@ lookupEntryTrans :: TypedEntryID blocks args ->
                     TypedBlockMapTrans ext blocks tops ret ->
                     Some (TypedEntryTrans ext blocks tops ret args)
 lookupEntryTrans entryID blkMap =
-  typedBlockTransEntries (RL.get (entryBlockID entryID) blkMap) !!
-  entryIndex entryID
+  maybe (error "lookupEntryTrans") id $
+  find (\(Some entryTrans) ->
+         entryID == typedEntryID (typedEntryTransEntry entryTrans)) $
+  typedBlockTransEntries (RL.get (entryBlockID entryID) blkMap)
 
 -- | Look up the translation of an entry by entry ID and make sure that it has
 -- the supplied ghost arguments
