@@ -357,7 +357,7 @@ flattenSValue sym (Sim.VVector ts) =
          do w <- W4Sim.bvPackBE sym bs
             case w of
               W4Sim.DBV bv -> return [Some bv]
-              W4Sim.ZBV -> fail "write_verilog: bitvectors of size zero unsupported"
+              W4Sim.ZBV -> return []
        Nothing -> concat <$> mapM (flattenSValue sym) vs
 flattenSValue _ sval = fail $ "write_verilog: unsupported result type: " ++ show sval
 
