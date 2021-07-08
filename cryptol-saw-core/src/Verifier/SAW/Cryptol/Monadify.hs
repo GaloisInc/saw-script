@@ -9,6 +9,29 @@ License     : BSD3
 Maintainer  : westbrook@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
+
+This module implements a "monadification" transformation, which converts "pure"
+SAW core terms that use inconsistent operations like @fix@ and convert them to
+monadic SAW core terms that use monadic versions of these operations that are
+consistent. The monad that is used is the @CompM@ monad that is axiomatized in
+the SAW cxore prelude. This is only a partial transformation, meaning that it
+will fail on some SAW core terms. Specifically, it requires that all
+applications @f arg@ in a term either have a non-dependent function type for @f@
+(i.e., a function with type @'Pi' x a b@ where @x@ does not occur in @b@) or a
+pure argument @arg@ that does not use any of the inconsistent operations.
+
+The monadification @Mon(t)@ of term @t@ is defined as follows (where we have
+simplified the input langauge to just contain pairs, sums, units, and
+functions):
+
+FIXME: either talk about CPS or drop the definition
+
+> Mon(sort s) = sort s
+> Mon(#()) = #()
+> Mon(T * U) = Mon(T) * Mon(U)
+> Mon(Either T U) = Either Mon(T) Mon(U)
+> Mon(Pi x a b) = Pi x Mon(T) (CompM Mon(U))
+> Mon()
 -}
 
 module Verifier.SAW.Cryptol.Monadify where
@@ -26,21 +49,44 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
 
--- | A SAW core term where all subterms are typed
-data AllSubs
+-- | A SAW core term where all of the subterms are typed
+data TypedSubsTerm
+  = TypedSubsTerm { tpSubsIndex :: Maybe TermIndex,
+                    tpSubsTermF :: TermF TypedSubsTerm,
+                    tpSubsTypeF :: TermF TypedSubsTerm }
 
--- | The monadification @Mon(trm)@ of a term @trm@ of type @tp@ is either a
--- "pure" term of type @Mon(tp)@ or a computational term of type
--- @CompM(Mon(tp))@, assuming that @Mon(tp)@ is itself a pure type
-data MonTerm
-     -- | @'CompMonTerm trm tp' trm tp@ is a pure term @t@ of type @tp@
-  = PureMonTerm OpenTerm OpenTerm
-    -- | @'CompMonTerm' trm tp@ is a computational monadified term @t@ of type
-    -- @CompM tp@
-  | CompMonTerm OpenTerm OpenTerm
+-- | Convert a 'Term' to a 'TypedSubsTerm'
+typeAllSubterms :: SharedContext -> Term -> IO TypedSubsTerm
+typeAllSubterms = error "FIXME"
+
+-- | When we monadify a term @trm@ of type @tp@, we in general get a term
+-- @Mon(trm) : CompM Mon(tp)@. But sometimes we can do better, and get a term of
+-- a "more pure" type that can be embedded into @CompM Mon(tp)@. A
+-- monadification type represents one of these more pure types.
+data MonType
+     -- | The "pure" type @Mon(tp)@
+  = PureMonType OpenTerm
+    -- | The "computational" type @CompM Mon(tp)@, where the supplied 'OpenTerm'
+    -- gives the pure type @Mon(tp)@
+  | CompMonType OpenTerm
+    -- | A (dependent) function type @Pi x t u@ for monadification type @u@
+  | FunMonType OpenTerm (OpenTerm -> MonType)
+
+
+-- | A monadified term is just a term plus a 'MonType'
+data MonTerm { monTermTerm :: OpenTerm, monTermType :: MonType }
+
+-- | Embed a 'MonTerm' into type @CompM Mon(tp)@
+compMonTerm :: MonTerm -> OpenTerm
+compMonTerm (MonTerm trm (PureMonType tp)) =
+  applyOpenTermMulti (globalOpenTerm "Prelude.returnM") [tp, trm]
+compMonTerm (MonTerm trm (CompMonType _)) = trm
+compMonTerm (MonTerm trm (FunMonType tp tp_f)) =
+  lambdaOpenTerm "x" tp (\x -> compMonTerm (applyOpenTerm trm x) (tp_f x))
+
 
 -- | An environment of named definitions that have already been monadified
-type MonadifyEnv = Map Ident Ident
+type MonadifyEnv = Map Ident MonTerm
 
 -- | The read-only state of a monadification computation
 data MonadifyROState = MonadifyROState {
@@ -89,19 +135,6 @@ resetMonadifyM ret_tp m =
 -- | Get the monadified return type of the top-level term being monadified
 topRetType :: MonadifyM OpenTerm
 topRetType = monStTopRetType <$> ask
-
--- | Get the type @CompM tp@ of the computational term representated by a
--- 'MonTerm' and return the underlying type @tp@
-monTermType :: MonTerm -> OpenTerm
-monTermType (PureMonTerm _ tp) = tp
-monTermType (CompMonTerm _ tp) = tp
-
--- | Turn a 'MonTerm' into a computational term by inserting a monadic return if
--- the 'MonTerm' is pure
-compMonTerm :: MonTerm -> OpenTerm
-compMonTerm (PureMonTerm trm tp) =
-  applyOpenTermMulti (globalOpenTerm "Prelude.returnM") [tp, trm]
-compMonTerm (CompMonTerm trm _) = trm
 
 -- | Turn a 'MonTerm' into a pure term by inserting a monadic bind if the
 -- 'MonTerm' is computational
