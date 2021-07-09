@@ -25,3 +25,5 @@ rust_lifetimes_proofs.v
 arrays.v
 clearbufs.v
 clearbufs_proofs.v
+mbox.v
+mbox_proofs.v
