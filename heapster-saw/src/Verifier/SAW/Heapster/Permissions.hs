@@ -4787,6 +4787,10 @@ instance (NuMatchingAny1 f, Substable1 s f m) =>
     [nuMP| xs :>: x |] -> (:>:) <$> genSubst s xs <*> genSubst1 s x
 
 instance (NuMatchingAny1 f, Substable1 s f m) =>
+         Substable1 s (RAssign f) m where
+  genSubst1 = genSubst
+
+instance (NuMatchingAny1 f, Substable1 s f m) =>
          Substable s (Assignment f ctx) m where
   genSubst s mb_assign =
     case mbMatch $ fmap viewAssign mb_assign of

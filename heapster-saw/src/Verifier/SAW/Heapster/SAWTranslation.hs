@@ -3060,7 +3060,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   -- A failure translates to a call to the catch handler, which is the most recent
   -- Impl1_Catch, if one exists, or the SAW errorM function otherwise
   ([nuMP| Impl1_Fail err |], _) ->
-    tell [ppError $ mbLift err] >> mzero
+    tell [mbLift $ fmap ppError err] >> mzero
 
   ([nuMP| Impl1_Catch |],
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
