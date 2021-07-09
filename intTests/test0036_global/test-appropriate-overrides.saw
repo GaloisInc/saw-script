@@ -1,0 +1,12 @@
+include "test-common.saw";
+
+m_O1 <- llvm_load_module "test-O1.bc";
+m_O2 <- llvm_load_module "test-O2.bc";
+
+f_O1_spec <- llvm_verify m_O1 "f" []                     true (f_spec 0) abc;
+g_O1_spec <- llvm_verify m_O1 "g" []                     true (g_spec 1) abc;
+h_O1_spec <- llvm_verify m_O1 "h" [f_O1_spec, g_O1_spec] true (h_spec 0) abc;
+
+f_O2_spec <- llvm_verify m_O2 "f" []                     true (f_spec 0) abc;
+g_O2_spec <- llvm_verify m_O2 "g" []                     true (g_spec 1) abc;
+h_O2_spec <- llvm_verify m_O2 "h" [f_O2_spec, g_O2_spec] true (h_spec 0) abc;

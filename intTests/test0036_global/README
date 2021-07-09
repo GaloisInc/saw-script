@@ -1,1 +1,25 @@
 These tests exercise SAW's handling of LLVM globals.
+
+Some notes:
+
+* The optimization settings used when compiling `test.c` have consequences
+  for SAW proofs. If compiled with `-O2` or higher, the LLVM bitcode for the
+  `h` function will inline away the calls to `f` and `g`. (See `test-O2.ll`.)
+  This means that registering overrides for `f` and `g` in a specification for
+  `h` will have no effect when `-O2` is used.
+* Accordingly, the `.saw` files in this test are careful to distinguish between
+  bitcode files compiled with `-O1` (`test-O1.bc`) and `-O2` (`test-O2.bc`).
+* `test-appropriate-overrides.saw` tests a specification for `h` that uses
+  overrides for `f` and `g` which initialize the global variable `x` to
+  appropriate values. SAW will accept this regardless of the optimization
+  setting.
+* `test-sketchy-overrides-{O1,O2}.saw` are like
+  `test-appropriate-overrides.saw`, except that the specification for `h`
+  uses an override for `g` which initializes `x` to a different value than
+  what actually occurs during an invocation of `h`. This will fail with
+  `test-O1.bc`, since the calls to `f` and `g` are still present in the bitcode
+  for `h`, but pass with `test-O2.bc`, where the calls have been inlined away.
+* `test-global-initializer.saw` is like `test-appropriate-overrides.saw`, but
+  it uses `llvm_global_initializer`.
+* `test-no-init-x.saw`, which is expected to fail, tests what happens when
+  `x` is not initialized in the specifications.
