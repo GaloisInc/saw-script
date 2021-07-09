@@ -23,3 +23,5 @@ rust_data_proofs.v
 rust_lifetimes.v
 rust_lifetimes_proofs.v
 arrays.v
+clearbufs.v
+clearbufs_proofs.v
