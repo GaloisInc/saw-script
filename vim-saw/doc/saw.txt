@@ -1,0 +1,10 @@
+*saw.txt* functionality for developing sawscript scripts
+
+This plugin adds basic syntax highlighting and a vim-slime override. This
+allows using vim-slime to send sawscript snippets from a sawscript file to a
+running sawscript interpreter. See the official vim-slime documentation for how
+to use vim-slime. The most basic command is <C-c><C-c>, which sends the whole
+paragraph the cursor is in. Note that the saw interpreter will correctly parse
+single top-level statements, but not multpile top-level statements.
+
+Dependencies: vim-slime
