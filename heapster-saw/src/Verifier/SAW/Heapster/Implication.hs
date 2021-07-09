@@ -319,7 +319,7 @@ data ImplError where
   ImplVariableError 
     :: Doc ann -> String 
     -> (Doc ann, ExprVar tp) -> (Doc ann, ValuePerm tp) -> CruCtx vars 
-    -> Some DistPerms
+    -> DistPerms ps
     -> ImplError
 
 data LifetimeErrorType where
@@ -330,24 +330,33 @@ data LifetimeErrorType where
 instance SubstVar PermVarSubst m =>
     Substable PermVarSubst ImplError m where
   genSubst s mb_impl = case mbMatch mb_impl of
-    [nuMP| GeneralError doc |] -> return $ GeneralError $ mbLift doc
-    [nuMP| NoFrameInScopeError |] -> return NoFrameInScopeError
-    [nuMP| ArrayStepError |] -> return ArrayStepError
-    [nuMP| MuUnfoldError |] -> return MuUnfoldError
-    [nuMP| FunctionPermissionError |] -> return FunctionPermissionError
-    [nuMP| PartialSubstitutionError str doc |] -> return $ PartialSubstitutionError (mbLift str) (mbLift doc)
-    [nuMP| LifetimeError le |] -> return $ LifetimeError $ mbLift le
-    [nuMP| MemBlockError doc |] -> return $ MemBlockError (mbLift doc)
-    [nuMP| EqualityProofError docl docr |] -> return $ EqualityProofError (mbLift docl) (mbLift docr)
-    [nuMP| InsufficientVariablesError doc |] -> return $ InsufficientVariablesError $ mbLift doc
-    [nuMP| ExistentialError doc1 doc2 |] -> return $ ExistentialError (mbLift doc1) (mbLift doc2)
-    [nuMP| ImplVariableError doc f (xdoc, x) (pdoc, p) ctx sdp |] -> do
+    [nuMP| GeneralError doc |] -> 
+      return $ GeneralError $ mbLift doc
+    [nuMP| NoFrameInScopeError |] -> 
+      return NoFrameInScopeError
+    [nuMP| ArrayStepError |] -> 
+      return ArrayStepError
+    [nuMP| MuUnfoldError |] -> 
+      return MuUnfoldError
+    [nuMP| FunctionPermissionError |] -> 
+      return FunctionPermissionError
+    [nuMP| PartialSubstitutionError str doc |] -> 
+      return $ PartialSubstitutionError (mbLift str) (mbLift doc)
+    [nuMP| LifetimeError le |] -> 
+      return $ LifetimeError $ mbLift le
+    [nuMP| MemBlockError doc |] -> 
+      return $ MemBlockError (mbLift doc)
+    [nuMP| EqualityProofError docl docr |] -> 
+      return $ EqualityProofError (mbLift docl) (mbLift docr)
+    [nuMP| InsufficientVariablesError doc |] -> 
+      return $ InsufficientVariablesError $ mbLift doc
+    [nuMP| ExistentialError doc1 doc2 |] -> 
+      return $ ExistentialError (mbLift doc1) (mbLift doc2)
+    [nuMP| ImplVariableError doc f (xdoc, x) (pdoc, p) ctx mb_dp |] -> do
       x' <- genSubst s x
       p' <- genSubst s p
-      case mbMatch sdp of
-        [nuMP| Some mb_dps |] -> do
-          dp <- genSubst s mb_dps
-          return $ ImplVariableError (mbLift doc) (mbLift f) (mbLift xdoc, x') (mbLift pdoc, p') (mbLift ctx) (Some dp)
+      dp <- genSubst s mb_dp
+      return $ ImplVariableError (mbLift doc) (mbLift f) (mbLift xdoc, x') (mbLift pdoc, p') (mbLift ctx) dp
    
 instance Liftable LifetimeErrorType where
   mbLift e = case mbMatch e of
@@ -6794,14 +6803,15 @@ implFailVarM :: NuMatchingAny1 r => String -> ExprVar tp -> ValuePerm tp ->
 implFailVarM f x p mb_p =
   use implStatePPInfo >>>= \ppinfo ->
   use implStateVars >>>= \ctx ->
-  findPermsContainingVar x >>>= \distperms ->
-    implFailM $ ImplVariableError 
-                  (ppImpl ppinfo x p mb_p) 
-                  f 
-                  (permPretty ppinfo x, x) 
-                  (permPretty ppinfo p, p)
-                  ctx 
-                  distperms
+  findPermsContainingVar x >>>= \case
+    (Some distperms) ->
+      implFailM $ ImplVariableError 
+                    (ppImpl ppinfo x p mb_p) 
+                    f 
+                    (permPretty ppinfo x, x) 
+                    (permPretty ppinfo p, p)
+                    ctx 
+                    distperms
 
   -- ImplVariableError 
   --   :: Doc ann -> String 
