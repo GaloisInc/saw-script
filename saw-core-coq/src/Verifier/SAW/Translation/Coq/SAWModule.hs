@@ -24,10 +24,8 @@ Portability : portable
 
 module Verifier.SAW.Translation.Coq.SAWModule where
 
-import           Control.Lens                                  (makeLenses, view)
 import qualified Control.Monad.Except                          as Except
 import           Control.Monad.Reader                          hiding (fail)
-import           Control.Monad.State                           hiding (fail)
 import           Prelude                                       hiding (fail)
 import           Prettyprinter                                 (Doc)
 
@@ -36,26 +34,22 @@ import qualified Language.Coq.Pretty                           as Coq
 import           Verifier.SAW.Module
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Term.Functor
-import           Verifier.SAW.Translation.Coq.Monad
+import qualified Verifier.SAW.Translation.Coq.Monad            as M
 import           Verifier.SAW.Translation.Coq.SpecialTreatment
 import qualified Verifier.SAW.Translation.Coq.Term             as TermTranslation
+import Verifier.SAW.Translation.Coq.Monad
 
 -- import Debug.Trace
 
-data ModuleTranslationState = ModuleTranslationState
-  { _currentModule  :: Maybe ModuleName
-  }
-  deriving (Show)
-makeLenses ''ModuleTranslationState
-
-type ModuleTranslationMonad m = TranslationMonad ModuleTranslationState m
+type ModuleTranslationMonad m =
+  M.TranslationMonad TermTranslation.TranslationReader () m
 
 runModuleTranslationMonad ::
-  TranslationConfiguration -> Maybe ModuleName ->
+  M.TranslationConfiguration -> Maybe ModuleName ->
   (forall m. ModuleTranslationMonad m => m a) ->
-  Either (TranslationError Term) (a, ModuleTranslationState)
-runModuleTranslationMonad configuration modname =
-  runTranslationMonad configuration (ModuleTranslationState modname)
+  Either (M.TranslationError Term) (a, ())
+runModuleTranslationMonad configuration modName =
+  M.runTranslationMonad configuration (TermTranslation.TranslationReader modName) ()
 
 dropPi :: Coq.Term -> Coq.Term
 dropPi (Coq.Pi (_ : t) r) = Coq.Pi t r
@@ -162,15 +156,19 @@ liftTermTranslationMonad ::
   (forall n. TermTranslation.TermTranslationMonad   n => n a) ->
   (forall m. ModuleTranslationMonad m => m a)
 liftTermTranslationMonad n = do
-  configuration <- ask
-  cur_mod <- view currentModule <$> get
-  let r = TermTranslation.runTermTranslationMonad configuration cur_mod [] [] n
+  configuration <- asks translationConfiguration
+  configReader <- asks otherConfiguration
+  let r = TermTranslation.runTermTranslationMonad configuration configReader [] [] n
   case r of
     Left  e      -> Except.throwError e
     Right (a, _) -> do
       return a
 
-translateDecl :: TranslationConfiguration -> Maybe ModuleName -> ModuleDecl -> Doc ann
+translateDecl ::
+  M.TranslationConfiguration ->
+  Maybe ModuleName ->
+  ModuleDecl ->
+  Doc ann
 translateDecl configuration modname decl =
   case decl of
   TypeDecl td -> do

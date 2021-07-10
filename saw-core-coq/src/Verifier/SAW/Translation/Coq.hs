@@ -113,7 +113,11 @@ Import ListNotations.
 translateTermAsDeclImports ::
   TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) (Doc ann)
 translateTermAsDeclImports configuration name t = do
-  doc <- TermTranslation.translateDefDoc configuration Nothing [] name t
+  doc <-
+    TermTranslation.translateDefDoc
+      configuration
+      (TermTranslation.TranslationReader Nothing)
+      [] name t
   return $ vcat [preamble configuration, hardline <> doc]
 
 translateSAWModule :: TranslationConfiguration -> Module -> Doc ann
@@ -131,7 +135,11 @@ translateSAWModule configuration m =
      ]
 
 translateCryptolModule ::
-  TranslationConfiguration -> [String] -> CryptolModule -> Either (TranslationError Term) (Doc ann)
+  TranslationConfiguration ->
+  -- | List of already translated global declarations
+  [String] ->
+  CryptolModule ->
+  Either (TranslationError Term) (Doc ann)
 translateCryptolModule configuration globalDecls m =
   let decls = CryptolModuleTranslation.translateCryptolModule
               configuration

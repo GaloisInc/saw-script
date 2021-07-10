@@ -62,6 +62,13 @@ traceTerm :: String -> Term -> a -> a
 traceTerm ctx t a = trace (ctx ++ ": " ++ showTerm t) a
 -}
 
+newtype TranslationReader = TranslationReader
+  { _currentModule  :: Maybe ModuleName
+  }
+  deriving (Show)
+
+makeLenses ''TranslationReader
+
 data TranslationState = TranslationState
 
   { _globalDeclarations :: [String]
@@ -70,7 +77,7 @@ data TranslationState = TranslationState
   -- same file).  We want to translate those exactly once, so we need to keep
   -- track of which ones have already been translated.
 
-  , _localDeclarations :: [Coq.Decl]
+  , _topLevelDeclarations :: [Coq.Decl]
   -- ^ Because some terms capture their dependencies, translating one term may
   -- result in multiple declarations: one for the term itself, but also zero or
   -- many for its dependencies.  We store all of those in this, so that a caller
@@ -95,11 +102,13 @@ data TranslationState = TranslationState
   -- ^ The next available name to be used for a let-bound shared
   -- sub-expression.
 
-  , _currentModule :: Maybe ModuleName
   }
   deriving (Show)
 
 makeLenses ''TranslationState
+
+type TermTranslationMonad m =
+  TranslationMonad TranslationReader TranslationState m
 
 -- | The set of reserved identifiers in Coq, obtained from section
 -- "Gallina Specification Language" of the Coq reference manual.
@@ -134,52 +143,61 @@ getNamesOfAllDeclarations ::
 getNamesOfAllDeclarations = view allDeclarations <$> get
   where
     allDeclarations =
-      to (\ (TranslationState {..}) -> namedDecls _localDeclarations ++ _globalDeclarations)
-
-type TermTranslationMonad m = TranslationMonad TranslationState m
+      to (\ (TranslationState {..}) -> namedDecls _topLevelDeclarations ++ _globalDeclarations)
 
 runTermTranslationMonad ::
   TranslationConfiguration ->
-  Maybe ModuleName ->
+  TranslationReader ->
   [String] ->
   [Coq.Ident] ->
   (forall m. TermTranslationMonad m => m a) ->
   Either (TranslationError Term) (a, TranslationState)
-runTermTranslationMonad configuration modname globalDecls localEnv =
-  runTranslationMonad configuration
+runTermTranslationMonad configuration r globalDecls localEnv =
+  runTranslationMonad configuration r
   (TranslationState { _globalDeclarations = globalDecls
-                    , _localDeclarations  = []
+                    , _topLevelDeclarations  = []
                     , _localEnvironment   = localEnv
                     , _unavailableIdents  = Set.union reservedIdents (Set.fromList localEnv)
                     , _sharedNames        = IntMap.empty
                     , _nextSharedName     = "var__0"
-                    , _currentModule      = modname
                     })
 
 errorTermM :: TermTranslationMonad m => String -> m Coq.Term
 errorTermM str = return $ Coq.App (Coq.Var "error") [Coq.StringLit str]
 
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Coq.Term
-translateIdentWithArgs i args =
-  (view currentModule <$> get) >>= \cur_modname ->
+translateIdentWithArgs i args = do
+  currentModuleName <- asks (view currentModule . otherConfiguration)
   let identToCoq ident =
-        if Just (identModule ident) == cur_modname then identName ident else
-          show (translateModuleName (identModule ident))
-          ++ "." ++ identName ident in
+        if Just (identModule ident) == currentModuleName
+          then identName ident
+          else
+            show (translateModuleName (identModule ident))
+            ++ "." ++ identName ident
+  specialTreatment <- findSpecialTreatment i
+  applySpecialTreatment identToCoq (atUseSite specialTreatment)
 
-  (atUseSite <$> findSpecialTreatment i) >>= \case
-    UsePreserve -> Coq.App (Coq.ExplVar $ identToCoq i) <$> mapM translateTerm args
-    UseRename targetModule targetName ->
-      Coq.App (Coq.ExplVar $ identToCoq $
-               mkIdent (fromMaybe (translateModuleName $ identModule i) targetModule)
-               (Text.pack targetName)) <$>
-      mapM translateTerm args
-    UseReplaceDropArgs n replacement
-      | length args >= n -> Coq.App replacement <$> mapM translateTerm (drop n args)
-    UseReplaceDropArgs n _ ->
-      errorTermM ("Identifier " ++ show i
-                  ++ " not applied to required number of args,"
-                  ++ " which is " ++ show n)
+  where
+
+    applySpecialTreatment identToCoq UsePreserve =
+      Coq.App (Coq.ExplVar $ identToCoq i) <$> mapM translateTerm args
+    applySpecialTreatment identToCoq (UseRename targetModule targetName) =
+      Coq.App
+        (Coq.ExplVar $ identToCoq $
+          mkIdent (fromMaybe (translateModuleName $ identModule i) targetModule)
+          (Text.pack targetName))
+          <$> mapM translateTerm args
+    applySpecialTreatment _identToCoq (UseReplaceDropArgs n replacement)
+      | length args >= n =
+        Coq.App replacement <$> mapM translateTerm (drop n args)
+    applySpecialTreatment _identToCoq (UseReplaceDropArgs n _) =
+      errorTermM (unwords
+        [ "Identifier"
+        , show i
+        , "not applied to required number of args, which is"
+        , show n
+        ]
+      )
 
 translateIdent :: TermTranslationMonad m => Ident -> m Coq.Term
 translateIdent i = translateIdentWithArgs i []
@@ -318,13 +336,34 @@ asApplyAllRecognizer :: Recognizer Term (Term, [Term])
 asApplyAllRecognizer t = do _ <- asApp t
                             return $ asApplyAll t
 
--- | Run a translation, but keep changes to the environment local to it,
--- restoring the current environment before returning.
-withLocalLocalEnvironment :: TermTranslationMonad m => m a -> m a
-withLocalLocalEnvironment action = do
-  s <- get
+-- | Run a translation, but keep some changes to the translation state local to
+-- that computation, restoring parts of the original translation state before
+-- returning.
+withLocalTranslationState :: TermTranslationMonad m => m a -> m a
+withLocalTranslationState action = do
+  before <- get
   result <- action
-  put s
+  after <- get
+  put (TranslationState
+    -- globalDeclarations is **not** restored, because we want to translate each
+    -- global declaration exactly once!
+    { _globalDeclarations = view globalDeclarations after
+    -- topLevelDeclarations is **not** restored, because it accumulates the
+    -- declarations witnessed in a given module so that we can extract it.
+    , _topLevelDeclarations = view topLevelDeclarations after
+    -- localEnvironment **is** restored, because the identifiers added to it
+    -- during translation are local to the term that was being translated.
+    , _localEnvironment = view localEnvironment before
+    -- unavailableIdents **is** restored, because the extra identifiers
+    -- unavailable in the term that was translated are local to it.
+    , _unavailableIdents = view unavailableIdents before
+    -- sharedNames **is** restored, because we are leaving the scope of the
+    -- locally shared names.
+    , _sharedNames = view sharedNames before
+    -- nextSharedName **is** restored, because we are leaving the scope of the
+    -- last names used.
+    , _nextSharedName = view nextSharedName before
+    })
   return result
 
 mkDefinition :: Coq.Ident -> Coq.Term -> Coq.Decl
@@ -354,7 +393,7 @@ translateParams ((n, ty):ps) = do
   return (Coq.Binder n' (Just ty') : ps')
 
 translatePi :: TermTranslationMonad m => [(LocalName, Term)] -> Term -> m Coq.Term
-translatePi binders body = withLocalLocalEnvironment $ do
+translatePi binders body = withLocalTranslationState $ do
   bindersT <- forM binders $ \ (b, bType) -> do
     bTypeT <- translateTerm bType
     b' <- freshenAndBindName b
@@ -389,7 +428,7 @@ nextVariant = reverse . go . reverse
 
 translateTermLet :: TermTranslationMonad m => Term -> m Coq.Term
 translateTermLet t =
-  withLocalLocalEnvironment $
+  withLocalTranslationState $
   do let counts = scTermCount False t
      let locals = fmap fst $ IntMap.filter keep counts
      names <- traverse (const nextName) locals
@@ -419,7 +458,7 @@ translateTerm t =
            Just x -> pure (Coq.Var x)
 
 translateTermUnshared :: TermTranslationMonad m => Term -> m Coq.Term
-translateTermUnshared t = withLocalLocalEnvironment $ do
+translateTermUnshared t = withLocalTranslationState $ do
   -- traceTerm "translateTerm" t $
   -- NOTE: env is in innermost-first order
   env <- view localEnvironment <$> get
@@ -487,7 +526,7 @@ translateTermUnshared t = withLocalLocalEnvironment $ do
                   do
                     len <- translateTerm n
                     (x', expr) <-
-                      withLocalLocalEnvironment $
+                      withLocalTranslationState $
                       do x' <- freshenAndBindName x
                          expr <- translateTerm body
                          pure (x', expr)
@@ -514,7 +553,7 @@ translateTermUnshared t = withLocalLocalEnvironment $ do
               case lambda of
               (asLambdaList -> ((recFn, _) : binders, body)) -> do
                 let (_binderPis, otherPis) = splitAt (length binders) pis
-                (recFn', bindersT, typeT, bodyT) <- withLocalLocalEnvironment $ do
+                (recFn', bindersT, typeT, bodyT) <- withLocalTranslationState $ do
                   -- this is very ugly...
                   recFn' <- freshenAndBindName recFn
                   bindersT <- mapM
@@ -543,7 +582,7 @@ translateTermUnshared t = withLocalLocalEnvironment $ do
 
   -- Constants come with a body
     Constant n body -> do
-      configuration <- ask
+      configuration <- asks translationConfiguration
       let renamed = translateConstant (notations configuration) n
       alreadyTranslatedDecls <- getNamesOfAllDeclarations
       let definitionsToSkip = skipDefinitions configuration
@@ -552,13 +591,13 @@ translateTermUnshared t = withLocalLocalEnvironment $ do
         else do
         b <-
           -- Translate body in a top-level name scope
-          withLocalLocalEnvironment $
+          withLocalTranslationState $
           do modify $ set localEnvironment []
              modify $ set unavailableIdents reservedIdents
              modify $ set sharedNames IntMap.empty
              modify $ set nextSharedName "var__0"
              translateTermLet body
-        modify $ over localDeclarations $ (mkDefinition renamed b :)
+        modify $ over topLevelDeclarations $ (mkDefinition renamed b :)
         Coq.Var <$> pure renamed
 
   where
@@ -590,16 +629,16 @@ defaultTermForType typ = do
 
 translateTermToDocWith ::
   TranslationConfiguration ->
-  Maybe ModuleName ->
+  TranslationReader ->
   [String] ->
   [String] ->
   (Coq.Term -> Doc ann) ->
   Term ->
   Either (TranslationError Term) (Doc ann)
-translateTermToDocWith configuration mn globalDecls localEnv f t = do
+translateTermToDocWith configuration r globalDecls localEnv f t = do
   (term, state) <-
-    runTermTranslationMonad configuration mn globalDecls localEnv (translateTermLet t)
-  let decls = view localDeclarations state
+    runTermTranslationMonad configuration r globalDecls localEnv (translateTermLet t)
+  let decls = view topLevelDeclarations state
   return $
     vcat $
     [ (vcat . intersperse hardline . map Coq.ppDecl . reverse) decls
@@ -609,10 +648,10 @@ translateTermToDocWith configuration mn globalDecls localEnv f t = do
 
 translateDefDoc ::
   TranslationConfiguration ->
-  Maybe ModuleName ->
+  TranslationReader ->
   [String] ->
   Coq.Ident -> Term ->
   Either (TranslationError Term) (Doc ann)
-translateDefDoc configuration mn globalDecls name =
-  translateTermToDocWith configuration mn globalDecls [name]
-  (\ term -> Coq.ppDecl (mkDefinition name term))
+translateDefDoc configuration r globalDecls name =
+  translateTermToDocWith configuration r globalDecls [name]
+  (Coq.ppDecl . mkDefinition name)
