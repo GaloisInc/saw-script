@@ -6,10 +6,11 @@
 
 module SAWScript.Prover.What4 where
 
-import System.IO
 
+import           Control.Lens ((^.))
 import           Data.Set (Set)
 import qualified Data.Map as Map
+import           System.IO
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
@@ -19,12 +20,14 @@ import           SAWScript.Proof(Prop, propToSATQuery, propSize, CEX)
 import           SAWScript.Prover.SolverStats
 import           SAWScript.Value (TopLevel, io, getSharedContext)
 
-import Data.Parameterized.Nonce
+import           Data.Parameterized.Nonce
 
 import           What4.Config
 import           What4.Solver
 import           What4.Interface
 import           What4.Expr.GroundEval
+import           What4.Expr.VarIdentification
+import           What4.ProblemFeatures
 import qualified Verifier.SAW.Simulator.What4 as W
 import           Verifier.SAW.Simulator.What4.FirstOrder
 import qualified What4.Expr.Builder as B
@@ -46,6 +49,35 @@ setupWhat4_sym hashConsing =
      cacheTermsSetting <- getOptionSetting B.cacheTerms $ getConfiguration sym
      _ <- setOpt cacheTermsSetting hashConsing
      return sym
+
+what4Theories ::
+  Set VarIndex ->
+  Bool ->
+  Prop ->
+  TopLevel [String]
+what4Theories unintSet hashConsing goal =
+  getSharedContext >>= \sc -> io $
+  do sym <- setupWhat4_sym hashConsing
+     satq <- propToSATQuery sc unintSet goal
+     (_varMap, lit) <- W.w4Solve sym sc satq
+     let pf = (predicateVarInfo lit)^.problemFeatures
+     return (evalTheories pf)
+
+evalTheories :: ProblemFeatures -> [String]
+evalTheories pf = [ nm | (nm,f) <- xs, hasProblemFeature pf f ]
+ where
+  xs = [ ("LinearArithmetic", useLinearArithmetic)
+       , ("NonlinearArithmetic", useNonlinearArithmetic)
+       , ("TranscendentalFunctions", useComputableReals)
+       , ("Integers", useIntegerArithmetic)
+       , ("Bitvectors", useBitvectors)
+       , ("ExistsForall", useExistForall)
+       , ("FirstOrderQuantifiers", useQuantifiers)
+       , ("Arrays", useSymbolicArrays)
+       , ("Structs", useStructs)
+       , ("Strings", useStrings)
+       , ("FloatingPoint", useFloatingPoint)
+       ]
 
 proveWhat4_sym ::
   SolverAdapter St ->
