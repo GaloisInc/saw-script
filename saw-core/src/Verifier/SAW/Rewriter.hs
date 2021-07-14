@@ -82,6 +82,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.TermNet as Net
+import Verifier.SAW.Prelude.Constants
 
 data RewriteRule a
   = RewriteRule { ctxt :: [Term], lhs :: Term, rhs :: Term, permutative :: Bool, annotation :: Maybe a }
@@ -152,8 +153,8 @@ first_order_match pat term = match pat term Map.empty
 asConstantNat :: Term -> Maybe Natural
 asConstantNat t =
   case R.asCtor t of
-    Just (i, []) | i == "Prelude.Zero" -> Just 0
-    Just (i, [x]) | i == "Prelude.Succ" -> (+ 1) <$> asConstantNat x
+    Just (i, [])  | primName i == preludeZeroIdent -> Just 0
+    Just (i, [x]) | primName i == preludeSuccIdent -> (+ 1) <$> asConstantNat x
     _ ->
       do let (f, xs) = R.asApplyAll t
          i <- R.asGlobalDef f
@@ -299,8 +300,8 @@ ruleOfTerm t ann =
     case unwrapTermF t of
       -- NOTE: this assumes the Coq-style equality type Eq X x y, where both X
       -- (the type of x and y) and x are parameters, and y is an index
-      FTermF (DataTypeApp ident [_, x] [y])
-          | ident == eqIdent -> mkRewriteRule [] x y ann
+      FTermF (DataTypeApp dt [_, x] [y])
+          | primName dt == eqIdent -> mkRewriteRule [] x y ann
       Pi _ ty body -> rule { ctxt = ty : ctxt rule }
           where rule = ruleOfTerm body ann
       _ -> error "ruleOfSharedTerm: Illegal argument"
@@ -379,7 +380,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ ann) =
                   return (mkRewriteRule ctxt l x ann)
          Just <$> traverse mkRule (Map.assocs m)
     (R.asApplyAll ->
-     (R.asRecursorApp -> Just (d, params, p_ret, cs_fs, _ixs, R.asLocalVar -> Just i),
+     (R.asRecursorApp -> Just (rec, crec, _ixs, R.asLocalVar -> Just i),
       more)) ->
       do let ctxt1 = reverse (drop (i+1) (reverse ctxt))
          let ctxt2 = reverse (take i (reverse ctxt))
@@ -395,7 +396,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ ann) =
                   -- Build a fully-applied constructor @c@ in context @ctxt1 ++ argTs@.
                   params2 <- traverse (incVars sc 0 nargs) params1
                   args <- traverse (scLocalVar sc) (reverse (take nargs [0..]))
-                  c <- scCtorAppParams sc (ctorName ctor) params2 args
+                  c <- scCtorAppParams sc (ctorPrimName ctor) params2 args
                   -- Build the list of types of the new context.
                   let ctxt' = ctxt1 ++ argTs ++ ctxt2
                   -- Define function to adjust indices on a term from
@@ -406,21 +407,21 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ ann) =
                   -- Adjust the indices and substitute the new
                   -- constructor value to make the new params, lhs,
                   -- and rhs in context @ctxt'@.
-                  params' <- traverse adjust params
                   lhs' <- adjust lhs
-                  p_ret' <- adjust p_ret
-                  cs_fs' <- traverse (traverse adjust) cs_fs
+
+                  rec'  <- adjust rec
+                  crec' <- traverse adjust crec
                   args' <- traverse (incVars sc 0 i) args
                   more' <- traverse adjust more
-                  let cn = ctorName ctor
-                  rhs1 <- scReduceRecursor sc d params' p_ret' cs_fs' cn args'
+
+                  rhs1 <- scReduceRecursor sc rec' crec' (ctorPrimName ctor) args'
                   rhs2 <- scApplyAll sc rhs1 more'
                   rhs3 <- betaReduce rhs2
                   -- re-fold recursive occurrences of the original rhs
                   let ss = addRule (mkRewriteRule ctxt rhs lhs Nothing) emptySimpset
                   (_,rhs') <- rewriteSharedTerm sc (ss :: Simpset ()) rhs3
                   return (mkRewriteRule ctxt' lhs' rhs' ann)
-         dt <- scRequireDataType sc d
+         dt <- scRequireDataType sc (primName (recursorDataType crec))
          rules <- traverse ctorRule (dtCtors dt)
          return (Just rules)
     _ -> return Nothing
@@ -530,13 +531,25 @@ asRecordRedex t =
 -- | An iota redex is a recursor application whose main argument is a
 -- constructor application; specifically, this function recognizes
 --
--- > RecursorApp d params p_ret cs_fs _ (CtorApp c _ args)
-asIotaRedex :: R.Recognizer Term (Ident, [Term], Term, [(Ident, Term)], Ident, [Term])
+-- > RecursorApp rec _ (CtorApp c _ args)
+--
+-- Note that this function does not recognize applications of
+-- recursors to concrete Nat values; see @asNatIotaRedex@.
+asIotaRedex :: R.Recognizer Term (Term, CompiledRecursor Term, PrimName Term, [Term])
 asIotaRedex t =
-  do (d, params, p_ret, cs_fs, _, arg) <- R.asRecursorApp t
-     (c, _, args) <- asCtorOrNat arg
-     return (d, params, p_ret, cs_fs, c, args)
+  do (rec, crec, _, arg) <- R.asRecursorApp t
+     (c, _, args) <- R.asCtorParams arg
+     return (rec, crec, c, args)
 
+-- | An iota redex whose argument is a concrete nautral number; specifically,
+--   this function recognizes
+--
+--   > RecursorApp rec _ n
+asNatIotaRedex :: R.Recognizer Term (Term, CompiledRecursor Term, Natural)
+asNatIotaRedex t =
+  do (rec, crec, _, arg) <- R.asRecursorApp t
+     n <- R.asNat arg
+     return (rec, crec, n)
 
 ----------------------------------------------------------------------
 -- Bottom-up rewriting
@@ -586,8 +599,10 @@ reduceSharedTerm :: SharedContext -> Term -> Maybe (IO Term)
 reduceSharedTerm sc (asBetaRedex -> Just (_, _, body, arg)) = Just (instantiateVar sc 0 arg body)
 reduceSharedTerm _ (asPairRedex -> Just t) = Just (return t)
 reduceSharedTerm _ (asRecordRedex -> Just t) = Just (return t)
-reduceSharedTerm sc (asIotaRedex -> Just (d, params, p_ret, cs_fs, c, args)) =
-  Just $ scReduceRecursor sc d params p_ret cs_fs c args
+reduceSharedTerm sc (asIotaRedex -> Just (rec, crec, c, args)) =
+  Just $ scReduceRecursor sc rec crec c args
+reduceSharedTerm sc (asNatIotaRedex -> Just (rec, crec, n)) =
+  Just $ scReduceNatRecursor sc rec crec n
 reduceSharedTerm _ _ = Nothing
 
 -- | Rewriter for shared terms.  The annotations of any used rules are collected
@@ -712,6 +727,9 @@ rewriteSharedTermTypeSafe sc ss t0 =
           -- a term to become ill-typed
           CtorApp{}        -> return ftf
           DataTypeApp{}    -> return ftf -- could treat same as CtorApp
+
+          RecursorType{}   -> return ftf
+          Recursor{}       -> return ftf
           RecursorApp{}    -> return ftf -- could treat same as CtorApp
 
           RecordType{}     -> traverse rewriteAll ftf

@@ -925,6 +925,10 @@ sometimes be helpful or essential. The `cryptol_ss` simpset includes
 rewrite rules to unfold all definitions in the `Cryptol` SAWCore module,
 but does not include any of the terms of equality type.
 
+* `add_cryptol_defs : `[String] -> Simpset -> Simpset` adds unfolding
+rules for functions with the given names from the SAWCore `Cryptol` module
+to the given `Simpset`.
+
 * `add_cryptol_eqs : [String] -> Simpset -> Simpset` adds the terms of
 equality type with the given names from the SAWCore `Cryptol` module to
 the given `Simpset`.
@@ -933,7 +937,7 @@ the given `Simpset`.
 rules from the SAWCore `Prelude` module to a `Simpset`.
 
 * `add_prelude_eqs : [String] -> Simpset -> Simpset` adds equality-typed
-term from the SAWCore `Prelude` module to a `Simpset`.
+terms from the SAWCore `Prelude` module to a `Simpset`.
 
 Finally, it's possible to construct a theorem from an arbitrary SAWCore
 expression (rather than a Cryptol expression), using the `core_axiom`

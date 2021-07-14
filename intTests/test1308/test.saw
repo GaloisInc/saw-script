@@ -1,0 +1,29 @@
+enable_lax_pointer_ordering;
+
+let alloc_init_readonly ty v = do {
+  p <- llvm_alloc_readonly ty;
+  llvm_points_to p v;
+  return p;
+};
+
+let ptr_to_fresh_readonly n ty = do {
+  x <- llvm_fresh_var n ty;
+  p <- alloc_init_readonly ty (llvm_term x);
+  return (x, p);
+};
+
+let LEN = 42;
+
+let zip_with_add_spec = do {
+  let array_ty = llvm_array LEN (llvm_int 64);
+  c_ptr <- llvm_alloc array_ty;
+  (a, a_ptr) <- ptr_to_fresh_readonly "a" array_ty;
+  (b, b_ptr) <- ptr_to_fresh_readonly "b" array_ty;
+
+  llvm_execute_func [c_ptr, a_ptr, b_ptr];
+
+  llvm_points_to c_ptr (llvm_term {{ zipWith`{LEN} (+) a b }});
+};
+
+mod <- llvm_load_module "test.bc";
+llvm_verify mod "zip_with_add" [] false zip_with_add_spec z3;

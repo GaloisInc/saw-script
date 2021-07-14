@@ -128,21 +128,23 @@ projTupleOpenTerm i t = projTupleOpenTerm (i-1) (pairRightOpenTerm t)
 ctorOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
 ctorOpenTerm c all_args = OpenTerm $ do
   maybe_ctor <- liftTCM scFindCtor c
-  (params, args) <-
-    case maybe_ctor of
-      Just ctor -> splitAt (ctorNumParams ctor) <$> mapM unOpenTerm all_args
-      Nothing -> throwTCError $ NoSuchCtor c
-  typeInferComplete $ CtorApp c params args
+  ctor <- case maybe_ctor of
+            Just ctor -> pure ctor
+            Nothing -> throwTCError $ NoSuchCtor c
+  (params, args) <- splitAt (ctorNumParams ctor) <$> mapM unOpenTerm all_args
+  c' <- traverse typeInferComplete (ctorPrimName ctor)
+  typeInferComplete $ CtorApp c' params args
 
 -- | Build an 'OpenTerm' for a datatype applied to its arguments
 dataTypeOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
 dataTypeOpenTerm d all_args = OpenTerm $ do
   maybe_dt <- liftTCM scFindDataType d
-  (params, args) <-
-    case maybe_dt of
-      Just dt -> splitAt (dtNumParams dt) <$> mapM unOpenTerm all_args
-      Nothing -> throwTCError $ NoSuchDataType d
-  typeInferComplete $ DataTypeApp d params args
+  dt <- case maybe_dt of
+          Just dt -> pure dt
+          Nothing -> throwTCError $ NoSuchDataType d
+  (params, args) <- splitAt (dtNumParams dt) <$> mapM unOpenTerm all_args
+  d' <- traverse typeInferComplete (dtPrimName dt)
+  typeInferComplete $ DataTypeApp d' params args
 
 -- | Build an 'OpenTerm' for a global name.
 globalOpenTerm :: Ident -> OpenTerm

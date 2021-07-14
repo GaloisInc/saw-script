@@ -45,6 +45,7 @@ import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Recognizer as R
+import Verifier.SAW.Utils (panic)
 
 import qualified Data.AIG as AIG
 
@@ -98,6 +99,7 @@ type instance VInt  (BitBlast l) = Integer
 type instance Extra (BitBlast l) = BExtra l
 
 type BValue l = Value (BitBlast l)
+type BPrim  l = Prims.Prim (BitBlast l)
 type BThunk l = Thunk (BitBlast l)
 
 data BExtra l
@@ -136,22 +138,19 @@ flattenBValue (VRecordValue elems) = do
   AIG.concat <$> mapM (flattenBValue <=< force . snd) elems
 flattenBValue _ = error $ unwords ["Verifier.SAW.Simulator.BitBlast.flattenBValue: unsupported value"]
 
-wordFun :: (LitVector l -> IO (BValue l)) -> BValue l
-wordFun f = strictFun (\x -> toWord x >>= f)
-
 ------------------------------------------------------------
 
 -- | op : (n : Nat) -> Vec n Bool -> Nat -> Vec n Bool
 bvShiftOp :: (LitVector l -> LitVector l -> IO (LitVector l))
           -> (LitVector l -> Natural -> LitVector l)
-          -> BValue l
+          -> BPrim l
 bvShiftOp bvOp natOp =
-  constFun $
-  wordFun $ \x -> return $
-  strictFun $ \y ->
+  Prims.constFun $
+  Prims.wordFun (pure1 lvFromV) $ \x ->
+  Prims.strictFun $ \y -> Prims.Prim $
     case y of
       VNat n   -> return (vWord (natOp x n))
-      VToNat v -> fmap vWord (bvOp x =<< toWord v)
+      VBVToNat _ v -> fmap vWord (bvOp x =<< toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.BitBlast.shiftOp", show y]
 
 lvSShr :: LitVector l -> Natural -> LitVector l
@@ -171,7 +170,8 @@ pure3 f x y z = pure (f x y z)
 prims :: AIG.IsAIG l g => g s -> Prims.BasePrims (BitBlast (l s))
 prims be =
   Prims.BasePrims
-  { Prims.bpAsBool  = AIG.asConstant be
+  { Prims.bpIsSymbolicEvaluator = True
+  , Prims.bpAsBool  = AIG.asConstant be
     -- Bitvectors
   , Prims.bpUnpack  = pure1 vFromLV
   , Prims.bpPack    = pure1 lvFromV
@@ -257,7 +257,7 @@ prims be =
 unsupportedAIGPrimitive :: String -> a
 unsupportedAIGPrimitive = Prim.unsupportedPrimitive "AIG"
 
-beConstMap :: AIG.IsAIG l g => g s -> Map Ident (BValue (l s))
+beConstMap :: AIG.IsAIG l g => g s -> Map Ident (BPrim (l s))
 beConstMap be =
   Map.union (Prims.constMap (prims be)) $
   Map.fromList
@@ -296,19 +296,21 @@ lazyMux be muxFn c tm fm
       f <- fm
       muxFn c t f
 
-muxBVal :: AIG.IsAIG l g => g s -> l s -> BValue (l s) -> BValue (l s) -> IO (BValue (l s))
+muxBVal :: AIG.IsAIG l g => g s -> TValue (BitBlast (l s)) -> l s -> BValue (l s) -> BValue (l s) -> IO (BValue (l s))
 muxBVal be = Prims.muxValue (prims be)
 
 muxInt :: a -> Integer -> Integer -> IO Integer
 muxInt _ x y = if x == y then return x else fail $ "muxBVal: VInt " ++ show (x, y)
 
-muxBExtra :: AIG.IsAIG l g => g s -> l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
-muxBExtra be c x y =
+muxBExtra :: AIG.IsAIG l g => g s ->
+  TValue (BitBlast (l s)) -> l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
+muxBExtra be (VDataType (primName -> "Prelude.Stream") [TValue tp] []) c x y =
   do let f i = do xi <- lookupBStream (VExtra x) i
                   yi <- lookupBStream (VExtra y) i
-                  muxBVal be c xi yi
+                  muxBVal be tp c xi yi
      r <- newIORef Map.empty
      return (BStream f r)
+muxBExtra _ tp _ _ _ = panic "AIG: muxBExtra" ["Type mismatch", show tp]
 
 -- | Barrel-shifter algorithm. Takes a list of bits in big-endian order.
 genShift ::
@@ -327,82 +329,90 @@ bitblastLogBase2 g x = do
 -- Integer/bitvector conversions
 
 -- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
-bvToIntOp :: AIG.IsAIG l g => g s -> BValue (l s)
-bvToIntOp g = constFun $ wordFun $ \v ->
+bvToIntOp :: AIG.IsAIG l g => g s -> BPrim (l s)
+bvToIntOp g =
+  Prims.constFun $
+  Prims.wordFun (pure1 lvFromV) $ \v ->
+  Prims.Prim $
    case AIG.asUnsigned g v of
       Just i -> return $ VInt i
       Nothing -> fail "Cannot convert symbolic bitvector to integer"
 
 -- primitive sbvToInt : (n : Nat) -> Vec n Bool -> Integer;
-sbvToIntOp :: AIG.IsAIG l g => g s -> BValue (l s)
-sbvToIntOp g = constFun $ wordFun $ \v ->
+sbvToIntOp :: AIG.IsAIG l g => g s -> BPrim (l s)
+sbvToIntOp g =
+  Prims.constFun $
+  Prims.wordFun (pure1 lvFromV) $ \v ->
+  Prims.Prim $
    case AIG.asSigned g v of
       Just i -> return $ VInt i
       Nothing -> fail "Cannot convert symbolic bitvector to integer"
 
 -- primitive intToBv : (n : Nat) -> Integer -> Vec n Bool;
-intToBvOp :: AIG.IsAIG l g => g s -> BValue (l s)
+intToBvOp :: AIG.IsAIG l g => g s -> BPrim (l s)
 intToBvOp g =
-  Prims.natFun' "intToBv n" $ \n -> return $
-  Prims.intFun "intToBv x" $ \x ->
-    VWord <$>
+  Prims.natFun $ \n ->
+  Prims.intFun $ \x -> Prims.Prim 
+    (VWord <$>
      if n >= 0 then return (AIG.bvFromInteger g (fromIntegral n) x)
-               else AIG.neg g (AIG.bvFromInteger g (fromIntegral n) (negate x))
+               else AIG.neg g (AIG.bvFromInteger g (fromIntegral n) (negate x)))
 
 ------------------------------------------------------------
 
-toIntModOp :: BValue l
+toIntModOp :: BPrim l
 toIntModOp =
-  Prims.natFun $ \n -> return $
-  Prims.intFun "toIntModOp" $ \x -> return $
-  VIntMod n (x `mod` toInteger n)
+  Prims.natFun $ \n ->
+  Prims.intFun $ \x ->
+    Prims.PrimValue (VIntMod n (x `mod` toInteger n))
 
-fromIntModOp :: BValue l
+fromIntModOp :: BPrim l
 fromIntModOp =
-  constFun $
-  Prims.intModFun "fromIntModOp" $ \x -> return $
-  VInt x
+  Prims.constFun $
+  Prims.intModFun $ \x ->
+    Prims.PrimValue (VInt x)
 
-intModEqOp :: AIG.IsAIG l g => g s -> BValue (l s)
+intModEqOp :: AIG.IsAIG l g => g s -> BPrim (l s)
 intModEqOp be =
-  constFun $
-  Prims.intModFun "intModEqOp" $ \x -> return $
-  Prims.intModFun "intModEqOp" $ \y -> return $
-  VBool (AIG.constant be (x == y))
+  Prims.constFun $
+  Prims.intModFun $ \x ->
+  Prims.intModFun $ \y ->
+    Prims.PrimValue (VBool (AIG.constant be (x == y)))
 
-intModBinOp :: (Integer -> Integer -> Integer) -> BValue l
+intModBinOp :: (Integer -> Integer -> Integer) -> BPrim l
 intModBinOp f =
-  Prims.natFun $ \n -> return $
-  Prims.intModFun "intModBinOp x" $ \x -> return $
-  Prims.intModFun "intModBinOp y" $ \y -> return $
-  VIntMod n (f x y `mod` toInteger n)
+  Prims.natFun $ \n ->
+  Prims.intModFun $ \x ->
+  Prims.intModFun $ \y ->
+    Prims.PrimValue (VIntMod n (f x y `mod` toInteger n))
 
-intModUnOp :: (Integer -> Integer) -> BValue l
+intModUnOp :: (Integer -> Integer) -> BPrim l
 intModUnOp f =
-  Prims.natFun $ \n -> return $
-  Prims.intModFun "intModUnOp" $ \x -> return $
-  VIntMod n (f x `mod` toInteger n)
+  Prims.natFun $ \n ->
+  Prims.intModFun $ \x ->
+    Prims.PrimValue (VIntMod n (f x `mod` toInteger n))
 
 ----------------------------------------
 
 -- MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
-mkStreamOp :: BValue l
+mkStreamOp :: BPrim l
 mkStreamOp =
-  constFun $
-  strictFun $ \f -> do
-    r <- newIORef Map.empty
-    return $ VExtra (BStream (\n -> apply f (ready (VNat n))) r)
+  Prims.constFun $
+  Prims.strictFun $ \f ->
+  Prims.Prim $
+    do r <- newIORef Map.empty
+       return $ VExtra (BStream (\n -> apply f (ready (VNat n))) r)
 
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
-streamGetOp :: AIG.IsAIG l g => g s -> BValue (l s)
+streamGetOp :: AIG.IsAIG l g => g s -> BPrim (l s)
 streamGetOp be =
-  constFun $
-  strictFun $ \xs -> return $
-  strictFun $ \case
+  Prims.tvalFun   $ \tp ->
+  Prims.strictFun $ \xs ->
+  Prims.strictFun $ \ix ->
+  Prims.Prim $ case ix of
     VNat n -> lookupBStream xs n
-    VToNat w ->
+    VBVToNat _ w ->
        do bs <- toWord w
-          AIG.muxInteger (lazyMux be (muxBVal be)) ((2 ^ AIG.length bs) - 1) bs (lookupBStream xs)
+          AIG.muxInteger (lazyMux be (muxBVal be tp)) ((2 ^ AIG.length bs) - 1) bs (lookupBStream xs)
     v -> fail (unlines ["Verifier.SAW.Simulator.BitBlast.streamGetOp", "Expected Nat value", show v])
 
 
@@ -436,7 +446,7 @@ newVars' be shape = ready <$> newVars be shape
 -- own bit engine internally, instead of receiving it from the caller,
 -- and pass it to the caller-provided continuation.
 
-type PrimMap l g = forall s. g s -> Map Ident (BValue (l s))
+type PrimMap l g = forall s. g s -> Map Ident (BPrim (l s))
 
 bitBlastBasic :: AIG.IsAIG l g
               => g s
@@ -446,9 +456,18 @@ bitBlastBasic :: AIG.IsAIG l g
               -> Term
               -> IO (BValue (l s))
 bitBlastBasic be m addlPrims ecMap t = do
+  let neutral _env nt = fail ("bitBlastBasic: could not evaluate neutral term: " ++ show nt)
+  let primHandler pn msg env _tv =
+         fail $ unlines
+           [ "Could not evaluate primitive " ++ show (primName pn)
+           , "On argument " ++ show (length env)
+           , Text.unpack msg
+           ]
   cfg <- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims be))
          (bitBlastExtCns ecMap)
          (const Nothing)
+         neutral
+         primHandler
   Sim.evalSharedTerm cfg t
 
 bitBlastExtCns ::

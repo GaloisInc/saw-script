@@ -973,7 +973,14 @@ setupPrestateConditions mspec cc mem env = aux []
       aux (lp:acc) globals xs
 
     aux acc globals (MS.SetupCond_Ghost () _loc var val : xs) =
-      aux acc (Crucible.insertGlobal var val globals) xs
+      case val of
+        TypedTerm (TypedTermSchema sch) tm ->
+          aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
+        TypedTerm tp _ ->
+          fail $ unlines
+            [ "Setup term for global variable expected to have Cryptol schema type, but got"
+            , show (MS.ppTypedTermType tp)
+            ]
 
 --------------------------------------------------------------------------------
 
@@ -1334,6 +1341,7 @@ setupLLVMCrucibleContext pathSat lm action =
      smt_array_memory_model_enabled <- gets rwSMTArrayMemoryModel
      crucible_assert_then_assume_enabled <- gets rwCrucibleAssertThenAssume
      what4HashConsing <- gets rwWhat4HashConsing
+     laxPointerOrdering <- gets rwLaxPointerOrdering
      Crucible.llvmPtrWidth ctx $ \wptr ->
        Crucible.withPtrWidth wptr $
        do let ?lc = ctx^.Crucible.llvmTypeCtx
@@ -1370,8 +1378,11 @@ setupLLVMCrucibleContext pathSat lm action =
                  crucible_assert_then_assume_enabled
 
                let bindings = Crucible.fnBindingsFromList []
+               let memOpts  = Crucible.defaultMemOptions
+                                { Crucible.laxPointerOrdering = laxPointerOrdering
+                                }
                let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
-                                 bindings (Crucible.llvmExtensionImpl Crucible.defaultMemOptions)
+                                 bindings (Crucible.llvmExtensionImpl memOpts)
                                  Common.SAWCruciblePersonality
                mem <- Crucible.populateConstGlobals sym (Crucible.globalInitMap mtrans)
                         =<< Crucible.initializeMemoryConstGlobals sym ctx llvm_mod
@@ -1528,11 +1539,11 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
                   do bv <- Crucible.projectLLVM_bv sym rv
                      t <- toSC sym st bv
                      let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
-                     pure $ TypedTerm (Cryptol.tMono cty) t
+                     pure $ TypedTerm (TypedTermSchema (Cryptol.tMono cty)) t
                 Crucible.BVRepr w ->
                   do t <- toSC sym st rv
                      let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
-                     pure $ TypedTerm (Cryptol.tMono cty) t
+                     pure $ TypedTerm (TypedTermSchema (Cryptol.tMono cty)) t
                 _ -> fail $ unwords ["Unexpected return type:", show rt]
             tt' <- abstractTypedExts sc (toList ecs) tt
             pure tt'
@@ -1948,12 +1959,19 @@ llvm_symbolic_alloc ro align_bytes sz =
      loc <- getW4Position "llvm_symbolic_alloc"
      sc <- lift getSharedContext
      sz_ty <- liftIO $ Cryptol.scCryptolType sc =<< scTypeOf sc sz
-     when (Just 64 /= asCryptolBVType sz_ty) $
-       throwCrucibleSetup loc $ unwords
-         [ "llvm_symbolic_alloc:"
-         , "unexpected type of size term, expected [64], found"
-         , Cryptol.pretty sz_ty
-         ]
+     case sz_ty of
+       Just (Right tp)
+         | Just 64 == asCryptolBVType tp -> return ()
+         | otherwise -> throwCrucibleSetup loc $ unwords
+              [ "llvm_symbolic_alloc:"
+              , "unexpected type of size term, expected [64], found"
+              , Cryptol.pretty tp
+              ]
+       _ -> throwCrucibleSetup loc $ unwords
+              [ "llvm_symbolic_alloc:"
+              , "unexpected term, expected term of type [64], but got"
+              , showTerm sz
+              ]
      let spec = LLVMAllocSpec
            { _allocSpecMut = if ro then Crucible.Immutable else Crucible.Mutable
            , _allocSpecType = Crucible.i8p
@@ -2122,15 +2140,22 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
   LLVMCrucibleSetupM $
   do cc <- getLLVMCrucibleContext
      loc <- getW4Position "llvm_points_to_array_prefix"
-     case ttSchema sz of
-       Cryptol.Forall [] [] ty
+     case ttType sz of
+       TypedTermSchema (Cryptol.Forall [] [] ty)
          | Just 64 == asCryptolBVType ty ->
            return ()
+         | otherwise ->
+           throwCrucibleSetup loc $ unwords
+              [ "llvm_points_to_array_prefix:"
+              , "unexpected type of size term, expected [64], found"
+              , Cryptol.pretty ty
+              ]
        _ -> throwCrucibleSetup loc $ unwords
-         [ "llvm_points_to_array_prefix:"
-         , "unexpected type of size term, expected [64], found"
-         , Cryptol.pretty (ttSchema sz)
-         ]
+              [ "llvm_points_to_array_prefix:"
+              , "unexpected size term, expected term of type [64], but got"
+              , showTerm (ttTerm sz)
+              ]
+
      Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -> Crucible.withPtrWidth wptr $
        do let ?lc = ccTypeCtx cc
           st <- get

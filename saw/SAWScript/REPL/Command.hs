@@ -228,9 +228,8 @@ sawScriptCmd str = do
     Left err -> io $ print err
     Right stmt ->
       do ro <- getTopLevelRO
-         ie <- getEnvironment
-         ((), ie') <- io $ runTopLevel (interpretStmt True stmt) ro ie
-         putEnvironment ie'
+         rwRef <- getEnvironmentRef
+         io $ runTopLevel (interpretStmt True stmt) ro rwRef
 
 replFileName :: String
 replFileName = "<stdin>"

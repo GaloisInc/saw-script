@@ -20,6 +20,35 @@ Several improvements have been made to JVM verification:
   "current" status, so that `enable_experimental` is no longer
   necessary for JVM verification.
 
+A new `enable_lax_pointer_ordering` function exists, which relaxes the
+restrictions that Crucible imposes on comparisons between pointers from
+different allocation blocks.
+
+## Changes
+
+* The linked-in version of ABC (based on the Haskell `abcBridge`
+  library) has been removed. During the original planning for this
+  removal, we marked commands based on this library as deprecated. In
+  the end, we replaced all of them except `cec` with Haskell
+  implementations, so no other commands have been removed, and the
+  following commands are now "current" again:
+
+    * `abc` (which now is the same as `w4_abc_verilog`)
+    * `load_aig`
+    * `save_aig`
+    * `save_aig_as_cnf`
+    * `bitblast`
+    * `write_aiger`
+    * `write_cnf`
+
+  We have also implemented a `w4_abc_aiger` command that writes a `Term`
+  in AIGER format and invokes ABC on it as an external process. This
+  should be very similar to the original `abc` command. Note that the
+  pure Haskell AIGER and CNF generation code has not been heavily tuned
+  for performance, and could likely be made more efficient. Please file
+  [issues](https://github.com/galoisinc/saw-script/issues) for
+  performance regressions you encounter!
+
 # Version 0.8
 
 ## New Features

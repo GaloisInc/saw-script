@@ -11,5 +11,6 @@ echo 'JOBS=1' >> codebuild/bin/jobs.sh
 source codebuild/bin/s2n_setup_env.sh
 SAW=true SAW_INSTALL_DIR=tmp-saw codebuild/bin/s2n_install_test_dependencies.sh
 cp /saw-bin/saw "$SAW_INSTALL_DIR"/bin/saw
+cp /saw-bin/abc "$SAW_INSTALL_DIR"/bin/abc
 "$SAW_INSTALL_DIR"/bin/saw --version
 exec codebuild/bin/s2n_codebuild.sh

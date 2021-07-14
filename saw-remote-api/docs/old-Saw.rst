@@ -165,6 +165,7 @@ Setting Options
   - ``option``: The name of the option to set. This is one of:
 
     * ``lax arithmetic``
+    * ``lax pointer ordering``
     * ``SMT array memory model``
     * ``What4 hash consing``
 

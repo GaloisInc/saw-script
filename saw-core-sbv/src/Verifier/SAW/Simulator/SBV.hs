@@ -67,11 +67,13 @@ import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, identName, toShortName)
+import Verifier.SAW.TypedAST (FieldName, toShortName, identBaseName)
 import Verifier.SAW.FiniteValue
             (FirstOrderType(..), FirstOrderValue(..)
             , fovVec, firstOrderTypeOf, asFirstOrderType
             )
+
+import Verifier.SAW.Utils (panic)
 
 data SBV
 
@@ -82,6 +84,7 @@ type instance VInt  SBV = SInteger
 type instance Extra SBV = SbvExtra
 
 type SValue = Value SBV
+type SPrim  = Prims.Prim SBV
 --type SThunk = Thunk SBV
 
 data SbvExtra =
@@ -102,7 +105,8 @@ pure3 f x y z = pure (f x y z)
 prims :: Prims.BasePrims SBV
 prims =
   Prims.BasePrims
-  { Prims.bpAsBool  = svAsBool
+  { Prims.bpIsSymbolicEvaluator = True
+  , Prims.bpAsBool  = svAsBool
   , Prims.bpUnpack  = svUnpack
   , Prims.bpPack    = pure1 symFromBits
   , Prims.bpBvAt    = pure2 svAt
@@ -185,7 +189,7 @@ prims =
 unsupportedSBVPrimitive :: String -> a
 unsupportedSBVPrimitive = Prim.unsupportedPrimitive "SBV"
 
-constMap :: Map Ident SValue
+constMap :: Map Ident SPrim
 constMap =
   Map.union (Prims.constMap prims) $
   Map.fromList
@@ -269,12 +273,12 @@ flattenSValue nm v = do
         VIntMod 0 si              -> return ([si], "")
         VIntMod n si              -> return ([svRem si (svInteger KUnbounded (toInteger n))], "")
         VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
-        VCtorApp i (V.toList->ts) -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) ts
-                                        return (concat xss, "_" ++ identName i ++ concat ss)
+        VCtorApp i ps ts          -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) (ps++ts)
+                                        return (concat xss, "_" ++ (Text.unpack (identBaseName (primName i))) ++ concat ss)
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
                                   -> return ([], s)
-        VFun _ -> fail $ "Cannot create uninterpreted higher-order function " ++ show nm
+        VFun _ _ -> fail $ "Cannot create uninterpreted higher-order function " ++ show nm
         _ -> fail $ "Cannot create uninterpreted function " ++ show nm ++ " with argument " ++ show v
 
 vWord :: SWord -> SValue
@@ -289,8 +293,8 @@ vInteger x = VInt x
 ------------------------------------------------------------
 -- Function constructors
 
-wordFun :: (SWord -> IO SValue) -> SValue
-wordFun f = strictFun (\x -> toWord x >>= f)
+wordFun :: (SWord -> SPrim) -> SPrim
+wordFun = Prims.wordFun (pure1 symFromBits)
 
 ------------------------------------------------------------
 -- Indexing operations
@@ -313,7 +317,7 @@ selectV merger maxValue valueFn vx =
   case svAsInteger vx of
     Just i
       | i >= 0    -> valueFn (fromInteger i)
-      | otherwise -> Prims.panic "selectV" ["expected nonnegative integer", show i]
+      | otherwise -> panic "selectV" ["expected nonnegative integer", show i]
     Nothing -> impl (intSizeOf vx) 0
   where
     impl _ x | x > maxValue || x < 0 = valueFn maxValue
@@ -342,27 +346,28 @@ svSlice i j x = svExtract (w - i - 1) (w - i - j) x
 -- Shift operations
 
 -- | op : (n : Nat) -> Vec n Bool -> Nat -> Vec n Bool
-bvShiftOp :: (SWord -> SWord -> SWord) -> (SWord -> Int -> SWord) -> SValue
+bvShiftOp :: (SWord -> SWord -> SWord) -> (SWord -> Int -> SWord) -> SPrim
 bvShiftOp bvOp natOp =
-  constFun $
-  wordFun $ \x -> return $
-  strictFun $ \y ->
+  Prims.constFun $
+  wordFun $ \x ->
+  Prims.strictFun $ \y ->
+  Prims.Prim $
     case y of
       VNat i | j < toInteger (maxBound :: Int) -> return (vWord (natOp x (fromInteger j)))
         where j = toInteger i `min` toInteger (intSizeOf x)
-      VToNat v -> fmap (vWord . bvOp x) (toWord v)
+      VBVToNat _ v -> fmap (vWord . bvOp x) (toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.SBV.bvShiftOp", show y]
 
 -- bvShl : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
-bvShLOp :: SValue
+bvShLOp :: SPrim
 bvShLOp = bvShiftOp svShiftLeft svShl
 
 -- bvShR : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
-bvShROp :: SValue
+bvShROp :: SPrim
 bvShROp = bvShiftOp svShiftRight svShr
 
 -- bvSShR : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
-bvSShROp :: SValue
+bvSShROp :: SPrim
 bvSShROp = bvShiftOp bvOp natOp
   where
     bvOp w x = svUnsign (svShiftRight (svSign w) x)
@@ -373,46 +378,55 @@ bvSShROp = bvShiftOp bvOp natOp
 
 -- primitive intToNat : Integer -> Nat;
 -- intToNat x == max 0 x
-intToNatOp :: SValue
+intToNatOp :: SPrim
 intToNatOp =
-  Prims.intFun "intToNat" $ \i ->
+  Prims.intFun $ \i ->
+  Prims.PrimValue $
     case svAsInteger i of
       Just i'
-        | 0 <= i'   -> pure (VNat (fromInteger i'))
-        | otherwise -> pure (VNat 0)
+        | 0 <= i'   -> VNat (fromInteger i')
+        | otherwise -> VNat 0
       Nothing ->
         let z  = svInteger KUnbounded 0
             i' = svIte (svLessThan i z) z i
-         in pure (VToNat (VInt i'))
+         in VIntToNat (VInt i')
 
 -- primitive natToInt :: Nat -> Integer;
-natToIntOp :: SValue
+natToIntOp :: SPrim
 natToIntOp =
-  Prims.natFun' "natToInt" $ \n -> return $
+  Prims.natFun $ \n ->
+  Prims.PrimValue $
     VInt (literalSInteger (toInteger n))
 
 -- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
-bvToIntOp :: SValue
-bvToIntOp = constFun $ wordFun $ \v ->
+bvToIntOp :: SPrim
+bvToIntOp =
+  Prims.constFun $
+  wordFun $ \v ->
+  Prims.PrimValue $
    case svAsInteger v of
-      Just i -> return $ VInt (literalSInteger i)
-      Nothing -> return $ VInt (svFromIntegral KUnbounded v)
+      Just i ->  VInt (literalSInteger i)
+      Nothing -> VInt (svFromIntegral KUnbounded v)
 
 -- primitive sbvToInt : (n : Nat) -> Vec n Bool -> Integer;
-sbvToIntOp :: SValue
-sbvToIntOp = constFun $ wordFun $ \v ->
+sbvToIntOp :: SPrim
+sbvToIntOp =
+  Prims.constFun $
+  wordFun $ \v ->
+  Prims.PrimValue $
    case svAsInteger (svSign v) of
-      Just i -> return $ VInt (literalSInteger i)
-      Nothing -> return $ VInt (svFromIntegral KUnbounded (svSign v))
+      Just i  -> VInt (literalSInteger i)
+      Nothing -> VInt (svFromIntegral KUnbounded (svSign v))
 
 -- primitive intToBv : (n : Nat) -> Integer -> Vec n Bool;
-intToBvOp :: SValue
+intToBvOp :: SPrim
 intToBvOp =
-  Prims.natFun' "intToBv n" $ \n -> return $
-  Prims.intFun "intToBv x" $ \x ->
+  Prims.natFun $ \n ->
+  Prims.intFun $ \x ->
+  Prims.PrimValue $
     case svAsInteger x of
-      Just i -> return $ VWord $ literalSWord (fromIntegral n) i
-      Nothing -> return $ VWord $ svFromIntegral (KBounded False (fromIntegral n)) x
+      Just i  -> VWord $ literalSWord (fromIntegral n) i
+      Nothing -> VWord $ svFromIntegral (KBounded False (fromIntegral n)) x
 
 ------------------------------------------------------------
 -- Rotations and shifts
@@ -440,38 +454,43 @@ svShiftR b x i = svIte b (svNot (svShiftRight (svNot x) i)) (svShiftRight x i)
 ------------------------------------------------------------
 -- Integers mod n
 
-toIntModOp :: SValue
+toIntModOp :: SPrim
 toIntModOp =
-  Prims.natFun' "toIntMod" $ \n -> pure $
-  Prims.intFun "toIntMod" $ \x -> pure $
-  VIntMod n x
+  Prims.natFun $ \n ->
+  Prims.intFun $ \x ->
+  Prims.PrimValue $
+    VIntMod n x
 
-fromIntModOp :: SValue
+fromIntModOp :: SPrim
 fromIntModOp =
-  Prims.natFun $ \n -> return $
-  Prims.intModFun "fromIntModOp" $ \x -> return $
-  VInt (svRem x (literalSInteger (toInteger n)))
+  Prims.natFun $ \n ->
+  Prims.intModFun $ \x ->
+  Prims.PrimValue $
+    VInt (svRem x (literalSInteger (toInteger n)))
 
-intModEqOp :: SValue
+intModEqOp :: SPrim
 intModEqOp =
-  Prims.natFun $ \n -> return $
-  Prims.intModFun "intModEqOp" $ \x -> return $
-  Prims.intModFun "intModEqOp" $ \y -> return $
-  let modulus = literalSInteger (toInteger n)
-  in VBool (svEqual (svRem (svMinus x y) modulus) (literalSInteger 0))
+  Prims.natFun $ \n ->
+  Prims.intModFun $ \x ->
+  Prims.intModFun $ \y ->
+  Prims.PrimValue $
+    let modulus = literalSInteger (toInteger n)
+     in VBool (svEqual (svRem (svMinus x y) modulus) (literalSInteger 0))
 
-intModBinOp :: (SInteger -> SInteger -> SInteger) -> SValue
+intModBinOp :: (SInteger -> SInteger -> SInteger) -> SPrim
 intModBinOp f =
-  Prims.natFun $ \n -> return $
-  Prims.intModFun "intModBinOp x" $ \x -> return $
-  Prims.intModFun "intModBinOp y" $ \y -> return $
-  VIntMod n (normalizeIntMod n (f x y))
+  Prims.natFun $ \n ->
+  Prims.intModFun $ \x ->
+  Prims.intModFun $ \y ->
+  Prims.PrimValue $
+    VIntMod n (normalizeIntMod n (f x y))
 
-intModUnOp :: (SInteger -> SInteger) -> SValue
+intModUnOp :: (SInteger -> SInteger) -> SPrim
 intModUnOp f =
-  Prims.natFun $ \n -> return $
-  Prims.intModFun "intModUnOp" $ \x -> return $
-  VIntMod n (normalizeIntMod n (f x))
+  Prims.natFun $ \n ->
+  Prims.intModFun $ \x ->
+  Prims.PrimValue $
+    VIntMod n (normalizeIntMod n (f x))
 
 normalizeIntMod :: Natural -> SInteger -> SInteger
 normalizeIntMod n x =
@@ -483,24 +502,25 @@ normalizeIntMod n x =
 -- Stream operations
 
 -- MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
-mkStreamOp :: SValue
+mkStreamOp :: SPrim
 mkStreamOp =
-  constFun $
-  strictFun $ \f -> do
-    r <- newIORef Map.empty
-    return $ VExtra (SStream (\n -> apply f (ready (VNat n))) r)
+  Prims.constFun $
+  Prims.strictFun $ \f -> Prims.Prim $
+    do r <- newIORef Map.empty
+       return $ VExtra (SStream (\n -> apply f (ready (VNat n))) r)
 
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
-streamGetOp :: SValue
+streamGetOp :: SPrim
 streamGetOp =
-  constFun $
-  strictFun $ \xs -> return $
-  strictFun $ \case
+  Prims.tvalFun   $ \tp ->
+  Prims.strictFun $ \xs ->
+  Prims.strictFun $ \ix ->
+  Prims.Prim $ case ix of
     VNat n -> lookupSStream xs n
-    VToNat w ->
+    VBVToNat _ w ->
       do ilv <- toWord w
-         selectV (lazyMux muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
-    v -> Prims.panic "SBV.streamGetOp" ["Expected Nat value", show v]
+         selectV (lazyMux (muxBVal tp)) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
+    v -> panic "SBV.streamGetOp" ["Expected Nat value", show v]
 
 
 lookupSStream :: SValue -> Natural -> IO SValue
@@ -554,23 +574,24 @@ sLg2 x = go 0
 ------------------------------------------------------------
 -- Ite ops
 
-muxBVal :: SBool -> SValue -> SValue -> IO SValue
+muxBVal :: TValue SBV -> SBool -> SValue -> SValue -> IO SValue
 muxBVal = Prims.muxValue prims
 
-muxSbvExtra :: SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
-muxSbvExtra c x y =
+muxSbvExtra :: TValue SBV -> SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
+muxSbvExtra (VDataType (primName -> "Prelude.Stream") [TValue tp] []) c x y =
   do let f i = do xi <- lookupSbvExtra x i
                   yi <- lookupSbvExtra y i
-                  muxBVal c xi yi
+                  muxBVal tp c xi yi
      r <- newIORef Map.empty
      return (SStream f r)
+muxSbvExtra tp _ _ _ = panic "muxSbvExtra" ["Type mismatch", show tp]
 
 ------------------------------------------------------------
 -- External interface
 
 -- | Abstract constants with names in the list 'unints' are kept as
 -- uninterpreted constants; all others are unfolded.
-sbvSolveBasic :: SharedContext -> Map Ident SValue -> Set VarIndex -> Term -> IO SValue
+sbvSolveBasic :: SharedContext -> Map Ident SPrim -> Set VarIndex -> Term -> IO SValue
 sbvSolveBasic sc addlPrims unintSet t = do
   m <- scGetModuleMap sc
 
@@ -578,18 +599,26 @@ sbvSolveBasic sc addlPrims unintSet t = do
   let uninterpreted ec
         | Set.member (ecVarIndex ec) unintSet = Just (extcns ec)
         | otherwise                           = Nothing
-  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted
+  let neutral _env nt = fail ("sbvSolveBasic: could not evaluate neutral term: " ++ show nt)
+  let primHandler pn msg env _tv =
+         fail $ unlines
+           [ "Could not evaluate primitive " ++ show (primName pn)
+           , "On argument " ++ show (length env)
+           , Text.unpack msg
+           ]
+  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted neutral primHandler
   Sim.evalSharedTerm cfg t
 
 parseUninterpreted :: [SVal] -> String -> TValue SBV -> IO SValue
 parseUninterpreted cws nm ty =
   case ty of
-    (VPiType _ f)
+    (VPiType fnm _ body)
       -> return $
-         strictFun $ \x -> do
-           (cws', suffix) <- flattenSValue nm x
-           t2 <- f (ready x)
-           parseUninterpreted (cws ++ cws') (nm ++ suffix) t2
+         VFun fnm $ \x ->
+           do x' <- force x
+              (cws', suffix) <- flattenSValue nm x'
+              t2 <- applyPiBody body (ready x')
+              parseUninterpreted (cws ++ cws') (nm ++ suffix) t2
 
     VBoolType
       -> return $ vBool $ mkUninterpreted KBool cws nm
@@ -629,7 +658,7 @@ mkUninterpreted :: Kind -> [SVal] -> String -> SVal
 mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
   where nm' = "|" ++ nm ++ "|" -- enclose name to allow primes and other non-alphanum chars
 
-sbvSATQuery :: SharedContext -> Map Ident SValue -> SATQuery -> IO ([Labeler], [ExtCns Term], Symbolic SBool)
+sbvSATQuery :: SharedContext -> Map Ident SPrim -> SATQuery -> IO ([Labeler], [ExtCns Term], Symbolic SBool)
 sbvSATQuery sc addlPrims query =
   do true <- liftIO (scBool sc True)
      t <- liftIO (foldM (scAnd sc) true (satAsserts query))
@@ -655,8 +684,15 @@ sbvSATQuery sc addlPrims query =
           let uninterpreted ec
                 | Set.member (ecVarIndex ec) unintSet = Just (mkUninterp ec)
                 | otherwise                           = Nothing
+          let neutral _env nt = fail ("sbvSATQuery: could not evaluate neutral term: " ++ show nt)
+          let primHandler pn msg env _tv =
+                 fail $ unlines
+                   [ "Could not evaluate primitive " ++ show (primName pn)
+                   , "On argument " ++ show (length env)
+                   , Text.unpack msg
+                   ]
 
-          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted)
+          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted neutral primHandler)
           bval <- liftIO (Sim.evalSharedTerm cfg t)
 
           case bval of
@@ -797,7 +833,7 @@ argTypes sc t = do
 
 sbvCodeGen_definition
   :: SharedContext
-  -> Map Ident SValue
+  -> Map Ident SPrim
   -> Set VarIndex
   -> Term
   -> (Natural -> Bool) -- ^ Allowed word sizes
@@ -885,7 +921,7 @@ sbvSetOutput _checkSz _ft _v _i = do
 
 
 sbvCodeGen :: SharedContext
-           -> Map Ident SValue
+           -> Map Ident SPrim
            -> Set VarIndex
            -> Maybe FilePath
            -> String

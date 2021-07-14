@@ -56,6 +56,16 @@ signed (BV w x)
 bvAt :: BitVector -> Int -> Bool
 bvAt (BV w x) i = testBit x (w - 1 - i)
 
+-- | Conversion from list of bits to integer (big-endian)
+bvToInteger :: Vector Bool -> Integer
+bvToInteger = V.foldl' (\x b -> if b then 2*x+1 else 2*x) 0
+
+unpackBitVector :: BitVector -> Vector Bool
+unpackBitVector x = V.generate (width x) (bvAt x)
+
+packBitVector :: Vector Bool -> BitVector
+packBitVector v = BV (V.length v) (bvToInteger v)
+
 ------------------------------------------------------------
 -- Primitive operations
 
@@ -264,6 +274,36 @@ lg2rem 1 = (0, 0)
 lg2rem n = (k+1, 2*d+r)
   where (q, r) = n `divMod` 2
         (k, d) = lg2rem q
+
+------------------------------------------------------------
+-- BitVector shift/rotate
+
+bvRotateL :: BitVector -> Integer -> BitVector
+bvRotateL (BV w x) i = bv w ((x `shiftL` j) .|. (x `shiftR` (w - j)))
+  where j = fromInteger (i `mod` toInteger w)
+
+bvRotateR :: BitVector -> Integer -> BitVector
+bvRotateR w i = bvRotateL w (- i)
+
+bvShiftL ::
+  Bool {- ^ bit value to shift in -} ->
+  BitVector {- ^ value to shift -} ->
+  Integer {- ^ amount to shift by -} ->
+  BitVector
+bvShiftL c (BV w x) i = bv w ((x `shiftL` j) .|. c')
+  where c' = if c then (1 `shiftL` j) - 1 else 0
+        j = fromInteger (i `min` toInteger w)
+
+bvShiftR ::
+  Bool {- ^ bit value to shift in -} ->
+  BitVector {- ^ value to shift -} ->
+  Integer {- ^ amount to shift by -} ->
+  BitVector
+bvShiftR c (BV w x) i = bv w (c' .|. (x `shiftR` j))
+  where c' = if c then (full `shiftL` (w - j)) .&. full else 0
+        full = (1 `shiftL` w) - 1
+        j = fromInteger (i `min` toInteger w)
+
 
 ----------------------------------------
 -- Errors
