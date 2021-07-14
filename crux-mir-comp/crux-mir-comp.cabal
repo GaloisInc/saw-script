@@ -41,6 +41,7 @@ library
                  template-haskell,
                  saw-core,
                  saw-core-what4,
+                 cryptol,
                  cryptol-saw-core,
                  saw-script
 
@@ -51,6 +52,7 @@ library
                    Mir.Compositional.Convert
                    Mir.Compositional.MethodSpec
                    Mir.Compositional.Override
+                   Mir.Cryptol
 
   ghc-options: -Wall -Wno-name-shadowing
 

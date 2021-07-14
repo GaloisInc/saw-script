@@ -24,7 +24,7 @@ let bar_spec = do {
   llvm_execute_func [x_ptr, (llvm_term n), (llvm_term i)];
 };
 
-fails (llvm_verify m "foo" [] false (foo_spec false) abc);
-foo_ov <- llvm_verify m "foo" [] false (foo_spec true) abc;
-llvm_verify m "bar" [foo_ov] false bar_spec abc;
+fails (llvm_verify m "foo" [] false (foo_spec false) yices);
+foo_ov <- llvm_verify m "foo" [] false (foo_spec true) yices;
+llvm_verify m "bar" [foo_ov] false bar_spec yices;
 

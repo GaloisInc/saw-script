@@ -29,14 +29,15 @@ import Data.Monoid
 #endif
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State
-import Control.Monad.Reader (ask)
 import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
+import Data.IORef
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -74,6 +75,7 @@ import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (prepareSATQuery, runManyTests)
 import Verifier.SAW.TypedAST
+import qualified Verifier.SAW.Simulator.TermModel as TM
 
 import SAWScript.Position
 
@@ -196,12 +198,12 @@ readSBV path unintlst =
 -- have more examples. It might be an improvement to take SAIGs as
 -- arguments, in the style of 'cecPrim' below. This would require
 -- support for latches in the 'AIGNetwork' SAWScript type.
-dsecPrint :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
-dsecPrint sc t1 t2 = SV.getProxy >>= \(SV.AIGProxy proxy) -> do
+dsecPrint :: TypedTerm -> TypedTerm -> TopLevel ()
+dsecPrint t1 t2 = do
   withSystemTempFile ".aig" $ \path1 _handle1 -> do
   withSystemTempFile ".aig" $ \path2 _handle2 -> do
-  Prover.writeSAIGInferLatches proxy sc path1 t1
-  Prover.writeSAIGInferLatches proxy sc path2 t2
+  Prover.writeSAIGInferLatches path1 t1
+  Prover.writeSAIGInferLatches path2 t2
   io $ callCommand (abcDsec path1 path2)
   where
     -- The '-w' here may be overkill ...
@@ -492,6 +494,18 @@ resolveName sc nm =
  fallback = fst <$> io (scResolveUnambiguous sc tnm)
 
 
+normalize_term :: TypedTerm -> TopLevel TypedTerm
+normalize_term tt = normalize_term_opaque [] tt
+
+normalize_term_opaque :: [String] -> TypedTerm -> TopLevel TypedTerm
+normalize_term_opaque opaque tt =
+  do sc <- getSharedContext
+     modmap <- io (scGetModuleMap sc)
+     idxs <- mapM (resolveName sc) opaque
+     let opaqueSet = Set.fromList idxs
+     tm' <- io (TM.normalizeSharedTerm sc modmap mempty mempty opaqueSet (ttTerm tt))
+     pure tt{ ttTerm = tm' }
+
 unfoldGoal :: [String] -> ProofScript ()
 unfoldGoal unints =
   execTactic $ tacticChange $ \goal ->
@@ -530,6 +544,76 @@ goal_eval unints =
      unintSet <- resolveNames unints
      prop' <- io (evalProp sc unintSet (goalProp goal))
      return (prop', EvalEvidence unintSet)
+
+extract_uninterp ::
+  [String] {- ^ uninterpred identifiers -} ->
+  [String] {- ^ opaque identifiers -} ->
+  TypedTerm ->
+  TopLevel (TypedTerm, [(String,[(TypedTerm,TypedTerm)])])
+extract_uninterp unints opaques tt =
+  do sc <- getSharedContext
+     idxs <- mapM (resolveName sc) unints
+     let unintSet = Set.fromList idxs
+     mmap <- io (scGetModuleMap sc)
+
+     opaqueSet <- Set.fromList <$> mapM (resolveName sc) opaques
+
+     boundECRef <- io (newIORef Set.empty)
+     let ?recordEC = \ec -> modifyIORef boundECRef (Set.insert ec)
+     (tm, repls) <- io (TM.extractUninterp sc mmap mempty mempty unintSet opaqueSet (ttTerm tt))
+     boundECSet <- io (readIORef boundECRef)
+     let tt' = tt{ ttTerm = tm }
+
+     let f = traverse $ \(ec,vs) ->
+               do ectm <- scExtCns sc ec
+                  vs'  <- filterCryTerms sc vs
+                  pure (ectm, vs')
+     repls' <- io (traverse f repls)
+
+     usedECRef <- io (newIORef Set.empty)
+     replList <- io $
+        forM (zip unints idxs) $ \(nm,idx) ->
+           do let ls = fromMaybe [] (Map.lookup idx repls')
+              xs <- forM ls $ \(e,vs) ->
+                      do e'  <- mkTypedTerm sc e
+                         vs' <- tupleTypedTerm sc vs
+                         modifyIORef usedECRef (Set.union (getAllExtSet (ttTerm vs')))
+                         pure (e',vs')
+              pure (nm,xs)
+     usedECSet <- io (readIORef usedECRef)
+
+     let boundAndUsed = Set.intersection boundECSet usedECSet
+     unless (Set.null boundAndUsed)
+       (do ppOpts <- getTopLevelPPOpts
+           vs <- io $ forM (Set.toList boundAndUsed) $ \ec ->
+                              do pptm <- scPrettyTerm ppOpts <$> scExtCns sc ec
+                                 let ppty = scPrettyTerm ppOpts (ecType ec)
+                                 return (pptm <> " : " <> ppty)
+           printOutLnTop Warn $ unlines $
+             [ "WARNING: extracted arguments reference captured variables!"
+             , "This usually means one of functions you extracted was used in a higher-order way"
+             , "that could not be fully unrolled, or the expression depends on lambda-bound variables."
+             , "The results of reasoning about this extraction may be unexpected."
+             , "The affected variables are:"
+             ] ++ (map ("  "++) vs))
+
+     pure (tt', replList)
+
+
+filterCryTerms :: SharedContext -> [Term] -> IO [TypedTerm]
+filterCryTerms sc = loop
+  where
+  loop [] = pure []
+  loop (x:xs) =
+    do tp <- Cryptol.scCryptolType sc =<< scTypeOf sc x
+       case tp of
+         Just (Right cty) ->
+           do let x' = TypedTerm (TypedTermSchema (C.tMono cty)) x
+              xs' <- loop xs
+              pure (x':xs')
+
+         _ -> loop xs
+
 
 beta_reduce_goal :: ProofScript ()
 beta_reduce_goal =
@@ -597,22 +681,13 @@ satExternal doCNF execName args =
          Just a  -> return (stats, SolveCounterexample a)
 
 writeAIGPrim :: FilePath -> Term -> TopLevel ()
-writeAIGPrim f t = do
-  SV.AIGProxy proxy <- SV.getProxy
-  sc <- SV.getSharedContext
-  Prover.writeAIG proxy sc f t
+writeAIGPrim = Prover.writeAIG
 
 writeSAIGPrim :: FilePath -> TypedTerm -> TopLevel ()
-writeSAIGPrim f t = do
-  SV.AIGProxy proxy <- SV.getProxy
-  sc <- SV.getSharedContext
-  Prover.writeSAIGInferLatches proxy sc f t
+writeSAIGPrim = Prover.writeSAIGInferLatches
 
 writeSAIGComputedPrim :: FilePath -> Term -> Int -> TopLevel ()
-writeSAIGComputedPrim f t n = do
-  SV.AIGProxy proxy <- SV.getProxy
-  sc <- SV.getSharedContext
-  Prover.writeSAIG proxy sc f t n
+writeSAIGComputedPrim = Prover.writeSAIG
 
 -- | Bit-blast a proposition check its validity using the RME library.
 proveRME :: ProofScript ()
@@ -638,48 +713,43 @@ proveUnintSBV conf unints =
      unintSet <- SV.scriptTopLevel (resolveNames unints)
      wrapProver (Prover.proveUnintSBV conf unintSet timeout)
 
-applyProverToGoal :: (SharedContext
-                      -> Prop -> IO (Maybe CEX, SolverStats))
-                     -> SharedContext
+applyProverToGoal :: (Prop -> TopLevel (Maybe CEX, SolverStats))
                      -> ProofGoal
                      -> TopLevel (SolverStats, SolveResult)
-applyProverToGoal f sc g = do
-  (mb, stats) <- io $ f sc (goalProp g)
+applyProverToGoal f g = do
+  (mb, stats) <- f (goalProp g)
   case mb of
     Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
     Just a  -> return (stats, SolveCounterexample a)
 
 wrapProver ::
-  (SharedContext -> Prop -> IO (Maybe CEX, SolverStats)) ->
+  (Prop -> TopLevel (Maybe CEX, SolverStats)) ->
   ProofScript ()
-wrapProver f = do
-  sc <- SV.scriptTopLevel SV.getSharedContext
-  execTactic $ tacticSolve $ applyProverToGoal f sc
+wrapProver f = execTactic $ tacticSolve $ applyProverToGoal f
 
 wrapW4Prover ::
-  ( Set VarIndex -> SharedContext -> Bool ->
-    Prop -> IO (Maybe CEX, SolverStats)) ->
+  ( Set VarIndex -> Bool ->
+    Prop -> TopLevel (Maybe CEX, SolverStats)) ->
   [String] ->
   ProofScript ()
 wrapW4Prover f unints = do
   hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
   unintSet <- SV.scriptTopLevel $ resolveNames unints
-  wrapProver $ \sc -> f unintSet sc hashConsing
+  wrapProver $ f unintSet hashConsing
 
 wrapW4ProveExporter ::
-  ( Set VarIndex -> SharedContext -> Bool -> FilePath ->
-    Prop -> IO (Maybe CEX, SolverStats)) ->
+  ( Set VarIndex -> Bool -> FilePath ->
+    Prop -> TopLevel (Maybe CEX, SolverStats)) ->
   [String] ->
   String ->
   String ->
   ProofScript ()
 wrapW4ProveExporter f unints path ext = do
   hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
-  sc <- SV.scriptTopLevel $ SV.getSharedContext
   unintSet <- SV.scriptTopLevel $ resolveNames unints
   execTactic $ tacticSolve $ \g -> do
     let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
-    applyProverToGoal (\s -> f unintSet s hashConsing file) sc g
+    applyProverToGoal (f unintSet hashConsing file) g
 
 --------------------------------------------------
 proveABC_SBV :: ProofScript ()
@@ -757,7 +827,7 @@ offline_w4_unint_yices unints path =
      wrapW4ProveExporter Prover.proveExportWhat4_yices unints path ".smt2"
 
 proveWithSATExporter ::
-  (SharedContext -> FilePath -> SATQuery -> TopLevel a) ->
+  (FilePath -> SATQuery -> TopLevel a) ->
   Set VarIndex ->
   String ->
   String ->
@@ -770,7 +840,7 @@ proveWithSATExporter exporter unintSet path sep ext =
      return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
 
 proveWithPropExporter ::
-  (SharedContext -> FilePath -> Prop -> TopLevel a) ->
+  (FilePath -> Prop -> TopLevel a) ->
   String ->
   String ->
   String ->
@@ -782,28 +852,26 @@ proveWithPropExporter exporter path sep ext =
      return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
 
 offline_aig :: FilePath -> ProofScript ()
-offline_aig path = do
-  SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
-  proveWithSATExporter (Prover.writeAIG_SAT proxy) mempty path "." ".aig"
+offline_aig path =
+  proveWithSATExporter Prover.writeAIG_SAT mempty path "." ".aig"
 
 offline_aig_external :: FilePath -> ProofScript ()
 offline_aig_external path =
   proveWithSATExporter Prover.writeAIG_SATviaVerilog mempty path "." ".aig"
 
 offline_cnf :: FilePath -> ProofScript ()
-offline_cnf path = do
-  SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
-  proveWithSATExporter (Prover.writeCNF proxy) mempty path "." ".cnf"
+offline_cnf path =
+  proveWithSATExporter Prover.writeCNF mempty path "." ".cnf"
 
 offline_cnf_external :: FilePath -> ProofScript ()
 offline_cnf_external path =
   proveWithSATExporter Prover.writeCNF_SATviaVerilog mempty path "." ".cnf"
 
 offline_coq :: FilePath -> ProofScript ()
-offline_coq path = proveWithPropExporter (const (Prover.writeCoqProp "goal" [] [])) path "_" ".v"
+offline_coq path = proveWithPropExporter (Prover.writeCoqProp "goal" [] []) path "_" ".v"
 
 offline_extcore :: FilePath -> ProofScript ()
-offline_extcore path = proveWithPropExporter (const Prover.writeCoreProp) path "." ".extcore"
+offline_extcore path = proveWithPropExporter Prover.writeCoreProp path "." ".extcore"
 
 offline_smtlib2 :: FilePath -> ProofScript ()
 offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2 mempty path "." ".smt2"
@@ -819,6 +887,9 @@ offline_unint_smtlib2 unints path =
 offline_verilog :: FilePath -> ProofScript ()
 offline_verilog path =
   proveWithSATExporter Prover.writeVerilogSAT mempty path "." ".v"
+
+w4_abc_aiger :: ProofScript ()
+w4_abc_aiger = wrapW4Prover Prover.w4AbcAIGER []
 
 w4_abc_verilog :: ProofScript ()
 w4_abc_verilog = wrapW4Prover Prover.w4AbcVerilog []
@@ -1145,10 +1216,11 @@ timePrim a = do
   return r
 
 failsPrim :: TopLevel SV.Value -> TopLevel ()
-failsPrim m = TopLevel $ do
-  topRO <- ask
-  topRW <- Control.Monad.State.get
-  x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
+failsPrim m = do
+  topRO <- getTopLevelRO
+  topRW <- getTopLevelRW
+  ref <- liftIO $ newIORef topRW
+  x <- liftIO $ Ex.try (runTopLevel m topRO ref)
   case x of
     Left (ex :: Ex.SomeException) ->
       do liftIO $ putStrLn "== Anticipated failure message =="
@@ -1442,9 +1514,8 @@ parseSharpSATResult s = parse (lines s)
 
 sharpSAT :: TypedTerm -> TopLevel Integer
 sharpSAT t = do
-  sc <- getSharedContext
   tmp <- io $ emptySystemTempFile "sharpSAT-input"
-  Prover.write_cnf sc tmp t
+  Prover.write_cnf tmp t
   (_ec, out, _err) <- io $ readProcessWithExitCode "sharpSAT" [tmp] ""
   io $ removeFile tmp
   case parseSharpSATResult out of
@@ -1453,9 +1524,8 @@ sharpSAT t = do
 
 approxmc :: TypedTerm -> TopLevel ()
 approxmc t = do
-  sc <- getSharedContext
   tmp <- io $ emptySystemTempFile "approxmc-input"
-  Prover.write_cnf sc tmp t
+  Prover.write_cnf tmp t
   (_ec, out, _err) <- io $ readProcessWithExitCode "approxmc" [tmp] ""
   io $ removeFile tmp
   let msg = filter ("[appmc] Number of solutions is" `isPrefixOf`) (lines out)

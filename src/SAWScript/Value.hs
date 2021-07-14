@@ -45,8 +45,9 @@ import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks, local)
-import Control.Monad.State (MonadState, StateT(..), get, gets, put)
+import Control.Monad.State (MonadState(..), StateT(..), get, gets, put)
 import Control.Monad.Trans.Class (MonadTrans(lift))
+import Data.IORef
 import Data.List ( intersperse )
 import qualified Data.Map as M
 import Data.Map ( Map )
@@ -87,6 +88,7 @@ import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
 import qualified Verifier.SAW.SharedTerm as SAWCorePP (PPOpts(..), defaultPPOpts,
                                                        ppTerm, scPrettyTerm)
 import Verifier.SAW.TypedTerm
+import Verifier.SAW.Term.Functor (ModuleName)
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
@@ -106,6 +108,8 @@ import qualified Lang.Crucible.JVM as CJ
 import Lang.Crucible.LLVM.ArraySizeProfile
 
 import           What4.ProgramLoc (ProgramLoc(..))
+
+import Verifier.SAW.Heapster.Permissions
 
 -- Values ----------------------------------------------------------------------
 
@@ -147,6 +151,7 @@ data Value
   | VCryptolModule CryptolModule
   | VJavaClass JSS.Class
   | VLLVMModule (Some CMSLLVM.LLVMModule)
+  | VHeapsterEnv HeapsterEnv
   | VSatResult SatResult
   | VProofResult ProofResult
   | VUninterp Uninterp
@@ -171,6 +176,23 @@ data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      }
   deriving Generic
 
+-- | All the context maintained by Heapster
+data HeapsterEnv = HeapsterEnv {
+  heapsterEnvSAWModule :: ModuleName,
+  -- ^ The SAW module containing all our Heapster definitions
+  heapsterEnvPermEnvRef :: IORef PermEnv,
+  -- ^ The current permissions environment
+  heapsterEnvLLVMModules :: [Some CMSLLVM.LLVMModule]
+  -- ^ The list of underlying 'LLVMModule's that we are translating
+  }
+
+showHeapsterEnv :: HeapsterEnv -> String
+showHeapsterEnv env =
+  concat $ intersperse "\n\n" $
+  map (\some_lm -> case some_lm of
+          Some lm -> CMSLLVM.showLLVMModule lm) $
+  heapsterEnvLLVMModules env
+
 data SatResult
   = Unsat SolverStats
   | Sat SolverStats [(ExtCns Term, FirstOrderValue)]
@@ -186,10 +208,11 @@ data PPOpts = PPOpts
   , ppOptsAscii :: Bool
   , ppOptsBase :: Int
   , ppOptsColor :: Bool
+  , ppOptsMinSharing :: Int
   }
 
 defaultPPOpts :: PPOpts
-defaultPPOpts = PPOpts False False 10 False
+defaultPPOpts = PPOpts False False 10 False 2
 
 cryptolPPOpts :: PPOpts -> C.PPOpts
 cryptolPPOpts opts =
@@ -203,6 +226,7 @@ sawPPOpts opts =
   SAWCorePP.defaultPPOpts
     { SAWCorePP.ppBase = ppOptsBase opts
     , SAWCorePP.ppColor = ppOptsColor opts
+    , SAWCorePP.ppMinSharing = ppOptsMinSharing opts
     }
 
 quietEvalOpts :: C.EvalOpts
@@ -297,6 +321,7 @@ showsPrecValue opts p v =
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
     VLLVMModule (Some m) -> showString (CMSLLVM.showLLVMModule m)
+    VHeapsterEnv env -> showString (showHeapsterEnv env)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
     VSatResult r -> showsSatResult opts r
@@ -409,6 +434,7 @@ data TopLevelRW =
   , rwCrucibleAssertThenAssume :: Bool
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
+  , rwLaxPointerOrdering :: Bool
 
   -- FIXME: These might be better split into "simulator hash-consing" and "tactic hash-consing"
   , rwWhat4HashConsing :: Bool
@@ -419,17 +445,25 @@ data TopLevelRW =
   }
 
 newtype TopLevel a =
-  TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
+  TopLevel (ReaderT TopLevelRO (ReaderT (IORef TopLevelRW) IO) a)
   deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow, MonadCatch, MonadMask)
 
 deriving instance MonadReader TopLevelRO TopLevel
-deriving instance MonadState TopLevelRW TopLevel
+
+instance MonadState TopLevelRW TopLevel where
+  get = TopLevel (lift (ReaderT readIORef))
+  put s = TopLevel (lift (ReaderT (flip writeIORef s)))
+  state f = TopLevel (lift (ReaderT (flip atomicModifyIORef (swap . f))))
+    where swap (x, y) = (y, x)
+
 instance Wrapped (TopLevel a) where
+
 instance MonadFail TopLevel where
   fail = throwTopLevel
 
-runTopLevel :: TopLevel a -> TopLevelRO -> TopLevelRW -> IO (a, TopLevelRW)
-runTopLevel (TopLevel m) ro rw = runStateT (runReaderT m ro) rw
+runTopLevel :: TopLevel a -> TopLevelRO -> IORef TopLevelRW -> IO a
+runTopLevel (TopLevel m) ro ref =
+  runReaderT (runReaderT m ro) ref
 
 io :: IO a -> TopLevel a
 io f = liftIO f
@@ -489,10 +523,10 @@ getTopLevelRO :: TopLevel TopLevelRO
 getTopLevelRO = TopLevel ask
 
 getTopLevelRW :: TopLevel TopLevelRW
-getTopLevelRW = TopLevel get
+getTopLevelRW = get
 
 putTopLevelRW :: TopLevelRW -> TopLevel ()
-putTopLevelRW rw = TopLevel (put rw)
+putTopLevelRW rw = put rw
 
 returnProof :: IsValue v => v -> TopLevel v
 returnProof v = recordProof v >> return v
@@ -503,8 +537,8 @@ recordProof v =
      putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
 
 -- | Access the current state of Java Class translation
-getJVMTrans :: TopLevel  CJ.JVMContext
-getJVMTrans = TopLevel (gets rwJVMTrans)
+getJVMTrans :: TopLevel CJ.JVMContext
+getJVMTrans = gets rwJVMTrans
 
 -- | Access the current state of Java Class translation
 putJVMTrans :: CJ.JVMContext -> TopLevel ()
@@ -620,7 +654,7 @@ runProofScript (ProofScript m) gl ploc rsn =
      ps <- io (startProof gl pos ploc rsn)
      (r,pstate) <- runStateT (runExceptT m) ps
      case r of
-       Left (stats,cex) -> return (InvalidProof stats cex pstate)
+       Left (stats,cex) -> return (SAWScript.Proof.InvalidProof stats cex pstate)
        Right _ ->
          do sc <- getSharedContext
             db <- roTheoremDB <$> getTopLevelRO
@@ -938,6 +972,13 @@ instance FromValue (Some CMSLLVM.LLVMModule) where
     fromValue (VLLVMModule m) = m
     fromValue _ = error "fromValue CMSLLVM.LLVMModule"
 
+instance IsValue HeapsterEnv where
+    toValue m = VHeapsterEnv m
+
+instance FromValue HeapsterEnv where
+    fromValue (VHeapsterEnv m) = m
+    fromValue _ = error "fromValue HeapsterEnv"
+
 instance IsValue ProofResult where
    toValue r = VProofResult r
 
@@ -1015,7 +1056,7 @@ addTraceReaderT str = underReaderT (addTraceTopLevel str)
 -- | Similar to 'addTraceIO', but for the 'TopLevel' monad.
 addTraceTopLevel :: String -> TopLevel a -> TopLevel a
 addTraceTopLevel str action = action & _Wrapped' %~
-  underReaderT (underStateT (liftIO . addTraceIO str))
+  underReaderT (underReaderT (liftIO . addTraceIO str))
 
 data SkeletonState = SkeletonState
   { _skelArgs :: [(Maybe TypedTerm, Maybe (CMSLLVM.AllLLVM CMS.SetupValue), Maybe Text)]

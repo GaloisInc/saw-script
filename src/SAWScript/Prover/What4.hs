@@ -17,6 +17,7 @@ import Verifier.SAW.SATQuery (SATQuery(..))
 
 import           SAWScript.Proof(Prop, propToSATQuery, propSize, CEX)
 import           SAWScript.Prover.SolverStats
+import           SAWScript.Value (TopLevel, io, getSharedContext)
 
 import Data.Parameterized.Nonce
 
@@ -49,23 +50,23 @@ setupWhat4_sym hashConsing =
 proveWhat4_sym ::
   SolverAdapter St ->
   Set VarIndex ->
-  SharedContext ->
   Bool ->
   Prop ->
-  IO (Maybe CEX, SolverStats)
-proveWhat4_sym solver un sc hashConsing t =
+  TopLevel (Maybe CEX, SolverStats)
+proveWhat4_sym solver un hashConsing t =
+  getSharedContext >>= \sc -> io $
   do sym <- setupWhat4_sym hashConsing
      proveWhat4_solver solver sym un sc t
 
 proveExportWhat4_sym ::
   SolverAdapter St ->
   Set VarIndex ->
-  SharedContext ->
   Bool ->
   FilePath ->
   Prop ->
-  IO (Maybe CEX, SolverStats)
-proveExportWhat4_sym solver un sc hashConsing outFilePath t =
+  TopLevel (Maybe CEX, SolverStats)
+proveExportWhat4_sym solver un hashConsing outFilePath t =
+  getSharedContext >>= \sc -> io $
   do sym <- setupWhat4_sym hashConsing
 
      -- Write smt out
@@ -80,10 +81,9 @@ proveWhat4_z3, proveWhat4_boolector, proveWhat4_cvc4,
   proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices,
   proveWhat4_abc ::
   Set VarIndex  {- ^ Uninterpreted functions -} ->
-  SharedContext {- ^ Context for working with terms -} ->
   Bool          {- ^ Hash-consing of What4 terms -}->
   Prop          {- ^ A proposition to be proved -} ->
-  IO (Maybe CEX, SolverStats)
+  TopLevel (Maybe CEX, SolverStats)
 
 proveWhat4_z3        = proveWhat4_sym z3Adapter
 proveWhat4_boolector = proveWhat4_sym boolectorAdapter
@@ -96,11 +96,10 @@ proveWhat4_abc       = proveWhat4_sym externalABCAdapter
 proveExportWhat4_z3, proveExportWhat4_boolector, proveExportWhat4_cvc4,
   proveExportWhat4_dreal, proveExportWhat4_stp, proveExportWhat4_yices ::
   Set VarIndex  {- ^ Uninterpreted functions -} ->
-  SharedContext {- ^ Context for working with terms -} ->
   Bool          {- ^ Hash-consing of ExportWhat4 terms -}->
   FilePath      {- ^ Path of file to write SMT to -}->
   Prop          {- ^ A proposition to be proved -} ->
-  IO (Maybe CEX, SolverStats)
+  TopLevel (Maybe CEX, SolverStats)
 
 proveExportWhat4_z3        = proveExportWhat4_sym z3Adapter
 proveExportWhat4_boolector = proveExportWhat4_sym boolectorAdapter

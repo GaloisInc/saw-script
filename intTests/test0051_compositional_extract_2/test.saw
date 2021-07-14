@@ -26,11 +26,11 @@ let sum_spec n = do {
   llvm_points_to s_p (llvm_term s);
 };
 
-add_ov <- llvm_compositional_extract m "add" "add" [] false add_spec abc;
-_ <- llvm_compositional_extract m "sum" "sum" [add_ov] false (sum_spec 10) abc;
+add_ov <- llvm_compositional_extract m "add" "add" [] false add_spec yices;
+_ <- llvm_compositional_extract m "sum" "sum" [add_ov] false (sum_spec 10) yices;
 
-add_thm <- prove_print abc
+add_thm <- prove_print yices
   {{ \a b -> add a b == reverse (split ((join (reverse a)) + (join (reverse b)))) }};
-prove_print (do { simplify (addsimps [add_thm] empty_ss); simplify (cryptol_ss ()); abc; })
+prove_print (do { simplify (addsimps [add_thm] empty_ss); simplify (cryptol_ss ()); yices; })
   {{ \a -> sum a == reverse (split (foldl (+) (0:[128]) (map join (map reverse a)))) }};
 

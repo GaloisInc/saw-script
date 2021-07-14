@@ -1,10 +1,10 @@
+Cabal-version: 2.4
 Name:          saw-script
 Version:       0.8.0.99
 Author:        Galois Inc.
 Maintainer:    atomb@galois.com
 Build-type:    Custom
-Cabal-version: >= 1.24
-License:       BSD3
+License:       BSD-3-Clause
 License-file:  LICENSE
 
 extra-source-files:
@@ -18,10 +18,6 @@ custom-setup
     , directory
     , filepath
     , process
-
-flag builtin-abc
-  description: Link with ABC as a static library
-  default: True
 
 library
   default-language: Haskell2010
@@ -50,6 +46,8 @@ library
     , filepath
     , free
     , haskeline
+    , heapster-saw
+    , hobbits >= 1.3.1
     , IfElse
     , jvm-parser
     , lens
@@ -130,6 +128,8 @@ library
     SAWScript.Utils
     SAWScript.Value
 
+    SAWScript.HeapsterBuiltins
+
     SAWScript.Crucible.Common
     SAWScript.Crucible.Common.MethodSpec
     SAWScript.Crucible.Common.Override
@@ -173,9 +173,9 @@ library
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
 
-  build-tools:
-    alex >= 3.1.3,
-    happy >= 1.9.4
+  build-tool-depends:
+    alex:alex >= 3.1.3,
+    happy:happy >= 1.9.4
 
 executable saw
   default-language: Haskell2010
@@ -212,16 +212,11 @@ executable saw
     , transformers
     , saw-script
     , saw-core
+    , heapster-saw
     , cryptol-saw-core
+    , aig
 
-  if flag(builtin-abc)
-    cpp-options: -DUSE_BUILTIN_ABC
-    build-depends: abcBridge
-    GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count -pgmlc++
-    extra-libraries:      stdc++
-  else
-    build-depends: aig
-    GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count
+  GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count
 
 test-suite integration_tests
   type: exitcode-stdio-1.0
