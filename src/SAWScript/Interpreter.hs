@@ -2946,6 +2946,12 @@ primitives = Map.fromList
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
     , " to ask if two monadic terms are equal" ]
 
+  , prim "monadify_term" "Term -> TopLevel Term"
+    (scVal monadifyTypedTerm)
+    Experimental
+    [ "Monadify a Cryptol term, converting it to a form where all recursion"
+    , " and errors are represented as monadic operators"]
+
   , prim "heapster_init_env"
     "String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_init_env)

@@ -69,9 +69,11 @@ data TypedSubsTerm
 typeAllSubterms :: SharedContext -> Term -> IO TypedSubsTerm
 typeAllSubterms = error "FIXME"
 
+{-
 -- | Convert a 'TypedSubsTerm' back to a 'Term'
 typedSubsTermTerm :: TypedSubsTerm -> Term
 typedSubsTermTerm = error "FIXME"
+-}
 
 -- | Get the type of a 'TypedSubsTerm' as a 'TypedSubsTerm'
 typedSubsTermType :: TypedSubsTerm -> TypedSubsTerm
@@ -80,6 +82,12 @@ typedSubsTermType tst =
                   tpSubsTermF = tpSubsTypeF tst,
                   tpSubsTypeF = FTermF (Sort $ tpSubstSort tst),
                   tpSubstSort = sortOf (tpSubstSort tst) }
+
+-- | Count the number of right-nested pi-abstractions of a 'TypedSubsTerm'
+typedSubsTermArity :: TypedSubsTerm -> Int
+typedSubsTermArity (TypedSubsTerm { tpSubsTermF = Pi _ _ tst }) =
+  1 + typedSubsTermArity tst
+typedSubsTermArity _ = 0
 
 
 ----------------------------------------------------------------------
@@ -107,6 +115,15 @@ data MonTerm
 -- | Build a pure 'MonTerm' from a pure 'OpenTerm'
 pureMonTerm :: OpenTerm -> MonTerm
 pureMonTerm trm = PureMonTerm trm $ openTermType trm
+
+-- | Build a pure 'MonTerm' from a pure function of the given arity. NOTE: this
+-- only works for first-order functions, i.e., functions whose argument types do
+-- not themselves contain function types.
+pureFunMonTerm :: Int -> OpenTerm -> MonTerm
+pureFunMonTerm 0 trm = pureMonTerm trm
+pureFunMonTerm i trm =
+  FunMonTerm "x" (piArgOpenTerm $ openTermType trm)
+  (pureFunMonTerm (i-1) . applyOpenTerm trm)
 
 -- | Build a 'MonTerm' for a 'failOpenTerm'
 failMonTerm :: String -> MonTerm
@@ -330,9 +347,18 @@ instance Monadify (TermF TypedSubsTerm) where
     do ctx <- monStCtx <$> ask
        retPure (ctx!!ix)
 
-  monadify (Constant _ t) =
-    -- FIXME: we just unfold constant definitions; is this correct?
-    monadify t
+  monadify (Constant ec _t) =
+    do env <- monStEnv <$> ask
+       case ecName ec of
+         ModuleIdentifier ident
+           | Just mtrm <- Map.lookup ident env ->
+             return mtrm
+         _ ->
+           -- FIXME: if a definition is not in the environment, we just unfold
+           -- it; is this correct?
+           --monadify t
+           fail ("Monadification failed: no translation for constant: "
+                 ++ show (toAbsoluteName $ ecName ec))
 
 instance Monadify (FlatTermF TypedSubsTerm) where
   monadify (Primitive nm) =
@@ -342,6 +368,10 @@ instance Monadify (FlatTermF TypedSubsTerm) where
          Nothing ->
            error ("Monadification failed: no translation for primitive: "
                   ++ show (primName nm))
+           -- NOTE: we could assume primitives not in the environment are pure,
+           -- by using something like this:
+           --
+           -- pureFunMonTerm (typedSubsTermArity $ primType nm) trm
   monadify UnitValue = retPure unitOpenTerm
   monadify UnitType = retPure unitTypeOpenTerm
   monadify (PairValue t1 t2) =
@@ -361,8 +391,12 @@ instance Monadify (FlatTermF TypedSubsTerm) where
 ----------------------------------------------------------------------
 
 -- | Monadify a term, or 'fail' if this is not possible
-monadifyTerm :: MonadIO m => SharedContext -> MonadifyEnv -> Term -> m Term
+monadifyTerm :: SharedContext -> MonadifyEnv -> Term -> IO Term
 monadifyTerm sc env t =
-  liftIO $
   do tst <- typeAllSubterms sc t
      completeOpenTerm sc $ monTermComp $ monadifyTermAndRun env [] tst
+
+-- | The default monadification environment
+defaultMonEnv :: MonadifyEnv
+defaultMonEnv = Map.fromList $
+  []

@@ -56,6 +56,7 @@ import Text.Read (readMaybe)
 
 import qualified Verifier.SAW.Cryptol as Cryptol
 import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
+import qualified Verifier.SAW.Cryptol.Monadify as Monadify
 
 -- saw-core
 import Verifier.SAW.Grammar (parseSAWTerm)
@@ -1504,6 +1505,11 @@ testMRSolver i1 i2 =
      case res of
        Just err -> io $ putStrLn $ Prover.showMRFailure err
        Nothing -> io $ putStrLn "Success!"
+
+monadifyTypedTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
+monadifyTypedTerm sc t =
+  liftIO (Monadify.monadifyTerm sc Monadify.defaultMonEnv (ttTerm t) >>=
+          mkTypedTerm sc)
 
 parseSharpSATResult :: String -> Maybe Integer
 parseSharpSATResult s = parse (lines s)

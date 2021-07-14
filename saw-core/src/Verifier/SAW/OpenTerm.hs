@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -27,7 +28,7 @@ module Verifier.SAW.OpenTerm (
   pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
-  applyOpenTerm, applyOpenTermMulti, applyPiOpenTerm,
+  applyOpenTerm, applyOpenTermMulti, applyPiOpenTerm, piArgOpenTerm,
   lambdaOpenTerm, lambdaOpenTermMulti, piOpenTerm, piOpenTermMulti,
   arrowOpenTerm, letOpenTerm,
   -- * Monadic operations for building terms with binders
@@ -181,6 +182,14 @@ applyPiOpenTerm (OpenTerm m_f) (OpenTerm m_arg) =
      ret <- applyPiTyped (NotFuncTypeInApp f arg) (typedType f) arg
      ret_tp <- liftTCM scTypeOf ret
      return (TypedTerm ret ret_tp)
+
+-- | Get the argument type of a function type, 'fail'ing if the input term is
+-- not a function type
+piArgOpenTerm :: OpenTerm -> OpenTerm
+piArgOpenTerm (OpenTerm m) =
+  OpenTerm $ m >>= \case
+  (unwrapTermF . typedVal -> Pi _ tp _) -> typeInferComplete tp
+  _ -> fail "piArgOpenTerm: not a pi type"
 
 -- | Build an 'OpenTerm' for the top variable in the current context, by
 -- building the 'TCM' computation which checks how much longer the context has
