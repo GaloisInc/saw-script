@@ -108,6 +108,10 @@ data MonTerm
 pureMonTerm :: OpenTerm -> MonTerm
 pureMonTerm trm = PureMonTerm trm $ openTermType trm
 
+-- | Build a 'MonTerm' for a 'failOpenTerm'
+failMonTerm :: String -> MonTerm
+failMonTerm str = pureMonTerm $ failOpenTerm str
+
 -- | Convert the type of a 'MonType' to its most general pure type @Mon(tp)@
 monTermPureType :: MonTerm -> OpenTerm
 monTermPureType (PureMonTerm _ tp) = tp
@@ -140,8 +144,7 @@ monTermComp mtrm@(FunMonTerm x tp body_f) =
   applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
   [monTermPureType mtrm, funTermPure x tp body_f]
 
-{- FIXME: no longer needed?
--- | Try to turn a 'MonTerm' into a pure term by converting any 'CompFunType'
+-- | Try to convert a 'MonTerm' into a pure term by converting any 'CompFunType'
 -- function to its most general @Pi x t (CompM u)@ form. For computational
 -- 'MonTerm's, return 'Nothing'
 monTermTryPure :: MonTerm -> Maybe OpenTerm
@@ -149,11 +152,15 @@ monTermTryPure (PureMonTerm trm _) = Just trm
 monTermTryPure (FunMonTerm x tp body) =
   return $ funTermPure x tp body
 monTermTryPure (CompMonTerm _ _) = Nothing
--}
 
+-- | Convert a 'MonTerm' to a pure term using 'monTermTryPure' or return an
+-- 'OpenTerm' that 'fail's when completed
+monTermForcePure :: String -> MonTerm -> OpenTerm
+monTermForcePure _ mtrm | Just trm <- monTermTryPure mtrm = trm
+monTermForcePure str _ = failOpenTerm str
 
 ----------------------------------------------------------------------
--- * The Monadified Monad
+-- * The Monadification Monad
 ----------------------------------------------------------------------
 
 -- | An environment of named definitions that have already been monadified
@@ -185,7 +192,7 @@ newtype MonadifyM a =
 
 instance Fail.MonadFail MonadifyM where
   fail str =
-    MonadifyM $ lift $ lift $ cont $ \_ -> pureMonTerm $ failOpenTerm str
+    MonadifyM $ lift $ lift $ cont $ \_ -> failMonTerm str
 
 -- | Run a monadification computation
 --
@@ -248,9 +255,30 @@ purifyMonTerm (CompMonTerm trm tp) =
 retPure :: OpenTerm -> MonadifyM MonTerm
 retPure = return . pureMonTerm
 
+
+----------------------------------------------------------------------
+-- * Monadification
+----------------------------------------------------------------------
+
 -- | Monadify a 'Term' and then purify it using 'purifyMonTerm'
 monadifyPure :: Monadify a => a -> MonadifyM OpenTerm
 monadifyPure = monadify >=> purifyMonTerm
+
+-- | Monadify a term and run the resulting computation
+monadifyTermAndRun :: MonadifyEnv -> MonadifyCtx -> TypedSubsTerm -> MonTerm
+monadifyTermAndRun env ctx tst =
+  let tp =
+        monTermForcePure "Monadification failed: type is impure" $
+        runMonadifyM env ctx (sortOpenTerm $ tpSubstSort tst) (monadify tst) in
+  runMonadifyM env ctx tp $ monadify tst
+
+-- | Monadify a term in a context that has been extended with an additional free
+-- variable. Return a function over that variable.
+monadifyInBinding :: TypedSubsTerm -> MonadifyM (OpenTerm -> MonTerm)
+monadifyInBinding tst =
+  do ro_st <- ask
+     return $ \x_trm ->
+       monadifyTermAndRun (monStEnv ro_st) (x_trm : monStCtx ro_st) tst
 
 -- | Generic function to monadify terms
 class Monadify a where
@@ -272,7 +300,8 @@ instance Monadify (TermF TypedSubsTerm) where
       | isCompTerm mtrm2
       , Pi _ _ tp_out <- tpSubsTypeF t1
       , inBitSet 0 (tpSubsFreeVars tp_out) ->
-        fail "Monadification failed (FIXME: better error message)"
+        fail ("Monadification failed: "
+              ++ "dependent function applied to impure argument")
 
     -- If t1 is a pure function, apply it
     (FunMonTerm _ _ body_f, mtrm2) ->
@@ -287,37 +316,15 @@ instance Monadify (TermF TypedSubsTerm) where
            (applyPiOpenTerm (monTermPureType mtrm1) trm2)
 
   monadify (Lambda x tp body) =
-    do ro_st <- ask
-       tp' <- monadifyPure tp
-       return $
-         FunMonTerm x tp' $ \x_trm ->
-         let body_tp_mtrm =
-               runMonadifyM (monStEnv ro_st) (x_trm : monStCtx ro_st)
-               (sortOpenTerm $ tpSubstSort body)
-               (monadify $ typedSubsTermType body) in
-         case body_tp_mtrm of
-           PureMonTerm body_tp _ ->
-             runMonadifyM (monStEnv ro_st) (x_trm : monStCtx ro_st) body_tp $
-             monadify body
-           _ ->
-             pureMonTerm $
-             failOpenTerm "Monadification failed (FIXME: better error message)"
+    do tp' <- monadifyPure tp
+       body_f <- monadifyInBinding body
+       return $ FunMonTerm x tp' body_f
 
   monadify (Pi x tp body) =
-    do ro_st <- ask
-       tp' <- monadifyPure tp
-       body_sort <- case tpSubsTypeF body of
-         FTermF (Sort s) -> return s
-         _ -> error "monadify: unexpected type of the body of a pi type"
-       let body_tp = sortOpenTerm body_sort
-       retPure $
-         piOpenTerm x tp' $ \x_trm ->
-         let body_mtrm =
-               runMonadifyM (monStEnv ro_st) (x_trm : monStCtx ro_st) body_tp $
-               monadify body in
-         case body_mtrm of
-           PureMonTerm body_trm _ -> body_trm
-           _ -> failOpenTerm "Monadification failed (FIXME: better error message)"
+    do tp' <- monadifyPure tp
+       body_f <- monadifyInBinding body
+       retPure $ piOpenTerm x tp' $
+         monTermForcePure "Monadification failed: body of pi is impure" . body_f
 
   monadify (LocalVar ix) =
     do ctx <- monStCtx <$> ask
@@ -347,3 +354,15 @@ instance Monadify (FlatTermF TypedSubsTerm) where
   monadify (NatLit n) = retPure $ natOpenTerm n
   monadify (StringLit str) = retPure $ stringLitOpenTerm str
   monadify _ = error "FIXME: missing cases for monadify"
+
+
+----------------------------------------------------------------------
+-- * Top-Level Entrypoints
+----------------------------------------------------------------------
+
+-- | Monadify a term, or 'fail' if this is not possible
+monadifyTerm :: MonadIO m => SharedContext -> MonadifyEnv -> Term -> m Term
+monadifyTerm sc env t =
+  liftIO $
+  do tst <- typeAllSubterms sc t
+     completeOpenTerm sc $ monTermComp $ monadifyTermAndRun env [] tst
