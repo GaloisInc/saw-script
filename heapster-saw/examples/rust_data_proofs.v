@@ -13,19 +13,19 @@ Import rust_data.
 
 Import SAWCorePrelude.
 
-Print bool_and__tuple_fun.
+(* Print bool_and__tuple_fun. *)
 
-Print test_result__tuple_fun.
+(* Print test_result__tuple_fun. *)
 
-Print test_sum_impl__tuple_fun.
+(* Print test_sum_impl__tuple_fun. *)
 
-Print list_is_empty__tuple_fun.
+(* Print list_is_empty__tuple_fun. *)
 
-Print list_head__tuple_fun.
+(* Print list_head__tuple_fun. *)
 
-Print list_head_impl__tuple_fun.
+(* Print list_head_impl__tuple_fun. *)
 
-Print str_struct_new__tuple_fun.
+(* Print str_struct_new__tuple_fun. *)
 
 Lemma no_errors_str_struct_new : refinesFun str_struct_new (fun _ _ _ => noErrorsSpec).
 Proof.

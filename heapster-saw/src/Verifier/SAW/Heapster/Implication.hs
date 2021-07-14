@@ -5865,8 +5865,13 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
     partialSubstForceM (fmap llvmFieldOffset mb_fp) "proveVarPtrPerms" >>>= \off ->
     foldMapWithDefault implCatchM
     (proveVarAtomicImplUnfoldOrFail x ps mb_p)
-    (\(i,_) -> proveVarLLVMField x ps i off mb_fp)
-    (findMaybeIndices (llvmPermContainsOffset off) ps)
+    (\(i,_) -> proveVarLLVMField x ps i off mb_fp) $
+    -- If there are any permissions that definitely contain off, use those, and
+    -- otherwise iterate through all those that could contain off
+    let ixs_props = findMaybeIndices (llvmPermContainsOffset off) ps in
+    case filter (\(_,props) -> all bvPropHolds props) ixs_props of
+      [] -> ixs_props
+      ixs_props_hold -> ixs_props_hold
 
   [nuMP| Perm_LLVMArray mb_ap |] ->
     partialSubstForceM mb_ap "proveVarPtrPerms" >>>= \ap ->

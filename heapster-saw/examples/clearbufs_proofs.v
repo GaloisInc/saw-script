@@ -8,11 +8,7 @@ From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import CompMExtra.
 
-Require Import Examples.rust_lifetimes.
-Import rust_lifetimes.
+Require Import Examples.clearbufs.
+Import clearbufs.
 
-Import SAWCorePrelude.
-
-(* Print mux_mut_refs_u64__tuple_fun. *)
-
-(* Print use_mux_mut_refs__tuple_fun. *)
+(* Eval cbn in clearbufs__tuple_fun. *)

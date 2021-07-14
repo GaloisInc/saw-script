@@ -52,3 +52,9 @@ rust_lifetimes.bc: rust_lifetimes.rs
 
 rust_lifetimes.v: rust_lifetimes.bc rust_lifetimes.saw
 	$(SAW) rust_lifetimes.saw
+
+clearbufs.v: clearbufs.bc clearbufs.saw clearbufs.sawcore
+	$(SAW) clearbufs.saw
+
+mbox.v: mbox.bc mbox.saw
+	$(SAW) mbox.saw
