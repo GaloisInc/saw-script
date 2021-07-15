@@ -54,6 +54,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Position
 
 
 ----------------------------------------------------------------------
@@ -90,6 +91,23 @@ typedSubsTermArity (TypedSubsTerm { tpSubsTermF = Pi _ _ tst }) =
   1 + typedSubsTermArity tst
 typedSubsTermArity _ = 0
 
+-- | Count the number of right-nested pi abstractions in a term, which
+-- represents a type. This assumes that the type is in WHNF.
+typeArity :: Term -> Int
+typeArity tp = length $ fst $ asPiList tp
+
+class ToTerm a where
+  toTerm :: a -> Term
+
+instance ToTerm Term where
+  toTerm = id
+
+instance ToTerm TypedSubsTerm where
+  toTerm = typedSubsTermTerm
+
+unsharedApply :: Term -> Term -> Term
+unsharedApply f arg = Unshared $ App f arg
+
 
 ----------------------------------------------------------------------
 -- * Monadified Terms and Types
@@ -117,14 +135,23 @@ data MonTerm
 pureMonTerm :: OpenTerm -> MonTerm
 pureMonTerm trm = PureMonTerm trm $ openTermType trm
 
--- | Build a pure 'MonTerm' from a pure function of the given arity. NOTE: this
--- only works for first-order functions, i.e., functions whose argument types do
--- not themselves contain function types.
-pureFunMonTerm :: Int -> OpenTerm -> MonTerm
-pureFunMonTerm 0 trm = pureMonTerm trm
-pureFunMonTerm i trm =
-  FunMonTerm "x" (piArgOpenTerm $ openTermType trm)
-  (pureFunMonTerm (i-1) . applyOpenTerm trm)
+-- | Build a pure 'MonTerm' from a pure function of the given arity which has
+-- the given type. NOTE: this only works for first-order functions, i.e.,
+-- functions whose argument types do not themselves contain function types.
+pureFunMonTerm :: Int -> OpenTerm -> ([OpenTerm] -> OpenTerm) -> MonTerm
+pureFunMonTerm 0 _ f = pureMonTerm (f [])
+pureFunMonTerm i tp f =
+  FunMonTerm "x" (piArgOpenTerm tp) $ \x ->
+  pureFunMonTerm (i-1) (applyPiOpenTerm tp x) $ \xs -> f (x : xs)
+
+-- | Build a pure 'MonTerm' from a global definition or primitive of the given
+-- arity. NOTE: this only works for first-order functions, i.e., functions whose
+-- argument types do not themselves contain function types.
+pureGlobalMonTerm :: Int -> Ident -> MonTerm
+pureGlobalMonTerm i ident =
+  pureFunMonTerm i
+  (openTermType (globalOpenTerm ident))
+  (applyOpenTermMulti (globalOpenTerm ident))
 
 -- | Build a 'MonTerm' for a 'failOpenTerm'
 failMonTerm :: String -> MonTerm
@@ -176,6 +203,7 @@ monTermTryPure (CompMonTerm _ _) = Nothing
 monTermForcePure :: String -> MonTerm -> OpenTerm
 monTermForcePure _ mtrm | Just trm <- monTermTryPure mtrm = trm
 monTermForcePure str _ = failOpenTerm str
+
 
 ----------------------------------------------------------------------
 -- * The Monadification Monad
@@ -289,8 +317,12 @@ monadifyTermAndRun :: MonadifyEnv -> MonadifyCtx -> Term -> MonTerm
 monadifyTermAndRun env ctx trm =
   let m_tp =
         bindTCMOpenTerm
-        (do tp <- liftTCM scTypeOf' (map fst ctx) trm >>= typeCheckWHNF
-            tp_tp <- liftTCM scTypeOf' (map fst ctx) tp >>= typeCheckWHNF
+        (do tp <-
+              atPos (Pos "debug1" "debug1" 0 0)
+              (liftTCM scTypeOf' (map fst ctx) trm >>= typeCheckWHNF)
+            tp_tp <-
+              atPos (Pos "debug2" "debug2" 0 0)
+              (liftTCM scTypeOf' (map fst ctx) tp >>= typeCheckWHNF)
             sort <- case asSort tp_tp of
               Just sort -> return sort
               Nothing -> error "Monadification: type of type is not a sort!"
@@ -336,6 +368,38 @@ failIfDepFun t_ctx t1 t2 =
                     ++ "applied to impure argument")
   _ -> t2
 
+-- | FIXME HERE: documentation: t1 is the untranslated form of mtrm1
+monadifyApply :: MonTerm -> MonTerm -> MonadifyM MonTerm
+monadifyApply mtrm1 mtrm2 =
+  do -- t_ctx <- map fst <$> monStCtx <$> ask
+     let mtrm2' =
+           -- If t1 has a dependent type and t2 is not pure then monadification
+           -- fails. We represent this changing mtrm2 to a failure OpenTerm if
+           -- it is computational.
+           {-
+           case mtrm2 of
+             CompMonTerm tp trm ->
+               CompMonTerm tp $ failIfDepFun t_ctx t1 trm
+             _ -> mtrm2 -}
+           -- FIXME: figure out how to detect this error!
+           mtrm2
+     case mtrm1 of
+       -- If t1 is a pure function, apply it
+       FunMonTerm _ _ body_f ->
+         body_f <$> purifyMonTerm mtrm2'
+
+       -- Otherwise, purify t1 to a monadic function and apply it
+       _ ->
+         do trm1 <- purifyMonTerm mtrm1
+            trm2 <- purifyMonTerm mtrm2'
+            return $ CompMonTerm
+              (applyOpenTerm trm1 trm2)
+              (applyPiOpenTerm (monTermPureType mtrm1) trm2)
+
+-- | FIXME HERE: documentation
+monadifyApplyMulti :: MonTerm -> [MonTerm] -> MonadifyM MonTerm
+monadifyApplyMulti = foldM monadifyApply
+
 -- | Generic function to monadify terms
 class Monadify a where
   monadify :: a -> MonadifyM MonTerm
@@ -358,27 +422,7 @@ instance Monadify (TermF Term) where
   monadify (App t1 t2) =
     do mtrm1 <- monadify t1
        mtrm2 <- monadify t2
-       t_ctx <- map fst <$> monStCtx <$> ask
-       let mtrm2' =
-             -- If t1 has a dependent type and t2 is not pure then
-             -- monadification fails. We represent this changing mtrm2 to a
-             -- failure OpenTerm if it is computational.
-             case mtrm2 of
-               CompMonTerm tp trm ->
-                 CompMonTerm tp $ failIfDepFun t_ctx t1 trm
-               _ -> mtrm2
-       case mtrm1 of
-         -- If t1 is a pure function, apply it
-         FunMonTerm _ _ body_f ->
-           body_f <$> purifyMonTerm mtrm2'
-
-         -- Otherwise, purify t1 to a monadic function and apply it
-         _ ->
-           do trm1 <- purifyMonTerm mtrm1
-              trm2 <- purifyMonTerm mtrm2'
-              return $ CompMonTerm
-                (applyOpenTerm trm1 trm2)
-                (applyPiOpenTerm (monTermPureType mtrm1) trm2)
+       monadifyApply mtrm1 mtrm2
 
   monadify (Lambda x tp body) =
     do tp' <- monadifyPure tp
@@ -463,7 +507,7 @@ instance Monadify (TermF TypedSubsTerm) where
                  ++ show (toAbsoluteName $ ecName ec))
 
 
-instance Monadify a => Monadify (FlatTermF a) where
+instance (Monadify a, ToTerm a) => Monadify (FlatTermF a) where
   monadify (Primitive nm) =
     do env <- monStEnv <$> ask
        case Map.lookup (primName nm) env of
@@ -483,6 +527,18 @@ instance Monadify a => Monadify (FlatTermF a) where
     pureMonTerm <$> (pairTypeOpenTerm <$> monadifyPure t1 <*> monadifyPure t2)
   monadify (PairLeft t) = pureMonTerm <$> pairLeftOpenTerm <$> monadifyPure t
   monadify (PairRight t) = pureMonTerm <$> pairRightOpenTerm <$> monadifyPure t
+  monadify (DataTypeApp pn params args) =
+    mapM monadify (params ++ args) >>=
+    monadifyApplyMulti (pureFunMonTerm
+                        (typeArity $ toTerm $ primType pn)
+                        (closedOpenTerm $ toTerm $ primType pn)
+                        (dataTypeOpenTerm $ primName pn))
+  monadify (CtorApp pn params args) =
+    mapM monadify (params ++ args) >>=
+    monadifyApplyMulti (pureFunMonTerm
+                        (typeArity $ toTerm $ primType pn)
+                        (closedOpenTerm $ toTerm $ primType pn)
+                        (ctorOpenTerm $ primName pn))
   monadify (Sort s) = retPure (sortOpenTerm s)
   monadify (NatLit n) = retPure $ natOpenTerm n
   monadify (StringLit str) = retPure $ stringLitOpenTerm str
@@ -509,12 +565,14 @@ monadifyTerm' sc env t =
 defaultMonPureIds :: [(Ident,Int)]
 defaultMonPureIds =
   [("Cryptol.PLiteral", 1),
-   ("Cryptol.ecNumber", 4)]
+   ("Cryptol.ecNumber", 3)
+  ]
 
 -- | The default monadification environment
 defaultMonEnv :: MonadifyEnv
 defaultMonEnv = Map.fromList $
   map (\(ident,arity) ->
-        (ident, pureFunMonTerm arity $ globalOpenTerm ident)) defaultMonPureIds
+        (ident, pureGlobalMonTerm arity ident))
+  defaultMonPureIds
   ++
   []
