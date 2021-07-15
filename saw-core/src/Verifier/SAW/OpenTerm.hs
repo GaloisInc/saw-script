@@ -79,7 +79,8 @@ bindTCMOpenTerm m f = OpenTerm (m >>= unOpenTerm . f)
 openTermType :: OpenTerm -> OpenTerm
 openTermType (OpenTerm m) =
   OpenTerm $ do TypedTerm _ tp <- m
-                tp_tp <- liftTCM scTypeOf tp
+                ctx <- askCtx
+                tp_tp <- liftTCM scTypeOf' (map snd ctx) tp
                 return (TypedTerm tp tp_tp)
 
 -- | Build an 'OpenTerm' from a 'FlatTermF'
@@ -176,15 +177,17 @@ applyOpenTerm (OpenTerm f) (OpenTerm arg) =
 applyOpenTermMulti :: OpenTerm -> [OpenTerm] -> OpenTerm
 applyOpenTermMulti = foldl applyOpenTerm
 
--- | Compute the output type of applying a function to an argument. That is,
--- given @f@ and @arg@, compute the type of @f arg@.
+-- | Compute the output type of applying a function of a given type to an
+-- argument. That is, given @tp@ and @arg@, compute the type of applying any @f@
+-- of type @tp@ to @arg@.
 applyPiOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
 applyPiOpenTerm (OpenTerm m_f) (OpenTerm m_arg) =
   OpenTerm $
   do f <- m_f
      arg <- m_arg
-     ret <- applyPiTyped (NotFuncTypeInApp f arg) (typedType f) arg
-     ret_tp <- liftTCM scTypeOf ret
+     ret <- applyPiTyped (NotFuncTypeInApp f arg) (typedVal f) arg
+     ctx <- askCtx
+     ret_tp <- liftTCM scTypeOf' (map snd ctx) ret
      return (TypedTerm ret ret_tp)
 
 -- | Get the argument type of a function type, 'fail'ing if the input term is
@@ -193,7 +196,10 @@ piArgOpenTerm :: OpenTerm -> OpenTerm
 piArgOpenTerm (OpenTerm m) =
   OpenTerm $ m >>= \case
   (unwrapTermF . typedVal -> Pi _ tp _) -> typeInferComplete tp
-  _ -> fail "piArgOpenTerm: not a pi type"
+  t ->
+    do ctx <- askCtx
+       fail ("piArgOpenTerm: not a pi type: " ++
+             scPrettyTermInCtx defaultPPOpts (map fst ctx) (typedVal t))
 
 -- | Build an 'OpenTerm' for the top variable in the current context, by
 -- building the 'TCM' computation which checks how much longer the context has
