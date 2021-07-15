@@ -21,7 +21,7 @@ module Verifier.SAW.OpenTerm (
   -- * Open terms and converting to closed terms
   OpenTerm(..), completeOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
-  closedOpenTerm, failOpenTerm, openTermType,
+  closedOpenTerm, failOpenTerm, bindTCMOpenTerm, openTermType,
   flatOpenTerm, sortOpenTerm, natOpenTerm,
   unitOpenTerm, unitTypeOpenTerm,
   stringLitOpenTerm, stringTypeOpenTerm,
@@ -70,6 +70,10 @@ closedOpenTerm t = OpenTerm $ typeInferComplete t
 -- | Build an 'OpenTerm' that 'fail's in the underlying monad when completed
 failOpenTerm :: String -> OpenTerm
 failOpenTerm str = OpenTerm $ fail str
+
+-- | Bind the result of a type-checking computation in building an 'OpenTerm'
+bindTCMOpenTerm :: TCM a -> (a -> OpenTerm) -> OpenTerm
+bindTCMOpenTerm m f = OpenTerm (m >>= unOpenTerm . f)
 
 -- | Return type type of an 'OpenTerm' as an 'OpenTerm
 openTermType :: OpenTerm -> OpenTerm
