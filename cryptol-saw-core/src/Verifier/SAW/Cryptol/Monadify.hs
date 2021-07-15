@@ -3,6 +3,7 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 {- |
@@ -51,6 +52,8 @@ import Verifier.SAW.Name
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
+import Verifier.SAW.SCTypeCheck
+import Verifier.SAW.Recognizer
 
 
 ----------------------------------------------------------------------
@@ -63,25 +66,23 @@ data TypedSubsTerm
                     tpSubsFreeVars :: BitSet,
                     tpSubsTermF :: TermF TypedSubsTerm,
                     tpSubsTypeF :: TermF TypedSubsTerm,
-                    tpSubstSort :: Sort }
+                    tpSubsSort :: Sort }
 
 -- | Convert a 'Term' to a 'TypedSubsTerm'
 typeAllSubterms :: SharedContext -> Term -> IO TypedSubsTerm
-typeAllSubterms = error "FIXME"
+typeAllSubterms = error "FIXME HERE"
 
-{-
 -- | Convert a 'TypedSubsTerm' back to a 'Term'
 typedSubsTermTerm :: TypedSubsTerm -> Term
-typedSubsTermTerm = error "FIXME"
--}
+typedSubsTermTerm = error "FIXME HERE"
 
 -- | Get the type of a 'TypedSubsTerm' as a 'TypedSubsTerm'
 typedSubsTermType :: TypedSubsTerm -> TypedSubsTerm
 typedSubsTermType tst =
   TypedSubsTerm { tpSubsIndex = Nothing, tpSubsFreeVars = tpSubsFreeVars tst,
                   tpSubsTermF = tpSubsTypeF tst,
-                  tpSubsTypeF = FTermF (Sort $ tpSubstSort tst),
-                  tpSubstSort = sortOf (tpSubstSort tst) }
+                  tpSubsTypeF = FTermF (Sort $ tpSubsSort tst),
+                  tpSubsSort = sortOf (tpSubsSort tst) }
 
 -- | Count the number of right-nested pi-abstractions of a 'TypedSubsTerm'
 typedSubsTermArity :: TypedSubsTerm -> Int
@@ -183,8 +184,10 @@ monTermForcePure str _ = failOpenTerm str
 -- | An environment of named definitions that have already been monadified
 type MonadifyEnv = Map Ident MonTerm
 
--- | A context mapping deBruijn indices to their monadified terms
-type MonadifyCtx = [OpenTerm]
+-- | A context for monadifying 'Term's which maintains, for each deBruijn index
+-- in scope, both its original un-monadified type along with an 'OpenTerm' for
+-- the translation of the variable to a local variable of monadified type
+type MonadifyCtx = [(Term,OpenTerm)]
 
 -- | The read-only state of a monadification computation
 data MonadifyROState = MonadifyROState {
@@ -282,30 +285,129 @@ monadifyPure :: Monadify a => a -> MonadifyM OpenTerm
 monadifyPure = monadify >=> purifyMonTerm
 
 -- | Monadify a term and run the resulting computation
-monadifyTermAndRun :: MonadifyEnv -> MonadifyCtx -> TypedSubsTerm -> MonTerm
-monadifyTermAndRun env ctx tst =
+monadifyTermAndRun :: MonadifyEnv -> MonadifyCtx -> Term -> MonTerm
+monadifyTermAndRun env ctx trm =
+  let m_tp =
+        bindTCMOpenTerm
+        (do tp <- liftTCM scTypeOf' (map fst ctx) trm >>= typeCheckWHNF
+            tp_tp <- liftTCM scTypeOf' (map fst ctx) tp >>= typeCheckWHNF
+            sort <- case asSort tp_tp of
+              Just sort -> return sort
+              Nothing -> error "Monadification: type of type is not a sort!"
+            return (tp,sort)) $ \(tp,sort) ->
+        monTermForcePure "Monadification failed: type is impure" $
+        runMonadifyM env ctx (sortOpenTerm sort) (monadify tp) in
+  runMonadifyM env ctx m_tp $ monadify trm
+
+-- | Monadify a 'TypedSubsTerm' and run the resulting computation
+monadifyTSTermAndRun :: MonadifyEnv -> MonadifyCtx -> TypedSubsTerm -> MonTerm
+monadifyTSTermAndRun env ctx tst =
   let tp =
         monTermForcePure "Monadification failed: type is impure" $
-        runMonadifyM env ctx (sortOpenTerm $ tpSubstSort tst) (monadify tst) in
+        runMonadifyM env ctx (sortOpenTerm $ tpSubsSort tst) (monadify tst) in
   runMonadifyM env ctx tp $ monadify tst
 
 -- | Monadify a term in a context that has been extended with an additional free
--- variable. Return a function over that variable.
-monadifyInBinding :: TypedSubsTerm -> MonadifyM (OpenTerm -> MonTerm)
-monadifyInBinding tst =
+-- variable, whose type is given by the first argument. Return a function over
+-- that variable.
+monadifyInBinding :: Term -> Term -> MonadifyM (OpenTerm -> MonTerm)
+monadifyInBinding tp tst =
   do ro_st <- ask
      return $ \x_trm ->
-       monadifyTermAndRun (monStEnv ro_st) (x_trm : monStCtx ro_st) tst
+       monadifyTermAndRun (monStEnv ro_st) ((tp,x_trm) : monStCtx ro_st) tst
+
+-- | Monadify a term in a context that has been extended with an additional free
+-- variable, whose type is given by the first argument. Return a function over
+-- that variable.
+monadifyTSInBinding :: Term -> TypedSubsTerm -> MonadifyM (OpenTerm -> MonTerm)
+monadifyTSInBinding tp tst =
+  do ro_st <- ask
+     return $ \x_trm ->
+       monadifyTSTermAndRun (monStEnv ro_st) ((tp,x_trm) : monStCtx ro_st) tst
+
+-- | Test if the first term has dependent function type, and, if so, return a
+-- failure 'OpenTerm', otherwise return the second 'OpenTerm'
+failIfDepFun :: [Term] -> Term -> OpenTerm -> OpenTerm
+failIfDepFun t_ctx t1 t2 =
+  bindTCMOpenTerm (liftTCM scTypeOf' t_ctx t1 >>= typeCheckWHNF) $ \case
+  (asPi -> Just (_, _, tp_out))
+    | inBitSet 0 (looseVars tp_out) ->
+      failOpenTerm ("Monadification failed: dependent function "
+                    ++ "applied to impure argument")
+  _ -> t2
 
 -- | Generic function to monadify terms
 class Monadify a where
   monadify :: a -> MonadifyM MonTerm
 
+instance Monadify Term where
+  monadify (STApp { stAppIndex = i, stAppTermF = tf}) =
+    memoizingM i $ monadify tf
+  monadify (Unshared tf) =
+    monadify tf
+
 instance Monadify TypedSubsTerm where
   monadify (TypedSubsTerm { tpSubsIndex = Just i, tpSubsTermF = tf}) =
-    memoizingM i $ monadify tf
+     memoizingM i $ monadify tf
   monadify (TypedSubsTerm { tpSubsIndex = Nothing, tpSubsTermF = tf}) =
     monadify tf
+
+
+instance Monadify (TermF Term) where
+  monadify (FTermF ftf) = monadify ftf
+  monadify (App t1 t2) =
+    do mtrm1 <- monadify t1
+       mtrm2 <- monadify t2
+       t_ctx <- map fst <$> monStCtx <$> ask
+       let mtrm2' =
+             -- If t1 has a dependent type and t2 is not pure then
+             -- monadification fails. We represent this changing mtrm2 to a
+             -- failure OpenTerm if it is computational.
+             case mtrm2 of
+               CompMonTerm tp trm ->
+                 CompMonTerm tp $ failIfDepFun t_ctx t1 trm
+               _ -> mtrm2
+       case mtrm1 of
+         -- If t1 is a pure function, apply it
+         FunMonTerm _ _ body_f ->
+           body_f <$> purifyMonTerm mtrm2'
+
+         -- Otherwise, purify t1 to a monadic function and apply it
+         _ ->
+           do trm1 <- purifyMonTerm mtrm1
+              trm2 <- purifyMonTerm mtrm2'
+              return $ CompMonTerm
+                (applyOpenTerm trm1 trm2)
+                (applyPiOpenTerm (monTermPureType mtrm1) trm2)
+
+  monadify (Lambda x tp body) =
+    do tp' <- monadifyPure tp
+       body_f <- monadifyInBinding tp body
+       return $ FunMonTerm x tp' body_f
+
+  monadify (Pi x tp body) =
+    do tp' <- monadifyPure tp
+       body_f <- monadifyInBinding tp body
+       retPure $ piOpenTerm x tp' $
+         monTermForcePure "Monadification failed: body of pi is impure" . body_f
+
+  monadify (LocalVar ix) =
+    do ctx <- monStCtx <$> ask
+       retPure $ snd (ctx!!ix)
+
+  monadify (Constant ec _t) =
+    do env <- monStEnv <$> ask
+       case ecName ec of
+         ModuleIdentifier ident
+           | Just mtrm <- Map.lookup ident env ->
+             return mtrm
+         _ ->
+           -- FIXME: if a definition is not in the environment, we just unfold
+           -- it; is this correct?
+           --monadify t
+           fail ("Monadification failed: no translation for constant: "
+                 ++ show (toAbsoluteName $ ecName ec))
+
 
 instance Monadify (TermF TypedSubsTerm) where
   monadify (FTermF ftf) = monadify ftf
@@ -334,18 +436,18 @@ instance Monadify (TermF TypedSubsTerm) where
 
   monadify (Lambda x tp body) =
     do tp' <- monadifyPure tp
-       body_f <- monadifyInBinding body
+       body_f <- monadifyTSInBinding (typedSubsTermTerm tp) body
        return $ FunMonTerm x tp' body_f
 
   monadify (Pi x tp body) =
     do tp' <- monadifyPure tp
-       body_f <- monadifyInBinding body
+       body_f <- monadifyTSInBinding (typedSubsTermTerm tp) body
        retPure $ piOpenTerm x tp' $
          monTermForcePure "Monadification failed: body of pi is impure" . body_f
 
   monadify (LocalVar ix) =
     do ctx <- monStCtx <$> ask
-       retPure (ctx!!ix)
+       retPure $ snd (ctx!!ix)
 
   monadify (Constant ec _t) =
     do env <- monStEnv <$> ask
@@ -360,7 +462,8 @@ instance Monadify (TermF TypedSubsTerm) where
            fail ("Monadification failed: no translation for constant: "
                  ++ show (toAbsoluteName $ ecName ec))
 
-instance Monadify (FlatTermF TypedSubsTerm) where
+
+instance Monadify a => Monadify (FlatTermF a) where
   monadify (Primitive nm) =
     do env <- monStEnv <$> ask
        case Map.lookup (primName nm) env of
@@ -383,7 +486,7 @@ instance Monadify (FlatTermF TypedSubsTerm) where
   monadify (Sort s) = retPure (sortOpenTerm s)
   monadify (NatLit n) = retPure $ natOpenTerm n
   monadify (StringLit str) = retPure $ stringLitOpenTerm str
-  monadify _ = error "FIXME: missing cases for monadify"
+  monadify _ = error "FIXME HERE: missing cases for monadify"
 
 
 ----------------------------------------------------------------------
@@ -393,10 +496,25 @@ instance Monadify (FlatTermF TypedSubsTerm) where
 -- | Monadify a term, or 'fail' if this is not possible
 monadifyTerm :: SharedContext -> MonadifyEnv -> Term -> IO Term
 monadifyTerm sc env t =
+  completeOpenTerm sc $ monTermComp $ monadifyTermAndRun env [] t
+
+-- | Monadify a term, or 'fail' if this is not possible
+monadifyTerm' :: SharedContext -> MonadifyEnv -> Term -> IO Term
+monadifyTerm' sc env t =
   do tst <- typeAllSubterms sc t
-     completeOpenTerm sc $ monTermComp $ monadifyTermAndRun env [] tst
+     completeOpenTerm sc $ monTermComp $ monadifyTSTermAndRun env [] tst
+
+-- | The definitions and primitives considered to be pure in 'defaultMonEnv',
+-- along with their arities
+defaultMonPureIds :: [(Ident,Int)]
+defaultMonPureIds =
+  [("Cryptol.PLiteral", 1),
+   ("Cryptol.ecNumber", 4)]
 
 -- | The default monadification environment
 defaultMonEnv :: MonadifyEnv
 defaultMonEnv = Map.fromList $
+  map (\(ident,arity) ->
+        (ident, pureFunMonTerm arity $ globalOpenTerm ident)) defaultMonPureIds
+  ++
   []
