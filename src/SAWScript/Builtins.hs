@@ -1508,8 +1508,10 @@ testMRSolver i1 i2 =
 
 monadifyTypedTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
 monadifyTypedTerm sc t =
-  liftIO (Monadify.monadifyTerm sc Monadify.defaultMonEnv (ttTerm t) >>=
-          mkTypedTerm sc)
+  liftIO $ do
+  trm <- Monadify.monadifyTerm sc Monadify.defaultMonEnv (ttTerm t)
+  tp <- scTypeOf sc trm
+  return $ TypedTerm (TypedTermOther tp) trm
 
 parseSharpSATResult :: String -> Maybe Integer
 parseSharpSATResult s = parse (lines s)
