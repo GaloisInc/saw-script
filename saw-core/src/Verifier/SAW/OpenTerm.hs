@@ -27,6 +27,7 @@ module Verifier.SAW.OpenTerm (
   stringLitOpenTerm, stringTypeOpenTerm,
   pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
+  recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
   applyOpenTerm, applyOpenTermMulti, applyPiOpenTerm, piArgOpenTerm,
   lambdaOpenTerm, lambdaOpenTermMulti, piOpenTerm, piOpenTermMulti,
@@ -151,6 +152,26 @@ tupleTypeOpenTerm = foldr pairTypeOpenTerm unitTypeOpenTerm
 projTupleOpenTerm :: Integer -> OpenTerm -> OpenTerm
 projTupleOpenTerm 0 t = pairLeftOpenTerm t
 projTupleOpenTerm i t = projTupleOpenTerm (i-1) (pairRightOpenTerm t)
+
+-- | Build a record value as an 'OpenTerm'
+recordOpenTerm :: [(FieldName, OpenTerm)] -> OpenTerm
+recordOpenTerm flds_ts =
+  OpenTerm $ do let (flds,ots) = unzip flds_ts
+                ts <- mapM unOpenTerm ots
+                typeInferComplete $ RecordValue $ zip flds ts
+
+-- | Build a record type as an 'OpenTerm'
+recordTypeOpenTerm :: [(FieldName, OpenTerm)] -> OpenTerm
+recordTypeOpenTerm flds_ts =
+  OpenTerm $ do let (flds,ots) = unzip flds_ts
+                ts <- mapM unOpenTerm ots
+                typeInferComplete $ RecordType $ zip flds ts
+
+-- | Project a field from a record
+projRecordOpenTerm :: OpenTerm -> FieldName -> OpenTerm
+projRecordOpenTerm (OpenTerm m) f =
+  OpenTerm $ do t <- m
+                typeInferComplete $ RecordProj t f
 
 -- | Build an 'OpenTerm' for a constructor applied to its arguments
 ctorOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
