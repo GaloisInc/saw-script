@@ -21,7 +21,7 @@ module Verifier.SAW.OpenTerm (
   -- * Open terms and converting to closed terms
   OpenTerm(..), completeOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
-  closedOpenTerm, failOpenTerm, bindTCMOpenTerm, openTermType,
+  closedOpenTerm, openOpenTerm, failOpenTerm, bindTCMOpenTerm, openTermType,
   flatOpenTerm, sortOpenTerm, natOpenTerm,
   unitOpenTerm, unitTypeOpenTerm,
   stringLitOpenTerm, stringTypeOpenTerm,
@@ -66,6 +66,17 @@ completeOpenTermType sc (OpenTerm termM) =
 -- | Embed a closed 'Term' into an 'OpenTerm'
 closedOpenTerm :: Term -> OpenTerm
 closedOpenTerm t = OpenTerm $ typeInferComplete t
+
+-- | Embed a 'Term' in the given typing context into an 'OpenTerm'
+openOpenTerm :: [(LocalName, Term)] -> Term -> OpenTerm
+openOpenTerm ctx t =
+  -- Extend the local type-checking context, wherever this OpenTerm gets used,
+  -- by appending ctx to the end, so that variables 0..length ctx-1 all get
+  -- type-checked with ctx. If these are really the only free variables, then it
+  -- won't matter what the rest of the ambient context is.
+  --
+  -- FIXME: we should check that the free variables of t are all < length ctx
+  OpenTerm $ withCtx ctx $ typeInferComplete t
 
 -- | Build an 'OpenTerm' that 'fail's in the underlying monad when completed
 failOpenTerm :: String -> OpenTerm
