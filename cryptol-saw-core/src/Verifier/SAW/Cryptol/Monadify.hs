@@ -24,18 +24,41 @@ applications @f arg@ in a term either have a non-dependent function type for @f@
 (i.e., a function with type @'Pi' x a b@ where @x@ does not occur in @b@) or a
 pure argument @arg@ that does not use any of the inconsistent operations.
 
-The monadification @Mon(t)@ of term @t@ is defined as follows (where we have
-simplified the input langauge to just contain pairs, sums, units, and
-functions):
+FIXME: explain this better
 
-FIXME: either talk about CPS or drop the definition
+MT(Pi x (sort 0) b) = Pi x (sort 0) CompMT(b)
+MT(Pi x Num b) = Pi x Num CompMT(b)
+MT(Pi _ a b) = MT(a) -> CompMT(b)
+MT(#(a,b)) = #(MT(a),MT(b))
+MT(f arg) = f MT(arg)  -- NOTE: f must be a pure function!
+MT(cnst) = cnst
+MT(dt args) = dt MT(args)
+MT(x) = x
+MT(_) = error
 
-> Mon(sort s) = sort s
-> Mon(#()) = #()
-> Mon(T * U) = Mon(T) * Mon(U)
-> Mon(Either T U) = Either Mon(T) Mon(U)
-> Mon(Pi x a b) = Pi x Mon(T) (CompM Mon(U))
-> Mon()
+CompMT(tp = Pi _ _ _) = MT(tp)
+CompMT(tp) = CompM MT(tp)
+
+-- NOTE: polymorphic functions like Pi x (sort 0) x have a CompM return type
+-- even if x is a function type. OR: we could make this a Haskell-level
+-- function!
+
+MonArg(t : tp) ==> MT(tp)
+MonArg(t) =
+  case Mon(t) of
+    m : CompM MT(a) => shift \k -> m >>= \x -> k x
+    _ => t
+
+Mon(t : tp) ==> MT(tp) or CompMT(tp)  (which are the same type for pis)
+Mon((f : Pi x a b) arg) = Mon(f) MT(arg)
+Mon((f : Pi _ a b) arg) = Mon(f) MonArg(arg)
+Mon(Lambda x a t) = Lambda x MT(a) Mon(t)
+Mon((t,u)) = (MonArg(t),MonArg(u))
+Mon(c args) = c MonArg(args)
+Mon(x) = x
+Mon(fix) = fixM (of some form...)
+Mon(cnst) = cnstM  if cnst is impure and monadifies to constM
+Mon(cnst) = cnst   otherwise
 -}
 
 module Verifier.SAW.Cryptol.Monadify where
@@ -110,23 +133,127 @@ unsharedApply f arg = Unshared $ App f arg
 
 
 ----------------------------------------------------------------------
--- * Monadified Terms and Types
+-- * Monadifying Types
 ----------------------------------------------------------------------
 
--- | When we monadify a term @trm@ of type @tp@, we in general get a term
--- @Mon(trm) : CompM Mon(tp)@. But sometimes we can do better, and get a term of
--- a "more pure" type that can be embedded into @CompM Mon(tp)@. A
--- monadification term represents one of these possibly more pure terms.
+data MonKind = MKType Sort | MKNum | MKFun MonKind MonKind deriving Eq
+
+-- | Convert a kind to a SAW core sort, if possible
+monKindToSort :: MonKind -> Maybe Sort
+monKindToSort (MKType s) = Just s
+monKindToSort _ = Nothing
+
+data MonType
+  = MTyForall MonKind (MonType -> MonType)
+  | MTyArrow MonType MonType
+  | MTyTuple [MonType]
+  | MTyRecord [(FieldName, MonType)]
+  | MTyBase MonKind OpenTerm -- A "base type" of a given kind
+  | MTyNum OpenTerm
+
+-- | Get the kind of a 'MonType', assuming it has one
+monTypeKind :: MonType -> Maybe MonKind
+monTypeKind (MTyForall _ _) = Nothing
+monTypeKind (MTyArrow t1 t2) =
+  do s1 <- monTypeKind t1 >>= monKindToSort
+     s2 <- monTypeKind t2 >>= monKindToSort
+     return $ MKType $ maxSort [s1, s2]
+monTypeKind (MTyTuple tps) =
+  do sorts <- mapM (monTypeKind >=> monKindToSort) tps
+     return $ MKType $ maxSort sorts
+monTypeKind (MTyRecord tps) =
+  do sorts <- mapM (monTypeKind . snd >=> monKindToSort) tps
+     return $ MKType $ maxSort sorts
+monTypeKind (MTyBase k _) = Just k
+monTypeKind (MTyNum _) = Just MKNum
+
+-- | Convert a SAW core 'Term' to a monadification kind, if possible
+monadifyKind :: Term -> Maybe MonKind
+monadifyKind (asDataType -> Just (num, []))
+  | primName num == "Cryptol.Num" = return MKNum
+monadifyKind (asSort -> Just s) = return $ MKType s
+monadifyKind (asPi -> Just (_, tp_in, tp_out)) =
+  MKFun <$> monadifyKind tp_in <*> monadifyKind tp_out
+monadifyKind _ = Nothing
+
+-- | Get the kind of a type constructor with kind @k@ applied to type @t@, or
+-- return 'Nothing' if the kinds do not line up
+applyKind :: MonKind -> MonType -> Maybe MonKind
+applyKind (MKFun k1 k2) t
+  | Just kt <- monTypeKind t
+  , kt == k1 = Just k2
+applyKind _ _ = Nothing
+
+-- | Perform 'applyKind' for 0 or more argument types
+applyKinds :: MonKind -> [MonType] -> Maybe MonKind
+applyKinds = foldM applyKind
+
+-- | A context of local variables used for monadifying types, which includes the
+-- variable names, their original types (before monadification), and, if their
+-- types corespond to 'MonKind's, a local 'MonType' that quantifies over them
+type MonadifyTypeCtx = [(LocalName,Term,Maybe MonType)]
+
+ppTermInTypeCtx :: MonadifyTypeCtx -> Term -> String
+ppTermInTypeCtx ctx t =
+  scPrettyTermInCtx defaultPPOpts (map (\(x,_,_) -> x) ctx) t
+
+mkBaseType :: MonadifyTypeCtx -> MonKind -> Term -> MonType
+mkBaseType ctx k t =
+  MTyBase k $ openOpenTerm (map (\(x,tp,_) -> (x,tp)) ctx) t
+
+-- | Convert a SAW core 'Term' to a monadification type
+monadifyType :: MonadifyTypeCtx -> Term -> MonType
+monadifyType ctx (asPi -> Just (x, tp_in, tp_out))
+  | Just k <- monadifyKind tp_in =
+    MTyForall k (\tp' -> monadifyType ((x,tp_in,Just tp'):ctx) tp_out)
+monadifyType ctx tp@(asPi -> Just (_, _, tp_out))
+  | inBitSet 0 (looseVars tp_out) =
+    error ("monadifyType: " ++
+           "dependent function type with non-kind argument type: " ++
+           ppTermInTypeCtx ctx tp)
+monadifyType ctx tp@(asPi -> Just (x, tp_in, tp_out)) =
+  MTyArrow (monadifyType ctx tp_in)
+  (monadifyType ((x,tp,Nothing):ctx) tp_out)
+monadifyType ctx (asTupleType -> Just tps) =
+  MTyTuple (map (monadifyType ctx) tps)
+monadifyType ctx (asRecordType -> Just tps) =
+  MTyRecord $ map (\(fld,tp) -> (fld, monadifyType ctx tp)) $ Map.toList tps
+monadifyType ctx tp@(asDataType -> Just (pn, args))
+  | Just pn_k <- monadifyKind (primType pn)
+  , tps <- map (monadifyType ctx) args
+  , Just k_out <- applyKinds pn_k tps =
+    mkBaseType ctx k_out tp
+monadifyType ctx tp@(asApplyAll -> (f, args@(_:_)))
+  | Just (ec, _) <- asConstant f
+  , Just ec_k <- monadifyKind (ecType ec)
+  , tps <- map (monadifyType ctx) args
+  , Just k_out <- applyKinds ec_k tps =
+    mkBaseType ctx k_out tp
+monadifyType ctx (asLocalVar -> Just i)
+  | i < length ctx
+  , (_,_,Just tp) <- ctx!!i = tp
+monadifyType ctx tp =
+  error ("monadifyType: not a valid type for monadification: "
+         ++ ppTermInTypeCtx ctx tp)
+
+
+{-
+----------------------------------------------------------------------
+-- * Monadified Terms
+----------------------------------------------------------------------
+
+-- | FIXME: this documentation is out of date
+--
+-- When we monadify a term @trm@ of type @tp@, we in general get a term
+-- @Mon(trm) : CompMT(tp)@. But sometimes we can do better, and get a term of a
+-- "more pure" type that can be embedded into @CompMT(tp)@. A monadification
+-- term represents one of these possibly more pure terms.
 data MonTerm
-     -- | A "pure" term of type @Mon(tp)@
-  = PureMonTerm OpenTerm OpenTerm
-    -- | A "computational" term of type @CompM Mon(tp)@, where the supplied
-    -- 'OpenTerm' gives the pure type @Mon(tp)@
-  | CompMonTerm OpenTerm OpenTerm
-    -- | A (dependent) function of type @Pi x t u@ for monadification type
-    -- @u@. Note that this is "more pure" than 'PureMonTerm', because that
-    -- constructor uses a type of the form @Pi x t (CompM u)@ for functions,
-    -- whereas this constructor allows the return type to be pure as well.
+     -- | A "pure" term of type @MT(tp)@ for base type @tp@
+  = PureMonTerm MonBaseType OpenTerm
+    -- | A "computational" term of type @CompMT(tp)@ for base type @tp@
+  | CompMonTerm MonBaseType OpenTerm
+  | ForallMonTerm LocalName MonKind (MonType -> MonTerm)
   | FunMonTerm LocalName OpenTerm (OpenTerm -> MonTerm)
 
 -- FIXME: maybe make the body of a FunMonTerm be a MonTerm -> MonTerm?
@@ -576,3 +703,4 @@ defaultMonEnv = Map.fromList $
   defaultMonPureIds
   ++
   []
+-}
