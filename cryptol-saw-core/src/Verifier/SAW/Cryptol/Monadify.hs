@@ -37,6 +37,7 @@ MT(x) = x
 MT(_) = error
 
 CompMT(tp = Pi _ _ _) = MT(tp)
+CompMT(n : Num) = n
 CompMT(tp) = CompM MT(tp)
 
 -- NOTE: polymorphic functions like Pi x (sort 0) x have a CompM return type
@@ -143,17 +144,48 @@ monKindToSort :: MonKind -> Maybe Sort
 monKindToSort (MKType s) = Just s
 monKindToSort _ = Nothing
 
+-- | Convert a 'MonKind' to the term it represents
+monKindOpenTerm :: MonKind -> OpenTerm
+monKindOpenTerm (MKType s) = sortOpenTerm s
+monKindOpenTerm MKNum = globalOpenTerm "Cryptol.Num"
+monKindOpenTerm (MKFun k1 k2) =
+  arrowOpenTerm "_" (monKindOpenTerm k1) (monKindOpenTerm k2)
+
 data MonType
-  = MTyForall MonKind (MonType -> MonType)
+  = MTyForall LocalName MonKind (MonType -> MonType)
   | MTyArrow MonType MonType
   | MTyTuple [MonType]
   | MTyRecord [(FieldName, MonType)]
-  | MTyBase MonKind OpenTerm -- A "base type" of a given kind
+  | MTyBase MonKind OpenTerm -- A "base type" or type var of a given kind
   | MTyNum OpenTerm
+
+-- | Make a base type of sort 0 from an 'OpenTerm'
+mkMonType0 :: OpenTerm -> MonType
+mkMonType0 = MTyBase (MKType $ mkSort 0)
+
+-- | Test that a monadification type is monomorphic, i.e., has no foralls
+monTypeIsMono :: MonType -> Bool
+monTypeIsMono (MTyForall _ _ _) = False
+monTypeIsMono (MTyArrow t1 t2) = monTypeIsMono t1 && monTypeIsMono t2
+monTypeIsMono (MTyTuple tps) = all monTypeIsMono tps
+monTypeIsMono (MTyRecord tps) = all (monTypeIsMono . snd) tps
+monTypeIsMono (MTyBase _ _) = True
+monTypeIsMono (MTyNum _) = True
+
+-- | Test if a monadification type @tp@ is considered a base type, meaning that
+-- @CompMT(tp) = CompM tp@
+isBaseType :: MonType -> Bool
+isBaseType (MTyForall _ _ _) = False
+isBaseType (MTyArrow _ _) = False
+isBaseType (MTyTuple _) = True
+isBaseType (MTyRecord _) = True
+isBaseType (MTyBase (MKType _) _) = True
+isBaseType (MTyBase _ _) = True
+isBaseType (MTyNum _) = False
 
 -- | Get the kind of a 'MonType', assuming it has one
 monTypeKind :: MonType -> Maybe MonKind
-monTypeKind (MTyForall _ _) = Nothing
+monTypeKind (MTyForall _ _ _) = Nothing
 monTypeKind (MTyArrow t1 t2) =
   do s1 <- monTypeKind t1 >>= monKindToSort
      s2 <- monTypeKind t2 >>= monKindToSort
@@ -166,6 +198,10 @@ monTypeKind (MTyRecord tps) =
      return $ MKType $ maxSort sorts
 monTypeKind (MTyBase k _) = Just k
 monTypeKind (MTyNum _) = Just MKNum
+
+-- | Get the 'Sort' @s@ of a 'MonType' if it has kind @'MKType' s@
+monTypeSort :: MonType -> Maybe Sort
+monTypeSort = monTypeKind >=> monKindToSort
 
 -- | Convert a SAW core 'Term' to a monadification kind, if possible
 monadifyKind :: Term -> Maybe MonKind
@@ -188,6 +224,26 @@ applyKind _ _ = Nothing
 applyKinds :: MonKind -> [MonType] -> Maybe MonKind
 applyKinds = foldM applyKind
 
+-- | Convert a 'MonType' to the argument type @MT(tp)@ it represents
+monTypeArgType :: MonType -> OpenTerm
+monTypeArgType (MTyForall x k body) =
+  piOpenTerm x (monKindOpenTerm k) (\tp -> monTypeCompType (body $ MTyBase k tp))
+monTypeArgType (MTyArrow t1 t2) =
+  arrowOpenTerm "_" (monTypeArgType t1) (monTypeCompType t2)
+monTypeArgType (MTyTuple tps) =
+  tupleTypeOpenTerm $ map monTypeArgType tps
+monTypeArgType (MTyRecord tps) =
+  recordTypeOpenTerm $ map (\(f,tp) -> (f, monTypeArgType tp)) tps
+monTypeArgType (MTyBase _ t) = t
+monTypeArgType (MTyNum n) = n
+
+-- | Convert a 'MonType' to the computation type @CompMT(tp)@ it represents
+monTypeCompType :: MonType -> OpenTerm
+monTypeCompType mtp@(MTyForall _ _ _) = monTypeArgType mtp
+monTypeCompType mtp@(MTyArrow _ _) = monTypeArgType mtp
+monTypeCompType mtp =
+  applyOpenTerm (globalOpenTerm "Prelude.CompM") (monTypeArgType mtp)
+
 -- | A context of local variables used for monadifying types, which includes the
 -- variable names, their original types (before monadification), and, if their
 -- types corespond to 'MonKind's, a local 'MonType' that quantifies over them
@@ -197,15 +253,15 @@ ppTermInTypeCtx :: MonadifyTypeCtx -> Term -> String
 ppTermInTypeCtx ctx t =
   scPrettyTermInCtx defaultPPOpts (map (\(x,_,_) -> x) ctx) t
 
-mkBaseType :: MonadifyTypeCtx -> MonKind -> Term -> MonType
-mkBaseType ctx k t =
+mkTermBaseType :: MonadifyTypeCtx -> MonKind -> Term -> MonType
+mkTermBaseType ctx k t =
   MTyBase k $ openOpenTerm (map (\(x,tp,_) -> (x,tp)) ctx) t
 
 -- | Convert a SAW core 'Term' to a monadification type
 monadifyType :: MonadifyTypeCtx -> Term -> MonType
 monadifyType ctx (asPi -> Just (x, tp_in, tp_out))
   | Just k <- monadifyKind tp_in =
-    MTyForall k (\tp' -> monadifyType ((x,tp_in,Just tp'):ctx) tp_out)
+    MTyForall x k (\tp' -> monadifyType ((x,tp_in,Just tp'):ctx) tp_out)
 monadifyType ctx tp@(asPi -> Just (_, _, tp_out))
   | inBitSet 0 (looseVars tp_out) =
     error ("monadifyType: " ++
@@ -222,13 +278,13 @@ monadifyType ctx tp@(asDataType -> Just (pn, args))
   | Just pn_k <- monadifyKind (primType pn)
   , tps <- map (monadifyType ctx) args
   , Just k_out <- applyKinds pn_k tps =
-    mkBaseType ctx k_out tp
+    mkTermBaseType ctx k_out tp
 monadifyType ctx tp@(asApplyAll -> (f, args@(_:_)))
   | Just (ec, _) <- asConstant f
   , Just ec_k <- monadifyKind (ecType ec)
   , tps <- map (monadifyType ctx) args
   , Just k_out <- applyKinds ec_k tps =
-    mkBaseType ctx k_out tp
+    mkTermBaseType ctx k_out tp
 monadifyType ctx (asLocalVar -> Just i)
   | i < length ctx
   , (_,_,Just tp) <- ctx!!i = tp
@@ -237,99 +293,85 @@ monadifyType ctx tp =
          ++ ppTermInTypeCtx ctx tp)
 
 
-{-
 ----------------------------------------------------------------------
 -- * Monadified Terms
 ----------------------------------------------------------------------
 
--- | FIXME: this documentation is out of date
---
--- When we monadify a term @trm@ of type @tp@, we in general get a term
--- @Mon(trm) : CompMT(tp)@. But sometimes we can do better, and get a term of a
--- "more pure" type that can be embedded into @CompMT(tp)@. A monadification
--- term represents one of these possibly more pure terms.
-data MonTerm
-     -- | A "pure" term of type @MT(tp)@ for base type @tp@
-  = PureMonTerm MonBaseType OpenTerm
-    -- | A "computational" term of type @CompMT(tp)@ for base type @tp@
-  | CompMonTerm MonBaseType OpenTerm
+data ArgMonTerm
+  = BaseMonTerm MonType OpenTerm
+  | FunMonTerm LocalName MonType MonType (ArgMonTerm -> MonTerm)
   | ForallMonTerm LocalName MonKind (MonType -> MonTerm)
-  | FunMonTerm LocalName OpenTerm (OpenTerm -> MonTerm)
 
--- FIXME: maybe make the body of a FunMonTerm be a MonTerm -> MonTerm?
+data MonTerm
+  = ArgMonTerm ArgMonTerm
+  | CompMonTerm MonType OpenTerm
 
--- | Build a pure 'MonTerm' from a pure 'OpenTerm'
-pureMonTerm :: OpenTerm -> MonTerm
-pureMonTerm trm = PureMonTerm trm $ openTermType trm
+-- | Get the type of a argument term
+argMonTermType :: ArgMonTerm -> MonType
+argMonTermType (BaseMonTerm tp _) = tp
+argMonTermType (ForallMonTerm x k body) = MTyForall x k (monTermType . body)
+argMonTermType (FunMonTerm _ tp_in tp_out _) = MTyArrow tp_in tp_out
 
--- | Build a pure 'MonTerm' from a pure function of the given arity which has
--- the given type. NOTE: this only works for first-order functions, i.e.,
--- functions whose argument types do not themselves contain function types.
-pureFunMonTerm :: Int -> OpenTerm -> ([OpenTerm] -> OpenTerm) -> MonTerm
-pureFunMonTerm 0 _ f = pureMonTerm (f [])
-pureFunMonTerm i tp f =
-  FunMonTerm "x" (piArgOpenTerm tp) $ \x ->
-  pureFunMonTerm (i-1) (applyPiOpenTerm tp x) $ \xs -> f (x : xs)
+-- | Get the type of a monadification term, irrespective of if it is pure or not
+monTermType :: MonTerm -> MonType
+monTermType (ArgMonTerm t) = argMonTermType t
+monTermType (CompMonTerm tp _) = tp
 
--- | Build a pure 'MonTerm' from a global definition or primitive of the given
--- arity. NOTE: this only works for first-order functions, i.e., functions whose
--- argument types do not themselves contain function types.
-pureGlobalMonTerm :: Int -> Ident -> MonTerm
-pureGlobalMonTerm i ident =
-  pureFunMonTerm i
-  (openTermType (globalOpenTerm ident))
-  (applyOpenTermMulti (globalOpenTerm ident))
+-- | Apply a monadified term to a type or term argument
+applyMonTerm :: MonTerm -> Either MonType ArgMonTerm -> MonTerm
+applyMonTerm (ArgMonTerm (FunMonTerm _ _ _ f)) (Right arg) = f arg
+applyMonTerm (ArgMonTerm (ForallMonTerm _ _ f)) (Left mtp) = f mtp
+applyMonTerm _ _ = error "applyMonTerm: application at incorrect type"
 
--- | Build a 'MonTerm' for a 'failOpenTerm'
-failMonTerm :: String -> MonTerm
-failMonTerm str = pureMonTerm $ failOpenTerm str
+-- | Apply a monadified term to 0 or more arguments
+applyMonTermMulti :: MonTerm -> [Either MonType ArgMonTerm] -> MonTerm
+applyMonTermMulti = foldl applyMonTerm
 
--- | Convert the type of a 'MonType' to its most general pure type @Mon(tp)@
-monTermPureType :: MonTerm -> OpenTerm
-monTermPureType (PureMonTerm _ tp) = tp
-monTermPureType (CompMonTerm _ tp) = tp
-monTermPureType (FunMonTerm x tp body_f) =
-  piOpenTerm x tp (monTermCompType . body_f)
-
--- | Convert the type of a 'MonTerm' to its most general computational type
--- @CompM Mon(tp)@
-monTermCompType :: MonTerm -> OpenTerm
-monTermCompType =
-  applyOpenTerm (globalOpenTerm "Prelude.CompM") . monTermPureType
-
--- | Test if a 'MonTerm' is a computational term, i.e., of @CompM@ type
-isCompTerm :: MonTerm -> Bool
-isCompTerm (CompMonTerm _ _) = True
-isCompTerm _ = False
-
--- | Convert a 'FunMonType' function of type @Pi x t u@ to its most general pure
--- type @Pi x t ('monTermPureType' u)@
-funTermPure :: LocalName -> OpenTerm -> (OpenTerm -> MonTerm) -> OpenTerm
-funTermPure x tp body_f = lambdaOpenTerm x tp (monTermComp . body_f)
-
--- | Embed a 'MonTerm' into type @CompM Mon(tp)@
-monTermComp :: MonTerm -> OpenTerm
-monTermComp (PureMonTerm trm tp) =
-  applyOpenTermMulti (globalOpenTerm "Prelude.returnM") [tp, trm]
-monTermComp (CompMonTerm trm _) = trm
-monTermComp mtrm@(FunMonTerm x tp body_f) =
+-- | Convert an 'ArgMonTerm' to a SAW core term of type @CompMT(tp)@
+argMonTermCompTerm :: ArgMonTerm -> OpenTerm
+argMonTermCompTerm (BaseMonTerm tp t) =
   applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
-  [monTermPureType mtrm, funTermPure x tp body_f]
+  [monTypeArgType tp, t]
+argMonTermCompTerm (FunMonTerm x tp_in _ body) =
+  lambdaOpenTerm x (monTypeArgType tp_in) (monTermCompTerm . body
+                                            . mkArgMonTerm tp_in)
+argMonTermCompTerm (ForallMonTerm x k body) =
+  lambdaOpenTerm x (monKindOpenTerm k) (monTermCompTerm . body . MTyBase k)
 
--- | Try to convert a 'MonTerm' into a pure term by converting any 'CompFunType'
--- function to its most general @Pi x t (CompM u)@ form. For computational
--- 'MonTerm's, return 'Nothing'
-monTermTryPure :: MonTerm -> Maybe OpenTerm
-monTermTryPure (PureMonTerm trm _) = Just trm
-monTermTryPure (FunMonTerm x tp body) =
-  return $ funTermPure x tp body
-monTermTryPure (CompMonTerm _ _) = Nothing
+-- | Convert a 'MonTerm' to a SAW core term of type @CompMT(tp)@
+monTermCompTerm :: MonTerm -> OpenTerm
+monTermCompTerm (ArgMonTerm amtrm) = argMonTermCompTerm amtrm
+monTermCompTerm (CompMonTerm _ trm) = trm
 
--- | Convert a 'MonTerm' to a pure term using 'monTermTryPure' or return an
--- 'OpenTerm' that 'fail's when completed
-monTermForcePure :: String -> MonTerm -> OpenTerm
-monTermForcePure _ mtrm | Just trm <- monTermTryPure mtrm = trm
-monTermForcePure str _ = failOpenTerm str
+-- | Convert an 'ArgMonTerm' to a SAW core term of type @MT(tp)@
+argMonTermArgTerm :: ArgMonTerm -> OpenTerm
+argMonTermArgTerm (BaseMonTerm _ t) = t
+argMonTermArgTerm t = argMonTermCompTerm t
+
+-- | Build an 'ArgMonTerm' from an 'OpenTerm' of argument type
+mkArgMonTerm :: MonType -> OpenTerm -> ArgMonTerm
+mkArgMonTerm (MTyForall x k body) t =
+  ForallMonTerm x k (\tp -> mkMonTerm (body tp) (applyOpenTerm t $
+                                                 monTypeArgType tp))
+mkArgMonTerm (MTyArrow t1 t2) t =
+  FunMonTerm "_" t1 t2 (\x -> mkMonTerm t2 $
+                              applyOpenTerm t $ argMonTermArgTerm x)
+mkArgMonTerm tp trm | isBaseType tp = BaseMonTerm tp trm
+mkArgMonTerm _ _ = error "mkArgMonTerm: malformed type for term"
+
+-- | Build a 'MonTerm' from an 'OpenTerm' of argument type
+mkMonTerm :: MonType -> OpenTerm -> MonTerm
+mkMonTerm tp t = ArgMonTerm $ mkArgMonTerm tp t
+
+-- | Build a 'MonTerm' from a global of a given argument type. Note that this
+-- only works for first-order types, i.e., where the global does not take in any
+-- functions (though it can take in type variables).
+mkGlobalMonTerm :: MonType -> Ident -> MonTerm
+mkGlobalMonTerm tp ident = mkMonTerm tp (globalOpenTerm ident)
+
+-- | Build a 'MonTerm' that 'fail's when converted to a term
+failMonTerm :: MonType -> String -> MonTerm
+failMonTerm tp str = mkMonTerm tp (failOpenTerm str)
 
 
 ----------------------------------------------------------------------
@@ -340,9 +382,10 @@ monTermForcePure str _ = failOpenTerm str
 type MonadifyEnv = Map Ident MonTerm
 
 -- | A context for monadifying 'Term's which maintains, for each deBruijn index
--- in scope, both its original un-monadified type along with an 'OpenTerm' for
--- the translation of the variable to a local variable of monadified type
-type MonadifyCtx = [(Term,OpenTerm)]
+-- in scope, both its original un-monadified type along with either a 'MonTerm'
+-- or 'MonType' for the translation of the variable to a local variable of
+-- monadified type or monadified kind
+type MonadifyCtx = [(LocalName,Term,Either MonType MonTerm)]
 
 -- | The read-only state of a monadification computation
 data MonadifyROState = MonadifyROState {
@@ -367,33 +410,8 @@ newtype MonadifyM a =
 
 instance Fail.MonadFail MonadifyM where
   fail str =
-    MonadifyM $ lift $ lift $ cont $ \_ -> failMonTerm str
-
--- | Run a monadification computation
---
--- FIXME: document the arguments
-runMonadifyM :: MonadifyEnv -> MonadifyCtx -> OpenTerm -> MonadifyM MonTerm ->
-                MonTerm
-runMonadifyM env ctx top_ret_tp m =
-  let ro_st = MonadifyROState env ctx top_ret_tp in
-  runCont (evalStateT (runReaderT (unMonadifyM m) ro_st) Map.empty) id
-
--- | Run a monadification computation using a mapping for identifiers that have
--- already been monadified and generate a SAW core term
-runCompleteMonadifyM :: MonadIO m => SharedContext -> MonadifyEnv -> OpenTerm ->
-                        MonadifyM MonTerm -> m Term
-runCompleteMonadifyM sc env top_ret_tp m =
-  liftIO $ completeOpenTerm sc $ monTermComp $ runMonadifyM env [] top_ret_tp m
-
--- | Memoize a computation of the monadified term associated with a 'TermIndex'
-memoizingM :: TermIndex -> MonadifyM MonTerm -> MonadifyM MonTerm
-memoizingM i m =
-  (Map.lookup i <$> get) >>= \case
-  Just ret  -> return ret
-  Nothing ->
-    do ret <- m
-       modify (Map.insert i ret)
-       return ret
+    do ret_tp <- topRetType
+       shiftMonadifyM $ \_ -> failMonTerm (mkMonType0 ret_tp) str
 
 -- | Capture the current continuation and pass it to a function, which must
 -- return the final computation result. Note that this is slightly differnet
@@ -413,28 +431,112 @@ resetMonadifyM ret_tp m =
 topRetType :: MonadifyM OpenTerm
 topRetType = monStTopRetType <$> ask
 
--- | Turn a 'MonTerm' into a pure term by inserting a monadic bind if the
--- 'MonTerm' is computational and converting any 'CompFunType' function to its
--- most general @Pi x t (CompM u)@ form
-purifyMonTerm :: MonTerm -> MonadifyM OpenTerm
-purifyMonTerm (PureMonTerm trm _) = return trm
-purifyMonTerm (FunMonTerm x tp body) =
-  return $ funTermPure x tp body
-purifyMonTerm (CompMonTerm trm tp) =
-  topRetType >>= \top_ret_tp ->
-  shiftMonadifyM $ \k ->
-  pureMonTerm $ applyOpenTermMulti (globalOpenTerm "Prelude.bindM")
-  [tp, top_ret_tp, trm, lambdaOpenTerm "x" tp (monTermComp . k)]
+-- | Run a monadification computation
+--
+-- FIXME: document the arguments
+runMonadifyM :: MonadifyEnv -> MonadifyCtx -> OpenTerm -> MonadifyM MonTerm ->
+                MonTerm
+runMonadifyM env ctx top_ret_tp m =
+  let ro_st = MonadifyROState env ctx top_ret_tp in
+  runCont (evalStateT (runReaderT (unMonadifyM m) ro_st) Map.empty) id
 
--- | Return a pure 'MonTerm' as the result of monadification
-retPure :: OpenTerm -> MonadifyM MonTerm
-retPure = return . pureMonTerm
+-- | Run a monadification computation using a mapping for identifiers that have
+-- already been monadified and generate a SAW core term
+runCompleteMonadifyM :: MonadIO m => SharedContext -> MonadifyEnv -> Term ->
+                        MonadifyM MonTerm -> m Term
+runCompleteMonadifyM sc env top_ret_tp m =
+  liftIO $ completeOpenTerm sc $ monTermCompTerm $
+  runMonadifyM env [] (monTypeArgType $ monadifyType [] top_ret_tp) m
+
+-- | Memoize a computation of the monadified term associated with a 'TermIndex'
+memoizingM :: TermIndex -> MonadifyM MonTerm -> MonadifyM MonTerm
+memoizingM i m =
+  (Map.lookup i <$> get) >>= \case
+  Just ret  -> return ret
+  Nothing ->
+    do ret <- m
+       modify (Map.insert i ret)
+       return ret
+
+-- | Turn a 'MonTerm' of type @CompMT(tp)@ to a term of argument type @MT(tp)@
+-- by inserting a monadic bind if the 'MonTerm' is computational
+argifyMonTerm :: MonTerm -> MonadifyM ArgMonTerm
+argifyMonTerm (ArgMonTerm mtrm) = return mtrm
+argifyMonTerm (CompMonTerm mtp trm) =
+  do let tp = monTypeArgType mtp
+     top_ret_tp <- topRetType
+     shiftMonadifyM $ \k ->
+       CompMonTerm (mkMonType0 top_ret_tp) $
+       applyOpenTermMulti (globalOpenTerm "Prelude.bindM")
+       [tp, top_ret_tp, trm,
+        lambdaOpenTerm "x" tp (monTermCompTerm . k . mkArgMonTerm mtp)]
 
 
 ----------------------------------------------------------------------
 -- * Monadification
 ----------------------------------------------------------------------
 
+
+{-
+Mon(t : tp) ==> MT(tp) or CompMT(tp)  (which are the same type for pis)
+Mon((f : Pi x a b) arg) = Mon(f) MT(arg)
+Mon((f : Pi _ a b) arg) = Mon(f) MonArg(arg)
+Mon(Lambda x a t) = Lambda x MT(a) Mon(t)
+Mon((t,u)) = (MonArg(t),MonArg(u))
+Mon(c args) = c MonArg(args)
+Mon(x) = x
+Mon(fix) = fixM (of some form...)
+Mon(cnst) = cnstM  if cnst is impure and monadifies to constM
+Mon(cnst) = cnst   otherwise
+-}
+
+mondifyArg :: MonType -> Term -> MonadifyM ArgMonTerm
+mondifyArg mtp t = monadifyTerm mtp t >>= argifyMonTerm
+
+monadifyTerm :: MonType -> Term -> MonadifyM MonTerm
+monadifyTerm mtp t@(STApp { stAppIndex = ix }) =
+  memoizingM ix $ monadifyTerm' mtp t
+monadifyTerm mtp t = monadifyTerm' mtp t
+
+monadifyTerm' :: MonType -> Term -> MonadifyM MonTerm
+monadifyTerm' mtp@(MTyForall _ _ _) t =
+  ask >>= \ro_st ->
+  return $ monadifyLambdas (monStEnv ro_st) (monStCtx ro_st) mtp t
+monadifyTerm' mtp@(MTyArrow _ _) t =
+  ask >>= \ro_st ->
+  return $ monadifyLambdas (monStEnv ro_st) (monStCtx ro_st) mtp t
+
+-- | FIXME: documentation; get our type down to a base type before going into
+-- the MonadifyM monad
+monadifyLambdas :: MonadifyEnv -> MonadifyCtx -> MonType -> Term -> MonTerm
+monadifyLambdas env ctx (MTyForall _ k tp_f) (asLambda ->
+                                              Just (x, x_tp, body)) =
+  -- FIXME: check that monadifyKind x_tp == k
+  ArgMonTerm $ ForallMonTerm x k $ \mtp ->
+  monadifyLambdas env ((x,x_tp,Left mtp) : ctx) (tp_f mtp) body
+monadifyLambdas env ctx (MTyArrow tp_in tp_out) (asLambda ->
+                                                 Just (x, x_tp, body)) =
+  -- FIXME: check that monadifyType x_tp == tp_in
+  ArgMonTerm $ FunMonTerm x tp_in tp_out $ \arg ->
+  monadifyLambdas env ((x,x_tp,Right (ArgMonTerm arg)) : ctx) tp_out body
+monadifyLambdas env ctx tp t =
+  monadifyEtaExpand env ctx tp tp t []
+
+monadifyEtaExpand :: MonadifyEnv -> MonadifyCtx -> MonType ->
+                     MonType -> Term -> [Either MonType ArgMonTerm] -> MonTerm
+monadifyEtaExpand env ctx top_mtp (MTyForall x k tp_f) t args =
+  ArgMonTerm $ ForallMonTerm x k $ \mtp ->
+  monadifyEtaExpand env ctx top_mtp (tp_f mtp) t (args ++ [Left mtp])
+monadifyEtaExpand env ctx top_mtp (MTyArrow tp_in tp_out) t args =
+  ArgMonTerm $ FunMonTerm "_" tp_in tp_out $ \arg ->
+  monadifyEtaExpand env ctx top_mtp tp_out t (args ++ [Right arg])
+monadifyEtaExpand env ctx top_mtp mtp t args =
+  applyMonTermMulti
+  (runMonadifyM env ctx (monTypeArgType mtp) (monadifyTerm top_mtp t))
+  args
+
+
+{-
 -- | Monadify a 'Term' and then purify it using 'purifyMonTerm'
 monadifyPure :: Monadify a => a -> MonadifyM OpenTerm
 monadifyPure = monadify >=> purifyMonTerm
