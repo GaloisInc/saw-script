@@ -389,18 +389,17 @@ mkArgMonTerm mtp t = mkFunArgMonTerm mtp (applyOpenTermMulti t)
 mkMonTerm :: MonType -> OpenTerm -> MonTerm
 mkMonTerm mtp t = mkFunMonTerm mtp (applyOpenTermMulti t)
 
--- | Build a 'MonTerm' from a global of a given argument type. Note that this
--- only works for first-order types, i.e., where the global does not take in any
--- functions (though it can take in type variables).
+-- | Build a 'MonTerm' from a global of a given argument type
 mkGlobalMonTerm :: MonType -> Ident -> MonTerm
 mkGlobalMonTerm tp ident = mkMonTerm tp (globalOpenTerm ident)
+
 
 -- | Build a 'MonTerm' from a constant of a given argument type. Note that this
 -- only works for first-order types, i.e., where the global does not take in any
 -- functions (though it can take in type variables).
-mkExtCnsMonTerm :: ExtCns Term -> MonTerm
-mkExtCnsMonTerm ec =
-  mkMonTerm (monadifyType [] $ ecType ec)
+mkExtCnsArgMonTerm :: ExtCns Term -> ArgMonTerm
+mkExtCnsArgMonTerm ec =
+  mkArgMonTerm (monadifyType [] $ ecType ec)
   (bindTCMOpenTerm
    (do tp <- liftTCM scWhnf (ecType ec)
        if isFirstOrderType tp then return () else
@@ -410,9 +409,9 @@ mkExtCnsMonTerm ec =
    const $ extCnsOpenTerm ec)
 
 -- | Build a 'MonTerm' from a constructor with the given 'PrimName'
-mkCtorMonTerm :: PrimName Term -> MonTerm
-mkCtorMonTerm pn =
-  mkFunMonTerm (monadifyType [] $ primType pn) (ctorOpenTerm $ primName pn)
+mkCtorArgMonTerm :: PrimName Term -> ArgMonTerm
+mkCtorArgMonTerm pn =
+  mkFunArgMonTerm (monadifyType [] $ primType pn) (ctorOpenTerm $ primName pn)
 
 -- | Build a 'MonTerm' that 'fail's when converted to a term
 failMonTerm :: MonType -> String -> MonTerm
@@ -424,7 +423,7 @@ failMonTerm tp str = mkMonTerm tp (failOpenTerm str)
 ----------------------------------------------------------------------
 
 -- | An environment of named definitions that have already been monadified
-type MonadifyEnv = Map NameInfo MonTerm
+type MonadifyEnv = Map NameInfo ArgMonTerm
 
 -- | A context for monadifying 'Term's which maintains, for each deBruijn index
 -- in scope, both its original un-monadified type along with either a 'MonTerm'
@@ -571,13 +570,13 @@ monadifyTerm' _ (asLocalVar -> Just ix) =
   ctx | (_,_,Right mtrm) <- ctx !! ix -> return mtrm
   _ -> fail "Monadification failed: type variable used in term position!"
 monadifyTerm' _ (asCtor -> Just (pn, args)) =
-  monadifyApply (mkCtorMonTerm pn) args
+  monadifyApply (mkCtorArgMonTerm pn) args
 monadifyTerm' _ (asApplyAll -> (asConstant -> Just (ec, _), args)) =
   do env <- monStEnv <$> ask
      let mtrm_f =
            case Map.lookup (ecName ec) env of
              Just mtrm -> mtrm
-             Nothing -> mkExtCnsMonTerm ec
+             Nothing -> mkExtCnsArgMonTerm ec
      monadifyApply mtrm_f args
 monadifyTerm' _ t =
   (monStCtx <$> ask) >>= \ctx ->
@@ -586,14 +585,16 @@ monadifyTerm' _ t =
 
 -- | Monadify the application of a monadified term to a list of terms, using the
 -- type of the already monadified to monadify the arguments
-monadifyApply :: MonTerm -> [Term] -> MonadifyM MonTerm
-monadifyApply (ArgMonTerm (FunMonTerm _ tp_in _ f)) (t : ts) =
-  monadifyArg tp_in t >>= \mtrm ->
-  monadifyApply (f mtrm) ts
-monadifyApply (ArgMonTerm (ForallMonTerm _ _ f)) (t : ts) =
-  (monStCtx <$> ask) >>= \ctx ->
-  monadifyApply (f $ monadifyType (ctxToTypeCtx ctx) t) ts
-monadifyApply mtrm [] = return mtrm
+monadifyApply :: ArgMonTerm -> [Term] -> MonadifyM MonTerm
+monadifyApply (FunMonTerm _ tp_in _ f) (t : ts) =
+  do mtrm <- monadifyArg tp_in t
+     f' <- argifyMonTerm (f mtrm)
+     monadifyApply f' ts
+monadifyApply (ForallMonTerm _ _ f) (t : ts) =
+  do ctx <- monStCtx <$> ask
+     f' <- argifyMonTerm (f $ monadifyType (ctxToTypeCtx ctx) t)
+     monadifyApply f' ts
+monadifyApply mtrm [] = return $ ArgMonTerm mtrm
 monadifyApply _ _ = fail "Monadification failed: application at incorrect type"
 
 
