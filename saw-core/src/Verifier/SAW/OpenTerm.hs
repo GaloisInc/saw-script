@@ -28,7 +28,7 @@ module Verifier.SAW.OpenTerm (
   pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
   recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
-  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
+  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, extCnsOpenTerm,
   applyOpenTerm, applyOpenTermMulti, applyPiOpenTerm, piArgOpenTerm,
   lambdaOpenTerm, lambdaOpenTermMulti, piOpenTerm, piOpenTermMulti,
   arrowOpenTerm, letOpenTerm,
@@ -83,7 +83,10 @@ openOpenTerm ctx t =
 failOpenTerm :: String -> OpenTerm
 failOpenTerm str = OpenTerm $ fail str
 
--- | Bind the result of a type-checking computation in building an 'OpenTerm'
+-- | Bind the result of a type-checking computation in building an 'OpenTerm'.
+-- NOTE: this operation should be considered "unsafe" because it can create
+-- malformed 'OpenTerm's if the result of the 'TCM' computation is used as part
+-- of the resulting 'OpenTerm'. For instance, @a@ should not be 'OpenTerm'.
 bindTCMOpenTerm :: TCM a -> (a -> OpenTerm) -> OpenTerm
 bindTCMOpenTerm m f = OpenTerm (m >>= unOpenTerm . f)
 
@@ -199,6 +202,10 @@ dataTypeOpenTerm d all_args = OpenTerm $ do
 globalOpenTerm :: Ident -> OpenTerm
 globalOpenTerm ident =
   OpenTerm (liftTCM scGlobalDef ident >>= typeInferComplete)
+
+-- | Build an 'OpenTerm' for an external constant
+extCnsOpenTerm :: ExtCns Term -> OpenTerm
+extCnsOpenTerm ec = OpenTerm (liftTCM scExtCns ec >>= typeInferComplete)
 
 -- | Apply an 'OpenTerm' to another
 applyOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
