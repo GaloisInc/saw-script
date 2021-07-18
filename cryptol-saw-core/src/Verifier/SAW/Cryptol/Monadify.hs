@@ -78,7 +78,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.Recognizer
-import Verifier.SAW.Position
+-- import Verifier.SAW.Position
 
 
 ----------------------------------------------------------------------
@@ -136,6 +136,19 @@ unsharedApply f arg = Unshared $ App f arg
 ----------------------------------------------------------------------
 -- * Monadifying Types
 ----------------------------------------------------------------------
+
+-- | Helper function for recognizing applications with non-empty lists of
+-- arguments. FIXME: put this somewhere more appropriate
+asApplyAll' :: Recognizer Term (Term, [Term])
+asApplyAll' (asApplyAll -> (f, args@(_:_))) = Just (f, args)
+asApplyAll' _ = Nothing
+
+-- | Test if a 'Term' is a first-order function type. Note: the argument should
+-- be in WHNF so that all definitions are unfolded
+isFirstOrderType :: Term -> Bool
+isFirstOrderType (asPi -> Just (_, asPi -> Just _, _)) = False
+isFirstOrderType (asPi -> Just (_, _, tp_out)) = isFirstOrderType tp_out
+isFirstOrderType _ = True
 
 data MonKind = MKType Sort | MKNum | MKFun MonKind MonKind deriving Eq
 
@@ -246,13 +259,20 @@ monTypeCompType mtp =
 
 -- | A context of local variables used for monadifying types, which includes the
 -- variable names, their original types (before monadification), and, if their
--- types corespond to 'MonKind's, a local 'MonType' that quantifies over them
+-- types corespond to 'MonKind's, a local 'MonType' that quantifies over them.
+--
+-- NOTE: the reason this type is different from 'MonadifyCtx', the context type
+-- for monadifying terms, is that monadifying arrow types does not introduce a
+-- local 'MonTerm' argument, since they are not dependent functions and so do
+-- not use a HOAS encoding.
 type MonadifyTypeCtx = [(LocalName,Term,Maybe MonType)]
 
+-- | Pretty-print a 'Term' relative to a 'MonadifyTypeCtx'
 ppTermInTypeCtx :: MonadifyTypeCtx -> Term -> String
 ppTermInTypeCtx ctx t =
   scPrettyTermInCtx defaultPPOpts (map (\(x,_,_) -> x) ctx) t
 
+-- | Make a monadification type that is to be considered a base type
 mkTermBaseType :: MonadifyTypeCtx -> MonKind -> Term -> MonType
 mkTermBaseType ctx k t =
   MTyBase k $ openOpenTerm (map (\(x,tp,_) -> (x,tp)) ctx) t
@@ -279,7 +299,7 @@ monadifyType ctx tp@(asDataType -> Just (pn, args))
   , tps <- map (monadifyType ctx) args
   , Just k_out <- applyKinds pn_k tps =
     mkTermBaseType ctx k_out tp
-monadifyType ctx tp@(asApplyAll -> (f, args@(_:_)))
+monadifyType ctx tp@(asApplyAll' -> Just (f, args@(_:_)))
   | Just (ec, _) <- asConstant f
   , Just ec_k <- monadifyKind (ecType ec)
   , tps <- map (monadifyType ctx) args
@@ -348,26 +368,51 @@ argMonTermArgTerm :: ArgMonTerm -> OpenTerm
 argMonTermArgTerm (BaseMonTerm _ t) = t
 argMonTermArgTerm t = argMonTermCompTerm t
 
+-- | Build an 'ArgMonTerm' from a function on 'OpenTerm's of argument type
+mkFunArgMonTerm :: MonType -> ([OpenTerm] -> OpenTerm) -> ArgMonTerm
+mkFunArgMonTerm (MTyForall x k body) f =
+  ForallMonTerm x k (\tp -> mkFunMonTerm (body tp) (f . (monTypeArgType tp:)))
+mkFunArgMonTerm (MTyArrow t1 t2) f =
+  FunMonTerm "_" t1 t2 (\x -> mkFunMonTerm t2 (f . (argMonTermArgTerm x:)))
+mkFunArgMonTerm tp f | isBaseType tp = BaseMonTerm tp (f [])
+mkFunArgMonTerm _ _ = error "mkFunArgMonTerm: malformed type for term"
+
+-- | Build a 'MonTerm' from a function on 'OpenTerm's of argument type
+mkFunMonTerm :: MonType -> ([OpenTerm] -> OpenTerm) -> MonTerm
+mkFunMonTerm tp f = ArgMonTerm $ mkFunArgMonTerm tp f
+
 -- | Build an 'ArgMonTerm' from an 'OpenTerm' of argument type
 mkArgMonTerm :: MonType -> OpenTerm -> ArgMonTerm
-mkArgMonTerm (MTyForall x k body) t =
-  ForallMonTerm x k (\tp -> mkMonTerm (body tp) (applyOpenTerm t $
-                                                 monTypeArgType tp))
-mkArgMonTerm (MTyArrow t1 t2) t =
-  FunMonTerm "_" t1 t2 (\x -> mkMonTerm t2 $
-                              applyOpenTerm t $ argMonTermArgTerm x)
-mkArgMonTerm tp trm | isBaseType tp = BaseMonTerm tp trm
-mkArgMonTerm _ _ = error "mkArgMonTerm: malformed type for term"
+mkArgMonTerm mtp t = mkFunArgMonTerm mtp (applyOpenTermMulti t)
 
 -- | Build a 'MonTerm' from an 'OpenTerm' of argument type
 mkMonTerm :: MonType -> OpenTerm -> MonTerm
-mkMonTerm tp t = ArgMonTerm $ mkArgMonTerm tp t
+mkMonTerm mtp t = mkFunMonTerm mtp (applyOpenTermMulti t)
 
 -- | Build a 'MonTerm' from a global of a given argument type. Note that this
 -- only works for first-order types, i.e., where the global does not take in any
 -- functions (though it can take in type variables).
 mkGlobalMonTerm :: MonType -> Ident -> MonTerm
 mkGlobalMonTerm tp ident = mkMonTerm tp (globalOpenTerm ident)
+
+-- | Build a 'MonTerm' from a constant of a given argument type. Note that this
+-- only works for first-order types, i.e., where the global does not take in any
+-- functions (though it can take in type variables).
+mkExtCnsMonTerm :: ExtCns Term -> MonTerm
+mkExtCnsMonTerm ec =
+  mkMonTerm (monadifyType [] $ ecType ec)
+  (bindTCMOpenTerm
+   (do tp <- liftTCM scWhnf (ecType ec)
+       if isFirstOrderType tp then return () else
+         fail ("Monadification failed: no rule to monadify constant " ++
+               show (toAbsoluteName $ ecName ec) ++
+               " of higher-order type")) $
+   const $ extCnsOpenTerm ec)
+
+-- | Build a 'MonTerm' from a constructor with the given 'PrimName'
+mkCtorMonTerm :: PrimName Term -> MonTerm
+mkCtorMonTerm pn =
+  mkFunMonTerm (monadifyType [] $ primType pn) (ctorOpenTerm $ primName pn)
 
 -- | Build a 'MonTerm' that 'fail's when converted to a term
 failMonTerm :: MonType -> String -> MonTerm
@@ -379,13 +424,26 @@ failMonTerm tp str = mkMonTerm tp (failOpenTerm str)
 ----------------------------------------------------------------------
 
 -- | An environment of named definitions that have already been monadified
-type MonadifyEnv = Map Ident MonTerm
+type MonadifyEnv = Map NameInfo MonTerm
 
 -- | A context for monadifying 'Term's which maintains, for each deBruijn index
 -- in scope, both its original un-monadified type along with either a 'MonTerm'
 -- or 'MonType' for the translation of the variable to a local variable of
 -- monadified type or monadified kind
 type MonadifyCtx = [(LocalName,Term,Either MonType MonTerm)]
+
+-- | Convert a 'MonadifyCtx' to a 'MonadifyTypeCtx'
+ctxToTypeCtx :: MonadifyCtx -> MonadifyTypeCtx
+ctxToTypeCtx = map (\(x,tp,arg) ->
+                     (x,tp,case arg of
+                         Left mtp -> Just mtp
+                         Right _ -> Nothing))
+
+-- | Pretty-print a 'Term' relative to a 'MonadifyCtx'
+ppTermInMonCtx :: MonadifyCtx -> Term -> String
+ppTermInMonCtx ctx t =
+  scPrettyTermInCtx defaultPPOpts (map (\(x,_,_) -> x) ctx) t
+
 
 -- | The read-only state of a monadification computation
 data MonadifyROState = MonadifyROState {
@@ -476,28 +534,21 @@ argifyMonTerm (CompMonTerm mtp trm) =
 -- * Monadification
 ----------------------------------------------------------------------
 
+-- | Monadify a term to a monadified term of argument type
+monadifyArg :: MonType -> Term -> MonadifyM ArgMonTerm
+monadifyArg mtp t = monadifyTerm mtp t >>= argifyMonTerm
 
-{-
-Mon(t : tp) ==> MT(tp) or CompMT(tp)  (which are the same type for pis)
-Mon((f : Pi x a b) arg) = Mon(f) MT(arg)
-Mon((f : Pi _ a b) arg) = Mon(f) MonArg(arg)
-Mon(Lambda x a t) = Lambda x MT(a) Mon(t)
-Mon((t,u)) = (MonArg(t),MonArg(u))
-Mon(c args) = c MonArg(args)
-Mon(x) = x
-Mon(fix) = fixM (of some form...)
-Mon(cnst) = cnstM  if cnst is impure and monadifies to constM
-Mon(cnst) = cnst   otherwise
--}
+-- | Monadify a term to argument type and convert back to a term
+monadifyArgTerm :: MonType -> Term -> MonadifyM OpenTerm
+monadifyArgTerm mtp t = argMonTermArgTerm <$> monadifyArg mtp t
 
-mondifyArg :: MonType -> Term -> MonadifyM ArgMonTerm
-mondifyArg mtp t = monadifyTerm mtp t >>= argifyMonTerm
-
+-- | Monadify a term
 monadifyTerm :: MonType -> Term -> MonadifyM MonTerm
 monadifyTerm mtp t@(STApp { stAppIndex = ix }) =
   memoizingM ix $ monadifyTerm' mtp t
 monadifyTerm mtp t = monadifyTerm' mtp t
 
+-- | The main implementation of 'monadifyTerm'
 monadifyTerm' :: MonType -> Term -> MonadifyM MonTerm
 monadifyTerm' mtp@(MTyForall _ _ _) t =
   ask >>= \ro_st ->
@@ -505,6 +556,46 @@ monadifyTerm' mtp@(MTyForall _ _ _) t =
 monadifyTerm' mtp@(MTyArrow _ _) t =
   ask >>= \ro_st ->
   return $ monadifyLambdas (monStEnv ro_st) (monStCtx ro_st) mtp t
+monadifyTerm' mtp@(MTyTuple mtps) (asTupleValue -> Just trms)
+  | length mtps == length trms =
+    mkMonTerm mtp <$> tupleOpenTerm <$> zipWithM monadifyArgTerm mtps trms
+monadifyTerm' mtp@(MTyRecord fs_mtps) (asRecordValue -> Just trm_map)
+  | length fs_mtps == Map.size trm_map
+  , (fs,mtps) <- unzip fs_mtps
+  , Just trms <- mapM (\f -> Map.lookup f trm_map) fs =
+    mkMonTerm mtp <$> recordOpenTerm <$> zip fs <$>
+    zipWithM monadifyArgTerm mtps trms
+monadifyTerm' _ (asLocalVar -> Just ix) =
+  (monStCtx <$> ask) >>= \case
+  ctx | ix >= length ctx -> fail "Monadification failed: vaiable out of scope!"
+  ctx | (_,_,Right mtrm) <- ctx !! ix -> return mtrm
+  _ -> fail "Monadification failed: type variable used in term position!"
+monadifyTerm' _ (asCtor -> Just (pn, args)) =
+  monadifyApply (mkCtorMonTerm pn) args
+monadifyTerm' _ (asApplyAll -> (asConstant -> Just (ec, _), args)) =
+  do env <- monStEnv <$> ask
+     let mtrm_f =
+           case Map.lookup (ecName ec) env of
+             Just mtrm -> mtrm
+             Nothing -> mkExtCnsMonTerm ec
+     monadifyApply mtrm_f args
+monadifyTerm' _ t =
+  (monStCtx <$> ask) >>= \ctx ->
+  fail ("Monadifiction failed: no case for term: " ++ ppTermInMonCtx ctx t)
+
+
+-- | Monadify the application of a monadified term to a list of terms, using the
+-- type of the already monadified to monadify the arguments
+monadifyApply :: MonTerm -> [Term] -> MonadifyM MonTerm
+monadifyApply (ArgMonTerm (FunMonTerm _ tp_in _ f)) (t : ts) =
+  monadifyArg tp_in t >>= \mtrm ->
+  monadifyApply (f mtrm) ts
+monadifyApply (ArgMonTerm (ForallMonTerm _ _ f)) (t : ts) =
+  (monStCtx <$> ask) >>= \ctx ->
+  monadifyApply (f $ monadifyType (ctxToTypeCtx ctx) t) ts
+monadifyApply mtrm [] = return mtrm
+monadifyApply _ _ = fail "Monadification failed: application at incorrect type"
+
 
 -- | FIXME: documentation; get our type down to a base type before going into
 -- the MonadifyM monad
@@ -522,6 +613,7 @@ monadifyLambdas env ctx (MTyArrow tp_in tp_out) (asLambda ->
 monadifyLambdas env ctx tp t =
   monadifyEtaExpand env ctx tp tp t []
 
+-- | FIXME: documentation
 monadifyEtaExpand :: MonadifyEnv -> MonadifyCtx -> MonType ->
                      MonType -> Term -> [Either MonType ArgMonTerm] -> MonTerm
 monadifyEtaExpand env ctx top_mtp (MTyForall x k tp_f) t args =
@@ -536,259 +628,17 @@ monadifyEtaExpand env ctx top_mtp mtp t args =
   args
 
 
-{-
--- | Monadify a 'Term' and then purify it using 'purifyMonTerm'
-monadifyPure :: Monadify a => a -> MonadifyM OpenTerm
-monadifyPure = monadify >=> purifyMonTerm
-
--- | Monadify a term and run the resulting computation
-monadifyTermAndRun :: MonadifyEnv -> MonadifyCtx -> Term -> MonTerm
-monadifyTermAndRun env ctx trm =
-  let m_tp =
-        bindTCMOpenTerm
-        (do tp <-
-              atPos (Pos "debug1" "debug1" 0 0)
-              (liftTCM scTypeOf' (map fst ctx) trm >>= typeCheckWHNF)
-            tp_tp <-
-              atPos (Pos "debug2" "debug2" 0 0)
-              (liftTCM scTypeOf' (map fst ctx) tp >>= typeCheckWHNF)
-            sort <- case asSort tp_tp of
-              Just sort -> return sort
-              Nothing -> error "Monadification: type of type is not a sort!"
-            return (tp,sort)) $ \(tp,sort) ->
-        monTermForcePure "Monadification failed: type is impure" $
-        runMonadifyM env ctx (sortOpenTerm sort) (monadify tp) in
-  runMonadifyM env ctx m_tp $ monadify trm
-
--- | Monadify a 'TypedSubsTerm' and run the resulting computation
-monadifyTSTermAndRun :: MonadifyEnv -> MonadifyCtx -> TypedSubsTerm -> MonTerm
-monadifyTSTermAndRun env ctx tst =
-  let tp =
-        monTermForcePure "Monadification failed: type is impure" $
-        runMonadifyM env ctx (sortOpenTerm $ tpSubsSort tst) (monadify tst) in
-  runMonadifyM env ctx tp $ monadify tst
-
--- | Monadify a term in a context that has been extended with an additional free
--- variable, whose type is given by the first argument. Return a function over
--- that variable.
-monadifyInBinding :: Term -> Term -> MonadifyM (OpenTerm -> MonTerm)
-monadifyInBinding tp tst =
-  do ro_st <- ask
-     return $ \x_trm ->
-       monadifyTermAndRun (monStEnv ro_st) ((tp,x_trm) : monStCtx ro_st) tst
-
--- | Monadify a term in a context that has been extended with an additional free
--- variable, whose type is given by the first argument. Return a function over
--- that variable.
-monadifyTSInBinding :: Term -> TypedSubsTerm -> MonadifyM (OpenTerm -> MonTerm)
-monadifyTSInBinding tp tst =
-  do ro_st <- ask
-     return $ \x_trm ->
-       monadifyTSTermAndRun (monStEnv ro_st) ((tp,x_trm) : monStCtx ro_st) tst
-
--- | Test if the first term has dependent function type, and, if so, return a
--- failure 'OpenTerm', otherwise return the second 'OpenTerm'
-failIfDepFun :: [Term] -> Term -> OpenTerm -> OpenTerm
-failIfDepFun t_ctx t1 t2 =
-  bindTCMOpenTerm (liftTCM scTypeOf' t_ctx t1 >>= typeCheckWHNF) $ \case
-  (asPi -> Just (_, _, tp_out))
-    | inBitSet 0 (looseVars tp_out) ->
-      failOpenTerm ("Monadification failed: dependent function "
-                    ++ "applied to impure argument")
-  _ -> t2
-
--- | FIXME HERE: documentation: t1 is the untranslated form of mtrm1
-monadifyApply :: MonTerm -> MonTerm -> MonadifyM MonTerm
-monadifyApply mtrm1 mtrm2 =
-  do -- t_ctx <- map fst <$> monStCtx <$> ask
-     let mtrm2' =
-           -- If t1 has a dependent type and t2 is not pure then monadification
-           -- fails. We represent this changing mtrm2 to a failure OpenTerm if
-           -- it is computational.
-           {-
-           case mtrm2 of
-             CompMonTerm tp trm ->
-               CompMonTerm tp $ failIfDepFun t_ctx t1 trm
-             _ -> mtrm2 -}
-           -- FIXME: figure out how to detect this error!
-           mtrm2
-     case mtrm1 of
-       -- If t1 is a pure function, apply it
-       FunMonTerm _ _ body_f ->
-         body_f <$> purifyMonTerm mtrm2'
-
-       -- Otherwise, purify t1 to a monadic function and apply it
-       _ ->
-         do trm1 <- purifyMonTerm mtrm1
-            trm2 <- purifyMonTerm mtrm2'
-            return $ CompMonTerm
-              (applyOpenTerm trm1 trm2)
-              (applyPiOpenTerm (monTermPureType mtrm1) trm2)
-
--- | FIXME HERE: documentation
-monadifyApplyMulti :: MonTerm -> [MonTerm] -> MonadifyM MonTerm
-monadifyApplyMulti = foldM monadifyApply
-
--- | Generic function to monadify terms
-class Monadify a where
-  monadify :: a -> MonadifyM MonTerm
-
-instance Monadify Term where
-  monadify (STApp { stAppIndex = i, stAppTermF = tf}) =
-    memoizingM i $ monadify tf
-  monadify (Unshared tf) =
-    monadify tf
-
-instance Monadify TypedSubsTerm where
-  monadify (TypedSubsTerm { tpSubsIndex = Just i, tpSubsTermF = tf}) =
-     memoizingM i $ monadify tf
-  monadify (TypedSubsTerm { tpSubsIndex = Nothing, tpSubsTermF = tf}) =
-    monadify tf
-
-
-instance Monadify (TermF Term) where
-  monadify (FTermF ftf) = monadify ftf
-  monadify (App t1 t2) =
-    do mtrm1 <- monadify t1
-       mtrm2 <- monadify t2
-       monadifyApply mtrm1 mtrm2
-
-  monadify (Lambda x tp body) =
-    do tp' <- monadifyPure tp
-       body_f <- monadifyInBinding tp body
-       return $ FunMonTerm x tp' body_f
-
-  monadify (Pi x tp body) =
-    do tp' <- monadifyPure tp
-       body_f <- monadifyInBinding tp body
-       retPure $ piOpenTerm x tp' $
-         monTermForcePure "Monadification failed: body of pi is impure" . body_f
-
-  monadify (LocalVar ix) =
-    do ctx <- monStCtx <$> ask
-       retPure $ snd (ctx!!ix)
-
-  monadify (Constant ec _t) =
-    do env <- monStEnv <$> ask
-       case ecName ec of
-         ModuleIdentifier ident
-           | Just mtrm <- Map.lookup ident env ->
-             return mtrm
-         _ ->
-           -- FIXME: if a definition is not in the environment, we just unfold
-           -- it; is this correct?
-           --monadify t
-           fail ("Monadification failed: no translation for constant: "
-                 ++ show (toAbsoluteName $ ecName ec))
-
-
-instance Monadify (TermF TypedSubsTerm) where
-  monadify (FTermF ftf) = monadify ftf
-  monadify (App t1 t2) =
-    ((,) <$> monadify t1 <*> monadify t2) >>= \case
-
-    -- If t1 has a dependent type and t2 is not pure then monadification fails
-    (_, mtrm2)
-      | isCompTerm mtrm2
-      , Pi _ _ tp_out <- tpSubsTypeF t1
-      , inBitSet 0 (tpSubsFreeVars tp_out) ->
-        fail ("Monadification failed: "
-              ++ "dependent function applied to impure argument")
-
-    -- If t1 is a pure function, apply it
-    (FunMonTerm _ _ body_f, mtrm2) ->
-      body_f <$> purifyMonTerm mtrm2
-
-    -- Otherwise, purify t1 to a monadic function and apply it
-    (mtrm1, mtrm2) ->
-      do trm1 <- purifyMonTerm mtrm1
-         trm2 <- purifyMonTerm mtrm2
-         return $ CompMonTerm
-           (applyOpenTerm trm1 trm2)
-           (applyPiOpenTerm (monTermPureType mtrm1) trm2)
-
-  monadify (Lambda x tp body) =
-    do tp' <- monadifyPure tp
-       body_f <- monadifyTSInBinding (typedSubsTermTerm tp) body
-       return $ FunMonTerm x tp' body_f
-
-  monadify (Pi x tp body) =
-    do tp' <- monadifyPure tp
-       body_f <- monadifyTSInBinding (typedSubsTermTerm tp) body
-       retPure $ piOpenTerm x tp' $
-         monTermForcePure "Monadification failed: body of pi is impure" . body_f
-
-  monadify (LocalVar ix) =
-    do ctx <- monStCtx <$> ask
-       retPure $ snd (ctx!!ix)
-
-  monadify (Constant ec _t) =
-    do env <- monStEnv <$> ask
-       case ecName ec of
-         ModuleIdentifier ident
-           | Just mtrm <- Map.lookup ident env ->
-             return mtrm
-         _ ->
-           -- FIXME: if a definition is not in the environment, we just unfold
-           -- it; is this correct?
-           --monadify t
-           fail ("Monadification failed: no translation for constant: "
-                 ++ show (toAbsoluteName $ ecName ec))
-
-
-instance (Monadify a, ToTerm a) => Monadify (FlatTermF a) where
-  monadify (Primitive nm) =
-    do env <- monStEnv <$> ask
-       case Map.lookup (primName nm) env of
-         Just mtrm -> return mtrm
-         Nothing ->
-           error ("Monadification failed: no translation for primitive: "
-                  ++ show (primName nm))
-           -- NOTE: we could assume primitives not in the environment are pure,
-           -- by using something like this:
-           --
-           -- pureFunMonTerm (typedSubsTermArity $ primType nm) trm
-  monadify UnitValue = retPure unitOpenTerm
-  monadify UnitType = retPure unitTypeOpenTerm
-  monadify (PairValue t1 t2) =
-    pureMonTerm <$> (pairOpenTerm <$> monadifyPure t1 <*> monadifyPure t2)
-  monadify (PairType t1 t2) =
-    pureMonTerm <$> (pairTypeOpenTerm <$> monadifyPure t1 <*> monadifyPure t2)
-  monadify (PairLeft t) = pureMonTerm <$> pairLeftOpenTerm <$> monadifyPure t
-  monadify (PairRight t) = pureMonTerm <$> pairRightOpenTerm <$> monadifyPure t
-  monadify (DataTypeApp pn params args) =
-    mapM monadify (params ++ args) >>=
-    monadifyApplyMulti (pureFunMonTerm
-                        (typeArity $ toTerm $ primType pn)
-                        (closedOpenTerm $ toTerm $ primType pn)
-                        (dataTypeOpenTerm $ primName pn))
-  monadify (CtorApp pn params args) =
-    mapM monadify (params ++ args) >>=
-    monadifyApplyMulti (pureFunMonTerm
-                        (typeArity $ toTerm $ primType pn)
-                        (closedOpenTerm $ toTerm $ primType pn)
-                        (ctorOpenTerm $ primName pn))
-  monadify (Sort s) = retPure (sortOpenTerm s)
-  monadify (NatLit n) = retPure $ natOpenTerm n
-  monadify (StringLit str) = retPure $ stringLitOpenTerm str
-  monadify _ = error "FIXME HERE: missing cases for monadify"
-
-
 ----------------------------------------------------------------------
 -- * Top-Level Entrypoints
 ----------------------------------------------------------------------
 
 -- | Monadify a term, or 'fail' if this is not possible
-monadifyTerm :: SharedContext -> MonadifyEnv -> Term -> IO Term
-monadifyTerm sc env t =
-  completeOpenTerm sc $ monTermComp $ monadifyTermAndRun env [] t
+monadify :: SharedContext -> MonadifyEnv -> Term -> IO Term
+monadify sc env t =
+  scTypeOf sc t >>= \tp ->
+  runCompleteMonadifyM sc env tp (monadifyTerm (monadifyType [] tp) t)
 
--- | Monadify a term, or 'fail' if this is not possible
-monadifyTerm' :: SharedContext -> MonadifyEnv -> Term -> IO Term
-monadifyTerm' sc env t =
-  do tst <- typeAllSubterms sc t
-     completeOpenTerm sc $ monTermComp $ monadifyTSTermAndRun env [] tst
-
+{-
 -- | The definitions and primitives considered to be pure in 'defaultMonEnv',
 -- along with their arities
 defaultMonPureIds :: [(Ident,Int)]
@@ -796,13 +646,9 @@ defaultMonPureIds =
   [("Cryptol.PLiteral", 1),
    ("Cryptol.ecNumber", 3)
   ]
+-}
 
 -- | The default monadification environment
 defaultMonEnv :: MonadifyEnv
 defaultMonEnv = Map.fromList $
-  map (\(ident,arity) ->
-        (ident, pureGlobalMonTerm arity ident))
-  defaultMonPureIds
-  ++
   []
--}

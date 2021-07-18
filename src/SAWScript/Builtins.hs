@@ -1509,7 +1509,7 @@ testMRSolver i1 i2 =
 monadifyTypedTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
 monadifyTypedTerm sc t =
   liftIO $ do
-  trm <- Monadify.monadifyTerm sc Monadify.defaultMonEnv (ttTerm t)
+  trm <- Monadify.monadify sc Monadify.defaultMonEnv (ttTerm t)
   tp <- scTypeOf sc trm
   return $ TypedTerm (TypedTermOther tp) trm
 
