@@ -80,6 +80,8 @@ import Verifier.SAW.OpenTerm
 import Verifier.SAW.Recognizer
 -- import Verifier.SAW.Position
 
+import Debug.Trace
+
 
 ----------------------------------------------------------------------
 -- * Typing All Subterms
@@ -143,6 +145,33 @@ isFirstOrderType :: Term -> Bool
 isFirstOrderType (asPi -> Just (_, asPi -> Just _, _)) = False
 isFirstOrderType (asPi -> Just (_, _, tp_out)) = isFirstOrderType tp_out
 isFirstOrderType _ = True
+
+-- | A global definition, which is either a primitive or a constant
+type GlobalDef = Either (ExtCns Term) (PrimName Term)
+
+-- | Extract the name of a global definition
+globalDefName :: GlobalDef -> NameInfo
+globalDefName (Left ec) = ecName ec
+globalDefName (Right pn) = ModuleIdentifier $ primName pn
+
+-- | Extract the type of a global definition
+globalDefType :: GlobalDef -> Term
+globalDefType (Left ec) = ecType ec
+globalDefType (Right pn) = primType pn
+
+-- | Build an 'OpenTerm' from a 'GlobalDef'
+globalDefOpenTerm :: GlobalDef -> OpenTerm
+globalDefOpenTerm (Left ec) = extCnsOpenTerm ec
+globalDefOpenTerm (Right pn) = globalOpenTerm (primName pn)
+
+-- | Recognize a named global definition, including its type
+asTypedGlobalDef :: Recognizer Term GlobalDef
+asTypedGlobalDef t =
+  case unwrapTermF t of
+    FTermF (Primitive pn) -> Just (Right pn)
+    Constant ec _ -> Just (Left ec)
+    _ -> Nothing
+
 
 data MonKind = MKType Sort | MKNum | MKFun MonKind MonKind deriving Eq
 
@@ -290,6 +319,8 @@ mkTermBaseType ctx k t =
 
 -- | Convert a SAW core 'Term' to a monadification type
 monadifyType :: MonadifyTypeCtx -> Term -> MonType
+monadifyType ctx t
+  | trace ("\nmonadifyType:\n" ++ ppTermInTypeCtx ctx t) False = undefined
 monadifyType ctx (asPi -> Just (x, tp_in, tp_out))
   | Just k <- monadifyKind tp_in =
     MTyForall x k (\tp' -> monadifyType ((x,tp_in,Just tp'):ctx) tp_out)
@@ -305,17 +336,24 @@ monadifyType ctx (asTupleType -> Just tps) =
   MTyTuple (map (monadifyType ctx) tps)
 monadifyType ctx (asRecordType -> Just tps) =
   MTyRecord $ map (\(fld,tp) -> (fld, monadifyType ctx tp)) $ Map.toList tps
-monadifyType ctx tp@(asDataType -> Just (pn, args))
+monadifyType ctx (asDataType -> Just (pn, args))
   | Just pn_k <- monadifyKind (primType pn)
-  , tps <- map (monadifyType ctx) args
-  , Just k_out <- applyKinds pn_k tps =
-    mkTermBaseType ctx k_out tp
-monadifyType ctx tp@(asApplyAll -> (f, args@(_:_)))
-  | Just (ec, _) <- asConstant f
-  , Just ec_k <- monadifyKind (ecType ec)
-  , tps <- map (monadifyType ctx) args
-  , Just k_out <- applyKinds ec_k tps =
-    mkTermBaseType ctx k_out tp
+  , margs <- map (monadifyType ctx) args
+  , Just k_out <- applyKinds pn_k margs =
+    -- NOTE: this case only recognizes data types whose arguments are all types
+    -- and/or Nums
+    MTyBase k_out $ dataTypeOpenTerm (primName pn) (map monTypeArgType margs)
+monadifyType ctx (asVectorType -> Just (len, tp)) =
+  mkMonType0 (applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
+              [openOpenTerm (typeCtxPureCtx ctx) len,
+               monTypeArgType (monadifyType ctx tp)])
+monadifyType ctx (asApplyAll -> (f, args))
+  | Just glob <- asTypedGlobalDef f
+  , Just ec_k <- monadifyKind $ globalDefType glob
+  , margs <- map (monadifyType ctx) args
+  , Just k_out <- applyKinds ec_k margs =
+    MTyBase k_out (applyOpenTermMulti (globalDefOpenTerm glob) $
+                   map monTypeArgType margs)
 monadifyType ctx tp@(asCtor -> Just (pn, _))
   | primName pn == "Cryptol.TCNum" || primName pn == "Cryptol.TCInf" =
     MTyNum $ openOpenTerm (typeCtxPureCtx ctx) tp
@@ -441,6 +479,11 @@ mkMonTerm mtp t = mkFunMonTerm mtp (applyOpenTermMulti t)
 -- | Build a 'MonTerm' from a global of a given argument type
 mkGlobalArgMonTerm :: MonType -> Ident -> ArgMonTerm
 mkGlobalArgMonTerm tp ident = mkArgMonTerm tp (globalOpenTerm ident)
+
+-- | Build a 'MonTerm' from a 'GlobalDef' of a given argument type
+mkGlobalDefArgMonTerm :: GlobalDef -> ArgMonTerm
+mkGlobalDefArgMonTerm glob =
+  mkArgMonTerm (monadifyType [] $ globalDefType glob) (globalDefOpenTerm glob)
 
 -- | Build a 'MonTerm' from a constructor with the given 'PrimName'
 mkCtorArgMonTerm :: PrimName Term -> ArgMonTerm
@@ -623,12 +666,12 @@ monadifyTerm' _ (asLocalVar -> Just ix) =
   _ -> fail "Monadification failed: type variable used in term position!"
 monadifyTerm' _ (asCtor -> Just (pn, args)) =
   monadifyApply (ArgMonTerm $ mkCtorArgMonTerm pn) args
-monadifyTerm' _ (asApplyAll -> (asConstant -> Just (ec, _), args)) =
+monadifyTerm' _ (asApplyAll -> (asTypedGlobalDef -> Just glob, args)) =
   do env <- monStEnv <$> ask
      let macro =
-           case Map.lookup (ecName ec) env of
+           case Map.lookup (globalDefName glob) env of
              Just m -> m
-             Nothing -> monMacro0 $ mkExtCnsPureArgMonTerm ec
+             Nothing -> monMacro0 $ mkGlobalDefArgMonTerm glob
          (macro_args, reg_args) = splitAt (macroNumArgs macro) args
          mtrm_f = macroApply macro macro_args
      monadifyApply (ArgMonTerm mtrm_f) reg_args
@@ -722,4 +765,5 @@ defaultMonEnv =
 monadify :: SharedContext -> MonadifyEnv -> Term -> IO Term
 monadify sc env t =
   scTypeOf sc t >>= \tp ->
+  trace ("monadify: type = " ++ showTerm tp) $
   runCompleteMonadifyM sc env tp (monadifyTerm (monadifyType [] tp) t)
