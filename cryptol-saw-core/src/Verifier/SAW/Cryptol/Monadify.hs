@@ -137,12 +137,6 @@ unsharedApply f arg = Unshared $ App f arg
 -- * Monadifying Types
 ----------------------------------------------------------------------
 
--- | Helper function for recognizing applications with non-empty lists of
--- arguments. FIXME: put this somewhere more appropriate
-asApplyAll' :: Recognizer Term (Term, [Term])
-asApplyAll' (asApplyAll -> (f, args@(_:_))) = Just (f, args)
-asApplyAll' _ = Nothing
-
 -- | Test if a 'Term' is a first-order function type. Note: the argument should
 -- be in WHNF so that all definitions are unfolded
 isFirstOrderType :: Term -> Bool
@@ -160,7 +154,7 @@ monKindToSort _ = Nothing
 -- | Convert a 'MonKind' to the term it represents
 monKindOpenTerm :: MonKind -> OpenTerm
 monKindOpenTerm (MKType s) = sortOpenTerm s
-monKindOpenTerm MKNum = globalOpenTerm "Cryptol.Num"
+monKindOpenTerm MKNum = dataTypeOpenTerm "Cryptol.Num" []
 monKindOpenTerm (MKFun k1 k2) =
   arrowOpenTerm "_" (monKindOpenTerm k1) (monKindOpenTerm k2)
 
@@ -316,7 +310,7 @@ monadifyType ctx tp@(asDataType -> Just (pn, args))
   , tps <- map (monadifyType ctx) args
   , Just k_out <- applyKinds pn_k tps =
     mkTermBaseType ctx k_out tp
-monadifyType ctx tp@(asApplyAll' -> Just (f, args@(_:_)))
+monadifyType ctx tp@(asApplyAll -> (f, args@(_:_)))
   | Just (ec, _) <- asConstant f
   , Just ec_k <- monadifyKind (ecType ec)
   , tps <- map (monadifyType ctx) args
@@ -445,8 +439,8 @@ mkMonTerm :: MonType -> OpenTerm -> MonTerm
 mkMonTerm mtp t = mkFunMonTerm mtp (applyOpenTermMulti t)
 
 -- | Build a 'MonTerm' from a global of a given argument type
-mkGlobalMonTerm :: MonType -> Ident -> MonTerm
-mkGlobalMonTerm tp ident = mkMonTerm tp (globalOpenTerm ident)
+mkGlobalArgMonTerm :: MonType -> Ident -> ArgMonTerm
+mkGlobalArgMonTerm tp ident = mkArgMonTerm tp (globalOpenTerm ident)
 
 -- | Build a 'MonTerm' from a constructor with the given 'PrimName'
 mkCtorArgMonTerm :: PrimName Term -> ArgMonTerm
@@ -462,13 +456,26 @@ mkExtCnsPureArgMonTerm ec =
 failMonTerm :: MonType -> String -> MonTerm
 failMonTerm tp str = mkMonTerm tp (failOpenTerm str)
 
+-- | Build an 'ArgMonTerm' that 'fail's when converted to a term
+failArgMonTerm :: MonType -> String -> ArgMonTerm
+failArgMonTerm tp str = mkArgMonTerm tp (failOpenTerm str)
+
 
 ----------------------------------------------------------------------
 -- * The Monadification Monad
 ----------------------------------------------------------------------
 
+-- | A monadification macro is a function that inspects its first @N@ arguments
+-- before being able to be converted to an 'ArgMonTerm'
+data MonMacro = MonMacro { macroNumArgs :: Int,
+                           macroApply :: [Term] -> ArgMonTerm }
+
+-- | Make a simple 'MonMacro' that inspects 0 arguments and just returns a term
+monMacro0 :: ArgMonTerm -> MonMacro
+monMacro0 mtrm = MonMacro 0 (const mtrm)
+
 -- | An environment of named definitions that have already been monadified
-type MonadifyEnv = Map NameInfo ArgMonTerm
+type MonadifyEnv = Map NameInfo MonMacro
 
 -- | A context for monadifying 'Term's which maintains, for each deBruijn index
 -- in scope, both its original un-monadified type along with either a 'MonTerm'
@@ -618,11 +625,13 @@ monadifyTerm' _ (asCtor -> Just (pn, args)) =
   monadifyApply (ArgMonTerm $ mkCtorArgMonTerm pn) args
 monadifyTerm' _ (asApplyAll -> (asConstant -> Just (ec, _), args)) =
   do env <- monStEnv <$> ask
-     let mtrm_f =
+     let macro =
            case Map.lookup (ecName ec) env of
-             Just mtrm -> mtrm
-             Nothing -> mkExtCnsPureArgMonTerm ec
-     monadifyApply (ArgMonTerm mtrm_f) args
+             Just m -> m
+             Nothing -> monMacro0 $ mkExtCnsPureArgMonTerm ec
+         (macro_args, reg_args) = splitAt (macroNumArgs macro) args
+         mtrm_f = macroApply macro macro_args
+     monadifyApply (ArgMonTerm mtrm_f) reg_args
 monadifyTerm' _ t =
   (monStCtx <$> ask) >>= \ctx ->
   fail ("Monadifiction failed: no case for term: " ++ ppTermInMonCtx ctx t)
@@ -676,6 +685,36 @@ monadifyEtaExpand env ctx top_mtp mtp t args =
 
 
 ----------------------------------------------------------------------
+-- * Handling the Primitives
+----------------------------------------------------------------------
+
+unsafeAssertMacro :: MonMacro
+unsafeAssertMacro = MonMacro 1 $ \ts ->
+  let numFunType =
+        MTyForall "n" (MKType $ mkSort 0) $ \n ->
+        MTyForall "m" (MKType $ mkSort 0) $ \m ->
+        MTyBase (MKType $ mkSort 0) $
+        dataTypeOpenTerm "Prelude.Eq"
+        [dataTypeOpenTerm "Prelude.Num" [],
+         monTypeArgType n, monTypeArgType m] in
+  case ts of
+    [(asDataType -> Just (num, []))]
+      | primName num == "Cryptol.Num" ->
+        mkGlobalArgMonTerm numFunType "Cryptol.numAssertEqM"
+    _ ->
+      failArgMonTerm numFunType
+      "Monadification failed: unsafeAssert applied to non-Num type"
+
+-- | The default monadification environment
+defaultMonEnv :: MonadifyEnv
+defaultMonEnv =
+  Map.fromList $ map (\(ident,macro) -> (ModuleIdentifier ident, macro)) $
+  [
+    ("Prelude.unsafeAssert", unsafeAssertMacro)
+  ]
+
+
+----------------------------------------------------------------------
 -- * Top-Level Entrypoints
 ----------------------------------------------------------------------
 
@@ -684,18 +723,3 @@ monadify :: SharedContext -> MonadifyEnv -> Term -> IO Term
 monadify sc env t =
   scTypeOf sc t >>= \tp ->
   runCompleteMonadifyM sc env tp (monadifyTerm (monadifyType [] tp) t)
-
-{-
--- | The definitions and primitives considered to be pure in 'defaultMonEnv',
--- along with their arities
-defaultMonPureIds :: [(Ident,Int)]
-defaultMonPureIds =
-  [("Cryptol.PLiteral", 1),
-   ("Cryptol.ecNumber", 3)
-  ]
--}
-
--- | The default monadification environment
-defaultMonEnv :: MonadifyEnv
-defaultMonEnv = Map.fromList $
-  []

@@ -183,6 +183,15 @@ tcLenFromThenTo_Nat x y z =
 tcLenFromThenTo : Num -> Num -> Num -> Num;
 tcLenFromThenTo = ternaryNumFun tcLenFromThenTo_Nat TCInf;
 
+primitive proveEqNum : (n m:Num) -> Maybe (Eq Num n m);
+
+numAssertEqM : (n m:Num) -> CompM (Eq Num n m);
+numAssertEqM n m =
+  maybe (Eq Num n m) (CompM (Eq Num n m))
+        (errorM (Eq Num n m) "numAssertEqM: assertion failed")
+        (returnM (Eq Num n m))
+        (proveEqNum n m);
+
 
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences
