@@ -58,7 +58,7 @@ sawCoreState sym = pure (onlineUserState (W4.sbUserState sym))
 ppAbortedResult :: (forall l args. GlobalPair Sym (SimFrame Sym ext l args) -> PP.Doc ann)
                 -> AbortedResult Sym ext
                 -> PP.Doc ann
-ppAbortedResult _ (AbortedExec InfeasibleBranch _) =
+ppAbortedResult _ (AbortedExec InfeasibleBranch{} _) =
   PP.pretty "Infeasible branch"
 ppAbortedResult ppGP (AbortedExec abt gp) = do
   PP.vcat
