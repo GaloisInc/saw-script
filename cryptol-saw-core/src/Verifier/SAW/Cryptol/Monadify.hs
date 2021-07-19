@@ -285,10 +285,14 @@ ppTermInTypeCtx :: MonadifyTypeCtx -> Term -> String
 ppTermInTypeCtx ctx t =
   scPrettyTermInCtx defaultPPOpts (map (\(x,_,_) -> x) ctx) t
 
+-- | Extract the variables and their original types from a 'MonadifyTypeCtx'
+typeCtxPureCtx :: MonadifyTypeCtx -> [(LocalName,Term)]
+typeCtxPureCtx = map (\(x,tp,_) -> (x,tp))
+
 -- | Make a monadification type that is to be considered a base type
 mkTermBaseType :: MonadifyTypeCtx -> MonKind -> Term -> MonType
 mkTermBaseType ctx k t =
-  MTyBase k $ openOpenTerm (map (\(x,tp,_) -> (x,tp)) ctx) t
+  MTyBase k $ openOpenTerm (typeCtxPureCtx ctx) t
 
 -- | Convert a SAW core 'Term' to a monadification type
 monadifyType :: MonadifyTypeCtx -> Term -> MonType
@@ -318,6 +322,9 @@ monadifyType ctx tp@(asApplyAll' -> Just (f, args@(_:_)))
   , tps <- map (monadifyType ctx) args
   , Just k_out <- applyKinds ec_k tps =
     mkTermBaseType ctx k_out tp
+monadifyType ctx tp@(asCtor -> Just (pn, _))
+  | primName pn == "Cryptol.TCNum" || primName pn == "Cryptol.TCInf" =
+    MTyNum $ openOpenTerm (typeCtxPureCtx ctx) tp
 monadifyType ctx (asLocalVar -> Just i)
   | i < length ctx
   , (_,_,Just tp) <- ctx!!i = tp
