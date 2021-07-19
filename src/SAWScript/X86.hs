@@ -27,7 +27,7 @@ module SAWScript.X86
   ) where
 
 
-import Control.Lens (toListOf, folded, (^.))
+import Control.Lens ((^.))
 import Control.Exception(Exception(..),throwIO)
 import Control.Monad.IO.Class(liftIO)
 
@@ -72,7 +72,8 @@ import Lang.Crucible.Simulator.ExecutionTree
           )
 import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
 import Lang.Crucible.Backend
-          (getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred,proofGoalsToList)
+          (getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred,goalsToList
+          ,assumptionsPred)
 import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator,insertHandleMap,emptyHandleMap)
 
 
@@ -564,15 +565,15 @@ gGoal sc g0 = boolToProp sc [] =<< go (gAssumes g)
 
 getGoals :: Sym -> IO [Goal]
 getGoals sym =
-  do obls <- proofGoalsToList <$> getProofObligations sym
+  do obls <- maybe [] goalsToList <$> getProofObligations sym
      st <- sawCoreState sym
      mapM (toGoal st) obls
   where
   toGoal st (ProofGoal asmps g) =
-    do as <- mapM (toSC sym st) (toListOf (folded . labeledPred) asmps)
+    do a1 <- toSC sym st =<< assumptionsPred sym asmps
        p  <- toSC sym st (g ^. labeledPred)
        let SimError loc msg = g^.labeledPredMsg
-       return Goal { gAssumes = as
+       return Goal { gAssumes = [a1]
                    , gShows   = p
                    , gLoc     = loc
                    , gMessage = msg
