@@ -929,6 +929,22 @@ primitives = Map.fromList
     , "variables."
     ]
 
+  , prim "term_theories" "[String] -> Term -> [String]"
+    (funVal2 term_theories)
+    Experimental
+    [ "Given a term of type \'Bool\', compute the SMT theories required"
+    , "to reason about this term. The functions (if any) given in the"
+    , "first argument will be treated as uninterpreted."
+    , ""
+    , "If the returned list is empty, the given term represents a problem"
+    , "that can be solved purely by boolean SAT reasoning."
+    , ""
+    , "Note: the given term will be simplified using the What4 backend"
+    , "before evaluating what theories are required.  For simple problems,"
+    , "this may simplify away some aspects of the problem altogether and may result"
+    , "in requiring fewer theories than one might expect."
+    ]
+
   , prim "default_term" "Term -> Term"
     (funVal1 default_typed_term)
     Experimental
