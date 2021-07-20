@@ -1,0 +1,14 @@
+enable_experimental;
+
+let andI = core_axiom "(a b : Bool) -> EqTrue a -> EqTrue b -> EqTrue (and a b)";
+let script = do { simplify (cryptol_ss()); goal_apply andI; trivial; };
+
+b <- fresh_symbolic "b" {| Bit |};
+
+print "The following proof should fail because the proof is incomplete.";
+fails (prove_print script {{ True && b }});
+
+print "Now we check that the 'prove' command also does the correct thing.";
+r <- prove script {{ True && b }};
+caseProofResult r (\_ -> fails (print "We should not get a theorem!"))
+                  (\x -> do { prove_print z3 {{ x == () }}; return ();} );
