@@ -475,13 +475,15 @@ methodSpecHandler opts sc cc top_loc css h = do
                 case res of
                   Left (OF loc rsn)  ->
                     -- TODO, better pretty printing for reasons
-                    liftIO $ Crucible.abortExecBecause
-                      (Crucible.AssumedFalse (Crucible.AssumptionReason loc (show rsn)))
+                    liftIO
+                      $ Crucible.abortExecBecause
+                      $ Crucible.AssertionFailure
+                      $ Crucible.SimError loc
+                      $ Crucible.AssertFailureSimError "assumed false" (show rsn)
                   Right (ret,st') ->
                     do liftIO $ forM_ (st'^.osAssumes) $ \asum ->
                          Crucible.addAssumption (cc^.ccBackend)
-                            (Crucible.LabeledPred asum
-                              (Crucible.AssumptionReason (st^.osLocation) "override postcondition"))
+                          $ Crucible.GenericAssumption (st^.osLocation) "override postcondition" asum
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
            , Just (W4.plSourceLoc (cs ^. MS.csLoc))

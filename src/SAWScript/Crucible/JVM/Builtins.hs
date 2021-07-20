@@ -59,7 +59,6 @@ import qualified Data.Map as Map
 import           Data.Maybe (fromMaybe, isNothing)
 import           Data.Set (Set)
 import qualified Data.Set as Set
-import qualified Data.Sequence as Seq
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Time.Clock (getCurrentTime, diffUTCTime)
@@ -132,6 +131,7 @@ import SAWScript.Crucible.JVM.Override
 import SAWScript.Crucible.JVM.ResolveSetupValue
 import SAWScript.Crucible.JVM.BuiltinsJVM ()
 
+type AssumptionReason = (W4.ProgramLoc, String)
 type SetupValue = MS.SetupValue CJ.JVM
 type Lemma = MS.ProvedSpec CJ.JVM
 type MethodSpec = MS.CrucibleMethodSpecIR CJ.JVM
@@ -276,7 +276,7 @@ verifyObligations ::
   JVMCrucibleContext ->
   MethodSpec ->
   ProofScript () ->
-  [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
+  [Crucible.LabeledPred Term AssumptionReason] ->
   [(String, W4.ProgramLoc, Term)] ->
   TopLevel (SolverStats, Set TheoremNonce)
 verifyObligations cc mspec tactic assumes asserts =
@@ -333,7 +333,7 @@ verifyPrestate ::
   MethodSpec ->
   Crucible.SymGlobalState Sym ->
   IO ([(J.Type, JVMVal)],
-      [Crucible.LabeledPred Term Crucible.AssumptionReason],
+      [Crucible.LabeledPred Term AssumptionReason],
       Map AllocIndex JVMRefVal,
       Crucible.SymGlobalState Sym)
 verifyPrestate cc mspec globals0 =
@@ -511,7 +511,7 @@ setupPrestateConditions ::
   JVMCrucibleContext ->
   Map AllocIndex JVMRefVal ->
   [SetupCondition] ->
-  IO [Crucible.LabeledPred Term Crucible.AssumptionReason]
+  IO [Crucible.LabeledPred Term AssumptionReason]
 setupPrestateConditions mspec cc env = aux []
   where
     tyenv   = MS.csAllocations mspec
@@ -523,11 +523,11 @@ setupPrestateConditions mspec cc env = aux []
       do val1' <- resolveSetupVal cc env tyenv nameEnv val1
          val2' <- resolveSetupVal cc env tyenv nameEnv val2
          t     <- assertEqualVals cc val1' val2'
-         let lp = Crucible.LabeledPred t (Crucible.AssumptionReason loc "equality precondition")
+         let lp = Crucible.LabeledPred t (loc, "equality precondition")
          aux (lp:acc) xs
 
     aux acc (MS.SetupCond_Pred loc tm : xs) =
-      let lp = Crucible.LabeledPred (ttTerm tm) (Crucible.AssumptionReason loc "precondition") in
+      let lp = Crucible.LabeledPred (ttTerm tm) (loc, "precondition") in
       aux (lp:acc) xs
 
     aux _ (MS.SetupCond_Ghost empty_ _ _ _ : _) = absurd empty_
@@ -593,7 +593,7 @@ verifySimulate ::
   [Crucible.GenericExecutionFeature Sym] ->
   MethodSpec ->
   [(a, JVMVal)] ->
-  [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
+  [Crucible.LabeledPred Term AssumptionReason] ->
   W4.ProgramLoc ->
   [Lemma] ->
   Crucible.SymGlobalState Sym ->
@@ -630,9 +630,10 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
                    mapM_ (registerOverride opts cc simctx top_loc)
                            (groupOn (view csMethodName) (map (view MS.psSpec) lemmas))
                    liftIO $ putStrLn "registering assumptions"
-                   liftIO $ do
-                     preds <- (traverse . Crucible.labeledPred) (resolveSAWPred cc) assumes
-                     Crucible.addAssumptions sym (Seq.fromList preds)
+                   liftIO $
+                     for_ assumes $ \(Crucible.LabeledPred p (loc, reason)) ->
+                       do expr <- resolveSAWPred cc p
+                          Crucible.addAssumption sym (Crucible.GenericAssumption loc reason expr)
                    liftIO $ putStrLn "simulating function"
                    fnCall
           Crucible.executeCrucible (map Crucible.genericToExecutionFeature feats)
@@ -731,14 +732,14 @@ verifyPoststate cc mspec env0 globals ret =
 
      obligations <- io $ Crucible.getProofObligations sym
      io $ Crucible.clearProofObligations sym
-     io $ mapM (verifyObligation sc) (Crucible.proofGoalsToList obligations)
+     io $ mapM (verifyObligation sc) (maybe [] Crucible.goalsToList obligations)
 
   where
     sym = cc^.jccBackend
 
     verifyObligation sc (Crucible.ProofGoal hyps (Crucible.LabeledPred concl (Crucible.SimError loc err))) =
       do st         <- sawCoreState sym
-         hypTerm    <- scAndList sc =<< mapM (toSC sym st) (toListOf (folded . Crucible.labeledPred) hyps)
+         hypTerm <- toSC sym st =<< Crucible.assumptionsPred sym hyps
          conclTerm  <- toSC sym st concl
          obligation <- scImplies sc hypTerm conclTerm
          return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, loc, obligation)

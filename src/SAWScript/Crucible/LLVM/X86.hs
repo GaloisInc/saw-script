@@ -914,8 +914,8 @@ assertPost globals env premem preregs = do
   st <- case result of
     Left err -> throwX86 $ show err
     Right (_, st) -> pure st
-  liftIO . forM_ (view O.osAssumes st) $ \p ->
-    C.addAssumption sym . C.LabeledPred p $ C.AssumptionReason (st ^. O.osLocation) "precondition"
+  liftIO . forM_ (view O.osAssumes st) $
+    C.addAssumption sym . C.GenericAssumption (st ^. O.osLocation) "precondition"
   liftIO . forM_ (view LO.osAsserts st) $ \(W4.LabeledPred p r) ->
     C.addAssertion sym $ C.LabeledPred p r
 
