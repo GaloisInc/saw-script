@@ -331,6 +331,7 @@ tcExpr WordMapRepr       {} e = tcError (pos e) "Expected wordmap"
 tcExpr StringMapRepr     {} e = tcError (pos e) "Expected stringmap"
 tcExpr SymbolicArrayRepr {} e = tcError (pos e) "Expected symbolicarray"
 tcExpr SymbolicStructRepr{} e = tcError (pos e) "Expected symbolicstruct"
+tcExpr SequenceRepr      {} e = tcError (pos e) "Expected sequencerepr"
 
 -- | Check for a unit literal
 tcUnit :: AstExpr -> Tc (PermExpr UnitType)
