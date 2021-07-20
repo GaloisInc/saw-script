@@ -80,7 +80,7 @@ import Verifier.SAW.OpenTerm
 import Verifier.SAW.Recognizer
 -- import Verifier.SAW.Position
 
-import Debug.Trace
+-- import Debug.Trace
 
 
 ----------------------------------------------------------------------
@@ -319,8 +319,10 @@ mkTermBaseType ctx k t =
 
 -- | Convert a SAW core 'Term' to a monadification type
 monadifyType :: MonadifyTypeCtx -> Term -> MonType
+{-
 monadifyType ctx t
   | trace ("\nmonadifyType:\n" ++ ppTermInTypeCtx ctx t) False = undefined
+-}
 monadifyType ctx (asPi -> Just (x, tp_in, tp_out))
   | Just k <- monadifyKind tp_in =
     MTyForall x k (\tp' -> monadifyType ((x,tp_in,Just tp'):ctx) tp_out)
@@ -761,9 +763,7 @@ defaultMonEnv =
 -- * Top-Level Entrypoints
 ----------------------------------------------------------------------
 
--- | Monadify a term, or 'fail' if this is not possible
-monadify :: SharedContext -> MonadifyEnv -> Term -> IO Term
-monadify sc env t =
-  scTypeOf sc t >>= \tp ->
-  trace ("monadify: type = " ++ showTerm tp) $
-  runCompleteMonadifyM sc env tp (monadifyTerm (monadifyType [] tp) t)
+-- | Monadify a term of the specified type, or 'fail' if this is not possible
+monadify :: SharedContext -> MonadifyEnv -> Term -> Term -> IO Term
+monadify sc env trm tp =
+  runCompleteMonadifyM sc env tp (monadifyTerm (monadifyType [] tp) trm)

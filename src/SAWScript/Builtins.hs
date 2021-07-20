@@ -1508,10 +1508,18 @@ testMRSolver i1 i2 =
 
 monadifyTypedTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
 monadifyTypedTerm sc t =
-  liftIO $ do
-  trm <- Monadify.monadify sc Monadify.defaultMonEnv (ttTerm t)
-  tp <- scTypeOf sc trm
-  return $ TypedTerm (TypedTermOther tp) trm
+  liftIO $
+  do ret_t <-
+       case ttType t of
+         TypedTermSchema schema ->
+           do tp <- Cryptol.importSchema sc Cryptol.emptyEnv schema
+              Monadify.monadify sc Monadify.defaultMonEnv (ttTerm t) tp
+         TypedTermKind _ ->
+           fail "monadify_term applied to a type"
+         TypedTermOther tp ->
+           Monadify.monadify sc Monadify.defaultMonEnv (ttTerm t) tp
+     tp <- scTypeOf sc ret_t
+     return $ TypedTerm (TypedTermOther tp) ret_t
 
 parseSharpSATResult :: String -> Maybe Integer
 parseSharpSATResult s = parse (lines s)
