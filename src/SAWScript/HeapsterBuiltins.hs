@@ -40,6 +40,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_find_trait_method_symbol
        , heapster_assume_fun
        , heapster_assume_fun_rename
+       , heapster_assume_fun_rename_prim
        , heapster_assume_fun_multi
        , heapster_print_fun_trans
        , heapster_export_coq
@@ -862,6 +863,53 @@ heapster_assume_fun_rename _bic _opts henv nm nm_to perms_string term_string =
         env' <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
         fun_typ <- liftIO $ translateCompleteFunPerm sc env fun_perm
         term_ident <- parseAndInsDef henv nm_to fun_typ term_string
+        let env'' = permEnvAddGlobalSymFun env'
+                                           (GlobalSymbol $ fromString nm)
+                                           w
+                                           fun_perm
+                                           (globalOpenTerm term_ident)
+        liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env''
+
+-- | Create a new SAW core primitive named @nm@ with type @tp@ in the module
+-- associated with the supplied Heapster environment, and return its identifier
+insPrimitive :: HeapsterEnv -> String -> Term -> TopLevel Ident
+insPrimitive henv nm tp =
+  do sc <- getSharedContext
+     let mnm = heapsterEnvSAWModule henv
+     let ident = mkSafeIdent mnm nm
+     i <- liftIO $ scFreshGlobalVar sc
+     liftIO $ scRegisterName sc i (ModuleIdentifier ident)
+     let pn = PrimName i ident tp
+     t <- liftIO $ scFlatTermF sc (Primitive pn)
+     liftIO $ scRegisterGlobal sc ident t
+     liftIO $ scModifyModule sc mnm $ \m ->
+        insDef m $ Def { defIdent = ident,
+                         defQualifier = PrimQualifier,
+                         defType = tp,
+                         defBody = Nothing }
+     return ident
+
+-- | Assume that the given named function has the supplied type and translates
+-- to a SAW core definition given by the second name
+heapster_assume_fun_rename_prim :: BuiltinContext -> Options -> HeapsterEnv ->
+                              String -> String -> String -> TopLevel ()
+heapster_assume_fun_rename_prim _bic _opts henv nm nm_to perms_string =
+  do Some lm <- failOnNothing ("Could not find symbol: " ++ nm)
+                              (lookupModContainingSym henv nm)
+     sc <- getSharedContext
+     let w = llvmModuleArchReprWidth lm
+     leq_proof <- case decideLeq (knownNat @1) w of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is 0!"
+     env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     (Some cargs, Some ret) <- lookupFunctionType lm nm
+     let args = mkCruCtx cargs
+     withKnownNat w $ withLeqProof leq_proof $ do
+        SomeFunPerm fun_perm <-
+          parseFunPermStringMaybeRust "permissions" w env args ret perms_string
+        env' <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
+        fun_typ <- liftIO $ translateCompleteFunPerm sc env fun_perm
+        term_ident <- insPrimitive henv nm_to fun_typ
         let env'' = permEnvAddGlobalSymFun env'
                                            (GlobalSymbol $ fromString nm)
                                            w
