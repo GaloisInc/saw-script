@@ -64,6 +64,7 @@ Mon(cnst) = cnst   otherwise
 
 module Verifier.SAW.Cryptol.Monadify where
 
+import Data.Maybe
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.IntMap.Strict (IntMap)
@@ -320,6 +321,10 @@ mkTermBaseType :: MonadifyTypeCtx -> MonKind -> Term -> MonType
 mkTermBaseType ctx k t =
   MTyBase k $ openOpenTerm (typeCtxPureCtx ctx) t
 
+-- | Monadify a type and convert it to its corresponding argument type
+monadifyTypeArgType :: MonadifyTypeCtx -> Term -> OpenTerm
+monadifyTypeArgType ctx t = monTypeArgType $ monadifyType ctx t
+
 -- | Convert a SAW core 'Term' to a monadification type
 monadifyType :: MonadifyTypeCtx -> Term -> MonType
 {-
@@ -341,6 +346,12 @@ monadifyType ctx (asPairType -> Just (tp1, tp2)) =
   MTyPair (monadifyType ctx tp1) (monadifyType ctx tp2)
 monadifyType ctx (asRecordType -> Just tps) =
   MTyRecord $ map (\(fld,tp) -> (fld, monadifyType ctx tp)) $ Map.toList tps
+monadifyType ctx (asDataType -> Just (eq_pn, [k_trm, tp1, tp2]))
+  | primName eq_pn == "Prelude.Eq"
+  , isJust (monadifyKind k_trm) =
+    -- NOTE: technically this is a Prop and not a sort 0, but it doesn't matter
+    mkMonType0 $ dataTypeOpenTerm "Prelude.Eq" [monadifyTypeArgType ctx tp1,
+                                                monadifyTypeArgType ctx tp2]
 monadifyType ctx (asDataType -> Just (pn, args))
   | Just pn_k <- monadifyKind (primType pn)
   , margs <- map (monadifyType ctx) args
@@ -351,7 +362,7 @@ monadifyType ctx (asDataType -> Just (pn, args))
 monadifyType ctx (asVectorType -> Just (len, tp)) =
   mkMonType0 (applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
               [openOpenTerm (typeCtxPureCtx ctx) len,
-               monTypeArgType (monadifyType ctx tp)])
+               monadifyTypeArgType ctx tp])
 monadifyType ctx (asApplyAll -> (f, args))
   | Just glob <- asTypedGlobalDef f
   , Just ec_k <- monadifyKind $ globalDefType glob
