@@ -150,29 +150,22 @@ isFirstOrderType (asPi -> Just (_, _, tp_out)) = isFirstOrderType tp_out
 isFirstOrderType _ = True
 
 -- | A global definition, which is either a primitive or a constant
-type GlobalDef = Either (ExtCns Term) (PrimName Term)
-
--- | Extract the name of a global definition
-globalDefName :: GlobalDef -> NameInfo
-globalDefName (Left ec) = ecName ec
-globalDefName (Right pn) = ModuleIdentifier $ primName pn
-
--- | Extract the type of a global definition
-globalDefType :: GlobalDef -> Term
-globalDefType (Left ec) = ecType ec
-globalDefType (Right pn) = primType pn
+data GlobalDef = GlobalDef { globalDefName :: NameInfo,
+                             globalDefType :: Term,
+                             globalDefTerm :: Term }
 
 -- | Build an 'OpenTerm' from a 'GlobalDef'
 globalDefOpenTerm :: GlobalDef -> OpenTerm
-globalDefOpenTerm (Left ec) = extCnsOpenTerm ec
-globalDefOpenTerm (Right pn) = globalOpenTerm (primName pn)
+globalDefOpenTerm = closedOpenTerm . globalDefTerm
 
 -- | Recognize a named global definition, including its type
 asTypedGlobalDef :: Recognizer Term GlobalDef
 asTypedGlobalDef t =
   case unwrapTermF t of
-    FTermF (Primitive pn) -> Just (Right pn)
-    Constant ec _ -> Just (Left ec)
+    FTermF (Primitive pn) ->
+      Just $ GlobalDef (ModuleIdentifier $ primName pn) (primType pn) t
+    Constant ec t_def ->
+      Just $ GlobalDef (ecName ec) (ecType ec) t_def
     _ -> Nothing
 
 
