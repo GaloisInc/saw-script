@@ -3187,6 +3187,15 @@ primitives = Map.fromList
     , " trans is not an identifier then it is bound to the defined name nm_to."
     ]
 
+  , prim "heapster_assume_fun_rename_prim"
+    "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_assume_fun_rename_prim)
+    Experimental
+    [
+      "heapster_assume_fun_rename_prim nm nm_to perms assumes that function nm"
+    , " has permissions perms as a primitive."
+    ]
+
   , prim "heapster_assume_fun_multi"
     "HeapsterEnv -> String -> [(String, String)] -> TopLevel HeapsterEnv"
     (bicVal heapster_assume_fun_multi)
