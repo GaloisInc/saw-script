@@ -66,6 +66,8 @@ module Verifier.SAW.Cryptol.Monadify where
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Cont
@@ -190,7 +192,7 @@ monKindOpenTerm (MKFun k1 k2) =
 data MonType
   = MTyForall LocalName MonKind (MonType -> MonType)
   | MTyArrow MonType MonType
-  | MTyTuple [MonType]
+  | MTyPair MonType MonType
   | MTyRecord [(FieldName, MonType)]
   | MTyBase MonKind OpenTerm -- A "base type" or type var of a given kind
   | MTyNum OpenTerm
@@ -202,8 +204,8 @@ mkMonType0 = MTyBase (MKType $ mkSort 0)
 -- | Test that a monadification type is monomorphic, i.e., has no foralls
 monTypeIsMono :: MonType -> Bool
 monTypeIsMono (MTyForall _ _ _) = False
-monTypeIsMono (MTyArrow t1 t2) = monTypeIsMono t1 && monTypeIsMono t2
-monTypeIsMono (MTyTuple tps) = all monTypeIsMono tps
+monTypeIsMono (MTyArrow tp1 tp2) = monTypeIsMono tp1 && monTypeIsMono tp2
+monTypeIsMono (MTyPair tp1 tp2) = monTypeIsMono tp1 && monTypeIsMono tp2
 monTypeIsMono (MTyRecord tps) = all (monTypeIsMono . snd) tps
 monTypeIsMono (MTyBase _ _) = True
 monTypeIsMono (MTyNum _) = True
@@ -213,7 +215,7 @@ monTypeIsMono (MTyNum _) = True
 isBaseType :: MonType -> Bool
 isBaseType (MTyForall _ _ _) = False
 isBaseType (MTyArrow _ _) = False
-isBaseType (MTyTuple _) = True
+isBaseType (MTyPair _ _) = True
 isBaseType (MTyRecord _) = True
 isBaseType (MTyBase (MKType _) _) = True
 isBaseType (MTyBase _ _) = True
@@ -226,9 +228,10 @@ monTypeKind (MTyArrow t1 t2) =
   do s1 <- monTypeKind t1 >>= monKindToSort
      s2 <- monTypeKind t2 >>= monKindToSort
      return $ MKType $ maxSort [s1, s2]
-monTypeKind (MTyTuple tps) =
-  do sorts <- mapM (monTypeKind >=> monKindToSort) tps
-     return $ MKType $ maxSort sorts
+monTypeKind (MTyPair tp1 tp2) =
+  do sort1 <- monTypeKind tp1 >>= monKindToSort
+     sort2 <- monTypeKind tp2 >>= monKindToSort
+     return $ MKType $ maxSort [sort1, sort2]
 monTypeKind (MTyRecord tps) =
   do sorts <- mapM (monTypeKind . snd >=> monKindToSort) tps
      return $ MKType $ maxSort sorts
@@ -266,8 +269,8 @@ monTypePureType (MTyForall x k body) =
   piOpenTerm x (monKindOpenTerm k) (\tp -> monTypePureType (body $ MTyBase k tp))
 monTypePureType (MTyArrow t1 t2) =
   arrowOpenTerm "_" (monTypePureType t1) (monTypePureType t2)
-monTypePureType (MTyTuple tps) =
-  tupleTypeOpenTerm $ map monTypePureType tps
+monTypePureType (MTyPair mtp1 mtp2) =
+  pairTypeOpenTerm (monTypePureType mtp1) (monTypePureType mtp2)
 monTypePureType (MTyRecord tps) =
   recordTypeOpenTerm $ map (\(f,tp) -> (f, monTypePureType tp)) tps
 monTypePureType (MTyBase _ t) = t
@@ -279,8 +282,8 @@ monTypeArgType (MTyForall x k body) =
   piOpenTerm x (monKindOpenTerm k) (\tp -> monTypeCompType (body $ MTyBase k tp))
 monTypeArgType (MTyArrow t1 t2) =
   arrowOpenTerm "_" (monTypeArgType t1) (monTypeCompType t2)
-monTypeArgType (MTyTuple tps) =
-  tupleTypeOpenTerm $ map monTypeArgType tps
+monTypeArgType (MTyPair mtp1 mtp2) =
+  pairTypeOpenTerm (monTypeArgType mtp1) (monTypeArgType mtp2)
 monTypeArgType (MTyRecord tps) =
   recordTypeOpenTerm $ map (\(f,tp) -> (f, monTypeArgType tp)) tps
 monTypeArgType (MTyBase _ t) = t
@@ -334,8 +337,8 @@ monadifyType ctx tp@(asPi -> Just (_, _, tp_out))
 monadifyType ctx tp@(asPi -> Just (x, tp_in, tp_out)) =
   MTyArrow (monadifyType ctx tp_in)
   (monadifyType ((x,tp,Nothing):ctx) tp_out)
-monadifyType ctx (asTupleType -> Just tps) =
-  MTyTuple (map (monadifyType ctx) tps)
+monadifyType ctx (asPairType -> Just (tp1, tp2)) =
+  MTyPair (monadifyType ctx tp1) (monadifyType ctx tp2)
 monadifyType ctx (asRecordType -> Just tps) =
   MTyRecord $ map (\(fld,tp) -> (fld, monadifyType ctx tp)) $ Map.toList tps
 monadifyType ctx (asDataType -> Just (pn, args))
@@ -552,7 +555,7 @@ data MonadifyROState = MonadifyROState {
 }
 
 -- | The state of a monadification computation = a memoization table
-type MonadifyState = Map TermIndex MonTerm
+type MonadifyState = IntMap MonTerm
 
 -- | The monad for monadifying SAW core terms
 newtype MonadifyM a =
@@ -592,7 +595,7 @@ runMonadifyM :: MonadifyEnv -> MonadifyCtx -> OpenTerm -> MonadifyM MonTerm ->
                 MonTerm
 runMonadifyM env ctx top_ret_tp m =
   let ro_st = MonadifyROState env ctx top_ret_tp in
-  runCont (evalStateT (runReaderT (unMonadifyM m) ro_st) Map.empty) id
+  runCont (evalStateT (runReaderT (unMonadifyM m) ro_st) IntMap.empty) id
 
 -- | Run a monadification computation using a mapping for identifiers that have
 -- already been monadified and generate a SAW core term
@@ -605,11 +608,11 @@ runCompleteMonadifyM sc env top_ret_tp m =
 -- | Memoize a computation of the monadified term associated with a 'TermIndex'
 memoizingM :: TermIndex -> MonadifyM MonTerm -> MonadifyM MonTerm
 memoizingM i m =
-  (Map.lookup i <$> get) >>= \case
+  (IntMap.lookup i <$> get) >>= \case
   Just ret  -> return ret
   Nothing ->
     do ret <- m
-       modify (Map.insert i ret)
+       modify (IntMap.insert i ret)
        return ret
 
 -- | Turn a 'MonTerm' of type @CompMT(tp)@ to a term of argument type @MT(tp)@
@@ -631,36 +634,63 @@ argifyMonTerm (CompMonTerm mtp trm) =
 ----------------------------------------------------------------------
 
 -- | Monadify a term to a monadified term of argument type
-monadifyArg :: MonType -> Term -> MonadifyM ArgMonTerm
+monadifyArg :: Maybe MonType -> Term -> MonadifyM ArgMonTerm
 monadifyArg mtp t = monadifyTerm mtp t >>= argifyMonTerm
 
 -- | Monadify a term to argument type and convert back to a term
-monadifyArgTerm :: MonType -> Term -> MonadifyM OpenTerm
+monadifyArgTerm :: Maybe MonType -> Term -> MonadifyM OpenTerm
 monadifyArgTerm mtp t = argMonTermArgTerm <$> monadifyArg mtp t
 
 -- | Monadify a term
-monadifyTerm :: MonType -> Term -> MonadifyM MonTerm
+monadifyTerm :: Maybe MonType -> Term -> MonadifyM MonTerm
 monadifyTerm mtp t@(STApp { stAppIndex = ix }) =
   memoizingM ix $ monadifyTerm' mtp t
 monadifyTerm mtp t = monadifyTerm' mtp t
 
--- | The main implementation of 'monadifyTerm'
-monadifyTerm' :: MonType -> Term -> MonadifyM MonTerm
-monadifyTerm' mtp@(MTyForall _ _ _) t =
+-- | The main implementation of 'monadifyTerm', which monadifies a term given an
+-- optional monadification type. The type must be given for introduction forms
+-- (i.e.,, lambdas, pairs, and records), but is optional for elimination forms
+-- (i.e., applications, projections, and also in this case variables). Note that
+-- this means monadification will fail on terms with beta or tuple redexes.
+monadifyTerm' :: Maybe MonType -> Term -> MonadifyM MonTerm
+monadifyTerm' (Just mtp@(MTyForall _ _ _)) t =
   ask >>= \ro_st ->
   return $ monadifyLambdas (monStEnv ro_st) (monStCtx ro_st) mtp t
-monadifyTerm' mtp@(MTyArrow _ _) t =
+monadifyTerm' (Just mtp@(MTyArrow _ _)) t =
   ask >>= \ro_st ->
   return $ monadifyLambdas (monStEnv ro_st) (monStCtx ro_st) mtp t
-monadifyTerm' mtp@(MTyTuple mtps) (asTupleValue -> Just trms)
-  | length mtps == length trms =
-    mkMonTerm mtp <$> tupleOpenTerm <$> zipWithM monadifyArgTerm mtps trms
-monadifyTerm' mtp@(MTyRecord fs_mtps) (asRecordValue -> Just trm_map)
+monadifyTerm' (Just mtp@(MTyPair mtp1 mtp2)) (asPairValue ->
+                                              Just (trm1, trm2)) =
+  mkMonTerm mtp <$> (pairOpenTerm <$>
+                     monadifyArgTerm (Just mtp1) trm1 <*>
+                     monadifyArgTerm (Just mtp2) trm2)
+monadifyTerm' (Just mtp@(MTyRecord fs_mtps)) (asRecordValue -> Just trm_map)
   | length fs_mtps == Map.size trm_map
   , (fs,mtps) <- unzip fs_mtps
   , Just trms <- mapM (\f -> Map.lookup f trm_map) fs =
     mkMonTerm mtp <$> recordOpenTerm <$> zip fs <$>
-    zipWithM monadifyArgTerm mtps trms
+    zipWithM monadifyArgTerm (map Just mtps) trms
+monadifyTerm' _ (asPairSelector -> Just (trm, False)) =
+  do mtrm <- monadifyArg Nothing trm
+     mtp <- case argMonTermType mtrm of
+       MTyPair t _ -> return t
+       _ -> fail "Monadification failed: projection on term of non-pair type"
+     return $ mkMonTerm mtp $
+       pairLeftOpenTerm $ argMonTermArgTerm mtrm
+monadifyTerm' _ (asPairSelector -> Just (trm, True)) =
+  do mtrm <- monadifyArg Nothing trm
+     mtp <- case argMonTermType mtrm of
+       MTyPair _ t -> return t
+       _ -> fail "Monadification failed: projection on term of non-pair type"
+     return $ mkMonTerm mtp $
+       pairRightOpenTerm $ argMonTermArgTerm mtrm
+monadifyTerm' _ (asRecordSelector -> Just (trm, fld)) =
+  do mtrm <- monadifyArg Nothing trm
+     mtp <- case argMonTermType mtrm of
+       MTyRecord mtps | Just mtp <- lookup fld mtps -> return mtp
+       _ -> fail ("Monadification failed: " ++
+                  "record projection on term of incorrect type")
+     return $ mkMonTerm mtp $ projRecordOpenTerm (argMonTermArgTerm mtrm) fld
 monadifyTerm' _ (asLocalVar -> Just ix) =
   (monStCtx <$> ask) >>= \case
   ctx | ix >= length ctx -> fail "Monadification failed: vaiable out of scope!"
@@ -687,7 +717,7 @@ monadifyTerm' _ t =
 monadifyApply :: MonTerm -> [Term] -> MonadifyM MonTerm
 monadifyApply f (t : ts)
   | MTyArrow tp_in _ <- monTermType f =
-    do mtrm <- monadifyArg tp_in t
+    do mtrm <- monadifyArg (Just tp_in) t
        monadifyApply (applyMonTerm f (Right mtrm)) ts
 monadifyApply f (t : ts)
   | MTyForall _ _ _ <- monTermType f =
@@ -725,7 +755,7 @@ monadifyEtaExpand env ctx top_mtp (MTyArrow tp_in tp_out) t args =
   monadifyEtaExpand env ctx top_mtp tp_out t (args ++ [Right arg])
 monadifyEtaExpand env ctx top_mtp mtp t args =
   applyMonTermMulti
-  (runMonadifyM env ctx (monTypeArgType mtp) (monadifyTerm top_mtp t))
+  (runMonadifyM env ctx (monTypeArgType mtp) (monadifyTerm (Just top_mtp) t))
   args
 
 
@@ -766,4 +796,4 @@ defaultMonEnv =
 -- | Monadify a term of the specified type, or 'fail' if this is not possible
 monadify :: SharedContext -> MonadifyEnv -> Term -> Term -> IO Term
 monadify sc env trm tp =
-  runCompleteMonadifyM sc env tp (monadifyTerm (monadifyType [] tp) trm)
+  runCompleteMonadifyM sc env tp (monadifyTerm (Just $ monadifyType [] tp) trm)
