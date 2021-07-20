@@ -3985,6 +3985,9 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
        let t = applyOpenTerm (globalOpenTerm "Prelude.boolToEither") b
        withPermStackM (:>: Member_Base) (:>: typeTransF tptrans [t]) m
 
+  [nuMP| TypedLLVMDbg{} |] ->
+    inExtTransM ETrans_Unit m
+
 
 ----------------------------------------------------------------------
 -- * Translating Sequences of Typed Crucible Statements
