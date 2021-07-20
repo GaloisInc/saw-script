@@ -27,6 +27,7 @@ module Verifier.SAW.OpenTerm (
   stringLitOpenTerm, stringTypeOpenTerm,
   pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
+  tupleOpenTerm', tupleTypeOpenTerm',
   recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, extCnsOpenTerm,
   applyOpenTerm, applyOpenTermMulti, applyPiOpenTerm, piArgOpenTerm,
@@ -155,6 +156,17 @@ tupleTypeOpenTerm = foldr pairTypeOpenTerm unitTypeOpenTerm
 projTupleOpenTerm :: Integer -> OpenTerm -> OpenTerm
 projTupleOpenTerm 0 t = pairLeftOpenTerm t
 projTupleOpenTerm i t = projTupleOpenTerm (i-1) (pairRightOpenTerm t)
+
+-- | Build a right-nested tuple as an 'OpenTerm' but without adding a final unit
+-- as the right-most element
+tupleOpenTerm' :: [OpenTerm] -> OpenTerm
+tupleOpenTerm' [] = unitOpenTerm
+tupleOpenTerm' ts = foldr1 pairTypeOpenTerm ts
+
+-- | Build a right-nested tuple type as an 'OpenTerm'
+tupleTypeOpenTerm' :: [OpenTerm] -> OpenTerm
+tupleTypeOpenTerm' [] = unitTypeOpenTerm
+tupleTypeOpenTerm' ts = foldr1 pairTypeOpenTerm ts
 
 -- | Build a record value as an 'OpenTerm'
 recordOpenTerm :: [(FieldName, OpenTerm)] -> OpenTerm
