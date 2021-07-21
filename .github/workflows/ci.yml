@@ -23,7 +23,7 @@ env:
 
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       name: ${{ steps.config.outputs.name }}
       version: ${{ steps.config.outputs.version }}
