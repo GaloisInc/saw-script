@@ -99,6 +99,7 @@ jobs:
             ${{ env.CACHE_VERSION }}-cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
       - if: needs.config.outputs.release == 'true'
+        name: Set release version
         shell: bash
         run: |
           sed -i.bak \
