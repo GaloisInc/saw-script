@@ -60,7 +60,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-18.04]
+        os: [[self-hosted, ubuntu-18.04]]
         ghc: ["8.8.4", "8.10.3"]
         include:
           - os: macos-latest
