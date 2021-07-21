@@ -543,10 +543,6 @@ data TypedLLVMStmt ret ps_in ps_out where
     !(TypedReg (LLVMPointerType w)) ->
     !(TypedReg (LLVMPointerType w)) ->
     TypedLLVMStmt (LLVMPointerType w) RNil (RNil :> LLVMPointerType w)
-  
-  -- | An ignored LLVM debug information statement
-  TypedLLVMDbg ::
-    TypedLLVMStmt UnitType RNil RNil
 
 -- | Return the input permissions for a 'TypedStmt'
 typedStmtIn :: TypedStmt ext rets ps_in ps_out -> DistPerms ps_in
@@ -606,7 +602,6 @@ typedLLVMStmtIn (TypedLLVMLoadHandle (TypedReg f) tp p) =
 typedLLVMStmtIn (TypedLLVMResolveGlobal _ _) =
   DistPermsNil
 typedLLVMStmtIn (TypedLLVMIte _ _ _ _) = DistPermsNil
-typedLLVMStmtIn TypedLLVMDbg{} = DistPermsNil
 
 -- | Return the output permissions for a 'TypedStmt'
 typedStmtOut :: TypedStmt ext rets ps_in ps_out -> RAssign Name rets ->
@@ -673,7 +668,6 @@ typedLLVMStmtOut (TypedLLVMResolveGlobal _ p) ret =
 typedLLVMStmtOut (TypedLLVMIte _ _ (TypedReg x1) (TypedReg x2)) ret =
   distPerms1 ret (ValPerm_Or (ValPerm_Eq $ PExpr_Var x1)
                   (ValPerm_Eq $ PExpr_Var x2))
-typedLLVMStmtOut TypedLLVMDbg{} _ = DistPermsNil
 
 
 -- | Check that the permission stack of the given permission set matches the
@@ -946,8 +940,6 @@ instance SubstVar PermVarSubst m =>
       TypedLLVMResolveGlobal (mbLift gsym) <$> genSubst s p
     [nuMP| TypedLLVMIte w r1 r2 r3 |] ->
       TypedLLVMIte (mbLift w) <$> genSubst s r1 <*> genSubst s r2 <*> genSubst s r3
-    [nuMP| TypedLLVMDbg |] ->
-      pure TypedLLVMDbg
 
 instance (PermCheckExtC ext, SubstVar PermVarSubst m) =>
          Substable PermVarSubst (TypedStmt ext rets ps_in ps_out) m where
@@ -1927,14 +1919,14 @@ runPermCheckM names entryID args ghosts mb_perms_in m =
   flip nuMultiWithElim1 (mbValuePermsToDistPerms mb_perms_in) $ \ns perms_in ->
   let (tops_args, ghosts_ns) = RL.split Proxy ghosts_prxs ns
       (tops_ns, args_ns) = RL.split Proxy args_prxs tops_args
-      (arg_names, local_names) = splitAt (rassignLen args_prxs) names
+      (arg_names, local_names) = initialNames args names
       st = emptyPermCheckState (distPermSet perms_in) tops_ns entryID local_names in
   
   let go x = runGenStateContT x st (\_ () -> pure ()) in
   go $
-  setVarTypes "top" [] tops_ns stTopCtx >>>
+  setVarTypes "top" (noNames' stTopCtx) tops_ns stTopCtx >>>
   setVarTypes "local" arg_names args_ns args >>>
-  setVarTypes "ghost" [] ghosts_ns ghosts >>>
+  setVarTypes "ghost" (noNames' ghosts) ghosts_ns ghosts >>>
   setInputExtState knownRepr ghosts ghosts_ns >>>
   m tops_ns args_ns ghosts_ns perms_in
 
@@ -1944,6 +1936,43 @@ rassignLen = go 0
     go :: Int -> RAssign f x -> Int
     go acc MNil = acc
     go acc (xs :>: _) = (go $! (acc+1)) xs
+
+initialNames ::
+  CruCtx tps ->
+  [Maybe String] ->
+  (RAssign (Ignore (Maybe String)) tps, [Maybe String])
+initialNames CruCtxNil xs = (MNil, xs)
+initialNames (CruCtxCons ts _) xs =
+  case initialNames ts xs of
+    (ys, z:zs) -> (ys :>: Ignore z, zs)
+    (ys, []  ) -> (ys :>: Ignore Nothing, [])    
+
+noNames ::
+  KnownRepr CruCtx tps =>
+  RAssign (Ignore (Maybe String)) tps
+noNames = noNames' knownRepr
+
+noNames' ::
+  CruCtx tps ->
+  RAssign (Ignore (Maybe String)) tps
+noNames' CruCtxNil = MNil
+noNames' (CruCtxCons xs _) = noNames' xs :>: Ignore Nothing
+
+dbgNames ::
+  KnownRepr CruCtx tps =>
+  PermCheckM ext cblocks blocks tops ret a ps a ps
+    (RAssign (Ignore (Maybe String)) tps)
+dbgNames = dbgNames' knownRepr
+
+dbgNames' ::
+  CruCtx tps ->
+  PermCheckM ext cblocks blocks tops ret a ps a ps
+    (RAssign (Ignore (Maybe String)) tps)
+dbgNames' CruCtxNil = pure MNil
+dbgNames' (CruCtxCons ts _) =
+  do ns <- dbgNames' ts
+     n <- nextDebugName
+     pure (ns :>: Ignore n)
 
 -- | Emit a 'TypedBlockMapDelta', which must be 'Closed', in an
 -- 'InnerPermCheckM' computation
@@ -2163,20 +2192,14 @@ setVarType str dbg x tp =
 -- | Remember the types of a sequence of free variables
 setVarTypes ::
   String ->
-  [Maybe String] ->
+  RAssign (Ignore (Maybe String)) tps ->
   RAssign Name tps ->
   CruCtx tps ->
   PermCheckM ext cblocks blocks tops ret r ps r ps ()
-setVarTypes str dbg ns0 ts0 = () <$ go dbg ns0 ts0
-  where
-    go ::
-      [Maybe String] -> RAssign Name tps -> CruCtx tps ->
-      PermCheckM ext cblocks blocks tops ret r ps r ps [Maybe String]
-    go names MNil CruCtxNil = pure names
-    go names (ns :>: n) (CruCtxCons ts t) =
-      do names' <- go names ns ts
-         setVarType str (join (listToMaybe names')) n t
-         pure (drop 1 names')
+setVarTypes _ MNil MNil CruCtxNil = pure ()
+setVarTypes str (ds :>: Ignore d) (ns :>: n) (CruCtxCons ts t) =
+  do setVarTypes str ds ns ts
+     setVarType str d n t
 
 -- | Get the current 'PPInfo'
 permGetPPInfo :: PermCheckM ext cblocks blocks tops ret r ps r ps PPInfo
@@ -2400,9 +2423,10 @@ convertRegType _ loc reg (BVRepr w1) tp2@(BVRepr w2)
   | Left LeqProof <- decideLeq (knownNat :: NatRepr 1) w2
   , NatCaseGT LeqProof <- testNatCases w1 w2 =
     withKnownNat w2 $
-    emitStmt knownRepr [] loc (TypedSetReg tp2 $
-                            TypedExpr (BVTrunc w2 w1 $ RegNoVal reg)
-                            Nothing) >>>= \(MNil :>: x) ->
+    emitStmt knownRepr noNames loc
+      (TypedSetReg tp2 $
+        TypedExpr (BVTrunc w2 w1 $ RegNoVal reg)
+        Nothing) >>>= \(MNil :>: x) ->
     stmtRecombinePerms >>>
     pure (TypedReg x)
 convertRegType _ loc reg (BVRepr w1) tp2@(BVRepr w2)
@@ -2412,9 +2436,10 @@ convertRegType _ loc reg (BVRepr w1) tp2@(BVRepr w2)
     -- FIXME: should this use endianness?
     -- (stEndianness <$> top_get) >>>= \endianness ->
     withKnownNat w2 $
-    emitStmt knownRepr [] loc (TypedSetReg tp2 $
-                            TypedExpr (BVSext w2 w1 $ RegNoVal reg)
-                            Nothing) >>>= \(MNil :>: x) ->
+    emitStmt knownRepr noNames loc
+      (TypedSetReg tp2 $
+        TypedExpr (BVSext w2 w1 $ RegNoVal reg)
+        Nothing) >>>= \(MNil :>: x) ->
     stmtRecombinePerms >>>
     pure (TypedReg x)
 convertRegType ExtRepr_LLVM loc reg (LLVMPointerRepr w1) (BVRepr w2)
@@ -2463,9 +2488,10 @@ extractBVBytes loc sz off_bytes (reg :: TypedReg (BVType w)) =
       | Just (Some off) <- someNat (bytesToBits off_bytes)
       , Left off_sz_w_pf <- decideLeq (addNat off sz) w ->
         withLeqProof sz_pf $ withLeqProof off_sz_w_pf $
-        emitStmt knownRepr [] loc (TypedSetReg (BVRepr sz) $
-                                  TypedExpr (BVSelect off sz w $ RegNoVal reg)
-                                  Nothing) >>>= \(MNil :>: x) ->
+        emitStmt knownRepr noNames loc
+          (TypedSetReg (BVRepr sz) $
+            TypedExpr (BVSelect off sz w $ RegNoVal reg)
+            Nothing) >>>= \(MNil :>: x) ->
         stmtRecombinePerms >>>
         pure (TypedReg x)
 
@@ -2476,9 +2502,10 @@ extractBVBytes loc sz off_bytes (reg :: TypedReg (BVType w)) =
                                     - intValue sz)
       , Left idx_sz_w_pf <- decideLeq (addNat idx sz) w ->
         withLeqProof sz_pf $ withLeqProof idx_sz_w_pf $
-        emitStmt knownRepr [] loc (TypedSetReg (BVRepr sz) $
-                                TypedExpr (BVSelect idx sz w $ RegNoVal reg)
-                                Nothing) >>>= \(MNil :>: x) ->
+        emitStmt knownRepr noNames loc
+          (TypedSetReg (BVRepr sz) $
+            TypedExpr (BVSelect idx sz w $ RegNoVal reg)
+            Nothing) >>>= \(MNil :>: x) ->
         stmtRecombinePerms >>>
         pure (TypedReg x)
     _ -> error "extractBVBytes: negative offset!"
@@ -2490,7 +2517,7 @@ extractBVBytes loc sz off_bytes (reg :: TypedReg (BVType w)) =
 -- for the return values.
 emitStmt ::
   CruCtx rets ->
-  [Maybe String] ->
+  RAssign (Ignore (Maybe String)) rets ->
   ProgramLoc ->
   TypedStmt ext rets ps_in ps_out ->
   StmtPermCheckM ext cblocks blocks tops ret ps_out ps_in
@@ -2513,7 +2540,7 @@ emitLLVMStmt ::
                 StmtPermCheckM LLVM cblocks blocks tops ret
                 ps_out ps_in (Name tp)
 emitLLVMStmt tp name loc stmt =
-  RL.head <$> emitStmt (singletonCruCtx tp) [name] loc (TypedLLVMStmt stmt)
+  RL.head <$> emitStmt (singletonCruCtx tp) (RL.singleton (Ignore name)) loc (TypedLLVMStmt stmt)
 
 -- | A program location for code which was generated by the type-checker
 checkerProgramLoc :: ProgramLoc
@@ -2874,8 +2901,9 @@ tcEmitStmt' ctx loc (SetReg tp (App e)) =
   traverseFC (tcRegWithVal ctx) e >>= \e_with_vals ->
   tcExpr e_with_vals >>= \maybe_val ->
   let typed_e = TypedExpr e_with_vals maybe_val in
-  nextDebugName >>= \name ->
-  emitStmt (singletonCruCtx tp) [name] loc (TypedSetReg tp typed_e) >>>= \(_ :>: x) ->
+  let rets = (singletonCruCtx tp) in
+  dbgNames' rets >>= \names ->
+  emitStmt rets names loc (TypedSetReg tp typed_e) >>>= \(_ :>: x) ->
   stmtRecombinePerms >>>
   pure (addCtxName ctx x)
 
@@ -2915,10 +2943,11 @@ tcEmitStmt' ctx loc (CallHandle ret freg_untyped _args_ctx args_untyped) =
       stmtProvePermsAppend CruCtxNil (emptyMb $
                                       eqDistPerms ghosts_ns gexprs) >>>= \_ ->
       stmtProvePerm freg (emptyMb $ ValPerm_Conj1 $ Perm_Fun fun_perm) >>>= \_ ->
-      nextDebugName >>>= \name ->
-      (emitStmt (singletonCruCtx ret) [name] loc
-       (TypedCall freg fun_perm (varsToTypedRegs
-                                 ghosts_ns) gexprs args)) >>>= \(_ :>: ret') ->
+      let rets = singletonCruCtx ret in
+      dbgNames' rets >>>= \names ->
+      emitStmt rets names loc
+        (TypedCall freg fun_perm
+          (varsToTypedRegs ghosts_ns) gexprs args) >>>= \(_ :>: ret') ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret')
 
@@ -2927,7 +2956,7 @@ tcEmitStmt' ctx loc (Assert reg msg) =
   getRegEqualsExpr treg >>= \case
     PExpr_Bool True -> pure ctx
     PExpr_Bool False -> stmtFailM (\_ -> pretty "Failed assertion")
-    _ -> ctx <$ emitStmt CruCtxNil [] loc (TypedAssert (tcReg ctx reg) (tcReg ctx msg))
+    _ -> ctx <$ emitStmt CruCtxNil MNil loc (TypedAssert (tcReg ctx reg) (tcReg ctx msg))
 
 tcEmitStmt' _ _ _ = error "tcEmitStmt: unsupported statement"
 
@@ -2980,9 +3009,9 @@ tcEmitLLVMSetExpr ctx loc (LLVM_PointerBlock w ptr_reg) =
       stmtRecombinePerms >>>
       stmtProvePerm tptr_reg (emptyMb $ ValPerm_Conj1 Perm_IsLLVMPtr) >>>
       emitLLVMStmt knownRepr Nothing loc (AssertLLVMPtr tptr_reg) >>>
-      nextDebugName >>>= \name ->
+      dbgNames >>>= \names ->
       emitStmt
-        knownRepr [name] loc
+        knownRepr names loc
         (TypedSetReg knownRepr $
                               TypedExpr (NatLit 1)
                               (Just $ PExpr_Nat 1)) >>>= \(_ :>: ret) ->
@@ -3015,8 +3044,8 @@ tcEmitLLVMSetExpr ctx loc (LLVM_PointerOffset w ptr_reg) =
       stmtRecombinePerms >>>
       stmtProvePerm tptr_reg (emptyMb $ ValPerm_Conj1 Perm_IsLLVMPtr) >>>
       emitLLVMStmt knownRepr Nothing loc (AssertLLVMPtr tptr_reg) >>>
-      nextDebugName >>>= \name ->
-      emitStmt knownRepr [name] loc
+      dbgNames >>>= \names ->
+      emitStmt knownRepr names loc
         (TypedSetReg knownRepr $
          TypedExpr (BVLit w $ BV.mkBV w 0)
          (Just $ bvInt 0)) >>>= \(MNil :>: ret) ->
@@ -3032,17 +3061,17 @@ tcEmitLLVMSetExpr ctx loc (LLVM_PointerIte w cond_reg then_reg else_reg) =
       telse_reg = tcReg ctx else_reg in
   getRegEqualsExpr tcond_reg >>= \case
     PExpr_Bool True ->
-      nextDebugName >>= \name ->
-      emitStmt knownRepr [name] loc
-        (TypedSetRegPermExpr knownRepr $ PExpr_Var $
-                              typedRegVar tthen_reg) >>>= \(MNil :>: ret) ->
+      dbgNames >>= \names ->
+      emitStmt knownRepr names loc
+        (TypedSetRegPermExpr knownRepr $ 
+          PExpr_Var $ typedRegVar tthen_reg) >>>= \(MNil :>: ret) ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret)
     PExpr_Bool False ->
-      nextDebugName >>>= \name ->
-      emitStmt knownRepr [name] loc
-        (TypedSetRegPermExpr knownRepr $ PExpr_Var $
-          typedRegVar telse_reg) >>>= \(MNil :>: ret) ->
+      dbgNames >>>= \names ->
+      emitStmt knownRepr names loc
+        (TypedSetRegPermExpr knownRepr $
+          PExpr_Var $ typedRegVar telse_reg) >>>= \(MNil :>: ret) ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret)
     _ ->
@@ -3064,16 +3093,20 @@ tcEmitLLVMSetExpr ctx loc (LLVM_SideConditions tp conds reg) =
         rest_m
       PExpr_Bool False -> stmtFailM (\_ -> pretty err_str)
       _ ->
-        emitStmt knownRepr [] loc (TypedSetRegPermExpr knownRepr $
-                                PExpr_String err_str) >>>= \(MNil :>: str_var) ->
+        emitStmt knownRepr noNames loc
+          (TypedSetRegPermExpr knownRepr $
+            PExpr_String err_str) >>>= \(MNil :>: str_var) ->
         stmtRecombinePerms >>>
-        emitStmt CruCtxNil [] loc (TypedAssert tcond_reg $
-                                TypedReg str_var) >>>= \MNil ->
+        emitStmt CruCtxNil MNil loc
+          (TypedAssert tcond_reg $
+            TypedReg str_var) >>>= \MNil ->
         stmtRecombinePerms >>>
         rest_m)
-  (nextDebugName >>>= \name ->
-   emitStmt (singletonCruCtx tp) [name] loc (TypedSetRegPermExpr tp $ PExpr_Var $
-                                      typedRegVar treg) >>>= \(MNil :>: ret) ->
+  (let rets = singletonCruCtx tp in
+   dbgNames' rets >>>= \names ->
+   emitStmt rets names loc
+     (TypedSetRegPermExpr tp $ PExpr_Var $
+       typedRegVar treg) >>>= \(MNil :>: ret) ->
     stmtRecombinePerms >>>
     pure (addCtxName ctx ret))
   conds
@@ -3213,8 +3246,8 @@ tcEmitLLVMStmt arch ctx loc (LLVM_MemClear _ (ptr :: Reg ctx (LLVMPointerType wp
         stmtRecombinePerms) >>>
 
   -- Return a fresh unit variable
-  nextDebugName >>= \name ->
-  emitStmt knownRepr [name] loc
+  dbgNames >>= \names ->
+  emitStmt knownRepr names loc
     (TypedSetReg knownRepr $
       TypedExpr EmptyApp
       (Just PExpr_Unit)) >>>= \(MNil :>: z) ->
@@ -3272,8 +3305,8 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PushFrame _ _) =
   emitLLVMStmt knownRepr Nothing loc TypedLLVMCreateFrame >>>= \fp ->
   setFramePtr ?ptrWidth (TypedReg fp) >>>
   stmtRecombinePerms >>>
-  nextDebugName >>>= \name ->
-  emitStmt knownRepr [name] loc
+  dbgNames >>>= \names ->
+  emitStmt knownRepr names loc
     (TypedSetReg knownRepr
       (TypedExpr EmptyApp Nothing)) >>>= \(MNil :>: y) ->
   stmtRecombinePerms >>>
@@ -3433,14 +3466,14 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
     -- FIXME: if we have bvEq e1' e2' or not (bvCouldEqual e1' e2') then we
     -- should return a known Boolean value in place of the Nothing
     (PExpr_LLVMWord e1', PExpr_LLVMWord e2') ->
-      emitStmt knownRepr [] loc (TypedSetRegPermExpr
+      emitStmt knownRepr noNames loc (TypedSetRegPermExpr
                               knownRepr e1') >>>= \(MNil :>: n1) ->
       stmtRecombinePerms >>>
-      emitStmt knownRepr [] loc (TypedSetRegPermExpr
+      emitStmt knownRepr noNames loc (TypedSetRegPermExpr
                               knownRepr e2') >>>= \(MNil :>: n2) ->
       stmtRecombinePerms >>>
-      nextDebugName >>>= \name ->
-      emitStmt knownRepr [name] loc
+      dbgNames >>>= \names ->
+      emitStmt knownRepr names loc
         (TypedSetReg knownRepr $
           TypedExpr (BaseIsEq knownRepr
                       (RegWithVal (TypedReg n1) e1')
@@ -3454,14 +3487,14 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
     -- FIXME: test off1 == off2 like above
     (asLLVMOffset -> Just (x1', off1), asLLVMOffset -> Just (x2', off2))
       | x1' == x2' ->
-        emitStmt knownRepr [] loc (TypedSetRegPermExpr
+        emitStmt knownRepr noNames loc (TypedSetRegPermExpr
                                 knownRepr off1) >>>= \(MNil :>: n1) ->
         stmtRecombinePerms >>>
-        emitStmt knownRepr [] loc (TypedSetRegPermExpr
+        emitStmt knownRepr noNames loc (TypedSetRegPermExpr
                                 knownRepr off2) >>>= \(MNil :>: n2) ->
         stmtRecombinePerms >>>
-        nextDebugName >>>= \name ->
-        emitStmt knownRepr [name] loc
+        dbgNames >>>= \names ->
+        emitStmt knownRepr names loc
           (TypedSetReg knownRepr $
             TypedExpr (BaseIsEq knownRepr
                         (RegWithVal (TypedReg n1) off1)
@@ -3477,8 +3510,8 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
       let r' = TypedReg x' in
       stmtProvePerm r' (emptyMb $ ValPerm_Conj1 Perm_IsLLVMPtr) >>>
       emitLLVMStmt knownRepr Nothing loc (AssertLLVMPtr r') >>>
-      nextDebugName >>= \name ->
-      emitStmt knownRepr [name] loc
+      dbgNames >>= \names ->
+      emitStmt knownRepr names loc
         (TypedSetReg knownRepr $
           TypedExpr (BoolLit False)
           Nothing) >>>= \(MNil :>: ret) ->
@@ -3490,8 +3523,8 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
       let r' = TypedReg x' in
       stmtProvePerm r' (emptyMb $ ValPerm_Conj1 Perm_IsLLVMPtr) >>>
       emitLLVMStmt knownRepr Nothing loc (AssertLLVMPtr r') >>>
-      nextDebugName >>= \name ->
-      emitStmt knownRepr [name] loc
+      dbgNames >>= \names ->
+      emitStmt knownRepr names loc
         (TypedSetReg knownRepr $
           TypedExpr (BoolLit False)
           Nothing) >>>= \(MNil :>: ret) ->
@@ -3507,8 +3540,9 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
 
 tcEmitLLVMStmt _arch ctx loc LLVM_Debug{} =
 --  let tptr = tcReg ctx ptr in
-  nextDebugName >>= \name ->
-  emitLLVMStmt knownRepr name loc TypedLLVMDbg >>>= \ret ->
+  dbgNames >>= \names ->
+  emitStmt knownRepr names loc
+    (TypedSetReg knownRepr (TypedExpr EmptyApp Nothing)) >>>= \(MNil :>: ret) ->
   stmtRecombinePerms >>>
   pure (addCtxName ctx ret)
 
