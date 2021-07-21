@@ -1396,30 +1396,87 @@ ecFromThenTo first next _ a =
 ecFromToBy :
   (first last stride : Num) -> (a : sort 0) -> PLiteral a ->
   seq (tcAdd (TCNum 1) (tcDiv (tcSub last first) stride)) a;
-ecFromToBy first last stride a PLit =
-  error (seq (tcAdd (TCNum 1) (tcDiv (tcSub last first) stride)) a)
-        "TODO implement ecFromToBy";
+ecFromToBy =
+  finNumRec
+    (\ (first:Num) -> (last:Num) -> (stride : Num) -> (a : sort 0) -> PLiteral a ->
+       seq (tcAdd (TCNum 1) (tcDiv (tcSub last first) stride)) a)
+    (\ (first:Nat) ->
+       finNumRec
+         (\ (last:Num) -> (stride : Num) -> (a : sort 0) -> PLiteral a ->
+            seq (tcAdd (TCNum 1) (tcDiv (tcSub last (TCNum first)) stride)) a)
+         (\ (last:Nat) ->
+           finNumRec
+             (\ (stride:Num) -> (a : sort 0) -> PLiteral a ->
+                seq (tcAdd (TCNum 1) (tcDiv (TCNum (subNat last first)) stride)) a)
+             (\ (stride:Nat) -> \ (a : sort 0) -> \ (pa : PLiteral a) ->
+               gen (addNat 1 (divNat (subNat last first) stride)) a
+                   (\ (i : Nat) -> pa (addNat first (mulNat i stride))))));
 
 ecFromToByLessThan :
   (first bound stride : Num) -> (a : sort 0) -> PLiteralLessThan a ->
   seq (tcCeilDiv (tcSub bound first) stride) a;
-ecFromToByLessThan first bound stride a PLit =
-  error (seq (tcCeilDiv (tcSub bound first) stride) a)
-        "TODO implement ecFromToByLessThan";
+ecFromToByLessThan =
+  finNumRec
+    (\ (first:Num) -> (bound:Num) -> (stride:Num) -> (a : sort 0) -> PLiteralLessThan a ->
+       seq (tcCeilDiv (tcSub bound first) stride) a)
+    (\ (first:Nat) ->
+      Num_rec
+        (\ (bound:Num) -> (stride:Num) -> (a : sort 0) -> PLiteralLessThan a ->
+           seq (tcCeilDiv (tcSub bound (TCNum first)) stride) a)
+
+        -- bound is finite case
+        (\ (bound:Nat) ->
+          finNumRec
+            (\ (stride:Num) -> (a : sort 0) -> PLiteralLessThan a ->
+               seq (tcCeilDiv (TCNum (subNat bound first)) stride) a)
+            (\ (stride:Nat) -> \ (a:sort 0) -> \ (pa:PLiteralLessThan a) ->
+              gen (ceilDivNat (subNat bound first) stride) a
+                  (\ (i:Nat) -> pa (addNat first (mulNat i stride)))))
+
+        -- bound is infinite case
+        (finNumRec
+            (\ (stride:Num) -> (a : sort 0) -> PLiteralLessThan a ->
+               seq (tcCeilDiv TCInf stride) a)
+            (\ (stride:Nat) -> \ (a : sort 0) -> \ (pa:PLiteralLessThan a) ->
+               MkStream a (\ (i:Nat) -> pa (addNat first (mulNat i stride))))));
 
 ecFromToDownBy :
   (first last stride : Num) -> (a : sort 0) -> PLiteral a ->
   seq (tcAdd (TCNum 1) (tcDiv (tcSub first last) stride)) a;
-ecFromToDownBy first last stride a PLit =
-  error (seq (tcAdd (TCNum 1) (tcDiv (tcSub first last) stride)) a)
-        "TODO implement ecFromToDownBy";
+ecFromToDownBy =
+  finNumRec
+    (\ (first:Num) -> (last:Num) -> (stride:Num) -> (a : sort 0) -> PLiteral a ->
+       seq (tcAdd (TCNum 1) (tcDiv (tcSub first last) stride)) a)
+    (\ (first:Nat) ->
+    finNumRec
+      (\ (last:Num) -> (stride:Num) -> (a : sort 0) -> PLiteral a ->
+         seq (tcAdd (TCNum 1) (tcDiv (tcSub (TCNum first) last) stride)) a)
+      (\ (last:Nat) ->
+      finNumRec
+        (\ (stride:Num) -> (a : sort 0) -> PLiteral a ->
+           seq (tcAdd (TCNum 1) (tcDiv (TCNum (subNat first last)) stride)) a)
+        (\ (stride:Nat) -> \ (a : sort 0) -> \ (pa : PLiteral a) ->
+           gen (addNat 1 (divNat (subNat first last) stride)) a
+               (\ (i:Nat) -> pa (subNat first (mulNat i stride))))));
 
 ecFromToDownByGreaterThan :
   (first bound stride : Num) -> (a : sort 0) -> PLiteral a ->
   seq (tcCeilDiv (tcSub first bound) stride) a;
-ecFromToDownByGreaterThan first bound stride a PLit =
-  error (seq (tcCeilDiv (tcSub first bound) stride) a)
-        "TODO implement ecFromToDownByGreaterThan";
+ecFromToDownByGreaterThan =
+  finNumRec
+    (\ (first:Num) -> (bound:Num) -> (stride:Num) -> (a : sort 0) -> PLiteral a ->
+       seq (tcCeilDiv (tcSub first bound) stride) a)
+    (\ (first:Nat) ->
+      finNumRec
+        (\ (bound:Num) -> (stride:Num) -> (a : sort 0) -> PLiteral a ->
+           seq (tcCeilDiv (tcSub (TCNum first) bound) stride) a)
+        (\ (bound:Nat) ->
+          finNumRec
+            (\ (stride:Num) -> (a : sort 0) -> PLiteral a ->
+               seq (tcCeilDiv (TCNum (subNat first bound)) stride) a)
+            (\ (stride:Nat) -> \ (a : sort 0) -> \ (pa:PLiteral a) ->
+               gen (ceilDivNat (subNat first bound) stride) a
+                   (\ (i:Nat) -> pa (subNat first (mulNat i stride))))));
 
 -- Infinite word sequences
 ecInfFrom : (a : sort 0) -> PIntegral a -> a -> seq TCInf a;
