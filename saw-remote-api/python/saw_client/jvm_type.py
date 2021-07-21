@@ -53,3 +53,18 @@ class JVMClassType(JVMType):
     def to_json(self) -> Any:
         return { 'type': 'class type',
                  'class name': self.name }
+
+java_bool = JVMBooleanType()
+java_byte = JVMByteType()
+java_char = JVMCharType()
+java_double = JVMDoubleType()
+java_float = JVMFloatType()
+java_int = JVMIntType()
+java_long = JVMLongType()
+java_short = JVMShortType()
+
+def java_array(size : int, element_type: 'JVMType'):
+    return JVMArrayType(element_type, size)
+
+def java_class(name: str):
+    return JVMClassType(name)

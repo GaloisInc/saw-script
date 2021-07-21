@@ -98,6 +98,59 @@ class LLVMVerify(SAWCommand):
     def process_result(self, res : Any) -> Any:
         return res
 
+class JVMLoadClass(SAWCommand):
+    def __init__(self, connection : argo.HasProtocolState,
+                 name : str,
+                 class_name : str) -> None:
+        super(JVMLoadClass, self).__init__(
+            'SAW/JVM/load class',
+            {'name': name, 'class name': class_name},
+            connection
+        )
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
+class JVMAssume(SAWCommand):
+    def __init__(
+            self,
+            connection : argo.HasProtocolState,
+            module : str,
+            function : str,
+            setup : Any,
+            lemma_name : str) -> None:
+        params = {'module': module,
+                  'function': function,
+                  'contract': setup,
+                  'lemma name': lemma_name}
+        super(JVMAssume, self).__init__('SAW/JVM/assume', params, connection)
+
+    def process_result(self, _res : Any) -> Any:
+        return None
+
+class JVMVerify(SAWCommand):
+    def __init__(
+            self,
+            connection : argo.HasProtocolState,
+            class_name : str,
+            method_name : str,
+            lemmas : List[str],
+            check_sat : bool,
+            setup : Any,
+            script : ProofScript,
+            lemma_name : str) -> None:
+        params = {'module': class_name,
+                  'function': method_name,
+                  'lemmas': lemmas,
+                  'check sat': check_sat,
+                  'contract': setup,
+                  'script': script,
+                  'lemma name': lemma_name}
+        super(JVMVerify, self).__init__('SAW/JVM/verify', params, connection)
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
 class Prove(SAWCommand):
     def __init__(
             self,

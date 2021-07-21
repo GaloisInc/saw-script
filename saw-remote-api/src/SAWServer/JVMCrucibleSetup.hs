@@ -191,7 +191,7 @@ data JVMLoadClassParams
 instance FromJSON JVMLoadClassParams where
   parseJSON =
     withObject "params for \"SAW/JVM/load class\"" $ \o ->
-    JVMLoadClassParams <$> o .: "name" <*> o .: "class"
+    JVMLoadClassParams <$> o .: "name" <*> o .: "class name"
 
 jvmLoadClass :: JVMLoadClassParams -> Argo.Command SAWState OK
 jvmLoadClass (JVMLoadClassParams serverName cname) =
@@ -207,7 +207,7 @@ instance Doc.DescribedMethod JVMLoadClassParams OK where
   parameterFieldDescription =
     [ ("name",
         Doc.Paragraph [Doc.Text "The name of the class on the server."])
-    , ("class",
+    , ("class name",
       Doc.Paragraph [Doc.Text "The java class to load."])
     ]
   resultFieldDescription = []

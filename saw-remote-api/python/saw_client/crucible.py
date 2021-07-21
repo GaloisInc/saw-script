@@ -87,7 +87,7 @@ class CryptolTerm(SetupVal):
 class FreshVar(NamedSetupVal):
     __name : Optional[str]
 
-    def __init__(self, spec : 'Contract', type : 'LLVMType', suggested_name : Optional[str] = None) -> None:
+    def __init__(self, spec : 'Contract', type : Union['LLVMType', 'JVMType'], suggested_name : Optional[str] = None) -> None:
         self.__name = suggested_name
         self.spec = spec
         self.type = type
@@ -122,7 +122,7 @@ class FreshVar(NamedSetupVal):
 class Allocated(NamedSetupVal):
     name : Optional[str]
 
-    def __init__(self, spec : 'Contract', type : 'LLVMType', *,
+    def __init__(self, spec : 'Contract', type : Union['LLVMType','JVMType'], *,
                  mutable : bool = True, alignment : Optional[int] = None) -> None:
         self.name = None
         self.spec = spec
@@ -250,7 +250,7 @@ class PointsTo:
     """The workhorse for ``points_to``.
     """
     def __init__(self, pointer : SetupVal, target : SetupVal, *,
-                 check_target_type : Union[PointerType, 'LLVMType', None] = PointerType(),
+                 check_target_type : Union[PointerType, 'LLVMType', 'JVMType', None] = PointerType(),
                  condition : Optional[Condition] = None) -> None:
         self.pointer = pointer
         self.target = target
@@ -383,7 +383,7 @@ class Contract:
         self.__used_names.add(new_name)
         return new_name
 
-    def fresh_var(self, type : 'LLVMType', suggested_name : Optional[str] = None) -> FreshVar:
+    def fresh_var(self, type : Union['LLVMType','JVMType'], suggested_name : Optional[str] = None) -> FreshVar:
         """Declares a fresh variable of type ``type`` (with name ``suggested_name`` if provided and available)."""
         fresh_name = self.get_fresh_name('x' if suggested_name is None else self.get_fresh_name(suggested_name))
         v = FreshVar(self, type, fresh_name)
@@ -395,7 +395,7 @@ class Contract:
             raise Exception("wrong state")
         return v
 
-    def alloc(self, type : 'LLVMType', *, read_only : bool = False,
+    def alloc(self, type : Union['LLVMType', 'JVMType'], *, read_only : bool = False,
                                         alignment : Optional[int] = None,
                                         points_to : Optional[SetupVal] = None) -> SetupVal:
         """Allocates a pointer of type ``type``.
@@ -424,7 +424,7 @@ class Contract:
         return a
 
     def points_to(self, pointer : SetupVal, target : SetupVal, *,
-                  check_target_type : Union[PointerType, 'LLVMType', None] = PointerType(),
+                  check_target_type : Union[PointerType, 'LLVMType', 'JVMType', None] = PointerType(),
                   condition : Optional[Condition] = None) -> None:
         """Declare that the memory location indicated by the ``pointer``
         contains the ``target``.
