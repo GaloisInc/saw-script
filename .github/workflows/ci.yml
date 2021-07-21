@@ -71,6 +71,15 @@ jobs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
 
+      - name: System Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt update
+          sudo apt install -y software-properties-common apt-transport-https ca-certificates wget curl
+          sudo apt install -y zlibc zlib1g zlib1g-dev git build-essential language-pack-en-base language-pack-en
+          sudo locale-gen en_US.UTF-8
+          sudo update-locale LANG=$LANG LANGUAGE=$LANGUAGE
+
       - uses: actions/checkout@v2
       - run: |
           git submodule update --init
