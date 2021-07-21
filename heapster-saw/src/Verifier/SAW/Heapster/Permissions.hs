@@ -3368,6 +3368,11 @@ modalizeShape _ _ (PExpr_Var _) =
   -- adding a modalized variable shape constructor
   Nothing
 modalizeShape _ _ PExpr_EmptyShape = Just PExpr_EmptyShape
+modalizeShape _ _ sh@(PExpr_NamedShape _ _ nmsh _)
+  | not (namedShapeCanUnfold nmsh) =
+    -- Opaque shapes are not affected by modalization, because we assume they do
+    -- not have any top-level pointers in them
+    Just sh
 modalizeShape rw l (PExpr_NamedShape rw' l' nmsh args) =
   -- If a named shape already has modalities, they take precedence
   Just $ PExpr_NamedShape (rw' <|> rw) (l' <|> l) nmsh args
