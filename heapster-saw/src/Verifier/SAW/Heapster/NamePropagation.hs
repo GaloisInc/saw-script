@@ -2,6 +2,7 @@
 {-# Language GADTs #-}
 module Verifier.SAW.Heapster.NamePropagation where
 
+import Data.Functor.Constant
 import Data.Parameterized.TraversableFC ( FoldableFC(toListFC), FunctorFC(fmapFC) )
 import Lang.Crucible.Analysis.Fixpoint
 import Lang.Crucible.CFG.Core ( Some(Some), CFG(cfgHandle) )
@@ -11,13 +12,13 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as PM
 import qualified Text.LLVM.AST as L
 
-type NameDom = Pointed (Ignore String)
+type NameDom = Pointed (Constant String)
 
-nameJoin :: Ignore String a -> Ignore String a -> NameDom a
-nameJoin (Ignore x) (Ignore y) | x == y = Pointed (Ignore x)
+nameJoin :: Constant String a -> Constant String a -> NameDom a
+nameJoin (Constant x) (Constant y) | x == y = Pointed (Constant x)
 nameJoin _ _ = Top
 
-nameDomain :: Domain (Pointed (Ignore String))
+nameDomain :: Domain (Pointed (Constant String))
 nameDomain = pointed nameJoin (==) WTO
 
 nameInterpretation :: Interpretation LLVM NameDom
@@ -32,11 +33,11 @@ nameInterpretation =  Interpretation
       let names' =
             case stmt of
               LLVM_Debug (LLVM_Dbg_Declare ptr di _) | Just n <- L.dilvName di ->
-                modifyAbstractRegValue names ptr (\_ -> Pointed (Ignore ("&" ++ n)))
+                modifyAbstractRegValue names ptr (\_ -> Pointed (Constant ("&" ++ n)))
               LLVM_Debug (LLVM_Dbg_Addr ptr di _) | Just n <- L.dilvName di ->
-                modifyAbstractRegValue names ptr (\_ -> Pointed (Ignore ("&" ++ n)))
+                modifyAbstractRegValue names ptr (\_ -> Pointed (Constant ("&" ++ n)))
               LLVM_Debug (LLVM_Dbg_Value _ val di _) | Just n <- L.dilvName di ->
-                modifyAbstractRegValue names val (\_ -> Pointed (Ignore n))
+                modifyAbstractRegValue names val (\_ -> Pointed (Constant n))
               _ -> names
       in (Just names', Bottom)             
   }
@@ -44,15 +45,15 @@ nameInterpretation =  Interpretation
 computeNames ::
   forall blocks init ret.
   CFG LLVM blocks init ret ->
-  Ctx.Assignment (Ignore [Maybe String]) blocks
+  Ctx.Assignment (Constant [Maybe String]) blocks
 computeNames cfg =
   case alg of
-    (_, end, _) -> fmapFC (\(Ignore (Some p)) -> Ignore (toListFC flatten (_paRegisters p))) end
+    (_, end, _) -> fmapFC (\(Ignore (Some p)) -> Constant (toListFC flatten (_paRegisters p))) end
   where
   flatten :: NameDom a -> Maybe String
   flatten Top = Nothing
   flatten Bottom = Nothing
-  flatten (Pointed (Ignore x)) = Just x
+  flatten (Pointed (Constant x)) = Just x
 
   sz = Ctx.size (handleArgTypes (cfgHandle cfg))
   alg =
