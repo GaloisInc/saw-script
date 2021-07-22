@@ -3929,7 +3929,8 @@ implIntroLLVMBlockNamed _ _ =
   error "implIntroLLVMBlockNamed: malformed permission"
 
 -- | Eliminate a @memblock@ permission on the top of the stack, if possible,
--- otherwise fail
+-- otherwise fail. The elimination does not have to completely remove any
+-- @memblock@ permission, it just needs to make some sort of progress.
 implElimLLVMBlock :: (1 <= w, KnownNat w, NuMatchingAny1 r) =>
                      ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
                      ImplM vars s r (ps :> LLVMPointerType w)
@@ -3953,16 +3954,22 @@ implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
     implElimLLVMBlock x (bp { llvmBlockShape = sh' })
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                           PExpr_EqShape (PExpr_Var y) }) =
-  -- For shape eqsh(y), prove y:block(sh) for some sh, apply
+  -- For shape eqsh(y), prove y:block(sh) for some sh, and apply
   -- SImpl_IntroLLVMBlockFromEq, and then recursively eliminate the resulting
-  -- memblock permission
+  -- memblock permission, unless the resulting shape cannot be eliminated, in
+  -- which case we have still made progress so we can just stop
   mbVarsM () >>>= \mb_unit ->
   withExtVarsM (proveVarImplInt y $ mbCombine RL.typeCtxProxies $ flip fmap mb_unit $ const $
                 nu $ \sh -> ValPerm_Conj1 $
                             Perm_LLVMBlockShape $ PExpr_Var sh) >>>= \(_, sh) ->
   let bp' = bp { llvmBlockShape = sh } in
   implSimplM Proxy (SImpl_IntroLLVMBlockFromEq x bp' y) >>>
-  implElimLLVMBlock x bp'
+  case sh of
+    PExpr_NamedShape _ _ nmsh _
+      | not (namedShapeCanUnfold nmsh) ->
+        -- Opaque shapes cannot be further eliminated, so stop
+        return ()
+    _ -> implElimLLVMBlock x bp'
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                           PExpr_PtrShape maybe_rw maybe_l sh })
   | Just len <- llvmShapeLength sh =
@@ -5375,7 +5382,8 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
       implSwapInsertConjM x (Perm_LLVMBlock bp_out) ps'' 0
 
 
-  -- If proving a named shape, prove its unfolding first and then fold it
+  -- If proving an unfoldable named shape, prove its unfolding first and then
+  -- fold it
   [nuMP| mb_bp : mb_bps |]
     | [nuMP| PExpr_NamedShape rw l nmsh args |] <- mbMatch $ fmap llvmBlockShape mb_bp
     , [nuMP| TrueRepr |] <- mbMatch $ fmap namedShapeCanUnfoldRepr nmsh
@@ -5400,6 +5408,27 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
 
       -- Finally, recombine the resulting permission with the rest of them
       implSwapInsertConjM x (Perm_LLVMBlock bp') ps_out' 0
+
+
+  -- If proving an opaque named shape, the only way to prove the memblock
+  -- permission is to have it on the left, but we don't have a memblock
+  -- permission on the left with this exact offset, length, and shape, because
+  -- it would have matched some previous case, so try to eliminate a memblock
+  -- and recurse
+  [nuMP| mb_bp : mb_bps |]
+    | [nuMP| PExpr_NamedShape _ _ nmsh _ |] <- mbMatch $ fmap llvmBlockShape mb_bp
+    , [nuMP| FalseRepr |] <- mbMatch $ fmap namedShapeCanUnfoldRepr nmsh
+    , Just off <- partialSubst psubst $ fmap llvmBlockOffset mb_bp
+    , Just i <- findIndex (\case
+                              p@(Perm_LLVMBlock _) ->
+                                isJust (llvmPermContainsOffset off p)
+                              _ -> False) ps
+    , Perm_LLVMBlock bp <- ps!!i ->
+      implGetPopConjM x ps i >>> implElimPopLLVMBlock x bp >>>
+      proveVarImplInt x (fmap ValPerm_Conj $
+                         mbMap2 (++)
+                         (fmap (map Perm_LLVMBlock) $ mbMap2 (:) mb_bp mb_bps)
+                         mb_ps)
 
 
   -- If proving an equality shape eqsh(z) for evar z which has already been set,
