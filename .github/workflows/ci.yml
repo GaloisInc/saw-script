@@ -445,7 +445,7 @@ jobs:
     name: "Test s2n proofs"
     timeout-minutes: 60
     needs: build
-    runs-on: ubuntu-18.04
+    runs-on: self-hosted
     strategy:
       fail-fast: false
       matrix:
