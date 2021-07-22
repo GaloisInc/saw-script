@@ -21,7 +21,8 @@ module Verifier.SAW.OpenTerm (
   -- * Open terms and converting to closed terms
   OpenTerm(..), completeOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
-  closedOpenTerm, openOpenTerm, failOpenTerm, bindTCMOpenTerm, openTermType,
+  closedOpenTerm, openOpenTerm, failOpenTerm,
+  bindTCMOpenTerm, bindPPOpenTerm, openTermType,
   flatOpenTerm, sortOpenTerm, natOpenTerm,
   unitOpenTerm, unitTypeOpenTerm,
   stringLitOpenTerm, stringTypeOpenTerm,
@@ -45,6 +46,7 @@ import Data.Text (Text)
 import Numeric.Natural
 
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.Module
@@ -90,6 +92,15 @@ failOpenTerm str = OpenTerm $ fail str
 -- of the resulting 'OpenTerm'. For instance, @a@ should not be 'OpenTerm'.
 bindTCMOpenTerm :: TCM a -> (a -> OpenTerm) -> OpenTerm
 bindTCMOpenTerm m f = OpenTerm (m >>= unOpenTerm . f)
+
+-- | Bind the result of pretty-printing an 'OpenTerm' while building another
+bindPPOpenTerm :: OpenTerm -> (String -> OpenTerm) -> OpenTerm
+bindPPOpenTerm (OpenTerm m) f =
+  OpenTerm $
+  do ctx <- askCtx
+     t <- typedVal <$> m
+     unOpenTerm $ f $ renderSawDoc defaultPPOpts $
+       ppTermInCtx defaultPPOpts (map fst ctx) t
 
 -- | Return type type of an 'OpenTerm' as an 'OpenTerm
 openTermType :: OpenTerm -> OpenTerm
