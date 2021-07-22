@@ -163,8 +163,8 @@ asTypedGlobalDef t =
   case unwrapTermF t of
     FTermF (Primitive pn) ->
       Just $ GlobalDef (ModuleIdentifier $ primName pn) (primType pn) t
-    Constant ec t_def ->
-      Just $ GlobalDef (ecName ec) (ecType ec) t_def
+    Constant ec _ ->
+      Just $ GlobalDef (ecName ec) (ecType ec) t
     _ -> Nothing
 
 
@@ -451,9 +451,11 @@ instance ToPureTerm ArgMonTerm where
 
 instance ToPureTerm MonTerm where
   toPureTerm (ArgMonTerm mtrm) = toPureTerm mtrm
-  toPureTerm (CompMonTerm _ _) =
+  toPureTerm (CompMonTerm _ t) =
+    bindPPOpenTerm t $ \term_pp ->
     failOpenTerm
-    "Monadification failed: could not convert computational term to pure term"
+    ("Monadification failed: " ++
+     "could not convert computational term to pure term: " ++ term_pp)
 
 -- | Convert an 'ArgMonTerm' to a SAW core term of type @MT(tp)@
 toArgTerm :: ArgMonTerm -> OpenTerm
