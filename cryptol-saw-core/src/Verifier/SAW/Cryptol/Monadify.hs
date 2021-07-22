@@ -795,7 +795,7 @@ unsafeAssertMacro = MonMacro 1 $ \ts ->
         MTyForall "m" (MKType $ mkSort 0) $ \m ->
         MTyBase (MKType $ mkSort 0) $
         dataTypeOpenTerm "Prelude.Eq"
-        [dataTypeOpenTerm "Prelude.Num" [],
+        [dataTypeOpenTerm "Cryptol.Num" [],
          toArgType n, toArgType m] in
   case ts of
     [(asDataType -> Just (num, []))]
