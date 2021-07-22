@@ -198,6 +198,8 @@ import SAWScript.Crucible.LLVM.Override
 import SAWScript.Crucible.LLVM.ResolveSetupValue
 import SAWScript.Crucible.LLVM.MethodSpecIR
 
+type AssumptionReason = (W4.ProgramLoc, String)
+
 type MemImpl = Crucible.MemImpl Sym
 
 data LLVMVerificationException
@@ -603,7 +605,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
 verifyObligations :: LLVMCrucibleContext arch
                   -> MS.CrucibleMethodSpecIR (LLVM arch)
                   -> ProofScript ()
-                  -> [Crucible.LabeledPred Term Crucible.AssumptionReason]
+                  -> [Crucible.LabeledPred Term AssumptionReason]
                   -> [(String, W4.ProgramLoc, Term)]
                   -> TopLevel (SolverStats, Set TheoremNonce)
 verifyObligations cc mspec tactic assumes asserts =
@@ -738,7 +740,7 @@ verifyPrestate ::
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   Crucible.SymGlobalState Sym ->
   IO ([(Crucible.MemType, LLVMVal)],
-      [Crucible.LabeledPred Term Crucible.AssumptionReason],
+      [Crucible.LabeledPred Term AssumptionReason],
       Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)),
       Crucible.SymGlobalState Sym)
 verifyPrestate opts cc mspec globals =
@@ -772,7 +774,7 @@ assumptionsContainContradiction ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
   ProofScript () ->
-  [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
+  [Crucible.LabeledPred Term AssumptionReason] ->
   TopLevel Bool
 assumptionsContainContradiction cc tactic assumptions =
   do
@@ -803,7 +805,7 @@ computeMinimalContradictingCore ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
   ProofScript () ->
-  [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
+  [Crucible.LabeledPred Term AssumptionReason] ->
   TopLevel ()
 computeMinimalContradictingCore cc tactic assumes =
   do
@@ -814,8 +816,9 @@ computeMinimalContradictingCore cc tactic assumes =
      findM (assumptionsContainContradiction cc tactic) cores >>= \case
       Nothing -> printOutLnTop Warn "No minimal core: the assumptions did not contains a contradiction."
       Just core ->
-        forM_ core $ \ assumption ->
-          printOutLnTop Warn (show . Crucible.ppAssumptionReason $ assumption ^. Crucible.labeledPredMsg)
+        forM_ core $ \assume ->
+          case assume^.Crucible.labeledPredMsg of
+            (loc, reason) -> printOutLnTop Warn (show loc ++ ": " ++ reason)
      printOutLnTop Warn "Because of the contradiction, the following proofs may be vacuous."
 
 -- | Checks whether the given list of assumptions contains a contradiction, and
@@ -824,7 +827,7 @@ checkAssumptionsForContradictions ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
   ProofScript () ->
-  [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
+  [Crucible.LabeledPred Term AssumptionReason] ->
   TopLevel ()
 checkAssumptionsForContradictions cc tactic assumes =
   whenM
@@ -953,7 +956,7 @@ setupPrestateConditions ::
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
   Crucible.SymGlobalState Sym ->
   [MS.SetupCondition (LLVM arch)]            ->
-  IO (Crucible.SymGlobalState Sym, [Crucible.LabeledPred Term Crucible.AssumptionReason])
+  IO (Crucible.SymGlobalState Sym, [Crucible.LabeledPred Term AssumptionReason])
 setupPrestateConditions mspec cc mem env = aux []
   where
     tyenv   = MS.csAllocations mspec
@@ -965,11 +968,11 @@ setupPrestateConditions mspec cc mem env = aux []
       do val1' <- resolveSetupVal cc mem env tyenv nameEnv val1
          val2' <- resolveSetupVal cc mem env tyenv nameEnv val2
          t     <- assertEqualVals cc val1' val2'
-         let lp = Crucible.LabeledPred t (Crucible.AssumptionReason loc "equality precondition")
+         let lp = Crucible.LabeledPred t (loc, "equality precondition")
          aux (lp:acc) globals xs
 
     aux acc globals (MS.SetupCond_Pred loc tm : xs) =
-      let lp = Crucible.LabeledPred (ttTerm tm) (Crucible.AssumptionReason loc "precondition") in
+      let lp = Crucible.LabeledPred (ttTerm tm) (loc, "precondition") in
       aux (lp:acc) globals xs
 
     aux acc globals (MS.SetupCond_Ghost () _loc var val : xs) =
@@ -1155,7 +1158,7 @@ verifySimulate ::
   [Crucible.GenericExecutionFeature Sym] ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   [(Crucible.MemType, LLVMVal)] ->
-  [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
+  [Crucible.LabeledPred Term AssumptionReason] ->
   W4.ProgramLoc ->
   [MS.ProvedSpec (LLVM arch)] ->
   Crucible.SymGlobalState Sym ->
@@ -1209,8 +1212,9 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
            do mapM_ (registerOverride opts cc simCtx top_loc)
                     (groupOn (view csName) funcLemmas)
               liftIO $
-                do preds <- (traverse . Crucible.labeledPred) (resolveSAWPred cc) assumes
-                   Crucible.addAssumptions sym (Seq.fromList preds)
+                for_ assumes $ \(Crucible.LabeledPred p (loc, reason)) ->
+                  do expr <- resolveSAWPred cc p
+                     Crucible.addAssumption sym (Crucible.GenericAssumption loc reason expr)
               Crucible.regValue <$> (Crucible.callBlock cfg entryId args')
      res <- Crucible.executeCrucible execFeatures initExecState
      case res of
@@ -1302,7 +1306,7 @@ verifyPoststate cc mspec env0 globals ret =
 
      obligations <- io $ Crucible.getProofObligations sym
      io $ Crucible.clearProofObligations sym
-     sc_obligations <- io $ mapM (verifyObligation sc) (Crucible.proofGoalsToList obligations)
+     sc_obligations <- io $ mapM (verifyObligation sc) (maybe [] Crucible.goalsToList obligations)
      return (sc_obligations, st)
 
   where
@@ -1310,7 +1314,7 @@ verifyPoststate cc mspec env0 globals ret =
 
     verifyObligation sc (Crucible.ProofGoal hyps (Crucible.LabeledPred concl err@(Crucible.SimError loc _))) =
       do st <- Common.sawCoreState sym
-         hypTerm <- toSC sym st =<< W4.andAllOf sym (folded . Crucible.labeledPred) hyps
+         hypTerm <- toSC sym st =<< Crucible.assumptionsPred sym hyps
          conclTerm  <- toSC sym st concl
          obligation <- scImplies sc hypTerm conclTerm
          return (unlines ["safety assertion:", show err], loc, obligation)

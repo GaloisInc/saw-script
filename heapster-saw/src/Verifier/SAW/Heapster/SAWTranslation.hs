@@ -599,6 +599,8 @@ instance TransInfo info =>
       return $ error "translate: RealValRepr"
     [nuMP| ComplexRealRepr |] ->
       return $ error "translate: ComplexRealRepr"
+    [nuMP| SequenceRepr{} |] ->
+      return $ error "translate: SequenceRepr"
     [nuMP| BVRepr w |] ->
       returnType1 =<< bitvectorTransM (translate w)
 
