@@ -5412,7 +5412,7 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
 
   -- If proving an opaque named shape, the only way to prove the memblock
   -- permission is to have it on the left, but we don't have a memblock
-  -- permission on the left with this exactly offset, length, and shape, because
+  -- permission on the left with this exact offset, length, and shape, because
   -- it would have matched some previous case, so try to eliminate a memblock
   -- and recurse
   [nuMP| mb_bp : mb_bps |]
