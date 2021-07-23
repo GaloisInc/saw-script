@@ -465,6 +465,15 @@ jobs:
           - blst
         ghc: ["8.8.4", "8.10.3"]
     steps:
+      - name: System Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt update
+          sudo apt install -y software-properties-common apt-transport-https ca-certificates wget curl
+          sudo apt install -y docker-compose language-pack-en-base language-pack-en
+          sudo locale-gen en_US.UTF-8
+          sudo update-locale LANG=$LANG LANGUAGE=$LANGUAGE
+
       - uses: actions/checkout@v2
       - run: |
           mkdir -p s2nTests/bin
