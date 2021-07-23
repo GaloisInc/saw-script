@@ -119,7 +119,6 @@ zip_dist() {
 
 zip_dist_with_solvers() {
   sname="${1}"
-  cp "$(which abc)"        dist/bin/
   cp "$(which cvc4)"       dist/bin/
   cp "$(which yices)"      dist/bin/
   cp "$(which yices-smt2)" dist/bin/
