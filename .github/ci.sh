@@ -117,6 +117,17 @@ zip_dist() {
   tar -czf "$name".tar.gz "$name"
 }
 
+zip_dist_with_solvers() {
+  sname="${1}"
+  cp "$(which abc)"        dist/bin/
+  cp "$(which cvc4)"       dist/bin/
+  cp "$(which yices)"      dist/bin/
+  cp "$(which yices-smt2)" dist/bin/
+  cp "$(which z3)"         dist/bin/
+  cp -r dist "$sname"
+  tar -cvzf "$sname".tar.gz "$sname"
+}
+
 output() { echo "::set-output name=$1::$2"; }
 ver() { grep Version saw-script.cabal | awk '{print $2}'; }
 set_version() { output saw-version "$(ver)"; }

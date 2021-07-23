@@ -129,6 +129,9 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist $NAME
 
+      - shell: bash
+        run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
+
       - if: matrix.ghc == '8.10.3' && needs.config.outputs.release == 'true'
         shell: bash
         env:
@@ -136,11 +139,26 @@ jobs:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME.tar.gz
 
+      - if: matrix.ghc == '8.10.3' && needs.config.outputs.release == 'true'
+        shell: bash
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: .github/ci.sh sign $NAME-with-solvers.tar.gz
+
       - if: matrix.ghc == '8.10.3'
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
           path: "${{ steps.config.outputs.name }}.tar.gz*"
+          if-no-files-found: error
+          retention-days: ${{ needs.config.outputs.retention-days }}
+
+      - if: matrix.ghc == '8.10.3'
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
+          path: "${{ steps.config.outputs.name }}-with-solvers.tar.gz*"
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
