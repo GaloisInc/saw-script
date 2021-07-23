@@ -463,7 +463,7 @@ jobs:
           - hmac-failure
           - awslc
           - blst
-        ghc: ["8.8.4", "8.10.3"]
+        ghc: ["8.10.3"]
     steps:
       - name: System Dependencies
         if: runner.os == 'Linux'
