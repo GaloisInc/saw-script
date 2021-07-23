@@ -36,7 +36,7 @@ getDeclsCryptol path = do
    modEnv <- M.initialModuleEnv
    let minp = M.ModuleInput True (pure evalOpts) BS.readFile modEnv
    (result, warnings) <-
-     SMT.withSolver (meSolverConfig modEnv) $ \s ->
+     SMT.withSolver (return ()) (meSolverConfig modEnv) $ \s ->
      M.loadModuleByPath path (minp s)
    return $ do
       forM_ warnings $ liftF . flip Warning () . pretty

@@ -1311,7 +1311,7 @@ defaultTypedTerm :: Options -> SharedContext -> C.SolverConfig -> TypedTerm -> I
 defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
   | null (C.sVars schema) = return tt
   | otherwise = do
-  mdefault <- C.withSolver cfg (\s -> C.defaultReplExpr s undefined schema)
+  mdefault <- C.withSolver (return ()) cfg (\s -> C.defaultReplExpr s undefined schema)
   let inst = do (soln, _) <- mdefault
                 mapM (`lookup` soln) (C.sVars schema)
   case inst of

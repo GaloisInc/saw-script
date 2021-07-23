@@ -493,7 +493,7 @@ resolveIdentifier env nm =
   nameEnv = getNamingEnv env
 
   doResolve pnm =
-    SMT.withSolver (meSolverConfig modEnv) $ \s ->
+    SMT.withSolver (return ()) (meSolverConfig modEnv) $ \s ->
     do let minp = MM.ModuleInput True (pure defaultEvalOpts) ?fileReader modEnv
        (res, _ws) <- MM.runModuleM (minp s) $
           MM.interactive (MB.rename interactiveName nameEnv (MR.renameVar MR.NameUse pnm))
@@ -653,7 +653,7 @@ liftModuleM ::
   ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
 liftModuleM env m =
   do let minp = MM.ModuleInput True (pure defaultEvalOpts) ?fileReader env
-     SMT.withSolver (meSolverConfig env) $ \s ->
+     SMT.withSolver (return ()) (meSolverConfig env) $ \s ->
        MM.runModuleM (minp s) m >>= moduleCmdResult
 
 defaultEvalOpts :: E.EvalOpts

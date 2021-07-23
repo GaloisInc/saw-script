@@ -216,13 +216,13 @@ executable saw
     , cryptol-saw-core
     , aig
 
-  GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count
+  GHC-options: -O2 -Wall -Werror -threaded -fno-ignore-asserts -fno-spec-constr-count
 
 test-suite integration_tests
   type: exitcode-stdio-1.0
   hs-source-dirs: intTests
 
-  ghc-options: -Wall
+  ghc-options: -Wall -threaded
   default-language: Haskell2010
 
   main-is: IntegrationTest.hs
