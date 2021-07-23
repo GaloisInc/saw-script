@@ -153,6 +153,7 @@ import           Lang.Crucible.LLVM.Extension (LLVM)
 import qualified Lang.Crucible.LLVM.Bytes as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
+import qualified Lang.Crucible.LLVM.SimpleLoopFixpoint as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
@@ -1157,13 +1158,15 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
        (registerInvariantOverride opts cc top_loc (HashMap.fromList breakpoints))
        (groupOn (view csName) invLemmas)
 
+     simpleLoopFixpointFeature <- Crucible.simpleLoopFixpoint sym cfg
+
      additionalFeatures <-
        mapM (Crucible.arraySizeProfile (ccLLVMContext cc)) $ maybeToList asp
 
      let execFeatures =
            invariantExecFeatures ++
            map Crucible.genericToExecutionFeature (patSatGenExecFeature ++ pfs) ++
-           additionalFeatures
+           (simpleLoopFixpointFeature : additionalFeatures)
 
      let initExecState =
            Crucible.InitialState simCtx globals Crucible.defaultAbortHandler retTy $

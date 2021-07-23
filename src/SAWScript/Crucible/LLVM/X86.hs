@@ -80,6 +80,7 @@ import SAWScript.Crucible.LLVM.MethodSpecIR
 import SAWScript.Crucible.LLVM.ResolveSetupValue
 import qualified SAWScript.Crucible.LLVM.Override as LO
 
+import qualified What4.Concrete as W4
 import qualified What4.Config as W4
 import qualified What4.Expr as W4
 import qualified What4.FunctionName as W4
@@ -108,6 +109,7 @@ import qualified Lang.Crucible.LLVM.Extension as C.LLVM
 import qualified Lang.Crucible.LLVM.Intrinsics as C.LLVM
 import qualified Lang.Crucible.LLVM.MemModel as C.LLVM
 import qualified Lang.Crucible.LLVM.MemType as C.LLVM
+import qualified Lang.Crucible.LLVM.SimpleLoopFixpoint as Crucible.LLVM
 import qualified Lang.Crucible.LLVM.Translation as C.LLVM
 import qualified Lang.Crucible.LLVM.TypeContext as C.LLVM
 
@@ -298,6 +300,13 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       rw <- getTopLevelRW
       cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms $ W4.getConfiguration sym
       _ <- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsingX86 rw
+      liftIO $ W4.extendConfig
+        [ W4.opt
+            LO.enableSMTArrayMemoryModel
+            (W4.ConcreteBool $ rwSMTArrayMemoryModel rw)
+            ("Enable SMT array memory model" :: Text)
+        ]
+        (W4.getConfiguration sym)
       sawst <- liftIO $ sawCoreState sym
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
@@ -431,7 +440,9 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
          else
            pure []
 
-      let execFeatures = psatf
+      simpleLoopFixpointFeature <- liftIO $ Crucible.LLVM.simpleLoopFixpoint sym cfg
+
+      let execFeatures = simpleLoopFixpointFeature : psatf
 
       liftIO $ C.executeCrucible execFeatures initial >>= \case
         C.FinishedResult{} -> pure ()
@@ -727,15 +738,18 @@ assumePointsTo ::
   LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim ()
 assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
-  when (isJust cond) $ throwX86 "unsupported x86_64 command: llvm_conditional_points_to"
-  tval <- checkConcreteSizePointsToValue tptval
-  sym <- use x86Sym
+  -- when (isJust cond) $ throwX86 "unsupported x86_64 command: llvm_conditional_points_to"
+  -- tval <- checkConcreteSizePointsToValue tptval
+  -- sym <- use x86Sym
+  opts <- use x86Options
   cc <- use x86CrucibleContext
   mem <- use x86Mem
   ptr <- resolvePtrSetupValue env tyenv tptr
-  val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
-  storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
-  mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
+  -- val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
+  -- storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
+  -- mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
+  cond' <- liftIO $ mapM (resolveSAWPred cc . ttTerm) cond
+  mem' <- liftIO $ LO.storePointsToValue opts cc env tyenv nameEnv mem cond' ptr tptval Nothing
   x86Mem .= mem'
 
 resolvePtrSetupValue ::
