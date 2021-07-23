@@ -440,7 +440,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
          else
            pure []
 
-      simpleLoopFixpointFeature <- liftIO $ Crucible.LLVM.simpleLoopFixpoint sym cfg
+      simpleLoopFixpointFeature <- liftIO $ Crucible.LLVM.simpleLoopFixpoint sym cfg mvar
 
       let execFeatures = simpleLoopFixpointFeature : psatf
 

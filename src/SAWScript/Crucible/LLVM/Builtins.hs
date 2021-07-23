@@ -1158,7 +1158,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
        (registerInvariantOverride opts cc top_loc (HashMap.fromList breakpoints))
        (groupOn (view csName) invLemmas)
 
-     simpleLoopFixpointFeature <- Crucible.simpleLoopFixpoint sym cfg
+     simpleLoopFixpointFeature <- Crucible.simpleLoopFixpoint sym cfg undefined
 
      additionalFeatures <-
        mapM (Crucible.arraySizeProfile (ccLLVMContext cc)) $ maybeToList asp
