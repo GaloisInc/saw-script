@@ -147,7 +147,7 @@ jobs:
         if: "matrix.ghc == '8.8.4'"
         with:
           path: dist-tests
-          name: dist-tests-${{ matrix.os }}
+          name: dist-tests-${{ runner.os }}
 
       - shell: bash
         run: .github/ci.sh setup_dist_bins
@@ -327,7 +327,7 @@ jobs:
 
       - uses: actions/download-artifact@v2
         with:
-          name: dist-tests-${{ matrix.os }}
+          name: dist-tests-${{ runner.os }}
           path: dist-tests
 
       - shell: bash
