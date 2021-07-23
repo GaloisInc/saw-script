@@ -137,11 +137,13 @@ jobs:
           matrix.ghc == '8.8.4' &&
           runner.os != 'Windows'
         uses: actions/upload-artifact@v2
+        name: Upload abc
         with:
           path: ${{ steps.abc.outputs.path }}
           name: abc-${{ runner.os }}
 
       - uses: actions/upload-artifact@v2
+        name: Upload dist-tests
         if: "matrix.ghc == '8.8.4'"
         with:
           path: dist-tests
@@ -164,6 +166,7 @@ jobs:
         run: .github/ci.sh sign $NAME.tar.gz
 
       - if: matrix.ghc == '8.8.4'
+        name: Upload ${{ steps.config.outputs.name }}.tar.gz
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -173,12 +176,14 @@ jobs:
 
       - if: "matrix.ghc == '8.8.4'"
         uses: actions/upload-artifact@v2
+        name: Upload ${{ runner.os }} dist-bin
         with:
           path: dist/bin
           name: ${{ runner.os }}-bins
 
       - if: "matrix.os == 'ubuntu-18.04'"
         uses: actions/upload-artifact@v2
+        name: Upload saw-${{ runner.os }}-${{ matrix.ghc }}
         with:
           name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
           path: "dist/bin/saw"
