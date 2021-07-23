@@ -181,7 +181,7 @@ jobs:
           path: dist/bin
           name: ${{ runner.os }}-bins
 
-      - if: "matrix.os == 'ubuntu-18.04'"
+      - if: "runner.os == 'Linux'"
         uses: actions/upload-artifact@v2
         name: Upload saw-${{ runner.os }}-${{ matrix.ghc }}
         with:
