@@ -17,8 +17,8 @@ class Add(Contract):
 
         self.returns(cryptol("(+)")(x,y))
 
-class SwapEasyTest(unittest.TestCase):
-    def test_swap(self):
+class AddTest(unittest.TestCase):
+    def test_add(self):
         saw.connect(reset_server=True)
 
         if __name__ == "__main__": saw.view(saw.LogResults())
