@@ -29,6 +29,8 @@ if [[ ! -x "$SAW_SERVER" ]]; then
   fi
 fi
 
+export CLASSPATH=$(pwd)/tests/saw/test-files
+
 echo "Running saw-remote-api tests..."
 echo "Using server $SAW_SERVER"
 run_test poetry run python -m unittest discover tests/saw
