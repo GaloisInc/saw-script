@@ -77,15 +77,15 @@ sawMethods =
   -- JVM
   , Argo.command
      "SAW/JVM/load class"
-     (Doc.Paragraph [Doc.Text "TODO"])
+     jvmLoadClassDescr
      jvmLoadClass
   , Argo.command
      "SAW/JVM/verify"
-     (Doc.Paragraph [Doc.Text "TODO"])
+     jvmVerifyDescr
      jvmVerify
   , Argo.command
      "SAW/JVM/assume"
-     (Doc.Paragraph [Doc.Text "TODO"])
+     jvmAssumeDescr
      jvmAssume
   -- LLVM
   , Argo.command

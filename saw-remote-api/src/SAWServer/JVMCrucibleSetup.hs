@@ -11,6 +11,7 @@
 {-# LANGUAGE TupleSections #-}
 module SAWServer.JVMCrucibleSetup
   ( jvmLoadClass
+  , jvmLoadClassDescr
   , compileJVMContract
   ) where
 
@@ -202,6 +203,10 @@ jvmLoadClass (JVMLoadClassParams serverName cname) =
          do c <- tl $ loadJavaClass cname
             setServerVal serverName c
             ok
+
+jvmLoadClassDescr :: Doc.Block
+jvmLoadClassDescr =
+  Doc.Paragraph [Doc.Text "Load the JVM class with the given name for later verification."]
 
 instance Doc.DescribedMethod JVMLoadClassParams OK where
   parameterFieldDescription =

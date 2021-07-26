@@ -2,7 +2,9 @@
 
 module SAWServer.JVMVerify
   ( jvmVerify
+  , jvmVerifyDescr
   , jvmAssume
+  , jvmAssumeDescr
   ) where
 
 import Prelude hiding (mod)
@@ -14,6 +16,7 @@ import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Value (rwCryptol)
 
 import qualified Argo
+import qualified Argo.Doc as Doc
 import SAWServer
     ( SAWState,
       SAWTask(JVMSetup),
@@ -63,7 +66,14 @@ jvmVerifyAssume mode (VerifyParams className fun lemmaNames checkSat contract sc
 jvmVerify :: VerifyParams JavaType -> Argo.Command SAWState OK
 jvmVerify = jvmVerifyAssume VerifyContract
 
+jvmVerifyDescr :: Doc.Block
+jvmVerifyDescr =
+  Doc.Paragraph [Doc.Text "Verify the named JVM method meets its specification."]
 
 jvmAssume :: AssumeParams JavaType -> Argo.Command SAWState OK
 jvmAssume (AssumeParams className fun contract lemmaName) =
   jvmVerifyAssume AssumeContract (VerifyParams className fun [] False contract (ProofScript []) lemmaName)
+
+jvmAssumeDescr :: Doc.Block
+jvmAssumeDescr =
+  Doc.Paragraph [Doc.Text "Assume the named JVM method meets its specification."]
