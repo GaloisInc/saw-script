@@ -186,9 +186,9 @@ monKindOpenTerm (MKFun k1 k2) =
 data MonType
   = MTyForall LocalName MonKind (MonType -> MonType)
   | MTyArrow MonType MonType
+  | MTySeq OpenTerm MonType
   | MTyPair MonType MonType
   | MTyRecord [(FieldName, MonType)]
-  | MTySeq OpenTerm MonType
   | MTyBase MonKind OpenTerm -- A "base type" or type var of a given kind
   | MTyNum OpenTerm
 
@@ -207,13 +207,13 @@ monTypeIsMono (MTyBase _ _) = True
 monTypeIsMono (MTyNum _) = True
 
 -- | Test if a monadification type @tp@ is considered a base type, meaning that
--- @CompMT(tp) = CompM tp@
+-- @CompMT(tp) = CompM MT(tp)@
 isBaseType :: MonType -> Bool
 isBaseType (MTyForall _ _ _) = False
 isBaseType (MTyArrow _ _) = False
+isBaseType (MTySeq _ _) = True
 isBaseType (MTyPair _ _) = True
 isBaseType (MTyRecord _) = True
-isBaseType (MTySeq _ _) = True
 isBaseType (MTyBase (MKType _) _) = True
 isBaseType (MTyBase _ _) = True
 isBaseType (MTyNum _) = False
@@ -263,33 +263,18 @@ applyKind _ _ = Nothing
 applyKinds :: MonKind -> [MonType] -> Maybe MonKind
 applyKinds = foldM applyKind
 
--- | Convert a 'MonType' to the pure type @tp@ it was translated from
-toPureType :: MonType -> OpenTerm
-toPureType (MTyForall x k body) =
-  piOpenTerm x (monKindOpenTerm k) (\tp -> toPureType (body $ MTyBase k tp))
-toPureType (MTyArrow t1 t2) =
-  arrowOpenTerm "_" (toPureType t1) (toPureType t2)
-toPureType (MTyPair mtp1 mtp2) =
-  pairTypeOpenTerm (toPureType mtp1) (toPureType mtp2)
-toPureType (MTyRecord tps) =
-  recordTypeOpenTerm $ map (\(f,tp) -> (f, toPureType tp)) tps
-toPureType (MTySeq n t) =
-  applyOpenTermMulti (globalOpenTerm "Cryptol.seq") [n, toPureType t]
-toPureType (MTyBase _ t) = t
-toPureType (MTyNum n) = n
-
 -- | Convert a 'MonType' to the argument type @MT(tp)@ it represents
 toArgType :: MonType -> OpenTerm
 toArgType (MTyForall x k body) =
   piOpenTerm x (monKindOpenTerm k) (\tp -> monTypeCompType (body $ MTyBase k tp))
 toArgType (MTyArrow t1 t2) =
   arrowOpenTerm "_" (toArgType t1) (monTypeCompType t2)
+toArgType (MTySeq n t) =
+  applyOpenTermMulti (globalOpenTerm "Cryptol.mseq") [n, toArgType t]
 toArgType (MTyPair mtp1 mtp2) =
   pairTypeOpenTerm (toArgType mtp1) (toArgType mtp2)
 toArgType (MTyRecord tps) =
   recordTypeOpenTerm $ map (\(f,tp) -> (f, toArgType tp)) tps
-toArgType (MTySeq n t) =
-  applyOpenTermMulti (globalOpenTerm "Cryptol.mseq") [n, toArgType t]
 toArgType (MTyBase _ t) = t
 toArgType (MTyNum n) = n
 
@@ -414,22 +399,28 @@ monadifyType ctx tp =
 -- * Monadified Terms
 ----------------------------------------------------------------------
 
+-- | A representation of a term that has been translated to argument type
+-- @MT(tp)@
 data ArgMonTerm
-  = PureMonTerm MonType OpenTerm
+    -- | A monadification term of a base type @MT(tp)@
+  = BaseMonTerm MonType OpenTerm
+    -- | A monadification term of non-depedent function type
   | FunMonTerm LocalName MonType MonType (ArgMonTerm -> MonTerm)
+    -- | A monadification term of polymorphic type
   | ForallMonTerm LocalName MonKind (MonType -> MonTerm)
 
+-- | A representation of a term that has been translated to computational type
+-- @CompMT(tp)@
 data MonTerm
   = ArgMonTerm ArgMonTerm
   | CompMonTerm MonType OpenTerm
 
--- | Get the monadification type of a monadification term, irrespective of if it
--- is pure or an argument or computational
+-- | Get the monadification type of a monadification term
 class GetMonType a where
   getMonType :: a -> MonType
 
 instance GetMonType ArgMonTerm where
-  getMonType (PureMonTerm tp _) = tp
+  getMonType (BaseMonTerm tp _) = tp
   getMonType (ForallMonTerm x k body) = MTyForall x k (getMonType . body)
   getMonType (FunMonTerm _ tp_in tp_out _) = MTyArrow tp_in tp_out
 
@@ -438,30 +429,13 @@ instance GetMonType MonTerm where
   getMonType (CompMonTerm tp _) = tp
 
 
+-- | Convert a monadification term to a SAW core term of type @CompMT(tp)@
 class ToCompTerm a where
-  -- | Convert a monadification term to a SAW core term of type @CompMT(tp)@
   toCompTerm :: a -> OpenTerm
 
 instance ToCompTerm ArgMonTerm where
-  toCompTerm (PureMonTerm (MTyForall x k tp_body) t) =
-    lambdaOpenTerm x (monKindOpenTerm k) $ \tp ->
-    toCompTerm $ PureMonTerm (tp_body $ MTyBase k tp) (applyOpenTerm t tp)
-  toCompTerm (PureMonTerm (MTyArrow tp_in tp_out) t)
-    | isBaseType tp_in =
-      -- In this case, tp_in = MT(tp_in), so we can apply t to x
-      lambdaOpenTerm "_" (toArgType tp_in) $ \x ->
-      toCompTerm $ PureMonTerm tp_out (applyOpenTerm t x)
-  toCompTerm (PureMonTerm (MTyArrow _ _) _) =
-    -- In this case we have a pure higher-order function of some type of the
-    -- form (a -> b) -> c, and we need to convert to (a -> CompMT(b)) ->
-    -- CompMT(c).  This is impossible because that would require converting a
-    -- monadic function to a pure function, so we throw an error.
-    failOpenTerm "Monadification failed: cannot monadify a pure higher-order function"
-  toCompTerm (PureMonTerm mtp t)
-    | isBaseType mtp =
-      applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
-      [toPureType mtp, t]
-  toCompTerm (PureMonTerm _mtp _t) = error "FIXME HERE: toCompTerm for pure terms"
+  toCompTerm (BaseMonTerm mtp t) =
+    applyOpenTermMulti (globalOpenTerm "Prelude.returnM") [toArgType mtp, t]
   toCompTerm (FunMonTerm x tp_in _ body) =
     lambdaOpenTerm x (toArgType tp_in) (toCompTerm . body . fromArgTerm tp_in)
   toCompTerm (ForallMonTerm x k body) =
@@ -472,31 +446,9 @@ instance ToCompTerm MonTerm where
   toCompTerm (CompMonTerm _ trm) = trm
 
 
-class ToPureTerm a where
-  -- | Convert a monadification term to a "pure" SAW core term of type @tp@, if
-  -- possible
-  toPureTerm :: a -> OpenTerm
-
-instance ToPureTerm ArgMonTerm where
-  toPureTerm (PureMonTerm _ t) = t
-  toPureTerm (FunMonTerm x tp_in _ f) =
-    lambdaOpenTerm x (toPureType tp_in) $ \x_trm ->
-    toPureTerm $ f $ PureMonTerm tp_in x_trm
-  toPureTerm (ForallMonTerm x k body) =
-    lambdaOpenTerm x (monKindOpenTerm k) $ \tp ->
-    toPureTerm $ body $ MTyBase k tp
-
-instance ToPureTerm MonTerm where
-  toPureTerm (ArgMonTerm mtrm) = toPureTerm mtrm
-  toPureTerm (CompMonTerm _ t) =
-    bindPPOpenTerm t $ \term_pp ->
-    failOpenTerm
-    ("Monadification failed: " ++
-     "could not convert computational term to pure term: " ++ term_pp)
-
 -- | Convert an 'ArgMonTerm' to a SAW core term of type @MT(tp)@
 toArgTerm :: ArgMonTerm -> OpenTerm
-toArgTerm (PureMonTerm mtp t) | isBaseType mtp = t
+toArgTerm (BaseMonTerm _ t) = t
 toArgTerm t = toCompTerm t
 
 
@@ -510,8 +462,7 @@ instance FromArgTerm ArgMonTerm where
                                                       toArgType tp))
   fromArgTerm (MTyArrow t1 t2) t =
     FunMonTerm "_" t1 t2 (\x -> fromCompTerm t2 (applyOpenTerm t $ toArgTerm x))
-  fromArgTerm tp t | isBaseType tp = PureMonTerm tp t
-  fromArgTerm _ _ = error "fromArgTerm: malformed type for term"
+  fromArgTerm tp t = BaseMonTerm tp t
 
 instance FromArgTerm MonTerm where
   fromArgTerm mtp t = ArgMonTerm $ fromArgTerm mtp t
@@ -523,8 +474,8 @@ fromCompTerm mtp t = ArgMonTerm $ fromArgTerm mtp t
 
 -- | Build a monadification term from a function on terms which, when viewed as
 -- a lambda, is a "semi-pure" function of the given monadification type, meaning
--- it maps terms of argument type @MT(tp)@ to a pure output value of argument
--- type; i.e., it has type @SemiP(tp)@, defined as:
+-- it maps terms of argument type @MT(tp)@ to an output value of argument type;
+-- i.e., it has type @SemiP(tp)@, defined as:
 --
 -- > SemiP(Pi x (sort 0) b) = Pi x (sort 0) SemiP(b)
 -- > SemiP(Pi x Num b) = Pi x Num SemiP(b)
@@ -537,8 +488,7 @@ fromSemiPureTermFun (MTyForall x k body) f =
 fromSemiPureTermFun (MTyArrow t1 t2) f =
   FunMonTerm "_" t1 t2 $ \x ->
   ArgMonTerm $ fromSemiPureTermFun t2 (f . (toArgTerm x:))
-fromSemiPureTermFun tp f | isBaseType tp = PureMonTerm tp (f [])
-fromSemiPureTermFun _ _ = error "fromSemiPureTermFun: malformed type"
+fromSemiPureTermFun tp f = BaseMonTerm tp (f [])
 
 -- | Like 'fromSemiPureTermFun' but use a term rather than a term function
 fromSemiPureTerm :: MonType -> OpenTerm -> ArgMonTerm
@@ -555,11 +505,7 @@ failArgMonTerm tp str = fromArgTerm tp (failOpenTerm str)
 -- | Apply a monadified term to a type or term argument
 applyMonTerm :: MonTerm -> Either MonType ArgMonTerm -> MonTerm
 applyMonTerm (ArgMonTerm (FunMonTerm _ _ _ f)) (Right arg) = f arg
-applyMonTerm (ArgMonTerm (PureMonTerm (MTyArrow _ tp_out) t)) (Right arg) =
-  ArgMonTerm $ PureMonTerm tp_out $ applyOpenTerm t $ toPureTerm arg
 applyMonTerm (ArgMonTerm (ForallMonTerm _ _ f)) (Left mtp) = f mtp
-applyMonTerm (ArgMonTerm (PureMonTerm (MTyForall _ _ body) t)) (Left mtp) =
-  ArgMonTerm $ PureMonTerm (body mtp) $ applyOpenTerm t $ toArgType mtp
 applyMonTerm _ _ = error "applyMonTerm: application at incorrect type"
 
 -- | Apply a monadified term to 0 or more arguments
@@ -570,10 +516,11 @@ applyMonTermMulti = foldl applyMonTerm
 mkGlobalArgMonTerm :: MonType -> Ident -> ArgMonTerm
 mkGlobalArgMonTerm tp ident = fromArgTerm tp (globalOpenTerm ident)
 
--- | Build a 'MonTerm' from a 'GlobalDef' of pure type
-mkPureGlobalDefArgMonTerm :: GlobalDef -> ArgMonTerm
-mkPureGlobalDefArgMonTerm glob =
-  PureMonTerm (monadifyType [] $ globalDefType glob) (globalDefOpenTerm glob)
+-- | Build a 'MonTerm' from a 'GlobalDef' of semi-pure type
+mkSemiPureGlobalDefTerm :: GlobalDef -> ArgMonTerm
+mkSemiPureGlobalDefTerm glob =
+  fromSemiPureTerm (monadifyType [] $
+                    globalDefType glob) (globalDefOpenTerm glob)
 
 -- | Build a 'MonTerm' from a constructor with the given 'PrimName'
 mkCtorArgMonTerm :: PrimName Term -> ArgMonTerm
@@ -815,7 +762,7 @@ monadifyTerm' _ (asApplyAll -> (asTypedGlobalDef -> Just glob, args)) =
      let macro =
            case Map.lookup (globalDefName glob) env of
              Just m -> m
-             Nothing -> monMacro0 $ mkPureGlobalDefArgMonTerm glob
+             Nothing -> monMacro0 $ mkSemiPureGlobalDefTerm glob
          (macro_args, reg_args) = splitAt (macroNumArgs macro) args
          mtrm_f = macroApply macro glob macro_args
      monadifyApply (ArgMonTerm mtrm_f) reg_args
