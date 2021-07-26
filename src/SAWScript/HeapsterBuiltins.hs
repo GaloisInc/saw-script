@@ -31,6 +31,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_define_llvmshape
        , heapster_define_opaque_llvmshape
        , heapster_define_rust_type
+       , heapster_define_rust_type_qual
        , heapster_block_entry_hint
        , heapster_gen_block_perms_hint
        , heapster_join_point_hint
@@ -39,6 +40,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_find_trait_method_symbol
        , heapster_assume_fun
        , heapster_assume_fun_rename
+       , heapster_assume_fun_rename_prim
        , heapster_assume_fun_multi
        , heapster_print_fun_trans
        , heapster_export_coq
@@ -72,7 +74,7 @@ import Data.Parameterized.TraversableF
 import Data.Parameterized.TraversableFC
 
 import Verifier.SAW.Term.Functor
-import Verifier.SAW.Module
+import Verifier.SAW.Module as Mod
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
@@ -124,7 +126,7 @@ import Prettyprinter
 -- | Extract out the contents of the 'Just' of a 'Maybe' wrapped in a
 -- `MonadFail`, calling 'fail' on the given string if the `Maybe` is a
 -- `Nothing`.
-failOnNothing :: MonadFail m => String -> Maybe a -> m a
+failOnNothing :: Fail.MonadFail m => String -> Maybe a -> m a
 failOnNothing err_str Nothing = Fail.fail err_str
 failOnNothing _ (Just a) = return a
 
@@ -225,10 +227,19 @@ parseTermFromString nm term_string = do
     Right term -> pure term
     Left err -> fail $ "Term parsing failed:\n" ++ show err
 
+-- | Find an unused identifier in a 'Module' by starting with a particular
+-- 'String' and appending a number if necessary
+findUnusedIdent :: Module -> String -> Ident
+findUnusedIdent m str =
+  fromJust $ find (isNothing . Mod.resolveName m . identBaseName) $
+  map (mkSafeIdent (moduleName m)) $
+  (str : map ((str ++) . show) [(0::Int) ..])
+
 -- | Parse the second given string as a term, check that it has the given type,
--- and, if the parsed term is not already an identifier, add it as a
--- definition in the current module using the first given string. Returns
--- either the identifer of the new definition or the identifier parsed.
+-- and, if the parsed term is not already an identifier, add it as a definition
+-- in the current module using the first given string. If that first string is
+-- already used, find another name for the definition. Return either the
+-- identifer of the new definition or the identifier that was parsed.
 parseAndInsDef :: HeapsterEnv -> String -> Term -> String -> TopLevel Ident
 parseAndInsDef henv nm term_tp term_string =
   do sc <- getSharedContext
@@ -240,9 +251,10 @@ parseAndInsDef henv nm term_tp term_string =
        STApp _ _ (Constant (EC _ (ModuleIdentifier term_ident) _) _) ->
          return term_ident
        term -> do
-         let term_ident = mkSafeIdent mnm nm
+         m <- liftIO $ scFindModule sc mnm
+         let term_ident = findUnusedIdent m nm
          liftIO $ scInsertDef sc mnm term_ident term_tp term
-         pure term_ident
+         return term_ident
 
 
 heapster_init_env :: BuiltinContext -> Options -> Text -> String ->
@@ -475,11 +487,10 @@ partialRecShape :: NatRepr w -> String -> CruCtx args ->
                    Maybe (Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w))) ->
                    Ident -> NamedShape 'True args w
 partialRecShape _ nm args mb_body trans_ident =
-  let body_err = error "Analyzing recursive shape cases before it is defined!"
-      fold_err = error "Folding recursive shape before it is defined!"
-      unfold_err = error "Unfolding recursive shape before it is defined!"
-  in NamedShape nm args $ RecShapeBody (fromMaybe body_err mb_body)
-                                       trans_ident fold_err unfold_err
+  let body_err =
+        error "Analyzing recursive shape cases before it is defined!" in
+  NamedShape nm args $
+  RecShapeBody (fromMaybe body_err mb_body) trans_ident Nothing
 
 -- | Given a named recursive shape name, arguments, body, and `trans_ident`,
 -- insert its definition and definitions for its fold and unfold functions
@@ -530,7 +541,7 @@ addIRTRecShape sc mnm env nm args body trans_ident =
      scInsertDef sc mnm fold_ident   fold_fun_tp   fold_fun_tm
      scInsertDef sc mnm unfold_ident unfold_fun_tp unfold_fun_tm
      let nsh = NamedShape nm args $
-                 RecShapeBody body trans_ident fold_ident unfold_ident
+                 RecShapeBody body trans_ident (Just (fold_ident, unfold_ident))
      return $ permEnvAddNamedShape env nsh
 
 -- | Define a new reachability permission
@@ -664,10 +675,11 @@ heapster_define_opaque_llvmshape _bic _opts henv nm w_int args_str len_str tp_st
      let env' = withKnownNat w $ permEnvAddOpaqueShape env nm args mb_len tp_id
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
--- | Define a new named LLVM shape from a Rust type declaration
-heapster_define_rust_type :: BuiltinContext -> Options -> HeapsterEnv ->
-                             String -> TopLevel ()
-heapster_define_rust_type _bic _opts henv str =
+-- | Define a new named LLVM shape from a Rust type declaration and an optional
+-- crate name that qualifies the type name
+heapster_define_rust_type_qual_opt :: BuiltinContext -> Options -> HeapsterEnv ->
+                                       Maybe String -> String -> TopLevel ()
+heapster_define_rust_type_qual_opt _bic _opts henv maybe_crate str =
   -- NOTE: Looking at first LLVM module to determine pointer width. Need to
   -- think more to determine if this is always a safe thing to do (e.g. are
   -- there ever circumstances where different modules have different pointer
@@ -679,10 +691,39 @@ heapster_define_rust_type _bic _opts henv str =
        Left pf -> return pf
        Right _ -> fail "LLVM arch width is 0!"
      env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
+     let crated_nm nm = maybe nm (\crate -> crate ++ "::" ++ nm) maybe_crate
      withKnownNat w $ withLeqProof leq_proof $
-       do SomeNamedShape nsh <- parseRustTypeString env w str
-          let env' = permEnvAddNamedShape env nsh
-          liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+       do partialShape <- parseRustTypeString env w str
+          case partialShape of
+            NonRecShape nm ctx sh ->
+              do let nsh = NamedShape { namedShapeName = crated_nm nm
+                                      , namedShapeArgs = ctx
+                                      , namedShapeBody = DefinedShapeBody sh
+                                      }
+                     env' = permEnvAddNamedShape env nsh
+                 liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+            RecShape nm ctx sh ->
+              do sc <- getSharedContext
+                 let mnm = heapsterEnvSAWModule henv
+                     nm' = crated_nm nm
+                     trans_ident = mkSafeIdent mnm (nm' ++ "_IRT")
+                 env' <-
+                   liftIO $ addIRTRecShape sc mnm env nm' ctx sh trans_ident
+                 liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+
+-- | Define a new named LLVM shape from a Rust type declaration
+heapster_define_rust_type :: BuiltinContext -> Options -> HeapsterEnv ->
+                             String -> TopLevel ()
+heapster_define_rust_type bic opts henv str =
+  heapster_define_rust_type_qual_opt bic opts henv Nothing str
+
+-- | Define a new named LLVM shape from a Rust type declaration and a crate name
+-- that qualifies the Rust type by being prefixed to the name of the LLVM shape
+heapster_define_rust_type_qual :: BuiltinContext -> Options -> HeapsterEnv ->
+                                  String -> String -> TopLevel ()
+heapster_define_rust_type_qual bic opts henv crate str =
+  heapster_define_rust_type_qual_opt bic opts henv (Just crate) str
 
 -- | Add Heapster type-checking hint for some blocks in a function given by
 -- name. The blocks to receive the hint are those specified in the list, or all
@@ -830,6 +871,53 @@ heapster_assume_fun_rename _bic _opts henv nm nm_to perms_string term_string =
         env' <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
         fun_typ <- liftIO $ translateCompleteFunPerm sc env fun_perm
         term_ident <- parseAndInsDef henv nm_to fun_typ term_string
+        let env'' = permEnvAddGlobalSymFun env'
+                                           (GlobalSymbol $ fromString nm)
+                                           w
+                                           fun_perm
+                                           (globalOpenTerm term_ident)
+        liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env''
+
+-- | Create a new SAW core primitive named @nm@ with type @tp@ in the module
+-- associated with the supplied Heapster environment, and return its identifier
+insPrimitive :: HeapsterEnv -> String -> Term -> TopLevel Ident
+insPrimitive henv nm tp =
+  do sc <- getSharedContext
+     let mnm = heapsterEnvSAWModule henv
+     let ident = mkSafeIdent mnm nm
+     i <- liftIO $ scFreshGlobalVar sc
+     liftIO $ scRegisterName sc i (ModuleIdentifier ident)
+     let pn = PrimName i ident tp
+     t <- liftIO $ scFlatTermF sc (Primitive pn)
+     liftIO $ scRegisterGlobal sc ident t
+     liftIO $ scModifyModule sc mnm $ \m ->
+        insDef m $ Def { defIdent = ident,
+                         defQualifier = PrimQualifier,
+                         defType = tp,
+                         defBody = Nothing }
+     return ident
+
+-- | Assume that the given named function has the supplied type and translates
+-- to a SAW core definition given by the second name
+heapster_assume_fun_rename_prim :: BuiltinContext -> Options -> HeapsterEnv ->
+                              String -> String -> String -> TopLevel ()
+heapster_assume_fun_rename_prim _bic _opts henv nm nm_to perms_string =
+  do Some lm <- failOnNothing ("Could not find symbol: " ++ nm)
+                              (lookupModContainingSym henv nm)
+     sc <- getSharedContext
+     let w = llvmModuleArchReprWidth lm
+     leq_proof <- case decideLeq (knownNat @1) w of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is 0!"
+     env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     (Some cargs, Some ret) <- lookupFunctionType lm nm
+     let args = mkCruCtx cargs
+     withKnownNat w $ withLeqProof leq_proof $ do
+        SomeFunPerm fun_perm <-
+          parseFunPermStringMaybeRust "permissions" w env args ret perms_string
+        env' <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
+        fun_typ <- liftIO $ translateCompleteFunPerm sc env fun_perm
+        term_ident <- insPrimitive henv nm_to fun_typ
         let env'' = permEnvAddGlobalSymFun env'
                                            (GlobalSymbol $ fromString nm)
                                            w

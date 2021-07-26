@@ -1988,16 +1988,17 @@ data NamedShapeBody b args w where
   -- | A recursive shape body has a one-step unfolding to a shape, which can
   -- refer to the shape itself via the last bound variable; it also has
   -- identifiers for the type it is translated to, along with fold and unfold
-  -- functions for mapping to and from this type
+  -- functions for mapping to and from this type. The fold and unfold functions
+  -- can be undefined if we are in the process of defining this recusive shape.
   RecShapeBody :: Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w)) ->
-                  Ident -> Ident -> Ident ->
+                  Ident -> Maybe (Ident, Ident) ->
                   NamedShapeBody 'True args w
 
 deriving instance Eq (NamedShapeBody b args w)
 
 -- | Test if a 'NamedShape' is recursive
 namedShapeIsRecursive :: NamedShape b args w -> Bool
-namedShapeIsRecursive (NamedShape _ _ (RecShapeBody _ _ _ _)) = True
+namedShapeIsRecursive (NamedShape _ _ (RecShapeBody _ _ _)) = True
 namedShapeIsRecursive _ = False
 
 -- | Get a 'BoolRepr' for the Boolean flag for whether a named shape can be
@@ -2005,7 +2006,7 @@ namedShapeIsRecursive _ = False
 namedShapeCanUnfoldRepr :: NamedShape b args w -> BoolRepr b
 namedShapeCanUnfoldRepr (NamedShape _ _ (DefinedShapeBody _)) = TrueRepr
 namedShapeCanUnfoldRepr (NamedShape _ _ (OpaqueShapeBody _ _)) = FalseRepr
-namedShapeCanUnfoldRepr (NamedShape _ _ (RecShapeBody _ _ _ _)) = TrueRepr
+namedShapeCanUnfoldRepr (NamedShape _ _ (RecShapeBody _ _ _)) = TrueRepr
 
 -- | Whether a 'NamedShape' can be unfolded
 namedShapeCanUnfold :: NamedShape b args w -> Bool
@@ -2964,6 +2965,57 @@ isConjPerm (ValPerm_Named n _ _) = nameSortIsConj (namedPermNameSort n)
 isConjPerm (ValPerm_Var _ _) = False
 isConjPerm (ValPerm_Conj _) = True
 
+-- | Return a struct permission where all fields have @true@ permissions
+trueStructAtomicPerm :: Assignment prx ctx -> AtomicPerm (StructType ctx)
+trueStructAtomicPerm =
+  Perm_Struct . RL.map (const ValPerm_True). assignToRList
+
+-- | Take two list of atomic struct permissions, one for structs with fields
+-- given by @ctx1@ and one with those given by @ctx2@, and append them pointwise
+-- to get a list of atomic struct permissions whose fields are given by the
+-- append @ctx1 <+> ctx2@. If one list is shorter than the other, fill it out
+-- with struct permissions @struct (true, ..., true)@ of all @true@ permissions.
+-- This only works if both lists have only 'Perm_Struct' permissions, and
+-- otherwise return 'Nothing'.
+tryAppendStructAPerms :: Assignment prx1 ctx1 -> Assignment prx2 ctx2 ->
+                         [AtomicPerm (StructType ctx1)] ->
+                         [AtomicPerm (StructType ctx2)] ->
+                         Maybe [AtomicPerm (StructType (ctx1 <+> ctx2))]
+tryAppendStructAPerms _ _ [] [] = return []
+tryAppendStructAPerms ctx1 ctx2 (Perm_Struct fs_ps:ps) (Perm_Struct fs_qs:qs) =
+  (Perm_Struct (assignToRListAppend ctx1 ctx2 fs_ps fs_qs) :) <$>
+  tryAppendStructAPerms ctx1 ctx2 ps qs
+tryAppendStructAPerms ctx1 ctx2 [] qs =
+  tryAppendStructAPerms ctx1 ctx2 [trueStructAtomicPerm ctx1] qs
+tryAppendStructAPerms ctx1 ctx2 ps [] =
+  tryAppendStructAPerms ctx1 ctx2 ps [trueStructAtomicPerm ctx2]
+tryAppendStructAPerms _ _ _ _ = mzero
+
+-- | Try to append struct permissions for structs with fields given by @ctx1@
+-- and @ctx2@ to get a permission for structs with fields given by the append
+-- @ctx1 <+> ctx2@ of these two contexts. Return 'Nothing' if this is not
+-- possible.
+tryAppendStructPerms :: Assignment prx1 ctx1 -> Assignment prx2 ctx2 ->
+                        ValuePerm (StructType ctx1) ->
+                        ValuePerm (StructType ctx2) ->
+                        Maybe (ValuePerm (StructType (ctx1 <+> ctx2)))
+tryAppendStructPerms ctx1 ctx2 (ValPerm_Or p1 p2) q =
+  ValPerm_Or <$> tryAppendStructPerms ctx1 ctx2 p1 q <*>
+  tryAppendStructPerms ctx1 ctx2 p2 q
+tryAppendStructPerms ctx1 ctx2 p (ValPerm_Or q1 q2) =
+  ValPerm_Or <$> tryAppendStructPerms ctx1 ctx2 p q1 <*>
+  tryAppendStructPerms ctx1 ctx2 p q2
+tryAppendStructPerms ctx1 ctx2 (ValPerm_Exists mb_p) q =
+  ValPerm_Exists <$> mbMaybe (flip fmap mb_p $ \p ->
+                               tryAppendStructPerms ctx1 ctx2 p q)
+tryAppendStructPerms ctx1 ctx2 p (ValPerm_Exists mb_q) =
+  ValPerm_Exists <$> mbMaybe (flip fmap mb_q $ \q ->
+                               tryAppendStructPerms ctx1 ctx2 p q)
+tryAppendStructPerms ctx1 ctx2 (ValPerm_Conj ps) (ValPerm_Conj qs) =
+  ValPerm_Conj <$> tryAppendStructAPerms ctx1 ctx2 ps qs
+tryAppendStructPerms _ _ _ _ = mzero
+
+
 -- | Helper function to build a 'Perm_LLVMFunPtr' from a 'FunPerm'
 mkPermLLVMFunPtr :: (1 <= w, KnownNat w) => f w -> FunPerm ghosts args ret ->
                     AtomicPerm (LLVMPointerType w)
@@ -3194,7 +3246,7 @@ llvmShapeLength (PExpr_NamedShape _ _ (NamedShape _ _
                                        (OpaqueShapeBody mb_len _)) args) =
   Just $ subst (substOfExprs args) mb_len
 llvmShapeLength (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
-                                            (RecShapeBody _ _ _ _)) args) =
+                                            (RecShapeBody _ _ _)) args) =
   -- FIXME: if the recursive shape contains itself *not* under a pointer, then
   -- this could diverge
   llvmShapeLength (unfoldNamedShape nmsh args)
@@ -3316,6 +3368,11 @@ modalizeShape _ _ (PExpr_Var _) =
   -- adding a modalized variable shape constructor
   Nothing
 modalizeShape _ _ PExpr_EmptyShape = Just PExpr_EmptyShape
+modalizeShape _ _ sh@(PExpr_NamedShape _ _ nmsh _)
+  | not (namedShapeCanUnfold nmsh) =
+    -- Opaque shapes are not affected by modalization, because we assume they do
+    -- not have any top-level pointers in them
+    Just sh
 modalizeShape rw l (PExpr_NamedShape rw' l' nmsh args) =
   -- If a named shape already has modalities, they take precedence
   Just $ PExpr_NamedShape (rw' <|> rw) (l' <|> l) nmsh args
@@ -3344,7 +3401,7 @@ unfoldNamedShape :: KnownNat w => NamedShape 'True args w -> PermExprs args ->
                     PermExpr (LLVMShapeType w)
 unfoldNamedShape (NamedShape _ _ (DefinedShapeBody mb_sh)) args =
   subst (substOfExprs args) mb_sh
-unfoldNamedShape sh@(NamedShape _ _ (RecShapeBody mb_sh _ _ _)) args =
+unfoldNamedShape sh@(NamedShape _ _ (RecShapeBody mb_sh _ _)) args =
   subst (substOfExprs (args :>: PExpr_NamedShape Nothing Nothing sh args)) mb_sh
 
 -- | Unfold a named shape and apply 'modalizeShape' to the result
@@ -4303,7 +4360,7 @@ shapeIsCopyable rw (PExpr_NamedShape maybe_rw' _ nmsh args) =
     -- HACK: the real computation we want to perform is to assume nmsh is copyable
     -- and prove it is under that assumption; to accomplish this, we substitute
     -- the empty shape for the recursive shape
-    RecShapeBody mb_sh _ _ _ ->
+    RecShapeBody mb_sh _ _ ->
       shapeIsCopyable rw $ subst (substOfExprs (args :>: PExpr_EmptyShape)) mb_sh
 shapeIsCopyable _ (PExpr_EqShape _) = True
 shapeIsCopyable rw (PExpr_PtrShape maybe_rw' _ sh) =
@@ -4589,7 +4646,7 @@ instance FreeVars (NamedShape b args w) where
 instance FreeVars (NamedShapeBody b args w) where
   freeVars (DefinedShapeBody mb_sh) = freeVars mb_sh
   freeVars (OpaqueShapeBody mb_len _) = freeVars mb_len
-  freeVars (RecShapeBody mb_sh _ _ _) = freeVars mb_sh
+  freeVars (RecShapeBody mb_sh _ _) = freeVars mb_sh
 
 
 -- | Test if an expression @e@ is a /determining/ expression, meaning that
@@ -4924,11 +4981,10 @@ genSubstNSB px s mb_body = case mbMatch mb_body of
       DefinedShapeBody <$> genSubstMb px s mb_sh
     [nuMP| OpaqueShapeBody mb_len trans_id |] ->
       OpaqueShapeBody <$> genSubstMb px s mb_len <*> return (mbLift trans_id)
-    [nuMP| RecShapeBody mb_sh trans_id fold_id unfold_id |] ->
+    [nuMP| RecShapeBody mb_sh trans_id fold_ids |] ->
       RecShapeBody <$> genSubstMb (px :>: Proxy) s mb_sh
                    <*> return (mbLift trans_id)
-                   <*> return (mbLift fold_id)
-                   <*> return (mbLift unfold_id)
+                   <*> return (mbLift fold_ids)
 
 instance SubstVar s m => Substable s (NamedPermName ns args a) m where
   genSubst _ mb_rpn = return $ mbLift mb_rpn
@@ -5826,12 +5882,11 @@ instance AbstractVars (NamedShapeBody b args w) where
     absVarsReturnH ns1 ns2 ($(mkClosed [| \i l -> OpaqueShapeBody l i |])
                              `clApply` toClosed trans_id)
     `clMbMbApplyM` abstractPEVars ns1 ns2 mb_len
-  abstractPEVars ns1 ns2 (RecShapeBody mb_sh trans_id fold_id unfold_id) =
+  abstractPEVars ns1 ns2 (RecShapeBody mb_sh trans_id fold_ids) =
     absVarsReturnH ns1 ns2 ($(mkClosed
-                              [| \i1 i2 i3 l -> RecShapeBody l i1 i2 i3 |])
+                              [| \i1 i2 l -> RecShapeBody l i1 i2 |])
                              `clApply` toClosed trans_id
-                             `clApply` toClosed fold_id
-                             `clApply` toClosed unfold_id)
+                             `clApply` toClosed fold_ids)
     `clMbMbApplyM` abstractPEVars ns1 ns2 mb_sh
 
 instance AbstractVars (NamedPermName ns args a) where
@@ -5845,6 +5900,15 @@ instance AbstractVars (NamedPermName ns args a) where
 ----------------------------------------------------------------------
 -- * Abstracting out named shapes
 ----------------------------------------------------------------------
+
+-- | An existentially quantified, partially defined LLVM shape applied to
+-- some arguments
+data SomePartialNamedShape w where
+  NonRecShape :: String -> CruCtx args -> Mb args (PermExpr (LLVMShapeType w))
+              -> SomePartialNamedShape w
+  RecShape :: String -> CruCtx args
+           -> Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w))
+           -> SomePartialNamedShape w
 
 -- | An existentially quantified LLVM shape applied to some arguments
 data SomeNamedShapeApp w where

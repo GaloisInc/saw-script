@@ -35,7 +35,7 @@ import Prelude hiding (mapM)
 import Control.Applicative ((<$>))
 #endif
 import Control.Monad (foldM, liftM)
---import Control.Monad.IO.Class
+import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
 import Control.Monad.Fix (MonadFix(mfix))
 import Control.Monad.Identity (Identity)
@@ -623,6 +623,11 @@ evalPrim fallback pn = loop [] (primType pn)
            runMaybeT (r x') >>= \case
              Just v -> loop ((ready x',t):env) tp' (f v)
              _ -> fallback msg ((ready x',t):env) tp'
+
+    loop env tp (Prims.PrimExcept m) =
+      runExceptT m >>= \case
+        Right v  -> pure v
+        Left msg -> fallback msg env tp
 
     loop _env _tp (Prims.Prim m) = m
     loop _env _tp (Prims.PrimValue v) = pure v

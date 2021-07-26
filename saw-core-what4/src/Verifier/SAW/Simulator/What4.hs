@@ -161,7 +161,8 @@ prims :: forall sym.
    Sym sym => sym -> Prims.BasePrims (What4 sym)
 prims sym =
   Prims.BasePrims
-  { Prims.bpAsBool  = W.asConstantPred
+  { Prims.bpIsSymbolicEvaluator = True
+  , Prims.bpAsBool  = W.asConstantPred
     -- Bitvectors
   , Prims.bpUnpack  = SW.bvUnpackBE sym
   , Prims.bpPack    = SW.bvPackBE sym

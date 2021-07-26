@@ -99,12 +99,13 @@ type SawDoc = Doc SawStyle
 data PPOpts = PPOpts { ppBase :: Int
                      , ppColor :: Bool
                      , ppShowLocalNames :: Bool
-                     , ppMaxDepth :: Maybe Int }
+                     , ppMaxDepth :: Maybe Int
+                     , ppMinSharing :: Int }
 
 -- | Default options for pretty-printing
 defaultPPOpts :: PPOpts
 defaultPPOpts = PPOpts { ppBase = 10, ppColor = False,
-                         ppShowLocalNames = True, ppMaxDepth = Nothing }
+                         ppShowLocalNames = True, ppMaxDepth = Nothing, ppMinSharing = 2 }
 
 -- | Options for printing with a maximum depth
 depthPPOpts :: Int -> PPOpts
@@ -575,16 +576,18 @@ shouldMemoizeTerm t =
 -- let-bindings for the entries in the memoization table. If the flag is true,
 -- compute a global table, otherwise compute a local table.
 ppTermWithMemoTable :: Prec -> Bool -> Term -> PPM SawDoc
-ppTermWithMemoTable prec global_p trm = ppLets occ_map_elems [] where
+ppTermWithMemoTable prec global_p trm = do
+     min_occs <- ppMinSharing <$> ppOpts <$> ask
+     ppLets (occ_map_elems min_occs) [] where
 
   -- Generate an occurrence map for trm, filtering out terms that only occur
   -- once, that are "too small" to memoize, and, for the global table, terms
   -- that are not closed
-  occ_map_elems =
+  occ_map_elems min_occs =
     IntMap.assocs $
     IntMap.filter
     (\(t,cnt) ->
-      cnt > 1 && shouldMemoizeTerm t &&
+      cnt >= min_occs && shouldMemoizeTerm t &&
       (if global_p then looseVars t == emptyBitSet else True)) $
     scTermCount global_p trm
 

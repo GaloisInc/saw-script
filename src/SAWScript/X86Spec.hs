@@ -103,9 +103,9 @@ import qualified Lang.Crucible.LLVM.MemModel as Crucible
 
 import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
 import Lang.Crucible.Backend
-          (addAssumption, getProofObligations, proofGoalsToList
-          ,assert, AssumptionReason(..)
-          ,LabeledPred(..), ProofGoal(..), labeledPredMsg)
+          (addAssumption, getProofObligations, goalsToList
+          ,assert, CrucibleAssumption(..)
+          ,ProofGoal(..), labeledPredMsg)
 
 import Lang.Crucible.Simulator.ExecutionTree
 import Lang.Crucible.Simulator.OverrideSim
@@ -826,7 +826,8 @@ makeEquiv opts s (Pair (Rep t _) (Equiv xs ys)) =
      let same a =
            do p <- evalSame sym t v a
               let loc = mkProgramLoc "<makeEquiv>" InternalPos
-              addAssumption sym (LabeledPred p (AssumptionReason loc "equivalance class assumption"))
+              addAssumption sym
+                $ GenericAssumption loc "equivalance class assumption" p
 
      mapM_ same rest
 
@@ -847,7 +848,7 @@ addAsmp opts s (msg,p) =
 
     _ -> do p' <- evalProp opts p s
             let loc = mkProgramLoc "<addAssmp>" InternalPos -- FIXME
-            addAssumption (optsSym opts) (LabeledPred p' (AssumptionReason loc msg))
+            addAssumption (optsSym opts) (GenericAssumption loc msg p')
 
 setCryPost :: forall p. (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> S p -> (String,Prop p) -> IO (S p)
 setCryPost opts s (_nm,p) =
@@ -1132,7 +1133,7 @@ debugPPReg r s =
 
 _debugDumpGoals :: Sym -> IO ()
 _debugDumpGoals sym =
-  do obls <- proofGoalsToList <$> getProofObligations sym
+  do obls <- maybe [] goalsToList <$> getProofObligations sym
      mapM_ sh (toList obls)
   where
   sh (ProofGoal _hyps g) = print (view labeledPredMsg g)

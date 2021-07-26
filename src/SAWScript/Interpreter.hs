@@ -549,10 +549,20 @@ enable_lax_arithmetic = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxArith = True }
 
+disable_lax_arithmetic :: TopLevel ()
+disable_lax_arithmetic = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxArith = False }
+
 enable_lax_pointer_ordering :: TopLevel ()
 enable_lax_pointer_ordering = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxPointerOrdering = True }
+
+disable_lax_pointer_ordering :: TopLevel ()
+disable_lax_pointer_ordering = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxPointerOrdering = False }
 
 enable_what4_hash_consing :: TopLevel ()
 enable_what4_hash_consing = do
@@ -619,6 +629,11 @@ set_color b = do
   -- Keep color disabled if `--no-color` command-line option is present
   let b' = b && useColor opts
   putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsColor = b' } }
+
+set_min_sharing :: Int -> TopLevel ()
+set_min_sharing b = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsMinSharing = b } }
 
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info (Text.unpack s)
@@ -775,10 +790,20 @@ primitives = Map.fromList
     Current
     [ "Enable lax rules for arithmetic overflow in Crucible." ]
 
+  , prim "disable_lax_arithmetic" "TopLevel ()"
+    (pureVal disable_lax_arithmetic)
+    Current
+    [ "Disable lax rules for arithmetic overflow in Crucible." ]
+
   , prim "enable_lax_pointer_ordering" "TopLevel ()"
     (pureVal enable_lax_pointer_ordering)
     Current
     [ "Enable lax rules for pointer ordering comparisons in Crucible." ]
+
+  , prim "disable_lax_pointer_ordering" "TopLevel ()"
+    (pureVal disable_lax_pointer_ordering)
+    Current
+    [ "Disable lax rules for pointer ordering comparisons in Crucible." ]
 
   , prim "enable_what4_hash_consing" "TopLevel ()"
     (pureVal enable_what4_hash_consing)
@@ -810,6 +835,12 @@ primitives = Map.fromList
     (pureVal set_color)
     Current
     [ "Select whether to pretty-print SAWCore terms using color." ]
+
+  , prim "set_min_sharing"     "Int -> TopLevel ()"
+    (pureVal set_min_sharing)
+    Current
+    [ "Set the number times a subterm must be shared for it to be"
+    ,  "let-bound in printer output." ]
 
   , prim "set_timeout"         "Int -> ProofScript ()"
     (pureVal set_timeout)
@@ -916,6 +947,22 @@ primitives = Map.fromList
     [ "Take a list of 'fresh_symbolic' variable and another term containing"
     , "those variables, and return a new lambda abstraction over the list of"
     , "variables."
+    ]
+
+  , prim "term_theories" "[String] -> Term -> [String]"
+    (funVal2 term_theories)
+    Experimental
+    [ "Given a term of type \'Bool\', compute the SMT theories required"
+    , "to reason about this term. The functions (if any) given in the"
+    , "first argument will be treated as uninterpreted."
+    , ""
+    , "If the returned list is empty, the given term represents a problem"
+    , "that can be solved purely by boolean SAT reasoning."
+    , ""
+    , "Note: the given term will be simplified using the What4 backend"
+    , "before evaluating what theories are required.  For simple problems,"
+    , "this may simplify away some aspects of the problem altogether and may result"
+    , "in requiring fewer theories than one might expect."
     ]
 
   , prim "default_term" "Term -> Term"
@@ -3073,6 +3120,16 @@ primitives = Map.fromList
     , "a string representing a top-level struct or enum definition."
     ]
 
+  , prim "heapster_define_rust_type_qual"
+    "HeapsterEnv -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_rust_type_qual)
+    Experimental
+    [ "heapster_define_rust_type_qual env crate tp defines a Heapster LLVM"
+    , " shape from tp, a string representing a top-level Rust struct or enum"
+    , " definition. The type is qualified by crate, meaning that \"crate::\""
+    , " is prepended to its name."
+    ]
+
   , prim "heapster_block_entry_hint"
     "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_block_entry_hint)
@@ -3148,6 +3205,15 @@ primitives = Map.fromList
     [ "heapster_assume_fun_rename nm nm_t perms trans assumes that function nm"
     , " has permissions perms and translates to the SAW core term trans. If"
     , " trans is not an identifier then it is bound to the defined name nm_to."
+    ]
+
+  , prim "heapster_assume_fun_rename_prim"
+    "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_assume_fun_rename_prim)
+    Experimental
+    [
+      "heapster_assume_fun_rename_prim nm nm_to perms assumes that function nm"
+    , " has permissions perms as a primitive."
     ]
 
   , prim "heapster_assume_fun_multi"

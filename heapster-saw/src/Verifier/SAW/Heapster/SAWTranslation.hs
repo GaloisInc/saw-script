@@ -599,6 +599,8 @@ instance TransInfo info =>
       return $ error "translate: RealValRepr"
     [nuMP| ComplexRealRepr |] ->
       return $ error "translate: ComplexRealRepr"
+    [nuMP| SequenceRepr{} |] ->
+      return $ error "translate: SequenceRepr"
     [nuMP| BVRepr w |] ->
       returnType1 =<< bitvectorTransM (translate w)
 
@@ -786,7 +788,7 @@ instance TransInfo info =>
         [nuMP| OpaqueShapeBody _ trans_id |] ->
           ETrans_Term <$> applyOpenTermMulti (globalOpenTerm $ mbLift trans_id) <$>
           transTerms <$> translate args
-        [nuMP| RecShapeBody _ trans_id _ _ |] ->
+        [nuMP| RecShapeBody _ trans_id _ |] ->
           ETrans_Term <$> applyOpenTermMulti (globalOpenTerm $ mbLift trans_id) <$>
           transTerms <$> translate args
     [nuMP| PExpr_EqShape _ |] -> return $ ETrans_Term unitTypeOpenTerm
@@ -1803,8 +1805,10 @@ lookupEntryTrans :: TypedEntryID blocks args ->
                     TypedBlockMapTrans ext blocks tops ret ->
                     Some (TypedEntryTrans ext blocks tops ret args)
 lookupEntryTrans entryID blkMap =
-  typedBlockTransEntries (RL.get (entryBlockID entryID) blkMap) !!
-  entryIndex entryID
+  maybe (error "lookupEntryTrans") id $
+  find (\(Some entryTrans) ->
+         entryID == typedEntryID (typedEntryTransEntry entryTrans)) $
+  typedBlockTransEntries (RL.get (entryBlockID entryID) blkMap)
 
 -- | Look up the translation of an entry by entry ID and make sure that it has
 -- the supplied ghost arguments
@@ -2739,17 +2743,25 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF ttrans [pairLeftOpenTerm (transTerm1 ptrans)])
          m
-
-  -- Intro for a recursive named shape applies the fold function
+  
+  -- Intro for a recursive named shape applies the fold function to the
+  -- translations of the arguments plus the translations of the proofs of the
+  -- permissions
   [nuMP| SImpl_IntroLLVMBlockNamed _ bp nmsh |]
-    | [nuMP| RecShapeBody _ _ fold_id _ |] <- mbMatch $ fmap namedShapeBody nmsh
+    | [nuMP| RecShapeBody _ _ fold_ids |] <- mbMatch $ fmap namedShapeBody nmsh
     , [nuMP| PExpr_NamedShape _ _ _ args |] <- mbMatch $ fmap llvmBlockShape bp ->
       do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
          args_trans <- translate args
-         let t = applyOpenTermMulti (globalOpenTerm $
-                                     mbLift fold_id) (transTerms args_trans)
+         fold_id <-
+           case fold_ids of
+             [nuP| Just (fold_id,_) |] -> return fold_id
+             _ -> error "Folding recursive shape before it is defined!"
          withPermStackM id
-           (\(pctx :>: _) -> pctx :>: typeTransF ttrans [t])
+           (\(pctx :>: ptrans_x) ->
+             pctx :>: typeTransF ttrans [applyOpenTermMulti
+                                         (globalOpenTerm $ mbLift fold_id)
+                                         (transTerms args_trans ++
+                                          transTerms ptrans_x)])
            m
 
   -- Intro for a defined named shape (the other case) is a no-op
@@ -2761,17 +2773,24 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            m
 
     | otherwise -> fail "translateSimplImpl: SImpl_IntroLLVMBlockNamed, unknown named shape"
-
+  -- Elim for a recursive named shape applies the unfold function to the
+  -- translations of the arguments plus the translations of the proofs of the
+  -- permissions
   [nuMP| SImpl_ElimLLVMBlockNamed _ bp nmsh |]
-  -- Elim for a recursive named shape applies the fold function
-    | [nuMP| RecShapeBody _ _ _ unfold_id |] <- mbMatch $ fmap namedShapeBody nmsh
+    | [nuMP| RecShapeBody _ _ fold_ids |] <- mbMatch $ fmap namedShapeBody nmsh
     , [nuMP| PExpr_NamedShape _ _ _ args |] <- mbMatch $ fmap llvmBlockShape bp ->
       do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
          args_trans <- translate args
-         let t = applyOpenTermMulti (globalOpenTerm $
-                                     mbLift unfold_id) (transTerms args_trans)
+         unfold_id <-
+           case fold_ids of
+             [nuP| Just (_,unfold_id) |] -> return unfold_id
+             _ -> error "Unfolding recursive shape before it is defined!"
          withPermStackM id
-           (\(pctx :>: _) -> pctx :>: typeTransF ttrans [t])
+           (\(pctx :>: ptrans_x) ->
+             pctx :>: typeTransF ttrans [applyOpenTermMulti
+                                         (globalOpenTerm $ mbLift unfold_id)
+                                         (transTerms args_trans ++
+                                          transTerms ptrans_x)])
            m
 
   -- Intro for a defined named shape (the other case) is a no-op

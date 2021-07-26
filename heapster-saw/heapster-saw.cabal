@@ -54,6 +54,7 @@ library
     Verifier.SAW.Heapster.Parser
     Verifier.SAW.Heapster.Permissions
     Verifier.SAW.Heapster.PermParser
+    Verifier.SAW.Heapster.NamePropagation
     Verifier.SAW.Heapster.RustTypes
     Verifier.SAW.Heapster.SAWTranslation
     Verifier.SAW.Heapster.Token
