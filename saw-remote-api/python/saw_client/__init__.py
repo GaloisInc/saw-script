@@ -436,7 +436,7 @@ def jvm_assume(cls: JVMClass,
 def jvm_verify(cls: JVMClass,
                method_name: str,
                contract: llvm.Contract,
-               lemmas: Optional[List[VerificationResult]] = None,
+               lemmas: List[VerificationResult] = [],
                check_sat: bool = False,
                script: Optional[proofscript.ProofScript] = None,
                lemma_name_hint: Optional[str] = None) -> VerificationResult:
@@ -445,8 +445,6 @@ def jvm_verify(cls: JVMClass,
     argument in further calls to `jvm_verify`
     """
 
-    if lemmas is None:
-        lemmas = []
     if script is None:
         script = proofscript.ProofScript([proofscript.z3([])])
     if lemma_name_hint is None:
@@ -561,13 +559,11 @@ def llvm_assume(module: LLVMModule,
 def llvm_verify(module: LLVMModule,
                 function: str,
                 contract: llvm.Contract,
-                lemmas: Optional[List[VerificationResult]] = None,
+                lemmas: List[VerificationResult] = [],
                 check_sat: bool = False,
                 script: Optional[proofscript.ProofScript] = None,
                 lemma_name_hint: Optional[str] = None) -> VerificationResult:
 
-    if lemmas is None:
-        lemmas = []
     if script is None:
         script = proofscript.ProofScript([proofscript.z3([])])
     if lemma_name_hint is None:
