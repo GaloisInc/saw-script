@@ -1,0 +1,8 @@
+enable_experimental;
+import "monadify.cry";
+enc <- unfold_term ["test1"] {{ test1 }};
+print "original term:";
+print_term enc;
+mtrm <- monadify_term enc;
+print "monadified term:";
+print_term mtrm;
