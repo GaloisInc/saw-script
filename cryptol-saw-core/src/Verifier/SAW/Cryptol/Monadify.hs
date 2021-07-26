@@ -30,6 +30,7 @@ MT(Pi x (sort 0) b) = Pi x (sort 0) CompMT(b)
 MT(Pi x Num b) = Pi x Num CompMT(b)
 MT(Pi _ a b) = MT(a) -> CompMT(b)
 MT(#(a,b)) = #(MT(a),MT(b))
+MT(seq n a) = mseq n MT(a)
 MT(f arg) = f MT(arg)  -- NOTE: f must be a pure function!
 MT(cnst) = cnst
 MT(dt args) = dt MT(args)
@@ -187,6 +188,7 @@ data MonType
   | MTyArrow MonType MonType
   | MTyPair MonType MonType
   | MTyRecord [(FieldName, MonType)]
+  | MTySeq OpenTerm MonType
   | MTyBase MonKind OpenTerm -- A "base type" or type var of a given kind
   | MTyNum OpenTerm
 
@@ -200,6 +202,7 @@ monTypeIsMono (MTyForall _ _ _) = False
 monTypeIsMono (MTyArrow tp1 tp2) = monTypeIsMono tp1 && monTypeIsMono tp2
 monTypeIsMono (MTyPair tp1 tp2) = monTypeIsMono tp1 && monTypeIsMono tp2
 monTypeIsMono (MTyRecord tps) = all (monTypeIsMono . snd) tps
+monTypeIsMono (MTySeq _ tp) = monTypeIsMono tp
 monTypeIsMono (MTyBase _ _) = True
 monTypeIsMono (MTyNum _) = True
 
@@ -210,6 +213,7 @@ isBaseType (MTyForall _ _ _) = False
 isBaseType (MTyArrow _ _) = False
 isBaseType (MTyPair _ _) = True
 isBaseType (MTyRecord _) = True
+isBaseType (MTySeq _ _) = True
 isBaseType (MTyBase (MKType _) _) = True
 isBaseType (MTyBase _ _) = True
 isBaseType (MTyNum _) = False
@@ -228,6 +232,9 @@ monTypeKind (MTyPair tp1 tp2) =
 monTypeKind (MTyRecord tps) =
   do sorts <- mapM (monTypeKind . snd >=> monKindToSort) tps
      return $ MKType $ maxSort sorts
+monTypeKind (MTySeq _ tp) =
+  do sort <- monTypeKind tp >>= monKindToSort
+     return $ MKType sort
 monTypeKind (MTyBase k _) = Just k
 monTypeKind (MTyNum _) = Just MKNum
 
@@ -266,6 +273,8 @@ toPureType (MTyPair mtp1 mtp2) =
   pairTypeOpenTerm (toPureType mtp1) (toPureType mtp2)
 toPureType (MTyRecord tps) =
   recordTypeOpenTerm $ map (\(f,tp) -> (f, toPureType tp)) tps
+toPureType (MTySeq n t) =
+  applyOpenTermMulti (globalOpenTerm "Cryptol.seq") [n, toPureType t]
 toPureType (MTyBase _ t) = t
 toPureType (MTyNum n) = n
 
@@ -279,6 +288,8 @@ toArgType (MTyPair mtp1 mtp2) =
   pairTypeOpenTerm (toArgType mtp1) (toArgType mtp2)
 toArgType (MTyRecord tps) =
   recordTypeOpenTerm $ map (\(f,tp) -> (f, toArgType tp)) tps
+toArgType (MTySeq n t) =
+  applyOpenTermMulti (globalOpenTerm "Cryptol.mseq") [n, toArgType t]
 toArgType (MTyBase _ t) = t
 toArgType (MTyNum n) = n
 
@@ -288,6 +299,20 @@ monTypeCompType mtp@(MTyForall _ _ _) = toArgType mtp
 monTypeCompType mtp@(MTyArrow _ _) = toArgType mtp
 monTypeCompType mtp =
   applyOpenTerm (globalOpenTerm "Prelude.CompM") (toArgType mtp)
+
+-- | The mapping for monadifying Cryptol typeclasses
+typeclassMonMap :: [(Ident,Ident)]
+typeclassMonMap =
+  [("Cryptol.PEq", "Cryptol.PEqM"),
+   ("Cryptol.PCmp", "Cryptol.PCmpM"),
+   ("Cryptol.PSignedCmp", "Cryptol.PSignedCmpM"),
+   ("Cryptol.PZero", "Cryptol.PZero"),
+   ("Cryptol.PLogic", "Cryptol.PLogic"),
+   ("Cryptol.PLogic", "Cryptol.PLogic"),
+   ("Cryptol.PRing", "Cryptol.PRing"),
+   ("Cryptol.PRing", "Cryptol.PRing"),
+   ("Cryptol.PIntegral", "Cryptol.PIntegralM"),
+   ("Cryptol.PLiteral", "Cryptol.PLiteral")]
 
 -- | A context of local variables used for monadifying types, which includes the
 -- variable names, their original types (before monadification), and, if their
@@ -352,9 +377,20 @@ monadifyType ctx (asDataType -> Just (pn, args))
     -- and/or Nums
     MTyBase k_out $ dataTypeOpenTerm (primName pn) (map toArgType margs)
 monadifyType ctx (asVectorType -> Just (len, tp)) =
-  mkMonType0 (applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
-              [openOpenTerm (typeCtxPureCtx ctx) len,
-               monadifyTypeArgType ctx tp])
+  let lenOT = openOpenTerm (typeCtxPureCtx ctx) len in
+  MTySeq (ctorOpenTerm "Cryptol.TCNum" [lenOT]) $ monadifyType ctx tp
+monadifyType ctx (asApplyAll -> ((asGlobalDef -> Just seq_id), [n, a]))
+  | seq_id == "Cryptol.seq"
+  , MTyNum n_trm <- monadifyType ctx n =
+    MTySeq n_trm (monadifyType ctx a)
+monadifyType ctx (asApp -> Just ((asGlobalDef -> Just f), arg))
+  | Just f_trans <- lookup f typeclassMonMap =
+    MTyBase (MKType $ mkSort 1) $
+    applyOpenTerm (globalOpenTerm f_trans) $ monadifyTypeArgType ctx arg
+monadifyType _ (asGlobalDef -> Just bool_id)
+  | bool_id == "Prelude.Bool" =
+    mkMonType0 (globalOpenTerm "Prelude.Bool")
+{-
 monadifyType ctx (asApplyAll -> (f, args))
   | Just glob <- asTypedGlobalDef f
   , Just ec_k <- monadifyKind $ globalDefType glob
@@ -362,6 +398,7 @@ monadifyType ctx (asApplyAll -> (f, args))
   , Just k_out <- applyKinds ec_k margs =
     MTyBase k_out (applyOpenTermMulti (globalDefOpenTerm glob) $
                    map toArgType margs)
+-}
 monadifyType ctx tp@(asCtor -> Just (pn, _))
   | primName pn == "Cryptol.TCNum" || primName pn == "Cryptol.TCInf" =
     MTyNum $ openOpenTerm (typeCtxPureCtx ctx) tp
@@ -484,6 +521,29 @@ fromCompTerm :: MonType -> OpenTerm -> MonTerm
 fromCompTerm mtp t | isBaseType mtp = CompMonTerm mtp t
 fromCompTerm mtp t = ArgMonTerm $ fromArgTerm mtp t
 
+-- | Build a monadification term from a function on terms which, when viewed as
+-- a lambda, is a "semi-pure" function of the given monadification type, meaning
+-- it maps terms of argument type @MT(tp)@ to a pure output value of argument
+-- type; i.e., it has type @SemiP(tp)@, defined as:
+--
+-- > SemiP(Pi x (sort 0) b) = Pi x (sort 0) SemiP(b)
+-- > SemiP(Pi x Num b) = Pi x Num SemiP(b)
+-- > SemiP(Pi _ a b) = MT(a) -> SemiP(b)
+-- > SemiP(a) = MT(a)
+fromSemiPureTermFun :: MonType -> ([OpenTerm] -> OpenTerm) -> ArgMonTerm
+fromSemiPureTermFun (MTyForall x k body) f =
+  ForallMonTerm x k $ \tp ->
+  ArgMonTerm $ fromSemiPureTermFun (body tp) (f . (toArgType tp:))
+fromSemiPureTermFun (MTyArrow t1 t2) f =
+  FunMonTerm "_" t1 t2 $ \x ->
+  ArgMonTerm $ fromSemiPureTermFun t2 (f . (toArgTerm x:))
+fromSemiPureTermFun tp f | isBaseType tp = PureMonTerm tp (f [])
+fromSemiPureTermFun _ _ = error "fromSemiPureTermFun: malformed type"
+
+-- | Like 'fromSemiPureTermFun' but use a term rather than a term function
+fromSemiPureTerm :: MonType -> OpenTerm -> ArgMonTerm
+fromSemiPureTerm mtp t = fromSemiPureTermFun mtp (applyOpenTermMulti t)
+
 -- | Build a 'MonTerm' that 'fail's when converted to a term
 failMonTerm :: MonType -> String -> MonTerm
 failMonTerm mtp str = fromArgTerm mtp (failOpenTerm str)
@@ -523,31 +583,45 @@ mkCtorArgMonTerm pn
     ("monadification failed: cannot handle constructor "
      ++ show (primName pn) ++ " with higher-order type")
 mkCtorArgMonTerm pn =
-  ctorHelper (monadifyType [] $ primType pn) (ctorOpenTerm $ primName pn)
-  where
-    ctorHelper :: MonType -> ([OpenTerm] -> OpenTerm) -> ArgMonTerm
-    ctorHelper (MTyForall x k body) f =
-      ForallMonTerm x k $ \tp ->
-      ArgMonTerm $ ctorHelper (body tp) (f . (toArgType tp:))
-    ctorHelper (MTyArrow t1 t2) f =
-      FunMonTerm "_" t1 t2 $ \x ->
-      ArgMonTerm $ ctorHelper t2 (f . (toArgTerm x:))
-    ctorHelper tp f | isBaseType tp = PureMonTerm tp (f [])
-    ctorHelper _ _ = error "mkCtorArgMonTerm: malformed type for constructor"
+  fromSemiPureTermFun (monadifyType [] $ primType pn) (ctorOpenTerm $ primName pn)
 
 
 ----------------------------------------------------------------------
--- * The Monadification Monad
+-- * Monadification Environments and Contexts
 ----------------------------------------------------------------------
 
 -- | A monadification macro is a function that inspects its first @N@ arguments
 -- before being able to be converted to an 'ArgMonTerm'
 data MonMacro = MonMacro { macroNumArgs :: Int,
-                           macroApply :: [Term] -> ArgMonTerm }
+                           macroApply :: GlobalDef -> [Term] -> ArgMonTerm }
 
 -- | Make a simple 'MonMacro' that inspects 0 arguments and just returns a term
 monMacro0 :: ArgMonTerm -> MonMacro
-monMacro0 mtrm = MonMacro 0 (const mtrm)
+monMacro0 mtrm = MonMacro 0 (\_ _ -> mtrm)
+
+-- | Make a 'MonMacro' that maps a named global to a global of semi-pure type.
+-- (See 'fromSemiPureTermFun'.) Because we can't get access to the type of the
+-- global until we apply the macro, we monadify its type at macro application
+-- time.
+semiPureGlobalMacro :: Ident -> Ident -> MonMacro
+semiPureGlobalMacro from to =
+  MonMacro 0 $ \glob args ->
+  if globalDefName glob == ModuleIdentifier from && args == [] then
+    fromSemiPureTerm (monadifyType [] $
+                      globalDefType glob) (globalOpenTerm to)
+  else
+    error ("Monadification macro for " ++ show from ++ " applied incorrectly")
+
+-- | Make a 'MonMacro' that maps a named global to a global of argument
+-- type. Because we can't get access to the type of the global until we apply
+-- the macro, we monadify its type at macro application time.
+argGlobalMacro :: Ident -> Ident -> MonMacro
+argGlobalMacro from to =
+  MonMacro 0 $ \glob args ->
+  if globalDefName glob == ModuleIdentifier from && args == [] then
+    mkGlobalArgMonTerm (monadifyType [] $ globalDefType glob) to
+  else
+    error ("Monadification macro for " ++ show from ++ " applied incorrectly")
 
 -- | An environment of named definitions that have already been monadified
 type MonadifyEnv = Map NameInfo MonMacro
@@ -570,6 +644,10 @@ ppTermInMonCtx :: MonadifyCtx -> Term -> String
 ppTermInMonCtx ctx t =
   scPrettyTermInCtx defaultPPOpts (map (\(x,_,_) -> x) ctx) t
 
+
+----------------------------------------------------------------------
+-- * The Monadification Monad
+----------------------------------------------------------------------
 
 -- | The read-only state of a monadification computation
 data MonadifyROState = MonadifyROState {
@@ -704,6 +782,13 @@ monadifyTerm' _ (asPairSelector -> Just (trm, False)) =
        _ -> fail "Monadification failed: projection on term of non-pair type"
      return $ fromArgTerm mtp $
        pairLeftOpenTerm $ toArgTerm mtrm
+monadifyTerm' (Just mtp@(MTySeq n mtp_elem)) (asFTermF ->
+                                              Just (ArrayValue _ trms)) =
+  do trms' <- traverse (monadifyArgTerm $ Just mtp_elem) trms
+     return $ fromArgTerm mtp $
+       applyOpenTermMulti (globalOpenTerm "Cryptol.seqToMseq")
+       [n, toArgType mtp_elem,
+        flatOpenTerm $ ArrayValue (toArgType mtp_elem) trms']
 monadifyTerm' _ (asPairSelector -> Just (trm, True)) =
   do mtrm <- monadifyArg Nothing trm
      mtp <- case getMonType mtrm of
@@ -732,7 +817,7 @@ monadifyTerm' _ (asApplyAll -> (asTypedGlobalDef -> Just glob, args)) =
              Just m -> m
              Nothing -> monMacro0 $ mkPureGlobalDefArgMonTerm glob
          (macro_args, reg_args) = splitAt (macroNumArgs macro) args
-         mtrm_f = macroApply macro macro_args
+         mtrm_f = macroApply macro glob macro_args
      monadifyApply (ArgMonTerm mtrm_f) reg_args
 monadifyTerm' _ t =
   (monStCtx <$> ask) >>= \ctx ->
@@ -790,8 +875,9 @@ monadifyEtaExpand env ctx top_mtp mtp t args =
 -- * Handling the Primitives
 ----------------------------------------------------------------------
 
+-- | The macro for unsafeAssert
 unsafeAssertMacro :: MonMacro
-unsafeAssertMacro = MonMacro 1 $ \ts ->
+unsafeAssertMacro = MonMacro 1 $ \_ ts ->
   let numFunType =
         MTyForall "n" (MKType $ mkSort 0) $ \n ->
         MTyForall "m" (MKType $ mkSort 0) $ \m ->
@@ -807,13 +893,75 @@ unsafeAssertMacro = MonMacro 1 $ \ts ->
       failArgMonTerm numFunType
       "Monadification failed: unsafeAssert applied to non-Num type"
 
+-- | Identifiers that are mapped to semi-pure functions
+semiPureMonEnv :: [(Ident,Ident)]
+semiPureMonEnv = [
+  ("Cryptol.seqMap", "Cryptol.seqMapM"),
+  ("Cryptol.seq_cong1", "Cryptol.mseq_cong1"),
+
+  -- PEq constraints => PEqM constraints
+  ("Cryptol.PEqBit", "Cryptol.PEqBitM"),
+  ("Cryptol.PEqSeqBool", "Cryptol.PEqSeqBoolM"),
+  ("Cryptol.PEqSeq", "Cryptol.PEqSeqM"),
+
+  -- PCmp constraints => PCmpM constraints
+  ("Cryptol.PCmpBit", "Cryptol.PCmpBitM"),
+  ("Cryptol.PCmpSeqBool", "Cryptol.PCmpSeqBoolM"),
+  ("Cryptol.PCmpSeq", "Cryptol.PCmpSeqM"),
+
+  -- PLogic constraints for sequences lift to monadic sequences
+  ("Cryptol.PLogicSeq", "Cryptol.PLogicSeqM"),
+  ("Cryptol.PLogicSeqBool", "Cryptol.PLogicSeqBoolM"),
+
+  -- The one PLiteral constraint
+  ("Cryptol.PLiteralSeqBool", "Cryptol.PLiteralSeqBoolM")
+  ]
+
+-- | Identifiers that are themselves semi-pure functions
+semiPureSelfMonEnv :: [Ident]
+semiPureSelfMonEnv = [
+  -- Logical operations
+  "Cryptol.ecAnd", "Cryptol.ecOr", "Cryptol.ecXor", "Cryptol.ecCompl",
+  "Cryptol.ecZero",
+
+  -- Sequences
+  "Cryptol.ecCat", "Cryptol.ecTake", "Cryptol.ecDrop", "Cryptol.ecJoin"
+  ]
+
+-- | Identifierd that are mapped to functions of argument type
+argMonEnv :: [(Ident,Ident)]
+argMonEnv = [
+  -- Comparison operations
+  ("Cryptol.ecEq", "Cryptol.ecEqM"),
+  ("Cryptol.ecNotEq", "Cryptol.ecNotEqM"),
+  ("Cryptol.ecLt", "Cryptol.ecLtM"),
+  ("Cryptol.ecGt", "Cryptol.ecGtM"),
+  ("Cryptol.ecLtEq", "Cryptol.ecLtEqM"),
+  ("Cryptol.ecGtEq", "Cryptol.ecGtEqM"),
+  ("Cryptol.ecSLt", "Cryptol.ecSLtM"),
+
+  -- Errors
+  ("Cryptol.ecError", "Cryptol.ecErrorM")
+  ]
+
 -- | The default monadification environment
 defaultMonEnv :: MonadifyEnv
 defaultMonEnv =
-  Map.fromList $ map (\(ident,macro) -> (ModuleIdentifier ident, macro)) $
-  [
-    ("Prelude.unsafeAssert", unsafeAssertMacro)
-  ]
+  Map.fromList
+  (map (\(ident,macro) -> (ModuleIdentifier ident, macro))
+   [
+     ("Prelude.unsafeAssert", unsafeAssertMacro)
+   ]
+   ++
+   map (\ident -> (ModuleIdentifier ident,
+                   semiPureGlobalMacro ident ident)) semiPureSelfMonEnv
+   ++
+   map (\(from,to) -> (ModuleIdentifier from,
+                       semiPureGlobalMacro from to)) semiPureMonEnv
+   ++
+   map (\(from,to) -> (ModuleIdentifier from,
+                       argGlobalMacro from to)) argMonEnv
+  )
 
 
 ----------------------------------------------------------------------
