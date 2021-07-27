@@ -288,16 +288,21 @@ Module CtxExtras (type : UsualDecidableType) (C : Ctx type).
        actxPf := actx_tail_pf c.(actxPf) |}.
   (** The tail of an assignment context in an extended pure context. *)
 
+  Lemma actx_head_lemma_helper {p F t} (c : actx (snd (pext p t)) F) b :
+    find (fst (pext p t)) c.(innerCtx) <> inl b.
+  Proof.
+    intro; destruct c as [?c [?H ?H ?H]]; simpl in H.
+    assert (HasValue (fst (pext p t)) (snd (pext p t)))
+      by (eexists; apply ext_1).
+    apply H0 in H3; destruct H3; apply find_1 in H3.
+    rewrite H3 in H; discriminate H.
+  Qed.
+
   Definition actx_head_lemma {p F t} (c : actx (snd (pext p t)) F) : F t.
   Proof.
     remember (find (fst (pext p t)) c.(innerCtx)) as o;
-      destruct o; eauto; symmetry in Heqo.
-    elimtype False.
-    destruct c as [?c [?H ?H ?H]]; simpl in Heqo.
-    assert (HasValue (fst (pext p t)) (snd (pext p t)))
-      by (eexists; apply ext_1).
-    apply H in H2; destruct H2; apply find_1 in H2.
-    rewrite H2 in Heqo; discriminate Heqo.
+      destruct o; symmetry in Heqo; eauto.
+    destruct (actx_head_lemma_helper c b); eauto.
   Qed.
 
   Definition actx_head {p F t} (c : actx (snd (pext p t)) F) : F t :=
@@ -306,6 +311,15 @@ Module CtxExtras (type : UsualDecidableType) (C : Ctx type).
     | inl _ => actx_head_lemma c
     end.
   (** The head of an assignment context in an extended pure context. *)
+
+  Definition actx_head_MapsTo {p F t} {c : actx (snd (pext p t)) F} :
+    MapsTo (fst (pext p t)) (actx_head c) c.(innerCtx).
+  Proof.
+    unfold actx_head; apply find_2; symmetry.
+    remember (find (fst (pext p t)) c.(innerCtx)) as o;
+      destruct o; symmetry in Heqo; eauto.
+    destruct (actx_head_lemma_helper c b); eauto.
+  Qed.
 
   Lemma actx_add_isFresh_pf {p F t} (c : actx p F) {x : F t} :
     isFresh (fst (pext p t)) c.(innerCtx) = true.
