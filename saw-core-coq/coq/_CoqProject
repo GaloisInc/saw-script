@@ -13,3 +13,10 @@ handwritten/CryptolToCoq/SAWCorePrelude_proofs.v
 handwritten/CryptolToCoq/SAWCorePreludeExtra.v
 handwritten/CryptolToCoq/SAWCoreScaffolding.v
 handwritten/CryptolToCoq/SAWCoreVectorsAsCoqVectors.v
+
+handwritten/CryptolToCoq/CompRefl/Utils.v
+handwritten/CryptolToCoq/CompRefl/CtxInterface.v
+handwritten/CryptolToCoq/CompRefl/CtxPositive.v
+handwritten/CryptolToCoq/CompRefl/CompRefl.v
+handwritten/CryptolToCoq/CompRefl/Reify.v
+handwritten/CryptolToCoq/CompRefl/Examples.v
