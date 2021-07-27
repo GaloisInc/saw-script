@@ -470,7 +470,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y software-properties-common apt-transport-https ca-certificates wget curl
-          sudo apt install -y docker-compose libtinfo6 language-pack-en-base language-pack-en
+          sudo apt install -y docker-compose build-essential libtinfo6 language-pack-en-base language-pack-en
           sudo locale-gen en_US.UTF-8
           sudo update-locale LANG=$LANG LANGUAGE=$LANGUAGE
 
