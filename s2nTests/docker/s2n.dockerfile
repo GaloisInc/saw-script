@@ -1,4 +1,14 @@
-FROM ubuntu:18.04
+# Note: this Dockerfile will be used to run the saw binary built by
+# the CI process, which means that the loadable libraries should be
+# the same between the two systems.  This stipulates that the "FROM"
+# instance specified here should match the OS image used to perform
+# the build stage (whether that's a Github runner or a self-hosted
+# runner).
+#
+# A common symptom of these not matching is that the bin/saw image
+# cannot be run because libtinfoX.so is not found.
+
+FROM ubuntu:20.04
 
 RUN apt-get update -y -q && \
     apt-get install -y software-properties-common && \
@@ -11,7 +21,6 @@ RUN apt-get update -y -q && \
     llvm-3.9 \
     make \
     sudo \
-    libtinfo6 \
     && \
     rm -rf /var/lib/apt/lists/*
 
