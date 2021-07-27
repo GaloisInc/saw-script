@@ -11,6 +11,7 @@ RUN apt-get update -y -q && \
     llvm-3.9 \
     make \
     sudo \
+    libtinfo6 \
     && \
     rm -rf /var/lib/apt/lists/*
 
