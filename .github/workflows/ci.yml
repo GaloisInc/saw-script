@@ -458,7 +458,7 @@ jobs:
           - hmac-failure
           - awslc
           - blst
-        ghc: ["8.10.3"]
+        ghc: ["8.10.4"]
     steps:
       - uses: actions/checkout@v2
       - run: |
