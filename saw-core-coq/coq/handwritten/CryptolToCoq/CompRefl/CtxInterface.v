@@ -180,8 +180,8 @@ Module CtxExtras (type : UsualDecidableType) (C : Ctx type).
   (** Specification of [HasValue] *)
   Definition HasValue_1 {F t1 t2} {n1 : name t1} {n2 : name t2} {c : ctx F} :
     tnameEq n1 n2 = true -> HasValue n1 c -> HasValue n2 c :=
-    fun p '(ex_intro _ x1 H) => ex_intro _ (rew (tnameEq_to_teq p) in x1)
-                                           (MapsTo_1 eq_refl H).
+    fun p '(ex_intro x1 H) => ex_intro _ (rew (tnameEq_to_teq p) in x1)
+                                         (MapsTo_1 eq_refl H).
 
   (** Properties of [MapsTo] *)
   Lemma MapsTo_fun {F t1 n1} {x1 x1' : F t1} {c} :
@@ -391,14 +391,14 @@ Module CtxExtras (type : UsualDecidableType) (C : Ctx type).
   Fixpoint HasFreshNames {F} (xs : list { t & name t * F t }) (c : ctx F) : Prop :=
     match xs with
     | [] => True
-    | existT _ _ (n,x) :: xs =>
+    | existT _ (n,x) :: xs =>
       { pf : isFresh n c = true | HasFreshNames xs (addWith c n pf x) }
     end.
 
   Fixpoint append {F} (c : ctx F) (xs : list { t & name t * F t }) : HasFreshNames xs c -> ctx F :=
     match xs with
     | [] => fun _ => c
-    | existT _ _ (n,x) :: xs => fun pfs => append (addWith c n (proj1_sig pfs) x) xs (proj2_sig pfs)
+    | existT _ (n,x) :: xs => fun pfs => append (addWith c n (proj1_sig pfs) x) xs (proj2_sig pfs)
     end.
 
   Lemma HasFreshNames_unfold_r {F} {c : ctx F} {xs : list { t & name t * F t }} {t} {n : name t} {x} :
@@ -439,7 +439,6 @@ Module CtxExtras (type : UsualDecidableType) (C : Ctx type).
     destruct H as [?pfs ?pf]; unshelve eexists; eauto.
     destruct pfs as [?pf ?pfs]; simpl append in pf.
   Admitted.
-
 
   Lemma append_1 {F} {c : ctx F} {t} {n : name t} {x xs pfs} :
     List.In (existT _ _ (n,x)) xs -> MapsTo n x (append c xs pfs).

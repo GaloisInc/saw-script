@@ -7,30 +7,11 @@ From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Import CompM.
+From CryptolToCoq Require Import CompRefl.Utils.
 From CryptolToCoq Require Import CompRefl.CompRefl.
 
 Import ListNotations.
 Import EqNotations.
-
-Definition eq_dep_eq1 {U P p x q y} (eq : eq_dep U P p x q y) : p = q :=
-  match eq with
-  | eq_dep_intro => eq_refl
-  end.
-
-Lemma f_eq_dep_2 :
-  forall U (P Q : U -> Type) R p q x y z w (f : forall p, P p -> Q p -> R p),
-    eq_dep U P p x q y -> eq_dep U Q p z q w -> eq_dep U R p (f p x z) q (f q y w).
-Admitted.
-
-Lemma eq_dep_fun_ext {U A} {P : U -> Type} {p q} {f : A -> P p} {g : A -> P q} :
-  (forall x, eq_dep U P p (f x) q (g x)) -> eq_dep U (fun i => A -> P i) p f q g.
-Admitted.
-
-Lemma eq_dep_bindM {A B C D : Set} {m1 m2} {k1 : A -> CompM C} {k2 : B -> CompM D} :
-  forall (H : eq_dep Set CompM A m1 B m2),
-  (forall a, eq_dep Set CompM C (k1 a) D (k2 (rew eq_dep_eq1 H in a))) ->
-  eq_dep Set CompM C (m1 >>= k1) D (m2 >>= k2).
-Admitted.
 
 
 (** * Ensuring a bool is true using typeclasses *)
@@ -183,11 +164,11 @@ Class ReifyType (tEnv : list Set) (t : type) (A : Set) :=
   reifyType_eq : typeD tEnv t = A.
 
 Definition reifyType_rew {tEnv t A} `{H : ReifyType tEnv t A} : A -> typeD tEnv t :=
-  match H with eq_refl => fun a => a end.
+  fun a => rew <- H in a.
 
 Instance ReifyType_unit {tEnv} :
   ReifyType tEnv unitT unit | 1.
-Proof. reflexivity. Qed.
+Proof. reflexivity. Defined.
 
 Instance ReifyType_Either {tEnv tl tr Al Ar}
   `(ReifyType tEnv tl Al) `(ReifyType tEnv tr Ar) :
@@ -195,15 +176,37 @@ Instance ReifyType_Either {tEnv tl tr Al Ar}
 Proof.
   unfold ReifyType in *; simpl.
   rewrite H, H0; reflexivity.
-Qed.
+Defined.
 
 Instance ReifyType_unknown {tEnv i A}
   `(InList _ tEnv i A) :
   ReifyType tEnv (TypeT i) A | 2.
 Proof.
   unfold InList, ReifyType in *; simpl; unfold nthTypeEnv.
-  apply nth_error_nth; eauto.
-Qed.
+  revert tEnv H; induction i; intros;
+    destruct tEnv; simpl in *;
+    try discriminate H; try injection H; eauto.
+Defined.
+
+Class ReifyFMType (tEnv : list Set) (fmt : fmtype) (lrt : LetRecType) :=
+  reifyFMType_eq : fmtypeD tEnv fmt = lrt.
+
+Instance ReifyFMType_FunMT {tEnv t fmt A lrt}
+  `(ReifyType tEnv t A)
+  `(ReifyFMType tEnv fmt lrt) :
+  ReifyFMType tEnv (FunMT t fmt) (LRT_Fun A (fun _ => lrt)).
+Proof.
+  unfold ReifyType, ReifyFMType in *; simpl.
+  rewrite H, H0; reflexivity.
+Defined.
+
+Instance ReifyFMType_CompMT {tEnv t A}
+  `(ReifyType tEnv t A) :
+  ReifyFMType tEnv (CompMT t) (LRT_Ret A).
+Proof.
+  unfold ReifyType, ReifyFMType in *; simpl.
+  rewrite H; reflexivity.
+Defined.
 
 
 (** * Reifying variables *)
@@ -244,7 +247,7 @@ Definition reifyExpr_teq {tEnv p t e A x} `{ReifyExpr tEnv p t e A x} :
 (* Instance ReifyExpr_var0 {tEnv p t A eq} : *)
 (*   ReifyExpr tEnv (Datatypes.snd (Ctx.pext p t)) *)
 (*             t (varE _ (Datatypes.fst (Ctx.pext p t))) *)
-(*             A (fun c => var0 p t c eq) | 1. *)
+(*             A (fun c => var0 p t c (eq c)) | 1. *)
 (* Proof. *)
 (*   unfold ReifyExpr, var0, Ctx.actx_head in *; cbn - [Ctx.ext]; intro. *)
 (*   assert (Ctx.HasValue (Datatypes.fst (Ctx.pext p t)) (Ctx.innerCtx c)). *)
@@ -259,7 +262,7 @@ Definition reifyExpr_teq {tEnv p t e A x} `{ReifyExpr tEnv p t e A x} :
 Instance ReifyExpr_var {tEnv p p' t A f eq}
   `(ReifyVar tEnv p (Datatypes.snd (Ctx.pext p' t)) f) :
   ReifyExpr tEnv p t (varE _ (Datatypes.fst (Ctx.pext p' t)))
-                   A (fun c => var0 p' t (f c) eq) | 1.
+                   A (fun c => var0 p' t (f c) (eq c)) | 1.
 Proof.
   unfold ReifyExpr, ReifyVar, var0, Ctx.actx_head in *; cbn - [Ctx.ext]; intro.
   assert (Ctx.HasValue (Datatypes.fst (Ctx.pext p' t)) (Ctx.innerCtx (f c))).
@@ -294,9 +297,9 @@ Proof.
   reflexivity.
 Qed.
 
-Instance ReifyExpr_unknown {tEnv p A i x}
-  `(ReifyType tEnv (TypeT i) A) :
-  ReifyExpr tEnv p _ (termE _ i (reifyType_rew x)) A (fun _ => x) | 2.
+Instance ReifyExpr_unknown {tEnv p t A x}
+  `(ReifyType tEnv t A) :
+  ReifyExpr tEnv p _ (termE _ (reifyType_rew x)) A (fun _ => x) | 2.
 Proof.
   unfold ReifyExpr, ReifyType, reifyType_eq in *; simpl; intro.
   destruct H; vm_compute reifyType_rew.
@@ -329,6 +332,7 @@ Axiom actx_tail_add : forall {p F t} (c : Ctx.actx p F) (x : F t),
   Ctx.actx_tail (Ctx.actx_add c x) = c.
 
 Instance ReifyMExpr_bindE {tEnv p t t' me ke' ke A B m k}
+  `(ReifyType tEnv t A)
   `(ReifyMExpr tEnv p t' me B m)
   `(ReifyMExpr tEnv (Datatypes.snd (Ctx.pext p t'))
                t ke'
@@ -336,16 +340,16 @@ Instance ReifyMExpr_bindE {tEnv p t t' me ke' ke A B m k}
   `(AbstractVar _ _ (Datatypes.fst (Ctx.pext p t')) ke' ke) :
   ReifyMExpr tEnv p t (bindE _ _ me ke) A (fun c => bindM (m c) (k c)).
 Proof.
-  unfold ReifyMExpr in *; cbn - [Ctx.ext]; unfold Ctx.inExt; intro.
-  apply (eq_dep_bindM (H c)); intros.
-  unfold reifyMExpr_teq, reifyMExpr_eq, var0 in H0.
-  replace ke' with (ke (Datatypes.fst (Ctx.pext p t'))) in H0.
+  unfold ReifyType, ReifyMExpr in *; cbn - [Ctx.ext]; unfold Ctx.inExt; intro.
+  apply (eq_dep_bindM (H0 c)); [eauto | intros].
+  unfold reifyMExpr_teq, reifyMExpr_eq, var0 in H1.
+  replace ke' with (ke (Datatypes.fst (Ctx.pext p t'))) in H1.
   rewrite Ctx.actx_fst_add_eq.
-  specialize (H0 (Ctx.actx_add c a)); cbn - [Ctx.ext] in H0.
-  rewrite H0, Ctx.actx_head_add.
+  specialize (H1 (Ctx.actx_add c a)); cbn - [Ctx.ext] in H1.
+  rewrite H1, Ctx.actx_head_add.
   enough ((k (Ctx.actx_tail (Ctx.actx_add c a))
-             (rew [fun x : Set => x] eq_dep_eq1 (H (Ctx.actx_tail (Ctx.actx_add c a))) in a)) = (k c (rew [fun x : Set => x] eq_dep_eq1 (H c) in a))).
-  - rewrite <- H2; reflexivity.
+             (rew [fun x : Set => x] eq_dep_eq1 (H0 (Ctx.actx_tail (Ctx.actx_add c a))) in a)) = (k c (rew [fun x : Set => x] eq_dep_eq1 (H0 c) in a))).
+  - rewrite <- H3; reflexivity.
   - rewrite (actx_tail_add c a); reflexivity.
 Qed.
 
@@ -358,7 +362,7 @@ Proof.
 Qed.
 
 Instance ReifyMExpr_eitherE {tEnv p} {t tl tr fe fe' ge ge' e A Al Ar f g x}
-  `(ReifyType tEnv tl Al) `(ReifyType tEnv tr Ar)
+  `(ReifyType tEnv tl Al) `(ReifyType tEnv tr Ar) `(ReifyType tEnv t A)
   `(ReifyExpr tEnv p (EitherT tl tr) e (SAWCorePrelude.Either Al Ar) x)
   `(ReifyMExpr tEnv (Datatypes.snd (Ctx.pext p tl))
                t fe'
@@ -375,17 +379,17 @@ Proof.
     cbn - [Ctx.ext]; unfold Ctx.inExt; intro.
   unfold reifyMExpr_teq, reifyMExpr_eq, var0 in H2, H3.
   destruct H, H0.
-  specialize (H1 c); apply eq_dep_eq in H1.
-  rewrite H1; cbn - [Ctx.ext].
+  specialize (H2 c); apply eq_dep_eq in H2.
+  rewrite H2; cbn - [Ctx.ext].
   eapply f_eq_dep_2 with (U := Set) (f := fun A l r => SAWCorePrelude.either (typeD tEnv tl) (typeD tEnv tr) (CompM A) l r (x c));
-    apply @eq_dep_fun_ext with (U := Set) (P := CompM); intro.
-  - specialize (H2 (Ctx.actx_add c x0)); cbn - [Ctx.ext] in H2.
-    replace fe' with (fe (Datatypes.fst (Ctx.pext p tl))) in H2.
-    rewrite Ctx.actx_fst_add_eq, H2, Ctx.actx_head_add.
+    apply @eq_dep_fun_ext with (U := Set) (P := CompM); eauto; intro.
+  - specialize (H3 (Ctx.actx_add c x0)); cbn - [Ctx.ext] in H3.
+    replace fe' with (fe (Datatypes.fst (Ctx.pext p tl))) in H3.
+    rewrite Ctx.actx_fst_add_eq, H3, Ctx.actx_head_add.
     rewrite (actx_tail_add c x0); reflexivity.
-  - specialize (H4 (Ctx.actx_add c x0)); cbn - [Ctx.ext] in H4.
-    replace ge' with (ge (Datatypes.fst (Ctx.pext p tr))) in H4.
-    rewrite Ctx.actx_fst_add_eq, H4, Ctx.actx_head_add.
+  - specialize (H5 (Ctx.actx_add c x0)); cbn - [Ctx.ext] in H5.
+    replace ge' with (ge (Datatypes.fst (Ctx.pext p tr))) in H5.
+    rewrite Ctx.actx_fst_add_eq, H5, Ctx.actx_head_add.
     rewrite (actx_tail_add c x0); reflexivity.
 Qed.
 
@@ -406,7 +410,7 @@ Proof.
 Qed.
 
 Instance ReifyFMExpr_FunMT {tEnv p t fmt fme fme'} {A : Set} {lrt f}
-  `(ReifyType tEnv t A)
+  `(ReifyType tEnv t A) `(ReifyFMType tEnv fmt lrt)
   `(ReifyFMExpr tEnv (Datatypes.snd (Ctx.pext p t))
                 fmt fme'
                 lrt (fun c => f (Ctx.actx_tail c) (var0 p t c reifyType_eq)))
@@ -415,84 +419,98 @@ Instance ReifyFMExpr_FunMT {tEnv p t fmt fme fme'} {A : Set} {lrt f}
 Proof.
   unfold ReifyFMExpr, ReifyType in *;
     cbn - [Ctx.ext]; unfold Ctx.inExt; intro.
-  unfold reifyMExpr_teq, reifyMExpr_eq, var0 in H0.
-  replace fme' with (fme (Datatypes.fst (Ctx.pext p t))) in H0.
+  unfold reifyMExpr_teq, reifyMExpr_eq, var0 in H1.
+  replace fme' with (fme (Datatypes.fst (Ctx.pext p t))) in H1.
   destruct H.
   enough (eq_dep LetRecType (fun lrt => typeD tEnv t -> lrtToType lrt)
                  (fmtypeD tEnv fmt) (fun x => fmexprD tEnv (Datatypes.snd (Ctx.add (Ctx.innerCtx c) x))
                                                       (fme (Datatypes.fst (Ctx.add (Ctx.innerCtx c) x))))
                  lrt (f c))
     by (rewrite H; reflexivity).
-  apply eq_dep_fun_ext; intro.
-  specialize (H0 (Ctx.actx_add c x)); cbn - [Ctx.ext] in H0.
-  rewrite Ctx.actx_fst_add_eq, H0, Ctx.actx_head_add.
+  apply eq_dep_fun_ext; eauto; intro.
+  specialize (H1 (Ctx.actx_add c x)); cbn - [Ctx.ext] in H1.
+  rewrite Ctx.actx_fst_add_eq, H1, Ctx.actx_head_add.
   rewrite(actx_tail_add c x); reflexivity.
 Qed.
 
 
 (** * Tactics for reifying *)
 
-Ltac reifyTac lemma P :=
-  unshelve (eapply lemma; [typeclasses eauto|]); [try exact []|].
+Ltac reifyTac lemma :=
+  unshelve (eapply lemma);
+  [try exact []|];
+  cbn [prods lastProds mapLastProds fst Datatypes.fst].
 
 Lemma reifyType_lemma {tEnv t A} (P : Type -> Prop)
-  `(ReifyType tEnv t A) :
+  `{ReifyType tEnv t A} :
   P (typeD tEnv t) -> P A.
 Proof. rewrite reifyType_eq; eauto. Qed.
 
-Ltac reifyType P := reifyTac reifyType_lemma P.
+Ltac reifyType := reifyTac reifyType_lemma.
 
 (* Lemma reifyExpr_lemma {tEnv p t e x} {P : string + typeD tEnv t -> Prop} *)
-(*   `(ReifyExpr tEnv p t e x) c : *)
+(*   `{ReifyExpr tEnv p t e x} c : *)
 (*   P (exprD tEnv (Ctx.innerCtx c) e) -> P (inr (x c)). *)
 (* Proof. rewrite reifyExpr_eq; eauto. Qed. *)
 
 Lemma reifyExpr_lemma {tEnv t e A x} {P : forall (A : Set), string + A -> Prop}
-  `(ReifyExpr tEnv Ctx.empty t e A (fun _ => x)) :
+  `{ReifyExpr tEnv Ctx.empty t e A (fun _ => x)} :
   P (typeD tEnv t) (exprD tEnv (Ctx.innerCtx Ctx.actx_empty) e) -> P A (inr x).
 Proof. rewrite (H Ctx.actx_empty); eauto. Qed.
 
-Ltac reifyExpr P := reifyTac reifyExpr_lemma P.
+Ltac reifyExpr := reifyTac reifyExpr_lemma.
 
 Lemma reifyMExpr_lemma {tEnv t me A m} {P : forall (A : Set), CompM A -> Prop}
-  `(ReifyMExpr tEnv Ctx.empty t me A (fun _ => m)) :
+  `{ReifyMExpr tEnv Ctx.empty t me A (fun _ => m)} :
   P (typeD tEnv t) (mexprD tEnv (Ctx.innerCtx Ctx.actx_empty) me) -> P A m.
 Proof. rewrite (H Ctx.actx_empty); eauto. Qed.
 
-Ltac reifyMExpr P := reifyTac reifyMExpr_lemma P.
+Ltac reifyMExpr := reifyTac reifyMExpr_lemma.
 
 Lemma reifyMExpr_refinesM_lemma {tEnv t me1 me2 A m1 m2}
-  `(ReifyMExpr tEnv Ctx.empty t me1 A (fun _ => m1))
-  `(ReifyMExpr tEnv Ctx.empty t me2 A (fun _ => m2)) :
+  `{ReifyMExpr tEnv Ctx.empty t me1 A (fun _ => m1)}
+  `{ReifyMExpr tEnv Ctx.empty t me2 A (fun _ => m2)} :
   refinesM (mexprD tEnv (Ctx.innerCtx Ctx.actx_empty) me1)
            (mexprD tEnv (Ctx.innerCtx Ctx.actx_empty) me2) ->
   refinesM m1 m2.
-Admitted.
+Proof.
+  unfold ReifyMExpr in *; intro.
+  specialize (H Ctx.actx_empty); specialize (H0 Ctx.actx_empty).
+  destruct (eq_dep_eq1 H).
+  apply eq_dep_eq in H; apply eq_dep_eq in H0.
+  rewrite H, H0 in H1; eauto.
+Qed.
 
-Ltac reifyMExpr_refinesM :=
-  unshelve (eapply reifyMExpr_refinesM_lemma;
-            [ typeclasses eauto | typeclasses eauto |]);
-  [try exact []|].
+Ltac reifyMExpr_refinesM := (* reifyTac reifyMExpr_refinesM_lemma. *)
+  unshelve (eapply reifyMExpr_refinesM_lemma);
+  [try exact []|];
+  cbn [prods lastProds mapLastProds fst Datatypes.fst].
 
 Lemma reifyFMExpr_lemma {tEnv fmt fme lrt f} {P : forall (lrt : LetRecType), lrtToType lrt -> Prop}
-  `(ReifyFMExpr tEnv Ctx.empty fmt fme lrt (fun _ => f)) :
+  `{ReifyFMExpr tEnv Ctx.empty fmt fme lrt (fun _ => f)} :
   P (fmtypeD tEnv fmt) (fmexprD tEnv (Ctx.innerCtx Ctx.actx_empty) fme) -> P lrt f.
 Proof. rewrite (H Ctx.actx_empty); eauto. Qed.
 
-Ltac reifyFMExpr P := reifyTac reifyFMExpr_lemma P.
+Ltac reifyFMExpr := reifyTac reifyFMExpr_lemma.
 
 Lemma reifyFMExpr_refinesFun_lemma {tEnv fmt fme1 fme2 lrt f1 f2}
-  `(ReifyFMExpr tEnv Ctx.empty fmt fme1 lrt (fun _ => f1))
-  `(ReifyFMExpr tEnv Ctx.empty fmt fme2 lrt (fun _ => f2)) :
+  `{ReifyFMExpr tEnv Ctx.empty fmt fme1 lrt (fun _ => f1)}
+  `{ReifyFMExpr tEnv Ctx.empty fmt fme2 lrt (fun _ => f2)} :
   refinesFun (fmexprD tEnv (Ctx.innerCtx Ctx.actx_empty) fme1)
              (fmexprD tEnv (Ctx.innerCtx Ctx.actx_empty) fme2) ->
   refinesFun f1 f2.
-Admitted.
+Proof.
+  unfold ReifyFMExpr in *; intro.
+  specialize (H Ctx.actx_empty); specialize (H0 Ctx.actx_empty).
+  destruct (eq_dep_eq1 H).
+  apply eq_dep_eq in H; apply eq_dep_eq in H0.
+  rewrite H, H0 in H1; eauto.
+Qed.
 
-Ltac reifyFMExpr_refinesFun :=
-  unshelve (eapply reifyFMExpr_refinesFun_lemma;
-            [ typeclasses eauto | typeclasses eauto |]);
-  [try exact []|].
+Ltac reifyFMExpr_refinesFun := (* reifyTac reifyFMExpr_refinesFun_lemma. *)
+  unshelve (eapply reifyFMExpr_refinesFun_lemma);
+  [try exact []|];
+  cbn [prods lastProds mapLastProds fst Datatypes.fst].
 
 (* Inductive test := hi. *)
 
@@ -509,19 +527,26 @@ Ltac reifyFMExpr_refinesFun :=
 
 (*   reifyMExpr_refinesM. *)
 
-Goal forall {P : forall (A : Set), CompM A -> Prop},
-    P _ (returnM tt >>= (fun u => returnM u)).
+(* Goal forall {P : forall (A : Set), CompM A -> Prop}, *)
+(*     P _ (returnM tt >>= (fun u => returnM u)). *)
 
-  Opaque bindM.
+(*   Opaque bindM. *)
 
-  intros.
-  (* typeclasses eauto. *)
-  eapply reifyMExpr_lemma.
-  - eapply ReifyMExpr_bindE.
-    + eapply ReifyMExpr_returnM.
-      (* eapply ReifyExpr_var0. *)
-      (* eapply ReifyExpr_var. *)
-Admitted.
+(*   intros. *)
+(*   eapply reifyMExpr_lemma. *)
+(*   unshelve typeclasses eauto;  *)
+(*   apply  *)
+(*   Set Typeclasses Debug. *)
+(*   try typeclasses eauto. *)
+(*   (* typeclasses eauto. *) *)
+(*   - eapply ReifyMExpr_bindE. *)
+(*     + eapply ReifyMExpr_returnM. *)
+(*       eapply ReifyExpr_var0. *)
+(*       typeclasses eauto. *)
+(*   Unshelve. 2: exact []. *)
+(*       Check @ReifyExpr_var0. *)
+(*       eapply (@ReifyExpr_var0 _ _ _ _ (reifyMExpr_teq (Ctx.actx_tail c))). *)
+(*       eapply (@ReifyExpr_var _ (Datatypes.snd (Ctx.pext Ctx.empty unitT)) Ctx.empty unitT unit). *)
 
 (*   intros. *)
 (*   reifyMExpr P. *)

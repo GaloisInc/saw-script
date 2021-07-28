@@ -26,31 +26,20 @@ Ltac prove_closed :=
   (typeclasses eauto with mem_exts || reflexivity).
 
 Ltac prove_refinesFun :=
+  reifyFMExpr_refinesFun;
   unshelve eapply (check_refinesFun_sound _ _ _); try exact [];
   [ prove_closed | prove_closed | ];
-  compute - [goalD]; cbn;
-  repeat (intro || apply split_and).
+  compute - [goalD]; simpl;
+  repeat (intro || apply split_and); compute.
 
 
-Let ex1_fmt := FunMT (EitherT (TypeT 0) (TypeT 0)) (CompMT (TypeT 0)).
-Let ex1_fme1 : fmexpr [unit] ex1_fmt :=
-  fun n => eitherE _ _ (fun m => returnE _ _ (varE _ m))
-                       (fun m => returnE _ _ (varE _ m))
-                       (varE _ n).
-Let ex1_fme2 : fmexpr [unit] ex1_fmt :=
-  fun _ => returnE _ _ (termE [unit] 0 tt).
+Inductive unit' : Set := tt'.
 
 Example ex1 :
-  @refinesFun (LRT_Fun (SAWCorePrelude.Either unit unit) (fun _ => LRT_Ret unit))
+  @refinesFun (LRT_Fun (SAWCorePrelude.Either unit' unit') (fun _ => LRT_Ret unit'))
               (fun x => SAWCorePrelude.either _ _ _ returnM returnM x)
-              (fun _ => returnM tt).
+              (fun _ => returnM tt').
 Proof.
-  change (LRT_Fun (SAWCorePrelude.Either unit unit) (fun _ => LRT_Ret unit))
-    with (fmtypeD [unit] ex1_fmt); unfold ex1_fmt.
-  change (fun x => SAWCorePrelude.either _ _ _ returnM returnM x)
-    with (fmexprD [unit] Ctx.empty ex1_fme1); unfold ex1_fme1.
-  change (fun _ => returnM tt)
-    with (fmexprD [unit] Ctx.empty ex1_fme2); unfold ex1_fme2.
   prove_refinesFun.
   - destruct x0; reflexivity.
   - destruct x0; reflexivity.

@@ -97,7 +97,7 @@ Definition nthPropEnv (i : nat) := nth i propEnv False.
 
 Inductive expr : type -> Type :=
 | varE {t} : name t -> expr t
-| termE i : nthTypeEnv i -> expr (TypeT i)
+| termE {t} : typeD t -> expr t
 (* | funE {t} : nat -> list { ti & expr ti } -> expr t *)
 | ttE : expr unitT
 | LeftE tl tr : expr tl -> expr (EitherT tl tr)
@@ -168,7 +168,7 @@ Fixpoint exprD (c : ctx typeD) {t} (e : expr t) : string + typeD t :=
                 | inr x => inr x
                 | inl _ => inl "[proof automation] name of type not found in context"%string
                 end
-  | termE i x => inr x
+  | termE _ x => inr x
   (* | funE _ i es => exprFunD (fun _ e => exprD c e) i es *)
   | ttE => inr tt
   | LeftE  _ tr e => apSumR (SAWCorePrelude.Left  _ (typeD tr)) (exprD c e)
@@ -233,7 +233,7 @@ Definition substVar {t t'} (n : name t) (x : expr t) (n' : name t') : string + e
 Fixpoint substExpr {t t'} (n : name t) (x : expr t) (e : expr t') : string + expr t' :=
   match e with
   | varE t' n' => substVar n x n'
-  | termE i x => inr (termE i x)
+  | termE _ x => inr (termE x)
   (* | funE _ i es => apSumR (funE i) (mapSumList (fun '(existT ti ei) => apSumR (existT _ ti) (substExpr n x ei)) es) *)
   | ttE => inr ttE
   | LeftE  _ tr e => apSumR (@LeftE  _ tr) (substExpr n x e)

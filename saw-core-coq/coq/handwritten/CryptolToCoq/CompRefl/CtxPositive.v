@@ -1,6 +1,7 @@
 
 From Coq          Require Import Bool.
 From Coq          Require Import Equalities.
+From Coq          Require Import Logic.Eqdep.
 From Coq          Require Import Program.Equality.
 From Coq          Require Import PArith.BinPos.
 From Coq          Require Import FSets.FMapInterface.
@@ -122,10 +123,10 @@ Module PositiveCtx (type : UsualDecidableType)
 
     Definition find {t} (n : name t) (c : ctx F) : bool + F t :=
       match Map.find n c.(pmap) with
-      | Some (existT _ t' (Some x)) => match type.eq_dec t t' with
-                                       | left e => inr (eq_rect_r _ x e)
-                                       | right _ => inl true
-                                       end
+      | Some (existT t' (Some x)) => match type.eq_dec t t' with
+                                     | left e => inr (eq_rect_r _ x e)
+                                     | right _ => inl true
+                                     end
       | Some _ => inl true
       | None => inl false
       end.
@@ -285,17 +286,23 @@ Module PositiveCtx (type : UsualDecidableType)
       forall (p : tnameEq n1 n2 = true),
         rew (tnameEq_to_teq p) in x1 = x2 ->
         MapsTo n1 x1 c -> MapsTo n2 x2 c.
-    (* Proof. *)
-    (*   (* intros; unfold MapsTo, tnameEq in *. *) *)
-    (*   intros; unfold MapsTo, Map.MapsTo in *; rewrite H in H0. *)
-    (*   injection H0 as H0; apply eq_sigT_eq_dep in H0. *)
-    (*   apply eq_dep_eq_dec in H0; [ eauto | exact type.eq_dec ]. *)
-    (* Qed. *)
-    Admitted.
+    Proof.
+      intros; unfold MapsTo, tnameEq in *.
+      symmetry in H; eapply eq_dep1_intro in H;
+        apply eq_dep1_dep in H; apply eq_dep_sym in H.
+      destruct (eq_dep_eq1 H); apply eq_dep_eq in H.
+      destruct (type.eq_dec t1 t1); [|contradiction].
+      apply nameEq_to_eq in p.
+      destruct p, H; eauto.
+    Qed.
 
     Lemma isFresh_1 {F t1 t2} {n1 : name t1} {n2 : name t2} {c : ctx F} :
       nameEq n1 n2 = true -> isFresh n1 c = isFresh n2 c.
-    Admitted.
+    Proof.
+      intros; unfold isFresh, nameEq in *.
+      apply Pos.eqb_eq in H.
+      destruct H; reflexivity.
+    Qed.
 
     Lemma isFresh_2 {F t1} {n1 : name t1} {c : ctx F} :
       HasValue n1 c -> isFresh n1 c = false.
