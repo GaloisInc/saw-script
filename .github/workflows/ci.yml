@@ -126,6 +126,7 @@ jobs:
         run: .github/ci.sh build
 
       - uses: GaloisInc/.github/actions/cabal-collect-bins@v1
+        if: runner.os != 'Windows'
         id: cabal-test-suites
         with:
           targets: |
