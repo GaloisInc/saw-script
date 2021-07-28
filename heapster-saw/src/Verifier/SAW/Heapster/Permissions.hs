@@ -179,8 +179,8 @@ ppInfoAddExprName base _ _
 ppInfoAddExprName base x (PPInfo { .. }) =
   let (i',str) =
         case Map.lookup base ppBaseNextInt of
-          Just i -> (i+1,str ++ show i)
-          Nothing -> (1,str) in
+          Just i -> (i+1, base ++ show i)
+          Nothing -> (1, base) in
   PPInfo { ppExprNames = NameMap.insert x (StringF str) ppExprNames,
            ppBaseNextInt = Map.insert base i' ppBaseNextInt }
 
