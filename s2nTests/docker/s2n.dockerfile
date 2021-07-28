@@ -14,11 +14,11 @@ RUN apt-get update -y -q && \
     apt-get install -y software-properties-common && \
     apt-get update -q -y && \
     apt install -y \
-    clang-5 \
+    clang-10 \
     curl \
     gcc \
     git \
-    llvm-5 \
+    llvm-10 \
     make \
     sudo \
     && \
