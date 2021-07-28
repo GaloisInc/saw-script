@@ -22,7 +22,7 @@ import Data.Parameterized.Nonce (Nonce, indexValue)
 import Data.Parameterized.TraversableFC ( FoldableFC(toListFC) )
 import Data.Text (Text)
 import Data.Type.RList ( mapToList )
-import GHC.Natural
+import GHC.Natural (Natural)
 import Lang.Crucible.FunctionHandle ( FnHandle )
 import Lang.Crucible.LLVM.Bytes ( Bytes )
 import Lang.Crucible.Types
@@ -59,8 +59,7 @@ instance JsonExport1 f => JsonExport (RAssign f x) where
 instance JsonExport b => JsonExport (Mb (a :: RList CrucibleType) b) where
     jsonExport ppi mb = mbLift $ flip nuMultiWithElim1 mb $ \names body ->
         object [
-            ("tag", "Mb"),
-            ("arguments", jsonExport ppi names),
+            ("args", jsonExport ppi names),
             ("body", jsonExport ppi body)
         ]
 
@@ -86,10 +85,6 @@ instance (JsonExport a, JsonExport b) => JsonExport (a,b) where
 instance JsonExport a => JsonExport [a] where
     jsonExport ppi xs = toJSON (jsonExport ppi <$> xs)
 
-instance JsonExport RWModality where
-    jsonExport _ Read = String "Read"
-    jsonExport _ Write = String "Write"
-
 instance JsonExport (BV n) where
     jsonExport _ (BV n) = toJSON n
 
@@ -99,7 +94,6 @@ instance JsonExport Int
 instance JsonExport Bool
 instance JsonExport Text
 instance {-# OVERLAPPING #-} JsonExport String
-
 
 class JsonExport1 f where
     jsonExport1 :: PPInfo -> f a -> Value
@@ -113,17 +107,16 @@ instance JsonExport1 LOwnedPerm
 instance JsonExport1 PermExpr
 instance JsonExport1 ValuePerm
 
-
 let newNames :: String -> Int -> TH.Q [TH.Name]
     newNames base n = forM [0..n-1] $ \i -> TH.newName (base ++ show i)
 
-    -- build :: String -> TH.ConstructorVariant -> [TH.ExpQ] -> TH.ExpQ
+    build :: String -> TH.ConstructorVariant -> [TH.ExpQ] -> TH.ExpQ
     -- Record, use record field names as JSON field names
     build tag (TH.RecordConstructor fieldNames) xs =
         TH.listE
           $ [| ("tag", tag) |]
           : [ [| (n, $x) |] | n <- TH.nameBase <$> fieldNames | x <- xs]
-    
+
     -- No fields, so just report the constructor tag
     build tag _ []  = [| [("tag", tag)] |]
 
@@ -159,7 +152,7 @@ let newNames :: String -> Int -> TH.Q [TH.Name]
         ''LLVMFieldShape, ''LOwnedPerm, ''NamedPermName, ''NamedShape,
         ''NamedShapeBody, ''NameReachConstr, ''NameSortRepr, ''NatRepr,
         ''PermExpr, ''PermOffset, ''StringInfoRepr, ''SymbolRepr, ''TypeRepr,
-        ''ValuePerm]
+        ''ValuePerm, ''RWModality]
 
  in concat <$> traverse generateJsonExport typesNeeded
 
