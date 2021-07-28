@@ -70,7 +70,7 @@ library
     , saw-core-coq
     , saw-core-sbv
     , saw-core-what4
-    , sbv >= 8.6 && < 8.8
+    , sbv >= 8.10 && < 8.16
     , split
     , temporary
     , template-haskell
