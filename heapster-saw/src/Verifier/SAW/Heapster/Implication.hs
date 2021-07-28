@@ -6903,7 +6903,7 @@ instance ErrorPretty ImplError where
     docx <+>
     pretty "not resolved when trying to prove:" <> softline <>
     docp
-  ppError (ImplVariableError doc f ev vp ctx dp) = renderDoc $
+  ppError (ImplVariableError doc f _ev _vp _ctx _dp) = renderDoc $
     sep [ pretty f <> colon <+> pretty "Could not prove"
         , doc ]
 
