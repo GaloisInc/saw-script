@@ -15,10 +15,9 @@
 module Verifier.SAW.Heapster.IDESupport where
 
 import Control.Monad.Reader
+import Control.Monad.Writer
 import Data.Aeson ( encodeFile, ToJSON )
-import Data.Bifunctor
 import Data.Binding.Hobbits
-import Data.Binding.Hobbits.MonadBind
 import Data.Maybe
 import Data.Parameterized.Some (Some (..))
 import qualified Data.Text as T
@@ -34,6 +33,8 @@ import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.TypedCrucible
+import Verifier.SAW.Heapster.JSONExport(ppToJson)
+import Data.Aeson (Value)
 
 import Debug.Trace
 
@@ -45,7 +46,10 @@ printIDEInfo _penv tcfgs file ppinfo =
   encodeFile file $ IDELog (runWithLoc ppinfo tcfgs)
 
 
-type ExtractionM = Reader (PPInfo, ProgramLoc)
+type ExtractionM = ReaderT (PPInfo, ProgramLoc) (Writer [LogEntry])
+
+emit :: LogEntry -> ExtractionM ()
+emit entry = tell [entry]
 
 -- | A single entry in the IDE info dump log.  At a bare minimum, this must
 -- include a location and corresponding permission.  Once the basics are
@@ -53,6 +57,7 @@ type ExtractionM = Reader (PPInfo, ProgramLoc)
 data LogEntry
   = LogEntry
       { leLocation :: String
+      , leExport :: Value
       , lePermissions :: String
       }
   | LogError
@@ -65,7 +70,7 @@ instance NuMatching LogEntry where
   nuMatchingProof = unsafeMbTypeRepr
 instance Liftable LogEntry where
   mbLift mb = case mbMatch mb of
-    [nuMP| LogEntry x y |] -> LogEntry (mbLift x) (mbLift y)
+    [nuMP| LogEntry x y z |] -> LogEntry (mbLift x) (mbLift y) (mbLift z)
     [nuMP| LogError x y |] -> LogError (mbLift x) (mbLift y)
 
 -- | A complete IDE info dump log, which is just a sequence of entries.  Once
@@ -77,36 +82,31 @@ instance ToJSON IDELog
 
 
 class ExtractLogEntries a where
-  extractLogEntries :: a -> ExtractionM [LogEntry]
+  extractLogEntries :: a -> ExtractionM ()
 
 instance (PermCheckExtC ext)
     => ExtractLogEntries
          (TypedEntry TransPhase ext blocks tops ret args ghosts) where
   extractLogEntries te = do
     let loc = trace "typed entry loc" (mbLift $ fmap getFirstProgramLocTS (typedEntryBody te))
-    errors <- withLoc loc $
+    withLoc loc $
       mbExtractLogEntries undefined (typedEntryBody te)
-    entryEntries <- mbExtractLogEntries undefined (typedEntryPermsIn te)
-    return $ trace "te entries" entryEntries <> trace "errors" errors
+    mbExtractLogEntries undefined (typedEntryPermsIn te)
 
 instance ExtractLogEntries (ValuePerms ctx) where
-  extractLogEntries vps = do
-    (ppi, loc) <- ask
-    return $ foldValuePerms (handlePerm ppi (snd $ ppLoc loc)) [] vps
-    where
-      handlePerm
-        :: PPInfo -> String -> [LogEntry] -> ValuePerm ctx' -> [LogEntry]
-      handlePerm ppi loc rest perm =
-        let permStr = permPrettyString ppi perm
-        in LogEntry loc permStr : rest
+  extractLogEntries vps =
+    do (ppi, loc) <- ask
+       let loc' = snd (ppLoc loc)
+       let strs = foldValuePerms (\xs vp -> (ppToJson ppi vp, permPrettyString ppi vp) : xs) [] vps
+       tell [LogEntry loc' export str | (export, str) <- strs]
 
 instance ExtractLogEntries (TypedStmtSeq ext blocks tops ret ps_in) where
-  extractLogEntries (TypedImplStmt (AnnotPermImpl str pimpl)) =
+  extractLogEntries (TypedImplStmt (AnnotPermImpl _str pimpl)) =
     -- fmap (setErrorMsg str) <$> extractLogEntries pimpl
     extractLogEntries pimpl
   extractLogEntries (TypedConsStmt loc _ _ rest) = do
     withLoc loc $ mbExtractLogEntries undefined rest
-  extractLogEntries (TypedTermStmt _ _) = return []
+  extractLogEntries (TypedTermStmt _ _) = pure ()
 
 instance ExtractLogEntries
     (PermImpl (TypedStmtSeq ext blocks tops ret) ps_in) where
@@ -120,16 +120,16 @@ instance ExtractLogEntries (PermImpl1 ps_in ps_outs) where
   extractLogEntries (Impl1_Fail err) =
     -- The error message is available further up the stack, so we just leave it
     -- empty here
-    reader $ \(_, loc) -> [LogError (snd $ ppLoc loc) (ppError err)]
-  extractLogEntries _ = return []
+    do (_, loc) <- ask
+       emit (LogError (snd (ppLoc loc)) (ppError err))
+  extractLogEntries _ = pure ()
 
 instance ExtractLogEntries
     (MbPermImpls (TypedStmtSeq ext blocks tops ret) ps_outs) where
   extractLogEntries (MbPermImpls_Cons ctx mbpis pis) = do
-    pisEntries <- mbExtractLogEntries ctx pis
-    mbpisEntries <- extractLogEntries mbpis
-    return $ pisEntries <> mbpisEntries
-  extractLogEntries MbPermImpls_Nil = return []
+    mbExtractLogEntries ctx pis
+    extractLogEntries mbpis
+  extractLogEntries MbPermImpls_Nil = pure ()
 
 instance (PermCheckExtC ext)
   => ExtractLogEntries (TypedCFG ext blocks ghosts inits ret) where
@@ -138,25 +138,26 @@ instance (PermCheckExtC ext)
 instance (PermCheckExtC ext)
   => ExtractLogEntries (TypedBlockMap TransPhase ext blocks tops ret) where
   extractLogEntries tbm =
-    fmap concat $ sequence $ RL.mapToList extractLogEntries tbm
+    sequence_ $ RL.mapToList extractLogEntries tbm
 
 instance (PermCheckExtC ext)
   => ExtractLogEntries (TypedBlock TransPhase ext blocks tops ret args) where
-    extractLogEntries tb = fmap concat $ mapM helper $ _typedBlockEntries tb
+    extractLogEntries tb = mapM_ helper $ _typedBlockEntries tb
       where
         helper
           :: (PermCheckExtC ext)
           => Some (TypedEntry TransPhase ext blocks tops ret args)
-          -> ExtractionM [LogEntry]
+          -> ExtractionM ()
         helper ste = case ste of
          Some te -> extractLogEntries te
 
+
 mbExtractLogEntries
-  :: ExtractLogEntries a => CruCtx ctx -> Mb ctx a -> ExtractionM [LogEntry]
+  :: ExtractLogEntries a => CruCtx ctx -> Mb ctx a -> ExtractionM ()
 mbExtractLogEntries ctx mb_a =
-  fmap mbLift $ strongMbM $ flip nuMultiWithElim1 mb_a $ \ns a ->
-    local (first $ ppInfoAddTypedExprNames ctx ns) $
-      extractLogEntries a
+  ReaderT $ \(ppi, loc) ->
+  tell $ mbLift $ flip nuMultiWithElim1 mb_a $ \ns x ->
+  execWriter $ runReaderT (extractLogEntries x) (ppInfoAddTypedExprNames ctx ns ppi, loc)
 
 ppInfoAddTypedExprNames
   :: CruCtx ctx
@@ -186,7 +187,7 @@ runWithLoc ppi =
     runWithLocHelper ppi' sstcfg = case trace "runWith Helper Case" sstcfg of
       Some (SomeTypedCFG tcfg) -> do
         let env = trace "runWithLocHelper" (ppi', getFirstProgramLoc tcfg)
-        runReader (trace "calling extract" extractLogEntries tcfg) env
+        execWriter (runReaderT (trace "calling extract" extractLogEntries tcfg) env)
 
 getFirstProgramLoc
   :: PermCheckExtC ext
