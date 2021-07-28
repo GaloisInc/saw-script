@@ -3026,20 +3026,21 @@ implCatchM m1 m2 =
 -- | "Push" all of the permissions in the permission set for a variable, which
 -- should be equal to the supplied permission, after deleting those permissions
 -- from the input permission set. This is like a simple "proof" of @x:p@.
-implPushM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+implPushM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r (ps :> a) ps ()
 implPushM x p =
   implApplyImpl1 (Impl1_Push x p) (MNil :>: Impl1Cont (const $ pure ()))
 
 -- | Call 'implPushM' for multiple @x:p@ permissions
-implPushMultiM :: NuMatchingAny1 r => DistPerms ps -> ImplM vars s r ps RNil ()
+implPushMultiM :: HasCallStack => NuMatchingAny1 r =>
+                  DistPerms ps -> ImplM vars s r ps RNil ()
 implPushMultiM DistPermsNil = pure ()
 implPushMultiM (DistPermsCons ps x p) =
   implPushMultiM ps >>> implPushM x p
 
 -- | For each permission @x:p@ in a list of permissions, either prove @x:eq(x)@
 -- by reflexivity if @p=eq(x)@ or push @x:p@ if @x@ has permissions @p@
-implPushOrReflMultiM :: NuMatchingAny1 r => DistPerms ps ->
+implPushOrReflMultiM :: HasCallStack => NuMatchingAny1 r => DistPerms ps ->
                         ImplM vars s r ps RNil ()
 implPushOrReflMultiM DistPermsNil = pure ()
 implPushOrReflMultiM (DistPermsCons ps x (ValPerm_Eq (PExpr_Var x')))
@@ -3050,7 +3051,7 @@ implPushOrReflMultiM (DistPermsCons ps x p) =
 -- | Pop a permission from the top of the stack back to the primary permission
 -- for a variable, assuming that the primary permission for that variable is
 -- empty, i.e., is the @true@ permission
-implPopM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+implPopM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
             ImplM vars s r ps (ps :> a) ()
 implPopM x p =
   implApplyImpl1 (Impl1_Pop x p) (MNil :>: Impl1Cont (const $ pure ()))
@@ -3722,6 +3723,28 @@ implSplitLifetimeM x f args l l2 ps_in ps_out =
                     permPretty i (ltFuncMinApply f l)]) >>>
   implSimplM Proxy (SImpl_SplitLifetime x f args l l2 ps_in ps_out) >>>
   getTopDistPerm l2 >>>= implPopM l2
+
+
+-- | Subsume a smaller lifetime @l2@ inside a bigger lifetime @l1@, by putting
+-- the @lowned@ permission for @l1@ inside that of @l2@. Assume permissions
+--
+-- > l1:lowned (ps_in1 -o ps_out1) * l2:lowned (ps_in2 -o ps_out2)
+--
+-- are on top of the stack, and change the permissions on @l2@ to
+--
+-- > l2:lowned (ps_in2 -o l1:lowned (ps_in1 -o ps_out1),ps_out2)
+--
+-- which is popped off the stack, leaving @l1:[l2]lcurrent@ on the stack.
+implSubsumeLifetimeM :: NuMatchingAny1 r => ExprVar LifetimeType ->
+                        LOwnedPerms ps_in1 -> LOwnedPerms ps_out1 ->
+                        ExprVar LifetimeType ->
+                        LOwnedPerms ps_in2 -> LOwnedPerms ps_out2 ->
+                        ImplM vars s r (ps :> LifetimeType)
+                        (ps :> LifetimeType :> LifetimeType) ()
+implSubsumeLifetimeM l1 ps_in1 ps_out1 l2 ps_in2 ps_out2 =
+  implSimplM Proxy (SImpl_SubsumeLifetime l1 ps_in1 ps_out1 l2 ps_in2 ps_out2) >>>
+  getTopDistPerm l2 >>>= implPopM l2
+
 
 -- | Find all lifetimes that we currently own which could, if ended, help prove
 -- the specified permissions, and return them with their @lowned@ permissions
@@ -4470,13 +4493,19 @@ proveVarLifetimeFunctor' x f args l mb_l psubst = case mbMatch mb_l of
     | Right l2 <- mbNameBoundP mb_z ->
       getPerm l2 >>= \case
 
-        -- If we have l2:lowned ps, prove l:[l2]lcurrent * l2:lowned ps and then
-        -- split the lifetime
-        ValPerm_LOwned ps_in ps_out ->
+        -- If we have l2:lowned ps, prove l:[l2]lcurrent * l2:lowned ps' for
+        -- some ps' and then split the lifetime of x. Note that, in proving
+        -- l:[l2]lcurrent, we can change the lowned permission for l2,
+        -- specifically if we subsume l1 into l2.
+        ValPerm_LOwned _ _ ->
           let (l',l'_p) = lcurrentPerm l l2 in
           proveVarImplInt l' (fmap (const l'_p) mb_z) >>>
-          implPushM l2 (ValPerm_LOwned ps_in ps_out) >>>
-          implSplitLifetimeM x f args l l2 ps_in ps_out
+          getPerm l2 >>>= \case
+            l2_p@(ValPerm_LOwned ps_in ps_out) ->
+              implPushM l2 l2_p >>>
+              implSplitLifetimeM x f args l l2 ps_in ps_out
+            _ -> error ("proveVarLifetimeFunctor: unexpected error: "
+                        ++ "l2 lost its lowned perms")
 
         -- Otherwise, prove l:[l2]lcurrent and weaken the lifetime
         _ ->
@@ -6058,6 +6087,13 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       [Perm_LCurrent (PExpr_Var l)] ->
         proveVarImplInt l (fmap ValPerm_Conj1 mb_p) >>>
         implSimplM Proxy (SImpl_LCurrentTrans x l l')
+      [Perm_LOwned ps_in ps_out]
+        | PExpr_Var l'_var <- l' ->
+          getSimpleVarPerm l'_var >>= \case
+            p@(ValPerm_LOwned ps_in' ps_out') ->
+              implPushM l'_var p >>>
+              implSubsumeLifetimeM x ps_in ps_out l'_var ps_in' ps_out'
+            _ -> proveVarAtomicImplUnfoldOrFail x ps mb_p
       _ -> proveVarAtomicImplUnfoldOrFail x ps mb_p
 
   -- If we have a struct permission on the left, eliminate it to a sequence of
