@@ -2177,16 +2177,16 @@ getVarTypes (xs :>: x) = CruCtxCons <$> getVarTypes xs <*> getVarType x
 
 -- | Remember the type of a free variable, and ensure that it has a permission
 setVarType ::
-  Maybe String ->
-  Maybe String ->
-  ExprVar a ->
-  TypeRepr a ->
+  Maybe String -> -- ^ The base name of the variable (e.g., "top", "arg", etc.)
+  Maybe String -> -- ^ The C name of the variable, if applicable
+  ExprVar a -> -- ^ The Hobbits variable itself
+  TypeRepr a -> -- ^ The type of the variable
   PermCheckM ext cblocks blocks tops ret r ps r ps ()
 setVarType maybe_str dbg x tp =
   let str' =
         case (maybe_str,dbg) of
           (_,Just d) -> "C[" ++ d ++ "]"
-          (Just str,_) -> str
+          (Just str,_) -> str ++ "_" ++ typeBaseName tp
           (Nothing,Nothing) -> typeBaseName tp
   in
   modify $ \st ->
@@ -2196,7 +2196,7 @@ setVarType maybe_str dbg x tp =
 
 -- | Remember the types of a sequence of free variables
 setVarTypes ::
-  Maybe String ->
+  Maybe String -> -- ^ The bsae name of the variable (e.g., "top", "arg", etc.)
   RAssign (Constant (Maybe String)) tps ->
   RAssign Name tps ->
   CruCtx tps ->
