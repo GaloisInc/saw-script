@@ -2958,7 +2958,7 @@ implApplyImpl1 impl1 mb_ms =
       (helper mbperms args)
       (gopenBinding strongMbM mbperm >>>= \(ns, perms') ->
         gmodify (set implStatePerms perms' .
-                 over implStatePPInfo (ppInfoAddExprNames "z" ns)) >>>
+                 over implStatePPInfo (ppInfoAddTypedExprNames ctx ns)) >>>
         implSetNameTypes ns ctx >>>
         f ns)
 

@@ -1923,9 +1923,9 @@ runPermCheckM names entryID args ghosts mb_perms_in m =
   
   let go x = runGenStateContT x st (\_ () -> pure ()) in
   go $
-  setVarTypes "top" (noNames' stTopCtx) tops_ns stTopCtx >>>
-  setVarTypes "local" arg_names args_ns args >>>
-  setVarTypes "ghost" (noNames' ghosts) ghosts_ns ghosts >>>
+  setVarTypes (Just "top") (noNames' stTopCtx) tops_ns stTopCtx >>>
+  setVarTypes (Just "local") arg_names args_ns args >>>
+  setVarTypes (Just "ghost") (noNames' ghosts) ghosts_ns ghosts >>>
   setInputExtState knownRepr ghosts ghosts_ns >>>
   m tops_ns args_ns ghosts_ns perms_in
 
@@ -2177,16 +2177,17 @@ getVarTypes (xs :>: x) = CruCtxCons <$> getVarTypes xs <*> getVarType x
 
 -- | Remember the type of a free variable, and ensure that it has a permission
 setVarType ::
-  String ->
-  Maybe String ->
-  ExprVar a ->
-  TypeRepr a ->
+  Maybe String -> -- ^ The base name of the variable (e.g., "top", "arg", etc.)
+  Maybe String -> -- ^ The C name of the variable, if applicable
+  ExprVar a -> -- ^ The Hobbits variable itself
+  TypeRepr a -> -- ^ The type of the variable
   PermCheckM ext cblocks blocks tops ret r ps r ps ()
-setVarType str dbg x tp =
+setVarType maybe_str dbg x tp =
   let str' =
-        case dbg of
-          Nothing -> str
-          Just d -> "C[" ++ d ++ "]"
+        case (maybe_str,dbg) of
+          (_,Just d) -> "C[" ++ d ++ "]"
+          (Just str,_) -> str ++ "_" ++ typeBaseName tp
+          (Nothing,Nothing) -> typeBaseName tp
   in
   modify $ \st ->
   st { stCurPerms = initVarPerm x (stCurPerms st),
@@ -2195,7 +2196,7 @@ setVarType str dbg x tp =
 
 -- | Remember the types of a sequence of free variables
 setVarTypes ::
-  String ->
+  Maybe String -> -- ^ The bsae name of the variable (e.g., "top", "arg", etc.)
   RAssign (Constant (Maybe String)) tps ->
   RAssign Name tps ->
   CruCtx tps ->
@@ -2530,7 +2531,7 @@ emitStmt tps names loc stmt =
   gopenBinding
     ((TypedConsStmt loc stmt (cruCtxProxies tps) <$>) . strongMbM)
     (mbPure (cruCtxProxies tps) ()) >>>= \(ns, ()) ->
-  setVarTypes "x" names ns tps >>>
+  setVarTypes Nothing names ns tps >>>
   gmodify (modifySTCurPerms (applyTypedStmt stmt ns)) >>>
   pure ns
 
