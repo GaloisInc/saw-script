@@ -117,11 +117,11 @@ build() {
     pkgs=(saw saw-remote-api)
   fi
   tee -a cabal.project.local > /dev/null < cabal.project.ci
-  if ! retry cabal v2-build "$@" "${pkgs[@]}"; then
+  if ! retry cabal v2-build --disable-executable-dynamic --enable-executable-static "$@" "${pkgs[@]}"; then
     if [[ "$RUNNER_OS" == "macOS" ]]; then
       echo "Working around a dylib issue on macos by removing the cache and trying again"
       cabal v2-clean
-      retry cabal v2-build "$@" "${pkgs[@]}"
+      retry cabal v2-build --disable-executable-dynamic --enable-executable-static "$@" "${pkgs[@]}"
     else
       return 1
     fi
