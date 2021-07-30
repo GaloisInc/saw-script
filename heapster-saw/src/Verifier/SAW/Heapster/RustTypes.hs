@@ -990,8 +990,6 @@ abstractMbLOPsModalities mb_lops = case mbMatch mb_lops of
                LOwnedPermBlock e (bp { llvmBlockRW = PExpr_Var rw,
                                        llvmBlockLifetime = PExpr_Var l }))
       mb_e mb_bp)
-  [nuMP| lops :>: lop@(LOwnedPermLifetime _ _ _) |] ->
-    liftA2 (mbMap2 (:>:)) (abstractMbLOPsModalities lops) (pure lop)
 
 
 -- | Find all field or block permissions containing lifetime @l@ and return them

@@ -180,7 +180,9 @@ expr ::                                         { AstExpr }
 
   | 'shape' '(' expr ')'                        { ExShape (pos $1) $3}
   | 'lowned' '(' list(varExpr) '-o' list1(varExpr) ')'
-                                                { ExLOwned (pos $1) $3 $5}
+                                                { ExLOwned (pos $1) [] $3 $5}
+  | 'lowned' '[' list(expr) ']' '(' list(varExpr) '-o' list1(varExpr) ')'
+                                                { ExLOwned (pos $1) $3 $6 $8}
   | lifetime 'lcurrent'                         { ExLCurrent (pos $2) $1 }
 
 -- BV Props (Value Permissions)
