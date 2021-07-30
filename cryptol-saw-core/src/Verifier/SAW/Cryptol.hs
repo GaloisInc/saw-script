@@ -759,21 +759,37 @@ prelPrims =
 
     -- -- Enumerations
   , ("fromTo",         flip scGlobalDef "Cryptol.ecFromTo")
-    --                            -- fromTo : {first, last, bits, a}
-    --                            --           ( fin last, fin bits, last >== first,
-    --                            --             Literal first a, Literal last a)
-    --                            --        => [1 + (last - first)]a
+                                  -- fromTo : {first, last, bits, a}
+                                  --           ( fin last, fin bits, last >== first,
+                                  --             Literal first a, Literal last a)
+                                  --        => [1 + (last - first)]a
   , ("fromToLessThan", flip scGlobalDef "Cryptol.ecFromToLessThan")
-    --                            -- fromToLessThan : {first, bound, a}
-    --                            --                   ( fin first, bound >= first,
-    --                            --                     LiteralLessThan bound a)
-    --                            --                => [bound - first]a
+                                  -- fromToLessThan : {first, bound, a}
+                                  --                   ( fin first, bound >= first,
+                                  --                     LiteralLessThan bound a)
+                                  --                => [bound - first]a
   , ("fromThenTo",     flip scGlobalDef "Cryptol.ecFromThenTo")
-    --                            -- fromThenTo : {first, next, last, a, len}
-    --                            --              ( fin first, fin next, fin last
-    --                            --              , Literal first a, Literal next a, Literal last a
-    --                            --              , first != next
-    --                            --              , lengthFromThenTo first next last == len) => [len]a
+                                  -- fromThenTo : {first, next, last, a, len}
+                                  --              ( fin first, fin next, fin last
+                                  --              , Literal first a, Literal next a, Literal last a
+                                  --              , first != next
+                                  --              , lengthFromThenTo first next last == len) => [len]a
+  , ("fromToBy",       flip scGlobalDef "Cryptol.ecFromToBy")
+                                  -- fromToBy : {first, last, stride, a}
+                                  --   (fin last, fin stride, stride >= 1, last >= first, Literal last a) =>
+                                  --   [1 + (last - first)/stride]a
+  , ("fromToByLessThan", flip scGlobalDef "Cryptol.ecFromToByLessThan")
+                                  -- fromToByLessThan : {first, bound, stride, a}
+                                  --   (fin first, fin stride, stride >= 1, bound >= first, LiteralLessThan bound a) =>
+                                  --   [(bound - first)/^stride]a
+  , ("fromToDownBy", flip scGlobalDef "Cryptol.ecFromToDownBy")
+                                  -- fromToDownBy : {first, last, stride, a}
+                                  --   (fin first, fin stride, stride >= 1, first >= last, Literal first a) =>
+                                  --   [1 + (first - last)/stride]a
+  , ("fromToDownByGreaterThan", flip scGlobalDef "Cryptol.ecFromToDownByGreaterThan")
+                                  -- fromToDownByGreaterThan : {first, bound, stride, a}
+                                  --   (fin first, fin stride, stride >= 1, first >= bound, Literal first a) =>
+                                  --   [(first - bound)/^stride]a
 
     -- Evaluation primitives: deepseq, parmap
   , ("deepseq",      flip scGlobalDef "Cryptol.ecDeepseq")     -- {a, b} (Eq b) => a -> b -> b

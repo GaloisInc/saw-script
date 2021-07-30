@@ -29,6 +29,7 @@ module Verifier.SAW.Heapster.Permissions where
 
 import Prelude hiding (pred)
 
+import Data.Char (isDigit)
 import Data.Maybe
 import Data.List hiding (sort)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -41,6 +42,8 @@ import Data.BitVector.Sized (BV)
 import Numeric.Natural
 import GHC.TypeLits
 import Data.Kind
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Control.Applicative hiding (empty)
 import Control.Monad.Identity hiding (ap)
 import Control.Monad.State hiding (ap)
@@ -134,41 +137,65 @@ foldMapWithDefault comb def f l = foldr1WithDefault comb def $ map f l
 
 newtype StringF a = StringF { unStringF :: String }
 
+-- | Convert a type to a base name for printing variables of that type
+typeBaseName :: TypeRepr a -> String
+typeBaseName UnitRepr = "u"
+typeBaseName BoolRepr = "b"
+typeBaseName NatRepr = "n"
+typeBaseName (BVRepr _) = "bv"
+typeBaseName (LLVMPointerRepr _) = "ptr"
+typeBaseName (LLVMBlockRepr _) = "blk"
+typeBaseName (LLVMFrameRepr _) = "frm"
+typeBaseName LifetimeRepr = "l"
+typeBaseName RWModalityRepr = "rw"
+typeBaseName (ValuePermRepr _) = "perm"
+typeBaseName (LLVMShapeRepr _) = "shape"
+typeBaseName (StringRepr _) = "str"
+typeBaseName (FunctionHandleRepr _ _) = "fn"
+typeBaseName (StructRepr _) = "strct"
+typeBaseName _ = "x"
+
+
+-- | A 'PPInfo' maps bound 'Name's to strings used for printing, with the
+-- invariant that each 'Name' is mapped to a different string. This invariant is
+-- maintained by always assigning each 'Name' to a "base string", which is often
+-- determined by the Crucible type of the 'Name', followed by a unique
+-- integer. Note that this means no base name should end with an integer. To
+-- ensure the uniqueness of these integers, the 'PPInfo' structure tracks the
+-- next integer to be used for each base string.
 data PPInfo =
   PPInfo { ppExprNames :: NameMap (StringF :: CrucibleType -> Type),
-           ppPermNames :: NameMap (StringF :: Type -> Type),
-           ppVarIndex :: Int }
+           ppBaseNextInt :: Map String Int }
 
+-- | Build an empty 'PPInfo' structure
 emptyPPInfo :: PPInfo
-emptyPPInfo = PPInfo NameMap.empty NameMap.empty 1
+emptyPPInfo = PPInfo NameMap.empty Map.empty
 
--- | Record an expression variable in a 'PPInfo' with the given base name
+-- | Add an expression variable to a 'PPInfo' with the given base name
 ppInfoAddExprName :: String -> ExprVar a -> PPInfo -> PPInfo
-ppInfoAddExprName base x info =
-  info { ppExprNames =
-           NameMap.insert x (StringF (base ++ show (ppVarIndex info)))
-           (ppExprNames info),
-           ppVarIndex = ppVarIndex info + 1 }
+ppInfoAddExprName base _ _
+  | length base == 0 || isDigit (last base) =
+    error ("ppInfoAddExprName: invalid base name: " ++ base)
+ppInfoAddExprName base x (PPInfo { .. }) =
+  let (i',str) =
+        case Map.lookup base ppBaseNextInt of
+          Just i -> (i+1, base ++ show i)
+          Nothing -> (1, base) in
+  PPInfo { ppExprNames = NameMap.insert x (StringF str) ppExprNames,
+           ppBaseNextInt = Map.insert base i' ppBaseNextInt }
 
+-- | Add a sequence of variables to a 'PPInfo' with the given base name
 ppInfoAddExprNames :: String -> RAssign Name (tps :: RList CrucibleType) ->
                       PPInfo -> PPInfo
 ppInfoAddExprNames _ MNil info = info
 ppInfoAddExprNames base (ns :>: n) info =
   ppInfoAddExprNames base ns $ ppInfoAddExprName base n info
 
--- | Record a permission variable in a 'PPInfo' with the given base name
-ppInfoAddPermName :: String -> Name (a :: Type) -> PPInfo -> PPInfo
-ppInfoAddPermName base x info =
-  info { ppPermNames =
-           NameMap.insert x (StringF (base ++ show (ppVarIndex info)))
-           (ppPermNames info),
-           ppVarIndex = ppVarIndex info + 1 }
-
-ppInfoAddPermNames :: String -> RAssign Name (tps :: RList Type) ->
-                      PPInfo -> PPInfo
-ppInfoAddPermNames _ MNil info = info
-ppInfoAddPermNames base (ns :>: n) info =
-  ppInfoAddPermNames base ns $ ppInfoAddPermName base n info
+-- | Add a sequence of variables to a 'PPInfo' using their 'typeBaseName's
+ppInfoAddTypedExprNames :: CruCtx tps -> RAssign Name tps -> PPInfo -> PPInfo
+ppInfoAddTypedExprNames _ MNil info = info
+ppInfoAddTypedExprNames (CruCtxCons tps tp) (ns :>: n) info =
+  ppInfoAddTypedExprNames tps ns $ ppInfoAddExprName (typeBaseName tp) n info
 
 
 type PermPPM = Reader PPInfo
@@ -235,17 +262,7 @@ instance PermPretty (ExprVar a) where
 instance PermPrettyF (Name :: CrucibleType -> Type) where
   permPrettyMF = permPrettyM
 
-instance PermPretty (Name (a :: Type)) where
-  permPrettyM x =
-    do maybe_str <- NameMap.lookup x <$> ppPermNames <$> ask
-       case maybe_str of
-         Just (StringF str) -> return $ pretty str
-         Nothing -> return $ pretty (show x)
-
 instance PermPretty (SomeName CrucibleType) where
-  permPrettyM (SomeName x) = permPrettyM x
-
-instance PermPretty (SomeName Type) where
   permPrettyM (SomeName x) = permPrettyM x
 
 instance PermPrettyF f => PermPretty (RAssign f ctx) where
@@ -302,31 +319,11 @@ permPrettyExprMb f mb =
   do docs <- traverseRAssign (\n -> Constant <$> permPrettyM n) ns
      f docs $ permPrettyM a
 
--- FIXME: no longer needed?
-{-
-permPrettyPermMb :: PermPretty a =>
-                    (RAssign (Constant (Doc ann)) ctx -> PermPPM (Doc ann) -> PermPPM (Doc ann)) ->
-                    Mb (ctx :: RList Type) a -> PermPPM (Doc ann)
-permPrettyPermMb f mb =
-  fmap mbLift $ strongMbM $ flip nuMultiWithElim1 mb $ \ns a ->
-  local (ppInfoAddPermNames "z" ns) $
-  do docs <- traverseRAssign (\n -> Constant <$> permPrettyM n) ns
-     f docs $ permPrettyM a
--}
-
 instance PermPretty a => PermPretty (Mb (ctx :: RList CrucibleType) a) where
   permPrettyM =
     permPrettyExprMb $ \docs ppm ->
     (\pp -> PP.group (ppEncList True (RL.toList docs) <>
                       nest 2 (dot <> line <> pp))) <$> ppm
-
--- FIXME: no longer needed?
-{-
-instance PermPretty a => PermPretty (Mb (ctx :: RList Type) a) where
-  permPrettyM =
-    permPrettyPermMb $ \docs ppm ->
-    (\pp -> PP.group (tupled (RL.toList docs) <> dot <> line <> pp)) <$> ppm
--}
 
 instance PermPretty Integer where
   permPrettyM = return . pretty
@@ -2686,7 +2683,7 @@ instance PermPretty (FunPerm ghosts args ret) where
           RL.split Proxy (cruCtxProxies args) ghosts_args_ns in
     local (ppInfoAddExprName "ret" ret_n) $
     local (ppInfoAddExprNames "arg" args_ns) $
-    local (ppInfoAddExprNames "ghost" ghosts_ns) $
+    local (ppInfoAddTypedExprNames ghosts ghosts_ns) $
     do pp_ps_in  <- permPrettyM ps_in
        pp_ps_out <- permPrettyM ps_out
        pp_ghosts <- permPrettyM (RL.map2 VarAndType ghosts_ns $
@@ -3368,6 +3365,11 @@ modalizeShape _ _ (PExpr_Var _) =
   -- adding a modalized variable shape constructor
   Nothing
 modalizeShape _ _ PExpr_EmptyShape = Just PExpr_EmptyShape
+modalizeShape _ _ sh@(PExpr_NamedShape _ _ nmsh _)
+  | not (namedShapeCanUnfold nmsh) =
+    -- Opaque shapes are not affected by modalization, because we assume they do
+    -- not have any top-level pointers in them
+    Just sh
 modalizeShape rw l (PExpr_NamedShape rw' l' nmsh args) =
   -- If a named shape already has modalities, they take precedence
   Just $ PExpr_NamedShape (rw' <|> rw) (l' <|> l) nmsh args

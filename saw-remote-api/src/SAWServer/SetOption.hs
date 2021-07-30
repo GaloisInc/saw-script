@@ -33,9 +33,9 @@ setOption opt =
          updateRW rw { rwLaxArith = enabled }
        EnableLaxPointerOrdering enabled ->
          updateRW rw { rwLaxPointerOrdering = enabled }
-       EnableSMTArrayMemoryModel enabled -> undefined
+       EnableSMTArrayMemoryModel enabled ->
          updateRW rw { rwSMTArrayMemoryModel = enabled }
-       EnableWhat4HashConsing enabled -> undefined
+       EnableWhat4HashConsing enabled ->
          updateRW rw { rwWhat4HashConsing = enabled }
      ok
 

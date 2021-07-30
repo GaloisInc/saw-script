@@ -549,10 +549,20 @@ enable_lax_arithmetic = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxArith = True }
 
+disable_lax_arithmetic :: TopLevel ()
+disable_lax_arithmetic = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxArith = False }
+
 enable_lax_pointer_ordering :: TopLevel ()
 enable_lax_pointer_ordering = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxPointerOrdering = True }
+
+disable_lax_pointer_ordering :: TopLevel ()
+disable_lax_pointer_ordering = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxPointerOrdering = False }
 
 enable_what4_hash_consing :: TopLevel ()
 enable_what4_hash_consing = do
@@ -780,10 +790,20 @@ primitives = Map.fromList
     Current
     [ "Enable lax rules for arithmetic overflow in Crucible." ]
 
+  , prim "disable_lax_arithmetic" "TopLevel ()"
+    (pureVal disable_lax_arithmetic)
+    Current
+    [ "Disable lax rules for arithmetic overflow in Crucible." ]
+
   , prim "enable_lax_pointer_ordering" "TopLevel ()"
     (pureVal enable_lax_pointer_ordering)
     Current
     [ "Enable lax rules for pointer ordering comparisons in Crucible." ]
+
+  , prim "disable_lax_pointer_ordering" "TopLevel ()"
+    (pureVal disable_lax_pointer_ordering)
+    Current
+    [ "Disable lax rules for pointer ordering comparisons in Crucible." ]
 
   , prim "enable_what4_hash_consing" "TopLevel ()"
     (pureVal enable_what4_hash_consing)
@@ -3185,6 +3205,15 @@ primitives = Map.fromList
     [ "heapster_assume_fun_rename nm nm_t perms trans assumes that function nm"
     , " has permissions perms and translates to the SAW core term trans. If"
     , " trans is not an identifier then it is bound to the defined name nm_to."
+    ]
+
+  , prim "heapster_assume_fun_rename_prim"
+    "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_assume_fun_rename_prim)
+    Experimental
+    [
+      "heapster_assume_fun_rename_prim nm nm_to perms assumes that function nm"
+    , " has permissions perms as a primitive."
     ]
 
   , prim "heapster_assume_fun_multi"
