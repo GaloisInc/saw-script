@@ -30,6 +30,7 @@ import Lang.Crucible.Types
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Datatype as TH
 import Verifier.SAW.Heapster.CruUtil ( CruCtx )
+import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Name ( Ident )
 import What4.FunctionName ( FunctionName )
@@ -80,6 +81,9 @@ instance JsonExport Ident where
 instance JsonExport FunctionName where
     jsonExport = toJSON . show -- Show instance is pretty
 
+instance JsonExport (EqProof a b) where
+    jsonExport _ = object []
+
 instance JsonExport a => JsonExport (Maybe a) where
     jsonExport = maybe Null jsonExport
 
@@ -91,6 +95,23 @@ instance JsonExport a => JsonExport [a] where
 
 instance JsonExport (BV n) where
     jsonExport = toJSON . asUnsigned
+
+instance JsonExport (Proxy a) where
+    jsonExport _ = object []
+
+instance JsonExport ImplError where
+    jsonExport = toJSON . ppError
+
+-- Custom instance avoids the polymorphic field on the Done case
+instance JsonExport (PermImpl f ps) where
+    jsonExport (PermImpl_Done _eq) =
+        object [("tag", "PermImpl_Done")]
+    jsonExport (PermImpl_Step rs mb) =
+        object
+            [("tag", "PermImpl_Step"),
+             ("contents", Array
+                [jsonExport rs,
+                 jsonExport mb])]
 
 instance JsonExport Natural
 instance JsonExport Integer
@@ -111,6 +132,8 @@ instance JsonExport1 (Name :: CrucibleType -> Type)
 instance JsonExport1 LOwnedPerm
 instance JsonExport1 PermExpr
 instance JsonExport1 ValuePerm
+instance JsonExport1 VarAndPerm
+instance JsonExport1 Proxy
 
 -- This code generates generic JSON generation instances for
 -- algebraic data types.
@@ -174,7 +197,10 @@ let fields :: String -> TH.ConstructorVariant -> [TH.ExpQ] -> TH.ExpQ
         ''LLVMFieldShape, ''LOwnedPerm, ''NamedPermName, ''NamedShape,
         ''NamedShapeBody, ''NameReachConstr, ''NameSortRepr, ''NatRepr,
         ''PermExpr, ''PermOffset, ''StringInfoRepr, ''SymbolRepr, ''TypeRepr,
-        ''ValuePerm, ''RWModality]
+        ''ValuePerm, ''RWModality, ''PermImpl1, ''Member, ''SimplImpl,
+        ''VarAndPerm, ''LocalPermImpl, ''LifetimeFunctor, ''NamedPerm,
+        ''RecPerm, ''OpaquePerm, ''DefinedPerm, ''ReachMethods, ''MbPermImpls
+        ]
 
  in traverse generateJsonExport typesNeeded
 
