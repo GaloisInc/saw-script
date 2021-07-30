@@ -35,6 +35,8 @@ Inductive type : Type :=
 | TypeT : nat -> type
 | unitT : type
 | EitherT : type -> type -> type
+| prodT : type -> type -> type
+| listT : type -> type
 .
 Inductive fmtype : Type :=
 | FunMT : type -> fmtype -> fmtype
@@ -75,6 +77,8 @@ Fixpoint typeD (t : type) : Set :=
   | TypeT i => nthTypeEnv i
   | unitT => unit
   | EitherT tl tr => SAWCorePrelude.Either (typeD tl) (typeD tr)
+  | prodT tl tr => prod (typeD tl) (typeD tr)
+  | listT t => list (typeD t)
   end.
 
 (* Fixpoint fmtypeD (fmt : fmtype) : Type := *)
@@ -102,6 +106,15 @@ Inductive expr : type -> Type :=
 | ttE : expr unitT
 | LeftE tl tr : expr tl -> expr (EitherT tl tr)
 | RightE tl tr : expr tr -> expr (EitherT tl tr)
+| fstE {tl tr} : expr (prodT tl tr) -> expr tl
+| sndE {tl tr} : expr (prodT tl tr) -> expr tr
+| pairE {tl tr} : expr tl -> expr tr -> expr (prodT tl tr)
+| nilE {t} : expr (listT t)
+| consE {t} : expr t -> expr (listT t) -> expr (listT t)
+| unfoldListE t : expr (listT t) ->
+                  expr (EitherT unitT (prodT t (prodT (listT t) unitT)))
+| foldListE t : expr (EitherT unitT (prodT t (prodT (listT t) unitT))) ->
+                expr (listT t)
 .
 Inductive prop : Type :=
 | PropP : nat -> prop
@@ -171,8 +184,15 @@ Fixpoint exprD (c : ctx typeD) {t} (e : expr t) : string + typeD t :=
   | termE _ x => inr x
   (* | funE _ i es => exprFunD (fun _ e => exprD c e) i es *)
   | ttE => inr tt
-  | LeftE  _ tr e => apSumR (SAWCorePrelude.Left  _ (typeD tr)) (exprD c e)
-  | RightE tl _ e => apSumR (SAWCorePrelude.Right (typeD tl) _) (exprD c e)
+  | LeftE  _ tr e => fmapSumR (SAWCorePrelude.Left  _ (typeD tr)) (exprD c e)
+  | RightE tl _ e => fmapSumR (SAWCorePrelude.Right (typeD tl) _) (exprD c e)
+  | fstE _ _ e => fmapSumR fst (exprD c e)
+  | sndE _ _ e => fmapSumR snd (exprD c e)
+  | pairE _ _ e1 e2 => apSumR (fmapSumR pair (exprD c e1)) (exprD c e2)
+  | nilE _ => inr nil
+  | consE _ e1 e2 => apSumR (fmapSumR cons (exprD c e1)) (exprD c e2)
+  | unfoldListE t e => fmapSumR (SAWCorePrelude.unfoldList (typeD t)) (exprD c e)
+  | foldListE t e => fmapSumR (SAWCorePrelude.foldList (typeD t)) (exprD c e)
   end.
 
 Inductive ErrorP : string -> Prop :=.
@@ -236,8 +256,15 @@ Fixpoint substExpr {t t'} (n : name t) (x : expr t) (e : expr t') : string + exp
   | termE _ x => inr (termE x)
   (* | funE _ i es => apSumR (funE i) (mapSumList (fun '(existT ti ei) => apSumR (existT _ ti) (substExpr n x ei)) es) *)
   | ttE => inr ttE
-  | LeftE  _ tr e => apSumR (@LeftE  _ tr) (substExpr n x e)
-  | RightE tl _ e => apSumR (@RightE tl _) (substExpr n x e)
+  | LeftE  _ tr e => fmapSumR (@LeftE  _ tr) (substExpr n x e)
+  | RightE tl _ e => fmapSumR (@RightE tl _) (substExpr n x e)
+  | fstE _ tr e => fmapSumR (@fstE _ tr) (substExpr n x e)
+  | sndE tl _ e => fmapSumR (@sndE tl _) (substExpr n x e)
+  | pairE _ _ e1 e2 => apSumR (fmapSumR pairE (substExpr n x e1)) (substExpr n x e2)
+  | nilE _ => inr nilE
+  | consE _ e1 e2 => apSumR (fmapSumR consE (substExpr n x e1)) (substExpr n x e2)
+  | unfoldListE t e => fmapSumR (unfoldListE t) (substExpr n x e)
+  | foldListE t e => fmapSumR (foldListE t) (substExpr n x e)
   end.
 
 Fixpoint substMExpr {t t'} (n : name t) (x : expr t) (me : mexpr t') : mexpr t' :=
@@ -284,6 +311,13 @@ Fixpoint closedExpr {F} (c : ctx F) {t} (e : expr t) : bool :=
   | ttE => true
   | LeftE  _ _ e => closedExpr c e
   | RightE _ _ e => closedExpr c e
+  | fstE _ _ e => closedExpr c e
+  | sndE _ _ e => closedExpr c e
+  | pairE _ _ e1 e2 => closedExpr c e1 && closedExpr c e2
+  | nilE _ => true
+  | consE _ e1 e2 => closedExpr c e1 && closedExpr c e2
+  | unfoldListE t e => closedExpr c e
+  | foldListE t e => closedExpr c e
   end.
 
 Fixpoint closedProp {F} (c : ctx F) (p : prop) : bool :=
@@ -317,6 +351,8 @@ Lemma closedExpr_exprD_eq (c : ctx typeD) {t} (e : expr t) :
 Proof.
   induction e; simpl in *; intros;
     try (destruct (IHe H); rewrite H0; simpl); eauto.
+  2-3: apply andb_true_iff in H; destruct H.
+  2-3: destruct (IHe1 H), (IHe2 H0); rewrite H1, H2; simpl; eauto.
   apply Ctx.mem_2 in H; destruct H.
   rewrite (Ctx.find_1 H); eauto.
 Qed.
@@ -325,6 +361,7 @@ Lemma wkn1_closedExpr (c : ctx typeD) {t'} (x : typeD t') {t} (e : expr t) :
   closedExpr c e = true -> closedExpr (snd (Ctx.add c x)) e = true.
 Proof.
   induction e; simpl; intros; eauto.
+  2-3: apply andb_true_iff in H; destruct H; apply andb_true_iff; eauto.
   apply Ctx.mem_2 in H; destruct H.
   apply Ctx.mem_1; exists x0; apply Ctx.ext_2; eauto.
 Qed.
@@ -363,6 +400,8 @@ Proof.
   destruct s as [?t [?n ?pf]].
   induction e; intros; cbn [ closedExpr exprD ] in *;
     try solve [ eauto | destruct (IHe H); eauto ].
+  2-3: apply andb_true_iff in H; destruct H.
+  2-3: destruct (IHe1 H), (IHe2 H0); eauto.
   apply Ctx.mem_2 in H; destruct H.
   rewrite (Ctx.find_1 H).
   rewrite (Ctx.find_1 (Ctx.append_cons_1 H)); eauto.

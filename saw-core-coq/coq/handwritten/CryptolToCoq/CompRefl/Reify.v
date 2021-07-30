@@ -178,6 +178,22 @@ Proof.
   rewrite H, H0; reflexivity.
 Defined.
 
+Instance ReifyType_prod {tEnv tl tr Al Ar}
+  `(ReifyType tEnv tl Al) `(ReifyType tEnv tr Ar) :
+  ReifyType tEnv (prodT tl tr) (prod Al Ar) | 1.
+Proof.
+  unfold ReifyType in *; simpl.
+  rewrite H, H0; reflexivity.
+Defined.
+
+Instance ReifyType_list {tEnv t A}
+  `(ReifyType tEnv t A) :
+  ReifyType tEnv (listT t) (list A) | 1.
+Proof.
+  unfold ReifyType in *; simpl.
+  rewrite H; reflexivity.
+Defined.
+
 Instance ReifyType_unknown {tEnv i A}
   `(InList _ tEnv i A) :
   ReifyType tEnv (TypeT i) A | 2.
@@ -244,21 +260,6 @@ Definition reifyExpr_teq {tEnv p t e A x} `{ReifyExpr tEnv p t e A x} :
   Ctx.actx p (typeD tEnv) -> typeD tEnv t = A :=
   fun c => eq_dep_eq1 (reifyExpr_eq c).
 
-(* Instance ReifyExpr_var0 {tEnv p t A eq} : *)
-(*   ReifyExpr tEnv (Datatypes.snd (Ctx.pext p t)) *)
-(*             t (varE _ (Datatypes.fst (Ctx.pext p t))) *)
-(*             A (fun c => var0 p t c (eq c)) | 1. *)
-(* Proof. *)
-(*   unfold ReifyExpr, var0, Ctx.actx_head in *; cbn - [Ctx.ext]; intro. *)
-(*   assert (Ctx.HasValue (Datatypes.fst (Ctx.pext p t)) (Ctx.innerCtx c)). *)
-(*   - apply (Ctx.actxPf c). *)
-(*     econstructor; apply Ctx.ext_1. *)
-(*   - destruct H; apply Ctx.find_1 in H. *)
-(*     rewrite H; simpl. *)
-(*     destruct eq; simpl. *)
-(*     reflexivity. *)
-(* Qed. *)
-
 Instance ReifyExpr_var {tEnv p p' t A f eq}
   `(ReifyVar tEnv p (Datatypes.snd (Ctx.pext p' t)) f) :
   ReifyExpr tEnv p t (varE _ (Datatypes.fst (Ctx.pext p' t)))
@@ -295,6 +296,89 @@ Proof.
   unfold ReifyExpr, ReifyType in *; simpl; intro.
   rewrite H, (H0 c).
   reflexivity.
+Qed.
+
+Instance ReifyExpr_fst {tEnv p tl tr Al Ar e x}
+  `(ReifyType tEnv tl Al) `(ReifyType tEnv tr Ar)
+  `(ReifyExpr tEnv p (prodT tl tr) e (prod Al Ar) x) :
+  ReifyExpr tEnv p _ (fstE tEnv e) _ (fun c => fst (x c)) | 1.
+Proof.
+  unfold ReifyExpr, ReifyType in *; simpl in *; intro.
+  destruct H, H0.
+  enough (fmapSumR fst (exprD tEnv (Ctx.innerCtx c) e) = inr (fst (x c)))
+    by (rewrite H; reflexivity).
+  specialize (H1 c); apply eq_dep_eq in H1.
+  rewrite H1; reflexivity.
+Qed.
+
+Instance ReifyExpr_snd {tEnv p tl tr Al Ar e x}
+  `(ReifyType tEnv tl Al) `(ReifyType tEnv tr Ar)
+  `(ReifyExpr tEnv p (prodT tl tr) e (prod Al Ar) x) :
+  ReifyExpr tEnv p _ (sndE tEnv e) _ (fun c => snd (x c)) | 1.
+Proof.
+  unfold ReifyExpr, ReifyType in *; simpl in *; intro.
+  destruct H, H0.
+  enough (fmapSumR snd (exprD tEnv (Ctx.innerCtx c) e) = inr (snd (x c)))
+    by (rewrite H; reflexivity).
+  specialize (H1 c); apply eq_dep_eq in H1.
+  rewrite H1; reflexivity.
+Qed.
+
+Instance ReifyExpr_pair {tEnv p tl tr Al Ar e1 e2 x1 x2}
+  `(ReifyExpr tEnv p tl e1 Al x1)
+  `(ReifyExpr tEnv p tr e2 Ar x2) :
+  ReifyExpr tEnv p _ (pairE tEnv e1 e2) _ (fun c => (x1 c, x2 c)) | 1.
+Proof.
+  unfold ReifyExpr, ReifyType in *; simpl in *; intro.
+  rewrite H, H0; reflexivity.
+Qed.
+
+Instance ReifyExpr_nil {tEnv p t A}
+  `(ReifyType tEnv t A) :
+  ReifyExpr tEnv p _ (@nilE tEnv t) _ (fun _ => @nil A) | 1.
+Proof.
+  unfold ReifyType in *; simpl in *; intro.
+  destruct H; reflexivity.
+Qed.
+
+Instance ReifyExpr_cons {tEnv p t A e1 e2 x1 x2}
+  `(ReifyExpr tEnv p t e1 A x1)
+  `(ReifyExpr tEnv p (listT t) e2 (list A) x2) :
+  ReifyExpr tEnv p _ (consE tEnv e1 e2) _ (fun c => (x1 c) :: (x2 c)) | 1.
+Proof.
+  unfold ReifyExpr, ReifyType in *; simpl in *; intro.
+  destruct (eq_dep_eq1 (H c)).
+  specialize (H c); apply eq_dep_eq in H.
+  specialize (H0 c); apply eq_dep_eq in H0.
+  enough (apSumR (fmapSumR cons (exprD tEnv (Ctx.innerCtx c) e1)) (exprD tEnv (Ctx.innerCtx c) e2) = inr (x1 c :: x2 c))
+    by (rewrite H1; reflexivity).
+  rewrite H, H0; reflexivity.
+Qed.
+
+Instance ReifyExpr_unfoldList {tEnv p t A e x}
+  `(ReifyType tEnv t A) `(ReifyExpr tEnv p _ e _ x) :
+  ReifyExpr tEnv p _ (@unfoldListE tEnv t e)
+                   _ (fun c => @SAWCorePrelude.unfoldList A (x c)) | 1.
+Proof.
+  unfold ReifyExpr, ReifyType in *; simpl in *; intro.
+  destruct H.
+  enough (fmapSumR (SAWCorePrelude.unfoldList (typeD tEnv t)) (exprD tEnv (Ctx.innerCtx c) e) = inr (SAWCorePrelude.unfoldList (typeD tEnv t) (x c)))
+    by (rewrite H; reflexivity).
+  specialize (H0 c); apply eq_dep_eq in H0.
+  rewrite H0; reflexivity.
+Qed.
+
+Instance ReifyExpr_foldList {tEnv p t A e x}
+  `(ReifyType tEnv t A) `(ReifyExpr tEnv p _ e _ x) :
+  ReifyExpr tEnv p _ (@foldListE tEnv t e)
+                   _ (fun c => @SAWCorePrelude.foldList A (x c)) | 1.
+Proof.
+  unfold ReifyExpr, ReifyType in *; simpl in *; intro.
+  destruct H.
+  enough (fmapSumR (SAWCorePrelude.foldList (typeD tEnv t)) (exprD tEnv (Ctx.innerCtx c) e) = inr (SAWCorePrelude.foldList (typeD tEnv t) (x c)))
+    by (rewrite H; reflexivity).
+  specialize (H0 c); apply eq_dep_eq in H0.
+  rewrite H0; reflexivity.
 Qed.
 
 Instance ReifyExpr_unknown {tEnv p t A x}
@@ -541,11 +625,10 @@ Ltac reifyFMExpr_refinesFun := (* reifyTac reifyFMExpr_refinesFun_lemma. *)
 (*   (* typeclasses eauto. *) *)
 (*   - eapply ReifyMExpr_bindE. *)
 (*     + eapply ReifyMExpr_returnM. *)
-(*       eapply ReifyExpr_var0. *)
+(*       eapply ReifyExpr_var. *)
 (*       typeclasses eauto. *)
 (*   Unshelve. 2: exact []. *)
 (*       Check @ReifyExpr_var0. *)
-(*       eapply (@ReifyExpr_var0 _ _ _ _ (reifyMExpr_teq (Ctx.actx_tail c))). *)
 (*       eapply (@ReifyExpr_var _ (Datatypes.snd (Ctx.pext Ctx.empty unitT)) Ctx.empty unitT unit). *)
 
 (*   intros. *)

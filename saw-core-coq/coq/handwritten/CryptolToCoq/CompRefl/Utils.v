@@ -15,8 +15,11 @@ Definition fromSum {A B C} (f : A -> C) (g : B -> C) (x : A + B) : C :=
   | inr b => g b
   end.
 
-Definition apSumR {A B C} (f : B -> C) : A + B -> A + C :=
+Definition fmapSumR {A B C} (f : B -> C) : A + B -> A + C :=
   fromSum inl (fun b => inr (f b)).
+
+Definition apSumR {A B C} : A + (B -> C) -> A + B -> A + C :=
+  fromSum (fun a _ => inl a) fmapSumR.
 
 Fixpoint mapSumList {A B C} (f : A -> B + C) (l : list A) : B + list C :=
   match l with
