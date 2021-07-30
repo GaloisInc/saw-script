@@ -35,7 +35,7 @@ import qualified SAWScript.Builtins as SB
 import qualified SAWScript.Value as SV
 import qualified SAWScript.Proof as PF
 import SAWServer
-    ( ServerVal(VTerm, VSimpset),
+    ( ServerVal(VSimpset),
       ServerName,
       SAWState,
       setServerVal,
@@ -49,9 +49,8 @@ import SAWServer.OK ( OK, ok )
 import SAWServer.TopLevel ( tl )
 import Verifier.SAW.FiniteValue (FirstOrderValue(..))
 import Verifier.SAW.Name (ecName, toShortName)
-import Verifier.SAW.Rewriter (addSimp, emptySimpset)
+import Verifier.SAW.Rewriter (emptySimpset)
 import Verifier.SAW.TermNet (merge)
-import Verifier.SAW.TypedTerm (TypedTerm(..))
 
 data Prover
   = RME
