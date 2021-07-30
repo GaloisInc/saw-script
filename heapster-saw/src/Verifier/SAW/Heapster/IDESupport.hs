@@ -11,7 +11,6 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
-
 module Verifier.SAW.Heapster.IDESupport where
 
 import Control.Monad.Reader
@@ -89,9 +88,8 @@ instance (PermCheckExtC ext)
          (TypedEntry TransPhase ext blocks tops ret args ghosts) where
   extractLogEntries te = do
     let loc = trace "typed entry loc" (mbLift $ fmap getFirstProgramLocTS (typedEntryBody te))
-    withLoc loc $
-      mbExtractLogEntries undefined (typedEntryBody te)
-    mbExtractLogEntries undefined (typedEntryPermsIn te)
+    withLoc loc (mbExtractLogEntries (typedEntryBody te))
+    mbExtractLogEntries (typedEntryPermsIn te)
 
 instance ExtractLogEntries (ValuePerms ctx) where
   extractLogEntries vps =
@@ -105,7 +103,7 @@ instance ExtractLogEntries (TypedStmtSeq ext blocks tops ret ps_in) where
     -- fmap (setErrorMsg str) <$> extractLogEntries pimpl
     extractLogEntries pimpl
   extractLogEntries (TypedConsStmt loc _ _ rest) = do
-    withLoc loc $ mbExtractLogEntries undefined rest
+    withLoc loc $ mbExtractLogEntries rest
   extractLogEntries (TypedTermStmt _ _) = pure ()
 
 instance ExtractLogEntries
@@ -126,8 +124,8 @@ instance ExtractLogEntries (PermImpl1 ps_in ps_outs) where
 
 instance ExtractLogEntries
     (MbPermImpls (TypedStmtSeq ext blocks tops ret) ps_outs) where
-  extractLogEntries (MbPermImpls_Cons ctx mbpis pis) = do
-    mbExtractLogEntries ctx pis
+  extractLogEntries (MbPermImpls_Cons _ mbpis pis) = do
+    mbExtractLogEntries pis
     extractLogEntries mbpis
   extractLogEntries MbPermImpls_Nil = pure ()
 
@@ -142,29 +140,16 @@ instance (PermCheckExtC ext)
 
 instance (PermCheckExtC ext)
   => ExtractLogEntries (TypedBlock TransPhase ext blocks tops ret args) where
-    extractLogEntries tb = mapM_ helper $ _typedBlockEntries tb
-      where
-        helper
-          :: (PermCheckExtC ext)
-          => Some (TypedEntry TransPhase ext blocks tops ret args)
-          -> ExtractionM ()
-        helper ste = case ste of
-         Some te -> extractLogEntries te
+    extractLogEntries tb =
+      mapM_ (\(Some te) -> extractLogEntries te) $ _typedBlockEntries tb
 
 
 mbExtractLogEntries
-  :: ExtractLogEntries a => CruCtx ctx -> Mb ctx a -> ExtractionM ()
-mbExtractLogEntries ctx mb_a =
+  :: ExtractLogEntries a => Mb (ctx :: RList CrucibleType) a -> ExtractionM ()
+mbExtractLogEntries mb_a =
   ReaderT $ \(ppi, loc) ->
   tell $ mbLift $ flip nuMultiWithElim1 mb_a $ \ns x ->
-  execWriter $ runReaderT (extractLogEntries x) (ppInfoAddTypedExprNames ctx ns ppi, loc)
-
-ppInfoAddTypedExprNames
-  :: CruCtx ctx
-  -> RAssign Name (tps :: RList CrucibleType)
-  -> PPInfo
-  -> PPInfo
-ppInfoAddTypedExprNames _ = ppInfoAddExprNames "x"
+  execWriter $ runReaderT (extractLogEntries x) (ppInfoAddExprNames "x" ns ppi, loc)
 
 typedStmtOutCtx :: TypedStmt ext rets ps_in ps_next -> CruCtx rets
 typedStmtOutCtx = error "FIXME: write typedStmtOutCtx"
