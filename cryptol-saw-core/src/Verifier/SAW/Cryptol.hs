@@ -890,21 +890,20 @@ importExpr sc env expr =
           do e' <- importExpr sc env e
              let t = fastTypeOf (envC env) e
              case C.tIsTuple t of
-               Just ts ->
-                 do scTupleSelector sc e' (i+1) (length ts)
-               Nothing ->
-                 do f <- mapTupleSelector sc env i t
-                    scApply sc f e'
+               Just ts -> scTupleSelector sc e' (i+1) (length ts)
+               Nothing -> panic "importExpr" ["invalid tuple selector", show i, pretty t]
         C.RecordSel x _ ->
           do e' <- importExpr sc env e
              let t = fastTypeOf (envC env) e
-             case C.tIsRec t of
-               Just fm ->
+             case C.tNoUser t of
+               C.TRec fm ->
                  do i <- the (elemIndex x (map fst (C.canonicalFields fm)))
                     scTupleSelector sc e' (i+1) (length (C.canonicalFields fm))
-               Nothing ->
-                 do f <- mapRecordSelector sc env x t
-                    scApply sc f e'
+               C.TNewtype nt _args ->
+                 do let fs = C.ntFields nt
+                    i <- the (elemIndex x (map fst (C.canonicalFields fs)))
+                    scTupleSelector sc e' (i+1) (length (C.canonicalFields fs))
+               _ -> panic "importExpr" ["invalid record selector", pretty x, pretty t]
         C.ListSel i _maybeLen ->
           do let t = fastTypeOf (envC env) e
              (n, a) <-
@@ -936,7 +935,7 @@ importExpr sc env expr =
              e2' <- importExpr sc env e2
              let t1 = fastTypeOf (envC env) e1
              case C.tIsRec t1 of
-               Nothing -> panic "importExpr" ["ESet/TupleSel: not a tuple type"]
+               Nothing -> panic "importExpr" ["ESet/RecordSel: not a record type"]
                Just tm ->
                  do i <- the (elemIndex x (map fst (C.canonicalFields tm)))
                     ts' <- traverse (importType sc env . snd) (C.canonicalFields tm)
@@ -1109,62 +1108,6 @@ importExpr' sc env schema expr =
          t2 <- the (C.isMono schema)
          expr' <- importExpr sc env expr
          coerceTerm sc env t1 t2 expr'
-
-mapTupleSelector :: SharedContext -> Env -> Int -> C.Type -> IO Term
-mapTupleSelector sc env i = fmap fst . go
-  where
-    go :: C.Type -> IO (Term, C.Type)
-    go t =
-      case C.tNoUser t of
-        (C.tIsSeq -> Just (n, a)) -> do
-          (f, b) <- go a
-          a' <- importType sc env a
-          b' <- importType sc env b
-          n' <- importType sc env n
-          g <- scGlobalApply sc "Cryptol.seqMap" [a', b', n', f]
-          return (g, C.tSeq n b)
-        (C.tIsFun -> Just (n, a)) -> do
-          (f, b) <- go a
-          a' <- importType sc env a
-          b' <- importType sc env b
-          n' <- importType sc env n
-          g <- scGlobalApply sc "Cryptol.compose" [n', a', b', f]
-          return (g, C.tFun n b)
-        (C.tIsTuple -> Just ts) -> do
-          x <- scLocalVar sc 0
-          y <- scTupleSelector sc x (i+1) (length ts)
-          t' <- importType sc env t
-          f <- scLambda sc "x" t' y
-          return (f, ts !! i)
-        _ -> panic "importExpr" ["invalid tuple selector", show i, show t]
-
-mapRecordSelector :: SharedContext -> Env -> C.Ident -> C.Type -> IO Term
-mapRecordSelector sc env i = fmap fst . go
-  where
-    go :: C.Type -> IO (Term, C.Type)
-    go t =
-      case C.tNoUser t of
-        (C.tIsSeq -> Just (n, a)) ->
-          do (f, b) <- go a
-             a' <- importType sc env a
-             b' <- importType sc env b
-             n' <- importType sc env n
-             g <- scGlobalApply sc "Cryptol.seqMap" [a', b', n', f]
-             return (g, C.tSeq n b)
-        (C.tIsFun -> Just (n, a)) ->
-          do (f, b) <- go a
-             a' <- importType sc env a
-             b' <- importType sc env b
-             n' <- importType sc env n
-             g <- scGlobalApply sc "Cryptol.compose" [n', a', b', f]
-             return (g, C.tFun n b)
-        (C.tIsRec -> Just tm) | Just k <- elemIndex i (map fst (C.canonicalFields tm)) ->
-          do x <- scLocalVar sc 0
-             y <- scTupleSelector sc x (k+1) (length (C.canonicalFields tm))
-             t' <- importType sc env t
-             f <- scLambda sc "x" t' y
-             return (f, snd (C.canonicalFields tm !! k))
-        _ -> panic "importExpr" ["invalid record selector", show i, show t]
 
 tupleUpdate :: SharedContext -> Term -> Int -> [Term] -> IO Term
 tupleUpdate _ f 0 [_] = return f
