@@ -1623,6 +1623,10 @@ genBVVec n len a f =
     (\(i:Nat) (pf:IsLtNat i (bvToNat n len)) -> 
       f (bvNat n i) (IsLtNat_to_bvult n len i pf));
 
+-- The False proposition
+FalseProp : Prop;
+FalseProp = Eq Bool True False;
+
 -- Ex Falso Quodlibet: if True = False then anything is possible
 efq : (a : sort 0) -> Eq Bool True False -> a;
 efq a contra =
@@ -1746,97 +1750,207 @@ updSliceBVVec n len a v start' len' v_sub =
 --------------------------------------------------------------------------------
 -- Iso-recursive types
 
--- An inductive description of a recursive type. The parameter As is a list of
--- arbitrary type constants that can be used in the description.
-data IRTDesc (As:ListSort) : sort 0 where {
-  -- The Nth type being recursively defined
-  IRT_varD   : Nat -> IRTDesc As;
+-- An inductive characterization of some "simple" types. These are used as the
+-- types of dependent type indices in IRTDesc, below.
+data SimpleTypeDesc : sort 0 where {
+  ST_nat : SimpleTypeDesc;
+  ST_bv : Nat -> SimpleTypeDesc;
+  ST_prod : SimpleTypeDesc -> SimpleTypeDesc -> SimpleTypeDesc;
+}
 
-  -- A nested recursive type, which binds a new varD as index 0
-  IRT_mu     : IRTDesc As -> IRTDesc As;
+-- Explicit typing for the SimpleTypeDesc recursor
+SimpleTypeDesc__rec : (P : SimpleTypeDesc -> sort 1) ->
+                      (P ST_nat) -> ((n:Nat) -> P (ST_bv n)) ->
+                      ((st1:SimpleTypeDesc) -> P st1 ->
+                       (st2:SimpleTypeDesc) -> P st2 -> P (ST_prod st1 st2)) ->
+                      (st:SimpleTypeDesc) -> P st;
+SimpleTypeDesc__rec P f1 f2 f3 = SimpleTypeDesc#rec P f1 f2 f3;
 
-  -- Sums
-  IRT_Either : IRTDesc As -> IRTDesc As -> IRTDesc As;
+-- Interpret a SimpleTypeDesc to a type
+interpSimpleTypeDesc : SimpleTypeDesc -> sort 0;
+interpSimpleTypeDesc =
+  SimpleTypeDesc__rec
+    (\ (_:SimpleTypeDesc) -> sort 0)
+    Nat (\ (n:Nat) -> Vec n Bool)
+    (\ (_:SimpleTypeDesc) (tp1:sort 0) (_:SimpleTypeDesc) (tp2:sort 0) ->
+       (tp1 * tp2));
 
-  -- Products
-  IRT_prod   : IRTDesc As -> IRTDesc As -> IRTDesc As;
 
-  -- A dependent product, whose first projection is a type constant in the As
-  -- list. Note that this means it cannot be recursive.
-  IRT_sigT   : (i:Nat) -> (listSortGet As i -> IRTDesc As) -> IRTDesc As;
+-- An inductive description of a recursive type. These recursive types are
+-- interpreted in a context of some N type variables As.
+data IRTDesc : sort 0 where {
+  -- The recursive type variable that refers to the type being defined
+  IRT_recVar : IRTDesc;
 
-  -- A bitvector type
-  IRT_BVVec  : (n:Nat) -> Vec n Bool -> (D:IRTDesc As) -> IRTDesc As;
+  -- A previously-defined recursive type D, applied to some type description
+  -- which should be of the form (a1 * (a2 * (... * (an * unit)))), where the
+  -- ais are used to instantiate the type variables of T
+  IRT_def    : IRTDesc -> IRTDesc -> IRTDesc;
+
+  -- A sum
+  IRT_Either : IRTDesc -> IRTDesc -> IRTDesc;
+
+  -- A product
+  IRT_prod   : IRTDesc -> IRTDesc -> IRTDesc;
+
+  -- A dependent product, whose first projection is a "simple" type. Note that
+  -- this means the first projection cannot be recursive.
+  IRT_sigT   : (st:SimpleTypeDesc) ->
+               (interpSimpleTypeDesc st -> IRTDesc) -> IRTDesc;
+
+  -- A vector type
+  IRT_Vec  : Nat -> IRTDesc -> IRTDesc;
 
   -- The unit type
-  IRT_unit   : IRTDesc As;
+  IRT_unit   : IRTDesc;
 
   -- The empty type / False proposition
-  IRT_empty  : IRTDesc As;
+  IRT_empty  : IRTDesc;
 
-  -- The Nth type constant in the As list
-  IRT_varT   : (i:Nat) -> IRTDesc As;
+  -- The Nth type variable in the As list
+  IRT_varT   : (i:Nat) -> IRTDesc;
 }
 
+-- Build a description of a BVVec
+IRT_BVVec : (n:Nat) -> Vec n Bool -> IRTDesc -> IRTDesc;
+IRT_BVVec n len desc = IRT_Vec (bvToNat n len) desc;
 
-IRTDesc__rec : (As:ListSort) -> (P : IRTDesc As -> sort 1) ->
-               ((i:Nat) -> P (IRT_varD As i)) ->
-               ((D:IRTDesc As) -> P D -> P (IRT_mu As D)) ->
-               ((Dl:IRTDesc As) -> P Dl -> (Dr:IRTDesc As) -> P Dr ->
-                  P (IRT_Either As Dl Dr)) ->
-               ((Dl:IRTDesc As) -> P Dl -> (Dr:IRTDesc As) -> P Dr ->
-                  P (IRT_prod As Dl Dr)) ->
-               ((i:Nat) -> (Df : listSortGet As i -> IRTDesc As) ->
-                  ((a:listSortGet As i) -> P (Df a)) -> P (IRT_sigT As i Df)) ->
-               ((n:Nat) -> (len:Vec n Bool) -> (D:IRTDesc As) -> P D ->
-                  P (IRT_BVVec As n len D)) ->
-               P (IRT_unit As) -> P (IRT_empty As) ->
-               ((i:Nat) -> P (IRT_varT As i)) ->
-               (D:IRTDesc As) -> P D;
-IRTDesc__rec As P f1 f2 f3 f4 f5 f6 f7 f8 f9 D = IRTDesc#rec As P f1 f2 f3 f4 f5 f6 f7 f8 f9 D;
 
--- A substitution for a context of iso-recursive type descriptions
-data IRTSubst (As:ListSort) : sort 0 where {
-  IRTs_Nil : IRTSubst As;
-  IRTs_Cons : IRTDesc As -> IRTSubst As -> IRTSubst As;
+IRTDesc__rec : (P : IRTDesc -> sort 1) ->
+               ((i:Nat) -> P (IRT_recVar i)) ->
+               ((d1:IRTDesc) -> P d1 -> (d2:IRTDesc) -> P d2 -> P (IRT_def d1 d2)) ->
+               ((Dl:IRTDesc) -> P Dl -> (Dr:IRTDesc) -> P Dr ->
+                  P (IRT_Either Dl Dr)) ->
+               ((Dl:IRTDesc) -> P Dl -> (Dr:IRTDesc) -> P Dr ->
+                  P (IRT_prod Dl Dr)) ->
+               ((st:SimpleTypeDesc) -> (Df : interpSimpleTypeDesc st -> IRTDesc) ->
+                  ((x:interpSimpleTypeDesc st) -> P (Df x)) -> P (IRT_sigT st Df)) ->
+               ((n:Nat) -> (D:IRTDesc) -> P D -> P (IRT_Vec n D)) ->
+               P IRT_unit -> P IRT_empty ->
+               ((i:Nat) -> P (IRT_varT i)) ->
+               (D:IRTDesc) -> P D;
+IRTDesc__rec P f1 f2 f3 f4 f5 f6 f7 f8 f9 D = IRTDesc#rec P f1 f2 f3 f4 f5 f6 f7 f8 f9 D;
+
+
+-- Treat a single IRTDesc as a list of descriptions, where IRT_prod is the cons
+-- and IRT_unit is the nil, and return the head and tail of such a list, or a
+-- pair of IRT_empty descriptions if this is impossible
+unconsIRTDesc : IRTDesc -> (IRTDesc * IRTDesc);
+unconsIRTDesc =
+  IRTDesc__rec (\ (_:IRTDesc) -> IRTDesc * IRTDesc)
+               (\ (_:Nat) -> (IRT_empty,IRT_empty))
+               (\ (_:IRTDesc) (_:IRTDesc * IRTDesc)
+                  (_:IRTDesc) (_:IRTDesc * IRTDesc) -> (IRT_empty,IRT_empty))
+               (\ (_:IRTDesc) (_:IRTDesc * IRTDesc)
+                  (_:IRTDesc) (_:IRTDesc * IRTDesc) -> (IRT_empty,IRT_empty))
+               (\ (d1:IRTDesc) (_:IRTDesc * IRTDesc)
+                  (d2:IRTDesc) (_:IRTDesc * IRTDesc) -> (d1,d2))
+               (\ (st:SimpleTypeDesc) (_ : interpSimpleTypeDesc st -> IRTDesc) ->
+                  (_: interpSimpleTypeDesc st -> IRTDesc * IRTDesc) ->
+                  (IRT_empty,IRT_empty))
+               (\ (_:Nat) (_:IRTDesc) (_:IRTDesc * IRTDesc) ->
+                  (IRT_empty,IRT_empty))
+               (IRT_empty,IRT_empty)
+               (IRT_empty,IRT_empty);
+
+headIRTDesc : IRTDesc -> IRTDesc;
+headIRTDesc d = (unconsIRTDesc d).1;
+
+tailIRTDesc : IRTDesc -> IRTDesc;
+tailIRTDesc d = (unconsIRTDesc d).2;
+
+-- Treat a single IRTDesc as a list of descriptions, where IRT_prod is the cons
+-- and IRT_unit is the nil, and return the nth description in such a list or the
+-- IRT_empty description if this is impossible
+projIRTDesc : Nat -> IRTDesc -> IRTDesc;
+projIRTDesc =
+  Nat__rec (\ (_:Nat) -> IRTDesc -> IRTDesc)
+           headIRTDesc
+           (\ (_:Nat) (rec:IRTDesc -> IRTDesc) (ds:IRTDesc) ->
+              tailIRTDesc (rec ds));
+
+{-
+data IRTIndices : sort 1 {
+  IRTIndices_types : ListSort -> IRTIndices;
+  IRTIndices_desc : IRTIndices -> IRTDesc -> IRTIndices;
 }
 
-IRTSubst__rec : (As:ListSort) -> (P : IRTSubst As -> sort 1) -> P (IRTs_Nil As) ->
-                ((D:IRTDesc As) -> (Ds:IRTSubst As) -> P Ds -> P (IRTs_Cons As D Ds)) ->
-                (Ds:IRTSubst As) -> P Ds;
-IRTSubst__rec As P f1 f2 Ds = IRTSubst#rec As P f1 f2 Ds;
+IRTIndices__rec : (P : IRTIndices -> sort 1) ->
+                  ((l:ListSort) -> P (IRTIndices_types l)) ->
+                  ((ixs:IRTIndices) -> P ixs -> (d:IRTDesc) ->
+                     P (IRTIndices_desc ixs d)) ->
+                  (ixs:IRTIndices) -> P ixs;
 
--- The IRTDesc at the given index in an IRTSubst or IRT_empty if the
--- index is out of bounds
-atIRTs : (As:ListSort) -> IRTSubst As -> Nat -> IRTDesc As;
-atIRTs As = IRTSubst__rec As (\ (_:IRTSubst As) -> Nat -> IRTDesc As)
-  (\ (_:Nat) -> IRT_empty As)
-  (\ (D:IRTDesc As) (_:IRTSubst As) (rec : Nat -> IRTDesc As) ->
-     Nat_cases (IRTDesc As) D (\ (n:Nat) (_:IRTDesc As) -> rec n));
+-- Project the nth type out of a list of types in an IRTIndices, or return the
+-- dummy empty type for a desc index or if n is out of bounds
+projTypeIRTIndices : Nat -> IRTIndices -> sort 0;
+projTypeIRTIndices i =
+  IRTIndices__rec (\ (_:IRTIndices) -> sort 0)
+                  (\ (l:ListSort) -> listSortGet l i)
+                  (\ (_:IRTIndices) (_:sort 0) (_:IRTDesc) -> FalseProp);
 
--- A IRTSubst with the first n (or all, if n > length) entries removed
-dropIRTs : (As:ListSort) -> IRTSubst As -> Nat -> IRTSubst As;
-dropIRTs As = IRTSubst__rec As (\ (_:IRTSubst As) -> Nat -> IRTSubst As)
-  (\ (_:Nat) -> IRTs_Nil As)
-  (\ (_:IRTDesc As) (Ds:IRTSubst As) (rec : Nat -> IRTSubst As) ->
-     Nat_cases (IRTSubst As) Ds (\ (n:Nat) (_ : IRTSubst As) -> rec n));
+-- Project the nth type description out of a type description IRTIndices if
+-- possible, or return the dummy empty type if not
+projDescIRTIndices : Nat -> IRTIndices -> IRTDesc;
+projDescIRTIndices i =
+  IRTIndices__rec (\ (_:IRTIndices) -> IRTDesc)
+                  (\ (_:ListSort) -> IRT_empty)
+                  (\ (_:IRTIndices) (ds:IRTDesc) -> projIRTDesc i ds);
+-}
 
--- The type corresponding to an iso-recursive type description
-data IRT (As:ListSort) : IRTSubst As -> IRTDesc As -> sort 0 where {
-  IRT_elemD    : (Ds:IRTSubst As) -> (i:Nat) ->
-                 IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i) ->
-                 IRT As Ds (IRT_varD As i);
-  IRT_fold     : (Ds:IRTSubst As) -> (D:IRTDesc As) ->
-                 IRT As (IRTs_Cons As (IRT_mu As D) Ds) D -> IRT As Ds (IRT_mu As D);
-  IRT_Left     : (Ds:IRTSubst As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
-                 IRT As Ds Dl -> IRT As Ds (IRT_Either As Dl Dr);
-  IRT_Right    : (Ds:IRTSubst As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
-                 IRT As Ds Dr -> IRT As Ds (IRT_Either As Dl Dr);
-  IRT_pair     : (Ds:IRTSubst As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
-                 IRT As Ds Dl -> IRT As Ds Dr -> IRT As Ds (IRT_prod As Dl Dr);
-  IRT_existT   : (Ds:IRTSubst As) -> (i:Nat) -> (Df : listSortGet As i -> IRTDesc As) ->
-                 (a:listSortGet As i) -> IRT As Ds (Df a) -> IRT As Ds (IRT_sigT As i Df);
-  IRT_genBVVec : (Ds:IRTSubst As) -> (n:Nat) -> (len:Vec n Bool) -> (D:IRTDesc As) ->
+
+-- The high-level idea is that IRT As [] Drec D is an element of the recursive
+-- type described by D, where As instantiates the type-level variables used in D
+-- and Drec is the description that we started with at the top of our recursive
+-- type, used to instantiate occurrences of the recursive variable.
+--
+-- The type description D could contain previously-defined descriptions D' with
+-- their own type-level variables, which are instantiated using a description of
+-- a type of the form (a1 * (a2 * (... * (an * unit)))) using the IRT_def
+-- constructor. Whenever we see (IRT_def D' arg), we switch to defining an IRT
+-- type described by D' but where its type-level arguments are instantiated
+-- using the di descriptions. In general, we have the type
+--
+-- IRT As [(Drec1,arg1), ..., (Drecn,argn)] Drec D
+--
+-- for a type described by D, where Drec is used for the recursive variable, but
+-- where the ith type variable IRT_var is instantiated by matching arg1 as a
+-- nested tuple type description and getting out the ith element of that
+-- description, which is itself interpreted in the outer context without
+-- arg1. That is, we have:
+--
+-- IRT_varDesc : IRT As args Drecn di ->
+--               IRT As ((Drecn,(d1*(...*(dn * unit)))):args) Drec (IRT_varT i)
+--
+
+FIXME HERE NOW:
+- Implement the above idea in IRT!
+- Implement UnfoldIRTType that removes one level of arguments or, for the empty
+- list of args, unfolds like before
+
+
+
+-- The type IRT As [arg1,...,argn] Dtop D is an element of the type described by
+-- D, where:
+--
+-- * As instantiates the type-level variables used in D * arg
+--
+-- IRT As Nothing Dtop D is a type describ
+data IRT (As:ListSort) : Maybe IRTDesc -> IRTDesc -> IRTDesc -> sort 0 where {
+  IRT_recVar   : (Ds:List IRTDesc) -> IRT ixs Ds D ->
+                 IRT ixs D IRT_recVar;
+  IRT_fold     : (D sub_D arg : IRTDesc)
+                 IRT (IRTIndices_desc ixs arg) sub_D sub_D ->
+                 IRT ixs D (IRT_def sub_D arg);
+  IRT_Left     : (D dl dr:IRTDesc) -> IRT D dl -> IRT D (IRT_Either D dl dr);
+  IRT_Right    : (D dl dr:IRTDesc) -> IRT D dr -> IRT D (IRT_Either D dl dr);
+  IRT_pair     : (D dl dr:IRTDesc) -> IRT D dl -> IRT D dr ->
+                 IRT D (IRT_prod D dl dr);
+  IRT_existT   : (D:IRTDesc) -> (st:SimpleTypeDesc) ->
+                 (f:interpSimpleTypeDesc st -> IRTDesc) ->
+                 (x:interpSimpleTypeDesc st) -> IRT D (f x) ->
+                 IRT D (IRT_sigT st f);
+  IRT_genVec   : (D:IRTDesc) -> (n:Nat) -> (len:Vec n Bool) -> (D:IRTDesc As) ->
                  ((i:Vec n Bool) -> is_bvult n i len -> IRT As Ds D) -> IRT As Ds (IRT_BVVec As n len D);
   IRT_tt       : (Ds:IRTSubst As) -> IRT As Ds (IRT_unit As);
   IRT_elemT    : (Ds:IRTSubst As) -> (i:Nat) ->
@@ -1847,11 +1961,11 @@ IRT__rec : (As:ListSort) -> (P : (Ds:IRTSubst As) -> (D:IRTDesc As) -> IRT As Ds
            ((Ds:IRTSubst As) -> (i:Nat) ->
               (x:IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i)) ->
               P (dropIRTs As Ds (Succ i)) (atIRTs As Ds i) x ->
-              P Ds (IRT_varD As i) (IRT_elemD As Ds i x)) ->
+              P Ds (IRT_recVar As i) (IRT_elemD As Ds i x)) ->
            ((Ds:IRTSubst As) -> (D:IRTDesc As) ->
-              (x:IRT As (IRTs_Cons As (IRT_mu As D) Ds) D) ->
-              P (IRTs_Cons As (IRT_mu As D) Ds) D x ->
-              P Ds (IRT_mu As D) (IRT_fold As Ds D x)) ->
+              (x:IRT As (IRTs_Cons As (IRT_def As D) Ds) D) ->
+              P (IRTs_Cons As (IRT_def As D) Ds) D x ->
+              P Ds (IRT_def As D) (IRT_fold As Ds D x)) ->
            ((Ds:IRTSubst As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) -> (xl:IRT As Ds Dl) ->
               P Ds Dl xl -> P Ds (IRT_Either As Dl Dr) (IRT_Left As Ds Dl Dr xl)) ->
            ((Ds:IRTSubst As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) -> (xr:IRT As Ds Dr) ->
@@ -1879,7 +1993,7 @@ UnfoldedIRT As Ds D = IRTDesc__rec As (\ (_:IRTDesc As) -> IRTSubst As -> sort 0
   (\ (i:Nat) (Ds:IRTSubst As) ->
       IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i))
   (\ (D:IRTDesc As) (rec : IRTSubst As -> sort 0) (Ds:IRTSubst As) ->
-      rec (IRTs_Cons As (IRT_mu As D) Ds))
+      rec (IRTs_Cons As (IRT_def As D) Ds))
   (\ (_:IRTDesc As) (recl : IRTSubst As -> sort 0)
      (_:IRTDesc As) (recr : IRTSubst As -> sort 0) (Ds:IRTSubst As) ->
       Either (recl Ds) (recr Ds))
@@ -1903,8 +2017,8 @@ unfoldIRT : (As:ListSort) -> (Ds:IRTSubst As) -> (D:IRTDesc As) ->
 unfoldIRT As = IRT__rec As (\ (Ds:IRTSubst As) (D:IRTDesc As) (_:IRT As Ds D) -> UnfoldedIRT As Ds D)
   (\ (Ds:IRTSubst As) (i:Nat) (x:IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i))
      (_:UnfoldedIRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i)) -> x)
-  (\ (Ds:IRTSubst As) (D:IRTDesc As) (_:IRT As (IRTs_Cons As (IRT_mu As D) Ds) D)
-     (rec: UnfoldedIRT As (IRTs_Cons As (IRT_mu As D) Ds) D) -> rec)
+  (\ (Ds:IRTSubst As) (D:IRTDesc As) (_:IRT As (IRTs_Cons As (IRT_def As D) Ds) D)
+     (rec: UnfoldedIRT As (IRTs_Cons As (IRT_def As D) Ds) D) -> rec)
   (\ (Ds:IRTSubst As) (Dl:IRTDesc As) (Dr:IRTDesc As)
      (_:IRT As Ds Dl) (recl:UnfoldedIRT As Ds Dl) ->
       Left (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr) recl)
@@ -1931,8 +2045,8 @@ foldIRT As Ds D = IRTDesc__rec As (\ (D:IRTDesc As) -> (Ds:IRTSubst As) -> Unfol
   (\ (i:Nat) (Ds:IRTSubst As) (x:IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i)) ->
       IRT_elemD As Ds i x)
   (\ (D:IRTDesc As) (rec : (Ds:IRTSubst As) -> UnfoldedIRT As Ds D -> IRT As Ds D)
-     (Ds:IRTSubst As) (x:UnfoldedIRT As (IRTs_Cons As (IRT_mu As D) Ds) D) ->
-      IRT_fold As Ds D (rec (IRTs_Cons As (IRT_mu As D) Ds) x))
+     (Ds:IRTSubst As) (x:UnfoldedIRT As (IRTs_Cons As (IRT_def As D) Ds) D) ->
+      IRT_fold As Ds D (rec (IRTs_Cons As (IRT_def As D) Ds) x))
   (\ (Dl:IRTDesc As) (recl : (Ds:IRTSubst As) -> UnfoldedIRT As Ds Dl -> IRT As Ds Dl)
      (Dr:IRTDesc As) (recr : (Ds:IRTSubst As) -> UnfoldedIRT As Ds Dr -> IRT As Ds Dr)
      (Ds:IRTSubst As) (x:Either (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr)) ->
