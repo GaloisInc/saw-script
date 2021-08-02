@@ -1764,7 +1764,7 @@ SimpleDesc__rec : (P : SimpleDesc -> sort 1) ->
                       ((st1:SimpleDesc) -> P st1 ->
                        (st2:SimpleDesc) -> P st2 -> P (SD_prod st1 st2)) ->
                       (sd:SimpleDesc) -> P sd;
-SimpleDesc__rec P f1 f2 f3 = SimpleDesc#rec P f1 f2 f3;
+SimpleDesc__rec P f1 f2 f3 sd = SimpleDesc#rec P f1 f2 f3 sd;
 
 -- Interpret a SimpleDesc to a type
 interpSimpleDesc : SimpleDesc -> sort 0;
@@ -1817,7 +1817,7 @@ IRT_BVVec n len desc = IRT_Vec (bvToNat n len) desc;
 
 
 IRTDesc__rec : (P : IRTDesc -> sort 1) ->
-               ((i:Nat) -> P (IRT_recVar i)) ->
+               P IRT_recVar ->
                ((d1:IRTDesc) -> P d1 -> (d2:IRTDesc) -> P d2 -> P (IRT_def d1 d2)) ->
                ((Dl:IRTDesc) -> P Dl -> (Dr:IRTDesc) -> P Dr ->
                   P (IRT_Either Dl Dr)) ->
@@ -1838,26 +1838,27 @@ IRTDesc__rec P f1 f2 f3 f4 f5 f6 f7 f8 f9 D = IRTDesc#rec P f1 f2 f3 f4 f5 f6 f7
 unconsIRTDesc : IRTDesc -> (IRTDesc * IRTDesc);
 unconsIRTDesc =
   IRTDesc__rec (\ (_:IRTDesc) -> IRTDesc * IRTDesc)
-               (\ (_:Nat) -> (IRT_empty,IRT_empty))
+               (IRT_empty,IRT_empty)
                (\ (_:IRTDesc) (_:IRTDesc * IRTDesc)
                   (_:IRTDesc) (_:IRTDesc * IRTDesc) -> (IRT_empty,IRT_empty))
                (\ (_:IRTDesc) (_:IRTDesc * IRTDesc)
                   (_:IRTDesc) (_:IRTDesc * IRTDesc) -> (IRT_empty,IRT_empty))
                (\ (d1:IRTDesc) (_:IRTDesc * IRTDesc)
                   (d2:IRTDesc) (_:IRTDesc * IRTDesc) -> (d1,d2))
-               (\ (sd:SimpleDesc) (_ : interpSimpleDesc sd -> IRTDesc) ->
+               (\ (sd:SimpleDesc) (_ : interpSimpleDesc sd -> IRTDesc)
                   (_: interpSimpleDesc sd -> IRTDesc * IRTDesc) ->
                   (IRT_empty,IRT_empty))
                (\ (_:Nat) (_:IRTDesc) (_:IRTDesc * IRTDesc) ->
                   (IRT_empty,IRT_empty))
                (IRT_empty,IRT_empty)
-               (IRT_empty,IRT_empty);
+               (IRT_empty,IRT_empty)
+               (\ (_:Nat) -> (IRT_empty,IRT_empty));
 
 headIRTDesc : IRTDesc -> IRTDesc;
 headIRTDesc d = (unconsIRTDesc d).1;
 
 tailIRTDesc : IRTDesc -> IRTDesc;
-tailIRTDesc d = (unconsIRTDesc d).2;
+tailIRTDesc d = (unconsIRTDesc d).(2);
 
 -- Treat a single IRTDesc as a list of descriptions, where IRT_prod is the cons
 -- and IRT_unit is the nil, and return the nth description in such a list or the
@@ -1944,7 +1945,7 @@ data IRT (As:ListSort) : List (IRTDesc * IRTDesc) ->
   IRT_existT   : (args:List (IRTDesc * IRTDesc)) -> (Drec:IRTDesc) ->
                  (sd:SimpleDesc) -> (f:interpSimpleDesc sd -> IRTDesc) ->
                  (x:interpSimpleDesc sd) -> IRT As args Drec (f x) ->
-                 IRT As args Drec (IRT_sigT st f);
+                 IRT As args Drec (IRT_sigT sd f);
   IRT_genVec   : (args:List (IRTDesc * IRTDesc)) -> (Drec:IRTDesc) ->
                  (n:Nat) -> (D:IRTDesc) -> ((i:Nat) -> IRT As args Drec D) ->
                  IRT As args Drec (IRT_Vec n D);
@@ -1953,12 +1954,13 @@ data IRT (As:ListSort) : List (IRTDesc * IRTDesc) ->
   IRT_argElem  : (args:List (IRTDesc * IRTDesc)) ->
                  (arg1 Drec1 Drec:IRTDesc) -> (i:Nat) ->
                  IRT As args Drec1 (projIRTDesc i arg1) ->
-                 IRT As (Cons (IRTDesc * IRTDesc) args (arg1, Drec1)) (IRT_varT i);
+                 IRT As (Cons (IRTDesc * IRTDesc) (arg1, Drec1) args) Drec (IRT_varT i);
   IRT_varElem  : (Drec:IRTDesc) -> (i:Nat) -> listSortGet As i ->
-                 IRT As (Nil (IRTDesc * IRTDesc)) (IRT_varT i);
+                 IRT As (Nil (IRTDesc * IRTDesc)) Drec (IRT_varT i);
 }
 
 
+{-
 FIXME HERE NOW: update IRT__rec, UnfoldedIRT, foldIRT, and unfoldIRT
 
 
@@ -2077,6 +2079,7 @@ foldIRT As Ds D = IRTDesc__rec As (\ (D:IRTDesc As) -> (Ds:IRTSubst As) -> Unfol
   (\ (Ds:IRTSubst As) (x:#()) -> IRT_tt As Ds)
   (\ (Ds:IRTSubst As) (x:Eq Bool True False) -> efq (IRT As Ds (IRT_empty As)) x)
   (\ (i:Nat) (Ds:IRTSubst As) (x:listSortGet As i) -> IRT_elemT As Ds i x) D Ds;
+-}
 
 
 --------------------------------------------------------------------------------
