@@ -170,6 +170,10 @@ Instance ReifyType_unit {tEnv} :
   ReifyType tEnv unitT unit | 1.
 Proof. reflexivity. Defined.
 
+Instance ReifyType_bool {tEnv} :
+  ReifyType tEnv boolT bool | 1.
+Proof. reflexivity. Defined.
+
 Instance ReifyType_Either {tEnv tl tr Al Ar}
   `(ReifyType tEnv tl Al) `(ReifyType tEnv tr Ar) :
   ReifyType tEnv (EitherT tl tr) (SAWCorePrelude.Either Al Ar) | 1.
@@ -278,6 +282,14 @@ Qed.
 
 Instance ReifyExpr_tt {tEnv p} :
   ReifyExpr tEnv p _ (ttE _) _ (fun _ => tt) | 1.
+Proof. intro; reflexivity. Qed.
+
+Instance ReifyExpr_true {tEnv p} :
+  ReifyExpr tEnv p _ (trueE _) _ (fun _ => true) | 1.
+Proof. intro; reflexivity. Qed.
+
+Instance ReifyExpr_false {tEnv p} :
+  ReifyExpr tEnv p _ (falseE _) _ (fun _ => false) | 1.
 Proof. intro; reflexivity. Qed.
 
 Instance ReifyExpr_Left {tEnv p tl tr Al Ar e x}
@@ -445,6 +457,18 @@ Proof.
   rewrite H; reflexivity.
 Qed.
 
+Instance ReifyMExpr_iteE {tEnv p} {t e me1 me2 A b x1 x2}
+  `(ReifyExpr tEnv p boolT e bool b)
+  `(ReifyMExpr tEnv p t me1 A x1)
+  `(ReifyMExpr tEnv p t me2 A x2) :
+  ReifyMExpr tEnv p t (iteE _ _ e me1 me2)
+                    A (fun c => if b c then x1 c else x2 c).
+Proof.
+  unfold ReifyMExpr, ReifyExpr in *; cbn; intro.
+  specialize (H c); apply eq_dep_eq in H; rewrite H; cbn.
+  eapply f_eq_dep_2 with (f := fun A x1 x2 => if b c then x1 else x2); eauto.
+Qed.
+
 Instance ReifyMExpr_eitherE {tEnv p} {t tl tr fe fe' ge ge' e A Al Ar f g x}
   `(ReifyType tEnv tl Al) `(ReifyType tEnv tr Ar) `(ReifyType tEnv t A)
   `(ReifyExpr tEnv p (EitherT tl tr) e (SAWCorePrelude.Either Al Ar) x)
@@ -475,6 +499,24 @@ Proof.
     replace ge' with (ge (Datatypes.fst (Ctx.pext p tr))) in H5.
     rewrite Ctx.actx_fst_add_eq, H5, Ctx.actx_head_add.
     rewrite (actx_tail_add c x0); reflexivity.
+Qed.
+
+Instance ReifyMExpr_existsE {tEnv p t t' Pe Pe' A A' P}
+  `(ReifyType tEnv t A)  `(ReifyType tEnv t' A')
+  `(ReifyMExpr tEnv (Datatypes.snd (Ctx.pext p t'))
+               t Pe'
+               A (fun c => P (Ctx.actx_tail c) (var0 p t' c reifyType_eq)))
+  `(AbstractVar _ _ (Datatypes.fst (Ctx.pext p t')) Pe' Pe) :
+  ReifyMExpr tEnv p t (existsE _ _ _ Pe) A (fun c => existsM (P c)).
+Proof.
+  unfold ReifyType, ReifyMExpr in *; cbn - [Ctx.ext]; unfold Ctx.inExt; intro.
+  unfold reifyType_eq in H1; destruct H0; cbn in H1.
+  eapply f_eq_dep with (U := Set) (f := fun A P => existsM P).
+  apply @eq_dep_fun_ext with (U := Set) (P := CompM); eauto; intro.
+  specialize (H1 (Ctx.actx_add c x)); cbn - [Ctx.ext] in H1.
+  replace Pe' with (Pe (Datatypes.fst (Ctx.pext p t'))) in H1.
+  rewrite Ctx.actx_fst_add_eq, H1, Ctx.actx_head_add.
+  rewrite (actx_tail_add c x); reflexivity.
 Qed.
 
 

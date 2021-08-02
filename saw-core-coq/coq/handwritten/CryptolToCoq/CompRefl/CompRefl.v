@@ -34,6 +34,7 @@ Qed.
 Inductive type : Type :=
 | TypeT : nat -> type
 | unitT : type
+| boolT : type
 | EitherT : type -> type -> type
 | prodT : type -> type -> type
 | listT : type -> type
@@ -76,6 +77,7 @@ Fixpoint typeD (t : type) : Set :=
   match t with
   | TypeT i => nthTypeEnv i
   | unitT => unit
+  | boolT => bool
   | EitherT tl tr => SAWCorePrelude.Either (typeD tl) (typeD tr)
   | prodT tl tr => prod (typeD tl) (typeD tr)
   | listT t => list (typeD t)
@@ -104,6 +106,8 @@ Inductive expr : type -> Type :=
 | termE {t} : typeD t -> expr t
 (* | funE {t} : nat -> list { ti & expr ti } -> expr t *)
 | ttE : expr unitT
+| trueE : expr boolT
+| falseE : expr boolT
 | LeftE tl tr : expr tl -> expr (EitherT tl tr)
 | RightE tl tr : expr tr -> expr (EitherT tl tr)
 | fstE {tl tr} : expr (prodT tl tr) -> expr tl
@@ -126,9 +130,11 @@ Inductive mexpr (t : type) : Type :=
 | returnE : expr t -> mexpr t
 | bindE {t'} : mexpr t' -> (name t' -> mexpr t) -> mexpr t
 | errorE : string -> mexpr t
+| iteE : expr boolT -> mexpr t -> mexpr t -> mexpr t
 | eitherE {tl tr} : (name tl -> mexpr t) ->
                     (name tr -> mexpr t) ->
                     expr (EitherT tl tr) -> mexpr t
+| existsE t' : (name t' -> mexpr t) -> mexpr t
 .
 Fixpoint fmexpr (fmt : fmtype) : Type :=
   match fmt with
@@ -140,7 +146,9 @@ Fixpoint fmexpr (fmt : fmtype) : Type :=
 Arguments returnE {t}.
 Arguments bindE {t t'}.
 Arguments errorE {t}.
+Arguments iteE {t}.
 Arguments eitherE {t tl tr}.
+Arguments existsE {t} t'.
 
 (* Definition Fun (F : type -> Type) args ret := *)
 (*   fold_right (fun t T => prod (typeD t) T) unit args -> F ret. *)
@@ -184,6 +192,8 @@ Fixpoint exprD (c : ctx typeD) {t} (e : expr t) : string + typeD t :=
   | termE _ x => inr x
   (* | funE _ i es => exprFunD (fun _ e => exprD c e) i es *)
   | ttE => inr tt
+  | trueE => inr true
+  | falseE => inr false
   | LeftE  _ tr e => fmapSumR (SAWCorePrelude.Left  _ (typeD tr)) (exprD c e)
   | RightE tl _ e => fmapSumR (SAWCorePrelude.Right (typeD tl) _) (exprD c e)
   | fstE _ _ e => fmapSumR fst (exprD c e)
@@ -229,9 +239,12 @@ Fixpoint mexprD (c : ctx typeD) {t} (me : mexpr t) : CompM (typeD t) :=
   | returnE e => mexprEmbExprD c e returnM
   | bindE t' e f => bindM (mexprD c e) (Ctx.inExt c (fun n c' => mexprD c' (f n)))
   | errorE s => errorM s
+  | iteE e me1 me2 => mexprEmbExprD c e (fun (x : bool) =>
+      if x then mexprD c me1 else mexprD c me2)
   | eitherE tl tr f g e => mexprEmbExprD c e (fun x =>
       SAWCorePrelude.either _ _ _ (Ctx.inExt c (fun nl cl => mexprD cl (f nl)))
                                   (Ctx.inExt c (fun nr cr => mexprD cr (g nr))) x)
+  | existsE _ P => existsM (Ctx.inExt c (fun n c' => mexprD c' (P n)))
   end.
 
 Fixpoint fmexprD (c : ctx typeD) {fmt} : fmexpr fmt -> lrtToType (fmtypeD fmt) :=
@@ -256,6 +269,8 @@ Fixpoint substExpr {t t'} (n : name t) (x : expr t) (e : expr t') : string + exp
   | termE _ x => inr (termE x)
   (* | funE _ i es => apSumR (funE i) (mapSumList (fun '(existT ti ei) => apSumR (existT _ ti) (substExpr n x ei)) es) *)
   | ttE => inr ttE
+  | trueE => inr trueE
+  | falseE => inr falseE
   | LeftE  _ tr e => fmapSumR (@LeftE  _ tr) (substExpr n x e)
   | RightE tl _ e => fmapSumR (@RightE tl _) (substExpr n x e)
   | fstE _ tr e => fmapSumR (@fstE _ tr) (substExpr n x e)
@@ -272,10 +287,15 @@ Fixpoint substMExpr {t t'} (n : name t) (x : expr t) (me : mexpr t') : mexpr t' 
   | returnE e => fromSum errorE returnE (substExpr n x e)
   | bindE _ e f => bindE (substMExpr n x e) (fun n' => substMExpr n x (f n'))
   | errorE s => errorE s
+  | iteE e me1 me2 =>
+    fromSum errorE (fun e' => iteE e' (substMExpr n x me1)
+                                      (substMExpr n x me2))
+                                      (substExpr n x e)
   | eitherE _ _ f g e =>
     fromSum errorE (eitherE (fun nl => substMExpr n x (f nl))
                             (fun nr => substMExpr n x (g nr)))
                             (substExpr n x e)
+  | existsE _ P => existsE _ (fun n' => substMExpr n x (P n'))
   end.
 
 Fixpoint substFMExpr {t fmt} (n : name t) (x : expr t) : fmexpr fmt -> fmexpr fmt :=
@@ -291,8 +311,10 @@ Fixpoint sizeME {F} (c : ctx F) {t} (x : mexpr t) : nat :=
   | returnE _ => 1
   | bindE _ e f => S (sizeME c e + Ctx.withFreshName c (fun n c' => sizeME c' (f n)))
   | errorE _ => 1
+  | iteE _ me1 me2 => S (sizeME c me1 + sizeME c me2)
   | eitherE _ _ f g e => S (Ctx.withFreshName c (fun nl cl => sizeME cl (f nl)) +
                             Ctx.withFreshName c (fun nr cr => sizeME cr (g nr)))
+  | existsE _ P => S (Ctx.withFreshName c (fun n' c' => sizeME c' (P n')))
   end.
 
 Fixpoint sizeFME {F} (c : ctx F) {fmt} : fmexpr fmt -> nat :=
@@ -309,6 +331,8 @@ Fixpoint closedExpr {F} (c : ctx F) {t} (e : expr t) : bool :=
   | varE _ n => Ctx.mem n c
   | termE _ _ => true
   | ttE => true
+  | trueE => true
+  | falseE => true
   | LeftE  _ _ e => closedExpr c e
   | RightE _ _ e => closedExpr c e
   | fstE _ _ e => closedExpr c e
@@ -335,9 +359,11 @@ Fixpoint closedMExpr {F} (c : ctx F) {t} (me : mexpr t) : Prop :=
   | returnE e => closedExpr c e = true
   | bindE _ e f => closedMExpr c e /\ forallFreshNamesIn c (fun n c' => closedMExpr c' (f n))
   | errorE _ => True
+  | iteE e me1 me2 => closedExpr c e = true /\ closedMExpr c me1 /\ closedMExpr c me2
   | eitherE _ _ f g e => closedExpr c e = true /\
                          forallFreshNamesIn c (fun nl cl => closedMExpr cl (f nl)) /\
                          forallFreshNamesIn c (fun nr cr => closedMExpr cr (g nr))
+  | existsE _ P => forallFreshNamesIn c (fun n' c' => closedMExpr c' (P n'))
   end.
 
 Fixpoint closedFMExpr {F} (c : ctx F) {fmt} : fmexpr fmt -> Prop :=
@@ -669,24 +695,40 @@ Definition introArgAndHyp (c : ctx typeD) (h : list prop) {t} (p : name t -> pro
                           (g : name t -> ctx typeD -> list prop -> Prop) : Prop :=
   introArg c (fun n c' => introHyp c' h (p n) (g n)).
 
-Fixpoint check_refinesM_fuel (m : nat) {t} (c : ctx typeD) (h : list prop) (x y : mexpr t) : Prop :=
+Definition introExVar (c : ctx typeD) {t} (g : name t -> ctx typeD -> Prop) : Prop :=
+  exists x, Ctx.inExt c g x.
+
+Fixpoint check_refinesM_fuel (m : nat) {t} (c : ctx typeD) (h : list prop)
+                             (me me' : mexpr t) : Prop :=
   match m with
   | S m =>
-    match x, y with
-    | returnE e1, returnE e2 => goalD c (propG (eqP e1 e2))
-    | eitherE _ _ f g x, _ =>
-      introArgAndHyp c h (fun nl => eqP x (LeftE _ _ (varE nl)))
-                     (fun nl cl hl => check_refinesM_fuel m cl hl (f nl) y) /\
-      introArgAndHyp c h (fun nr => eqP x (RightE _ _ (varE nr)))
-                     (fun nr cr hr => check_refinesM_fuel m cr hr (g nr) y)
-    | _, eitherE _ _ f g y =>
-      introArgAndHyp c h (fun nl => eqP y (LeftE _ _ (varE nl)))
-                     (fun nl cl hl => check_refinesM_fuel m cl hl x (f nl)) /\
-      introArgAndHyp c h (fun nr => eqP y (RightE _ _ (varE nr)))
-                     (fun nr cr hr => check_refinesM_fuel m cr hr x (g nr))
-    | _,_ => goalD c (refinesMG x y)
+    match me, me' with
+    | returnE e, returnE e' => goalD c (propG (eqP e e'))
+    (* | existsE _ P, existsE _ P' => *)
+    (*   introArg c (fun n c' => check_refinesM_fuel m c' h (P n) (P' n)) *)
+    | iteE e me1 me2, _ =>
+      introHyp c h (eqP e trueE) (fun c' h' => check_refinesM_fuel m c' h' me1 me') /\
+      introHyp c h (eqP e falseE) (fun c' h' => check_refinesM_fuel m c' h' me2 me')
+    | eitherE _ _ f g e, _ =>
+      introArgAndHyp c h (fun nl => eqP e (LeftE _ _ (varE nl)))
+                     (fun nl cl hl => check_refinesM_fuel m cl hl (f nl) me') /\
+      introArgAndHyp c h (fun nr => eqP e (RightE _ _ (varE nr)))
+                     (fun nr cr hr => check_refinesM_fuel m cr hr (g nr) me')
+    | existsE _ P, _ =>
+      introArg c (fun n c' => check_refinesM_fuel m c' h (P n) me')
+    | _, iteE e' me1' me2' =>
+      introHyp c h (eqP e' trueE) (fun c' h' => check_refinesM_fuel m c' h' me me1') /\
+      introHyp c h (eqP e' falseE) (fun c' h' => check_refinesM_fuel m c' h' me me2')
+    | _, eitherE _ _ f' g' e' =>
+      introArgAndHyp c h (fun nl => eqP e' (LeftE _ _ (varE nl)))
+                     (fun nl cl hl => check_refinesM_fuel m cl hl me (f' nl)) /\
+      introArgAndHyp c h (fun nr => eqP e' (RightE _ _ (varE nr)))
+                     (fun nr cr hr => check_refinesM_fuel m cr hr me (g' nr))
+    | _, existsE _ P' =>
+      introExVar c (fun n c' => check_refinesM_fuel m c' h me (P' n))
+    | _,_ => goalD c (refinesMG me me')
     end
-  | O => goalD c (refinesMG x y)
+  | O => goalD c (refinesMG me me')
   end.
 
 Definition check_refinesM {t} c h x y :=
@@ -737,40 +779,117 @@ Qed.
 
 Arguments introHyp : simpl never.
 
-Definition check_refinesM_fuel_soundness m {t} c h (x y : mexpr t) :=
-  closedHyps c h = true -> closedMExpr c x -> closedMExpr c y ->
+Definition check_refinesM_fuel_soundness m {t} c h (me me' : mexpr t) :=
+  closedHyps c h = true -> closedMExpr c me -> closedMExpr c me' ->
   hypsD c h ->
-  check_refinesM_fuel m c h x y ->
-  mexprD c x |= mexprD c y.
+  check_refinesM_fuel m c h me me' ->
+  mexprD c me |= mexprD c me'.
 
 Definition check_refinesM_fuel_soundness_IH m :=
-  (forall t c h x y, @check_refinesM_fuel_soundness m t c h x y).
+  (forall t c h me me', @check_refinesM_fuel_soundness m t c h me me').
 
 Arguments check_refinesM_fuel_soundness /.
 Arguments check_refinesM_fuel_soundness_IH /.
 
-Lemma check_refinesM_return_lr_sound m {t} c h (e1 e2 : expr t) :
-  check_refinesM_fuel_soundness (S m) c h (returnE e1) (returnE e2).
+Record check_refinesM_no_left_match {t} (me : mexpr t) :=
+  { no_left_match_ite     : forall e me1 me2,   me <> iteE e me1 me2;
+    no_left_match_eitherE : forall tl tr f g e, me <> @eitherE _ tl tr f g e;
+    no_left_match_existsE : forall t' P,        me <> existsE t' P }.
+
+Lemma check_refinesM_return_lr_sound m {t} c h (e e' : expr t) :
+  check_refinesM_fuel_soundness (S m) c h (returnE e) (returnE e').
 Proof.
   intros clh clx cly hD cf; simpl in *.
-  generalize dependent (exprD c e1); intros se1 cf.
-  generalize dependent (exprD c e2); intros se2 cf.
-  destruct se1, se2; simpl in *; try contradiction.
+  generalize dependent (exprD c e); intros se cf.
+  generalize dependent (exprD c e'); intros se' cf.
+  destruct se, se'; simpl in *; try contradiction.
   rewrite cf; reflexivity.
 Qed.
 
-Lemma check_refinesM_either_l_sound m {tl tr t} c h f g x y :
+(* Lemma check_refinesM_exists_lr_sound m {t t'} c h (P P' : name t' -> mexpr t) : *)
+(*   check_refinesM_fuel_soundness_IH m -> *)
+(*   check_refinesM_fuel_soundness (S m) c h (existsE _ P) (existsE _ P'). *)
+(* Proof. *)
+(*   intros IHm clh clP clP' hD cf; simpl in *. *)
+(*   apply refinesM_existsM_lr; intro x. *)
+(*   simpl; unfold Ctx.inExt. *)
+(*   apply (IHm _ _ h). *)
+(*   + eapply wkn1_closedHyps; eauto. *)
+(*   + unfold forallFreshNamesIn, Ctx.addWith in clP. *)
+(*     specialize (clP (Datatypes.fst (Ctx.add c x)) Ctx.ext_5 x). *)
+(*     unfold Ctx.add in clP; rewrite <- Ctx.ext_8 in clP; eauto. *)
+(*   + unfold forallFreshNamesIn, Ctx.addWith in clP'. *)
+(*     specialize (clP' (Datatypes.fst (Ctx.add c x)) Ctx.ext_5 x). *)
+(*     unfold Ctx.add in clP'; rewrite <- Ctx.ext_8 in clP'; eauto. *)
+(*   + eapply wkn1_hypsD; eauto. *)
+(*   + apply cf. *)
+(* Qed. *)
+
+Lemma check_refinesM_if_l_sound m {t} c h e me1 me2 me' :
   check_refinesM_fuel_soundness_IH m ->
-  check_refinesM_fuel_soundness (S m) c h (@eitherE t tl tr f g x) y.
+  check_refinesM_fuel_soundness (S m) c h (@iteE t e me1 me2) me'.
 Proof.
-  intros IHm clh [clx [clf clg]] cly hD [cfl cfr]; simpl in *.
-  destruct (closedExpr_exprD_eq _ _ clx) as [?x ?H]; rewrite H.
-  destruct x0 as [?x|?x]; simpl; unfold Ctx.inExt.
-  - specialize (cfl x0); clear cfr.
-    rewrite <- (wkn1_exprD _ x0) in H; eauto.
+  intros IHm clh [cle [clme1 clme2]] clme' hD [cf1 cf2]; simpl in *.
+  destruct (closedExpr_exprD_eq _ _ cle) as [?x ?H]; rewrite H.
+  destruct x; simpl; unfold Ctx.inExt.
+  - apply introHyp_sound in cf1; eauto.
+    + destruct cf1 as [?ps [[clh' h'D] cf1]].
+      apply (IHm _ _ (h ++ ps)); eauto.
+    + simpl; rewrite andb_true_iff; eauto.
+    + simpl; rewrite H; simpl; eauto.
+  - apply introHyp_sound in cf2; eauto.
+    + destruct cf2 as [?ps [[clh' h'D] cf2]].
+      apply (IHm _ _ (h ++ ps)); eauto.
+    + simpl; rewrite andb_true_iff; eauto.
+    + simpl; rewrite H; simpl; eauto.
+Qed.
+
+Lemma unfold_check_refinesM_fuel_if_r m {t} c h me e' me1' me2' :
+  check_refinesM_no_left_match me ->
+  check_refinesM_fuel (S m) c h me (@iteE t e' me1' me2') ->
+  introHyp c h (eqP e' trueE) (fun c' h' => check_refinesM_fuel m c' h' me me1') /\
+  introHyp c h (eqP e' falseE) (fun c' h' => check_refinesM_fuel m c' h' me me2').
+Proof.
+  destruct 1; destruct me; simpl; intros; eauto.
+  - elimtype False; eapply no_left_match_ite0; reflexivity.
+  - elimtype False; eapply no_left_match_eitherE0; reflexivity.
+  - elimtype False; eapply no_left_match_existsE0; reflexivity.
+Qed.
+
+Lemma check_refinesM_if_r_sound m {t} c h me e' me1' me2' :
+  check_refinesM_no_left_match me ->
+  check_refinesM_fuel_soundness_IH m ->
+  check_refinesM_fuel_soundness (S m) c h me (@iteE t e' me1' me2').
+Proof.
+  intros neqs IHm clh clme [cle' [clme1' clme2']] hD cf; simpl in *.
+  apply unfold_check_refinesM_fuel_if_r in cf; eauto.
+  destruct cf as [cf1 cf2]; simpl in *.
+  destruct (closedExpr_exprD_eq _ _ cle') as [?x ?H]; rewrite H.
+  destruct x; simpl; unfold Ctx.inExt.
+  - apply introHyp_sound in cf1; eauto.
+    + destruct cf1 as [?ps [[clh' h'D] cf1]].
+      apply (IHm _ _ (h ++ ps)); eauto.
+    + simpl; rewrite andb_true_iff; eauto.
+    + simpl; rewrite H; simpl; eauto.
+  - apply introHyp_sound in cf2; eauto.
+    + destruct cf2 as [?ps [[clh' h'D] cf2]].
+      apply (IHm _ _ (h ++ ps)); eauto.
+    + simpl; rewrite andb_true_iff; eauto.
+    + simpl; rewrite H; simpl; eauto.
+Qed.
+
+Lemma check_refinesM_either_l_sound m {tl tr t} c h f g e me' :
+  check_refinesM_fuel_soundness_IH m ->
+  check_refinesM_fuel_soundness (S m) c h (@eitherE t tl tr f g e) me'.
+Proof.
+  intros IHm clh [cle [clf clg]] clme' hD [cfl cfr]; simpl in *.
+  destruct (closedExpr_exprD_eq _ _ cle) as [?x ?H]; rewrite H.
+  destruct x as [?x|?x]; simpl; unfold Ctx.inExt.
+  - specialize (cfl x); clear cfr.
+    rewrite <- (wkn1_exprD _ x) in H; eauto.
     apply introHyp_sound in cfl.
-    + destruct cfl as [?ps [[clh' h'D] cf']].
-      rewrite <- (wkn1_mexprD c x0 y); eauto.
+    + destruct cfl as [?ps [[clh' h'D] cf]].
+      rewrite <- (wkn1_mexprD c x me'); eauto.
       apply (IHm _ _ (h ++ ps)); eauto.
       * unfold Ctx.add; rewrite Ctx.ext_8; apply clf.
       * apply wkn1_closedMExpr; eauto.
@@ -782,11 +901,11 @@ Proof.
     + simpl; unfold snd in H.
       rewrite H; simpl.
       unfold Ctx.add; rewrite (Ctx.find_1 Ctx.ext_1); simpl; eauto.
-  - specialize (cfr x0); clear cfl.
-    rewrite <- (wkn1_exprD _ x0) in H; eauto.
+  - specialize (cfr x); clear cfl.
+    rewrite <- (wkn1_exprD _ x) in H; eauto.
     apply introHyp_sound in cfr.
-    + destruct cfr as [?ps [[clh' h'D] cf']].
-      rewrite <- (wkn1_mexprD c x0 y); eauto.
+    + destruct cfr as [?ps [[clh' h'D] cf]].
+      rewrite <- (wkn1_mexprD c x me'); eauto.
       apply (IHm _ _ (h ++ ps)); eauto.
       * unfold Ctx.add; rewrite Ctx.ext_8; apply clg.
       * apply wkn1_closedMExpr; eauto.
@@ -800,36 +919,38 @@ Proof.
       unfold Ctx.add; rewrite (Ctx.find_1 Ctx.ext_1); simpl; eauto.
 Qed.
 
-Lemma unfold_check_refinesM_fuel_either_r m {tl tr t} c h f g x y :
-  (forall tl' tr' f' g' e, x = @eitherE _ tl' tr' f' g' e -> False) ->
-  check_refinesM_fuel (S m) c h x (@eitherE t tl tr f g y) ->
-  introArgAndHyp c h (fun nl => eqP y (LeftE _ _ (varE nl)))
-                     (fun nl cl hl => check_refinesM_fuel m cl hl x (f nl)) /\
-      introArgAndHyp c h (fun nr => eqP y (RightE _ _ (varE nr)))
-                     (fun nr cr hr => check_refinesM_fuel m cr hr x (g nr)).
+Lemma unfold_check_refinesM_fuel_either_r m {tl tr t} c h me f' g' e' :
+  check_refinesM_no_left_match me ->
+  check_refinesM_fuel (S m) c h me (@eitherE t tl tr f' g' e') ->
+  introArgAndHyp c h (fun nl => eqP e' (LeftE _ _ (varE nl)))
+                     (fun nl cl hl => check_refinesM_fuel m cl hl me (f' nl)) /\
+  introArgAndHyp c h (fun nr => eqP e' (RightE _ _ (varE nr)))
+                     (fun nr cr hr => check_refinesM_fuel m cr hr me (g' nr)).
 Proof.
-  destruct x; simpl; intros; eauto.
-  eapply False_ind, H; easy.
+  destruct 1; destruct me; simpl; intros; eauto.
+  - elimtype False; eapply no_left_match_ite0; reflexivity.
+  - elimtype False; eapply no_left_match_eitherE0; reflexivity.
+  - elimtype False; eapply no_left_match_existsE0; reflexivity.
 Qed.
 
-Lemma check_refinesM_either_r_sound m {tl tr t} c h f g x y :
-  (forall tl' tr' f' g' e, x = @eitherE _ tl' tr' f' g' e -> False) ->
+Lemma check_refinesM_either_r_sound m {tl tr t} c h me f' g' e' :
+  check_refinesM_no_left_match me ->
   check_refinesM_fuel_soundness_IH m ->
-  check_refinesM_fuel_soundness (S m) c h x (@eitherE t tl tr f g y).
+  check_refinesM_fuel_soundness (S m) c h me (@eitherE t tl tr f' g' e').
 Proof.
-  intros neq IHm clh clx [cly [clf clg]] hD cf.
+  intros neqs IHm clh clme [cle' [clf' clg']] hD cf.
   apply unfold_check_refinesM_fuel_either_r in cf; eauto.
   destruct cf as [cfl cfr]; simpl in *.
-  destruct (closedExpr_exprD_eq _ _ cly) as [?x ?H]; rewrite H.
-  destruct x0 as [?x|?x]; simpl; unfold Ctx.inExt.
-  - specialize (cfl x0); clear cfr.
-    rewrite <- (wkn1_exprD _ x0) in H; eauto.
+  destruct (closedExpr_exprD_eq _ _ cle') as [?x ?H]; rewrite H.
+  destruct x as [?x|?x]; simpl; unfold Ctx.inExt.
+  - specialize (cfl x); clear cfr.
+    rewrite <- (wkn1_exprD _ x) in H; eauto.
     apply introHyp_sound in cfl.
     + destruct cfl as [?ps [[clh' h'D] cf']].
-      rewrite <- (wkn1_mexprD c x0 x); eauto.
+      rewrite <- (wkn1_mexprD c x me); eauto.
       apply (IHm _ _ (h ++ ps)); eauto.
       * apply wkn1_closedMExpr; eauto.
-      * unfold Ctx.add; rewrite Ctx.ext_8; apply clf.
+      * unfold Ctx.add; rewrite Ctx.ext_8; apply clf'.
     + eapply wkn1_closedHyps; eauto.
     + simpl; rewrite andb_true_iff; split.
       * apply wkn1_closedExpr; eauto.
@@ -838,14 +959,14 @@ Proof.
     + simpl; unfold snd in H.
       rewrite H; simpl.
       unfold Ctx.add; rewrite (Ctx.find_1 Ctx.ext_1); simpl; eauto.
-  - specialize (cfr x0); clear cfl.
-    rewrite <- (wkn1_exprD _ x0) in H; eauto.
+  - specialize (cfr x); clear cfl.
+    rewrite <- (wkn1_exprD _ x) in H; eauto.
     apply introHyp_sound in cfr.
     + destruct cfr as [?ps [[clh' h'D] cf']].
-      rewrite <- (wkn1_mexprD c x0 x); eauto.
+      rewrite <- (wkn1_mexprD c x me); eauto.
       apply (IHm _ _ (h ++ ps)); eauto.
       * apply wkn1_closedMExpr; eauto.
-      * unfold Ctx.add; rewrite Ctx.ext_8; apply clg.
+      * unfold Ctx.add; rewrite Ctx.ext_8; apply clg'.
     + eapply wkn1_closedHyps; eauto.
     + simpl; rewrite andb_true_iff; split.
       * apply wkn1_closedExpr; eauto.
@@ -854,24 +975,80 @@ Proof.
     + simpl; unfold snd in H.
       rewrite H; simpl.
       unfold Ctx.add; rewrite (Ctx.find_1 Ctx.ext_1); simpl; eauto.
+Qed.
+
+(* Lemma unfold_check_refinesM_fuel_exists_l m {t t'} c h P me' : *)
+(*   (forall t' P', me' <> existsE t' P') -> *)
+(*   check_refinesM_fuel (S m) c h (@existsE t t' P) me' -> *)
+(*   introArg c (fun n c' => check_refinesM_fuel m c' h (P n) me'). *)
+(* Proof. *)
+(*   destruct me'; simpl; intros; eauto. *)
+(*   elimtype False; eapply H; reflexivity. *)
+(* Qed. *)
+
+Lemma check_refinesM_exists_l_sound m {t t'} c h P me' :
+  (* (forall t' P', me' <> existsE t' P') -> *)
+  check_refinesM_fuel_soundness_IH m ->
+  check_refinesM_fuel_soundness (S m) c h (@existsE t t' P) me'.
+Proof.
+  intros (* neq *) IHm clh clP clme' hD cf; simpl in *.
+  (* apply unfold_check_refinesM_fuel_exists_l in cf; eauto. *)
+  apply refinesM_existsM_l; intro x.
+  simpl; unfold Ctx.inExt.
+  rewrite <- (wkn1_mexprD c x me'); eauto.
+  apply (IHm _ _ h); eauto.
+  + eapply wkn1_closedHyps; eauto.
+  + unfold forallFreshNamesIn, Ctx.addWith in clP.
+    specialize (clP (Datatypes.fst (Ctx.add c x)) Ctx.ext_5 x).
+    unfold Ctx.add in clP; rewrite <- Ctx.ext_8 in clP; eauto.
+  + apply wkn1_closedMExpr; eauto.
+  + eapply wkn1_hypsD; eauto.
+  + apply cf.
+Qed.
+
+Lemma unfold_check_refinesM_fuel_exists_r m {t t'} c h me P' :
+  check_refinesM_no_left_match me ->
+  check_refinesM_fuel (S m) c h me (@existsE t t' P') ->
+  introExVar c (fun n c' => check_refinesM_fuel m c' h me (P' n)).
+Proof.
+  destruct 1; destruct me; simpl; intros; eauto.
+  - elimtype False; eapply no_left_match_ite0; reflexivity.
+  - elimtype False; eapply no_left_match_eitherE0; reflexivity.
+  - elimtype False; eapply no_left_match_existsE0; reflexivity.
+Qed.
+
+Lemma check_refinesM_exists_r_sound m {t t'} c h me P' :
+  check_refinesM_no_left_match me ->
+  check_refinesM_fuel_soundness_IH m ->
+  check_refinesM_fuel_soundness (S m) c h me (@existsE t t' P').
+Proof.
+  intros neqs IHm clh clme clP' hD cf; simpl in *.
+  apply unfold_check_refinesM_fuel_exists_r in cf; eauto.
+  destruct cf as [?x cf]; unfold Ctx.inExt in *.
+  unshelve (eapply refinesM_existsM_r); [ exact x |].
+  rewrite <- (wkn1_mexprD c x me); eauto.
+  apply (IHm _ _ h).
+  + eapply wkn1_closedHyps; eauto.
+  + apply wkn1_closedMExpr; eauto.
+  + unfold forallFreshNamesIn, Ctx.addWith in clP'.
+    specialize (clP' (Datatypes.fst (Ctx.add c x)) Ctx.ext_5 x).
+    unfold Ctx.add in clP'; rewrite <- Ctx.ext_8 in clP'; eauto.
+  + eapply wkn1_hypsD; eauto.
+  + apply cf.
 Qed.
 
 Theorem check_refinesM_fuel_sound m {t} c h (x y : mexpr t) :
   check_refinesM_fuel_soundness m c h x y.
 Proof.
-  revert t c h x y; induction m; intros t c h x y;
-    [| destruct x,y ]; try solve [ simpl in *; eauto ].
-  - apply check_refinesM_return_lr_sound; eauto.
-  - apply check_refinesM_either_r_sound; eauto.
-    intros; discriminate H.
-  - apply check_refinesM_either_r_sound; eauto.
-    intros; discriminate H.
-  - apply check_refinesM_either_r_sound; eauto.
-    intros; discriminate H.
-  - apply check_refinesM_either_l_sound; eauto.
-  - apply check_refinesM_either_l_sound; eauto.
-  - apply check_refinesM_either_l_sound; eauto.
-  - apply check_refinesM_either_l_sound; eauto.
+  revert t c h x y; induction m; intros t c h x y; [| destruct x,y ];
+    try solve [ simpl in *; eauto
+              | now apply check_refinesM_if_l_sound
+              | now apply check_refinesM_either_l_sound
+              | now apply check_refinesM_exists_l_sound
+              | now apply check_refinesM_if_r_sound
+              | now apply check_refinesM_either_r_sound
+              | now apply check_refinesM_exists_r_sound ].
+  - now apply check_refinesM_return_lr_sound.
 Qed.
 
 Corollary check_refinesM_sound c {t} (x y : mexpr t) :
