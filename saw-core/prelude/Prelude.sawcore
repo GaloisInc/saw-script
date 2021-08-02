@@ -1752,27 +1752,27 @@ updSliceBVVec n len a v start' len' v_sub =
 
 -- An inductive characterization of some "simple" types. These are used as the
 -- types of dependent type indices in IRTDesc, below.
-data SimpleTypeDesc : sort 0 where {
-  ST_nat : SimpleTypeDesc;
-  ST_bv : Nat -> SimpleTypeDesc;
-  ST_prod : SimpleTypeDesc -> SimpleTypeDesc -> SimpleTypeDesc;
+data SimpleDesc : sort 0 where {
+  SD_nat : SimpleDesc;
+  SD_bv : Nat -> SimpleDesc;
+  SD_prod : SimpleDesc -> SimpleDesc -> SimpleDesc;
 }
 
--- Explicit typing for the SimpleTypeDesc recursor
-SimpleTypeDesc__rec : (P : SimpleTypeDesc -> sort 1) ->
-                      (P ST_nat) -> ((n:Nat) -> P (ST_bv n)) ->
-                      ((st1:SimpleTypeDesc) -> P st1 ->
-                       (st2:SimpleTypeDesc) -> P st2 -> P (ST_prod st1 st2)) ->
-                      (st:SimpleTypeDesc) -> P st;
-SimpleTypeDesc__rec P f1 f2 f3 = SimpleTypeDesc#rec P f1 f2 f3;
+-- Explicit typing for the SimpleDesc recursor
+SimpleDesc__rec : (P : SimpleDesc -> sort 1) ->
+                      (P SD_nat) -> ((n:Nat) -> P (SD_bv n)) ->
+                      ((st1:SimpleDesc) -> P st1 ->
+                       (st2:SimpleDesc) -> P st2 -> P (SD_prod st1 st2)) ->
+                      (sd:SimpleDesc) -> P sd;
+SimpleDesc__rec P f1 f2 f3 = SimpleDesc#rec P f1 f2 f3;
 
--- Interpret a SimpleTypeDesc to a type
-interpSimpleTypeDesc : SimpleTypeDesc -> sort 0;
-interpSimpleTypeDesc =
-  SimpleTypeDesc__rec
-    (\ (_:SimpleTypeDesc) -> sort 0)
+-- Interpret a SimpleDesc to a type
+interpSimpleDesc : SimpleDesc -> sort 0;
+interpSimpleDesc =
+  SimpleDesc__rec
+    (\ (_:SimpleDesc) -> sort 0)
     Nat (\ (n:Nat) -> Vec n Bool)
-    (\ (_:SimpleTypeDesc) (tp1:sort 0) (_:SimpleTypeDesc) (tp2:sort 0) ->
+    (\ (_:SimpleDesc) (tp1:sort 0) (_:SimpleDesc) (tp2:sort 0) ->
        (tp1 * tp2));
 
 
@@ -1784,7 +1784,8 @@ data IRTDesc : sort 0 where {
 
   -- A previously-defined recursive type D, applied to some type description
   -- which should be of the form (a1 * (a2 * (... * (an * unit)))), where the
-  -- ais are used to instantiate the type variables of T
+  -- ais are used to instantiate the type variables of T. See the comments for
+  -- the IRT type below.
   IRT_def    : IRTDesc -> IRTDesc -> IRTDesc;
 
   -- A sum
@@ -1795,8 +1796,7 @@ data IRTDesc : sort 0 where {
 
   -- A dependent product, whose first projection is a "simple" type. Note that
   -- this means the first projection cannot be recursive.
-  IRT_sigT   : (st:SimpleTypeDesc) ->
-               (interpSimpleTypeDesc st -> IRTDesc) -> IRTDesc;
+  IRT_sigT   : (sd:SimpleDesc) -> (interpSimpleDesc sd -> IRTDesc) -> IRTDesc;
 
   -- A vector type
   IRT_Vec  : Nat -> IRTDesc -> IRTDesc;
@@ -1823,8 +1823,8 @@ IRTDesc__rec : (P : IRTDesc -> sort 1) ->
                   P (IRT_Either Dl Dr)) ->
                ((Dl:IRTDesc) -> P Dl -> (Dr:IRTDesc) -> P Dr ->
                   P (IRT_prod Dl Dr)) ->
-               ((st:SimpleTypeDesc) -> (Df : interpSimpleTypeDesc st -> IRTDesc) ->
-                  ((x:interpSimpleTypeDesc st) -> P (Df x)) -> P (IRT_sigT st Df)) ->
+               ((sd:SimpleDesc) -> (Df : interpSimpleDesc sd -> IRTDesc) ->
+                  ((x:interpSimpleDesc sd) -> P (Df x)) -> P (IRT_sigT sd Df)) ->
                ((n:Nat) -> (D:IRTDesc) -> P D -> P (IRT_Vec n D)) ->
                P IRT_unit -> P IRT_empty ->
                ((i:Nat) -> P (IRT_varT i)) ->
@@ -1845,8 +1845,8 @@ unconsIRTDesc =
                   (_:IRTDesc) (_:IRTDesc * IRTDesc) -> (IRT_empty,IRT_empty))
                (\ (d1:IRTDesc) (_:IRTDesc * IRTDesc)
                   (d2:IRTDesc) (_:IRTDesc * IRTDesc) -> (d1,d2))
-               (\ (st:SimpleTypeDesc) (_ : interpSimpleTypeDesc st -> IRTDesc) ->
-                  (_: interpSimpleTypeDesc st -> IRTDesc * IRTDesc) ->
+               (\ (sd:SimpleDesc) (_ : interpSimpleDesc sd -> IRTDesc) ->
+                  (_: interpSimpleDesc sd -> IRTDesc * IRTDesc) ->
                   (IRT_empty,IRT_empty))
                (\ (_:Nat) (_:IRTDesc) (_:IRTDesc * IRTDesc) ->
                   (IRT_empty,IRT_empty))
@@ -1905,57 +1905,62 @@ projDescIRTIndices i =
 -- type, used to instantiate occurrences of the recursive variable.
 --
 -- The type description D could contain previously-defined descriptions D' with
--- their own type-level variables, which are instantiated using a description of
--- a type of the form (a1 * (a2 * (... * (an * unit)))) using the IRT_def
--- constructor. Whenever we see (IRT_def D' arg), we switch to defining an IRT
--- type described by D' but where its type-level arguments are instantiated
--- using the di descriptions. In general, we have the type
+-- their own type-level variables, which we would like to instantiate with their
+-- own types. That is, we would like to allow D to contain some type-level
+-- function T<a1,...,an>. In order to keep IRT at universe level 0, however, the
+-- argument types ai must themselves be encoded. These descriptions are bundled
+-- into a single description arg = (a1 * (a2 * (... * (an * unit))) and passed
+-- to a description D' of T using the form (IRT_def D' arg). An IRT element of
+-- this type description is an element of D' in a context where the ith type
+-- variable (varT i) is an element of the type described by ai, but where ai is
+-- itself interpreted in the original context where it was passed to D'. This
+-- context also includes the original Drec from where the IRT_def occurred. If
+-- D' in turn contains some (IRT_def D'' arg'), D'' is interpreted in a context
+-- where its variables are instantiated as a type in arg', which is then
+-- interpreted in a context where its variables are still instantiated using
+-- arg. More generally, the first index (after the As paramter) of IRT is a list
 --
--- IRT As [(Drec1,arg1), ..., (Drecn,argn)] Drec D
+-- args = [(arg1,Drec1), ..., (argn,Drecn)]
 --
--- for a type described by D, where Drec is used for the recursive variable, but
--- where the ith type variable IRT_var is instantiated by matching arg1 as a
--- nested tuple type description and getting out the ith element of that
--- description, which is itself interpreted in the outer context without
--- arg1. That is, we have:
---
--- IRT_varDesc : IRT As args Drecn di ->
---               IRT As ((Drecn,(d1*(...*(dn * unit)))):args) Drec (IRT_varT i)
---
-
-FIXME HERE NOW:
-- Implement the above idea in IRT!
-- Implement UnfoldIRTType that removes one level of arguments or, for the empty
-- list of args, unfolds like before
-
-
-
--- The type IRT As [arg1,...,argn] Dtop D is an element of the type described by
--- D, where:
---
--- * As instantiates the type-level variables used in D * arg
---
--- IRT As Nothing Dtop D is a type describ
-data IRT (As:ListSort) : Maybe IRTDesc -> IRTDesc -> IRTDesc -> sort 0 where {
-  IRT_recVar   : (Ds:List IRTDesc) -> IRT ixs Ds D ->
-                 IRT ixs D IRT_recVar;
-  IRT_fold     : (D sub_D arg : IRTDesc)
-                 IRT (IRTIndices_desc ixs arg) sub_D sub_D ->
-                 IRT ixs D (IRT_def sub_D arg);
-  IRT_Left     : (D dl dr:IRTDesc) -> IRT D dl -> IRT D (IRT_Either D dl dr);
-  IRT_Right    : (D dl dr:IRTDesc) -> IRT D dr -> IRT D (IRT_Either D dl dr);
-  IRT_pair     : (D dl dr:IRTDesc) -> IRT D dl -> IRT D dr ->
-                 IRT D (IRT_prod D dl dr);
-  IRT_existT   : (D:IRTDesc) -> (st:SimpleTypeDesc) ->
-                 (f:interpSimpleTypeDesc st -> IRTDesc) ->
-                 (x:interpSimpleTypeDesc st) -> IRT D (f x) ->
-                 IRT D (IRT_sigT st f);
-  IRT_genVec   : (D:IRTDesc) -> (n:Nat) -> (len:Vec n Bool) -> (D:IRTDesc As) ->
-                 ((i:Vec n Bool) -> is_bvult n i len -> IRT As Ds D) -> IRT As Ds (IRT_BVVec As n len D);
-  IRT_tt       : (Ds:IRTSubst As) -> IRT As Ds (IRT_unit As);
-  IRT_elemT    : (Ds:IRTSubst As) -> (i:Nat) ->
-                 listSortGet As i -> IRT As Ds (IRT_varT As i);
+-- indicating that (varT i) is interpreted as a description ai in arg1, that is,
+-- as an element of IRT As [(arg2,Drec2),...] Drec1 arg1, meaning that the first
+-- element of args is popped off the front of the list. When the args list is
+-- empty, we then go back to using As as described above.
+data IRT (As:ListSort) : List (IRTDesc * IRTDesc) ->
+                         IRTDesc -> IRTDesc -> sort 0 where {
+  IRT_recElem  : (args:List (IRTDesc * IRTDesc)) -> (Drec:IRTDesc) ->
+                 IRT As args Drec Drec ->
+                 IRT As args Drec IRT_recVar;
+  IRT_defElem  : (args:List (IRTDesc * IRTDesc)) -> (Drec D arg:IRTDesc) ->
+                 IRT As (Cons (IRTDesc * IRTDesc) (arg,Drec) args) D D ->
+                 IRT As args Drec (IRT_def D arg);
+  IRT_Left     : (args:List (IRTDesc * IRTDesc)) -> (Drec Dl Dr:IRTDesc) ->
+                 IRT As args Drec Dl -> IRT As args Drec (IRT_Either Dl Dr);
+  IRT_Right    : (args:List (IRTDesc * IRTDesc)) -> (Drec Dl Dr:IRTDesc) ->
+                 IRT As args Drec Dr -> IRT As args Drec (IRT_Either Dl Dr);
+  IRT_pair     : (args:List (IRTDesc * IRTDesc)) -> (Drec Dl Dr:IRTDesc) ->
+                 IRT As args Drec Dl -> IRT As args Drec Dr ->
+                 IRT As args Drec (IRT_prod Dl Dr);
+  IRT_existT   : (args:List (IRTDesc * IRTDesc)) -> (Drec:IRTDesc) ->
+                 (sd:SimpleDesc) -> (f:interpSimpleDesc sd -> IRTDesc) ->
+                 (x:interpSimpleDesc sd) -> IRT As args Drec (f x) ->
+                 IRT As args Drec (IRT_sigT st f);
+  IRT_genVec   : (args:List (IRTDesc * IRTDesc)) -> (Drec:IRTDesc) ->
+                 (n:Nat) -> (D:IRTDesc) -> ((i:Nat) -> IRT As args Drec D) ->
+                 IRT As args Drec (IRT_Vec n D);
+  IRT_tt       : (args:List (IRTDesc * IRTDesc)) -> (Drec:IRTDesc) ->
+                 IRT As args Drec IRT_unit;
+  IRT_argElem  : (args:List (IRTDesc * IRTDesc)) ->
+                 (arg1 Drec1 Drec:IRTDesc) -> (i:Nat) ->
+                 IRT As args Drec1 (projIRTDesc i arg1) ->
+                 IRT As (Cons (IRTDesc * IRTDesc) args (arg1, Drec1)) (IRT_varT i);
+  IRT_varElem  : (Drec:IRTDesc) -> (i:Nat) -> listSortGet As i ->
+                 IRT As (Nil (IRTDesc * IRTDesc)) (IRT_varT i);
 }
+
+
+FIXME HERE NOW: update IRT__rec, UnfoldedIRT, foldIRT, and unfoldIRT
+
 
 IRT__rec : (As:ListSort) -> (P : (Ds:IRTSubst As) -> (D:IRTDesc As) -> IRT As Ds D -> sort 1) ->
            ((Ds:IRTSubst As) -> (i:Nat) ->
