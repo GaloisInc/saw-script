@@ -3929,8 +3929,8 @@ implIntroLLVMBlockNamed _ _ =
   error "implIntroLLVMBlockNamed: malformed permission"
 
 -- | Eliminate a @memblock@ permission on the top of the stack, if possible,
--- otherwise fail. The elimination does not have to completely remove any
--- @memblock@ permission, it just needs to make some sort of progress.
+-- otherwise fail. Specifically, this means to perform one step of @memblock@
+-- elimination, depening on the shape of the @memblock@ permission.
 implElimLLVMBlock :: (1 <= w, KnownNat w, NuMatchingAny1 r) =>
                      ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
                      ImplM vars s r (ps :> LLVMPointerType w)
@@ -3947,36 +3947,25 @@ implElimLLVMBlock x bp
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                           PExpr_NamedShape rw l nmsh args })
   | TrueRepr <- namedShapeCanUnfoldRepr nmsh
-  , Just sh' <- unfoldModalizeNamedShape rw l nmsh args =
+  , isJust (unfoldModalizeNamedShape rw l nmsh args) =
     (if namedShapeIsRecursive nmsh
      then implSetRecRecurseLeftM else pure ()) >>>
-    implSimplM Proxy (SImpl_ElimLLVMBlockNamed x bp nmsh) >>>
-    implElimLLVMBlock x (bp { llvmBlockShape = sh' })
+    implSimplM Proxy (SImpl_ElimLLVMBlockNamed x bp nmsh)
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                           PExpr_EqShape (PExpr_Var y) }) =
-  -- For shape eqsh(y), prove y:block(sh) for some sh, and apply
-  -- SImpl_IntroLLVMBlockFromEq, and then recursively eliminate the resulting
-  -- memblock permission, unless the resulting shape cannot be eliminated, in
-  -- which case we have still made progress so we can just stop
+  -- For shape eqsh(y), prove y:block(sh) for some sh and then apply
+  -- SImpl_IntroLLVMBlockFromEq
   mbVarsM () >>>= \mb_unit ->
   withExtVarsM (proveVarImplInt y $ mbCombine RL.typeCtxProxies $ flip fmap mb_unit $ const $
                 nu $ \sh -> ValPerm_Conj1 $
                             Perm_LLVMBlockShape $ PExpr_Var sh) >>>= \(_, sh) ->
   let bp' = bp { llvmBlockShape = sh } in
-  implSimplM Proxy (SImpl_IntroLLVMBlockFromEq x bp' y) >>>
-  case sh of
-    PExpr_NamedShape _ _ nmsh _
-      | not (namedShapeCanUnfold nmsh) ->
-        -- Opaque shapes cannot be further eliminated, so stop
-        return ()
-    _ -> implElimLLVMBlock x bp'
+  implSimplM Proxy (SImpl_IntroLLVMBlockFromEq x bp' y)
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                           PExpr_PtrShape maybe_rw maybe_l sh })
   | Just len <- llvmShapeLength sh =
     let bp' = bp { llvmBlockLen = len, llvmBlockShape = sh } in
     implSimplM Proxy (SImpl_ElimLLVMBlockPtr x maybe_rw maybe_l bp')
-    -- NOTE: no need to recurse in this case, because we have a normal pointer
-    -- permission on x (even though its contents are a memblock permission)
 implElimLLVMBlock x (LLVMBlockPerm { llvmBlockShape =
                                      PExpr_FieldShape (LLVMFieldShape p)
                                    , ..}) =
@@ -4021,6 +4010,35 @@ implElimPopIthLLVMBlock x ps i
     implExtractConjM x ps i >>> implPopM x (ValPerm_Conj $ deleteNth i ps) >>>
     implElimLLVMBlock x bp >>> getTopDistPerm x >>>= \p' -> recombinePerm x p'
 implElimPopIthLLVMBlock _ _ _ = error "implElimPopIthLLVMBlock: malformed inputs"
+
+
+-- | Assume the top of the stack contains @x:p1*...*pn@, which are all the
+-- permissions for @x@. Extract the @i@th conjuct @pi@, which should be a
+-- @memblock@ permission. Eliminate that @memblock@ permission using
+-- 'implElimLLVMBlock' if possible to atomic permissions @x:q1*...*qm@, and
+-- append the resulting atomic permissions @qi@ to the top of the stack, leaving
+--
+-- > x:ps1 * ... * pi-1 * pi+1 * ... * pn * q1 * ... * qm
+--
+-- on top of the stack. Return the list of atomic permissions that are now on
+-- top of the stack. If the @memblock@ permission @pi@ cannot be elimnated, then
+-- fail.
+implElimAppendIthLLVMBlock :: (1 <= w, KnownNat w, NuMatchingAny1 r) =>
+                              ExprVar (LLVMPointerType w) ->
+                              [AtomicPerm (LLVMPointerType w)] -> Int ->
+                              ImplM vars s r (ps :> LLVMPointerType w)
+                              (ps :> LLVMPointerType w)
+                              [AtomicPerm (LLVMPointerType w)]
+implElimAppendIthLLVMBlock x ps i
+  | i < length ps , Perm_LLVMBlock bp <- ps!!i =
+    implExtractSwapConjM x ps i >>> implElimLLVMBlock x bp >>>
+    elimOrsExistsM x >>>= \case
+      (ValPerm_Conj ps') ->
+        implAppendConjsM x (deleteNth i ps) ps' >>> return (deleteNth i ps ++ ps')
+      _ -> error ("implElimAppendIthLLVMBlock: unexpected non-conjunctive perm "
+                  ++ "returned by implElimLLVMBlock")
+implElimAppendIthLLVMBlock _ _ _ =
+  error "implElimAppendIthLLVMBlock: malformed inputs"
 
 
 ----------------------------------------------------------------------
@@ -5245,8 +5263,22 @@ proveVarLLVMBlocksExt2 x ps psubst mb_bps_ext mb_bps mb_ps =
   pure (e1,e2)
 
 
--- | The "real" version of 'proveVarLLVMBlocks'; that function is just a debug
--- printing wrapper around this one
+-- | The "real" version of 'proveVarLLVMBlocks'. That function is just a debug
+-- printing wrapper around this one.
+--
+-- A central motivation of this algorithm is to do as little elimination on the
+-- left or introduction on the right as possible, in order to build the smallest
+-- derivation we can. The algorithm iterates through the block permissions on
+-- the right, trying for each of them to either match it up with a block
+-- permission on the left or simplify it to a non-block permission. The first
+-- stage of the algorithm attempts to break down permissions on the left that
+-- overlap with but are not contained in the current block permission on the
+-- right we are trying to prove, so that we end up with permissions on the left
+-- that are no bigger than the right. It then repeatedly breaks down the
+-- right-hand block permission we are trying to prove, going back to stage one
+-- if necessary if this leads to it being smaller than some left-hand
+-- permission, until we either get a precise match or we eventually break the
+-- right-hand permission down to a non-block permission.
 proveVarLLVMBlocks' ::
   (1 <= w, KnownNat w, NuMatchingAny1 r) => ExprVar (LLVMPointerType w) ->
   [AtomicPerm (LLVMPointerType w)] -> PartialSubst vars ->
@@ -5305,6 +5337,22 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
 
       -- Finally, combine the one memblock perm we chose with the rest of them
       implInsertConjM x (Perm_LLVMBlock bp'') ps_out 0
+
+
+  -- If there is a left-hand permission whose range overlaps with but is not
+  -- contained in that of mb_bp, eliminate it
+  [nuMP| mb_bp : _ |]
+    | Just off <- partialSubst psubst $ fmap llvmBlockOffset mb_bp
+    , Just len <- partialSubst psubst $ fmap llvmBlockLen mb_bp
+    , rng <- BVRange off len
+    , Just i <- findIndex (\case
+                              Perm_LLVMBlock bp ->
+                                bvRangesCouldOverlap (llvmBlockRange bp) rng &&
+                                not (bvRangeSubset (llvmBlockRange bp) rng)
+                              _ -> False) ps
+    , isLLVMBlockPerm (ps!!i) ->
+      implElimAppendIthLLVMBlock x ps i >>>= \ps' ->
+      proveVarLLVMBlocks x ps' psubst mb_bps_in mb_ps
 
 
   -- If proving the empty shape for length 0, recursively prove everything else
@@ -5423,7 +5471,7 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
   -- permission on the left with this exact offset, length, and shape, because
   -- it would have matched some previous case, so try to eliminate a memblock
   -- and recurse
-  [nuMP| mb_bp : mb_bps |]
+  [nuMP| mb_bp : _ |]
     | [nuMP| PExpr_NamedShape _ _ nmsh _ |] <- mbMatch $ fmap llvmBlockShape mb_bp
     , [nuMP| FalseRepr |] <- mbMatch $ fmap namedShapeCanUnfoldRepr nmsh
     , Just off <- partialSubst psubst $ fmap llvmBlockOffset mb_bp
@@ -5432,11 +5480,8 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
                                 isJust (llvmPermContainsOffset off p)
                               _ -> False) ps
     , Perm_LLVMBlock _ <- ps!!i ->
-      implElimPopIthLLVMBlock x ps i >>>
-      proveVarImplInt x (fmap ValPerm_Conj $
-                         mbMap2 (++)
-                         (fmap (map Perm_LLVMBlock) $ mbMap2 (:) mb_bp mb_bps)
-                         mb_ps)
+      implElimAppendIthLLVMBlock x ps i >>>= \ps' ->
+      proveVarLLVMBlocks x ps' psubst mb_bps_in mb_ps
 
 
   -- If proving an equality shape eqsh(z) for evar z which has already been set,
@@ -5484,7 +5529,7 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
   -- have it on the left, but we don't have a memblock permission on the left with
   -- this exactly offset, length, and shape, because it would have matched the
   -- first case above, so try to eliminate a memblock and recurse
-  [nuMP| mb_bp : mb_bps |]
+  [nuMP| mb_bp : _ |]
     | [nuMP| PExpr_EqShape (PExpr_Var mb_z) |] <- mbMatch $ fmap llvmBlockShape mb_bp
     , Right _ <- mbNameBoundP mb_z
     , Just off <- partialSubst psubst $ fmap llvmBlockOffset mb_bp
@@ -5493,11 +5538,9 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
                                 isJust (llvmPermContainsOffset off p)
                               _ -> False) ps
     , Perm_LLVMBlock _ <- ps!!i ->
-      implElimPopIthLLVMBlock x ps i >>>
-      proveVarImplInt x (fmap ValPerm_Conj $
-                         mbMap2 (++)
-                         (fmap (map Perm_LLVMBlock) $ mbMap2 (:) mb_bp mb_bps)
-                         mb_ps)
+      implElimAppendIthLLVMBlock x ps i >>>= \ps' ->
+      proveVarLLVMBlocks x ps' psubst mb_bps_in mb_ps
+
 
   -- If proving a pointer shape, prove the required permission by adding it to ps;
   -- this requires the pointed-to shape to have a well-defined length
