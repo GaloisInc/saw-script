@@ -5358,10 +5358,12 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
 
 
   -- If there is a left-hand permission whose range overlaps with but is not
-  -- contained in that of mb_bp, eliminate it
+  -- contained in that of mb_bp, eliminate it. Note that we exclude mb_bp with 0
+  -- length for this case.
   [nuMP| mb_bp : _ |]
     | Just off <- partialSubst psubst $ fmap llvmBlockOffset mb_bp
     , Just len <- partialSubst psubst $ fmap llvmBlockLen mb_bp
+    , not (bvIsZero len)
     , rng <- BVRange off len
     , Just i <- findIndex (\case
                               Perm_LLVMBlock bp ->
