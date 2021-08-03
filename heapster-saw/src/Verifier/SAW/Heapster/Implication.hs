@@ -5339,6 +5339,24 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
       implInsertConjM x (Perm_LLVMBlock bp'') ps_out 0
 
 
+  -- If the offset and length of the top block matches one that we already have
+  -- on the left, but the left-hand permission has a defined shape, unfold the
+  -- defined shape
+  [nuMP| mb_bp : _ |]
+    | Just off <- partialSubst psubst $ fmap llvmBlockOffset mb_bp
+    , Just len <- partialSubst psubst $ fmap llvmBlockLen mb_bp
+    , Just i <- findIndex
+      (\case
+          Perm_LLVMBlock bp
+            | PExpr_NamedShape _ _ nmsh _ <- llvmBlockShape bp
+            , DefinedShapeBody _ <- namedShapeBody nmsh ->
+                bvEq (llvmBlockOffset bp) off &&
+                bvEq (llvmBlockLen bp) len
+          _ -> False) ps ->
+      implElimAppendIthLLVMBlock x ps i >>>= \ps' ->
+      proveVarLLVMBlocks x ps' psubst mb_bps_in mb_ps
+
+
   -- If there is a left-hand permission whose range overlaps with but is not
   -- contained in that of mb_bp, eliminate it
   [nuMP| mb_bp : _ |]
@@ -5349,8 +5367,7 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
                               Perm_LLVMBlock bp ->
                                 bvRangesCouldOverlap (llvmBlockRange bp) rng &&
                                 not (bvRangeSubset (llvmBlockRange bp) rng)
-                              _ -> False) ps
-    , isLLVMBlockPerm (ps!!i) ->
+                              _ -> False) ps ->
       implElimAppendIthLLVMBlock x ps i >>>= \ps' ->
       proveVarLLVMBlocks x ps' psubst mb_bps_in mb_ps
 
