@@ -4005,13 +4005,22 @@ implElimLLVMBlock _ bp =
                     permPretty i (Perm_LLVMBlock bp)) >>>=
   implFailM
 
--- | Eliminate a @memblock@ permission on the top of the stack and recombine it,
--- if this is possible; otherwise fail
-implElimPopLLVMBlock :: (1 <= w, KnownNat w, NuMatchingAny1 r) =>
-                        ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
-                        ImplM vars s r ps (ps :> LLVMPointerType w) ()
-implElimPopLLVMBlock x bp =
-  implElimLLVMBlock x bp >>> getTopDistPerm x >>>= \p' -> recombinePerm x p'
+-- | Assume the top of the stack contains @x:ps@, which are all the permissions
+-- for @x@. Extract the @i@th conjuct from @ps@, which should be a @memblock@
+-- permission, pop the remaining permissions back to @x@, eliminate the
+-- @memblock@ permission using 'implElimLLVMBlock' if possible, and recombine
+-- all the resulting permissions. If the block permission cannot be elimnated,
+-- then fail.
+implElimPopIthLLVMBlock :: (1 <= w, KnownNat w, NuMatchingAny1 r) =>
+                           ExprVar (LLVMPointerType w) ->
+                           [AtomicPerm (LLVMPointerType w)] -> Int ->
+                           ImplM vars s r ps (ps :> LLVMPointerType w) ()
+implElimPopIthLLVMBlock x ps i
+  | i < length ps
+  , Perm_LLVMBlock bp <- ps!!i =
+    implExtractConjM x ps i >>> implPopM x (ValPerm_Conj $ deleteNth i ps) >>>
+    implElimLLVMBlock x bp >>> getTopDistPerm x >>>= \p' -> recombinePerm x p'
+implElimPopIthLLVMBlock _ _ _ = error "implElimPopIthLLVMBlock: malformed inputs"
 
 
 ----------------------------------------------------------------------
@@ -4629,9 +4638,8 @@ proveVarLLVMField ::
 
 -- Special case: if the LHS is a memblock perm, unfold it and prove again
 proveVarLLVMField x ps i _ mb_fp
-  | Perm_LLVMBlock bp <- ps!!i =
-    implExtractConjM x ps i >>> implPopM x (ValPerm_Conj $ deleteNth i ps) >>>
-    implElimPopLLVMBlock x bp >>>
+  | Perm_LLVMBlock _ <- ps!!i =
+    implElimPopIthLLVMBlock x ps i >>>
     proveVarImplInt x (fmap (ValPerm_Conj1 . Perm_LLVMField) mb_fp)
 
 proveVarLLVMField x ps i off mb_fp =
@@ -4878,8 +4886,8 @@ proveVarLLVMArrayH x _ ps ap
 -- eliminate that memblock permission and try again
 proveVarLLVMArrayH x _ ps ap
   | Just i <- findIndex (isLLVMAtomicPermWithOffset $ llvmArrayOffset ap) ps
-  , Perm_LLVMBlock bp <- ps!!i =
-    implGetPopConjM x ps i >>> implElimPopLLVMBlock x bp >>>
+  , Perm_LLVMBlock _ <- ps!!i =
+    implElimPopIthLLVMBlock x ps i >>>
     mbVarsM (ValPerm_LLVMArray ap) >>>= \mb_p ->
     proveVarImplInt x mb_p
 
@@ -5423,8 +5431,8 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
                               p@(Perm_LLVMBlock _) ->
                                 isJust (llvmPermContainsOffset off p)
                               _ -> False) ps
-    , Perm_LLVMBlock bp <- ps!!i ->
-      implGetPopConjM x ps i >>> implElimPopLLVMBlock x bp >>>
+    , Perm_LLVMBlock _ <- ps!!i ->
+      implElimPopIthLLVMBlock x ps i >>>
       proveVarImplInt x (fmap ValPerm_Conj $
                          mbMap2 (++)
                          (fmap (map Perm_LLVMBlock) $ mbMap2 (:) mb_bp mb_bps)
@@ -5484,8 +5492,8 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
                               p@(Perm_LLVMBlock _) ->
                                 isJust (llvmPermContainsOffset off p)
                               _ -> False) ps
-    , Perm_LLVMBlock bp <- ps!!i ->
-      implGetPopConjM x ps i >>> implElimPopLLVMBlock x bp >>>
+    , Perm_LLVMBlock _ <- ps!!i ->
+      implElimPopIthLLVMBlock x ps i >>>
       proveVarImplInt x (fmap ValPerm_Conj $
                          mbMap2 (++)
                          (fmap (map Perm_LLVMBlock) $ mbMap2 (:) mb_bp mb_bps)
