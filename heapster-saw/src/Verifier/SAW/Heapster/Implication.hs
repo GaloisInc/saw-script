@@ -4040,6 +4040,34 @@ implElimAppendIthLLVMBlock x ps i
 implElimAppendIthLLVMBlock _ _ _ =
   error "implElimAppendIthLLVMBlock: malformed inputs"
 
+-- | Prove a @memblock@ permission with shape @sh1 orsh sh2 orsh ... orsh shn@
+-- from one with shape @shi@.
+implIntroOrShapeMultiM :: (NuMatchingAny1 r, 1 <= w, KnownNat w) =>
+                          ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
+                          [PermExpr (LLVMShapeType w)] -> Int ->
+                          ImplM vars s r (ps :> LLVMPointerType w)
+                          (ps :> LLVMPointerType w) ()
+-- Special case: if we take the or of a single shape, it is that shape itself,
+-- so we don't need to do anything
+implIntroOrShapeMultiM _x _bp [_sh] 0 = return ()
+implIntroOrShapeMultiM x bp (sh1 : shs) 0 =
+  let sh2 = foldr1 PExpr_OrShape shs in
+  introOrLM x
+  (ValPerm_LLVMBlock $ bp { llvmBlockShape = sh1 })
+  (ValPerm_LLVMBlock $ bp { llvmBlockShape = sh2 }) >>>
+  implSimplM Proxy (SImpl_IntroLLVMBlockOr
+                    x (bp { llvmBlockShape = sh1 }) sh2)
+implIntroOrShapeMultiM x bp (sh1 : shs) i =
+  implIntroOrShapeMultiM x bp shs (i-1) >>>
+  let sh2 = foldr1 PExpr_OrShape shs in
+  introOrRM x
+  (ValPerm_LLVMBlock $ bp { llvmBlockShape = sh1 })
+  (ValPerm_LLVMBlock $ bp { llvmBlockShape = sh2 }) >>>
+  implSimplM Proxy (SImpl_IntroLLVMBlockOr
+                    x (bp { llvmBlockShape = sh1 }) sh2)
+implIntroOrShapeMultiM _ _ _ _ = error "implIntroOrShapeMultiM"
+
+
 
 ----------------------------------------------------------------------
 -- * Support for Proving Lifetimes Are Current
@@ -5468,7 +5496,7 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
       let mb_bps' =
             mbMap3 (\bp sh' bps -> (bp { llvmBlockShape = sh' } : bps))
             mb_bp mb_sh' mb_bps in
-      proveVarLLVMBlocks' x ps psubst mb_bps' mb_ps >>>
+      proveVarLLVMBlocks x ps psubst mb_bps' mb_ps >>>
 
       -- Extract out the block perm we proved
       getTopDistPerm x >>>= \(ValPerm_Conj ps_out) ->
@@ -5678,6 +5706,35 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
       -- Finally, move the memblock perm we proved back into position
       partialSubstForceM mb_bp "proveVarLLVMBlock" >>>= \bp ->
       implSwapInsertConjM x (Perm_LLVMBlock bp) ps'' 0
+
+
+  -- If proving a tagged union shape where we have an equality permission on the
+  -- left that matches one of the disjuncts, prove that disjunct and or it up
+  -- with the other disjuncts
+  [nuMP| mb_bp : mb_bps |]
+    | [nuMP| Just mb_tag_u |] <- mbMatch $ fmap (asTaggedUnionShape
+                                                 . llvmBlockShape) mb_bp
+    , Just off <- partialSubst psubst $ fmap llvmBlockOffset mb_bp
+    , Just i <- mbLift $ fmap (findTaggedUnionIndexForPerms off ps) mb_tag_u
+    , mb_shs <- fmap taggedUnionDisjs mb_tag_u
+    , mb_sh <- fmap (!!i) mb_shs ->
+
+      -- Recursively prove the ith disjunct
+      proveVarLLVMBlocks x ps psubst (mbMap3
+                                      (\bp sh bps ->
+                                        bp { llvmBlockShape = sh } : bps)
+                                      mb_bp mb_sh mb_bps) mb_ps >>>
+
+      -- Move the block permission with shape mb_sh to the top of the stack
+      getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+      implExtractSwapConjM x ps' 0 >>>
+
+      -- Finally, weaken the block permission to be the desired tagged union
+      -- shape, and move it back into position
+      partialSubstForceM mb_shs "proveVarLLVMBlock" >>>= \shs ->
+      partialSubstForceM mb_bp "proveVarLLVMBlock" >>>= \bp ->
+      implIntroOrShapeMultiM x bp shs i >>>
+      implSwapInsertConjM x (Perm_LLVMBlock bp) (tail ps') 0
 
 
   -- If proving a disjunctive shape, try to prove one of the disjuncts
