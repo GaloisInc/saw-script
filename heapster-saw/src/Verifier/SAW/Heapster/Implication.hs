@@ -3928,6 +3928,7 @@ implIntroLLVMBlockNamed x bp
 implIntroLLVMBlockNamed _ _ =
   error "implIntroLLVMBlockNamed: malformed permission"
 
+
 -- | Eliminate a @memblock@ permission on the top of the stack, if possible,
 -- otherwise fail. Specifically, this means to perform one step of @memblock@
 -- elimination, depening on the shape of the @memblock@ permission.
@@ -3935,15 +3936,20 @@ implElimLLVMBlock :: (1 <= w, KnownNat w, NuMatchingAny1 r) =>
                      ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
                      ImplM vars s r (ps :> LLVMPointerType w)
                      (ps :> LLVMPointerType w) ()
+
+-- Eliminate the empty shape to an array of bytes
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape = PExpr_EmptyShape }) =
   implSimplM Proxy (SImpl_ElimLLVMBlockToBytes x bp)
+
+-- If the "natural" length of the shape of a memblock permission is smaller than
+-- its actual length, sequence with the empty shape and then eliminate
 implElimLLVMBlock x bp
   | Just sh_len <- llvmShapeLength $ llvmBlockShape bp
   , bvLt sh_len $ llvmBlockLen bp =
-    -- If the "natural" length of the shape of a memblock permission is smaller
-    -- than its actual length, sequence with the empty shape and then eliminate
     implSimplM Proxy (SImpl_IntroLLVMBlockSeqEmpty x bp) >>>
     implSimplM Proxy (SImpl_ElimLLVMBlockSeq x bp PExpr_EmptyShape)
+
+-- Unfold defined or recursive named shapes
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                           PExpr_NamedShape rw l nmsh args })
   | TrueRepr <- namedShapeCanUnfoldRepr nmsh
@@ -3951,21 +3957,26 @@ implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
     (if namedShapeIsRecursive nmsh
      then implSetRecRecurseLeftM else pure ()) >>>
     implSimplM Proxy (SImpl_ElimLLVMBlockNamed x bp nmsh)
+
+-- For shape eqsh(y), prove y:block(sh) for some sh and then apply
+-- SImpl_IntroLLVMBlockFromEq
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                           PExpr_EqShape (PExpr_Var y) }) =
-  -- For shape eqsh(y), prove y:block(sh) for some sh and then apply
-  -- SImpl_IntroLLVMBlockFromEq
   mbVarsM () >>>= \mb_unit ->
   withExtVarsM (proveVarImplInt y $ mbCombine RL.typeCtxProxies $ flip fmap mb_unit $ const $
                 nu $ \sh -> ValPerm_Conj1 $
                             Perm_LLVMBlockShape $ PExpr_Var sh) >>>= \(_, sh) ->
   let bp' = bp { llvmBlockShape = sh } in
   implSimplM Proxy (SImpl_IntroLLVMBlockFromEq x bp' y)
+
+-- For [l]ptrsh(rw,sh), eliminate to a pointer to a memblock with shape sh
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                           PExpr_PtrShape maybe_rw maybe_l sh })
   | Just len <- llvmShapeLength sh =
     let bp' = bp { llvmBlockLen = len, llvmBlockShape = sh } in
     implSimplM Proxy (SImpl_ElimLLVMBlockPtr x maybe_rw maybe_l bp')
+
+-- For a field shape, eliminate to a field permission
 implElimLLVMBlock x (LLVMBlockPerm { llvmBlockShape =
                                      PExpr_FieldShape (LLVMFieldShape p)
                                    , ..}) =
@@ -3975,24 +3986,46 @@ implElimLLVMBlock x (LLVMBlockPerm { llvmBlockShape =
                                      llvmFieldOffset = llvmBlockOffset,
                                      llvmFieldContents = p })
                     llvmBlockLen)
+
+-- For an array shape, eliminate to an array permission
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                           PExpr_ArrayShape _ _ _ }) =
   implSimplM Proxy (SImpl_ElimLLVMBlockArray x $ llvmArrayBlockToArrayPerm bp)
+
+-- Special case: for shape sh1;emptysh where the natural length of sh1 is the
+-- same as the length of the block permission, eliminate the emptysh, converting
+-- to a memblock permission of shape sh1
+implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
+                                          PExpr_SeqShape sh PExpr_EmptyShape })
+  | Just len <- llvmShapeLength sh
+  , bvEq len (llvmBlockLen bp) =
+    implSimplM Proxy (SImpl_ElimLLVMBlockSeqEmpty x
+                      (bp { llvmBlockShape = sh }))
+
+-- Otherwise, for a sequence shape sh1;sh2, eliminate to two memblock
+-- permissions, of shapes sh1 and sh2
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                           PExpr_SeqShape sh1 sh2 })
   | isJust $ llvmShapeLength sh1 =
     implSimplM Proxy (SImpl_ElimLLVMBlockSeq
                       x (bp { llvmBlockShape = sh1 }) sh2)
+
+-- For an or shape, eliminate to a disjunctive permisison
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                         PExpr_OrShape sh1 sh2 }) =
   implSimplM Proxy (SImpl_ElimLLVMBlockOr x (bp { llvmBlockShape = sh1 }) sh2)
+
+-- For an existential shape, eliminate to an existential permisison
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                         PExpr_ExShape _mb_sh }) =
   implSimplM Proxy (SImpl_ElimLLVMBlockEx x bp)
+
+-- If none of the above cases matched, we cannot eliminate, so fail
 implElimLLVMBlock _ bp =
   implTraceM (\i -> pretty "Could not eliminate permission" <+>
                     permPretty i (Perm_LLVMBlock bp)) >>>=
   implFailM
+
 
 -- | Assume the top of the stack contains @x:ps@, which are all the permissions
 -- for @x@. Extract the @i@th conjuct from @ps@, which should be a @memblock@
@@ -5385,6 +5418,26 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
       proveVarLLVMBlocks x ps' psubst mb_bps_in mb_ps
 
 
+  -- If the offset and length of the top block matches one that we already have
+  -- on the left, but the left-hand permission has an unneeded empty shape at
+  -- the end, i.e., is of the form sh;emptysh where the natural length of sh is
+  -- the length of the left-hand permission, remove that trailing empty shape
+  [nuMP| mb_bp : _ |]
+    | Just off <- partialSubst psubst $ fmap llvmBlockOffset mb_bp
+    , Just len <- partialSubst psubst $ fmap llvmBlockLen mb_bp
+    , Just i <- findIndex
+      (\case
+          Perm_LLVMBlock bp
+            | PExpr_SeqShape sh1 PExpr_EmptyShape <- llvmBlockShape bp
+            , Just len' <- llvmShapeLength sh1 ->
+              bvEq (llvmBlockOffset bp) off &&
+              bvEq (llvmBlockLen bp) len &&
+              bvEq len len'
+          _ -> False) ps ->
+      implElimAppendIthLLVMBlock x ps i >>>= \ps' ->
+      proveVarLLVMBlocks x ps' psubst mb_bps_in mb_ps
+
+
   -- If there is a left-hand permission whose range overlaps with but is not
   -- contained in that of mb_bp, eliminate it. Note that we exclude mb_bp with 0
   -- length for this case.
@@ -5493,6 +5546,8 @@ proveVarLLVMBlocks' x ps psubst mb_bps_in mb_ps = case mbMatch mb_bps_in of
     , [nuMP| Just mb_sh' |] <- mbMatch $ (mbMap3 unfoldModalizeNamedShape rw l nmsh
                                          `mbApply` args) ->
       -- Recurse using the unfolded shape
+      (if mbLift (fmap namedShapeIsRecursive nmsh) then implSetRecRecurseRightM
+       else return ()) >>>
       let mb_bps' =
             mbMap3 (\bp sh' bps -> (bp { llvmBlockShape = sh' } : bps))
             mb_bp mb_sh' mb_bps in
