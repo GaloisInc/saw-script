@@ -54,7 +54,7 @@ install_z3() {
   is_exe "$BIN" "z3" && return
 
   case "$RUNNER_OS" in
-    Linux) file="ubuntu-18.04.zip" ;;
+    Linux) file="glibc-2.31.zip" ;;
     macOS) file="osx-10.15.7.zip" ;;
     Windows) file="win.zip" ;;
   esac
