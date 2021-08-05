@@ -4101,7 +4101,6 @@ implIntroOrShapeMultiM x bp (sh1 : shs) i =
 implIntroOrShapeMultiM _ _ _ _ = error "implIntroOrShapeMultiM"
 
 
-
 ----------------------------------------------------------------------
 -- * Support for Proving Lifetimes Are Current
 ----------------------------------------------------------------------
