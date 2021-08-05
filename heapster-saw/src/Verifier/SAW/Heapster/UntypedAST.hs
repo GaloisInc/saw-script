@@ -69,7 +69,7 @@ data AstExpr
   | ExLessEqual Pos AstExpr AstExpr -- ^ less-than or equal-to bitvector proposition
 
   | ExEq Pos AstExpr            -- ^ equal permission
-  | ExLOwned Pos [(Located String, AstExpr)] [(Located String, AstExpr)] -- ^ owned permission
+  | ExLOwned Pos [AstExpr] [(Located String, AstExpr)] [(Located String, AstExpr)] -- ^ owned permission
   | ExLCurrent Pos (Maybe AstExpr) -- ^ current permission
   | ExShape Pos AstExpr -- ^ shape literal
   | ExFree Pos AstExpr -- ^ free literal
@@ -106,7 +106,7 @@ instance HasPos AstExpr where
   pos (ExNotEqual   p _ _      ) = p
   pos (ExLessThan   p _ _      ) = p
   pos (ExLessEqual  p _ _      ) = p
-  pos (ExLOwned     p _ _      ) = p
+  pos (ExLOwned     p _ _ _    ) = p
   pos (ExLCurrent   p _        ) = p
   pos (ExShape      p _        ) = p
   pos (ExFree       p _        ) = p
