@@ -71,6 +71,7 @@ data AstExpr
   | ExEq Pos AstExpr            -- ^ equal permission
   | ExLOwned Pos [AstExpr] [(Located String, AstExpr)] [(Located String, AstExpr)] -- ^ owned permission
   | ExLCurrent Pos (Maybe AstExpr) -- ^ current permission
+  | ExLFinished Pos -- ^ finished permission
   | ExShape Pos AstExpr -- ^ shape literal
   | ExFree Pos AstExpr -- ^ free literal
   | ExPtr Pos (Maybe AstExpr) AstExpr AstExpr (Maybe AstExpr) AstExpr -- ^ pointer permission
@@ -108,6 +109,7 @@ instance HasPos AstExpr where
   pos (ExLessEqual  p _ _      ) = p
   pos (ExLOwned     p _ _ _    ) = p
   pos (ExLCurrent   p _        ) = p
+  pos (ExLFinished  p          ) = p
   pos (ExShape      p _        ) = p
   pos (ExFree       p _        ) = p
   pos (ExPtr        p _ _ _ _ _) = p
