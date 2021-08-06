@@ -66,13 +66,6 @@ import GHC.Stack
 import Debug.Trace
 
 
-{- FIXME HERE NOW:
-- add contained lifetimes to lowned perms
-- remove LOwnedPermLifetime constructor
-- change the rules SplitLifetime, SubsumeLifetime, MapLifetime,
-  EndLifetime, and BeginLifetime
--}
-
 ----------------------------------------------------------------------
 -- * Equality Proofs
 ----------------------------------------------------------------------
@@ -766,8 +759,8 @@ data SimplImpl ps_in ps_out where
   -- | Save a permission for later by splitting it into part that is in the
   -- current lifetime and part that is saved in the lifetime for later:
   --
-  -- > x:F<l,rws> * l:[l2]lcurrent * l2:lowned (ps_in -o ps_out)
-  -- >   -o x:F<l2,rws> * l2:lowned (x:F<l2,Rs>, ps_in -o x:F<l,rws>, ps_out)
+  -- > x:F<l,rws> * l:[l2]lcurrent * l2:lowned[ls] (ps_in -o ps_out)
+  -- >   -o x:F<l2,rws> * l2:lowned[ls](x:F<l2,Rs>, ps_in -o x:F<l,rws>, ps_out)
   --
   -- Note that this rule also supports @l=always@, in which case the
   -- @l:[l2]lcurrent@ permission is replaced by @l2:true@ (as a hack, because it
@@ -3288,6 +3281,12 @@ implCopyM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r (ps :> a :> a) (ps :> a) ()
 implCopyM x p = implSimplM Proxy (SImpl_Copy x p)
 
+-- | Push a copyable permission using 'implPushM', copy that permission, and
+-- then pop it back to the variable permission for @x@
+implPushCopyM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+                 ImplM vars s r (ps :> a) ps ()
+implPushCopyM x p = implPushM x p >>> implCopyM x p >>> implPopM x p
+
 -- | Swap the top two permissions on the top of the stack
 implSwapM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ExprVar b -> ValuePerm b ->
@@ -3469,8 +3468,7 @@ implProveEqPerms (DistPermsCons ps' x (ValPerm_Eq (PExpr_Var y)))
   | x == y
   = implProveEqPerms ps' >>> introEqReflM x
 implProveEqPerms (DistPermsCons ps' x p@(ValPerm_Eq _)) =
-  implProveEqPerms ps' >>>
-  implPushM x p >>> implCopyM x p >>> implPopM x p
+  implProveEqPerms ps' >>> implPushCopyM x p
 implProveEqPerms _ = error "implProveEqPerms: non-equality permission"
 
 -- | Cast a proof of @x:p@ to one of @x:p'@ using a proof that @p=p'@
@@ -3777,10 +3775,11 @@ implContainedLifetimeCurrentM l ls ps_in ps_out l2 =
 -- | Remove a finshed contained lifetime from an @lowned@ permission. Assume the
 -- permissions
 --
--- > l1:lowned[ls1,l2,ls2] (ps_in -o ps_out) * l2:lfinished
+-- > l1:lowned[ls] (ps_in -o ps_out) * l2:lfinished
 --
--- are on top of the stack, and remove @l2@ from the contained lifetimes of
--- @l1@, popping the resulting @lowned@ permission on @l1@ off of the stack.
+-- are on top of the stack where @l2@ is in @ls@, and remove @l2@ from the
+-- contained lifetimes @ls@ of @l1@, popping the resulting @lowned@ permission
+-- on @l1@ off of the stack.
 implRemoveContainedLifetimeM :: NuMatchingAny1 r => ExprVar LifetimeType ->
                                 [PermExpr LifetimeType] ->
                                 LOwnedPerms ps_in -> LOwnedPerms ps_out ->
@@ -4201,9 +4200,7 @@ proveLifetimeCurrent (CurrentTransPerms cur_perms l) =
   proveLifetimeCurrent cur_perms >>>
   let l' = lifetimeCurrentPermsLifetime cur_perms
       p_l_cur = ValPerm_LCurrent l' in
-  implPushM l p_l_cur >>>
-  implCopyM l p_l_cur >>>
-  implPopM l p_l_cur
+  implPushCopyM l p_l_cur
 
 
 ----------------------------------------------------------------------
@@ -4217,15 +4214,12 @@ simplEqPerm :: NuMatchingAny1 r => ExprVar a -> PermExpr a ->
                ImplM vars s r (as :> a) (as :> a) (PermExpr a)
 simplEqPerm x e@(PExpr_Var y) =
   getPerm y >>= \case
-  p@(ValPerm_Eq e') ->
-    implPushM y p >>> implCopyM y p >>> implPopM y p >>>
-    introCastM x y p >>> pure e'
+  p@(ValPerm_Eq e') -> implPushCopyM y p >>> introCastM x y p >>> pure e'
   _ -> pure e
 simplEqPerm x e@(PExpr_LLVMOffset y off) =
   getPerm y >>= \case
   p@(ValPerm_Eq e') ->
-    implPushM y p >>> implCopyM y p >>> implPopM y p >>>
-    castLLVMPtrM y p off x >>> pure (addLLVMOffset e' off)
+    implPushCopyM y p >>> castLLVMPtrM y p off x >>> pure (addLLVMOffset e' off)
   _ -> pure e
 simplEqPerm _ e = pure e
 
@@ -4259,12 +4253,12 @@ recombinePerm' x (ValPerm_Eq (PExpr_Var y)) _
 recombinePerm' x (ValPerm_Eq e1) p@(ValPerm_Eq e2)
   | e1 == e2 = implDropM x p
 recombinePerm' x x_p@(ValPerm_Eq (PExpr_Var y)) p =
-  implPushM x x_p >>> introEqCopyM x (PExpr_Var y) >>> implPopM x x_p >>>
+  implPushCopyM x x_p >>>
   invertEqM x y >>> implSwapM x p y (ValPerm_Eq (PExpr_Var x)) >>>
   introCastM y x p >>> getPerm y >>>= \y_p -> recombinePermExpl y y_p p
 recombinePerm' x x_p@(ValPerm_Eq (PExpr_LLVMOffset y off)) (ValPerm_Conj ps) =
-  implPushM x x_p >>> introEqCopyM x (PExpr_LLVMOffset y off) >>>
-  implPopM x x_p >>> implSimplM Proxy (SImpl_InvertLLVMOffsetEq x off y) >>>
+  implPushCopyM x x_p >>>
+  implSimplM Proxy (SImpl_InvertLLVMOffsetEq x off y) >>>
   implSwapM x (ValPerm_Conj ps) y (ValPerm_Eq
                                    (PExpr_LLVMOffset x (bvNegate off))) >>>
   castLLVMPtrM x (ValPerm_Conj ps) (bvNegate off) y >>>
@@ -6232,9 +6226,9 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
   -- FIXME HERE: eventually we should handle lowned permissions on the right
   -- with arbitrary contained lifetimes, by equalizing the two sides
   [nuMP| Perm_LOwned [] _ _ |]
-    | [Perm_LOwned (mapM asVar -> Just ls) _ _] <- ps ->
-      implPopM x (ValPerm_Conj ps) >>>
-      mapM_ implEndLifetimeRecM ls >>>
+    | [Perm_LOwned ls@(PExpr_Var l2:_) ps_in ps_out] <- ps ->
+      implEndLifetimeRecM l2 >>>
+      implRemoveContainedLifetimeM x ls ps_in ps_out l2 >>>
       proveVarImplInt x (fmap ValPerm_Conj1 mb_p)
 
   [nuMP| Perm_LOwned [] mb_ps_inR mb_ps_outR |]
@@ -6323,9 +6317,7 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       _ -> proveVarAtomicImplUnfoldOrFail x ps mb_p
 
   [nuMP| Perm_LFinished |] ->
-    implPopM x (ValPerm_Conj ps) >>> implEndLifetimeRecM x >>>
-    implPushM x ValPerm_LFinished >>> implCopyM x ValPerm_LFinished >>>
-    implPopM x ValPerm_LFinished
+    implPopM x (ValPerm_Conj ps) >>> implEndLifetimeRecM x
 
   -- If we have a struct permission on the left, eliminate it to a sequence of
   -- variables and prove the required permissions for each variable
@@ -6959,24 +6951,23 @@ localProveVars ps_in ps_out =
 -- @lowned@ permissions are held for all of those lifetimes. For each lifetime
 -- that is ended, prove its required input permissions and recombine the
 -- resulting output permissions. If a lifetime has already ended, do nothing.
+-- Leave an @lfinished@ permission for that lifetime on the top of the stack.
 implEndLifetimeRecM :: NuMatchingAny1 r => ExprVar LifetimeType ->
-                       ImplM vars s r ps ps ()
+                       ImplM vars s r (ps :> LifetimeType) ps ()
 implEndLifetimeRecM l =
   getPerm l >>>= \case
-  ValPerm_LFinished -> return ()
+  p@ValPerm_LFinished -> implPushCopyM l p
   p@(ValPerm_LOwned [] ps_in ps_out)
     | Just dps_in <- lownedPermsToDistPerms ps_in ->
       mbVarsM dps_in >>>= \mb_dps_in ->
       -- NOTE: we are assuming that l's permission, p, will not change during
       -- this recursive call to the prover, which should be safe
       proveVarsImplAppendInt mb_dps_in >>>
-      implPushM l p >>>
-      implEndLifetimeM Proxy l ps_in ps_out
+      implPushM l p >>> implEndLifetimeM Proxy l ps_in ps_out >>>
+      implPushCopyM l ValPerm_LFinished
   p@(ValPerm_LOwned ((asVar -> Just l') : ls) ps_in ps_out) ->
     implPushM l p >>>
     implEndLifetimeRecM l' >>>
-    implPushM l' ValPerm_LFinished >>> implCopyM l' ValPerm_LFinished >>>
-    implPopM l' ValPerm_LFinished >>>
     implRemoveContainedLifetimeM l ls ps_in ps_out l' >>>
     implEndLifetimeRecM l
   _ ->
@@ -7005,7 +6996,7 @@ proveVarsImplAppend mb_ps =
                   sep [pretty "Ending lifetime" <+> permPretty i l,
                        pretty "in order to prove:",
                        permPretty i mb_ps]) >>>
-     implEndLifetimeRecM l >>>
+     implEndLifetimeRecM l >>> implDropM l ValPerm_LFinished >>>
      proveVarsImplAppend mb_ps))
 
 -- | Prove a list of existentially-quantified distinguished permissions and put
