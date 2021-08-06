@@ -31,6 +31,7 @@ import Prelude hiding (pred)
 
 import Data.Char (isDigit)
 import Data.Maybe
+import Data.Foldable (asum)
 import Data.List hiding (sort)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NonEmpty
@@ -3544,7 +3545,7 @@ data TaggedUnionShape w
 -- | Extract the disjunctive shapes from a 'TaggedUnionShape'
 taggedUnionDisjs :: TaggedUnionShape w -> [PermExpr (LLVMShapeType w)]
 taggedUnionDisjs (TaggedUnionShape disjs) =
-  snd $ unzip $ NonEmpty.toList disjs
+  map snd $ NonEmpty.toList disjs
 
 -- | Convert a 'TaggedUnionShape' to the shape it represents
 taggedUnionToShape :: TaggedUnionShape w -> PermExpr (LLVMShapeType w)
@@ -3584,22 +3585,31 @@ asTaggedUnionShape sh
 asTaggedUnionShape _ = Nothing
 
 -- | Find a disjunct in a 'TaggedUnionShape' that could be proven at the given
+-- offset from the given atomic permission, by checking if it is a field or
+-- block permission containing an equality permission to one of the tags. If
+-- some disjunct can be proved, return its index in the list of disjuncts.
+findTaggedUnionIndexForPerm :: PermExpr (BVType w) ->
+                               AtomicPerm (LLVMPointerType w) ->
+                               TaggedUnionShape w -> Maybe Int
+findTaggedUnionIndexForPerm off p (TaggedUnionShape disjs@((bv1,_) :| _))
+  | Just bp <- llvmAtomicPermToBlock p
+  , bvEq off (llvmBlockOffset bp)
+  , Just (SomeBV tag_bv) <- getShapeBVTag $ llvmBlockShape bp
+  , Just Refl <- testEquality (natRepr tag_bv) (natRepr bv1)
+  , Just i <- findIndex (== tag_bv) $ map fst $ NonEmpty.toList disjs
+  = Just i
+findTaggedUnionIndexForPerm _ _ _ = Nothing
+
+
+-- | Find a disjunct in a 'TaggedUnionShape' that could be proven at the given
 -- offset from the given atomic permissions, by looking for a field or block
 -- permission containing an equality permission to one of the tags. If some
 -- disjunct can be proved, return its index in the list of disjuncts.
 findTaggedUnionIndexForPerms :: PermExpr (BVType w) ->
                                 [AtomicPerm (LLVMPointerType w)] ->
                                 TaggedUnionShape w -> Maybe Int
-findTaggedUnionIndexForPerms off (p : _) (TaggedUnionShape disjs@((bv1,_) :| _))
-  | Just bp <- llvmAtomicPermToBlock p
-  , bvEq off (llvmBlockOffset bp)
-  , Just (SomeBV tag_bv) <- getShapeBVTag $ llvmBlockShape bp
-  , Just Refl <- testEquality (natRepr tag_bv) (natRepr bv1)
-  , Just i <- findIndex (== tag_bv) $ fst $ unzip $ NonEmpty.toList disjs
-  = Just i
-findTaggedUnionIndexForPerms off (_ : ps) tag_u =
-  findTaggedUnionIndexForPerms off ps tag_u
-findTaggedUnionIndexForPerms _ [] _ = Nothing
+findTaggedUnionIndexForPerms off ps tag_un =
+  asum $ map (\p -> findTaggedUnionIndexForPerm off p tag_un) ps
 
 
 -- | Convert an array cell number @cell@ to the byte offset for that cell, given
