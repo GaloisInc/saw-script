@@ -5821,8 +5821,8 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps mb_ps
     implCatchM (pure True) (pure False) >>>= \is_case1 ->
 
     -- Prove the chosen shape by recursively calling proveVarLLVMBlocks
-    let mb_sh = if is_case1 then mb_sh1 else mb_sh2 in
-    let mb_bp' = mbMap2 (\bp sh -> bp { llvmBlockShape = sh }) mb_bp mb_sh in
+    let mb_sh' = if is_case1 then mb_sh1 else mb_sh2 in
+    let mb_bp' = mbMap2 (\bp sh -> bp { llvmBlockShape = sh }) mb_bp mb_sh' in
     proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps) mb_ps >>>
 
     -- Move the block permission we proved to the top of the stack
