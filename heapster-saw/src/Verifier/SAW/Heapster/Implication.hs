@@ -807,7 +807,7 @@ data SimplImpl ps_in ps_out where
   SImpl_RemoveContainedLifetime :: ExprVar LifetimeType ->
                                    [PermExpr LifetimeType] ->
                                    LOwnedPerms ps_in -> LOwnedPerms ps_out ->
-                                   PermExpr LifetimeType ->
+                                   ExprVar LifetimeType ->
                                    SimplImpl
                                    (RNil :> LifetimeType :> LifetimeType)
                                    (RNil :> LifetimeType)
@@ -1705,7 +1705,7 @@ simplImplIn (SImpl_ContainedLifetimeCurrent l ls ps_in ps_out l2) =
     error ("simplImplIn: SImpl_ContainedLifetimeCurrent: " ++
            "lifetime not in contained lifetimes")
 simplImplIn (SImpl_RemoveContainedLifetime l ls ps_in ps_out l2) =
-  if elem l2 ls then
+  if elem (PExpr_Var l2) ls then
     distPerms2 l (ValPerm_LOwned ls ps_in ps_out) l2 ValPerm_LFinished
   else
     error ("simplImplIn: SImpl_RemoveContainedLifetime: " ++
@@ -2029,8 +2029,8 @@ simplImplOut (SImpl_ContainedLifetimeCurrent l ls ps_in ps_out l2) =
     error ("simplImplOut: SImpl_ContainedLifetimeCurrent: " ++
            "lifetime not in contained lifetimes")
 simplImplOut (SImpl_RemoveContainedLifetime l ls ps_in ps_out l2) =
-  if elem l2 ls then
-    distPerms1 l (ValPerm_LOwned (delete l2 ls) ps_in ps_out)
+  if elem (PExpr_Var l2) ls then
+    distPerms1 l (ValPerm_LOwned (delete (PExpr_Var l2) ls) ps_in ps_out)
   else
     error ("simplImplOut: SImpl_RemoveContainedLifetime: " ++
            "lifetime not in contained lifetimes")
@@ -3693,15 +3693,19 @@ implBeginLifetimeM =
 
 -- | End a lifetime, assuming the top of the stack is of the form
 --
--- > ps, ps_in, l:lowned(ps_in -o ps_out)
+-- > ps_in, l:lowned(ps_in -o ps_out)
 --
--- Pop all the returned permissions @ps_out@, leaving just @ps@ on the stack.
+-- Recombine all the returned permissions @ps_out@ and @l:lfinished@, leaving
+-- just @ps@ on the stack.
 implEndLifetimeM :: NuMatchingAny1 r => Proxy ps -> ExprVar LifetimeType ->
                     LOwnedPerms ps_in -> LOwnedPerms ps_out ->
                     ImplM vars s r ps (ps :++: ps_in :> LifetimeType) ()
-implEndLifetimeM ps l ps_in ps_out@(lownedPermsToDistPerms -> Just dps_out) =
-  implSimplM ps (SImpl_EndLifetime l ps_in ps_out) >>>
-  recombinePermsPartial ps (DistPermsCons dps_out l ValPerm_LFinished)
+implEndLifetimeM ps l ps_in ps_out@(lownedPermsToDistPerms -> Just dps_out)
+  | isJust (lownedPermsToDistPerms ps_in) =
+    implSimplM ps (SImpl_EndLifetime l ps_in ps_out) >>>
+    implTraceM (\i -> pretty "Lifetime" <+>
+                      permPretty i l <+> pretty "ended") >>>
+    recombinePermsPartial ps (DistPermsCons dps_out l ValPerm_LFinished)
 implEndLifetimeM _ _ _ _ = implFailM "implEndLifetimeM: lownedPermsToDistPerms"
 
 
@@ -3759,22 +3763,22 @@ implContainedLifetimeCurrentM l ls ps_in ps_out l2 =
   implPopM l (ValPerm_LOwned ls ps_in ps_out)
 
 
--- | Remove a finshed contained lifetime from an @lowned@ permission, assuming
--- the permissions
+-- | Remove a finshed contained lifetime from an @lowned@ permission. Assume the
+-- permissions
 --
 -- > l1:lowned[ls1,l2,ls2] (ps_in -o ps_out) * l2:lfinished
 --
--- are on top of the stack and replacing them with
---
--- > l1:lowned[ls1,ls2] (ps_in -o ps_out)
+-- are on top of the stack, and remove @l2@ from the contained lifetimes of
+-- @l1@, popping the resulting @lowned@ permission on @l1@ off of the stack.
 implRemoveContainedLifetimeM :: NuMatchingAny1 r => ExprVar LifetimeType ->
                                 [PermExpr LifetimeType] ->
                                 LOwnedPerms ps_in -> LOwnedPerms ps_out ->
-                                PermExpr LifetimeType ->
-                                ImplM vars s r (ps :> LifetimeType)
+                                ExprVar LifetimeType ->
+                                ImplM vars s r ps
                                 (ps :> LifetimeType :> LifetimeType) ()
 implRemoveContainedLifetimeM l ls ps_in ps_out l2 =
-  implSimplM Proxy (SImpl_RemoveContainedLifetime l ls ps_in ps_out l2)
+  implSimplM Proxy (SImpl_RemoveContainedLifetime l ls ps_in ps_out l2) >>>
+  implPopM l (ValPerm_LOwned (delete (PExpr_Var l2) ls) ps_in ps_out)
 
 
 -- | Find all lifetimes that we currently own which could, if ended, help prove
@@ -6203,8 +6207,16 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       proveEq fperms mb_fperms >>>= \eqp ->
       implCastPermM x (fmap (ValPerm_Conj1 . Perm_LLVMFrame) eqp)
 
-  [nuMP| Perm_LOwned mb_ls mb_ps_inR mb_ps_outR |]
-    | [Perm_LOwned ls ps_inL ps_outL] <- ps ->
+  -- FIXME HERE: eventually we should handle lowned permissions on the right
+  -- with arbitrary contained lifetimes, by equalizing the two sides
+  [nuMP| Perm_LOwned [] _ _ |]
+    | [Perm_LOwned (mapM asVar -> Just ls) _ _] <- ps ->
+      implPopM x (ValPerm_Conj ps) >>>
+      mapM_ implEndLifetimeRecM ls >>>
+      proveVarImplInt x (fmap ValPerm_Conj1 mb_p)
+
+  [nuMP| Perm_LOwned [] mb_ps_inR mb_ps_outR |]
+    | [Perm_LOwned [] ps_inL ps_outL] <- ps ->
 
       -- First, simplify both sides using any current equality permissions. This
       -- just builds the equality proofs and computes the new LHS and RHS, but
@@ -6247,7 +6259,7 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       getPSubst >>>= \psubst ->
       let eqp_R =
             fmap (\(mb_ps_in,mb_ps_out) ->
-                   ValPerm_LOwned ls
+                   ValPerm_LOwned []
                    (partialSubstForce psubst mb_ps_in "proveVarAtomicImpl")
                    (partialSubstForce psubst mb_ps_out "proveVarAtomicImpl"))
             eqp_mb_psR in
@@ -6266,8 +6278,8 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       -- lowned permissions and casting it, and then cast the result
       implPushM x (ValPerm_Conj ps) >>>
       implCastPermM x (fmap (\(ps_in,ps_out) ->
-                              ValPerm_LOwned ls ps_in ps_out) eqp_psL) >>>
-      implSimplM Proxy (SImpl_MapLifetime x ls ps_inL' ps_outL' ps_inR' ps_outR'
+                              ValPerm_LOwned [] ps_in ps_out) eqp_psL) >>>
+      implSimplM Proxy (SImpl_MapLifetime x [] ps_inL' ps_outL' ps_inR' ps_outR'
                         ps1 ps2 impl_in impl_out) >>>
       implCastPermM x (someEqProofSym eqp_R)
 
@@ -6283,10 +6295,15 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
         implSimplM Proxy (SImpl_LCurrentTrans x l l')
       [Perm_LOwned ls ps_in ps_out]
         | elem l' ls -> implContainedLifetimeCurrentM x ls ps_in ps_out l'
-      [Perm_LOwned sub_ls ps_in ps_out] ->
+      [Perm_LOwned ls ps_in ps_out] ->
         implSubsumeLifetimeM x ls ps_in ps_out l' >>>
         implContainedLifetimeCurrentM x (l':ls) ps_in ps_out l'
       _ -> proveVarAtomicImplUnfoldOrFail x ps mb_p
+
+  [nuMP| Perm_LFinished |] ->
+    implPopM x (ValPerm_Conj ps) >>> implEndLifetimeRecM x >>>
+    implPushM x ValPerm_LFinished >>> implCopyM x ValPerm_LFinished >>>
+    implPopM x ValPerm_LFinished
 
   -- If we have a struct permission on the left, eliminate it to a sequence of
   -- variables and prove the required permissions for each variable
@@ -6916,6 +6933,36 @@ localProveVars ps_in ps_out =
 -- * External Entrypoints to the Implication Prover
 ----------------------------------------------------------------------
 
+-- | End a lifetime and, recursively, all lifetimes it contains, assuming that
+-- @lowned@ permissions are held for all of those lifetimes. For each lifetime
+-- that is ended, prove its required input permissions and recombine the
+-- resulting output permissions. If a lifetime has already ended, do nothing.
+implEndLifetimeRecM :: NuMatchingAny1 r => ExprVar LifetimeType ->
+                       ImplM vars s r ps ps ()
+implEndLifetimeRecM l =
+  getPerm l >>>= \case
+  ValPerm_LFinished -> return ()
+  p@(ValPerm_LOwned [] ps_in ps_out)
+    | Just dps_in <- lownedPermsToDistPerms ps_in ->
+      mbVarsM dps_in >>>= \mb_dps_in ->
+      -- NOTE: we are assuming that l's permission, p, will not change during
+      -- this recursive call to the prover, which should be safe
+      proveVarsImplAppendInt mb_dps_in >>>
+      implPushM l p >>>
+      implEndLifetimeM Proxy l ps_in ps_out
+  p@(ValPerm_LOwned ((asVar -> Just l') : ls) ps_in ps_out) ->
+    implPushM l p >>>
+    implEndLifetimeRecM l' >>>
+    implPushM l' ValPerm_LFinished >>> implCopyM l' ValPerm_LFinished >>>
+    implPopM l' ValPerm_LFinished >>>
+    implRemoveContainedLifetimeM l ls ps_in ps_out l' >>>
+    implEndLifetimeRecM l
+  _ ->
+    implTraceM (\i ->
+                 pretty "implEndLifetimeRecM: could not end lifetime: " <>
+                 permPretty i l) >>>= implFailM
+
+
 -- | Prove a list of existentially-quantified distinguished permissions, adding
 -- those proofs to the top of the stack. In the case that a the variable itself
 -- whose permissions are being proved is existentially-quantified --- that is,
@@ -6926,26 +6973,18 @@ proveVarsImplAppend :: NuMatchingAny1 r => ExDistPerms vars ps ->
                        ImplM vars s r (ps_in :++: ps) ps_in ()
 proveVarsImplAppend mb_ps =
   use implStatePerms >>>= \(_ :: PermSet ps_in) ->
-  let prx :: Proxy ps_in = Proxy in
   lifetimesThatCouldProve mb_ps >>>= \ls_ps ->
   foldr1 implCatchM
   ((proveVarsImplAppendInt mb_ps)
    :
    flip map ls_ps
-   (\case
-       (l,l_p@(Perm_LOwned ps_in@(lownedPermsToDistPerms ->
-                                  Just dps_in) ps_out)) ->
-         implTraceM (\i ->
-                      sep [pretty "Ending lifetime" <+> permPretty i l,
-                           pretty "in order to prove:",
-                           permPretty i mb_ps]) >>>
-         proveVarsImplAppendInt (fmap (const dps_in) mb_ps) >>>
-         implPushM l (ValPerm_Conj1 l_p) >>>
-         implEndLifetimeM prx l ps_in ps_out >>>
-         implTraceM (\i -> pretty "Lifetime" <+> permPretty i l
-                           <+> pretty "ended") >>>
-         proveVarsImplAppend mb_ps
-       _ -> error "proveVarsImplAppend: unexpected lifetimesThatCouldProve result"))
+   (\(l,_) ->
+     implTraceM (\i ->
+                  sep [pretty "Ending lifetime" <+> permPretty i l,
+                       pretty "in order to prove:",
+                       permPretty i mb_ps]) >>>
+     implEndLifetimeRecM l >>>
+     proveVarsImplAppend mb_ps))
 
 -- | Prove a list of existentially-quantified distinguished permissions and put
 -- those proofs onto the stack. This is the same as 'proveVarsImplAppend' except

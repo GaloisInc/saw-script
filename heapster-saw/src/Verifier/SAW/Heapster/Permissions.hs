@@ -2046,6 +2046,14 @@ asVarOffset (PExpr_Var x) = Just (x, NoPermOffset)
 asVarOffset (PExpr_LLVMOffset x off) = Just (x, LLVMPermOffset off)
 asVarOffset _ = Nothing
 
+-- | Convert an expression to a variable if possible
+asVar :: PermExpr a -> Maybe (ExprVar a)
+asVar e
+  | Just (x,off) <- asVarOffset e
+  , offsetsEq off NoPermOffset =
+    Just x
+asVar _ = Nothing
+
 -- | Negate a 'PermOffset'
 negatePermOffset :: PermOffset a -> PermOffset a
 negatePermOffset NoPermOffset = NoPermOffset
