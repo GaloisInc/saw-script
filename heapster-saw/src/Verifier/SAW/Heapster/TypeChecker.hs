@@ -607,7 +607,7 @@ tcLifetimeAtomic (ExLOwned _ ls x y) =
   do Some x' <- tcLOwnedPerms x
      Some y' <- tcLOwnedPerms y
      ls' <- mapM tcKExpr ls
-     pure (Perm_LOwned x' y')
+     pure (Perm_LOwned ls' x' y')
 tcLifetimeAtomic (ExLCurrent _ l) = Perm_LCurrent <$> tcOptLifetime l
 tcLifetimeAtomic e = tcError (pos e) "Expected lifetime perm"
 
