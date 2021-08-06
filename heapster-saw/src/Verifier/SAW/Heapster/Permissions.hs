@@ -31,8 +31,10 @@ import Prelude hiding (pred)
 
 import Data.Char (isDigit)
 import Data.Maybe
+import Data.Foldable (asum)
 import Data.List hiding (sort)
 import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.String
 import Data.Proxy
 import Data.Reflection
@@ -2787,6 +2789,7 @@ $(mkNuMatching [t| forall args a. LifetimeFunctor args a |])
 $(mkNuMatching [t| forall ps. LifetimeCurrentPerms ps |])
 
 
+
 instance NuMatchingAny1 LOwnedPerm where
   nuMatchingAny1Proof = nuMatchingProof
 
@@ -3506,6 +3509,94 @@ remLLVMBLockPermRange rng bp =
          snd <$> splitLLVMBlockPerm (bvRangeEnd rng) bp
        else return bp'
      return (bps_l ++ [bp_r])
+
+
+-- | A tagged union shape is a shape of the form
+--
+-- > sh1 orsh sh2 orsh ... orsh shn
+--
+-- where each @shi@ is equivalent up to associativity of the @;@ operator to a
+-- shape of the form
+--
+-- > fieldsh(eq(llvmword(bvi)));shi'
+--
+-- That is, each disjunct of the shape starts with an equality permission that
+-- determines which disjunct should be used. These shapes are represented as a
+-- list of the disjuncts, which are tagged with the bitvector values @bvi@ used
+-- in the equality permission.
+data TaggedUnionShape w
+  = forall sz. (1 <= sz, KnownNat sz) =>
+    TaggedUnionShape (NonEmpty (BV sz, PermExpr (LLVMShapeType w)))
+
+-- | Extract the disjunctive shapes from a 'TaggedUnionShape'
+taggedUnionDisjs :: TaggedUnionShape w -> [PermExpr (LLVMShapeType w)]
+taggedUnionDisjs (TaggedUnionShape disjs) =
+  map snd $ NonEmpty.toList disjs
+
+-- | Convert a 'TaggedUnionShape' to the shape it represents
+taggedUnionToShape :: TaggedUnionShape w -> PermExpr (LLVMShapeType w)
+taggedUnionToShape (TaggedUnionShape disjs) =
+  foldr1 PExpr_OrShape $ NonEmpty.map snd disjs
+
+-- | A bitvector value of some unknown size
+data SomeBV = forall sz. (1 <= sz, KnownNat sz) => SomeBV (BV sz)
+
+-- | Test if a shape is of the form @fieldsh(eq(llvmword(bv)))@ for some @bv@.
+-- If so, return @bv@.
+shapeToTag :: PermExpr (LLVMShapeType w) -> Maybe SomeBV
+shapeToTag (PExpr_FieldShape
+            (LLVMFieldShape
+             (ValPerm_Eq (PExpr_LLVMWord (PExpr_BV [] bv))))) =
+  Just (SomeBV bv)
+shapeToTag _ = Nothing
+
+-- | Test if a shape begins with an equality permission to a bitvector value and
+-- return that bitvector value
+getShapeBVTag :: PermExpr (LLVMShapeType w) -> Maybe SomeBV
+getShapeBVTag sh | Just some_bv <- shapeToTag sh = Just some_bv
+getShapeBVTag (PExpr_SeqShape sh1 _) = getShapeBVTag sh1
+getShapeBVTag _ = Nothing
+
+-- | Test if a shape is a tagged union shape and, if so, convert it to the
+-- 'TaggedUnionShape' representation
+asTaggedUnionShape :: PermExpr (LLVMShapeType w) -> Maybe (TaggedUnionShape w)
+asTaggedUnionShape (PExpr_OrShape sh1 sh2)
+  | Just (SomeBV bv1) <- getShapeBVTag sh1
+  , Just (TaggedUnionShape disjs2@((bv2,_) :| _)) <- asTaggedUnionShape sh2
+  , Just Refl <- testEquality (natRepr bv1) (natRepr bv2) =
+    Just (TaggedUnionShape (NonEmpty.cons (bv1,sh1) disjs2))
+asTaggedUnionShape sh
+  | Just (SomeBV bv) <- getShapeBVTag sh =
+    Just (TaggedUnionShape ((bv,sh) :| []))
+asTaggedUnionShape _ = Nothing
+
+-- | Find a disjunct in a 'TaggedUnionShape' that could be proven at the given
+-- offset from the given atomic permission, by checking if it is a field or
+-- block permission containing an equality permission to one of the tags. If
+-- some disjunct can be proved, return its index in the list of disjuncts.
+findTaggedUnionIndexForPerm :: PermExpr (BVType w) ->
+                               AtomicPerm (LLVMPointerType w) ->
+                               TaggedUnionShape w -> Maybe Int
+findTaggedUnionIndexForPerm off p (TaggedUnionShape disjs@((bv1,_) :| _))
+  | Just bp <- llvmAtomicPermToBlock p
+  , bvEq off (llvmBlockOffset bp)
+  , Just (SomeBV tag_bv) <- getShapeBVTag $ llvmBlockShape bp
+  , Just Refl <- testEquality (natRepr tag_bv) (natRepr bv1)
+  , Just i <- findIndex (== tag_bv) $ map fst $ NonEmpty.toList disjs
+  = Just i
+findTaggedUnionIndexForPerm _ _ _ = Nothing
+
+
+-- | Find a disjunct in a 'TaggedUnionShape' that could be proven at the given
+-- offset from the given atomic permissions, by looking for a field or block
+-- permission containing an equality permission to one of the tags. If some
+-- disjunct can be proved, return its index in the list of disjuncts.
+findTaggedUnionIndexForPerms :: PermExpr (BVType w) ->
+                                [AtomicPerm (LLVMPointerType w)] ->
+                                TaggedUnionShape w -> Maybe Int
+findTaggedUnionIndexForPerms off ps tag_un =
+  asum $ map (\p -> findTaggedUnionIndexForPerm off p tag_un) ps
+
 
 -- | Convert an array cell number @cell@ to the byte offset for that cell, given
 -- by @stride * cell + field_num@
@@ -6152,6 +6243,7 @@ data PermEnv = PermEnv {
   permEnvHints :: [Hint]
   }
 
+$(mkNuMatching [t| forall w. TaggedUnionShape w |])
 $(mkNuMatching [t| forall ctx. PermVarSubst ctx |])
 $(mkNuMatching [t| PermEnvFunEntry |])
 $(mkNuMatching [t| SomeNamedPerm |])
