@@ -3002,18 +3002,41 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
 
+-- | A flag to indicate whether the translation of a permission implication
+-- contains any failures
+data HasFailures = HasFailures | NoFailures deriving Eq
+
+instance Semigroup HasFailures where
+  HasFailures <> _ = HasFailures
+  _ <> HasFailures = HasFailures
+  NoFailures <> NoFailures = NoFailures
+
+instance Monoid HasFailures where
+  mempty = NoFailures
+
 -- | The monad for translating 'PermImpl's, which accumulates all failure
 -- messages in all branches of a 'PermImpl' and either returns a result or
 -- results in only failures
-type PermImplTransM = MaybeT (Writer [String])
+type PermImplTransM = MaybeT (Writer ([String], HasFailures))
 
 -- | Run a 'PermImplTransM' computation
-runPermImplTransM :: PermImplTransM a -> (Maybe a, [String])
+runPermImplTransM :: PermImplTransM a -> (Maybe a, ([String], HasFailures))
 runPermImplTransM = runWriter . runMaybeT
 
--- | Catch any failures in a 'PermImplTransM' computation
-pitmCatching :: PermImplTransM a -> PermImplTransM (Maybe a)
-pitmCatching m = lift $ runMaybeT m
+-- | Signal a failure in a 'PermImplTransM' computation with the given string
+pitmFail :: String -> PermImplTransM a
+pitmFail str = tell ([str],HasFailures) >> mzero
+
+-- | Catch any failures in a 'PermImplTransM' computation, returning 'Nothing'
+-- if the computation completely fails, or an @a@ paired with a 'HasFailures'
+-- flag to indicate if that @a@ contains some partial failures. Reset the
+-- 'HasFailures' flag so that @'pitmCatching' m@ is marked as having no failures
+-- even if @m@ has failures.
+pitmCatching :: PermImplTransM a -> PermImplTransM (Maybe a, HasFailures)
+pitmCatching m =
+  do let (maybe_a, (strs,hasf)) = runPermImplTransM m
+     tell (strs,NoFailures)
+     return (maybe_a,hasf)
 
 -- | Return or fail depending on whether the input is present or 'Nothing'
 pitmMaybeRet :: Maybe a -> PermImplTransM a
@@ -3061,8 +3084,8 @@ translatePermImplUnary ::
   Mb ctx (MbPermImpls r (RNil :> '(bs,ps_out))) ->
   (ImpTransM ext blocks tops ret ps_out (ctx :++: bs) OpenTerm ->
    ImpTransM ext blocks tops ret ps ctx OpenTerm) ->
-  PermImplTransM
-    (ImplFailCont -> ImpTransM ext blocks tops ret ps ctx OpenTerm)
+  PermImplTransM (ImplFailCont ->
+                  ImpTransM ext blocks tops ret ps ctx OpenTerm)
 translatePermImplUnary (mbMatch -> [nuMP| MbPermImpls_Cons _ _ mb_impl |]) f =
   translatePermImpl Proxy (mbCombine RL.typeCtxProxies mb_impl) >>= \trans ->
   return $ \k -> f $ trans k
@@ -3079,21 +3102,28 @@ translatePermImpl1 :: ImplTranslateF r ext blocks tops ret =>
 translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) of
   -- A failure translates to a call to the catch handler, which is the most recent
   -- Impl1_Catch, if one exists, or the SAW errorM function otherwise
-  ([nuMP| Impl1_Fail str |], _) ->
-    tell [mbLift str] >> mzero
+  ([nuMP| Impl1_Fail str |], _) -> pitmFail $ mbLift str
   
   ([nuMP| Impl1_Catch |],
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
-    pitmCatching (translatePermImpl prx $ mbCombine RL.typeCtxProxies mb_impl1) >>= \maybe_trans1 ->
-    pitmCatching (translatePermImpl prx $ mbCombine RL.typeCtxProxies mb_impl2) >>= \maybe_trans2 ->
-    case (maybe_trans1, maybe_trans2) of
-      (Just trans1, Just trans2) ->
+    pitmCatching (translatePermImpl prx $
+                  mbCombine RL.typeCtxProxies mb_impl1) >>= \trans_pair1 ->
+    pitmCatching (translatePermImpl prx $
+                  mbCombine RL.typeCtxProxies mb_impl2) >>= \trans_pair2 ->
+    (if snd trans_pair1 == HasFailures && snd trans_pair2 == HasFailures then
+       tell ([],HasFailures)
+     else return ()) >>
+    case (trans_pair1, trans_pair2) of
+      ((Just trans, NoFailures), _) -> return trans
+      (_, (Just trans, NoFailures)) -> return trans
+      ((Just trans1, _), (Just trans2, _)) ->
         return $ \k ->
         compReturnTypeM >>= \ret_tp ->
         letTransM "catchpoint" ret_tp (trans2 k)
         (\catchpoint -> trans1 $ ImplFailContTerm catchpoint)
-      (Nothing, Just trans2) -> return trans2
-      (_, Nothing) -> pitmMaybeRet maybe_trans1
+      ((Just trans, _), (Nothing, _)) -> return trans
+      ((Nothing, _), (Just trans, _)) -> return trans
+      ((Nothing, _), (Nothing, _)) -> mzero
   
   -- A push moves the given permission from x to the top of the perm stack
   ([nuMP| Impl1_Push x p |], _) ->
@@ -3116,9 +3146,12 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   -- an or elimination performs a pattern-match on an Either
   ([nuMP| Impl1_ElimOr x p1 p2 |],
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
-    pitmCatching (translatePermImpl prx $ mbCombine RL.typeCtxProxies mb_impl1) >>= \maybe_trans1 ->
-    pitmCatching (translatePermImpl prx $ mbCombine RL.typeCtxProxies mb_impl2) >>= \maybe_trans2 ->
-    case (maybe_trans1, maybe_trans2) of
+    pitmCatching (translatePermImpl prx $
+                  mbCombine RL.typeCtxProxies mb_impl1) >>= \(mtrans1,hasf1) ->
+    pitmCatching (translatePermImpl prx $
+                  mbCombine RL.typeCtxProxies mb_impl2) >>= \(mtrans2,hasf2) ->
+    tell ([],hasf1 <> hasf2) >>
+    case (mtrans1, mtrans2) of
       (Nothing, Nothing) -> mzero
       _ ->
         return $ \k ->
@@ -3130,10 +3163,10 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
            eitherElimTransM tp1 tp2 tp_ret
              (\ptrans ->
                withPermStackM id ((:>: ptrans) . RL.tail) $
-               forceImplTrans maybe_trans1 k)
+               forceImplTrans mtrans1 k)
              (\ptrans ->
                withPermStackM id ((:>: ptrans) . RL.tail) $
-               forceImplTrans maybe_trans2 k)
+               forceImplTrans mtrans2 k)
              (transTupleTerm top_ptrans)
   
   -- An existential elimination performs a pattern-match on a Sigma
@@ -3244,7 +3277,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   -- If e1 and e2 are definitely not equal, treat this as a fail
   ([nuMP| Impl1_TryProveBVProp _ (BVProp_Eq e1 e2) prop_str |], _)
     | not $ mbLift (mbMap2 bvCouldEqual e1 e2) ->
-      tell [mbLift prop_str] >> mzero
+      pitmFail (mbLift prop_str)
   
   -- Otherwise, insert an equality test with proof construction. Note that, as
   -- with all TryProveBVProps, if the test fails and there is no failure
@@ -3355,7 +3388,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
          ]
 
   ([nuMP| Impl1_TryProveBVProp _ _ _ |], _) ->
-    tell ["translatePermImpl1: Unhandled BVProp case"] >> mzero
+    pitmFail ("translatePermImpl1: Unhandled BVProp case")
 
 
 -- | Translate a 'PermImpl' in the 'PermImplTransM' monad to a function that
@@ -3378,7 +3411,7 @@ instance ImplTranslateF r ext blocks tops ret =>
          Translate (ImpTransInfo
                     ext blocks tops ret ps) ctx (AnnotPermImpl r ps) OpenTerm where
   translate (mbMatch -> [nuMP| AnnotPermImpl err impl |]) =
-    let (transF, errs) = runPermImplTransM $ translatePermImpl Proxy impl in
+    let (transF, (errs,_)) = runPermImplTransM $ translatePermImpl Proxy impl in
     forceImplTrans transF $
     ImplFailContMsg (mbLift err ++ "\n\n"
                      ++ concat (intersperse
