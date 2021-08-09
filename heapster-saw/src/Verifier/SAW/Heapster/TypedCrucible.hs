@@ -2877,14 +2877,16 @@ tcEmitStmt ::
   StmtPermCheckM ext cblocks blocks tops ret RNil RNil (CtxTrans ctx')
 tcEmitStmt ctx loc stmt =
   do _     <- stmtTraceM (const (pretty "Type-checking statement:" <+>
-                        ppStmt (size ctx) stmt))
+                                 ppStmt (size ctx) stmt))
      !_    <- permGetPPInfo
      !pps  <- mapM (\(Some r) -> ppCruRegAndPerms ctx r) (stmtInputRegs stmt)
-     !_    <- stmtTraceM (\_-> pretty "Input perms:" <> softline <> ppCommaSep pps)
+     !_    <- stmtTraceM (\_-> pretty "Input perms:" <> softline <>
+                               ppCommaSep pps)
      !ctx' <- tcEmitStmt' ctx loc stmt
      !pps' <- mapM (\(Some r) -> ppCruRegAndPerms ctx' r)
                    (stmtOutputRegs (Ctx.size ctx') stmt)
-     _     <- stmtTraceM (const (pretty "Output perms:" <> softline <> ppCommaSep pps'))
+     _     <- stmtTraceM (const (pretty "Output perms:" <> softline <>
+                                 ppCommaSep pps'))
      pure ctx'
 
 
@@ -3846,6 +3848,15 @@ tcTermStmt ctx (Return reg) =
       req_perms =
         varSubst (singletonVarSubst $ typedRegVar treg) mb_ret_perms
       err = ppProofError (stPPInfo st) req_perms in
+  mapM (\(Some x) -> ppRelevantPerms $ TypedReg x) (RL.mapToList Some $
+                                                    distPermsVars req_perms)
+  >>>= \pps_before ->
+  stmtTraceM (\i ->
+               pretty "Type-checking return statement" <> line <>
+               pretty "Current perms:" <> softline <>
+               ppCommaSep pps_before <> line <>
+               pretty "Required perms:" <> softline <>
+               permPretty i req_perms) >>>
   TypedReturn <$>
   pcmRunImplM CruCtxNil err
   (const $ TypedRet Refl (stRetType top_st) treg mb_ret_perms)

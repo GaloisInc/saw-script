@@ -990,8 +990,6 @@ abstractMbLOPsModalities mb_lops = case mbMatch mb_lops of
                LOwnedPermBlock e (bp { llvmBlockRW = PExpr_Var rw,
                                        llvmBlockLifetime = PExpr_Var l }))
       mb_e mb_bp)
-  [nuMP| lops :>: lop@(LOwnedPermLifetime _ _ _) |] ->
-    liftA2 (mbMap2 (:>:)) (abstractMbLOPsModalities lops) (pure lop)
 
 
 -- | Find all field or block permissions containing lifetime @l@ and return them
@@ -1058,11 +1056,11 @@ mbLifetimeFunPerm (LifetimeDef _ _ [] _)
          Some3FunPerm $ FunPerm (appendCruCtx
                                  (singletonCruCtx LifetimeRepr) ghosts) args ret
          (mbMap3 (\ps_in lops_in lops_in_abs ->
-                   assocAppend (MNil :>: ValPerm_LOwned lops_in lops_in_abs)
+                   assocAppend (MNil :>: ValPerm_LOwned [] lops_in lops_in_abs)
                    ghosts args_prxs $ distPermsToValuePerms ps_in)
           mb_ps_in mb_lops_in mb_lops_in_abs)
          (mbMap3 (\ps_out lops_out lops_in_abs ->
-                   assocAppend (MNil :>: ValPerm_LOwned lops_out lops_in_abs)
+                   assocAppend (MNil :>: ValPerm_LOwned [] lops_out lops_in_abs)
                    ghosts (args_prxs :>: Proxy) $ distPermsToValuePerms ps_out)
           mb_ps_out mb_lops_out (extMb mb_lops_in_abs))
 mbLifetimeFunPerm (LifetimeDef _ _ _bounds _) _ =
