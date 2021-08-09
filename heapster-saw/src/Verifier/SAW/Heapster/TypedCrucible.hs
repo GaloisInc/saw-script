@@ -4031,7 +4031,7 @@ widenEntry (TypedEntry {..}) =
 -- with those input permissions, if it has not been type-checked already.
 --
 -- If any of the call site implications fail, and the input "can widen" flag is
--- 'True', recompute the entrypoint input permissions using widening
+-- 'True', recompute the entrypoint input permissions using widening.
 visitEntry ::
   (PermCheckExtC ext, CtxToRList cargs ~ args, KnownRepr ExtRepr ext) =>
   [Maybe String] ->
@@ -4074,14 +4074,16 @@ visitEntry names can_widen blk entry =
 -- | Visit a block by visiting all its entrypoints
 visitBlock ::
   (PermCheckExtC ext, KnownRepr ExtRepr ext) =>
-  TypedBlock TCPhase ext blocks tops ret args ->
+  Bool -> TypedBlock TCPhase ext blocks tops ret args ->
   TopPermCheckM ext cblocks blocks tops ret
   (TypedBlock TCPhase ext blocks tops ret args)
-visitBlock blk@(TypedBlock {..}) =
+visitBlock can_widen blk@(TypedBlock {..}) =
   (stCBlocksEq <$> get) >>= \Refl ->
   flip (set typedBlockEntries) blk <$>
   mapM (\(Some entry) ->
-         visitEntry _typedBlockNames typedBlockCanWiden typedBlockBlock entry) _typedBlockEntries
+         visitEntry _typedBlockNames (can_widen && typedBlockCanWiden)
+         typedBlockBlock entry)
+  _typedBlockEntries
 
 -- | Flatten a list of topological ordering components to a list of nodes in
 -- topological order paired with a flag denoting which nodes were loop heads
@@ -4103,6 +4105,11 @@ cfgOrderWithSCCs cfg =
    (fmapFC (const $ Constant False) $ cfgBlockMap cfg)
    nodes_sccs)
 
+-- | The maximum number of iterations through the CFG while we allow widening
+-- when type-checking before we give up and force everything to be done
+maxWideningIters :: Int
+maxWideningIters = 5
+
 -- | Type-check a Crucible CFG
 tcCFG ::
   forall w ext cblocks ghosts inits ret.
@@ -4119,17 +4126,19 @@ tcCFG w env endianness fun_perm cfg =
       init_st = let ?ptrWidth = w in emptyTopPermCheckState env fun_perm endianness cfg sccs
       tp_nodes = map (\(Some blkID) ->
                        Some $ stLookupBlockID blkID init_st) nodes in
-  let tp_blk_map = flip evalState init_st $ main_loop tp_nodes in
+  let tp_blk_map =
+        flip evalState init_st $ main_loop maxWideningIters tp_nodes in
   TypedCFG { tpcfgHandle = TypedFnHandle ghosts h
            , tpcfgFunPerm = fun_perm
            , tpcfgBlockMap = tp_blk_map
            , tpcfgEntryID =
                TypedEntryID (stLookupBlockID (cfgEntryBlockID cfg) init_st) 0 }
   where
-    main_loop :: [Some (TypedBlockID blocks :: RList CrucibleType -> Type)] ->
+    main_loop :: Int ->
+                 [Some (TypedBlockID blocks :: RList CrucibleType -> Type)] ->
                  TopPermCheckM ext cblocks blocks tops ret
                  (TypedBlockMap TransPhase ext blocks tops ret)
-    main_loop nodes =
+    main_loop rem_iters nodes =
       get >>= \st ->
       case completeTypedBlockMap $ view stBlockMap st of
         Just blkMapOut -> return blkMapOut
@@ -4137,5 +4146,10 @@ tcCFG w env endianness fun_perm cfg =
           forM_ nodes (\(Some tpBlkID) ->
                         let memb = typedBlockIDMember tpBlkID in
                         use (stBlockMap . member memb) >>=
-                        (visitBlock >=> assign (stBlockMap . member memb))) >>
-          main_loop nodes
+                        (visitBlock (rem_iters > 0) >=>
+                         assign (stBlockMap . member memb))) >>
+          if rem_iters > 0 then
+            main_loop (rem_iters - 1) nodes
+          else case completeTypedBlockMap $ view stBlockMap st of
+            Just ret -> return ret
+            Nothing -> error "tcCFG: failed to complete on last iteration"
