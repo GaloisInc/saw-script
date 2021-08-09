@@ -3107,23 +3107,22 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   ([nuMP| Impl1_Catch |],
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
     pitmCatching (translatePermImpl prx $
-                  mbCombine RL.typeCtxProxies mb_impl1) >>= \trans_pair1 ->
+                  mbCombine RL.typeCtxProxies mb_impl1) >>= \(mtrans1,hasf1) ->
     pitmCatching (translatePermImpl prx $
-                  mbCombine RL.typeCtxProxies mb_impl2) >>= \trans_pair2 ->
-    (if snd trans_pair1 == HasFailures && snd trans_pair2 == HasFailures then
-       tell ([],HasFailures)
+                  mbCombine RL.typeCtxProxies mb_impl2) >>= \(mtrans2,hasf2) ->
+    (if hasf1 == HasFailures && hasf2 == HasFailures then tell ([],HasFailures)
      else return ()) >>
-    case (trans_pair1, trans_pair2) of
-      ((Just trans, NoFailures), _) -> return trans
-      (_, (Just trans, NoFailures)) -> return trans
-      ((Just trans1, _), (Just trans2, _)) ->
+    case (mtrans1, hasf1, mtrans2, hasf2) of
+      (Just trans, NoFailures, _, _) -> return trans
+      (_, _, Just trans, NoFailures) -> return trans
+      (Just trans1, _, Just trans2, _) ->
         return $ \k ->
         compReturnTypeM >>= \ret_tp ->
         letTransM "catchpoint" ret_tp (trans2 k)
         (\catchpoint -> trans1 $ ImplFailContTerm catchpoint)
-      ((Just trans, _), (Nothing, _)) -> return trans
-      ((Nothing, _), (Just trans, _)) -> return trans
-      ((Nothing, _), (Nothing, _)) -> mzero
+      (Just trans, _, Nothing, _) -> return trans
+      (Nothing, _, Just trans, _) -> return trans
+      (Nothing, _, Nothing, _) -> mzero
   
   -- A push moves the given permission from x to the top of the perm stack
   ([nuMP| Impl1_Push x p |], _) ->
