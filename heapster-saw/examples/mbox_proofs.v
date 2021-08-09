@@ -105,11 +105,9 @@ Lemma mbox_drop_spec_ref
 Proof.
   unfold mbox_drop, mbox_drop__tuple_fun, mbox_drop_spec.
   (* Set Ltac Profiling. *)
-  time "mbox_drop_spec_ref" prove_refinement with NoRewrite.
+  time "mbox_drop_spec_ref" prove_refinement.
   (* Show Ltac Profile. Reset Ltac Profile. *)
-  - admit.
-  - rewrite transMbox_Mbox_nil_r; reflexivity.
-Admitted.
+Time Qed.
 
 
 Lemma mbox_free_chain_spec_ref
@@ -131,18 +129,6 @@ Proof.
   unfold noErrorsSpec, mkBV32.
   prove_refinement.
 Qed.
-
-
-(* Lemma no_errors_mbox_randomize *)
-(*   : refinesFun mbox_randomize (fun _ => noErrorsSpec). *)
-(* Proof. *)
-(*   unfold mbox_randomize, mbox_randomize__tuple_fun. *)
-(*   unfold randSpec. *)
-(*   prove_refinement_match_letRecM_l. *)
-(*   - intros; exact noErrorsSpec. *)
-(*   (* Set Ltac Profiling. *) *)
-(*   time "no_errors_mbox_randomize" prove_refinement. *)
-(*   (* Show Ltac Profile. Reset Ltac Profile. *) *)
 
 
 Lemma no_errors_mbox_concat
@@ -186,21 +172,22 @@ Proof.
   (* Show Ltac Profile. Reset Ltac Profile. *)
 Time Qed.
 
-(* Definition mbox_concat_chains_spec (x y : Mbox) : Mbox := *)
-(*   Mbox__rec (fun _ => Mbox) Mbox_nil (fun _ _ _ _ _ => *)
-(*     Mbox__rec (fun _ => Mbox) Mbox_nil (fun _ _ _ _ _ => *)
-(*       transMbox x y) y) x. *)
+Definition mbox_concat_chains_spec (x y : Mbox) : Mbox :=
+  Mbox__rec (fun _ => Mbox) Mbox_nil (fun _ _ _ _ _ =>
+    Mbox__rec (fun _ => Mbox) x (fun _ _ _ _ _ =>
+      transMbox x y) y) x.
 
-(* Lemma mbox_concat_chains_spec_ref *)
-(*   : refinesFun mbox_concat_chains (fun x y => returnM (mbox_concat_chains_spec x y)). *)
-(* Proof. *)
-(*   unfold mbox_concat_chains, mbox_concat_chains__tuple_fun. *)
-(*   prove_refinement_match_letRecM_l. *)
-(*   - exact (fun x y strt len next d => returnM (transMbox x (Mbox_cons strt len next d))). *)
-(*   (* unfold mbox_concat_chains_spec. *) *)
-(*   time "mbox_concat_spec_ref" prove_refinement. *)
-(*   all: unfold mbox_concat_chains_spec; simpl. *)
-(* Time Qed. *)
+Lemma mbox_concat_chains_spec_ref
+  : refinesFun mbox_concat_chains (fun x y => returnM (mbox_concat_chains_spec x y)).
+Proof.
+  unfold mbox_concat_chains, mbox_concat_chains__tuple_fun.
+  prove_refinement_match_letRecM_l.
+  - intros x y strt len next d.
+    exact (returnM (transMbox x (Mbox_cons strt len (transMbox next y) d))).
+  unfold mbox_concat_chains_spec.
+  time "mbox_concat_spec_ref" prove_refinement.
+  simpl; repeat rewrite transMbox_Mbox_nil_r; reflexivity.
+Time Qed.
 
 
 Lemma no_errors_mbox_detach
@@ -386,86 +373,3 @@ Definition mbox_copy_spec_ref' : ltac:(let tp := type of mbox_copy_spec_ref in
                                        let tp' := eval unfold refinesFun, mbox_copy_spec, mbox_copy_spec_cons, empty_mbox_d in tp
                                         in exact tp') := mbox_copy_spec_ref.
 Hint Rewrite mbox_copy_spec_ref' : refinement_proofs.
-
-
-(** * Graveyard of `Admitted`s for testing functions' runtimes *)
-
-(* Lemma no_errors_mbox_from_buffer *)
-(*   : refinesFun mbox_from_buffer (fun _ _ => noErrorsSpec). *)
-(* Proof. *)
-(*   unfold mbox_from_buffer, mbox_from_buffer__tuple_fun. *)
-(*   unfold mboxNewSpec, mkBV8, mkBV64. *)
-(*   try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64. *)
-(*   try unfold llvm__x2eobjectsize__x2ei64__x2ep0i8, __memcpy_chk. *)
-(*   Set Printing Depth 10000. *)
-(*   time prove_refinement_match_letRecM_l. *)
-(*   - intros; exact noErrorsSpec. *)
-(*   unfold noErrorsSpec. *)
-(*   (* Set Ltac Profiling. *) *)
-(*   time "no_errors_mbox_from_buffer" prove_refinement with NoRewrite. *)
-(*   (* Show Ltac Profile. Reset Ltac Profile. *) *)
-(* Admitted. *)
-
-(* Lemma no_errors_mbox_to_buffer *)
-(*   : refinesFun mbox_to_buffer (fun _ _ _ _ => noErrorsSpec). *)
-(* Proof. *)
-(*   unfold mbox_to_buffer, mbox_to_buffer__tuple_fun. *)
-(*   unfold mboxNewSpec, mkBV8, mkBV64. *)
-(*   try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64. *)
-(*   try unfold llvm__x2eobjectsize__x2ei64__x2ep0i8, __memcpy_chk. *)
-(*   Set Printing Depth 10000. *)
-(*   time prove_refinement_match_letRecM_l. *)
-(*   - intros; exact noErrorsSpec. *)
-(*   unfold noErrorsSpec. *)
-(*   (* Set Ltac Profiling. *) *)
-(*   time "no_errors_mbox_to_buffer" prove_refinement with NoRewrite. *)
-(*   (* Show Ltac Profile. Reset Ltac Profile. *) *)
-(* Admitted. *)
-
-(* Lemma no_errors_mbox_split_at *)
-(*   : refinesFun mbox_split_at (fun _ _ => noErrorsSpec). *)
-(* Proof. *)
-(*   unfold mbox_split_at, mbox_split_at__tuple_fun. *)
-(*   unfold mboxNewSpec, mkBV8, mkBV64. *)
-(*   try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64. *)
-(*   try unfold llvm__x2eobjectsize__x2ei64__x2ep0i8, __memcpy_chk. *)
-(*   Set Printing Depth 10000. *)
-(*   (* time prove_refinement_match_letRecM_l. *) *)
-(*   (* - intros; exact noErrorsSpec. *) *)
-(*   unfold noErrorsSpec. *)
-(*   (* Set Ltac Profiling. *) *)
-(*   time "no_errors_mbox_split_at" prove_refinement with NoRewrite. *)
-(*   (* Show Ltac Profile. Reset Ltac Profile. *) *)
-(* Admitted. *)
-
-(* Lemma no_errors_copy_chain *)
-(*   : refinesFun mbox_copy_chain (fun _ _ => noErrorsSpec). *)
-(* Proof. *)
-(*   unfold mbox_copy_chain, mbox_copy_chain__tuple_fun. *)
-(*   unfold mboxNewSpec, mkBV8, mkBV64. *)
-(*   try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64. *)
-(*   try unfold llvm__x2eobjectsize__x2ei64__x2ep0i8, __memcpy_chk. *)
-(*   Set Printing Depth 10000. *)
-(*   (* time prove_refinement_match_letRecM_l. *) *)
-(*   (* - intros; exact noErrorsSpec. *) *)
-(*   unfold noErrorsSpec. *)
-(*   (* Set Ltac Profiling. *) *)
-(*   time "no_errors_copy_chain" prove_refinement with NoRewrite. *)
-(*   (* Show Ltac Profile. Reset Ltac Profile. *) *)
-(* Admitted. *)
-
-(* Lemma no_errors_eq *)
-(*   : refinesFun mbox_eq (fun _ _ => noErrorsSpec). *)
-(* Proof. *)
-(*   unfold mbox_eq, mbox_eq__tuple_fun. *)
-(*   unfold mboxNewSpec, mkBV8, mkBV64. *)
-(*   try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64. *)
-(*   try unfold llvm__x2eobjectsize__x2ei64__x2ep0i8, __memcpy_chk. *)
-(*   Set Printing Depth 10000. *)
-(*   time prove_refinement_match_letRecM_l. *)
-(*   - intros; exact noErrorsSpec. *)
-(*   unfold noErrorsSpec. *)
-(*   (* Set Ltac Profiling. *) *)
-(*   time "no_errors_eq" prove_refinement with NoRewrite. *)
-(*   (* Show Ltac Profile. Reset Ltac Profile. *) *)
-(* Admitted. *)
