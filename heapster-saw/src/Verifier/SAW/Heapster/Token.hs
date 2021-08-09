@@ -51,6 +51,7 @@ data Token
   | TLifetime           -- ^ keyword @lifetime@
   | TLOwned             -- ^ keyword @lowned@
   | TLCurrent           -- ^ keyword @lcurrent@
+  | TLFinished          -- ^ keyword @lfinished@
   | TRWModality         -- ^ keyword @rwmodality@
   | TPermList           -- ^ keyword @permlist@
   | TStruct             -- ^ keyword @struct@
@@ -130,6 +131,7 @@ describeToken t =
     TLifetime           -> "keyword 'lifetime'"
     TLOwned             -> "keyword 'lowned'"
     TLCurrent           -> "keyword 'lcurrent'"
+    TLFinished          -> "keyword 'lfinished'"
     TRWModality         -> "keyword 'rwmodality'"
     TPermList           -> "keyword 'permlist'"
     TStruct             -> "keyword 'struct'"
