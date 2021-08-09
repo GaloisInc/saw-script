@@ -227,8 +227,7 @@ lifetime ::                                     { Maybe AstExpr         }
 
 lifetimes ::                                    { [AstExpr]             }
   :                                             { []                    }
-  | '[' ']'                                     { []                    }
-  | '[' list1R(expr) ']'                        { $2                    }
+  | '[' list(expr) ']'                          { $2                    }
 
 llvmFieldPermArray ::                           { ArrayPerm             }
   : lifetime '(' expr ',' expr ',' expr ')' '|->' expr
