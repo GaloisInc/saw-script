@@ -43,23 +43,24 @@ Definition string_set_remove : forall (p0 : string_set), forall (p1 : string), C
 
 Definition insert_remove__tuple_fun : @CompM.lrtTupleType (@CompM.LRT_Cons (@CompM.LRT_Fun string_set (fun (perm0 : string_set) => @CompM.LRT_Fun string (fun (perm1 : string) => @CompM.LRT_Fun string (fun (perm2 : string) => @CompM.LRT_Ret (prod string_set (prod string unit)))))) (@CompM.LRT_Nil)) :=
   @CompM.multiFixM (@CompM.LRT_Cons (@CompM.LRT_Fun string_set (fun (perm0 : string_set) => @CompM.LRT_Fun string (fun (perm1 : string) => @CompM.LRT_Fun string (fun (perm2 : string) => @CompM.LRT_Ret (prod string_set (prod string unit)))))) (@CompM.LRT_Nil)) (fun (insert_remove : @CompM.lrtToType (@CompM.LRT_Fun string_set (fun (perm0 : string_set) => @CompM.LRT_Fun string (fun (perm1 : string) => @CompM.LRT_Fun string (fun (perm2 : string) => @CompM.LRT_Ret (prod string_set (prod string unit))))))) => pair (fun (p0 : string_set) (p1 : string) (p2 : string) => @CompM.letRecM (@CompM.LRT_Nil) (prod string_set (prod string unit)) tt (@errorM CompM _ (prod string_set (prod string unit)) "At string_set.c:15:3 ($17 = call $16($13, $14);)
-  Regs: $16 = x25 @ , $13 = x22 @ , $14 = x23 @ 
-  Input perms: top1:true, top2:string_set<W, top1>, top3:string<>,
-               top4:string<>, ghost8:llvmframe [C[&str2]12:8, C[&str1]11:8,
-                                                C[&set]10:8],
-               x25:(ghost29:lifetime).
-                   ghost29:true, arg28:string_set<W, ghost29>, arg27:string<>
-                   -o
-                   ghost29:true, arg28:string_set<W, ghost29>, arg27:true,
-                   ret26:true, x22:eq(top2), x23:eq(top3),
-               C[&set]10:ptr((W,0) |-> eq(x22)), C[&str1]11:ptr((W,0) |->
-                                                                  eq(x23)),
-               C[&str2]12:ptr((W,0) |-> eq(local7)), local7:eq(top4)
+  Regs: $16 = fn @ , $13 = ptr3 @ , $14 = ptr4 @ 
+  Input perms: top_l:true, top_ptr:string_set<W, top_l>,
+               top_ptr1:string<>, top_ptr2:string<>,
+               ghost_frm:llvmframe [C[&str2]:8, C[&str1]:8, C[&set]:8],
+               fn:(l:lifetime).
+                  l:true, arg1:string_set<W, l>, arg:string<>
+                  -o
+                  l:true, arg1:string_set<W, l>, arg:true, ret:true,
+               ptr3:eq(top_ptr), ptr4:eq(top_ptr1), C[&set]:ptr((W,0) |->
+                                                                  eq(ptr3)),
+               C[&str1]:ptr((W,0) |-> eq(ptr4)), C[&str2]:ptr((W,0) |->
+                                                                eq(local_ptr2)),
+               local_ptr2:eq(top_ptr2)
   Could not prove
-    (z26). z26:true, x22:string_set<W, z26>, x23:string<>
+    (z). z:true, ptr3:string_set<W, z>, ptr4:string<>
 
-  Could not determine enough variables to prove permissions:
-  (z26). z26:true, x22:string_set<W, z26>"%string)) tt).
+  Could not determine enough variables to prove permissions: (z).
+    z:true, ptr3:string_set<W, z>"%string)) tt).
 
 Definition insert_remove : @CompM.lrtToType (@CompM.LRT_Fun string_set (fun (perm0 : string_set) => @CompM.LRT_Fun string (fun (perm1 : string) => @CompM.LRT_Fun string (fun (perm2 : string) => @CompM.LRT_Ret (prod string_set (prod string unit)))))) :=
   SAWCoreScaffolding.fst insert_remove__tuple_fun.

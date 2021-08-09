@@ -22,15 +22,6 @@ Import mbox.
 Import SAWCorePrelude.
 
 
-Lemma Mbox_rect_id (m : Mbox) :
-  Mbox_rect (fun _ => Mbox) Mbox_nil
-            (fun strt len _ rec vec => Mbox_cons strt len rec vec) m = m.
-Proof.
-  induction m; simpl; eauto.
-  rewrite IHm; reflexivity.
-Qed.
-
-
 Definition unfoldMbox_nil :
   unfoldMbox Mbox_nil = Left _ _ tt :=
   reflexivity _.
@@ -116,10 +107,6 @@ Proof.
   (* Set Ltac Profiling. *)
   time "mbox_drop_spec_ref" prove_refinement with NoRewrite.
   (* Show Ltac Profile. Reset Ltac Profile. *)
-  1-2: fold Bool in *;
-       destruct (bvule 64 (projT1 len0) (bvSub 64 a0 (projT1 len)));
-       cbn in e_either; try discriminate e_either.
-  - admit.
   - admit.
   - rewrite transMbox_Mbox_nil_r; reflexivity.
 Admitted.
@@ -275,9 +262,10 @@ Proof.
   (* Most of the remaining cases are taken care of with just bvAdd_id_l and bvAdd_id_r *)
   all: try rewrite bvAdd_id_r; try rewrite bvAdd_id_l; try reflexivity.
   (* The remaining case just needs a few more rewrites *)
-  do 3 f_equal.
-  rewrite bvAdd_assoc; f_equal.
-  rewrite bvAdd_comm; reflexivity.
+  - do 3 f_equal.
+    rewrite bvAdd_assoc; f_equal.
+    rewrite bvAdd_comm; reflexivity.
+  - cbn; rewrite transMbox_Mbox_nil_r; reflexivity.
 Time Qed.
 
 
@@ -350,7 +338,7 @@ Proof.
   try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64.
   try unfold llvm__x2eobjectsize__x2ei64__x2ep0i8, __memcpy_chk.
   Set Printing Depth 1000.
-  (* Expect this to take on the order of 25 seconds, removing the `NoRewrite`
+  (* Expect this to take on the order of 15 seconds, removing the `NoRewrite`
      adds another 5 seconds and only simplifies the proof in the one noted spot *)
   (* Set Ltac Profiling. *)
   time "mbox_copy_spec_ref" prove_refinement with NoRewrite.
@@ -365,17 +353,11 @@ Proof.
     discriminate e_maybe1.
   - rewrite a1 in e_maybe2.
     discriminate e_maybe2.
-  - replace a2 with e_forall; [ replace a3 with e_forall0 | ].
+  - rewrite transMbox_Mbox_nil_r. (* <- this would go away if we removed "NoRewrite" *)
+    replace a2 with e_forall; [ replace a3 with e_forall0 | ].
     destruct strt, len, u, u0; cbn.
     unfold conjSliceBVVec; simpl projT1.
     reflexivity.
-  - apply BoolDecidableEqDepSet.UIP.
-  - apply BoolDecidableEqDepSet.UIP.
-  - replace a2 with e_forall; [ replace a3 with e_forall0 | ].
-    destruct strt, len, u, u0; cbn.
-    unfold conjSliceBVVec; simpl projT1.
-    (* Without the `NoRewrite` this next line is just `reflexivity` *)
-    rewrite Mbox_rect_id; reflexivity.
   - apply BoolDecidableEqDepSet.UIP.
   - apply BoolDecidableEqDepSet.UIP.
   - rewrite <- e_assuming in e_if.
