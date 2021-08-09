@@ -4138,6 +4138,12 @@ tcCFG w env endianness fun_perm cfg =
                  [Some (TypedBlockID blocks :: RList CrucibleType -> Type)] ->
                  TopPermCheckM ext cblocks blocks tops ret
                  (TypedBlockMap TransPhase ext blocks tops ret)
+    main_loop rem_iters _
+      -- We may have to iterate through the CFG twice with widening turned off
+      -- to finally get everything to quiesce, once to ensure all block bodies
+      -- have type-checked and once again to ensure any back edged produced in
+      -- that last iteration have completed
+      | rem_iters < -2 = error "tcCFG: failed to complete on last iteration"
     main_loop rem_iters nodes =
       get >>= \st ->
       case completeTypedBlockMap $ view stBlockMap st of
@@ -4148,8 +4154,4 @@ tcCFG w env endianness fun_perm cfg =
                         use (stBlockMap . member memb) >>=
                         (visitBlock (rem_iters > 0) >=>
                          assign (stBlockMap . member memb))) >>
-          if rem_iters > 0 then
-            main_loop (rem_iters - 1) nodes
-          else case completeTypedBlockMap $ view stBlockMap st of
-            Just ret -> return ret
-            Nothing -> error "tcCFG: failed to complete on last iteration"
+          main_loop (rem_iters - 1) nodes
