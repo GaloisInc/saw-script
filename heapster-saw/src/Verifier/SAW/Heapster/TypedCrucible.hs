@@ -1543,12 +1543,12 @@ deleteEntryCallees topEntryID = execState (deleteCallees topEntryID) where
   deleteCallees callerID =
     get >>= \blkMap ->
     mapM_ (\(Some calleeID) ->
-            deleteCaller callerID calleeID) (entryCallees callerID blkMap)
+            deleteCall callerID calleeID) (entryCallees callerID blkMap)
 
   -- Delete call sites of a caller to a particular callee
-  deleteCaller :: TypedEntryID blocks args1 -> TypedEntryID blocks args2 ->
-                  State (TypedBlockMap phase ext blocks tops ret) ()
-  deleteCaller callerID calleeID =
+  deleteCall :: TypedEntryID blocks args1 -> TypedEntryID blocks args2 ->
+                State (TypedBlockMap phase ext blocks tops ret) ()
+  deleteCall callerID calleeID =
     (typedBlockSort <$> use (blockByID $ entryBlockID calleeID)) >>= \case
     JoinSort ->
       -- The target has JoinSort, so we want to keep the callee entrypoint. Thus
@@ -1557,7 +1557,7 @@ deleteEntryCallees topEntryID = execState (deleteCallees topEntryID) where
                  . entryByID calleeID) $ \(Some callee) ->
       let callers' =
             flip filter (typedEntryCallers callee) $ \(Some site) ->
-            callSiteIDCallerEq callerID $ typedCallSiteID site in
+            not $ callSiteIDCallerEq callerID $ typedCallSiteID site in
       Some $ callee { typedEntryCallers = callers' }
     MultiEntrySort ->
       -- The target has MultiEntrySort, so callerID is the only caller to this
