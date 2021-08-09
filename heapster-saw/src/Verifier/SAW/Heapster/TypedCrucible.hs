@@ -220,9 +220,28 @@ typedFnHandleRetType (TypedFnHandle _ h) = handleReturnType h
 
 
 -- | As in standard Crucible, blocks are identified by membership proofs that
--- their input arguments are in the @blocks@ list
-type TypedBlockID (a :: RList (RList CrucibleType)) =
-  Member a -- :: (b :: RList CrucibleType) -> Type
+-- their input arguments are in the @blocks@ list. We also track an 'Int' that
+-- gives the 'indexVal' of the original Crucible block ID, so that typed block
+-- IDs can be printed the same way as standard Crucible block IDs. The issue
+-- here is that 'Member' proofs count from the right of an 'RList', while
+-- Crucible uses membership proofs that count from the left, and so the sizes
+-- are not the same.
+data TypedBlockID (ctx :: RList (RList CrucibleType)) args =
+  TypedBlockID { typedBlockIDMember :: Member ctx args, typedBlockIDIx :: Int }
+  deriving Eq
+
+instance TestEquality (TypedBlockID ctx) where
+  testEquality (TypedBlockID memb1 _) (TypedBlockID memb2 _) =
+    testEquality memb1 memb2
+
+instance Show (TypedBlockID ctx args) where
+  show tblkID = "%" ++ show (typedBlockIDIx tblkID)
+
+-- | Convert a Crucible 'Index' to a 'TypedBlockID'
+indexToTypedBlockID :: Size ctx -> Index ctx args ->
+                       TypedBlockID (CtxCtxToRList ctx) (CtxToRList args)
+indexToTypedBlockID sz ix =
+  TypedBlockID (indexCtxToMember sz ix) (Ctx.indexVal ix)
 
 -- | All of our blocks have multiple entry points, for different inferred types,
 -- so a "typed" 'BlockID' is a normal Crucible 'BlockID' (which is just an index
@@ -232,19 +251,17 @@ data TypedEntryID (blocks :: RList (RList CrucibleType)) (args :: RList Crucible
   TypedEntryID { entryBlockID :: TypedBlockID blocks args, entryIndex :: Int }
   deriving Eq
 
--- | Compute the length of a 'Member' proof, which corresponds to its deBruijn
--- index, i.e., number of hops from the right
-memberLength :: Member a as -> Int
-memberLength Member_Base = 0
-memberLength (Member_Step memb) = 1 + memberLength memb
+-- | Get the 'Member' proof of the 'TypedBlockID' of a 'TypedEntryID'
+entryBlockMember :: TypedEntryID blocks args -> Member blocks args
+entryBlockMember = typedBlockIDMember . entryBlockID
 
 -- | Compute the indices corresponding to the 'BlockID' and 'entryIndex' of a
 -- 'TypedEntryID', for printing purposes
 entryIDIndices :: TypedEntryID blocks args -> (Int, Int)
-entryIDIndices (TypedEntryID memb ix) = (memberLength memb, ix)
+entryIDIndices (TypedEntryID tblkID ix) = (typedBlockIDIx tblkID, ix)
 
 instance Show (TypedEntryID blocks args) where
-  show entryID = "<entryID " ++ show (entryIDIndices entryID) ++ ">"
+  show (TypedEntryID {..}) = show entryBlockID ++ "(" ++ show entryIndex ++ ")"
 
 instance TestEquality (TypedEntryID blocks) where
   testEquality (TypedEntryID memb1 i1) (TypedEntryID memb2 i2)
@@ -312,6 +329,7 @@ instance NuMatchingAny1 RegWithVal where
 
 $(mkNuMatching [t| forall ext tp. NuMatchingExtC ext => TypedExpr ext tp |])
 $(mkNuMatching [t| forall ghosts args ret. TypedFnHandle ghosts args ret |])
+$(mkNuMatching [t| forall blocks args. TypedBlockID blocks args |])
 $(mkNuMatching [t| forall blocks args. TypedEntryID blocks args |])
 $(mkNuMatching [t| forall blocks args ghosts. TypedCallSiteID blocks args ghosts |])
 $(mkNuMatching [t| forall blocks tops ps_in. TypedJumpTarget blocks tops ps_in |])
@@ -319,8 +337,19 @@ $(mkNuMatching [t| forall blocks tops ps_in. TypedJumpTarget blocks tops ps_in |
 instance NuMatchingAny1 (TypedJumpTarget blocks tops) where
   nuMatchingAny1Proof = nuMatchingProof
 
+instance NuMatchingAny1 (TypedBlockID blocks) where
+  nuMatchingAny1Proof = nuMatchingProof
+
 instance NuMatchingAny1 (TypedEntryID blocks) where
   nuMatchingAny1Proof = nuMatchingProof
+
+instance Closable (TypedBlockID blocks args) where
+  toClosed (TypedBlockID memb ix) =
+    $(mkClosed [| TypedBlockID |])
+    `clApply` toClosed memb `clApply` toClosed ix
+
+instance Liftable (TypedBlockID blocks args) where
+  mbLift = unClosed . mbLift . fmap toClosed
 
 instance Closable (TypedEntryID blocks args) where
   toClosed (TypedEntryID entryBlockID entryIndex) =
@@ -1323,7 +1352,7 @@ emptyBlockOfSort ::
                           cblocks) tops ret (CtxToRList cargs)
 emptyBlockOfSort names cblocks sort blk
   | Refl <- reprReprToCruCtxCtxEq cblocks
-  = TypedBlock (indexCtxToMember (size cblocks) $
+  = TypedBlock (indexToTypedBlockID (size cblocks) $
                 blockIDIndex $ blockID blk) blk sort True [] names
 
 -- | Build a block with a user-supplied input permission
@@ -1338,7 +1367,7 @@ emptyBlockForPerms ::
                           cblocks) tops ret (CtxToRList cargs)
 emptyBlockForPerms names cblocks blk tops ret ghosts perms_in perms_out
   | Refl <- reprReprToCruCtxCtxEq cblocks
-  , blockID <- indexCtxToMember (size cblocks) $ blockIDIndex $ blockID blk
+  , blockID <- indexToTypedBlockID (size cblocks) $ blockIDIndex $ blockID blk
   , args <- mkCruCtx (blockInputs blk) =
     TypedBlock blockID blk JoinSort False
     [Some TypedEntry {
@@ -1459,7 +1488,7 @@ type TypedBlockMap phase ext blocks tops ret =
 
 instance Show (TypedEntry phase ext blocks tops ret args ghosts) where
   show (TypedEntry { .. }) =
-    "<entry " ++ show (entryIDIndices typedEntryID) ++ ">"
+    "<entry " ++ show typedEntryID ++ ">"
 
 instance Show (TypedBlock phase ext blocks tops ret args) where
   show = concatMap (\(Some entry) -> show entry) . (^. typedBlockEntries)
@@ -1478,7 +1507,9 @@ blockByID :: TypedBlockID blocks args ->
              Lens'
              (TypedBlockMap phase ext blocks tops ret)
              (TypedBlock phase ext blocks tops ret args)
-blockByID blkID = lens (RL.get blkID) (flip $ RL.set blkID)
+blockByID blkID =
+  let memb = typedBlockIDMember blkID in
+  lens (RL.get memb) (flip $ RL.set memb)
 
 -- | Look up a 'TypedEntry' by its 'TypedEntryID'
 lookupEntry :: TypedEntryID blocks args ->
@@ -1641,19 +1672,14 @@ addCtxName ctx x = extend ctx (TypedReg x)
 
 -- | The translation of a Crucible block id
 newtype BlockIDTrans blocks args =
-  BlockIDTrans { unBlockIDTrans :: Member blocks (CtxToRList args) }
-
-extendBlockIDTrans :: BlockIDTrans blocks args ->
-                      BlockIDTrans (blocks :> tp) args
-extendBlockIDTrans (BlockIDTrans memb) = BlockIDTrans $ Member_Step memb
+  BlockIDTrans { unBlockIDTrans :: TypedBlockID blocks (CtxToRList args) }
 
 -- | Build a map from Crucible block IDs to 'Member' proofs
 buildBlockIDMap :: Assignment f cblocks ->
                    Assignment (BlockIDTrans (CtxCtxToRList cblocks)) cblocks
-buildBlockIDMap (viewAssign -> AssignEmpty) = Ctx.empty
-buildBlockIDMap (viewAssign -> AssignExtend asgn _) =
-  Ctx.extend (fmapFC extendBlockIDTrans $ buildBlockIDMap asgn)
-  (BlockIDTrans Member_Base)
+buildBlockIDMap blks =
+  Ctx.generate (Ctx.size blks) $ \ix ->
+  BlockIDTrans (indexToTypedBlockID (Ctx.size blks) ix)
 
 data SomePtrWidth where SomePtrWidth :: HasPtrWidth w => SomePtrWidth
 
@@ -1762,7 +1788,7 @@ applyTypedBlockMapDelta :: TypedBlockMapDelta blocks tops ret ->
                            TopPermCheckState ext cblocks blocks tops ret ->
                            TopPermCheckState ext cblocks blocks tops ret
 applyTypedBlockMapDelta (TypedBlockMapAddCallSite siteID perms_in) top_st =
-  over (stBlockMap . member (entryBlockID $ callSiteDest siteID))
+  over (stBlockMap . member (entryBlockMember $ callSiteDest siteID))
   (blockAddCallSite siteID (stTopCtx top_st) (stRetType top_st)
    perms_in (stRetPerms top_st))
   top_st
@@ -1997,7 +2023,7 @@ callBlockWithPerms :: TypedEntryID blocks args_src ->
                       InnerPermCheckM ext cblocks blocks tops ret
                       (TypedCallSiteID blocks args vars)
 callBlockWithPerms srcEntryID destID vars cl_perms_in =
-  do blk <- view (stBlockMap . member destID) <$> ask
+  do blk <- view (stBlockMap . member (typedBlockIDMember destID)) <$> ask
      let siteID = newCallSiteID srcEntryID vars blk
      innerEmitDelta ($(mkClosed [| TypedBlockMapAddCallSite |])
                     `clApply` toClosed siteID `clApply` cl_perms_in)
@@ -3989,6 +4015,7 @@ widenEntry :: PermCheckExtC ext =>
               TypedEntry TCPhase ext blocks tops ret args ghosts ->
               Some (TypedEntry TCPhase ext blocks tops ret args)
 widenEntry (TypedEntry {..}) =
+  trace ("Widening entrypoint: " ++ show typedEntryID) $
   case foldl1' (widen typedEntryTops typedEntryArgs) $
        map (fmapF typedCallSiteArgVarPerms) typedEntryCallers of
     Some (ArgVarPerms ghosts perms_in) ->
@@ -4108,7 +4135,7 @@ tcCFG w env endianness fun_perm cfg =
         Just blkMapOut -> return blkMapOut
         Nothing ->
           forM_ nodes (\(Some tpBlkID) ->
-                        use (stBlockMap . member tpBlkID) >>=
-                        (visitBlock >=>
-                         assign (stBlockMap . member tpBlkID))) >>
+                        let memb = typedBlockIDMember tpBlkID in
+                        use (stBlockMap . member memb) >>=
+                        (visitBlock >=> assign (stBlockMap . member memb))) >>
           main_loop nodes
