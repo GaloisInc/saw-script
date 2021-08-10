@@ -3596,6 +3596,15 @@ simplify1PermForDetVars det_vars x (ValPerm_Conj ps)
     getPerm x >>>= \new_p ->
     simplify1PermForDetVars det_vars x new_p
 
+-- For lowned permission l:lowned[ls](ps_in -o ps_out), end any lifetimes in ls
+-- that are not determined and remove them from the lowned permission for ls
+simplify1PermForDetVars det_vars l (ValPerm_LOwned ls _ _)
+  | l':_ <- flip mapMaybe ls (asVar >=> \l' ->
+                               if NameSet.member l' det_vars then Nothing
+                               else return l') =
+    implEndLifetimeRecM l' >>>
+    getPerm l >>>= \p' -> simplify1PermForDetVars det_vars l p'
+
 -- If none of the above cases match but p has only determined free variables,
 -- just leave p as is
 simplify1PermForDetVars det_vars _ p
