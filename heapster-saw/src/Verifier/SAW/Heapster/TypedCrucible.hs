@@ -1675,11 +1675,10 @@ newtype BlockIDTrans blocks args =
   BlockIDTrans { unBlockIDTrans :: TypedBlockID blocks (CtxToRList args) }
 
 -- | Build a map from Crucible block IDs to 'Member' proofs
-buildBlockIDMap :: Assignment f cblocks ->
+buildBlockIDMap :: Size cblocks ->
                    Assignment (BlockIDTrans (CtxCtxToRList cblocks)) cblocks
-buildBlockIDMap blks =
-  Ctx.generate (Ctx.size blks) $ \ix ->
-  BlockIDTrans (indexToTypedBlockID (Ctx.size blks) ix)
+buildBlockIDMap sz =
+  Ctx.generate sz $ \ix -> BlockIDTrans (indexToTypedBlockID sz ix)
 
 data SomePtrWidth where SomePtrWidth :: HasPtrWidth w => SomePtrWidth
 
@@ -1733,7 +1732,7 @@ emptyTopPermCheckState env fun_perm endianness cfg sccs =
   { stTopCtx = funPermTops fun_perm
   , stRetType = funPermRet fun_perm
   , stRetPerms = funPermOuts fun_perm
-  , stBlockTrans = buildBlockIDMap blkMap
+  , stBlockTrans = buildBlockIDMap (Ctx.size blkMap)
   , _stBlockMap = initTypedBlockMap env fun_perm cfg sccs
   , stPermEnv = env
   , stBlockTypes = fmapFC blockInputs blkMap
@@ -4074,7 +4073,8 @@ visitEntry names can_widen blk entry =
 -- | Visit a block by visiting all its entrypoints
 visitBlock ::
   (PermCheckExtC ext, KnownRepr ExtRepr ext) =>
-  Bool -> TypedBlock TCPhase ext blocks tops ret args ->
+  Bool -> {- ^ Whether widening can be applied in type-checking this block -}
+  TypedBlock TCPhase ext blocks tops ret args ->
   TopPermCheckM ext cblocks blocks tops ret
   (TypedBlock TCPhase ext blocks tops ret args)
 visitBlock can_widen blk@(TypedBlock {..}) =
