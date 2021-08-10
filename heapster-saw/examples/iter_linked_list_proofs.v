@@ -39,7 +39,7 @@ Proof.
        try destruct e_assuming0 as [?e_assuming ?e_assuming];
        try destruct e_assuming1 as [?e_assuming ?e_assuming]; simpl in *.
   (* All but one of the remaining goals are taken care of by assumptions we have in scope: *)
-  all: try (split; [| rewrite appendList_Nil_r]); eauto.
+  all: try rewrite appendList_Nil_r; try split; eauto.
   (* We just have to show this case is impossible by virtue of our loop invariant: *)
   apply isBvult_to_isBvule_suc in e_assuming0.
   apply bvule_msb_l in e_assuming0; try assumption.
