@@ -3711,6 +3711,7 @@ implBeginLifetimeM =
   implApplyImpl1 Impl1_BeginLifetime
     (MNil :>: Impl1Cont (\(_ :>: n) -> pure n)) >>>= \l ->
   implPopM l (ValPerm_LOwned [] MNil MNil) >>>
+  implTraceM (\i -> pretty "Beginning lifetime:" <+> permPretty i l) >>>
   pure l
 
 -- | End a lifetime, assuming the top of the stack is of the form
@@ -3725,8 +3726,7 @@ implEndLifetimeM :: NuMatchingAny1 r => Proxy ps -> ExprVar LifetimeType ->
 implEndLifetimeM ps l ps_in ps_out@(lownedPermsToDistPerms -> Just dps_out)
   | isJust (lownedPermsToDistPerms ps_in) =
     implSimplM ps (SImpl_EndLifetime l ps_in ps_out) >>>
-    implTraceM (\i -> pretty "Lifetime" <+>
-                      permPretty i l <+> pretty "ended") >>>
+    implTraceM (\i -> pretty "Ending lifetime:" <+> permPretty i l) >>>
     recombinePermsPartial ps (DistPermsCons dps_out l ValPerm_LFinished)
 implEndLifetimeM _ _ _ _ = implFailM "implEndLifetimeM: lownedPermsToDistPerms"
 
@@ -6908,7 +6908,7 @@ findProvablePerm mbUnsetVars mb_ps = case mbMatch mb_ps of
       (best_rank, extExDistPermsSplit best mb_x mb_p)
 
 
--- | Find all existential lifetime variables that are assigned permissions in an
+-- | Find all existential lifetime variables with @lowned@ permissions in an
 -- 'ExDistPerms' list, and instantiate them with fresh lifetimes
 instantiateLifetimeVars :: NuMatchingAny1 r => ExDistPerms vars ps ->
                            ImplM vars s r ps_in ps_in ()
@@ -6921,9 +6921,8 @@ instantiateLifetimeVars' :: NuMatchingAny1 r => PartialSubst vars ->
                             ExDistPerms vars ps -> ImplM vars s r ps_in ps_in ()
 instantiateLifetimeVars' psubst mb_ps = case mbMatch mb_ps of
   [nuMP| DistPermsNil |] -> pure ()
-  [nuMP| DistPermsCons mb_ps' mb_x (ValPerm_Conj1 mb_p) |]
-    | Just Refl <- mbLift $ fmap isLifetimePerm mb_p
-    , Left memb <- mbNameBoundP mb_x
+  [nuMP| DistPermsCons mb_ps' mb_x (ValPerm_LOwned _ _ _) |]
+    | Left memb <- mbNameBoundP mb_x
     , Nothing <- psubstLookup psubst memb ->
       implBeginLifetimeM >>>= \l ->
       setVarM memb (PExpr_Var l) >>>
