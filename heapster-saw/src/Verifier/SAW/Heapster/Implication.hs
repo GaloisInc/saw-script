@@ -4393,6 +4393,23 @@ recombinePermsPartial _ DistPermsNil = pure ()
 recombinePermsPartial ps (DistPermsCons ps' x p) =
   recombinePerm x p >>> recombinePermsPartial ps ps'
 
+-- | Recombine some of the permissions on the stack back into the permission
+-- set, but in reverse order
+recombinePermsRevPartial :: NuMatchingAny1 r => RAssign Proxy ps1 -> DistPerms ps2 ->
+                            ImplM vars s r ps1 (ps1 :++: ps2) ()
+recombinePermsRevPartial _ DistPermsNil = return ()
+recombinePermsRevPartial ps1 ps2@(DistPermsCons ps2' x p) =
+  implMoveDownM ps1 (RL.map (const Proxy) ps2) x MNil >>>
+  recombinePermsRevPartial (ps1 :>: Proxy) ps2' >>>
+  recombinePerm x p
+
+-- | Recombine the permissions on the stack back into the permission set, but in
+-- reverse order
+recombinePermsRev :: NuMatchingAny1 r => DistPerms ps ->
+                     ImplM vars s r RNil ps ()
+recombinePermsRev ps
+  | Refl <- RL.prependRNilEq ps = recombinePermsRevPartial MNil ps
+
 -- | Recombine the permissions for a 'LifetimeCurrentPerms' list
 recombineLifetimeCurrentPerms :: NuMatchingAny1 r =>
                                  LifetimeCurrentPerms ps_l ->
@@ -6956,7 +6973,7 @@ localProveVars ps_in ps_out =
   implTraceM (\i -> sep [pretty "localProveVars:", permPretty i ps_in,
                          pretty "-o", permPretty i ps_out]) >>>
   LocalPermImpl <$>
-  embedImplM ps_in (recombinePerms ps_in >>>
+  embedImplM ps_in (recombinePermsRev ps_in >>>
                     proveVarsImplInt (emptyMb ps_out) >>>
                     pure (LocalImplRet Refl))
 
