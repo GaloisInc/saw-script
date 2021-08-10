@@ -1817,7 +1817,7 @@ lookupEntryTrans entryID blkMap =
   maybe (error "lookupEntryTrans") id $
   find (\(Some entryTrans) ->
          entryID == typedEntryID (typedEntryTransEntry entryTrans)) $
-  typedBlockTransEntries (RL.get (entryBlockID entryID) blkMap)
+  typedBlockTransEntries (RL.get (entryBlockMember entryID) blkMap)
 
 -- | Look up the translation of an entry by entry ID and make sure that it has
 -- the supplied ghost arguments
