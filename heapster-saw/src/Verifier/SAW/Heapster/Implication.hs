@@ -3716,7 +3716,7 @@ implBeginLifetimeM =
 
 -- | End a lifetime, assuming the top of the stack is of the form
 --
--- > ps, ps_in, l:lowned(ps_in -o ps_out)
+-- > ps_in, l:lowned(ps_in -o ps_out)
 --
 -- Remove @l@ from any other @lowned@ permissions held by other variables.
 -- Recombine all the returned permissions @ps_out@ and @l:lfinished@ returned by

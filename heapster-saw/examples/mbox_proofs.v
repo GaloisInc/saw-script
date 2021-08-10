@@ -22,15 +22,6 @@ Import mbox.
 Import SAWCorePrelude.
 
 
-Lemma Mbox_rect_id (m : Mbox) :
-  Mbox_rect (fun _ => Mbox) Mbox_nil
-            (fun strt len _ rec vec => Mbox_cons strt len rec vec) m = m.
-Proof.
-  induction m; simpl; eauto.
-  rewrite IHm; reflexivity.
-Qed.
-
-
 Definition unfoldMbox_nil :
   unfoldMbox Mbox_nil = Left _ _ tt :=
   reflexivity _.
@@ -79,7 +70,44 @@ Proof.
   simpl; f_equal; eauto.
 Qed.
 
-Hint Rewrite transMbox_Mbox_nil_r : refinesM.
+Lemma transMbox_assoc m1 m2 m3 :
+  transMbox (transMbox m1 m2) m3 = transMbox m1 (transMbox m2 m3).
+Proof.
+  induction m1; eauto.
+  simpl; f_equal; eauto.
+Qed.
+
+Hint Rewrite transMbox_Mbox_nil_r transMbox_assoc : refinesM.
+
+
+(* ========================================================================== *)
+
+
+Lemma no_errors_mbox_drop
+  : refinesFun mbox_drop (fun _ _ => noErrorsSpec).
+Proof.
+  unfold mbox_drop, mbox_drop__tuple_fun, noErrorsSpec.
+  (* Set Ltac Profiling. *)
+  time "no_errors_mbox_drop" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
+Time Qed.
+
+Definition mbox_drop_spec : Mbox -> BV64 -> Mbox :=
+  Mbox__rec _ (fun _ => Mbox_nil) (fun strt len next rec d ix =>
+    if bvuge 64 (projT1 ix) (projT1 len)
+    then Mbox_cons (existT _ (intToBv 64 0) tt) (existT _ (intToBv 64 0) tt)
+                   (rec (existT _ (bvSub 64 (projT1 ix) (projT1 len)) tt)) d
+    else Mbox_cons (existT _ (bvAdd 64 (projT1 ix) (projT1 strt)) tt)
+                   (existT _ (bvSub 64 (projT1 len) (projT1 ix)) tt) next d).
+
+Lemma mbox_drop_spec_ref
+  : refinesFun mbox_drop (fun x ix => returnM (mbox_drop_spec x ix)).
+Proof.
+  unfold mbox_drop, mbox_drop__tuple_fun, mbox_drop_spec.
+  (* Set Ltac Profiling. *)
+  time "mbox_drop_spec_ref" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
+Time Qed.
 
 
 Lemma mbox_free_chain_spec_ref
@@ -89,7 +117,9 @@ Proof.
   prove_refinement_match_letRecM_l.
   - exact (fun _ => returnM (mkBV32 (intToBv 32 0))).
   unfold mkBV32.
+  (* Set Ltac Profiling. *)
   time "mbox_free_chain_spec_ref" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
 Time Qed.
 
 Lemma no_errors_mbox_free_chain
@@ -105,7 +135,9 @@ Lemma no_errors_mbox_concat
   : refinesFun mbox_concat (fun _ _ => noErrorsSpec).
 Proof.
   unfold mbox_concat, mbox_concat__tuple_fun, noErrorsSpec.
+  (* Set Ltac Profiling. *)
   time "no_errors_mbox_concat" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
 Time Qed.
 
 Definition mbox_concat_spec (x y : Mbox) : Mbox :=
@@ -115,7 +147,46 @@ Lemma mbox_concat_spec_ref
   : refinesFun mbox_concat (fun x y => returnM (mbox_concat_spec x y)).
 Proof.
   unfold mbox_concat, mbox_concat__tuple_fun, mbox_concat_spec.
+  (* Set Ltac Profiling. *)
   time "mbox_concat_spec_ref" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
+Time Qed.
+
+(* Add `mbox_concat_spec_ref` to the hint database. Unfortunately, Coq will not unfold refinesFun
+   and mbox_concat_spec when rewriting, and the only workaround I know right now is this :/ *)
+Definition mbox_concat_spec_ref' : ltac:(let tp := type of mbox_concat_spec_ref in
+                                         let tp' := eval unfold refinesFun, mbox_concat_spec in tp
+                                          in exact tp') := mbox_concat_spec_ref.
+Hint Rewrite mbox_concat_spec_ref' : refinement_proofs.
+
+
+Lemma no_errors_mbox_concat_chains
+  : refinesFun mbox_concat_chains (fun _ _ => noErrorsSpec).
+Proof.
+  unfold mbox_concat_chains, mbox_concat_chains__tuple_fun.
+  prove_refinement_match_letRecM_l.
+  - exact (fun _ _ _ _ _ _ => noErrorsSpec).
+  unfold noErrorsSpec.
+  (* Set Ltac Profiling. *)
+  time "no_errors_mbox_concat_chains" prove_refinement with NoRewrite.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
+Time Qed.
+
+Definition mbox_concat_chains_spec (x y : Mbox) : Mbox :=
+  Mbox__rec (fun _ => Mbox) Mbox_nil (fun _ _ _ _ _ =>
+    Mbox__rec (fun _ => Mbox) x (fun _ _ _ _ _ =>
+      transMbox x y) y) x.
+
+Lemma mbox_concat_chains_spec_ref
+  : refinesFun mbox_concat_chains (fun x y => returnM (mbox_concat_chains_spec x y)).
+Proof.
+  unfold mbox_concat_chains, mbox_concat_chains__tuple_fun.
+  prove_refinement_match_letRecM_l.
+  - intros x y strt len next d.
+    exact (returnM (transMbox x (Mbox_cons strt len (transMbox next y) d))).
+  unfold mbox_concat_chains_spec.
+  time "mbox_concat_spec_ref" prove_refinement.
+  simpl; repeat rewrite transMbox_Mbox_nil_r; reflexivity.
 Time Qed.
 
 
@@ -123,7 +194,9 @@ Lemma no_errors_mbox_detach
   : refinesFun mbox_detach (fun _ => noErrorsSpec).
 Proof.
   unfold mbox_detach, mbox_detach__tuple_fun, noErrorsSpec.
+  (* Set Ltac Profiling. *)
   time "no_errors_mbox_detach" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
 Time Qed.
 
 Definition mbox_detach_spec : Mbox -> Mbox * (Mbox * unit) :=
@@ -134,7 +207,52 @@ Lemma mbox_detach_spec_ref
   : refinesFun mbox_detach (fun x => returnM (mbox_detach_spec x)).
 Proof.
   unfold mbox_detach, mbox_detach__tuple_fun, mbox_detach, mbox_detach_spec.
+  (* Set Ltac Profiling. *)
   time "mbox_detach_spec_ref" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
+Time Qed.
+
+(* Add `mbox_detach_spec_ref` to the hint database. Unfortunately, Coq will not unfold refinesFun
+   and mbox_detach_spec when rewriting, and the only workaround I know right now is this :/ *)
+Definition mbox_detach_spec_ref' : ltac:(let tp := type of mbox_detach_spec_ref in
+                                         let tp' := eval unfold refinesFun, mbox_detach_spec in tp
+                                          in exact tp') := mbox_detach_spec_ref.
+Hint Rewrite mbox_detach_spec_ref' : refinement_proofs.
+
+
+Lemma no_errors_mbox_len
+  : refinesFun mbox_len (fun _ => noErrorsSpec).
+Proof.
+  unfold mbox_len, mbox_len__tuple_fun.
+  prove_refinement_match_letRecM_l.
+  - exact (fun _ _ _ => noErrorsSpec).
+  unfold noErrorsSpec.
+  (* Set Ltac Profiling. *)
+  time "no_errors_mbox_len" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
+Time Qed.
+
+Definition mbox_len_spec : Mbox -> bitvector 64 :=
+  Mbox__rec (fun _ =>  bitvector 64) (intToBv 64 0)
+          (fun strt len m rec d => bvAdd 64 rec (projT1 len)).
+
+Lemma mbox_len_spec_ref
+  : refinesFun mbox_len (fun m => returnM (m, (existT _ (mbox_len_spec m) tt, tt))).
+Proof.
+  unfold mbox_len, mbox_len__tuple_fun.
+  prove_refinement_match_letRecM_l.
+  - exact (fun m1 rec m2 => returnM (transMbox m1 m2, (existT _ (bvAdd 64 (projT1 rec) (mbox_len_spec m2)) tt, tt))).
+  unfold mbox_len_spec.
+  (* Set Ltac Profiling. *)
+  time "mbox_len_spec_ref" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
+  (* Most of the remaining cases are taken care of with just bvAdd_id_l and bvAdd_id_r *)
+  all: try rewrite bvAdd_id_r; try rewrite bvAdd_id_l; try reflexivity.
+  (* The remaining case just needs a few more rewrites *)
+  - do 3 f_equal.
+    rewrite bvAdd_assoc; f_equal.
+    rewrite bvAdd_comm; reflexivity.
+  - cbn; rewrite transMbox_Mbox_nil_r; reflexivity.
 Time Qed.
 
 
@@ -207,9 +325,11 @@ Proof.
   try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64.
   try unfold llvm__x2eobjectsize__x2ei64__x2ep0i8, __memcpy_chk.
   Set Printing Depth 1000.
-  (* Expect this to take on the order of 25 seconds, removing the `NoRewrite`
+  (* Expect this to take on the order of 15 seconds, removing the `NoRewrite`
      adds another 5 seconds and only simplifies the proof in the one noted spot *)
+  (* Set Ltac Profiling. *)
   time "mbox_copy_spec_ref" prove_refinement with NoRewrite.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
   all: try discriminate e_either.
   - rewrite e_forall in e_maybe.
     discriminate e_maybe.
@@ -220,17 +340,11 @@ Proof.
     discriminate e_maybe1.
   - rewrite a1 in e_maybe2.
     discriminate e_maybe2.
-  - replace a2 with e_forall; [ replace a3 with e_forall0 | ].
+  - rewrite transMbox_Mbox_nil_r. (* <- this would go away if we removed "NoRewrite" *)
+    replace a2 with e_forall; [ replace a3 with e_forall0 | ].
     destruct strt, len, u, u0; cbn.
     unfold conjSliceBVVec; simpl projT1.
     reflexivity.
-  - apply BoolDecidableEqDepSet.UIP.
-  - apply BoolDecidableEqDepSet.UIP.
-  - replace a2 with e_forall; [ replace a3 with e_forall0 | ].
-    destruct strt, len, u, u0; cbn.
-    unfold conjSliceBVVec; simpl projT1.
-    (* Without the `NoRewrite` this next line is just `reflexivity` *)
-    rewrite Mbox_rect_id; reflexivity.
   - apply BoolDecidableEqDepSet.UIP.
   - apply BoolDecidableEqDepSet.UIP.
   - rewrite <- e_assuming in e_if.
@@ -252,3 +366,10 @@ Proof.
   induction a; simpl in *.
   all: repeat prove_refinement.
 Qed.
+
+(* Add `mbox_copy_spec_ref` to the hint database. Unfortunately, Coq will not unfold refinesFun
+   and mbox_copy_spec when rewriting, and the only workaround I know right now is this :/ *)
+Definition mbox_copy_spec_ref' : ltac:(let tp := type of mbox_copy_spec_ref in
+                                       let tp' := eval unfold refinesFun, mbox_copy_spec, mbox_copy_spec_cons, empty_mbox_d in tp
+                                        in exact tp') := mbox_copy_spec_ref.
+Hint Rewrite mbox_copy_spec_ref' : refinement_proofs.
