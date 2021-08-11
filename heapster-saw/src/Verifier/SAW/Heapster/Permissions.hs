@@ -4882,6 +4882,9 @@ extSubstMulti s (xs :>: x) = extSubst (extSubstMulti s xs) x
 
 -- | Generalized notion of substitution, which says that substitution type @s@
 -- supports substituting into type @a@ in monad @m@
+--
+-- FIXME: the 'Mb' argument should really be a 'MatchedMb', to emphasize that we
+-- expect it to be in fresh pair form
 class SubstVar s m => Substable s a m where
   genSubst :: s ctx -> Mb ctx a -> m a
 
@@ -4899,23 +4902,20 @@ instance (NuMatching a, Substable s a m) => Substable s (NonEmpty a) m where
   genSubst s (mbMatch -> [nuMP| x :| xs |]) =
     (:|) <$> genSubst s x <*> genSubst s xs
 
-instance (Substable s a m, Substable s b m) => Substable s (a,b) m where
-  genSubst s ab = (,) <$> genSubst s (fmap fst ab) <*> genSubst s (fmap snd ab)
+instance (NuMatching a, NuMatching b,
+          Substable s a m, Substable s b m) => Substable s (a,b) m where
+  genSubst s [nuP| (a,b) |] = (,) <$> genSubst s a <*> genSubst s b
 
-instance (Substable s a m,
+instance (NuMatching a, NuMatching b, NuMatching c, Substable s a m,
           Substable s b m, Substable s c m) => Substable s (a,b,c) m where
-  genSubst s abc =
-    (,,) <$> genSubst s (fmap (\(a,_,_) -> a) abc)
-    <*> genSubst s (fmap (\(_,b,_) -> b) abc)
-    <*> genSubst s (fmap (\(_,_,c) -> c) abc)
+  genSubst s [nuP| (a,b,c) |] =
+    (,,) <$> genSubst s a <*> genSubst s b <*> genSubst s c
 
-instance (Substable s a m, Substable s b m,
+instance (NuMatching a, NuMatching b, NuMatching c, NuMatching d,
+          Substable s a m, Substable s b m,
           Substable s c m, Substable s d m) => Substable s (a,b,c,d) m where
-  genSubst s abcd =
-    (,,,) <$> genSubst s (fmap (\(a,_,_,_) -> a) abcd)
-          <*> genSubst s (fmap (\(_,b,_,_) -> b) abcd)
-          <*> genSubst s (fmap (\(_,_,c,_) -> c) abcd)
-          <*> genSubst s (fmap (\(_,_,_,d) -> d) abcd)
+  genSubst s [nuP| (a,b,c,d) |] =
+    (,,,) <$> genSubst s a <*> genSubst s b <*> genSubst s c <*> genSubst s d
 
 instance (NuMatching a, Substable s a m) => Substable s (Maybe a) m where
   genSubst s mb_x = case mbMatch mb_x of
