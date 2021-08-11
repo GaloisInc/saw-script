@@ -2415,6 +2415,12 @@ primitives = Map.fromList
     Experimental
     [ "Legacy alternative name for `llvm_verify_x86`." ]
 
+  , prim "llvm_verify_fixpoint_x86"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    (pureVal llvm_verify_fixpoint_x86)
+    Experimental
+    []
+
   , prim "enable_x86_what4_hash_consing" "TopLevel ()"
     (pureVal enable_x86_what4_hash_consing)
     Experimental

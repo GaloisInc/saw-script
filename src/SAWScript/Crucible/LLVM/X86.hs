@@ -25,6 +25,7 @@ Stability   : provisional
 
 module SAWScript.Crucible.LLVM.X86
   ( llvm_verify_x86
+  , llvm_verify_fixpoint_x86
   , defaultStackBaseAlign
   ) where
 
@@ -52,8 +53,10 @@ import Data.Maybe
 import qualified Text.LLVM.AST as LLVM
 
 import Data.Parameterized.Some
+import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.Map (MapF)
 import Data.Parameterized.NatRepr
-import Data.Parameterized.Context hiding (view)
+import Data.Parameterized.Context hiding (view, zipWithM)
 
 import Verifier.SAW.CryptolEnv
 import Verifier.SAW.FiniteValue
@@ -109,7 +112,7 @@ import qualified Lang.Crucible.LLVM.Extension as C.LLVM
 import qualified Lang.Crucible.LLVM.Intrinsics as C.LLVM
 import qualified Lang.Crucible.LLVM.MemModel as C.LLVM
 import qualified Lang.Crucible.LLVM.MemType as C.LLVM
-import qualified Lang.Crucible.LLVM.SimpleLoopFixpoint as Crucible.LLVM
+import qualified Lang.Crucible.LLVM.SimpleLoopFixpoint as Crucible.LLVM.Fixpoint
 import qualified Lang.Crucible.LLVM.Translation as C.LLVM
 import qualified Lang.Crucible.LLVM.TypeContext as C.LLVM
 
@@ -288,7 +291,39 @@ llvm_verify_x86 ::
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript SatResult {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
-llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
+llvm_verify_x86 llvmModule path nm globsyms checkSat setup tactic =
+  llvm_verify_x86' llvmModule path nm globsyms checkSat Nothing setup tactic
+
+-- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
+-- to an LLVM specification. This allows for compositional verification of LLVM
+-- functions that call x86_64 functions (but not the other way around).
+llvm_verify_fixpoint_x86 ::
+  Some LLVMModule {- ^ Module to associate with method spec -} ->
+  FilePath {- ^ Path to ELF file -} ->
+  String {- ^ Function's symbol in ELF file -} ->
+  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Bool {- ^ Whether to enable path satisfiability checking -} ->
+  TypedTerm ->
+  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  ProofScript SatResult {- ^ Tactic used to use when discharging goals -} ->
+  TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
+llvm_verify_fixpoint_x86 llvmModule path nm globsyms checkSat f setup tactic =
+  llvm_verify_x86' llvmModule path nm globsyms checkSat (Just f) setup tactic
+
+-- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
+-- to an LLVM specification. This allows for compositional verification of LLVM
+-- functions that call x86_64 functions (but not the other way around).
+llvm_verify_x86' ::
+  Some LLVMModule {- ^ Module to associate with method spec -} ->
+  FilePath {- ^ Path to ELF file -} ->
+  String {- ^ Function's symbol in ELF file -} ->
+  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Bool {- ^ Whether to enable path satisfiability checking -} ->
+  Maybe TypedTerm ->
+  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  ProofScript SatResult {- ^ Tactic used to use when discharging goals -} ->
+  TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
+llvm_verify_x86' (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat maybeFixpointFunc setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       let ?ptrWidth = knownNat @64
@@ -440,9 +475,36 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
          else
            pure []
 
-      simpleLoopFixpointFeature <- liftIO $ Crucible.LLVM.simpleLoopFixpoint sym cfg mvar
+      simpleLoopFixpointFeature <- maybeToList <$> mapM
+        (\func -> liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $ \fixpoint_substitution ->
+          do let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
+             let foo = foldMap
+                   (\(Some fixpoint_entry) ->
+                     Set.map (mapSome $ W4.varExpr sym) $ W4.exprUninterpConstants sym $ Crucible.LLVM.Fixpoint.bodyValue fixpoint_entry)
+                   (MapF.elems fixpoint_substitution)
+            --  let bar = Set.toList $ Set.difference foo $ Set.fromList $ MapF.keys fixpoint_substitution
+            --  baz <- forM bar $ viewSome $ toSC sym sawst
+             lalala <- Set.fromList <$> mapM (scExtCns sc . tecExt) (methodSpec ^. MS.csPreState ^. MS.csFreshVars)
+             lala <- Set.fromList <$> mapM (viewSome $ toSC sym sawst) (Set.toList foo)
+             let baz = Set.toList $ Set.intersection lalala lala
+             arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+               toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
+             applied_func <- scApplyAll sc (ttTerm func) $ baz ++ arguments
+             putStrLn $ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts applied_func
+             tp <- scTypeOf sc applied_func
+             putStrLn $ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts tp
+             applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i -> do
+               la <- scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
+               putStrLn $ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts la
+               mkTypedTerm sc =<< scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
+             MapF.fromList <$> zipWithM
+               (\(MapF.Pair variable _) applied_func_selector ->
+                 MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) (ttTerm applied_func_selector))
+               fixpoint_substitution_as_list
+               applied_func_selectors)
+        maybeFixpointFunc
 
-      let execFeatures = simpleLoopFixpointFeature : psatf
+      let execFeatures = simpleLoopFixpointFeature ++ psatf
 
       liftIO $ C.executeCrucible execFeatures initial >>= \case
         C.FinishedResult{} -> pure ()

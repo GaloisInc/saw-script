@@ -1158,7 +1158,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
        (registerInvariantOverride opts cc top_loc (HashMap.fromList breakpoints))
        (groupOn (view csName) invLemmas)
 
-     simpleLoopFixpointFeature <- Crucible.simpleLoopFixpoint sym cfg undefined
+    --  simpleLoopFixpointFeature <- Crucible.simpleLoopFixpoint sym cfg undefined
 
      additionalFeatures <-
        mapM (Crucible.arraySizeProfile (ccLLVMContext cc)) $ maybeToList asp
@@ -1166,7 +1166,8 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
      let execFeatures =
            invariantExecFeatures ++
            map Crucible.genericToExecutionFeature (patSatGenExecFeature ++ pfs) ++
-           (simpleLoopFixpointFeature : additionalFeatures)
+          --  (simpleLoopFixpointFeature : additionalFeatures)
+           additionalFeatures
 
      let initExecState =
            Crucible.InitialState simCtx globals Crucible.defaultAbortHandler retTy $
