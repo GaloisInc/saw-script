@@ -2157,6 +2157,9 @@ simplImplOut (SImpl_NamedArgRead x npn args off memb) =
 simplImplOut (SImpl_ReachabilityTrans x rp args off _ e) =
   distPerms1 x (ValPerm_Named (recPermName rp) (PExprs_Cons args e) off)
 
+-- | Compute the output permissions of a 'SimplImpl' implication in a binding
+mbSimplImplOut :: Mb ctx (SimplImpl ps_in ps_out) -> Mb ctx (DistPerms ps_out)
+mbSimplImplOut = mbMapCl $(mkClosed [| simplImplOut |])
 
 -- | Apply a 'SimplImpl' implication to the permissions on the top of a
 -- permission set stack, checking that they equal the 'simplImplIn' of the
