@@ -26,6 +26,9 @@ pure argument @arg@ that does not use any of the inconsistent operations.
 
 FIXME: explain this better
 
+
+Type-level translation:
+
 MT(Pi x (sort 0) b) = Pi x (sort 0) CompMT(b)
 MT(Pi x Num b) = Pi x Num CompMT(b)
 MT(Pi _ a b) = MT(a) -> CompMT(b)
@@ -41,9 +44,8 @@ CompMT(tp = Pi _ _ _) = MT(tp)
 CompMT(n : Num) = n
 CompMT(tp) = CompM MT(tp)
 
--- NOTE: polymorphic functions like Pi x (sort 0) x have a CompM return type
--- even if x is a function type. OR: we could make this a Haskell-level
--- function!
+
+Term-level translation:
 
 MonArg(t : tp) ==> MT(tp)
 MonArg(t) =
