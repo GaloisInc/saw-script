@@ -4864,7 +4864,7 @@ noExprsInTypeCtx (Member_Step ctx) = noExprsInTypeCtx ctx
 -- | Defines a substitution type @s@ that supports substituting into expression
 -- and permission variables in a given monad @m@
 class MonadBind m => SubstVar s m | s -> m where
-  -- extSubst :: s ctx -> ExprVar a -> s (ctx :> a)
+  extSubst :: s ctx -> ExprVar a -> s (ctx :> a)
   substExprVar :: s ctx -> Mb ctx (ExprVar a) -> m (PermExpr a)
 
 substPermVar :: SubstVar s m => s ctx -> Mb ctx (PermVar a) -> m (ValuePerm a)
@@ -4873,6 +4873,12 @@ substPermVar s mb_x =
   case e of
     PExpr_Var x -> return $ ValPerm_Var x NoPermOffset
     PExpr_ValPerm p -> return p
+
+-- | Extend a substitution with 0 or more variables
+extSubstMulti :: SubstVar s m => s ctx -> RAssign ExprVar ctx' ->
+                 s (ctx :++: ctx')
+extSubstMulti s MNil = s
+extSubstMulti s (xs :>: x) = extSubst (extSubstMulti s xs) x
 
 -- | Generalized notion of substitution, which says that substitution type @s@
 -- supports substituting into type @a@ in monad @m@
@@ -4916,21 +4922,27 @@ instance (NuMatching a, Substable s a m) => Substable s (Maybe a) m where
     [nuMP| Just a |] -> Just <$> genSubst s a
     [nuMP| Nothing |] -> return Nothing
 
-instance {-# INCOHERENT #-} (Given (RAssign Proxy ctx), Substable s a m, NuMatching a) => Substable s (Mb ctx a) m where
-   genSubst = genSubstMb given
+instance {-# INCOHERENT #-} (Given (RAssign Proxy (ctx :: RList CrucibleType)),
+                             Substable s a m, NuMatching a) =>
+                            Substable s (Mb ctx a) m where
+  genSubst = genSubstMb given
 
-instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) => Substable s (Mb RNil a) m where
-   genSubst = genSubstMb RL.typeCtxProxies
+instance {-# INCOHERENT #-}
+  (Substable s a m, NuMatching a) =>
+  Substable s (Mb (RNil :: RList CrucibleType) a) m where
+  genSubst = genSubstMb RL.typeCtxProxies
 
-instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) => Substable s (Binding c a) m where
-   genSubst = genSubstMb RL.typeCtxProxies
+instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) =>
+                            Substable s (Binding (c :: CrucibleType) a) m where
+  genSubst = genSubstMb RL.typeCtxProxies
 
 genSubstMb ::
   Substable s a m =>
   NuMatching a =>
-  RAssign Proxy ctx ->
+  RAssign Proxy (ctx :: RList CrucibleType) ->
   s ctx' -> Mb ctx' (Mb ctx a) -> m (Mb ctx a)
-genSubstMb p s mbmb = mbM (fmap (genSubst s) (mbSwap p mbmb))
+genSubstMb p s mbmb =
+  mbM $ nuMulti p $ \ns -> genSubst (extSubstMulti s ns) (mbCombine p mbmb)
 
 instance SubstVar s m => Substable s (Member ctx a) m where
   genSubst _ mb_memb = return $ mbLift mb_memb
@@ -5278,7 +5290,7 @@ noPermsInCruCtx (Member_Step ctx) = noPermsInCruCtx ctx
 -- No case for Member_Base
 
 instance SubstVar PermSubst Identity where
-  -- extSubst (PermSubst elems) x = PermSubst $ elems :>: PExpr_Var x
+  extSubst (PermSubst elems) x = PermSubst $ elems :>: PExpr_Var x
   substExprVar s x =
     case mbNameBoundP x of
       Left memb -> return $ substLookup s memb
@@ -5352,7 +5364,7 @@ varSubstVar s mb_x =
     Right x -> x
 
 instance SubstVar PermVarSubst Identity where
-  -- extSubst (PermVarSubst elems) x = PermVarSubst $ elems :>: x
+  extSubst s x = PermVarSubst_Cons s x
   substExprVar s x =
     case mbNameBoundP x of
       Left memb -> return $ PExpr_Var $ varSubstLookup s memb
@@ -5467,9 +5479,8 @@ psubstAppend (PartialSubst elems1) (PartialSubst elems2) =
   PartialSubst $ RL.append elems1 elems2
 
 instance SubstVar PartialSubst Maybe where
-  {-
   extSubst (PartialSubst elems) x =
-    PartialSubst $ elems :>: PSubstElem (Just $ PExpr_Var x) -}
+    PartialSubst $ elems :>: PSubstElem (Just $ PExpr_Var x)
   substExprVar s x =
     case mbNameBoundP x of
       Left memb -> psubstLookup s memb
