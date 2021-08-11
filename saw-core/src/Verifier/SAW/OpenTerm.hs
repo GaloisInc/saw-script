@@ -149,7 +149,9 @@ dataTypeOpenTerm d all_args = OpenTerm $ do
 -- | Build an 'OpenTerm' for a global name.
 globalOpenTerm :: Ident -> OpenTerm
 globalOpenTerm ident =
-  OpenTerm (liftTCM scGlobalDef ident >>= typeInferComplete)
+  OpenTerm (do trm <- liftTCM scGlobalDef ident
+               tp <- liftTCM scTypeOfGlobal ident
+               return $ TypedTerm trm tp)
 
 -- | Apply an 'OpenTerm' to another
 applyOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm

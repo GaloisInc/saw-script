@@ -376,6 +376,10 @@ instance TypeInfer Term where
 -- calling inference on all the sub-components and extending the context inside
 -- of the binding forms
 instance TypeInfer (TermF Term) where
+  typeInfer (FTermF ftf) =
+    -- Dispatch to the TypeInfer instance for FlatTermF Term, which does some
+    -- special-case handling itself
+    typeInfer ftf
   typeInfer (Lambda x a rhs) =
     do a_tptrm <- typeInferCompleteWHNF a
        -- NOTE: before adding a type to the context, we want to be sure it is in
@@ -388,12 +392,21 @@ instance TypeInfer (TermF Term) where
        -- WHNF, so we don't have to normalize each time we look up a var type
        rhs_tptrm <- withVar x (typedVal a_tptrm) $ typeInferComplete rhs
        typeInfer (Pi x a_tptrm rhs_tptrm)
+  typeInfer (Constant ec _) =
+    -- NOTE: this special case is to prevent us from re-type-checking the
+    -- definition of each constant, as we assume it was type-checked when it was
+    -- created
+    return $ ecType ec
   typeInfer t = typeInfer =<< mapM typeInferComplete t
   typeInferComplete tf =
     TypedTerm <$> liftTCM scTermF tf <*> typeInfer tf
 
--- Type inference for FlatTermF Term dispatches to that for FlatTermF TypedTerm
+-- Type inference for FlatTermF Term dispatches to that for FlatTermF TypedTerm,
+-- with special cases for primitives and constants to avoid re-type-checking
+-- their types as we are assuming they were type-checked when they were created
 instance TypeInfer (FlatTermF Term) where
+  typeInfer (Primitive pn) = return $ primType pn
+  typeInfer (ExtCns ec) = return $ ecType ec
   typeInfer t = typeInfer =<< mapM typeInferComplete t
   typeInferComplete ftf =
     TypedTerm <$> liftTCM scFlatTermF ftf <*> typeInfer ftf
