@@ -38,6 +38,7 @@ import Data.Parameterized.Some (Some (..))
 import qualified Data.Text as T
 import qualified Data.Type.RList as RL
 import GHC.Generics (Generic)
+import Lang.Crucible.FunctionHandle
 import Lang.Crucible.Types (CrucibleType)
 import What4.FunctionName (FunctionName (functionName))
 import What4.ProgramLoc
@@ -59,7 +60,7 @@ printIDEInfo _penv tcfgs file ppinfo =
   encodeFile file $ IDELog (runWithLoc ppinfo tcfgs)
 
 
-type ExtractionM = ReaderT (PPInfo, ProgramLoc) (Writer [LogEntry])
+type ExtractionM = ReaderT (PPInfo, ProgramLoc, String) (Writer [LogEntry])
 
 emit :: LogEntry -> ExtractionM ()
 emit entry = tell [entry]
@@ -72,12 +73,14 @@ data LogEntry
       { leLocation :: String
       , leEntryId :: LogEntryID
       , leCallers :: [LogEntryID]
+      , leFunctionName :: String
       , leExport :: Value
       , lePermissions :: String
       }
   | LogError
       { lerrLocation :: String
       , lerrError :: String
+      , lerrFunctionName :: String
       }
   deriving (Generic, Show)
 instance ToJSON LogEntry
@@ -85,9 +88,11 @@ instance NuMatching LogEntry where
   nuMatchingProof = unsafeMbTypeRepr
 instance Liftable LogEntry where
   mbLift mb = case mbMatch mb of
-    [nuMP| LogEntry v w x y z |] -> 
-      LogEntry (mbLift v) (mbLift w) (mbLift x) (mbLift y) (mbLift z)
-    [nuMP| LogError x y |] -> LogError (mbLift x) (mbLift y)
+    [nuMP| LogEntry u v w x y z |] -> 
+      LogEntry (mbLift u) (mbLift v) (mbLift w) 
+               (mbLift x) (mbLift y) (mbLift z)
+    [nuMP| LogError x y z |] -> 
+      LogError (mbLift x) (mbLift y) (mbLift z)
 
 
 data LogEntryID = LogEntryID
@@ -148,8 +153,8 @@ instance ExtractLogEntries
 
 instance ExtractLogEntries (PermImpl1 ps_in ps_outs) where
   extractLogEntries (Impl1_Fail err) =
-    do (_, loc) <- ask
-       emit (LogError (snd (ppLoc loc)) (ppError err))
+    do (_, loc, fname) <- ask
+       emit (LogError (snd (ppLoc loc)) (ppError err) fname)
   extractLogEntries _ = pure ()
 
 instance ExtractLogEntries
@@ -176,10 +181,10 @@ instance (PermCheckExtC ext)
 mbExtractLogEntries
   :: ExtractLogEntries a => Mb (ctx :: RList CrucibleType) a -> ExtractionM ()
 mbExtractLogEntries mb_a =
-  ReaderT $ \(ppi, loc) ->
+  ReaderT $ \(ppi, loc, fname) ->
   tell $ mbLift $ flip nuMultiWithElim1 mb_a $ \ns x ->
   execWriter $ runReaderT (extractLogEntries x) 
-                          (ppInfoAddExprNames "x" ns ppi, loc)
+                          (ppInfoAddExprNames "x" ns ppi, loc, fname)
 
 -- TODO: The next two functions are a hack, and we should probably rethink how
 -- this is architected a bit.  They don't fit into the type signature of
@@ -192,29 +197,32 @@ mbValPermEntries
   -> Mb ctx (ValuePerms ctx) 
   -> ExtractionM ()
 mbValPermEntries entryId callers mb_vp =
-  ReaderT $ \(ppi, loc) ->
+  ReaderT $ \(ppi, loc, fname) ->
   tell $ mbLift $ flip nuMultiWithElim1 mb_vp $ \ns vp ->
   execWriter $ runReaderT (valPermEntries entryId callers vp) 
-                          (ppInfoAddExprNames "x" ns ppi, loc)
+                          (ppInfoAddExprNames "x" ns ppi, loc, fname)
 
 valPermEntries :: LogEntryID -> [LogEntryID] -> ValuePerms ctx -> ExtractionM ()
 valPermEntries entryId callers vps = do
-  (ppi, loc) <- ask
+  (ppi, loc, fname) <- ask
   let loc' = snd (ppLoc loc)
   let strs = foldValuePerms (\xs vp -> 
                (ppToJson ppi vp, permPrettyString ppi vp) : xs) [] vps
-  tell [LogEntry loc' entryId callers export str | (export, str) <- strs]
+  tell [LogEntry loc' entryId callers fname export str | (export, str) <- strs]
 
 typedStmtOutCtx :: TypedStmt ext rets ps_in ps_next -> CruCtx rets
 typedStmtOutCtx = error "FIXME: write typedStmtOutCtx"
 
 withLoc :: ProgramLoc -> ExtractionM a -> ExtractionM a
-withLoc loc = local (\(ppinfo, _) -> (ppinfo, loc))
+withLoc loc = local (\(ppinfo, _, fname) -> (ppinfo, loc, fname))
 
 setErrorMsg :: String -> LogEntry -> LogEntry
 setErrorMsg msg le@LogError {} = le { lerrError = msg }
 setErrorMsg msg le@LogEntry {} =
-  LogError { lerrError = msg, lerrLocation = leLocation le}
+  LogError { lerrError = msg
+           , lerrLocation = leLocation le
+           , lerrFunctionName = leFunctionName le
+           }
 
 
 runWithLoc :: PPInfo -> [Some SomeTypedCFG] -> [LogEntry]
@@ -224,8 +232,12 @@ runWithLoc ppi =
     runWithLocHelper :: PPInfo -> Some SomeTypedCFG -> [LogEntry]
     runWithLocHelper ppi' sstcfg = case sstcfg of
       Some (SomeTypedCFG tcfg) -> do
-        let env = (ppi', getFirstProgramLoc tcfg)
+        let env = (ppi', getFirstProgramLoc tcfg, getFunctionName tcfg)
         execWriter (runReaderT (extractLogEntries tcfg) env)
+
+getFunctionName :: TypedCFG ext blocks ghosts inits ret -> String
+getFunctionName tcfg = case tpcfgHandle tcfg of
+  TypedFnHandle _ handle -> show $ handleName handle
 
 getFirstProgramLoc
   :: PermCheckExtC ext
