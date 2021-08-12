@@ -46,6 +46,7 @@ import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Set as Set
 import Data.Set (Set)
+import qualified Data.List as List
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
@@ -476,17 +477,25 @@ llvm_verify_x86' (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat m
            pure []
 
       simpleLoopFixpointFeature <- maybeToList <$> mapM
-        (\func -> liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $ \fixpoint_substitution ->
+        (\func -> liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $ \fixpoint_substitution condition ->
           do let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
              let foo = foldMap
                    (\(Some fixpoint_entry) ->
                      Set.map (mapSome $ W4.varExpr sym) $ W4.exprUninterpConstants sym $ Crucible.LLVM.Fixpoint.bodyValue fixpoint_entry)
                    (MapF.elems fixpoint_substitution)
-            --  let bar = Set.toList $ Set.difference foo $ Set.fromList $ MapF.keys fixpoint_substitution
-            --  baz <- forM bar $ viewSome $ toSC sym sawst
-             lalala <- Set.fromList <$> mapM (scExtCns sc . tecExt) (methodSpec ^. MS.csPreState ^. MS.csFreshVars)
-             lala <- Set.fromList <$> mapM (viewSome $ toSC sym sawst) (Set.toList foo)
-             let baz = Set.toList $ Set.intersection lalala lala
+             let bar = Set.map (mapSome $ W4.varExpr sym) $ W4.exprUninterpConstants sym condition
+             let lala = Set.toList $ Set.filter
+                   (\(Some variable) ->
+                     not (List.isPrefixOf "cfoo" $ show $ W4.printSymExpr variable)
+                     && not (List.isPrefixOf "cbar" $ show $ W4.printSymExpr variable)
+                     && not (List.isPrefixOf "cundefined" $ show $ W4.printSymExpr variable)
+                     && not (List.isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable))
+                   (Set.union foo bar)
+             lalala <- forM lala $ viewSome $ toSC sym sawst
+             baz <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet lalala
+            --  lalala <- Set.fromList <$> mapM (scExtCns sc . tecExt) (methodSpec ^. MS.csPreState ^. MS.csFreshVars)
+            --  lala <- Set.fromList <$> mapM (viewSome $ toSC sym sawst) (Set.toList foo)
+            --  let baz = Set.toList $ Set.intersection lalala lala
              arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
                toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
              applied_func <- scApplyAll sc (ttTerm func) $ baz ++ arguments
