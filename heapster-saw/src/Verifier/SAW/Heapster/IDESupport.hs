@@ -14,26 +14,42 @@
 module Verifier.SAW.Heapster.IDESupport where
 
 import Control.Monad.Reader
+  ( MonadReader (ask, local),
+    ReaderT (..),
+  )
 import Control.Monad.Writer
-import Data.Aeson ( encodeFile, ToJSON )
+  ( MonadWriter (tell),
+    Writer,
+    execWriter,
+  )
+import Data.Aeson (ToJSON, Value, encodeFile)
 import Data.Binding.Hobbits
-import Data.Maybe
+  ( Liftable (..),
+    Mb,
+    NuMatching (..),
+    RList,
+    mbMatch,
+    nuMP,
+    nuMultiWithElim1,
+    unsafeMbTypeRepr,
+  )
+import Data.Maybe (catMaybes, listToMaybe, mapMaybe)
 import Data.Parameterized.Some (Some (..))
 import qualified Data.Text as T
 import qualified Data.Type.RList as RL
-import GHC.Generics ( Generic )
-import Lang.Crucible.Types
-import What4.FunctionName ( FunctionName(functionName) )
+import GHC.Generics (Generic)
+import Lang.Crucible.Types (CrucibleType)
+import What4.FunctionName (FunctionName (functionName))
 import What4.ProgramLoc
-    ( Position(InternalPos, SourcePos, BinaryPos, OtherPos),
-      ProgramLoc(..) )
+  ( Position (BinaryPos, InternalPos, OtherPos, SourcePos),
+    ProgramLoc (..),
+  )
 
 import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.TypedCrucible
 import Verifier.SAW.Heapster.JSONExport(ppToJson)
-import Data.Aeson (Value)
 
 
 -- | The entry point for dumping a Heapster environment to a file for IDE
@@ -69,7 +85,8 @@ instance NuMatching LogEntry where
   nuMatchingProof = unsafeMbTypeRepr
 instance Liftable LogEntry where
   mbLift mb = case mbMatch mb of
-    [nuMP| LogEntry v w x y z |] -> LogEntry (mbLift v) (mbLift w) (mbLift x) (mbLift y) (mbLift z)
+    [nuMP| LogEntry v w x y z |] -> 
+      LogEntry (mbLift v) (mbLift w) (mbLift x) (mbLift y) (mbLift z)
     [nuMP| LogError x y |] -> LogError (mbLift x) (mbLift y)
 
 
@@ -154,7 +171,6 @@ instance (PermCheckExtC ext)
 instance (PermCheckExtC ext)
   => ExtractLogEntries (TypedBlock TransPhase ext blocks tops ret args) where
     extractLogEntries tb =
-      -- block here
       mapM_ (\(Some te) -> extractLogEntries te) $ _typedBlockEntries tb
 
 mbExtractLogEntries
@@ -162,24 +178,31 @@ mbExtractLogEntries
 mbExtractLogEntries mb_a =
   ReaderT $ \(ppi, loc) ->
   tell $ mbLift $ flip nuMultiWithElim1 mb_a $ \ns x ->
-  execWriter $ runReaderT (extractLogEntries x) (ppInfoAddExprNames "x" ns ppi, loc)
+  execWriter $ runReaderT (extractLogEntries x) 
+                          (ppInfoAddExprNames "x" ns ppi, loc)
 
 -- TODO: The next two functions are a hack, and we should probably rethink how
 -- this is architected a bit.  They don't fit into the type signature of
 -- `ExtractLogEntries` currently because we push down the extra information
 -- about the entrypoint IDs which we need wherever `LogEntry`s are created.
 
-mbValPermEntries :: LogEntryID -> [LogEntryID] -> Mb ctx (ValuePerms ctx) -> ExtractionM ()
+mbValPermEntries 
+  :: LogEntryID 
+  -> [LogEntryID] 
+  -> Mb ctx (ValuePerms ctx) 
+  -> ExtractionM ()
 mbValPermEntries entryId callers mb_vp =
   ReaderT $ \(ppi, loc) ->
   tell $ mbLift $ flip nuMultiWithElim1 mb_vp $ \ns vp ->
-  execWriter $ runReaderT (valPermEntries entryId callers vp) (ppInfoAddExprNames "x" ns ppi, loc)
+  execWriter $ runReaderT (valPermEntries entryId callers vp) 
+                          (ppInfoAddExprNames "x" ns ppi, loc)
 
 valPermEntries :: LogEntryID -> [LogEntryID] -> ValuePerms ctx -> ExtractionM ()
 valPermEntries entryId callers vps = do
   (ppi, loc) <- ask
   let loc' = snd (ppLoc loc)
-  let strs = foldValuePerms (\xs vp -> (ppToJson ppi vp, permPrettyString ppi vp) : xs) [] vps
+  let strs = foldValuePerms (\xs vp -> 
+               (ppToJson ppi vp, permPrettyString ppi vp) : xs) [] vps
   tell [LogEntry loc' entryId callers export str | (export, str) <- strs]
 
 typedStmtOutCtx :: TypedStmt ext rets ps_in ps_next -> CruCtx rets
