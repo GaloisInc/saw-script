@@ -777,6 +777,8 @@ monadifyTerm' prims _ (asApplyAll -> (asTypedGlobalDef -> Just glob, args))
   , (macro_args, reg_args) <- splitAt (macroNumArgs macro) args
   , mtrm_f <- macroApply macro glob macro_args =
     monadifyApply (ArgMonTerm mtrm_f) reg_args
+monadifyTerm' _ _ (asTypedGlobalDef -> Just glob) =
+  return $ ArgMonTerm $ mkSemiPureGlobalDefTerm glob
 monadifyTerm' _ _ (asApp -> Just (f, arg)) =
   do mtrm_f <- monadifyTerm Nothing f
      monadifyApply mtrm_f [arg]
