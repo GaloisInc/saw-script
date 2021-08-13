@@ -225,6 +225,13 @@ isBaseType (MTyBase (MKType _) _) = True
 isBaseType (MTyBase _ _) = True
 isBaseType (MTyNum _) = False
 
+-- | If a 'MonType' is a type-level number, return its 'OpenTerm', otherwise
+-- return 'Nothing'
+monTypeNum :: MonType -> Maybe OpenTerm
+monTypeNum (MTyNum t) = Just t
+monTypeNum (MTyBase MKNum t) = Just t
+monTypeNum _ = Nothing
+
 -- | Get the kind of a 'MonType', assuming it has one
 monTypeKind :: MonType -> Maybe MonKind
 monTypeKind (MTyForall _ _ _) = Nothing
@@ -369,10 +376,13 @@ monadifyType ctx (asDataType -> Just (pn, args))
 monadifyType ctx (asVectorType -> Just (len, tp)) =
   let lenOT = openOpenTerm (typeCtxPureCtx ctx) len in
   MTySeq (ctorOpenTerm "Cryptol.TCNum" [lenOT]) $ monadifyType ctx tp
-monadifyType ctx (asApplyAll -> ((asGlobalDef -> Just seq_id), [n, a]))
-  | seq_id == "Cryptol.seq"
-  , MTyNum n_trm <- monadifyType ctx n =
-    MTySeq n_trm (monadifyType ctx a)
+monadifyType ctx tp@(asApplyAll -> ((asGlobalDef -> Just seq_id), [n, a]))
+  | seq_id == "Cryptol.seq" =
+    case monTypeNum (monadifyType ctx n) of
+      Just n_trm -> MTySeq n_trm (monadifyType ctx a)
+      Nothing ->
+        error ("Monadify type: not a number: " ++ ppTermInTypeCtx ctx n
+               ++ " in type: " ++ ppTermInTypeCtx ctx tp)
 monadifyType ctx (asApp -> Just ((asGlobalDef -> Just f), arg))
   | Just f_trans <- lookup f typeclassMonMap =
     MTyBase (MKType $ mkSort 1) $
