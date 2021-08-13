@@ -48,6 +48,7 @@ library
      Verifier.SAW.Cryptol.Simpset
      Verifier.SAW.Cryptol.Monadify
      Verifier.SAW.CryptolEnv
+     Verifier.SAW.MonadifyEnv
      Verifier.SAW.TypedTerm
   GHC-options: -Wall -Werror
 

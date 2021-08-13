@@ -33,6 +33,7 @@ module Verifier.SAW.CryptolEnv
   , lookupIn
   , resolveIdentifier
   , meSolverConfig
+  , mkCryEnv
   )
   where
 
