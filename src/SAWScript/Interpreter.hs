@@ -75,7 +75,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST hiding (FlatTermF(..))
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.CryptolEnv as CEnv
-import qualified Verifier.SAW.MonadifyEnv as Monadify
+import qualified Verifier.SAW.Cryptol.Monadify as Monadify
 
 import qualified Lang.JVM.Codebase as JCB
 
@@ -472,7 +472,7 @@ buildTopLevelEnv proxy opts =
                    , rwTypedef    = Map.empty
                    , rwDocs       = primDocEnv primsAvail
                    , rwCryptol    = ce0
-                   , rwMonadify   = Monadify.emptyMonadifyEnv
+                   , rwMonadify   = Monadify.defaultMonEnv
                    , rwProofs     = []
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwJVMTrans   = jvmTrans
@@ -2947,11 +2947,6 @@ primitives = Map.fromList
     Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
     , " to ask if two monadic terms are equal" ]
-
-  , prim "monadify_env" "TopLevel ()"
-    (scVal monadifyEnv)
-    Experimental
-    [ "Monadify the current Cryptol environment"]
 
   , prim "monadify_term" "Term -> TopLevel Term"
     (scVal monadifyTypedTerm)

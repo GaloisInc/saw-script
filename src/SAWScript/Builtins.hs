@@ -57,7 +57,6 @@ import Text.Read (readMaybe)
 import qualified Verifier.SAW.Cryptol as Cryptol
 import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
 import qualified Verifier.SAW.Cryptol.Monadify as Monadify
-import qualified Verifier.SAW.MonadifyEnv as Monadify
 
 -- saw-core
 import Verifier.SAW.Grammar (parseSAWTerm)
@@ -1507,26 +1506,20 @@ testMRSolver i1 i2 =
        Just err -> io $ putStrLn $ Prover.showMRFailure err
        Nothing -> io $ putStrLn "Success!"
 
-monadifyEnv :: SharedContext -> TopLevel ()
-monadifyEnv sc =
-  do rw <- get
-     monEnv' <-
-       liftIO $ Monadify.monadifyCryptolEnv sc (rwMonadify rw) (rwCryptol rw)
-     put $ rw { rwMonadify = monEnv' }
-
 monadifyTypedTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
 monadifyTypedTerm sc t =
-  do Monadify.MonadifyEnv prims table <- rwMonadify <$> get
-     ret_t <-
+  do env <- rwMonadify <$> get
+     (ret_t, env') <-
        liftIO $
        case ttType t of
          TypedTermSchema schema ->
            do tp <- Cryptol.importSchema sc Cryptol.emptyEnv schema
-              Monadify.monadifyToTerm sc prims table (ttTerm t) tp
+              Monadify.monadifyTermInEnv sc env (ttTerm t) tp
          TypedTermKind _ ->
            fail "monadify_term applied to a type"
          TypedTermOther tp ->
-           Monadify.monadifyToTerm sc prims table (ttTerm t) tp
+           Monadify.monadifyTermInEnv sc env (ttTerm t) tp
+     modify (\s -> s { rwMonadify = env' })
      tp <- liftIO $ scTypeOf sc ret_t
      return $ TypedTerm (TypedTermOther tp) ret_t
 

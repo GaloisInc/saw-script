@@ -77,6 +77,7 @@ import Control.Monad.State
 import Control.Monad.Cont
 import qualified Control.Monad.Fail as Fail
 -- import Control.Monad.IO.Class (MonadIO, liftIO)
+import qualified Data.Text as T
 
 import Verifier.SAW.Name
 import Verifier.SAW.Term.Functor
@@ -155,6 +156,10 @@ isFirstOrderType _ = True
 data GlobalDef = GlobalDef { globalDefName :: NameInfo,
                              globalDefType :: Term,
                              globalDefTerm :: Term }
+
+-- | Get the 'String' name of a 'GlobalDef'
+globalDefString :: GlobalDef -> String
+globalDefString = T.unpack . toAbsoluteName . globalDefName
 
 -- | Build an 'OpenTerm' from a 'GlobalDef'
 globalDefOpenTerm :: GlobalDef -> OpenTerm
@@ -293,7 +298,6 @@ typeclassMonMap =
    ("Cryptol.PCmp", "Cryptol.PCmpM"),
    ("Cryptol.PSignedCmp", "Cryptol.PSignedCmpM"),
    ("Cryptol.PZero", "Cryptol.PZero"),
-   ("Cryptol.PLogic", "Cryptol.PLogic"),
    ("Cryptol.PLogic", "Cryptol.PLogic"),
    ("Cryptol.PRing", "Cryptol.PRing"),
    ("Cryptol.PRing", "Cryptol.PRing"),
@@ -541,10 +545,10 @@ mkCtorArgMonTerm pn =
 -- | A monadification macro is a function that inspects its first @N@ arguments
 -- before being able to be converted to an 'ArgMonTerm'
 data MonMacro = MonMacro { macroNumArgs :: Int,
-                           macroApply :: GlobalDef -> [Term] -> ArgMonTerm }
+                           macroApply :: GlobalDef -> [Term] -> MonTerm }
 
 -- | Make a simple 'MonMacro' that inspects 0 arguments and just returns a term
-monMacro0 :: ArgMonTerm -> MonMacro
+monMacro0 :: MonTerm -> MonMacro
 monMacro0 mtrm = MonMacro 0 (\_ _ -> mtrm)
 
 -- | Make a 'MonMacro' that maps a named global to a global of semi-pure type.
@@ -555,8 +559,8 @@ semiPureGlobalMacro :: Ident -> Ident -> MonMacro
 semiPureGlobalMacro from to =
   MonMacro 0 $ \glob args ->
   if globalDefName glob == ModuleIdentifier from && args == [] then
-    fromSemiPureTerm (monadifyType [] $
-                      globalDefType glob) (globalOpenTerm to)
+    ArgMonTerm $ fromSemiPureTerm (monadifyType [] $
+                                   globalDefType glob) (globalOpenTerm to)
   else
     error ("Monadification macro for " ++ show from ++ " applied incorrectly")
 
@@ -567,12 +571,12 @@ argGlobalMacro :: Ident -> Ident -> MonMacro
 argGlobalMacro from to =
   MonMacro 0 $ \glob args ->
   if globalDefName glob == ModuleIdentifier from && args == [] then
-    mkGlobalArgMonTerm (monadifyType [] $ globalDefType glob) to
+    ArgMonTerm $ mkGlobalArgMonTerm (monadifyType [] $ globalDefType glob) to
   else
     error ("Monadification macro for " ++ show from ++ " applied incorrectly")
 
 -- | An environment of named primitives and how to monadify them
-type MonadifyPrimMap = Map NameInfo MonMacro
+type MonadifyEnv = Map NameInfo MonMacro
 
 -- | A context for monadifying 'Term's which maintains, for each deBruijn index
 -- in scope, both its original un-monadified type along with either a 'MonTerm'
@@ -596,8 +600,8 @@ ppTermInMonCtx ctx t =
 type MonadifyMemoTable = IntMap MonTerm
 
 -- | The empty memoization table
-emptyMonadifyMemoTable :: MonadifyMemoTable
-emptyMonadifyMemoTable = IntMap.empty
+emptyMemoTable :: MonadifyMemoTable
+emptyMemoTable = IntMap.empty
 
 
 ----------------------------------------------------------------------
@@ -607,15 +611,12 @@ emptyMonadifyMemoTable = IntMap.empty
 -- | The read-only state of a monadification computation
 data MonadifyROState = MonadifyROState {
   -- | The monadification environment
-  monStPrims :: MonadifyPrimMap,
+  monStEnv :: MonadifyEnv,
   -- | The monadification context 
   monStCtx :: MonadifyCtx,
   -- | The monadified return type of the top-level term being monadified
   monStTopRetType :: OpenTerm
 }
-
--- | The state of a monadification computation = a memoization table
-type MonadifyState = IntMap MonTerm
 
 -- | The monad for monadifying SAW core terms
 newtype MonadifyM a =
@@ -623,7 +624,7 @@ newtype MonadifyM a =
                 ReaderT MonadifyROState (StateT MonadifyMemoTable
                                          (Cont MonTerm)) a }
   deriving (Functor, Applicative, Monad,
-            MonadReader MonadifyROState, MonadState MonadifyState)
+            MonadReader MonadifyROState, MonadState MonadifyMemoTable)
 
 instance Fail.MonadFail MonadifyM where
   fail str =
@@ -642,8 +643,7 @@ shiftMonadifyM f = MonadifyM $ lift $ lift $ cont f
 resetMonadifyM :: OpenTerm -> MonadifyM MonTerm -> MonadifyM MonTerm
 resetMonadifyM ret_tp m =
   do ro_st <- ask
-     table <- get
-     return $ runMonadifyM (monStPrims ro_st) table (monStCtx ro_st) ret_tp m
+     return $ runMonadifyM (monStEnv ro_st) (monStCtx ro_st) ret_tp m
 
 -- | Get the monadified return type of the top-level term being monadified
 topRetType :: MonadifyM OpenTerm
@@ -652,30 +652,27 @@ topRetType = monStTopRetType <$> ask
 -- | Run a monadification computation
 --
 -- FIXME: document the arguments
-runMonadifyM :: MonadifyPrimMap -> MonadifyMemoTable -> MonadifyCtx ->
-                OpenTerm -> MonadifyM MonTerm -> MonTerm
-runMonadifyM prims table ctx top_ret_tp m =
-  let ro_st = MonadifyROState prims ctx top_ret_tp in
-  runCont (evalStateT (runReaderT (unMonadifyM m) ro_st) table) id
+runMonadifyM :: MonadifyEnv -> MonadifyCtx -> OpenTerm ->
+                MonadifyM MonTerm -> MonTerm
+runMonadifyM env ctx top_ret_tp m =
+  let ro_st = MonadifyROState env ctx top_ret_tp in
+  runCont (evalStateT (runReaderT (unMonadifyM m) ro_st) emptyMemoTable) id
 
 -- | Run a monadification computation using a mapping for identifiers that have
 -- already been monadified and generate a SAW core term
-runCompleteMonadifyM :: MonadIO m => SharedContext -> MonadifyPrimMap ->
-                        MonadifyMemoTable -> Term -> MonadifyM MonTerm ->
-                        m Term
-runCompleteMonadifyM sc prims table top_ret_tp m =
+runCompleteMonadifyM :: MonadIO m => SharedContext -> MonadifyEnv ->
+                        Term -> MonadifyM MonTerm -> m Term
+runCompleteMonadifyM sc env top_ret_tp m =
   liftIO $ completeOpenTerm sc $ toCompTerm $
-  runMonadifyM prims table [] (toArgType $ monadifyType [] top_ret_tp) m
+  runMonadifyM env [] (toArgType $ monadifyType [] top_ret_tp) m
 
 -- | Memoize a computation of the monadified term associated with a 'TermIndex'
 memoizingM :: TermIndex -> MonadifyM MonTerm -> MonadifyM MonTerm
 memoizingM i m =
   (IntMap.lookup i <$> get) >>= \case
   Just ret ->
-    trace ("Memoized result for index " ++ show i) $
     return ret
   Nothing ->
-    trace ("No memoized result for index " ++ show i) $
     do ret <- m
        modify (IntMap.insert i ret)
        return ret
@@ -708,93 +705,93 @@ monadifyArgTerm mtp t = toArgTerm <$> monadifyArg mtp t
 
 -- | Monadify a term
 monadifyTerm :: Maybe MonType -> Term -> MonadifyM MonTerm
+{-
 monadifyTerm _ t
   | trace ("Monadifying term: " ++ showTerm t) False
   = undefined
+-}
 monadifyTerm mtp t@(STApp { stAppIndex = ix }) =
-  (monStPrims <$> ask) >>= \prims ->
-  memoizingM ix $ monadifyTerm' prims mtp t
+  memoizingM ix $ monadifyTerm' mtp t
 monadifyTerm mtp t =
-  (monStPrims <$> ask) >>= \prims ->
-  monadifyTerm' prims mtp t
+  monadifyTerm' mtp t
 
 -- | The main implementation of 'monadifyTerm', which monadifies a term given an
 -- optional monadification type. The type must be given for introduction forms
 -- (i.e.,, lambdas, pairs, and records), but is optional for elimination forms
 -- (i.e., applications, projections, and also in this case variables). Note that
 -- this means monadification will fail on terms with beta or tuple redexes.
-monadifyTerm' :: MonadifyPrimMap -> Maybe MonType -> Term -> MonadifyM MonTerm
-monadifyTerm' prims (Just mtp) t@(asLambda -> Just _) =
-  (monStCtx <$> ask) >>= \ctx ->
-  get >>= \table ->
-  return $ monadifyLambdas prims table ctx mtp t
+monadifyTerm' :: Maybe MonType -> Term -> MonadifyM MonTerm
+monadifyTerm' (Just mtp) t@(asLambda -> Just _) =
+  ask >>= \(MonadifyROState { monStEnv = env, monStCtx = ctx }) ->
+  return $ monadifyLambdas env ctx mtp t
 {-
-monadifyTerm' _ (Just mtp@(MTyForall _ _ _)) t =
+monadifyTerm' (Just mtp@(MTyForall _ _ _)) t =
   ask >>= \ro_st ->
   get >>= \table ->
-  return $ monadifyLambdas (monStPrims ro_st) table (monStCtx ro_st) mtp t
-monadifyTerm' _ (Just mtp@(MTyArrow _ _)) t =
+  return $ monadifyLambdas (monStEnv ro_st) table (monStCtx ro_st) mtp t
+monadifyTerm' (Just mtp@(MTyArrow _ _)) t =
   ask >>= \ro_st ->
   get >>= \table ->
-  return $ monadifyLambdas (monStPrims ro_st) table (monStCtx ro_st) mtp t
+  return $ monadifyLambdas (monStEnv ro_st) table (monStCtx ro_st) mtp t
 -}
-monadifyTerm' _ (Just mtp@(MTyPair mtp1 mtp2)) (asPairValue ->
+monadifyTerm' (Just mtp@(MTyPair mtp1 mtp2)) (asPairValue ->
                                               Just (trm1, trm2)) =
   fromArgTerm mtp <$> (pairOpenTerm <$>
                        monadifyArgTerm (Just mtp1) trm1 <*>
                        monadifyArgTerm (Just mtp2) trm2)
-monadifyTerm' _ (Just mtp@(MTyRecord fs_mtps)) (asRecordValue -> Just trm_map)
+monadifyTerm' (Just mtp@(MTyRecord fs_mtps)) (asRecordValue -> Just trm_map)
   | length fs_mtps == Map.size trm_map
   , (fs,mtps) <- unzip fs_mtps
   , Just trms <- mapM (\f -> Map.lookup f trm_map) fs =
     fromArgTerm mtp <$> recordOpenTerm <$> zip fs <$>
     zipWithM monadifyArgTerm (map Just mtps) trms
-monadifyTerm' _ _ (asPairSelector -> Just (trm, False)) =
+monadifyTerm' _ (asPairSelector -> Just (trm, False)) =
   do mtrm <- monadifyArg Nothing trm
      mtp <- case getMonType mtrm of
        MTyPair t _ -> return t
        _ -> fail "Monadification failed: projection on term of non-pair type"
      return $ fromArgTerm mtp $
        pairLeftOpenTerm $ toArgTerm mtrm
-monadifyTerm' _ (Just mtp@(MTySeq n mtp_elem)) (asFTermF ->
-                                                Just (ArrayValue _ trms)) =
+monadifyTerm' (Just mtp@(MTySeq n mtp_elem)) (asFTermF ->
+                                              Just (ArrayValue _ trms)) =
   do trms' <- traverse (monadifyArgTerm $ Just mtp_elem) trms
      return $ fromArgTerm mtp $
        applyOpenTermMulti (globalOpenTerm "Cryptol.seqToMseq")
        [n, toArgType mtp_elem,
         flatOpenTerm $ ArrayValue (toArgType mtp_elem) trms']
-monadifyTerm' _ _ (asPairSelector -> Just (trm, True)) =
+monadifyTerm' _ (asPairSelector -> Just (trm, True)) =
   do mtrm <- monadifyArg Nothing trm
      mtp <- case getMonType mtrm of
        MTyPair _ t -> return t
        _ -> fail "Monadification failed: projection on term of non-pair type"
      return $ fromArgTerm mtp $
        pairRightOpenTerm $ toArgTerm mtrm
-monadifyTerm' _ _ (asRecordSelector -> Just (trm, fld)) =
+monadifyTerm' _ (asRecordSelector -> Just (trm, fld)) =
   do mtrm <- monadifyArg Nothing trm
      mtp <- case getMonType mtrm of
        MTyRecord mtps | Just mtp <- lookup fld mtps -> return mtp
        _ -> fail ("Monadification failed: " ++
                   "record projection on term of incorrect type")
      return $ fromArgTerm mtp $ projRecordOpenTerm (toArgTerm mtrm) fld
-monadifyTerm' _ _ (asLocalVar -> Just ix) =
+monadifyTerm' _ (asLocalVar -> Just ix) =
   (monStCtx <$> ask) >>= \case
   ctx | ix >= length ctx -> fail "Monadification failed: vaiable out of scope!"
   ctx | (_,_,Right mtrm) <- ctx !! ix -> return mtrm
   _ -> fail "Monadification failed: type variable used in term position!"
-monadifyTerm' _ _ (asCtor -> Just (pn, args)) =
+monadifyTerm' _ (asCtor -> Just (pn, args)) =
   monadifyApply (ArgMonTerm $ mkCtorArgMonTerm pn) args
-monadifyTerm' prims _ (asApplyAll -> (asTypedGlobalDef -> Just glob, args))
-  | Just macro <- Map.lookup (globalDefName glob) prims
-  , (macro_args, reg_args) <- splitAt (macroNumArgs macro) args
-  , mtrm_f <- macroApply macro glob macro_args =
-    monadifyApply (ArgMonTerm mtrm_f) reg_args
-monadifyTerm' _ _ (asTypedGlobalDef -> Just glob) =
-  return $ ArgMonTerm $ mkSemiPureGlobalDefTerm glob
-monadifyTerm' _ _ (asApp -> Just (f, arg)) =
+monadifyTerm' _ (asApplyAll -> (asTypedGlobalDef -> Just glob, args)) =
+  (Map.lookup (globalDefName glob) <$> monStEnv <$> ask) >>= \case
+  Just macro
+    | (macro_args, reg_args) <- splitAt (macroNumArgs macro) args
+    , mtrm_f <- macroApply macro glob macro_args ->
+      monadifyApply mtrm_f reg_args
+  Nothing -> error ("Monadification failed: unhandled constant: "
+                    ++ globalDefString glob)
+monadifyTerm' _ (asApp -> Just (f, arg)) =
   do mtrm_f <- monadifyTerm Nothing f
      monadifyApply mtrm_f [arg]
-monadifyTerm' _ _ t =
+monadifyTerm' _ t =
   (monStCtx <$> ask) >>= \ctx ->
   fail ("Monadifiction failed: no case for term: " ++ ppTermInMonCtx ctx t)
 
@@ -817,34 +814,32 @@ monadifyApply f [] = return f
 
 -- | FIXME: documentation; get our type down to a base type before going into
 -- the MonadifyM monad
-monadifyLambdas :: MonadifyPrimMap -> MonadifyMemoTable -> MonadifyCtx ->
-                   MonType -> Term -> MonTerm
-monadifyLambdas prims table ctx (MTyForall _ k tp_f) (asLambda ->
-                                                      Just (x, x_tp, body)) =
+monadifyLambdas :: MonadifyEnv -> MonadifyCtx -> MonType -> Term -> MonTerm
+monadifyLambdas env ctx (MTyForall _ k tp_f) (asLambda ->
+                                              Just (x, x_tp, body)) =
   -- FIXME: check that monadifyKind x_tp == k
   ArgMonTerm $ ForallMonTerm x k $ \mtp ->
-  monadifyLambdas prims table ((x,x_tp,Left mtp) : ctx) (tp_f mtp) body
-monadifyLambdas prims table ctx (MTyArrow tp_in tp_out) (asLambda ->
-                                                         Just (x, x_tp, body)) =
+  monadifyLambdas env ((x,x_tp,Left mtp) : ctx) (tp_f mtp) body
+monadifyLambdas env ctx (MTyArrow tp_in tp_out) (asLambda ->
+                                                 Just (x, x_tp, body)) =
   -- FIXME: check that monadifyType x_tp == tp_in
   ArgMonTerm $ FunMonTerm x tp_in tp_out $ \arg ->
-  monadifyLambdas prims table ((x,x_tp,Right (ArgMonTerm arg)) : ctx) tp_out body
-monadifyLambdas prims table ctx tp t =
-  monadifyEtaExpand prims table ctx tp tp t []
+  monadifyLambdas env ((x,x_tp,Right (ArgMonTerm arg)) : ctx) tp_out body
+monadifyLambdas env ctx tp t =
+  monadifyEtaExpand env ctx tp tp t []
 
 -- | FIXME: documentation
-monadifyEtaExpand :: MonadifyPrimMap -> MonadifyMemoTable -> MonadifyCtx ->
-                     MonType -> MonType -> Term ->
+monadifyEtaExpand :: MonadifyEnv -> MonadifyCtx -> MonType -> MonType -> Term ->
                      [Either MonType ArgMonTerm] -> MonTerm
-monadifyEtaExpand prims table ctx top_mtp (MTyForall x k tp_f) t args =
+monadifyEtaExpand env ctx top_mtp (MTyForall x k tp_f) t args =
   ArgMonTerm $ ForallMonTerm x k $ \mtp ->
-  monadifyEtaExpand prims table ctx top_mtp (tp_f mtp) t (args ++ [Left mtp])
-monadifyEtaExpand prims table ctx top_mtp (MTyArrow tp_in tp_out) t args =
+  monadifyEtaExpand env ctx top_mtp (tp_f mtp) t (args ++ [Left mtp])
+monadifyEtaExpand env ctx top_mtp (MTyArrow tp_in tp_out) t args =
   ArgMonTerm $ FunMonTerm "_" tp_in tp_out $ \arg ->
-  monadifyEtaExpand prims table ctx top_mtp tp_out t (args ++ [Right arg])
-monadifyEtaExpand prims table ctx top_mtp mtp t args =
+  monadifyEtaExpand env ctx top_mtp tp_out t (args ++ [Right arg])
+monadifyEtaExpand env ctx top_mtp mtp t args =
   applyMonTermMulti
-  (runMonadifyM prims table ctx (toArgType mtp) (monadifyTerm (Just top_mtp) t))
+  (runMonadifyM env ctx (toArgType mtp) (monadifyTerm (Just top_mtp) t))
   args
 
 
@@ -865,9 +860,9 @@ unsafeAssertMacro = MonMacro 1 $ \_ ts ->
   case ts of
     [(asDataType -> Just (num, []))]
       | primName num == "Cryptol.Num" ->
-        mkGlobalArgMonTerm numFunType "Cryptol.numAssertEqM"
+        ArgMonTerm $ mkGlobalArgMonTerm numFunType "Cryptol.numAssertEqM"
     _ ->
-      failArgMonTerm numFunType
+      failMonTerm numFunType
       "Monadification failed: unsafeAssert applied to non-Num type"
 
 -- | Identifiers that are mapped to semi-pure functions
@@ -894,16 +889,29 @@ semiPureMonPrims = [
   ("Cryptol.PLiteralSeqBool", "Cryptol.PLiteralSeqBoolM")
   ]
 
+
 -- | Identifiers that are themselves semi-pure functions
 semiPureSelfMonPrims :: [Ident]
 semiPureSelfMonPrims = [
+  -- Operations from the Prelude
+  "Prelude.ite",
+
+  -- PLogic constraints that do not change
+  "Cryptol.PLogicUnit", "Cryptol.PLogicBit", "Cryptol.PLogicPair",
+
+  -- Numeric operations
+  "Cryptol.ecNumber", "Cryptol.ecPlus", "Cryptol.ecMinus", "Cryptol.ecMul",
+  "Cryptol.ecNeg", "Cryptol.ecDiv", "Cryptol.ecMod", "Cryptol.ecExp",
+
   -- Logical operations
   "Cryptol.ecAnd", "Cryptol.ecOr", "Cryptol.ecXor", "Cryptol.ecCompl",
   "Cryptol.ecZero",
 
   -- Sequences
   "Cryptol.ecCat", "Cryptol.ecTake", "Cryptol.ecDrop", "Cryptol.ecJoin"
+
   ]
+
 
 -- | Identifierd that are mapped to functions of argument type
 argMonPrims :: [(Ident,Ident)]
@@ -921,9 +929,9 @@ argMonPrims = [
   ("Cryptol.ecError", "Cryptol.ecErrorM")
   ]
 
--- | The default monadification map for primitives
-defaultMonPrims :: MonadifyPrimMap
-defaultMonPrims =
+-- | The default monadification environment
+defaultMonEnv :: MonadifyEnv
+defaultMonEnv =
   Map.fromList
   (map (\(ident,macro) -> (ModuleIdentifier ident, macro))
    [
@@ -945,19 +953,40 @@ defaultMonPrims =
 -- * Top-Level Entrypoints
 ----------------------------------------------------------------------
 
--- | Monadify a term of the specified type, or 'fail' if this is not possible
-monadifyToTerm :: SharedContext -> MonadifyPrimMap -> MonadifyMemoTable ->
-                  Term -> Term -> IO Term
-monadifyToTerm sc prims table trm tp =
-  runCompleteMonadifyM sc prims table tp $
+-- monadifyNameInfo :: NameInfo -> NameInfo
+-- monadifyNameInfo nmi =
+
+-- | Monadify a term of the specified type to a 'MonTerm' and then complete that
+-- 'MonTerm' to a SAW core 'Term', or 'fail' if this is not possible
+monadifyCompleteTerm :: SharedContext -> MonadifyEnv -> Term -> Term -> IO Term
+monadifyCompleteTerm sc env trm tp =
+  runCompleteMonadifyM sc env tp $
   monadifyTerm (Just $ monadifyType [] tp) trm
 
--- | Monadify a of the specified type with a name to a 'MonTerm'
-monadifyNamedTerm :: SharedContext -> MonadifyPrimMap -> MonadifyMemoTable ->
+-- | Monadify a 'Term' of the specified type, bind the result to a fresh SAW
+-- core constant generated from the supplied name, and then convert that
+-- constant back to a 'MonTerm'
+monadifyNamedTerm :: SharedContext -> MonadifyEnv ->
                      NameInfo -> Term -> Term -> IO MonTerm
-monadifyNamedTerm sc prims table nmi trm tp =
+monadifyNamedTerm sc env nmi trm tp =
+  trace ("Monadifying " ++ T.unpack (toAbsoluteName nmi)) $
   do let mtp = monadifyType [] tp
      comp_tp <- completeOpenTerm sc $ toCompType mtp
-     trm' <- monadifyToTerm sc prims table trm tp
-     const_trm <- scConstant' sc nmi trm' comp_tp
+     trm' <- monadifyCompleteTerm sc env trm tp
+     const_trm <- scConstant sc (toShortName nmi) trm' comp_tp
      return $ fromCompTerm mtp $ closedOpenTerm const_trm
+
+-- | Monadify a term with the specified type along with all constants it
+-- contains, adding the monadifications of those constants to the monadification
+-- environment
+monadifyTermInEnv :: SharedContext -> MonadifyEnv -> Term -> Term ->
+                     IO (Term, MonadifyEnv)
+monadifyTermInEnv sc top_env top_trm top_tp =
+  flip runStateT top_env $
+  do let const_infos = map snd $ Map.toAscList $ getConstantSet top_trm
+     forM_ const_infos $ \(nmi,tp,body) ->
+       do env <- get
+          mtrm <- lift $ monadifyNamedTerm sc env nmi body tp
+          put $ Map.insert nmi (monMacro0 mtrm) env
+     env <- get
+     lift $ monadifyCompleteTerm sc env top_trm top_tp
