@@ -61,6 +61,8 @@ import Data.Parameterized.Context hiding (view, zipWithM)
 
 import Verifier.SAW.CryptolEnv
 import Verifier.SAW.FiniteValue
+import Verifier.SAW.Prelude
+import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 
@@ -505,12 +507,35 @@ llvm_verify_x86' (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat m
              applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i -> do
                la <- scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
                putStrLn $ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts la
-               mkTypedTerm sc =<< scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
-             MapF.fromList <$> zipWithM
+               scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
+             result_substitution <- MapF.fromList <$> zipWithM
                (\(MapF.Pair variable _) applied_func_selector ->
-                 MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) (ttTerm applied_func_selector))
+                 MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)
                fixpoint_substitution_as_list
-               applied_func_selectors)
+               applied_func_selectors
+
+             lala_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
+               toSC sym sawst variable
+             let Just (_, foobar) = asConstant (ttTerm func)
+             let (foobar', [_, foobar'']) = asApplyAll foobar
+             when (isGlobalDef "Prelude.fix" foobar' == Nothing) $ fail $ "not Prelude.fix: " ++ showTerm foobar'
+             body <- betaNormalize sc =<< scApplyAll sc foobar'' ((ttTerm func) : (baz ++ lala_arguments))
+             foo_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+               toSC sym sawst $ Crucible.LLVM.Fixpoint.bodyValue fixpoint_entry
+             foo_applied_func <- scApplyAll sc (ttTerm func) $ baz ++ foo_arguments
+             foo_la <- scTuple sc lala_arguments
+            --  foo_condition <- toSC sym sawst condition
+             let lhs = Prelude.last foo_arguments
+             w <- scNat sc 64
+             rhs <- scBvMul sc w (head baz) =<< scBvNat sc w =<< scNat sc 128
+             foo_condition <- scBvULt sc w lhs rhs
+             putStrLn $ "foo_condition: " ++ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts foo_condition
+             foo_type <- scTupleType sc =<< mapM (scTypeOf sc) lala_arguments
+             foo_lala <- scIte sc foo_type foo_condition foo_applied_func foo_la
+             foo_lalala <- scEq sc foo_lala body
+             result_condition <- bindSAWTerm sym sawst W4.BaseBoolRepr foo_lalala
+
+             return (result_substitution, result_condition))
         maybeFixpointFunc
 
       let execFeatures = simpleLoopFixpointFeature ++ psatf
