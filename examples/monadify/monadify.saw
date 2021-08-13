@@ -1,8 +1,10 @@
 enable_experimental;
 import "monadify.cry";
-enc <- unfold_term ["test1"] {{ test1 }};
+monadify_env;
+
+mux_binop3 <- unfold_term ["mux_binop3"] {{ mux_binop3 }};
 print "original term:";
-print_term enc;
-mtrm <- monadify_term enc;
+print_term mux_binop3;
+mtrm <- monadify_term mux_binop3;
 print "monadified term:";
 print_term mtrm;

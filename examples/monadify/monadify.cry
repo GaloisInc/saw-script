@@ -1,7 +1,12 @@
-test1 : ([8], [32], [32], [32]) -> [32]
-test1 (t, x, y, z) =
+
+
+
+// An operation where the first argument determines the operation to be
+// performed on the remaining 3
+mux_binop3 : ([8], [32], [32], [32]) -> [32]
+mux_binop3 (t, x, y, z) =
   if (0 <= t)  && (t <= 19) then (x && y) ^ (~x && z)
    | (20 <= t) && (t <= 39) then x ^ y ^ z
    | (40 <= t) && (t <= 59) then (x && y) ^ (x && z) ^ (y && z)
    | (60 <= t) && (t <= 79) then x ^ y ^ z
-   else error "test1: t out of range"
+   else error "mux_binop3: t out of range"
