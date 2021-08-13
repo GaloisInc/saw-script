@@ -993,7 +993,9 @@ monadifyTermInEnv :: SharedContext -> MonadifyEnv -> Term -> Term ->
                      IO (Term, MonadifyEnv)
 monadifyTermInEnv sc top_env top_trm top_tp =
   flip runStateT top_env $
-  do let const_infos = map snd $ Map.toAscList $ getConstantSet top_trm
+  do let const_infos =
+           filter (\(nmi,_,_) -> Map.notMember nmi top_env) $
+           map snd $ Map.toAscList $ getConstantSet top_trm
      forM_ const_infos $ \(nmi,tp,body) ->
        do env <- get
           mtrm <- lift $ monadifyNamedTerm sc env nmi body tp
