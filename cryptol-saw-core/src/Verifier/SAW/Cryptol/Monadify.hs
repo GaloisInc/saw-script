@@ -86,7 +86,7 @@ import Verifier.SAW.OpenTerm
 import Verifier.SAW.Recognizer
 -- import Verifier.SAW.Position
 
--- import Debug.Trace
+import Debug.Trace
 
 
 ----------------------------------------------------------------------
@@ -671,8 +671,11 @@ runCompleteMonadifyM sc prims table top_ret_tp m =
 memoizingM :: TermIndex -> MonadifyM MonTerm -> MonadifyM MonTerm
 memoizingM i m =
   (IntMap.lookup i <$> get) >>= \case
-  Just ret  -> return ret
+  Just ret ->
+    trace ("Memoized result for index " ++ show i) $
+    return ret
   Nothing ->
+    trace ("No memoized result for index " ++ show i) $
     do ret <- m
        modify (IntMap.insert i ret)
        return ret
@@ -705,6 +708,9 @@ monadifyArgTerm mtp t = toArgTerm <$> monadifyArg mtp t
 
 -- | Monadify a term
 monadifyTerm :: Maybe MonType -> Term -> MonadifyM MonTerm
+monadifyTerm _ t
+  | trace ("Monadifying term: " ++ showTerm t) False
+  = undefined
 monadifyTerm mtp t@(STApp { stAppIndex = ix }) =
   (monStPrims <$> ask) >>= \prims ->
   memoizingM ix $ monadifyTerm' prims mtp t
@@ -718,6 +724,11 @@ monadifyTerm mtp t =
 -- (i.e., applications, projections, and also in this case variables). Note that
 -- this means monadification will fail on terms with beta or tuple redexes.
 monadifyTerm' :: MonadifyPrimMap -> Maybe MonType -> Term -> MonadifyM MonTerm
+monadifyTerm' prims (Just mtp) t@(asLambda -> Just _) =
+  (monStCtx <$> ask) >>= \ctx ->
+  get >>= \table ->
+  return $ monadifyLambdas prims table ctx mtp t
+{-
 monadifyTerm' _ (Just mtp@(MTyForall _ _ _)) t =
   ask >>= \ro_st ->
   get >>= \table ->
@@ -726,6 +737,7 @@ monadifyTerm' _ (Just mtp@(MTyArrow _ _)) t =
   ask >>= \ro_st ->
   get >>= \table ->
   return $ monadifyLambdas (monStPrims ro_st) table (monStCtx ro_st) mtp t
+-}
 monadifyTerm' _ (Just mtp@(MTyPair mtp1 mtp2)) (asPairValue ->
                                               Just (trm1, trm2)) =
   fromArgTerm mtp <$> (pairOpenTerm <$>
