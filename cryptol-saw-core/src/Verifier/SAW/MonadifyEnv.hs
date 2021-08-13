@@ -18,11 +18,15 @@ import qualified Data.IntMap as IntMap
 import qualified Data.ByteString as BS
 
 import qualified Cryptol.TypeCheck.AST as T
+import qualified Cryptol.Utils.PP as C
+import qualified Cryptol.ModuleSystem.Name as C
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Cryptol as C
 import Verifier.SAW.Cryptol.Monadify
 import Verifier.SAW.CryptolEnv
+
+import Debug.Trace
 
 
 -- | A monadification environment is a map for primitives and a memo table
@@ -36,8 +40,8 @@ emptyMonadifyEnv :: MonadifyEnv
 emptyMonadifyEnv = MonadifyEnv { monEnvPrims = defaultMonPrims,
                                  monEnvTable = emptyMonadifyMemoTable }
 
--- | A Cryptol name, its translation to SAW core, and its type schema
-type CryptolNameInfo = (T.Name, Term, T.Schema)
+-- | A Cryptol name, its translation to SAW core, and its type
+type CryptolNameInfo = (T.Name, Term, Either Term T.Schema)
 
 -- | The 'stAppIndex' of a 'Term', if it has one
 stAppIndexMaybe :: Term -> Maybe TermIndex
@@ -52,27 +56,40 @@ cnameInfoKey (_, t, _) = maybe maxBound id $ stAppIndexMaybe t
 -- topologically, i.e., so that later names in the list can contain earlier ones
 -- but not vice-versa. This topological sorting is done using the 'stAppIndex'
 -- of the SAW core translations of the terms.
-cryptolEnvNameInfos :: CryptolEnv -> [CryptolNameInfo]
-cryptolEnvNameInfos cenv =
-  sortOn cnameInfoKey $
-  flip map (Map.assocs $ eExtraTypes cenv) $ \(cname,schema) ->
-  case Map.lookup cname (eTermEnv cenv) of
-    Just t -> (cname,t,schema)
-    Nothing ->
-      error ("cryptolEnvNameInfos: Cryptol name has type but no translation: "
-             ++ show cname)
+cryptolEnvNameInfos :: SharedContext -> CryptolEnv -> IO [CryptolNameInfo]
+cryptolEnvNameInfos sc cenv =
+  fmap (sortOn cnameInfoKey) $
+  forM (Map.assocs $ eTermEnv cenv) $ \(cname,t) ->
+  case Map.lookup cname (eExtraTypes cenv) of
+    Just schema -> return (cname,t,Right schema)
+    Nothing -> scTypeOf sc t >>= \tp -> return (cname,t,Left tp)
 
 monadifyCNameInfo :: SharedContext -> C.Env -> MonadifyEnv ->
                      CryptolNameInfo -> IO MonadifyEnv
-monadifyCNameInfo sc cryEnv menv (cname,trm,schema)
+monadifyCNameInfo _ _ menv (cname,_,_)
+  | C.Declared _ C.SystemName <- C.nameInfo cname =
+    trace ("Skipping cryptol system name " ++ C.pretty cname) $
+    return menv
+monadifyCNameInfo _ _ menv (cname,_,_)
+  | C.Parameter <- C.nameInfo cname =
+    trace ("Skipping cryptol parameter name " ++ C.pretty cname) $
+    return menv
+monadifyCNameInfo _ _ _ (cname,_,_)
+  | trace ("Monadifying cryptol name " ++
+           C.pretty cname) False = undefined
+monadifyCNameInfo sc cryEnv menv (cname,trm,tp_info)
   | Just ix <- stAppIndexMaybe trm =
-    do tp <- importSchema sc cryEnv schema
+    trace ("Monadifying cryptol name " ++ C.pretty cname) $
+    do tp <- case tp_info of
+         Left tp -> return tp
+         Right schema -> importSchema sc cryEnv schema
        nmi <- importName cname
        mtrm <-
          monadifyNamedTerm sc (monEnvPrims menv) (monEnvTable menv) nmi trm tp
        return $ menv { monEnvTable = IntMap.insert ix mtrm (monEnvTable menv) }
-monadifyCNameInfo _ _ menv _ =
+monadifyCNameInfo _ _ menv (cname,_,_) =
   -- We can't add a term with no memoization info to the memoization table
+  trace ("Skipping unshared cryptol name " ++ C.pretty cname) $
   return menv
 
 -- | Apply monadification to all named terms in a 'CryptolEnv', adding the
@@ -81,4 +98,5 @@ monadifyCryptolEnv :: SharedContext -> MonadifyEnv -> CryptolEnv ->
                       IO MonadifyEnv
 monadifyCryptolEnv sc menv cenv =
   do cryEnv <- let ?fileReader = BS.readFile in mkCryEnv cenv
-     foldM (monadifyCNameInfo sc cryEnv) menv (cryptolEnvNameInfos cenv)
+     cinfos <- cryptolEnvNameInfos sc cenv
+     foldM (monadifyCNameInfo sc cryEnv) menv cinfos
