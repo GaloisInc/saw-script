@@ -203,6 +203,10 @@ data MonType
 mkMonType0 :: OpenTerm -> MonType
 mkMonType0 = MTyBase (MKType $ mkSort 0)
 
+-- | Make a 'MonType' for the Boolean type
+boolMonType :: MonType
+boolMonType = mkMonType0 $ globalOpenTerm "Prelude.Bool"
+
 -- | Test that a monadification type is monomorphic, i.e., has no foralls
 monTypeIsMono :: MonType -> Bool
 monTypeIsMono (MTyForall _ _ _) = False
@@ -553,13 +557,14 @@ mkCtorArgMonTerm pn =
 ----------------------------------------------------------------------
 
 -- | A monadification macro is a function that inspects its first @N@ arguments
--- before being able to be converted to an 'ArgMonTerm'
-data MonMacro = MonMacro { macroNumArgs :: Int,
-                           macroApply :: GlobalDef -> [Term] -> MonTerm }
+-- before deciding how to monadify itself
+data MonMacro = MonMacro {
+  macroNumArgs :: Int,
+  macroApply :: GlobalDef -> [Term] -> MonadifyM MonTerm }
 
 -- | Make a simple 'MonMacro' that inspects 0 arguments and just returns a term
 monMacro0 :: MonTerm -> MonMacro
-monMacro0 mtrm = MonMacro 0 (\_ _ -> mtrm)
+monMacro0 mtrm = MonMacro 0 (\_ _ -> return mtrm)
 
 -- | Make a 'MonMacro' that maps a named global to a global of semi-pure type.
 -- (See 'fromSemiPureTermFun'.) Because we can't get access to the type of the
@@ -569,8 +574,8 @@ semiPureGlobalMacro :: Ident -> Ident -> MonMacro
 semiPureGlobalMacro from to =
   MonMacro 0 $ \glob args ->
   if globalDefName glob == ModuleIdentifier from && args == [] then
-    ArgMonTerm $ fromSemiPureTerm (monadifyType [] $
-                                   globalDefType glob) (globalOpenTerm to)
+    return $ ArgMonTerm $
+    fromSemiPureTerm (monadifyType [] $ globalDefType glob) (globalOpenTerm to)
   else
     error ("Monadification macro for " ++ show from ++ " applied incorrectly")
 
@@ -581,7 +586,8 @@ argGlobalMacro :: Ident -> Ident -> MonMacro
 argGlobalMacro from to =
   MonMacro 0 $ \glob args ->
   if globalDefName glob == ModuleIdentifier from && args == [] then
-    ArgMonTerm $ mkGlobalArgMonTerm (monadifyType [] $ globalDefType glob) to
+    return $ ArgMonTerm $
+    mkGlobalArgMonTerm (monadifyType [] $ globalDefType glob) to
   else
     error ("Monadification macro for " ++ show from ++ " applied incorrectly")
 
@@ -705,6 +711,12 @@ argifyMonTerm (CompMonTerm mtp trm) =
 -- * Monadification
 ----------------------------------------------------------------------
 
+-- | Monadify a type in the context of the 'MonadifyM' monad
+monadifyTypeM :: Term -> MonadifyM MonType
+monadifyTypeM tp =
+  do ctx <- monStCtx <$> ask
+     return $ monadifyType (ctxToTypeCtx ctx) tp
+
 -- | Monadify a term to a monadified term of argument type
 monadifyArg :: Maybe MonType -> Term -> MonadifyM ArgMonTerm
 monadifyArg mtp t = monadifyTerm mtp t >>= argifyMonTerm
@@ -792,10 +804,10 @@ monadifyTerm' _ (asCtor -> Just (pn, args)) =
   monadifyApply (ArgMonTerm $ mkCtorArgMonTerm pn) args
 monadifyTerm' _ (asApplyAll -> (asTypedGlobalDef -> Just glob, args)) =
   (Map.lookup (globalDefName glob) <$> monStEnv <$> ask) >>= \case
-  Just macro
-    | (macro_args, reg_args) <- splitAt (macroNumArgs macro) args
-    , mtrm_f <- macroApply macro glob macro_args ->
-      monadifyApply mtrm_f reg_args
+  Just macro ->
+    do let (macro_args, reg_args) = splitAt (macroNumArgs macro) args
+       mtrm_f <- macroApply macro glob macro_args
+       monadifyApply mtrm_f reg_args
   Nothing -> error ("Monadification failed: unhandled constant: "
                     ++ globalDefString glob)
 monadifyTerm' _ (asApp -> Just (f, arg)) =
@@ -815,8 +827,7 @@ monadifyApply f (t : ts)
        monadifyApply (applyMonTerm f (Right mtrm)) ts
 monadifyApply f (t : ts)
   | MTyForall _ _ _ <- getMonType f =
-    do ctx <- monStCtx <$> ask
-       let mtp = monadifyType (ctxToTypeCtx ctx) t
+    do mtp <- monadifyTypeM t
        monadifyApply (applyMonTerm f (Left mtp)) ts
 monadifyApply _ (_:_) = fail "monadifyApply: application at incorrect type"
 monadifyApply f [] = return f
@@ -857,7 +868,8 @@ monadifyEtaExpand env ctx top_mtp mtp t args =
 -- * Handling the Primitives
 ----------------------------------------------------------------------
 
--- | The macro for unsafeAssert
+-- | The macro for unsafeAssert, which checks the type of the objects being
+-- compared and dispatches to the proper comparison function
 unsafeAssertMacro :: MonMacro
 unsafeAssertMacro = MonMacro 1 $ \_ ts ->
   let numFunType =
@@ -870,10 +882,33 @@ unsafeAssertMacro = MonMacro 1 $ \_ ts ->
   case ts of
     [(asDataType -> Just (num, []))]
       | primName num == "Cryptol.Num" ->
-        ArgMonTerm $ mkGlobalArgMonTerm numFunType "Cryptol.numAssertEqM"
+        return $ ArgMonTerm $
+        mkGlobalArgMonTerm numFunType "Cryptol.numAssertEqM"
     _ ->
-      failMonTerm numFunType
-      "Monadification failed: unsafeAssert applied to non-Num type"
+      fail "Monadification failed: unsafeAssert applied to non-Num type"
+
+-- | The macro for if-then-else, which contains any binds in a branch to that
+-- branch
+iteMacro :: MonMacro
+iteMacro = MonMacro 4 $ \_ args ->
+  do let (tp, cond, branch1, branch2) =
+           case args of
+             [t1, t2, t3, t4] -> (t1, t2, t3, t4)
+             _ -> error "iteMacro: wrong number of arguments!"
+     atrm_cond <- monadifyArg (Just boolMonType) cond
+     mtp <- monadifyTypeM tp
+     mtrm1 <- resetMonadifyM (toArgType mtp) $monadifyTerm (Just mtp) branch1
+     mtrm2 <- resetMonadifyM (toArgType mtp) $monadifyTerm (Just mtp) branch2
+     case (mtrm1, mtrm2) of
+       (ArgMonTerm atrm1, ArgMonTerm atrm2) ->
+         return $ fromArgTerm mtp $
+         applyOpenTermMulti (globalOpenTerm "Prelude.ite")
+         [toArgType mtp, toArgTerm atrm_cond, toArgTerm atrm1, toArgTerm atrm2]
+       _ ->
+         return $ fromCompTerm mtp $
+         applyOpenTermMulti (globalOpenTerm "Prelude.ite")
+         [toCompType mtp, toArgTerm atrm_cond,
+          toCompTerm mtrm1, toCompTerm mtrm2]
 
 -- | Identifiers that are mapped to semi-pure functions
 semiPureMonPrims :: [(Ident,Ident)]
@@ -903,9 +938,6 @@ semiPureMonPrims = [
 -- | Identifiers that are themselves semi-pure functions
 semiPureSelfMonPrims :: [Ident]
 semiPureSelfMonPrims = [
-  -- Operations from the Prelude
-  "Prelude.ite",
-
   -- PLogic constraints that do not change
   "Cryptol.PLogicUnit", "Cryptol.PLogicBit", "Cryptol.PLogicPair",
 
@@ -945,7 +977,8 @@ defaultMonEnv =
   Map.fromList
   (map (\(ident,macro) -> (ModuleIdentifier ident, macro))
    [
-     ("Prelude.unsafeAssert", unsafeAssertMacro)
+     ("Prelude.unsafeAssert", unsafeAssertMacro),
+     ("Prelude.ite", iteMacro)
    ]
    ++
    map (\ident -> (ModuleIdentifier ident,
