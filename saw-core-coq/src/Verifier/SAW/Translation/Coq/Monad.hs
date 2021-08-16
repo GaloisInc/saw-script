@@ -17,6 +17,7 @@ module Verifier.SAW.Translation.Coq.Monad
   , TranslationConfigurationMonad
   , TranslationMonad
   , TranslationError(..)
+  , WithTranslationConfiguration(..)
   , runTranslationMonad
   ) where
 
@@ -77,19 +78,32 @@ data TranslationConfiguration = TranslationConfiguration
   -- - SAWCoreVectorsAsSSReflectSeqs
   }
 
-type TranslationConfigurationMonad m =
-  ( MonadReader TranslationConfiguration m
+-- | The functional dependency of 'MonadReader' makes it not compositional, so
+-- we have to jam together different structures that want to be in the 'Reader'
+-- into a single datatype.  This type allows adding extra configuration on top
+-- of the translation configuration.
+data WithTranslationConfiguration r = WithTranslationConfiguration
+  { translationConfiguration :: TranslationConfiguration
+  , otherConfiguration :: r
+  }
+
+-- | Some computations will rely solely on access to the configuration, so we
+-- provide it separately.
+type TranslationConfigurationMonad r m =
+  ( MonadReader (WithTranslationConfiguration r) m
   )
 
-type TranslationMonad s m =
+type TranslationMonad r s m =
   ( Except.MonadError (TranslationError Term)  m
-  , TranslationConfigurationMonad m
+  , TranslationConfigurationMonad r m
   , MonadState s m
   )
 
 runTranslationMonad ::
   TranslationConfiguration ->
+  r ->
   s ->
-  (forall m. TranslationMonad s m => m a) ->
+  (forall m. TranslationMonad r s m => m a) ->
   Either (TranslationError Term) (a, s)
-runTranslationMonad configuration state m = runStateT (runReaderT m configuration) state
+runTranslationMonad configuration r s m =
+  runStateT (runReaderT m (WithTranslationConfiguration configuration r)) s
