@@ -1574,9 +1574,13 @@ instance TransInfo info =>
     [nuMP| ValPerm_Exists p1 |] ->
       do let tp = mbBindingType p1
          tp_trans <- translateClosed tp
-         mkPermTypeTrans1 p <$>
-           sigmaTypeTransM "x_ex" tp_trans (\x -> inExtTransM x $
-                                                  translate $ mbCombine RL.typeCtxProxies p1)
+         let p1_cbn = mbCombine RL.typeCtxProxies p1
+         case mbMatch p1_cbn of
+           [nuMP| ValPerm_Eq _ |] -> 
+             return $ mkPermTypeTrans1 p (typeTransTupleType tp_trans)
+           _ -> mkPermTypeTrans1 p <$>
+                  sigmaTypeTransM "x_ex" tp_trans (\x -> inExtTransM x $
+                                                         translate p1_cbn)
     [nuMP| ValPerm_Named npn args off |] ->
       do env <- infoEnv <$> ask
          args_trans <- translate args
@@ -2134,11 +2138,14 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     do let tp = mbExprType e
        tp_trans <- translateClosed tp
        etrans <- translate e
-       sigma_trm <-
-         sigmaTransM "x_ex" tp_trans (flip inExtTransM $ translate $ mbCombine RL.typeCtxProxies p)
-         etrans getTopPermM
+       let p_cbn = mbCombine RL.typeCtxProxies p
+       trm <- case mbMatch p_cbn of
+                [nuMP| ValPerm_Eq _ |] ->
+                  return $ typeTransTupleType tp_trans
+                _ -> sigmaTransM "x_ex" tp_trans (flip inExtTransM $ translate p_cbn)
+                                 etrans getTopPermM
        withPermStackM id
-         ((:>: PTrans_Term (fmap ValPerm_Exists p) sigma_trm) . RL.tail)
+         ((:>: PTrans_Term (fmap ValPerm_Exists p) trm) . RL.tail)
          m
 
   [nuMP| SImpl_Cast _ _ _ |] ->
@@ -3191,13 +3198,20 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
        let tp = mbBindingType p
        top_ptrans <- getTopPermM
        tp_trans <- translateClosed tp
-       sigmaElimTransM "x_elimEx" tp_trans
-         (flip inExtTransM $ translate $ mbCombine RL.typeCtxProxies p)
-         compReturnTypeTransM
-         (\etrans ptrans ->
-           inExtTransM etrans $
-           withPermStackM id ((:>: ptrans) . RL.tail) m)
-         (transTerm1 top_ptrans)
+       let p_cbn = mbCombine RL.typeCtxProxies p
+       case mbMatch p_cbn of
+         [nuMP| ValPerm_Eq e |] ->
+           let etrans = typeTransF (tupleTypeTrans tp_trans)
+                                   [typeTransTupleType tp_trans]
+            in inExtTransM etrans $ 
+                 withPermStackM id ((:>: PTrans_Eq e) . RL.tail) m
+         _ -> sigmaElimTransM "x_elimEx" tp_trans
+                (flip inExtTransM $ translate p_cbn)
+                compReturnTypeTransM
+                (\etrans ptrans ->
+                  inExtTransM etrans $
+                  withPermStackM id ((:>: ptrans) . RL.tail) m)
+                (transTerm1 top_ptrans)
 
   -- A SimplImpl is translated using translateSimplImpl
   ([nuMP| Impl1_Simpl simpl mb_prx |], _) ->
