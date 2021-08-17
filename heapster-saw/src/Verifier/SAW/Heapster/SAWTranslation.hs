@@ -2141,7 +2141,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        let p_cbn = mbCombine RL.typeCtxProxies p
        trm <- case mbMatch p_cbn of
                 [nuMP| ValPerm_Eq _ |] ->
-                  return $ typeTransTupleType tp_trans
+                  return $ transTupleTerm etrans
                 _ -> sigmaTransM "x_ex" tp_trans (flip inExtTransM $ translate p_cbn)
                                  etrans getTopPermM
        withPermStackM id
@@ -3202,7 +3202,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
        case mbMatch p_cbn of
          [nuMP| ValPerm_Eq e |] ->
            let etrans = typeTransF (tupleTypeTrans tp_trans)
-                                   [typeTransTupleType tp_trans]
+                                   [transTerm1 top_ptrans]
             in inExtTransM etrans $ 
                  withPermStackM id ((:>: PTrans_Eq e) . RL.tail) m
          _ -> sigmaElimTransM "x_elimEx" tp_trans
