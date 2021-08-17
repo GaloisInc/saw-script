@@ -125,9 +125,9 @@ Fixpoint tuple_foldl_dep (a : Type) (b : Nat -> Type) (n : Nat)
 
 Definition EmptyVec := Vector.nil.
 
-Definition coerceVec (a : sort 0) (m n : Nat) (eq : Eq Nat m n) (v : Vec m a) : Vec n a :=
+Definition coerceVec (a : sort 0) (m n : Nat) (H : Eq Nat m n) (v : Vec m a) : Vec n a :=
   match
-    eq_sym eq in eq _ n'
+    eq_sym H in eq _ n'
     return Vec n' a -> Vec n a
   with
   | eq_refl => fun x => x
