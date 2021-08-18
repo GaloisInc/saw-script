@@ -170,10 +170,10 @@ translateIdentWithArgs i args = do
   currentModuleName <- asks (view currentModule . otherConfiguration)
   let identToCoq ident =
         if Just (identModule ident) == currentModuleName
-          then identName ident
+          then escapeIdent (identName ident)
           else
             show (translateModuleName (identModule ident))
-            ++ "." ++ identName ident
+            ++ "." ++ escapeIdent (identName ident)
   specialTreatment <- findSpecialTreatment i
   applySpecialTreatment identToCoq (atUseSite specialTreatment)
 
@@ -404,8 +404,7 @@ translatePi binders body = withLocalTranslationState $ do
 
 -- | Translate a local name from a saw-core binder into a fresh Coq identifier.
 translateLocalIdent :: TermTranslationMonad m => LocalName -> m Coq.Ident
-translateLocalIdent x = freshVariant ident0
-  where ident0 = Text.unpack x -- TODO: use some string encoding to ensure lexically valid Coq identifiers
+translateLocalIdent x = freshVariant (escapeIdent (Text.unpack x))
 
 -- | Find an fresh, as-yet-unused variant of the given Coq identifier.
 freshVariant :: TermTranslationMonad m => Coq.Ident -> m Coq.Ident

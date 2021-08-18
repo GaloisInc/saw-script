@@ -475,7 +475,7 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
                      , "From CryptolToCoq Require Import SAWCorePrelude."
                      , "Import SAWCorePrelude."
                      , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCore."
-                     , "Import CryptolPrimitives."
+                     , "Import CryptolPrimitivesForSAWCore."
                      , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra."
                      , ""
                      , cmDoc
