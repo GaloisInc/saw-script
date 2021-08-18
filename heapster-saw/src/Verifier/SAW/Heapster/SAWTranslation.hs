@@ -460,6 +460,14 @@ sigmaTypeTransM x ttrans tp_f =
      return (dataTypeOpenTerm "Prelude.Sigma"
              [typeTransTupleType ttrans, tp_f_trm])
 
+-- | Like `sigmaTypeTransM`, but translates `exists x.eq(y)` into just `x`
+sigmaTypePermTransM :: TransInfo info => String -> TypeTrans (ExprTrans trL) ->
+                       Mb (ctx :> trL) (ValuePerm trR) ->
+                       TransM info ctx OpenTerm
+sigmaTypePermTransM x ttrans p_cbn = case mbMatch p_cbn of
+  [nuMP| ValPerm_Eq _ |] -> return $ typeTransTupleType ttrans
+  _ -> sigmaTypeTransM x ttrans (flip inExtTransM $ translate p_cbn)
+
 -- | Build a dependent pair of the type returned by 'sigmaTypeTransM'. Note that
 -- the 'TypeTrans' returned by the type-level function will in general be in a
 -- larger context than that of the right-hand projection argument, so we allow
@@ -475,6 +483,16 @@ sigmaTransM x tp_l tp_r lhs rhs_m =
      return (ctorOpenTerm "Prelude.exists"
              [typeTransTupleType tp_l, tp_r_trm, transTupleTerm lhs, rhs])
 
+-- | Like `sigmaTransM`, but translates `exists x.eq(y)` into just `x`
+sigmaPermTransM :: (TransInfo info, IsTermTrans trR2) =>
+                   String -> TypeTrans (ExprTrans trL) ->
+                   Mb (ctx :> trL) (ValuePerm trR1) ->
+                   ExprTrans trL -> TransM info ctx trR2 ->
+                   TransM info ctx OpenTerm
+sigmaPermTransM x ttrans p_cbn etrans rhs_m = case mbMatch p_cbn of
+  [nuMP| ValPerm_Eq _ |] -> return $ transTupleTerm etrans
+  _ -> sigmaTransM x ttrans (flip inExtTransM $ translate p_cbn)
+                   etrans rhs_m
 
 -- | Eliminate a dependent pair of the type returned by 'sigmaTypeTransM'
 sigmaElimTransM :: (IsTermTrans trL, IsTermTrans trR) =>
@@ -518,6 +536,20 @@ sigmaElimTransM x tp_l tp_r tp_ret_m f sigma =
              [ typeTransTupleType tp_l, tp_r_trm, tp_ret, f_trm, sigma ])
 -}
 
+-- | Like `sigmaElimTransM`, but translates `exists x.eq(y)` into just `x`
+sigmaElimPermTransM :: (TransInfo info) =>
+                       String -> TypeTrans (ExprTrans trL) ->
+                       Mb (ctx :> trL) (ValuePerm trR) ->
+                       TransM info ctx (TypeTrans trRet) ->
+                       (ExprTrans trL -> PermTrans (ctx :> trL) trR ->
+                                         TransM info ctx OpenTerm) ->
+                       OpenTerm ->
+                       TransM info ctx OpenTerm
+sigmaElimPermTransM x tp_l p_cbn tp_ret_m f sigma = case mbMatch p_cbn of
+  [nuMP| ValPerm_Eq e |] -> f (typeTransF (tupleTypeTrans tp_l) [sigma])
+                              (PTrans_Eq e)
+  _ -> sigmaElimTransM x tp_l (flip inExtTransM $ translate p_cbn)
+                       tp_ret_m f sigma
 
 -- | The class for translating to SAW
 class Translate info ctx a tr | ctx a -> tr where
@@ -1574,13 +1606,8 @@ instance TransInfo info =>
     [nuMP| ValPerm_Exists p1 |] ->
       do let tp = mbBindingType p1
          tp_trans <- translateClosed tp
-         let p1_cbn = mbCombine RL.typeCtxProxies p1
-         case mbMatch p1_cbn of
-           [nuMP| ValPerm_Eq _ |] -> 
-             return $ mkPermTypeTrans1 p (typeTransTupleType tp_trans)
-           _ -> mkPermTypeTrans1 p <$>
-                  sigmaTypeTransM "x_ex" tp_trans (\x -> inExtTransM x $
-                                                         translate p1_cbn)
+         mkPermTypeTrans1 p <$>
+           sigmaTypePermTransM "x_ex" tp_trans (mbCombine RL.typeCtxProxies p1)
     [nuMP| ValPerm_Named npn args off |] ->
       do env <- infoEnv <$> ask
          args_trans <- translate args
@@ -2138,12 +2165,8 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     do let tp = mbExprType e
        tp_trans <- translateClosed tp
        etrans <- translate e
-       let p_cbn = mbCombine RL.typeCtxProxies p
-       trm <- case mbMatch p_cbn of
-                [nuMP| ValPerm_Eq _ |] ->
-                  return $ transTupleTerm etrans
-                _ -> sigmaTransM "x_ex" tp_trans (flip inExtTransM $ translate p_cbn)
-                                 etrans getTopPermM
+       trm <- sigmaPermTransM "x_ex" tp_trans (mbCombine RL.typeCtxProxies p)
+                              etrans getTopPermM
        withPermStackM id
          ((:>: PTrans_Term (fmap ValPerm_Exists p) trm) . RL.tail)
          m
@@ -3198,20 +3221,13 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
        let tp = mbBindingType p
        top_ptrans <- getTopPermM
        tp_trans <- translateClosed tp
-       let p_cbn = mbCombine RL.typeCtxProxies p
-       case mbMatch p_cbn of
-         [nuMP| ValPerm_Eq e |] ->
-           let etrans = typeTransF (tupleTypeTrans tp_trans)
-                                   [transTerm1 top_ptrans]
-            in inExtTransM etrans $ 
-                 withPermStackM id ((:>: PTrans_Eq e) . RL.tail) m
-         _ -> sigmaElimTransM "x_elimEx" tp_trans
-                (flip inExtTransM $ translate p_cbn)
-                compReturnTypeTransM
-                (\etrans ptrans ->
-                  inExtTransM etrans $
-                  withPermStackM id ((:>: ptrans) . RL.tail) m)
-                (transTerm1 top_ptrans)
+       sigmaElimPermTransM "x_elimEx" tp_trans
+         (mbCombine RL.typeCtxProxies p)
+         compReturnTypeTransM
+         (\etrans ptrans ->
+           inExtTransM etrans $
+           withPermStackM id ((:>: ptrans) . RL.tail) m)
+         (transTerm1 top_ptrans)
 
   -- A SimplImpl is translated using translateSimplImpl
   ([nuMP| Impl1_Simpl simpl mb_prx |], _) ->
