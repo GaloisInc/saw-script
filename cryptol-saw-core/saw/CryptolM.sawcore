@@ -1,0 +1,697 @@
+-------------------------------------------------------------------------------
+-- Cryptol primitives for SAWCore
+
+module CryptolMM where
+
+-- import Prelude;
+import Cryptol;
+
+
+--------------------------------------------------------------------------------
+-- Monadic assertions
+
+primitive proveEqNum : (n m:Num) -> Maybe (Eq Num n m);
+
+-- A version of unsafeAssert specialized to the Num type
+numAssertEqM : (n m:Num) -> CompM (Eq Num n m);
+numAssertEqM n m =
+  maybe (Eq Num n m) (CompM (Eq Num n m))
+        (errorM (Eq Num n m) "numAssertEqM: assertion failed")
+        (returnM (Eq Num n m))
+        (proveEqNum n m);
+
+
+--------------------------------------------------------------------------------
+-- Monadic Sequences
+
+-- The type of computational vectors, which are just vectors of computations, as
+-- specified in the denotational semantics of Cryptol
+mvec : Nat -> sort 0 -> sort 0;
+mvec n a = Vec n (CompM a);
+
+-- Compute a Vec value from an mvec
+mvecToVecM : (n:Nat) -> (a:sort 0) -> mvec n a -> CompM (Vec n a);
+mvecToVecM n a =
+  Nat__rec
+    (\ (m:Nat) -> mvec m a -> CompM (Vec m a))
+    (\ (_:mvec 0 a) -> returnM (Vec 0 a) (EmptyVec a))
+    (\ (m:Nat) (rec_f:mvec m a -> CompM (Vec m a)) (v:mvec (Succ m) a) ->
+       fmapM2 a (Vec m a) (Vec (Succ m) a)
+              (\ (x:a) (v':Vec m a) -> ConsVec a x m v')
+              (head m (CompM a) v)
+              (rec_f (tail m (CompM a) v)))
+    n;
+
+-- Convert a Vec to an mvec
+vecToMvec : (n:Nat) -> (a:sort 0) -> Vec n a -> mvec n a;
+vecToMvec n a = map a (CompM a) (returnM a) n;
+
+-- Convert a unary Vec function to a unary, monadic mvec fun
+vecToMvecMFun : (n:Nat) -> (a:sort 0) -> (Vec n a -> Vec n a) -> mvec n a ->
+                CompM (mvec n a);
+vecToMvecMFun n a f mv =
+  fmapM (Vec n a) (mvec n a) (\ (v:Vec n a) -> vecToMvec n a (f v))
+        (mvecToVecM n a mv);
+
+-- Convert a binary Vec function to a binary, monadic mvec fun
+vecToMvecMFun2 : (n:Nat) -> (a:sort 0) -> (Vec n a -> Vec n a -> Vec n a) ->
+                 mvec n a -> mvec n a -> CompM (mvec n a);
+vecToMvecMFun2 n a f mv1 mv2 =
+  fmapM2 (Vec n a) (Vec n a) (mvec n a)
+         (\ (v1 v2: Vec n a) -> vecToMvec n a (f v1 v2))
+         (mvecToVecM n a mv1) (mvecToVecM n a mv2);
+
+-- The type of computational sequences, which are just sequences of
+-- computations, as specified in the denotational semantics of Cryptol.
+mseq : Num -> sort 0 -> sort 0;
+mseq num a = seq num (CompM a);
+
+-- Monadic version of seqMap
+seqMapM : (a b : sort 0) -> (n : Num) -> (a -> CompM b) -> mseq n a ->
+          mseq n b;
+seqMapM a b n f s =
+  seqMap (CompM a) (CompM b) n (\ (m:CompM a) -> bindM a b m f) s;
+
+mseq_cong1 : (m : Num) -> (n : Num) -> (a : sort 0) ->
+  Eq Num m n -> Eq (sort 0) (mseq m a) (mseq n a);
+mseq_cong1 m n a eq_mn =
+  eq_cong Num m n eq_mn (sort 0) (\ (x:Num) -> mseq x a);
+
+-- Convert a seq to an mseq
+seqToMseq : (n:Num) -> (a:sort 0) -> seq n a -> mseq n a;
+seqToMseq n a = seqMap a (CompM a) n (returnM a);
+
+
+--------------------------------------------------------------------------------
+-- Auxiliary functions
+
+eListSelM : (a : sort 0) -> (n : Num) -> mseq n a -> Nat -> CompM a;
+eListSelM a n = eListSel (CompM a) n;
+
+
+--------------------------------------------------------------------------------
+-- List comprehensions
+
+-- FIXME
+primitive
+fromM : (a b : sort 0) -> (m n : Num) -> mseq m a -> (a -> CompM (mseq n b)) ->
+        CompM (seq (tcMul m n) (a * b));
+
+-- FIXME
+primitive
+mletM : (a b : sort 0) -> (n : Num) -> a -> (a -> CompM (mseq n b)) ->
+        CompM (mseq n (a * b));
+
+seqZipM : (a b : sort 0) -> (m n : Num) -> mseq m a -> mseq n b ->
+          mseq (tcMin m n) (a * b);
+seqZipM a b m n ms1 ms2 =
+  seqMap
+    (CompM a * CompM b) (CompM (a * b)) (tcMin m n)
+    (\ (p : CompM a * CompM b) ->
+       bindM2 a b (a*b) p.(1) p.(2) (\ (x:a) (y:b) -> returnM (a*b) (x,y)))
+    (seqZip (CompM a) (CompM b) m n ms1 ms2);
+
+
+--------------------------------------------------------------------------------
+-- Monadic versions of the Cryptol typeclasses
+
+
+-- Monadic version of the PEq typeclass
+
+PEqM : sort 0 -> sort 1;
+PEqM a = #{ eqM : a -> a -> CompM Bool };
+
+liftPEqM : (a:sort 0) -> PEq a -> PEqM a;
+liftPEqM a pa = { eqM = \ (x:a) (y:a) -> returnM Bool (pa.eq x y) };
+
+PEqBitM : PEqM Bool;
+PEqBitM = liftPEqM Bool PEqBit;
+
+PEqIntegerM : PEqM Integer;
+PEqIntegerM = liftPEqM Integer PEqInteger;
+
+PEqRationalM : PEqM Rational;
+PEqRationalM = liftPEqM Rational PEqRational;
+
+PEqIntModM : (n : Nat) -> PEqM (IntMod n);
+PEqIntModM n = liftPEqM (IntMod n) (PEqIntMod n);
+
+PEqIntModNumM : (num : Num) -> PEqM (IntModNum num);
+PEqIntModNumM num = liftPEqM (IntModNum num) (PEqIntModNum num);
+
+PEqMVec : (n : Nat) -> (a : sort 0) -> PEqM a -> PEqM (mvec n a);
+PEqMVec n_top a pa =
+  { eqM =
+    Nat__rec
+      (\ (n:Nat) -> mvec n a -> mvec n a -> CompM Bool)
+      (\ (_ _ : mvec 0 a) -> returnM Bool True)
+      (\ (n:Nat) (rec_f:mvec n a -> mvec n a -> CompM Bool)
+         (v1 v2:mvec (Succ n) a) ->
+         fmapM2
+           Bool Bool Bool and
+           (bindM2 a a Bool (head n (CompM a) v1) (head n (CompM a) v2) pa.eqM)
+           (rec_f (tail n (CompM a) v1) (tail n (CompM a) v2)))
+      n_top };
+
+PEqMStream : (a : sort 0) -> PEqM (Stream a);
+PEqMStream a = { eqM = \ (_:Stream a) (_:Stream a) ->
+                         errorM Bool "invalid Eq instance" };
+
+PEqMSeq : (n : Num) -> (a : sort 0) -> PEqM a -> PEqM (mseq n a);
+PEqMSeq n a pa =
+  Num#rec (\ (n:Num) -> PEqM (mseq n a))
+          (\ (n:Nat) -> PEqMVec n a pa)
+          (PEqMStream (CompM a))
+          n;
+
+PEqMWord : (n : Nat) -> PEqM (mvec n Bool);
+PEqMWord n =
+  { eqM = \ (v1 v2:mvec n Bool) ->
+            fmapM2 (Vec n Bool) (Vec n Bool) Bool (bvEq n)
+                   (mvecToVecM n Bool v1) (mvecToVecM n Bool v2) };
+
+PEqMSeqBool : (n : Num) -> PEqM (mseq n Bool);
+PEqMSeqBool n =
+  Num#rec (\ (n : Num) -> PEqM (mseq n Bool))
+          (\ (n:Nat) -> PEqMWord n)
+          (PEqMStream (CompM Bool))
+          n;
+
+PEqMUnit : PEqM #();
+PEqMUnit = liftPEqM #() PEqUnit;
+
+PEqMPair : (a b : sort 0) -> PEqM a -> PEqM b -> PEqM (a * b);
+PEqMPair a b pa pb =
+  { eqM = \ (p1 p2 : a * b) ->
+            fmapM2 Bool Bool Bool and (pa.eqM p1.(1) p2.(1))
+                                      (pb.eqM p1.(2) p2.(2)) };
+
+
+-- Monadic version of the PCmp typeclass
+
+PCmpM : sort 0 -> sort 1;
+PCmpM a =
+  #{ cmpEqM : PEqM a
+   , cmpM : a -> a -> Bool -> CompM Bool
+   };
+
+liftPCmpM : (a:sort 0) -> PCmp a -> PCmpM a;
+liftPCmpM a pa =
+  { cmpEqM = liftPEqM a pa.cmpEq,
+    cmpM = \ (x:a) (y:a) (b:Bool) -> returnM Bool (pa.cmp x y b) };
+
+PCmpMBit : PCmpM Bool;
+PCmpMBit = liftPCmpM Bool PCmpBit;
+
+PCmpMInteger : PCmpM Integer;
+PCmpMInteger = liftPCmpM Integer PCmpInteger;
+
+PCmpMRational : PCmpM Rational;
+PCmpMRational = liftPCmpM Rational PCmpRational;
+
+-- FIXME: write this!
+primitive PCmpMVec : (n : Nat) -> (a : sort 0) -> PCmpM a -> PCmpM (mvec n a);
+
+PCmpMStream : (a : sort 0) -> PCmpM (Stream a);
+PCmpMStream a = { cmpEqM = PEqMStream a,
+                  cmpM = \ (_:Stream a) (_:Stream a) (_:Bool) ->
+                           errorM Bool "invalid Cmp instance" };
+
+PCmpMSeq : (n : Num) -> (a : sort 0) -> PCmpM a -> PCmpM (mseq n a);
+PCmpMSeq n a pa =
+  Num#rec (\ (n:Num) -> PCmpM (mseq n a))
+          (\ (n:Nat) -> PCmpMVec n a pa)
+          (PCmpMStream (CompM a))
+          n;
+
+PCmpMWord : (n : Nat) -> PCmpM (mvec n Bool);
+PCmpMWord n =
+  { cmpEqM = PEqMWord n,
+    cmpM = \ (v1 v2:mvec n Bool) (k:Bool) ->
+             fmapM3 (Vec n Bool) (Vec n Bool) Bool Bool (bvCmp n)
+                    (mvecToVecM n Bool v1) (mvecToVecM n Bool v2)
+                    (returnM Bool k) };
+
+PCmpMSeqBool : (n : Num) -> PCmpM (mseq n Bool);
+PCmpMSeqBool n =
+  Num#rec (\ (n : Num) -> PCmpM (mseq n Bool))
+          (\ (n:Nat) -> PCmpMWord n)
+          (PCmpMStream (CompM Bool))
+          n;
+
+PCmpMUnit : PCmpM #();
+PCmpMUnit = liftPCmpM #() PCmpUnit;
+
+PCmpMPair : (a b : sort 0) -> PCmpM a -> PCmpM b -> PCmpM (a * b);
+PCmpMPair a b pa pb =
+  { cmpEqM = PEqMPair a b pa.cmpEqM pb.cmpEqM,
+    cmpM = \ (p1 p2 : a * b) (b:Bool) ->
+             bindM Bool Bool (pb.cmpM p1.(2) p2.(2) b) (pa.cmpM p1.(1) p2.(1)) };
+
+
+-- Monadic version of the SignedCmp class
+
+-- FIXME
+
+
+-- No monadic version of the Zero
+
+
+-- Lifting the PLogic typeclass to monadic sequences
+
+PLogicCompM : (a : sort 0) -> PLogic a -> PLogic (CompM a);
+PLogicCompM a pa =
+  { logicZero = returnM a (pa.logicZero)
+  , and  = fmapM2 a a a (pa.and)
+  , or   = fmapM2 a a a (pa.or)
+  , xor  = fmapM2 a a a (pa.xor)
+  , not  = fmapM a a (pa.not)
+  };
+
+PLogicSeqM : (n : Num) -> (a : sort 0) -> PLogic a -> PLogic (mseq n a);
+PLogicSeqM n a pa = PLogicSeq n (CompM a) (PLogicCompM a pa);
+
+PLogicSeqBoolM : (n : Num) -> PLogic (mseq n Bool);
+PLogicSeqBoolM n = PLogicSeqM n Bool PLogicBit;
+
+
+-- Monadic version of the PRing typeclass
+
+PRingM : sort 0 -> sort 1;
+PRingM a =
+  #{ ringMZero : PZero a
+   , addM  : a -> a -> CompM a
+   , subM  : a -> a -> CompM a
+   , mulM  : a -> a -> CompM a
+   , negM  : a -> CompM a
+   , intM  : Integer -> a
+   };
+
+liftPRingM : (a : sort 0) -> PRing a -> PRingM a;
+liftPRingM a pa =
+  { ringMZero = pa.ringZero
+  , addM = (\ (x y:a) -> returnM a (pa.add x y))
+  , subM = (\ (x y:a) -> returnM a (pa.sub x y))
+  , mulM = (\ (x y:a) -> returnM a (pa.mul x y))
+  , negM = (\ (x:a) -> returnM a (pa.neg x))
+  , intM = pa.int
+  };
+
+PRingMInteger : PRingM Integer;
+PRingMInteger = liftPRingM Integer PRingInteger;
+
+PRingMIntMod : (n : Nat) -> PRingM (IntMod n);
+PRingMIntMod n = liftPRingM (IntMod n) (PRingIntMod n);
+
+PRingMIntModNum : (num : Num) -> PRingM (IntModNum num);
+PRingMIntModNum num = liftPRingM (IntModNum num) (PRingIntModNum num);
+
+PRingMRational : PRingM Rational;
+PRingMRational = liftPRingM Rational PRingRational;
+
+PRingMVec : (n : Nat) -> (a : sort 0) -> PRingM a -> PRingM (mvec n a);
+PRingMVec n a pa =
+  { ringMZero = replicate n (CompM a) (returnM a pa.ringMZero)
+  , addM = (\ (mv1 mv2:mvec n a) ->
+              returnM (mvec n a)
+                      (zipWith (CompM a) (CompM a) (CompM a)
+                               (bindApplyM2 a a a pa.addM) n mv1 mv2))
+  , subM = (\ (mv1 mv2:mvec n a) ->
+              returnM (mvec n a)
+                      (zipWith (CompM a) (CompM a) (CompM a)
+                               (bindApplyM2 a a a pa.subM) n mv2 mv2))
+  , mulM = (\ (mv1 mv2:mvec n a) ->
+              returnM (mvec n a)
+                      (zipWith (CompM a) (CompM a) (CompM a)
+                               (bindApplyM2 a a a pa.mulM) n mv1 mv2))
+  , negM = (\ (mv:mvec n a) ->
+              returnM (mvec n a)
+                      (map (CompM a) (CompM a) (bindApplyM a a pa.negM) n mv))
+  , intM = \ (i : Integer) -> replicate n (CompM a) (returnM a (pa.intM i))
+  };
+
+PRingMStream : (a : sort 0) -> PRingM a -> PRingM (Stream (CompM a));
+PRingMStream a pa =
+  { ringMZero = streamConst (CompM a) (returnM a pa.ringMZero)
+  , addM = (\ (s1 s2:Stream (CompM a)) ->
+              returnM (Stream (CompM a))
+                      (streamMap2 (CompM a) (CompM a) (CompM a)
+                                  (bindApplyM2 a a a pa.addM) s1 s2))
+  , subM = (\ (s1 s2:Stream (CompM a)) ->
+              returnM (Stream (CompM a))
+                      (streamMap2 (CompM a) (CompM a) (CompM a)
+                                  (bindApplyM2 a a a pa.subM) s1 s2))
+  , mulM = (\ (s1 s2:Stream (CompM a)) ->
+              returnM (Stream (CompM a))
+                      (streamMap2 (CompM a) (CompM a) (CompM a)
+                                  (bindApplyM2 a a a pa.mulM) s1 s2))
+  , negM = (\ (s:Stream (CompM a)) ->
+              returnM (Stream (CompM a))
+                      (streamMap (CompM a) (CompM a)
+                                 (bindApplyM a a pa.negM) s))
+  , intM = \ (i : Integer) -> streamConst (CompM a) (returnM a (pa.intM i))
+  };
+
+PRingMSeq : (n : Num) -> (a : sort 0) -> PRingM a -> PRingM (mseq n a);
+PRingMSeq n =
+  Num#rec (\ (n : Num) -> (a : sort 0) -> PRingM a -> PRingM (mseq n a))
+          (\ (n:Nat) -> PRingMVec n)
+          PRingMStream
+          n;
+
+
+PRingMWord : (n : Nat) -> PRingM (mvec n Bool);
+PRingMWord n =
+  { ringMZero = vecToMvec n Bool (bvNat n 0)
+  , addM = vecToMvecMFun2 n Bool (bvAdd n)
+  , subM = vecToMvecMFun2 n Bool (bvSub n)
+  , mulM = vecToMvecMFun2 n Bool (bvMul n)
+  , negM = vecToMvecMFun n Bool (bvNeg n)
+  , intM = \ (i:Integer) -> vecToMvec n Bool (intToBv n i)
+  };
+
+errorMStream : (a : sort 0) -> String -> Stream (CompM a);
+errorMStream a str = streamConst (CompM a) (errorM a str);
+
+errorMStreamM : (a : sort 0) -> String -> CompM (Stream (CompM a));
+errorMStreamM a str = returnM (Stream (CompM a)) (errorMStream a str);
+
+PRingMStreamBool : PRingM (mseq TCInf Bool);
+PRingMStreamBool =
+  { ringMZero = streamConst (CompM Bool) (returnM Bool PZeroBit),
+    addM = (\ (_ _: mseq TCInf Bool) -> errorMStreamM Bool "PRingMStreamBool"),
+    subM = (\ (_ _: mseq TCInf Bool) -> errorMStreamM Bool "PRingMStreamBool"),
+    mulM = (\ (_ _: mseq TCInf Bool) -> errorMStreamM Bool "PRingMStreamBool"),
+    negM = (\ (_: mseq TCInf Bool) -> errorMStreamM Bool "PRingMStreamBool"),
+    intM = (\ (_:Integer) -> errorMStream Bool "PRingMStreamBool") };
+
+PRingMSeqBool : (n : Num) -> PRingM (mseq n Bool);
+PRingMSeqBool n =
+  Num#rec (\ (n:Num) -> PRingM (mseq n Bool))
+          (\ (n:Nat) -> PRingMWord n)
+          PRingMStreamBool
+          n;
+
+-- FIXME
+primitive PRingMFun : (a b : sort 0) -> PRingM b -> PRingM (a -> CompM b);
+
+PRingMUnit : PRingM #();
+PRingMUnit = liftPRingM #() PRingUnit;
+
+-- FIXME
+primitive PRingMPair : (a b : sort 0) -> PRingM a -> PRingM b -> PRingM (a * b);
+
+
+-- Monadic version of the Integral class
+
+PIntegralM : sort 0 -> sort 1;
+PIntegralM a =
+  #{ integralRingM : PRingM a,
+     divM : a -> a -> CompM a,
+     modM : a -> a -> CompM a,
+     toIntM : a -> CompM Integer,
+     posNegCasesM :
+       (r:sort 0) -> (Nat -> CompM r) -> (Nat -> CompM r) -> a -> CompM r };
+
+PIntegralIntegerM : PIntegralM Integer;
+PIntegralIntegerM =
+  { integralRingM = PRingMInteger,
+    divM = (\ (x y:Integer) ->
+              ite (CompM Integer) (intEq y (natToInt 0))
+                  (errorM Integer "Divide by zero")
+                  (returnM Integer (intDiv x y))),
+    modM = (\ (x y:Integer) ->
+              ite (CompM Integer) (intEq y (natToInt 0))
+                  (errorM Integer "Modulus by zero")
+                  (returnM Integer (intMod x y))),
+    toIntM = returnM Integer,
+    posNegCasesM =
+      -- FIXME: A SAW core bug will not normalize the types of constants, so we
+      -- do this workaround of binding PIntegralInteger to a variable
+      (\ (inst:PIntegral Integer) (r:sort 0) -> inst.posNegCases (CompM r))
+      PIntegralInteger };
+
+PIntegralMWord : (n : Nat) -> PIntegralM (mvec n Bool);
+PIntegralMWord n =
+  { integralRingM = PRingMWord n,
+    divM = (\ (mv1 mv2:mvec n Bool) ->
+              bindM2 (Vec n Bool) (Vec n Bool) (mvec n Bool)
+                     (mvecToVecM n Bool mv1) (mvecToVecM n Bool mv2)
+                     (\ (v1 v2:Vec n Bool) ->
+                        ite (CompM (mvec n Bool)) (bvNonzero n v2)
+                            (returnM (mvec n Bool)
+                                     (vecToMvec n Bool (bvUDiv n v1 v2)))
+                            (errorM (mvec n Bool) "Divide by zero"))),
+    modM = (\ (mv1 mv2:mvec n Bool) ->
+              bindM2 (Vec n Bool) (Vec n Bool) (mvec n Bool)
+                     (mvecToVecM n Bool mv1) (mvecToVecM n Bool mv2)
+                     (\ (v1 v2:Vec n Bool) ->
+                        ite (CompM (mvec n Bool)) (bvNonzero n v2)
+                            (returnM (mvec n Bool)
+                                     (vecToMvec n Bool (bvURem n v1 v2)))
+                            (errorM (mvec n Bool) "Modulus by zero"))),
+    toIntM = (\ (mv:mvec n Bool) ->
+                fmapM (Vec n Bool) Integer (bvToInt n) (mvecToVecM n Bool mv)),
+    posNegCasesM = (\ (r:sort 0) (pos neg:Nat -> CompM r) (mv:mvec n Bool) ->
+                      bindM Nat r
+                            (fmapM (Vec n Bool) Nat (bvToNat n)
+                                   (mvecToVecM n Bool mv))
+                            pos) };
+
+PIntegralMStreamBool : PIntegralM (Stream (CompM Bool));
+PIntegralMStreamBool =
+  { integralRingM = PRingMStreamBool,
+    divM = (\ (_ _:Stream (CompM Bool)) ->
+              errorMStreamM Bool "PIntegralStreamBoolM"),
+    modM = (\ (_ _:Stream (CompM Bool)) ->
+              errorMStreamM Bool "PIntegralStreamBoolM"),
+    toIntM = (\ (_:Stream (CompM Bool)) ->
+               errorM Integer "PIntegralStreamBoolM"),
+    posNegCasesM = (\ (r:sort 0) (_ _:Nat -> CompM r) (_:Stream (CompM Bool)) ->
+                      errorM r "PIntegralStreamBoolM") };
+
+PIntegralMSeqBool : (n : Num) -> PIntegralM (mseq n Bool);
+PIntegralMSeqBool n =
+  Num#rec (\ (n:Num) -> PIntegralM (mseq n Bool))
+          (\ (n:Nat) -> PIntegralMWord n)
+          PIntegralMStreamBool
+	  n;
+
+
+
+-- Monadic version of the PField typeclass
+
+-- FIXME
+
+
+-- Monadic version of the PRound typeclass
+
+-- FIXME
+
+
+-- Lifting the PLiteral typeclass to monadic sequences
+
+PLiteralSeqBoolM : (n : Num) -> PLiteral (mseq n Bool);
+PLiteralSeqBoolM n i = seqToMseq n Bool (PLiteralSeqBool n i);
+
+
+--------------------------------------------------------------------------------
+-- Monadic versions of the Cryptol primitives
+
+-- Ring
+ecFromIntegerM : (a : sort 0) -> PRingM a -> Integer -> a;
+ecFromIntegerM a pa = pa.intM;
+
+ecPlusM : (a : sort 0) -> PRingM a -> a -> a -> CompM a;
+ecPlusM a pa = pa.addM;
+
+ecMinusM : (a : sort 0) -> PRingM a -> a -> a -> CompM a;
+ecMinusM a pa = pa.subM;
+
+ecMulM : (a : sort 0) -> PRingM a -> a -> a -> CompM a;
+ecMulM a pa = pa.mulM;
+
+ecNegM : (a : sort 0) -> PRingM a -> a -> CompM a;
+ecNegM a pa = pa.negM;
+
+
+-- Integral
+ecToIntegerM : (a : sort 0) -> PIntegralM a -> a -> CompM Integer;
+ecToIntegerM a pa = pa.toIntM;
+
+ecDivM : (a : sort 0) -> PIntegralM a -> a -> a -> CompM a;
+ecDivM a pi = pi.divM;
+
+ecModM : (a : sort 0) -> PIntegralM a -> a -> a -> CompM a;
+ecModM a pi = pi.modM;
+
+-- FIXME
+primitive
+ecExpM : (a b: sort 0) -> PRingM a -> PIntegralM b -> a -> b -> CompM a;
+
+
+-- Field
+-- FIXME
+
+-- Round
+-- FIXME
+
+-- Bitvector ops
+-- FIXME
+
+
+-- EqM
+ecEqM : (a : sort 0) -> PEqM a -> a -> a -> CompM Bool;
+ecEqM a pa = pa.eqM;
+
+ecNotEqM : (a : sort 0) -> PEqM a -> a -> a -> CompM Bool;
+ecNotEqM a pa x y = fmapM Bool Bool not (ecEqM a pa x y);
+
+-- Cmp
+ecLtM : (a : sort 0) -> PCmpM a -> a -> a -> CompM Bool;
+ecLtM a pa x y = pa.cmpM x y False;
+
+ecGtM : (a : sort 0) -> PCmpM a -> a -> a -> CompM Bool;
+ecGtM a pa x y = ecLtM a pa y x;
+
+ecLtEqM  : (a : sort 0) -> PCmpM a -> a -> a -> CompM Bool;
+ecLtEqM a pa x y = fmapM Bool Bool not (ecLtM a pa y x);
+
+ecGtEqM  : (a : sort 0) -> PCmpM a -> a -> a -> CompM Bool;
+ecGtEqM a pa x y = fmapM Bool Bool not (ecLtM a pa x y);
+
+-- SignedCmp
+-- ecSLtM : (a : sort 0) -> PSignedCmpM a -> a -> a -> CompM Bool;
+-- ecSLtM a pa x y = pa.scmp x y False;
+
+-- Logic
+-- NOTE: same operations as the pure ones
+
+
+-- Sequences
+
+-- FIXME: a number of the non-monadic versions of these functions contain calls
+-- to error (many hidden in calls to finNumRec). The monadic versions of these,
+-- below, should be reimplemented to call errorM instead in these cases.
+
+
+ecShiftLM : (m : Num) -> (ix a : sort 0) -> PIntegralM ix -> PZero a ->
+            mseq m a -> ix -> CompM (mseq m a);
+ecShiftLM m ix a pa pz ms i =
+  bindM Integer (mseq m a) (pa.toIntM i)
+        (\ (i_int:Integer) ->
+           returnM
+             (mseq m a)
+             (ecShiftL m Integer (CompM a) PIntegralInteger (returnM a pz) ms i_int));
+
+ecShiftRM : (m : Num) -> (ix a : sort 0) -> PIntegralM ix -> PZero a ->
+            mseq m a -> ix -> CompM (mseq m a);
+ecShiftRM m ix a pa pz ms i =
+  bindM Integer (mseq m a) (pa.toIntM i)
+        (\ (i_int:Integer) ->
+           returnM
+             (mseq m a)
+             (ecShiftR m Integer (CompM a) PIntegralInteger (returnM a pz) ms i_int));
+
+-- FIXME
+primitive
+ecSShiftRM : (n : Num) -> (ix : sort 0) -> PIntegralM ix -> mseq n Bool -> ix ->
+             CompM (mseq n Bool);
+{-
+ecSShiftRM m ix pa ms i =
+  bindM Integer (mseq m Bool) (pa.toIntM i)
+        (\ (i_int:Integer) ->
+           returnM
+             (mseq m Bool)
+             (ecSShiftR m Integer PIntegralInteger ms i_int));
+-}
+
+ecRotLM : (m : Num) -> (ix a : sort 0) -> PIntegralM ix -> mseq m a -> ix ->
+          CompM (mseq m a);
+ecRotLM m ix a pa ms i =
+  bindM Integer (mseq m a) (pa.toIntM i)
+        (\ (i_int:Integer) ->
+           returnM
+             (mseq m a)
+             (ecRotL m Integer (CompM a) PIntegralInteger ms i_int));
+
+ecRotRM : (m : Num) -> (ix a : sort 0) -> PIntegralM ix -> mseq m a -> ix ->
+          CompM (mseq m a);
+ecRotRM m ix a pa ms i =
+  bindM Integer (mseq m a) (pa.toIntM i)
+        (\ (i_int:Integer) ->
+           returnM
+             (mseq m a)
+             (ecRotR m Integer (CompM a) PIntegralInteger ms i_int));
+
+ecCatM : (m n : Num) -> (a : sort 0) -> mseq m a -> mseq n a ->
+         mseq (tcAdd m n) a;
+ecCatM m n a = ecCat m n (CompM a);
+
+ecTakeM : (m n : Num) -> (a : sort 0) -> mseq (tcAdd m n) a -> mseq m a;
+ecTakeM m n a = ecTake m n (CompM a);
+
+ecDropM : (m n : Num) -> (a : sort 0) -> mseq (tcAdd m n) a -> mseq n a;
+ecDropM m n a = ecDrop m n (CompM a);
+
+primitive
+ecJoinM : (m n : Num) -> (a : sort 0) -> mseq m (mseq n a) -> mseq (tcMul m n) a;
+
+ecSplitM : (m n : Num) -> (a : sort 0) -> mseq (tcMul m n) a ->
+           mseq m (mseq n a);
+ecSplitM m n a ms =
+  seqMap (mseq n a) (CompM (mseq n a)) m (returnM (mseq n a))
+         (ecSplit m n (CompM a) ms);
+
+ecReverseM : (n : Num) -> (a : sort 0) -> mseq n a -> mseq n a;
+ecReverseM n a = ecReverse n (CompM a);
+
+primitive
+ecTransposeM : (m n : Num) -> (a : sort 0) -> mseq m (mseq n a) ->
+               mseq n (mseq m a);
+
+ecAtM : (n : Num) -> (a ix: sort 0) -> PIntegralM ix -> mseq n a -> ix -> CompM a;
+ecAtM n_top a ix pa ms =
+  pa.posNegCasesM a
+    (\ (i:Nat) ->
+       Num#rec
+         (\ (n:Num) -> mseq n a -> CompM a)
+         (\ (n:Nat) (mv:mvec n a) ->
+            atWithDefault n (CompM a) (errorM a "ecAtM: index out of bounds") mv i)
+         (\ (xs:Stream (CompM a)) -> streamGet (CompM a) xs i)
+         n_top ms)
+    (\ (_:Nat) -> errorM a "ecAt: negative index");
+
+primitive
+ecAtBackM : (n : Num) -> (a ix : sort 0) -> PIntegralM ix -> mseq n a -> ix ->
+            CompM a;
+
+ecFromToM : (first last : Num) -> (a : sort 0) -> PLiteral a -> PLiteral a ->
+            mseq (tcAdd (TCNum 1) (tcSub last first)) a;
+ecFromToM first last a pa pb =
+  seqToMseq (tcAdd (TCNum 1) (tcSub last first)) a
+            (ecFromTo first last a pa pb);
+
+ecFromToLessThanM : (first bound : Num) -> (a : sort 0) -> PLiteralLessThan a ->
+                    mseq (tcSub bound first) a;
+ecFromToLessThanM first bound a pa =
+  seqToMseq (tcSub bound first) a (ecFromToLessThan first bound a pa);
+
+ecFromThenToM :
+  (first next last : Num) -> (a : sort 0) -> (len : Num) ->
+  PLiteral a -> PLiteral a -> PLiteral a -> mseq len a;
+ecFromThenToM first next last a len pa pb pc =
+  seqToMseq len a (ecFromThenTo first next last a len pa pb pc);
+
+primitive
+ecInfFromM : (a : sort 0) -> PIntegralM a -> a -> mseq TCInf a;
+
+primitive
+ecInfFromThenM : (a : sort 0) -> PIntegralM a -> a -> a -> mseq TCInf a;
+
+ecErrorM : (a : sort 0) -> (len : Num) -> mseq len (mvec 8 Bool) -> CompM a;
+ecErrorM a len msg =
+  errorM a "encountered call to the Cryptol 'error' function";
+
+
+--------------------------------------------------------------------------------

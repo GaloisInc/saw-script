@@ -45,6 +45,7 @@ library
      Verifier.SAW.Cryptol
      Verifier.SAW.Cryptol.Panic
      Verifier.SAW.Cryptol.Prelude
+     Verifier.SAW.Cryptol.PreludeM
      Verifier.SAW.Cryptol.Simpset
      Verifier.SAW.Cryptol.Monadify
      Verifier.SAW.CryptolEnv

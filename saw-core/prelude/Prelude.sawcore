@@ -911,6 +911,24 @@ primitive Vec : Nat -> sort 0 -> sort 0;
 -- Primitive function for generating an array.
 primitive gen : (n : Nat) -> (a : sort 0) -> (Nat -> a) -> Vec n a;
 
+-- Primitive eliminators for arrays
+primitive head : (n : Nat) -> (a : sort 0) -> Vec (Succ n) a -> a;
+primitive tail : (n : Nat) -> (a : sort 0) -> Vec (Succ n) a -> Vec n a;
+
+-- An implementation for atWithDefault
+--
+-- FIXME: can we replace atWithDefault with this implementation? Or does some
+-- automation rely on atWithDefault being a primitive?
+atWithDefault' : (n : Nat) -> (a : sort 0) -> a -> Vec n a -> Nat -> a;
+atWithDefault' n_top a d =
+  Nat__rec
+    (\ (n:Nat) -> Vec n a -> Nat -> a)
+    (\ (_:Vec 0 a) (_:Nat) -> d)
+    (\ (n:Nat) (rec_f: Vec n a -> Nat -> a) (v:Vec (Succ n) a) (i:Nat) ->
+       Nat_cases a (head n a v)
+                 (\ (i_prev:Nat) (_:a) -> rec_f (tail n a v) i_prev) i)
+    n_top;
+
 primitive atWithDefault : (n : Nat) -> (a : sort 0) -> a -> Vec n a -> Nat -> a;
 
 at : (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> a;
@@ -922,8 +940,6 @@ primitive EmptyVec : (a : sort 0) -> Vec 0 a;
 ConsVec : (a : sort 0) -> a -> (n : Nat) -> Vec n a -> Vec (Succ n) a;
 ConsVec a x n v =
   gen (Succ n) a (Nat_cases a x (\ (i:Nat) -> \ (a':a) -> at n a v i));
-
-primitive UnConsVec : (n : Nat) -> (a : sort 0) -> Vec (Succ n) a -> (a * Vec n a);
 
 upd : (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> a -> Vec n a;
 upd n a v j x = gen n a (\ (i : Nat) -> ite a (equalNat i j) x (at n a v i));
@@ -1948,6 +1964,28 @@ primitive CompM : sort 0 -> sort 0;
 
 primitive returnM : (a:sort 0) -> a -> CompM a;
 primitive bindM : (a b:sort 0) -> CompM a -> (a -> CompM b) -> CompM b;
+
+-- Bind two values and pass them to a binary function
+bindM2 : (a b c: sort 0) -> CompM a -> CompM b -> (a -> b -> CompM c) -> CompM c;
+bindM2 a b c m1 m2 f = bindM a c m1 (\ (x:a) -> bindM b c m2 (f x));
+
+-- Bind three values and pass them to a trinary function
+bindM3 : (a b c d: sort 0) -> CompM a -> CompM b -> CompM c ->
+         (a -> b -> c -> CompM d) -> CompM d;
+bindM3 a b c d m1 m2 m3 f = bindM a d m1 (\ (x:a) -> bindM2 b c d m2 m3 (f x));
+
+-- A version of bind that takes the function first
+bindApplyM : (a b : sort 0) -> (a -> CompM b) -> CompM a -> CompM b;
+bindApplyM a b f m = bindM a b m f;
+
+-- A version of bindM2 that takes the function first
+bindApplyM2 : (a b c: sort 0) -> (a -> b -> CompM c) -> CompM a -> CompM b -> CompM c;
+bindApplyM2 a b c f m1 m2 = bindM a c m1 (\ (x:a) -> bindM b c m2 (f x));
+
+-- A version of bindM3 that takes the function first
+bindApplyM3 : (a b c d: sort 0) -> (a -> b -> c -> CompM d) ->
+              CompM a -> CompM b -> CompM c -> CompM d;
+bindApplyM3 a b c d f m1 m2 m3 = bindM3 a b c d m1 m2 m3 f;
 
 -- Apply a pure function to a computation
 fmapM : (a b: sort 0) -> (a -> b) -> CompM a -> CompM b;

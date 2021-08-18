@@ -86,6 +86,7 @@ import Verifier.SAW.OpenTerm
 -- import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.Recognizer
 -- import Verifier.SAW.Position
+import Verifier.SAW.Cryptol.PreludeM
 
 import Debug.Trace
 
@@ -288,7 +289,7 @@ toArgType (MTyForall x k body) =
 toArgType (MTyArrow t1 t2) =
   arrowOpenTerm "_" (toArgType t1) (toCompType t2)
 toArgType (MTySeq n t) =
-  applyOpenTermMulti (globalOpenTerm "Cryptol.mseq") [n, toArgType t]
+  applyOpenTermMulti (globalOpenTerm "CryptolM.mseq") [n, toArgType t]
 toArgType (MTyPair mtp1 mtp2) =
   pairTypeOpenTerm (toArgType mtp1) (toArgType mtp2)
 toArgType (MTyRecord tps) =
@@ -305,14 +306,13 @@ toCompType mtp = applyOpenTerm (globalOpenTerm "Prelude.CompM") (toArgType mtp)
 -- | The mapping for monadifying Cryptol typeclasses
 typeclassMonMap :: [(Ident,Ident)]
 typeclassMonMap =
-  [("Cryptol.PEq", "Cryptol.PEqM"),
-   ("Cryptol.PCmp", "Cryptol.PCmpM"),
-   ("Cryptol.PSignedCmp", "Cryptol.PSignedCmpM"),
+  [("Cryptol.PEq", "CryptolM.PEqM"),
+   ("Cryptol.PCmp", "CryptolM.PCmpM"),
+   ("Cryptol.PSignedCmp", "CryptolM.PSignedCmpM"),
    ("Cryptol.PZero", "Cryptol.PZero"),
    ("Cryptol.PLogic", "Cryptol.PLogic"),
-   ("Cryptol.PRing", "Cryptol.PRing"),
-   ("Cryptol.PRing", "Cryptol.PRing"),
-   ("Cryptol.PIntegral", "Cryptol.PIntegralM"),
+   ("Cryptol.PRing", "CryptolM.PRingM"),
+   ("Cryptol.PIntegral", "CryptolM.PIntegralM"),
    ("Cryptol.PLiteral", "Cryptol.PLiteral")]
 
 -- | A context of local variables used for monadifying types, which includes the
@@ -778,7 +778,7 @@ monadifyTerm' (Just mtp@(MTySeq n mtp_elem)) (asFTermF ->
                                               Just (ArrayValue _ trms)) =
   do trms' <- traverse (monadifyArgTerm $ Just mtp_elem) trms
      return $ fromArgTerm mtp $
-       applyOpenTermMulti (globalOpenTerm "Cryptol.seqToMseq")
+       applyOpenTermMulti (globalOpenTerm "CryptolM.seqToMseq")
        [n, toArgType mtp_elem,
         flatOpenTerm $ ArrayValue (toArgType mtp_elem) trms']
 monadifyTerm' _ (asPairSelector -> Just (trm, True)) =
@@ -883,7 +883,7 @@ unsafeAssertMacro = MonMacro 1 $ \_ ts ->
     [(asDataType -> Just (num, []))]
       | primName num == "Cryptol.Num" ->
         return $ ArgMonTerm $
-        mkGlobalArgMonTerm numFunType "Cryptol.numAssertEqM"
+        mkGlobalArgMonTerm numFunType "CryptolM.numAssertEqM"
     _ ->
       fail "Monadification failed: unsafeAssert applied to non-Num type"
 
@@ -913,25 +913,31 @@ iteMacro = MonMacro 4 $ \_ args ->
 -- | Identifiers that are mapped to semi-pure functions
 semiPureMonPrims :: [(Ident,Ident)]
 semiPureMonPrims = [
-  ("Cryptol.seqMap", "Cryptol.seqMapM"),
-  ("Cryptol.seq_cong1", "Cryptol.mseq_cong1"),
+  ("Cryptol.seqMap", "CryptolM.seqMapM"),
+  ("Cryptol.seq_cong1", "CryptolM.mseq_cong1"),
 
   -- PEq constraints => PEqM constraints
-  ("Cryptol.PEqBit", "Cryptol.PEqBitM"),
-  ("Cryptol.PEqSeqBool", "Cryptol.PEqSeqBoolM"),
-  ("Cryptol.PEqSeq", "Cryptol.PEqSeqM"),
+  ("Cryptol.PEqBit", "CryptolM.PEqBitM"),
+  ("Cryptol.PEqSeqBool", "CryptolM.PEqSeqBoolM"),
+  ("Cryptol.PEqSeq", "CryptolM.PEqSeqM"),
 
   -- PCmp constraints => PCmpM constraints
-  ("Cryptol.PCmpBit", "Cryptol.PCmpBitM"),
-  ("Cryptol.PCmpSeqBool", "Cryptol.PCmpSeqBoolM"),
-  ("Cryptol.PCmpSeq", "Cryptol.PCmpSeqM"),
+  ("Cryptol.PCmpBit", "CryptolM.PCmpBitM"),
+  ("Cryptol.PCmpSeqBool", "CryptolM.PCmpSeqBoolM"),
+  ("Cryptol.PCmpSeq", "CryptolM.PCmpSeqM"),
 
   -- PLogic constraints for sequences lift to monadic sequences
-  ("Cryptol.PLogicSeq", "Cryptol.PLogicSeqM"),
-  ("Cryptol.PLogicSeqBool", "Cryptol.PLogicSeqBoolM"),
+  ("Cryptol.PLogicSeq", "CryptolM.PLogicSeqM"),
+  ("Cryptol.PLogicSeqBool", "CryptolM.PLogicSeqBoolM"),
 
   -- The one PLiteral constraint
-  ("Cryptol.PLiteralSeqBool", "Cryptol.PLiteralSeqBoolM")
+  ("Cryptol.PLiteralSeqBool", "CryptolM.PLiteralSeqBoolM"),
+
+  -- Sequences
+  ("Cryptol.ecCat", "CryptolM.ecCatM"),
+  ("Cryptol.ecTake", "CryptolM.ecTakeM"),
+  ("Cryptol.ecDrop", "CryptolM.ecDropM"),
+  ("Cryptol.ecJoin", "CryptolM.ecJoinM")
   ]
 
 
@@ -947,10 +953,7 @@ semiPureSelfMonPrims = [
 
   -- Logical operations
   "Cryptol.ecAnd", "Cryptol.ecOr", "Cryptol.ecXor", "Cryptol.ecCompl",
-  "Cryptol.ecZero",
-
-  -- Sequences
-  "Cryptol.ecCat", "Cryptol.ecTake", "Cryptol.ecDrop", "Cryptol.ecJoin"
+  "Cryptol.ecZero"
 
   ]
 
@@ -959,16 +962,16 @@ semiPureSelfMonPrims = [
 argMonPrims :: [(Ident,Ident)]
 argMonPrims = [
   -- Comparison operations
-  ("Cryptol.ecEq", "Cryptol.ecEqM"),
-  ("Cryptol.ecNotEq", "Cryptol.ecNotEqM"),
-  ("Cryptol.ecLt", "Cryptol.ecLtM"),
-  ("Cryptol.ecGt", "Cryptol.ecGtM"),
-  ("Cryptol.ecLtEq", "Cryptol.ecLtEqM"),
-  ("Cryptol.ecGtEq", "Cryptol.ecGtEqM"),
-  ("Cryptol.ecSLt", "Cryptol.ecSLtM"),
+  ("Cryptol.ecEq", "CryptolM.ecEqM"),
+  ("Cryptol.ecNotEq", "CryptolM.ecNotEqM"),
+  ("Cryptol.ecLt", "CryptolM.ecLtM"),
+  ("Cryptol.ecGt", "CryptolM.ecGtM"),
+  ("Cryptol.ecLtEq", "CryptolM.ecLtEqM"),
+  ("Cryptol.ecGtEq", "CryptolM.ecGtEqM"),
+  ("Cryptol.ecSLt", "CryptolM.ecSLtM"),
 
   -- Errors
-  ("Cryptol.ecError", "Cryptol.ecErrorM")
+  ("Cryptol.ecError", "CryptolM.ecErrorM")
   ]
 
 -- | The default monadification environment
@@ -996,8 +999,12 @@ defaultMonEnv =
 -- * Top-Level Entrypoints
 ----------------------------------------------------------------------
 
--- monadifyNameInfo :: NameInfo -> NameInfo
--- monadifyNameInfo nmi =
+-- | Ensure that the @CryptolM@ module is loaded
+ensureCryptolMLoaded :: SharedContext -> IO ()
+ensureCryptolMLoaded sc =
+  scModuleIsLoaded sc (mkModuleName ["CryptolM"]) >>= \is_loaded ->
+  if is_loaded then return () else
+    scLoadCryptolMModule sc
 
 -- | Monadify a term of the specified type to a 'MonTerm' and then complete that
 -- 'MonTerm' to a SAW core 'Term', or 'fail' if this is not possible
@@ -1026,7 +1033,8 @@ monadifyTermInEnv :: SharedContext -> MonadifyEnv -> Term -> Term ->
                      IO (Term, MonadifyEnv)
 monadifyTermInEnv sc top_env top_trm top_tp =
   flip runStateT top_env $
-  do let const_infos =
+  do lift $ ensureCryptolMLoaded sc
+     let const_infos =
            filter (\(nmi,_,_) -> Map.notMember nmi top_env) $
            map snd $ Map.toAscList $ getConstantSet top_trm
      forM_ const_infos $ \(nmi,tp,body) ->
