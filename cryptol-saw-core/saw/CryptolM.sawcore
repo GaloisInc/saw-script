@@ -1,7 +1,7 @@
 -------------------------------------------------------------------------------
 -- Cryptol primitives for SAWCore
 
-module CryptolMM where
+module CryptolM where
 
 -- import Prelude;
 import Cryptol;
