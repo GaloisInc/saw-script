@@ -92,13 +92,11 @@ Proof.
   (* Show Ltac Profile. Reset Ltac Profile. *)
 Time Qed.
 
-Definition mbox_drop_spec : Mbox -> BV64 -> Mbox :=
+Definition mbox_drop_spec : Mbox -> bitvector 64 -> Mbox :=
   Mbox__rec _ (fun _ => Mbox_nil) (fun strt len next rec d ix =>
-    if bvuge 64 (projT1 ix) (projT1 len)
-    then Mbox_cons (existT _ (intToBv 64 0) tt) (existT _ (intToBv 64 0) tt)
-                   (rec (existT _ (bvSub 64 (projT1 ix) (projT1 len)) tt)) d
-    else Mbox_cons (existT _ (bvAdd 64 (projT1 ix) (projT1 strt)) tt)
-                   (existT _ (bvSub 64 (projT1 len) (projT1 ix)) tt) next d).
+    if bvuge 64 ix len
+    then Mbox_cons (intToBv 64 0) (intToBv 64 0) (rec (bvSub 64 ix len)) d
+    else Mbox_cons (bvAdd 64 ix strt) (bvSub 64 len ix) next d).
 
 Lemma mbox_drop_spec_ref
   : refinesFun mbox_drop (fun x ix => returnM (mbox_drop_spec x ix)).
@@ -111,12 +109,11 @@ Time Qed.
 
 
 Lemma mbox_free_chain_spec_ref
-  : refinesFun mbox_free_chain (fun _ => returnM (mkBV32 (intToBv 32 0))).
+  : refinesFun mbox_free_chain (fun _ => returnM (intToBv 32 0)).
 Proof.
   unfold mbox_free_chain, mbox_free_chain__tuple_fun, mboxFreeSpec.
   prove_refinement_match_letRecM_l.
-  - exact (fun _ => returnM (mkBV32 (intToBv 32 0))).
-  unfold mkBV32.
+  - exact (fun _ => returnM (intToBv 32 0)).
   (* Set Ltac Profiling. *)
   time "mbox_free_chain_spec_ref" prove_refinement.
   (* Show Ltac Profile. Reset Ltac Profile. *)
@@ -126,7 +123,7 @@ Lemma no_errors_mbox_free_chain
   : refinesFun mbox_free_chain (fun _ => noErrorsSpec).
 Proof.
   rewrite mbox_free_chain_spec_ref.
-  unfold noErrorsSpec, mkBV32.
+  unfold noErrorsSpec.
   prove_refinement.
 Qed.
 
@@ -185,7 +182,7 @@ Proof.
   - intros x y strt len next d.
     exact (returnM (transMbox x (Mbox_cons strt len (transMbox next y) d))).
   unfold mbox_concat_chains_spec.
-  time "mbox_concat_spec_ref" prove_refinement.
+  time "mbox_concat_chains_spec_ref" prove_refinement.
   simpl; repeat rewrite transMbox_Mbox_nil_r; reflexivity.
 Time Qed.
 
@@ -234,14 +231,14 @@ Time Qed.
 
 Definition mbox_len_spec : Mbox -> bitvector 64 :=
   Mbox__rec (fun _ =>  bitvector 64) (intToBv 64 0)
-          (fun strt len m rec d => bvAdd 64 rec (projT1 len)).
+          (fun strt len m rec d => bvAdd 64 rec len).
 
 Lemma mbox_len_spec_ref
-  : refinesFun mbox_len (fun m => returnM (m, (existT _ (mbox_len_spec m) tt, tt))).
+  : refinesFun mbox_len (fun m => returnM (m, (mbox_len_spec m, tt))).
 Proof.
   unfold mbox_len, mbox_len__tuple_fun.
   prove_refinement_match_letRecM_l.
-  - exact (fun m1 rec m2 => returnM (transMbox m1 m2, (existT _ (bvAdd 64 (projT1 rec) (mbox_len_spec m2)) tt, tt))).
+  - exact (fun m1 rec m2 => returnM (transMbox m1 m2, (bvAdd 64 rec (mbox_len_spec m2), tt))).
   unfold mbox_len_spec.
   (* Set Ltac Profiling. *)
   time "mbox_len_spec_ref" prove_refinement.
@@ -249,7 +246,7 @@ Proof.
   (* Most of the remaining cases are taken care of with just bvAdd_id_l and bvAdd_id_r *)
   all: try rewrite bvAdd_id_r; try rewrite bvAdd_id_l; try reflexivity.
   (* The remaining case just needs a few more rewrites *)
-  - do 3 f_equal.
+  - do 2 f_equal.
     rewrite bvAdd_assoc; f_equal.
     rewrite bvAdd_comm; reflexivity.
   - cbn; rewrite transMbox_Mbox_nil_r; reflexivity.
@@ -258,16 +255,16 @@ Time Qed.
 
 Definition mbox_copy_precond : Mbox -> Prop :=
   Mbox__rec (fun _ => Prop) True (fun strt len _ _ _ =>
-    isBvslt 64 (intToBv 64 0) (projT1 strt) /\ isBvule 64 (projT1 strt) (intToBv 64 128) /\
-    isBvule 64 (projT1 len) (bvSub 64 (intToBv 64 128) (projT1 strt))).
+    isBvslt 64 (intToBv 64 0) strt /\ isBvule 64 strt (intToBv 64 128) /\
+    isBvule 64 len (bvSub 64 (intToBv 64 128) strt)).
 
-(* This proof takes a *long* time. Since we're also going to prove spec_ref, we
-   can prove no-errors faster using that proof (see below) *)
+(* This proof takes a bit to complete. Since we're also going to prove spec_ref,
+   we can prove no-errors faster using that proof (see below) *)
 (* Lemma no_errors_mbox_copy *)
 (*   : refinesFun mbox_copy (fun m => assumingM (mbox_copy_precond m) noErrorsSpec). *)
 (* Proof. *)
-(*   unfold mbox_copy, mbox_copy__tuple_fun, mbox_copy_precond, noErrorsSpec. *)
-(*   unfold mboxNewSpec, mkBV8, mkBV64. *)
+(*   unfold mbox_copy, mbox_copy__tuple_fun, mboxNewSpec. *)
+(*   unfold mbox_copy_precond, noErrorsSpec. *)
 (*   (* Yikes! The below functions may or may not be defined depending on what *)
 (*      machine compiled mbox.bc *) *)
 (*   try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64. *)
@@ -291,22 +288,22 @@ Definition mbox_copy_precond : Mbox -> Prop :=
 (*     + reflexivity. *)
 (*     + apply isBvslt_to_isBvsle. *)
 (*       assumption. *)
-(* Time Qed. (* Holy crap this takes a long time! *) *)
+(* Time Qed. *)
 
-Definition empty_mbox_d := genBVVec 64 (intToBv 64 128) BV8 (fun i _ => mkBV8 (bvNat 8 0)).
+Definition empty_mbox_d := genBVVec 64 (intToBv 64 128) (bitvector 8) (fun i _ => bvNat 8 0).
 
 (* TODO give this a better name and explain what it does *)
-Definition conjSliceBVVec (start len : BV64) pf0 pf1 d0 d1 : BVVec 64 bv64_128 BV8 :=
-  updSliceBVVec 64 (intToBv 64 128) _ d0 (projT1 start) (projT1 len)
-    (sliceBVVec 64 (intToBv 64 128) _ (projT1 start) (projT1 len) pf0 pf1 d1).
+Definition conjSliceBVVec (strt len : bitvector 64) pf0 pf1 d0 d1 : BVVec 64 bv64_128 (bitvector 8) :=
+  updSliceBVVec 64 (intToBv 64 128) _ d0 strt len
+    (sliceBVVec 64 (intToBv 64 128) _ strt len pf0 pf1 d1).
 
 (* Given a `start`, `len`, and `dat` of a single Mbox, return an mbox chain consisting of
    a single mbox with `id` 0,  the given `start` and `len`, and the given `dat` with the
    range 0 to `start` zeroed out. *)
 Definition mbox_copy_spec_cons strt len m d : CompM (Mbox * (Mbox * unit)) :=
-  assumingM (isBvslt 64 (intToBv 64 0) (projT1 strt))
-    (forallM (fun pf0 : isBvule 64 (projT1 strt) (intToBv 64 128) =>
-      (forallM (fun pf1 : isBvule 64 (projT1 len) (bvSub 64 (intToBv 64 128) (projT1 strt)) =>
+  assumingM (isBvslt 64 (intToBv 64 0) strt)
+    (forallM (fun pf0 : isBvule 64 strt (intToBv 64 128) =>
+      (forallM (fun pf1 : isBvule 64 len (bvSub 64 (intToBv 64 128) strt) =>
         returnM (Mbox_cons strt len m
                            (conjSliceBVVec strt len pf0 pf1 d d),
                 (Mbox_cons strt len Mbox_nil
@@ -318,8 +315,8 @@ Definition mbox_copy_spec : Mbox -> CompM (Mbox * (Mbox * unit)) :=
 
 Lemma mbox_copy_spec_ref : refinesFun mbox_copy mbox_copy_spec.
 Proof.
-  unfold mbox_copy, mbox_copy__tuple_fun, mbox_copy_spec, mbox_copy_spec_cons, empty_mbox_d.
-  unfold mboxNewSpec, mkBV8, mkBV64.
+  unfold mbox_copy, mbox_copy__tuple_fun, mboxNewSpec.
+  unfold mbox_copy_spec, mbox_copy_spec_cons, empty_mbox_d.
   (* Yikes! The below functions may or may not be defined depending on what
      machine compiled mbox.bc *)
   try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64.
@@ -342,8 +339,7 @@ Proof.
     discriminate e_maybe2.
   - rewrite transMbox_Mbox_nil_r. (* <- this would go away if we removed "NoRewrite" *)
     replace a2 with e_forall; [ replace a3 with e_forall0 | ].
-    destruct strt, len, u, u0; cbn.
-    unfold conjSliceBVVec; simpl projT1.
+    unfold conjSliceBVVec.
     reflexivity.
   - apply BoolDecidableEqDepSet.UIP.
   - apply BoolDecidableEqDepSet.UIP.
@@ -355,7 +351,7 @@ Proof.
     + reflexivity.
     + apply isBvslt_to_isBvsle.
       assumption.
-Time Qed. (* FIXME The QED takes longer than the proof itself!! *)
+Time Qed.
 
 Lemma no_errors_mbox_copy
   : refinesFun mbox_copy (fun m => assumingM (mbox_copy_precond m) noErrorsSpec).
