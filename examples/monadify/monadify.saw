@@ -1,10 +1,12 @@
 enable_experimental;
 import "monadify.cry";
 
+/*
 my_abs <- unfold_term ["my_abs"] {{ my_abs }};
 my_absM <- monadify_term my_abs;
 print "my_abs: monadified term:";
 print_term my_absM;
+*/
 
 /*
 err_if_lt0 <- unfold_term ["err_if_lt0"] {{ err_if_lt0 }};
@@ -14,10 +16,16 @@ print_term err_if_lt0M;
 */
 
 /*
-mux_binop3 <- {{ mux_binop3 }};
+sha1 <- {{ sha1 }};
 print "original term:";
-print_term mux_binop3;
-mtrm <- monadify_term mux_binop3;
+print_term sha1;
+mtrm <- monadify_term sha1;
 print "monadified term:";
 print_term mtrm;
 */
+
+fib <- unfold_term ["fib"] {{ fib }};
+print_term fib;
+fibM <- monadify_term fib;
+print "fib: monadified term:";
+print_term fibM;

@@ -2204,6 +2204,10 @@ letRecM : (lrts : LetRecTypes) -> (B:sort 0) -> lrtPi lrts (lrtTupleType lrts) -
 letRecM lrts B F body = lrtApply lrts (CompM B) body (multiFixM lrts F);
 -}
 
+-- Build a multi-argument fixed-point of type A1 -> ... -> An -> CompM B
+primitive multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
+                         lrtToType lrt;
+
 -- Construct a fixed-point for a tuple of mutually-recursive functions
 primitive multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
                       lrtTupleType lrts;

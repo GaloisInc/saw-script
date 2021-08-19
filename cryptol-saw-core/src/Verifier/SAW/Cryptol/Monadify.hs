@@ -910,6 +910,36 @@ iteMacro = MonMacro 4 $ \_ args ->
          [toCompType mtp, toArgTerm atrm_cond,
           toCompTerm mtrm1, toCompTerm mtrm2]
 
+-- | Helper function: build a @LetRecType@ for a nested pi type
+lrtFromMonType :: MonType -> OpenTerm
+lrtFromMonType (MTyForall x k body_f) =
+  ctorOpenTerm "Prelude.LRT_Fun"
+  [monKindOpenTerm k,
+   lambdaOpenTerm x (monKindOpenTerm k) (\tp -> lrtFromMonType $
+                                                body_f $ MTyBase k tp)]
+lrtFromMonType (MTyArrow mtp1 mtp2) =
+  ctorOpenTerm "Prelude.LRT_Fun"
+  [toArgType mtp1,
+   lambdaOpenTerm "_" (toArgType mtp1) (\_ -> lrtFromMonType mtp2)]
+lrtFromMonType mtp =
+  ctorOpenTerm "Prelude.LRT_Ret" [toArgType mtp]
+
+
+-- | The macro for fix
+--
+-- FIXME: does not yet handle mutual recursion
+fixMacro :: MonMacro
+fixMacro = MonMacro 2 $ \_ args -> case args of
+  [tp@(asPi -> Just _), f] ->
+    do mtp <- monadifyTypeM tp
+       amtrm_f <- monadifyArg (Just $ MTyArrow mtp mtp) f
+       return $ fromCompTerm mtp $
+         applyOpenTermMulti (globalOpenTerm "Prelude.multiArgFixM")
+         [lrtFromMonType mtp, toCompTerm amtrm_f]
+  [(asRecordType -> Just _), _] ->
+    fail "Monadification failed: cannot yet handle mutual recursion"
+  _ -> error "fixMacro: malformed arguments!"
+
 -- | A "macro mapping" maps a single pure identifier to a 'MonMacro' for it
 type MacroMapping = (NameInfo, MonMacro)
 
@@ -939,6 +969,7 @@ defaultMonEnv =
     -- Prelude functions
     mmCustom "Prelude.unsafeAssert" unsafeAssertMacro
   , mmCustom "Prelude.ite" iteMacro
+  , mmCustom "Prelude.fix" fixMacro
 
     -- Top-level sequence functions
   , mmSemiPure "Cryptol.seqMap" "CryptolM.seqMapM"

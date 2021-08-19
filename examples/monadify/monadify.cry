@@ -13,3 +13,6 @@ sha1 (t, x, y, z) =
    | (40 <= t) && (t <= 59) then (x && y) ^ (x && z) ^ (y && z)
    | (60 <= t) && (t <= 79) then x ^ y ^ z
    else error "sha1: t out of range"
+
+fib : [64] -> [64]
+fib x = if x == 0 then 1 else x * fib (x - 1)
