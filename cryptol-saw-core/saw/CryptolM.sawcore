@@ -124,20 +124,20 @@ PEqM a = #{ eqM : a -> a -> CompM Bool };
 liftPEqM : (a:sort 0) -> PEq a -> PEqM a;
 liftPEqM a pa = { eqM = \ (x:a) (y:a) -> returnM Bool (pa.eq x y) };
 
-PEqBitM : PEqM Bool;
-PEqBitM = liftPEqM Bool PEqBit;
+PEqMBit : PEqM Bool;
+PEqMBit = liftPEqM Bool PEqBit;
 
-PEqIntegerM : PEqM Integer;
-PEqIntegerM = liftPEqM Integer PEqInteger;
+PEqMInteger : PEqM Integer;
+PEqMInteger = liftPEqM Integer PEqInteger;
 
-PEqRationalM : PEqM Rational;
-PEqRationalM = liftPEqM Rational PEqRational;
+PEqMRational : PEqM Rational;
+PEqMRational = liftPEqM Rational PEqRational;
 
-PEqIntModM : (n : Nat) -> PEqM (IntMod n);
-PEqIntModM n = liftPEqM (IntMod n) (PEqIntMod n);
+PEqMIntMod : (n : Nat) -> PEqM (IntMod n);
+PEqMIntMod n = liftPEqM (IntMod n) (PEqIntMod n);
 
-PEqIntModNumM : (num : Num) -> PEqM (IntModNum num);
-PEqIntModNumM num = liftPEqM (IntModNum num) (PEqIntModNum num);
+PEqMIntModNum : (num : Num) -> PEqM (IntModNum num);
+PEqMIntModNum num = liftPEqM (IntModNum num) (PEqIntModNum num);
 
 PEqMVec : (n : Nat) -> (a : sort 0) -> PEqM a -> PEqM (mvec n a);
 PEqMVec n_top a pa =
@@ -268,11 +268,11 @@ PLogicCompM a pa =
   , not  = fmapM a a (pa.not)
   };
 
-PLogicSeqM : (n : Num) -> (a : sort 0) -> PLogic a -> PLogic (mseq n a);
-PLogicSeqM n a pa = PLogicSeq n (CompM a) (PLogicCompM a pa);
+PLogicMSeq : (n : Num) -> (a : sort 0) -> PLogic a -> PLogic (mseq n a);
+PLogicMSeq n a pa = PLogicSeq n (CompM a) (PLogicCompM a pa);
 
-PLogicSeqBoolM : (n : Num) -> PLogic (mseq n Bool);
-PLogicSeqBoolM n = PLogicSeqM n Bool PLogicBit;
+PLogicMSeqBool : (n : Num) -> PLogic (mseq n Bool);
+PLogicMSeqBool n = PLogicMSeq n Bool PLogicBit;
 
 
 -- Monadic version of the PRing typeclass
