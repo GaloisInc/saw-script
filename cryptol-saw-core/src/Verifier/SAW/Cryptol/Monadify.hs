@@ -897,8 +897,8 @@ iteMacro = MonMacro 4 $ \_ args ->
              _ -> error "iteMacro: wrong number of arguments!"
      atrm_cond <- monadifyArg (Just boolMonType) cond
      mtp <- monadifyTypeM tp
-     mtrm1 <- resetMonadifyM (toArgType mtp) $monadifyTerm (Just mtp) branch1
-     mtrm2 <- resetMonadifyM (toArgType mtp) $monadifyTerm (Just mtp) branch2
+     mtrm1 <- resetMonadifyM (toArgType mtp) $ monadifyTerm (Just mtp) branch1
+     mtrm2 <- resetMonadifyM (toArgType mtp) $ monadifyTerm (Just mtp) branch2
      case (mtrm1, mtrm2) of
        (ArgMonTerm atrm1, ArgMonTerm atrm2) ->
          return $ fromArgTerm mtp $
