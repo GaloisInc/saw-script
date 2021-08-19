@@ -82,6 +82,7 @@ import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.Widening
 
 import Debug.Trace
+import Data.Type.RList (mapRAssign)
 
 
 ----------------------------------------------------------------------
@@ -338,7 +339,6 @@ instance Closable (TypedCallSiteID blocks args vars) where
 
 instance Liftable (TypedCallSiteID blocks args vars) where
   mbLift = unClosed . mbLift . fmap toClosed
-
 
 ----------------------------------------------------------------------
 -- * Typed Crucible Statements
@@ -1175,6 +1175,8 @@ data TypedEntry phase ext blocks tops ret args ghosts =
     typedEntryCallers :: ![Some (TypedCallSite phase blocks tops args ghosts)],
     -- | The ghost variables for this entrypoint
     typedEntryGhosts :: !(CruCtx ghosts),
+    --
+    typedEntryNames :: !(TransData phase (RAssign (Constant String) ((tops :++: args) :++: ghosts))),
     -- | The input permissions for this entrypoint
     typedEntryPermsIn :: !(MbValuePerms ((tops :++: args) :++: ghosts)),
     -- | The output permissions for the function (cached locally)
@@ -1205,16 +1207,18 @@ completeTypedEntry ::
 completeTypedEntry (TypedEntry { .. })
   | Just body <- typedEntryBody
   , Just callers <- mapM (traverseF completeTypedCallSite) typedEntryCallers
-  = Just $ TypedEntry { typedEntryBody = body, typedEntryCallers = callers, .. }
+  , Just names <- typedEntryNames
+  = Just $ TypedEntry { typedEntryBody = body, typedEntryCallers = callers, typedEntryNames = names, .. }
 completeTypedEntry _ = Nothing
 
 -- | Build an entrypoint from a call site, using that call site's permissions as
 -- the entyrpoint input permissions
-singleCallSiteEntry :: TypedCallSiteID blocks args vars ->
-                       CruCtx tops -> CruCtx args -> TypeRepr ret ->
-                       MbValuePerms ((tops :++: args) :++: vars) ->
-                       MbValuePerms (tops :> ret) ->
-                       TypedEntry TCPhase ext blocks tops ret args vars
+singleCallSiteEntry ::
+  TypedCallSiteID blocks args vars ->
+  CruCtx tops -> CruCtx args -> TypeRepr ret ->
+  MbValuePerms ((tops :++: args) :++: vars) ->
+  MbValuePerms (tops :> ret) ->
+  TypedEntry TCPhase ext blocks tops ret args vars
 singleCallSiteEntry siteID tops args ret perms_in perms_out =
   TypedEntry
   {
@@ -1222,6 +1226,7 @@ singleCallSiteEntry siteID tops args ret perms_in perms_out =
     typedEntryArgs = args, typedEntryRet = ret,
     typedEntryCallers = [Some $ idTypedCallSite siteID tops args perms_in],
     typedEntryGhosts = callSiteVars siteID,
+    typedEntryNames = Nothing,
     typedEntryPermsIn = perms_in, typedEntryPermsOut = perms_out,
     typedEntryBody = Nothing
   }
@@ -1345,6 +1350,7 @@ emptyBlockForPerms names cblocks blk tops ret ghosts perms_in perms_out
         typedEntryID = TypedEntryID blockID 0, typedEntryTops = tops,
         typedEntryArgs = args, typedEntryRet = ret,
         typedEntryCallers = [], typedEntryGhosts = ghosts,
+        typedEntryNames = Nothing,
         typedEntryPermsIn = perms_in, typedEntryPermsOut = perms_out,
         typedEntryBody = Nothing }]
     names
@@ -3867,27 +3873,46 @@ tcBlockEntryBody ::
   Block ext cblocks ret args ->
   TypedEntry TCPhase ext blocks tops ret (CtxToRList args) ghosts ->
   TopPermCheckM ext cblocks blocks tops ret
-    (Mb ((tops :++: CtxToRList args) :++: ghosts)
+    (RAssign (Constant String) ((tops :++: CtxToRList args) :++: ghosts),
+     Mb ((tops :++: CtxToRList args) :++: ghosts)
       (TypedStmtSeq ext blocks tops ret ((tops :++: CtxToRList args) :++: ghosts)))
 tcBlockEntryBody names blk entry@(TypedEntry {..}) =
-  runPermCheckM names typedEntryID typedEntryArgs typedEntryGhosts typedEntryPermsIn $
-  \tops_ns args_ns ghosts_ns perms ->
-  let ctx = mkCtxTrans (blockInputs blk) args_ns
-      ns = RL.append (RL.append tops_ns args_ns) ghosts_ns in
-  stmtTraceM (\i ->
-               pretty "Type-checking block" <+> pretty (blockID blk) <>
-               comma <+> pretty "entrypoint" <+> pretty (entryIndex typedEntryID)
-               <> line <>
-               pretty "Input types:"
-               <> align (permPretty i $
-                         RL.map2 VarAndType ns $ cruCtxToTypes $
-                         typedEntryAllArgs entry)
-               <> line <>
-               pretty "Input perms:"
-               <> align (permPretty i perms)) >>>
-  stmtRecombinePerms >>>
-  tcEmitStmtSeq names ctx (blk ^. blockStmts)
+  do mbNs <- mkNs
+     stmts <- mkStmts
+     pure (mbLift mbNs,stmts)
+  where
+    mkNs =
+      runPermCheckM names typedEntryID typedEntryArgs typedEntryGhosts typedEntryPermsIn $
+      \tops_ns args_ns ghosts_ns _ ->
+      permGetPPInfo >>>= \ppi ->
+      let tops   = mapRAssign (Constant . show . permPretty ppi) tops_ns
+          args   = mapRAssign (Constant . show . permPretty ppi) args_ns
+          ghosts = mapRAssign (Constant . show . permPretty ppi) ghosts_ns
+          ns     = rappend (rappend tops args) ghosts
+      in traceShow ("ns", RL.toList ns) $ gmapRet (>> pure ns)
 
+    mkStmts =
+      runPermCheckM names typedEntryID typedEntryArgs typedEntryGhosts typedEntryPermsIn $
+      \tops_ns args_ns ghosts_ns perms ->
+      let ctx = mkCtxTrans (blockInputs blk) args_ns
+          ns = RL.append (RL.append tops_ns args_ns) ghosts_ns in
+      stmtTraceM (\i ->
+                  pretty "Type-checking block" <+> pretty (blockID blk) <>
+                  comma <+> pretty "entrypoint" <+> pretty (entryIndex typedEntryID)
+                  <> line <>
+                  pretty "Input types:"
+                  <> align (permPretty i $
+                            RL.map2 VarAndType ns $ cruCtxToTypes $
+                            typedEntryAllArgs entry)
+                  <> line <>
+                  pretty "Input perms:"
+                  <> align (permPretty i perms)) >>>
+      stmtRecombinePerms >>>
+      tcEmitStmtSeq names ctx (blk ^. blockStmts)
+
+rappend :: RAssign f x -> RAssign f y -> RAssign f (x :++: y)
+rappend xs (ys :>: y) = rappend xs ys :>: y
+rappend xs MNil = xs
 
 -- | Prove that the permissions held at a call site from the given source
 -- entrypoint imply the supplied input permissions of the current entrypoint
@@ -3949,18 +3974,22 @@ visitCallSite (TypedEntry {..}) site@(TypedCallSite {..})
 
 -- | Widen the permissions held by all callers of an entrypoint to compute new,
 -- weaker input permissions that can hopefully be satisfied by them
-widenEntry :: PermCheckExtC ext =>
-              TypedEntry TCPhase ext blocks tops ret args ghosts ->
-              Some (TypedEntry TCPhase ext blocks tops ret args)
+widenEntry ::
+  forall ext blocks tops ret args ghosts.
+  PermCheckExtC ext =>
+  TypedEntry TCPhase ext blocks tops ret args ghosts ->
+  Some (TypedEntry TCPhase ext blocks tops ret args)
 widenEntry (TypedEntry {..}) =
   case foldl1' (widen typedEntryTops typedEntryArgs) $
        map (fmapF typedCallSiteArgVarPerms) typedEntryCallers of
-    Some (ArgVarPerms ghosts perms_in) ->
+    Some (ArgVarPerms (ghosts :: CruCtx x) perms_in) ->
       let callers =
-            map (fmapF (callSiteSetGhosts ghosts)) typedEntryCallers in
+            map (fmapF (callSiteSetGhosts ghosts)) typedEntryCallers
+      in
       Some $
       TypedEntry { typedEntryCallers = callers, typedEntryGhosts = ghosts,
-                   typedEntryPermsIn = perms_in, typedEntryBody = Nothing, .. }
+                   typedEntryPermsIn = perms_in, typedEntryBody = Nothing,
+                   typedEntryNames = Nothing, .. }
 
 -- | Visit an entrypoint, by first proving the required implications at each
 -- call site, meaning that the permissions held at the call site imply the input
@@ -4003,9 +4032,10 @@ visitEntry names can_widen blk entry =
       -- is no reason to re-type-check the body, so just update the callers
       return $ Some $ entry { typedEntryCallers = callers }
     else
-      do body <- maybe (tcBlockEntryBody names blk entry) return (typedEntryBody entry)
+      do (ns, body) <- maybe (tcBlockEntryBody names blk entry) return ((,) <$> typedEntryNames entry <*> typedEntryBody entry)
          return $ Some $ entry { typedEntryCallers = callers,
-                                 typedEntryBody = Just body }
+                                 typedEntryBody = Just body,
+                                 typedEntryNames = Just ns }
 
 
 -- | Visit a block by visiting all its entrypoints

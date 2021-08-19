@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE PolyKinds #-}
 module Verifier.SAW.Heapster.IDESupport where
 
 import Control.Monad.Reader
@@ -51,7 +52,10 @@ import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.TypedCrucible
 import Verifier.SAW.Heapster.JSONExport(ppToJson)
-
+import Data.Aeson (Value)
+import Data.Type.RList (mapRAssign)
+import Data.Functor.Constant
+import Control.Monad.Writer
 
 -- | The entry point for dumping a Heapster environment to a file for IDE
 -- consumption.
@@ -65,6 +69,9 @@ type ExtractionM = ReaderT (PPInfo, ProgramLoc, String) (Writer [LogEntry])
 emit :: LogEntry -> ExtractionM ()
 emit entry = tell [entry]
 
+gather :: ExtractionM () -> ExtractionM [LogEntry]
+gather m = snd <$> listen m
+
 -- | A single entry in the IDE info dump log.  At a bare minimum, this must
 -- include a location and corresponding permission.  Once the basics are
 -- working, we can enrich the information we log.
@@ -74,26 +81,31 @@ data LogEntry
       , leEntryId :: LogEntryID
       , leCallers :: [LogEntryID]
       , leFunctionName :: String
-      , leExport :: Value
-      , lePermissions :: String
+      , lePermissions :: [(String, String, Value)]
       }
   | LogError
       { lerrLocation :: String
       , lerrError :: String
       , lerrFunctionName :: String
       }
+  | LogImpl
+      { limplLocation :: String
+      , limplExport :: Value
+      , limplFunctionName :: String
+      }
+
   deriving (Generic, Show)
 instance ToJSON LogEntry
 instance NuMatching LogEntry where
   nuMatchingProof = unsafeMbTypeRepr
 instance Liftable LogEntry where
   mbLift mb = case mbMatch mb of
-    [nuMP| LogEntry u v w x y z |] -> 
-      LogEntry (mbLift u) (mbLift v) (mbLift w) 
-               (mbLift x) (mbLift y) (mbLift z)
+    [nuMP| LogEntry v w x y z |] -> 
+      LogEntry (mbLift v) (mbLift w) (mbLift x) (mbLift y) (mbLift z)
     [nuMP| LogError x y z |] -> 
       LogError (mbLift x) (mbLift y) (mbLift z)
-
+    [nuMP| LogImpl x y z |] -> 
+      LogImpl (mbLift x) (mbLift y) (mbLift z)
 
 data LogEntryID = LogEntryID
   { leIdBlock :: Int
@@ -126,7 +138,15 @@ instance (PermCheckExtC ext)
     withLoc loc (mbExtractLogEntries (typedEntryBody te))
     let entryId = mkLogEntryID $ typedEntryID te
     let callers = callerIDs $ typedEntryCallers te
-    mbValPermEntries entryId callers (typedEntryPermsIn te)
+    (ppi, _, fname) <- ask
+    let loc' = snd (ppLoc loc)
+    let f :: 
+           (Pair (Constant String) ValuePerm) x ->
+           Constant (String, String, Value) x
+        f (Pair (Constant name) vp) = Constant (name, permPrettyString ppi vp, ppToJson ppi vp)
+    let inputs = mbLift
+               $ fmap (RL.toList . mapRAssign f . zipRAssign (typedEntryNames te)) (typedEntryPermsIn te)
+    tell [LogEntry loc' entryId callers fname inputs]
 
 mkLogEntryID :: TypedEntryID blocks args -> LogEntryID
 mkLogEntryID = uncurry LogEntryID . entryIDIndices
@@ -134,6 +154,12 @@ mkLogEntryID = uncurry LogEntryID . entryIDIndices
 callerIDs :: [Some (TypedCallSite phase blocks tops args ghosts)] -> [LogEntryID]
 callerIDs = map $ \(Some tcs) -> case typedCallSiteID tcs of 
     TypedCallSiteID tei _ _ _ -> mkLogEntryID tei
+
+data Pair f g x = Pair (f x) (g x)
+
+zipRAssign :: RL.RAssign f x -> RL.RAssign g x -> RL.RAssign (Pair f g) x
+zipRAssign RL.MNil RL.MNil = RL.MNil
+zipRAssign (xs RL.:>: x) (ys RL.:>: y) = zipRAssign xs ys RL.:>: Pair x y
 
 instance ExtractLogEntries (TypedStmtSeq ext blocks tops ret ps_in) where
   extractLogEntries (TypedImplStmt (AnnotPermImpl _str pimpl)) =
@@ -155,7 +181,10 @@ instance ExtractLogEntries (PermImpl1 ps_in ps_outs) where
   extractLogEntries (Impl1_Fail err) =
     do (_, loc, fname) <- ask
        emit (LogError (snd (ppLoc loc)) (ppError err) fname)
-  extractLogEntries _ = pure ()
+    -- The error message is available further up the stack, so we just leave it
+  extractLogEntries impl =
+    do (ppi, loc, fname) <- ask
+       emit (LogImpl (snd (ppLoc loc)) (ppToJson ppi impl) fname)
 
 instance ExtractLogEntries
     (MbPermImpls (TypedStmtSeq ext blocks tops ret) ps_outs) where
@@ -186,30 +215,6 @@ mbExtractLogEntries mb_a =
   execWriter $ runReaderT (extractLogEntries x) 
                           (ppInfoAddExprNames "x" ns ppi, loc, fname)
 
--- TODO: The next two functions are a hack, and we should probably rethink how
--- this is architected a bit.  They don't fit into the type signature of
--- `ExtractLogEntries` currently because we push down the extra information
--- about the entrypoint IDs which we need wherever `LogEntry`s are created.
-
-mbValPermEntries 
-  :: LogEntryID 
-  -> [LogEntryID] 
-  -> Mb ctx (ValuePerms ctx) 
-  -> ExtractionM ()
-mbValPermEntries entryId callers mb_vp =
-  ReaderT $ \(ppi, loc, fname) ->
-  tell $ mbLift $ flip nuMultiWithElim1 mb_vp $ \ns vp ->
-  execWriter $ runReaderT (valPermEntries entryId callers vp) 
-                          (ppInfoAddExprNames "x" ns ppi, loc, fname)
-
-valPermEntries :: LogEntryID -> [LogEntryID] -> ValuePerms ctx -> ExtractionM ()
-valPermEntries entryId callers vps = do
-  (ppi, loc, fname) <- ask
-  let loc' = snd (ppLoc loc)
-  let strs = foldValuePerms (\xs vp -> 
-               (ppToJson ppi vp, permPrettyString ppi vp) : xs) [] vps
-  tell [LogEntry loc' entryId callers fname export str | (export, str) <- strs]
-
 typedStmtOutCtx :: TypedStmt ext rets ps_in ps_next -> CruCtx rets
 typedStmtOutCtx = error "FIXME: write typedStmtOutCtx"
 
@@ -218,12 +223,15 @@ withLoc loc = local (\(ppinfo, _, fname) -> (ppinfo, loc, fname))
 
 setErrorMsg :: String -> LogEntry -> LogEntry
 setErrorMsg msg le@LogError {} = le { lerrError = msg }
+setErrorMsg msg le@LogImpl {} =
+  LogError { lerrError = msg
+           , lerrLocation = limplLocation le
+           , lerrFunctionName = limplFunctionName le}
 setErrorMsg msg le@LogEntry {} =
   LogError { lerrError = msg
            , lerrLocation = leLocation le
            , lerrFunctionName = leFunctionName le
            }
-
 
 runWithLoc :: PPInfo -> [Some SomeTypedCFG] -> [LogEntry]
 runWithLoc ppi =

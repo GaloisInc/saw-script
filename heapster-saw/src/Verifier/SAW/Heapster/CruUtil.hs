@@ -23,6 +23,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Reflection
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.Functor.Constant
 import Data.ByteString
 import Numeric
 import Numeric.Natural
@@ -563,6 +564,15 @@ instance Liftable (KnownReprObj f a) where
 
 instance LiftableAny1 (KnownReprObj f) where
   mbLiftAny1 = mbLift
+
+instance Liftable a => LiftableAny1 (Constant a) where
+  mbLiftAny1 = mbLift
+
+instance Liftable a => Liftable (Constant a b) where
+  mbLift (mbMatch -> [nuMP| Data.Functor.Constant.Constant x |]) = Data.Functor.Constant.Constant (mbLift x)
+
+instance (Liftable a, Liftable b, Liftable c) => Liftable (a,b,c) where
+  mbLift (mbMatch -> [nuMP| (x,y,z) |]) = (mbLift x, mbLift y, mbLift z)
 
 -- FIXME: this change for issue #28 requires ClosableAny1 to be exported from
 -- Hobbits
