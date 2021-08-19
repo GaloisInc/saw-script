@@ -25,6 +25,7 @@ Stability   : provisional
 
 module SAWScript.Crucible.LLVM.X86
   ( llvm_verify_x86
+  , llvm_verify_fixpoint_x86
   , defaultStackBaseAlign
   ) where
 
@@ -46,6 +47,9 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
+import qualified Data.Set as Set
+import Data.Set (Set)
+import qualified Data.List as List
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
@@ -53,12 +57,16 @@ import Data.Maybe
 import qualified Text.LLVM.AST as LLVM
 
 import Data.Parameterized.Some
+import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.Map (MapF)
 import Data.Parameterized.NatRepr
-import Data.Parameterized.Context hiding (view)
+import Data.Parameterized.Context hiding (view, zipWithM)
 
 import Verifier.SAW.CryptolEnv
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Name (toShortName)
+import Verifier.SAW.Prelude
+import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 
@@ -84,6 +92,7 @@ import SAWScript.Crucible.LLVM.ResolveSetupValue
 import qualified SAWScript.Crucible.LLVM.Override as LO
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as LMS (LLVM)
 
+import qualified What4.Concrete as W4
 import qualified What4.Config as W4
 import qualified What4.Expr as W4
 import qualified What4.FunctionName as W4
@@ -112,6 +121,7 @@ import qualified Lang.Crucible.LLVM.Extension as C.LLVM
 import qualified Lang.Crucible.LLVM.Intrinsics as C.LLVM
 import qualified Lang.Crucible.LLVM.MemModel as C.LLVM
 import qualified Lang.Crucible.LLVM.MemType as C.LLVM
+import qualified Lang.Crucible.LLVM.SimpleLoopFixpoint as Crucible.LLVM.Fixpoint
 import qualified Lang.Crucible.LLVM.Translation as C.LLVM
 import qualified Lang.Crucible.LLVM.TypeContext as C.LLVM
 
@@ -291,7 +301,39 @@ llvm_verify_x86 ::
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
+llvm_verify_x86 llvmModule path nm globsyms checkSat setup tactic =
+  llvm_verify_x86' llvmModule path nm globsyms checkSat Nothing setup tactic
+
+-- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
+-- to an LLVM specification. This allows for compositional verification of LLVM
+-- functions that call x86_64 functions (but not the other way around).
+llvm_verify_fixpoint_x86 ::
+  Some LLVMModule {- ^ Module to associate with method spec -} ->
+  FilePath {- ^ Path to ELF file -} ->
+  String {- ^ Function's symbol in ELF file -} ->
+  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Bool {- ^ Whether to enable path satisfiability checking -} ->
+  TypedTerm ->
+  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  ProofScript () {- ^ Tactic used to use when discharging goals -} ->
+  TopLevel (SomeLLVM MS.ProvedSpec)
+llvm_verify_fixpoint_x86 llvmModule path nm globsyms checkSat f setup tactic =
+  llvm_verify_x86' llvmModule path nm globsyms checkSat (Just f) setup tactic
+
+-- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
+-- to an LLVM specification. This allows for compositional verification of LLVM
+-- functions that call x86_64 functions (but not the other way around).
+llvm_verify_x86' ::
+  Some LLVMModule {- ^ Module to associate with method spec -} ->
+  FilePath {- ^ Path to ELF file -} ->
+  String {- ^ Function's symbol in ELF file -} ->
+  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Bool {- ^ Whether to enable path satisfiability checking -} ->
+  Maybe TypedTerm ->
+  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  ProofScript () {- ^ Tactic used to use when discharging goals -} ->
+  TopLevel (SomeLLVM MS.ProvedSpec)
+llvm_verify_x86' (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat maybeFixpointFunc setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       start <- io getCurrentTime
@@ -305,6 +347,13 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       rw <- getTopLevelRW
       cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms $ W4.getConfiguration sym
       _ <- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsingX86 rw
+      liftIO $ W4.extendConfig
+        [ W4.opt
+            LO.enableSMTArrayMemoryModel
+            (W4.ConcreteBool $ rwSMTArrayMemoryModel rw)
+            ("Enable SMT array memory model" :: Text)
+        ]
+        (W4.getConfiguration sym)
       sawst <- liftIO $ sawCoreState sym
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
@@ -438,7 +487,67 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
          else
            pure []
 
-      let execFeatures = psatf
+      simpleLoopFixpointFeature <- maybeToList <$> mapM
+        (\func -> liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $ \fixpoint_substitution condition ->
+          do let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
+             let foo = foldMap
+                   (\(Some fixpoint_entry) ->
+                     Set.map (mapSome $ W4.varExpr sym) $ W4.exprUninterpConstants sym $ Crucible.LLVM.Fixpoint.bodyValue fixpoint_entry)
+                   (MapF.elems fixpoint_substitution)
+             let bar = Set.map (mapSome $ W4.varExpr sym) $ W4.exprUninterpConstants sym condition
+             let lala = Set.toList $ Set.filter
+                   (\(Some variable) ->
+                     not (List.isPrefixOf "cfoo" $ show $ W4.printSymExpr variable)
+                     && not (List.isPrefixOf "cbar" $ show $ W4.printSymExpr variable)
+                     && not (List.isPrefixOf "cundefined" $ show $ W4.printSymExpr variable)
+                     && not (List.isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable))
+                   (Set.union foo bar)
+             lalala <- forM lala $ viewSome $ toSC sym sawst
+             baz <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet lalala
+            --  lalala <- Set.fromList <$> mapM (scExtCns sc . tecExt) (methodSpec ^. MS.csPreState ^. MS.csFreshVars)
+            --  lala <- Set.fromList <$> mapM (viewSome $ toSC sym sawst) (Set.toList foo)
+            --  let baz = Set.toList $ Set.intersection lalala lala
+             arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+               toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
+             applied_func <- scApplyAll sc (ttTerm func) $ baz ++ arguments
+             putStrLn $ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts applied_func
+             tp <- scTypeOf sc applied_func
+             putStrLn $ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts tp
+             applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i -> do
+               la <- scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
+               putStrLn $ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts la
+               scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
+             result_substitution <- MapF.fromList <$> zipWithM
+               (\(MapF.Pair variable _) applied_func_selector ->
+                 MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)
+               fixpoint_substitution_as_list
+               applied_func_selectors
+
+             lala_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
+               toSC sym sawst variable
+             let Just (_, foobar) = asConstant (ttTerm func)
+             let (foobar', [_, foobar'']) = asApplyAll foobar
+             when (isGlobalDef "Prelude.fix" foobar' == Nothing) $ fail $ "not Prelude.fix: " ++ showTerm foobar'
+             body <- betaNormalize sc =<< scApplyAll sc foobar'' ((ttTerm func) : (baz ++ lala_arguments))
+             foo_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+               toSC sym sawst $ Crucible.LLVM.Fixpoint.bodyValue fixpoint_entry
+             foo_applied_func <- scApplyAll sc (ttTerm func) $ baz ++ foo_arguments
+             foo_la <- scTuple sc lala_arguments
+            --  foo_condition <- toSC sym sawst condition
+             let lhs = Prelude.last foo_arguments
+             w <- scNat sc 64
+             rhs <- scBvMul sc w (head baz) =<< scBvNat sc w =<< scNat sc 128
+             foo_condition <- scBvULt sc w lhs rhs
+             putStrLn $ "foo_condition: " ++ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts foo_condition
+             foo_type <- scTupleType sc =<< mapM (scTypeOf sc) lala_arguments
+             foo_lala <- scIte sc foo_type foo_condition foo_applied_func foo_la
+             foo_lalala <- scEq sc foo_lala body
+             result_condition <- bindSAWTerm sym sawst W4.BaseBoolRepr foo_lalala
+
+             return (result_substitution, result_condition))
+        maybeFixpointFunc
+
+      let execFeatures = simpleLoopFixpointFeature ++ psatf
 
       liftIO $ C.executeCrucible execFeatures initial >>= \case
         C.FinishedResult{} -> pure ()
@@ -746,15 +855,18 @@ assumePointsTo ::
   LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim ()
 assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
-  when (isJust cond) $ throwX86 "unsupported x86_64 command: llvm_conditional_points_to"
-  tval <- checkConcreteSizePointsToValue tptval
-  sym <- use x86Sym
+  -- when (isJust cond) $ throwX86 "unsupported x86_64 command: llvm_conditional_points_to"
+  -- tval <- checkConcreteSizePointsToValue tptval
+  -- sym <- use x86Sym
+  opts <- use x86Options
   cc <- use x86CrucibleContext
   mem <- use x86Mem
   ptr <- resolvePtrSetupValue env tyenv tptr
-  val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
-  storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
-  mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
+  -- val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
+  -- storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
+  -- mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
+  cond' <- liftIO $ mapM (resolveSAWPred cc . ttTerm) cond
+  mem' <- liftIO $ LO.storePointsToValue opts cc env tyenv nameEnv mem cond' ptr tptval Nothing
   x86Mem .= mem'
 
 resolvePtrSetupValue ::
