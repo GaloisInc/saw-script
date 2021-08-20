@@ -62,8 +62,10 @@ instance JsonExport1 f => JsonExport (Assignment f x) where
 instance JsonExport1 f => JsonExport (RAssign f x) where
     jsonExport = toJSON . mapToList jsonExport1
 
+
 instance JsonExport b => JsonExport (Mb (a :: RList CrucibleType) b) where
     jsonExport mb = mbLift $ flip nuMultiWithElim1 mb $ \names body ->
+        let ?ppi = ppInfoAddExprNames "x" names ?ppi in
         object [
             ("args", jsonExport names),
             ("body", jsonExport body)
