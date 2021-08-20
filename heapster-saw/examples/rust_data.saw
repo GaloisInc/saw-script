@@ -61,6 +61,14 @@ heapster_define_opaque_llvmshape env "HashMap" 64 "T:llvmshape 64, U:llvmshape 6
 // where the type being defined is passed to an opaque or recursvie type
 //heapster_define_rust_type env "pub enum Tree<X> { Leaf (X), Node (Vec<Tree<X>>) }";
 
+// Enum20 type
+heapster_define_rust_type env "pub enum Enum20<X> { Enum20_0(X), Enum20_1(X), Enum20_2(X), Enum20_3(X), Enum20_4(X), Enum20_5(X), Enum20_6(X), Enum20_7(X), Enum20_8(X), Enum20_9(X), Enum20_10(X), Enum20_11(X), Enum20_12(X), Enum20_13(X), Enum20_14(X), Enum20_15(X), Enum20_16(X), Enum20_17(X), Enum20_18(X), Enum20_19(X), }";
+
+// List10 type
+heapster_define_rust_type env "pub enum List10<X> { List10_Head(X,Box<List10<X>>), List10_0(X,Box<List10<X>>), List10_1(X,Box<List10<X>>), List10_2(X,Box<List10<X>>), List10_3(X,Box<List10<X>>), List10_4(X,Box<List10<X>>), List10_5(X,Box<List10<X>>), List10_6(X,Box<List10<X>>), List10_7(X,Box<List10<X>>), List10_8(X,Box<List10<X>>), List10_9(X,Box<List10<X>>), }";
+
+// List20 type
+heapster_define_rust_type env "pub enum List20<X> { List20_Head(X,Box<List20<X>>), List20_0(X,Box<List20<X>>), List20_1(X,Box<List20<X>>), List20_2(X,Box<List20<X>>), List20_3(X,Box<List20<X>>), List20_4(X,Box<List20<X>>), List20_5(X,Box<List20<X>>), List20_6(X,Box<List20<X>>), List20_7(X,Box<List20<X>>), List20_8(X,Box<List20<X>>), List20_9(X,Box<List20<X>>), List20_10(X,Box<List20<X>>), List20_11(X,Box<List20<X>>), List20_12(X,Box<List20<X>>), List20_13(X,Box<List20<X>>), List20_14(X,Box<List20<X>>), List20_15(X,Box<List20<X>>), List20_16(X,Box<List20<X>>), List20_17(X,Box<List20<X>>), List20_18(X,Box<List20<X>>), List20_19(X,Box<List20<X>>), }";
 
 
 /***
@@ -97,6 +105,7 @@ heapster_assume_fun_rename env hashmap_u64_u64_insert_sym "hashmap_u64_u64_inser
  *** Type-Checked Functions
  ***/
 
+/*
 // bool_and
 bool_and_sym <- heapster_find_symbol env "8bool_and";
 heapster_typecheck_fun_rename env bool_and_sym "bool_and" "<> fn (bool,bool) -> bool";
@@ -157,6 +166,16 @@ str_struct_new <- heapster_find_symbol env "9StrStruct3new";
 
 // FIXME: this is the correct version, with the String shape
 heapster_typecheck_fun_rename env str_struct_new "str_struct_new" "(len:bv 64).arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:memblock(W,0,24,String<>)";
+*/
+
+enum20_list_proj_sym <- heapster_find_symbol env "16enum20_list_proj";
+//heapster_typecheck_fun_rename env enum20_list_proj_sym "enum20_list_proj" "<'a> fn (x:&'a Enum20<List<u64>>) -> &'a List<u64>";
+
+list10_head_sym <- heapster_find_symbol env "11list10_head";
+//heapster_typecheck_fun_rename env list10_head_sym "list10_head" "<'a> fn (x:&'a List10<List<u64>>) -> &'a List<u64>";
+
+list20_head_sym <- heapster_find_symbol env "11list20_head";
+heapster_typecheck_fun_rename env list20_head_sym "list20_head" "<'a> fn (x:&'a List20<List<u64>>) -> &'a List<u64>";
 
 
 /***

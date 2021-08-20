@@ -315,3 +315,138 @@ pub fn tree_sum (t: &Tree<u64>) -> u64 {
     }
 }
 */
+
+/* A 20-element enum that just wraps around type X */
+#[repr(u64)]
+pub enum Enum20<X> {
+  Enum20_0(X),
+  Enum20_1(X),
+  Enum20_2(X),
+  Enum20_3(X),
+  Enum20_4(X),
+  Enum20_5(X),
+  Enum20_6(X),
+  Enum20_7(X),
+  Enum20_8(X),
+  Enum20_9(X),
+  Enum20_10(X),
+  Enum20_11(X),
+  Enum20_12(X),
+  Enum20_13(X),
+  Enum20_14(X),
+  Enum20_15(X),
+  Enum20_16(X),
+  Enum20_17(X),
+  Enum20_18(X),
+  Enum20_19(X),
+}
+
+pub fn enum20_list_proj<'a> (x:&'a Enum20<List<u64>>) -> &'a List<u64> {
+  match x {
+      Enum20::Enum20_0(l) => l,
+      Enum20::Enum20_1(l) => l,
+      Enum20::Enum20_2(l) => l,
+      Enum20::Enum20_3(l) => l,
+      Enum20::Enum20_4(l) => l,
+      Enum20::Enum20_5(l) => l,
+      Enum20::Enum20_6(l) => l,
+      Enum20::Enum20_7(l) => l,
+      Enum20::Enum20_8(l) => l,
+      Enum20::Enum20_9(l) => l,
+      Enum20::Enum20_10(l) => l,
+      Enum20::Enum20_11(l) => l,
+      Enum20::Enum20_12(l) => l,
+      Enum20::Enum20_13(l) => l,
+      Enum20::Enum20_14(l) => l,
+      Enum20::Enum20_15(l) => l,
+      Enum20::Enum20_16(l) => l,
+      Enum20::Enum20_17(l) => l,
+      Enum20::Enum20_18(l) => l,
+      Enum20::Enum20_19(l) => l,
+  }
+}
+
+/* A non-empty list type with 20 separate constructors */
+#[repr(u64)]
+pub enum List10<X> {
+  List10Head(X),
+  List10_0(X,Box<List10<X>>),
+  List10_1(X,Box<List10<X>>),
+  List10_2(X,Box<List10<X>>),
+  List10_3(X,Box<List10<X>>),
+  List10_4(X,Box<List10<X>>),
+  List10_5(X,Box<List10<X>>),
+  List10_6(X,Box<List10<X>>),
+  List10_7(X,Box<List10<X>>),
+  List10_8(X,Box<List10<X>>),
+  List10_9(X,Box<List10<X>>),
+}
+
+pub fn list10_head<'a> (x:&'a List10<List<u64>>) -> &'a List<u64> {
+  match x {
+      List10::List10Head(l) => l,
+      List10::List10_0(l,_) => l,
+      List10::List10_1(l,_) => l,
+      List10::List10_2(l,_) => l,
+      List10::List10_3(l,_) => l,
+      List10::List10_4(l,_) => l,
+      List10::List10_5(l,_) => l,
+      List10::List10_6(l,_) => l,
+      List10::List10_7(l,_) => l,
+      List10::List10_8(l,_) => l,
+      List10::List10_9(l,_) => l,
+  }
+}
+
+
+/* A non-empty list type with 20 separate constructors */
+#[repr(u64)]
+pub enum List20<X> {
+  List20Head(X),
+  List20_0(X,Box<List20<X>>),
+  List20_1(X,Box<List20<X>>),
+  List20_2(X,Box<List20<X>>),
+  List20_3(X,Box<List20<X>>),
+  List20_4(X,Box<List20<X>>),
+  List20_5(X,Box<List20<X>>),
+  List20_6(X,Box<List20<X>>),
+  List20_7(X,Box<List20<X>>),
+  List20_8(X,Box<List20<X>>),
+  List20_9(X,Box<List20<X>>),
+  List20_10(X,Box<List20<X>>),
+  List20_11(X,Box<List20<X>>),
+  List20_12(X,Box<List20<X>>),
+  List20_13(X,Box<List20<X>>),
+  List20_14(X,Box<List20<X>>),
+  List20_15(X,Box<List20<X>>),
+  List20_16(X,Box<List20<X>>),
+  List20_17(X,Box<List20<X>>),
+  List20_18(X,Box<List20<X>>),
+  List20_19(X,Box<List20<X>>),
+}
+
+pub fn list20_head<'a> (x:&'a List20<List<u64>>) -> &'a List<u64> {
+  match x {
+      List20::List20Head(l) => l,
+      List20::List20_0(l,_) => l,
+      List20::List20_1(l,_) => l,
+      List20::List20_2(l,_) => l,
+      List20::List20_3(l,_) => l,
+      List20::List20_4(l,_) => l,
+      List20::List20_5(l,_) => l,
+      List20::List20_6(l,_) => l,
+      List20::List20_7(l,_) => l,
+      List20::List20_8(l,_) => l,
+      List20::List20_9(l,_) => l,
+      List20::List20_10(l,_) => l,
+      List20::List20_11(l,_) => l,
+      List20::List20_12(l,_) => l,
+      List20::List20_13(l,_) => l,
+      List20::List20_14(l,_) => l,
+      List20::List20_15(l,_) => l,
+      List20::List20_16(l,_) => l,
+      List20::List20_17(l,_) => l,
+      List20::List20_18(l,_) => l,
+      List20::List20_19(l,_) => l,
+  }
+}
