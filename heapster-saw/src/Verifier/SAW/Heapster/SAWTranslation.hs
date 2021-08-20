@@ -937,13 +937,17 @@ data AtomicPermTrans ctx a where
 
   -- | LOwned permissions translate to a monadic function from (the translation
   -- of) the input permissions to the output permissions
-  APTrans_LOwned :: Mb ctx (LOwnedPerms ps_in) ->
+  APTrans_LOwned :: Mb ctx [PermExpr LifetimeType] ->
+                    Mb ctx (LOwnedPerms ps_in) ->
                     Mb ctx (LOwnedPerms ps_out) ->
                     OpenTerm -> AtomicPermTrans ctx LifetimeType
 
   -- | LCurrent permissions have no computational content
   APTrans_LCurrent :: Mb ctx (PermExpr LifetimeType) ->
                       AtomicPermTrans ctx LifetimeType
+
+  -- | LFinished permissions have no computational content
+  APTrans_LFinished :: AtomicPermTrans ctx LifetimeType
 
   -- | The translation of a struct permission is sequence of the translations of
   -- the permissions in the struct permission
@@ -1101,8 +1105,9 @@ instance IsTermTrans (AtomicPermTrans ctx a) where
   transTerms (APTrans_NamedConj _ _ _ t) = [t]
   transTerms (APTrans_DefinedNamedConj _ _ _ ptrans) = transTerms ptrans
   transTerms (APTrans_LLVMFrame _) = []
-  transTerms (APTrans_LOwned _ _ t) = [t]
+  transTerms (APTrans_LOwned _ _ _ t) = [t]
   transTerms (APTrans_LCurrent _) = []
+  transTerms APTrans_LFinished = []
   transTerms (APTrans_Struct pctx) = transTerms pctx
   transTerms (APTrans_Fun _ t) = [t]
   transTerms (APTrans_BVProp prop) = transTerms prop
@@ -1156,9 +1161,10 @@ atomicPermTransPerm _ (APTrans_NamedConj npn args off _) =
 atomicPermTransPerm _ (APTrans_DefinedNamedConj npn args off _) =
   mbMap2 (Perm_NamedConj npn) args off
 atomicPermTransPerm _ (APTrans_LLVMFrame fp) = fmap Perm_LLVMFrame fp
-atomicPermTransPerm _ (APTrans_LOwned ps_in ps_out _) =
-  mbMap2 Perm_LOwned ps_in ps_out
+atomicPermTransPerm _ (APTrans_LOwned ls ps_in ps_out _) =
+  mbMap3 Perm_LOwned ls ps_in ps_out
 atomicPermTransPerm _ (APTrans_LCurrent l) = fmap Perm_LCurrent l
+atomicPermTransPerm prxs APTrans_LFinished = nus prxs $ const Perm_LFinished
 atomicPermTransPerm prxs (APTrans_Struct ps) =
   fmap Perm_Struct $ permTransCtxPerms prxs ps
 atomicPermTransPerm _ (APTrans_Fun fp _) = fmap Perm_Fun fp
@@ -1217,9 +1223,10 @@ instance ExtPermTrans AtomicPermTrans where
   extPermTrans (APTrans_DefinedNamedConj npn args off ptrans) =
     APTrans_DefinedNamedConj npn (extMb args) (extMb off) (extPermTrans ptrans)
   extPermTrans (APTrans_LLVMFrame fp) = APTrans_LLVMFrame $ extMb fp
-  extPermTrans (APTrans_LOwned ps_in ps_out t) =
-    APTrans_LOwned (extMb ps_in) (extMb ps_out) t
+  extPermTrans (APTrans_LOwned ls ps_in ps_out t) =
+    APTrans_LOwned (extMb ls) (extMb ps_in) (extMb ps_out) t
   extPermTrans (APTrans_LCurrent p) = APTrans_LCurrent $ extMb p
+  extPermTrans APTrans_LFinished = APTrans_LFinished
   extPermTrans (APTrans_Struct ps) = APTrans_Struct $ RL.map extPermTrans ps
   extPermTrans (APTrans_Fun fp t) = APTrans_Fun (extMb fp) t
   extPermTrans (APTrans_BVProp prop_trans) =
@@ -1629,15 +1636,17 @@ instance TransInfo info =>
                          APTrans_NamedConj (mbLift npn) args off t) ptrans
     [nuMP| Perm_LLVMFrame fp |] ->
       return $ mkTypeTrans0 $ APTrans_LLVMFrame fp
-    [nuMP| Perm_LOwned ps_in ps_out |] ->
+    [nuMP| Perm_LOwned ls ps_in ps_out |] ->
       do tp_in <- translate1 ps_in
          tp_out <- translate1 ps_out
          let tp = arrowOpenTerm "ps" tp_in (applyOpenTerm
                                             (globalOpenTerm "Prelude.CompM")
                                             tp_out)
-         return $ mkTypeTrans1 tp (APTrans_LOwned ps_in ps_out)
+         return $ mkTypeTrans1 tp (APTrans_LOwned ls ps_in ps_out)
     [nuMP| Perm_LCurrent l |] ->
       return $ mkTypeTrans0 $ APTrans_LCurrent l
+    [nuMP| Perm_LFinished |] ->
+      return $ mkTypeTrans0 APTrans_LFinished
     [nuMP| Perm_Struct ps |] ->
       fmap APTrans_Struct <$> translate ps
     [nuMP| Perm_Fun fun_perm |] ->
@@ -1808,7 +1817,7 @@ lookupEntryTrans entryID blkMap =
   maybe (error "lookupEntryTrans") id $
   find (\(Some entryTrans) ->
          entryID == typedEntryID (typedEntryTransEntry entryTrans)) $
-  typedBlockTransEntries (RL.get (entryBlockID entryID) blkMap)
+  typedBlockTransEntries (RL.get (entryBlockMember entryID) blkMap)
 
 -- | Look up the translation of an entry by entry ID and make sure that it has
 -- the supplied ghost arguments
@@ -2542,7 +2551,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
       pctx :>: PTrans_Conj [APTrans_IsLLVMPtr] :>: ptrans)
     m
 
-  [nuMP| SImpl_SplitLifetime _ f args l _ ps_in ps_out |] ->
+  [nuMP| SImpl_SplitLifetime _ f args l _ _ ps_in ps_out |] ->
     do pctx_out_trans <- translate $ fmap simplImplOut mb_simpl
        ps_in_tp <- translate1 ps_in
        ps_out_tp <- translate1 ps_out
@@ -2566,27 +2575,33 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            typeTransF pctx_out_trans (transTerms ptrans_x ++ [f_tm]))
          m
 
-  [nuMP| SImpl_SubsumeLifetime _ _ ps_in1 ps_out1 ps_in2 ps_out2 |] ->
+  [nuMP| SImpl_SubsumeLifetime _ _ _ _ _ |] ->
     do pctx_out_trans <- translate $ fmap simplImplOut mb_simpl
-       ps_in1_tp <- translate1 ps_in1
-       ps_out1_tp <- translate1 ps_out1
-       ps_in2_tp <- translate1 ps_in2
-       ps_out2_tp <- translate1 ps_out2
-       let fun_tp1 = arrowOpenTerm "ps" ps_in1_tp (applyOpenTerm
-                                                   (globalOpenTerm "Prelude.CompM")
-                                                   ps_out1_tp)
        withPermStackM id
-         (\(pctx :>: ptrans_l1 :>: ptrans_l2) ->
-           -- The output permissions are an lcurrent permission, which has no term
-           -- translation, and the updated lowned permission, which is the result
-           -- of adding the translation of the lowned permission for l1 to the
-           -- return value of that for l2
-           RL.append pctx $
-           typeTransF pctx_out_trans [applyOpenTermMulti
-                                      (globalOpenTerm "Prelude.tupleCompMFunOut")
-                                      [ps_in2_tp, ps_out2_tp, fun_tp1,
-                                       transTerm1 ptrans_l1,
-                                       transTerm1 ptrans_l2]])
+         (\(pctx :>: ptrans_l) ->
+           RL.append pctx $ typeTransF pctx_out_trans (transTerms ptrans_l))
+         m
+
+  [nuMP| SImpl_ContainedLifetimeCurrent _ _ _ _ _ |] ->
+    do pctx_out_trans <- translate $ fmap simplImplOut mb_simpl
+       withPermStackM
+         (\(ns :>: l1) -> ns :>: l1 :>: l1)
+         (\(pctx :>: ptrans_l) ->
+           -- Note: lcurrent perms do not contain any terms and the term for the
+           -- lowned permission does not change, so the only terms in both the
+           -- input and the output are in ptrans_l
+           RL.append pctx $ typeTransF pctx_out_trans (transTerms ptrans_l))
+         m
+
+  [nuMP| SImpl_RemoveContainedLifetime _ _ _ _ _ |] ->
+    do pctx_out_trans <- translate $ fmap simplImplOut mb_simpl
+       withPermStackM
+         (\(ns :>: l1 :>: _) -> ns :>: l1)
+         (\(pctx :>: ptrans_l :>: _) ->
+           -- Note: lcurrent perms do not contain any terms and the term for the
+           -- lowned permission does not change, so the only terms in both the
+           -- input and the output are in ptrans_l
+           RL.append pctx $ typeTransF pctx_out_trans (transTerms ptrans_l))
          m
 
   [nuMP| SImpl_WeakenLifetime _ _ _ _ _ |] ->
@@ -2599,8 +2614,8 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            RL.append pctx (typeTransF pctx_out_trans $ transTerms ptrans_x))
          m
 
-  [nuMP| SImpl_MapLifetime l ps_in ps_out
-                                  ps_in' ps_out' ps1 ps2 impl_in impl_out |] ->
+  [nuMP| SImpl_MapLifetime l _ ps_in ps_out
+                           ps_in' ps_out' ps1 ps2 impl_in impl_out |] ->
     -- First, translate the output permissions and all of the perm lists
     do pctx_out_trans <- translate $ fmap simplImplOut mb_simpl
        ps_in_trans <- translate ps_in
@@ -2683,8 +2698,9 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                   (strictTransTupleTerm pctx_in)),
           lambdaTransM "endl_ps" ps_out_trans $ \pctx_out ->
            withPermStackM
-           (\_ -> vars_out)
-           (\_ -> RL.append pctx_ps pctx_out)
+           (\(_ :>: l) -> vars_out :>: l)
+           (\_ -> RL.append pctx_ps pctx_out :>:
+                  PTrans_Conj [APTrans_LFinished])
            m]
 
   [nuMP| SImpl_LCurrentRefl l |] ->
@@ -2743,7 +2759,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF ttrans [pairLeftOpenTerm (transTerm1 ptrans)])
          m
-  
+
   -- Intro for a recursive named shape applies the fold function to the
   -- translations of the arguments plus the translations of the proofs of the
   -- permissions
@@ -3001,18 +3017,41 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
 
+-- | A flag to indicate whether the translation of a permission implication
+-- contains any failures
+data HasFailures = HasFailures | NoFailures deriving Eq
+
+instance Semigroup HasFailures where
+  HasFailures <> _ = HasFailures
+  _ <> HasFailures = HasFailures
+  NoFailures <> NoFailures = NoFailures
+
+instance Monoid HasFailures where
+  mempty = NoFailures
+
 -- | The monad for translating 'PermImpl's, which accumulates all failure
 -- messages in all branches of a 'PermImpl' and either returns a result or
 -- results in only failures
-type PermImplTransM = MaybeT (Writer [String])
+type PermImplTransM = MaybeT (Writer ([String], HasFailures))
 
 -- | Run a 'PermImplTransM' computation
-runPermImplTransM :: PermImplTransM a -> (Maybe a, [String])
+runPermImplTransM :: PermImplTransM a -> (Maybe a, ([String], HasFailures))
 runPermImplTransM = runWriter . runMaybeT
 
--- | Catch any failures in a 'PermImplTransM' computation
-pitmCatching :: PermImplTransM a -> PermImplTransM (Maybe a)
-pitmCatching m = lift $ runMaybeT m
+-- | Signal a failure in a 'PermImplTransM' computation with the given string
+pitmFail :: String -> PermImplTransM a
+pitmFail str = tell ([str],HasFailures) >> mzero
+
+-- | Catch any failures in a 'PermImplTransM' computation, returning 'Nothing'
+-- if the computation completely fails, or an @a@ paired with a 'HasFailures'
+-- flag to indicate if that @a@ contains some partial failures. Reset the
+-- 'HasFailures' flag so that @'pitmCatching' m@ is marked as having no failures
+-- even if @m@ has failures.
+pitmCatching :: PermImplTransM a -> PermImplTransM (Maybe a, HasFailures)
+pitmCatching m =
+  do let (maybe_a, (strs,hasf)) = runPermImplTransM m
+     tell (strs,NoFailures)
+     return (maybe_a,hasf)
 
 -- | Return or fail depending on whether the input is present or 'Nothing'
 pitmMaybeRet :: Maybe a -> PermImplTransM a
@@ -3060,8 +3099,8 @@ translatePermImplUnary ::
   Mb ctx (MbPermImpls r (RNil :> '(bs,ps_out))) ->
   (ImpTransM ext blocks tops ret ps_out (ctx :++: bs) OpenTerm ->
    ImpTransM ext blocks tops ret ps ctx OpenTerm) ->
-  PermImplTransM
-    (ImplFailCont -> ImpTransM ext blocks tops ret ps ctx OpenTerm)
+  PermImplTransM (ImplFailCont ->
+                  ImpTransM ext blocks tops ret ps ctx OpenTerm)
 translatePermImplUnary (mbMatch -> [nuMP| MbPermImpls_Cons _ _ mb_impl |]) f =
   translatePermImpl Proxy (mbCombine RL.typeCtxProxies mb_impl) >>= \trans ->
   return $ \k -> f $ trans k
@@ -3079,20 +3118,27 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   -- A failure translates to a call to the catch handler, which is the most recent
   -- Impl1_Catch, if one exists, or the SAW errorM function otherwise
   ([nuMP| Impl1_Fail err |], _) ->
-    tell [mbLift $ fmap ppError err] >> mzero
+    tell ([mbLift (fmap ppError err)],HasFailures) >> mzero
 
   ([nuMP| Impl1_Catch |],
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
-    pitmCatching (translatePermImpl prx $ mbCombine RL.typeCtxProxies mb_impl1) >>= \maybe_trans1 ->
-    pitmCatching (translatePermImpl prx $ mbCombine RL.typeCtxProxies mb_impl2) >>= \maybe_trans2 ->
-    case (maybe_trans1, maybe_trans2) of
-      (Just trans1, Just trans2) ->
+    pitmCatching (translatePermImpl prx $
+                  mbCombine RL.typeCtxProxies mb_impl1) >>= \(mtrans1,hasf1) ->
+    pitmCatching (translatePermImpl prx $
+                  mbCombine RL.typeCtxProxies mb_impl2) >>= \(mtrans2,hasf2) ->
+    (if hasf1 == HasFailures && hasf2 == HasFailures then tell ([],HasFailures)
+     else return ()) >>
+    case (mtrans1, hasf1, mtrans2, hasf2) of
+      (Just trans, NoFailures, _, _) -> return trans
+      (_, _, Just trans, NoFailures) -> return trans
+      (Just trans1, _, Just trans2, _) ->
         return $ \k ->
         compReturnTypeM >>= \ret_tp ->
         letTransM "catchpoint" ret_tp (trans2 k)
         (\catchpoint -> trans1 $ ImplFailContTerm catchpoint)
-      (Nothing, Just trans2) -> return trans2
-      (_, Nothing) -> pitmMaybeRet maybe_trans1
+      (Just trans, _, Nothing, _) -> return trans
+      (Nothing, _, Just trans, _) -> return trans
+      (Nothing, _, Nothing, _) -> mzero
 
   -- A push moves the given permission from x to the top of the perm stack
   ([nuMP| Impl1_Push x p |], _) ->
@@ -3115,9 +3161,12 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   -- an or elimination performs a pattern-match on an Either
   ([nuMP| Impl1_ElimOr x p1 p2 |],
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
-    pitmCatching (translatePermImpl prx $ mbCombine RL.typeCtxProxies mb_impl1) >>= \maybe_trans1 ->
-    pitmCatching (translatePermImpl prx $ mbCombine RL.typeCtxProxies mb_impl2) >>= \maybe_trans2 ->
-    case (maybe_trans1, maybe_trans2) of
+    pitmCatching (translatePermImpl prx $
+                  mbCombine RL.typeCtxProxies mb_impl1) >>= \(mtrans1,hasf1) ->
+    pitmCatching (translatePermImpl prx $
+                  mbCombine RL.typeCtxProxies mb_impl2) >>= \(mtrans2,hasf2) ->
+    tell ([],hasf1 <> hasf2) >>
+    case (mtrans1, mtrans2) of
       (Nothing, Nothing) -> mzero
       _ ->
         return $ \k ->
@@ -3129,10 +3178,10 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
            eitherElimTransM tp1 tp2 tp_ret
              (\ptrans ->
                withPermStackM id ((:>: ptrans) . RL.tail) $
-               forceImplTrans maybe_trans1 k)
+               forceImplTrans mtrans1 k)
              (\ptrans ->
                withPermStackM id ((:>: ptrans) . RL.tail) $
-               forceImplTrans maybe_trans2 k)
+               forceImplTrans mtrans2 k)
              (transTupleTerm top_ptrans)
 
   -- An existential elimination performs a pattern-match on a Sigma
@@ -3221,7 +3270,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   ([nuMP| Impl1_BeginLifetime |], _) ->
     translatePermImplUnary mb_impls $ \m ->
     inExtTransM ETrans_Lifetime $
-    do tp_trans <- translateClosed $ ValPerm_LOwned MNil MNil
+    do tp_trans <- translateClosed $ ValPerm_LOwned [] MNil MNil
        let id_fun =
              lambdaOpenTerm "ps_empty" unitTypeOpenTerm $ \x ->
              applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
@@ -3243,7 +3292,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   -- If e1 and e2 are definitely not equal, treat this as a fail
   ([nuMP| Impl1_TryProveBVProp _ (BVProp_Eq e1 e2) prop_str |], _)
     | not $ mbLift (mbMap2 bvCouldEqual e1 e2) ->
-      tell [mbLift prop_str] >> mzero
+      pitmFail (mbLift prop_str)
 
   -- Otherwise, insert an equality test with proof construction. Note that, as
   -- with all TryProveBVProps, if the test fails and there is no failure
@@ -3354,7 +3403,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
          ]
 
   ([nuMP| Impl1_TryProveBVProp _ _ _ |], _) ->
-    tell ["translatePermImpl1: Unhandled BVProp case"] >> mzero
+    pitmFail ("translatePermImpl1: Unhandled BVProp case")
 
 
 -- | Translate a 'PermImpl' in the 'PermImplTransM' monad to a function that
@@ -3377,7 +3426,7 @@ instance ImplTranslateF r ext blocks tops ret =>
          Translate (ImpTransInfo
                     ext blocks tops ret ps) ctx (AnnotPermImpl r ps) OpenTerm where
   translate (mbMatch -> [nuMP| AnnotPermImpl err impl |]) =
-    let (transF, errs) = runPermImplTransM $ translatePermImpl Proxy impl in
+    let (transF, (errs,_)) = runPermImplTransM $ translatePermImpl Proxy impl in
     forceImplTrans transF $
     ImplFailContMsg (mbLift err ++ "\n\n"
                      ++ concat (intersperse

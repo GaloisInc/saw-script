@@ -24,6 +24,9 @@ A new `enable_lax_pointer_ordering` function exists, which relaxes the
 restrictions that Crucible imposes on comparisons between pointers from
 different allocation blocks.
 
+A SAW value of type `Bool` can now be brought into scope in Cryptol expressions
+as a value of type `Bit`.
+
 ## Changes
 
 * The linked-in version of ABC (based on the Haskell `abcBridge`
