@@ -163,4 +163,4 @@ heapster_typecheck_fun_rename env str_struct_new "str_struct_new" "(len:bv 64).a
  *** Export to Coq
  ***/
 
-heapster_export_coq env "rust_data.v";
+heapster_export_coq env "rust_data_gen.v";
