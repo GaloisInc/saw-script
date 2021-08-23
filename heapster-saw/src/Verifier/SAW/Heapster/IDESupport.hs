@@ -18,11 +18,6 @@ import Control.Monad.Reader
   ( MonadReader (ask, local),
     ReaderT (..),
   )
-import Control.Monad.Writer
-  ( MonadWriter (tell),
-    Writer,
-    execWriter,
-  )
 import Data.Aeson (ToJSON, Value, encodeFile)
 import Data.Binding.Hobbits
   ( Liftable (..),
@@ -33,6 +28,7 @@ import Data.Binding.Hobbits
     nuMP,
     nuMultiWithElim1,
     unsafeMbTypeRepr,
+    Name,
   )
 import Data.Maybe (catMaybes, listToMaybe, mapMaybe)
 import Data.Parameterized.Some (Some (..))
@@ -52,10 +48,11 @@ import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.TypedCrucible
 import Verifier.SAW.Heapster.JSONExport(ppToJson)
-import Data.Aeson (Value)
 import Data.Type.RList (mapRAssign)
 import Data.Functor.Constant
 import Control.Monad.Writer
+import Data.Binding.Hobbits.NameMap (NameMap)
+import qualified Data.Binding.Hobbits.NameMap as NameMap
 
 -- | The entry point for dumping a Heapster environment to a file for IDE
 -- consumption.
@@ -140,12 +137,24 @@ instance (PermCheckExtC ext)
     let callers = callerIDs $ typedEntryCallers te
     (ppi, _, fname) <- ask
     let loc' = snd (ppLoc loc)
-    let f :: 
-           (Pair (Constant String) ValuePerm) x ->
-           Constant (String, String, Value) x
-        f (Pair (Constant name) vp) = Constant (name, permPrettyString ppi vp, ppToJson ppi vp)
-    let inputs = mbLift
-               $ fmap (RL.toList . mapRAssign f . zipRAssign (typedEntryNames te)) (typedEntryPermsIn te)
+    
+    let insertNames ::
+          RL.RAssign Name (x :: RList CrucibleType) ->
+          RL.RAssign (Constant String) x ->
+          NameMap (StringF :: CrucibleType -> *)->
+          NameMap (StringF :: CrucibleType -> *)
+        insertNames RL.MNil RL.MNil m = m
+        insertNames (ns RL.:>: n) (xs RL.:>: Constant name) m =
+          insertNames ns xs (NameMap.insert n (StringF name) m)
+        inputs = mbLift
+               $ flip nuMultiWithElim1 (typedEntryPermsIn te)
+               $ \ns body ->
+                 let ppi' = ppi { ppExprNames = insertNames ns (typedEntryNames te) (ppExprNames ppi) }
+                     f :: 
+                      (Pair (Constant String) ValuePerm) x ->
+                      Constant (String, String, Value) x
+                     f (Pair (Constant name) vp) = Constant (name, permPrettyString ppi' vp, ppToJson ppi' vp)
+                 in RL.toList (mapRAssign f (zipRAssign (typedEntryNames te) body))
     tell [LogEntry loc' entryId callers fname inputs]
 
 mkLogEntryID :: TypedEntryID blocks args -> LogEntryID
@@ -212,8 +221,8 @@ mbExtractLogEntries
 mbExtractLogEntries mb_a =
   ReaderT $ \(ppi, loc, fname) ->
   tell $ mbLift $ flip nuMultiWithElim1 mb_a $ \ns x ->
-  execWriter $ runReaderT (extractLogEntries x) 
-                          (ppInfoAddExprNames "x" ns ppi, loc, fname)
+  let ppi' = ppInfoAddExprNames "x" ns ppi in
+  execWriter $ runReaderT (extractLogEntries x) (ppi', loc, fname)
 
 typedStmtOutCtx :: TypedStmt ext rets ps_in ps_next -> CruCtx rets
 typedStmtOutCtx = error "FIXME: write typedStmtOutCtx"

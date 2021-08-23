@@ -2532,9 +2532,8 @@ emitStmt ::
   StmtPermCheckM ext cblocks blocks tops ret ps_out ps_in
     (RAssign Name rets)
 emitStmt tps names loc stmt =
-  gopenBinding
-    ((TypedConsStmt loc stmt (cruCtxProxies tps) <$>) . strongMbM)
-    (mbPure (cruCtxProxies tps) ()) >>>= \(ns, ()) ->
+  let pxys = cruCtxProxies tps in
+  startBinding pxys (fmap (TypedConsStmt loc stmt pxys) . strongMbM) >>>= \ns ->
   setVarTypes Nothing names ns tps >>>
   gmodify (modifySTCurPerms (applyTypedStmt stmt ns)) >>>
   pure ns
