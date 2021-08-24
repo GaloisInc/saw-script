@@ -7,8 +7,8 @@ From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import CompMExtra.
 
-Load "string_set.v".
-Import StringSet.
+Require Import Examples.string_set_gen.
+Import string_set.
 Import SAWCorePrelude.
 
 (* Print insert_remove__tuple_fun. *)
