@@ -213,9 +213,11 @@ jobs:
       # to Coq translator; if we do other Coq tests, this should become
       # its own build artifact, to avoid downloading it twice
       - working-directory: saw-core-coq/coq
+        shell: bash
         run: PATH="$GITHUB_WORKSPACE/dist/bin:$PATH" opam exec -- make -j
 
       - working-directory: heapster-saw/examples
+        shell: bash
         run: PATH="$GITHUB_WORKSPACE/dist/bin:$PATH" opam exec -- make -j
 
   saw-remote-api-tests:
