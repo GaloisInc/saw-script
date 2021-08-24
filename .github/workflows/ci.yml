@@ -501,7 +501,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
-      - ocaml-tests
+      - heapster-tests
       - saw-remote-api-tests
       - cabal-test
       - build-push-image
