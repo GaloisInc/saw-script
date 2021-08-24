@@ -134,9 +134,12 @@ scWriteExternal t0 =
         Lambda s t e   -> pure $ unwords ["Lam", Text.unpack s, show t, show e]
         Pi s t e       -> pure $ unwords ["Pi", Text.unpack s, show t, show e]
         LocalVar i     -> pure $ unwords ["Var", show i]
-        Constant ec e  ->
+        Constant ec (Just e)  ->
             do stashName ec
                pure $ unwords ["Constant", show (ecVarIndex ec), show (ecType ec), show e]
+        Constant ec Nothing ->
+            do stashName ec
+               pure $ unwords ["ConstantOpaque", show (ecVarIndex ec), show (ecType ec)]
         FTermF ftf     ->
           case ftf of
             Primitive ec ->
@@ -295,7 +298,8 @@ scReadExternal sc input =
         ["Lam", x, t, e]    -> Lambda (Text.pack x) <$> readIdx t <*> readIdx e
         ["Pi", s, t, e]     -> Pi (Text.pack s) <$> readIdx t <*> readIdx e
         ["Var", i]          -> pure $ LocalVar (read i)
-        ["Constant",i,t,e]  -> Constant <$> readEC i t <*> readIdx e
+        ["Constant",i,t,e]  -> Constant <$> readEC i t <*> (Just <$> readIdx e)
+        ["ConstantOpaque",i,t]  -> Constant <$> readEC i t <*> pure Nothing
         ["Primitive", i, t] -> FTermF <$> (Primitive <$> readPrimName i t)
         ["Unit"]            -> pure $ FTermF UnitValue
         ["UnitT"]           -> pure $ FTermF UnitType

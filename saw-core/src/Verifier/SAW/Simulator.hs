@@ -31,9 +31,7 @@ module Verifier.SAW.Simulator
 
 import Prelude hiding (mapM)
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative ((<$>))
-#endif
+import Control.Applicative ((<|>))
 import Control.Monad (foldM, liftM)
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
@@ -42,6 +40,7 @@ import Control.Monad.Identity (Identity)
 import qualified Control.Monad.State as State
 import Data.Foldable (foldlM)
 import qualified Data.Set as Set
+import Data.Maybe (fromMaybe)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.IntMap (IntMap)
@@ -150,7 +149,9 @@ evalTermF cfg lam recEval tf env =
 
     LocalVar i              -> force (fst (env !! i))
     Constant ec t           -> do ec' <- traverse evalType ec
-                                  maybe (recEval t) id (simConstant cfg tf ec')
+                                  fromMaybe
+                                    (simNeutral cfg env (NeutralConstant ec))
+                                    (simConstant cfg tf ec' <|> (recEval <$> t))
     FTermF ftf              ->
       case ftf of
         Primitive pn ->
@@ -521,7 +522,8 @@ mkMemoLocal cfg memoClosed t env = go memoClosed t
         Lambda _ t1 _   -> go memo t1
         Pi _ t1 _       -> go memo t1
         LocalVar _      -> return memo
-        Constant _ t1   -> go memo t1
+        Constant _ Nothing -> return memo -- TODO? is this right?
+        Constant _ (Just t1) -> go memo t1
 
 {-# SPECIALIZE evalLocalTermF ::
   Show (Extra l) =>
