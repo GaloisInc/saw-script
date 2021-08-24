@@ -12,8 +12,7 @@ ifeq ($(SAW),)
   ifeq ($(CI),)
 	    SAW=cabal run saw
   else
-    SAW=$(GITHUB_WORKSPACE)/dist/bin/saw
-#    $(error Could not find SAW executable; PATH = $(PATH))
+    $(error Could not find SAW executable; PATH = $(PATH))
   endif
 endif
 

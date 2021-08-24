@@ -193,14 +193,11 @@ jobs:
           name: "${{ runner.os }}-bins"
           path: dist/bin
 
-      - name: Update PATH to include sAW
+      - name: Update PATH to include SAW
         shell: bash
         run: |
           chmod +x dist/bin/*
           echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
-          echo "PATH=$GITHUB_PATH"
-          echo "Contents of $GITHUB_WORKSPACE/dist/bin:"
-          ls $GITHUB_WORKSPACE/dist/bin
 
       - uses: ocaml/setup-ocaml@v2
         with:
@@ -215,11 +212,11 @@ jobs:
       # its own build artifact, to avoid downloading it twice
       - working-directory: saw-core-coq/coq
         shell: bash
-        run: PATH="$GITHUB_WORKSPACE/dist/bin:$PATH" opam exec -- make -j
+        run: opam exec -- make -j
 
       - working-directory: heapster-saw/examples
         shell: bash
-        run: PATH="$GITHUB_WORKSPACE/dist/bin:$PATH" opam exec -- make -j
+        run: opam exec -- make -j
 
   saw-remote-api-tests:
     runs-on: ${{ matrix.os }}
