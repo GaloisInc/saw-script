@@ -5,8 +5,16 @@ Makefile.coq: _CoqProject
 
 include Makefile.coq
 
-# If the saw executable is available, use it, otherwise fall back on cabal run saw
-SAW=$(shell which saw || echo cabal run saw)
+# If running in CI, always set $SAW=`which saw`. Otherwise, if saw is not in the
+# current path, fall back on cabal run saw
+SAW=$(shell which saw)
+ifeq ($(SAW),)
+  ifeq ($(CI),)
+    SAW=cabal run saw
+  else
+    $(error Could not find SAW executable)
+  endif
+endif
 
 %.bc: %.c
 	clang -emit-llvm -g -c $<
