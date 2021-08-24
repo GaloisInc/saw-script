@@ -16,7 +16,7 @@ Definition eq_dec := Bool.bool_dec.
 End BoolDecidableSet.
 Module BoolDecidableEqDepSet := DecidableEqDepSet BoolDecidableSet.
 
-Require Import Examples.mbox.
+Require Import Examples.mbox_gen.
 Import mbox.
 
 Import SAWCorePrelude.

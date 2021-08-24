@@ -11,7 +11,7 @@ From CryptolToCoq Require Import CompMExtra.
 
 Import SAWCorePrelude.
 
-Require Import Examples.arrays.
+Require Import Examples.arrays_gen.
 Import arrays.
 
 Import VectorNotations.

@@ -46,4 +46,4 @@ heapster_typecheck_fun_rename env use_mux_mut_refs_sym "use_mux_mut_refs" "(). e
  *** Export to Coq
  ***/
 
-heapster_export_coq env "rust_lifetimes.v";
+heapster_export_coq env "rust_lifetimes_gen.v";

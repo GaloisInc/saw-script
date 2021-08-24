@@ -8,7 +8,7 @@ From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import CompMExtra.
 
-Load "xor_swap.v".
+Require Import Examples.xor_swap_gen.
 Import xor_swap.
 
 

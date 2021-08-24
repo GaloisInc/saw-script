@@ -173,7 +173,7 @@ jobs:
           name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
           path: "dist/bin/saw"
 
-  ocaml-tests:
+  heapster-tests:
     needs: [build]
     strategy:
       fail-fast: false
@@ -193,6 +193,12 @@ jobs:
           name: "${{ runner.os }}-bins"
           path: dist/bin
 
+      - name: Update PATH to include SAW
+        shell: bash
+        run: |
+          chmod +x dist/bin/*
+          echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
+
       - uses: ocaml/setup-ocaml@v2
         with:
           ocaml-compiler: 4.09.x  # coq-bits claims to support < 4.10 only
@@ -201,11 +207,16 @@ jobs:
 
       - run: opam install --unlock-base -y coq=8.12.2 coq-bits=1.0.0
 
+      # FIXME: the following builds the Coq libraries for the SAW core
+      # to Coq translator; if we do other Coq tests, this should become
+      # its own build artifact, to avoid downloading it twice
       - working-directory: saw-core-coq/coq
-        run: PATH="$PWD/dist/bin:$PATH" opam exec -- make -j
+        shell: bash
+        run: opam exec -- make -j
 
       - working-directory: heapster-saw/examples
-        run: PATH="$PWD/dist/bin:$PATH" opam exec -- make -j
+        shell: bash
+        run: opam exec -- make -j
 
   saw-remote-api-tests:
     runs-on: ${{ matrix.os }}
@@ -496,7 +507,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
-      - ocaml-tests
+      - heapster-tests
       - saw-remote-api-tests
       - cabal-test
       - build-push-image

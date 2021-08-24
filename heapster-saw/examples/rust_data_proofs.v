@@ -8,7 +8,7 @@ From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import CompMExtra.
 
-Require Import Examples.rust_data.
+Require Import Examples.rust_data_gen.
 Import rust_data.
 
 Import SAWCorePrelude.
