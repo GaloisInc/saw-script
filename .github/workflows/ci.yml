@@ -193,7 +193,13 @@ jobs:
           name: "${{ runner.os }}-bins"
           path: dist/bin
 
-      - run: echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
+      - name: Update PATH to include sAW
+        shell: bash
+        run: |
+          echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
+          echo "PATH=$GITHUB_PATH"
+          echo "Contents of $GITHUB_WORKSPACE/dist/bin:"
+          ls $GITHUB_WORKSPACE/dist/bin
 
       - uses: ocaml/setup-ocaml@v2
         with:
