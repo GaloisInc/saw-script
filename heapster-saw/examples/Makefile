@@ -10,9 +10,10 @@ include Makefile.coq
 SAW=$(shell which saw)
 ifeq ($(SAW),)
   ifeq ($(CI),)
-    SAW=cabal run saw
+	    SAW=cabal run saw
   else
-    $(error Could not find SAW executable)
+    SAW=$(GITHUB_WORKSPACE)/dist/bin/saw
+#    $(error Could not find SAW executable; PATH = $(PATH))
   endif
 endif
 
