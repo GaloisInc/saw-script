@@ -130,6 +130,8 @@ namedDecls = concatMap filterNamed
   where
     filterNamed :: Coq.Decl -> [String]
     filterNamed (Coq.Axiom n _)                               = [n]
+    filterNamed (Coq.Parameter n _)                           = [n]
+    filterNamed (Coq.Variable n _)                            = [n]
     filterNamed (Coq.Comment _)                               = []
     filterNamed (Coq.Definition n _ _ _)                      = [n]
     filterNamed (Coq.InductiveDecl (Coq.Inductive n _ _ _ _)) = [n]
@@ -292,7 +294,25 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
         in
         foldM addElement (Coq.App (Coq.Var "Vector.nil") [Coq.Var "_"]) (Vector.reverse vec)
     StringLit s -> pure (Coq.Scope (Coq.StringLit (Text.unpack s)) "string")
-    ExtCns (EC _ _ _) -> errorTermM "External constants not supported"
+
+    ExtCns ec ->
+      do configuration <- asks translationConfiguration
+         let renamed = translateConstant (notations configuration) ec
+         alreadyTranslatedDecls <- getNamesOfAllDeclarations
+         let definitionsToSkip = skipDefinitions configuration
+         if elem renamed alreadyTranslatedDecls || elem renamed definitionsToSkip
+           then Coq.Var <$> pure renamed
+           else do
+             tp <-
+              -- Translate type in a top-level name scope
+              withLocalTranslationState $
+              do modify $ set localEnvironment []
+                 modify $ set unavailableIdents reservedIdents
+                 modify $ set sharedNames IntMap.empty
+                 modify $ set nextSharedName "var__0"
+                 translateTermLet (ecType ec)
+             modify $ over topLevelDeclarations $ (Coq.Variable renamed tp :)
+             Coq.Var <$> pure renamed
 
     -- The translation of a record type {fld1:tp1, ..., fldn:tpn} is
     -- RecordTypeCons fld1 tp1 (... (RecordTypeCons fldn tpn RecordTypeNil)...).
@@ -579,8 +599,28 @@ translateTermUnshared t = withLocalTranslationState $ do
       | n < length env -> Coq.Var <$> pure (env !! n)
       | otherwise -> Except.throwError $ LocalVarOutOfBounds t
 
-  -- Constants come with a body
-    Constant n body -> do
+    -- Constants with no body
+    Constant n Nothing -> do
+      configuration <- asks translationConfiguration
+      let renamed = translateConstant (notations configuration) n
+      alreadyTranslatedDecls <- getNamesOfAllDeclarations
+      let definitionsToSkip = skipDefinitions configuration
+      if elem renamed alreadyTranslatedDecls || elem renamed definitionsToSkip
+        then Coq.Var <$> pure renamed
+        else do
+          tp <-
+           -- Translate type in a top-level name scope
+           withLocalTranslationState $
+           do modify $ set localEnvironment []
+              modify $ set unavailableIdents reservedIdents
+              modify $ set sharedNames IntMap.empty
+              modify $ set nextSharedName "var__0"
+              translateTermLet (ecType n)
+          modify $ over topLevelDeclarations $ (Coq.Parameter renamed tp :)
+          Coq.Var <$> pure renamed
+
+    -- Constants with a body
+    Constant n (Just body) -> do
       configuration <- asks translationConfiguration
       let renamed = translateConstant (notations configuration) n
       alreadyTranslatedDecls <- getNamesOfAllDeclarations

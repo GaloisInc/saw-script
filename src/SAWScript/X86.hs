@@ -127,7 +127,7 @@ import Verifier.SAW.Recognizer(asBool)
 import Verifier.SAW.Simulator.What4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_ctx)
 
 -- Cryptol Verifier
-import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
+import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule,defaultPrimitiveOptions)
 import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 
 -- SAWScript
@@ -365,7 +365,7 @@ loadCry sym mb =
      env <- initCryptolEnv sc
      case mb of
        Nothing   -> return env
-       Just file -> snd <$> loadCryptolModule sc env file
+       Just file -> snd <$> loadCryptolModule sc defaultPrimitiveOptions env file
 
 
 --------------------------------------------------------------------------------
