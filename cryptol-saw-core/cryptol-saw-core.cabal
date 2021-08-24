@@ -67,7 +67,7 @@ executable css
 
   hs-source-dirs : css
   main-is : Main.hs
-  GHC-options: -Wall -O2 -rtsopts -pgmlc++
+  GHC-options: -Wall -O2 -threaded -rtsopts -pgmlc++
   extra-libraries:      stdc++
 
 test-suite cryptol-saw-core-tc-test
@@ -85,3 +85,5 @@ test-suite cryptol-saw-core-tc-test
     cryptol-saw-core,
     heredoc >= 0.2,
     saw-core
+
+  GHC-options: -threaded
