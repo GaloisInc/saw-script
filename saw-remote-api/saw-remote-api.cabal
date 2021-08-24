@@ -16,6 +16,11 @@ maintainer:          kwf@galois.com
 category:            Network
 extra-source-files:  CHANGELOG.md
 
+common general
+  ghc-options:
+    -O2
+    -threaded
+
 common warnings
   ghc-options:
     -Wall
@@ -86,7 +91,7 @@ library
                    SAWServer.VerifyCommon
 
 executable saw-remote-api
-  import: deps, warnings, errors
+  import: general, deps, warnings, errors
   main-is:             Main.hs
   build-depends:       saw-remote-api
   -- other-modules:
