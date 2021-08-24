@@ -196,6 +196,7 @@ jobs:
       - name: Update PATH to include sAW
         shell: bash
         run: |
+          chmod +x dist/bin/*
           echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
           echo "PATH=$GITHUB_PATH"
           echo "Contents of $GITHUB_WORKSPACE/dist/bin:"
