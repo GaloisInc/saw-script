@@ -507,6 +507,8 @@ Fixpoint zip (a b : sort 0) (m n : Nat) (xs : Vec m a) (ys : Vec n b)
 
 (* Prelude.foldr was skipped *)
 
+(* Prelude.foldl was skipped *)
+
 Definition reverse : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreVectorsAsCoqVectors.Vec n a :=
   fun (n : @SAWCoreScaffolding.Nat) (a : Type) (xs : @SAWCoreVectorsAsCoqVectors.Vec n a) => @SAWCoreVectorsAsCoqVectors.gen n a (fun (i : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt n a xs (@subNat (@subNat n 1) i)).
 
