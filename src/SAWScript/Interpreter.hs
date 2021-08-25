@@ -480,6 +480,7 @@ buildTopLevelEnv proxy opts =
                    , rwProfilingFile = Nothing
                    , rwLaxArith = False
                    , rwLaxPointerOrdering = False
+                   , rwDebugIntrinsics = True
                    , rwWhat4HashConsing = False
                    , rwWhat4HashConsingX86 = False
                    , rwPreservedRegs = []
@@ -563,6 +564,16 @@ disable_lax_pointer_ordering :: TopLevel ()
 disable_lax_pointer_ordering = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxPointerOrdering = False }
+
+enable_debug_intrinsics :: TopLevel ()
+enable_debug_intrinsics = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwDebugIntrinsics = True }
+
+disable_debug_intrinsics :: TopLevel ()
+disable_debug_intrinsics = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwDebugIntrinsics = False }
 
 enable_what4_hash_consing :: TopLevel ()
 enable_what4_hash_consing = do
@@ -804,6 +815,16 @@ primitives = Map.fromList
     (pureVal disable_lax_pointer_ordering)
     Current
     [ "Disable lax rules for pointer ordering comparisons in Crucible." ]
+
+  , prim "enable_debug_intrinsics" "TopLevel ()"
+    (pureVal enable_debug_intrinsics)
+    Current
+    [ "Enable translating statements using certain llvm.dbg intrinsic functions in Crucible." ]
+
+  , prim "disable_debug_intrinsics" "TopLevel ()"
+    (pureVal disable_debug_intrinsics)
+    Current
+    [ "Disable translating statements using certain llvm.dbg intrinsic functions in Crucible." ]
 
   , prim "enable_what4_hash_consing" "TopLevel ()"
     (pureVal enable_what4_hash_consing)

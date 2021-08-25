@@ -435,6 +435,7 @@ data TopLevelRW =
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
   , rwLaxPointerOrdering :: Bool
+  , rwDebugIntrinsics :: Bool
 
   -- FIXME: These might be better split into "simulator hash-consing" and "tactic hash-consing"
   , rwWhat4HashConsing :: Bool
