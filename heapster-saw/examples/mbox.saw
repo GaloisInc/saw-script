@@ -137,4 +137,4 @@ heapster_typecheck_fun env "mbox_drop" "().arg0:mbox<W,llvmword(0)>, arg1:int64<
 
 //------------------------------------------------------------------------------
 // Export to coq for verification
-heapster_export_coq env "mbox.v";
+heapster_export_coq env "mbox_gen.v";

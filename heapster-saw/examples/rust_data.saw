@@ -182,4 +182,4 @@ heapster_typecheck_fun_rename env list20_head_sym "list20_head" "<'a> fn (x:&'a 
  *** Export to Coq
  ***/
 
-heapster_export_coq env "rust_data.v";
+heapster_export_coq env "rust_data_gen.v";

@@ -8,7 +8,7 @@ From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import CompMExtra.
 
-Require Import Examples.iter_linked_list.
+Require Import Examples.iter_linked_list_gen.
 Import iter_linked_list.
 
 Import SAWCorePrelude.
