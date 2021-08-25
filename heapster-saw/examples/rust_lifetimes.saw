@@ -19,14 +19,14 @@ heapster_define_llvmshape env "u64" 64 "" "fieldsh(int64<>)";
  ***/
 
 // llvm.uadd.with.overflow.i64
-heapster_assume_fun env "llvm.uadd.with.overflow.i64" "().arg0:int64<>, arg1:int64<> -o ret:struct(int64<>,int1<>)" "\\ (x y:int64Trans) -> returnM (int64Trans * int1Trans * #()) (mkInt64Trans (bvAdd 64 (unInt64Trans x) (unInt64Trans y)), mkInt1Trans (gen 1 Bool (\\ (_:Nat) -> bvCarry 64 (unInt64Trans x) (unInt64Trans y))), ())";
+heapster_assume_fun env "llvm.uadd.with.overflow.i64" "().arg0:int64<>, arg1:int64<> -o ret:struct(int64<>,int1<>)" "\\ (x y:Vec 64 Bool) -> returnM (Vec 64 Bool * Vec 1 Bool * #()) (bvAdd 64 x y, gen 1 Bool (\\ (_:Nat) -> bvCarry 64 x y), ())";
 
 // llvm.expect.i1
-heapster_assume_fun env "llvm.expect.i1" "().arg0:int1<>, arg1:int1<> -o ret:int1<>" "\\ (x y:int1Trans) -> returnM int1Trans x";
+heapster_assume_fun env "llvm.expect.i1" "().arg0:int1<>, arg1:int1<> -o ret:int1<>" "\\ (x y:Vec 1 Bool) -> returnM (Vec 1 Bool) x";
 
 // core::panicking::panic
 //panic_sym <- heapster_find_symbol env "5panic";
-//heapster_assume_fun_rename env panic_sym "panic" "().empty -o empty" "returnM int1Trans x";
+//heapster_assume_fun_rename env panic_sym "panic" "().empty -o empty" "returnM (Vec 1 Bool) x";
 
 
 /***
@@ -46,4 +46,4 @@ heapster_typecheck_fun_rename env use_mux_mut_refs_sym "use_mux_mut_refs" "(). e
  *** Export to Coq
  ***/
 
-heapster_export_coq env "rust_lifetimes.v";
+heapster_export_coq env "rust_lifetimes_gen.v";

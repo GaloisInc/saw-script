@@ -11,4 +11,4 @@ heapster_typecheck_fun env "copy_ptr_contents" "().arg0:ptr((R,0) |-> int64<>) -
 
 heapster_typecheck_fun env "copy_ptr" "().arg0:ptr((W,0) |-> int64<>) -o arg0:ptr((W,0) |-> int64<>)";
 
-heapster_export_coq env "memcpy.v";
+heapster_export_coq env "memcpy_gen.v";

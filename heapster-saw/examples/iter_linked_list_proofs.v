@@ -8,7 +8,7 @@ From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import CompMExtra.
 
-Require Import Examples.iter_linked_list.
+Require Import Examples.iter_linked_list_gen.
 Import iter_linked_list.
 
 Import SAWCorePrelude.
@@ -22,8 +22,8 @@ Qed.
 
 
 Definition incr_list_invar :=
-  @list_rect {_ : bitvector 64 & unit} (fun _ => Prop) True
-           (fun x _ rec => isBvult 64 (projT1 x) (intToBv 64 0x7fffffffffffffff) /\ rec).
+  @list_rect (bitvector 64) (fun _ => Prop) True
+             (fun x _ rec => isBvult 64 x (intToBv 64 0x7fffffffffffffff) /\ rec).
 
 Arguments incr_list_invar !l.
 

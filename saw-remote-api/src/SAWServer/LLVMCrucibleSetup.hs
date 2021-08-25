@@ -43,9 +43,11 @@ import SAWScript.Crucible.LLVM.Builtins
     , llvm_return
     , llvm_precond
     , llvm_postcond )
+import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS (GhostGlobal)
-import SAWScript.Value (BuiltinContext, LLVMCrucibleSetupM(..), biSharedContext)
+import SAWScript.Value
+    ( BuiltinContext, LLVMCrucibleSetupM(..), TopLevelRW(..), biSharedContext )
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.TypedTerm (TypedTerm)
@@ -57,6 +59,7 @@ import SAWServer as Server
       SAWState,
       CrucibleSetupVal(..),
       sawTask,
+      sawTopLevelRW,
       getHandleAlloc,
       setServerVal )
 import SAWServer.Data.Contract
@@ -209,7 +212,11 @@ llvmLoadModule (LLVMLoadModuleParams serverName fileName) =
      case tasks of
        (_:_) -> Argo.raise $ notAtTopLevel $ map fst tasks
        [] ->
-         do let ?laxArith = False -- TODO read from config
+         do rw <- view sawTopLevelRW <$> Argo.getState
+            let ?transOpts = CL.defaultTranslationOptions
+                               { CL.laxArith        = rwLaxArith rw
+                               , CL.debugIntrinsics = rwDebugIntrinsics rw
+                               }
             halloc <- getHandleAlloc
             loaded <- liftIO (CMS.loadLLVMModule fileName halloc)
             case loaded of

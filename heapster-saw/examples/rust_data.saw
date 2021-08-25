@@ -78,19 +78,19 @@ heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64" "(rw:rwmodality, l1:lifetime
 // <str as alloc::string::ToString>::to_string
 to_string_str <- heapster_find_symbol env "$LT$str$u20$as$u20$alloc..string..ToString$GT$9to_string";
 // NOTE: this is the more incorrect version, with no lifetime argument and no shapes
-//heapster_assume_fun_rename env to_string_str "to_string_str" "(len:bv 64). arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:exists len':bv 64. ptr((W,0) |-> array(0,<len',*1,[(W,0,8) |-> int8<>])) * ptr((W,8) |-> int64<>) * ptr((W,16) |-> eq(llvmword(len')))" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len int8Trans) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #()) len (str, mkInt64Trans len, ()))";
+//heapster_assume_fun_rename env to_string_str "to_string_str" "(len:bv 64). arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:exists len':bv 64. ptr((W,0) |-> array(0,<len',*1,[(W,0,8) |-> int8<>])) * ptr((W,8) |-> int64<>) * ptr((W,16) |-> eq(llvmword(len')))" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len (Vec 8 Bool)) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #()) len (str, len, ()))";
 
 // NOTE: this is the incorrect version, with no lifetime argument
-heapster_assume_fun_rename env to_string_str "to_string_str" "(len:bv 64). arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:memblock(W,0,24,String<>)" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len int8Trans) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #()) len (str, mkInt64Trans len, ()))";
+heapster_assume_fun_rename env to_string_str "to_string_str" "(len:bv 64). arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:memblock(W,0,24,String<>)" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len (Vec 8 Bool)) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #()) len (str, len, ()))";
 
 // FIXME: this is the correct version, with a lifetime argument
-//heapster_assume_fun_rename env to_string_str "to_string_str" "(ps:lowned_perm,l:lifetime,len:bv 64). l:lowned ps, arg0:[l]memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[[l](R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o l:lowned ps, arg0:[l]memblock(W,0,24,String<>)" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len int8Trans) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #()) len (str, mkInt64Trans len, ()))";
+//heapster_assume_fun_rename env to_string_str "to_string_str" "(ps:lowned_perm,l:lifetime,len:bv 64). l:lowned ps, arg0:[l]memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[[l](R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o l:lowned ps, arg0:[l]memblock(W,0,24,String<>)" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len (Vec 8 Bool)) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #()) len (str, len, ()))";
 
 
 // HashMap::insert
 // FIXME: we currently pretend this always returns None
 hashmap_u64_u64_insert_sym <- heapster_find_symbol env "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert";
-heapster_assume_fun_rename env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert" "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>" "\\ (endl:HashMap int64Trans int64Trans * #() -> CompM (HashMap int64Trans int64Trans * #())) (h:HashMap int64Trans int64Trans) (k:int64Trans) (v:int64Trans) -> returnM ((#() -> CompM (HashMap int64Trans int64Trans * #())) * Either #() int64Trans * #()) ((\\ (_:#()) -> returnM (HashMap int64Trans int64Trans * #()) (Cons (int64Trans * int64Trans) (k,v) h, ())), Left #() int64Trans (), ())";
+heapster_assume_fun_rename env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert" "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>" "\\ (endl:HashMap (Vec 64 Bool) (Vec 64 Bool) * #() -> CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) (h:HashMap (Vec 64 Bool) (Vec 64 Bool)) (k:Vec 64 Bool) (v:Vec 64 Bool) -> returnM ((#() -> CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) * Either #() (Vec 64 Bool) * #()) ((\\ (_:#()) -> returnM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #()) (Cons (Vec 64 Bool * Vec 64 Bool) (k,v) h, ())), Left #() (Vec 64 Bool) (), ())";
 
 
 /***
@@ -163,4 +163,4 @@ heapster_typecheck_fun_rename env str_struct_new "str_struct_new" "(len:bv 64).a
  *** Export to Coq
  ***/
 
-heapster_export_coq env "rust_data.v";
+heapster_export_coq env "rust_data_gen.v";

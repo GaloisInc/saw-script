@@ -10,4 +10,4 @@ heapster_block_entry_hint env "clearbufs" 3 "top1:llvmptr 64" "frm:llvmframe 64,
 
 heapster_typecheck_fun env "clearbufs" "().arg0:Bufs<llvmword(0)> -o arg0:Bufs<llvmword(0)>";
 
-heapster_export_coq env "clearbufs.v";
+heapster_export_coq env "clearbufs_gen.v";

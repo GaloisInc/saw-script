@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE LambdaCase #-}
 
 {- |
 Module      : Verifier.SAW.SCTypeCheck
@@ -464,13 +465,9 @@ instance TypeInfer (FlatTermF TypedTerm) where
        sy <- ensureSort ty
        liftTCM scSort (max sx sy)
   typeInfer (PairLeft (TypedTerm _ tp)) =
-    case asPairType tp of
-      Just (t1, _) -> typeCheckWHNF t1
-      _ -> throwTCError (NotTupleType tp)
+    ensurePairType tp >>= \(t1,_) -> return t1
   typeInfer (PairRight (TypedTerm _ tp)) =
-    case asPairType tp of
-      Just (_, t2) -> typeCheckWHNF t2
-      _ -> throwTCError (NotTupleType tp)
+    ensurePairType tp >>= \(_,t2) -> return t2
 
   typeInfer (DataTypeApp d params args) =
     -- Look up the DataType structure, check the length of the params and args,
@@ -515,10 +512,9 @@ instance TypeInfer (FlatTermF TypedTerm) where
     liftTCM scFlatTermF $ RecordType $
     map (\(f,TypedTerm _ tp) -> (f,tp)) elems
   typeInfer (RecordProj t@(TypedTerm _ t_tp) fld) =
-    case asRecordType t_tp of
-      Just (Map.lookup fld -> Just tp) -> return tp
-      Just _ -> throwTCError $ BadRecordField fld t_tp
-      Nothing -> throwTCError $ NotRecordType t
+    ensureRecordType (NotRecordType t) t_tp >>= \case
+    (Map.lookup fld -> Just tp) -> return tp
+    _ -> throwTCError $ BadRecordField fld t_tp
   typeInfer (Sort s) = liftTCM scSort (sortOf s)
   typeInfer (NatLit _) = liftTCM scNatType
   typeInfer (ArrayValue (TypedTerm tp tp_tp) vs) =
@@ -541,18 +537,37 @@ instance TypeInfer (FlatTermF TypedTerm) where
 -- evaluator. If @fun_tp@ is not a pi type, raise the supplied error.
 applyPiTyped :: TCError -> Term -> TypedTerm -> TCM Term
 applyPiTyped err fun_tp arg =
-  case asPi fun_tp of
-    Just (_, arg_tp, ret_tp) -> do
-      -- _ <- ensureSort aty -- NOTE: we assume tx is well-formed and WHNF
-      -- aty' <- scTypeCheckWHNF aty
-      checkSubtype arg arg_tp
-      liftTCM instantiateVar 0 (typedVal arg) ret_tp >>= typeCheckWHNF
-    _ -> throwTCError err
+  ensurePiType err fun_tp >>= \(_,arg_tp,ret_tp) ->
+  do checkSubtype arg arg_tp
+     liftTCM instantiateVar 0 (typedVal arg) ret_tp >>= typeCheckWHNF
 
--- | Ensure that a 'Term' is a sort, and return that sort
+-- | Ensure that a 'Term' matches a recognizer function, normalizing if
+-- necessary; otherwise throw the supplied 'TCError'
+ensureRecognizer :: Recognizer Term a -> TCError -> Term -> TCM a
+ensureRecognizer f _ (f -> Just a) = return a
+ensureRecognizer f err trm =
+  typeCheckWHNF trm >>= \case
+  (f -> Just a) -> return a
+  _ -> throwTCError err
+
+-- | Ensure a 'Term' is a sort, normalizing if necessary, and return that sort
 ensureSort :: Term -> TCM Sort
-ensureSort (asSort -> Just s) = return s
-ensureSort tp = throwTCError $ NotSort tp
+ensureSort tp = ensureRecognizer asSort (NotSort tp) tp
+
+-- | Ensure a 'Term' is a pair type, normalizing if necessary, and return the
+-- two components of that pair type
+ensurePairType :: Term -> TCM (Term, Term)
+ensurePairType tp = ensureRecognizer asPairType (NotSort tp) tp
+
+-- | Ensure a 'Term' is a record type, normalizing if necessary, and return the
+-- components of that record type
+ensureRecordType :: TCError -> Term -> TCM (Map FieldName Term)
+ensureRecordType err tp = ensureRecognizer asRecordType err tp
+
+-- | Ensure a 'Term' is a pi type, normalizing if necessary. Return the
+-- components of that pi type on success; otherwise throw the supplied error.
+ensurePiType :: TCError -> Term -> TCM (LocalName, Term, Term)
+ensurePiType err tp = ensureRecognizer asPi err tp
 
 -- | Reduce a type to WHNF (using 'scWhnf'), also adding in some conversions for
 -- operations on Nat literals that are useful in type-checking
