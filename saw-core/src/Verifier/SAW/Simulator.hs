@@ -518,7 +518,7 @@ mkMemoLocal cfg memoClosed t env = go mempty t
     goTermF memo tf =
       case tf of
         FTermF ftf      -> foldlM go memo ftf
-        App t1 t2       -> do memo' <- go memo t1
+        App t1 t2       -> do memo' <- goTermF memo (unwrapTermF t1)
                               go memo' t2
         Lambda _ t1 _   -> go memo t1
         Pi _ t1 _       -> go memo t1
@@ -549,10 +549,10 @@ evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam recEval tf0 
   where
     lam = evalOpen cfg memoClosed
     recEval (Unshared tf) = evalTermF cfg lam recEval tf env
-    recEval (STApp{ stAppIndex = i, stAppFreeVars = fv }) =
+    recEval (STApp{ stAppIndex = i, stAppFreeVars = fv, stAppTermF = tf }) =
       case IMap.lookup i memo of
         Just x -> force x
-        Nothing -> panic "evalLocalTermF" ["internal error"]
+        Nothing -> evalTermF cfg lam recEval tf env
       where memo = if fv == emptyBitSet then memoClosed else memoLocal
 
 {-# SPECIALIZE evalOpen ::
