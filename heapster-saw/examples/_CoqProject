@@ -23,6 +23,7 @@ rust_data_proofs.v
 rust_lifetimes_gen.v
 rust_lifetimes_proofs.v
 arrays_gen.v
+arrays_proofs.v
 clearbufs_gen.v
 clearbufs_proofs.v
 mbox_gen.v

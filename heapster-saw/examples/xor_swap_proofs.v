@@ -13,8 +13,8 @@ Import xor_swap.
 
 
 Definition xor_swap_spec x1 x2 :
-  CompM ({_ : bitvector 64 & unit} * ({_ : bitvector 64 & unit} * unit)) :=
-  returnM (existT _ x2 tt, ((existT _ x1 tt), tt)).
+  CompM (bitvector 64 * (bitvector 64 * unit)) :=
+  returnM (x2, (x1, tt)).
 Arguments xor_swap_spec /.
 
 Lemma no_errors_xor_swap : refinesFun xor_swap (fun _ _ => noErrorsSpec).
