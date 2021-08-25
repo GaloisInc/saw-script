@@ -60,13 +60,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-18.04]
+        os: [ubuntu-18.04, macos-latest, windows-latest]
         ghc: ["8.8.4", "8.10.3"]
-        include:
-          - os: macos-latest
-            ghc: "8.8.4"
-          - os: windows-latest
-            ghc: "8.8.4"
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
@@ -347,6 +342,7 @@ jobs:
   build-push-image:
     runs-on: ubuntu-latest
     needs: [config]
+    if: github.event_name == 'schedule'
     strategy:
       fail-fast: false
       matrix:
@@ -459,7 +455,7 @@ jobs:
           - hmac-failure
           - awslc
           - blst
-        ghc: ["8.8.4", "8.10.3"]
+        ghc: ["8.10.3"]
     steps:
       - uses: actions/checkout@v2
       - run: |
