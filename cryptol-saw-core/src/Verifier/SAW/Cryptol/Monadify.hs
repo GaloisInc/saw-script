@@ -582,10 +582,10 @@ semiPureGlobalMacro from to =
 -- | Make a 'MonMacro' that maps a named global to a global of argument
 -- type. Because we can't get access to the type of the global until we apply
 -- the macro, we monadify its type at macro application time.
-argGlobalMacro :: Ident -> Ident -> MonMacro
+argGlobalMacro :: NameInfo -> Ident -> MonMacro
 argGlobalMacro from to =
   MonMacro 0 $ \glob args ->
-  if globalDefName glob == ModuleIdentifier from && args == [] then
+  if globalDefName glob == from && args == [] then
     return $ ArgMonTerm $
     mkGlobalArgMonTerm (monadifyType [] $ globalDefType glob) to
   else
@@ -955,7 +955,8 @@ mmSelf self_id =
 
 -- | Build a 'MacroMapping' from an identifier to a function of argument type
 mmArg :: Ident -> Ident -> MacroMapping
-mmArg from_id to_id = (ModuleIdentifier from_id, argGlobalMacro from_id to_id)
+mmArg from_id to_id = (ModuleIdentifier from_id,
+                       argGlobalMacro (ModuleIdentifier from_id) to_id)
 
 -- | Build a 'MacroMapping' from an identifier and a custom 'MonMacro'
 mmCustom :: Ident -> MonMacro -> MacroMapping
@@ -1084,6 +1085,11 @@ ensureCryptolMLoaded sc =
   scModuleIsLoaded sc (mkModuleName ["CryptolM"]) >>= \is_loaded ->
   if is_loaded then return () else
     scLoadCryptolMModule sc
+
+-- | Monadify a type to its argument type and complete it to a 'Term'
+monadifyCompleteArgType :: SharedContext -> Term -> IO Term
+monadifyCompleteArgType sc tp =
+  completeOpenTerm sc $ monadifyTypeArgType [] tp
 
 -- | Monadify a term of the specified type to a 'MonTerm' and then complete that
 -- 'MonTerm' to a SAW core 'Term', or 'fail' if this is not possible
