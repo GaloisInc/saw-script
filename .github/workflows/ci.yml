@@ -23,7 +23,7 @@ env:
 
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       name: ${{ steps.config.outputs.name }}
       version: ${{ steps.config.outputs.version }}
@@ -60,7 +60,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-18.04]
+        os: [self-hosted]
         ghc: ["8.8.4", "8.10.3"]
         include:
           - os: macos-latest
@@ -70,6 +70,15 @@ jobs:
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
+
+      - name: System Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt update
+          sudo apt install -y software-properties-common apt-transport-https ca-certificates wget curl
+          sudo apt install -y zlibc zlib1g zlib1g-dev git build-essential language-pack-en-base language-pack-en
+          sudo locale-gen en_US.UTF-8
+          sudo update-locale LANG=$LANG LANGUAGE=$LANGUAGE
 
       - uses: actions/checkout@v2
       - run: |
@@ -99,6 +108,7 @@ jobs:
             ${{ env.CACHE_VERSION }}-cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
       - if: needs.config.outputs.release == 'true'
+        name: Set release version
         shell: bash
         run: |
           sed -i.bak \
@@ -116,6 +126,7 @@ jobs:
         run: .github/ci.sh build
 
       - uses: GaloisInc/.github/actions/cabal-collect-bins@v1
+        if: runner.os != 'Windows'
         id: cabal-test-suites
         with:
           targets: |
@@ -127,15 +138,17 @@ jobs:
           matrix.ghc == '8.8.4' &&
           runner.os != 'Windows'
         uses: actions/upload-artifact@v2
+        name: Upload abc
         with:
           path: ${{ steps.abc.outputs.path }}
           name: abc-${{ runner.os }}
 
       - uses: actions/upload-artifact@v2
+        name: Upload dist-tests
         if: "matrix.ghc == '8.8.4'"
         with:
           path: dist-tests
-          name: dist-tests-${{ matrix.os }}
+          name: dist-tests-${{ runner.os }}
 
       - shell: bash
         run: .github/ci.sh setup_dist_bins
@@ -154,6 +167,7 @@ jobs:
         run: .github/ci.sh sign $NAME.tar.gz
 
       - if: matrix.ghc == '8.8.4'
+        name: Upload ${{ steps.config.outputs.name }}.tar.gz
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -163,12 +177,14 @@ jobs:
 
       - if: "matrix.ghc == '8.8.4'"
         uses: actions/upload-artifact@v2
+        name: Upload ${{ runner.os }} dist-bin
         with:
           path: dist/bin
           name: ${{ runner.os }}-bins
 
-      - if: "matrix.os == 'ubuntu-18.04'"
+      - if: "runner.os == 'Linux'"
         uses: actions/upload-artifact@v2
+        name: Upload saw-${{ runner.os }}-${{ matrix.ghc }}
         with:
           name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
           path: "dist/bin/saw"
@@ -226,11 +242,11 @@ jobs:
       matrix:
         include:
           - test: saw-remote-api/scripts/run_rpc_tests.sh
-            os: ubuntu-18.04
+            os: ubuntu-20.04
           - test: saw-remote-api/scripts/run_rpc_tests.sh
             os: macos-latest
           - test: saw-remote-api/scripts/check_docs.sh
-            os: ubuntu-18.04
+            os: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
         with:
@@ -278,7 +294,7 @@ jobs:
       fail-fast: false
       matrix:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
-        os: [ubuntu-18.04]
+        os: [ubuntu-20.04]
         continue-on-error: [false]
         include:
           - suite: integration_tests
@@ -323,7 +339,7 @@ jobs:
 
       - uses: actions/download-artifact@v2
         with:
-          name: dist-tests-${{ matrix.os }}
+          name: dist-tests-${{ runner.os }}
           path: dist-tests
 
       - shell: bash
@@ -446,7 +462,7 @@ jobs:
     name: "Test s2n proofs"
     timeout-minutes: 60
     needs: build
-    runs-on: ubuntu-18.04
+    runs-on: self-hosted
     strategy:
       fail-fast: false
       matrix:
@@ -459,8 +475,17 @@ jobs:
           - hmac-failure
           - awslc
           - blst
-        ghc: ["8.8.4", "8.10.3"]
+        ghc: ["8.10.3"]
     steps:
+      - name: System Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt update
+          sudo apt install -y software-properties-common apt-transport-https ca-certificates wget curl
+          sudo apt install -y docker-compose build-essential libtinfo6 language-pack-en-base language-pack-en
+          sudo locale-gen en_US.UTF-8
+          sudo update-locale LANG=$LANG LANGUAGE=$LANGUAGE
+
       - uses: actions/checkout@v2
       - run: |
           mkdir -p s2nTests/bin
