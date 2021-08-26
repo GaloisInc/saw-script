@@ -398,6 +398,7 @@ translate opts elf fun =
   do let name = funName fun
      sayLn ("Translating function: " ++ BSC.unpack name)
 
+     let ?memOpts = Crucible.defaultMemOptions
      let ?recordLLVMAnnotation = \_ _ -> return ()
 
      let sym   = backend opts
@@ -431,7 +432,7 @@ setSimulatorVerbosity verbosity sym = do
 
 
 doSim ::
-  Crucible.HasLLVMAnn Sym =>
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
   Options ->
   RelevantElf ->
   SymFuns Sym ->

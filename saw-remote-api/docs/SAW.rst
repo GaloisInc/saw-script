@@ -402,7 +402,7 @@ Parameter fields
 
 
 ``option``
-  The option to set and its accompanying value (i.e., true or false); one of the following:``lax arithmetic``, ``lax pointer ordering``, ``SMT array memory model``, or ``What4 hash consing``
+  The option to set and its accompanying value (i.e., true or false); one of the following:``lax arithmetic``, ``lax pointer ordering``, ``debug intrinsics``, ``SMT array memory model``, or ``What4 hash consing``
   
   
 
