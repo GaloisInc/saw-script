@@ -62,9 +62,6 @@ jobs:
       matrix:
         os: [ubuntu-18.04, macos-latest, windows-latest]
         ghc: ["8.8.4", "8.10.3"]
-        exclude:
-          os: windows-latest
-          ghc: "8.8.4"
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
