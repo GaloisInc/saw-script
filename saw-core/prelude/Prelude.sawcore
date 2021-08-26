@@ -2038,11 +2038,18 @@ primitive existsM : (a b:sort 0) -> (a -> CompM b) -> CompM b;
 -- those computations diverge from each other.
 primitive forallM : (a b:sort 0) -> (a -> CompM b) -> CompM b;
 
--- We can define fixM as let rec f x = ... in f
+-- NOTE: for the simplicity and efficiency of MR solver, we define all
+-- fixed-point computations in CompM via a primitive multiFixM, defined below.
+-- Thus, even though fixM is really the primitive operation, we write this file
+-- as if multiFixM is, but I am leaving this version of fixM commented out here
+-- to keep this decision explicitly documented and to make it easier to switch
+-- back to having fixM be primitive if we decide to do so later.
+--
+{-
 primitive fixM : (a:sort 0) -> (b:a -> sort 0) ->
                  (((x:a) -> CompM (b x)) -> ((x:a) -> CompM (b x))) ->
                  (x:a) -> CompM (b x);
--- fixM a b fn x = letRecM1 a b b fn (\ (f:a -> CompM b) -> f x);
+-}
 
 -- A representation of the type (x1:A1) -> ... -> (xn:An) -> CompM (B x1 ... xn)
 data LetRecType : sort 1 where {
@@ -2145,6 +2152,17 @@ lrtTupleType lrts =
   (\ (lrt:LetRecType) (_:LetRecTypes) (rest:sort 0) -> #(lrtToType lrt, rest))
   lrts;
 
+-- Apply a multi-arity function of type lrtPi lrts B to an lrtTupleType lrts
+lrtApply : (lrts:LetRecTypes) -> (B:sort 0) -> lrtPi lrts B -> lrtTupleType lrts -> B;
+lrtApply top_lrts B =
+  LetRecTypes#rec
+  (\ (lrts:LetRecTypes) -> lrtPi lrts B -> lrtTupleType lrts -> B)
+  (\ (F:B) (_:#()) -> F)
+  (\ (lrt:LetRecType) (lrts:LetRecTypes) (rest:lrtPi lrts B -> lrtTupleType lrts -> B)
+      (F:lrtPi (LRT_Cons lrt lrts) B) (fs:lrtTupleType (LRT_Cons lrt lrts)) ->
+    rest (F fs.(1)) fs.(2))
+  top_lrts;
+
 -- NOTE: the following are needed to define multiFixM instead of making it a
 -- primitive, which we are keeping commented here in case that is needed
 {-
@@ -2159,17 +2177,6 @@ lrtLambda top_lrts B =
      (rest:(lrtTupleType lrts -> B) -> lrtPi lrts B)
      (F:lrtTupleType (LRT_Cons lrt lrts) -> B) (f:lrtToType lrt) ->
     rest (\ (fs:lrtTupleType lrts) -> F (f, fs)))
-  top_lrts;
-
--- Apply a multi-arity function of type lrtPi lrts B to an lrtTupleType lrts
-lrtApply : (lrts:LetRecTypes) -> (B:sort 0) -> lrtPi lrts B -> lrtTupleType lrts -> B;
-lrtApply top_lrts B =
-  LetRecTypes#rec
-  (\ (lrts:LetRecTypes) -> lrtPi lrts B -> lrtTupleType lrts -> B)
-  (\ (F:B) (_:#()) -> F)
-  (\ (lrt:LetRecType) (lrts:LetRecTypes) (rest:lrtPi lrts B -> lrtTupleType lrts -> B)
-      (F:lrtPi (LRT_Cons lrt lrts) B) (fs:lrtTupleType (LRT_Cons lrt lrts)) ->
-    rest (F fs.(1)) fs.(2))
   top_lrts;
 
 -- Build a multi-argument fixed-point of type A1 -> ... -> An -> CompM B
@@ -2208,29 +2215,34 @@ multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
             lrtTupleType lrts;
 multiFixM lrts F =
   multiTupleFixM lrts (\ (fs:lrtTupleType lrts) -> lrtApply lrts (lrtTupleType lrts) F fs);
-
--- A letrec construct for binding 0 or more mutually recursive functions
-letRecM : (lrts : LetRecTypes) -> (B:sort 0) -> lrtPi lrts (lrtTupleType lrts) ->
-          lrtPi lrts (CompM B) -> CompM B;
-letRecM lrts B F body = lrtApply lrts (CompM B) body (multiFixM lrts F);
 -}
-
--- Build a multi-argument fixed-point of type A1 -> ... -> An -> CompM B
-primitive multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
-                         lrtToType lrt;
 
 -- Construct a fixed-point for a tuple of mutually-recursive functions
 primitive multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
                       lrtTupleType lrts;
+
+-- Build a single, multi-argument fixed-point of type A1 -> ... -> An -> CompM B
+multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
+               lrtToType lrt;
+multiArgFixM lrt f =
+  (multiFixM
+     (LRT_Cons lrt LRT_Nil)
+     (\ (f: lrtToType lrt) -> (f, ()))).(1);
+
+-- A single-argument fixed-point function
+fixM : (a:sort 0) -> (b:a -> sort 0) ->
+       (((x:a) -> CompM (b x)) -> ((x:a) -> CompM (b x))) ->
+       (x:a) -> CompM (b x);
+fixM a b = multiArgFixM (LRT_Fun a (\ (x:a) -> LRT_Ret (b x)));
 
 -- This is like let rec in ML: letRecM defs body defines N recursive functions
 -- in terms of themselves using defs, and then passes them to body. We use this
 -- instead of the more standard fixM because it offers a more compact
 -- representation, and because fixM messes with functional extensionality by
 -- introducing an irreducible term at function type.
-primitive letRecM : (lrts : LetRecTypes) -> (b : sort 0) ->
-                    (lrtPi lrts (lrtTupleType lrts)) ->
-                    (lrtPi lrts (CompM b)) -> CompM b;
+letRecM : (lrts : LetRecTypes) -> (B:sort 0) -> lrtPi lrts (lrtTupleType lrts) ->
+          lrtPi lrts (CompM B) -> CompM B;
+letRecM lrts B F body = lrtApply lrts (CompM B) body (multiFixM lrts F);
 
 -- This is let rec with exactly one binding
 letRecM1 : (a b c : sort 0) -> ((a -> CompM b) -> (a -> CompM b)) ->
