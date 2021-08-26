@@ -1,5 +1,9 @@
+
 enable_experimental;
+import "SpecPrims.cry" as SpecPrims;
 import "monadify.cry";
+set_monadification "SpecPrims::exists" "Prelude.existsM";
+set_monadification "SpecPrims::forall" "Prelude.forallM";
 
 /*
 my_abs <- unfold_term ["my_abs"] {{ my_abs }};
@@ -29,3 +33,15 @@ print_term fib;
 fibM <- monadify_term fib;
 print "fib: monadified term:";
 print_term fibM;
+
+noErrors <- unfold_term ["noErrors"] {{ SpecPrims::noErrors }};
+print_term noErrors;
+noErrorsM <- monadify_term noErrors;
+print "noErrors: monadified term:";
+print_term noErrorsM;
+
+fibSpecNoErrors <- unfold_term ["fibSpecNoErrors"] {{ fibSpecNoErrors }};
+print_term fibSpecNoErrors;
+fibSpecNoErrorsM <- monadify_term fibSpecNoErrors;
+print "fibSpecNoErrors: monadified term:";
+print_term fibSpecNoErrorsM;

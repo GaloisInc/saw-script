@@ -1,4 +1,8 @@
 
+module Monadify where
+
+import SpecPrims
+
 my_abs : [64] -> [64]
 my_abs x = if x < 0 then -x else x
 
@@ -16,3 +20,6 @@ sha1 (t, x, y, z) =
 
 fib : [64] -> [64]
 fib x = if x == 0 then 1 else x * fib (x - 1)
+
+fibSpecNoErrors : [64] -> [64]
+fibSpecNoErrors _ = noErrors
