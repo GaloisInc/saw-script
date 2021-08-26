@@ -2246,14 +2246,17 @@ scArrayEq :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
 scArrayEq sc a b x y = scGlobalApply sc "Prelude.arrayEq" [a, b, x, y]
 
 -- > arrayCopy : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> Array (Vec n Bool) a -> Vec n Bool -> Vec n Bool -> Array (Vec n Bool) a;
+-- > arrayCopy n a dest_arr dest_idx src_arr src_idx len
 scArrayCopy :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
 scArrayCopy sc n a f i g j l = scGlobalApply sc "Prelude.arrayCopy" [n, a, f, i, g, j, l]
 
 -- > arraySet : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> a -> Vec n Bool -> Array (Vec n Bool) a;
+-- > arraySet n a arr idx val len
 scArraySet :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
 scArraySet sc n a f i e l = scGlobalApply sc "Prelude.arraySet" [n, a, f, i, e, l]
 
 -- > arrayRangeEq : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> Array (Vec n Bool) a -> Vec n Bool -> Vec n Bool -> Bool;
+-- > arrayRangeEq n a lhs_arr lhs_idx rhs_arr rhs_idx len
 scArrayRangeEq :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
 scArrayRangeEq sc n a f i g j l = scGlobalApply sc "Prelude.arrayRangeEq" [n, a, f, i, g, j, l]
 
