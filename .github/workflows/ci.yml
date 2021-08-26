@@ -122,7 +122,7 @@ jobs:
           dest: dist-tests
 
       - if: |
-          matrix.ghc == '8.8.4' &&
+          matrix.ghc == '8.10.3' &&
           runner.os != 'Windows'
         uses: actions/upload-artifact@v2
         with:
@@ -130,7 +130,7 @@ jobs:
           name: abc-${{ runner.os }}
 
       - uses: actions/upload-artifact@v2
-        if: "matrix.ghc == '8.8.4'"
+        if: "matrix.ghc == '8.10.3'"
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
@@ -144,14 +144,14 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist $NAME
 
-      - if: matrix.ghc == '8.8.4' && needs.config.outputs.release == 'true'
+      - if: matrix.ghc == '8.10.3' && needs.config.outputs.release == 'true'
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME.tar.gz
 
-      - if: matrix.ghc == '8.8.4'
+      - if: matrix.ghc == '8.10.3'
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -159,7 +159,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: "matrix.ghc == '8.8.4'"
+      - if: "matrix.ghc == '8.10.3'"
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
