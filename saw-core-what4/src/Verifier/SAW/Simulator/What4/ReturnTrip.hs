@@ -367,6 +367,15 @@ scEq sym sc tp x y =
     BaseBoolRepr    -> scBoolEq sc x y
     BaseRealRepr    -> scRealEq sym sc x y
     BaseIntegerRepr -> scIntEq sc x y
+    BaseArrayRepr idxTypes range
+      | Ctx.Empty Ctx.:> idx_type <- idxTypes ->
+        do let SAWExpr x' = x
+           let SAWExpr y' = y
+           sc_idx_type <- baseSCType sym sc idx_type
+           sc_elm_type <- baseSCType sym sc range
+           SAWExpr <$> SC.scArrayEq sc sc_idx_type sc_elm_type x' y'
+      | otherwise ->
+        unsupported sym ("SAW backend: equality comparison on unsupported multidimensional array type:" ++ show tp)
     BaseBVRepr w    ->
       do let SAWExpr x' = x
          let SAWExpr y' = y
@@ -796,6 +805,35 @@ evaluateExpr sym st sc cache = f []
                sc_elm <- f env v
                SAWExpr <$> SC.scArrayUpdate sc sc_idx_type sc_elm_type sc_arr sc_idx sc_elm
           | otherwise -> unimplemented "multidimensional UpdateArray"
+
+        B.CopyArray w a_repr dest_arr dest_idx src_arr src_idx len _dest_end_idx _src_end_idx ->
+          do sc_w <- SC.scNat sc (natValue w)
+             sc_a <- baseSCType sym sc a_repr
+             sc_dest_arr <- f env dest_arr
+             sc_dest_idx <- f env dest_idx
+             sc_src_arr <- f env src_arr
+             sc_src_idx <- f env src_idx
+             sc_len <- f env len
+             SAWExpr <$> SC.scArrayCopy sc sc_w sc_a sc_dest_arr sc_dest_idx sc_src_arr sc_src_idx sc_len
+
+        B.SetArray w a_repr arr idx val len _end_idx ->
+          do sc_w <- SC.scNat sc (natValue w)
+             sc_a <- baseSCType sym sc a_repr
+             sc_arr <- f env arr
+             sc_idx <- f env idx
+             sc_val <- f env val
+             sc_len <- f env len
+             SAWExpr <$> SC.scArraySet sc sc_w sc_a sc_arr sc_idx sc_val sc_len
+
+        B.EqualArrayRange w a_repr x_arr x_idx y_arr y_idx len _x_end_idx _y_end_idx ->
+          do sc_w <- SC.scNat sc (natValue w)
+             sc_a <- baseSCType sym sc a_repr
+             sc_x_arr <- f env x_arr
+             sc_x_idx <- f env x_idx
+             sc_y_arr <- f env y_arr
+             sc_y_idx <- f env y_idx
+             sc_len <- f env len
+             SAWExpr <$> SC.scArrayRangeEq sc sc_w sc_a sc_x_arr sc_x_idx sc_y_arr sc_y_idx sc_len
 
         B.IntDiv x y ->
           do x' <- f env x
