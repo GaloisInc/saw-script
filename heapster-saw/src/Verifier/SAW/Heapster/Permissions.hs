@@ -349,6 +349,16 @@ permPrettyExprMb f mb =
   do docs <- traverseRAssign (\n -> Constant <$> permPrettyM n) ns
      f docs $ permPrettyM a
 
+permPrettyExprMbTyped :: PermPretty a =>
+  CruCtx ctx ->
+  (RAssign (Constant (Doc ann)) ctx -> PermPPM (Doc ann) -> PermPPM (Doc ann)) ->
+  Mb (ctx :: RList CrucibleType) a -> PermPPM (Doc ann)
+permPrettyExprMbTyped ctx f mb =
+  fmap mbLift $ strongMbM $ flip nuMultiWithElim1 mb $ \ns a ->
+  local (ppInfoAddTypedExprNames ctx ns) $
+  do docs <- traverseRAssign (\n -> Constant <$> permPrettyM n) ns
+     f docs $ permPrettyM a
+
 instance (PermPretty a) => PermPretty (Mb (ctx :: RList CrucibleType) a) where
   permPrettyM =
     permPrettyExprMb $ \docs ppm ->
@@ -891,7 +901,7 @@ instance PermPretty (PermExpr a) where
        pp2 <- permPrettyM sh2
        return $ nest 2 $ sep [pp1 <+> pretty "orsh", pp2]
   permPrettyM (PExpr_ExShape mb_sh) =
-    flip permPrettyExprMb mb_sh $ \(_ :>: Constant pp_n) ppm ->
+    flip (permPrettyExprMbTyped (CruCtxNil `CruCtxCons` knownRepr)) mb_sh $ \(_ :>: Constant pp_n) ppm ->
     do pp <- ppm
        return $ nest 2 $ sep [pretty "exsh" <+> pp_n <> dot, pp]
   permPrettyM (PExpr_ValPerm p) = permPrettyM p
@@ -2592,7 +2602,7 @@ instance PermPretty (ValuePerm a) where
     (\pp1 pp2 -> hang 2 (pp1 <> softline <> pretty "or" <+> pp2))
     <$> permPrettyM p1 <*> permPrettyM p2
   permPrettyM (ValPerm_Exists mb_p) =
-    flip permPrettyExprMb mb_p $ \(_ :>: Constant pp_n) ppm ->
+    flip (permPrettyExprMbTyped (CruCtxNil `CruCtxCons` knownRepr)) mb_p $ \(_ :>: Constant pp_n) ppm ->
     (\pp -> hang 2 (pretty "exists" <+> pp_n <> dot <+> pp)) <$> ppm
   permPrettyM (ValPerm_Named n args off) =
     do n_pp <- permPrettyM n
