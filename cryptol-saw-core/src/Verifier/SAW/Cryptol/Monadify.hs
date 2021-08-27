@@ -158,6 +158,12 @@ data GlobalDef = GlobalDef { globalDefName :: NameInfo,
                              globalDefType :: Term,
                              globalDefTerm :: Term }
 
+instance Eq GlobalDef where
+  gd1 == gd2 = globalDefName gd1 == globalDefName gd2
+
+instance Show GlobalDef where
+  show = show . globalDefName
+
 -- | Get the 'String' name of a 'GlobalDef'
 globalDefString :: GlobalDef -> String
 globalDefString = T.unpack . toAbsoluteName . globalDefName

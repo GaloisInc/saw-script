@@ -19,30 +19,40 @@ import Prettyprinter
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Cryptol.Monadify
 
 import SAWScript.Proof (boolToProp)
 import qualified SAWScript.Prover.SBV as SBV
 
 import Prelude
 
+-- | A function name that has been specifically created for a coinductive proof
+newtype LocalFunName
+  = LocalFunName { unLocalFunName :: ExtCns Term } deriving (Eq, Show)
 
-newtype LocalFunName = LocalFunName { unLocalFunName :: ExtCns Term } deriving (Eq, Show)
+-- | Names of functions to be used in computations, which are either local names
+-- (represented with an 'ExtCns'), which have been created to represent
+-- recursive calls to fixed-points, or global named constants
+data FunName
+  = LocalName LocalFunName | GlobalName GlobalDef
+  deriving (Eq, Show)
 
--- | Names of functions to be used in computations, which are either local,
--- letrec-bound names (represented with an 'ExtCns'), or global named constants
-data FunName = LocalName LocalFunName | GlobalName Ident
-             deriving (Eq, Show)
+-- | Get the type of a 'FunName'
+funNameType :: FunName -> Term
+funNameType (LocalName (LocalFunName ec)) = ecType ec
+funNameType (GlobalName gd) = globalDefType gd
 
-funNameType :: FunName -> MRM Term
-funNameType (LocalName (LocalFunName ec)) = return $ ecType ec
-funNameType (GlobalName i) = liftSC1 scTypeOfGlobal i
-
--- | A "marking" consisting of a set of unfolded function names
+-- | A "marking" consisting of a set of function names. Terms are marked to
+-- indicate that they are subterms of terms that we got from unfolding the
+-- specified function names. Marking is used to prevent infinite loops in the
+-- solver.
 newtype Mark = Mark [FunName] deriving (Semigroup, Monoid, Show)
 
+-- | Check if a function name is in a 'Mark'
 inMark :: FunName -> Mark -> Bool
 inMark f (Mark fs) = elem f fs
 
+-- | Build a 'Mark' for a single function name
 singleMark :: FunName -> Mark
 singleMark f = Mark [f]
 
@@ -334,7 +344,7 @@ compFunInputType (CompFunMark f _) = compFunInputType f
 asFunName :: Term -> Maybe FunName
 asFunName t =
   (LocalName <$> LocalFunName <$> asExtCns t)
-  `mplus` (GlobalName <$> asGlobalDef t)
+  `mplus` (GlobalName <$> asTypedGlobalDef t)
 
 -- | Match a term as being of the form @CompM a@ for some @a@
 asCompMApp :: Term -> Maybe Term
@@ -576,8 +586,8 @@ instance MRSolveEq WHNFComp WHNFComp where
         (mrUnfoldFunBind f2 args2 mark2 k2 >>= \c -> mrSolveEq comp1 c)
     where
       cmp_funs =
-        do tp1 <- funNameType f1
-           tp2 <- funNameType f2
+        do let tp1 = funNameType f1
+           let tp2 = funNameType f2
            mrSolveEq (Type tp1) (Type tp2)
            mrSolveEq f1 f2
            zipWithM_ mrSolveEq args1 args2
