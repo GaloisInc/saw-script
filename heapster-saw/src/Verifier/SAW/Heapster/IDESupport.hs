@@ -53,6 +53,7 @@ import Data.Functor.Constant
 import Control.Monad.Writer
 import Data.Binding.Hobbits.NameMap (NameMap)
 import qualified Data.Binding.Hobbits.NameMap as NameMap
+import Verifier.SAW.Heapster.NamedMb
 
 -- | The entry point for dumping a Heapster environment to a file for IDE
 -- consumption.
@@ -131,30 +132,30 @@ instance (PermCheckExtC ext)
     => ExtractLogEntries
          (TypedEntry TransPhase ext blocks tops ret args ghosts) where
   extractLogEntries te = do
-    let loc = mbLift $ fmap getFirstProgramLocTS (typedEntryBody te)
-    withLoc loc (mbExtractLogEntries (typedEntryBody te))
+    let loc = mbLift' $ fmap getFirstProgramLocTS (typedEntryBody te)
+    withLoc loc (mb'ExtractLogEntries (typedEntryBody te))
     let entryId = mkLogEntryID $ typedEntryID te
     let callers = callerIDs $ typedEntryCallers te
     (ppi, _, fname) <- ask
     let loc' = snd (ppLoc loc)
-    
+    let debugNames = _mbNames (typedEntryBody te)
     let insertNames ::
           RL.RAssign Name (x :: RList CrucibleType) ->
-          RL.RAssign (Constant String) x ->
+          RL.RAssign StringF x ->
           NameMap (StringF :: CrucibleType -> *)->
           NameMap (StringF :: CrucibleType -> *)
         insertNames RL.MNil RL.MNil m = m
-        insertNames (ns RL.:>: n) (xs RL.:>: Constant name) m =
+        insertNames (ns RL.:>: n) (xs RL.:>: StringF name) m =
           insertNames ns xs (NameMap.insert n (StringF name) m)
         inputs = mbLift
                $ flip nuMultiWithElim1 (typedEntryPermsIn te)
                $ \ns body ->
-                 let ppi' = ppi { ppExprNames = insertNames ns (typedEntryNames te) (ppExprNames ppi) }
+                 let ppi' = ppi { ppExprNames = insertNames ns debugNames (ppExprNames ppi) }
                      f :: 
-                      (Pair (Constant String) ValuePerm) x ->
+                      (Pair StringF ValuePerm) x ->
                       Constant (String, String, Value) x
-                     f (Pair (Constant name) vp) = Constant (name, permPrettyString ppi' vp, ppToJson ppi' vp)
-                 in RL.toList (mapRAssign f (zipRAssign (typedEntryNames te) body))
+                     f (Pair (StringF name) vp) = Constant (name, permPrettyString ppi' vp, ppToJson ppi' vp)
+                 in RL.toList (mapRAssign f (zipRAssign debugNames body))
     tell [LogEntry loc' entryId callers fname inputs]
 
 mkLogEntryID :: TypedEntryID blocks args -> LogEntryID
@@ -175,7 +176,7 @@ instance ExtractLogEntries (TypedStmtSeq ext blocks tops ret ps_in) where
     -- fmap (setErrorMsg str) <$> extractLogEntries pimpl
     extractLogEntries pimpl
   extractLogEntries (TypedConsStmt loc _ _ rest) = do
-    withLoc loc $ mbExtractLogEntries rest
+    withLoc loc $ mb'ExtractLogEntries rest
   extractLogEntries (TypedTermStmt _ _) = pure ()
 
 instance ExtractLogEntries
@@ -197,8 +198,8 @@ instance ExtractLogEntries (PermImpl1 ps_in ps_outs) where
 
 instance ExtractLogEntries
     (MbPermImpls (TypedStmtSeq ext blocks tops ret) ps_outs) where
-  extractLogEntries (MbPermImpls_Cons _ mbpis pis) = do
-    mbExtractLogEntries pis
+  extractLogEntries (MbPermImpls_Cons ctx mbpis pis) = do
+    mbExtractLogEntries ctx pis
     extractLogEntries mbpis
   extractLogEntries MbPermImpls_Nil = pure ()
 
@@ -217,11 +218,19 @@ instance (PermCheckExtC ext)
       mapM_ (\(Some te) -> extractLogEntries te) $ _typedBlockEntries tb
 
 mbExtractLogEntries
-  :: ExtractLogEntries a => Mb (ctx :: RList CrucibleType) a -> ExtractionM ()
-mbExtractLogEntries mb_a =
+  :: ExtractLogEntries a => CruCtx ctx -> Mb (ctx :: RList CrucibleType) a -> ExtractionM ()
+mbExtractLogEntries ctx mb_a =
   ReaderT $ \(ppi, loc, fname) ->
   tell $ mbLift $ flip nuMultiWithElim1 mb_a $ \ns x ->
-  let ppi' = ppInfoAddExprNames "x" ns ppi in
+  let ppi' = ppInfoAddTypedExprNames ctx ns ppi in
+  execWriter $ runReaderT (extractLogEntries x) (ppi', loc, fname)
+
+mb'ExtractLogEntries
+  :: ExtractLogEntries a => Mb' (ctx :: RList CrucibleType) a -> ExtractionM ()
+mb'ExtractLogEntries mb_a =
+  ReaderT $ \(ppi, loc, fname) ->
+  tell $ mbLift $ flip nuMultiWithElim1 (_mbBinding mb_a) $ \ns x ->
+  let ppi' = ppInfoApplyAllocation ns (_mbNames mb_a) ppi in
   execWriter $ runReaderT (extractLogEntries x) (ppi', loc, fname)
 
 typedStmtOutCtx :: TypedStmt ext rets ps_in ps_next -> CruCtx rets
@@ -278,7 +287,7 @@ getFirstProgramLocBM block =
       -> Maybe ProgramLoc
     helper ste = case ste of
       Some TypedEntry { typedEntryBody = stmts } ->
-        Just $ mbLift $ fmap getFirstProgramLocTS stmts
+        Just $ mbLift' $ fmap getFirstProgramLocTS stmts
 
 -- | From the sequence, get the first program location we encounter, which
 -- should correspond to the permissions for the entry point we want to log

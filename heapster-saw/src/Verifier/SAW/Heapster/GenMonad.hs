@@ -8,7 +8,7 @@ module Verifier.SAW.Heapster.GenMonad (
   -- * Core definitions
   GenStateContT(..), (>>>=), (>>>),
   -- * Continuation operations
-  gcaptureCC, gmapRet, gabortM, gparallel, startBinding, gopenBinding,
+  gcaptureCC, gmapRet, gabortM, gparallel, startBinding, startBinding', gopenBinding, gopenBinding',
   -- * State operations
   gmodify,
   -- * Transformations
@@ -20,6 +20,7 @@ import Control.Monad.State ( ap, MonadState(get, put) )
 import Control.Monad.Trans.Class ( MonadTrans(lift) )
 import Control.Monad.Trans.Reader
 import Data.Proxy
+import Verifier.SAW.Heapster.NamedMb
 
 -- | The generalized state-continuation monad
 newtype GenStateContT s1 r1 s2 r2 m a = GenStateContT {
@@ -109,11 +110,28 @@ gopenBinding f_ret mb_a =
   k (names, a)
 
 -- | Name-binding in the generalized continuation monad (FIXME: explain)
+gopenBinding' ::
+  (Mb' ctx (m b1) -> m r2) ->
+  Mb' ctx b2 ->
+  GenStateContT s b1 s r2 m (RAssign Name ctx, b2)
+gopenBinding' f_ret mb_a =
+  gcaptureCC \k ->
+  f_ret $ flip nuMultiWithElim1' mb_a $ \names a ->
+  k (names, a)
+
+-- | Name-binding in the generalized continuation monad (FIXME: explain)
 startBinding ::
   RAssign Proxy ctx ->
   (Mb ctx (m r1) -> m r2) ->
   GenStateContT s r1 s r2 m (RAssign Name ctx)
 startBinding tps f_ret = gcaptureCC (f_ret . nuMulti tps)
+
+-- | Name-binding in the generalized continuation monad (FIXME: explain)
+startBinding' ::
+  RAssign StringF ctx ->
+  (Mb' ctx (m r1) -> m r2) ->
+  GenStateContT s r1 s r2 m (RAssign Name ctx)
+startBinding' tps f_ret = gcaptureCC (f_ret . nuMulti' tps)
 
 addReader :: GenStateContT s1 r1 s2 r2 m a -> GenStateContT s1 r1 s2 r2 (ReaderT e m) a
 addReader (GenStateContT m) =

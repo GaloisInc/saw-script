@@ -79,6 +79,7 @@ import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.CFG.Core
 import Verifier.SAW.Term.Functor (Ident)
 import Verifier.SAW.OpenTerm
+import Verifier.SAW.Heapster.NamedMb
 
 import Verifier.SAW.Heapster.CruUtil
 
@@ -137,8 +138,6 @@ foldMapWithDefault comb def f l = foldr1WithDefault comb def $ map f l
 -- * Pretty-printing
 ----------------------------------------------------------------------
 
-newtype StringF a = StringF { unStringF :: String }
-
 -- | Convert a type to a base name for printing variables of that type
 typeBaseName :: TypeRepr a -> String
 typeBaseName UnitRepr = "u"
@@ -175,16 +174,24 @@ emptyPPInfo = PPInfo NameMap.empty Map.empty
 
 -- | Add an expression variable to a 'PPInfo' with the given base name
 ppInfoAddExprName :: String -> ExprVar a -> PPInfo -> PPInfo
-ppInfoAddExprName base _ _
+ppInfoAddExprName base x ppi =
+  let (ppi', str) = ppInfoAllocateName base ppi in
+  ppInfoApplyName x str ppi'
+
+ppInfoApplyName :: Name (x :: CrucibleType) -> String -> PPInfo -> PPInfo
+ppInfoApplyName x str ppi =
+  ppi { ppExprNames = NameMap.insert x (StringF str) (ppExprNames ppi) }
+
+ppInfoAllocateName :: String -> PPInfo -> (PPInfo, String)
+ppInfoAllocateName base _
   | length base == 0 || isDigit (last base) =
     error ("ppInfoAddExprName: invalid base name: " ++ base)
-ppInfoAddExprName base x (PPInfo { .. }) =
+ppInfoAllocateName base ppi =
   let (i',str) =
-        case Map.lookup base ppBaseNextInt of
+        case Map.lookup base (ppBaseNextInt ppi) of
           Just i -> (i+1, base ++ show i)
           Nothing -> (1, base) in
-  PPInfo { ppExprNames = NameMap.insert x (StringF str) ppExprNames,
-           ppBaseNextInt = Map.insert base i' ppBaseNextInt }
+  (ppi { ppBaseNextInt = Map.insert base i' (ppBaseNextInt ppi) }, str)
 
 -- | Add a sequence of variables to a 'PPInfo' with the given base name
 ppInfoAddExprNames :: String -> RAssign Name (tps :: RList CrucibleType) ->
@@ -193,12 +200,33 @@ ppInfoAddExprNames _ MNil info = info
 ppInfoAddExprNames base (ns :>: n) info =
   ppInfoAddExprNames base ns $ ppInfoAddExprName base n info
 
+-- |
+ppInfoAllocateExprNames ::
+  String {- ^ base name -} ->
+  RAssign pxy (tps :: RList CrucibleType) ->
+  PPInfo ->
+  (PPInfo, RAssign StringF tps)
+ppInfoAllocateExprNames _ MNil info = (info, MNil)
+ppInfoAllocateExprNames base (ns :>: _) ppi =
+  case ppInfoAllocateName base ppi of
+    (ppi1, str) ->
+      case ppInfoAllocateExprNames base ns ppi1 of
+        (ppi2, ns') -> (ppi2, ns' :>: StringF str)
+
 -- | Add a sequence of variables to a 'PPInfo' using their 'typeBaseName's
 ppInfoAddTypedExprNames :: CruCtx tps -> RAssign Name tps -> PPInfo -> PPInfo
 ppInfoAddTypedExprNames _ MNil info = info
 ppInfoAddTypedExprNames (CruCtxCons tps tp) (ns :>: n) info =
   ppInfoAddTypedExprNames tps ns $ ppInfoAddExprName (typeBaseName tp) n info
 
+ppInfoApplyAllocation ::
+  RAssign Name (tps :: RList CrucibleType) ->
+  RAssign StringF tps ->
+  PPInfo ->
+  PPInfo
+ppInfoApplyAllocation MNil MNil ppi = ppi
+ppInfoApplyAllocation (ns :>: n) (ss :>: StringF s) ppi =
+  ppInfoApplyAllocation ns ss (ppInfoApplyName n s ppi)
 
 type PermPPM = Reader PPInfo
 
@@ -313,15 +341,15 @@ instance PermPrettyF VarAndType where
 
 
 permPrettyExprMb :: PermPretty a =>
-                    (RAssign (Constant (Doc ann)) ctx -> PermPPM (Doc ann) -> PermPPM (Doc ann)) ->
-                    Mb (ctx :: RList CrucibleType) a -> PermPPM (Doc ann)
+  (RAssign (Constant (Doc ann)) ctx -> PermPPM (Doc ann) -> PermPPM (Doc ann)) ->
+  Mb (ctx :: RList CrucibleType) a -> PermPPM (Doc ann)
 permPrettyExprMb f mb =
   fmap mbLift $ strongMbM $ flip nuMultiWithElim1 mb $ \ns a ->
-  local (ppInfoAddExprNames "z" ns) $
+  local (ppInfoAddExprNames "x" ns) $
   do docs <- traverseRAssign (\n -> Constant <$> permPrettyM n) ns
      f docs $ permPrettyM a
 
-instance PermPretty a => PermPretty (Mb (ctx :: RList CrucibleType) a) where
+instance (PermPretty a) => PermPretty (Mb (ctx :: RList CrucibleType) a) where
   permPrettyM =
     permPrettyExprMb $ \docs ppm ->
     (\pp -> PP.group (ppEncList True (RL.toList docs) <>
@@ -4931,6 +4959,23 @@ genSubstMb ::
   RAssign Proxy ctx ->
   s ctx' -> Mb ctx' (Mb ctx a) -> m (Mb ctx a)
 genSubstMb p s mbmb = mbM (fmap (genSubst s) (mbSwap p mbmb))
+
+
+instance {-# INCOHERENT #-} (Given (RAssign Proxy ctx), Substable s a m, NuMatching a) => Substable s (Mb' ctx a) m where
+   genSubst = genSubstMb' given
+
+instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) => Substable s (Mb' RNil a) m where
+   genSubst = genSubstMb' RL.typeCtxProxies
+
+instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) => Substable s (Binding' c a) m where
+   genSubst = genSubstMb' RL.typeCtxProxies
+
+genSubstMb' ::
+  Substable s a m =>
+  NuMatching a =>
+  RAssign Proxy ctx ->
+  s ctx' -> Mb ctx' (Mb' ctx a) -> m (Mb' ctx a)
+genSubstMb' p s mbmb = mbM' (fmap (genSubst s) (mbSink p mbmb))
 
 instance SubstVar s m => Substable s (Member ctx a) m where
   genSubst _ mb_memb = return $ mbLift mb_memb

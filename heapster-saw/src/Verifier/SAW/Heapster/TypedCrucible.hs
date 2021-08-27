@@ -50,7 +50,6 @@ import Prettyprinter as PP
 
 import qualified Data.Type.RList as RL
 import Data.Binding.Hobbits
-import Data.Binding.Hobbits.MonadBind
 import Data.Binding.Hobbits.NameSet (NameSet, SomeName(..), SomeRAssign(..),
                                      namesListToNames, namesToNamesList,
                                      nameSetIsSubsetOf)
@@ -80,9 +79,9 @@ import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.NamePropagation
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.Widening
+import Verifier.SAW.Heapster.NamedMb
 
 import Debug.Trace
-import Data.Type.RList (mapRAssign)
 
 
 ----------------------------------------------------------------------
@@ -761,7 +760,7 @@ data TypedStmtSeq ext blocks tops ret ps_in where
   TypedConsStmt :: !ProgramLoc ->
                    !(TypedStmt ext rets ps_in ps_next) ->
                    !(RAssign Proxy rets) ->
-                   !(Mb rets (TypedStmtSeq ext blocks tops ret ps_next)) ->
+                   !(Mb' rets (TypedStmtSeq ext blocks tops ret ps_next)) ->
                    TypedStmtSeq ext blocks tops ret ps_in
 
   -- | Typed version of 'TermStmt', which terminates the current block
@@ -1204,18 +1203,17 @@ data TypedEntry phase ext blocks tops ret args ghosts =
     typedEntryCallers :: ![Some (TypedCallSite phase blocks tops args ghosts)],
     -- | The ghost variables for this entrypoint
     typedEntryGhosts :: !(CruCtx ghosts),
-    --
-    typedEntryNames :: !(TransData phase (RAssign (Constant String) ((tops :++: args) :++: ghosts))),
     -- | The input permissions for this entrypoint
     typedEntryPermsIn :: !(MbValuePerms ((tops :++: args) :++: ghosts)),
     -- | The output permissions for the function (cached locally)
     typedEntryPermsOut :: !(MbValuePerms (tops :> ret)),
     -- | The type-checked body of the entrypoint
     typedEntryBody :: !(TransData phase
-                        (Mb ((tops :++: args) :++: ghosts)
+                        (Mb' ((tops :++: args) :++: ghosts)
                          (TypedStmtSeq ext blocks tops ret
                           ((tops :++: args) :++: ghosts))))
   }
+
 
 -- | Test if an entrypoint has in-degree greater than 1
 typedEntryHasMultiInDegree :: TypedEntry phase ext blocks tops ret args ghosts ->
@@ -1236,8 +1234,7 @@ completeTypedEntry ::
 completeTypedEntry (TypedEntry { .. })
   | Just body <- typedEntryBody
   , Just callers <- mapM (traverseF completeTypedCallSite) typedEntryCallers
-  , Just names <- typedEntryNames
-  = Just $ TypedEntry { typedEntryBody = body, typedEntryCallers = callers, typedEntryNames = names, .. }
+  = Just $ TypedEntry { typedEntryBody = body, typedEntryCallers = callers, .. }
 completeTypedEntry _ = Nothing
 
 -- | Build an entrypoint from a call site, using that call site's permissions as
@@ -1255,7 +1252,6 @@ singleCallSiteEntry siteID tops args ret perms_in perms_out =
     typedEntryArgs = args, typedEntryRet = ret,
     typedEntryCallers = [Some $ idTypedCallSite siteID tops args perms_in],
     typedEntryGhosts = callSiteVars siteID,
-    typedEntryNames = Nothing,
     typedEntryPermsIn = perms_in, typedEntryPermsOut = perms_out,
     typedEntryBody = Nothing
   }
@@ -1379,7 +1375,6 @@ emptyBlockForPerms names cblocks blk tops ret ghosts perms_in perms_out
         typedEntryID = TypedEntryID blockID 0, typedEntryTops = tops,
         typedEntryArgs = args, typedEntryRet = ret,
         typedEntryCallers = [], typedEntryGhosts = ghosts,
-        typedEntryNames = Nothing,
         typedEntryPermsIn = perms_in, typedEntryPermsOut = perms_out,
         typedEntryBody = Nothing }]
     names
@@ -1944,24 +1939,72 @@ runPermCheckM ::
    DistPerms ((tops :++: args) :++: ghosts) ->
    PermCheckM ext cblocks blocks tops ret () ps_out r ((tops :++: args)
                                                        :++: ghosts) ()) ->
-  TopPermCheckM ext cblocks blocks tops ret (Mb ((tops :++: args) :++: ghosts) r)
+  TopPermCheckM ext cblocks blocks tops ret (Mb' ((tops :++: args) :++: ghosts) r)
 runPermCheckM names entryID args ghosts mb_perms_in m =
   get >>= \(TopPermCheckState {..}) ->
   let args_prxs = cruCtxProxies args
-      ghosts_prxs = cruCtxProxies ghosts in
-  liftInnerToTopM $ strongMbM $
-  flip nuMultiWithElim1 (mbValuePermsToDistPerms mb_perms_in) $ \ns perms_in ->
+      ghosts_prxs = cruCtxProxies ghosts
+      (arg_names, local_names) = initialNames args names
+      (dbgs, ppi) = flip runState emptyPPInfo $
+          do x <- state (allocateDebugNames' (Just "top") (noNames' stTopCtx) stTopCtx)
+             y <- state (allocateDebugNames' (Just "local") arg_names args)
+             z <- state (allocateDebugNames' (Just "ghost") (noNames' ghosts) ghosts)
+             pure (x `rappend` y `rappend` z)
+    in
+  liftInnerToTopM $ strongMbM' $
+  flip nuMultiWithElim1' (Mb' dbgs (mbValuePermsToDistPerms mb_perms_in)) $ \ns perms_in ->
   let (tops_args, ghosts_ns) = RL.split Proxy ghosts_prxs ns
       (tops_ns, args_ns) = RL.split Proxy args_prxs tops_args
-      (arg_names, local_names) = initialNames args names
-      st = emptyPermCheckState (distPermSet perms_in) tops_ns entryID local_names in
+      st1 = emptyPermCheckState (distPermSet perms_in) tops_ns entryID local_names
+      st = st1 { stPPInfo = ppi } in
   let go x = runGenStateContT x st (\_ () -> pure ()) in
   go $
-  setVarTypes (Just "top") (noNames' stTopCtx) tops_ns stTopCtx >>>
-  setVarTypes (Just "local") arg_names args_ns args >>>
-  setVarTypes (Just "ghost") (noNames' ghosts) ghosts_ns ghosts >>>
+  setVarTypes' tops_ns stTopCtx >>>
+  setVarTypes' args_ns args >>>
+  setVarTypes' ghosts_ns ghosts >>>
+  modify (\s->s{ stPPInfo = ppInfoApplyAllocation ns dbgs (stPPInfo st)}) >>>
   setInputExtState knownRepr ghosts ghosts_ns >>>
   m tops_ns args_ns ghosts_ns perms_in
+
+{-
+explore ::
+  forall tops args ghosts ext blocks cblocks ret ps r1 r2.
+  KnownRepr ExtRepr ext =>
+  [Maybe String] ->
+      TypedEntryID blocks args ->
+      CruCtx tops ->
+      CruCtx args ->
+      CruCtx ghosts ->
+      MbValuePerms ((tops :++: args) :++: ghosts) ->
+      
+    (RAssign ExprVar tops -> RAssign ExprVar args -> RAssign ExprVar ghosts ->
+      DistPerms ((tops :++: args) :++: ghosts) ->
+      PermCheckM ext cblocks blocks tops ret r1 ps r2 ((tops :++: args)
+                                                          :++: ghosts) ()) ->
+
+      PermCheckM ext cblocks blocks tops ret r1 ps r2 ps ()
+explore names entryID topCtx argCtx ghostCtx mb_perms_in m =
+  let args_prxs = cruCtxProxies argCtx
+      ghosts_prxs = cruCtxProxies ghostCtx
+      (arg_names, local_names) = initialNames argCtx names in
+
+  allocateDebugNames (Just "top") (noNames' topCtx) topCtx >>>= \topDbgs ->
+  allocateDebugNames (Just "local") arg_names argCtx >>>= \argDbgs ->
+  allocateDebugNames (Just "ghost") (noNames' ghostCtx) ghostCtx >>>= \ghostDbgs ->
+  gopenBinding (fmap _ . strongMbM) (mbValuePermsToDistPerms mb_perms_in) >>>= \(ns, perms_in) ->
+  let (tops_args, ghosts_ns) = RL.split Proxy ghosts_prxs ns
+      (tops_ns, args_ns) = RL.split Proxy args_prxs tops_args
+      st :: PermCheckState ext blocks tops ret ((tops :++: args) :++: ghosts)
+      st = emptyPermCheckState (distPermSet perms_in) tops_ns entryID local_names in
+  
+  setVarTypes' tops_ns topCtx >>>
+  modify (\s->s{ stPPInfo = ppInfoApplyAllocation tops_ns topDbgs (stPPInfo st)}) >>>
+  modify (\s->s{ stPPInfo = ppInfoApplyAllocation args_ns argDbgs (stPPInfo st)}) >>>
+  modify (\s->s{ stPPInfo = ppInfoApplyAllocation ghosts_ns ghostDbgs (stPPInfo st)}) >>>
+  setInputExtState knownRepr ghostCtx ghosts_ns >>>
+  m tops_ns args_ns ghosts_ns perms_in
+
+  -}
 
 rassignLen :: RAssign f x -> Int
 rassignLen = go 0
@@ -2236,6 +2279,65 @@ setVarTypes _ MNil MNil CruCtxNil = pure ()
 setVarTypes str (ds :>: Constant d) (ns :>: n) (CruCtxCons ts t) =
   do setVarTypes str ds ns ts
      setVarType str d n t
+
+-- | Remember the type of a free variable, and ensure that it has a permission
+setVarType' ::
+  ExprVar a -> -- ^ The Hobbits variable itself
+  TypeRepr a -> -- ^ The type of the variable
+  PermCheckM ext cblocks blocks tops ret r ps r ps ()
+setVarType' x tp =
+  modify $ \st ->
+  st { stCurPerms = initVarPerm x (stCurPerms st),
+       stVarTypes = NameMap.insert x tp (stVarTypes st) }
+
+-- | Remember the types of a sequence of free variables
+setVarTypes' ::
+  RAssign Name tps ->
+  CruCtx tps ->
+  PermCheckM ext cblocks blocks tops ret r ps r ps ()
+setVarTypes' MNil CruCtxNil = pure ()
+setVarTypes' (ns :>: n) (CruCtxCons ts t) =
+  do setVarTypes' ns ts
+     setVarType' n t
+
+allocateDebugNames ::
+  Maybe String -> -- ^ The bsae name of the variable (e.g., "top", "arg", etc.)
+  RAssign (Constant (Maybe String)) tps ->
+  CruCtx tps ->
+  PermCheckM ext cblocks blocks tops ret r ps r ps
+    (RAssign StringF tps)
+allocateDebugNames _ MNil _ = pure MNil
+allocateDebugNames base (ds :>: Constant dbg) (CruCtxCons ts tp) =
+  do outs <- allocateDebugNames base ds ts
+     out <- state $ \st ->
+              case ppInfoAllocateName str (stPPInfo st) of
+              (ppi, str') -> (str', st { stPPInfo = ppi })
+     pure (outs :>: StringF out)
+  where
+    str =
+      case (base,dbg) of
+        (_,Just d) -> "C[" ++ d ++ "]"
+        (Just b,_) -> b ++ "_" ++ typeBaseName tp
+        (Nothing,Nothing) -> typeBaseName tp
+
+allocateDebugNames' ::
+  Maybe String -> -- ^ The bsae name of the variable (e.g., "top", "arg", etc.)
+  RAssign (Constant (Maybe String)) tps ->
+  CruCtx tps ->
+  PPInfo ->
+  (RAssign StringF tps, PPInfo)
+allocateDebugNames' _ MNil _ ppi = (MNil, ppi)
+allocateDebugNames' base (ds :>: Constant dbg) (CruCtxCons ts tp) ppi =
+  case allocateDebugNames' base ds ts ppi of
+    (outs, ppi1) ->
+      case ppInfoAllocateName str ppi1 of
+        (ppi2, out) -> (outs :>: StringF out, ppi2)
+  where
+    str =
+      case (base,dbg) of
+        (_,Just d) -> "C[" ++ d ++ "]"
+        (Just b,_) -> b ++ "_" ++ typeBaseName tp
+        (Nothing,Nothing) -> typeBaseName tp
 
 -- | FIXME HERE: Make 'ImplM' quantify over any underlying monad, so that we do
 -- not have to use 'traversePermImpl' after we run an 'ImplM'
@@ -2533,8 +2635,10 @@ emitStmt ::
     (RAssign Name rets)
 emitStmt tps names loc stmt =
   let pxys = cruCtxProxies tps in
-  startBinding pxys (fmap (TypedConsStmt loc stmt pxys) . strongMbM) >>>= \ns ->
-  setVarTypes Nothing names ns tps >>>
+  allocateDebugNames Nothing names tps >>>= \debugs ->
+  startBinding' debugs (fmap (TypedConsStmt loc stmt pxys) . strongMbM') >>>= \ns ->
+  modify (\st -> st { stPPInfo = ppInfoApplyAllocation ns debugs (stPPInfo st)}) >>>
+  setVarTypes' ns tps >>>
   gmodify (modifySTCurPerms (applyTypedStmt stmt ns)) >>>
   pure ns
 
@@ -3918,26 +4022,10 @@ tcBlockEntryBody ::
   Block ext cblocks ret args ->
   TypedEntry TCPhase ext blocks tops ret (CtxToRList args) ghosts ->
   TopPermCheckM ext cblocks blocks tops ret
-    (RAssign (Constant String) ((tops :++: CtxToRList args) :++: ghosts),
-     Mb ((tops :++: CtxToRList args) :++: ghosts)
+     (Mb' ((tops :++: CtxToRList args) :++: ghosts)
       (TypedStmtSeq ext blocks tops ret ((tops :++: CtxToRList args) :++: ghosts)))
 tcBlockEntryBody names blk entry@(TypedEntry {..}) =
-  do mbNs <- mkNs
-     stmts <- mkStmts
-     pure (mbLift mbNs,stmts)
-  where
-    mkNs =
-      runPermCheckM names typedEntryID typedEntryArgs typedEntryGhosts typedEntryPermsIn $
-      \tops_ns args_ns ghosts_ns _ ->
-      permGetPPInfo >>>= \ppi ->
-      let tops   = mapRAssign (Constant . show . permPretty ppi) tops_ns
-          args   = mapRAssign (Constant . show . permPretty ppi) args_ns
-          ghosts = mapRAssign (Constant . show . permPretty ppi) ghosts_ns
-          ns     = rappend (rappend tops args) ghosts
-      in traceShow ("ns", RL.toList ns) $ gmapRet (>> pure ns)
-
-    mkStmts =
-      runPermCheckM names typedEntryID typedEntryArgs typedEntryGhosts typedEntryPermsIn $
+        runPermCheckM names typedEntryID typedEntryArgs typedEntryGhosts typedEntryPermsIn $
       \tops_ns args_ns ghosts_ns perms ->
       let ctx = mkCtxTrans (blockInputs blk) args_ns
           ns = RL.append (RL.append tops_ns args_ns) ghosts_ns in
@@ -3971,7 +4059,7 @@ proveCallSiteImpl ::
                                              ((tops :++: args) :++: vars)
                                              tops args ghosts)
 proveCallSiteImpl srcID destID args ghosts vars mb_perms_in mb_perms_out =
-  fmap CallSiteImpl $ runPermCheckM [] srcID args vars mb_perms_in $
+  fmap (CallSiteImpl . _mbBinding) $ runPermCheckM [] srcID args vars mb_perms_in $
   \tops_ns args_ns _ perms_in ->
   let perms_out =
         give (cruCtxProxies ghosts) $
@@ -4035,7 +4123,7 @@ widenEntry (TypedEntry {..}) =
       Some $
       TypedEntry { typedEntryCallers = callers, typedEntryGhosts = ghosts,
                    typedEntryPermsIn = perms_in, typedEntryBody = Nothing,
-                   typedEntryNames = Nothing, .. }
+                   .. }
 
 -- | Visit an entrypoint, by first proving the required implications at each
 -- call site, meaning that the permissions held at the call site imply the input
@@ -4078,10 +4166,10 @@ visitEntry names can_widen blk entry =
       -- is no reason to re-type-check the body, so just update the callers
       return $ Some $ entry { typedEntryCallers = callers }
     else
-      do (ns, body) <- maybe (tcBlockEntryBody names blk entry) return ((,) <$> typedEntryNames entry <*> typedEntryBody entry)
+      do body <- maybe (tcBlockEntryBody names blk entry) return (typedEntryBody entry)
          return $ Some $ entry { typedEntryCallers = callers,
-                                 typedEntryBody = Just body,
-                                 typedEntryNames = Just ns }
+                                 typedEntryBody = Just body
+                                }
 
 
 -- | Visit a block by visiting all its entrypoints

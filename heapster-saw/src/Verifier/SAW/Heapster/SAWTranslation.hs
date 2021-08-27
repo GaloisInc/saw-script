@@ -77,6 +77,7 @@ import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.TypedCrucible
+import Verifier.SAW.Heapster.NamedMb
 
 import GHC.Stack
 import Debug.Trace
@@ -3798,7 +3799,7 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
          -- If not, continue by translating entry, setting the variable
          -- permission map to empty (as in the beginning of a block)
          clearVarPermsM $ translate $
-         fmap (\s -> varSubst s $ typedEntryBody entry) mb_s
+         fmap (\s -> varSubst s $ _mbBinding $ typedEntryBody entry) mb_s
 
 
 instance PermCheckExtC ext =>
@@ -4084,7 +4085,7 @@ instance PermCheckExtC ext =>
   translate mb_x = case mbMatch mb_x of
     [nuMP| TypedImplStmt impl_seq |] -> translate impl_seq
     [nuMP| TypedConsStmt loc stmt pxys mb_seq |] ->
-      translateStmt (mbLift loc) stmt (translate $ mbCombine (mbLift pxys) mb_seq)
+      translateStmt (mbLift loc) stmt (translate $ mbCombine (mbLift pxys) (_mbBinding <$> mb_seq))
     [nuMP| TypedTermStmt _ term_stmt |] -> translate term_stmt
 
 instance PermCheckExtC ext =>
@@ -4214,7 +4215,7 @@ translateEntryBody mapTrans entry =
   lambdaPermCtx (typedEntryPermsIn entry) $ \pctx ->
   do retType <- translateEntryRetType entry
      impTransM (RL.members pctx) pctx mapTrans retType $ translate $
-       typedEntryBody entry
+       _mbBinding $ typedEntryBody entry
 
 -- | Translate all the entrypoints in a 'TypedBlockMap' that correspond to
 -- letrec-bound functions to SAW core functions as in 'translateEntryBody'
