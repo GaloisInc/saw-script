@@ -1959,9 +1959,9 @@ runPermCheckM names entryID args ghosts mb_perms_in m =
       st = st1 { stPPInfo = ppi } in
   let go x = runGenStateContT x st (\_ () -> pure ()) in
   go $
-  setVarTypes' tops_ns stTopCtx >>>
-  setVarTypes' args_ns args >>>
-  setVarTypes' ghosts_ns ghosts >>>
+  setVarTypes tops_ns stTopCtx >>>
+  setVarTypes args_ns args >>>
+  setVarTypes ghosts_ns ghosts >>>
   modify (\s->s{ stPPInfo = ppInfoApplyAllocation ns dbgs (stPPInfo st)}) >>>
   setInputExtState knownRepr ghosts ghosts_ns >>>
   m tops_ns args_ns ghosts_ns perms_in
@@ -2251,77 +2251,37 @@ getVarTypes (xs :>: x) = CruCtxCons <$> getVarTypes xs <*> getVarType x
 
 -- | Remember the type of a free variable, and ensure that it has a permission
 setVarType ::
-  Maybe String -> -- ^ The base name of the variable (e.g., "top", "arg", etc.)
-  Maybe String -> -- ^ The C name of the variable, if applicable
-  ExprVar a -> -- ^ The Hobbits variable itself
-  TypeRepr a -> -- ^ The type of the variable
+  ExprVar a {- ^ The Hobbits variable itself -} ->
+  TypeRepr a {- ^ The type of the variable -} ->
   PermCheckM ext cblocks blocks tops ret r ps r ps ()
-setVarType maybe_str dbg x tp =
-  let str' =
-        case (maybe_str,dbg) of
-          (_,Just d) -> "C[" ++ d ++ "]"
-          (Just str,_) -> str ++ "_" ++ typeBaseName tp
-          (Nothing,Nothing) -> typeBaseName tp
-  in
-  modify $ \st ->
-  st { stCurPerms = initVarPerm x (stCurPerms st),
-       stVarTypes = NameMap.insert x tp (stVarTypes st),
-       stPPInfo = ppInfoAddExprName str' x (stPPInfo st) }
-
--- | Remember the types of a sequence of free variables
-setVarTypes ::
-  Maybe String -> -- ^ The bsae name of the variable (e.g., "top", "arg", etc.)
-  RAssign (Constant (Maybe String)) tps ->
-  RAssign Name tps ->
-  CruCtx tps ->
-  PermCheckM ext cblocks blocks tops ret r ps r ps ()
-setVarTypes _ MNil MNil CruCtxNil = pure ()
-setVarTypes str (ds :>: Constant d) (ns :>: n) (CruCtxCons ts t) =
-  do setVarTypes str ds ns ts
-     setVarType str d n t
-
--- | Remember the type of a free variable, and ensure that it has a permission
-setVarType' ::
-  ExprVar a -> -- ^ The Hobbits variable itself
-  TypeRepr a -> -- ^ The type of the variable
-  PermCheckM ext cblocks blocks tops ret r ps r ps ()
-setVarType' x tp =
+setVarType x tp =
   modify $ \st ->
   st { stCurPerms = initVarPerm x (stCurPerms st),
        stVarTypes = NameMap.insert x tp (stVarTypes st) }
 
 -- | Remember the types of a sequence of free variables
-setVarTypes' ::
+setVarTypes ::
   RAssign Name tps ->
   CruCtx tps ->
   PermCheckM ext cblocks blocks tops ret r ps r ps ()
-setVarTypes' MNil CruCtxNil = pure ()
-setVarTypes' (ns :>: n) (CruCtxCons ts t) =
-  do setVarTypes' ns ts
-     setVarType' n t
+setVarTypes MNil CruCtxNil = pure ()
+setVarTypes (ns :>: n) (CruCtxCons ts t) =
+  do setVarTypes ns ts
+     setVarType n t
 
 allocateDebugNames ::
-  Maybe String -> -- ^ The bsae name of the variable (e.g., "top", "arg", etc.)
+  Maybe String {- ^ The bsae name of the variable (e.g., "top", "arg", etc.) -} ->
   RAssign (Constant (Maybe String)) tps ->
   CruCtx tps ->
   PermCheckM ext cblocks blocks tops ret r ps r ps
     (RAssign StringF tps)
-allocateDebugNames _ MNil _ = pure MNil
-allocateDebugNames base (ds :>: Constant dbg) (CruCtxCons ts tp) =
-  do outs <- allocateDebugNames base ds ts
-     out <- state $ \st ->
-              case ppInfoAllocateName str (stPPInfo st) of
-              (ppi, str') -> (str', st { stPPInfo = ppi })
-     pure (outs :>: StringF out)
-  where
-    str =
-      case (base,dbg) of
-        (_,Just d) -> "C[" ++ d ++ "]"
-        (Just b,_) -> b ++ "_" ++ typeBaseName tp
-        (Nothing,Nothing) -> typeBaseName tp
+allocateDebugNames base ds tps =
+  state $ \s ->
+    case allocateDebugNames' base ds tps (stPPInfo s) of
+      (r, info) -> (r, s{ stPPInfo = info}) 
 
 allocateDebugNames' ::
-  Maybe String -> -- ^ The bsae name of the variable (e.g., "top", "arg", etc.)
+  Maybe String {- ^ The bsae name of the variable (e.g., "top", "arg", etc.) -} ->
   RAssign (Constant (Maybe String)) tps ->
   CruCtx tps ->
   PPInfo ->
@@ -2638,7 +2598,7 @@ emitStmt tps names loc stmt =
   allocateDebugNames Nothing names tps >>>= \debugs ->
   startBinding' debugs (fmap (TypedConsStmt loc stmt pxys) . strongMbM') >>>= \ns ->
   modify (\st -> st { stPPInfo = ppInfoApplyAllocation ns debugs (stPPInfo st)}) >>>
-  setVarTypes' ns tps >>>
+  setVarTypes ns tps >>>
   gmodify (modifySTCurPerms (applyTypedStmt stmt ns)) >>>
   pure ns
 

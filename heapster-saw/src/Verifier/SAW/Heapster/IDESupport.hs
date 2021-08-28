@@ -197,14 +197,6 @@ instance (PermCheckExtC ext)
     extractLogEntries tb =
       mapM_ (\(Some te) -> extractLogEntries te) $ _typedBlockEntries tb
 
-mbExtractLogEntries
-  :: ExtractLogEntries a => CruCtx ctx -> Mb (ctx :: RList CrucibleType) a -> ExtractionM ()
-mbExtractLogEntries ctx mb_a =
-  ReaderT $ \(ppi, loc, fname) ->
-  tell $ mbLift $ flip nuMultiWithElim1 mb_a $ \ns x ->
-  let ppi' = ppInfoAddTypedExprNames ctx ns ppi in
-  execWriter $ runReaderT (extractLogEntries x) (ppi', loc, fname)
-
 nmbExtractLogEntries
   :: ExtractLogEntries a => Mb' (ctx :: RList CrucibleType) a -> ExtractionM ()
 nmbExtractLogEntries mb_a =
