@@ -32,6 +32,7 @@ import qualified Language.Haskell.TH.Datatype as TH
 import Verifier.SAW.Heapster.CruUtil ( CruCtx )
 import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.Permissions
+import Verifier.SAW.Heapster.NamedMb
 import Verifier.SAW.Name ( Ident )
 import What4.FunctionName ( FunctionName )
 
@@ -63,9 +64,17 @@ instance JsonExport1 f => JsonExport (RAssign f x) where
     jsonExport = toJSON . mapToList jsonExport1
 
 
-instance JsonExport b => JsonExport (Mb (a :: RList CrucibleType) b) where
+instance JsonExport a => JsonExport (Mb (ctx :: RList CrucibleType) a) where
     jsonExport mb = mbLift $ flip nuMultiWithElim1 mb $ \names body ->
         let ?ppi = ppInfoAddExprNames "x" names ?ppi in
+        object [
+            ("args", jsonExport names),
+            ("body", jsonExport body)
+        ]
+
+instance JsonExport a => JsonExport (Mb' (ctx :: RList CrucibleType) a) where
+    jsonExport mb = mbLift $ flip nuMultiWithElim1 (_mbBinding mb) $ \names body ->
+        let ?ppi = ppInfoApplyAllocation names (_mbNames mb) ?ppi in
         object [
             ("args", jsonExport names),
             ("body", jsonExport body)

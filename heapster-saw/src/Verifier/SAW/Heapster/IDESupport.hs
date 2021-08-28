@@ -20,16 +20,6 @@ import Control.Monad.Reader
   )
 import Data.Aeson (ToJSON, Value, encodeFile)
 import Data.Binding.Hobbits
-  ( Liftable (..),
-    Mb,
-    NuMatching (..),
-    RList,
-    mbMatch,
-    nuMP,
-    nuMultiWithElim1,
-    unsafeMbTypeRepr,
-    Name,
-  )
 import Data.Maybe (catMaybes, listToMaybe, mapMaybe)
 import Data.Parameterized.Some (Some (..))
 import qualified Data.Text as T
@@ -51,8 +41,6 @@ import Verifier.SAW.Heapster.JSONExport(ppToJson)
 import Data.Type.RList (mapRAssign)
 import Data.Functor.Constant
 import Control.Monad.Writer
-import Data.Binding.Hobbits.NameMap (NameMap)
-import qualified Data.Binding.Hobbits.NameMap as NameMap
 import Verifier.SAW.Heapster.NamedMb
 
 -- | The entry point for dumping a Heapster environment to a file for IDE
@@ -133,26 +121,18 @@ instance (PermCheckExtC ext)
          (TypedEntry TransPhase ext blocks tops ret args ghosts) where
   extractLogEntries te = do
     let loc = mbLift' $ fmap getFirstProgramLocTS (typedEntryBody te)
-    withLoc loc (mb'ExtractLogEntries (typedEntryBody te))
+    withLoc loc (nmbExtractLogEntries (typedEntryBody te))
     let entryId = mkLogEntryID $ typedEntryID te
     let callers = callerIDs $ typedEntryCallers te
     (ppi, _, fname) <- ask
     let loc' = snd (ppLoc loc)
     let debugNames = _mbNames (typedEntryBody te)
-    let insertNames ::
-          RL.RAssign Name (x :: RList CrucibleType) ->
-          RL.RAssign StringF x ->
-          NameMap (StringF :: CrucibleType -> *)->
-          NameMap (StringF :: CrucibleType -> *)
-        insertNames RL.MNil RL.MNil m = m
-        insertNames (ns RL.:>: n) (xs RL.:>: StringF name) m =
-          insertNames ns xs (NameMap.insert n (StringF name) m)
-        inputs = mbLift
+    let inputs = mbLift
                $ flip nuMultiWithElim1 (typedEntryPermsIn te)
                $ \ns body ->
-                 let ppi' = ppi { ppExprNames = insertNames ns debugNames (ppExprNames ppi) }
-                     f :: 
-                      (Pair StringF ValuePerm) x ->
+                 let ppi' = ppInfoApplyAllocation ns debugNames ppi
+                     f ::
+                      Pair StringF ValuePerm x ->
                       Constant (String, String, Value) x
                      f (Pair (StringF name) vp) = Constant (name, permPrettyString ppi' vp, ppToJson ppi' vp)
                  in RL.toList (mapRAssign f (zipRAssign debugNames body))
@@ -176,7 +156,7 @@ instance ExtractLogEntries (TypedStmtSeq ext blocks tops ret ps_in) where
     -- fmap (setErrorMsg str) <$> extractLogEntries pimpl
     extractLogEntries pimpl
   extractLogEntries (TypedConsStmt loc _ _ rest) = do
-    withLoc loc $ mb'ExtractLogEntries rest
+    withLoc loc $ nmbExtractLogEntries rest
   extractLogEntries (TypedTermStmt _ _) = pure ()
 
 instance ExtractLogEntries
@@ -198,8 +178,8 @@ instance ExtractLogEntries (PermImpl1 ps_in ps_outs) where
 
 instance ExtractLogEntries
     (MbPermImpls (TypedStmtSeq ext blocks tops ret) ps_outs) where
-  extractLogEntries (MbPermImpls_Cons ctx mbpis pis) = do
-    mbExtractLogEntries ctx pis
+  extractLogEntries (MbPermImpls_Cons _ mbpis pis) = do
+    nmbExtractLogEntries pis
     extractLogEntries mbpis
   extractLogEntries MbPermImpls_Nil = pure ()
 
@@ -225,9 +205,9 @@ mbExtractLogEntries ctx mb_a =
   let ppi' = ppInfoAddTypedExprNames ctx ns ppi in
   execWriter $ runReaderT (extractLogEntries x) (ppi', loc, fname)
 
-mb'ExtractLogEntries
+nmbExtractLogEntries
   :: ExtractLogEntries a => Mb' (ctx :: RList CrucibleType) a -> ExtractionM ()
-mb'ExtractLogEntries mb_a =
+nmbExtractLogEntries mb_a =
   ReaderT $ \(ppi, loc, fname) ->
   tell $ mbLift $ flip nuMultiWithElim1 (_mbBinding mb_a) $ \ns x ->
   let ppi' = ppInfoApplyAllocation ns (_mbNames mb_a) ppi in
@@ -313,7 +293,7 @@ getFirstProgramLocMBPI
 getFirstProgramLocMBPI MbPermImpls_Nil =
   error "Error finding program location for IDE log"
 getFirstProgramLocMBPI (MbPermImpls_Cons _ _ pis) =
-  mbLift $ fmap getFirstProgramLocPI pis
+  mbLift' $ fmap getFirstProgramLocPI pis
 
 -- | Print a `ProgramLoc` in a way that is useful for an IDE, i.e., machine
 -- readable

@@ -62,6 +62,7 @@ import Data.Binding.Hobbits
 import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.GenMonad
+import Verifier.SAW.Heapster.NamedMb
 
 import GHC.Stack
 import Debug.Trace
@@ -1360,7 +1361,7 @@ data MbPermImpls r bs_pss where
   MbPermImpls_Nil :: MbPermImpls r RNil
   MbPermImpls_Cons :: CruCtx bs ->
                       !(MbPermImpls r bs_pss) ->
-                      !(Mb bs (PermImpl r ps)) ->
+                      !(Mb' bs (PermImpl r ps)) ->
                       MbPermImpls r (bs_pss :> '(bs,ps))
 
 -- | A local implication, from an input to an output permission set
@@ -1408,7 +1409,7 @@ permImplStep impl1@(Impl1_Fail _) mb_impls = PermImpl_Step impl1 mb_impls
 -- Catch --> call the permImplCatch function
 permImplStep Impl1_Catch ((MbPermImpls_Cons _
                            (MbPermImpls_Cons _ _ mb_pimpl1) mb_pimpl2)) =
-  permImplCatch (elimEmptyMb mb_pimpl1) (elimEmptyMb mb_pimpl2)
+  permImplCatch (elimEmptyMb' mb_pimpl1) (elimEmptyMb' mb_pimpl2)
 
 -- Unary rules applied to failure --> failures
 --
@@ -1437,8 +1438,8 @@ permImplStep impl1@(Impl1_TryProveBVProp _ _ _) mb_impls =
 -- An or elimination fails if both branches fail
 permImplStep (Impl1_ElimOr _ _ _) (MbPermImpls_Cons _
                                    (MbPermImpls_Cons _ MbPermImpls_Nil
-                                    (matchMbImplFail -> Just msg1))
-                                   (matchMbImplFail -> Just msg2)) =
+                                    (matchMbImplFail . _mbBinding -> Just msg1))
+                                   (matchMbImplFail . _mbBinding -> Just msg2)) =
   PermImpl_Step (Impl1_Fail $ GeneralError $ pretty
                   (msg1 ++ "\n\n--------------------\n\n" ++ msg2))
   MbPermImpls_Nil
@@ -1455,7 +1456,7 @@ permImplStepUnary :: NuMatchingAny1 r =>
                      MbPermImpls r (RNil :> '(bs, ps_out)) -> PermImpl r ps_in
 
 -- If the continuation implication is a failure, percolate it up
-permImplStepUnary _ (MbPermImpls_Cons _ _ (matchMbImplFail -> Just msg)) =
+permImplStepUnary _ (MbPermImpls_Cons _ _ (matchMbImplFail . _mbBinding -> Just msg)) =
   PermImpl_Step (Impl1_Fail $ GeneralError $ pretty msg) MbPermImpls_Nil
 
 -- If the continuation implication is a catch with a failure on the right-hand
@@ -1483,6 +1484,7 @@ matchMbImplFail mb_impl = case mbMatch mb_impl of
   [nuMP| PermImpl_Step (Impl1_Fail err) _ |] -> Just $ mbLift $ fmap ppError err
   _ -> Nothing
 
+{-
 -- | Pattern-matchin an implication inside a binding to see if it is a catch
 -- whose right-hand side is just a failure, all without requiring a
 -- 'NuMatchingAny1' constraint on the @r@ variable
@@ -1493,9 +1495,10 @@ matchMbImplCatchFail mb_impl = case mbMatch mb_impl of
   [nuMP| PermImpl_Step Impl1_Catch
                       (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1)
                       mb_impl2) |]
-    | Just msg <- matchMbImplFail (mbCombine RL.typeCtxProxies mb_impl2) ->
+    | Just msg <- matchMbImplFail $ _mbBidning (mbCombine RL.typeCtxProxies mb_impl2) ->
       Just (mbCombine RL.typeCtxProxies mb_impl1, msg)
   _ -> Nothing
+  -}
 
 -- | Produce a branching proof tree that performs the first implication and, if
 -- that one fails, falls back on the second. If 'pruneFailingBranches' is set,
@@ -1516,12 +1519,12 @@ permImplCatch pimpl1@(PermImpl_Step (Impl1_Fail _) _) pimpl2 =
 permImplCatch (PermImpl_Step Impl1_Catch
                (MbPermImpls_Cons _
                 (MbPermImpls_Cons _ _ mb_pimpl_1a) mb_pimpl_1b)) pimpl2 =
-  permImplCatch (elimEmptyMb mb_pimpl_1a) $
-  permImplCatch (elimEmptyMb mb_pimpl_1b) pimpl2
+  permImplCatch (elimEmptyMb' mb_pimpl_1a) $
+  permImplCatch (elimEmptyMb' mb_pimpl_1b) pimpl2
 permImplCatch pimpl1 pimpl2 =
   PermImpl_Step Impl1_Catch $
-  MbPermImpls_Cons knownRepr (MbPermImpls_Cons knownRepr MbPermImpls_Nil $ emptyMb pimpl1) $
-  emptyMb pimpl2
+  MbPermImpls_Cons knownRepr (MbPermImpls_Cons knownRepr MbPermImpls_Nil $ emptyMb' pimpl1) $
+  emptyMb' pimpl2
 
 
 -- | Test if a 'PermImpl' "succeeds", meaning there is at least one non-failing
@@ -1534,40 +1537,40 @@ permImplSucceeds (PermImpl_Done _) = 2
 permImplSucceeds (PermImpl_Step (Impl1_Fail _) _) = 0
 permImplSucceeds (PermImpl_Step Impl1_Catch
                   (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2)) =
-  max (mbLift $ fmap permImplSucceeds mb_impl1)
-  (mbLift $ fmap permImplSucceeds mb_impl2)
+  max (mbLift' $ fmap permImplSucceeds mb_impl1)
+  (mbLift' $ fmap permImplSucceeds mb_impl2)
 permImplSucceeds (PermImpl_Step (Impl1_Push _ _) (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  mbLift' $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_Pop _ _) (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  mbLift' $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_ElimOr _ _ _)
                   (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2)) =
-  max (mbLift (fmap permImplSucceeds mb_impl1))
-  (mbLift (fmap permImplSucceeds mb_impl2))
+  max (mbLift' (fmap permImplSucceeds mb_impl1))
+  (mbLift' (fmap permImplSucceeds mb_impl2))
 permImplSucceeds (PermImpl_Step (Impl1_ElimExists _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  mbLift' $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_Simpl _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  mbLift' $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_LetBind _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  mbLift' $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_ElimStructField _ _ _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  mbLift' $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_ElimLLVMFieldContents _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  mbLift' $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_ElimLLVMBlockToEq _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  mbLift' $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step Impl1_BeginLifetime
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  mbLift' $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_TryProveBVProp _ _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  mbLift' $ fmap permImplSucceeds mb_impl
 
 -- | Test if a 'PermImpl' fails, meaning 'permImplSucceeds' returns 0
 permImplFails :: PermImpl r ps -> Bool
@@ -2648,7 +2651,7 @@ instance (NuMatchingAny1 r, SubstVar PermVarSubst m,
     [nuMP| MbPermImpls_Nil |] -> return MbPermImpls_Nil
     [nuMP| MbPermImpls_Cons mpx mb_impl mb_impls' |] ->
       let px = mbLift mpx in
-      MbPermImpls_Cons px <$> genSubst s mb_impl <*> genSubstMb (cruCtxProxies px) s mb_impls'
+      MbPermImpls_Cons px <$> genSubst s mb_impl <*> genSubstMb' (cruCtxProxies px) s mb_impls'
 
 -- FIXME: shouldn't need the SubstVar PermVarSubst m assumption...
 instance SubstVar PermVarSubst m =>
@@ -3075,11 +3078,12 @@ implApplyImpl1 impl1 mb_ms =
                 (State (Closed s)) a
     helper MbPermSets_Nil _ = gabortM (return MbPermImpls_Nil)
     helper (MbPermSets_Cons mbperms ctx mbperm) (args :>: Impl1Cont f) =
-      gparallel (\m1 m2 -> MbPermImpls_Cons ctx <$> m1 <*> m2)
+      state (\s -> s & implStatePPInfo %%~ ppInfoAllocateTypedExprNames ctx) >>>= \n ->
+      gparallel (\m1 m2 -> MbPermImpls_Cons ctx <$> m1 <*> (Mb' n <$> m2))
       (helper mbperms args)
       (gopenBinding strongMbM mbperm >>>= \(ns, perms') ->
         gmodify (set implStatePerms perms' .
-                 over implStatePPInfo (ppInfoAddTypedExprNames ctx ns)) >>>
+                 over implStatePPInfo (ppInfoApplyAllocation ns n)) >>>
         implSetNameTypes ns ctx >>>
         f ns)
 

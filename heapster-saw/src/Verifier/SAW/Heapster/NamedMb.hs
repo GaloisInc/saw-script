@@ -32,8 +32,7 @@ nuMulti' tps f = Mb'
   }
 
 nuMultiWithElim1' :: (RAssign Name ctx -> arg -> b) -> Mb' ctx arg -> Mb' ctx b
-nuMultiWithElim1' k = over mbBinding (nuMultiWithElim1 k)
-
+nuMultiWithElim1' = over mbBinding . nuMultiWithElim1
 
 strongMbM' :: MonadStrongBind m => Mb' ctx (m a) -> m (Mb' ctx a)
 strongMbM' = traverseOf mbBinding strongMbM
@@ -42,11 +41,7 @@ mbM' :: (MonadBind m, NuMatching a) => Mb' ctx (m a) -> m (Mb' ctx a)
 mbM' = traverseOf mbBinding mbM
 
 mbSwap' :: RAssign Proxy ctx -> Mb' ctx' (Mb' ctx a) -> Mb' ctx (Mb' ctx' a)
-mbSwap' p (Mb' names' body') =
-    Mb'
-    { _mbNames = mbLift (_mbNames <$> body')
-    , _mbBinding = Mb' names' <$> mbSwap p (_mbBinding <$> body')
-    }
+mbSwap' p (Mb' names' body') = Mb' names' <$> mbSink p body'
 
 mbSink :: RAssign Proxy ctx -> Mb ctx' (Mb' ctx a) -> Mb' ctx (Mb ctx' a)
 mbSink p m =
@@ -54,6 +49,9 @@ mbSink p m =
     { _mbNames = mbLift (_mbNames <$> m)
     , _mbBinding = mbSwap p (_mbBinding <$> m)
     }
+
+mbCombine' :: RAssign Proxy c2 -> Mb' c1 (Mb' c2 a) -> Mb' (c1 :++: c2) a
+mbCombine' = undefined
 
 mbLift' :: Liftable a => Mb' ctx a -> a
 mbLift' = views mbBinding mbLift

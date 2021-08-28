@@ -219,6 +219,16 @@ ppInfoAddTypedExprNames _ MNil info = info
 ppInfoAddTypedExprNames (CruCtxCons tps tp) (ns :>: n) info =
   ppInfoAddTypedExprNames tps ns $ ppInfoAddExprName (typeBaseName tp) n info
 
+-- | Add a sequence of variables to a 'PPInfo' using their 'typeBaseName's
+ppInfoAllocateTypedExprNames ::
+  CruCtx tps -> PPInfo -> (RAssign StringF tps, PPInfo)
+ppInfoAllocateTypedExprNames CruCtxNil info = (MNil, info)
+ppInfoAllocateTypedExprNames (CruCtxCons tps tp) ppi =
+  case ppInfoAllocateName (typeBaseName tp) ppi of
+    (ppi1, str) ->
+      case ppInfoAllocateTypedExprNames tps ppi1 of
+        (ns', ppi2) -> (ns' :>: StringF str, ppi2)
+
 ppInfoApplyAllocation ::
   RAssign Name (tps :: RList CrucibleType) ->
   RAssign StringF tps ->
@@ -4970,6 +4980,18 @@ genSubstMb ::
   s ctx' -> Mb ctx' (Mb ctx a) -> m (Mb ctx a)
 genSubstMb p s mbmb = mbM (fmap (genSubst s) (mbSwap p mbmb))
 
+genSubstMb' ::
+  Substable s a m =>
+  NuMatching a =>
+  RAssign Proxy ctx ->
+  s ctx' -> Mb ctx' (Mb' ctx a) -> m (Mb' ctx a)
+genSubstMb' p s mbmb = mbM' (fmap (genSubst s) (swapHelper p mbmb))
+
+swapHelper :: RAssign Proxy b -> Mb a (Mb' b c) -> Mb' b (Mb a c)
+swapHelper p m = Mb' ns (mbSwap p bs)
+  where
+    ns = mbLift (fmap _mbNames m)
+    bs = fmap _mbBinding m
 
 instance {-# INCOHERENT #-} (Given (RAssign Proxy ctx), Substable s a m, NuMatching a) => Substable s (Mb' ctx a) m where
    genSubst = genSubstMb' given
@@ -4980,12 +5002,6 @@ instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) => Substable s (Mb' 
 instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) => Substable s (Binding' c a) m where
    genSubst = genSubstMb' RL.typeCtxProxies
 
-genSubstMb' ::
-  Substable s a m =>
-  NuMatching a =>
-  RAssign Proxy ctx ->
-  s ctx' -> Mb ctx' (Mb' ctx a) -> m (Mb' ctx a)
-genSubstMb' p s mbmb = mbM' (fmap (genSubst s) (mbSink p mbmb))
 
 instance SubstVar s m => Substable s (Member ctx a) m where
   genSubst _ mb_memb = return $ mbLift mb_memb

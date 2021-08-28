@@ -3103,7 +3103,7 @@ translatePermImplUnary ::
   PermImplTransM (ImplFailCont ->
                   ImpTransM ext blocks tops ret ps ctx OpenTerm)
 translatePermImplUnary (mbMatch -> [nuMP| MbPermImpls_Cons _ _ mb_impl |]) f =
-  translatePermImpl Proxy (mbCombine RL.typeCtxProxies mb_impl) >>= \trans ->
+  translatePermImpl Proxy (mbCombine RL.typeCtxProxies (fmap _mbBinding mb_impl)) >>= \trans ->
   return $ \k -> f $ trans k
 
 
@@ -3124,9 +3124,11 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   ([nuMP| Impl1_Catch |],
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
     pitmCatching (translatePermImpl prx $
-                  mbCombine RL.typeCtxProxies mb_impl1) >>= \(mtrans1,hasf1) ->
+                  mbCombine RL.typeCtxProxies $
+                  fmap _mbBinding mb_impl1) >>= \(mtrans1,hasf1) ->
     pitmCatching (translatePermImpl prx $
-                  mbCombine RL.typeCtxProxies mb_impl2) >>= \(mtrans2,hasf2) ->
+                  mbCombine RL.typeCtxProxies $
+                  fmap _mbBinding mb_impl2) >>= \(mtrans2,hasf2) ->
     (if hasf1 == HasFailures && hasf2 == HasFailures then tell ([],HasFailures)
      else return ()) >>
     case (mtrans1, hasf1, mtrans2, hasf2) of
@@ -3163,9 +3165,11 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   ([nuMP| Impl1_ElimOr x p1 p2 |],
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
     pitmCatching (translatePermImpl prx $
-                  mbCombine RL.typeCtxProxies mb_impl1) >>= \(mtrans1,hasf1) ->
+                  mbCombine RL.typeCtxProxies $
+                  fmap _mbBinding mb_impl1) >>= \(mtrans1,hasf1) ->
     pitmCatching (translatePermImpl prx $
-                  mbCombine RL.typeCtxProxies mb_impl2) >>= \(mtrans2,hasf2) ->
+                  mbCombine RL.typeCtxProxies $
+                  fmap _mbBinding mb_impl2) >>= \(mtrans2,hasf2) ->
     tell ([],hasf1 <> hasf2) >>
     case (mtrans1, mtrans2) of
       (Nothing, Nothing) -> mzero
@@ -3302,7 +3306,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   -- considered just an assertion and not a failure
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_Eq e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _mbBinding mb_impl') >>= \trans ->
     return $ \k ->
     do prop_tp_trans <- translate prop
        applyMultiTransM (return $ globalOpenTerm "Prelude.maybe")
@@ -3318,7 +3322,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   -- For an inequality test, we don't need a proof, so just insert an if
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_Neq e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _mbBinding mb_impl') >>= \trans ->
     return $ \k ->
     let w = natVal2 prop in
     applyMultiTransM (return $ globalOpenTerm "Prelude.ite")
@@ -3343,7 +3347,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
 
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULt e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _mbBinding mb_impl') >>= \trans ->
     return $ \k ->
     do prop_tp_trans <- translate prop
        applyMultiTransM (return $ globalOpenTerm "Prelude.maybe")
@@ -3370,7 +3374,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
 
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _mbBinding mb_impl') >>= \trans ->
     return $ \k ->
     do prop_tp_trans <- translate prop
        applyMultiTransM (return $ globalOpenTerm "Prelude.maybe")
@@ -3387,7 +3391,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
 
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq_Diff e1 e2 e3) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _mbBinding mb_impl') >>= \trans ->
     return $ \k ->
     do prop_tp_trans <- translate prop
        applyMultiTransM (return $ globalOpenTerm "Prelude.maybe")
