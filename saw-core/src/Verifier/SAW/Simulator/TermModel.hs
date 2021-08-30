@@ -668,6 +668,14 @@ prims sc cfg =
               a  <- scIntegerType sc
               Left <$> scIte sc a tm x' y'
 
+  , Prims.bpMuxArray = \c x@(TMArray a a' b b' arr1) y@(TMArray _ _ _ _ arr2) ->
+       case c of
+         Right bb -> if bb then pure x else pure y
+         Left tm ->
+           do t <- scArrayType sc a' b'
+              arr' <- scIte sc t tm arr1 arr2
+              return $ TMArray a a' b b' arr'
+
   , Prims.bpMuxExtra = \tp c x y ->
        case c of
          Right b -> if b then pure x else pure y
@@ -868,6 +876,32 @@ prims sc cfg =
         pure (Right True)
       else
         Left <$> scArrayEq sc a' b' arr1 arr2
+
+  , Prims.bpArrayCopy = \(TMArray a a' b b' arr1) idx1 (TMArray _ _ _ _ arr2) idx2 len ->
+      do let n = wordWidth idx1
+         n' <- scNat sc n
+         idx1' <- wordTerm sc idx1
+         idx2' <- wordTerm sc idx2
+         len' <- wordTerm sc len
+         arr' <- scArrayCopy sc n' b' arr1 idx1' arr2 idx2' len'
+         pure (TMArray a a' b b' arr')
+
+  , Prims.bpArraySet = \(TMArray a a' b b' arr) idx val len ->
+      do let n = wordWidth idx
+         n' <- scNat sc n
+         idx' <- wordTerm sc idx
+         val' <- readBackValue sc cfg b val
+         len' <- wordTerm sc len
+         arr' <- scArraySet sc n' b' arr idx' val' len'
+         pure (TMArray a a' b b' arr')
+
+  , Prims.bpArrayRangeEq = \(TMArray _ _ _ b' arr1) idx1 (TMArray _ _ _ _ arr2) idx2 len ->
+      do let n = wordWidth idx1
+         n' <- scNat sc n
+         idx1' <- wordTerm sc idx1
+         idx2' <- wordTerm sc idx2
+         len' <- wordTerm sc len
+         Left <$> scArrayRangeEq sc n' b' arr1 idx1' arr2 idx2' len'
   }
 
 

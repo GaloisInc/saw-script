@@ -139,6 +139,7 @@ type Ptr = C.LLVM.LLVMPtr Sym 64
 type X86Constraints =
   ( C.LLVM.HasPtrWidth (C.LLVM.ArchWidth LLVMArch)
   , C.LLVM.HasLLVMAnn Sym
+  , ?memOpts :: C.LLVM.MemOptions
   , ?lc :: C.LLVM.TypeContext
   )
 
@@ -295,6 +296,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       start <- io getCurrentTime
       let ?ptrWidth = knownNat @64
+      let ?memOpts = C.LLVM.defaultMemOptions
       let ?recordLLVMAnnotation = \_ _ -> return ()
       sc <- getSharedContext
       opts <- getOptions

@@ -248,7 +248,7 @@ modTrans = _modTrans
 -- | Load an LLVM module from the given bitcode file, then parse and
 -- translate to Crucible.
 loadLLVMModule ::
-  (?laxArith :: Bool) =>
+  (?transOpts :: CL.TranslationOptions) =>
   FilePath ->
   Crucible.HandleAllocator ->
   IO (Either LLVM.Error (Some LLVMModule))
@@ -257,8 +257,7 @@ loadLLVMModule file halloc =
      case parseResult of
        Left err -> return (Left err)
        Right llvm_mod ->
-         do let ?optLoopMerge = False
-            memVar <- CL.mkMemVar (Text.pack "saw:llvm_memory") halloc
+         do memVar <- CL.mkMemVar (Text.pack "saw:llvm_memory") halloc
             Some mtrans <- CL.translateModule halloc memVar llvm_mod
             return (Right (Some (LLVMModule file llvm_mod mtrans)))
 

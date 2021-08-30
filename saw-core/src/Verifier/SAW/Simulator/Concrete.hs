@@ -145,6 +145,7 @@ prims =
   , Prims.bpMuxBool  = pure3 ite
   , Prims.bpMuxWord  = pure3 ite
   , Prims.bpMuxInt   = pure3 ite
+  , Prims.bpMuxArray = unsupportedConcretePrimitive "bpMuxArray"
   , Prims.bpMuxExtra = \_tp -> pure3 ite
     -- Booleans
   , Prims.bpTrue   = True
@@ -213,6 +214,9 @@ prims =
   , Prims.bpArrayLookup = unsupportedConcretePrimitive "bpArrayLookup"
   , Prims.bpArrayUpdate = unsupportedConcretePrimitive "bpArrayUpdate"
   , Prims.bpArrayEq = unsupportedConcretePrimitive "bpArrayEq"
+  , Prims.bpArrayCopy = unsupportedConcretePrimitive "bpArrayCopy"
+  , Prims.bpArraySet = unsupportedConcretePrimitive "bpArraySet"
+  , Prims.bpArrayRangeEq = unsupportedConcretePrimitive "bpArrayRangeEq"
   }
 
 unsupportedConcretePrimitive :: String -> a

@@ -83,7 +83,7 @@ import qualified Cryptol.ModuleSystem.Renamer as MR
 
 import qualified Cryptol.Utils.Ident as C
 
-import Cryptol.Utils.PP
+import Cryptol.Utils.PP hiding ((</>))
 import Cryptol.Utils.Ident (Ident, preludeName, preludeReferenceName
                            , packIdent, interactiveName, identText
                            , packModName, textToModName, modNameChunks
