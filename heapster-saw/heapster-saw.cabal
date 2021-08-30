@@ -58,6 +58,7 @@ library
     Verifier.SAW.Heapster.Permissions
     Verifier.SAW.Heapster.PermParser
     Verifier.SAW.Heapster.NamePropagation
+    Verifier.SAW.Heapster.NamedMb
     Verifier.SAW.Heapster.RustTypes
     Verifier.SAW.Heapster.SAWTranslation
     Verifier.SAW.Heapster.Token

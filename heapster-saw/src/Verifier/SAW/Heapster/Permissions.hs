@@ -200,19 +200,6 @@ ppInfoAddExprNames _ MNil info = info
 ppInfoAddExprNames base (ns :>: n) info =
   ppInfoAddExprNames base ns $ ppInfoAddExprName base n info
 
--- |
-ppInfoAllocateExprNames ::
-  String {- ^ base name -} ->
-  RAssign pxy (tps :: RList CrucibleType) ->
-  PPInfo ->
-  (PPInfo, RAssign StringF tps)
-ppInfoAllocateExprNames _ MNil info = (info, MNil)
-ppInfoAllocateExprNames base (ns :>: _) ppi =
-  case ppInfoAllocateName base ppi of
-    (ppi1, str) ->
-      case ppInfoAllocateExprNames base ns ppi1 of
-        (ppi2, ns') -> (ppi2, ns' :>: StringF str)
-
 -- | Add a sequence of variables to a 'PPInfo' using their 'typeBaseName's
 ppInfoAddTypedExprNames :: CruCtx tps -> RAssign Name tps -> PPInfo -> PPInfo
 ppInfoAddTypedExprNames _ MNil info = info
