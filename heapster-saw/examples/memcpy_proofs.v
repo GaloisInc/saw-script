@@ -8,7 +8,7 @@ From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import CompMExtra.
 
-Require Import Examples.memcpy.
+Require Import Examples.memcpy_gen.
 Import memcpy.
 
 Import SAWCorePrelude.

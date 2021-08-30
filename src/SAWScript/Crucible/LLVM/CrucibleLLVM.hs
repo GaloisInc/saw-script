@@ -79,6 +79,8 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
   , LLVMContext
   , translateModule
   , llvmDeclToFunHandleRepr'
+  , TranslationOptions(..)
+  , defaultTranslationOptions
     -- * Re-exports from "Lang.Crucible.LLVM.MemModel"
   , doResolveGlobal
   , Mem
@@ -166,7 +168,8 @@ import Lang.Crucible.LLVM.Globals
 
 import Lang.Crucible.LLVM.Translation
   (llvmMemVar, cfgMap, transContext, llvmPtrWidth, llvmTypeCtx,
-   ModuleTranslation, LLVMContext, translateModule, llvmDeclToFunHandleRepr')
+   ModuleTranslation, LLVMContext, translateModule, llvmDeclToFunHandleRepr',
+   TranslationOptions(..), defaultTranslationOptions)
 
 import Lang.Crucible.LLVM.MemModel
   (Mem, MemImpl, doResolveGlobal, storeRaw, storeConstRaw, mallocRaw, mallocConstRaw,

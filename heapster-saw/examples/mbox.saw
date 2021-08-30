@@ -39,11 +39,11 @@ heapster_define_perm env "boolean" " " "llvmptr 1" "exists x:bv 1.eq(llvmword(x)
 // memcpy i64
 // heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64" "(X:perm(llvmptr 64), Y:perm(llvmptr 64)).arg0:(exists x:bv 1.X), arg1:(exists x:bv 1.Y), arg2:true, arg3:true -o arg0:(exists x:bv 1.Y), arg1:(exists x:bv 1.Y)" "\\ (X:sort 0) (Y:sort 0) (_:SigBV1 X) (y:SigBV1 Y) -> returnM (SigBV1 Y * (SigBV1 Y * #())) (y, (y, ()))";
 
-// heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64" "(len:bv 64).arg0:byte_array<W,len>, arg1:byte_array<W,len>, arg2:eq(llvmword(len)), arg3:true -o arg0:byte_array<W,len>, arg1:byte_array<W,len>" "\\ (len:Vec 64 Bool) (x y:BVVec 64 len BV8) -> returnM (BVVec 64 len BV8 * (BVVec 64 len BV8 * #())) (y, (y, ()))";
+// heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64" "(len:bv 64).arg0:byte_array<W,len>, arg1:byte_array<W,len>, arg2:eq(llvmword(len)), arg3:true -o arg0:byte_array<W,len>, arg1:byte_array<W,len>" "\\ (len:Vec 64 Bool) (x y:BVVec 64 len (Vec 8 Bool)) -> returnM (BVVec 64 len (Vec 8 Bool) * (BVVec 64 len (Vec 8 Bool) * #())) (y, (y, ()))";
 
 heapster_assume_fun env "llvm.objectsize.i64.p0i8" "().empty -o empty" "returnM #() ()";
 
-heapster_assume_fun env "__memcpy_chk" "(len:bv 64).arg0:byte_array<W,len>,arg1:byte_array<W,len>,arg2:eq(llvmword (len)) -o arg0:byte_array<W,len>,arg1:byte_array<W,len>" "\\ (len:Vec 64 Bool) (_ src : BVVec 64 len BV8) -> returnM (BVVec 64 len BV8 * BVVec 64 len BV8 * #()) (src, src, ())";
+heapster_assume_fun env "__memcpy_chk" "(len:bv 64).arg0:byte_array<W,len>,arg1:byte_array<W,len>,arg2:eq(llvmword (len)) -o arg0:byte_array<W,len>,arg1:byte_array<W,len>" "\\ (len:Vec 64 Bool) (_ src : BVVec 64 len (Vec 8 Bool)) -> returnM (BVVec 64 len (Vec 8 Bool) * BVVec 64 len (Vec 8 Bool) * #()) (src, src, ())";
 
 
 //------------------------------------------------------------------------------
@@ -137,4 +137,4 @@ heapster_typecheck_fun env "mbox_drop" "().arg0:mbox<W,llvmword(0)>, arg1:int64<
 
 //------------------------------------------------------------------------------
 // Export to coq for verification
-heapster_export_coq env "mbox.v";
+heapster_export_coq env "mbox_gen.v";

@@ -8,7 +8,7 @@ From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import CompMExtra.
 
-Require Import Examples.clearbufs.
+Require Import Examples.clearbufs_gen.
 Import clearbufs.
 
 (* Eval cbn in clearbufs__tuple_fun. *)

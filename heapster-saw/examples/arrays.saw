@@ -26,4 +26,4 @@ heapster_typecheck_fun env "filter_and_sum_pos" "(len:bv 64).arg0:array(0,<len,*
 heapster_gen_block_perms_hint env "sum_2d" [];
 heapster_typecheck_fun env "sum_2d" "(l1:bv 64,l2:bv 64).arg0:array(0,<l1,*8,[(W,0) |-> array(0,<l2,*8,[(W,0) |-> exists z:bv 64.eq(llvmword(z))])]), arg1:eq(llvmword(l1)), arg2:eq(llvmword(l2)) -o arg0:array(0,<l1,*8,[(W,0) |-> array(0,<l2,*8,[(W,0) |-> exists z:bv 64.eq(llvmword(z))])]), arg1:true, arg2:true, ret:exists x:bv 64.eq(llvmword(x))";
 
-heapster_export_coq env "arrays.v";
+heapster_export_coq env "arrays_gen.v";

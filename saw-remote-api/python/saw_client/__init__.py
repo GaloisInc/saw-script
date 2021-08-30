@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional, Set, Union, Tuple, Any, IO
+from typing import List, Optional, Set, Union, Tuple, Any, IO, TextIO
 import uuid
 import sys
 import time
@@ -145,7 +145,9 @@ def connect(command: Union[str, ServerConnection, None] = None,
             cryptol_path: Optional[str] = None,
             persist: bool = False,
             url : Optional[str] = None,
-            reset_server : bool = False) -> None:
+            reset_server : bool = False,
+            verify : Union[bool, str] = True,
+            log_dest : Optional[TextIO] = None) -> None:
     """
     Connect to a (possibly new) Saw server process.
 
@@ -182,7 +184,9 @@ def connect(command: Union[str, ServerConnection, None] = None,
             command=command,
             cryptol_path=cryptol_path,
             persist=persist,
-            url=url)
+            url=url,
+            verify=verify,
+            log_dest=log_dest)
     elif reset_server:
         __designated_connection.reset_server()
     else:
@@ -229,6 +233,13 @@ def disconnect() -> None:
     if __designated_connection is not None:
         __designated_connection.disconnect()
     __designated_connection = None
+
+
+def logging(on : bool, *, dest : TextIO = sys.stderr) -> None:
+    """Whether to log received and transmitted JSON."""
+    global __designated_connection
+    if __designated_connection is not None:
+        __designated_connection.logging(on=on,dest=dest)
 
 
 class View:

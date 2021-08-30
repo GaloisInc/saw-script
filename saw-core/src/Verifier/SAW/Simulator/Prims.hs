@@ -184,6 +184,7 @@ data BasePrims l =
   , bpMuxBool  :: VBool l -> VBool l -> VBool l -> MBool l
   , bpMuxWord  :: VBool l -> VWord l -> VWord l -> MWord l
   , bpMuxInt   :: VBool l -> VInt l -> VInt l -> MInt l
+  , bpMuxArray :: VBool l -> VArray l -> VArray l -> MArray l
   , bpMuxExtra :: TValue l -> VBool l -> Extra l -> Extra l -> EvalM l (Extra l)
     -- Booleans
   , bpTrue   :: VBool l
@@ -250,6 +251,9 @@ data BasePrims l =
   , bpArrayLookup :: VArray l -> Value l -> MValue l
   , bpArrayUpdate :: VArray l -> Value l -> Value l -> MArray l
   , bpArrayEq :: VArray l -> VArray l -> MBool l
+  , bpArrayCopy :: VArray l -> VWord l -> VArray l -> VWord l -> VWord l -> MArray l
+  , bpArraySet :: VArray l -> VWord l -> Value l -> VWord l -> MArray l
+  , bpArrayRangeEq :: VArray l -> VWord l -> VArray l -> VWord l -> VWord l -> MBool l
   }
 
 bpBool :: VMonad l => BasePrims l -> Bool -> MBool l
@@ -374,6 +378,9 @@ constMap bp = Map.fromList
   , ("Prelude.arrayLookup", arrayLookupOp bp)
   , ("Prelude.arrayUpdate", arrayUpdateOp bp)
   , ("Prelude.arrayEq", arrayEqOp bp)
+  , ("Prelude.arrayCopy", arrayCopyOp bp)
+  , ("Prelude.arraySet", arraySetOp bp)
+  , ("Prelude.arrayRangeEq", arrayRangeEqOp bp)
   ]
 
 -- | Call this function to indicate that a programming error has
@@ -1180,6 +1187,7 @@ muxValue bp tp0 b = value tp0
     value _ (VBool x)         (VBool y)         = VBool <$> bpMuxBool bp b x y
     value _ (VWord x)         (VWord y)         = VWord <$> bpMuxWord bp b x y
     value _ (VInt x)          (VInt y)          = VInt <$> bpMuxInt bp b x y
+    value _ (VArray x)        (VArray y)        = VArray <$> bpMuxArray bp b x y
     value _ (VIntMod n x)     (VIntMod _ y)     = VIntMod n <$> bpMuxInt bp b x y
 
     value tp x@(VWord _)       y                = do xv <- toVector' x
@@ -1305,3 +1313,52 @@ arrayEqOp bp =
     do x' <- toArray x
        y' <- toArray y
        VBool <$> bpArrayEq bp x' y'
+
+-- arrayCopy : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> Array (Vec n Bool) a -> Vec n Bool -> Vec n Bool -> Array (Vec n Bool) a;
+arrayCopyOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+arrayCopyOp bp =
+  constFun $
+  constFun $
+  strictFun $ \f ->
+  strictFun $ \i ->
+  strictFun $ \g ->
+  strictFun $ \j ->
+  strictFun $ \l -> Prim $
+    do f' <- toArray f
+       i' <- toWord (bpPack bp) i
+       g' <- toArray g
+       j' <- toWord (bpPack bp) j
+       l' <- toWord (bpPack bp) l
+       VArray <$> (bpArrayCopy bp) f' i' g' j' l'
+
+-- arraySet : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> a -> Vec n Bool -> Array (Vec n Bool) a;
+arraySetOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+arraySetOp bp =
+  constFun $
+  constFun $
+  strictFun $ \f ->
+  strictFun $ \i ->
+  strictFun $ \e ->
+  strictFun $ \l -> Prim $
+    do f' <- toArray f
+       i' <- toWord (bpPack bp) i
+       l' <- toWord (bpPack bp) l
+       VArray <$> (bpArraySet bp) f' i' e l'
+
+-- arrayRangeEq : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> Array (Vec n Bool) a -> Vec n Bool -> Vec n Bool -> Bool;
+arrayRangeEqOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+arrayRangeEqOp bp =
+  constFun $
+  constFun $
+  strictFun $ \f ->
+  strictFun $ \i ->
+  strictFun $ \g ->
+  strictFun $ \j ->
+  strictFun $ \l -> Prim $
+    do f' <- toArray f
+       i' <- toWord (bpPack bp) i
+       g' <- toArray g
+       j' <- toWord (bpPack bp) j
+       l' <- toWord (bpPack bp) l
+       VBool <$> (bpArrayRangeEq bp) f' i' g' j' l'
+

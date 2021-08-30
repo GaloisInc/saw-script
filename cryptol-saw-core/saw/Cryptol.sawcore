@@ -1741,6 +1741,15 @@ ecArrayLookup = arrayLookup;
 ecArrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
 ecArrayUpdate = arrayUpdate;
 
+ecArrayCopy : (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Array (seq n Bool) a;
+ecArrayCopy = finNumRec (\(n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Array (seq n Bool) a) arrayCopy;
+
+ecArraySet : (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> a -> seq n Bool -> Array (seq n Bool) a;
+ecArraySet = finNumRec (\(n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> a -> seq n Bool -> Array (seq n Bool) a) arraySet;
+
+ecArrayRangeEq : (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Bool;
+ecArrayRangeEq = finNumRec (\(n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Bool) arrayRangeEq;
+
 --------------------------------------------------------------------------------
 -- Suite-B Primitives
 

@@ -16,4 +16,4 @@ heapster_typecheck_fun env "sorted_insert" "(x:bv 64).arg0:eq(llvmword(x)), arg1
 
 heapster_typecheck_fun env "sorted_insert_no_malloc" "(x:bv 64).arg0:ptr((W,0) |-> eq(llvmword(x))) * ptr((W,8) |-> eq(llvmword(0))), arg1:List<(exists y:(bv 64).eq(llvmword(y))),always,W> -o arg0:true, arg1:true, ret:List<(exists y:(bv 64).eq(llvmword(y))),always,W>";
 
-heapster_export_coq env "linked_list.v";
+heapster_export_coq env "linked_list_gen.v";

@@ -27,4 +27,4 @@ heapster_typecheck_fun env "insert_remove" "(l:lifetime).arg0:string_set<W,l>, a
 // FIXME: should be able to write the above like this when all the changes above happen
 // heapster_typecheck_fun env "insert_remove" "(l:lifetime).arg0:string_set<W,l>, arg1:string<>, arg2:string<> -o arg0:string_set<W,l>, arg1:true, arg2:string<>";
 
-heapster_export_coq env "string_set.v";
+heapster_export_coq env "string_set_gen.v";

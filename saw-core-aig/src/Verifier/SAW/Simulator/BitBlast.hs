@@ -184,6 +184,7 @@ prims be =
   , Prims.bpMuxBool  = \b x y -> AIG.lazyMux be b (pure x) (pure y)
   , Prims.bpMuxWord  = \b x y -> AIG.iteM be b (pure x) (pure y)
   , Prims.bpMuxInt   = muxInt
+  , Prims.bpMuxArray = unsupportedAIGPrimitive "bpMuxArray"
   , Prims.bpMuxExtra = muxBExtra be
     -- Booleans
   , Prims.bpTrue   = AIG.trueLit be
@@ -252,6 +253,9 @@ prims be =
   , Prims.bpArrayLookup = unsupportedAIGPrimitive "bpArrayLookup"
   , Prims.bpArrayUpdate = unsupportedAIGPrimitive "bpArrayUpdate"
   , Prims.bpArrayEq = unsupportedAIGPrimitive "bpArrayEq"
+  , Prims.bpArrayCopy = unsupportedAIGPrimitive "bpArrayCopy"
+  , Prims.bpArraySet = unsupportedAIGPrimitive "bpArraySet"
+  , Prims.bpArrayRangeEq = unsupportedAIGPrimitive "bpArrayRangeEq"
   }
 
 unsupportedAIGPrimitive :: String -> a
