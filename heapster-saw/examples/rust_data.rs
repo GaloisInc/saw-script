@@ -279,6 +279,23 @@ impl List<u64> {
     }
 }
 
+/* A linked list specialized to 64-bit elements */
+#[derive(Clone, Debug, PartialEq)]
+#[repr(C,u64)]
+pub enum List64 {
+    Nil64,
+    Cons64 (u64,Box<List64>)
+}
+
+/* Test if a List64 is empty */
+pub fn list64_is_empty (l: &List64) -> bool {
+    match l {
+        List64::Nil64 => true,
+        List64::Cons64 (_,_) => false
+    }
+}
+
+
 /* Insert a mapping into m from the greatest of x and y to the other */
 pub fn hash_map_insert_gt_to_le (m: &mut HashMap<u64,u64>, x:u64, y:u64) -> () {
     if x > y {
@@ -287,6 +304,20 @@ pub fn hash_map_insert_gt_to_le (m: &mut HashMap<u64,u64>, x:u64, y:u64) -> () {
         m.insert (y, x);
     }
 }
+
+/* A binary tree */
+pub enum BinTree<X> {
+    BinLeaf (X),
+    BinNode (Box<BinTree<X>>,Box<BinTree<X>>)
+}
+
+pub fn bintree_is_leaf (t: &BinTree<u64>) -> bool {
+    match *t {
+        BinTree::BinLeaf (_) => true,
+        BinTree::BinNode (_,_) => false
+    }
+}
+
 
 /* A tree whose internal nodes contain vectors of children */
 pub enum Tree<X> {
