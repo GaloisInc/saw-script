@@ -120,7 +120,7 @@ instance (PermCheckExtC ext)
     => ExtractLogEntries
          (TypedEntry TransPhase ext blocks tops ret args ghosts) where
   extractLogEntries te = do
-    let loc = mbLift' $ fmap getFirstProgramLocTS (typedEntryBody te)
+    let loc = nmbLift $ fmap getFirstProgramLocTS (typedEntryBody te)
     withLoc loc (nmbExtractLogEntries (typedEntryBody te))
     let entryId = mkLogEntryID $ typedEntryID te
     let callers = callerIDs $ typedEntryCallers te
@@ -198,7 +198,7 @@ instance (PermCheckExtC ext)
       mapM_ (\(Some te) -> extractLogEntries te) $ _typedBlockEntries tb
 
 nmbExtractLogEntries
-  :: ExtractLogEntries a => Mb' (ctx :: RList CrucibleType) a -> ExtractionM ()
+  :: ExtractLogEntries a => NMb (ctx :: RList CrucibleType) a -> ExtractionM ()
 nmbExtractLogEntries mb_a =
   ReaderT $ \(ppi, loc, fname) ->
   tell $ mbLift $ flip nuMultiWithElim1 (_mbBinding mb_a) $ \ns x ->
@@ -259,7 +259,7 @@ getFirstProgramLocBM block =
       -> Maybe ProgramLoc
     helper ste = case ste of
       Some TypedEntry { typedEntryBody = stmts } ->
-        Just $ mbLift' $ fmap getFirstProgramLocTS stmts
+        Just $ nmbLift $ fmap getFirstProgramLocTS stmts
 
 -- | From the sequence, get the first program location we encounter, which
 -- should correspond to the permissions for the entry point we want to log
@@ -285,7 +285,7 @@ getFirstProgramLocMBPI
 getFirstProgramLocMBPI MbPermImpls_Nil =
   error "Error finding program location for IDE log"
 getFirstProgramLocMBPI (MbPermImpls_Cons _ _ pis) =
-  mbLift' $ fmap getFirstProgramLocPI pis
+  nmbLift $ fmap getFirstProgramLocPI pis
 
 -- | Print a `ProgramLoc` in a way that is useful for an IDE, i.e., machine
 -- readable

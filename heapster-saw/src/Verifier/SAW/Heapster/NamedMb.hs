@@ -14,53 +14,50 @@ import Control.Lens
 
 newtype StringF a = StringF { unStringF :: String }
 
-type Binding' c = Mb' (RNil :> c)
+type Binding' c = NMb (RNil :> c)
 
-data Mb' ctx a = Mb'
+data NMb ctx a = NMb
   { _mbNames :: RAssign StringF ctx
   , _mbBinding :: Mb ctx a
   }
   deriving Functor
 
-mbBinding :: Lens (Mb' ctx a) (Mb' ctx b) (Mb ctx a) (Mb ctx b)
-mbBinding f x = Mb' (_mbNames x) <$> f (_mbBinding x)
+mbBinding :: Lens (NMb ctx a) (NMb ctx b) (Mb ctx a) (Mb ctx b)
+mbBinding f x = NMb (_mbNames x) <$> f (_mbBinding x)
 
-nuMulti' :: RAssign StringF ctx -> (RAssign Name ctx -> b) -> Mb' ctx b
-nuMulti' tps f = Mb'
+nuMultiN :: RAssign StringF ctx -> (RAssign Name ctx -> b) -> NMb ctx b
+nuMultiN tps f = NMb
   { _mbNames = tps
   , _mbBinding = nuMulti (mapRAssign (const Proxy) tps) f
   }
 
-nuMultiWithElim1' :: (RAssign Name ctx -> arg -> b) -> Mb' ctx arg -> Mb' ctx b
-nuMultiWithElim1' = over mbBinding . nuMultiWithElim1
+nuMultiWithElim1N :: (RAssign Name ctx -> arg -> b) -> NMb ctx arg -> NMb ctx b
+nuMultiWithElim1N = over mbBinding . nuMultiWithElim1
 
-strongMbM' :: MonadStrongBind m => Mb' ctx (m a) -> m (Mb' ctx a)
-strongMbM' = traverseOf mbBinding strongMbM
+strongNMbM :: MonadStrongBind m => NMb ctx (m a) -> m (NMb ctx a)
+strongNMbM = traverseOf mbBinding strongMbM
 
-mbM' :: (MonadBind m, NuMatching a) => Mb' ctx (m a) -> m (Mb' ctx a)
-mbM' = traverseOf mbBinding mbM
+nmbM :: (MonadBind m, NuMatching a) => NMb ctx (m a) -> m (NMb ctx a)
+nmbM = traverseOf mbBinding mbM
 
-mbSwap' :: RAssign Proxy ctx -> Mb' ctx' (Mb' ctx a) -> Mb' ctx (Mb' ctx' a)
-mbSwap' p (Mb' names' body') = Mb' names' <$> mbSink p body'
+nmbSwap :: RAssign Proxy ctx -> NMb ctx' (NMb ctx a) -> NMb ctx (NMb ctx' a)
+nmbSwap p (NMb names' body') = NMb names' <$> nmbSink p body'
 
-mbSink :: RAssign Proxy ctx -> Mb ctx' (Mb' ctx a) -> Mb' ctx (Mb ctx' a)
-mbSink p m =
-    Mb'
+nmbSink :: RAssign Proxy ctx -> Mb ctx' (NMb ctx a) -> NMb ctx (Mb ctx' a)
+nmbSink p m =
+    NMb
     { _mbNames = mbLift (_mbNames <$> m)
     , _mbBinding = mbSwap p (_mbBinding <$> m)
     }
 
-mbCombine' :: RAssign Proxy c2 -> Mb' c1 (Mb' c2 a) -> Mb' (c1 :++: c2) a
-mbCombine' = undefined
+nmbLift :: Liftable a => NMb ctx a -> a
+nmbLift = views mbBinding mbLift
 
-mbLift' :: Liftable a => Mb' ctx a -> a
-mbLift' = views mbBinding mbLift
+elimEmptyNMb :: NMb RNil a -> a
+elimEmptyNMb = views mbBinding elimEmptyMb
 
-elimEmptyMb' :: Mb' RNil a -> a
-elimEmptyMb' = views mbBinding elimEmptyMb
-
-emptyMb' :: a -> Mb' RNil a
-emptyMb' = Mb' MNil . emptyMb
+emptyNMb :: a -> NMb RNil a
+emptyNMb = NMb MNil . emptyMb
 
 mkNuMatching [t| forall a. StringF a |]
 instance NuMatchingAny1 StringF where
@@ -72,4 +69,4 @@ instance Liftable (StringF a) where
 instance LiftableAny1 StringF where
     mbLiftAny1 = mbLift
 
-mkNuMatching [t| forall ctx a. NuMatching a => Mb' ctx a |]
+mkNuMatching [t| forall ctx a. NuMatching a => NMb ctx a |]

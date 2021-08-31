@@ -4426,7 +4426,7 @@ distPermsTail =
 -- | The lens for the nth permission in a 'DistPerms' stack
 nthVarPerm :: Member ps a -> ExprVar a -> Lens' (DistPerms ps) (ValuePerm a)
 nthVarPerm Member_Base x = distPermsHead x
-nthVarPerm (Member_Step memb') x = distPermsTail . nthVarPerm memb' x
+nthVarPerm (Member_Step meNMb) x = distPermsTail . nthVarPerm meNMb x
 
 -- | Test if a permission can be copied, i.e., whether @p -o p*p@. This is true
 -- iff @p@ does not contain any 'Write' modalities, any frame permissions, or
@@ -4967,27 +4967,27 @@ genSubstMb ::
   s ctx' -> Mb ctx' (Mb ctx a) -> m (Mb ctx a)
 genSubstMb p s mbmb = mbM (fmap (genSubst s) (mbSwap p mbmb))
 
-genSubstMb' ::
+genSubstNMb ::
   Substable s a m =>
   NuMatching a =>
   RAssign Proxy ctx ->
-  s ctx' -> Mb ctx' (Mb' ctx a) -> m (Mb' ctx a)
-genSubstMb' p s mbmb = mbM' (fmap (genSubst s) (swapHelper p mbmb))
+  s ctx' -> Mb ctx' (NMb ctx a) -> m (NMb ctx a)
+genSubstNMb p s mbmb = nmbM (fmap (genSubst s) (swapHelper p mbmb))
 
-swapHelper :: RAssign Proxy b -> Mb a (Mb' b c) -> Mb' b (Mb a c)
-swapHelper p m = Mb' ns (mbSwap p bs)
+swapHelper :: RAssign Proxy b -> Mb a (NMb b c) -> NMb b (Mb a c)
+swapHelper p m = NMb ns (mbSwap p bs)
   where
     ns = mbLift (fmap _mbNames m)
     bs = fmap _mbBinding m
 
-instance {-# INCOHERENT #-} (Given (RAssign Proxy ctx), Substable s a m, NuMatching a) => Substable s (Mb' ctx a) m where
-   genSubst = genSubstMb' given
+instance {-# INCOHERENT #-} (Given (RAssign Proxy ctx), Substable s a m, NuMatching a) => Substable s (NMb ctx a) m where
+   genSubst = genSubstNMb given
 
-instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) => Substable s (Mb' RNil a) m where
-   genSubst = genSubstMb' RL.typeCtxProxies
+instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) => Substable s (NMb RNil a) m where
+   genSubst = genSubstNMb RL.typeCtxProxies
 
 instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) => Substable s (Binding' c a) m where
-   genSubst = genSubstMb' RL.typeCtxProxies
+   genSubst = genSubstNMb RL.typeCtxProxies
 
 
 instance SubstVar s m => Substable s (Member ctx a) m where
@@ -5626,8 +5626,8 @@ instance AbstractVars (Name (a :: CrucibleType)) where
   abstractPEVars ns1 ns2 (n :: Name a)
     | Just memb <- memberElem n ns2
     = return ( $(mkClosed
-                 [| \prxs1 prxs2 memb' ->
-                   nuMulti prxs1 (const $ nuMulti prxs2 (RL.get memb')) |])
+                 [| \prxs1 prxs2 meNMb ->
+                   nuMulti prxs1 (const $ nuMulti prxs2 (RL.get meNMb)) |])
                `clApply` closedProxies ns1 `clApply` closedProxies ns2
                `clApply` toClosed memb)
   abstractPEVars _ _ _ = Nothing
@@ -5636,9 +5636,9 @@ instance AbstractVars (Name (a :: Type)) where
   abstractPEVars ns1 ns2 (n :: Name a)
     | Just memb <- memberElem n ns1
     = return ( $(mkClosed
-                 [| \prxs1 prxs2 memb' ->
+                 [| \prxs1 prxs2 meNMb ->
                    nuMulti prxs1 $ \ns ->
-                   nuMulti prxs2 (const $ RL.get memb' ns) |])
+                   nuMulti prxs2 (const $ RL.get meNMb ns) |])
                `clApply` closedProxies ns1 `clApply` closedProxies ns2
                `clApply` toClosed memb)
   abstractPEVars _ _ _ = Nothing
