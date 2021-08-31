@@ -35,7 +35,7 @@ import SAWScript.REPL.Trie
 import SAWScript.Position (getPos)
 
 import Cryptol.Parser (ParseError())
-import Cryptol.Utils.PP
+import Cryptol.Utils.PP hiding ((</>))
 
 import Control.Monad (guard)
 import Data.Char (isSpace,isPunctuation,isSymbol)

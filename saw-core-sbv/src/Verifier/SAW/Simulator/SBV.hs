@@ -118,6 +118,7 @@ prims =
   , Prims.bpMuxBool  = pure3 svIte
   , Prims.bpMuxWord  = pure3 svIte
   , Prims.bpMuxInt   = pure3 svIte
+  , Prims.bpMuxArray = unsupportedSBVPrimitive "bpMuxArray"
   , Prims.bpMuxExtra = muxSbvExtra
     -- Booleans
   , Prims.bpTrue   = svTrue
@@ -184,6 +185,9 @@ prims =
   , Prims.bpArrayLookup = unsupportedSBVPrimitive "bpArrayLookup"
   , Prims.bpArrayUpdate = unsupportedSBVPrimitive "bpArrayUpdate"
   , Prims.bpArrayEq = unsupportedSBVPrimitive "bpArrayEq"
+  , Prims.bpArrayCopy = unsupportedSBVPrimitive "bpArrayCopy"
+  , Prims.bpArraySet = unsupportedSBVPrimitive "bpArraySet"
+  , Prims.bpArrayRangeEq = unsupportedSBVPrimitive "bpArrayRangeEq"
   }
 
 unsupportedSBVPrimitive :: String -> a

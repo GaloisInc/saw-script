@@ -8,12 +8,12 @@ From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import CompMExtra.
 
-Load "xor_swap_rust.v".
+Require Import Examples.xor_swap_rust_gen.
 Import xor_swap_rust.
 
 Definition xor_swap_spec x1 x2 :
-  CompM ({_ : bitvector 64 & unit} * ({_ : bitvector 64 & unit} * unit)) :=
-  returnM (existT _ x2 tt, ((existT _ x1 tt), tt)).
+  CompM (bitvector 64 * (bitvector 64 * unit)) :=
+  returnM (x2, (x1, tt)).
 Arguments xor_swap_spec /.
 
 (* FIXME: move lemma to SAWCorePrelude...? *)

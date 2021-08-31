@@ -3,18 +3,6 @@ module rust_data where
 
 import Prelude;
 
--- The translation of the permission int8<>
-int8Trans : sort 0;
-int8Trans = Sigma (Vec 8 Bool) (\ (_:Vec 8 Bool) -> #());
-
--- The translation of the permission int64<>
-int64Trans : sort 0;
-int64Trans = Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #());
-
--- Build an int64Trans from a 64-bit bitvector
-mkInt64Trans : Vec 64 Bool -> int64Trans;
-mkInt64Trans bv = exists (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) bv ();
-
 unfoldListPermH : (a:sort 0) -> List a -> Either #() (#() * a * List a);
 unfoldListPermH a l =
   List__rec a (\ (_:List a) -> Either #() (#() * a * List a))

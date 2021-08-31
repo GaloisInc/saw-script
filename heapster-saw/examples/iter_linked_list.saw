@@ -14,4 +14,4 @@ heapster_block_entry_hint env "length" 3 "top1:llvmptr 64" "frm:llvmframe 64,gho
 
 heapster_typecheck_fun env "length" "().arg0:ListF<int64<>,always,W,llvmword(0)> -o arg0:true, ret:int64<>";
 
-heapster_export_coq env "iter_linked_list.v";
+heapster_export_coq env "iter_linked_list_gen.v";

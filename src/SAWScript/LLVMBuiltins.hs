@@ -32,12 +32,17 @@ import qualified Text.LLVM.Parser as LLVM (parseType)
 
 import SAWScript.Value as SV
 
+import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule, loadLLVMModule)
 
 llvm_load_module :: FilePath -> TopLevel (Some CMS.LLVMModule)
 llvm_load_module file =
   do laxArith <- gets rwLaxArith
-     let ?laxArith = laxArith
+     debugIntrinsics <- gets rwDebugIntrinsics
+     let ?transOpts = CL.defaultTranslationOptions
+                        { CL.laxArith = laxArith
+                        , CL.debugIntrinsics = debugIntrinsics
+                        }
      halloc <- getHandleAlloc
      io (CMS.loadLLVMModule file halloc) >>= \case
        Left err -> fail (LLVM.formatError err)

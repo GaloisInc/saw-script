@@ -49,8 +49,15 @@ printIDEInfo :: PermEnv -> [Some SomeTypedCFG] -> FilePath -> PPInfo -> IO ()
 printIDEInfo _penv tcfgs file ppinfo =
   encodeFile file $ IDELog (runWithLoc ppinfo tcfgs)
 
+data ExtractionInfo = ExtractionInfo {
+  eiPPInfo :: PPInfo,
+  eiLoc :: ProgramLoc,
+  eiFnName :: String,
+  eiErrorPrefix :: String
+}
 
-type ExtractionM = ReaderT (PPInfo, ProgramLoc, String) (Writer [LogEntry])
+type ExtractionM = ReaderT ExtractionInfo (Writer [LogEntry])
+
 
 emit :: LogEntry -> ExtractionM ()
 emit entry = tell [entry]
@@ -124,7 +131,7 @@ instance (PermCheckExtC ext)
     withLoc loc (nmbExtractLogEntries (typedEntryBody te))
     let entryId = mkLogEntryID $ typedEntryID te
     let callers = callerIDs $ typedEntryCallers te
-    (ppi, _, fname) <- ask
+    ExtractionInfo { eiPPInfo = ppi, eiFnName = fname } <- ask
     let loc' = snd (ppLoc loc)
     let debugNames = _mbNames (typedEntryBody te)
     let inputs = mbLift
@@ -152,8 +159,8 @@ zipRAssign RL.MNil RL.MNil = RL.MNil
 zipRAssign (xs RL.:>: x) (ys RL.:>: y) = zipRAssign xs ys RL.:>: Pair x y
 
 instance ExtractLogEntries (TypedStmtSeq ext blocks tops ret ps_in) where
-  extractLogEntries (TypedImplStmt (AnnotPermImpl _str pimpl)) =
-    -- fmap (setErrorMsg str) <$> extractLogEntries pimpl
+  extractLogEntries (TypedImplStmt (AnnotPermImpl str pimpl)) =
+    local (\eiinfo -> eiinfo { eiErrorPrefix = str }) $
     extractLogEntries pimpl
   extractLogEntries (TypedConsStmt loc _ _ rest) = do
     withLoc loc $ nmbExtractLogEntries rest
@@ -169,11 +176,11 @@ instance ExtractLogEntries
 
 instance ExtractLogEntries (PermImpl1 ps_in ps_outs) where
   extractLogEntries (Impl1_Fail err) =
-    do (_, loc, fname) <- ask
-       emit (LogError (snd (ppLoc loc)) (ppError err) fname)
+    do ExtractionInfo { eiLoc = loc, eiFnName = fname, eiErrorPrefix = prefix } <- ask
+       emit (LogError (snd (ppLoc loc)) (prefix ++ "\n" ++ ppError err) fname)
     -- The error message is available further up the stack, so we just leave it
   extractLogEntries impl =
-    do (ppi, loc, fname) <- ask
+    do ExtractionInfo { eiPPInfo = ppi, eiLoc = loc, eiFnName = fname } <- ask
        emit (LogImpl (snd (ppLoc loc)) (ppToJson ppi impl) fname)
 
 instance ExtractLogEntries
@@ -200,19 +207,20 @@ instance (PermCheckExtC ext)
 nmbExtractLogEntries
   :: ExtractLogEntries a => NMb (ctx :: RList CrucibleType) a -> ExtractionM ()
 nmbExtractLogEntries mb_a =
-  ReaderT $ \(ppi, loc, fname) ->
+  ReaderT $ \einfo ->
   tell $ mbLift $ flip nuMultiWithElim1 (_mbBinding mb_a) $ \ns x ->
-  let ppi' = ppInfoApplyAllocation ns (_mbNames mb_a) ppi in
-  execWriter $ runReaderT (extractLogEntries x) (ppi', loc, fname)
+  let ppi' = ppInfoApplyAllocation ns (_mbNames mb_a) (eiPPInfo einfo) in
+  execWriter $ runReaderT (extractLogEntries x) 
+               (einfo { eiPPInfo = ppi' })
 
 typedStmtOutCtx :: TypedStmt ext rets ps_in ps_next -> CruCtx rets
 typedStmtOutCtx = error "FIXME: write typedStmtOutCtx"
 
 withLoc :: ProgramLoc -> ExtractionM a -> ExtractionM a
-withLoc loc = local (\(ppinfo, _, fname) -> (ppinfo, loc, fname))
+withLoc loc = local $ \einfo -> einfo { eiLoc = loc } 
 
 setErrorMsg :: String -> LogEntry -> LogEntry
-setErrorMsg msg le@LogError {} = le { lerrError = msg }
+setErrorMsg msg le@LogError {} = le { lerrError = msg <> lerrError le }
 setErrorMsg msg le@LogImpl {} =
   LogError { lerrError = msg
            , lerrLocation = limplLocation le
@@ -230,7 +238,12 @@ runWithLoc ppi =
     runWithLocHelper :: PPInfo -> Some SomeTypedCFG -> [LogEntry]
     runWithLocHelper ppi' sstcfg = case sstcfg of
       Some (SomeTypedCFG tcfg) -> do
-        let env = (ppi', getFirstProgramLoc tcfg, getFunctionName tcfg)
+        let env = ExtractionInfo {
+          eiPPInfo = ppi',
+          eiLoc = getFirstProgramLoc tcfg,
+          eiFnName = getFunctionName tcfg,
+          eiErrorPrefix = ""
+          }
         execWriter (runReaderT (extractLogEntries tcfg) env)
 
 getFunctionName :: TypedCFG ext blocks ghosts inits ret -> String
