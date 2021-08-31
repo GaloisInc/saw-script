@@ -3133,7 +3133,7 @@ translatePermImplUnary ::
   PermImplTransM (ImplFailCont ->
                   ImpTransM ext blocks tops ret ps ctx OpenTerm)
 translatePermImplUnary (mbMatch -> [nuMP| MbPermImpls_Cons _ _ mb_impl |]) f =
-  translatePermImpl Proxy (mbCombine RL.typeCtxProxies (fmap _mbBinding mb_impl)) >>= \trans ->
+  translatePermImpl Proxy (mbCombine RL.typeCtxProxies (fmap _nmbBinding mb_impl)) >>= \trans ->
   return $ \k -> f $ trans k
 
 
@@ -3155,10 +3155,10 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
     pitmCatching (translatePermImpl prx $
                   mbCombine RL.typeCtxProxies $
-                  fmap _mbBinding mb_impl1) >>= \(mtrans1,hasf1) ->
+                  fmap _nmbBinding mb_impl1) >>= \(mtrans1,hasf1) ->
     pitmCatching (translatePermImpl prx $
                   mbCombine RL.typeCtxProxies $
-                  fmap _mbBinding mb_impl2) >>= \(mtrans2,hasf2) ->
+                  fmap _nmbBinding mb_impl2) >>= \(mtrans2,hasf2) ->
     (if hasf1 == HasFailures && hasf2 == HasFailures then tell ([],HasFailures)
      else return ()) >>
     case (mtrans1, hasf1, mtrans2, hasf2) of
@@ -3196,10 +3196,10 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
     pitmCatching (translatePermImpl prx $
                   mbCombine RL.typeCtxProxies $
-                  fmap _mbBinding mb_impl1) >>= \(mtrans1,hasf1) ->
+                  fmap _nmbBinding mb_impl1) >>= \(mtrans1,hasf1) ->
     pitmCatching (translatePermImpl prx $
                   mbCombine RL.typeCtxProxies $
-                  fmap _mbBinding mb_impl2) >>= \(mtrans2,hasf2) ->
+                  fmap _nmbBinding mb_impl2) >>= \(mtrans2,hasf2) ->
     tell ([],hasf1 <> hasf2) >>
     case (mtrans1, mtrans2) of
       (Nothing, Nothing) -> mzero
@@ -3336,7 +3336,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   -- considered just an assertion and not a failure
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_Eq e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _mbBinding mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _nmbBinding mb_impl') >>= \trans ->
     return $ \k ->
     do prop_tp_trans <- translate prop
        applyMultiTransM (return $ globalOpenTerm "Prelude.maybe")
@@ -3352,7 +3352,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   -- For an inequality test, we don't need a proof, so just insert an if
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_Neq e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _mbBinding mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _nmbBinding mb_impl') >>= \trans ->
     return $ \k ->
     let w = natVal2 prop in
     applyMultiTransM (return $ globalOpenTerm "Prelude.ite")
@@ -3377,7 +3377,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
 
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULt e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _mbBinding mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _nmbBinding mb_impl') >>= \trans ->
     return $ \k ->
     do prop_tp_trans <- translate prop
        applyMultiTransM (return $ globalOpenTerm "Prelude.maybe")
@@ -3404,7 +3404,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
 
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _mbBinding mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _nmbBinding mb_impl') >>= \trans ->
     return $ \k ->
     do prop_tp_trans <- translate prop
        applyMultiTransM (return $ globalOpenTerm "Prelude.maybe")
@@ -3421,7 +3421,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
 
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq_Diff e1 e2 e3) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _mbBinding mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _nmbBinding mb_impl') >>= \trans ->
     return $ \k ->
     do prop_tp_trans <- translate prop
        applyMultiTransM (return $ globalOpenTerm "Prelude.maybe")
@@ -3833,7 +3833,7 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
          -- If not, continue by translating entry, setting the variable
          -- permission map to empty (as in the beginning of a block)
          clearVarPermsM $ translate $
-         fmap (\s -> varSubst s $ _mbBinding $ typedEntryBody entry) mb_s
+         fmap (\s -> varSubst s $ _nmbBinding $ typedEntryBody entry) mb_s
 
 
 instance PermCheckExtC ext =>
@@ -4119,7 +4119,7 @@ instance PermCheckExtC ext =>
   translate mb_x = case mbMatch mb_x of
     [nuMP| TypedImplStmt impl_seq |] -> translate impl_seq
     [nuMP| TypedConsStmt loc stmt pxys mb_seq |] ->
-      translateStmt (mbLift loc) stmt (translate $ mbCombine (mbLift pxys) (_mbBinding <$> mb_seq))
+      translateStmt (mbLift loc) stmt (translate $ mbCombine (mbLift pxys) (_nmbBinding <$> mb_seq))
     [nuMP| TypedTermStmt _ term_stmt |] -> translate term_stmt
 
 instance PermCheckExtC ext =>
@@ -4249,7 +4249,7 @@ translateEntryBody mapTrans entry =
   lambdaPermCtx (typedEntryPermsIn entry) $ \pctx ->
   do retType <- translateEntryRetType entry
      impTransM (RL.members pctx) pctx mapTrans retType $ translate $
-       _mbBinding $ typedEntryBody entry
+       _nmbBinding $ typedEntryBody entry
 
 -- | Translate all the entrypoints in a 'TypedBlockMap' that correspond to
 -- letrec-bound functions to SAW core functions as in 'translateEntryBody'

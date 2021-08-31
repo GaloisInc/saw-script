@@ -1438,8 +1438,8 @@ permImplStep impl1@(Impl1_TryProveBVProp _ _ _) mb_impls =
 -- An or elimination fails if both branches fail
 permImplStep (Impl1_ElimOr _ _ _) (MbPermImpls_Cons _
                                    (MbPermImpls_Cons _ MbPermImpls_Nil
-                                    (matchMbImplFail . _mbBinding -> Just msg1))
-                                   (matchMbImplFail . _mbBinding -> Just msg2)) =
+                                    (matchMbImplFail . _nmbBinding -> Just msg1))
+                                   (matchMbImplFail . _nmbBinding -> Just msg2)) =
   PermImpl_Step (Impl1_Fail $ GeneralError $ pretty
                   (msg1 ++ "\n\n--------------------\n\n" ++ msg2))
   MbPermImpls_Nil
@@ -1456,7 +1456,7 @@ permImplStepUnary :: NuMatchingAny1 r =>
                      MbPermImpls r (RNil :> '(bs, ps_out)) -> PermImpl r ps_in
 
 -- If the continuation implication is a failure, percolate it up
-permImplStepUnary _ (MbPermImpls_Cons _ _ (matchMbImplFail . _mbBinding -> Just msg)) =
+permImplStepUnary _ (MbPermImpls_Cons _ _ (matchMbImplFail . _nmbBinding -> Just msg)) =
   PermImpl_Step (Impl1_Fail $ GeneralError $ pretty msg) MbPermImpls_Nil
 
 -- If the continuation implication is a catch with a failure on the right-hand

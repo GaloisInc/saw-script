@@ -73,8 +73,8 @@ instance JsonExport a => JsonExport (Mb (ctx :: RList CrucibleType) a) where
         ]
 
 instance JsonExport a => JsonExport (NMb (ctx :: RList CrucibleType) a) where
-    jsonExport mb = mbLift $ flip nuMultiWithElim1 (_mbBinding mb) $ \names body ->
-        let ?ppi = ppInfoApplyAllocation names (_mbNames mb) ?ppi in
+    jsonExport mb = mbLift $ flip nuMultiWithElim1 (_nmbBinding mb) $ \names body ->
+        let ?ppi = ppInfoApplyAllocation names (_nmbNames mb) ?ppi in
         object [
             ("args", jsonExport names),
             ("body", jsonExport body)

@@ -4977,8 +4977,8 @@ genSubstNMb p s mbmb = nmbM (fmap (genSubst s) (swapHelper p mbmb))
 swapHelper :: RAssign Proxy b -> Mb a (NMb b c) -> NMb b (Mb a c)
 swapHelper p m = NMb ns (mbSwap p bs)
   where
-    ns = mbLift (fmap _mbNames m)
-    bs = fmap _mbBinding m
+    ns = mbLift (fmap _nmbNames m)
+    bs = fmap _nmbBinding m
 
 instance {-# INCOHERENT #-} (Given (RAssign Proxy ctx), Substable s a m, NuMatching a) => Substable s (NMb ctx a) m where
    genSubst = genSubstNMb given
@@ -4986,7 +4986,7 @@ instance {-# INCOHERENT #-} (Given (RAssign Proxy ctx), Substable s a m, NuMatch
 instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) => Substable s (NMb RNil a) m where
    genSubst = genSubstNMb RL.typeCtxProxies
 
-instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) => Substable s (Binding' c a) m where
+instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) => Substable s (NBinding c a) m where
    genSubst = genSubstNMb RL.typeCtxProxies
 
 

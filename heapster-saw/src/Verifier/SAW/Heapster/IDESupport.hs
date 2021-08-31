@@ -133,7 +133,7 @@ instance (PermCheckExtC ext)
     let callers = callerIDs $ typedEntryCallers te
     ExtractionInfo { eiPPInfo = ppi, eiFnName = fname } <- ask
     let loc' = snd (ppLoc loc)
-    let debugNames = _mbNames (typedEntryBody te)
+    let debugNames = _nmbNames (typedEntryBody te)
     let inputs = mbLift
                $ flip nuMultiWithElim1 (typedEntryPermsIn te)
                $ \ns body ->
@@ -208,8 +208,8 @@ nmbExtractLogEntries
   :: ExtractLogEntries a => NMb (ctx :: RList CrucibleType) a -> ExtractionM ()
 nmbExtractLogEntries mb_a =
   ReaderT $ \einfo ->
-  tell $ mbLift $ flip nuMultiWithElim1 (_mbBinding mb_a) $ \ns x ->
-  let ppi' = ppInfoApplyAllocation ns (_mbNames mb_a) (eiPPInfo einfo) in
+  tell $ mbLift $ flip nuMultiWithElim1 (_nmbBinding mb_a) $ \ns x ->
+  let ppi' = ppInfoApplyAllocation ns (_nmbNames mb_a) (eiPPInfo einfo) in
   execWriter $ runReaderT (extractLogEntries x) 
                (einfo { eiPPInfo = ppi' })
 

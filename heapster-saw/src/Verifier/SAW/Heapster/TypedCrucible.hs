@@ -4019,7 +4019,7 @@ proveCallSiteImpl ::
                                              ((tops :++: args) :++: vars)
                                              tops args ghosts)
 proveCallSiteImpl srcID destID args ghosts vars mb_perms_in mb_perms_out =
-  fmap (CallSiteImpl . _mbBinding) $ runPermCheckM [] srcID args vars mb_perms_in $
+  fmap (CallSiteImpl . _nmbBinding) $ runPermCheckM [] srcID args vars mb_perms_in $
   \tops_ns args_ns _ perms_in ->
   let perms_out =
         give (cruCtxProxies ghosts) $
