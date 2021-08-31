@@ -907,6 +907,17 @@ data SimplImpl ps_in ps_out where
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
+  -- | Split a memblock permission of empty shape into one of a given length
+  -- @len1@ and another of the remaining length:
+  --
+  -- > x:memblock(rw,l,off,len,emptysh)
+  -- >   -o x:memblock(rw,l,off,len1,emptysh)
+  -- >      * x:memblock(rw,l,off+len1,len - len1,emptysh)
+  SImpl_SplitLLVMBlockEmpty ::
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
+    PermExpr (BVType w) ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+
   -- | Fold the body of a named shape in a @memblock@ permission:
   --
   -- > x:memblock(rw,l,off,len,'unfoldNamedShape' nmsh args)
@@ -1738,6 +1749,11 @@ simplImplIn (SImpl_ElimLLVMBlockSeqEmpty x bp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
                 bp { llvmBlockShape =
                        PExpr_SeqShape (llvmBlockShape bp) PExpr_EmptyShape })
+simplImplIn (SImpl_SplitLLVMBlockEmpty x bp len1) =
+  if llvmBlockShape bp == PExpr_EmptyShape && bvLt len1 (llvmBlockLen bp) then
+    distPerms1 x (ValPerm_LLVMBlock bp)
+  else
+    error "simplImplIn: SImpl_SplitLLVMBlockEmpty: length too long!"
 simplImplIn (SImpl_IntroLLVMBlockNamed x bp nmsh) =
   case llvmBlockShape bp of
     PExpr_NamedShape rw l nmsh' args
@@ -2066,6 +2082,15 @@ simplImplOut (SImpl_IntroLLVMBlockSeqEmpty x bp) =
                        PExpr_SeqShape (llvmBlockShape bp) PExpr_EmptyShape })
 simplImplOut (SImpl_ElimLLVMBlockSeqEmpty x bp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
+simplImplOut (SImpl_SplitLLVMBlockEmpty x bp len1) =
+  if llvmBlockShape bp == PExpr_EmptyShape && bvLt len1 (llvmBlockLen bp) then
+    distPerms1 x (ValPerm_Conj
+                  [Perm_LLVMBlock (bp { llvmBlockLen = len1 }),
+                   Perm_LLVMBlock
+                   (bp { llvmBlockOffset = bvAdd (llvmBlockOffset bp) len1,
+                         llvmBlockLen = bvSub (llvmBlockLen bp) len1 })])
+  else
+    error "simplImplOut: SImpl_SplitLLVMBlockEmpty: length too long!"
 simplImplOut (SImpl_IntroLLVMBlockNamed x bp _) =
   distPerms1 x $ ValPerm_LLVMBlock bp
 simplImplOut (SImpl_ElimLLVMBlockNamed x bp nmsh) =
@@ -2470,6 +2495,9 @@ instance SubstVar PermVarSubst m =>
       SImpl_IntroLLVMBlockSeqEmpty <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_ElimLLVMBlockSeqEmpty x bp |] ->
       SImpl_ElimLLVMBlockSeqEmpty <$> genSubst s x <*> genSubst s bp
+    [nuMP| SImpl_SplitLLVMBlockEmpty x bp len1 |] ->
+      SImpl_SplitLLVMBlockEmpty <$> genSubst s x <*> genSubst s bp
+      <*> genSubst s len1
     [nuMP| SImpl_IntroLLVMBlockNamed x bp nmsh |] ->
       SImpl_IntroLLVMBlockNamed <$> genSubst s x <*> genSubst s bp
                                 <*> genSubst s nmsh
@@ -5550,6 +5578,36 @@ proveVarLLVMBlocks1 x ps psubst mb_bps_in@(mb_bp:_) mb_ps
         _ -> False) ps =
     implElimAppendIthLLVMBlock x ps i >>>= \ps' ->
     proveVarLLVMBlocks x ps' psubst mb_bps_in mb_ps
+
+
+-- If there is a left-hand permission with empty shape whose range overlaps with
+-- but is not contained in that of mb_bp, split it into pieces wholly contained
+-- in or disjoint from the range of mb_bp; i.e., split it at the beginning
+-- and/or end of mb_bp. We exclude mb_bp with length 0 as a pathological edge
+-- case.
+proveVarLLVMBlocks1 x ps psubst mb_bps_in@(mb_bp:_) mb_ps
+  | Just off <- partialSubst psubst $ fmap llvmBlockOffset mb_bp
+  , Just len <- partialSubst psubst $ fmap llvmBlockLen mb_bp
+  , rng <- BVRange off len
+  , not (bvIsZero len)
+  , Just i <- findIndex (\case
+                            Perm_LLVMBlock bp ->
+                              llvmBlockShape bp == PExpr_EmptyShape &&
+                              bvRangesCouldOverlap (llvmBlockRange bp) rng &&
+                              not (bvRangeSubset (llvmBlockRange bp) rng)
+                            _ -> False) ps
+  , Perm_LLVMBlock bp <- ps!!i =
+    implExtractSwapConjM x ps i >>>
+    -- If the end of mb_bp is contained in bp, split bp at the end of mb_bp,
+    -- otherwise split it at the beginning of mb_bp
+    let len1 = if bvInRange (bvAdd off len) (llvmBlockRange bp) then
+                 bvSub (bvAdd off len) (llvmBlockOffset bp)
+               else
+                 bvSub off (llvmBlockOffset bp) in
+    implSimplM Proxy (SImpl_SplitLLVMBlockEmpty x bp len1) >>>
+    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    implAppendConjsM x (deleteNth i ps) ps' >>>
+    proveVarLLVMBlocks x (deleteNth i ps ++ ps') psubst mb_bps_in mb_ps
 
 
 -- If there is a left-hand permission whose range overlaps with but is not
