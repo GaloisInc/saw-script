@@ -2093,6 +2093,19 @@ class NuMatchingAny1 f => ImplTranslateF f ext blocks tops ret where
 -- * Translating Permission Implication Constructs
 ----------------------------------------------------------------------
 
+-- | Translate the output permissions of a 'SimplImpl'
+translateSimplImplOut :: Mb ctx (SimplImpl ps_in ps_out) ->
+                         ImpTransM ext blocks tops ret ps ctx
+                         (TypeTrans (PermTransCtx ctx ps_out))
+translateSimplImplOut = translate . mbSimplImplOut
+
+-- | Translate the head output permission of a 'SimplImpl'
+translateSimplImplOutHead :: Mb ctx (SimplImpl ps_in (ps_out :> a)) ->
+                             ImpTransM ext blocks tops ret ps ctx
+                             (TypeTrans (PermTrans ctx a))
+translateSimplImplOutHead =
+  fmap (fmap RL.head) . translate . mbSimplImplOut
+
 -- | Translate a 'SimplImpl' to a function on translation computations
 translateSimplImpl :: Proxy ps -> Mb ctx (SimplImpl ps_in ps_out) ->
                       ImpTransM ext blocks tops ret (ps :++: ps_out) ctx OpenTerm ->
@@ -2178,7 +2191,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     m
 
   [nuMP| SImpl_CastPerm (x::ExprVar a) eqp |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        let prxs_a = MNil :>: (Proxy :: Proxy a)
        let prxs1 = mbLift $ fmap (distPermsToProxies . eqProofPerms) eqp
        let prxs = RL.append prxs_a prxs1
@@ -2474,7 +2487,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_LLVMArrayToField _ _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: _) -> pctx :>: typeTransF ttrans [])
          m
@@ -2583,7 +2596,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     m
 
   [nuMP| SImpl_SplitLifetime _ f args l _ _ ps_in ps_out |] ->
-    do pctx_out_trans <- translate $ fmap simplImplOut mb_simpl
+    do pctx_out_trans <- translateSimplImplOut mb_simpl
        ps_in_tp <- translate1 ps_in
        ps_out_tp <- translate1 ps_out
        x_tp_trans <- translate (mbMap3 ltFuncApply f args l)
@@ -2607,14 +2620,14 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_SubsumeLifetime _ _ _ _ _ |] ->
-    do pctx_out_trans <- translate $ fmap simplImplOut mb_simpl
+    do pctx_out_trans <- translateSimplImplOut mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans_l) ->
            RL.append pctx $ typeTransF pctx_out_trans (transTerms ptrans_l))
          m
 
   [nuMP| SImpl_ContainedLifetimeCurrent _ _ _ _ _ |] ->
-    do pctx_out_trans <- translate $ fmap simplImplOut mb_simpl
+    do pctx_out_trans <- translateSimplImplOut mb_simpl
        withPermStackM
          (\(ns :>: l1) -> ns :>: l1 :>: l1)
          (\(pctx :>: ptrans_l) ->
@@ -2625,7 +2638,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_RemoveContainedLifetime _ _ _ _ _ |] ->
-    do pctx_out_trans <- translate $ fmap simplImplOut mb_simpl
+    do pctx_out_trans <- translateSimplImplOut mb_simpl
        withPermStackM
          (\(ns :>: l1 :>: _) -> ns :>: l1)
          (\(pctx :>: ptrans_l :>: _) ->
@@ -2636,7 +2649,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_WeakenLifetime _ _ _ _ _ |] ->
-    do pctx_out_trans <- translate $ fmap simplImplOut mb_simpl
+    do pctx_out_trans <- translateSimplImplOut mb_simpl
        withPermStackM RL.tail
          (\(pctx :>: ptrans_x :>: _) ->
            -- NOTE: lcurrent permissions have no term translations, so we can
@@ -2648,7 +2661,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
   [nuMP| SImpl_MapLifetime l _ ps_in ps_out
                            ps_in' ps_out' ps1 ps2 impl_in impl_out |] ->
     -- First, translate the output permissions and all of the perm lists
-    do pctx_out_trans <- translate $ fmap simplImplOut mb_simpl
+    do pctx_out_trans <- translateSimplImplOut mb_simpl
        ps_in_trans <- translate ps_in
        ps_out_trans <- translate ps_out
        ps_in'_trans <- translate ps_in'
@@ -2746,19 +2759,19 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     m
 
   [nuMP| SImpl_DemoteLLVMBlockRW _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) -> pctx :>: typeTransF ttrans (transTerms ptrans))
          m
 
   [nuMP| SImpl_IntroLLVMBlockEmpty x _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM (:>: translateVar x)
          (\pctx -> pctx :>: typeTransF ttrans [unitOpenTerm])
          m
 
   [nuMP| SImpl_CoerceLLVMBlockEmpty _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: _) -> pctx :>: typeTransF ttrans [unitOpenTerm])
          m
@@ -2767,7 +2780,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     do let w = natVal2 mb_bp
        let w_term = natOpenTerm w
        len_term <- translate1 $ fmap llvmBlockLen mb_bp
-       ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+       ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: _) ->
            let arr_term =
@@ -2777,7 +2790,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_IntroLLVMBlockSeqEmpty _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF ttrans [pairOpenTerm (transTerm1 ptrans)
@@ -2785,7 +2798,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_ElimLLVMBlockSeqEmpty _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF ttrans [pairLeftOpenTerm (transTerm1 ptrans)])
@@ -2797,7 +2810,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
   [nuMP| SImpl_IntroLLVMBlockNamed _ bp nmsh |]
     | [nuMP| RecShapeBody _ _ fold_ids |] <- mbMatch $ fmap namedShapeBody nmsh
     , [nuMP| PExpr_NamedShape _ _ _ args |] <- mbMatch $ fmap llvmBlockShape bp ->
-      do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+      do ttrans <- translateSimplImplOutHead mb_simpl
          args_trans <- translate args
          fold_id <-
            case fold_ids of
@@ -2813,7 +2826,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
 
   -- Intro for a defined named shape (the other case) is a no-op
     | [nuMP| DefinedShapeBody _ |] <- mbMatch $ fmap namedShapeBody nmsh ->
-      do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+      do ttrans <- translateSimplImplOutHead mb_simpl
          withPermStackM id
            (\(pctx :>: ptrans) ->
              pctx :>: typeTransF ttrans [transTerm1 ptrans])
@@ -2826,7 +2839,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
   [nuMP| SImpl_ElimLLVMBlockNamed _ bp nmsh |]
     | [nuMP| RecShapeBody _ _ fold_ids |] <- mbMatch $ fmap namedShapeBody nmsh
     , [nuMP| PExpr_NamedShape _ _ _ args |] <- mbMatch $ fmap llvmBlockShape bp ->
-      do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+      do ttrans <- translateSimplImplOutHead mb_simpl
          args_trans <- translate args
          unfold_id <-
            case fold_ids of
@@ -2842,7 +2855,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
 
   -- Intro for a defined named shape (the other case) is a no-op
     | [nuMP| DefinedShapeBody _ |] <- mbMatch $ fmap namedShapeBody nmsh ->
-      do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+      do ttrans <- translateSimplImplOutHead mb_simpl
          withPermStackM id
            (\(pctx :>: ptrans) ->
              pctx :>: typeTransF ttrans [transTerm1 ptrans])
@@ -2851,28 +2864,28 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     | otherwise -> fail "translateSimplImpl: ElimLLVMBlockNamed, unknown named shape"
 
   [nuMP| SImpl_IntroLLVMBlockFromEq _ _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM RL.tail
          (\(pctx :>: _ :>: ptrans) ->
            pctx :>: typeTransF ttrans [transTerm1 ptrans])
          m
 
   [nuMP| SImpl_IntroLLVMBlockPtr _ _ _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF ttrans (transTerms ptrans))
          m
 
   [nuMP| SImpl_ElimLLVMBlockPtr _ _ _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF ttrans (transTerms ptrans))
          m
 
   [nuMP| SImpl_IntroLLVMBlockField _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF ttrans [transTupleTerm ptrans])
@@ -2892,21 +2905,21 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_IntroLLVMBlockArray _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF ttrans [transTerm1 ptrans])
          m
 
   [nuMP| SImpl_ElimLLVMBlockArray _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF ttrans [transTerm1 ptrans])
          m
 
   [nuMP| SImpl_IntroLLVMBlockSeq _ _ _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM RL.tail
          (\(pctx :>: ptrans1 :>: ptrans2) ->
            let pair_term =
@@ -2915,7 +2928,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_ElimLLVMBlockSeq _ _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF ttrans [pairLeftOpenTerm (transTerm1 ptrans),
@@ -2923,32 +2936,32 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_IntroLLVMBlockOr _ _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) -> pctx :>: typeTransF ttrans [transTerm1 ptrans])
          m
 
   [nuMP| SImpl_ElimLLVMBlockOr _ _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) -> pctx :>: typeTransF ttrans [transTerm1 ptrans])
          m
 
   [nuMP| SImpl_IntroLLVMBlockEx _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) -> pctx :>: typeTransF ttrans [transTerm1 ptrans])
          m
 
   [nuMP| SImpl_ElimLLVMBlockEx _ _ |] ->
-    do ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) -> pctx :>: typeTransF ttrans [transTerm1 ptrans])
          m
 
   [nuMP| SImpl_FoldNamed _ (NamedPerm_Rec rp) args _ |] ->
     do args_trans <- translate args
-       ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+       ttrans <- translateSimplImplOutHead mb_simpl
        let fold_ident = mbLift $ fmap recPermFoldFun rp
        withPermStackM id
          (\(pctx :>: ptrans_x) ->
@@ -2960,7 +2973,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
 
   [nuMP| SImpl_UnfoldNamed _ (NamedPerm_Rec rp) args _ |] ->
     do args_trans <- translate args
-       ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+       ttrans <- translateSimplImplOutHead mb_simpl
        let unfold_ident = mbLift $ fmap recPermUnfoldFun rp
        withPermStackM id
          (\(pctx :>: ptrans_x) ->
@@ -2994,37 +3007,37 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
   -}
 
   [nuMP| SImpl_NamedToConj _ _ _ _ |] ->
-    do tp_trans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do tp_trans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF tp_trans (transTerms ptrans)) m
 
   [nuMP| SImpl_NamedFromConj _ _ _ _ |] ->
-    do tp_trans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do tp_trans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF tp_trans (transTerms ptrans)) m
 
   [nuMP| SImpl_NamedArgAlways _ _ _ _ _ _ |] ->
-    do tp_trans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do tp_trans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF tp_trans (transTerms ptrans)) m
 
   [nuMP| SImpl_NamedArgCurrent _ _ _ _ _ _ |] ->
-    do tp_trans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do tp_trans <- translateSimplImplOutHead mb_simpl
        withPermStackM RL.tail
          (\(pctx :>: ptrans :>: _) ->
            pctx :>: typeTransF tp_trans (transTerms ptrans)) m
 
   [nuMP| SImpl_NamedArgWrite _ _ _ _ _ _ |] ->
-    do tp_trans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do tp_trans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF tp_trans (transTerms ptrans)) m
 
   [nuMP| SImpl_NamedArgRead _ _ _ _ _ |] ->
-    do tp_trans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+    do tp_trans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF tp_trans (transTerms ptrans)) m
@@ -3033,7 +3046,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     do args_trans <- translate $ mbMap2 PExprs_Cons args e
        y_trans <- translate y
        e_trans <- translate e
-       ttrans <- translate $ fmap (distPermsHeadPerm . simplImplOut) mb_simpl
+       ttrans <- translateSimplImplOutHead mb_simpl
        let trans_ident = mbLift $ fmap recPermTransMethod rp
        withPermStackM RL.tail
          (\(pctx :>: ptrans_x :>: ptrans_y) ->
