@@ -51,6 +51,8 @@ newSAWCoreBackend sc =
   do st <- newSAWCoreState sc
      sym <- newOnlineBackend W4.FloatRealRepr Nonce.globalNonceGenerator (SMT2.defaultFeatures Z3.Z3) st
      W4.extendConfig Z3.z3Options (W4.getConfiguration sym)
+     z3TimeoutSetting <- W4.getOptionSetting Z3.z3Timeout (W4.getConfiguration sym)
+     _ <- W4.setOpt z3TimeoutSetting 10000
      return sym
 
 sawCoreState :: Sym -> IO (SAWCoreState Nonce.GlobalNonceGenerator)

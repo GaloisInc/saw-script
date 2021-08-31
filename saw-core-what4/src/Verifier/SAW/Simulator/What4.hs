@@ -1372,7 +1372,11 @@ mkUninterpretedSAW ::
   UnintApp (SymExpr (B.ExprBuilder n st fs)) ->
   BaseTypeRepr t ->
   IO (SymExpr (B.ExprBuilder n st fs) t)
-mkUninterpretedSAW sym st ref trm (UnintApp nm args tys) ret =
+mkUninterpretedSAW sym st ref trm (UnintApp nm args tys) ret
+  | Just Refl <- testEquality Ctx.empty tys
+  , ArgTermConst const_term <- trm =
+    bindSAWTerm sym st ret const_term
+  | otherwise =
   do fn <- mkSymFn sym ref nm tys ret
      sawRegisterSymFunInterp st fn (reconstructArgTerm trm)
      W.applySymFn sym fn args
