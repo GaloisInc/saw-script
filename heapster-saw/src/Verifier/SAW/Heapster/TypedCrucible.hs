@@ -2724,9 +2724,10 @@ setErrorPrefix names loc stmt_pp ctx regs =
   ppCruRegsAndTopsPerms names ctx regs >>>= \(regs_pp, perms_pp) ->
   let prefix =
         PP.sep
-        [PP.group (pretty "At" <+> ppShortFileName (plSourceLoc loc)
-                  <+> parens stmt_pp),
-         PP.group (pretty "Regs:" <+> regs_pp),
+        [
+          -- PP.group (pretty "At" <+> ppShortFileName (plSourceLoc loc)
+                  -- <+> parens stmt_pp),
+        --  PP.group (pretty "Regs:" <+> regs_pp),
          PP.group (pretty "Input perms:" <+> perms_pp)] in
   gmodify $ \st -> st { stErrPrefix = Just prefix }
 
