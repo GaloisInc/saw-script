@@ -931,14 +931,24 @@ layoutFun abi arg_shs ret_sh =
        foldr appendArgLayout argLayout0 <$> mapM (layoutArgShape abi) arg_shs
      ret_layout_eith <- layoutArgShapeOrBlock abi ret_sh
      case ret_layout_eith of
+
+       -- Special case: if the return type is empty, use the unit type as the
+       -- return type
+       Right (ArgLayout Ctx.Empty _) ->
+         funPerm3FromArgLayoutNoArgs args_layout UnitRepr ValPerm_True
+
+       -- Special case: if the return type is a single field, remove the struct
+       -- type and just use the type of that single field
        Right (ArgLayout (Ctx.Empty Ctx.:> ret_tp)
               (argLayoutPerm1ToPerm -> ret_p)) ->
-         -- Special case: if the return type is a single field, remove the
-         -- struct type and just use the type of that single field
          funPerm3FromArgLayoutNoArgs args_layout ret_tp ret_p
+
+       -- If the return type can be laid out as a struct type, then do so
        Right (ArgLayout ret_ctx ret_p) ->
          funPerm3FromArgLayoutNoArgs args_layout (StructRepr ret_ctx)
          (argLayoutPermToPerm ret_p)
+
+       -- Otherwise add an extra pointer argument used as an out variable
        Left bp ->
            funPerm3FromArgLayout args_layout
            (extend Ctx.empty knownRepr)
