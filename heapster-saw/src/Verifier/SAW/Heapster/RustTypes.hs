@@ -673,12 +673,12 @@ un3SomeFunPerm args ret (Some3FunPerm fun_perm)
     return $ SomeFunPerm fun_perm
 un3SomeFunPerm args ret (Some3FunPerm fun_perm) =
   fail $ renderDoc $ vsep
-  [ pretty "Incorrect LLVM type for function permission:"
+  [ pretty "Unexpected LLVM type for function permission:"
   , permPretty emptyPPInfo fun_perm
-  , pretty "Expected type:"
+  , pretty "Actual LLVM type of function:"
     <+> PP.group (permPretty emptyPPInfo args) <+> pretty "=>"
     <+> PP.group (permPretty emptyPPInfo ret)
-  , pretty "Actual type:"
+  , pretty "Expected LLVM type of function:"
     <+> PP.group (permPretty emptyPPInfo (funPermArgs fun_perm))
     <+> pretty "=>"
     <+> PP.group (permPretty emptyPPInfo (funPermRet fun_perm)) ]
