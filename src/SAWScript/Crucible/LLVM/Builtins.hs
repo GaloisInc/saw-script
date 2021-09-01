@@ -57,6 +57,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , llvm_alloc_readonly
     , llvm_alloc_readonly_aligned
     , llvm_alloc_with_size
+    , llvm_alloc_sym_init
     , llvm_symbolic_alloc
     , llvm_alloc_global
     , llvm_fresh_expanded_val
@@ -1008,20 +1009,19 @@ assertEqualVals cc v1 v2 =
 
 -- TODO(langston): combine with/move to executeAllocation
 doAlloc ::
-  (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch       ->
   AllocIndex ->
   LLVMAllocSpec ->
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
-doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz loc fresh _symSz)
+doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz loc fresh symSz)
   | fresh = liftIO $ executeFreshPointer cc i
   | otherwise =
   StateT $ \mem ->
   do let sym = cc^.ccBackend
      sz' <- liftIO $ resolveSAWSymBV cc Crucible.PtrWidth sz
      let l = show (W4.plSourceLoc loc)
-     liftIO $
-       Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
+     liftIO $ doAllocSymInit sym mem mut alignment sz' l symSz
 
 --------------------------------------------------------------------------------
 
@@ -1870,9 +1870,10 @@ llvm_alloc_with_mutability_and_size ::
   Crucible.Mutability    ->
   Maybe (Crucible.Bytes) ->
   Maybe Crucible.Alignment ->
+  Bool ->
   L.Type           ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
-llvm_alloc_with_mutability_and_size mut sz alignment lty =
+llvm_alloc_with_mutability_and_size mut sz alignment symSz lty =
   LLVMCrucibleSetupM $
   do cctx <- getLLVMCrucibleContext
      loc <- getW4Position "llvm_alloc"
@@ -1917,14 +1918,14 @@ llvm_alloc_with_mutability_and_size mut sz alignment lty =
        , _allocSpecBytes = sz''
        , _allocSpecLoc = loc
        , _allocSpecFresh = False
-       , _allocSpecSymSz = False
+       , _allocSpecSymSz = symSz
        }
 
 llvm_alloc ::
   L.Type         ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
 llvm_alloc =
-  llvm_alloc_with_mutability_and_size Crucible.Mutable Nothing Nothing
+  llvm_alloc_with_mutability_and_size Crucible.Mutable Nothing Nothing False
 
 llvm_alloc_aligned ::
   Int            ->
@@ -1937,7 +1938,7 @@ llvm_alloc_readonly ::
   L.Type         ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
 llvm_alloc_readonly =
-  llvm_alloc_with_mutability_and_size Crucible.Immutable Nothing Nothing
+  llvm_alloc_with_mutability_and_size Crucible.Immutable Nothing Nothing False
 
 llvm_alloc_readonly_aligned ::
   Int            ->
@@ -1957,6 +1958,7 @@ llvm_alloc_aligned_with_mutability mut n lty =
        mut
        Nothing
        (Just alignment)
+       False
        lty
 
 coerceAlignment :: Int -> CrucibleSetup (LLVM arch) Crucible.Alignment
@@ -1980,7 +1982,11 @@ llvm_alloc_with_size sz lty =
     Crucible.Mutable
     (Just (Crucible.toBytes sz))
     Nothing
+    False
     lty
+
+llvm_alloc_sym_init :: L.Type -> LLVMCrucibleSetupM (AllLLVM SetupValue)
+llvm_alloc_sym_init = llvm_alloc_with_mutability_and_size Crucible.Mutable Nothing Nothing True
 
 llvm_symbolic_alloc ::
   Bool ->
@@ -2013,7 +2019,7 @@ llvm_symbolic_alloc ro align_bytes sz =
            , _allocSpecBytes = sz
            , _allocSpecLoc = loc
            , _allocSpecFresh = False
-           , _allocSpecSymSz = True
+           , _allocSpecSymSz = False
            }
      n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?= spec
@@ -2196,9 +2202,9 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
        do let ?lc = ccTypeCtx cc
           st <- get
           let rs = st ^. Setup.csResolvedState
-          -- if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
-          --   then throwCrucibleSetup loc "Multiple points-to preconditions on same pointer"
-          --   else Setup.csResolvedState %= MS.markResolved ptr []
+          if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
+            then throwCrucibleSetup loc "Multiple points-to preconditions on same pointer"
+            else Setup.csResolvedState %= MS.markResolved ptr []
           let env = MS.csAllocations (st ^. Setup.csMethodSpec)
               nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
           ptrTy <- typeOfSetupValue cc env nameEnv ptr

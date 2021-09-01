@@ -45,6 +45,7 @@ module SAWScript.Crucible.LLVM.Override
   , methodSpecHandler
   , valueToSC
   , storePointsToValue
+  , doAllocSymInit
 
   , diffMemTypes
 
@@ -1672,18 +1673,31 @@ executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc fres
      mem <- readGlobal memVar
      sz' <- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth sz
      let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
-     (ptr, mem') <- liftIO $
-       Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
-     mem'' <- liftIO $ if symSz
-       then
-         do arr <- W4.freshConstant
-              sym
-              (W4.systemSymbol "arr!")
-              (W4.BaseArrayRepr (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth) (W4.BaseBVRepr (W4.knownNat @8)))
-            Crucible.doArrayConstStore sym mem' ptr alignment arr sz'
-       else return mem'
-     writeGlobal memVar mem''
+     (ptr, mem') <- liftIO $ doAllocSymInit sym mem mut alignment sz' l symSz
+     writeGlobal memVar mem'
      assignVar cc loc var ptr
+
+doAllocSymInit ::
+  (Crucible.IsSymInterface sym, Crucible.HasPtrWidth wptr, Crucible.HasLLVMAnn sym) =>
+  sym ->
+  Crucible.MemImpl sym ->
+  Crucible.Mutability ->
+  Crucible.Alignment ->
+  W4.SymBV sym wptr {- ^ allocation size -} ->
+  String {- ^ source location for use in error messages -} ->
+  Bool {- ^ source location for use in error messages -} ->
+  IO (Crucible.LLVMPtr sym wptr, Crucible.MemImpl sym)
+doAllocSymInit sym mem mut alignment sz loc symSz  = do
+  (ptr, mem') <- Crucible.doMalloc sym Crucible.HeapAlloc mut loc mem sz alignment
+  mem'' <- if symSz then do
+    arr <- W4.freshConstant
+      sym
+      (W4.systemSymbol "arr!")
+      (W4.BaseArrayRepr (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth) (W4.BaseBVRepr (W4.knownNat @8)))
+    Crucible.doArrayConstStore sym mem' ptr alignment arr sz
+  else
+    return mem'
+  return (ptr, mem'')
 
 ------------------------------------------------------------------------
 

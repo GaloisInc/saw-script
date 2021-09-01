@@ -1320,13 +1320,13 @@ parseUninterpretedSAW sym st sc ref trm app ty =
               parseUninterpretedSAW sym st sc ref trm' app' t2
 
     VBoolType
-      -> VBool <$> mkUninterpretedSAW sym st ref trm app BaseBoolRepr
+      -> VBool <$> mkUninterpretedSAW sym st sc ref trm app BaseBoolRepr
 
     VIntType
-      -> VInt  <$> mkUninterpretedSAW sym st ref trm app BaseIntegerRepr
+      -> VInt  <$> mkUninterpretedSAW sym st sc ref trm app BaseIntegerRepr
 
     VIntModType n
-      -> VIntMod n <$> mkUninterpretedSAW sym st ref (ArgTermFromIntMod n trm) app BaseIntegerRepr
+      -> VIntMod n <$> mkUninterpretedSAW sym st sc ref (ArgTermFromIntMod n trm) app BaseIntegerRepr
 
     -- 0 width bitvector is a constant
     VVecType 0 VBoolType
@@ -1334,7 +1334,7 @@ parseUninterpretedSAW sym st sc ref trm app ty =
 
     VVecType n VBoolType
       | Just (Some (PosNat w)) <- somePosNat n
-      -> (VWord . DBV) <$> mkUninterpretedSAW sym st ref trm app (BaseBVRepr w)
+      -> (VWord . DBV) <$> mkUninterpretedSAW sym st sc ref trm app (BaseBVRepr w)
 
     VVecType n ety | n >= 0
       ->  do ety' <- termOfTValue sc ety
@@ -1349,7 +1349,7 @@ parseUninterpretedSAW sym st sc ref trm app ty =
       | Just (Some idx_repr) <- valueAsBaseType ity
       , Just (Some elm_repr) <- valueAsBaseType ety
       -> (VArray . SArray) <$>
-          mkUninterpretedSAW sym st ref trm app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
+          mkUninterpretedSAW sym st sc ref trm app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
     VUnitType
       -> return VUnit
@@ -1367,15 +1367,15 @@ mkUninterpretedSAW ::
   forall n st fs t.
   B.ExprBuilder n st fs ->
   SAWCoreState n ->
+  SharedContext ->
   IORef (SymFnCache (B.ExprBuilder n st fs)) ->
   ArgTerm ->
   UnintApp (SymExpr (B.ExprBuilder n st fs)) ->
   BaseTypeRepr t ->
   IO (SymExpr (B.ExprBuilder n st fs) t)
-mkUninterpretedSAW sym st ref trm (UnintApp nm args tys) ret
-  | Just Refl <- testEquality Ctx.empty tys
-  , ArgTermConst const_term <- trm =
-    bindSAWTerm sym st ret const_term
+mkUninterpretedSAW sym st sc ref trm (UnintApp nm args tys) ret
+  | Just Refl <- testEquality Ctx.empty tys =
+    bindSAWTerm sym st ret =<< reconstructArgTerm trm sc []
   | otherwise =
   do fn <- mkSymFn sym ref nm tys ret
      sawRegisterSymFunInterp st fn (reconstructArgTerm trm)
