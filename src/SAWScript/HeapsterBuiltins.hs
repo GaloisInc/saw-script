@@ -254,6 +254,49 @@ parseAndInsDef henv nm term_tp term_string =
          liftIO $ scInsertDef sc mnm term_ident term_tp term
          return term_ident
 
+-- | Translate a typed LLVM 'L.Value' to a Heapster permission + translation
+--
+-- FIXME: move this to Permissions.hs
+translateLLVMValue :: (1 <= w, KnownNat w) => f w -> L.Type -> L.Value ->
+                      Maybe (ValuePerm (LLVMPointerType w), [OpenTerm])
+translateLLVMValue _ _ _ =
+  -- FIXME HERE NOW
+  Nothing
+
+-- | Add an LLVM global constant to a 'PermEnv', if the global has a type and
+-- value we can translate to Heapster, otherwise silently ignore it
+--
+-- FIXME: move this to Permissions.hs
+permEnvAddGlobalConst :: (1 <= w, KnownNat w) => f w -> PermEnv ->
+                         L.Global -> PermEnv
+permEnvAddGlobalConst w env global =
+  maybe env id $
+  do val <- L.globalValue global
+     (p, ts) <- translateLLVMValue w (L.globalType global) val
+     return $ permEnvAddGlobalSyms env
+       [PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p ts]
+
+-- | Build a 'HeapsterEnv' associated with the given SAW core module and the
+-- given 'LLVMModule's. Add any globals in the 'LLVMModule's to the returned
+-- 'HeapsterEnv'.
+mkHeapsterEnv :: ModuleName -> [Some LLVMModule] -> TopLevel HeapsterEnv
+mkHeapsterEnv saw_mod_name llvm_mods@(Some first_mod:_) =
+  do let w = llvmModuleArchReprWidth first_mod
+     leq_proof <- case decideLeq (knownNat @1) w of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is 0!"
+     let globals = concatMap (\(Some lm) -> L.modGlobals $ modAST lm) llvm_mods
+         env =
+           withKnownNat w $ withLeqProof leq_proof $
+           foldl (permEnvAddGlobalConst w) heapster_default_env globals
+     env_ref <- liftIO $ newIORef env
+     return $ HeapsterEnv {
+       heapsterEnvSAWModule = saw_mod_name,
+       heapsterEnvPermEnvRef = env_ref,
+       heapsterEnvLLVMModules = llvm_mods
+       }
+mkHeapsterEnv _ [] = fail "mkHeapsterEnv: empty list of LLVM modules!"
+
 
 heapster_init_env :: BuiltinContext -> Options -> Text -> String ->
                      TopLevel HeapsterEnv
@@ -269,12 +312,7 @@ heapster_init_env _bic _opts mod_str llvm_filename =
      preludeMod <- liftIO $ scFindModule sc preludeModuleName
      liftIO $ scLoadModule sc (insImport (const True) preludeMod $
                                  emptyModule saw_mod_name)
-     perm_env_ref <- liftIO $ newIORef heapster_default_env
-     return $ HeapsterEnv {
-       heapsterEnvSAWModule = saw_mod_name,
-       heapsterEnvPermEnvRef = perm_env_ref,
-       heapsterEnvLLVMModules = [llvm_mod]
-       }
+     mkHeapsterEnv saw_mod_name [llvm_mod]
 
 load_sawcore_from_file :: BuiltinContext -> Options -> String -> TopLevel ()
 load_sawcore_from_file _ _ mod_filename =
@@ -289,12 +327,7 @@ heapster_init_env_from_file _bic _opts mod_filename llvm_filename =
      sc <- getSharedContext
      (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
-     perm_env_ref <- liftIO $ newIORef heapster_default_env
-     return $ HeapsterEnv {
-       heapsterEnvSAWModule = saw_mod_name,
-       heapsterEnvPermEnvRef = perm_env_ref,
-       heapsterEnvLLVMModules = [llvm_mod]
-       }
+     mkHeapsterEnv saw_mod_name [llvm_mod]
 
 heapster_init_env_for_files :: BuiltinContext -> Options -> String -> [String] ->
                                TopLevel HeapsterEnv
@@ -303,12 +336,7 @@ heapster_init_env_for_files _bic _opts mod_filename llvm_filenames =
      sc <- getSharedContext
      (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
-     perm_env_ref <- liftIO $ newIORef heapster_default_env
-     return $ HeapsterEnv {
-       heapsterEnvSAWModule = saw_mod_name,
-       heapsterEnvPermEnvRef = perm_env_ref,
-       heapsterEnvLLVMModules = llvm_mods
-       }
+     mkHeapsterEnv saw_mod_name llvm_mods
 
 -- | Look up the CFG associated with a symbol name in a Heapster environment
 heapster_get_cfg :: BuiltinContext -> Options -> HeapsterEnv ->
