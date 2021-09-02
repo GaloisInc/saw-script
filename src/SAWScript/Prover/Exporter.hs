@@ -56,6 +56,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.SBV.Dynamic as SBV
 import System.Directory (removeFile)
+import System.FilePath (takeBaseName)
 import System.IO
 import System.IO.Temp(emptySystemTempFile)
 import Data.Text (pack)
@@ -148,8 +149,8 @@ writeAIG f t = do
      io $ AIG.writeAiger f aig
 
 withABCVerilog :: FilePath -> Term -> (FilePath -> String) -> TopLevel ()
-withABCVerilog baseName t buildCmd =
-  do verilogFile <- io $ emptySystemTempFile (baseName ++ ".v")
+withABCVerilog fileName t buildCmd =
+  do verilogFile <- io $ emptySystemTempFile (takeBaseName fileName ++ ".v")
      sc <- getSharedContext
      write_verilog sc verilogFile t
      io $
