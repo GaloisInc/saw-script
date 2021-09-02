@@ -2803,6 +2803,13 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            pctx :>: typeTransF ttrans [pairLeftOpenTerm (transTerm1 ptrans)])
          m
 
+  [nuMP| SImpl_SplitLLVMBlockEmpty _ _ _ |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       withPermStackM id
+         (\(pctx :>: _) ->
+           pctx :>: typeTransF ttrans [unitOpenTerm, unitOpenTerm])
+         m
+
   -- Intro for a recursive named shape applies the fold function to the
   -- translations of the arguments plus the translations of the proofs of the
   -- permissions
