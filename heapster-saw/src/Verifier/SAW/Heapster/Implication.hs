@@ -62,9 +62,11 @@ import Data.Binding.Hobbits
 import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.GenMonad
+import Verifier.SAW.Heapster.NamedMb
 
 import GHC.Stack
 import Debug.Trace
+
 
 
 ----------------------------------------------------------------------
@@ -306,6 +308,76 @@ unSomeEqProof (SomeEqProofCons some_eqp eq_step)
   | UnSomeEqProof eqp <- unSomeEqProof some_eqp =
     UnSomeEqProof $ EqProofCons eqp eq_step
 
+
+----------------------------------------------------------------------
+-- * Implication Errors
+----------------------------------------------------------------------
+
+data ImplError where
+  GeneralError :: Doc ann -> ImplError
+  NoFrameInScopeError :: ImplError
+  ArrayStepError :: ImplError
+  MuUnfoldError :: ImplError
+  FunctionPermissionError :: ImplError
+  PartialSubstitutionError :: String -> Doc ann -> ImplError
+  LifetimeError :: LifetimeErrorType -> ImplError
+  MemBlockError :: Doc ann -> ImplError
+  EqualityProofError :: Doc ann -> Doc ann -> ImplError
+  InsufficientVariablesError :: Doc ann -> ImplError
+  ExistentialError :: Doc ann -> Doc ann -> ImplError
+  ImplVariableError 
+    :: Doc ann -> String 
+    -> (Doc ann, ExprVar tp) -> (Doc ann, ValuePerm tp) -> CruCtx vars 
+    -> DistPerms ps
+    -> ImplError
+
+data LifetimeErrorType where
+  EndLifetimeError :: LifetimeErrorType
+  ImplicationLifetimeError :: LifetimeErrorType
+  LifetimeCurrentError :: PP.Doc ann -> LifetimeErrorType
+
+instance SubstVar PermVarSubst m =>
+    Substable PermVarSubst ImplError m where
+  genSubst s mb_impl = case mbMatch mb_impl of
+    [nuMP| GeneralError doc |] -> 
+      return $ GeneralError $ mbLift doc
+    [nuMP| NoFrameInScopeError |] -> 
+      return NoFrameInScopeError
+    [nuMP| ArrayStepError |] -> 
+      return ArrayStepError
+    [nuMP| MuUnfoldError |] -> 
+      return MuUnfoldError
+    [nuMP| FunctionPermissionError |] -> 
+      return FunctionPermissionError
+    [nuMP| PartialSubstitutionError str doc |] -> 
+      return $ PartialSubstitutionError (mbLift str) (mbLift doc)
+    [nuMP| LifetimeError le |] -> 
+      return $ LifetimeError $ mbLift le
+    [nuMP| MemBlockError doc |] -> 
+      return $ MemBlockError (mbLift doc)
+    [nuMP| EqualityProofError docl docr |] -> 
+      return $ EqualityProofError (mbLift docl) (mbLift docr)
+    [nuMP| InsufficientVariablesError doc |] -> 
+      return $ InsufficientVariablesError $ mbLift doc
+    [nuMP| ExistentialError doc1 doc2 |] -> 
+      return $ ExistentialError (mbLift doc1) (mbLift doc2)
+    [nuMP| ImplVariableError doc f (xdoc, x) (pdoc, p) ctx mb_dp |] -> do
+      x' <- genSubst s x
+      p' <- genSubst s p
+      dp <- genSubst s mb_dp
+      return $ ImplVariableError (mbLift doc) (mbLift f) (mbLift xdoc, x') (mbLift pdoc, p') (mbLift ctx) dp
+   
+instance Liftable LifetimeErrorType where
+  mbLift e = case mbMatch e of
+    [nuMP| EndLifetimeError |] -> EndLifetimeError
+    [nuMP| ImplicationLifetimeError |] -> ImplicationLifetimeError
+    [nuMP| LifetimeCurrentError doc |] -> LifetimeCurrentError $ mbLift doc
+
+-- The reason this isn't just Show is to sort of future-proof things. For
+-- instance, we may want to dump a limited amount of information to stdout, but
+-- something more comprehensive to a log for an IDE.
+class ErrorPretty a where
+  ppError :: a -> String
 
 ----------------------------------------------------------------------
 -- * Permission Implications
@@ -1172,7 +1244,7 @@ data PermImpl1 ps_in ps_outs where
   -- the failure, which is a proof of 0 disjuncts:
   --
   -- > ps -o .
-  Impl1_Fail :: String -> PermImpl1 ps RNil
+  Impl1_Fail :: ImplError -> PermImpl1 ps RNil
 
   -- | Catch any failure in the first branch by calling the second, passing the
   -- same input permissions to both branches:
@@ -1300,7 +1372,7 @@ data MbPermImpls r bs_pss where
   MbPermImpls_Nil :: MbPermImpls r RNil
   MbPermImpls_Cons :: CruCtx bs ->
                       !(MbPermImpls r bs_pss) ->
-                      !(Mb bs (PermImpl r ps)) ->
+                      !(NMb bs (PermImpl r ps)) ->
                       MbPermImpls r (bs_pss :> '(bs,ps))
 
 -- | A local implication, from an input to an output permission set
@@ -1316,16 +1388,6 @@ idLocalPermImpl :: LocalPermImpl ps ps
 idLocalPermImpl = LocalPermImpl $ PermImpl_Done $ LocalImplRet Refl
 
 -- type IsLLVMPointerTypeList w ps = RAssign ((:~:) (LLVMPointerType w)) ps
-
-$(mkNuMatching [t| forall a. EqPerm a |])
-$(mkNuMatching [t| forall ps a. NuMatching a => EqProofStep ps a |])
-$(mkNuMatching [t| forall ps a. NuMatching a => EqProof ps a |])
-$(mkNuMatching [t| forall ps_in ps_out. SimplImpl ps_in ps_out |])
-$(mkNuMatching [t| forall ps_in ps_outs. PermImpl1 ps_in ps_outs |])
-$(mkNuMatching [t| forall r bs_pss. NuMatchingAny1 r => MbPermImpls r bs_pss |])
-$(mkNuMatching [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |])
-$(mkNuMatching [t| forall ps_in ps_out. LocalPermImpl ps_in ps_out |])
-$(mkNuMatching [t| forall ps ps'. LocalImplRet ps ps' |])
 
 instance NuMatchingAny1 EqPerm where
   nuMatchingAny1Proof = nuMatchingProof
@@ -1358,7 +1420,7 @@ permImplStep impl1@(Impl1_Fail _) mb_impls = PermImpl_Step impl1 mb_impls
 -- Catch --> call the permImplCatch function
 permImplStep Impl1_Catch ((MbPermImpls_Cons _
                            (MbPermImpls_Cons _ _ mb_pimpl1) mb_pimpl2)) =
-  permImplCatch (elimEmptyMb mb_pimpl1) (elimEmptyMb mb_pimpl2)
+  permImplCatch (elimEmptyNMb mb_pimpl1) (elimEmptyNMb mb_pimpl2)
 
 -- Unary rules applied to failure --> failures
 --
@@ -1387,10 +1449,10 @@ permImplStep impl1@(Impl1_TryProveBVProp _ _ _) mb_impls =
 -- An or elimination fails if both branches fail
 permImplStep (Impl1_ElimOr _ _ _) (MbPermImpls_Cons _
                                    (MbPermImpls_Cons _ MbPermImpls_Nil
-                                    (matchMbImplFail -> Just msg1))
-                                   (matchMbImplFail -> Just msg2)) =
-  PermImpl_Step (Impl1_Fail
-                 (msg1 ++ "\n\n--------------------\n\n" ++ msg2))
+                                    (matchMbImplFail . _nmbBinding -> Just msg1))
+                                   (matchMbImplFail . _nmbBinding -> Just msg2)) =
+  PermImpl_Step (Impl1_Fail $ GeneralError $ pretty
+                  (msg1 ++ "\n\n--------------------\n\n" ++ msg2))
   MbPermImpls_Nil
 
 -- Default case: just apply PermImpl_Step
@@ -1405,8 +1467,8 @@ permImplStepUnary :: NuMatchingAny1 r =>
                      MbPermImpls r (RNil :> '(bs, ps_out)) -> PermImpl r ps_in
 
 -- If the continuation implication is a failure, percolate it up
-permImplStepUnary _ (MbPermImpls_Cons _ _ (matchMbImplFail -> Just msg)) =
-  PermImpl_Step (Impl1_Fail msg) MbPermImpls_Nil
+permImplStepUnary _ (MbPermImpls_Cons _ _ (matchMbImplFail . _nmbBinding -> Just msg)) =
+  PermImpl_Step (Impl1_Fail $ GeneralError $ pretty msg) MbPermImpls_Nil
 
 -- If the continuation implication is a catch with a failure on the right-hand
 -- side, percolate up the catch
@@ -1430,9 +1492,10 @@ permImplStepUnary impl1 mb_impls = PermImpl_Step impl1 mb_impls
 -- 'NuMatchingAny1' constraint on the @r@ variable
 matchMbImplFail :: NuMatchingAny1 r => Mb ctx (PermImpl r ps) -> Maybe String
 matchMbImplFail mb_impl = case mbMatch mb_impl of
-  [nuMP| PermImpl_Step (Impl1_Fail msg) _ |] -> Just $ mbLift msg
+  [nuMP| PermImpl_Step (Impl1_Fail err) _ |] -> Just $ mbLift $ fmap ppError err
   _ -> Nothing
 
+{-
 -- | Pattern-matchin an implication inside a binding to see if it is a catch
 -- whose right-hand side is just a failure, all without requiring a
 -- 'NuMatchingAny1' constraint on the @r@ variable
@@ -1443,9 +1506,10 @@ matchMbImplCatchFail mb_impl = case mbMatch mb_impl of
   [nuMP| PermImpl_Step Impl1_Catch
                       (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1)
                       mb_impl2) |]
-    | Just msg <- matchMbImplFail (mbCombine RL.typeCtxProxies mb_impl2) ->
+    | Just msg <- matchMbImplFail $ _mbBidning (mbCombine RL.typeCtxProxies mb_impl2) ->
       Just (mbCombine RL.typeCtxProxies mb_impl1, msg)
   _ -> Nothing
+  -}
 
 -- | Produce a branching proof tree that performs the first implication and, if
 -- that one fails, falls back on the second. If 'pruneFailingBranches' is set,
@@ -1458,18 +1522,20 @@ permImplCatch pimpl (PermImpl_Step (Impl1_Fail _) _)
   | pruneFailingBranches = pimpl
 permImplCatch (PermImpl_Step (Impl1_Fail str1) _) (PermImpl_Step
                                                    (Impl1_Fail str2) mb_impls) =
-  PermImpl_Step (Impl1_Fail (str1 ++ "\n\n--------------------\n\n" ++ str2)) mb_impls
+  PermImpl_Step (Impl1_Fail $ GeneralError $ 
+      pretty (ppError str1 ++ "\n\n--------------------\n\n" ++ ppError str2)) 
+    mb_impls
 permImplCatch pimpl1@(PermImpl_Step (Impl1_Fail _) _) pimpl2 =
   permImplCatch pimpl2 pimpl1
 permImplCatch (PermImpl_Step Impl1_Catch
                (MbPermImpls_Cons _
                 (MbPermImpls_Cons _ _ mb_pimpl_1a) mb_pimpl_1b)) pimpl2 =
-  permImplCatch (elimEmptyMb mb_pimpl_1a) $
-  permImplCatch (elimEmptyMb mb_pimpl_1b) pimpl2
+  permImplCatch (elimEmptyNMb mb_pimpl_1a) $
+  permImplCatch (elimEmptyNMb mb_pimpl_1b) pimpl2
 permImplCatch pimpl1 pimpl2 =
   PermImpl_Step Impl1_Catch $
-  MbPermImpls_Cons knownRepr (MbPermImpls_Cons knownRepr MbPermImpls_Nil $ emptyMb pimpl1) $
-  emptyMb pimpl2
+  MbPermImpls_Cons knownRepr (MbPermImpls_Cons knownRepr MbPermImpls_Nil $ emptyNMb pimpl1) $
+  emptyNMb pimpl2
 
 
 -- | Test if a 'PermImpl' "succeeds", meaning there is at least one non-failing
@@ -1482,40 +1548,40 @@ permImplSucceeds (PermImpl_Done _) = 2
 permImplSucceeds (PermImpl_Step (Impl1_Fail _) _) = 0
 permImplSucceeds (PermImpl_Step Impl1_Catch
                   (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2)) =
-  max (mbLift $ fmap permImplSucceeds mb_impl1)
-  (mbLift $ fmap permImplSucceeds mb_impl2)
+  max (nmbLift $ fmap permImplSucceeds mb_impl1)
+  (nmbLift $ fmap permImplSucceeds mb_impl2)
 permImplSucceeds (PermImpl_Step (Impl1_Push _ _) (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  nmbLift $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_Pop _ _) (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  nmbLift $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_ElimOr _ _ _)
                   (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2)) =
-  max (mbLift (fmap permImplSucceeds mb_impl1))
-  (mbLift (fmap permImplSucceeds mb_impl2))
+  max (nmbLift (fmap permImplSucceeds mb_impl1))
+  (nmbLift (fmap permImplSucceeds mb_impl2))
 permImplSucceeds (PermImpl_Step (Impl1_ElimExists _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  nmbLift $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_Simpl _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  nmbLift $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_LetBind _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  nmbLift $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_ElimStructField _ _ _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  nmbLift $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_ElimLLVMFieldContents _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  nmbLift $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_ElimLLVMBlockToEq _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  nmbLift $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step Impl1_BeginLifetime
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  nmbLift $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_TryProveBVProp _ _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
-  mbLift $ fmap permImplSucceeds mb_impl
+  nmbLift $ fmap permImplSucceeds mb_impl
 
 -- | Test if a 'PermImpl' fails, meaning 'permImplSucceeds' returns 0
 permImplFails :: PermImpl r ps -> Bool
@@ -2573,7 +2639,7 @@ instance SubstVar PermVarSubst m =>
 instance SubstVar PermVarSubst m =>
          Substable PermVarSubst (PermImpl1 ps_in ps_out) m where
   genSubst s mb_impl = case mbMatch mb_impl of
-    [nuMP| Impl1_Fail str |] -> return (Impl1_Fail $ mbLift str)
+    [nuMP| Impl1_Fail err |] -> Impl1_Fail <$> genSubst s err
     [nuMP| Impl1_Catch |] -> return Impl1_Catch
     [nuMP| Impl1_Push x p |] ->
       Impl1_Push <$> genSubst s x <*> genSubst s p
@@ -2616,7 +2682,7 @@ instance (NuMatchingAny1 r, SubstVar PermVarSubst m,
     [nuMP| MbPermImpls_Nil |] -> return MbPermImpls_Nil
     [nuMP| MbPermImpls_Cons mpx mb_impl mb_impls' |] ->
       let px = mbLift mpx in
-      MbPermImpls_Cons px <$> genSubst s mb_impl <*> genSubstMb (cruCtxProxies px) s mb_impls'
+      MbPermImpls_Cons px <$> genSubst s mb_impl <*> genSubstNMb (cruCtxProxies px) s mb_impls'
 
 -- FIXME: shouldn't need the SubstVar PermVarSubst m assumption...
 instance SubstVar PermVarSubst m =>
@@ -2810,12 +2876,11 @@ partialSubstForceM :: (NuMatchingAny1 r, PermPretty a,
                       Mb vars a -> String -> ImplM vars s r ps ps a
 partialSubstForceM mb_e caller =
   do psubst <- getPSubst
-     case partialSubst psubst mb_e of
-       Just e -> pure e
-       Nothing ->
-         implTraceM (\i -> sep [pretty ("Incomplete susbtitution in " ++ caller
-                                        ++ " for:"),
-                                permPretty i mb_e]) >>= implFailM
+     use implStatePPInfo >>>= \ppinfo ->
+       case partialSubst psubst mb_e of
+         Just e -> pure e
+         Nothing ->
+           implFailM $ PartialSubstitutionError caller (permPretty ppinfo mb_e)
 
 -- | Modify the current partial substitution
 modifyPSubst :: (PartialSubst vars -> PartialSubst vars) ->
@@ -2881,7 +2946,7 @@ implRecFlagCaseM m1 m2 =
 implSetRecRecurseRightM :: NuMatchingAny1 r => ImplM vars s r ps ps ()
 implSetRecRecurseRightM =
   use implStateRecRecurseFlag >>= \case
-    RecLeft -> implFailMsgM "Tried to unfold a mu on the right after unfolding on the left"
+    RecLeft -> implFailM MuUnfoldError
     _ -> implStateRecRecurseFlag .= RecRight
 
 -- | Set the recursive recursion flag to indicate recursion on the left, or fail
@@ -2890,7 +2955,7 @@ implSetRecRecurseLeftM :: NuMatchingAny1 r => ImplM vars s r ps ps ()
 implSetRecRecurseLeftM =
   use implStateRecRecurseFlag >>= \case
     RecRight ->
-      implFailMsgM "Tried to unfold a mu on the left after unfolding on the right"
+      implFailM MuUnfoldError
     _ -> implStateRecRecurseFlag .= RecLeft
 
 -- | Look up the 'NamedPerm' structure for a named permssion
@@ -2974,6 +3039,45 @@ implSetNameTypes (ns :>: n) (CruCtxCons tps tp) =
      implStatePerms     %= initVarPerm n
      implSetNameTypes ns tps
 
+-- | TODO: Move this in to Hobbits
+nameMapFind 
+  :: (forall tp. f tp -> Bool) 
+  -> NameMap f 
+  -> Maybe (Some (Product Name f))
+nameMapFind predicate nm = 
+  case find (\(NameAndElem _ f) -> predicate f) $ NameMap.assocs nm of
+    Just (NameAndElem name f) -> Just $ Some $ Pair name f
+    Nothing -> Nothing
+
+-- | Traverse a permissions to determine whether it refers to a particular variable.
+permContainsVar :: ExprVar a -> ValuePerm b -> Bool
+permContainsVar ev (ValPerm_Eq pe) = permExprContainsVar ev pe
+permContainsVar ev (ValPerm_Or l r) = permContainsVar ev l || permContainsVar ev r
+permContainsVar ev (ValPerm_Exists vp) = mbLift $ fmap (permContainsVar ev) vp
+permContainsVar ev (ValPerm_Named _ pe _) = 
+  or $ RL.mapToList (permExprContainsVar ev) pe
+permContainsVar _  (ValPerm_Var _ _) = False
+permContainsVar ev (ValPerm_Conj as) = any atomicHelper as
+  where
+    atomicHelper :: AtomicPerm a -> Bool
+    atomicHelper (Perm_NamedConj _ perms _) = 
+      or $ RL.mapToList (permExprContainsVar ev) perms
+    atomicHelper _ = False
+
+
+permExprContainsVar :: ExprVar a -> PermExpr b -> Bool
+permExprContainsVar ev1 (PExpr_Var ev2) = case testEquality ev1 ev2 of
+  Just Refl -> ev1 == ev2
+  Nothing -> False
+permExprContainsVar _ _ = False
+
+findPermsContainingVar :: ExprVar tp -> ImplM vars s r ps ps (Some DistPerms)
+findPermsContainingVar x = 
+  getPerms >>>= \perms ->
+    case nameMapFind (permContainsVar x) (view varPermMap perms) of
+      Just (Some (Pair y p)) -> findPermsContainingVar y >>>= \(Some dps) ->
+        return $ Some $ DistPermsCons dps y p
+      Nothing -> return $ Some DistPermsNil
 
 ----------------------------------------------------------------------
 -- * The Permission Implication Rules as Monadic Operations
@@ -3005,25 +3109,14 @@ implApplyImpl1 impl1 mb_ms =
                 (State (Closed s)) a
     helper MbPermSets_Nil _ = gabortM (return MbPermImpls_Nil)
     helper (MbPermSets_Cons mbperms ctx mbperm) (args :>: Impl1Cont f) =
-      gparallel (\m1 m2 -> MbPermImpls_Cons ctx <$> m1 <*> m2)
+      state (\s -> s & implStatePPInfo %%~ ppInfoAllocateTypedExprNames ctx) >>>= \n ->
+      gparallel (\m1 m2 -> MbPermImpls_Cons ctx <$> m1 <*> (NMb n <$> m2))
       (helper mbperms args)
       (gopenBinding strongMbM mbperm >>>= \(ns, perms') ->
         gmodify (set implStatePerms perms' .
-                 over implStatePPInfo (ppInfoAddTypedExprNames ctx ns)) >>>
+                 over implStatePPInfo (ppInfoApplyAllocation ns n)) >>>
         implSetNameTypes ns ctx >>>
         f ns)
-
--- | Emit debugging output using the current 'PPInfo' if the 'implStateDoTrace'
--- flag is set
-implTraceM :: (PPInfo -> PP.Doc ann) -> ImplM vars s r ps ps String
-implTraceM f =
-  do do_trace <- use implStateDoTrace
-     doc <- uses implStatePPInfo f
-     let str = renderDoc doc
-     fn do_trace str (pure str)
-  where
-    fn True  = trace
-    fn False = const id
 
 -- | Run an 'ImplM' computation with 'implStateDoTrace' temporarily disabled
 implWithoutTracingM :: ImplM vars s r ps_out ps_in a ->
@@ -3035,18 +3128,6 @@ implWithoutTracingM m =
   (implStateDoTrace .= saved) >>
   pure a
 
--- | Terminate the current proof branch with a failure
-implFailM :: NuMatchingAny1 r => String -> ImplM vars s r ps_any ps a
-implFailM str =
-  use implStateFailPrefix >>>= \prefix ->
-  implTraceM (const $ pretty (prefix ++ "Implication failed")) >>>
-  implApplyImpl1 (Impl1_Fail (prefix ++ str)) MNil
-
--- | Call 'implFailM' and also output a debugging message
-implFailMsgM :: NuMatchingAny1 r => String -> ImplM vars s r ps_any ps a
-implFailMsgM msg =
-  implTraceM (const $ pretty msg) >>>= implFailM
-
 -- | Pretty print an implication @x:p -o (vars).p'@
 ppImpl :: PPInfo -> ExprVar tp -> ValuePerm tp ->
           Mb (vars :: RList CrucibleType) (ValuePerm tp) -> PP.Doc ann
@@ -3054,15 +3135,6 @@ ppImpl i x p mb_p =
   sep [PP.group (permPretty i x <> PP.colon <> PP.align (permPretty i p)),
        PP.pretty "-o",
        PP.group (PP.align (permPretty i mb_p))]
-
--- | Terminate the current proof branch with a failure proving @x:p -o mb_p@
-implFailVarM :: NuMatchingAny1 r => String -> ExprVar tp -> ValuePerm tp ->
-                Mb vars (ValuePerm tp) -> ImplM vars s r ps_any ps a
-implFailVarM f x p mb_p =
-  implTraceM (\i ->
-               sep [pretty f <> colon <+> pretty "Could not prove",
-                    ppImpl i x p mb_p]) >>>=
-  implFailM
 
 -- | Produce a branching proof tree that performs the first implication and, if
 -- that one fails, falls back on the second. If 'pruneFailingBranches' is set,
@@ -3295,7 +3367,7 @@ implElimLLVMBlockToEq x bp =
   pure y
 
 -- | Try to prove a proposition about bitvectors dynamically, failing as in
--- 'implFailM' if the proposition does not hold
+-- 'implFailM if the proposition does not hold
 implTryProveBVProp :: (1 <= w, KnownNat w, NuMatchingAny1 r) =>
                       ExprVar (LLVMPointerType w) -> BVProp w ->
                       ImplM vars s r (ps :> LLVMPointerType w) ps ()
@@ -3760,7 +3832,7 @@ implEndLifetimeM ps l ps_in ps_out@(lownedPermsToDistPerms -> Just dps_out)
     implSimplM ps (SImpl_EndLifetime l ps_in ps_out) >>>
     implTraceM (\i -> pretty "Ending lifetime:" <+> permPretty i l) >>>
     recombinePermsPartial ps (DistPermsCons dps_out l ValPerm_LFinished)
-implEndLifetimeM _ _ _ _ = implFailM "implEndLifetimeM: lownedPermsToDistPerms"
+implEndLifetimeM _ _ _ _ = implFailM (LifetimeError EndLifetimeError)
 
 -- | Save a permission for later by splitting it into part that is in the
 -- current lifetime and part that is saved in the lifetime for later. Assume
@@ -4134,9 +4206,8 @@ implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
 
 -- If none of the above cases matched, we cannot eliminate, so fail
 implElimLLVMBlock _ bp =
-  implTraceM (\i -> pretty "Could not eliminate permission" <+>
-                    permPretty i (Perm_LLVMBlock bp)) >>>=
-  implFailM
+  use implStatePPInfo >>>= \ppinfo ->
+    implFailM $ MemBlockError $ permPretty ppinfo (Perm_LLVMBlock bp)
 
 
 -- | Assume the top of the stack contains @x:ps@, which are all the permissions
@@ -4230,9 +4301,8 @@ getLifetimeCurrentPerms (PExpr_Var l) =
       case some_cur_perms of
         Some cur_perms -> pure $ Some $ CurrentTransPerms cur_perms l
     _ ->
-      implTraceM (\i -> pretty "Could not prove lifetime is current:" <+>
-                        permPretty i l) >>=
-      implFailM
+      use implStatePPInfo >>>= \ppinfo ->
+        implFailM $ LifetimeError (LifetimeCurrentError $ permPretty ppinfo l)
 
 -- | Prove the permissions represented by a 'LifetimeCurrentPerms'
 proveLifetimeCurrent :: NuMatchingAny1 r => LifetimeCurrentPerms ps_l ->
@@ -4457,16 +4527,6 @@ recombineLifetimeCurrentPerms (CurrentTransPerms cur_perms l) =
 -- * Proving Equalities
 ----------------------------------------------------------------------
 
--- | Fail when trying to prove an equality
-proveEqFail :: (NuMatchingAny1 r, PermPretty (f a)) => f a -> Mb vars (f a) ->
-               ImplM vars s r ps ps any
-proveEqFail e mb_e =
-  implTraceM (\i ->
-               sep [pretty "proveEq" <> colon <+> pretty "Could not prove",
-                    sep [permPretty i e <+>
-                         pretty "=" <+> permPretty i mb_e]]) >>>=
-  implFailM
-
 -- | Typeclass for the generic function that tries to extend the current partial
 -- substitution to unify an expression with an expression pattern and returns a
 -- proof of the equality on success
@@ -4503,7 +4563,11 @@ instance ProveEq (LLVMFramePerm w) where
       do eqp1 <- proveEq e mb_e
          eqp2 <- proveEq fperms mb_fperms
          pure (liftA2 (\x y -> (x,i):y) eqp1 eqp2)
-  proveEq perms mb = proveEqFail perms mb
+  proveEq perms mb = 
+    use implStatePPInfo >>>= \ppinfo ->
+      implFailM $ EqualityProofError 
+                    (permPretty ppinfo perms) 
+                    (permPretty ppinfo mb)
 
 instance ProveEq (LLVMBlockPerm w) where
   proveEq bp mb_bp =
@@ -4577,7 +4641,11 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
           Just _ -> proveEqH psubst e mb_e
           Nothing -> getVarEqPerm y >>= \case
             Just _ -> proveEqH psubst e mb_e
-            Nothing -> proveEqFail e mb_e
+            Nothing -> 
+              use implStatePPInfo >>>= \ppinfo ->
+                implFailM $ EqualityProofError 
+                              (permPretty ppinfo e)
+                              (permPretty ppinfo mb_e)
 
   -- To prove x=e, try to see if x:eq(e') and proceed by transitivity
   (PExpr_Var x, _) ->
@@ -4585,7 +4653,11 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
     Just e' ->
       proveEq e' mb_e >>= \eqp2 ->
       pure (someEqProofTrans (someEqProof1 x e' True) eqp2)
-    Nothing -> proveEqFail e mb_e
+    Nothing ->
+      use implStatePPInfo >>>= \ppinfo ->
+      implFailM $ EqualityProofError 
+                    (permPretty ppinfo e)
+                    (permPretty ppinfo mb_e)
 
   -- To prove e=x, try to see if x:eq(e') and proceed by transitivity
   (_, [nuMP| PExpr_Var z |])
@@ -4594,7 +4666,11 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
         Just e' ->
           proveEq e (fmap (const e') mb_e) >>= \eqp ->
           pure (someEqProofTrans eqp (someEqProof1 x e' False))
-        Nothing -> proveEqFail e mb_e
+        Nothing ->
+          use implStatePPInfo >>>= \ppinfo ->
+          implFailM $ EqualityProofError 
+                        (permPretty ppinfo e)
+                        (permPretty ppinfo mb_e)
 
   -- FIXME: if proving word(e1)=word(e2) for ground e2, we could add an assertion
   -- that e1=e2 using a BVProp_Eq
@@ -4614,7 +4690,10 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
   -- FIXME: add cases to prove struct(es1)=struct(es2)
 
   -- Otherwise give up!
-  _ -> proveEqFail e mb_e
+  _ -> use implStatePPInfo >>>= \ppinfo ->
+         implFailM $ EqualityProofError 
+                       (permPretty ppinfo e)
+                       (permPretty ppinfo mb_e)
 
 
 -- | Build a proof on the top of the stack that @x:eq(e)@. Assume that all @x@
@@ -5286,7 +5365,7 @@ proveVarLLVMArray_ArrayStep x ps ap i ap_lhs
 
 -- Otherwise we don't know what to do so we fail
 proveVarLLVMArray_ArrayStep _x _ps _ap _i _ap_lhs =
-  implFailMsgM "proveVarLLVMArray_ArrayStep"
+  implFailM ArrayStepError
 
 
 ----------------------------------------------------------------------
@@ -6383,7 +6462,7 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
              lownedPermsToDistPerms ps_inR, lownedPermsToDistPerms ps_outR) of
           (Just dps_inL, Just dps_outL, Just dps_inR, Just dps_outR) ->
             pure (dps_inL, dps_outL, dps_inR, dps_outR)
-          _ -> implFailMsgM "proveVarAtomicImpl: lownedPermsToDistPerms")
+          _ -> implFailM (LifetimeError ImplicationLifetimeError))
       >>>= \(dps_inL, dps_outL, dps_inR, dps_outR) ->
       localProveVars (RL.append ps1 dps_inR) dps_inL >>>= \impl_in ->
       localProveVars (RL.append ps2 dps_outL) dps_outR >>>= \impl_out ->
@@ -6522,12 +6601,9 @@ proveVarConjImpl x ps mb_ps =
                            mb_ps' mb_p) "proveVarConjImpl") >>>= \(ps',p) ->
       implInsertConjM x p ps' i
     Nothing ->
-      implTraceM
-      (\i ->
-        sep [PP.fillSep [PP.pretty
-             "Could not determine enough variables to prove permissions:",
-             permPretty i (fmap ValPerm_Conj mb_ps)]]) >>>=
-      implFailM
+      use implStatePPInfo >>>= \ppinfo ->
+        implFailM $ InsufficientVariablesError $ 
+                      permPretty ppinfo (fmap ValPerm_Conj mb_ps)
 
 
 ----------------------------------------------------------------------
@@ -6847,15 +6923,14 @@ proveExVarImpl _ mb_x mb_p@(mbMatch -> [nuMP| ValPerm_Conj [Perm_LLVMFrame _] |]
         getVarVarM memb >>>= \n' ->
         proveVarImplInt n' mb_p >>> pure n'
       Nothing ->
-        implFailMsgM "proveExVarImpl: No LLVM frame pointer in scope"
+        implFailM NoFrameInScopeError
 
 -- Otherwise we fail
 proveExVarImpl _ mb_x mb_p =
-  implTraceM (\i -> pretty "proveExVarImpl: existential variable" <+>
-                    permPretty i mb_x <+>
-                    pretty "not resolved when trying to prove:" <> softline <>
-                    permPretty i mb_p) >>>=
-  implFailM
+  use implStatePPInfo >>>= \ppinfo ->
+    implFailM $ ExistentialError 
+                  (permPretty ppinfo mb_x)
+                  (permPretty ppinfo mb_p)
 
 
 ----------------------------------------------------------------------
@@ -7008,12 +7083,9 @@ proveVarsImplAppendInt ps =
       proveVarsImplAppendInt (mbMap2 appendDistPerms ps1 ps2) >>>
       implMoveUpM cur_perms (mbDistPermsToProxies ps1) x (mbDistPermsToProxies ps2)
     _ ->
-      implTraceM
-      (\i ->
-        sep [PP.fillSep [PP.pretty
-             "Could not determine enough variables to prove permissions:",
-             permPretty i ps]]) >>>=
-      implFailM
+      use implStatePPInfo >>>= \ppinfo ->
+        implFailM $ InsufficientVariablesError $
+                      permPretty ppinfo ps
 
 -- | Prove a list of existentially-quantified distinguished permissions and put
 -- those proofs onto the stack. This is the same as 'proveVarsImplAppendInt'
@@ -7079,7 +7151,8 @@ implEndLifetimeRecM l =
   _ ->
     implTraceM (\i ->
                  pretty "implEndLifetimeRecM: could not end lifetime: " <>
-                 permPretty i l) >>>= implFailM
+                 permPretty i l) >>>
+    implFailM (LifetimeError EndLifetimeError)
 
 
 -- | Prove a list of existentially-quantified distinguished permissions, adding
@@ -7140,3 +7213,99 @@ proveVarsImplVarEVars mb_ps =
 proveVarImpl :: NuMatchingAny1 r => ExprVar a -> Mb vars (ValuePerm a) ->
                 ImplM vars s r (ps :> a) ps ()
 proveVarImpl x mb_p = proveVarsImplAppend $ fmap (distPerms1 x) mb_p
+
+
+-- | Terminate the current proof branch with a failure
+implFailM :: NuMatchingAny1 r => ImplError -> ImplM vars s r ps_any ps a
+implFailM err =
+  use implStateFailPrefix >>>= \prefix ->
+    implTraceM (const $ pretty $ prefix <> ppError err) >>> 
+    implApplyImpl1 (Impl1_Fail err) MNil
+
+-- | Terminate the current proof branch with a failure proving @x:p -o mb_p@
+implFailVarM :: NuMatchingAny1 r => String -> ExprVar tp -> ValuePerm tp ->
+                Mb vars (ValuePerm tp) -> ImplM vars s r ps_any ps a
+implFailVarM f x p mb_p =
+  use implStatePPInfo >>>= \ppinfo ->
+  use implStateVars >>>= \ctx ->
+  findPermsContainingVar x >>>= \case
+    (Some distperms) ->
+      implFailM $ ImplVariableError 
+                    (ppImpl ppinfo x p mb_p) 
+                    f 
+                    (permPretty ppinfo x, x) 
+                    (permPretty ppinfo p, p)
+                    ctx 
+                    distperms
+
+  -- ImplVariableError 
+  --   :: Doc ann -> String 
+  --   -> ExprVar tp -> ValuePerm tp -> CruCtx vars 
+  --   -> Some DistPerms -> Mb vars (ValuePerm tp) 
+  --   -> ImplError
+
+
+
+-- | Emit debugging output using the current 'PPInfo' if the 'implStateDoTrace'
+-- flag is set
+implTraceM :: (PPInfo -> PP.Doc ann) -> ImplM vars s r ps ps String
+implTraceM f =
+  do do_trace <- use implStateDoTrace
+     doc <- uses implStatePPInfo f
+     let str = renderDoc doc
+     fn do_trace str (pure str)
+  where
+    fn True  = trace
+    fn False = const id
+
+
+instance ErrorPretty ImplError where
+  ppError (GeneralError doc) = renderDoc doc
+  ppError NoFrameInScopeError = 
+    "No LLVM frame in scope"
+  ppError ArrayStepError = 
+    "Error proving array permissions"
+  ppError MuUnfoldError =
+    "Tried to unfold a mu on the left after unfolding on the right"
+  ppError FunctionPermissionError =
+    "Could not find function permission"
+  ppError (PartialSubstitutionError caller doc) = renderDoc $
+    sep [ pretty ("Incomplete susbtitution in " ++ caller ++ " for: ")
+        , doc ]
+  ppError (LifetimeError EndLifetimeError) =
+    "implEndLifetimeM: lownedPermsToDistPerms"
+  ppError (LifetimeError ImplicationLifetimeError) =
+    "proveVarAtomicImpl: lownedPermsToDistPerms"
+  ppError (LifetimeError (LifetimeCurrentError doc)) = renderDoc $
+    pretty "Could not prove lifetime is current:" <+> doc
+  ppError (MemBlockError doc) = renderDoc $
+    pretty "Could not eliminate permission" <+> doc
+    -- permPretty pp (Perm_LLVMBlock bp)
+  ppError (EqualityProofError edoc mbedoc) = renderDoc $
+    sep [ pretty "proveEq" <> colon <+> pretty "Could not prove"
+        , edoc <+> pretty "=" <+> mbedoc]
+  ppError (InsufficientVariablesError doc) = renderDoc $
+    sep [PP.fillSep [PP.pretty
+          "Could not determine enough variables to prove permissions:",
+          doc]]
+  ppError (ExistentialError docx docp ) = renderDoc $
+    pretty "proveExVarImpl: existential variable" <+>
+    docx <+>
+    pretty "not resolved when trying to prove:" <> softline <>
+    docp
+  ppError (ImplVariableError doc f _ev _vp _ctx _dp) = renderDoc $
+    sep [ pretty f <> colon <+> pretty "Could not prove"
+        , doc ]
+
+
+$(mkNuMatching [t| forall a. EqPerm a |])
+$(mkNuMatching [t| forall ps a. NuMatching a => EqProofStep ps a |])
+$(mkNuMatching [t| forall ps a. NuMatching a => EqProof ps a |])
+$(mkNuMatching [t| forall ps_in ps_out. SimplImpl ps_in ps_out |])
+$(mkNuMatching [t| LifetimeErrorType |])
+$(mkNuMatching [t| ImplError |])
+$(mkNuMatching [t| forall ps_in ps_outs. PermImpl1 ps_in ps_outs |])
+$(mkNuMatching [t| forall r bs_pss. NuMatchingAny1 r => MbPermImpls r bs_pss |])
+$(mkNuMatching [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |])
+$(mkNuMatching [t| forall ps_in ps_out. LocalPermImpl ps_in ps_out |])
+$(mkNuMatching [t| forall ps ps'. LocalImplRet ps ps' |])

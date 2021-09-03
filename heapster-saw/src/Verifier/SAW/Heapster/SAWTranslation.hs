@@ -77,6 +77,7 @@ import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.TypedCrucible
+import Verifier.SAW.Heapster.NamedMb
 
 import GHC.Stack
 import Debug.Trace
@@ -2687,10 +2688,10 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        let fromJustOrError (Just x) = x
            fromJustOrError Nothing = error "translateSimplImpl: SImpl_MapLifetime"
            ps_in'_vars =
-             RL.map (translateVar . getCompose) $ mbRAssign $ 
+             RL.map (translateVar . getCompose) $ mbRAssign $
              fmap (fromJustOrError . lownedPermsVars) ps_in'
            ps_out_vars =
-             RL.map (translateVar . getCompose) $ mbRAssign $ 
+             RL.map (translateVar . getCompose) $ mbRAssign $
              fmap (fromJustOrError . lownedPermsVars) ps_out
        impl_in_tm <-
          translateCurryLocalPermImpl "Error mapping lifetime input perms:" impl_in
@@ -2839,7 +2840,6 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            m
 
     | otherwise -> fail "translateSimplImpl: SImpl_IntroLLVMBlockNamed, unknown named shape"
-
   -- Elim for a recursive named shape applies the unfold function to the
   -- translations of the arguments plus the translations of the proofs of the
   -- permissions
@@ -3153,7 +3153,7 @@ translatePermImplUnary ::
   PermImplTransM (ImplFailCont ->
                   ImpTransM ext blocks tops ret ps ctx OpenTerm)
 translatePermImplUnary (mbMatch -> [nuMP| MbPermImpls_Cons _ _ mb_impl |]) f =
-  translatePermImpl Proxy (mbCombine RL.typeCtxProxies mb_impl) >>= \trans ->
+  translatePermImpl Proxy (mbCombine RL.typeCtxProxies (fmap _nmbBinding mb_impl)) >>= \trans ->
   return $ \k -> f $ trans k
 
 
@@ -3168,14 +3168,17 @@ translatePermImpl1 :: ImplTranslateF r ext blocks tops ret =>
 translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) of
   -- A failure translates to a call to the catch handler, which is the most recent
   -- Impl1_Catch, if one exists, or the SAW errorM function otherwise
-  ([nuMP| Impl1_Fail str |], _) -> pitmFail $ mbLift str
+  ([nuMP| Impl1_Fail err |], _) ->
+    tell ([mbLift (fmap ppError err)],HasFailures) >> mzero
 
   ([nuMP| Impl1_Catch |],
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
     pitmCatching (translatePermImpl prx $
-                  mbCombine RL.typeCtxProxies mb_impl1) >>= \(mtrans1,hasf1) ->
+                  mbCombine RL.typeCtxProxies $
+                  fmap _nmbBinding mb_impl1) >>= \(mtrans1,hasf1) ->
     pitmCatching (translatePermImpl prx $
-                  mbCombine RL.typeCtxProxies mb_impl2) >>= \(mtrans2,hasf2) ->
+                  mbCombine RL.typeCtxProxies $
+                  fmap _nmbBinding mb_impl2) >>= \(mtrans2,hasf2) ->
     (if hasf1 == HasFailures && hasf2 == HasFailures then tell ([],HasFailures)
      else return ()) >>
     case (mtrans1, hasf1, mtrans2, hasf2) of
@@ -3212,9 +3215,11 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   ([nuMP| Impl1_ElimOr x p1 p2 |],
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
     pitmCatching (translatePermImpl prx $
-                  mbCombine RL.typeCtxProxies mb_impl1) >>= \(mtrans1,hasf1) ->
+                  mbCombine RL.typeCtxProxies $
+                  fmap _nmbBinding mb_impl1) >>= \(mtrans1,hasf1) ->
     pitmCatching (translatePermImpl prx $
-                  mbCombine RL.typeCtxProxies mb_impl2) >>= \(mtrans2,hasf2) ->
+                  mbCombine RL.typeCtxProxies $
+                  fmap _nmbBinding mb_impl2) >>= \(mtrans2,hasf2) ->
     tell ([],hasf1 <> hasf2) >>
     case (mtrans1, mtrans2) of
       (Nothing, Nothing) -> mzero
@@ -3351,7 +3356,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   -- considered just an assertion and not a failure
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_Eq e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _nmbBinding mb_impl') >>= \trans ->
     return $ \k ->
     do prop_tp_trans <- translate prop
        applyMultiTransM (return $ globalOpenTerm "Prelude.maybe")
@@ -3367,7 +3372,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   -- For an inequality test, we don't need a proof, so just insert an if
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_Neq e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _nmbBinding mb_impl') >>= \trans ->
     return $ \k ->
     let w = natVal2 prop in
     applyMultiTransM (return $ globalOpenTerm "Prelude.ite")
@@ -3392,7 +3397,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
 
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULt e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _nmbBinding mb_impl') >>= \trans ->
     return $ \k ->
     do prop_tp_trans <- translate prop
        applyMultiTransM (return $ globalOpenTerm "Prelude.maybe")
@@ -3419,7 +3424,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
 
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _nmbBinding mb_impl') >>= \trans ->
     return $ \k ->
     do prop_tp_trans <- translate prop
        applyMultiTransM (return $ globalOpenTerm "Prelude.maybe")
@@ -3436,7 +3441,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
 
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq_Diff e1 e2 e3) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
-    translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+    translatePermImpl prx (mbCombine RL.typeCtxProxies $ fmap _nmbBinding mb_impl') >>= \trans ->
     return $ \k ->
     do prop_tp_trans <- translate prop
        applyMultiTransM (return $ globalOpenTerm "Prelude.maybe")
@@ -3848,7 +3853,7 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
          -- If not, continue by translating entry, setting the variable
          -- permission map to empty (as in the beginning of a block)
          clearVarPermsM $ translate $
-         fmap (\s -> varSubst s $ typedEntryBody entry) mb_s
+         fmap (\s -> varSubst s $ _nmbBinding $ typedEntryBody entry) mb_s
 
 
 instance PermCheckExtC ext =>
@@ -4134,7 +4139,7 @@ instance PermCheckExtC ext =>
   translate mb_x = case mbMatch mb_x of
     [nuMP| TypedImplStmt impl_seq |] -> translate impl_seq
     [nuMP| TypedConsStmt loc stmt pxys mb_seq |] ->
-      translateStmt (mbLift loc) stmt (translate $ mbCombine (mbLift pxys) mb_seq)
+      translateStmt (mbLift loc) stmt (translate $ mbCombine (mbLift pxys) (_nmbBinding <$> mb_seq))
     [nuMP| TypedTermStmt _ term_stmt |] -> translate term_stmt
 
 instance PermCheckExtC ext =>
@@ -4264,7 +4269,7 @@ translateEntryBody mapTrans entry =
   lambdaPermCtx (typedEntryPermsIn entry) $ \pctx ->
   do retType <- translateEntryRetType entry
      impTransM (RL.members pctx) pctx mapTrans retType $ translate $
-       typedEntryBody entry
+       _nmbBinding $ typedEntryBody entry
 
 -- | Translate all the entrypoints in a 'TypedBlockMap' that correspond to
 -- letrec-bound functions to SAW core functions as in 'translateEntryBody'
@@ -4402,14 +4407,30 @@ someCFGAndPermPtrPerm (SomeCFGAndPerm _ _ _ fun_perm) =
 tcTranslateCFGTupleFun ::
   HasPtrWidth w =>
   PermEnv -> EndianForm -> [SomeCFGAndPerm LLVM] ->
-  (OpenTerm, OpenTerm)
+  (OpenTerm, [SomeTypedCFG LLVM], OpenTerm)
 tcTranslateCFGTupleFun env endianness cfgs_and_perms =
-  let lrts = map (someCFGAndPermLRT env) cfgs_and_perms in
-  let lrts_tm =
+  let lrts = map (someCFGAndPermLRT env) cfgs_and_perms
+
+      lrts_tm =
         foldr (\lrt lrts' -> ctorOpenTerm "Prelude.LRT_Cons" [lrt,lrts'])
         (ctorOpenTerm "Prelude.LRT_Nil" [])
-        lrts in
-  (lrts_tm ,) $
+        lrts
+
+      fakeEnv = withKnownNat ?ptrWidth $
+                permEnvAddGlobalSyms env $
+                  map (\cfg_and_perm ->
+                        PermEnvGlobalEntry
+                          (someCFGAndPermSym cfg_and_perm)
+                          (someCFGAndPermPtrPerm cfg_and_perm)
+                          [error "TODO: put something here"])
+                    cfgs_and_perms
+
+      tcfgs = map (\cfg_and_perms ->
+                      case cfg_and_perms of
+                        SomeCFGAndPerm _ _ cfg fun_perm ->
+                          SomeTypedCFG $ tcCFG ?ptrWidth fakeEnv endianness fun_perm cfg) cfgs_and_perms
+  in
+  (lrts_tm , tcfgs, ) $
   lambdaOpenTermMulti (zip
                        (map (pack . someCFGAndPermToName) cfgs_and_perms)
                        (map (applyOpenTerm
@@ -4459,9 +4480,9 @@ tcTranslateAddCFGs ::
   HasPtrWidth w =>
   SharedContext -> ModuleName ->
   PermEnv -> EndianForm -> [SomeCFGAndPerm LLVM] ->
-  IO PermEnv
+  IO (PermEnv, [SomeTypedCFG LLVM])
 tcTranslateAddCFGs sc mod_name env endianness cfgs_and_perms =
-  do let (lrts, tup_fun) =
+  do let (lrts, tcfgs, tup_fun) =
            tcTranslateCFGTupleFun env endianness cfgs_and_perms
      let tup_fun_ident =
            mkSafeIdent mod_name (someCFGAndPermToName (head cfgs_and_perms)
@@ -4470,7 +4491,7 @@ tcTranslateAddCFGs sc mod_name env endianness cfgs_and_perms =
        applyOpenTerm (globalOpenTerm "Prelude.lrtTupleType") lrts
      tup_fun_tm <- completeOpenTerm sc $
        applyOpenTermMulti (globalOpenTerm "Prelude.multiFixM") [lrts, tup_fun]
-     scInsertDef sc mod_name tup_fun_ident tup_fun_tp tup_fun_tm 
+     scInsertDef sc mod_name tup_fun_ident tup_fun_tp tup_fun_tm
      new_entries <-
        zipWithM
        (\cfg_and_perm i ->
@@ -4486,7 +4507,7 @@ tcTranslateAddCFGs sc mod_name env endianness cfgs_and_perms =
               (someCFGAndPermPtrPerm cfg_and_perm)
               [globalOpenTerm ident])
        cfgs_and_perms [0 ..]
-     return $ permEnvAddGlobalSyms env new_entries
+     return (permEnvAddGlobalSyms env new_entries, tcfgs)
 
 
 ----------------------------------------------------------------------
