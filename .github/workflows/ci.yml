@@ -509,7 +509,6 @@ jobs:
       - heapster-tests
       - saw-remote-api-tests
       - cabal-test
-      - build-push-image
       - s2n-tests
     steps:
       - run: "true"
