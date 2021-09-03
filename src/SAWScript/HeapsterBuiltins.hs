@@ -93,6 +93,7 @@ import Lang.Crucible.LLVM.TypeContext
 import Lang.Crucible.LLVM.DataLayout
 
 import qualified Text.LLVM.AST as L
+import qualified Text.LLVM.PP as L
 
 import SAWScript.TopLevel
 import SAWScript.Value
@@ -112,6 +113,8 @@ import Verifier.SAW.Heapster.ParsedCtx
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
 import Prettyprinter
+
+import Debug.Trace
 
 
 -- | Extract out the contents of the 'Right' of an 'Either', calling 'fail' if
@@ -260,7 +263,6 @@ parseAndInsDef henv nm term_tp term_string =
 translateLLVMValue :: (1 <= w, KnownNat w) => f w -> L.Type -> L.Value ->
                       Maybe (ValuePerm (LLVMPointerType w), [OpenTerm])
 translateLLVMValue _ _ _ =
-  -- FIXME HERE NOW
   Nothing
 
 -- | Add an LLVM global constant to a 'PermEnv', if the global has a type and
@@ -270,6 +272,10 @@ translateLLVMValue _ _ _ =
 permEnvAddGlobalConst :: (1 <= w, KnownNat w) => f w -> PermEnv ->
                          L.Global -> PermEnv
 permEnvAddGlobalConst w env global =
+  trace ("Global: " ++ show (L.globalSym global) ++ "; value =" ++
+         show (maybe "None" (L.withConfig
+                             (L.Config True True True)
+                             (show . L.ppValue)) (L.globalValue global))) $
   maybe env id $
   do val <- L.globalValue global
      (p, ts) <- translateLLVMValue w (L.globalType global) val
