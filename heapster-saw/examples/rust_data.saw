@@ -34,6 +34,17 @@ heapster_define_rust_type env "pub enum Option<X> { None, Some (X) }";
 //heapster_define_recursive_perm env "ListPerm" "X:llvmshape 64, Xlen:bv 64, rw:rwmodality, l:lifetime" "llvmptr 64" ["[l]memblock(rw,0,Xlen + 16,List<ListPerm<X,Xlen,rw,l>,X>)"] "\\ (X:sort 0) (_:Vec 64 Bool) -> List X" "\\ (X:sort 0) (_:Vec 64 Bool) -> foldListPermH X" "\\ (X:sort 0) (_:Vec 64 Bool) -> unfoldListPermH X";
 heapster_define_rust_type env "pub enum List<X> { Nil, Cons (X,Box<List<X>>) }";
 
+// fmt::Error type
+heapster_define_rust_type_qual env "fmt" "pub struct Error { }";
+
+// fmt::Result type
+// FIXME: there seems to be some optimization in Rust that lays out fmt::Result as a 1-bit value
+heapster_define_llvmshape env "fmt::Result" 64 "" "fieldsh(1,eq(llvmword(0))) orsh fieldsh(1,eq(llvmword(1)))";
+//heapster_define_rust_type_qual env "fmt" "pub enum Result { Ok (), Err (fmt::Error) }";
+
+// Formatter type
+heapster_define_opaque_llvmshape env "fmt::Formatter" 64 "" "64" "#()";
+
 // List64 type
 heapster_define_rust_type env "pub enum List64 { Nil64, Cons64 (u64,Box<List64>) }";
 
@@ -105,6 +116,10 @@ heapster_assume_fun_rename env to_string_str "to_string_str" "(len:bv 64). arg0:
 // FIXME: we currently pretend this always returns None
 hashmap_u64_u64_insert_sym <- heapster_find_symbol env "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert";
 heapster_assume_fun_rename env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert" "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>" "\\ (endl:HashMap (Vec 64 Bool) (Vec 64 Bool) * #() -> CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) (h:HashMap (Vec 64 Bool) (Vec 64 Bool)) (k:Vec 64 Bool) (v:Vec 64 Bool) -> returnM ((#() -> CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) * Either #() (Vec 64 Bool) * #()) ((\\ (_:#()) -> returnM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #()) (Cons (Vec 64 Bool * Vec 64 Bool) (k,v) h, ())), Left #() (Vec 64 Bool) (), ())";
+
+String__fmt_sym <- heapster_find_trait_method_symbol env "core::fmt::Display::fmt<String>";
+// heapster_assume_fun_rename env String__fmt_sym "String__fmt" "<'a, 'b> fn(&'a String, f: &'b mut fmt::Formatter) -> fmt::Result" "\\ (end_a : List (Vec 8 Bool) * #() -> CompM (List (Vec 8 Bool) * #())) (end_b : #() * #() -> CompM (#() * #())) (str:List (Vec 8 Bool)) (fmt : #()) -> returnM ((#() -> CompM (List (Vec 8 Bool) * #())) * (#() -> CompM (#() * #())) * Either #() #() * #()) ((\\ (_:#()) -> returnM (List (Vec 8 Bool) * #()) (str, ())), (\\ (_:#()) -> returnM (#() * #()) ((), ())), Left #() #() (), ())";
+heapster_assume_fun_rename_prim env String__fmt_sym "String__fmt" "<'a, 'b> fn(&'a String, f: &'b mut fmt::Formatter) -> fmt::Result";
 
 
 /***

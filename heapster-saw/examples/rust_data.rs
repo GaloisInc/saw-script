@@ -1,4 +1,6 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt;
+
 
 /* The logical and operation as a function on bool */
 pub fn bool_and (x:bool, y:bool) -> bool {
@@ -245,6 +247,17 @@ pub fn cycle_true_enum (te: &TrueEnum) -> TrueEnum {
     }
 }
 
+impl fmt::Display for TrueEnum {
+    fn fmt<'a, 'b>(&'a self, f: &'b mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TrueEnum::Foo => write!(f, "Foo"),
+            TrueEnum::Bar => write!(f, "Bar"),
+            TrueEnum::Baz => write!(f, "Baz"),
+        }
+    }
+}
+
+
 /* A linked list */
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C,u64)]
@@ -294,7 +307,6 @@ pub fn list64_is_empty (l: &List64) -> bool {
         List64::Cons64 (_,_) => false
     }
 }
-
 
 /* Insert a mapping into m from the greatest of x and y to the other */
 pub fn hash_map_insert_gt_to_le (m: &mut HashMap<u64,u64>, x:u64, y:u64) -> () {
