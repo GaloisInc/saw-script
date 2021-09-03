@@ -137,6 +137,28 @@ foldMapWithDefault comb def f l = foldr1WithDefault comb def $ map f l
 -- * Pretty-printing
 ----------------------------------------------------------------------
 
+-- | A special-purpose type used to indicate debugging level
+data DebugLevel = DebugLevel Int deriving (Eq,Ord)
+
+-- | The debug level for no debugging
+noDebugLevel :: DebugLevel
+noDebugLevel = DebugLevel 0
+
+-- | The debug level to enable tracing
+traceDebugLevel :: DebugLevel
+traceDebugLevel = DebugLevel 1
+
+-- | Output a debug statement to @stderr@ using 'trace' if the supplied
+-- 'DebugLevel' is at least 'traceDebugLevel'
+debugTrace :: DebugLevel -> String -> a -> a
+debugTrace dlevel | dlevel >= traceDebugLevel = trace
+debugTrace _ = const id
+
+-- | Like 'debugTrace' but take in a 'Doc' instead of a 'String'
+debugTracePretty :: DebugLevel -> Doc ann -> a -> a
+debugTracePretty dlevel d a = debugTrace dlevel (renderDoc d) a
+
+-- | The constant string functor
 newtype StringF a = StringF { unStringF :: String }
 
 -- | Convert a type to a base name for printing variables of that type
@@ -1007,7 +1029,7 @@ bvLt _ _ = False
 bvSLt :: (1 <= w, KnownNat w) =>
          PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
 bvSLt (bvMatchConst -> Just i1) (bvMatchConst -> Just i2) =
-  trace ("bvSLt " ++ show i1 ++ " " ++ show i2) (BV.slt knownNat i1 i2)
+  BV.slt knownNat i1 i2
 bvSLt _ _ = False
 
 -- | Test whether a bitvector expression @e@ is in a 'BVRange' for all
