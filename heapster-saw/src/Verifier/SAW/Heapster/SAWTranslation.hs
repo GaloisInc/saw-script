@@ -79,7 +79,7 @@ import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.TypedCrucible
 
 import GHC.Stack
-import Debug.Trace
+
 
 scInsertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
 scInsertDef sc mnm ident def_tp def_tm =
@@ -3806,16 +3806,18 @@ debugPrettyPermCtx prxs (ptranss :>: ptrans) =
 translateApply :: String -> OpenTerm -> Mb ctx (DistPerms ps) ->
                   ImpTransM ext blocks tops ret ps ctx OpenTerm
 translateApply nm f perms =
-  do expr_ctx <- itiExprCtx <$> ask
+  do assertPermStackEqM nm perms
+     expr_ctx <- itiExprCtx <$> ask
      arg_membs <- itiPermStackVars <$> ask
      let e_args = RL.map (flip RL.get expr_ctx) arg_membs
      i_args <- itiPermStack <$> ask
      return $
+       {-
        trace ("translateApply for " ++ nm ++ " with perm arguments:\n" ++
               -- renderDoc (list $ debugPrettyPermCtx (mbToProxy perms) i_args)
               -- permPrettyString emptyPPInfo (permTransCtxPerms (mbToProxy perms) i_args)
               permPrettyString emptyPPInfo perms
-             ) $
+             ) $ -}
        applyOpenTermMulti f (exprCtxToTerms e_args ++ permCtxToTerms i_args)
 
 -- | Translate a call to (the translation of) an entrypoint, by either calling
@@ -4194,14 +4196,13 @@ piLRTTransM x tps body_f =
 translateEntryLRT :: TypedEntry TransPhase ext blocks tops ret args ghosts ->
                      TypeTransM ctx OpenTerm
 translateEntryLRT entry@(TypedEntry {..}) =
-  trace "translateEntryLRT starting..." $ inEmptyCtxTransM $
+  inEmptyCtxTransM $
   translateClosed (typedEntryAllArgs entry) >>= \arg_tps ->
   piLRTTransM "arg" arg_tps $ \ectx ->
   inCtxTransM ectx $
   translate typedEntryPermsIn >>= \perms_in_tps ->
   piLRTTransM "p" perms_in_tps $ \_ ->
   translateEntryRetType entry >>= \retType ->
-  trace "translateEntryLRT finished" $
   return $ ctorOpenTerm "Prelude.LRT_Ret" [retType]
 
 -- | Build a @LetRecTypes@ list that describes the types of all of the
@@ -4209,14 +4210,12 @@ translateEntryLRT entry@(TypedEntry {..}) =
 translateBlockMapLRTs :: TypedBlockMap TransPhase ext blocks tops ret ->
                          TypeTransM ctx OpenTerm
 translateBlockMapLRTs =
-  trace "translateBlockMapLRTs started..." $
   foldBlockMapLetRec
   (\entry rest_m ->
     do entryType <- translateEntryLRT entry
        rest <- rest_m
        return $ ctorOpenTerm "Prelude.LRT_Cons" [entryType, rest])
-  (trace "translateBlockMapLRTs finished" $
-   return $ ctorOpenTerm "Prelude.LRT_Nil" [])
+  (return $ ctorOpenTerm "Prelude.LRT_Nil" [])
 
 -- | Lambda-abstract over all the entrypoints in a 'TypedBlockMap' that
 -- correspond to letrec-bound functions, putting the lambda-bound variables into
@@ -4273,11 +4272,10 @@ translateBlockMapBodies :: PermCheckExtC ext =>
                            TypedBlockMap TransPhase ext blocks tops ret ->
                            TypeTransM ctx OpenTerm
 translateBlockMapBodies mapTrans =
-  trace "translateBlockMapBodies starting..." $
   foldBlockMapLetRec
   (\entry restM ->
     pairOpenTerm <$> translateEntryBody mapTrans entry <*> restM)
-  (trace "translateBlockMapBodies finished" $ return unitOpenTerm)
+  (return unitOpenTerm)
 
 
 -- | Translate a typed CFG to a SAW term
@@ -4401,9 +4399,9 @@ someCFGAndPermPtrPerm (SomeCFGAndPerm _ _ _ fun_perm) =
 -- each @tpi@ is the @i@th type in @lrts@
 tcTranslateCFGTupleFun ::
   HasPtrWidth w =>
-  PermEnv -> EndianForm -> [SomeCFGAndPerm LLVM] ->
+  PermEnv -> EndianForm -> DebugLevel -> [SomeCFGAndPerm LLVM] ->
   (OpenTerm, OpenTerm)
-tcTranslateCFGTupleFun env endianness cfgs_and_perms =
+tcTranslateCFGTupleFun env endianness dlevel cfgs_and_perms =
   let lrts = map (someCFGAndPermLRT env) cfgs_and_perms in
   let lrts_tm =
         foldr (\lrt lrts' -> ctorOpenTerm "Prelude.LRT_Cons" [lrt,lrts'])
@@ -4427,8 +4425,8 @@ tcTranslateCFGTupleFun env endianness cfgs_and_perms =
   tupleOpenTerm $ flip map (zip cfgs_and_perms funs) $ \(cfg_and_perm, _) ->
   case cfg_and_perm of
     SomeCFGAndPerm sym _ cfg fun_perm ->
-      trace ("Type-checking " ++ show sym) $
-      translateCFG env' $ tcCFG ?ptrWidth env' endianness fun_perm cfg
+      debugTrace dlevel ("Type-checking " ++ show sym) $
+      translateCFG env' $ tcCFG ?ptrWidth env' endianness dlevel fun_perm cfg
 
 
 -- | Make a "coq-safe" identifier from a string that might contain
@@ -4458,11 +4456,11 @@ mkSafeIdent mnm nm =
 tcTranslateAddCFGs ::
   HasPtrWidth w =>
   SharedContext -> ModuleName ->
-  PermEnv -> EndianForm -> [SomeCFGAndPerm LLVM] ->
+  PermEnv -> EndianForm -> DebugLevel -> [SomeCFGAndPerm LLVM] ->
   IO PermEnv
-tcTranslateAddCFGs sc mod_name env endianness cfgs_and_perms =
+tcTranslateAddCFGs sc mod_name env endianness dlevel cfgs_and_perms =
   do let (lrts, tup_fun) =
-           tcTranslateCFGTupleFun env endianness cfgs_and_perms
+           tcTranslateCFGTupleFun env endianness dlevel cfgs_and_perms
      let tup_fun_ident =
            mkSafeIdent mod_name (someCFGAndPermToName (head cfgs_and_perms)
                                  ++ "__tuple_fun")

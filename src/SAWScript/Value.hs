@@ -182,8 +182,9 @@ data HeapsterEnv = HeapsterEnv {
   -- ^ The SAW module containing all our Heapster definitions
   heapsterEnvPermEnvRef :: IORef PermEnv,
   -- ^ The current permissions environment
-  heapsterEnvLLVMModules :: [Some CMSLLVM.LLVMModule]
+  heapsterEnvLLVMModules :: [Some CMSLLVM.LLVMModule],
   -- ^ The list of underlying 'LLVMModule's that we are translating
+  heapsterEnvDebugLevel :: IORef DebugLevel
   }
 
 showHeapsterEnv :: HeapsterEnv -> String

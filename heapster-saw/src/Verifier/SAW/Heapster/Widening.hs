@@ -118,18 +118,19 @@ instance Monad (PolyContT r m) where
     PolyContT $ \k -> m $ \a -> runPolyContT (f a) k
 
 data WidState = WidState { _wsNameMap :: WidNameMap,
-                           _wsPPInfo :: PPInfo }
+                           _wsPPInfo :: PPInfo,
+                           _wsDebugLevel :: DebugLevel }
 
 makeLenses ''WidState
 
 type WideningM =
   StateT WidState (PolyContT ExtVarPermsFun Identity)
 
-runWideningM :: WideningM () -> WidNameMap -> RAssign Name args ->
+runWideningM :: WideningM () -> DebugLevel -> WidNameMap -> RAssign Name args ->
                 ExtVarPerms args
-runWideningM m wnmap =
+runWideningM m dlevel wnmap =
   applyExtVarPermsFun $ runIdentity $
-  runPolyContT (runStateT m $ WidState wnmap emptyPPInfo)
+  runPolyContT (runStateT m $ WidState wnmap emptyPPInfo dlevel)
   (Identity . wnMapExtWidFun . _wsNameMap . snd)
 
 openMb :: CruCtx ctx -> Mb ctx a -> WideningM (RAssign Name ctx, a)
@@ -180,8 +181,8 @@ setVarNamesM base xs = modify $ over wsPPInfo $ ppInfoAddExprNames base xs
 
 traceM :: (PPInfo -> Doc ()) -> WideningM ()
 traceM f =
-  (f <$> view wsPPInfo <$> get) >>= \doc ->
-  tracePretty doc (return ())
+  debugTrace <$> (view wsDebugLevel <$> get)
+  <*> (renderDoc <$> f <$> view wsPPInfo <$> get) <*> (return ())
 
 
 ----------------------------------------------------------------------
@@ -878,11 +879,13 @@ simplifyGhostPerms _ some_avps = some_avps
 ----------------------------------------------------------------------
 
 -- | Widen two lists of permissions-in-bindings
-widen :: CruCtx tops -> CruCtx args -> Some (ArgVarPerms (tops :++: args)) ->
+widen :: DebugLevel -> CruCtx tops -> CruCtx args ->
+         Some (ArgVarPerms (tops :++: args)) ->
          Some (ArgVarPerms (tops :++: args)) ->
          Some (ArgVarPerms (tops :++: args))
-widen tops args (Some (ArgVarPerms vars1 mb_perms1)) (Some (ArgVarPerms
-                                                            vars2 mb_perms2)) =
+widen dlevel tops args (Some (ArgVarPerms
+                              vars1 mb_perms1)) (Some (ArgVarPerms
+                                                       vars2 mb_perms2)) =
   let all_args = appendCruCtx tops args
       prxs1 = cruCtxProxies vars1
       prxs2 = cruCtxProxies vars2
@@ -890,7 +893,7 @@ widen tops args (Some (ArgVarPerms vars1 mb_perms1)) (Some (ArgVarPerms
   simplifyGhostPerms (cruCtxProxies all_args) $
   completeArgVarPerms $ flip nuMultiWithElim1 mb_mb_perms1 $
   \args_ns1 mb_perms1' ->
-  (\m -> runWideningM m NameMap.empty args_ns1) $
+  (\m -> runWideningM m dlevel NameMap.empty args_ns1) $
   do (vars1_ns, ps1) <- openMb vars1 mb_perms1'
      (ns2, ps2) <- openMb (appendCruCtx all_args vars2) mb_perms2
      let (args_ns2, vars2_ns) = RL.split all_args prxs2 ns2

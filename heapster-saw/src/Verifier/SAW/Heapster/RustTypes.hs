@@ -1099,9 +1099,9 @@ rsConvertFun :: (1 <= w, KnownNat w) => prx w ->
                 Abi -> Generics Span -> FnDecl Span -> RustConvM Some3FunPerm
 rsConvertFun w abi (Generics ldefs _tparams@[]
                     (WhereClause [] _) _) (FnDecl args maybe_ret_tp False _) =
-  fmap (\ret ->
-         tracePretty (pretty "rsConvertFun returning:" <+>
-                      permPretty emptyPPInfo ret) ret) $
+  -- fmap (\ret ->
+  --        tracePretty (pretty "rsConvertFun returning:" <+>
+  --                     permPretty emptyPPInfo ret) ret) $
   withLifetimes ldefs $
   do arg_shapes <- mapM (rsConvert w) args
      ret_shape <- maybe (return PExpr_EmptyShape) (rsConvert w) maybe_ret_tp
