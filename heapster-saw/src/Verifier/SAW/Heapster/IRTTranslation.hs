@@ -599,6 +599,9 @@ instance IRTDescs (ValuePerm a) where
       do x1 <- irtDesc p1 ixs1
          x2 <- irtDesc p2 ixs2
          irtCtor "Prelude.IRT_Either" [x1, x2]
+    ([nuMP| ValPerm_Exists p |], IRTVarsCons ix _)
+      | [nuMP| ValPerm_Eq _ |] <- mbMatch (mbCombine RL.typeCtxProxies p) ->
+        irtCtor "Prelude.IRT_varT" [natOpenTerm ix]
     ([nuMP| ValPerm_Exists p |], IRTVarsCons ix ixs') ->
       do let tp = mbBindingType p
          tp_trans <- tupleTypeTrans <$> translateClosed tp
