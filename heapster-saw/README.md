@@ -3,7 +3,7 @@
 Implementation of the Heapster type system of separation types inside SAW,
 including a translation to SAW core.
 
-This remainder of this README contains general information about using
+The remainder of this README contains general information about using
 Heapster about the `examples` directory contained here.
 
 ## Building
@@ -64,7 +64,8 @@ commands used, as well as some examples.
 
 One of the simplest Heapster commands is `heapster_define_perm`, which defines
 a new named permission which can then be used in Heapster types. As an
-example, here's a permission which describes an 64-bit integer value:
+example, the following defines a permission which describes a 64-bit integer
+value:
 ```
 heapster_define_perm
   env
@@ -73,9 +74,9 @@ heapster_define_perm
   "llvmptr 64"
   "exists x:bv 64.eq(llvmword(x))";
 ```
-It's first argument is the Heapster environment, the second is its name, the
-third is its arguments (of which there are none), the fourth is its type, and
-the fifth is its definition. 
+The first argument is the Heapster environment, the second is its name, the
+third is its arguments (of which there are none), the fourth is the type of
+value that the permission applies to, and the fifth is its definition. 
 
 To define permissions which can describe unbounded data structures, you can use
 the `heapster_define_recursive_perm` command. As an example, here is how to
@@ -103,21 +104,21 @@ env <- heapster_init_env_from_file "my_file.sawcore" "my_file.bc";
 ```
 
 Finally, to actually type-check a function you can use
-`heapster_typecheck_fun`. Here's an example using the `is_elem` function from
-`examples/linked_list.c` and the permissions we defined above:
+`heapster_typecheck_fun`. The following is an example using the `is_elem`
+function from `examples/linked_list.c` and the permissions we defined above:
 ```
 heapster_typecheck_fun
   env
   "is_elem"
   "().arg0:int64<>, arg1:List64<R> -o arg0:true, arg1:true, ret:int64<>";
 ```
-The heapster type given has three parts, the context of ghosts, the input
-permissions, and the output permissions. Here there are no ghosts used, so the
-context is empty (the `()` at the start). The input permissions state that the
-two arguments to `is_elem` are an `int64` and a read-only `List64`,
-respectively. The output permissions state that the two arguments are
-unconstrained after returning (the vacuous `true` permissions) and that the
-returned value is an `int64`.
+The heapster type given has three parts, the context of ghost variables, the
+input permissions, and the output permissions. Here there are no ghost
+variables used, so the context is empty (the `()` at the start). The input
+permissions state that the two arguments to `is_elem` are an `int64` and a
+read-only `List64`, respectively. The output permissions state that the two
+arguments are unconstrained after returning (the vacuous `true` permissions)
+and that the returned value is an `int64`.
 
 Note that for more complicated examples, usually examples involving loops,
 the `heapster_block_entry_hint` command will also need to be used in order for
