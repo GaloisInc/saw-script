@@ -66,6 +66,7 @@ import Verifier.SAW.Heapster.UntypedAST
 'lifetime'      { Located $$ TLifetime                  }
 'lowned'        { Located $$ TLOwned                    }
 'lcurrent'      { Located $$ TLCurrent                  }
+'lfinished'     { Located $$ TLFinished                 }
 'rwmodality'    { Located $$ TRWModality                }
 'permlist'      { Located $$ TPermList                  }
 'struct'        { Located $$ TStruct                    }
@@ -179,9 +180,10 @@ expr ::                                         { AstExpr }
                                                 { ExPtr (pos $2) $1 $5 $7 Nothing $10 }
 
   | 'shape' '(' expr ')'                        { ExShape (pos $1) $3}
-  | 'lowned' '(' list(varExpr) '-o' list1(varExpr) ')'
-                                                { ExLOwned (pos $1) $3 $5}
+  | 'lowned' lifetimes '(' list(varExpr) '-o' list1(varExpr) ')'
+                                                { ExLOwned (pos $1) $2 $4 $6}
   | lifetime 'lcurrent'                         { ExLCurrent (pos $2) $1 }
+  | 'lfinished'                                 { ExLFinished (pos $1) }
 
 -- BV Props (Value Permissions)
 
@@ -222,6 +224,10 @@ varType ::                                      { (Located String, AstType) }
 lifetime ::                                     { Maybe AstExpr         }
   :                                             { Nothing               }
   | '[' expr ']'                                { Just $2               }
+
+lifetimes ::                                    { [AstExpr]             }
+  :                                             { []                    }
+  | '[' list(expr) ']'                          { $2                    }
 
 llvmFieldPermArray ::                           { ArrayPerm             }
   : lifetime '(' expr ',' expr ',' expr ')' '|->' expr

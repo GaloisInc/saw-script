@@ -16,19 +16,10 @@ Definition eq_dec := Bool.bool_dec.
 End BoolDecidableSet.
 Module BoolDecidableEqDepSet := DecidableEqDepSet BoolDecidableSet.
 
-Require Import Examples.mbox.
+Require Import Examples.mbox_gen.
 Import mbox.
 
 Import SAWCorePrelude.
-
-
-Lemma Mbox_rect_id (m : Mbox) :
-  Mbox_rect (fun _ => Mbox) Mbox_nil
-            (fun strt len _ rec vec => Mbox_cons strt len rec vec) m = m.
-Proof.
-  induction m; simpl; eauto.
-  rewrite IHm; reflexivity.
-Qed.
 
 
 Definition unfoldMbox_nil :
@@ -79,24 +70,60 @@ Proof.
   simpl; f_equal; eauto.
 Qed.
 
-Hint Rewrite transMbox_Mbox_nil_r : refinesM.
+Lemma transMbox_assoc m1 m2 m3 :
+  transMbox (transMbox m1 m2) m3 = transMbox m1 (transMbox m2 m3).
+Proof.
+  induction m1; eauto.
+  simpl; f_equal; eauto.
+Qed.
+
+Hint Rewrite transMbox_Mbox_nil_r transMbox_assoc : refinesM.
+
+
+(* ========================================================================== *)
+
+
+Lemma no_errors_mbox_drop
+  : refinesFun mbox_drop (fun _ _ => noErrorsSpec).
+Proof.
+  unfold mbox_drop, mbox_drop__tuple_fun, noErrorsSpec.
+  (* Set Ltac Profiling. *)
+  time "no_errors_mbox_drop" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
+Time Qed.
+
+Definition mbox_drop_spec : Mbox -> bitvector 64 -> Mbox :=
+  Mbox__rec _ (fun _ => Mbox_nil) (fun strt len next rec d ix =>
+    if bvuge 64 ix len
+    then Mbox_cons (intToBv 64 0) (intToBv 64 0) (rec (bvSub 64 ix len)) d
+    else Mbox_cons (bvAdd 64 ix strt) (bvSub 64 len ix) next d).
+
+Lemma mbox_drop_spec_ref
+  : refinesFun mbox_drop (fun x ix => returnM (mbox_drop_spec x ix)).
+Proof.
+  unfold mbox_drop, mbox_drop__tuple_fun, mbox_drop_spec.
+  (* Set Ltac Profiling. *)
+  time "mbox_drop_spec_ref" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
+Time Qed.
 
 
 Lemma mbox_free_chain_spec_ref
-  : refinesFun mbox_free_chain (fun _ => returnM (mkBV32 (intToBv 32 0))).
+  : refinesFun mbox_free_chain (fun _ => returnM (intToBv 32 0)).
 Proof.
   unfold mbox_free_chain, mbox_free_chain__tuple_fun, mboxFreeSpec.
   prove_refinement_match_letRecM_l.
-  - exact (fun _ => returnM (mkBV32 (intToBv 32 0))).
-  unfold mkBV32.
+  - exact (fun _ => returnM (intToBv 32 0)).
+  (* Set Ltac Profiling. *)
   time "mbox_free_chain_spec_ref" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
 Time Qed.
 
 Lemma no_errors_mbox_free_chain
   : refinesFun mbox_free_chain (fun _ => noErrorsSpec).
 Proof.
   rewrite mbox_free_chain_spec_ref.
-  unfold noErrorsSpec, mkBV32.
+  unfold noErrorsSpec.
   prove_refinement.
 Qed.
 
@@ -105,7 +132,9 @@ Lemma no_errors_mbox_concat
   : refinesFun mbox_concat (fun _ _ => noErrorsSpec).
 Proof.
   unfold mbox_concat, mbox_concat__tuple_fun, noErrorsSpec.
+  (* Set Ltac Profiling. *)
   time "no_errors_mbox_concat" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
 Time Qed.
 
 Definition mbox_concat_spec (x y : Mbox) : Mbox :=
@@ -115,7 +144,46 @@ Lemma mbox_concat_spec_ref
   : refinesFun mbox_concat (fun x y => returnM (mbox_concat_spec x y)).
 Proof.
   unfold mbox_concat, mbox_concat__tuple_fun, mbox_concat_spec.
+  (* Set Ltac Profiling. *)
   time "mbox_concat_spec_ref" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
+Time Qed.
+
+(* Add `mbox_concat_spec_ref` to the hint database. Unfortunately, Coq will not unfold refinesFun
+   and mbox_concat_spec when rewriting, and the only workaround I know right now is this :/ *)
+Definition mbox_concat_spec_ref' : ltac:(let tp := type of mbox_concat_spec_ref in
+                                         let tp' := eval unfold refinesFun, mbox_concat_spec in tp
+                                          in exact tp') := mbox_concat_spec_ref.
+Hint Rewrite mbox_concat_spec_ref' : refinement_proofs.
+
+
+Lemma no_errors_mbox_concat_chains
+  : refinesFun mbox_concat_chains (fun _ _ => noErrorsSpec).
+Proof.
+  unfold mbox_concat_chains, mbox_concat_chains__tuple_fun.
+  prove_refinement_match_letRecM_l.
+  - exact (fun _ _ _ _ _ _ => noErrorsSpec).
+  unfold noErrorsSpec.
+  (* Set Ltac Profiling. *)
+  time "no_errors_mbox_concat_chains" prove_refinement with NoRewrite.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
+Time Qed.
+
+Definition mbox_concat_chains_spec (x y : Mbox) : Mbox :=
+  Mbox__rec (fun _ => Mbox) Mbox_nil (fun _ _ _ _ _ =>
+    Mbox__rec (fun _ => Mbox) x (fun _ _ _ _ _ =>
+      transMbox x y) y) x.
+
+Lemma mbox_concat_chains_spec_ref
+  : refinesFun mbox_concat_chains (fun x y => returnM (mbox_concat_chains_spec x y)).
+Proof.
+  unfold mbox_concat_chains, mbox_concat_chains__tuple_fun.
+  prove_refinement_match_letRecM_l.
+  - intros x y strt len next d.
+    exact (returnM (transMbox x (Mbox_cons strt len (transMbox next y) d))).
+  unfold mbox_concat_chains_spec.
+  time "mbox_concat_chains_spec_ref" prove_refinement.
+  simpl; repeat rewrite transMbox_Mbox_nil_r; reflexivity.
 Time Qed.
 
 
@@ -123,7 +191,9 @@ Lemma no_errors_mbox_detach
   : refinesFun mbox_detach (fun _ => noErrorsSpec).
 Proof.
   unfold mbox_detach, mbox_detach__tuple_fun, noErrorsSpec.
+  (* Set Ltac Profiling. *)
   time "no_errors_mbox_detach" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
 Time Qed.
 
 Definition mbox_detach_spec : Mbox -> Mbox * (Mbox * unit) :=
@@ -134,22 +204,67 @@ Lemma mbox_detach_spec_ref
   : refinesFun mbox_detach (fun x => returnM (mbox_detach_spec x)).
 Proof.
   unfold mbox_detach, mbox_detach__tuple_fun, mbox_detach, mbox_detach_spec.
+  (* Set Ltac Profiling. *)
   time "mbox_detach_spec_ref" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
+Time Qed.
+
+(* Add `mbox_detach_spec_ref` to the hint database. Unfortunately, Coq will not unfold refinesFun
+   and mbox_detach_spec when rewriting, and the only workaround I know right now is this :/ *)
+Definition mbox_detach_spec_ref' : ltac:(let tp := type of mbox_detach_spec_ref in
+                                         let tp' := eval unfold refinesFun, mbox_detach_spec in tp
+                                          in exact tp') := mbox_detach_spec_ref.
+Hint Rewrite mbox_detach_spec_ref' : refinement_proofs.
+
+
+Lemma no_errors_mbox_len
+  : refinesFun mbox_len (fun _ => noErrorsSpec).
+Proof.
+  unfold mbox_len, mbox_len__tuple_fun.
+  prove_refinement_match_letRecM_l.
+  - exact (fun _ _ _ => noErrorsSpec).
+  unfold noErrorsSpec.
+  (* Set Ltac Profiling. *)
+  time "no_errors_mbox_len" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
+Time Qed.
+
+Definition mbox_len_spec : Mbox -> bitvector 64 :=
+  Mbox__rec (fun _ =>  bitvector 64) (intToBv 64 0)
+          (fun strt len m rec d => bvAdd 64 rec len).
+
+Lemma mbox_len_spec_ref
+  : refinesFun mbox_len (fun m => returnM (m, (mbox_len_spec m, tt))).
+Proof.
+  unfold mbox_len, mbox_len__tuple_fun.
+  prove_refinement_match_letRecM_l.
+  - exact (fun m1 rec m2 => returnM (transMbox m1 m2, (bvAdd 64 rec (mbox_len_spec m2), tt))).
+  unfold mbox_len_spec.
+  (* Set Ltac Profiling. *)
+  time "mbox_len_spec_ref" prove_refinement.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
+  (* Most of the remaining cases are taken care of with just bvAdd_id_l and bvAdd_id_r *)
+  all: try rewrite bvAdd_id_r; try rewrite bvAdd_id_l; try reflexivity.
+  (* The remaining case just needs a few more rewrites *)
+  - do 2 f_equal.
+    rewrite bvAdd_assoc; f_equal.
+    rewrite bvAdd_comm; reflexivity.
+  - cbn; rewrite transMbox_Mbox_nil_r; reflexivity.
 Time Qed.
 
 
 Definition mbox_copy_precond : Mbox -> Prop :=
   Mbox__rec (fun _ => Prop) True (fun strt len _ _ _ =>
-    isBvslt 64 (intToBv 64 0) (projT1 strt) /\ isBvule 64 (projT1 strt) (intToBv 64 128) /\
-    isBvule 64 (projT1 len) (bvSub 64 (intToBv 64 128) (projT1 strt))).
+    isBvslt 64 (intToBv 64 0) strt /\ isBvule 64 strt (intToBv 64 128) /\
+    isBvule 64 len (bvSub 64 (intToBv 64 128) strt)).
 
-(* This proof takes a *long* time. Since we're also going to prove spec_ref, we
-   can prove no-errors faster using that proof (see below) *)
+(* This proof takes a bit to complete. Since we're also going to prove spec_ref,
+   we can prove no-errors faster using that proof (see below) *)
 (* Lemma no_errors_mbox_copy *)
 (*   : refinesFun mbox_copy (fun m => assumingM (mbox_copy_precond m) noErrorsSpec). *)
 (* Proof. *)
-(*   unfold mbox_copy, mbox_copy__tuple_fun, mbox_copy_precond, noErrorsSpec. *)
-(*   unfold mboxNewSpec, mkBV8, mkBV64. *)
+(*   unfold mbox_copy, mbox_copy__tuple_fun, mboxNewSpec. *)
+(*   unfold mbox_copy_precond, noErrorsSpec. *)
 (*   (* Yikes! The below functions may or may not be defined depending on what *)
 (*      machine compiled mbox.bc *) *)
 (*   try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64. *)
@@ -173,22 +288,22 @@ Definition mbox_copy_precond : Mbox -> Prop :=
 (*     + reflexivity. *)
 (*     + apply isBvslt_to_isBvsle. *)
 (*       assumption. *)
-(* Time Qed. (* Holy crap this takes a long time! *) *)
+(* Time Qed. *)
 
-Definition empty_mbox_d := genBVVec 64 (intToBv 64 128) BV8 (fun i _ => mkBV8 (bvNat 8 0)).
+Definition empty_mbox_d := genBVVec 64 (intToBv 64 128) (bitvector 8) (fun i _ => bvNat 8 0).
 
 (* TODO give this a better name and explain what it does *)
-Definition conjSliceBVVec (start len : BV64) pf0 pf1 d0 d1 : BVVec 64 bv64_128 BV8 :=
-  updSliceBVVec 64 (intToBv 64 128) _ d0 (projT1 start) (projT1 len)
-    (sliceBVVec 64 (intToBv 64 128) _ (projT1 start) (projT1 len) pf0 pf1 d1).
+Definition conjSliceBVVec (strt len : bitvector 64) pf0 pf1 d0 d1 : BVVec 64 bv64_128 (bitvector 8) :=
+  updSliceBVVec 64 (intToBv 64 128) _ d0 strt len
+    (sliceBVVec 64 (intToBv 64 128) _ strt len pf0 pf1 d1).
 
 (* Given a `start`, `len`, and `dat` of a single Mbox, return an mbox chain consisting of
    a single mbox with `id` 0,  the given `start` and `len`, and the given `dat` with the
    range 0 to `start` zeroed out. *)
 Definition mbox_copy_spec_cons strt len m d : CompM (Mbox * (Mbox * unit)) :=
-  assumingM (isBvslt 64 (intToBv 64 0) (projT1 strt))
-    (forallM (fun pf0 : isBvule 64 (projT1 strt) (intToBv 64 128) =>
-      (forallM (fun pf1 : isBvule 64 (projT1 len) (bvSub 64 (intToBv 64 128) (projT1 strt)) =>
+  assumingM (isBvslt 64 (intToBv 64 0) strt)
+    (forallM (fun pf0 : isBvule 64 strt (intToBv 64 128) =>
+      (forallM (fun pf1 : isBvule 64 len (bvSub 64 (intToBv 64 128) strt) =>
         returnM (Mbox_cons strt len m
                            (conjSliceBVVec strt len pf0 pf1 d d),
                 (Mbox_cons strt len Mbox_nil
@@ -200,16 +315,18 @@ Definition mbox_copy_spec : Mbox -> CompM (Mbox * (Mbox * unit)) :=
 
 Lemma mbox_copy_spec_ref : refinesFun mbox_copy mbox_copy_spec.
 Proof.
-  unfold mbox_copy, mbox_copy__tuple_fun, mbox_copy_spec, mbox_copy_spec_cons, empty_mbox_d.
-  unfold mboxNewSpec, mkBV8, mkBV64.
+  unfold mbox_copy, mbox_copy__tuple_fun, mboxNewSpec.
+  unfold mbox_copy_spec, mbox_copy_spec_cons, empty_mbox_d.
   (* Yikes! The below functions may or may not be defined depending on what
      machine compiled mbox.bc *)
   try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64.
   try unfold llvm__x2eobjectsize__x2ei64__x2ep0i8, __memcpy_chk.
   Set Printing Depth 1000.
-  (* Expect this to take on the order of 25 seconds, removing the `NoRewrite`
+  (* Expect this to take on the order of 15 seconds, removing the `NoRewrite`
      adds another 5 seconds and only simplifies the proof in the one noted spot *)
+  (* Set Ltac Profiling. *)
   time "mbox_copy_spec_ref" prove_refinement with NoRewrite.
+  (* Show Ltac Profile. Reset Ltac Profile. *)
   all: try discriminate e_either.
   - rewrite e_forall in e_maybe.
     discriminate e_maybe.
@@ -220,17 +337,10 @@ Proof.
     discriminate e_maybe1.
   - rewrite a1 in e_maybe2.
     discriminate e_maybe2.
-  - replace a2 with e_forall; [ replace a3 with e_forall0 | ].
-    destruct strt, len, u, u0; cbn.
-    unfold conjSliceBVVec; simpl projT1.
+  - rewrite transMbox_Mbox_nil_r. (* <- this would go away if we removed "NoRewrite" *)
+    replace a2 with e_forall; [ replace a3 with e_forall0 | ].
+    unfold conjSliceBVVec.
     reflexivity.
-  - apply BoolDecidableEqDepSet.UIP.
-  - apply BoolDecidableEqDepSet.UIP.
-  - replace a2 with e_forall; [ replace a3 with e_forall0 | ].
-    destruct strt, len, u, u0; cbn.
-    unfold conjSliceBVVec; simpl projT1.
-    (* Without the `NoRewrite` this next line is just `reflexivity` *)
-    rewrite Mbox_rect_id; reflexivity.
   - apply BoolDecidableEqDepSet.UIP.
   - apply BoolDecidableEqDepSet.UIP.
   - rewrite <- e_assuming in e_if.
@@ -241,7 +351,7 @@ Proof.
     + reflexivity.
     + apply isBvslt_to_isBvsle.
       assumption.
-Time Qed. (* FIXME The QED takes longer than the proof itself!! *)
+Time Qed.
 
 Lemma no_errors_mbox_copy
   : refinesFun mbox_copy (fun m => assumingM (mbox_copy_precond m) noErrorsSpec).
@@ -252,3 +362,10 @@ Proof.
   induction a; simpl in *.
   all: repeat prove_refinement.
 Qed.
+
+(* Add `mbox_copy_spec_ref` to the hint database. Unfortunately, Coq will not unfold refinesFun
+   and mbox_copy_spec when rewriting, and the only workaround I know right now is this :/ *)
+Definition mbox_copy_spec_ref' : ltac:(let tp := type of mbox_copy_spec_ref in
+                                       let tp' := eval unfold refinesFun, mbox_copy_spec, mbox_copy_spec_cons, empty_mbox_d in tp
+                                        in exact tp') := mbox_copy_spec_ref.
+Hint Rewrite mbox_copy_spec_ref' : refinement_proofs.

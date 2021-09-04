@@ -219,6 +219,7 @@ initialState readFileFn =
                 , rwCrucibleAssertThenAssume = False
                 , rwLaxArith = False
                 , rwLaxPointerOrdering = False
+                , rwDebugIntrinsics = True
                 , rwWhat4HashConsing = False
                 , rwWhat4HashConsingX86 = False
                 , rwStackBaseAlign = defaultStackBaseAlign

@@ -8,7 +8,7 @@ From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import CompMExtra.
 
-Require Import Examples.rust_data.
+Require Import Examples.rust_data_gen.
 Import rust_data.
 
 Import SAWCorePrelude.
@@ -34,10 +34,10 @@ Proof.
 Qed.
 
 Definition str_struct_new_spec (len:bitvector 64) (_:unit)
-           (str:BVVec 64 len int8Trans) :
+           (str:BVVec 64 len (bitvector 8)) :
   CompM {len' : bitvector 64
-                & (BVVec 64 len' int8Trans * (int64Trans * unit))%type} :=
-  returnM (existT (fun len' => (BVVec 64 len' int8Trans * (int64Trans * unit))%type) len (str, (existT _ len tt, tt))).
+                & (BVVec 64 len' (bitvector 8) * (bitvector 64 * unit))%type} :=
+  returnM (existT (fun len' => (BVVec 64 len' (bitvector 8) * (bitvector 64 * unit))%type) len (str, (len, tt))).
 
 Lemma str_struct_new_correct : refinesFun str_struct_new str_struct_new_spec.
 Proof.

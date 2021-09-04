@@ -8,7 +8,7 @@ From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import CompMExtra.
 
-Require Import Examples.loops.
+Require Import Examples.loops_gen.
 Import loops.
 
 Import SAWCorePrelude.
@@ -24,21 +24,15 @@ Proof.
 Qed.
 
 
-Definition add_loop_spec (x y : {_ : bitvector 64 & unit}) : CompM {_ : bitvector 64 & unit}
-  := returnM (existT _ (bvAdd 64 (projT1 x) (projT1 y)) tt).
-
-Lemma add_loop_spec_ref : refinesFun add_loop add_loop_spec.
+Lemma add_loop_spec_ref : refinesFun add_loop (fun x y => returnM (bvAdd 64 x y)).
 Proof.
   unfold add_loop, add_loop__tuple_fun.
   prove_refinement_match_letRecM_l.
-  - exact (fun _ _ ret i => add_loop_spec ret i).
-  unfold add_loop_spec.
+  - exact (fun _ _ ret i => returnM (bvAdd 64 ret i)).
   time "add_loop_spec_ref" prove_refinement.
-  - f_equal.
-    rewrite bvAdd_assoc.
+  - rewrite bvAdd_assoc.
     rewrite (bvAdd_comm _ a4).
     rewrite <- (bvAdd_assoc _ _ _ a4).
-    compute_bv_funs.
     rewrite bvAdd_id_l.
     reflexivity.
   - rewrite isBvule_n_zero in e_if.
@@ -50,7 +44,7 @@ Qed.
 (* Add `add_loop_spec_ref` to the hint database. Unfortunately, Coq will not unfold refinesFun
    and add_loop_spec when rewriting, and the only workaround I know right now is this :/ *)
 Definition add_loop_spec_ref' : ltac:(let tp := type of add_loop_spec_ref in
-                                      let tp' := eval unfold refinesFun, add_loop_spec in tp
+                                      let tp' := eval unfold refinesFun in tp
                                        in exact tp') := add_loop_spec_ref.
 Hint Rewrite add_loop_spec_ref' : refinement_proofs.
 
@@ -60,13 +54,10 @@ Proof.
   time "no_errors_sign_of_sum" prove_refinement.
 Qed.
 
-Definition sign_of_sum_spec (x y : {_ : bitvector 64 & unit}) : CompM {_ : bitvector 64 & unit} :=
-  orM (     assertM (isBvslt _ (intToBv _ 0) (bvAdd _ (projT1 x) (projT1 y)))
-                    >> returnM (existT _ (intToBv _ 1) tt))
-      (orM (assertM (isBvslt _ (bvAdd _ (projT1 x) (projT1 y)) (intToBv _ 0))
-                    >> returnM (existT _ (intToBv _ (-1)) tt))
-           (assertM (bvAdd _ (projT1 x) (projT1 y) = intToBv _ 0)
-                    >> returnM (existT _ (intToBv _ 0) tt))).
+Definition sign_of_sum_spec (x y : bitvector 64) : CompM (bitvector 64) :=
+  orM (     assertM (isBvslt _ (intToBv _ 0) (bvAdd _ x y)) >> returnM (intToBv _ 1))
+      (orM (assertM (isBvslt _ (bvAdd _ x y) (intToBv _ 0)) >> returnM (intToBv _ (-1)))
+           (assertM (bvAdd _ x y = intToBv _ 0)             >> returnM (intToBv _ 0))).
 
 Lemma sign_of_sum_spec_ref : refinesFun sign_of_sum sign_of_sum_spec.
 Proof.
@@ -108,13 +99,10 @@ Definition sign_of_sum_spec_ref' : ltac:(let tp := type of sign_of_sum_spec_ref 
 Hint Rewrite sign_of_sum_spec_ref' : refinement_proofs.
 
 
-Definition compare_sum_spec (x y z : {_ : bitvector 64 & unit}) : CompM {_ : bitvector 64 & unit} :=
-  orM (     assertM (isBvslt _ (projT1 x) (bvAdd _ (projT1 y) (projT1 z)))
-                    >> returnM (existT _ (intToBv _ 1) tt))
-      (orM (assertM (isBvslt _ (bvAdd _ (projT1 y) (projT1 z)) (projT1 x))
-                    >> returnM (existT _ (intToBv _ (-1)) tt))
-           (assertM (projT1 x = bvAdd _ (projT1 y) (projT1 z))
-                    >> returnM (existT _ (intToBv _ 0) tt))).
+Definition compare_sum_spec (x y z : bitvector 64) : CompM (bitvector 64) :=
+  orM (     assertM (isBvslt _ x (bvAdd _ y z)) >> returnM (intToBv _ 1))
+      (orM (assertM (isBvslt _ (bvAdd _ y z) x) >> returnM (intToBv _ (-1)))
+           (assertM (x = bvAdd _ y z)           >> returnM (intToBv _ 0))).
 
 Lemma compare_sum_spec_ref : refinesFun compare_sum compare_sum_spec.
 Proof.

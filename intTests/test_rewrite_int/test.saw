@@ -1,0 +1,39 @@
+// This test ensures that rewrite rules using `intEq` and `intModEq` will work.
+
+let ss0 = add_cryptol_defs ["ecEq"] (cryptol_ss ());
+
+let {{
+  squareInt : Integer -> Integer
+  squareInt x = x * x
+
+  squareZ5 : Z 5 -> Z 5
+  squareZ5 x = x * x
+}};
+
+let prove_rule t =
+  do {
+    thm <- prove_print z3 (rewrite ss0 t);
+    print thm;
+    return thm;
+  };
+
+squareInt_plus <-
+  prove_rule {{ \x y -> squareInt (x + y) == squareInt x + squareInt y + 2 * x * y }};
+
+squareInt_times <-
+  prove_rule {{ \x y -> squareInt (x * y) == squareInt x * squareInt y }};
+
+squareZ5_plus <-
+  prove_rule {{ \x y -> squareZ5 (x + y) == squareZ5 x + squareZ5 y + 2 * x * y }};
+
+squareZ5_times <-
+  prove_rule {{ \x y -> squareZ5 (x * y) == squareZ5 x * squareZ5 y }};
+
+let ss1 = addsimps [squareInt_plus, squareInt_times, squareZ5_plus, squareZ5_times] ss0;
+let tac = do { simplify ss1; print_goal; w4_unint_z3 ["squareInt", "squareZ5"]; };
+
+prove_print tac
+  {{ \x y z -> squareInt (x * y + z) == squareInt x * squareInt y + squareInt z + 2 * x * y * z }};
+
+prove_print tac
+  {{ \x y z -> squareZ5 (x * y + z) == squareZ5 x * squareZ5 y + squareZ5 z + 2 * x * y * z }};

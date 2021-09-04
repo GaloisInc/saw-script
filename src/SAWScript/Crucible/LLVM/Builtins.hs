@@ -153,6 +153,7 @@ import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
 import qualified Lang.Crucible.LLVM.ArraySizeProfile as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
 import qualified Lang.Crucible.LLVM.Bytes as Crucible
+import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
@@ -486,7 +487,7 @@ withMethodSpec ::
   LLVMModule arch ->
   String            {- ^ Name of the function -} ->
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
-  ((?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ((?lc :: Crucible.TypeContext, ?memOpts::Crucible.MemOptions, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
    LLVMCrucibleContext arch -> MS.CrucibleMethodSpecIR (LLVM arch) -> TopLevel a) ->
   TopLevel a
 withMethodSpec pathSat lm nm setup action =
@@ -530,7 +531,11 @@ withMethodSpec pathSat lm nm setup action =
               action cc methodSpec
 
 verifyMethodSpec ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   [MS.ProvedSpec (LLVM arch)] ->
@@ -1038,7 +1043,12 @@ ppGlobalPair cc gp =
 --------------------------------------------------------------------------------
 
 registerOverride ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch, Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , Crucible.HasPtrWidth wptr
+  , wptr ~ Crucible.ArchWidth arch
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options                    ->
   LLVMCrucibleContext arch       ->
   Crucible.SimContext (SAWCruciblePersonality Sym) Sym Crucible.LLVM ->
@@ -1075,7 +1085,11 @@ registerOverride opts cc sim_ctx top_loc cs =
               Crucible.writeGlobal mvar mem'
 
 registerInvariantOverride ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options ->
   LLVMCrucibleContext arch ->
   W4.ProgramLoc ->
@@ -1152,7 +1166,12 @@ withBreakpointCfgAndBlockId context name parent k =
          Nothing -> fail $ "Unexpected breakpoint name: " ++ name
 
 verifySimulate ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch, Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , Crucible.HasPtrWidth wptr
+  , wptr ~ Crucible.ArchWidth arch
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options ->
   LLVMCrucibleContext arch ->
   [Crucible.GenericExecutionFeature Sym] ->
@@ -1266,7 +1285,12 @@ scAndList sc = conj . filter nontrivial
 --------------------------------------------------------------------------------
 
 verifyPoststate ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch, Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , Crucible.HasPtrWidth wptr
+  , wptr ~ Crucible.ArchWidth arch
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   LLVMCrucibleContext arch              {- ^ crucible context                             -} ->
   MS.CrucibleMethodSpecIR (LLVM arch)              {- ^ specification                                -} ->
   Map AllocIndex (LLVMPtr wptr)     {- ^ allocation substitution                      -} ->
@@ -1331,7 +1355,7 @@ verifyPoststate cc mspec env0 globals ret =
 setupLLVMCrucibleContext ::
   Bool {- ^ enable path sat checking -} ->
   LLVMModule arch ->
-  ((?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ((?lc :: Crucible.TypeContext, ?memOpts::Crucible.MemOptions, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
    LLVMCrucibleContext arch -> TopLevel a) ->
   TopLevel a
 setupLLVMCrucibleContext pathSat lm action =
@@ -1349,6 +1373,10 @@ setupLLVMCrucibleContext pathSat lm action =
      Crucible.llvmPtrWidth ctx $ \wptr ->
        Crucible.withPtrWidth wptr $
        do let ?lc = ctx^.Crucible.llvmTypeCtx
+          let ?memOpts = Crucible.defaultMemOptions
+                          { Crucible.laxPointerOrdering = laxPointerOrdering
+                          }
+          let ?intrinsicsOpts = Crucible.defaultIntrinsicsOptions
           let ?recordLLVMAnnotation = \_ _ -> return ()
           cc <-
             io $
@@ -1382,11 +1410,8 @@ setupLLVMCrucibleContext pathSat lm action =
                  crucible_assert_then_assume_enabled
 
                let bindings = Crucible.fnBindingsFromList []
-               let memOpts  = Crucible.defaultMemOptions
-                                { Crucible.laxPointerOrdering = laxPointerOrdering
-                                }
                let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
-                                 bindings (Crucible.llvmExtensionImpl memOpts)
+                                 bindings (Crucible.llvmExtensionImpl ?memOpts)
                                  Common.SAWCruciblePersonality
                mem <- Crucible.populateConstGlobals sym (Crucible.globalInitMap mtrans)
                         =<< Crucible.initializeMemoryConstGlobals sym ctx llvm_mod

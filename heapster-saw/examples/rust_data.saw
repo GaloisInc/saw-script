@@ -34,6 +34,9 @@ heapster_define_rust_type env "pub enum Option<X> { None, Some (X) }";
 //heapster_define_recursive_perm env "ListPerm" "X:llvmshape 64, Xlen:bv 64, rw:rwmodality, l:lifetime" "llvmptr 64" ["[l]memblock(rw,0,Xlen + 16,List<ListPerm<X,Xlen,rw,l>,X>)"] "\\ (X:sort 0) (_:Vec 64 Bool) -> List X" "\\ (X:sort 0) (_:Vec 64 Bool) -> foldListPermH X" "\\ (X:sort 0) (_:Vec 64 Bool) -> unfoldListPermH X";
 heapster_define_rust_type env "pub enum List<X> { Nil, Cons (X,Box<List<X>>) }";
 
+// List64 type
+heapster_define_rust_type env "pub enum List64 { Nil64, Cons64 (u64,Box<List64>) }";
+
 // The String type
 heapster_define_llvmshape env "String" 64 "" "exsh cap:bv 64. ptrsh(arraysh(cap,1,[(8,int8<>)]));fieldsh(int64<>);fieldsh(eq(llvmword(cap)))";
 
@@ -56,11 +59,22 @@ heapster_define_opaque_llvmshape env "Vec" 64 "T:llvmshape 64" "24" "\\ (T:sort 
 // Opaque type for HashMap<T,U>
 heapster_define_opaque_llvmshape env "HashMap" 64 "T:llvmshape 64, U:llvmshape 64" "56" "\\ (T:sort 0) (U:sort 0) -> List (T * U)";
 
+// BinTree<X> type
+heapster_define_rust_type env "pub enum BinTree<X> { BinLeaf (X), BinNode (Box<BinTree<X>>,Box<BinTree<X>>) }";
+
 // Tree<X> type
 // FIXME: this does not work yet because Heapster cannot yet handle recursive types
 // where the type being defined is passed to an opaque or recursvie type
 //heapster_define_rust_type env "pub enum Tree<X> { Leaf (X), Node (Vec<Tree<X>>) }";
 
+// Enum20 type
+heapster_define_rust_type env "pub enum Enum20<X> { Enum20_0(X), Enum20_1(X), Enum20_2(X), Enum20_3(X), Enum20_4(X), Enum20_5(X), Enum20_6(X), Enum20_7(X), Enum20_8(X), Enum20_9(X), Enum20_10(X), Enum20_11(X), Enum20_12(X), Enum20_13(X), Enum20_14(X), Enum20_15(X), Enum20_16(X), Enum20_17(X), Enum20_18(X), Enum20_19(X), }";
+
+// List10 type
+heapster_define_rust_type env "pub enum List10<X> { List10_Head(X,Box<List10<X>>), List10_0(X,Box<List10<X>>), List10_1(X,Box<List10<X>>), List10_2(X,Box<List10<X>>), List10_3(X,Box<List10<X>>), List10_4(X,Box<List10<X>>), List10_5(X,Box<List10<X>>), List10_6(X,Box<List10<X>>), List10_7(X,Box<List10<X>>), List10_8(X,Box<List10<X>>), List10_9(X,Box<List10<X>>), }";
+
+// List20 type
+heapster_define_rust_type env "pub enum List20<X> { List20_Head(X,Box<List20<X>>), List20_0(X,Box<List20<X>>), List20_1(X,Box<List20<X>>), List20_2(X,Box<List20<X>>), List20_3(X,Box<List20<X>>), List20_4(X,Box<List20<X>>), List20_5(X,Box<List20<X>>), List20_6(X,Box<List20<X>>), List20_7(X,Box<List20<X>>), List20_8(X,Box<List20<X>>), List20_9(X,Box<List20<X>>), List20_10(X,Box<List20<X>>), List20_11(X,Box<List20<X>>), List20_12(X,Box<List20<X>>), List20_13(X,Box<List20<X>>), List20_14(X,Box<List20<X>>), List20_15(X,Box<List20<X>>), List20_16(X,Box<List20<X>>), List20_17(X,Box<List20<X>>), List20_18(X,Box<List20<X>>), List20_19(X,Box<List20<X>>), }";
 
 
 /***
@@ -78,19 +92,19 @@ heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64" "(rw:rwmodality, l1:lifetime
 // <str as alloc::string::ToString>::to_string
 to_string_str <- heapster_find_symbol env "$LT$str$u20$as$u20$alloc..string..ToString$GT$9to_string";
 // NOTE: this is the more incorrect version, with no lifetime argument and no shapes
-//heapster_assume_fun_rename env to_string_str "to_string_str" "(len:bv 64). arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:exists len':bv 64. ptr((W,0) |-> array(0,<len',*1,[(W,0,8) |-> int8<>])) * ptr((W,8) |-> int64<>) * ptr((W,16) |-> eq(llvmword(len')))" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len int8Trans) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #()) len (str, mkInt64Trans len, ()))";
+//heapster_assume_fun_rename env to_string_str "to_string_str" "(len:bv 64). arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:exists len':bv 64. ptr((W,0) |-> array(0,<len',*1,[(W,0,8) |-> int8<>])) * ptr((W,8) |-> int64<>) * ptr((W,16) |-> eq(llvmword(len')))" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len (Vec 8 Bool)) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #()) len (str, len, ()))";
 
 // NOTE: this is the incorrect version, with no lifetime argument
-heapster_assume_fun_rename env to_string_str "to_string_str" "(len:bv 64). arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:memblock(W,0,24,String<>)" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len int8Trans) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #()) len (str, mkInt64Trans len, ()))";
+heapster_assume_fun_rename env to_string_str "to_string_str" "(len:bv 64). arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:memblock(W,0,24,String<>)" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len (Vec 8 Bool)) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #()) len (str, len, ()))";
 
 // FIXME: this is the correct version, with a lifetime argument
-//heapster_assume_fun_rename env to_string_str "to_string_str" "(ps:lowned_perm,l:lifetime,len:bv 64). l:lowned ps, arg0:[l]memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[[l](R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o l:lowned ps, arg0:[l]memblock(W,0,24,String<>)" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len int8Trans) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' int8Trans * int64Trans * #()) len (str, mkInt64Trans len, ()))";
+//heapster_assume_fun_rename env to_string_str "to_string_str" "(ps:lowned_perm,l:lifetime,len:bv 64). l:lowned ps, arg0:[l]memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[[l](R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o l:lowned ps, arg0:[l]memblock(W,0,24,String<>)" "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len (Vec 8 Bool)) -> returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #())) (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #()) len (str, len, ()))";
 
 
 // HashMap::insert
 // FIXME: we currently pretend this always returns None
 hashmap_u64_u64_insert_sym <- heapster_find_symbol env "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert";
-heapster_assume_fun_rename env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert" "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>" "\\ (endl:HashMap int64Trans int64Trans * #() -> CompM (HashMap int64Trans int64Trans * #())) (h:HashMap int64Trans int64Trans) (k:int64Trans) (v:int64Trans) -> returnM ((#() -> CompM (HashMap int64Trans int64Trans * #())) * Either #() int64Trans * #()) ((\\ (_:#()) -> returnM (HashMap int64Trans int64Trans * #()) (Cons (int64Trans * int64Trans) (k,v) h, ())), Left #() int64Trans (), ())";
+heapster_assume_fun_rename env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert" "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>" "\\ (endl:HashMap (Vec 64 Bool) (Vec 64 Bool) * #() -> CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) (h:HashMap (Vec 64 Bool) (Vec 64 Bool)) (k:Vec 64 Bool) (v:Vec 64 Bool) -> returnM ((#() -> CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) * Either #() (Vec 64 Bool) * #()) ((\\ (_:#()) -> returnM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #()) (Cons (Vec 64 Bool * Vec 64 Bool) (k,v) h, ())), Left #() (Vec 64 Bool) (), ())";
 
 
 /***
@@ -149,6 +163,10 @@ list_head_impl_sym <- heapster_find_symbol env "14list_head_impl";
 heapster_typecheck_fun_rename env list_head_impl_sym "list_head_impl" "<'a> fn (l: &'a List<u64>) -> Result<u64,()>";
 //heapster_typecheck_fun_rename env list_head_impl_sym "list_head_impl" "(rw:rwmodality).arg0:List<fieldsh(int64<>),8,rw,always> -o ret:(struct(eq(llvmword(0)),exists z:bv 64. eq(llvmword(z)))) or (struct(eq(llvmword(1)),true))";
 
+// list64_is_empty
+list64_is_empty_sym <- heapster_find_symbol env "15list64_is_empty";
+heapster_typecheck_fun_rename env list_is_empty_sym "list64_is_empty" "<'a> fn (l: &'a List64<>) -> bool";
+
 // StrStruct::new
 str_struct_new <- heapster_find_symbol env "9StrStruct3new";
 
@@ -158,9 +176,21 @@ str_struct_new <- heapster_find_symbol env "9StrStruct3new";
 // FIXME: this is the correct version, with the String shape
 heapster_typecheck_fun_rename env str_struct_new "str_struct_new" "(len:bv 64).arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:memblock(W,0,24,String<>)";
 
+bintree_is_leaf_sym <- heapster_find_symbol env "15bintree_is_leaf";
+heapster_typecheck_fun_rename env bintree_is_leaf_sym "bintree_is_leaf" "<'a> fn (t: &'a BinTree<u64>) -> bool";
+
+enum20_list_proj_sym <- heapster_find_symbol env "16enum20_list_proj";
+//heapster_typecheck_fun_rename env enum20_list_proj_sym "enum20_list_proj" "<'a> fn (x:&'a Enum20<List<u64>>) -> &'a List<u64>";
+
+list10_head_sym <- heapster_find_symbol env "11list10_head";
+//heapster_typecheck_fun_rename env list10_head_sym "list10_head" "<'a> fn (x:&'a List10<List<u64>>) -> &'a List<u64>";
+
+list20_head_sym <- heapster_find_symbol env "11list20_head";
+heapster_typecheck_fun_rename env list20_head_sym "list20_head" "<'a> fn (x:&'a List20<List<u64>>) -> &'a List<u64>";
+
 
 /***
  *** Export to Coq
  ***/
 
-heapster_export_coq env "rust_data.v";
+heapster_export_coq env "rust_data_gen.v";

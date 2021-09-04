@@ -1,5 +1,5 @@
 
-module StringSet where
+module string_set where
 
 import Prelude;
 

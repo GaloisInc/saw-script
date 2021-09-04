@@ -166,6 +166,7 @@ prims =
   , Prims.bpMuxBool  = pure3 RME.mux
   , Prims.bpMuxWord  = pure3 muxRMEV
   , Prims.bpMuxInt   = pure3 muxInt
+  , Prims.bpMuxArray = unsupportedRMEPrimitive "bpMuxArray"
   , Prims.bpMuxExtra = \tp -> pure3 (muxExtra tp)
     -- Booleans
   , Prims.bpTrue   = RME.true
@@ -232,6 +233,9 @@ prims =
   , Prims.bpArrayLookup = unsupportedRMEPrimitive "bpArrayLookup"
   , Prims.bpArrayUpdate = unsupportedRMEPrimitive "bpArrayUpdate"
   , Prims.bpArrayEq = unsupportedRMEPrimitive "bpArrayEq"
+  , Prims.bpArrayCopy = unsupportedRMEPrimitive "bpArrayCopy"
+  , Prims.bpArraySet = unsupportedRMEPrimitive "bpArraySet"
+  , Prims.bpArrayRangeEq = unsupportedRMEPrimitive "bpArrayRangeEq"
   }
 
 unsupportedRMEPrimitive :: String -> a

@@ -182,8 +182,9 @@ data HeapsterEnv = HeapsterEnv {
   -- ^ The SAW module containing all our Heapster definitions
   heapsterEnvPermEnvRef :: IORef PermEnv,
   -- ^ The current permissions environment
-  heapsterEnvLLVMModules :: [Some CMSLLVM.LLVMModule]
+  heapsterEnvLLVMModules :: [Some CMSLLVM.LLVMModule],
   -- ^ The list of underlying 'LLVMModule's that we are translating
+  heapsterEnvDebugLevel :: IORef DebugLevel
   }
 
 showHeapsterEnv :: HeapsterEnv -> String
@@ -435,6 +436,7 @@ data TopLevelRW =
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
   , rwLaxPointerOrdering :: Bool
+  , rwDebugIntrinsics :: Bool
 
   -- FIXME: These might be better split into "simulator hash-consing" and "tactic hash-consing"
   , rwWhat4HashConsing :: Bool
@@ -574,6 +576,9 @@ extendEnv sc x mt md v rw =
          VString s ->
            do tt <- typedTermOfString sc (unpack s)
               pure $ CEnv.bindTypedTerm (ident, tt) ce
+         VBool b ->
+           do tt <- typedTermOfBool sc b
+              pure $ CEnv.bindTypedTerm (ident, tt) ce
          _ ->
            pure ce
      pure $
@@ -590,13 +595,19 @@ extendEnv sc x mt md v rw =
 
 typedTermOfString :: SharedContext -> String -> IO TypedTerm
 typedTermOfString sc str =
-  do let schema = Cryptol.Forall [] [] (Cryptol.tString (length str))
+  do let schema = Cryptol.tMono (Cryptol.tString (length str))
      bvNat <- scGlobalDef sc "Prelude.bvNat"
      bvNat8 <- scApply sc bvNat =<< scNat sc 8
      byteT <- scBitvector sc 8
      let scChar c = scApply sc bvNat8 =<< scNat sc (fromIntegral (fromEnum c))
      ts <- traverse scChar str
      trm <- scVector sc byteT ts
+     pure (TypedTerm (TypedTermSchema schema) trm)
+
+typedTermOfBool :: SharedContext -> Bool -> IO TypedTerm
+typedTermOfBool sc b =
+  do let schema = Cryptol.tMono Cryptol.tBit
+     trm <- scBool sc b
      pure (TypedTerm (TypedTermSchema schema) trm)
 
 

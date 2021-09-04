@@ -673,12 +673,12 @@ un3SomeFunPerm args ret (Some3FunPerm fun_perm)
     return $ SomeFunPerm fun_perm
 un3SomeFunPerm args ret (Some3FunPerm fun_perm) =
   fail $ renderDoc $ vsep
-  [ pretty "Incorrect LLVM type for function permission:"
+  [ pretty "Unexpected LLVM type for function permission:"
   , permPretty emptyPPInfo fun_perm
-  , pretty "Expected type:"
+  , pretty "Actual LLVM type of function:"
     <+> PP.group (permPretty emptyPPInfo args) <+> pretty "=>"
     <+> PP.group (permPretty emptyPPInfo ret)
-  , pretty "Actual type:"
+  , pretty "Expected LLVM type of function:"
     <+> PP.group (permPretty emptyPPInfo (funPermArgs fun_perm))
     <+> pretty "=>"
     <+> PP.group (permPretty emptyPPInfo (funPermRet fun_perm)) ]
@@ -931,14 +931,24 @@ layoutFun abi arg_shs ret_sh =
        foldr appendArgLayout argLayout0 <$> mapM (layoutArgShape abi) arg_shs
      ret_layout_eith <- layoutArgShapeOrBlock abi ret_sh
      case ret_layout_eith of
+
+       -- Special case: if the return type is empty, use the unit type as the
+       -- return type
+       Right (ArgLayout Ctx.Empty _) ->
+         funPerm3FromArgLayoutNoArgs args_layout UnitRepr ValPerm_True
+
+       -- Special case: if the return type is a single field, remove the struct
+       -- type and just use the type of that single field
        Right (ArgLayout (Ctx.Empty Ctx.:> ret_tp)
               (argLayoutPerm1ToPerm -> ret_p)) ->
-         -- Special case: if the return type is a single field, remove the
-         -- struct type and just use the type of that single field
          funPerm3FromArgLayoutNoArgs args_layout ret_tp ret_p
+
+       -- If the return type can be laid out as a struct type, then do so
        Right (ArgLayout ret_ctx ret_p) ->
          funPerm3FromArgLayoutNoArgs args_layout (StructRepr ret_ctx)
          (argLayoutPermToPerm ret_p)
+
+       -- Otherwise add an extra pointer argument used as an out variable
        Left bp ->
            funPerm3FromArgLayout args_layout
            (extend Ctx.empty knownRepr)
@@ -990,8 +1000,6 @@ abstractMbLOPsModalities mb_lops = case mbMatch mb_lops of
                LOwnedPermBlock e (bp { llvmBlockRW = PExpr_Var rw,
                                        llvmBlockLifetime = PExpr_Var l }))
       mb_e mb_bp)
-  [nuMP| lops :>: lop@(LOwnedPermLifetime _ _ _) |] ->
-    liftA2 (mbMap2 (:>:)) (abstractMbLOPsModalities lops) (pure lop)
 
 
 -- | Find all field or block permissions containing lifetime @l@ and return them
@@ -1058,11 +1066,11 @@ mbLifetimeFunPerm (LifetimeDef _ _ [] _)
          Some3FunPerm $ FunPerm (appendCruCtx
                                  (singletonCruCtx LifetimeRepr) ghosts) args ret
          (mbMap3 (\ps_in lops_in lops_in_abs ->
-                   assocAppend (MNil :>: ValPerm_LOwned lops_in lops_in_abs)
+                   assocAppend (MNil :>: ValPerm_LOwned [] lops_in lops_in_abs)
                    ghosts args_prxs $ distPermsToValuePerms ps_in)
           mb_ps_in mb_lops_in mb_lops_in_abs)
          (mbMap3 (\ps_out lops_out lops_in_abs ->
-                   assocAppend (MNil :>: ValPerm_LOwned lops_out lops_in_abs)
+                   assocAppend (MNil :>: ValPerm_LOwned [] lops_out lops_in_abs)
                    ghosts (args_prxs :>: Proxy) $ distPermsToValuePerms ps_out)
           mb_ps_out mb_lops_out (extMb mb_lops_in_abs))
 mbLifetimeFunPerm (LifetimeDef _ _ _bounds _) _ =
@@ -1090,13 +1098,13 @@ rsConvertMonoFun w span abi ls fn_tp =
 rsConvertFun :: (1 <= w, KnownNat w) => prx w ->
                 Abi -> Generics Span -> FnDecl Span -> RustConvM Some3FunPerm
 rsConvertFun w abi (Generics ldefs _tparams@[]
-                    (WhereClause [] _) _) (FnDecl args (Just ret_tp) False _) =
-  fmap (\ret ->
-         tracePretty (pretty "rsConvertFun returning:" <+>
-                      permPretty emptyPPInfo ret) ret) $
+                    (WhereClause [] _) _) (FnDecl args maybe_ret_tp False _) =
+  -- fmap (\ret ->
+  --        tracePretty (pretty "rsConvertFun returning:" <+>
+  --                     permPretty emptyPPInfo ret) ret) $
   withLifetimes ldefs $
   do arg_shapes <- mapM (rsConvert w) args
-     ret_shape <- rsConvert w ret_tp
+     ret_shape <- maybe (return PExpr_EmptyShape) (rsConvert w) maybe_ret_tp
      layoutFun abi arg_shapes ret_shape
 rsConvertFun _ _ _ _ = fail "rsConvertFun: unsupported Rust function type"
 

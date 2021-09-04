@@ -45,6 +45,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_print_fun_trans
        , heapster_export_coq
        , heapster_parse_test
+       , heapster_set_debug_level
        ) where
 
 import Data.Maybe
@@ -270,10 +271,12 @@ heapster_init_env _bic _opts mod_str llvm_filename =
      liftIO $ scLoadModule sc (insImport (const True) preludeMod $
                                  emptyModule saw_mod_name)
      perm_env_ref <- liftIO $ newIORef heapster_default_env
+     dlevel_ref <- liftIO $ newIORef noDebugLevel
      return $ HeapsterEnv {
        heapsterEnvSAWModule = saw_mod_name,
        heapsterEnvPermEnvRef = perm_env_ref,
-       heapsterEnvLLVMModules = [llvm_mod]
+       heapsterEnvLLVMModules = [llvm_mod],
+       heapsterEnvDebugLevel = dlevel_ref
        }
 
 load_sawcore_from_file :: BuiltinContext -> Options -> String -> TopLevel ()
@@ -290,10 +293,12 @@ heapster_init_env_from_file _bic _opts mod_filename llvm_filename =
      (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
      perm_env_ref <- liftIO $ newIORef heapster_default_env
+     dlevel_ref <- liftIO $ newIORef noDebugLevel
      return $ HeapsterEnv {
        heapsterEnvSAWModule = saw_mod_name,
        heapsterEnvPermEnvRef = perm_env_ref,
-       heapsterEnvLLVMModules = [llvm_mod]
+       heapsterEnvLLVMModules = [llvm_mod],
+       heapsterEnvDebugLevel = dlevel_ref
        }
 
 heapster_init_env_for_files :: BuiltinContext -> Options -> String -> [String] ->
@@ -304,10 +309,12 @@ heapster_init_env_for_files _bic _opts mod_filename llvm_filenames =
      (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
      perm_env_ref <- liftIO $ newIORef heapster_default_env
+     dlevel_ref <- liftIO $ newIORef noDebugLevel
      return $ HeapsterEnv {
        heapsterEnvSAWModule = saw_mod_name,
        heapsterEnvPermEnvRef = perm_env_ref,
-       heapsterEnvLLVMModules = llvm_mods
+       heapsterEnvLLVMModules = llvm_mods,
+       heapsterEnvDebugLevel = dlevel_ref
        }
 
 -- | Look up the CFG associated with a symbol name in a Heapster environment
@@ -977,6 +984,7 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
      let endianness =
            llvmDataLayout (modTrans lm ^. transContext ^. llvmTypeCtx)
            ^. intLayout
+     dlevel <- liftIO $ readIORef $ heapsterEnvDebugLevel henv
      LeqProof <- case decideLeq (knownNat @16) w of
        Left pf -> return pf
        Right _ -> fail "LLVM arch width is < 16!"
@@ -991,8 +999,8 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
           let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
           let ret = handleReturnType $ cfgHandle cfg
           SomeFunPerm fun_perm <-
-            tracePretty (pretty ("Fun args:" :: String) <+>
-                         permPretty emptyPPInfo args) $
+            -- tracePretty (pretty ("Fun args:" :: String) <+>
+            --              permPretty emptyPPInfo args) $
             withKnownNat w $
             parseFunPermStringMaybeRust "permissions" w env args ret perms_string
           return (SomeCFGAndPerm (GlobalSymbol $
@@ -1001,7 +1009,7 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
      let saw_modname = heapsterEnvSAWModule henv
      env' <- liftIO $
        let ?ptrWidth = w in
-       tcTranslateAddCFGs sc saw_modname env endianness some_cfgs_and_perms
+       tcTranslateAddCFGs sc saw_modname env endianness dlevel some_cfgs_and_perms
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
@@ -1051,6 +1059,11 @@ heapster_export_coq _bic _opts henv filename =
                    postPreamble = "From CryptolToCoq Require Import SAWCorePrelude."},
                  translateSAWModule coq_trans_conf saw_mod]
      liftIO $ writeFile filename (show coq_doc)
+
+heapster_set_debug_level :: BuiltinContext -> Options -> HeapsterEnv ->
+                            Int -> TopLevel ()
+heapster_set_debug_level _ _ env l =
+  liftIO $ writeIORef (heapsterEnvDebugLevel env) (DebugLevel l)
 
 heapster_parse_test :: BuiltinContext -> Options -> Some LLVMModule ->
                        String -> String ->  TopLevel ()

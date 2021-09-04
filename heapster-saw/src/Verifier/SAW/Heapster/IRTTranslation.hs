@@ -154,8 +154,9 @@ instance ContainsIRTRecName (AtomicPerm a) where
   containsIRTRecName n (Perm_NamedConj _ args _) = containsIRTRecName n args
   containsIRTRecName n (Perm_LLVMFrame fperm) =
     containsIRTRecName n (map fst fperm)
-  containsIRTRecName _ (Perm_LOwned _ _) = False
+  containsIRTRecName _ (Perm_LOwned _ _ _) = False
   containsIRTRecName _ (Perm_LCurrent _) = False
+  containsIRTRecName _ Perm_LFinished = False
   containsIRTRecName n (Perm_Struct ps) = containsIRTRecName n ps
   containsIRTRecName _ (Perm_Fun _) = False
   containsIRTRecName _ (Perm_BVProp _) = False
@@ -414,9 +415,10 @@ instance IRTTyVars (AtomicPerm a) where
     [nuMP| Perm_NamedConj npn args off |] ->
       namedPermIRTTyVars mb_p npn args off
     [nuMP| Perm_LLVMFrame _ |] -> return ([], IRTVarsNil)
-    [nuMP| Perm_LOwned _ _ |] ->
+    [nuMP| Perm_LOwned _ _ _ |] ->
       throwError "lowned permission in an IRT definition!"
     [nuMP| Perm_LCurrent _ |] -> return ([], IRTVarsNil)
+    [nuMP| Perm_LFinished |] -> return ([], IRTVarsNil)
     [nuMP| Perm_Struct ps |] -> irtTyVars ps
     [nuMP| Perm_Fun _ |] ->
       throwError "fun perm in an IRT definition!"
@@ -597,6 +599,9 @@ instance IRTDescs (ValuePerm a) where
       do x1 <- irtDesc p1 ixs1
          x2 <- irtDesc p2 ixs2
          irtCtor "Prelude.IRT_Either" [x1, x2]
+    ([nuMP| ValPerm_Exists p |], IRTVarsCons ix _)
+      | [nuMP| ValPerm_Eq _ |] <- mbMatch (mbCombine RL.typeCtxProxies p) ->
+        irtCtor "Prelude.IRT_varT" [natOpenTerm ix]
     ([nuMP| ValPerm_Exists p |], IRTVarsCons ix ixs') ->
       do let tp = mbBindingType p
          tp_trans <- tupleTypeTrans <$> translateClosed tp
@@ -660,9 +665,10 @@ instance IRTDescs (AtomicPerm a) where
     ([nuMP| Perm_NamedConj npn args off |], _) ->
       namedPermIRTDescs npn args off ixs
     ([nuMP| Perm_LLVMFrame _ |], _) -> return []
-    ([nuMP| Perm_LOwned _ _ |], _) ->
+    ([nuMP| Perm_LOwned _ _ _ |], _) ->
       error "lowned permission made it to IRTDesc translation"
     ([nuMP| Perm_LCurrent _ |], _) -> return []
+    ([nuMP| Perm_LFinished |], _) -> return []
     ([nuMP| Perm_Struct ps |], _) ->
       irtDescs ps ixs
     ([nuMP| Perm_Fun _ |], _) ->

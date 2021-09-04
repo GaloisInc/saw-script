@@ -11,4 +11,4 @@ heapster_typecheck_fun env "sign_of_sum" "().arg0:int64<>, arg1:int64<> -o ret:i
 
 heapster_typecheck_fun env "compare_sum" "().arg0:int64<>, arg1:int64<>, arg2:int64<> -o ret:int64<>";
 
-heapster_export_coq env "loops.v";
+heapster_export_coq env "loops_gen.v";

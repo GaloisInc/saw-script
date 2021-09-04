@@ -368,7 +368,11 @@ ppArgs sym cc cs (Crucible.RegMap args) = do
 --   predicates.
 methodSpecHandler ::
   forall arch rtp args ret.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
@@ -586,7 +590,11 @@ methodSpecHandler opts sc cc top_loc css h = do
 --   predicates.
 methodSpecHandler_prestate ::
   forall arch ctx.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
@@ -630,16 +638,21 @@ methodSpecHandler_poststate opts sc cc retTy cs =
      computeReturnValue opts cc sc cs retTy (cs ^. MS.csRetValue)
 
 -- learn pre/post condition
-learnCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym)
-          => Options
-          -> SharedContext
-          -> LLVMCrucibleContext arch
-          -> MS.CrucibleMethodSpecIR (LLVM arch)
-          -> PrePost
-          -> [MS.AllocGlobal (LLVM arch)]
-          -> Map AllocIndex (MS.AllocSpec (LLVM arch))
-          -> MS.StateSpec (LLVM arch)
-          -> OverrideMatcher (LLVM arch) md ()
+learnCond ::
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
+  Options ->
+  SharedContext ->
+  LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  PrePost ->
+  [MS.AllocGlobal (LLVM arch)] ->
+  Map AllocIndex (MS.AllocSpec (LLVM arch)) ->
+  MS.StateSpec (LLVM arch) ->
+  OverrideMatcher (LLVM arch) md ()
 learnCond opts sc cc cs prepost globals extras ss =
   do let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
@@ -870,7 +883,11 @@ ppProgramLoc loc =
 -- statement cannot be executed until bindings for any/all lhs
 -- variables exist.
 matchPointsTos :: forall arch md.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options          {- ^ saw script print out opts -} ->
   SharedContext    {- ^ term construction context -} ->
   LLVMCrucibleContext arch {- ^ simulator context     -} ->
@@ -1334,7 +1351,11 @@ learnGhost _sc _cc _loc _prepost _var (TypedTerm tp _)
 -- Returns a string on failure describing a concrete memory load failure.
 learnPointsTo ::
   forall arch md ann.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options                    ->
   SharedContext              ->
   LLVMCrucibleContext arch      ->
