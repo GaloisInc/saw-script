@@ -3285,6 +3285,12 @@ primitives = Map.fromList
     Experimental
     [ "Export a Heapster environment to a Coq file" ]
 
+  , prim "heapster_set_debug_level"
+    "HeapsterEnv -> Int -> TopLevel ()"
+    (bicVal heapster_set_debug_level)
+    Experimental
+    [ "Set the debug level for Heapster; 0 = no debug output, 1 = debug output" ]
+
   , prim "heapster_parse_test"
     "LLVMModule -> String -> String -> TopLevel ()"
     (bicVal heapster_parse_test)

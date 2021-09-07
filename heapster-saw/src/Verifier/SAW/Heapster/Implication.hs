@@ -64,7 +64,6 @@ import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.GenMonad
 
 import GHC.Stack
-import Debug.Trace
 
 
 ----------------------------------------------------------------------
@@ -2657,15 +2656,15 @@ data ImplState vars ps =
               -- ^ Types of all the variables in scope
               _implStateFailPrefix :: String,
               -- ^ A prefix string to prepend to any failure messages
-              _implStateDoTrace :: Bool
+              _implStateDebugLevel :: DebugLevel
               -- ^ Whether tracing is turned on or not
             }
 makeLenses ''ImplState
 
 mkImplState :: CruCtx vars -> PermSet ps -> PermEnv ->
-               PPInfo -> String -> Bool -> NameMap TypeRepr ->
+               PPInfo -> String -> DebugLevel -> NameMap TypeRepr ->
                ImplState vars ps
-mkImplState vars perms env info fail_prefix do_trace nameTypes =
+mkImplState vars perms env info fail_prefix dlevel nameTypes =
   ImplState {
   _implStateVars = vars,
   _implStatePerms = perms,
@@ -2676,7 +2675,7 @@ mkImplState vars perms env info fail_prefix do_trace nameTypes =
   _implStatePPInfo = info,
   _implStateNameTypes = nameTypes,
   _implStateFailPrefix = fail_prefix,
-  _implStateDoTrace = do_trace
+  _implStateDebugLevel = dlevel
   }
 
 extImplState :: KnownRepr TypeRepr tp => ImplState vars ps ->
@@ -2707,28 +2706,28 @@ runImplM ::
   PermEnv                   {- ^ permission environment   -} ->
   PPInfo                    {- ^ pretty-printer settings  -} ->
   String                    {- ^ fail prefix              -} ->
-  Bool                      {- ^ do trace                 -} ->
+  DebugLevel                {- ^ debug level              -} ->
   NameMap TypeRepr          {- ^ name types               -} ->
   ImplM vars s r ps_out ps_in a ->
   ((a, ImplState vars ps_out) -> State (Closed s) (r ps_out)) ->
   State (Closed s) (PermImpl r ps_in)
-runImplM vars perms env ppInfo fail_prefix do_trace nameTypes m k =
+runImplM vars perms env ppInfo fail_prefix dlevel nameTypes m k =
   runGenStateContT
     m
-    (mkImplState vars perms env ppInfo fail_prefix do_trace nameTypes)
+    (mkImplState vars perms env ppInfo fail_prefix dlevel nameTypes)
     (\s a -> PermImpl_Done <$> k (a, s))
 
 -- | Run an 'ImplM' computation that returns a 'PermImpl', by inserting that
 -- 'PermImpl' inside of the larger 'PermImpl' that is built up by the 'ImplM'
 -- computation.
 runImplImplM :: CruCtx vars -> PermSet ps_in -> PermEnv -> PPInfo ->
-                String -> Bool -> NameMap TypeRepr ->
+                String -> DebugLevel -> NameMap TypeRepr ->
                 ImplM vars s r ps_out ps_in (PermImpl r ps_out) ->
                 State (Closed s) (PermImpl r ps_in)
-runImplImplM vars perms env ppInfo fail_prefix do_trace nameTypes m =
+runImplImplM vars perms env ppInfo fail_prefix dlevel nameTypes m =
   runGenStateContT
     m
-    (mkImplState vars perms env ppInfo fail_prefix do_trace nameTypes)
+    (mkImplState vars perms env ppInfo fail_prefix dlevel nameTypes)
     (\_ -> pure)
 
 -- | Embed a sub-computation in a name-binding inside another 'ImplM'
@@ -2742,7 +2741,7 @@ embedImplM ps_in m =
   lift $
   runImplM CruCtxNil (distPermSet ps_in)
   (view implStatePermEnv s) (view implStatePPInfo s)
-  (view implStateFailPrefix s) (view implStateDoTrace s)
+  (view implStateFailPrefix s) (view implStateDebugLevel s)
   (view implStateNameTypes s) m (pure . fst)
 
 -- | Embed a sub-computation in a name-binding inside another 'ImplM'
@@ -2758,7 +2757,7 @@ embedMbImplM mb_ps_in mb_m =
         runImplM
          CruCtxNil ps_in
          (view implStatePermEnv    s) (view implStatePPInfo  s)
-         (view implStateFailPrefix s) (view implStateDoTrace s)
+         (view implStateFailPrefix s) (view implStateDebugLevel s)
          (view implStateNameTypes  s) m (pure . fst))
        mb_ps_in mb_m
 
@@ -3013,26 +3012,23 @@ implApplyImpl1 impl1 mb_ms =
         implSetNameTypes ns ctx >>>
         f ns)
 
--- | Emit debugging output using the current 'PPInfo' if the 'implStateDoTrace'
--- flag is set
+-- | Emit debugging output using the current 'PPInfo' if the 'implStateDebugLevel'
+-- is at least 1
 implTraceM :: (PPInfo -> PP.Doc ann) -> ImplM vars s r ps ps String
 implTraceM f =
-  do do_trace <- use implStateDoTrace
+  do dlevel <- use implStateDebugLevel
      doc <- uses implStatePPInfo f
      let str = renderDoc doc
-     fn do_trace str (pure str)
-  where
-    fn True  = trace
-    fn False = const id
+     debugTrace dlevel str (return str)
 
--- | Run an 'ImplM' computation with 'implStateDoTrace' temporarily disabled
+-- | Run an 'ImplM' computation with the debug level set to 'noDebugLevel'
 implWithoutTracingM :: ImplM vars s r ps_out ps_in a ->
                        ImplM vars s r ps_out ps_in a
 implWithoutTracingM m =
-  use implStateDoTrace >>>= \saved ->
-  (implStateDoTrace .= False) >>>
+  use implStateDebugLevel >>>= \saved ->
+  (implStateDebugLevel .= noDebugLevel) >>>
   m >>>= \a ->
-  (implStateDoTrace .= saved) >>
+  (implStateDebugLevel .= saved) >>
   pure a
 
 -- | Terminate the current proof branch with a failure

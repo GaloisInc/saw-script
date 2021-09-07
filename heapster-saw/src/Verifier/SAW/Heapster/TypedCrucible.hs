@@ -81,8 +81,6 @@ import Verifier.SAW.Heapster.NamePropagation
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.Widening
 
-import Debug.Trace
-
 
 ----------------------------------------------------------------------
 -- * Handling Crucible Extensions
@@ -1453,7 +1451,6 @@ entryAddCallSite siteID _ entry
     (typedEntryCallers entry)
   = error "entryAddCallSite: call site already exists!"
 entryAddCallSite siteID perms_in entry =
-  trace ("entryAddCallSite: " ++ show siteID) $
   entry { typedEntryCallers =
             typedEntryCallers entry ++ [Some $
                                         emptyTypedCallSite siteID perms_in] }
@@ -1478,7 +1475,6 @@ blockAddCallSite siteID _ _ perms_in _ blk
 
 -- Otherwise, make a new entrypoint
 blockAddCallSite siteID tops ret perms_in perms_out blk =
-  trace ("blockAddCallSite: " ++ show siteID) $
   addEntryToBlock (singleCallSiteEntry
                    siteID tops (blockArgs blk) ret perms_in perms_out) blk
 
@@ -1709,7 +1705,9 @@ data TopPermCheckState ext cblocks blocks tops ret =
     stCBlocksEq :: RListToCtxCtx blocks :~: cblocks,
     -- | The endianness of the current architecture
     stEndianness :: !EndianForm,
-    stArchWidth :: SomePtrWidth
+    stArchWidth :: SomePtrWidth,
+    -- | The debugging level
+    stDebugLevel :: DebugLevel
   }
 
 makeLenses ''TopPermCheckState
@@ -1721,12 +1719,13 @@ emptyTopPermCheckState ::
   PermEnv ->
   FunPerm ghosts (CtxToRList init) ret ->
   EndianForm ->
+  DebugLevel ->
   CFG ext cblocks init ret ->
   Assignment (Constant Bool) cblocks ->
   TopPermCheckState ext cblocks
     (CtxCtxToRList cblocks)
     (ghosts :++: CtxToRList init) ret
-emptyTopPermCheckState env fun_perm endianness cfg sccs =
+emptyTopPermCheckState env fun_perm endianness dlevel cfg sccs =
   let blkMap = cfgBlockMap cfg in
   TopPermCheckState
   { stTopCtx = funPermTops fun_perm
@@ -1739,6 +1738,7 @@ emptyTopPermCheckState env fun_perm endianness cfg sccs =
   , stCBlocksEq = reprReprToCruCtxCtxEq (fmapFC blockInputs blkMap)
   , stEndianness = endianness
   , stArchWidth = SomePtrWidth
+  , stDebugLevel = dlevel
   }
 
 
@@ -2243,9 +2243,10 @@ getErrorPrefix = gets (fromMaybe emptyDoc . stErrPrefix)
 stmtTraceM :: (PPInfo -> Doc ()) ->
               PermCheckM ext cblocks blocks tops ret r ps r ps String
 stmtTraceM f =
-  do doc <- f <$> permGetPPInfo
+  do dlevel <- stDebugLevel <$> top_get
+     doc <- f <$> permGetPPInfo
      let str = renderDoc doc
-     trace str (pure str)
+     debugTrace dlevel str (return str)
 
 -- | Failure in the statement permission-checking monad
 stmtFailM :: (PPInfo -> Doc ()) -> PermCheckM ext cblocks blocks tops ret r1 ps1
@@ -2286,9 +2287,10 @@ pcmRunImplM vars fail_doc retF impl_m =
   gets stCurPerms >>>= \perms_in ->
   gets stPPInfo   >>>= \ppInfo ->
   gets stVarTypes >>>= \varTypes ->
+  (stDebugLevel <$> top_get) >>>= \dlevel ->
   liftPermCheckM $ lift $
   fmap (AnnotPermImpl (renderDoc (err_prefix <> line <> fail_doc))) $
-  runImplM vars perms_in env ppInfo "" True varTypes impl_m
+  runImplM vars perms_in env ppInfo "" dlevel varTypes impl_m
   (return . retF . fst)
 
 -- | Call 'runImplImplM' in the 'PermCheckM' monad
@@ -2304,9 +2306,10 @@ pcmRunImplImplM vars fail_doc impl_m =
   gets stCurPerms >>>= \perms_in ->
   gets stPPInfo   >>>= \ppInfo ->
   gets stVarTypes >>>= \varTypes ->
+  (stDebugLevel <$> top_get) >>>= \dlevel ->
   liftPermCheckM $ lift $
   fmap (AnnotPermImpl (renderDoc (err_prefix <> line <> fail_doc))) $
-  runImplImplM vars perms_in env ppInfo "" True varTypes impl_m
+  runImplImplM vars perms_in env ppInfo "" dlevel varTypes impl_m
 
 -- | Embed an implication computation inside a permission-checking computation,
 -- also supplying an overall error message for failures
@@ -2323,8 +2326,9 @@ pcmEmbedImplWithErrM f_impl vars fail_doc m =
   gets stCurPerms >>>= \perms_in ->
   gets stPPInfo   >>>= \ppInfo ->
   gets stVarTypes >>>= \varTypes ->
+  (stDebugLevel <$> top_get) >>>= \dlevel ->
 
-  addReader (gcaptureCC (runImplM vars perms_in env ppInfo "" True varTypes m))
+  addReader (gcaptureCC (runImplM vars perms_in env ppInfo "" dlevel varTypes m))
     >>>= \(a, implSt) ->
 
   gmodify ((\st -> st { stPPInfo = implSt ^. implStatePPInfo,
@@ -3864,12 +3868,16 @@ tcTermStmt ctx (Br reg tgt1 tgt2) =
   let treg = tcReg ctx reg in
   getRegEqualsExpr treg >>>= \treg_expr ->
   case treg_expr of
-    PExpr_Bool True -> trace "tcTermStmt: br reg known to be true!" $
-                       TypedJump <$> tcJumpTarget ctx tgt1
-    PExpr_Bool False -> trace "tcTermStmt: br reg known to be false!" $
-                        TypedJump <$> tcJumpTarget ctx tgt2
-    _ -> trace "tcTermStmt: br reg unknown, checking both branches..." $
-         TypedBr treg <$> tcJumpTarget ctx tgt1 <*> tcJumpTarget ctx tgt2
+    PExpr_Bool True ->
+      stmtTraceM (const $ pretty "tcTermStmt: br reg known to be true!") >>
+      (TypedJump <$> tcJumpTarget ctx tgt1)
+    PExpr_Bool False ->
+      stmtTraceM (const $ pretty "tcTermStmt: br reg known to be false!") >>
+      (TypedJump <$> tcJumpTarget ctx tgt2)
+    _ ->
+      stmtTraceM (const $ pretty
+                  "tcTermStmt: br reg unknown, checking both branches...") >>
+      (TypedBr treg <$> tcJumpTarget ctx tgt1 <*> tcJumpTarget ctx tgt2)
 tcTermStmt ctx (Return reg) =
   let treg = tcReg ctx reg in
   get >>>= \st ->
@@ -4019,12 +4027,12 @@ visitCallSite (TypedEntry {..}) site@(TypedCallSite {..})
 
 -- | Widen the permissions held by all callers of an entrypoint to compute new,
 -- weaker input permissions that can hopefully be satisfied by them
-widenEntry :: PermCheckExtC ext =>
+widenEntry :: PermCheckExtC ext => DebugLevel ->
               TypedEntry TCPhase ext blocks tops ret args ghosts ->
               Some (TypedEntry TCPhase ext blocks tops ret args)
-widenEntry (TypedEntry {..}) =
-  trace ("Widening entrypoint: " ++ show typedEntryID) $
-  case foldl1' (widen typedEntryTops typedEntryArgs) $
+widenEntry dlevel (TypedEntry {..}) =
+  debugTrace dlevel ("Widening entrypoint: " ++ show typedEntryID) $
+  case foldl1' (widen dlevel typedEntryTops typedEntryArgs) $
        map (fmapF typedCallSiteArgVarPerms) typedEntryCallers of
     Some (ArgVarPerms ghosts perms_in) ->
       let callers =
@@ -4051,18 +4059,23 @@ visitEntry ::
 -- If the entry is already complete, do nothing
 visitEntry _ _ _ entry
   | isJust $ completeTypedEntry entry =
-    trace ("visitEntry " ++ show (typedEntryID entry) ++ ": no change") $
+    (stDebugLevel <$> get) >>= \dlevel ->
+    debugTrace dlevel ("visitEntry " ++ show (typedEntryID entry)
+                       ++ ": no change") $
     return $ Some entry
 -- Otherwise, visit the call sites, widen if needed, and type-check the body
-visitEntry _ _ _ (TypedEntry {..})
-  | tracePretty (vsep [pretty ("visitEntry " ++ show typedEntryID
-                               ++ " with input perms:"),
-                       permPretty emptyPPInfo typedEntryPermsIn]) False = undefined
 visitEntry names can_widen blk entry =
+  (stDebugLevel <$> get) >>= \dlevel ->
+  debugTracePretty dlevel
+  (vsep [pretty ("visitEntry " ++ show (typedEntryID entry)
+                 ++ " with input perms:"),
+         permPretty emptyPPInfo (typedEntryPermsIn entry)])
+  (return ()) >>= \() ->
+
   mapM (traverseF $
         visitCallSite entry) (typedEntryCallers entry) >>= \callers ->
   if can_widen && any (anyF typedCallSiteImplFails) callers then
-    case widenEntry entry of
+    case widenEntry dlevel entry of
       Some entry' ->
         -- If we widen then we are throwing away the old body, so all of its
         -- callees are no longer needed and can be deleted
@@ -4124,15 +4137,17 @@ tcCFG ::
   forall w ext cblocks ghosts inits ret.
   (PermCheckExtC ext, KnownRepr ExtRepr ext, 1 <= w, 16 <= w) =>
   NatRepr w ->
-  PermEnv -> EndianForm ->
+  PermEnv -> EndianForm -> DebugLevel ->
   FunPerm ghosts (CtxToRList inits) ret ->
   CFG ext cblocks inits ret ->
   TypedCFG ext (CtxCtxToRList cblocks) ghosts (CtxToRList inits) ret
-tcCFG w env endianness fun_perm cfg =
+tcCFG w env endianness dlevel fun_perm cfg =
   let h = cfgHandle cfg
       ghosts = funPermGhosts fun_perm
       (nodes, sccs) = cfgOrderWithSCCs cfg
-      init_st = let ?ptrWidth = w in emptyTopPermCheckState env fun_perm endianness cfg sccs
+      init_st =
+        let ?ptrWidth = w in
+        emptyTopPermCheckState env fun_perm endianness dlevel cfg sccs
       tp_nodes = map (\(Some blkID) ->
                        Some $ stLookupBlockID blkID init_st) nodes in
   let tp_blk_map =
