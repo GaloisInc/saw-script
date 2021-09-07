@@ -117,9 +117,13 @@ heapster_assume_fun_rename env to_string_str "to_string_str" "(len:bv 64). arg0:
 hashmap_u64_u64_insert_sym <- heapster_find_symbol env "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert";
 heapster_assume_fun_rename env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert" "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>" "\\ (endl:HashMap (Vec 64 Bool) (Vec 64 Bool) * #() -> CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) (h:HashMap (Vec 64 Bool) (Vec 64 Bool)) (k:Vec 64 Bool) (v:Vec 64 Bool) -> returnM ((#() -> CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) * Either #() (Vec 64 Bool) * #()) ((\\ (_:#()) -> returnM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #()) (Cons (Vec 64 Bool * Vec 64 Bool) (k,v) h, ())), Left #() (Vec 64 Bool) (), ())";
 
+/*
 String__fmt_sym <- heapster_find_trait_method_symbol env "core::fmt::Display::fmt<String>";
 // heapster_assume_fun_rename env String__fmt_sym "String__fmt" "<'a, 'b> fn(&'a String, f: &'b mut fmt::Formatter) -> fmt::Result" "\\ (end_a : List (Vec 8 Bool) * #() -> CompM (List (Vec 8 Bool) * #())) (end_b : #() * #() -> CompM (#() * #())) (str:List (Vec 8 Bool)) (fmt : #()) -> returnM ((#() -> CompM (List (Vec 8 Bool) * #())) * (#() -> CompM (#() * #())) * Either #() #() * #()) ((\\ (_:#()) -> returnM (List (Vec 8 Bool) * #()) (str, ())), (\\ (_:#()) -> returnM (#() * #()) ((), ())), Left #() #() (), ())";
 heapster_assume_fun_rename_prim env String__fmt_sym "String__fmt" "<'a, 'b> fn(&'a String, f: &'b mut fmt::Formatter) -> fmt::Result";
+*/
+
+
 
 
 /***
@@ -162,6 +166,9 @@ heapster_typecheck_fun_rename env mixed_struct_get_i2 "MixedStruct_get_i2" "<'a>
 cycle_true_enum_sym <- heapster_find_symbol env "15cycle_true_enum";
 // NOTE: This typecheck requires full(er) support for disjunctive shapes, which Heapster currently lacks
 // heapster_typecheck_fun_rename env cycle_true_enum_sym "cycle_true_enum" "<'a> fn (te:&'a TrueEnum) -> TrueEnum";
+
+TrueEnum__fmt_sym <- heapster_find_trait_method_symbol env "core::fmt::Display::fmt<TrueEnum>";
+heapster_typecheck_fun_rename env TrueEnum__fmt_sym "TrueEnum__fmt" "<'a, 'b> fn (&'a TrueEnum, f: &'b mut fmt::Formatter) -> fmt::Result";
 
 // list_is_empty
 list_is_empty_sym <- heapster_find_symbol env "13list_is_empty";
