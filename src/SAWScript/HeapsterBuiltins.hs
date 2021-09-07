@@ -114,6 +114,7 @@ import Verifier.SAW.Heapster.ParsedCtx
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
 import Prettyprinter
+import qualified Text.PrettyPrint.HughesPJ as PPHPJ
 
 import Debug.Trace
 
@@ -273,10 +274,10 @@ translateLLVMValue _ _ _ =
 permEnvAddGlobalConst :: (1 <= w, KnownNat w) => f w -> PermEnv ->
                          L.Global -> PermEnv
 permEnvAddGlobalConst w env global =
-  trace ("Global: " ++ show (L.globalSym global) ++ "; value =" ++
-         show (maybe "None" (L.withConfig
-                             (L.Config True True True)
-                             (show . L.ppValue)) (L.globalValue global))) $
+  trace ("Global: " ++ show (L.globalSym global) ++ "; value =\n" ++
+         maybe "None" (L.withConfig
+                       (L.Config True True True)
+                       (\v -> show $ PPHPJ.nest 2 $ L.ppValue v)) (L.globalValue global)) $
   maybe env id $
   do val <- L.globalValue global
      (p, ts) <- translateLLVMValue w (L.globalType global) val
