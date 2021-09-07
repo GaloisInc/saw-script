@@ -233,6 +233,7 @@ impl MixedStruct {
 
 /* A 'true' enum */
 #[derive(Clone, Debug, PartialEq)]
+#[repr(u64)]
 pub enum TrueEnum {
     Foo,
     Bar,
