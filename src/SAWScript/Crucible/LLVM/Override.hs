@@ -1478,26 +1478,7 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
 
                    return Nothing
 
-              -- _ ->
-              --   do expected_sz_bv <- liftIO $ resolveSAWSymBV cc (knownNat @64) (ttTerm expected_sz_tm)
-              --      case BV.asUnsigned <$> W4.asBV expected_sz_bv of
-              --        Just expected_sz ->
-              --          do res <- liftIO $ Crucible.loadRaw sym mem ptr1 (Crucible.arrayType (fromIntegral expected_sz) (Crucible.bitvectorType 1)) Crucible.noAlignment
-              --             case res of
-              --               Crucible.NoErr pred_ res_val -> do
-              --                 addAssert pred_ $ Crucible.SimError loc $ Crucible.AssertFailureSimError (show errMsg) ""
-              --                 -- realTerm <- valueToSC sym loc (show errMsg) tval res_val
-              --                 -- instantiateExtMatchTerm sc cc (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
-              --                 -- arr_tm <- memArrayToSawCoreTerm cc
-
-              --                 -- instantiateExtMatchTerm sc cc loc prepost arr_tm (ttTerm expected_arr_tm)
-
-              --      return Nothing
-
-              --        Nothing -> return $ Just errMsg
-              _ -> do
-                liftIO $ putStrLn $ show $ Crucible.ppMem $ Crucible.memImplHeap mem
-                return $ Just errMsg
+              _ -> return $ Just errMsg
 
 ------------------------------------------------------------------------
 

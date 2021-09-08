@@ -512,12 +512,8 @@ llvm_verify_x86' (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat m
              arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
                toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
              applied_func <- scApplyAll sc (ttTerm func) $ baz ++ arguments
-             putStrLn $ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts applied_func
-             tp <- scTypeOf sc applied_func
-             putStrLn $ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts tp
-             applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i -> do
-               la <- scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
-               putStrLn $ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts la
+            --  putStrLn $ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts applied_func
+             applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i ->
                scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
              result_substitution <- MapF.fromList <$> zipWithM
                (\(MapF.Pair variable _) applied_func_selector ->
@@ -540,7 +536,7 @@ llvm_verify_x86' (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat m
              w <- scNat sc 64
              rhs <- scBvMul sc w (head baz) =<< scBvNat sc w =<< scNat sc 128
              foo_condition <- scBvULt sc w lhs rhs
-             putStrLn $ "foo_condition: " ++ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts foo_condition
+            --  putStrLn $ "foo_condition: " ++ scPrettyTerm Verifier.SAW.SharedTerm.defaultPPOpts foo_condition
              foo_type <- scTupleType sc =<< mapM (scTypeOf sc) lala_arguments
              foo_lala <- scIte sc foo_type foo_condition foo_applied_func foo_la
              foo_lalala <- scEq sc foo_lala body
