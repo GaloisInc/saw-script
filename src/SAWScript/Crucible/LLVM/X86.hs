@@ -42,8 +42,8 @@ import Data.Foldable (foldlM)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
 import qualified Data.Text as Text
-import Data.Set (Set)
-import qualified Data.Set as Set
+-- import Data.Set (Set)
+-- import qualified Data.Set as Set
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
@@ -58,7 +58,7 @@ import qualified Text.LLVM.AST as LLVM
 
 import Data.Parameterized.Some
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Map (MapF)
+-- import           Data.Parameterized.Map (MapF)
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Context hiding (view, zipWithM)
 
