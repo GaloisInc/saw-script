@@ -3383,6 +3383,20 @@ llvmBlockPtrPerm :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
                     ValuePerm (LLVMPointerType w)
 llvmBlockPtrPerm bp = ValPerm_Conj1 $ llvmBlockPtrAtomicPerm bp
 
+-- | Create a read block permission with shape @sh@, i.e., the 'LLVMBlockPerm'
+-- corresponding to the permission @memblock(R,0,'llvmShapeLength'(sh),sh)@
+llvmReadBlockOfShape :: (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
+                        LLVMBlockPerm w
+llvmReadBlockOfShape sh
+  | Just len <- llvmShapeLength sh =
+    LLVMBlockPerm { llvmBlockRW = PExpr_Read,
+                    llvmBlockLifetime = PExpr_Always,
+                    llvmBlockOffset = bvInt 0,
+                    llvmBlockLen = len,
+                    llvmBlockShape = sh }
+llvmReadBlockOfShape _ =
+  error "llvmReadBlockOfShape: shape without known length"
+
 -- | Add the given read/write and lifetime modalities to all top-level pointer
 -- shapes in a shape. Top-level here means we do not recurse inside pointer
 -- shapes, as pointer shape modalities also apply recursively to the contained
