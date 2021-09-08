@@ -279,26 +279,23 @@ ppLLVMConstExpr ce =
 --
 -- FIXME: move this to Permissions.hs
 translateLLVMValue :: (1 <= w, KnownNat w) => NatRepr w -> L.Type -> L.Value ->
-                      LLVMTransM (PermExpr (LLVMShapeType w), [OpenTerm])
+                      LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
 translateLLVMValue w tp@(L.PrimType (L.Integer n)) (L.ValInteger i) =
   translateLLVMType w tp >>= \(sh,_) ->
-  return (sh, [bvLitOpenTerm $ map (testBit i) $
-               reverse [0..(fromIntegral n)-1]])
+  return (sh, bvLitOpenTerm (map (testBit i) $
+                             reverse [0..(fromIntegral n)-1]))
 translateLLVMValue w _ (L.ValSymbol sym) =
   do env <- ask
      -- (p, ts) <- lift (lookupGlobalSymbol env (GlobalSymbol sym) w)
-     (p, ts) <- case (lookupGlobalSymbol env (GlobalSymbol sym) w) of
-       Just p_ts -> return p_ts
+     (p, t) <- case (lookupGlobalSymbol env (GlobalSymbol sym) w) of
+       Just (p,[t]) -> return (p,t)
+       Just (p,ts) -> return (p,tupleOpenTerm ts)
        Nothing -> trace ("Could not find symbol: " ++ show sym) mzero
-     return (PExpr_FieldShape (LLVMFieldShape p), ts)
+     return (PExpr_FieldShape (LLVMFieldShape p), t)
 translateLLVMValue w _ (L.ValArray tp elems) =
   do
     -- First, translate the elements
-    transs <- mapM (translateLLVMValue w tp) elems
-    -- For now, we require each element to translate to exactly one term
-    ts <- forM transs (\etrans -> case etrans of
-                          (_, [t]) -> return t
-                          _ -> mzero)
+    ts <- map snd <$> mapM (translateLLVMValue w tp) elems
     -- Array shapes can only handle field shapes elements, so translate the
     -- element type to and ensure it returns a field shape; FIXME: this could
     -- actually handle sequences of field shapes if necessary
@@ -312,11 +309,10 @@ translateLLVMValue w _ (L.ValArray tp elems) =
 
     -- Finally, build our array shape and SAW core value
     return (PExpr_ArrayShape (bvInt $ fromIntegral $ length elems) sh_len [fsh],
-            [arrayValueOpenTerm saw_tp ts])
-translateLLVMValue _ _ (L.ValPackedStruct []) = return (PExpr_EmptyShape, [])
+            arrayValueOpenTerm saw_tp ts)
 translateLLVMValue w _ (L.ValPackedStruct elems) =
-  mapM (translateLLVMTypedValue w) elems >>= \(unzip -> (shs,tss)) ->
-  return (foldr1 PExpr_SeqShape shs, concat tss)
+  mapM (translateLLVMTypedValue w) elems >>= \(unzip -> (shs,ts)) ->
+  return (foldr PExpr_SeqShape PExpr_EmptyShape shs, tupleOpenTerm ts)
 translateLLVMValue w tp (L.ValString bytes) =
   translateLLVMValue w tp (L.ValArray
                            (L.PrimType (L.Integer 8))
@@ -338,7 +334,7 @@ translateLLVMValue _ _ v =
 
 -- | Helper function for 'translateLLVMValue'
 translateLLVMTypedValue :: (1 <= w, KnownNat w) => NatRepr w -> L.Typed L.Value ->
-                           LLVMTransM (PermExpr (LLVMShapeType w), [OpenTerm])
+                           LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
 translateLLVMTypedValue w (L.Typed tp v) = translateLLVMValue w tp v
 
 -- | Translate an LLVM type into a shape plus the SAW core type of elements of
@@ -359,7 +355,7 @@ translateLLVMType _ tp =
 
 -- | Helper function for 'translateLLVMValue'
 translateLLVMConstExpr :: (1 <= w, KnownNat w) => NatRepr w -> L.ConstExpr ->
-                          LLVMTransM (PermExpr (LLVMShapeType w), [OpenTerm])
+                          LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
 translateLLVMConstExpr w (L.ConstGEP _ _ _ (L.Typed tp ptr : ixs)) =
   translateLLVMValue w tp ptr >>= \ptr_trans ->
   translateLLVMGEP w tp ptr_trans ixs
@@ -373,9 +369,9 @@ translateLLVMConstExpr _ ce =
 
 -- | Helper function for 'translateLLVMValue'
 translateLLVMGEP :: (1 <= w, KnownNat w) => NatRepr w -> L.Type ->
-                    (PermExpr (LLVMShapeType w), [OpenTerm]) ->
+                    (PermExpr (LLVMShapeType w), OpenTerm) ->
                     [L.Typed L.Value] ->
-                    LLVMTransM (PermExpr (LLVMShapeType w), [OpenTerm])
+                    LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
 translateLLVMGEP _ _ vtrans [] = return vtrans
 translateLLVMGEP w (L.Array _ tp) vtrans (L.Typed _ (L.ValInteger 0) : ixs) =
   translateLLVMGEP w tp vtrans ixs
@@ -416,10 +412,10 @@ permEnvAddGlobalConst w env global =
       Nothing -> trace (sym ++ " not translated") x) $
   flip runLLVMTransM env $
   do val <- lift $ L.globalValue global
-     (sh, ts) <- translateLLVMValue w (L.globalType global) val
+     (sh, t) <- translateLLVMValue w (L.globalType global) val
      let p = ValPerm_LLVMBlock $ llvmReadBlockOfShape sh
      return $ permEnvAddGlobalSyms env
-       [PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p ts]
+       [PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p [t]]
 
 -- | Build a 'HeapsterEnv' associated with the given SAW core module and the
 -- given 'LLVMModule's. Add any globals in the 'LLVMModule's to the returned
