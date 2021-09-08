@@ -9,6 +9,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module SAWScript.HeapsterBuiltins
        ( heapster_init_env
@@ -48,6 +49,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_set_debug_level
        ) where
 
+import Data.Bits
 import Data.Maybe
 import qualified Data.Map as Map
 import Data.String
@@ -57,6 +59,7 @@ import Data.IORef
 import Data.Functor.Product
 import Control.Lens
 import Control.Monad
+import Control.Monad.Reader
 import Control.Monad.IO.Class
 import qualified Control.Monad.Fail as Fail
 import System.Directory
@@ -259,28 +262,98 @@ parseAndInsDef henv nm term_tp term_string =
          liftIO $ scInsertDef sc mnm term_ident term_tp term
          return term_ident
 
+type LLVMTransM = ReaderT PermEnv Maybe
+
+runLLVMTransM :: LLVMTransM a -> PermEnv -> Maybe a
+runLLVMTransM = runReaderT
+
+ppLLVMValue :: L.Value -> String
+ppLLVMValue val =
+  L.withConfig (L.Config True True True) (show $ PPHPJ.nest 2 $ L.ppValue val)
+
+ppLLVMConstExpr :: L.ConstExpr -> String
+ppLLVMConstExpr ce =
+  L.withConfig (L.Config True True True) (show $ PPHPJ.nest 2 $ L.ppConstExpr ce)
+
 -- | Translate a typed LLVM 'L.Value' to a Heapster permission + translation
 --
 -- FIXME: move this to Permissions.hs
-translateLLVMValue :: (1 <= w, KnownNat w) => f w -> L.Type -> L.Value ->
-                      Maybe (ValuePerm (LLVMPointerType w), [OpenTerm])
-translateLLVMValue _ _ _ =
-  Nothing
+translateLLVMValue :: (1 <= w, KnownNat w) => NatRepr w -> L.Type -> L.Value ->
+                      LLVMTransM (PermExpr (LLVMShapeType w), [OpenTerm])
+translateLLVMValue w _ (L.ValSymbol sym) =
+  do env <- ask
+     (p, ts) <- lift (lookupGlobalSymbol env (GlobalSymbol sym) w)
+     return (PExpr_FieldShape (LLVMFieldShape p), ts)
+translateLLVMValue _ _ (L.ValPackedStruct []) = return (PExpr_EmptyShape, [])
+translateLLVMValue w _ (L.ValPackedStruct elems) =
+  mapM (translateLLVMTypedValue w) elems >>= \(unzip -> (shs,tss)) ->
+  return (foldr1 PExpr_SeqShape shs, concat tss)
+translateLLVMValue _ _ (L.ValString bytes) =
+  return (PExpr_ArrayShape (bvInt $ fromIntegral $ length bytes) 1
+          [LLVMFieldShape (ValPerm_Exists $ nu $ \(bv :: Name (BVType 8)) ->
+                            ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var bv)],
+          [arrayValueOpenTerm (bvTypeOpenTerm (8::Int)) $
+           map (\b -> bvLitOpenTerm $ map (testBit b) [7,6..0]) bytes])
+translateLLVMValue w _ (L.ValConstExpr ce) =
+  translateLLVMConstExpr w ce
+translateLLVMValue _ _ v =
+  trace ("translateLLVMValue cannot handle value:\n"
+         ++ show (ppLLVMValue v))
+  mzero
+
+-- | Helper function for 'translateLLVMValue'
+translateLLVMTypedValue :: (1 <= w, KnownNat w) => NatRepr w -> L.Typed L.Value ->
+                           LLVMTransM (PermExpr (LLVMShapeType w), [OpenTerm])
+translateLLVMTypedValue w (L.Typed tp v) = translateLLVMValue w tp v
+
+-- | Helper function for 'translateLLVMValue'
+translateLLVMConstExpr :: (1 <= w, KnownNat w) => NatRepr w -> L.ConstExpr ->
+                          LLVMTransM (PermExpr (LLVMShapeType w), [OpenTerm])
+translateLLVMConstExpr w (L.ConstGEP _ _ _ (L.Typed tp ptr : ixs)) =
+  translateLLVMValue w tp ptr >>= \ptr_trans ->
+  translateLLVMGEP w tp ptr_trans ixs
+translateLLVMConstExpr w (L.ConstConv L.BitCast
+                          (L.Typed tp@(L.PtrTo _) v) (L.PtrTo _)) =
+  -- A bitcast from one LLVM pointer type to another is a no-op for us
+  translateLLVMValue w tp v
+translateLLVMConstExpr _ ce =
+  trace ("translateLLVMConstExpr cannot handle expr:\n"
+         ++ show (ppLLVMConstExpr ce))
+  mzero
+
+-- | Helper function for 'translateLLVMValue'
+translateLLVMGEP :: (1 <= w, KnownNat w) => NatRepr w -> L.Type ->
+                    (PermExpr (LLVMShapeType w), [OpenTerm]) ->
+                    [L.Typed L.Value] ->
+                    LLVMTransM (PermExpr (LLVMShapeType w), [OpenTerm])
+translateLLVMGEP _ _ vtrans [] = return vtrans
+translateLLVMGEP w (L.Array _ tp) vtrans (L.Typed _ (L.ValInteger 0) : ixs) =
+  translateLLVMGEP w tp vtrans ixs
+translateLLVMGEP w (L.PtrTo tp) vtrans (L.Typed _ (L.ValInteger 0) : ixs) =
+  translateLLVMGEP w tp vtrans ixs
+translateLLVMGEP w (L.PackedStruct [tp]) vtrans (L.Typed _ (L.ValInteger 0) : ixs) =
+  translateLLVMGEP w tp vtrans ixs
+translateLLVMGEP _ _ _ _ = mzero
 
 -- | Add an LLVM global constant to a 'PermEnv', if the global has a type and
 -- value we can translate to Heapster, otherwise silently ignore it
 --
 -- FIXME: move this to Permissions.hs
-permEnvAddGlobalConst :: (1 <= w, KnownNat w) => f w -> PermEnv ->
-                         L.Global -> PermEnv
-permEnvAddGlobalConst w env global =
-  trace ("Global: " ++ show (L.globalSym global) ++ "; value =\n" ++
-         maybe "None" (L.withConfig
-                       (L.Config True True True)
-                       (\v -> show $ PPHPJ.nest 2 $ L.ppValue v)) (L.globalValue global)) $
+permEnvAddGlobalConst :: (1 <= w, KnownNat w) => NatRepr w -> L.Global ->
+                         PermEnv -> PermEnv
+permEnvAddGlobalConst w global env =
+  let sym = show (L.globalSym global) in
+  trace ("Global: " ++ sym ++ "; value =\n" ++
+         maybe "None" ppLLVMValue
+         (L.globalValue global)) $
   maybe env id $
-  do val <- L.globalValue global
-     (p, ts) <- translateLLVMValue w (L.globalType global) val
+  (\x -> case x of
+      Just _ -> trace (sym ++ " translated") x
+      Nothing -> trace (sym ++ " not translated") x) $
+  flip runLLVMTransM env $
+  do val <- lift $ L.globalValue global
+     (sh, ts) <- translateLLVMValue w (L.globalType global) val
+     let p = ValPerm_LLVMBlock $ llvmReadBlockOfShape sh
      return $ permEnvAddGlobalSyms env
        [PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p ts]
 
@@ -296,7 +369,7 @@ mkHeapsterEnv saw_mod_name llvm_mods@(Some first_mod:_) =
      let globals = concatMap (\(Some lm) -> L.modGlobals $ modAST lm) llvm_mods
          env =
            withKnownNat w $ withLeqProof leq_proof $
-           foldl (permEnvAddGlobalConst w) heapster_default_env globals
+           foldr (permEnvAddGlobalConst w) heapster_default_env globals
      env_ref <- liftIO $ newIORef env
      dlevel_ref <- liftIO $ newIORef noDebugLevel
      return $ HeapsterEnv {
