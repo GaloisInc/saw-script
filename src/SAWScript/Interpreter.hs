@@ -483,6 +483,7 @@ buildTopLevelEnv proxy opts =
                    , rwDebugIntrinsics = True
                    , rwWhat4HashConsing = False
                    , rwWhat4HashConsingX86 = False
+                   , rwWhat4Eval = False
                    , rwPreservedRegs = []
                    , rwStackBaseAlign = defaultStackBaseAlign
                    }
@@ -594,6 +595,16 @@ disable_x86_what4_hash_consing :: TopLevel ()
 disable_x86_what4_hash_consing = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwWhat4HashConsingX86 = False }
+
+enable_what4_eval :: TopLevel ()
+enable_what4_eval = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4Eval = True }
+
+disable_what4_eval :: TopLevel ()
+disable_what4_eval = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4Eval = False }
 
 add_x86_preserved_reg :: String -> TopLevel ()
 add_x86_preserved_reg r = do
@@ -2628,6 +2639,16 @@ primitives = Map.fromList
     (pureVal default_x86_preserved_reg)
     Current
     [ "Use the default set of callee-saved registers during x86 verification." ]
+
+  , prim "enable_what4_eval" "TopLevel ()"
+    (pureVal enable_what4_eval)
+    Experimental
+    [ "Enable hash consing for What4 expressions during x86 verification." ]
+
+  , prim "disable_what4_eval" "TopLevel ()"
+    (pureVal disable_what4_eval)
+    Current
+    [ "Disable hash consing for What4 expressions during x86 verification." ]
 
   , prim "set_x86_stack_base_align" "Int -> TopLevel ()"
     (pureVal set_x86_stack_base_align)

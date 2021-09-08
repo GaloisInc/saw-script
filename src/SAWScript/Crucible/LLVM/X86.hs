@@ -151,6 +151,7 @@ type X86Constraints =
   , C.LLVM.HasLLVMAnn Sym
   , ?memOpts :: C.LLVM.MemOptions
   , ?lc :: C.LLVM.TypeContext
+  , ?doW4Eval :: Bool
   )
 
 newtype X86Sim a = X86Sim { unX86Sim :: StateT X86State IO a }
@@ -354,6 +355,7 @@ llvm_verify_x86' (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat m
             ("Enable SMT array memory model" :: Text)
         ]
         (W4.getConfiguration sym)
+      let ?doW4Eval = rwWhat4Eval rw
       sawst <- liftIO $ sawCoreState sym
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule

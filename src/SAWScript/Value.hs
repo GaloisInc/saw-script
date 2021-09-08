@@ -442,6 +442,8 @@ data TopLevelRW =
   , rwWhat4HashConsing :: Bool
   , rwWhat4HashConsingX86 :: Bool
 
+  , rwWhat4Eval :: Bool
+
   , rwPreservedRegs :: [String]
   , rwStackBaseAlign :: Integer
   }

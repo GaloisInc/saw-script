@@ -297,7 +297,7 @@ resolveSetupElemIndexOrFail cc env nameEnv v i = do
 -- | Translate a SetupValue into a Crucible LLVM value, resolving
 -- references
 resolveSetupVal :: forall arch.
-  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
   Crucible.MemImpl Sym ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
@@ -358,7 +358,7 @@ resolveSetupVal cc mem env tyenv nameEnv val = do
     dl = Crucible.llvmDataLayout lc
 
 resolveTypedTerm ::
-  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
   TypedTerm       ->
   IO LLVMVal
@@ -373,6 +373,7 @@ resolveTypedTerm cc tm =
             ]
 
 resolveSAWPred ::
+  (?doW4Eval :: Bool) =>
   LLVMCrucibleContext arch ->
   Term ->
   IO (W4.Pred Sym)
@@ -390,20 +391,20 @@ resolveSAWPred cc tm = do
              _ -> return Nothing
      case mx of
        Just x  -> return $ W4.backendPred sym x
-       Nothing ->
-         do cryptol_ss <- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc
-            (_,tm'') <- rewriteSharedTerm sc cryptol_ss tm'
-            (_,tm''') <- rewriteSharedTerm sc ss tm''
-            let foo = filter (\(name, _, _) -> not (isPreludeName name)) $ Map.elems $ getConstantSet tm'''
-            putStrLn $ "resolveSAWPred: " ++ show (map (\(name, _, _) -> name) $ Map.elems $ getConstantSet tm''')
-            putStrLn $ "resolveSAWPred: " ++ show (ppTerm defaultPPOpts tm''')
-            if foo == [] then
-              do (_names, (_mlabels, p)) <- w4Eval sym st sc mempty Set.empty tm'''
-                 return p
-            else bindSAWTerm sym st W4.BaseBoolRepr tm'
+       Nothing
+         | ?doW4Eval ->
+           do cryptol_ss <- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc
+              (_,tm'') <- rewriteSharedTerm sc cryptol_ss tm'
+              (_,tm''') <- rewriteSharedTerm sc ss tm''
+              if (filter (\(name, _, _) -> not (isPreludeName name)) $ Map.elems $ getConstantSet tm''') == [] then
+                do (_names, (_mlabels, p)) <- w4Eval sym st sc mempty Set.empty tm'''
+                   return p
+              else bindSAWTerm sym st W4.BaseBoolRepr tm'
+         | otherwise ->
+           bindSAWTerm sym st W4.BaseBoolRepr tm'
 
 resolveSAWSymBV ::
-  (1 <= w) =>
+  (?doW4Eval :: Bool, 1 <= w) =>
   LLVMCrucibleContext arch ->
   NatRepr w ->
   Term ->
@@ -420,23 +421,23 @@ resolveSAWSymBV cc w tm =
              _ -> return Nothing
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
-       Nothing ->
-         do let ss = cc^.ccBasicSS
-            (_,tm') <- rewriteSharedTerm sc ss tm
-            cryptol_ss <- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc
-            (_,tm'') <- rewriteSharedTerm sc cryptol_ss tm'
-            (_,tm''') <- rewriteSharedTerm sc ss tm''
-            let foo = filter (\(name, _, _) -> not (isPreludeName name)) $ Map.elems $ getConstantSet tm'''
-            putStrLn $ "resolveSAWSymBV: " ++ show (map (\(name, _, _) -> name) $ Map.elems $ getConstantSet tm''')
-            putStrLn $ "resolveSAWSymBV: " ++ show (ppTerm defaultPPOpts tm''')
-            if foo == [] then
-              do (_names, _, _, x) <- w4EvalAny sym st sc mempty Set.empty tm'''
-                 case valueToSymExpr x of
-                   Just (Some y)
-                     | Just Refl <- testEquality (W4.BaseBVRepr w) (W4.exprType y) ->
-                       return y
-                   _ -> fail ""
-            else bindSAWTerm sym st (W4.BaseBVRepr w) tm
+       Nothing
+         | ?doW4Eval ->
+           do let ss = cc^.ccBasicSS
+              (_,tm') <- rewriteSharedTerm sc ss tm
+              cryptol_ss <- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc
+              (_,tm'') <- rewriteSharedTerm sc cryptol_ss tm'
+              (_,tm''') <- rewriteSharedTerm sc ss tm''
+              if (filter (\(name, _, _) -> not (isPreludeName name)) $ Map.elems $ getConstantSet tm''') == [] then
+                do (_names, _, _, x) <- w4EvalAny sym st sc mempty Set.empty tm'''
+                   case valueToSymExpr x of
+                     Just (Some y)
+                       | Just Refl <- testEquality (W4.BaseBVRepr w) (W4.exprType y) ->
+                         return y
+                     _ -> fail ""
+              else bindSAWTerm sym st (W4.BaseBVRepr w) tm
+         | otherwise ->
+           bindSAWTerm sym st (W4.BaseBVRepr w) tm
 
 isPreludeName :: NameInfo -> Bool
 isPreludeName = \case
@@ -444,7 +445,7 @@ isPreludeName = \case
   _ -> False
 
 resolveSAWTerm ::
-  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
   Cryptol.TValue ->
   Term ->
