@@ -342,10 +342,12 @@ matchSliceShape (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
   matchSliceShape (unfoldNamedShape nmsh args)
 matchSliceShape _ = Nothing
 
-
-instance RsConvert w Mutability (PermExpr RWModalityType) where
-  rsConvert _ Mutable = return PExpr_Write
-  rsConvert _ Immutable = return PExpr_Read
+-- Convert a 'Mutability' to a modality override for a 'PExpr_PtrShape'; mutable
+-- references inherit the modality of the container they are in, so they
+-- translate to 'Nothing'
+instance RsConvert w Mutability (Maybe (PermExpr RWModalityType)) where
+  rsConvert _ Mutable = return Nothing
+  rsConvert _ Immutable = return (Just PExpr_Read)
 
 instance RsConvert w (Lifetime Span) (PermExpr LifetimeType) where
   rsConvert _ (Lifetime "static" _) = return PExpr_Always
@@ -379,16 +381,17 @@ instance RsConvert w (Ty Span) (PermExpr (LLVMShapeType w)) where
          _ -> fail "rsConvert: slices of compound types not yet supported"
   rsConvert _ (Rptr Nothing _ _ _) =
     fail "rsConvert: lifetimes must be supplied for reference types"
-  rsConvert w (Rptr (Just rust_l) Mutable tp' _) =
+  rsConvert w (Rptr (Just rust_l) mut tp' _) =
     do l <- rsConvert w rust_l
        sh <- rsConvert w tp'
+       rw <- rsConvert w mut
        case sh of
          -- Test if sh is a slice type = an array of existential length
          (matchSliceShape -> Just (stride,fshs)) ->
            -- If so, build a "fat pointer" = a pair of a pointer to our array
            -- shape plus a length value
            return $ PExpr_ExShape $ nu $ \n ->
-           PExpr_SeqShape (PExpr_PtrShape Nothing Nothing $
+           PExpr_SeqShape (PExpr_PtrShape rw Nothing $
                            PExpr_ArrayShape (PExpr_Var n) stride $
                            subst1 (PExpr_Var n) fshs)
            (PExpr_FieldShape $ LLVMFieldShape $ ValPerm_Eq $
@@ -397,15 +400,11 @@ instance RsConvert w (Ty Span) (PermExpr (LLVMShapeType w)) where
          -- If it's not a slice, make sure it has a known size
          _ | Just len <- llvmShapeLength sh
            , isJust (bvMatchConst len) ->
-             return $ PExpr_PtrShape Nothing (Just l) sh
+             return $ PExpr_PtrShape rw (Just l) sh
 
          -- Otherwise, it's a non-standard dynamically-sized type, which we
          -- don't quite know how to handle yet...
          _ -> fail "rsConvert: pointer to non-slice dynamically-sized type"
-  rsConvert w (Rptr (Just rust_l) Immutable tp' _) =
-    do l <- rsConvert w rust_l
-       sh <- rsConvert w tp'
-       return $ PExpr_PtrShape (Just PExpr_Read) (Just l) sh
   rsConvert w (PathTy Nothing path _) =
     do mrec <- asks rciRecType
        case mrec of
