@@ -726,6 +726,46 @@ un3SomeFunPerm args ret (Some3FunPerm fun_perm) =
     <+> pretty "=>"
     <+> PP.group (permPretty emptyPPInfo (funPermRet fun_perm)) ]
 
+-- | This is the more general form of 'funPerm3FromArgLayout, where there can be
+-- ghost variables in the 'ArgLayout'
+funPerm3FromMbArgLayout :: CtxRepr ctx ->
+                           MatchedMb ghosts (ArgLayoutPerm ctx) ->
+                           CruCtx ghosts -> CtxRepr args ->
+                           ValuePerms (CtxToRList args) ->
+                           ValuePerms (CtxToRList args) ->
+                           TypeRepr ret -> ValuePerm ret ->
+                           RustConvM Some3FunPerm
+
+-- Special case: if the argument perms are just a sequence of permissions on the
+-- individual arguments, make a function perm with those argument perms, that
+-- is, we build the function permission
+--
+-- (ghosts). arg1:p1, ..., argn:pn -o ret:ret_perm
+funPerm3FromMbArgLayout ctx [nuMP| ALPerm mb_ps_in |]
+  ghosts ctx1 ps1_in ps1_out ret_tp ret_perm
+  | ctx_args <- mkCruCtx (ctx1 Ctx.<++> ctx)
+  , ctx_all <- appendCruCtx ghosts ctx_args
+  , ghost_perms <- trueValuePerms $ cruCtxProxies ghosts
+  , mb_ps_in_all <-
+      mbCombine (cruCtxProxies ctx_args) $
+      fmap (\ps_in ->
+             nuMulti (cruCtxProxies ctx_args) $ const $
+             RL.append ghost_perms
+             (assignToRListAppend ctx1 ctx ps1_in ps_in)) mb_ps_in
+  , ps_out_all <-
+      RL.append ghost_perms (assignToRListAppend ctx1 ctx ps1_out $
+                             trueValuePerms $ assignToRList ctx) :>: ret_perm =
+    return $ Some3FunPerm $ FunPerm ghosts ctx_args ret_tp mb_ps_in_all
+    (nuMulti (cruCtxProxies ctx_all :>: Proxy) $ \_ -> ps_out_all)
+funPerm3FromMbArgLayout ctx [nuMP| ALPerm_Exists mb_p |]
+  ghosts ctx1 ps1_in ps1_out ret_tp ret_perm =
+  funPerm3FromMbArgLayout ctx (mbMatch $ mbCombine (MNil :>: Proxy) mb_p)
+  (CruCtxCons ghosts knownRepr) ctx1 ps1_in ps1_out ret_tp ret_perm
+funPerm3FromMbArgLayout _ctx [nuMP| ALPerm_Or _ _ |]
+  _ghosts _ctx1 _ps1_in _ps1_out _ret_tp _ret_perm =
+  fail "Cannot (yet) handle Rust enums or other disjunctive types in functions"
+
+
 -- | Build a function permission from an 'ArgLayout' that describes the
 -- arguments and their input permissions and a return permission that describes
 -- the output permissions on the return value. The arguments specified by the
@@ -738,25 +778,9 @@ funPerm3FromArgLayout :: ArgLayout -> CtxRepr args ->
                          ValuePerms (CtxToRList args) ->
                          TypeRepr ret -> ValuePerm ret ->
                          RustConvM Some3FunPerm
-funPerm3FromArgLayout (ArgLayout ctx p_in) ctx1 ps1_in ps1_out ret_tp ret_perm
-    -- Special case: if the argument perms are just a sequence of permissions on
-    -- the individual arguments, make a function perm with those argument perms,
-    -- that is, we build the function permission
-    --
-    -- (). arg1:p1, ..., argn:pn -o ret:ret_perm
-  | ALPerm ps_in <- p_in
-  , ctx_all <- mkCruCtx (ctx1 Ctx.<++> ctx)
-  , ps_in_all <- RL.append MNil (assignToRListAppend ctx1 ctx ps1_in ps_in)
-  , ps_out_all <-
-      RL.append MNil (assignToRListAppend ctx1 ctx ps1_out $
-                      trueValuePerms $ assignToRList ctx) :>: ret_perm
-  , gs_ctx_prxs <- RL.append MNil (cruCtxProxies ctx_all) =
-    return $ Some3FunPerm $ FunPerm CruCtxNil ctx_all ret_tp
-    (nuMulti gs_ctx_prxs $ \_ -> ps_in_all)
-    (nuMulti (gs_ctx_prxs :>: Proxy) $ \_ -> ps_out_all)
-funPerm3FromArgLayout (ArgLayout _ctx _p) _ctx1 _p1_in _p1_out _ret_tp _ret_perm =
-  -- FIXME HERE
-  fail "Cannot (yet) handle Rust enums or other disjunctive types in functions"
+funPerm3FromArgLayout (ArgLayout ctx p_in) ctx1 ps1_in ps1_out ret_tp ret_perm =
+  funPerm3FromMbArgLayout ctx (mbMatch $ emptyMb p_in) CruCtxNil
+  ctx1 ps1_in ps1_out ret_tp ret_perm
 
 -- | Like 'funPerm3FromArgLayout' but with no additional arguments
 funPerm3FromArgLayoutNoArgs :: ArgLayout -> TypeRepr ret -> ValuePerm ret ->
