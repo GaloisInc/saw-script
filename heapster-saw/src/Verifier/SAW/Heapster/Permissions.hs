@@ -632,6 +632,11 @@ shapeLLVMTypeWidth :: KnownNat w => f (LLVMShapeType w) -> NatRepr w
 shapeLLVMTypeWidth _ = knownNat
 
 -- | Convenience function to get the number of bytes = the bit width divided by
+-- 8 of an LLVM pointer type
+exprLLVMTypeBytes :: KnownNat w => f (LLVMPointerType w) -> Integer
+exprLLVMTypeBytes e = intValue (exprLLVMTypeWidth e) `div` 8
+
+-- | Convenience function to get the number of bytes = the bit width divided by
 -- 8 of an LLVM pointer type as an expr. Note that this assumes the bit width is
 -- a multiple of 8, so does not worry about rounding.
 exprLLVMTypeBytesExpr :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
