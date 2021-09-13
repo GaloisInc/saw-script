@@ -302,8 +302,8 @@ llvm_verify_x86 ::
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_verify_x86 llvmModule path nm globsyms checkSat setup tactic =
-  llvm_verify_x86' llvmModule path nm globsyms checkSat Nothing setup tactic
+llvm_verify_x86 llvmModule path nm globsyms checkSat =
+  llvm_verify_x86' llvmModule path nm globsyms checkSat Nothing
 
 -- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
 -- to an LLVM specification. This allows for compositional verification of LLVM
@@ -318,8 +318,8 @@ llvm_verify_fixpoint_x86 ::
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_verify_fixpoint_x86 llvmModule path nm globsyms checkSat f setup tactic =
-  llvm_verify_x86' llvmModule path nm globsyms checkSat (Just f) setup tactic
+llvm_verify_fixpoint_x86 llvmModule path nm globsyms checkSat f =
+  llvm_verify_x86' llvmModule path nm globsyms checkSat (Just f)
 
 -- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
 -- to an LLVM specification. This allows for compositional verification of LLVM
