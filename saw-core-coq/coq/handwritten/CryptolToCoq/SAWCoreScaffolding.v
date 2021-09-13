@@ -8,7 +8,7 @@ From CryptolToCoq Require Export CompM.
 
 Definition sort (n : nat) := Type.
 
-Axiom error : forall (a : Type), String.string -> a.
+Axiom error : forall {a : Type}, String.string -> a.
 
 Definition String := String.string.
 

@@ -418,6 +418,16 @@ withImportCryptolPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq
    ]
   }
 
+
+withImportCryptolPrimitivesForSAWCoreExtra ::
+  Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
+withImportCryptolPrimitivesForSAWCoreExtra config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
+  config { Coq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra."
+   ]
+  }
+
+
 writeCoqTerm ::
   String ->
   [(String, String)] ->
@@ -427,8 +437,8 @@ writeCoqTerm ::
   TopLevel ()
 writeCoqTerm name notations skips path t = do
   let configuration =
-        withImportSAWCorePrelude $
         withImportCryptolPrimitivesForSAWCore $
+        withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
   case Coq.translateTermAsDeclImports configuration name t of
     Left err -> throwTopLevel $ "Error translating: " ++ show err
@@ -464,22 +474,15 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   (cm, _) <- loadCryptolModule sc env inputFile
   let cryptolPreludeDecls = map Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
   let configuration =
-        withImportSAWCorePrelude $
+        withImportCryptolPrimitivesForSAWCoreExtra $
         withImportCryptolPrimitivesForSAWCore $
+        withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
   case Coq.translateCryptolModule configuration cryptolPreludeDecls cm of
     Left e -> putStrLn $ show e
     Right cmDoc ->
       writeFile outputFile
-      (show . vcat $ [ Coq.preamble configuration
-                     , "From CryptolToCoq Require Import SAWCorePrelude."
-                     , "Import SAWCorePrelude."
-                     , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCore."
-                     , "Import CryptolPrimitives."
-                     , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra."
-                     , ""
-                     , cmDoc
-                     ])
+      (show . vcat $ [ Coq.preamble configuration, cmDoc])
 
 nameOfSAWCorePrelude :: Un.ModuleName
 nameOfSAWCorePrelude = Un.moduleName preludeModule
