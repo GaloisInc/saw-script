@@ -1,5 +1,6 @@
 enable_experimental;
 env <- heapster_init_env_from_file "rust_data.sawcore" "rust_data.bc";
+heapster_set_debug_level env 1;
 
 /***
  *** Types
@@ -13,6 +14,7 @@ heapster_define_perm env "int1" " " "llvmptr 1" "exists x:bv 1.eq(llvmword(x))";
 
 heapster_define_llvmshape env "u64" 64 "" "fieldsh(int64<>)";
 heapster_define_llvmshape env "u32" 64 "" "fieldsh(32,int32<>)";
+heapster_define_llvmshape env "u8" 64 "" "fieldsh(8,int8<>)";
 
 // bool type
 heapster_define_llvmshape env "bool" 64 "" "fieldsh(1,int1<>)";
@@ -29,10 +31,24 @@ heapster_define_rust_type env "pub enum Sum<X,Y> { Left (X), Right (Y) }";
 // The Option type
 heapster_define_rust_type env "pub enum Option<X> { None, Some (X) }";
 
+// The str type
+heapster_define_llvmshape env "str" 64 "" "exsh len:bv 64.arraysh(len,1,[(8,int8<>)])";
+//heapster_define_rust_type env "type str = [u8];";
+
+// The String type
+heapster_define_llvmshape env "String" 64 "" "exsh cap:bv 64. ptrsh(arraysh(cap,1,[(8,int8<>)]));fieldsh(int64<>);fieldsh(eq(llvmword(cap)))";
+
 // List type
 //heapster_define_llvmshape env "List" 64 "L:perm(llvmptr 64),X:llvmshape 64" "(fieldsh(eq(llvmword(0)))) orsh (fieldsh(eq(llvmword(1)));X;fieldsh(L))";
 //heapster_define_recursive_perm env "ListPerm" "X:llvmshape 64, Xlen:bv 64, rw:rwmodality, l:lifetime" "llvmptr 64" ["[l]memblock(rw,0,Xlen + 16,List<ListPerm<X,Xlen,rw,l>,X>)"] "\\ (X:sort 0) (_:Vec 64 Bool) -> List X" "\\ (X:sort 0) (_:Vec 64 Bool) -> foldListPermH X" "\\ (X:sort 0) (_:Vec 64 Bool) -> unfoldListPermH X";
 heapster_define_rust_type env "pub enum List<X> { Nil, Cons (X,Box<List<X>>) }";
+
+// Void type; note that Heapster does not (yet?) support empty types, so instead
+// we make this type opaque. Also, note that the ArgumentV1 structure contains
+// referens to Void, so presumably they are just casts of other types...?
+//
+//heapster_define_rust_type env "pub enum Void {}";
+heapster_define_opaque_llvmshape env "Void" 64 "" "64" "#()";
 
 // fmt::Error type
 heapster_define_rust_type_qual env "fmt" "pub struct Error { }";
@@ -42,14 +58,18 @@ heapster_define_rust_type_qual env "fmt" "pub struct Error { }";
 heapster_define_llvmshape env "fmt::Result" 64 "" "fieldsh(1,eq(llvmword(0))) orsh fieldsh(1,eq(llvmword(1)))";
 //heapster_define_rust_type_qual env "fmt" "pub enum Result { Ok (), Err (fmt::Error) }";
 
-// Formatter type
+// fmt::Formatter type
 heapster_define_opaque_llvmshape env "fmt::Formatter" 64 "" "64" "#()";
+
+// fmt::ArgumentV1 type
+//heapster_define_rust_type_qual env "fmt" "pub struct ArgumentV1<'a> { value: &'a Void, formatter: for <'b> fn(&'b Void, &'b mut fmt::Formatter) -> fmt::Result, }";
+
+// fmt::Arguments type
+//heapster_define_rust_type_qual env "fmt" "pub struct Arguments<'a> { pieces: &'a [&'a str], fmt: Option<&'a [fmt::Argument]>, args: &'a [fmt::ArgumentV1<'a>], }";
+
 
 // List64 type
 heapster_define_rust_type env "pub enum List64 { Nil64, Cons64 (u64,Box<List64>) }";
-
-// The String type
-heapster_define_llvmshape env "String" 64 "" "exsh cap:bv 64. ptrsh(arraysh(cap,1,[(8,int8<>)]));fieldsh(int64<>);fieldsh(eq(llvmword(cap)))";
 
 // The TwoValues, ThreeValues, FourValues, and FiveValues types
 heapster_define_rust_type env "pub struct TwoValues(u32,u32);";
@@ -124,6 +144,13 @@ heapster_assume_fun_rename_prim env String__fmt_sym "String__fmt" "<'a, 'b> fn(&
 */
 
 
+// Arguments::new_v1
+Arguments__new_v1_sym <- heapster_find_symbol env "3fmt9Arguments6new_v1";
+//heapster_assume_fun_rename_prim env Arguments__new_v1_sym "Arguments__new" "<'a> fn (pieces: &'a [&'a str], args: &'a [ArgumentV1<'a>]) -> Arguments<'a>";
+
+// Formatter::write_str
+Formatter__write_str_sym <- heapster_find_symbol env "9Formatter9write_str";
+heapster_assume_fun_rename_prim env Formatter__write_str_sym "Formatter__write_str" "<'a,'b> fn (&'a mut fmt::Formatter, &'b str) -> fmt::Result";
 
 
 /***

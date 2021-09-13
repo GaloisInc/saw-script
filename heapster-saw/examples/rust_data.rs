@@ -251,9 +251,14 @@ pub fn cycle_true_enum (te: &TrueEnum) -> TrueEnum {
 impl fmt::Display for TrueEnum {
     fn fmt<'a, 'b>(&'a self, f: &'b mut fmt::Formatter) -> fmt::Result {
         match self {
+            TrueEnum::Foo => f.write_str ("Foo"),
+            TrueEnum::Bar => f.write_str ("Bar"),
+            TrueEnum::Baz => f.write_str ("Baz"),
+            /*
             TrueEnum::Foo => write!(f,"Foo"),
             TrueEnum::Bar => write!(f,"Bar"),
             TrueEnum::Baz => write!(f,"Baz"),
+             */
         }
     }
 }
