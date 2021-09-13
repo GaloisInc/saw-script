@@ -643,13 +643,17 @@ translateTermUnshared t = withLocalTranslationState $ do
     badTerm          = Except.throwError $ BadTerm t
 
 -- | In order to turn fixpoint computations into iterative computations, we need
--- to be able to create "dummy" values at the type of the computation.  For now,
--- we will support arbitrary nesting of vectors of boolean values.
+-- to be able to create "dummy" values at the type of the computation.
 defaultTermForType ::
   TermTranslationMonad m =>
   Term -> m Coq.Term
 defaultTermForType typ = do
   case typ of
+    (asBoolType -> Just ()) -> translateIdent (mkIdent preludeName "False")
+
+    (isGlobalDef "Prelude.Nat" -> Just ()) -> return $ Coq.NatLit 0
+
+    (asIntegerType -> Just ()) -> return $ Coq.ZLit 0
 
     (asSeq -> Just (n, typ')) -> do
       seqConst <- translateIdent (mkIdent (mkModuleName ["Cryptol"]) "seqConst")
@@ -658,13 +662,19 @@ defaultTermForType typ = do
       defaultT <- defaultTermForType typ'
       return $ Coq.App seqConst [ nT, typ'T, defaultT ]
 
-    (asBoolType -> Just ()) -> translateIdent (mkIdent preludeName "False")
+    (asPairType -> Just (x,y)) -> do
+      x' <- defaultTermForType x
+      y' <- defaultTermForType y
+      return $ Coq.App (Coq.Var "pair") [x',y']
 
-    _ ->
-      return $ Coq.App (Coq.Var "error")
-      [Coq.StringLit ("Could not generate default value of type " ++ showTerm typ)]
+    (asPiList -> (bs,body))
+      | not (null bs)
+      , looseVars body == emptyBitSet ->
+      do bs'   <- forM bs $ \ (_nm, ty) -> Coq.Binder "_" . Just <$> translateTerm ty
+         body' <- defaultTermForType body
+         return $ Coq.Lambda bs' body'
 
-    -- _ -> Except.throwError $ CannotCreateDefaultValue typ
+    _ -> Except.throwError $ CannotCreateDefaultValue typ
 
 translateTermToDocWith ::
   TranslationConfiguration ->
