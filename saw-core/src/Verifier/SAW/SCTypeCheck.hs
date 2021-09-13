@@ -439,13 +439,19 @@ instance TypeInfer (TermF TypedTerm) where
          else
          error ("Context = " ++ show ctx)
          -- throwTCError (DanglingVar (i - length ctx))
-  typeInfer (Constant (EC _ n (TypedTerm req_tp req_tp_sort)) (TypedTerm _ tp)) =
+  typeInfer (Constant (EC _ n (TypedTerm req_tp req_tp_sort)) (Just (TypedTerm _ tp))) =
     do void (ensureSort req_tp_sort)
        -- NOTE: we do the subtype check here, rather than call checkSubtype, so
        -- that we can throw the custom BadConstType error on failure
        ok <- isSubtype tp req_tp
        if ok then return tp else
          throwTCError $ BadConstType n tp req_tp
+
+  typeInfer (Constant (EC _ _ (TypedTerm req_tp req_tp_sort)) Nothing) =
+    -- Constant with no body, just return the EC type
+    do void (ensureSort req_tp_sort)
+       return req_tp
+
   typeInferComplete tf =
     TypedTerm <$> liftTCM scTermF (fmap typedVal tf) <*> typeInfer tf
 

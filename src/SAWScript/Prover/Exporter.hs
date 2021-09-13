@@ -66,7 +66,7 @@ import Prettyprinter (vcat)
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
-import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule)
+import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule, ImportPrimitiveOptions(..))
 import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
 import Verifier.SAW.FiniteValue
@@ -471,7 +471,8 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   let ?fileReader = BS.readFile
   env <- initCryptolEnv sc
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
-  (cm, _) <- loadCryptolModule sc env inputFile
+  let primOpts = ImportPrimitiveOptions{ allowUnknownPrimitives = True }
+  (cm, _) <- loadCryptolModule sc primOpts env inputFile
   let cryptolPreludeDecls = map Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
   let configuration =
         withImportCryptolPrimitivesForSAWCoreExtra $
