@@ -1,3 +1,4 @@
+Up to date
 SAW RPC Server
 ==============
 
@@ -122,6 +123,119 @@ Parameter fields
 
 ``expression``
   The expression to save.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
+SAW/JVM/load class (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Load the JVM class with the given name for later verification.
+
+Parameter fields
+++++++++++++++++
+
+
+``name``
+  The name of the class on the server.
+  
+  
+
+``class name``
+  The java class to load.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
+SAW/JVM/verify (command)
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Verify the named JVM method meets its specification.
+
+Parameter fields
+++++++++++++++++
+
+
+``module``
+  The module of the function being verified.
+  
+  
+
+``function``
+  The function being verified.
+  
+  
+
+``lemmas``
+  The specifications to use for other functions during this verification.
+  
+  
+
+``check sat``
+  Whether or not to enable path satisfiability checking.
+  
+  
+
+``contract``
+  The specification to verify for the function.
+  
+  
+
+``script``
+  The script to use to prove the validity of the resulting verification conditions.
+  
+  
+
+``lemma name``
+  The name to refer to this verification/contract by later.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
+SAW/JVM/assume (command)
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Assume the named JVM method meets its specification.
+
+Parameter fields
+++++++++++++++++
+
+
+``module``
+  The LLVM  module containing the function.
+  
+  
+
+``function``
+  The function we are assuming a contract for.
+  
+  
+
+``contract``
+  The specification to assume for the function.
+  
+  
+
+``lemma name``
+  The name to refer to this assumed contract by later.
   
   
 
