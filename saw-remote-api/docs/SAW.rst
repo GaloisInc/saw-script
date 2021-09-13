@@ -1,4 +1,3 @@
-Up to date
 SAW RPC Server
 ==============
 
