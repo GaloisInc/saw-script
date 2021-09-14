@@ -333,7 +333,7 @@ data TermF e
       -- ^ The type of a (possibly) dependent function
     | LocalVar !DeBruijnIndex
       -- ^ Local variables are referenced by deBruijn index.
-    | Constant !(ExtCns e) !e
+    | Constant !(ExtCns e) !(Maybe e)
       -- ^ An abstract constant packaged with its type and definition.
       -- The body and type should be closed terms.
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
