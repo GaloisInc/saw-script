@@ -15,9 +15,7 @@ env:
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
   # ./s2nTests/docker/saw.dockerfile
-  Z3_VERSION: "4.8.10"
-  CVC4_VERSION: "4.1.8"
-  YICES_VERSION: "2.6.2"
+  SOLVER_PKG_VERSION: "snapshot-20210914"
 
   OCAML_VERSION: 4.09.x
 
@@ -185,6 +183,8 @@ jobs:
 
       - shell: bash
         run: .github/ci.sh install_system_deps
+        env:
+          BIN_ZIP_FILE: ${{ matrix.os }}-bin.zip
 
       - uses: actions/download-artifact@v2
         with:
@@ -236,6 +236,8 @@ jobs:
 
       - shell: bash
         run: .github/ci.sh install_system_deps
+        env:
+          BIN_ZIP_FILE: ${{ matrix.os }}-bin.zip
 
       - uses: actions/download-artifact@v2
         with:
@@ -299,6 +301,8 @@ jobs:
 
       - shell: bash
         run: .github/ci.sh install_system_deps
+        env:
+          BIN_ZIP_FILE: ${{ matrix.os }}-bin.zip
 
       - uses: actions/download-artifact@v2
         with:
