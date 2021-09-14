@@ -180,9 +180,10 @@ setVarNamesM :: String -> RAssign ExprVar tps -> WideningM ()
 setVarNamesM base xs = modify $ over wsPPInfo $ ppInfoAddExprNames base xs
 
 traceM :: (PPInfo -> Doc ()) -> WideningM ()
-traceM f =
-  debugTrace <$> (view wsDebugLevel <$> get)
-  <*> (renderDoc <$> f <$> view wsPPInfo <$> get) <*> (return ())
+traceM f = do
+  dlevel <- view wsDebugLevel <$> get
+  str <- renderDoc <$> f <$> view wsPPInfo <$> get
+  debugTrace dlevel str $ return ()
 
 
 ----------------------------------------------------------------------

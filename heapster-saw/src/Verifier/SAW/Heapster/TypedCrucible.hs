@@ -4074,6 +4074,7 @@ visitEntry names can_widen blk entry =
 
   mapM (traverseF $
         visitCallSite entry) (typedEntryCallers entry) >>= \callers ->
+  debugTrace dlevel ("can_widen: " ++ show can_widen ++ ", any_fails: "  ++ show (any (anyF typedCallSiteImplFails) callers)) $
   if can_widen && any (anyF typedCallSiteImplFails) callers then
     case widenEntry dlevel entry of
       Some entry' ->
