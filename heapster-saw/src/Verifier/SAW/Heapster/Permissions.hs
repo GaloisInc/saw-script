@@ -4779,6 +4779,7 @@ isDeterminingExpr (PExpr_BV [BVFactor _ _] _) =
   -- A linear expression N*x + M lets you solve for x when it is possible
   True
 isDeterminingExpr (PExpr_ValPerm (ValPerm_Eq e)) = isDeterminingExpr e
+isDeterminingExpr (PExpr_LLVMOffset _ off) = isDeterminingExpr off
 isDeterminingExpr e =
   -- If an expression has no free variables then it vacuously determines all of
   -- its free variables

@@ -271,17 +271,21 @@ widenExpr' tp e1@(asVarOffset -> Just (x1, off1)) e2@(asVarOffset ->
        _ | x1 == x2 && offsetsEq off1 off2 ->
            visitM x1 >> return e1
 
-       -- If we have the same variable but different offsets, then the two sides
-       -- cannot be equal, so we generalize with a new variable
-       _ | x1 == x2 ->
-           do x <- bindFreshVar tp
-              visitM x
-              ((p1',p2'), p') <-
-                doubleSplitWidenPerm tp (offsetPerm off1 p1) (offsetPerm off2 p2)
-              setOffVarPermM x1 off1 p1'
-              setOffVarPermM x2 off2 p2'
-              setVarPermM x p'
-              return $ PExpr_Var x
+       -- If we have the same variable but different offsets, e.g., if we are
+       -- widening x &+ bv1 and x &+ bv2, then bind a fresh variable bv for the
+       -- offset and return x &+ bv. Note that we cannot have the same variable
+       -- x on both sides unless they have been visited, so we can safely
+       -- ignore the isv1 and isv2 flags. The complexity of having these two
+       -- cases is to find the BVType of one of off1 or off2; because the
+       -- previous case did not match, we know at least one is LLVMPermOffset.
+       _ | x1 == x2, LLVMPermOffset (exprType -> off_tp) <- off1 ->
+           do off_var <- bindFreshVar off_tp
+              visitM off_var
+              return $ PExpr_LLVMOffset x1 (PExpr_Var off_var)
+       _ | x1 == x2, LLVMPermOffset (exprType -> off_tp) <- off2 ->
+           do off_var <- bindFreshVar off_tp
+              visitM off_var
+              return $ PExpr_LLVMOffset x1 (PExpr_Var off_var)
 
        -- If a variable has an eq(e) permission, replace it with e and recurse
        (ValPerm_Eq e1', _, _, _) ->
