@@ -29,6 +29,25 @@ import Lang.Crucible.LLVM.MemModel
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Heapster.Permissions
 
+-- | Generate a SAW core term for a bitvector literal whose length is given by
+-- the first integer and whose value is given by the second
+bvLitOfIntOpenTerm :: Integer -> Integer -> OpenTerm
+bvLitOfIntOpenTerm n i =
+  bvLitOpenTerm (map (testBit i) $ reverse [0..(fromIntegral n)-1])
+
+-- | Helper function to build a SAW core term of type @BVVec w len a@, i.e., a
+-- bitvector-indexed vector, containing a given list of elements of type
+-- @a@. The roundabout way we do this currently requires a default element of
+-- type @a@, even though this value is never actually used. Also required is the
+-- bitvector width @w@.
+bvVecValueOpenTerm :: NatRepr w -> OpenTerm -> [OpenTerm] -> OpenTerm ->
+                      OpenTerm
+bvVecValueOpenTerm w tp ts def_tm =
+  applyOpenTermMulti (globalOpenTerm "Prelude.genBVVecFromVec")
+  [natOpenTerm (fromIntegral $ length ts), tp, arrayValueOpenTerm tp ts,
+   def_tm, natOpenTerm (natValue w),
+   bvLitOfIntOpenTerm (intValue w) (fromIntegral $ length ts)]
+
 -- | The monad for translating LLVM globals to Heapster
 type LLVMTransM = ReaderT (PermEnv, DebugLevel) Maybe
 
@@ -57,8 +76,7 @@ translateLLVMValue :: (1 <= w, KnownNat w) => NatRepr w -> L.Type -> L.Value ->
                       LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
 translateLLVMValue w tp@(L.PrimType (L.Integer n)) (L.ValInteger i) =
   translateLLVMType w tp >>= \(sh,_) ->
-  return (sh, bvLitOpenTerm (map (testBit i) $
-                             reverse [0..(fromIntegral n)-1]))
+  return (sh, bvLitOfIntOpenTerm (fromIntegral n) i)
 translateLLVMValue w _ (L.ValSymbol sym) =
   do (env,_) <- ask
      -- (p, ts) <- lift (lookupGlobalSymbol env (GlobalSymbol sym) w)
@@ -71,6 +89,7 @@ translateLLVMValue w _ (L.ValArray tp elems) =
   do
     -- First, translate the elements
     ts <- map snd <$> mapM (translateLLVMValue w tp) elems
+
     -- Array shapes can only handle field shapes elements, so translate the
     -- element type to and ensure it returns a field shape; FIXME: this could
     -- actually handle sequences of field shapes if necessary
@@ -78,13 +97,19 @@ translateLLVMValue w _ (L.ValArray tp elems) =
     fsh <- case sh of
       PExpr_FieldShape fsh -> return fsh
       _ -> mzero
+
     -- Compute the array stride as the length of the element shape
     sh_len_expr <- lift $ llvmShapeLength sh
     sh_len <- fromInteger <$> lift (bvMatchConstInt sh_len_expr)
 
+    -- Generate a default element of type tp using the zero initializer; this is
+    -- currently needed by bvVecValueOpenTerm
+    def_v <- llvmZeroInitValue tp
+    (_,def_tm) <- translateLLVMValue w tp def_v
+
     -- Finally, build our array shape and SAW core value
     return (PExpr_ArrayShape (bvInt $ fromIntegral $ length elems) sh_len [fsh],
-            arrayValueOpenTerm saw_tp ts)
+            bvVecValueOpenTerm w saw_tp ts def_tm)
 translateLLVMValue w _ (L.ValPackedStruct elems) =
   mapM (translateLLVMTypedValue w) elems >>= \(unzip -> (shs,ts)) ->
   return (foldr PExpr_SeqShape PExpr_EmptyShape shs, tupleOpenTerm ts)
