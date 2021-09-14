@@ -49,7 +49,6 @@ module SAWScript.HeapsterBuiltins
        , heapster_set_debug_level
        ) where
 
-import Data.Bits
 import Data.Maybe
 import qualified Data.Map as Map
 import Data.String
@@ -59,7 +58,6 @@ import Data.IORef
 import Data.Functor.Product
 import Control.Lens
 import Control.Monad
-import Control.Monad.Reader
 import Control.Monad.IO.Class
 import qualified Control.Monad.Fail as Fail
 import System.Directory
@@ -97,7 +95,6 @@ import Lang.Crucible.LLVM.TypeContext
 import Lang.Crucible.LLVM.DataLayout
 
 import qualified Text.LLVM.AST as L
-import qualified Text.LLVM.PP as L
 
 import SAWScript.TopLevel
 import SAWScript.Value
@@ -113,13 +110,11 @@ import Verifier.SAW.Heapster.SAWTranslation
 import Verifier.SAW.Heapster.IRTTranslation
 import Verifier.SAW.Heapster.PermParser
 import Verifier.SAW.Heapster.ParsedCtx
+import Verifier.SAW.Heapster.LLVMGlobalConst
 
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
 import Prettyprinter
-import qualified Text.PrettyPrint.HughesPJ as PPHPJ
-
-import Debug.Trace
 
 
 -- | Extract out the contents of the 'Right' of an 'Either', calling 'fail' if
@@ -262,161 +257,6 @@ parseAndInsDef henv nm term_tp term_string =
          liftIO $ scInsertDef sc mnm term_ident term_tp term
          return term_ident
 
-type LLVMTransM = ReaderT PermEnv Maybe
-
-runLLVMTransM :: LLVMTransM a -> PermEnv -> Maybe a
-runLLVMTransM = runReaderT
-
-ppLLVMValue :: L.Value -> String
-ppLLVMValue val =
-  L.withConfig (L.Config True True True) (show $ PPHPJ.nest 2 $ L.ppValue val)
-
-ppLLVMConstExpr :: L.ConstExpr -> String
-ppLLVMConstExpr ce =
-  L.withConfig (L.Config True True True) (show $ PPHPJ.nest 2 $ L.ppConstExpr ce)
-
--- | Translate a typed LLVM 'L.Value' to a Heapster permission + translation
---
--- FIXME: move this to Permissions.hs
-translateLLVMValue :: (1 <= w, KnownNat w) => NatRepr w -> L.Type -> L.Value ->
-                      LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
-translateLLVMValue w tp@(L.PrimType (L.Integer n)) (L.ValInteger i) =
-  translateLLVMType w tp >>= \(sh,_) ->
-  return (sh, bvLitOpenTerm (map (testBit i) $
-                             reverse [0..(fromIntegral n)-1]))
-translateLLVMValue w _ (L.ValSymbol sym) =
-  do env <- ask
-     -- (p, ts) <- lift (lookupGlobalSymbol env (GlobalSymbol sym) w)
-     (p, t) <- case (lookupGlobalSymbol env (GlobalSymbol sym) w) of
-       Just (p,[t]) -> return (p,t)
-       Just (p,ts) -> return (p,tupleOpenTerm ts)
-       Nothing -> trace ("Could not find symbol: " ++ show sym) mzero
-     return (PExpr_FieldShape (LLVMFieldShape p), t)
-translateLLVMValue w _ (L.ValArray tp elems) =
-  do
-    -- First, translate the elements
-    ts <- map snd <$> mapM (translateLLVMValue w tp) elems
-    -- Array shapes can only handle field shapes elements, so translate the
-    -- element type to and ensure it returns a field shape; FIXME: this could
-    -- actually handle sequences of field shapes if necessary
-    (sh, saw_tp) <- translateLLVMType w tp
-    fsh <- case sh of
-      PExpr_FieldShape fsh -> return fsh
-      _ -> mzero
-    -- Compute the array stride as the length of the element shape
-    sh_len_expr <- lift $ llvmShapeLength sh
-    sh_len <- fromInteger <$> lift (bvMatchConstInt sh_len_expr)
-
-    -- Finally, build our array shape and SAW core value
-    return (PExpr_ArrayShape (bvInt $ fromIntegral $ length elems) sh_len [fsh],
-            arrayValueOpenTerm saw_tp ts)
-translateLLVMValue w _ (L.ValPackedStruct elems) =
-  mapM (translateLLVMTypedValue w) elems >>= \(unzip -> (shs,ts)) ->
-  return (foldr PExpr_SeqShape PExpr_EmptyShape shs, tupleOpenTerm ts)
-translateLLVMValue w tp (L.ValString bytes) =
-  translateLLVMValue w tp (L.ValArray
-                           (L.PrimType (L.Integer 8))
-                           (map (L.ValInteger . toInteger) bytes))
-  {-
-  return (PExpr_ArrayShape (bvInt $ fromIntegral $ length bytes) 1
-          [LLVMFieldShape (ValPerm_Exists $ nu $ \(bv :: Name (BVType 8)) ->
-                            ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var bv)],
-          [arrayValueOpenTerm (bvTypeOpenTerm (8::Int)) $
-           map (\b -> bvLitOpenTerm $ map (testBit b) [7,6..0]) bytes])
--}
-translateLLVMValue w _ (L.ValConstExpr ce) =
-  translateLLVMConstExpr w ce
-translateLLVMValue w tp L.ValZeroInit =
-  llvmZeroInitValue tp >>= translateLLVMValue w tp
-translateLLVMValue _ _ v =
-  trace ("translateLLVMValue does not yet handle:\n" ++ ppLLVMValue v)
-  mzero
-
--- | Helper function for 'translateLLVMValue'
-translateLLVMTypedValue :: (1 <= w, KnownNat w) => NatRepr w -> L.Typed L.Value ->
-                           LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
-translateLLVMTypedValue w (L.Typed tp v) = translateLLVMValue w tp v
-
--- | Translate an LLVM type into a shape plus the SAW core type of elements of
--- the translation of that shape
-translateLLVMType :: (1 <= w, KnownNat w) => NatRepr w -> L.Type ->
-                     LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
-translateLLVMType _ (L.PrimType (L.Integer n))
-  | Just (Some (n_repr :: NatRepr n)) <- someNat n
-  , Left leq_pf <- decideLeq (knownNat @1) n_repr =
-    withKnownNat n_repr $ withLeqProof leq_pf $
-    return (PExpr_FieldShape (LLVMFieldShape $ ValPerm_Exists $ nu $ \bv ->
-                               ValPerm_Eq $ PExpr_LLVMWord $
-                               PExpr_Var (bv :: Name (BVType n))),
-            (bvTypeOpenTerm n))
-translateLLVMType _ tp =
-  trace ("translateLLVMType does not yet handle:\n" ++ show (L.ppType tp))
-  mzero
-
--- | Helper function for 'translateLLVMValue'
-translateLLVMConstExpr :: (1 <= w, KnownNat w) => NatRepr w -> L.ConstExpr ->
-                          LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
-translateLLVMConstExpr w (L.ConstGEP _ _ _ (L.Typed tp ptr : ixs)) =
-  translateLLVMValue w tp ptr >>= \ptr_trans ->
-  translateLLVMGEP w tp ptr_trans ixs
-translateLLVMConstExpr w (L.ConstConv L.BitCast
-                          (L.Typed tp@(L.PtrTo _) v) (L.PtrTo _)) =
-  -- A bitcast from one LLVM pointer type to another is a no-op for us
-  translateLLVMValue w tp v
-translateLLVMConstExpr _ ce =
-  trace ("translateLLVMConstExpr does not yet handle:\n" ++ ppLLVMConstExpr ce)
-  mzero
-
--- | Helper function for 'translateLLVMValue'
-translateLLVMGEP :: (1 <= w, KnownNat w) => NatRepr w -> L.Type ->
-                    (PermExpr (LLVMShapeType w), OpenTerm) ->
-                    [L.Typed L.Value] ->
-                    LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
-translateLLVMGEP _ _ vtrans [] = return vtrans
-translateLLVMGEP w (L.Array _ tp) vtrans (L.Typed _ (L.ValInteger 0) : ixs) =
-  translateLLVMGEP w tp vtrans ixs
-translateLLVMGEP w (L.PtrTo tp) vtrans (L.Typed _ (L.ValInteger 0) : ixs) =
-  translateLLVMGEP w tp vtrans ixs
-translateLLVMGEP w (L.PackedStruct [tp]) vtrans (L.Typed _ (L.ValInteger 0) : ixs) =
-  translateLLVMGEP w tp vtrans ixs
-translateLLVMGEP _ tp _ ixs =
-  trace ("translateLLVMGEP cannot handle arguments:\n" ++
-         "  " ++ intercalate "," (show tp : map show ixs))
-  mzero
-
--- | Build an LLVM value for a @zeroinitializer@ field of the supplied type
-llvmZeroInitValue :: L.Type -> LLVMTransM (L.Value)
-llvmZeroInitValue (L.PrimType (L.Integer _)) = return $ L.ValInteger 0
-llvmZeroInitValue (L.Array len tp) =
-  L.ValArray tp <$> replicate (fromIntegral len) <$> llvmZeroInitValue tp
-llvmZeroInitValue (L.PackedStruct tps) =
-  L.ValPackedStruct <$> zipWith L.Typed tps <$> mapM llvmZeroInitValue tps
-llvmZeroInitValue tp =
-  trace ("llvmZeroInitValue cannot handle type:\n" ++ show (L.ppType tp))
-  mzero
-
--- | Add an LLVM global constant to a 'PermEnv', if the global has a type and
--- value we can translate to Heapster, otherwise silently ignore it
---
--- FIXME: move this to Permissions.hs
-permEnvAddGlobalConst :: (1 <= w, KnownNat w) => NatRepr w ->
-                         PermEnv -> L.Global -> PermEnv
-permEnvAddGlobalConst w env global =
-  let sym = show (L.globalSym global) in
-  trace ("Global: " ++ sym ++ "; value =\n" ++
-         maybe "None" ppLLVMValue
-         (L.globalValue global)) $
-  maybe env id $
-  (\x -> case x of
-      Just _ -> trace (sym ++ " translated") x
-      Nothing -> trace (sym ++ " not translated") x) $
-  flip runLLVMTransM env $
-  do val <- lift $ L.globalValue global
-     (sh, t) <- translateLLVMValue w (L.globalType global) val
-     let p = ValPerm_LLVMBlock $ llvmReadBlockOfShape sh
-     return $ permEnvAddGlobalSyms env
-       [PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p [t]]
-
 -- | Build a 'HeapsterEnv' associated with the given SAW core module and the
 -- given 'LLVMModule's. Add any globals in the 'LLVMModule's to the returned
 -- 'HeapsterEnv'.
@@ -427,9 +267,11 @@ mkHeapsterEnv saw_mod_name llvm_mods@(Some first_mod:_) =
        Left pf -> return pf
        Right _ -> fail "LLVM arch width is 0!"
      let globals = concatMap (\(Some lm) -> L.modGlobals $ modAST lm) llvm_mods
+         dlevel = noDebugLevel -- FIXME: how to set the debug level for
+                               -- permEnvAddGlobalConst?
          env =
            withKnownNat w $ withLeqProof leq_proof $
-           foldl (permEnvAddGlobalConst w) heapster_default_env globals
+           foldl (permEnvAddGlobalConst dlevel w) heapster_default_env globals
      env_ref <- liftIO $ newIORef env
      dlevel_ref <- liftIO $ newIORef noDebugLevel
      return $ HeapsterEnv {

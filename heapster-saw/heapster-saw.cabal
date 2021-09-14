@@ -28,6 +28,7 @@ library
     reflection,
     -- ansi-wl-pprint,
     prettyprinter >= 1.7.0,
+    pretty,
     transformers,
     mtl,
     containers,
@@ -47,6 +48,7 @@ library
     Verifier.SAW.Heapster.Implication
     Verifier.SAW.Heapster.IRTTranslation
     Verifier.SAW.Heapster.Lexer
+    Verifier.SAW.Heapster.LLVMGlobalConst
     Verifier.SAW.Heapster.Located
     Verifier.SAW.Heapster.ParsedCtx
     Verifier.SAW.Heapster.Parser
