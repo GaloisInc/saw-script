@@ -574,6 +574,10 @@ translateClosed :: (TransInfo info, Translate info ctx a tr) =>
                    a -> TransM info ctx tr
 translateClosed a = nuMultiTransM (const a) >>= translate
 
+instance (Translate info ctx a tr, NuMatching a) =>
+         Translate info ctx [a] [tr] where
+  translate = mapM translate . mbList
+
 
 ----------------------------------------------------------------------
 -- * Translating Types
@@ -781,11 +785,10 @@ instance TransInfo info =>
       return $ ETrans_Term $ bvBVOpenTerm w $ mbLift off
     [nuMP| PExpr_BV bvfactors (BV.BV 0) |] ->
       let w = natVal3 bvfactors in
-      ETrans_Term <$> foldr1 (bvAddOpenTerm w) <$>
-      mapM translate (mbList bvfactors)
+      ETrans_Term <$> foldr1 (bvAddOpenTerm w) <$> translate bvfactors
     [nuMP| PExpr_BV bvfactors off |] ->
       do let w = natRepr3 bvfactors
-         bv_transs <- mapM translate $ mbList bvfactors
+         bv_transs <- translate bvfactors
          return $ ETrans_Term $
            foldr (bvAddOpenTerm $ natValue w) (bvBVOpenTerm w $ mbLift off) bv_transs
     [nuMP| PExpr_Struct args |] ->
@@ -822,7 +825,7 @@ instance TransInfo info =>
       do let w = natVal4 mb_len
          let w_term = natOpenTerm w
          len_term <- translate1 mb_len
-         elem_tp <- tupleOfTypes <$> concat <$> mapM translate (mbList mb_fshs)
+         elem_tp <- tupleOfTypes <$> concat <$> translate mb_fshs
          return $ ETrans_Term $
            applyOpenTermMulti (globalOpenTerm "Prelude.BVVec")
            [w_term, len_term, elem_tp]
@@ -1420,7 +1423,7 @@ setLLVMArrayTransCell arr_trans (LLVMArrayIndexTrans _ i_trans _)
 -- | Adjust an array cell (= list of fields) of the translation of an LLVM array
 -- permission at a given index by applying a function to it
 adjustLLVMArrayTransCell :: (1 <= w, KnownNat w) => LLVMArrayPermTrans ctx w ->
-                            OpenTerm ->  LLVMArrayIndexTrans ctx w ->
+                            OpenTerm -> LLVMArrayIndexTrans ctx w ->
                             LLVMArrayPermTrans ctx w
 adjustLLVMArrayTransCell arr_trans f_trm (LLVMArrayIndexTrans _ i_trans _) =
   let w = fromInteger $ natVal arr_trans in
@@ -1515,6 +1518,84 @@ setLLVMArrayTransSlice arr_trans sub_arr_trans off_tm =
       applyOpenTermMulti
       (globalOpenTerm "Prelude.updSliceBVVec")
       [natOpenTerm w, len_tm, elem_tp, arr_tm, off_tm, len'_tm, sub_arr_tm] }
+
+-- | Weaken a monadic function of type @(T1*...*Tn) -> CompM(U1*...*Um)@ to one
+-- of type @(V*T1*...*Tn) -> CompM(V*U1*...*Um)@, where tuples of 2 or more
+-- types are right-nested and and in a unit type, i.e., have the form
+-- @(T1*(T2*(...*(Tn*#()))))@.
+weakenMonadicFun1 :: OpenTerm -> [OpenTerm] -> [OpenTerm] -> OpenTerm ->
+                     OpenTerm
+weakenMonadicFun1 v ts us f =
+  -- First form a term f1 of type V*(T1*...*Tn) -> CompM(V*(U1*...*Um))
+  let t_tup = tupleOfTypes ts
+      u_tup = tupleOfTypes us
+      f1 =
+        applyOpenTermMulti (globalOpenTerm "Prelude.tupleCompMFunBoth")
+        [t_tup, u_tup, v, f] in
+
+  let f2 = case ts of
+        -- If ts is empty, form the term \ (x:V) -> f1 (x, ()) to coerce f1 from
+        -- type V*#() -> CompM(V*Us) to type V -> CompM(V*Us)
+        [] ->
+          lambdaOpenTerm "x" v $ \x ->
+          applyOpenTerm f1 (pairOpenTerm x unitOpenTerm)
+        -- If ts = [t], form the term \ (x:V*(T*#())) -> f1 (x.(1),x.(2).(1)) to
+        -- coerce f1 from V*T -> CompM(V*Us) to type V*(T*#()) -> CompM(V*Us)
+        [t] ->
+          lambdaOpenTerm "x" (tupleTypeOpenTerm [v,t]) $ \x ->
+          applyOpenTerm f1 (pairOpenTerm
+                            (pairLeftOpenTerm x)
+                            (pairLeftOpenTerm $ pairRightOpenTerm x))
+        -- Otherwise, leave f1 unchanged
+        _ -> f1 in
+
+  case us of
+    -- If us is empty, compose f2 with \ (x:V*#()) -> returnM V x.(1) to coerce
+    -- from V*Us -> CompM (V*#()) to V*Us -> CompM V
+    [] ->
+      applyOpenTermMulti (globalOpenTerm "Prelude.composeM")
+      [tupleOfTypes (v:ts), pairTypeOpenTerm v unitTypeOpenTerm, v, f2,
+       lambdaOpenTerm "x" (pairTypeOpenTerm v unitTypeOpenTerm)
+       (\x -> applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
+              [v, pairLeftOpenTerm x])]
+    [u] ->
+      -- If us = [u], compose f2 with the term
+      -- \ (x:V*U) -> returnM (V*(U*#())) (x.(1), (x.(2),())) to coerce
+      -- from V*Us -> CompM (V*U) to V*Us -> CompM (V*(U*#()))
+      applyOpenTermMulti (globalOpenTerm "Prelude.composeM")
+      [tupleOfTypes (v:ts), pairTypeOpenTerm v u, tupleOfTypes [v,u], f2,
+       lambdaOpenTerm "x" (pairTypeOpenTerm v u)
+       (\x -> applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
+              [tupleOfTypes [v,u],
+               pairOpenTerm (pairLeftOpenTerm x)
+               (pairOpenTerm (pairRightOpenTerm x) unitOpenTerm)])]
+    -- Otherwise, leave f2 unchanged
+    _ -> f2
+
+
+-- | Weaken a monadic function of type @(T1*...*Tn) -> CompM(U1*...*Um)@ to one
+-- of type @(V1*...*Vk*T1*...*Tn) -> CompM(V1*...*Vk*U1*...*Um)@, where tuples
+-- of 2 or more types are right-nested and and in a unit type, i.e., have the
+-- form @(T1 * (T2 * (... * (Tn * #()))))@
+weakenMonadicFun :: [OpenTerm] -> [OpenTerm] -> [OpenTerm] -> OpenTerm ->
+                    OpenTerm
+weakenMonadicFun vs ts_top us_top f_top =
+  let (_,_,ret) =
+        foldr (\v (ts,us,f) -> (v:ts, v:us, weakenMonadicFun1 v ts us f))
+        (ts_top, us_top, f_top)
+        vs in
+  ret
+
+-- | Weaken a monadic function which is the translation of an ownership
+-- permission @lowned(ps_in -o ps_out)@ to @lowned(P * ps_in -o P * ps_out)@
+weakenLifetimeFun :: TypeTrans (PermTrans ctx a) ->
+                     TypeTrans (PermTransCtx ctx ps_in) ->
+                     TypeTrans (PermTransCtx ctx ps_out) ->
+                     OpenTerm -> OpenTerm
+weakenLifetimeFun tp_trans ps_in_trans ps_out_trans f =
+  weakenMonadicFun (transTerms
+                    tp_trans) (transTerms
+                               ps_in_trans) (transTerms ps_out_trans) f
 
 
 instance (1 <= w, KnownNat w, TransInfo info) =>
@@ -1616,7 +1697,7 @@ instance TransInfo info =>
              translate (mbMap2 (unfoldDefinedPerm dp) args off)
            Nothing -> error "Unknown permission name!"
     [nuMP| ValPerm_Conj ps |] ->
-      fmap PTrans_Conj <$> listTypeTrans <$> mapM translate (mbList ps)
+      fmap PTrans_Conj <$> listTypeTrans <$> translate ps
     [nuMP| ValPerm_Var x _ |] ->
       mkPermTypeTrans1 p <$> translate1 x
 
@@ -1659,8 +1740,8 @@ instance TransInfo info =>
     [nuMP| Perm_LLVMFrame fp |] ->
       return $ mkTypeTrans0 $ APTrans_LLVMFrame fp
     [nuMP| Perm_LOwned ls ps_in ps_out |] ->
-      do tp_in <- translate1 ps_in
-         tp_out <- translate1 ps_out
+      do tp_in <- typeTransTupleType <$> translate ps_in
+         tp_out <- typeTransTupleType <$> translate ps_out
          let tp = arrowOpenTerm "ps" tp_in (applyOpenTerm
                                             (globalOpenTerm "Prelude.CompM")
                                             tp_out)
@@ -1690,9 +1771,7 @@ translateLLVMArrayPerm mb_ap =
      let w_term = natOpenTerm w
      let mb_len = fmap llvmArrayLen mb_ap
      let mb_flds = fmap llvmArrayFields mb_ap
-     flds_trans <-
-       tupleTypeTrans <$> listTypeTrans <$>
-       mapM (translate . fmap llvmArrayFieldToAtomicPerm) (mbList mb_flds)
+     flds_trans <- tupleTypeTrans <$> listTypeTrans <$> translate mb_flds
      len_term <- translate1 mb_len
      let elem_tp = typeTransType1 flds_trans
      {-
@@ -1746,13 +1825,19 @@ instance TransInfo info =>
                                                  (PermTransCtx ctx ps)) where
   translate = translate . mbDistPermsToValuePerms . fmap unTypeDistPerms
 
+instance (TransInfo info, 1 <= w, KnownNat w) =>
+         Translate info ctx (LLVMArrayField w) (TypeTrans
+                                                (AtomicPermTrans ctx
+                                                 (LLVMPointerType w))) where
+  translate = translate . fmap llvmArrayFieldToAtomicPerm
+
+
 -- LOwnedPerms translate to a single tuple type, because lowned permissions
 -- translate to functions with one argument and one return value
 instance TransInfo info =>
          Translate info ctx (LOwnedPerms ps) (TypeTrans
                                               (PermTransCtx ctx ps)) where
-  translate =
-    fmap strictTupleTypeTrans . translate . fmap (RL.map lownedPermPerm)
+  translate = translate . fmap (RL.map lownedPermPerm)
 
 -- Translate a FunPerm to a pi-abstraction (FIXME: more documentation!)
 instance TransInfo info =>
@@ -2467,13 +2552,10 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     m
 
 
-  [nuMP| SImpl_LLVMArrayRearrange _ _ mb_ap2 |] ->
-    do ap2_tp_trans <- translate mb_ap2
+  [nuMP| SImpl_LLVMArrayRearrange _ _ _ |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
-         (\(pctx :>: ptrans_array) ->
-           pctx :>:
-           PTrans_Conj [APTrans_LLVMArray $
-                        typeTransF ap2_tp_trans [transTerm1 ptrans_array]])
+         (\(pctx :>: ptrans) -> pctx :>: typeTransF ttrans [transTerm1 ptrans])
          m
 
   [nuMP| SImpl_LLVMArrayToField _ _ _ |] ->
@@ -2564,8 +2646,32 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            pctx :>: PTrans_Conj [APTrans_LLVMArray arr_trans'])
          m
 
-  [nuMP| SImpl_LLVMArrayContents _ _ _ _ _ |] ->
-    error "FIXME HERE: translateSimplImpl: SImpl_LLVMArrayContents unhandled"
+  [nuMP| SImpl_LLVMArrayContents _ ap flds' impl |] ->
+    do pctx_out_trans <- translateSimplImplOutHead mb_simpl
+       (w_term, len_term, elem_tp, _) <- translateLLVMArrayPerm ap
+       flds_in_trans <-
+         fmap tupleTypeTrans $ translate $
+         fmap (ValPerm_Conj . map llvmArrayFieldToAtomicPerm . llvmArrayFields) ap
+       flds_out_trans <-
+         fmap tupleTypeTrans $ translate $
+         fmap (ValPerm_Conj . map llvmArrayFieldToAtomicPerm) flds'
+       impl_tm <-
+         -- FIXME: this code just fabricates a pretend LLVM value for the
+         -- arbitrary field of the array, which seems like a hack
+         inExtTransM ETrans_LLVM $
+         translateCurryLocalPermImpl "Error mapping array field permissions:"
+         (mbCombine RL.typeCtxProxies impl) MNil MNil
+         (fmap ((MNil :>:) . extPermTrans) flds_in_trans) (MNil :>: Member_Base)
+         (fmap ((MNil :>:) . extPermTrans) flds_out_trans)
+       let mk_arr_out_tm ptrans_arr =
+             applyOpenTermMulti
+             (globalOpenTerm "Prelude.mapBVVecM")
+             [elem_tp, typeTransType1 flds_out_trans, impl_tm,
+              w_term, len_term, transTerm1 ptrans_arr]
+       withPermStackM id
+         (\(pctx :>: ptrans_arr) ->
+           pctx :>: typeTransF pctx_out_trans [mk_arr_out_tm ptrans_arr])
+         m
 
   [nuMP| SImpl_LLVMFieldIsPtr x _ |] ->
     withPermStackM (:>: translateVar x)
@@ -2587,8 +2693,8 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
 
   [nuMP| SImpl_SplitLifetime _ f args l _ _ ps_in ps_out |] ->
     do pctx_out_trans <- translateSimplImplOut mb_simpl
-       ps_in_tp <- translate1 ps_in
-       ps_out_tp <- translate1 ps_out
+       ps_in_trans <- translate ps_in
+       ps_out_trans <- translate ps_out
        x_tp_trans <- translate (mbMap3 ltFuncApply f args l)
        withPermStackM
          (\(ns :>: x :>: _ :>: l2) -> ns :>: x :>: l2)
@@ -2596,15 +2702,9 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            -- The permission for x does not change type, just its lifetime; the
            -- permission for l has the (tupled) type of x added as a new input and
            -- output with tupleCompMFunBoth
-           let (f_tm,_,_) =
-                 foldr (\x_tp (f_term,f_in_tp,f_out_tp) ->
-                         ( applyOpenTermMulti
-                           (globalOpenTerm "Prelude.tupleCompMFunBoth")
-                           [f_in_tp, f_out_tp, x_tp, f_term]
-                         , pairTypeOpenTerm x_tp f_in_tp
-                         , pairTypeOpenTerm x_tp f_out_tp))
-                 (transTerm1 ptrans_l, ps_in_tp, ps_out_tp)
-                 (transTerms x_tp_trans) in
+           let f_tm =
+                 weakenLifetimeFun x_tp_trans ps_in_trans ps_out_trans $
+                 transTerm1 ptrans_l in
            RL.append pctx $
            typeTransF pctx_out_trans (transTerms ptrans_x ++ [f_tm]))
          m
@@ -2652,10 +2752,10 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                            ps_in' ps_out' ps1 ps2 impl_in impl_out |] ->
     -- First, translate the output permissions and all of the perm lists
     do pctx_out_trans <- translateSimplImplOut mb_simpl
-       ps_in_trans <- translate ps_in
-       ps_out_trans <- translate ps_out
-       ps_in'_trans <- translate ps_in'
-       ps_out'_trans <- translate ps_out'
+       ps_in_trans <- tupleTypeTrans <$> translate ps_in
+       ps_out_trans <- tupleTypeTrans <$> translate ps_out
+       ps_in'_trans <- tupleTypeTrans <$> translate ps_in'
+       ps_out'_trans <- tupleTypeTrans <$> translate ps_out'
        -- ps1_trans <- translate ps1
        -- ps2_trans <- translate ps2
 
@@ -2692,12 +2792,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        let l_res_tm =
              applyOpenTermMulti
              (globalOpenTerm "Prelude.composeM")
-             [transTerm1 ps_in'_trans, transTerm1 ps_in_trans,
-              transTerm1 ps_out'_trans, impl_in_tm,
+             [typeTransType1 ps_in'_trans, typeTransType1 ps_in_trans,
+              typeTransType1 ps_out'_trans, impl_in_tm,
               applyOpenTermMulti
               (globalOpenTerm "Prelude.composeM")
-              [transTerm1 ps_in_trans, transTerm1 ps_out_trans,
-               transTerm1 ps_out'_trans, transTerm1 ptrans_l, impl_out_tm]]
+              [typeTransType1 ps_in_trans, typeTransType1 ps_out_trans,
+               typeTransType1 ps_out'_trans, transTerm1 ptrans_l, impl_out_tm]]
 
        -- Finally, update the permissions
        withPermStackM
@@ -2708,7 +2808,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
   [nuMP| SImpl_EndLifetime _ ps_in ps_out |] ->
     -- First, translate the output permissions and the input and output types of
     -- the monadic function for the lifeime ownership permission
-    do ps_out_trans <- translate ps_out
+    do ps_out_trans <- tupleTypeTrans <$> translate ps_out
        let prxs_in = mbRAssignProxies ps_in :>: Proxy
 
        -- Next, split out the ps_in permissions from the rest of the pctx
@@ -2727,9 +2827,9 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        -- Now we apply the lifetime ownerhip function to ps_in and bind its output
        -- in the rest of the computation
        applyMultiTransM (return $ globalOpenTerm "Prelude.bindM")
-         [return (transTerm1 ps_out_trans), returnTypeM,
+         [return (typeTransType1 ps_out_trans), returnTypeM,
           return (applyOpenTerm (transTerm1 ptrans_l)
-                  (strictTransTupleTerm pctx_in)),
+                  (transTupleTerm pctx_in)),
           lambdaTransM "endl_ps" ps_out_trans $ \pctx_out ->
            withPermStackM
            (\(_ :>: l) -> vars_out :>: l)
@@ -3479,7 +3579,7 @@ instance ImplTranslateF (LocalImplRet ps) ext blocks ps_in ret where
     do pctx <- itiPermStack <$> ask
        ret_tp <- returnTypeM
        return $ applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
-         [ret_tp, strictTransTupleTerm pctx]
+         [ret_tp, transTupleTerm pctx]
 
 -- | Translate a local implication to its output, adding an error message
 translateLocalPermImpl :: String -> Mb ctx (LocalPermImpl ps_in ps_out) ->
@@ -3500,7 +3600,7 @@ translateCurryLocalPermImpl ::
   ImpTransM ext blocks tops ret ps ctx OpenTerm
 translateCurryLocalPermImpl err impl pctx1 vars1 tp_trans2 vars2 tp_trans_out =
   lambdaTransM "x_local" tp_trans2 $ \pctx2 ->
-  local (\info -> info { itiReturnType = transTerm1 tp_trans_out }) $
+  local (\info -> info { itiReturnType = typeTransType1 tp_trans_out }) $
   withPermStackM
     (const (RL.append vars1 vars2))
     (const (RL.append pctx1 pctx2))

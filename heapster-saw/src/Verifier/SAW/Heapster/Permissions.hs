@@ -3753,6 +3753,13 @@ llvmArrayRemArrayBorrows ap sub_ap
     ap
 llvmArrayRemArrayBorrows _ _ = error "llvmArrayRemArrayBorrows"
 
+-- | Test if the borrows of an array can be permuted to another order
+llvmArrayBorrowsPermuteTo :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                             [LLVMArrayBorrow w] -> Bool
+llvmArrayBorrowsPermuteTo ap bs =
+  all (flip elem (llvmArrayBorrows ap)) bs &&
+  all (flip elem bs) (llvmArrayBorrows ap)
+
 -- | Add a cell offset to an 'LLVMArrayBorrow', meaning we change the borrow to
 -- be relative to an array with that many more cells added to the front
 cellOffsetLLVMArrayBorrow :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
