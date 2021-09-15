@@ -231,6 +231,12 @@ impl MixedStruct {
     }
 }
 
+impl fmt::Display for MixedStruct {
+    fn fmt<'a, 'b>(&'a self, f: &'b mut fmt::Formatter) -> fmt::Result {
+        write!(f, "s = {}, i1 = {}, i2 = {}", self.s, self.i1, self.i2)
+    }
+}
+
 /* A 'true' enum */
 #[derive(Clone, Debug, PartialEq)]
 #[repr(u64)]
