@@ -108,6 +108,12 @@ Fixpoint foldr (a b : Type) (n : Nat) (f : a -> b -> b) (base : b) (v : Vec n a)
   | Vector.cons hd _ tl => f hd (foldr _ _ _ f base tl)
   end.
 
+Fixpoint foldl (a b : Type) (n : Nat) (f : b -> a -> b) (acc : b) (v : Vec n a) : b :=
+  match v with
+  | Vector.nil => acc
+  | Vector.cons hd _ tl => foldl _ _ _ f (f acc hd) tl
+  end.
+
 Fixpoint foldl_dep (a : Type) (b : Nat -> Type) (n : Nat)
          (f : forall n, b n -> a -> b (S n)) (base : b O) (v : Vec n a) : b n :=
   match v with
@@ -125,9 +131,9 @@ Fixpoint tuple_foldl_dep (a : Type) (b : Nat -> Type) (n : Nat)
 
 Definition EmptyVec := Vector.nil.
 
-Definition coerceVec (a : sort 0) (m n : Nat) (eq : Eq Nat m n) (v : Vec m a) : Vec n a :=
+Definition coerceVec (a : sort 0) (m n : Nat) (H : Eq Nat m n) (v : Vec m a) : Vec n a :=
   match
-    eq_sym eq in eq _ n'
+    eq_sym H in eq _ n'
     return Vec n' a -> Vec n a
   with
   | eq_refl => fun x => x

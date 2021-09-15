@@ -360,7 +360,7 @@ ruleOfProp (R.asApplyAll -> (R.isGlobalDef intEqIdent -> Just (), [x, y])) ann =
   Just $ mkRewriteRule [] x y ann
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef intModEqIdent -> Just (), [_, x, y])) ann =
   Just $ mkRewriteRule [] x y ann
-ruleOfProp (unwrapTermF -> Constant _ body) ann = ruleOfProp body ann
+ruleOfProp (unwrapTermF -> Constant _ (Just body)) ann = ruleOfProp body ann
 ruleOfProp (R.asEq -> Just (_, x, y)) ann =
   Just $ mkRewriteRule [] x y ann
 ruleOfProp (R.asEqTrue -> Just body) ann = ruleOfProp body ann

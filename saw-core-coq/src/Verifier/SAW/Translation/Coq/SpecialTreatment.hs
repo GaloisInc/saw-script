@@ -26,10 +26,12 @@ module Verifier.SAW.Translation.Coq.SpecialTreatment where
 
 import           Control.Lens                       (_1, _2, over)
 import           Control.Monad.Reader               (asks)
+import           Data.Char                          (isAlphaNum)
 import qualified Data.Map                           as Map
 import           Data.String.Interpolate            (i)
 import qualified Data.Text                          as Text
 import           Prelude                            hiding (fail)
+import           Text.Encoding.Z                    (zEncodeString)
 
 import qualified Language.Coq.AST                   as Coq
 import           Verifier.SAW.SharedTerm
@@ -316,6 +318,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("coerceVec",     mapsTo vectorsModule "coerceVec")
   , ("eq_Vec",        skip)
   , ("foldr",         mapsTo vectorsModule "foldr")
+  , ("foldl",         mapsTo vectorsModule "foldl")
   , ("gen",           mapsTo vectorsModule "gen")
   , ("rotateL",       mapsTo vectorsModule "rotateL")
   , ("rotateR",       mapsTo vectorsModule "rotateR")
@@ -446,14 +449,22 @@ sawCorePreludeSpecialTreatmentMap configuration =
 constantsRenamingMap :: [(String, String)] -> Map.Map String String
 constantsRenamingMap notations = Map.fromList notations
 
+escapeIdent :: String -> String
+escapeIdent str
+  | all okChar str = str
+  | otherwise      = "Op_" ++ zEncodeString str
+ where
+   okChar x = isAlphaNum x || x `elem` ("_'" :: String)
+
 -- TODO: Now that ExtCns contains a unique identifier, it might make sense
 -- to check those here to avoid some captures?
 translateConstant :: [(String, String)] -> ExtCns e -> String
 translateConstant notations (EC {..}) =
-  Map.findWithDefault
-    (Text.unpack (toShortName ecName))
-    (Text.unpack (toShortName ecName))
-    (constantsRenamingMap notations) -- TODO short name doesn't seem right
+  escapeIdent $
+    Map.findWithDefault
+      (Text.unpack (toShortName ecName))
+      (Text.unpack (toShortName ecName))
+      (constantsRenamingMap notations) -- TODO short name doesn't seem right
 
 zipSnippet :: String
 zipSnippet = [i|

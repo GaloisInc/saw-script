@@ -955,6 +955,7 @@ axiom at_single : (a : sort 0) -> (x : a) -> (i : Nat) -> Eq a (at 1 a (single a
 primitive zip : (a b : sort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) (a * b);
 
 primitive foldr : (a b : sort 0) -> (n : Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
+primitive foldl : (a b : sort 0) -> (n : Nat) -> (b -> a -> b) -> b -> Vec n a -> b;
 
 reverse : (n : Nat) -> (a : sort 0) -> Vec n a -> Vec n a;
 reverse n a xs = gen n a (\ (i : Nat) -> at n a xs (subNat (subNat n 1) i));
@@ -1626,6 +1627,14 @@ genBVVec n len a f =
   genWithProof (bvToNat n len) a
     (\(i:Nat) (pf:IsLtNat i (bvToNat n len)) -> 
       f (bvNat n i) (IsLtNat_to_bvult n len i pf));
+
+-- Generate a BVVec from the elements of an existing vector, using a default
+-- value when we run out of the existing vector
+genBVVecFromVec : (m : Nat) -> (a : sort 0) -> Vec m a -> a ->
+                  (n : Nat) -> (len : Vec n Bool) -> BVVec n len a;
+genBVVecFromVec m a v def n len =
+  genBVVec n len a (\ (i:Vec n Bool) (_:is_bvult n i len) ->
+                      atWithDefault m a def v (bvToNat n i));
 
 -- Ex Falso Quodlibet: if True = False then anything is possible
 efq : (a : sort 0) -> Eq Bool True False -> a;

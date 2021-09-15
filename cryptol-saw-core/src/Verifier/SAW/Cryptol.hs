@@ -653,16 +653,30 @@ proveProp sc env prop =
 
         _ -> do panic "proveProp" [pretty prop]
 
-importPrimitive :: SharedContext -> Env -> C.Name -> C.Schema -> IO Term
-importPrimitive sc env n sch
+importPrimitive :: SharedContext -> ImportPrimitiveOptions -> Env -> C.Name -> C.Schema -> IO Term
+importPrimitive sc primOpts env n sch
+  -- lookup primitive in the main primitive lookup table
   | Just nm <- C.asPrim n, Just term <- Map.lookup nm allPrims = term sc
+
+  -- lookup primitive in the main reference implementation lookup table
   | Just nm <- C.asPrim n, Just expr <- Map.lookup nm (envRefPrims env) =
       do t <- importSchema sc env sch
          e <- importExpr sc env expr
          nmi <- importName n
          scConstant' sc nmi e t
+
+  -- Optionally, create an opaque constant representing the primitive
+  -- if it doesn't match one of the ones we know about.
+  | Just _ <- C.asPrim n, allowUnknownPrimitives primOpts =
+      do t <- importSchema sc env sch
+         nmi <- importName n
+         scOpaqueConstant sc nmi t
+
+  -- Panic if we don't know the given primitive (TODO? probably shouldn't be a panic)
   | Just nm <- C.asPrim n = panic "Unknown Cryptol primitive name" [show nm]
+
   | otherwise = panic "Improper Cryptol primitive name" [show n]
+
 
 allPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 allPrims = prelPrims <> arrayPrims <> floatPrims <> suiteBPrims <> primeECPrims
@@ -1245,9 +1259,9 @@ importName cnm =
 -- definitions. (With subterm sharing, this is not as bad as it might
 -- seem.) We might want to think about generating let or where
 -- expressions instead.
-importDeclGroup :: Bool -> SharedContext -> Env -> C.DeclGroup -> IO Env
+importDeclGroup :: DeclGroupOptions -> SharedContext -> Env -> C.DeclGroup -> IO Env
 
-importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
+importDeclGroup declOpts sc env (C.Recursive [decl]) =
   case C.dDefinition decl of
     C.DPrim ->
       panic "importDeclGroup" ["Primitive declarations cannot be recursive:", show (C.dName decl)]
@@ -1258,11 +1272,11 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
          let x = nameToLocalName (C.dName decl)
          f' <- scLambda sc x t' e'
          rhs <- scGlobalApply sc "Prelude.fix" [t', f']
-         rhs' <- if isTopLevel then
-                    do nmi <- importName (C.dName decl)
-                       scConstant' sc nmi rhs t'
-                 else
-                   return rhs
+         rhs' <- case declOpts of
+                   TopLevelDeclGroup _ ->
+                     do nmi <- importName (C.dName decl)
+                        scConstant' sc nmi rhs t'
+                   NestedDeclGroup -> return rhs
          let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                         , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
          return env'
@@ -1272,7 +1286,7 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
 -- We handle this by "tupling up" all the declarations using a record and
 -- taking the fixpoint at this record type.  The desired declarations are then
 -- achieved by projecting the field names from this record.
-importDeclGroup isTopLevel sc env (C.Recursive decls) =
+importDeclGroup declOpts sc env (C.Recursive decls) =
   do -- build the environment for the declaration bodies
      let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
 
@@ -1319,11 +1333,11 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      let mkRhs d t =
            do let s = nameToFieldName (C.dName d)
               r <- scRecordSelect sc rhs s
-              if isTopLevel then
-                do nmi <- importName (C.dName d)
-                   scConstant' sc nmi r t
-              else
-                return r
+              case declOpts of
+                TopLevelDeclGroup _ ->
+                  do nmi <- importName (C.dName d)
+                     scConstant' sc nmi r t
+                NestedDeclGroup -> return r
      rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
      let env' = env { envE = Map.union (fmap (\v -> (v, 0)) rhss) (envE env)
@@ -1331,32 +1345,51 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
                     }
      return env'
 
-importDeclGroup isTopLevel sc env (C.NonRecursive decl) =
+importDeclGroup declOpts sc env (C.NonRecursive decl) =
   case C.dDefinition decl of
     C.DPrim
-     | isTopLevel -> do
-        rhs <- importPrimitive sc env (C.dName decl) (C.dSignature decl)
+     | TopLevelDeclGroup primOpts <- declOpts -> do
+        rhs <- importPrimitive sc primOpts env (C.dName decl) (C.dSignature decl)
         let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
-                      , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
+                       , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env)
+                       }
         return env'
      | otherwise -> do
         panic "importDeclGroup" ["Primitive declarations only allowed at top-level:", show (C.dName decl)]
 
     C.DExpr expr -> do
      rhs <- importExpr' sc env (C.dSignature decl) expr
-     rhs' <- if not isTopLevel then return rhs else do
-       nmi <- importName (C.dName decl)
-       t <- importSchema sc env (C.dSignature decl)
-       scConstant' sc nmi rhs t
+     rhs' <- case declOpts of
+               TopLevelDeclGroup _ ->
+                 do nmi <- importName (C.dName decl)
+                    t <- importSchema sc env (C.dSignature decl)
+                    scConstant' sc nmi rhs t
+               NestedDeclGroup -> return rhs
      let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      return env'
 
-importDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
-importDeclGroups sc = foldM (importDeclGroup False sc)
+data ImportPrimitiveOptions =
+  ImportPrimitiveOptions
+  { allowUnknownPrimitives :: Bool
+    -- ^ Should unknown primitives be translated as fresh external constants?
+  }
 
-importTopLevelDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
-importTopLevelDeclGroups sc = foldM (importDeclGroup True sc)
+defaultPrimitiveOptions :: ImportPrimitiveOptions
+defaultPrimitiveOptions =
+  ImportPrimitiveOptions
+  { allowUnknownPrimitives = False
+  }
+
+data DeclGroupOptions
+  = TopLevelDeclGroup ImportPrimitiveOptions
+  | NestedDeclGroup
+
+importDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
+importDeclGroups sc = foldM (importDeclGroup NestedDeclGroup sc)
+
+importTopLevelDeclGroups :: SharedContext -> ImportPrimitiveOptions -> Env -> [C.DeclGroup] -> IO Env
+importTopLevelDeclGroups sc primOpts = foldM (importDeclGroup (TopLevelDeclGroup primOpts) sc)
 
 coerceTerm :: SharedContext -> Env -> C.Type -> C.Type -> Term -> IO Term
 coerceTerm sc env t1 t2 e

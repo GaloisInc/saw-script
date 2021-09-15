@@ -158,6 +158,43 @@ class SAWConnection:
         self.most_recent_result = CreateGhostVariable(self, name, server_name)
         return self.most_recent_result
 
+    def jvm_load_class(self, name: str, class_name: str)  -> Command:
+        """Create an instance of the `JVMLoadClass` command. Documentation on the purpose
+        and use of this command is associated with the top-level `jvm_load_class`
+        function.
+        """
+        self.most_recent_result = JVMLoadClass(self, name, class_name)
+        return self.most_recent_result
+
+    def jvm_verify(self,
+                   class_name: str,
+                   method_name: str,
+                   lemmas: List[str],
+                   check_sat: bool,
+                   contract: Any,
+                   script: ProofScript,
+                   lemma_name: str) -> Command:
+        """Create an instance of the `JVMVerify` command. Documentation on the purpose
+        and use of this command is associated with the top-level `jvm_assume`
+        function.
+        """
+        self.most_recent_result = \
+            JVMVerify(self, class_name, method_name, lemmas, check_sat, contract, script, lemma_name)
+        return self.most_recent_result
+
+    def jvm_assume(self,
+                   class_name: str,
+                   method_name: str,
+                   contract: Any,
+                   lemma_name: str) -> Command:
+        """Create an instance of the `JVMAssume` command. Documentation on the purpose
+        and use of this command is associated with the top-level `jvm_assume`
+        function.
+        """
+        self.most_recent_result = \
+            JVMAssume(self, class_name, method_name, contract, lemma_name)
+        return self.most_recent_result
+
     def llvm_load_module(self, name: str, bitcode_file: str)  -> Command:
         self.most_recent_result = LLVMLoadModule(self, name, bitcode_file)
         return self.most_recent_result
