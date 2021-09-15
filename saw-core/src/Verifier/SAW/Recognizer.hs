@@ -313,8 +313,8 @@ asLocalVar :: Recognizer Term DeBruijnIndex
 asLocalVar (unwrapTermF -> LocalVar i) = return i
 asLocalVar _ = Nothing
 
-asConstant :: Recognizer Term (ExtCns Term, Term)
-asConstant (unwrapTermF -> Constant ec t) = return (ec, t)
+asConstant :: Recognizer Term (ExtCns Term, Maybe Term)
+asConstant (unwrapTermF -> Constant ec mt) = return (ec, mt)
 asConstant _ = Nothing
 
 asExtCns :: Recognizer Term (ExtCns Term)

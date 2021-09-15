@@ -333,7 +333,7 @@ data TermF e
       -- ^ The type of a (possibly) dependent function
     | LocalVar !DeBruijnIndex
       -- ^ Local variables are referenced by deBruijn index.
-    | Constant !(ExtCns e) !e
+    | Constant !(ExtCns e) !(Maybe e)
       -- ^ An abstract constant packaged with its type and definition.
       -- The body and type should be closed terms.
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
@@ -401,15 +401,15 @@ instance Net.Pattern Term where
 termToPat :: Term -> Net.Pat
 termToPat t =
     case unwrapTermF t of
-      Constant ec _             -> Net.Atom (toAbsoluteName (ecName ec))
+      Constant ec _             -> Net.Atom (toShortName (ecName ec))
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
-      FTermF (Primitive pn)     -> Net.Atom (identText (primName pn))
+      FTermF (Primitive pn)     -> Net.Atom (identBaseName (primName pn))
       FTermF (Sort s)           -> Net.Atom (Text.pack ('*' : show s))
       FTermF (NatLit _)         -> Net.Var
       FTermF (DataTypeApp c ps ts) ->
-        foldl Net.App (Net.Atom (identText (primName c))) (map termToPat (ps ++ ts))
+        foldl Net.App (Net.Atom (identBaseName (primName c))) (map termToPat (ps ++ ts))
       FTermF (CtorApp c ps ts)   ->
-        foldl Net.App (Net.Atom (identText (primName c))) (map termToPat (ps ++ ts))
+        foldl Net.App (Net.Atom (identBaseName (primName c))) (map termToPat (ps ++ ts))
       _                         -> Net.Var
 
 unwrapTermF :: Term -> TermF Term

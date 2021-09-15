@@ -70,6 +70,8 @@ data Decl
   = Axiom Ident Type
   | Comment String
   | Definition Ident [Binder] (Maybe Type) Term
+  | Parameter Ident Type
+  | Variable Ident Type
   | InductiveDecl Inductive
   | Snippet String
   deriving (Show)

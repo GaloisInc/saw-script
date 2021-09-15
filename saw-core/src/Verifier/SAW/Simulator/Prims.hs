@@ -353,6 +353,7 @@ constMap bp = Map.fromList
   , ("Prelude.split", splitOp bp)
   , ("Prelude.zip", vZipOp (bpUnpack bp))
   , ("Prelude.foldr", foldrOp (bpUnpack bp))
+  , ("Prelude.foldl", foldlOp (bpUnpack bp))
   , ("Prelude.rotateL", rotateLOp bp)
   , ("Prelude.rotateR", rotateROp bp)
   , ("Prelude.shiftL", shiftLOp bp)
@@ -1057,6 +1058,21 @@ foldrOp unpack =
                    apply fx y
     xv <- toVector unpack xs
     lift (V.foldr g (force z) xv)
+
+-- foldl : (a b : sort 0) -> (n : Nat) -> (b -> a -> b) -> b -> Vec n a -> b;
+foldlOp :: (VMonadLazy l, Show (Extra l)) => Unpack l -> Prim l
+foldlOp unpack =
+  constFun $
+  constFun $
+  constFun $
+  strictFun $ \f ->
+  primFun $ \z ->
+  strictFun $ \xs ->
+  PrimExcept $ do
+    let g m x = do f1 <- apply f =<< delay m
+                   apply f1 x
+    xv <- toVector unpack xs
+    lift (V.foldl g (force z) xv)
 
 -- op :: Integer -> Integer;
 intUnOp :: VMonad l => (VInt l -> MInt l) -> Prim l

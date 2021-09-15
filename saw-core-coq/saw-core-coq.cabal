@@ -27,7 +27,8 @@ library
     text,
     parameterized-utils,
     bv-sized,
-    vector
+    vector,
+    zenc
   hs-source-dirs: src
   exposed-modules:
      Language.Coq.AST

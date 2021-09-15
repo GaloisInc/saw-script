@@ -49,7 +49,7 @@ import SAWScript.Crucible.LLVM.Builtins (CheckPointsToType)
 import SAWScript.Crucible.LLVM.X86 (defaultStackBaseAlign)
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS (ProvedSpec, GhostGlobal)
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModule)
-import SAWScript.Options (defaultOptions)
+import SAWScript.Options (Options(..), processEnv, defaultOptions)
 import SAWScript.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
 import SAWScript.Proof (newTheoremDB)
@@ -173,15 +173,13 @@ initialState readFileFn =
   -- warnings from the Cryptol type checker
   silence $
   do sc <- mkSharedContext
+     opts <- processEnv defaultOptions
      CryptolSAW.scLoadPreludeModule sc
      CryptolSAW.scLoadCryptolModule sc
      let mn = mkModuleName ["SAWScript"]
      scLoadModule sc (emptyModule mn)
      ss <- basic_ss sc
-     let jarFiles = []
-         classPaths = []
-         javaBinDirs = []
-     jcb <- JSS.loadCodebase jarFiles classPaths javaBinDirs
+     jcb <- JSS.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
      let bic = BuiltinContext { biSharedContext = sc
                               , biBasicSS = ss
                               }
@@ -193,7 +191,7 @@ initialState readFileFn =
      let ro = TopLevelRO
                 { roSharedContext = sc
                 , roJavaCodebase = jcb
-                , roOptions = defaultOptions
+                , roOptions = opts
                 , roHandleAlloc = halloc
                 , roPosition = PosInternal "SAWServer"
 #if USE_BUILTIN_ABC
