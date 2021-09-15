@@ -2624,9 +2624,6 @@ instance SubstVar s m => Substable1 s (LocalImplRet ps) m where
 -- FIXME: instead of having a separate PPInfo and name type map, we should maybe
 -- combine all the local context into one type...?
 
-data RecurseFlag = RecLeft | RecRight | RecNone
-  deriving (Eq, Show, Read)
-
 data ImplState vars ps =
   ImplState { _implStatePerms :: PermSet ps,
               _implStateVars :: CruCtx vars,

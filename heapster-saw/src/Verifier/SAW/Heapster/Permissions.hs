@@ -86,7 +86,7 @@ import Debug.Trace
 
 
 ----------------------------------------------------------------------
--- * Utility Functions
+-- * Utility Functions and Definitions
 ----------------------------------------------------------------------
 
 -- | Delete the nth element of a list
@@ -131,6 +131,11 @@ foldr1WithDefault f def (a:as) = f a $ foldr1WithDefault f def as
 -- empty list.
 foldMapWithDefault :: (b -> b -> b) -> b -> (a -> b) -> [a] -> b
 foldMapWithDefault comb def f l = foldr1WithDefault comb def $ map f l
+
+-- | A flag indicating whether an equality test has unfolded a
+-- recursively-defined name on one side of the equation already
+data RecurseFlag = RecLeft | RecRight | RecNone
+  deriving (Eq, Show, Read)
 
 
 ----------------------------------------------------------------------
@@ -6503,6 +6508,15 @@ lookupNamedPerm env = helper (permEnvNamedPerms env) where
     | Just (Refl, Refl, Refl) <- testNamedPermNameEq (namedPermName rp) rpn
     = Just rp
   helper (_:rps) rpn = helper rps rpn
+
+-- | Look up the 'NamedPerm' for a 'NamedPermName' in a 'PermEnv' or raise an
+-- error if it does not exist
+requireNamedPerm :: PermEnv -> NamedPermName ns args a -> NamedPerm ns args a
+requireNamedPerm env npn
+  | Just np <- lookupNamedPerm env npn = np
+requireNamedPerm _ npn =
+  error ("requireNamedPerm: named perm does not exist: "
+         ++ namedPermNameName npn)
 
 -- | Look up an LLVM shape by name in a 'PermEnv' and cast it to a given width
 lookupNamedShape :: PermEnv -> String -> Maybe SomeNamedShape
