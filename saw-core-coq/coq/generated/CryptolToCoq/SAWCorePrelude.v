@@ -459,6 +459,10 @@ Axiom expByNat : forall (a : Type), a -> (a -> a -> a) -> a -> @SAWCoreScaffoldi
 
 (* Prelude.gen was skipped *)
 
+Axiom head : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) a -> a .
+
+Axiom tail : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) a -> @SAWCoreVectorsAsCoqVectors.Vec n a .
+
 (* Prelude.atWithDefault was skipped *)
 
 Definition sawAt : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreScaffolding.Nat -> a :=
@@ -830,11 +834,11 @@ Definition uncurrySigma : forall (a : Type), forall (b : a -> Type), forall (c :
 
 (* Prelude.List__rec was skipped *)
 
-Definition unfoldList : forall (a : Type), @Datatypes.list a -> @Either unit (prod a (prod (@Datatypes.list a) unit)) :=
-  fun (a : Type) (l : @Datatypes.list a) => @Datatypes.list_rect a (fun (_1 : @Datatypes.list a) => @Either unit (prod a (prod (@Datatypes.list a) unit))) (@Left unit (prod a (prod (@Datatypes.list a) unit)) tt) (fun (x : a) (l1 : @Datatypes.list a) (_1 : @Either unit (prod a (prod (@Datatypes.list a) unit))) => @Right unit (prod a (prod (@Datatypes.list a) unit)) (pair x (pair l1 tt))) l.
+Definition unfoldList : forall (a : Type), @Datatypes.list a -> @Either unit (prod a (@Datatypes.list a)) :=
+  fun (a : Type) (l : @Datatypes.list a) => @Datatypes.list_rect a (fun (_1 : @Datatypes.list a) => @Either unit (prod a (@Datatypes.list a))) (@Left unit (prod a (@Datatypes.list a)) tt) (fun (x : a) (l1 : @Datatypes.list a) (_1 : @Either unit (prod a (@Datatypes.list a))) => @Right unit (prod a (@Datatypes.list a)) (pair x l1)) l.
 
-Definition foldList : forall (a : Type), @Either unit (prod a (prod (@Datatypes.list a) unit)) -> @Datatypes.list a :=
-  fun (a : Type) => @either unit (prod a (prod (@Datatypes.list a) unit)) (@Datatypes.list a) (fun (_1 : unit) => @Datatypes.nil a) (fun (tup : prod a (prod (@Datatypes.list a) unit)) => @Datatypes.cons a (SAWCoreScaffolding.fst tup) (SAWCoreScaffolding.fst (SAWCoreScaffolding.snd tup))).
+Definition foldList : forall (a : Type), @Either unit (prod a (@Datatypes.list a)) -> @Datatypes.list a :=
+  fun (a : Type) => @either unit (prod a (@Datatypes.list a)) (@Datatypes.list a) (fun (_1 : unit) => @Datatypes.nil a) (fun (tup : prod a (@Datatypes.list a)) => @Datatypes.cons a (SAWCoreScaffolding.fst tup) (SAWCoreScaffolding.snd tup)).
 
 Inductive ListSort : Type :=
 | LS_Nil : @ListSort
@@ -1011,6 +1015,18 @@ Definition foldIRT : forall (As : @ListSort), forall (Ds : @IRTSubsts As), foral
 
 (* Prelude.bindM was skipped *)
 
+Definition fmapM : forall (a : Type), forall (b : Type), (a -> b) -> CompM a -> CompM b :=
+  fun (a : Type) (b : Type) (f : a -> b) (m : CompM a) => @bindM CompM _ a b m (fun (x : a) => @returnM CompM _ b (f x)).
+
+Definition applyM : forall (a : Type), forall (b : Type), CompM (a -> b) -> CompM a -> CompM b :=
+  fun (a : Type) (b : Type) (f : CompM (a -> b)) (m : CompM a) => @bindM CompM _ (a -> b) b f (fun (f1 : a -> b) => @bindM CompM _ a b m (fun (x : a) => @returnM CompM _ b (f1 x))).
+
+Definition fmapM2 : forall (a : Type), forall (b : Type), forall (c : Type), (a -> b -> c) -> CompM a -> CompM b -> CompM c :=
+  fun (a : Type) (b : Type) (c : Type) (f : a -> b -> c) (m1 : CompM a) (m2 : CompM b) => @applyM b c (@fmapM a (b -> c) f m1) m2.
+
+Definition fmapM3 : forall (a : Type), forall (b : Type), forall (c : Type), forall (d : Type), (a -> b -> c -> d) -> CompM a -> CompM b -> CompM c -> CompM d :=
+  fun (a : Type) (b : Type) (c : Type) (d : Type) (f : a -> b -> c -> d) (m1 : CompM a) (m2 : CompM b) (m3 : CompM c) => @applyM c d (@fmapM2 a b (c -> d) f m1 m2) m3.
+
 Definition composeM : forall (a : Type), forall (b : Type), forall (c : Type), (a -> CompM b) -> (b -> CompM c) -> a -> CompM c :=
   fun (a : Type) (b : Type) (c : Type) (f : a -> CompM b) (g : b -> CompM c) (x : a) => @bindM CompM _ b c (f x) g.
 
@@ -1019,6 +1035,12 @@ Definition tupleCompMFunBoth : forall (a : Type), forall (b : Type), forall (c :
 
 Definition tupleCompMFunOut : forall (a : Type), forall (b : Type), forall (c : Type), c -> (a -> CompM b) -> a -> CompM (prod c b) :=
   fun (a : Type) (b : Type) (c : Type) (x : c) (f : a -> CompM b) (y : a) => @bindM CompM _ b (prod c b) (f y) (fun (z : b) => @returnM CompM _ (prod c b) (pair x z)).
+
+Definition mapM : forall (a : Type), forall (b : Type), (a -> CompM b) -> forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n a -> CompM (@SAWCoreVectorsAsCoqVectors.Vec n b) :=
+  fun (a : Type) (b : Type) (f : a -> CompM b) => @Nat__rec (fun (n : @SAWCoreScaffolding.Nat) => @SAWCoreVectorsAsCoqVectors.Vec n a -> CompM (@SAWCoreVectorsAsCoqVectors.Vec n b)) (fun (_1 : @SAWCoreVectorsAsCoqVectors.Vec 0 a) => @returnM CompM _ (@SAWCoreVectorsAsCoqVectors.Vec 0 b) (@SAWCoreVectorsAsCoqVectors.EmptyVec b)) (fun (n : @SAWCoreScaffolding.Nat) (rec_f : @SAWCoreVectorsAsCoqVectors.Vec n a -> CompM (@SAWCoreVectorsAsCoqVectors.Vec n b)) (v : @SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) a) => @fmapM2 b (@SAWCoreVectorsAsCoqVectors.Vec n b) (@SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) b) (fun (hd : b) (tl : @SAWCoreVectorsAsCoqVectors.Vec n b) => @ConsVec b hd n tl) (f (@head n a v)) (rec_f (@tail n a v))).
+
+Definition mapBVVecM : forall (a : Type), forall (b : Type), (a -> CompM b) -> forall (n : @SAWCoreScaffolding.Nat), forall (len : @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)), @BVVec n len a -> CompM (@BVVec n len b) :=
+  fun (a : Type) (b : Type) (f : a -> CompM b) (n : @SAWCoreScaffolding.Nat) (len : @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) => @mapM a b f (@SAWCoreVectorsAsCoqVectors.bvToNat n len).
 
 (* Prelude.errorM was skipped *)
 

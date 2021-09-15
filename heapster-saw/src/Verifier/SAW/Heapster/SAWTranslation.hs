@@ -132,12 +132,32 @@ typeTransType1 (TypeTrans [] _) = unitTypeOpenTerm
 typeTransType1 (TypeTrans [tp] _) = tp
 typeTransType1 _ = error ("typeTransType1" ++ nlPrettyCallStack callStack)
 
--- | Build the tuple of @N@ types, with the special case that a single type is
--- just converted to itself
+-- | Build the tuple type @T1 * (T2 * ... * (Tn-1 * Tn))@ of @n@ types, with the
+-- special case that 0 types maps to the unit type @#()@ (and 1 type just maps
+-- to itself). Note that this is different from 'tupleTypeOpenTerm', which
+-- always ends with unit, i.e., which returns @T1*(T2*...*(Tn-1*(Tn*#())))@.
 tupleOfTypes :: [OpenTerm] -> OpenTerm
 tupleOfTypes [] = unitTypeOpenTerm
 tupleOfTypes [tp] = tp
-tupleOfTypes tps = tupleTypeOpenTerm tps
+tupleOfTypes (tp:tps) = pairTypeOpenTerm tp $ tupleOfTypes tps
+
+-- | Build the tuple @(t1,(t2,(...,(tn-1,tn))))@ of @n@ terms, with the
+-- special case that 0 types maps to the unit value @()@ (and 1 value just maps
+-- to itself). Note that this is different from 'tupleOpenTerm', which
+-- always ends with unit, i.e., which returns @t1*(t2*...*(tn-1*(tn*())))@.
+tupleOfTerms :: [OpenTerm] -> OpenTerm
+tupleOfTerms [] = unitOpenTerm
+tupleOfTerms [t] = t
+tupleOfTerms (t:ts) = pairOpenTerm t $ tupleOfTerms ts
+
+-- | Project the @i@th element from a term of type @'tupleOfTypes' tps@. Note
+-- that this requires knowing the length of @tps@.
+projTupleOfTypes :: [OpenTerm] -> Integer -> OpenTerm -> OpenTerm
+projTupleOfTypes [] _ _ = error "projTupleOfTypes: projection of empty tuple!"
+projTupleOfTypes [_] 0 tup = tup
+projTupleOfTypes (_:_) 0 tup = pairLeftOpenTerm tup
+projTupleOfTypes (_:tps) i tup =
+  projTupleOfTypes tps (i-1) $ pairRightOpenTerm tup
 
 -- | Map the 'typeTransTypes' field of a 'TypeTrans' to a single type, where a
 -- single type is mapped to itself, an empty list of types is mapped to @unit@,
@@ -145,14 +165,13 @@ tupleOfTypes tps = tupleTypeOpenTerm tps
 typeTransTupleType :: TypeTrans tr -> OpenTerm
 typeTransTupleType = tupleOfTypes . typeTransTypes
 
--- | Convert a 'TypeTrans' over 0 or more types to one over 1 type, where 2
--- or more types are converted to a single tuple type
+-- | Convert a 'TypeTrans' over 0 or more types to one over the one type
+-- returned by 'tupleOfTypes'
 tupleTypeTrans :: TypeTrans tr -> TypeTrans tr
--- tupleTypeTrans ttrans@(TypeTrans [] _) = ttrans
-tupleTypeTrans ttrans@(TypeTrans [_] _) = ttrans
 tupleTypeTrans ttrans =
-  TypeTrans [tupleTypeOpenTerm $ typeTransTypes ttrans]
-  (\[t] -> typeTransF ttrans $ map (\i -> projTupleOpenTerm i t) $
+  let tps = typeTransTypes ttrans in
+  TypeTrans [tupleOfTypes tps]
+  (\[t] -> typeTransF ttrans $ map (\i -> projTupleOfTypes tps i t) $
            take (length $ typeTransTypes ttrans) [0..])
 
 -- | Convert a 'TypeTrans' over 0 or more types to one over 1 type of the form
@@ -219,7 +238,7 @@ class IsTermTrans tr where
 -- function returns an element of the type @'tupleTypeTrans' ttrans@.
 transTupleTerm :: IsTermTrans tr => tr -> OpenTerm
 transTupleTerm (transTerms -> [t]) = t
-transTupleTerm tr = tupleOpenTerm $ transTerms tr
+transTupleTerm tr = tupleOfTerms $ transTerms tr
 
 -- | Build a tuple of the terms contained in a translation. This is "strict" in
 -- that it always makes a tuple, even for a single type, unlike
@@ -1520,9 +1539,8 @@ setLLVMArrayTransSlice arr_trans sub_arr_trans off_tm =
       [natOpenTerm w, len_tm, elem_tp, arr_tm, off_tm, len'_tm, sub_arr_tm] }
 
 -- | Weaken a monadic function of type @(T1*...*Tn) -> CompM(U1*...*Um)@ to one
--- of type @(V*T1*...*Tn) -> CompM(V*U1*...*Um)@, where tuples of 2 or more
--- types are right-nested and and in a unit type, i.e., have the form
--- @(T1*(T2*(...*(Tn*#()))))@.
+-- of type @(V*T1*...*Tn) -> CompM(V*U1*...*Um)@, @n@-ary tuple types are built
+-- using 'tupleOfTypes'
 weakenMonadicFun1 :: OpenTerm -> [OpenTerm] -> [OpenTerm] -> OpenTerm ->
                      OpenTerm
 weakenMonadicFun1 v ts us f =
@@ -1539,13 +1557,6 @@ weakenMonadicFun1 v ts us f =
         [] ->
           lambdaOpenTerm "x" v $ \x ->
           applyOpenTerm f1 (pairOpenTerm x unitOpenTerm)
-        -- If ts = [t], form the term \ (x:V*(T*#())) -> f1 (x.(1),x.(2).(1)) to
-        -- coerce f1 from V*T -> CompM(V*Us) to type V*(T*#()) -> CompM(V*Us)
-        [t] ->
-          lambdaOpenTerm "x" (tupleTypeOpenTerm [v,t]) $ \x ->
-          applyOpenTerm f1 (pairOpenTerm
-                            (pairLeftOpenTerm x)
-                            (pairLeftOpenTerm $ pairRightOpenTerm x))
         -- Otherwise, leave f1 unchanged
         _ -> f1 in
 
@@ -1558,17 +1569,6 @@ weakenMonadicFun1 v ts us f =
        lambdaOpenTerm "x" (pairTypeOpenTerm v unitTypeOpenTerm)
        (\x -> applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
               [v, pairLeftOpenTerm x])]
-    [u] ->
-      -- If us = [u], compose f2 with the term
-      -- \ (x:V*U) -> returnM (V*(U*#())) (x.(1), (x.(2),())) to coerce
-      -- from V*Us -> CompM (V*U) to V*Us -> CompM (V*(U*#()))
-      applyOpenTermMulti (globalOpenTerm "Prelude.composeM")
-      [tupleOfTypes (v:ts), pairTypeOpenTerm v u, tupleOfTypes [v,u], f2,
-       lambdaOpenTerm "x" (pairTypeOpenTerm v u)
-       (\x -> applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
-              [tupleOfTypes [v,u],
-               pairOpenTerm (pairLeftOpenTerm x)
-               (pairOpenTerm (pairRightOpenTerm x) unitOpenTerm)])]
     -- Otherwise, leave f2 unchanged
     _ -> f2
 

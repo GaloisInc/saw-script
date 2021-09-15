@@ -1451,20 +1451,20 @@ List__rec :
   (l : List a) -> P l;
 List__rec a P f1 f2 l = List#rec a P f1 f2 l;
 
-unfoldList : (a:sort 0) -> List a -> Either #() (a * List a * #());
+unfoldList : (a:sort 0) -> List a -> Either #() (a * List a);
 unfoldList a l =
-  List__rec a (\ (_:List a) -> Either #() (a * List a * #()))
-  (Left #() (a * List a * #()) ())
-  (\ (x:a) (l:List a) (_:Either #() (a * List a * #())) ->
-     Right #() (a * List a * #()) (x, l, ()))
+  List__rec a (\ (_:List a) -> Either #() (a * List a))
+  (Left #() (a * List a) ())
+  (\ (x:a) (l:List a) (_:Either #() (a * List a)) ->
+     Right #() (a * List a) (x, l))
   l;
 
-foldList : (a:sort 0) -> Either #() (a * List a * #()) -> List a;
+foldList : (a:sort 0) -> Either #() (a * List a) -> List a;
 foldList a =
-  either #() (a * List a * #()) (List a)
+  either #() (a * List a) (List a)
          (\ (_ : #()) -> Nil a)
-         (\ (tup : (a * List a * #())) ->
-            Cons a tup.(1) tup.(2).(1));
+         (\ (tup : (a * List a)) ->
+            Cons a tup.(1) tup.(2));
 
 -- A list of types, i.e. `List (sort 0)` if `List` was universe polymorphic
 data ListSort : sort 1
