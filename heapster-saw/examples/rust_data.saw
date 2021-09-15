@@ -1,6 +1,5 @@
 enable_experimental;
 env <- heapster_init_env_from_file "rust_data.sawcore" "rust_data.bc";
-heapster_set_debug_level env 1;
 
 /***
  *** Types
@@ -32,7 +31,10 @@ heapster_define_rust_type env "pub enum Sum<X,Y> { Left (X), Right (Y) }";
 heapster_define_rust_type env "pub enum Option<X> { None, Some (X) }";
 
 // The str type
-heapster_define_llvmshape env "str" 64 "" "exsh len:bv 64.arraysh(len,1,[(8,int8<>)])";
+// For now we have to define the shape explicitly without the int8 name because
+// we don't yet have implications on array cells
+//heapster_define_llvmshape env "str" 64 "" "exsh len:bv 64.arraysh(len,1,[(8,int8<>)])";
+heapster_define_llvmshape env "str" 64 "" "exsh len:bv 64.arraysh(len,1,[(8,exists x:bv 8.eq(llvmword(x)))])";
 //heapster_define_rust_type env "type str = [u8];";
 
 // The String type
@@ -135,7 +137,8 @@ heapster_assume_fun_rename env to_string_str "to_string_str" "(len:bv 64). arg0:
 // HashMap::insert
 // FIXME: we currently pretend this always returns None
 hashmap_u64_u64_insert_sym <- heapster_find_symbol env "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert";
-heapster_assume_fun_rename env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert" "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>" "\\ (endl:HashMap (Vec 64 Bool) (Vec 64 Bool) * #() -> CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) (h:HashMap (Vec 64 Bool) (Vec 64 Bool)) (k:Vec 64 Bool) (v:Vec 64 Bool) -> returnM ((#() -> CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) * Either #() (Vec 64 Bool) * #()) ((\\ (_:#()) -> returnM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #()) (Cons (Vec 64 Bool * Vec 64 Bool) (k,v) h, ())), Left #() (Vec 64 Bool) (), ())";
+heapster_assume_fun_rename_prim env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert" "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>";
+//heapster_assume_fun_rename env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert" "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>" "\\ (endl:HashMap (Vec 64 Bool) (Vec 64 Bool) * #() -> CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) (h:HashMap (Vec 64 Bool) (Vec 64 Bool)) (k:Vec 64 Bool) (v:Vec 64 Bool) -> returnM ((#() -> CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) * Either #() (Vec 64 Bool) * #()) ((\\ (_:#()) -> returnM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #()) (Cons (Vec 64 Bool * Vec 64 Bool) (k,v) h, ())), Left #() (Vec 64 Bool) (), ())";
 
 /*
 String__fmt_sym <- heapster_find_trait_method_symbol env "core::fmt::Display::fmt<String>";
