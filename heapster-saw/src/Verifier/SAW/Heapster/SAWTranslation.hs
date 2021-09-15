@@ -2647,7 +2647,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_LLVMArrayContents _ ap flds' impl |] ->
-    do pctx_out_trans <- translateSimplImplOutHead mb_simpl
+    do p_out_trans <- translateSimplImplOutHead mb_simpl
        (w_term, len_term, elem_tp, _) <- translateLLVMArrayPerm ap
        flds_in_trans <-
          fmap tupleTypeTrans $ translate $
@@ -2663,15 +2663,21 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          (mbCombine RL.typeCtxProxies impl) MNil MNil
          (fmap ((MNil :>:) . extPermTrans) flds_in_trans) (MNil :>: Member_Base)
          (fmap ((MNil :>:) . extPermTrans) flds_out_trans)
-       let mk_arr_out_tm ptrans_arr =
+       -- Build the computation that maps impl_tm over the input array using the
+       -- mapBVVecM monadic combinator
+       ptrans_arr <- getTopPermM
+       let arr_out_comp_tm =
              applyOpenTermMulti
              (globalOpenTerm "Prelude.mapBVVecM")
              [elem_tp, typeTransType1 flds_out_trans, impl_tm,
               w_term, len_term, transTerm1 ptrans_arr]
-       withPermStackM id
-         (\(pctx :>: ptrans_arr) ->
-           pctx :>: typeTransF pctx_out_trans [mk_arr_out_tm ptrans_arr])
-         m
+       -- Now use bindM to bind the result of arr_out_comp_tm in the remaining
+       -- computation
+       applyMultiTransM (return $ globalOpenTerm "Prelude.bindM")
+         [return (typeTransType1 p_out_trans), returnTypeM,
+          return arr_out_comp_tm,
+          lambdaTransM "mapped_array" p_out_trans $ \ptrans_arr' ->
+           withPermStackM id (\(pctx :>: _) -> pctx :>: ptrans_arr') m]
 
   [nuMP| SImpl_LLVMFieldIsPtr x _ |] ->
     withPermStackM (:>: translateVar x)
