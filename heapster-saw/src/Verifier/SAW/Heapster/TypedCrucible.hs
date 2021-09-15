@@ -4031,12 +4031,12 @@ visitCallSite (TypedEntry {..}) site@(TypedCallSite {..})
 
 -- | Widen the permissions held by all callers of an entrypoint to compute new,
 -- weaker input permissions that can hopefully be satisfied by them
-widenEntry :: PermCheckExtC ext => DebugLevel ->
+widenEntry :: PermCheckExtC ext => DebugLevel -> PermEnv ->
               TypedEntry TCPhase ext blocks tops ret args ghosts ->
               Some (TypedEntry TCPhase ext blocks tops ret args)
-widenEntry dlevel (TypedEntry {..}) =
+widenEntry dlevel env (TypedEntry {..}) =
   debugTrace dlevel ("Widening entrypoint: " ++ show typedEntryID) $
-  case foldl1' (widen dlevel typedEntryTops typedEntryArgs) $
+  case foldl1' (widen dlevel env typedEntryTops typedEntryArgs) $
        map (fmapF typedCallSiteArgVarPerms) typedEntryCallers of
     Some (ArgVarPerms ghosts perms_in) ->
       let callers =
@@ -4070,6 +4070,7 @@ visitEntry _ _ _ entry
 -- Otherwise, visit the call sites, widen if needed, and type-check the body
 visitEntry names can_widen blk entry =
   (stDebugLevel <$> get) >>= \dlevel ->
+  (stPermEnv <$> get) >>= \env ->
   debugTracePretty dlevel
   (vsep [pretty ("visitEntry " ++ show (typedEntryID entry)
                  ++ " with input perms:"),
@@ -4079,7 +4080,7 @@ visitEntry names can_widen blk entry =
   mapM (traverseF $
         visitCallSite entry) (typedEntryCallers entry) >>= \callers ->
   if can_widen && any (anyF typedCallSiteImplFails) callers then
-    case widenEntry dlevel entry of
+    case widenEntry dlevel env entry of
       Some entry' ->
         -- If we widen then we are throwing away the old body, so all of its
         -- callees are no longer needed and can be deleted
