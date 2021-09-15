@@ -3011,12 +3011,29 @@ primitives = Map.fromList
     , " from the named LLVM bitcode file."
     ]
 
+  , prim "heapster_init_env_debug"
+    "String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env)
+    Experimental
+    [ "Create a new Heapster environment with the given SAW module name"
+    , " from the named LLVM bitcode file with debug tracing turned on"
+    ]
+
   , prim "heapster_init_env_from_file"
     "String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_init_env_from_file)
     Experimental
     [ "Create a new Heapster environment from the named LLVM bitcode file,"
     , " initialized with the module in the given SAW core file."
+    ]
+
+  , prim "heapster_init_env_from_file_debug"
+    "String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env_from_file_debug)
+    Experimental
+    [ "Create a new Heapster environment from the named LLVM bitcode file,"
+    , " initialized with the module in the given SAW core file, with debug"
+    , " tracing turned on"
     ]
 
   , prim "load_sawcore_from_file"
