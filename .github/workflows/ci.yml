@@ -103,11 +103,6 @@ jobs:
             saw/SAWScript/Version.hs
           rm -f saw/SAWScript/Version.hs.bak
 
-      - id: abc
-        shell: bash
-        run: .github/ci.sh build_abc
-        if: runner.os != 'Windows'
-
       - shell: bash
         run: .github/ci.sh build
 
