@@ -908,6 +908,9 @@ Definition BVVec : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVec
 Definition genBVVec : forall (n : @SAWCoreScaffolding.Nat), forall (len : @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)), forall (a : Type), (forall (i : @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)), @is_bvult n i len -> a) -> @BVVec n len a :=
   fun (n : @SAWCoreScaffolding.Nat) (len : @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) (a : Type) (f : forall (i : @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)), @SAWCoreScaffolding.Eq (@SAWCoreScaffolding.Bool) (@SAWCoreVectorsAsCoqVectors.bvult n i len) (@SAWCoreScaffolding.true) -> a) => @genWithProof (@SAWCoreVectorsAsCoqVectors.bvToNat n len) a (fun (i : @SAWCoreScaffolding.Nat) (pf : @IsLeNat (@SAWCoreScaffolding.Succ i) (@SAWCoreVectorsAsCoqVectors.bvToNat n len)) => f (@SAWCoreVectorsAsCoqVectors.bvNat n i) (@IsLtNat_to_bvult n len i pf)).
 
+Definition genBVVecFromVec : forall (m : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWCoreVectorsAsCoqVectors.Vec m a -> a -> forall (n : @SAWCoreScaffolding.Nat), forall (len : @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)), @BVVec n len a :=
+  fun (m : @SAWCoreScaffolding.Nat) (a : Type) (v : @SAWCoreVectorsAsCoqVectors.Vec m a) (def : a) (n : @SAWCoreScaffolding.Nat) (len : @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) => @genBVVec n len a (fun (i : @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) (_1 : @SAWCoreScaffolding.Eq (@SAWCoreScaffolding.Bool) (@SAWCoreVectorsAsCoqVectors.bvult n i len) (@SAWCoreScaffolding.true)) => @SAWCoreVectorsAsCoqVectors.atWithDefault m a def v (@SAWCoreVectorsAsCoqVectors.bvToNat n i)).
+
 Definition efq : forall (a : Type), @SAWCoreScaffolding.Eq (@SAWCoreScaffolding.Bool) (@SAWCoreScaffolding.true) (@SAWCoreScaffolding.false) -> a :=
   fun (a : Type) (contra : @SAWCoreScaffolding.Eq (@SAWCoreScaffolding.Bool) (@SAWCoreScaffolding.true) (@SAWCoreScaffolding.false)) => @SAWCoreScaffolding.coerce unit a (@trans Type unit (if @SAWCoreScaffolding.true then unit else a) a (@sym Type (if @SAWCoreScaffolding.true then unit else a) unit (@ite_true Type unit a)) (@trans Type (if @SAWCoreScaffolding.true then unit else a) (if @SAWCoreScaffolding.false then unit else a) a (@eq_cong (@SAWCoreScaffolding.Bool) (@SAWCoreScaffolding.true) (@SAWCoreScaffolding.false) contra Type (fun (b : @SAWCoreScaffolding.Bool) => if b then unit else a)) (@ite_false Type unit a))) tt.
 
@@ -1059,6 +1062,12 @@ Axiom arrayConstant : forall (a : Type), forall (b : Type), b -> @Array a b .
 Axiom arrayLookup : forall (a : Type), forall (b : Type), @Array a b -> a -> b .
 
 Axiom arrayUpdate : forall (a : Type), forall (b : Type), @Array a b -> a -> b -> @Array a b .
+
+Axiom arrayCopy : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @Array (@SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) a -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> @Array (@SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) a -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> @Array (@SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) a .
+
+Axiom arraySet : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @Array (@SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) a -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> a -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> @Array (@SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) a .
+
+Axiom arrayRangeEq : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @Array (@SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) a -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> @Array (@SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) a -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> @SAWCoreScaffolding.Bool .
 
 Axiom arrayEq : forall (a : Type), forall (b : Type), @Array a b -> @Array a b -> @SAWCoreScaffolding.Bool .
 

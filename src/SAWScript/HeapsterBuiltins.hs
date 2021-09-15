@@ -9,10 +9,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module SAWScript.HeapsterBuiltins
        ( heapster_init_env
+       , heapster_init_env_debug
        , heapster_init_env_from_file
+       , heapster_init_env_from_file_debug
        , heapster_init_env_for_files
        , load_sawcore_from_file
        , heapster_get_cfg
@@ -109,6 +112,7 @@ import Verifier.SAW.Heapster.SAWTranslation
 import Verifier.SAW.Heapster.IRTTranslation
 import Verifier.SAW.Heapster.PermParser
 import Verifier.SAW.Heapster.ParsedCtx
+import Verifier.SAW.Heapster.LLVMGlobalConst
 
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
@@ -255,10 +259,44 @@ parseAndInsDef henv nm term_tp term_string =
          liftIO $ scInsertDef sc mnm term_ident term_tp term
          return term_ident
 
+-- | Build a 'HeapsterEnv' associated with the given SAW core module and the
+-- given 'LLVMModule's. Add any globals in the 'LLVMModule's to the returned
+-- 'HeapsterEnv'.
+mkHeapsterEnv :: DebugLevel -> ModuleName -> [Some LLVMModule] ->
+                 TopLevel HeapsterEnv
+mkHeapsterEnv dlevel saw_mod_name llvm_mods@(Some first_mod:_) =
+  do let w = llvmModuleArchReprWidth first_mod
+     leq_proof <- case decideLeq (knownNat @1) w of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is 0!"
+     let globals = concatMap (\(Some lm) -> L.modGlobals $ modAST lm) llvm_mods
+         env =
+           withKnownNat w $ withLeqProof leq_proof $
+           foldl (permEnvAddGlobalConst dlevel w) heapster_default_env globals
+     env_ref <- liftIO $ newIORef env
+     dlevel_ref <- liftIO $ newIORef dlevel
+     return $ HeapsterEnv {
+       heapsterEnvSAWModule = saw_mod_name,
+       heapsterEnvPermEnvRef = env_ref,
+       heapsterEnvLLVMModules = llvm_mods,
+       heapsterEnvDebugLevel = dlevel_ref
+       }
+mkHeapsterEnv _ _ [] = fail "mkHeapsterEnv: empty list of LLVM modules!"
 
-heapster_init_env :: BuiltinContext -> Options -> Text -> String ->
-                     TopLevel HeapsterEnv
-heapster_init_env _bic _opts mod_str llvm_filename =
+
+heapster_init_env :: BuiltinContext -> Options ->
+                     Text -> String -> TopLevel HeapsterEnv
+heapster_init_env bic opts mod_str llvm_filename =
+  heapster_init_env_gen bic opts noDebugLevel mod_str llvm_filename
+
+heapster_init_env_debug :: BuiltinContext -> Options ->
+                           Text -> String -> TopLevel HeapsterEnv
+heapster_init_env_debug bic opts mod_str llvm_filename =
+  heapster_init_env_gen bic opts traceDebugLevel mod_str llvm_filename
+
+heapster_init_env_gen :: BuiltinContext -> Options -> DebugLevel ->
+                         Text -> String -> TopLevel HeapsterEnv
+heapster_init_env_gen _bic _opts dlevel mod_str llvm_filename =
   do llvm_mod <- llvm_load_module llvm_filename
      sc <- getSharedContext
      let saw_mod_name = mkModuleName [mod_str]
@@ -270,14 +308,7 @@ heapster_init_env _bic _opts mod_str llvm_filename =
      preludeMod <- liftIO $ scFindModule sc preludeModuleName
      liftIO $ scLoadModule sc (insImport (const True) preludeMod $
                                  emptyModule saw_mod_name)
-     perm_env_ref <- liftIO $ newIORef heapster_default_env
-     dlevel_ref <- liftIO $ newIORef noDebugLevel
-     return $ HeapsterEnv {
-       heapsterEnvSAWModule = saw_mod_name,
-       heapsterEnvPermEnvRef = perm_env_ref,
-       heapsterEnvLLVMModules = [llvm_mod],
-       heapsterEnvDebugLevel = dlevel_ref
-       }
+     mkHeapsterEnv dlevel saw_mod_name [llvm_mod]
 
 load_sawcore_from_file :: BuiltinContext -> Options -> String -> TopLevel ()
 load_sawcore_from_file _ _ mod_filename =
@@ -287,19 +318,24 @@ load_sawcore_from_file _ _ mod_filename =
 
 heapster_init_env_from_file :: BuiltinContext -> Options -> String -> String ->
                                TopLevel HeapsterEnv
-heapster_init_env_from_file _bic _opts mod_filename llvm_filename =
+heapster_init_env_from_file bic opts mod_filename llvm_filename =
+  heapster_init_env_from_file_gen
+  bic opts noDebugLevel mod_filename llvm_filename
+
+heapster_init_env_from_file_debug :: BuiltinContext -> Options ->
+                                     String -> String -> TopLevel HeapsterEnv
+heapster_init_env_from_file_debug bic opts mod_filename llvm_filename =
+  heapster_init_env_from_file_gen
+  bic opts traceDebugLevel mod_filename llvm_filename
+
+heapster_init_env_from_file_gen :: BuiltinContext -> Options -> DebugLevel ->
+                                   String -> String -> TopLevel HeapsterEnv
+heapster_init_env_from_file_gen _bic _opts dlevel mod_filename llvm_filename =
   do llvm_mod <- llvm_load_module llvm_filename
      sc <- getSharedContext
      (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
-     perm_env_ref <- liftIO $ newIORef heapster_default_env
-     dlevel_ref <- liftIO $ newIORef noDebugLevel
-     return $ HeapsterEnv {
-       heapsterEnvSAWModule = saw_mod_name,
-       heapsterEnvPermEnvRef = perm_env_ref,
-       heapsterEnvLLVMModules = [llvm_mod],
-       heapsterEnvDebugLevel = dlevel_ref
-       }
+     mkHeapsterEnv dlevel saw_mod_name [llvm_mod]
 
 heapster_init_env_for_files :: BuiltinContext -> Options -> String -> [String] ->
                                TopLevel HeapsterEnv
@@ -308,14 +344,7 @@ heapster_init_env_for_files _bic _opts mod_filename llvm_filenames =
      sc <- getSharedContext
      (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
-     perm_env_ref <- liftIO $ newIORef heapster_default_env
-     dlevel_ref <- liftIO $ newIORef noDebugLevel
-     return $ HeapsterEnv {
-       heapsterEnvSAWModule = saw_mod_name,
-       heapsterEnvPermEnvRef = perm_env_ref,
-       heapsterEnvLLVMModules = llvm_mods,
-       heapsterEnvDebugLevel = dlevel_ref
-       }
+     mkHeapsterEnv noDebugLevel saw_mod_name llvm_mods
 
 -- | Look up the CFG associated with a symbol name in a Heapster environment
 heapster_get_cfg :: BuiltinContext -> Options -> HeapsterEnv ->

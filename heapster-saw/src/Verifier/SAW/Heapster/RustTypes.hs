@@ -59,6 +59,7 @@ import Language.Rust.Data.Ident (Ident(..), name)
 import Prettyprinter as PP
 
 import Lang.Crucible.Types
+import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.LLVM.MemModel hiding (Mutability(..))
 
 import Verifier.SAW.Heapster.CruUtil
@@ -327,9 +328,26 @@ withRecType rust_n rust_ns rec_n = local (\info -> info { rciRecType = Just (rus
 -- * Converting Rust Types to Heapster Shapes
 ----------------------------------------------------------------------
 
-instance RsConvert w Mutability (PermExpr RWModalityType) where
-  rsConvert _ Mutable = return PExpr_Write
-  rsConvert _ Immutable = return PExpr_Read
+-- | Test if a shape matches the translation of a slice type, and, if so, return
+-- the stride and the fields of the slice, where the latter can have the length
+-- free
+matchSliceShape :: PermExpr (LLVMShapeType w) ->
+                   Maybe (Bytes, Binding (BVType w) [LLVMFieldShape w])
+matchSliceShape (PExpr_ExShape
+                 [nuP| PExpr_ArrayShape (PExpr_Var len) stride fshs |])
+  | Left Member_Base <- mbNameBoundP len =
+    Just (mbLift stride, fshs)
+matchSliceShape (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
+                                            (DefinedShapeBody _)) args) =
+  matchSliceShape (unfoldNamedShape nmsh args)
+matchSliceShape _ = Nothing
+
+-- Convert a 'Mutability' to a modality override for a 'PExpr_PtrShape'; mutable
+-- references inherit the modality of the container they are in, so they
+-- translate to 'Nothing'
+instance RsConvert w Mutability (Maybe (PermExpr RWModalityType)) where
+  rsConvert _ Mutable = return Nothing
+  rsConvert _ Immutable = return (Just PExpr_Read)
 
 instance RsConvert w (Lifetime Span) (PermExpr LifetimeType) where
   rsConvert _ (Lifetime "static" _) = return PExpr_Always
@@ -352,16 +370,41 @@ instance RsConvert w [PathParameters Span] (Some TypedPermExprs) where
     foldr appendTypedExprs emptyTypedPermExprs <$> mapM (rsConvert w) paramss
 
 instance RsConvert w (Ty Span) (PermExpr (LLVMShapeType w)) where
-  rsConvert _ (Rptr _ _ (Slice _ _) _) =
-    error "FIXME: pointers to slice types are not currently supported"
-  rsConvert w (Rptr (Just rust_l) Mutable tp' _) =
+  rsConvert w (Slice tp _) =
+    do sh <- rsConvert w tp
+       case sh of
+         PExpr_FieldShape fsh@(LLVMFieldShape p) ->
+           return (PExpr_ExShape $ nu $ \n ->
+                    PExpr_ArrayShape (PExpr_Var n)
+                    (fromIntegral $ exprLLVMTypeBytes p)
+                    [fsh])
+         _ -> fail "rsConvert: slices of compound types not yet supported"
+  rsConvert _ (Rptr Nothing _ _ _) =
+    fail "rsConvert: lifetimes must be supplied for reference types"
+  rsConvert w (Rptr (Just rust_l) mut tp' _) =
     do l <- rsConvert w rust_l
        sh <- rsConvert w tp'
-       return $ PExpr_PtrShape Nothing (Just l) sh
-  rsConvert w (Rptr (Just rust_l) Immutable tp' _) =
-    do l <- rsConvert w rust_l
-       sh <- rsConvert w tp'
-       return $ PExpr_PtrShape (Just PExpr_Read) (Just l) sh
+       rw <- rsConvert w mut
+       case sh of
+         -- Test if sh is a slice type = an array of existential length
+         (matchSliceShape -> Just (stride,fshs)) ->
+           -- If so, build a "fat pointer" = a pair of a pointer to our array
+           -- shape plus a length value
+           return $ PExpr_ExShape $ nu $ \n ->
+           PExpr_SeqShape (PExpr_PtrShape rw Nothing $
+                           PExpr_ArrayShape (PExpr_Var n) stride $
+                           subst1 (PExpr_Var n) fshs)
+           (PExpr_FieldShape $ LLVMFieldShape $ ValPerm_Eq $
+            PExpr_LLVMWord $ PExpr_Var n)
+
+         -- If it's not a slice, make sure it has a known size
+         _ | Just len <- llvmShapeLength sh
+           , isJust (bvMatchConst len) ->
+             return $ PExpr_PtrShape rw (Just l) sh
+
+         -- Otherwise, it's a non-standard dynamically-sized type, which we
+         -- don't quite know how to handle yet...
+         _ -> fail "rsConvert: pointer to non-slice dynamically-sized type"
   rsConvert w (PathTy Nothing path _) =
     do mrec <- asks rciRecType
        case mrec of
@@ -683,6 +726,46 @@ un3SomeFunPerm args ret (Some3FunPerm fun_perm) =
     <+> pretty "=>"
     <+> PP.group (permPretty emptyPPInfo (funPermRet fun_perm)) ]
 
+-- | This is the more general form of 'funPerm3FromArgLayout, where there can be
+-- ghost variables in the 'ArgLayout'
+funPerm3FromMbArgLayout :: CtxRepr ctx ->
+                           MatchedMb ghosts (ArgLayoutPerm ctx) ->
+                           CruCtx ghosts -> CtxRepr args ->
+                           ValuePerms (CtxToRList args) ->
+                           ValuePerms (CtxToRList args) ->
+                           TypeRepr ret -> ValuePerm ret ->
+                           RustConvM Some3FunPerm
+
+-- Special case: if the argument perms are just a sequence of permissions on the
+-- individual arguments, make a function perm with those argument perms, that
+-- is, we build the function permission
+--
+-- (ghosts). arg1:p1, ..., argn:pn -o ret:ret_perm
+funPerm3FromMbArgLayout ctx [nuMP| ALPerm mb_ps_in |]
+  ghosts ctx1 ps1_in ps1_out ret_tp ret_perm
+  | ctx_args <- mkCruCtx (ctx1 Ctx.<++> ctx)
+  , ctx_all <- appendCruCtx ghosts ctx_args
+  , ghost_perms <- trueValuePerms $ cruCtxProxies ghosts
+  , mb_ps_in_all <-
+      mbCombine (cruCtxProxies ctx_args) $
+      fmap (\ps_in ->
+             nuMulti (cruCtxProxies ctx_args) $ const $
+             RL.append ghost_perms
+             (assignToRListAppend ctx1 ctx ps1_in ps_in)) mb_ps_in
+  , ps_out_all <-
+      RL.append ghost_perms (assignToRListAppend ctx1 ctx ps1_out $
+                             trueValuePerms $ assignToRList ctx) :>: ret_perm =
+    return $ Some3FunPerm $ FunPerm ghosts ctx_args ret_tp mb_ps_in_all
+    (nuMulti (cruCtxProxies ctx_all :>: Proxy) $ \_ -> ps_out_all)
+funPerm3FromMbArgLayout ctx [nuMP| ALPerm_Exists mb_p |]
+  ghosts ctx1 ps1_in ps1_out ret_tp ret_perm =
+  funPerm3FromMbArgLayout ctx (mbMatch $ mbCombine (MNil :>: Proxy) mb_p)
+  (CruCtxCons ghosts knownRepr) ctx1 ps1_in ps1_out ret_tp ret_perm
+funPerm3FromMbArgLayout _ctx [nuMP| ALPerm_Or _ _ |]
+  _ghosts _ctx1 _ps1_in _ps1_out _ret_tp _ret_perm =
+  fail "Cannot (yet) handle Rust enums or other disjunctive types in functions"
+
+
 -- | Build a function permission from an 'ArgLayout' that describes the
 -- arguments and their input permissions and a return permission that describes
 -- the output permissions on the return value. The arguments specified by the
@@ -695,25 +778,9 @@ funPerm3FromArgLayout :: ArgLayout -> CtxRepr args ->
                          ValuePerms (CtxToRList args) ->
                          TypeRepr ret -> ValuePerm ret ->
                          RustConvM Some3FunPerm
-funPerm3FromArgLayout (ArgLayout ctx p_in) ctx1 ps1_in ps1_out ret_tp ret_perm
-    -- Special case: if the argument perms are just a sequence of permissions on
-    -- the individual arguments, make a function perm with those argument perms,
-    -- that is, we build the function permission
-    --
-    -- (). arg1:p1, ..., argn:pn -o ret:ret_perm
-  | ALPerm ps_in <- p_in
-  , ctx_all <- mkCruCtx (ctx1 Ctx.<++> ctx)
-  , ps_in_all <- RL.append MNil (assignToRListAppend ctx1 ctx ps1_in ps_in)
-  , ps_out_all <-
-      RL.append MNil (assignToRListAppend ctx1 ctx ps1_out $
-                      trueValuePerms $ assignToRList ctx) :>: ret_perm
-  , gs_ctx_prxs <- RL.append MNil (cruCtxProxies ctx_all) =
-    return $ Some3FunPerm $ FunPerm CruCtxNil ctx_all ret_tp
-    (nuMulti gs_ctx_prxs $ \_ -> ps_in_all)
-    (nuMulti (gs_ctx_prxs :>: Proxy) $ \_ -> ps_out_all)
-funPerm3FromArgLayout (ArgLayout _ctx _p) _ctx1 _p1_in _p1_out _ret_tp _ret_perm =
-  -- FIXME HERE
-  fail "Cannot (yet) handle Rust enums or other disjunctive types in functions"
+funPerm3FromArgLayout (ArgLayout ctx p_in) ctx1 ps1_in ps1_out ret_tp ret_perm =
+  funPerm3FromMbArgLayout ctx (mbMatch $ emptyMb p_in) CruCtxNil
+  ctx1 ps1_in ps1_out ret_tp ret_perm
 
 -- | Like 'funPerm3FromArgLayout' but with no additional arguments
 funPerm3FromArgLayoutNoArgs :: ArgLayout -> TypeRepr ret -> ValuePerm ret ->

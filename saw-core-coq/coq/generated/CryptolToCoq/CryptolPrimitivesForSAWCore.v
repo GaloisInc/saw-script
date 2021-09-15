@@ -782,6 +782,15 @@ Definition ecArrayLookup : forall (a : Type), forall (b : Type), @SAWCorePrelude
 Definition ecArrayUpdate : forall (a : Type), forall (b : Type), @SAWCorePrelude.Array a b -> a -> b -> @SAWCorePrelude.Array a b :=
   @SAWCorePrelude.arrayUpdate.
 
+Definition ecArrayCopy : forall (n : @Num), forall (a : Type), @SAWCorePrelude.Array (@seq n (@SAWCoreScaffolding.Bool)) a -> @seq n (@SAWCoreScaffolding.Bool) -> @SAWCorePrelude.Array (@seq n (@SAWCoreScaffolding.Bool)) a -> @seq n (@SAWCoreScaffolding.Bool) -> @seq n (@SAWCoreScaffolding.Bool) -> @SAWCorePrelude.Array (@seq n (@SAWCoreScaffolding.Bool)) a :=
+  @finNumRec (fun (n : @Num) => forall (a : Type), @SAWCorePrelude.Array (@seq n (@SAWCoreScaffolding.Bool)) a -> @seq n (@SAWCoreScaffolding.Bool) -> @SAWCorePrelude.Array (@seq n (@SAWCoreScaffolding.Bool)) a -> @seq n (@SAWCoreScaffolding.Bool) -> @seq n (@SAWCoreScaffolding.Bool) -> @SAWCorePrelude.Array (@seq n (@SAWCoreScaffolding.Bool)) a) (@SAWCorePrelude.arrayCopy).
+
+Definition ecArraySet : forall (n : @Num), forall (a : Type), @SAWCorePrelude.Array (@seq n (@SAWCoreScaffolding.Bool)) a -> @seq n (@SAWCoreScaffolding.Bool) -> a -> @seq n (@SAWCoreScaffolding.Bool) -> @SAWCorePrelude.Array (@seq n (@SAWCoreScaffolding.Bool)) a :=
+  @finNumRec (fun (n : @Num) => forall (a : Type), @SAWCorePrelude.Array (@seq n (@SAWCoreScaffolding.Bool)) a -> @seq n (@SAWCoreScaffolding.Bool) -> a -> @seq n (@SAWCoreScaffolding.Bool) -> @SAWCorePrelude.Array (@seq n (@SAWCoreScaffolding.Bool)) a) (@SAWCorePrelude.arraySet).
+
+Definition ecArrayRangeEq : forall (n : @Num), forall (a : Type), @SAWCorePrelude.Array (@seq n (@SAWCoreScaffolding.Bool)) a -> @seq n (@SAWCoreScaffolding.Bool) -> @SAWCorePrelude.Array (@seq n (@SAWCoreScaffolding.Bool)) a -> @seq n (@SAWCoreScaffolding.Bool) -> @seq n (@SAWCoreScaffolding.Bool) -> @SAWCoreScaffolding.Bool :=
+  @finNumRec (fun (n : @Num) => forall (a : Type), @SAWCorePrelude.Array (@seq n (@SAWCoreScaffolding.Bool)) a -> @seq n (@SAWCoreScaffolding.Bool) -> @SAWCorePrelude.Array (@seq n (@SAWCoreScaffolding.Bool)) a -> @seq n (@SAWCoreScaffolding.Bool) -> @seq n (@SAWCoreScaffolding.Bool) -> @SAWCoreScaffolding.Bool) (@SAWCorePrelude.arrayRangeEq).
+
 Definition AESEncRound : @SAWCoreVectorsAsCoqVectors.Vec 4 (@SAWCoreVectorsAsCoqVectors.Vec 32 (@SAWCoreScaffolding.Bool)) -> @SAWCoreVectorsAsCoqVectors.Vec 4 (@SAWCoreVectorsAsCoqVectors.Vec 32 (@SAWCoreScaffolding.Bool)) :=
   fun (x : @SAWCoreVectorsAsCoqVectors.Vec 4 (@SAWCoreVectorsAsCoqVectors.Vec 32 (@SAWCoreScaffolding.Bool))) => @SAWCoreScaffolding.error (@SAWCoreVectorsAsCoqVectors.Vec 4 (@SAWCoreVectorsAsCoqVectors.Vec 32 (@SAWCoreScaffolding.Bool))) "Unimplemented: AESEncRound"%string.
 

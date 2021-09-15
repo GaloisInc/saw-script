@@ -2796,8 +2796,12 @@ tcExpr (BVUndef _w) =
 
 tcExpr (BVLit w (BV.BV i)) = withKnownNat w $ pure $ Just $ bvInt i
 
-tcExpr (BVSext w2 _ (RegWithVal _ (bvMatchConstInt -> Just i))) =
-  withKnownNat w2 $ pure $ Just $ bvInt i
+tcExpr (BVTrunc w2 _ (RegWithVal _ (bvMatchConst -> Just bv))) =
+  withKnownNat w2 $ pure $ Just $ bvBV $ BV.trunc w2 bv
+tcExpr (BVZext w2 _ (RegWithVal _ (bvMatchConst -> Just bv))) =
+  withKnownNat w2 $ pure $ Just $ bvBV $ BV.zext w2 bv
+tcExpr (BVSext w2 w (RegWithVal _ (bvMatchConst -> Just bv))) =
+  withKnownNat w2 $ pure $ Just $ bvBV $ BV.sext w w2 bv
 
 tcExpr (BVAdd w (RegWithVal _ e1) (RegWithVal _ e2)) =
   withKnownNat w $ pure $ Just $ bvAdd e1 e2

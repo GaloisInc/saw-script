@@ -1,4 +1,6 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt;
+
 
 /* The logical and operation as a function on bool */
 pub fn bool_and (x:bool, y:bool) -> bool {
@@ -229,8 +231,15 @@ impl MixedStruct {
     }
 }
 
+impl fmt::Display for MixedStruct {
+    fn fmt<'a, 'b>(&'a self, f: &'b mut fmt::Formatter) -> fmt::Result {
+        write!(f, "s = {}, i1 = {}, i2 = {}", self.s, self.i1, self.i2)
+    }
+}
+
 /* A 'true' enum */
 #[derive(Clone, Debug, PartialEq)]
+#[repr(u64)]
 pub enum TrueEnum {
     Foo,
     Bar,
@@ -244,6 +253,22 @@ pub fn cycle_true_enum (te: &TrueEnum) -> TrueEnum {
         TrueEnum::Baz => TrueEnum::Foo,
     }
 }
+
+impl fmt::Display for TrueEnum {
+    fn fmt<'a, 'b>(&'a self, f: &'b mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TrueEnum::Foo => f.write_str ("Foo"),
+            TrueEnum::Bar => f.write_str ("Bar"),
+            TrueEnum::Baz => f.write_str ("Baz"),
+            /*
+            TrueEnum::Foo => write!(f,"Foo"),
+            TrueEnum::Bar => write!(f,"Bar"),
+            TrueEnum::Baz => write!(f,"Baz"),
+             */
+        }
+    }
+}
+
 
 /* A linked list */
 #[derive(Clone, Debug, PartialEq)]
@@ -294,7 +319,6 @@ pub fn list64_is_empty (l: &List64) -> bool {
         List64::Cons64 (_,_) => false
     }
 }
-
 
 /* Insert a mapping into m from the greatest of x and y to the other */
 pub fn hash_map_insert_gt_to_le (m: &mut HashMap<u64,u64>, x:u64, y:u64) -> () {
