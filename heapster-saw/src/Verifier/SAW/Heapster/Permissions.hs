@@ -3280,6 +3280,10 @@ llvmBlockEndOffset :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
                       PermExpr (BVType w)
 llvmBlockEndOffset = bvRangeEnd . llvmBlockRange
 
+-- | Return the length in bytes of an 'LLVMFieldShape'
+llvmFieldShapeLength :: LLVMFieldShape w -> Integer
+llvmFieldShapeLength (LLVMFieldShape p) = exprLLVMTypeBytes p
+
 -- | Return the expression for the length of a shape if there is one
 llvmShapeLength :: (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
                    Maybe (PermExpr (BVType w))
@@ -3300,8 +3304,8 @@ llvmShapeLength (PExpr_EqShape _) = Nothing
 llvmShapeLength (PExpr_PtrShape _ _ sh)
   | LLVMShapeRepr w <- exprType sh = Just $ bvInt (intValue w `div` 8)
   | otherwise = Nothing
-llvmShapeLength (PExpr_FieldShape (LLVMFieldShape p)) =
-  Just $ exprLLVMTypeBytesExpr p
+llvmShapeLength (PExpr_FieldShape fsh) =
+  Just $ bvInt $ llvmFieldShapeLength fsh
 llvmShapeLength (PExpr_ArrayShape len _ _) = Just len
 llvmShapeLength (PExpr_SeqShape sh1 sh2) =
   liftA2 bvAdd (llvmShapeLength sh1) (llvmShapeLength sh2)
@@ -3406,6 +3410,15 @@ llvmReadBlockOfShape sh
                     llvmBlockShape = sh }
 llvmReadBlockOfShape _ =
   error "llvmReadBlockOfShape: shape without known length"
+
+-- | Test if an LLVM shape is a sequence of field shapes, and if so, return that
+-- sequence
+matchLLVMFieldShapeSeq :: (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
+                          Maybe [LLVMFieldShape w]
+matchLLVMFieldShapeSeq (PExpr_FieldShape fsh) = Just [fsh]
+matchLLVMFieldShapeSeq (PExpr_SeqShape sh1 sh2) =
+  (++) <$> matchLLVMFieldShapeSeq sh1 <*> matchLLVMFieldShapeSeq sh2
+matchLLVMFieldShapeSeq _ = Nothing
 
 -- | Add the given read/write and lifetime modalities to all top-level pointer
 -- shapes in a shape. Top-level here means we do not recurse inside pointer
