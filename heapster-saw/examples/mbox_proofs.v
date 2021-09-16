@@ -246,7 +246,7 @@ Proof.
   (* Most of the remaining cases are taken care of with just bvAdd_id_l and bvAdd_id_r *)
   all: try rewrite bvAdd_id_r; try rewrite bvAdd_id_l; try reflexivity.
   (* The remaining case just needs a few more rewrites *)
-  - do 2 f_equal.
+  - f_equal.
     rewrite bvAdd_assoc; f_equal.
     rewrite bvAdd_comm; reflexivity.
   - cbn; rewrite transMbox_Mbox_nil_r; reflexivity.
@@ -300,17 +300,17 @@ Definition conjSliceBVVec (strt len : bitvector 64) pf0 pf1 d0 d1 : BVVec 64 bv6
 (* Given a `start`, `len`, and `dat` of a single Mbox, return an mbox chain consisting of
    a single mbox with `id` 0,  the given `start` and `len`, and the given `dat` with the
    range 0 to `start` zeroed out. *)
-Definition mbox_copy_spec_cons strt len m d : CompM (Mbox * (Mbox * unit)) :=
+Definition mbox_copy_spec_cons strt len m d : CompM (Mbox * Mbox) :=
   assumingM (isBvslt 64 (intToBv 64 0) strt)
     (forallM (fun pf0 : isBvule 64 strt (intToBv 64 128) =>
       (forallM (fun pf1 : isBvule 64 len (bvSub 64 (intToBv 64 128) strt) =>
         returnM (Mbox_cons strt len m
                            (conjSliceBVVec strt len pf0 pf1 d d),
                 (Mbox_cons strt len Mbox_nil
-                           (conjSliceBVVec strt len pf0 pf1 empty_mbox_d d), tt)))))).
+                           (conjSliceBVVec strt len pf0 pf1 empty_mbox_d d))))))).
 
-Definition mbox_copy_spec : Mbox -> CompM (Mbox * (Mbox * unit)) :=
-  Mbox__rec (fun _ => CompM  (Mbox * (Mbox * unit))) (returnM (Mbox_nil, (Mbox_nil, tt)))
+Definition mbox_copy_spec : Mbox -> CompM (Mbox * Mbox) :=
+  Mbox__rec (fun _ => CompM  (Mbox * Mbox)) (returnM (Mbox_nil, Mbox_nil))
           (fun strt len m _ d => mbox_copy_spec_cons strt len m d).
 
 Lemma mbox_copy_spec_ref : refinesFun mbox_copy mbox_copy_spec.
