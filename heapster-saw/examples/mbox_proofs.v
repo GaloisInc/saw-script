@@ -26,7 +26,7 @@ Definition unfoldMbox_nil :
   unfoldMbox Mbox_nil = Left _ _ tt :=
   reflexivity _.
 Definition unfoldMbox_cons strt len m d :
-  unfoldMbox (Mbox_cons strt len m d) = Right _ _ (strt, (len, (m, (d, tt)))) :=
+  unfoldMbox (Mbox_cons strt len m d) = Right _ _ (strt, (len, (m, d))) :=
   reflexivity _.
 
 Ltac Mbox_destruct m m' := destruct m as [| ?strt ?len m' ?d].
@@ -40,7 +40,7 @@ Lemma refinesM_either_unfoldMbox_nil_l {C} f g (P : CompM C) :
 Proof. eauto. Qed.
 
 Lemma refinesM_either_unfoldMbox_cons_l {C} strt len m d f g (P : CompM C) :
-  g (strt, (len, (m, (d, tt)))) |= P ->
+  g (strt, (len, (m, d))) |= P ->
   SAWCorePrelude.either _ _ _ f g (unfoldMbox (Mbox_cons strt len m d)) |= P.
 Proof. eauto. Qed.
 
@@ -196,9 +196,9 @@ Proof.
   (* Show Ltac Profile. Reset Ltac Profile. *)
 Time Qed.
 
-Definition mbox_detach_spec : Mbox -> Mbox * (Mbox * unit) :=
-  Mbox__rec _ (Mbox_nil, (Mbox_nil, tt))
-            (fun strt len next _ d => (next, (Mbox_cons strt len Mbox_nil d, tt))).
+Definition mbox_detach_spec : Mbox -> Mbox * Mbox :=
+  Mbox__rec _ (Mbox_nil, Mbox_nil)
+            (fun strt len next _ d => (next, (Mbox_cons strt len Mbox_nil d))).
 
 Lemma mbox_detach_spec_ref
   : refinesFun mbox_detach (fun x => returnM (mbox_detach_spec x)).
@@ -234,11 +234,11 @@ Definition mbox_len_spec : Mbox -> bitvector 64 :=
           (fun strt len m rec d => bvAdd 64 rec len).
 
 Lemma mbox_len_spec_ref
-  : refinesFun mbox_len (fun m => returnM (m, (mbox_len_spec m, tt))).
+  : refinesFun mbox_len (fun m => returnM (m, mbox_len_spec m)).
 Proof.
   unfold mbox_len, mbox_len__tuple_fun.
   prove_refinement_match_letRecM_l.
-  - exact (fun m1 rec m2 => returnM (transMbox m1 m2, (bvAdd 64 rec (mbox_len_spec m2), tt))).
+  - exact (fun m1 rec m2 => returnM (transMbox m1 m2, bvAdd 64 rec (mbox_len_spec m2))).
   unfold mbox_len_spec.
   (* Set Ltac Profiling. *)
   time "mbox_len_spec_ref" prove_refinement.
