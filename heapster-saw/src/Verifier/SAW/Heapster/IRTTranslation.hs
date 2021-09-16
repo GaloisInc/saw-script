@@ -32,7 +32,6 @@ module Verifier.SAW.Heapster.IRTTranslation (
   ) where
 
 import Numeric.Natural
-import Data.Foldable
 import Data.Functor.Const
 import GHC.TypeLits
 import Control.Monad.Reader
@@ -540,11 +539,10 @@ irtCtorOpenTerm c all_args =
 
 -- | Like 'tupleOfTypes' but with @IRT_prod@
 irtProd :: [OpenTerm] -> IRTDescTransM ctx OpenTerm
+irtProd [] = irtCtorOpenTerm "Prelude.IRT_unit" []
 irtProd [x] = return x
-irtProd xs =
-  do irtUnit <- irtCtorOpenTerm "Prelude.IRT_unit" []
-     foldrM (\x xs' -> irtCtorOpenTerm "Prelude.IRT_prod" [x, xs'])
-            irtUnit xs
+irtProd (x:xs) =
+  irtProd xs >>= \xs' -> irtCtorOpenTerm "Prelude.IRT_prod" [x, xs']
 
 -- | A singleton list containing the result of 'irtCtorOpenTerm'
 irtCtor :: Ident -> [OpenTerm] -> IRTDescTransM ctx [OpenTerm]
