@@ -67,6 +67,10 @@ jobs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
 
+      - uses: actions/checkout@v2
+        run: |
+           git submodule update --init
+
       - id: config
         shell: bash
         run: |
