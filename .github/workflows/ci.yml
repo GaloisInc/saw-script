@@ -68,7 +68,7 @@ jobs:
     steps:
 
       - uses: actions/checkout@v2
-        run: |
+      - run: |
            git submodule update --init
 
       - id: config
