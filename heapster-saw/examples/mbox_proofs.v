@@ -26,7 +26,7 @@ Definition unfoldMbox_nil :
   unfoldMbox Mbox_nil = Left _ _ tt :=
   reflexivity _.
 Definition unfoldMbox_cons strt len m d :
-  unfoldMbox (Mbox_cons strt len m d) = Right _ _ (strt, (len, (m, (d, tt)))) :=
+  unfoldMbox (Mbox_cons strt len m d) = Right _ _ (strt, (len, (m, d))) :=
   reflexivity _.
 
 Ltac Mbox_destruct m m' := destruct m as [| ?strt ?len m' ?d].
@@ -40,7 +40,7 @@ Lemma refinesM_either_unfoldMbox_nil_l {C} f g (P : CompM C) :
 Proof. eauto. Qed.
 
 Lemma refinesM_either_unfoldMbox_cons_l {C} strt len m d f g (P : CompM C) :
-  g (strt, (len, (m, (d, tt)))) |= P ->
+  g (strt, (len, (m, d))) |= P ->
   SAWCorePrelude.either _ _ _ f g (unfoldMbox (Mbox_cons strt len m d)) |= P.
 Proof. eauto. Qed.
 
@@ -196,9 +196,9 @@ Proof.
   (* Show Ltac Profile. Reset Ltac Profile. *)
 Time Qed.
 
-Definition mbox_detach_spec : Mbox -> Mbox * (Mbox * unit) :=
-  Mbox__rec _ (Mbox_nil, (Mbox_nil, tt))
-            (fun strt len next _ d => (next, (Mbox_cons strt len Mbox_nil d, tt))).
+Definition mbox_detach_spec : Mbox -> Mbox * Mbox :=
+  Mbox__rec _ (Mbox_nil, Mbox_nil)
+            (fun strt len next _ d => (next, (Mbox_cons strt len Mbox_nil d))).
 
 Lemma mbox_detach_spec_ref
   : refinesFun mbox_detach (fun x => returnM (mbox_detach_spec x)).
@@ -234,11 +234,11 @@ Definition mbox_len_spec : Mbox -> bitvector 64 :=
           (fun strt len m rec d => bvAdd 64 rec len).
 
 Lemma mbox_len_spec_ref
-  : refinesFun mbox_len (fun m => returnM (m, (mbox_len_spec m, tt))).
+  : refinesFun mbox_len (fun m => returnM (m, mbox_len_spec m)).
 Proof.
   unfold mbox_len, mbox_len__tuple_fun.
   prove_refinement_match_letRecM_l.
-  - exact (fun m1 rec m2 => returnM (transMbox m1 m2, (bvAdd 64 rec (mbox_len_spec m2), tt))).
+  - exact (fun m1 rec m2 => returnM (transMbox m1 m2, bvAdd 64 rec (mbox_len_spec m2))).
   unfold mbox_len_spec.
   (* Set Ltac Profiling. *)
   time "mbox_len_spec_ref" prove_refinement.
@@ -246,7 +246,7 @@ Proof.
   (* Most of the remaining cases are taken care of with just bvAdd_id_l and bvAdd_id_r *)
   all: try rewrite bvAdd_id_r; try rewrite bvAdd_id_l; try reflexivity.
   (* The remaining case just needs a few more rewrites *)
-  - do 2 f_equal.
+  - f_equal.
     rewrite bvAdd_assoc; f_equal.
     rewrite bvAdd_comm; reflexivity.
   - cbn; rewrite transMbox_Mbox_nil_r; reflexivity.
@@ -300,17 +300,17 @@ Definition conjSliceBVVec (strt len : bitvector 64) pf0 pf1 d0 d1 : BVVec 64 bv6
 (* Given a `start`, `len`, and `dat` of a single Mbox, return an mbox chain consisting of
    a single mbox with `id` 0,  the given `start` and `len`, and the given `dat` with the
    range 0 to `start` zeroed out. *)
-Definition mbox_copy_spec_cons strt len m d : CompM (Mbox * (Mbox * unit)) :=
+Definition mbox_copy_spec_cons strt len m d : CompM (Mbox * Mbox) :=
   assumingM (isBvslt 64 (intToBv 64 0) strt)
     (forallM (fun pf0 : isBvule 64 strt (intToBv 64 128) =>
       (forallM (fun pf1 : isBvule 64 len (bvSub 64 (intToBv 64 128) strt) =>
         returnM (Mbox_cons strt len m
                            (conjSliceBVVec strt len pf0 pf1 d d),
                 (Mbox_cons strt len Mbox_nil
-                           (conjSliceBVVec strt len pf0 pf1 empty_mbox_d d), tt)))))).
+                           (conjSliceBVVec strt len pf0 pf1 empty_mbox_d d))))))).
 
-Definition mbox_copy_spec : Mbox -> CompM (Mbox * (Mbox * unit)) :=
-  Mbox__rec (fun _ => CompM  (Mbox * (Mbox * unit))) (returnM (Mbox_nil, (Mbox_nil, tt)))
+Definition mbox_copy_spec : Mbox -> CompM (Mbox * Mbox) :=
+  Mbox__rec (fun _ => CompM  (Mbox * Mbox)) (returnM (Mbox_nil, Mbox_nil))
           (fun strt len m _ d => mbox_copy_spec_cons strt len m d).
 
 Lemma mbox_copy_spec_ref : refinesFun mbox_copy mbox_copy_spec.

@@ -86,7 +86,7 @@ import Debug.Trace
 
 
 ----------------------------------------------------------------------
--- * Utility Functions
+-- * Utility Functions and Definitions
 ----------------------------------------------------------------------
 
 -- | Delete the nth element of a list
@@ -131,6 +131,11 @@ foldr1WithDefault f def (a:as) = f a $ foldr1WithDefault f def as
 -- empty list.
 foldMapWithDefault :: (b -> b -> b) -> b -> (a -> b) -> [a] -> b
 foldMapWithDefault comb def f l = foldr1WithDefault comb def $ map f l
+
+-- | A flag indicating whether an equality test has unfolded a
+-- recursively-defined name on one side of the equation already
+data RecurseFlag = RecLeft | RecRight | RecNone
+  deriving (Eq, Show, Read)
 
 
 ----------------------------------------------------------------------
@@ -3275,6 +3280,10 @@ llvmBlockEndOffset :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
                       PermExpr (BVType w)
 llvmBlockEndOffset = bvRangeEnd . llvmBlockRange
 
+-- | Return the length in bytes of an 'LLVMFieldShape'
+llvmFieldShapeLength :: LLVMFieldShape w -> Integer
+llvmFieldShapeLength (LLVMFieldShape p) = exprLLVMTypeBytes p
+
 -- | Return the expression for the length of a shape if there is one
 llvmShapeLength :: (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
                    Maybe (PermExpr (BVType w))
@@ -3295,8 +3304,8 @@ llvmShapeLength (PExpr_EqShape _) = Nothing
 llvmShapeLength (PExpr_PtrShape _ _ sh)
   | LLVMShapeRepr w <- exprType sh = Just $ bvInt (intValue w `div` 8)
   | otherwise = Nothing
-llvmShapeLength (PExpr_FieldShape (LLVMFieldShape p)) =
-  Just $ exprLLVMTypeBytesExpr p
+llvmShapeLength (PExpr_FieldShape fsh) =
+  Just $ bvInt $ llvmFieldShapeLength fsh
 llvmShapeLength (PExpr_ArrayShape len _ _) = Just len
 llvmShapeLength (PExpr_SeqShape sh1 sh2) =
   liftA2 bvAdd (llvmShapeLength sh1) (llvmShapeLength sh2)
@@ -3401,6 +3410,15 @@ llvmReadBlockOfShape sh
                     llvmBlockShape = sh }
 llvmReadBlockOfShape _ =
   error "llvmReadBlockOfShape: shape without known length"
+
+-- | Test if an LLVM shape is a sequence of field shapes, and if so, return that
+-- sequence
+matchLLVMFieldShapeSeq :: (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
+                          Maybe [LLVMFieldShape w]
+matchLLVMFieldShapeSeq (PExpr_FieldShape fsh) = Just [fsh]
+matchLLVMFieldShapeSeq (PExpr_SeqShape sh1 sh2) =
+  (++) <$> matchLLVMFieldShapeSeq sh1 <*> matchLLVMFieldShapeSeq sh2
+matchLLVMFieldShapeSeq _ = Nothing
 
 -- | Add the given read/write and lifetime modalities to all top-level pointer
 -- shapes in a shape. Top-level here means we do not recurse inside pointer
@@ -3752,6 +3770,13 @@ llvmArrayRemArrayBorrows ap sub_ap
     (map (cellOffsetLLVMArrayBorrow cell_num) (llvmArrayBorrows sub_ap))
     ap
 llvmArrayRemArrayBorrows _ _ = error "llvmArrayRemArrayBorrows"
+
+-- | Test if the borrows of an array can be permuted to another order
+llvmArrayBorrowsPermuteTo :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                             [LLVMArrayBorrow w] -> Bool
+llvmArrayBorrowsPermuteTo ap bs =
+  all (flip elem (llvmArrayBorrows ap)) bs &&
+  all (flip elem bs) (llvmArrayBorrows ap)
 
 -- | Add a cell offset to an 'LLVMArrayBorrow', meaning we change the borrow to
 -- be relative to an array with that many more cells added to the front
@@ -6496,6 +6521,15 @@ lookupNamedPerm env = helper (permEnvNamedPerms env) where
     | Just (Refl, Refl, Refl) <- testNamedPermNameEq (namedPermName rp) rpn
     = Just rp
   helper (_:rps) rpn = helper rps rpn
+
+-- | Look up the 'NamedPerm' for a 'NamedPermName' in a 'PermEnv' or raise an
+-- error if it does not exist
+requireNamedPerm :: PermEnv -> NamedPermName ns args a -> NamedPerm ns args a
+requireNamedPerm env npn
+  | Just np <- lookupNamedPerm env npn = np
+requireNamedPerm _ npn =
+  error ("requireNamedPerm: named perm does not exist: "
+         ++ namedPermNameName npn)
 
 -- | Look up an LLVM shape by name in a 'PermEnv' and cast it to a given width
 lookupNamedShape :: PermEnv -> String -> Maybe SomeNamedShape
