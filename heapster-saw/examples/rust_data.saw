@@ -15,6 +15,9 @@ heapster_define_llvmshape env "u64" 64 "" "fieldsh(int64<>)";
 heapster_define_llvmshape env "u32" 64 "" "fieldsh(32,int32<>)";
 heapster_define_llvmshape env "u8" 64 "" "fieldsh(8,int8<>)";
 
+heapster_define_llvmshape env "usize" 64 "" "fieldsh(int64<>)";
+heapster_define_llvmshape env "char" 64 "" "fieldsh(32,int32<>)";
+
 // bool type
 heapster_define_llvmshape env "bool" 64 "" "fieldsh(1,int1<>)";
 
@@ -45,30 +48,13 @@ heapster_define_llvmshape env "String" 64 "" "exsh cap:bv 64. ptrsh(arraysh(cap,
 //heapster_define_recursive_perm env "ListPerm" "X:llvmshape 64, Xlen:bv 64, rw:rwmodality, l:lifetime" "llvmptr 64" ["[l]memblock(rw,0,Xlen + 16,List<ListPerm<X,Xlen,rw,l>,X>)"] "\\ (X:sort 0) (_:Vec 64 Bool) -> List X" "\\ (X:sort 0) (_:Vec 64 Bool) -> foldListPermH X" "\\ (X:sort 0) (_:Vec 64 Bool) -> unfoldListPermH X";
 heapster_define_rust_type env "pub enum List<X> { Nil, Cons (X,Box<List<X>>) }";
 
-// Void type; note that Heapster does not (yet?) support empty types, so instead
-// we make this type opaque. Also, note that the ArgumentV1 structure contains
-// referens to Void, so presumably they are just casts of other types...?
+// The Rust Void type is really a general existential type; this is not directly
+// representable in the Rust type system, but it is in Heapster!
+//heapster_define_llvmshape env "Void" 64 "" "exsh T:llvmshape 64.T";
 //
-//heapster_define_rust_type env "pub enum Void {}";
+// Doh! Except the above looks like a dynamically-sized type to Heapster! So we
+// instead just make Void an opaque type
 heapster_define_opaque_llvmshape env "Void" 64 "" "64" "#()";
-
-// fmt::Error type
-heapster_define_rust_type_qual env "fmt" "pub struct Error { }";
-
-// fmt::Result type
-// FIXME: there seems to be some optimization in Rust that lays out fmt::Result as a 1-bit value
-heapster_define_llvmshape env "fmt::Result" 64 "" "fieldsh(1,eq(llvmword(0))) orsh fieldsh(1,eq(llvmword(1)))";
-//heapster_define_rust_type_qual env "fmt" "pub enum Result { Ok (), Err (fmt::Error) }";
-
-// fmt::Formatter type
-heapster_define_opaque_llvmshape env "fmt::Formatter" 64 "" "64" "#()";
-
-// fmt::ArgumentV1 type
-//heapster_define_rust_type_qual env "fmt" "pub struct ArgumentV1<'a> { value: &'a Void, formatter: for <'b> fn(&'b Void, &'b mut fmt::Formatter) -> fmt::Result, }";
-
-// fmt::Arguments type
-//heapster_define_rust_type_qual env "fmt" "pub struct Arguments<'a> { pieces: &'a [&'a str], fmt: Option<&'a [fmt::Argument]>, args: &'a [fmt::ArgumentV1<'a>], }";
-
 
 // List64 type
 heapster_define_rust_type env "pub enum List64 { Nil64, Cons64 (u64,Box<List64>) }";
@@ -111,6 +97,43 @@ heapster_define_rust_type env "pub enum List20<X> { List20_Head(X,Box<List20<X>>
 
 
 /***
+ *** Rust Formatting Types
+ ***/
+
+// fmt::Error type
+heapster_define_rust_type_qual env "fmt" "pub struct Error { }";
+
+// fmt::Result type
+// FIXME: there seems to be some optimization in Rust that lays out fmt::Result as a 1-bit value
+heapster_define_llvmshape env "fmt::Result" 64 "" "fieldsh(1,eq(llvmword(0))) orsh fieldsh(1,eq(llvmword(1)))";
+//heapster_define_rust_type_qual env "fmt" "pub enum Result { Ok (), Err (fmt::Error) }";
+
+// fmt::Formatter type
+heapster_define_opaque_llvmshape env "fmt::Formatter" 64 "" "64" "#()";
+
+// fmt::Alignment type
+heapster_define_rust_type_qual env "fmt" "pub enum Alignment { Left, Right, Center, Unknown,}";
+
+// fmt::Count type
+heapster_define_rust_type_qual env "fmt" "pub enum Count { Is(usize), Param(usize), NextParam, Implied,}";
+
+// fmt::FormatSpec
+heapster_define_rust_type_qual env "fmt" "pub struct FormatSpec { pub fill: char, pub align: fmt::Alignment, pub flags: u32, pub precision: fmt::Count, pub width: fmt::Count, }";
+
+// fmt::Position
+heapster_define_rust_type_qual env "fmt" "pub enum Position { Next, At(usize),}";
+
+// fmt::Argument type
+heapster_define_rust_type_qual env "fmt" "pub struct Argument { pub position: fmt::Position, pub format: fmt::FormatSpec,}";
+
+// fmt::ArgumentV1 type
+heapster_define_rust_type_qual env "fmt" "pub struct ArgumentV1<'a> { value: &'a Void, formatter: for <'b> fn(&'b Void, &'b mut fmt::Formatter) -> fmt::Result, }";
+
+// fmt::Arguments type
+//heapster_define_rust_type_qual env "fmt" "pub struct Arguments<'a> { pieces: &'a [&'a str], fmt: Option<&'a [fmt::Argument]>, args: &'a [fmt::ArgumentV1<'a>], }";
+
+
+/***
  *** Assumed Functions
  ***/
 
@@ -120,7 +143,7 @@ exchange_malloc_sym <- heapster_find_symbol env "15exchange_malloc";
 heapster_assume_fun_rename env exchange_malloc_sym "exchange_malloc" "(len:bv 64).arg0:eq(llvmword(len)),arg1:true -o ret:memblock(W,0,len,emptysh)" "\\ (len:Vec 64 Bool) -> returnM #() ()";
 
 // memcpy
-heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64" "(rw:rwmodality, l1:lifetime, l2:lifetime, sh:llvmshape 64, b:llvmblock 64, len:bv 64).arg0:[l1]memblock(W,0,len,sh), arg1:[l2]memblock(rw,0,len,eqsh(b)), arg2:eq(llvmword(len))  -o  arg0:[l1]memblock(W,0,len,eqsh(b)), arg1:[l2]memblock(rw,0,len,eqsh(b))" "\\ (X:sort 0) (len:Vec 64 Bool) (x:X) (_:#()) -> returnM (#() * #() * #()) ((),(),())";
+heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64" "(rw:rwmodality, l1:lifetime, l2:lifetime, sh:llvmshape 64, b:llvmblock 64, len:bv 64).arg0:[l1]memblock(W,0,len,sh), arg1:[l2]memblock(rw,0,len,eqsh(b)), arg2:eq(llvmword(len))  -o  arg0:[l1]memblock(W,0,len,eqsh(b)), arg1:[l2]memblock(rw,0,len,eqsh(b))" "\\ (X:sort 0) (len:Vec 64 Bool) (x:X) (_:#()) -> returnM (#() * #()) ((),())";
 
 // <str as alloc::string::ToString>::to_string
 to_string_str <- heapster_find_symbol env "$LT$str$u20$as$u20$alloc..string..ToString$GT$9to_string";

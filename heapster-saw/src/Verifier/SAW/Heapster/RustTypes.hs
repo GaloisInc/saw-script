@@ -54,6 +54,7 @@ import qualified Data.Binding.Hobbits.NameSet as NameSet
 
 import Language.Rust.Syntax
 import Language.Rust.Parser
+import qualified Language.Rust.Pretty as RustPP
 import Language.Rust.Data.Ident (Ident(..), name)
 
 import Prettyprinter as PP
@@ -124,6 +125,12 @@ lookupTypedName str =
 lookupName :: String -> TypeRepr a -> RustConvM (Name a)
 lookupName str tp =
   lookupTypedName str >>= \n -> castTypedM "variable" tp n
+
+-- | Build a 'PPInfo' structure for the names currently in scope
+rsPPInfo :: RustConvM PPInfo
+rsPPInfo =
+  foldr (\(str, Some (Typed _ n)) -> ppInfoAddExprName str n) emptyPPInfo <$>
+  rciCtx <$> ask
 
 -- | The conversion of a context of Rust type and lifetime variables
 type RustCtx = RAssign (Product (Constant String) TypeRepr)
@@ -372,13 +379,17 @@ instance RsConvert w [PathParameters Span] (Some TypedPermExprs) where
 instance RsConvert w (Ty Span) (PermExpr (LLVMShapeType w)) where
   rsConvert w (Slice tp _) =
     do sh <- rsConvert w tp
-       case sh of
-         PExpr_FieldShape fsh@(LLVMFieldShape p) ->
+       case matchLLVMFieldShapeSeq sh of
+         Just fshs ->
            return (PExpr_ExShape $ nu $ \n ->
                     PExpr_ArrayShape (PExpr_Var n)
-                    (fromIntegral $ exprLLVMTypeBytes p)
-                    [fsh])
-         _ -> fail "rsConvert: slices of compound types not yet supported"
+                    (fromIntegral $ sum $ map llvmFieldShapeLength fshs)
+                    fshs)
+         _ ->
+           rsPPInfo >>= \ppInfo ->
+           fail ("rsConvert: slices not yet supported of type: "
+                 ++ show (RustPP.pretty tp) ++ " with translation:\n"
+                 ++ renderDoc (permPretty ppInfo sh))
   rsConvert _ (Rptr Nothing _ _ _) =
     fail "rsConvert: lifetimes must be supplied for reference types"
   rsConvert w (Rptr (Just rust_l) mut tp' _) =
@@ -715,16 +726,17 @@ un3SomeFunPerm args ret (Some3FunPerm fun_perm)
   , Just Refl <- testEquality ret (funPermRet fun_perm) =
     return $ SomeFunPerm fun_perm
 un3SomeFunPerm args ret (Some3FunPerm fun_perm) =
+  rsPPInfo >>= \ppInfo ->
   fail $ renderDoc $ vsep
   [ pretty "Unexpected LLVM type for function permission:"
-  , permPretty emptyPPInfo fun_perm
+  , permPretty ppInfo fun_perm
   , pretty "Actual LLVM type of function:"
-    <+> PP.group (permPretty emptyPPInfo args) <+> pretty "=>"
-    <+> PP.group (permPretty emptyPPInfo ret)
+    <+> PP.group (permPretty ppInfo args) <+> pretty "=>"
+    <+> PP.group (permPretty ppInfo ret)
   , pretty "Expected LLVM type of function:"
-    <+> PP.group (permPretty emptyPPInfo (funPermArgs fun_perm))
+    <+> PP.group (permPretty ppInfo (funPermArgs fun_perm))
     <+> pretty "=>"
-    <+> PP.group (permPretty emptyPPInfo (funPermRet fun_perm)) ]
+    <+> PP.group (permPretty ppInfo (funPermRet fun_perm)) ]
 
 -- | This is the more general form of 'funPerm3FromArgLayout, where there can be
 -- ghost variables in the 'ArgLayout'
@@ -919,9 +931,10 @@ layoutArgShapeByVal Rust (PExpr_PtrShape maybe_rw maybe_l sh)
 
 -- If we don't know the length of our pointer, we can't lay it out at all
 layoutArgShapeByVal Rust (PExpr_PtrShape _ _ sh) =
+  lift rsPPInfo >>= \ppInfo ->
   lift $ fail $ renderDoc $ fillSep
   [pretty "layoutArgShapeByVal: Shape with unknown length:",
-   permPretty emptyPPInfo sh]
+   permPretty ppInfo sh]
 
 -- A field shape --> the contents of the field
 layoutArgShapeByVal Rust (PExpr_FieldShape (LLVMFieldShape p)) =
@@ -958,8 +971,9 @@ layoutArgShapeByVal Rust (PExpr_ExShape mb_sh) =
   existsArgLayout <$> mbM (fmap (layoutArgShapeByVal Rust) mb_sh)
 
 layoutArgShapeByVal Rust sh =
+  lift rsPPInfo >>= \ppInfo ->
   lift $ fail $ renderDoc $ fillSep
-  [pretty "layoutArgShapeByVal: Unsupported shape:", permPretty emptyPPInfo sh]
+  [pretty "layoutArgShapeByVal: Unsupported shape:", permPretty ppInfo sh]
 layoutArgShapeByVal abi _ =
   lift $ fail ("layoutArgShapeByVal: Unsupported ABI: " ++ show abi)
 
@@ -975,9 +989,10 @@ layoutArgShapeOrBlock abi sh =
   Just layout -> return $ Right layout
   Nothing | Just bp <- shapeToBlock sh -> return $ Left bp
   _ ->
+    rsPPInfo >>= \ppInfo ->
     fail $ renderDoc $ fillSep
     [pretty "layoutArgShapeOrBlock: Could not layout shape with unknown size:",
-     permPretty emptyPPInfo sh]
+     permPretty ppInfo sh]
 
 -- | Compute the layout of an argument with the given shape as 1 or more
 -- register arguments of a function
@@ -1087,10 +1102,11 @@ lownedPermsForLifetime l (perms :>: VarAndPerm x p)
   , not (NameSet.member l $ freeVars p)
   = lownedPermsForLifetime l perms
 lownedPermsForLifetime l (_ :>: vap) =
+  rsPPInfo >>= \ppInfo ->
   fail $ renderDoc $ fillSep
   [pretty "lownedPermsForLifetime: could not compute lowned permissions for "
-   <+> permPretty emptyPPInfo l <+> pretty "in:",
-   permPretty emptyPPInfo vap]
+   <+> permPretty ppInfo l <+> pretty "in:",
+   permPretty ppInfo vap]
 
 -- | Get the 'String' name defined by a 'LifetimeDef'
 lifetimeDefName :: LifetimeDef a -> String

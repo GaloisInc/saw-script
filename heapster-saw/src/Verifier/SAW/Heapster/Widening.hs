@@ -119,18 +119,21 @@ instance Monad (PolyContT r m) where
 
 data WidState = WidState { _wsNameMap :: WidNameMap,
                            _wsPPInfo :: PPInfo,
-                           _wsDebugLevel :: DebugLevel }
+                           _wsPermEnv :: PermEnv,
+                           _wsDebugLevel :: DebugLevel,
+                           _wsRecFlag :: RecurseFlag }
 
 makeLenses ''WidState
 
 type WideningM =
   StateT WidState (PolyContT ExtVarPermsFun Identity)
 
-runWideningM :: WideningM () -> DebugLevel -> WidNameMap -> RAssign Name args ->
+runWideningM :: WideningM () -> DebugLevel -> PermEnv -> RAssign Name args ->
                 ExtVarPerms args
-runWideningM m dlevel wnmap =
+runWideningM m dlevel env =
   applyExtVarPermsFun $ runIdentity $
-  runPolyContT (runStateT m $ WidState wnmap emptyPPInfo dlevel)
+  runPolyContT (runStateT m $
+                WidState NameMap.empty emptyPPInfo env dlevel RecNone)
   (Identity . wnMapExtWidFun . _wsNameMap . snd)
 
 openMb :: CruCtx ctx -> Mb ctx a -> WideningM (RAssign Name ctx, a)
@@ -657,6 +660,40 @@ widenPerm' _ (ValPerm_Named npn1 args1 off1) (ValPerm_Named npn2 args2 off2)
   , offsetsEq off1 off2 =
     (\args -> ValPerm_Named npn1 args off1) <$>
     widenExprs (namedPermNameArgs npn1) args1 args2
+widenPerm' tp (ValPerm_Named npn1 args1 off1) p2
+  | DefinedSortRepr _ <- namedPermNameSort npn1 =
+    do env <- use wsPermEnv
+       let np1 = requireNamedPerm env npn1
+       widenPerm tp (unfoldPerm np1 args1 off1) p2
+widenPerm' tp p1 (ValPerm_Named npn2 args2 off2)
+  | DefinedSortRepr _ <- namedPermNameSort npn2 =
+    do env <- use wsPermEnv
+       let np2 = requireNamedPerm env npn2
+       widenPerm tp p1 (unfoldPerm np2 args2 off2)
+widenPerm' tp (ValPerm_Named npn1 args1 off1) p2
+  | RecursiveSortRepr _ _ <- namedPermNameSort npn1 =
+    use wsRecFlag >>= \case
+      RecRight ->
+        -- If we have already unfolded on the right, don't unfold on the left
+        -- (for termination reasons); instead just give up and return true
+        return ValPerm_True
+      _ ->
+        do wsRecFlag .= RecLeft
+           env <- use wsPermEnv
+           let np1 = requireNamedPerm env npn1
+           widenPerm tp (unfoldPerm np1 args1 off1) p2
+widenPerm' tp p1 (ValPerm_Named npn2 args2 off2)
+  | RecursiveSortRepr _ _ <- namedPermNameSort npn2 =
+    use wsRecFlag >>= \case
+      RecLeft ->
+        -- If we have already unfolded on the left, don't unfold on the right
+        -- (for termination reasons); instead just give up and return true
+        return ValPerm_True
+      _ ->
+        do wsRecFlag .= RecRight
+           env <- use wsPermEnv
+           let np2 = requireNamedPerm env npn2
+           widenPerm tp p1 (unfoldPerm np2 args2 off2)
 widenPerm' _ (ValPerm_Var x1 off1) (ValPerm_Var x2 off2)
   | x1 == x2 && offsetsEq off1 off2 = return $ ValPerm_Var x1 off1
 widenPerm' tp (ValPerm_Conj ps1) (ValPerm_Conj ps2) =
@@ -879,13 +916,13 @@ simplifyGhostPerms _ some_avps = some_avps
 ----------------------------------------------------------------------
 
 -- | Widen two lists of permissions-in-bindings
-widen :: DebugLevel -> CruCtx tops -> CruCtx args ->
+widen :: DebugLevel -> PermEnv -> CruCtx tops -> CruCtx args ->
          Some (ArgVarPerms (tops :++: args)) ->
          Some (ArgVarPerms (tops :++: args)) ->
          Some (ArgVarPerms (tops :++: args))
-widen dlevel tops args (Some (ArgVarPerms
-                              vars1 mb_perms1)) (Some (ArgVarPerms
-                                                       vars2 mb_perms2)) =
+widen dlevel env tops args (Some (ArgVarPerms
+                                  vars1 mb_perms1)) (Some (ArgVarPerms
+                                                           vars2 mb_perms2)) =
   let all_args = appendCruCtx tops args
       prxs1 = cruCtxProxies vars1
       prxs2 = cruCtxProxies vars2
@@ -893,7 +930,7 @@ widen dlevel tops args (Some (ArgVarPerms
   simplifyGhostPerms (cruCtxProxies all_args) $
   completeArgVarPerms $ flip nuMultiWithElim1 mb_mb_perms1 $
   \args_ns1 mb_perms1' ->
-  (\m -> runWideningM m dlevel NameMap.empty args_ns1) $
+  (\m -> runWideningM m dlevel env args_ns1) $
   do (vars1_ns, ps1) <- openMb vars1 mb_perms1'
      (ns2, ps2) <- openMb (appendCruCtx all_args vars2) mb_perms2
      let (args_ns2, vars2_ns) = RL.split all_args prxs2 ns2
