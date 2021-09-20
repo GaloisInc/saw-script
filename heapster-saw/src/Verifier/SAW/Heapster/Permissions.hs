@@ -3183,20 +3183,70 @@ llvmFieldPermToBlock fp =
     llvmBlockLen = llvmFieldLen fp,
     llvmBlockShape = PExpr_FieldShape (LLVMFieldShape $ llvmFieldContents fp) }
 
+-- | Convert a block permission to a field permission, if possible
+llvmBlockPermToField :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
+                        NatRepr sz -> LLVMBlockPerm w ->
+                        Maybe (LLVMFieldPerm w sz)
+llvmBlockPermToField sz bp
+  | PExpr_FieldShape (LLVMFieldShape p) <- llvmBlockShape bp
+  , Just Refl <- testEquality sz (exprLLVMTypeWidth p) =
+    Just $ LLVMFieldPerm { llvmFieldRW = llvmBlockRW bp,
+                           llvmFieldLifetime = llvmBlockLifetime bp,
+                           llvmFieldOffset = llvmBlockOffset bp,
+                           llvmFieldContents = p }
+llvmBlockPermToField _ _ = Nothing
+
+-- | Convert an array permission with no borrows to a block permission
+llvmArrayPermToBlock :: (1 <= w, KnownNat w) =>
+                        LLVMArrayPerm w -> Maybe (LLVMBlockPerm w)
+llvmArrayPermToBlock ap
+  | [] <- llvmArrayBorrows ap =
+    Just $ LLVMBlockPerm
+    { llvmBlockRW = llvmArrayRW ap,
+      llvmBlockLifetime = llvmArrayLifetime ap,
+      llvmBlockOffset = llvmArrayOffset ap,
+      llvmBlockLen = bvMult (llvmArrayStride ap) (llvmArrayLen ap),
+      llvmBlockShape =
+        PExpr_ArrayShape (llvmArrayLen ap) (llvmArrayStride ap)
+        (llvmArrayCellShape ap) }
+llvmArrayPermToBlock _ = Nothing
+
+-- | Convert a block permission with array shape to an array permission
+llvmBlockPermToArray :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
+                        Maybe (LLVMArrayPerm w)
+llvmBlockPermToArray bp
+  | PExpr_ArrayShape len stride sh <- llvmBlockShape bp =
+    Just $ LLVMArrayPerm
+    { llvmArrayRW = llvmBlockRW bp,
+      llvmArrayLifetime = llvmBlockLifetime bp,
+      llvmArrayOffset = llvmBlockOffset bp,
+      llvmArrayLen = bvMult (toInteger stride) len,
+      llvmArrayStride = stride,
+      llvmArrayCellShape = sh,
+      llvmArrayBorrows = [] }
+llvmBlockPermToArray _ = Nothing
+
+-- | Convert a block permission with statically-known length @len@ to an
+-- equivalent array of length 1 with stride @len@
+llvmBlockPermToArray1 :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
+                         Maybe (LLVMArrayPerm w)
+llvmBlockPermToArray1 bp
+  | stride <- bvMatchConstInt $ llvmBlockLen bp =
+    Just $ LLVMArrayPerm
+    { llvmArrayRW = llvmBlockRW bp,
+      llvmArrayLifetime = llvmBlockLifetime bp,
+      llvmArrayOffset = llvmBlockOffset bp,
+      llvmArrayLen = bvInt 1,
+      llvmArrayStride = fromInteger stride,
+      llvmArrayCellShape = llvmBlockShape bp,
+      llvmArrayBorrows = [] }
+llvmBlockPermToArray1 _ = Nothing
+
 -- | Convert an atomic permission to a @memblock@, if possible
 llvmAtomicPermToBlock :: AtomicPerm (LLVMPointerType w) ->
                          Maybe (LLVMBlockPerm w)
 llvmAtomicPermToBlock (Perm_LLVMField fp) = Just $ llvmFieldPermToBlock fp
-llvmAtomicPermToBlock (Perm_LLVMArray ap)
-  | [] <- llvmArrayBorrows ap
-  = Just $ LLVMBlockPerm
-      { llvmBlockRW = llvmArrayRW ap,
-        llvmBlockLifetime = llvmArrayLifetime ap,
-        llvmBlockOffset = llvmArrayOffset ap,
-        llvmBlockLen = bvMult (llvmArrayStride ap) (llvmArrayLen ap),
-        llvmBlockShape =
-          PExpr_ArrayShape (llvmArrayLen ap) (llvmArrayStride ap)
-          (llvmArrayCellShape ap) }
+llvmAtomicPermToBlock (Perm_LLVMArray ap) = llvmArrayPermToBlock ap
 llvmAtomicPermToBlock (Perm_LLVMBlock bp) = Just bp
 llvmAtomicPermToBlock _ = Nothing
 
@@ -3292,22 +3342,6 @@ llvmShapeLength (PExpr_ExShape mb_sh) =
       partialSubst (emptyPSubst $ singletonCruCtx $ knownRepr) mb_len
     _ -> Nothing
 
--- | Convert a @memblock@ permission with array shape to an array permission
-llvmArrayBlockToArrayPerm :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
-                             LLVMArrayPerm w
-llvmArrayBlockToArrayPerm bp
-  | PExpr_ArrayShape len stride sh <- llvmBlockShape bp =
-    LLVMArrayPerm
-    { llvmArrayRW = llvmBlockRW bp,
-      llvmArrayLifetime = llvmBlockLifetime bp,
-      llvmArrayOffset = llvmBlockOffset bp,
-      llvmArrayLen = bvMult (toInteger stride) len,
-      llvmArrayStride = stride,
-      llvmArrayBorrows = [],
-      llvmArrayCellShape = sh }
-llvmArrayBlockToArrayPerm _ =
-  error "llvmArrayBlockToArrayPerm: block perm not of array shape"
-
 -- | Adjust the read/write and lifetime modalities of a block permission by
 -- setting those modalities that are supplied as arguments
 llvmBlockAdjustModalities :: Maybe (PermExpr RWModalityType) ->
@@ -3318,36 +3352,32 @@ llvmBlockAdjustModalities maybe_rw maybe_l bp =
       l = maybe (llvmBlockLifetime bp) id maybe_l in
   bp { llvmBlockRW = rw, llvmBlockLifetime = l }
 
--- | Create a field permission for a pointer to a block permission which uses
--- the offset, read/write modality, and lifetime of the block permission; that
--- is, return
+-- | Convert a block permission of pointer shape to the block permission of
+-- field shape that it represents. That is, convert the block permission
 --
--- > [l]ptr((rw,off) |-> [l]memblock(rw,0,len,sh))
-llvmBlockPtrFieldPerm :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
-                         LLVMFieldPerm w w
-llvmBlockPtrFieldPerm bp =
-  LLVMFieldPerm
-  { llvmFieldRW = llvmBlockRW bp,
-    llvmFieldLifetime = llvmBlockLifetime bp,
-    llvmFieldOffset = llvmBlockOffset bp,
-    llvmFieldContents = ValPerm_LLVMBlock (bp { llvmBlockOffset = bvInt 0 }) }
-
--- | Create a pointer atomic permission to a block permission which uses the
--- offset, read/write modality, and lifetime of the block permission; that is,
--- return
+-- > [l]memblock(rw,off,w/8,[l2]ptrsh(rw2,sh))
 --
--- > [l]ptr((rw,off) |-> [l]memblock(rw,0,len,sh))
-llvmBlockPtrAtomicPerm :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
-                          AtomicPerm (LLVMPointerType w)
-llvmBlockPtrAtomicPerm bp = Perm_LLVMField $ llvmBlockPtrFieldPerm bp
-
--- | Create a pointer permission to a block permission which uses the offset,
--- read/write modality, and lifetime of the block permission; that is, return
+-- to
 --
--- > [l]ptr((rw,off) |-> [l]memblock(rw,0,len,sh))
-llvmBlockPtrPerm :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
-                    ValuePerm (LLVMPointerType w)
-llvmBlockPtrPerm bp = ValPerm_Conj1 $ llvmBlockPtrAtomicPerm bp
+-- > [l]memblock(rw,off,w/8,fieldsh([l2]memblock(rw2,0,sh_len,sh)))
+--
+-- where @sh_len@ is the 'llvmShapeLength' of @sh@. It is an error if the input
+-- block permission does not have the required form displayed above.
+llvmBlockPtrShapeUnfold :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
+                           Maybe (LLVMBlockPerm w)
+llvmBlockPtrShapeUnfold bp
+  | PExpr_PtrShape maybe_rw maybe_l sh <- llvmBlockShape bp
+  , Just sh_len <- llvmShapeLength sh
+  , bvEq (llvmBlockLen bp) (bvInt $ machineWordBytes bp) =
+    Just $ bp { llvmBlockShape =
+                PExpr_FieldShape $ LLVMFieldShape $ ValPerm_LLVMBlock $
+                LLVMBlockPerm
+                { llvmBlockRW = maybe (llvmBlockRW bp) id maybe_rw,
+                  llvmBlockLifetime = maybe (llvmBlockLifetime bp) id maybe_l,
+                  llvmBlockOffset = bvInt 0,
+                  llvmBlockLen = sh_len,
+                  llvmBlockShape = sh } }
+llvmBlockPtrShapeUnfold _ = Nothing
 
 -- | Create a read block permission with shape @sh@, i.e., the 'LLVMBlockPerm'
 -- corresponding to the permission @memblock(R,0,'llvmShapeLength'(sh),sh)@
