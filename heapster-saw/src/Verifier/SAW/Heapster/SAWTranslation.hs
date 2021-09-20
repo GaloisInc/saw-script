@@ -2996,16 +2996,10 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_ElimLLVMBlockField _ _ _ |] ->
-    do let mb_ps = fmap ((\case ValPerm_Conj ps -> ps
-                                _ -> error "translateSimplImpl: SImpl_ElimLLVMBlockField, VPerm_Conj required"
-                         ). distPermsHeadPerm . simplImplOut) mb_simpl
-       ttrans1 <- translate $ fmap (!!0) mb_ps
-       ttrans2 <- translate $ fmap (!!1) mb_ps
+    do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
-           pctx :>:
-           PTrans_Conj [typeTransF (tupleTypeTrans ttrans1) [transTerm1 ptrans],
-                        typeTransF ttrans2 [unitOpenTerm]])
+           pctx :>: typeTransF ttrans [transTerm1 ptrans])
          m
 
   [nuMP| SImpl_IntroLLVMBlockArray _ _ |] ->

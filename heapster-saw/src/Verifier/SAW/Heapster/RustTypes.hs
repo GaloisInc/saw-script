@@ -240,40 +240,6 @@ namedShapeShapeFun w (SomeNamedShape nmsh) =
    pretty "Expected:" <+> pretty (intValue w),
    pretty "Actual:" <+> pretty (intValue (natRepr nmsh))]
 
--- | A table for converting Rust base types to shapes
-namedTypeTable :: (1 <= w, KnownNat w) => prx w -> [(String,SomeShapeFun w)]
-namedTypeTable w =
-  [("bool", sizedIntShapeFun @_ @1 w Proxy),
-   ("i8", sizedIntShapeFun @_ @8 w Proxy),
-   ("u8", sizedIntShapeFun @_ @8 w Proxy),
-   ("i16", sizedIntShapeFun @_ @16 w Proxy),
-   ("u16", sizedIntShapeFun @_ @16 w Proxy),
-   ("i32", sizedIntShapeFun @_ @32 w Proxy),
-   ("u32", sizedIntShapeFun @_ @32 w Proxy),
-   ("i64", sizedIntShapeFun @_ @64 w Proxy),
-   ("u64", sizedIntShapeFun @_ @64 w Proxy),
-
-   -- isize and usize are the same size as pointers, which is w
-   ("isize", sizedIntShapeFun w w),
-   ("usize", sizedIntShapeFun w w),
-
-   -- Strings contain three fields: a pointer, a length, and a capacity
-   ("String",
-    constShapeFun (PExpr_ExShape $ nu $ \cap ->
-                    (PExpr_SeqShape
-                     -- The pointer to an array of bytes
-                     (PExpr_PtrShape Nothing Nothing $
-                      PExpr_ArrayShape (PExpr_Var cap) 1
-                      [LLVMFieldShape $ ValPerm_Exists $ llvmExEqWord $ Proxy @8])
-                     (PExpr_SeqShape
-                      -- The length value
-                      (PExpr_FieldShape $ LLVMFieldShape $
-                       ValPerm_Exists $ llvmExEqWord w)
-                      -- The capacity
-                      (PExpr_FieldShape $ LLVMFieldShape $ ValPerm_Eq $
-                       PExpr_LLVMWord $ PExpr_Var cap)))))
-   ]
-
 -- | A fully qualified Rust path without any of the parameters; e.g.,
 -- @Foo<X>::Bar<Y,Z>::Baz@ just becomes @[Foo,Bar,Baz]@
 newtype RustName = RustName [Ident] deriving (Eq)
@@ -339,11 +305,12 @@ withRecType rust_n rust_ns rec_n = local (\info -> info { rciRecType = Just (rus
 -- the stride and the fields of the slice, where the latter can have the length
 -- free
 matchSliceShape :: PermExpr (LLVMShapeType w) ->
-                   Maybe (Bytes, Binding (BVType w) [LLVMFieldShape w])
+                   Maybe (Bytes,
+                          Binding (BVType w) (PermExpr (LLVMShapeType w)))
 matchSliceShape (PExpr_ExShape
-                 [nuP| PExpr_ArrayShape (PExpr_Var len) stride fshs |])
+                 [nuP| PExpr_ArrayShape (PExpr_Var len) stride mb_sh |])
   | Left Member_Base <- mbNameBoundP len =
-    Just (mbLift stride, fshs)
+    Just (mbLift stride, mb_sh)
 matchSliceShape (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
                                             (DefinedShapeBody _)) args) =
   matchSliceShape (unfoldNamedShape nmsh args)
@@ -379,15 +346,13 @@ instance RsConvert w [PathParameters Span] (Some TypedPermExprs) where
 instance RsConvert w (Ty Span) (PermExpr (LLVMShapeType w)) where
   rsConvert w (Slice tp _) =
     do sh <- rsConvert w tp
-       case matchLLVMFieldShapeSeq sh of
-         Just fshs ->
+       case llvmShapeLength sh of
+         Just (bvMatchConstInt -> Just stride) ->
            return (PExpr_ExShape $ nu $ \n ->
-                    PExpr_ArrayShape (PExpr_Var n)
-                    (fromIntegral $ sum $ map llvmFieldShapeLength fshs)
-                    fshs)
+                    PExpr_ArrayShape (PExpr_Var n) (fromInteger stride) sh)
          _ ->
            rsPPInfo >>= \ppInfo ->
-           fail ("rsConvert: slices not yet supported of type: "
+           fail ("rsConvert: slices not supported for dynamically-sized type: "
                  ++ show (RustPP.pretty tp) ++ " with translation:\n"
                  ++ renderDoc (permPretty ppInfo sh))
   rsConvert _ (Rptr Nothing _ _ _) =
@@ -398,13 +363,13 @@ instance RsConvert w (Ty Span) (PermExpr (LLVMShapeType w)) where
        rw <- rsConvert w mut
        case sh of
          -- Test if sh is a slice type = an array of existential length
-         (matchSliceShape -> Just (stride,fshs)) ->
+         (matchSliceShape -> Just (stride,mb_sh)) ->
            -- If so, build a "fat pointer" = a pair of a pointer to our array
            -- shape plus a length value
            return $ PExpr_ExShape $ nu $ \n ->
            PExpr_SeqShape (PExpr_PtrShape rw Nothing $
                            PExpr_ArrayShape (PExpr_Var n) stride $
-                           subst1 (PExpr_Var n) fshs)
+                           subst1 (PExpr_Var n) mb_sh)
            (PExpr_FieldShape $ LLVMFieldShape $ ValPerm_Eq $
             PExpr_LLVMWord $ PExpr_Var n)
 
