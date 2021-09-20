@@ -501,23 +501,24 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf []
 mkMemoLocal :: forall l. (VMonadLazy l, Show (Extra l)) =>
                SimulatorConfig l -> IntMap (Thunk l) ->
                Term -> Env l -> EvalM l (IntMap (Thunk l))
-mkMemoLocal cfg memoClosed t env = go memoClosed t
+mkMemoLocal cfg memoClosed t env = go mempty t
   where
     go :: IntMap (Thunk l) -> Term -> EvalM l (IntMap (Thunk l))
     go memo (Unshared tf) = goTermF memo tf
-    go memo (STApp{ stAppIndex = i, stAppTermF = tf }) =
-      case IMap.lookup i memo of
-        Just _ -> return memo
-        Nothing -> do
-          memo' <- goTermF memo tf
-          thunk <- delay (evalLocalTermF cfg memoClosed memo' tf env)
-          return (IMap.insert i thunk memo')
-
+    go memo (STApp{ stAppIndex = i, stAppFreeVars = fv, stAppTermF = tf })
+      | fv == emptyBitSet = pure memo
+      | otherwise =
+        case IMap.lookup i memo of
+          Just _ -> pure memo
+          Nothing ->
+            do memo' <- goTermF memo tf
+               thunk <- delay (evalLocalTermF cfg memoClosed memo' tf env)
+               pure (IMap.insert i thunk memo')
     goTermF :: IntMap (Thunk l) -> TermF Term -> EvalM l (IntMap (Thunk l))
     goTermF memo tf =
       case tf of
         FTermF ftf      -> foldlM go memo ftf
-        App t1 t2       -> do memo' <- go memo t1
+        App t1 t2       -> do memo' <- goTermF memo (unwrapTermF t1)
                               go memo' t2
         Lambda _ t1 _   -> go memo t1
         Pi _ t1 _       -> go memo t1
@@ -548,10 +549,11 @@ evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam recEval tf0 
   where
     lam = evalOpen cfg memoClosed
     recEval (Unshared tf) = evalTermF cfg lam recEval tf env
-    recEval (STApp{ stAppIndex = i }) =
-      case IMap.lookup i memoLocal of
+    recEval (STApp{ stAppIndex = i, stAppFreeVars = fv, stAppTermF = tf }) =
+      case IMap.lookup i memo of
         Just x -> force x
-        Nothing -> panic "evalLocalTermF" ["internal error"]
+        Nothing -> evalTermF cfg lam recEval tf env
+      where memo = if fv == emptyBitSet then memoClosed else memoLocal
 
 {-# SPECIALIZE evalOpen ::
   Show (Extra l) =>
@@ -576,10 +578,11 @@ evalOpen cfg memoClosed t env = do
   memoLocal <- mkMemoLocal cfg memoClosed t env
   let eval :: Term -> MValue l
       eval (Unshared tf) = evalF tf
-      eval (STApp{ stAppIndex = i, stAppTermF = tf }) =
-        case IMap.lookup i memoLocal of
+      eval (STApp{ stAppIndex = i, stAppFreeVars = fv, stAppTermF = tf }) =
+        case IMap.lookup i memo of
           Just x -> force x
           Nothing -> evalF tf
+        where memo = if fv == emptyBitSet then memoClosed else memoLocal
       evalF :: TermF Term -> MValue l
       evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval tf env
   eval t
