@@ -234,11 +234,10 @@ Definition bvMul (n : nat) (a : bitvector n) (b : bitvector n)
   := bitsToBv (mulB (bvToBITS a) (bvToBITS b)).
 Global Opaque bvMul.
 
-(* This is annoying to implement, so using BITS conversion *)
+(* This is annoying to implement, so use bvSub *)
 Definition bvNeg (n : nat) (a : bitvector n)
   : bitvector n
-  := bitsToBv (invB (bvToBITS a)).
-Global Opaque bvNeg.
+  := bvSub n (intToBv n 0) a.
 
 (* FIXME this is not implemented *)
 Definition bvUDiv (n : nat) (a : bitvector n) (b : bitvector n)

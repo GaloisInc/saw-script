@@ -30,6 +30,7 @@
 module Verifier.SAW.Heapster.Implication where
 
 import Data.Maybe
+import Data.Either
 import Data.List
 import Data.Functor.Product
 import Data.Functor.Compose
@@ -218,6 +219,12 @@ someEqProof1 :: ExprVar a -> PermExpr a -> Bool -> SomeEqProof (PermExpr a)
 someEqProof1 x e flag =
   let eq_step = EqProofStep (MNil :>: EqPerm x e flag) (\(_ :>: e') -> e') in
   SomeEqProofCons (SomeEqProofRefl $ eqProofStepLHS eq_step) eq_step
+
+-- | A 'SomeEqProof' for the identity @x = x &+ 0@
+someEqProofZeroOffset :: (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
+                         SomeEqProof (PermExpr (LLVMPointerType w))
+someEqProofZeroOffset x =
+  someEqProof1 x (PExpr_LLVMOffset x (zeroOfType (BVRepr knownNat))) True
 
 -- | Apply symmetry to a 'SomeEqProof', changing an @e1=e2@ proof to @e2=e1@
 someEqProofSym :: SomeEqProof a -> SomeEqProof a
@@ -418,6 +425,12 @@ data SimplImpl ps_in ps_out where
                       ExprVar (BVType w) -> PermExpr (BVType w) ->
                       SimplImpl (RNil :> LLVMPointerType w :> BVType w)
                       (RNil :> LLVMPointerType w)
+
+  -- | The implication that @x@ is the same as @x &+ 0@
+  --
+  -- > . -o x:eq(x &+ 0)
+  SImpl_LLVMOffsetZeroEq :: (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
+                            SimplImpl RNil (RNil :> LLVMPointerType w)
 
   -- | Introduce an empty conjunction on @x@, i.e.:
   --
@@ -1569,6 +1582,7 @@ simplImplIn (SImpl_InvTransEq x y e) =
 simplImplIn (SImpl_CopyEq x e) = distPerms1 x (ValPerm_Eq e)
 simplImplIn (SImpl_LLVMWordEq x y e) =
   distPerms2 x (ValPerm_Eq (PExpr_LLVMWord (PExpr_Var y))) y (ValPerm_Eq e)
+simplImplIn (SImpl_LLVMOffsetZeroEq _) = DistPermsNil
 simplImplIn (SImpl_IntroConj _) = DistPermsNil
 simplImplIn (SImpl_ExtractConj x ps _) = distPerms1 x (ValPerm_Conj ps)
 simplImplIn (SImpl_CopyConj x ps _) = distPerms1 x (ValPerm_Conj ps)
@@ -1872,6 +1886,8 @@ simplImplOut (SImpl_InvTransEq x y _) = distPerms1 x (ValPerm_Eq $ PExpr_Var y)
 simplImplOut (SImpl_CopyEq x e) = distPerms2 x (ValPerm_Eq e) x (ValPerm_Eq e)
 simplImplOut (SImpl_LLVMWordEq x _ e) =
   distPerms1 x (ValPerm_Eq (PExpr_LLVMWord e))
+simplImplOut (SImpl_LLVMOffsetZeroEq x) =
+  distPerms1 x (ValPerm_Eq (PExpr_LLVMOffset x (zeroOfType (BVRepr knownNat))))
 simplImplOut (SImpl_IntroConj x) = distPerms1 x ValPerm_True
 simplImplOut (SImpl_ExtractConj x ps i) =
   if i < length ps then
@@ -2368,6 +2384,8 @@ instance SubstVar PermVarSubst m =>
       SImpl_CopyEq <$> genSubst s x <*> genSubst s e
     [nuMP| SImpl_LLVMWordEq x y e |] ->
       SImpl_LLVMWordEq <$> genSubst s x <*> genSubst s y <*> genSubst s e
+    [nuMP| SImpl_LLVMOffsetZeroEq x |] ->
+      SImpl_LLVMOffsetZeroEq <$> genSubst s x
     [nuMP| SImpl_IntroConj x |] ->
       SImpl_IntroConj <$> genSubst s x
     [nuMP| SImpl_ExtractConj x ps i |] ->
@@ -3507,6 +3525,9 @@ implProveEqPerms DistPermsNil = pure ()
 implProveEqPerms (DistPermsCons ps' x (ValPerm_Eq (PExpr_Var y)))
   | x == y
   = implProveEqPerms ps' >>> introEqReflM x
+implProveEqPerms (DistPermsCons ps' x (ValPerm_Eq (PExpr_LLVMOffset y off)))
+  | x == y, bvMatchConstInt off == Just 0
+  = implProveEqPerms ps' >>> implSimplM Proxy (SImpl_LLVMOffsetZeroEq x)
 implProveEqPerms (DistPermsCons ps' x p@(ValPerm_Eq _)) =
   implProveEqPerms ps' >>> implPushCopyM x p
 implProveEqPerms _ = error "implProveEqPerms: non-equality permission"
@@ -4528,7 +4549,8 @@ substEqsWithProof a =
 
 
 -- | The main work horse for 'proveEq' on expressions
-proveEqH :: NuMatchingAny1 r => PartialSubst vars -> PermExpr a ->
+proveEqH :: forall vars a s r ps. NuMatchingAny1 r =>
+            PartialSubst vars -> PermExpr a ->
             Mb vars (PermExpr a) ->
             ImplM vars s r ps ps (SomeEqProof (PermExpr a))
 proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
@@ -4575,6 +4597,20 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
             Just _ -> proveEqH psubst e mb_e
             Nothing -> proveEqFail e mb_e
 
+  -- To prove @x &+ o = e@, we subtract @o@ from the RHS and recurse
+  (PExpr_LLVMOffset x off, _) ->
+    proveEq (PExpr_Var x) (fmap (`addLLVMOffset` bvNegate off) mb_e) >>= \some_eqp ->
+    pure $ fmap (`addLLVMOffset` off) some_eqp
+
+  -- To prove @x = x &+ o@, we prove that @0 = o@ and combine it with the fact
+  -- that @x = x &+ 0@ ('someEqProofZeroOffset') using transitivity
+  (PExpr_Var x, [nuMP| PExpr_LLVMOffset mb_y mb_off |])
+    | Right y <- mbNameBoundP mb_y
+    , x == y ->
+      proveEq (zeroOfType (BVRepr knownNat)) mb_off >>= \some_eqp ->
+      pure $ someEqProofTrans (someEqProofZeroOffset y)
+                              (fmap (PExpr_LLVMOffset y) some_eqp)
+
   -- To prove x=e, try to see if x:eq(e') and proceed by transitivity
   (PExpr_Var x, _) ->
     getVarEqPerm x >>= \case
@@ -4599,18 +4635,47 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
   (PExpr_LLVMWord e', [nuMP| PExpr_LLVMWord mb_e' |]) ->
     fmap PExpr_LLVMWord <$> proveEqH psubst e' mb_e'
 
-  -- Prove e = N*z + M where e - M is a multiple of N by setting z = (e-M)/N
-  (_, [nuMP| PExpr_BV [BVFactor (BV.BV mb_n) z] (BV.BV mb_m) |])
-    | Left memb <- mbNameBoundP z
-    , Nothing <- psubstLookup psubst memb
-    , bvIsZero (bvMod (bvSub e (bvInt $ mbLift mb_m)) (mbLift mb_n)) ->
-      setVarM memb (bvDiv (bvSub e (bvInt $ mbLift mb_m)) (mbLift mb_n)) >>>
-      pure (SomeEqProofRefl e)
+  -- Prove e = L_1*y_1 + ... + L_k*y_k + N*z + M where z is an unset variable,
+  -- each y_i is either a set variable with value e_i or an unbound variable
+  -- with e_i = y_i, and e - (L_1*e_1 + ... + L_k*e_k + M) is divisible by N,
+  -- by setting z = (e - (L_1*e_1 + ... + L_k*e_k + M))/N
+  (_, [nuMP| PExpr_BV mb_factors (BV.BV mb_m) |])
+    | Just (n, memb, e_factors) <- getUnsetBVFactor mb_factors
+    , e' <- bvSub e (bvAdd e_factors (bvInt $ mbLift mb_m))
+    , bvIsZero (bvMod e' n) ->
+      setVarM memb (bvDiv e' n) >>> pure (SomeEqProofRefl e)
 
   -- FIXME: add cases to prove struct(es1)=struct(es2)
 
   -- Otherwise give up!
   _ -> proveEqFail e mb_e
+
+  where -- If there is exactly one 'BVFactor' in a list of 'BVFactor's which is
+        -- an unset variable, return the value of its 'BV', the witness that it
+        -- is bound, and the result of adding together the remaining factors
+        getUnsetBVFactor :: (1 <= w, KnownNat w) => Mb vars [BVFactor w] ->
+                            Maybe (Integer, Member vars (BVType w), PermExpr (BVType w))
+        getUnsetBVFactor (mbList -> mb_factors) =
+          case partitionEithers $ mbFactorNameBoundP <$> mb_factors of
+            ([(n, memb)], xs) -> Just (n, memb, foldl' bvAdd (bvInt 0) xs)
+            _ -> Nothing
+
+        -- If a 'BVFactor' in a binding is an unset variable, return the value
+        -- of its 'BV' and the witness that it is bound. Otherwise, return the
+        -- constant of the factor multiplied by the variable's value if it is
+        -- a set variable, or the constant of the factor multiplied by the
+        -- variable, if it is an unbound variable
+        mbFactorNameBoundP :: Mb vars (BVFactor w) ->
+                              Either (Integer, Member vars (BVType w))
+                                     (PermExpr (BVType w))
+        mbFactorNameBoundP (mbMatch -> [nuMP| BVFactor (BV.BV mb_n) mb_z |]) =
+          let n = mbLift mb_n in
+          case mbNameBoundP mb_z of
+            Left memb -> case psubstLookup psubst memb of 
+                           Nothing -> Left (n, memb)
+                           Just e' -> Right (bvMultBV (BV.mkBV knownNat n) e')
+            Right z -> Right (PExpr_BV [BVFactor (BV.mkBV knownNat n) z]
+                                       (BV.zero knownNat))
 
 
 -- | Build a proof on the top of the stack that @x:eq(e)@. Assume that all @x@

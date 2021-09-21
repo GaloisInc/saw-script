@@ -108,7 +108,7 @@ Lemma compare_sum_spec_ref : refinesFun compare_sum compare_sum_spec.
 Proof.
   unfold compare_sum, compare_sum__tuple_fun, compare_sum_spec.
   time "compare_sum_spec_ref" prove_refinement.
-  all: rewrite bvSub_zero_bvNeg in e_assert.
+  all: rewrite bvSub_zero_n in e_assert.
   (* Note that there are two versions of each case because of the if! *)
   (* The `x < y + z` case: *)
   1,4: continue_prove_refinement_left.

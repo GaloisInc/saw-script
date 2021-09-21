@@ -141,6 +141,9 @@ Instance Proper_isBvslt_isBvsle w : Proper (isBvsle w --> isBvsle w ==> impl) (i
 Definition isBvult_to_isBvule w a b : isBvult w a b -> isBvule w a b. Admitted.
 Instance Proper_isBvult_isBvule w : Proper (isBvule w --> isBvule w ==> impl) (isBvult w). Admitted.
 
+Definition isBvule_to_isBvult_or_eq w a b : isBvule w a b -> isBvult w a b \/ a = b.
+Admitted.
+
 Definition isBvslt_to_isBvsle_suc w a b : isBvslt w a b ->
                                           isBvsle w (bvAdd w a (intToBv w 1)) b.
 Admitted.
@@ -167,6 +170,9 @@ Definition isBvsle_suc_r w (a : bitvector w) : isBvsle w a (bvsmax w) ->
 Admitted.
 
 Definition isBvslt_antirefl w a : ~ isBvslt w a a.
+Admitted.
+
+Definition isBvule_zero_n w a : isBvule w (intToBv w 0) a.
 Admitted.
 
 Definition isBvule_n_zero w a : isBvule w a (intToBv w 0) <-> a = intToBv w 0.
@@ -198,15 +204,21 @@ Admitted.
 
 (** Lemmas about bitvector subtraction, negation, and sign bits **)
 
-Lemma bvSub_zero_bvNeg w a : bvSub w (intToBv w 0) a = bvNeg w a.
+Lemma bvSub_n_zero w a : bvSub w a (intToBv w 0) = a.
 Admitted.
 
-Hint Rewrite bvSub_zero_bvNeg : SAWCoreBitvectors_eqs.
+Lemma bvSub_zero_n w a : bvSub w (intToBv w 0) a = bvNeg w a.
+Admitted.
+
+Hint Rewrite bvSub_zero_n : SAWCoreBitvectors_eqs.
 
 Lemma bvNeg_msb w a : msb w (bvNeg (Succ w) a) = not (msb w a).
 Admitted.
 
 Hint Rewrite bvNeg_msb : SAWCoreBitvectors_eqs.
+
+Lemma bvNeg_bvAdd_distrib w a b : bvNeg w (bvAdd w a b) = bvAdd w (bvNeg w a) (bvNeg w b).
+Admitted.
 
 Lemma bvslt_bvSub_r w a b : isBvslt w a b <-> isBvslt w (intToBv w 0) (bvSub w b a).
 Admitted.
