@@ -451,6 +451,8 @@ jobs:
       - shell: bash
         working-directory: s2nTests
         run: |
+          curl -o solvers-bin.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/$SOLVER_PKG_VERSION/ubuntu-18.04-bin.zip"
+          (cd bin && unzip ../solvers-bin.zip)
           docker-compose pull
           grep -h '^FROM' docker/*.dockerfile | sort -u | awk '{print $2}' | xargs -n1 -P8 docker pull
 
