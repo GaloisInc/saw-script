@@ -15,7 +15,7 @@ env:
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
   # ./s2nTests/docker/saw.dockerfile
-  SOLVER_PKG_VERSION: "snapshot-20210914"
+  SOLVER_PKG_VERSION: "snapshot-20210917"
 
   OCAML_VERSION: 4.09.x
 
