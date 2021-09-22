@@ -636,6 +636,11 @@ exprLLVMTypeWidth :: KnownNat w => f (LLVMPointerType w) -> NatRepr w
 exprLLVMTypeWidth _ = knownNat
 
 -- | Convenience function to get the bit width of an LLVM pointer type
+mbExprLLVMTypeWidth :: KnownNat w => Mb ctx (f (LLVMPointerType w)) ->
+                       NatRepr w
+mbExprLLVMTypeWidth _ = knownNat
+
+-- | Convenience function to get the bit width of an LLVM pointer type
 shapeLLVMTypeWidth :: KnownNat w => f (LLVMShapeType w) -> NatRepr w
 shapeLLVMTypeWidth _ = knownNat
 
@@ -1515,12 +1520,40 @@ pattern ValPerm_LLVMField fp <- ValPerm_Conj [Perm_LLVMField fp]
   where
     ValPerm_LLVMField fp = ValPerm_Conj [Perm_LLVMField fp]
 
+-- | The conjunction of exactly 1 field permission in a binding
+pattern MbValPerm_LLVMField :: () => (a ~ LLVMPointerType w, 1 <= w, KnownNat w,
+                                      1 <= sz, KnownNat sz) =>
+                               Mb ctx (LLVMFieldPerm w sz) ->
+                               Mb ctx (ValuePerm a)
+pattern MbValPerm_LLVMField mb_fp <- [nuP| ValPerm_LLVMField mb_fp |]
+  where
+    MbValPerm_LLVMField mb_fp =
+      mbMapCl $(mkClosed [| ValPerm_LLVMField |]) mb_fp
+
 -- | The conjunction of exactly 1 array permission
 pattern ValPerm_LLVMArray :: () => (a ~ LLVMPointerType w, 1 <= w, KnownNat w) =>
                              LLVMArrayPerm w -> ValuePerm a
 pattern ValPerm_LLVMArray ap <- ValPerm_Conj [Perm_LLVMArray ap]
   where
     ValPerm_LLVMArray ap = ValPerm_Conj [Perm_LLVMArray ap]
+
+-- | The conjunction of exactly 1 array permission
+pattern MbValPerm_LLVMArray :: () => (a ~ LLVMPointerType w, 1 <= w, KnownNat w) =>
+                               Mb ctx (LLVMArrayPerm w) -> Mb ctx (ValuePerm a)
+pattern MbValPerm_LLVMArray mb_ap <- [nuP| ValPerm_LLVMArray ap |]
+  where
+    MbValPerm_LLVMArray mb_ap =
+      mbMapCl $(mkClosed [| ValPerm_LLVMArray |]) mb_ap
+
+-- | The conjunction of exactly 1 array permission in a binding
+pattern MbValPerm_LLVMField :: () => (a ~ LLVMPointerType w, 1 <= w, KnownNat w,
+                                      1 <= sz, KnownNat sz) =>
+                               Mb ctx (LLVMFieldPerm w sz) ->
+                               Mb ctx (ValuePerm a)
+pattern MbValPerm_LLVMField mb_fp <- [nuP| ValPerm_LLVMField mb_fp |]
+  where
+    MbValPerm_LLVMField mb_fp =
+      mbMapCl $(mkClosed [| ValPerm_LLVMField |]) mb_fp
 
 -- | The conjunction of exactly 1 block permission
 pattern ValPerm_LLVMBlock :: () => (a ~ LLVMPointerType w, 1 <= w, KnownNat w) =>

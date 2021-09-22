@@ -4147,6 +4147,73 @@ implElimAppendIthLLVMBlock x ps i
 implElimAppendIthLLVMBlock _ _ _ =
   error "implElimAppendIthLLVMBlock: malformed inputs"
 
+
+-- | Assume @x:p@ is on top of the stack, where @p@ is a @memblock@ permission
+-- that contains the supplied offset @off@, and repeatedly eliminate this
+-- @memblock@ permission until @p@ has been converted to a non-@memblock@
+-- permission @p'@ that contains @off@. Leave @p'@ on top of the stack, return
+-- it as the return value, and recombine any other permissions that are yielded
+-- by this elimination.
+--
+-- The notion of "contains" is determined by the supplied @imprecise_p@ flag: a
+-- 'True' makes this mean "could contain" in the sense of 'bvPropCouldHold',
+-- while 'False' makes this mean "definitely contains" in the sense of
+-- 'bvPropHolds'.
+--
+-- If there are multiple ways to eliminate @p@ to a @p'@ that contains @off@
+-- (which is only possible when @imprecise_p@ is 'True'), return each of them,
+-- using 'implCatchM' to combine the different computation paths.
+--
+-- If no matches are found, fail using 'implFailVarM', citing the supplied
+-- permission as the one we are trying to prove.
+implElimLLVMBlockForOffset :: (1 <= w, KnownNat w, NuMatchingAny1 r) =>
+                              ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
+                              Bool -> PermExpr (BVType w) ->
+                              Mb vars (ValuePerm (LLVMPointerType w)) ->
+                              ImplM vars s r (ps :> LLVMPointerType w)
+                              (ps :> LLVMPointerType w)
+                              (AtomicPerm (LLVMPointerType w))
+implElimLLVMBlockForOffset x bp imprecise_p off mb_p =
+  implElimLLVMBlock x bp >>> getTopDistPerm x >>>= \(ValPerm_Conj ps) ->
+  implGetLLVMPermForOffset x ps imprecise_p True off mb_p
+
+-- | Assume @x:p1*...*pn@ is on top of the stack, and try to find a permission
+-- @pi@ that contains a given offset @off@. If a @pi@ is found that definitely
+-- contains @off@, in the sense of 'bvPropHolds', it is selected. Otherwise, if
+-- the first 'Bool' flag is 'True', imprecise matches are allowed, which are
+-- permissions @pi@ that could contain @off@ in the sense of 'bvPropCouldHold',
+-- and all such imprecise matches are returned, using 'implCatchM' to try each
+-- possibility and fallback to the next one if it leads to a failure. If the
+-- selected @pi@ is a @memblock@ permission and the second 'Bool' flag is
+-- 'True', it is then repeatedly eliminated in the sense of 'implElimLLVMBlock'
+-- until a non-@memblock@ permission containing @off@ results, and this
+-- permission is then used as the new @pi@. The resulting permission @pi@ is
+-- then left on top of the stack and returned by the function, while the
+-- remaining permissions for @x@ are recombined with any other existing
+-- permissions for @x@. If no matches are found, fail using 'implFailVarM',
+-- citing the supplied permission as the one we are trying to prove.
+implGetLLVMPermForOffset ::
+  ExprVar (LLVMPointerType w) -> {- ^ the variable @x@ -}
+  [AtomicPerm (LLVMPointerType w)] -> {- ^ the permissions held for @x@ -}
+  Bool -> {- ^ whether imprecise matches are allowed -}
+  Bool -> {- ^ whether block permissions should be eliminated -}
+  PermExpr (BVType w) -> {- ^ the offset we are looking for -}
+  Mb ctx (ValuePerm (LLVMPointerType w)) -> {- ^ the perm we want to prove -}
+  ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w)
+  (AtomicPerm (LLVMPointerType w))
+
+implGetLLVMPermForOffset x ps imprecise_p elim_blocks_p off mb_p =
+  case llvmPermIndicesForOffset ps imprecise_p off of
+    [] -> implFailVarM "implGetLLVMPermForOffset" x (ValPerm_Conj ps) mb_p
+    ixs ->
+      foldr1 implCatchM $ flip map ixs $ \i ->
+      implGetConjM x ps i >>>= \ps' -> recombinePerm x (ValPerm_Conj ps') >>>
+      case p!!i of
+        Perm_LLVMBlock bp
+          | elim_blocks_p -> implElimLLVMBlockForOffset x bp imprecise_p off
+        p_i -> return p_i
+
+
 -- | Prove a @memblock@ permission with shape @sh1 orsh sh2 orsh ... orsh shn@
 -- from one with shape @shi@.
 implIntroOrShapeMultiM :: (NuMatchingAny1 r, 1 <= w, KnownNat w) =>
@@ -4173,45 +4240,6 @@ implIntroOrShapeMultiM x bp (sh1 : shs) i =
   implSimplM Proxy (SImpl_IntroLLVMBlockOr
                     x (bp { llvmBlockShape = sh1 }) sh2)
 implIntroOrShapeMultiM _ _ _ _ = error "implIntroOrShapeMultiM"
-
-
--- | Assume @x:p1*...*pn@ is on top of the stack, and try to find a permission
--- @pi@ that contains a given offset @off@. If a @pi@ is found that definitely
--- contains @off@, in the sense of 'bvPropHolds', it is selected. Otherwise, if
--- the first 'Bool' flag is 'True', imprecise matches are allowed, which are
--- permissions @pi@ that could contain @off@ in the sense of 'bvPropCouldHold',
--- and all such imprecise matches are returned, using 'implCatchM' to try each
--- possibility and fallback to the next one if it fails. If the selected
--- permission @pi@ is a @memblock@ permission and the second 'Bool' flag is
--- 'True', it is then repeatedly eliminated in the sense of 'implElimLLVMBlock'
--- until a non-@memblock@ permission containing @off@ results, and this
--- permission is then used as the new @pi@. The resulting permission @pi@ is
--- then left on top of the stack and returned by the function, while the
--- remaining permissions for @x@ are recombined with any other existing
--- permissions for @x@. If no matches are found, fail using 'implFailVarM',
--- citing the supplied permission as the one we are trying to prove.
-implGetLLVMPermForOffset ::
-  ExprVar (LLVMPointerType w) -> {- ^ the variable @x@ -}
-  [AtomicPerm (LLVMPointerType w)] -> {- ^ the permissions held for @x@ -}
-  Bool -> {- ^ whether imprecise matches are allowed -}
-  Bool -> {- ^ whether block permissions should be eliminated -}
-  PermExpr (BVType w) -> {- ^ the offset we are looking for -}
-  Mb ctx (ValuePerm (LLVMPointerType w)) -> {- ^ the perm we want to prove -}
-  ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w)
-  (AtomicPerm (LLVMPointerType w))
-
-implGetLLVMPermForOffset x ps imprecise_p elim_blocks_p off mb_p =
-  case llvmPermIndicesForOffset ps imprecise_p off of
-    [] -> implFailVarM "implGetLLVMPermForOffset" x (ValPerm_Conj ps) mb_p
-    ixs ->
-      foldr1 implCatchM $ flip map ixs $ \i ->
-      implExtractConjM x ps i >>> implPopM x ps >>>
-      case p!!i of
-        Perm_LLVMBlock bp
-          | elim_blocks_p -> implElimLLVMBlockForOffset x bp off
-        p_i -> return p_i
-
-FIXME HERE NOWNOW: write implElimLLVMBlockForOffset
 
 
 ----------------------------------------------------------------------
@@ -4893,234 +4921,97 @@ solveForPermListImpl ps_l mb_ps_r =
 -- * Proving Field Permissions
 ----------------------------------------------------------------------
 
--- | Prove an LLVM field permission @x:ptr((rw,off) |-> p)@ from permission @pi@
--- assuming that the the current permissions @x:(p1 * ... *pn)@ for @x@ are on
--- the top of the stack, and ensuring that any remaining permissions for @x@ get
--- popped back to the primary permissions for @x@
+-- | Prove an LLVM field permission @x:ptr((rw,off) |-> p)@ from permissions
+-- @x:p1*...*pn@ on the top of the stack, and ensure that any remaining
+-- permissions for @x@ get popped back to the primary permissions for @x@. This
+-- function does not unfold named permissions in the @pi@s.
 proveVarLLVMField ::
   (1 <= w, KnownNat w, 1 <= sz, KnownNat sz, NuMatchingAny1 r) =>
-  ExprVar (LLVMPointerType w) -> [AtomicPerm (LLVMPointerType w)] -> Int ->
+  ExprVar (LLVMPointerType w) -> [AtomicPerm (LLVMPointerType w)] ->
   PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w sz) ->
   ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
 
-FIXME HERE NOWNOW: rewrite to use implGetLLVMPermForOffset, equalizeRWs,
-and proveVarLifetimeFunctor
+proveVarLLVMField x ps off mb_fp =
+  implGetLLVMPermForOffset x ps True True off
+  (MbValPerm_LLVMField mb_fp) >>>= \p ->
+  proveVarLLVMFieldH x p off mb_fp
 
-
-
-
-
-
-
--- Special case: if the LHS is a memblock perm, unfold it and prove again
-proveVarLLVMField x ps i _ mb_fp
-  | Perm_LLVMBlock _ <- ps!!i =
-    implElimPopIthLLVMBlock x ps i >>>
-    proveVarImplInt x (fmap (ValPerm_Conj1 . Perm_LLVMField) mb_fp)
-
-proveVarLLVMField x ps i off mb_fp =
-  (if i < length ps then pure () else
-     error "proveVarLLVMField: index too large") >>>= \() ->
-  implExtractConjM x ps i >>>
-  let ps_rem = deleteNth i ps in
-  implPopM x (ValPerm_Conj ps_rem) >>>
-  getPSubst >>>= \psubst ->
-  extractNeededLLVMFieldPerm x (ps!!i) off psubst mb_fp >>>= \(fp,maybe_p_rem) ->
-  (case maybe_p_rem of
-      Just p_rem ->
-        implPushM x (ValPerm_Conj ps_rem) >>>
-        implInsertConjM x p_rem ps_rem i >>>
-        implPopM x (ValPerm_Conj (take i ps_rem ++ [p_rem] ++ drop i ps_rem))
-      Nothing -> implDropM x ValPerm_True) >>>
-  proveVarLLVMFieldFromField x fp off mb_fp
-
-
--- | Prove an LLVM field permission from another one that is on the top of the
--- stack, by casting the offset, changing the lifetime if needed, and proving
--- the contents
-proveVarLLVMFieldFromField ::
-  (1 <= w, KnownNat w, 1 <= sz, KnownNat sz, NuMatchingAny1 r) =>
-  ExprVar (LLVMPointerType w) -> LLVMFieldPerm w sz ->
-  PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w sz) ->
-  ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
-proveVarLLVMFieldFromField x fp off' mb_fp =
-  -- Step 1: make sure to have a variable for the contents
-  implElimLLVMFieldContentsM x fp >>>= \y ->
-  let fp' = fp { llvmFieldContents = ValPerm_Eq (PExpr_Var y) } in
-
-  -- Step 2: cast the field offset to off' if necessary
-  (if bvEq (llvmFieldOffset fp') off' then
-     pure fp'
-   else
-     implTryProveBVProp x (BVProp_Eq (llvmFieldOffset fp') off') >>>
-     implSimplM Proxy (SImpl_CastLLVMFieldOffset x fp' off') >>>
-     pure (fp' { llvmFieldOffset = off' })) >>>= \fp'' ->
-
-  -- Step 3: prove the contents
-  proveVarImplInt y (fmap llvmFieldContents mb_fp) >>>
-  partialSubstForceM (fmap llvmFieldContents mb_fp)
-  "proveVarLLVMFieldFromField" >>>= \p_y ->
-  let fp''' = fp'' { llvmFieldContents = p_y } in
-  introLLVMFieldContentsM x y fp''' >>>
-
-  -- Step 4: change the lifetime if needed. This is done after proving the
-  -- contents, so that, if we need to split the lifetime, we don't split the
-  -- lifetime of a pointer permission with eq(y) permissions, as that would
-  -- require the pointer to be constant until the end of the new lifetime.
-  let (f, args) = fieldToLTFunc fp''' in
-  proveVarLifetimeFunctor x f args (llvmFieldLifetime fp''') (fmap
-                                                              llvmFieldLifetime
-                                                              mb_fp)
-
-
--- | Extract an LLVM field permission from the given atomic permission, leaving
--- as much of the original atomic permission as possible on the top of the stack
--- (which could be none of it, i.e., @true@). At the end of this function, the
--- top of the stack should look like
---
--- > x:ptr((rw,off) -> p) * x:rem
---
--- where @rem@ is the remainder of the input atomic permission, which is either
--- a single atomic permission or @true@. The field permission and remaining
--- atomic permission (if any) are the return values of this function.
-extractNeededLLVMFieldPerm ::
+-- | Prove an LLVM field permission @mb_fp@ from an atomic permission @x:p@ on
+-- the top of the stack, assuming that the offset of @mb_fp@ is @off@ and that
+-- @p@ could (in the sense of 'bvPropCouldHold') contain the offset @off@
+proveVarLLVMFieldH ::
   (1 <= w, KnownNat w, 1 <= sz, KnownNat sz, NuMatchingAny1 r) =>
   ExprVar (LLVMPointerType w) -> AtomicPerm (LLVMPointerType w) ->
-  PermExpr (BVType w) -> PartialSubst vars -> Mb vars (LLVMFieldPerm w sz) ->
-  ImplM vars s r (ps :> LLVMPointerType w :> LLVMPointerType w)
-  (ps :> LLVMPointerType w)
-  (LLVMFieldPerm w sz, Maybe (AtomicPerm (LLVMPointerType w)))
+  PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w sz) ->
+  ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
 
--- If proving x:ptr((rw,off) |-> p) |- x:ptr((z,off') |-> p') for an RWModality
--- variable z, set z = rw and recurse
-extractNeededLLVMFieldPerm x p@(Perm_LLVMField fp) off' psubst mb_fp
-  | Just Refl <- testEquality (llvmFieldSize fp) (mbLift $
-                                                  fmap llvmFieldSize mb_fp)
-  , [nuMP| PExpr_Var z |] <- mbMatch $ fmap llvmFieldRW mb_fp
-  , Left memb <- mbNameBoundP z
-  , Nothing <- psubstLookup psubst memb =
-    setVarM memb (llvmFieldRW fp) >>>
-    extractNeededLLVMFieldPerm x p off' psubst
-    (fmap (\fp' -> fp' { llvmFieldRW = llvmFieldRW fp }) mb_fp)
+-- If we have a field permission of the correct size on the left, use it to
+-- prove the field permission on the right
+proveVarLLVMFieldH x (Perm_LLVMField fp) off mb_fp
+  | bvEq (llvmFieldOffset fp) off
+  , Just Refl <- testEquality (exprLLVMTypeWidth fp) (mbExprLLVMTypeWidth
+                                                      mb_fp) =
+    -- Step 1: make sure to have a variable for the contents
+    implElimLLVMFieldContentsM x fp >>>= \y ->
+    let fp' = fp { llvmFieldContents = ValPerm_Eq (PExpr_Var y) } in
 
--- If proving x:ptr((rw,off) |-> p) |- x:ptr((z,off') |-> p') where z is
--- defined, substitute for z and recurse
-extractNeededLLVMFieldPerm x p@(Perm_LLVMField fp) off' psubst mb_fp
-  | Just Refl <- testEquality (llvmFieldSize fp) (mbLift $
-                                                  fmap llvmFieldSize mb_fp)
-  , [nuMP| PExpr_Var z |] <- mbMatch $ fmap llvmFieldRW mb_fp
-  , Left memb <- mbNameBoundP z
-  , Just rw <- psubstLookup psubst memb =
-    extractNeededLLVMFieldPerm x p off' psubst
-    (fmap (\fp' -> fp' { llvmFieldRW = rw }) mb_fp)
+    -- Step 2: prove the contents
+    proveVarImplInt y (fmap llvmFieldContents mb_fp) >>>
+    partialSubstForceM (fmap llvmFieldContents mb_fp)
+    "proveVarLLVMFieldFromField" >>>= \p_y ->
+    let fp'' = fp' { llvmFieldContents = p_y } in
+    introLLVMFieldContentsM x y fp'' >>>
 
--- If proving x:ptr((R,off) |-> p) |- x:ptr((R,off') |-> p'), just copy the read
--- permission
-extractNeededLLVMFieldPerm x (Perm_LLVMField fp) _ _ mb_fp
-  | Just Refl <- testEquality (llvmFieldSize fp) (mbLift $
-                                                  fmap llvmFieldSize mb_fp)
-  , PExpr_Read <- llvmFieldRW fp
-  , [nuMP| PExpr_Read |] <- mbMatch $ fmap llvmFieldRW mb_fp
-  = implCopyConjM x [Perm_LLVMField fp] 0 >>>
-    pure (fp, Just (Perm_LLVMField fp))
+    -- Step 3: change the lifetime if needed. This is done after proving the
+    -- contents, so that, if we need to split the lifetime, we don't split the
+    -- lifetime of a pointer permission with eq(y) permissions, as that would
+    -- require the pointer to be constant until the end of the new lifetime.
+    --
+    -- FIXME: probably the right way to do this would be to first check if there
+    -- is going to be a borrow, and if so then recall the field permissions for
+    -- fp immediately before we do said borrow. Maybe this could be part of
+    -- proveVarLifetimeFunctor?
+    let (f, args) = fieldToLTFunc fp'' in
+    proveVarLifetimeFunctor x f args (llvmFieldLifetime fp'')
+    (fmap llvmFieldLifetime mb_fp) >>>= \l ->
+    let fp''' = fp { llvmFieldLifetime = l } in
 
--- Cannot prove x:ptr((rw,off) |-> p) |- x:ptr((W,off') |-> p') if rw is not W,
--- so fail
-extractNeededLLVMFieldPerm x ap@(Perm_LLVMField fp) _ _ mb_fp
-  | Just Refl <- testEquality (llvmFieldSize fp) (mbLift $
-                                                  fmap llvmFieldSize mb_fp)
-  , PExpr_Write /= llvmFieldRW fp
-  , [nuMP| PExpr_Write |] <- mbMatch $ fmap llvmFieldRW mb_fp
-  = implFailVarM "extractNeededLLVMFieldPerm" x (ValPerm_Conj1 $ ap)
-    (fmap (ValPerm_Conj1 . Perm_LLVMField) mb_fp)
+    -- Step 4: equalize the read/write modalities. This is done after changing
+    -- the lifetime so that the original modality is recovered after any borrow
+    -- performed above is over.
+    equalizeRWs x (\rw -> fp''' { llvmFieldRW = rw }) (llvmFieldRW fp)
+    (mbLLVMFieldRW mb_fp) (SImpl_DemoteLLVMFieldRW x fp''') >>>
+    return ()
 
--- If proving x:[l1]ptr((rw,off) |-> p) |- x:[l2]ptr((R,off') |-> p') for rw not
--- equal to R (i.e., equal to W or to a variable), demote rw to R and copy it
-extractNeededLLVMFieldPerm x (Perm_LLVMField fp) _ _ mb_fp
-  | Just Refl <- testEquality (llvmFieldSize fp) (mbLift $
-                                                  fmap llvmFieldSize mb_fp)
-  , PExpr_Read /= llvmFieldRW fp
-  , [nuMP| PExpr_Read |] <- mbMatch $ fmap llvmFieldRW mb_fp
-  = let fp' = fp in
-    implSimplM Proxy (SImpl_DemoteLLVMFieldRW x fp') >>>
-    let fp'' = fp' { llvmFieldRW = PExpr_Read } in
-    implCopyConjM x [Perm_LLVMField fp''] 0 >>>
-    pure (fp'', Just (Perm_LLVMField fp''))
+-- If we have a block permission on the left, eliminate it
+proveVarLLVMFieldH x (Perm_LLVMBlock bp) off mb_fp =
+  implElimLLVMBlockForOffset x bp True off (MbLLVMField_Perm mb_fp) >>>= \p ->
+  proveVarLLVMFieldH x p off mb_fp
 
--- If proving x:ptr((rw,off) |-> p) |- x:ptr((rw,off') |-> p') for any other
--- case, just push a true permission, because there is no remaining permission
-extractNeededLLVMFieldPerm x (Perm_LLVMField fp) _ _ mb_fp
-  | Just Refl <- testEquality (llvmFieldSize fp) (mbLift $
-                                                  fmap llvmFieldSize mb_fp)
-  , mbLift (fmap ((llvmFieldRW fp ==) . llvmFieldRW) mb_fp)
-  = introConjM x >>> pure (fp, Nothing)
+-- If we have a copyable array permission on the left such that @off@ matches an
+-- index into that array permission, copy the corresponding cell
+proveVarLLVMFieldH x p@(Perm_LLVMArray ap) off mb_fp
+  | Just ix <- matchLLVMArrayIndex ap off
+  , cell <- llvmArrayIndexCell ix
+  , atomicPermIsCopyable p =
+    implLLVMArrayCellCopy x ap cell >>>
+    recombinePerm x (ValPerm_LLVMArray ap) >>>
+    proveVarLLVMFieldH x (ValPerm_LLVMBlock $ llvmArrayCellPerm ap cell) off mb_fp
 
--- If proving x:[l]array(rw,off,<len,*stride,fps,bs) |- x:ptr((R,off) |-> p) such that
--- off=i*stride+j and the array permission is copyable, copy cell i
-extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' _ mb_fp
-  | Just ix <- matchLLVMArrayIndex ap off'
-  , LLVMArrayField fp <- llvmArrayFieldWithOffset ap ix
-  , Just Refl <- testEquality (llvmFieldSize fp) (mbLift $
-                                                  fmap llvmFieldSize mb_fp)
-  , PExpr_Read <- llvmFieldRW fp
-  , permIsCopyable (llvmFieldContents fp)
-  , [nuMP| PExpr_Read |] <- mbMatch $ fmap llvmFieldRW mb_fp =
-    implLLVMArrayIndexCopy x ap ix >>>
-    pure (fp, Just (Perm_LLVMArray ap))
+-- If we have a non-copyable array permission on the left such that @off@
+-- matches an index into that array permission, borrow the corresponding cell
+proveVarLLVMFieldH x p@(Perm_LLVMArray ap) off mb_fp
+  | Just ix <- matchLLVMArrayIndex ap off
+  , cell <- llvmArrayIndexCell ix =
+    implLLVMArrayCellBorrow x ap cell >>>
+    recombinePerm x (ValPerm_LLVMArray $
+                     llvmArrayAddBorrow (FieldBorrow cell) ap) >>>
+    proveVarLLVMFieldH x (ValPerm_LLVMBlock $
+                          llvmArrayCellPerm ap cell) off mb_fp
 
--- If proving x:array(off,<len,*stride,fps,bs) |- x:ptr((rw,off) |-> p) such
--- that off=i*stride+j and the corresponding array field is of the right size in
--- any other case, borrow that field
-extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' psubst mb_fp
-  | Just ix <- matchLLVMArrayField ap off'
-  , LLVMArrayField fp <- llvmArrayFieldWithOffset ap ix
-  , Just Refl <- testEquality (llvmFieldSize fp) (mbLift $
-                                                  fmap llvmFieldSize mb_fp) =
-    implLLVMArrayIndexBorrow x ap ix >>>= \(ap', _) ->
-    implSwapM x (ValPerm_Conj1 $ Perm_LLVMField fp) x (ValPerm_Conj1 $
-                                                       Perm_LLVMArray ap') >>>
-    extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' psubst mb_fp >>>=
-    \(fp', maybe_p_rem) ->
-    -- NOTE: it is safe to just drop the remaining permission on the stack,
-    -- because it is either Nothing (for a write) or a copy of the field
-    -- permission (for a read)
-    implDropM x (maybe ValPerm_True ValPerm_Conj1 maybe_p_rem) >>>
-    implSwapM x (ValPerm_Conj1 $
-                 Perm_LLVMArray ap') x (ValPerm_Conj1 $ Perm_LLVMField fp) >>>
-    pure (fp', Just (Perm_LLVMArray ap'))
-
--- If proving x:array(off,<len,*stride,fps,bs) |- x:ptr((rw,off) |-> p) such
--- that off=i*stride+j but the corresponding array field is of a smaller size,
--- borrow a sub-array for the correct size and cast it to a field permission
-extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' _ mb_fp
-  | stride_bits <- llvmArrayStrideBits ap
-  , sz <- mbLift $ fmap llvmFieldSize mb_fp
-  , len <- bvInt (intValue sz `div` stride_bits)
-  , sub_ap <- ap { llvmArrayOffset = off', llvmArrayLen = len,
-                   llvmArrayBorrows = [] }
-  , isJust $ llvmArrayIsOffsetArray ap sub_ap
-  , Just fp <- llvmArrayToField sz sub_ap
-  , ap' <- llvmArrayAddBorrow (llvmSubArrayBorrow ap sub_ap) ap =
-    implLLVMArrayBorrow x ap sub_ap >>>
-    implSwapM x (ValPerm_Conj1 $
-                 Perm_LLVMArray sub_ap) x (ValPerm_Conj1 $
-                                           Perm_LLVMArray ap') >>>
-    implSimplM Proxy (SImpl_LLVMArrayToField x sub_ap sz) >>>
-    -- NOTE: extractNeededLLVMFieldPerm is responsible for setting the
-    -- rwmodality, so we include this proveEqCast for just it here
-    proveEqCast x (\rw -> ValPerm_Conj1 $ Perm_LLVMField $
-                          fp { llvmFieldRW = rw })
-    (llvmFieldRW fp) (fmap llvmFieldRW mb_fp) >>>
-    implSwapM x (ValPerm_Conj1 $
-                 Perm_LLVMArray ap') x (ValPerm_Conj1 $
-                                        Perm_LLVMField fp) >>>
-    pure (fp, Just (Perm_LLVMArray ap'))
-
-
--- All other cases fail
-extractNeededLLVMFieldPerm x ap _ _ mb_fp =
-  implFailVarM "extractNeededLLVMFieldPerm" x (ValPerm_Conj1 $ ap)
-  (fmap (ValPerm_Conj1 . Perm_LLVMField) mb_fp)
+-- If none of the above cases match, then fail
+proveVarLLVMFieldH x p _ mb_fp =
+  implFailVarM x (ValPerm_Conj1 p) (MbValPerm_LLVMField mb_fp)
 
 
 ----------------------------------------------------------------------
@@ -5129,7 +5020,8 @@ extractNeededLLVMFieldPerm x ap _ _ mb_fp =
 
 -- | Prove an LLVM array permission @ap@ from permissions @x:(p1 * ... *pn)@ on
 -- the top of the stack, ensuring that any remaining permissions for @x@ get
--- popped back to the primary permissions for @x@
+-- popped back to the primary permissions for @x@. This function does not unfold
+-- named permissions in the @pi@s.
 proveVarLLVMArray ::
   (1 <= w, KnownNat w, NuMatchingAny1 r) => ExprVar (LLVMPointerType w) ->
   Bool -> [AtomicPerm (LLVMPointerType w)] -> Mb vars (LLVMArrayPerm w) ->
@@ -5175,13 +5067,11 @@ proveVarLLVMArrayH x first_p _ ps mb_ap =
     | llvmArrayStride ap_lhs == mbLLVMArrayStride mb_ap ->
       proveVarLLVMArray_FromArray x ps' ap_lhs mb_ap
 
-  -- Because we told implGetLLVMPermForOffset to eliminate block perms, the only
-  -- other possible case is a named permission, so try to unfold it
-  p ->
-    getAtomicPerms x >>>= \ps ->
-    implSwapInsertConjM x p ps 0 >>>
-    proveVarAtomicImplUnfoldOrFail x (p:ps)
-    (mbMapCl $(mkClosed [| Perm_LLVMArray |]) mb_ap)
+  -- Because we told implGetLLVMPermForOffset to eliminate block perms, there
+  -- should be no other cases that will work here, so fail
+  _ ->
+    implFailVarM "proveVarLLVMArrayH" x (ValPerm_Conj ps)
+    (MbValPerm_LLVMArray mb_ap)
 
 
 -- | Prove an array permission by proving its first cell and then its remaining
@@ -5536,6 +5426,8 @@ proveVarLLVMBlock x ps mb_bp =
   do psubst <- getPSubst
      proveVarLLVMBlocks x ps psubst [mb_bp]
 
+FIXME HERE NOWNOW: do we need to use implGetLLVMPermForOffset for
+proveVarLLVMBlock?
 
 -- | Prove a conjunction of block and atomic permissions for @x@, assuming all
 -- of the permissions for @x@ are on the top of the stack and given by the
@@ -6383,17 +6275,15 @@ proveVarAtomicImpl ::
 proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
 
   [nuMP| Perm_LLVMField mb_fp |] ->
-    partialSubstForceM (fmap llvmFieldOffset mb_fp) "proveVarPtrPerms" >>>= \off ->
-    foldMapWithDefault implCatchM
+    partialSubstForceM (mbLLVMFieldOffset mb_fp) "proveVarPtrPerms" >>>= \off ->
+    implCatchM
+    (proveVarLLVMField x ps off mb_fp)
     (proveVarAtomicImplUnfoldOrFail x ps mb_p)
-    (\i -> proveVarLLVMField x ps i off mb_fp) $
-    -- If there are any permissions that definitely contain off, use those, and
-    -- otherwise iterate through all those that could contain off
-    llvmPermIndicesForOffset ps True off
 
   [nuMP| Perm_LLVMArray mb_ap |] ->
-    partialSubstForceM mb_ap "proveVarPtrPerms" >>>= \ap ->
-    proveVarLLVMArray x True ps ap
+    implCatchM
+    (proveVarLLVMArray x True ps mb_ap)
+    (proveVarAtomicImplUnfoldOrFail x ps mb_p)
 
   [nuMP| Perm_LLVMBlock mb_bp |] ->
     proveVarLLVMBlock x ps mb_bp
