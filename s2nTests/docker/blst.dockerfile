@@ -11,7 +11,7 @@ RUN git clone https://github.com/GaloisInc/blst-verification.git /workdir && \
     git submodule update --init
 
 WORKDIR /workdir
-RUN curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20210917/ubuntu-18.04-bin.zip" && \
+RUN wget --quiet -O solvers.zip "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20210917/ubuntu-18.04-bin.zip" && \
     (cd bin && unzip ../solvers.zip)
 
 COPY scripts/blst-entrypoint.sh /entrypoint.sh
