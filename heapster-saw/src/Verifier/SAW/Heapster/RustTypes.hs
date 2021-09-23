@@ -1038,6 +1038,15 @@ abstractMbLOPsModalities mb_lops = case mbMatch mb_lops of
                LOwnedPermField e (fp { llvmFieldRW = PExpr_Var rw,
                                        llvmFieldLifetime = PExpr_Var l }))
       mb_e mb_fp)
+  [nuMP| lops :>: LOwnedPermArray mb_e mb_ap |] ->
+    liftA2 (mbMap2 (:>:))
+    (abstractMbLOPsModalities lops)
+    (SomeTypedMb (CruCtxCons (CruCtxCons CruCtxNil RWModalityRepr) LifetimeRepr) $
+     nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: rw :>: l) ->
+      mbMap2 (\e ap ->
+               LOwnedPermArray e (ap { llvmArrayRW = PExpr_Var rw,
+                                       llvmArrayLifetime = PExpr_Var l }))
+      mb_e mb_ap)
   [nuMP| lops :>: LOwnedPermBlock mb_e mb_bp |] ->
     liftA2 (mbMap2 (:>:))
     (abstractMbLOPsModalities lops)
