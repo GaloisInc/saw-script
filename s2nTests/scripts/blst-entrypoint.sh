@@ -6,7 +6,7 @@ cd /workdir
 cp /saw-bin/saw bin/saw
 
 wget --quiet -O solvers.zip "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20210917/ubuntu-18.04-bin.zip"
-(cd bin && unzip ../solvers.zip)
+(cd bin && unzip -o ../solvers.zip)
 
 export PATH=/workdir/bin:$PATH
 export CRYPTOLPATH=/workdir/cryptol-specs:/workdir/spec
