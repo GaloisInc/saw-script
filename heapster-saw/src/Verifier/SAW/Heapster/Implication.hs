@@ -66,17 +66,6 @@ import Verifier.SAW.Heapster.GenMonad
 import GHC.Stack
 
 
-{-
-FIXME HERE NOW:
-- ArrayShape and Perm_LLVMArray: flds -> sh
-- llvmArrayFields -> llvmArrayCellShape
-- rework LLVMArrayIndex: call number + offset
-- matchLLVMArrayField -> matchLLVMArrayIndex
-- remove LLVMArrayField
-- remove borrows
-- replace array rules with array shape rules
--}
-
 ----------------------------------------------------------------------
 -- * Equality Proofs
 ----------------------------------------------------------------------
