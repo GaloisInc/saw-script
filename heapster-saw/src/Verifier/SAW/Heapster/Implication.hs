@@ -1767,7 +1767,9 @@ simplImplIn (SImpl_IntroLLVMBlockFromEq x bp y) =
                 bp { llvmBlockShape = PExpr_EqShape $ PExpr_Var y })
   y (ValPerm_Conj1 $ Perm_LLVMBlockShape $ llvmBlockShape bp)
 simplImplIn (SImpl_IntroLLVMBlockPtr x bp) =
-  distPerms1 x $ ValPerm_LLVMBlock $ llvmBlockPtrShapeUnfold bp
+  case llvmBlockPtrShapeUnfold bp of
+    Just bp' -> distPerms1 x $ ValPerm_LLVMBlock bp'
+    Nothing -> error "simplImplIn: SImpl_IntroLLVMBlockPtr: malformed block shape"
 simplImplIn (SImpl_ElimLLVMBlockPtr x bp) =
   distPerms1 x $ ValPerm_LLVMBlock bp
 simplImplIn (SImpl_IntroLLVMBlockField x fp) =
@@ -4071,9 +4073,8 @@ implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
   implSimplM Proxy (SImpl_IntroLLVMBlockFromEq x bp' y)
 
 -- For [l]ptrsh(rw,sh), eliminate to a pointer to a memblock with shape sh
-implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
-                                          PExpr_PtrShape maybe_rw maybe_l sh })
-  | Just len <- llvmShapeLength sh =
+implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape = PExpr_PtrShape _ _ _ })
+  | isJust (llvmBlockPtrShapeUnfold bp) =
     implSimplM Proxy (SImpl_ElimLLVMBlockPtr x bp)
 
 -- For a field shape, eliminate to a field permission
@@ -4221,6 +4222,7 @@ implElimLLVMBlockForOffset x bp imprecise_p off mb_p =
 -- permissions for @x@. If no matches are found, fail using 'implFailVarM',
 -- citing the supplied permission as the one we are trying to prove.
 implGetLLVMPermForOffset ::
+  (1 <= w, KnownNat w, NuMatchingAny1 r) =>
   ExprVar (LLVMPointerType w) -> {- ^ the variable @x@ -}
   [AtomicPerm (LLVMPointerType w)] -> {- ^ the permissions held for @x@ -}
   Bool -> {- ^ whether imprecise matches are allowed -}
@@ -4728,17 +4730,17 @@ equalizeRWsH :: NuMatchingAny1 r => ExprVar a ->
                 ImplM vars s r (ps :> a) (ps :> a) (PermExpr RWModalityType)
 
 -- If rw and mb_rw are already equal, just return rw
-equalizeRWsH x f rw psubst mb_rw _
+equalizeRWsH _ _ rw psubst mb_rw _
   | Just rw' <- partialSubst psubst mb_rw
   , rw == rw' = return rw
 
 -- If mb_rw is read, weaken rw to read using the supplied rule
-equalizeRWsH x f rw psubst mb_rw impl
+equalizeRWsH _ _ _ psubst mb_rw impl
   | Just PExpr_Read <- partialSubst psubst mb_rw =
     implSimplM Proxy impl >>> return PExpr_Read
 
 -- Otherwise, prove rw = mb_rw and cast f(rw) to f(mb_rw)
-equalizeRWsH x f rw psubst mb_rw _ =
+equalizeRWsH x f rw _ mb_rw _ =
   proveEqCast x f rw mb_rw >>>
   partialSubstForceM mb_rw "equalizeRWs: incomplete psubst"
 
@@ -5027,7 +5029,7 @@ proveVarLLVMFieldH x p@(Perm_LLVMArray ap) off mb_fp
 
 -- If we have a non-copyable array permission on the left such that @off@
 -- matches an index into that array permission, borrow the corresponding cell
-proveVarLLVMFieldH x p@(Perm_LLVMArray ap) off mb_fp
+proveVarLLVMFieldH x (Perm_LLVMArray ap) off mb_fp
   | Just ix <- matchLLVMArrayIndex ap off
   , cell <- llvmArrayIndexCell ix =
     implLLVMArrayCellBorrow x ap cell >>>
@@ -5070,7 +5072,7 @@ proveVarLLVMArrayH ::
   ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
 
 -- Special case: if the length is 0, prove an empty array
-proveVarLLVMArrayH x first_p psubst ps mb_ap
+proveVarLLVMArrayH x _ psubst ps mb_ap
   | Just len <- partialSubst psubst $ mbLLVMArrayLen mb_ap
   , bvIsZero len =
     implPopM x (ValPerm_Conj ps) >>>
@@ -5111,8 +5113,7 @@ proveVarLLVMArray_FromHead ::
   ImplM vars s r (ps :> LLVMPointerType w) ps ()
 proveVarLLVMArray_FromHead x mb_ap =
   -- Prove the head permission and convert to an array
-  let mb_bp = mbMapCl $(mkClosed [| llvmArrayPermHead |]) mb_ap
-      mb_p = mbMapCl $(mkClosed [| ValPerm_LLVMBlock |]) mb_bp in
+  let mb_bp = mbMapCl $(mkClosed [| llvmArrayPermHead |]) mb_ap in
   proveVarImplInt x (mbValPerm_LLVMBlock mb_bp) >>>
   partialSubstForceM mb_bp "proveVarLLVMArray: incomplete psubst" >>>= \bp_head ->
   implSimplM Proxy (SImpl_LLVMArrayFromBlock x bp_head) >>>
@@ -5164,7 +5165,6 @@ proveVarLLVMArray_FromArray x ap_lhs mb_ap =
   "proveVarLLVMArray: incomplete psubst" >>>= \len ->
   partialSubstForceM (mbLLVMArrayBorrows mb_ap)
   "proveVarLLVMArray: incomplete array offset" >>>= \bs ->
-  getAtomicPerms x >>>= \ps ->
   proveVarLLVMArray_FromArray1 x ps ap_lhs off len bs mb_ap
 
 
@@ -5178,7 +5178,7 @@ proveVarLLVMArray_FromArray1 ::
   (1 <= w, KnownNat w, NuMatchingAny1 r) => ExprVar (LLVMPointerType w) ->
   [AtomicPerm (LLVMPointerType w)] -> LLVMArrayPerm w ->
   PermExpr (BVType w) -> PermExpr (BVType w) -> [LLVMArrayBorrow w] ->
-  Mb ctx (LLVMArrayPerm w) ->
+  Mb vars (LLVMArrayPerm w) ->
   ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w)
   (LLVMArrayPerm w)
 
@@ -5211,7 +5211,7 @@ proveVarLLVMArray_FromArray1 x ps ap_lhs off len bs mb_ap
 
     -- Recursively prove ap with length len' and borrows that could be in the
     -- first portion of ap
-    proveVarLLVMArray_FromArray2 x ap_lhs len' bs_first mb_ap >>>= \ap' ->
+    proveVarLLVMArray_FromArray2 x ap_lhs' len' bs_first mb_ap >>>= \ap' ->
 
     -- Prove ap with the remaining offset, length, and borrows
     let ap_rest = ap' { llvmArrayLen = bvSub len len',
@@ -5219,6 +5219,7 @@ proveVarLLVMArray_FromArray1 x ps ap_lhs off len bs mb_ap
                         llvmArrayBorrows = bs_rest } in
     mbVarsM ap_rest >>>= \mb_ap_rest ->
     getAtomicPerms x >>>= \ps' ->
+    implPushM x (ValPerm_Conj ps') >>>
     proveVarLLVMArray x False ps' mb_ap_rest >>>
 
     -- Combine ap_first and ap_rest to get out ap
@@ -5230,7 +5231,7 @@ proveVarLLVMArray_FromArray1 x ps ap_lhs off len bs mb_ap
 
 
 -- Otherwise, borrow or copy len bytes of ap_lhs and recurse
-proveVarLLVMArray_FromArray1 x ps ap_lhs off len bs mb_ap =
+proveVarLLVMArray_FromArray1 x _ ap_lhs off len bs mb_ap =
   let ap_lhs' = ap_lhs { llvmArrayOffset = off, llvmArrayLen = len } in
   implLLVMArrayGet x ap_lhs ap_lhs' >>>= \ap_lhs'' ->
   recombinePerm x (ValPerm_LLVMArray ap_lhs'') >>>
@@ -5289,7 +5290,7 @@ proveVarLLVMArray_FromArray2 x ap_lhs len bs mb_ap
 -- If we get here then ap_lhs and ap have the same borrows, offset, length, and
 -- stride, so equalize their modalities, prove the shape of mb_ap from that of
 -- ap_lhs, rearrange their borrows, and we are done
-proveVarLLVMArray_FromArray2 x ap_lhs len bs mb_ap =
+proveVarLLVMArray_FromArray2 x ap_lhs _ bs mb_ap =
   -- Coerce the rw modality of ap_lhs to that of mb_ap, if possibe
   equalizeRWs x (\rw -> ValPerm_LLVMArray $ ap_lhs { llvmArrayRW = rw })
   (llvmArrayRW ap_lhs) (mbLLVMArrayRW mb_ap)
