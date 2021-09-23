@@ -1967,7 +1967,7 @@ simplImplOut (SImpl_LLVMArrayEmpty x ap) =
 simplImplOut (SImpl_LLVMArrayFromBlock x bp) =
   case llvmBlockPermToArray1 bp of
     Just ap -> distPerms1 x $ ValPerm_LLVMArray ap
-    _ -> error "simplImplOut: SImpl_LLVMArrayOneCell: block perm with non-static length"
+    _ -> error "simplImplOut: SImpl_LLVMArrayFromBlock: block perm with non-static length"
 
 simplImplOut (SImpl_LLVMArrayCellCopy x ap cell) =
   if atomicPermIsCopyable (Perm_LLVMArray ap) then
