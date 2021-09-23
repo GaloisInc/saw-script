@@ -3461,7 +3461,8 @@ implProveEqPerms (DistPermsCons ps' x p@(ValPerm_Eq _)) =
 implProveEqPerms _ = error "implProveEqPerms: non-equality permission"
 
 -- | Cast a proof of @x:p@ to one of @x:p'@ using a proof that @p=p'@
-implCastPermM :: NuMatchingAny1 r => ExprVar a -> SomeEqProof (ValuePerm a) ->
+implCastPermM :: HasCallStack => NuMatchingAny1 r => ExprVar a ->
+                 SomeEqProof (ValuePerm a) ->
                  ImplM vars s r (ps :> a) (ps :> a) ()
 implCastPermM x some_eqp
   | UnSomeEqProof eqp <- unSomeEqProof some_eqp =
@@ -3469,7 +3470,7 @@ implCastPermM x some_eqp
     implSimplM Proxy (SImpl_CastPerm x eqp)
 
 -- | Cast a permission somewhere in the stack using an equality proof
-implCastStackElemM :: NuMatchingAny1 r => Member ps a ->
+implCastStackElemM :: HasCallStack => NuMatchingAny1 r => Member ps a ->
                       SomeEqProof (ValuePerm a) -> ImplM vars s r ps ps ()
 implCastStackElemM memb some_eqp =
   getDistPerms >>>= \all_perms ->
@@ -3480,7 +3481,8 @@ implCastStackElemM memb some_eqp =
       implMoveDownM ps0 (ps1 :>: px) x MNil
 
 -- | Cast all of the permissions on the stack using 'implCastPermM'
-implCastStackM :: NuMatchingAny1 r => SomeEqProof (ValuePerms ps) ->
+implCastStackM :: HasCallStack => NuMatchingAny1 r =>
+                  SomeEqProof (ValuePerms ps) ->
                   ImplM vars s r ps ps ()
 implCastStackM some_eqp =
   getDistPerms >>>= \perms ->
@@ -4974,8 +4976,8 @@ proveVarLLVMFieldH x (Perm_LLVMField fp) off mb_fp
     let fp' = fp { llvmFieldContents = ValPerm_Eq (PExpr_Var y) } in
 
     -- Step 2: prove the contents
-    proveVarImplInt y (fmap llvmFieldContents mb_fp) >>>
-    partialSubstForceM (fmap llvmFieldContents mb_fp)
+    proveVarImplInt y (mbLLVMFieldContents mb_fp) >>>
+    partialSubstForceM (mbLLVMFieldContents mb_fp)
     "proveVarLLVMFieldFromField" >>>= \p_y ->
     let fp'' = fp' { llvmFieldContents = p_y } in
     introLLVMFieldContentsM x y fp'' >>>
@@ -4992,7 +4994,7 @@ proveVarLLVMFieldH x (Perm_LLVMField fp) off mb_fp
     let (f, args) = fieldToLTFunc fp'' in
     proveVarLifetimeFunctor x f args (llvmFieldLifetime fp'')
     (fmap llvmFieldLifetime mb_fp) >>>= \l ->
-    let fp''' = fp { llvmFieldLifetime = l } in
+    let fp''' = fp'' { llvmFieldLifetime = l } in
 
     -- Step 4: equalize the read/write modalities. This is done after changing
     -- the lifetime so that the original modality is recovered after any borrow
@@ -6242,7 +6244,7 @@ proveVarAtomicImplUnfoldOrFail x ps mb_ap =
            proveVarImplUnfoldLeft x p_l mb_p_r (Just i)
 
        -- Otherwise, we fail
-       _ -> implFailVarM "proveVarAtomicImpl" x p_l mb_p_r
+       _ -> implFailVarM "proveVarAtomicImplUnfoldOrFail" x p_l mb_p_r
 
 
 -- | Prove @x:(p1 * ... * pn) |- x:p@ for some atomic permission @p@, assuming

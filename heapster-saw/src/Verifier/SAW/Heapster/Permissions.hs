@@ -1681,6 +1681,11 @@ mbLLVMFieldRW = mbMapCl $(mkClosed [| llvmFieldRW |])
 mbLLVMFieldOffset :: Mb ctx (LLVMFieldPerm w sz) -> Mb ctx (PermExpr (BVType w))
 mbLLVMFieldOffset = mbMapCl $(mkClosed [| llvmFieldOffset |])
 
+-- | Get the contents-in-binding of a field permission in binding
+mbLLVMFieldContents :: Mb ctx (LLVMFieldPerm w sz) ->
+                       Mb ctx (ValuePerm (LLVMPointerType sz))
+mbLLVMFieldContents = mbMapCl $(mkClosed [| llvmFieldContents |])
+
 
 -- | Helper type to represent byte offsets
 --
