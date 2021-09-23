@@ -4123,7 +4123,7 @@ llvmArrayPermDivide ap len =
           filter (not . borrow_in_first) (llvmArrayBorrows ap) })
 
 
--- | Create a list of field permissions the cover @N@ bytes:
+-- | Create a list of field permissions that cover @N@ bytes:
 --
 -- > ptr((W,0) |-> true, (W,M) |-> true, (W,2*M) |-> true,
 -- >   ..., (W, (i-1)*M, 8*(sz-(i-1)*M)) |-> true)
