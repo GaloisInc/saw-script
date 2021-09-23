@@ -61,7 +61,7 @@ data AstExpr
   | ExExSh Pos String AstType AstExpr -- ^ existentially quantified shape
   | ExFieldSh Pos (Maybe AstExpr) AstExpr -- ^ field shape
   | ExPtrSh Pos (Maybe AstExpr) (Maybe AstExpr) AstExpr -- ^ pointer shape
-  | ExArraySh Pos AstExpr AstExpr AstExpr -- array shape
+  | ExArraySh Pos AstExpr AstExpr AstExpr -- ^ array shape
 
   | ExEqual Pos AstExpr AstExpr -- ^ equal bitvector proposition
   | ExNotEqual Pos AstExpr AstExpr -- ^ not-equal bitvector proposition
@@ -77,7 +77,7 @@ data AstExpr
   | ExPtr Pos (Maybe AstExpr) AstExpr AstExpr (Maybe AstExpr) AstExpr -- ^ pointer permission
   | ExMemblock Pos (Maybe AstExpr) AstExpr AstExpr AstExpr AstExpr -- ^ memblock permission
   | ExLlvmFunPtr Pos AstExpr AstExpr AstFunPerm -- ^ function pointer permission
-  | ExArray Pos (Maybe AstExpr) AstExpr AstExpr AstExpr AstExpr AstExpr -- array permission
+  | ExArray Pos (Maybe AstExpr) AstExpr AstExpr AstExpr AstExpr AstExpr -- ^ array permission
   deriving Show
 
 -- | Returns outermost position
