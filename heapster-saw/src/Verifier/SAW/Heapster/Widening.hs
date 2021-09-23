@@ -401,7 +401,7 @@ widenExpr' _ (PExpr_FieldShape (LLVMFieldShape p1)) (PExpr_FieldShape
 widenExpr' _ (PExpr_ArrayShape
               len1 stride1 sh1) (PExpr_ArrayShape len2 stride2 sh2)
   | bvEq len1 len2 && stride1 == stride2 =
-    PExpr_ArrayShape len1 stride1 <$> widenExpr sh1 sh2
+    PExpr_ArrayShape len1 stride1 <$> widenExpr knownRepr sh1 sh2
 
 -- FIXME: there should be some check that the first shapes have the same length,
 -- though this is more complex if they might have free variables...?
@@ -542,14 +542,15 @@ widenAtomicPerms' tp (Perm_LLVMArray ap1 : ps1) ps2 =
              substEqVars wnmap (llvmArrayRW ap1)
              == substEqVars wnmap (llvmArrayRW ap2) &&
              substEqVars wnmap (llvmArrayLifetime ap1)
-             == substEqVars wnmap (llvmArrayLifetime ap2) &&
+             == substEqVars wnmap (llvmArrayLifetime ap2)
            _ -> False) ps2 of
     Just i
       | Perm_LLVMArray ap2 <- ps2!!i ->
         -- NOTE: at this point, ap1 and ap2 are equal except for perhaps their
         -- borrows and shapes, so we just filter out the borrows in ap1 that are
         -- also in ap2 and widen the shapes
-        widen (llvmArrayCellShape ap1) (llvmArrayCellShape ap2) >>= \sh ->
+        widenExpr knownRepr (llvmArrayCellShape ap1) (llvmArrayCellShape ap2)
+        >>= \sh ->
         (Perm_LLVMArray (ap1 { llvmArrayCellShape = sh,
                                llvmArrayBorrows =
                                  filter (flip elem (llvmArrayBorrows ap2))
