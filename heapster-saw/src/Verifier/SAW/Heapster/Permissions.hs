@@ -1520,6 +1520,7 @@ pattern ValPerm_LLVMField fp <- ValPerm_Conj [Perm_LLVMField fp]
   where
     ValPerm_LLVMField fp = ValPerm_Conj [Perm_LLVMField fp]
 
+{- FIXME: why doesn't this work?
 -- | The conjunction of exactly 1 field permission in a binding
 pattern MbValPerm_LLVMField :: () => (a ~ LLVMPointerType w, 1 <= w, KnownNat w,
                                       1 <= sz, KnownNat sz) =>
@@ -1529,6 +1530,13 @@ pattern MbValPerm_LLVMField mb_fp <- [nuP| ValPerm_LLVMField mb_fp |]
   where
     MbValPerm_LLVMField mb_fp =
       mbMapCl $(mkClosed [| ValPerm_LLVMField |]) mb_fp
+-}
+
+-- | Build a 'ValPerm_LLVMField' in a binding
+mbValPerm_LLVMField :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
+                       Mb ctx (LLVMFieldPerm w sz) ->
+                       Mb ctx (ValuePerm (LLVMPointerType w))
+mbValPerm_LLVMField = mbMapCl $(mkClosed [| ValPerm_LLVMField |])
 
 -- | The conjunction of exactly 1 array permission
 pattern ValPerm_LLVMArray :: () => (a ~ LLVMPointerType w, 1 <= w, KnownNat w) =>
@@ -1537,23 +1545,20 @@ pattern ValPerm_LLVMArray ap <- ValPerm_Conj [Perm_LLVMArray ap]
   where
     ValPerm_LLVMArray ap = ValPerm_Conj [Perm_LLVMArray ap]
 
+{- FIXME: why doesn't this work?
 -- | The conjunction of exactly 1 array permission
 pattern MbValPerm_LLVMArray :: () => (a ~ LLVMPointerType w, 1 <= w, KnownNat w) =>
                                Mb ctx (LLVMArrayPerm w) -> Mb ctx (ValuePerm a)
-pattern MbValPerm_LLVMArray mb_ap <- [nuP| ValPerm_LLVMArray ap |]
+pattern MbValPerm_LLVMArray mb_ap <- [nuP| ValPerm_LLVMArray mb_ap |]
   where
     MbValPerm_LLVMArray mb_ap =
       mbMapCl $(mkClosed [| ValPerm_LLVMArray |]) mb_ap
+-}
 
--- | The conjunction of exactly 1 array permission in a binding
-pattern MbValPerm_LLVMField :: () => (a ~ LLVMPointerType w, 1 <= w, KnownNat w,
-                                      1 <= sz, KnownNat sz) =>
-                               Mb ctx (LLVMFieldPerm w sz) ->
-                               Mb ctx (ValuePerm a)
-pattern MbValPerm_LLVMField mb_fp <- [nuP| ValPerm_LLVMField mb_fp |]
-  where
-    MbValPerm_LLVMField mb_fp =
-      mbMapCl $(mkClosed [| ValPerm_LLVMField |]) mb_fp
+-- | Build a 'ValPerm_LLVMArray' in a binding
+mbValPerm_LLVMArray :: (1 <= w, KnownNat w) => Mb ctx (LLVMArrayPerm w) ->
+                       Mb ctx (ValuePerm (LLVMPointerType w))
+mbValPerm_LLVMArray = mbMapCl $(mkClosed [| ValPerm_LLVMArray |])
 
 -- | The conjunction of exactly 1 block permission
 pattern ValPerm_LLVMBlock :: () => (a ~ LLVMPointerType w, 1 <= w, KnownNat w) =>
@@ -1561,6 +1566,11 @@ pattern ValPerm_LLVMBlock :: () => (a ~ LLVMPointerType w, 1 <= w, KnownNat w) =
 pattern ValPerm_LLVMBlock bp <- ValPerm_Conj [Perm_LLVMBlock bp]
   where
     ValPerm_LLVMBlock bp = ValPerm_Conj [Perm_LLVMBlock bp]
+
+-- | Build a 'ValPerm_LLVMBlock' in a binding
+mbValPerm_LLVMBlock :: (1 <= w, KnownNat w) => Mb ctx (LLVMBlockPerm w) ->
+                       Mb ctx (ValuePerm (LLVMPointerType w))
+mbValPerm_LLVMBlock = mbMapCl $(mkClosed [| ValPerm_LLVMBlock |])
 
 -- | The conjunction of exactly 1 block shape permission
 pattern ValPerm_LLVMBlockShape :: () => (a ~ LLVMBlockType w, b ~ LLVMShapeType w,
@@ -1658,6 +1668,19 @@ data LLVMFieldPerm w sz =
 -- | Helper to get a 'NatRepr' for the size of an 'LLVMFieldPerm'
 llvmFieldSize :: KnownNat sz => LLVMFieldPerm w sz -> NatRepr sz
 llvmFieldSize _ = knownNat
+
+-- | Helper to get a 'NatRepr' for the size of an 'LLVMFieldPerm' in a binding
+mbLLVMFieldSize :: KnownNat sz => Mb ctx (LLVMFieldPerm w sz) -> NatRepr sz
+mbLLVMFieldSize _ = knownNat
+
+-- | Get the rw-modality-in-binding of a field permission in binding
+mbLLVMFieldRW :: Mb ctx (LLVMFieldPerm w sz) -> Mb ctx (PermExpr RWModalityType)
+mbLLVMFieldRW = mbMapCl $(mkClosed [| llvmFieldRW |])
+
+-- | Get the offset-in-binding of a field permission in binding
+mbLLVMFieldOffset :: Mb ctx (LLVMFieldPerm w sz) -> Mb ctx (PermExpr (BVType w))
+mbLLVMFieldOffset = mbMapCl $(mkClosed [| llvmFieldOffset |])
+
 
 -- | Helper type to represent byte offsets
 --
@@ -1758,13 +1781,9 @@ data LLVMBlockPerm w =
                 }
   deriving Eq
 
--- | Convenience function for building a single llvmblock permission
-mkLLVMBlockPerm :: (1 <= w, KnownNat w) =>
-                   PermExpr RWModalityType -> PermExpr LifetimeType ->
-                   PermExpr (BVType w) -> PermExpr (BVType w) ->
-                   PermExpr (LLVMShapeType w) -> ValuePerm (LLVMPointerType w)
-mkLLVMBlockPerm rw l off len sh =
-  ValPerm_Conj1 $ Perm_LLVMBlock $ LLVMBlockPerm rw l off len sh
+-- | Get the rw-modality-in-binding of a block permission in binding
+mbLLVMBlockRW :: Mb ctx (LLVMBlockPerm w) -> Mb ctx (PermExpr RWModalityType)
+mbLLVMBlockRW = mbMapCl $(mkClosed [| llvmBlockRW |])
 
 -- | An LLVM shape for a single pointer field of unknown size
 data LLVMFieldShape w =
@@ -3350,7 +3369,7 @@ llvmArrayCellPerm ap cell =
 
 -- | Get the permission for the first cell of an array permission
 llvmArrayPermHead :: (1 <= w, KnownNat w) => LLVMArrayPerm w -> LLVMBlockPerm w
-llvmArrayPermHead ap = llvmArrayCellPerm (bvInt 0)
+llvmArrayPermHead ap = llvmArrayCellPerm ap (bvInt 0)
 
 -- | Get the permission for all of an array permission after the first cell
 llvmArrayPermTail :: (1 <= w, KnownNat w) => LLVMArrayPerm w -> LLVMArrayPerm w
@@ -3953,8 +3972,8 @@ llvmArrayIndexInArray ap ix =
 
 -- | Test if a cell is in an array permission and is not currently being
 -- borrowed
-llvmArrayCellInArray :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-                        BVRange w -> [BVProp w]
+llvmArrayCellInArray :: (1 <= w, KnownNat w) =>
+                        LLVMArrayPerm w -> PermExpr (BVType w) -> [BVProp w]
 llvmArrayCellInArray ap cell = llvmArrayBorrowInArray ap (FieldBorrow cell)
 
 -- | Test if all cell numbers in a 'BVRange' are in an array permission and are
