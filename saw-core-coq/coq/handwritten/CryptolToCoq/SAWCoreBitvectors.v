@@ -16,7 +16,7 @@ Import SAWCorePrelude.
 
 (* A duplicate from `Program.Equality`, because importing that
    module directly gives us a conflict with the `~=` notation... *)
-Tactic Notation "dependent" "destruction" ident(H) := 
+Tactic Notation "dependent" "destruction" ident(H) :=
   Equality.do_depelim' ltac:(fun hyp => idtac) ltac:(fun hyp => Equality.do_case hyp) H.
 
 Create HintDb SAWCoreBitvectors_eqs.
@@ -228,6 +228,51 @@ Admitted.
 
 Lemma bvule_msb_r w a b : isBvule (Succ w) a b -> msb w b = false -> msb w a = false.
 Admitted.
+
+(** Lemmas about bitvector xor **)
+
+Lemma bvXor_same n x :
+  SAWCorePrelude.bvXor n x x = SAWCorePrelude.replicate n Bool false.
+Proof.
+  unfold SAWCorePrelude.bvXor, SAWCorePrelude.bvZipWith, SAWCorePrelude.zipWith, SAWCorePrelude.replicate.
+  induction x; auto; simpl; f_equal; auto.
+  rewrite SAWCorePrelude.xor_same; auto.
+Qed.
+
+Lemma bvXor_zero n x :
+  SAWCorePrelude.bvXor n x (SAWCorePrelude.replicate n Bool false) = x.
+Proof.
+  unfold SAWCorePrelude.bvXor, SAWCorePrelude.bvZipWith, SAWCorePrelude.zipWith, SAWCorePrelude.replicate.
+  induction x; auto; simpl. f_equal; auto; cbn.
+  rewrite SAWCorePrelude.xor_False2; auto.
+Qed.
+
+Lemma bvXor_assoc n x y z :
+  SAWCorePrelude.bvXor n x (SAWCorePrelude.bvXor n y z) =
+  SAWCorePrelude.bvXor n (SAWCorePrelude.bvXor n x y) z.
+Proof.
+  unfold SAWCorePrelude.bvXor, SAWCorePrelude.bvZipWith, SAWCorePrelude.zipWith.
+  induction n; auto; simpl. f_equal; auto; cbn.
+  unfold xor. rewrite Bool.xorb_assoc_reverse. reflexivity.
+  remember (S n).
+  destruct x; try solve [inversion Heqn0; clear Heqn0; subst]. injection Heqn0.
+  destruct y; try solve [inversion Heqn0; clear Heqn0; subst]. injection Heqn0.
+  destruct z; try solve [inversion Heqn0; clear Heqn0; subst]. injection Heqn0.
+  intros. subst. clear Heqn0. cbn. apply IHn.
+Qed.
+
+Lemma bvXor_comm n x y :
+  SAWCorePrelude.bvXor n x y = SAWCorePrelude.bvXor n y x.
+Proof.
+  unfold SAWCorePrelude.bvXor, SAWCorePrelude.bvZipWith, SAWCorePrelude.zipWith.
+  induction n; auto; simpl. f_equal; auto; cbn.
+  unfold xor. apply Bool.xorb_comm.
+  remember (S n).
+  destruct x; try solve [inversion Heqn0; clear Heqn0; subst]. injection Heqn0.
+  destruct y; try solve [inversion Heqn0; clear Heqn0; subst]. injection Heqn0.
+  intros. subst. clear Heqn0. cbn. apply IHn.
+Qed.
+
 
 
 (** Some general lemmas about boolean equality **)
