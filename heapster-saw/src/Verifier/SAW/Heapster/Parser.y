@@ -160,8 +160,8 @@ expr ::                                         { AstExpr }
   | lifetime 'ptrsh' '('          expr ')'      { ExPtrSh (pos $2) $1 Nothing $4 }
   | 'fieldsh' '(' expr ',' expr ')'             { ExFieldSh (pos $1) (Just $3) $5 }
   | 'fieldsh' '('          expr ')'             { ExFieldSh (pos $1) Nothing $3 }
-  | 'arraysh' '(' expr ',' expr ',' expr ')'
-                                                { ExArraySh (pos $1) $3 $5 $7 }
+  | 'arraysh' '(' '<' expr ',' '*' expr ',' expr ')'
+                                                { ExArraySh (pos $1) $4 $7 $9 }
   | 'exsh' IDENT ':' type '.' expr              { ExExSh (pos $1) (locThing $2) $4 $6 }
 
 -- Value Permissions
