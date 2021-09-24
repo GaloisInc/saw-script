@@ -5331,9 +5331,9 @@ proveVarLLVMArray_FromArray2 x ap_lhs _ bs mb_ap =
    else
      -- Otherwise, coerce the contents
      let dps_in = nu $ \y -> distPerms1 y $ ValPerm_LLVMBlock $
-                             llvmArrayCellPerm ap $ bvInt 0
+                             llvmArrayCellPerm ap_lhs'' $ bvInt 0
          dps_out = nu $ \y -> distPerms1 y $ ValPerm_LLVMBlock $
-                              llvmArrayCellPerm ap_lhs'' $ bvInt 0 in
+                              llvmArrayCellPerm ap $ bvInt 0 in
      localMbProveVars dps_in dps_out >>>= \mb_impl ->
      implSimplM Proxy (SImpl_LLVMArrayContents x ap_lhs'' sh mb_impl) >>>
      return (ap_lhs'' { llvmArrayCellShape = sh })) >>>= \ap_lhs''' ->
