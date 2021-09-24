@@ -894,7 +894,7 @@ data SimplImpl ps_in ps_out where
   -- | Eliminate any @memblock@ permission to an array of bytes:
   --
   -- > x:memblock(rw,l,off,len,emptysh)
-  -- >   -o x:array(off,<len,*1,[[l](rw,0,8) |-> true])
+  -- >   -o x:[l]array(rw,off,<len,*1,fieldsh(true),[])
   SImpl_ElimLLVMBlockToBytes ::
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
@@ -993,11 +993,13 @@ data SimplImpl ps_in ps_out where
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
-  -- | Eliminate a block of array shape to the corresponding array permission:
+  -- | Eliminate a block of array shape to the corresponding array permission,
+  -- assuming that the length of the block equals that of the array:
   --
-  -- > x:memblock(...) -o x:array(...)
+  -- > x:[l]memblock(rw,off,stride*len,arraysh(<len,*stride,sh))
+  -- >   -o x:[l]array(rw,off,<len,*stride,sh,[])
   SImpl_ElimLLVMBlockArray ::
-    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
   -- | Prove a block of shape @sh1;sh2@ from blocks of shape @sh1@ and @sh2@,
@@ -1767,11 +1769,8 @@ simplImplIn (SImpl_ElimLLVMBlockField x fp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $ llvmFieldPermToBlock fp)
 simplImplIn (SImpl_IntroLLVMBlockArray x ap) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMArray ap)
-simplImplIn (SImpl_ElimLLVMBlockArray x ap) =
-  case llvmAtomicPermToBlock (Perm_LLVMArray ap) of
-    Just bp -> distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
-    Nothing ->
-      error "simplImplIn: SImpl_ElimLLVMBlockArray: malformed array permission"
+simplImplIn (SImpl_ElimLLVMBlockArray x bp) =
+  distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
 simplImplIn (SImpl_IntroLLVMBlockSeq x bp1 len2 sh2) =
   distPerms2
   x (ValPerm_Conj1 $ Perm_LLVMBlock bp1)
@@ -2084,8 +2083,11 @@ simplImplOut (SImpl_IntroLLVMBlockArray x ap) =
     Just bp -> distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
     Nothing ->
       error "simplImplOut: SImpl_IntroLLVMBlockArray: malformed array permission"
-simplImplOut (SImpl_ElimLLVMBlockArray x ap) =
-  distPerms1 x (ValPerm_Conj1 $ Perm_LLVMArray ap)
+simplImplOut (SImpl_ElimLLVMBlockArray x bp) =
+  case llvmBlockPermToArray bp of
+    Just ap -> distPerms1 x (ValPerm_Conj1 $ Perm_LLVMArray ap)
+    Nothing ->
+      error "simplImplIn: SImpl_ElimLLVMBlockArray: malformed input permission"
 simplImplOut (SImpl_IntroLLVMBlockSeq x bp1 len2 sh2) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
                 bp1 { llvmBlockLen = bvAdd (llvmBlockLen bp1) len2,
@@ -2470,8 +2472,8 @@ instance SubstVar PermVarSubst m =>
       SImpl_ElimLLVMBlockField <$> genSubst s x <*> genSubst s fp
     [nuMP| SImpl_IntroLLVMBlockArray x fp |] ->
       SImpl_IntroLLVMBlockArray <$> genSubst s x <*> genSubst s fp
-    [nuMP| SImpl_ElimLLVMBlockArray x fp |] ->
-      SImpl_ElimLLVMBlockArray <$> genSubst s x <*> genSubst s fp
+    [nuMP| SImpl_ElimLLVMBlockArray x bp |] ->
+      SImpl_ElimLLVMBlockArray <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_IntroLLVMBlockSeq x bp1 len2 sh2 |] ->
       SImpl_IntroLLVMBlockSeq <$> genSubst s x <*> genSubst s bp1
                               <*> genSubst s len2 <*> genSubst s sh2
@@ -4075,11 +4077,16 @@ implElimLLVMBlock x bp@(LLVMBlockPerm
   implSimplM Proxy (SImpl_ElimLLVMBlockField x $ fromJust $
                     llvmBlockPermToField (exprLLVMTypeWidth p) bp)
 
--- For an array shape, eliminate to an array permission
-implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
-                                          PExpr_ArrayShape _ _ _ }) =
-  implSimplM Proxy (SImpl_ElimLLVMBlockArray x $ fromJust $
-                    llvmBlockPermToArray bp)
+-- For an array shape of the right length, eliminate to an array permission
+implElimLLVMBlock x bp
+  | isJust (llvmBlockPermToArray bp) =
+    implSimplM Proxy (SImpl_ElimLLVMBlockArray x bp)
+
+-- FIXME: if we match an array shape here, its stride*length must be greater
+-- than the length of bp, so we should truncate it
+--
+-- implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
+--                                           PExpr_ArrayShape _ _ _ }) =
 
 -- Special case: for shape sh1;emptysh where the natural length of sh1 is the
 -- same as the length of the block permission, eliminate the emptysh, converting

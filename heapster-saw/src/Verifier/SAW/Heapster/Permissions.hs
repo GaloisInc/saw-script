@@ -3334,11 +3334,13 @@ llvmArrayPermToBlock ap
         (llvmArrayCellShape ap) }
 llvmArrayPermToBlock _ = Nothing
 
--- | Convert a block permission with array shape to an array permission
+-- | Convert a block permission with array shape to an array permission,
+-- assuming the length of the block permission equals the size of the array
 llvmBlockPermToArray :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
                         Maybe (LLVMArrayPerm w)
 llvmBlockPermToArray bp
-  | PExpr_ArrayShape len stride sh <- llvmBlockShape bp =
+  | PExpr_ArrayShape len stride sh <- llvmBlockShape bp
+  , bvEq (bvMult stride len) (llvmBlockLen bp) =
     Just $ LLVMArrayPerm
     { llvmArrayRW = llvmBlockRW bp,
       llvmArrayLifetime = llvmBlockLifetime bp,
