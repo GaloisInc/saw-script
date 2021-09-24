@@ -4069,22 +4069,17 @@ implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape = PExpr_PtrShape _ _ _ })
     implSimplM Proxy (SImpl_ElimLLVMBlockPtr x bp)
 
 -- For a field shape, eliminate to a field permission
-{-
-implElimLLVMBlock x (LLVMBlockPerm { llvmBlockShape =
-                                     PExpr_FieldShape (LLVMFieldShape p)
-                                   , ..}) =
-  implSimplM Proxy (SImpl_ElimLLVMBlockField x
-                    (LLVMFieldPerm { llvmFieldRW = llvmBlockRW,
-                                     llvmFieldLifetime = llvmBlockLifetime,
-                                     llvmFieldOffset = llvmBlockOffset,
-                                     llvmFieldContents = p })
-                    llvmBlockLen)
+implElimLLVMBlock x bp@(LLVMBlockPerm
+                        { llvmBlockShape =
+                            PExpr_FieldShape (LLVMFieldShape p) }) =
+  implSimplM Proxy (SImpl_ElimLLVMBlockField x $ fromJust $
+                    llvmBlockPermToField (exprLLVMTypeWidth p) bp)
 
 -- For an array shape, eliminate to an array permission
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                           PExpr_ArrayShape _ _ _ }) =
-  implSimplM Proxy (SImpl_ElimLLVMBlockArray x $ llvmArrayBlockToArrayPerm bp)
--}
+  implSimplM Proxy (SImpl_ElimLLVMBlockArray x $ fromJust $
+                    llvmBlockPermToArray bp)
 
 -- Special case: for shape sh1;emptysh where the natural length of sh1 is the
 -- same as the length of the block permission, eliminate the emptysh, converting
