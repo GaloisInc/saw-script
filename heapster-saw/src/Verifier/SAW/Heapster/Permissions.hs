@@ -1512,6 +1512,10 @@ pattern ValPerm_True = ValPerm_Conj []
 pattern ValPerm_Conj1 :: AtomicPerm a -> ValuePerm a
 pattern ValPerm_Conj1 p = ValPerm_Conj [p]
 
+-- | The conjunction of exactly 1 atomic permission in a binding
+mbValPerm_Conj1 :: Mb ctx (AtomicPerm a) -> Mb ctx (ValuePerm a)
+mbValPerm_Conj1 = mbMapCl $(mkClosed [| ValPerm_Conj1 |])
+
 -- | The conjunction of exactly 1 field permission
 pattern ValPerm_LLVMField :: () => (a ~ LLVMPointerType w, 1 <= w, KnownNat w,
                                     1 <= sz, KnownNat sz) =>
@@ -4064,8 +4068,8 @@ llvmPermIndicesForOffset :: (1 <= w, KnownNat w) =>
                             PermExpr (BVType w) -> [Int]
 llvmPermIndicesForOffset ps imprecise_p off =
   let ixs_props = findMaybeIndices (llvmPermContainsOffset off) ps in
-  case findIndex (\(_,(_,holds)) -> holds) ixs_props of
-    Just i -> [i]
+  case find (\(_,(_,holds)) -> holds) ixs_props of
+    Just (i,_) -> [i]
     Nothing | imprecise_p -> map fst ixs_props
     Nothing -> []
 

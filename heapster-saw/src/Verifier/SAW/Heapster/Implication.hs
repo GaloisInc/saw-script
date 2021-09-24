@@ -4225,7 +4225,15 @@ implGetLLVMPermForOffset ::
 
 implGetLLVMPermForOffset x ps imprecise_p elim_blocks_p off mb_p =
   case llvmPermIndicesForOffset ps imprecise_p off of
-    [] -> implFailVarM "implGetLLVMPermForOffset" x (ValPerm_Conj ps) mb_p
+    -- If we didn't find any matches, try to unfold on the left
+    [] ->
+      implUnfoldOrFail x ps mb_p >>>= \_ ->
+      elimOrsExistsNamesM x >>>= \p'' ->
+      (case p'' of
+          ValPerm_Conj ps' ->
+            implGetLLVMPermForOffset x ps' imprecise_p elim_blocks_p off mb_p
+          -- FIXME: handle eq perms here
+          _ -> implFailVarM "implGetLLVMPermForOffset" x (ValPerm_Conj ps) mb_p)
     ixs ->
       foldr1 implCatchM $ flip map ixs $ \i ->
       implGetConjM x ps i >>>= \ps' -> recombinePerm x (ValPerm_Conj ps') >>>
@@ -4953,6 +4961,12 @@ proveVarLLVMField ::
   ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
 
 proveVarLLVMField x ps off mb_fp =
+  implTraceM (\i ->
+               pretty "proveVarLLVMField:" <+> permPretty i x <> colon <>
+               align (sep [PP.group (permPretty i (ValPerm_Conj ps)),
+                           pretty "-o",
+                           PP.group (permPretty i mb_fp
+                                     <+> pretty "@" <+> permPretty i off)])) >>>
   implGetLLVMPermForOffset x ps True True off
   (mbValPerm_LLVMField mb_fp) >>>= \p ->
   proveVarLLVMFieldH x p off mb_fp
@@ -4978,7 +4992,7 @@ proveVarLLVMFieldH x (Perm_LLVMField fp) off mb_fp
     -- Step 2: prove the contents
     proveVarImplInt y (mbLLVMFieldContents mb_fp) >>>
     partialSubstForceM (mbLLVMFieldContents mb_fp)
-    "proveVarLLVMFieldFromField" >>>= \p_y ->
+    "proveVarLLVMFieldH" >>>= \p_y ->
     let fp'' = fp' { llvmFieldContents = p_y } in
     introLLVMFieldContentsM x y fp'' >>>
 
@@ -5030,7 +5044,7 @@ proveVarLLVMFieldH x (Perm_LLVMArray ap) off mb_fp
 
 -- If none of the above cases match, then fail
 proveVarLLVMFieldH x p _ mb_fp =
-  implFailVarM "proveVarLLVMField" x (ValPerm_Conj1 p)
+  implFailVarM "proveVarLLVMFieldH" x (ValPerm_Conj1 p)
   (mbValPerm_LLVMField mb_fp)
 
 
@@ -6162,6 +6176,62 @@ proveVarLLVMBlocks2 x ps _ mb_bp _ mb_bps =
 -- * Proving and Eliminating Recursive Permissions
 ----------------------------------------------------------------------
 
+-- | Assuming @x:p1@ is on top of the stack, unfold a foldable named permission
+-- in @p1@. If an 'Int' @i@ is supplied, then @p1@ is a conjunctive permission
+-- whose @i@th conjunct is the named permisison to be unfolded; otherwise @p1@
+-- itself is the named permission to be unfolded. Leave the resulting unfolded
+-- permission on top of the stack, recombining any additional permissions (in
+-- the former case, where a single conjunct is unfolded) back into the primary
+-- permissions of @x@, and return that unfolded permission.
+implUnfoldLeft :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+                  Maybe Int -> ImplM vars s r (ps :> a) (ps :> a) (ValuePerm a)
+implUnfoldLeft x (ValPerm_Named npn args off) Nothing
+  | TrueRepr <- nameCanFoldRepr npn =
+    (case namedPermNameSort npn of
+        RecursiveSortRepr _ _ -> implSetRecRecurseLeftM
+        _ -> pure ()) >>>
+    implUnfoldNamedM x npn args off >>>= \p' ->
+    return p'
+implUnfoldLeft x (ValPerm_Conj ps) (Just i)
+  | i < length ps
+  , Perm_NamedConj npn args off <- ps!!i
+  , TrueRepr <- nameCanFoldRepr npn =
+    (case namedPermNameSort npn of
+        RecursiveSortRepr _ _ -> implSetRecRecurseLeftM
+        _ -> pure ()) >>>
+    implExtractConjM x ps i >>>
+    recombinePerm x (ValPerm_Conj $ deleteNth i ps) >>>
+    implNamedFromConjM x npn args off >>>
+    implUnfoldNamedM x npn args off >>>= \p' ->
+    return p'
+implUnfoldLeft _ _ _ = error ("implUnfoldLeft: malformed inputs")
+
+
+-- | Assume that @x:(p1 * ... * pn)@ is on top of the stack, and try to find
+-- some @pi@ that can be unfolded. If successful, recombine the remaining @pj@
+-- to the primary permission for @x@, unfold @pi@, leave it on top of the stack,
+-- and return its unfolded permission. Otherwise fail using 'implFailVarM',
+-- citing the supplied permission in binding as the one we were trying to prove.
+implUnfoldOrFail :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] ->
+                    Mb vars (ValuePerm a) ->
+                    ImplM vars s r (ps :> a) (ps :> a) (ValuePerm a)
+implUnfoldOrFail x ps mb_p =
+  let p_l = ValPerm_Conj ps in
+  use implStateRecRecurseFlag >>= \flag ->
+  case () of
+    -- We can always unfold a defined name on the left
+    _ | Just i <- findIndex isDefinedConjPerm ps ->
+        implUnfoldLeft x p_l (Just i)
+
+    -- If flag allows it, we can unfold a recursive name on the left
+    _ | Just i <- findIndex isRecursiveConjPerm ps
+      , flag /= RecRight ->
+        implUnfoldLeft x p_l (Just i)
+
+    -- Otherwise, we fail
+    _ -> implFailVarM "implUnfoldOrFail" x p_l mb_p
+
+
 -- | Prove @x:p1 |- x:p2@ by unfolding a foldable named permission in @p1@ and
 -- then recursively proving @x:p2@ from the resulting permissions. If an 'Int'
 -- @i@ is supplied, then @p1@ is a conjunctive permission whose @i@th conjunct
@@ -6171,30 +6241,9 @@ proveVarImplUnfoldLeft :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
                           Mb vars (ValuePerm a) ->
                           Maybe Int -> ImplM vars s r (ps :> a) (ps :> a) ()
 
-proveVarImplUnfoldLeft x (ValPerm_Named npn args off) mb_p Nothing
-  | TrueRepr <- nameCanFoldRepr npn =
-    (case namedPermNameSort npn of
-        RecursiveSortRepr _ _ -> implSetRecRecurseLeftM
-        _ -> pure ()) >>>
-    implUnfoldNamedM x npn args off >>>= \p' ->
-    implPopM x p' >>>
-    proveVarImplInt x mb_p
-
-proveVarImplUnfoldLeft x (ValPerm_Conj ps) mb_p (Just i)
-  | i < length ps
-  , Perm_NamedConj npn args off <- ps!!i
-  , TrueRepr <- nameCanFoldRepr npn =
-    (case namedPermNameSort npn of
-        RecursiveSortRepr _ _ -> implSetRecRecurseLeftM
-        _ -> pure ()) >>>
-    implExtractConjM x ps i >>> implPopM x (ValPerm_Conj $ deleteNth i ps) >>>
-    implNamedFromConjM x npn args off >>>
-    implUnfoldNamedM x npn args off >>>= \p' ->
-    recombinePerm x p' >>>
-    proveVarImplInt x mb_p
-
-proveVarImplUnfoldLeft _ _ _ _ =
-  error ("proveVarImplUnfoldLeft: malformed inputs")
+proveVarImplUnfoldLeft x p mb_p maybe_i =
+  implUnfoldLeft x p maybe_i >>>= \p' -> recombinePerm x p' >>>
+  proveVarImplInt x mb_p
 
 
 -- | Prove @x:p1 |- x:P<args>\@off@ where @P@ is foldable by first proving the
@@ -6230,21 +6279,9 @@ proveVarAtomicImplUnfoldOrFail :: NuMatchingAny1 r => ExprVar a ->
                                   [AtomicPerm a] -> Mb vars (AtomicPerm a) ->
                                   ImplM vars s r (ps :> a) (ps :> a) ()
 proveVarAtomicImplUnfoldOrFail x ps mb_ap =
-  do let p_l = ValPerm_Conj ps
-         mb_p_r = fmap ValPerm_Conj1 mb_ap
-     flag <- use implStateRecRecurseFlag
-     case () of
-       -- We can always unfold a defined name on the left
-       _ | Just i <- findIndex isDefinedConjPerm ps ->
-           proveVarImplUnfoldLeft x p_l mb_p_r (Just i)
-
-       -- If flag allows it, we can unfold a recursive name on the left
-       _ | Just i <- findIndex isRecursiveConjPerm ps
-         , flag /= RecRight ->
-           proveVarImplUnfoldLeft x p_l mb_p_r (Just i)
-
-       -- Otherwise, we fail
-       _ -> implFailVarM "proveVarAtomicImplUnfoldOrFail" x p_l mb_p_r
+  let mb_p = mbValPerm_Conj1 mb_ap in
+  implUnfoldOrFail x ps mb_p >>>= \p' -> recombinePerm x p' >>>
+  proveVarImplInt x mb_p
 
 
 -- | Prove @x:(p1 * ... * pn) |- x:p@ for some atomic permission @p@, assuming
@@ -6261,17 +6298,9 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
 
   [nuMP| Perm_LLVMField mb_fp |] ->
     partialSubstForceM (mbLLVMFieldOffset mb_fp) "proveVarPtrPerms" >>>= \off ->
-    implCatchM
-    (proveVarLLVMField x ps off mb_fp)
-    (proveVarAtomicImplUnfoldOrFail x ps mb_p)
-
-  [nuMP| Perm_LLVMArray mb_ap |] ->
-    implCatchM
-    (proveVarLLVMArray x True ps mb_ap)
-    (proveVarAtomicImplUnfoldOrFail x ps mb_p)
-
-  [nuMP| Perm_LLVMBlock mb_bp |] ->
-    proveVarLLVMBlock x ps mb_bp
+    proveVarLLVMField x ps off mb_fp
+  [nuMP| Perm_LLVMArray mb_ap |] -> proveVarLLVMArray x True ps mb_ap
+  [nuMP| Perm_LLVMBlock mb_bp |] -> proveVarLLVMBlock x ps mb_bp
 
   [nuMP| Perm_LLVMFree mb_e |] ->
     partialSubstForceM mb_e "proveVarAtomicImpl" >>>= \e ->
