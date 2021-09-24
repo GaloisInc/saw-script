@@ -1037,20 +1037,20 @@ bvRangeTransLen :: BVRangeTrans ctx w -> ExprTrans (BVType w)
 bvRangeTransLen (BVRangeTrans _ _ len) = len
 
 -- | The translation of an LLVM array permission is a SAW term of @BVVec@ type,
--- along with a type translation for its cell type and proof terms stating that
--- all of the borrows are in the array. Note that the type translation for the
--- cell type is always a 'tupleTypeTrans', i.e., has at most one SAW type.
+-- along with a SAW term for its length as a bitvector and the type translation
+-- for a @memblock@ permission to its head cell, which can be offset to get a
+-- @memblock@ permission for any of its cells.
 data LLVMArrayPermTrans ctx w = LLVMArrayPermTrans {
   llvmArrayTransPerm :: Mb ctx (LLVMArrayPerm w),
   llvmArrayTransLen :: OpenTerm,
-  llvmArrayTransCell :: TypeTrans (AtomicPermTrans ctx (LLVMPointerType w)),
+  llvmArrayTransHeadCell :: TypeTrans (AtomicPermTrans ctx (LLVMPointerType w)),
   -- llvmArrayTransBorrows :: [LLVMArrayBorrowTrans ctx w],
   llvmArrayTransTerm :: OpenTerm
   }
 
 -- | Get the SAW type of the cells of the translation of an array permission
 llvmArrayTransCellType :: LLVMArrayPermTrans ctx w -> OpenTerm
-llvmArrayTransCellType = typeTransType1 . llvmArrayTransCell
+llvmArrayTransCellType = typeTransType1 . llvmArrayTransHeadCell
 
 
 -- | The translation of an 'LLVMArrayBorrow' is an element / proof of the
@@ -1406,9 +1406,9 @@ getLLVMArrayTransCell :: (1 <= w, KnownNat w) => LLVMArrayPermTrans ctx w ->
 getLLVMArrayTransCell arr_trans mb_cell cell_tm (BVPropTrans _ in_rng_pf:_) =
   let w = fromInteger $ natVal arr_trans in
   fromJust $
-  offsetLLVMAtomicPermTrans (mbMap2 llvmArrayCellToAbsOffset
+  offsetLLVMAtomicPermTrans (mbMap2 llvmArrayCellToOffset
                              (llvmArrayTransPerm arr_trans) mb_cell) $
-  typeTransF (llvmArrayTransCell arr_trans)
+  typeTransF (llvmArrayTransHeadCell arr_trans)
   [applyOpenTermMulti (globalOpenTerm "Prelude.atBVVec")
    [natOpenTerm w, llvmArrayTransLen arr_trans,
     llvmArrayTransCellType arr_trans, llvmArrayTransTerm arr_trans,
@@ -2477,7 +2477,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
              LLVMArrayPermTrans
              { llvmArrayTransPerm = mb_ap_out
              , llvmArrayTransLen = bvAddOpenTerm w len1 len2
-             , llvmArrayTransCell = llvmArrayTransCell array_trans1
+             , llvmArrayTransHeadCell = llvmArrayTransHeadCell array_trans1
              , llvmArrayTransTerm =
                applyOpenTermMulti (globalOpenTerm "Prelude.appendBVVec")
                [natOpenTerm w, len1, len2, llvmArrayTransTerm array_trans1,
