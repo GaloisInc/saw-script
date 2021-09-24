@@ -3261,23 +3261,23 @@ implTryProveBVProps x (prop:props) =
   implInsertConjM x (Perm_BVProp prop) (map Perm_BVProp props) 0
 
 -- | Drop a permission from the top of the stack
-implDropM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+implDropM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r ps (ps :> a) ()
 implDropM x p = implSimplM Proxy (SImpl_Drop x p)
 
 -- | Copy a permission on the top of the stack, assuming it is copyable
-implCopyM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+implCopyM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r (ps :> a :> a) (ps :> a) ()
 implCopyM x p = implSimplM Proxy (SImpl_Copy x p)
 
 -- | Push a copyable permission using 'implPushM', copy that permission, and
 -- then pop it back to the variable permission for @x@
-implPushCopyM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+implPushCopyM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
                  ImplM vars s r (ps :> a) ps ()
 implPushCopyM x p = implPushM x p >>> implCopyM x p >>> implPopM x p
 
 -- | Swap the top two permissions on the top of the stack
-implSwapM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+implSwapM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ExprVar b -> ValuePerm b ->
              ImplM vars s r (ps :> b :> a) (ps :> a :> b) ()
 implSwapM x p1 y p2 = implSimplM Proxy (SImpl_Swap x p1 y p2)
@@ -5565,7 +5565,7 @@ proveVarLLVMBlocks1 x ps psubst (mb_bp:mb_bps)
   , Perm_LLVMBlock bp <- ps!!i =
 
     -- Copy or extract the memblock perm we chose to the top of the stack
-    implGetConjM x ps i >>>= \ps' ->
+    implGetSwapConjM x ps i >>>= \ps' ->
 
     -- Make the input block have the required modalities
     equalizeBlockModalities x bp mb_bp >>>= \bp' ->
