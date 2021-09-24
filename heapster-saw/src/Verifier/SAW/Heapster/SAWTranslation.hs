@@ -106,7 +106,14 @@ nlPrettyCallStack = ("\n" ++) . prettyCallStack
 -- construct in Haskell.
 data TypeTrans tr = TypeTrans
                      { typeTransTypes :: [OpenTerm],
-                       typeTransF :: [OpenTerm] -> tr }
+                       typeTransFun :: [OpenTerm] -> tr }
+
+-- | Apply the 'typeTransFun' of a 'TypeTrans' with the call stack
+typeTransF :: HasCallStack => TypeTrans tr -> [OpenTerm] -> tr
+typeTransF (TypeTrans tps f) ts | length tps == length ts = f ts
+typeTransF (TypeTrans tps _) ts =
+  error ("Type translation expected " ++ show (length tps) ++
+         " arguments, but got " ++ show (length ts))
 
 instance Functor TypeTrans where
   fmap f (TypeTrans ts tp_f) = TypeTrans ts (f . tp_f)
