@@ -1347,7 +1347,8 @@ offsetLLVMPermTrans mb_off (PTrans_Conj ps) =
   PTrans_Conj $ mapMaybe (offsetLLVMAtomicPermTrans mb_off) ps
 offsetLLVMPermTrans mb_off (PTrans_Defined n args off ptrans) =
   PTrans_Defined n args (mbMap2 addPermOffsets off
-                         (fmap mkLLVMPermOffset mb_off)) ptrans
+                         (fmap mkLLVMPermOffset mb_off)) $
+  offsetLLVMPermTrans mb_off ptrans
 offsetLLVMPermTrans mb_off (PTrans_Term mb_p t) =
   PTrans_Term (mbMap2 offsetLLVMPerm mb_off mb_p) t
 
