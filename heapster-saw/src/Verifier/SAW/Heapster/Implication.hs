@@ -2697,19 +2697,24 @@ embedImplM ps_in m =
 -- | Embed a sub-computation in a name-binding inside another 'ImplM'
 -- computation, throwing away any state from that sub-computation and returning
 -- a 'PermImpl' inside a name-binding
-embedMbImplM :: Mb ctx (DistPerms ps_in) ->
+embedMbImplM :: KnownRepr CruCtx ctx => Mb ctx (DistPerms ps_in) ->
                 Mb ctx (ImplM RNil s r' ps_out ps_in (r' ps_out)) ->
                 ImplM vars s r ps ps (Mb ctx (PermImpl r' ps_in))
 embedMbImplM mb_ps_in mb_m =
   do s <- get
-     lift $ strongMbM $ mbMap2
-       (\ps_in m ->
+     lift $ strongMbM $ nuMultiWithElim
+       (\ns (_ :>: Identity ps_in :>: Identity m) ->
         runImplM
          CruCtxNil (distPermSet ps_in)
          (view implStatePermEnv    s) (view implStatePPInfo  s)
          (view implStateFailPrefix s) (view implStateDebugLevel s)
-         (view implStateNameTypes  s) m (pure . fst))
-       mb_ps_in mb_m
+         (view implStateNameTypes  s)
+         (gmodify (over implStatePPInfo
+                   (ppInfoAddTypedExprNames knownRepr ns)) >>>
+          implSetNameTypes ns knownRepr >>>
+          m)
+         (pure . fst))
+       (MNil :>: mb_ps_in :>: mb_m)
 
 -- | Run an 'ImplM' computation in a locally-scoped way, where all effects
 -- are restricted to the local computation. This is essentially a form of the
@@ -4195,9 +4200,13 @@ implElimLLVMBlockForOffset :: (1 <= w, KnownNat w, NuMatchingAny1 r) =>
                               (ps :> LLVMPointerType w)
                               (AtomicPerm (LLVMPointerType w))
 implElimLLVMBlockForOffset x bp imprecise_p off mb_p =
-  implElimLLVMBlock x bp >>> getTopDistPerm x >>>= \(ValPerm_Conj ps) ->
-  implGetLLVMPermForOffset x ps imprecise_p True off mb_p
-
+  implElimLLVMBlock x bp >>> elimOrsExistsNamesM x >>>= \p' ->
+  case p' of
+    ValPerm_Conj ps ->
+      implGetLLVMPermForOffset x ps imprecise_p True off mb_p
+    _ ->
+      -- FIXME: handle eq perms here
+      implFailVarM "implElimLLVMBlockForOffset" x (ValPerm_LLVMBlock bp) mb_p
 
 -- | Assume @x:p1*...*pn@ is on top of the stack, and try to find a permission
 -- @pi@ that contains a given offset @off@. If a @pi@ is found that definitely
@@ -7072,9 +7081,8 @@ localProveVars ps_in ps_out =
 
 -- | Prove one sequence of permissions over an extended set of local variables
 -- from another and capture the proof as a 'LocalPermImpl' in a binding
-localMbProveVars :: NuMatchingAny1 r =>
-                    Mb (ctx :: RList CrucibleType) (DistPerms ps_in) ->
-                    Mb ctx (DistPerms ps_out) ->
+localMbProveVars :: NuMatchingAny1 r => KnownRepr CruCtx ctx =>
+                    Mb ctx (DistPerms ps_in) -> Mb ctx (DistPerms ps_out) ->
                     ImplM vars s r ps ps (Mb ctx (LocalPermImpl ps_in ps_out))
 localMbProveVars mb_ps_in mb_ps_out =
   implTraceM (\i -> sep [pretty "localMbProveVars:", permPretty i mb_ps_in,
