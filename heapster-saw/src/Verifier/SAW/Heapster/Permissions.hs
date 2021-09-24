@@ -892,7 +892,9 @@ instance PermPretty (PermExpr a) where
     do len_pp <- permPrettyM len
        sh_pp <- permPrettyM sh
        let stride_pp = pretty (toInteger stride)
-       return (pretty "arraysh" <> tupled [len_pp, stride_pp, sh_pp])
+       return (pretty "arraysh" <>
+               ppEncList True [pretty "<" <> len_pp,
+                               pretty "*" <> stride_pp, sh_pp])
   permPrettyM (PExpr_SeqShape sh1 sh2) =
     do pp1 <- permPrettyM sh1
        pp2 <- permPrettyM sh2
