@@ -4085,7 +4085,7 @@ llvmMakeSubArray ap off len
   , cell_rng <- BVRange cell len =
     ap { llvmArrayOffset = off, llvmArrayLen = len,
          llvmArrayBorrows =
-           filter (all bvPropCouldHold .
+           filter (not . all bvPropHolds .
                    llvmArrayBorrowsDisjoint (RangeBorrow cell_rng)) $
            llvmArrayBorrows ap }
 llvmMakeSubArray _ _ _ = error "llvmMakeSubArray"
