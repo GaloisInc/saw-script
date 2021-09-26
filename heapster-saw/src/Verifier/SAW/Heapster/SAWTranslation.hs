@@ -2379,8 +2379,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            pctx :>: typeTransF ttrans (transTerms ptrans))
          m
 
-  [nuMP| SImpl_LLVMArrayCopy _ mb_ap mb_sub_ap |] ->
-    do let _w = natVal2 mb_ap
+  [nuMP| SImpl_LLVMArrayCopy _ mb_ap _ _ |] ->
+    do let mb_sub_ap =
+             case mbSimplImplOut mb_simpl of
+               [nuP| _ :>: VarAndPerm _ (ValPerm_LLVMArray sub_ap) :>: _ |] ->
+                 sub_ap
+               _ -> error "translateSimplImpl: SImpl_LLVMArrayCopy: unexpected perms"
        sub_ap_tp_trans <- translate mb_sub_ap
        rng_trans <- translate $ mbMap2 llvmSubArrayRange mb_ap mb_sub_ap
        -- let mb_sub_borrows = fmap llvmArrayBorrows mb_sub_ap
@@ -2399,8 +2403,13 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            :>: ptrans_array)
          m
 
-  [nuMP| SImpl_LLVMArrayBorrow _ mb_ap mb_sub_ap |] ->
-    do sub_ap_tp_trans <- translate mb_sub_ap
+  [nuMP| SImpl_LLVMArrayBorrow _ mb_ap _ _ |] ->
+    do let mb_sub_ap =
+             case mbSimplImplOut mb_simpl of
+               [nuP| _ :>: VarAndPerm _ (ValPerm_LLVMArray sub_ap) :>: _ |] ->
+                 sub_ap
+               _ -> error "translateSimplImpl: SImpl_LLVMArrayCopy: unexpected perms"
+       sub_ap_tp_trans <- translate mb_sub_ap
        let mb_rng = mbMap2 llvmSubArrayRange mb_ap mb_sub_ap
        rng_trans <- translate mb_rng
        -- let mb_sub_borrows = fmap llvmArrayBorrows mb_sub_ap
@@ -2493,13 +2502,11 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          (\(pctx :>: ptrans) -> pctx :>: typeTransF ttrans [transTerm1 ptrans])
          m
 
-{-
   [nuMP| SImpl_LLVMArrayToField _ _ _ |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: _) -> pctx :>: typeTransF ttrans [])
          m
--}
 
   [nuMP| SImpl_LLVMArrayEmpty x mb_ap |] ->
     do (w_term, _, elem_tp, ap_tp_trans) <- translateLLVMArrayPerm mb_ap

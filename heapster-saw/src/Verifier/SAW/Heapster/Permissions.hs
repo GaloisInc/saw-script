@@ -82,6 +82,7 @@ import Verifier.SAW.OpenTerm
 
 import Verifier.SAW.Heapster.CruUtil
 
+import GHC.Stack
 import Debug.Trace
 
 
@@ -3314,12 +3315,28 @@ llvmBlockPermToField :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
                         Maybe (LLVMFieldPerm w sz)
 llvmBlockPermToField sz bp
   | PExpr_FieldShape (LLVMFieldShape p) <- llvmBlockShape bp
-  , Just Refl <- testEquality sz (exprLLVMTypeWidth p) =
+  , Just Refl <- testEquality sz (exprLLVMTypeWidth p)
+  , bvEq (llvmBlockLen bp) (bvInt (intValue sz `div` 8)) =
     Just $ LLVMFieldPerm { llvmFieldRW = llvmBlockRW bp,
                            llvmFieldLifetime = llvmBlockLifetime bp,
                            llvmFieldOffset = llvmBlockOffset bp,
                            llvmFieldContents = p }
 llvmBlockPermToField _ _ = Nothing
+
+-- | Convert an array permission with total size @sz@ bits to a field permission
+-- of size @sz@ bits, assuming it has no borrows
+llvmArrayToField :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
+                    NatRepr sz -> LLVMArrayPerm w ->
+                    Maybe (LLVMFieldPerm w sz)
+llvmArrayToField sz ap
+  | bvEq (bvMult (llvmArrayStrideBits ap) (llvmArrayLen ap)) (bvInt $
+                                                              intValue sz)
+  , [] <- llvmArrayBorrows ap =
+    Just $ LLVMFieldPerm { llvmFieldRW = llvmArrayRW ap,
+                           llvmFieldLifetime = llvmArrayLifetime ap,
+                           llvmFieldOffset = llvmArrayOffset ap,
+                           llvmFieldContents = ValPerm_True }
+llvmArrayToField _ _ = Nothing
 
 -- | Convert an array permission with no borrows to a block permission
 llvmArrayPermToBlock :: (1 <= w, KnownNat w) =>
@@ -3883,31 +3900,36 @@ llvmArrayAddArrayBorrows _ _ = error "llvmArrayAddArrayBorrows"
 
 -- | Find the position in the list of borrows of an 'LLVMArrayPerm' of a
 -- specific borrow
-llvmArrayFindBorrow :: LLVMArrayBorrow w -> LLVMArrayPerm w -> Int
+llvmArrayFindBorrow :: HasCallStack => LLVMArrayBorrow w -> LLVMArrayPerm w ->
+                       Int
 llvmArrayFindBorrow b ap =
   case findIndex (== b) (llvmArrayBorrows ap) of
     Just i -> i
     Nothing -> error "llvmArrayFindBorrow: borrow not found"
 
 -- | Remove a borrow from an 'LLVMArrayPerm'
-llvmArrayRemBorrow :: LLVMArrayBorrow w -> LLVMArrayPerm w -> LLVMArrayPerm w
+llvmArrayRemBorrow :: HasCallStack => LLVMArrayBorrow w -> LLVMArrayPerm w ->
+                      LLVMArrayPerm w
 llvmArrayRemBorrow b ap =
   ap { llvmArrayBorrows =
          deleteNth (llvmArrayFindBorrow b ap) (llvmArrayBorrows ap) }
 
 -- | Remove a sequence of borrows from an 'LLVMArrayPerm'
-llvmArrayRemBorrows :: [LLVMArrayBorrow w] -> LLVMArrayPerm w -> LLVMArrayPerm w
+llvmArrayRemBorrows :: HasCallStack => [LLVMArrayBorrow w] -> LLVMArrayPerm w ->
+                       LLVMArrayPerm w
 llvmArrayRemBorrows bs ap = foldr llvmArrayRemBorrow ap bs
 
 -- | Remove all borrows from the second array to the first, assuming the one is
 -- an offset array as in 'llvmArrayIsOffsetArray'
-llvmArrayRemArrayBorrows :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
-                            LLVMArrayPerm w -> LLVMArrayPerm w
+llvmArrayRemArrayBorrows :: HasCallStack => (1 <= w, KnownNat w) =>
+                            LLVMArrayPerm w -> LLVMArrayPerm w ->
+                            LLVMArrayPerm w
 llvmArrayRemArrayBorrows ap sub_ap
   | Just cell_num <- llvmArrayIsOffsetArray ap sub_ap =
-    llvmArrayRemBorrows
-    (map (cellOffsetLLVMArrayBorrow cell_num) (llvmArrayBorrows sub_ap))
-    ap
+    let sub_bs =
+          map (cellOffsetLLVMArrayBorrow cell_num) (llvmArrayBorrows sub_ap)
+        bs' = filter (flip notElem sub_bs) $ llvmArrayBorrows ap in
+    ap { llvmArrayBorrows = bs' }
 llvmArrayRemArrayBorrows _ _ = error "llvmArrayRemArrayBorrows"
 
 -- | Test if the borrows of an array can be permuted to another order
@@ -3937,10 +3959,23 @@ cellOffsetLLVMArrayBorrow off (RangeBorrow rng) =
 matchLLVMArrayIndex :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
                        PermExpr (BVType w) -> Maybe (LLVMArrayIndex w)
 matchLLVMArrayIndex ap o =
-    do let rel_off = bvSub o (llvmArrayOffset ap)
-       (ix, cell_off) <-
-         bvMatchFactorPlusConst (bytesToInteger $ llvmArrayStride ap) rel_off
-       return $ LLVMArrayIndex ix cell_off
+  do let rel_off = bvSub o (llvmArrayOffset ap)
+     (ix, cell_off) <-
+       bvMatchFactorPlusConst (bytesToInteger $ llvmArrayStride ap) rel_off
+     return $ LLVMArrayIndex ix cell_off
+
+-- | Test if a byte offset @o@ statically aligns with a cell boundary in an
+-- array, i.e., whether
+--
+-- > o - off = stride*cell
+--
+-- for some @cell@. Return @cell@ on success.
+matchLLVMArrayCell :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                      PermExpr (BVType w) -> Maybe (PermExpr (BVType w))
+matchLLVMArrayCell ap off
+  | Just (LLVMArrayIndex cell (BV.BV 0)) <- matchLLVMArrayIndex ap off =
+    Just cell
+matchLLVMArrayCell _ _ = Nothing
 
 -- | Return a list 'BVProp' stating that the cell(s) represented by an array
 -- borrow are in the "base" set of cells in an array, before the borrows are
@@ -3967,7 +4002,7 @@ llvmArrayBorrowsDisjoint (RangeBorrow rng) (FieldBorrow ix) =
 llvmArrayBorrowsDisjoint (RangeBorrow rng1) (RangeBorrow rng2) =
   bvPropRangesDisjoint rng1 rng2
 
--- | Return a list of propositions stating that the field(s) represented by an
+-- | Return a list of propositions stating that the cell(s) represented by an
 -- array borrow are in the set of fields of an array permission. This takes into
 -- account the current borrows on the array permission, which are fields that
 -- are /not/ currently in that array permission.
@@ -4002,9 +4037,8 @@ llvmArrayCellsInArray ap rng = llvmArrayBorrowInArray ap (RangeBorrow rng)
 llvmArrayIsOffsetArray :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
                           LLVMArrayPerm w -> Maybe (PermExpr (BVType w))
 llvmArrayIsOffsetArray ap1 ap2
-  | llvmArrayStride ap1 == llvmArrayStride ap2
-  , Just (LLVMArrayIndex cell_num (BV.BV 0)) <-
-      matchLLVMArrayIndex ap1 (llvmArrayOffset ap2) = Just cell_num
+  | llvmArrayStride ap1 == llvmArrayStride ap2 =
+    matchLLVMArrayCell ap1 (llvmArrayOffset ap2)
 llvmArrayIsOffsetArray _ _ = Nothing
 
 -- | Build a 'BVRange' for the cells of a sub-array @ap2@ in @ap1@
@@ -4036,6 +4070,25 @@ llvmArrayContainsArray ap sub_ap =
   llvmArrayCellsInArray
   (llvmArrayRemArrayBorrows ap sub_ap)
   (llvmSubArrayRange ap sub_ap)
+
+-- | Build a sub-array of an array permission at a given offset with a given
+-- length, keeping only those borrows from the original array that could (in the
+-- sense of 'bvPropCouldHold') overlap with the range of the sub-array. This
+-- means that the borrows in the returned sub-array are an over-approximation of
+-- the borrows that overlap with it, i.e., there could be borrows in the
+-- returned sub-array permission that are not in its range.
+llvmMakeSubArray :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                    PermExpr (BVType w) -> PermExpr (BVType w) ->
+                    LLVMArrayPerm w
+llvmMakeSubArray ap off len
+  | Just cell <- matchLLVMArrayCell ap off
+  , cell_rng <- BVRange cell len =
+    ap { llvmArrayOffset = off, llvmArrayLen = len,
+         llvmArrayBorrows =
+           filter (all bvPropCouldHold .
+                   llvmArrayBorrowsDisjoint (RangeBorrow cell_rng)) $
+           llvmArrayBorrows ap }
+llvmMakeSubArray _ _ _ = error "llvmMakeSubArray"
 
 -- | Test if an atomic LLVM permission potentially allows a read or write of a
 -- given offset. If so, return a list of the propositions required for the read
