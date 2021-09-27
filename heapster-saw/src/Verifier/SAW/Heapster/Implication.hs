@@ -3500,39 +3500,44 @@ implCastStackM some_eqp =
 
 -- | Introduce a proof of @x:true@ onto the top of the stack, which is the same
 -- as an empty conjunction
-introConjM :: NuMatchingAny1 r => ExprVar a -> ImplM vars s r (ps :> a) ps ()
+introConjM :: HasCallStack => NuMatchingAny1 r =>
+              ExprVar a -> ImplM vars s r (ps :> a) ps ()
 introConjM x = implSimplM Proxy (SImpl_IntroConj x)
 
 -- | Extract the @i@th atomic permission from the conjunct on the top of the
 -- stack and put it just below the top of the stack
-implExtractConjM :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] -> Int ->
+implExtractConjM :: HasCallStack => NuMatchingAny1 r =>
+                    ExprVar a -> [AtomicPerm a] -> Int ->
                     ImplM vars s r (ps :> a :> a) (ps :> a) ()
 implExtractConjM x ps i = implSimplM Proxy (SImpl_ExtractConj x ps i)
 
 -- | Extract the @i@th atomic permission from the conjunct on the top of the
 -- stack and push it to the top of the stack; i.e., call 'implExtractConjM' and
 -- then swap the top two stack elements
-implExtractSwapConjM :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] -> Int ->
+implExtractSwapConjM :: HasCallStack => NuMatchingAny1 r =>
+                        ExprVar a -> [AtomicPerm a] -> Int ->
                         ImplM vars s r (ps :> a :> a) (ps :> a) ()
 implExtractSwapConjM x ps i =
   implExtractConjM x ps i >>>
   implSwapM x (ValPerm_Conj1 $ ps!!i) x (ValPerm_Conj $ deleteNth i ps)
 
 -- | Combine the top two conjunctive permissions on the stack
-implAppendConjsM :: NuMatchingAny1 r => ExprVar a ->
+implAppendConjsM :: HasCallStack => NuMatchingAny1 r => ExprVar a ->
                     [AtomicPerm a] -> [AtomicPerm a] ->
                     ImplM vars s r (ps :> a) (ps :> a :> a) ()
 implAppendConjsM x ps1 ps2 = implSimplM Proxy (SImpl_AppendConjs x ps1 ps2)
 
 -- | Split the conjuctive permissions on the top of the stack into the first @i@
 -- and the remaining conjuncts after those
-implSplitConjsM :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] -> Int ->
+implSplitConjsM :: HasCallStack => NuMatchingAny1 r =>
+                   ExprVar a -> [AtomicPerm a] -> Int ->
                    ImplM vars s r (ps :> a :> a) (ps :> a) ()
 implSplitConjsM x ps i = implSimplM Proxy (SImpl_SplitConjs x ps i)
 
 -- | Split the conjuctive permissions on the top of the stack into the first @i@
 -- and the remaining conjuncts after those, and then swap them
-implSplitSwapConjsM :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] -> Int ->
+implSplitSwapConjsM :: HasCallStack => NuMatchingAny1 r =>
+                       ExprVar a -> [AtomicPerm a] -> Int ->
                        ImplM vars s r (ps :> a :> a) (ps :> a) ()
 implSplitSwapConjsM x ps i =
   implSplitConjsM x ps i >>>
@@ -3542,14 +3547,16 @@ implSplitSwapConjsM x ps i =
 -- assuming that conjunction contains the given atomic permissions and that the
 -- given conjunct is copyable, and put the copied atomic permission just below
 -- the top of the stack
-implCopyConjM :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] -> Int ->
+implCopyConjM :: HasCallStack => NuMatchingAny1 r =>
+                 ExprVar a -> [AtomicPerm a] -> Int ->
                  ImplM vars s r (ps :> a :> a) (ps :> a) ()
 implCopyConjM x ps i = implSimplM Proxy (SImpl_CopyConj x ps i)
 
 -- | Copy the @i@th atomic permission in the conjunct on the top of the stack
 -- and push it to the top of the stack; i.e., call 'implCopyConjM' and then swap
 -- the top two stack elements
-implCopySwapConjM :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] -> Int ->
+implCopySwapConjM :: HasCallStack => NuMatchingAny1 r =>
+                     ExprVar a -> [AtomicPerm a] -> Int ->
                      ImplM vars s r (ps :> a :> a) (ps :> a) ()
 implCopySwapConjM x ps i =
   implCopyConjM x ps i >>>
@@ -3559,7 +3566,8 @@ implCopySwapConjM x ps i =
 -- top of the stack, leaving the extracted or copied permission just below the
 -- top of the stack and the remaining other permissions on top of the stack.
 -- Return the list of conjuncts remaining on top of the stack.
-implGetConjM :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] -> Int ->
+implGetConjM :: HasCallStack => NuMatchingAny1 r =>
+                ExprVar a -> [AtomicPerm a] -> Int ->
                 ImplM vars s r (ps :> a :> a) (ps :> a) [AtomicPerm a]
 implGetConjM x ps i =
   if atomicPermIsCopyable (ps!!i) then
@@ -3571,7 +3579,8 @@ implGetConjM x ps i =
 -- top of the stack, leaving the extracted or copied permission on top of the
 -- stack and the remaining other permissions just below it. Return the list of
 -- conjuncts remaining just below the top of the stack.
-implGetSwapConjM :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] -> Int ->
+implGetSwapConjM :: HasCallStack => NuMatchingAny1 r =>
+                    ExprVar a -> [AtomicPerm a] -> Int ->
                     ImplM vars s r (ps :> a :> a) (ps :> a) [AtomicPerm a]
 implGetSwapConjM x ps i =
   if atomicPermIsCopyable (ps!!i) then
@@ -3581,7 +3590,8 @@ implGetSwapConjM x ps i =
 
 -- | Either extract or copy the @i@th atomic permission in the conjunct on the
 -- top of the stack, popping the remaining permissions
-implGetPopConjM :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] -> Int ->
+implGetPopConjM :: HasCallStack => NuMatchingAny1 r =>
+                   ExprVar a -> [AtomicPerm a] -> Int ->
                    ImplM vars s r (ps :> a) (ps :> a) ()
 implGetPopConjM x ps i =
   if atomicPermIsCopyable (ps!!i) then
@@ -3593,14 +3603,15 @@ implGetPopConjM x ps i =
 
 -- | If the top element of the stack is copyable, then copy it and pop it, and
 -- otherwise just leave it alone on top of the stack
-implMaybeCopyPopM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+implMaybeCopyPopM :: HasCallStack => NuMatchingAny1 r =>
+                     ExprVar a -> ValuePerm a ->
                      ImplM vars s r (ps :> a) (ps :> a) ()
 implMaybeCopyPopM x p | permIsCopyable p = implCopyM x p >>> implPopM x p
 implMaybeCopyPopM _ _ = pure ()
 
 -- | Insert an atomic permission below the top of the stack at the @i@th
 -- position in the conjunct on the top of the stack, where @i@ must be between
-implInsertConjM :: NuMatchingAny1 r => ExprVar a ->
+implInsertConjM :: HasCallStack => NuMatchingAny1 r => ExprVar a ->
                    AtomicPerm a -> [AtomicPerm a] -> Int ->
                    ImplM vars s r (ps :> a) (ps :> a :> a) ()
 implInsertConjM x p ps i = implSimplM Proxy (SImpl_InsertConj x p ps i)
@@ -3608,7 +3619,7 @@ implInsertConjM x p ps i = implSimplM Proxy (SImpl_InsertConj x p ps i)
 -- | Insert an atomic permission on the top of the stack into the @i@th position
 -- in the conjunct below it on the of the stack; that is, swap the top two
 -- permissions and call 'implInsertConjM'
-implSwapInsertConjM :: NuMatchingAny1 r => ExprVar a ->
+implSwapInsertConjM :: HasCallStack => NuMatchingAny1 r => ExprVar a ->
                        AtomicPerm a -> [AtomicPerm a] -> Int ->
                        ImplM vars s r (ps :> a) (ps :> a :> a) ()
 implSwapInsertConjM x p ps i =
@@ -5739,8 +5750,8 @@ proveVarLLVMBlocks1 x ps psubst mb_bps_in@(mb_bp:_)
 -- length 0 for this case, since eliminating on the left does not help prove
 -- these permissions.
 proveVarLLVMBlocks1 x ps psubst mb_bps_in@(mb_bp:_)
-  | Just off <- partialSubst psubst $ fmap llvmBlockOffset mb_bp
-  , Just len <- partialSubst psubst $ fmap llvmBlockLen mb_bp
+  | Just off <- partialSubst psubst $ mbLLVMBlockOffset mb_bp
+  , Just len <- partialSubst psubst $ mbLLVMBlockLen mb_bp
   , not (bvIsZero len)
   , rng <- BVRange off len
   , Just i <- findIndex (\case
@@ -5756,7 +5767,7 @@ proveVarLLVMBlocks1 x ps psubst mb_bps_in@(mb_bp:_)
 -- operates by induction on the shape
 proveVarLLVMBlocks1 x ps psubst (mb_bp:mb_bps) =
   proveVarLLVMBlocks2 x ps psubst mb_bp (mbMatch $
-                                         fmap llvmBlockShape mb_bp) mb_bps
+                                         mbLLVMBlockShape mb_bp) mb_bps
 
 
 -- | Stage 2 of 'proveVarLLVMBlocks'. See that comments on that function. The
@@ -6044,31 +6055,52 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     implSwapInsertConjM x (Perm_LLVMBlock bp) ps'' 0
 
 
--- If proving a tagged union shape where we have an equality permission on the
--- left that matches one of the disjuncts, prove that disjunct and or it up with
--- the other disjuncts
+-- If proving a tagged union shape, first prove an equality permission for the
+-- tag and then use that equality permission to 
 proveVarLLVMBlocks2 x ps psubst mb_bp _ mb_bps
-  | [nuMP| Just mb_tag_u |] <- mbMatch $ fmap (asTaggedUnionShape
-                                               . llvmBlockShape) mb_bp
-  , Just off <- partialSubst psubst $ fmap llvmBlockOffset mb_bp
-  , Just i <- mbLift $ fmap (findTaggedUnionIndexForPerms off ps) mb_tag_u
-  , mb_shs <- fmap taggedUnionDisjs mb_tag_u
-  , mb_sh <- fmap (!!i) mb_shs =
+  | Just [nuP| SomeTaggedUnionShape mb_tag_u |] <- mbLLVMBlockToTaggedUnion mb_bp
+  , mb_shs <- mbTaggedUnionDisjs mb_tag_u
+  , mb_tag_fp <- mbTaggedUnionExTagPerm mb_bp
+  , Just off <- partialSubst psubst $ mbLLVMBlockOffset mb_bp =
 
-    -- Recursively prove the ith disjunct
-    proveVarLLVMBlocks x ps psubst
+    -- Prove permission x:ptr((R,off) |-> eq(z)) with existential variable z to
+    -- get the tag value for the tagged union, then take it off the stack
+    withExtVarsM (proveVarLLVMField x ps off mb_tag_fp) >>>= \((), e_tag) ->
+    getTopDistPerm x >>>= \p' ->
+    recombinePerm x p' >>>
+
+    -- Find the disjunct corresponding to e_tag, if there is one; otherwise, we
+    -- don't know which disjunct to use, so return each of them in turn,
+    -- combining them with implCatchM
+    (getEqualsExpr e_tag >>>= \case
+        (bvMatchConst -> Just tag_bv)
+          | Just i <- mbFindTaggedUnionIndex tag_bv mb_tag_u -> return i
+        _ ->
+          let len =
+                mbLift $ mbMapCl $(mkClosed [| length .
+                                             taggedUnionDisjs |]) mb_tag_u in
+          foldr1 implCatchM $ map return [0..len-1]) >>>= \i ->
+
+    -- Get the permissions we now have for x and push them back to the top of
+    -- the stack
+    getAtomicPerms x >>>= \ps' ->
+    implPushM x (ValPerm_Conj ps') >>>
+
+    -- Recursively prove the ith disjunct and all the rest of mb_bps
+    let mb_sh = mbTaggedUnionNthDisj i mb_tag_u in
+    proveVarLLVMBlocks x ps' psubst
     (mbMap2 (\bp sh -> bp { llvmBlockShape = sh }) mb_bp mb_sh : mb_bps) >>>
 
     -- Move the block permission with shape mb_sh to the top of the stack
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
-    implExtractSwapConjM x ps' 0 >>>
+    getTopDistPerm x >>>= \(ValPerm_Conj ps'') ->
+    implExtractSwapConjM x ps'' 0 >>>
 
     -- Finally, weaken the block permission to be the desired tagged union
     -- shape, and move it back into position
     partialSubstForceM mb_shs "proveVarLLVMBlock" >>>= \shs ->
     partialSubstForceM mb_bp "proveVarLLVMBlock" >>>= \bp ->
     implIntroOrShapeMultiM x bp shs i >>>
-    implSwapInsertConjM x (Perm_LLVMBlock bp) (tail ps') 0
+    implSwapInsertConjM x (Perm_LLVMBlock bp) (tail ps'') 0
 
 
 -- If proving a disjunctive shape, try to prove one of the disjuncts

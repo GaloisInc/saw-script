@@ -31,7 +31,6 @@ import Prelude hiding (pred)
 
 import Data.Char (isDigit)
 import Data.Maybe
-import Data.Foldable (asum)
 import Data.List hiding (sort)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NonEmpty
@@ -1796,6 +1795,19 @@ data LLVMBlockPerm w =
 -- | Get the rw-modality-in-binding of a block permission in binding
 mbLLVMBlockRW :: Mb ctx (LLVMBlockPerm w) -> Mb ctx (PermExpr RWModalityType)
 mbLLVMBlockRW = mbMapCl $(mkClosed [| llvmBlockRW |])
+
+-- | Get the offset-in-binding of a block permission in binding
+mbLLVMBlockOffset :: Mb ctx (LLVMBlockPerm w) -> Mb ctx (PermExpr (BVType w))
+mbLLVMBlockOffset = mbMapCl $(mkClosed [| llvmBlockOffset |])
+
+-- | Get the length-in-binding of a block permission in binding
+mbLLVMBlockLen :: Mb ctx (LLVMBlockPerm w) -> Mb ctx (PermExpr (BVType w))
+mbLLVMBlockLen = mbMapCl $(mkClosed [| llvmBlockLen |])
+
+-- | Get the shape-in-binding of a block permission in binding
+mbLLVMBlockShape :: Mb ctx (LLVMBlockPerm w) ->
+                    Mb ctx (PermExpr (LLVMShapeType w))
+mbLLVMBlockShape = mbMapCl $(mkClosed [| llvmBlockShape |])
 
 -- | An LLVM shape for a single pointer field of unknown size
 data LLVMFieldShape w =
@@ -3745,17 +3757,48 @@ remLLVMBLockPermRange rng bp =
 -- determines which disjunct should be used. These shapes are represented as a
 -- list of the disjuncts, which are tagged with the bitvector values @bvi@ used
 -- in the equality permission.
-data TaggedUnionShape w
+data TaggedUnionShape w sz
+  = TaggedUnionShape (NonEmpty (BV sz, PermExpr (LLVMShapeType w)))
+
+-- | A 'TaggedUnionShape' with existentially quantified tag size
+data SomeTaggedUnionShape w
   = forall sz. (1 <= sz, KnownNat sz) =>
-    TaggedUnionShape (NonEmpty (BV sz, PermExpr (LLVMShapeType w)))
+    SomeTaggedUnionShape (TaggedUnionShape w sz)
 
 -- | Extract the disjunctive shapes from a 'TaggedUnionShape'
-taggedUnionDisjs :: TaggedUnionShape w -> [PermExpr (LLVMShapeType w)]
+taggedUnionDisjs :: TaggedUnionShape w sz -> [PermExpr (LLVMShapeType w)]
 taggedUnionDisjs (TaggedUnionShape disjs) =
   map snd $ NonEmpty.toList disjs
 
+-- | Extract the disjunctive shapes from a 'TaggedUnionShape' in a binding
+mbTaggedUnionDisjs :: Mb ctx (TaggedUnionShape w sz) ->
+                      Mb ctx [PermExpr (LLVMShapeType w)]
+mbTaggedUnionDisjs = mbMapCl $(mkClosed [| taggedUnionDisjs |])
+
+-- | Get the @n@th disjunct of a 'TaggedUnionShape' in a binding
+mbTaggedUnionNthDisj :: Int -> Mb ctx (TaggedUnionShape w sz) ->
+                        Mb ctx (PermExpr (LLVMShapeType w))
+mbTaggedUnionNthDisj n_top =
+  mbMapCl ($(mkClosed [| \n -> (!!n) . taggedUnionDisjs |])
+           `clApply` toClosed n_top)
+
+-- | Get the tags from a 'TaggedUnionShape'
+taggedUnionTags :: TaggedUnionShape w sz -> [BV sz]
+taggedUnionTags (TaggedUnionShape disjs) = map fst $ NonEmpty.toList disjs
+
+-- | Build a 'TaggedUnionShape' with a single disjunct
+taggedUnionSingle :: BV sz -> PermExpr (LLVMShapeType w) ->
+                     TaggedUnionShape w sz
+taggedUnionSingle tag sh = TaggedUnionShape ((tag,sh) :| [])
+
+-- | Add a disjunct to the front of a 'TaggedUnionShape'
+taggedUnionCons :: BV sz -> PermExpr (LLVMShapeType w) ->
+                   TaggedUnionShape w sz -> TaggedUnionShape w sz
+taggedUnionCons tag sh (TaggedUnionShape disjs) =
+  TaggedUnionShape $ NonEmpty.cons (tag,sh) disjs
+
 -- | Convert a 'TaggedUnionShape' to the shape it represents
-taggedUnionToShape :: TaggedUnionShape w -> PermExpr (LLVMShapeType w)
+taggedUnionToShape :: TaggedUnionShape w sz -> PermExpr (LLVMShapeType w)
 taggedUnionToShape (TaggedUnionShape disjs) =
   foldr1 PExpr_OrShape $ NonEmpty.map snd disjs
 
@@ -3780,17 +3823,56 @@ getShapeBVTag _ = Nothing
 
 -- | Test if a shape is a tagged union shape and, if so, convert it to the
 -- 'TaggedUnionShape' representation
-asTaggedUnionShape :: PermExpr (LLVMShapeType w) -> Maybe (TaggedUnionShape w)
+asTaggedUnionShape :: PermExpr (LLVMShapeType w) ->
+                      Maybe (SomeTaggedUnionShape w)
 asTaggedUnionShape (PExpr_OrShape sh1 sh2)
-  | Just (SomeBV bv1) <- getShapeBVTag sh1
-  , Just (TaggedUnionShape disjs2@((bv2,_) :| _)) <- asTaggedUnionShape sh2
-  , Just Refl <- testEquality (natRepr bv1) (natRepr bv2) =
-    Just (TaggedUnionShape (NonEmpty.cons (bv1,sh1) disjs2))
+  | Just (SomeBV tag1) <- getShapeBVTag sh1
+  , Just (SomeTaggedUnionShape tag_u2) <- asTaggedUnionShape sh2
+  , Just Refl <- testEquality (natRepr tag1) (natRepr tag_u2) =
+    Just $ SomeTaggedUnionShape $ taggedUnionCons tag1 sh1 tag_u2
 asTaggedUnionShape sh
-  | Just (SomeBV bv) <- getShapeBVTag sh =
-    Just (TaggedUnionShape ((bv,sh) :| []))
+  | Just (SomeBV tag) <- getShapeBVTag sh =
+    Just $ SomeTaggedUnionShape $ taggedUnionSingle tag sh
 asTaggedUnionShape _ = Nothing
 
+-- | Try to convert a @memblock@ permission in a binding to a tagged union shape
+-- in a binding
+mbLLVMBlockToTaggedUnion :: Mb ctx (LLVMBlockPerm w) ->
+                            Maybe (Mb ctx (SomeTaggedUnionShape w))
+mbLLVMBlockToTaggedUnion =
+  mbMaybe . mbMapCl $(mkClosed [| asTaggedUnionShape . llvmBlockShape |])
+
+-- | Convert a @memblock@ permission with a union shape to a field permission
+-- with an equality permission @eq(z)@ with evar @z@ for the tag
+taggedUnionExTagPerm :: (1 <= sz, KnownNat sz) => LLVMBlockPerm w ->
+                        Binding (BVType sz) (LLVMFieldPerm w sz)
+taggedUnionExTagPerm bp =
+  nu $ \z -> LLVMFieldPerm { llvmFieldRW = llvmBlockRW bp,
+                             llvmFieldLifetime = llvmBlockLifetime bp,
+                             llvmFieldOffset = llvmBlockOffset bp,
+                             llvmFieldContents =
+                               ValPerm_Eq (PExpr_LLVMWord $ PExpr_Var z) }
+
+-- | Convert a tagged union shape in a binding to
+mbTaggedUnionExTagPerm :: (1 <= sz, KnownNat sz) => Mb ctx (LLVMBlockPerm w) ->
+                          Mb (ctx :> BVType sz) (LLVMFieldPerm w sz)
+mbTaggedUnionExTagPerm =
+  mbCombine RL.typeCtxProxies . mbMapCl $(mkClosed [| taggedUnionExTagPerm |])
+
+-- | Find a disjunct in a 'TaggedUnionShape' with the given tag
+findTaggedUnionIndex :: BV.BV sz -> TaggedUnionShape w sz -> Maybe Int
+findTaggedUnionIndex tag_bv (TaggedUnionShape disjs) =
+  findIndex (== tag_bv) $ map fst $ NonEmpty.toList disjs
+
+-- | Find a disjunct in a 'TaggedUnionShape' in a binding with the given tag
+mbFindTaggedUnionIndex :: BV.BV sz -> Mb ctx (TaggedUnionShape w sz) ->
+                          Maybe Int
+mbFindTaggedUnionIndex tag_bv =
+  mbLift . mbMapCl ($(mkClosed [| findTaggedUnionIndex |])
+                    `clApply` toClosed tag_bv)
+
+-- FIXME: delete these?
+{-
 -- | Find a disjunct in a 'TaggedUnionShape' that could be proven at the given
 -- offset from the given atomic permission, by checking if it is a field or
 -- block permission containing an equality permission to one of the tags. If
@@ -3817,6 +3899,7 @@ findTaggedUnionIndexForPerms :: PermExpr (BVType w) ->
                                 TaggedUnionShape w -> Maybe Int
 findTaggedUnionIndexForPerms off ps tag_un =
   asum $ map (\p -> findTaggedUnionIndexForPerm off p tag_un) ps
+-}
 
 
 -- | Convert an array cell number @cell@ to the byte offset for that cell, given
@@ -6408,7 +6491,8 @@ data PermEnv = PermEnv {
   permEnvHints :: [Hint]
   }
 
-$(mkNuMatching [t| forall w. TaggedUnionShape w |])
+$(mkNuMatching [t| forall w sz. TaggedUnionShape w sz |])
+$(mkNuMatching [t| forall w. SomeTaggedUnionShape w |])
 $(mkNuMatching [t| forall ctx. PermVarSubst ctx |])
 $(mkNuMatching [t| PermEnvFunEntry |])
 $(mkNuMatching [t| SomeNamedPerm |])
