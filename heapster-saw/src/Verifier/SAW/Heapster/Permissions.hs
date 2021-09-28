@@ -719,21 +719,6 @@ findAtomicPermInList x pred plist =
   foldPermListAtomic x (\p rest ->
                          if pred p then Just p else rest) Nothing plist
 
--- FIXME: move this down below the mkNuMatching calls or move
--- llvmAtomicPermToBlock up before them... or just remove this function
-{-
--- | Find a permission on a specific variable in a permission list that is
--- equivalent to a block permission
-findBlockPermInList :: ExprVar (LLVMPointerType w) ->
-                       (LLVMBlockPerm w -> Bool) ->
-                       PermExpr PermListType -> Maybe (LLVMBlockPerm w)
-findBlockPermInList x pred plist =
-  foldPermListAtomic x (\p rest ->
-                         case llvmAtomicPermToBlock p of
-                           Just bp | pred bp -> Just bp
-                           _ -> rest) Nothing plist
--}
-
 -- | A bitvector variable, possibly multiplied by a constant
 data BVFactor w where
   -- | A variable of type @'BVType' w@ multiplied by a constant @i@, which
@@ -1250,6 +1235,54 @@ bvRangeSuffix off' (BVRange off len) =
 bvRangeSub :: (1 <= w, KnownNat w) => BVRange w -> PermExpr (BVType w) ->
               BVRange w
 bvRangeSub (BVRange off len) x = BVRange (bvSub off x) len
+
+-- | Delete all offsets from the first 'BVRange' that are definitely (in the
+-- sense of 'bvPropHolds') in the second, returning a list of 'BVRange's that
+-- together describe the remaining offsets
+bvRangeDelete :: (1 <= w, KnownNat w) => BVRange w -> BVRange w -> [BVRange w]
+bvRangeDelete rng1 rng2
+  -- If rng1 is a subset of rng2, return the empty set
+  | bvRangeSubset rng1 rng2 = []
+bvRangeDelete rng1 rng2
+  -- If both endpoints of rng1 are in rng2 but it is not a subset of rng2, then
+  -- one of the ranges wrapped, and we return the range from the end of rng2 to
+  -- its beginning again
+  | bvInRange (bvRangeOffset rng1) rng2 &&
+    bvInRange (bvRangeEnd rng1) rng2 =
+    [BVRange (bvRangeEnd rng2) (bvSub (bvInt 0) (bvRangeLength rng2))]
+bvRangeDelete rng1 rng2
+  -- If the beginning of rng1 is in rng2 but the above cases don't hold, then
+  -- rng2 removes some prefix of rng1, so return the range from the end of rng2
+  -- to the end of rng1
+  | bvInRange (bvRangeOffset rng1) rng2 =
+    [bvRangeSuffix (bvRangeEnd rng2) rng1]
+bvRangeDelete rng1 rng2
+  -- If the end of rng1 is in rng2 but the above cases don't hold, then rng2
+  -- removes some suffix of rng1, so return the range from the beginnning of
+  -- rng1 to the beginning of rng2
+  | bvInRange (bvRangeEnd rng1) rng2 =
+    [BVRange (bvRangeOffset rng1)
+     (bvSub (bvRangeOffset rng2) (bvRangeOffset rng1))]
+bvRangeDelete rng1 rng2
+  -- If we get here then both endpoints of rng1 are not in rng2, but rng2 sits
+  -- inside of rng1, so return the prefix of rng1 before rng2 and the suffix of
+  -- rng1 after rng2
+  | off1 <- bvRangeOffset rng1
+  , off2 <- bvRangeOffset rng2
+  , end1 <- bvRangeEnd rng1
+  , end2 <- bvRangeEnd rng2
+  , bvInRange off2 rng1 =
+    [BVRange off1 (bvSub off2 off1), BVRange end2 (bvSub end1 end2)]
+bvRangeDelete rng1 _ =
+  -- If we get here, then rng2 is completely disjoint from rng1, so return rng1
+  [rng1]
+
+-- | Delete all offsets in any of a list of ranges from a range, yielding a list
+-- of ranges of the remaining offsets
+bvRangesDelete :: (1 <= w, KnownNat w) => BVRange w -> [BVRange w] ->
+                  [BVRange w]
+bvRangesDelete rng_top =
+  foldr (\rng_del rngs -> concatMap (flip bvRangeDelete rng_del) rngs) [rng_top]
 
 -- | Build a bitvector expression from an integer
 bvInt :: (1 <= w, KnownNat w) => Integer -> PermExpr (BVType w)
@@ -1796,6 +1829,11 @@ data LLVMBlockPerm w =
 mbLLVMBlockRW :: Mb ctx (LLVMBlockPerm w) -> Mb ctx (PermExpr RWModalityType)
 mbLLVMBlockRW = mbMapCl $(mkClosed [| llvmBlockRW |])
 
+-- | Get the lifetime-in-binding of a block permission in binding
+mbLLVMBlockLifetime :: Mb ctx (LLVMBlockPerm w) ->
+                       Mb ctx (PermExpr LifetimeType)
+mbLLVMBlockLifetime = mbMapCl $(mkClosed [| llvmBlockLifetime |])
+
 -- | Get the offset-in-binding of a block permission in binding
 mbLLVMBlockOffset :: Mb ctx (LLVMBlockPerm w) -> Mb ctx (PermExpr (BVType w))
 mbLLVMBlockOffset = mbMapCl $(mkClosed [| llvmBlockOffset |])
@@ -1897,6 +1935,54 @@ lownedPermVar _ = Nothing
 lownedPermPerm :: LOwnedPerm a -> ValuePerm a
 lownedPermPerm = exprAndPermPerm . lownedPermExprAndPerm
 
+-- | Convert the permission part of an 'LOwnedPerm' to a block permission on a
+-- variable, if possible
+lownedPermVarBlockPerm :: LOwnedPerm a -> Maybe (ExprVar a, SomeLLVMBlockPerm a)
+lownedPermVarBlockPerm lop
+  | Just (x, perm_off) <- asVarOffset (lownedPermExpr lop)
+  , ValPerm_Conj1 p <- lownedPermPerm lop
+  , Just (SomeLLVMBlockPerm bp) <- llvmAtomicPermToSomeBlock p
+  , off <- llvmPermOffsetExpr perm_off =
+    Just (x, SomeLLVMBlockPerm (offsetLLVMBlockPerm off bp))
+lownedPermVarBlockPerm _ = Nothing
+
+-- | Convert the permission part of an 'LOwnedPerm' in a binding to a block
+-- permission on a variable in a binding, if possible
+mbLownedPermVarBlockPerm :: Mb ctx (LOwnedPerm a) ->
+                            Maybe (Mb ctx (ExprVar a, SomeLLVMBlockPerm a))
+mbLownedPermVarBlockPerm =
+  mbMaybe . mbMapCl $(mkClosed [| lownedPermVarBlockPerm |])
+
+-- | Get the read/write and lifetime modalities of an 'LOwnedPerm' of LLVM type
+llvmLownedPermModalities :: LOwnedPerm (LLVMPointerType w) ->
+                            (PermExpr RWModalityType, PermExpr LifetimeType)
+llvmLownedPermModalities (LOwnedPermField _ fp) =
+  (llvmFieldRW fp, llvmFieldLifetime fp)
+llvmLownedPermModalities (LOwnedPermArray _ ap) =
+  (llvmArrayRW ap, llvmArrayLifetime ap)
+llvmLownedPermModalities (LOwnedPermBlock _ bp) =
+  (llvmBlockRW bp, llvmBlockLifetime bp)
+
+-- | Find an 'LOwnedPerm' for a particular variable in an 'LOwnedPerms' list
+findLOwnedPermForVar :: ExprVar a -> LOwnedPerms ps -> Maybe (LOwnedPerm a)
+findLOwnedPermForVar _ MNil = Nothing
+findLOwnedPermForVar x (_ :>: lop)
+  | Just (y, _) <- asVarOffset (lownedPermExpr lop)
+  , Just Refl <- testEquality x y = Just lop
+findLOwnedPermForVar x (lops :>: _) = findLOwnedPermForVar x lops
+
+-- | Find all 'LOwnedPerm's for a specific variable of LLVM pointer type in an
+-- 'LOwnedPerms' list, and return the ranges of offsets that each of those cover
+lownedPermsOffsetsForLLVMVar :: (1 <= w, KnownNat w) =>
+                                ExprVar (LLVMPointerType w) -> LOwnedPerms ps ->
+                                [BVRange w]
+lownedPermsOffsetsForLLVMVar _ MNil = []
+lownedPermsOffsetsForLLVMVar x (lops :>: lop)
+  | Just (y, SomeLLVMBlockPerm bp) <- lownedPermVarBlockPerm lop
+  , Just Refl <- testEquality x y =
+    llvmBlockRange bp : lownedPermsOffsetsForLLVMVar x lops
+lownedPermsOffsetsForLLVMVar x (lops :>: _) =
+  lownedPermsOffsetsForLLVMVar x lops
 
 -- | A function permission is a set of input and output permissions inside a
 -- context of ghost variables
@@ -2157,6 +2243,12 @@ mkLLVMPermOffset :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
                     PermOffset (LLVMPointerType w)
 mkLLVMPermOffset off | bvIsZero off = NoPermOffset
 mkLLVMPermOffset off = LLVMPermOffset off
+
+-- | Extract a bitvector offset expression from a 'PermOffset' of pointer type
+llvmPermOffsetExpr :: (1 <= w, KnownNat w) => PermOffset (LLVMPointerType w) ->
+                      PermExpr (BVType w)
+llvmPermOffsetExpr NoPermOffset = bvInt 0
+llvmPermOffsetExpr (LLVMPermOffset e) = e
 
 -- | Test two 'PermOffset's for semantic, not just syntactic, equality
 offsetsEq :: PermOffset a -> PermOffset a -> Bool
@@ -2903,99 +2995,6 @@ instance PermPrettyF ExprAndPerm where
   permPrettyMF = permPrettyM
 
 
-$(mkNuMatching [t| forall a . PermExpr a |])
-$(mkNuMatching [t| forall a . BVFactor a |])
-$(mkNuMatching [t| forall w. BVRange w |])
-$(mkNuMatching [t| forall w. BVProp w |])
-$(mkNuMatching [t| forall a . AtomicPerm a |])
-$(mkNuMatching [t| forall a . ValuePerm a |])
--- $(mkNuMatching [t| forall as. ValuePerms as |])
-$(mkNuMatching [t| forall a . VarAndPerm a |])
-
-instance NuMatchingAny1 PermExpr where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 ValuePerm where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 VarAndPerm where
-  nuMatchingAny1Proof = nuMatchingProof
-
-$(mkNuMatching [t| forall w sz . LLVMFieldPerm w sz |])
-$(mkNuMatching [t| forall w . LLVMArrayPerm w |])
-$(mkNuMatching [t| forall w . LLVMBlockPerm w |])
-$(mkNuMatching [t| RWModality |])
-$(mkNuMatching [t| forall w . LLVMArrayIndex w |])
-$(mkNuMatching [t| forall w . LLVMArrayBorrow w |])
-$(mkNuMatching [t| forall w . LLVMFieldShape w |])
-$(mkNuMatching [t| forall w . LOwnedPerm w |])
-$(mkNuMatching [t| forall ghosts args ret. FunPerm ghosts args ret |])
-$(mkNuMatching [t| forall args ret. SomeFunPerm args ret |])
-$(mkNuMatching [t| forall ns. NameSortRepr ns |])
-$(mkNuMatching [t| forall ns args a. NameReachConstr ns args a |])
-$(mkNuMatching [t| forall ns args a. NamedPermName ns args a |])
-$(mkNuMatching [t| SomeNamedPermName |])
-$(mkNuMatching [t| forall b args w. NamedShape b args w |])
-$(mkNuMatching [t| forall b args w. NamedShapeBody b args w |])
-$(mkNuMatching [t| forall a. PermOffset a |])
-$(mkNuMatching [t| forall ns args a. NamedPerm ns args a |])
-$(mkNuMatching [t| forall b args a. OpaquePerm b args a |])
-$(mkNuMatching [t| forall args a reach. ReachMethods args a reach |])
-$(mkNuMatching [t| forall b reach args a. RecPerm b reach args a |])
-$(mkNuMatching [t| forall b args a. DefinedPerm b args a |])
-$(mkNuMatching [t| forall args a. LifetimeFunctor args a |])
-$(mkNuMatching [t| forall ps. LifetimeCurrentPerms ps |])
-
-
-
-instance NuMatchingAny1 LOwnedPerm where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 DistPerms where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance Liftable RWModality where
-  mbLift mb_rw = case mbMatch mb_rw of
-    [nuMP| Write |] -> Write
-    [nuMP| Read |] -> Read
-
-instance Closable RWModality where
-  toClosed Write = $(mkClosed [| Write |])
-  toClosed Read = $(mkClosed [| Read |])
-
-instance Closable (NameSortRepr ns) where
-  toClosed (DefinedSortRepr b) =
-    $(mkClosed [| DefinedSortRepr |]) `clApply` toClosed b
-  toClosed (OpaqueSortRepr b) =
-    $(mkClosed [| OpaqueSortRepr |]) `clApply` toClosed b
-  toClosed (RecursiveSortRepr b reach) =
-    $(mkClosed [| RecursiveSortRepr |])
-    `clApply` toClosed b `clApply` toClosed reach
-
-instance Liftable (NameSortRepr ns) where
-  mbLift = unClosed . mbLift . fmap toClosed
-
-instance Closable (NameReachConstr ns args a) where
-  toClosed NameReachConstr = $(mkClosed [| NameReachConstr |])
-  toClosed NameNonReachConstr = $(mkClosed [| NameNonReachConstr |])
-
-instance Liftable (NameReachConstr ns args a) where
-  mbLift = unClosed . mbLift . fmap toClosed
-
-instance Liftable (NamedPermName ns args a) where
-  mbLift (mbMatch -> [nuMP| NamedPermName n tp args ns r |]) =
-    NamedPermName (mbLift n) (mbLift tp) (mbLift args) (mbLift ns) (mbLift r)
-
-instance Liftable SomeNamedPermName where
-  mbLift (mbMatch -> [nuMP| SomeNamedPermName rpn |]) =
-    SomeNamedPermName $ mbLift rpn
-
-instance Liftable (ReachMethods args a reach) where
-  mbLift mb_x = case mbMatch mb_x of
-    [nuMP| ReachMethods transIdent |] ->
-      ReachMethods (mbLift transIdent)
-    [nuMP| NoReachMethods |] -> NoReachMethods
-
 -- | Embed a 'ValuePerm' in a 'PermExpr' - like 'PExpr_ValPerm' but maps
 -- 'ValPerm_Var's to 'PExpr_Var's
 permToExpr :: ValuePerm a -> PermExpr (ValuePermType a)
@@ -3444,13 +3443,6 @@ llvmAtomicPermToSomeBlock (Perm_LLVMBlock bp) =
   Just $ SomeLLVMBlockPerm $ bp
 llvmAtomicPermToSomeBlock _ = Nothing
 
--- | Get the lifetime of an atomic permission, if it has one
-llvmAtomicPermLifetime :: AtomicPerm a -> Maybe (PermExpr LifetimeType)
-llvmAtomicPermLifetime (llvmAtomicPermToSomeBlock ->
-                        Just (SomeLLVMBlockPerm bp)) =
-  Just $ llvmBlockLifetime bp
-llvmAtomicPermLifetime _ = Nothing
-
 -- | Get the offset of an atomic permission, if it has one
 llvmAtomicPermOffset :: AtomicPerm (LLVMPointerType w) ->
                         Maybe (PermExpr (BVType w))
@@ -3469,6 +3461,11 @@ llvmAtomicPermRange p = fmap llvmBlockRange $ llvmAtomicPermToBlock p
 -- | Get the range of offsets represented by an 'LLVMBlockPerm'
 llvmBlockRange :: LLVMBlockPerm w -> BVRange w
 llvmBlockRange bp = BVRange (llvmBlockOffset bp) (llvmBlockLen bp)
+
+-- | Set the range of an 'LLVMBlock'
+llvmBlockSetRange :: LLVMBlockPerm w -> BVRange w -> LLVMBlockPerm w
+llvmBlockSetRange bp (BVRange off len) =
+  bp { llvmBlockOffset = off, llvmBlockLen = len }
 
 -- | Get the ending offset of a block permission
 llvmBlockEndOffset :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
@@ -6407,6 +6404,99 @@ instance AbstractNamedShape w (FunPerm ghosts args ret) where
   abstractNSM (FunPerm ghosts args ret perms_in perms_out) =
     mbMap2 (FunPerm ghosts args ret) <$> abstractNSM perms_in
                                      <*> abstractNSM perms_out
+
+
+$(mkNuMatching [t| forall a . PermExpr a |])
+$(mkNuMatching [t| forall a . BVFactor a |])
+$(mkNuMatching [t| forall w. BVRange w |])
+$(mkNuMatching [t| forall w. BVProp w |])
+$(mkNuMatching [t| forall a . AtomicPerm a |])
+$(mkNuMatching [t| forall a . ValuePerm a |])
+-- $(mkNuMatching [t| forall as. ValuePerms as |])
+$(mkNuMatching [t| forall a . VarAndPerm a |])
+
+instance NuMatchingAny1 PermExpr where
+  nuMatchingAny1Proof = nuMatchingProof
+
+instance NuMatchingAny1 ValuePerm where
+  nuMatchingAny1Proof = nuMatchingProof
+
+instance NuMatchingAny1 VarAndPerm where
+  nuMatchingAny1Proof = nuMatchingProof
+
+$(mkNuMatching [t| forall w sz . LLVMFieldPerm w sz |])
+$(mkNuMatching [t| forall w . LLVMArrayPerm w |])
+$(mkNuMatching [t| forall w . LLVMBlockPerm w |])
+$(mkNuMatching [t| RWModality |])
+$(mkNuMatching [t| forall w . LLVMArrayIndex w |])
+$(mkNuMatching [t| forall w . LLVMArrayBorrow w |])
+$(mkNuMatching [t| forall w . LLVMFieldShape w |])
+$(mkNuMatching [t| forall w . LOwnedPerm w |])
+$(mkNuMatching [t| forall ghosts args ret. FunPerm ghosts args ret |])
+$(mkNuMatching [t| forall args ret. SomeFunPerm args ret |])
+$(mkNuMatching [t| forall ns. NameSortRepr ns |])
+$(mkNuMatching [t| forall ns args a. NameReachConstr ns args a |])
+$(mkNuMatching [t| forall ns args a. NamedPermName ns args a |])
+$(mkNuMatching [t| SomeNamedPermName |])
+$(mkNuMatching [t| forall b args w. NamedShape b args w |])
+$(mkNuMatching [t| forall b args w. NamedShapeBody b args w |])
+$(mkNuMatching [t| forall a. PermOffset a |])
+$(mkNuMatching [t| forall ns args a. NamedPerm ns args a |])
+$(mkNuMatching [t| forall b args a. OpaquePerm b args a |])
+$(mkNuMatching [t| forall args a reach. ReachMethods args a reach |])
+$(mkNuMatching [t| forall b reach args a. RecPerm b reach args a |])
+$(mkNuMatching [t| forall b args a. DefinedPerm b args a |])
+$(mkNuMatching [t| forall args a. LifetimeFunctor args a |])
+$(mkNuMatching [t| forall ps. LifetimeCurrentPerms ps |])
+$(mkNuMatching [t| forall a. SomeLLVMBlockPerm a |])
+
+instance NuMatchingAny1 LOwnedPerm where
+  nuMatchingAny1Proof = nuMatchingProof
+
+instance NuMatchingAny1 DistPerms where
+  nuMatchingAny1Proof = nuMatchingProof
+
+instance Liftable RWModality where
+  mbLift mb_rw = case mbMatch mb_rw of
+    [nuMP| Write |] -> Write
+    [nuMP| Read |] -> Read
+
+instance Closable RWModality where
+  toClosed Write = $(mkClosed [| Write |])
+  toClosed Read = $(mkClosed [| Read |])
+
+instance Closable (NameSortRepr ns) where
+  toClosed (DefinedSortRepr b) =
+    $(mkClosed [| DefinedSortRepr |]) `clApply` toClosed b
+  toClosed (OpaqueSortRepr b) =
+    $(mkClosed [| OpaqueSortRepr |]) `clApply` toClosed b
+  toClosed (RecursiveSortRepr b reach) =
+    $(mkClosed [| RecursiveSortRepr |])
+    `clApply` toClosed b `clApply` toClosed reach
+
+instance Liftable (NameSortRepr ns) where
+  mbLift = unClosed . mbLift . fmap toClosed
+
+instance Closable (NameReachConstr ns args a) where
+  toClosed NameReachConstr = $(mkClosed [| NameReachConstr |])
+  toClosed NameNonReachConstr = $(mkClosed [| NameNonReachConstr |])
+
+instance Liftable (NameReachConstr ns args a) where
+  mbLift = unClosed . mbLift . fmap toClosed
+
+instance Liftable (NamedPermName ns args a) where
+  mbLift (mbMatch -> [nuMP| NamedPermName n tp args ns r |]) =
+    NamedPermName (mbLift n) (mbLift tp) (mbLift args) (mbLift ns) (mbLift r)
+
+instance Liftable SomeNamedPermName where
+  mbLift (mbMatch -> [nuMP| SomeNamedPermName rpn |]) =
+    SomeNamedPermName $ mbLift rpn
+
+instance Liftable (ReachMethods args a reach) where
+  mbLift mb_x = case mbMatch mb_x of
+    [nuMP| ReachMethods transIdent |] ->
+      ReachMethods (mbLift transIdent)
+    [nuMP| NoReachMethods |] -> NoReachMethods
 
 
 ----------------------------------------------------------------------

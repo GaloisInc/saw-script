@@ -66,6 +66,18 @@ import Verifier.SAW.Heapster.GenMonad
 import GHC.Stack
 
 
+-- * Helper functions (should be moved to Hobbits)
+
+-- | Append two existentially quantified 'RAssign' lists
+apSomeRAssign :: Some (RAssign f) -> Some (RAssign f) -> Some (RAssign f)
+apSomeRAssign (Some x) (Some y) = Some (RL.append x y)
+
+-- | Concatenate a list of existentially quantified 'RAssign' lists
+concatSomeRAssign :: [Some (RAssign f)] -> Some (RAssign f)
+concatSomeRAssign = foldl apSomeRAssign (Some MNil)
+-- foldl is intentional, appending RAssign matches on the second argument
+
+
 ----------------------------------------------------------------------
 -- * Equality Proofs
 ----------------------------------------------------------------------
@@ -2819,6 +2831,15 @@ withExtVarsM m =
              Just e -> e
              Nothing -> zeroOfType knownRepr)
 
+-- | Run an implication computation with an additional context of existential
+-- variables
+withExtVarsMultiM :: KnownCruCtx vars' ->
+                     ImplM (vars :++: vars') s r ps1 ps2 a ->
+                     ImplM vars s r ps1 ps2 a
+withExtVarsMultiM MNil m = m
+withExtVarsMultiM (ctx :>: KnownReprObj) m =
+  withExtVarsMultiM ctx (withExtVarsM m >>>= \(a,_) -> return a)
+
 -- | Perform either the first, second, or both computations with an 'implCatchM'
 -- between, depending on the recursion flag
 implRecFlagCaseM :: NuMatchingAny1 r => ImplM vars s r ps_out ps_in a ->
@@ -4868,35 +4889,44 @@ proveVarLifetimeFunctor' x f args l mb_l psubst = case mbMatch mb_l of
 -- * Solving for Permission List Implications
 ----------------------------------------------------------------------
 
+-- | A permission that needs to be proved for an implication, which has at least
+-- those evars mentioned in @vars@ but possibly more
+data NeededPerm vars a where
+  NeededPerm :: KnownCruCtx vars' -> ExprVar a ->
+                Mb (vars :++: vars') (ValuePerm a) ->
+                NeededPerm vars a
+
 -- | A sequence of permissions in bindings that need to be proved
-type NeededPerms vars = Some (RAssign (Compose (Mb vars) VarAndPerm))
-
--- | Append two existentially quantified 'RAssign' lists
-apSomeRAssign :: Some (RAssign f) -> Some (RAssign f) -> Some (RAssign f)
-apSomeRAssign (Some x) (Some y) = Some (RL.append x y)
-
--- | Concatenate a list of existentially quantified 'RAssign' lists
-concatSomeRAssign :: [Some (RAssign f)] -> Some (RAssign f)
-concatSomeRAssign = foldl apSomeRAssign (Some MNil) 
--- foldl is intentional, appending RAssign matches on the second argument
-
--- | Convert a 'NeededPerms' list to an 'ExDistPerms'
-neededPermsToExDistPerms :: RAssign prx vars ->
-                            RAssign (Compose (Mb vars) VarAndPerm) ps ->
-                            Mb vars (DistPerms ps)
-neededPermsToExDistPerms vars MNil = nuMulti (RL.map (\_-> Proxy) vars) (const MNil)
-neededPermsToExDistPerms vars (ps :>: Compose mb_vap) =
-  mbMap2 (:>:) (neededPermsToExDistPerms vars ps) mb_vap
+type NeededPerms vars = Some (RAssign (NeededPerm vars))
 
 -- | A single needed permission
-neededPerms1 :: Mb vars (ExprVar a) -> Mb vars (ValuePerm a) -> NeededPerms vars
-neededPerms1 mb_x mb_p = Some (MNil :>: Compose (mbMap2 VarAndPerm mb_x mb_p))
+neededPerms1 :: ExprVar a -> Mb vars (ValuePerm a) -> NeededPerms vars
+neededPerms1 x mb_p = Some (MNil :>: NeededPerm MNil x mb_p)
+
+-- | A single needed permission with a single existential variable
+mbNeededPerms1 :: KnownRepr TypeRepr tp => ExprVar a ->
+                  Mb (vars :> tp) (ValuePerm a) -> NeededPerms vars
+mbNeededPerms1 x mb_p =
+  Some (MNil :>: NeededPerm (MNil :>: KnownReprObj) x mb_p)
 
 -- | Convert an existential 'DistPerms' not in a binding to a 'NeededPerms'
 someDistPermsToNeededPerms :: RAssign Proxy vars -> Some DistPerms ->
                               NeededPerms vars
 someDistPermsToNeededPerms prxs =
-  fmapF $ RL.map (Compose . nuMulti prxs . const)
+  fmapF $ RL.map (\(VarAndPerm x p) ->
+                   NeededPerm MNil x (nuMulti prxs (const p)))
+
+-- | Prove the permission represented by a 'NeededPerm'
+proveNeededPerm :: NuMatchingAny1 r => NeededPerm vars a ->
+                   ImplM vars s r (ps :> a) ps ()
+proveNeededPerm (NeededPerm ctx x mb_p) =
+  withExtVarsMultiM ctx $ proveVarImpl x mb_p
+
+-- | Prove the permission represented by a 'NeededPerm'
+proveNeededPerms :: NuMatchingAny1 r => RAssign (NeededPerm vars) ps' ->
+                    ImplM vars s r (ps :++: ps') ps ()
+proveNeededPerms MNil = return ()
+proveNeededPerms (ps :>: p) = proveNeededPerms ps >>> proveNeededPerm p
 
 -- | If the second argument is an unset variable, set it to the first, otherwise
 -- do nothing
@@ -4910,6 +4940,7 @@ tryUnifyVars x mb_x = case mbMatch mb_x of
            _ -> pure ()
   _ -> pure ()
 
+
 -- | Find all the permissions that need to be added to the given list of
 -- permissions to prove the given block permission
 solveForPermListImplBlock :: (NuMatchingAny1 r, 1 <= w, KnownNat w) =>
@@ -4918,29 +4949,30 @@ solveForPermListImplBlock :: (NuMatchingAny1 r, 1 <= w, KnownNat w) =>
                              Mb vars (LLVMBlockPerm w) ->
                              ImplM vars s r ps ps (NeededPerms vars)
 
--- If the LHS is empty, return the input block permission
-solveForPermListImplBlock MNil x mb_bp =
-  pure (neededPerms1 (fmap (const x) mb_bp) (fmap ValPerm_LLVMBlock mb_bp))
+solveForPermListImplBlock lops x mb_bp
+  | Just some_lop <- findLOwnedPermForVar x lops =
+    -- Use the modalities of some_lop to set the modalities of mb_bp, if needed
+    let (rw,l) = llvmLownedPermModalities some_lop in
+    tryUnifyVars rw (mbLLVMBlockRW mb_bp) >>>
+    tryUnifyVars l (mbLLVMBlockLifetime mb_bp) >>>
+    let rngs_lhs = lownedPermsOffsetsForLLVMVar x lops in
+    let mb_ex_bps =
+          fmap (\bp ->
+                 -- Subtract all ranges of offsets in lops from that of mb_bp,
+                 -- and, for each remaining range, create a memblock permission
+                 -- with existential shape
+                 map (\rng -> nu $ \z ->
+                       (llvmBlockSetRange bp rng)
+                       { llvmBlockShape = PExpr_Var z }) $
+                 bvRangesDelete (llvmBlockRange bp) rngs_lhs) mb_bp in
+    return $ concatSomeRAssign $
+    map (\mb_ex_bp -> mbNeededPerms1 x $ mbValPerm_LLVMBlock $
+                      mbCombine RL.typeCtxProxies mb_ex_bp) $
+    mbList mb_ex_bps
 
--- If the LHS starts with a field permission, treat it like a block permission
-solveForPermListImplBlock (ps_l :>: LOwnedPermField e fp_l) x mb_bp =
-  solveForPermListImplBlock
-  (ps_l :>: LOwnedPermBlock e (llvmFieldPermToBlock fp_l)) x mb_bp
-
--- If the LHS starts with a block permission bp', remove the range of bp' from
--- the required bp and recurse on the results, setting the lifetime of our block
--- permission to that of bp' if it is not already set
-solveForPermListImplBlock (ps_l :>: LOwnedPermBlock (PExpr_Var y) bp_l) x mb_bp
-  | Just Refl <- testEquality x y
-  , rng_l <- llvmBlockRange bp_l
-  , [nuMP| Just mb_bps |] <- mbMatch $ fmap (remLLVMBLockPermRange rng_l) mb_bp =
-    tryUnifyVars (llvmBlockLifetime bp_l) (fmap llvmBlockLifetime mb_bp) >>>
-    tryUnifyVars (llvmBlockRW bp_l) (fmap llvmBlockRW mb_bp) >>>
-    concatSomeRAssign <$> mapM (solveForPermListImplBlock ps_l x) (mbList mb_bps)
-
--- Otherwise, recurse on the tail of the permission list
-solveForPermListImplBlock (ps_l :>: _) x mb_bp =
-  solveForPermListImplBlock ps_l x mb_bp
+-- If none of our lowned perms contain x, we need all of mb_bp
+solveForPermListImplBlock _ x mb_bp =
+  return $ neededPerms1 x $ mbValPerm_LLVMBlock mb_bp
 
 
 -- | The second stage of 'solveForPermListImpl', after equality permissions have
@@ -4949,31 +4981,23 @@ solveForPermListImpl1 :: NuMatchingAny1 r => LOwnedPerms ps_l ->
                          Mb vars (LOwnedPerms ps_r) ->
                          ImplM vars s r ps ps (NeededPerms vars)
 solveForPermListImpl1 ps_l mb_ps = case mbMatch mb_ps of
-
   -- If the RHS is empty, we are done
   [nuMP| MNil |] ->
     pure (Some MNil)
 
-  -- If the RHS starts with a field perm, convert to a block perm and call
-  -- solveForPermListImplBlock
-  [nuMP| mb_ps_r :>: LOwnedPermField (PExpr_Var mb_x) mb_fp |]
-    | Right x <- mbNameBoundP mb_x
-    , mb_bp <- fmap llvmFieldPermToBlock mb_fp ->
-      do needed1 <- solveForPermListImplBlock ps_l x mb_bp
-         needed2 <- solveForPermListImpl1 ps_l mb_ps_r
-         pure (apSomeRAssign needed1 needed2)
+  -- If the head of the RHS converts to a block permission, call
+  -- solveForPermListImplBlock, and recurse on the tail
+  [nuMP| mb_ps_r :>: mb_p_r |]
+    | Just [nuP| (mb_x, SomeLLVMBlockPerm mb_bp) |] <-
+        mbLownedPermVarBlockPerm mb_p_r
+    , Right x <- mbNameBoundP mb_x ->
+      do neededs1 <- solveForPermListImplBlock ps_l x mb_bp
+         neededs2 <- solveForPermListImpl1 ps_l mb_ps_r
+         pure (apSomeRAssign neededs1 neededs2)
 
-  -- If the RHS starts with a block perm, call solveForPermListImplBlock
-  [nuMP| mb_ps_r :>: LOwnedPermBlock (PExpr_Var mb_x) mb_bp |]
-    | Right x <- mbNameBoundP mb_x ->
-      do needed1 <- solveForPermListImplBlock ps_l x mb_bp
-         needed2 <- solveForPermListImpl1 ps_l mb_ps_r
-         pure (apSomeRAssign needed1 needed2)
-
-  -- Otherwise, we don't know what to do, so do nothing and return
-  _ ->
-    pure (Some MNil)
-
+  -- Otherwise, drop the head and recurse on the tail
+  [nuMP| mb_ps_r :>: _ |] ->
+    solveForPermListImpl1 ps_l mb_ps_r
 
 -- | Determine what additional permissions from the variable permissions, if
 -- any, would be needed to prove one list of permissions implies another. Also
@@ -6503,9 +6527,6 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       let mb_ps_inL = fmap (const ps_inL) mb_ps_inR in
       solveForPermListImpl ps_inR mb_ps_inL >>>= \(Some neededs1) ->
       solveForPermListImpl ps_outL mb_ps_outR >>>= \(Some neededs2) ->
-      uses implStateVars cruCtxProxies >>>= \prxs ->
-      let mb_ps1 = neededPermsToExDistPerms prxs neededs1
-          mb_ps2 = neededPermsToExDistPerms prxs neededs2 in
 
       -- Prove ps1 and ps2, which can have evars, and then look at the
       -- substitution instances of ps1 and ps2 that were actually proved on top
@@ -6514,7 +6535,7 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       -- on the LHSs and not arbitrary expressions
       getDistPerms >>>= \ps0_with_a ->
       let ps0 = RL.tail ps0_with_a in
-      proveVarsImplAppendInt (mbMap2 RL.append mb_ps1 mb_ps2) >>>
+      proveNeededPerms (RL.append neededs1 neededs2) >>>
       getTopDistPerms ps0_with_a (RL.append neededs1 neededs2) >>>= \ps12 ->
       let (ps1,ps2) = RL.split neededs1 neededs2 ps12 in
       partialSubstForceM mb_ps_outR "proveVarAtomicImpl" >>>= \ps_outR ->
