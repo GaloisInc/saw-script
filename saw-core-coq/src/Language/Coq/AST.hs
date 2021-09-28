@@ -73,5 +73,6 @@ data Decl
   | Parameter Ident Type
   | Variable Ident Type
   | InductiveDecl Inductive
+  | Section Ident [Decl]
   | Snippet String
   deriving (Show)

@@ -136,6 +136,7 @@ namedDecls = concatMap filterNamed
     filterNamed (Coq.Definition n _ _ _)                      = [n]
     filterNamed (Coq.InductiveDecl (Coq.Inductive n _ _ _ _)) = [n]
     filterNamed (Coq.Snippet _)                               = []
+    filterNamed (Coq.Section _ ds)                            = namedDecls ds
 
 -- | Retrieve the names of all local and global declarations from the
 -- translation state.
@@ -616,7 +617,7 @@ translateTermUnshared t = withLocalTranslationState $ do
               modify $ set sharedNames IntMap.empty
               modify $ set nextSharedName "var__0"
               translateTermLet (ecType n)
-          modify $ over topLevelDeclarations $ (Coq.Parameter renamed tp :)
+          modify $ over topLevelDeclarations $ (Coq.Variable renamed tp :)
           Coq.Var <$> pure renamed
 
     -- Constants with a body

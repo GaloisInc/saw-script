@@ -163,6 +163,12 @@ ppDecl decl = case decl of
      , ppTerm PrecNone body <> period
      ]) <> hardline
   InductiveDecl ind -> ppInductive ind
+  Section nm ds ->
+    vsep $ concat
+     [ [ hsep [text "Section", text nm, period] ]
+     , map (indent 2 . ppDecl) ds
+     , [ hsep [text "End", text nm, period] ]
+     ]
   Snippet s -> text s
 
 ppConstructor :: Constructor -> Doc ann

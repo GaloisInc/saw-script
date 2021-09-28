@@ -479,7 +479,8 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
         withImportCryptolPrimitivesForSAWCore $
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
-  case Coq.translateCryptolModule configuration cryptolPreludeDecls cm of
+  let nm = takeBaseName inputFile
+  case Coq.translateCryptolModule nm configuration cryptolPreludeDecls cm of
     Left e -> putStrLn $ show e
     Right cmDoc ->
       writeFile outputFile
