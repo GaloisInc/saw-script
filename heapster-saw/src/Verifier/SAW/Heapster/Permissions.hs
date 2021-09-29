@@ -3320,15 +3320,18 @@ llvmFieldPermToBlock fp =
     llvmBlockLen = llvmFieldLen fp,
     llvmBlockShape = PExpr_FieldShape (LLVMFieldShape $ llvmFieldContents fp) }
 
--- | Convert a block permission to a field permission, if possible
+-- | Convert a block permission with field shape to a field permission
+--
+-- NOTE: do not check that the length of the block equals that of the resulting
+-- field permission, in case the length of the block has a free variable that
+-- might be provably but not syntacitcally equal to the length
 llvmBlockPermToField :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
                         NatRepr sz -> LLVMBlockPerm w ->
                         Maybe (LLVMFieldPerm w sz)
 llvmBlockPermToField sz bp
   | PExpr_FieldShape (LLVMFieldShape p) <- llvmBlockShape bp
   , Just Refl <- testEquality sz (exprLLVMTypeWidth p)
-  , bvEq (llvmBlockLen bp) (bvInt (intValue sz `div` 8)) =
-    Just $ LLVMFieldPerm { llvmFieldRW = llvmBlockRW bp,
+  = Just $ LLVMFieldPerm { llvmFieldRW = llvmBlockRW bp,
                            llvmFieldLifetime = llvmBlockLifetime bp,
                            llvmFieldOffset = llvmBlockOffset bp,
                            llvmFieldContents = p }
@@ -3366,11 +3369,14 @@ llvmArrayPermToBlock _ = Nothing
 
 -- | Convert a block permission with array shape to an array permission,
 -- assuming the length of the block permission equals the size of the array
+--
+-- NOTE: do not check that the length of the block equals that of the resulting
+-- array permission, in case the length of the block has a free variable that
+-- might be provably but not syntacitcally equal to the length
 llvmBlockPermToArray :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
                         Maybe (LLVMArrayPerm w)
 llvmBlockPermToArray bp
-  | PExpr_ArrayShape len stride sh <- llvmBlockShape bp
-  , bvEq (bvMult stride len) (llvmBlockLen bp) =
+  | PExpr_ArrayShape len stride sh <- llvmBlockShape bp =
     Just $ LLVMArrayPerm
     { llvmArrayRW = llvmBlockRW bp,
       llvmArrayLifetime = llvmBlockLifetime bp,

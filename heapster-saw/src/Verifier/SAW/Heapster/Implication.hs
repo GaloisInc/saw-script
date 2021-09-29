@@ -2095,8 +2095,10 @@ simplImplOut (SImpl_IntroLLVMBlockArray x ap) =
       error "simplImplOut: SImpl_IntroLLVMBlockArray: malformed array permission"
 simplImplOut (SImpl_ElimLLVMBlockArray x bp) =
   case llvmBlockPermToArray bp of
-    Just ap -> distPerms1 x (ValPerm_Conj1 $ Perm_LLVMArray ap)
-    Nothing ->
+    Just ap
+      | bvEq (llvmArrayLengthBytes ap) (llvmBlockLen bp) ->
+        distPerms1 x (ValPerm_Conj1 $ Perm_LLVMArray ap)
+    _ ->
       error "simplImplIn: SImpl_ElimLLVMBlockArray: malformed input permission"
 simplImplOut (SImpl_IntroLLVMBlockSeq x bp1 len2 sh2) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
@@ -4134,12 +4136,14 @@ implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape = PExpr_PtrShape _ _ _ })
 implElimLLVMBlock x bp@(LLVMBlockPerm
                         { llvmBlockShape =
                             PExpr_FieldShape (LLVMFieldShape p) })
-  | Just fp <- llvmBlockPermToField (exprLLVMTypeWidth p) bp =
+  | Just fp <- llvmBlockPermToField (exprLLVMTypeWidth p) bp
+  , bvEq (llvmFieldLen fp) (llvmBlockLen bp) =
     implSimplM Proxy (SImpl_ElimLLVMBlockField x fp)
 
 -- For an array shape of the right length, eliminate to an array permission
 implElimLLVMBlock x bp
-  | isJust (llvmBlockPermToArray bp) =
+  | Just ap <- llvmBlockPermToArray bp
+  , bvEq (llvmArrayLengthBytes ap) (llvmBlockLen bp) =
     implSimplM Proxy (SImpl_ElimLLVMBlockArray x bp)
 
 -- FIXME: if we match an array shape here, its stride*length must be greater
