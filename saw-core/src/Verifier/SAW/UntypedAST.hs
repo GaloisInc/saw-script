@@ -62,7 +62,7 @@ import Verifier.SAW.TypedAST
 
 data Term
   = Name (PosPair Text)
-  | Sort Pos Sort
+  | Sort Pos Sort Bool
   | App Term Term
   | Lambda Pos TermCtx Term
   | Pi Pos TermCtx Term
@@ -110,7 +110,7 @@ instance Positioned Term where
   pos t =
     case t of
       Name i               -> pos i
-      Sort p _             -> p
+      Sort p _ _           -> p
       Lambda p _ _         -> p
       App x _              -> pos x
       Pi p _ _             -> p

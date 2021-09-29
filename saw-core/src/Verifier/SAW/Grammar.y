@@ -72,6 +72,7 @@ import Verifier.SAW.Lexer
   'import'    { PosPair _ (TKey "import") }
   'module'    { PosPair _ (TKey "module") }
   'sort'      { PosPair _ (TKey "sort") }
+  'isort'     { PosPair _ (TKey "isort") }
   'Prop'      { PosPair _ (TKey "Prop") }
   'where'     { PosPair _ (TKey "where") }
   'axiom'     { PosPair _ (TKey "axiom") }
@@ -175,8 +176,9 @@ AtomTerm
   | string                       { StringLit (pos $1) (Text.pack (tokString (val $1))) }
   | Ident                        { Name $1 }
   | IdentRec                     { Recursor Nothing $1 }
-  | 'Prop'                       { Sort (pos $1) propSort }
-  | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) }
+  | 'Prop'                       { Sort (pos $1) propSort False }
+  | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) False }
+  | 'isort' nat                  { Sort (pos $1) (mkSort (tokNat (val $2))) True }
   | AtomTerm '.' Ident           { RecordProj $1 (val $3) }
   | AtomTerm '.' IdentRec        {% parseRecursorProj $1 $3 }
   | AtomTerm '.' nat             {% parseTupleSelector $1 (fmap tokNat $3) }

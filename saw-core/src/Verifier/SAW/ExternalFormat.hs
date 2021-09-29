@@ -183,9 +183,10 @@ scWriteExternal t0 =
             RecordType elem_tps -> pure $ unwords ["RecordType", show elem_tps]
             RecordValue elems   -> pure $ unwords ["Record", show elems]
             RecordProj e prj    -> pure $ unwords ["RecordProj", show e, Text.unpack prj]
-            Sort s              -> pure $
-              if s == propSort then unwords ["Prop"] else
-                unwords ["Sort", drop 5 (show s)] -- Ugly hack to drop "sort "
+            Sort s h
+              | s == propSort -> pure $ unwords ["Prop", show h]
+              | otherwise     -> pure $ unwords ["Sort", drop 5 (show s), show h]
+                                                        -- /\ Ugly hack to drop "sort "
             NatLit n            -> pure $ unwords ["Nat", show n]
             ArrayValue e v      -> pure $ unwords ("Array" : show e :
                                             map show (V.toList v))
@@ -344,8 +345,8 @@ scReadExternal sc input =
         ["Record", elems] ->
           FTermF <$> (RecordValue <$> (traverse (traverse getTerm) =<< readM elems))
         ["RecordProj", e, prj] -> FTermF <$> (RecordProj <$> readIdx e <*> pure (Text.pack prj))
-        ["Prop"]            -> pure $ FTermF (Sort propSort)
-        ["Sort", s]         -> FTermF <$> (Sort <$> (mkSort <$> readM s))
+        ["Prop", h]         -> FTermF <$> (Sort propSort <$> readM h)
+        ["Sort", s, h]      -> FTermF <$> (Sort <$> (mkSort <$> readM s) <*> readM h)
         ["Nat", n]          -> FTermF <$> (NatLit <$> readM n)
         ("Array" : e : es)  -> FTermF <$> (ArrayValue <$> readIdx e <*> (V.fromList <$> traverse readIdx es))
         ("String" : ts)     -> FTermF <$> (StringLit <$> (readM (unwords ts)))

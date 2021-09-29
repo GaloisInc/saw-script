@@ -191,7 +191,7 @@ data FlatTermF e
 
     -- | Sorts, aka universes, are the types of types; i.e., an object is a
     -- "type" iff it has type @Sort s@ for some s
-  | Sort !Sort
+  | Sort !Sort !Bool
 
     -- Primitive builtin values
     -- | Natural number with given value.
@@ -305,7 +305,7 @@ zipWithFlatTermF f = go
     go (RecordProj e1 fld1) (RecordProj e2 fld2)
       | fld1 == fld2 = Just $ RecordProj (f e1 e2) fld1
 
-    go (Sort sx) (Sort sy) | sx == sy = Just (Sort sx)
+    go (Sort sx hx) (Sort sy hy) | sx == sy = Just (Sort sx (hx && hy)) -- TODO?
     go (NatLit i) (NatLit j) | i == j = Just (NatLit i)
     go (StringLit s) (StringLit t) | s == t = Just (StringLit s)
     go (ArrayValue tx vx) (ArrayValue ty vy)
@@ -401,7 +401,7 @@ termToPat t =
       Constant ec _             -> Net.Atom (toShortName (ecName ec))
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
       FTermF (Primitive pn)     -> Net.Atom (identBaseName (primName pn))
-      FTermF (Sort s)           -> Net.Atom (Text.pack ('*' : show s))
+      FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))
       FTermF (NatLit _)         -> Net.Var
       FTermF (DataTypeApp c ps ts) ->
         foldl Net.App (Net.Atom (identBaseName (primName c))) (map termToPat (ps ++ ts))

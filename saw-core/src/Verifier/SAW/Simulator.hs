@@ -238,7 +238,7 @@ evalTermF cfg lam recEval tf env =
                                  v@VRecordValue{} -> valRecordProj v fld
                                  _ -> simNeutral cfg env (NeutralRecordProj (NeutralBox t) fld)
 
-        Sort s              -> return $ TValue (VSort s)
+        Sort s _h           -> return $ TValue (VSort s)
 
         NatLit n            -> return $ VNat n
 

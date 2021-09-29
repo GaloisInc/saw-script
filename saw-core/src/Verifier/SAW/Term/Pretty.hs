@@ -467,7 +467,7 @@ ppFlatTermF prec tf =
     RecordValue alist ->
       ppRecord False <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
     RecordProj e fld -> ppProj fld <$> ppTerm' PrecArg e
-    Sort s -> return $ viaShow s
+    Sort s h -> return ((if h then pretty ("i"::String) else mempty) <> viaShow s)
     NatLit i -> ppNat <$> (ppOpts <$> ask) <*> return (toInteger i)
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecTerm) (V.toList args)
