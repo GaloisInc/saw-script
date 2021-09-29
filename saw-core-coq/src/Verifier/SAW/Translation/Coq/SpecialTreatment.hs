@@ -259,8 +259,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("PairType",  mapsTo sawDefinitionsModule "PairType")
   , ("PairValue", mapsTo sawDefinitionsModule "PairValue")
   , ("Pair__rec", mapsTo sawDefinitionsModule "Pair__rec")
-  , ("fst",       mapsTo sawDefinitionsModule "fst")
-  , ("snd",       mapsTo sawDefinitionsModule "snd")
+  , ("fst",       replaceDropArgs 2 $ Coq.Var "fst")
+  , ("snd",       replaceDropArgs 2 $ Coq.Var "snd")
   ]
 
   -- Equality
