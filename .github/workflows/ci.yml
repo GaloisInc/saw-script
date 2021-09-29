@@ -325,7 +325,7 @@ jobs:
   build-push-image:
     runs-on: ubuntu-latest
     needs: [config]
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
