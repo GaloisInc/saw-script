@@ -528,7 +528,7 @@ Definition multiFixM {lrts:LetRecTypes}
   multiTupleFixM lrts (fun fs => lrtApply F fs).
 
 (* A letrec construct for binding 0 or more mutually recursive functions *)
-Definition letRecM {lrts : LetRecTypes} {B} (F: lrtPi lrts (lrtTupleType lrts))
+Definition letRecM (lrts : LetRecTypes) B (F: lrtPi lrts (lrtTupleType lrts))
            (body:lrtPi lrts (CompM B)) : CompM B :=
   lrtApply body (multiFixM F).
 
@@ -686,12 +686,12 @@ Proof.
   apply ref_f.
 Qed.
 
-Lemma letRecM_Nil B F P : @letRecM LRT_Nil B F P = P.
+Lemma letRecM_Nil B F P : letRecM LRT_Nil B F P = P.
 Proof.
   reflexivity.
 Qed.
 
-Lemma refinesM_letRecM_Nil_l B F P Q : P |= Q -> @letRecM LRT_Nil B F P |= Q.
+Lemma refinesM_letRecM_Nil_l B F P Q : P |= Q -> letRecM LRT_Nil B F P |= Q.
 Proof.
   rewrite letRecM_Nil. trivial.
 Qed.
@@ -707,7 +707,7 @@ Lemma refinesM_letRecM_const_r lrts B (F : lrtPi lrts (lrtTupleType lrts))
                                `{ProperLRTFun _ _ P} `{ProperLRTFun _ _ Q}
   : refinesFunTuple (multiFixM F) G ->
     lrtApply P G |= lrtApply Q G ->
-    @letRecM lrts B F P |= @letRecM lrts B (lrtLambda (fun _ => G)) Q.
+    letRecM lrts B F P |= letRecM lrts B (lrtLambda (fun _ => G)) Q.
 Proof.
   destruct H as [ProperP]; destruct H0 as [ProperQ].
   intros.
@@ -728,8 +728,8 @@ Qed.
 
 Lemma refinesM_letRecM_match_r lrts B F P Q `{ProperLRTFun _ _ P}
   : forall (G : lrtTupleType lrts),
-    @letRecM lrts B F P |= @letRecM lrts B (lrtLambda (fun _ => G)) (lrtLambda (fun _ => Q)) ->
-    @letRecM lrts B F P |= Q.
+    letRecM lrts B F P |= letRecM lrts B (lrtLambda (fun _ => G)) (lrtLambda (fun _ => Q)) ->
+    letRecM lrts B F P |= Q.
 Proof.
   intros.
   rewrite H0.
@@ -752,7 +752,7 @@ Proof.
   intros ref1 ref2; destruct b; [ apply ref1 | apply ref2 ]; reflexivity.
 Qed.
 
-Lemma simpl_letRecM0 B F body : @letRecM LRT_Nil B F body = body.
+Lemma simpl_letRecM0 B F body : letRecM LRT_Nil B F body = body.
 Proof.
   reflexivity.
 Qed.

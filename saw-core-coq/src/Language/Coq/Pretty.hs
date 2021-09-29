@@ -58,11 +58,16 @@ ppIdent = text
 ppBinder :: Binder -> Doc ann
 ppBinder (Binder x Nothing)  = ppIdent x
 ppBinder (Binder x (Just t)) = parens (ppIdent x <+> colon <+> ppTerm PrecNone t)
+ppBinder (ImplicitBinder x Nothing)  = braces (ppIdent x)
+ppBinder (ImplicitBinder x (Just t)) = braces (ppIdent x <+> colon <+> ppTerm PrecNone t)
 
 ppPiBinder :: PiBinder -> Doc ann
 ppPiBinder (PiBinder Nothing t)  = ppTerm PrecApp t <+> text "->"
 ppPiBinder (PiBinder (Just x) t) =
   text "forall" <+> parens (ppIdent x <+> colon <+> ppTerm PrecNone t) <> comma
+ppPiBinder (PiImplicitBinder Nothing t)  = braces (ppTerm PrecApp t) <+> text "->"
+ppPiBinder (PiImplicitBinder (Just x) t) =
+  text "forall" <+> braces (ppIdent x <+> colon <+> ppTerm PrecNone t) <> comma
 
 ppBinders :: [Binder] -> Doc ann
 ppBinders = hsep . map ppBinder

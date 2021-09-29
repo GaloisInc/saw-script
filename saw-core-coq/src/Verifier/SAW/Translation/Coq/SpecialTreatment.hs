@@ -186,7 +186,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Unsafe SAW features
   ++
-  [ ("error",             replaceDropArgs 1 $ Coq.Var "SAWCoreScaffolding.error")
+  [ ("error",             mapsTo sawDefinitionsModule "error")
   , ("fix",               skip)
   , ("unsafeAssert",      replaceDropArgs 3 $ Coq.Ltac "solveUnsafeAssert")
   , ("unsafeCoerce",      skip)

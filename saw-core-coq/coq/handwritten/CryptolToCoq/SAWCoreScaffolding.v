@@ -16,7 +16,7 @@ From CryptolToCoq Require Export CompM.
   *)
 Class Inhabited (a:Type) := MkInhabited { inhabitant : a }.
 
-Axiom error : forall {a : Type} {HI:Inhabited a}, String.string -> a.
+Axiom error : forall (a : Type) {HI:Inhabited a}, String.string -> a.
 
 Definition error_realizable : forall {a : Type} {HI:Inhabited a}, String.string -> a.
 Proof. intros; exact inhabitant. Qed.
