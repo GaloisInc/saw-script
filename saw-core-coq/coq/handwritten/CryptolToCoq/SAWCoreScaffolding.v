@@ -28,8 +28,12 @@ Instance Inhabited_Type : Inhabited Type :=
 Instance Inhabited_sort (n:nat) : Inhabited (sort n) :=
   MkInhabited (sort n) unit.
 
-Instance Inhabited_Fun (a b:Type) {Hb:Inhabited b} : Inhabited (a -> b) :=
-  MkInhabited (a -> b) (fun _ => inhabitant).
+Instance Inhabited_Intro (a:Type) (b:a -> Type) (Hb: forall x, Inhabited (b x))
+  : Inhabited (forall x, b x)
+  := MkInhabited (forall x, b x) (fun x => @inhabitant (b x) (Hb x)).
+
+Global Hint Extern 5 (Inhabited ?A) =>
+  (apply (@MkInhabited A); intuition (eauto with typeclass_instances inh)) : typeclass_instances.
 
 Definition String := String.string.
 
@@ -153,6 +157,14 @@ Definition sawUnsafeCoerce (a b : Type) (x : a) := x.
 Definition Nat := nat.
 Definition Nat_rect := nat_rect.
 
+Instance Inhabited_Nat : Inhabited Nat :=
+  MkInhabited Nat 0%nat.
+Instance Inhabited_nat : Inhabited nat :=
+  MkInhabited nat 0%nat.
+
+Global Hint Resolve (0%nat : nat) : inh.
+Global Hint Resolve (0%nat : Nat) : inh.
+
 (* Definition minNat := Nat.min. *)
 
 Definition uncurry (a b c : Type) (f : a -> b -> c) (p : a * (b * unit)) : c  :=
@@ -202,6 +214,10 @@ Instance Inhabited_Intger : Inhabited Integer :=
   MkInhabited Integer 0%Z.
 Instance Inhabited_Z : Inhabited Z :=
   MkInhabited Z 0%Z.
+
+Global Hint Resolve (0%Z : Z) : inh.
+Global Hint Resolve (0%Z : Integer) : inh.
+
 
 (* NOTE: the following will be nonsense for values of n <= 1 *)
 Definition IntMod (n : nat) := Z.

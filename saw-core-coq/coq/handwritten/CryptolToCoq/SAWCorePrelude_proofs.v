@@ -120,7 +120,7 @@ Proof.
   unfold sawAt. now simpl.
 Qed.
 
-Lemma gen_sawAt T
+Lemma gen_sawAt T {HT : Inhabited T}
   : forall (m : Nat) a, gen m T (fun i => sawAt m T a i) = a.
 Proof.
   apply Vector.t_ind.
@@ -132,12 +132,11 @@ Proof.
     move => h n t IH.
     simpl.
     f_equal.
-    setoid_rewrite sawAt_S.
-    apply IH.
+    exact IH.
   }
 Qed.
 
-Lemma append_cons m n T h t v
+Lemma append_cons m n T {HT:Inhabited T} h t v
   : append m.+1 n T (cons T h m t) v
     =
     cons T h _ (append m n T t v).
@@ -145,7 +144,7 @@ Proof.
   reflexivity.
 Qed.
 
-Theorem rewrite_append T n (w : Vec n T)
+Theorem rewrite_append T {HT:Inhabited T} n (w : Vec n T)
   : forall m (v : Vec m T),
     existT _ (addNat m n) (append m n T v w)
     =
@@ -161,7 +160,7 @@ Proof.
   }
   {
     simpl => h m t IH.
-    setoid_rewrite append_cons.
+    rewrite append_cons.
     dependent rewrite IH.
     reflexivity.
   }
