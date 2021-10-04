@@ -184,9 +184,9 @@ translateIdentWithArgs i args = do
 
     applySpecialTreatment identToCoq UsePreserve =
       Coq.App (Coq.Var $ identToCoq i) <$> mapM translateTerm args
-    applySpecialTreatment identToCoq (UseRename targetModule targetName) =
+    applySpecialTreatment identToCoq (UseRename targetModule targetName expl) =
       Coq.App
-        (Coq.Var $ identToCoq $
+        ((if expl then Coq.ExplVar else Coq.Var) $ identToCoq $
           mkIdent (fromMaybe (translateModuleName $ identModule i) targetModule)
           (Text.pack targetName))
           <$> mapM translateTerm args
@@ -209,7 +209,7 @@ translateIdentToIdent :: TermTranslationMonad m => Ident -> m (Maybe Ident)
 translateIdentToIdent i =
   (atUseSite <$> findSpecialTreatment i) >>= \case
     UsePreserve -> return $ Just (mkIdent translatedModuleName (identBaseName i))
-    UseRename   targetModule targetName ->
+    UseRename   targetModule targetName _ ->
       return $ Just $ mkIdent (fromMaybe translatedModuleName targetModule) (Text.pack targetName)
     UseReplaceDropArgs _ _ -> return Nothing
   where

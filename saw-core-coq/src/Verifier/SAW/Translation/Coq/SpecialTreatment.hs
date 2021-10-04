@@ -51,7 +51,7 @@ data DefSiteTreatment
 
 data UseSiteTreatment
   = UsePreserve
-  | UseRename   (Maybe ModuleName) String
+  | UseRename   (Maybe ModuleName) String Bool
   | UseReplaceDropArgs  Int Coq.Term
 
 data IdentSpecialTreatment = IdentSpecialTreatment
@@ -91,9 +91,16 @@ findSpecialTreatment ident = do
 mapsTo :: ModuleName -> String -> IdentSpecialTreatment
 mapsTo targetModule targetName = IdentSpecialTreatment
   { atDefSite = DefSkip
-  , atUseSite = UseRename (Just targetModule) targetName
+  , atUseSite = UseRename (Just targetModule) targetName False
   }
 
+-- Like @mapsTo@ but use an explicit variable reference so
+-- that all implicit arguments must be provided.
+mapsToExpl :: ModuleName -> String -> IdentSpecialTreatment
+mapsToExpl targetModule targetName = IdentSpecialTreatment
+  { atDefSite = DefSkip
+  , atUseSite = UseRename (Just targetModule) targetName True
+  }
 -- Use `realize` for axioms that can be realized, or for primitives that must be
 -- realized.  While some primitives can be written directly in a standalone Coq
 -- module, some primitives depend on code from the extracted module, and are
@@ -114,7 +121,7 @@ realize code = IdentSpecialTreatment
 rename :: String -> IdentSpecialTreatment
 rename ident = IdentSpecialTreatment
   { atDefSite = DefRename Nothing ident
-  , atUseSite = UseRename Nothing ident
+  , atUseSite = UseRename Nothing ident False
   }
 
 -- Replace any occurrences of identifier applied to @n@ arguments with the
@@ -425,8 +432,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("LRT_Nil",              mapsTo compMModule "LRT_Nil")
   , ("lrtPi",                mapsTo compMModule "lrtPi")
   , ("lrtTupleType",         mapsTo compMModule "lrtTupleType")
-  , ("multiFixM",            mapsTo compMModule "multiFixM")
-  , ("letRecM",              mapsTo compMModule "letRecM")
+  , ("multiFixM",            mapsToExpl compMModule "multiFixM")
+  , ("letRecM",              mapsToExpl compMModule "letRecM")
   ]
 
   -- Dependent pairs

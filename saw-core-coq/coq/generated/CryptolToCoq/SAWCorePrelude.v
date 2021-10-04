@@ -1050,7 +1050,7 @@ Definition mapBVVecM : forall (a : Type), forall (b : Type), forall {Inh_b : SAW
 (* Prelude.letRecM was skipped *)
 
 Definition letRecM1 : forall (a : Type), forall (b : Type), forall (c : Type), ((a -> CompM b) -> a -> CompM b) -> ((a -> CompM b) -> CompM c) -> CompM c :=
-  fun (a : Type) (b : Type) (c : Type) (fn : (a -> CompM b) -> a -> CompM b) (body : (a -> CompM b) -> CompM c) => CompM.letRecM (CompM.LRT_Cons (CompM.LRT_Fun a (fun (_1 : a) => CompM.LRT_Ret b)) CompM.LRT_Nil) c (fun (f : a -> CompM b) => pair (fn f) tt) (fun (f : a -> CompM b) => body f).
+  fun (a : Type) (b : Type) (c : Type) (fn : (a -> CompM b) -> a -> CompM b) (body : (a -> CompM b) -> CompM c) => @CompM.letRecM (CompM.LRT_Cons (CompM.LRT_Fun a (fun (_1 : a) => CompM.LRT_Ret b)) CompM.LRT_Nil) c (fun (f : a -> CompM b) => pair (fn f) tt) (fun (f : a -> CompM b) => body f).
 
 (* Prelude.test_fun0 was skipped *)
 
