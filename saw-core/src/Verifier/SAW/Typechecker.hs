@@ -297,9 +297,16 @@ instance TypeInferCtx Un.TermVar Un.Term where
 -- | Type-check a list of declarations and insert them into the current module
 processDecls :: [Un.Decl] -> TCM ()
 processDecls [] = return ()
+
+processDecls (Un.InjectCodeDecl ns txt : rest) =
+  do mnm <- getModuleName
+     liftTCM scModifyModule mnm $ \m -> insInjectCode m ns txt
+     processDecls rest
+
 processDecls (Un.TypedDef nm params rty body : rest) =
   processDecls (Un.TypeDecl NoQualifier nm (Un.Pi (pos nm) params rty) :
                 Un.TermDef nm (map fst params) body : rest)
+
 processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
               Un.TermDef (PosPair _ ((== nm) -> True)) vars body : rest) =
   -- Type-checking for definitions
@@ -345,9 +352,11 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
 
 processDecls (Un.TypeDecl NoQualifier (PosPair p nm) _ : _) =
   atPos p $ throwTCError $ DeclError nm "Definition without defining equation"
+
 processDecls (Un.TypeDecl _ (PosPair p nm) _ :
               Un.TermDef (PosPair _ ((== nm) -> True)) _ _ : _) =
   atPos p $ throwTCError $ DeclError nm "Primitive or axiom with definition"
+
 processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
   (atPos p $
    do typed_tp <- typeInferComplete tp
@@ -366,8 +375,10 @@ processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
                          defType = typedVal typed_tp,
                          defBody = Nothing }) >>
   processDecls rest
+
 processDecls (Un.TermDef (PosPair p nm) _ _ : _) =
   atPos p $ throwTCError $ DeclError nm "Dangling definition without a type"
+
 processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   -- This top line makes sure that we process the rest of the decls after the
   -- main body of the code below, which processes just the current data decl

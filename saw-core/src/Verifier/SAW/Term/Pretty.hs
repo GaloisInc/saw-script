@@ -713,6 +713,7 @@ data PPModule = PPModule [ModuleName] [PPDecl]
 data PPDecl
   = PPTypeDecl Ident [(LocalName, Term)] [(LocalName, Term)] Sort [(Ident, Term)]
   | PPDefDecl Ident Term (Maybe Term)
+  | PPInjectCode Text.Text Text.Text
 
 -- | Pretty-print a 'PPModule'
 ppPPModule :: PPOpts -> PPModule -> SawDoc
@@ -736,3 +737,6 @@ ppPPModule opts (PPModule importNames decls) =
       case defBody of
         Just body -> Just <$> ppTerm' PrecTerm body
         Nothing -> return Nothing
+
+    ppDecl (PPInjectCode ns text) =
+      pure (pretty ("injectCode"::Text.Text) <+> viaShow ns <+> viaShow text)

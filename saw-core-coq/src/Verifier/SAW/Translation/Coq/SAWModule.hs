@@ -27,7 +27,7 @@ module Verifier.SAW.Translation.Coq.SAWModule where
 import qualified Control.Monad.Except                          as Except
 import           Control.Monad.Reader                          hiding (fail)
 import           Prelude                                       hiding (fail)
-import           Prettyprinter                                 (Doc)
+import           Prettyprinter                                 (Doc, pretty)
 
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
@@ -179,3 +179,6 @@ translateDecl configuration modname decl =
     case runModuleTranslationMonad configuration modname (translateDef dd) of
       Left e -> error $ show e
       Right (tdecl, _) -> Coq.ppDecl tdecl
+  InjectCodeDecl ns txt
+    | ns == "Coq" -> pretty txt
+    | otherwise   -> mempty

@@ -77,6 +77,8 @@ import Verifier.SAW.Lexer
   'where'     { PosPair _ (TKey "where") }
   'axiom'     { PosPair _ (TKey "axiom") }
   'primitive' { PosPair _ (TKey "primitive") }
+  'injectCode' { PosPair _ (TKey "injectCode") }
+
   nat      { PosPair _ (TNat _) }
   '_'      { PosPair _ (TIdent "_") }
   ident    { PosPair _ (TIdent _) }
@@ -106,6 +108,8 @@ SAWDecl : 'data' Ident VarCtx ':' LTerm 'where' '{' list(CtorDecl) '}'
                                                    (TypedDef $1 [] $3) $4 }
         | Ident list(TermVar) '=' LTerm ';' { TermDef $1 $2 $4 }
         | Ident VarCtxItem VarCtx ':' LTerm '=' LTerm ';' { TypedDef $1 ($2 ++ $3) $5 $7 }
+        | 'injectCode' string string ';'
+	     { InjectCodeDecl (Text.pack (tokString (val $2))) (Text.pack (tokString (val $3))) }
 
 DefBody :: { Term }
 DefBody : '=' LTerm { $2 }

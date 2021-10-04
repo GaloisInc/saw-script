@@ -70,7 +70,7 @@ $idchar    = [a-z A-Z 0-9 \' \_]
 
 @punct = "#" | "," | "->" | "." | ";" | ":" | "=" | "*"
        | "\" | "(" | ")" | "[" | "]" | "{" | "}" | "|"
-@keywords = "data" | "hiding" | "import" | "module"
+@keywords = "data" | "hiding" | "import" | "module" | "injectCode"
           | "sort" | "isort" | "Prop" | "where" | "primitive" | "axiom"
 @key = @punct | @keywords
 

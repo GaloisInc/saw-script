@@ -149,6 +149,7 @@ translateCryptolModule nm configuration globalDecls m =
   in
   Coq.ppDecl . Coq.Section nm <$> decls
 
-moduleDeclName :: ModuleDecl -> String
-moduleDeclName (TypeDecl (DataType { dtName })) = identName dtName
-moduleDeclName (DefDecl  (Def      { defIdent })) = identName defIdent
+moduleDeclName :: ModuleDecl -> Maybe String
+moduleDeclName (TypeDecl (DataType { dtName })) = Just (identName dtName)
+moduleDeclName (DefDecl  (Def      { defIdent })) = Just (identName defIdent)
+moduleDeclName InjectCodeDecl{} = Nothing

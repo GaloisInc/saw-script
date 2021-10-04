@@ -54,6 +54,7 @@ module Verifier.SAW.Module
   , moduleDefs
   , findDef
   , insDef
+  , insInjectCode
   , moduleDecls
   , modulePrimitives
   , moduleAxioms
@@ -252,6 +253,11 @@ instance Show DataType where
 -- | Declarations that can occur in a module
 data ModuleDecl = TypeDecl DataType
                 | DefDecl Def
+                    -- | Code to inject directly in-stream when
+                    --   doing translations.
+                | InjectCodeDecl
+                    Text {- ^ Code namespace -}
+                    Text {- ^ Code do inject -}
 
 -- | The different sorts of things that a 'Text' name can be resolved to
 data ResolvedName
@@ -366,6 +372,11 @@ completeDataType m (identBaseName -> str) ctors =
     Nothing ->
       internalError $ "completeDataType: datatype not found: " ++ show str
 
+
+-- | Insert an "injectCode" declaration
+insInjectCode :: Module -> Text -> Text -> Module
+insInjectCode m ns txt =
+  m{ moduleRDecls = InjectCodeDecl ns txt : moduleRDecls m }
 
 -- | Insert a definition into a module
 insDef :: Module -> Def -> Module
@@ -497,3 +508,5 @@ ppModule opts m =
       (map (\c -> (ctorName c, ctorType c)) dtCtors)
     toDecl (DefDecl (Def {..})) =
       PPDefDecl defIdent defType defBody
+    toDecl (InjectCodeDecl ns text) =
+      PPInjectCode ns text
