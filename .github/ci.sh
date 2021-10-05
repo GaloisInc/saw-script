@@ -119,10 +119,11 @@ zip_dist() {
 
 zip_dist_with_solvers() {
   sname="${1}"
-  cp "$(which cvc4)"       dist/bin/
-  cp "$(which yices)"      dist/bin/
-  cp "$(which yices-smt2)" dist/bin/
-  cp "$(which z3)"         dist/bin/
+  cp "$BIN/abc"        dist/bin/
+  cp "$BIN/cvc4"       dist/bin/
+  cp "$BIN/yices"      dist/bin/
+  cp "$BIN/yices-smt2" dist/bin/
+  cp "$BIN/z3"         dist/bin/
   cp -r dist "$sname"
   tar -cvzf "$sname".tar.gz "$sname"
 }
