@@ -84,6 +84,11 @@ jobs:
         with:
           ghc-version: ${{ matrix.ghc }}
 
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          BUILD_TARGET_OS: ${{ matrix.os }}
+
       - uses: actions/cache@v2
         name: Cache cabal store
         with:
@@ -189,7 +194,7 @@ jobs:
       - shell: bash
         run: .github/ci.sh install_system_deps
         env:
-          BIN_ZIP_FILE: ${{ matrix.os }}-bin.zip
+          BUILD_TARGET_OS: ${{ matrix.os }}
 
       - uses: actions/download-artifact@v2
         with:
@@ -242,7 +247,7 @@ jobs:
       - shell: bash
         run: .github/ci.sh install_system_deps
         env:
-          BIN_ZIP_FILE: ${{ matrix.os }}-bin.zip
+          BUILD_TARGET_OS: ${{ matrix.os }}
 
       - uses: actions/download-artifact@v2
         with:
@@ -302,7 +307,7 @@ jobs:
       - shell: bash
         run: .github/ci.sh install_system_deps
         env:
-          BIN_ZIP_FILE: ${{ matrix.os }}-bin.zip
+          BUILD_TARGET_OS: ${{ matrix.os }}
 
       - uses: actions/download-artifact@v2
         with:
