@@ -59,7 +59,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-18.04, macos-latest, windows-latest]
+        os: [ubuntu-18.04, macos-10.15, windows-latest]
         ghc: ["8.8.4", "8.10.3"]
         exclude:
           - os: windows-latest
@@ -184,7 +184,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-10.15]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -236,7 +236,7 @@ jobs:
           - test: saw-remote-api/scripts/run_rpc_tests.sh
             os: ubuntu-18.04
           - test: saw-remote-api/scripts/run_rpc_tests.sh
-            os: macos-latest
+            os: macos-10.15
           - test: saw-remote-api/scripts/check_docs.sh
             os: ubuntu-18.04
     steps:
@@ -286,7 +286,7 @@ jobs:
         continue-on-error: [false]
         include:
           - suite: integration_tests
-            os: macos-latest
+            os: macos-10.15
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
           - suite: integration_tests
             os: windows-latest
@@ -294,7 +294,7 @@ jobs:
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
         exclude:
           - suite: integration_tests
-            os: macos-latest
+            os: macos-10.15
             continue-on-error: false
           - suite: integration_tests
             os: windows-latest
