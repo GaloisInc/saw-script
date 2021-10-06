@@ -70,6 +70,14 @@ uninterpreted functions.
   [issues](https://github.com/galoisinc/saw-script/issues) for
   performance regressions you encounter!
 
+  The removal of the linked-in ABC version means that the `abc` tactic
+  now requires an external `abc` executable. You can get this by
+  downloading a `with-solvers` package from the releases page, by
+  downloading a solver package from the [`what4-solvers`
+  repository](https://github.com/GaloisInc/what4-solvers), or by
+  building it yourself from the [ABC
+  repository](https://github.com/berkeley-abc/abc).
+
 * The LLVM bitcode reader now should support files from any LLVM version
   between 3.6 and 12.
 
