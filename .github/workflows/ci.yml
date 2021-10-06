@@ -109,6 +109,8 @@ jobs:
           rm -f saw/SAWScript/Version.hs.bak
 
       - shell: bash
+        env:
+          RELEASE: ${{ needs.config.outputs.release }}
         run: .github/ci.sh build_cryptol
 
       - shell: bash

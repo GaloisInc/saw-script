@@ -45,7 +45,7 @@ setup_dist_bins() {
     extract_exe "saw-remote-api" "dist/bin"
   fi
   extract_exe "saw" "dist/bin"
-  extract_exe "cryptol" "dist/bin" "deps/cryptol/dist-newstyle"
+  extract_exe "cryptol" "dist/bin"
   export PATH=$PWD/dist/bin:$PATH
   echo "$PWD/dist/bin" >> "$GITHUB_PATH"
   strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
@@ -84,10 +84,7 @@ install_system_deps() {
 }
 
 build_cryptol() {
-  is_exe "dist/bin" "cryptol" && return
-  (cd deps/cryptol &&
-    git submodule update --init &&
-    .github/ci.sh build)
+  cabal build exe:cryptol
 }
 
 bundle_files() {
