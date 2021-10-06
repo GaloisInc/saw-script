@@ -2,6 +2,115 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+
+{- |
+Module      : SAWScript.Prover.MRSolver
+Copyright   : Galois, Inc. 2021
+License     : BSD3
+Maintainer  : westbrook@galois.com
+Stability   : experimental
+Portability : non-portable (language extensions)
+
+This module implements a monadic-recursive solver, for proving that one monadic
+term refines another. The algorithm works on the "monadic normal form" of
+computations, which uses the following laws to simplify binds in computations,
+where either is the sum elimination function defined in the SAW core prelude:
+
+returnM x >>= k               = k x
+errorM str >>= k              = errorM
+(m >>= k1) >>= k2             = m >>= \x -> k1 x >>= k2
+(existsM f) >>= k             = existsM (\x -> f x >>= k)
+(forallM f) >>= k             = forallM (\x -> f x >>= k)
+(orM m1 m2) >>= k             = orM (m1 >>= k) (m2 >>= k)
+(if b then m1 else m2) >>= k  = if b then m1 >>= k else m2 >>1 k
+(either f1 f2 e) >>= k        = either (\x -> f1 x >= k) (\x -> f2 x >= k) e
+(letrecM funs body) >>= k     = letrecM funs (\F1 ... Fn -> body F1 ... Fn >>= k)
+
+The resulting computations of one of the following forms:
+
+returnM e  |  errorM str  |  existsM f  |  forallM f  |  orM m1 m2  |
+if b then m1 else m2  |  either f1 f2 e  |  F e1 ... en  |  F e1 ... en >>= k  |
+letrecM lrts B (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> m)
+
+The form F e1 ... en refers to a recursively-defined function or a function
+variable that has been locally bound by a letrecM. Either way, monadic
+normalization does not attempt to normalize these functions.
+
+The algorithm maintains a context of three sorts of variables: letrec-bound
+variables, existential variables, and universal variables. Universal variables
+are represented as free SAW core variables, while the other two forms of
+variable are represented as SAW core 'ExtCns's terms, which are essentially
+axioms that have been generated internally. These 'ExtCns's are Skolemized,
+meaning that they take in as arguments all universal variables that were in
+scope when they were created. The context also maintains a partial substitution
+for the existential variables, as they become instantiated with values, and it
+additionally remembers the bodies / unfoldings of the letrec-bound variables.
+
+The goal of the solver at any point is of the form C |- m1 <= m2, meaning that
+we are trying to prove m1 refines m2 in context C. This proceed by cases:
+
+C |- returnM e1 <= returnM e2: prove C |- e1 = e2
+
+C |- errorM str1 <= errorM str2: vacuously true
+
+C |- if b then m1' else m1'' <= m2: prove C,b=true |- m1' <= m2 and
+C,b=false |- m1'' <= m2, skipping either case where C,b=X is unsatisfiable;
+
+C |- m1 <= if b then m2' else m2'': similar to the above
+
+C |- either T U (CompM V) f1 f2 e <= m: prove C,x:T,e=inl x |- f1 x <= m and
+C,y:U,e=inl y |- f2 y <= m, again skippping any case with unsatisfiable context;
+
+C |- m <= either T U (CompM V) f1 f2 e: similar to previous
+
+C |- m <= forallM f: make a new universal variable x and recurse
+
+C |- existsM f <= m: make a new universal variable x and recurse (existential
+elimination uses universal variables and vice-versa)
+
+C |- m <= existsM f: make a new existential variable x and recurse
+
+C |- forall f <= m: make a new existential variable x and recurse
+
+C |- m <= orM m1 m2: try to prove C |- m <= m1, and if that fails, backtrack and
+prove C |- m <= m2
+
+C |- orM m1 m2 <= m: prove both C |- m1 <= m and C |- m2 <= m
+
+C |- letrec (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> body) <= m: create
+letrec-bound variables F1 through Fn in the context bound to their unfoldings f1
+through fn, respectively, and recurse on body <= m
+
+C |- m <= letrec (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> body): similar to
+previous case
+
+C |- F e1 ... en >>= k <= F e1' ... en' >>= k': prove C |- ei = ei' for each i
+and then prove k x <= k' x for new universal variable x
+
+C |- F e1 ... en <= F e1' ... en': prove C |- ei = ei' for each i
+
+C |- F x1 ... xn <= m: if we have an assumption in the context C of the form
+forall ys. F y1 ... yn <= m' then prove C |- [x1/y1, ..., xn/yn]m' <= m;
+otherwise unfold F, replacing recursive calls to F with m, yielding some term
+[m/F]F_body, and then prove C |- [m/F]F_body <= m; FIXME: eventually we should
+do a "recursive unfolding" of F, which also unfolds any other function that is
+mutually recursive with F but not with itself
+
+C |- F e1 ... en >>= k <= m:
+
+* If we have an assumption that F <= m', recursively prove C |- m' >>= k <= m
+  (NOTE: assumptions are for functions we have already verified)
+
+* If F is tail-recursive, make a new function F' with the same body as F except
+  that each return e is replaced with a call to k e, and then proceed as in the
+  C |- F' x1 ... xn <= m case, above (note that functions extracted from
+  Heapster are generally tail recursive);
+
+* Otherwise we don't know to "split" m into a bind of something that is refined
+  by F e1 ... en and something the is refined by k, so just fail
+-}
 
 module SAWScript.Prover.MRSolver
   (askMRSolver, MRFailure(..), showMRFailure
@@ -17,6 +126,8 @@ import Data.Semigroup
 import Prettyprinter
 
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.CtxTerm (MonadTerm(..))
+import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
@@ -24,62 +135,53 @@ import Verifier.SAW.Cryptol.Monadify
 import SAWScript.Proof (boolToProp)
 import qualified SAWScript.Prover.SBV as SBV
 
-import Prelude
 
--- | A function name that has been specifically created for a coinductive proof
-newtype LocalFunName
-  = LocalFunName { unLocalFunName :: ExtCns Term } deriving (Eq, Show)
+----------------------------------------------------------------------
+-- * MR Solver Term Representation
+----------------------------------------------------------------------
+
+-- | A variable used by the MR solver
+newtype MRVar = MRVar { unMRVar :: ExtCns Term } deriving (Eq, Show, Ord)
 
 -- | Names of functions to be used in computations, which are either local names
 -- (represented with an 'ExtCns'), which have been created to represent
 -- recursive calls to fixed-points, or global named constants
 data FunName
-  = LocalName LocalFunName | GlobalName GlobalDef
+  = LocalName (ExtCns Term) | GlobalName GlobalDef
   deriving (Eq, Show)
 
 -- | Get the type of a 'FunName'
 funNameType :: FunName -> Term
-funNameType (LocalName (LocalFunName ec)) = ecType ec
+funNameType (LocalName ec) = ecType ec
 funNameType (GlobalName gd) = globalDefType gd
-
--- | A "marking" consisting of a set of function names. Terms are marked to
--- indicate that they are subterms of terms that we got from unfolding the
--- specified function names. Marking is used to prevent infinite loops in the
--- solver.
-newtype Mark = Mark [FunName] deriving (Semigroup, Monoid, Show)
-
--- | Check if a function name is in a 'Mark'
-inMark :: FunName -> Mark -> Bool
-inMark f (Mark fs) = elem f fs
-
--- | Build a 'Mark' for a single function name
-singleMark :: FunName -> Mark
-singleMark f = Mark [f]
 
 -- | A term specifically known to be of type @sort i@ for some @i@
 newtype Type = Type Term deriving Show
 
--- | A computation in WHNF
+-- | A Haskell representation of a @CompM@ in "monadic normal form"
 data WHNFComp
-  = Return Term -- ^ Terminates with a return
-  | Error -- ^ Raises an error
-  | If Term Comp Comp -- ^ If-then-else that returns @CompM a@
-  | FunBind FunName [Term] Mark CompFun
-    -- ^ Bind a monadic function with @N@ arguments in an @a -> CompM b@ term,
-    -- marked with a set of function names
+  = ReturnM Term -- ^ A term @returnM a x@
+  | ErrorM Term -- ^ A term @errorM a str@
+  | Ite Term Comp Comp -- ^ If-then-else computation
+  | OrM Term Term -- ^ an @orM@ computation
+  | ExistsM CompFun -- ^ an @existsM@ computation
+  | ForallM CompFun -- ^ a @forallM@ computation
+  | FunBind FunName [Term] CompFun
+    -- ^ Bind a monadic function with @N@ arguments in an @a -> CompM b@ term
   deriving Show
 
 -- | A computation function of type @a -> CompM b@ for some @a@ and @b@
 data CompFun
+     -- | An arbitrary term
   = CompFunTerm Term
+    -- | A special case for the term @\ (x:a) -> returnM a x@
+  | CompFunReturn
+    -- | The monadic composition @f >=> g@
   | CompFunComp CompFun CompFun
-    -- ^ The monadic composition @f >=> g@
-  | CompFunMark CompFun Mark
-    -- ^ A computation marked with function names
   deriving Show
 
 -- | A computation of type @CompM a@ for some @a@
-data Comp = CompTerm Term | CompBind Comp CompFun | CompMark Comp Mark
+data Comp = CompTerm Term | CompBind Comp CompFun
           deriving Show
 
 -- | A universal type for all the different ways MR. Solver represents terms
@@ -103,6 +205,130 @@ instance IsMRTerm CompFun where toMRTerm = MRTermCompFun
 instance IsMRTerm WHNFComp where toMRTerm = MRTermWHNFComp
 instance IsMRTerm FunName where toMRTerm = MRTermFunName
 
+
+----------------------------------------------------------------------
+-- * Pretty-Printing MR Solver Terms
+----------------------------------------------------------------------
+
+-- | The monad for pretty-printing in a context of SAW core variables
+type PPInCtxM = Reader [LocalName]
+
+-- | Pretty-print an object in a SAW core context and render to a 'String'
+showInCtx :: PrettyInCtx a => [LocalName] -> a -> String
+showInCtx ctx a =
+  renderSawDoc defaultPPOpts $ runReader (prettyInCtx a) ctx
+
+-- | A generic function for pretty-printing an object in a SAW core context of
+-- locally-bound names
+class PrettyInCtx a where
+  prettyInCtx :: a -> PPInCtxM SawDoc
+
+instance PrettyInCtx Term where
+  prettyInCtx t = flip (ppTermInCtx defaultPPOpts) t <$> ask
+
+-- | Combine a list of pretty-printed documents that represent an application
+prettyAppList :: [PPInCtxM SawDoc] -> PPInCtxM SawDoc
+prettyAppList = fmap (group . hang 2 . vsep) . sequence
+
+instance PrettyInCtx Type where
+  prettyInCtx (Type t) = prettyInCtx t
+
+instance PrettyInCtx FunName where
+  prettyInCtx (LocalName ec) = return $ ppName $ ecName ec
+  prettyInCtx (GlobalName i) = return $ viaShow i
+
+instance PrettyInCtx Comp where
+  prettyInCtx (CompTerm t) = prettyInCtx t
+  prettyInCtx (CompBind c f) =
+    prettyAppList [prettyInCtx c, return ">>=", prettyInCtx f]
+
+instance PrettyInCtx CompFun where
+  prettyInCtx (CompFunTerm t) = prettyInCtx t
+  prettyInCtx CompFunReturn = return "returnM"
+  prettyInCtx (CompFunComp f g) =
+    prettyAppList [prettyInCtx f, return ">=>", prettyInCtx g]
+
+instance PrettyInCtx WHNFComp where
+  prettyInCtx (ReturnM t) =
+    prettyAppList [return "returnM", return "_", parens <$> prettyInCtx t]
+  prettyInCtx (ErrorM str) =
+    prettyAppList [return "errorM", return "_", parens <$> prettyInCtx str]
+  prettyInCtx (Ite cond t1 t2) =
+    prettyAppList [return "ite", return "_", prettyInCtx cond,
+                   parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
+  prettyInCtx (OrM t1 t2) =
+    prettyAppList [return "orM", return "_",
+                   parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
+  prettyInCtx (ExistsM f) =
+    prettyAppList [return "existsM", return "_", return "_",
+                   parens <$> prettyInCtx f]
+  prettyInCtx (ForallM f) =
+    prettyAppList [return "forallM", return "_", return "_",
+                   parens <$> prettyInCtx f]
+  prettyInCtx (FunBind f [] k) =
+    prettyAppList [prettyInCtx f, return ">>=", prettyInCtx k]
+  prettyInCtx (FunBind f args k) =
+    prettyAppList
+    [parens <$> prettyAppList (prettyInCtx f : map prettyInCtx args),
+     return ">>=", prettyInCtx k]
+
+instance PrettyInCtx MRTerm where
+  prettyInCtx (MRTermTerm t) = prettyInCtx t
+  prettyInCtx (MRTermType tp) = prettyInCtx tp
+  prettyInCtx (MRTermComp comp) = prettyInCtx comp
+  prettyInCtx (MRTermCompFun f) = prettyInCtx f
+  prettyInCtx (MRTermWHNFComp norm) = prettyInCtx norm
+  prettyInCtx (MRTermFunName nm) = prettyInCtx nm
+
+
+----------------------------------------------------------------------
+-- * Lifting MR Solver Terms
+----------------------------------------------------------------------
+
+-- | Generic function for lifting a MR solver term
+class MRLiftTerm a where
+  mrLiftTerm :: MonadTerm m => DeBruijnIndex -> DeBruijnIndex -> a -> m a
+
+instance MRLiftTerm Term where
+  mrLiftTerm = liftTerm
+
+instance MRLiftTerm Type where
+  mrLiftTerm n i (Type tp) = Type <$> liftTerm n i tp
+
+instance MRLiftTerm WHNFComp where
+  mrLiftTerm n i (ReturnM t) = ReturnM <$> mrLiftTerm n i t
+  mrLiftTerm n i (ErrorM str) = ErrorM <$> mrLiftTerm n i str
+  mrLiftTerm n i (Ite cond t1 t2) =
+    Ite <$> mrLiftTerm n i cond <*> mrLiftTerm n i t1 <*> mrLiftTerm n i t2
+  mrLiftTerm n i (OrM t1 t2) = OrM <$> mrLiftTerm n i t1 <*> mrLiftTerm n i t2
+  mrLiftTerm n i (ExistsM f) = ExistsM <$> mrLiftTerm n i f
+  mrLiftTerm n i (ForallM f) = ForallM <$> mrLiftTerm n i f
+  mrLiftTerm n i (FunBind nm args f) =
+    FunBind nm <$> mapM (mrLiftTerm n i) args <*> mrLiftTerm n i f
+
+instance MRLiftTerm CompFun where
+  mrLiftTerm n i (CompFunTerm t) = CompFunTerm <$> mrLiftTerm n i t
+  mrLiftTerm n i CompFunReturn = return CompFunReturn
+  mrLiftTerm n i (CompFunComp f g) =
+    CompFunComp <$> mrLiftTerm n i f <*> mrLiftTerm n i g
+
+instance MRLiftTerm Comp where
+  mrLiftTerm n i (CompTerm t) = CompTerm <$> mrLiftTerm n i t
+  mrLiftTerm n i (CompBind m f) = CompBind <$> mrLiftTerm n i m <*> mrLiftTerm n i f
+
+instance MRLiftTerm MRTerm where
+  mrLiftTerm n i (MRTermTerm t) = MRTermTerm <$> mrLiftTerm n i t
+  mrLiftTerm n i (MRTermType tp) = MRTermType <$> mrLiftTerm n i tp
+  mrLiftTerm n i (MRTermComp m) = MRTermComp <$> mrLiftTerm n i m
+  mrLiftTerm n i (MRTermCompFun f) = MRTermCompFun <$> mrLiftTerm n i f
+  mrLiftTerm n i (MRTermWHNFComp m) = MRTermWHNFComp <$> mrLiftTerm n i m
+  mrLiftTerm n i (MRTermFunName nm) = return $ MRTermFunName nm
+
+
+----------------------------------------------------------------------
+-- * MR Solver Errors
+----------------------------------------------------------------------
+
 -- | The context in which a failure occurred
 data FailCtx
   = FailCtxCmp MRTerm MRTerm
@@ -117,135 +343,116 @@ data MRFailure
   | FunsNotEq FunName FunName
   | CannotLookupFunDef FunName
   | RecursiveUnfold FunName
-  | MalformedInOutTypes Term
+  | MalformedLetRecTypes Term
   | MalformedDefsFun Term
   | MalformedComp Term
   | NotCompFunType Term
+    -- | A local variable binding
+  | MRFailureLocalVar LocalName MRFailure
+    -- | Information about the context of the failure
   | MRFailureCtx FailCtx MRFailure
-    -- ^ Records terms we were trying to compare when we got a failure
+    -- | Records a disjunctive branch we took, where both cases failed
   | MRFailureDisj MRFailure MRFailure
-    -- ^ Records a disjunctive branch we took, where both cases failed
   deriving Show
 
-prettyTerm :: Term -> Doc ann
-prettyTerm = unAnnotate . ppTerm defaultPPOpts
+-- | Pretty-print an object prefixed with a 'String' that describes it
+ppWithPrefix :: PrettyInCtx a => String -> a -> PPInCtxM SawDoc
+ppWithPrefix str a = (pretty str <>) <$> nest 2 <$> (line <>) <$> prettyInCtx a
 
-prettyAppList :: [Doc ann] -> Doc ann
-prettyAppList = group . hang 2 . vsep
+-- | Pretty-print two objects, prefixed with a 'String' and with a separator
+ppWithPrefixSep :: PrettyInCtx a => String -> a -> String -> a ->
+                   PPInCtxM SawDoc
+ppWithPrefixSep d1 t2 d3 t4 =
+  prettyInCtx t2 >>= \d2 -> prettyInCtx t4 >>= \d4 ->
+  return $ group (pretty d1 <> nest 2 (line <> d2) <> line <>
+                  pretty d3 <> nest 2 (line <> d4))
 
-instance Pretty Type where
-  pretty (Type t) = prettyTerm t
+-- | Apply 'vsep' to a list of pretty-printing computations
+vsepM :: [PPInCtxM SawDoc] -> PPInCtxM SawDoc
+vsepM = fmap vsep . sequence
 
-instance Pretty FunName where
-  pretty (LocalName (LocalFunName ec)) = unAnnotate $ ppName $ ecName ec
-  pretty (GlobalName i) = viaShow i
+instance PrettyInCtx FailCtx where
+  prettyInCtx (FailCtxCmp t1 t2) =
+    group <$> nest 2 <$> vsepM [return "When comparing terms:",
+                                prettyInCtx t1, prettyInCtx t2]
+  prettyInCtx (FailCtxWHNF t) =
+    group <$> nest 2 <$> vsepM [return "When normalizing computation:",
+                                prettyInCtx t]
 
-instance Pretty Comp where
-  pretty (CompTerm t) = prettyTerm t
-  pretty (CompBind c f) =
-    prettyAppList [pretty c, ">>=", pretty f]
-  pretty (CompMark c _) =
-    -- FIXME: print the mark?
-    pretty c
+instance PrettyInCtx MRFailure where
+  prettyInCtx (TermsNotEq t1 t2) =
+    ppWithPrefixSep "Terms not equal:" t1 "and" t2
+  prettyInCtx (TypesNotEq tp1 tp2) =
+    ppWithPrefixSep "Types not equal:" tp1 "and" tp2
+  prettyInCtx (ReturnNotError t) =
+    ppWithPrefix "errorM computation not equal to:" (ReturnM t)
+  prettyInCtx (FunsNotEq nm1 nm2) =
+    vsepM [return "Named functions not equal:",
+           prettyInCtx nm1, prettyInCtx nm2]
+  prettyInCtx (CannotLookupFunDef nm) =
+    ppWithPrefix "Could not find definition for function:" nm
+  prettyInCtx (RecursiveUnfold nm) =
+    ppWithPrefix "Recursive unfolding of function inside its own body:" nm
+  prettyInCtx (MalformedLetRecTypes t) =
+    ppWithPrefix "Not a ground LetRecTypes list:" t
+  prettyInCtx (MalformedDefsFun t) =
+    ppWithPrefix "Cannot handle letRecM recursive definitions term:" t
+  prettyInCtx (MalformedComp t) =
+    ppWithPrefix "Could not handle computation:" t
+  prettyInCtx (NotCompFunType tp) =
+    ppWithPrefix "Not a computation or computational function type:" tp
+  prettyInCtx (MRFailureLocalVar x err) =
+    local (x:) $ prettyInCtx err
+  prettyInCtx (MRFailureCtx ctx err) =
+    do pp1 <- prettyInCtx ctx
+       pp2 <- prettyInCtx err
+       return (pp1 <> line <> pp2)
+  prettyInCtx (MRFailureDisj err1 err2) =
+    ppWithPrefixSep "Tried two comparisons:" err1 "Backtracking..." err2
 
-instance Pretty CompFun where
-  pretty (CompFunTerm t) = prettyTerm t
-  pretty (CompFunComp f g) =
-    prettyAppList [pretty f, ">=>", pretty g]
-  pretty (CompFunMark f _) =
-    -- FIXME: print the mark?
-    pretty f
-
-instance Pretty WHNFComp where
-  pretty (Return t) =
-    prettyAppList ["returnM", parens (prettyTerm t)]
-  pretty Error = "errorM"
-  pretty (If cond t1 t2) =
-    prettyAppList ["ite", prettyTerm cond,
-                   parens (pretty t1), parens (pretty t2)]
-  pretty (FunBind f [] _ k) =
-    prettyAppList [pretty f, ">>=", pretty k]
-  pretty (FunBind f args _ k) =
-    prettyAppList
-    [parens (prettyAppList (pretty f : map prettyTerm args)),
-     ">>=" <+> pretty k]
-
-vsepIndent24 :: Doc ann -> Doc ann -> Doc ann -> Doc ann -> Doc ann
-vsepIndent24 d1 d2 d3 d4 =
-  group (d1 <> nest 2 (line <> d2) <> line <> d3 <> nest 2 (line <> d4))
-
-instance Pretty MRTerm where
-  pretty (MRTermTerm t) = prettyTerm t
-  pretty (MRTermType tp) = pretty tp
-  pretty (MRTermComp comp) = pretty comp
-  pretty (MRTermCompFun f) = pretty f
-  pretty (MRTermWHNFComp norm) = pretty norm
-  pretty (MRTermFunName nm) = "function" <+> pretty nm
-
-instance Pretty FailCtx where
-  pretty (FailCtxCmp t1 t2) =
-    group $ nest 2 $ vsep ["When comparing terms:", pretty t1, pretty t2]
-  pretty (FailCtxWHNF t) =
-    group $ nest 2 $ vsep ["When normalizing computation:", prettyTerm t]
-
-instance Pretty MRFailure where
-  pretty (TermsNotEq t1 t2) =
-    vsepIndent24
-    "Terms not equal:" (prettyTerm t1)
-    "and" (prettyTerm t2)
-  pretty (TypesNotEq tp1 tp2) =
-    vsepIndent24
-    "Types not equal:" (pretty tp1)
-    "and" (pretty tp2)
-  pretty (ReturnNotError t) =
-    nest 2 ("errorM not equal to" <+>
-            group (hang 2 $ vsep ["returnM", prettyTerm t]))
-  pretty (FunsNotEq nm1 nm2) =
-    vsep ["Named functions not equal:", pretty nm1, pretty nm2]
-  pretty (CannotLookupFunDef nm) =
-    vsep ["Could not find definition for function:", pretty nm]
-  pretty (RecursiveUnfold nm) =
-    vsep ["Recursive unfolding of function inside its own body:",
-          pretty nm]
-  pretty (MalformedInOutTypes t) =
-    "Not a ground InputOutputTypes list:"
-    <> nest 2 (line <> prettyTerm t)
-  pretty (MalformedDefsFun t) =
-    "Cannot handle letRecM recursive definitions term:"
-    <> nest 2 (line <> prettyTerm t)
-  pretty (MalformedComp t) =
-    "Could not handle computation:"
-    <> nest 2 (line <> prettyTerm t)
-  pretty (NotCompFunType tp) =
-    "Not a computation or computational function type:"
-    <> nest 2 (line <> prettyTerm tp)
-  pretty (MRFailureCtx ctx err) =
-    pretty ctx <> line <> pretty err
-  pretty (MRFailureDisj err1 err2) =
-    vsepIndent24 "Tried two comparisons:" (pretty err1)
-    "Backtracking..." (pretty err2)
-
+-- | Render a 'MRFailure' to a 'String'
 showMRFailure :: MRFailure -> String
-showMRFailure = show . pretty
+showMRFailure = showInCtx []
+
+
+----------------------------------------------------------------------
+-- * MR Monad
+----------------------------------------------------------------------
+
+-- | Classification info for what sort of variable an 'MRVar' is
+data MRVarInfo
+     -- | An existential variable, that might be instantiated
+  = EVarInfo (Maybe Term)
+    -- | A letrec-bound function, with its body
+  | FunVarInfo Term
 
 -- | State maintained by MR. Solver
 data MRState = MRState {
+  -- | Global shared context for building terms, etc.
   mrSC :: SharedContext,
-  -- ^ Global shared context for building terms, etc.
+  -- | Global SMT configuration for the duration of the MR. Solver call
   mrSMTConfig :: SBV.SMTConfig,
-  -- ^ Global SMT configuration for the duration of the MR. Solver call
+  -- | SMT timeout for SMT calls made by Mr. Solver
   mrSMTTimeout :: Maybe Integer,
-  -- ^ SMT timeout for SMT calls made by Mr. Solver
-  mrLocalFuns :: [(LocalFunName, Term)],
-  -- ^ Letrec-bound function names with their definitions as lambda-terms
-  mrFunEqs :: [((FunName, FunName), Bool)],
-  -- ^ Cache of which named functions are equal
-  mrPathCondition :: Term
-  -- ^ The conjunction of all Boolean if conditions along the current path
+  -- | The context of universal variables, which are free SAW core variables
+  mrUVars :: [(LocalName,Term)],
+  -- | The existential and letrec-bound variables
+  mrVars :: [(MRVar, MRVarInfo)],
+  -- | The current assumptions of function refinement, where we assume each
+  -- left-hand in the list side refines its corresponding right-hand side
+  mrFunRefs :: [(FunName, Term)],
+  -- | The current assumptions, which are conjoined into a single Boolean term
+  mrAssumptions :: Term
 }
 
--- | Monad used by the MR. Solver
+-- | Mr. Monad, the monad used by MR. Solver
 type MRM = ExceptT MRFailure (StateT MRState IO)
+
+instance MonadTerm MRM where
+  mkTermF = liftSC1 scTermF
+  liftTerm = liftSC3 incVars
+  whnfTerm = liftSC1 scWhnf
+  substTerm = liftSC3 instantiateVarList
 
 -- | Run an 'MRM' computation, and apply a function to any failure thrown
 mapFailure :: (MRFailure -> MRFailure) -> MRM a -> MRM a
@@ -266,6 +473,9 @@ withFailureCtx ctx = mapFailure (MRFailureCtx ctx)
 catchErrorEither :: MonadError e m => m a -> m (Either e a)
 catchErrorEither m = catchError (Right <$> m) (return . Left)
 
+-- FIXME: replace these individual lifting functions with a more general
+-- typeclass like LiftTCM
+
 -- | Lift a nullary SharedTerm computation into 'MRM'
 liftSC0 :: (SharedContext -> IO a) -> MRM a
 liftSC0 f = (mrSC <$> get) >>= \sc -> liftIO (f sc)
@@ -282,23 +492,104 @@ liftSC2 f a b = (mrSC <$> get) >>= \sc -> liftIO (f sc a b)
 liftSC3 :: (SharedContext -> a -> b -> c -> IO d) -> a -> b -> c -> MRM d
 liftSC3 f a b c = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c)
 
+-- | Lift a quaternary SharedTerm computation into 'MRM'
+liftSC4 :: (SharedContext -> a -> b -> c -> d -> IO e) -> a -> b -> c -> d ->
+           MRM e
+liftSC4 f a b c d = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c d)
+
+-- | Run a MR Solver computation in a context extended with a universal variable
+withUVar :: LocalName -> Type -> MRM a -> MRM a
+withUVar nm (Type tp) m =
+  mapFailure (MRFailureLocalVar nm) $
+  do st <- get
+     put (st { mrUVars = (nm,tp) : mrUVars st })
+     ret <- m
+     modify (\st' -> st' { mrUVars = mrUVars st })
+     return ret
+
+-- | Run a MR Solver computation in a context extended with a universal variable
+-- and pass it the lifting (in the sense of 'incVars') of an MR Solver term
+withUVarLift :: MRLiftTerm tm => LocalName -> Type -> tm -> (tm -> MRM a) ->
+                MRM a
+withUVarLift nm tp t m =
+  withUVar nm tp (mrLiftTerm 0 1 t >>= m)
+
+{-
+FIXME HERE NOW: write mrLiftTerm
+
+-- | Convert an 'MRVar' to a 'Term'
+mrVarTerm :: MRVar -> MRM Term
+mrVarTerm (MRVar ec) = liftSC1 scExtCns ec
+
+-- | Get the 'VarInfo' associated with a 'MRVar'
+mrVarInfo :: MRVar -> MRM (Maybe MRVarInfo)
+mrVarInfo var = lookup var <$> mrVars <$> get
+
+-- | Get the current value of an evar, if it has one
+mrGetEVar :: MRVar -> MRM (Maybe Term)
+mrGetEVar var =
+  mrVarInfo var >>= \case
+  Just (EVarInfo maybe_tm) -> return maybe_tm
+  Just _ -> error "mrGetEVar: Non-evar"
+  Nothing -> error "mrGetEVar: Unknown var"
+
+-- | Make a fresh variable of a given type, and the SAW core term built from it
+mrFreshVar :: LocalName -> Type -> MRVarInfo -> MRM MRVar
+mrFreshVar nm (Type tp) info =
+  do ec <- liftSC2 scFreshEC nm tp
+     let var = MRVar ec
+     evar_tm <- liftSC1 scExtCns ec
+     modify $ \st -> st { mrVars = (var, info) : mrVars st }
+     return var
+
+-- | Make a fresh existential variable of the given type
+mrFreshEVar :: LocalName -> Type -> MRM MRVar
+mrFreshEVar nm tp = mrFreshVar nm tp (EVarInfo Nothing)
+
+-- | Make a fresh function variable of the given type with the given body
+mrFreshFunVar :: LocalName -> Type -> Term -> MRM MRVar
+mrFreshFunVar nm tp body = mrFreshVar nm tp (FunVarInfo body)
+
+-- | Update the value associated with a key in an association list, raising the
+-- supplied 'String' error message if the key is not found
+updateAList :: Eq k => String -> k -> (a -> a) -> [(k,a)] -> [(k,a)]
+updateAList msg _ _ [] = error msg
+updateAList _ k f ((k',a):xs) | k == k' = (k', f a) : xs
+updateAList msg k f ((k',a):xs) | = (k', a) : updateAList msg k f xs
+
+-- | Set the value of an evar
+mrSetEVar :: MRVar -> Term -> MRM ()
+mrSetEVar var val =
+  do val_tp <- liftSC1 scTypeOf val
+     -- FIXME: catch subtyping errors and report them as being evar failures
+     liftSC3 scCheckSubtype Nothing (TypedTerm val val_tp) (mrVarType var)
+     modify $ \st ->
+       flip (updateAList "mrSetEVar: variable unknown!" var) (mrVars st) $ \case
+         EVarInfo Nothing -> EVarInfo val
+         EVarInfo (Just _) -> error "mrSetEVar: variable already set!"
+         _ -> error "mrSetEVar: not an evar!"
+
 -- | Test if a Boolean term is "provable", i.e., its negation is unsatisfiable
-mrProvable :: Term -> MRM Bool
-mrProvable bool_prop =
+mrProvableRaw :: Term -> MRM Bool
+mrProvableRaw bool_prop =
   do smt_conf <- mrSMTConfig <$> get
      timeout <- mrSMTTimeout <$> get
-     path_prop <- mrPathCondition <$> get
-     bool_prop' <- liftSC2 scImplies path_prop bool_prop
-     sc <- mrSC <$> get
-     prop <- liftIO (boolToProp sc [] bool_prop')
-     (smt_res, _) <- liftIO (SBV.proveUnintSBVIO sc smt_conf mempty timeout prop)
+     prop <- liftSC2 boolToProp [] bool_prop
+     (smt_res, _) <- liftSC4 SBV.proveUnintSBVIO smt_conf mempty timeout prop
      case smt_res of
        Just _ -> return False
        Nothing -> return True
 
--- | Test if a Boolean term is satisfiable
-mrSatisfiable :: Term -> MRM Bool
-mrSatisfiable prop = not <$> (liftSC1 scNot prop >>= mrProvable)
+-- | Test if a Boolean term is satisfiable, i.e., if its negation is provable
+mrSatisfiableRaw :: Term -> MRM Bool
+mrSatisfiableRaw prop = not <$> (liftSC1 scNot bool_prop' >>= mrProvableRaw)
+
+-- | Test if a Boolean term is provable given the current assumptions
+mrProvable :: Term -> MRM Bool
+mrProvable bool_prop =
+  do assumps <- mrAssumptions <$> get
+     bool_prop' <- liftSC2 scImplies assumps bool_prop
+     mrProvableRaw bool_prop'
 
 -- | Test if two terms are equal using an SMT solver
 mrTermsEq :: Term -> Term -> MRM Bool
@@ -306,29 +597,26 @@ mrTermsEq t1 t2 =
   do tp <- liftSC1 scTypeOf t1
      eq_fun_tm <- liftSC1 scGlobalDef "Prelude.eq"
      prop <- liftSC2 scApplyAll eq_fun_tm [tp, t1, t2]
-     -- Remember, t1 == t2 is true iff t1 /= t2 is not satisfiable
-     -- not_prop <- liftSC1 scNot prop
-     -- not <$> mrSatisfiable not_prop
      mrProvable prop
 
 -- | Run an equality-testing computation under the assumption of an additional
 -- path condition. If the condition is unsatisfiable, the test is vacuously
 -- true, so need not be run.
-withPathCondition :: Term -> MRM () -> MRM ()
-withPathCondition cond m =
-  do sat <- mrSatisfiable cond
+withAssumption :: Term -> MRM () -> MRM ()
+withAssumption assump m =
+  do assumps <- mrAssumptions <$> get
+     assumps' <- liftSc2 scAnd assump assumps
+     sat <- mrSatisfiableRaw assumps'
      if sat then
-       do old_cond <- mrPathCondition <$> get
-          new_cond <- liftSC2 scAnd old_cond cond
-          modify $ \st -> st { mrPathCondition = new_cond }
+       do modify $ \st -> st { mrAssumps = assumps' }
           m
-          modify $ \st -> st { mrPathCondition = old_cond }
+          modify $ \st -> st { mrAssumps = assumps }
        else return ()
 
--- | Like 'withPathCondition' but for the negation of a condition
-withNotPathCondition :: Term -> MRM () -> MRM ()
-withNotPathCondition cond m =
-  liftSC1 scNot cond >>= \cond' -> withPathCondition cond' m
+
+----------------------------------------------------------------------
+-- * Normalizing and Matching on Terms
+----------------------------------------------------------------------
 
 -- | Get the input type of a computation function
 compFunInputType :: CompFun -> MRM Term
@@ -343,7 +631,7 @@ compFunInputType (CompFunMark f _) = compFunInputType f
 -- | Match a term as a function name
 asFunName :: Term -> Maybe FunName
 asFunName t =
-  (LocalName <$> LocalFunName <$> asExtCns t)
+  (LocalName <$> MRVar <$> asExtCns t)
   `mplus` (GlobalName <$> asTypedGlobalDef t)
 
 -- | Match a term as being of the form @CompM a@ for some @a@
@@ -364,19 +652,18 @@ applyCompFun (CompFunMark f mark) t =
   do comp <- applyCompFun f t
      return $ CompMark comp mark
 
--- | Take in an @InputOutputTypes@ list (as a SAW core term) and build a fresh
--- function variable for each pair of input and output types in it
-mkFunVarsForTps :: Term -> MRM [LocalFunName]
-mkFunVarsForTps (asCtor -> Just (primName -> "Prelude.TypesNil", [])) =
+
+-- | Take in a @LetRecTypes@ list (as a SAW core term) and build a fresh
+-- function variable for each @LetRecType@ in it
+mkFunVarsForTps :: Term -> MRM [MRVar]
+mkFunVarsForTps (asCtor -> Just (primName -> "Prelude.LRT_Nil", [])) =
   return []
-mkFunVarsForTps (asCtor -> Just (primName -> "Prelude.TypesCons", [a, b, tps])) =
-  do compM <- liftSC1 scGlobalDef "Prelude.CompM"
-     comp_b <- liftSC2 scApply compM b
-     tp <- liftSC3 scPi "x" a comp_b
-     rest <- mkFunVarsForTps tps
-     ec <- liftSC2 scFreshEC "f" tp
-     return (LocalFunName ec : rest)
-mkFunVarsForTps t = throwError (MalformedInOutTypes t)
+mkFunVarsForTps (asCtor -> Just (primName -> "Prelude.LRT_Cons", [lrt, lrts])) =
+  do tp <- liftSC1 completeOpenTerm $
+       applyOpenTerm (globalOpenTerm "Prelude.lrtToType") (closedOpenTerm lrt)
+     f <- MRVar <$> liftSC2 scFreshEC "f" tp
+     (f:) <$> mkFunVarsForTps lrts
+mkFunVarsForTps t = throwError (MalformedLetRecTypes t)
 
 -- | Normalize a computation to weak head normal form
 whnfComp :: Comp -> MRM WHNFComp
@@ -400,18 +687,29 @@ whnfComp (CompTerm t) =
        (isGlobalDef "Prelude.ite" -> Just (), [_, cond, then_tm, else_tm]) ->
          return $ If cond (CompTerm then_tm) (CompTerm else_tm)
        (isGlobalDef "Prelude.letRecM" -> Just (), [tps, _, defs_f, body_f]) ->
-         do funs <- mkFunVarsForTps tps
-            fun_tms <- mapM (liftSC1 scFlatTermF . ExtCns . unLocalFunName) funs
-            funs_tm <-
+         do
+           -- First, make fresh function constants for all the bound functions
+           funs <- mkFunVarsForTps tps
+           fun_tms <- mapM mrVarTerm funs
+
+           -- Next, tuple the constants up and apply the definition function
+           -- defs_f to that tuple, yielding the definitions of the individual
+           -- letrec-bound functions in terms of the new function constants
+           funs_tm <-
               foldr ((=<<) . liftSC2 scPairValue) (liftSC0 scUnitValue) fun_tms
-            defs_tm <- liftSC2 scApply defs_f funs_tm >>= liftSC1 scWhnf
-            defs <- case asTupleValue defs_tm of
-              Just defs -> return defs
-              Nothing -> throwError (MalformedDefsFun defs_f)
-            modify $ \st ->
-              st { mrLocalFuns = (zip funs defs) ++ mrLocalFuns st }
-            body_tm <- liftSC2 scApply body_f funs_tm
-            whnfComp (CompTerm body_tm)
+           defs_tm <- liftSC2 scApply defs_f funs_tm >>= liftSC1 scWhnf
+           defs <- case asTupleValue defs_tm of
+             Just defs -> return defs
+             Nothing -> throwError (MalformedDefsFun defs_f)
+
+           -- Remember the body associated with each fresh function constant
+           modify $ \st -> st { mrVars = zip funs defs : mrVars st }
+
+           -- Finally, apply the body function to the tuple of constants and
+           -- recursively normalize the resulting computation
+           body_tm <- liftSC2 scApply body_f funs_tm
+           whnfComp (CompTerm body_tm)
+
        ((asFunName -> Just f), args) ->
          do comp_tp <- liftSC1 scTypeOf t >>= liftSC1 scWhnf
             tp <-
@@ -447,11 +745,11 @@ whnfMark (FunBind f args mark1 g) mark2 =
 -- or because it is a locally-bound function variable
 mrLookupFunDef :: FunName -> MRM Term
 mrLookupFunDef f@(GlobalName _) = throwError (CannotLookupFunDef f)
-mrLookupFunDef f@(LocalName nm) =
-  do fun_assoc <- mrLocalFuns <$> get
-     case lookup nm fun_assoc of
-       Just body -> return body
-       Nothing -> throwError (CannotLookupFunDef f)
+mrLookupFunDef f@(LocalName var) =
+  mrVarInfo var >>= \case
+  Just (FunVarInfo body) -> return body
+  Just _ -> throwError (CannotLookupFunDef f)
+  Nothing -> error "mrLookupFunDef: unknown variable!"
 
 -- | Unfold a call to function @f@ in term @f args >>= g@
 mrUnfoldFunBind :: FunName -> [Term] -> Mark -> CompFun -> MRM Comp
@@ -462,6 +760,13 @@ mrUnfoldFunBind f args mark g =
        (CompMark <$> (CompTerm <$> liftSC2 scApplyAll f_def args)
         <*> (return $ singleMark f `mappend` mark))
        <*> return g
+
+
+----------------------------------------------------------------------
+-- * MR Solver Itself
+----------------------------------------------------------------------
+
+FIXME HERE NOW: update the rest of MR Solver
 
 -- | Coinductively prove an equality between two named functions by assuming
 -- the names are equal and proving their bodies equal
@@ -600,6 +905,11 @@ instance MRSolveEq WHNFComp WHNFComp where
     -- to do is unfold the function call and recurse
     mrUnfoldFunBind f2 args2 mark2 k2 >>= \c -> mrSolveEq comp1 c
 
+
+----------------------------------------------------------------------
+-- * External Entrypoints
+----------------------------------------------------------------------
+
 -- | Test two monadic, recursive terms for equivalence
 askMRSolver ::
   SharedContext ->
@@ -633,3 +943,4 @@ askMRSolver sc smt_conf timeout t1 t2 =
      case res of
        Left err -> return $ Just err
        Right () -> return Nothing
+-}
