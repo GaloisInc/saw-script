@@ -45,6 +45,7 @@ setup_dist_bins() {
     extract_exe "saw-remote-api" "dist/bin"
   fi
   extract_exe "saw" "dist/bin"
+  extract_exe "cryptol" "dist/bin" "deps/cryptol/dist-newstyle"
   export PATH=$PWD/dist/bin:$PATH
   echo "$PWD/dist/bin" >> "$GITHUB_PATH"
   strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"

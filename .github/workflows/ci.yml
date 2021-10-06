@@ -109,6 +109,9 @@ jobs:
           rm -f saw/SAWScript/Version.hs.bak
 
       - shell: bash
+        run: .github/ci.sh build_cryptol
+
+      - shell: bash
         run: .github/ci.sh build
 
       - uses: GaloisInc/.github/actions/cabal-collect-bins@v1
