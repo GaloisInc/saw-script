@@ -2032,6 +2032,11 @@ primitive errorM : (a:sort 0) -> String -> CompM a;
 -- specification, this is the union of computations f x.
 primitive existsM : (a b:sort 0) -> (a -> CompM b) -> CompM b;
 
+-- The computation that nondeterministically chooses one computation or another.
+-- As a specification, represents the disjunction of two specifications.
+orM : (a : sort 0) -> CompM a -> CompM a -> CompM a;
+orM a m1 m2 = existsM Bool a (\ (b:Bool) -> ite (CompM a) b m1 m2);
+
 -- The specification formed from the intersection of all computations f x for
 -- all possible inputs x. Computationally, this is sort of like running f for
 -- all possible inputs x at the same time and then raising an error if any of
@@ -2163,9 +2168,6 @@ lrtApply top_lrts B =
     rest (F fs.(1)) fs.(2))
   top_lrts;
 
--- NOTE: the following are needed to define multiFixM instead of making it a
--- primitive, which we are keeping commented here in case that is needed
-{-
 -- Construct a multi-arity function of type lrtPi lrts B from one of type
 -- lrtTupleType lrts -> B
 lrtLambda : (lrts:LetRecTypes) -> (B:sort 0) -> (lrtTupleType lrts -> B) -> lrtPi lrts B;
@@ -2179,6 +2181,9 @@ lrtLambda top_lrts B =
     rest (\ (fs:lrtTupleType lrts) -> F (f, fs)))
   top_lrts;
 
+-- NOTE: the following are needed to define letRecM instead of making it a
+-- primitive, which we are keeping commented here in case that is needed
+{-
 -- Build a multi-argument fixed-point of type A1 -> ... -> An -> CompM B
 multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
                lrtToType lrt;
@@ -2217,9 +2222,36 @@ multiFixM lrts F =
   multiTupleFixM lrts (\ (fs:lrtTupleType lrts) -> lrtApply lrts (lrtTupleType lrts) F fs);
 -}
 
+-- This is like let rec in ML: letRecM defs body defines N recursive functions
+-- in terms of themselves using defs, and then passes them to body. We use this
+-- instead of the more standard fixM because it offers a more compact
+-- representation, and because fixM messes with functional extensionality by
+-- introducing an irreducible term at function type.
+primitive letRecM : (lrts : LetRecTypes) -> (B:sort 0) ->
+                    lrtPi lrts (lrtTupleType lrts) ->
+                    lrtPi lrts (CompM B) -> CompM B;
+-- letRecM lrts B F body = lrtApply lrts (CompM B) body (multiFixM lrts F);
+
+-- This is let rec with exactly one binding
+letRecM1 : (a b c : sort 0) -> ((a -> CompM b) -> (a -> CompM b)) ->
+           ((a -> CompM b) -> CompM c) -> CompM c;
+letRecM1 a b c fn body =
+  letRecM
+    (LRT_Cons (LRT_Fun a (\ (_:a) -> LRT_Ret b)) LRT_Nil) c
+    (\ (f:a -> CompM b) -> (fn f, ()))
+    (\ (f:a -> CompM b) -> body f);
+
+
 -- Construct a fixed-point for a tuple of mutually-recursive functions
 primitive multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
                       lrtTupleType lrts;
+-- FIXME: write this in terms of letRecM!
+{-
+multiFixM lrts f =
+  letRecM lrts (lrtTupleType lrts) f
+          (lrtLambda lrts (lrtTupleType lrts)
+                     (\ (fs:lrtTupleType lrts) -> fs));
+-}
 
 -- Build a single, multi-argument fixed-point of type A1 -> ... -> An -> CompM B
 multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
@@ -2234,24 +2266,6 @@ fixM : (a:sort 0) -> (b:a -> sort 0) ->
        (((x:a) -> CompM (b x)) -> ((x:a) -> CompM (b x))) ->
        (x:a) -> CompM (b x);
 fixM a b = multiArgFixM (LRT_Fun a (\ (x:a) -> LRT_Ret (b x)));
-
--- This is like let rec in ML: letRecM defs body defines N recursive functions
--- in terms of themselves using defs, and then passes them to body. We use this
--- instead of the more standard fixM because it offers a more compact
--- representation, and because fixM messes with functional extensionality by
--- introducing an irreducible term at function type.
-letRecM : (lrts : LetRecTypes) -> (B:sort 0) -> lrtPi lrts (lrtTupleType lrts) ->
-          lrtPi lrts (CompM B) -> CompM B;
-letRecM lrts B F body = lrtApply lrts (CompM B) body (multiFixM lrts F);
-
--- This is let rec with exactly one binding
-letRecM1 : (a b c : sort 0) -> ((a -> CompM b) -> (a -> CompM b)) ->
-           ((a -> CompM b) -> CompM c) -> CompM c;
-letRecM1 a b c fn body =
-  letRecM
-    (LRT_Cons (LRT_Fun a (\ (_:a) -> LRT_Ret b)) LRT_Nil) c
-    (\ (f:a -> CompM b) -> (fn f, ()))
-    (\ (f:a -> CompM b) -> body f);
 
 
 -- Test computations
