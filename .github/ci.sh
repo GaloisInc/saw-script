@@ -74,7 +74,7 @@ build() {
 }
 
 install_system_deps() {
-  (cd $BIN && curl -o bins.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/$SOLVER_PKG_VERSION/$BIN_ZIP_FILE" && unzip -o bins.zip && rm bins.zip)
+  (cd $BIN && curl -o bins.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/$SOLVER_PKG_VERSION/$BUILD_TARGET_OS-bin.zip" && unzip -o bins.zip && rm bins.zip)
   chmod +x $BIN/*
   cp $BIN/yices_smt2$EXT $BIN/yices-smt2$EXT
   export PATH="$BIN:$PATH"
@@ -115,6 +115,17 @@ zip_dist() {
   name="$1"
   cp -r dist "$name"
   tar -czf "$name".tar.gz "$name"
+}
+
+zip_dist_with_solvers() {
+  sname="${1}"
+  cp "$BIN/abc"        dist/bin/
+  cp "$BIN/cvc4"       dist/bin/
+  cp "$BIN/yices"      dist/bin/
+  cp "$BIN/yices-smt2" dist/bin/
+  cp "$BIN/z3"         dist/bin/
+  cp -r dist "$sname"
+  tar -cvzf "$sname".tar.gz "$sname"
 }
 
 output() { echo "::set-output name=$1::$2"; }
