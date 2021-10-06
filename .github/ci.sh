@@ -91,11 +91,12 @@ build_cryptol() {
 }
 
 bundle_files() {
-  mkdir -p dist dist/{bin,doc,examples,include,lib}
+  mkdir -p dist dist/{bin,deps,doc,examples,include,lib}
 
   cp LICENSE README.md dist/
   $IS_WIN || chmod +x dist/bin/*
 
+  (cd deps/cryptol-specs && git archive --prefix=cryptol-specs/ --format=tar HEAD) | (cd dist/deps && tar x)
   cp doc/extcore.md dist/doc
   cp doc/tutorial/sawScriptTutorial.pdf dist/doc/tutorial.pdf
   cp doc/manual/manual.pdf dist/doc/manual.pdf
