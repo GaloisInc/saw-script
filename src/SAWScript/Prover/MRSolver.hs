@@ -4,6 +4,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE LambdaCase #-}
 
 {- |
 Module      : SAWScript.Prover.MRSolver
@@ -121,13 +122,20 @@ module SAWScript.Prover.MRSolver
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
+import Control.Monad.Trans.Maybe
 import Data.Semigroup
+
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 
 import Prettyprinter
 
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm (MonadTerm(..))
 import Verifier.SAW.Term.Pretty
+import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
@@ -137,11 +145,48 @@ import qualified SAWScript.Prover.SBV as SBV
 
 
 ----------------------------------------------------------------------
+-- * Utility Functions for Transforming 'Term's
+----------------------------------------------------------------------
+
+-- | Transform the immediate subterms of a term using the supplied function
+traverseSubterms :: MonadTerm m => (Term -> m Term) -> Term -> m Term
+traverseSubterms f (unwrapTermF -> tf) = traverse f tf >>= mkTermF
+
+-- | Build a recursive memoized function for tranforming 'Term's. Take in a
+-- function @f@ that intuitively performs one step of the transformation and
+-- allow it to recursively call the memoized function being defined by passing
+-- it as the first argument to @f@.
+memoFixTermFun :: MonadIO m => ((Term -> m a) -> Term -> m a) -> Term -> m a
+memoFixTermFun f term_top =
+  do table_ref <- liftIO $ newIORef IntMap.empty
+     let go t@(STApp { stAppIndex = ix }) =
+           readIORef table_ref >>= \table ->
+           case IntMap.lookup ix table of
+             Just ret -> return ret
+             Nothing ->
+               do ret <- f go t
+                  modifyIORef' table_ref (IntMap.insert ix ret)
+                  return ret
+         go t = f go t
+     go term_top
+
+
+----------------------------------------------------------------------
 -- * MR Solver Term Representation
 ----------------------------------------------------------------------
 
 -- | A variable used by the MR solver
 newtype MRVar = MRVar { unMRVar :: ExtCns Term } deriving (Eq, Show, Ord)
+
+-- | Test if a 'Term' is an application of an 'MRVar' to some arguments
+asMRVarApp :: Recognizer Term (MRVar, [Term])
+asMRVarApp (asApplyAll -> (asExtCns -> Just ec, args)) =
+  return (MRVar ec, args)
+asMRVarApp _ = Nothing
+
+-- | Get the type of an 'MRVar'
+mrVarType :: MRVar -> Term
+mrVarType = ecType . unMRVar
 
 -- | Names of functions to be used in computations, which are either local names
 -- (represented with an 'ExtCns'), which have been created to represent
@@ -381,7 +426,7 @@ instance PrettyInCtx FailCtx where
 
 instance PrettyInCtx MRFailure where
   prettyInCtx (TermsNotEq t1 t2) =
-    ppWithPrefixSep "Terms not equal:" t1 "and" t2
+    ppWithPrefixSep "Could not prove terms equal:" t1 "and" t2
   prettyInCtx (TypesNotEq tp1 tp2) =
     ppWithPrefixSep "Types not equal:" tp1 "and" tp2
   prettyInCtx (ReturnNotError t) =
@@ -426,6 +471,17 @@ data MRVarInfo
     -- | A letrec-bound function, with its body
   | FunVarInfo Term
 
+-- | A map from 'MRVar's to their info
+type MRVarMap = Map MRVar MRVarInfo
+
+-- | Recognize an evar applied to 0 or more arguments relative to a 'MRVarMap'
+-- along with its instantiation, if any
+asEVarApp :: MRVarMap -> Recognizer Term (MRVar, [Term], Maybe Term)
+asEVarApp var_map (asMRVarApp -> Just (var, args))
+  | Just (EVarInfo maybe_inst) <- Map.lookup var var_map =
+    Just (var, args, maybe_inst)
+asEVarApp _ _ = Nothing
+
 -- | State maintained by MR. Solver
 data MRState = MRState {
   -- | Global shared context for building terms, etc.
@@ -437,7 +493,7 @@ data MRState = MRState {
   -- | The context of universal variables, which are free SAW core variables
   mrUVars :: [(LocalName,Term)],
   -- | The existential and letrec-bound variables
-  mrVars :: [(MRVar, MRVarInfo)],
+  mrVars :: MRVarMap,
   -- | The current assumptions of function refinement, where we assume each
   -- left-hand in the list side refines its corresponding right-hand side
   mrFunRefs :: [(FunName, Term)],
@@ -445,8 +501,8 @@ data MRState = MRState {
   mrAssumptions :: Term
 }
 
--- | Mr. Monad, the monad used by MR. Solver
-type MRM = ExceptT MRFailure (StateT MRState IO)
+-- | Mr. Monad, the monad used by MR. Solver, which is the state-exception monad
+type MRM = StateT MRState (ExceptT MRFailure IO)
 
 instance MonadTerm MRM where
   mkTermF = liftSC1 scTermF
@@ -458,7 +514,8 @@ instance MonadTerm MRM where
 mapFailure :: (MRFailure -> MRFailure) -> MRM a -> MRM a
 mapFailure f m = catchError m (throwError . f)
 
--- | Try two different 'MRM' computations, combining their failures if needed
+-- | Try two different 'MRM' computations, combining their failures if needed.
+-- Note that the 'MRState' will reset if the first computation fails.
 mrOr :: MRM a -> MRM a -> MRM a
 mrOr m1 m2 =
   catchError m1 $ \err1 ->
@@ -497,25 +554,44 @@ liftSC4 :: (SharedContext -> a -> b -> c -> d -> IO e) -> a -> b -> c -> d ->
            MRM e
 liftSC4 f a b c d = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c d)
 
--- | Run a MR Solver computation in a context extended with a universal variable
-withUVar :: LocalName -> Type -> MRM a -> MRM a
+-- | Run a MR Solver computation in a context extended with a universal
+-- variable, which is passed as a 'Term' to the sub-computation
+withUVar :: LocalName -> Type -> (Term -> MRM a) -> MRM a
 withUVar nm (Type tp) m =
   mapFailure (MRFailureLocalVar nm) $
   do st <- get
      put (st { mrUVars = (nm,tp) : mrUVars st })
-     ret <- m
+     ret <- liftSC1 scLocalVar 0 >>= m
      modify (\st' -> st' { mrUVars = mrUVars st })
      return ret
 
 -- | Run a MR Solver computation in a context extended with a universal variable
 -- and pass it the lifting (in the sense of 'incVars') of an MR Solver term
-withUVarLift :: MRLiftTerm tm => LocalName -> Type -> tm -> (tm -> MRM a) ->
-                MRM a
+withUVarLift :: MRLiftTerm tm => LocalName -> Type -> tm ->
+                (Term -> tm -> MRM a) -> MRM a
 withUVarLift nm tp t m =
-  withUVar nm tp (mrLiftTerm 0 1 t >>= m)
+  withUVar nm tp (\x -> mrLiftTerm 0 1 t >>= m x)
 
-{-
-FIXME HERE NOW: write mrLiftTerm
+-- | Build 'Term's for all the uvars currently in scope, ordered from least to
+-- most recently bound
+getAllUVarTerms :: MRM [Term]
+getAllUVarTerms =
+  (length <$> mrUVars <$> get) >>= \len ->
+  mapM (liftSC1 scLocalVar) [len-1, len-2 .. 0]
+
+-- | Lambda-abstract all the current uvars out of a 'Term', with the least
+-- recently bound variable being abstracted first
+lambdaUVarsM :: Term -> MRM Term
+lambdaUVarsM t =
+  (mrUVars <$> get) >>= \ctx ->
+  liftSC2 scLambdaList (reverse ctx) t
+
+-- | Pi-abstract all the current uvars out of a 'Term', with the least recently
+-- bound variable being abstracted first
+piUVarsM :: Term -> MRM Term
+piUVarsM t =
+  (mrUVars <$> get) >>= \ctx ->
+  liftSC2 scPiList (reverse ctx) t
 
 -- | Convert an 'MRVar' to a 'Term'
 mrVarTerm :: MRVar -> MRM Term
@@ -523,7 +599,7 @@ mrVarTerm (MRVar ec) = liftSC1 scExtCns ec
 
 -- | Get the 'VarInfo' associated with a 'MRVar'
 mrVarInfo :: MRVar -> MRM (Maybe MRVarInfo)
-mrVarInfo var = lookup var <$> mrVars <$> get
+mrVarInfo var = Map.lookup var <$> mrVars <$> get
 
 -- | Get the current value of an evar, if it has one
 mrGetEVar :: MRVar -> MRM (Maybe Term)
@@ -533,43 +609,120 @@ mrGetEVar var =
   Just _ -> error "mrGetEVar: Non-evar"
   Nothing -> error "mrGetEVar: Unknown var"
 
--- | Make a fresh variable of a given type, and the SAW core term built from it
+-- | Make a fresh 'MRVar' of a given type with the given info
 mrFreshVar :: LocalName -> Type -> MRVarInfo -> MRM MRVar
 mrFreshVar nm (Type tp) info =
   do ec <- liftSC2 scFreshEC nm tp
      let var = MRVar ec
      evar_tm <- liftSC1 scExtCns ec
-     modify $ \st -> st { mrVars = (var, info) : mrVars st }
+     modify $ \st -> st { mrVars = Map.insert var info (mrVars st) }
      return var
 
--- | Make a fresh existential variable of the given type
-mrFreshEVar :: LocalName -> Type -> MRM MRVar
-mrFreshEVar nm tp = mrFreshVar nm tp (EVarInfo Nothing)
+-- | Make a fresh existential variable of the given type, abstracting out all
+-- the current uvars and returning the new evar applied to all current uvars
+mrFreshEVar :: LocalName -> Type -> MRM Term
+mrFreshEVar nm (Type tp) =
+  do tp' <- piUVarsM tp
+     var <- mrFreshVar nm (Type tp') (EVarInfo Nothing)
+     var_tm <- mrVarTerm var
+     vars <- getAllUVarTerms
+     liftSC2 scApplyAll var_tm vars
 
 -- | Make a fresh function variable of the given type with the given body
 mrFreshFunVar :: LocalName -> Type -> Term -> MRM MRVar
 mrFreshFunVar nm tp body = mrFreshVar nm tp (FunVarInfo body)
 
--- | Update the value associated with a key in an association list, raising the
--- supplied 'String' error message if the key is not found
-updateAList :: Eq k => String -> k -> (a -> a) -> [(k,a)] -> [(k,a)]
-updateAList msg _ _ [] = error msg
-updateAList _ k f ((k',a):xs) | k == k' = (k', f a) : xs
-updateAList msg k f ((k',a):xs) | = (k', a) : updateAList msg k f xs
-
--- | Set the value of an evar
-mrSetEVar :: MRVar -> Term -> MRM ()
-mrSetEVar var val =
+-- | Set the value of an evar to a closed term
+mrSetEVarClosed :: MRVar -> Term -> MRM ()
+mrSetEVarClosed var val =
   do val_tp <- liftSC1 scTypeOf val
      -- FIXME: catch subtyping errors and report them as being evar failures
      liftSC3 scCheckSubtype Nothing (TypedTerm val val_tp) (mrVarType var)
      modify $ \st ->
-       flip (updateAList "mrSetEVar: variable unknown!" var) (mrVars st) $ \case
-         EVarInfo Nothing -> EVarInfo val
-         EVarInfo (Just _) -> error "mrSetEVar: variable already set!"
-         _ -> error "mrSetEVar: not an evar!"
+       st { mrVars =
+            Map.alter
+            (\case
+                Just (EVarInfo Nothing) -> Just $ EVarInfo (Just val)
+                Just (EVarInfo (Just _)) ->
+                  error "Setting existential variable: variable already set!"
+                _ -> error "Setting existential variable: not an evar!")
+            var (mrVars st) }
 
--- | Test if a Boolean term is "provable", i.e., its negation is unsatisfiable
+
+-- | Try to set the value of the application @X e1 .. en@ of evar @X@ to an
+-- expression @e@ by trying to set @X@ to @\ x1 ... xn -> e@. This only works if
+-- each free uvar @xi@ in @e@ is one of the arguments @ej@ to @X@ (though it
+-- need not be the case that @i=j@). Return whether this succeeded.
+mrTrySetAppliedEVar :: MRVar -> [Term] -> Term -> MRM Bool
+mrTrySetAppliedEVar evar args t =
+  -- Get the complete list of argument variables of the type of evar
+  let (evar_vars, _) = asPiList (mrVarType var) in
+  -- Get all the free variables of t
+  let free_vars = bitSetElems (looseVars t) in
+  -- For each free var of t, find an arg equal to it
+  case mapM (\i -> findIndex (\case
+                                 (asLocalVar -> Just j) -> i == j
+                                 _ -> False) args) free_vars of
+    Just fv_arg_ixs
+      -- Check to make sure we have the right number of args
+      | length args == length evar_vars -> do
+          -- Build a list of the input vars x1 ... xn as terms, noting that the
+          -- first variable is the least recently bound and so has the highest
+          -- deBruijn index
+          let arg_ixs = [length args - 1, length args - 2, .., 0]
+          arg_vars <- mapM (liftSC1 scLocalVar) arg_ixs
+
+          -- For free variable of t, we substitute the corresponding variable
+          -- xi, substituting error terms for the variables that are not free
+          -- (since we have nothing else to substitute for them)
+          let var_map = zip free_vars fv_arg_ixs
+          let subst = flip map [0, .., length args - 1] \i ->
+                maybe (error "mrTrySetAppliedEVar: unexpected free variable")
+                (arg_vars !!) (lookup i var_map)
+          body <- substTerm 0 subst t
+
+          -- Now build \x1 ... xn -> body as a term and set evar to that term
+          var_inst <- liftSC2 scLambdaList var_vars body
+          mrSetEVarClosed var var_inst
+          return True
+
+    _ -> False
+
+
+-- | Replace all evars in a 'Term' with their instantiations when they have one
+mrSubstEVars :: Term -> MRM Term
+mrSubstEVars = memoFixTermFun $ \recurse t ->
+  do var_map <- mrVars <$> get
+     case t of
+       -- If t is an instantiated evar, recurse on its instantiation
+       (asEVarApp var_map -> Just (_, args, Just t')) ->
+         liftSC2 scApplyAll t' args >>= recurse
+       -- If t is anything else, recurse on its immediate subterms
+       _ -> traverseSubterms recurse t
+
+-- | Replace all evars in a 'Term' with their instantiations, returning
+-- 'Nothing' if we hit an uninstantiated evar
+mrSubstEVarsStrict :: Term -> MRM (Maybe Term)
+mrSubstEVarsStrict = runMaybeT $ memoFixTermFun $ \recurse t ->
+  do var_map <- mrVars <$> get
+     case t of
+       -- If t is an instantiated evar, recurse on its instantiation
+       (asEVarApp var_map -> Just (_, args, Just t')) ->
+         lift (liftSC2 scApplyAll t' args) >>= recurse
+       -- If t is an uninstantiated evar, return Nothing
+       (asEVarApp var_map -> Just (_, args, Nothing)) ->
+         mzero
+       -- If t is anything else, recurse on its immediate subterms
+       _ -> traverseSubterms recurse t
+
+
+----------------------------------------------------------------------
+-- * Calling Out to SMT
+----------------------------------------------------------------------
+
+-- | Test if a closed Boolean term is "provable", i.e., its negation is
+-- unsatisfiable, using an SMT solver. By "closed" we mean that it contains no
+-- uvars or 'MRVar's.
 mrProvableRaw :: Term -> MRM Bool
 mrProvableRaw bool_prop =
   do smt_conf <- mrSMTConfig <$> get
@@ -580,43 +733,82 @@ mrProvableRaw bool_prop =
        Just _ -> return False
        Nothing -> return True
 
--- | Test if a Boolean term is satisfiable, i.e., if its negation is provable
-mrSatisfiableRaw :: Term -> MRM Bool
-mrSatisfiableRaw prop = not <$> (liftSC1 scNot bool_prop' >>= mrProvableRaw)
-
--- | Test if a Boolean term is provable given the current assumptions
+-- | Test if a Boolean term over the current uvars is provable given the current
+-- assumptions
 mrProvable :: Term -> MRM Bool
-mrProvable bool_prop =
+mrProvable bool_tm =
   do assumps <- mrAssumptions <$> get
-     bool_prop' <- liftSC2 scImplies assumps bool_prop
-     mrProvableRaw bool_prop'
+     prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
+     forall_prop <- piUVarsM prop
+     mrProvableRaw forall_prop
 
--- | Test if two terms are equal using an SMT solver
-mrTermsEq :: Term -> Term -> MRM Bool
-mrTermsEq t1 t2 =
-  do tp <- liftSC1 scTypeOf t1
-     eq_fun_tm <- liftSC1 scGlobalDef "Prelude.eq"
-     prop <- liftSC2 scApplyAll eq_fun_tm [tp, t1, t2]
-     mrProvable prop
 
--- | Run an equality-testing computation under the assumption of an additional
--- path condition. If the condition is unsatisfiable, the test is vacuously
--- true, so need not be run.
-withAssumption :: Term -> MRM () -> MRM ()
-withAssumption assump m =
-  do assumps <- mrAssumptions <$> get
-     assumps' <- liftSc2 scAnd assump assumps
-     sat <- mrSatisfiableRaw assumps'
-     if sat then
-       do modify $ \st -> st { mrAssumps = assumps' }
-          m
-          modify $ \st -> st { mrAssumps = assumps }
-       else return ()
+-- | A "simple" strategy for proving equality between two terms, which we assume
+-- are of the same type. This strategy first checks if either side is an
+-- uninstantiated evar, in which case it set that evar to the other side. If
+-- not, it builds an equality proposition by applying the supplied function to
+-- both sides, and passes this proposition to an SMT solver.
+mrProveEqSimple :: (Term -> Term -> MRM Term) -> MRVarMap -> Term -> Term ->
+                   MRM ()
+
+-- If t1 is an instantiated evar, substitute and recurse
+mrProveEqSimple eqf var_map (asEVarApp var_map -> Just (_, args, Just f)) t2 =
+  liftSC2 scApplyAll f args >>= \t1' -> mrProveEqSimple eqf var_map t1' t2
+
+-- If t1 is an uninstantiated evar, instantiate it with t2
+mrProveEqSimple _ var_map t1@(asEVarApp var_map ->
+                              Just (evar, args, Nothing)) t2 =
+  do t2' <- mrSubstEVars t2
+     success <- mrTrySetAppliedEVar evar args t2'
+     if success then return () else throwError (TermsNotEq t1 t2)
+
+-- If t2 is an instantiated evar, substitute and recurse
+mrProveEqSimple eqf var_map t1 (asEVarApp -> Just (_, args, f)) =
+  liftSC2 scApplyAll f args >>= \t2' -> mrProveEqSimple eqf var_map t1 t2'
+
+-- If t2 is an uninstantiated evar, instantiate it with t1
+mrProveEqSimple _ var_map t1 t2@(asEVarApp var_map ->
+                                 Just (evar, args, Nothing)) =
+  do t1' <- mrSubstEVars t1
+     success <- mrTrySetAppliedEVar evar args t1
+     if success then return () else throwError (TermsNotEq t1 t2)
+
+-- Otherwise, try to prove both sides are equal. The use of mrSubstEVars instead
+-- of mrSubstEVarsStrict means that we allow evars in the terms we send to the
+-- SMT solver, but we treat them as uvars.
+mrProveEqSimple eqf _ t1 t2 =
+  do t1' <- mrSubstEVars t1
+     t2' <- mrSubstEVars t2
+     prop <- eqf t1' t2'
+     succ <- mrProvable prop
+     if succ then return () else
+       throwError (TermsNotEq t1 t2)
+
+
+-- | Prove that two terms are equal, instantiating evars if necessary, or
+-- throwing an error if this is not possible
+mrProveEq :: Term -> Term -> MRM ()
+mrProveEq t1_top t2_top =
+  (do tp <- liftSC1 scTypeOf t1_top
+      varmap <- mrVars <$> get
+      proveEq varmap tp t1_top t2_top)
+  where
+    proveEq :: Map MRVar MRVarInfo -> Term -> Term -> Term -> MRM ()
+    proveEq var_map (asDataType -> (pn, [])) t1 t2
+      | pn == "Prelude.Nat" =
+        mrProveEqSimple (liftSC2 scEqualNat) var_map t1 t2
+    proveEq var_map (asBitvectorType -> Just _) t1 t2 =
+      -- FIXME: make a better solver for bitvector equalities
+      mrProveEqSimple (liftSC2 scEq) var_map t1 t2
+    proveEq var_map _ t1 t2 =
+      mrProveEqSimple (liftSC2 scEq) var_map t1 t2
 
 
 ----------------------------------------------------------------------
 -- * Normalizing and Matching on Terms
 ----------------------------------------------------------------------
+
+FIXME HERE NOW: update the rest of MR solver!
 
 -- | Get the input type of a computation function
 compFunInputType :: CompFun -> MRM Term
