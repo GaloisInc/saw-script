@@ -45,6 +45,7 @@ setup_dist_bins() {
     extract_exe "saw-remote-api" "dist/bin"
   fi
   extract_exe "saw" "dist/bin"
+  extract_exe "cryptol" "dist/bin"
   export PATH=$PWD/dist/bin:$PATH
   echo "$PWD/dist/bin" >> "$GITHUB_PATH"
   strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
@@ -83,18 +84,16 @@ install_system_deps() {
 }
 
 build_cryptol() {
-  is_exe "dist/bin" "cryptol" && return
-  (cd deps/cryptol &&
-    git submodule update --init &&
-    .github/ci.sh build)
+  cabal build exe:cryptol
 }
 
 bundle_files() {
-  mkdir -p dist dist/{bin,doc,examples,include,lib}
+  mkdir -p dist dist/{bin,deps,doc,examples,include,lib}
 
   cp LICENSE README.md dist/
   $IS_WIN || chmod +x dist/bin/*
 
+  (cd deps/cryptol-specs && git archive --prefix=cryptol-specs/ --format=tar HEAD) | (cd dist/deps && tar x)
   cp doc/extcore.md dist/doc
   cp doc/tutorial/sawScriptTutorial.pdf dist/doc/tutorial.pdf
   cp doc/manual/manual.pdf dist/doc/manual.pdf
