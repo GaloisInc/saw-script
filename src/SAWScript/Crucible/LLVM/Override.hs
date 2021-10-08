@@ -1091,10 +1091,7 @@ matchArg ::
   OverrideMatcher (LLVM arch) md ()
 
 matchArg opts sc cc cs prepost actual expectedTy expected = do
-  let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
-  mem <- case Crucible.lookupGlobal mvar $ cc ^. ccLLVMGlobals of
-    Nothing -> fail "internal error: LLVM Memory global not found"
-    Just mem -> pure mem
+  mem <- readGlobal $ Crucible.llvmMemVar $ ccLLVMContext cc
   case (actual, expectedTy, expected) of
     (_, _, SetupTerm expectedTT)
       | TypedTermSchema (Cryptol.Forall [] [] tyexpr) <- ttType expectedTT
