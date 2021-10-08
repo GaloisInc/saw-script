@@ -66,7 +66,7 @@ repl mbBatch opts begin =
       Nothing -> return ()
 
   getInputLines prompt ls =
-    do mb <- getInputLine prompt
+    do mb <- fmap (filter (/= '\r')) <$> getInputLine prompt
        let newPrompt = map (\_ -> ' ') prompt
        case mb of
           Nothing -> return Nothing

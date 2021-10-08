@@ -16,6 +16,8 @@ import           Verifier.SAW.Translation.Coq.Monad
 import qualified Verifier.SAW.Translation.Coq.Term  as TermTranslation
 import           Verifier.SAW.TypedTerm
 
+
+
 translateTypedTermMap ::
   TermTranslation.TermTranslationMonad m => Map.Map Name TypedTerm -> m [Coq.Decl]
 translateTypedTermMap tm = forM (Map.assocs tm) translateAndRegisterEntry

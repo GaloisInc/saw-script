@@ -1,4 +1,4 @@
-# Unreleased version
+# Version 0.9
 
 ## New Features
 
@@ -20,12 +20,30 @@ Several improvements have been made to JVM verification:
   "current" status, so that `enable_experimental` is no longer
   necessary for JVM verification.
 
+* The RPC API now includes methods for Java verification, as described [here](https://github.com/GaloisInc/saw-script/blob/master/saw-remote-api/docs/SAW.rst#sawjvmload-class-command).
+
 A new `enable_lax_pointer_ordering` function exists, which relaxes the
 restrictions that Crucible imposes on comparisons between pointers from
 different allocation blocks.
 
 A SAW value of type `Bool` can now be brought into scope in Cryptol expressions
 as a value of type `Bit`.
+
+A new `hoist_ifs_in_goal` proof tactic works like `hoist_ifs` but on the
+current goal in a proof script.
+
+The verification summaries produced when specifying the `-s` flag now
+contain much more detailed information. When producing JSON output (`-f
+json`), the tool in the `verif-viewer` directory can be used to
+translate it to GraphViz format.
+
+Two new experimental functions can evaluate SAWCore terms into simpler
+forms. The `normalize_term` function simplifies the given term by fully
+evaluating it with the SAWCore symbolic simulator but keeping it in
+SAWCore format. The `extract_uninterp` function allows certain
+uninterpreted functions to be replaced with extra inputs and constraints
+on those inputs, allowing propositional solvers to prove goals involving
+uninterpreted functions.
 
 ## Changes
 
@@ -51,6 +69,42 @@ as a value of type `Bit`.
   for performance, and could likely be made more efficient. Please file
   [issues](https://github.com/galoisinc/saw-script/issues) for
   performance regressions you encounter!
+
+  The removal of the linked-in ABC version means that the `abc` tactic
+  now requires an external `abc` executable. You can get this by
+  downloading a `with-solvers` package from the releases page, by
+  downloading a solver package from the [`what4-solvers`
+  repository](https://github.com/GaloisInc/what4-solvers), or by
+  building it yourself from the [ABC
+  repository](https://github.com/berkeley-abc/abc).
+
+* The LLVM bitcode reader now should support files from any LLVM version
+  between 3.6 and 12.
+
+## Bug Fixes
+
+* Overall, closed issues #109, #120, #128, #156, #233, #316, #320, #324,
+  #523, #561, #624, #689, #722, #727, #746, #869, #872, #900, #975,
+  #982, #1033, #1035, #1045, #1066, #1098, #1120, #1135, #1140, #1144,
+  #1147, #1148, #1152, #1166, #1171, #1175, #1182, #1184, #1186, #1211,
+  #1224, #1226, #1230, #1256, #1260, #1263, #1269, #1280, #1285, #1299,
+  #1307, #1308, #1311, #1318, #1341, #1355, #1367, #1375, #1381, #1388,
+  #1389, #1390, #1404, #1411, #1420, #1430, and #1438.
+
+* Overall, merged pull requests #942, #1117, #1185, #1191, #1204, #1205,
+  #1206, #1207, #1208, #1209, #1212, #1213, #1214, #1216, #1218, #1219,
+  #1267, #1270, #1272, #1274, #1275, #1276, #1278, #1279, #1281, #1282,
+  #1283, #1284, #1286, #1288, #1289, #1290, #1292, #1293, #1294, #1295,
+  #1297, #1298, #1300, #1309, #1310, #1313, #1315, #1317, #1319, #1320,
+  #1321, #1323, #1325, #1327, #1328, #1329, #1330, #1331, #1332, #1334,
+  #1335, #1336, #1337, #1342, #1343, #1345, #1346, #1349, #1351, #1356,
+  #1357, #1364, #1365, #1366, #1368, #1369, #1370, #1371, #1373, #1374,
+  #1378, #1379, #1380, #1384, #1385, #1391, #1392, #1393, #1394, #1396,
+  #1397, #1398, #1399, #1401, #1402, #1403, #1405, #1406, #1410, #1413,
+  #1414, #1415, #1416, #1422, #1423, #1424, #1426, #1427, #1428, #1429,
+  #1431, #1432, #1433, #1434, #1435, #1437, #1439, #1440, #1441, #1443,
+  #1444, #1445, #1446, #1448, #1449, #1450, #1451, #1453, #1454, #1455,
+  #1456, #1457, #1458, #1459, #1463, #1464, #1465, #1466, and #1468.
 
 # Version 0.8
 

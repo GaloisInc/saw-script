@@ -25,9 +25,9 @@ Mbox_def = Mbox;
             (m:Mbox) -> P m;
 Mbox__rec P f1 f2 m = Mbox#rec P f1 f2 m; -}
 
---unfoldMbox : Mbox -> Either #() (Mbox * Vec 64 Bool * BVVec 64 bv64_16 (Vec 64 Bool) * #());
+--unfoldMbox : Mbox -> Either #() (Mbox * Vec 64 Bool * BVVec 64 bv64_16 (Vec 64 Bool));
 primitive
-unfoldMbox : Mbox -> Either #() (Sigma (V64) (\ (len : V64) -> Mbox * BVVec 64 len (Vec 64 Bool) * #()));
+unfoldMbox : Mbox -> Either #() (Sigma (V64) (\ (len : V64) -> Mbox * BVVec 64 len (Vec 64 Bool)));
 
 {-unfoldMbox m =
   Mbox__rec (\ (_:Mbox) -> Either #() (Mbox * Vec 64 Bool * BVVec 64 bv64_16 (Vec 64 Bool) * #()))
@@ -38,7 +38,7 @@ unfoldMbox : Mbox -> Either #() (Sigma (V64) (\ (len : V64) -> Mbox * BVVec 64 l
   -}
 
 primitive
-foldMbox : Either #() (Sigma (V64) (\ (len : V64) -> Mbox * BVVec 64 len (Vec 64 Bool) * #())) -> Mbox;
+foldMbox : Either #() (Sigma (V64) (\ (len : V64) -> Mbox * BVVec 64 len (Vec 64 Bool))) -> Mbox;
 
 --(Mbox * Vec 64 Bool * (BVVec 64 bv64_16 (Vec 64 Bool)) * #()) -> Mbox;
 {-

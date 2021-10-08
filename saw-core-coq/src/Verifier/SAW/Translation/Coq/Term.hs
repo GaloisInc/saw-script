@@ -130,10 +130,13 @@ namedDecls = concatMap filterNamed
   where
     filterNamed :: Coq.Decl -> [String]
     filterNamed (Coq.Axiom n _)                               = [n]
+    filterNamed (Coq.Parameter n _)                           = [n]
+    filterNamed (Coq.Variable n _)                            = [n]
     filterNamed (Coq.Comment _)                               = []
     filterNamed (Coq.Definition n _ _ _)                      = [n]
     filterNamed (Coq.InductiveDecl (Coq.Inductive n _ _ _ _)) = [n]
     filterNamed (Coq.Snippet _)                               = []
+    filterNamed (Coq.Section _ ds)                            = namedDecls ds
 
 -- | Retrieve the names of all local and global declarations from the
 -- translation state.
@@ -170,10 +173,10 @@ translateIdentWithArgs i args = do
   currentModuleName <- asks (view currentModule . otherConfiguration)
   let identToCoq ident =
         if Just (identModule ident) == currentModuleName
-          then identName ident
+          then escapeIdent (identName ident)
           else
             show (translateModuleName (identModule ident))
-            ++ "." ++ identName ident
+            ++ "." ++ escapeIdent (identName ident)
   specialTreatment <- findSpecialTreatment i
   applySpecialTreatment identToCoq (atUseSite specialTreatment)
 
@@ -292,7 +295,25 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
         in
         foldM addElement (Coq.App (Coq.Var "Vector.nil") [Coq.Var "_"]) (Vector.reverse vec)
     StringLit s -> pure (Coq.Scope (Coq.StringLit (Text.unpack s)) "string")
-    ExtCns (EC _ _ _) -> errorTermM "External constants not supported"
+
+    ExtCns ec ->
+      do configuration <- asks translationConfiguration
+         let renamed = translateConstant (notations configuration) ec
+         alreadyTranslatedDecls <- getNamesOfAllDeclarations
+         let definitionsToSkip = skipDefinitions configuration
+         if elem renamed alreadyTranslatedDecls || elem renamed definitionsToSkip
+           then Coq.Var <$> pure renamed
+           else do
+             tp <-
+              -- Translate type in a top-level name scope
+              withLocalTranslationState $
+              do modify $ set localEnvironment []
+                 modify $ set unavailableIdents reservedIdents
+                 modify $ set sharedNames IntMap.empty
+                 modify $ set nextSharedName "var__0"
+                 translateTermLet (ecType ec)
+             modify $ over topLevelDeclarations $ (Coq.Variable renamed tp :)
+             Coq.Var <$> pure renamed
 
     -- The translation of a record type {fld1:tp1, ..., fldn:tpn} is
     -- RecordTypeCons fld1 tp1 (... (RecordTypeCons fldn tpn RecordTypeNil)...).
@@ -404,8 +425,7 @@ translatePi binders body = withLocalTranslationState $ do
 
 -- | Translate a local name from a saw-core binder into a fresh Coq identifier.
 translateLocalIdent :: TermTranslationMonad m => LocalName -> m Coq.Ident
-translateLocalIdent x = freshVariant ident0
-  where ident0 = Text.unpack x -- TODO: use some string encoding to ensure lexically valid Coq identifiers
+translateLocalIdent x = freshVariant (escapeIdent (Text.unpack x))
 
 -- | Find an fresh, as-yet-unused variant of the given Coq identifier.
 freshVariant :: TermTranslationMonad m => Coq.Ident -> m Coq.Ident
@@ -580,8 +600,28 @@ translateTermUnshared t = withLocalTranslationState $ do
       | n < length env -> Coq.Var <$> pure (env !! n)
       | otherwise -> Except.throwError $ LocalVarOutOfBounds t
 
-  -- Constants come with a body
-    Constant n body -> do
+    -- Constants with no body
+    Constant n Nothing -> do
+      configuration <- asks translationConfiguration
+      let renamed = translateConstant (notations configuration) n
+      alreadyTranslatedDecls <- getNamesOfAllDeclarations
+      let definitionsToSkip = skipDefinitions configuration
+      if elem renamed alreadyTranslatedDecls || elem renamed definitionsToSkip
+        then Coq.Var <$> pure renamed
+        else do
+          tp <-
+           -- Translate type in a top-level name scope
+           withLocalTranslationState $
+           do modify $ set localEnvironment []
+              modify $ set unavailableIdents reservedIdents
+              modify $ set sharedNames IntMap.empty
+              modify $ set nextSharedName "var__0"
+              translateTermLet (ecType n)
+          modify $ over topLevelDeclarations $ (Coq.Variable renamed tp :)
+          Coq.Var <$> pure renamed
+
+    -- Constants with a body
+    Constant n (Just body) -> do
       configuration <- asks translationConfiguration
       let renamed = translateConstant (notations configuration) n
       alreadyTranslatedDecls <- getNamesOfAllDeclarations
@@ -604,13 +644,17 @@ translateTermUnshared t = withLocalTranslationState $ do
     badTerm          = Except.throwError $ BadTerm t
 
 -- | In order to turn fixpoint computations into iterative computations, we need
--- to be able to create "dummy" values at the type of the computation.  For now,
--- we will support arbitrary nesting of vectors of boolean values.
+-- to be able to create "dummy" values at the type of the computation.
 defaultTermForType ::
   TermTranslationMonad m =>
   Term -> m Coq.Term
 defaultTermForType typ = do
   case typ of
+    (asBoolType -> Just ()) -> translateIdent (mkIdent preludeName "False")
+
+    (isGlobalDef "Prelude.Nat" -> Just ()) -> return $ Coq.NatLit 0
+
+    (asIntegerType -> Just ()) -> return $ Coq.ZLit 0
 
     (asSeq -> Just (n, typ')) -> do
       seqConst <- translateIdent (mkIdent (mkModuleName ["Cryptol"]) "seqConst")
@@ -619,13 +663,19 @@ defaultTermForType typ = do
       defaultT <- defaultTermForType typ'
       return $ Coq.App seqConst [ nT, typ'T, defaultT ]
 
-    (asBoolType -> Just ()) -> translateIdent (mkIdent preludeName "False")
+    (asPairType -> Just (x,y)) -> do
+      x' <- defaultTermForType x
+      y' <- defaultTermForType y
+      return $ Coq.App (Coq.Var "pair") [x',y']
 
-    _ ->
-      return $ Coq.App (Coq.Var "error")
-      [Coq.StringLit ("Could not generate default value of type " ++ showTerm typ)]
+    (asPiList -> (bs,body))
+      | not (null bs)
+      , looseVars body == emptyBitSet ->
+      do bs'   <- forM bs $ \ (_nm, ty) -> Coq.Binder "_" . Just <$> translateTerm ty
+         body' <- defaultTermForType body
+         return $ Coq.Lambda bs' body'
 
-    -- _ -> Except.throwError $ CannotCreateDefaultValue typ
+    _ -> Except.throwError $ CannotCreateDefaultValue typ
 
 translateTermToDocWith ::
   TranslationConfiguration ->

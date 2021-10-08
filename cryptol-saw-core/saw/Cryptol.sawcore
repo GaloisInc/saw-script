@@ -1073,6 +1073,12 @@ ecSMod n =
     (error (Stream Bool -> Stream Bool -> Stream Bool) "ecSMod: expected finite word")
     n;
 
+toSignedInteger : (n : Num) -> seq n Bool -> Integer;
+toSignedInteger n =
+  Num#rec (\ (n:Num) -> seq n Bool -> Integer)
+    sbvToInt
+    (error (Stream Bool -> Integer) "toSignedInteger: expected finite word")
+    n;
 
 -- Eq
 ecEq : (a : sort 0) -> PEq a -> a -> a -> Bool;
@@ -1533,7 +1539,7 @@ ecParmap a b n pb =
 ecFoldl : (n : Num) -> (a : sort 0) -> (b : sort 0) -> (a -> b -> a) -> a -> seq n b -> a;
 ecFoldl n a b f z =
   Num#rec (\ (n : Num) -> seq n b -> a)
-    (\ (n : Nat) -> \ (xs : Vec n b) -> foldr b a n (\ (y : b) -> \ (x : a) -> f x y) z (reverse n b xs))
+    (\ (n : Nat) -> \ (xs : Vec n b) -> foldl b a n f z xs)
     (\ (xs : Stream b) -> error a "Unexpected infinite stream in foldl" )
     n;
 

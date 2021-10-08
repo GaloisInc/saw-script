@@ -911,6 +911,10 @@ primitive Vec : Nat -> sort 0 -> sort 0;
 -- Primitive function for generating an array.
 primitive gen : (n : Nat) -> (a : sort 0) -> (Nat -> a) -> Vec n a;
 
+-- Primitive eliminators for arrays
+primitive head : (n : Nat) -> (a : sort 0) -> Vec (Succ n) a -> a;
+primitive tail : (n : Nat) -> (a : sort 0) -> Vec (Succ n) a -> Vec n a;
+
 primitive atWithDefault : (n : Nat) -> (a : sort 0) -> a -> Vec n a -> Nat -> a;
 
 at : (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> a;
@@ -951,6 +955,7 @@ axiom at_single : (a : sort 0) -> (x : a) -> (i : Nat) -> Eq a (at 1 a (single a
 primitive zip : (a b : sort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) (a * b);
 
 primitive foldr : (a b : sort 0) -> (n : Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
+primitive foldl : (a b : sort 0) -> (n : Nat) -> (b -> a -> b) -> b -> Vec n a -> b;
 
 reverse : (n : Nat) -> (a : sort 0) -> Vec n a -> Vec n a;
 reverse n a xs = gen n a (\ (i : Nat) -> at n a xs (subNat (subNat n 1) i));
@@ -1446,20 +1451,20 @@ List__rec :
   (l : List a) -> P l;
 List__rec a P f1 f2 l = List#rec a P f1 f2 l;
 
-unfoldList : (a:sort 0) -> List a -> Either #() (a * List a * #());
+unfoldList : (a:sort 0) -> List a -> Either #() (a * List a);
 unfoldList a l =
-  List__rec a (\ (_:List a) -> Either #() (a * List a * #()))
-  (Left #() (a * List a * #()) ())
-  (\ (x:a) (l:List a) (_:Either #() (a * List a * #())) ->
-     Right #() (a * List a * #()) (x, l, ()))
+  List__rec a (\ (_:List a) -> Either #() (a * List a))
+  (Left #() (a * List a) ())
+  (\ (x:a) (l:List a) (_:Either #() (a * List a)) ->
+     Right #() (a * List a) (x, l))
   l;
 
-foldList : (a:sort 0) -> Either #() (a * List a * #()) -> List a;
+foldList : (a:sort 0) -> Either #() (a * List a) -> List a;
 foldList a =
-  either #() (a * List a * #()) (List a)
+  either #() (a * List a) (List a)
          (\ (_ : #()) -> Nil a)
-         (\ (tup : (a * List a * #())) ->
-            Cons a tup.(1) tup.(2).(1));
+         (\ (tup : (a * List a)) ->
+            Cons a tup.(1) tup.(2));
 
 -- A list of types, i.e. `List (sort 0)` if `List` was universe polymorphic
 data ListSort : sort 1
@@ -1622,6 +1627,14 @@ genBVVec n len a f =
   genWithProof (bvToNat n len) a
     (\(i:Nat) (pf:IsLtNat i (bvToNat n len)) -> 
       f (bvNat n i) (IsLtNat_to_bvult n len i pf));
+
+-- Generate a BVVec from the elements of an existing vector, using a default
+-- value when we run out of the existing vector
+genBVVecFromVec : (m : Nat) -> (a : sort 0) -> Vec m a -> a ->
+                  (n : Nat) -> (len : Vec n Bool) -> BVVec n len a;
+genBVVecFromVec m a v def n len =
+  genBVVec n len a (\ (i:Vec n Bool) (_:is_bvult n i len) ->
+                      atWithDefault m a def v (bvToNat n i));
 
 -- Ex Falso Quodlibet: if True = False then anything is possible
 efq : (a : sort 0) -> Eq Bool True False -> a;
@@ -1947,6 +1960,24 @@ primitive CompM : sort 0 -> sort 0;
 primitive returnM : (a:sort 0) -> a -> CompM a;
 primitive bindM : (a b:sort 0) -> CompM a -> (a -> CompM b) -> CompM b;
 
+-- Apply a pure function to a computation
+fmapM : (a b: sort 0) -> (a -> b) -> CompM a -> CompM b;
+fmapM a b f m = bindM a b m (\ (x:a) -> returnM b (f x));
+
+-- Apply a computation of a function to a computation of an argument
+applyM : (a b: sort 0) -> CompM (a -> b) -> CompM a -> CompM b;
+applyM a b f m =
+  bindM (a -> b) b f (\ (f:a->b) -> bindM a b m (\ (x:a) -> returnM b (f x)));
+
+-- Apply a binary pure function to a computation
+fmapM2 : (a b c: sort 0) -> (a -> b -> c) -> CompM a -> CompM b -> CompM c;
+fmapM2 a b c f m1 m2 = applyM b c (fmapM a (b -> c) f m1) m2;
+
+-- Apply a trinary pure function to a computation
+fmapM3 : (a b c d: sort 0) -> (a -> b -> c -> d) ->
+         CompM a -> CompM b -> CompM c -> CompM d;
+fmapM3 a b c d f m1 m2 m3 = applyM c d (fmapM2 a b (c -> d) f m1 m2) m3;
+
 -- Compose two monadic functions
 composeM : (a b c: sort 0) -> (a -> CompM b) -> (b -> CompM c) -> a -> CompM c;
 composeM a b c f g x = bindM b c (f x) g;
@@ -1961,6 +1992,24 @@ tupleCompMFunBoth a b c f =
 tupleCompMFunOut : (a b c: sort 0) -> c -> (a -> CompM b) -> (a -> CompM (c * b));
 tupleCompMFunOut a b c x f =
   \ (y:a) -> bindM b (c*b) (f y) (\ (z:b) -> returnM (c*b) (x,z));
+
+-- Map a monadic function across a vector
+mapM : (a b : sort 0) -> (a -> CompM b) -> (n : Nat) -> Vec n a -> CompM (Vec n b);
+mapM a b f =
+  Nat__rec
+    (\ (n:Nat) -> Vec n a -> CompM (Vec n b))
+    (\ (_:Vec 0 a) -> returnM (Vec 0 b) (EmptyVec b))
+    (\ (n:Nat) (rec_f:Vec n a -> CompM (Vec n b)) (v:Vec (Succ n) a) ->
+       fmapM2 b (Vec n b) (Vec (Succ n) b)
+              (\ (hd:b) (tl:Vec n b) -> ConsVec b hd n tl)
+              (f (head n a v))
+              (rec_f (tail n a v)));
+
+-- Map a monadic function across a BVVec
+mapBVVecM : (a b : sort 0) -> (a -> CompM b) ->
+            (n : Nat) -> (len : Vec n Bool) -> BVVec n len a ->
+            CompM (BVVec n len b);
+mapBVVecM a b f n len = mapM a b f (bvToNat n len);
 
 -- Raise an error in the computation monad
 primitive errorM : (a:sort 0) -> String -> CompM a;

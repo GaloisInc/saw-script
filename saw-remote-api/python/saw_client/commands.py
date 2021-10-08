@@ -12,34 +12,44 @@ class SAWCommand(argo.Command):
         return exceptions.make_saw_exception(ae)
 
 class CryptolLoadFile(SAWCommand):
-    def __init__(self, connection : argo.HasProtocolState, filename : str) -> None:
+    def __init__(self, connection : argo.HasProtocolState,
+                 filename : str,
+                 timeout : Optional[float]) -> None:
         super(CryptolLoadFile, self).__init__(
             'SAW/Cryptol/load file',
             {'file': filename},
-            connection
+            connection,
+            timeout=timeout
         )
 
     def process_result(self, _res : Any) -> Any:
         return None
 
 class CryptolLoadModule(SAWCommand):
-    def __init__(self, connection : argo.HasProtocolState, module_name : str) -> None:
+    def __init__(self, connection : argo.HasProtocolState,
+                 module_name : str,
+                 timeout : Optional[float]) -> None:
         super(CryptolLoadModule, self).__init__(
             'SAW/Cryptol/load module',
             {'module': module_name},
-            connection
+            connection,
+            timeout=timeout
         )
 
     def process_result(self, _res : Any) -> Any:
         return None
 
 class CreateGhostVariable(SAWCommand):
-    def __init__(self, connection : argo.HasProtocolState, name : str, server_name : str) -> None:
+    def __init__(self, connection : argo.HasProtocolState,
+                 name : str,
+                 server_name : str,
+                 timeout : Optional[float]) -> None:
         super(CreateGhostVariable, self).__init__(
             'SAW/create ghost variable',
             {'display name': name,
              'server name': server_name},
-            connection
+            connection,
+            timeout=timeout
         )
 
     def process_result(self, _res : Any) -> Any:
@@ -48,11 +58,13 @@ class CreateGhostVariable(SAWCommand):
 class LLVMLoadModule(SAWCommand):
     def __init__(self, connection : argo.HasProtocolState,
                  name : str,
-                 bitcode_file : str) -> None:
+                 bitcode_file : str,
+                 timeout : Optional[float]) -> None:
         super(LLVMLoadModule, self).__init__(
             'SAW/LLVM/load module',
             {'name': name, 'bitcode file': bitcode_file},
-            connection
+            connection,
+            timeout=timeout
         )
 
     def process_result(self, res : Any) -> Any:
@@ -65,12 +77,13 @@ class LLVMAssume(SAWCommand):
             module : str,
             function : str,
             setup : Any,
-            lemma_name : str) -> None:
+            lemma_name : str,
+            timeout : Optional[float]) -> None:
         params = {'module': module,
                   'function': function,
                   'contract': setup,
                   'lemma name': lemma_name}
-        super(LLVMAssume, self).__init__('SAW/LLVM/assume', params, connection)
+        super(LLVMAssume, self).__init__('SAW/LLVM/assume', params, connection, timeout=timeout)
 
     def process_result(self, _res : Any) -> Any:
         return None
@@ -85,7 +98,8 @@ class LLVMVerify(SAWCommand):
             check_sat : bool,
             setup : Any,
             script : ProofScript,
-            lemma_name : str) -> None:
+            lemma_name : str,
+            timeout : Optional[float]) -> None:
         params = {'module': module,
                   'function': function,
                   'lemmas': lemmas,
@@ -93,7 +107,64 @@ class LLVMVerify(SAWCommand):
                   'contract': setup,
                   'script': script,
                   'lemma name': lemma_name}
-        super(LLVMVerify, self).__init__('SAW/LLVM/verify', params, connection)
+        super(LLVMVerify, self).__init__('SAW/LLVM/verify', params, connection, timeout=timeout)
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
+class JVMLoadClass(SAWCommand):
+    def __init__(self, connection : argo.HasProtocolState,
+                 name : str,
+                 class_name : str,
+                 timeout : Optional[float]) -> None:
+        super(JVMLoadClass, self).__init__(
+            'SAW/JVM/load class',
+            {'name': name, 'class name': class_name},
+            connection,
+            timeout=timeout
+        )
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
+class JVMAssume(SAWCommand):
+    def __init__(
+            self,
+            connection : argo.HasProtocolState,
+            module : str,
+            function : str,
+            setup : Any,
+            lemma_name : str,
+            timeout : Optional[float]) -> None:
+        params = {'module': module,
+                  'function': function,
+                  'contract': setup,
+                  'lemma name': lemma_name}
+        super(JVMAssume, self).__init__('SAW/JVM/assume', params, connection, timeout=timeout)
+
+    def process_result(self, _res : Any) -> Any:
+        return None
+
+class JVMVerify(SAWCommand):
+    def __init__(
+            self,
+            connection : argo.HasProtocolState,
+            class_name : str,
+            method_name : str,
+            lemmas : List[str],
+            check_sat : bool,
+            setup : Any,
+            script : ProofScript,
+            lemma_name : str,
+            timeout : Optional[float]) -> None:
+        params = {'module': class_name,
+                  'function': method_name,
+                  'lemmas': lemmas,
+                  'check sat': check_sat,
+                  'contract': setup,
+                  'script': script,
+                  'lemma name': lemma_name}
+        super(JVMVerify, self).__init__('SAW/JVM/verify', params, connection, timeout=timeout)
 
     def process_result(self, res : Any) -> Any:
         return res
@@ -103,10 +174,11 @@ class Prove(SAWCommand):
             self,
             connection : argo.HasProtocolState,
             goal : cryptoltypes.CryptolJSON,
-            script : ProofScript) -> None:
+            script : ProofScript,
+            timeout : Optional[float]) -> None:
         params = {'goal': goal,
                   'script': script}
-        super(Prove, self).__init__('SAW/prove', params, connection)
+        super(Prove, self).__init__('SAW/prove', params, connection, timeout=timeout)
 
     def process_result(self, res : Any) -> Any:
         return res

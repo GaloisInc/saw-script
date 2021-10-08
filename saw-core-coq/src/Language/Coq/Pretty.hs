@@ -146,6 +146,12 @@ ppDecl decl = case decl of
   Axiom nm ty ->
     (nest 2 $
      hsep ([text "Axiom", text nm, text ":", ppTerm PrecNone ty, period])) <> hardline
+  Parameter nm ty ->
+    (nest 2 $
+     hsep ([text "Parameter", text nm, text ":", ppTerm PrecNone ty, period])) <> hardline
+  Variable nm ty ->
+    (nest 2 $
+     hsep ([text "Variable", text nm, text ":", ppTerm PrecNone ty, period])) <> hardline
   Comment s ->
     text "(*" <+> text s <+> text "*)" <> hardline
   Definition nm bs mty body ->
@@ -157,6 +163,12 @@ ppDecl decl = case decl of
      , ppTerm PrecNone body <> period
      ]) <> hardline
   InductiveDecl ind -> ppInductive ind
+  Section nm ds ->
+    vsep $ concat
+     [ [ hsep [text "Section", text nm, period] ]
+     , map (indent 2 . ppDecl) ds
+     , [ hsep [text "End", text nm, period] ]
+     ]
   Snippet s -> text s
 
 ppConstructor :: Constructor -> Doc ann

@@ -7,6 +7,7 @@ module SAWScript.Prover.ABC
 
 import Control.Monad (unless)
 import Control.Monad.IO.Class
+import qualified Data.ByteString.Char8 as C8
 import Data.Char (isSpace)
 import Data.List (isPrefixOf)
 import qualified Data.Map as Map
@@ -120,7 +121,7 @@ w4AbcExternal exporter argFn unints _hashcons goal =
        let execName = "abc"
            args = ["-q", argFn tmp tmpCex]
        (_out, _err) <- liftIO $ readProcessExitIfFailure execName args
-       cexText <- liftIO $ readFile tmpCex
+       cexText <- liftIO $ C8.unpack <$> C8.readFile tmpCex
        liftIO $ removeFile tmp
        liftIO $ removeFile tmpCex
 

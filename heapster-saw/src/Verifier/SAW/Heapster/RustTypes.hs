@@ -54,11 +54,13 @@ import qualified Data.Binding.Hobbits.NameSet as NameSet
 
 import Language.Rust.Syntax
 import Language.Rust.Parser
+import qualified Language.Rust.Pretty as RustPP
 import Language.Rust.Data.Ident (Ident(..), name)
 
 import Prettyprinter as PP
 
 import Lang.Crucible.Types
+import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.LLVM.MemModel hiding (Mutability(..))
 
 import Verifier.SAW.Heapster.CruUtil
@@ -123,6 +125,12 @@ lookupTypedName str =
 lookupName :: String -> TypeRepr a -> RustConvM (Name a)
 lookupName str tp =
   lookupTypedName str >>= \n -> castTypedM "variable" tp n
+
+-- | Build a 'PPInfo' structure for the names currently in scope
+rsPPInfo :: RustConvM PPInfo
+rsPPInfo =
+  foldr (\(str, Some (Typed _ n)) -> ppInfoAddExprName str n) emptyPPInfo <$>
+  rciCtx <$> ask
 
 -- | The conversion of a context of Rust type and lifetime variables
 type RustCtx = RAssign (Product (Constant String) TypeRepr)
@@ -327,9 +335,26 @@ withRecType rust_n rust_ns rec_n = local (\info -> info { rciRecType = Just (rus
 -- * Converting Rust Types to Heapster Shapes
 ----------------------------------------------------------------------
 
-instance RsConvert w Mutability (PermExpr RWModalityType) where
-  rsConvert _ Mutable = return PExpr_Write
-  rsConvert _ Immutable = return PExpr_Read
+-- | Test if a shape matches the translation of a slice type, and, if so, return
+-- the stride and the fields of the slice, where the latter can have the length
+-- free
+matchSliceShape :: PermExpr (LLVMShapeType w) ->
+                   Maybe (Bytes, Binding (BVType w) [LLVMFieldShape w])
+matchSliceShape (PExpr_ExShape
+                 [nuP| PExpr_ArrayShape (PExpr_Var len) stride fshs |])
+  | Left Member_Base <- mbNameBoundP len =
+    Just (mbLift stride, fshs)
+matchSliceShape (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
+                                            (DefinedShapeBody _)) args) =
+  matchSliceShape (unfoldNamedShape nmsh args)
+matchSliceShape _ = Nothing
+
+-- Convert a 'Mutability' to a modality override for a 'PExpr_PtrShape'; mutable
+-- references inherit the modality of the container they are in, so they
+-- translate to 'Nothing'
+instance RsConvert w Mutability (Maybe (PermExpr RWModalityType)) where
+  rsConvert _ Mutable = return Nothing
+  rsConvert _ Immutable = return (Just PExpr_Read)
 
 instance RsConvert w (Lifetime Span) (PermExpr LifetimeType) where
   rsConvert _ (Lifetime "static" _) = return PExpr_Always
@@ -352,16 +377,45 @@ instance RsConvert w [PathParameters Span] (Some TypedPermExprs) where
     foldr appendTypedExprs emptyTypedPermExprs <$> mapM (rsConvert w) paramss
 
 instance RsConvert w (Ty Span) (PermExpr (LLVMShapeType w)) where
-  rsConvert _ (Rptr _ _ (Slice _ _) _) =
-    error "FIXME: pointers to slice types are not currently supported"
-  rsConvert w (Rptr (Just rust_l) Mutable tp' _) =
+  rsConvert w (Slice tp _) =
+    do sh <- rsConvert w tp
+       case matchLLVMFieldShapeSeq sh of
+         Just fshs ->
+           return (PExpr_ExShape $ nu $ \n ->
+                    PExpr_ArrayShape (PExpr_Var n)
+                    (fromIntegral $ sum $ map llvmFieldShapeLength fshs)
+                    fshs)
+         _ ->
+           rsPPInfo >>= \ppInfo ->
+           fail ("rsConvert: slices not yet supported of type: "
+                 ++ show (RustPP.pretty tp) ++ " with translation:\n"
+                 ++ renderDoc (permPretty ppInfo sh))
+  rsConvert _ (Rptr Nothing _ _ _) =
+    fail "rsConvert: lifetimes must be supplied for reference types"
+  rsConvert w (Rptr (Just rust_l) mut tp' _) =
     do l <- rsConvert w rust_l
        sh <- rsConvert w tp'
-       return $ PExpr_PtrShape Nothing (Just l) sh
-  rsConvert w (Rptr (Just rust_l) Immutable tp' _) =
-    do l <- rsConvert w rust_l
-       sh <- rsConvert w tp'
-       return $ PExpr_PtrShape (Just PExpr_Read) (Just l) sh
+       rw <- rsConvert w mut
+       case sh of
+         -- Test if sh is a slice type = an array of existential length
+         (matchSliceShape -> Just (stride,fshs)) ->
+           -- If so, build a "fat pointer" = a pair of a pointer to our array
+           -- shape plus a length value
+           return $ PExpr_ExShape $ nu $ \n ->
+           PExpr_SeqShape (PExpr_PtrShape rw Nothing $
+                           PExpr_ArrayShape (PExpr_Var n) stride $
+                           subst1 (PExpr_Var n) fshs)
+           (PExpr_FieldShape $ LLVMFieldShape $ ValPerm_Eq $
+            PExpr_LLVMWord $ PExpr_Var n)
+
+         -- If it's not a slice, make sure it has a known size
+         _ | Just len <- llvmShapeLength sh
+           , isJust (bvMatchConst len) ->
+             return $ PExpr_PtrShape rw (Just l) sh
+
+         -- Otherwise, it's a non-standard dynamically-sized type, which we
+         -- don't quite know how to handle yet...
+         _ -> fail "rsConvert: pointer to non-slice dynamically-sized type"
   rsConvert w (PathTy Nothing path _) =
     do mrec <- asks rciRecType
        case mrec of
@@ -672,16 +726,57 @@ un3SomeFunPerm args ret (Some3FunPerm fun_perm)
   , Just Refl <- testEquality ret (funPermRet fun_perm) =
     return $ SomeFunPerm fun_perm
 un3SomeFunPerm args ret (Some3FunPerm fun_perm) =
+  rsPPInfo >>= \ppInfo ->
   fail $ renderDoc $ vsep
   [ pretty "Unexpected LLVM type for function permission:"
-  , permPretty emptyPPInfo fun_perm
+  , permPretty ppInfo fun_perm
   , pretty "Actual LLVM type of function:"
-    <+> PP.group (permPretty emptyPPInfo args) <+> pretty "=>"
-    <+> PP.group (permPretty emptyPPInfo ret)
+    <+> PP.group (permPretty ppInfo args) <+> pretty "=>"
+    <+> PP.group (permPretty ppInfo ret)
   , pretty "Expected LLVM type of function:"
-    <+> PP.group (permPretty emptyPPInfo (funPermArgs fun_perm))
+    <+> PP.group (permPretty ppInfo (funPermArgs fun_perm))
     <+> pretty "=>"
-    <+> PP.group (permPretty emptyPPInfo (funPermRet fun_perm)) ]
+    <+> PP.group (permPretty ppInfo (funPermRet fun_perm)) ]
+
+-- | This is the more general form of 'funPerm3FromArgLayout, where there can be
+-- ghost variables in the 'ArgLayout'
+funPerm3FromMbArgLayout :: CtxRepr ctx ->
+                           MatchedMb ghosts (ArgLayoutPerm ctx) ->
+                           CruCtx ghosts -> CtxRepr args ->
+                           ValuePerms (CtxToRList args) ->
+                           ValuePerms (CtxToRList args) ->
+                           TypeRepr ret -> ValuePerm ret ->
+                           RustConvM Some3FunPerm
+
+-- Special case: if the argument perms are just a sequence of permissions on the
+-- individual arguments, make a function perm with those argument perms, that
+-- is, we build the function permission
+--
+-- (ghosts). arg1:p1, ..., argn:pn -o ret:ret_perm
+funPerm3FromMbArgLayout ctx [nuMP| ALPerm mb_ps_in |]
+  ghosts ctx1 ps1_in ps1_out ret_tp ret_perm
+  | ctx_args <- mkCruCtx (ctx1 Ctx.<++> ctx)
+  , ctx_all <- appendCruCtx ghosts ctx_args
+  , ghost_perms <- trueValuePerms $ cruCtxProxies ghosts
+  , mb_ps_in_all <-
+      mbCombine (cruCtxProxies ctx_args) $
+      fmap (\ps_in ->
+             nuMulti (cruCtxProxies ctx_args) $ const $
+             RL.append ghost_perms
+             (assignToRListAppend ctx1 ctx ps1_in ps_in)) mb_ps_in
+  , ps_out_all <-
+      RL.append ghost_perms (assignToRListAppend ctx1 ctx ps1_out $
+                             trueValuePerms $ assignToRList ctx) :>: ret_perm =
+    return $ Some3FunPerm $ FunPerm ghosts ctx_args ret_tp mb_ps_in_all
+    (nuMulti (cruCtxProxies ctx_all :>: Proxy) $ \_ -> ps_out_all)
+funPerm3FromMbArgLayout ctx [nuMP| ALPerm_Exists mb_p |]
+  ghosts ctx1 ps1_in ps1_out ret_tp ret_perm =
+  funPerm3FromMbArgLayout ctx (mbMatch $ mbCombine (MNil :>: Proxy) mb_p)
+  (CruCtxCons ghosts knownRepr) ctx1 ps1_in ps1_out ret_tp ret_perm
+funPerm3FromMbArgLayout _ctx [nuMP| ALPerm_Or _ _ |]
+  _ghosts _ctx1 _ps1_in _ps1_out _ret_tp _ret_perm =
+  fail "Cannot (yet) handle Rust enums or other disjunctive types in functions"
+
 
 -- | Build a function permission from an 'ArgLayout' that describes the
 -- arguments and their input permissions and a return permission that describes
@@ -695,25 +790,9 @@ funPerm3FromArgLayout :: ArgLayout -> CtxRepr args ->
                          ValuePerms (CtxToRList args) ->
                          TypeRepr ret -> ValuePerm ret ->
                          RustConvM Some3FunPerm
-funPerm3FromArgLayout (ArgLayout ctx p_in) ctx1 ps1_in ps1_out ret_tp ret_perm
-    -- Special case: if the argument perms are just a sequence of permissions on
-    -- the individual arguments, make a function perm with those argument perms,
-    -- that is, we build the function permission
-    --
-    -- (). arg1:p1, ..., argn:pn -o ret:ret_perm
-  | ALPerm ps_in <- p_in
-  , ctx_all <- mkCruCtx (ctx1 Ctx.<++> ctx)
-  , ps_in_all <- RL.append MNil (assignToRListAppend ctx1 ctx ps1_in ps_in)
-  , ps_out_all <-
-      RL.append MNil (assignToRListAppend ctx1 ctx ps1_out $
-                      trueValuePerms $ assignToRList ctx) :>: ret_perm
-  , gs_ctx_prxs <- RL.append MNil (cruCtxProxies ctx_all) =
-    return $ Some3FunPerm $ FunPerm CruCtxNil ctx_all ret_tp
-    (nuMulti gs_ctx_prxs $ \_ -> ps_in_all)
-    (nuMulti (gs_ctx_prxs :>: Proxy) $ \_ -> ps_out_all)
-funPerm3FromArgLayout (ArgLayout _ctx _p) _ctx1 _p1_in _p1_out _ret_tp _ret_perm =
-  -- FIXME HERE
-  fail "Cannot (yet) handle Rust enums or other disjunctive types in functions"
+funPerm3FromArgLayout (ArgLayout ctx p_in) ctx1 ps1_in ps1_out ret_tp ret_perm =
+  funPerm3FromMbArgLayout ctx (mbMatch $ emptyMb p_in) CruCtxNil
+  ctx1 ps1_in ps1_out ret_tp ret_perm
 
 -- | Like 'funPerm3FromArgLayout' but with no additional arguments
 funPerm3FromArgLayoutNoArgs :: ArgLayout -> TypeRepr ret -> ValuePerm ret ->
@@ -852,9 +931,10 @@ layoutArgShapeByVal Rust (PExpr_PtrShape maybe_rw maybe_l sh)
 
 -- If we don't know the length of our pointer, we can't lay it out at all
 layoutArgShapeByVal Rust (PExpr_PtrShape _ _ sh) =
+  lift rsPPInfo >>= \ppInfo ->
   lift $ fail $ renderDoc $ fillSep
   [pretty "layoutArgShapeByVal: Shape with unknown length:",
-   permPretty emptyPPInfo sh]
+   permPretty ppInfo sh]
 
 -- A field shape --> the contents of the field
 layoutArgShapeByVal Rust (PExpr_FieldShape (LLVMFieldShape p)) =
@@ -891,8 +971,9 @@ layoutArgShapeByVal Rust (PExpr_ExShape mb_sh) =
   existsArgLayout <$> mbM (fmap (layoutArgShapeByVal Rust) mb_sh)
 
 layoutArgShapeByVal Rust sh =
+  lift rsPPInfo >>= \ppInfo ->
   lift $ fail $ renderDoc $ fillSep
-  [pretty "layoutArgShapeByVal: Unsupported shape:", permPretty emptyPPInfo sh]
+  [pretty "layoutArgShapeByVal: Unsupported shape:", permPretty ppInfo sh]
 layoutArgShapeByVal abi _ =
   lift $ fail ("layoutArgShapeByVal: Unsupported ABI: " ++ show abi)
 
@@ -908,9 +989,10 @@ layoutArgShapeOrBlock abi sh =
   Just layout -> return $ Right layout
   Nothing | Just bp <- shapeToBlock sh -> return $ Left bp
   _ ->
+    rsPPInfo >>= \ppInfo ->
     fail $ renderDoc $ fillSep
     [pretty "layoutArgShapeOrBlock: Could not layout shape with unknown size:",
-     permPretty emptyPPInfo sh]
+     permPretty ppInfo sh]
 
 -- | Compute the layout of an argument with the given shape as 1 or more
 -- register arguments of a function
@@ -1020,10 +1102,11 @@ lownedPermsForLifetime l (perms :>: VarAndPerm x p)
   , not (NameSet.member l $ freeVars p)
   = lownedPermsForLifetime l perms
 lownedPermsForLifetime l (_ :>: vap) =
+  rsPPInfo >>= \ppInfo ->
   fail $ renderDoc $ fillSep
   [pretty "lownedPermsForLifetime: could not compute lowned permissions for "
-   <+> permPretty emptyPPInfo l <+> pretty "in:",
-   permPretty emptyPPInfo vap]
+   <+> permPretty ppInfo l <+> pretty "in:",
+   permPretty ppInfo vap]
 
 -- | Get the 'String' name defined by a 'LifetimeDef'
 lifetimeDefName :: LifetimeDef a -> String
