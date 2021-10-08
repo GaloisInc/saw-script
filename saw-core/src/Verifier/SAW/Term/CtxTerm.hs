@@ -75,6 +75,7 @@ import Data.Kind(Type)
 import Data.Proxy
 import Data.Type.Equality
 import Control.Monad
+import Control.Monad.Trans
 
 import Data.Parameterized.Context
 
@@ -355,6 +356,12 @@ class Monad m => MonadTerm m where
   substTerm :: DeBruijnIndex -> [Term] -> Term -> m Term
                -- ^ NOTE: the first term in the list is substituted for the most
                -- recently-bound variable, i.e., deBruijn index 0
+
+instance (MonadTerm m, MonadTrans t, Monad (t m)) => MonadTerm (t m) where
+  mkTermF = lift . mkTermF
+  liftTerm n i t = lift $ liftTerm n i t
+  whnfTerm = lift . whnfTerm
+  substTerm n s t = lift $ substTerm n s t
 
 -- | Build a 'Term' from a 'FlatTermF' in a 'MonadTerm'
 mkFlatTermF :: MonadTerm m => FlatTermF Term -> m Term
