@@ -57,7 +57,7 @@ module Verifier.SAW.Term.Functor
   , Sort, mkSort, propSort, sortOf, maxSort
     -- * Sets of free variables
   , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
-  , decrBitSet, completeBitSet, singletonBitSet
+  , decrBitSet, multiDecrBitSet, completeBitSet, singletonBitSet, bitSetElems
   , looseVars, smallestFreeVar
   ) where
 
@@ -475,10 +475,10 @@ bitSetElems :: BitSet -> [Int]
 bitSetElems = go 0 where
   -- Return the addition of shft to all elements of a BitSet
   go :: Int -> BitSet -> [Int]
-  go shft bs = case smallestBitSetElem bit_set of
+  go shft bs = case smallestBitSetElem bs of
     Nothing -> []
     Just i ->
-      shft + i : go (shft + i + 1) (multiDecrBitSet (shft + i + 1) bit_set)
+      shft + i : go (shft + i + 1) (multiDecrBitSet (shft + i + 1) bs)
 
 -- | Compute the free variables of a term given free variables for its immediate
 -- subterms
