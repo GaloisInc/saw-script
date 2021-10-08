@@ -119,11 +119,13 @@ module SAWScript.Prover.MRSolver
   , SBV.z3, SBV.cvc4, SBV.yices, SBV.mathSAT, SBV.boolector
   ) where
 
+import Data.List (findIndex)
+import Data.Semigroup
+import Data.IORef
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
 import Control.Monad.Trans.Maybe
-import Data.Semigroup
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -138,6 +140,7 @@ import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Prelude
 import Verifier.SAW.Cryptol.Monadify
 
 import SAWScript.Proof (boolToProp)
@@ -160,12 +163,12 @@ memoFixTermFun :: MonadIO m => ((Term -> m a) -> Term -> m a) -> Term -> m a
 memoFixTermFun f term_top =
   do table_ref <- liftIO $ newIORef IntMap.empty
      let go t@(STApp { stAppIndex = ix }) =
-           readIORef table_ref >>= \table ->
+           liftIO (readIORef table_ref) >>= \table ->
            case IntMap.lookup ix table of
              Just ret -> return ret
              Nothing ->
                do ret <- f go t
-                  modifyIORef' table_ref (IntMap.insert ix ret)
+                  liftIO $ modifyIORef' table_ref (IntMap.insert ix ret)
                   return ret
          go t = f go t
      go term_top
@@ -502,7 +505,9 @@ data MRState = MRState {
 }
 
 -- | Mr. Monad, the monad used by MR. Solver, which is the state-exception monad
-type MRM = StateT MRState (ExceptT MRFailure IO)
+newtype MRM a = MRM { runMRM :: StateT MRState (ExceptT MRFailure IO) a }
+              deriving (Functor, Applicative, Monad, MonadIO,
+                        MonadState MRState, MonadError MRFailure)
 
 instance MonadTerm MRM where
   mkTermF = liftSC1 scTermF
@@ -656,7 +661,7 @@ mrSetEVarClosed var val =
 mrTrySetAppliedEVar :: MRVar -> [Term] -> Term -> MRM Bool
 mrTrySetAppliedEVar evar args t =
   -- Get the complete list of argument variables of the type of evar
-  let (evar_vars, _) = asPiList (mrVarType var) in
+  let (evar_vars, _) = asPiList (mrVarType evar) in
   -- Get all the free variables of t
   let free_vars = bitSetElems (looseVars t) in
   -- For each free var of t, find an arg equal to it
@@ -669,24 +674,24 @@ mrTrySetAppliedEVar evar args t =
           -- Build a list of the input vars x1 ... xn as terms, noting that the
           -- first variable is the least recently bound and so has the highest
           -- deBruijn index
-          let arg_ixs = [length args - 1, length args - 2, .., 0]
+          let arg_ixs = [length args - 1, length args - 2 .. 0]
           arg_vars <- mapM (liftSC1 scLocalVar) arg_ixs
 
           -- For free variable of t, we substitute the corresponding variable
           -- xi, substituting error terms for the variables that are not free
           -- (since we have nothing else to substitute for them)
           let var_map = zip free_vars fv_arg_ixs
-          let subst = flip map [0, .., length args - 1] \i ->
+          let subst = flip map [0 .. length args - 1] $ \i ->
                 maybe (error "mrTrySetAppliedEVar: unexpected free variable")
                 (arg_vars !!) (lookup i var_map)
           body <- substTerm 0 subst t
 
-          -- Now build \x1 ... xn -> body as a term and set evar to that term
-          var_inst <- liftSC2 scLambdaList var_vars body
-          mrSetEVarClosed var var_inst
+          -- Now instantiate evar to \x1 ... xn -> body
+          evar_inst <- liftSC2 scLambdaList evar_vars body
+          mrSetEVarClosed evar evar_inst
           return True
 
-    _ -> False
+    _ -> return False
 
 
 -- | Replace all evars in a 'Term' with their instantiations when they have one
@@ -703,7 +708,8 @@ mrSubstEVars = memoFixTermFun $ \recurse t ->
 -- | Replace all evars in a 'Term' with their instantiations, returning
 -- 'Nothing' if we hit an uninstantiated evar
 mrSubstEVarsStrict :: Term -> MRM (Maybe Term)
-mrSubstEVarsStrict = runMaybeT $ memoFixTermFun $ \recurse t ->
+mrSubstEVarsStrict top_t =
+  runMaybeT $ flip memoFixTermFun top_t $ \recurse t ->
   do var_map <- mrVars <$> get
      case t of
        -- If t is an instantiated evar, recurse on its instantiation
@@ -763,7 +769,7 @@ mrProveEqSimple _ var_map t1@(asEVarApp var_map ->
      if success then return () else throwError (TermsNotEq t1 t2)
 
 -- If t2 is an instantiated evar, substitute and recurse
-mrProveEqSimple eqf var_map t1 (asEVarApp -> Just (_, args, f)) =
+mrProveEqSimple eqf var_map t1 (asEVarApp var_map -> Just (_, args, Just f)) =
   liftSC2 scApplyAll f args >>= \t2' -> mrProveEqSimple eqf var_map t1 t2'
 
 -- If t2 is an uninstantiated evar, instantiate it with t1
@@ -794,8 +800,8 @@ mrProveEq t1_top t2_top =
       proveEq varmap tp t1_top t2_top)
   where
     proveEq :: Map MRVar MRVarInfo -> Term -> Term -> Term -> MRM ()
-    proveEq var_map (asDataType -> (pn, [])) t1 t2
-      | pn == "Prelude.Nat" =
+    proveEq var_map (asDataType -> Just (pn, [])) t1 t2
+      | primName pn == "Prelude.Nat" =
         mrProveEqSimple (liftSC2 scEqualNat) var_map t1 t2
     proveEq var_map (asBitvectorType -> Just _) t1 t2 =
       -- FIXME: make a better solver for bitvector equalities
@@ -804,6 +810,7 @@ mrProveEq t1_top t2_top =
       mrProveEqSimple (liftSC2 scEq) var_map t1 t2
 
 
+{-
 ----------------------------------------------------------------------
 -- * Normalizing and Matching on Terms
 ----------------------------------------------------------------------
