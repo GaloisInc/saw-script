@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : SAWScript.Prover.MRSolver
@@ -90,19 +91,15 @@ previous case
 C |- F e1 ... en >>= k <= F e1' ... en' >>= k': prove C |- ei = ei' for each i
 and then prove k x <= k' x for new universal variable x
 
-C |- F e1 ... en <= F e1' ... en': prove C |- ei = ei' for each i
-
-C |- F x1 ... xn <= m: if we have an assumption in the context C of the form
-forall ys. F y1 ... yn <= m' then prove C |- [x1/y1, ..., xn/yn]m' <= m;
-otherwise unfold F, replacing recursive calls to F with m, yielding some term
-[m/F]F_body, and then prove C |- [m/F]F_body <= m; FIXME: eventually we should
-do a "recursive unfolding" of F, which also unfolds any other function that is
-mutually recursive with F but not with itself
-
 C |- F e1 ... en >>= k <= m:
 
-* If we have an assumption that F <= m', recursively prove C |- m' >>= k <= m
-  (NOTE: assumptions are for functions we have already verified)
+* If we have an assumption that forall x1, ..., xm, F e1' ... en' <= m' for some
+  ei' and m', match the ei' against the ei by instantiating the xj with fresh
+  evars, and if this succeeds then recursively prove C |- m' >>= k <= m
+
+* If k is the trivial computation function \x -> returnM x, add an assumption
+  that forall values of the uvars in scope, F e1 ... en <= m, and use this
+  assumption in proving that [e1/x1, ..., en/xn]F_body <= m;
 
 * If F is tail-recursive, make a new function F' with the same body as F except
   that each return e is replaced with a call to k e, and then proceed as in the
@@ -186,26 +183,21 @@ containsLetRecM (unwrapTermF -> tf) = any containsLetRecM tf
 -- | A variable used by the MR solver
 newtype MRVar = MRVar { unMRVar :: ExtCns Term } deriving (Eq, Show, Ord)
 
--- | Test if a 'Term' is an application of an 'MRVar' to some arguments
-asMRVarApp :: Recognizer Term (MRVar, [Term])
-asMRVarApp (asApplyAll -> (asExtCns -> Just ec, args)) =
-  return (MRVar ec, args)
-asMRVarApp _ = Nothing
-
 -- | Get the type of an 'MRVar'
 mrVarType :: MRVar -> Term
 mrVarType = ecType . unMRVar
 
--- | Names of functions to be used in computations, which are either local names
--- (represented with an 'ExtCns'), which have been created to represent
--- recursive calls to fixed-points, or global named constants
+-- | Names of functions to be used in computations, which are either names bound
+-- by letrec to for recursive calls to fixed-points, existential variables, or
+-- global named constants
 data FunName
-  = LocalName (ExtCns Term) | GlobalName GlobalDef
+  = LetRecName MRVar | EVarFunName MRVar | GlobalName GlobalDef
   deriving (Eq, Show)
 
 -- | Get the type of a 'FunName'
 funNameType :: FunName -> Term
-funNameType (LocalName ec) = ecType ec
+funNameType (LetRecName var) = mrVarType var
+funNameType (EVarFunName var) = mrVarType var
 funNameType (GlobalName gd) = globalDefType gd
 
 -- | A term specifically known to be of type @sort i@ for some @i@
@@ -218,8 +210,8 @@ data NormComp
   | Ite Term Comp Comp -- ^ If-then-else computation
   | Either CompFun CompFun Term -- ^ A sum elimination
   | OrM Comp Comp -- ^ an @orM@ computation
-  | ExistsM CompFun -- ^ an @existsM@ computation
-  | ForallM CompFun -- ^ a @forallM@ computation
+  | ExistsM Type CompFun -- ^ an @existsM@ computation
+  | ForallM Type CompFun -- ^ a @forallM@ computation
   | FunBind FunName [Term] CompFun
     -- ^ Bind a monadic function with @N@ arguments in an @a -> CompM b@ term
   deriving Show
@@ -233,6 +225,20 @@ data CompFun
     -- | The monadic composition @f >=> g@
   | CompFunComp CompFun CompFun
   deriving Show
+
+-- | If a 'CompFun' contains an explicit lambda-abstraction, then return the
+-- textual name bound by that lambda
+compFunVarName :: CompFun -> Maybe LocalName
+compFunVarName (CompFunTerm (asLambda -> Just (nm, _, _))) = Just nm
+compFunVarName (CompFunComp f _) = compFunVarName f
+compFunVarName _ = Nothing
+
+-- | If a 'CompFun' contains an explicit lambda-abstraction, then return the
+-- input type for it
+compFunInputType :: CompFun -> Maybe Term
+compFunInputType (CompFunTerm (asLambda -> Just (_, tp, _))) = Just tp
+compFunInputType (CompFunComp f _) = compFunInputType f
+compFunInputType _ = Nothing
 
 -- | A computation of type @CompM a@ for some @a@
 data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
@@ -287,8 +293,12 @@ prettyAppList = fmap (group . hang 2 . vsep) . sequence
 instance PrettyInCtx Type where
   prettyInCtx (Type t) = prettyInCtx t
 
+instance PrettyInCtx MRVar where
+  prettyInCtx (MRVar ec) = return $ ppName $ ecName ec
+
 instance PrettyInCtx FunName where
-  prettyInCtx (LocalName ec) = return $ ppName $ ecName ec
+  prettyInCtx (LetRecName var) = prettyInCtx var
+  prettyInCtx (EVarFunName var) = prettyInCtx var
   prettyInCtx (GlobalName i) = return $ viaShow i
 
 instance PrettyInCtx Comp where
@@ -316,11 +326,11 @@ instance PrettyInCtx NormComp where
   prettyInCtx (OrM t1 t2) =
     prettyAppList [return "orM", return "_",
                    parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
-  prettyInCtx (ExistsM f) =
-    prettyAppList [return "existsM", return "_", return "_",
+  prettyInCtx (ExistsM tp f) =
+    prettyAppList [return "existsM", prettyInCtx tp, return "_",
                    parens <$> prettyInCtx f]
-  prettyInCtx (ForallM f) =
-    prettyAppList [return "forallM", return "_", return "_",
+  prettyInCtx (ForallM tp f) =
+    prettyAppList [return "forallM", prettyInCtx tp, return "_",
                    parens <$> prettyInCtx f]
   prettyInCtx (FunBind f [] k) =
     prettyAppList [prettyInCtx f, return ">>=", prettyInCtx k]
@@ -346,6 +356,9 @@ instance PrettyInCtx MRTerm where
 class MRLiftTerm a where
   mrLiftTerm :: MonadTerm m => DeBruijnIndex -> DeBruijnIndex -> a -> m a
 
+instance (MRLiftTerm a, MRLiftTerm b) => MRLiftTerm (a,b) where
+  mrLiftTerm n i (a,b) = (,) <$> mrLiftTerm n i a <*> mrLiftTerm n i b
+
 instance MRLiftTerm Term where
   mrLiftTerm = liftTerm
 
@@ -360,8 +373,10 @@ instance MRLiftTerm NormComp where
   mrLiftTerm n i (Either f g eith) =
     Either <$> mrLiftTerm n i f <*> mrLiftTerm n i g <*> mrLiftTerm n i eith
   mrLiftTerm n i (OrM t1 t2) = OrM <$> mrLiftTerm n i t1 <*> mrLiftTerm n i t2
-  mrLiftTerm n i (ExistsM f) = ExistsM <$> mrLiftTerm n i f
-  mrLiftTerm n i (ForallM f) = ForallM <$> mrLiftTerm n i f
+  mrLiftTerm n i (ExistsM tp f) =
+    ExistsM <$> mrLiftTerm n i tp <*> mrLiftTerm n i f
+  mrLiftTerm n i (ForallM tp f) =
+    ForallM <$> mrLiftTerm n i tp <*> mrLiftTerm n i f
   mrLiftTerm n i (FunBind nm args f) =
     FunBind nm <$> mapM (mrLiftTerm n i) args <*> mrLiftTerm n i f
 
@@ -398,6 +413,7 @@ data FailCtx
 data MRFailure
   = TermsNotEq Term Term
   | TypesNotEq Type Type
+  | CompsDoNotRefine NormComp NormComp
   | ReturnNotError Term
   | FunsNotEq FunName FunName
   | CannotLookupFunDef FunName
@@ -488,13 +504,37 @@ data MRVarInfo
 -- | A map from 'MRVar's to their info
 type MRVarMap = Map MRVar MRVarInfo
 
+-- | Test if a 'Term' is an application of an 'ExtCns' to some arguments
+asExtCnsApp :: Recognizer Term (ExtCns Term, [Term])
+asExtCnsApp (asApplyAll -> (asExtCns -> Just ec, args)) =
+  return (ec, args)
+asExtCnsApp _ = Nothing
+
 -- | Recognize an evar applied to 0 or more arguments relative to a 'MRVarMap'
 -- along with its instantiation, if any
 asEVarApp :: MRVarMap -> Recognizer Term (MRVar, [Term], Maybe Term)
-asEVarApp var_map (asMRVarApp -> Just (var, args))
-  | Just (EVarInfo maybe_inst) <- Map.lookup var var_map =
-    Just (var, args, maybe_inst)
+asEVarApp var_map (asExtCnsApp -> Just (ec, args))
+  | Just (EVarInfo maybe_inst) <- Map.lookup (MRVar ec) var_map =
+    Just (MRVar ec, args, maybe_inst)
 asEVarApp _ _ = Nothing
+
+-- | An assumption that a named function refines some specificaiton. This has
+-- the form
+--
+-- > forall x1, ..., xn. F e1 ... ek <= m
+--
+-- for some universal context @x1:T1, .., xn:Tn@, some list of argument
+-- expressions @ei@ over the universal @xj@ variables, and some right-hand side
+-- computation expression @m@.
+data FunAssump = FunAssump {
+  -- | The uvars that were in scope when this assmption was created, in order
+  -- from outermost to innermost; that is, the uvars as "seen from outside their
+  -- scope", which is the reverse of the order of 'mrUVars', below
+  fassumpCtx :: [(LocalName,Term)],
+  -- | The argument expressions @e1, ..., en@ over the 'fassumpCtx' uvars
+  fassumpArgs :: [Term],
+  -- | The right-hand side upper bound @m@ over the 'fassumpCtx' uvars
+  fassumpRHS :: Term }
 
 -- | State maintained by MR. Solver
 data MRState = MRState {
@@ -504,13 +544,14 @@ data MRState = MRState {
   mrSMTConfig :: SBV.SMTConfig,
   -- | SMT timeout for SMT calls made by Mr. Solver
   mrSMTTimeout :: Maybe Integer,
-  -- | The context of universal variables, which are free SAW core variables
-  mrUVars :: [(LocalName,Term)],
+  -- | The context of universal variables, which are free SAW core variables, in
+  -- order from innermost to outermost, i.e., where element @0@ corresponds to
+  -- deBruijn index @0@
+  mrUVars :: [(LocalName,Type)],
   -- | The existential and letrec-bound variables
   mrVars :: MRVarMap,
-  -- | The current assumptions of function refinement, where we assume each
-  -- left-hand in the list side refines its corresponding right-hand side
-  mrFunRefs :: [(FunName, Term)],
+  -- | The current assumptions of function refinement
+  mrFunAssumps :: Map FunName FunAssump,
   -- | The current assumptions, which are conjoined into a single Boolean term
   mrAssumptions :: Term
 }
@@ -574,10 +615,15 @@ liftSC4 f a b c d = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c d)
 mrApplyAll :: Term -> [Term] -> MRM Term
 mrApplyAll f args = liftSC2 scApplyAll f args >>= liftSC1 betaNormalize
 
+-- | Get the current context of uvars as a list of variable names and their
+-- types as SAW core 'Term's, with the most recently bound uvar first
+mrUVarCtx :: MRM [(LocalName,Term)]
+mrUVarCtx = map (\(nm,Type tp) -> (nm,tp)) <$> mrUVars <$> get
+
 -- | Run a MR Solver computation in a context extended with a universal
 -- variable, which is passed as a 'Term' to the sub-computation
 withUVar :: LocalName -> Type -> (Term -> MRM a) -> MRM a
-withUVar nm (Type tp) m =
+withUVar nm tp m =
   mapFailure (MRFailureLocalVar nm) $
   do st <- get
      put (st { mrUVars = (nm,tp) : mrUVars st })
@@ -602,16 +648,12 @@ getAllUVarTerms =
 -- | Lambda-abstract all the current uvars out of a 'Term', with the least
 -- recently bound variable being abstracted first
 lambdaUVarsM :: Term -> MRM Term
-lambdaUVarsM t =
-  (mrUVars <$> get) >>= \ctx ->
-  liftSC2 scLambdaList (reverse ctx) t
+lambdaUVarsM t = mrUVarCtx >>= \ctx -> liftSC2 scLambdaList (reverse ctx) t
 
 -- | Pi-abstract all the current uvars out of a 'Term', with the least recently
 -- bound variable being abstracted first
 piUVarsM :: Term -> MRM Term
-piUVarsM t =
-  (mrUVars <$> get) >>= \ctx ->
-  liftSC2 scPiList (reverse ctx) t
+piUVarsM t = mrUVarCtx >>= \ctx -> liftSC2 scPiList (reverse ctx) t
 
 -- | Convert an 'MRVar' to a 'Term', applying it to all the uvars in scope
 mrVarTerm :: MRVar -> MRM Term
@@ -631,6 +673,14 @@ mrGetEVar var =
   Just (EVarInfo maybe_tm) -> return maybe_tm
   Just _ -> error "mrGetEVar: Non-evar"
   Nothing -> error "mrGetEVar: Unknown var"
+
+-- | Get the body of a letrec-bound variable applied to some arguments
+mrFunVarBody :: MRVar -> [Term] -> MRM Term
+mrFunVarBody var args =
+  mrVarInfo var >>= \case
+  Just (FunVarInfo body) -> mrApplyAll body args
+  Just _ -> error "mrFunVarBody: Non-function var"
+  Nothing -> error "mrFunVarBody: Unknown var"
 
 -- | Make a fresh 'MRVar' of a given type, which must be closed, i.e., have no
 -- free uvars
@@ -655,6 +705,21 @@ mrFreshEVar nm (Type tp) =
      var <- mrFreshVar nm tp'
      mrSetVarInfo var (EVarInfo Nothing)
      mrVarTerm var
+
+-- | Return a fresh sequence of existential variables for a context of variable
+-- names and types, assuming each variable is free in the types that occur after
+-- it in the list. Return the new evars all applied to the current uvars.
+mrFreshEVars :: [(LocalName,Term)] -> MRM [Term]
+mrFreshEVars = helper [] where
+  -- Return fresh evars for the suffix of a context of variable names and types,
+  -- where the supplied Terms are evars that have already been generated for the
+  -- earlier part of the context, and so must be substituted into the remaining
+  -- types in the context
+  helper :: [Term] -> [(LocalName,Term)] -> MRM Term
+  helper evars [] = return evars
+  helper evars ((nm,tp):ctx) =
+    do evar <- substTerm 0 evars tp >>= mrFreshEVar nm
+       helper (evar:evars) ctx
 
 -- | Set the value of an evar to a closed term
 mrSetEVarClosed :: MRVar -> Term -> MRM ()
@@ -739,6 +804,48 @@ mrSubstEVarsStrict top_t =
          mzero
        -- If t is anything else, recurse on its immediate subterms
        _ -> traverseSubterms recurse t
+
+-- | Look up the 'FunAssump' for a 'FunName', if there is one
+mrGetFunAssump :: FunName -> MRM (Maybe FunAssump)
+mrGetFunAssump nm = map.lookup nm <$> mrFunAssumps <$> get
+
+-- | Run a computation under the additional assumption that a named function
+-- applied to a list of arguments refines a given right-hand side, all of which
+-- are 'Term's that can have the current uvars free
+withFunAssump :: FunName -> [Term] -> Term -> MRM a -> MRM a
+withFunAssump fname args rhs m =
+  do ctx <- reverse <$> mrUVarCtx
+     assumps <- mrFunAssumps <$> get
+     let assumps' = Map.insert fname (FunAssump ctx args rhs) assumps
+     modify (\s -> s { mrFunAssumps = assumps' })
+     ret <- m
+     modify (\s -> s { mrFunAssumps = assumps })
+     return ret
+
+-- | Generate fresh evars for the context of a 'FunAssump' and substitute them
+-- into its arguments and right-hand side
+instantiateFunAssump :: FunAssump -> MRM ([Term], Term)
+instantiateFunAssump fassump =
+  do evars <- mrFreshEVars $ fassumpCtx fassump
+     args <- substTerm 0 evars $ fassumpArgs fassump
+     rhs <- substTerm 0 evars $ fassumpRHS fassump
+     return (args, rhs)
+
+-- | Add an assumption of type @Bool@ to the current path condition while
+-- executing a sub-computation
+withAssumption :: Term -> MRM a -> MRM a
+withAssumption phi m =
+  do assumps <- mrAssumptions <$> get
+     assumps' <- liftSC2 scAnd phi assumps
+     modify (\s -> s { mrAssumptions = assumps' })
+     ret <- m
+     modify (\s -> s { mrAssumptions = assumps })
+     return ret
+
+-- | Add an assumption in a computation that two terms are equal, using 'scEq'
+withEqAssumption :: Term -> Term -> MRM a -> MRM a
+withEqAssumption t1 t2 m =
+  liftSC2 scEq t1 t2 >>= \prop -> withAssumption prop m
 
 
 ----------------------------------------------------------------------
@@ -833,13 +940,6 @@ mrProveEq t1_top t2_top =
 -- * Normalizing and Matching on Terms
 ----------------------------------------------------------------------
 
--- | Match a term as a function name
-asFunName :: Term -> Maybe FunName
-asFunName t =
-  (LocalName <$> asExtCns t)
-  `mplus`
-  (GlobalName <$> asTypedGlobalDef t)
-
 -- | Match a type as being of the form @CompM a@ for some @a@
 asCompM :: Term -> Maybe Term
 asCompM (asApp -> Just (isGlobalDef "Prelude.CompM" -> Just (), tp)) =
@@ -892,10 +992,10 @@ normComp (CompTerm t) =
       return $ Either (CompFunTerm f) (CompFunTerm g) eith
     (isGlobalDef "Prelude.orM" -> Just (), [_, _, m1, m2]) ->
       return $ OrM (CompTerm m1) (CompTerm m2)
-    (isGlobalDef "Prelude.existsM" -> Just (), [_, _, body_tm]) ->
-      return $ ExistsM (CompFunTerm body_tm)
-    (isGlobalDef "Prelude.forallM" -> Just (), [_, _, body_tm]) ->
-      return $ ForallM (CompFunTerm body_tm)
+    (isGlobalDef "Prelude.existsM" -> Just (), [tp, _, body_tm]) ->
+      return $ ExistsM (Type tp) (CompFunTerm body_tm)
+    (isGlobalDef "Prelude.forallM" -> Just (), [tp, _, body_tm]) ->
+      return $ ForallM (Type tp) (CompFunTerm body_tm)
     (isGlobalDef "Prelude.letRecM" -> Just (), [lrts, _, defs_f, body_f]) ->
       do
         -- First, make fresh function constants for all the bound functions,
@@ -930,8 +1030,21 @@ normComp (CompTerm t) =
       | not (containsLetRecM body) ->
         mrApplyAll body args >>= normCompTerm
 
-    ((asFunName -> Just f), args) ->
-      return $ FunBind f args CompFunReturn
+    -- For an ExtCns, we have to check what sort of variable it is
+    -- FIXME: substitute for evars if they have been instantiated
+    (f_tm@(asExtCns -> Just ec), args) ->
+      do let var = MRVar ec
+         maybe_info <- mrVarInfo var
+         let fun_name =
+               case maybe_info of
+                 Just (EVarInfo _) -> EVarFunName var
+                 Just (FunVarInfo _) -> LetRecName var
+                 Nothing | Just glob <- asTypedGlobalDef f_tm -> GlobalName glob
+                 _ -> error "normComp: unreachable"
+         return $ FunBind fun_name args CompFunReturn
+
+    ((asTypedGlobalDef -> Just gdef), args) ->
+      return $ FunBind (GlobalName gdef) args CompFunReturn
 
     _ -> throwError (MalformedComp t)
 
@@ -944,8 +1057,8 @@ normBind (Ite cond comp1 comp2) k =
   return $ Ite cond (CompBind comp1 k) (CompBind comp2 k)
 normBind (OrM comp1 comp2) k =
   return $ OrM (CompBind comp1 k) (CompBind comp2 k)
-normBind (ExistsM f) k = return $ ExistsM (CompFunComp f k)
-normBind (ForallM f) k = return $ ForallM (CompFunComp f k)
+normBind (ExistsM tp f) k = return $ ExistsM tp (CompFunComp f k)
+normBind (ForallM tp f) k = return $ ForallM tp (CompFunComp f k)
 normBind (FunBind f args k1) k2 =
   return $ FunBind f args (CompFunComp k1 k2)
 
@@ -957,8 +1070,7 @@ applyCompFun (CompFunComp f g) t =
      return $ CompBind comp g
 applyCompFun CompFunReturn t =
   return $ CompReturn t
-applyCompFun (CompFunTerm f) t =
-  CompTerm <$> (liftSC2 scApply f t >>= liftSC1 betaNormalize)
+applyCompFun (CompFunTerm f) t = CompTerm <$> mrApplyAll f [t]
 
 
 {- FIXME: do these go away?
@@ -984,151 +1096,131 @@ mrUnfoldFunBind f args mark g =
        <*> return g
 -}
 
+
+----------------------------------------------------------------------
+-- * Mr Solver Himself (He Identifies as Male)
+----------------------------------------------------------------------
+
+-- | Prove that the left-hand computation refines the right-hand one. See the
+-- rules described at the beginning of this module.
+mrRefines :: NormComp -> NormComp -> MRM ()
+mrRefines (ReturnM e1) (ReturnM e2) = mrProveEq e1 e2
+mrRefines (ErrorM _) (ErrorM _) = return ()
+mrRefines (ReturnM e) (ErrorM _) = throwError (ReturnNotError e)
+mrRefines (ErrorM _) (ReturnM e) = throwError (ReturnNotError e)
+mrRefines (Ite cond1 m1 m1') m2_all@(Ite cond2 m2 m2') =
+  liftSC1 scNot cond1 >>= \not_cond1 ->
+  (liftSC2 scEq cond1 cond2 >>= mrProvable) >>= \case
+  True ->
+    -- If we can prove cond1 == cond2, then we just need to prove m1 <= m2 and
+    -- m1' <= m2'; further, we need only add assumptions about cond1, because it
+    -- is provably equal to cond2
+    withAssumption cond1 (mrRefines m1 m2) >>
+    withAssumption not_cond1 (mrRefines m1' m2')
+  False ->
+    -- Otherwise, prove each branch of the LHS refines the whole RHS
+    withAssumption cond1 (mrRefines m1 m2_all) >>
+    withAssumption not_cond1 (mrRefines m1' m2_all)
+mrRefines (Ite cond1 m1 m1') m2 =
+  liftSC1 scNot cond1 >>= \not_cond1 ->
+    withAssumption cond1 (mrRefines m1 m2) >>
+    withAssumption not_cond1 (mrRefines m1' m2)
+mrRefines m1 (Ite cond2 m2 m2') =
+  liftSC1 scNot cond2 >>= \not_cond2 ->
+    withAssumption cond2 (mrRefines m1 m2) >>
+    withAssumption not_cond2 (mrRefines m1 m2')
+-- FIXME: handle sum elimination
+-- mrRefines (Either f1 g1 e1) (Either f2 g2 e2) =
+mrRefines m1 (ForallM tp f2) =
+  let nm = maybe "x" id (compFunVarName f2) in
+  withUVarLift nm tp (m1,f2) $ \x (m1',f2') ->
+  mrApplyAll f2' [x] >>= \m2' ->
+  mrRefines m1' m2'
+mrRefines (ExistsM tp f1) m2 =
+  let nm = maybe "x" id (compFunVarName f1) in
+  withUVarLift nm tp (f1,m2) $ \x (f1',m2') ->
+  mrApplyAll f1' [x] >>= \m1' ->
+  mrRefines m1' m2'
+mrRefines m1 (OrM m2 m2') =
+  mrOr (mrRefines m1 m2) (mrRefines m1 m2')
+mrRefines (OrM m1 m1') m2 =
+  mrRefines m1 m2 >> mrRefines m1' m2
+mrRefines (FunBind f args1 k1) (FunBind f' args2 k2)
+  | f == f' && length args1 == length args2 =
+    zipWithM_ mrProveEq args1 args2 >>
+    mrRefinesFun k1 k2
+mrRefines (FunBind (EVarFunName evar) args CompFunReturn) m2 =
+  mrGetEVar evar >>= \case
+  Just f ->
+    foldM applyCompFun (CompFunTerm f) args >>= normComp >>= \m1' ->
+    mrRefines m1' m2
+  Nothing -> mrTrySetAppliedEVar evar args m2
+mrRefines m1@(FunBind f@(LetRecName f_var) args k1) m2 =
+  mrGetFunAssump f >>= \case
+  Nothing
+    | CompFunReturn <- k1 ->
+      -- If we do not already have an assumption that f refines some
+      -- specification, and if the right-hand side of our bind is the trivial
+      -- return function, then we are essentially trying to f args <= m2, so
+      -- assume it is true and coinductively prove that it is true under that
+      -- assumption
+      mrFunVarBody f_var args >>= \f_body ->
+      withFunAssump f args m2 $
+      mrRefines f_body m2
+  Nothing ->
+    -- If we do not already have an assumption that f refines some specification
+    -- but k1 is non-trivial, then to solve f args >>= k1 <= m2 we would have to
+    -- split m2 into a part that f args refines and a part that k1 refines, but
+    -- we don't know how to do that, so give up
+    throwError (CompsDoNotRefine m1 m2)
+  Just fassump ->
+    -- If we have an assumption that f args' refines some rhs, then prove that
+    -- args = args' and then that rhs refines m2
+    do (assump_args, assump_rhs) <- instantiateFunAssump fassump
+       zipWithM_ mrProveEq assump_args args
+       m1' <- normBind assump_rhs k1
+       mrRefines m1' m2
+mrRefines m1@(FunBind f@(GlobalName _) args k1) m2 =
+  mrGetFunAssump f >>= \case
+  Just fassump ->
+    -- If we have an assumption that f args' refines some rhs, then prove that
+    -- args = args' and then that rhs refines m2
+    do (assump_args, assump_rhs) <- instantiateFunAssump fassump
+       zipWithM_ mrProveEq assump_args args
+       m1' <- normBind assump_rhs k1
+       mrRefines m1' m2
+  Nothing ->
+    -- We don't want to do inter-procedural proofs, so if we don't know anything
+    -- about f already then give up
+    throwError (CompsDoNotRefine m1 m2)
+
+-- NOTE: the rules that introduce existential variables need to go last, so that
+-- they can quantify over as many universals as possible
+mrRefines m1 (ExistsM tp f2) =
+  do let nm = maybe "x" id (compFunVarName f2)
+     evar <- mrFreshEVar nm tp
+     m2' <- mrApplyAll f2 [evar]
+     mrRefines m1 m2'
+mrRefines (ForallM tp f1) m2 =
+  do let nm = maybe "x" id (compFunVarName f1)
+     evar <- mrFreshEVar nm tp
+     m1' <- mrApplyAll f1 [evar]
+     mrRefines m1' m2
+
+-- | Prove that one function refines another for all inputs
+mrRefinesFun :: CompFun -> CompFun -> MRM ()
+mrRefinesFun CompFunReturn CompFunReturn = return ()
+mrRefinesFun f1 f2
+  | Just nm <- compFunVarName f1 `mplus` compFunVarName f2
+  , Just tp <- compFunInputType f1 `mplus` compFunInputType f2 =
+    withUVarLift nm tp (f1,f2) $ \x (f1', f2') ->
+    do m1' <- applyCompFun f1' x >>= normComp
+       m2' <- applyCompFun f2' x >>= normComp
+       mrRefines m1' m2'
+mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
+
+
 {-
-----------------------------------------------------------------------
--- * MR Solver Itself
-----------------------------------------------------------------------
-
-FIXME HERE NOW: update the rest of MR Solver
-
--- | Coinductively prove an equality between two named functions by assuming
--- the names are equal and proving their bodies equal
-mrSolveCoInd :: FunName -> FunName -> MRM ()
-mrSolveCoInd f1 f2 =
-  do def1 <- mrLookupFunDef f1
-     def2 <- mrLookupFunDef f2
-     saved <- get
-     put $ saved { mrFunEqs = ((f1,f2),True) : mrFunEqs saved }
-     catchError (mrSolveEq (CompFunMark (CompFunTerm def1) (singleMark f1))
-                 (CompFunMark (CompFunTerm def2) (singleMark f2))) $ \err ->
-       -- NOTE: any equalities proved under the assumption that f1 == f2 are
-       -- suspect, so we have to throw them out and revert to saved on error
-       (put saved >> throwError err)
-
-
--- | Typeclass for proving that two (representations of) objects of the same SAW
--- core type @a@ are equivalent, where the notion of equivalent depends on the
--- type @a@. This assumes that the two objects have the same SAW core type. The
--- 'MRM' computation returns @()@ on success and throws a 'MRFailure' on error.
-class (IsMRTerm a, IsMRTerm b) => MRSolveEq a b where
-  mrSolveEq' :: a -> b -> MRM ()
-
--- | The main function for solving equations, that calls @mrSovleEq'@ but with
--- debugging support for errors, i.e., adding to the failure context
-mrSolveEq :: MRSolveEq a b => a -> b -> MRM ()
-mrSolveEq a b =
-  withFailureCtx (FailCtxCmp (toMRTerm a) (toMRTerm b)) $ mrSolveEq' a b
-
--- NOTE: this instance is specifically for terms of non-computation type
-instance MRSolveEq Term Term where
-  mrSolveEq' t1 t2 =
-    do eq <- mrTermsEq t1 t2
-       if eq then return () else throwError (TermsNotEq t1 t2)
-
-instance MRSolveEq Type Type where
-  mrSolveEq' tp1@(Type t1) tp2@(Type t2) =
-    do eq <- liftSC3 scConvertible True t1 t2
-       if eq then return () else
-         throwError (TypesNotEq tp1 tp2)
-
-instance MRSolveEq FunName FunName where
-  mrSolveEq' f1 f2 | f1 == f2 = return ()
-  mrSolveEq' f1 f2 =
-    do eqs <- mrFunEqs <$> get
-       case lookup (f1,f2) eqs of
-         Just True -> return ()
-         Just False -> throwError (FunsNotEq f1 f2)
-         Nothing -> mrSolveCoInd f1 f2
-
-instance MRSolveEq Comp Comp where
-  mrSolveEq' comp1 comp2 =
-    do norm1 <- normComp comp1
-       norm2 <- normComp comp2
-       mrSolveEq norm1 norm2
-
-instance MRSolveEq CompFun CompFun where
-  mrSolveEq' f1 f2 =
-    do tp <- compFunInputType f1
-       var <- liftSC2 scFreshGlobal "x" tp
-       comp1 <- applyCompFun f1 var
-       comp2 <- applyCompFun f2 var
-       mrSolveEq comp1 comp2
-
-instance MRSolveEq Comp NormComp where
-  mrSolveEq' comp1 norm2 =
-    do norm1 <- normComp comp1
-       mrSolveEq norm1 norm2
-
-instance MRSolveEq NormComp Comp where
-  mrSolveEq' norm1 comp2 =
-    do norm2 <- normComp comp2
-       mrSolveEq norm1 norm2
-
-instance MRSolveEq NormComp NormComp where
-  mrSolveEq' (Return t1) (Return t2) =
-    -- Returns are equal iff their returned values are
-    mrSolveEq t1 t2
-  mrSolveEq' (Return t1) Error =
-    -- Return is never equal to error
-    throwError (ReturnNotError t1)
-  mrSolveEq' Error (Return t2) =
-    -- Return is never equal to error
-    throwError (ReturnNotError t2)
-  mrSolveEq' Error Error =
-    -- Error trivially equals itself
-    return ()
-  mrSolveEq' (If cond1 then1 else1) norm2@(If cond2 then2 else2) =
-    -- Special case if the two conditions are equal: assert the one condition to
-    -- test the then branches and assert its negtion to test the elses
-    do eq <- mrTermsEq cond1 cond2
-       if eq then
-         (withPathCondition cond1 $ mrSolveEq then1 then2) >>
-         (withNotPathCondition cond1 $ mrSolveEq else1 else2)
-         else
-         -- Otherwise, compare the first then and else, under their respective
-         -- path conditions, to the whole second computation
-         (withPathCondition cond1 $ mrSolveEq then1 norm2) >>
-         (withNotPathCondition cond1 $ mrSolveEq else1 norm2)
-  mrSolveEq' (If cond1 then1 else1) norm2 =
-    -- To compare an if to anything else, compare the then and else, under their
-    -- respective path conditions, to the other computation
-    (withPathCondition cond1 $ mrSolveEq then1 norm2) >>
-    (withNotPathCondition cond1 $ mrSolveEq else1 norm2)
-  mrSolveEq' norm1 (If cond2 then2 else2) =
-    -- To compare an if to anything else, compare the then and else, under their
-    -- respective path conditions, to the other computation
-    (withPathCondition cond2 $ mrSolveEq norm1 then2) >>
-    (withNotPathCondition cond2 $ mrSolveEq norm1 else2)
-  mrSolveEq' comp1@(FunBind f1 args1 mark1 k1) comp2@(FunBind f2 args2 mark2 k2) =
-    -- To compare two computations (f1 args1 >>= norm1) and (f2 args2 >>= norm2)
-    -- we first test if (f1 args1) and (f2 args2) are equal. If so, we recurse
-    -- and compare norm1 and norm2; otherwise, we try unfolding one or the other
-    -- of f1 and f2.
-    catchErrorEither cmp_funs >>= \ cmp_fun_res ->
-    case cmp_fun_res of
-      Right () -> mrSolveEq k1 k2
-      Left err ->
-        mapFailure (MRFailureDisj err) $
-        (mrUnfoldFunBind f1 args1 mark1 k1 >>= \c -> mrSolveEq c comp2)
-        `mrOr`
-        (mrUnfoldFunBind f2 args2 mark2 k2 >>= \c -> mrSolveEq comp1 c)
-    where
-      cmp_funs =
-        do let tp1 = funNameType f1
-           let tp2 = funNameType f2
-           mrSolveEq (Type tp1) (Type tp2)
-           mrSolveEq f1 f2
-           zipWithM_ mrSolveEq args1 args2
-  mrSolveEq' (FunBind f1 args1 mark1 k1) comp2 =
-    -- This case compares a function call to a Return or Error; the only thing
-    -- to do is unfold the function call and recurse
-    mrUnfoldFunBind f1 args1 mark1 k1 >>= \c -> mrSolveEq c comp2
-  mrSolveEq' comp1 (FunBind f2 args2 mark2 k2) =
-    -- This case compares a function call to a Return or Error; the only thing
-    -- to do is unfold the function call and recurse
-    mrUnfoldFunBind f2 args2 mark2 k2 >>= \c -> mrSolveEq comp1 c
-
-
 ----------------------------------------------------------------------
 -- * External Entrypoints
 ----------------------------------------------------------------------
