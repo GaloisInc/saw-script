@@ -190,7 +190,16 @@ data FlatTermF e
   | RecordProj e !FieldName
 
     -- | Sorts, aka universes, are the types of types; i.e., an object is a
-    -- "type" iff it has type @Sort s@ for some s
+    -- "type" iff it has type @Sort s@ for some s.
+    --
+    -- The extra boolean argument is an advisory flag that is used to
+    -- indicate that types in this sort are expected to be inhabited.
+    -- In the concrete syntax "isort" is used to indicate cases where
+    -- this flag is set.  This flag is mostly ignored, but is used in
+    -- the Coq export process to indicate where "Inhabited" class
+    -- instances are necessary in function definitions. Note in particular
+    -- that this flag does not affect typechecking, so missing or overeager
+    -- "isort" annotations will only be detected via the Coq export.
   | Sort !Sort !Bool
 
     -- Primitive builtin values
@@ -305,7 +314,8 @@ zipWithFlatTermF f = go
     go (RecordProj e1 fld1) (RecordProj e2 fld2)
       | fld1 == fld2 = Just $ RecordProj (f e1 e2) fld1
 
-    go (Sort sx hx) (Sort sy hy) | sx == sy = Just (Sort sx (hx && hy)) -- TODO?
+    go (Sort sx hx) (Sort sy hy) | sx == sy = Just (Sort sx (hx && hy))
+         -- /\ NB, it's not entirely clear how the inhabited flag should be propagated
     go (NatLit i) (NatLit j) | i == j = Just (NatLit i)
     go (StringLit s) (StringLit t) | s == t = Just (StringLit s)
     go (ArrayValue tx vx) (ArrayValue ty vy)
