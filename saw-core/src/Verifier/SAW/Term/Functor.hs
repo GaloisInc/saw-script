@@ -88,9 +88,6 @@ type DeBruijnIndex = Int
 type FieldName = Text
 type LocalName = Text
 
-instance (Hashable k, Hashable a) => Hashable (Map k a) where
-    hashWithSalt x m = hashWithSalt x (Map.assocs m)
-
 instance Hashable a => Hashable (Vector a) where
     hashWithSalt x v = hashWithSalt x (V.toList v)
 
