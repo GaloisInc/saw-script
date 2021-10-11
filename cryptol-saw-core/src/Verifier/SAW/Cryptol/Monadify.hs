@@ -180,6 +180,8 @@ asTypedGlobalDef t =
       Just $ GlobalDef (ModuleIdentifier $ primName pn) (primType pn) t
     Constant ec _ ->
       Just $ GlobalDef (ecName ec) (ecType ec) t
+    FTermF (ExtCns ec) ->
+      Just $ GlobalDef (ecName ec) (ecType ec) t
     _ -> Nothing
 
 
