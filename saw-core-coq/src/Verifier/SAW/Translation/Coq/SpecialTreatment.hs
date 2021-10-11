@@ -43,15 +43,31 @@ data SpecialTreatment = SpecialTreatment
   , identSpecialTreatment :: Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
   }
 
+-- | How to handle SAWCore identifiers at their definition sites.
 data DefSiteTreatment
-  = DefPreserve
-  | DefRename   (Maybe ModuleName) String -- optional module rename, then identifier itself
-  | DefReplace  String
+  = -- | Translate the identifier unchanged, and directly translate the assocated
+    --   SAWCore declaration.
+    DefPreserve
+  | -- | Translate the identifier into the given Coq identifer,
+    --   and otherwise directly translate the associated SAWCore declaration.
+    DefRename String
+  | -- | Replace the declaration of the identifier with the given text.
+    DefReplace  String
+    -- | Skip the declartion of the identifier altogether.
   | DefSkip
 
+-- | How to translate SAWCore identifiers at their use sites.
 data UseSiteTreatment
-  = UsePreserve
+  = -- | Translate the identifier unchanged
+    UsePreserve
+    -- | Rename the given identifier into the given (optionally qualified)
+    --   Coq identifier.  The boolean value, if true, indicates that the
+    --   identifier should be an "explicit" identifier with a leading \"\@\"
+    --   symbol, which indicates to Coq that all implicit arguments should be
+    --   treated as explicit.
   | UseRename   (Maybe ModuleName) String Bool
+    -- | Drop the first @n@ SAWCore arguments to this identifier, then replace
+    --   the occurence with the given Coq term.
   | UseReplaceDropArgs  Int Coq.Term
 
 data IdentSpecialTreatment = IdentSpecialTreatment
@@ -120,7 +136,7 @@ realize code = IdentSpecialTreatment
 -- Also useful for translation notations, until they are better supported.
 rename :: String -> IdentSpecialTreatment
 rename ident = IdentSpecialTreatment
-  { atDefSite = DefRename Nothing ident
+  { atDefSite = DefRename ident
   , atUseSite = UseRename Nothing ident False
   }
 
