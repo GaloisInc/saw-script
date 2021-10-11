@@ -257,7 +257,7 @@ data ModuleDecl = TypeDecl DataType
                     --   doing translations.
                 | InjectCodeDecl
                     Text {- ^ Code namespace -}
-                    Text {- ^ Code do inject -}
+                    Text {- ^ Code to inject -}
 
 -- | The different sorts of things that a 'Text' name can be resolved to
 data ResolvedName
