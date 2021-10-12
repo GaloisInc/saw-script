@@ -28,5 +28,3 @@ clearbufs_gen.v
 clearbufs_proofs.v
 mbox_gen.v
 mbox_proofs.v
-sha512_gen.v
-sha512_proofs.v
