@@ -117,17 +117,15 @@ module SAWScript.Prover.MRSolver
   ) where
 
 import Data.List (findIndex)
-import Data.Semigroup
 import Data.IORef
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
 import Control.Monad.Trans.Maybe
 
+import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap
 
 import Prettyprinter
 
@@ -195,10 +193,12 @@ data FunName
   deriving (Eq, Ord, Show)
 
 -- | Get the type of a 'FunName'
+{- FIXME: unused
 funNameType :: FunName -> Term
 funNameType (LetRecName var) = mrVarType var
 funNameType (EVarFunName var) = mrVarType var
 funNameType (GlobalName gd) = globalDefType gd
+-}
 
 -- | A term specifically known to be of type @sort i@ for some @i@
 newtype Type = Type Term deriving Show
@@ -284,6 +284,8 @@ instance PrettyInCtx Comp where
   prettyInCtx (CompTerm t) = prettyInCtx t
   prettyInCtx (CompBind c f) =
     prettyAppList [prettyInCtx c, return ">>=", prettyInCtx f]
+  prettyInCtx (CompReturn t) =
+    prettyAppList [ return "returnM", return "_", parens <$> prettyInCtx t]
 
 instance PrettyInCtx CompFun where
   prettyInCtx (CompFunTerm t) = prettyInCtx t
@@ -378,12 +380,12 @@ instance TermLike NormComp where
 
 instance TermLike CompFun where
   liftTermLike n i (CompFunTerm t) = CompFunTerm <$> liftTermLike n i t
-  liftTermLike n i CompFunReturn = return CompFunReturn
+  liftTermLike _ _ CompFunReturn = return CompFunReturn
   liftTermLike n i (CompFunComp f g) =
     CompFunComp <$> liftTermLike n i f <*> liftTermLike n i g
 
   substTermLike n s (CompFunTerm t) = CompFunTerm <$> substTermLike n s t
-  substTermLike n s CompFunReturn = return CompFunReturn
+  substTermLike _ _ CompFunReturn = return CompFunReturn
   substTermLike n s (CompFunComp f g) =
     CompFunComp <$> substTermLike n s f <*> substTermLike n s g
 
@@ -391,9 +393,11 @@ instance TermLike Comp where
   liftTermLike n i (CompTerm t) = CompTerm <$> liftTermLike n i t
   liftTermLike n i (CompBind m f) =
     CompBind <$> liftTermLike n i m <*> liftTermLike n i f
+  liftTermLike n i (CompReturn t) = CompReturn <$> liftTermLike n i t
   substTermLike n s (CompTerm t) = CompTerm <$> substTermLike n s t
   substTermLike n s (CompBind m f) =
     CompBind <$> substTermLike n s m <*> substTermLike n s f
+  substTermLike n s (CompReturn t) = CompReturn <$> substTermLike n s t
 
 
 ----------------------------------------------------------------------
@@ -456,6 +460,8 @@ instance PrettyInCtx MRFailure where
     ppWithPrefixSep "Could not prove terms equal:" t1 "and" t2
   prettyInCtx (TypesNotEq tp1 tp2) =
     ppWithPrefixSep "Types not equal:" tp1 "and" tp2
+  prettyInCtx (CompsDoNotRefine m1 m2) =
+    ppWithPrefixSep "Could not prove refinement: " m1 "<=" m2
   prettyInCtx (ReturnNotError t) =
     ppWithPrefix "errorM computation not equal to:" (ReturnM t)
   prettyInCtx (FunsNotEq nm1 nm2) =
@@ -553,8 +559,18 @@ data MRState = MRState {
   mrAssumptions :: Term
 }
 
+-- | Build a default, empty state from SMT configuration parameters and a set of
+-- function refinement assumptions
+mkMRState :: SharedContext -> Map FunName FunAssump -> SBV.SMTConfig ->
+             Maybe Integer -> IO MRState
+mkMRState sc fun_assumps smt_config timeout =
+  scBool sc True >>= \true_tm ->
+  return $ MRState { mrSC = sc, mrSMTConfig = smt_config,
+                     mrSMTTimeout = timeout, mrUVars = [], mrVars = Map.empty,
+                     mrFunAssumps = fun_assumps, mrAssumptions = true_tm }
+
 -- | Mr. Monad, the monad used by MR. Solver, which is the state-exception monad
-newtype MRM a = MRM { runMRM :: StateT MRState (ExceptT MRFailure IO) a }
+newtype MRM a = MRM { unMRM :: StateT MRState (ExceptT MRFailure IO) a }
               deriving (Functor, Applicative, Monad, MonadIO,
                         MonadState MRState, MonadError MRFailure)
 
@@ -564,7 +580,11 @@ instance MonadTerm MRM where
   whnfTerm = liftSC1 scWhnf
   substTerm = liftSC3 instantiateVarList
 
--- | Run an 'MRM' computation, and apply a function to any failure thrown
+-- | Run an 'MRM' computation and return a result or an error
+runMRM :: MRState -> MRM a -> IO (Either MRFailure a)
+runMRM init_st m = runExceptT $ flip evalStateT init_st $ unMRM m
+
+-- | Apply a function to any failure thrown by an 'MRM' computation
 mapFailure :: (MRFailure -> MRFailure) -> MRM a -> MRM a
 mapFailure f m = catchError m (throwError . f)
 
@@ -580,16 +600,20 @@ mrOr m1 m2 =
 withFailureCtx :: FailCtx -> MRM a -> MRM a
 withFailureCtx ctx = mapFailure (MRFailureCtx ctx)
 
+{-
 -- | Catch any errors thrown by a computation and coerce them to a 'Left'
 catchErrorEither :: MonadError e m => m a -> m (Either e a)
 catchErrorEither m = catchError (Right <$> m) (return . Left)
+-}
 
 -- FIXME: replace these individual lifting functions with a more general
 -- typeclass like LiftTCM
 
+{-
 -- | Lift a nullary SharedTerm computation into 'MRM'
 liftSC0 :: (SharedContext -> IO a) -> MRM a
 liftSC0 f = (mrSC <$> get) >>= \sc -> liftIO (f sc)
+-}
 
 -- | Lift a unary SharedTerm computation into 'MRM'
 liftSC1 :: (SharedContext -> a -> IO b) -> a -> MRM b
@@ -635,6 +659,20 @@ withUVarLift :: TermLike tm => LocalName -> Type -> tm ->
 withUVarLift nm tp t m =
   withUVar nm tp (\x -> liftTermLike 0 1 t >>= m x)
 
+-- | Run a MR Solver computation in a context extended with a list of universal
+-- variables, passing 'Term's for those variables to the supplied computation.
+-- The variables are bound "outside in", meaning the first variable in the list
+-- is bound outermost, and so will have the highest deBruijn index.
+withUVars :: [(LocalName,Term)] -> ([Term] -> MRM a) -> MRM a
+withUVars = helper [] where
+  -- The extra input list gives the variables that have already been bound, in
+  -- order from most to least recently bound
+  helper :: [Term] -> [(LocalName,Term)] -> ([Term] -> MRM a) -> MRM a
+  helper vars [] m = m $ reverse vars
+  helper vars ((nm,tp):ctx) m =
+    substTerm 0 vars tp >>= \tp' ->
+    withUVar nm (Type tp') $ \var -> helper (var:vars) ctx m
+
 -- | Build 'Term's for all the uvars currently in scope, ordered from least to
 -- most recently bound
 getAllUVarTerms :: MRM [Term]
@@ -662,14 +700,6 @@ mrVarTerm (MRVar ec) =
 -- | Get the 'VarInfo' associated with a 'MRVar'
 mrVarInfo :: MRVar -> MRM (Maybe MRVarInfo)
 mrVarInfo var = Map.lookup var <$> mrVars <$> get
-
--- | Get the current value of an evar, if it has one
-mrGetEVar :: MRVar -> MRM (Maybe Term)
-mrGetEVar var =
-  mrVarInfo var >>= \case
-  Just (EVarInfo maybe_tm) -> return maybe_tm
-  Just _ -> error "mrGetEVar: Non-evar"
-  Nothing -> error "mrGetEVar: Unknown var"
 
 -- | Get the body of a letrec-bound variable applied to some arguments
 mrFunVarBody :: MRVar -> [Term] -> MRM Term
@@ -797,10 +827,14 @@ mrSubstEVarsStrict top_t =
        (asEVarApp var_map -> Just (_, args, Just t')) ->
          lift (mrApplyAll t' args) >>= recurse
        -- If t is an uninstantiated evar, return Nothing
-       (asEVarApp var_map -> Just (_, args, Nothing)) ->
+       (asEVarApp var_map -> Just (_, _, Nothing)) ->
          mzero
        -- If t is anything else, recurse on its immediate subterms
        _ -> traverseSubterms recurse t
+
+-- | Makes 'mrSubstEVarsStrict' be marked as used
+_mrSubstEVarsStrict :: Term -> MRM (Maybe Term)
+_mrSubstEVarsStrict = mrSubstEVarsStrict
 
 -- | Look up the 'FunAssump' for a 'FunName', if there is one
 mrGetFunAssump :: FunName -> MRM (Maybe FunAssump)
@@ -838,11 +872,6 @@ withAssumption phi m =
      ret <- m
      modify (\s -> s { mrAssumptions = assumps })
      return ret
-
--- | Add an assumption in a computation that two terms are equal, using 'scEq'
-withEqAssumption :: Term -> Term -> MRM a -> MRM a
-withEqAssumption t1 t2 m =
-  liftSC2 scEq t1 t2 >>= \prop -> withAssumption prop m
 
 
 ----------------------------------------------------------------------
@@ -899,7 +928,7 @@ mrProveEqSimple eqf var_map t1 (asEVarApp var_map -> Just (_, args, Just f)) =
 mrProveEqSimple _ var_map t1 t2@(asEVarApp var_map ->
                                  Just (evar, args, Nothing)) =
   do t1' <- mrSubstEVars t1
-     success <- mrTrySetAppliedEVar evar args t1
+     success <- mrTrySetAppliedEVar evar args t1'
      if success then return () else throwError (TermsNotEq t1 t2)
 
 -- Otherwise, try to prove both sides are equal. The use of mrSubstEVars instead
@@ -909,8 +938,8 @@ mrProveEqSimple eqf _ t1 t2 =
   do t1' <- mrSubstEVars t1
      t2' <- mrSubstEVars t2
      prop <- eqf t1' t2'
-     succ <- mrProvable prop
-     if succ then return () else
+     success <- mrProvable prop
+     if success then return () else
        throwError (TermsNotEq t1 t2)
 
 
@@ -1052,6 +1081,8 @@ normBind (ReturnM t) k = applyNormCompFun k t
 normBind (ErrorM msg) _ = return (ErrorM msg)
 normBind (Ite cond comp1 comp2) k =
   return $ Ite cond (CompBind comp1 k) (CompBind comp2 k)
+normBind (Either f g t) k =
+  return $ Either (CompFunComp f k) (CompFunComp g k) t
 normBind (OrM comp1 comp2) k =
   return $ OrM (CompBind comp1 k) (CompBind comp2 k)
 normBind (ExistsM tp f) k = return $ ExistsM tp (CompFunComp f k)
@@ -1123,6 +1154,7 @@ mrRefines t1 t2 =
      withFailureCtx (FailCtxRefines m1 m2) $ mrRefines' m1 m2
 
 -- | The main implementation of 'mrRefines'
+mrRefines' :: NormComp -> NormComp -> MRM ()
 mrRefines' (ReturnM e1) (ReturnM e2) = mrProveEq e1 e2
 mrRefines' (ErrorM _) (ErrorM _) = return ()
 mrRefines' (ReturnM e) (ErrorM _) = throwError (ReturnNotError e)
@@ -1248,7 +1280,6 @@ mrRefinesFun f1 f2
 mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 
 
-{-
 ----------------------------------------------------------------------
 -- * External Entrypoints
 ----------------------------------------------------------------------
@@ -1263,27 +1294,14 @@ askMRSolver ::
 askMRSolver sc smt_conf timeout t1 t2 =
   do tp1 <- scTypeOf sc t1
      tp2 <- scTypeOf sc t2
-     true_tm <- scBool sc True
-     let init_st = MRState {
-           mrSC = sc,
-           mrSMTConfig = smt_conf,
-           mrSMTTimeout = timeout,
-           mrLocalFuns = [],
-           mrFunEqs = [],
-           mrPathCondition = true_tm
-           }
-     res <-
-       flip evalStateT init_st $ runExceptT $
-       do mrSolveEq (Type tp1) (Type tp2)
-          let (pi_args, ret_tp) = asPiList tp1
-          vars <- mapM (\(x, x_tp) -> liftSC2 scFreshGlobal x x_tp) pi_args
-          case asCompMApp ret_tp of
-            Just _ -> return ()
-            Nothing -> throwError (NotCompFunType tp1)
-          t1_app <- liftSC2 scApplyAll t1 vars
-          t2_app <- liftSC2 scApplyAll t2 vars
-          mrSolveEq (CompTerm t1_app) (CompTerm t2_app)
-     case res of
-       Left err -> return $ Just err
-       Right () -> return Nothing
--}
+     tps_are_eq <- scConvertibleEval sc scTypeCheckWHNF True t1 t2
+     init_st <- mkMRState sc Map.empty smt_conf timeout
+     case tps_are_eq of
+       True
+         | (uvar_ctx, asCompM -> Just _) <- asPiList tp1 ->
+           fmap (either Just (const Nothing)) $ runMRM init_st $
+           withUVars uvar_ctx $ \vars ->
+           do m1 <- mrApplyAll t1 vars >>= normCompTerm
+              m2 <- mrApplyAll t2 vars >>= normCompTerm
+              mrRefines m1 m2
+       _ -> return $ Just (TypesNotEq (Type tp1) (Type tp2))
