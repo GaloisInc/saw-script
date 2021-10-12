@@ -1060,6 +1060,12 @@ Axiom arrayLookup : forall (a : Type), forall (b : Type), @Array a b -> a -> b .
 
 Axiom arrayUpdate : forall (a : Type), forall (b : Type), @Array a b -> a -> b -> @Array a b .
 
+Axiom arrayCopy : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @Array (@SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) a -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> @Array (@SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) a -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> @Array (@SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) a .
+
+Axiom arraySet : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @Array (@SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) a -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> a -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> @Array (@SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) a .
+
+Axiom arrayRangeEq : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @Array (@SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) a -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> @Array (@SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool)) a -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreScaffolding.Bool) -> @SAWCoreScaffolding.Bool .
+
 Axiom arrayEq : forall (a : Type), forall (b : Type), @Array a b -> @Array a b -> @SAWCoreScaffolding.Bool .
 
 (* Prelude.bveq_sameL was skipped *)
