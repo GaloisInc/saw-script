@@ -32,6 +32,7 @@ function run_test {
 
 
 echo "Setting up python environment for remote server clients..."
+poetry update
 poetry install
 
 export SAW_SERVER_URL="http://localhost:8080/"
