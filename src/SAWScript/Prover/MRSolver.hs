@@ -111,7 +111,7 @@ C |- F e1 ... en >>= k <= m:
 -}
 
 module SAWScript.Prover.MRSolver
-  (askMRSolver, MRFailure(..), showMRFailure
+  (askMRSolver, MRFailure(..), showMRFailure, isCompFunType
   , SBV.SMTConfig
   , SBV.z3, SBV.cvc4, SBV.yices, SBV.mathSAT, SBV.boolector
   ) where
@@ -971,6 +971,11 @@ asCompM :: Term -> Maybe Term
 asCompM (asApp -> Just (isGlobalDef "Prelude.CompM" -> Just (), tp)) =
   return tp
 asCompM _ = fail "not a CompM type!"
+
+-- | Test if a type is a monadic function type of 0 or more arguments
+isCompFunType :: Term -> Bool
+isCompFunType (asPiList -> (_, asCompM -> Just _)) = True
+isCompFunType _ = False
 
 -- | Pattern-match on a @LetRecTypes@ list in normal form and return a list of
 -- the types it specifies, each in normal form and with uvars abstracted out

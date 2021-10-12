@@ -1489,24 +1489,6 @@ cryptol_add_path path =
      let rw' = rw { rwCryptol = ce' }
      putTopLevelRW rw'
 
-mr_solver_tests :: [SharedContext -> IO Term]
-mr_solver_tests =
-  let helper nm = \sc -> scGlobalDef sc nm in
-  map helper
-  [ "Prelude.test_fun0", "Prelude.test_fun1", "Prelude.test_fun2"
-  , "Prelude.test_fun3", "Prelude.test_fun4", "Prelude.test_fun5"
-  , "Prelude.test_fun6"]
-
-testMRSolver :: Integer -> Integer -> TopLevel ()
-testMRSolver i1 i2 =
-  do sc <- getSharedContext
-     t1 <- liftIO $ (mr_solver_tests !! fromInteger i1) sc
-     t2 <- liftIO $ (mr_solver_tests !! fromInteger i2) sc
-     res <- liftIO $ Prover.askMRSolver sc SBV.z3 Nothing t1 t2
-     case res of
-       Just err -> io $ putStrLn $ Prover.showMRFailure err
-       Nothing -> io $ putStrLn "Success!"
-
 -- | Call 'Cryptol.importSchema' using a 'CEnv.CryptolEnv'
 importSchemaCEnv :: SharedContext -> CEnv.CryptolEnv -> Cryptol.Schema ->
                     IO Term
@@ -1531,6 +1513,22 @@ monadifyTypedTerm sc t =
      modify (\s -> s { rwMonadify = menv' })
      tp <- liftIO $ scTypeOf sc ret_t
      return $ TypedTerm (TypedTermOther tp) ret_t
+
+-- | Ensure that a 'TypedTerm' has been monadified
+ensureMonadicTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
+ensureMonadicTerm _ t
+  | TypedTermOther tp <- ttType t
+  , Prover.isCompFunType tp = return t
+ensureMonadicTerm sc t = monadifyTypedTerm sc t
+
+mrSolver :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
+mrSolver sc t1 t2 =
+  do m1 <- ttTerm <$> ensureMonadicTerm sc t1
+     m2 <- ttTerm <$> ensureMonadicTerm sc t2
+     res <- liftIO $ Prover.askMRSolver sc SBV.z3 Nothing m1 m2
+     case res of
+       Just err -> io $ putStrLn $ Prover.showMRFailure err
+       Nothing -> io $ putStrLn "Success!"
 
 setMonadification :: SharedContext -> String -> String -> TopLevel ()
 setMonadification sc cry_str saw_str =
