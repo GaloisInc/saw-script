@@ -278,11 +278,11 @@ asDataType o = resolveArgs $ Matcher (Net.Atom (identBaseName (primName o))) mat
 
 -- | Match any sort.
 asAnySort :: Matcher Sort
-asAnySort = asVar $ \t -> do Sort v <- R.asFTermF t; return v
+asAnySort = asVar $ \t -> do Sort v _ <- R.asFTermF t; return v
 
 -- | Match a specific sort.
 asSort :: Sort -> Matcher ()
-asSort s = Matcher (termToPat (Unshared (FTermF (Sort s)))) fn
+asSort s = Matcher (termToPat (Unshared (FTermF (Sort s False)))) fn
   where fn t = do s' <- R.asSort t
                   guard (s == s')
 

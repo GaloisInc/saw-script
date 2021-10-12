@@ -528,7 +528,7 @@ Definition multiFixM {lrts:LetRecTypes}
   multiTupleFixM lrts (fun fs => lrtApply F fs).
 
 (* A letrec construct for binding 0 or more mutually recursive functions *)
-Definition letRecM {lrts : LetRecTypes} {B} (F: lrtPi lrts (lrtTupleType lrts))
+Definition letRecM (lrts : LetRecTypes) {B} (F: lrtPi lrts (lrtTupleType lrts))
            (body:lrtPi lrts (CompM B)) : CompM B :=
   lrtApply body (multiFixM F).
 
