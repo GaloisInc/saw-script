@@ -49,11 +49,11 @@ Definition simpl0_spec num : BVVec 64 num (bitvector 8) -> bitvector 64 :=
 Definition simpl0_letRec_spec num0 idx num (sum : bitvector 64) arr (_ _ _ : unit) :=
   forallM (fun (pf : isBvule 64 idx num0) =>
   assumingM (num = bvSub 64 num0 idx)
-            (returnM (arr, (bvAdd 64 sum (simpl0_spec (bvSub 64 num0 idx)
-                                                      (dropBVVec _ _ _ idx pf arr)), tt)))).
+            (returnM (arr, bvAdd 64 sum (simpl0_spec (bvSub 64 num0 idx)
+                                                     (dropBVVec _ _ _ idx pf arr))))).
 
 Lemma simpl0_spec_ref :
-  refinesFun simpl0 (fun num arr => returnM (arr, (simpl0_spec num arr, tt))).
+  refinesFun simpl0 (fun num arr => returnM (arr, simpl0_spec num arr)).
 Proof.
   unfold simpl0, simpl0__tuple_fun.
   prove_refinement_match_letRecM_l.
