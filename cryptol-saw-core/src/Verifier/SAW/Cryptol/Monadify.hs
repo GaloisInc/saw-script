@@ -153,13 +153,19 @@ isFirstOrderType (asPi -> Just (_, asPi -> Just _, _)) = False
 isFirstOrderType (asPi -> Just (_, _, tp_out)) = isFirstOrderType tp_out
 isFirstOrderType _ = True
 
--- | A global definition, which is either a primitive or a constant
+-- | A global definition, which is either a primitive or a constant. As
+-- described in the documentation for 'ExtCns', the names need not be unique,
+-- but the 'VarIndex' is, and this is what is used to index 'GlobalDef's.
 data GlobalDef = GlobalDef { globalDefName :: NameInfo,
+                             globalDefIndex :: VarIndex,
                              globalDefType :: Term,
                              globalDefTerm :: Term }
 
 instance Eq GlobalDef where
-  gd1 == gd2 = globalDefName gd1 == globalDefName gd2
+  gd1 == gd2 = globalDefIndex gd1 == globalDefIndex gd2
+
+instance Ord GlobalDef where
+  compare gd1 gd2 = compare (globalDefIndex gd1) (globalDefIndex gd2)
 
 instance Show GlobalDef where
   show = show . globalDefName
@@ -177,11 +183,12 @@ asTypedGlobalDef :: Recognizer Term GlobalDef
 asTypedGlobalDef t =
   case unwrapTermF t of
     FTermF (Primitive pn) ->
-      Just $ GlobalDef (ModuleIdentifier $ primName pn) (primType pn) t
+      Just $ GlobalDef (ModuleIdentifier $
+                        primName pn) (primVarIndex pn) (primType pn) t
     Constant ec _ ->
-      Just $ GlobalDef (ecName ec) (ecType ec) t
+      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t
     FTermF (ExtCns ec) ->
-      Just $ GlobalDef (ecName ec) (ecType ec) t
+      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t
     _ -> Nothing
 
 
