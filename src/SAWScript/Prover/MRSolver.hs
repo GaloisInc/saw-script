@@ -192,7 +192,7 @@ mrVarType = ecType . unMRVar
 -- global named constants
 data FunName
   = LetRecName MRVar | EVarFunName MRVar | GlobalName GlobalDef
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 -- | Get the type of a 'FunName'
 funNameType :: FunName -> Term
@@ -235,35 +235,14 @@ compFunVarName _ = Nothing
 
 -- | If a 'CompFun' contains an explicit lambda-abstraction, then return the
 -- input type for it
-compFunInputType :: CompFun -> Maybe Term
-compFunInputType (CompFunTerm (asLambda -> Just (_, tp, _))) = Just tp
+compFunInputType :: CompFun -> Maybe Type
+compFunInputType (CompFunTerm (asLambda -> Just (_, tp, _))) = Just $ Type tp
 compFunInputType (CompFunComp f _) = compFunInputType f
 compFunInputType _ = Nothing
 
 -- | A computation of type @CompM a@ for some @a@
 data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
           deriving Show
-
--- | A universal type for all the different ways MR. Solver represents terms
-data MRTerm
-  = MRTermTerm Term
-  | MRTermType Type
-  | MRTermComp Comp
-  | MRTermCompFun CompFun
-  | MRTermNormComp NormComp
-  | MRTermFunName FunName
-  deriving Show
-
--- | Typeclass for things that can be coerced to 'MRTerm'
-class IsMRTerm a where
-  toMRTerm :: a -> MRTerm
-
-instance IsMRTerm Term where toMRTerm = MRTermTerm
-instance IsMRTerm Type where toMRTerm = MRTermType
-instance IsMRTerm Comp where toMRTerm = MRTermComp
-instance IsMRTerm CompFun where toMRTerm = MRTermCompFun
-instance IsMRTerm NormComp where toMRTerm = MRTermNormComp
-instance IsMRTerm FunName where toMRTerm = MRTermFunName
 
 
 ----------------------------------------------------------------------
@@ -339,64 +318,82 @@ instance PrettyInCtx NormComp where
     [parens <$> prettyAppList (prettyInCtx f : map prettyInCtx args),
      return ">>=", prettyInCtx k]
 
-instance PrettyInCtx MRTerm where
-  prettyInCtx (MRTermTerm t) = prettyInCtx t
-  prettyInCtx (MRTermType tp) = prettyInCtx tp
-  prettyInCtx (MRTermComp comp) = prettyInCtx comp
-  prettyInCtx (MRTermCompFun f) = prettyInCtx f
-  prettyInCtx (MRTermNormComp norm) = prettyInCtx norm
-  prettyInCtx (MRTermFunName nm) = prettyInCtx nm
-
 
 ----------------------------------------------------------------------
 -- * Lifting MR Solver Terms
 ----------------------------------------------------------------------
 
--- | Generic function for lifting a MR solver term
-class MRLiftTerm a where
-  mrLiftTerm :: MonadTerm m => DeBruijnIndex -> DeBruijnIndex -> a -> m a
+-- | A term-like object is one that supports lifting and substitution
+class TermLike a where
+  liftTermLike :: MonadTerm m => DeBruijnIndex -> DeBruijnIndex -> a -> m a
+  substTermLike :: MonadTerm m => DeBruijnIndex -> [Term] -> a -> m a
 
-instance (MRLiftTerm a, MRLiftTerm b) => MRLiftTerm (a,b) where
-  mrLiftTerm n i (a,b) = (,) <$> mrLiftTerm n i a <*> mrLiftTerm n i b
+instance (TermLike a, TermLike b) => TermLike (a,b) where
+  liftTermLike n i (a,b) = (,) <$> liftTermLike n i a <*> liftTermLike n i b
+  substTermLike n s (a,b) = (,) <$> substTermLike n s a <*> substTermLike n s b
 
-instance MRLiftTerm Term where
-  mrLiftTerm = liftTerm
+instance TermLike a => TermLike [a] where
+  liftTermLike n i l = mapM (liftTermLike n i) l
+  substTermLike n s l = mapM (substTermLike n s) l
 
-instance MRLiftTerm Type where
-  mrLiftTerm n i (Type tp) = Type <$> liftTerm n i tp
+instance TermLike Term where
+  liftTermLike = liftTerm
+  substTermLike = substTerm
 
-instance MRLiftTerm NormComp where
-  mrLiftTerm n i (ReturnM t) = ReturnM <$> mrLiftTerm n i t
-  mrLiftTerm n i (ErrorM str) = ErrorM <$> mrLiftTerm n i str
-  mrLiftTerm n i (Ite cond t1 t2) =
-    Ite <$> mrLiftTerm n i cond <*> mrLiftTerm n i t1 <*> mrLiftTerm n i t2
-  mrLiftTerm n i (Either f g eith) =
-    Either <$> mrLiftTerm n i f <*> mrLiftTerm n i g <*> mrLiftTerm n i eith
-  mrLiftTerm n i (OrM t1 t2) = OrM <$> mrLiftTerm n i t1 <*> mrLiftTerm n i t2
-  mrLiftTerm n i (ExistsM tp f) =
-    ExistsM <$> mrLiftTerm n i tp <*> mrLiftTerm n i f
-  mrLiftTerm n i (ForallM tp f) =
-    ForallM <$> mrLiftTerm n i tp <*> mrLiftTerm n i f
-  mrLiftTerm n i (FunBind nm args f) =
-    FunBind nm <$> mapM (mrLiftTerm n i) args <*> mrLiftTerm n i f
+instance TermLike Type where
+  liftTermLike n i (Type tp) = Type <$> liftTerm n i tp
+  substTermLike n s (Type tp) = Type <$> substTerm n s tp
 
-instance MRLiftTerm CompFun where
-  mrLiftTerm n i (CompFunTerm t) = CompFunTerm <$> mrLiftTerm n i t
-  mrLiftTerm n i CompFunReturn = return CompFunReturn
-  mrLiftTerm n i (CompFunComp f g) =
-    CompFunComp <$> mrLiftTerm n i f <*> mrLiftTerm n i g
+instance TermLike NormComp where
+  liftTermLike n i (ReturnM t) = ReturnM <$> liftTermLike n i t
+  liftTermLike n i (ErrorM str) = ErrorM <$> liftTermLike n i str
+  liftTermLike n i (Ite cond t1 t2) =
+    Ite <$> liftTermLike n i cond <*> liftTermLike n i t1 <*> liftTermLike n i t2
+  liftTermLike n i (Either f g eith) =
+    Either <$> liftTermLike n i f <*> liftTermLike n i g <*> liftTermLike n i eith
+  liftTermLike n i (OrM t1 t2) = OrM <$> liftTermLike n i t1 <*> liftTermLike n i t2
+  liftTermLike n i (ExistsM tp f) =
+    ExistsM <$> liftTermLike n i tp <*> liftTermLike n i f
+  liftTermLike n i (ForallM tp f) =
+    ForallM <$> liftTermLike n i tp <*> liftTermLike n i f
+  liftTermLike n i (FunBind nm args f) =
+    FunBind nm <$> mapM (liftTermLike n i) args <*> liftTermLike n i f
 
-instance MRLiftTerm Comp where
-  mrLiftTerm n i (CompTerm t) = CompTerm <$> mrLiftTerm n i t
-  mrLiftTerm n i (CompBind m f) = CompBind <$> mrLiftTerm n i m <*> mrLiftTerm n i f
+  substTermLike n s (ReturnM t) = ReturnM <$> substTermLike n s t
+  substTermLike n s (ErrorM str) = ErrorM <$> substTermLike n s str
+  substTermLike n s (Ite cond t1 t2) =
+    Ite <$> substTermLike n s cond <*> substTermLike n s t1
+    <*> substTermLike n s t2
+  substTermLike n s (Either f g eith) =
+    Either <$> substTermLike n s f <*> substTermLike n s g
+    <*> substTermLike n s eith
+  substTermLike n s (OrM t1 t2) =
+    OrM <$> substTermLike n s t1 <*> substTermLike n s t2
+  substTermLike n s (ExistsM tp f) =
+    ExistsM <$> substTermLike n s tp <*> substTermLike n s f
+  substTermLike n s (ForallM tp f) =
+    ForallM <$> substTermLike n s tp <*> substTermLike n s f
+  substTermLike n s (FunBind nm args f) =
+    FunBind nm <$> mapM (substTermLike n s) args <*> substTermLike n s f
 
-instance MRLiftTerm MRTerm where
-  mrLiftTerm n i (MRTermTerm t) = MRTermTerm <$> mrLiftTerm n i t
-  mrLiftTerm n i (MRTermType tp) = MRTermType <$> mrLiftTerm n i tp
-  mrLiftTerm n i (MRTermComp m) = MRTermComp <$> mrLiftTerm n i m
-  mrLiftTerm n i (MRTermCompFun f) = MRTermCompFun <$> mrLiftTerm n i f
-  mrLiftTerm n i (MRTermNormComp m) = MRTermNormComp <$> mrLiftTerm n i m
-  mrLiftTerm n i (MRTermFunName nm) = return $ MRTermFunName nm
+instance TermLike CompFun where
+  liftTermLike n i (CompFunTerm t) = CompFunTerm <$> liftTermLike n i t
+  liftTermLike n i CompFunReturn = return CompFunReturn
+  liftTermLike n i (CompFunComp f g) =
+    CompFunComp <$> liftTermLike n i f <*> liftTermLike n i g
+
+  substTermLike n s (CompFunTerm t) = CompFunTerm <$> substTermLike n s t
+  substTermLike n s CompFunReturn = return CompFunReturn
+  substTermLike n s (CompFunComp f g) =
+    CompFunComp <$> substTermLike n s f <*> substTermLike n s g
+
+instance TermLike Comp where
+  liftTermLike n i (CompTerm t) = CompTerm <$> liftTermLike n i t
+  liftTermLike n i (CompBind m f) =
+    CompBind <$> liftTermLike n i m <*> liftTermLike n i f
+  substTermLike n s (CompTerm t) = CompTerm <$> substTermLike n s t
+  substTermLike n s (CompBind m f) =
+    CompBind <$> substTermLike n s m <*> substTermLike n s f
 
 
 ----------------------------------------------------------------------
@@ -405,7 +402,7 @@ instance MRLiftTerm MRTerm where
 
 -- | The context in which a failure occurred
 data FailCtx
-  = FailCtxCmp MRTerm MRTerm
+  = FailCtxRefines NormComp NormComp
   | FailCtxMNF Term
   deriving Show
 
@@ -447,9 +444,9 @@ vsepM :: [PPInCtxM SawDoc] -> PPInCtxM SawDoc
 vsepM = fmap vsep . sequence
 
 instance PrettyInCtx FailCtx where
-  prettyInCtx (FailCtxCmp t1 t2) =
-    group <$> nest 2 <$> vsepM [return "When comparing terms:",
-                                prettyInCtx t1, prettyInCtx t2]
+  prettyInCtx (FailCtxRefines m1 m2) =
+    group <$> nest 2 <$>
+    ppWithPrefixSep "When proving refinement:" m1 "<=" m2
   prettyInCtx (FailCtxMNF t) =
     group <$> nest 2 <$> vsepM [return "When normalizing computation:",
                                 prettyInCtx t]
@@ -534,7 +531,7 @@ data FunAssump = FunAssump {
   -- | The argument expressions @e1, ..., en@ over the 'fassumpCtx' uvars
   fassumpArgs :: [Term],
   -- | The right-hand side upper bound @m@ over the 'fassumpCtx' uvars
-  fassumpRHS :: Term }
+  fassumpRHS :: NormComp }
 
 -- | State maintained by MR. Solver
 data MRState = MRState {
@@ -633,10 +630,10 @@ withUVar nm tp m =
 
 -- | Run a MR Solver computation in a context extended with a universal variable
 -- and pass it the lifting (in the sense of 'incVars') of an MR Solver term
-withUVarLift :: MRLiftTerm tm => LocalName -> Type -> tm ->
+withUVarLift :: TermLike tm => LocalName -> Type -> tm ->
                 (Term -> tm -> MRM a) -> MRM a
 withUVarLift nm tp t m =
-  withUVar nm tp (\x -> mrLiftTerm 0 1 t >>= m x)
+  withUVar nm tp (\x -> liftTermLike 0 1 t >>= m x)
 
 -- | Build 'Term's for all the uvars currently in scope, ordered from least to
 -- most recently bound
@@ -715,10 +712,10 @@ mrFreshEVars = helper [] where
   -- where the supplied Terms are evars that have already been generated for the
   -- earlier part of the context, and so must be substituted into the remaining
   -- types in the context
-  helper :: [Term] -> [(LocalName,Term)] -> MRM Term
+  helper :: [Term] -> [(LocalName,Term)] -> MRM [Term]
   helper evars [] = return evars
   helper evars ((nm,tp):ctx) =
-    do evar <- substTerm 0 evars tp >>= mrFreshEVar nm
+    do evar <- substTerm 0 evars tp >>= mrFreshEVar nm . Type
        helper (evar:evars) ctx
 
 -- | Set the value of an evar to a closed term
@@ -807,12 +804,12 @@ mrSubstEVarsStrict top_t =
 
 -- | Look up the 'FunAssump' for a 'FunName', if there is one
 mrGetFunAssump :: FunName -> MRM (Maybe FunAssump)
-mrGetFunAssump nm = map.lookup nm <$> mrFunAssumps <$> get
+mrGetFunAssump nm = Map.lookup nm <$> mrFunAssumps <$> get
 
 -- | Run a computation under the additional assumption that a named function
 -- applied to a list of arguments refines a given right-hand side, all of which
 -- are 'Term's that can have the current uvars free
-withFunAssump :: FunName -> [Term] -> Term -> MRM a -> MRM a
+withFunAssump :: FunName -> [Term] -> NormComp -> MRM a -> MRM a
 withFunAssump fname args rhs m =
   do ctx <- reverse <$> mrUVarCtx
      assumps <- mrFunAssumps <$> get
@@ -824,11 +821,11 @@ withFunAssump fname args rhs m =
 
 -- | Generate fresh evars for the context of a 'FunAssump' and substitute them
 -- into its arguments and right-hand side
-instantiateFunAssump :: FunAssump -> MRM ([Term], Term)
+instantiateFunAssump :: FunAssump -> MRM ([Term], NormComp)
 instantiateFunAssump fassump =
   do evars <- mrFreshEVars $ fassumpCtx fassump
-     args <- substTerm 0 evars $ fassumpArgs fassump
-     rhs <- substTerm 0 evars $ fassumpRHS fassump
+     args <- substTermLike 0 evars $ fassumpArgs fassump
+     rhs <- substTermLike 0 evars $ fassumpRHS fassump
      return (args, rhs)
 
 -- | Add an assumption of type @Bool@ to the current path condition while
@@ -1051,7 +1048,7 @@ normComp (CompTerm t) =
 
 -- | Bind a computation in whnf with a function, and normalize
 normBind :: NormComp -> CompFun -> MRM NormComp
-normBind (ReturnM t) k = applyCompFun k t >>= normComp
+normBind (ReturnM t) k = applyNormCompFun k t
 normBind (ErrorM msg) _ = return (ErrorM msg)
 normBind (Ite cond comp1 comp2) k =
   return $ Ite cond (CompBind comp1 k) (CompBind comp2 k)
@@ -1072,6 +1069,11 @@ applyCompFun CompFunReturn t =
   return $ CompReturn t
 applyCompFun (CompFunTerm f) t = CompTerm <$> mrApplyAll f [t]
 
+-- | Apply a 'CompFun' to a term and normalize the resulting computation
+applyNormCompFun :: CompFun -> Term -> MRM NormComp
+applyNormCompFun f arg = applyCompFun f arg >>= normComp
+
+-- | Apply a 'Comp
 
 {- FIXME: do these go away?
 -- | Lookup the definition of a function or throw a 'CannotLookupFunDef' if this is
@@ -1101,14 +1103,31 @@ mrUnfoldFunBind f args mark g =
 -- * Mr Solver Himself (He Identifies as Male)
 ----------------------------------------------------------------------
 
+-- | An object that can be converted to a normalized computation
+class ToNormComp a where
+  toNormComp :: a -> MRM NormComp
+
+instance ToNormComp NormComp where
+  toNormComp = return
+instance ToNormComp Comp where
+  toNormComp = normComp
+instance ToNormComp Term where
+  toNormComp = normComp . CompTerm
+
 -- | Prove that the left-hand computation refines the right-hand one. See the
 -- rules described at the beginning of this module.
-mrRefines :: NormComp -> NormComp -> MRM ()
-mrRefines (ReturnM e1) (ReturnM e2) = mrProveEq e1 e2
-mrRefines (ErrorM _) (ErrorM _) = return ()
-mrRefines (ReturnM e) (ErrorM _) = throwError (ReturnNotError e)
-mrRefines (ErrorM _) (ReturnM e) = throwError (ReturnNotError e)
-mrRefines (Ite cond1 m1 m1') m2_all@(Ite cond2 m2 m2') =
+mrRefines :: (ToNormComp a, ToNormComp b) => a -> b -> MRM ()
+mrRefines t1 t2 =
+  do m1 <- toNormComp t1
+     m2 <- toNormComp t2
+     withFailureCtx (FailCtxRefines m1 m2) $ mrRefines' m1 m2
+
+-- | The main implementation of 'mrRefines'
+mrRefines' (ReturnM e1) (ReturnM e2) = mrProveEq e1 e2
+mrRefines' (ErrorM _) (ErrorM _) = return ()
+mrRefines' (ReturnM e) (ErrorM _) = throwError (ReturnNotError e)
+mrRefines' (ErrorM _) (ReturnM e) = throwError (ReturnNotError e)
+mrRefines' (Ite cond1 m1 m1') m2_all@(Ite cond2 m2 m2') =
   liftSC1 scNot cond1 >>= \not_cond1 ->
   (liftSC2 scEq cond1 cond2 >>= mrProvable) >>= \case
   True ->
@@ -1121,41 +1140,47 @@ mrRefines (Ite cond1 m1 m1') m2_all@(Ite cond2 m2 m2') =
     -- Otherwise, prove each branch of the LHS refines the whole RHS
     withAssumption cond1 (mrRefines m1 m2_all) >>
     withAssumption not_cond1 (mrRefines m1' m2_all)
-mrRefines (Ite cond1 m1 m1') m2 =
-  liftSC1 scNot cond1 >>= \not_cond1 ->
-    withAssumption cond1 (mrRefines m1 m2) >>
-    withAssumption not_cond1 (mrRefines m1' m2)
-mrRefines m1 (Ite cond2 m2 m2') =
-  liftSC1 scNot cond2 >>= \not_cond2 ->
-    withAssumption cond2 (mrRefines m1 m2) >>
-    withAssumption not_cond2 (mrRefines m1 m2')
+mrRefines' (Ite cond1 m1 m1') m2 =
+  do not_cond1 <- liftSC1 scNot cond1
+     withAssumption cond1 (mrRefines m1 m2)
+     withAssumption not_cond1 (mrRefines m1' m2)
+mrRefines' m1 (Ite cond2 m2 m2') =
+  do not_cond2 <- liftSC1 scNot cond2
+     withAssumption cond2 (mrRefines m1 m2)
+     withAssumption not_cond2 (mrRefines m1 m2')
 -- FIXME: handle sum elimination
 -- mrRefines (Either f1 g1 e1) (Either f2 g2 e2) =
-mrRefines m1 (ForallM tp f2) =
+mrRefines' m1 (ForallM tp f2) =
   let nm = maybe "x" id (compFunVarName f2) in
   withUVarLift nm tp (m1,f2) $ \x (m1',f2') ->
-  mrApplyAll f2' [x] >>= \m2' ->
+  applyNormCompFun f2' x >>= \m2' ->
   mrRefines m1' m2'
-mrRefines (ExistsM tp f1) m2 =
+mrRefines' (ExistsM tp f1) m2 =
   let nm = maybe "x" id (compFunVarName f1) in
   withUVarLift nm tp (f1,m2) $ \x (f1',m2') ->
-  mrApplyAll f1' [x] >>= \m1' ->
+  applyNormCompFun f1' x >>= \m1' ->
   mrRefines m1' m2'
-mrRefines m1 (OrM m2 m2') =
+mrRefines' m1 (OrM m2 m2') =
   mrOr (mrRefines m1 m2) (mrRefines m1 m2')
-mrRefines (OrM m1 m1') m2 =
+mrRefines' (OrM m1 m1') m2 =
   mrRefines m1 m2 >> mrRefines m1' m2
-mrRefines (FunBind f args1 k1) (FunBind f' args2 k2)
+     
+mrRefines' (FunBind f args1 k1) (FunBind f' args2 k2)
   | f == f' && length args1 == length args2 =
     zipWithM_ mrProveEq args1 args2 >>
     mrRefinesFun k1 k2
-mrRefines (FunBind (EVarFunName evar) args CompFunReturn) m2 =
+
+-- FIXME: the following case doesn't work unless we either allow evars to be set
+-- to NormComps or we can turn NormComps back into terms
+{-
+mrRefines' (FunBind (EVarFunName evar) args CompFunReturn) m2 =
   mrGetEVar evar >>= \case
   Just f ->
-    foldM applyCompFun (CompFunTerm f) args >>= normComp >>= \m1' ->
+    (mrApplyAll f args >>= normCompTerm) >>= \m1' ->
     mrRefines m1' m2
   Nothing -> mrTrySetAppliedEVar evar args m2
-mrRefines m1@(FunBind f@(LetRecName f_var) args k1) m2 =
+-}
+mrRefines' m1@(FunBind f@(LetRecName f_var) args k1) m2 =
   mrGetFunAssump f >>= \case
   Nothing
     | CompFunReturn <- k1 ->
@@ -1164,9 +1189,8 @@ mrRefines m1@(FunBind f@(LetRecName f_var) args k1) m2 =
       -- return function, then we are essentially trying to f args <= m2, so
       -- assume it is true and coinductively prove that it is true under that
       -- assumption
-      mrFunVarBody f_var args >>= \f_body ->
-      withFunAssump f args m2 $
-      mrRefines f_body m2
+      do f_body <- mrFunVarBody f_var args
+         withFunAssump f args m2 $ mrRefines f_body m2
   Nothing ->
     -- If we do not already have an assumption that f refines some specification
     -- but k1 is non-trivial, then to solve f args >>= k1 <= m2 we would have to
@@ -1180,7 +1204,7 @@ mrRefines m1@(FunBind f@(LetRecName f_var) args k1) m2 =
        zipWithM_ mrProveEq assump_args args
        m1' <- normBind assump_rhs k1
        mrRefines m1' m2
-mrRefines m1@(FunBind f@(GlobalName _) args k1) m2 =
+mrRefines' m1@(FunBind f@(GlobalName _) args k1) m2 =
   mrGetFunAssump f >>= \case
   Just fassump ->
     -- If we have an assumption that f args' refines some rhs, then prove that
@@ -1196,16 +1220,20 @@ mrRefines m1@(FunBind f@(GlobalName _) args k1) m2 =
 
 -- NOTE: the rules that introduce existential variables need to go last, so that
 -- they can quantify over as many universals as possible
-mrRefines m1 (ExistsM tp f2) =
+mrRefines' m1 (ExistsM tp f2) =
   do let nm = maybe "x" id (compFunVarName f2)
      evar <- mrFreshEVar nm tp
-     m2' <- mrApplyAll f2 [evar]
+     m2' <- applyNormCompFun f2 evar
      mrRefines m1 m2'
-mrRefines (ForallM tp f1) m2 =
+mrRefines' (ForallM tp f1) m2 =
   do let nm = maybe "x" id (compFunVarName f1)
      evar <- mrFreshEVar nm tp
-     m1' <- mrApplyAll f1 [evar]
+     m1' <- applyNormCompFun f1 evar
      mrRefines m1' m2
+
+-- If none of the above cases match, then fail
+mrRefines' m1 m2 = throwError (CompsDoNotRefine m1 m2)
+
 
 -- | Prove that one function refines another for all inputs
 mrRefinesFun :: CompFun -> CompFun -> MRM ()
@@ -1214,8 +1242,8 @@ mrRefinesFun f1 f2
   | Just nm <- compFunVarName f1 `mplus` compFunVarName f2
   , Just tp <- compFunInputType f1 `mplus` compFunInputType f2 =
     withUVarLift nm tp (f1,f2) $ \x (f1', f2') ->
-    do m1' <- applyCompFun f1' x >>= normComp
-       m2' <- applyCompFun f2' x >>= normComp
+    do m1' <- applyNormCompFun f1' x
+       m2' <- applyNormCompFun f2' x
        mrRefines m1' m2'
 mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 
