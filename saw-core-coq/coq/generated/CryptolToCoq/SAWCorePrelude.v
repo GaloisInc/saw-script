@@ -1016,6 +1016,8 @@ Definition fmapM2 : forall (a : Type), forall (b : Type), forall (c : Type), (a 
 Definition fmapM3 : forall (a : Type), forall (b : Type), forall (c : Type), forall (d : Type), (a -> b -> c -> d) -> CompM a -> CompM b -> CompM c -> CompM d :=
   fun (a : Type) (b : Type) (c : Type) (d : Type) (f : a -> b -> c -> d) (m1 : CompM a) (m2 : CompM b) (m3 : CompM c) => applyM c d (fmapM2 a b (c -> d) f m1 m2) m3.
 
+(* Prelude.existsM was skipped *)
+
 Definition composeM : forall (a : Type), forall (b : Type), forall (c : Type), (a -> CompM b) -> (b -> CompM c) -> a -> CompM c :=
   fun (a : Type) (b : Type) (c : Type) (f : a -> CompM b) (g : b -> CompM c) (x : a) => @bindM CompM _ b c (f x) g.
 

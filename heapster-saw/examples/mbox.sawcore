@@ -79,4 +79,4 @@ mboxAllFreedSpec : CompM (Vec 1 Bool);
 mboxAllFreedSpec = returnM (Vec 1 Bool) (bvNat 1 0);
 
 randSpec : CompM (Vec 32 Bool);
-randSpec = returnM (Vec 32 Bool) (bvNat 32 3);
+randSpec = existsM (Vec 32 Bool) (Vec 32 Bool) (\ (x : Vec 32 Bool) -> returnM (Vec 32 Bool) x);
