@@ -174,7 +174,7 @@ normalizeProp prop
 importKind :: SharedContext -> C.Kind -> IO Term
 importKind sc kind =
   case kind of
-    C.KType       -> scSort sc (mkSort 0)
+    C.KType       -> scISort sc (mkSort 0)
     C.KNum        -> scDataTypeApp sc "Cryptol.Num" []
     C.KProp       -> scSort sc (mkSort 0)
     (C.:->) k1 k2 -> join $ scFun sc <$> importKind sc k1 <*> importKind sc k2
@@ -745,6 +745,8 @@ prelPrims =
   , ("%$",           flip scGlobalDef "Cryptol.ecSMod")        -- {n} (fin n, n>=1) => [n] -> [n] -> [n]
   , ("lg2",          flip scGlobalDef "Cryptol.ecLg2")         -- {n} (fin n) => [n] -> [n]
   , (">>$",          flip scGlobalDef "Cryptol.ecSShiftR")     -- {n, ix} (fin n, n >= 1, Integral ix) => [n] -> ix -> [n]
+  , ("toSignedInteger",
+                     flip scGlobalDef "Cryptol.toSignedInteger") -- {n} (fin n, n >= 1) => [n] -> Integer
 
     -- -- Rational primitives
   , ("ratio",        flip scGlobalDef "Cryptol.ecRatio")       -- Integer -> Integer -> Rational

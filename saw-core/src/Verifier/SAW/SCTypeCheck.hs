@@ -521,7 +521,7 @@ instance TypeInfer (FlatTermF TypedTerm) where
     ensureRecordType (NotRecordType t) t_tp >>= \case
     (Map.lookup fld -> Just tp) -> return tp
     _ -> throwTCError $ BadRecordField fld t_tp
-  typeInfer (Sort s) = liftTCM scSort (sortOf s)
+  typeInfer (Sort s _) = liftTCM scSort (sortOf s)
   typeInfer (NatLit _) = liftTCM scNatType
   typeInfer (ArrayValue (TypedTerm tp tp_tp) vs) =
     do n <- liftTCM scNat (fromIntegral (V.length vs))

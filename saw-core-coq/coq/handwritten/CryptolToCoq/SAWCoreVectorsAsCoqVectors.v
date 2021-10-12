@@ -32,6 +32,9 @@ Fixpoint gen (n : nat) (a : Type) (f : nat -> a) {struct n} : Vec n a.
     ).
 Defined.
 
+Instance Inhabited_Vec (n:nat) (a:Type) {Ha:Inhabited a} : Inhabited (Vec n a) :=
+  MkInhabited (Vec n a) (gen n a (fun _ => inhabitant)).
+
 Theorem gen_domain_eq n T : forall f g (domain_eq : forall i, f i = g i),
     gen n T f = gen n T g.
 Proof.
@@ -281,11 +284,13 @@ Definition bvSShr (w : nat) (a : bitvector w.+1) (n : nat)
   := a.
 Global Opaque bvSShr.
 
+(* FIXME this is not implemented *)
 Definition bvShl (w : nat) (a : bitvector w) (n : nat)
   : bitvector w
   := a.
 Global Opaque bvShl.
 
+(* FIXME this is not implemented *)
 Definition bvShr (w : nat) (a : bitvector w) (n : nat)
   : bitvector w
   := a.

@@ -43,15 +43,31 @@ data SpecialTreatment = SpecialTreatment
   , identSpecialTreatment :: Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
   }
 
+-- | How to handle SAWCore identifiers at their definition sites.
 data DefSiteTreatment
-  = DefPreserve
-  | DefRename   (Maybe ModuleName) String -- optional module rename, then identifier itself
-  | DefReplace  String
+  = -- | Translate the identifier unchanged, and directly translate the assocated
+    --   SAWCore declaration.
+    DefPreserve
+  | -- | Translate the identifier into the given Coq identifer,
+    --   and otherwise directly translate the associated SAWCore declaration.
+    DefRename String
+  | -- | Replace the declaration of the identifier with the given text.
+    DefReplace  String
+    -- | Skip the declartion of the identifier altogether.
   | DefSkip
 
+-- | How to translate SAWCore identifiers at their use sites.
 data UseSiteTreatment
-  = UsePreserve
-  | UseRename   (Maybe ModuleName) String
+  = -- | Translate the identifier unchanged
+    UsePreserve
+    -- | Rename the given identifier into the given (optionally qualified)
+    --   Coq identifier.  The boolean value, if true, indicates that the
+    --   identifier should be an "explicit" identifier with a leading \"\@\"
+    --   symbol, which indicates to Coq that all implicit arguments should be
+    --   treated as explicit.
+  | UseRename   (Maybe ModuleName) String Bool
+    -- | Drop the first @n@ SAWCore arguments to this identifier, then replace
+    --   the occurence with the given Coq term.
   | UseReplaceDropArgs  Int Coq.Term
 
 data IdentSpecialTreatment = IdentSpecialTreatment
@@ -91,9 +107,16 @@ findSpecialTreatment ident = do
 mapsTo :: ModuleName -> String -> IdentSpecialTreatment
 mapsTo targetModule targetName = IdentSpecialTreatment
   { atDefSite = DefSkip
-  , atUseSite = UseRename (Just targetModule) targetName
+  , atUseSite = UseRename (Just targetModule) targetName False
   }
 
+-- Like @mapsTo@ but use an explicit variable reference so
+-- that all implicit arguments must be provided.
+mapsToExpl :: ModuleName -> String -> IdentSpecialTreatment
+mapsToExpl targetModule targetName = IdentSpecialTreatment
+  { atDefSite = DefSkip
+  , atUseSite = UseRename (Just targetModule) targetName True
+  }
 -- Use `realize` for axioms that can be realized, or for primitives that must be
 -- realized.  While some primitives can be written directly in a standalone Coq
 -- module, some primitives depend on code from the extracted module, and are
@@ -113,8 +136,8 @@ realize code = IdentSpecialTreatment
 -- Also useful for translation notations, until they are better supported.
 rename :: String -> IdentSpecialTreatment
 rename ident = IdentSpecialTreatment
-  { atDefSite = DefRename Nothing ident
-  , atUseSite = UseRename Nothing ident
+  { atDefSite = DefRename ident
+  , atUseSite = UseRename Nothing ident False
   }
 
 -- Replace any occurrences of identifier applied to @n@ arguments with the
@@ -259,8 +282,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("PairType",  mapsTo sawDefinitionsModule "PairType")
   , ("PairValue", mapsTo sawDefinitionsModule "PairValue")
   , ("Pair__rec", mapsTo sawDefinitionsModule "Pair__rec")
-  , ("fst",       mapsTo sawDefinitionsModule "fst")
-  , ("snd",       mapsTo sawDefinitionsModule "snd")
+  , ("fst",       replaceDropArgs 2 $ Coq.Var "fst")
+  , ("snd",       replaceDropArgs 2 $ Coq.Var "snd")
   ]
 
   -- Equality
@@ -425,8 +448,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("LRT_Nil",              mapsTo compMModule "LRT_Nil")
   , ("lrtPi",                mapsTo compMModule "lrtPi")
   , ("lrtTupleType",         mapsTo compMModule "lrtTupleType")
-  , ("multiFixM",            mapsTo compMModule "multiFixM")
-  , ("letRecM",              mapsTo compMModule "letRecM")
+  , ("multiFixM",            mapsToExpl compMModule "multiFixM")
+  , ("letRecM",              mapsToExpl compMModule "letRecM")
   ]
 
   -- Dependent pairs

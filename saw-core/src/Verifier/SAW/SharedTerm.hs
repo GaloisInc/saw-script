@@ -97,6 +97,7 @@ module Verifier.SAW.SharedTerm
   , scCtorApp
   , scApplyCtor
   , scSort
+  , scISort
     -- *** Variables and constants
   , scLocalVar
   , scConstant
@@ -1056,7 +1057,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
                Just (Map.lookup fld -> Just f_tp) -> return f_tp
                Just _ -> fail "Record field not in record type"
                Nothing -> fail "Record project of non-record type"
-        Sort s -> lift $ scSort sc (sortOf s)
+        Sort s _ -> lift $ scSort sc (sortOf s)
         NatLit _ -> lift $ scNatType sc
         ArrayValue tp vs -> lift $ do
           n <- scNat sc (fromIntegral (V.length vs))
@@ -1289,7 +1290,11 @@ scApplyCtor sc c args = scCtorApp sc (ctorName c) args
 
 -- | Create a term from a 'Sort'.
 scSort :: SharedContext -> Sort -> IO Term
-scSort sc s = scFlatTermF sc (Sort s)
+scSort sc s = scFlatTermF sc (Sort s False)
+
+-- | Create a term from a 'Sort', and set the advisory "inhabited" flag
+scISort :: SharedContext -> Sort -> IO Term
+scISort sc s = scFlatTermF sc (Sort s True)
 
 -- | Create a literal term from a 'Natural'.
 scNat :: SharedContext -> Natural -> IO Term

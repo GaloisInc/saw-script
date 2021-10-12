@@ -660,7 +660,7 @@ data SimplImpl ps_in ps_out where
   -- > -o x:array(off,<len,*stride,fps,permute(bs))
   SImpl_LLVMArrayRearrange ::
     (1 <= w, KnownNat w) =>
-    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> LLVMArrayPerm w ->
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> [LLVMArrayBorrow w] ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
   -- | Convert an array to a field of the same size with @true@ contents:
@@ -736,17 +736,18 @@ data SimplImpl ps_in ps_out where
     SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
     (RNil :> LLVMPointerType w)
 
-  -- | Apply an implication to the @i@th field of an array permission:
+  -- | Apply an implication to the fields of an array permission:
   --
-  -- > y:fpi -o y:fpi'
+  -- > y:fp1 * ... * fpn -o y:fp1' * ... * fpn'
   -- > ------------------------------------------------
   -- > x:array(off,<len,*stride,(fp1, ..., fpn),bs) -o
-  -- >   x:array(off,<len,*stride,
-  -- >           (fp1, ..., fp(i-1), fpi', fp(i+1), ..., fpn),bs)
+  -- >   x:array(off,<len,*stride,(fp1',...,fpn'),bs)
   SImpl_LLVMArrayContents ::
     (1 <= w, KnownNat w) =>
-    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> Int -> LLVMArrayField w ->
-    LocalPermImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w) ->
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> [LLVMArrayField w] ->
+    Binding (LLVMPointerType w) (LocalPermImpl
+                                 (RNil :> LLVMPointerType w)
+                                 (RNil :> LLVMPointerType w)) ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
   -- | Prove that @x@ is a pointer from a field permission:
@@ -1658,16 +1659,11 @@ simplImplIn (SImpl_LLVMArrayAppend x ap1 ap2) =
         x (ValPerm_Conj1 $ Perm_LLVMArray ap2)
     _ -> error "simplImplIn: SImpl_LLVMArrayAppend: arrays cannot be appended"
 
-simplImplIn (SImpl_LLVMArrayRearrange x ap1 ap2) =
-  if bvEq (llvmArrayOffset ap1) (llvmArrayOffset ap2) &&
-     bvEq (llvmArrayLen ap1) (llvmArrayLen ap2) &&
-     llvmArrayStride ap1 == llvmArrayStride ap2 &&
-     llvmArrayFields ap1 == llvmArrayFields ap2 &&
-     all (flip elem (llvmArrayBorrows ap2)) (llvmArrayBorrows ap1) &&
-     all (flip elem (llvmArrayBorrows ap1)) (llvmArrayBorrows ap2) then
-    distPerms1 x (ValPerm_Conj1 $ Perm_LLVMArray ap1)
+simplImplIn (SImpl_LLVMArrayRearrange x ap bs) =
+  if llvmArrayBorrowsPermuteTo ap bs then
+    distPerms1 x (ValPerm_Conj1 $ Perm_LLVMArray ap)
   else
-    error "simplImplIn: SImpl_LLVMArrayRearrange: arrays not equivalent"
+    error "simplImplIn: SImpl_LLVMArrayRearrange: malformed output borrows list"
 
 simplImplIn (SImpl_LLVMArrayToField x ap _) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMArray ap)
@@ -1708,7 +1704,7 @@ simplImplIn (SImpl_LLVMArrayIndexReturn x ap ix) =
   else
     error "simplImplIn: SImpl_LLVMArrayIndexReturn: index not being borrowed"
 
-simplImplIn (SImpl_LLVMArrayContents x ap _ _ _) =
+simplImplIn (SImpl_LLVMArrayContents x ap _ _) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMArray ap])
 simplImplIn (SImpl_LLVMFieldIsPtr x fp) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMField fp])
@@ -1977,16 +1973,11 @@ simplImplOut (SImpl_LLVMArrayAppend x ap1 ap2) =
         llvmArrayAddArrayBorrows ap1' ap2
     _ -> error "simplImplOut: SImpl_LLVMArrayAppend: arrays cannot be appended"
 
-simplImplOut (SImpl_LLVMArrayRearrange x ap1 ap2) =
-  if bvEq (llvmArrayOffset ap1) (llvmArrayOffset ap2) &&
-     bvEq (llvmArrayLen ap1) (llvmArrayLen ap2) &&
-     llvmArrayStride ap1 == llvmArrayStride ap2 &&
-     llvmArrayFields ap1 == llvmArrayFields ap2 &&
-     all (flip elem (llvmArrayBorrows ap2)) (llvmArrayBorrows ap1) &&
-     all (flip elem (llvmArrayBorrows ap1)) (llvmArrayBorrows ap2) then
-    distPerms1 x (ValPerm_Conj1 $ Perm_LLVMArray ap2)
+simplImplOut (SImpl_LLVMArrayRearrange x ap bs) =
+  if llvmArrayBorrowsPermuteTo ap bs then
+    distPerms1 x (ValPerm_Conj1 $ Perm_LLVMArray $ ap { llvmArrayBorrows = bs })
   else
-    error "simplImplOut: SImpl_LLVMArrayRearrange: arrays not equivalent"
+    error "simplImplOut: SImpl_LLVMArrayRearrange: malformed output borrows list"
 
 simplImplOut (SImpl_LLVMArrayToField x ap sz) =
   case llvmArrayToField sz ap of
@@ -2032,11 +2023,8 @@ simplImplOut (SImpl_LLVMArrayIndexReturn x ap ix) =
   else
     error "simplImplOut: SImpl_LLVMArrayIndexReturn: index not being borrowed"
 
-simplImplOut (SImpl_LLVMArrayContents x ap i fp _) =
-  distPerms1 x (ValPerm_Conj [Perm_LLVMArray $
-                              ap { llvmArrayFields =
-                                     take i (llvmArrayFields ap) ++
-                                     fp : drop (i+1) (llvmArrayFields ap)}])
+simplImplOut (SImpl_LLVMArrayContents x ap flds _) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMArray $ ap { llvmArrayFields = flds }])
 
 simplImplOut (SImpl_LLVMFieldIsPtr x fp) =
   distPerms2 x (ValPerm_Conj1 Perm_IsLLVMPtr)
@@ -2439,8 +2427,8 @@ instance SubstVar PermVarSubst m =>
       SImpl_LLVMArrayReturn <$> genSubst s x <*> genSubst s ap <*> genSubst s rng
     [nuMP| SImpl_LLVMArrayAppend x ap1 ap2 |] ->
       SImpl_LLVMArrayAppend <$> genSubst s x <*> genSubst s ap1 <*> genSubst s ap2
-    [nuMP| SImpl_LLVMArrayRearrange x ap1 ap2 |] ->
-      SImpl_LLVMArrayRearrange <$> genSubst s x <*> genSubst s ap1 <*> genSubst s ap2
+    [nuMP| SImpl_LLVMArrayRearrange x ap bs |] ->
+      SImpl_LLVMArrayRearrange <$> genSubst s x <*> genSubst s ap <*> genSubst s bs
     [nuMP| SImpl_LLVMArrayToField x ap sz |] ->
       SImpl_LLVMArrayToField <$> genSubst s x <*> genSubst s ap
                              <*> return (mbLift sz)
@@ -2456,10 +2444,9 @@ instance SubstVar PermVarSubst m =>
     [nuMP| SImpl_LLVMArrayIndexReturn x ap ix |] ->
       SImpl_LLVMArrayIndexReturn <$> genSubst s x <*> genSubst s ap <*>
                                      genSubst s ix
-    [nuMP| SImpl_LLVMArrayContents x ap i fp impl |] ->
+    [nuMP| SImpl_LLVMArrayContents x ap flds mb_mb_impl |] ->
       SImpl_LLVMArrayContents <$> genSubst s x <*> genSubst s ap <*>
-                                  return (mbLift i) <*> genSubst s fp <*>
-                                  genSubst s impl
+                                  genSubst s flds <*> genSubst s mb_mb_impl
     [nuMP| SImpl_LLVMFieldIsPtr x fp |] ->
       SImpl_LLVMFieldIsPtr <$> genSubst s x <*> genSubst s fp
     [nuMP| SImpl_LLVMArrayIsPtr x ap |] ->
@@ -2655,9 +2642,6 @@ instance SubstVar s m => Substable1 s (LocalImplRet ps) m where
 -- FIXME: instead of having a separate PPInfo and name type map, we should maybe
 -- combine all the local context into one type...?
 
-data RecurseFlag = RecLeft | RecRight | RecNone
-  deriving (Eq, Show, Read)
-
 data ImplState vars ps =
   ImplState { _implStatePerms :: PermSet ps,
               _implStateVars :: CruCtx vars,
@@ -2765,7 +2749,7 @@ embedImplM ps_in m =
 -- | Embed a sub-computation in a name-binding inside another 'ImplM'
 -- computation, throwing away any state from that sub-computation and returning
 -- a 'PermImpl' inside a name-binding
-embedMbImplM :: Mb ctx (PermSet ps_in) ->
+embedMbImplM :: Mb ctx (DistPerms ps_in) ->
                 Mb ctx (ImplM RNil s r' ps_out ps_in (r' ps_out)) ->
                 ImplM vars s r ps ps (Mb ctx (PermImpl r' ps_in))
 embedMbImplM mb_ps_in mb_m =
@@ -2773,7 +2757,7 @@ embedMbImplM mb_ps_in mb_m =
      lift $ strongMbM $ mbMap2
        (\ps_in m ->
         runImplM
-         CruCtxNil ps_in
+         CruCtxNil (distPermSet ps_in)
          (view implStatePermEnv    s) (view implStatePPInfo  s)
          (view implStateFailPrefix s) (view implStateDebugLevel s)
          (view implStateNameTypes  s) m (pure . fst))
@@ -4004,13 +3988,14 @@ implLLVMArrayAppend x ap1 ap2 =
   implSimplM Proxy (SImpl_LLVMArrayAppend x ap1 ap2)
 
 
--- | Rearrange the order of the borrows in an array permission
+-- | Rearrange the order of the borrows in the input array permission to match
+-- the given list, assuming the two have the same elements
 implLLVMArrayRearrange ::
   (1 <= w, KnownNat w, NuMatchingAny1 r) =>
-  ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> LLVMArrayPerm w ->
+  ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> [LLVMArrayBorrow w] ->
   ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
-implLLVMArrayRearrange x ap_in ap_out =
-  implSimplM Proxy (SImpl_LLVMArrayRearrange x ap_in ap_out)
+implLLVMArrayRearrange x ap bs =
+  implSimplM Proxy (SImpl_LLVMArrayRearrange x ap bs)
 
 -- | Prove an empty array with length 0
 implLLVMArrayEmpty ::
@@ -5212,8 +5197,7 @@ proveVarLLVMArrayH x first_p ps ap =
                  | precise <- bvEq off (llvmArrayOffset ap_lhs)
                  , (first_p || precise)
                  , Just cell_num <- llvmArrayIsOffsetArray ap_lhs ap
-                 , bvCouldBeInRange cell_num (llvmArrayCells ap_lhs)
-                 , llvmArrayFields ap_lhs == llvmArrayFields ap ->
+                 , bvCouldBeInRange cell_num (llvmArrayCells ap_lhs) ->
                    Just (precise, proveVarLLVMArray_ArrayStep x ps ap i ap_lhs)
                _ -> Nothing)
    ps [0..])
@@ -5225,6 +5209,24 @@ proveVarLLVMArray_ArrayStep ::
   [AtomicPerm (LLVMPointerType w)] -> LLVMArrayPerm w ->
   Int -> LLVMArrayPerm w ->
   ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
+proveVarLLVMArray_ArrayStep x ps ap i ap_lhs =
+  implTraceM (\info ->
+               pretty "proveVarLLVMArray_ArrayStep:" <+>
+               permPretty info x <> colon <>
+               align (sep [PP.group (permPretty info (ValPerm_Conj ps)),
+                           parens (permPretty info (ValPerm_LLVMArray ap)),
+                           pretty "-o",
+                           PP.group (permPretty info (ValPerm_Conj1 $
+                                                      Perm_LLVMArray ap))])) >>>
+  proveVarLLVMArray_ArrayStepH x ps ap i ap_lhs
+
+
+-- | The main workhorse of 'proveVarLLVMArray_ArrayStep'
+proveVarLLVMArray_ArrayStepH ::
+  (1 <= w, KnownNat w, NuMatchingAny1 r) => ExprVar (LLVMPointerType w) ->
+  [AtomicPerm (LLVMPointerType w)] -> LLVMArrayPerm w ->
+  Int -> LLVMArrayPerm w ->
+  ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
 
 -- If there is a borrow in ap_lhs that is not in ap but might overlap with ap,
 -- return it to ap_lhs
@@ -5232,7 +5234,7 @@ proveVarLLVMArray_ArrayStep ::
 -- FIXME: when an array ap_ret is being borrowed from ap_lhs, this code requires
 -- all of it to be returned, with no borrows, even though it could be that ap
 -- allows some of ap_ret to be borrowed
-proveVarLLVMArray_ArrayStep x ps ap i ap_lhs
+proveVarLLVMArray_ArrayStepH x ps ap i ap_lhs
   | Just ap_cell_off <- llvmArrayIsOffsetArray ap_lhs ap
   , Just b <-
     find (\b ->
@@ -5258,7 +5260,7 @@ proveVarLLVMArray_ArrayStep x ps ap i ap_lhs
 -- If there is a borrow in ap that is not in ap_lhs, borrow it from ap_lhs. Note
 -- the assymmetry with the previous case: we only add borrows if we definitely
 -- have to, but we remove borrows if we might have to.
-proveVarLLVMArray_ArrayStep x ps ap i ap_lhs
+proveVarLLVMArray_ArrayStepH x ps ap i ap_lhs
   | Just ap_lhs_cell_off <- llvmArrayIsOffsetArray ap ap_lhs
   , Just b <-
     find (\b ->
@@ -5277,21 +5279,41 @@ proveVarLLVMArray_ArrayStep x ps ap i ap_lhs
     -- added to the front of the list of borrows, so we need to rearrange.
     implLLVMArrayBorrowBorrow x ap' b >>>= \p ->
     recombinePerm x p >>>
-    implLLVMArrayRearrange x (llvmArrayAddBorrow b ap') ap
+    implLLVMArrayRearrange x (llvmArrayAddBorrow b ap') (llvmArrayBorrows ap)
 
 -- If ap and ap_lhs are equal up to the order of their borrows, just rearrange
--- the borrows and we should be good
-proveVarLLVMArray_ArrayStep x ps ap i ap_lhs
+-- the borrows and we should be done
+proveVarLLVMArray_ArrayStepH x ps ap i ap_lhs
   | bvEq (llvmArrayOffset ap_lhs) (llvmArrayOffset ap)
   , bvEq (llvmArrayLen ap_lhs) (llvmArrayLen ap)
   , llvmArrayStride ap_lhs == llvmArrayStride ap
-  , llvmArrayFields ap_lhs == llvmArrayFields ap =
+  , llvmArrayFields ap_lhs == llvmArrayFields ap
+  , llvmArrayBorrowsPermuteTo ap_lhs (llvmArrayBorrows ap) =
     implGetPopConjM x ps i >>>
-    implLLVMArrayRearrange x ap_lhs ap
+    implLLVMArrayRearrange x ap_lhs (llvmArrayBorrows ap)
+
+-- If ap and ap_lhs have the same range and stride but their fields are
+-- different, prove the rhs fields from the lhs fields
+proveVarLLVMArray_ArrayStepH x ps ap i ap_lhs
+  | bvEq (llvmArrayOffset ap_lhs) (llvmArrayOffset ap)
+  , bvEq (llvmArrayLen ap_lhs) (llvmArrayLen ap)
+  , llvmArrayStride ap_lhs == llvmArrayStride ap
+  , flds <- llvmArrayFields ap
+  , flds_lhs <- llvmArrayFields ap_lhs
+  , ap' <- ap { llvmArrayFields = flds_lhs }
+  , dps_in <-
+      nu $ \y -> distPerms1 y $ ValPerm_Conj $
+                 map llvmArrayFieldToAtomicPerm flds_lhs
+  , dps_out <-
+      nu $ \y -> distPerms1 y $ ValPerm_Conj $
+                 map llvmArrayFieldToAtomicPerm flds =
+    proveVarLLVMArray_ArrayStep x ps ap' i ap_lhs >>>
+    localMbProveVars dps_in dps_out >>>= \mb_impl ->
+    implSimplM Proxy (SImpl_LLVMArrayContents x ap' flds mb_impl)
 
 -- If ap is contained inside ap_lhs at a cell boundary then copy or borrow ap
 -- from ap_lhs depending on whether they are copyable
-proveVarLLVMArray_ArrayStep x ps ap i ap_lhs
+proveVarLLVMArray_ArrayStepH x ps ap i ap_lhs
   | all bvPropCouldHold (bvPropRangeSubset
                          (llvmArrayAbsOffsets ap) (llvmArrayAbsOffsets ap_lhs))
   , llvmArrayStride ap_lhs == llvmArrayStride ap
@@ -5311,7 +5333,7 @@ proveVarLLVMArray_ArrayStep x ps ap i ap_lhs
 -- If we get to this case but ap is still at a cell boundary in ap_lhs then
 -- ap_lhs only satisfies some initial portion of ap, so borrow or copy that part
 -- of ap_lhs and continue proving the rest of ap
-proveVarLLVMArray_ArrayStep x ps ap i ap_lhs
+proveVarLLVMArray_ArrayStepH x ps ap i ap_lhs
   | llvmArrayStride ap_lhs == llvmArrayStride ap
   , llvmArrayFields ap_lhs == llvmArrayFields ap
   , Just (LLVMArrayIndex ap_cell_num 0) <-
@@ -5346,7 +5368,7 @@ proveVarLLVMArray_ArrayStep x ps ap i ap_lhs
 
 
 -- Otherwise we don't know what to do so we fail
-proveVarLLVMArray_ArrayStep _x _ps _ap _i _ap_lhs =
+proveVarLLVMArray_ArrayStepH _x _ps _ap _i _ap_lhs =
   implFailMsgM "proveVarLLVMArray_ArrayStep"
 
 
@@ -7097,6 +7119,23 @@ localProveVars ps_in ps_out =
   embedImplM ps_in (recombinePermsRev ps_in >>>
                     proveVarsImplInt (emptyMb ps_out) >>>
                     pure (LocalImplRet Refl))
+
+-- | Prove one sequence of permissions over an extended set of local variables
+-- from another and capture the proof as a 'LocalPermImpl' in a binding
+localMbProveVars :: NuMatchingAny1 r =>
+                    Mb (ctx :: RList CrucibleType) (DistPerms ps_in) ->
+                    Mb ctx (DistPerms ps_out) ->
+                    ImplM vars s r ps ps (Mb ctx (LocalPermImpl ps_in ps_out))
+localMbProveVars mb_ps_in mb_ps_out =
+  implTraceM (\i -> sep [pretty "localMbProveVars:", permPretty i mb_ps_in,
+                         pretty "-o", permPretty i mb_ps_out]) >>>
+  fmap LocalPermImpl <$>
+  embedMbImplM mb_ps_in (mbMap2
+                         (\ps_in ps_out ->
+                           recombinePermsRev ps_in >>>
+                           proveVarsImplInt (emptyMb ps_out) >>>
+                           pure (LocalImplRet Refl))
+                         mb_ps_in mb_ps_out)
 
 
 ----------------------------------------------------------------------

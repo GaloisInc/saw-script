@@ -9,6 +9,7 @@ TAG=${1:-saw-remote-api}
 pushd $DIR/..
 
 docker run --name=saw-remote-api -d \
+  --env CLASSPATH=/home/saw/tests/saw/test-files \
   -v $PWD/python/tests/saw/test-files:/home/saw/tests/saw/test-files \
   -p 8080:8080 \
   "$TAG"
@@ -44,6 +45,7 @@ popd
 echo "killing saw-remote-api docker container"
 
 docker container kill saw-remote-api
+docker container rm saw-remote-api
 
 
 if [ $NUM_FAILS -eq 0 ]

@@ -42,10 +42,12 @@ type Type = Term
 
 data Binder
   = Binder Ident (Maybe Type)
+  | ImplicitBinder Ident (Maybe Type)
     deriving (Show)
 
 data PiBinder
   = PiBinder (Maybe Ident) Type
+  | PiImplicitBinder (Maybe Ident) Type
     deriving (Show)
 
 -- Because saw-core does not give very helpful access to the parameters and
@@ -73,5 +75,6 @@ data Decl
   | Parameter Ident Type
   | Variable Ident Type
   | InductiveDecl Inductive
+  | Section Ident [Decl]
   | Snippet String
   deriving (Show)

@@ -31,20 +31,20 @@ Mbox__rec : (P : Mbox -> sort 0) ->
             (m:Mbox) -> P m;
 Mbox__rec P f1 f2 m = Mbox#rec P f1 f2 m;
 
-unfoldMbox : Mbox -> Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool) * #());
+unfoldMbox : Mbox -> Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool));
 unfoldMbox m =
-  Mbox__rec (\ (_:Mbox) -> Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool) * #()))
-  (Left #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool) * #()) ())
-  (\ (strt:Vec 64 Bool) (len:Vec 64 Bool) (m:Mbox) (_:Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool) * #())) (d:BVVec 64 bv64_128 (Vec 8 Bool)) ->
-     Right #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool) * #()) (strt, len, m, d, ()))
+  Mbox__rec (\ (_:Mbox) -> Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)))
+  (Left #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)) ())
+  (\ (strt:Vec 64 Bool) (len:Vec 64 Bool) (m:Mbox) (_:Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool))) (d:BVVec 64 bv64_128 (Vec 8 Bool)) ->
+     Right #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)) (strt, len, m, d))
   m;
 
-foldMbox : Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * (BVVec 64 bv64_128 (Vec 8 Bool)) * #()) -> Mbox;
+foldMbox : Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)) -> Mbox;
 foldMbox =
-  either #() (Vec 64 Bool * Vec 64 Bool * Mbox * (BVVec 64 bv64_128 (Vec 8 Bool)) * #()) Mbox
+  either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)) Mbox
          (\ (_:#()) -> Mbox_nil)
-         (\ (tup : (Vec 64 Bool * Vec 64 Bool * Mbox * (BVVec 64 bv64_128 (Vec 8 Bool)) * #())) ->
-            Mbox_cons tup.1 tup.2 tup.3 tup.4);
+         (\ (tup : (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool))) ->
+            Mbox_cons tup.1 tup.2 tup.3 tup.(2).(2).(2));
 
 {-
 getMbox : (a : sort 0) -> Mbox a -> a;

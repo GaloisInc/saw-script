@@ -136,6 +136,7 @@ namedDecls = concatMap filterNamed
     filterNamed (Coq.Definition n _ _ _)                      = [n]
     filterNamed (Coq.InductiveDecl (Coq.Inductive n _ _ _ _)) = [n]
     filterNamed (Coq.Snippet _)                               = []
+    filterNamed (Coq.Section _ ds)                            = namedDecls ds
 
 -- | Retrieve the names of all local and global declarations from the
 -- translation state.
@@ -182,10 +183,10 @@ translateIdentWithArgs i args = do
   where
 
     applySpecialTreatment identToCoq UsePreserve =
-      Coq.App (Coq.ExplVar $ identToCoq i) <$> mapM translateTerm args
-    applySpecialTreatment identToCoq (UseRename targetModule targetName) =
+      Coq.App (Coq.Var $ identToCoq i) <$> mapM translateTerm args
+    applySpecialTreatment identToCoq (UseRename targetModule targetName expl) =
       Coq.App
-        (Coq.ExplVar $ identToCoq $
+        ((if expl then Coq.ExplVar else Coq.Var) $ identToCoq $
           mkIdent (fromMaybe (translateModuleName $ identModule i) targetModule)
           (Text.pack targetName))
           <$> mapM translateTerm args
@@ -208,7 +209,7 @@ translateIdentToIdent :: TermTranslationMonad m => Ident -> m (Maybe Ident)
 translateIdentToIdent i =
   (atUseSite <$> findSpecialTreatment i) >>= \case
     UsePreserve -> return $ Just (mkIdent translatedModuleName (identBaseName i))
-    UseRename   targetModule targetName ->
+    UseRename   targetModule targetName _ ->
       return $ Just $ mkIdent (fromMaybe translatedModuleName targetModule) (Text.pack targetName)
     UseReplaceDropArgs _ _ -> return Nothing
   where
@@ -278,7 +279,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
          let args = indices ++ [termEliminated]
          Coq.App r' <$> mapM translateTerm args
 
-    Sort s -> pure (Coq.Sort (translateSort s))
+    Sort s _h -> pure (Coq.Sort (translateSort s))
     NatLit i -> pure (Coq.NatLit (toInteger i))
     ArrayValue (asBoolType -> Just ()) (traverse asBool -> Just bits)
       | Pair w bv <- BV.bitsBE (Vector.toList bits)
@@ -405,22 +406,65 @@ mkLet (name, rhs) body = Coq.Let name [] Nothing rhs body
 translateParams ::
   TermTranslationMonad m =>
   [(LocalName, Term)] -> m [Coq.Binder]
-translateParams [] = return []
-translateParams ((n, ty):ps) = do
-  ty' <- translateTerm ty
-  n' <- freshenAndBindName n
-  ps' <- translateParams ps
-  return (Coq.Binder n' (Just ty') : ps')
+translateParams bs = concat <$> mapM translateParam bs
+
+translateParam ::
+  TermTranslationMonad m =>
+  (LocalName, Term) -> m [Coq.Binder]
+translateParam (n, ty) =
+  translateBinder n ty >>= \case
+    Left (n',ty') -> return [Coq.Binder n' (Just ty')]
+    Right (n',ty',nh,nhty) ->
+      return [Coq.Binder n' (Just ty'), Coq.ImplicitBinder nh (Just nhty)]
 
 translatePi :: TermTranslationMonad m => [(LocalName, Term)] -> Term -> m Coq.Term
 translatePi binders body = withLocalTranslationState $ do
-  bindersT <- forM binders $ \ (b, bType) -> do
-    bTypeT <- translateTerm bType
-    b' <- freshenAndBindName b
-    let n = if b == "_" then Nothing else Just b'
-    return (Coq.PiBinder n bTypeT)
+  bindersT <- concat <$> mapM translatePiBinder binders
   bodyT <- translateTermLet body
   return $ Coq.Pi bindersT bodyT
+
+translatePiBinder ::
+  TermTranslationMonad m => (LocalName, Term) -> m [Coq.PiBinder]
+translatePiBinder (n, ty) =
+  translateBinder n ty >>= \case
+    Left (n',ty')
+      | n == "_"  -> return [Coq.PiBinder Nothing ty']
+      | otherwise -> return [Coq.PiBinder (Just n') ty']
+    Right (n',ty',nh,nhty) ->
+      return [Coq.PiBinder (Just n') ty', Coq.PiImplicitBinder (Just nh) nhty]
+
+translateBinder ::
+  TermTranslationMonad m =>
+  LocalName ->
+  Term ->
+  m (Either (Coq.Ident,Coq.Type) (Coq.Ident,Coq.Type,Coq.Ident,Coq.Type))
+translateBinder n ty@(asPiList -> (args, asISort -> Just _s)) =
+  do ty' <- translateTerm ty
+     n' <- freshenAndBindName n
+     hty' <- translateInhHyp args (Coq.Var n')
+     hn' <- translateLocalIdent ("Inh_" <> n )
+     return $ Right (n',ty',hn',hty')
+translateBinder n ty =
+  do ty' <- translateTerm ty
+     n'  <- freshenAndBindName n
+     return $ Left (n',ty')
+
+translateInhHyp ::
+  TermTranslationMonad m =>
+  [(LocalName, Term)] -> Coq.Term -> m Coq.Term
+translateInhHyp [] tm = return (Coq.App (Coq.Var "SAWCoreScaffolding.Inhabited") [tm])
+translateInhHyp args tm = withLocalTranslationState $
+  do args' <- mapM (uncurry translateBinder) args
+     return $ Coq.Pi (concatMap mkPi args')
+                (Coq.App (Coq.Var "SAWCoreScaffolding.Inhabited") [Coq.App tm (map mkArg args')])
+ where
+  mkPi (Left (nm,ty)) =
+    [Coq.PiBinder (Just nm) ty]
+  mkPi (Right (nm,ty,hnm,hty)) =
+    [Coq.PiBinder (Just nm) ty, Coq.PiImplicitBinder (Just hnm) hty]
+
+  mkArg (Left (nm,_)) = Coq.Var nm
+  mkArg (Right (nm,_,_,_)) = Coq.Var nm
 
 -- | Translate a local name from a saw-core binder into a fresh Coq identifier.
 translateLocalIdent :: TermTranslationMonad m => LocalName -> m Coq.Ident
@@ -616,7 +660,7 @@ translateTermUnshared t = withLocalTranslationState $ do
               modify $ set sharedNames IntMap.empty
               modify $ set nextSharedName "var__0"
               translateTermLet (ecType n)
-          modify $ over topLevelDeclarations $ (Coq.Parameter renamed tp :)
+          modify $ over topLevelDeclarations $ (Coq.Variable renamed tp :)
           Coq.Var <$> pure renamed
 
     -- Constants with a body
