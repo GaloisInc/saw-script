@@ -30,7 +30,6 @@
 module Verifier.SAW.Heapster.Implication where
 
 import Data.Maybe
-import Data.Either
 import Data.List
 import Data.Functor.Product
 import Data.Functor.Compose
@@ -4625,7 +4624,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
   -- with e_i = y_i, and e - (L_1*e_1 + ... + L_k*e_k + M) is divisible by N,
   -- by setting z = (e - (L_1*e_1 + ... + L_k*e_k + M))/N
   (_, [nuMP| PExpr_BV mb_factors (BV.BV mb_m) |])
-    | Just (n, memb, e_factors) <- getUnsetBVFactor mb_factors
+    | Just (n, memb, e_factors) <- getUnsetBVFactor psubst mb_factors
     , e' <- bvSub e (bvAdd e_factors (bvInt $ mbLift mb_m))
     , bvIsZero (bvMod e' n) ->
       setVarM memb (bvDiv e' n) >>> pure (SomeEqProofRefl e)
@@ -4634,33 +4633,6 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
 
   -- Otherwise give up!
   _ -> proveEqFail e mb_e
-
-  where -- If there is exactly one 'BVFactor' in a list of 'BVFactor's which is
-        -- an unset variable, return the value of its 'BV', the witness that it
-        -- is bound, and the result of adding together the remaining factors
-        getUnsetBVFactor :: (1 <= w, KnownNat w) => Mb vars [BVFactor w] ->
-                            Maybe (Integer, Member vars (BVType w), PermExpr (BVType w))
-        getUnsetBVFactor (mbList -> mb_factors) =
-          case partitionEithers $ mbFactorNameBoundP <$> mb_factors of
-            ([(n, memb)], xs) -> Just (n, memb, foldl' bvAdd (bvInt 0) xs)
-            _ -> Nothing
-
-        -- If a 'BVFactor' in a binding is an unset variable, return the value
-        -- of its 'BV' and the witness that it is bound. Otherwise, return the
-        -- constant of the factor multiplied by the variable's value if it is
-        -- a set variable, or the constant of the factor multiplied by the
-        -- variable, if it is an unbound variable
-        mbFactorNameBoundP :: Mb vars (BVFactor w) ->
-                              Either (Integer, Member vars (BVType w))
-                                     (PermExpr (BVType w))
-        mbFactorNameBoundP (mbMatch -> [nuMP| BVFactor (BV.BV mb_n) mb_z |]) =
-          let n = mbLift mb_n in
-          case mbNameBoundP mb_z of
-            Left memb -> case psubstLookup psubst memb of 
-                           Nothing -> Left (n, memb)
-                           Just e' -> Right (bvMultBV (BV.mkBV knownNat n) e')
-            Right z -> Right (PExpr_BV [BVFactor (BV.mkBV knownNat n) z]
-                                       (BV.zero knownNat))
 
 
 -- | Build a proof on the top of the stack that @x:eq(e)@. Assume that all @x@
