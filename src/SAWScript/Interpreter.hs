@@ -2942,7 +2942,7 @@ primitives = Map.fromList
 
     ---------------------------------------------------------------------
 
-  , prim "mr_solver"  "Term -> Term -> TopLevel Bool"
+  , prim "mr_solver"  "Term -> Term -> TopLevel ()"
     (scVal mrSolver)
     Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
