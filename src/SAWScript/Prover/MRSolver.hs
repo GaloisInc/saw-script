@@ -637,9 +637,10 @@ mrApplyAll :: Term -> [Term] -> MRM Term
 mrApplyAll f args = liftSC2 scApplyAll f args >>= liftSC1 betaNormalize
 
 -- | Get the current context of uvars as a list of variable names and their
--- types as SAW core 'Term's, with the most recently bound uvar first
+-- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in
+-- the order as seen "from the outside"
 mrUVarCtx :: MRM [(LocalName,Term)]
-mrUVarCtx = map (\(nm,Type tp) -> (nm,tp)) <$> mrUVars <$> get
+mrUVarCtx = reverse <$> map (\(nm,Type tp) -> (nm,tp)) <$> mrUVars <$> get
 
 -- | Run a MR Solver computation in a context extended with a universal
 -- variable, which is passed as a 'Term' to the sub-computation
@@ -683,12 +684,12 @@ getAllUVarTerms =
 -- | Lambda-abstract all the current uvars out of a 'Term', with the least
 -- recently bound variable being abstracted first
 lambdaUVarsM :: Term -> MRM Term
-lambdaUVarsM t = mrUVarCtx >>= \ctx -> liftSC2 scLambdaList (reverse ctx) t
+lambdaUVarsM t = mrUVarCtx >>= \ctx -> liftSC2 scLambdaList ctx t
 
 -- | Pi-abstract all the current uvars out of a 'Term', with the least recently
 -- bound variable being abstracted first
 piUVarsM :: Term -> MRM Term
-piUVarsM t = mrUVarCtx >>= \ctx -> liftSC2 scPiList (reverse ctx) t
+piUVarsM t = mrUVarCtx >>= \ctx -> liftSC2 scPiList ctx t
 
 -- | Convert an 'MRVar' to a 'Term', applying it to all the uvars in scope
 mrVarTerm :: MRVar -> MRM Term
@@ -845,7 +846,7 @@ mrGetFunAssump nm = Map.lookup nm <$> mrFunAssumps <$> get
 -- are 'Term's that can have the current uvars free
 withFunAssump :: FunName -> [Term] -> NormComp -> MRM a -> MRM a
 withFunAssump fname args rhs m =
-  do ctx <- reverse <$> mrUVarCtx
+  do ctx <- mrUVarCtx
      assumps <- mrFunAssumps <$> get
      let assumps' = Map.insert fname (FunAssump ctx args rhs) assumps
      modify (\s -> s { mrFunAssumps = assumps' })
@@ -947,7 +948,8 @@ mrProveEqSimple eqf _ t1 t2 =
 -- throwing an error if this is not possible
 mrProveEq :: Term -> Term -> MRM ()
 mrProveEq t1_top t2_top =
-  (do tp <- liftSC1 scTypeOf t1_top
+  (do ctx <- mrUVarCtx
+      tp <- liftSC2 scTypeOf' (map snd ctx) t1_top
       varmap <- mrVars <$> get
       proveEq varmap tp t1_top t2_top)
   where
