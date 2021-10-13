@@ -135,7 +135,6 @@ import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
-import Verifier.SAW.Prelude
 import Verifier.SAW.Cryptol.Monadify
 
 import SAWScript.Proof (termToProp)
@@ -642,6 +641,10 @@ mrApplyAll f args = liftSC2 scApplyAll f args >>= liftSC1 betaNormalize
 mrUVarCtx :: MRM [(LocalName,Term)]
 mrUVarCtx = reverse <$> map (\(nm,Type tp) -> (nm,tp)) <$> mrUVars <$> get
 
+-- | Get the type of a 'Term' in the current uvar context
+mrTypeOf :: Term -> MRM Term
+mrTypeOf t = mrUVarCtx >>= \ctx -> liftSC2 scTypeOf' (map snd ctx) t
+
 -- | Run a MR Solver computation in a context extended with a universal
 -- variable, which is passed as a 'Term' to the sub-computation
 withUVar :: LocalName -> Type -> (Term -> MRM a) -> MRM a
@@ -752,7 +755,7 @@ mrFreshEVars = helper [] where
 -- | Set the value of an evar to a closed term
 mrSetEVarClosed :: MRVar -> Term -> MRM ()
 mrSetEVarClosed var val =
-  do val_tp <- liftSC1 scTypeOf val
+  do val_tp <- mrTypeOf val
      -- FIXME: catch subtyping errors and report them as being evar failures
      liftSC3 scCheckSubtype Nothing (TypedTerm val val_tp) (mrVarType var)
      modify $ \st ->
@@ -901,6 +904,22 @@ mrProvable bool_tm =
      forall_prop <- piUVarsM prop
      mrProvableRaw forall_prop
 
+-- | Build a Boolean 'Term' stating that two 'Term's are equal. This is like
+-- 'scEq' except that it works on open terms.
+mrEq :: Term -> Term -> MRM Term
+mrEq t1 t2 = mrTypeOf t1 >>= \tp -> mrEq' tp t1 t2
+
+-- | Build a Boolean 'Term' stating that the second and third 'Term' arguments
+-- are equal, where the first 'Term' gives their type (which we assume is the
+-- same for both). This is like 'scEq' except that it works on open terms.
+mrEq' :: Term -> Term -> Term -> MRM Term
+mrEq' (asDataType -> Just (pn, [])) t1 t2
+  | primName pn == "Prelude.Nat" = liftSC2 scEqualNat t1 t2
+mrEq' (asBoolType -> Just _) t1 t2 = liftSC2 scBoolEq t1 t2
+mrEq' (asIntegerType -> Just _) t1 t2 = liftSC2 scIntEq t1 t2
+mrEq' (asVectorType -> Just (n, asBoolType -> Just ())) t1 t2 =
+  liftSC3 scBvEq n t1 t2
+mrEq' _ _ _ = error "mrEq': unsupported type"
 
 -- | A "simple" strategy for proving equality between two terms, which we assume
 -- are of the same type. This strategy first checks if either side is an
@@ -948,8 +967,7 @@ mrProveEqSimple eqf _ t1 t2 =
 -- throwing an error if this is not possible
 mrProveEq :: Term -> Term -> MRM ()
 mrProveEq t1_top t2_top =
-  (do ctx <- mrUVarCtx
-      tp <- liftSC2 scTypeOf' (map snd ctx) t1_top
+  (do tp <- mrTypeOf t1_top
       varmap <- mrVars <$> get
       proveEq varmap tp t1_top t2_top)
   where
@@ -957,11 +975,14 @@ mrProveEq t1_top t2_top =
     proveEq var_map (asDataType -> Just (pn, [])) t1 t2
       | primName pn == "Prelude.Nat" =
         mrProveEqSimple (liftSC2 scEqualNat) var_map t1 t2
-    proveEq var_map (asBitvectorType -> Just _) t1 t2 =
+    proveEq var_map (asVectorType -> Just (n, asBoolType -> Just ())) t1 t2 =
       -- FIXME: make a better solver for bitvector equalities
-      mrProveEqSimple (liftSC2 scEq) var_map t1 t2
-    proveEq var_map _ t1 t2 =
-      mrProveEqSimple (liftSC2 scEq) var_map t1 t2
+      mrProveEqSimple (liftSC3 scBvEq n) var_map t1 t2
+    proveEq var_map (asBoolType -> Just _) t1 t2 =
+      mrProveEqSimple (liftSC2 scBoolEq) var_map t1 t2
+    proveEq var_map (asIntegerType -> Just _) t1 t2 =
+      mrProveEqSimple (liftSC2 scIntEq) var_map t1 t2
+    proveEq _ _ t1 t2 = throwError (TermsNotEq t1 t2)
 
 
 ----------------------------------------------------------------------
@@ -1168,7 +1189,7 @@ mrRefines' (ReturnM e) (ErrorM _) = throwError (ReturnNotError e)
 mrRefines' (ErrorM _) (ReturnM e) = throwError (ReturnNotError e)
 mrRefines' (Ite cond1 m1 m1') m2_all@(Ite cond2 m2 m2') =
   liftSC1 scNot cond1 >>= \not_cond1 ->
-  (liftSC2 scEq cond1 cond2 >>= mrProvable) >>= \case
+  (mrEq cond1 cond2 >>= mrProvable) >>= \case
   True ->
     -- If we can prove cond1 == cond2, then we just need to prove m1 <= m2 and
     -- m1' <= m2'; further, we need only add assumptions about cond1, because it
