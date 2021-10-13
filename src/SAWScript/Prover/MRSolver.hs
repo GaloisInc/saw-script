@@ -138,7 +138,7 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.Prelude
 import Verifier.SAW.Cryptol.Monadify
 
-import SAWScript.Proof (boolToProp)
+import SAWScript.Proof (termToProp)
 import qualified SAWScript.Prover.SBV as SBV
 
 
@@ -882,10 +882,10 @@ withAssumption phi m =
 -- unsatisfiable, using an SMT solver. By "closed" we mean that it contains no
 -- uvars or 'MRVar's.
 mrProvableRaw :: Term -> MRM Bool
-mrProvableRaw bool_prop =
+mrProvableRaw prop_term =
   do smt_conf <- mrSMTConfig <$> get
      timeout <- mrSMTTimeout <$> get
-     prop <- liftSC2 boolToProp [] bool_prop
+     prop <- liftSC1 termToProp prop_term
      (smt_res, _) <- liftSC4 SBV.proveUnintSBVIO smt_conf mempty timeout prop
      case smt_res of
        Just _ -> return False
@@ -1209,6 +1209,8 @@ mrRefines' (FunBind f args1 k1) (FunBind f' args2 k2)
 
 -- FIXME: the following case doesn't work unless we either allow evars to be set
 -- to NormComps or we can turn NormComps back into terms
+mrRefines' m1@(FunBind (EVarFunName _) _ _) m2 =
+  throwError (CompsDoNotRefine m1 m2)
 {-
 mrRefines' (FunBind (EVarFunName evar) args CompFunReturn) m2 =
   mrGetEVar evar >>= \case
@@ -1217,6 +1219,7 @@ mrRefines' (FunBind (EVarFunName evar) args CompFunReturn) m2 =
     mrRefines m1' m2
   Nothing -> mrTrySetAppliedEVar evar args m2
 -}
+
 mrRefines' m1@(FunBind f@(LetRecName f_var) args k1) m2 =
   mrGetFunAssump f >>= \case
   Nothing
@@ -1299,7 +1302,7 @@ askMRSolver ::
 askMRSolver sc smt_conf timeout t1 t2 =
   do tp1 <- scTypeOf sc t1
      tp2 <- scTypeOf sc t2
-     tps_are_eq <- scConvertibleEval sc scTypeCheckWHNF True t1 t2
+     tps_are_eq <- scConvertibleEval sc scTypeCheckWHNF True tp1 tp2
      init_st <- mkMRState sc Map.empty smt_conf timeout
      case tps_are_eq of
        True
