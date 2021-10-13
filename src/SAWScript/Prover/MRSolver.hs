@@ -118,6 +118,7 @@ module SAWScript.Prover.MRSolver
 
 import Data.List (findIndex)
 import Data.IORef
+import System.IO (hPutStrLn, stderr)
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
@@ -555,18 +556,21 @@ data MRState = MRState {
   -- | The current assumptions of function refinement
   mrFunAssumps :: Map FunName FunAssump,
   -- | The current assumptions, which are conjoined into a single Boolean term
-  mrAssumptions :: Term
+  mrAssumptions :: Term,
+  -- | The debug level, which controls debug printing
+  mrDebugLevel :: Int
 }
 
 -- | Build a default, empty state from SMT configuration parameters and a set of
 -- function refinement assumptions
 mkMRState :: SharedContext -> Map FunName FunAssump -> SBV.SMTConfig ->
-             Maybe Integer -> IO MRState
-mkMRState sc fun_assumps smt_config timeout =
+             Maybe Integer -> Int -> IO MRState
+mkMRState sc fun_assumps smt_config timeout dlvl =
   scBool sc True >>= \true_tm ->
   return $ MRState { mrSC = sc, mrSMTConfig = smt_config,
                      mrSMTTimeout = timeout, mrUVars = [], mrVars = Map.empty,
-                     mrFunAssumps = fun_assumps, mrAssumptions = true_tm }
+                     mrFunAssumps = fun_assumps, mrAssumptions = true_tm,
+                     mrDebugLevel = dlvl }
 
 -- | Mr. Monad, the monad used by MR. Solver, which is the state-exception monad
 newtype MRM a = MRM { unMRM :: StateT MRState (ExceptT MRFailure IO) a }
@@ -877,6 +881,37 @@ withAssumption phi m =
      modify (\s -> s { mrAssumptions = assumps })
      return ret
 
+-- | Print a 'String' if the debug level is at least the supplied 'Int'
+debugPrint :: Int -> String -> MRM ()
+debugPrint i str =
+  (mrDebugLevel <$> get) >>= \lvl ->
+  if lvl >= i then liftIO (hPutStrLn stderr str) else return ()
+
+-- | Print a document if the debug level is at least the supplied 'Int'
+debugPretty :: Int -> SawDoc -> MRM ()
+debugPretty i pp = debugPrint i $ renderSawDoc defaultPPOpts pp
+
+-- | Pretty-print an object in the current context if the current debug level is
+-- at least the supplied 'Int'
+debugPrettyInCtx :: PrettyInCtx a => Int -> a -> MRM ()
+debugPrettyInCtx i a =
+  (mrUVars <$> get) >>= \ctx -> debugPrint i (showInCtx (map fst ctx) a)
+
+-- | Pretty-print an object relative to the current context
+mrPPInCtx :: PrettyInCtx a => a -> MRM SawDoc
+mrPPInCtx a =
+  runReader (prettyInCtx a) <$> map fst <$> mrUVars <$> get
+
+-- | Pretty-print the result of 'ppWithPrefixSep' relative to the current uvar
+-- context to 'stderr' if the debug level is at least the 'Int' provided
+mrDebugPPPrefixSep :: PrettyInCtx a => Int -> String -> a -> String -> a ->
+                      MRM ()
+mrDebugPPPrefixSep i pre a1 sp a2 =
+  (mrUVars <$> get) >>= \ctx ->
+  debugPretty i $
+  flip runReader (map fst ctx) (group <$> nest 2 <$>
+                                ppWithPrefixSep pre a1 sp a2)
+
 
 ----------------------------------------------------------------------
 -- * Calling Out to SMT
@@ -967,7 +1002,8 @@ mrProveEqSimple eqf _ t1 t2 =
 -- throwing an error if this is not possible
 mrProveEq :: Term -> Term -> MRM ()
 mrProveEq t1_top t2_top =
-  (do tp <- mrTypeOf t1_top
+  (do mrDebugPPPrefixSep 1 "mrProveEq" t1_top "==" t2_top
+      tp <- mrTypeOf t1_top
       varmap <- mrVars <$> get
       proveEq varmap tp t1_top t2_top)
   where
@@ -1179,6 +1215,7 @@ mrRefines :: (ToNormComp a, ToNormComp b) => a -> b -> MRM ()
 mrRefines t1 t2 =
   do m1 <- toNormComp t1
      m2 <- toNormComp t2
+     mrDebugPPPrefixSep 1 "mrRefines" m1 "<=" m2
      withFailureCtx (FailCtxRefines m1 m2) $ mrRefines' m1 m2
 
 -- | The main implementation of 'mrRefines'
@@ -1318,15 +1355,16 @@ mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 -- | Test two monadic, recursive terms for equivalence
 askMRSolver ::
   SharedContext ->
+  Int {- ^ The debug level -} ->
   SBV.SMTConfig {- ^ SBV configuration -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
   Term -> Term -> IO (Maybe MRFailure)
 
-askMRSolver sc smt_conf timeout t1 t2 =
+askMRSolver sc dlvl smt_conf timeout t1 t2 =
   do tp1 <- scTypeOf sc t1
      tp2 <- scTypeOf sc t2
      tps_are_eq <- scConvertibleEval sc scTypeCheckWHNF True tp1 tp2
-     init_st <- mkMRState sc Map.empty smt_conf timeout
+     init_st <- mkMRState sc Map.empty smt_conf timeout dlvl
      case tps_are_eq of
        True
          | (uvar_ctx, asCompM -> Just _) <- asPiList tp1 ->

@@ -2943,10 +2943,15 @@ primitives = Map.fromList
     ---------------------------------------------------------------------
 
   , prim "mr_solver"  "Term -> Term -> TopLevel Bool"
-    (scVal mrSolver)
+    (scVal (\sc -> mrSolver sc 0))
     Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
     , " to ask if one monadic term refines another" ]
+
+  , prim "mr_solver_debug"  "Int -> Term -> Term -> TopLevel Bool"
+    (scVal mrSolver)
+    Experimental
+    [ "Call the monadic-recursive solver at the supplied debug level" ]
 
   , prim "monadify_term" "Term -> TopLevel Term"
     (scVal monadifyTypedTerm)
