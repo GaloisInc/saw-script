@@ -2942,11 +2942,11 @@ primitives = Map.fromList
 
     ---------------------------------------------------------------------
 
-  , prim "mr_solver"  "Term -> Term -> TopLevel ()"
+  , prim "mr_solver"  "Term -> Term -> TopLevel Bool"
     (scVal mrSolver)
     Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to ask if two monadic terms are equal" ]
+    , " to ask if one monadic term refines another" ]
 
   , prim "monadify_term" "Term -> TopLevel Term"
     (scVal monadifyTypedTerm)
