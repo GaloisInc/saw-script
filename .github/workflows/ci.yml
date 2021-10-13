@@ -216,6 +216,7 @@ jobs:
       - uses: ocaml/setup-ocaml@v2
         with:
           ocaml-compiler: 4.09.x  # coq-bits claims to support < 4.10 only
+          dune-cache: true
 
       - run: opam repo add coq-released https://coq.inria.fr/opam/released
 
