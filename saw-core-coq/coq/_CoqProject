@@ -13,3 +13,5 @@ handwritten/CryptolToCoq/SAWCorePrelude_proofs.v
 handwritten/CryptolToCoq/SAWCorePreludeExtra.v
 handwritten/CryptolToCoq/SAWCoreScaffolding.v
 handwritten/CryptolToCoq/SAWCoreVectorsAsCoqVectors.v
+
+handwritten/CryptolToCoq/Everything.v
