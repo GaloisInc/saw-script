@@ -159,7 +159,8 @@ isFirstOrderType _ = True
 data GlobalDef = GlobalDef { globalDefName :: NameInfo,
                              globalDefIndex :: VarIndex,
                              globalDefType :: Term,
-                             globalDefTerm :: Term }
+                             globalDefTerm :: Term,
+                             globalDefBody :: Maybe Term }
 
 instance Eq GlobalDef where
   gd1 == gd2 = globalDefIndex gd1 == globalDefIndex gd2
@@ -184,11 +185,11 @@ asTypedGlobalDef t =
   case unwrapTermF t of
     FTermF (Primitive pn) ->
       Just $ GlobalDef (ModuleIdentifier $
-                        primName pn) (primVarIndex pn) (primType pn) t
-    Constant ec _ ->
-      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t
+                        primName pn) (primVarIndex pn) (primType pn) t Nothing
+    Constant ec body ->
+      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t (Just body)
     FTermF (ExtCns ec) ->
-      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t
+      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t Nothing
     _ -> Nothing
 
 
