@@ -730,17 +730,49 @@ mrVarTerm (MRVar ec) =
 mrVarInfo :: MRVar -> MRM (Maybe MRVarInfo)
 mrVarInfo var = Map.lookup var <$> mrVars <$> get
 
--- | Get the body of a function applied to some arguments
-mrFunBody :: FunName -> [Term] -> MRM (Maybe Term)
-mrFunBody (LetRecName var) args =
+-- | Convert an 'ExtCns' to a 'FunName'
+extCnsToFunName :: ExtCns Term -> MRM FunName
+extCnsToFunName ec = let var = MRVar ec in mrVarInfo var >>= \case
+  Just (EVarInfo _) -> return $ EVarFunName var
+  Just (FunVarInfo _) -> return $ LetRecName var
+  Nothing
+    | Just glob <- asTypedGlobalDef (Unshared $ FTermF $ ExtCns ec) ->
+      return $ GlobalName glob
+  _ -> error "extCnsToFunName: unreachable"
+
+-- | Get the body of a function @f@ if it has one
+mrFunNameBody :: FunName -> MRM (Maybe Term)
+mrFunNameBody (LetRecName var) =
   mrVarInfo var >>= \case
-  Just (FunVarInfo body) -> Just <$> mrApplyAll body args
+  Just (FunVarInfo body) -> return $ Just body
   _ -> error "mrFunBody: unknown letrec var"
-mrFunBody (GlobalName glob) args =
-  case globalDefBody glob of
-    Just body -> Just <$> mrApplyAll body args
-    Nothing -> return Nothing
-mrFunBody (EVarFunName _) _ = return Nothing
+mrFunNameBody (GlobalName glob) = return $ globalDefBody glob
+mrFunNameBody (EVarFunName _) = return Nothing
+
+-- | Get the body of a function @f@ applied to some arguments, if possible
+mrFunBody :: FunName -> [Term] -> MRM (Maybe Term)
+mrFunBody f args = mrFunNameBody f >>= \case
+  Just body -> Just <$> mrApplyAll body args
+  Nothing -> return Nothing
+
+-- | Test if a 'Term' contains, after possibly unfolding some functions, a call
+-- to a given function @f@ again
+mrCallsFun :: FunName -> Term -> MRM Bool
+mrCallsFun f = memoFixTermFun $ \recurse t -> case t of
+  (asExtCns -> Just ec) ->
+    do g <- extCnsToFunName ec
+       maybe_body <- mrFunNameBody g
+       case maybe_body of
+         _ | f == g -> return True
+         Just body -> recurse body
+         Nothing -> return False
+  (asTypedGlobalDef -> Just gdef) ->
+    case globalDefBody gdef of
+      _ | f == GlobalName gdef -> return True
+      Just body -> recurse body
+      Nothing -> return False
+  (unwrapTermF -> tf) ->
+    foldM (\b t' -> if b then return b else recurse t') False tf
 
 -- | Make a fresh 'MRVar' of a given type, which must be closed, i.e., have no
 -- free uvars
@@ -1147,15 +1179,8 @@ normComp (CompTerm t) =
 
     -- For an ExtCns, we have to check what sort of variable it is
     -- FIXME: substitute for evars if they have been instantiated
-    (f_tm@(asExtCns -> Just ec), args) ->
-      do let var = MRVar ec
-         maybe_info <- mrVarInfo var
-         let fun_name =
-               case maybe_info of
-                 Just (EVarInfo _) -> EVarFunName var
-                 Just (FunVarInfo _) -> LetRecName var
-                 Nothing | Just glob <- asTypedGlobalDef f_tm -> GlobalName glob
-                 _ -> error "normComp: unreachable"
+    ((asExtCns -> Just ec), args) ->
+      do fun_name <- extCnsToFunName ec
          return $ FunBind fun_name args CompFunReturn
 
     ((asTypedGlobalDef -> Just gdef), args) ->
@@ -1312,34 +1337,50 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   mrFunOutType f2 args2 >>= \tp2 ->
   mrConvertible tp1 tp2 >>= \tps_eq ->
   mrFunBody f1 args1 >>= \maybe_f1_body ->
+  (maybe (return False) (mrCallsFun f1) maybe_f1_body) >>= \recursive1 ->
   mrFunBody f2 args2 >>= \maybe_f2_body ->
+  (maybe (return False) (mrCallsFun f2) maybe_f2_body) >>= \recursive2 ->
   mrGetFunAssump f1 >>= \case
+
+  -- If we have an assumption that f1 args' refines some rhs, then prove that
+  -- args1 = args' and then that rhs refines m2
   Just fassump ->
-    -- If we have an assumption that f1 args' refines some rhs, then prove that
-    -- args1 = args' and then that rhs refines m2
     do (assump_args, assump_rhs) <- instantiateFunAssump fassump
        zipWithM_ mrProveEq assump_args args1
        m1' <- normBind assump_rhs k1
        mrRefines m1' m2
-  -- FIXME: add cases here for unfolding non-recursive definitions
+
+  -- If f1 unfolds and is not recursive in itself, unfold it and recurse
+  _ | Just f1_body <- maybe_f1_body
+    , not recursive1 ->
+      mrRefines f1_body m2
+
+  -- If f2 unfolds and is not recursive in itself, unfold it and recurse
+  _ | Just f2_body <- maybe_f2_body
+    , not recursive2 ->
+      mrRefines m1 f2_body
+
+  -- If we do not already have an assumption that f1 refines some specification,
+  -- and both f1 and f2 are recursive but have the same return type, then try to
+  -- coinductively prove that f1 args1 <= f2 args2 under the assumption that f1
+  -- args1 <= f2 args2, and then try to prove that k1 <= k2
   Nothing
     | tps_eq
     , Just f1_body <- maybe_f1_body
     , Just f2_body <- maybe_f2_body ->
-      -- If we do not already have an assumption that f1 refines some
-      -- specification, and if f1 and f2 have the same return type, then try to
-      -- coinductively prove that f1 args1 <= f2 args2 under the assumption that
-      -- f1 args1 <= f2 args2, and then try to prove that k1 <= k2
       do withFunAssump f1 args1 (FunBind f2 args2 CompFunReturn) $
            mrRefines f1_body f2_body
          mrRefinesFun k1 k2
+
+  -- If we cannot line up f1 and f2, then making progress here would require us
+  -- to somehow split either m1 or m2 into some bind m' >>= k' such that m' is
+  -- related to the function call on the other side and k' is related to the
+  -- continuation on the other side, but we don't know how to do that, so give
+  -- up
   Nothing ->
-    -- If we cannot line up f1 and f2, then making progress here would require
-    -- us to somehow split either m1 or m2 into some bind m' >>= k' such that m'
-    -- is related to the function call on the other side and k' is related to
-    -- the continuation on the other side, but we don't know how to do that, so
-    -- give up
     throwError (CompsDoNotRefine m1 m2)
+
+{- FIXME: handle FunBind on just one side
 mrRefines' m1@(FunBind f@(GlobalName _) args k1) m2 =
   mrGetFunAssump f >>= \case
   Just fassump ->
@@ -1353,6 +1394,7 @@ mrRefines' m1@(FunBind f@(GlobalName _) args k1) m2 =
     -- We don't want to do inter-procedural proofs, so if we don't know anything
     -- about f already then give up
     throwError (CompsDoNotRefine m1 m2)
+-}
 
 -- NOTE: the rules that introduce existential variables need to go last, so that
 -- they can quantify over as many universals as possible
