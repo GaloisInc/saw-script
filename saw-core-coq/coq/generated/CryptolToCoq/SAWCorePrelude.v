@@ -1004,6 +1004,8 @@ Definition foldIRT : forall (As : ListSort), forall (Ds : IRTSubsts As), forall 
 
 (* Prelude.bindM was skipped *)
 
+(* Prelude.existsM was skipped *)
+
 Definition fmapM : forall (a : Type), forall (b : Type), (a -> b) -> CompM a -> CompM b :=
   fun (a : Type) (b : Type) (f : a -> b) (m : CompM a) => @bindM CompM _ a b m (fun (x : a) => @returnM CompM _ b (f x)).
 
