@@ -47,4 +47,8 @@ heapster_typecheck_fun env "sum_2d"
                       \ arg0:array(0,<l1,*8,[(W,0) |-> array(0,<l2,*8,[(W,0) |-> int64<>])]), \
                       \ arg1:true, arg2:true, ret:int64<>";
 
+heapster_typecheck_fun env "sum_inc_ptr"
+  "(len:bv 64). arg0:array(0,<len,*1,[(W,0,8) |-> int8<>]), arg1:eq(llvmword(len)) -o \
+              \ arg0:array(0,<len,*1,[(W,0,8) |-> int8<>]), arg1:true, ret:int64<>";
+
 heapster_export_coq env "arrays_gen.v";
