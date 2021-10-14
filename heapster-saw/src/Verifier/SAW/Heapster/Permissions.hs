@@ -31,6 +31,7 @@ import Prelude hiding (pred)
 
 import Data.Char (isDigit)
 import Data.Maybe
+import Data.Either
 import Data.Foldable (asum)
 import Data.List hiding (sort)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -4823,6 +4824,7 @@ isDeterminingExpr (PExpr_BV [BVFactor _ _] _) =
   -- A linear expression N*x + M lets you solve for x when it is possible
   True
 isDeterminingExpr (PExpr_ValPerm (ValPerm_Eq e)) = isDeterminingExpr e
+isDeterminingExpr (PExpr_LLVMOffset _ off) = isDeterminingExpr off
 isDeterminingExpr e =
   -- If an expression has no free variables then it vacuously determines all of
   -- its free variables
@@ -5567,6 +5569,40 @@ partialSubst = genSubst
 partialSubstForce :: Substable PartialSubst a Maybe => PartialSubst ctx ->
                      Mb ctx a -> String -> a
 partialSubstForce s mb msg = fromMaybe (error msg) $ partialSubst s mb
+
+
+----------------------------------------------------------------------
+-- * Additional functions involving partial substitutions
+----------------------------------------------------------------------
+
+-- | If there is exactly one 'BVFactor' in a list of 'BVFactor's which is
+-- an unset variable, return the value of its 'BV', the witness that it
+-- is bound, and the result of adding together the remaining factors
+getUnsetBVFactor :: (1 <= w, KnownNat w) => PartialSubst vars ->
+                    Mb vars [BVFactor w] ->
+                    Maybe (Integer, Member vars (BVType w), PermExpr (BVType w))
+getUnsetBVFactor psubst (mbList -> mb_factors) =
+  case partitionEithers $ mbFactorNameBoundP psubst <$> mb_factors of
+    ([(n, memb)], xs) -> Just (n, memb, foldl' bvAdd (bvInt 0) xs)
+    _ -> Nothing
+
+-- | If a 'BVFactor' in a binding is an unset variable, return the value
+-- of its 'BV' and the witness that it is bound. Otherwise, return the
+-- constant of the factor multiplied by the variable's value if it is
+-- a set variable, or the constant of the factor multiplied by the
+-- variable, if it is an unbound variable
+mbFactorNameBoundP :: PartialSubst vars ->
+                      Mb vars (BVFactor w) ->
+                      Either (Integer, Member vars (BVType w))
+                             (PermExpr (BVType w))
+mbFactorNameBoundP psubst (mbMatch -> [nuMP| BVFactor (BV.BV mb_n) mb_z |]) =
+  let n = mbLift mb_n in
+  case mbNameBoundP mb_z of
+    Left memb -> case psubstLookup psubst memb of 
+                   Nothing -> Left (n, memb)
+                   Just e' -> Right (bvMultBV (BV.mkBV knownNat n) e')
+    Right z -> Right (PExpr_BV [BVFactor (BV.mkBV knownNat n) z]
+                               (BV.zero knownNat))
 
 
 ----------------------------------------------------------------------
