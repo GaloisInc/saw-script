@@ -91,23 +91,30 @@ previous case
 C |- F e1 ... en >>= k <= F e1' ... en' >>= k': prove C |- ei = ei' for each i
 and then prove k x <= k' x for new universal variable x
 
-C |- F e1 ... en >>= k <= m:
+C |- F e1 ... en >>= k <= F' e1' ... em' >>= k':
 
-* If we have an assumption that forall x1, ..., xm, F e1' ... en' <= m' for some
-  ei' and m', match the ei' against the ei by instantiating the xj with fresh
-  evars, and if this succeeds then recursively prove C |- m' >>= k <= m
+* If we have an assumption that forall x1 ... xj, F a1 ... an <= F' a1' .. am',
+  prove ei = ai and ei' = ai' and then that C |- k x <= k' x for fresh uvar x
 
-* If k is the trivial computation function \x -> returnM x, add an assumption
-  that forall values of the uvars in scope, F e1 ... en <= m, and use this
-  assumption in proving that [e1/x1, ..., en/xn]F_body <= m;
+* If we have an assumption that forall x1, ..., xn, F e1'' ... en'' <= m' for
+  some ei'' and m', match the ei'' against the ei by instantiating the xj with
+  fresh evars, and if this succeeds then recursively prove C |- m' >>= k <= RHS
 
-* If F is tail-recursive, make a new function F' with the same body as F except
-  that each return e is replaced with a call to k e, and then proceed as in the
-  C |- F' x1 ... xn <= m case, above (note that functions extracted from
-  Heapster are generally tail recursive);
+(We don't do this one right now)
+* If we have an assumption that forall x1', ..., xn', m <= F e1'' ... en'' for
+  some ei'' and m', match the ei'' against the ei by instantiating the xj with
+  fresh evars, and if this succeeds then recursively prove C |- LHS <= m' >>= k'
 
-* Otherwise we don't know to "split" m into a bind of something that is refined
-  by F e1 ... en and something the is refined by k, so just fail
+* If either side is a definition whose unfolding does not contain letrecM, fixM,
+  or any related operations, unfold it
+
+* If F and F' have the same return type, add an assumption forall uvars in scope
+  that F e1 ... en <= F' e1' ... em' and unfold both sides, recursively proving
+  that F_body e1 ... en <= F_body' e1' ... em'. Then also prove k x <= k' x for
+  fresh uvar x.
+
+* Otherwise we don't know to "split" one of the sides into a bind whose
+  components relate to the two components on the other side, so just fail
 -}
 
 module SAWScript.Prover.MRSolver
@@ -193,12 +200,10 @@ data FunName
   deriving (Eq, Ord, Show)
 
 -- | Get the type of a 'FunName'
-{- FIXME: unused
 funNameType :: FunName -> Term
 funNameType (LetRecName var) = mrVarType var
 funNameType (EVarFunName var) = mrVarType var
 funNameType (GlobalName gd) = globalDefType gd
--}
 
 -- | A term specifically known to be of type @sort i@ for some @i@
 newtype Type = Type Term deriving Show
@@ -649,6 +654,22 @@ mrUVarCtx = reverse <$> map (\(nm,Type tp) -> (nm,tp)) <$> mrUVars <$> get
 mrTypeOf :: Term -> MRM Term
 mrTypeOf t = mrUVarCtx >>= \ctx -> liftSC2 scTypeOf' (map snd ctx) t
 
+-- | Check if two 'Term's are convertible in the 'MRM' monad
+mrConvertible :: Term -> Term -> MRM Bool
+mrConvertible = liftSC4 scConvertibleEval scTypeCheckWHNF True
+
+-- | Take a 'FunName' @f@ for a monadic function of type @vars -> CompM a@ and
+-- compute the type @CompM [args/vars]a@ of @f@ applied to @args@. Return the
+-- type @[args/vars]a@ that @CompM@ is applied to.
+mrFunOutType :: FunName -> [Term] -> MRM Term
+mrFunOutType ((asPiList . funNameType) -> (vars, asCompM -> Just tp)) args
+  | length vars == length args =
+    substTermLike 0 args tp
+mrFunOutType _ _ =
+  -- NOTE: this is an error because we should only ever call mrFunOutType with a
+  -- well-formed application at a CompM type
+  error "mrFunOutType"
+
 -- | Run a MR Solver computation in a context extended with a universal
 -- variable, which is passed as a 'Term' to the sub-computation
 withUVar :: LocalName -> Type -> (Term -> MRM a) -> MRM a
@@ -709,13 +730,17 @@ mrVarTerm (MRVar ec) =
 mrVarInfo :: MRVar -> MRM (Maybe MRVarInfo)
 mrVarInfo var = Map.lookup var <$> mrVars <$> get
 
--- | Get the body of a letrec-bound variable applied to some arguments
-mrFunVarBody :: MRVar -> [Term] -> MRM Term
-mrFunVarBody var args =
+-- | Get the body of a function applied to some arguments
+mrFunBody :: FunName -> [Term] -> MRM (Maybe Term)
+mrFunBody (LetRecName var) args =
   mrVarInfo var >>= \case
-  Just (FunVarInfo body) -> mrApplyAll body args
-  Just _ -> error "mrFunVarBody: Non-function var"
-  Nothing -> error "mrFunVarBody: Unknown var"
+  Just (FunVarInfo body) -> Just <$> mrApplyAll body args
+  _ -> error "mrFunBody: unknown letrec var"
+mrFunBody (GlobalName glob) args =
+  case globalDefBody glob of
+    Just body -> Just <$> mrApplyAll body args
+    Nothing -> return Nothing
+mrFunBody (EVarFunName _) _ = return Nothing
 
 -- | Make a fresh 'MRVar' of a given type, which must be closed, i.e., have no
 -- free uvars
@@ -1262,14 +1287,11 @@ mrRefines' m1 (OrM m2 m2') =
 mrRefines' (OrM m1 m1') m2 =
   mrRefines m1 m2 >> mrRefines m1' m2
      
-mrRefines' (FunBind f args1 k1) (FunBind f' args2 k2)
-  | f == f' && length args1 == length args2 =
-    zipWithM_ mrProveEq args1 args2 >>
-    mrRefinesFun k1 k2
-
--- FIXME: the following case doesn't work unless we either allow evars to be set
+-- FIXME: the following cases don't work unless we either allow evars to be set
 -- to NormComps or we can turn NormComps back into terms
 mrRefines' m1@(FunBind (EVarFunName _) _ _) m2 =
+  throwError (CompsDoNotRefine m1 m2)
+mrRefines' m1 m2@(FunBind (EVarFunName _) _ _) =
   throwError (CompsDoNotRefine m1 m2)
 {-
 mrRefines' (FunBind (EVarFunName evar) args CompFunReturn) m2 =
@@ -1280,30 +1302,44 @@ mrRefines' (FunBind (EVarFunName evar) args CompFunReturn) m2 =
   Nothing -> mrTrySetAppliedEVar evar args m2
 -}
 
-mrRefines' m1@(FunBind f@(LetRecName f_var) args k1) m2 =
-  mrGetFunAssump f >>= \case
-  Nothing
-    | CompFunReturn <- k1 ->
-      -- If we do not already have an assumption that f refines some
-      -- specification, and if the right-hand side of our bind is the trivial
-      -- return function, then we are essentially trying to f args <= m2, so
-      -- assume it is true and coinductively prove that it is true under that
-      -- assumption
-      do f_body <- mrFunVarBody f_var args
-         withFunAssump f args m2 $ mrRefines f_body m2
-  Nothing ->
-    -- If we do not already have an assumption that f refines some specification
-    -- but k1 is non-trivial, then to solve f args >>= k1 <= m2 we would have to
-    -- split m2 into a part that f args refines and a part that k1 refines, but
-    -- we don't know how to do that, so give up
-    throwError (CompsDoNotRefine m1 m2)
+mrRefines' (FunBind f args1 k1) (FunBind f' args2 k2)
+  | f == f' && length args1 == length args2 =
+    zipWithM_ mrProveEq args1 args2 >>
+    mrRefinesFun k1 k2
+
+mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
+  mrFunOutType f1 args1 >>= \tp1 ->
+  mrFunOutType f2 args2 >>= \tp2 ->
+  mrConvertible tp1 tp2 >>= \tps_eq ->
+  mrFunBody f1 args1 >>= \maybe_f1_body ->
+  mrFunBody f2 args2 >>= \maybe_f2_body ->
+  mrGetFunAssump f1 >>= \case
   Just fassump ->
-    -- If we have an assumption that f args' refines some rhs, then prove that
-    -- args = args' and then that rhs refines m2
+    -- If we have an assumption that f1 args' refines some rhs, then prove that
+    -- args1 = args' and then that rhs refines m2
     do (assump_args, assump_rhs) <- instantiateFunAssump fassump
-       zipWithM_ mrProveEq assump_args args
+       zipWithM_ mrProveEq assump_args args1
        m1' <- normBind assump_rhs k1
        mrRefines m1' m2
+  -- FIXME: add cases here for unfolding non-recursive definitions
+  Nothing
+    | tps_eq
+    , Just f1_body <- maybe_f1_body
+    , Just f2_body <- maybe_f2_body ->
+      -- If we do not already have an assumption that f1 refines some
+      -- specification, and if f1 and f2 have the same return type, then try to
+      -- coinductively prove that f1 args1 <= f2 args2 under the assumption that
+      -- f1 args1 <= f2 args2, and then try to prove that k1 <= k2
+      do withFunAssump f1 args1 (FunBind f2 args2 CompFunReturn) $
+           mrRefines f1_body f2_body
+         mrRefinesFun k1 k2
+  Nothing ->
+    -- If we cannot line up f1 and f2, then making progress here would require
+    -- us to somehow split either m1 or m2 into some bind m' >>= k' such that m'
+    -- is related to the function call on the other side and k' is related to
+    -- the continuation on the other side, but we don't know how to do that, so
+    -- give up
+    throwError (CompsDoNotRefine m1 m2)
 mrRefines' m1@(FunBind f@(GlobalName _) args k1) m2 =
   mrGetFunAssump f >>= \case
   Just fassump ->
@@ -1363,14 +1399,15 @@ askMRSolver ::
 askMRSolver sc dlvl smt_conf timeout t1 t2 =
   do tp1 <- scTypeOf sc t1
      tp2 <- scTypeOf sc t2
-     tps_are_eq <- scConvertibleEval sc scTypeCheckWHNF True tp1 tp2
      init_st <- mkMRState sc Map.empty smt_conf timeout dlvl
-     case tps_are_eq of
-       True
-         | (uvar_ctx, asCompM -> Just _) <- asPiList tp1 ->
-           fmap (either Just (const Nothing)) $ runMRM init_st $
-           withUVars uvar_ctx $ \vars ->
-           do m1 <- mrApplyAll t1 vars >>= normCompTerm
-              m2 <- mrApplyAll t2 vars >>= normCompTerm
-              mrRefines m1 m2
-       _ -> return $ Just (TypesNotEq (Type tp1) (Type tp2))
+     case asPiList tp1 of
+       (uvar_ctx, asCompM -> Just _) ->
+         fmap (either Just (const Nothing)) $ runMRM init_st $
+         withUVars uvar_ctx $ \vars ->
+         do tps_are_eq <- mrConvertible tp1 tp2
+            if tps_are_eq then return () else
+              throwError (TypesNotEq (Type tp1) (Type tp2))
+            m1 <- mrApplyAll t1 vars >>= normCompTerm
+            m2 <- mrApplyAll t2 vars >>= normCompTerm
+            mrRefines m1 m2
+       _ -> return $ Just $ NotCompFunType tp1
