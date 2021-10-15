@@ -1075,7 +1075,11 @@ mrProveEq t1_top t2_top =
       mrProveEqSimple (liftSC2 scBoolEq) var_map t1 t2
     proveEq var_map (asIntegerType -> Just _) t1 t2 =
       mrProveEqSimple (liftSC2 scIntEq) var_map t1 t2
-    proveEq _ _ t1 t2 = throwError (TermsNotEq t1 t2)
+    proveEq _ _ t1 t2 =
+      -- As a fallback, for types we can't handle, just check convertibility
+      mrConvertible t1 t2 >>= \case
+      True -> return ()
+      False -> throwError (TermsNotEq t1 t2)
 
 
 ----------------------------------------------------------------------
