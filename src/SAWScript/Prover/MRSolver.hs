@@ -755,6 +755,15 @@ mrFunBody f args = mrFunNameBody f >>= \case
   Just body -> Just <$> mrApplyAll body args
   Nothing -> return Nothing
 
+-- | Get the body of a function @f@ applied to some arguments, as per
+-- 'mrFunBody', and also return whether its body recursively calls itself, as
+-- per 'mrCallsFun'
+mrFunBodyRecInfo :: FunName -> [Term] -> MRM (Maybe (Term, Bool))
+mrFunBodyRecInfo f args =
+  mrFunBody f args >>= \case
+  Just f_body -> Just <$> (f_body,) <$> mrCallsFun f f_body
+  Nothing -> return Nothing
+
 -- | Test if a 'Term' contains, after possibly unfolding some functions, a call
 -- to a given function @f@ again
 mrCallsFun :: FunName -> Term -> MRM Bool
@@ -1177,9 +1186,13 @@ normComp (CompTerm t) =
 
     -- Only unfold constants that are not recursive functions, i.e., whose
     -- bodies do not contain letrecs
+    {- FIXME: this should be handled by mrRefines; we want it to be handled there
+       so that we use refinement assumptions before unfolding constants, to give
+       the user control over refinement proofs
     ((asConstant -> Just (_, body)), args)
       | not (containsLetRecM body) ->
         mrApplyAll body args >>= normCompTerm
+    -}
 
     -- For an ExtCns, we have to check what sort of variable it is
     -- FIXME: substitute for evars if they have been instantiated
@@ -1207,6 +1220,10 @@ normBind (ExistsM tp f) k = return $ ExistsM tp (CompFunComp f k)
 normBind (ForallM tp f) k = return $ ForallM tp (CompFunComp f k)
 normBind (FunBind f args k1) k2 =
   return $ FunBind f args (CompFunComp k1 k2)
+
+-- | Bind a 'Term' for a computation with a function and normalize
+normBindTerm :: Term -> CompFun -> MRM NormComp
+normBindTerm t f = normCompTerm t >>= \m -> normBind m f
 
 -- | Apply a computation function to a term argument to get a computation
 applyCompFun :: CompFun -> Term -> MRM Comp
@@ -1340,10 +1357,8 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   mrFunOutType f1 args1 >>= \tp1 ->
   mrFunOutType f2 args2 >>= \tp2 ->
   mrConvertible tp1 tp2 >>= \tps_eq ->
-  mrFunBody f1 args1 >>= \maybe_f1_body ->
-  (maybe (return False) (mrCallsFun f1) maybe_f1_body) >>= \recursive1 ->
-  mrFunBody f2 args2 >>= \maybe_f2_body ->
-  (maybe (return False) (mrCallsFun f2) maybe_f2_body) >>= \recursive2 ->
+  mrFunBodyRecInfo f1 args1 >>= \maybe_f1_body ->
+  mrFunBodyRecInfo f2 args2 >>= \maybe_f2_body ->
   mrGetFunAssump f1 >>= \case
 
   -- If we have an assumption that f1 args' refines some rhs, then prove that
@@ -1355,14 +1370,12 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
        mrRefines m1' m2
 
   -- If f1 unfolds and is not recursive in itself, unfold it and recurse
-  _ | Just f1_body <- maybe_f1_body
-    , not recursive1 ->
-      mrRefines f1_body m2
+  _ | Just (f1_body, False) <- maybe_f1_body ->
+      normBindTerm f1_body k1 >>= \m1' -> mrRefines m1' m2
 
   -- If f2 unfolds and is not recursive in itself, unfold it and recurse
-  _ | Just f2_body <- maybe_f2_body
-    , not recursive2 ->
-      mrRefines m1 f2_body
+  _ | Just (f2_body, False) <- maybe_f2_body ->
+      normBindTerm f2_body k2 >>= \m2' -> mrRefines m1 m2'
 
   -- If we do not already have an assumption that f1 refines some specification,
   -- and both f1 and f2 are recursive but have the same return type, then try to
@@ -1370,8 +1383,8 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   -- args1 <= f2 args2, and then try to prove that k1 <= k2
   Nothing
     | tps_eq
-    , Just f1_body <- maybe_f1_body
-    , Just f2_body <- maybe_f2_body ->
+    , Just (f1_body, _) <- maybe_f1_body
+    , Just (f2_body, _) <- maybe_f2_body ->
       do withFunAssump f1 args1 (FunBind f2 args2 CompFunReturn) $
            mrRefines f1_body f2_body
          mrRefinesFun k1 k2
@@ -1399,6 +1412,56 @@ mrRefines' m1@(FunBind f@(GlobalName _) args k1) m2 =
     -- about f already then give up
     throwError (CompsDoNotRefine m1 m2)
 -}
+
+
+mrRefines' m1@(FunBind f1 args1 k1) m2 =
+  mrGetFunAssump f1 >>= \case
+
+  -- If we have an assumption that f1 args' refines some rhs, then prove that
+  -- args1 = args' and then that rhs refines m2
+  Just fassump ->
+    do (assump_args, assump_rhs) <- instantiateFunAssump fassump
+       zipWithM_ mrProveEq assump_args args1
+       m1' <- normBind assump_rhs k1
+       mrRefines m1' m2
+
+  -- Otherwise, see if we can unfold f1
+  Nothing ->
+    mrFunBodyRecInfo f1 args1 >>= \case
+
+    -- If f1 unfolds and is not recursive in itself, unfold it and recurse
+    Just (f1_body, False) ->
+      normBindTerm f1_body k1 >>= \m1' -> mrRefines m1' m2
+
+    -- Otherwise we would have to somehow split m2 into some computation of the
+    -- form m2' >>= k2 where f1 args1 <= m2' and k1 <= k2, but we don't know how
+    -- to do this splitting, so give up
+    _ ->
+      throwError (CompsDoNotRefine m1 m2)
+
+
+mrRefines' m1 m2@(FunBind f2 args2 k2) =
+  mrFunBodyRecInfo f2 args2 >>= \case
+
+  -- If f2 unfolds and is not recursive in itself, unfold it and recurse
+  Just (f2_body, False) ->
+    normBindTerm f2_body k2 >>= \m2' -> mrRefines m1 m2'
+
+  -- If f2 unfolds but is recursive, and k2 is the trivial continuation, meaning
+  -- m2 is just f2 args2, use the law of coinduction to prove m1 <= f2 args2 by
+  -- proving m1 <= f2_body under the assumption that m1 <= f2 args2
+  {- FIXME: implement something like this
+  Just (f2_body, True)
+    | CompFunReturn <- k2 ->
+      withFunAssumpR m1 f2 args2 $
+   -}
+
+    -- Otherwise we would have to somehow split m1 into some computation of the
+    -- form m1' >>= k1 where m1' <= f2 args2 and k1 <= k2, but we don't know how
+    -- to do this splitting, so give up
+  _ ->
+    throwError (CompsDoNotRefine m1 m2)
+
 
 -- NOTE: the rules that introduce existential variables need to go last, so that
 -- they can quantify over as many universals as possible
@@ -1453,6 +1516,7 @@ askMRSolver sc dlvl smt_conf timeout t1 t2 =
          do tps_are_eq <- mrConvertible tp1 tp2
             if tps_are_eq then return () else
               throwError (TypesNotEq (Type tp1) (Type tp2))
+            mrDebugPPPrefixSep 1 "mr_solver" t1 "<=" t2
             m1 <- mrApplyAll t1 vars >>= normCompTerm
             m2 <- mrApplyAll t2 vars >>= normCompTerm
             mrRefines m1 m2
