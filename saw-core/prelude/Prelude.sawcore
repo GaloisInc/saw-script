@@ -2147,6 +2147,27 @@ lrtPi lrts b =
   (\ (lrt:LetRecType) (_:LetRecTypes) (rest:sort 0) -> lrtToType lrt -> rest)
   lrts;
 
+-- Apply a function the the body of a multi-arity lrtPi function
+lrtPiMap : (a b : sort 0) -> (f : a -> b) -> (lrts : LetRecTypes) ->
+           lrtPi lrts a -> lrtPi lrts b;
+lrtPiMap a b f lrts_top =
+  LetRecTypes#rec
+  (\ (lrts:LetRecTypes) -> lrtPi lrts a -> lrtPi lrts b)
+  (\ (x:a) -> f x)
+  (\ (lrt:LetRecType) (lrts:LetRecTypes) (rec:lrtPi lrts a -> lrtPi lrts b)
+     (f:lrtToType lrt -> lrtPi lrts a) (g:lrtToType lrt) ->
+     rec (f g))
+  lrts_top;
+
+-- Convert a multi-arity lrtPi that returns a pair to a pair of lrtPi functions
+-- that return the individual arguments
+lrtPiPair : (a b:sort 0) -> (lrts : LetRecTypes) -> lrtPi lrts #(a,b) ->
+            #(lrtPi lrts a, lrtPi lrts b);
+lrtPiPair a b lrts f =
+  (lrtPiMap #(a,b) a (\ (tup:#(a,b)) -> tup.(1)) lrts f,
+   lrtPiMap #(a,b) b (\ (tup:#(a,b)) -> tup.(2)) lrts f);
+
+
 -- Build the product type (lrtToType lrt1, ..., lrtToType lrtn) from the
 -- LetRecTypes list [lrt1, ..., lrtn]
 lrtTupleType : LetRecTypes -> sort 0;
@@ -2157,6 +2178,9 @@ lrtTupleType lrts =
   (\ (lrt:LetRecType) (_:LetRecTypes) (rest:sort 0) -> #(lrtToType lrt, rest))
   lrts;
 
+-- NOTE: the following are needed to define letRecM instead of making it a
+-- primitive, which we are keeping commented here in case that is needed
+{-
 -- Apply a multi-arity function of type lrtPi lrts B to an lrtTupleType lrts
 lrtApply : (lrts:LetRecTypes) -> (B:sort 0) -> lrtPi lrts B -> lrtTupleType lrts -> B;
 lrtApply top_lrts B =
@@ -2181,9 +2205,6 @@ lrtLambda top_lrts B =
     rest (\ (fs:lrtTupleType lrts) -> F (f, fs)))
   top_lrts;
 
--- NOTE: the following are needed to define letRecM instead of making it a
--- primitive, which we are keeping commented here in case that is needed
-{-
 -- Build a multi-argument fixed-point of type A1 -> ... -> An -> CompM B
 multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
                lrtToType lrt;
@@ -2241,31 +2262,68 @@ letRecM1 a b c fn body =
     (\ (f:a -> CompM b) -> (fn f, ()))
     (\ (f:a -> CompM b) -> body f);
 
-
--- Construct a fixed-point for a tuple of mutually-recursive functions
-primitive multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
-                      lrtTupleType lrts;
--- FIXME: write this in terms of letRecM!
-{-
-multiFixM lrts f =
-  letRecM lrts (lrtTupleType lrts) f
-          (lrtLambda lrts (lrtTupleType lrts)
-                     (\ (fs:lrtTupleType lrts) -> fs));
--}
-
--- Build a single, multi-argument fixed-point of type A1 -> ... -> An -> CompM B
-multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
-               lrtToType lrt;
-multiArgFixM lrt f =
-  (multiFixM
-     (LRT_Cons lrt LRT_Nil)
-     (\ (f: lrtToType lrt) -> (f, ()))).(1);
-
 -- A single-argument fixed-point function
 fixM : (a:sort 0) -> (b:a -> sort 0) ->
        (((x:a) -> CompM (b x)) -> ((x:a) -> CompM (b x))) ->
        (x:a) -> CompM (b x);
-fixM a b = multiArgFixM (LRT_Fun a (\ (x:a) -> LRT_Ret (b x)));
+fixM a b f x =
+  letRecM (LRT_Cons (LRT_Fun a (\ (y:a) -> LRT_Ret (b y))) LRT_Nil)
+          (b x)
+          (\ (g: (y:a) -> CompM (b y)) -> (f g, ()))
+          (\ (g: (y:a) -> CompM (b y)) -> g x);
+
+-- Build a monadic function that takes in its arguments and then calls letRecM.
+-- That is, build a function
+--
+-- \x1 ... xn -> letRecM lrts F (\f1 ... fm -> body f1 ... fm x1 ... xn)
+--
+-- where F recursively defines the fi functions and body defines the computation
+-- for the function we are defining in terms of the fi and the xj arguments.
+letRecFun : (lrts : LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
+            (lrt : LetRecType) -> lrtPi lrts (lrtToType lrt) -> lrtToType lrt;
+letRecFun lrts F lrt_top =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> lrtPi lrts (lrtToType lrt) -> lrtToType lrt)
+  (\ (b:sort 0) (body:lrtPi lrts (CompM b)) ->
+     letRecM lrts b F body)
+  (\ (a:sort 0) (lrtF: a -> LetRecType)
+     (rec: (x:a) -> lrtPi lrts (lrtToType (lrtF x)) -> lrtToType (lrtF x))
+     (body:lrtPi lrts ((x:a) -> lrtToType (lrtF x)))
+     (x:a) ->
+     rec x (lrtPiMap ((y:a) -> lrtToType (lrtF y))
+                     (lrtToType (lrtF x))
+                     (\ (g:(y:a) -> lrtToType (lrtF y)) -> g x)
+                     lrts
+                     body))
+  lrt_top;
+
+-- Build a multi-argument fixed-point of type A1 -> ... -> An -> CompM B
+multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
+               lrtToType lrt;
+multiArgFixM lrt F =
+  letRecFun (LRT_Cons lrt LRT_Nil)
+            (\ (f:lrtToType lrt) -> (F f, ()))
+            lrt
+            (\ (f:lrtToType lrt) -> f);
+
+-- Construct a fixed-point for a tuple of mutually-recursive functions
+multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
+            lrtTupleType lrts;
+multiFixM lrts_top F_top =
+  LetRecTypes#rec
+  (\ (lrts:LetRecTypes) -> lrtPi lrts_top (lrtTupleType lrts) ->
+     lrtTupleType lrts)
+  (\ (_:lrtPi lrts_top #()) -> ())
+  (\ (lrt:LetRecType) (lrts:LetRecTypes)
+     (rec: lrtPi lrts_top (lrtTupleType lrts) -> lrtTupleType lrts)
+     (F: lrtPi lrts_top #(lrtToType lrt, lrtTupleType lrts)) ->
+     (letRecFun
+        lrts_top F_top lrt
+        (lrtPiPair (lrtToType lrt) (lrtTupleType lrts) lrts_top F).(1)
+      ,
+      rec (lrtPiPair (lrtToType lrt) (lrtTupleType lrts) lrts_top F).(2)))
+  lrts_top
+  F_top;
 
 
 -- Test computations
