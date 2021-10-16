@@ -123,7 +123,8 @@ module SAWScript.Prover.MRSolver
   , SBV.z3, SBV.cvc4, SBV.yices, SBV.mathSAT, SBV.boolector
   ) where
 
-import Data.List (findIndex)
+import Data.List (find, findIndex)
+import qualified Data.Text as T
 import Data.IORef
 import System.IO (hPutStrLn, stderr)
 import Control.Monad.Reader
@@ -230,6 +231,12 @@ data CompFun
     -- | The monadic composition @f >=> g@
   | CompFunComp CompFun CompFun
   deriving Show
+
+-- | Compose two 'CompFun's, simplifying if one is a 'CompFunReturn'
+compFunComp :: CompFun -> CompFun -> CompFun
+compFunComp CompFunReturn f = f
+compFunComp f CompFunReturn = f
+compFunComp f g = CompFunComp f g
 
 -- | If a 'CompFun' contains an explicit lambda-abstraction, then return the
 -- textual name bound by that lambda
@@ -670,14 +677,23 @@ mrFunOutType _ _ =
   -- well-formed application at a CompM type
   error "mrFunOutType"
 
+-- | Turn a 'LocalName' into one not in a list, adding a suffix if necessary
+uniquifyName :: LocalName -> [LocalName] -> LocalName
+uniquifyName nm nms | notElem nm nms = nm
+uniquifyName nm nms =
+  case find (flip notElem nms) $
+       map (T.append nm . T.pack . show) [(0::Int) ..] of
+    Just nm' -> nm'
+    Nothing -> error "uniquifyName"
+
 -- | Run a MR Solver computation in a context extended with a universal
 -- variable, which is passed as a 'Term' to the sub-computation
 withUVar :: LocalName -> Type -> (Term -> MRM a) -> MRM a
 withUVar nm tp m =
-  mapFailure (MRFailureLocalVar nm) $
   do st <- get
-     put (st { mrUVars = (nm,tp) : mrUVars st })
-     ret <- liftSC1 scLocalVar 0 >>= m
+     let nm' = uniquifyName nm (map fst $ mrUVars st)
+     put (st { mrUVars = (nm',tp) : mrUVars st })
+     ret <- mapFailure (MRFailureLocalVar nm') (liftSC1 scLocalVar 0 >>= m)
      modify (\st' -> st' { mrUVars = mrUVars st })
      return ret
 
@@ -919,7 +935,9 @@ mrGetFunAssump nm = Map.lookup nm <$> mrFunAssumps <$> get
 -- are 'Term's that can have the current uvars free
 withFunAssump :: FunName -> [Term] -> NormComp -> MRM a -> MRM a
 withFunAssump fname args rhs m =
-  do ctx <- mrUVarCtx
+  do mrDebugPPPrefixSep 1 "withFunAssump" (FunBind
+                                           fname args CompFunReturn) "<=" rhs
+     ctx <- mrUVarCtx
      assumps <- mrFunAssumps <$> get
      let assumps' = Map.insert fname (FunAssump ctx args rhs) assumps
      modify (\s -> s { mrFunAssumps = assumps' })
@@ -1150,7 +1168,7 @@ normComp (CompTerm t) =
       return $ Ite cond (CompTerm then_tm) (CompTerm else_tm)
     (isGlobalDef "Prelude.either" -> Just (), [_, _, _, f, g, eith]) ->
       return $ Either (CompFunTerm f) (CompFunTerm g) eith
-    (isGlobalDef "Prelude.orM" -> Just (), [_, _, m1, m2]) ->
+    (isGlobalDef "Prelude.orM" -> Just (), [_, m1, m2]) ->
       return $ OrM (CompTerm m1) (CompTerm m2)
     (isGlobalDef "Prelude.existsM" -> Just (), [tp, _, body_tm]) ->
       return $ ExistsM (Type tp) (CompFunTerm body_tm)
@@ -1213,13 +1231,13 @@ normBind (ErrorM msg) _ = return (ErrorM msg)
 normBind (Ite cond comp1 comp2) k =
   return $ Ite cond (CompBind comp1 k) (CompBind comp2 k)
 normBind (Either f g t) k =
-  return $ Either (CompFunComp f k) (CompFunComp g k) t
+  return $ Either (compFunComp f k) (compFunComp g k) t
 normBind (OrM comp1 comp2) k =
   return $ OrM (CompBind comp1 k) (CompBind comp2 k)
-normBind (ExistsM tp f) k = return $ ExistsM tp (CompFunComp f k)
-normBind (ForallM tp f) k = return $ ForallM tp (CompFunComp f k)
+normBind (ExistsM tp f) k = return $ ExistsM tp (compFunComp f k)
+normBind (ForallM tp f) k = return $ ForallM tp (compFunComp f k)
 normBind (FunBind f args k1) k2 =
-  return $ FunBind f args (CompFunComp k1 k2)
+  return $ FunBind f args (compFunComp k1 k2)
 
 -- | Bind a 'Term' for a computation with a function and normalize
 normBindTerm :: Term -> CompFun -> MRM NormComp
@@ -1348,10 +1366,12 @@ mrRefines' (FunBind (EVarFunName evar) args CompFunReturn) m2 =
   Nothing -> mrTrySetAppliedEVar evar args m2
 -}
 
+{-
 mrRefines' (FunBind f args1 k1) (FunBind f' args2 k2)
   | f == f' && length args1 == length args2 =
     zipWithM_ mrProveEq args1 args2 >>
     mrRefinesFun k1 k2
+-}
 
 mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   mrFunOutType f1 args1 >>= \tp1 ->
