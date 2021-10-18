@@ -162,6 +162,12 @@ Definition isBvule_to_isBvsle_pos w a b : isBvsle w (intToBv w 0) a ->
                                           isBvule w a b <-> isBvsle w a b.
 Admitted.
 
+Definition isBvslt_to_bvEq_false w a b : isBvslt w a b -> bvEq w a b = false.
+Admitted.
+
+Definition isBvult_to_bvEq_false w a b : isBvult w a b -> bvEq w a b = false.
+Admitted.
+
 
 (** Other lemmas about bitvector inequalities **)
 
@@ -345,6 +351,9 @@ Proof.
   induction a; eauto.
   rewrite bvEq_cons, boolEq_refl, IHa; eauto.
 Qed.
+
+Lemma bvEq_sym w a b : bvEq w a b = bvEq w b a.
+Admitted.
 
 Lemma bvEq_eq  w a b : bvEq w a b = true <-> a = b.
 Proof.
