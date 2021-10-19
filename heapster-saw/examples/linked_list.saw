@@ -17,7 +17,7 @@ heapster_typecheck_fun env "is_elem"
 
 heapster_assume_fun env "malloc"
   "(sz:bv 64). arg0:eq(llvmword(8*sz)) -o \
-             \ arg0:true, ret:array(0,<sz,*8,[(W,0) |-> true])"
+             \ arg0:true, ret:array(W,0,<sz,*8,fieldsh(true))"
   "mallocSpec";
 
 heapster_typecheck_fun env "any"
