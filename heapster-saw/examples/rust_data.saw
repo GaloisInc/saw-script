@@ -274,7 +274,7 @@ to_string_str <- heapster_find_symbol env "$LT$str$u20$as$u20$alloc..string..ToS
 // NOTE: this is the incorrect version, with no lifetime argument
 heapster_assume_fun_rename env to_string_str "to_string_str"
   "(len:bv 64). arg0:memblock(W,0,24,emptysh), \
-              \ arg1:array(R,0,<len,*1,[(R,0,8) |-> int8<>]), \
+              \ arg1:array(R,0,<len,*1,fieldsh(8,int8<>)), \
               \ arg2:eq(llvmword(len)) -o \
               \ arg0:memblock(W,0,24,String<>)"
   "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len (Vec 8 Bool)) -> \

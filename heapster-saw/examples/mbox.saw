@@ -31,7 +31,7 @@ heapster_define_reachability_perm env "mbox"
   "rw:rwmodality, x:llvmptr 64"
   "llvmptr 64"
   "ptr((rw,0) |-> int64<>) * ptr((rw,8) |-> int64<>) * ptr((rw,16) |-> mbox<rw,x>) * \
-  \ array(W, 24, <128, *1, fieldsh(int8<>))"
+  \ array(W, 24, <128, *1, fieldsh(8,int8<>))"
   "Mbox_def" "foldMbox" "unfoldMbox" "transMbox";
 
 // heapster_define_perm env "mbox_nonnull"
