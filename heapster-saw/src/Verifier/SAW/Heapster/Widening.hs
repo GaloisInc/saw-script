@@ -102,6 +102,14 @@ wnMapExtWidFun :: WidNameMap -> ExtVarPermsFun vars
 wnMapExtWidFun wnmap =
   ExtVarPermsFun $ \ns -> ExtVarPerms_Base $ RL.map (flip wnMapGetPerm wnmap) ns
 
+-- | Assign the trivial @true@ permission to any variable that has not yet been
+-- visited
+wnMapDropUnvisiteds :: WidNameMap -> WidNameMap
+wnMapDropUnvisiteds =
+  NameMap.map $ \case
+  p@(Pair _ (Constant True)) -> p
+  (Pair _ (Constant False)) -> Pair ValPerm_True (Constant False)
+
 newtype PolyContT r m a =
   PolyContT { runPolyContT :: forall x. (forall y. a -> m (r y)) -> m (r x) }
 
@@ -956,6 +964,7 @@ widen dlevel env tops args (Some (ArgVarPerms
      void $ widenExprs all_args (RL.map PExpr_Var args_ns1) (RL.map
                                                              PExpr_Var args_ns2)
      widenExtGhostVars vars1 vars1_ns vars2 vars2_ns
+     modifying wsNameMap wnMapDropUnvisiteds
      wnmap <- view wsNameMap <$> get
      traceM (\i ->
               pretty "Widening returning:" <> line <>
