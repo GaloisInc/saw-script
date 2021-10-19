@@ -1983,24 +1983,6 @@ fmapM3 : (a b c d: sort 0) -> (a -> b -> c -> d) ->
          CompM a -> CompM b -> CompM c -> CompM d;
 fmapM3 a b c d f m1 m2 m3 = applyM c d (fmapM2 a b (c -> d) f m1 m2) m3;
 
--- Apply a pure function to a computation
-fmapM : (a b: sort 0) -> (a -> b) -> CompM a -> CompM b;
-fmapM a b f m = bindM a b m (\ (x:a) -> returnM b (f x));
-
--- Apply a computation of a function to a computation of an argument
-applyM : (a b: sort 0) -> CompM (a -> b) -> CompM a -> CompM b;
-applyM a b f m =
-  bindM (a -> b) b f (\ (f:a->b) -> bindM a b m (\ (x:a) -> returnM b (f x)));
-
--- Apply a binary pure function to a computation
-fmapM2 : (a b c: sort 0) -> (a -> b -> c) -> CompM a -> CompM b -> CompM c;
-fmapM2 a b c f m1 m2 = applyM b c (fmapM a (b -> c) f m1) m2;
-
--- Apply a trinary pure function to a computation
-fmapM3 : (a b c d: sort 0) -> (a -> b -> c -> d) ->
-         CompM a -> CompM b -> CompM c -> CompM d;
-fmapM3 a b c d f m1 m2 m3 = applyM c d (fmapM2 a b (c -> d) f m1 m2) m3;
-
 -- Compose two monadic functions
 composeM : (a b c: sort 0) -> (a -> CompM b) -> (b -> CompM c) -> a -> CompM c;
 composeM a b c f g x = bindM b c (f x) g;
