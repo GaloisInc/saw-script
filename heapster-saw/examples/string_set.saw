@@ -14,17 +14,28 @@ heapster_define_opaque_perm env "string_set" "rw:rwmodality, l:lifetime" "llvmpt
 // heapster_define_opaque_perm env "string_set" "rw:rwmodality, l:lifetime" "llvmptr 64" "StringSet.stringList";
 
 
-heapster_assume_fun env "string_set_insert" "(l1:lifetime).arg0:string_set<W,l1>, arg1:string<> -o arg0:string_set<W,l1>, arg1:true, ret:true" "listInsertM String";
-heapster_assume_fun env "string_set_remove" "(l1:lifetime).arg0:string_set<W,l1>, arg1:string<> -o arg0:string_set<W,l1>, arg1:string<>, ret:true" "listRemoveM String equalString";
+heapster_assume_fun env "string_set_insert"
+  "(l1:lifetime). arg0:string_set<W,l1>, arg1:string<> -o \
+                \ arg0:string_set<W,l1>, arg1:true, ret:true"
+  "listInsertM String";
+heapster_assume_fun env "string_set_remove"
+  "(l1:lifetime).arg0:string_set<W,l1>, arg1:string<> -o \
+                \ arg0:string_set<W,l1>, arg1:string<>, ret:true"
+  "listRemoveM String equalString";
 
 // The old way: we have to define names to use the functions above
-// heapster_assume_fun env "string_set_insert" "(l1:lifetime).arg0:string_set<W,l1>, arg1:string<> -o arg0:string_set<W,l1>, arg1:true, ret:true" "stringListInsertM";
-// heapster_assume_fun env "string_set_remove" "(l1:lifetime).arg0:string_set<W,l1>, arg1:string<> -o arg0:string_set<W,l1>, arg1:string<>, ret:true" "stringListRemoveM";
+// heapster_assume_fun env "string_set_insert"
+//   "(l1:lifetime). arg0:string_set<W,l1>, arg1:string<> -o \
+//                 \ arg0:string_set<W,l1>, arg1:true, ret:true"
+//   "stringListInsertM";
+// heapster_assume_fun env "string_set_remove"
+//   "(l1:lifetime). arg0:string_set<W,l1>, arg1:string<> -o \
+//                 \ arg0:string_set<W,l1>, arg1:string<>, ret:true"
+//   "stringListRemoveM";
 
 // Type-check our insert_remove function
-heapster_typecheck_fun env "insert_remove" "(l:lifetime).arg0:string_set<W,l>, arg1:string<>, arg2:string<> -o arg0:string_set<W,l>, arg1:true, arg2:string<>";
-
-// FIXME: should be able to write the above like this when all the changes above happen
-// heapster_typecheck_fun env "insert_remove" "(l:lifetime).arg0:string_set<W,l>, arg1:string<>, arg2:string<> -o arg0:string_set<W,l>, arg1:true, arg2:string<>";
+heapster_typecheck_fun env "insert_remove"
+  "(l:lifetime). arg0:string_set<W,l>, arg1:string<>, arg2:string<> -o \
+               \ arg0:string_set<W,l>, arg1:true, arg2:string<>";
 
 heapster_export_coq env "string_set_gen.v";

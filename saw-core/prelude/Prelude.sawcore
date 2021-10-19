@@ -1962,6 +1962,7 @@ primitive CompM : sort 0 -> sort 0;
 
 primitive returnM : (a:sort 0) -> a -> CompM a;
 primitive bindM : (a b:sort 0) -> CompM a -> (a -> CompM b) -> CompM b;
+primitive existsM : (a:sort 0) -> (b:sort 0) -> (a -> CompM b) -> CompM b;
 
 -- Apply a pure function to a computation
 fmapM : (a b: sort 0) -> (a -> b) -> CompM a -> CompM b;

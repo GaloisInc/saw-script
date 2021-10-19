@@ -2302,6 +2302,11 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     (\(pctx :>: _ :>: _) -> (pctx :>: PTrans_Eq (fmap PExpr_LLVMWord e)))
     m
 
+  [nuMP| SImpl_LLVMOffsetZeroEq x |] ->
+    let bvZero = zeroOfType (BVRepr knownNat) in
+    withPermStackM (:>: translateVar x)
+                   (:>: PTrans_Eq (fmap (flip PExpr_LLVMOffset bvZero) x)) m
+
   [nuMP| SImpl_IntroConj x |] ->
     withPermStackM (:>: translateVar x) (:>: PTrans_True) m
 

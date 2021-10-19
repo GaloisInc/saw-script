@@ -439,6 +439,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("catchM",               skip)
   , ("fixM",                 replace (Coq.App (Coq.ExplVar "fixM")
                                        [Coq.Var "CompM", Coq.Var "_"]))
+  , ("existsM",              mapsToExpl compMModule "existsM")
   , ("LetRecType",           mapsTo compMModule "LetRecType")
   , ("LRT_Ret",              mapsTo compMModule "LRT_Ret")
   , ("LRT_Fun",              mapsTo compMModule "LRT_Fun")
