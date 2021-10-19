@@ -135,6 +135,14 @@ Proof.
     vm_compute in e_if0; discriminate e_if0.
 Qed.
 
+(*
+  In English, the spec for `mbox_randomize m` is:
+  - If `m` is non-null, the function returns `SUCCESS` and `m->data` is set to
+    some `data'` such that `m->data[i] = data'[i]` for all `i` such that
+    `i < m->strt` or `i >= m->len`.
+  - Otherwise, the function returns MBOX_NULL_ERROR.
+*)
+
 Definition SUCCESS         := intToBv 32 0.
 Definition MBOX_NULL_ERROR := intToBv 32 23.
 
