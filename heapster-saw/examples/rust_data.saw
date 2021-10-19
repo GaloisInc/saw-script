@@ -447,7 +447,8 @@ str_struct_new <- heapster_find_symbol env "9StrStruct3new";
 
 // FIXME: this is the correct version, with the String shape
 //heapster_typecheck_fun_rename env str_struct_new "str_struct_new" "(len:bv 64).arg0:memblock(W,0,24,emptysh), arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), arg2:eq(llvmword(len)) -o arg0:memblock(W,0,24,String<>)";
-heapster_typecheck_fun_rename env str_struct_new "str_struct_new" "<'a> fn (name:&'a str) -> StrStruct<>";
+heapster_typecheck_fun_rename env str_struct_new "str_struct_new"
+  "<'a> fn (name:&'a str) -> StrStruct<>";
 
 bintree_is_leaf_sym <- heapster_find_symbol env "15bintree_is_leaf";
 heapster_typecheck_fun_rename env bintree_is_leaf_sym "bintree_is_leaf"
