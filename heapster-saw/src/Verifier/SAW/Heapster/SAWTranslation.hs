@@ -1759,7 +1759,6 @@ instance TransInfo info =>
                                                  (PermTransCtx ctx ps)) where
   translate = translate . mbDistPermsToValuePerms . fmap unTypeDistPerms
 
-
 -- LOwnedPerms translate to a single tuple type, because lowned permissions
 -- translate to functions with one argument and one return value
 instance TransInfo info =>
@@ -2229,6 +2228,11 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     withPermStackM RL.tail
     (\(pctx :>: _ :>: _) -> (pctx :>: PTrans_Eq (fmap PExpr_LLVMWord e)))
     m
+
+  [nuMP| SImpl_LLVMOffsetZeroEq x |] ->
+    let bvZero = zeroOfType (BVRepr knownNat) in
+    withPermStackM (:>: translateVar x)
+                   (:>: PTrans_Eq (fmap (flip PExpr_LLVMOffset bvZero) x)) m
 
   [nuMP| SImpl_IntroConj x |] ->
     withPermStackM (:>: translateVar x) (:>: PTrans_True) m

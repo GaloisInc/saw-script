@@ -16,8 +16,10 @@ ifeq ($(SAW),)
   endif
 endif
 
-%.bc: %.c
+ifeq ($(CI),)
+  %.bc: %.c
 	clang -emit-llvm -g -c $<
+endif
 
 %_gen.v: %.saw %.bc
 	$(SAW) $<

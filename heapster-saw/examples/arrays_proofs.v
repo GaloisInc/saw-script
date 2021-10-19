@@ -137,3 +137,74 @@ Admitted.
 (*   * apply isBvslt_to_isBvsle_suc; assumption. *)
 (*   * apply isBvult_to_isBvslt_pos; assumption. *)
 (* Qed. *)
+
+
+Definition sum_inc_ptr_invar (len0 idx len : bitvector 64) :=
+  isBvule 64 idx len0 /\ len = bvSub 64 len0 idx.
+
+Lemma no_errors_sum_inc_ptr : refinesFun sum_inc_ptr (fun len arr => noErrorsSpec).
+Proof.
+  unfold sum_inc_ptr, sum_inc_ptr__tuple_fun.
+  prove_refinement_match_letRecM_l.
+  - exact (fun len0 idx len sum arr _ _ _ => assumingM (sum_inc_ptr_invar len0 idx len) noErrorsSpec).
+  unfold noErrorsSpec, sum_inc_ptr_invar.
+  time "no_errors_sum_inc_ptr" prove_refinement.
+  all: try assumption.
+  - assert (isBvult 64 a2 a1).
+    + apply isBvule_to_isBvult_or_eq in e_assuming.
+      destruct e_assuming; [assumption |].
+      apply bvEq_bvSub_r in H.
+      symmetry in H; contradiction.
+    + rewrite H in e_maybe; discriminate e_maybe.
+  - apply isBvult_to_isBvule_suc; assumption.
+  - repeat rewrite bvSub_eq_bvAdd_neg.
+    rewrite bvAdd_assoc; f_equal.
+    rewrite bvNeg_bvAdd_distrib; reflexivity.
+  - apply isBvule_zero_n.
+  - symmetry; apply bvSub_n_zero.
+Qed.
+
+
+Definition sum_inc_ptr_spec len : BVVec 64 len (bitvector 8) -> bitvector 64 :=
+  foldr _ _ _ (fun a b => bvAdd 64 b (bvUExt 56 8 a)) (intToBv 64 0).
+
+Definition sum_inc_ptr_letRec_spec len0 idx len (sum : bitvector 64) arr (_ _ _ : unit) :=
+  forallM (fun (pf : isBvule 64 idx len0) =>
+  assumingM (len = bvSub 64 len0 idx)
+            (returnM (arr, bvAdd 64 sum (sum_inc_ptr_spec (bvSub 64 len0 idx)
+                                                     (dropBVVec _ _ _ idx pf arr))))).
+
+Lemma sum_inc_ptr_spec_ref :
+  refinesFun sum_inc_ptr (fun len arr => returnM (arr, sum_inc_ptr_spec len arr)).
+Proof.
+  unfold sum_inc_ptr, sum_inc_ptr__tuple_fun.
+  prove_refinement_match_letRecM_l.
+  - exact sum_inc_ptr_letRec_spec.
+  unfold noErrorsSpec, sum_inc_ptr_letRec_spec, sum_inc_ptr_spec.
+  time "sum_inc_ptr_spec_ref" prove_refinement.
+  (* Why didn't prove_refinement do this? *)
+  3: prove_refinement_eauto; [| apply refinesM_returnM ].
+  7: prove_refinement_eauto; [| apply refinesM_returnM ].
+  (* same as no_errors_sum_inc_ptr *)
+  - assert (isBvult 64 a2 a1).
+    + apply isBvule_to_isBvult_or_eq in e_forall.
+      destruct e_forall; [assumption |].
+      apply bvEq_bvSub_r in H.
+      symmetry in H; contradiction.
+    + rewrite H in e_maybe; discriminate e_maybe.
+  - apply isBvult_to_isBvule_suc; assumption.
+  - repeat rewrite bvSub_eq_bvAdd_neg.
+    rewrite bvAdd_assoc; f_equal.
+    rewrite bvNeg_bvAdd_distrib; reflexivity.
+  (* unique to this proof *)
+  - admit.
+  - repeat f_equal.
+    admit.
+  (* same as no_errors_sum_inc_ptr *)
+  - apply isBvule_zero_n.
+  - symmetry; apply bvSub_n_zero.
+  (* unique to this proof *)
+  - rewrite bvAdd_id_l.
+    repeat f_equal.
+    admit.
+Admitted.

@@ -83,6 +83,59 @@ Hint Rewrite transMbox_Mbox_nil_r transMbox_assoc : refinesM.
 (* ========================================================================== *)
 
 
+Definition mbox_randomize_precond : Mbox -> Prop :=
+  Mbox__rec (fun _ => Prop) True (fun strt len _ _ _ =>
+    (* 0 <= strt <= len < 128 *)
+    isBvsle 64 (intToBv 64 0) strt /\ isBvsle 64 strt len /\
+    isBvslt 64 len (intToBv 64 128)).
+
+Definition mbox_randomize_invar (strt len i : bitvector 64) : Prop :=
+  (* 0 <= strt <= i <= len < 128 *)
+  isBvsle 64 (intToBv 64 0) strt /\ isBvsle 64 strt i /\
+  isBvsle 64 i len /\ isBvslt 64 len (intToBv 64 128).
+
+Lemma no_errors_mbox_randomize
+  : refinesFun mbox_randomize (fun m => assumingM (mbox_randomize_precond m) noErrorsSpec).
+Proof.
+  unfold mbox_randomize, mbox_randomize__tuple_fun, mbox_randomize_precond.
+  prove_refinement_match_letRecM_l.
+  - exact (fun strt len m d i => assumingM (mbox_randomize_invar strt len i) noErrorsSpec).
+  unfold noErrorsSpec, randSpec, mbox_randomize_invar.
+  time "no_errors_mbox_randomize" prove_refinement.
+  (* All the `Mbox_def` and `Vec 32 bool` goals are only every used in *)
+  (* impossible cases, so they can be set to whatever Coq chooses. These *)
+  (* calls to `assumption` also take care of showing that the loop invariant *)
+  (* holds initially from our precondition, and a few of the cases of showing *)
+  (* that the loop invariant holds inductively (see below). *)
+  all: try assumption.
+  (* Showing the error case of the array bounds check is impossible by virtue *)
+  (* of our loop invariant *)
+  - assert (isBvsle 64 (intToBv 64 0) a4) by (rewrite e_assuming0; eauto).
+    assert (isBvsle 64 (intToBv 64 0) a1) by (rewrite H; eauto).
+    apply isBvult_to_isBvslt_pos in e_if; eauto.
+    assert (isBvult 64 a4 (intToBv 64 128)).
+    + apply isBvult_to_isBvslt_pos; [ eauto | reflexivity | ].
+      rewrite e_if; eauto.
+    + rewrite H1 in e_maybe; discriminate e_maybe.
+  (* Showing the loop invariant holds inductively (the remaining two cases) *)
+  - rewrite e_assuming1; apply isBvsle_suc_r.
+    apply isBvslt_to_isBvsle.
+    rewrite e_assuming2, e_assuming3.
+    reflexivity.
+  - apply isBvslt_to_isBvsle_suc.
+    apply isBvult_to_isBvslt_pos in e_if.
+    + assumption.
+    + rewrite e_assuming0; eauto.
+    + rewrite e_assuming0, e_assuming1; eauto.
+  (* Showing the error case of the overflow check is impossible by virtue of *)
+  (* our loop invariant *)
+  - rewrite <- e_assuming1, <- e_assuming0 in e_if0.
+    vm_compute in e_if0; discriminate e_if0.
+  - rewrite e_assuming2, e_assuming3 in e_if0.
+    vm_compute in e_if0; discriminate e_if0.
+Qed.
+
+
 Lemma no_errors_mbox_drop
   : refinesFun mbox_drop (fun _ _ => noErrorsSpec).
 Proof.

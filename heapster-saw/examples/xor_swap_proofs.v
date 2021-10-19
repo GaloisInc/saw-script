@@ -4,6 +4,7 @@ From Coq          Require Import String.
 From Coq          Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
+From CryptolToCoq Require Import SAWCoreBitvectors.
 
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import CompMExtra.
@@ -23,19 +24,19 @@ Proof.
   time "no_errors_xor_swap" prove_refinement.
 Qed.
 
-(* FIXME: move lemma to SAWCorePrelude...? *)
+
 Lemma bvXor_twice_r n x y :
   SAWCorePrelude.bvXor n (SAWCorePrelude.bvXor n x y) y = x.
 Proof.
-  admit.
-Admitted.
+  rewrite <- bvXor_assoc. rewrite bvXor_same. rewrite bvXor_zero. reflexivity.
+Qed.
 
-(* FIXME: move lemma to SAWCorePrelude...? *)
 Lemma bvXor_twice_l n x y :
   SAWCorePrelude.bvXor n (SAWCorePrelude.bvXor n y x) y = x.
 Proof.
-  admit.
-Admitted.
+  rewrite bvXor_comm. rewrite bvXor_assoc.
+  rewrite bvXor_same. rewrite bvXor_comm. rewrite bvXor_zero. reflexivity.
+Qed.
 
 Lemma xor_swap_correct : refinesFun xor_swap xor_swap_spec.
 Proof.

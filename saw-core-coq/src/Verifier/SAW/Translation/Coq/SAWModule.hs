@@ -27,7 +27,7 @@ module Verifier.SAW.Translation.Coq.SAWModule where
 import qualified Control.Monad.Except                          as Except
 import           Control.Monad.Reader                          hiding (fail)
 import           Prelude                                       hiding (fail)
-import           Prettyprinter                                 (Doc)
+import           Prettyprinter                                 (Doc, pretty)
 
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
@@ -84,10 +84,10 @@ translateDataType :: ModuleTranslationMonad m => DataType -> m Coq.Decl
 --   | trace ("translateDataType: " ++ show dtName) False = undefined
 translateDataType (DataType {..}) =
   atDefSite <$> findSpecialTreatment dtName >>= \case
-  DefPreserve              -> translateNamed $ identName dtName
-  DefRename   _ targetName -> translateNamed $ targetName
-  DefReplace  str          -> return $ Coq.Snippet str
-  DefSkip                  -> return $ skipped dtName
+  DefPreserve            -> translateNamed $ identName dtName
+  DefRename   targetName -> translateNamed $ targetName
+  DefReplace  str        -> return $ Coq.Snippet str
+  DefSkip                -> return $ skipped dtName
   where
     translateNamed :: ModuleTranslationMonad m => Coq.Ident -> m Coq.Decl
     translateNamed name = do
@@ -128,10 +128,10 @@ translateDef (Def {..}) = {- trace ("translateDef " ++ show defIdent) $ -} do
   where
 
     translateAccordingly :: ModuleTranslationMonad m => DefSiteTreatment -> m Coq.Decl
-    translateAccordingly  DefPreserve             = translateNamed $ identName defIdent
-    translateAccordingly (DefRename _ targetName) = translateNamed $ targetName
-    translateAccordingly (DefReplace  str)        = return $ Coq.Snippet str
-    translateAccordingly  DefSkip                 = return $ skipped defIdent
+    translateAccordingly  DefPreserve           = translateNamed $ identName defIdent
+    translateAccordingly (DefRename targetName) = translateNamed $ targetName
+    translateAccordingly (DefReplace  str)      = return $ Coq.Snippet str
+    translateAccordingly  DefSkip               = return $ skipped defIdent
 
     translateNamed :: ModuleTranslationMonad m => Coq.Ident -> m Coq.Decl
     translateNamed name = liftTermTranslationMonad (go defQualifier defBody)
@@ -179,3 +179,6 @@ translateDecl configuration modname decl =
     case runModuleTranslationMonad configuration modname (translateDef dd) of
       Left e -> error $ show e
       Right (tdecl, _) -> Coq.ppDecl tdecl
+  InjectCodeDecl ns txt
+    | ns == "Coq" -> pretty txt
+    | otherwise   -> mempty

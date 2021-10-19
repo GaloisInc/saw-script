@@ -91,3 +91,14 @@ uint64_t sum_2d (int64_t **arr, uint64_t l1, uint64_t l2) {
   }
   return sum;
 }
+
+/* Finds the sum of the elements of an array by incrementing the given pointer
+   instead of using a for loop over an index */
+uint64_t sum_inc_ptr(const uint8_t *arr, size_t len) {
+  uint64_t sum = 0;
+  while (len--) {
+    sum += arr[0];
+    arr += 1;
+  }
+  return sum;
+}

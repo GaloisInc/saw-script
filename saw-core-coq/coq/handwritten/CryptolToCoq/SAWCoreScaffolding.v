@@ -6,11 +6,41 @@ From Coq Require        Numbers.NatInt.NZLog.
 From Coq Require Import Strings.String.
 From CryptolToCoq Require Export CompM.
 
+(** A typeclass we use to restrict applications of the "error" axiom
+  * to inhabited types. This allows the axiom to be realizable, and
+  * prevents us from constructing an inconsistent environment.
+  *
+  * The basic idea is that typeclass instances will be used to construct
+  * the necessary inhabitants at use sites, so instances will be needed
+  * for all the types expected to be involved in calls to "error".
+  *)
+Class Inhabited (a:Type) := MkInhabited { inhabitant : a }.
+
+Axiom error : forall (a : Type) {HI:Inhabited a}, String.string -> a.
+
+Definition error_realizable : forall {a : Type} {HI:Inhabited a}, String.string -> a.
+Proof. intros; exact inhabitant. Qed.
+
 Definition sort (n : nat) := Type.
 
-Axiom error : forall {a : Type}, String.string -> a.
+Instance Inhabited_Type : Inhabited Type :=
+  MkInhabited Type unit.
+Instance Inhabited_sort (n:nat) : Inhabited (sort n) :=
+  MkInhabited (sort n) unit.
+
+Instance Inhabited_Intro (a:Type) (b:a -> Type) (Hb: forall x, Inhabited (b x))
+  : Inhabited (forall x, b x)
+  := MkInhabited (forall x, b x) (fun x => @inhabitant (b x) (Hb x)).
+
+Global Hint Extern 5 (Inhabited ?A) =>
+  (apply (@MkInhabited A); intuition (eauto with typeclass_instances inh)) : typeclass_instances.
 
 Definition String := String.string.
+
+Instance Inhabited_String : Inhabited String :=
+  MkInhabited String ""%string.
+Instance Inhabited_string : Inhabited String.string :=
+  MkInhabited String.string ""%string.
 
 Definition equalString (s1 s2: String) : bool :=
   match String.string_dec s1 s2 with
@@ -36,6 +66,16 @@ Definition not      := negb.
 Definition or     := orb.
 Definition xor    := xorb.
 Definition boolEq := Coq.Bool.Bool.eqb.
+
+Instance Inhabited_Unit : Inhabited UnitType :=
+  MkInhabited UnitType tt.
+Instance Inhabited_Bool : Inhabited Bool :=
+  MkInhabited Bool false.
+
+Instance Inhabited_unit : Inhabited unit :=
+  MkInhabited unit tt.
+Instance Inhabited_bool : Inhabited bool :=
+  MkInhabited bool false.
 
 (* SAW uses an alternate form of eq_rect where the motive function P also
 depends on the equality proof itself *)
@@ -117,6 +157,14 @@ Definition sawUnsafeCoerce (a b : Type) (x : a) := x.
 Definition Nat := nat.
 Definition Nat_rect := nat_rect.
 
+Instance Inhabited_Nat : Inhabited Nat :=
+  MkInhabited Nat 0%nat.
+Instance Inhabited_nat : Inhabited nat :=
+  MkInhabited nat 0%nat.
+
+Global Hint Resolve (0%nat : nat) : inh.
+Global Hint Resolve (0%nat : Nat) : inh.
+
 (* Definition minNat := Nat.min. *)
 
 Definition uncurry (a b c : Type) (f : a -> b -> c) (p : a * (b * unit)) : c  :=
@@ -141,6 +189,10 @@ Definition snd {A B} := @snd A B.
 Definition Zero := O.
 Definition Succ := S.
 
+Instance Inhabited_Pair (a b:Type) {Ha : Inhabited a} {Hb : Inhabited b} : Inhabited (PairType a b) :=
+    MkInhabited (PairType a b) (PairValue a b inhabitant inhabitant).
+Instance Inhabited_prod (a b:Type) {Ha : Inhabited a} {Hb : Inhabited b} : Inhabited (prod a b) :=
+    MkInhabited (prod a b) (pair inhabitant inhabitant).
 
 Definition Integer := Z.
 Definition intAdd : Integer -> Integer -> Integer := Z.add.
@@ -158,6 +210,15 @@ Definition intLt : Integer -> Integer -> Bool := Z.ltb.
 Definition intToNat : Integer -> Nat := Z.to_nat.
 Definition natToInt : Nat -> Integer := Z.of_nat.
 
+Instance Inhabited_Intger : Inhabited Integer :=
+  MkInhabited Integer 0%Z.
+Instance Inhabited_Z : Inhabited Z :=
+  MkInhabited Z 0%Z.
+
+Global Hint Resolve (0%Z : Z) : inh.
+Global Hint Resolve (0%Z : Integer) : inh.
+
+
 (* NOTE: the following will be nonsense for values of n <= 1 *)
 Definition IntMod (n : nat) := Z.
 Definition toIntMod (n : Nat) : Integer -> IntMod n := fun i => Z.modulo i (Z.of_nat n).
@@ -174,6 +235,8 @@ Definition intModMul : forall (n : Nat), (IntMod n) -> (IntMod n) -> IntMod n
 Definition intModNeg : forall (n : Nat), (IntMod n) -> IntMod n
   := fun _ => ZModulo.opp.
 
+Instance Inhabited_IntMod (n:nat) : Inhabited (IntMod n) :=
+  MkInhabited (IntMod n) 0%Z.
 
 (***
  *** A simple typeclass-based implementation of SAW record types
@@ -193,6 +256,13 @@ Variant RecordTypeCons (str:String.string) (tp:Type) (rest_tp:Type) : Type :=
 
 Arguments RecordTypeCons str%string_scope tp rest_tp.
 Arguments RecordCons str%string_scope {tp rest_tp} x rest.
+
+Instance Inhabited_RecordNil : Inhabited RecordTypeNil :=
+    MkInhabited RecordTypeNil RecordNil.
+Instance Inhabited_RecordCons (fnm:String.string) (tp rest_tp:Type)
+  {Htp : Inhabited tp} {Hrest : Inhabited rest_tp}
+  : Inhabited (RecordTypeCons fnm tp rest_tp)
+  := MkInhabited (RecordTypeCons fnm tp rest_tp) (RecordCons fnm inhabitant inhabitant).
 
 (* Get the head element of a non-empty record type *)
 Definition recordHead {str tp rest_tp} (r:RecordTypeCons str tp rest_tp) : tp :=

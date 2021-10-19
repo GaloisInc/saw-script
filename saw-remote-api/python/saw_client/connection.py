@@ -146,24 +146,24 @@ class SAWConnection:
             return self.most_recent_result.state()
 
     # Protocol messages
-    def cryptol_load_file(self, filename: str) -> Command:
-        self.most_recent_result = CryptolLoadFile(self, filename)
+    def cryptol_load_file(self, filename: str, timeout : Optional[float] = None) -> Command:
+        self.most_recent_result = CryptolLoadFile(self, filename, timeout)
         return self.most_recent_result
 
-    def create_ghost_variable(self, name: str, server_name: str) -> Command:
+    def create_ghost_variable(self, name: str, server_name: str, timeout : Optional[float] = None) -> Command:
         """Create an instance of the `CreateGhostVariable` command. Documentation on
         the purpose and use of this command is associated with the top-level
         `create_ghost_variable` function.
         """
-        self.most_recent_result = CreateGhostVariable(self, name, server_name)
+        self.most_recent_result = CreateGhostVariable(self, name, server_name, timeout)
         return self.most_recent_result
 
-    def jvm_load_class(self, name: str, class_name: str)  -> Command:
+    def jvm_load_class(self, name: str, class_name: str, timeout : Optional[float] = None)  -> Command:
         """Create an instance of the `JVMLoadClass` command. Documentation on the purpose
         and use of this command is associated with the top-level `jvm_load_class`
         function.
         """
-        self.most_recent_result = JVMLoadClass(self, name, class_name)
+        self.most_recent_result = JVMLoadClass(self, name, class_name, timeout)
         return self.most_recent_result
 
     def jvm_verify(self,
@@ -173,30 +173,32 @@ class SAWConnection:
                    check_sat: bool,
                    contract: Any,
                    script: ProofScript,
-                   lemma_name: str) -> Command:
+                   lemma_name: str,
+                   timeout : Optional[float] = None) -> Command:
         """Create an instance of the `JVMVerify` command. Documentation on the purpose
         and use of this command is associated with the top-level `jvm_assume`
         function.
         """
         self.most_recent_result = \
-            JVMVerify(self, class_name, method_name, lemmas, check_sat, contract, script, lemma_name)
+            JVMVerify(self, class_name, method_name, lemmas, check_sat, contract, script, lemma_name, timeout)
         return self.most_recent_result
 
     def jvm_assume(self,
                    class_name: str,
                    method_name: str,
                    contract: Any,
-                   lemma_name: str) -> Command:
+                   lemma_name: str,
+                   timeout : Optional[float] = None) -> Command:
         """Create an instance of the `JVMAssume` command. Documentation on the purpose
         and use of this command is associated with the top-level `jvm_assume`
         function.
         """
         self.most_recent_result = \
-            JVMAssume(self, class_name, method_name, contract, lemma_name)
+            JVMAssume(self, class_name, method_name, contract, lemma_name, timeout)
         return self.most_recent_result
 
-    def llvm_load_module(self, name: str, bitcode_file: str)  -> Command:
-        self.most_recent_result = LLVMLoadModule(self, name, bitcode_file)
+    def llvm_load_module(self, name: str, bitcode_file: str, timeout : Optional[float] = None)  -> Command:
+        self.most_recent_result = LLVMLoadModule(self, name, bitcode_file, timeout)
         return self.most_recent_result
 
     def llvm_verify(self,
@@ -206,29 +208,32 @@ class SAWConnection:
                     check_sat: bool,
                     contract: Any,
                     script: ProofScript,
-                    lemma_name: str) -> Command:
+                    lemma_name: str,
+                    timeout : Optional[float] = None) -> Command:
         self.most_recent_result = \
-            LLVMVerify(self, module, function, lemmas, check_sat, contract, script, lemma_name)
+            LLVMVerify(self, module, function, lemmas, check_sat, contract, script, lemma_name, timeout)
         return self.most_recent_result
 
     def llvm_assume(self,
                     module: str,
                     function: str,
                     contract: Any,
-                    lemma_name: str) -> Command:
+                    lemma_name: str,
+                    timeout : Optional[float] = None) -> Command:
         """Create an instance of the `LLVMAssume` command. Documentation on the purpose
         and use of this command is associated with the top-level `llvm_assume`
         function.
         """
         self.most_recent_result = \
-            LLVMAssume(self, module, function, contract, lemma_name)
+            LLVMAssume(self, module, function, contract, lemma_name, timeout)
         return self.most_recent_result
 
     def prove(self,
               goal: cryptoltypes.CryptolJSON,
-              proof_script: ProofScript) -> Command:
+              proof_script: ProofScript,
+              timeout : Optional[float] = None) -> Command:
         """Create an instance of the `Prove` command. Documentation on the purpose and
         use of this command is associated with the top-level `prove` function.
         """
-        self.most_recent_result = Prove(self, goal, proof_script)
+        self.most_recent_result = Prove(self, goal, proof_script, timeout)
         return self.most_recent_result
