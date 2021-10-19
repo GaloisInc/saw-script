@@ -431,11 +431,11 @@ tcLLVMShape (ExPtrSh _ maybe_l maybe_rw sh) =
   <*> traverse tcKExpr maybe_rw
   <*> tcKExpr sh
 tcLLVMShape (ExFieldSh _ w fld) = PExpr_FieldShape <$> tcLLVMFieldShape_ w fld
-tcLLVMShape (ExArraySh _ len stride flds) =
+tcLLVMShape (ExArraySh _ len stride sh) =
   PExpr_ArrayShape
   <$> tcKExpr len
   <*> (Bytes . fromIntegral <$> tcNatural stride)
-  <*> traverse (uncurry tcLLVMFieldShape_) flds
+  <*> tcKExpr sh
 tcLLVMShape e = tcError (pos e) "Expected shape"
 
 -- | Field and array helper for 'tcLLVMShape'
@@ -524,11 +524,23 @@ tcAtomicPerm (StructRepr tys) e = tcStructAtomic tys e
 tcAtomicPerm LifetimeRepr e = tcLifetimeAtomic e
 tcAtomicPerm _ e = tcError (pos e) "Expected perm"
 
+-- | Build a field permission using an 'LLVMFieldShape'
+fieldPermFromShape :: (KnownNat w, 1 <= w) => PermExpr RWModalityType ->
+                      PermExpr LifetimeType -> PermExpr (BVType w) ->
+                      LLVMFieldShape w -> AtomicPerm (LLVMPointerType w)
+fieldPermFromShape rw l off (LLVMFieldShape p) =
+  Perm_LLVMField $ LLVMFieldPerm rw l off p
+
 -- | Check an LLVM pointer atomic permission expression
 tcPointerAtomic :: (KnownNat w, 1 <= w) => AstExpr -> Tc (AtomicPerm (LLVMPointerType w))
-tcPointerAtomic (ExPtr p l rw off sz c) =
-  llvmArrayFieldToAtomicPerm <$> tcArrayFieldPerm (ArrayPerm p l rw off sz c)
-tcPointerAtomic (ExArray _ x y z w) = Perm_LLVMArray <$> tcArrayAtomic x y z w
+tcPointerAtomic (ExPtr _ l rw off sz c) =
+  fieldPermFromShape
+  <$> tcKExpr rw
+  <*> tcOptLifetime l
+  <*> tcKExpr off
+  <*> tcLLVMFieldShape_ sz c
+tcPointerAtomic (ExArray _ l rw off len stride sh) =
+  Perm_LLVMArray <$> tcArrayAtomic l rw off len stride sh
 tcPointerAtomic (ExMemblock _ l rw off len sh) = Perm_LLVMBlock <$> tcMemblock l rw off len sh
 tcPointerAtomic (ExFree      _ x  ) = Perm_LLVMFree <$> tcKExpr x
 tcPointerAtomic (ExLlvmFunPtr _ n w f) = tcFunPtrAtomic n w f
@@ -564,26 +576,17 @@ tcMemblock l rw off len sh =
 
 -- | Check an atomic array permission literal
 tcArrayAtomic ::
-  (KnownNat w, 1 <= w) => AstExpr -> AstExpr -> AstExpr -> [ArrayPerm] -> Tc (LLVMArrayPerm w)
-tcArrayAtomic off len stride fields =
+  (KnownNat w, 1 <= w) => Maybe AstExpr -> AstExpr -> AstExpr -> AstExpr ->
+  AstExpr -> AstExpr -> Tc (LLVMArrayPerm w)
+tcArrayAtomic l rw off len stride sh =
   LLVMArrayPerm
-  <$> tcKExpr off
+  <$> tcKExpr rw
+  <*> tcOptLifetime l
+  <*> tcKExpr off
   <*> tcKExpr len
   <*> (Bytes . fromIntegral <$> tcNatural stride)
-  <*> traverse tcArrayFieldPerm fields
+  <*> tcKExpr sh
   <*> pure []
-
--- | Check a single field of an array permission
-tcArrayFieldPerm :: forall w. (KnownNat w, 1 <= w) => ArrayPerm -> Tc (LLVMArrayField w)
-tcArrayFieldPerm (ArrayPerm _ l rw off sz c) =
-  do llvmFieldLifetime <- tcOptLifetime l
-     llvmFieldRW <- tcExpr RWModalityRepr rw
-     llvmFieldOffset <- tcKExpr off :: Tc (PermExpr (BVType w))
-     Some (Pair w LeqProof) <- maybe (pure (Some (Pair (knownNat :: NatRepr w) LeqProof)))
-                               tcPositive sz
-     withKnownNat w do
-      llvmFieldContents <- withKnownNat w (tcValPerm (LLVMPointerRepr w) c)
-      pure (LLVMArrayField LLVMFieldPerm{..})
 
 -- | Check a frame permission literal
 tcFrameAtomic :: (KnownNat w, 1 <= w) => AstExpr -> Tc (AtomicPerm (LLVMFrameType w))
