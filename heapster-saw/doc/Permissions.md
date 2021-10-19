@@ -45,7 +45,7 @@ A llvm-pointer (aka an llvm value) is either an llvmword or a variable+an offset
 
 Any crucible type can have a variable of that type, and that thing is an expression
 
-| Permission Expressions `e` | Type | Description |
+| Permission Expression `e` | Type | Description |
 | :---: | :---: | :--- |
 | `x`                          | any                | Any expression variable |
 | `unit`                       | `unit`             | A unit literal |
@@ -65,7 +65,7 @@ In addition to the above expressions, we also have shape expressions, which we s
 
 | Shape Permission Expressions `sh` | Type | Description |
 | :---: | :---: | :--- |
-| `emptysh`                   | `llvmshape w` | The empty shape |
+| `emptysh`                   | <nobr>`llvmshape w`</nobr> | The empty shape |
 | `name<e1,..,en>`            | `llvmshape w` | A named shape along with arguments for it, with optional read/write and lifetime modalities that are applied to the body of the shape. Named shapes can either be (1) defined shapes (alias) (2) recursive shapes, or (3) opaque shapes (axioms-all you know is their length). |
 | `eqsh(e)`                   | `llvmshape w` | A shape equal to the llvmblock `e`, where `e` is an expression of type `llvmblock w`. Used to type memcpy. |
 | `sh1 orsh sh2`              | `llvmshape w` | A disjunctive shape. `sh1` and `sh2` need not have the same size. |
