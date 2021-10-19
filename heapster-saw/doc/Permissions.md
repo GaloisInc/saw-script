@@ -21,7 +21,7 @@ Permission types
 
 A permission type includes regular crucible types as well as heapster-specific types
 
-| **Permission Type `a`** | **Description** |
+| **Permission Types `a`** | **Description** |
 | :---: | :--- |
 | `unit`                | Crucible unit type |
 | `bool`                | Crucible boolean type |
@@ -45,7 +45,7 @@ A llvm-pointer (aka an llvm value) is either an llvmword or a variable+an offset
 
 Any crucible type can have a variable of that type, and that thing is an expression
 
-| Permission Expression `e` | Type | Description |
+| Permission Expressions `e` | Type | Description |
 | :---: | :---: | :--- |
 | `x`                          | any                | Any expression variable |
 | `unit`                       | `unit`             | A unit literal |
