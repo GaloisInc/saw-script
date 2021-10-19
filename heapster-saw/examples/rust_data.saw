@@ -184,9 +184,14 @@ heapster_define_rust_type_qual env "fmt"
 
 // fmt::ArgumentV1 type
 heapster_define_rust_type_qual env "fmt"
-  "pub struct ArgumentV1<'a> { \
-  \ value: &'a Void, \
-  \ formatter: for <'b> fn(&'b Void, &'b mut fmt::Formatter) -> fmt::Result, }";
+  "pub struct ArgumentV1 { value: Box<Void>, formatter: Box<Void> }";
+
+// FIXME: this is the correct type, but Heapster cannot yet handle lifetime
+// arguments for types
+// heapster_define_rust_type_qual env "fmt"
+//   "pub struct ArgumentV1<'a> { \
+//   \ value: &'a Void, \
+//   \ formatter: for <'b> fn(&'b Void, &'b mut fmt::Formatter) -> fmt::Result, }";
 
 // fmt::Arguments type
 //heapster_define_rust_type_qual env "fmt"
