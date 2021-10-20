@@ -8,7 +8,7 @@ heapster_define_reachability_perm env "Bufs"
   "x:llvmptr 64" "llvmptr 64"
   "exists len:(bv 64).ptr((W,0) |-> Bufs<x>) * \
   \ ptr((W,8) |-> eq(llvmword(len))) * \
-  \ array(16, <len, *8, [(W,0) |-> int64<>])"
+  \ array(W, 16, <len, *8, fieldsh(int64<>))"
   "Mbox_def" "foldMbox" "unfoldMbox" "transMbox";
 
 heapster_block_entry_hint env "clearbufs" 3

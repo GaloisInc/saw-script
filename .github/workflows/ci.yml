@@ -1,3 +1,10 @@
+# Overall configuration notes:
+# - Artifact uploads for binaries are from GHC 8.10.3
+# - Builds for Ubuntu happen on 18.04 (would like to include 20.04, in addition)
+# - Builds for macOS builds on 10.15 (to avoid GHC bug on macOS 11; solvable with GHC > 8.10.4)
+# - Docker builds happen nightly, on manual invocation, and on release branch commits
+# Please update this comment as those details change.
+
 name: SAWScript
 on:
   push:
@@ -12,9 +19,10 @@ env:
   CACHE_VERSION: 1
   DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
 
-  # Solver versions - also update in the following locations:
+  # Solver package snapshot date - also update in the following locations:
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
+  # ./s2nTests/scripts/blst-entrypoint.sh
   # ./s2nTests/docker/saw.dockerfile
   SOLVER_PKG_VERSION: "snapshot-20210917"
 

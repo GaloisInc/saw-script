@@ -118,6 +118,9 @@ zip_dist() {
 
 zip_dist_with_solvers() {
   sname="${1}"
+  # Because these binaries come from the what4-solvers repository, they
+  # should be at least as portable (in terms of dynamic library
+  # dependencies) as the SAW binaries.
   cp "$BIN/abc"        dist/bin/
   cp "$BIN/cvc4"       dist/bin/
   cp "$BIN/yices"      dist/bin/

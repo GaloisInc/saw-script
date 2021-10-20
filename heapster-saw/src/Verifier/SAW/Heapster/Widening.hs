@@ -102,6 +102,14 @@ wnMapExtWidFun :: WidNameMap -> ExtVarPermsFun vars
 wnMapExtWidFun wnmap =
   ExtVarPermsFun $ \ns -> ExtVarPerms_Base $ RL.map (flip wnMapGetPerm wnmap) ns
 
+-- | Assign the trivial @true@ permission to any variable that has not yet been
+-- visited
+wnMapDropUnvisiteds :: WidNameMap -> WidNameMap
+wnMapDropUnvisiteds =
+  NameMap.map $ \case
+  p@(Pair _ (Constant True)) -> p
+  (Pair _ (Constant False)) -> Pair ValPerm_True (Constant False)
+
 newtype PolyContT r m a =
   PolyContT { runPolyContT :: forall x. (forall y. a -> m (r y)) -> m (r x) }
 
@@ -402,21 +410,11 @@ widenExpr' _ (PExpr_FieldShape (LLVMFieldShape p1)) (PExpr_FieldShape
   | Just Refl <- testEquality (exprLLVMTypeWidth p1) (exprLLVMTypeWidth p2) =
     PExpr_FieldShape <$> LLVMFieldShape <$> widenPerm knownRepr p1 p2
 
--- Array shapes can only be widened if they have the same length, stride, and
--- fields whose ith fields have the same size for each i
-widenExpr' _ (PExpr_ArrayShape len1 stride1 flds1) (PExpr_ArrayShape
-                                                   len2 stride2 flds2)
-  | bvEq len1 len2 && stride1 == stride2
-  , and (zipWith
-         (\(LLVMFieldShape p1) (LLVMFieldShape p2) ->
-           isJust $ testEquality (exprLLVMTypeWidth p1) (exprLLVMTypeWidth p2))
-         flds1 flds2) =
-    PExpr_ArrayShape len1 stride1 <$>
-    zipWithM (\(LLVMFieldShape p1) (LLVMFieldShape p2) ->
-               case testEquality (exprLLVMTypeWidth p1) (exprLLVMTypeWidth p2) of
-                 Just Refl -> LLVMFieldShape <$> widenPerm knownRepr p1 p2
-                 Nothing -> error "widenExpr: unreachable!")
-    flds1 flds2
+-- Array shapes can only be widened if they have the same length and stride
+widenExpr' _ (PExpr_ArrayShape
+              len1 stride1 sh1) (PExpr_ArrayShape len2 stride2 sh2)
+  | bvEq len1 len2 && stride1 == stride2 =
+    PExpr_ArrayShape len1 stride1 <$> widenExpr knownRepr sh1 sh2
 
 -- FIXME: there should be some check that the first shapes have the same length,
 -- though this is more complex if they might have free variables...?
@@ -553,16 +551,23 @@ widenAtomicPerms' tp (Perm_LLVMArray ap1 : ps1) ps2 =
              substEqVars wnmap (llvmArrayLen ap1)
              == substEqVars wnmap (llvmArrayLen ap2) &&
              llvmArrayStride ap1 == llvmArrayStride ap2 &&
-             substEqVars wnmap (llvmArrayFields ap1)
-             == substEqVars wnmap (llvmArrayFields ap2)
+             -- FIXME: widen the rw modalities?
+             substEqVars wnmap (llvmArrayRW ap1)
+             == substEqVars wnmap (llvmArrayRW ap2) &&
+             substEqVars wnmap (llvmArrayLifetime ap1)
+             == substEqVars wnmap (llvmArrayLifetime ap2)
            _ -> False) ps2 of
     Just i
       | Perm_LLVMArray ap2 <- ps2!!i ->
         -- NOTE: at this point, ap1 and ap2 are equal except for perhaps their
-        -- borrows, so we just filter out the borrows in ap1 that are also in ap2
-        (Perm_LLVMArray (ap1 { llvmArrayBorrows =
-                               filter (flip elem (llvmArrayBorrows ap2))
-                               (llvmArrayBorrows ap1) }) :) <$>
+        -- borrows and shapes, so we just filter out the borrows in ap1 that are
+        -- also in ap2 and widen the shapes
+        widenExpr knownRepr (llvmArrayCellShape ap1) (llvmArrayCellShape ap2)
+        >>= \sh ->
+        (Perm_LLVMArray (ap1 { llvmArrayCellShape = sh,
+                               llvmArrayBorrows =
+                                 filter (flip elem (llvmArrayBorrows ap2))
+                                 (llvmArrayBorrows ap1) }) :) <$>
         widenAtomicPerms tp ps1 (deleteNth i ps2)
     _ ->
       -- We did not find an appropriate array on the RHS, so drop this one
@@ -959,6 +964,7 @@ widen dlevel env tops args (Some (ArgVarPerms
      void $ widenExprs all_args (RL.map PExpr_Var args_ns1) (RL.map
                                                              PExpr_Var args_ns2)
      widenExtGhostVars vars1 vars1_ns vars2 vars2_ns
+     modifying wsNameMap wnMapDropUnvisiteds
      wnmap <- view wsNameMap <$> get
      traceM (\i ->
               pretty "Widening returning:" <> line <>

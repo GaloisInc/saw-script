@@ -87,16 +87,9 @@ translateLLVMValue w _ (L.ValSymbol sym) =
      return (PExpr_FieldShape (LLVMFieldShape p), t)
 translateLLVMValue w _ (L.ValArray tp elems) =
   do
-    -- First, translate the elements
+    -- First, translate the elements and their type
     ts <- map snd <$> mapM (translateLLVMValue w tp) elems
-
-    -- Array shapes can only handle field shapes elements, so translate the
-    -- element type to and ensure it returns a field shape; FIXME: this could
-    -- actually handle sequences of field shapes if necessary
     (sh, saw_tp) <- translateLLVMType w tp
-    fsh <- case sh of
-      PExpr_FieldShape fsh -> return fsh
-      _ -> mzero
 
     -- Compute the array stride as the length of the element shape
     sh_len_expr <- lift $ llvmShapeLength sh
@@ -108,7 +101,7 @@ translateLLVMValue w _ (L.ValArray tp elems) =
     (_,def_tm) <- translateLLVMValue w tp def_v
 
     -- Finally, build our array shape and SAW core value
-    return (PExpr_ArrayShape (bvInt $ fromIntegral $ length elems) sh_len [fsh],
+    return (PExpr_ArrayShape (bvInt $ fromIntegral $ length elems) sh_len sh,
             bvVecValueOpenTerm w saw_tp ts def_tm)
 translateLLVMValue w _ (L.ValPackedStruct elems) =
   mapM (translateLLVMTypedValue w) elems >>= \(unzip -> (shs,ts)) ->
