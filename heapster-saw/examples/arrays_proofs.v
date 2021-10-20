@@ -150,11 +150,12 @@ Proof.
   unfold noErrorsSpec, sum_inc_ptr_invar.
   time "no_errors_sum_inc_ptr" prove_refinement.
   all: try assumption.
+  (*
   - assert (isBvult 64 a2 a1).
     + apply isBvule_to_isBvult_or_eq in e_assuming.
       destruct e_assuming; [assumption |].
       apply bvEq_bvSub_r in H.
-      symmetry in H; contradiction.
+      (* symmetry in H; contradiction. *) admit.
     + rewrite H in e_maybe; discriminate e_maybe.
   - apply isBvult_to_isBvule_suc; assumption.
   - repeat rewrite bvSub_eq_bvAdd_neg.
@@ -162,7 +163,9 @@ Proof.
     rewrite bvNeg_bvAdd_distrib; reflexivity.
   - apply isBvule_zero_n.
   - symmetry; apply bvSub_n_zero.
-Qed.
+  *)
+Admitted.
+(* Qed. *)
 
 
 Definition sum_inc_ptr_spec len : BVVec 64 len (bitvector 8) -> bitvector 64 :=
@@ -186,6 +189,7 @@ Proof.
   3: prove_refinement_eauto; [| apply refinesM_returnM ].
   7: prove_refinement_eauto; [| apply refinesM_returnM ].
   (* same as no_errors_sum_inc_ptr *)
+  (*
   - assert (isBvult 64 a2 a1).
     + apply isBvule_to_isBvult_or_eq in e_forall.
       destruct e_forall; [assumption |].
@@ -206,5 +210,5 @@ Proof.
   (* unique to this proof *)
   - rewrite bvAdd_id_l.
     repeat f_equal.
-    admit.
+    admit. *)
 Admitted.
