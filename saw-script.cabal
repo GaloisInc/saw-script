@@ -91,7 +91,7 @@ library
     , flexdis86
     , elf-edit
     , reflection
-    , aeson
+    , aeson >= 1.4.2 && < 2.0
 
   hs-source-dirs: src
 
