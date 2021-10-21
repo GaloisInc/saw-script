@@ -78,7 +78,7 @@ The first argument is the Heapster environment, the second is its name, the
 third is its arguments (of which there are none), the fourth is the type of
 value that the permission applies to, and the fifth is its definition. 
 
-To define permissions which can describe unbounded data structures, you can use
+To define [permissions](doc/Permissions.md) which can describe unbounded data structures, you can use
 the `heapster_define_recursive_perm` command. As an example, here is how to
 describe a linked list of 64-bit words using this command:
 ```
@@ -135,6 +135,10 @@ convention, we add a `_gen` suffix to the filename.
 ```
 heapster_export_coq env "my_file_gen.v";
 ```
+
+### Heapster Permissions
+
+See this [additional documentation](doc/Permissions.md) for a reference on the syntax and meaning of heapster permissions.
 
 ### Verifying in Coq
 
