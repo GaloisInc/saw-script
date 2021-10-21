@@ -1380,7 +1380,7 @@ data ImportPrimitiveOptions =
 defaultPrimitiveOptions :: ImportPrimitiveOptions
 defaultPrimitiveOptions =
   ImportPrimitiveOptions
-  { allowUnknownPrimitives = False
+  { allowUnknownPrimitives = True
   }
 
 data DeclGroupOptions
