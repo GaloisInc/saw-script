@@ -195,7 +195,7 @@ Proof.
     + exact e_exists0.
     + prove_refinement; intros.
       rewrite <- e_assert; eauto.
-      unfold adjustBVVec; rewrite at_gen_BVVec.
+      unfold updBVVec; rewrite at_gen_BVVec.
       enough (bvEq 64 i a4 = false) by (rewrite H0; reflexivity).
       destruct H.
       * apply isBvslt_to_bvEq_false.
