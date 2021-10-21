@@ -288,6 +288,20 @@ heapster_assume_fun_rename_prim env hashmap_u64_u64_insert_sym "hashmap_u64_u64_
 //    \                                 (Cons (Vec 64 Bool * Vec 64 Bool) (k,v) h, ())), \
 //    \          Left #() (Vec 64 Bool) (), ())";
 
+// String::deref
+string_deref <- heapster_find_trait_method_symbol env
+  "core::ops::deref::Deref::deref<String>";
+heapster_assume_fun_rename_prim env string_deref "string_deref"
+  "<'a> fn (&'a String) -> &'a str";
+
+// String::fmt
+string_fmt <- heapster_find_trait_method_symbol env
+    "core::fmt::Display::fmt<String>";
+heapster_assume_fun_rename_prim env string_fmt "String_fmt"
+    "<'a, 'b> fn(&'a String, f: &'b mut fmt::Formatter) -> fmt::Result";
+//heapster_typecheck_fun_rename env string_fmt "String_fmt"
+//    "<'a, 'b> fn(&'a String, f: &'b mut fmt::Formatter) -> fmt::Result";
+
 /*
 String__fmt_sym <- heapster_find_trait_method_symbol env "core::fmt::Display::fmt<String>";
 // heapster_assume_fun_rename env String__fmt_sym "String__fmt"
@@ -304,8 +318,21 @@ heapster_assume_fun_rename_prim env String__fmt_sym "String__fmt"
   "<'a, 'b> fn(&'a String, f: &'b mut fmt::Formatter) -> fmt::Result";
 */
 
+// core::fmt::Display::fmt<u64>
+// FIXME: why does this not match the normal symbol pattern for traits?
+u64_fmt <- heapster_find_symbol env
+  "core3fmt3num3imp52_$LT$impl$u20$core..fmt..Display";
+heapster_assume_fun_rename_prim env u64_fmt "u64_fmt"
+    "<'a, 'b> fn(&'a u64, f: &'b mut fmt::Formatter) -> fmt::Result";
+
+
+// A "dummy" type for an arbitrary 64-bit LLVM value with no permissions
+heapster_define_llvmshape env "Any" 64 "" "fieldsh(true)";
 
 // ArgumentV1::new
+ArgumentV1_new_syms <- heapster_find_symbols env "10ArgumentV13new";
+for ArgumentV1_new_syms (\ sym -> heapster_assume_fun_rename_prim env sym sym
+                                    "<> fn (x:Any, f:Any) -> fmt::ArgumentV1");
 //ArgumentV1_new <- heapster_find_symbol env "10ArgumentV13new";
 //heapster_assume_fun_rename_prim env ArgumentV1_new "ArgumentV1_new"
 //  "<'a,'b,T> fn (x: &'b T, f: fn(&T, &mut fmt::Formatter) -> fmt::Result) \
