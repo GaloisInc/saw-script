@@ -135,6 +135,91 @@ Proof.
     vm_compute in e_if0; discriminate e_if0.
 Qed.
 
+(*
+  In English, the spec for `mbox_randomize m` is:
+  - If `m` is non-null, the function returns `SUCCESS` and `m->data` is set to
+    some `data'` such that `m->data[i] = data'[i]` for all `i` such that
+    `i < m->strt` or `i >= m->len`.
+  - Otherwise, the function returns MBOX_NULL_ERROR.
+*)
+
+Definition SUCCESS         := intToBv 32 0.
+Definition MBOX_NULL_ERROR := intToBv 32 23.
+
+Definition mbox_randomize_non_null_spec strt len m d : CompM (Mbox * bitvector 32) :=
+  existsM (fun d' => assertM (forall i (pf : isBvult 64 i bv64_128),
+                                isBvslt 64 i strt \/ isBvsle 64 len i ->
+                                atBVVec _ _ _ d i pf = atBVVec _ _ _ d' i pf) >>
+                     returnM (Mbox_cons strt len m d', SUCCESS)).
+
+Definition mbox_randomize_spec : Mbox -> CompM (Mbox * bitvector 32) :=
+  Mbox__rec (fun _ => CompM (Mbox * bitvector 32))
+          (returnM (Mbox_nil, MBOX_NULL_ERROR))
+          (fun strt len m _ d => mbox_randomize_non_null_spec strt len m d).
+
+Lemma mbox_randomize_spec_ref :
+  refinesFun mbox_randomize (fun m => assumingM (mbox_randomize_precond m) (mbox_randomize_spec m)).
+Proof.
+  unfold mbox_randomize, mbox_randomize__tuple_fun, mbox_randomize_precond, mbox_randomize_spec.
+  prove_refinement_match_letRecM_l.
+  - exact (fun strt len m d i =>
+             assumingM (mbox_randomize_invar strt len i)
+                       (mbox_randomize_non_null_spec strt len m d)).
+  unfold noErrorsSpec, randSpec, mbox_randomize_invar.
+  time "mbox_randomize_spec_ref" prove_refinement.
+  (* All but the noted cases are the same as `no_errors_mbox_randomize` above *)
+  all: try assumption.
+  (* Showing the error case of the array bounds check is impossible by virtue *)
+  (* of our loop invariant *)
+  - assert (isBvsle 64 (intToBv 64 0) a4) by (rewrite e_assuming0; eauto).
+    assert (isBvsle 64 (intToBv 64 0) a1) by (rewrite H; eauto).
+    apply isBvult_to_isBvslt_pos in e_if; eauto.
+    assert (isBvult 64 a4 (intToBv 64 128)).
+    + apply isBvult_to_isBvslt_pos; [ eauto | reflexivity | ].
+      rewrite e_if; eauto.
+    + rewrite H1 in e_maybe; discriminate e_maybe.
+  (* Showing the loop invariant holds inductively (the remaining two cases) *)
+  - rewrite e_assuming1; apply isBvsle_suc_r.
+    apply isBvslt_to_isBvsle.
+    rewrite e_assuming2, e_assuming3.
+    reflexivity.
+  - apply isBvslt_to_isBvsle_suc.
+    apply isBvult_to_isBvslt_pos in e_if.
+    + assumption.
+    + rewrite e_assuming0; eauto.
+    + rewrite e_assuming0, e_assuming1; eauto.
+  (* Unique to this proof: Showing our spec works for the recursive case *)
+  - rewrite transMbox_Mbox_nil_r; simpl.
+    unfold mbox_randomize_non_null_spec.
+    prove_refinement.
+    + exact e_exists0.
+    + prove_refinement; intros.
+      rewrite <- e_assert; eauto.
+      unfold updBVVec; rewrite at_gen_BVVec.
+      enough (bvEq 64 i a4 = false) by (rewrite H0; reflexivity).
+      destruct H.
+      * apply isBvslt_to_bvEq_false.
+        rewrite e_assuming1 in H; eauto.
+      * rewrite bvEq_sym.
+        apply isBvslt_to_bvEq_false.
+        apply isBvult_to_isBvslt_pos in e_if.
+        -- rewrite H in e_if; eauto.
+        -- rewrite e_assuming0; eauto.
+        -- rewrite e_assuming0, e_assuming1; eauto.
+  (* Showing the error case of the overflow check is impossible by virtue of *)
+  (* our loop invariant *)
+  - rewrite <- e_assuming1, <- e_assuming0 in e_if0.
+    vm_compute in e_if0; discriminate e_if0.
+  - rewrite e_assuming2, e_assuming3 in e_if0.
+    vm_compute in e_if0; discriminate e_if0.
+  (* Unique to this proof: Showing our spec works for the base case *)
+  - rewrite transMbox_Mbox_nil_r; simpl.
+    unfold mbox_randomize_non_null_spec.
+    prove_refinement.
+    + exact a3.
+    + prove_refinement.
+Qed.
+
 
 Lemma no_errors_mbox_drop
   : refinesFun mbox_drop (fun _ _ => noErrorsSpec).
