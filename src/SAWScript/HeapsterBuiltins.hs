@@ -17,6 +17,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_init_env_from_file
        , heapster_init_env_from_file_debug
        , heapster_init_env_for_files
+       , heapster_init_env_for_files_debug
        , load_sawcore_from_file
        , heapster_get_cfg
        , heapster_typecheck_fun
@@ -337,14 +338,30 @@ heapster_init_env_from_file_gen _bic _opts dlevel mod_filename llvm_filename =
      liftIO $ tcInsertModule sc saw_mod
      mkHeapsterEnv dlevel saw_mod_name [llvm_mod]
 
-heapster_init_env_for_files :: BuiltinContext -> Options -> String -> [String] ->
-                               TopLevel HeapsterEnv
-heapster_init_env_for_files _bic _opts mod_filename llvm_filenames =
+heapster_init_env_for_files_gen :: BuiltinContext -> Options -> DebugLevel ->
+                                   String -> [String] ->
+                                   TopLevel HeapsterEnv
+heapster_init_env_for_files_gen _bic _opts dlevel mod_filename llvm_filenames =
   do llvm_mods <- mapM llvm_load_module llvm_filenames
      sc <- getSharedContext
      (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
-     mkHeapsterEnv noDebugLevel saw_mod_name llvm_mods
+     mkHeapsterEnv dlevel saw_mod_name llvm_mods
+
+heapster_init_env_for_files :: BuiltinContext -> Options -> String -> [String] ->
+                               TopLevel HeapsterEnv
+heapster_init_env_for_files _bic _opts mod_filename llvm_filenames =
+  heapster_init_env_for_files_gen _bic _opts noDebugLevel
+                                  mod_filename llvm_filenames
+
+heapster_init_env_for_files_debug :: BuiltinContext -> Options ->
+                                     String -> [String] ->
+                                     TopLevel HeapsterEnv
+heapster_init_env_for_files_debug _bic _opts mod_filename llvm_filenames =
+  heapster_init_env_for_files_gen _bic _opts traceDebugLevel
+                                  mod_filename llvm_filenames
+
+
 
 -- | Look up the CFG associated with a symbol name in a Heapster environment
 heapster_get_cfg :: BuiltinContext -> Options -> HeapsterEnv ->
