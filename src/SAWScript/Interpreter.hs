@@ -3051,6 +3051,15 @@ primitives = Map.fromList
     , " initialized with the module in the given SAW core file."
     ]
 
+  , prim "heapster_init_env_for_files_debug"
+    "String -> [String] -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env_for_files_debug)
+    Experimental
+    [ "Create a new Heapster environment from the named LLVM bitcode files,"
+    , " initialized with the module in the given SAW core file, with debug"
+    , " tracing turned on"
+    ]
+
   , prim "heapster_get_cfg"
     "HeapsterEnv -> String -> TopLevel CFG"
     (bicVal heapster_get_cfg)
