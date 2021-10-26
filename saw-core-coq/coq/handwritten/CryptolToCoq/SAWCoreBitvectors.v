@@ -226,9 +226,11 @@ Hint Rewrite bvNeg_msb : SAWCoreBitvectors_eqs.
 Lemma bvNeg_bvAdd_distrib w a b : bvNeg w (bvAdd w a b) = bvAdd w (bvNeg w a) (bvNeg w b).
 Admitted.
 
+(* FIXME This is false if a <= 0 *)
 Lemma bvslt_bvSub_r w a b : isBvslt w a b <-> isBvslt w (intToBv w 0) (bvSub w b a).
 Admitted.
 
+(* FIXME This is false if a <= 0 *)
 Lemma bvslt_bvSub_l w a b : isBvslt w a b <-> isBvslt w (bvSub w a b) (intToBv w 0).
 Admitted.
 

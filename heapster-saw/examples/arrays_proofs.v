@@ -212,3 +212,54 @@ Proof.
     repeat f_equal.
     admit. *)
 Admitted.
+
+(* We *really* need a better bitvector library, the lemmas we need are getting pretty ad-hoc *)
+
+Axiom bvSub_1_lt : forall w a, isBvslt w (intToBv w 0) a ->
+                               isBvslt w (bvSub w a (intToBv w 1)) a.
+
+Axiom isBvslt_suc_r : forall w a, isBvslt w a (bvsmax w) ->
+                                  isBvslt w a (bvAdd w a (intToBv w 1)).
+
+Axiom isBvsle_bvSub_inj_pos : forall w a b c, isBvsle w (intToBv w 0) a ->
+                                              isBvsle w (intToBv w 0) b ->
+                                              isBvsle w (intToBv w 0) c ->
+                                              isBvsle w (bvSub w a c) (bvSub w b c) <->
+                                              isBvsle w a b.
+
+Definition even_odd_sums_diff_invar half_len len i :=
+  len = bvMul 64 (intToBv 64 2) half_len /\
+  isBvslt 64 (intToBv 64 0) i.
+
+Lemma no_errors_even_odd_sums_diff :
+  refinesFun even_odd_sums_diff (fun half_len arr => noErrorsSpec).
+Proof.
+  unfold even_odd_sums_diff, even_odd_sums_diff__tuple_fun.
+  Set Printing Depth 1000.
+  prove_refinement_match_letRecM_l.
+  - exact (fun half_len len sum i arr _ _ _ _ =>
+             assumingM (even_odd_sums_diff_invar half_len len i)
+                       noErrorsSpec).
+  unfold even_odd_sums_diff_invar, noErrorsSpec.
+  time "even_odd_sums_diff" prove_refinement.
+  all: try assumption.
+  - enough (isBvult 64 (bvSub 64 a4 (intToBv 64 1)) (bvMul 64 (intToBv 64 2) a1))
+      by (rewrite H in e_maybe; discriminate e_maybe).
+    rewrite <- e_if.
+    assert (isBvsle 64 (intToBv 64 0) a4) by (apply isBvslt_to_isBvsle; eauto).
+    apply isBvult_to_isBvslt_pos; eauto.
+    + change (intToBv 64 0) with (bvSub 64 (intToBv 64 1) (intToBv 64 1)).
+      (* apply isBvsle_bvSub_inj_pos. *)
+      (* I give up I'm done messing around manually with bitvectors for now *)
+      admit.
+    + apply bvSub_1_lt.
+      rewrite e_assuming; reflexivity.
+  - (* (e_if4 is a contradiction) *)
+    admit.
+  - rewrite e_assuming.
+    change (intToBv 64 2) with (bvAdd 64 (intToBv 64 1) (intToBv 64 1)).
+    rewrite <- bvAdd_assoc.
+    rewrite <- isBvslt_suc_r; [ rewrite <- isBvslt_suc_r; [ reflexivity |] |].
+    + admit.
+    + admit.
+Admitted.

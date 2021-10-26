@@ -2529,12 +2529,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            [nuP| DistPermsCons _ _ (ValPerm_LLVMArray mb_ap) |] -> return mb_ap
            _ -> error ("translateSimplImpl: SImpl_LLVMArrayFromBlock: "
                        ++ "unexpected form of output permission")
-       (w_term, len_term, elem_tp, ap_tp_trans) <- translateLLVMArrayPerm mb_ap
+       (w_term, _, elem_tp, ap_tp_trans) <- translateLLVMArrayPerm mb_ap
        withPermStackM id
          (\(pctx :>: ptrans_cell) ->
            let arr_term =
                  applyOpenTermMulti (globalOpenTerm "Prelude.singletonBVVec")
-                 [w_term, len_term, elem_tp, transTerm1 ptrans_cell] in
+                 [w_term, elem_tp, transTerm1 ptrans_cell] in
            pctx :>:
            PTrans_Conj [APTrans_LLVMArray $ typeTransF ap_tp_trans [arr_term]])
          m
