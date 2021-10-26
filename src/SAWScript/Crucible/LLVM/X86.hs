@@ -386,11 +386,13 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
                       [ "Unable to find CFG for function at address "
                       , show $ W4.ppExpr off
                       ]
+        lookupSyscall = Macaw.unsupportedSyscalls "saw-script"
         noExtraValidityPred _ _ _ _ = return Nothing
         defaultMacawExtensions_x86_64 = Macaw.macawExtensions
           (Macaw.x86_64MacawEvalFn sfs) mvar
           (mkGlobalMap . Map.singleton 0 $ preState ^. x86GlobalBase)
           funcLookup
+          lookupSyscall
           noExtraValidityPred
         sawMacawExtensions = defaultMacawExtensions_x86_64
           { C.extensionExec = \s0 st -> case s0 of
