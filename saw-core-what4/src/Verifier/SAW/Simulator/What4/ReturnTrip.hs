@@ -908,6 +908,7 @@ evaluateExpr sym st sc cache = f []
         B.FloatToSBV{} -> floatFail
         B.FloatToReal{} -> floatFail
         B.FloatToBinary{} -> floatFail
+        B.FloatSpecialFunction{} -> floatFail
 
         B.RoundReal{} -> realFail
         B.RoundEvenReal{} -> realFail
@@ -915,14 +916,7 @@ evaluateExpr sym st sc cache = f []
         B.CeilReal{} -> realFail
         B.RealDiv{} -> realFail
         B.RealSqrt{} -> realFail
-        B.Pi{} -> realFail
-        B.RealSin{} -> realFail
-        B.RealCos{} -> realFail
-        B.RealSinh{} -> realFail
-        B.RealCosh{} -> realFail
-        B.RealExp{} -> realFail
-        B.RealLog{} -> realFail
-        B.RealATan2{} -> realFail
+        B.RealSpecialFunction{} -> realFail
 
         B.Cplx{}     -> cplxFail
         B.RealPart{} -> cplxFail
