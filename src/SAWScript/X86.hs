@@ -105,6 +105,7 @@ import Data.Macaw.Symbolic( ArchRegStruct
                           , MacawSimulatorState(..)
                           , macawExtensions
                           , unsupportedSyscalls
+                          , defaultMacawArchStmtExtensionOverride
                           )
 import qualified Data.Macaw.Symbolic as Macaw ( LookupFunctionHandle(..) )
 import Data.Macaw.Symbolic( MacawExt
@@ -474,6 +475,7 @@ doSim opts elf sfs name (globs,overs) st checkPost =
        -- The memory setup for this verifier does not have that problem, and
        -- thus does not need any additional validity predicates.
        let noExtraValidityPred _ _ _ _ = return Nothing
+       let archEvalFns = x86_64MacawEvalFn sfs defaultMacawArchStmtExtensionOverride
        let lookupSyscall = unsupportedSyscalls "saw-script"
        let ctx :: SimContext (MacawSimulatorState Sym) Sym (MacawExt X86_64)
            ctx = SimContext { _ctxSymInterface = sym
@@ -481,7 +483,7 @@ doSim opts elf sfs name (globs,overs) st checkPost =
                               , ctxIntrinsicTypes = llvmIntrinsicTypes
                               , simHandleAllocator = allocator opts
                               , printHandle = stdout
-                              , extensionImpl = macawExtensions (x86_64MacawEvalFn sfs) mvar globs (callHandler overs sym) lookupSyscall noExtraValidityPred
+                              , extensionImpl = macawExtensions archEvalFns mvar globs (callHandler overs sym) lookupSyscall noExtraValidityPred
                               , _functionBindings = FnBindings $
                                 insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) emptyHandleMap
                               , _cruciblePersonality = MacawSimulatorState
