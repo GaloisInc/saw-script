@@ -1,3 +1,4 @@
 Makefile.coq*
 .Makefile.coq*
+*.bc
 *_gen.v
