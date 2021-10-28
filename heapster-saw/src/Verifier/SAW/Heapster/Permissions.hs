@@ -32,7 +32,6 @@ import Prelude hiding (pred)
 import Data.Char (isDigit)
 import Data.Maybe
 import Data.Either
-import Data.Foldable (asum)
 import Data.List hiding (sort)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NonEmpty
@@ -274,11 +273,11 @@ ppEncList flag ds =
   (if flag then parens else brackets) $ ppCommaSep ds
 
 instance (PermPretty a, PermPretty b) => PermPretty (a,b) where
-  permPrettyM (a,b) = tupled <$> sequence [permPrettyM a, permPrettyM b]
+  permPrettyM (a,b) = ppEncList True <$> sequence [permPrettyM a, permPrettyM b]
 
 instance (PermPretty a, PermPretty b, PermPretty c) => PermPretty (a,b,c) where
   permPrettyM (a,b,c) =
-    tupled <$> sequence [permPrettyM a, permPrettyM b, permPrettyM c]
+    ppEncList True <$> sequence [permPrettyM a, permPrettyM b, permPrettyM c]
 
 instance PermPretty a => PermPretty [a] where
   permPrettyM as = ppEncList False <$> mapM permPrettyM as
@@ -902,7 +901,7 @@ instance (1 <= w, KnownNat w) => PermPretty (LLVMFieldShape w) where
       parens <$> permPrettyM p
   permPrettyM (LLVMFieldShape p) =
     do p_pp <- permPrettyM p
-       return $ tupled [pretty (intValue $ exprLLVMTypeWidth p), p_pp]
+       return $ ppEncList True [pretty (intValue $ exprLLVMTypeWidth p), p_pp]
 
 prettyPermListM :: PermExpr PermListType -> PermPPM (Doc ann)
 prettyPermListM PExpr_PermListNil =
