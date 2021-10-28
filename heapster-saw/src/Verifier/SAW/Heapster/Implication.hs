@@ -4512,6 +4512,19 @@ recombinePermConj x x_ps p@(Perm_LLVMField fp)
     implDropM x (ValPerm_Conj1 p) >>>
     pure x_ps
 
+-- If p is an array read permission whose offsets match an existing array
+-- permission, drop it
+recombinePermConj x x_ps p@(Perm_LLVMArray ap)
+  | Just _ <-
+      find (\case Perm_LLVMArray ap' ->
+                    bvEq (llvmArrayOffset ap') (llvmArrayOffset ap) &&
+                    bvEq (llvmArrayLen ap') (llvmArrayLen ap)
+                  _ -> False) x_ps
+  , PExpr_Read <- llvmArrayRW ap =
+    implDropM x (ValPerm_Conj1 p) >>>
+    pure x_ps
+
+
 -- If p is an is_llvmptr permission and x_ps already contains one, drop it
 recombinePermConj x x_ps p@Perm_IsLLVMPtr
   | elem Perm_IsLLVMPtr x_ps =
@@ -5332,6 +5345,10 @@ proveVarLLVMArray_FromArray1 ::
 proveVarLLVMArray_FromArray1 x _ ap_lhs off len bs mb_ap
   | bvEq off (llvmArrayOffset ap_lhs)
   , bvEq len (llvmArrayLen ap_lhs) =
+    (if atomicPermIsCopyable (Perm_LLVMArray ap_lhs) then
+       implCopyM x (ValPerm_LLVMArray ap_lhs) >>>
+       recombinePerm x (ValPerm_LLVMArray ap_lhs)
+     else return ()) >>>
     proveVarLLVMArray_FromArray2 x ap_lhs len bs mb_ap
 
 -- If ap could extend beyond ap_lhs and there is an atomic permission for x
