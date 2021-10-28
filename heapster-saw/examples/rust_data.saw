@@ -233,6 +233,9 @@ heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
 // <str as alloc::string::ToString>::to_string
 to_string_str <- heapster_find_symbol env
     "$LT$str$u20$as$u20$alloc..string..ToString$GT$9to_string";
+heapster_assume_fun_rename_prim env to_string_str "to_string_str"
+  "<'a> fn (&'a str) -> String";
+
 // NOTE: this is the more incorrect version, with no lifetime argument and no shapes
 //heapster_assume_fun_rename env to_string_str "to_string_str"
 //  "(len:bv 64). arg0:memblock(W,0,24,emptysh),
@@ -247,16 +250,16 @@ to_string_str <- heapster_find_symbol env
 //    \           BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #()) len (str, len, ()))";
 
 // NOTE: this is the incorrect version, with no lifetime argument
-heapster_assume_fun_rename env to_string_str "to_string_str"
-  "(len:bv 64). arg0:memblock(W,0,24,emptysh), \
-              \ arg1:array(R,0,<len,*1,fieldsh(8,int8<>)), \
-              \ arg2:eq(llvmword(len)) -o \
-              \ arg0:memblock(W,0,24,String<>)"
-  "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len (Vec 8 Bool)) -> \
-    \ returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> \
-    \           BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #())) \
-    \         (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> \
-    \           BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #()) len (str, len, ()))";
+// heapster_assume_fun_rename env to_string_str "to_string_str"
+//   "(len:bv 64). arg0:memblock(W,0,24,emptysh), \
+//               \ arg1:array(R,0,<len,*1,fieldsh(8,int8<>)), \
+//               \ arg2:eq(llvmword(len)) -o \
+//               \ arg0:memblock(W,0,24,String<>)"
+//   "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len (Vec 8 Bool)) -> \
+//     \ returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> \
+//     \           BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #())) \
+//     \         (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> \
+//     \           BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #()) len (str, len, ()))";
 
 // FIXME: this is the correct version, with a lifetime argument
 //heapster_assume_fun_rename env to_string_str "to_string_str"
@@ -291,8 +294,8 @@ heapster_assume_fun_rename_prim env hashmap_u64_u64_insert_sym "hashmap_u64_u64_
 // String::deref
 string_deref <- heapster_find_trait_method_symbol env
   "core::ops::deref::Deref::deref<String>";
-heapster_assume_fun_rename_prim env string_deref "string_deref"
-  "<'a> fn (&'a String) -> &'a str";
+//heapster_assume_fun_rename_prim env string_deref "string_deref"
+//  "<'a> fn (&'a String) -> &'a str";
 
 // String::fmt
 string_fmt <- heapster_find_trait_method_symbol env
@@ -450,22 +453,14 @@ list64_is_empty_sym <- heapster_find_symbol env "15list64_is_empty";
 heapster_typecheck_fun_rename env list_is_empty_sym "list64_is_empty"
   "<'a> fn (l: &'a List64<>) -> bool";
 
+hash_map_insert_gt_to_le_sym <- heapster_find_symbol env "hash_map_insert_gt_to_le";
+heapster_typecheck_fun_rename
+  env hash_map_insert_gt_to_le_sym
+  "hash_map_insert_gt_to_le"
+  "<'a> fn (m: &'a mut HashMap<u64,u64>, x:u64, y:u64) -> ()";
+
 // StrStruct::new
 str_struct_new <- heapster_find_symbol env "9StrStruct3new";
-
-// FIXME: this is the simplified version, that returns ptr permissions
-//heapster_typecheck_fun_rename env str_struct_new "str_struct_new"
-//  "(len:bv 64). arg0:memblock(W,0,24,emptysh), \
-//              \ arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), \
-//              \ arg2:eq(llvmword(len)) -o \
-//              \ arg0:exists len':bv 64. ptr((W,0) |-> array(0,<len',*1,[(R,0,8) |-> int8<>])) * \
-//              \\     ptr((W,8) |-> int64<>) * ptr((W,16) |-> eq(llvmword(len')))";
-
-// FIXME: this is the correct version, with the String shape
-//heapster_typecheck_fun_rename env str_struct_new "str_struct_new"
-//    "(len:bv 64).arg0:memblock(W,0,24,emptysh), \
-//               \ arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), \
-//               \ arg2:eq(llvmword(len)) -o arg0:memblock(W,0,24,String<>)";
 heapster_typecheck_fun_rename env str_struct_new "str_struct_new"
   "<'a> fn (name:&'a str) -> StrStruct<>";
 
