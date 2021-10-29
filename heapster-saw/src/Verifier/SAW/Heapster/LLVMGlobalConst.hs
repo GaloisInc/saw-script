@@ -14,6 +14,7 @@ import Data.Bits
 import Data.List
 import Control.Monad.Reader
 import GHC.TypeLits
+import qualified Data.BitVector.Sized as BV
 import qualified Text.PrettyPrint.HughesPJ as PPHPJ
 
 import qualified Text.LLVM.AST as L
@@ -23,11 +24,15 @@ import Data.Binding.Hobbits hiding (sym)
 
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Some
+import Data.Parameterized.Pair
 
 import Lang.Crucible.Types
+import Lang.Crucible.LLVM.DataLayout
 import Lang.Crucible.LLVM.MemModel
+
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Heapster.Permissions
+
 
 -- | Generate a SAW core term for a bitvector literal whose length is given by
 -- the first integer and whose value is given by the second
@@ -48,17 +53,23 @@ bvVecValueOpenTerm w tp ts def_tm =
    def_tm, natOpenTerm (natValue w),
    bvLitOfIntOpenTerm (intValue w) (fromIntegral $ length ts)]
 
+-- | The information needed to translate an LLVM global to Heapster
+data LLVMTransInfo = LLVMTransInfo {
+  llvmTransInfoEnv :: PermEnv,
+  llvmTransInfoEndianness :: EndianForm,
+  llvmTransInfoDebugLevel :: DebugLevel }
+
 -- | The monad for translating LLVM globals to Heapster
-type LLVMTransM = ReaderT (PermEnv, DebugLevel) Maybe
+type LLVMTransM = ReaderT LLVMTransInfo Maybe
 
 -- | Run the 'LLVMTransM' monad
-runLLVMTransM :: LLVMTransM a -> (PermEnv, DebugLevel) -> Maybe a
+runLLVMTransM :: LLVMTransM a -> LLVMTransInfo -> Maybe a
 runLLVMTransM = runReaderT
 
 -- | Use 'debugTrace' to output a string message and then call 'mzero'
 traceAndZeroM :: String -> LLVMTransM a
 traceAndZeroM msg =
-  do (_,dlevel) <- ask
+  do dlevel <- llvmTransInfoDebugLevel <$> ask
      debugTrace dlevel msg mzero
 
 -- | Helper function to pretty-print the value of a global
@@ -78,7 +89,7 @@ translateLLVMValue w tp@(L.PrimType (L.Integer n)) (L.ValInteger i) =
   translateLLVMType w tp >>= \(sh,_) ->
   return (sh, bvLitOfIntOpenTerm (fromIntegral n) i)
 translateLLVMValue w _ (L.ValSymbol sym) =
-  do (env,_) <- ask
+  do env <- llvmTransInfoEnv <$> ask
      -- (p, ts) <- lift (lookupGlobalSymbol env (GlobalSymbol sym) w)
      (p, t) <- case (lookupGlobalSymbol env (GlobalSymbol sym) w) of
        Just (p,[t]) -> return (p,t)
@@ -106,16 +117,26 @@ translateLLVMValue w _ (L.ValArray tp elems) =
 translateLLVMValue w _ (L.ValPackedStruct elems) =
   mapM (translateLLVMTypedValue w) elems >>= \(unzip -> (shs,ts)) ->
   return (foldr PExpr_SeqShape PExpr_EmptyShape shs, tupleOpenTerm ts)
+translateLLVMValue _ _ (L.ValString []) = mzero
+translateLLVMValue _ _ (L.ValString bytes) =
+  do endianness <- llvmTransInfoEndianness <$> ask
+     let bv_fun =
+           case endianness of
+             BigEndian -> BV.bytesBE
+             LittleEndian -> BV.bytesLE
+     let field_sh = case bv_fun bytes of
+           Pair sz bv
+             | Left leq_proof <- decideLeq (knownNat @1) sz ->
+               withKnownNat sz $ withLeqProof leq_proof $
+               LLVMFieldShape $ ValPerm_Eq $ PExpr_LLVMWord $ bvBV bv
+           Pair _ _ -> error "translateLLVMValue: unexpected zero-sized bitvector"
+     return (PExpr_FieldShape field_sh, unitOpenTerm)
+
+{-
 translateLLVMValue w tp (L.ValString bytes) =
   translateLLVMValue w tp (L.ValArray
                            (L.PrimType (L.Integer 8))
                            (map (L.ValInteger . toInteger) bytes))
-  {-
-  return (PExpr_ArrayShape (bvInt $ fromIntegral $ length bytes) 1
-          [LLVMFieldShape (ValPerm_Exists $ nu $ \(bv :: Name (BVType 8)) ->
-                            ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var bv)],
-          [arrayValueOpenTerm (bvTypeOpenTerm (8::Int)) $
-           map (\b -> bvLitOpenTerm $ map (testBit b) [7,6..0]) bytes])
 -}
 translateLLVMValue w _ (L.ValConstExpr ce) =
   translateLLVMConstExpr w ce
@@ -190,10 +211,13 @@ llvmZeroInitValue tp =
 
 -- | Add an LLVM global constant to a 'PermEnv', if the global has a type and
 -- value we can translate to Heapster, otherwise silently ignore it
-permEnvAddGlobalConst :: (1 <= w, KnownNat w) => DebugLevel -> NatRepr w ->
-                         PermEnv -> L.Global -> PermEnv
-permEnvAddGlobalConst dlevel w env global =
+permEnvAddGlobalConst :: (1 <= w, KnownNat w) => DebugLevel -> EndianForm ->
+                         NatRepr w -> PermEnv -> L.Global -> PermEnv
+permEnvAddGlobalConst dlevel endianness w env global =
   let sym = show (L.globalSym global) in
+  let trans_info = LLVMTransInfo { llvmTransInfoEnv = env,
+                                   llvmTransInfoEndianness = endianness,
+                                   llvmTransInfoDebugLevel = dlevel } in
   debugTrace dlevel ("Global: " ++ sym ++ "; value =\n" ++
                      maybe "None" ppLLVMValue
                      (L.globalValue global)) $
@@ -201,7 +225,7 @@ permEnvAddGlobalConst dlevel w env global =
   (\x -> case x of
       Just _ -> debugTrace dlevel (sym ++ " translated") x
       Nothing -> debugTrace dlevel (sym ++ " not translated") x) $
-  flip runLLVMTransM (env,dlevel) $
+  flip runLLVMTransM trans_info $
   do val <- lift $ L.globalValue global
      (sh, t) <- translateLLVMValue w (L.globalType global) val
      let p = ValPerm_LLVMBlock $ llvmReadBlockOfShape sh

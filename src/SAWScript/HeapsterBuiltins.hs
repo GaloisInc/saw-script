@@ -266,13 +266,17 @@ mkHeapsterEnv :: DebugLevel -> ModuleName -> [Some LLVMModule] ->
                  TopLevel HeapsterEnv
 mkHeapsterEnv dlevel saw_mod_name llvm_mods@(Some first_mod:_) =
   do let w = llvmModuleArchReprWidth first_mod
+     let endianness =
+           llvmDataLayout (modTrans first_mod ^. transContext ^. llvmTypeCtx)
+           ^. intLayout
      leq_proof <- case decideLeq (knownNat @1) w of
        Left pf -> return pf
        Right _ -> fail "LLVM arch width is 0!"
      let globals = concatMap (\(Some lm) -> L.modGlobals $ modAST lm) llvm_mods
          env =
            withKnownNat w $ withLeqProof leq_proof $
-           foldl (permEnvAddGlobalConst dlevel w) heapster_default_env globals
+           foldl (permEnvAddGlobalConst dlevel endianness w)
+           heapster_default_env globals
      env_ref <- liftIO $ newIORef env
      dlevel_ref <- liftIO $ newIORef dlevel
      return $ HeapsterEnv {
