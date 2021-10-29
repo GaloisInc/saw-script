@@ -4308,6 +4308,17 @@ llvmFieldsPermOfSize :: (1 <= w, KnownNat w) => f w -> Integer ->
                         ValuePerm (LLVMPointerType w)
 llvmFieldsPermOfSize w n = ValPerm_Conj $ llvmFieldsOfSize w n
 
+-- | Return a memblock permission with empty shape of given size
+llvmEmptyBlockPermOfSize :: (1 <= w, KnownNat w) => f w -> Integer ->
+                        ValuePerm (LLVMPointerType w)
+llvmEmptyBlockPermOfSize _ n = ValPerm_LLVMBlock $
+    LLVMBlockPerm { llvmBlockRW       = PExpr_RWModality Write
+                  , llvmBlockLifetime = PExpr_Always
+                  , llvmBlockOffset   = bvInt 0
+                  , llvmBlockLen      = bvInt n
+                  , llvmBlockShape    = PExpr_EmptyShape
+                  }
+
 -- | Create an LLVM shape for a single byte with @true@ permissions
 llvmByteTrueShape :: (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w)
 llvmByteTrueShape =

@@ -4080,14 +4080,16 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
         w :: Proxy w = Proxy in
     withKnownNat ?ptrWidth $
     inExtTransM ETrans_LLVM $
-    translateClosed (llvmFieldsPermOfSize w sz) >>= \ptrans_tp ->
+    translateClosed (llvmEmptyBlockPermOfSize w sz) >>= \ptrans_tp ->
     withPermStackM (:>: Member_Base)
     (\(pctx :>: _) ->
       pctx
       :>: PTrans_Conj [APTrans_LLVMFrame $
                        flip nuMultiWithElim1 (extMb mb_fperm) $
                        \(_ :>: ret) fperm -> (PExpr_Var ret, sz):fperm]
-      :>: typeTransF ptrans_tp [])
+      -- the unitOpenTerm argument is because ptrans_tp is a memblock permission
+      -- with an empty shape; the empty shape expects a unit argument
+      :>: typeTransF ptrans_tp [unitOpenTerm])
     m
 
   [nuMP| TypedLLVMCreateFrame |] ->

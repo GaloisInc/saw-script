@@ -501,16 +501,14 @@ data TypedLLVMStmt ret ps_in ps_out where
       (ps :> LLVMPointerType w :++: ps_l)
       (ps :> LLVMPointerType w :++: ps_l)
 
-  -- | Allocate an object of the given size on the given LLVM frame, broken into
-  -- word-sized fields followed by a field at the end with the remaining size:
+  -- | Allocate an object of the given size on the given LLVM frame, described
+  -- as a memory block with empty shape:
   --
   -- Type:
   -- > fp:frame(ps) -o fp:frame(ps,(ret,i)),
-  -- >                 ret:ptr((W,0) |-> true, (W,M) |-> true, (W,2*M) |-> true,
-  -- >                         ..., (w, (i-1)*M, 8*(sz-(i-1)*M)) |-> true)
+  -- >                 ret:memblock(W,0,sz,emptysh)
   --
-  -- where @sz@ is the number of bytes allocated, @M@ is the machine word size in
-  -- bytes, and @i@ is the greatest natural number such that @(i-1)*M < sz@
+  -- where @sz@ is the number of bytes allocated
   TypedLLVMAlloca ::
     HasPtrWidth w =>
     !(TypedReg (LLVMFrameType w)) ->
@@ -683,7 +681,7 @@ typedLLVMStmtOut (TypedLLVMAlloca
                   (TypedReg f) (fperms :: LLVMFramePerm w) len) ret =
   withKnownNat ?ptrWidth $
   distPerms2 f (ValPerm_Conj [Perm_LLVMFrame ((PExpr_Var ret, len):fperms)])
-  ret (llvmFieldsPermOfSize Proxy len)
+  ret (llvmEmptyBlockPermOfSize Proxy len)
 typedLLVMStmtOut TypedLLVMCreateFrame ret =
   withKnownNat ?ptrWidth $
   distPerms1 ret $ ValPerm_Conj [Perm_LLVMFrame []]
