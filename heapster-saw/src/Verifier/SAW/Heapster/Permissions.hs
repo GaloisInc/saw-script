@@ -951,31 +951,6 @@ zeroOfType _ = error "zeroOfType"
 varFactor :: (1 <= w, KnownNat w) => ExprVar (BVType w) -> BVFactor w
 varFactor = BVFactor $ BV.one knownNat
 
--- | Normalize a bitvector expression @1*x + 0@ to just @x@
-bvNormVar :: PermExpr (BVType w) -> PermExpr (BVType w)
-bvNormVar (PExpr_BV [BVFactor i x] off)
-  | i == BV.one knownNat && off == BV.zero knownNat = PExpr_Var x
-bvNormVar e = e
-
--- | Normalize a bitvector expression, so that every variable has at most one
--- factor and the factors are sorted by variable name. NOTE: we shouldn't
--- actually have to call this if we always construct our expressions with the
--- combinators below.
--- FIXME: This above note is wrong, we should either actually use this function
--- in the combinators below or remove the note
-bvNormalize :: PermExpr (BVType w) -> PermExpr (BVType w)
-bvNormalize e@(PExpr_Var _) = e
-bvNormalize (PExpr_BV factors off) =
-  PExpr_BV
-  (norm (sortBy (\(BVFactor _ x) (BVFactor _ y) -> compare x y) factors))
-  off
-  where
-    norm [] = []
-    norm ((BVFactor (BV.BV 0) _) : factors') = norm factors'
-    norm ((BVFactor i1 x1) : (BVFactor i2 x2) : factors')
-      | x1 == x2 = norm ((BVFactor (BV.add knownNat i1 i2) x1) : factors')
-    norm (f : factors') = f : norm factors'
-
 -- | Merge two normalized / sorted lists of 'BVFactor's
 bvMergeFactors :: [BVFactor w] -> [BVFactor w] -> [BVFactor w]
 bvMergeFactors fs1 fs2 =
@@ -1010,9 +985,6 @@ bvMatchConstInt = fmap BV.asUnsigned . bvMatchConst
 
 -- | Normalize a bitvector expression to a canonical form. Currently this just
 -- means converting @1*x+0@ to @x@.
--- FIXME: This function does the same thing as 'bvNormVar' but has a less
--- descriptive name - perhaps we should remove it and replace its usages with
--- calls to 'bvNormVar'?
 normalizeBVExpr :: PermExpr (BVType w) -> PermExpr (BVType w)
 normalizeBVExpr (PExpr_BV [BVFactor (BV.BV 1) x] (BV.BV 0)) = PExpr_Var x
 normalizeBVExpr e = e
@@ -1314,14 +1286,14 @@ bvFactorExpr i         x = PExpr_BV [BVFactor i x] (BV.zero knownNat)
 bvAdd :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> PermExpr (BVType w) ->
          PermExpr (BVType w)
 bvAdd (bvMatch -> (factors1, const1)) (bvMatch -> (factors2, const2)) =
-  bvNormVar $
+  normalizeBVExpr $
   PExpr_BV (bvMergeFactors factors1 factors2) (BV.add knownNat const1 const2)
 
 -- | Multiply a bitvector expression by a bitvector
 bvMultBV :: (1 <= w, KnownNat w) => BV.BV w -> PermExpr (BVType w) ->
             PermExpr (BVType w)
 bvMultBV i_bv (bvMatch -> (factors, off)) =
-  bvNormVar $
+  normalizeBVExpr $
   PExpr_BV (map (\(BVFactor j x) ->
                   BVFactor (BV.mul knownNat i_bv j) x) factors)
   (BV.mul knownNat i_bv off)
@@ -1349,7 +1321,7 @@ bvDiv :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> Integer ->
          PermExpr (BVType w)
 bvDiv (bvMatch -> (factors, off)) n =
   let n_bv = BV.mkBV knownNat n in
-  bvNormVar $
+  normalizeBVExpr $
   PExpr_BV (mapMaybe (\(BVFactor i x) ->
                        if BV.urem i n_bv == BV.zero knownNat then
                          Just (BVFactor (BV.uquot i n_bv) x)
@@ -1362,7 +1334,7 @@ bvMod :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> Integer ->
          PermExpr (BVType w)
 bvMod (bvMatch -> (factors, off)) n =
   let n_bv = BV.mkBV knownNat n in
-  bvNormVar $
+  normalizeBVExpr $
   PExpr_BV (mapMaybe (\f@(BVFactor i _) ->
                        if BV.urem i n_bv /= BV.zero knownNat
                        then Just f else Nothing) factors)
