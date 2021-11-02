@@ -282,21 +282,16 @@ widenExpr' tp e1@(asVarOffset -> Just (x1, off1)) e2@(asVarOffset ->
        _ | x1 == x2 && offsetsEq off1 off2 ->
            visitM x1 >> return e1
 
-       -- If we have the same variable but different offsets, e.g., if we are
-       -- widening x &+ bv1 and x &+ bv2, then bind a fresh variable bv for the
-       -- offset and return x &+ bv. Note that we cannot have the same variable
+       -- If we have the same variable but different offsets, we widen them
+       -- using 'widenOffsets'. Note that we cannot have the same variable
        -- x on both sides unless they have been visited, so we can safely
        -- ignore the isv1 and isv2 flags. The complexity of having these two
        -- cases is to find the BVType of one of off1 or off2; because the
        -- previous case did not match, we know at least one is LLVMPermOffset.
        _ | x1 == x2, LLVMPermOffset (exprType -> off_tp) <- off1 ->
-           do off_var <- bindFreshVar off_tp
-              visitM off_var
-              return $ PExpr_LLVMOffset x1 (PExpr_Var off_var)
+           PExpr_LLVMOffset x1 <$> widenOffsets off_tp off1 off2
        _ | x1 == x2, LLVMPermOffset (exprType -> off_tp) <- off2 ->
-           do off_var <- bindFreshVar off_tp
-              visitM off_var
-              return $ PExpr_LLVMOffset x1 (PExpr_Var off_var)
+           PExpr_LLVMOffset x1 <$> widenOffsets off_tp off1 off2
 
        -- If a variable has an eq(e) permission, replace it with e and recurse
        (ValPerm_Eq e1', _, _, _) ->
@@ -451,6 +446,40 @@ widenExprs :: CruCtx tps -> PermExprs tps -> PermExprs tps ->
 widenExprs _ MNil MNil = return MNil
 widenExprs (CruCtxCons tps tp) (es1 :>: e1) (es2 :>: e2) =
   (:>:) <$> widenExprs tps es1 es2 <*> widenExpr tp e1 e2
+
+
+-- | Widen two bitvector offsets by trying to widen them additively
+-- ('widenBVsAddy'), or if that is not possible, by widening them 
+-- multiplicatively ('widenBVsMulty')
+widenOffsets :: (1 <= w, KnownNat w) => TypeRepr (BVType w) ->
+                PermOffset (LLVMPointerType w) ->
+                PermOffset (LLVMPointerType w) ->
+                WideningM (PermExpr (BVType w))
+widenOffsets tp (llvmPermOffsetExpr -> off1) (llvmPermOffsetExpr -> off2) =
+  widenBVsAddy tp off1 off2 >>= maybe (widenBVsMulty tp off1 off2) return
+
+-- | Widen two bitvectors @bv1@ and @bv2@ additively, i.e. bind a fresh
+-- variable @bv@ and return @(bv2 - bv1) * bv + bv1@, assuming @bv2 - bv1@
+-- is a constant
+widenBVsAddy :: (1 <= w, KnownNat w) => TypeRepr (BVType w) ->
+                PermExpr (BVType w) -> PermExpr (BVType w) ->
+                WideningM (Maybe (PermExpr (BVType w)))
+widenBVsAddy tp bv1 bv2 =
+  case bvMatchConst (bvSub bv2 bv1) of
+    Just d -> do x <- bindFreshVar tp
+                 visitM x
+                 return $ Just (bvAdd (bvFactorExpr d x) bv1)
+    _ -> return Nothing
+
+-- | Widen two bitvectors @bv1@ and @bv2@ multiplicatively, i.e. bind a fresh
+-- variable @bv@ and return @(bvGCD bv1 bv2) * bv@
+widenBVsMulty :: (1 <= w, KnownNat w) => TypeRepr (BVType w) ->
+                 PermExpr (BVType w) -> PermExpr (BVType w) ->
+                 WideningM (PermExpr (BVType w))
+widenBVsMulty tp bv1 bv2 =
+  do x <- bindFreshVar tp
+     visitM x
+     return $ bvFactorExpr (bvGCD bv1 bv2) x
 
 
 -- | Take two block permissions @bp1@ and @bp2@ with the same offset and use
