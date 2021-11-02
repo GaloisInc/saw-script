@@ -102,3 +102,23 @@ uint64_t sum_inc_ptr(const uint8_t *arr, size_t len) {
   }
   return sum;
 }
+
+/* Like the above, but uses an array of int64_t */
+uint64_t sum_inc_ptr_64(const uint64_t *arr, size_t len) {
+  uint64_t sum = 0;
+  while (len--) {
+    sum += arr[0];
+    arr += 8;
+  }
+  return sum;
+}
+
+/* For an array of even length, returns the sum of the even components of the
+   array minus the sum of the odd components of an array */
+uint64_t even_odd_sums_diff(const uint64_t *arr, size_t len) {
+  uint64_t sum = 0;
+  for (uint64_t i = 1; i < len; i += 2) {
+    sum += arr[i-1] - arr[i];
+  }
+  return sum;
+}
