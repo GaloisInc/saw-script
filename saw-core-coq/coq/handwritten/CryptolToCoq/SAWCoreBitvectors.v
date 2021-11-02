@@ -13,11 +13,19 @@ From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Import CompMExtra.
 
 Import SAWCorePrelude.
+Import VectorNotations.
 
 (* A duplicate from `Program.Equality`, because importing that
    module directly gives us a conflict with the `~=` notation... *)
 Tactic Notation "dependent" "destruction" ident(H) :=
   Equality.do_depelim' ltac:(fun hyp => idtac) ltac:(fun hyp => Equality.do_case hyp) H.
+
+(* like the `easy` tactic, but tries out branches *)
+Ltac easy_branch :=
+  match goal with
+  | |- _ \/ _ => (left; easy_branch) || (right; easy_branch)
+  | |- _ => easy
+  end.
 
 Create HintDb SAWCoreBitvectors_eqs.
 
@@ -110,144 +118,212 @@ Definition bvumax w : bitvector w := gen w _ (fun _ => true).
 Definition bvumin w : bitvector w := gen w _ (fun _ => false).
 
 
+(* FIXME For now, we say a bitvector lemma holds if it holds up to 3 or 4 bits.
+         This is better than just having `Admitted`s for every lemma, but
+         eventually this should be replaced with proper proofs. *)
+
+Axiom holds_up_to_3 : forall (P : nat -> Prop),
+                      P 0 -> P 1 -> P 2 -> P 3 ->
+                      forall n, P n.
+
+Axiom holds_up_to_4 : forall (P : nat -> Prop),
+                      P 0 -> P 1 -> P 2 -> P 3 -> P 4 ->
+                      forall n, P n.
+
+(* A tactic which tries to prove that the current goal holds up to a certain
+   number of bits (see `holds_for_bits_up_to_3` and `holds_for_bits_up_to_4`) *)
+Ltac holds_for_bits_up_to n axiom :=
+  repeat match goal with
+         | H : _ |- _ => revert H
+         end;
+  match goal with
+  | |- ?G =>
+    compute;
+    match goal with
+    | |- forall w, @?P w =>
+      idtac "Warning: Admitting the bitvector proposition below if it holds for" w "<" n;
+      idtac G;
+      apply (axiom P); intros;
+      (* completely destruct every bitvector argument, then try `easy` *)
+      repeat match goal with
+             | a : VectorDef.t bool _  |- _ => repeat dependent destruction a
+             | b : bool |- _ => destruct b
+             end; try easy_branch
+    end
+  end.
+
+(* The tactics to use to "prove" a bitvector lemma by showing it holds up to
+   either 3 or 4 bits. Only use the former if the latter is too slow. *)
+Ltac holds_for_bits_up_to_3 := holds_for_bits_up_to 3 holds_up_to_3.
+Ltac holds_for_bits_up_to_4 := holds_for_bits_up_to 4 holds_up_to_4.
+
+
 (** Bitvector inquality propositions, and their preorders **)
 
 Definition isBvsle w a b : Prop := bvsle w a b = true.
 Definition isBvsle_def w a b : bvsle w a b = true <-> isBvsle w a b := reflexivity _.
-Definition isBvsle_def_opp w a b : bvslt w a b = false <-> isBvsle w b a. Admitted.
-Instance PreOrder_isBvsle w : PreOrder (isBvsle w). Admitted.
+Definition isBvsle_def_opp w a b : bvslt w a b = false <-> isBvsle w b a.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvslt w a b : Prop := bvslt w a b = true.
 Definition isBvslt_def w a b : bvslt w a b = true <-> isBvslt w a b := reflexivity _.
-Definition isBvslt_def_opp w a b : bvsle w a b = false <-> isBvslt w b a. Admitted.
-Instance PreOrder_isBvslt w : PreOrder (isBvslt w). Admitted.
+Definition isBvslt_def_opp w a b : bvsle w a b = false <-> isBvslt w b a.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvule w a b : Prop := bvule w a b = true.
 Definition isBvule_def w a b : bvule w a b = true <-> isBvule w a b := reflexivity _.
-Definition isBvule_def_opp w a b : bvult w a b = false <-> isBvule w b a. Admitted.
-Instance PreOrder_isBvule w : PreOrder (isBvule w). Admitted.
+Definition isBvule_def_opp w a b : bvult w a b = false <-> isBvule w b a.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvult w a b : Prop := bvult w a b = true.
 Definition isBvult_def w a b : bvult w a b = true <-> isBvult w a b := reflexivity _.
-Definition isBvult_def_opp w a b : bvule w a b = false <-> isBvult w b a. Admitted.
-Instance PreOrder_isBvult w : PreOrder (isBvult w). Admitted.
+Definition isBvult_def_opp w a b : bvule w a b = false <-> isBvult w b a.
+Proof. holds_for_bits_up_to_4. Qed.
+
+Instance Reflexive_isBvsle w : Reflexive (isBvsle w).
+Proof. holds_for_bits_up_to_4. Qed.
+
+Instance Reflexive_isBvule w : Reflexive (isBvule w).
+Proof. holds_for_bits_up_to_4. Qed.
+
+Instance Transitive_isBvsle w : Transitive (isBvsle w).
+Proof. holds_for_bits_up_to_3. Qed.
+
+Instance Transitive_isBvslt w : Transitive (isBvslt w).
+Proof. holds_for_bits_up_to_3. Qed.
+
+Instance Transitive_isBvule w : Transitive (isBvule w).
+Proof. holds_for_bits_up_to_3. Qed.
+
+Instance Transitive_isBvult w : Transitive (isBvult w).
+Proof. holds_for_bits_up_to_3. Qed.
 
 
 (** Converting between bitvector inqualities **)
 
-Definition isBvslt_to_isBvsle w a b : isBvslt w a b -> isBvsle w a b. Admitted.
-Instance Proper_isBvslt_isBvsle w : Proper (isBvsle w --> isBvsle w ==> impl) (isBvslt w). Admitted.
+Definition isBvslt_to_isBvsle w a b : isBvslt w a b -> isBvsle w a b.
+Proof. holds_for_bits_up_to_4. Qed.
+Instance Proper_isBvslt_isBvsle w :
+  Proper (isBvsle w --> isBvsle w ==> impl) (isBvslt w).
+Proof. holds_for_bits_up_to_3. Qed.
 
-Definition isBvult_to_isBvule w a b : isBvult w a b -> isBvule w a b. Admitted.
-Instance Proper_isBvult_isBvule w : Proper (isBvule w --> isBvule w ==> impl) (isBvult w). Admitted.
+Definition isBvult_to_isBvule w a b : isBvult w a b -> isBvule w a b.
+Proof. holds_for_bits_up_to_4. Qed.
+Instance Proper_isBvult_isBvule w : Proper (isBvule w --> isBvule w ==> impl) (isBvult w).
+Proof. holds_for_bits_up_to_3. Qed.
 
 Definition isBvule_to_isBvult_or_eq w a b : isBvule w a b -> isBvult w a b \/ a = b.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvslt_to_isBvsle_suc w a b : isBvslt w a b ->
                                           isBvsle w (bvAdd w a (intToBv w 1)) b.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvult_to_isBvule_suc w a b : isBvult w a b ->
                                           isBvule w (bvAdd w a (intToBv w 1)) b.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvult_to_isBvslt_pos w a b : isBvsle w (intToBv w 0) a ->
                                           isBvsle w (intToBv w 0) b ->
                                           isBvult w a b <-> isBvslt w a b.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvule_to_isBvsle_pos w a b : isBvsle w (intToBv w 0) a ->
                                           isBvsle w (intToBv w 0) b ->
                                           isBvule w a b <-> isBvsle w a b.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvslt_to_bvEq_false w a b : isBvslt w a b -> bvEq w a b = false.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvult_to_bvEq_false w a b : isBvult w a b -> bvEq w a b = false.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 
 (** Other lemmas about bitvector inequalities **)
 
-Definition isBvsle_suc_r w (a : bitvector w) : isBvsle w a (bvsmax w) ->
+Definition isBvsle_suc_r w (a : bitvector w) : isBvslt w a (bvsmax w) ->
                                                isBvsle w a (bvAdd w a (intToBv w 1)).
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvslt_antirefl w a : ~ isBvslt w a a.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvule_zero_n w a : isBvule w (intToBv w 0) a.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvule_n_zero w a : isBvule w a (intToBv w 0) <-> a = intToBv w 0.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvult_n_zero w a : ~ isBvult w a (intToBv w 0).
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvsle_antisymm w a b : isBvsle w a b -> isBvsle w b a -> a = b.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 
 (** Lemmas about bitvector addition **)
 
 Lemma bvAdd_id_l w a : bvAdd w (intToBv w 0) a = a.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Lemma bvAdd_id_r w a : bvAdd w a (intToBv w 0) = a.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Hint Rewrite bvAdd_id_l bvAdd_id_r : SAWCoreBitvectors_eqs.
 
 Lemma bvAdd_comm w a b : bvAdd w a b = bvAdd w b a.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Lemma bvAdd_assoc w a b c : bvAdd w (bvAdd w a b) c = bvAdd w a (bvAdd w b c).
-Admitted.
+Proof. holds_for_bits_up_to_3. Qed.
 
 
 (** Lemmas about bitvector subtraction, negation, and sign bits **)
 
 Lemma bvSub_n_zero w a : bvSub w a (intToBv w 0) = a.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Lemma bvSub_zero_n w a : bvSub w (intToBv w 0) a = bvNeg w a.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Hint Rewrite bvSub_zero_n : SAWCoreBitvectors_eqs.
 
-Lemma bvNeg_msb w a : msb w (bvNeg (Succ w) a) = not (msb w a).
-Admitted.
+Lemma bvNeg_msb w a : isBvult (Succ w) (intToBv (Succ w) 0) a ->
+                      isBvult (Succ w) a (bvsmax (Succ w)) ->
+                      msb w (bvNeg (Succ w) a) = not (msb w a).
+Proof. holds_for_bits_up_to_4. Qed.
 
-Hint Rewrite bvNeg_msb : SAWCoreBitvectors_eqs.
+(* Hint Rewrite bvNeg_msb : SAWCoreBitvectors_eqs. *)
 
 Lemma bvNeg_bvAdd_distrib w a b : bvNeg w (bvAdd w a b) = bvAdd w (bvNeg w a) (bvNeg w b).
+Proof. holds_for_bits_up_to_3. Qed.
+
+(* FIXME What precondition do we need here? Or - is this even the right lemma
+         for loops_proofs.v? Should we just remove this? *)
+Lemma bvslt_bvSub_r w a b : isBvslt w (intToBv w 0) (bvSub w b a) -> isBvslt w a b.
 Admitted.
 
-(* FIXME This is false if a <= 0 *)
-Lemma bvslt_bvSub_r w a b : isBvslt w a b <-> isBvslt w (intToBv w 0) (bvSub w b a).
-Admitted.
-
-(* FIXME This is false if a <= 0 *)
+(* FIXME What precondition do we need here? Or - is this even the right lemma
+         for loops_proofs.v? Should we just remove this? *)
 Lemma bvslt_bvSub_l w a b : isBvslt w a b <-> isBvslt w (bvSub w a b) (intToBv w 0).
 Admitted.
 
 Lemma bvEq_bvSub_r w a b : a = b <-> intToBv w 0 = bvSub w b a.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Lemma bvEq_bvSub_l w a b : a = b <-> bvSub w a b = intToBv w 0.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Lemma bvSub_eq_bvAdd_neg w a b : bvSub w a b = bvAdd w a (bvNeg w b).
-Admitted.
+Proof. holds_for_bits_up_to_3. Qed.
 
 Lemma bvule_msb_l w a b : isBvule (Succ w) a b -> msb w a = true -> msb w b = true.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Lemma bvule_msb_r w a b : isBvule (Succ w) a b -> msb w b = false -> msb w a = false.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
+
 
 (** Lemmas about bitvector xor **)
 
@@ -292,7 +368,6 @@ Proof.
   destruct y; try solve [inversion Heqn0; clear Heqn0; subst]. injection Heqn0.
   intros. subst. clear Heqn0. cbn. apply IHn.
 Qed.
-
 
 
 (** Some general lemmas about boolean equality **)
@@ -355,7 +430,7 @@ Proof.
 Qed.
 
 Lemma bvEq_sym w a b : bvEq w a b = bvEq w b a.
-Admitted.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Lemma bvEq_eq  w a b : bvEq w a b = true <-> a = b.
 Proof.
