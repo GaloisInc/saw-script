@@ -465,7 +465,7 @@ widenBVsAddy :: (1 <= w, KnownNat w) => TypeRepr (BVType w) ->
                 PermExpr (BVType w) -> PermExpr (BVType w) ->
                 WideningM (Maybe (PermExpr (BVType w)))
 widenBVsAddy tp bv1 bv2 =
-  case bvMatchConst $ bvNormalize (bvSub bv2 bv1) of
+  case bvMatchConst (bvSub bv2 bv1) of
     Just d -> do x <- bindFreshVar tp
                  visitM x
                  return $ Just (bvAdd (bvFactorExpr d x) bv1)
