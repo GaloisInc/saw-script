@@ -120,6 +120,11 @@ withVar x tp m =
 withCtx :: [(LocalName, Term)] -> TCM a -> TCM a
 withCtx = flip (foldr (\(x,tp) -> withVar x tp))
 
+-- | Run a type-checking computation while remembering the term given
+-- TODO: fix this description
+withErrorTerm :: Term -> TCM a -> TCM a
+withErrorTerm tm m =
+  catchError m (throwError . ErrorTerm tm)
 
 -- | Run a type-checking computation @m@ and tag any error it throws with the
 -- given position, using the 'ErrorPos' constructor, unless that error is
@@ -166,6 +171,7 @@ data TCError
   | DeclError Text String
   | ErrorPos Pos TCError
   | ErrorCtx LocalName Term TCError
+  | ErrorTerm Term TCError
   | ExpectedRecursor TypedTerm
 
 
@@ -250,6 +256,11 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     local (\(ctx,_) -> (ctx, Just p)) $ helper err
   helper (ErrorCtx x _ err) =
     local (\(ctx,p) -> (x:ctx, p)) $ helper err
+  helper (ErrorTerm tm err) = do
+    info <- ppWithPos [ return ("While typechecking term: ")
+                      , ishow tm ]
+    cont <- helper err
+    return (info ++ cont)
   helper (ExpectedRecursor ttm) =
     ppWithPos [ return "Expected recursor value", ishow (typedVal ttm), ishow (typedType ttm)]
 
@@ -361,13 +372,13 @@ typeInferCompleteInCtx ctx f =
 -- Type inference for Term dispatches to type inference on TermF Term, but uses
 -- memoization to avoid repeated work
 instance TypeInfer Term where
-  typeInfer (Unshared tf) = typeInfer tf
-  typeInfer (STApp{ stAppIndex = i, stAppTermF = tf}) =
+  typeInfer t@(Unshared tf) = withErrorTerm t $ typeInfer tf
+  typeInfer t@(STApp{ stAppIndex = i, stAppTermF = tf}) =
     do table <- get
        case Map.lookup i table of
          Just x  -> return x
          Nothing ->
-           do x <- typeInfer tf
+           do x  <- withErrorTerm t $ typeInfer tf
               x' <- typeCheckWHNF x
               modify (Map.insert i x')
               return x'
