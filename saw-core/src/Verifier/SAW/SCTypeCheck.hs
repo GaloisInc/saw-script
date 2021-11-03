@@ -120,11 +120,18 @@ withVar x tp m =
 withCtx :: [(LocalName, Term)] -> TCM a -> TCM a
 withCtx = flip (foldr (\(x,tp) -> withVar x tp))
 
--- | Run a type-checking computation while remembering the term given
--- TODO: fix this description
+-- | Run a type-checking computation @m@ and tag any error it throws with the
+-- 'ErrorTerm' constructor
 withErrorTerm :: Term -> TCM a -> TCM a
-withErrorTerm tm m =
-  catchError m (throwError . ErrorTerm tm)
+withErrorTerm tm m = catchError m (throwError . ErrorTerm tm)
+
+-- | Lift @withErrorTerm@ to `TermF Term`
+withErrorTermF :: TermF Term -> TCM a -> TCM a
+withErrorTermF tm = withErrorTerm (Unshared tm)
+
+-- | Lift @withErrorTerm@ to `TermF TypedTerm`
+withErrorTypedTermF :: TermF TypedTerm -> TCM a -> TCM a
+withErrorTypedTermF tm = withErrorTermF (fmap typedVal tm)
 
 -- | Run a type-checking computation @m@ and tag any error it throws with the
 -- given position, using the 'ErrorPos' constructor, unless that error is
@@ -382,7 +389,7 @@ instance TypeInfer Term where
               x' <- typeCheckWHNF x
               modify (Map.insert i x')
               return x'
-  typeInferComplete trm = TypedTerm trm <$> typeInfer trm
+  typeInferComplete trm = TypedTerm trm <$> withErrorTerm trm (typeInfer trm)
 
 -- Type inference for TermF Term dispatches to that for TermF TypedTerm by
 -- calling inference on all the sub-components and extending the context inside
@@ -411,7 +418,7 @@ instance TypeInfer (TermF Term) where
     return $ ecType ec
   typeInfer t = typeInfer =<< mapM typeInferComplete t
   typeInferComplete tf =
-    TypedTerm <$> liftTCM scTermF tf <*> typeInfer tf
+    TypedTerm <$> liftTCM scTermF tf <*> withErrorTermF tf (typeInfer tf)
 
 -- Type inference for FlatTermF Term dispatches to that for FlatTermF TypedTerm,
 -- with special cases for primitives and constants to avoid re-type-checking
@@ -421,7 +428,8 @@ instance TypeInfer (FlatTermF Term) where
   typeInfer (ExtCns ec) = return $ ecType ec
   typeInfer t = typeInfer =<< mapM typeInferComplete t
   typeInferComplete ftf =
-    TypedTerm <$> liftTCM scFlatTermF ftf <*> typeInfer ftf
+    TypedTerm <$> liftTCM scFlatTermF ftf
+              <*> withErrorTermF (FTermF ftf) (typeInfer ftf)
 
 
 -- Type inference for TermF TypedTerm is the main workhorse. Intuitively, this
@@ -464,7 +472,8 @@ instance TypeInfer (TermF TypedTerm) where
        return req_tp
 
   typeInferComplete tf =
-    TypedTerm <$> liftTCM scTermF (fmap typedVal tf) <*> typeInfer tf
+    TypedTerm <$> liftTCM scTermF (fmap typedVal tf)
+              <*> withErrorTypedTermF tf (typeInfer tf)
 
 
 -- Type inference for FlatTermF TypedTerm is the main workhorse for flat
@@ -546,7 +555,8 @@ instance TypeInfer (FlatTermF TypedTerm) where
     typeCheckWHNF $ typedVal $ ecType ec
 
   typeInferComplete ftf =
-    TypedTerm <$> liftTCM scFlatTermF (fmap typedVal ftf) <*> typeInfer ftf
+    TypedTerm <$> liftTCM scFlatTermF (fmap typedVal ftf)
+              <*> withErrorTypedTermF (FTermF ftf) (typeInfer ftf)
 
 -- | Check that @fun_tp=Pi x a b@ and that @arg@ has type @a@, and return the
 -- result of substituting @arg@ for @x@ in the result type @b@, i.e.,
