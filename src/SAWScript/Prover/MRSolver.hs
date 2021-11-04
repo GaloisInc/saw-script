@@ -1282,6 +1282,11 @@ mrUnfoldFunBind f args mark g =
        <*> return g
 -}
 
+{-
+FIXME HERE NOW: maybe each FunName should stipulate whether it is recursive or
+not, so that mrRefines can unfold the non-recursive ones early but wait on
+handling the recursive ones
+-}
 
 ----------------------------------------------------------------------
 -- * Mr Solver Himself (He Identifies as Male)
