@@ -359,3 +359,11 @@ Global Opaque bvsle.
 
 Definition bvsge (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   bvsle n b a.
+
+Definition bvAddOverflow n (a : bitvector n) (b : bitvector n) : Bool :=
+  let c := bvAdd n a b
+   in ((sign a && sign b && ~~ sign c) || (~~ sign a && ~~ sign b && sign c))%bool.
+
+Definition bvSubOverflow n (a : bitvector n) (b : bitvector n) : Bool :=
+  let c := bvSub n a b
+   in ((sign a && ~~ sign b && ~~ sign c) || (~~ sign a && sign b && sign c))%bool.

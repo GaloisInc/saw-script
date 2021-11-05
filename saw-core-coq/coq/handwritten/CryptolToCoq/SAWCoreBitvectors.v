@@ -242,8 +242,20 @@ Proof. holds_for_bits_up_to_4. Qed.
 
 (** Other lemmas about bitvector inequalities **)
 
-Definition isBvsle_suc_r w (a : bitvector w) : isBvslt w a (bvsmax w) ->
-                                               isBvsle w a (bvAdd w a (intToBv w 1)).
+Definition isBvslt_pred_l w a : isBvslt w (bvsmin w) a ->
+                                isBvslt w (bvSub w a (intToBv w 1)) a.
+Proof. holds_for_bits_up_to_4. Qed.
+
+Definition isBvsle_pred_l w a : isBvslt w (bvsmin w) a ->
+                                isBvsle w (bvSub w a (intToBv w 1)) a.
+Proof. holds_for_bits_up_to_4. Qed.
+
+Definition isBvsle_suc_r w a : isBvslt w a (bvsmax w) ->
+                               isBvsle w a (bvAdd w a (intToBv w 1)).
+Proof. holds_for_bits_up_to_4. Qed.
+
+Definition isBvslt_suc_r w a : isBvslt w a (bvsmax w) ->
+                               isBvslt w a (bvAdd w a (intToBv w 1)).
 Proof. holds_for_bits_up_to_4. Qed.
 
 Definition isBvslt_antirefl w a : ~ isBvslt w a a.
@@ -289,25 +301,28 @@ Proof. holds_for_bits_up_to_4. Qed.
 
 Hint Rewrite bvSub_zero_n : SAWCoreBitvectors_eqs.
 
-Lemma bvNeg_msb w a : isBvult (Succ w) (intToBv (Succ w) 0) a ->
-                      isBvult (Succ w) a (bvsmax (Succ w)) ->
-                      msb w (bvNeg (Succ w) a) = not (msb w a).
+Lemma msb_true_iff_bvslt w a :
+  msb w a = true <-> isBvslt (Succ w) a (intToBv (Succ w) 0).
 Proof. holds_for_bits_up_to_4. Qed.
 
-(* Hint Rewrite bvNeg_msb : SAWCoreBitvectors_eqs. *)
+Lemma msb_false_iff_bvsle w a :
+  msb w a = false <-> isBvsle (Succ w) (intToBv (Succ w) 0) a.
+Proof. holds_for_bits_up_to_4. Qed.
+
+Lemma bvNeg_bvslt_zero_iff w a : isBvslt w (bvsmin w) a ->
+  isBvslt w a (intToBv w 0) <-> isBvslt w (intToBv w 0) (bvNeg w a).
+Proof. holds_for_bits_up_to_3. Qed.
 
 Lemma bvNeg_bvAdd_distrib w a b : bvNeg w (bvAdd w a b) = bvAdd w (bvNeg w a) (bvNeg w b).
 Proof. holds_for_bits_up_to_3. Qed.
 
-(* FIXME What precondition do we need here? Or - is this even the right lemma
-         for loops_proofs.v? Should we just remove this? *)
-Lemma bvslt_bvSub_r w a b : isBvslt w (intToBv w 0) (bvSub w b a) -> isBvslt w a b.
-Admitted.
+Lemma bvslt_bvSub_l w a b : bvSubOverflow w a b = false ->
+                            isBvslt w (bvSub w a b) (intToBv w 0) -> isBvslt w a b.
+Proof. holds_for_bits_up_to_4. Qed.
 
-(* FIXME What precondition do we need here? Or - is this even the right lemma
-         for loops_proofs.v? Should we just remove this? *)
-Lemma bvslt_bvSub_l w a b : isBvslt w a b <-> isBvslt w (bvSub w a b) (intToBv w 0).
-Admitted.
+Lemma bvslt_bvSub_r w a b : bvSubOverflow w b a = false ->
+                            isBvslt w (intToBv w 0) (bvSub w b a) -> isBvslt w a b.
+Proof. holds_for_bits_up_to_4. Qed.
 
 Lemma bvEq_bvSub_r w a b : a = b <-> intToBv w 0 = bvSub w b a.
 Proof. holds_for_bits_up_to_4. Qed.
@@ -318,11 +333,15 @@ Proof. holds_for_bits_up_to_4. Qed.
 Lemma bvSub_eq_bvAdd_neg w a b : bvSub w a b = bvAdd w a (bvNeg w b).
 Proof. holds_for_bits_up_to_3. Qed.
 
-Lemma bvule_msb_l w a b : isBvule (Succ w) a b -> msb w a = true -> msb w b = true.
-Proof. holds_for_bits_up_to_4. Qed.
+Lemma bvule_to_bvslt_zero w a b : isBvule w a b ->
+                                  isBvslt w a (intToBv w 0) ->
+                                  isBvslt w b (intToBv w 0).
+Proof. holds_for_bits_up_to_3. Qed.
 
-Lemma bvule_msb_r w a b : isBvule (Succ w) a b -> msb w b = false -> msb w a = false.
-Proof. holds_for_bits_up_to_4. Qed.
+Lemma bvule_to_zero_bvsle w a b : isBvule w a b ->
+                                  isBvsle w (intToBv w 0) b ->
+                                  isBvsle w (intToBv w 0) a.
+Proof. holds_for_bits_up_to_3. Qed.
 
 
 (** Lemmas about bitvector xor **)
@@ -625,8 +644,10 @@ Hint Extern 1 (IntroArg _ (@eq bool ?x ?y) _) =>
     | or _ _ => simple apply IntroArg_or_bool_eq_true
     | not _ => simple apply IntroArg_not_bool_eq_true
     | boolEq _ _ => simple apply IntroArg_boolEq_eq
-    | if _ then true else false => simple apply IntroArg_bool_eq_if_true
-    | if _ then false else true => simple apply IntroArg_bool_eq_if_inv_true
+    | if _ then true   else false  => simple apply IntroArg_bool_eq_if_true
+    | if _ then 1%bool else 0%bool => simple apply IntroArg_bool_eq_if_true
+    | if _ then false  else true   => simple apply IntroArg_bool_eq_if_inv_true
+    | if _ then 0%bool else 1%bool => simple apply IntroArg_bool_eq_if_inv_true
     end
   | false => lazymatch x with
     | SAWCorePrelude.bvEq _ _ _ => simple apply IntroArg_bvEq_neq
@@ -634,8 +655,10 @@ Hint Extern 1 (IntroArg _ (@eq bool ?x ?y) _) =>
     | or _ _ => simple apply IntroArg_or_bool_eq_false
     | not _ => simple apply IntroArg_not_bool_eq_false
     | boolEq _ _ => simple apply IntroArg_boolEq_neq
-    | if _ then true else false => simple apply IntroArg_bool_eq_if_false
-    | if _ then false else true => simple apply IntroArg_bool_eq_if_inv_false
+    | if _ then true   else false  => simple apply IntroArg_bool_eq_if_false
+    | if _ then 1%bool else 0%bool => simple apply IntroArg_bool_eq_if_false
+    | if _ then false  else true   => simple apply IntroArg_bool_eq_if_inv_false
+    | if _ then 0%bool else 1%bool => simple apply IntroArg_bool_eq_if_inv_false
     end
   end : refinesFun.
 
@@ -726,6 +749,21 @@ Proof. intros H eq; apply H, isBvult_def_opp; eauto. Qed.
 (* Hint Extern 3 (IntroArg _ (bvule _ _ _ = false) _) => *)
 (*    simple apply IntroArg_isBvult_def_opp : refinesFun. *)
 
+Lemma IntroArg_msb_true_iff_bvslt n w a goal :
+  IntroArg n (isBvslt (Succ w) a (intToBv (Succ w) 0)) (fun _ => goal) ->
+  IntroArg n (msb w a = true) (fun _ => goal).
+Proof. intros H eq; rewrite msb_true_iff_bvslt in eq; eauto. Qed.
+
+Lemma IntroArg_msb_false_iff_bvsle n w a goal :
+  IntroArg n (isBvsle (Succ w) (intToBv (Succ w) 0) a) (fun _ => goal) ->
+  IntroArg n (msb w a = false) (fun _ => goal).
+Proof. intros H eq; rewrite msb_false_iff_bvsle in eq; eauto. Qed.
+
+(* Hint Extern 3 (IntroArg _ (msb _ _ = true) _) => *)
+(*    simple apply IntroArg_msb_true_iff_bvslt : refinesFun. *)
+(* Hint Extern 3 (IntroArg _ (msb _ _ = false) _) => *)
+(*    simple apply IntroArg_msb_false_iff_bvsle : refinesFun. *)
+
 Hint Extern 3 (IntroArg _ (@eq bool ?x ?y) _) =>
   lazymatch y with
   | true => lazymatch x with
@@ -733,11 +771,13 @@ Hint Extern 3 (IntroArg _ (@eq bool ?x ?y) _) =>
     | bvslt _ _ _ => simple apply IntroArg_isBvslt_def
     | bvule _ _ _ => simple apply IntroArg_isBvule_def
     | bvult _ _ _ => simple apply IntroArg_isBvult_def
+    | msb _ _ => simple apply IntroArg_msb_true_iff_bvslt
     end
   | false => lazymatch x with
     | bvsle _ _ _ => simple apply IntroArg_isBvslt_def_opp
     | bvslt _ _ _ => simple apply IntroArg_isBvsle_def_opp
     | bvule _ _ _ => simple apply IntroArg_isBvult_def_opp
     | bvult _ _ _ => simple apply IntroArg_isBvule_def_opp
+    | msb _ _ => simple apply IntroArg_msb_false_iff_bvsle
     end
   end : refinesFun.
