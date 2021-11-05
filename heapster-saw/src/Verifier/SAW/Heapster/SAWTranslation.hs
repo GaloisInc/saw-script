@@ -2376,6 +2376,30 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                             ptrans'])
     m
 
+  [nuMP| SImpl_SplitLLVMWordField x _ _ _ _ |] ->
+    do ttrans <- translateSimplImplOut mb_simpl
+       withPermStackM (:>: translateVar x)
+         (\(pctx :>: _) -> RL.append pctx $ typeTransF ttrans [])
+         m
+
+  [nuMP| SImpl_ConcatLLVMWordFields _ _ _ _ |] ->
+    do ttrans <- translateSimplImplOut mb_simpl
+       withPermStackM RL.tail
+         (\(pctx :>: _ :>: _) -> RL.append pctx $ typeTransF ttrans [])
+         m
+
+  [nuMP| SImpl_SplitLLVMTrueField x _ _ _ |] ->
+    do ttrans <- translateSimplImplOut mb_simpl
+       withPermStackM (:>: translateVar x)
+         (\(pctx :>: _) -> RL.append pctx $ typeTransF ttrans [])
+         m
+
+  [nuMP| SImpl_ConcatLLVMTrueFields _ _ _ |] ->
+    do ttrans <- translateSimplImplOut mb_simpl
+       withPermStackM RL.tail
+         (\(pctx :>: _ :>: _) -> RL.append pctx $ typeTransF ttrans [])
+         m
+
   [nuMP| SImpl_DemoteLLVMArrayRW _ _ |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id

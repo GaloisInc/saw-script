@@ -2287,10 +2287,11 @@ pcmRunImplM vars fail_doc retF impl_m =
   gets stCurPerms >>>= \perms_in ->
   gets stPPInfo   >>>= \ppInfo ->
   gets stVarTypes >>>= \varTypes ->
+  (stEndianness <$> top_get) >>>= \endianness ->
   (stDebugLevel <$> top_get) >>>= \dlevel ->
   liftPermCheckM $ lift $
   fmap (AnnotPermImpl (renderDoc (err_prefix <> line <> fail_doc))) $
-  runImplM vars perms_in env ppInfo "" dlevel varTypes impl_m
+  runImplM vars perms_in env ppInfo "" dlevel varTypes endianness impl_m
   (return . retF . fst)
 
 -- | Call 'runImplImplM' in the 'PermCheckM' monad
@@ -2306,10 +2307,11 @@ pcmRunImplImplM vars fail_doc impl_m =
   gets stCurPerms >>>= \perms_in ->
   gets stPPInfo   >>>= \ppInfo ->
   gets stVarTypes >>>= \varTypes ->
+  (stEndianness <$> top_get) >>>= \endianness ->
   (stDebugLevel <$> top_get) >>>= \dlevel ->
   liftPermCheckM $ lift $
   fmap (AnnotPermImpl (renderDoc (err_prefix <> line <> fail_doc))) $
-  runImplImplM vars perms_in env ppInfo "" dlevel varTypes impl_m
+  runImplImplM vars perms_in env ppInfo "" dlevel varTypes endianness impl_m
 
 -- | Embed an implication computation inside a permission-checking computation,
 -- also supplying an overall error message for failures
@@ -2326,9 +2328,11 @@ pcmEmbedImplWithErrM f_impl vars fail_doc m =
   gets stCurPerms >>>= \perms_in ->
   gets stPPInfo   >>>= \ppInfo ->
   gets stVarTypes >>>= \varTypes ->
+  (stEndianness <$> top_get) >>>= \endianness ->
   (stDebugLevel <$> top_get) >>>= \dlevel ->
 
-  addReader (gcaptureCC (runImplM vars perms_in env ppInfo "" dlevel varTypes m))
+  addReader (gcaptureCC
+             (runImplM vars perms_in env ppInfo "" dlevel varTypes endianness m))
     >>>= \(a, implSt) ->
 
   gmodify ((\st -> st { stPPInfo = implSt ^. implStatePPInfo,
