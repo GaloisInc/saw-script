@@ -1710,7 +1710,9 @@ simplImplIn (SImpl_ConcatLLVMWordFields x fp1 bv2 _) =
   case llvmFieldContents fp1 of
     ValPerm_Eq (PExpr_LLVMWord (bvMatchConst -> Just _)) ->
       distPerms2 x (ValPerm_LLVMField fp1) x (ValPerm_LLVMField $
-                                              llvmFieldSetEqWord fp1 bv2)
+                                              llvmFieldAddOffsetInt
+                                              (llvmFieldSetEqWord fp1 bv2)
+                                              (intValue (natRepr fp1) `div` 8))
     _ -> error "simplImplIn: SImpl_ConcatLLVMWordFields: malformed input permission"
 simplImplIn (SImpl_SplitLLVMTrueField x fp _ _) =
   case llvmFieldContents fp of
@@ -1720,7 +1722,9 @@ simplImplIn (SImpl_ConcatLLVMTrueFields x fp1 sz2) =
   case llvmFieldContents fp1 of
     ValPerm_True ->
       distPerms2 x (ValPerm_LLVMField fp1) x (ValPerm_LLVMField $
-                                              llvmFieldSetTrue fp1 sz2)
+                                              llvmFieldAddOffsetInt
+                                              (llvmFieldSetTrue fp1 sz2)
+                                              (intValue (natRepr fp1) `div` 8))
     _ -> error "simplImplIn: SImpl_ConcatLLVMTrueFields: malformed field permission"
 simplImplIn (SImpl_DemoteLLVMArrayRW x ap) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMArray ap])
@@ -2012,7 +2016,9 @@ simplImplOut (SImpl_SplitLLVMWordField x fp bv1 bv2 endianness) =
     ValPerm_Eq (PExpr_LLVMWord (bvMatchConst -> Just bv))
       | Just (bv1, bv2) == bvSplit endianness knownNat bv ->
         distPerms2 x (ValPerm_LLVMField (llvmFieldSetEqWord fp bv1))
-        x (ValPerm_LLVMField (llvmFieldSetEqWord fp bv2))
+        x (ValPerm_LLVMField (llvmFieldAddOffsetInt
+                              (llvmFieldSetEqWord fp bv2)
+                              (intValue (natRepr bv1) `div` 8)))
     _ -> error "simplImplOut: SImpl_SplitLLVMWordField: malformed input permission"
 simplImplOut (SImpl_ConcatLLVMWordFields x fp1 bv2 endianness) =
   case llvmFieldContents fp1 of
@@ -2024,7 +2030,9 @@ simplImplOut (SImpl_SplitLLVMTrueField x fp sz1 sz2m1) =
   case llvmFieldContents fp of
     ValPerm_True ->
       distPerms2 x (ValPerm_LLVMField $ llvmFieldSetTrue fp sz1)
-      x (ValPerm_LLVMField $ llvmFieldSetTrue fp sz2m1)
+      x (ValPerm_LLVMField $
+         llvmFieldAddOffsetInt (llvmFieldSetTrue fp sz2m1)
+         (intValue (natRepr sz1) `div` 8))
     _ -> error "simplImplOut: SImpl_SplitLLVMTrueField: malformed field permission"
 simplImplOut (SImpl_ConcatLLVMTrueFields x fp1 sz2) =
   case llvmFieldContents fp1 of
@@ -4112,14 +4120,18 @@ implLLVMFieldSplit x fp sz_bytes
           implSimplM Proxy (SImpl_SplitLLVMWordField
                             x (llvmFieldSetEqWord fp bv) bv1 bv2 endianness) >>>
           return (Perm_LLVMField (llvmFieldSetEqWord fp bv1),
-                  Perm_LLVMField (llvmFieldSetEqWord fp bv2))
+                  Perm_LLVMField (llvmFieldAddOffsetInt
+                                  (llvmFieldSetEqWord fp bv2)
+                                  sz_bytes))
       Just _ ->
         error "implLLVMFieldSplit: unreachable case"
       Nothing ->
         implSimplM Proxy (SImpl_SplitLLVMTrueField x
                           (llvmFieldSetTrue fp fp) sz fp_m_sz) >>>
         return (Perm_LLVMField (llvmFieldSetTrue fp sz),
-                Perm_LLVMField (llvmFieldSetTrue fp fp_m_sz))
+                Perm_LLVMField (llvmFieldAddOffsetInt
+                                (llvmFieldSetTrue fp fp_m_sz)
+                                sz_bytes))
 implLLVMFieldSplit _ _ _ =
   implFailMsgM "implLLVMFieldSplit: malformed input permissions"
 

@@ -3376,6 +3376,17 @@ llvmReadExRWExLPerm (off :: PermExpr (BVType w)) =
                   llvmFieldOffset = off,
                   llvmFieldContents = ValPerm_True }
 
+-- | Add a bitvector expression to the offset of a field permission
+llvmFieldAddOffset :: (1 <= w, KnownNat w) => LLVMFieldPerm w sz ->
+                      PermExpr (BVType w) -> LLVMFieldPerm w sz
+llvmFieldAddOffset fp off =
+  fp { llvmFieldOffset = bvAdd (llvmFieldOffset fp) off }
+
+-- | Add an integer to the offset of a field permission
+llvmFieldAddOffsetInt :: (1 <= w, KnownNat w) => LLVMFieldPerm w sz ->
+                         Integer -> LLVMFieldPerm w sz
+llvmFieldAddOffsetInt fp off = llvmFieldAddOffset fp (bvInt off)
+
 -- | Set the contents of a field permission, possibly changing its size
 llvmFieldSetContents :: LLVMFieldPerm w sz1 ->
                         ValuePerm (LLVMPointerType sz2) -> LLVMFieldPerm w sz2
