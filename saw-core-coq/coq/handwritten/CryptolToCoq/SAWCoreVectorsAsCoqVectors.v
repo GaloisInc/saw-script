@@ -199,7 +199,7 @@ Definition joinLSB {n} (v : bitvector n) (lsb : bool) : bitvector n.+1 :=
 
 Definition bvToNatFolder (n : nat) (b : bool) := b + n.*2.
 
-Fixpoint bvToNat (size : Nat) (v : bitvector size) : Nat :=
+Definition bvToNat (size : Nat) (v : bitvector size) : Nat :=
   Vector.fold_left bvToNatFolder 0 v.
 
 (* This is used to write literals of bitvector type, e.g. intToBv 64 3 *)
@@ -319,7 +319,7 @@ Fixpoint shiftR (n : nat) (A : Type) (x : A) (v : Vector.t A n) (i : nat)
   : Vector.t A n
   := match i with
      | O => v
-     | S i' => Vector.shiftout (cons _ x _ (shiftL n A x v i'))
+     | S i' => Vector.shiftout (cons _ x _ (shiftR n A x v i'))
      end.
 
 (* This is annoying to implement, so using BITS conversion *)
@@ -359,3 +359,11 @@ Global Opaque bvsle.
 
 Definition bvsge (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   bvsle n b a.
+
+Definition bvAddOverflow n (a : bitvector n) (b : bitvector n) : Bool :=
+  let c := bvAdd n a b
+   in ((sign a && sign b && ~~ sign c) || (~~ sign a && ~~ sign b && sign c))%bool.
+
+Definition bvSubOverflow n (a : bitvector n) (b : bitvector n) : Bool :=
+  let c := bvSub n a b
+   in ((sign a && ~~ sign b && ~~ sign c) || (~~ sign a && sign b && sign c))%bool.

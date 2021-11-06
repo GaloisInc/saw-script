@@ -91,7 +91,7 @@ Qed.
 
 Definition incr_list_invar :=
   @list_rect (bitvector 64) (fun _ => Prop) True
-             (fun x _ rec => isBvult 64 x (intToBv 64 0x7fffffffffffffff) /\ rec).
+             (fun x _ rec => isBvslt 64 x (bvsmax 64) /\ rec).
 
 Arguments incr_list_invar !l.
 
@@ -105,11 +105,11 @@ Proof.
   time "no_errors_incr_list" prove_refinement.
   all: try destruct e_assuming as [?e_assuming ?e_assuming];
        try destruct e_assuming0 as [?e_assuming ?e_assuming];
-       try destruct e_assuming1 as [?e_assuming ?e_assuming]; simpl in *.
+       try destruct e_assuming1 as [?e_assuming ?e_assuming]; cbn - [bvsmax] in *.
   (* All but one of the remaining goals are taken care of by assumptions we have in scope: *)
   all: try rewrite appendList_Nil_r; try split; eauto.
   (* We just have to show this case is impossible by virtue of our loop invariant: *)
-  apply isBvult_to_isBvule_suc in e_assuming0.
-  apply bvule_msb_l in e_assuming0; try assumption.
-  compute_bv_funs in e_assuming0; inversion e_assuming0.
+  apply isBvslt_suc_r in e_assuming0.
+  rewrite <- e_assuming0, e_if in e_if0.
+  apply isBvslt_antirefl in e_if0; contradiction.
 Qed.

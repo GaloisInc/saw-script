@@ -119,7 +119,6 @@ Proof.
     + rewrite H1 in e_maybe; discriminate e_maybe.
   (* Showing the loop invariant holds inductively (the remaining two cases) *)
   - rewrite e_assuming1; apply isBvsle_suc_r.
-    apply isBvslt_to_isBvsle.
     rewrite e_assuming2, e_assuming3.
     reflexivity.
   - apply isBvslt_to_isBvsle_suc.
@@ -180,7 +179,6 @@ Proof.
     + rewrite H1 in e_maybe; discriminate e_maybe.
   (* Showing the loop invariant holds inductively (the remaining two cases) *)
   - rewrite e_assuming1; apply isBvsle_suc_r.
-    apply isBvslt_to_isBvsle.
     rewrite e_assuming2, e_assuming3.
     reflexivity.
   - apply isBvslt_to_isBvsle_suc.
