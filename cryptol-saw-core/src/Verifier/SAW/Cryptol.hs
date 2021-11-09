@@ -174,7 +174,7 @@ normalizeProp prop
 importKind :: SharedContext -> C.Kind -> IO Term
 importKind sc kind =
   case kind of
-    C.KType       -> scSort sc (mkSort 0)
+    C.KType       -> scISort sc (mkSort 0)
     C.KNum        -> scDataTypeApp sc "Cryptol.Num" []
     C.KProp       -> scSort sc (mkSort 0)
     (C.:->) k1 k2 -> join $ scFun sc <$> importKind sc k1 <*> importKind sc k2
@@ -1380,7 +1380,7 @@ data ImportPrimitiveOptions =
 defaultPrimitiveOptions :: ImportPrimitiveOptions
 defaultPrimitiveOptions =
   ImportPrimitiveOptions
-  { allowUnknownPrimitives = False
+  { allowUnknownPrimitives = True
   }
 
 data DeclGroupOptions

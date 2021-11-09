@@ -102,7 +102,7 @@ instance ContainsIRTRecName (PermExpr a) where
     containsIRTRecName n args
   containsIRTRecName n (PExpr_PtrShape _ _ sh) = containsIRTRecName n sh
   containsIRTRecName n (PExpr_FieldShape fsh) = containsIRTRecName n fsh
-  containsIRTRecName n (PExpr_ArrayShape _ _ fshs) = containsIRTRecName n fshs
+  containsIRTRecName n (PExpr_ArrayShape _ _ sh) = containsIRTRecName n sh
   containsIRTRecName n (PExpr_SeqShape sh1 sh2) =
     containsIRTRecName n sh1 || containsIRTRecName n sh2
   containsIRTRecName n (PExpr_OrShape sh1 sh2) =
@@ -141,7 +141,7 @@ instance ContainsIRTRecName (RAssign ValuePerm tps) where
 instance ContainsIRTRecName (AtomicPerm a) where
   containsIRTRecName n (Perm_LLVMField fp) = containsIRTRecName n fp
   containsIRTRecName n (Perm_LLVMArray arrp) =
-    containsIRTRecName n (llvmArrayFields arrp)
+    containsIRTRecName n (llvmArrayCellShape arrp)
   containsIRTRecName n (Perm_LLVMBlock bp) =
     containsIRTRecName n (llvmBlockShape bp)
   containsIRTRecName _ (Perm_LLVMFree _) = False
@@ -159,9 +159,6 @@ instance ContainsIRTRecName (AtomicPerm a) where
   containsIRTRecName n (Perm_Struct ps) = containsIRTRecName n ps
   containsIRTRecName _ (Perm_Fun _) = False
   containsIRTRecName _ (Perm_BVProp _) = False
-
-instance ContainsIRTRecName (LLVMArrayField w) where
-  containsIRTRecName n (LLVMArrayField fp) = containsIRTRecName n fp
 
 instance ContainsIRTRecName (LLVMFieldPerm w sz) where
   containsIRTRecName n fp = containsIRTRecName n $ llvmFieldContents fp
@@ -401,8 +398,7 @@ instance IRTTyVars (AtomicPerm a) where
     [nuMP| Perm_LLVMField fld |] ->
       irtTyVars (fmap llvmFieldContents fld)
     [nuMP| Perm_LLVMArray mb_ap |] ->
-         irtTyVars $ fmap (fmap llvmArrayFieldToAtomicPerm . llvmArrayFields)
-                          mb_ap
+      irtTyVars $ mbLLVMArrayCellShape mb_ap
     [nuMP| Perm_LLVMBlock bp |] ->
       irtTyVars (fmap llvmBlockShape bp)
     [nuMP| Perm_LLVMFree _ |] -> return ([], IRTVarsNil)
@@ -461,7 +457,7 @@ instance IRTTyVars (PermExpr (LLVMShapeType w)) where
     [nuMP| PExpr_EqShape _ |] -> return ([], IRTVarsNil)
     [nuMP| PExpr_PtrShape _ _ sh |] -> irtTyVars sh
     [nuMP| PExpr_FieldShape fsh |] -> irtTyVars fsh
-    [nuMP| PExpr_ArrayShape _ _ fshs |] -> irtTyVars fshs
+    [nuMP| PExpr_ArrayShape _ _ sh |] -> irtTyVars sh
     [nuMP| PExpr_SeqShape sh1 sh2 |] ->
       do (tps1, ixs1) <- irtTyVars sh1
          (tps2, ixs2) <- irtTyVars sh2
@@ -648,10 +644,8 @@ instance IRTDescs (AtomicPerm a) where
       do let w = natVal2 mb_ap
              w_term = natOpenTerm w
          len_term <- translate1 (fmap llvmArrayLen mb_ap)
-         let mb_flds = fmap (fmap llvmArrayFieldToAtomicPerm . llvmArrayFields)
-                            mb_ap
-         xs_term <- irtDesc mb_flds ixs
-         irtCtor "Prelude.IRT_BVVec" [w_term, len_term, xs_term]
+         sh_desc_term <- irtDesc (mbLLVMArrayCellShape mb_ap) ixs
+         irtCtor "Prelude.IRT_BVVec" [w_term, len_term, sh_desc_term]
     ([nuMP| Perm_LLVMBlock bp |], _) ->
       irtDescs (fmap llvmBlockShape bp) ixs
     ([nuMP| Perm_LLVMFree _ |], _) -> return []
@@ -692,12 +686,12 @@ instance IRTDescs (PermExpr (LLVMShapeType w)) where
       irtDescs sh ixs
     ([nuMP| PExpr_FieldShape fsh |], _) ->
       irtDescs fsh ixs
-    ([nuMP| PExpr_ArrayShape mb_len _ mb_fshs |], _) ->
+    ([nuMP| PExpr_ArrayShape mb_len _ mb_sh |], _) ->
       do let w = natVal4 mb_len
              w_term = natOpenTerm w
          len_term <- translate1 mb_len
-         xs_term <- irtDesc mb_fshs ixs
-         irtCtor "Prelude.IRT_BVVec" [w_term, len_term, xs_term]
+         sh_desc_term <- irtDesc mb_sh ixs
+         irtCtor "Prelude.IRT_BVVec" [w_term, len_term, sh_desc_term]
     ([nuMP| PExpr_SeqShape sh1 sh2 |], IRTVarsAppend ixs1 ixs2) ->
       do x1 <- irtDesc sh1 ixs1
          x2 <- irtDesc sh2 ixs2

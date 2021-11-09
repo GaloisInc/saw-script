@@ -50,6 +50,7 @@ import Control.Monad (unless)
 import Control.Monad.Except (runExceptT)
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
+import Data.Maybe (mapMaybe)
 import Data.Parameterized.Nonce (globalNonceGenerator)
 import Data.Parameterized.Some (Some(..))
 import qualified Data.Map as Map
@@ -60,9 +61,9 @@ import System.FilePath (takeBaseName)
 import System.IO
 import System.IO.Temp(emptySystemTempFile)
 import Data.Text (pack)
-import Data.Text.Prettyprint.Doc.Render.Text
 import qualified Data.Vector as V
 import Prettyprinter (vcat)
+import Prettyprinter.Render.Text
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
@@ -473,7 +474,7 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   let primOpts = ImportPrimitiveOptions{ allowUnknownPrimitives = True }
   (cm, _) <- loadCryptolModule sc primOpts env inputFile
-  let cryptolPreludeDecls = map Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
+  let cryptolPreludeDecls = mapMaybe Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
   let configuration =
         withImportCryptolPrimitivesForSAWCoreExtra $
         withImportCryptolPrimitivesForSAWCore $

@@ -81,10 +81,16 @@ Definition no_errors_sign_of_sum' : ltac:(let tp := type of no_errors_sign_of_su
                                            in exact tp') := no_errors_sign_of_sum.
 Hint Rewrite no_errors_sign_of_sum' : refinement_proofs.
 
-Lemma no_errors_compare_sum : refinesFun compare_sum (fun _ _ _ => noErrorsSpec).
+Lemma no_errors_compare_sum :
+  refinesFun compare_sum (fun x _ _ => assumingM (isBvslt 64 (bvsmin 64) x)
+                                                 noErrorsSpec).
 Proof.
   unfold compare_sum, compare_sum__tuple_fun, noErrorsSpec.
   time "no_errors_compare_sum" prove_refinement.
+  - assumption. (* doesn't matter what we put here *)
+  - rewrite bvNeg_bvslt_zero_iff in e_if; eauto.
+    rewrite e_if in e_if0.
+    apply isBvslt_antirefl in e_if0; contradiction.
 Qed.
 
 
@@ -100,28 +106,30 @@ Hint Rewrite sign_of_sum_spec_ref' : refinement_proofs.
 
 
 Definition compare_sum_spec (x y z : bitvector 64) : CompM (bitvector 64) :=
-  orM (     assertM (isBvslt _ x (bvAdd _ y z)) >> returnM (intToBv _ 1))
-      (orM (assertM (isBvslt _ (bvAdd _ y z) x) >> returnM (intToBv _ (-1)))
-           (assertM (x = bvAdd _ y z)           >> returnM (intToBv _ 0))).
+  assumingM (isBvslt 64 (bvsmin 64) x /\ bvSubOverflow 64 (bvAdd 64 y z) x = false)
+    (orM (     assertM (isBvslt _ x (bvAdd _ y z)) >> returnM (intToBv _ 1))
+         (orM (assertM (isBvslt _ (bvAdd _ y z) x) >> returnM (intToBv _ (-1)))
+              (assertM (x = bvAdd _ y z)           >> returnM (intToBv _ 0)))).
 
 Lemma compare_sum_spec_ref : refinesFun compare_sum compare_sum_spec.
 Proof.
   unfold compare_sum, compare_sum__tuple_fun, compare_sum_spec.
   time "compare_sum_spec_ref" prove_refinement.
-  all: rewrite bvSub_zero_bvNeg in e_assert.
+  all: try rewrite bvSub_zero_n, bvAdd_comm, <- bvSub_eq_bvAdd_neg in e_assert.
   (* Note that there are two versions of each case because of the if! *)
   (* The `x < y + z` case: *)
   1,4: continue_prove_refinement_left.
-  1,2: rewrite bvslt_bvSub_r, bvSub_eq_bvAdd_neg, bvAdd_comm.
-  1,2: assumption.
+  1,2: apply bvslt_bvSub_r; eauto.
   (* The `x > y + z` case: *)
   1,3: continue_prove_refinement_right;
        continue_prove_refinement_left.
-  1,2: rewrite bvslt_bvSub_l, bvSub_eq_bvAdd_neg, bvAdd_comm.
-  1,2: assumption.
+  1,2: apply bvslt_bvSub_l; eauto.
   (* The `x = y + z` case: *)
   1,2: continue_prove_refinement_right;
        continue_prove_refinement_right.
-  1,2: rewrite bvEq_bvSub_r, bvSub_eq_bvAdd_neg, bvAdd_comm.
-  1,2: symmetry; assumption.
+  1,2: rewrite bvEq_bvSub_r; symmetry; eauto.
+  (* The remaining case follows from our precondition (same as no_errors) *)
+  rewrite bvNeg_bvslt_zero_iff in e_if0; eauto.
+  rewrite e_if0 in e_if1.
+  apply isBvslt_antirefl in e_if1; contradiction.
 Qed.

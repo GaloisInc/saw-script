@@ -102,6 +102,14 @@ wnMapExtWidFun :: WidNameMap -> ExtVarPermsFun vars
 wnMapExtWidFun wnmap =
   ExtVarPermsFun $ \ns -> ExtVarPerms_Base $ RL.map (flip wnMapGetPerm wnmap) ns
 
+-- | Assign the trivial @true@ permission to any variable that has not yet been
+-- visited
+wnMapDropUnvisiteds :: WidNameMap -> WidNameMap
+wnMapDropUnvisiteds =
+  NameMap.map $ \case
+  p@(Pair _ (Constant True)) -> p
+  (Pair _ (Constant False)) -> Pair ValPerm_True (Constant False)
+
 newtype PolyContT r m a =
   PolyContT { runPolyContT :: forall x. (forall y. a -> m (r y)) -> m (r x) }
 
@@ -183,9 +191,10 @@ setVarNamesM :: String -> RAssign ExprVar tps -> WideningM ()
 setVarNamesM base xs = modify $ over wsPPInfo $ ppInfoAddExprNames base xs
 
 traceM :: (PPInfo -> Doc ()) -> WideningM ()
-traceM f =
-  debugTrace <$> (view wsDebugLevel <$> get)
-  <*> (renderDoc <$> f <$> view wsPPInfo <$> get) <*> (return ())
+traceM f = do
+  dlevel <- view wsDebugLevel <$> get
+  str <- renderDoc <$> f <$> view wsPPInfo <$> get
+  debugTrace dlevel str $ return ()
 
 
 ----------------------------------------------------------------------
@@ -273,17 +282,16 @@ widenExpr' tp e1@(asVarOffset -> Just (x1, off1)) e2@(asVarOffset ->
        _ | x1 == x2 && offsetsEq off1 off2 ->
            visitM x1 >> return e1
 
-       -- If we have the same variable but different offsets, then the two sides
-       -- cannot be equal, so we generalize with a new variable
-       _ | x1 == x2 ->
-           do x <- bindFreshVar tp
-              visitM x
-              ((p1',p2'), p') <-
-                doubleSplitWidenPerm tp (offsetPerm off1 p1) (offsetPerm off2 p2)
-              setOffVarPermM x1 off1 p1'
-              setOffVarPermM x2 off2 p2'
-              setVarPermM x p'
-              return $ PExpr_Var x
+       -- If we have the same variable but different offsets, we widen them
+       -- using 'widenOffsets'. Note that we cannot have the same variable
+       -- x on both sides unless they have been visited, so we can safely
+       -- ignore the isv1 and isv2 flags. The complexity of having these two
+       -- cases is to find the BVType of one of off1 or off2; because the
+       -- previous case did not match, we know at least one is LLVMPermOffset.
+       _ | x1 == x2, LLVMPermOffset (exprType -> off_tp) <- off1 ->
+           PExpr_LLVMOffset x1 <$> widenOffsets off_tp off1 off2
+       _ | x1 == x2, LLVMPermOffset (exprType -> off_tp) <- off2 ->
+           PExpr_LLVMOffset x1 <$> widenOffsets off_tp off1 off2
 
        -- If a variable has an eq(e) permission, replace it with e and recurse
        (ValPerm_Eq e1', _, _, _) ->
@@ -397,21 +405,11 @@ widenExpr' _ (PExpr_FieldShape (LLVMFieldShape p1)) (PExpr_FieldShape
   | Just Refl <- testEquality (exprLLVMTypeWidth p1) (exprLLVMTypeWidth p2) =
     PExpr_FieldShape <$> LLVMFieldShape <$> widenPerm knownRepr p1 p2
 
--- Array shapes can only be widened if they have the same length, stride, and
--- fields whose ith fields have the same size for each i
-widenExpr' _ (PExpr_ArrayShape len1 stride1 flds1) (PExpr_ArrayShape
-                                                   len2 stride2 flds2)
-  | bvEq len1 len2 && stride1 == stride2
-  , and (zipWith
-         (\(LLVMFieldShape p1) (LLVMFieldShape p2) ->
-           isJust $ testEquality (exprLLVMTypeWidth p1) (exprLLVMTypeWidth p2))
-         flds1 flds2) =
-    PExpr_ArrayShape len1 stride1 <$>
-    zipWithM (\(LLVMFieldShape p1) (LLVMFieldShape p2) ->
-               case testEquality (exprLLVMTypeWidth p1) (exprLLVMTypeWidth p2) of
-                 Just Refl -> LLVMFieldShape <$> widenPerm knownRepr p1 p2
-                 Nothing -> error "widenExpr: unreachable!")
-    flds1 flds2
+-- Array shapes can only be widened if they have the same length and stride
+widenExpr' _ (PExpr_ArrayShape
+              len1 stride1 sh1) (PExpr_ArrayShape len2 stride2 sh2)
+  | bvEq len1 len2 && stride1 == stride2 =
+    PExpr_ArrayShape len1 stride1 <$> widenExpr knownRepr sh1 sh2
 
 -- FIXME: there should be some check that the first shapes have the same length,
 -- though this is more complex if they might have free variables...?
@@ -448,6 +446,40 @@ widenExprs :: CruCtx tps -> PermExprs tps -> PermExprs tps ->
 widenExprs _ MNil MNil = return MNil
 widenExprs (CruCtxCons tps tp) (es1 :>: e1) (es2 :>: e2) =
   (:>:) <$> widenExprs tps es1 es2 <*> widenExpr tp e1 e2
+
+
+-- | Widen two bitvector offsets by trying to widen them additively
+-- ('widenBVsAddy'), or if that is not possible, by widening them 
+-- multiplicatively ('widenBVsMulty')
+widenOffsets :: (1 <= w, KnownNat w) => TypeRepr (BVType w) ->
+                PermOffset (LLVMPointerType w) ->
+                PermOffset (LLVMPointerType w) ->
+                WideningM (PermExpr (BVType w))
+widenOffsets tp (llvmPermOffsetExpr -> off1) (llvmPermOffsetExpr -> off2) =
+  widenBVsAddy tp off1 off2 >>= maybe (widenBVsMulty tp off1 off2) return
+
+-- | Widen two bitvectors @bv1@ and @bv2@ additively, i.e. bind a fresh
+-- variable @bv@ and return @(bv2 - bv1) * bv + bv1@, assuming @bv2 - bv1@
+-- is a constant
+widenBVsAddy :: (1 <= w, KnownNat w) => TypeRepr (BVType w) ->
+                PermExpr (BVType w) -> PermExpr (BVType w) ->
+                WideningM (Maybe (PermExpr (BVType w)))
+widenBVsAddy tp bv1 bv2 =
+  case bvMatchConst (bvSub bv2 bv1) of
+    Just d -> do x <- bindFreshVar tp
+                 visitM x
+                 return $ Just (bvAdd (bvFactorExpr d x) bv1)
+    _ -> return Nothing
+
+-- | Widen two bitvectors @bv1@ and @bv2@ multiplicatively, i.e. bind a fresh
+-- variable @bv@ and return @(bvGCD bv1 bv2) * bv@
+widenBVsMulty :: (1 <= w, KnownNat w) => TypeRepr (BVType w) ->
+                 PermExpr (BVType w) -> PermExpr (BVType w) ->
+                 WideningM (PermExpr (BVType w))
+widenBVsMulty tp bv1 bv2 =
+  do x <- bindFreshVar tp
+     visitM x
+     return $ bvFactorExpr (bvGCD bv1 bv2) x
 
 
 -- | Take two block permissions @bp1@ and @bp2@ with the same offset and use
@@ -548,16 +580,23 @@ widenAtomicPerms' tp (Perm_LLVMArray ap1 : ps1) ps2 =
              substEqVars wnmap (llvmArrayLen ap1)
              == substEqVars wnmap (llvmArrayLen ap2) &&
              llvmArrayStride ap1 == llvmArrayStride ap2 &&
-             substEqVars wnmap (llvmArrayFields ap1)
-             == substEqVars wnmap (llvmArrayFields ap2)
+             -- FIXME: widen the rw modalities?
+             substEqVars wnmap (llvmArrayRW ap1)
+             == substEqVars wnmap (llvmArrayRW ap2) &&
+             substEqVars wnmap (llvmArrayLifetime ap1)
+             == substEqVars wnmap (llvmArrayLifetime ap2)
            _ -> False) ps2 of
     Just i
       | Perm_LLVMArray ap2 <- ps2!!i ->
         -- NOTE: at this point, ap1 and ap2 are equal except for perhaps their
-        -- borrows, so we just filter out the borrows in ap1 that are also in ap2
-        (Perm_LLVMArray (ap1 { llvmArrayBorrows =
-                               filter (flip elem (llvmArrayBorrows ap2))
-                               (llvmArrayBorrows ap1) }) :) <$>
+        -- borrows and shapes, so we just filter out the borrows in ap1 that are
+        -- also in ap2 and widen the shapes
+        widenExpr knownRepr (llvmArrayCellShape ap1) (llvmArrayCellShape ap2)
+        >>= \sh ->
+        (Perm_LLVMArray (ap1 { llvmArrayCellShape = sh,
+                               llvmArrayBorrows =
+                                 filter (flip elem (llvmArrayBorrows ap2))
+                                 (llvmArrayBorrows ap1) }) :) <$>
         widenAtomicPerms tp ps1 (deleteNth i ps2)
     _ ->
       -- We did not find an appropriate array on the RHS, so drop this one
@@ -954,6 +993,7 @@ widen dlevel env tops args (Some (ArgVarPerms
      void $ widenExprs all_args (RL.map PExpr_Var args_ns1) (RL.map
                                                              PExpr_Var args_ns2)
      widenExtGhostVars vars1 vars1_ns vars2 vars2_ns
+     modifying wsNameMap wnMapDropUnvisiteds
      wnmap <- view wsNameMap <$> get
      traceM (\i ->
               pretty "Widening returning:" <> line <>

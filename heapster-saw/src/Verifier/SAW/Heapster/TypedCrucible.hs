@@ -3280,10 +3280,11 @@ tcEmitLLVMStmt arch ctx loc (LLVM_MemClear _ (ptr :: Reg ctx (LLVMPointerType wp
 
   -- For each field perm, prove it and write 0 to it
   (forM_ @_ @_ @_ @() flds $ \case
-      LLVMArrayField fp ->
+      Perm_LLVMField fp ->
         stmtProvePerm tptr (emptyMb $ ValPerm_Conj1 $ Perm_LLVMField fp) >>>
         emitTypedLLVMStore arch Nothing loc tptr fp (PExpr_LLVMWord (bvInt 0)) DistPermsNil >>>
-        stmtRecombinePerms) >>>
+        stmtRecombinePerms
+      _ -> error "Unexpected return value from llvmFieldsOfSize") >>>
 
   -- Return a fresh unit variable
   dbgNames >>= \names ->
@@ -4079,6 +4080,8 @@ visitEntry names can_widen blk entry =
 
   mapM (traverseF $
         visitCallSite entry) (typedEntryCallers entry) >>= \callers ->
+  debugTrace dlevel ("can_widen: " ++ show can_widen ++ ", any_fails: "
+                     ++ show (any (anyF typedCallSiteImplFails) callers)) $
   if can_widen && any (anyF typedCallSiteImplFails) callers then
     case widenEntry dlevel env entry of
       Some entry' ->
