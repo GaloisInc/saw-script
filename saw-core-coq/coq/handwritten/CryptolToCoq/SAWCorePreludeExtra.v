@@ -14,51 +14,37 @@ Fixpoint Nat_cases2_match a f1 f2 f3 (x y : nat) : a :=
   | (S x, S y) => f3 x y (Nat_cases2_match a f1 f2 f3 x y)
   end.
 
-Theorem Nat_cases2_match_spec a f1 f2 f3 x y :
+Theorem Nat_cases2_match_spec a f1 f2 f3 : forall x y,
   Nat_cases2 a f1 f2 f3 x y = Nat_cases2_match a f1 f2 f3 x y.
 Proof.
-  revert y.
-  induction x; intros y.
-  {
-    reflexivity.
-  }
-  {
-    destruct y.
-    {
-      reflexivity.
-    }
-    {
-      simpl.
-      now rewrite IHx.
-    }
-  }
+  induction x; induction y; simpl; congruence.
 Qed.
 
-Theorem minNat_min a b : minNat a b = min a b.
+Theorem minNat_min : forall x y, minNat x y = min x y.
 Proof.
-  revert b.
-  induction a; intros b.
-  {
-    reflexivity.
-  }
-  {
-    destruct b; simpl; intuition.
-  }
+  induction x; induction y; simpl; auto.
 Qed.
 
-Theorem minNat_Succ n : minNat n (Succ n) = n.
+Theorem maxNat_max : forall x y, maxNat x y = max x y.
 Proof.
-  unfold minNat.
-  rewrite Nat_cases2_match_spec.
-  induction n.
-  {
-    reflexivity.
-  }
-  {
-    unfold Succ in *.
-    simpl.
-    intuition.
-  }
+  induction x; induction y; simpl; auto.
+Qed.
+
+Theorem addNat_add : forall x y, addNat x y = x + y.
+Proof.
+  induction x; simpl; auto.
+Qed.
+
+Theorem subNat_sub : forall x y, subNat x y = x - y.
+Proof.
+  induction x; induction y; simpl; auto.
+Qed.
+
+Theorem mulNat_mul : forall x y, mulNat x y = x * y.
+Proof.
+  induction x; simpl; intros; auto.
+  rewrite IHx.
+  apply addNat_add.
 Qed.
 
 Theorem fold_unfold_IRT As Ds D : forall x, foldIRT As Ds D (unfoldIRT As Ds D x) = x.
