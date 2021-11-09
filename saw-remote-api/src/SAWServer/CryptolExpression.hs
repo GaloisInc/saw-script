@@ -19,7 +19,7 @@ import Data.Maybe (fromMaybe)
 import Cryptol.Eval (EvalOpts(..))
 import Cryptol.ModuleSystem (ModuleError, ModuleInput(..), ModuleRes, ModuleWarning)
 import Cryptol.ModuleSystem.Base (genInferInput, getPrimMap, noPat, rename)
-import Cryptol.ModuleSystem.Env (ModuleEnv, meSolverConfig)
+import Cryptol.ModuleSystem.Env (ModuleEnv)
 import Cryptol.ModuleSystem.Interface (noIfaceParams)
 import Cryptol.ModuleSystem.Monad (ModuleM, interactive, runModuleM, setNameSeeds, setSupply, typeCheckWarnings, typeCheckingFailed)
 import qualified Cryptol.ModuleSystem.Renamer as MR
@@ -35,10 +35,11 @@ import SAWScript.Value (biSharedContext, TopLevelRW(..))
 import Verifier.SAW.CryptolEnv
     ( getAllIfaceDecls,
       getNamingEnv,
+      meSolverConfig,
       translateExpr,
       CryptolEnv(eExtraTypes, eExtraTSyns, eModuleEnv) )
 import Verifier.SAW.SharedTerm (SharedContext)
-import Verifier.SAW.TypedTerm(TypedTerm(..))
+import Verifier.SAW.TypedTerm(TypedTerm(..),TypedTermType(..))
 
 import qualified Argo
 import CryptolServer.Data.Expression (Expression, getCryptolExpr)
@@ -62,7 +63,7 @@ getTypedTermOfCExp fileReader sc cenv expr =
      let env = eModuleEnv cenv
      let minp = ModuleInput True (pure defaultEvalOpts) B.readFile env
      mres <-
-       withSolver (meSolverConfig env) $ \s ->
+       withSolver (return ()) (meSolverConfig env) $ \s ->
        runModuleM (minp s) $
        do npe <- interactive (noPat expr) -- eliminate patterns
 
@@ -85,7 +86,7 @@ getTypedTermOfCExp fileReader sc cenv expr =
        (Right ((checkedExpr, schema), modEnv'), ws) ->
          do let env' = cenv { eModuleEnv = modEnv' }
             trm <- liftIO $ translateExpr sc env' checkedExpr
-            return (Right (TypedTerm schema trm, modEnv'), ws)
+            return (Right (TypedTerm (TypedTermSchema schema) trm, modEnv'), ws)
        (Left err, ws) -> return (Left err, ws)
 
 moduleCmdResult :: ModuleRes a -> Argo.Command SAWState (a, ModuleEnv)

@@ -1,0 +1,66 @@
+cabal-version:      2.4
+Name:               heapster-saw
+Version:            0.1
+License:            BSD-3-Clause
+License-file:       LICENSE
+Author:             Galois, Inc.
+Maintainer:         westbrook@galois.com
+Copyright:          (c) 2020 Galois Inc.
+Category:           Formal Methods
+Build-type:         Simple
+Synopsis:           Program verification in SAW using Heapster
+Description:
+  A type system for binaries based on separation logic, along with a translation
+  from well-typed programs into pure monadic SAW core programs
+
+library
+  build-depends:
+    base == 4.*,
+    array ^>= 0.5.3,
+    saw-core,
+    crucible,
+    crucible-llvm,
+    what4,
+    parameterized-utils,
+    lens,
+    text,
+    llvm-pretty >= 0.8,
+    reflection,
+    -- ansi-wl-pprint,
+    prettyprinter >= 1.7.0,
+    pretty,
+    transformers,
+    mtl,
+    containers,
+    bv-sized,
+    bytestring,
+    vector,
+    filepath,
+    language-rust,
+    hobbits ^>= 1.4,
+  hs-source-dirs: src
+  build-tool-depends:
+    alex:alex,
+    happy:happy,
+  exposed-modules:
+    Verifier.SAW.Heapster.CruUtil
+    Verifier.SAW.Heapster.GenMonad
+    Verifier.SAW.Heapster.Implication
+    Verifier.SAW.Heapster.IRTTranslation
+    Verifier.SAW.Heapster.Lexer
+    Verifier.SAW.Heapster.LLVMGlobalConst
+    Verifier.SAW.Heapster.Located
+    Verifier.SAW.Heapster.ParsedCtx
+    Verifier.SAW.Heapster.Parser
+    Verifier.SAW.Heapster.Permissions
+    Verifier.SAW.Heapster.PermParser
+    Verifier.SAW.Heapster.NamePropagation
+    Verifier.SAW.Heapster.RustTypes
+    Verifier.SAW.Heapster.SAWTranslation
+    Verifier.SAW.Heapster.Token
+    Verifier.SAW.Heapster.TypeChecker
+    Verifier.SAW.Heapster.TypedCrucible
+    Verifier.SAW.Heapster.UntypedAST
+    Verifier.SAW.Heapster.Widening
+  GHC-options: -Wall
+  default-language: Haskell2010

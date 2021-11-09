@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 module SAWServer.NoParams (NoParams(..)) where
 
 import Data.Aeson
@@ -12,5 +13,5 @@ instance ToJSON NoParams where
 instance FromJSON NoParams where
   parseJSON = withObject "no parameters" (const (pure NoParams))
 
-instance Doc.DescribedParams NoParams where
+instance Doc.DescribedMethod NoParams () where
   parameterFieldDescription = []

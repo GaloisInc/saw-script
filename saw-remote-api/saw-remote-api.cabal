@@ -16,10 +16,10 @@ maintainer:          kwf@galois.com
 category:            Network
 extra-source-files:  CHANGELOG.md
 
-
-flag builtin-abc
-  description: Link with ABC as a static library
-  default: True
+common general
+  ghc-options:
+    -O2
+    -threaded
 
 common warnings
   ghc-options:
@@ -35,7 +35,8 @@ common errors
 
 common deps
   build-depends: base >=4.11.1.0 && <4.15,
-                 aeson,
+                 aeson >= 1.4.2 && < 2.0,
+                 aig,
                  argo,
                  base64-bytestring,
                  bytestring,
@@ -61,11 +62,6 @@ common deps
                  vector >= 0.12 && < 0.13,
                  cryptol-remote-api
   default-language: Haskell2010
-  if flag(builtin-abc)
-    cpp-options: -DUSE_BUILTIN_ABC
-    build-depends: abcBridge
-  else
-    build-depends: aig
 
 library
   import: deps, warnings, errors
@@ -95,7 +91,7 @@ library
                    SAWServer.VerifyCommon
 
 executable saw-remote-api
-  import: deps, warnings, errors
+  import: general, deps, warnings, errors
   main-is:             Main.hs
   build-depends:       saw-remote-api
   -- other-modules:

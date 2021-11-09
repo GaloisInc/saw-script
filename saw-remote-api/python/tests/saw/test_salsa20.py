@@ -3,6 +3,7 @@ import unittest
 from cryptol.cryptoltypes import to_cryptol
 from saw_client import *
 from saw_client.llvm import Contract, void, SetupVal, FreshVar, cryptol, i8, i32, LLVMType, LLVMArrayType
+from saw_client.proofscript import z3
 
 
 def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None) -> Tuple[FreshVar, SetupVal]:
@@ -142,7 +143,8 @@ class Salsa20EasyTest(unittest.TestCase):
         self.assertIs(cr_result.is_success(), True)
         dr_result = llvm_verify(mod, 's20_doubleround', DoubleRoundContract(), lemmas=[cr_result, rr_result])
         self.assertIs(dr_result.is_success(), True)
-        hash_result = llvm_verify(mod, 's20_hash', HashContract(), lemmas=[dr_result])
+        hash_result = llvm_verify(mod, 's20_hash', HashContract(),
+        lemmas=[dr_result], script = proofscript.ProofScript([proofscript.z3(['doubleround'])]))
         self.assertIs(hash_result.is_success(), True)
         expand_result = llvm_verify(mod, 's20_expand32', ExpandContract(), lemmas=[hash_result])
         self.assertIs(expand_result.is_success(), True)

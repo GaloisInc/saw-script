@@ -35,7 +35,7 @@ import SAWScript.REPL.Trie
 import SAWScript.Position (getPos)
 
 import Cryptol.Parser (ParseError())
-import Cryptol.Utils.PP
+import Cryptol.Utils.PP hiding ((</>))
 
 import Control.Monad (guard)
 import Data.Char (isSpace,isPunctuation,isSymbol)
@@ -228,9 +228,8 @@ sawScriptCmd str = do
     Left err -> io $ print err
     Right stmt ->
       do ro <- getTopLevelRO
-         ie <- getEnvironment
-         ((), ie') <- io $ runTopLevel (interpretStmt True stmt) ro ie
-         putEnvironment ie'
+         rwRef <- getEnvironmentRef
+         io $ runTopLevel (interpretStmt True stmt) ro rwRef
 
 replFileName :: String
 replFileName = "<stdin>"

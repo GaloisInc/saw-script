@@ -41,10 +41,11 @@ import Data.Foldable (foldlM)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
 import qualified Data.Text as Text
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
-import qualified Data.Set as Set
-import Data.Set (Set)
+import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
@@ -138,6 +139,7 @@ type Ptr = C.LLVM.LLVMPtr Sym 64
 type X86Constraints =
   ( C.LLVM.HasPtrWidth (C.LLVM.ArchWidth LLVMArch)
   , C.LLVM.HasLLVMAnn Sym
+  , ?memOpts :: C.LLVM.MemOptions
   , ?lc :: C.LLVM.TypeContext
   )
 
@@ -288,11 +290,13 @@ llvm_verify_x86 ::
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
-  TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
+  TopLevel (SomeLLVM MS.ProvedSpec)
 llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
+      start <- io getCurrentTime
       let ?ptrWidth = knownNat @64
+      let ?memOpts = C.LLVM.defaultMemOptions
       let ?recordLLVMAnnotation = \_ _ -> return ()
       sc <- getSharedContext
       opts <- getOptions
@@ -382,11 +386,15 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
                       [ "Unable to find CFG for function at address "
                       , show $ W4.ppExpr off
                       ]
+        archEvalFns = Macaw.x86_64MacawEvalFn sfs Macaw.defaultMacawArchStmtExtensionOverride
+        lookupSyscall = Macaw.unsupportedSyscalls "saw-script"
         noExtraValidityPred _ _ _ _ = return Nothing
-        defaultMacawExtensions_x86_64 = Macaw.macawExtensions
-          (Macaw.x86_64MacawEvalFn sfs) mvar
+        defaultMacawExtensions_x86_64 =
+          Macaw.macawExtensions
+          archEvalFns mvar
           (mkGlobalMap . Map.singleton 0 $ preState ^. x86GlobalBase)
           funcLookup
+          lookupSyscall
           noExtraValidityPred
         sawMacawExtensions = defaultMacawExtensions_x86_64
           { C.extensionExec = \s0 st -> case s0 of
@@ -449,9 +457,13 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
             ar
         C.TimeoutResult{} -> fail "Execution timed out"
 
-      stats <- checkGoals sym opts sc tactic
+      (stats,thms) <- checkGoals sym opts sc tactic
 
-      returnProof $ SomeLLVM (methodSpec & MS.csSolverStats .~ stats)
+      end <- io getCurrentTime
+      let diff = diffUTCTime end start
+      ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats thms mempty diff)
+      returnProof $ SomeLLVM ps
+
   | otherwise = fail "LLVM module must be 64-bit"
 
 --------------------------------------------------------------------------------
@@ -908,8 +920,8 @@ assertPost globals env premem preregs = do
   st <- case result of
     Left err -> throwX86 $ show err
     Right (_, st) -> pure st
-  liftIO . forM_ (view O.osAssumes st) $ \p ->
-    C.addAssumption sym . C.LabeledPred p $ C.AssumptionReason (st ^. O.osLocation) "precondition"
+  liftIO . forM_ (view O.osAssumes st) $
+    C.addAssumption sym . C.GenericAssumption (st ^. O.osLocation) "precondition"
   liftIO . forM_ (view LO.osAsserts st) $ \(W4.LabeledPred p r) ->
     C.addAssertion sym $ C.LabeledPred p r
 
@@ -943,7 +955,7 @@ checkGoals ::
   Options ->
   SharedContext ->
   ProofScript () ->
-  TopLevel SolverStats
+  TopLevel (SolverStats, Set TheoremNonce)
 checkGoals sym opts sc tactic = do
   gs <- liftIO $ getGoals sym
   liftIO . printOutLn opts Info $ mconcat
@@ -951,12 +963,13 @@ checkGoals sym opts sc tactic = do
     , show $ length gs
     , " goals"
     ]
-  stats <- forM (zip [0..] gs) $ \(n, g) -> do
+  outs <- forM (zip [0..] gs) $ \(n, g) -> do
     term <- liftIO $ gGoal sc g
     let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
-    res <- runProofScript tactic proofgoal
+    res <- runProofScript tactic proofgoal (Just (gLoc g)) $ Text.unwords
+              ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))]
     case res of
-      ValidProof stats _thm -> return stats -- TODO do something with these theorems
+      ValidProof stats thm -> return (stats, thmNonce thm)
       UnfinishedProof pst -> do
         printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
         printOutLnTop Info (show (psStats pst))
@@ -975,4 +988,7 @@ checkGoals sym opts sc tactic = do
         printOutLnTop OnlyCounterExamples "----------------------------------"
         throwTopLevel "Proof failed."
   liftIO $ printOutLn opts Info "All goals succeeded"
-  return (mconcat stats)
+
+  let stats = mconcat (map fst outs)
+  let thms  = mconcat (map (Set.singleton . snd) outs)
+  return (stats, thms)

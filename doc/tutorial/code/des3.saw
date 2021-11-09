@@ -2,13 +2,13 @@ import "DES.cry";
 
 print "proving dec_enc...";
 let prop1 = {{ \key msg -> decrypt key (encrypt key msg) == msg }};
-dec_enc <- prove_print abc {{prop1}};
+dec_enc <- prove_print w4_abc_verilog {{prop1}};
 
 print dec_enc;
 
 print "proving enc_dec...";
 let prop2 = {{ \key msg -> encrypt key (decrypt key msg) == msg }};
-enc_dec <- prove_print abc {{prop2}};
+enc_dec <- prove_print w4_abc_verilog {{prop2}};
 
 print enc_dec;
 
@@ -24,7 +24,7 @@ prove_print do {
     unfolding ["dec3", "enc3"];
     simplify ss;
     print_goal;
-    abc;
+    w4_abc_verilog;
 } {{prop3}};
 
 print "proving enc3_dec3...";
@@ -34,5 +34,5 @@ prove_print do {
     unfolding ["dec3", "enc3"];
     simplify ss;
     print_goal;
-    abc;
+    w4_abc_verilog;
 } {{prop4}};

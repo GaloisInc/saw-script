@@ -29,14 +29,15 @@ import Data.Monoid
 #endif
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State
-import Control.Monad.Reader (ask)
 import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
+import Data.IORef
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -74,6 +75,7 @@ import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (prepareSATQuery, runManyTests)
 import Verifier.SAW.TypedAST
+import qualified Verifier.SAW.Simulator.TermModel as TM
 
 import SAWScript.Position
 
@@ -90,7 +92,7 @@ import qualified Data.SBV.Dynamic as SBV
 import qualified Data.AIG as AIG
 
 -- cryptol
-import qualified Cryptol.ModuleSystem.Env as C (meSolverConfig, meSearchPath)
+import qualified Cryptol.ModuleSystem.Env as C (meSearchPath)
 import qualified Cryptol.TypeCheck as C (SolverConfig)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.PP as C (ppWithNames, pp, text, (<+>))
@@ -115,6 +117,7 @@ import SAWScript.TopLevel
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
 
+import SAWScript.Crucible.Common.MethodSpec (ppTypedTermType)
 import SAWScript.Prover.Util(checkBooleanSchema)
 import SAWScript.Prover.SolverStats
 import qualified SAWScript.Prover.SBV as Prover
@@ -131,11 +134,16 @@ showPrim v = do
   return (SV.showsPrecValue opts 0 v "")
 
 definePrim :: Text -> TypedTerm -> TopLevel TypedTerm
-definePrim name (TypedTerm schema rhs) =
+definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
   do sc <- getSharedContext
      ty <- io $ Cryptol.importSchema sc Cryptol.emptyEnv schema
      t <- io $ scConstant sc name rhs ty
-     return $ TypedTerm schema t
+     return $ TypedTerm (TypedTermSchema schema) t
+definePrim _name (TypedTerm tp _) =
+  fail $ unlines
+    [ "Expected term with Cryptol schema type, but got"
+    , show (ppTypedTermType tp)
+    ]
 
 sbvUninterpreted :: String -> Term -> TopLevel Uninterp
 sbvUninterpreted s t = return $ Uninterp (s, t)
@@ -150,7 +158,7 @@ readBytes path = do
   xs <- io $ mapM (scBvConst sc 8 . toInteger) bytes
   trm <- io $ scVector sc e xs
   let schema = C.Forall [] [] (C.tSeq (C.tNum len) (C.tSeq (C.tNum (8::Int)) C.tBit))
-  return (TypedTerm schema trm)
+  return (TypedTerm (TypedTermSchema schema) trm)
 
 readSBV :: FilePath -> [Uninterp] -> TopLevel TypedTerm
 readSBV path unintlst =
@@ -166,7 +174,7 @@ readSBV path unintlst =
              printOutLnTop Error $ unlines $
              ("Type error reading " ++ path ++ ":") : prettyTCError err
            Right _ -> return () -- TODO: check that it matches 'schema'?
-       return (TypedTerm schema trm)
+       return (TypedTerm (TypedTermSchema schema) trm)
     where
       unintmap = Map.fromList $ map getUninterp unintlst
 
@@ -190,12 +198,12 @@ readSBV path unintlst =
 -- have more examples. It might be an improvement to take SAIGs as
 -- arguments, in the style of 'cecPrim' below. This would require
 -- support for latches in the 'AIGNetwork' SAWScript type.
-dsecPrint :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
-dsecPrint sc t1 t2 = SV.getProxy >>= \(SV.AIGProxy proxy) -> do
+dsecPrint :: TypedTerm -> TypedTerm -> TopLevel ()
+dsecPrint t1 t2 = do
   withSystemTempFile ".aig" $ \path1 _handle1 -> do
   withSystemTempFile ".aig" $ \path2 _handle2 -> do
-  Prover.writeSAIGInferLatches proxy sc path1 t1
-  Prover.writeSAIGInferLatches proxy sc path2 t2
+  Prover.writeSAIGInferLatches path1 t1
+  Prover.writeSAIGInferLatches path2 t2
   io $ callCommand (abcDsec path1 path2)
   where
     -- The '-w' here may be overkill ...
@@ -257,7 +265,7 @@ readAIGPrim f = do
   et <- io $ readAIG proxy opts sc f
   case et of
     Left err -> fail $ "Reading AIG failed: " ++ err
-    Right (inLen, outLen, t) -> pure $ TypedTerm schema t
+    Right (inLen, outLen, t) -> pure $ TypedTerm (TypedTermSchema schema) t
       where
         t1 = C.tWord (C.tNum inLen)
         t2 = C.tWord (C.tNum outLen)
@@ -286,8 +294,8 @@ replacePrim pat replace t = do
     unless c $ fail $ unlines
       [ "terms do not have convertible types", show tpat, show ty1, show trepl, show ty2 ]
 
-  let ss = emptySimpset
-  t' <- io $ replaceTerm sc ss (tpat, trepl) (ttTerm t)
+  let ss = emptySimpset :: SV.SAWSimpset
+  (_,t') <- io $ replaceTerm sc ss (tpat, trepl) (ttTerm t)
 
   io $ do
     ty  <- scTypeOf sc (ttTerm t)
@@ -358,7 +366,7 @@ assumeValid =
   execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is valid"
      pos <- SV.getPosition
-     let admitMsg = "assumeValid: " ++ goalName goal
+     let admitMsg = "assumeValid: " <> Text.pack (goalName goal)
      let stats = solverStats "ADMITTED" (propSize (goalProp goal))
      return (stats, SolveSuccess (Admitted admitMsg pos (goalProp goal)))
 
@@ -367,11 +375,11 @@ assumeUnsat =
   execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is unsat"
      pos <- SV.getPosition
-     let admitMsg = "assumeUnsat: " ++ goalName goal
+     let admitMsg = "assumeUnsat: " <> Text.pack (goalName goal)
      let stats = solverStats "ADMITTED" (propSize (goalProp goal))
      return (stats, SolveSuccess (Admitted admitMsg pos (goalProp goal)))
 
-admitProof :: String -> ProofScript ()
+admitProof :: Text -> ProofScript ()
 admitProof msg =
   execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: admitting goal " ++ goalName goal
@@ -486,6 +494,18 @@ resolveName sc nm =
  fallback = fst <$> io (scResolveUnambiguous sc tnm)
 
 
+normalize_term :: TypedTerm -> TopLevel TypedTerm
+normalize_term tt = normalize_term_opaque [] tt
+
+normalize_term_opaque :: [String] -> TypedTerm -> TopLevel TypedTerm
+normalize_term_opaque opaque tt =
+  do sc <- getSharedContext
+     modmap <- io (scGetModuleMap sc)
+     idxs <- mapM (resolveName sc) opaque
+     let opaqueSet = Set.fromList idxs
+     tm' <- io (TM.normalizeSharedTerm sc modmap mempty mempty opaqueSet (ttTerm tt))
+     pure tt{ ttTerm = tm' }
+
 unfoldGoal :: [String] -> ProofScript ()
 unfoldGoal unints =
   execTactic $ tacticChange $ \goal ->
@@ -494,12 +514,28 @@ unfoldGoal unints =
      prop' <- io (unfoldProp sc unints' (goalProp goal))
      return (prop', UnfoldEvidence unints')
 
-simplifyGoal :: Simpset -> ProofScript ()
+simplifyGoal :: SV.SAWSimpset -> ProofScript ()
 simplifyGoal ss =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
-     prop' <- io (simplifyProp sc ss (goalProp goal))
+     (_,prop') <- io (simplifyProp sc ss (goalProp goal))
      return (prop', RewriteEvidence ss)
+
+hoistIfsInGoalPrim :: ProofScript ()
+hoistIfsInGoalPrim =
+  execTactic $ tacticChange $ \goal ->
+    do sc <- getSharedContext
+       p <- io $ hoistIfsInGoal sc (goalProp goal)
+       return (p, HoistIfsEvidence)
+
+term_type :: TypedTerm -> TopLevel C.Schema
+term_type tt =
+  case ttType tt of
+    TypedTermSchema sch -> pure sch
+    tp -> fail $ unlines
+            [ "Term does not have a Cryptol type"
+            , show (ppTypedTermType tp)
+            ]
 
 goal_eval :: [String] -> ProofScript ()
 goal_eval unints =
@@ -508,6 +544,76 @@ goal_eval unints =
      unintSet <- resolveNames unints
      prop' <- io (evalProp sc unintSet (goalProp goal))
      return (prop', EvalEvidence unintSet)
+
+extract_uninterp ::
+  [String] {- ^ uninterpred identifiers -} ->
+  [String] {- ^ opaque identifiers -} ->
+  TypedTerm ->
+  TopLevel (TypedTerm, [(String,[(TypedTerm,TypedTerm)])])
+extract_uninterp unints opaques tt =
+  do sc <- getSharedContext
+     idxs <- mapM (resolveName sc) unints
+     let unintSet = Set.fromList idxs
+     mmap <- io (scGetModuleMap sc)
+
+     opaqueSet <- Set.fromList <$> mapM (resolveName sc) opaques
+
+     boundECRef <- io (newIORef Set.empty)
+     let ?recordEC = \ec -> modifyIORef boundECRef (Set.insert ec)
+     (tm, repls) <- io (TM.extractUninterp sc mmap mempty mempty unintSet opaqueSet (ttTerm tt))
+     boundECSet <- io (readIORef boundECRef)
+     let tt' = tt{ ttTerm = tm }
+
+     let f = traverse $ \(ec,vs) ->
+               do ectm <- scExtCns sc ec
+                  vs'  <- filterCryTerms sc vs
+                  pure (ectm, vs')
+     repls' <- io (traverse f repls)
+
+     usedECRef <- io (newIORef Set.empty)
+     replList <- io $
+        forM (zip unints idxs) $ \(nm,idx) ->
+           do let ls = fromMaybe [] (Map.lookup idx repls')
+              xs <- forM ls $ \(e,vs) ->
+                      do e'  <- mkTypedTerm sc e
+                         vs' <- tupleTypedTerm sc vs
+                         modifyIORef usedECRef (Set.union (getAllExtSet (ttTerm vs')))
+                         pure (e',vs')
+              pure (nm,xs)
+     usedECSet <- io (readIORef usedECRef)
+
+     let boundAndUsed = Set.intersection boundECSet usedECSet
+     unless (Set.null boundAndUsed)
+       (do ppOpts <- getTopLevelPPOpts
+           vs <- io $ forM (Set.toList boundAndUsed) $ \ec ->
+                              do pptm <- scPrettyTerm ppOpts <$> scExtCns sc ec
+                                 let ppty = scPrettyTerm ppOpts (ecType ec)
+                                 return (pptm <> " : " <> ppty)
+           printOutLnTop Warn $ unlines $
+             [ "WARNING: extracted arguments reference captured variables!"
+             , "This usually means one of functions you extracted was used in a higher-order way"
+             , "that could not be fully unrolled, or the expression depends on lambda-bound variables."
+             , "The results of reasoning about this extraction may be unexpected."
+             , "The affected variables are:"
+             ] ++ (map ("  "++) vs))
+
+     pure (tt', replList)
+
+
+filterCryTerms :: SharedContext -> [Term] -> IO [TypedTerm]
+filterCryTerms sc = loop
+  where
+  loop [] = pure []
+  loop (x:xs) =
+    do tp <- Cryptol.scCryptolType sc =<< scTypeOf sc x
+       case tp of
+         Just (Right cty) ->
+           do let x' = TypedTerm (TypedTermSchema (C.tMono cty)) x
+              xs' <- loop xs
+              pure (x':xs')
+
+         _ -> loop xs
+
 
 beta_reduce_goal :: ProofScript ()
 beta_reduce_goal =
@@ -524,7 +630,8 @@ goal_apply thm =
 goal_assume :: ProofScript Theorem
 goal_assume =
   do sc <- SV.scriptTopLevel getSharedContext
-     execTactic (tacticAssume sc)
+     pos <- SV.scriptTopLevel SV.getPosition
+     execTactic (tacticAssume sc pos)
 
 goal_intro :: Text -> ProofScript TypedTerm
 goal_intro s =
@@ -574,22 +681,13 @@ satExternal doCNF execName args =
          Just a  -> return (stats, SolveCounterexample a)
 
 writeAIGPrim :: FilePath -> Term -> TopLevel ()
-writeAIGPrim f t = do
-  SV.AIGProxy proxy <- SV.getProxy
-  sc <- SV.getSharedContext
-  Prover.writeAIG proxy sc f t
+writeAIGPrim = Prover.writeAIG
 
 writeSAIGPrim :: FilePath -> TypedTerm -> TopLevel ()
-writeSAIGPrim f t = do
-  SV.AIGProxy proxy <- SV.getProxy
-  sc <- SV.getSharedContext
-  Prover.writeSAIGInferLatches proxy sc f t
+writeSAIGPrim = Prover.writeSAIGInferLatches
 
 writeSAIGComputedPrim :: FilePath -> Term -> Int -> TopLevel ()
-writeSAIGComputedPrim f t n = do
-  SV.AIGProxy proxy <- SV.getProxy
-  sc <- SV.getSharedContext
-  Prover.writeSAIG proxy sc f t n
+writeSAIGComputedPrim = Prover.writeSAIG
 
 -- | Bit-blast a proposition check its validity using the RME library.
 proveRME :: ProofScript ()
@@ -615,48 +713,43 @@ proveUnintSBV conf unints =
      unintSet <- SV.scriptTopLevel (resolveNames unints)
      wrapProver (Prover.proveUnintSBV conf unintSet timeout)
 
-applyProverToGoal :: (SharedContext
-                      -> Prop -> IO (Maybe CEX, SolverStats))
-                     -> SharedContext
+applyProverToGoal :: (Prop -> TopLevel (Maybe CEX, SolverStats))
                      -> ProofGoal
                      -> TopLevel (SolverStats, SolveResult)
-applyProverToGoal f sc g = do
-  (mb, stats) <- io $ f sc (goalProp g)
+applyProverToGoal f g = do
+  (mb, stats) <- f (goalProp g)
   case mb of
     Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
     Just a  -> return (stats, SolveCounterexample a)
 
 wrapProver ::
-  (SharedContext -> Prop -> IO (Maybe CEX, SolverStats)) ->
+  (Prop -> TopLevel (Maybe CEX, SolverStats)) ->
   ProofScript ()
-wrapProver f = do
-  sc <- SV.scriptTopLevel SV.getSharedContext
-  execTactic $ tacticSolve $ applyProverToGoal f sc
+wrapProver f = execTactic $ tacticSolve $ applyProverToGoal f
 
 wrapW4Prover ::
-  ( Set VarIndex -> SharedContext -> Bool ->
-    Prop -> IO (Maybe CEX, SolverStats)) ->
+  ( Set VarIndex -> Bool ->
+    Prop -> TopLevel (Maybe CEX, SolverStats)) ->
   [String] ->
   ProofScript ()
 wrapW4Prover f unints = do
   hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
   unintSet <- SV.scriptTopLevel $ resolveNames unints
-  wrapProver $ \sc -> f unintSet sc hashConsing
+  wrapProver $ f unintSet hashConsing
 
 wrapW4ProveExporter ::
-  ( Set VarIndex -> SharedContext -> Bool -> FilePath ->
-    Prop -> IO (Maybe CEX, SolverStats)) ->
+  ( Set VarIndex -> Bool -> FilePath ->
+    Prop -> TopLevel (Maybe CEX, SolverStats)) ->
   [String] ->
   String ->
   String ->
   ProofScript ()
 wrapW4ProveExporter f unints path ext = do
   hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
-  sc <- SV.scriptTopLevel $ SV.getSharedContext
   unintSet <- SV.scriptTopLevel $ resolveNames unints
   execTactic $ tacticSolve $ \g -> do
     let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
-    applyProverToGoal (\s -> f unintSet s hashConsing file) sc g
+    applyProverToGoal (f unintSet hashConsing file) g
 
 --------------------------------------------------
 proveABC_SBV :: ProofScript ()
@@ -734,7 +827,7 @@ offline_w4_unint_yices unints path =
      wrapW4ProveExporter Prover.proveExportWhat4_yices unints path ".smt2"
 
 proveWithSATExporter ::
-  (SharedContext -> FilePath -> SATQuery -> TopLevel a) ->
+  (FilePath -> SATQuery -> TopLevel a) ->
   Set VarIndex ->
   String ->
   String ->
@@ -747,7 +840,7 @@ proveWithSATExporter exporter unintSet path sep ext =
      return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
 
 proveWithPropExporter ::
-  (SharedContext -> FilePath -> Prop -> TopLevel a) ->
+  (FilePath -> Prop -> TopLevel a) ->
   String ->
   String ->
   String ->
@@ -759,28 +852,26 @@ proveWithPropExporter exporter path sep ext =
      return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
 
 offline_aig :: FilePath -> ProofScript ()
-offline_aig path = do
-  SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
-  proveWithSATExporter (Prover.writeAIG_SAT proxy) mempty path "." ".aig"
+offline_aig path =
+  proveWithSATExporter Prover.writeAIG_SAT mempty path "." ".aig"
 
 offline_aig_external :: FilePath -> ProofScript ()
 offline_aig_external path =
   proveWithSATExporter Prover.writeAIG_SATviaVerilog mempty path "." ".aig"
 
 offline_cnf :: FilePath -> ProofScript ()
-offline_cnf path = do
-  SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
-  proveWithSATExporter (Prover.writeCNF proxy) mempty path "." ".cnf"
+offline_cnf path =
+  proveWithSATExporter Prover.writeCNF mempty path "." ".cnf"
 
 offline_cnf_external :: FilePath -> ProofScript ()
 offline_cnf_external path =
   proveWithSATExporter Prover.writeCNF_SATviaVerilog mempty path "." ".cnf"
 
 offline_coq :: FilePath -> ProofScript ()
-offline_coq path = proveWithPropExporter (const (Prover.writeCoqProp "goal" [] [])) path "_" ".v"
+offline_coq path = proveWithPropExporter (Prover.writeCoqProp "goal" [] []) path "_" ".v"
 
 offline_extcore :: FilePath -> ProofScript ()
-offline_extcore path = proveWithPropExporter (const Prover.writeCoreProp) path "." ".extcore"
+offline_extcore path = proveWithPropExporter Prover.writeCoreProp path "." ".extcore"
 
 offline_smtlib2 :: FilePath -> ProofScript ()
 offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2 mempty path "." ".smt2"
@@ -797,6 +888,9 @@ offline_verilog :: FilePath -> ProofScript ()
 offline_verilog path =
   proveWithSATExporter Prover.writeVerilogSAT mempty path "." ".v"
 
+w4_abc_aiger :: ProofScript ()
+w4_abc_aiger = wrapW4Prover Prover.w4AbcAIGER []
+
 w4_abc_verilog :: ProofScript ()
 w4_abc_verilog = wrapW4Prover Prover.w4AbcVerilog []
 
@@ -810,14 +904,15 @@ provePrim ::
   TypedTerm ->
   TopLevel ProofResult
 provePrim script t = do
-  io $ checkBooleanSchema (ttSchema t)
+  io $ checkBooleanSchema (ttType t)
   sc <- getSharedContext
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   let goal = ProofGoal 0 "prove" "prove" prop
-  res <- SV.runProofScript script goal
+  res <- SV.runProofScript script goal Nothing "prove_prim"
   case res of
     UnfinishedProof pst ->
       printOutLnTop Info $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)"
+    ValidProof _ thm -> SV.recordProof thm
     _ -> return ()
   return res
 
@@ -830,7 +925,7 @@ provePrintPrim script t = do
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   let goal = ProofGoal 0 "prove" "prove" prop
   opts <- rwPPOpts <$> getTopLevelRW
-  res <- SV.runProofScript script goal
+  res <- SV.runProofScript script goal Nothing "prove_print_prim"
   let failProof pst =
          fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                           ++ SV.showsProofResult opts res ""
@@ -846,11 +941,11 @@ satPrim ::
   TypedTerm ->
   TopLevel SV.SatResult
 satPrim script t =
-  do io $ checkBooleanSchema (ttSchema t)
+  do io $ checkBooleanSchema (ttType t)
      sc <- getSharedContext
      prop <- io $ predicateToProp sc Existential (ttTerm t)
      let goal = ProofGoal 0 "sat" "sat" prop
-     res <- SV.runProofScript script goal
+     res <- SV.runProofScript script goal Nothing "sat"
      case res of
        InvalidProof stats cex _ -> return (SV.Sat stats cex)
        ValidProof stats _thm -> return (SV.Unsat stats)
@@ -880,26 +975,26 @@ quickCheckPrintPrim opts sc numTests tt =
                "----------Counterexample----------\n" ++
                showList cex' ""
 
-cryptolSimpset :: TopLevel Simpset
+cryptolSimpset :: TopLevel SV.SAWSimpset
 cryptolSimpset =
   do sc <- getSharedContext
      io $ Cryptol.mkCryptolSimpset sc
 
-addPreludeEqs :: [Text] -> Simpset -> TopLevel Simpset
+addPreludeEqs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addPreludeEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Prelude"])
 
-addCryptolEqs :: [Text] -> Simpset -> TopLevel Simpset
+addCryptolEqs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addCryptolEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Cryptol"])
 
-add_core_defs :: Text -> [Text] -> Simpset -> TopLevel Simpset
+add_core_defs :: Text -> [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 add_core_defs modname names ss =
   do sc <- getSharedContext
      defs <- io $ mapM (getDef sc) names -- FIXME: warn if not found
@@ -913,16 +1008,16 @@ add_core_defs modname names ss =
         Just d -> return d
         Nothing -> fail $ Text.unpack $ modname <> " definition " <> n <> " not found"
 
-add_prelude_defs :: [Text] -> Simpset -> TopLevel Simpset
+add_prelude_defs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 add_prelude_defs = add_core_defs "Prelude"
 
-add_cryptol_defs :: [Text] -> Simpset -> TopLevel Simpset
+add_cryptol_defs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 add_cryptol_defs = add_core_defs "Cryptol"
 
-rewritePrim :: Simpset -> TypedTerm -> TopLevel TypedTerm
+rewritePrim :: SV.SAWSimpset -> TypedTerm -> TopLevel TypedTerm
 rewritePrim ss (TypedTerm schema t) = do
   sc <- getSharedContext
-  t' <- io $ rewriteSharedTerm sc ss t
+  (_,t') <- io $ rewriteSharedTerm sc ss t
   return (TypedTerm schema t')
 
 unfold_term :: [String] -> TypedTerm -> TopLevel TypedTerm
@@ -938,23 +1033,24 @@ beta_reduce_term (TypedTerm schema t) = do
   t' <- io $ betaNormalize sc t
   return (TypedTerm schema t')
 
-addsimp :: Theorem -> Simpset -> TopLevel Simpset
+addsimp :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimp thm ss =
   do sc <- getSharedContext
-     io (propToRewriteRule sc (thmProp thm)) >>= \case
+     io (propToRewriteRule sc (thmProp thm) (Just (thmNonce thm))) >>= \case
        Nothing -> fail "addsimp: theorem not an equation"
        Just rule -> pure (addRule rule ss)
 
-addsimp' :: Term -> Simpset -> TopLevel Simpset
+-- TODO: remove this, it implicitly adds axioms
+addsimp' :: Term -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimp' t ss =
-  case ruleOfProp t of
+  case ruleOfProp t Nothing of
     Nothing -> fail "addsimp': theorem not an equation"
     Just rule -> pure (addRule rule ss)
 
-addsimps :: [Theorem] -> Simpset -> TopLevel Simpset
+addsimps :: [Theorem] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimps thms ss = foldM (flip addsimp) ss thms
 
-addsimps' :: [Term] -> Simpset -> TopLevel Simpset
+addsimps' :: [Term] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimps' ts ss = foldM (flip addsimp') ss ts
 
 print_type :: Term -> TopLevel ()
@@ -991,7 +1087,7 @@ freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
   sc <- getSharedContext
   cty <- io $ Cryptol.importType sc Cryptol.emptyEnv ct
   tm <- io $ scFreshGlobal sc x cty
-  return $ TypedTerm schema tm
+  return $ TypedTerm (TypedTermSchema schema) tm
 freshSymbolicPrim _ _ =
   fail "Can't create fresh symbolic variable of non-ground type."
 
@@ -1019,7 +1115,6 @@ lambdas vars tt =
 
 -- | Apply the given Term to the given values, and evaluate to a
 -- final value.
--- TODO: Take (ExtCns, FiniteValue) instead of (Term, FiniteValue)
 cexEvalFn :: SharedContext -> [(ExtCns Term, FirstOrderValue)] -> Term
           -> IO Concrete.CValue
 cexEvalFn sc args tm = do
@@ -1121,10 +1216,11 @@ timePrim a = do
   return r
 
 failsPrim :: TopLevel SV.Value -> TopLevel ()
-failsPrim m = TopLevel $ do
-  topRO <- ask
-  topRW <- Control.Monad.State.get
-  x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
+failsPrim m = do
+  topRO <- getTopLevelRO
+  topRW <- getTopLevelRW
+  ref <- liftIO $ newIORef topRW
+  x <- liftIO $ Ex.try (runTopLevel m topRO ref)
   case x of
     Left (ex :: Ex.SomeException) ->
       do liftIO $ putStrLn "== Anticipated failure message =="
@@ -1135,8 +1231,8 @@ failsPrim m = TopLevel $ do
 eval_bool :: TypedTerm -> TopLevel Bool
 eval_bool t = do
   sc <- getSharedContext
-  case ttSchema t of
-    C.Forall [] [] (C.tIsBit -> True) -> return ()
+  case ttType t of
+    TypedTermSchema (C.Forall [] [] (C.tIsBit -> True)) -> return ()
     _ -> fail "eval_bool: not type Bit"
   unless (null (getAllExts (ttTerm t))) $
     fail "eval_bool: term contains symbolic variables"
@@ -1147,13 +1243,13 @@ eval_int :: TypedTerm -> TopLevel Integer
 eval_int t = do
   sc <- getSharedContext
   cenv <- fmap rwCryptol getTopLevelRW
-  let cfg = C.meSolverConfig (CEnv.eModuleEnv cenv)
+  let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
   unless (null (getAllExts (ttTerm t))) $
     fail "term contains symbolic variables"
   opts <- getOptions
   t' <- io $ defaultTypedTerm opts sc cfg t
-  case ttSchema t' of
-    C.Forall [] [] (isInteger -> True) -> return ()
+  case ttType t' of
+    TypedTermSchema (C.Forall [] [] (isInteger -> True)) -> return ()
     _ -> fail "eval_int: argument is not a finite bitvector"
   v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t'
   io $ C.runEval mempty (C.bvVal <$> C.fromVWord C.Concrete "eval_int" v)
@@ -1168,41 +1264,58 @@ list_term :: [TypedTerm] -> TopLevel TypedTerm
 list_term [] = fail "list_term: invalid empty list"
 list_term tts@(tt0 : _) =
   do sc <- getSharedContext
-     let schema = ttSchema tt0
-     unless (all (schema ==) (map ttSchema tts)) $
+     a <- case ttType tt0 of
+            TypedTermSchema (C.Forall [] [] a) -> return a
+            _ -> fail "list_term: not a monomorphic element type"
+     let eqa (TypedTermSchema (C.Forall [] [] x)) = a == x
+         eqa _ = False
+     unless (all eqa (map ttType tts)) $
        fail "list_term: non-uniform element types"
-     a <-
-       case schema of
-         C.Forall [] [] a -> return a
-         _ -> fail "list_term: not a monomorphic element type"
+
      a' <- io $ Cryptol.importType sc Cryptol.emptyEnv a
      trm <- io $ scVectorReduced sc a' (map ttTerm tts)
      let n = C.tNum (length tts)
-     return (TypedTerm (C.tMono (C.tSeq n a)) trm)
+     return (TypedTerm (TypedTermSchema (C.tMono (C.tSeq n a))) trm)
 
 eval_list :: TypedTerm -> TopLevel [TypedTerm]
 eval_list t = do
   sc <- getSharedContext
   (n, a) <-
-    case ttSchema t of
-      C.Forall [] [] (C.tIsSeq -> Just (C.tIsNum -> Just n, a)) -> return (n, a)
+    case ttType t of
+      TypedTermSchema (C.Forall [] [] (C.tIsSeq -> Just (C.tIsNum -> Just n, a))) -> return (n, a)
       _ -> fail "eval_list: not a monomorphic array type"
   n' <- io $ scNat sc (fromInteger n)
   a' <- io $ Cryptol.importType sc Cryptol.emptyEnv a
   idxs <- io $ traverse (scNat sc) $ map fromInteger [0 .. n - 1]
   ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
-  return (map (TypedTerm (C.tMono a)) ts)
+  return (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
+
+term_theories :: [String] -> TypedTerm -> TopLevel [String]
+term_theories unints t = do
+  sc <- getSharedContext
+  unintSet <- resolveNames unints
+  hashConsing <- gets SV.rwWhat4HashConsing
+  prop <- io (predicateToProp sc Universal (ttTerm t))
+  Prover.what4Theories unintSet hashConsing prop
+
+default_typed_term :: TypedTerm -> TopLevel TypedTerm
+default_typed_term tt = do
+  sc <- getSharedContext
+  cenv <- fmap rwCryptol getTopLevelRW
+  let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
+  opts <- getOptions
+  io $ defaultTypedTerm opts sc cfg tt
 
 -- | Default the values of the type variables in a typed term.
 defaultTypedTerm :: Options -> SharedContext -> C.SolverConfig -> TypedTerm -> IO TypedTerm
-defaultTypedTerm opts sc cfg tt@(TypedTerm schema trm)
+defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
   | null (C.sVars schema) = return tt
   | otherwise = do
-  mdefault <- C.withSolver cfg (\s -> C.defaultReplExpr s undefined schema)
+  mdefault <- C.withSolver (return ()) cfg (\s -> C.defaultReplExpr s undefined schema)
   let inst = do (soln, _) <- mdefault
                 mapM (`lookup` soln) (C.sVars schema)
   case inst of
-    Nothing -> return (TypedTerm schema trm)
+    Nothing -> return (TypedTerm (TypedTermSchema schema) trm)
     Just tys -> do
       let vars = C.sVars schema
       let nms = C.addTNames vars IntMap.empty
@@ -1220,7 +1333,7 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm schema trm)
       let props = map (plainSubst su) (C.sProps schema)
       trm'' <- foldM dischargeProp trm' props
       let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))
-      return (TypedTerm schema' trm'')
+      return (TypedTerm (TypedTermSchema schema') trm'')
   where
     warnDefault ns (x,t) =
       printOutLn opts Info $ show $ C.text "Assuming" C.<+> C.ppWithNames ns (x :: C.TParam) C.<+> C.text "=" C.<+> C.pp t
@@ -1235,6 +1348,9 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm schema trm)
         C.TRec fs      -> C.TRec (fmap (plainSubst s) fs)
         C.TVar x       -> C.apSubst s (C.TVar x)
         C.TNewtype nt ts -> C.TNewtype nt (fmap (plainSubst s) ts)
+
+defaultTypedTerm _opts _sc _cfg tt = return tt
+
 
 eval_size :: C.Schema -> TopLevel Integer
 eval_size s =
@@ -1289,7 +1405,7 @@ prove_core script input =
      t <- parseCore input
      p <- io (termToProp sc t)
      opts <- rwPPOpts <$> getTopLevelRW
-     res <- SV.runProofScript script (ProofGoal 0 "prove" "prove" p)
+     res <- SV.runProofScript script (ProofGoal 0 "prove" "prove" p) Nothing "prove_core"
      let failProof pst =
             fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                                   ++ SV.showsProofResult opts res ""
@@ -1304,13 +1420,17 @@ core_axiom input =
      pos <- SV.getPosition
      t <- parseCore input
      p <- io (termToProp sc t)
-     SV.returnProof (admitTheorem "core_axiom" pos p)
+     db <- roTheoremDB <$> getTopLevelRO
+     thm <- io (admitTheorem db "core_axiom" p pos "core_axiom")
+     SV.returnProof thm
 
 core_thm :: String -> TopLevel Theorem
 core_thm input =
   do t <- parseCore input
      sc <- getSharedContext
-     thm <- io (proofByTerm sc t)
+     pos <- SV.getPosition
+     db <- roTheoremDB <$> getTopLevelRO
+     thm <- io (proofByTerm sc db t pos "core_thm")
      SV.returnProof thm
 
 get_opt :: Int -> TopLevel String
@@ -1353,7 +1473,7 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
       s' <- io $ CEnv.parseSchema cenv' (noLoc s)
       t' <- io $ scGlobalDef sc i
       putTopLevelRW $ rw { rwCryptol = cenv' }
-      return (n', TypedTerm s' t')
+      return (n', TypedTerm (TypedTermSchema s') t')
 
 cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CryptolModule
 cryptol_load fileReader path = do
@@ -1361,7 +1481,7 @@ cryptol_load fileReader path = do
   rw <- getTopLevelRW
   let ce = rwCryptol rw
   let ?fileReader = fileReader
-  (m, ce') <- io $ CEnv.loadCryptolModule sc ce path
+  (m, ce') <- io $ CEnv.loadCryptolModule sc CEnv.defaultPrimitiveOptions ce path
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m
 
@@ -1402,9 +1522,8 @@ parseSharpSATResult s = parse (lines s)
 
 sharpSAT :: TypedTerm -> TopLevel Integer
 sharpSAT t = do
-  sc <- getSharedContext
   tmp <- io $ emptySystemTempFile "sharpSAT-input"
-  Prover.write_cnf sc tmp t
+  Prover.write_cnf tmp t
   (_ec, out, _err) <- io $ readProcessWithExitCode "sharpSAT" [tmp] ""
   io $ removeFile tmp
   case parseSharpSATResult out of
@@ -1413,9 +1532,8 @@ sharpSAT t = do
 
 approxmc :: TypedTerm -> TopLevel ()
 approxmc t = do
-  sc <- getSharedContext
   tmp <- io $ emptySystemTempFile "approxmc-input"
-  Prover.write_cnf sc tmp t
+  Prover.write_cnf tmp t
   (_ec, out, _err) <- io $ readProcessWithExitCode "approxmc" [tmp] ""
   io $ removeFile tmp
   let msg = filter ("[appmc] Number of solutions is" `isPrefixOf`) (lines out)
@@ -1429,5 +1547,16 @@ summarize_verification =
      let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
-         summary = computeVerificationSummary jspecs lspecs thms
+     db <- roTheoremDB <$> getTopLevelRO
+     summary <- io (computeVerificationSummary db jspecs lspecs thms)
      io $ putStrLn $ prettyVerificationSummary summary
+
+summarize_verification_json :: String -> TopLevel ()
+summarize_verification_json fpath =
+  do values <- rwProofs <$> getTopLevelRW
+     let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
+         lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
+         thms    = [ t | SV.VTheorem t <- values ]
+     db <- roTheoremDB <$> getTopLevelRO
+     summary <- io (computeVerificationSummary db jspecs lspecs thms)
+     io (writeFile fpath (jsonVerificationSummary summary))

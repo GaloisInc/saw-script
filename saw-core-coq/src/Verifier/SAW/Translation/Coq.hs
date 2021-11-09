@@ -113,7 +113,11 @@ Import ListNotations.
 translateTermAsDeclImports ::
   TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) (Doc ann)
 translateTermAsDeclImports configuration name t = do
-  doc <- TermTranslation.translateDefDoc configuration Nothing [] name t
+  doc <-
+    TermTranslation.translateDefDoc
+      configuration
+      (TermTranslation.TranslationReader Nothing)
+      [] name t
   return $ vcat [preamble configuration, hardline <> doc]
 
 translateSAWModule :: TranslationConfiguration -> Module -> Doc ann
@@ -131,15 +135,21 @@ translateSAWModule configuration m =
      ]
 
 translateCryptolModule ::
-  TranslationConfiguration -> [String] -> CryptolModule -> Either (TranslationError Term) (Doc ann)
-translateCryptolModule configuration globalDecls m =
+  Coq.Ident {- ^ Section name -} ->
+  TranslationConfiguration ->
+  -- | List of already translated global declarations
+  [String] ->
+  CryptolModule ->
+  Either (TranslationError Term) (Doc ann)
+translateCryptolModule nm configuration globalDecls m =
   let decls = CryptolModuleTranslation.translateCryptolModule
               configuration
               globalDecls
               m
   in
-  vcat . map Coq.ppDecl <$> decls
+  Coq.ppDecl . Coq.Section nm <$> decls
 
-moduleDeclName :: ModuleDecl -> String
-moduleDeclName (TypeDecl (DataType { dtName })) = identName dtName
-moduleDeclName (DefDecl  (Def      { defIdent })) = identName defIdent
+moduleDeclName :: ModuleDecl -> Maybe String
+moduleDeclName (TypeDecl (DataType { dtName })) = Just (identName dtName)
+moduleDeclName (DefDecl  (Def      { defIdent })) = Just (identName defIdent)
+moduleDeclName InjectCodeDecl{} = Nothing

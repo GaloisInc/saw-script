@@ -16,11 +16,12 @@ import SAWServer.CryptolSetup
       cryptolLoadModule,
       cryptolLoadFileDescr,
       cryptolLoadFile )
+import SAWServer.Data.JVMType()
 import SAWServer.Ghost
     ( createGhostVariableDescr,
       createGhostVariable )
---import SAWServer.JVMCrucibleSetup
---import SAWServer.JVMVerify
+import SAWServer.JVMCrucibleSetup
+import SAWServer.JVMVerify
 import SAWServer.LLVMCrucibleSetup
     ( llvmLoadModuleDescr, llvmLoadModule )
 import SAWServer.LLVMVerify
@@ -74,11 +75,18 @@ sawMethods =
      saveTermDescr
      saveTerm
   -- JVM
-  {-
-  , Argo.command "SAW/JVM/load class" (Doc.Paragraph [Doc.Text "TODO"]) jvmLoadClass
-  , Argo.command "SAW/JVM/verify"     (Doc.Paragraph [Doc.Text "TODO"]) jvmVerify
-  , Argo.command "SAW/JVM/assume"     (Doc.Paragraph [Doc.Text "TODO"]) jvmAssume
-  -}
+  , Argo.command
+     "SAW/JVM/load class"
+     jvmLoadClassDescr
+     jvmLoadClass
+  , Argo.command
+     "SAW/JVM/verify"
+     jvmVerifyDescr
+     jvmVerify
+  , Argo.command
+     "SAW/JVM/assume"
+     jvmAssumeDescr
+     jvmAssume
   -- LLVM
   , Argo.command
      "SAW/LLVM/load module"

@@ -38,12 +38,12 @@ module SAWScript.REPL.Monad (
   , getTermEnv, modifyTermEnv, setTermEnv
   , getExtraTypes, modifyExtraTypes, setExtraTypes
   , getExtraNames, modifyExtraNames, setExtraNames
-  , getRW
 
     -- ** SAWScript stuff
   , getSharedContext
   , getTopLevelRO
   , getEnvironment, modifyEnvironment, putEnvironment
+  , getEnvironmentRef
   , getSAWScriptNames
   ) where
 
@@ -55,6 +55,7 @@ import Cryptol.Parser (ParseError,ppError)
 import Cryptol.Parser.NoInclude (IncludeError,ppIncludeError)
 import Cryptol.Parser.NoPat (Error)
 import qualified Cryptol.TypeCheck.AST as T
+import Cryptol.Utils.Ident (Namespace(..))
 import Cryptol.Utils.PP
 
 #if !MIN_VERSION_base(4,8,0)
@@ -72,11 +73,8 @@ import System.IO.Error (isUserError, ioeGetErrorString)
 
 import Verifier.SAW.SharedTerm (Term)
 import Verifier.SAW.CryptolEnv
-#ifdef USE_BUILTIN_ABC
-import qualified Data.ABC.GIA as GIA
-#else
 import qualified Data.AIG as AIG
-#endif
+import qualified Data.AIG.CompactGraph as AIG
 
 --------------------
 
@@ -87,58 +85,53 @@ import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..))
 import SAWScript.Value (AIGProxy(..))
 import Verifier.SAW (SharedContext)
 
-#ifdef USE_BUILTIN_ABC
-deriving instance Typeable GIA.Proxy
-#else
 deriving instance Typeable AIG.Proxy
-#endif
 
 -- REPL Environment ------------------------------------------------------------
 
--- REPL RW Environment.
-data RW = RW
-  { eContinue   :: Bool
-  , eIsBatch    :: Bool
-  , eTopLevelRO :: TopLevelRO
-  , environment :: TopLevelRW
+-- REPL Environment.
+data Refs = Refs
+  { eContinue   :: IORef Bool
+  , eIsBatch    :: IORef Bool
+  , eTopLevelRO :: IORef TopLevelRO
+  , environment :: IORef TopLevelRW
   }
 
 -- | Initial, empty environment.
-defaultRW :: Bool -> Options -> IO RW
-defaultRW isBatch opts = do
-#ifdef USE_BUILTIN_ABC
-  (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy GIA.proxy) opts
-#else
-  (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy AIG.basicProxy) opts
-#endif
-
-  return RW
-    { eContinue   = True
-    , eIsBatch    = isBatch
-    , eTopLevelRO = ro
-    , environment = rw
-    }
+defaultRefs :: Bool -> Options -> IO Refs
+defaultRefs isBatch opts =
+  do (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy AIG.compactProxy) opts
+     contRef <- newIORef True
+     batchRef <- newIORef isBatch
+     roRef <- newIORef ro
+     rwRef <- newIORef rw
+     return Refs
+       { eContinue   = contRef
+       , eIsBatch    = batchRef
+       , eTopLevelRO = roRef
+       , environment = rwRef
+       }
 
 -- | Build up the prompt for the REPL.
-mkPrompt :: RW -> String
-mkPrompt rw
-  | eIsBatch rw = ""
-  | otherwise   = "sawscript> "
+mkPrompt :: Bool {- ^ is batch -} -> String
+mkPrompt batch
+  | batch     = ""
+  | otherwise = "sawscript> "
 
-mkTitle :: RW -> String
-mkTitle _rw = "sawscript"
+mkTitle :: Refs -> String
+mkTitle _refs = "sawscript"
 
 
 -- REPL Monad ------------------------------------------------------------------
 
 -- | REPL_ context with InputT handling.
-newtype REPL a = REPL { unREPL :: IORef RW -> IO a }
+newtype REPL a = REPL { unREPL :: Refs -> IO a }
 
 -- | Run a REPL action with a fresh environment.
 runREPL :: Bool -> Options -> REPL a -> IO a
-runREPL isBatch opts m = do
-  ref <- newIORef =<< defaultRW isBatch opts
-  unREPL m ref
+runREPL isBatch opts m =
+  do refs <- defaultRefs isBatch opts
+     unREPL m refs
 
 instance Functor REPL where
   {-# INLINE fmap #-}
@@ -246,31 +239,35 @@ rethrowEvalError m = run `X.catch` rethrow
 io :: IO a -> REPL a
 io m = REPL (\ _ -> m)
 
-getRW :: REPL RW
-getRW  = REPL readIORef
+getRefs :: REPL Refs
+getRefs = REPL pure
 
-modifyRW_ :: (RW -> RW) -> REPL ()
-modifyRW_ f = REPL (\ ref -> modifyIORef ref f)
+readRef :: (Refs -> IORef a) -> REPL a
+readRef r = REPL (\refs -> readIORef (r refs))
+
+modifyRef :: (Refs -> IORef a) -> (a -> a) -> REPL ()
+modifyRef r f = REPL (\refs -> modifyIORef (r refs) f)
 
 -- | Construct the prompt for the current environment.
 getPrompt :: REPL String
-getPrompt  = mkPrompt `fmap` getRW
+getPrompt = mkPrompt <$> readRef eIsBatch
 
 shouldContinue :: REPL Bool
-shouldContinue  = eContinue `fmap` getRW
+shouldContinue = readRef eContinue
 
 stop :: REPL ()
-stop  = modifyRW_ (\ rw -> rw { eContinue = False })
+stop = modifyRef eContinue (const False)
 
 unlessBatch :: REPL () -> REPL ()
-unlessBatch body = do
-  rw <- getRW
-  unless (eIsBatch rw) body
+unlessBatch body =
+  do batch <- readRef eIsBatch
+     unless batch body
 
 setREPLTitle :: REPL ()
-setREPLTitle  = unlessBatch $ do
-  rw <- getRW
-  io (setTitle (mkTitle rw))
+setREPLTitle =
+  unlessBatch $
+  do refs <- getRefs
+     io (setTitle (mkTitle refs))
 
 getVars :: REPL (Map.Map T.Name M.IfaceDecl)
 getVars  = do
@@ -297,13 +294,13 @@ getNewtypes = do
 getExprNames :: REPL [String]
 getExprNames =
   do fNames <- fmap getNamingEnv getCryptolEnv
-     return (map (show . pp) (Map.keys (MN.neExprs fNames)))
+     return (map (show . pp) (Map.keys (MN.namespaceMap NSValue fNames)))
 
 -- | Get visible type signature names.
 getTypeNames :: REPL [String]
 getTypeNames  =
   do fNames <- fmap getNamingEnv getCryptolEnv
-     return (map (show . pp) (Map.keys (MN.neTypes fNames)))
+     return (map (show . pp) (Map.keys (MN.namespaceMap NSType fNames)))
 
 getPropertyNames :: REPL [String]
 getPropertyNames =
@@ -360,17 +357,19 @@ getSharedContext :: REPL SharedContext
 getSharedContext = fmap roSharedContext getTopLevelRO
 
 getTopLevelRO :: REPL TopLevelRO
-getTopLevelRO = fmap eTopLevelRO getRW
+getTopLevelRO = readRef eTopLevelRO
+
+getEnvironmentRef :: REPL (IORef TopLevelRW)
+getEnvironmentRef = environment <$> getRefs
 
 getEnvironment :: REPL TopLevelRW
-getEnvironment = fmap environment getRW
+getEnvironment = readRef environment
 
 putEnvironment :: TopLevelRW -> REPL ()
 putEnvironment = modifyEnvironment . const
 
 modifyEnvironment :: (TopLevelRW -> TopLevelRW) -> REPL ()
-modifyEnvironment f = modifyRW_ $ \current ->
-  current { environment = f (environment current) }
+modifyEnvironment = modifyRef environment
 
 -- | Get visible variable names for Haskeline completion.
 getSAWScriptNames :: REPL [String]

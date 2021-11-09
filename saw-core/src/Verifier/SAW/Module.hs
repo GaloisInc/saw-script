@@ -28,9 +28,11 @@ module Verifier.SAW.Module
   , Ctor(..)
   , ctorNumParams
   , ctorNumArgs
+  , ctorPrimName
   , DataType(..)
   , dtNumParams
   , dtNumIndices
+  , dtPrimName
     -- * Modules
   , Module
   , ModuleDecl(..)
@@ -52,6 +54,7 @@ module Verifier.SAW.Module
   , moduleDefs
   , findDef
   , insDef
+  , insInjectCode
   , moduleDecls
   , modulePrimitives
   , moduleAxioms
@@ -124,9 +127,11 @@ data Ctor =
   Ctor
   { ctorName :: !Ident
     -- ^ The name of this constructor
+  , ctorVarIndex :: !VarIndex
+    -- ^ Unique var index for this constructor
   , ctorArgStruct :: CtorArgStruct d params ixs
     -- ^ Arguments to the constructor
-  , ctorDataTypeName :: Ident
+  , ctorDataType :: !(PrimName Term)
     -- ^ The datatype this constructor belongs to
   , ctorType :: Term
     -- ^ Cached type of the constructor, which should always be equal to
@@ -146,19 +151,26 @@ data Ctor =
     --
     -- where the @ps@ are the parameters and the @ix@s are the indices of
     -- datatype @d@
-  , ctorIotaReduction :: Term
-    -- ^ Cached result of one step of iota reduction of the term
+  , ctorIotaReduction ::
+       Term   {- ^ recursor term -} ->
+       Map VarIndex Term {- ^ constructor eliminators -} ->
+       [Term] {- ^ constructor arguments -} ->
+       IO Term
+    -- ^ Cached function for computing the result of one step of iota
+    --   reduction of the term
     --
-    -- > RecursorApp d params p_ret elims ixs (c params args)
+    -- > RecursorApp rec ixs (c params args)
     --
-    -- where @params@, @p_ret@, @elims@, and @args@ are distinct free variables,
-    -- in that order, so that the last @arg@ is the most recently-bound
-    -- variable, i.e., has deBruijn index 0. This means that an iota reduction
-    -- of the above recursor application can be performed by substituting the
-    -- concrete parameters, eliminators, and constructor arguments into the
-    -- 'Term' stored in 'ctorIotaReduction'. Note that we are assuming that the
-    -- @elims@ are in the same order as they are listed in the corresponding
-    -- 'DataType' for this constructor.
+    --   The arguments to this function are the recusor value, the
+    --   the map from the recursor that maps constructors to eliminator
+    --   functions, and the arguments to the constructor.
+
+  , ctorIotaTemplate :: Term
+    -- ^ Cached term used for computing iota reductions.  It has free variables
+    --   @rec@, @elim@ and @args@, in that order so that the last @arg@ is the
+    --   most recently-bound variable with deBruijn index 0.  The @rec@ variable
+    --   represents the recursor value, @elim@ represents the eliminator function
+    --   for the constructor, and @args@ represent the arguments to this constructor.
   }
 
 -- | Return the number of parameters of a constructor
@@ -171,6 +183,9 @@ ctorNumArgs :: Ctor -> Int
 ctorNumArgs (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
   bindingsLength ctorArgs
 
+-- | Compute the ExtCns that uniquely references a constructor
+ctorPrimName :: Ctor -> PrimName Term
+ctorPrimName ctor = PrimName (ctorVarIndex ctor) (ctorName ctor) (ctorType ctor)
 
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y)
@@ -192,6 +207,8 @@ data DataType =
   DataType
   { dtName :: Ident
     -- ^ The name of this datatype
+  , dtVarIndex :: !VarIndex
+    -- ^ Unique var index for this data type
   , dtParams :: [(LocalName, Term)]
     -- ^ The context of parameters of this datatype
   , dtIndices :: [(LocalName, Term)]
@@ -217,6 +234,10 @@ dtNumParams dt = length $ dtParams dt
 dtNumIndices :: DataType -> Int
 dtNumIndices dt = length $ dtIndices dt
 
+-- | Compute the ExtCns that uniquely references a datatype
+dtPrimName :: DataType -> PrimName Term
+dtPrimName dt = PrimName (dtVarIndex dt) (dtName dt) (dtType dt)
+
 instance Eq DataType where
   (==) = lift2 dtName (==)
 
@@ -232,6 +253,11 @@ instance Show DataType where
 -- | Declarations that can occur in a module
 data ModuleDecl = TypeDecl DataType
                 | DefDecl Def
+                    -- | Code to inject directly in-stream when
+                    --   doing translations.
+                | InjectCodeDecl
+                    Text {- ^ Code namespace -}
+                    Text {- ^ Code to inject -}
 
 -- | The different sorts of things that a 'Text' name can be resolved to
 data ResolvedName
@@ -346,6 +372,11 @@ completeDataType m (identBaseName -> str) ctors =
     Nothing ->
       internalError $ "completeDataType: datatype not found: " ++ show str
 
+
+-- | Insert an "injectCode" declaration
+insInjectCode :: Module -> Text -> Text -> Module
+insInjectCode m ns txt =
+  m{ moduleRDecls = InjectCodeDecl ns txt : moduleRDecls m }
 
 -- | Insert a definition into a module
 insDef :: Module -> Def -> Module
@@ -477,3 +508,5 @@ ppModule opts m =
       (map (\c -> (ctorName c, ctorType c)) dtCtors)
     toDecl (DefDecl (Def {..})) =
       PPDefDecl defIdent defType defBody
+    toDecl (InjectCodeDecl ns text) =
+      PPInjectCode ns text

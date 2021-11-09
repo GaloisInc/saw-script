@@ -113,7 +113,7 @@ parseSBVExpr opts sc unint nodes size (SBV.SBVApp operator sbvs) =
                    b <- scBoolType sc
                    -- SBV append takes the most-significant argument
                    -- first, as SAWCore does.
-                   scAppend sc b s1 s2 arg1 arg2
+                   scAppend sc s1 s2 b arg1 arg2
             _ -> fail "parseSBVExpr: wrong number of arguments for append"
       SBV.BVLkUp indexSize resultSize ->
           do (size1 : inSizes, arg1 : args) <- liftM unzip $ mapM (parseSBV sc nodes) sbvs
@@ -385,7 +385,7 @@ scAppendAll sc ((x, size1) : xs) =
        s1 <- scNat sc (fromInteger size1)
        s2 <- scNat sc (fromInteger size2)
        y <- scAppendAll sc xs
-       scAppend sc b s1 s2 x y
+       scAppend sc s1 s2 b x y
 
 typOf :: SBV.SBVPgm -> Typ
 typOf (SBV.SBVPgm (_, irtype, _, _, _, _)) = parseIRType irtype

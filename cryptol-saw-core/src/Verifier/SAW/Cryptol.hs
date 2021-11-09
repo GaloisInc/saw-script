@@ -35,6 +35,8 @@ import Text.URI
 
 import qualified Cryptol.Eval.Type as TV
 import qualified Cryptol.Backend.Monad as V
+import qualified Cryptol.Backend.SeqMap as V
+import qualified Cryptol.Backend.WordValue as V
 import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
@@ -43,22 +45,23 @@ import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, single
 import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..))
 import qualified Cryptol.Utils.Ident as C
-  ( Ident, PrimIdent(..), mkIdent, prelPrim, floatPrim, arrayPrim
+  ( Ident, PrimIdent(..), mkIdent
+  , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
   , ModName, modNameToText, identText, interactiveName
+  , ModPath(..), modPathSplit
   )
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
 
 import Verifier.SAW.Cryptol.Panic
-import Verifier.SAW.Conversion
 import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import qualified Verifier.SAW.Simulator.Concrete as SC
+import qualified Verifier.SAW.Simulator.Value as SC
 import Verifier.SAW.Prim (BitVector(..))
-import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.MonadLazy (force)
-import Verifier.SAW.TypedAST (mkSort, mkModuleName, FieldName, LocalName)
+import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
 
 import GHC.Stack
 
@@ -171,7 +174,7 @@ normalizeProp prop
 importKind :: SharedContext -> C.Kind -> IO Term
 importKind sc kind =
   case kind of
-    C.KType       -> scSort sc (mkSort 0)
+    C.KType       -> scISort sc (mkSort 0)
     C.KNum        -> scDataTypeApp sc "Cryptol.Num" []
     C.KProp       -> scSort sc (mkSort 0)
     (C.:->) k1 k2 -> join $ scFun sc <$> importKind sc k1 <*> importKind sc k2
@@ -650,16 +653,33 @@ proveProp sc env prop =
 
         _ -> do panic "proveProp" [pretty prop]
 
-importPrimitive :: SharedContext -> Env -> C.Name -> C.Schema -> IO Term
-importPrimitive sc env n sch
-  | Just nm <- C.asPrim n, Just term <- Map.lookup nm (prelPrims <> arrayPrims <> floatPrims) = term sc
+importPrimitive :: SharedContext -> ImportPrimitiveOptions -> Env -> C.Name -> C.Schema -> IO Term
+importPrimitive sc primOpts env n sch
+  -- lookup primitive in the main primitive lookup table
+  | Just nm <- C.asPrim n, Just term <- Map.lookup nm allPrims = term sc
+
+  -- lookup primitive in the main reference implementation lookup table
   | Just nm <- C.asPrim n, Just expr <- Map.lookup nm (envRefPrims env) =
       do t <- importSchema sc env sch
          e <- importExpr sc env expr
          nmi <- importName n
          scConstant' sc nmi e t
+
+  -- Optionally, create an opaque constant representing the primitive
+  -- if it doesn't match one of the ones we know about.
+  | Just _ <- C.asPrim n, allowUnknownPrimitives primOpts =
+      do t <- importSchema sc env sch
+         nmi <- importName n
+         scOpaqueConstant sc nmi t
+
+  -- Panic if we don't know the given primitive (TODO? probably shouldn't be a panic)
   | Just nm <- C.asPrim n = panic "Unknown Cryptol primitive name" [show nm]
+
   | otherwise = panic "Improper Cryptol primitive name" [show n]
+
+
+allPrims :: Map C.PrimIdent (SharedContext -> IO Term)
+allPrims = prelPrims <> arrayPrims <> floatPrims <> suiteBPrims <> primeECPrims
 
 prelPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 prelPrims =
@@ -725,6 +745,8 @@ prelPrims =
   , ("%$",           flip scGlobalDef "Cryptol.ecSMod")        -- {n} (fin n, n>=1) => [n] -> [n] -> [n]
   , ("lg2",          flip scGlobalDef "Cryptol.ecLg2")         -- {n} (fin n) => [n] -> [n]
   , (">>$",          flip scGlobalDef "Cryptol.ecSShiftR")     -- {n, ix} (fin n, n >= 1, Integral ix) => [n] -> ix -> [n]
+  , ("toSignedInteger",
+                     flip scGlobalDef "Cryptol.toSignedInteger") -- {n} (fin n, n >= 1) => [n] -> Integer
 
     -- -- Rational primitives
   , ("ratio",        flip scGlobalDef "Cryptol.ecRatio")       -- Integer -> Integer -> Rational
@@ -740,7 +762,8 @@ prelPrims =
 
     -- -- Sequences primitives
   , ("#",            flip scGlobalDef "Cryptol.ecCat")         -- {a,b,d} (fin a) => [a] d -> [b] d -> [a + b] d
-  , ("splitAt",      flip scGlobalDef "Cryptol.ecSplitAt")     -- {a,b,c} (fin a) => [a+b] c -> ([a]c,[b]c)
+  , ("take",         flip scGlobalDef "Cryptol.ecTake")        -- {front, back, a} [front + back]a -> [front]a
+  , ("drop",         flip scGlobalDef "Cryptol.ecDrop")        -- {front, back, a} (fin front) => [front + back]a -> [back]a
   , ("join",         flip scGlobalDef "Cryptol.ecJoin")        -- {a,b,c} (fin b) => [a][b]c -> [a * b]c
   , ("split",        flip scGlobalDef "Cryptol.ecSplit")       -- {a,b,c} (fin b) => [a * b] c -> [a][b] c
   , ("reverse",      flip scGlobalDef "Cryptol.ecReverse")     -- {a,b} (fin a) => [a] b -> [a] b
@@ -752,21 +775,37 @@ prelPrims =
 
     -- -- Enumerations
   , ("fromTo",         flip scGlobalDef "Cryptol.ecFromTo")
-    --                            -- fromTo : {first, last, bits, a}
-    --                            --           ( fin last, fin bits, last >== first,
-    --                            --             Literal first a, Literal last a)
-    --                            --        => [1 + (last - first)]a
+                                  -- fromTo : {first, last, bits, a}
+                                  --           ( fin last, fin bits, last >== first,
+                                  --             Literal first a, Literal last a)
+                                  --        => [1 + (last - first)]a
   , ("fromToLessThan", flip scGlobalDef "Cryptol.ecFromToLessThan")
-    --                            -- fromToLessThan : {first, bound, a}
-    --                            --                   ( fin first, bound >= first,
-    --                            --                     LiteralLessThan bound a)
-    --                            --                => [bound - first]a
+                                  -- fromToLessThan : {first, bound, a}
+                                  --                   ( fin first, bound >= first,
+                                  --                     LiteralLessThan bound a)
+                                  --                => [bound - first]a
   , ("fromThenTo",     flip scGlobalDef "Cryptol.ecFromThenTo")
-    --                            -- fromThenTo : {first, next, last, a, len}
-    --                            --              ( fin first, fin next, fin last
-    --                            --              , Literal first a, Literal next a, Literal last a
-    --                            --              , first != next
-    --                            --              , lengthFromThenTo first next last == len) => [len]a
+                                  -- fromThenTo : {first, next, last, a, len}
+                                  --              ( fin first, fin next, fin last
+                                  --              , Literal first a, Literal next a, Literal last a
+                                  --              , first != next
+                                  --              , lengthFromThenTo first next last == len) => [len]a
+  , ("fromToBy",       flip scGlobalDef "Cryptol.ecFromToBy")
+                                  -- fromToBy : {first, last, stride, a}
+                                  --   (fin last, fin stride, stride >= 1, last >= first, Literal last a) =>
+                                  --   [1 + (last - first)/stride]a
+  , ("fromToByLessThan", flip scGlobalDef "Cryptol.ecFromToByLessThan")
+                                  -- fromToByLessThan : {first, bound, stride, a}
+                                  --   (fin first, fin stride, stride >= 1, bound >= first, LiteralLessThan bound a) =>
+                                  --   [(bound - first)/^stride]a
+  , ("fromToDownBy", flip scGlobalDef "Cryptol.ecFromToDownBy")
+                                  -- fromToDownBy : {first, last, stride, a}
+                                  --   (fin first, fin stride, stride >= 1, first >= last, Literal first a) =>
+                                  --   [1 + (first - last)/stride]a
+  , ("fromToDownByGreaterThan", flip scGlobalDef "Cryptol.ecFromToDownByGreaterThan")
+                                  -- fromToDownByGreaterThan : {first, bound, stride, a}
+                                  --   (fin first, fin stride, stride >= 1, first >= bound, Literal first a) =>
+                                  --   [(first - bound)/^stride]a
 
     -- Evaluation primitives: deepseq, parmap
   , ("deepseq",      flip scGlobalDef "Cryptol.ecDeepseq")     -- {a, b} (Eq b) => a -> b -> b
@@ -786,6 +825,9 @@ arrayPrims =
   [ ("arrayConstant", flip scGlobalDef "Cryptol.ecArrayConstant") -- {a,b} b -> Array a b
   , ("arrayLookup",   flip scGlobalDef "Cryptol.ecArrayLookup") -- {a,b} Array a b -> a -> b
   , ("arrayUpdate",   flip scGlobalDef "Cryptol.ecArrayUpdate") -- {a,b} Array a b -> a -> b -> Array a b
+  , ("arrayCopy", flip scGlobalDef "Cryptol.ecArrayCopy") -- {n,a} Array [n] a -> [n] -> Array [n] a -> [n] -> [n] -> Array [n] a
+  , ("arraySet", flip scGlobalDef "Cryptol.ecArraySet") -- {n,a} Array [n] a -> [n] -> a -> [n] -> Array [n] a
+  , ("arrayRangeEqual", flip scGlobalDef "Cryptol.ecArrayRangeEq") -- {n,a} Array [n] a -> [n] -> Array [n] a -> [n] -> [n] -> Bit
   ]
 
 floatPrims :: Map C.PrimIdent (SharedContext -> IO Term)
@@ -814,6 +856,31 @@ floatPrims =
   , ("fpSqrt",         flip scGlobalDef "Cryptol.fpSqrt")
   ]
 
+suiteBPrims :: Map C.PrimIdent (SharedContext -> IO Term)
+suiteBPrims =
+  Map.fromList $
+  first C.suiteBPrim <$>
+  [ ("AESEncRound",      flip scGlobalDef "Cryptol.AESEncRound")
+  , ("AESEncFinalRound", flip scGlobalDef "Cryptol.AESEncFinalRound")
+  , ("AESDecRound",      flip scGlobalDef "Cryptol.AESDecRound")
+  , ("AESDecFinalRound", flip scGlobalDef "Cryptol.AESDecFinalRound")
+  , ("AESInvMixColumns", flip scGlobalDef "Cryptol.AESInvMixColumns")
+  , ("AESKeyExpand",     flip scGlobalDef "Cryptol.AESKeyExpand")
+  , ("processSHA2_224",  flip scGlobalDef "Cryptol.processSHA2_224")
+  , ("processSHA2_256",  flip scGlobalDef "Cryptol.processSHA2_256")
+  , ("processSHA2_384",  flip scGlobalDef "Cryptol.processSHA2_384")
+  , ("processSHA2_512",  flip scGlobalDef "Cryptol.processSHA2_512")
+  ]
+
+primeECPrims :: Map C.PrimIdent (SharedContext -> IO Term)
+primeECPrims =
+  Map.fromList $
+  first C.primeECPrim <$>
+  [ ("ec_double",      flip scGlobalDef "Cryptol.ec_double")
+  , ("ec_add_nonzero", flip scGlobalDef "Cryptol.ec_add_nonzero")
+  , ("ec_mult",        flip scGlobalDef "Cryptol.ec_mult")
+  , ("ec_twin_mult",   flip scGlobalDef "Cryptol.ec_twin_mult")
+  ]
 
 -- | Convert a Cryptol expression to a SAW-Core term. Calling
 -- 'scTypeOf' on the result of @'importExpr' sc env expr@ must yield a
@@ -842,21 +909,20 @@ importExpr sc env expr =
           do e' <- importExpr sc env e
              let t = fastTypeOf (envC env) e
              case C.tIsTuple t of
-               Just ts ->
-                 do scTupleSelector sc e' (i+1) (length ts)
-               Nothing ->
-                 do f <- mapTupleSelector sc env i t
-                    scApply sc f e'
+               Just ts -> scTupleSelector sc e' (i+1) (length ts)
+               Nothing -> panic "importExpr" ["invalid tuple selector", show i, pretty t]
         C.RecordSel x _ ->
           do e' <- importExpr sc env e
              let t = fastTypeOf (envC env) e
-             case C.tIsRec t of
-               Just fm ->
+             case C.tNoUser t of
+               C.TRec fm ->
                  do i <- the (elemIndex x (map fst (C.canonicalFields fm)))
                     scTupleSelector sc e' (i+1) (length (C.canonicalFields fm))
-               Nothing ->
-                 do f <- mapRecordSelector sc env x t
-                    scApply sc f e'
+               C.TNewtype nt _args ->
+                 do let fs = C.ntFields nt
+                    i <- the (elemIndex x (map fst (C.canonicalFields fs)))
+                    scTupleSelector sc e' (i+1) (length (C.canonicalFields fs))
+               _ -> panic "importExpr" ["invalid record selector", pretty x, pretty t]
         C.ListSel i _maybeLen ->
           do let t = fastTypeOf (envC env) e
              (n, a) <-
@@ -888,7 +954,7 @@ importExpr sc env expr =
              e2' <- importExpr sc env e2
              let t1 = fastTypeOf (envC env) e1
              case C.tIsRec t1 of
-               Nothing -> panic "importExpr" ["ESet/TupleSel: not a tuple type"]
+               Nothing -> panic "importExpr" ["ESet/RecordSel: not a record type"]
                Just tm ->
                  do i <- the (elemIndex x (map fst (C.canonicalFields tm)))
                     ts' <- traverse (importType sc env . snd) (C.canonicalFields tm)
@@ -1062,62 +1128,6 @@ importExpr' sc env schema expr =
          expr' <- importExpr sc env expr
          coerceTerm sc env t1 t2 expr'
 
-mapTupleSelector :: SharedContext -> Env -> Int -> C.Type -> IO Term
-mapTupleSelector sc env i = fmap fst . go
-  where
-    go :: C.Type -> IO (Term, C.Type)
-    go t =
-      case C.tNoUser t of
-        (C.tIsSeq -> Just (n, a)) -> do
-          (f, b) <- go a
-          a' <- importType sc env a
-          b' <- importType sc env b
-          n' <- importType sc env n
-          g <- scGlobalApply sc "Cryptol.seqMap" [a', b', n', f]
-          return (g, C.tSeq n b)
-        (C.tIsFun -> Just (n, a)) -> do
-          (f, b) <- go a
-          a' <- importType sc env a
-          b' <- importType sc env b
-          n' <- importType sc env n
-          g <- scGlobalApply sc "Cryptol.compose" [n', a', b', f]
-          return (g, C.tFun n b)
-        (C.tIsTuple -> Just ts) -> do
-          x <- scLocalVar sc 0
-          y <- scTupleSelector sc x (i+1) (length ts)
-          t' <- importType sc env t
-          f <- scLambda sc "x" t' y
-          return (f, ts !! i)
-        _ -> panic "importExpr" ["invalid tuple selector", show i, show t]
-
-mapRecordSelector :: SharedContext -> Env -> C.Ident -> C.Type -> IO Term
-mapRecordSelector sc env i = fmap fst . go
-  where
-    go :: C.Type -> IO (Term, C.Type)
-    go t =
-      case C.tNoUser t of
-        (C.tIsSeq -> Just (n, a)) ->
-          do (f, b) <- go a
-             a' <- importType sc env a
-             b' <- importType sc env b
-             n' <- importType sc env n
-             g <- scGlobalApply sc "Cryptol.seqMap" [a', b', n', f]
-             return (g, C.tSeq n b)
-        (C.tIsFun -> Just (n, a)) ->
-          do (f, b) <- go a
-             a' <- importType sc env a
-             b' <- importType sc env b
-             n' <- importType sc env n
-             g <- scGlobalApply sc "Cryptol.compose" [n', a', b', f]
-             return (g, C.tFun n b)
-        (C.tIsRec -> Just tm) | Just k <- elemIndex i (map fst (C.canonicalFields tm)) ->
-          do x <- scLocalVar sc 0
-             y <- scTupleSelector sc x (k+1) (length (C.canonicalFields tm))
-             t' <- importType sc env t
-             f <- scLambda sc "x" t' y
-             return (f, snd (C.canonicalFields tm !! k))
-        _ -> panic "importExpr" ["invalid record selector", show i, show t]
-
 tupleUpdate :: SharedContext -> Term -> Int -> [Term] -> IO Term
 tupleUpdate _ f 0 [_] = return f
 tupleUpdate sc f 0 (a : ts) =
@@ -1231,27 +1241,29 @@ importName cnm =
   case C.nameInfo cnm of
     C.Parameter -> fail ("Cannot import non-top-level name: " ++ show cnm)
     C.Declared modNm _
-      | modNm == C.interactiveName ->
+      | modNm == C.TopModule C.interactiveName ->
           let shortNm = C.identText (C.nameIdent cnm)
               aliases = [shortNm]
               uri = cryptolURI [shortNm] (Just (C.nameUnique cnm))
            in pure (ImportedName uri aliases)
 
       | otherwise ->
-          let modNmTxt  = C.modNameToText modNm
-              modNms = Text.splitOn "::" modNmTxt
-              shortNm = C.identText (C.nameIdent cnm)
-              aliases = [shortNm, modNmTxt <> "::" <> shortNm]
-              uri = cryptolURI (modNms ++ [shortNm]) Nothing
+          let (topMod, nested) = C.modPathSplit modNm
+              modNmTxt = C.modNameToText topMod
+              modNms   = (Text.splitOn "::" modNmTxt) ++ map C.identText nested
+              shortNm  = C.identText (C.nameIdent cnm)
+              longNm   = Text.intercalate "::" ([modNmTxt] ++ map C.identText nested ++ [shortNm])
+              aliases  = [shortNm, longNm]
+              uri      = cryptolURI (modNms ++ [shortNm]) Nothing
            in pure (ImportedName uri aliases)
 
 -- | Currently this imports declaration groups by inlining all the
 -- definitions. (With subterm sharing, this is not as bad as it might
 -- seem.) We might want to think about generating let or where
 -- expressions instead.
-importDeclGroup :: Bool -> SharedContext -> Env -> C.DeclGroup -> IO Env
+importDeclGroup :: DeclGroupOptions -> SharedContext -> Env -> C.DeclGroup -> IO Env
 
-importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
+importDeclGroup declOpts sc env (C.Recursive [decl]) =
   case C.dDefinition decl of
     C.DPrim ->
       panic "importDeclGroup" ["Primitive declarations cannot be recursive:", show (C.dName decl)]
@@ -1262,11 +1274,11 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
          let x = nameToLocalName (C.dName decl)
          f' <- scLambda sc x t' e'
          rhs <- scGlobalApply sc "Prelude.fix" [t', f']
-         rhs' <- if isTopLevel then
-                    do nmi <- importName (C.dName decl)
-                       scConstant' sc nmi rhs t'
-                 else
-                   return rhs
+         rhs' <- case declOpts of
+                   TopLevelDeclGroup _ ->
+                     do nmi <- importName (C.dName decl)
+                        scConstant' sc nmi rhs t'
+                   NestedDeclGroup -> return rhs
          let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                         , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
          return env'
@@ -1276,7 +1288,7 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
 -- We handle this by "tupling up" all the declarations using a record and
 -- taking the fixpoint at this record type.  The desired declarations are then
 -- achieved by projecting the field names from this record.
-importDeclGroup isTopLevel sc env (C.Recursive decls) =
+importDeclGroup declOpts sc env (C.Recursive decls) =
   do -- build the environment for the declaration bodies
      let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
 
@@ -1323,11 +1335,11 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      let mkRhs d t =
            do let s = nameToFieldName (C.dName d)
               r <- scRecordSelect sc rhs s
-              if isTopLevel then
-                do nmi <- importName (C.dName d)
-                   scConstant' sc nmi r t
-              else
-                return r
+              case declOpts of
+                TopLevelDeclGroup _ ->
+                  do nmi <- importName (C.dName d)
+                     scConstant' sc nmi r t
+                NestedDeclGroup -> return r
      rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
      let env' = env { envE = Map.union (fmap (\v -> (v, 0)) rhss) (envE env)
@@ -1335,32 +1347,51 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
                     }
      return env'
 
-importDeclGroup isTopLevel sc env (C.NonRecursive decl) =
+importDeclGroup declOpts sc env (C.NonRecursive decl) =
   case C.dDefinition decl of
     C.DPrim
-     | isTopLevel -> do
-        rhs <- importPrimitive sc env (C.dName decl) (C.dSignature decl)
+     | TopLevelDeclGroup primOpts <- declOpts -> do
+        rhs <- importPrimitive sc primOpts env (C.dName decl) (C.dSignature decl)
         let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
-                      , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
+                       , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env)
+                       }
         return env'
      | otherwise -> do
         panic "importDeclGroup" ["Primitive declarations only allowed at top-level:", show (C.dName decl)]
 
     C.DExpr expr -> do
      rhs <- importExpr' sc env (C.dSignature decl) expr
-     rhs' <- if not isTopLevel then return rhs else do
-       nmi <- importName (C.dName decl)
-       t <- importSchema sc env (C.dSignature decl)
-       scConstant' sc nmi rhs t
+     rhs' <- case declOpts of
+               TopLevelDeclGroup _ ->
+                 do nmi <- importName (C.dName decl)
+                    t <- importSchema sc env (C.dSignature decl)
+                    scConstant' sc nmi rhs t
+               NestedDeclGroup -> return rhs
      let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      return env'
 
-importDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
-importDeclGroups sc = foldM (importDeclGroup False sc)
+data ImportPrimitiveOptions =
+  ImportPrimitiveOptions
+  { allowUnknownPrimitives :: Bool
+    -- ^ Should unknown primitives be translated as fresh external constants?
+  }
 
-importTopLevelDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
-importTopLevelDeclGroups sc = foldM (importDeclGroup True sc)
+defaultPrimitiveOptions :: ImportPrimitiveOptions
+defaultPrimitiveOptions =
+  ImportPrimitiveOptions
+  { allowUnknownPrimitives = True
+  }
+
+data DeclGroupOptions
+  = TopLevelDeclGroup ImportPrimitiveOptions
+  | NestedDeclGroup
+
+importDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
+importDeclGroups sc = foldM (importDeclGroup NestedDeclGroup sc)
+
+importTopLevelDeclGroups :: SharedContext -> ImportPrimitiveOptions -> Env -> [C.DeclGroup] -> IO Env
+importTopLevelDeclGroups sc primOpts = foldM (importDeclGroup (TopLevelDeclGroup primOpts) sc)
 
 coerceTerm :: SharedContext -> Env -> C.Type -> C.Type -> Term -> IO Term
 coerceTerm sc env t1 t2 e
@@ -1560,108 +1591,79 @@ pIsNeq ty = case C.tNoUser ty of
 --------------------------------------------------------------------------------
 -- Utilities
 
-asCryptolTypeValue :: SC.TValue SC.Concrete -> Maybe C.Type
+asCryptolTypeValue :: SC.TValue SC.Concrete -> Maybe (Either C.Kind C.Type)
 asCryptolTypeValue v =
   case v of
-    SC.VBoolType -> return C.tBit
-    SC.VIntType -> return C.tInteger
-    SC.VIntModType n -> return (C.tIntMod (C.tNum n))
+    SC.VBoolType -> return (Right C.tBit)
+    SC.VIntType -> return (Right C.tInteger)
+    SC.VIntModType n -> return (Right (C.tIntMod (C.tNum n)))
     SC.VArrayType v1 v2 -> do
-      t1 <- asCryptolTypeValue v1
-      t2 <- asCryptolTypeValue v2
-      return $ C.tArray t1 t2
+      Right t1 <- asCryptolTypeValue v1
+      Right t2 <- asCryptolTypeValue v2
+      return (Right (C.tArray t1 t2))
     SC.VVecType n v2 -> do
-      t2 <- asCryptolTypeValue v2
-      return (C.tSeq (C.tNum n) t2)
-    SC.VDataType "Prelude.Stream" [v1] ->
-      case v1 of
-        SC.TValue tv -> C.tSeq C.tInf <$> asCryptolTypeValue tv
-        _ -> Nothing
-    SC.VUnitType -> return (C.tTuple [])
-    SC.VPairType v1 v2 -> do
-      t1 <- asCryptolTypeValue v1
-      t2 <- asCryptolTypeValue v2
-      case C.tIsTuple t2 of
-        Just ts -> return (C.tTuple (t1 : ts))
-        Nothing -> return (C.tTuple [t1, t2])
-    SC.VPiType v1 f -> do
-      case v1 of
-        -- if we see that the parameter is a Cryptol.Num, it's a
-        -- pretty good guess that it originally was a
-        -- polymorphic number type.
-        SC.VDataType "Cryptol.Num" [] ->
-          let msg= unwords ["asCryptolTypeValue: can't infer a polymorphic Cryptol"
-                           ,"type. Please, make sure all numeric types are"
-                           ,"specialized before constructing a typed term."
-                           ]
-          in error msg
-            -- otherwise we issue a generic error about dependent type inference
-        _ -> do
-          let msg = unwords ["asCryptolTypeValue: can't infer a Cryptol type"
-                            ,"for a dependent SAW-Core type."
-                            ]
-          let v2 = SC.runIdentity (f (error msg))
-          t1 <- asCryptolTypeValue v1
-          t2 <- asCryptolTypeValue v2
-          return (C.tFun t1 t2)
-    _ -> Nothing
+      Right t2 <- asCryptolTypeValue v2
+      return (Right (C.tSeq (C.tNum n) t2))
 
--- | Deprecated.
-scCryptolType :: SharedContext -> Term -> IO C.Type
+    SC.VDataType (primName -> "Prelude.Stream") [SC.TValue v1] [] ->
+        do Right t1 <- asCryptolTypeValue v1
+           return (Right (C.tSeq C.tInf t1))
+
+    SC.VDataType (primName -> "Cryptol.Num") [] [] ->
+      return (Left C.KNum)
+
+    SC.VDataType _ _ _ -> Nothing
+
+    SC.VUnitType -> return (Right (C.tTuple []))
+    SC.VPairType v1 v2 -> do
+      Right t1 <- asCryptolTypeValue v1
+      Right t2 <- asCryptolTypeValue v2
+      case C.tIsTuple t2 of
+        Just ts -> return (Right (C.tTuple (t1 : ts)))
+        Nothing -> return (Right (C.tTuple [t1, t2]))
+
+    SC.VPiType _nm v1 (SC.VNondependentPi v2) ->
+      do Right t1 <- asCryptolTypeValue v1
+         Right t2 <- asCryptolTypeValue v2
+         return (Right (C.tFun t1 t2))
+
+    SC.VSort s
+      | s == mkSort 0 -> return (Left C.KType)
+      | otherwise     -> Nothing
+
+    -- TODO?
+    SC.VPiType _nm _v1 (SC.VDependentPi _) -> Nothing
+    SC.VStringType -> Nothing
+    SC.VRecordType{} -> Nothing
+    SC.VRecursorType{} -> Nothing
+    SC.VTyTerm{} -> Nothing
+
+
+scCryptolType :: SharedContext -> Term -> IO (Maybe (Either C.Kind C.Type))
 scCryptolType sc t =
   do modmap <- scGetModuleMap sc
      case SC.evalSharedTerm modmap Map.empty Map.empty t of
-       SC.TValue (asCryptolTypeValue -> Just ty) -> return ty
-       _ -> panic "scCryptolType" ["scCryptolType: unsupported type " ++ showTerm t]
-
--- | Deprecated.
-scCryptolEq :: SharedContext -> Term -> Term -> IO Term
-scCryptolEq sc x y =
-  do rules <- concat <$> traverse defRewrites defs
-     let ss = addConvs natConversions (addRules rules emptySimpset)
-     tx <- scTypeOf sc x >>= rewriteSharedTerm sc ss >>= scCryptolType sc
-     ty <- scTypeOf sc y >>= rewriteSharedTerm sc ss >>= scCryptolType sc
-     unless (tx == ty) $
-       panic "scCryptolEq"
-                 [ "scCryptolEq: type mismatch between"
-                 , pretty tx
-                 , "and"
-                 , pretty ty
-                 ]
-
-     -- Actually apply the equality function, along with the Eq class dictionary
-     t <- scTypeOf sc x
-     c <- scCryptolType sc t
-     k <- importType sc emptyEnv c
-     eqPrf <- proveProp sc emptyEnv (C.pEq c)
-     scGlobalApply sc "Cryptol.ecEq" [k, eqPrf, x, y]
-
-  where
-    defs = map (mkIdent (mkModuleName ["Cryptol"])) ["seq", "ty"]
-    defRewrites ident =
-      do maybe_def <- scFindDef sc ident
-         case maybe_def of
-           Nothing -> return []
-           Just def -> scDefRewriteRules sc def
+       SC.TValue tv -> return (asCryptolTypeValue tv)
+       _ -> return Nothing
 
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.
-exportValueWithSchema :: C.Schema -> SC.CValue -> V.Value
+exportValueWithSchema :: C.Schema -> SC.CValue -> V.Eval V.Value
 exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalValType mempty ty) v
-exportValueWithSchema _ _ = V.VPoly mempty (error "exportValueWithSchema")
+exportValueWithSchema _ _ = pure (V.VPoly mempty (error "exportValueWithSchema"))
 -- TODO: proper support for polymorphic values
 
-exportValue :: TV.TValue -> SC.CValue -> V.Value
+exportValue :: TV.TValue -> SC.CValue -> V.Eval V.Value
 exportValue ty v = case ty of
 
   TV.TVBit ->
-    V.VBit (SC.toBool v)
+    pure (V.VBit (SC.toBool v))
 
   TV.TVInteger ->
-    V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
+    pure (V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer"))
 
   TV.TVIntMod _modulus ->
-    V.VInteger (case v of SC.VIntMod _ x -> x; _ -> error "exportValue: expected intmod")
+    pure (V.VInteger (case v of SC.VIntMod _ x -> x; _ -> error "exportValue: expected intmod"))
 
   TV.TVArray{} -> error $ "exportValue: (on array type " ++ show ty ++ ")"
 
@@ -1673,28 +1675,29 @@ exportValue ty v = case ty of
     case v of
       SC.VWord w -> V.word V.Concrete (toInteger (width w)) (unsigned w)
       SC.VVector xs
-        | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) (V.ready (V.LargeBitsVal (fromIntegral (Vector.length xs))
-                            (V.finiteSeqMap . map (V.ready . V.VBit . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)))
-        | otherwise   -> V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap $
-                            map (V.ready . exportValue e . SC.runIdentity . force) $ Vector.toList xs
+        | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) <$>
+            V.bitmapWordVal V.Concrete (toInteger (Vector.length xs))
+                 (V.finiteSeqMap V.Concrete . map (V.ready . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)
+        | otherwise   -> pure . V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap V.Concrete $
+                            map (\x -> exportValue e (SC.runIdentity (force x))) (Vector.toList xs)
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
   -- infinite streams
   TV.TVStream e ->
     case v of
-      SC.VExtra (SC.CStream trie) -> V.VStream (V.IndexSeqMap $ \i -> V.ready $ exportValue e (IntTrie.apply trie i))
+      SC.VExtra (SC.CStream trie) -> pure $ V.VStream (V.indexSeqMap $ \i -> exportValue e (IntTrie.apply trie i))
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
   -- tuples
-  TV.TVTuple etys -> V.VTuple (exportTupleValue etys v)
+  TV.TVTuple etys -> pure $ V.VTuple $ exportTupleValue etys v
 
   -- records
   TV.TVRec fields ->
-      V.VRecord (C.recordFromFieldsWithDisplay (C.displayOrder fields) $ exportRecordValue (C.canonicalFields fields) v)
+      pure . V.VRecord . C.recordFromFieldsWithDisplay (C.displayOrder fields) $ exportRecordValue (C.canonicalFields fields) v
 
   -- functions
   TV.TVFun _aty _bty ->
-    V.VFun mempty (error "exportValue: TODO functions")
+    pure $ V.VFun mempty (error "exportValue: TODO functions")
 
   -- abstract types
   TV.TVAbstract{} ->
@@ -1709,8 +1712,8 @@ exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
   case (tys, v) of
     ([]    , SC.VUnit    ) -> []
-    ([t]   , _           ) -> [V.ready $ exportValue t v]
-    (t : ts, SC.VPair x y) -> (V.ready $ exportValue t (run x)) : exportTupleValue ts (run y)
+    ([t]   , _           ) -> [exportValue t v]
+    (t : ts, SC.VPair x y) -> (exportValue t (run x)) : exportTupleValue ts (run y)
     _                      -> error $ "exportValue: expected tuple"
   where
     run = SC.runIdentity . force
@@ -1719,12 +1722,11 @@ exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.
 exportRecordValue fields v =
   case (fields, v) of
     ([]         , SC.VUnit    ) -> []
-    ([(n, t)]   , _           ) -> [(n, V.ready $ exportValue t v)]
-    ((n, t) : ts, SC.VPair x y) ->
-      (n, V.ready $ exportValue t (run x)) : exportRecordValue ts (run y)
+    ([(n, t)]   , _           ) -> [(n, exportValue t v)]
+    ((n, t) : ts, SC.VPair x y) -> (n, exportValue t (run x)) : exportRecordValue ts (run y)
     (_, SC.VRecordValue (alistAllFields
                          (map (C.identText . fst) fields) -> Just ths)) ->
-      zipWith (\(n,t) x -> (n, V.ready $ exportValue t (run x))) fields ths
+      zipWith (\(n,t) x -> (n, exportValue t (run x))) fields ths
     _                              -> error $ "exportValue: expected record"
   where
     run = SC.runIdentity . force
@@ -1733,20 +1735,23 @@ fvAsBool :: FirstOrderValue -> Bool
 fvAsBool (FOVBit b) = b
 fvAsBool _ = error "fvAsBool: expected FOVBit value"
 
-exportFirstOrderValue :: FirstOrderValue -> V.Value
+exportFirstOrderValue :: FirstOrderValue -> V.Eval V.Value
 exportFirstOrderValue fv =
   case fv of
-    FOVBit b    -> V.VBit b
-    FOVInt i    -> V.VInteger i
-    FOVIntMod _ i -> V.VInteger i
-    FOVWord w x -> V.word V.Concrete (toInteger w) x
+    FOVBit b      -> pure (V.VBit b)
+    FOVInt i      -> pure (V.VInteger i)
+    FOVIntMod _ i -> pure (V.VInteger i)
+    FOVWord w x   -> V.word V.Concrete (toInteger w) x
     FOVVec t vs
-      | t == FOTBit -> V.VWord len (V.ready (V.LargeBitsVal len (V.finiteSeqMap . map (V.ready . V.VBit . fvAsBool) $ vs)))
-      | otherwise   -> V.VSeq  len (V.finiteSeqMap (map (V.ready . exportFirstOrderValue) vs))
+      | t == FOTBit -> V.VWord len <$> (V.bitmapWordVal V.Concrete len
+                          (V.finiteSeqMap V.Concrete . map (V.ready . fvAsBool) $ vs))
+      | otherwise   -> pure (V.VSeq len (V.finiteSeqMap V.Concrete (map exportFirstOrderValue vs)))
       where len = toInteger (length vs)
     FOVArray{}  -> error $ "exportFirstOrderValue: unsupported FOT Array"
-    FOVTuple vs -> V.VTuple (map (V.ready . exportFirstOrderValue) vs)
-    FOVRec vm   -> V.VRecord $ C.recordFromFields [ (C.mkIdent n, V.ready $ exportFirstOrderValue v) | (n, v) <- Map.assocs vm ]
+    FOVTuple vs -> pure $ V.VTuple $ map exportFirstOrderValue vs
+    FOVRec vm   ->
+      do let vm' = fmap exportFirstOrderValue vm
+         pure $ V.VRecord $ C.recordFromFields [ (C.mkIdent n, v) | (n, v) <- Map.assocs vm' ]
 
 importFirstOrderValue :: FirstOrderType -> V.Value -> IO FirstOrderValue
 importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
@@ -1755,7 +1760,7 @@ importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
   go t v = case (t,v) of
     (FOTBit         , V.VBit b)        -> return (FOVBit b)
     (FOTInt         , V.VInteger i)    -> return (FOVInt i)
-    (FOTVec _ FOTBit, V.VWord w wv)    -> FOVWord (fromIntegral w) . V.bvVal <$> (V.asWordVal V.Concrete =<< wv)
+    (FOTVec _ FOTBit, V.VWord w wv)    -> FOVWord (fromIntegral w) . V.bvVal <$> (V.asWordVal V.Concrete wv)
     (FOTVec _ ty    , V.VSeq len xs)   -> FOVVec ty <$> traverse (go ty =<<) (V.enumerateSeqMap len xs)
     (FOTTuple tys   , V.VTuple xs)     -> FOVTuple <$> traverse (\(ty, x) -> go ty =<< x) (zip tys xs)
     (FOTRec fs      , V.VRecord xs)    ->

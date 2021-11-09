@@ -368,7 +368,11 @@ ppArgs sym cc cs (Crucible.RegMap args) = do
 --   predicates.
 methodSpecHandler ::
   forall arch rtp args ret.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
@@ -475,13 +479,15 @@ methodSpecHandler opts sc cc top_loc css h = do
                 case res of
                   Left (OF loc rsn)  ->
                     -- TODO, better pretty printing for reasons
-                    liftIO $ Crucible.abortExecBecause
-                      (Crucible.AssumedFalse (Crucible.AssumptionReason loc (show rsn)))
+                    liftIO
+                      $ Crucible.abortExecBecause
+                      $ Crucible.AssertionFailure
+                      $ Crucible.SimError loc
+                      $ Crucible.AssertFailureSimError "assumed false" (show rsn)
                   Right (ret,st') ->
                     do liftIO $ forM_ (st'^.osAssumes) $ \asum ->
                          Crucible.addAssumption (cc^.ccBackend)
-                            (Crucible.LabeledPred asum
-                              (Crucible.AssumptionReason (st^.osLocation) "override postcondition"))
+                          $ Crucible.GenericAssumption (st^.osLocation) "override postcondition" asum
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
            , Just (W4.plSourceLoc (cs ^. MS.csLoc))
@@ -584,7 +590,11 @@ methodSpecHandler opts sc cc top_loc css h = do
 --   predicates.
 methodSpecHandler_prestate ::
   forall arch ctx.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
@@ -628,16 +638,21 @@ methodSpecHandler_poststate opts sc cc retTy cs =
      computeReturnValue opts cc sc cs retTy (cs ^. MS.csRetValue)
 
 -- learn pre/post condition
-learnCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym)
-          => Options
-          -> SharedContext
-          -> LLVMCrucibleContext arch
-          -> MS.CrucibleMethodSpecIR (LLVM arch)
-          -> PrePost
-          -> [MS.AllocGlobal (LLVM arch)]
-          -> Map AllocIndex (MS.AllocSpec (LLVM arch))
-          -> MS.StateSpec (LLVM arch)
-          -> OverrideMatcher (LLVM arch) md ()
+learnCond ::
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
+  Options ->
+  SharedContext ->
+  LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  PrePost ->
+  [MS.AllocGlobal (LLVM arch)] ->
+  Map AllocIndex (MS.AllocSpec (LLVM arch)) ->
+  MS.StateSpec (LLVM arch) ->
+  OverrideMatcher (LLVM arch) md ()
 learnCond opts sc cc cs prepost globals extras ss =
   do let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
@@ -868,7 +883,11 @@ ppProgramLoc loc =
 -- statement cannot be executed until bindings for any/all lhs
 -- variables exist.
 matchPointsTos :: forall arch md.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options          {- ^ saw script print out opts -} ->
   SharedContext    {- ^ term construction context -} ->
   LLVMCrucibleContext arch {- ^ simulator context     -} ->
@@ -1071,7 +1090,7 @@ matchArg opts sc cc cs prepost actual expectedTy expected = do
     Just mem -> pure mem
   case (actual, expectedTy, expected) of
     (_, _, SetupTerm expectedTT)
-      | Cryptol.Forall [] [] tyexpr <- ttSchema expectedTT
+      | TypedTermSchema (Cryptol.Forall [] [] tyexpr) <- ttType expectedTT
       , Right tval <- Cryptol.evalType mempty tyexpr
         -> do sym      <- Ov.getSymInterface
               failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
@@ -1308,14 +1327,20 @@ learnGhost ::
   MS.GhostGlobal                                            ->
   TypedTerm                                              ->
   OverrideMatcher (LLVM arch) md ()
-learnGhost sc cc loc prepost var expected =
-  do actual <- readGlobal var
-     when (ttSchema actual /= ttSchema expected) $ fail $ unlines $
+learnGhost sc cc loc prepost var (TypedTerm (TypedTermSchema schEx) tmEx) =
+  do (sch,tm) <- readGlobal var
+     when (sch /= schEx) $ fail $ unlines $
        [ "Ghost variable had the wrong type:"
-       , "- Expected: " ++ show (Cryptol.pp (ttSchema expected))
-       , "- Actual:   " ++ show (Cryptol.pp (ttSchema actual))
+       , "- Expected: " ++ show (Cryptol.pp schEx)
+       , "- Actual:   " ++ show (Cryptol.pp sch)
        ]
-     instantiateExtMatchTerm sc cc loc prepost (ttTerm actual) (ttTerm expected)
+     instantiateExtMatchTerm sc cc loc prepost tm tmEx
+learnGhost _sc _cc _loc _prepost _var (TypedTerm tp _)
+  = fail $ unlines
+      [ "Ghost variable expected value has improper type"
+      , "expected Cryptol schema type, but got"
+      , show (MS.ppTypedTermType tp)
+      ]
 
 ------------------------------------------------------------------------
 
@@ -1326,7 +1351,11 @@ learnGhost sc cc loc prepost var expected =
 -- Returns a string on failure describing a concrete memory load failure.
 learnPointsTo ::
   forall arch md ann.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options                    ->
   SharedContext              ->
   LLVMCrucibleContext arch      ->
@@ -1634,10 +1663,16 @@ executeGhost ::
   MS.GhostGlobal ->
   TypedTerm ->
   OverrideMatcher (LLVM arch) RW ()
-executeGhost sc var val =
+executeGhost sc var (TypedTerm (TypedTermSchema sch) tm) =
   do s <- OM (use termSub)
-     t <- liftIO (ttTermLens (scInstantiateExt sc s) val)
-     writeGlobal var t
+     tm' <- liftIO (scInstantiateExt sc s tm)
+     writeGlobal var (sch,tm')
+executeGhost _sc _var (TypedTerm tp _) =
+  fail $ unlines
+    [ "executeGhost: improper value type"
+    , "expected Cryptol schema type, but got"
+    , show (MS.ppTypedTermType tp)
+    ]
 
 ------------------------------------------------------------------------
 

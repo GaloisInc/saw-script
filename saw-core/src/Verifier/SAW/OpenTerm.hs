@@ -23,6 +23,8 @@ module Verifier.SAW.OpenTerm (
   closedOpenTerm, flatOpenTerm, sortOpenTerm, natOpenTerm,
   unitOpenTerm, unitTypeOpenTerm,
   stringLitOpenTerm, stringTypeOpenTerm,
+  trueOpenTerm, falseOpenTerm, boolOpenTerm, boolTypeOpenTerm,
+  arrayValueOpenTerm, bvLitOpenTerm, bvTypeOpenTerm,
   pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
@@ -36,6 +38,7 @@ module Verifier.SAW.OpenTerm (
   lambdaOpenTermAuxM, piOpenTermAuxM
   ) where
 
+import qualified Data.Vector as V
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Text (Text)
@@ -73,7 +76,7 @@ flatOpenTerm ftf = OpenTerm $
 
 -- | Build an 'OpenTerm' for a sort
 sortOpenTerm :: Sort -> OpenTerm
-sortOpenTerm s = flatOpenTerm (Sort s)
+sortOpenTerm s = flatOpenTerm (Sort s False)
 
 -- | Build an 'OpenTerm' for a natural number literal
 natOpenTerm :: Natural -> OpenTerm
@@ -94,6 +97,39 @@ stringLitOpenTerm = flatOpenTerm . StringLit
 -- | Return the SAW core type @String@ of strings.
 stringTypeOpenTerm :: OpenTerm
 stringTypeOpenTerm = globalOpenTerm "Prelude.String"
+
+-- | The 'True' value as a SAW core term
+trueOpenTerm :: OpenTerm
+trueOpenTerm = globalOpenTerm "Prelude.True"
+
+-- | The 'False' value as a SAW core term
+falseOpenTerm :: OpenTerm
+falseOpenTerm = globalOpenTerm "Prelude.False"
+
+-- | Convert a 'Bool' to a SAW core term
+boolOpenTerm :: Bool -> OpenTerm
+boolOpenTerm True = globalOpenTerm "Prelude.True"
+boolOpenTerm False = globalOpenTerm "Prelude.False"
+
+-- | The 'Bool' type as a SAW core term
+boolTypeOpenTerm :: OpenTerm
+boolTypeOpenTerm = globalOpenTerm "Prelude.Bool"
+
+-- | Build an 'OpenTerm' for an array literal
+arrayValueOpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
+arrayValueOpenTerm tp elems =
+  flatOpenTerm $ ArrayValue tp $ V.fromList elems
+
+-- | Create a SAW core term for a bitvector literal
+bvLitOpenTerm :: [Bool] -> OpenTerm
+bvLitOpenTerm bits =
+  arrayValueOpenTerm boolTypeOpenTerm $ map boolOpenTerm bits
+
+-- | Create a SAW core term for the type of a bitvector
+bvTypeOpenTerm :: Integral a => a -> OpenTerm
+bvTypeOpenTerm n =
+  applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
+  [natOpenTerm (fromIntegral n), boolTypeOpenTerm]
 
 -- | Build an 'OpenTerm' for a pair
 pairOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
@@ -128,26 +164,30 @@ projTupleOpenTerm i t = projTupleOpenTerm (i-1) (pairRightOpenTerm t)
 ctorOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
 ctorOpenTerm c all_args = OpenTerm $ do
   maybe_ctor <- liftTCM scFindCtor c
-  (params, args) <-
-    case maybe_ctor of
-      Just ctor -> splitAt (ctorNumParams ctor) <$> mapM unOpenTerm all_args
-      Nothing -> throwTCError $ NoSuchCtor c
-  typeInferComplete $ CtorApp c params args
+  ctor <- case maybe_ctor of
+            Just ctor -> pure ctor
+            Nothing -> throwTCError $ NoSuchCtor c
+  (params, args) <- splitAt (ctorNumParams ctor) <$> mapM unOpenTerm all_args
+  c' <- traverse typeInferComplete (ctorPrimName ctor)
+  typeInferComplete $ CtorApp c' params args
 
 -- | Build an 'OpenTerm' for a datatype applied to its arguments
 dataTypeOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
 dataTypeOpenTerm d all_args = OpenTerm $ do
   maybe_dt <- liftTCM scFindDataType d
-  (params, args) <-
-    case maybe_dt of
-      Just dt -> splitAt (dtNumParams dt) <$> mapM unOpenTerm all_args
-      Nothing -> throwTCError $ NoSuchDataType d
-  typeInferComplete $ DataTypeApp d params args
+  dt <- case maybe_dt of
+          Just dt -> pure dt
+          Nothing -> throwTCError $ NoSuchDataType d
+  (params, args) <- splitAt (dtNumParams dt) <$> mapM unOpenTerm all_args
+  d' <- traverse typeInferComplete (dtPrimName dt)
+  typeInferComplete $ DataTypeApp d' params args
 
 -- | Build an 'OpenTerm' for a global name.
 globalOpenTerm :: Ident -> OpenTerm
 globalOpenTerm ident =
-  OpenTerm (liftTCM scGlobalDef ident >>= typeInferComplete)
+  OpenTerm (do trm <- liftTCM scGlobalDef ident
+               tp <- liftTCM scTypeOfGlobal ident
+               return $ TypedTerm trm tp)
 
 -- | Apply an 'OpenTerm' to another
 applyOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm

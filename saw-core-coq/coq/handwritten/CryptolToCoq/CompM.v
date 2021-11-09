@@ -528,7 +528,7 @@ Definition multiFixM {lrts:LetRecTypes}
   multiTupleFixM lrts (fun fs => lrtApply F fs).
 
 (* A letrec construct for binding 0 or more mutually recursive functions *)
-Definition letRecM {lrts : LetRecTypes} {B} (F: lrtPi lrts (lrtTupleType lrts))
+Definition letRecM (lrts : LetRecTypes) {B} (F: lrtPi lrts (lrtTupleType lrts))
            (body:lrtPi lrts (CompM B)) : CompM B :=
   lrtApply body (multiFixM F).
 
@@ -922,4 +922,11 @@ Lemma refinesM_assumingM_l {A} (P:Prop) (m1 m2 : CompM A) :
   P -> m1 |= m2 -> assumingM P m1 |= m2.
 Proof.
   apply refinesM_forallM_l.
+Qed.
+
+(* NOTE: the other direction does not hold *)
+Lemma assumingM_bindM {A B} (P:Prop) (m: CompM A) (Q: A -> CompM B) :
+  refinesM ((assumingM P m) >>= Q) (assumingM P (m >>= Q)).
+Proof.
+  apply forallM_bindM.
 Qed.

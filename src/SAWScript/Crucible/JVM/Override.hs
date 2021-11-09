@@ -243,13 +243,15 @@ methodSpecHandler opts sc cc top_loc css h = do
                 case res of
                   Left (OF loc rsn)  ->
                     -- TODO, better pretty printing for reasons
-                    liftIO $ Crucible.abortExecBecause
-                      (Crucible.AssumedFalse (Crucible.AssumptionReason loc (show rsn)))
+                    liftIO
+                      $ Crucible.abortExecBecause
+                      $ Crucible.AssertionFailure
+                      $ Crucible.SimError loc
+                      $ Crucible.AssertFailureSimError "assumed false" (show rsn)
                   Right (ret,st') ->
                     do liftIO $ forM_ (st'^.osAssumes) $ \asum ->
                          Crucible.addAssumption (cc ^. jccBackend)
-                            (Crucible.LabeledPred asum
-                              (Crucible.AssumptionReason (st^.osLocation) "override postcondition"))
+                          $ Crucible.GenericAssumption (st^.osLocation) "override postcondition" asum
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
            , Just (W4.plSourceLoc (cs ^. MS.csLoc))
@@ -550,7 +552,7 @@ matchArg ::
   OverrideMatcher CJ.JVM w ()
 
 matchArg opts sc cc cs prepost actual expectedTy expected@(MS.SetupTerm expectedTT)
-  | Cryptol.Forall [] [] tyexpr <- ttSchema expectedTT
+  | TypedTermSchema (Cryptol.Forall [] [] tyexpr) <- ttType expectedTT
   , Right tval <- Cryptol.evalType mempty tyexpr
   = do sym <- Ov.getSymInterface
        failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
@@ -672,29 +674,29 @@ learnPointsTo opts sc cc spec prepost pt = do
   globals <- OM (use overrideGlobals)
   case pt of
 
-    JVMPointsToField loc ptr fid val ->
+    JVMPointsToField loc ptr fid (Just val) ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doFieldLoad sym globals rval fid
          v <- liftIO $ projectJVMVal sym ty ("field load " ++ J.fieldIdName fid ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
-    JVMPointsToStatic loc fid val ->
+    JVMPointsToStatic loc fid (Just val) ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          dyn <- liftIO $ CJ.doStaticFieldLoad sym jc globals fid
          v <- liftIO $ projectJVMVal sym ty ("static field load " ++ J.fieldIdName fid ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
-    JVMPointsToElem loc ptr idx val ->
+    JVMPointsToElem loc ptr idx (Just val) ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doArrayLoad sym globals rval idx
          v <- liftIO $ projectJVMVal sym ty ("array load " ++ show idx ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
-    JVMPointsToArray loc ptr tt ->
+    JVMPointsToArray loc ptr (Just tt) ->
       do (len, ety) <-
-           case Cryptol.isMono (ttSchema tt) of
+           case ttIsMono (ttType tt) of
              Nothing -> fail "jvm_array_is: invalid polymorphic value"
              Just cty ->
                case Cryptol.tIsSeq cty of
@@ -722,6 +724,10 @@ learnPointsTo opts sc cc spec prepost pt = do
          ts <- traverse load [0 .. fromInteger len - 1]
          realTerm <- liftIO $ scVector sc ety_tm ts
          matchTerm sc cc loc prepost realTerm (ttTerm tt)
+
+    -- If the right-hand-side is 'Nothing', this is indicates a "modifies" declaration,
+    -- which should probably not appear in the pre-state section, and has no effect.
+    _ -> pure ()
 
 ------------------------------------------------------------------------
 
@@ -782,10 +788,13 @@ executeAllocation opts cc (var, (loc, alloc)) =
      let halloc = cc^.jccHandleAllocator
      sym <- Ov.getSymInterface
      globals <- OM (use overrideGlobals)
+     let mut = True -- allocate objects/arrays from post-state as mutable
      (ptr, globals') <-
        case alloc of
-         AllocObject cname -> liftIO $ CJ.doAllocateObject sym halloc jc cname globals
-         AllocArray len elemTy -> liftIO $ CJ.doAllocateArray sym halloc jc len elemTy globals
+         AllocObject cname ->
+           liftIO $ CJ.doAllocateObject sym halloc jc cname (const mut) globals
+         AllocArray len elemTy ->
+           liftIO $ CJ.doAllocateArray sym halloc jc len elemTy (const mut) globals
      OM (overrideGlobals .= globals')
      assignVar cc loc var ptr
 
@@ -823,23 +832,23 @@ executePointsTo opts sc cc spec pt = do
   case pt of
 
     JVMPointsToField _loc ptr fid val ->
-      do dyn <- injectSetupValueJVM sym opts cc sc spec val
+      do dyn <- maybe (pure CJ.unassignedJVMValue) (injectSetupValueJVM sym opts cc sc spec) val
          rval <- resolveAllocIndexJVM ptr
          globals' <- liftIO $ CJ.doFieldStore sym globals rval fid dyn
          OM (overrideGlobals .= globals')
 
     JVMPointsToStatic _loc fid val ->
-      do dyn <- injectSetupValueJVM sym opts cc sc spec val
+      do dyn <- maybe (pure CJ.unassignedJVMValue) (injectSetupValueJVM sym opts cc sc spec) val
          globals' <- liftIO $ CJ.doStaticFieldStore sym jc globals fid dyn
          OM (overrideGlobals .= globals')
 
     JVMPointsToElem _loc ptr idx val ->
-      do dyn <- injectSetupValueJVM sym opts cc sc spec val
+      do dyn <- maybe (pure CJ.unassignedJVMValue) (injectSetupValueJVM sym opts cc sc spec) val
          rval <- resolveAllocIndexJVM ptr
          globals' <- liftIO $ CJ.doArrayStore sym globals rval idx dyn
          OM (overrideGlobals .= globals')
 
-    JVMPointsToArray _loc ptr tt ->
+    JVMPointsToArray _loc ptr (Just tt) ->
       do (_ety, tts) <-
            liftIO (destVecTypedTerm sc tt) >>=
            \case
@@ -849,6 +858,15 @@ executePointsTo opts sc cc spec pt = do
          vs <- traverse (injectSetupValueJVM sym opts cc sc spec . MS.SetupTerm) tts
          globals' <- liftIO $ doEntireArrayStore sym globals rval vs
          OM (overrideGlobals .= globals')
+
+    JVMPointsToArray _loc ptr Nothing ->
+      case Map.lookup ptr (MS.csAllocations spec) of
+        Just (_, AllocArray len _) ->
+          do let vs = replicate len CJ.unassignedJVMValue
+             rval <- resolveAllocIndexJVM ptr
+             globals' <- liftIO $ doEntireArrayStore sym globals rval vs
+             OM (overrideGlobals .= globals')
+        _ -> panic "JVMSetup" ["executePointsTo", "expected array allocation"]
 
 injectSetupValueJVM ::
   Sym                  ->
@@ -875,7 +893,7 @@ doEntireArrayStore sym glob ref vs = foldM store glob (zip [0..] vs)
 -- along with a list of its projected components. Return 'Nothing' if
 -- the 'TypedTerm' does not have a vector type.
 destVecTypedTerm :: SharedContext -> TypedTerm -> IO (Maybe (Cryptol.Type, [TypedTerm]))
-destVecTypedTerm sc (TypedTerm schema t) =
+destVecTypedTerm sc (TypedTerm ttp t) =
   case asVec of
     Nothing -> pure Nothing
     Just (len, ety) ->
@@ -883,10 +901,10 @@ destVecTypedTerm sc (TypedTerm schema t) =
          ty_tm <- Cryptol.importType sc Cryptol.emptyEnv ety
          idxs <- traverse (scNat sc) (map fromInteger [0 .. len-1])
          ts <- traverse (scAt sc len_tm ty_tm t) idxs
-         pure $ Just (ety, map (TypedTerm (Cryptol.tMono ety)) ts)
+         pure $ Just (ety, map (TypedTerm (TypedTermSchema (Cryptol.tMono ety))) ts)
   where
     asVec =
-      do ty <- Cryptol.isMono schema
+      do ty <- ttIsMono ttp
          (n, a) <- Cryptol.tIsSeq ty
          n' <- Cryptol.tIsNum n
          Just (n', a)

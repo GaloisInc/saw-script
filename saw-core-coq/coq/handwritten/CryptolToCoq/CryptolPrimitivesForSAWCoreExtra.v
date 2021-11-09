@@ -46,7 +46,7 @@ Ltac solveUnsafeAssertStep :=
   | [ |- min ?n (S ?n) = ?n ] => apply min_S
   end.
 
-Ltac solveUnsafeAssert := repeat (solveUnsafeAssertStep; simpl).
+Ltac solveUnsafeAssert := repeat (solveUnsafeAssertStep; simpl); trivial.
 
 Definition cbc_enc_helper n : Eq Num (tcMin n (tcAdd (TCNum 1) n)) n :=
   ltac:(solveUnsafeAssert).

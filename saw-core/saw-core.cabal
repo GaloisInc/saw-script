@@ -32,7 +32,7 @@ library
     data-ref,
     directory,
     filepath,
-    hashable >= 1.2,
+    hashable >= 1.3.4,
     lens >= 3.8,
     modern-uri >= 0.3.2 && < 0.4,
     MonadRandom,
@@ -76,6 +76,7 @@ library
      Verifier.SAW.SCTypeCheck
      Verifier.SAW.Simulator
      Verifier.SAW.Simulator.Concrete
+     Verifier.SAW.Simulator.TermModel
      Verifier.SAW.Simulator.MonadLazy
      Verifier.SAW.Simulator.Prims
      Verifier.SAW.Simulator.RME

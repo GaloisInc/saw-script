@@ -6,6 +6,7 @@
 {-# Language ExplicitForAll #-}
 {-# Language FlexibleContexts #-}
 {-# Language TypeApplications #-}
+{-# Language TupleSections #-}
 module SAWScript.Prover.Exporter
   ( proveWithSATExporter
   , proveWithPropExporter
@@ -31,6 +32,7 @@ module SAWScript.Prover.Exporter
   , writeCoqCryptolModule
   , writeCoqSAWCorePrelude
   , writeCoqTerm
+  , coqTranslationConfiguration
   , writeCoqProp
   , writeCore
   , writeVerilog
@@ -46,23 +48,26 @@ import Data.Foldable(toList)
 
 import Control.Monad (unless)
 import Control.Monad.Except (runExceptT)
-import Control.Monad.IO.Class (liftIO, MonadIO)
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
+import Data.Maybe (mapMaybe)
 import Data.Parameterized.Nonce (globalNonceGenerator)
 import Data.Parameterized.Some (Some(..))
+import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.SBV.Dynamic as SBV
 import System.Directory (removeFile)
+import System.FilePath (takeBaseName)
 import System.IO
 import System.IO.Temp(emptySystemTempFile)
-import Data.Text.Prettyprint.Doc.Render.Text
+import Data.Text (pack)
+import qualified Data.Vector as V
 import Prettyprinter (vcat)
+import Prettyprinter.Render.Text
 
-import Cryptol.Utils.PP(pretty)
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
-import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule)
+import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule, ImportPrimitiveOptions(..))
 import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
 import Verifier.SAW.FiniteValue
@@ -72,7 +77,7 @@ import Verifier.SAW.Recognizer (asPi)
 import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.Translation.Coq as Coq
-import Verifier.SAW.TypedAST (mkModuleName)
+import Verifier.SAW.TypedAST (mkModuleName, toShortName)
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.Value as Sim
@@ -83,6 +88,7 @@ import qualified Verifier.SAW.Simulator.What4 as W
 import qualified Verifier.SAW.UntypedAST as Un
 
 import SAWScript.Crucible.Common
+import SAWScript.Crucible.Common.MethodSpec (ppTypedTermType)
 import SAWScript.Proof (Prop, propSize, propToTerm, predicateToSATQuery, propToSATQuery)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
@@ -90,13 +96,16 @@ import SAWScript.Prover.What4
 import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
+import What4.Config (extendConfig)
+import What4.Interface (getConfiguration, IsSymExprBuilder)
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
+import What4.Protocol.SMTLib2.Response (smtParseOptions)
 import What4.Protocol.VerilogWriter (exprsVerilog)
 import What4.Solver.Adapter
 import qualified What4.SWord as W4Sim
 
 proveWithSATExporter ::
-  (SharedContext -> FilePath -> SATQuery -> TopLevel a) ->
+  (FilePath -> SATQuery -> TopLevel a) ->
   Set VarIndex ->
   String ->
   Prop ->
@@ -104,41 +113,48 @@ proveWithSATExporter ::
 proveWithSATExporter exporter unintSet path goal =
   do sc <- getSharedContext
      satq <- io $ propToSATQuery sc unintSet goal
-     _ <- exporter sc path satq
+     _ <- exporter path satq
      let stats = solverStats ("offline: "++ path) (propSize goal)
      return stats
 
 
 proveWithPropExporter ::
-  (SharedContext -> FilePath -> Prop -> TopLevel a) ->
+  (FilePath -> Prop -> TopLevel a) ->
   String ->
   Prop ->
   TopLevel SolverStats
 proveWithPropExporter exporter path goal =
-  do sc <- getSharedContext
-     _ <- exporter sc path goal
+  do _ <- exporter path goal
      let stats = solverStats ("offline: "++ path) (propSize goal)
      return stats
 
 --------------------------------------------------------------------------------
 
-writeAIG_SAT :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> SATQuery -> TopLevel ()
-writeAIG_SAT proxy sc f satq = io $
-  BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \g l _vars ->
-    AIG.writeAiger f (AIG.Network g [l])
+writeAIG_SAT ::
+  FilePath ->
+  SATQuery ->
+  TopLevel [(ExtCns Term, FiniteType)]
+writeAIG_SAT f satq =
+  do AIGProxy proxy <- getProxy
+     sc <- getSharedContext
+     io $ BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \g l vars ->
+         do AIG.writeAiger f (AIG.Network g [l])
+            return vars
 
 -- | Write a @Term@ representing a an arbitrary function to an AIG file.
-writeAIG :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> TopLevel ()
-writeAIG proxy sc f t = do
-  io $ do
-    aig <- bitblastPrim proxy sc t
-    AIG.writeAiger f aig
+writeAIG :: FilePath -> Term -> TopLevel ()
+writeAIG f t = do
+  do sc <- getSharedContext
+     AIGProxy proxy <- getProxy
+     aig <- io $ bitblastPrim proxy sc t
+     io $ AIG.writeAiger f aig
 
-withABCVerilog :: SharedContext -> FilePath -> Term -> (FilePath -> String) -> TopLevel ()
-withABCVerilog sc baseName t buildCmd =
-  do verilogFile <- liftIO $ emptySystemTempFile (baseName ++ ".v")
+withABCVerilog :: FilePath -> Term -> (FilePath -> String) -> TopLevel ()
+withABCVerilog fileName t buildCmd =
+  do verilogFile <- io $ emptySystemTempFile (takeBaseName fileName ++ ".v")
+     sc <- getSharedContext
      write_verilog sc verilogFile t
-     liftIO $
+     io $
        do (out, err) <- readProcessExitIfFailure "abc" ["-q", buildCmd verilogFile]
           unless (null out) $ putStrLn "ABC output:" >> putStrLn out
           unless (null err) $ putStrLn "ABC errors:" >> putStrLn err
@@ -146,59 +162,65 @@ withABCVerilog sc baseName t buildCmd =
 
 -- | Write a @SATQuery@ to an AIG file by using ABC to convert a Verilog
 -- file.
-writeAIG_SATviaVerilog :: SharedContext -> FilePath -> SATQuery -> TopLevel ()
-writeAIG_SATviaVerilog sc f query =
-  writeAIGviaVerilog sc f =<< liftIO (satQueryAsTerm sc query)
+writeAIG_SATviaVerilog :: FilePath -> SATQuery -> TopLevel ()
+writeAIG_SATviaVerilog f query =
+  do sc <- getSharedContext
+     t <- io (satQueryAsTerm sc query)
+     writeAIGviaVerilog f t
 
 -- | Write a @Term@ representing a an arbitrary function to an AIG file
 -- by using ABC to convert a Verilog file.
-writeAIGviaVerilog :: SharedContext -> FilePath -> Term -> TopLevel ()
-writeAIGviaVerilog sc aigFile t =
-  withABCVerilog sc aigFile t $
+writeAIGviaVerilog :: FilePath -> Term -> TopLevel ()
+writeAIGviaVerilog aigFile t =
+  withABCVerilog aigFile t $
       \verilogFile -> "%read " ++ verilogFile ++ "; %blast; &write " ++ aigFile
 
 -- | Write a @SATQuery@ to a CNF file by using ABC to convert a Verilog
 -- file.
-writeCNF_SATviaVerilog :: SharedContext -> FilePath -> SATQuery -> TopLevel ()
-writeCNF_SATviaVerilog sc f query =
-  writeCNFviaVerilog sc f =<< liftIO (satQueryAsTerm sc query)
+writeCNF_SATviaVerilog :: FilePath -> SATQuery -> TopLevel ()
+writeCNF_SATviaVerilog f query =
+  do sc <- getSharedContext
+     t <- io (satQueryAsTerm sc query)
+     writeCNFviaVerilog f t
 
 -- | Write a @Term@ representing a an arbitrary function to a CNF file
 -- by using ABC to convert a Verilog file.
-writeCNFviaVerilog :: SharedContext -> FilePath -> Term -> TopLevel ()
-writeCNFviaVerilog sc cnfFile t =
-  withABCVerilog sc cnfFile t $
+writeCNFviaVerilog :: FilePath -> Term -> TopLevel ()
+writeCNFviaVerilog cnfFile t =
+  withABCVerilog cnfFile t $
       \verilogFile -> "%read " ++ verilogFile ++ "; %blast; &write_cnf " ++ cnfFile
 
 -- | Like @writeAIG@, but takes an additional 'Integer' argument
 -- specifying the number of input and output bits to be interpreted as
 -- latches. Used to implement more friendly SAIG writers
 -- @writeSAIGInferLatches@ and @writeSAIGComputedLatches@.
-writeSAIG :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> Int -> TopLevel ()
-writeSAIG proxy sc file tt numLatches = do
-  liftIO $ do
-    aig <- bitblastPrim proxy sc tt
-    AIG.writeAigerWithLatches file aig numLatches
+writeSAIG :: FilePath -> Term -> Int -> TopLevel ()
+writeSAIG file tt numLatches = do
+  do sc <- getSharedContext
+     AIGProxy proxy <- getProxy
+     aig <- io $ bitblastPrim proxy sc tt
+     io $ AIG.writeAigerWithLatches file aig numLatches
 
 -- | Given a term a type '(i, s) -> (o, s)', call @writeSAIG@ on term
 -- with latch bits set to '|s|', the width of 's'.
-writeSAIGInferLatches :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> TypedTerm -> TopLevel ()
-writeSAIGInferLatches proxy sc file tt = do
+writeSAIGInferLatches :: FilePath -> TypedTerm -> TopLevel ()
+writeSAIGInferLatches file tt = do
+  sc <- getSharedContext
   ty <- io $ scTypeOf sc (ttTerm tt)
-  s <- getStateType ty
+  s <- getStateType sc ty
   let numLatches = sizeFiniteType s
-  writeSAIG proxy sc file (ttTerm tt) numLatches
+  writeSAIG file (ttTerm tt) numLatches
   where
     die :: String -> TopLevel a
     die why = throwTopLevel $
       "writeSAIGInferLatches: " ++ why ++ ":\n" ++
       "term must have type of the form '(i, s) -> (o, s)',\n" ++
       "where 'i', 's', and 'o' are all fixed-width types,\n" ++
-      "but type of term is:\n" ++ (pretty . ttSchema $ tt)
+      "but type of term is:\n" ++ (show . ppTypedTermType . ttType $ tt)
 
     -- Decompose type as '(i, s) -> (o, s)' and return 's'.
-    getStateType :: Term -> TopLevel FiniteType
-    getStateType ty = do
+    getStateType :: SharedContext -> Term -> TopLevel FiniteType
+    getStateType sc ty = do
       ty' <- io $ scWhnf sc ty
       case ty' of
         (asPi -> Just (_nm, tp, body)) ->
@@ -220,51 +242,54 @@ writeSAIGInferLatches proxy sc file tt = do
 -- | Like @writeAIGInferLatches@, but takes an additional argument
 -- specifying the number of input and output bits to be interpreted as
 -- latches.
-writeAIGComputedLatches ::
-  (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> Int -> TopLevel ()
-writeAIGComputedLatches proxy sc file term numLatches =
-  writeSAIG proxy sc file term numLatches
+writeAIGComputedLatches :: FilePath -> Term -> Int -> TopLevel ()
+writeAIGComputedLatches file term numLatches =
+  writeSAIG file term numLatches
 
-writeCNF :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> SATQuery -> TopLevel ()
-writeCNF proxy sc f satq = io $
-  do _ <- BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \g l _vars -> AIG.writeCNF g l f
+writeCNF :: FilePath -> SATQuery -> TopLevel ()
+writeCNF f satq =
+  do sc <- getSharedContext
+     AIGProxy proxy <- getProxy
+     _ <- io $ BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \g l _vars -> AIG.writeCNF g l f
      return ()
 
-write_cnf :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
-write_cnf sc f (TypedTerm schema t) = do
-  liftIO $ checkBooleanSchema schema
-  AIGProxy proxy <- getProxy
+write_cnf :: FilePath -> TypedTerm -> TopLevel ()
+write_cnf f (TypedTerm schema t) = do
+  io $ checkBooleanSchema schema
+  sc <- getSharedContext
   satq <- io (predicateToSATQuery sc mempty t)
-  writeCNF proxy sc f satq
+  writeCNF f satq
 
-write_cnf_external :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
-write_cnf_external sc f (TypedTerm schema t) = do
-  liftIO $ checkBooleanSchema schema
-  writeCNFviaVerilog sc f t
+write_cnf_external :: FilePath -> TypedTerm -> TopLevel ()
+write_cnf_external f (TypedTerm schema t) = do
+  io $ checkBooleanSchema schema
+  writeCNFviaVerilog f t
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
 -- function returning a boolean) to an SMT-Lib version 2 file. The goal
 -- is to pass the term through as directly as possible, so we interpret
 -- it as an existential.
-write_smtlib2 :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
-write_smtlib2 sc f (TypedTerm schema t) = do
+write_smtlib2 :: FilePath -> TypedTerm -> TopLevel ()
+write_smtlib2 f (TypedTerm schema t) = do
+  sc <- getSharedContext
   io $ checkBooleanSchema schema
   satq <- io $ predicateToSATQuery sc mempty t
-  writeSMTLib2 sc f satq
+  writeSMTLib2 f satq
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
 -- function returning a boolean) to an SMT-Lib version 2 file. The goal
 -- is to pass the term through as directly as possible, so we interpret
 -- it as an existential. This version uses What4 instead of SBV.
-write_smtlib2_w4 :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
-write_smtlib2_w4 sc f (TypedTerm schema t) = do
+write_smtlib2_w4 :: FilePath -> TypedTerm -> TopLevel ()
+write_smtlib2_w4 f (TypedTerm schema t) = do
+  sc <- getSharedContext
   io $ checkBooleanSchema schema
   satq <- io $ predicateToSATQuery sc mempty t
-  writeSMTLib2What4 sc f satq
+  writeSMTLib2What4 f satq
 
 -- | Write a SAT query to an SMT-Lib version 2 file.
-writeSMTLib2 :: SharedContext -> FilePath -> SATQuery -> TopLevel ()
-writeSMTLib2 sc f satq = io $
+writeSMTLib2 :: FilePath -> SATQuery -> TopLevel ()
+writeSMTLib2 f satq = getSharedContext >>= \sc -> io $
   do (_, _, l) <- SBV.sbvSATQuery sc mempty satq
      let isSat = True -- l is encoded as an existential formula
      txt <- SBV.generateSMTBenchmark isSat l
@@ -272,12 +297,14 @@ writeSMTLib2 sc f satq = io $
 
 -- | Write a SAT query an SMT-Lib version 2 file.
 -- This version uses What4 instead of SBV.
-writeSMTLib2What4 :: SharedContext -> FilePath -> SATQuery -> TopLevel ()
-writeSMTLib2What4 sc f satq = io $
+writeSMTLib2What4 :: FilePath -> SATQuery -> TopLevel ()
+writeSMTLib2What4 f satq = getSharedContext >>= \sc -> io $
   do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
-     (_argNames, _argTys, _labels, lit) <- W.w4Solve sym sc satq
+     (_varMap, lit) <- W.w4Solve sym sc satq
+     let cfg = getConfiguration sym
+     extendConfig smtParseOptions cfg
      withFile f WriteMode $ \h ->
-       writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features sym h [lit]
+       writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features Nothing sym h [lit]
 
 writeCore :: FilePath -> Term -> TopLevel ()
 writeCore path t = io $ writeFile path (scWriteExternal t)
@@ -285,16 +312,25 @@ writeCore path t = io $ writeFile path (scWriteExternal t)
 write_verilog :: SharedContext -> FilePath -> Term -> TopLevel ()
 write_verilog sc path t = io $ writeVerilog sc path t
 
-writeVerilogSAT :: MonadIO m => SharedContext -> FilePath -> SATQuery -> m ([ExtCns Term],[FiniteType])
-writeVerilogSAT sc path satq = liftIO $
+writeVerilogSAT :: FilePath -> SATQuery -> TopLevel [(ExtCns Term, FiniteType)]
+writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
   do sym <- newSAWCoreBackend sc
-     (argNames, argTys, _lbls, bval) <- W.w4Solve sym sc satq
+     -- For SAT checking, we don't care what order the variables are in,
+     -- but only that we can correctly keep track of the connection
+     -- between inputs and assignments.
+     let varList  = Map.toList (satVariables satq)
+     let argNames = map fst varList
+     let argTys = map snd varList
+     (vars, bval) <- W.w4Solve sym sc satq
      let f fot = case toFiniteType fot of
                    Nothing -> fail $ "writeVerilogSAT: Unsupported argument type " ++ show fot
                    Just ft -> return ft
+     let argSValues = map (snd . snd) vars
+     let argSValueNames = zip argSValues (map (toShortName . ecName) argNames)
      argTys' <- traverse f argTys
-
-     edoc <- runExceptT $ exprsVerilog sym [Some bval] "f"
+     let mkInput (v, nm) = map (,nm) <$> flattenSValue sym v
+     ins <- concat <$> mapM mkInput argSValueNames
+     edoc <- runExceptT $ exprsVerilog sym ins [Some bval] "f"
      case edoc of
        Left err -> fail $ "Failed to translate to Verilog: " ++ err
        Right doc -> do
@@ -302,30 +338,44 @@ writeVerilogSAT sc path satq = liftIO $
          hPutDoc h doc
          hPutStrLn h ""
          hClose h
-     return (argNames, argTys')
+     return (zip argNames argTys')
 
-flattenSValue :: W4Sim.SValue sym -> IO [Some (W4.SymExpr sym)]
-flattenSValue (Sim.VBool b) = return [Some b]
-flattenSValue (Sim.VWord (W4Sim.DBV w)) = return [Some w]
-flattenSValue (Sim.VPair l r) =
+flattenSValue :: IsSymExprBuilder sym => sym -> W4Sim.SValue sym -> IO [Some (W4.SymExpr sym)]
+flattenSValue _ (Sim.VBool b) = return [Some b]
+flattenSValue _ (Sim.VWord (W4Sim.DBV w)) = return [Some w]
+flattenSValue sym (Sim.VPair l r) =
   do lv <- Sim.force l
      rv <- Sim.force r
-     ls <- flattenSValue lv
-     rs <- flattenSValue rv
+     ls <- flattenSValue sym lv
+     rs <- flattenSValue sym rv
      return (ls ++ rs)
-flattenSValue (Sim.VVector ts) =
+flattenSValue sym (Sim.VVector ts) =
   do vs <- mapM Sim.force ts
-     es <- mapM flattenSValue vs
-     return (concat es)
-flattenSValue sval = fail $ "write_verilog: unsupported result type: " ++ show sval
+     let getBool (Sim.VBool b) = Just b
+         getBool _ = Nothing
+         mbs = V.map getBool vs
+     case sequence mbs of
+       Just bs ->
+         do w <- W4Sim.bvPackBE sym bs
+            case w of
+              W4Sim.DBV bv -> return [Some bv]
+              W4Sim.ZBV -> return []
+       Nothing -> concat <$> mapM (flattenSValue sym) vs
+flattenSValue _ sval = fail $ "write_verilog: unsupported result type: " ++ show sval
 
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
   sym <- newSAWCoreBackend sc
   st  <- sawCoreState sym
-  (_, (_, sval)) <- W4Sim.w4EvalAny sym st sc mempty mempty t
-  es <- flattenSValue sval
-  edoc <- runExceptT $ exprsVerilog sym es "f"
+  -- For writing Verilog in the general case, it's convenient for any
+  -- lambda-bound inputs to appear first in the module input list, in
+  -- order, followed by free variables (probably in the order seen
+  -- during traversal, because that's at least _a_ deterministic order).
+  (argNames, args, _, sval) <- W4Sim.w4EvalAny sym st sc mempty mempty t
+  es <- flattenSValue sym sval
+  let mkInput (v, nm) = map (, pack nm) <$> flattenSValue sym v
+  ins <- concat <$> mapM mkInput (zip args argNames)
+  edoc <- runExceptT $ exprsVerilog sym ins es "f"
   case edoc of
     Left err -> fail $ "Failed to translate to Verilog: " ++ err
     Right doc -> do
@@ -369,6 +419,16 @@ withImportCryptolPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq
    ]
   }
 
+
+withImportCryptolPrimitivesForSAWCoreExtra ::
+  Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
+withImportCryptolPrimitivesForSAWCoreExtra config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
+  config { Coq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra."
+   ]
+  }
+
+
 writeCoqTerm ::
   String ->
   [(String, String)] ->
@@ -378,8 +438,8 @@ writeCoqTerm ::
   TopLevel ()
 writeCoqTerm name notations skips path t = do
   let configuration =
-        withImportSAWCorePrelude $
         withImportCryptolPrimitivesForSAWCore $
+        withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
   case Coq.translateTermAsDeclImports configuration name t of
     Left err -> throwTopLevel $ "Error translating: " ++ show err
@@ -412,25 +472,20 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   let ?fileReader = BS.readFile
   env <- initCryptolEnv sc
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
-  (cm, _) <- loadCryptolModule sc env inputFile
-  let cryptolPreludeDecls = map Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
+  let primOpts = ImportPrimitiveOptions{ allowUnknownPrimitives = True }
+  (cm, _) <- loadCryptolModule sc primOpts env inputFile
+  let cryptolPreludeDecls = mapMaybe Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
   let configuration =
-        withImportSAWCorePrelude $
+        withImportCryptolPrimitivesForSAWCoreExtra $
         withImportCryptolPrimitivesForSAWCore $
+        withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
-  case Coq.translateCryptolModule configuration cryptolPreludeDecls cm of
+  let nm = takeBaseName inputFile
+  case Coq.translateCryptolModule nm configuration cryptolPreludeDecls cm of
     Left e -> putStrLn $ show e
     Right cmDoc ->
       writeFile outputFile
-      (show . vcat $ [ Coq.preamble configuration
-                     , "From CryptolToCoq Require Import SAWCorePrelude."
-                     , "Import SAWCorePrelude."
-                     , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCore."
-                     , "Import CryptolPrimitives."
-                     , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra."
-                     , ""
-                     , cmDoc
-                     ])
+      (show . vcat $ [ Coq.preamble configuration, cmDoc])
 
 nameOfSAWCorePrelude :: Un.ModuleName
 nameOfSAWCorePrelude = Un.moduleName preludeModule

@@ -18,6 +18,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Term.Pretty
   ( SawDoc
+  , renderSawDoc
   , SawStyle(..)
   , PPOpts(..)
   , defaultPPOpts
@@ -48,6 +49,7 @@ import Data.Foldable (Foldable)
 import qualified Data.Foldable as Fold
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
+import qualified Data.Map as Map
 import qualified Data.Vector as V
 import Numeric (showIntAtBase)
 import Prettyprinter
@@ -59,6 +61,7 @@ import qualified Data.IntMap.Strict as IntMap
 
 import Verifier.SAW.Name
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Utils (panic)
 
 --------------------------------------------------------------------------------
 -- * Doc annotations
@@ -96,12 +99,13 @@ type SawDoc = Doc SawStyle
 data PPOpts = PPOpts { ppBase :: Int
                      , ppColor :: Bool
                      , ppShowLocalNames :: Bool
-                     , ppMaxDepth :: Maybe Int }
+                     , ppMaxDepth :: Maybe Int
+                     , ppMinSharing :: Int }
 
 -- | Default options for pretty-printing
 defaultPPOpts :: PPOpts
 defaultPPOpts = PPOpts { ppBase = 10, ppColor = False,
-                         ppShowLocalNames = True, ppMaxDepth = Nothing }
+                         ppShowLocalNames = True, ppMaxDepth = Nothing, ppMinSharing = 2 }
 
 -- | Options for printing with a maximum depth
 depthPPOpts :: Int -> PPOpts
@@ -414,7 +418,7 @@ ppDataType d (params, ((d_ctx,d_tp), ctors)) =
 ppFlatTermF :: Prec -> FlatTermF Term -> PPM SawDoc
 ppFlatTermF prec tf =
   case tf of
-    Primitive ec  -> annotate PrimitiveStyle <$> ppBestName (ecName ec)
+    Primitive ec  -> annotate PrimitiveStyle <$> ppBestName (ModuleIdentifier (primName ec))
     UnitValue     -> return "(-empty-)"
     UnitType      -> return "#(-empty-)"
     PairValue x y -> ppPair prec <$> ppTerm' PrecTerm x <*> ppTerm' PrecCommas y
@@ -422,29 +426,48 @@ ppFlatTermF prec tf =
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
 
-    CtorApp c params args ->
-      ppAppList prec (annotate CtorAppStyle (ppIdent c)) <$> mapM (ppTerm' PrecArg) (params ++ args)
-    DataTypeApp dt params args ->
-      ppAppList prec (annotate DataTypeStyle (ppIdent dt)) <$> mapM (ppTerm' PrecArg) (params ++ args)
-    RecursorApp d params p_ret cs_fs ixs arg ->
+    RecursorType d params motive _motiveTy ->
       do params_pp <- mapM (ppTerm' PrecArg) params
-         p_ret_pp <- ppTerm' PrecArg p_ret
-         fs_pp <- mapM (ppTerm' PrecTerm . snd) cs_fs
+         motive_pp <- ppTerm' PrecArg motive
+         nm <- ppBestName (ModuleIdentifier (primName d))
+         return $
+           ppAppList prec (annotate RecursorStyle (nm <> "#recType"))
+             (params_pp ++ [motive_pp])
+
+    Recursor (CompiledRecursor d params motive _motiveTy cs_fs ctorOrder) ->
+      do params_pp <- mapM (ppTerm' PrecArg) params
+         motive_pp <- ppTerm' PrecArg motive
+         fs_pp <- traverse (ppTerm' PrecTerm . fst) cs_fs
+         nm <- ppBestName (ModuleIdentifier (primName d))
+         f_pps <- forM ctorOrder $ \ec ->
+                    do cnm <- ppBestName (ModuleIdentifier (primName ec))
+                       case Map.lookup (primVarIndex ec) fs_pp of
+                         Just f_pp -> pure $ vsep [cnm, "=>", f_pp]
+                         Nothing -> panic "ppFlatTerm" ["missing constructor", show cnm]
+         return $
+           ppAppList prec (annotate RecursorStyle (nm <> "#rec"))
+             (params_pp ++ [motive_pp, tupled f_pps])
+
+    RecursorApp r ixs arg ->
+      do rec_pp <- ppTerm' PrecApp r
          ixs_pp <- mapM (ppTerm' PrecArg) ixs
          arg_pp <- ppTerm' PrecArg arg
-         return $
-           ppAppList prec (annotate RecursorStyle (ppIdent d <> "#rec"))
-           (params_pp ++ [p_ret_pp] ++
-            [tupled $
-             zipWith (\(c,_) f_pp -> vsep [ppIdent c, "=>", f_pp])
-             cs_fs fs_pp]
-            ++ ixs_pp ++ [arg_pp])
+         return $ ppAppList prec rec_pp (ixs_pp ++ [arg_pp])
+
+    CtorApp c params args ->
+      do cnm <- ppBestName (ModuleIdentifier (primName c))
+         ppAppList prec (annotate CtorAppStyle cnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
+
+    DataTypeApp dt params args ->
+      do dnm <- ppBestName (ModuleIdentifier (primName dt))
+         ppAppList prec (annotate DataTypeStyle dnm) <$> mapM (ppTerm' PrecArg) (params ++ args)
+
     RecordType alist ->
       ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
     RecordValue alist ->
       ppRecord False <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
     RecordProj e fld -> ppProj fld <$> ppTerm' PrecArg e
-    Sort s -> return $ viaShow s
+    Sort s h -> return ((if h then pretty ("i"::String) else mempty) <> viaShow s)
     NatLit i -> ppNat <$> (ppOpts <$> ask) <*> return (toInteger i)
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecTerm) (V.toList args)
@@ -524,10 +547,17 @@ scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
         argsAndSubterms (unwrapTermF -> App f arg) = arg : argsAndSubterms f
         argsAndSubterms h =
           case unwrapTermF h of
-            Lambda _ t1 _ | not doBinders -> [t1]
-            Pi _ t1 _     | not doBinders -> [t1]
-            Constant{}                    -> []
-            tf                            -> Fold.toList tf
+            Lambda _ t1 _ | not doBinders  -> [t1]
+            Pi _ t1 _     | not doBinders  -> [t1]
+            Constant{}                     -> []
+            FTermF (Primitive _)           -> []
+            FTermF (DataTypeApp _ ps xs)   -> ps ++ xs
+            FTermF (CtorApp _ ps xs)       -> ps ++ xs
+            FTermF (RecursorType _ ps m _) -> ps ++ [m]
+            FTermF (Recursor crec)         -> recursorParams crec ++
+                                              [recursorMotive crec] ++
+                                              map fst (Map.elems (recursorElims crec))
+            tf                             -> Fold.toList tf
 
 -- | Return true if the printing of the given term should be memoized; we do not
 -- want to memoize the printing of terms that are "too small"
@@ -552,16 +582,18 @@ shouldMemoizeTerm t =
 -- let-bindings for the entries in the memoization table. If the flag is true,
 -- compute a global table, otherwise compute a local table.
 ppTermWithMemoTable :: Prec -> Bool -> Term -> PPM SawDoc
-ppTermWithMemoTable prec global_p trm = ppLets occ_map_elems [] where
+ppTermWithMemoTable prec global_p trm = do
+     min_occs <- ppMinSharing <$> ppOpts <$> ask
+     ppLets (occ_map_elems min_occs) [] where
 
   -- Generate an occurrence map for trm, filtering out terms that only occur
   -- once, that are "too small" to memoize, and, for the global table, terms
   -- that are not closed
-  occ_map_elems =
+  occ_map_elems min_occs =
     IntMap.assocs $
     IntMap.filter
     (\(t,cnt) ->
-      cnt > 1 && shouldMemoizeTerm t &&
+      cnt >= min_occs && shouldMemoizeTerm t &&
       (if global_p then looseVars t == emptyBitSet else True)) $
     scTermCount global_p trm
 
@@ -681,6 +713,7 @@ data PPModule = PPModule [ModuleName] [PPDecl]
 data PPDecl
   = PPTypeDecl Ident [(LocalName, Term)] [(LocalName, Term)] Sort [(Ident, Term)]
   | PPDefDecl Ident Term (Maybe Term)
+  | PPInjectCode Text.Text Text.Text
 
 -- | Pretty-print a 'PPModule'
 ppPPModule :: PPOpts -> PPModule -> SawDoc
@@ -704,3 +737,6 @@ ppPPModule opts (PPModule importNames decls) =
       case defBody of
         Just body -> Just <$> ppTerm' PrecTerm body
         Nothing -> return Nothing
+
+    ppDecl (PPInjectCode ns text) =
+      pure (pretty ("injectCode"::Text.Text) <+> viaShow ns <+> viaShow text)
