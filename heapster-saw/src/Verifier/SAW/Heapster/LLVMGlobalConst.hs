@@ -14,7 +14,6 @@ import Data.Bits
 import Data.List
 import Control.Monad.Reader
 import GHC.TypeLits
-import qualified Data.BitVector.Sized as BV
 import qualified Text.PrettyPrint.HughesPJ as PPHPJ
 
 import qualified Text.LLVM.AST as L
@@ -24,7 +23,6 @@ import Data.Binding.Hobbits hiding (sym)
 
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Some
-import Data.Parameterized.Pair
 
 import Lang.Crucible.Types
 import Lang.Crucible.LLVM.DataLayout
@@ -120,17 +118,11 @@ translateLLVMValue w _ (L.ValPackedStruct elems) =
 translateLLVMValue _ _ (L.ValString []) = mzero
 translateLLVMValue _ _ (L.ValString bytes) =
   do endianness <- llvmTransInfoEndianness <$> ask
-     let bv_fun =
-           case endianness of
-             BigEndian -> BV.bytesBE
-             LittleEndian -> BV.bytesLE
-     let field_sh = case bv_fun bytes of
-           Pair sz bv
-             | Left leq_proof <- decideLeq (knownNat @1) sz ->
-               withKnownNat sz $ withLeqProof leq_proof $
-               LLVMFieldShape $ ValPerm_Eq $ PExpr_LLVMWord $ bvBV bv
-           Pair _ _ -> error "translateLLVMValue: unexpected zero-sized bitvector"
-     return (PExpr_FieldShape field_sh, unitOpenTerm)
+     case bvFromBytes endianness bytes of
+       Some (BVExpr e) ->
+         return (PExpr_FieldShape (LLVMFieldShape $
+                                   ValPerm_Eq $ PExpr_LLVMWord e),
+                 unitOpenTerm)
 
 {-
 translateLLVMValue w tp (L.ValString bytes) =
