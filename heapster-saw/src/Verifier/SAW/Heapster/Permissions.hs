@@ -3483,7 +3483,7 @@ llvmBlockPermToArray bp
     { llvmArrayRW = llvmBlockRW bp,
       llvmArrayLifetime = llvmBlockLifetime bp,
       llvmArrayOffset = llvmBlockOffset bp,
-      llvmArrayLen = bvMult (toInteger stride) len,
+      llvmArrayLen = len,
       llvmArrayStride = stride,
       llvmArrayCellShape = sh,
       llvmArrayBorrows = [] }
