@@ -960,29 +960,6 @@ zeroOfType _ = error "zeroOfType"
 varFactor :: (1 <= w, KnownNat w) => ExprVar (BVType w) -> BVFactor w
 varFactor = BVFactor $ BV.one knownNat
 
--- | Normalize a bitvector expression @1*x + 0@ to just @x@
-bvNormVar :: PermExpr (BVType w) -> PermExpr (BVType w)
-bvNormVar (PExpr_BV [BVFactor i x] off)
-  | i == BV.one knownNat && off == BV.zero knownNat = PExpr_Var x
-bvNormVar e = e
-
--- | Normalize a bitvector expression, so that every variable has at most one
--- factor and the factors are sorted by variable name. NOTE: we shouldn't
--- actually have to call this if we always construct our expressions with the
--- combinators below.
-bvNormalize :: PermExpr (BVType w) -> PermExpr (BVType w)
-bvNormalize e@(PExpr_Var _) = e
-bvNormalize (PExpr_BV factors off) =
-  PExpr_BV
-  (norm (sortBy (\(BVFactor _ x) (BVFactor _ y) -> compare x y) factors))
-  off
-  where
-    norm [] = []
-    norm ((BVFactor (BV.BV 0) _) : factors') = norm factors'
-    norm ((BVFactor i1 x1) : (BVFactor i2 x2) : factors')
-      | x1 == x2 = norm ((BVFactor (BV.add knownNat i1 i2) x1) : factors')
-    norm (f : factors') = f : norm factors'
-
 -- | Merge two normalized / sorted lists of 'BVFactor's
 bvMergeFactors :: [BVFactor w] -> [BVFactor w] -> [BVFactor w]
 bvMergeFactors fs1 fs2 =
@@ -1353,18 +1330,25 @@ bvSplit LittleEndian sz1 bv2
           BV.select n0 (subNat sz2 sz1) bv2)
 bvSplit _ _ _ = Nothing
 
+-- | Build a bitvector expression consisting of a single single 'BVFactor',
+-- i.e. a variable multiplied by some constant
+bvFactorExpr :: (1 <= w, KnownNat w) =>
+                BV w -> ExprVar (BVType w) -> PermExpr (BVType w)
+bvFactorExpr (BV.BV 1) x = PExpr_Var x
+bvFactorExpr i         x = PExpr_BV [BVFactor i x] (BV.zero knownNat)
+
 -- | Add two bitvector expressions
 bvAdd :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> PermExpr (BVType w) ->
          PermExpr (BVType w)
 bvAdd (bvMatch -> (factors1, const1)) (bvMatch -> (factors2, const2)) =
-  bvNormVar $
+  normalizeBVExpr $
   PExpr_BV (bvMergeFactors factors1 factors2) (BV.add knownNat const1 const2)
 
 -- | Multiply a bitvector expression by a bitvector
 bvMultBV :: (1 <= w, KnownNat w) => BV.BV w -> PermExpr (BVType w) ->
             PermExpr (BVType w)
 bvMultBV i_bv (bvMatch -> (factors, off)) =
-  bvNormVar $
+  normalizeBVExpr $
   PExpr_BV (map (\(BVFactor j x) ->
                   BVFactor (BV.mul knownNat i_bv j) x) factors)
   (BV.mul knownNat i_bv off)
@@ -1392,7 +1376,7 @@ bvDiv :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> Integer ->
          PermExpr (BVType w)
 bvDiv (bvMatch -> (factors, off)) n =
   let n_bv = BV.mkBV knownNat n in
-  bvNormVar $
+  normalizeBVExpr $
   PExpr_BV (mapMaybe (\(BVFactor i x) ->
                        if BV.urem i n_bv == BV.zero knownNat then
                          Just (BVFactor (BV.uquot i n_bv) x)
@@ -1405,7 +1389,7 @@ bvMod :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> Integer ->
          PermExpr (BVType w)
 bvMod (bvMatch -> (factors, off)) n =
   let n_bv = BV.mkBV knownNat n in
-  bvNormVar $
+  normalizeBVExpr $
   PExpr_BV (mapMaybe (\f@(BVFactor i _) ->
                        if BV.urem i n_bv /= BV.zero knownNat
                        then Just f else Nothing) factors)
@@ -1418,6 +1402,24 @@ bvMatchFactorPlusConst :: (1 <= w, KnownNat w) =>
                           Maybe (PermExpr (BVType w), BV w)
 bvMatchFactorPlusConst a e =
   bvMatchConst (bvMod e a) >>= \y -> Just (bvDiv e a, y)
+
+-- | Returns the greatest common divisor of all the coefficients (i.e. offsets
+-- and factor coefficients) of the given bitvectors, returning a negative
+-- number iff all coefficients are <= 0
+bvGCD :: (1 <= w, KnownNat w) =>
+         PermExpr (BVType w) -> PermExpr (BVType w) -> BV w
+bvGCD (bvMatch -> (fs1, off1)) (bvMatch -> (fs2, off2)) =
+  fromMaybe (error "bvGCD: overflow") . BV.mkBVSigned knownNat $
+  foldl' (\d (BVFactor i _) -> d `gcdS` BV.asSigned knownNat i)
+         (foldl' (\d (BVFactor i _) -> d `gcdS` BV.asSigned knownNat i)
+                 (BV.asSigned knownNat off1 `gcdS` BV.asSigned knownNat off2)
+                 fs1)
+         fs2
+  where -- A version of 'gcd' whose return value is negative iff both of
+        -- its arguments are <= 0
+        gcdS :: Integer -> Integer -> Integer
+        gcdS x y | x <= 0 && y <= 0 = - gcd x y
+                 | otherwise        =   gcd x y
 
 -- | Convert an LLVM pointer expression to a variable + optional offset, if this
 -- is possible
@@ -5870,8 +5872,7 @@ mbFactorNameBoundP psubst (mbMatch -> [nuMP| BVFactor (BV.BV mb_n) mb_z |]) =
     Left memb -> case psubstLookup psubst memb of 
                    Nothing -> Left (n, memb)
                    Just e' -> Right (bvMultBV (BV.mkBV knownNat n) e')
-    Right z -> Right (PExpr_BV [BVFactor (BV.mkBV knownNat n) z]
-                               (BV.zero knownNat))
+    Right z -> Right (bvFactorExpr (BV.mkBV knownNat n) z)
 
 
 ----------------------------------------------------------------------

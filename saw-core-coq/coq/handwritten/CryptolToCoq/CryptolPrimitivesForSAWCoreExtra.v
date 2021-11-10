@@ -1,6 +1,7 @@
 (* This module contains additional definitions that can only be defined after *)
 (* the Cryptol prelude has been defined. *)
 
+From Coq          Require Import Lia.
 From Coq          Require Import Lists.List.
 From Coq          Require Import String.
 From Coq          Require Import Vectors.Vector.
@@ -28,69 +29,33 @@ Proof.
   reflexivity.
 Qed.
 
-Theorem min_S n : min n (S n) = n.
+Theorem min_nSn n : min n (S n) = n.
 Proof.
-  rewrite PeanoNat.Nat.min_comm.
-  induction n.
-  { reflexivity. }
-  { simpl in *. intuition. }
+  induction n; simpl; auto.
+Qed.
+
+Theorem min_Snn n : min (S n) n = n.
+Proof.
+  induction n; simpl; auto.
 Qed.
 
 Ltac solveUnsafeAssertStep :=
   match goal with
   | [ |- context [ Succ ] ] => unfold Succ
+  | [ |- context [ addNat _ _ ] ] => rewrite addNat_add
+  | [ |- context [ mulNat _ _ ] ] => rewrite mulNat_mul
+  | [ |- context [ subNat _ _ ] ] => rewrite subNat_sub
+  | [ |- context [ maxNat _ _ ] ] => rewrite maxNat_max
+  | [ |- context [ minNat _ _ ] ] => rewrite minNat_min
   | [ n : Num |- _ ] => destruct n
   | [ |- Eq Num (TCNum _) (TCNum _) ] => apply Eq_TCNum
   | [ |- Eq Num _ _ ] => reflexivity
-  | [ |- context [ minNat _ _ ] ] => rewrite minNat_min
-  | [ |- min ?n (S ?n) = ?n ] => apply min_S
+  | [ |- min ?n (S ?n) = _ ] => rewrite (min_nSn n)
+  | [ |- min (S ?n) ?n = _ ] => rewrite (min_Snn n)
   end.
 
-Ltac solveUnsafeAssert := repeat (solveUnsafeAssertStep; simpl); trivial.
+Ltac solveUnsafeAssert := repeat (solveUnsafeAssertStep; simpl; try lia); trivial.
 
-Definition cbc_enc_helper n : Eq Num (tcMin n (tcAdd (TCNum 1) n)) n :=
-  ltac:(solveUnsafeAssert).
-
-(*
-Goal forall n p b, Eq Num (tcAdd n (tcAdd (TCNum 32) p)) (tcMul (tcAdd (TCNum 2) b) (TCNum 16)).
-  intros.
-  simpl.
-  solve_unsafeAssert_step. simpl.
-
-Goal forall n0, Eq Num TCInf
-   (TCNum
-      (S
-         (S
-            (S
-               (S
-                  (S
-                     (S
-                        (S
-                           (S
-                              (S
-                                 (S
-                                    (S
-                                       (S
-                                          (S
-                                             (S
-                                                (S
-                                                   (S
-                                                      (S
-                                                         (S
-                                                            (S
-                                                               (S
-                                                                  (S
-                                                                     (S
-                                                                        (S
-                                                                           (S
-                                                                              (S
-                                                                                 (S
-                                                                                    (S
-                                                                                       (S
-                                                                                          (S (S (S (S (mulNat n0 16)))))))))))))))))))))))))))))))))).
-  intros.
-  solve_unsafeAssert.
-*)
 
 Fixpoint iterNat {a : Type} (n : nat) (f : a -> a) : a -> a :=
   match n with
@@ -99,7 +64,7 @@ Fixpoint iterNat {a : Type} (n : nat) (f : a -> a) : a -> a :=
   end
 .
 
-Fixpoint iter {a : Type} (n : Num) (f : a -> a) : a -> a :=
+Definition iter {a : Type} (n : Num) (f : a -> a) : a -> a :=
     match n with
     | TCNum n => fun xs => iterNat n f xs
     | TCInf   => fun xs => xs

@@ -859,9 +859,9 @@ minNat x y =
 -- | Maximum
 maxNat : Nat -> Nat -> Nat;
 maxNat x y =
-  Nat_cases2 Nat (\ (x':Nat) -> x')
-             (\ (y':Nat) -> Succ y')
-             (\ (y':Nat) -> \ (x':Nat) -> \ (sub_xy:Nat) -> sub_xy) y x;
+  Nat_cases2 Nat (\ (y':Nat) -> y')
+             (\ (x':Nat) -> Succ x')
+             (\ (x':Nat) -> \ (y':Nat) -> \ (max_xy:Nat) -> Succ max_xy) x y;
 
 -- | Width(n) = 1 + floor(log_2(n))
 primitive widthNat : Nat -> Nat;

@@ -351,6 +351,22 @@ for ArgumentV1_new_syms (\ sym -> heapster_assume_fun_rename_prim env sym sym
 //heapster_assume_fun_rename_prim env ArgumentV1_new_String "ArgumentV1_new_String"
 //  "<'a,'b> fn (x: &'b String, f: Box<Void>) -> fmt::ArgumentV1";
 
+// ArgumentV1::new
+//ArgumentV1_new <- heapster_find_symbol env "10ArgumentV13new";
+//heapster_assume_fun_rename_prim env ArgumentV1_new "ArgumentV1_new"
+//  "<'a,'b,T> fn (x: &'b T, f: fn(&T, &mut fmt::Formatter) -> fmt::Result) \
+//              \ -> fmt::ArgumentV1<'b>";
+//ArgumentV1_new_String <- heapster_find_symbol env
+//  "_ZN4core3fmt10ArgumentV13new17hdf7e5958686d74c0E";
+//heapster_assume_fun_rename_prim env ArgumentV1_new_String "ArgumentV1_new_String"
+//  "<'a,'b> fn (x: &'b String, \
+//             \ f: for<'c,'d> fn (&'c String, &'d mut fmt::Formatter) -> fmt::Result) \
+//           \ -> fmt::ArgumentV1<'b>";
+//heapster_assume_fun_rename_prim env ArgumentV1_new_String "ArgumentV1_new_String"
+//  "<'a,'b> fn (x: &'b String, f: Box<Void>) -> fmt::ArgumentV1<'b>";
+//heapster_assume_fun_rename_prim env ArgumentV1_new_String "ArgumentV1_new_String"
+//  "<'a,'b> fn (x: &'b String, f: Box<Void>) -> fmt::ArgumentV1";
+
 // Arguments::new_v1
 Arguments__new_v1_sym <- heapster_find_symbol env "3fmt9Arguments6new_v1";
 //heapster_assume_fun_rename_prim env Arguments__new_v1_sym "Arguments__new"
