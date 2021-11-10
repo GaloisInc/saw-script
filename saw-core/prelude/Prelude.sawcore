@@ -1612,6 +1612,12 @@ axiom bvult_sub_add_bvult : (n:Nat) -> (x y z:Vec n Bool) ->
                             is_bvule n y z -> is_bvult n x (bvSub n z y) ->
                             is_bvult n (bvAdd n y x) z;
 
+-- Axiom: x <u y+z and y <=u x implies (x-y) <u z
+axiom bvult_sum_bvult_sub : (n:Nat) -> (x y z:Vec n Bool) ->
+                            is_bvult n x (bvAdd n y z) ->
+                            Eq Bool (bvult n x y) False ->
+                            is_bvult n (bvSub n x y) z;
+
 -- When comparing a nat and a bitvector, IsLtNat and is_bvult are equivalent
 axiom IsLtNat_to_bvult : (n : Nat) -> (x : Vec n Bool) -> (i : Nat) ->
                          IsLtNat i (bvToNat n x) -> is_bvult n (bvNat n i) x;
@@ -1758,6 +1764,21 @@ updSliceBVVec n len a v start' len' v_sub =
                  atBVVec n len' a v_sub (bvSub n i start') pf_sub)
               (bvultWithProof n (bvSub n i start') len'))
            (atBVVec n len a v i pf));
+
+-- Append two BVVecs
+appendBVVec : (n : Nat) -> (len1 len2 : Vec n Bool) -> (a : sort 0) ->
+              BVVec n len1 a -> BVVec n len2 a -> BVVec n (bvAdd n len1 len2) a;
+appendBVVec n len1 len2 a v1 v2 =
+  genBVVec n (bvAdd n len1 len2) a
+    (\ (i:Vec n Bool) (pf12:is_bvult n i (bvAdd n len1 len2)) ->
+       iteDep
+         (\ (b:Bool) -> Eq Bool (bvult n i len1) b -> a)
+         (bvult n i len1)
+         (\ (pf1:is_bvult n i len1) -> atBVVec n len1 a v1 i pf1)
+         (\ (not_pf1:Eq Bool (bvult n i len1) False) ->
+            atBVVec n len2 a v2 (bvSub n i len1)
+                    (bvult_sum_bvult_sub n i len1 len2 pf12 not_pf1))
+         (Refl Bool (bvult n i len1)));
 
 
 --------------------------------------------------------------------------------
@@ -1965,6 +1986,9 @@ primitive returnM : (a:sort 0) -> a -> CompM a;
 primitive bindM : (a b:sort 0) -> CompM a -> (a -> CompM b) -> CompM b;
 primitive existsM : (a:sort 0) -> (b:sort 0) -> (a -> CompM b) -> CompM b;
 
+-- Raise an error in the computation monad
+primitive errorM : (a:sort 0) -> String -> CompM a;
+
 -- Apply a pure function to a computation
 fmapM : (a b: sort 0) -> (a -> b) -> CompM a -> CompM b;
 fmapM a b f m = bindM a b m (\ (x:a) -> returnM b (f x));
@@ -2016,8 +2040,22 @@ mapBVVecM : (a : sort 0) -> (b : isort 0) -> (a -> CompM b) ->
             CompM (BVVec n len b);
 mapBVVecM a b f n len = mapM a b f (bvToNat n len);
 
--- Raise an error in the computation monad
-primitive errorM : (a:sort 0) -> String -> CompM a;
+-- Append two BVVecs and cast the resulting size, if possible
+appendCastBVVecM : (n : Nat) -> (len1 len2 len3 : Vec n Bool) -> (a : sort 0) ->
+                   BVVec n len1 a -> BVVec n len2 a ->
+                   CompM (BVVec n len3 a);
+appendCastBVVecM n len1 len2 len3 a v1 v2 =
+  maybe
+    (Eq (Vec n Bool) (bvAdd n len1 len2) len3) (CompM (BVVec n len3 a))
+    (errorM (BVVec n len3 a) "Could not cast BVVec")
+    (\ (pf:Eq (Vec n Bool) (bvAdd n len1 len2) len3) ->
+       returnM
+         (BVVec n len3 a)
+         (coerce (BVVec n (bvAdd n len1 len2) a) (BVVec n len3 a)
+                 (eq_cong (Vec n Bool) (bvAdd n len1 len2) len3 pf
+                          (sort 0) (\ (l:Vec n Bool) -> BVVec n l a))
+                 (appendBVVec n len1 len2 a v1 v2)))
+    (bvEqWithProof n (bvAdd n len1 len2) len3);
 
 -- Run the first computation, and, if it raises an error, catch the error and
 -- run the second computation
