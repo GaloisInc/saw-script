@@ -3941,6 +3941,7 @@ implSplitLifetimeM :: (KnownRepr TypeRepr a, NuMatchingAny1 r) =>
 implSplitLifetimeM x f args l l2 sub_ls ps_in ps_out =
   implTraceM (\i ->
                sep [pretty "Splitting lifetime to" <+> permPretty i l2 <> colon,
+                    permPretty i x <> colon <>
                     permPretty i (ltFuncMinApply f l)]) >>>
   implSimplM Proxy (SImpl_SplitLifetime x f args l l2 sub_ls ps_in ps_out) >>>
   getTopDistPerm l2 >>>= implPopM l2
