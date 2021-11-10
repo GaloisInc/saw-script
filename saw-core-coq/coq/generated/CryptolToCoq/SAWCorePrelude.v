@@ -420,7 +420,7 @@ Definition minNat : SAWCoreScaffolding.Nat -> SAWCoreScaffolding.Nat -> SAWCoreS
   fun (x : SAWCoreScaffolding.Nat) (y : SAWCoreScaffolding.Nat) => Nat_cases2 SAWCoreScaffolding.Nat (fun (y' : SAWCoreScaffolding.Nat) => SAWCoreScaffolding.Zero) (fun (x' : SAWCoreScaffolding.Nat) => SAWCoreScaffolding.Zero) (fun (x' : SAWCoreScaffolding.Nat) (y' : SAWCoreScaffolding.Nat) (min_xy : SAWCoreScaffolding.Nat) => SAWCoreScaffolding.Succ min_xy) x y.
 
 Definition maxNat : SAWCoreScaffolding.Nat -> SAWCoreScaffolding.Nat -> SAWCoreScaffolding.Nat :=
-  fun (x : SAWCoreScaffolding.Nat) (y : SAWCoreScaffolding.Nat) => Nat_cases2 SAWCoreScaffolding.Nat (fun (x' : SAWCoreScaffolding.Nat) => x') (fun (y' : SAWCoreScaffolding.Nat) => SAWCoreScaffolding.Succ y') (fun (y' : SAWCoreScaffolding.Nat) (x' : SAWCoreScaffolding.Nat) (sub_xy : SAWCoreScaffolding.Nat) => sub_xy) y x.
+  fun (x : SAWCoreScaffolding.Nat) (y : SAWCoreScaffolding.Nat) => Nat_cases2 SAWCoreScaffolding.Nat (fun (y' : SAWCoreScaffolding.Nat) => y') (fun (x' : SAWCoreScaffolding.Nat) => SAWCoreScaffolding.Succ x') (fun (x' : SAWCoreScaffolding.Nat) (y' : SAWCoreScaffolding.Nat) (max_xy : SAWCoreScaffolding.Nat) => SAWCoreScaffolding.Succ max_xy) x y.
 
 (* Prelude.widthNat was skipped *)
 
