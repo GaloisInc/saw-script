@@ -3924,12 +3924,31 @@ implEndLifetimeM ps l ps_in ps_out@(lownedPermsToDistPerms -> Just dps_out)
     recombinePermsPartial ps (DistPermsCons dps_out l ValPerm_LFinished)
 implEndLifetimeM _ _ _ _ = implFailM "implEndLifetimeM: lownedPermsToDistPerms"
 
+-- | Drop any permissions of the form @x:[l]p@ in the primary permissions for
+-- @x@, which are supplied as an argument
+implDropLifetimeConjsM :: NuMatchingAny1 r => ExprVar LifetimeType ->
+                          ExprVar a -> [AtomicPerm a] ->
+                          ImplM vars s r ps ps ()
+implDropLifetimeConjsM l x ps
+  | Just i <- findIndex (\p -> atomicPermLifetime p == Just (PExpr_Var l)) ps =
+    implPushM x (ValPerm_Conj ps) >>>
+    implExtractSwapConjM x ps i >>>
+    implDropM x (ValPerm_Conj1 (ps!!i)) >>>
+    let ps' = deleteNth i ps in
+    implPopM x (ValPerm_Conj ps') >>>
+    implDropLifetimeConjsM l x ps'
+implDropLifetimeConjsM _ _ _ = return ()
+
 -- | Find all primary permissions of the form @x:[l]p@ and drop them, assuming
 -- that we have just ended lifetime @l@
 implDropLifetimePermsM :: NuMatchingAny1 r => ExprVar LifetimeType ->
                           ImplM vars s r ps ps ()
 implDropLifetimePermsM l =
-  (NameMap.assocs <$> view varPermMap <$> getPerms) >>>= \
+  (NameMap.assocs <$> view varPermMap <$> getPerms) >>>= \vars_and_perms ->
+  forM_ vars_and_perms $ \case
+  NameAndElem x (ValPerm_Conj ps) ->
+    implDropLifetimeConjsM l x ps
+  _ -> return ()
 
 -- | Save a permission for later by splitting it into part that is in the
 -- current lifetime and part that is saved in the lifetime for later. Assume
@@ -4767,8 +4786,8 @@ recombinePerm' x x_p@(ValPerm_Exists _) p =
 recombinePerm' x (ValPerm_Conj x_ps) (ValPerm_Conj (p:ps)) =
   implExtractConjM x (p:ps) 0 >>>
   implSwapM x (ValPerm_Conj1 p) x (ValPerm_Conj ps) >>>
-  recombinePermConj x x_ps p >>>= \x_ps' ->
-  recombinePermExpl x (ValPerm_Conj x_ps') (ValPerm_Conj ps)
+  recombinePermConj x x_ps p >>>
+  recombinePerm x (ValPerm_Conj ps)
 recombinePerm' x x_p (ValPerm_Named npn args off)
   | TrueRepr <- nameIsConjRepr npn =
     implNamedToConjM x npn args off >>>
@@ -4779,7 +4798,7 @@ recombinePerm' x _ p = implDropM x p
 -- conjuctive permission @x_p1 * ... * x_pn@ for @x@, returning the resulting
 -- permission conjucts for @x@
 recombinePermConj :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] ->
-                     AtomicPerm a -> ImplM vars s r as (as :> a) [AtomicPerm a]
+                     AtomicPerm a -> ImplM vars s r as (as :> a) ()
 
 -- If p is a field read permission that is already in x_ps, drop it
 recombinePermConj x x_ps p@(Perm_LLVMField fp)
@@ -4789,8 +4808,7 @@ recombinePermConj x x_ps p@(Perm_LLVMField fp)
                   _ -> False) x_ps
   , PExpr_Read <- llvmFieldRW fp
   , PExpr_Read <- llvmFieldRW fp' =
-    implDropM x (ValPerm_Conj1 p) >>>
-    pure x_ps
+    implDropM x (ValPerm_Conj1 p)
 
 -- If p is an array read permission whose offsets match an existing array
 -- permission, drop it
@@ -4801,41 +4819,17 @@ recombinePermConj x x_ps p@(Perm_LLVMArray ap)
                     bvEq (llvmArrayLen ap') (llvmArrayLen ap)
                   _ -> False) x_ps
   , PExpr_Read <- llvmArrayRW ap =
-    implDropM x (ValPerm_Conj1 p) >>>
-    pure x_ps
-
+    implDropM x (ValPerm_Conj1 p)
 
 -- If p is an is_llvmptr permission and x_ps already contains one, drop it
 recombinePermConj x x_ps p@Perm_IsLLVMPtr
   | elem Perm_IsLLVMPtr x_ps =
-    implDropM x (ValPerm_Conj1 p) >>>
-    pure x_ps
+    implDropM x (ValPerm_Conj1 p)
 
--- NOTE: the following is old, but it would never match anyway, because if we
+-- NOTE: we do not return a field that was borrowed from an array, because if we
 -- have a field (or block) that was borrowed from an array, it almost certainly
--- was borrowed because we accessed it, so it will contain eq permissions and
--- its shape will not equal that of the array it was borrowed from
-{-
--- If p is a field that was borrowed from an array, return it; i.e., if we are
--- returning x:ptr((rw,off+i*stride+j) |-> p) and x has a permission of the form
--- x:array(off,<len,*stride,fps,(i*stride+j):bs) where the jth element of fps
--- equals ptr((rw,j) |-> p), then remove (i*stride+j) from bs
-recombinePermConj x x_ps (Perm_LLVMField fp)
-  | (ap,i,ix):_ <-
-      flip mapMaybe (zip x_ps [0::Int ..]) $
-      \case (Perm_LLVMArray ap, i)
-              | Just ix <- matchLLVMArrayField ap (llvmFieldOffset fp)
-              , elem (FieldBorrow ix) (llvmArrayBorrows ap) ->
-                Just (ap,i,ix)
-            _ -> Nothing
-  , LLVMArrayField fp == llvmArrayFieldWithOffset ap ix =
-    implPushM x (ValPerm_Conj x_ps) >>> implExtractConjM x x_ps i >>>
-    let x_ps' = deleteNth i x_ps in
-    implPopM x (ValPerm_Conj x_ps') >>>
-    implLLVMArrayIndexReturn x ap ix >>>
-    recombinePermConj x x_ps' (Perm_LLVMArray $
-                               llvmArrayRemBorrow (FieldBorrow ix) ap)
--}
+-- was borrowed because we accessed it, so it will contain eq permissions, which
+-- make it a stronger permission than the cell permission in the array
 
 -- If p is an array that was borrowed from some other array, return it
 recombinePermConj x x_ps (Perm_LLVMArray ap)
@@ -4854,16 +4848,29 @@ recombinePermConj x x_ps (Perm_LLVMArray ap)
     implLLVMArrayReturn x ap_bigger ap >>>= \ap_bigger' ->
     recombinePermConj x x_ps' (Perm_LLVMArray ap_bigger')
 
--- If p is a block that 
+-- If p is a memblock permission whose range is a subset of that of a permission
+-- we already hold, drop it
 recombinePermConj x x_ps (Perm_LLVMBlock bp)
-FIXME HERE NOW
+  | any (llvmAtomicPermContainsRange $ llvmBlockRange bp) x_ps =
+    implDropM x $ ValPerm_LLVMBlock bp
+
+-- If p is a memblock permission whose range overlaps with but is not wholly
+-- contained in a permission we already hold, eliminate it and recombine
+--
+-- FIXME: if the elimination fails, this shouldn't fail, it should just
+-- recombine without eliminating, so we should special case those shapes where
+-- the elimination will fail
+recombinePermConj x x_ps (Perm_LLVMBlock bp)
+  | any (llvmAtomicPermOverlapsRange $ llvmBlockRange bp) x_ps =
+    implElimLLVMBlock x bp >>>
+    getTopDistPerm x >>>= \p ->
+    recombinePerm x p
 
 -- Default case: insert p at the end of the x_ps
 recombinePermConj x x_ps p =
   implPushM x (ValPerm_Conj x_ps) >>>
   implInsertConjM x p x_ps (length x_ps) >>>
-  implPopM x (ValPerm_Conj (x_ps ++ [p])) >>>
-  pure (x_ps ++ [p])
+  implPopM x (ValPerm_Conj (x_ps ++ [p]))
 
 
 -- | Recombine the permissions on the stack back into the permission set
@@ -5971,10 +5978,8 @@ proveVarLLVMBlock x ps mb_bp =
   do psubst <- getPSubst
      proveVarLLVMBlocks x ps psubst [mb_bp]
 
--- | Prove a conjunction of block and atomic permissions for @x@, assuming all
--- of the permissions for @x@ are on the top of the stack and given by the
--- second argument. The block permissions are the ones that we are currently
--- working on, and when they are all proved we bottom out to 'proveVarConjImpl'.
+-- | Prove a conjunction of block and atomic permissions for @x@ from the
+-- permissions on top of the stack, which are given by the second argument.
 --
 -- A central motivation of this algorithm is to do as little elimination on the
 -- left or introduction on the right as possible, in order to build the smallest
@@ -6069,7 +6074,7 @@ proveVarLLVMBlocks1 ::
 
 -- We are done, yay! Pop ps and build a true permission
 proveVarLLVMBlocks1 x ps _ [] =
-  implPopM x (ValPerm_Conj ps) >>> introConjM x
+  recombinePerm x (ValPerm_Conj ps) >>> introConjM x
 
 -- If the offset, length, and shape of the top block matches one that we already
 -- have, just cast the rwmodality and lifetime and prove the remaining perms
