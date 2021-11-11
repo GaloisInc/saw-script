@@ -2014,7 +2014,7 @@ simplImplOut (SImpl_DemoteLLVMFieldRW x fld) =
 simplImplOut (SImpl_SplitLLVMWordField x fp bv1 bv2 endianness) =
   case llvmFieldContents fp of
     ValPerm_Eq (PExpr_LLVMWord (bvMatchConst -> Just bv))
-      | Just (bv1, bv2) == bvSplit endianness knownNat bv ->
+      | bvSplit endianness knownNat bv == Just (bv1, bv2) ->
         distPerms2 x (ValPerm_LLVMField (llvmFieldSetEqWord fp bv1))
         x (ValPerm_LLVMField (llvmFieldAddOffsetInt
                               (llvmFieldSetEqWord fp bv2)
