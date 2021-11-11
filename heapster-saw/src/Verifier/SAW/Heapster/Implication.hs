@@ -3920,8 +3920,16 @@ implEndLifetimeM ps l ps_in ps_out@(lownedPermsToDistPerms -> Just dps_out)
   | isJust (lownedPermsToDistPerms ps_in) =
     implSimplM ps (SImpl_EndLifetime l ps_in ps_out) >>>
     implTraceM (\i -> pretty "Ending lifetime:" <+> permPretty i l) >>>
+    implDropLifetimePermsM l >>>
     recombinePermsPartial ps (DistPermsCons dps_out l ValPerm_LFinished)
 implEndLifetimeM _ _ _ _ = implFailM "implEndLifetimeM: lownedPermsToDistPerms"
+
+-- | Find all primary permissions of the form @x:[l]p@ and drop them, assuming
+-- that we have just ended lifetime @l@
+implDropLifetimePermsM :: NuMatchingAny1 r => ExprVar LifetimeType ->
+                          ImplM vars s r ps ps ()
+implDropLifetimePermsM l =
+  (NameMap.assocs <$> view varPermMap <$> getPerms) >>>= \
 
 -- | Save a permission for later by splitting it into part that is in the
 -- current lifetime and part that is saved in the lifetime for later. Assume
@@ -4842,6 +4850,10 @@ recombinePermConj x x_ps (Perm_LLVMArray ap)
     implPopM x (ValPerm_Conj x_ps') >>>
     implLLVMArrayReturn x ap_bigger ap >>>= \ap_bigger' ->
     recombinePermConj x x_ps' (Perm_LLVMArray ap_bigger')
+
+-- If p is a block that 
+recombinePermConj x x_ps (Perm_LLVMBlock bp)
+FIXME HERE NOW
 
 -- Default case: insert p at the end of the x_ps
 recombinePermConj x x_ps p =
@@ -6076,6 +6088,12 @@ proveVarLLVMBlocks1 x ps psubst (mb_bp:mb_bps)
 
     -- Make the input block have the required modalities
     equalizeBlockModalities x bp mb_bp >>>= \bp' ->
+
+    -- Duplicate and save the block permission if it is copyable
+    (if atomicPermIsCopyable (Perm_LLVMBlock bp') then
+       implCopyM x (ValPerm_LLVMBlock bp') >>>
+       recombinePerm x (ValPerm_LLVMBlock bp')
+     else return ()) >>>
 
     -- Move it down below ps'
     implSwapM x (ValPerm_Conj ps') x (ValPerm_LLVMBlock bp') >>>
