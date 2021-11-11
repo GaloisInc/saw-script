@@ -3403,7 +3403,7 @@ llvmFieldSetEqWord fp bv =
 
 -- | Set the contents of a field permission to an @eq(y)@ permission
 llvmFieldSetEqVar :: (1 <= sz2, KnownNat sz2) => LLVMFieldPerm w sz1 ->
-                     Name (LLVMPointerType sz2) -> LLVMFieldPerm w sz2
+                     ExprVar (LLVMPointerType sz2) -> LLVMFieldPerm w sz2
 llvmFieldSetEqVar fp y =
   llvmFieldSetContents fp (ValPerm_Eq $ PExpr_Var y)
 
@@ -4284,7 +4284,7 @@ llvmMakeSubArray _ _ _ = error "llvmMakeSubArray"
 -- given offset. If so, return a list of the propositions required for the read
 -- to be allowed, and whether the propositions definitely hold (as in
 -- 'bvPropHolds') or only could hold (as in 'bvPropCouldHold'). For fields and
--- blocks, the offset must simply by in their range, while for arrays, the
+-- blocks, the offset must simply be in their range, while for arrays, the
 -- offset must only /not/ match any outstanding borrows, and the propositions
 -- returned codify that as well as the requirement that the offset is in the
 -- array range.

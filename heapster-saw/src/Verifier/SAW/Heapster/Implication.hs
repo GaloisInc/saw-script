@@ -2014,7 +2014,7 @@ simplImplOut (SImpl_DemoteLLVMFieldRW x fld) =
 simplImplOut (SImpl_SplitLLVMWordField x fp bv1 bv2 endianness) =
   case llvmFieldContents fp of
     ValPerm_Eq (PExpr_LLVMWord (bvMatchConst -> Just bv))
-      | Just (bv1, bv2) == bvSplit endianness knownNat bv ->
+      | bvSplit endianness knownNat bv == Just (bv1, bv2) ->
         distPerms2 x (ValPerm_LLVMField (llvmFieldSetEqWord fp bv1))
         x (ValPerm_LLVMField (llvmFieldAddOffsetInt
                               (llvmFieldSetEqWord fp bv2)
@@ -4133,6 +4133,9 @@ implLLVMFieldSplit x fp sz_bytes
                                   (llvmFieldSetEqWord fp bv2)
                                   sz_bytes))
       Just _ ->
+        -- NOTE: this is unreachable because we already know that sz <=
+        -- llvmFieldSize (because the subNat' above succeeded), so the bvSplit
+        -- above should always succeed
         error "implLLVMFieldSplit: unreachable case"
       Nothing ->
         implSimplM Proxy (SImpl_SplitLLVMTrueField x
