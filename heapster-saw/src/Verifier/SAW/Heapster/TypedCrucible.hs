@@ -3601,11 +3601,19 @@ tcEmitLLVMStmt _arch _ctx _loc stmt =
 -- * Permission Checking for Jump Targets and Termination Statements
 ----------------------------------------------------------------------
 
--- | Cast the primary permission for @x@ using any equality permissions in scope
-castPermForVar :: NuMatchingAny1 r => ExprVar a -> ImplM vars s r RNil RNil ()
-castPermForVar x =
+-- | Cast the primary permission for @x@ using any equality permissions on
+-- variables *not* in the supplied list of determined variables. The idea here
+-- is that we are trying to simplify out and remove un-determined variables.
+castUnDetVarsForVar :: NuMatchingAny1 r => NameSet CrucibleType -> ExprVar a ->
+                       ImplM vars s r RNil RNil ()
+castUnDetVarsForVar det_vars x =
+  (view varPermMap <$> getPerms) >>>= \var_perm_map ->
   getPerm x >>>= \p ->
-  substEqsWithProof p >>>= \eqp ->
+  let nondet_perms =
+        NameMap.fromList $
+        filter (\(NameMap.NameAndElem y _) -> not $ NameSet.member y det_vars) $
+        NameMap.assocs var_perm_map in
+  let eqp = someEqProofFromSubst nondet_perms p in
   implPushM x p >>>
   implCastPermM x eqp >>>
   implPopM x (someEqProofRHS eqp)
@@ -3657,6 +3665,13 @@ simplify1PermForDetVars det_vars l (ValPerm_LOwned ls _ _)
 simplify1PermForDetVars det_vars _ p
   | nameSetIsSubsetOf (freeVars p) det_vars = pure ()
 
+-- If p is an equality permission to a word with undetermined variables,
+-- existentially quantify over the word
+simplify1PermForDetVars _ x p@(ValPerm_Eq (PExpr_LLVMWord e)) =
+  let mb_p = nu $ \z -> ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var z in
+  implPushM x p >>> introExistsM x e mb_p >>>
+  implPopM x (ValPerm_Exists mb_p)
+
 -- Otherwise, drop p, because it is not determined
 simplify1PermForDetVars _det_vars x p =
   implPushM x p >>> implDropM x p
@@ -3670,7 +3685,7 @@ simplifyPermsForDetVars det_vars_list =
   let det_vars = NameSet.fromList det_vars_list in
   (permSetVars <$> getPerms) >>>= \vars ->
   mapM_ (\(SomeName x) ->
-          castPermForVar x >>>
+          castUnDetVarsForVar det_vars x >>>
           getPerm x >>>= simplify1PermForDetVars det_vars x) vars
 
 
