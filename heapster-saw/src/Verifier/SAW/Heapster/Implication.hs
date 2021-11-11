@@ -4124,6 +4124,9 @@ implLLVMFieldSplit x fp sz_bytes
                                   (llvmFieldSetEqWord fp bv2)
                                   sz_bytes))
       Just _ ->
+        -- NOTE: this is unreachable because we already know that sz <=
+        -- llvmFieldSize (because the subNat' above succeeded), so the bvSplit
+        -- above should always succeed
         error "implLLVMFieldSplit: unreachable case"
       Nothing ->
         implSimplM Proxy (SImpl_SplitLLVMTrueField x
