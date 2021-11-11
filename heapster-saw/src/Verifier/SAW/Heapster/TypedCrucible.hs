@@ -3601,6 +3601,15 @@ tcEmitLLVMStmt _arch _ctx _loc stmt =
 -- * Permission Checking for Jump Targets and Termination Statements
 ----------------------------------------------------------------------
 
+-- | Cast the primary permission for @x@ using any equality permissions in scope
+castPermForVar :: NuMatchingAny1 r => ExprVar a -> ImplM vars s r RNil RNil ()
+castPermForVar x =
+  getPerm x >>>= \p ->
+  substEqsWithProof p >>>= \eqp ->
+  implPushM x p >>>
+  implCastPermM x eqp >>>
+  implPopM x (someEqProofRHS eqp)
+
 -- | Simplify and drop permissions @p@ on variable @x@ so they only depend on
 -- the determined variables given in the supplied list
 simplify1PermForDetVars :: NuMatchingAny1 r =>
@@ -3661,6 +3670,7 @@ simplifyPermsForDetVars det_vars_list =
   let det_vars = NameSet.fromList det_vars_list in
   (permSetVars <$> getPerms) >>>= \vars ->
   mapM_ (\(SomeName x) ->
+          castPermForVar x >>>
           getPerm x >>>= simplify1PermForDetVars det_vars x) vars
 
 
