@@ -221,6 +221,17 @@ heapster_assume_fun_rename env exchange_malloc_sym "exchange_malloc"
               \ ret:memblock(W,0,len,emptysh)"
   "\\ (len:Vec 64 Bool) -> returnM #() ()";
 
+// llvm.uadd.with.overflow.i64
+heapster_assume_fun env "llvm.uadd.with.overflow.i64"
+  "(). arg0:int64<>, arg1:int64<> -o ret:struct(int64<>,int1<>)"
+  "\\ (x y:Vec 64 Bool) -> \
+    \ returnM (Vec 64 Bool * Vec 1 Bool) (bvAdd 64 x y, single Bool (bvCarry 64 x y))";
+
+// llvm.expect.i1
+heapster_assume_fun env "llvm.expect.i1"
+  "().arg0:int1<>, arg1:int1<> -o ret:int1<>" "\\ (x y:Vec 1 Bool) -> returnM (Vec 1 Bool) x";
+
+
 // memcpy
 heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
   "(rw:rwmodality, l1:lifetime, l2:lifetime, sh:llvmshape 64, \
@@ -394,6 +405,18 @@ heapster_typecheck_fun_rename env bool_and_sym "bool_and" "<> fn (bool,bool) -> 
 mk_two_values_sym <- heapster_find_symbol env "13mk_two_values";
 heapster_typecheck_fun_rename env mk_two_values_sym "mk_two_values" "<> fn (u32,u32) -> TwoValues";
 */
+
+// ref_sum
+ref_sum_sym <- heapster_find_symbol env "7ref_sum";
+heapster_typecheck_fun_rename env ref_sum_sym "ref_sum"
+  "<'a,'b> fn (x:&'a u64, y:&'a u64) -> u64";
+
+// double_dup_ref
+heapster_set_debug_level env 1;
+double_dup_ref_sym <- heapster_find_symbol env "14double_dup_ref";
+heapster_typecheck_fun_rename env double_dup_ref_sym "double_dup_ref"
+  "<'a,'b> fn (x:&'a u64) -> u64";
+heapster_set_debug_level env 0;
 
 // test_result
 test_result_sym <- heapster_find_symbol env "11test_result";
