@@ -53,6 +53,7 @@ import Data.Parameterized.BoolRepr
 import Data.Parameterized.TraversableF
 
 import Lang.Crucible.Types
+import Lang.Crucible.LLVM.DataLayout
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.CFG.Core
 import Lang.Crucible.FunctionHandle
@@ -608,6 +609,63 @@ data SimplImpl ps_in ps_out where
     (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
     ExprVar (LLVMPointerType w) -> LLVMFieldPerm w sz ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+
+  -- | Split an LLVM field permission that points to a known bitvector:
+  --
+  -- > x:[l]ptr((rw,off) |-> eq(bv1++bv2))
+  -- >   -o [l]x:ptr((rw,off) |-> eq(bv1))
+  -- >      * [l]x:ptr((rw,off+len(bv1)) |-> eq(bv2))
+  --
+  -- Note that the definition of @++@ depends on the current endianness.
+  SImpl_SplitLLVMWordField ::
+    (1 <= w, KnownNat w, 1 <= sz1, KnownNat sz1, 1 <= sz2, KnownNat sz2,
+     1 <= (sz2 - sz1), KnownNat (sz2 - sz1)) =>
+    ExprVar (LLVMPointerType w) ->
+    LLVMFieldPerm w sz2 -> BV.BV sz1 -> BV.BV (sz2 - sz1) -> EndianForm ->
+    SimplImpl (RNil :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w :> LLVMPointerType w)
+
+  -- | Concatenate two LLVM field permissions that point to known bitvectors:
+  --
+  -- > [l]x:ptr((rw,off) |-> eq(bv1)) * [l]x:ptr((rw,off+len(bv1)) |-> eq(bv2))
+  -- > -o x:[l]ptr((rw,off) |-> eq(bv1++bv2))
+  --
+  -- Note that the definition of @++@ depends on the current endianness.
+  SImpl_ConcatLLVMWordFields ::
+    (1 <= w, KnownNat w, 1 <= sz1, KnownNat sz1, 1 <= sz2, KnownNat sz2,
+     1 <= (sz1 + sz2), KnownNat (sz1 + sz2)) =>
+    ExprVar (LLVMPointerType w) ->
+    LLVMFieldPerm w sz1 -> BV.BV sz2 -> EndianForm ->
+    SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w)
+
+  -- | Split an LLVM field permission with @true@ contents:
+  --
+  -- > x:[l]ptr((rw,off,sz2) |-> true)
+  -- >   -o [l]x:ptr((rw,off,sz1) |-> true)
+  -- >      * [l]x:ptr((rw,off+sz1,sz2-sz1) |-> true)
+  --
+  -- Note that the definition of @++@ depends on the current endianness.
+  SImpl_SplitLLVMTrueField ::
+    (1 <= w, KnownNat w, 1 <= sz1, KnownNat sz1, 1 <= sz2, KnownNat sz2,
+     1 <= (sz2 - sz1), KnownNat (sz2 - sz1)) =>
+    ExprVar (LLVMPointerType w) -> LLVMFieldPerm w sz2 -> NatRepr sz1 ->
+    NatRepr (sz2 - sz1) ->
+    SimplImpl (RNil :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w :> LLVMPointerType w)
+
+  -- | Concatenate two LLVM field permissions with @true@ contents:
+  --
+  -- > [l]x:ptr((rw,off,sz1) |-> true) * [l]x:ptr((rw,off+sz1,sz2) |-> true)
+  -- > -o x:[l]ptr((rw,off,sz1+sz2) |-> true)
+  --
+  -- Note that the definition of @++@ depends on the current endianness.
+  SImpl_ConcatLLVMTrueFields ::
+    (1 <= w, KnownNat w, 1 <= sz1, KnownNat sz1, 1 <= sz2, KnownNat sz2,
+     1 <= (sz1 + sz2), KnownNat (sz1 + sz2)) =>
+    ExprVar (LLVMPointerType w) -> LLVMFieldPerm w sz1 -> NatRepr sz2 ->
+    SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w)
 
   -- | Demote an LLVM array permission to read modality:
   --
@@ -1642,6 +1700,32 @@ simplImplIn (SImpl_IntroLLVMFieldContents x y fld) =
   y (llvmFieldContents fld)
 simplImplIn (SImpl_DemoteLLVMFieldRW x fld) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMField fld])
+simplImplIn (SImpl_SplitLLVMWordField x fp bv1 bv2 endianness) =
+  case llvmFieldContents fp of
+    ValPerm_Eq (PExpr_LLVMWord (bvMatchConst -> Just bv))
+      | Just (bv1, bv2) == bvSplit endianness knownNat bv ->
+        distPerms1 x $ ValPerm_LLVMField fp
+    _ -> error "simplImplIn: SImpl_SplitLLVMWordField: malformed input permission"
+simplImplIn (SImpl_ConcatLLVMWordFields x fp1 bv2 _) =
+  case llvmFieldContents fp1 of
+    ValPerm_Eq (PExpr_LLVMWord (bvMatchConst -> Just _)) ->
+      distPerms2 x (ValPerm_LLVMField fp1) x (ValPerm_LLVMField $
+                                              llvmFieldAddOffsetInt
+                                              (llvmFieldSetEqWord fp1 bv2)
+                                              (intValue (natRepr fp1) `div` 8))
+    _ -> error "simplImplIn: SImpl_ConcatLLVMWordFields: malformed input permission"
+simplImplIn (SImpl_SplitLLVMTrueField x fp _ _) =
+  case llvmFieldContents fp of
+    ValPerm_True -> distPerms1 x $ ValPerm_LLVMField fp
+    _ -> error "simplImplIn: SImpl_SplitLLVMTrueField: malformed field permission"
+simplImplIn (SImpl_ConcatLLVMTrueFields x fp1 sz2) =
+  case llvmFieldContents fp1 of
+    ValPerm_True ->
+      distPerms2 x (ValPerm_LLVMField fp1) x (ValPerm_LLVMField $
+                                              llvmFieldAddOffsetInt
+                                              (llvmFieldSetTrue fp1 sz2)
+                                              (intValue (natRepr fp1) `div` 8))
+    _ -> error "simplImplIn: SImpl_ConcatLLVMTrueFields: malformed field permission"
 simplImplIn (SImpl_DemoteLLVMArrayRW x ap) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMArray ap])
 simplImplIn (SImpl_LLVMArrayCopy x ap off len) =
@@ -1927,6 +2011,35 @@ simplImplOut (SImpl_IntroLLVMFieldContents x _ fld) =
 simplImplOut (SImpl_DemoteLLVMFieldRW x fld) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMField $
                               fld { llvmFieldRW = PExpr_Read }])
+simplImplOut (SImpl_SplitLLVMWordField x fp bv1 bv2 endianness) =
+  case llvmFieldContents fp of
+    ValPerm_Eq (PExpr_LLVMWord (bvMatchConst -> Just bv))
+      | bvSplit endianness knownNat bv == Just (bv1, bv2) ->
+        distPerms2 x (ValPerm_LLVMField (llvmFieldSetEqWord fp bv1))
+        x (ValPerm_LLVMField (llvmFieldAddOffsetInt
+                              (llvmFieldSetEqWord fp bv2)
+                              (intValue (natRepr bv1) `div` 8)))
+    _ -> error "simplImplOut: SImpl_SplitLLVMWordField: malformed input permission"
+simplImplOut (SImpl_ConcatLLVMWordFields x fp1 bv2 endianness) =
+  case llvmFieldContents fp1 of
+    ValPerm_Eq (PExpr_LLVMWord (bvMatchConst -> Just bv1)) ->
+      distPerms1 x (ValPerm_LLVMField $ llvmFieldSetEqWord fp1 $
+                    bvConcat endianness bv1 bv2)
+    _ -> error "simplImplIn: SImpl_ConcatLLVMWordFields: malformed input permission"
+simplImplOut (SImpl_SplitLLVMTrueField x fp sz1 sz2m1) =
+  case llvmFieldContents fp of
+    ValPerm_True ->
+      distPerms2 x (ValPerm_LLVMField $ llvmFieldSetTrue fp sz1)
+      x (ValPerm_LLVMField $
+         llvmFieldAddOffsetInt (llvmFieldSetTrue fp sz2m1)
+         (intValue (natRepr sz1) `div` 8))
+    _ -> error "simplImplOut: SImpl_SplitLLVMTrueField: malformed field permission"
+simplImplOut (SImpl_ConcatLLVMTrueFields x fp1 sz2) =
+  case llvmFieldContents fp1 of
+    ValPerm_True ->
+      distPerms1 x (ValPerm_LLVMField $
+                    llvmFieldSetTrue fp1 (addNat (llvmFieldSize fp1) sz2))
+    _ -> error "simplImplOut: SImpl_ConcatLLVMTrueFields: malformed field permission"
 simplImplOut (SImpl_DemoteLLVMArrayRW x ap) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMArray $
                               ap { llvmArrayRW = PExpr_Read }])
@@ -2397,6 +2510,18 @@ instance SubstVar PermVarSubst m =>
                                        genSubst s fld
     [nuMP| SImpl_DemoteLLVMFieldRW x fld |] ->
       SImpl_DemoteLLVMFieldRW <$> genSubst s x <*> genSubst s fld
+    [nuMP| SImpl_SplitLLVMWordField x fp bv1 bv2 endianness |] ->
+      SImpl_SplitLLVMWordField <$> genSubst s x <*> genSubst s fp <*>
+      return (mbLift bv1) <*> return (mbLift bv2) <*> return (mbLift endianness)
+    [nuMP| SImpl_ConcatLLVMWordFields x fp1 bv2 endianness |] ->
+      SImpl_ConcatLLVMWordFields <$> genSubst s x <*> genSubst s fp1 <*>
+      return (mbLift bv2) <*> return (mbLift endianness)
+    [nuMP| SImpl_SplitLLVMTrueField x fp sz1 sz2m1 |] ->
+      SImpl_SplitLLVMTrueField <$> genSubst s x <*> genSubst s fp <*>
+      return (mbLift sz1) <*> return (mbLift sz2m1)
+    [nuMP| SImpl_ConcatLLVMTrueFields x fp1 sz2 |] ->
+      SImpl_ConcatLLVMTrueFields <$> genSubst s x <*> genSubst s fp1 <*>
+      return (mbLift sz2)
     [nuMP| SImpl_DemoteLLVMArrayRW x ap |] ->
       SImpl_DemoteLLVMArrayRW <$> genSubst s x <*> genSubst s ap
     [nuMP| SImpl_LLVMArrayCopy x ap off len |] ->
@@ -2635,6 +2760,8 @@ data ImplState vars ps =
               -- ^ Pretty-printing for all variables in scope
               _implStateNameTypes :: NameMap TypeRepr,
               -- ^ Types of all the variables in scope
+              _implStateEndianness :: EndianForm,
+              -- ^ The endianness of the current architecture
               _implStateFailPrefix :: String,
               -- ^ A prefix string to prepend to any failure messages
               _implStateDebugLevel :: DebugLevel
@@ -2644,8 +2771,8 @@ makeLenses ''ImplState
 
 mkImplState :: CruCtx vars -> PermSet ps -> PermEnv ->
                PPInfo -> String -> DebugLevel -> NameMap TypeRepr ->
-               ImplState vars ps
-mkImplState vars perms env info fail_prefix dlevel nameTypes =
+               EndianForm -> ImplState vars ps
+mkImplState vars perms env info fail_prefix dlevel nameTypes endianness =
   ImplState {
   _implStateVars = vars,
   _implStatePerms = perms,
@@ -2655,6 +2782,7 @@ mkImplState vars perms env info fail_prefix dlevel nameTypes =
   _implStatePermEnv = env,
   _implStatePPInfo = info,
   _implStateNameTypes = nameTypes,
+  _implStateEndianness = endianness,
   _implStateFailPrefix = fail_prefix,
   _implStateDebugLevel = dlevel
   }
@@ -2689,26 +2817,27 @@ runImplM ::
   String                    {- ^ fail prefix              -} ->
   DebugLevel                {- ^ debug level              -} ->
   NameMap TypeRepr          {- ^ name types               -} ->
+  EndianForm                {- ^ endianness               -} ->
   ImplM vars s r ps_out ps_in a ->
   ((a, ImplState vars ps_out) -> State (Closed s) (r ps_out)) ->
   State (Closed s) (PermImpl r ps_in)
-runImplM vars perms env ppInfo fail_prefix dlevel nameTypes m k =
+runImplM vars perms env ppInfo fail_prefix dlevel nameTypes endianness m k =
   runGenStateContT
     m
-    (mkImplState vars perms env ppInfo fail_prefix dlevel nameTypes)
+    (mkImplState vars perms env ppInfo fail_prefix dlevel nameTypes endianness)
     (\s a -> PermImpl_Done <$> k (a, s))
 
 -- | Run an 'ImplM' computation that returns a 'PermImpl', by inserting that
 -- 'PermImpl' inside of the larger 'PermImpl' that is built up by the 'ImplM'
 -- computation.
 runImplImplM :: CruCtx vars -> PermSet ps_in -> PermEnv -> PPInfo ->
-                String -> DebugLevel -> NameMap TypeRepr ->
+                String -> DebugLevel -> NameMap TypeRepr -> EndianForm ->
                 ImplM vars s r ps_out ps_in (PermImpl r ps_out) ->
                 State (Closed s) (PermImpl r ps_in)
-runImplImplM vars perms env ppInfo fail_prefix dlevel nameTypes m =
+runImplImplM vars perms env ppInfo fail_prefix dlevel nameTypes endianness m =
   runGenStateContT
     m
-    (mkImplState vars perms env ppInfo fail_prefix dlevel nameTypes)
+    (mkImplState vars perms env ppInfo fail_prefix dlevel nameTypes endianness)
     (\_ -> pure)
 
 -- | Embed a sub-computation in a name-binding inside another 'ImplM'
@@ -2723,7 +2852,7 @@ embedImplM ps_in m =
   runImplM CruCtxNil (distPermSet ps_in)
   (view implStatePermEnv s) (view implStatePPInfo s)
   (view implStateFailPrefix s) (view implStateDebugLevel s)
-  (view implStateNameTypes s) m (pure . fst)
+  (view implStateNameTypes s) (view implStateEndianness s) m (pure . fst)
 
 -- | Embed a sub-computation in a name-binding inside another 'ImplM'
 -- computation, throwing away any state from that sub-computation and returning
@@ -2739,7 +2868,7 @@ embedMbImplM mb_ps_in mb_m =
          CruCtxNil (distPermSet ps_in)
          (view implStatePermEnv    s) (view implStatePPInfo  s)
          (view implStateFailPrefix s) (view implStateDebugLevel s)
-         (view implStateNameTypes  s)
+         (view implStateNameTypes  s) (view implStateEndianness s)
          (gmodify (over implStatePPInfo
                    (ppInfoAddTypedExprNames knownRepr ns)) >>>
           implSetNameTypes ns knownRepr >>>
@@ -3894,6 +4023,148 @@ introLLVMFieldContentsM ::
 introLLVMFieldContentsM x y fp =
   implSimplM Proxy (SImpl_IntroLLVMFieldContents x y fp)
 
+-- | Coerce the contents of a field permission on top of the stack to @true@
+implLLVMFieldSetTrue ::
+  (NuMatchingAny1 r, 1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
+  ExprVar (LLVMPointerType w) -> LLVMFieldPerm w sz ->
+  ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
+implLLVMFieldSetTrue x fp =
+  implElimLLVMFieldContentsM x fp >>>= \y ->
+  introConjM y >>>
+  let fp_true = llvmFieldSetTrue fp fp in
+  introLLVMFieldContentsM x y fp_true
+
+-- | Start with a pointer permission on top of the stack and try to coerce it to
+-- a pointer permission whose contents are of the form @(eq(llvmword(bv)))@
+-- where @bv@ is a constant bitvector. If successful, return @bv@, otherwise
+-- coerce to a field with @true@ contents and return 'Nothing'.
+implLLVMFieldTryProveWordEq ::
+  (NuMatchingAny1 r, 1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
+  ExprVar (LLVMPointerType w) -> LLVMFieldPerm w sz ->
+  ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w)
+  (Maybe (BV.BV sz))
+implLLVMFieldTryProveWordEq x fp =
+  implElimLLVMFieldContentsM x fp >>>= \y -> getPerm y >>>= \p ->
+  implPushM y p >>> elimOrsExistsNamesM y >>>= \case
+  ValPerm_Eq e ->
+    substEqsWithProof e >>>= \eqp ->
+    case someEqProofRHS eqp of
+      PExpr_LLVMWord (bvMatchConst -> Just bv) ->
+        implCastPermM y (fmap ValPerm_Eq eqp) >>>
+        let fp' = llvmFieldSetEqWord fp bv in
+        introLLVMFieldContentsM x y fp' >>>
+        return (Just bv)
+      _ ->
+        implDropM y p >>> implLLVMFieldSetTrue x (llvmFieldSetEqVar fp y) >>>
+        return Nothing
+  _ ->
+    implDropM y p >>> implLLVMFieldSetTrue x (llvmFieldSetEqVar fp y) >>>
+    return Nothing
+
+-- | Like 'implLLVMFieldTryeProveWordEq' but for two field permissions in the
+-- top two slots on the stack
+implLLVMFieldTryProveWordEq2 ::
+  (NuMatchingAny1 r, 1 <= w, KnownNat w, 1 <= sz1, KnownNat sz1,
+   1 <= sz2, KnownNat sz2) =>
+  ExprVar (LLVMPointerType w) -> LLVMFieldPerm w sz1 -> LLVMFieldPerm w sz2 ->
+  ImplM vars s r (ps :> LLVMPointerType w :> LLVMPointerType w)
+  (ps :> LLVMPointerType w :> LLVMPointerType w)
+  (Maybe (BV.BV sz1, BV.BV sz2))
+implLLVMFieldTryProveWordEq2 x fp1 fp2 =
+  implLLVMFieldTryProveWordEq x fp2 >>>= \case
+  Nothing ->
+    let fp2_true = llvmFieldSetTrue fp2 fp2 in
+    implSwapM x (ValPerm_LLVMField fp1) x (ValPerm_LLVMField fp2_true) >>>
+    implLLVMFieldSetTrue x fp1 >>>
+    let fp1_true = llvmFieldSetTrue fp1 fp1 in
+    implSwapM x (ValPerm_LLVMField fp2_true) x (ValPerm_LLVMField fp1_true) >>>
+    return Nothing
+  Just bv2 ->
+    let fp2' = llvmFieldSetEqWord fp2 bv2 in
+    implSwapM x (ValPerm_LLVMField fp1) x (ValPerm_LLVMField fp2') >>>
+    implLLVMFieldTryProveWordEq x fp1 >>>= \case
+      Nothing ->
+        let fp1_true = llvmFieldSetTrue fp1 fp1 in
+        implSwapM x (ValPerm_LLVMField fp2') x (ValPerm_LLVMField fp1_true) >>>
+        implLLVMFieldSetTrue x fp2' >>>
+        return Nothing
+      Just bv1 ->
+        let fp1' = llvmFieldSetEqWord fp2 bv1 in
+        implSwapM x (ValPerm_LLVMField fp2') x (ValPerm_LLVMField fp1') >>>
+        return (Just (bv1, bv2))
+
+-- | Attempt to split a pointer permission @ptr((rw,off,sz) |-> p)@ on top of
+-- the stack into two permissions of the form @ptr((rw,off,8*len) |-> p1)@ and
+-- @ptr((rw,off+len,sz-(8*len)) |-> p2)@, that is, into one field of size @len@
+-- bytes and one field of the remaining size. If @p@ can be coerced to an
+-- equality permission @eq(llvmword(bv))@ for a known constant bitvector @bv@,
+-- then @p1@ and @p2@ are equalities to the split of @bv@ into known smaller
+-- bitvectors, and otherwise they are both @true@.
+implLLVMFieldSplit ::
+  (NuMatchingAny1 r, 1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
+  ExprVar (LLVMPointerType w) -> LLVMFieldPerm w sz -> Integer ->
+  ImplM vars s r (ps :> LLVMPointerType w :> LLVMPointerType w)
+  (ps :> LLVMPointerType w)
+  (AtomicPerm (LLVMPointerType w), AtomicPerm (LLVMPointerType w))
+implLLVMFieldSplit x fp sz_bytes
+  | Just (Some sz) <- someNat (sz_bytes * 8)
+  , Just fp_m_sz <- subNat' (llvmFieldSize fp) sz
+  , Left LeqProof <- decideLeq sz (llvmFieldSize fp)
+  , Left LeqProof <- decideLeq (knownNat @1) sz
+  , Left LeqProof <- decideLeq (knownNat @1) fp_m_sz =
+    withKnownNat sz $ withKnownNat fp_m_sz $
+    use implStateEndianness >>>= \endianness ->
+    implLLVMFieldTryProveWordEq x fp >>>= \case
+      Just bv
+        | Just (bv1, bv2) <- bvSplit endianness sz bv ->
+          implSimplM Proxy (SImpl_SplitLLVMWordField
+                            x (llvmFieldSetEqWord fp bv) bv1 bv2 endianness) >>>
+          return (Perm_LLVMField (llvmFieldSetEqWord fp bv1),
+                  Perm_LLVMField (llvmFieldAddOffsetInt
+                                  (llvmFieldSetEqWord fp bv2)
+                                  sz_bytes))
+      Just _ ->
+        -- NOTE: this is unreachable because we already know that sz <=
+        -- llvmFieldSize (because the subNat' above succeeded), so the bvSplit
+        -- above should always succeed
+        error "implLLVMFieldSplit: unreachable case"
+      Nothing ->
+        implSimplM Proxy (SImpl_SplitLLVMTrueField x
+                          (llvmFieldSetTrue fp fp) sz fp_m_sz) >>>
+        return (Perm_LLVMField (llvmFieldSetTrue fp sz),
+                Perm_LLVMField (llvmFieldAddOffsetInt
+                                (llvmFieldSetTrue fp fp_m_sz)
+                                sz_bytes))
+implLLVMFieldSplit _ _ _ =
+  implFailMsgM "implLLVMFieldSplit: malformed input permissions"
+
+-- | Concatentate two pointer permissions @ptr((rw,off,sz1) |-> p1)@ and
+-- @ptr((rw,off+sz1/8,sz2) |-> p2)@ into a single pointer permission of the form
+-- @ptr((rw,off,sz1+sz2) |-> p)@. If @p1@ and @p2@ are both equality permissions
+-- @eq(llvmword(bv))@ for known constant bitvectors, then the output contents
+-- permission @p@ is an equality to the concatenated of these bitvectors.
+-- Otherwise @p@ is just @true@.
+implLLVMFieldConcat ::
+  (NuMatchingAny1 r, 1 <= w, KnownNat w, 1 <= sz1, KnownNat sz1,
+   1 <= sz2, KnownNat sz2) =>
+  ExprVar (LLVMPointerType w) -> LLVMFieldPerm w sz1 -> LLVMFieldPerm w sz2 ->
+  ImplM vars s r (ps :> LLVMPointerType w)
+  (ps :> LLVMPointerType w :> LLVMPointerType w)
+  ()
+implLLVMFieldConcat x fp1 fp2
+  | LeqProof <- leqAddPos fp1 fp2 =
+    withKnownNat (addNat (natRepr fp1) (natRepr fp2)) $
+    use implStateEndianness >>>= \endianness ->
+    implLLVMFieldTryProveWordEq2 x fp1 fp2 >>>= \case
+      Nothing ->
+        implSimplM Proxy (SImpl_ConcatLLVMTrueFields x
+                          (llvmFieldSetTrue fp1 fp1)
+                          (llvmFieldSize fp2))
+      Just (bv1, bv2) ->
+        implSimplM Proxy (SImpl_ConcatLLVMWordFields x
+                          (llvmFieldSetEqWord fp1 bv1)
+                          bv2 endianness)
+
 -- | Borrow a cell from an LLVM array permission on the top of the stack, after
 -- proving (with 'implTryProveBVProps') that the index is in the array exclusive
 -- of any outstanding borrows (see 'llvmArrayCellInArray'). Return the
@@ -4511,6 +4782,19 @@ recombinePermConj x x_ps p@(Perm_LLVMField fp)
   , PExpr_Read <- llvmFieldRW fp' =
     implDropM x (ValPerm_Conj1 p) >>>
     pure x_ps
+
+-- If p is an array read permission whose offsets match an existing array
+-- permission, drop it
+recombinePermConj x x_ps p@(Perm_LLVMArray ap)
+  | Just _ <-
+      find (\case Perm_LLVMArray ap' ->
+                    bvEq (llvmArrayOffset ap') (llvmArrayOffset ap) &&
+                    bvEq (llvmArrayLen ap') (llvmArrayLen ap)
+                  _ -> False) x_ps
+  , PExpr_Read <- llvmArrayRW ap =
+    implDropM x (ValPerm_Conj1 p) >>>
+    pure x_ps
+
 
 -- If p is an is_llvmptr permission and x_ps already contains one, drop it
 recombinePermConj x x_ps p@Perm_IsLLVMPtr
@@ -5143,6 +5427,66 @@ proveVarLLVMFieldH2 x (Perm_LLVMField fp) off mb_fp
     (llvmFieldRW fp) (mbLLVMFieldRW mb_fp) (SImpl_DemoteLLVMFieldRW x fp''') >>>
     return ()
 
+-- If we have a field permission with the correct offset that is bigger than the
+-- desired field permission, split it and recurse
+proveVarLLVMFieldH2 x (Perm_LLVMField fp) off mb_fp
+  | bvEq (llvmFieldOffset fp) off
+  , sz <- mbLLVMFieldSize mb_fp
+  , intValue sz < intValue (llvmFieldSize fp)
+  , intValue sz `mod` 8 == 0
+  , sz_bytes <- intValue sz `div` 8 =
+    implLLVMFieldSplit x fp sz_bytes >>>= \(p1, p2) ->
+    recombinePerm x (ValPerm_Conj1 p2) >>>
+    proveVarLLVMFieldH x p1 off mb_fp
+
+-- If we have a field permission with the correct offset that is smaller than
+-- the desired field permission, split the desired field permission into two,
+-- recursively xprove the first of these from fp, prove the second with some
+-- other permissions, and then concatenate the results
+proveVarLLVMFieldH2 x (Perm_LLVMField fp) off mb_fp
+  | bvEq (llvmFieldOffset fp) off
+  , sz <- llvmFieldSize fp
+  , mb_sz <- mbLLVMFieldSize mb_fp
+  , Just (sz' :: NatRepr sz') <- subNat' mb_sz sz -- sz + sz' = mb_sz
+  , Left leq' <- decideLeq (knownNat @1) sz'
+  , intValue sz `mod` 8 == 0
+  , sz_bytes <- intValue sz `div` 8 =
+
+    -- First, eliminate fp to point to a variable y, and prove mb_fp with
+    -- contents (and size) set to y
+    implElimLLVMFieldContentsM x fp >>>= \y ->
+    let fp' = fp { llvmFieldContents = ValPerm_Eq (PExpr_Var y) } in
+    let mb_fp1 = fmap (flip llvmFieldSetContents
+                       (ValPerm_Eq (PExpr_Var y))) mb_fp in
+    proveVarLLVMFieldH x (Perm_LLVMField fp') off mb_fp1 >>>
+    getTopDistPerm x >>>= \(ValPerm_LLVMField fp1) ->
+
+    -- Next, prove the rest of mb_fp, at offset off+sz_bytes and with contents
+    -- equal to some variable z
+    withKnownNat sz' $ withLeqProof leq' $
+    let mb_fp2 =
+          mbCombine (MNil :>: (Proxy :: Proxy (LLVMPointerType sz'))) $
+          fmap (\fp_rhs -> nu $ \(z :: Name (LLVMPointerType sz')) ->
+                 fp_rhs { llvmFieldOffset = bvAdd off (bvInt sz_bytes),
+                          llvmFieldContents = ValPerm_Eq (PExpr_Var z) })
+          mb_fp in
+    withExtVarsM (proveVarImplInt x $ mbValPerm_LLVMField mb_fp2) >>>
+    getTopDistPerm x >>>= \(ValPerm_LLVMField fp2) ->
+
+    -- Finally, combine these two pieces of mb_fp into a single permission
+    implLLVMFieldConcat x fp1 fp2
+
+-- If we have a field permission that contains the correct offset but doesn't
+-- start at it, then split it and recurse
+proveVarLLVMFieldH2 x (Perm_LLVMField fp) off mb_fp
+  | not $ bvEq (llvmFieldOffset fp) off
+  , bvInRange off (llvmFieldRange fp)
+  , Just split_off <- bvMatchConstInt (bvSub off $ llvmFieldOffset fp) =
+    implLLVMFieldSplit x fp split_off >>>= \(p1, p2) ->
+    implSwapM x (ValPerm_Conj1 p1) x (ValPerm_Conj1 p2) >>>
+    recombinePerm x (ValPerm_Conj1 p1) >>>
+    proveVarLLVMFieldH x p2 off mb_fp
+
 -- If we have a block permission on the left, eliminate it
 proveVarLLVMFieldH2 x (Perm_LLVMBlock bp) off mb_fp =
   implElimLLVMBlockForOffset x bp True off (mbValPerm_LLVMField mb_fp) >>>= \p ->
@@ -5332,6 +5676,10 @@ proveVarLLVMArray_FromArray1 ::
 proveVarLLVMArray_FromArray1 x _ ap_lhs off len bs mb_ap
   | bvEq off (llvmArrayOffset ap_lhs)
   , bvEq len (llvmArrayLen ap_lhs) =
+    (if atomicPermIsCopyable (Perm_LLVMArray ap_lhs) then
+       implCopyM x (ValPerm_LLVMArray ap_lhs) >>>
+       recombinePerm x (ValPerm_LLVMArray ap_lhs)
+     else return ()) >>>
     proveVarLLVMArray_FromArray2 x ap_lhs len bs mb_ap
 
 -- If ap could extend beyond ap_lhs and there is an atomic permission for x
