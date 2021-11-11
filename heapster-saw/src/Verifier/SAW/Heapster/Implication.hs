@@ -4800,15 +4800,14 @@ recombinePerm' x _ p = implDropM x p
 recombinePermConj :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] ->
                      AtomicPerm a -> ImplM vars s r as (as :> a) ()
 
--- If p is a field read permission that is already in x_ps, drop it
-recombinePermConj x x_ps p@(Perm_LLVMField fp)
-  | Just (Perm_LLVMField fp') <-
-      find (\case Perm_LLVMField fp' ->
-                    bvEq (llvmFieldOffset fp') (llvmFieldOffset fp)
-                  _ -> False) x_ps
-  , PExpr_Read <- llvmFieldRW fp
-  , PExpr_Read <- llvmFieldRW fp' =
-    implDropM x (ValPerm_Conj1 p)
+-- If p is a field permission whose range is a subset of that of a permission we
+-- already hold, drop it
+recombinePermConj x x_ps (Perm_LLVMField fp)
+  | any (llvmAtomicPermContainsRange $ llvmFieldRange fp) x_ps =
+    implDropM x $ ValPerm_LLVMField fp
+
+-- FIXME: if p is a field permission whose range overlaps with but is not wholly
+-- contained in a permission we already hold, split it and recombine parts of it
 
 -- If p is an array read permission whose offsets match an existing array
 -- permission, drop it
@@ -5444,7 +5443,15 @@ proveVarLLVMFieldH2 x (Perm_LLVMField fp) off mb_fp
     -- the lifetime so that the original modality is recovered after any borrow
     -- performed above is over.
     equalizeRWs x (\rw -> ValPerm_LLVMField $ fp''' { llvmFieldRW = rw })
-    (llvmFieldRW fp) (mbLLVMFieldRW mb_fp) (SImpl_DemoteLLVMFieldRW x fp''') >>>
+    (llvmFieldRW fp) (mbLLVMFieldRW mb_fp)
+    (SImpl_DemoteLLVMFieldRW x fp''') >>>= \rw' ->
+
+    -- Step 5: duplicate the field permission if it is copyable, and then return
+    let fp'''' = fp''' { llvmFieldRW = rw' } in
+    (if atomicPermIsCopyable (Perm_LLVMField fp'''') then
+       implCopyM x (ValPerm_LLVMField fp'''') >>>
+       recombinePerm x (ValPerm_LLVMField fp'''')
+     else return ()) >>>
     return ()
 
 -- If we have a field permission with the correct offset that is bigger than the
