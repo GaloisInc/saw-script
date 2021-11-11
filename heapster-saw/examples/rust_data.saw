@@ -412,11 +412,9 @@ heapster_typecheck_fun_rename env ref_sum_sym "ref_sum"
   "<'a,'b> fn (x:&'a u64, y:&'a u64) -> u64";
 
 // double_dup_ref
-heapster_set_debug_level env 1;
 double_dup_ref_sym <- heapster_find_symbol env "14double_dup_ref";
 heapster_typecheck_fun_rename env double_dup_ref_sym "double_dup_ref"
   "<'a,'b> fn (x:&'a u64) -> u64";
-heapster_set_debug_level env 0;
 
 // test_result
 test_result_sym <- heapster_find_symbol env "11test_result";
