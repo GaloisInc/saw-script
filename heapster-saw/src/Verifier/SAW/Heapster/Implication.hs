@@ -5240,6 +5240,15 @@ data NeededPerm vars a where
                 Mb (vars :++: vars') (ValuePerm a) ->
                 NeededPerm vars a
 
+instance PermPretty (NeededPerm vars a) where
+  permPrettyM (NeededPerm _ x mb_p) =
+    do x_pp <- permPrettyM x
+       pp_mb_p <- permPrettyM mb_p
+       return (x_pp <> colon <> pp_mb_p)
+
+instance PermPrettyF (NeededPerm vars) where
+  permPrettyMF = permPrettyM
+
 -- | A sequence of permissions in bindings that need to be proved
 type NeededPerms vars = Some (RAssign (NeededPerm vars))
 
@@ -6955,8 +6964,12 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       -- on the LHSs and not arbitrary expressions
       getDistPerms >>>= \ps0_with_a ->
       let ps0 = RL.tail ps0_with_a in
-      proveNeededPerms (RL.append neededs1 neededs2) >>>
-      getTopDistPerms ps0_with_a (RL.append neededs1 neededs2) >>>= \ps12 ->
+      let neededs12 = RL.append neededs1 neededs2 in
+      implTraceM (\i -> hang 2
+                        (pretty "Proving needed perms for lowned implication:"
+                         <> line <> permPretty i neededs12)) >>>
+      proveNeededPerms neededs12 >>>
+      getTopDistPerms ps0_with_a neededs12 >>>= \ps12 ->
       let (ps1,ps2) = RL.split neededs1 neededs2 ps12 in
       partialSubstForceM mb_ps_outR "proveVarAtomicImpl" >>>= \ps_outR ->
 

@@ -273,8 +273,8 @@ tracePretty doc = trace (renderDoc doc)
 ppCommaSep :: [Doc ann] -> Doc ann
 ppCommaSep [] = mempty
 ppCommaSep ds =
-  PP.group $ align $ fillSep (map (<> comma) (take (length ds - 1) ds)
-                              ++ [last ds])
+  PP.group $ align $ fillSep $ map PP.group
+  (map (<> comma) (take (length ds - 1) ds) ++ [last ds])
 
 -- | Pretty-print a comma-separated list using 'fillSep' enclosed inside either
 -- parentheses (if the supplied flag is 'True') or brackets (if it is 'False')
@@ -357,13 +357,12 @@ permPrettyExprMb f mb =
   fmap mbLift $ strongMbM $ flip nuMultiWithElim1 mb $ \ns a ->
   local (ppInfoAddExprNames "z" ns) $
   do docs <- traverseRAssign (\n -> Constant <$> permPrettyM n) ns
-     f docs $ permPrettyM a
+     PP.group <$> hang 2 <$> f docs (permPrettyM a)
 
 instance PermPretty a => PermPretty (Mb (ctx :: RList CrucibleType) a) where
   permPrettyM =
     permPrettyExprMb $ \docs ppm ->
-    (\pp -> PP.group (ppEncList True (RL.toList docs) <>
-                      nest 2 (dot <> line <> pp))) <$> ppm
+    (\pp -> ppEncList True (RL.toList docs) <> dot <> line <> pp) <$> ppm
 
 instance PermPretty Integer where
   permPrettyM = return . pretty
@@ -849,10 +848,15 @@ instance PermPretty (PermExpr a) where
   permPrettyM (PExpr_Nat n) = return $ pretty $ show n
   permPrettyM (PExpr_String str) = return (pretty '"' <> pretty str <> pretty '"')
   permPrettyM (PExpr_Bool b) = return $ pretty b
+  permPrettyM (PExpr_BV [] constant) =
+    return $ pretty $ BV.asSigned knownNat constant
   permPrettyM (PExpr_BV factors constant) =
-    do pps <- mapM permPrettyM factors
-       return $ encloseSep mempty mempty (pretty "+")
-         (pps ++ [pretty $ BV.asUnsigned constant])
+    do factors_pp <-
+         encloseSep mempty mempty (pretty "+") <$> mapM permPrettyM factors
+       case BV.asSigned knownNat constant of
+         0 -> return factors_pp
+         c | c > 0 -> return (factors_pp <> pretty "+" <> pretty c)
+         c -> return (factors_pp <> pretty c)
   permPrettyM (PExpr_Struct args) =
     (\pp -> pretty "struct" <+> parens pp) <$> permPrettyM args
   permPrettyM PExpr_Always = return $ pretty "always"
@@ -902,7 +906,7 @@ instance PermPretty (PermExpr a) where
   permPrettyM (PExpr_ExShape mb_sh) =
     flip permPrettyExprMb mb_sh $ \(_ :>: Constant pp_n) ppm ->
     do pp <- ppm
-       return $ nest 2 $ sep [pretty "exsh" <+> pp_n <> dot, pp]
+       return $ sep [pretty "exsh" <+> pp_n <> dot, pp]
   permPrettyM (PExpr_ValPerm p) = permPrettyM p
 
 instance (1 <= w, KnownNat w) => PermPretty (LLVMFieldShape w) where
@@ -931,7 +935,7 @@ instance PermPrettyF PermExpr where
 
 instance PermPretty (BVFactor w) where
   permPrettyM (BVFactor i x) =
-    ((pretty (BV.asUnsigned i) <> pretty "*") <>) <$> permPrettyM x
+    ((pretty (BV.asSigned knownNat i) <> pretty "*") <>) <$> permPrettyM x
 
 instance PermPretty RWModality where
   permPrettyM Read = return $ pretty "R"
@@ -2876,7 +2880,7 @@ instance PermPretty (ValuePerm a) where
     <$> permPrettyM p1 <*> permPrettyM p2
   permPrettyM (ValPerm_Exists mb_p) =
     flip permPrettyExprMb mb_p $ \(_ :>: Constant pp_n) ppm ->
-    (\pp -> hang 2 (pretty "exists" <+> pp_n <> dot <+> pp)) <$> ppm
+    (\pp -> pretty "exists" <+> pp_n <> dot <+> pp) <$> ppm
   permPrettyM (ValPerm_Named n args off) =
     do n_pp <- permPrettyM n
        args_pp <- permPrettyM args
