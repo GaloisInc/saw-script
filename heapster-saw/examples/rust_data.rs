@@ -12,6 +12,17 @@ pub fn bool_and_pair (xy:(bool,bool)) -> bool {
     xy.0 & xy.1
 }
 
+/* Read two integers from references and return their sum */
+pub fn ref_sum <'a,'b> (x:&'a u64, y:&'a u64) -> u64 {
+    return *x + *y;
+}
+
+/* Double the integer pointed to by a reference by duplicating the reference and
+ * passing it to ref_sum */
+pub fn double_dup_ref <'a> (x:&'a u64) -> u64 {
+    return ref_sum (x, x);
+}
+
 #[repr(C)]
 pub struct BoolStruct { fst_bool:bool,snd_bool:bool }
 

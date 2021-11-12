@@ -1874,7 +1874,7 @@ data LLVMArrayBorrow w
     -- ^ Borrow a specific cell of an array permission
   | RangeBorrow (BVRange w)
     -- ^ Borrow a range of array cells, where each cell is 'llvmArrayStride'
-    -- machine words long
+    -- bytes long
   deriving Eq
 
 
@@ -3553,6 +3553,13 @@ llvmAtomicPermToSomeBlock (Perm_LLVMBlock bp) =
   Just $ SomeLLVMBlockPerm $ bp
 llvmAtomicPermToSomeBlock _ = Nothing
 
+-- | Get the lifetime of an atomic perm if it is a field, array, or memblock
+atomicPermLifetime :: AtomicPerm a -> Maybe (PermExpr LifetimeType)
+atomicPermLifetime (Perm_LLVMField fp) = Just $ llvmFieldLifetime fp
+atomicPermLifetime (Perm_LLVMArray ap) = Just $ llvmArrayLifetime ap
+atomicPermLifetime (Perm_LLVMBlock bp) = Just $ llvmBlockLifetime bp
+atomicPermLifetime _ = Nothing
+
 -- | Get the offset of an atomic permission, if it has one
 llvmAtomicPermOffset :: AtomicPerm (LLVMPointerType w) ->
                         Maybe (PermExpr (BVType w))
@@ -4305,6 +4312,37 @@ llvmPermContainsOffset off (Perm_LLVMBlock bp)
   , bvPropCouldHold prop =
     Just ([prop], bvPropHolds prop)
 llvmPermContainsOffset _ _ = Nothing
+
+-- | Test if an atomic LLVM permission contains (in the sense of 'bvPropHolds')
+-- all offsets in a given range
+llvmAtomicPermContainsRange :: (1 <= w, KnownNat w) => BVRange w ->
+                               AtomicPerm (LLVMPointerType w) -> Bool
+llvmAtomicPermContainsRange rng (Perm_LLVMArray ap)
+  | Just ix1 <- matchLLVMArrayIndex ap (bvRangeOffset rng)
+  , Just ix2 <- matchLLVMArrayIndex ap (bvRangeEnd rng)
+  , props <- llvmArrayBorrowInArray ap (RangeBorrow $ BVRange
+                                        (llvmArrayIndexCell ix1)
+                                        (llvmArrayIndexCell ix2)) =
+    all bvPropHolds props
+llvmAtomicPermContainsRange rng (Perm_LLVMField fp) =
+  bvRangeSubset rng (llvmFieldRange fp)
+llvmAtomicPermContainsRange rng (Perm_LLVMBlock bp) =
+  bvRangeSubset rng (llvmBlockRange bp)
+llvmAtomicPermContainsRange _ _ = False
+
+-- | Test if an atomic LLVM permission has a range that overlaps with (in the
+-- sense of 'bvPropHolds') the offsets in a given range
+llvmAtomicPermOverlapsRange :: (1 <= w, KnownNat w) => BVRange w ->
+                               AtomicPerm (LLVMPointerType w) -> Bool
+llvmAtomicPermOverlapsRange rng (Perm_LLVMArray ap) =
+  bvRangesOverlap rng (llvmArrayAbsOffsets ap) &&
+  not (null $ bvRangesDelete rng $
+       map (llvmArrayBorrowOffsets ap) (llvmArrayBorrows ap))
+llvmAtomicPermOverlapsRange rng (Perm_LLVMField fp) =
+  bvRangesOverlap rng (llvmFieldRange fp)
+llvmAtomicPermOverlapsRange rng (Perm_LLVMBlock bp) =
+  bvRangesOverlap rng (llvmBlockRange bp)
+llvmAtomicPermOverlapsRange _ _ = False
 
 -- | Search through a list of permissions for either some permission that
 -- definitely contains (as in 'bvPropHolds') the given offset or, failing that,
