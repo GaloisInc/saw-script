@@ -303,6 +303,16 @@ instance NuMatching (FloatInfoRepr fi) where
 instance NuMatching RoundingMode where
   nuMatchingProof = unsafeMbTypeRepr
 
+instance NuMatching EndianForm where
+  nuMatchingProof = unsafeMbTypeRepr
+
+instance Closable EndianForm where
+  toClosed BigEndian = $(mkClosed [| BigEndian |])
+  toClosed LittleEndian = $(mkClosed [| LittleEndian |])
+
+instance Liftable EndianForm where
+  mbLift = unClosed . mbLift . fmap toClosed
+
 $(mkNuMatching [t| forall f. NuMatchingAny1 f => Some f |])
 
 instance NuMatchingAny1 BaseTypeRepr where

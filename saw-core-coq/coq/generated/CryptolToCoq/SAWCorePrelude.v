@@ -420,7 +420,7 @@ Definition minNat : SAWCoreScaffolding.Nat -> SAWCoreScaffolding.Nat -> SAWCoreS
   fun (x : SAWCoreScaffolding.Nat) (y : SAWCoreScaffolding.Nat) => Nat_cases2 SAWCoreScaffolding.Nat (fun (y' : SAWCoreScaffolding.Nat) => SAWCoreScaffolding.Zero) (fun (x' : SAWCoreScaffolding.Nat) => SAWCoreScaffolding.Zero) (fun (x' : SAWCoreScaffolding.Nat) (y' : SAWCoreScaffolding.Nat) (min_xy : SAWCoreScaffolding.Nat) => SAWCoreScaffolding.Succ min_xy) x y.
 
 Definition maxNat : SAWCoreScaffolding.Nat -> SAWCoreScaffolding.Nat -> SAWCoreScaffolding.Nat :=
-  fun (x : SAWCoreScaffolding.Nat) (y : SAWCoreScaffolding.Nat) => Nat_cases2 SAWCoreScaffolding.Nat (fun (x' : SAWCoreScaffolding.Nat) => x') (fun (y' : SAWCoreScaffolding.Nat) => SAWCoreScaffolding.Succ y') (fun (y' : SAWCoreScaffolding.Nat) (x' : SAWCoreScaffolding.Nat) (sub_xy : SAWCoreScaffolding.Nat) => sub_xy) y x.
+  fun (x : SAWCoreScaffolding.Nat) (y : SAWCoreScaffolding.Nat) => Nat_cases2 SAWCoreScaffolding.Nat (fun (y' : SAWCoreScaffolding.Nat) => y') (fun (x' : SAWCoreScaffolding.Nat) => SAWCoreScaffolding.Succ x') (fun (x' : SAWCoreScaffolding.Nat) (y' : SAWCoreScaffolding.Nat) (max_xy : SAWCoreScaffolding.Nat) => SAWCoreScaffolding.Succ max_xy) x y.
 
 (* Prelude.widthNat was skipped *)
 
@@ -893,6 +893,8 @@ Axiom trans_bvult_bvule : forall (n : SAWCoreScaffolding.Nat), forall (x : SAWCo
 
 Axiom bvult_sub_add_bvult : forall (n : SAWCoreScaffolding.Nat), forall (x : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (y : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (z : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), is_bvule n y z -> is_bvult n x (SAWCoreVectorsAsCoqVectors.bvSub n z y) -> is_bvult n (SAWCoreVectorsAsCoqVectors.bvAdd n y x) z .
 
+Axiom bvult_sum_bvult_sub : forall (n : SAWCoreScaffolding.Nat), forall (x : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (y : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (z : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), is_bvult n x (SAWCoreVectorsAsCoqVectors.bvAdd n y z) -> SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool (SAWCoreVectorsAsCoqVectors.bvult n x y) SAWCoreScaffolding.false -> is_bvult n (SAWCoreVectorsAsCoqVectors.bvSub n x y) z .
+
 Axiom IsLtNat_to_bvult : forall (n : SAWCoreScaffolding.Nat), forall (x : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (i : SAWCoreScaffolding.Nat), IsLtNat i (SAWCoreVectorsAsCoqVectors.bvToNat n x) -> is_bvult n (SAWCoreVectorsAsCoqVectors.bvNat n i) x .
 
 Axiom bvult_to_IsLtNat : forall (n : SAWCoreScaffolding.Nat), forall (x : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (i : SAWCoreScaffolding.Nat), is_bvult n (SAWCoreVectorsAsCoqVectors.bvNat n i) x -> IsLtNat i (SAWCoreVectorsAsCoqVectors.bvToNat n x) .
@@ -942,6 +944,9 @@ Definition sliceBVVec : forall (n : SAWCoreScaffolding.Nat), forall (len : SAWCo
 
 Definition updSliceBVVec : forall (n : SAWCoreScaffolding.Nat), forall (len : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (a : Type), BVVec n len a -> forall (start' : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (len' : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), BVVec n len' a -> BVVec n len a :=
   fun (n : SAWCoreScaffolding.Nat) (len : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (a : Type) (v : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreVectorsAsCoqVectors.bvToNat n len) a) (start' : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (len' : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (v_sub : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreVectorsAsCoqVectors.bvToNat n len') a) => genBVVec n len a (fun (i : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (pf : SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool (SAWCoreVectorsAsCoqVectors.bvult n i len) SAWCoreScaffolding.true) => if SAWCoreVectorsAsCoqVectors.bvule n start' i then maybe (is_bvult n (SAWCoreVectorsAsCoqVectors.bvSub n i start') len') a (atBVVec n len a v i pf) (fun (pf_sub : SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool (SAWCoreVectorsAsCoqVectors.bvult n (SAWCoreVectorsAsCoqVectors.bvSub n i start') len') SAWCoreScaffolding.true) => atBVVec n len' a v_sub (SAWCoreVectorsAsCoqVectors.bvSub n i start') pf_sub) (bvultWithProof n (SAWCoreVectorsAsCoqVectors.bvSub n i start') len') else atBVVec n len a v i pf).
+
+Definition appendBVVec : forall (n : SAWCoreScaffolding.Nat), forall (len1 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (len2 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (a : Type), BVVec n len1 a -> BVVec n len2 a -> BVVec n (SAWCoreVectorsAsCoqVectors.bvAdd n len1 len2) a :=
+  fun (n : SAWCoreScaffolding.Nat) (len1 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (len2 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (a : Type) (v1 : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreVectorsAsCoqVectors.bvToNat n len1) a) (v2 : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreVectorsAsCoqVectors.bvToNat n len2) a) => genBVVec n (SAWCoreVectorsAsCoqVectors.bvAdd n len1 len2) a (fun (i : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (pf12 : SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool (SAWCoreVectorsAsCoqVectors.bvult n i (SAWCoreVectorsAsCoqVectors.bvAdd n len1 len2)) SAWCoreScaffolding.true) => SAWCoreScaffolding.iteDep (fun (b : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool (SAWCoreVectorsAsCoqVectors.bvult n i len1) b -> a) (SAWCoreVectorsAsCoqVectors.bvult n i len1) (fun (pf1 : SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool (SAWCoreVectorsAsCoqVectors.bvult n i len1) SAWCoreScaffolding.true) => atBVVec n len1 a v1 i pf1) (fun (not_pf1 : SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool (SAWCoreVectorsAsCoqVectors.bvult n i len1) SAWCoreScaffolding.false) => atBVVec n len2 a v2 (SAWCoreVectorsAsCoqVectors.bvSub n i len1) (bvult_sum_bvult_sub n i len1 len2 pf12 not_pf1)) (SAWCoreScaffolding.Refl SAWCoreScaffolding.Bool (SAWCoreVectorsAsCoqVectors.bvult n i len1))).
 
 Inductive IRTDesc (As : ListSort) : Type :=
 | IRT_varD : SAWCoreScaffolding.Nat -> IRTDesc As
@@ -1006,6 +1011,8 @@ Definition foldIRT : forall (As : ListSort), forall (Ds : IRTSubsts As), forall 
 
 (* Prelude.existsM was skipped *)
 
+(* Prelude.errorM was skipped *)
+
 Definition fmapM : forall (a : Type), forall (b : Type), (a -> b) -> CompM a -> CompM b :=
   fun (a : Type) (b : Type) (f : a -> b) (m : CompM a) => @bindM CompM _ a b m (fun (x : a) => @returnM CompM _ b (f x)).
 
@@ -1033,7 +1040,8 @@ Definition mapM : forall (a : Type), forall (b : Type), forall {Inh_b : SAWCoreS
 Definition mapBVVecM : forall (a : Type), forall (b : Type), forall {Inh_b : SAWCoreScaffolding.Inhabited b}, (a -> CompM b) -> forall (n : SAWCoreScaffolding.Nat), forall (len : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), BVVec n len a -> CompM (BVVec n len b) :=
   fun (a : Type) (b : Type) {Inh_b : SAWCoreScaffolding.Inhabited b} (f : a -> CompM b) (n : SAWCoreScaffolding.Nat) (len : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) => mapM a b f (SAWCoreVectorsAsCoqVectors.bvToNat n len).
 
-(* Prelude.errorM was skipped *)
+Definition appendCastBVVecM : forall (n : SAWCoreScaffolding.Nat), forall (len1 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (len2 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (len3 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (a : Type), BVVec n len1 a -> BVVec n len2 a -> CompM (BVVec n len3 a) :=
+  fun (n : SAWCoreScaffolding.Nat) (len1 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (len2 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (len3 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (a : Type) (v1 : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreVectorsAsCoqVectors.bvToNat n len1) a) (v2 : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreVectorsAsCoqVectors.bvToNat n len2) a) => maybe (SAWCoreScaffolding.Eq (SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (SAWCoreVectorsAsCoqVectors.bvAdd n len1 len2) len3) (CompM (BVVec n len3 a)) (@errorM CompM _ (BVVec n len3 a) "Could not cast BVVec"%string) (fun (pf : SAWCoreScaffolding.Eq (SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (SAWCoreVectorsAsCoqVectors.bvAdd n len1 len2) len3) => @returnM CompM _ (BVVec n len3 a) (SAWCoreScaffolding.coerce (BVVec n (SAWCoreVectorsAsCoqVectors.bvAdd n len1 len2) a) (BVVec n len3 a) (eq_cong (SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (SAWCoreVectorsAsCoqVectors.bvAdd n len1 len2) len3 pf Type (fun (l : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) => BVVec n l a)) (appendBVVec n len1 len2 a v1 v2))) (bvEqWithProof n (SAWCoreVectorsAsCoqVectors.bvAdd n len1 len2) len3).
 
 (* Prelude.fixM was skipped *)
 

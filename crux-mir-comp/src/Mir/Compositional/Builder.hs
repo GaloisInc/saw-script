@@ -31,6 +31,7 @@ import qualified Data.Sequence as Seq
 import Data.Set (Set)
 import qualified Data.Set as Set
 import GHC.Stack (HasCallStack)
+import qualified Prettyprinter as PP
 
 import qualified What4.Expr.Builder as W4
 import What4.FunctionName (functionNameFromText)
@@ -49,8 +50,6 @@ import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
 import qualified Verifier.SAW.TypedTerm as SAW
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
-
-import Crux.Types (HasModel)
 
 import Mir.DefId
 import Mir.Generator (CollectionState, collection)
@@ -183,7 +182,7 @@ instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
 -- Rust invokes `msb.add_arg(...)` or similar.
 
 builderNew :: forall sym p t st fs rtp.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     CollectionState ->
     -- | `DefId` of the `builder_new` monomorphization.  Its `Instance` should
     -- have one type argument, which is the `TyFnDef` of the function that the
@@ -225,7 +224,7 @@ builderNew cs defId = do
 -- argument.  For example, if `argRef` points to an `&mut i32`, the `i32` will
 -- be overwritten with a fresh symbolic variable.
 addArg :: forall sym p t st fs rtp args ret tp.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     TypeRepr tp -> MirReferenceMux sym tp -> MethodSpecBuilder sym t ->
     OverrideSim (p sym) sym MIR rtp args ret (MethodSpecBuilder sym t)
 addArg tpr argRef msb = execBuilderT msb $ do
@@ -324,8 +323,9 @@ gatherAssumes msb = do
 
     -- Find all assumptions that mention a relevant variable.
     assumes <- liftIO $ collectAssumptions sym
+    flatAssumes <- liftIO $ flattenAssumptions sym assumes
     optAssumes' <- liftIO $ relevantPreds sym vars $
-        map (\a -> (a ^. W4.labeledPred, a ^. W4.labeledPredMsg)) $ toList assumes
+        map (\a -> (assumptionPred a, show $ ppAssumption PP.viaShow a)) $ flatAssumes
     let assumes' = case optAssumes' of
             Left (pred, msg, Some v) ->
                 error $ "assumption `" ++ show pred ++ "` (" ++ show msg ++
@@ -362,7 +362,7 @@ gatherAsserts msb = do
     let vars = (msb ^. msbPre . seVars) `Set.union` (msb ^. msbPost . seVars)
 
     -- Find all assertions that mention a relevant variable.
-    goals <- liftIO $ proofGoalsToList <$> getProofObligations sym
+    goals <- liftIO $ maybe [] goalsToList <$> getProofObligations sym
     let asserts = map proofGoal goals
     optAsserts' <- liftIO $ relevantPreds sym vars $
         map (\a -> (a ^. W4.labeledPred, a ^. W4.labeledPredMsg)) asserts
