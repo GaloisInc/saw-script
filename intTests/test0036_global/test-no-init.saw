@@ -1,4 +1,4 @@
-m <- llvm_load_module "./test.bc";
+m <- llvm_load_module "./test-O1.bc";
 
 llvm_verify m "f" [] true (do {
     y <- llvm_fresh_var "y" (llvm_int 32);
