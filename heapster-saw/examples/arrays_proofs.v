@@ -43,7 +43,7 @@ Proof.
   (* Proving that the loop invariant holds inductively: *)
   - transitivity a2.
     + assumption.
-    + apply isBvsle_suc_r.
+    + apply isBvsle_suc_r; eauto.
       rewrite e_assuming2, e_assuming0.
       reflexivity.
   - apply isBvslt_to_isBvsle_suc.
@@ -80,7 +80,7 @@ Proof.
     discriminate e_maybe.
   - transitivity a2.
     + assumption.
-    + apply isBvsle_suc_r.
+    + apply isBvsle_suc_r; eauto.
       rewrite e_assuming2, e_assuming0.
       reflexivity.
   - apply isBvslt_to_isBvsle_suc.
@@ -215,12 +215,6 @@ Admitted.
 
 (* We *really* need a better bitvector library, the lemmas we need are getting pretty ad-hoc *)
 
-Axiom bvSub_1_lt : forall w a, isBvslt w (intToBv w 0) a ->
-                               isBvslt w (bvSub w a (intToBv w 1)) a.
-
-Axiom isBvslt_suc_r : forall w a, isBvslt w a (bvsmax w) ->
-                                  isBvslt w a (bvAdd w a (intToBv w 1)).
-
 Axiom isBvsle_bvSub_inj_pos : forall w a b c, isBvsle w (intToBv w 0) a ->
                                               isBvsle w (intToBv w 0) b ->
                                               isBvsle w (intToBv w 0) c ->
@@ -252,14 +246,14 @@ Proof.
       (* apply isBvsle_bvSub_inj_pos. *)
       (* I give up I'm done messing around manually with bitvectors for now *)
       admit.
-    + apply bvSub_1_lt.
-      rewrite e_assuming; reflexivity.
+    + apply isBvslt_pred_l; eauto.
+      rewrite <- e_assuming; reflexivity.
   - (* (e_if4 is a contradiction) *)
     admit.
   - rewrite e_assuming.
     change (intToBv 64 2) with (bvAdd 64 (intToBv 64 1) (intToBv 64 1)).
     rewrite <- bvAdd_assoc.
-    rewrite <- isBvslt_suc_r; [ rewrite <- isBvslt_suc_r; [ reflexivity |] |].
+    rewrite <- isBvslt_suc_r.
     + admit.
     + admit.
 Admitted.

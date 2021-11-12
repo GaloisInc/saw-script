@@ -572,71 +572,11 @@ translateTermUnshared t = withLocalTranslationState $ do
               [] -> return ite
               _  -> Coq.App ite <$> mapM translateTerm rest
           _ -> badTerm
-        -- NOTE: the following works for something like CBC, because computing
-        -- the n-th block only requires n steps of recursion
-        -- FIXME: (pun not intended) better conditions for when this is safe to do
-        "Prelude.fix" ->
-          case args of
-          []  -> errorTermM "call to Prelude.fix with no argument"
-          [_] -> errorTermM "call to Prelude.fix with 1 argument"
-          resultType : lambda : rest ->
-            case resultType of
-            -- TODO: check that 'n' is finite
-            (asSeq -> Just (n, _)) ->
-              case lambda of
 
-              (asLambda -> Just (x, seqType, body)) | seqType == resultType ->
-                  do
-                    len <- translateTerm n
-                    (x', expr) <-
-                      withLocalTranslationState $
-                      do x' <- freshenAndBindName x
-                         expr <- translateTerm body
-                         pure (x', expr)
-                    seqTypeT <- translateTerm seqType
-                    defaultValueT <- defaultTermForType resultType
-                    let iter =
-                          Coq.App (Coq.Var "iter")
-                          [ len
-                          , Coq.Lambda [Coq.Binder x' (Just seqTypeT)] expr
-                          , defaultValueT
-                          ]
-                    case rest of
-                      [] -> return iter
-                      _  -> Coq.App iter <$> mapM translateTerm rest
-              _ -> badTerm
-            -- NOTE: there is currently one instance of `fix` that will trigger
-            -- `errorTermM`.  It is used in `Cryptol.cry` when translating
-            -- `iterate`, which generates an infinite stream of nested
-            -- applications of a given function.
+        -- Refuse to translate any recursive value defined using Prelude.fix
+        "Prelude.fix" -> badTerm
 
-            (asPiList -> (pis, afterPis)) ->
-              -- NOTE: this will output some code, but it is likely that Coq
-              -- will reject it for not being structurally recursive.
-              case lambda of
-              (asLambdaList -> ((recFn, _) : binders, body)) -> do
-                let (_binderPis, otherPis) = splitAt (length binders) pis
-                (recFn', bindersT, typeT, bodyT) <- withLocalTranslationState $ do
-                  -- this is very ugly...
-                  recFn' <- freshenAndBindName recFn
-                  bindersT <- mapM
-                    (\ (b, bType) -> do
-                      bTypeT <- translateTerm bType
-                      b' <- freshenAndBindName b
-                      return $ Coq.Binder b' (Just bTypeT)
-                    )
-                    binders
-                  typeT <- translatePi otherPis afterPis
-                  bodyT <- translateTerm body
-                  return (recFn', bindersT, typeT, bodyT)
-                let fix = Coq.Fix recFn' bindersT typeT bodyT
-                case rest of
-                  [] -> return fix
-                  _  -> errorTermM "THAT" -- Coq.App fix <$> mapM (go env) rest
-              _ -> errorTermM "call to Prelude.fix without lambda"
-
-        _ ->
-          translateIdentWithArgs i args
+        _ -> translateIdentWithArgs i args
       _ -> Coq.App <$> translateTerm f <*> traverse translateTerm args
 
     LocalVar n

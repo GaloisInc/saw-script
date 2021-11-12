@@ -221,6 +221,17 @@ heapster_assume_fun_rename env exchange_malloc_sym "exchange_malloc"
               \ ret:memblock(W,0,len,emptysh)"
   "\\ (len:Vec 64 Bool) -> returnM #() ()";
 
+// llvm.uadd.with.overflow.i64
+heapster_assume_fun env "llvm.uadd.with.overflow.i64"
+  "(). arg0:int64<>, arg1:int64<> -o ret:struct(int64<>,int1<>)"
+  "\\ (x y:Vec 64 Bool) -> \
+    \ returnM (Vec 64 Bool * Vec 1 Bool) (bvAdd 64 x y, single Bool (bvCarry 64 x y))";
+
+// llvm.expect.i1
+heapster_assume_fun env "llvm.expect.i1"
+  "().arg0:int1<>, arg1:int1<> -o ret:int1<>" "\\ (x y:Vec 1 Bool) -> returnM (Vec 1 Bool) x";
+
+
 // memcpy
 heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
   "(rw:rwmodality, l1:lifetime, l2:lifetime, sh:llvmshape 64, \
@@ -233,6 +244,9 @@ heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
 // <str as alloc::string::ToString>::to_string
 to_string_str <- heapster_find_symbol env
     "$LT$str$u20$as$u20$alloc..string..ToString$GT$9to_string";
+heapster_assume_fun_rename_prim env to_string_str "to_string_str"
+  "<'a> fn (&'a str) -> String";
+
 // NOTE: this is the more incorrect version, with no lifetime argument and no shapes
 //heapster_assume_fun_rename env to_string_str "to_string_str"
 //  "(len:bv 64). arg0:memblock(W,0,24,emptysh),
@@ -247,16 +261,16 @@ to_string_str <- heapster_find_symbol env
 //    \           BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #()) len (str, len, ()))";
 
 // NOTE: this is the incorrect version, with no lifetime argument
-heapster_assume_fun_rename env to_string_str "to_string_str"
-  "(len:bv 64). arg0:memblock(W,0,24,emptysh), \
-              \ arg1:array(R,0,<len,*1,fieldsh(8,int8<>)), \
-              \ arg2:eq(llvmword(len)) -o \
-              \ arg0:memblock(W,0,24,String<>)"
-  "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len (Vec 8 Bool)) -> \
-    \ returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> \
-    \           BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #())) \
-    \         (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> \
-    \           BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #()) len (str, len, ()))";
+// heapster_assume_fun_rename env to_string_str "to_string_str"
+//   "(len:bv 64). arg0:memblock(W,0,24,emptysh), \
+//               \ arg1:array(R,0,<len,*1,fieldsh(8,int8<>)), \
+//               \ arg2:eq(llvmword(len)) -o \
+//               \ arg0:memblock(W,0,24,String<>)"
+//   "\\ (len:Vec 64 Bool) (_:#()) (str:BVVec 64 len (Vec 8 Bool)) -> \
+//     \ returnM (Sigma (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> \
+//     \           BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #())) \
+//     \         (exists (Vec 64 Bool) (\\ (len':Vec 64 Bool) -> \
+//     \           BVVec 64 len' (Vec 8 Bool) * Vec 64 Bool * #()) len (str, len, ()))";
 
 // FIXME: this is the correct version, with a lifetime argument
 //heapster_assume_fun_rename env to_string_str "to_string_str"
@@ -288,6 +302,20 @@ heapster_assume_fun_rename_prim env hashmap_u64_u64_insert_sym "hashmap_u64_u64_
 //    \                                 (Cons (Vec 64 Bool * Vec 64 Bool) (k,v) h, ())), \
 //    \          Left #() (Vec 64 Bool) (), ())";
 
+// String::deref
+string_deref <- heapster_find_trait_method_symbol env
+  "core::ops::deref::Deref::deref<String>";
+//heapster_assume_fun_rename_prim env string_deref "string_deref"
+//  "<'a> fn (&'a String) -> &'a str";
+
+// String::fmt
+string_fmt <- heapster_find_trait_method_symbol env
+    "core::fmt::Display::fmt<String>";
+heapster_assume_fun_rename_prim env string_fmt "String_fmt"
+    "<'a, 'b> fn(&'a String, f: &'b mut fmt::Formatter) -> fmt::Result";
+//heapster_typecheck_fun_rename env string_fmt "String_fmt"
+//    "<'a, 'b> fn(&'a String, f: &'b mut fmt::Formatter) -> fmt::Result";
+
 /*
 String__fmt_sym <- heapster_find_trait_method_symbol env "core::fmt::Display::fmt<String>";
 // heapster_assume_fun_rename env String__fmt_sym "String__fmt"
@@ -304,6 +332,35 @@ heapster_assume_fun_rename_prim env String__fmt_sym "String__fmt"
   "<'a, 'b> fn(&'a String, f: &'b mut fmt::Formatter) -> fmt::Result";
 */
 
+// core::fmt::Display::fmt<u64>
+// FIXME: why does this not match the normal symbol pattern for traits?
+u64_fmt <- heapster_find_symbol env
+  "core3fmt3num3imp52_$LT$impl$u20$core..fmt..Display";
+heapster_assume_fun_rename_prim env u64_fmt "u64_fmt"
+    "<'a, 'b> fn(&'a u64, f: &'b mut fmt::Formatter) -> fmt::Result";
+
+
+// A "dummy" type for an arbitrary 64-bit LLVM value with no permissions
+heapster_define_llvmshape env "Any" 64 "" "fieldsh(true)";
+
+// ArgumentV1::new
+ArgumentV1_new_syms <- heapster_find_symbols env "10ArgumentV13new";
+for ArgumentV1_new_syms (\ sym -> heapster_assume_fun_rename_prim env sym sym
+                                    "<> fn (x:Any, f:Any) -> fmt::ArgumentV1");
+//ArgumentV1_new <- heapster_find_symbol env "10ArgumentV13new";
+//heapster_assume_fun_rename_prim env ArgumentV1_new "ArgumentV1_new"
+//  "<'a,'b,T> fn (x: &'b T, f: fn(&T, &mut fmt::Formatter) -> fmt::Result) \
+//              \ -> fmt::ArgumentV1<'b>";
+//ArgumentV1_new_String <- heapster_find_symbol env
+//  "_ZN4core3fmt10ArgumentV13new17hdf7e5958686d74c0E";
+//heapster_assume_fun_rename_prim env ArgumentV1_new_String "ArgumentV1_new_String"
+//  "<'a,'b> fn (x: &'b String, \
+//             \ f: for<'c,'d> fn (&'c String, &'d mut fmt::Formatter) -> fmt::Result) \
+//           \ -> fmt::ArgumentV1<'b>";
+//heapster_assume_fun_rename_prim env ArgumentV1_new_String "ArgumentV1_new_String"
+//  "<'a,'b> fn (x: &'b String, f: Box<Void>) -> fmt::ArgumentV1<'b>";
+//heapster_assume_fun_rename_prim env ArgumentV1_new_String "ArgumentV1_new_String"
+//  "<'a,'b> fn (x: &'b String, f: Box<Void>) -> fmt::ArgumentV1";
 
 // ArgumentV1::new
 //ArgumentV1_new <- heapster_find_symbol env "10ArgumentV13new";
@@ -348,6 +405,16 @@ heapster_typecheck_fun_rename env bool_and_sym "bool_and" "<> fn (bool,bool) -> 
 mk_two_values_sym <- heapster_find_symbol env "13mk_two_values";
 heapster_typecheck_fun_rename env mk_two_values_sym "mk_two_values" "<> fn (u32,u32) -> TwoValues";
 */
+
+// ref_sum
+ref_sum_sym <- heapster_find_symbol env "7ref_sum";
+heapster_typecheck_fun_rename env ref_sum_sym "ref_sum"
+  "<'a,'b> fn (x:&'a u64, y:&'a u64) -> u64";
+
+// double_dup_ref
+double_dup_ref_sym <- heapster_find_symbol env "14double_dup_ref";
+heapster_typecheck_fun_rename env double_dup_ref_sym "double_dup_ref"
+  "<'a,'b> fn (x:&'a u64) -> u64";
 
 // test_result
 test_result_sym <- heapster_find_symbol env "11test_result";
@@ -423,22 +490,14 @@ list64_is_empty_sym <- heapster_find_symbol env "15list64_is_empty";
 heapster_typecheck_fun_rename env list_is_empty_sym "list64_is_empty"
   "<'a> fn (l: &'a List64<>) -> bool";
 
+hash_map_insert_gt_to_le_sym <- heapster_find_symbol env "hash_map_insert_gt_to_le";
+heapster_typecheck_fun_rename
+  env hash_map_insert_gt_to_le_sym
+  "hash_map_insert_gt_to_le"
+  "<'a> fn (m: &'a mut HashMap<u64,u64>, x:u64, y:u64) -> ()";
+
 // StrStruct::new
 str_struct_new <- heapster_find_symbol env "9StrStruct3new";
-
-// FIXME: this is the simplified version, that returns ptr permissions
-//heapster_typecheck_fun_rename env str_struct_new "str_struct_new"
-//  "(len:bv 64). arg0:memblock(W,0,24,emptysh), \
-//              \ arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), \
-//              \ arg2:eq(llvmword(len)) -o \
-//              \ arg0:exists len':bv 64. ptr((W,0) |-> array(0,<len',*1,[(R,0,8) |-> int8<>])) * \
-//              \\     ptr((W,8) |-> int64<>) * ptr((W,16) |-> eq(llvmword(len')))";
-
-// FIXME: this is the correct version, with the String shape
-//heapster_typecheck_fun_rename env str_struct_new "str_struct_new"
-//    "(len:bv 64).arg0:memblock(W,0,24,emptysh), \
-//               \ arg1:array(0,<len,*1,[(R,0,8) |-> int8<>]), \
-//               \ arg2:eq(llvmword(len)) -o arg0:memblock(W,0,24,String<>)";
 heapster_typecheck_fun_rename env str_struct_new "str_struct_new"
   "<'a> fn (name:&'a str) -> StrStruct<>";
 

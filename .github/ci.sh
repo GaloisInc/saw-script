@@ -58,9 +58,9 @@ build() {
   cabal v2-configure -j --enable-tests
   git status --porcelain
   if $IS_WIN; then
-    pkgs=(saw)
+    pkgs=(saw crux-mir-comp)
   else
-    pkgs=(saw saw-remote-api)
+    pkgs=(saw crux-mir-comp saw-remote-api)
   fi
   tee -a cabal.project.local > /dev/null < cabal.project.ci
   if ! retry cabal v2-build "$@" "${pkgs[@]}"; then

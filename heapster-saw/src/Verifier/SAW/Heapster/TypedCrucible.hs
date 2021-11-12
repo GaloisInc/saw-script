@@ -2285,10 +2285,11 @@ pcmRunImplM vars fail_doc retF impl_m =
   gets stCurPerms >>>= \perms_in ->
   gets stPPInfo   >>>= \ppInfo ->
   gets stVarTypes >>>= \varTypes ->
+  (stEndianness <$> top_get) >>>= \endianness ->
   (stDebugLevel <$> top_get) >>>= \dlevel ->
   liftPermCheckM $ lift $
   fmap (AnnotPermImpl (renderDoc (err_prefix <> line <> fail_doc))) $
-  runImplM vars perms_in env ppInfo "" dlevel varTypes impl_m
+  runImplM vars perms_in env ppInfo "" dlevel varTypes endianness impl_m
   (return . retF . fst)
 
 -- | Call 'runImplImplM' in the 'PermCheckM' monad
@@ -2304,10 +2305,11 @@ pcmRunImplImplM vars fail_doc impl_m =
   gets stCurPerms >>>= \perms_in ->
   gets stPPInfo   >>>= \ppInfo ->
   gets stVarTypes >>>= \varTypes ->
+  (stEndianness <$> top_get) >>>= \endianness ->
   (stDebugLevel <$> top_get) >>>= \dlevel ->
   liftPermCheckM $ lift $
   fmap (AnnotPermImpl (renderDoc (err_prefix <> line <> fail_doc))) $
-  runImplImplM vars perms_in env ppInfo "" dlevel varTypes impl_m
+  runImplImplM vars perms_in env ppInfo "" dlevel varTypes endianness impl_m
 
 -- | Embed an implication computation inside a permission-checking computation,
 -- also supplying an overall error message for failures
@@ -2324,9 +2326,11 @@ pcmEmbedImplWithErrM f_impl vars fail_doc m =
   gets stCurPerms >>>= \perms_in ->
   gets stPPInfo   >>>= \ppInfo ->
   gets stVarTypes >>>= \varTypes ->
+  (stEndianness <$> top_get) >>>= \endianness ->
   (stDebugLevel <$> top_get) >>>= \dlevel ->
 
-  addReader (gcaptureCC (runImplM vars perms_in env ppInfo "" dlevel varTypes m))
+  addReader (gcaptureCC
+             (runImplM vars perms_in env ppInfo "" dlevel varTypes endianness m))
     >>>= \(a, implSt) ->
 
   gmodify ((\st -> st { stPPInfo = implSt ^. implStatePPInfo,
@@ -3595,6 +3599,23 @@ tcEmitLLVMStmt _arch _ctx _loc stmt =
 -- * Permission Checking for Jump Targets and Termination Statements
 ----------------------------------------------------------------------
 
+-- | Cast the primary permission for @x@ using any equality permissions on
+-- variables *not* in the supplied list of determined variables. The idea here
+-- is that we are trying to simplify out and remove un-determined variables.
+castUnDetVarsForVar :: NuMatchingAny1 r => NameSet CrucibleType -> ExprVar a ->
+                       ImplM vars s r RNil RNil ()
+castUnDetVarsForVar det_vars x =
+  (view varPermMap <$> getPerms) >>>= \var_perm_map ->
+  getPerm x >>>= \p ->
+  let nondet_perms =
+        NameMap.fromList $
+        filter (\(NameMap.NameAndElem y _) -> not $ NameSet.member y det_vars) $
+        NameMap.assocs var_perm_map in
+  let eqp = someEqProofFromSubst nondet_perms p in
+  implPushM x p >>>
+  implCastPermM x eqp >>>
+  implPopM x (someEqProofRHS eqp)
+
 -- | Simplify and drop permissions @p@ on variable @x@ so they only depend on
 -- the determined variables given in the supplied list
 simplify1PermForDetVars :: NuMatchingAny1 r =>
@@ -3642,6 +3663,13 @@ simplify1PermForDetVars det_vars l (ValPerm_LOwned ls _ _)
 simplify1PermForDetVars det_vars _ p
   | nameSetIsSubsetOf (freeVars p) det_vars = pure ()
 
+-- If p is an equality permission to a word with undetermined variables,
+-- existentially quantify over the word
+simplify1PermForDetVars _ x p@(ValPerm_Eq (PExpr_LLVMWord e)) =
+  let mb_p = nu $ \z -> ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var z in
+  implPushM x p >>> introExistsM x e mb_p >>>
+  implPopM x (ValPerm_Exists mb_p)
+
 -- Otherwise, drop p, because it is not determined
 simplify1PermForDetVars _det_vars x p =
   implPushM x p >>> implDropM x p
@@ -3655,6 +3683,7 @@ simplifyPermsForDetVars det_vars_list =
   let det_vars = NameSet.fromList det_vars_list in
   (permSetVars <$> getPerms) >>>= \vars ->
   mapM_ (\(SomeName x) ->
+          castUnDetVarsForVar det_vars x >>>
           getPerm x >>>= simplify1PermForDetVars det_vars x) vars
 
 

@@ -37,7 +37,6 @@ import GHC.Stack (HasCallStack)
 
 import qualified What4.Expr.Builder as W4
 import qualified What4.Interface as W4
-import qualified What4.LabeledPred as W4
 import qualified What4.Partial as W4
 import What4.ProgramLoc
 
@@ -55,9 +54,6 @@ import qualified Verifier.SAW.TypedTerm as SAW
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Override as MS
 
-import qualified Crux.Model as Crux
-import Crux.Types (HasModel(..))
-
 import Mir.Generator
 import Mir.Intrinsics hiding (MethodSpec)
 import qualified Mir.Mir as M
@@ -68,7 +64,6 @@ import Mir.Compositional.MethodSpec
 
 
 type MirOverrideMatcher sym a = forall p rorw rtp args ret.
-    HasModel p =>
     MS.OverrideMatcher' sym MIR rorw (OverrideSim (p sym) sym MIR rtp args ret) a
 
 data MethodSpec = MethodSpec 
@@ -86,7 +81,7 @@ instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) => MethodSpecImpl sy
 -- | Pretty-print a MethodSpec.  This wraps `ppMethodSpec` and returns the
 -- result as a Rust string.
 printSpec ::
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     MethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym (MirSlice (BVType 8)))
 printSpec ms = do
@@ -109,7 +104,7 @@ printSpec ms = do
 -- the current test, calls to the subject function will be replaced with
 -- `runSpec`.
 enable ::
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     MethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret ()
 enable ms = do
@@ -129,7 +124,7 @@ enable ms = do
 -- | "Run" a MethodSpec: assert its preconditions, create fresh symbolic
 -- variables for its outputs, and assert its postconditions.
 runSpec :: forall sym p t st fs args ret rtp.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     CollectionState -> FnHandle args ret -> MIRMethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym ret)
 runSpec cs mh ms = do
@@ -172,7 +167,8 @@ runSpec cs mh ms = do
         let nameSymbol = W4.safeSymbol nameStr
         Some btpr <- liftIO $ termToType sym sc (SAW.ecType ec)
         expr <- liftIO $ W4.freshConstant sym nameSymbol btpr
-        stateContext . cruciblePersonality . personalityModel %= Crux.addVar loc nameStr btpr expr
+        let ev = CreateVariableEvent loc nameStr btpr expr
+        liftIO $ addAssumptions sym (singleEvent ev)
         term <- liftIO $ eval expr
         return (SAW.ecVarIndex ec, term)
 
@@ -273,8 +269,7 @@ runSpec cs mh ms = do
         liftIO $ addAssertion sym lp
 
     forM_ (os ^. MS.osAssumes) $ \p ->
-        liftIO $ addAssumption sym $ W4.LabeledPred p $
-            AssumptionReason loc "methodspec postcondition"
+        liftIO $ addAssumption sym (GenericAssumption loc "methodspec postcondition" p)
 
     let preAllocMap = os ^. MS.setupValueSub
 
