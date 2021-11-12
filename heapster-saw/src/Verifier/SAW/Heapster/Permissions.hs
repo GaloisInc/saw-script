@@ -30,9 +30,9 @@ module Verifier.SAW.Heapster.Permissions where
 import Prelude hiding (pred)
 
 import Data.Char (isDigit)
+import Data.Word
 import Data.Maybe
 import Data.Either
-import Data.Foldable (asum)
 import Data.List hiding (sort)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NonEmpty
@@ -69,12 +69,14 @@ import Data.Parameterized.Context (Assignment, AssignView(..),
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.BoolRepr
 import Data.Parameterized.NatRepr
+import Data.Parameterized.Pair
 
 import Prettyprinter as PP
 import Prettyprinter.Render.String (renderString)
 
 import Lang.Crucible.Types
 import Lang.Crucible.FunctionHandle
+import Lang.Crucible.LLVM.DataLayout
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.CFG.Core
@@ -90,6 +92,13 @@ import Debug.Trace
 ----------------------------------------------------------------------
 -- * Utility Functions and Definitions
 ----------------------------------------------------------------------
+
+-- | FIXME: put this somewhere more appropriate
+subNat' :: NatRepr m -> NatRepr n -> Maybe (NatRepr (m-n))
+subNat' m n
+  | Left leq <- decideLeq n m =
+    Just $ withLeqProof leq $ subNat m n
+subNat' _ _ = Nothing
 
 -- | Delete the nth element of a list
 deleteNth :: Int -> [a] -> [a]
@@ -274,11 +283,11 @@ ppEncList flag ds =
   (if flag then parens else brackets) $ ppCommaSep ds
 
 instance (PermPretty a, PermPretty b) => PermPretty (a,b) where
-  permPrettyM (a,b) = tupled <$> sequence [permPrettyM a, permPrettyM b]
+  permPrettyM (a,b) = ppEncList True <$> sequence [permPrettyM a, permPrettyM b]
 
 instance (PermPretty a, PermPretty b, PermPretty c) => PermPretty (a,b,c) where
   permPrettyM (a,b,c) =
-    tupled <$> sequence [permPrettyM a, permPrettyM b, permPrettyM c]
+    ppEncList True <$> sequence [permPrettyM a, permPrettyM b, permPrettyM c]
 
 instance PermPretty a => PermPretty [a] where
   permPrettyM as = ppEncList False <$> mapM permPrettyM as
@@ -902,7 +911,7 @@ instance (1 <= w, KnownNat w) => PermPretty (LLVMFieldShape w) where
       parens <$> permPrettyM p
   permPrettyM (LLVMFieldShape p) =
     do p_pp <- permPrettyM p
-       return $ tupled [pretty (intValue $ exprLLVMTypeWidth p), p_pp]
+       return $ ppEncList True [pretty (intValue $ exprLLVMTypeWidth p), p_pp]
 
 prettyPermListM :: PermExpr PermListType -> PermPPM (Doc ann)
 prettyPermListM PExpr_PermListNil =
@@ -1274,6 +1283,52 @@ bvIntOfSize _ = bvInt
 -- | Build a bitvector expression from a Haskell bitvector
 bvBV :: (1 <= w, KnownNat w) => BV w -> PermExpr (BVType w)
 bvBV i = PExpr_BV [] i
+
+-- | Helper datatype for 'bvFromBytes'
+data BVExpr w = (1 <= w, KnownNat w) => BVExpr (PermExpr (BVType w))
+
+-- | Build a bitvector expression from a list of bytes, depending on the
+-- endianness
+bvFromBytes :: EndianForm -> [Word8] -> Some BVExpr
+bvFromBytes endianness bytes =
+  let bv_fun =
+        case endianness of
+          BigEndian -> BV.bytesBE
+          LittleEndian -> BV.bytesLE in
+  case bv_fun bytes of
+    Pair sz bv
+      | Left leq_proof <- decideLeq (knownNat @1) sz ->
+        withKnownNat sz $ withLeqProof leq_proof $ Some $ BVExpr $ bvBV bv
+    Pair _ _ -> error "bvFromBytes: zero-sized bitvector"
+
+-- | Concatenate two bitvectors, using the current endianness to determine how
+-- they combine
+bvConcat :: KnownNat sz1 => KnownNat sz2 => EndianForm ->
+            BV.BV sz1 -> BV.BV sz2 -> BV.BV (sz1+sz2)
+bvConcat BigEndian bv1 bv2 = BV.concat knownRepr knownRepr bv1 bv2
+bvConcat LittleEndian bv1 bv2
+  | Refl <- plusComm bv1 bv2 =
+    BV.concat knownRepr knownRepr bv2 bv1
+
+-- | Split a bitvector in two, if this is possible, using the current endianness
+-- to determine which is the first versus second part of the split
+bvSplit :: KnownNat sz1 => KnownNat sz2 => EndianForm ->
+           NatRepr sz1 -> BV.BV sz2 -> Maybe (BV.BV sz1, BV.BV (sz2 - sz1))
+bvSplit BigEndian sz1 bv2
+  | n0 <- knownNat @0
+  , sz2 <- natRepr bv2
+  , Left LeqProof <- decideLeq (addNat n0 sz1) sz2
+  , Left LeqProof <- decideLeq (addNat sz1 (subNat sz2 sz1)) sz2 =
+    Just (BV.select n0 sz1 bv2, BV.select sz1 (subNat sz2 sz1) bv2)
+bvSplit LittleEndian sz1 bv2
+  | n0 <- knownNat @0
+  , sz2 <- natRepr bv2
+  , Left LeqProof <- decideLeq sz1 sz2
+  , Left LeqProof <- decideLeq (addNat (subNat sz2 sz1) sz1) sz2
+  , Left LeqProof <- decideLeq (addNat n0 (subNat sz2 sz1)) sz2 =
+    Just (BV.select (subNat sz2 sz1) sz1 bv2,
+          BV.select n0 (subNat sz2 sz1) bv2)
+bvSplit _ _ _ = Nothing
 
 -- | Build a bitvector expression consisting of a single single 'BVFactor',
 -- i.e. a variable multiplied by some constant
@@ -1712,6 +1767,10 @@ data LLVMFieldPerm w sz =
 llvmFieldSize :: KnownNat sz => LLVMFieldPerm w sz -> NatRepr sz
 llvmFieldSize _ = knownNat
 
+-- | Get the size of an 'LLVMFieldPerm' in bytes
+llvmFieldSizeBytes :: KnownNat sz => LLVMFieldPerm w sz -> Integer
+llvmFieldSizeBytes fp = intValue (llvmFieldSize fp) `div` 8
+
 -- | Helper to get a 'NatRepr' for the size of an 'LLVMFieldPerm' in a binding
 mbLLVMFieldSize :: KnownNat sz => Mb ctx (LLVMFieldPerm w sz) -> NatRepr sz
 mbLLVMFieldSize _ = knownNat
@@ -1728,6 +1787,12 @@ mbLLVMFieldOffset = mbMapCl $(mkClosed [| llvmFieldOffset |])
 mbLLVMFieldContents :: Mb ctx (LLVMFieldPerm w sz) ->
                        Mb ctx (ValuePerm (LLVMPointerType sz))
 mbLLVMFieldContents = mbMapCl $(mkClosed [| llvmFieldContents |])
+
+-- | Get the range of bytes contained in a field permisison
+llvmFieldRange :: (1 <= w, KnownNat w, KnownNat sz) => LLVMFieldPerm w sz ->
+                  BVRange w
+llvmFieldRange fp =
+  BVRange (llvmFieldOffset fp) (bvInt $ llvmFieldSizeBytes fp)
 
 
 -- | Helper type to represent byte offsets
@@ -3313,6 +3378,41 @@ llvmReadExRWExLPerm (off :: PermExpr (BVType w)) =
                   llvmFieldOffset = off,
                   llvmFieldContents = ValPerm_True }
 
+-- | Add a bitvector expression to the offset of a field permission
+llvmFieldAddOffset :: (1 <= w, KnownNat w) => LLVMFieldPerm w sz ->
+                      PermExpr (BVType w) -> LLVMFieldPerm w sz
+llvmFieldAddOffset fp off =
+  fp { llvmFieldOffset = bvAdd (llvmFieldOffset fp) off }
+
+-- | Add an integer to the offset of a field permission
+llvmFieldAddOffsetInt :: (1 <= w, KnownNat w) => LLVMFieldPerm w sz ->
+                         Integer -> LLVMFieldPerm w sz
+llvmFieldAddOffsetInt fp off = llvmFieldAddOffset fp (bvInt off)
+
+-- | Set the contents of a field permission, possibly changing its size
+llvmFieldSetContents :: LLVMFieldPerm w sz1 ->
+                        ValuePerm (LLVMPointerType sz2) -> LLVMFieldPerm w sz2
+llvmFieldSetContents (LLVMFieldPerm {..}) p =
+  LLVMFieldPerm { llvmFieldContents = p, .. }
+
+-- | Set the contents of a field permission to an @eq(llvmword(bv))@ permission
+llvmFieldSetEqWord :: (1 <= sz2, KnownNat sz2) => LLVMFieldPerm w sz1 ->
+                      BV.BV sz2 -> LLVMFieldPerm w sz2
+llvmFieldSetEqWord fp bv =
+  llvmFieldSetContents fp (ValPerm_Eq $ PExpr_LLVMWord $ bvBV bv)
+
+-- | Set the contents of a field permission to an @eq(y)@ permission
+llvmFieldSetEqVar :: (1 <= sz2, KnownNat sz2) => LLVMFieldPerm w sz1 ->
+                     ExprVar (LLVMPointerType sz2) -> LLVMFieldPerm w sz2
+llvmFieldSetEqVar fp y =
+  llvmFieldSetContents fp (ValPerm_Eq $ PExpr_Var y)
+
+-- | Set the contents of a field permission to an @true@ permission of a
+-- specific size
+llvmFieldSetTrue :: (1 <= sz2, KnownNat sz2) => LLVMFieldPerm w sz1 ->
+                    f sz2 -> LLVMFieldPerm w sz2
+llvmFieldSetTrue fp _ = llvmFieldSetContents fp ValPerm_True
+
 -- | Convert a field permission to a block permission
 llvmFieldPermToBlock :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
                         LLVMFieldPerm w sz -> LLVMBlockPerm w
@@ -3385,7 +3485,7 @@ llvmBlockPermToArray bp
     { llvmArrayRW = llvmBlockRW bp,
       llvmArrayLifetime = llvmBlockLifetime bp,
       llvmArrayOffset = llvmBlockOffset bp,
-      llvmArrayLen = bvMult (toInteger stride) len,
+      llvmArrayLen = len,
       llvmArrayStride = stride,
       llvmArrayCellShape = sh,
       llvmArrayBorrows = [] }
@@ -4183,9 +4283,8 @@ llvmMakeSubArray _ _ _ = error "llvmMakeSubArray"
 -- | Test if an atomic LLVM permission potentially allows a read or write of a
 -- given offset. If so, return a list of the propositions required for the read
 -- to be allowed, and whether the propositions definitely hold (as in
--- 'bvPropHolds') or only could hold (as in 'bvPropCouldHold'). For LLVM field
--- permissions, the offset of the field must statically match the supplied
--- offset, so the list of propositions will be empty, while for arrays, the
+-- 'bvPropHolds') or only could hold (as in 'bvPropCouldHold'). For fields and
+-- blocks, the offset must simply be in their range, while for arrays, the
 -- offset must only /not/ match any outstanding borrows, and the propositions
 -- returned codify that as well as the requirement that the offset is in the
 -- array range.
@@ -4193,7 +4292,9 @@ llvmPermContainsOffset :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
                           AtomicPerm (LLVMPointerType w) ->
                           Maybe ([BVProp w], Bool)
 llvmPermContainsOffset off (Perm_LLVMField fp)
-  | bvEq (llvmFieldOffset fp) off = Just ([], True)
+  | prop <- bvPropInRange off (llvmFieldRange fp)
+  , bvPropCouldHold prop =
+    Just ([prop], bvPropHolds prop)
 llvmPermContainsOffset off (Perm_LLVMArray ap)
   | Just ix <- matchLLVMArrayIndex ap off
   , props <- llvmArrayIndexInArray ap ix

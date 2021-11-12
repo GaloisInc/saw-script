@@ -2376,6 +2376,30 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                             ptrans'])
     m
 
+  [nuMP| SImpl_SplitLLVMWordField x _ _ _ _ |] ->
+    do ttrans <- translateSimplImplOut mb_simpl
+       withPermStackM (:>: translateVar x)
+         (\(pctx :>: _) -> RL.append pctx $ typeTransF ttrans [])
+         m
+
+  [nuMP| SImpl_ConcatLLVMWordFields _ _ _ _ |] ->
+    do ttrans <- translateSimplImplOut mb_simpl
+       withPermStackM RL.tail
+         (\(pctx :>: _ :>: _) -> RL.append pctx $ typeTransF ttrans [])
+         m
+
+  [nuMP| SImpl_SplitLLVMTrueField x _ _ _ |] ->
+    do ttrans <- translateSimplImplOut mb_simpl
+       withPermStackM (:>: translateVar x)
+         (\(pctx :>: _) -> RL.append pctx $ typeTransF ttrans [])
+         m
+
+  [nuMP| SImpl_ConcatLLVMTrueFields _ _ _ |] ->
+    do ttrans <- translateSimplImplOut mb_simpl
+       withPermStackM RL.tail
+         (\(pctx :>: _ :>: _) -> RL.append pctx $ typeTransF ttrans [])
+         m
+
   [nuMP| SImpl_DemoteLLVMArrayRW _ _ |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
@@ -2470,34 +2494,24 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_LLVMArrayAppend _ mb_ap1 mb_ap2 |] ->
-    withPermStackM RL.tail
-    (\(pctx :>: ptrans_array1 :>: ptrans_array2) ->
-       let w = natVal2 mb_ap1
-           array_trans1 =
-             unPTransLLVMArray
-             "translateSimplImpl: SImpl_LLVMArrayAppend" ptrans_array1
-           array_trans2 =
-             unPTransLLVMArray
-             "translateSimplImpl: SImpl_LLVMArrayAppend" ptrans_array2
-           len1 = llvmArrayTransLen array_trans1
-           len2 = llvmArrayTransLen array_trans2
-           mb_ap_out =
-             mbMap2 (\ap1 ap2 ->
-                      llvmArrayAddArrayBorrows
-                      (ap1 { llvmArrayLen =
-                             bvAdd (llvmArrayLen ap1) (llvmArrayLen ap2) })
-                      ap2) mb_ap1 mb_ap2
-           array_trans_out =
-             LLVMArrayPermTrans
-             { llvmArrayTransPerm = mb_ap_out
-             , llvmArrayTransLen = bvAddOpenTerm w len1 len2
-             , llvmArrayTransHeadCell = llvmArrayTransHeadCell array_trans1
-             , llvmArrayTransTerm =
-               applyOpenTermMulti (globalOpenTerm "Prelude.appendBVVec")
-               [natOpenTerm w, len1, len2, llvmArrayTransTerm array_trans1,
-                llvmArrayTransTerm array_trans2] } in
-       pctx :>: PTrans_Conj [APTrans_LLVMArray array_trans_out])
-    m
+    do (w_term, len1_tm, elem_tp, _) <- translateLLVMArrayPerm mb_ap1
+       (_, len2_tm, _, _) <- translateLLVMArrayPerm mb_ap2
+       tp_trans <- translateSimplImplOutHead mb_simpl
+       len3_tm <- translate1 $ fmap (\(ValPerm_LLVMArray ap) ->
+                                      llvmArrayLen ap) $
+         fmap distPermsHeadPerm $ mbSimplImplOut mb_simpl
+       (_ :>: ptrans1 :>: ptrans2) <- itiPermStack <$> ask
+       let arr_out_comp_tm =
+             applyOpenTermMulti
+             (globalOpenTerm "Prelude.appendCastBVVecM")
+             [w_term, len1_tm, len2_tm, len3_tm, elem_tp,
+              transTerm1 ptrans1, transTerm1 ptrans2]
+       applyMultiTransM (return $ globalOpenTerm "Prelude.bindM")
+         [return (typeTransType1 tp_trans), returnTypeM,
+          return arr_out_comp_tm,
+          lambdaTransM "appended_array" tp_trans $ \ptrans_arr' ->
+           withPermStackM RL.tail (\(pctx :>: _ :>: _) ->
+                                    pctx :>: ptrans_arr') m]
 
 
   [nuMP| SImpl_LLVMArrayRearrange _ _ _ |] ->
@@ -2529,12 +2543,19 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            [nuP| DistPermsCons _ _ (ValPerm_LLVMArray mb_ap) |] -> return mb_ap
            _ -> error ("translateSimplImpl: SImpl_LLVMArrayFromBlock: "
                        ++ "unexpected form of output permission")
-       (w_term, _, elem_tp, ap_tp_trans) <- translateLLVMArrayPerm mb_ap
+       (w_tm, len_tm, elem_tp, ap_tp_trans) <- translateLLVMArrayPerm mb_ap
        withPermStackM id
          (\(pctx :>: ptrans_cell) ->
            let arr_term =
+                 -- FIXME: this generates a BVVec of length (bvNat n 1), whereas
+                 -- what we need is a BVVec of length [0,0,...,1]; the two are
+                 -- provably equal but not convertible in SAW core
+                 {-
                  applyOpenTermMulti (globalOpenTerm "Prelude.singletonBVVec")
-                 [w_term, elem_tp, transTerm1 ptrans_cell] in
+                 [w_tm, elem_tp, transTerm1 ptrans_cell]
+                 -}
+                 applyOpenTermMulti (globalOpenTerm "Prelude.repeatBVVec")
+                 [w_tm, len_tm, elem_tp, transTerm1 ptrans_cell] in
            pctx :>:
            PTrans_Conj [APTrans_LLVMArray $ typeTransF ap_tp_trans [arr_term]])
          m

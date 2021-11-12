@@ -72,7 +72,7 @@ data RunCruxMode = RcmConcrete | RcmSymbolic | RcmCoverage
   deriving (Show, Eq)
 
 runCrux :: FilePath -> Handle -> RunCruxMode -> IO ()
-runCrux rustFile outHandle mode = do
+runCrux rustFile outHandle mode = Mir.withMirLogging $ do
     -- goalTimeout is bumped from 60 to 180 because scalar.rs symbolic
     -- verification runs close to the timeout, causing flaky results
     -- (especially in CI).
@@ -90,8 +90,8 @@ runCrux rustFile outHandle mode = do
                                         Crux.branchCoverage = (mode == RcmCoverage) } ,
                    Mir.defaultMirOptions { Mir.printResultOnly = (mode == RcmConcrete),
                                            Mir.defaultRlibsDir = "../deps/crucible/crux-mir/rlibs" })
-    let ?outputConfig = Crux.mkOutputConfig False outHandle outHandle $
-                        Just (fst options)
+    let ?outputConfig = Crux.mkOutputConfig (outHandle, False) (outHandle, False)
+            Mir.mirLoggingToSayWhat (Just $ fst options)
     setEnv "CRYPTOLPATH" "."
     _exitCode <- Mir.runTestsWithExtraOverrides overrides options
     return ()

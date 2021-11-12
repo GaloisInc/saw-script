@@ -64,7 +64,7 @@ import Mir.Compositional.Convert
 
 cryptolOverrides ::
     forall sym p t st fs args ret blocks rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     Maybe (SomeOnlineSolver sym) ->
     CollectionState ->
     Text ->
@@ -133,7 +133,7 @@ cryptolOverrides _symOnline cs name cfg
 
 cryptolLoad ::
     forall sym p t st fs rtp a r tp .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     M.Collection ->
     M.FnSig ->
     TypeRepr tp ->
@@ -163,7 +163,7 @@ cryptolLoad col sig (FunctionHandleRepr argsCtx retTpr) modulePathStr nameStr = 
 cryptolLoad _ _ tpr _ _ = fail $ "cryptol::load: bad function type " ++ show tpr
 
 loadString ::
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     RegValue sym (MirSlice (BVType 8)) ->
     String ->
     OverrideSim (p sym) sym MIR rtp a r Text
@@ -174,7 +174,7 @@ loadString str desc = getString str >>= \x -> case x of
 
 cryptolOverride ::
     forall sym p t st fs rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     M.Collection ->
     MirHandle ->
     RegValue sym (MirSlice (BVType 8)) ->
@@ -202,14 +202,14 @@ data LoadedCryptolFunc sym = forall args ret . LoadedCryptolFunc
     { _lcfArgs :: Assignment TypeShape args
     , _lcfRet :: TypeShape ret
     , _lcfRun :: forall p rtp r.
-        HasModel p => OverrideSim (p sym) sym MIR rtp args r (RegValue sym ret)
+        OverrideSim (p sym) sym MIR rtp args r (RegValue sym ret)
     }
 
 -- | Load a Cryptol function, returning an `OverrideSim` action that can be
 -- used to run the function.
 loadCryptolFunc ::
     forall sym p t st fs rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     M.Collection ->
     M.FnSig ->
     Text ->
@@ -259,7 +259,7 @@ loadCryptolFunc col sig modulePath name = do
 
 cryptolRun ::
     forall sym p t st fs rtp r args ret .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     SAW.SharedContext ->
     String ->
     Assignment TypeShape args ->
