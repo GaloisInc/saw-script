@@ -1920,6 +1920,14 @@ mbLLVMBlockShape :: Mb ctx (LLVMBlockPerm w) ->
                     Mb ctx (PermExpr (LLVMShapeType w))
 mbLLVMBlockShape = mbMapCl $(mkClosed [| llvmBlockShape |])
 
+-- | Get the range of offsets represented by an 'LLVMBlockPerm'
+llvmBlockRange :: LLVMBlockPerm w -> BVRange w
+llvmBlockRange bp = BVRange (llvmBlockOffset bp) (llvmBlockLen bp)
+
+-- | Get the range-in-binding of a block permission in binding
+mbLLVMBlockRange :: Mb ctx (LLVMBlockPerm w) -> Mb ctx (BVRange w)
+mbLLVMBlockRange = mbMapCl $(mkClosed [| llvmBlockRange |])
+
 -- | An LLVM shape for a single pointer field of unknown size
 data LLVMFieldShape w =
   forall sz. (1 <= sz, KnownNat sz) =>
@@ -3578,10 +3586,6 @@ llvmAtomicPermLen = fmap llvmBlockLen . llvmAtomicPermToBlock
 -- arrays with borrows do not have a well-defined range.
 llvmAtomicPermRange :: AtomicPerm (LLVMPointerType w) -> Maybe (BVRange w)
 llvmAtomicPermRange p = fmap llvmBlockRange $ llvmAtomicPermToBlock p
-
--- | Get the range of offsets represented by an 'LLVMBlockPerm'
-llvmBlockRange :: LLVMBlockPerm w -> BVRange w
-llvmBlockRange bp = BVRange (llvmBlockOffset bp) (llvmBlockLen bp)
 
 -- | Set the range of an 'LLVMBlock'
 llvmBlockSetRange :: LLVMBlockPerm w -> BVRange w -> LLVMBlockPerm w
