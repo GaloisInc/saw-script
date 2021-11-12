@@ -18,34 +18,34 @@ Theorem Nat_cases2_match_spec a f1 f2 f3 : forall x y,
   Nat_cases2 a f1 f2 f3 x y = Nat_cases2_match a f1 f2 f3 x y.
 Proof.
   induction x; induction y; simpl; congruence.
-Qed.
+Defined.
 
 Theorem minNat_min : forall x y, minNat x y = min x y.
 Proof.
   induction x; induction y; simpl; auto.
-Qed.
+Defined.
 
 Theorem maxNat_max : forall x y, maxNat x y = max x y.
 Proof.
   induction x; induction y; simpl; auto.
-Qed.
+Defined.
 
 Theorem addNat_add : forall x y, addNat x y = x + y.
 Proof.
   induction x; simpl; auto.
-Qed.
+Defined.
 
 Theorem subNat_sub : forall x y, subNat x y = x - y.
 Proof.
   induction x; induction y; simpl; auto.
-Qed.
+Defined.
 
 Theorem mulNat_mul : forall x y, mulNat x y = x * y.
 Proof.
   induction x; simpl; intros; auto.
   rewrite IHx.
   apply addNat_add.
-Qed.
+Defined.
 
 Theorem fold_unfold_IRT As Ds D : forall x, foldIRT As Ds D (unfoldIRT As Ds D x) = x.
 Proof.

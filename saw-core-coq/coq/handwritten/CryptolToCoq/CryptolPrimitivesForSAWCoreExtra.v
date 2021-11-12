@@ -25,19 +25,24 @@ Coercion natToNat : nat >-> Nat.
 Theorem Eq_TCNum a b : a = b -> Eq _ (TCNum a) (TCNum b).
 Proof.
   intros EQ.
-  rewrite EQ.
-  reflexivity.
-Qed.
+  apply f_equal.
+  apply EQ.
+Defined.
 
 Theorem min_nSn n : min n (S n) = n.
 Proof.
   induction n; simpl; auto.
-Qed.
+Defined.
 
 Theorem min_Snn n : min (S n) n = n.
 Proof.
   induction n; simpl; auto.
-Qed.
+Defined.
+
+Theorem min_nn n : min n n = n.
+Proof.
+  induction n; simpl; auto.
+Defined.
 
 Ltac solveUnsafeAssertStep :=
   match goal with
@@ -50,11 +55,12 @@ Ltac solveUnsafeAssertStep :=
   | [ n : Num |- _ ] => destruct n
   | [ |- Eq Num (TCNum _) (TCNum _) ] => apply Eq_TCNum
   | [ |- Eq Num _ _ ] => reflexivity
+  | [ |- min ?n ?n = _ ] => rewrite (min_nn n)
   | [ |- min ?n (S ?n) = _ ] => rewrite (min_nSn n)
   | [ |- min (S ?n) ?n = _ ] => rewrite (min_Snn n)
   end.
 
-Ltac solveUnsafeAssert := repeat (solveUnsafeAssertStep; simpl; try lia); trivial.
+Ltac solveUnsafeAssert := repeat (repeat solveUnsafeAssertStep; simpl; try reflexivity; try lia); trivial.
 
 
 Fixpoint iterNat {a : Type} (n : nat) (f : a -> a) : a -> a :=
