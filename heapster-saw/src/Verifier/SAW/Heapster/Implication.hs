@@ -2138,8 +2138,8 @@ simplImplOut (SImpl_LLVMBlockIsPtr x bp) =
 simplImplOut (SImpl_SplitLifetime x f args l l2 sub_ls ps_in ps_out) =
   distPerms2 x (ltFuncApply f args $ PExpr_Var l2)
   l2 (ValPerm_LOwned sub_ls
-      (ps_in :>: ltFuncMinApplyLOP x f (PExpr_Var l2))
-      (ps_out :>: ltFuncApplyLOP x f args l))
+      (RL.append (MNil :>: ltFuncMinApplyLOP x f (PExpr_Var l2)) ps_in)
+      (RL.append (MNil :>: ltFuncApplyLOP x f args l) ps_out))
 simplImplOut (SImpl_SubsumeLifetime l ls ps_in ps_out l2) =
   distPerms1 l (ValPerm_LOwned (l2:ls) ps_in ps_out)
 simplImplOut (SImpl_ContainedLifetimeCurrent l ls ps_in ps_out l2) =
