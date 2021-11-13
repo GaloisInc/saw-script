@@ -427,6 +427,10 @@ widenExpr' tp sh1 (PExpr_ExShape mb_sh2) =
   do x <- bindFreshVar knownRepr
      widenExpr tp sh1 (varSubst (singletonVarSubst x) mb_sh2)
 
+-- For two shapes that don't match any of the above cases, return the most
+-- general shape, which is the empty shape
+widenExpr' (LLVMShapeRepr _) _ _ = return $ PExpr_EmptyShape
+
 -- NOTE: this assumes that permission expressions only occur in covariant
 -- positions
 widenExpr' (ValuePermRepr tp) (PExpr_ValPerm p1) (PExpr_ValPerm p2) =

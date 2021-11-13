@@ -69,7 +69,7 @@ Lemma no_errors_contains0
 Proof.
   unfold contains0, contains0__tuple_fun, contains0_precond.
   prove_refinement_match_letRecM_l.
-  - exact (fun a' i _ _ _ _ => assumingM (contains0_invariant a a' i) noErrorsSpec).
+  - exact (fun a' i _ _ _ _ _ => assumingM (contains0_invariant a a' i) noErrorsSpec).
   unfold contains0_invariant, noErrorsSpec.
   fold bvMem_lo; fold bvMem_hi.
   time "no_errors_contains0" prove_refinement.
