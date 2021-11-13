@@ -1560,6 +1560,15 @@ ecFoldlPrime :
   (n : Num) -> (a : sort 0) -> (b : isort 0) -> PEq a -> (a -> b -> a) -> a -> seq n b -> a;
 ecFoldlPrime n a b pa = ecFoldl n a b;
 
+-- scanl : {n, a, b}  (a -> b -> a) -> a -> [n]b -> [1+n]a
+ecScanl :
+  (n : Num) -> (a : sort 0) -> (b : sort 0) -> (a -> b -> a) -> a -> seq n b -> seq (tcAdd (TCNum 1) n) a;
+ecScanl n a b f z =
+  Num#rec (\ (n : Num) -> seq n b -> seq (tcAdd (TCNum 1) n) a)
+    (\ (n:Nat) -> \ (xs : Vec n b) -> scanl b a n f z xs)
+    (\ (xs : Stream b) -> MkStream a (Nat__rec (\ (i:Nat) -> a) z (\ (i:Nat) -> \ (x:a) -> f x (streamGet b xs i))))
+    n;
+
 --------------------------------------------------------------------------------
 -- Floating point primitives (TODO)
 

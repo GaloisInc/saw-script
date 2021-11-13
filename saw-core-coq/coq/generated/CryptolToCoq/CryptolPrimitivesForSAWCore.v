@@ -677,6 +677,9 @@ Definition ecFoldl : forall (n : Num), forall (a : Type), forall (b : Type), for
 Definition ecFoldlPrime : forall (n : Num), forall (a : Type), forall (b : Type), forall {Inh_b : SAWCoreScaffolding.Inhabited b}, PEq a -> (a -> b -> a) -> a -> seq n b -> a :=
   fun (n : Num) (a : Type) (b : Type) {Inh_b : SAWCoreScaffolding.Inhabited b} (pa : RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) => ecFoldl n a b.
 
+Definition ecScanl : forall (n : Num), forall (a : Type), forall (b : Type), (a -> b -> a) -> a -> seq n b -> seq (tcAdd (TCNum 1) n) a :=
+  fun (n : Num) (a : Type) (b : Type) (f : a -> b -> a) (z : a) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => seq n1 b -> seq (tcAdd (TCNum 1) n1) a) (fun (n1 : SAWCoreScaffolding.Nat) (xs : SAWCoreVectorsAsCoqVectors.Vec n1 b) => SAWCoreVectorsAsCoqVectors.scanl b a n1 f z xs) (fun (xs : SAWCorePrelude.Stream b) => SAWCorePrelude.MkStream a (SAWCorePrelude.Nat__rec (fun (i : SAWCoreScaffolding.Nat) => a) z (fun (i : SAWCoreScaffolding.Nat) (x : a) => f x (SAWCorePrelude.streamGet b xs i)))) n.
+
 Definition TCFloat : Num -> Num -> Type :=
   fun (_1 : Num) (_2 : Num) => unit : Type.
 

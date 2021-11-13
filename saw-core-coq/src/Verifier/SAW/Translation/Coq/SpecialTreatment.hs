@@ -344,6 +344,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("eq_Vec",        skip)
   , ("foldr",         mapsTo vectorsModule "foldr")
   , ("foldl",         mapsTo vectorsModule "foldl")
+  , ("scanl",         mapsTo vectorsModule "scanl")
   , ("gen",           mapsTo vectorsModule "gen")
   , ("rotateL",       mapsTo vectorsModule "rotateL")
   , ("rotateR",       mapsTo vectorsModule "rotateR")
