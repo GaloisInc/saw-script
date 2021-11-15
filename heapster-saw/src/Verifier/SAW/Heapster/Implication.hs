@@ -2138,8 +2138,8 @@ simplImplOut (SImpl_LLVMBlockIsPtr x bp) =
 simplImplOut (SImpl_SplitLifetime x f args l l2 sub_ls ps_in ps_out) =
   distPerms2 x (ltFuncApply f args $ PExpr_Var l2)
   l2 (ValPerm_LOwned sub_ls
-      (ps_in :>: ltFuncMinApplyLOP x f (PExpr_Var l2))
-      (ps_out :>: ltFuncApplyLOP x f args l))
+      (RL.append (MNil :>: ltFuncMinApplyLOP x f (PExpr_Var l2)) ps_in)
+      (RL.append (MNil :>: ltFuncApplyLOP x f args l) ps_out))
 simplImplOut (SImpl_SubsumeLifetime l ls ps_in ps_out l2) =
   distPerms1 l (ValPerm_LOwned (l2:ls) ps_in ps_out)
 simplImplOut (SImpl_ContainedLifetimeCurrent l ls ps_in ps_out l2) =
@@ -5240,6 +5240,15 @@ data NeededPerm vars a where
                 Mb (vars :++: vars') (ValuePerm a) ->
                 NeededPerm vars a
 
+instance PermPretty (NeededPerm vars a) where
+  permPrettyM (NeededPerm _ x mb_p) =
+    do x_pp <- permPrettyM x
+       pp_mb_p <- permPrettyM mb_p
+       return (x_pp <> colon <> pp_mb_p)
+
+instance PermPrettyF (NeededPerm vars) where
+  permPrettyMF = permPrettyM
+
 -- | A sequence of permissions in bindings that need to be proved
 type NeededPerms vars = Some (RAssign (NeededPerm vars))
 
@@ -5285,37 +5294,61 @@ tryUnifyVars x mb_x = case mbMatch mb_x of
   _ -> pure ()
 
 
--- | Find all the permissions that need to be added to the given list of
--- permissions to prove the given block permission
+-- | Find all the permissions @ps@ that need to be added to the given list
+-- @lops@ of 'LOwnedPerms' to prove the given block permission. That is, given
+-- @bp@, solve for the least @ps@ such that @x:ps * lops |- x:bp@. This is done
+-- by finding all field, array, and block permissions for @x@ in @lops@ and
+-- subtracting (via 'bvRangesDelete') their ranges from the range of @bp@. For
+-- whatever ranges are left, return block permissions for those ranges with
+-- fresh existential variables for their shapes, since a block permission with
+-- an existential shape is the most general form of block permission.
+--
+-- NOTE: This function requires the range of the block permission to be known,
+-- i.e., to not have any existential variables, so that 'bvRangesDelete' knows
+-- how to perform the range subtraction. The range of the block permission is
+-- passed as the third argument. The ranges of permissions in @lowned@
+-- permissions should always be known anyway, so this should not be a problem.
 solveForPermListImplBlock :: (NuMatchingAny1 r, 1 <= w, KnownNat w) =>
-                             LOwnedPerms ps_l ->
-                             ExprVar (LLVMPointerType w) ->
-                             Mb vars (LLVMBlockPerm w) ->
+                             LOwnedPerms ps_l -> ExprVar (LLVMPointerType w) ->
+                             BVRange w -> Mb vars (LLVMBlockPerm w) ->
                              ImplM vars s r ps ps (NeededPerms vars)
 
-solveForPermListImplBlock lops x mb_bp
+-- If there is at least one perm for x in lops, use it to set the modalities of
+-- mb_bp, and then delete the left-hand ranges from the right-hand range
+solveForPermListImplBlock lops x bp_rng mb_bp
   | Just some_lop <- findLOwnedPermForVar x lops =
-    -- Use the modalities of some_lop to set the modalities of mb_bp, if needed
+
+    -- Use the modalities of some_lop to set the modalities of mb_bp
     let (rw,l) = llvmLownedPermModalities some_lop in
     tryUnifyVars rw (mbLLVMBlockRW mb_bp) >>>
     tryUnifyVars l (mbLLVMBlockLifetime mb_bp) >>>
+
+    -- Find all the ranges covered by perms for x in lops, and subtract them
+    -- from the range of mb_bp
     let rngs_lhs = lownedPermsOffsetsForLLVMVar x lops in
+    let rngs_rem = bvRangesDelete bp_rng rngs_lhs in
+    {-
+    implTraceM (\i -> pretty "solveForPermListImplBlock for" <+>
+                      permPretty i x <> colon <> line <>
+                      permPretty i bp_rng <+>
+                      pretty "-" <+> permPretty i rngs_lhs <+> pretty "=" <+>
+                      permPretty i rngs_rem) >>> -}
+
+    -- Subtract all ranges of offsets in lops from that of mb_bp, and, for each
+    -- remaining range, create a memblock permission with existential shape
     let mb_ex_bps =
           fmap (\bp ->
-                 -- Subtract all ranges of offsets in lops from that of mb_bp,
-                 -- and, for each remaining range, create a memblock permission
-                 -- with existential shape
                  map (\rng -> nu $ \z ->
                        (llvmBlockSetRange bp rng)
-                       { llvmBlockShape = PExpr_Var z }) $
-                 bvRangesDelete (llvmBlockRange bp) rngs_lhs) mb_bp in
+                       { llvmBlockShape = PExpr_Var z })
+                 rngs_rem) mb_bp in
     return $ concatSomeRAssign $
     map (\mb_ex_bp -> mbNeededPerms1 x $ mbValPerm_LLVMBlock $
                       mbCombine RL.typeCtxProxies mb_ex_bp) $
     mbList mb_ex_bps
 
 -- If none of our lowned perms contain x, we need all of mb_bp
-solveForPermListImplBlock _ x mb_bp =
+solveForPermListImplBlock _ x _ mb_bp =
   return $ neededPerms1 x $ mbValPerm_LLVMBlock mb_bp
 
 
@@ -5335,7 +5368,9 @@ solveForPermListImpl1 ps_l mb_ps = case mbMatch mb_ps of
     | Just [nuP| (mb_x, SomeLLVMBlockPerm mb_bp) |] <-
         mbLownedPermVarBlockPerm mb_p_r
     , Right x <- mbNameBoundP mb_x ->
-      do neededs1 <- solveForPermListImplBlock ps_l x mb_bp
+      do bp_rng <-
+           partialSubstForceM (mbLLVMBlockRange mb_bp) "solveForPermListImpl1"
+         neededs1 <- solveForPermListImplBlock ps_l x bp_rng mb_bp
          neededs2 <- solveForPermListImpl1 ps_l mb_ps_r
          pure (apSomeRAssign neededs1 neededs2)
 
@@ -6955,8 +6990,12 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       -- on the LHSs and not arbitrary expressions
       getDistPerms >>>= \ps0_with_a ->
       let ps0 = RL.tail ps0_with_a in
-      proveNeededPerms (RL.append neededs1 neededs2) >>>
-      getTopDistPerms ps0_with_a (RL.append neededs1 neededs2) >>>= \ps12 ->
+      let neededs12 = RL.append neededs1 neededs2 in
+      implTraceM (\i -> hang 2
+                        (pretty "Proving needed perms for lowned implication:"
+                         <> line <> permPretty i neededs12)) >>>
+      proveNeededPerms neededs12 >>>
+      getTopDistPerms ps0_with_a neededs12 >>>= \ps12 ->
       let (ps1,ps2) = RL.split neededs1 neededs2 ps12 in
       partialSubstForceM mb_ps_outR "proveVarAtomicImpl" >>>= \ps_outR ->
 

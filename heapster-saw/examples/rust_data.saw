@@ -390,6 +390,11 @@ Formatter__write_str_sym <- heapster_find_symbol env "9Formatter9write_str";
 heapster_assume_fun_rename_prim env Formatter__write_str_sym "Formatter__write_str"
   "<'a,'b> fn (&'a mut fmt::Formatter, &'b str) -> fmt::Result";
 
+// Formatter::write_fmt
+Formatter__write_fmt_sym <- heapster_find_symbol env "9Formatter9write_fmt";
+heapster_assume_fun_rename_prim env Formatter__write_fmt_sym "Formatter__write_fmt"
+  "<'a> fn (&'a mut fmt::Formatter, fmt::Arguments) -> fmt::Result";
+
 
 /***
  *** Type-Checked Functions
