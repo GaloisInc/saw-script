@@ -110,6 +110,7 @@ import Lang.Crucible.LLVM.ArraySizeProfile
 import           What4.ProgramLoc (ProgramLoc(..))
 
 import Verifier.SAW.Heapster.Permissions
+import Verifier.SAW.Heapster.SAWTranslation (ChecksFlag)
 
 -- Values ----------------------------------------------------------------------
 
@@ -184,7 +185,10 @@ data HeapsterEnv = HeapsterEnv {
   -- ^ The current permissions environment
   heapsterEnvLLVMModules :: [Some CMSLLVM.LLVMModule],
   -- ^ The list of underlying 'LLVMModule's that we are translating
-  heapsterEnvDebugLevel :: IORef DebugLevel
+  heapsterEnvDebugLevel :: IORef DebugLevel,
+  -- ^ The current debug level
+  heapsterEnvChecksFlag :: IORef ChecksFlag
+  -- ^ Whether translation checks are currently enabled
   }
 
 showHeapsterEnv :: HeapsterEnv -> String

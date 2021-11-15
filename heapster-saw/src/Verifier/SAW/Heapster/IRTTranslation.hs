@@ -186,7 +186,8 @@ runIRTTyVarsTransM :: PermEnv -> IRTRecName args -> CruCtx args ->
                       Either String a
 runIRTTyVarsTransM env n_rec argsCtx m = runReaderT m ctx
   where args_trans = RL.map (\tp -> Const $ typeTransTypes $
-                               runNilTypeTransM (translateClosed tp) env)
+                               runNilTypeTransM env noChecks $
+                               translateClosed tp)
                             (cruCtxToTypes argsCtx)
         ctx = IRTTyVarsTransCtx n_rec args_trans MNil env
 
@@ -274,8 +275,8 @@ translateCompletePermIRTTyVars sc env npn_rec args p =
     Left err -> fail err
     Right (tps, ixs) ->
       do tm <- completeOpenTermTyped sc $
-               runNilTypeTransM (lambdaExprCtx args $
-                                  listSortOpenTerm <$> sequence tps) env
+               runNilTypeTransM env noChecks (lambdaExprCtx args $
+                                              listSortOpenTerm <$> sequence tps)
          return (tm, setIRTVarIdxs ixs)
 
 -- | Given the a recursive shape being defined, translate the shape's body to
@@ -293,8 +294,8 @@ translateCompleteShapeIRTTyVars sc env nmsh_rec =
     Left err -> fail err
     Right (tps, ixs) ->
       do tm <- completeOpenTermTyped sc $
-               runNilTypeTransM (lambdaExprCtx args $
-                                  listSortOpenTerm <$> sequence tps) env
+               runNilTypeTransM env noChecks (lambdaExprCtx args $
+                                              listSortOpenTerm <$> sequence tps)
          return (tm, setIRTVarIdxs ixs)
 
 -- | Types from which we can get IRT type variables, e.g. ValuePerm
@@ -572,8 +573,8 @@ translateCompleteIRTDesc sc env tyVarsIdent args p ixs =
              [ applyOpenTermMulti (globalOpenTerm tyVarsIdent)
                                   (exprCtxToTerms ectx) ]
      tp <- completeOpenTerm sc $
-           runNilTypeTransM (translateClosed args >>= \tptrans ->
-                              piTransM "e" tptrans irtDescOpenTerm) env
+           runNilTypeTransM env noChecks (translateClosed args >>= \tptrans ->
+                                           piTransM "e" tptrans irtDescOpenTerm)
      return $ TypedTerm tm tp
 
 -- | Types from which we can get IRT type descriptions, e.g. ValuePerm
@@ -736,8 +737,8 @@ translateCompleteIRTDef :: SharedContext -> PermEnv ->
                            IO TypedTerm
 translateCompleteIRTDef sc env tyVarsIdent descIdent args =
   completeOpenTermTyped sc $
-  runNilTypeTransM (lambdaExprCtx args $
-                     irtDefinition tyVarsIdent descIdent) env
+  runNilTypeTransM env noChecks (lambdaExprCtx args $
+                                 irtDefinition tyVarsIdent descIdent)
 
 -- | Given identifiers whose definitions in the shared context are the results
 -- of corresponding calls to 'translateCompleteIRTDef',
@@ -749,8 +750,8 @@ translateCompleteIRTFoldFun :: SharedContext -> PermEnv ->
                                IO Term
 translateCompleteIRTFoldFun sc env tyVarsIdent descIdent _ args =
   completeOpenTerm sc $
-  runNilTypeTransM (lambdaExprCtx args $
-                     irtFoldFun tyVarsIdent descIdent) env
+  runNilTypeTransM env noChecks (lambdaExprCtx args $
+                                 irtFoldFun tyVarsIdent descIdent)
 
 -- | Given identifiers whose definitions in the shared context are the results
 -- of corresponding calls to 'translateCompleteIRTDef',
@@ -762,8 +763,8 @@ translateCompleteIRTUnfoldFun :: SharedContext -> PermEnv ->
                                  IO Term
 translateCompleteIRTUnfoldFun sc env tyVarsIdent descIdent _ args =
   completeOpenTerm sc $
-  runNilTypeTransM (lambdaExprCtx args $
-                     irtUnfoldFun tyVarsIdent descIdent) env
+  runNilTypeTransM env noChecks (lambdaExprCtx args $
+                                 irtUnfoldFun tyVarsIdent descIdent)
 
 -- | Get the terms for the arguments to @IRT@, @foldIRT@, and @unfoldIRT@
 -- given the appropriate identifiers

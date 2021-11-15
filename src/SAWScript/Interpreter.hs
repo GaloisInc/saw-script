@@ -3317,6 +3317,13 @@ primitives = Map.fromList
     Experimental
     [ "Set the debug level for Heapster; 0 = no debug output, 1 = debug output" ]
 
+  , prim "heapster_set_translation_checks"
+    "HeapsterEnv -> Bool -> TopLevel ()"
+    (bicVal heapster_set_translation_checks)
+    Experimental
+    [ "Tell Heapster whether to perform its translation-time checks of the "
+    , "well-formedness of type-checking proofs" ]
+
   , prim "heapster_parse_test"
     "LLVMModule -> String -> String -> TopLevel ()"
     (bicVal heapster_parse_test)

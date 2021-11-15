@@ -609,30 +609,42 @@ instance (Translate info ctx a tr, NuMatching a) =>
 -- * Translating Types
 ----------------------------------------------------------------------
 
+-- | A flag for whether or not to perform checks in the translation. We use this
+-- type, rather than just 'Bool', for documentation purposes.
+newtype ChecksFlag = ChecksFlag { unChecksFlag :: Bool }
+
+-- | The 'ChecksFlag' specifying not to perform any translation checks
+noChecks :: ChecksFlag
+noChecks = ChecksFlag False
+
+-- | The 'ChecksFlag' specifying to perform all translation checks
+doChecks :: ChecksFlag
+doChecks = ChecksFlag True
+
 -- | Translation info for translating types and pure expressions
-data TypeTransInfo ctx = TypeTransInfo (ExprTransCtx ctx) PermEnv
+data TypeTransInfo ctx = TypeTransInfo (ExprTransCtx ctx) PermEnv ChecksFlag
 
 -- | Build an empty 'TypeTransInfo' from a 'PermEnv'
-emptyTypeTransInfo :: PermEnv -> TypeTransInfo RNil
+emptyTypeTransInfo :: PermEnv -> ChecksFlag -> TypeTransInfo RNil
 emptyTypeTransInfo = TypeTransInfo MNil
 
 instance TransInfo TypeTransInfo where
-  infoCtx (TypeTransInfo ctx _) = ctx
-  infoEnv (TypeTransInfo _ env) = env
-  extTransInfo etrans (TypeTransInfo ctx env) =
-    TypeTransInfo (ctx :>: etrans) env
+  infoCtx (TypeTransInfo ctx _ _) = ctx
+  infoEnv (TypeTransInfo _ env _) = env
+  extTransInfo etrans (TypeTransInfo ctx env checks) =
+    TypeTransInfo (ctx :>: etrans) env checks
 
 -- | The translation monad specific to translating types and pure expressions
 type TypeTransM = TransM TypeTransInfo
 
 -- | Run a 'TypeTransM' computation in the empty translation context
-runNilTypeTransM :: TypeTransM RNil a -> PermEnv -> a
-runNilTypeTransM m env = runTransM m (emptyTypeTransInfo env)
+runNilTypeTransM :: PermEnv -> ChecksFlag -> TypeTransM RNil a -> a
+runNilTypeTransM env checks m = runTransM m (emptyTypeTransInfo env checks)
 
 -- | Run a translation computation in an empty expression translation context
 inEmptyCtxTransM :: TypeTransM RNil a -> TypeTransM ctx a
 inEmptyCtxTransM =
-  withInfoM (\(TypeTransInfo _ env) -> TypeTransInfo MNil env)
+  withInfoM (\(TypeTransInfo _ env checks) -> TypeTransInfo MNil env checks)
 
 instance TransInfo info => Translate info ctx (NatRepr n) OpenTerm where
   translate mb_n = return $ natOpenTerm $ mbLift $ fmap natValue mb_n
@@ -1897,7 +1909,8 @@ data ImpTransInfo ext blocks tops ret ps ctx =
     itiPermStackVars :: RAssign (Member ctx) ps,
     itiPermEnv :: PermEnv,
     itiBlockMapTrans :: TypedBlockMapTrans ext blocks tops ret,
-    itiReturnType :: OpenTerm
+    itiReturnType :: OpenTerm,
+    itiChecksFlag :: ChecksFlag
   }
 
 instance TransInfo (ImpTransInfo ext blocks tops ret ps) where
@@ -1924,20 +1937,22 @@ impTransM :: forall ctx ps ext blocks tops ret a.
              OpenTerm -> ImpTransM ext blocks tops ret ps ctx a ->
              TypeTransM ctx a
 impTransM pvars pctx mapTrans retType =
-  withInfoM $ \(TypeTransInfo ectx env) ->
+  withInfoM $ \(TypeTransInfo ectx env checks) ->
   ImpTransInfo { itiExprCtx = ectx,
                  itiPermCtx = RL.map (const $ PTrans_True) ectx,
                  itiPermStack = pctx,
                  itiPermStackVars = pvars,
                  itiPermEnv = env,
                  itiBlockMapTrans = mapTrans,
-                 itiReturnType = retType }
+                 itiReturnType = retType,
+                 itiChecksFlag = checks }
 
 -- | Embed a type translation into an impure translation
 -- FIXME: should no longer need this...
 tpTransM :: TypeTransM ctx a -> ImpTransM ext blocks tops ret ps ctx a
 tpTransM =
-  withInfoM (\info -> TypeTransInfo (itiExprCtx info) (itiPermEnv info))
+  withInfoM (\(ImpTransInfo {..}) ->
+              TypeTransInfo itiExprCtx itiPermEnv itiChecksFlag)
 
 -- | Get most recently bound variable
 getTopVarM :: ImpTransM ext blocks tops ret ps (ctx :> tp) (ExprTrans tp)
@@ -1975,15 +1990,23 @@ getPermStackDistPerms =
        `mbApply`
        permTransCtxPerms prxs stack
 
+-- | Run a computation if the current 'ChecksFlag' is set
+ifChecksFlagM :: ImpTransM ext blocks tops ret ps ctx () ->
+                 ImpTransM ext blocks tops ret ps ctx ()
+ifChecksFlagM m =
+  (itiChecksFlag <$> ask) >>= \checks ->
+  if unChecksFlag checks then m else return ()
+
 -- | Assert a property of the current permission stack, raising an 'error' if it
 -- fails to hold. The 'String' names the construct being translated.
 assertPermStackM :: HasCallStack => String ->
                     (RAssign (Member ctx) ps -> PermTransCtx ctx ps -> Bool) ->
                     ImpTransM ext blocks tops ret ps ctx ()
 assertPermStackM nm f =
-  ask >>= \info ->
-  if f (itiPermStackVars info) (itiPermStack info) then return () else
-    error ("translate: " ++ nm ++ nlPrettyCallStack callStack)
+  ifChecksFlagM
+  (ask >>= \info ->
+   if f (itiPermStackVars info) (itiPermStack info) then return () else
+     error ("translate: " ++ nm ++ nlPrettyCallStack callStack))
 
 -- | Assert that the top portion of the current permission stack equals the
 -- given 'DistPerms'
@@ -1991,45 +2014,48 @@ assertPermStackTopEqM :: HasCallStack => ps ~ (ps1 :++: ps2) =>
                          String -> f ps1 -> Mb ctx (DistPerms ps2) ->
                          ImpTransM ext blocks tops ret ps ctx ()
 assertPermStackTopEqM nm prx expected =
-  getPermStackDistPerms >>= \perms ->
-  let actuals =
-        fmap (snd . splitDistPerms prx (mbDistPermsToProxies expected)) perms in
-  if expected == actuals then return () else
-    error ("assertPermStackEqM (" ++ nm ++ "): expected permission stack:\n" ++
-           permPrettyString emptyPPInfo expected ++
-           "\nFound permission stack:\n" ++
-           permPrettyString emptyPPInfo actuals ++
-           nlPrettyCallStack callStack)
+  ifChecksFlagM
+  (getPermStackDistPerms >>= \perms ->
+   let actuals =
+         fmap (snd . splitDistPerms prx (mbDistPermsToProxies expected)) perms in
+   if expected == actuals then return () else
+     error ("assertPermStackEqM (" ++ nm ++ "): expected permission stack:\n" ++
+            permPrettyString emptyPPInfo expected ++
+            "\nFound permission stack:\n" ++
+            permPrettyString emptyPPInfo actuals ++
+            nlPrettyCallStack callStack))
 
 -- | Assert that the current permission stack equals the given 'DistPerms'
 assertPermStackEqM :: HasCallStack => String -> Mb ctx (DistPerms ps) ->
                       ImpTransM ext blocks tops ret ps ctx ()
 assertPermStackEqM nm perms =
   -- FIXME: unify this function with assertPermStackTopEqM
-  getPermStackDistPerms >>= \stack_perms ->
-  if perms == stack_perms then return () else
-    error ("assertPermStackEqM (" ++ nm ++ "): expected permission stack:\n" ++
-           permPrettyString emptyPPInfo perms ++
-           "\nFound permission stack:\n" ++
-           permPrettyString emptyPPInfo stack_perms ++
-           nlPrettyCallStack callStack)
+  ifChecksFlagM
+  (getPermStackDistPerms >>= \stack_perms ->
+   if perms == stack_perms then return () else
+     error ("assertPermStackEqM (" ++ nm ++ "): expected permission stack:\n" ++
+            permPrettyString emptyPPInfo perms ++
+            "\nFound permission stack:\n" ++
+            permPrettyString emptyPPInfo stack_perms ++
+            nlPrettyCallStack callStack))
 
 -- | Assert that the top permission is as given by the arguments
 assertTopPermM :: HasCallStack => String -> Mb ctx (ExprVar a) ->
                   Mb ctx (ValuePerm a) ->
                   ImpTransM ext blocks tops ret (ps :> a) ctx ()
 assertTopPermM nm x p =
-  getPermStackDistPerms >>= \stack_perms ->
-  case mbMatch stack_perms of
-    [nuMP| DistPermsCons _ x' p' |] | x == x' && p == p' -> return ()
-    [nuMP| DistPermsCons _ x' p' |] ->
-      error ("assertTopPermM (" ++ nm ++ "): expected top permissions:\n" ++
-             permPrettyString emptyPPInfo (mbMap2 distPerms1 x p) ++
-             "\nFound top permissions:\n" ++
-             permPrettyString emptyPPInfo (mbMap2 distPerms1 x' p') ++
-             nlPrettyCallStack callStack ++
-             "\nCurrent perm stack:\n" ++
-             permPrettyString emptyPPInfo stack_perms)
+  ifChecksFlagM
+  (getPermStackDistPerms >>= \stack_perms ->
+   case mbMatch stack_perms of
+     [nuMP| DistPermsCons _ x' p' |] | x == x' && p == p' -> return ()
+     [nuMP| DistPermsCons _ x' p' |] ->
+       error ("assertTopPermM (" ++ nm ++ "): expected top permissions:\n" ++
+              permPrettyString emptyPPInfo (mbMap2 distPerms1 x p) ++
+              "\nFound top permissions:\n" ++
+              permPrettyString emptyPPInfo (mbMap2 distPerms1 x' p') ++
+              nlPrettyCallStack callStack ++
+              "\nCurrent perm stack:\n" ++
+              permPrettyString emptyPPInfo stack_perms))
 
 -- | Get the (translation of the) perms for a variable
 getVarPermM :: Mb ctx (ExprVar tp) ->
@@ -4352,10 +4378,10 @@ translateBlockMapBodies mapTrans =
 -- | Translate a typed CFG to a SAW term
 translateCFG ::
   PermCheckExtC ext =>
-  PermEnv ->
+  PermEnv -> ChecksFlag ->
   TypedCFG ext blocks ghosts inits ret ->
   OpenTerm
-translateCFG env (cfg :: TypedCFG ext blocks ghosts inits ret) =
+translateCFG env checks (cfg :: TypedCFG ext blocks ghosts inits ret) =
   let h = tpcfgHandle cfg
       fun_perm = tpcfgFunPerm cfg
       blkMap = tpcfgBlockMap cfg
@@ -4363,7 +4389,7 @@ translateCFG env (cfg :: TypedCFG ext blocks ghosts inits ret) =
       inits = typedFnHandleArgs h
       ghosts = typedFnHandleGhosts h
       retType = typedFnHandleRetType h in
-  flip runNilTypeTransM env $ lambdaExprCtx ctx $
+  runNilTypeTransM env checks $ lambdaExprCtx ctx $
 
   -- We translate retType before extending the expr context to contain another
   -- copy of inits, as it is easier to do it here
@@ -4441,7 +4467,7 @@ someCFGAndPermToName (SomeCFGAndPerm _ nm _ _) = nm
 someCFGAndPermLRT :: PermEnv -> SomeCFGAndPerm ext -> OpenTerm
 someCFGAndPermLRT env (SomeCFGAndPerm _ _ _
                        (FunPerm ghosts args ret perms_in perms_out)) =
-  flip runNilTypeTransM env $
+  runNilTypeTransM env noChecks $
   translateClosed (appendCruCtx ghosts args) >>= \ctx_trans ->
   piLRTTransM "arg" ctx_trans $ \ectx ->
   inCtxTransM ectx $
@@ -4470,9 +4496,9 @@ someCFGAndPermPtrPerm (SomeCFGAndPerm _ _ _ fun_perm) =
 -- each @tpi@ is the @i@th type in @lrts@
 tcTranslateCFGTupleFun ::
   HasPtrWidth w =>
-  PermEnv -> EndianForm -> DebugLevel -> [SomeCFGAndPerm LLVM] ->
+  PermEnv -> ChecksFlag -> EndianForm -> DebugLevel -> [SomeCFGAndPerm LLVM] ->
   (OpenTerm, OpenTerm)
-tcTranslateCFGTupleFun env endianness dlevel cfgs_and_perms =
+tcTranslateCFGTupleFun env checks endianness dlevel cfgs_and_perms =
   let lrts = map (someCFGAndPermLRT env) cfgs_and_perms in
   let lrts_tm =
         foldr (\lrt lrts' -> ctorOpenTerm "Prelude.LRT_Cons" [lrt,lrts'])
@@ -4497,7 +4523,8 @@ tcTranslateCFGTupleFun env endianness dlevel cfgs_and_perms =
   case cfg_and_perm of
     SomeCFGAndPerm sym _ cfg fun_perm ->
       debugTrace dlevel ("Type-checking " ++ show sym) $
-      translateCFG env' $ tcCFG ?ptrWidth env' endianness dlevel fun_perm cfg
+      translateCFG env' checks $
+      tcCFG ?ptrWidth env' endianness dlevel fun_perm cfg
 
 
 -- | Make a "coq-safe" identifier from a string that might contain
@@ -4525,13 +4552,12 @@ mkSafeIdent mnm nm =
 -- with the name @"n__tuple_fun"@ will also be added, where @n@ is the name
 -- associated with the first CFG in the list.
 tcTranslateAddCFGs ::
-  HasPtrWidth w =>
-  SharedContext -> ModuleName ->
-  PermEnv -> EndianForm -> DebugLevel -> [SomeCFGAndPerm LLVM] ->
+  HasPtrWidth w => SharedContext -> ModuleName -> PermEnv -> ChecksFlag ->
+  EndianForm -> DebugLevel -> [SomeCFGAndPerm LLVM] ->
   IO PermEnv
-tcTranslateAddCFGs sc mod_name env endianness dlevel cfgs_and_perms =
+tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
   do let (lrts, tup_fun) =
-           tcTranslateCFGTupleFun env endianness dlevel cfgs_and_perms
+           tcTranslateCFGTupleFun env checks endianness dlevel cfgs_and_perms
      let tup_fun_ident =
            mkSafeIdent mod_name (someCFGAndPermToName (head cfgs_and_perms)
                                  ++ "__tuple_fun")
@@ -4567,15 +4593,13 @@ translateCompleteFunPerm :: SharedContext -> PermEnv ->
                             FunPerm ghosts args ret -> IO Term
 translateCompleteFunPerm sc env fun_perm =
   completeOpenTerm sc $
-  runNilTypeTransM (translate $ emptyMb fun_perm) env
+  runNilTypeTransM env noChecks (translate $ emptyMb fun_perm)
 
 -- | Translate a 'TypeRepr' to the SAW core type it represents
-translateCompleteType :: SharedContext -> PermEnv ->
-                         TypeRepr tp -> IO Term
+translateCompleteType :: SharedContext -> PermEnv -> TypeRepr tp -> IO Term
 translateCompleteType sc env typ_perm =
-  completeOpenTerm sc $
-  typeTransType1 $
-  runNilTypeTransM (translate $ emptyMb typ_perm) env
+  completeOpenTerm sc $ typeTransType1 $
+  runNilTypeTransM env noChecks $ translate $ emptyMb typ_perm
 
 -- | Translate a 'TypeRepr' within the given context of type arguments to the
 -- SAW core type it represents
@@ -4583,7 +4607,8 @@ translateCompleteTypeInCtx :: SharedContext -> PermEnv ->
                               CruCtx args -> Mb args (TypeRepr a) -> IO Term
 translateCompleteTypeInCtx sc env args ret =
   completeOpenTerm sc $
-  runNilTypeTransM (piExprCtx args (typeTransType1 <$> translate ret')) env
+  runNilTypeTransM env noChecks (piExprCtx args (typeTransType1 <$>
+                                                 translate ret'))
   where ret' = mbCombine (cruCtxProxies args) . emptyMb $ ret
 
 -- | Translate an input list of 'ValuePerms' and an output 'ValuePerm' to a SAW
@@ -4595,9 +4620,9 @@ translateCompletePureFun :: SharedContext -> PermEnv
                          -> Mb ctx (ValuePerm ret) -- ^ Return type perm
                          -> IO Term
 translateCompletePureFun sc env ctx args ret =
-  completeOpenTerm sc $
-  runNilTypeTransM (piExprCtx ctx $ piPermCtx args' $ const $
-                    typeTransTupleType <$> translate ret') env
+  completeOpenTerm sc $ runNilTypeTransM env noChecks $
+  piExprCtx ctx $ piPermCtx args' $ const $
+  typeTransTupleType <$> translate ret'
   where args' = mbCombine pxys . emptyMb $ args
         ret'  = mbCombine pxys . emptyMb $ ret
         pxys  = cruCtxProxies ctx

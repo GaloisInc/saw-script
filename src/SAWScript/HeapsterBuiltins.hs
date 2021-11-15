@@ -50,6 +50,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_export_coq
        , heapster_parse_test
        , heapster_set_debug_level
+       , heapster_set_translation_checks
        ) where
 
 import Data.Maybe
@@ -280,11 +281,13 @@ mkHeapsterEnv dlevel saw_mod_name llvm_mods@(Some first_mod:_) =
            heapster_default_env globals
      env_ref <- liftIO $ newIORef env
      dlevel_ref <- liftIO $ newIORef dlevel
+     checks_ref <- liftIO $ newIORef doChecks
      return $ HeapsterEnv {
        heapsterEnvSAWModule = saw_mod_name,
        heapsterEnvPermEnvRef = env_ref,
        heapsterEnvLLVMModules = llvm_mods,
-       heapsterEnvDebugLevel = dlevel_ref
+       heapsterEnvDebugLevel = dlevel_ref,
+       heapsterEnvChecksFlag = checks_ref
        }
 mkHeapsterEnv _ _ [] = fail "mkHeapsterEnv: empty list of LLVM modules!"
 
@@ -617,8 +620,8 @@ heapster_define_reachability_perm _bic _opts henv
        let args_ctx = appendParsedCtx pre_args_ctx last_args_ctx
        let args = parsedCtxCtx args_ctx
        trans_tp <- liftIO $ 
-         translateCompleteTypeInCtx sc env args (nus (cruCtxProxies args) $
-                                                 const $ ValuePermRepr tp)
+         translateCompleteTypeInCtx sc env args $
+         nus (cruCtxProxies args) $ const $ ValuePermRepr tp
        trans_tp_ident <- parseAndInsDef henv nm trans_tp trans_tp_str
 
        -- Use permEnvAddRecPermM to tie the knot of adding a recursive
@@ -642,12 +645,12 @@ heapster_define_reachability_perm _bic _opts henv
                     (\ns -> ValPerm_Named npn (namesToExprs ns) NoPermOffset)
               -- Typecheck fold against body -o P<args>
               fold_fun_tp <- liftIO $
-                translateCompletePureFun sc tmp_env args (singletonValuePerms
-                                                          <$> or_tp) nm_tp
+                translateCompletePureFun sc tmp_env args (singletonValuePerms <$>
+                                                          or_tp) nm_tp
               -- Typecheck fold against P<args> -o body
               unfold_fun_tp <- liftIO $
-                translateCompletePureFun sc tmp_env args (singletonValuePerms
-                                                          <$> nm_tp) or_tp
+                translateCompletePureFun sc tmp_env args (singletonValuePerms <$>
+                                                          nm_tp) or_tp
               -- Build identifiers foldXXX and unfoldXXX
               fold_ident <-
                 parseAndInsDef henv ("fold" ++ nm) fold_fun_tp fold_fun_str
@@ -717,9 +720,8 @@ heapster_define_opaque_llvmshape _bic _opts henv nm w_int args_str len_str tp_st
      mb_len <- parseExprInCtxString env (BVRepr w) args_ctx len_str
      sc <- getSharedContext
      tp_tp <- liftIO $
-       translateCompleteTypeInCtx sc env args (nus (cruCtxProxies args) $
-                                               const $ ValuePermRepr $
-                                               LLVMShapeRepr w)
+       translateCompleteTypeInCtx sc env args $
+       nus (cruCtxProxies args) $ const $ ValuePermRepr $ LLVMShapeRepr w
      tp_id <- parseAndInsDef henv nm tp_tp tp_str
      let env' = withKnownNat w $ permEnvAddOpaqueShape env nm args mb_len tp_id
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
@@ -1035,6 +1037,7 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
            llvmDataLayout (modTrans lm ^. transContext ^. llvmTypeCtx)
            ^. intLayout
      dlevel <- liftIO $ readIORef $ heapsterEnvDebugLevel henv
+     checks <- liftIO $ readIORef $ heapsterEnvChecksFlag henv
      LeqProof <- case decideLeq (knownNat @16) w of
        Left pf -> return pf
        Right _ -> fail "LLVM arch width is < 16!"
@@ -1059,7 +1062,8 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
      let saw_modname = heapsterEnvSAWModule henv
      env' <- liftIO $
        let ?ptrWidth = w in
-       tcTranslateAddCFGs sc saw_modname env endianness dlevel some_cfgs_and_perms
+       tcTranslateAddCFGs sc saw_modname env checks endianness dlevel
+       some_cfgs_and_perms
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
@@ -1114,6 +1118,11 @@ heapster_set_debug_level :: BuiltinContext -> Options -> HeapsterEnv ->
                             Int -> TopLevel ()
 heapster_set_debug_level _ _ env l =
   liftIO $ writeIORef (heapsterEnvDebugLevel env) (DebugLevel l)
+
+heapster_set_translation_checks :: BuiltinContext -> Options -> HeapsterEnv ->
+                                   Bool -> TopLevel ()
+heapster_set_translation_checks _ _ env f =
+  liftIO $ writeIORef (heapsterEnvChecksFlag env) (ChecksFlag f)
 
 heapster_parse_test :: BuiltinContext -> Options -> Some LLVMModule ->
                        String -> String ->  TopLevel ()
