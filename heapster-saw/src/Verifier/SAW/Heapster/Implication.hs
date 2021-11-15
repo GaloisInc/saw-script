@@ -4085,8 +4085,8 @@ implLLVMFieldTryProveWordEq x fp =
       _ ->
         implDropM y p >>> implLLVMFieldSetTrue x (llvmFieldSetEqVar fp y) >>>
         return Nothing
-  _ ->
-    implDropM y p >>> implLLVMFieldSetTrue x (llvmFieldSetEqVar fp y) >>>
+  p' ->
+    implDropM y p' >>> implLLVMFieldSetTrue x (llvmFieldSetEqVar fp y) >>>
     return Nothing
 
 -- | Like 'implLLVMFieldTryeProveWordEq' but for two field permissions in the
