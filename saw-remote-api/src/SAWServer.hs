@@ -220,6 +220,7 @@ initialState readFileFn =
                 , rwDebugIntrinsics = True
                 , rwWhat4HashConsing = False
                 , rwWhat4HashConsingX86 = False
+                , rwWhat4Eval = False
                 , rwStackBaseAlign = defaultStackBaseAlign
                 , rwProofs = []
                 , rwPreservedRegs = []
