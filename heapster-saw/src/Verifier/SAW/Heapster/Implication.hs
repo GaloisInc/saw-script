@@ -3197,16 +3197,18 @@ implCatchM :: NuMatchingAny1 r => PermPretty p => String -> p ->
               ImplM vars s r ps1 ps2 a -> ImplM vars s r ps1 ps2 a ->
               ImplM vars s r ps1 ps2 a
 implCatchM f p m1 m2 =
+  implTraceM (\i -> pretty ("Inserting catch in " ++ f ++ " for proving:")
+                    <> line <> permPretty i p) >>>
   implApplyImpl1
     Impl1_Catch
     (MNil
      :>: Impl1Cont (const $
-                    implTraceM (\i -> pretty ("Inserting catch in " ++ f
+                    implTraceM (\i -> pretty ("Case 1 of catch in " ++ f
                                               ++ " for proving:")
                                       <> line <> permPretty i p) >>>
                     m1)
      :>: Impl1Cont (const $
-                    implTraceM (\i -> pretty ("Backtracking to catch in " ++ f
+                    implTraceM (\i -> pretty ("Case 2 of catch in " ++ f
                                               ++ " for proving:")
                                       <> line <> permPretty i p) >>>
                     m2))
