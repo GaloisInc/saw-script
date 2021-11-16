@@ -2970,7 +2970,8 @@ tcEmitStmt' ctx loc (CallHandle ret freg_untyped _args_ctx args_untyped) =
           pure (if could then Just (SomeFunPerm fun_perm) else Nothing)
         _ -> pure Nothing
       _ -> pure []) >>>= \maybe_fun_perms ->
-  (stmtEmbedImplM $ foldr1WithDefault implCatchM
+  (stmtEmbedImplM $ foldr1WithDefault (implCatchM "tcEmitStmt (fun perm)" $
+                                       typedRegVar freg)
    (implFailMsgM "Could not find function permission")
    (mapMaybe (fmap pure) maybe_fun_perms)) >>>= \some_fun_perm ->
   case some_fun_perm of
