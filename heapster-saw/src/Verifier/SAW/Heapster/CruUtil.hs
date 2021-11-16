@@ -288,7 +288,7 @@ instance NuMatching ByteString where
 instance NuMatching (MemoryError sym) where
   nuMatchingProof = unsafeMbTypeRepr
 
-instance NuMatching (MemoryErrorReason a b) where
+instance NuMatching MemoryErrorReason where
   nuMatchingProof = unsafeMbTypeRepr
 
 instance NuMatching (FnHandle args ret) where
