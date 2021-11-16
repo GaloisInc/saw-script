@@ -3160,7 +3160,6 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     do args_trans <- translate args
        e_trans <- translate e
        y_trans <- translate y
-       e_trans <- translate e
        ttrans <- translateSimplImplOutHead mb_simpl
        let trans_ident = mbLift $ fmap recPermTransMethod rp
        withPermStackM RL.tail
@@ -3318,7 +3317,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
 
   -- If both branches of an or elimination fail, the whole thing fails; otherwise,
   -- an or elimination performs a pattern-match on an Either
-  ([nuMP| Impl1_ElimOr x p1 p2 |],
+  ([nuMP| Impl1_ElimOr x mb_p1 mb_p2 |],
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
     pitmCatching (translatePermImpl prx $
                   mbCombine RL.typeCtxProxies mb_impl1) >>= \(mtrans1,hasf1) ->
@@ -3334,8 +3333,8 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
                            [| \(Impl1_ElimOr _ p1 p2) -> ValPerm_Or p1 p2 |])
                  mb_impl
            () <- assertTopPermM "Impl1_ElimOr" x mb_p1_or_p2
-           tp1 <- translate p1
-           tp2 <- translate p2
+           tp1 <- translate mb_p1
+           tp2 <- translate mb_p2
            tp_ret <- compReturnTypeTransM
            top_ptrans <- getTopPermM
            eitherElimTransM tp1 tp2 tp_ret
@@ -4096,7 +4095,7 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
     ((:>: (PTrans_Eq $ extMb e)) . RL.tail)
     m
 
-  [nuMP| OffsetLLVMValue x off |] ->
+  [nuMP| OffsetLLVMValue _ _ |] ->
     let mb_x_off =
           mbMapCl $(mkClosed [| \(OffsetLLVMValue x off) ->
                                PExpr_LLVMOffset (typedRegVar x) off |])
