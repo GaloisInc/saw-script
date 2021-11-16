@@ -2478,6 +2478,9 @@ data VarAndPerm a = VarAndPerm (ExprVar a) (ValuePerm a)
 varAndPermPerm :: VarAndPerm a -> ValuePerm a
 varAndPermPerm (VarAndPerm _ p) = p
 
+-- | A pair that is specifically pretty-printing with a colon
+data ColonPair a b = ColonPair a b
+
 -- | A list of "distinguished" permissions to named variables
 -- FIXME: just call these VarsAndPerms or something like that...
 type DistPerms = RAssign VarAndPerm
@@ -3060,6 +3063,11 @@ instance PermPretty (VarAndPerm a) where
 
 instance PermPrettyF VarAndPerm where
   permPrettyMF = permPrettyM
+
+instance (PermPretty a, PermPretty b) => PermPretty (ColonPair a b) where
+  permPrettyM (ColonPair a b) =
+    (\pp1 pp2 -> pp1 <> colon <> pp2) <$> permPrettyM a <*> permPrettyM b
+
 
 {-
 instance PermPretty (DistPerms ps) where

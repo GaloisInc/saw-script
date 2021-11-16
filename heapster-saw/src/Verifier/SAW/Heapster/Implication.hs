@@ -2989,15 +2989,18 @@ withExtVarsMultiM (ctx :>: KnownReprObj) m =
   withExtVarsMultiM ctx (withExtVarsM m >>>= \(a,_) -> return a)
 
 -- | Perform either the first, second, or both computations with an 'implCatchM'
--- between, depending on the recursion flag
-implRecFlagCaseM :: NuMatchingAny1 r => ImplM vars s r ps_out ps_in a ->
+-- between, depending on the recursion flag. The 'String' names the function
+-- that is calling 'implCatchM', while the @p@ argument states what we are
+-- trying to prove; both of these are used for debug tracing.
+implRecFlagCaseM :: NuMatchingAny1 r => PermPretty p => String -> p ->
+                    ImplM vars s r ps_out ps_in a ->
                     ImplM vars s r ps_out ps_in a ->
                     ImplM vars s r ps_out ps_in a
-implRecFlagCaseM m1 m2 =
+implRecFlagCaseM f p m1 m2 =
   use implStateRecRecurseFlag >>>= \case
     RecLeft  -> m1
     RecRight -> m2
-    RecNone  -> implCatchM m1 m2
+    RecNone  -> implCatchM f p m1 m2
 
 -- | Set the recursive permission recursion flag to indicate recursion on the
 -- right, or fail if we are already recursing on the left
@@ -3186,14 +3189,27 @@ implFailVarM f x p mb_p =
   implFailM
 
 -- | Produce a branching proof tree that performs the first implication and, if
--- that one fails, falls back on the second. If 'pruneFailingBranches' is set,
--- failing branches are pruned.
-implCatchM :: NuMatchingAny1 r =>
+-- that one fails, falls back on the second. The supplied 'String' says what
+-- proof-search function is performing the catch, while the @p@ argument says
+-- what we are trying to prove; both of these are for debugging purposes, and
+-- are used in the debug trace.
+implCatchM :: NuMatchingAny1 r => PermPretty p => String -> p ->
               ImplM vars s r ps1 ps2 a -> ImplM vars s r ps1 ps2 a ->
               ImplM vars s r ps1 ps2 a
-implCatchM m1 m2 =
-  implApplyImpl1 Impl1_Catch (MNil :>: Impl1Cont (const m1)
-                              :>: Impl1Cont (const m2))
+implCatchM f p m1 m2 =
+  implApplyImpl1
+    Impl1_Catch
+    (MNil
+     :>: Impl1Cont (const $
+                    implTraceM (\i -> pretty ("Inserting catch in " ++ f
+                                              ++ " for proving:")
+                                      <> line <> permPretty i p) >>>
+                    m1)
+     :>: Impl1Cont (const $
+                    implTraceM (\i -> pretty ("Backtracking to catch in " ++ f
+                                              ++ " for proving:")
+                                      <> line <> permPretty i p) >>>
+                    m2))
 
 -- | "Push" all of the permissions in the permission set for a variable, which
 -- should be equal to the supplied permission, after deleting those permissions
@@ -4624,7 +4640,8 @@ implGetLLVMPermForOffset x ps imprecise_p elim_blocks_p off mb_p =
           -- FIXME: handle eq perms here
           _ -> implFailVarM "implGetLLVMPermForOffset" x (ValPerm_Conj ps) mb_p)
     ixs ->
-      foldr1 implCatchM $ flip map ixs $ \i ->
+      foldr1 (implCatchM "implGetLLVMPermForOffset" (ColonPair x mb_p)) $
+      flip map ixs $ \i ->
       implExtractConjM x ps i >>>
       let ps' = deleteNth i ps in
       recombinePerm x (ValPerm_Conj ps') >>>
@@ -6558,7 +6575,9 @@ proveVarLLVMBlocks2 x ps psubst mb_bp _ mb_bps
           let len =
                 mbLift $ mbMapCl $(mkClosed [| length .
                                              taggedUnionDisjs |]) mb_tag_u in
-          foldr1 implCatchM $ map return [0..len-1]) >>>= \i ->
+          foldr1 (implCatchM "proveVarLLVMBlocks2"
+                  (ColonPair x (mb_bp:mb_bps))) $
+          map return [0..len-1]) >>>= \i ->
 
     -- Get the permissions we now have for x and push them back to the top of
     -- the stack
@@ -6588,7 +6607,8 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 
     -- Build a computation that tries returning True here, and if that fails
     -- returns False; True is used for sh1 while False is used for sh2
-    implCatchM (pure True) (pure False) >>>= \is_case1 ->
+    implCatchM "proveVarLLVMBlocks2" (ColonPair x (mb_bp:mb_bps))
+               (pure True) (pure False) >>>= \is_case1 ->
 
     -- Prove the chosen shape by recursively calling proveVarLLVMBlocks
     let mb_sh' = if is_case1 then mb_sh1 else mb_sh2 in
@@ -7220,7 +7240,7 @@ proveVarImplH x p mb_p = case (p, mbMatch mb_p) of
   -- Prove x:(p1 \/ p2) by trying to prove x:p1 and x:p2 in two branches
   (_, [nuMP| ValPerm_Or mb_p1 mb_p2 |]) ->
     implPopM x p >>>
-    implCatchM
+    implCatchM "proveVarImplH" (ColonPair x mb_p)
     (proveVarImplInt x mb_p1 >>>
      partialSubstForceM mb_p1 "proveVarImpl" >>>= \p1 ->
      partialSubstForceM mb_p2 "proveVarImpl" >>>= \p2 ->
@@ -7246,7 +7266,7 @@ proveVarImplH x p mb_p = case (p, mbMatch mb_p) of
     , NameReachConstr <- namedPermNameReachConstr npn
     , PExprs_Cons args1_pre e1 <- args1
     , [nuMP| PExprs_Cons mb_args2_pre mb_e2 |] <- mbMatch mb_args2 ->
-      implCatchM
+      implCatchM "proveVarImplH" (ColonPair x mb_p)
 
       -- Reflexivity branch: pop x:P<...>, prove x:eq(e), and use reflexivity
       (implPopM x p >>> proveVarImplInt x (fmap ValPerm_Eq mb_e2) >>>
@@ -7324,6 +7344,7 @@ proveVarImplH x p mb_p = case (p, mbMatch mb_p) of
     | RecursiveSortRepr _ _ <- namedPermNameSort npn1
     , RecursiveSortRepr _ _ <- namedPermNameSort $ mbLift mb_npn2 ->
       implRecFlagCaseM
+      "proveVarImplH" (ColonPair x mb_p)
       (proveVarImplFoldRight x p mb_p)
       (proveVarImplUnfoldLeft x p mb_p Nothing)
 
@@ -7335,6 +7356,7 @@ proveVarImplH x p mb_p = case (p, mbMatch mb_p) of
     | Just i <- findIndex isRecursiveConjPerm ps
     , RecursiveSortRepr _ _ <- namedPermNameSort $ mbLift mb_npn ->
       implRecFlagCaseM
+      "proveVarImplH" (ColonPair x mb_p)
       (proveVarImplUnfoldLeft x p mb_p (Just i))
       (proveVarImplFoldRight x p mb_p)
 
@@ -7730,7 +7752,7 @@ proveVarsImplAppend :: NuMatchingAny1 r => ExDistPerms vars ps ->
 proveVarsImplAppend mb_ps =
   use implStatePerms >>>= \(_ :: PermSet ps_in) ->
   lifetimesThatCouldProve mb_ps >>>= \ls_ps ->
-  foldr1 implCatchM
+  foldr1 (implCatchM "proveVarsImplAppend" mb_ps)
   ((proveVarsImplAppendInt mb_ps)
    :
    flip map ls_ps
