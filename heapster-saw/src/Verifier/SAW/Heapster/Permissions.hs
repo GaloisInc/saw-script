@@ -2474,6 +2474,10 @@ data DefinedPerm b args a = DefinedPerm {
 -- make certain typeclass instances (like pretty-printing) specific to it
 data VarAndPerm a = VarAndPerm (ExprVar a) (ValuePerm a)
 
+-- | Extract the permissions from a 'VarAndPerm'
+varAndPermPerm :: VarAndPerm a -> ValuePerm a
+varAndPermPerm (VarAndPerm _ p) = p
+
 -- | A list of "distinguished" permissions to named variables
 -- FIXME: just call these VarsAndPerms or something like that...
 type DistPerms = RAssign VarAndPerm
