@@ -611,7 +611,7 @@ instance (Translate info ctx a tr, NuMatching a) =>
 
 -- | A flag for whether or not to perform checks in the translation. We use this
 -- type, rather than just 'Bool', for documentation purposes.
-newtype ChecksFlag = ChecksFlag { unChecksFlag :: Bool }
+newtype ChecksFlag = ChecksFlag { checksFlagSet :: Bool }
 
 -- | The 'ChecksFlag' specifying not to perform any translation checks
 noChecks :: ChecksFlag
@@ -1999,7 +1999,7 @@ ifChecksFlagM :: ImpTransM ext blocks tops ret ps ctx () ->
                  ImpTransM ext blocks tops ret ps ctx ()
 ifChecksFlagM m =
   (itiChecksFlag <$> ask) >>= \checks ->
-  if unChecksFlag checks then m else return ()
+  if checksFlagSet checks then m else return ()
 
 -- | Assert a property of the current permission stack, raising an 'error' if it
 -- fails to hold. The 'String' names the construct being translated.
