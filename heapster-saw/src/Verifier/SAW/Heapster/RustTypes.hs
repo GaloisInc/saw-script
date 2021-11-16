@@ -367,7 +367,7 @@ instance RsConvert w (Ty Span) (PermExpr (LLVMShapeType w)) where
            -- If so, build a "fat pointer" = a pair of a pointer to our array
            -- shape plus a length value
            return $ PExpr_ExShape $ nu $ \n ->
-           PExpr_SeqShape (PExpr_PtrShape rw Nothing $
+           PExpr_SeqShape (PExpr_PtrShape rw (Just l) $
                            PExpr_ArrayShape (PExpr_Var n) stride $
                            subst1 (PExpr_Var n) mb_sh)
            (PExpr_FieldShape $ LLVMFieldShape $ ValPerm_Eq $
