@@ -1483,10 +1483,14 @@ importComp sc env lenT elemT expr mss =
               m <- importType sc env len
               a <- importType sc env ty
               (ys, n, b, argss, len') <- zipAll branches
-              zs <- scGlobalApply sc "Cryptol.seqZip" [a, b, m, n, xs, ys]
-              mn <- scGlobalApply sc "Cryptol.tcMin" [m, n]
               ab <- scTupleType sc [a, b]
-              return (zs, mn, ab, args : argss, C.tMin len len')
+              if len == len' then
+                do zs <- scGlobalApply sc "Cryptol.seqZipSame" [a, b, m, xs, ys]
+                   return (zs, m, ab, args : argss, len)
+              else
+                do zs <- scGlobalApply sc "Cryptol.seqZip" [a, b, m, n, xs, ys]
+                   mn <- scGlobalApply sc "Cryptol.tcMin" [m, n]
+                   return (zs, mn, ab, args : argss, C.tMin len len')
      (xs, n, a, argss, lenT') <- zipAll mss
      f <- lambdaTuples sc env elemT expr argss
      b <- importType sc env elemT

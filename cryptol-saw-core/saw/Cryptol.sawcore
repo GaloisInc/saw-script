@@ -403,6 +403,16 @@ seqZip a b m n =
        n)
     m;
 
+zipSame : (a b : isort 0) -> (n : Nat) -> Vec n a -> Vec n b -> Vec n (a * b);
+zipSame a b n x y = gen n (a*b) (\ (i : Nat) -> (at n a x i, at n b y i));
+
+seqZipSame : (a b : isort 0) -> (n : Num) -> seq n a -> seq n b -> seq n (a * b);
+seqZipSame a b n =
+  Num#rec
+    (\ (n : Num) -> seq n a -> seq n b -> seq n (a * b))
+    (\ (n : Nat) -> zipSame a b n)
+    (streamMap2 a b (a*b) (\ (x:a) -> \ (y:b) -> (x,y)))
+    n;
 
 --------------------------------------------------------------------------------
 -- Ring and Logic functions
