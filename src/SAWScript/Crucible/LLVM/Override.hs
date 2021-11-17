@@ -41,12 +41,14 @@ module SAWScript.Crucible.LLVM.Override
   , learnSetupCondition
   , executeSetupCondition
   , matchArg
+  , matchPointsToValue
   , assertTermEqualities
   , methodSpecHandler
   , valueToSC
   , storePointsToValue
 
   , diffMemTypes
+  , ppPointsToAsLLVMVal
 
   , enableSMTArrayMemoryModel
   ) where
@@ -1368,14 +1370,34 @@ learnPointsTo ::
   PointsTo (LLVM arch)       ->
   OverrideMatcher (LLVM arch) md (Maybe (PP.Doc ann))
 learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
+  do (_memTy, ptr1) <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
+     matchPointsToValue opts sc cc spec prepost loc maybe_cond ptr1 val
+
+matchPointsToValue ::
+  forall arch md ann.
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
+  , ?doW4Eval :: Bool
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
+  Options                    ->
+  SharedContext              ->
+  LLVMCrucibleContext arch      ->
+  MS.CrucibleMethodSpecIR (LLVM arch)       ->
+  PrePost                    ->
+  W4.ProgramLoc ->
+  Maybe TypedTerm ->
+  LLVMPtr (Crucible.ArchWidth arch) ->
+  LLVMPointsToValue arch ->
+  OverrideMatcher (LLVM arch) md (Maybe (PP.Doc ann))
+matchPointsToValue opts sc cc spec prepost loc maybe_cond ptr val =
   do let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec
      sym    <- Ov.getSymInterface
 
      mem    <- readGlobal $ Crucible.llvmMemVar
                           $ ccLLVMContext cc
-
-     (_memTy, ptr1) <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
 
      let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
 
@@ -1385,12 +1407,12 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
             -- In case the types are different (from llvm_points_to_untyped)
             -- then the load type should be determined by the rhs.
             storTy <- Crucible.toStorableType memTy
-            res <- liftIO $ Crucible.loadRaw sym mem ptr1 storTy alignment
+            res <- liftIO $ Crucible.loadRaw sym mem ptr storTy alignment
             let summarizeBadLoad =
                  let dataLayout = Crucible.llvmDataLayout (ccTypeCtx cc)
                      sz = Crucible.memTypeSize dataLayout memTy
                  in map (PP.pretty . unwords)
-                    [ [ "When reading through pointer:", show (Crucible.ppPtr ptr1) ]
+                    [ [ "When reading through pointer:", show (Crucible.ppPtr ptr) ]
                     , [ "in the ", stateCond prepost, "of an override" ]
                     , [ "Tried to read something of size:"
                       , show (Crucible.bytesToInteger sz)
@@ -1410,7 +1432,7 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
               _ -> do
                 -- When we have a concrete failure, we do a little more computation to
                 -- try and find out why.
-                let (blk, _offset) = Crucible.llvmPointerView ptr1
+                let (blk, _offset) = Crucible.llvmPointerView ptr
                 pure $ Just $ PP.vcat . (summarizeBadLoad ++) $
                   case W4.asNat blk of
                     Nothing -> ["<Read from unknown allocation>"]
@@ -1434,15 +1456,15 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
 
        SymbolicSizeValue expected_arr_tm expected_sz_tm ->
          do maybe_allocation_array <- liftIO $
-              Crucible.asMemAllocationArrayStore sym Crucible.PtrWidth ptr1 (Crucible.memImplHeap mem)
+              Crucible.asMemAllocationArrayStore sym Crucible.PtrWidth ptr (Crucible.memImplHeap mem)
             let errMsg = PP.vcat $ map (PP.pretty . unwords)
-                  [ [ "When reading through pointer:", show (Crucible.ppPtr ptr1) ]
+                  [ [ "When reading through pointer:", show (Crucible.ppPtr ptr) ]
                   , [ "in the ", stateCond prepost, "of an override" ]
                   , [ "Tried to read an array prefix of size:", show (MS.ppTypedTerm expected_sz_tm) ]
                   ]
             case maybe_allocation_array of
               Just (ok, arr, sz)
-                | Crucible.LLVMPointer _ off <- ptr1
+                | Crucible.LLVMPointer _ off <- ptr
                 , Just 0 <- BV.asUnsigned <$> W4.asBV off ->
                 do addAssert ok $ Crucible.SimError loc $ Crucible.GenericSimError $ show errMsg
                    st <- liftIO (sawCoreState sym)
