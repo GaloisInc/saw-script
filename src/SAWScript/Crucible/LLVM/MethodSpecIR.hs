@@ -45,6 +45,7 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
   , allocSpecLoc
   , allocSpecBytes
   , allocSpecFresh
+  , allocSpecSymInit
   , mutIso
   , isMut
     -- * LLVMModule
@@ -196,6 +197,7 @@ data LLVMAllocSpec =
     , _allocSpecBytes :: Term
     , _allocSpecLoc   :: ProgramLoc
     , _allocSpecFresh :: Bool -- ^ Whether declared with @crucible_fresh_pointer@
+    , _allocSpecSymInit :: Bool
     }
   deriving (Eq, Show)
 

@@ -734,7 +734,7 @@ assumeAllocation ::
   Map MS.AllocIndex Ptr ->
   (MS.AllocIndex, LLVMAllocSpec) {- ^ llvm_alloc statement -} ->
   X86Sim (Map MS.AllocIndex Ptr)
-assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc False) = do
+assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc False _symInit) = do
   cc <- use x86CrucibleContext
   sym <- use x86Sym
   mem <- use x86Mem
