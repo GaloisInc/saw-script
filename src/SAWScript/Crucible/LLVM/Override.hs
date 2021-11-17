@@ -39,6 +39,7 @@ module SAWScript.Crucible.LLVM.Override
 
   , learnCond
   , learnSetupCondition
+  , learnPointsTo
   , executeSetupCondition
   , matchArg
   , assertTermEqualities
@@ -47,6 +48,7 @@ module SAWScript.Crucible.LLVM.Override
   , storePointsToValue
 
   , diffMemTypes
+  , ppPointsToAsLLVMVal
 
   , enableSMTArrayMemoryModel
   ) where

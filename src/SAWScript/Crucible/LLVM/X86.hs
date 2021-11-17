@@ -84,6 +84,7 @@ import SAWScript.Crucible.LLVM.ResolveSetupValue
 import qualified SAWScript.Crucible.LLVM.Override as LO
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as LMS (LLVM)
 
+import qualified What4.Concrete as W4
 import qualified What4.Config as W4
 import qualified What4.Expr as W4
 import qualified What4.FunctionName as W4
@@ -306,6 +307,13 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       rw <- getTopLevelRW
       cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms $ W4.getConfiguration sym
       _ <- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsingX86 rw
+      liftIO $ W4.extendConfig
+        [ W4.opt
+            LO.enableSMTArrayMemoryModel
+            (W4.ConcreteBool $ rwSMTArrayMemoryModel rw)
+            ("Enable SMT array memory model" :: Text)
+        ]
+        (W4.getConfiguration sym)
       let ?doW4Eval = rwWhat4Eval rw
       sawst <- liftIO $ sawCoreState sym
       halloc <- getHandleAlloc
@@ -748,15 +756,12 @@ assumePointsTo ::
   LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim ()
 assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
-  when (isJust cond) $ throwX86 "unsupported x86_64 command: llvm_conditional_points_to"
-  tval <- checkConcreteSizePointsToValue tptval
-  sym <- use x86Sym
+  opts <- use x86Options
   cc <- use x86CrucibleContext
   mem <- use x86Mem
   ptr <- resolvePtrSetupValue env tyenv tptr
-  val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
-  storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
-  mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
+  cond' <- liftIO $ mapM (resolveSAWPred cc . ttTerm) cond
+  mem' <- liftIO $ LO.storePointsToValue opts cc env tyenv nameEnv mem cond' ptr tptval Nothing
   x86Mem .= mem'
 
 resolvePtrSetupValue ::
@@ -782,11 +787,6 @@ resolvePtrSetupValue env tyenv tptr = do
         liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
     _ -> liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
          =<< resolveSetupVal cc mem env tyenv Map.empty tptr
-
-checkConcreteSizePointsToValue :: LLVMPointsToValue LLVMArch -> X86Sim (MS.SetupValue LLVM)
-checkConcreteSizePointsToValue = \case
-  ConcreteSizeValue val -> return val
-  SymbolicSizeValue{} -> throwX86 "unsupported x86_64 command: llvm_points_to_array_prefix"
 
 -- | Write each SetupValue passed to llvm_execute_func to the appropriate
 -- x86_64 register from the calling convention.
@@ -847,9 +847,6 @@ assertPost globals env premem preregs = do
   cc <- use x86CrucibleContext
   ms <- use x86MethodSpec
   postregs <- use x86Regs
-  let
-    tyenv = ms ^. MS.csPreState . MS.csAllocs
-    nameEnv = MS.csTypeNames ms
 
   prersp <- getReg Macaw.RSP preregs
   expectedIP <- liftIO $ C.LLVM.doLoad sym premem prersp (C.LLVM.bitvectorType 8)
@@ -886,8 +883,7 @@ assertPost globals env premem preregs = do
         _ -> throwX86 $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)
     _ -> pure []
 
-  pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)
-    $ assertPointsTo env tyenv nameEnv
+  pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos) assertPointsTo
 
   let setupConditionMatchesPre = fmap -- assume preconditions
         (LO.executeSetupCondition opts sc cc ms)
@@ -926,26 +922,20 @@ assertPost globals env premem preregs = do
 -- | Assert that a points-to postcondition holds.
 assertPointsTo ::
   X86Constraints =>
-  Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
-  Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
-  Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim (LLVMOverrideMatcher md ())
-assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptexpected) = do
-  when (isJust cond) $ throwX86 "unsupported x86_64 command: llvm_conditional_points_to"
-  texpected <- checkConcreteSizePointsToValue tptexpected
-  sym <- use x86Sym
+assertPointsTo pointsTo@(LLVMPointsTo loc _ _ _) = do
   opts <- use x86Options
   sc <- use x86SharedContext
   cc <- use x86CrucibleContext
   ms <- use x86MethodSpec
-  mem <- use x86Mem
-  ptr <- resolvePtrSetupValue env tyenv tptr
-  memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv texpected
-  storTy <- liftIO $ C.LLVM.toStorableType memTy
-
-  actual <- liftIO $ C.LLVM.assertSafe sym =<< C.LLVM.loadRaw sym mem ptr storTy C.LLVM.noAlignment
-  pure $ LO.matchArg opts sc cc ms MS.PostState actual memTy texpected
+  pure $ do
+    err <- LO.learnPointsTo opts sc cc ms MS.PostState pointsTo
+    case err of
+      Just msg -> do
+        doc <- LO.ppPointsToAsLLVMVal opts cc sc ms pointsTo
+        O.failure loc (O.BadPointerLoad (Right doc) msg)
+      Nothing -> pure ()
 
 -- | Gather and run the solver on goals from the simulator.
 checkGoals ::
