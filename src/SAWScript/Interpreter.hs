@@ -2337,6 +2337,13 @@ primitives = Map.fromList
     Experimental
     [ "Legacy alternative name for `llvm_alloc_with_size`." ]
 
+  , prim "llvm_alloc_sym_init" "LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_alloc_sym_init)
+    Experimental
+    [ "Like `llvm_alloc`, but assume that the allocation is initialized with"
+    , "symbolic bytes."
+    ]
+
   , prim "llvm_symbolic_alloc" "Bool -> Int -> Term -> LLVMSetup SetupValue"
     (pureVal llvm_symbolic_alloc)
     Current

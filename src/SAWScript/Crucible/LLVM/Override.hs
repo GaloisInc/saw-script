@@ -46,6 +46,7 @@ module SAWScript.Crucible.LLVM.Override
   , methodSpecHandler
   , valueToSC
   , storePointsToValue
+  , doAllocSymInit
 
   , diffMemTypes
   , ppPointsToAsLLVMVal
@@ -769,7 +770,7 @@ enforcePointerValidity sc cc loc ss =
             addAssert c $ Crucible.SimError loc $
               Crucible.AssertFailureSimError msg ""
 
-       | (LLVMAllocSpec mut _pty alignment psz _ploc fresh, ptr) <- mems
+       | (LLVMAllocSpec mut _pty alignment psz _ploc fresh _sym_init, ptr) <- mems
        , not fresh -- Fresh symbolic pointers are not assumed to be valid; don't check them
        ]
 
@@ -829,8 +830,8 @@ enforceDisjointAllocSpec ::
   (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
 enforceDisjointAllocSpec sc cc sym loc
-  (LLVMAllocSpec pmut _pty _palign psz ploc pfresh, p)
-  (LLVMAllocSpec qmut _qty _qalign qsz qloc qfresh, q)
+  (LLVMAllocSpec pmut _pty _palign psz ploc pfresh _p_sym_init, p)
+  (LLVMAllocSpec qmut _qty _qalign qsz qloc qfresh _q_sym_init, q)
   | (pmut, qmut) == (Crucible.Immutable, Crucible.Immutable) =
     pure () -- Read-only allocations may alias each other
   | pfresh || qfresh =
@@ -862,7 +863,7 @@ enforceDisjointAllocGlobal ::
   (LLVMAllocGlobal arch, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
 enforceDisjointAllocGlobal sym loc
-  (LLVMAllocSpec _pmut _pty _palign psz ploc _pfresh, p)
+  (LLVMAllocSpec _pmut _pty _palign psz ploc _pfresh _p_sym_init, p)
   (LLVMAllocGlobal qloc (L.Symbol qname), q) =
   do let Crucible.LLVMPointer pblk _ = p
      let Crucible.LLVMPointer qblk _ = q
@@ -1644,7 +1645,7 @@ executeAllocation ::
   LLVMCrucibleContext arch          ->
   (AllocIndex, LLVMAllocSpec) ->
   OverrideMatcher (LLVM arch) RW ()
-executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc fresh)
+executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc fresh symInit)
   | fresh =
   do ptr <- liftIO $ executeFreshPointer cc var
      OM (setupValueSub %= Map.insert var ptr)
@@ -1660,10 +1661,31 @@ executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc fres
      mem <- readGlobal memVar
      sz' <- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth sz
      let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
-     (ptr, mem') <- liftIO $
-       Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
+     (ptr, mem') <- liftIO $ doAllocSymInit sym mem mut alignment sz' l symInit
      writeGlobal memVar mem'
      assignVar cc loc var ptr
+
+doAllocSymInit ::
+  (Crucible.IsSymInterface sym, Crucible.HasPtrWidth wptr, Crucible.HasLLVMAnn sym) =>
+  sym ->
+  Crucible.MemImpl sym ->
+  Crucible.Mutability ->
+  Crucible.Alignment ->
+  W4.SymBV sym wptr {- ^ allocation size -} ->
+  String {- ^ source location for use in error messages -} ->
+  Bool {- ^ source location for use in error messages -} ->
+  IO (Crucible.LLVMPtr sym wptr, Crucible.MemImpl sym)
+doAllocSymInit sym mem mut alignment sz loc sym_init  = do
+  (ptr, mem') <- Crucible.doMalloc sym Crucible.HeapAlloc mut loc mem sz alignment
+  mem'' <- if sym_init then do
+    arr <- W4.freshConstant
+      sym
+      (W4.systemSymbol "arr!")
+      (W4.BaseArrayRepr (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth) (W4.BaseBVRepr (W4.knownNat @8)))
+    Crucible.doArrayConstStore sym mem' ptr alignment arr sz
+  else
+    return mem'
+  return (ptr, mem'')
 
 ------------------------------------------------------------------------
 
