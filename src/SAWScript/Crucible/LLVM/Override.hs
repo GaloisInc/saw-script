@@ -1465,14 +1465,41 @@ matchPointsToValue opts sc cc spec prepost loc maybe_cond ptr val =
                   ]
             case maybe_allocation_array of
               Just (ok, arr, sz)
-                | Crucible.LLVMPointer _ off <- ptr
-                , Just 0 <- BV.asUnsigned <$> W4.asBV off ->
+                | Crucible.LLVMPointer _ off <- ptr ->
                 do addAssert ok $ Crucible.SimError loc $ Crucible.GenericSimError $ show errMsg
+                   sub <- OM (use termSub)
                    st <- liftIO (sawCoreState sym)
-                   arr_tm <- liftIO $ toSC sym st arr
-                   instantiateExtMatchTerm sc cc (spec ^. MS.csLoc) prepost arr_tm (ttTerm expected_arr_tm)
+
+                   ptr_width_tm <- liftIO $ scNat sc $ natValue ?ptrWidth
+                   off_type_tm <- liftIO $ scBitvector sc $ natValue ?ptrWidth
+                   off_tm <- liftIO $ toSC sym st off
+                   alloc_arr_tm <- liftIO $ toSC sym st arr
+
+                   arr_tm <- liftIO $ case BV.asUnsigned <$> W4.asBV off of
+                     Just 0 -> return alloc_arr_tm
+                     _ ->
+                       do byte_width_tm <- scNat sc 8
+                          byte_type_tm <- scBitvector sc 8
+
+                          zero_off_tm <- scBvNat sc ptr_width_tm =<< scNat sc 0
+                          zero_byte_tm <- scBvNat sc byte_width_tm =<< scNat sc 0
+                          zero_arr_const_tm <- scArrayConstant sc off_type_tm byte_type_tm zero_byte_tm
+
+                          instantiated_expected_sz_tm <- scInstantiateExt sc sub $ ttTerm expected_sz_tm
+                          scArrayCopy sc ptr_width_tm byte_type_tm
+                            zero_arr_const_tm -- dest array
+                            zero_off_tm -- dest offset
+                            alloc_arr_tm -- src array
+                            off_tm -- src offset
+                            instantiated_expected_sz_tm -- length
+
+                   instantiateExtMatchTerm sc cc loc prepost arr_tm $ ttTerm expected_arr_tm
+
                    sz_tm <- liftIO $ toSC sym st sz
-                   instantiateExtMatchTerm sc cc (spec ^. MS.csLoc) prepost sz_tm (ttTerm expected_sz_tm)
+                   expected_end_off_tm <- liftIO $ scBvAdd sc ptr_width_tm off_tm $ ttTerm expected_sz_tm
+                   inbounds_check_tm <- liftIO $ scBvULe sc ptr_width_tm expected_end_off_tm sz_tm
+                   learnPred sc cc loc prepost inbounds_check_tm
+
                    return Nothing
 
               _ -> return $ Just errMsg
