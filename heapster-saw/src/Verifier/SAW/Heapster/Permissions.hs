@@ -1376,10 +1376,10 @@ bvSub e1 e2 = bvAdd e1 (bvNegate e2)
 
 -- | Integer division on bitvector expressions, truncating any factors @i*x@
 -- where @i@ is not a multiple of the divisor to zero
-bvDiv :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> Integer ->
+bvDiv :: (1 <= w, KnownNat w, Integral a) => PermExpr (BVType w) -> a ->
          PermExpr (BVType w)
 bvDiv (bvMatch -> (factors, off)) n =
-  let n_bv = BV.mkBV knownNat n in
+  let n_bv = BV.mkBV knownNat (toInteger n) in
   normalizeBVExpr $
   PExpr_BV (mapMaybe (\(BVFactor i x) ->
                        if BV.urem i n_bv == BV.zero knownNat then
@@ -1389,10 +1389,10 @@ bvDiv (bvMatch -> (factors, off)) n =
 
 -- | Integer Modulus on bitvector expressions, where any factors @i*x@ with @i@
 -- not a multiple of the divisor are included in the modulus
-bvMod :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> Integer ->
+bvMod :: (1 <= w, KnownNat w, Integral a) => PermExpr (BVType w) -> a ->
          PermExpr (BVType w)
 bvMod (bvMatch -> (factors, off)) n =
-  let n_bv = BV.mkBV knownNat n in
+  let n_bv = BV.mkBV knownNat $ toInteger n in
   normalizeBVExpr $
   PExpr_BV (mapMaybe (\f@(BVFactor i _) ->
                        if BV.urem i n_bv /= BV.zero knownNat
@@ -3584,15 +3584,23 @@ atomicPermLifetime (Perm_LLVMArray ap) = Just $ llvmArrayLifetime ap
 atomicPermLifetime (Perm_LLVMBlock bp) = Just $ llvmBlockLifetime bp
 atomicPermLifetime _ = Nothing
 
--- | Get the offset of an atomic permission, if it has one
+-- | Get the starting offset of an atomic permission, if it has one. This
+-- includes array permissions which may have some cells borrowed.
 llvmAtomicPermOffset :: AtomicPerm (LLVMPointerType w) ->
                         Maybe (PermExpr (BVType w))
-llvmAtomicPermOffset = fmap llvmBlockOffset . llvmAtomicPermToBlock
+llvmAtomicPermOffset (Perm_LLVMField fp) = Just $ llvmFieldOffset fp
+llvmAtomicPermOffset (Perm_LLVMArray ap) = Just $ llvmArrayOffset ap
+llvmAtomicPermOffset (Perm_LLVMBlock bp) = Just $ llvmBlockOffset bp
+llvmAtomicPermOffset _ = Nothing
 
--- | Get the length of an atomic permission, if it has one
+-- | Get the length of an atomic permission, if it has one. This includes array
+-- permissions which may have some cells borrowed.
 llvmAtomicPermLen :: AtomicPerm (LLVMPointerType w) ->
                      Maybe (PermExpr (BVType w))
-llvmAtomicPermLen = fmap llvmBlockLen . llvmAtomicPermToBlock
+llvmAtomicPermLen (Perm_LLVMField fp) = Just $ llvmFieldLen fp
+llvmAtomicPermLen (Perm_LLVMArray ap) = Just $ llvmArrayLengthBytes ap
+llvmAtomicPermLen (Perm_LLVMBlock bp) = Just $ llvmBlockLen bp
+llvmAtomicPermLen _ = Nothing
 
 -- | Get the range of offsets of an atomic permission, if it has one. Note that
 -- arrays with borrows do not have a well-defined range.
@@ -4332,6 +4340,14 @@ llvmPermContainsOffset off (Perm_LLVMBlock bp)
   , bvPropCouldHold prop =
     Just ([prop], bvPropHolds prop)
 llvmPermContainsOffset _ _ = Nothing
+
+-- | Test if an atomic LLVM permission definitely contains an offset. This is
+-- the 'Bool' flag returned by 'llvmPermContainsOffset', or 'False' if that is
+-- undefined.
+llvmPermContainsOffsetBool :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                              AtomicPerm (LLVMPointerType w) -> Bool
+llvmPermContainsOffsetBool off p =
+  maybe False snd $ llvmPermContainsOffset off p
 
 -- | Test if an atomic LLVM permission contains (in the sense of 'bvPropHolds')
 -- all offsets in a given range

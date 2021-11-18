@@ -6685,18 +6685,19 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps)
 
 
--- If z is unset and there is a field permission with the required offset and
--- length, set z to a field shape with equality permission to an existential
--- variable, which is the most general field permission we can make
+-- If the shape of mb_bp is an unset variable z and there is a field permission
+-- on the left that contains all the offsets of mb_bp, recursively prove a
+-- memblock permission with shape fieldsh(eq(y)) for fresh evar y, which is the
+-- most general field permission
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_Var mb_z |] <- mb_sh
   , Left memb <- mbNameBoundP mb_z
   , Nothing <- psubstLookup psubst memb
   , Just off <- partialSubst psubst (fmap llvmBlockOffset mb_bp)
   , Just len <- partialSubst psubst (fmap llvmBlockLen mb_bp)
-  , Just i <- findIndex (isLLVMAtomicPermWithOffset off) ps
-  , Perm_LLVMField (fp :: LLVMFieldPerm w sz) <- ps!!i
-  , bvEq len (llvmFieldLen fp) =
+  , Just i <- findIndex (llvmPermContainsOffsetBool off) ps
+  , (Perm_LLVMField (fp :: LLVMFieldPerm w sz)) <- ps!!i
+  , bvLeq (bvAdd off len) (bvAdd (llvmFieldOffset fp) (llvmFieldLen fp)) =
 
     -- Recursively prove a membblock with shape fieldsh(eq(y)) for fresh evar y
     let mb_bp' =
@@ -6713,38 +6714,62 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     setVarM memb (PExpr_FieldShape $ LLVMFieldShape $ ValPerm_Eq e)
 
 
--- If z is unset and there is an atomic permission with the required offset and
--- length (which is not a field permission, because otherwise the previous case
--- would match), set z to the shape of that atomic permission and recurse
+-- If the shape of mb_bp is an unset variable z and there is an array permission
+-- on the left that contains all the offsets of mb_bp, recursively prove a
+-- memblock permission with the corresponding array shape
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_Var mb_z |] <- mb_sh
   , Left memb <- mbNameBoundP mb_z
   , Nothing <- psubstLookup psubst memb
   , Just off <- partialSubst psubst (fmap llvmBlockOffset mb_bp)
   , Just len <- partialSubst psubst (fmap llvmBlockLen mb_bp)
-  , Just i <- findIndex (isLLVMAtomicPermWithOffset off) ps
-  , Just bp_lhs <- llvmAtomicPermToBlock (ps!!i)
-  , bvEq len (llvmBlockLen bp_lhs)
-  , sh_lhs <- llvmBlockShape bp_lhs =
+  , Just i <- findIndex (llvmPermContainsOffsetBool off) ps
+  , (Perm_LLVMArray ap) <- ps!!i
+  , Just (LLVMArrayIndex bp_cell (BV.BV 0)) <- matchLLVMArrayIndex ap off
+  , bvIsZero (bvMod len (llvmArrayStride ap))
+  , sh_len <- bvDiv len (llvmArrayStride ap)
+  , bvLeq (bvAdd bp_cell sh_len) (llvmArrayLen ap)
+  , sh <- PExpr_ArrayShape sh_len (llvmArrayStride ap) (llvmArrayCellShape ap) =
+    setVarM memb sh >>>
+    proveVarLLVMBlocks x ps psubst
+    (fmap (\bp -> bp { llvmBlockShape = sh }) mb_bp : mb_bps)
 
-    setVarM memb sh_lhs >>>
-    let mb_bp' = fmap (\bp -> bp { llvmBlockShape = sh_lhs }) mb_bp in
-    proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps)
 
-
--- If z is unset and there is an atomic permission with the required offset (but
--- not the required length, because otherwise it would have matched the previous
--- case), split our memblock permission into two memblock permissions with
--- unknown shapes but where the first has the length of this atomic permission
--- (so the previous case will match), and then recurse
+-- If the shape of mb_bp is an unset variable z and there is a block permission
+-- on the left with the required offset and length, set z to the shape of that
+-- block permission and recurse. Note that proveVarLLVMBlocks1 removes the case
+-- where there is a block permission that overlaps with mb_bp.
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_Var mb_z |] <- mb_sh
   , Left memb <- mbNameBoundP mb_z
   , Nothing <- psubstLookup psubst memb
   , Just off <- partialSubst psubst (fmap llvmBlockOffset mb_bp)
-  , Just i <- findIndex (isLLVMAtomicPermWithOffset off) ps
-  , Just len1 <- llvmAtomicPermLen (ps!!i)
-  , not (bvIsZero len1) =
+  , Just len <- partialSubst psubst (fmap llvmBlockLen mb_bp)
+  , Just i <- findIndex (llvmPermContainsOffsetBool off) ps
+  , (Perm_LLVMBlock bp_lhs) <- ps!!i
+  , bvEq off (llvmBlockOffset bp_lhs)
+  , bvEq len (llvmBlockLen bp_lhs)
+  , sh_lhs <- llvmBlockShape bp_lhs =
+    setVarM memb sh_lhs >>>
+    proveVarLLVMBlocks x ps psubst
+    (fmap (\bp -> bp { llvmBlockShape = sh_lhs }) mb_bp : mb_bps)
+
+
+-- If z is unset and there is an atomic permission that contains the required
+-- offset of mb_bp but is shorter than mb_bp, split mb_bp into two memblock
+-- permissions with unknown shapes but where the first has the length of this
+-- atomic permission, and then recurse
+proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
+  | [nuMP| PExpr_Var mb_z |] <- mb_sh
+  , Left memb <- mbNameBoundP mb_z
+  , Nothing <- psubstLookup psubst memb
+  , Just off <- partialSubst psubst (mbLLVMBlockOffset mb_bp)
+  , Just len <- partialSubst psubst (mbLLVMBlockLen mb_bp)
+  , Just i <- findIndex (llvmPermContainsOffsetBool off) ps
+  , Just off_lhs <- llvmAtomicPermOffset (ps!!i)
+  , Just len_lhs <- llvmAtomicPermLen (ps!!i)
+  , len1 <- bvSub len_lhs (bvSub off off_lhs)
+  , bvLt len1 len =
 
     -- Build existential memblock perms with fresh variables for shapes, where
     -- the first one has the length of the atomic perm we found and the other
@@ -6775,6 +6800,24 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     -- this proof back into position
     setVarM memb (llvmBlockShape bp) >>>
     implSwapInsertConjM x (Perm_LLVMBlock bp) ps_ret' 0
+
+proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
+  | [nuMP| PExpr_Var mb_z |] <- mb_sh
+  , Left memb <- mbNameBoundP mb_z
+  , Nothing <- psubstLookup psubst memb
+  , Just off <- partialSubst psubst (mbLLVMBlockOffset mb_bp)
+  , Just len <- partialSubst psubst (mbLLVMBlockLen mb_bp)
+  , Just i <- findIndex (llvmPermContainsOffsetBool off) ps
+  , Just off_lhs <- llvmAtomicPermOffset (ps!!i)
+  , Just len_lhs <- llvmAtomicPermLen (ps!!i)
+  , len1 <- bvSub len_lhs (bvSub off off_lhs) =
+    implTraceM (\i -> pretty "proveVarLLVMBlocks2: len1 =" <+>
+                      permPretty i len1 <+> pretty ", len_lhs =" <+>
+                      permPretty i len_lhs <+> pretty ", len =" <+>
+                      permPretty i len) >>>
+    mbSubstM (\s -> ValPerm_Conj (map (Perm_LLVMBlock . s)
+                                  (mb_bp:mb_bps))) >>>= \mb_bps' ->
+    implFailVarM "proveVarLLVMBlock" x (ValPerm_Conj ps) mb_bps'
 
 
 proveVarLLVMBlocks2 x ps _ mb_bp _ mb_bps =
