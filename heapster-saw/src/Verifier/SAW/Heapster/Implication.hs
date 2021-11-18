@@ -6358,15 +6358,12 @@ proveVarLLVMBlocks2 x ps psubst mb_bp _ mb_bps
 
 -- For an unfoldable named shape, prove its unfolding first and then fold it
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
-  | [nuMP| PExpr_NamedShape rw l nmsh args |] <- mb_sh
-  , [nuMP| TrueRepr |] <- mbMatch $ fmap namedShapeCanUnfoldRepr nmsh
-  , [nuMP| Just mb_sh' |] <- mbMatch $ (mbMap3 unfoldModalizeNamedShape rw l nmsh
-                                       `mbApply` args) =
+  | [nuMP| PExpr_NamedShape _ _ mb_nmsh _ |] <- mb_sh
+  , Just mb_bp' <- mbUnfoldModalizeNamedShapeBlock mb_bp =
+
     -- Recurse using the unfolded shape
-    (if mbLift (fmap namedShapeIsRecursive nmsh) then implSetRecRecurseRightM
+    (if mbNamedShapeIsRecursive mb_nmsh then implSetRecRecurseRightM
      else return ()) >>>
-    let mb_bp' =
-          mbMap2 (\bp sh' -> (bp { llvmBlockShape = sh' })) mb_bp mb_sh' in
     proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps) >>>
 
     -- Extract out the block perm we proved
@@ -6375,8 +6372,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     implSplitSwapConjsM x ps_out 1 >>>
 
     -- Fold the named shape
-    partialSubstForceM (fmap
-                        llvmBlockShape mb_bp) "proveVarLLVMBlocks" >>>= \sh ->
+    partialSubstForceM (mbLLVMBlockShape mb_bp) "proveVarLLVMBlocks" >>>= \sh ->
     let bp' = bp { llvmBlockShape = sh } in
     implIntroLLVMBlockNamed x bp' >>>
 
@@ -6389,9 +6385,9 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 -- on the left with this exact offset, length, and shape, because it would have
 -- matched some previous case, so try to eliminate a memblock and recurse
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
-  | [nuMP| PExpr_NamedShape _ _ nmsh _ |] <- mb_sh
-  , [nuMP| FalseRepr |] <- mbMatch $ fmap namedShapeCanUnfoldRepr nmsh
-  , Just off <- partialSubst psubst $ fmap llvmBlockOffset mb_bp
+  | [nuMP| PExpr_NamedShape _ _ mb_nmsh _ |] <- mb_sh
+  , FalseRepr <- mbNamedShapeCanUnfoldRepr mb_nmsh
+  , Just off <- partialSubst psubst $ mbLLVMBlockOffset mb_bp
   , Just i <- findIndex (\case
                             p@(Perm_LLVMBlock _) ->
                               isJust (llvmPermContainsOffset off p)
@@ -6407,8 +6403,9 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_EqShape (PExpr_Var mb_z) |] <- mb_sh
   , Left memb <- mbNameBoundP mb_z
   , Just blk <- psubstLookup psubst memb =
-    proveVarLLVMBlocks x ps psubst
-    (fmap (\bp -> bp { llvmBlockShape = PExpr_EqShape blk }) mb_bp : mb_bps)
+    let mb_bp' = fmap (\bp -> bp { llvmBlockShape =
+                                     PExpr_EqShape blk }) mb_bp in
+    proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps)
 
 
 -- If proving an equality shape eqsh(z) for unset evar z, prove any memblock
@@ -6421,8 +6418,9 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 
     -- Locally bind z_sh for the shape of the memblock perm and recurse
     let mb_bp' =
-          mbCombine RL.typeCtxProxies $ flip fmap mb_bp $ \bp ->
-          nu $ \z_sh -> bp { llvmBlockShape = PExpr_Var z_sh } in
+          mbCombine RL.typeCtxProxies $ flip mbMapCl mb_bp $
+          $(mkClosed [| \bp -> nu $ \z_sh ->
+                       bp { llvmBlockShape = PExpr_Var z_sh } |]) in
     proveVarLLVMBlocksExt1 x ps psubst mb_bp' mb_bps >>>
 
     -- Extract out the block perm we proved
@@ -6524,17 +6522,19 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 -- requires the first shape to have a well-defined length
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_SeqShape mb_sh1 _ |] <- mb_sh
-  , mbLift $ fmap (isJust . llvmShapeLength) mb_sh1 =
+  , mbLift $ mbMapCl $(mkClosed [| isJust . llvmShapeLength |]) mb_sh1 =
 
     -- Add the two shapes to mb_bps and recursively call proveVarLLVMBlocks
     let mb_bps12 =
-          fmap (\bp ->
-                 let PExpr_SeqShape sh1 sh2 = llvmBlockShape bp in
-                 let Just len1 = llvmShapeLength sh1 in
-                 [bp { llvmBlockLen = len1, llvmBlockShape = sh1 },
-                  bp { llvmBlockOffset = bvAdd (llvmBlockOffset bp) len1,
-                       llvmBlockLen = bvSub (llvmBlockLen bp) len1,
-                       llvmBlockShape = sh2 }]) mb_bp in
+          mbMapCl
+          $(mkClosed [| \bp ->
+                       let PExpr_SeqShape sh1 sh2 = llvmBlockShape bp in
+                       let Just len1 = llvmShapeLength sh1 in
+                       [bp { llvmBlockLen = len1, llvmBlockShape = sh1 },
+                        bp { llvmBlockOffset = bvAdd (llvmBlockOffset bp) len1,
+                             llvmBlockLen = bvSub (llvmBlockLen bp) len1,
+                             llvmBlockShape = sh2 }] |])
+          mb_bp in
     proveVarLLVMBlocks x ps psubst (mbList mb_bps12 ++ mb_bps) >>>
 
     -- Move the block permissions we proved to the top of the stack
@@ -6587,9 +6587,8 @@ proveVarLLVMBlocks2 x ps psubst mb_bp _ mb_bps
     implPushM x (ValPerm_Conj ps') >>>
 
     -- Recursively prove the ith disjunct and all the rest of mb_bps
-    let mb_sh = mbTaggedUnionNthDisj i mb_tag_u in
-    proveVarLLVMBlocks x ps' psubst
-    (mbMap2 (\bp sh -> bp { llvmBlockShape = sh }) mb_bp mb_sh : mb_bps) >>>
+    proveVarLLVMBlocks x ps' psubst (mbTaggedUnionNthDisjBlock i mb_bp
+                                     : mb_bps) >>>
 
     -- Move the block permission with shape mb_sh to the top of the stack
     getTopDistPerm x >>>= \(ValPerm_Conj ps'') ->
@@ -6605,7 +6604,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp _ mb_bps
 
 -- If proving a disjunctive shape, try to prove one of the disjuncts
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
-  | [nuMP| PExpr_OrShape mb_sh1 mb_sh2 |] <- mb_sh =
+  | [nuMP| PExpr_OrShape _ _ |] <- mb_sh =
 
     -- Build a computation that tries returning True here, and if that fails
     -- returns False; True is used for sh1 while False is used for sh2
@@ -6613,8 +6612,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
                (pure True) (pure False) >>>= \is_case1 ->
 
     -- Prove the chosen shape by recursively calling proveVarLLVMBlocks
-    let mb_sh' = if is_case1 then mb_sh1 else mb_sh2 in
-    let mb_bp' = mbMap2 (\bp sh -> bp { llvmBlockShape = sh }) mb_bp mb_sh' in
+    let mb_bp' = mbDisjBlockToSubShape is_case1 mb_bp in
     proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps) >>>
 
     -- Move the block permission we proved to the top of the stack
@@ -6637,14 +6635,12 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 
 -- If proving an existential shape, introduce an evar and recurse
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
-  | [nuMP| PExpr_ExShape mb_mb_sh' |] <- mb_sh =
+  | [nuMP| PExpr_ExShape mb_mb_sh |] <- mb_sh
+  , (_ :: Mb ctx (Binding a (PermExpr (LLVMShapeType w)))) <- mb_mb_sh
+  , a <- knownRepr :: TypeRepr a
+  , mb_bp' <- mbExBlockToSubShape a mb_bp =
 
     -- Prove the sub-shape in the context of a new existential variable
-    let mb_bp' =
-          mbCombine RL.typeCtxProxies $
-          mbMap2 (\bp mb_sh' ->
-                   fmap (\sh -> bp { llvmBlockShape = sh }) mb_sh')
-          mb_bp mb_mb_sh' in
     proveVarLLVMBlocksExt1 x ps psubst mb_bp' mb_bps >>>= \e ->
 
     -- Move the block permission we proved to the top of the stack
@@ -6652,15 +6648,13 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     implSplitSwapConjsM x ps' 1 >>>
 
     -- Prove an existential around the memblock permission we proved
-    partialSubstForceM (mbMap2 (,)
-                        mb_bp mb_mb_sh') "proveVarLLVMBlock" >>>= \(bp,mb_sh') ->
-    introExistsM x e (fmap (\sh -> ValPerm_LLVMBlock $
-                                   bp { llvmBlockShape = sh }) mb_sh') >>>
+    partialSubstForceM mb_bp "proveVarLLVMBlock" >>>= \bp_out ->
+    introExistsM x e (mbValPerm_LLVMBlock $ exBlockToSubShape a bp_out) >>>
 
     -- Now coerce the existential permission on top of the stack to a memblock
     -- perm with existential shape, and move it back into position
-    implSimplM Proxy (SImpl_IntroLLVMBlockEx x bp) >>>
-    implSwapInsertConjM x (Perm_LLVMBlock bp) (tail ps') 0
+    implSimplM Proxy (SImpl_IntroLLVMBlockEx x bp_out) >>>
+    implSwapInsertConjM x (Perm_LLVMBlock bp_out) (tail ps') 0
 
 
 -- If proving an evar shape that has already been set, substitute and recurse
@@ -6801,24 +6795,6 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     setVarM memb (llvmBlockShape bp) >>>
     implSwapInsertConjM x (Perm_LLVMBlock bp) ps_ret' 0
 
-proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
-  | [nuMP| PExpr_Var mb_z |] <- mb_sh
-  , Left memb <- mbNameBoundP mb_z
-  , Nothing <- psubstLookup psubst memb
-  , Just off <- partialSubst psubst (mbLLVMBlockOffset mb_bp)
-  , Just len <- partialSubst psubst (mbLLVMBlockLen mb_bp)
-  , Just i <- findIndex (llvmPermContainsOffsetBool off) ps
-  , Just off_lhs <- llvmAtomicPermOffset (ps!!i)
-  , Just len_lhs <- llvmAtomicPermLen (ps!!i)
-  , len1 <- bvSub len_lhs (bvSub off off_lhs) =
-    implTraceM (\i -> pretty "proveVarLLVMBlocks2: len1 =" <+>
-                      permPretty i len1 <+> pretty ", len_lhs =" <+>
-                      permPretty i len_lhs <+> pretty ", len =" <+>
-                      permPretty i len) >>>
-    mbSubstM (\s -> ValPerm_Conj (map (Perm_LLVMBlock . s)
-                                  (mb_bp:mb_bps))) >>>= \mb_bps' ->
-    implFailVarM "proveVarLLVMBlock" x (ValPerm_Conj ps) mb_bps'
-
 
 proveVarLLVMBlocks2 x ps _ mb_bp _ mb_bps =
   mbSubstM (\s -> ValPerm_Conj (map (Perm_LLVMBlock . s)
@@ -6914,6 +6890,8 @@ proveVarImplFoldRight x p mb_p = case mbMatch mb_p of
           _ -> pure ()) >>>
       implLookupNamedPerm npn >>>= \np ->
       implPopM x p >>>
+      -- FIXME: how to replace this mbMap2 with mbMapCl, to avoid refreshing all
+      -- the names in mb_args and mb_off? Maybe they aren't that big anyway...
       proveVarImplInt x (mbMap2 (unfoldPerm np) mb_args mb_off) >>>
       partialSubstForceM (mbMap2 (,) mb_args mb_off)
       "proveVarImplFoldRight" >>>= \(args,off) ->
@@ -7200,12 +7178,14 @@ proveVarConjImpl x ps mb_ps =
            rank -> rank)
        (mbList mb_ps) of
     Just i ->
-      let mb_p = fmap (!!i) mb_ps in
-      let mb_ps' = fmap (deleteNth i) mb_ps in
+      let mb_p = mbMapCl ($(mkClosed [| flip (!!) |])
+                          `clApply` toClosed i) mb_ps in
+      let mb_ps' = mbMapCl ($(mkClosed [| deleteNth |])
+                            `clApply` toClosed i) mb_ps in
       proveVarAtomicImpl x ps mb_p >>>
-      proveVarImplInt x (fmap ValPerm_Conj mb_ps') >>>
-      (partialSubstForceM (mbMap2 (,)
-                           mb_ps' mb_p) "proveVarConjImpl") >>>= \(ps',p) ->
+      proveVarImplInt x (mbValPerm_Conj mb_ps') >>>
+      partialSubstForceM mb_ps' "proveVarConjImpl" >>>= \ps' ->
+      partialSubstForceM mb_p "proveVarConjImpl" >>>= \p ->
       implInsertConjM x p ps' i
     Nothing ->
       implTraceM
@@ -7558,16 +7538,6 @@ type ExDistPerms vars ps = Mb vars (DistPerms ps)
 distPermsToExDistPerms :: DistPerms ps -> ExDistPerms RNil ps
 distPermsToExDistPerms = emptyMb
 
--- | Combine a list of names and a sequence of permissions inside a name-binding
--- to get an 'ExDistPerms'
-mbValuePermsToExDistPerms :: RAssign Name ps -> Mb vars (ValuePerms ps) ->
-                             ExDistPerms vars ps
-mbValuePermsToExDistPerms MNil mb_ps = fmap (const DistPermsNil) mb_ps
-mbValuePermsToExDistPerms (xs :>: x) mb_ps =
-  mbMap2 (\ps p -> DistPermsCons ps x p)
-  (mbValuePermsToExDistPerms xs (fmap RL.tail mb_ps))
-  (fmap RL.head mb_ps)
-
 -- | Substitute arguments into a function permission to get the existentially
 -- quantified input permissions needed on the arguments
 funPermExDistIns :: FunPerm ghosts args ret -> RAssign Name args ->
@@ -7589,6 +7559,7 @@ extExDistPermsSplit :: ExDistPermsSplit vars ps ->
                        Mb vars (ExprVar b) -> Mb vars (ValuePerm b) ->
                        ExDistPermsSplit vars (ps :> b)
 extExDistPermsSplit (ExDistPermsSplit ps1 mb_x mb_p ps2) y p' =
+  -- FIXME: how to replace this mbMap2 with an mbMapCl?
   ExDistPermsSplit ps1 mb_x mb_p $
   mbMap2 DistPermsCons ps2 y `mbApply` p'
 

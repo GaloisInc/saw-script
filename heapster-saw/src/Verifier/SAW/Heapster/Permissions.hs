@@ -1602,6 +1602,10 @@ data ValuePerm (a :: CrucibleType) where
   ValPerm_Conj :: [AtomicPerm a] -> ValuePerm a
 
 
+-- | The conjunction of a list of atomic permissions in a binding
+mbValPerm_Conj :: Mb ctx [AtomicPerm a] -> Mb ctx (ValuePerm a)
+mbValPerm_Conj = mbMapCl $(mkClosed [| ValPerm_Conj |])
+
 -- | The vacuously true permission is the conjunction of 0 atomic permissions
 pattern ValPerm_True :: ValuePerm a
 pattern ValPerm_True = ValPerm_Conj []
@@ -2295,12 +2299,23 @@ namedShapeIsRecursive :: NamedShape b args w -> Bool
 namedShapeIsRecursive (NamedShape _ _ (RecShapeBody _ _ _)) = True
 namedShapeIsRecursive _ = False
 
+-- | Test if a 'NamedShape' in a binding is recursive
+mbNamedShapeIsRecursive :: Mb ctx (NamedShape b args w) -> Bool
+mbNamedShapeIsRecursive =
+  mbLift . mbMapCl $(mkClosed [| namedShapeIsRecursive |])
+
 -- | Get a 'BoolRepr' for the Boolean flag for whether a named shape can be
 -- unfolded
 namedShapeCanUnfoldRepr :: NamedShape b args w -> BoolRepr b
 namedShapeCanUnfoldRepr (NamedShape _ _ (DefinedShapeBody _)) = TrueRepr
 namedShapeCanUnfoldRepr (NamedShape _ _ (OpaqueShapeBody _ _)) = FalseRepr
 namedShapeCanUnfoldRepr (NamedShape _ _ (RecShapeBody _ _ _)) = TrueRepr
+
+-- | Get a 'BoolRepr' for the Boolean flag for whether a named shape in a
+-- binding can be unfolded
+mbNamedShapeCanUnfoldRepr :: Mb ctx (NamedShape b args w) -> BoolRepr b
+mbNamedShapeCanUnfoldRepr =
+  mbLift . mbMapCl $(mkClosed [| namedShapeCanUnfoldRepr |])
 
 -- | Whether a 'NamedShape' can be unfolded
 namedShapeCanUnfold :: NamedShape b args w -> Bool
@@ -3787,6 +3802,71 @@ unfoldModalizeNamedShape :: KnownNat w => Maybe (PermExpr RWModalityType) ->
 unfoldModalizeNamedShape rw l nmsh args =
   modalizeShape rw l $ unfoldNamedShape nmsh args
 
+-- | Unfold the shape of a block permission using 'unfoldModalizeNamedShape' if
+-- it has a named shape
+unfoldModalizeNamedShapeBlock :: KnownNat w => LLVMBlockPerm w ->
+                                 Maybe (LLVMBlockPerm w)
+unfoldModalizeNamedShapeBlock bp
+  | PExpr_NamedShape rw l nmsh args <- llvmBlockShape bp
+  , TrueRepr <- namedShapeCanUnfoldRepr nmsh
+  , Just sh' <- unfoldModalizeNamedShape rw l nmsh args =
+    Just (bp { llvmBlockShape = sh' })
+unfoldModalizeNamedShapeBlock _ = Nothing
+
+-- | Unfold the shape of a block permission in a binding using
+-- 'unfoldModalizeNamedShape' if it has a named shape
+mbUnfoldModalizeNamedShapeBlock :: KnownNat w => Mb ctx (LLVMBlockPerm w) ->
+                                   Maybe (Mb ctx (LLVMBlockPerm w))
+mbUnfoldModalizeNamedShapeBlock =
+  mbMaybe . mbMapCl $(mkClosed [| unfoldModalizeNamedShapeBlock |])
+
+-- | Change the shape of a disjunctive block to either its left or right
+-- disjunct, depending on whether the supplied 'Bool' is 'True' or 'False'
+disjBlockToSubShape :: Bool -> LLVMBlockPerm w -> LLVMBlockPerm w
+disjBlockToSubShape flag bp
+  | PExpr_OrShape sh1 sh2 <- llvmBlockShape bp =
+    bp { llvmBlockShape = if flag then sh1 else sh2 }
+disjBlockToSubShape _ _ = error "disjBlockToSubShape"
+
+-- | Change the shape of a disjunctive block in a binding to either its left or
+-- right disjunct, depending on whether the supplied 'Bool' is 'True' or 'False'
+mbDisjBlockToSubShape :: Bool -> Mb ctx (LLVMBlockPerm w) ->
+                         Mb ctx (LLVMBlockPerm w)
+mbDisjBlockToSubShape flag =
+  mbMapCl ($(mkClosed [| disjBlockToSubShape |]) `clApply` toClosed flag)
+
+-- | A block permission in a binding at some unknown type
+data SomeBindingLLVMBlockPerm w =
+  forall a. SomeBindingLLVMBlockPerm (Binding a (LLVMBlockPerm w))
+
+-- | Match an existential shape with the given bidning type
+matchExShape :: TypeRepr a -> PermExpr (LLVMShapeType w) ->
+                Maybe (Binding a (PermExpr (LLVMShapeType w)))
+matchExShape a (PExpr_ExShape (mb_sh :: Binding b (PermExpr (LLVMShapeType w))))
+  | Just Refl <- testEquality a (knownRepr :: TypeRepr b) =
+    Just mb_sh
+matchExShape _ _ = Nothing
+
+-- | Change the shape of an existential block to the body of its existential
+exBlockToSubShape :: TypeRepr a -> LLVMBlockPerm w ->
+                     Binding a (LLVMBlockPerm w)
+exBlockToSubShape a bp
+  | Just mb_sh <- matchExShape a $ llvmBlockShape bp =
+    -- NOTE: even when exBlockToSubShape is called inside a binding as part of
+    -- mbExBlockToSubShape, the existential binding will probably be a fresh
+    -- function instead of a fresh pair, because it itself has not been
+    -- mbMatched, so this fmap shouldn't be re-subsituting names
+    fmap (\sh -> bp { llvmBlockShape = sh }) mb_sh
+exBlockToSubShape _ _ = error "exBlockToSubShape"
+
+-- | Change the shape of an existential block in a binding to the body of its
+-- existential
+mbExBlockToSubShape :: TypeRepr a -> Mb ctx (LLVMBlockPerm w) ->
+                       Mb (ctx :> a) (LLVMBlockPerm w)
+mbExBlockToSubShape a =
+  mbCombine RL.typeCtxProxies .
+  mbMapCl ($(mkClosed [| exBlockToSubShape |]) `clApply` toClosed a)
+
 -- | Split a block permission into portions that are before and after a given
 -- offset, if possible, assuming the offset is in the block permission
 splitLLVMBlockPerm :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
@@ -3924,6 +4004,29 @@ mbTaggedUnionNthDisj n_top =
   mbMapCl ($(mkClosed [| \n -> (!!n) . taggedUnionDisjs |])
            `clApply` toClosed n_top)
 
+-- | Change a block permisison with a tagged union shape to have the @n@th
+-- disjunct shape of this tagged union
+taggedUnionNthDisjBlock :: Int -> LLVMBlockPerm w -> LLVMBlockPerm w
+taggedUnionNthDisjBlock 0 bp
+  | PExpr_OrShape sh1 _ <- llvmBlockShape bp =
+    bp { llvmBlockShape = sh1 }
+taggedUnionNthDisjBlock 0 bp =
+  -- NOTE: this case happens for the last shape in a tagged union, which is not
+  -- or-ed with anything, and is guaranteed not to be an or itsef (so it won't
+  -- match the above case)
+  bp
+taggedUnionNthDisjBlock n bp
+  | PExpr_OrShape _ sh2 <- llvmBlockShape bp =
+    taggedUnionNthDisjBlock (n-1) $ bp { llvmBlockShape = sh2 }
+taggedUnionNthDisjBlock _ _ = error "taggedUnionNthDisjBlock"
+
+-- | Change the a block permisison in a binding with a tagged union shape to
+-- have the @n@th disjunct shape of this tagged union
+mbTaggedUnionNthDisjBlock :: Int -> Mb ctx (LLVMBlockPerm w) ->
+                             Mb ctx (LLVMBlockPerm w)
+mbTaggedUnionNthDisjBlock n =
+  mbMapCl ($(mkClosed [| taggedUnionNthDisjBlock |]) `clApply` toClosed n)
+
 -- | Get the tags from a 'TaggedUnionShape'
 taggedUnionTags :: TaggedUnionShape w sz -> [BV sz]
 taggedUnionTags (TaggedUnionShape disjs) = map fst $ NonEmpty.toList disjs
@@ -3995,7 +4098,8 @@ taggedUnionExTagPerm bp =
                              llvmFieldContents =
                                ValPerm_Eq (PExpr_LLVMWord $ PExpr_Var z) }
 
--- | Convert a tagged union shape in a binding to
+-- | Convert a @memblock@ permission in a binding with a tagged union shape to a
+-- field permission with permission @eq(z)@ using evar @z@ for the tag
 mbTaggedUnionExTagPerm :: (1 <= sz, KnownNat sz) => Mb ctx (LLVMBlockPerm w) ->
                           Mb (ctx :> BVType sz) (LLVMFieldPerm w sz)
 mbTaggedUnionExTagPerm =
@@ -6679,6 +6783,7 @@ $(mkNuMatching [t| forall b args a. DefinedPerm b args a |])
 $(mkNuMatching [t| forall args a. LifetimeFunctor args a |])
 $(mkNuMatching [t| forall ps. LifetimeCurrentPerms ps |])
 $(mkNuMatching [t| forall a. SomeLLVMBlockPerm a |])
+$(mkNuMatching [t| forall w. SomeBindingLLVMBlockPerm w |])
 
 instance NuMatchingAny1 LOwnedPerm where
   nuMatchingAny1Proof = nuMatchingProof
