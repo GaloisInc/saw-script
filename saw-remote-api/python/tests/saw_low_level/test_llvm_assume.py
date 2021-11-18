@@ -15,6 +15,7 @@ class LLVMAssumeTest(unittest.TestCase):
         c.llvm_load_module('m', assume_bc).result()
 
         seven_contract = {
+            "mutable globals": [],
             "pre vars": [],
             "pre conds": [],
             "pre allocated": [],
@@ -28,6 +29,7 @@ class LLVMAssumeTest(unittest.TestCase):
         }
 
         addone_contract = {
+            "mutable globals": [],
             "pre vars": [],
             "pre conds": [],
             "pre allocated": [],

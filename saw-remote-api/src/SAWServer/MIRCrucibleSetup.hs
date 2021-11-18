@@ -11,6 +11,7 @@ module SAWServer.MIRCrucibleSetup
 
 import Control.Exception (throw)
 import Control.Lens ( (^.), view )
+import Control.Monad (unless)
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import Control.Monad.State ( MonadState(..) )
 import Data.Aeson ( FromJSON(..), withObject, (.:) )
@@ -66,7 +67,7 @@ import SAWServer.Data.Contract
       GhostValue(GhostValue),
       Allocated(Allocated),
       ContractVar(ContractVar),
-      Contract(preVars, preConds, preAllocated, preGhostValues, prePointsTos, prePointsToBitfields,
+      Contract(mutableGlobals, preVars, preConds, preAllocated, preGhostValues, prePointsTos, prePointsToBitfields,
                argumentVals, postVars, postConds, postAllocated, postGhostValues, postPointsTos, postPointsToBitfields,
                returnVal) )
 import SAWServer.Data.MIRType (JSONMIRType, mirType)
@@ -86,7 +87,9 @@ compileMIRContract ::
   Contract JSONMIRType (P.Expr P.PName) ->
   MIRSetupM ()
 compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
-  do allocsPre <- mapM setupAlloc (preAllocated c)
+  do unless (null (mutableGlobals c)) $
+       MIRSetupM $ fail "Allocating mutable global variables not supported in the MIR API."
+     allocsPre <- mapM setupAlloc (preAllocated c)
      (envPre, cenvPre) <- setupState allocsPre (Map.empty, cenv0) (preVars c)
      mapM_ (\p -> getTypedTerm cenvPre p >>= mir_precond) (preConds c)
      mapM_ (setupPointsTo (envPre, cenvPre)) (prePointsTos c)
