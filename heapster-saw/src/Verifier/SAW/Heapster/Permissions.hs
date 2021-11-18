@@ -93,6 +93,33 @@ import Debug.Trace
 -- * Utility Functions and Definitions
 ----------------------------------------------------------------------
 
+-- | Replace the body of a binding with a constant
+mbConst :: a -> Mb ctx b -> Mb ctx a
+mbConst a = fmap $ const a
+
+-- | Get the first element of a pair in a binding
+mbFst :: NuMatching a => NuMatching b => Mb ctx (a,b) -> Mb ctx a
+mbFst = mbMapCl $(mkClosed [| fst |])
+
+-- | Get the second element of a pair in a binding
+mbSnd :: NuMatching a => NuMatching b => Mb ctx (a,b) -> Mb ctx b
+mbSnd = mbMapCl $(mkClosed [| snd |])
+
+-- | Get the first element of a triple in a binding
+mbFst3 :: NuMatching a => NuMatching b => NuMatching c =>
+          Mb ctx (a,b,c) -> Mb ctx a
+mbFst3 = mbMapCl $(mkClosed [| \(a,_,_) -> a |])
+
+-- | Get the first element of a triple in a binding
+mbSnd3 :: NuMatching a => NuMatching b => NuMatching c =>
+          Mb ctx (a,b,c) -> Mb ctx b
+mbSnd3 = mbMapCl $(mkClosed [| \(_,b,_) -> b |])
+
+-- | Get the first element of a triple in a binding
+mbThd3 :: NuMatching a => NuMatching b => NuMatching c =>
+          Mb ctx (a,b,c) -> Mb ctx c
+mbThd3 = mbMapCl $(mkClosed [| \(_,_,c) -> c |])
+
 -- | FIXME: put this somewhere more appropriate
 subNat' :: NatRepr m -> NatRepr n -> Maybe (NatRepr (m-n))
 subNat' m n
@@ -105,6 +132,10 @@ deleteNth :: Int -> [a] -> [a]
 deleteNth i xs | i >= length xs = error "deleteNth"
 deleteNth i xs = take i xs ++ drop (i+1) xs
 
+-- | Apply 'deleteNth' inside a name-binding
+mbDeleteNth :: NuMatching a => Int -> Mb ctx [a] -> Mb ctx [a]
+mbDeleteNth i = mbMapCl ($(mkClosed [| deleteNth |]) `clApply` toClosed i)
+
 -- | Replace the nth element of a list
 replaceNth :: Int -> a -> [a] -> [a]
 replaceNth i _ xs | i >= length xs = error "replaceNth"
@@ -114,6 +145,9 @@ replaceNth i x xs = take i xs ++ x : drop (i+1) xs
 insertNth :: Int -> a -> [a] -> [a]
 insertNth i x xs = take i xs ++ x : drop i xs
 
+-- | Find the @n@th element of a list in a binding
+mbNth :: NuMatching a => Int -> Mb ctx [a] -> Mb ctx a
+mbNth i = mbMapCl ($(mkClosed [| flip (!!) |]) `clApply` toClosed i)
 
 -- | Find all elements of list @l@ where @f@ returns a value and return that
 -- value plus its index into @l@
@@ -142,6 +176,13 @@ foldr1WithDefault f def (a:as) = f a $ foldr1WithDefault f def as
 -- empty list.
 foldMapWithDefault :: (b -> b -> b) -> b -> (a -> b) -> [a] -> b
 foldMapWithDefault comb def f l = foldr1WithDefault comb def $ map f l
+
+-- | Build a 'NameSet' from a sequence of names and a list of 'Bool' flags
+nameSetFromFlags :: RAssign Name (ctx :: RList k) -> [Bool] -> NameSet k
+nameSetFromFlags ns flags =
+  NameSet.fromList $
+  mapMaybe (\(n,flag) -> if flag then Just n else Nothing) $
+  zip (RL.mapToList SomeName ns) flags
 
 -- | A flag indicating whether an equality test has unfolded a
 -- recursively-defined name on one side of the equation already
@@ -1602,6 +1643,10 @@ data ValuePerm (a :: CrucibleType) where
   ValPerm_Conj :: [AtomicPerm a] -> ValuePerm a
 
 
+-- | Build an equality permission in a binding
+mbValPerm_Eq :: Mb ctx (PermExpr a) -> Mb ctx (ValuePerm a)
+mbValPerm_Eq = mbMapCl $(mkClosed [| ValPerm_Eq |])
+
 -- | The conjunction of a list of atomic permissions in a binding
 mbValPerm_Conj :: Mb ctx [AtomicPerm a] -> Mb ctx (ValuePerm a)
 mbValPerm_Conj = mbMapCl $(mkClosed [| ValPerm_Conj |])
@@ -1786,6 +1831,11 @@ mbLLVMFieldSize _ = knownNat
 -- | Get the rw-modality-in-binding of a field permission in binding
 mbLLVMFieldRW :: Mb ctx (LLVMFieldPerm w sz) -> Mb ctx (PermExpr RWModalityType)
 mbLLVMFieldRW = mbMapCl $(mkClosed [| llvmFieldRW |])
+
+-- | Get the lifetime-in-binding of a field permission in binding
+mbLLVMFieldLifetime :: Mb ctx (LLVMFieldPerm w sz) ->
+                       Mb ctx (PermExpr LifetimeType)
+mbLLVMFieldLifetime = mbMapCl $(mkClosed [| llvmFieldLifetime |])
 
 -- | Get the offset-in-binding of a field permission in binding
 mbLLVMFieldOffset :: Mb ctx (LLVMFieldPerm w sz) -> Mb ctx (PermExpr (BVType w))
@@ -5965,6 +6015,12 @@ psubstMbUnsetVars (PartialSubst elems) =
             if maybe_e == Nothing
             then Constant (Just $ SomeName n)
             else Constant Nothing) ns elems
+
+-- | Return a list of 'Bool's indicating which of the bound names in context
+-- @ctx@ are unset in the given partial substitution
+psubstUnsetVarsBool :: PartialSubst ctx -> [Bool]
+psubstUnsetVarsBool (PartialSubst elems) =
+  RL.mapToList (\(PSubstElem maybe_e) -> isNothing maybe_e) elems
 
 -- | Set the expression associated with a variable in a partial substitution. It
 -- is an error if it is already set.
