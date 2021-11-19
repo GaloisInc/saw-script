@@ -93,6 +93,10 @@ import Debug.Trace
 -- * Utility Functions and Definitions
 ----------------------------------------------------------------------
 
+-- | Take the ceiling of a division
+ceil_div :: Integral a => a -> a -> a
+ceil_div a b = (a + b - fromInteger 1) `div` b
+
 -- | Replace the body of a binding with a constant
 mbConst :: a -> Mb ctx b -> Mb ctx a
 mbConst a = fmap $ const a
@@ -694,16 +698,16 @@ shapeLLVMTypeWidth :: KnownNat w => f (LLVMShapeType w) -> NatRepr w
 shapeLLVMTypeWidth _ = knownNat
 
 -- | Convenience function to get the number of bytes = the bit width divided by
--- 8 of an LLVM pointer type
+-- 8 of an LLVM pointer type rounded up
 exprLLVMTypeBytes :: KnownNat w => f (LLVMPointerType w) -> Integer
-exprLLVMTypeBytes e = intValue (exprLLVMTypeWidth e) `div` 8
+exprLLVMTypeBytes e = intValue (exprLLVMTypeWidth e) `ceil_div` 8
 
 -- | Convenience function to get the number of bytes = the bit width divided by
 -- 8 of an LLVM pointer type as an expr. Note that this assumes the bit width is
 -- a multiple of 8, so does not worry about rounding.
 exprLLVMTypeBytesExpr :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
                          f (LLVMPointerType sz) -> PermExpr (BVType w)
-exprLLVMTypeBytesExpr e = bvInt (intValue (exprLLVMTypeWidth e) `div` 8)
+exprLLVMTypeBytesExpr e = bvInt (intValue (exprLLVMTypeWidth e) `ceil_div` 8)
 
 -- | Convenience function to get the width of an LLVM pointer type of an
 -- expression in a binding as an expression
@@ -711,7 +715,7 @@ mbExprLLVMTypeBytesExpr :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
                            Mb ctx (f (LLVMPointerType sz)) ->
                            PermExpr (BVType w)
 mbExprLLVMTypeBytesExpr mb_e =
-  bvInt $ div (intValue $ mbLift $ fmap exprLLVMTypeWidth mb_e) 8
+  bvInt $ ceil_div (intValue $ mbLift $ fmap exprLLVMTypeWidth mb_e) 8
 
 -- | Pattern-match a permission list expression as a typed list of permissions
 -- consed onto a terminator, which can either be the empty list (represented by
@@ -1820,7 +1824,7 @@ llvmFieldSize _ = knownNat
 
 -- | Get the size of an 'LLVMFieldPerm' in bytes
 llvmFieldSizeBytes :: KnownNat sz => LLVMFieldPerm w sz -> Integer
-llvmFieldSizeBytes fp = intValue (llvmFieldSize fp) `div` 8
+llvmFieldSizeBytes fp = intValue (llvmFieldSize fp) `ceil_div` 8
 
 -- | Helper to get a 'NatRepr' for the size of an 'LLVMFieldPerm' in a binding
 mbLLVMFieldSize :: KnownNat sz => Mb ctx (LLVMFieldPerm w sz) -> NatRepr sz
@@ -3702,7 +3706,7 @@ llvmShapeLength (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
   llvmShapeLength (unfoldNamedShape nmsh args)
 llvmShapeLength (PExpr_EqShape _) = Nothing
 llvmShapeLength (PExpr_PtrShape _ _ sh)
-  | LLVMShapeRepr w <- exprType sh = Just $ bvInt (intValue w `div` 8)
+  | LLVMShapeRepr w <- exprType sh = Just $ bvInt (intValue w `ceil_div` 8)
   | otherwise = Nothing
 llvmShapeLength (PExpr_FieldShape fsh) =
   Just $ bvInt $ llvmFieldShapeLength fsh
@@ -4232,12 +4236,12 @@ machineWordBytes :: KnownNat w => f w -> Integer
 machineWordBytes w
   | natVal w `mod` 8 /= 0 =
     error "machineWordBytes: word size is not a multiple of 8!"
-machineWordBytes w = natVal w `div` 8
+machineWordBytes w = natVal w `ceil_div` 8
 
 -- | Convert bytes to machine words, rounded up, i.e., return @ceil(n/W)@,
 -- where @W@ is the number of bytes per machine word
 bytesToMachineWords :: KnownNat w => f w -> Integer -> Integer
-bytesToMachineWords w n = (n + machineWordBytes w - 1) `div` machineWordBytes w
+bytesToMachineWords w n = n `ceil_div` machineWordBytes w
 
 -- | Return the largest multiple of 'machineWordBytes' less than the input
 prevMachineWord :: KnownNat w => f w -> Integer -> Integer
