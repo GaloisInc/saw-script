@@ -301,7 +301,7 @@ permPretty :: PermPretty a => PPInfo -> a -> Doc ann
 permPretty info a = runReader (permPrettyM a) info
 
 renderDoc :: Doc ann -> String
-renderDoc doc = renderString (layoutSmart opts doc)
+renderDoc doc = renderString (layoutPretty opts doc)
   where opts = LayoutOptions (AvailablePerLine 80 0.8)
 
 permPrettyString :: PermPretty a => PPInfo -> a -> String
@@ -310,12 +310,10 @@ permPrettyString info a = renderDoc $ permPretty info a
 tracePretty :: Doc ann -> a -> a
 tracePretty doc = trace (renderDoc doc)
 
--- | Pretty-print a comma-separated list using 'fillSep'
+-- | Pretty-print a comma-separated list
 ppCommaSep :: [Doc ann] -> Doc ann
-ppCommaSep [] = mempty
 ppCommaSep ds =
-  PP.group $ align $ fillSep $ map PP.group
-  (map (<> comma) (take (length ds - 1) ds) ++ [last ds])
+  PP.group $ align $ fillSep $ map PP.group $ PP.punctuate comma ds
 
 -- | Pretty-print a comma-separated list using 'fillSep' enclosed inside either
 -- parentheses (if the supplied flag is 'True') or brackets (if it is 'False')
