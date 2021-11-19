@@ -1,5 +1,5 @@
 # Revision history for saw-remote-api
 
-## 0.1.0.0 -- YYYY-mm-dd
+## 0.9.0 -- 2021-11-19
 
-* First version. Released on an unsuspecting world.
+* v0.9 release

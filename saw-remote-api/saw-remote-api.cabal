@@ -4,14 +4,14 @@ cabal-version:       2.4
 -- http://haskell.org/cabal/users-guide/
 
 name:                saw-remote-api
-version:             0.1.0.0
+version:             0.9.0
 -- synopsis:
 -- description:
 -- bug-reports:
 license:             BSD-3-Clause
 license-file:        LICENSE
-author:              Kenny Foner
-maintainer:          kwf@galois.com
+author:              Galois, Inc.
+maintainer:          saw@galois.com
 -- copyright:
 category:            Network
 extra-source-files:  CHANGELOG.md
