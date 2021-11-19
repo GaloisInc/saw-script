@@ -625,6 +625,18 @@ data SimplImpl ps_in ps_out where
     SimplImpl (RNil :> LLVMPointerType w)
     (RNil :> LLVMPointerType w :> LLVMPointerType w)
 
+  -- | Truncate an LLVM field permission that points to a known bitvector:
+  --
+  -- > x:[l]ptr((rw,off) |-> eq(bv1++bv2))
+  -- >   -o [l]x:ptr((rw,off) |-> eq(bv1))
+  --
+  -- Note that the definition of @++@ depends on the current endianness.
+  SImpl_TruncateLLVMWordField ::
+    (1 <= w, KnownNat w, 1 <= sz1, KnownNat sz1, 1 <= sz2, KnownNat sz2) =>
+    ExprVar (LLVMPointerType w) ->
+    LLVMFieldPerm w sz2 -> BV.BV sz1 -> EndianForm ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+
   -- | Concatenate two LLVM field permissions that point to known bitvectors:
   --
   -- > [l]x:ptr((rw,off) |-> eq(bv1)) * [l]x:ptr((rw,off+len(bv1)) |-> eq(bv2))
@@ -644,8 +656,6 @@ data SimplImpl ps_in ps_out where
   -- > x:[l]ptr((rw,off,sz2) |-> true)
   -- >   -o [l]x:ptr((rw,off,sz1) |-> true)
   -- >      * [l]x:ptr((rw,off+sz1,sz2-sz1) |-> true)
-  --
-  -- Note that the definition of @++@ depends on the current endianness.
   SImpl_SplitLLVMTrueField ::
     (1 <= w, KnownNat w, 1 <= sz1, KnownNat sz1, 1 <= sz2, KnownNat sz2,
      1 <= (sz2 - sz1), KnownNat (sz2 - sz1)) =>
@@ -654,12 +664,20 @@ data SimplImpl ps_in ps_out where
     SimplImpl (RNil :> LLVMPointerType w)
     (RNil :> LLVMPointerType w :> LLVMPointerType w)
 
+  -- | Truncate an LLVM field permission with @true@ contents:
+  --
+  -- > x:[l]ptr((rw,off,sz2) |-> true)
+  -- >   -o [l]x:ptr((rw,off,sz1) |-> true)
+  --
+  SImpl_TruncateLLVMTrueField ::
+    (1 <= w, KnownNat w, 1 <= sz1, KnownNat sz1, 1 <= sz2, KnownNat sz2) =>
+    ExprVar (LLVMPointerType w) -> LLVMFieldPerm w sz2 -> NatRepr sz1 ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+
   -- | Concatenate two LLVM field permissions with @true@ contents:
   --
   -- > [l]x:ptr((rw,off,sz1) |-> true) * [l]x:ptr((rw,off+sz1,sz2) |-> true)
   -- > -o x:[l]ptr((rw,off,sz1+sz2) |-> true)
-  --
-  -- Note that the definition of @++@ depends on the current endianness.
   SImpl_ConcatLLVMTrueFields ::
     (1 <= w, KnownNat w, 1 <= sz1, KnownNat sz1, 1 <= sz2, KnownNat sz2,
      1 <= (sz1 + sz2), KnownNat (sz1 + sz2)) =>
@@ -1706,6 +1724,13 @@ simplImplIn (SImpl_SplitLLVMWordField x fp bv1 bv2 endianness) =
       | Just (bv1, bv2) == bvSplit endianness knownNat bv ->
         distPerms1 x $ ValPerm_LLVMField fp
     _ -> error "simplImplIn: SImpl_SplitLLVMWordField: malformed input permission"
+simplImplIn (SImpl_TruncateLLVMWordField x fp bv1 endianness) =
+  case llvmFieldContents fp of
+    ValPerm_Eq (PExpr_LLVMWord (bvMatchConst -> Just bv))
+      | Just (bv1', _) <- bvSplit endianness knownNat bv
+      , bv1 == bv1' ->
+        distPerms1 x $ ValPerm_LLVMField fp
+    _ -> error "simplImplIn: SImpl_TruncateLLVMWordField: malformed input permission"
 simplImplIn (SImpl_ConcatLLVMWordFields x fp1 bv2 _) =
   case llvmFieldContents fp1 of
     ValPerm_Eq (PExpr_LLVMWord (bvMatchConst -> Just _)) ->
@@ -1718,6 +1743,10 @@ simplImplIn (SImpl_SplitLLVMTrueField x fp _ _) =
   case llvmFieldContents fp of
     ValPerm_True -> distPerms1 x $ ValPerm_LLVMField fp
     _ -> error "simplImplIn: SImpl_SplitLLVMTrueField: malformed field permission"
+simplImplIn (SImpl_TruncateLLVMTrueField x fp _) =
+  case llvmFieldContents fp of
+    ValPerm_True -> distPerms1 x $ ValPerm_LLVMField fp
+    _ -> error "simplImplIn: SImpl_TruncateLLVMTrueField: malformed field permission"
 simplImplIn (SImpl_ConcatLLVMTrueFields x fp1 sz2) =
   case llvmFieldContents fp1 of
     ValPerm_True ->
@@ -2020,6 +2049,13 @@ simplImplOut (SImpl_SplitLLVMWordField x fp bv1 bv2 endianness) =
                               (llvmFieldSetEqWord fp bv2)
                               (intValue (natRepr bv1) `div` 8)))
     _ -> error "simplImplOut: SImpl_SplitLLVMWordField: malformed input permission"
+simplImplOut (SImpl_TruncateLLVMWordField x fp bv1 endianness) =
+  case llvmFieldContents fp of
+    ValPerm_Eq (PExpr_LLVMWord (bvMatchConst -> Just bv))
+      | Just (bv1', _) <- bvSplit endianness knownNat bv
+      , bv1 == bv1' ->
+        distPerms1 x (ValPerm_LLVMField (llvmFieldSetEqWord fp bv1))
+    _ -> error "simplImplOut: SImpl_TruncateLLVMWordField: malformed input permission"
 simplImplOut (SImpl_ConcatLLVMWordFields x fp1 bv2 endianness) =
   case llvmFieldContents fp1 of
     ValPerm_Eq (PExpr_LLVMWord (bvMatchConst -> Just bv1)) ->
@@ -2034,6 +2070,12 @@ simplImplOut (SImpl_SplitLLVMTrueField x fp sz1 sz2m1) =
          llvmFieldAddOffsetInt (llvmFieldSetTrue fp sz2m1)
          (intValue (natRepr sz1) `div` 8))
     _ -> error "simplImplOut: SImpl_SplitLLVMTrueField: malformed field permission"
+simplImplOut (SImpl_TruncateLLVMTrueField x fp sz1) =
+  case llvmFieldContents fp of
+    ValPerm_True
+      | intValue sz1 < intValue (llvmFieldSize fp) ->
+        distPerms1 x (ValPerm_LLVMField $ llvmFieldSetTrue fp sz1)
+    _ -> error "simplImplOut: SImpl_TruncateLLVMTrueField: malformed field permission"
 simplImplOut (SImpl_ConcatLLVMTrueFields x fp1 sz2) =
   case llvmFieldContents fp1 of
     ValPerm_True ->
@@ -2513,12 +2555,18 @@ instance SubstVar PermVarSubst m =>
     [nuMP| SImpl_SplitLLVMWordField x fp bv1 bv2 endianness |] ->
       SImpl_SplitLLVMWordField <$> genSubst s x <*> genSubst s fp <*>
       return (mbLift bv1) <*> return (mbLift bv2) <*> return (mbLift endianness)
+    [nuMP| SImpl_TruncateLLVMWordField x fp bv1 endianness |] ->
+      SImpl_TruncateLLVMWordField <$> genSubst s x <*> genSubst s fp <*>
+      return (mbLift bv1) <*> return (mbLift endianness)
     [nuMP| SImpl_ConcatLLVMWordFields x fp1 bv2 endianness |] ->
       SImpl_ConcatLLVMWordFields <$> genSubst s x <*> genSubst s fp1 <*>
       return (mbLift bv2) <*> return (mbLift endianness)
     [nuMP| SImpl_SplitLLVMTrueField x fp sz1 sz2m1 |] ->
       SImpl_SplitLLVMTrueField <$> genSubst s x <*> genSubst s fp <*>
       return (mbLift sz1) <*> return (mbLift sz2m1)
+    [nuMP| SImpl_TruncateLLVMTrueField x fp sz1 |] ->
+      SImpl_TruncateLLVMTrueField <$> genSubst s x <*> genSubst s fp <*>
+      return (mbLift sz1)
     [nuMP| SImpl_ConcatLLVMTrueFields x fp1 sz2 |] ->
       SImpl_ConcatLLVMTrueFields <$> genSubst s x <*> genSubst s fp1 <*>
       return (mbLift sz2)
@@ -4184,6 +4232,41 @@ implLLVMFieldSplit x fp sz_bytes
 implLLVMFieldSplit _ _ _ =
   implFailMsgM "implLLVMFieldSplit: malformed input permissions"
 
+
+-- | Attempt to truncate a pointer permission @ptr((rw,off,sz) |-> p)@ on top of
+-- the stack into a permission of the form @ptr((rw,off,sz') |-> p')@ for @sz'@
+-- smaller than @sz@. If @p@ can be coerced to an equality permission
+-- @eq(llvmword(bv))@ for a known constant bitvector @bv@, then @p'@ is an
+-- equality to the truncation of @bv@; otherwise it is just @true@.
+implLLVMFieldTruncate ::
+  (NuMatchingAny1 r, 1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
+  ExprVar (LLVMPointerType w) -> LLVMFieldPerm w sz -> NatRepr sz' ->
+  ImplM vars s r (ps :> LLVMPointerType w)
+  (ps :> LLVMPointerType w)
+  (AtomicPerm (LLVMPointerType w))
+implLLVMFieldTruncate x fp sz'
+  | Left LeqProof <- decideLeq sz' (llvmFieldSize fp)
+  , Left LeqProof <- decideLeq (knownNat @1) sz' =
+    withKnownNat sz' $
+    use implStateEndianness >>>= \endianness ->
+    implLLVMFieldTryProveWordEq x fp >>>= \case
+      Just bv
+        | Just (bv', _) <- bvSplit endianness sz' bv ->
+          implSimplM Proxy (SImpl_TruncateLLVMWordField
+                            x (llvmFieldSetEqWord fp bv) bv' endianness) >>>
+          return (Perm_LLVMField (llvmFieldSetEqWord fp bv'))
+      Just _ ->
+        -- NOTE: this is unreachable because we already know that sz <=
+        -- llvmFieldSize (because the subNat' above succeeded), so the bvSplit
+        -- above should always succeed
+        error "implLLVMFieldTruncate: unreachable case"
+      Nothing ->
+        implSimplM Proxy (SImpl_TruncateLLVMTrueField x
+                          (llvmFieldSetTrue fp fp) sz') >>>
+        return (Perm_LLVMField (llvmFieldSetTrue fp sz'))
+implLLVMFieldTruncate _ _ _ =
+  implFailMsgM "implLLVMFieldTruncate: malformed input permissions"
+
 -- | Concatentate two pointer permissions @ptr((rw,off,sz1) |-> p1)@ and
 -- @ptr((rw,off+sz1/8,sz2) |-> p2)@ into a single pointer permission of the form
 -- @ptr((rw,off,sz1+sz2) |-> p)@. If @p1@ and @p2@ are both equality permissions
@@ -5512,20 +5595,31 @@ proveVarLLVMFieldH2 x (Perm_LLVMField fp) off mb_fp
     return ()
 
 -- If we have a field permission with the correct offset that is bigger than the
--- desired field permission, split it and recurse
+-- size of the desired field permission rounded up to the nearest byte, split
+-- the field permission we have and recurse
 proveVarLLVMFieldH2 x (Perm_LLVMField fp) off mb_fp
   | bvEq (llvmFieldOffset fp) off
   , sz <- mbLLVMFieldSize mb_fp
-  , intValue sz < intValue (llvmFieldSize fp)
-  , intValue sz `mod` 8 == 0
-  , sz_bytes <- intValue sz `div` 8 =
+  , sz_bytes <- (intValue sz + 7) `div` 8
+  , sz_bytes < llvmFieldSizeBytes fp =
     implLLVMFieldSplit x fp sz_bytes >>>= \(p1, p2) ->
     recombinePerm x (ValPerm_Conj1 p2) >>>
     proveVarLLVMFieldH x p1 off mb_fp
 
+-- If we have a field permission with the correct offset that is bigger than the
+-- desired field permission but did not match the previous case, then the
+-- desired field is some uneven number of bits smaller than the field we have,
+-- so all we can do is truncate the field we have
+proveVarLLVMFieldH2 x (Perm_LLVMField fp) off mb_fp
+  | bvEq (llvmFieldOffset fp) off
+  , sz <- mbLLVMFieldSize mb_fp
+  , intValue sz < intValue (llvmFieldSize fp) =
+    implLLVMFieldTruncate x fp sz >>>= \p ->
+    proveVarLLVMFieldH x p off mb_fp
+
 -- If we have a field permission with the correct offset that is smaller than
 -- the desired field permission, split the desired field permission into two,
--- recursively xprove the first of these from fp, prove the second with some
+-- recursively prove the first of these from fp, prove the second with some
 -- other permissions, and then concatenate the results
 proveVarLLVMFieldH2 x (Perm_LLVMField fp) off mb_fp
   | bvEq (llvmFieldOffset fp) off

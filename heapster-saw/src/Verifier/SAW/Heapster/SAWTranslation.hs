@@ -2424,6 +2424,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          (\(pctx :>: _) -> RL.append pctx $ typeTransF ttrans [])
          m
 
+  [nuMP| SImpl_TruncateLLVMWordField _ _ _ _ |] ->
+    do ttrans <- translateSimplImplOut mb_simpl
+       withPermStackM id
+         (\(pctx :>: _) -> RL.append pctx $ typeTransF ttrans [])
+         m
+
   [nuMP| SImpl_ConcatLLVMWordFields _ _ _ _ |] ->
     do ttrans <- translateSimplImplOut mb_simpl
        withPermStackM RL.tail
@@ -2433,6 +2439,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
   [nuMP| SImpl_SplitLLVMTrueField x _ _ _ |] ->
     do ttrans <- translateSimplImplOut mb_simpl
        withPermStackM (:>: translateVar x)
+         (\(pctx :>: _) -> RL.append pctx $ typeTransF ttrans [])
+         m
+
+  [nuMP| SImpl_TruncateLLVMTrueField _ _ _ |] ->
+    do ttrans <- translateSimplImplOut mb_simpl
+       withPermStackM id
          (\(pctx :>: _) -> RL.append pctx $ typeTransF ttrans [])
          m
 
