@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "saw-client"
-version = "0.9.0"
+version = "0.9.1"
 readme = "README.md"
 description = "SAW client for the SAW 0.9 RPC server"
 authors = ["Galois, Inc. <saw@galois.com>"]
