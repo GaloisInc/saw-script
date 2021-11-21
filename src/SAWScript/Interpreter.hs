@@ -68,6 +68,7 @@ import SAWScript.Proof (newTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
 import SAWScript.Prover.MRSolver (emptyMREnv)
+import SAWScript.Yosys
 import Verifier.SAW.Conversion
 --import Verifier.SAW.PrettySExp
 import Verifier.SAW.Prim (rethrowEvalError)
@@ -3330,6 +3331,17 @@ primitives = Map.fromList
     (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue CJ.JVM))
     Current
     [ "Construct a `JVMValue` from a `Term`." ]
+
+    ---------------------------------------------------------------------
+
+  , prim "yosys_load_module"  "String -> TopLevel YosysIR"
+    (pureVal yosys_load_module)
+    Experimental
+    []
+  , prim "yosys_extract"  "YosysIR -> String -> String -> TopLevel Term"
+    (pureVal yosys_extract)
+    Experimental
+    []
 
     ---------------------------------------------------------------------
 
