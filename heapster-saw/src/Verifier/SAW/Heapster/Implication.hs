@@ -5731,8 +5731,11 @@ proveVarLLVMFieldH2 x (Perm_LLVMField fp) off mb_fp
     withExtVarsM (proveVarImplInt x $ mbValPerm_LLVMField mb_fp2) >>>
     getTopDistPerm x >>>= \(ValPerm_LLVMField fp2) ->
 
-    -- Finally, combine these two pieces of mb_fp into a single permission
-    implLLVMFieldConcat x fp1 fp2
+    -- Finally, combine these two pieces of mb_fp into a single permission, and
+    -- use this permission to prove the one we needed to begin with
+    implLLVMFieldConcat x fp1 fp2 >>>
+    getTopDistPerm x >>>= \(ValPerm_LLVMField fp_concat) ->
+    proveVarLLVMFieldH x (Perm_LLVMField fp_concat) off mb_fp
 
 -- If we have a field permission that contains the correct offset but doesn't
 -- start at it, then split it and recurse
