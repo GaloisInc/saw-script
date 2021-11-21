@@ -1,6 +1,6 @@
 
 enable_experimental;
-env <- heapster_init_env "structs" "structs.bc";
+env <- heapster_init_env "c_data" "c_data.bc";
 
 /***
  *** Type Definitions
@@ -46,4 +46,4 @@ heapster_typecheck_fun env "padded_struct_incr_all"
  *** Export to Coq
  ***/
 
-heapster_export_coq env "structs_gen.v";
+heapster_export_coq env "c_data_gen.v";
