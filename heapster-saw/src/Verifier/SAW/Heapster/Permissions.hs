@@ -693,6 +693,14 @@ mbExprLLVMTypeWidth :: KnownNat w => Mb ctx (f (LLVMPointerType w)) ->
                        NatRepr w
 mbExprLLVMTypeWidth _ = knownNat
 
+-- | Convenience function to get the bit width of a bitvector type
+exprBVTypeWidth :: KnownNat w => f (BVType w) -> NatRepr w
+exprBVTypeWidth _ = knownNat
+
+-- | Convenience function to get the bit width of an LLVM pointer type
+mbExprBVTypeWidth :: KnownNat w => Mb ctx (f (BVType w)) -> NatRepr w
+mbExprBVTypeWidth _ = knownNat
+
 -- | Convenience function to get the bit width of an LLVM pointer type
 shapeLLVMTypeWidth :: KnownNat w => f (LLVMShapeType w) -> NatRepr w
 shapeLLVMTypeWidth _ = knownNat
@@ -3486,17 +3494,23 @@ llvmFieldSetContents :: LLVMFieldPerm w sz1 ->
 llvmFieldSetContents (LLVMFieldPerm {..}) p =
   LLVMFieldPerm { llvmFieldContents = p, .. }
 
--- | Set the contents of a field permission to an @eq(llvmword(bv))@ permission
+-- | Set the contents of a field permission to an @eq(llvmword(e))@ permission
 llvmFieldSetEqWord :: (1 <= sz2, KnownNat sz2) => LLVMFieldPerm w sz1 ->
-                      BV.BV sz2 -> LLVMFieldPerm w sz2
-llvmFieldSetEqWord fp bv =
-  llvmFieldSetContents fp (ValPerm_Eq $ PExpr_LLVMWord $ bvBV bv)
+                      PermExpr (BVType sz2) -> LLVMFieldPerm w sz2
+llvmFieldSetEqWord fp e =
+  llvmFieldSetContents fp (ValPerm_Eq $ PExpr_LLVMWord e)
 
 -- | Set the contents of a field permission to an @eq(y)@ permission
 llvmFieldSetEqVar :: (1 <= sz2, KnownNat sz2) => LLVMFieldPerm w sz1 ->
                      ExprVar (LLVMPointerType sz2) -> LLVMFieldPerm w sz2
 llvmFieldSetEqVar fp y =
   llvmFieldSetContents fp (ValPerm_Eq $ PExpr_Var y)
+
+-- | Set the contents of a field permission to an @eq(llvmword(y))@ permission
+llvmFieldSetEqWordVar :: (1 <= sz2, KnownNat sz2) => LLVMFieldPerm w sz1 ->
+                         ExprVar (BVType sz2) -> LLVMFieldPerm w sz2
+llvmFieldSetEqWordVar fp y =
+  llvmFieldSetContents fp (ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var y)
 
 -- | Set the contents of a field permission to an @true@ permission of a
 -- specific size
