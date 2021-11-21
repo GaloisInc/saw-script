@@ -13,6 +13,12 @@ Import c_data.
 
 Import SAWCorePrelude.
 
+Lemma no_errors_incr_u64_ptr_byte :
+  refinesFun incr_u64_ptr_byte (fun _ => noErrorsSpec).
+  unfold incr_u64_ptr_byte, incr_u64_ptr_byte__tuple_fun, noErrorsSpec.
+  time "no_errors_incr_u64_ptr_byte" prove_refinement.
+Qed.
+
 Lemma no_errors_alloc_padded_struct :
   refinesFun alloc_padded_struct noErrorsSpec.
   unfold alloc_padded_struct, alloc_padded_struct__tuple_fun, noErrorsSpec, malloc.
