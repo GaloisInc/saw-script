@@ -4265,7 +4265,7 @@ implLLVMFieldTryProveWordEq2 x fp1 fp2 =
         implLLVMFieldSetTrue x fp2' >>>
         return Nothing
       Just e1 ->
-        let fp1' = llvmFieldSetEqWord fp2 e1 in
+        let fp1' = llvmFieldSetEqWord fp1 e1 in
         implSwapM x (ValPerm_LLVMField fp2') x (ValPerm_LLVMField fp1') >>>
         return (Just (e1, e2))
 
@@ -4359,8 +4359,7 @@ implLLVMFieldConcat ::
   (ps :> LLVMPointerType w :> LLVMPointerType w)
   ()
 implLLVMFieldConcat x fp1 fp2
-  | LeqProof <- leqAddPos fp1 fp2
-  , fp1 == llvmFieldSetContents fp2 (llvmFieldContents fp1) =
+  | LeqProof <- leqAddPos fp1 fp2 =
     withKnownNat (addNat (natRepr fp1) (natRepr fp2)) $
     use implStateEndianness >>>= \endianness ->
     implLLVMFieldTryProveWordEq2 x fp1 fp2 >>>= \case
@@ -4374,8 +4373,6 @@ implLLVMFieldConcat x fp1 fp2
         implSimplM Proxy (SImpl_ConcatLLVMTrueFields x
                           (llvmFieldSetTrue fp1 fp1)
                           (llvmFieldSize fp2))
-implLLVMFieldConcat _ _ _ =
-  error "implLLVMFieldConcat: malformed input permissions"
 
 -- | Borrow a cell from an LLVM array permission on the top of the stack, after
 -- proving (with 'implTryProveBVProps') that the index is in the array exclusive
