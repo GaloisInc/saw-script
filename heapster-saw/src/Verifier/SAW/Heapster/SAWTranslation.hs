@@ -803,10 +803,10 @@ bvConcatOpenTerm :: EndianForm -> OpenTerm -> OpenTerm ->
                     OpenTerm -> OpenTerm -> OpenTerm
 bvConcatOpenTerm BigEndian sz1 sz2 e1 e2 =
   applyOpenTermMulti (globalOpenTerm "Prelude.append")
-  [boolTypeOpenTerm, sz1, sz2, boolTypeOpenTerm, e1, e2]
+  [sz1, sz2, boolTypeOpenTerm, e1, e2]
 bvConcatOpenTerm LittleEndian sz1 sz2 e1 e2 =
   applyOpenTermMulti (globalOpenTerm "Prelude.append")
-  [boolTypeOpenTerm, sz2, sz1, boolTypeOpenTerm, e2, e1]
+  [sz2, sz1, boolTypeOpenTerm, e2, e1]
 
 -- | Translate a variable to a 'Member' proof, raising an error if the variable
 -- is unbound
