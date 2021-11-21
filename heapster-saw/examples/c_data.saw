@@ -34,6 +34,10 @@ heapster_assume_fun env "malloc"
  *** Type-Checked Functions
  ***/
 
+// incr_u64_ptr_byte
+heapster_typecheck_fun env "incr_u64_ptr_byte"
+  "(). arg0:ptr((W,0) |-> int64<>) -o arg0:ptr((W,0) |-> int64<>)";
+
 // alloc_padded_struct
 heapster_typecheck_fun env "alloc_padded_struct"
   "(). empty -o ret:memblock(W,0,32,padded_struct<>)";
