@@ -67,6 +67,7 @@ import SAWScript.Value
 import SAWScript.Proof (newTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
+import SAWScript.Yosys
 import Verifier.SAW.Conversion
 --import Verifier.SAW.PrettySExp
 import Verifier.SAW.Prim (rethrowEvalError)
@@ -3156,8 +3157,22 @@ primitives = Map.fromList
 
     ---------------------------------------------------------------------
 
+  , prim "yosys_load_module"  "String -> TopLevel YosysIR"
+    (pureVal yosys_load_module)
+    Experimental
+    []
+  , prim "yosys_extract"  "YosysIR -> String -> String -> TopLevel Term"
+    (pureVal yosys_extract)
+    Experimental
+    []
+
+    ---------------------------------------------------------------------
+
   , prim "mr_solver"  "Term -> Term -> TopLevel Bool"
     (scVal (\sc -> mrSolver sc 0))
+
+  , prim "test_mr_solver"  "Int -> Int -> TopLevel Bool"
+    (pureVal testMRSolver)
     Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
     , " to ask if one monadic term refines another" ]

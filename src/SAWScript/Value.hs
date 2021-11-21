@@ -78,6 +78,7 @@ import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))
+import SAWScript.Yosys.IR
 
 import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.CryptolEnv as CEnv
@@ -160,6 +161,7 @@ data Value
   | VAIG AIGNetwork
   | VCFG SAW_CFG
   | VGhostVar CMS.GhostGlobal
+  | VYosysModule YosysIR
 
 type SAWSimpset = Simpset TheoremNonce
 
@@ -337,6 +339,7 @@ showsPrecValue opts p v =
     VCFG (JVM_CFG g) -> showString (show g)
     VGhostVar x -> showParen (p > 10)
                  $ showString "Ghost " . showsPrec 11 x
+    VYosysModule _ -> showString "<<Yosys module>>"
     VJVMSetup _      -> showString "<<JVM Setup>>"
     VJVMMethodSpec _ -> showString "<<JVM MethodSpec>>"
     VJVMSetupValue x -> shows x
@@ -1023,6 +1026,13 @@ instance IsValue CMS.GhostGlobal where
 instance FromValue CMS.GhostGlobal where
   fromValue (VGhostVar r) = r
   fromValue v = error ("fromValue GlobalVar: " ++ show v)
+
+instance IsValue YosysIR where
+  toValue = VYosysModule
+
+instance FromValue YosysIR where
+  fromValue (VYosysModule ir) = ir
+  fromValue v = error ("fromValue YosysIR: " ++ show v)
 
 -- Error handling --------------------------------------------------------------
 
