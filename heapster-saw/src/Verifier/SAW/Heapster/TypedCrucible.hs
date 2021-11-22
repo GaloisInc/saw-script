@@ -3825,10 +3825,12 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
           tops_perms = varPermsMulti tops_ns cur_perms
           tops_set = NameSet.fromList $ namesToNamesList tops_ns
           ghosts_perms = varPermsMulti ghosts_ns cur_perms
-          args_perms =
-            buildDistPerms (\n -> if NameSet.member n tops_set then
-                                    ValPerm_Eq (PExpr_Var n)
-                                  else cur_perms ^. varPerm n) args_ns
+          args_perms = fst $
+            foldrAndBuildDistPerms (\n tops_or_seen ->
+              if NameSet.member n tops_or_seen
+              then (ValPerm_Eq (PExpr_Var n), tops_or_seen)
+              else (cur_perms ^. varPerm n, NameSet.insert n tops_or_seen))
+            tops_set args_ns
           perms_in = appendDistPerms (appendDistPerms
                                       tops_perms args_perms) ghosts_perms in
       implTraceM (\i ->
