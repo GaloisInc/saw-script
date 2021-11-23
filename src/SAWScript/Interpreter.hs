@@ -2637,12 +2637,12 @@ primitives = Map.fromList
   , prim "enable_what4_eval" "TopLevel ()"
     (pureVal enable_what4_eval)
     Experimental
-    [ "Enable What4 translation for SAwCore expressions during Crucible symbolic execution." ]
+    [ "Enable What4 translation for SAWCore expressions during Crucible symbolic execution." ]
 
   , prim "disable_what4_eval" "TopLevel ()"
     (pureVal disable_what4_eval)
     Current
-    [ "Disable What4 translation for SAwCore expressions during Crucible symbolic execution." ]
+    [ "Disable What4 translation for SAWCore expressions during Crucible symbolic execution." ]
 
   , prim "set_x86_stack_base_align" "Int -> TopLevel ()"
     (pureVal set_x86_stack_base_align)
