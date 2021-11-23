@@ -521,11 +521,11 @@ heapster_typecheck_fun_rename env bintree_is_leaf_sym "bintree_is_leaf"
   "<'a> fn (t: &'a BinTree<u64>) -> bool";
 
 enum20_list_proj_sym <- heapster_find_symbol env "16enum20_list_proj";
-//heapster_typecheck_fun_rename env enum20_list_proj_sym "enum20_list_proj"
+heapster_typecheck_fun_rename env enum20_list_proj_sym "enum20_list_proj"
   "<'a> fn (x:&'a Enum20<List<u64>>) -> &'a List<u64>";
 
 list10_head_sym <- heapster_find_symbol env "11list10_head";
-//heapster_typecheck_fun_rename env list10_head_sym "list10_head"
+heapster_typecheck_fun_rename env list10_head_sym "list10_head"
   "<'a> fn (x:&'a List10<List<u64>>) -> &'a List<u64>";
 
 list20_u64_clone_sym <- heapster_find_symbol env
@@ -533,11 +533,11 @@ list20_u64_clone_sym <- heapster_find_symbol env
 heapster_typecheck_fun_rename env list20_u64_clone_sym "list20_u64_clone"
   "<'a> fn (&'a List20<u64>) -> List20<u64>";
 
-/*
+heapster_set_translation_checks env false;
 list20_head_sym <- heapster_find_symbol env "11list20_head";
 heapster_typecheck_fun_rename env list20_head_sym "list20_head"
   "<'a> fn (x:&'a List20<List<u64>>) -> &'a List<u64>";
-*/
+
 
 /***
  *** Export to Coq
