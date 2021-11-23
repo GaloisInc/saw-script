@@ -64,6 +64,7 @@ heapster_typecheck_fun env "return_state"
   "(). arg0:array(W,0,<8,*8,fieldsh(int64<>)) -o \
      \ arg0:array(W,0,<8,*8,fieldsh(int64<>))";
 
+heapster_set_translation_checks env false;
 heapster_typecheck_fun env "sha512_block_data_order"
   "(num:bv 64). arg0:array(W,0,<8,*8,fieldsh(int64<>)), \
               \ arg1:array(R,0,<16*num,*8,fieldsh(int64<>)), \
