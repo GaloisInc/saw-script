@@ -626,7 +626,11 @@ methodSpecHandler_prestate opts sc cc args cs =
 --   and computing postcondition predicates.
 methodSpecHandler_poststate ::
   forall arch ret.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
@@ -696,7 +700,11 @@ enforceCompleteSubstitution loc ss =
 
 
 -- execute a pre/post condition
-executeCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym)
+executeCond :: ( ?lc :: Crucible.TypeContext
+               , ?memOpts :: Crucible.MemOptions
+               , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+               , Crucible.HasLLVMAnn Sym
+               )
             => Options
             -> SharedContext
             -> LLVMCrucibleContext arch
@@ -1609,7 +1617,11 @@ invalidateMutableAllocs opts sc cc cs = do
 -- | Perform an allocation as indicated by an @llvm_alloc@ or
 -- @llvm_fresh_pointer@ statement from the postcondition section.
 executeAllocation ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options                        ->
   SharedContext ->
   LLVMCrucibleContext arch          ->
