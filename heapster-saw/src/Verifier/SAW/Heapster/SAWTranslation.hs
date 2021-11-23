@@ -3606,6 +3606,13 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
          , applyMultiTransM (return $ globalOpenTerm "Prelude.bvEqWithProof")
            [ return (natOpenTerm $ natVal2 prop) , translate1 e1, translate1 e2]]
 
+  -- If e1 and e2 are already unequal, short-circuit and do nothing
+  ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_Neq e1 e2) _ |], _)
+    | not $ mbLift (mbMap2 bvCouldEqual e1 e2) ->
+      translatePermImplUnary mb_impls $
+        withPermStackM (:>: translateVar x)
+          (:>: PTrans_Conj [APTrans_BVProp (BVPropTrans prop unitOpenTerm)])
+
   -- For an inequality test, we don't need a proof, so just insert an if
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_Neq e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
