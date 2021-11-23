@@ -1649,6 +1649,14 @@ primitives = Map.fromList
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
+  , prim "w4_unint_z3_using" "String -> [String] -> ProofScript ()"
+    (pureVal w4_unint_z3_using)
+    Current
+    [ "Prove the current goal using What4 (Z3 backend) using the given"
+    , "Z3 tactic. Leave the given list of names, as defined with"
+    , "'define', as uninterpreted."
+    ]
+
   , prim "w4_unint_yices"         "[String] -> ProofScript ()"
     (pureVal w4_unint_yices)
     Current

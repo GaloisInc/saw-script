@@ -10,6 +10,7 @@ module SAWScript.Prover.What4 where
 import           Control.Lens ((^.))
 import           Data.Set (Set)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import           System.IO
 
 import Verifier.SAW.SharedTerm
@@ -88,7 +89,7 @@ proveWhat4_sym ::
 proveWhat4_sym solver un hashConsing t =
   getSharedContext >>= \sc -> io $
   do sym <- setupWhat4_sym hashConsing
-     proveWhat4_solver solver sym un sc t
+     proveWhat4_solver solver sym un sc t (return ())
 
 proveExportWhat4_sym ::
   SolverAdapter St ->
@@ -124,6 +125,20 @@ proveWhat4_dreal     = proveWhat4_sym drealAdapter
 proveWhat4_stp       = proveWhat4_sym stpAdapter
 proveWhat4_yices     = proveWhat4_sym yicesAdapter
 proveWhat4_abc       = proveWhat4_sym externalABCAdapter
+
+proveWhat4_z3_using ::
+  String        {- ^ Solver tactic -} ->
+  Set VarIndex  {- ^ Uninterpreted functions -} ->
+  Bool          {- ^ Hash-consing of What4 terms -}->
+  Prop          {- ^ A proposition to be proved -} ->
+  TopLevel (Maybe CEX, SolverStats)
+proveWhat4_z3_using tactic un hashConsing t =
+  getSharedContext >>= \sc -> io $
+  do sym <- setupWhat4_sym hashConsing
+     proveWhat4_solver z3Adapter sym un sc t $
+       do z3TacticSetting <- getOptionSetting z3Tactic $ getConfiguration sym
+          _ <- setOpt z3TacticSetting $ Text.pack tactic
+          return ()
 
 proveExportWhat4_z3, proveExportWhat4_boolector, proveExportWhat4_cvc4,
   proveExportWhat4_dreal, proveExportWhat4_stp, proveExportWhat4_yices ::
@@ -176,11 +191,13 @@ proveWhat4_solver :: forall st t ff.
   Set VarIndex       {- ^ Uninterpreted functions -} ->
   SharedContext      {- ^ Context for working with terms -} ->
   Prop               {- ^ A proposition to be proved/checked. -} ->
+  IO ()              {- ^ Extra setup actions -} ->
   IO (Maybe CEX, SolverStats)
   -- ^ (example/counter-example, solver statistics)
-proveWhat4_solver solver sym unintSet sc goal =
+proveWhat4_solver solver sym unintSet sc goal extraSetup =
   do
      (argNames, bvs, lit, stats) <- setupWhat4_solver solver sym unintSet sc goal
+     _ <- extraSetup
 
      -- log to stdout
      let logger _ str = putStrLn str
