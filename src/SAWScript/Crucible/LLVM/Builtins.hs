@@ -1377,7 +1377,7 @@ setupLLVMCrucibleContext pathSat lm action =
                           { Crucible.laxPointerOrdering = laxPointerOrdering
                           }
           let ?intrinsicsOpts = Crucible.defaultIntrinsicsOptions
-          let ?recordLLVMAnnotation = \_ _ -> return ()
+          let ?recordLLVMAnnotation = \_ _ _ -> return ()
           cc <-
             io $
             do let verbosity = simVerbose opts

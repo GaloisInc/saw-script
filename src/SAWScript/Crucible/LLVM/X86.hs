@@ -297,7 +297,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       start <- io getCurrentTime
       let ?ptrWidth = knownNat @64
       let ?memOpts = C.LLVM.defaultMemOptions
-      let ?recordLLVMAnnotation = \_ _ -> return ()
+      let ?recordLLVMAnnotation = \_ _ _ -> return ()
       sc <- getSharedContext
       opts <- getOptions
       basic_ss <- getBasicSS
