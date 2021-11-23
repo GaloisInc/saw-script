@@ -470,7 +470,7 @@ data TypedLLVMStmt ret ps_in ps_out where
   -- Type:
   -- > ps, x:ptr((rw,0) |-> p), cur_ps
   -- > -o ps, x:ptr((rw,0) |-> eq(ret)), ret:p, cur_ps
-  TypedLLVMLoad :: 
+  TypedLLVMLoad ::
     (HasPtrWidth w, 1 <= sz, KnownNat sz) =>
     !(TypedReg (LLVMPointerType w)) ->
     !(LLVMFieldPerm w sz) ->
@@ -540,7 +540,7 @@ data TypedLLVMStmt ret ps_in ps_out where
   -- referred to by a function pointer, assuming we know it has one:
   --
   -- Type: @x:llvm_funptr(p) -o ret:p@
-  TypedLLVMLoadHandle :: 
+  TypedLLVMLoadHandle ::
     HasPtrWidth w =>
     !(TypedReg (LLVMPointerType w)) ->
     !(TypeRepr (FunctionHandleType cargs ret)) ->
@@ -1338,7 +1338,7 @@ entryByID entryID =
     over typedBlockEntries (replaceNth (blockEntryIx entryID blk) e) blk)
 
 
--- | Build an empty 'TypedBlock' 
+-- | Build an empty 'TypedBlock'
 emptyBlockOfSort ::
   [Maybe String] ->
   Assignment CtxRepr cblocks ->
@@ -1943,7 +1943,7 @@ runPermCheckM names entryID args ghosts mb_perms_in m =
       (tops_ns, args_ns) = RL.split Proxy args_prxs tops_args
       (arg_names, local_names) = initialNames args names
       st = emptyPermCheckState (distPermSet perms_in) tops_ns entryID local_names in
-  
+
   let go x = runGenStateContT x st (\_ () -> pure ()) in
   go $
   setVarTypes (Just "top") (noNames' stTopCtx) tops_ns stTopCtx >>>
@@ -1967,7 +1967,7 @@ initialNames CruCtxNil xs = (MNil, xs)
 initialNames (CruCtxCons ts _) xs =
   case initialNames ts xs of
     (ys, z:zs) -> (ys :>: Constant z, zs)
-    (ys, []  ) -> (ys :>: Constant Nothing, [])    
+    (ys, []  ) -> (ys :>: Constant Nothing, [])
 
 -- | Compute an empty debug name assignment from a known context
 noNames ::
@@ -2641,7 +2641,7 @@ ppCruRegAndPerms ctx r =
 -- their permissions, the variables in those permissions etc., as in
 -- 'varPermsTransFreeVars'
 getRelevantPerms :: [SomeName CrucibleType] ->
-                    PermCheckM ext cblocks blocks tops ret r ps r ps 
+                    PermCheckM ext cblocks blocks tops ret r ps r ps
                       (Some DistPerms)
 getRelevantPerms (namesListToNames -> SomeRAssign ns) =
   gets stCurPerms >>>= \perms ->
@@ -3121,7 +3121,7 @@ tcEmitLLVMSetExpr ctx loc (LLVM_PointerIte w cond_reg then_reg else_reg) =
     PExpr_Bool True ->
       dbgNames >>= \names ->
       emitStmt knownRepr names loc
-        (TypedSetRegPermExpr knownRepr $ 
+        (TypedSetRegPermExpr knownRepr $
           PExpr_Var $ typedRegVar tthen_reg) >>>= \(MNil :>: ret) ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret)
@@ -3140,7 +3140,7 @@ tcEmitLLVMSetExpr ctx loc (LLVM_PointerIte w cond_reg then_reg else_reg) =
       pure (addCtxName ctx ret)
 
 -- For LLVM side conditions, treat each side condition as an assert
-tcEmitLLVMSetExpr ctx loc (LLVM_SideConditions tp conds reg) =
+tcEmitLLVMSetExpr ctx loc (LLVM_SideConditions _ tp conds reg) =
   let treg = tcReg ctx reg in
   foldr
   (\(LLVMSideCondition cond_reg ub) rest_m ->

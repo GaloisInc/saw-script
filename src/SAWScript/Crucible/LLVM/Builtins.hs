@@ -1390,7 +1390,7 @@ setupLLVMCrucibleContext pathSat lm action =
                           { Crucible.laxPointerOrdering = laxPointerOrdering
                           }
           let ?intrinsicsOpts = Crucible.defaultIntrinsicsOptions
-          let ?recordLLVMAnnotation = \_ _ -> return ()
+          let ?recordLLVMAnnotation = \_ _ _ -> return ()
           let ?w4EvalTactic = W4EvalTactic { doW4Eval = what4Eval }
           let ?checkAllocSymInit = allocSymInitCheck
           cc <-
