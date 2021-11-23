@@ -323,6 +323,17 @@ pub enum List64 {
     Cons64 (u64,Box<List64>)
 }
 
+pub fn box_list64_clone<'a>(x:&'a Box<List64>) -> Box<List64> {
+    return x.clone();
+}
+
+pub fn list64_clone<'a>(x:&'a List64) -> List64 {
+    match &x {
+        List64::Nil64 => List64::Nil64,
+        List64::Cons64(h,t) => List64::Cons64(*h,box_list64_clone(t)),
+    }
+}
+
 /* Test if a List64 is empty */
 pub fn list64_is_empty (l: &List64) -> bool {
     match l {
@@ -515,4 +526,32 @@ pub fn list20_head<'a> (x:&'a List20<List<u64>>) -> &'a List<u64> {
       List20::List20_18(l,_) => l,
       List20::List20_19(l,_) => l,
   }
+}
+
+impl Clone for List20<u64> {
+    fn clone<'a>(&'a self) -> Self {
+        match &self {
+            List20::List20Head(b) => List20::List20Head(*b),
+            List20::List20_0(h,t) => List20::List20_0(*h,t.clone()),
+            List20::List20_1(h,t) => List20::List20_1(*h,t.clone()),
+            List20::List20_2(h,t) => List20::List20_2(*h,t.clone()),
+            List20::List20_3(h,t) => List20::List20_3(*h,t.clone()),
+            List20::List20_4(h,t) => List20::List20_4(*h,t.clone()),
+            List20::List20_5(h,t) => List20::List20_5(*h,t.clone()),
+            List20::List20_6(h,t) => List20::List20_6(*h,t.clone()),
+            List20::List20_7(h,t) => List20::List20_7(*h,t.clone()),
+            List20::List20_8(h,t) => List20::List20_8(*h,t.clone()),
+            List20::List20_9(h,t) => List20::List20_9(*h,t.clone()),
+            List20::List20_10(h,t) => List20::List20_10(*h,t.clone()),
+            List20::List20_11(h,t) => List20::List20_11(*h,t.clone()),
+            List20::List20_12(h,t) => List20::List20_12(*h,t.clone()),
+            List20::List20_13(h,t) => List20::List20_13(*h,t.clone()),
+            List20::List20_14(h,t) => List20::List20_14(*h,t.clone()),
+            List20::List20_15(h,t) => List20::List20_15(*h,t.clone()),
+            List20::List20_16(h,t) => List20::List20_16(*h,t.clone()),
+            List20::List20_17(h,t) => List20::List20_17(*h,t.clone()),
+            List20::List20_18(h,t) => List20::List20_18(*h,t.clone()),
+            List20::List20_19(h,t) => List20::List20_19(*h,t.clone()),
+        }
+    }
 }
