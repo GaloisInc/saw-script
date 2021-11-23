@@ -28,6 +28,7 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
   , equalValsPred
   , memArrayToSawCoreTerm
   , scPtrWidthBvNat
+  , W4EvalTactic(..)
   ) where
 
 import Control.Lens ((^.))
@@ -294,10 +295,18 @@ resolveSetupElemIndexOrFail cc env nameEnv v i = do
     lc = ccTypeCtx cc
     dl = Crucible.llvmDataLayout lc
 
+
+-- | The tactic for What4 translation for SAWCore expressions during
+-- Crucible symbolic execution. The boolean option specifies whether
+-- non-user-defined symbols are translated. Note that ground constants are
+-- always translated.
+newtype W4EvalTactic = W4EvalTactic { doW4Eval :: Bool }
+  deriving (Eq, Ord, Show)
+
 -- | Translate a SetupValue into a Crucible LLVM value, resolving
 -- references
 resolveSetupVal :: forall arch.
-  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
   Crucible.MemImpl Sym ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
@@ -358,7 +367,7 @@ resolveSetupVal cc mem env tyenv nameEnv val = do
     dl = Crucible.llvmDataLayout lc
 
 resolveTypedTerm ::
-  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
   TypedTerm       ->
   IO LLVMVal
@@ -373,7 +382,7 @@ resolveTypedTerm cc tm =
             ]
 
 resolveSAWPred ::
-  (?doW4Eval :: Bool) =>
+  (?w4EvalTactic :: W4EvalTactic) =>
   LLVMCrucibleContext arch ->
   Term ->
   IO (W4.Pred Sym)
@@ -392,7 +401,7 @@ resolveSAWPred cc tm = do
      case mx of
        Just x  -> return $ W4.backendPred sym x
        Nothing
-         | ?doW4Eval ->
+         | doW4Eval ?w4EvalTactic ->
            do cryptol_ss <- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc
               (_,tm'') <- rewriteSharedTerm sc cryptol_ss tm'
               (_,tm''') <- rewriteSharedTerm sc ss tm''
@@ -404,7 +413,7 @@ resolveSAWPred cc tm = do
            bindSAWTerm sym st W4.BaseBoolRepr tm'
 
 resolveSAWSymBV ::
-  (?doW4Eval :: Bool, 1 <= w) =>
+  (?w4EvalTactic :: W4EvalTactic, 1 <= w) =>
   LLVMCrucibleContext arch ->
   NatRepr w ->
   Term ->
@@ -422,7 +431,7 @@ resolveSAWSymBV cc w tm =
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
        Nothing
-         | ?doW4Eval ->
+         | doW4Eval ?w4EvalTactic ->
            do let ss = cc^.ccBasicSS
               (_,tm') <- rewriteSharedTerm sc ss tm
               cryptol_ss <- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc
@@ -445,7 +454,7 @@ isPreludeName = \case
   _ -> False
 
 resolveSAWTerm ::
-  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
   Cryptol.TValue ->
   Term ->

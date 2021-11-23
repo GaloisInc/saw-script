@@ -161,7 +161,7 @@ ppLLVMVal cc val = do
 
 -- | Resolve a 'SetupValue' into a 'LLVMVal' and pretty-print it
 ppSetupValueAsLLVMVal ::
-  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options              {- ^ output/verbosity options -} ->
   LLVMCrucibleContext arch ->
   SharedContext {- ^ context for constructing SAW terms -} ->
@@ -197,7 +197,7 @@ mkStructuralMismatch _opts cc _sc spec llvmval setupval memTy =
 -- | Instead of using 'ppPointsTo', which prints 'SetupValue', translate
 --   expressions to 'LLVMVal'.
 ppPointsToAsLLVMVal ::
-  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options              {- ^ output/verbosity options -} ->
   LLVMCrucibleContext arch ->
   SharedContext {- ^ context for constructing SAW terms -} ->
@@ -216,7 +216,7 @@ ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo loc cond ptr val) = do
 
 -- | Create an error stating that the 'LLVMVal' was not equal to the 'SetupValue'
 notEqual ::
-  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   PrePost ->
   Options              {- ^ output/verbosity options -} ->
   W4.ProgramLoc        {- ^ where is the assertion from? -} ->
@@ -373,7 +373,7 @@ methodSpecHandler ::
   forall arch rtp args ret.
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
-  , ?doW4Eval :: Bool
+  , ?w4EvalTactic :: W4EvalTactic
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -596,7 +596,7 @@ methodSpecHandler_prestate ::
   forall arch ctx.
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
-  , ?doW4Eval :: Bool
+  , ?w4EvalTactic :: W4EvalTactic
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -631,7 +631,7 @@ methodSpecHandler_prestate opts sc cc args cs =
 --   and computing postcondition predicates.
 methodSpecHandler_poststate ::
   forall arch ret.
-  (?lc :: Crucible.TypeContext, ?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
@@ -646,7 +646,7 @@ methodSpecHandler_poststate opts sc cc retTy cs =
 learnCond ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
-  , ?doW4Eval :: Bool
+  , ?w4EvalTactic :: W4EvalTactic
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -670,7 +670,7 @@ learnCond opts sc cc cs prepost globals extras ss =
 
 
 assertTermEqualities ::
-  (?doW4Eval :: Bool) =>
+  (?w4EvalTactic :: W4EvalTactic) =>
   SharedContext ->
   LLVMCrucibleContext arch ->
   OverrideMatcher (LLVM arch) md ()
@@ -703,7 +703,7 @@ enforceCompleteSubstitution loc ss =
 
 
 -- execute a pre/post condition
-executeCond :: (?lc :: Crucible.TypeContext, ?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym)
+executeCond :: (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym)
             => Options
             -> SharedContext
             -> LLVMCrucibleContext arch
@@ -741,7 +741,7 @@ refreshTerms sc ss =
 -- override's precondition are allocated, and meet the appropriate
 -- requirements for alignment and mutability.
 enforcePointerValidity ::
-  (?lc :: Crucible.TypeContext, ?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   SharedContext ->
   LLVMCrucibleContext arch ->
   W4.ProgramLoc ->
@@ -780,7 +780,7 @@ enforcePointerValidity sc cc loc ss =
 -- an override's precondition are disjoint. Read-only allocations are
 -- allowed to alias other read-only allocations, however.
 enforceDisjointness ::
-  (?lc :: Crucible.TypeContext, ?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   SharedContext ->
   LLVMCrucibleContext arch ->
   W4.ProgramLoc ->
@@ -822,7 +822,7 @@ enforceDisjointness sc cc loc globals extras ss =
 -- not be disjoint. Similarly, fresh pointers need not be checked for
 -- disjointness.
 enforceDisjointAllocSpec ::
-  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   SharedContext ->
   LLVMCrucibleContext arch ->
   Sym -> W4.ProgramLoc ->
@@ -892,7 +892,7 @@ ppProgramLoc loc =
 matchPointsTos :: forall arch md.
   ( ?lc :: Crucible.TypeContext
   , ?memOpts :: Crucible.MemOptions
-  , ?doW4Eval :: Bool
+  , ?w4EvalTactic :: W4EvalTactic
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -960,7 +960,7 @@ matchPointsTos opts sc cc spec prepost = go False []
 ------------------------------------------------------------------------
 
 computeReturnValue ::
-  (?lc :: Crucible.TypeContext, ?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options               {- ^ saw script debug and print options     -} ->
   LLVMCrucibleContext arch  {- ^ context of the crucible simulation     -} ->
   SharedContext         {- ^ context for generating saw terms       -} ->
@@ -1079,7 +1079,7 @@ diffMemTypesList i ((x, y) : ts) =
 
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
-  (?doW4Eval :: Bool) =>
+  (?w4EvalTactic :: W4EvalTactic) =>
   Options          {- ^ saw script print out opts -} ->
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
   SharedContext      {- ^ context for constructing SAW terms    -} ->
@@ -1307,7 +1307,7 @@ matchTerm sc cc loc prepost real expect =
 -- | Use the current state to learn about variable assignments based on
 -- preconditions for a procedure specification.
 learnSetupCondition ::
-  (?lc :: Crucible.TypeContext, ?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                    ->
   SharedContext              ->
   LLVMCrucibleContext arch       ->
@@ -1359,7 +1359,7 @@ learnPointsTo ::
   forall arch md ann.
   ( ?lc :: Crucible.TypeContext
   , ?memOpts :: Crucible.MemOptions
-  , ?doW4Eval :: Bool
+  , ?w4EvalTactic :: W4EvalTactic
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -1378,7 +1378,7 @@ matchPointsToValue ::
   forall arch md ann.
   ( ?lc :: Crucible.TypeContext
   , ?memOpts :: Crucible.MemOptions
-  , ?doW4Eval :: Bool
+  , ?w4EvalTactic :: W4EvalTactic
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -1513,7 +1513,7 @@ stateCond PostState = "postcondition"
 -- | Process an @llvm_equal@ statement from the precondition
 -- section of the CrucibleSetup block.
 learnEqual ::
-  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                                          ->
   SharedContext                                    ->
   LLVMCrucibleContext arch                            ->
@@ -1533,7 +1533,7 @@ learnEqual opts sc cc spec loc prepost v1 v2 = do
 -- | Process an @llvm_precond@ statement from the precondition
 -- section of the CrucibleSetup block.
 learnPred ::
-  (?doW4Eval :: Bool) =>
+  (?w4EvalTactic :: W4EvalTactic) =>
   SharedContext                                                       ->
   LLVMCrucibleContext arch                                               ->
   W4.ProgramLoc                                                       ->
@@ -1545,7 +1545,7 @@ learnPred sc cc loc prepost t =
      addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError (stateCond prepost) ""))
 
 instantiateExtResolveSAWPred ::
-  (?doW4Eval :: Bool) =>
+  (?w4EvalTactic :: W4EvalTactic) =>
   SharedContext ->
   LLVMCrucibleContext arch ->
   Term ->
@@ -1555,7 +1555,7 @@ instantiateExtResolveSAWPred sc cc cond = do
   liftIO $ resolveSAWPred cc =<< scInstantiateExt sc sub cond
 
 instantiateExtResolveSAWSymBV ::
-  (?doW4Eval :: Bool, 1 <= w) =>
+  (?w4EvalTactic :: W4EvalTactic, 1 <= w) =>
   SharedContext ->
   LLVMCrucibleContext arch ->
   NatRepr w ->
@@ -1574,7 +1574,7 @@ instantiateExtResolveSAWSymBV sc cc w tm = do
 -- Return a map containing the overwritten memory allocations.
 invalidateMutableAllocs ::
   ( ?lc :: Crucible.TypeContext
-  , ?doW4Eval :: Bool
+  , ?w4EvalTactic :: W4EvalTactic
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -1666,7 +1666,7 @@ invalidateMutableAllocs opts sc cc cs = do
 -- | Perform an allocation as indicated by an @llvm_alloc@ or
 -- @llvm_fresh_pointer@ statement from the postcondition section.
 executeAllocation ::
-  (?lc :: Crucible.TypeContext, ?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options                        ->
   SharedContext ->
   LLVMCrucibleContext arch          ->
@@ -1719,7 +1719,7 @@ doAllocSymInit sym mem mut alignment sz loc sym_init  = do
 -- | Update the simulator state based on the postconditions from the
 -- procedure specification.
 executeSetupCondition ::
-  (?lc :: Crucible.TypeContext, ?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                    ->
   SharedContext              ->
   LLVMCrucibleContext arch     ->
@@ -1758,7 +1758,7 @@ executeGhost _sc _var (TypedTerm tp _) =
 -- the CrucibleSetup block. First we compute the value indicated by
 -- 'val', and then write it to the address indicated by 'ptr'.
 executePointsTo ::
-  (?lc :: Crucible.TypeContext, ?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options                    ->
   SharedContext              ->
   LLVMCrucibleContext arch     ->
@@ -1789,7 +1789,7 @@ executePointsTo opts sc cc spec overwritten_allocs (LLVMPointsTo _loc cond ptr v
      writeGlobal memVar mem'
 
 storePointsToValue ::
-  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options ->
   LLVMCrucibleContext arch ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
@@ -1875,7 +1875,7 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
 -- | Process an @llvm_equal@ statement from the postcondition
 -- section of the CrucibleSetup block.
 executeEqual ::
-  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                                          ->
   SharedContext                                    ->
   LLVMCrucibleContext arch                           ->
@@ -1892,7 +1892,7 @@ executeEqual opts sc cc spec v1 v2 = do
 -- | Process an @llvm_postcond@ statement from the postcondition
 -- section of the CrucibleSetup block.
 executePred ::
-  (?doW4Eval :: Bool) =>
+  (?w4EvalTactic :: W4EvalTactic) =>
   SharedContext ->
   LLVMCrucibleContext arch ->
   TypedTerm {- ^ the term to assert as a postcondition -} ->
@@ -1942,7 +1942,7 @@ instantiateSetupValue sc s v =
 ------------------------------------------------------------------------
 
 resolveSetupValueLLVM ::
-  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options              ->
   LLVMCrucibleContext arch ->
   SharedContext        ->
@@ -1961,7 +1961,7 @@ resolveSetupValueLLVM opts cc sc spec sval =
      return (memTy, lval)
 
 resolveSetupValue ::
-  (?doW4Eval :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options              ->
   LLVMCrucibleContext arch ->
   SharedContext        ->
