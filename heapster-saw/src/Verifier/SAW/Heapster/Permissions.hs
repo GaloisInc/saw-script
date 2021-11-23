@@ -93,6 +93,37 @@ import Debug.Trace
 -- * Utility Functions and Definitions
 ----------------------------------------------------------------------
 
+-- | Take the ceiling of a division
+ceil_div :: Integral a => a -> a -> a
+ceil_div a b = (a + b - fromInteger 1) `div` b
+
+-- | Replace the body of a binding with a constant
+mbConst :: a -> Mb ctx b -> Mb ctx a
+mbConst a = fmap $ const a
+
+-- | Get the first element of a pair in a binding
+mbFst :: NuMatching a => NuMatching b => Mb ctx (a,b) -> Mb ctx a
+mbFst = mbMapCl $(mkClosed [| fst |])
+
+-- | Get the second element of a pair in a binding
+mbSnd :: NuMatching a => NuMatching b => Mb ctx (a,b) -> Mb ctx b
+mbSnd = mbMapCl $(mkClosed [| snd |])
+
+-- | Get the first element of a triple in a binding
+mbFst3 :: NuMatching a => NuMatching b => NuMatching c =>
+          Mb ctx (a,b,c) -> Mb ctx a
+mbFst3 = mbMapCl $(mkClosed [| \(a,_,_) -> a |])
+
+-- | Get the first element of a triple in a binding
+mbSnd3 :: NuMatching a => NuMatching b => NuMatching c =>
+          Mb ctx (a,b,c) -> Mb ctx b
+mbSnd3 = mbMapCl $(mkClosed [| \(_,b,_) -> b |])
+
+-- | Get the first element of a triple in a binding
+mbThd3 :: NuMatching a => NuMatching b => NuMatching c =>
+          Mb ctx (a,b,c) -> Mb ctx c
+mbThd3 = mbMapCl $(mkClosed [| \(_,_,c) -> c |])
+
 -- | FIXME: put this somewhere more appropriate
 subNat' :: NatRepr m -> NatRepr n -> Maybe (NatRepr (m-n))
 subNat' m n
@@ -105,6 +136,10 @@ deleteNth :: Int -> [a] -> [a]
 deleteNth i xs | i >= length xs = error "deleteNth"
 deleteNth i xs = take i xs ++ drop (i+1) xs
 
+-- | Apply 'deleteNth' inside a name-binding
+mbDeleteNth :: NuMatching a => Int -> Mb ctx [a] -> Mb ctx [a]
+mbDeleteNth i = mbMapCl ($(mkClosed [| deleteNth |]) `clApply` toClosed i)
+
 -- | Replace the nth element of a list
 replaceNth :: Int -> a -> [a] -> [a]
 replaceNth i _ xs | i >= length xs = error "replaceNth"
@@ -114,6 +149,9 @@ replaceNth i x xs = take i xs ++ x : drop (i+1) xs
 insertNth :: Int -> a -> [a] -> [a]
 insertNth i x xs = take i xs ++ x : drop i xs
 
+-- | Find the @n@th element of a list in a binding
+mbNth :: NuMatching a => Int -> Mb ctx [a] -> Mb ctx a
+mbNth i = mbMapCl ($(mkClosed [| flip (!!) |]) `clApply` toClosed i)
 
 -- | Find all elements of list @l@ where @f@ returns a value and return that
 -- value plus its index into @l@
@@ -142,6 +180,13 @@ foldr1WithDefault f def (a:as) = f a $ foldr1WithDefault f def as
 -- empty list.
 foldMapWithDefault :: (b -> b -> b) -> b -> (a -> b) -> [a] -> b
 foldMapWithDefault comb def f l = foldr1WithDefault comb def $ map f l
+
+-- | Build a 'NameSet' from a sequence of names and a list of 'Bool' flags
+nameSetFromFlags :: RAssign Name (ctx :: RList k) -> [Bool] -> NameSet k
+nameSetFromFlags ns flags =
+  NameSet.fromList $
+  mapMaybe (\(n,flag) -> if flag then Just n else Nothing) $
+  zip (RL.mapToList SomeName ns) flags
 
 -- | A flag indicating whether an equality test has unfolded a
 -- recursively-defined name on one side of the equation already
@@ -260,7 +305,7 @@ permPretty :: PermPretty a => PPInfo -> a -> Doc ann
 permPretty info a = runReader (permPrettyM a) info
 
 renderDoc :: Doc ann -> String
-renderDoc doc = renderString (layoutSmart opts doc)
+renderDoc doc = renderString (layoutPretty opts doc)
   where opts = LayoutOptions (AvailablePerLine 80 0.8)
 
 permPrettyString :: PermPretty a => PPInfo -> a -> String
@@ -269,12 +314,10 @@ permPrettyString info a = renderDoc $ permPretty info a
 tracePretty :: Doc ann -> a -> a
 tracePretty doc = trace (renderDoc doc)
 
--- | Pretty-print a comma-separated list using 'fillSep'
+-- | Pretty-print a comma-separated list
 ppCommaSep :: [Doc ann] -> Doc ann
-ppCommaSep [] = mempty
 ppCommaSep ds =
-  PP.group $ align $ fillSep $ map PP.group
-  (map (<> comma) (take (length ds - 1) ds) ++ [last ds])
+  PP.group $ align $ fillSep $ map PP.group $ PP.punctuate comma ds
 
 -- | Pretty-print a comma-separated list using 'fillSep' enclosed inside either
 -- parentheses (if the supplied flag is 'True') or brackets (if it is 'False')
@@ -650,21 +693,29 @@ mbExprLLVMTypeWidth :: KnownNat w => Mb ctx (f (LLVMPointerType w)) ->
                        NatRepr w
 mbExprLLVMTypeWidth _ = knownNat
 
+-- | Convenience function to get the bit width of a bitvector type
+exprBVTypeWidth :: KnownNat w => f (BVType w) -> NatRepr w
+exprBVTypeWidth _ = knownNat
+
+-- | Convenience function to get the bit width of an LLVM pointer type
+mbExprBVTypeWidth :: KnownNat w => Mb ctx (f (BVType w)) -> NatRepr w
+mbExprBVTypeWidth _ = knownNat
+
 -- | Convenience function to get the bit width of an LLVM pointer type
 shapeLLVMTypeWidth :: KnownNat w => f (LLVMShapeType w) -> NatRepr w
 shapeLLVMTypeWidth _ = knownNat
 
 -- | Convenience function to get the number of bytes = the bit width divided by
--- 8 of an LLVM pointer type
+-- 8 of an LLVM pointer type rounded up
 exprLLVMTypeBytes :: KnownNat w => f (LLVMPointerType w) -> Integer
-exprLLVMTypeBytes e = intValue (exprLLVMTypeWidth e) `div` 8
+exprLLVMTypeBytes e = intValue (exprLLVMTypeWidth e) `ceil_div` 8
 
 -- | Convenience function to get the number of bytes = the bit width divided by
 -- 8 of an LLVM pointer type as an expr. Note that this assumes the bit width is
 -- a multiple of 8, so does not worry about rounding.
 exprLLVMTypeBytesExpr :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
                          f (LLVMPointerType sz) -> PermExpr (BVType w)
-exprLLVMTypeBytesExpr e = bvInt (intValue (exprLLVMTypeWidth e) `div` 8)
+exprLLVMTypeBytesExpr e = bvInt (intValue (exprLLVMTypeWidth e) `ceil_div` 8)
 
 -- | Convenience function to get the width of an LLVM pointer type of an
 -- expression in a binding as an expression
@@ -672,7 +723,7 @@ mbExprLLVMTypeBytesExpr :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
                            Mb ctx (f (LLVMPointerType sz)) ->
                            PermExpr (BVType w)
 mbExprLLVMTypeBytesExpr mb_e =
-  bvInt $ div (intValue $ mbLift $ fmap exprLLVMTypeWidth mb_e) 8
+  bvInt $ ceil_div (intValue $ mbLift $ fmap exprLLVMTypeWidth mb_e) 8
 
 -- | Pattern-match a permission list expression as a typed list of permissions
 -- consed onto a terminator, which can either be the empty list (represented by
@@ -1376,10 +1427,10 @@ bvSub e1 e2 = bvAdd e1 (bvNegate e2)
 
 -- | Integer division on bitvector expressions, truncating any factors @i*x@
 -- where @i@ is not a multiple of the divisor to zero
-bvDiv :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> Integer ->
+bvDiv :: (1 <= w, KnownNat w, Integral a) => PermExpr (BVType w) -> a ->
          PermExpr (BVType w)
 bvDiv (bvMatch -> (factors, off)) n =
-  let n_bv = BV.mkBV knownNat n in
+  let n_bv = BV.mkBV knownNat (toInteger n) in
   normalizeBVExpr $
   PExpr_BV (mapMaybe (\(BVFactor i x) ->
                        if BV.urem i n_bv == BV.zero knownNat then
@@ -1389,10 +1440,10 @@ bvDiv (bvMatch -> (factors, off)) n =
 
 -- | Integer Modulus on bitvector expressions, where any factors @i*x@ with @i@
 -- not a multiple of the divisor are included in the modulus
-bvMod :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> Integer ->
+bvMod :: (1 <= w, KnownNat w, Integral a) => PermExpr (BVType w) -> a ->
          PermExpr (BVType w)
 bvMod (bvMatch -> (factors, off)) n =
-  let n_bv = BV.mkBV knownNat n in
+  let n_bv = BV.mkBV knownNat $ toInteger n in
   normalizeBVExpr $
   PExpr_BV (mapMaybe (\f@(BVFactor i _) ->
                        if BV.urem i n_bv /= BV.zero knownNat
@@ -1602,6 +1653,14 @@ data ValuePerm (a :: CrucibleType) where
   ValPerm_Conj :: [AtomicPerm a] -> ValuePerm a
 
 
+-- | Build an equality permission in a binding
+mbValPerm_Eq :: Mb ctx (PermExpr a) -> Mb ctx (ValuePerm a)
+mbValPerm_Eq = mbMapCl $(mkClosed [| ValPerm_Eq |])
+
+-- | The conjunction of a list of atomic permissions in a binding
+mbValPerm_Conj :: Mb ctx [AtomicPerm a] -> Mb ctx (ValuePerm a)
+mbValPerm_Conj = mbMapCl $(mkClosed [| ValPerm_Conj |])
+
 -- | The vacuously true permission is the conjunction of 0 atomic permissions
 pattern ValPerm_True :: ValuePerm a
 pattern ValPerm_True = ValPerm_Conj []
@@ -1773,7 +1832,7 @@ llvmFieldSize _ = knownNat
 
 -- | Get the size of an 'LLVMFieldPerm' in bytes
 llvmFieldSizeBytes :: KnownNat sz => LLVMFieldPerm w sz -> Integer
-llvmFieldSizeBytes fp = intValue (llvmFieldSize fp) `div` 8
+llvmFieldSizeBytes fp = intValue (llvmFieldSize fp) `ceil_div` 8
 
 -- | Helper to get a 'NatRepr' for the size of an 'LLVMFieldPerm' in a binding
 mbLLVMFieldSize :: KnownNat sz => Mb ctx (LLVMFieldPerm w sz) -> NatRepr sz
@@ -1782,6 +1841,11 @@ mbLLVMFieldSize _ = knownNat
 -- | Get the rw-modality-in-binding of a field permission in binding
 mbLLVMFieldRW :: Mb ctx (LLVMFieldPerm w sz) -> Mb ctx (PermExpr RWModalityType)
 mbLLVMFieldRW = mbMapCl $(mkClosed [| llvmFieldRW |])
+
+-- | Get the lifetime-in-binding of a field permission in binding
+mbLLVMFieldLifetime :: Mb ctx (LLVMFieldPerm w sz) ->
+                       Mb ctx (PermExpr LifetimeType)
+mbLLVMFieldLifetime = mbMapCl $(mkClosed [| llvmFieldLifetime |])
 
 -- | Get the offset-in-binding of a field permission in binding
 mbLLVMFieldOffset :: Mb ctx (LLVMFieldPerm w sz) -> Mb ctx (PermExpr (BVType w))
@@ -2295,12 +2359,23 @@ namedShapeIsRecursive :: NamedShape b args w -> Bool
 namedShapeIsRecursive (NamedShape _ _ (RecShapeBody _ _ _)) = True
 namedShapeIsRecursive _ = False
 
+-- | Test if a 'NamedShape' in a binding is recursive
+mbNamedShapeIsRecursive :: Mb ctx (NamedShape b args w) -> Bool
+mbNamedShapeIsRecursive =
+  mbLift . mbMapCl $(mkClosed [| namedShapeIsRecursive |])
+
 -- | Get a 'BoolRepr' for the Boolean flag for whether a named shape can be
 -- unfolded
 namedShapeCanUnfoldRepr :: NamedShape b args w -> BoolRepr b
 namedShapeCanUnfoldRepr (NamedShape _ _ (DefinedShapeBody _)) = TrueRepr
 namedShapeCanUnfoldRepr (NamedShape _ _ (OpaqueShapeBody _ _)) = FalseRepr
 namedShapeCanUnfoldRepr (NamedShape _ _ (RecShapeBody _ _ _)) = TrueRepr
+
+-- | Get a 'BoolRepr' for the Boolean flag for whether a named shape in a
+-- binding can be unfolded
+mbNamedShapeCanUnfoldRepr :: Mb ctx (NamedShape b args w) -> BoolRepr b
+mbNamedShapeCanUnfoldRepr =
+  mbLift . mbMapCl $(mkClosed [| namedShapeCanUnfoldRepr |])
 
 -- | Whether a 'NamedShape' can be unfolded
 namedShapeCanUnfold :: NamedShape b args w -> Bool
@@ -3419,17 +3494,23 @@ llvmFieldSetContents :: LLVMFieldPerm w sz1 ->
 llvmFieldSetContents (LLVMFieldPerm {..}) p =
   LLVMFieldPerm { llvmFieldContents = p, .. }
 
--- | Set the contents of a field permission to an @eq(llvmword(bv))@ permission
+-- | Set the contents of a field permission to an @eq(llvmword(e))@ permission
 llvmFieldSetEqWord :: (1 <= sz2, KnownNat sz2) => LLVMFieldPerm w sz1 ->
-                      BV.BV sz2 -> LLVMFieldPerm w sz2
-llvmFieldSetEqWord fp bv =
-  llvmFieldSetContents fp (ValPerm_Eq $ PExpr_LLVMWord $ bvBV bv)
+                      PermExpr (BVType sz2) -> LLVMFieldPerm w sz2
+llvmFieldSetEqWord fp e =
+  llvmFieldSetContents fp (ValPerm_Eq $ PExpr_LLVMWord e)
 
 -- | Set the contents of a field permission to an @eq(y)@ permission
 llvmFieldSetEqVar :: (1 <= sz2, KnownNat sz2) => LLVMFieldPerm w sz1 ->
                      ExprVar (LLVMPointerType sz2) -> LLVMFieldPerm w sz2
 llvmFieldSetEqVar fp y =
   llvmFieldSetContents fp (ValPerm_Eq $ PExpr_Var y)
+
+-- | Set the contents of a field permission to an @eq(llvmword(y))@ permission
+llvmFieldSetEqWordVar :: (1 <= sz2, KnownNat sz2) => LLVMFieldPerm w sz1 ->
+                         ExprVar (BVType sz2) -> LLVMFieldPerm w sz2
+llvmFieldSetEqWordVar fp y =
+  llvmFieldSetContents fp (ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var y)
 
 -- | Set the contents of a field permission to an @true@ permission of a
 -- specific size
@@ -3584,15 +3665,23 @@ atomicPermLifetime (Perm_LLVMArray ap) = Just $ llvmArrayLifetime ap
 atomicPermLifetime (Perm_LLVMBlock bp) = Just $ llvmBlockLifetime bp
 atomicPermLifetime _ = Nothing
 
--- | Get the offset of an atomic permission, if it has one
+-- | Get the starting offset of an atomic permission, if it has one. This
+-- includes array permissions which may have some cells borrowed.
 llvmAtomicPermOffset :: AtomicPerm (LLVMPointerType w) ->
                         Maybe (PermExpr (BVType w))
-llvmAtomicPermOffset = fmap llvmBlockOffset . llvmAtomicPermToBlock
+llvmAtomicPermOffset (Perm_LLVMField fp) = Just $ llvmFieldOffset fp
+llvmAtomicPermOffset (Perm_LLVMArray ap) = Just $ llvmArrayOffset ap
+llvmAtomicPermOffset (Perm_LLVMBlock bp) = Just $ llvmBlockOffset bp
+llvmAtomicPermOffset _ = Nothing
 
--- | Get the length of an atomic permission, if it has one
+-- | Get the length of an atomic permission, if it has one. This includes array
+-- permissions which may have some cells borrowed.
 llvmAtomicPermLen :: AtomicPerm (LLVMPointerType w) ->
                      Maybe (PermExpr (BVType w))
-llvmAtomicPermLen = fmap llvmBlockLen . llvmAtomicPermToBlock
+llvmAtomicPermLen (Perm_LLVMField fp) = Just $ llvmFieldLen fp
+llvmAtomicPermLen (Perm_LLVMArray ap) = Just $ llvmArrayLengthBytes ap
+llvmAtomicPermLen (Perm_LLVMBlock bp) = Just $ llvmBlockLen bp
+llvmAtomicPermLen _ = Nothing
 
 -- | Get the range of offsets of an atomic permission, if it has one. Note that
 -- arrays with borrows do not have a well-defined range.
@@ -3631,7 +3720,7 @@ llvmShapeLength (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
   llvmShapeLength (unfoldNamedShape nmsh args)
 llvmShapeLength (PExpr_EqShape _) = Nothing
 llvmShapeLength (PExpr_PtrShape _ _ sh)
-  | LLVMShapeRepr w <- exprType sh = Just $ bvInt (intValue w `div` 8)
+  | LLVMShapeRepr w <- exprType sh = Just $ bvInt (intValue w `ceil_div` 8)
   | otherwise = Nothing
 llvmShapeLength (PExpr_FieldShape fsh) =
   Just $ bvInt $ llvmFieldShapeLength fsh
@@ -3779,6 +3868,71 @@ unfoldModalizeNamedShape :: KnownNat w => Maybe (PermExpr RWModalityType) ->
 unfoldModalizeNamedShape rw l nmsh args =
   modalizeShape rw l $ unfoldNamedShape nmsh args
 
+-- | Unfold the shape of a block permission using 'unfoldModalizeNamedShape' if
+-- it has a named shape
+unfoldModalizeNamedShapeBlock :: KnownNat w => LLVMBlockPerm w ->
+                                 Maybe (LLVMBlockPerm w)
+unfoldModalizeNamedShapeBlock bp
+  | PExpr_NamedShape rw l nmsh args <- llvmBlockShape bp
+  , TrueRepr <- namedShapeCanUnfoldRepr nmsh
+  , Just sh' <- unfoldModalizeNamedShape rw l nmsh args =
+    Just (bp { llvmBlockShape = sh' })
+unfoldModalizeNamedShapeBlock _ = Nothing
+
+-- | Unfold the shape of a block permission in a binding using
+-- 'unfoldModalizeNamedShape' if it has a named shape
+mbUnfoldModalizeNamedShapeBlock :: KnownNat w => Mb ctx (LLVMBlockPerm w) ->
+                                   Maybe (Mb ctx (LLVMBlockPerm w))
+mbUnfoldModalizeNamedShapeBlock =
+  mbMaybe . mbMapCl $(mkClosed [| unfoldModalizeNamedShapeBlock |])
+
+-- | Change the shape of a disjunctive block to either its left or right
+-- disjunct, depending on whether the supplied 'Bool' is 'True' or 'False'
+disjBlockToSubShape :: Bool -> LLVMBlockPerm w -> LLVMBlockPerm w
+disjBlockToSubShape flag bp
+  | PExpr_OrShape sh1 sh2 <- llvmBlockShape bp =
+    bp { llvmBlockShape = if flag then sh1 else sh2 }
+disjBlockToSubShape _ _ = error "disjBlockToSubShape"
+
+-- | Change the shape of a disjunctive block in a binding to either its left or
+-- right disjunct, depending on whether the supplied 'Bool' is 'True' or 'False'
+mbDisjBlockToSubShape :: Bool -> Mb ctx (LLVMBlockPerm w) ->
+                         Mb ctx (LLVMBlockPerm w)
+mbDisjBlockToSubShape flag =
+  mbMapCl ($(mkClosed [| disjBlockToSubShape |]) `clApply` toClosed flag)
+
+-- | A block permission in a binding at some unknown type
+data SomeBindingLLVMBlockPerm w =
+  forall a. SomeBindingLLVMBlockPerm (Binding a (LLVMBlockPerm w))
+
+-- | Match an existential shape with the given bidning type
+matchExShape :: TypeRepr a -> PermExpr (LLVMShapeType w) ->
+                Maybe (Binding a (PermExpr (LLVMShapeType w)))
+matchExShape a (PExpr_ExShape (mb_sh :: Binding b (PermExpr (LLVMShapeType w))))
+  | Just Refl <- testEquality a (knownRepr :: TypeRepr b) =
+    Just mb_sh
+matchExShape _ _ = Nothing
+
+-- | Change the shape of an existential block to the body of its existential
+exBlockToSubShape :: TypeRepr a -> LLVMBlockPerm w ->
+                     Binding a (LLVMBlockPerm w)
+exBlockToSubShape a bp
+  | Just mb_sh <- matchExShape a $ llvmBlockShape bp =
+    -- NOTE: even when exBlockToSubShape is called inside a binding as part of
+    -- mbExBlockToSubShape, the existential binding will probably be a fresh
+    -- function instead of a fresh pair, because it itself has not been
+    -- mbMatched, so this fmap shouldn't be re-subsituting names
+    fmap (\sh -> bp { llvmBlockShape = sh }) mb_sh
+exBlockToSubShape _ _ = error "exBlockToSubShape"
+
+-- | Change the shape of an existential block in a binding to the body of its
+-- existential
+mbExBlockToSubShape :: TypeRepr a -> Mb ctx (LLVMBlockPerm w) ->
+                       Mb (ctx :> a) (LLVMBlockPerm w)
+mbExBlockToSubShape a =
+  mbCombine RL.typeCtxProxies .
+  mbMapCl ($(mkClosed [| exBlockToSubShape |]) `clApply` toClosed a)
+
 -- | Split a block permission into portions that are before and after a given
 -- offset, if possible, assuming the offset is in the block permission
 splitLLVMBlockPerm :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
@@ -3916,6 +4070,29 @@ mbTaggedUnionNthDisj n_top =
   mbMapCl ($(mkClosed [| \n -> (!!n) . taggedUnionDisjs |])
            `clApply` toClosed n_top)
 
+-- | Change a block permisison with a tagged union shape to have the @n@th
+-- disjunct shape of this tagged union
+taggedUnionNthDisjBlock :: Int -> LLVMBlockPerm w -> LLVMBlockPerm w
+taggedUnionNthDisjBlock 0 bp
+  | PExpr_OrShape sh1 _ <- llvmBlockShape bp =
+    bp { llvmBlockShape = sh1 }
+taggedUnionNthDisjBlock 0 bp =
+  -- NOTE: this case happens for the last shape in a tagged union, which is not
+  -- or-ed with anything, and is guaranteed not to be an or itsef (so it won't
+  -- match the above case)
+  bp
+taggedUnionNthDisjBlock n bp
+  | PExpr_OrShape _ sh2 <- llvmBlockShape bp =
+    taggedUnionNthDisjBlock (n-1) $ bp { llvmBlockShape = sh2 }
+taggedUnionNthDisjBlock _ _ = error "taggedUnionNthDisjBlock"
+
+-- | Change the a block permisison in a binding with a tagged union shape to
+-- have the @n@th disjunct shape of this tagged union
+mbTaggedUnionNthDisjBlock :: Int -> Mb ctx (LLVMBlockPerm w) ->
+                             Mb ctx (LLVMBlockPerm w)
+mbTaggedUnionNthDisjBlock n =
+  mbMapCl ($(mkClosed [| taggedUnionNthDisjBlock |]) `clApply` toClosed n)
+
 -- | Get the tags from a 'TaggedUnionShape'
 taggedUnionTags :: TaggedUnionShape w sz -> [BV sz]
 taggedUnionTags (TaggedUnionShape disjs) = map fst $ NonEmpty.toList disjs
@@ -3987,7 +4164,8 @@ taggedUnionExTagPerm bp =
                              llvmFieldContents =
                                ValPerm_Eq (PExpr_LLVMWord $ PExpr_Var z) }
 
--- | Convert a tagged union shape in a binding to
+-- | Convert a @memblock@ permission in a binding with a tagged union shape to a
+-- field permission with permission @eq(z)@ using evar @z@ for the tag
 mbTaggedUnionExTagPerm :: (1 <= sz, KnownNat sz) => Mb ctx (LLVMBlockPerm w) ->
                           Mb (ctx :> BVType sz) (LLVMFieldPerm w sz)
 mbTaggedUnionExTagPerm =
@@ -4072,12 +4250,12 @@ machineWordBytes :: KnownNat w => f w -> Integer
 machineWordBytes w
   | natVal w `mod` 8 /= 0 =
     error "machineWordBytes: word size is not a multiple of 8!"
-machineWordBytes w = natVal w `div` 8
+machineWordBytes w = natVal w `ceil_div` 8
 
 -- | Convert bytes to machine words, rounded up, i.e., return @ceil(n/W)@,
 -- where @W@ is the number of bytes per machine word
 bytesToMachineWords :: KnownNat w => f w -> Integer -> Integer
-bytesToMachineWords w n = (n + machineWordBytes w - 1) `div` machineWordBytes w
+bytesToMachineWords w n = n `ceil_div` machineWordBytes w
 
 -- | Return the largest multiple of 'machineWordBytes' less than the input
 prevMachineWord :: KnownNat w => f w -> Integer -> Integer
@@ -4332,6 +4510,14 @@ llvmPermContainsOffset off (Perm_LLVMBlock bp)
   , bvPropCouldHold prop =
     Just ([prop], bvPropHolds prop)
 llvmPermContainsOffset _ _ = Nothing
+
+-- | Test if an atomic LLVM permission definitely contains an offset. This is
+-- the 'Bool' flag returned by 'llvmPermContainsOffset', or 'False' if that is
+-- undefined.
+llvmPermContainsOffsetBool :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                              AtomicPerm (LLVMPointerType w) -> Bool
+llvmPermContainsOffsetBool off p =
+  maybe False snd $ llvmPermContainsOffset off p
 
 -- | Test if an atomic LLVM permission contains (in the sense of 'bvPropHolds')
 -- all offsets in a given range
@@ -5854,6 +6040,12 @@ psubstMbUnsetVars (PartialSubst elems) =
             then Constant (Just $ SomeName n)
             else Constant Nothing) ns elems
 
+-- | Return a list of 'Bool's indicating which of the bound names in context
+-- @ctx@ are unset in the given partial substitution
+psubstUnsetVarsBool :: PartialSubst ctx -> [Bool]
+psubstUnsetVarsBool (PartialSubst elems) =
+  RL.mapToList (\(PSubstElem maybe_e) -> isNothing maybe_e) elems
+
 -- | Set the expression associated with a variable in a partial substitution. It
 -- is an error if it is already set.
 psubstSet :: Member ctx a -> PermExpr a -> PartialSubst ctx ->
@@ -6671,6 +6863,7 @@ $(mkNuMatching [t| forall b args a. DefinedPerm b args a |])
 $(mkNuMatching [t| forall args a. LifetimeFunctor args a |])
 $(mkNuMatching [t| forall ps. LifetimeCurrentPerms ps |])
 $(mkNuMatching [t| forall a. SomeLLVMBlockPerm a |])
+$(mkNuMatching [t| forall w. SomeBindingLLVMBlockPerm w |])
 
 instance NuMatchingAny1 LOwnedPerm where
   nuMatchingAny1Proof = nuMatchingProof
