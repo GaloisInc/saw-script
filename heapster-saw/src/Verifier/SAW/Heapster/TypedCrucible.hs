@@ -3767,21 +3767,6 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
   top_get >>= \top_st ->
   get >>= \st ->
   gets (permCheckExtStateNames . stExtState) >>= \(Some ext_ns) ->
-  let tops_ns = stTopVars st
-      args_t = tcRegs ctx args
-      args_ns = typedRegsToVars args_t
-      tops_args_ns = RL.append tops_ns args_ns
-      tops_args_ext_ns = RL.append tops_args_ns ext_ns
-      {-
-      (gen_perms_hint, join_point_hint) =
-        case stFnHandle top_st of
-          SomeHandle h ->
-            (lookupBlockGenPermsHint (stPermEnv top_st) h
-             (stBlockTypes top_st) blkID
-            ,
-            lookupBlockJoinPointHint (stPermEnv top_st) h
-            (stBlockTypes top_st) blkID) -} in
-
   tcBlockID blkID >>>= \tpBlkID ->
 
   -- Step 0: run all of the following steps inside a local ImplM computation,
@@ -3791,6 +3776,13 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
   -- that when we type-check a condition branch instruction (Br), the
   -- simplifications of each branch do not affect each other.
   pcmRunImplImplM CruCtxNil mempty $
+
+  -- NOTE: the args all must be distinct variables (this is required by
+  -- implPushOrReflMultiM below and also the translation of jump targets)
+  implFreshenNames (typedRegsToVars $ tcRegs ctx args) >>>= \args_ns ->
+  let tops_ns = stTopVars st
+      tops_args_ns = RL.append tops_ns args_ns
+      tops_args_ext_ns = RL.append tops_args_ns ext_ns in
 
   -- Step 1: Compute the variables whose values are determined by the
   -- permissions on the top and normal arguments as the starting point for
@@ -3825,12 +3817,10 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
           tops_perms = varPermsMulti tops_ns cur_perms
           tops_set = NameSet.fromList $ namesToNamesList tops_ns
           ghosts_perms = varPermsMulti ghosts_ns cur_perms
-          args_perms = fst $
-            foldrAndBuildDistPerms (\n tops_or_seen ->
-              if NameSet.member n tops_or_seen
-              then (ValPerm_Eq (PExpr_Var n), tops_or_seen)
-              else (cur_perms ^. varPerm n, NameSet.insert n tops_or_seen))
-            tops_set args_ns
+          args_perms =
+            buildDistPerms (\n -> if NameSet.member n tops_set
+                                  then ValPerm_Eq (PExpr_Var n)
+                                  else cur_perms ^. varPerm n) args_ns
           perms_in = appendDistPerms (appendDistPerms
                                       tops_perms args_perms) ghosts_perms in
       implTraceM (\i ->
