@@ -1014,14 +1014,14 @@ doAlloc ::
   AllocIndex ->
   LLVMAllocSpec ->
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
-doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz loc fresh symInit)
+doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz loc fresh initialization)
   | fresh = liftIO $ executeFreshPointer cc i
   | otherwise =
   StateT $ \mem ->
   do let sym = cc^.ccBackend
      sz' <- liftIO $ resolveSAWSymBV cc Crucible.PtrWidth sz
      let l = show (W4.plSourceLoc loc)
-     liftIO $ doAllocSymInit sym mem mut alignment sz' l symInit
+     liftIO $ doAllocSymInit sym mem mut alignment sz' l initialization
 
 --------------------------------------------------------------------------------
 
@@ -1873,10 +1873,10 @@ llvm_alloc_with_mutability_and_size ::
   Crucible.Mutability    ->
   Maybe (Crucible.Bytes) ->
   Maybe Crucible.Alignment ->
-  Bool ->
+  LLVMAllocSpecInit ->
   L.Type           ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
-llvm_alloc_with_mutability_and_size mut sz alignment symInit lty =
+llvm_alloc_with_mutability_and_size mut sz alignment initialization lty =
   LLVMCrucibleSetupM $
   do cctx <- getLLVMCrucibleContext
      loc <- getW4Position "llvm_alloc"
@@ -1921,14 +1921,14 @@ llvm_alloc_with_mutability_and_size mut sz alignment symInit lty =
        , _allocSpecBytes = sz''
        , _allocSpecLoc = loc
        , _allocSpecFresh = False
-       , _allocSpecSymInit = symInit
+       , _allocSpecInit = initialization
        }
 
 llvm_alloc ::
   L.Type         ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
 llvm_alloc =
-  llvm_alloc_with_mutability_and_size Crucible.Mutable Nothing Nothing False
+  llvm_alloc_with_mutability_and_size Crucible.Mutable Nothing Nothing LLVMAllocSpecNoInitialization
 
 llvm_alloc_aligned ::
   Int            ->
@@ -1941,7 +1941,7 @@ llvm_alloc_readonly ::
   L.Type         ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
 llvm_alloc_readonly =
-  llvm_alloc_with_mutability_and_size Crucible.Immutable Nothing Nothing False
+  llvm_alloc_with_mutability_and_size Crucible.Immutable Nothing Nothing LLVMAllocSpecNoInitialization
 
 llvm_alloc_readonly_aligned ::
   Int            ->
@@ -1961,7 +1961,7 @@ llvm_alloc_aligned_with_mutability mut n lty =
        mut
        Nothing
        (Just alignment)
-       False
+       LLVMAllocSpecNoInitialization
        lty
 
 coerceAlignment :: Int -> CrucibleSetup (LLVM arch) Crucible.Alignment
@@ -1985,11 +1985,12 @@ llvm_alloc_with_size sz lty =
     Crucible.Mutable
     (Just (Crucible.toBytes sz))
     Nothing
-    False
+    LLVMAllocSpecNoInitialization
     lty
 
 llvm_alloc_sym_init :: L.Type -> LLVMCrucibleSetupM (AllLLVM SetupValue)
-llvm_alloc_sym_init = llvm_alloc_with_mutability_and_size Crucible.Mutable Nothing Nothing True
+llvm_alloc_sym_init =
+  llvm_alloc_with_mutability_and_size Crucible.Mutable Nothing Nothing LLVMAllocSpecSymbolicInitialization
 
 llvm_symbolic_alloc ::
   Bool ->
@@ -2022,7 +2023,7 @@ llvm_symbolic_alloc ro align_bytes sz =
            , _allocSpecBytes = sz
            , _allocSpecLoc = loc
            , _allocSpecFresh = False
-           , _allocSpecSymInit = False
+           , _allocSpecInit = LLVMAllocSpecNoInitialization
            }
      n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?= spec
@@ -2072,7 +2073,7 @@ constructFreshPointer mid loc memTy =
                      , _allocSpecBytes = sz
                      , _allocSpecLoc = loc
                      , _allocSpecFresh = True
-                     , _allocSpecSymInit = False
+                     , _allocSpecInit = LLVMAllocSpecNoInitialization
                      }
      -- TODO: refactor
      case mid of

@@ -1672,7 +1672,7 @@ executeAllocation ::
   LLVMCrucibleContext arch          ->
   (AllocIndex, LLVMAllocSpec) ->
   OverrideMatcher (LLVM arch) RW ()
-executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc fresh symInit)
+executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc fresh initialization)
   | fresh =
   do ptr <- liftIO $ executeFreshPointer cc var
      OM (setupValueSub %= Map.insert var ptr)
@@ -1688,7 +1688,7 @@ executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc fres
      mem <- readGlobal memVar
      sz' <- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth sz
      let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
-     (ptr, mem') <- liftIO $ doAllocSymInit sym mem mut alignment sz' l symInit
+     (ptr, mem') <- liftIO $ doAllocSymInit sym mem mut alignment sz' l initialization
      writeGlobal memVar mem'
      assignVar cc loc var ptr
 
@@ -1700,18 +1700,18 @@ doAllocSymInit ::
   Crucible.Alignment ->
   W4.SymBV sym wptr {- ^ allocation size -} ->
   String {- ^ source location for use in error messages -} ->
-  Bool {- ^ source location for use in error messages -} ->
+  LLVMAllocSpecInit {- ^ allocation initialization policy -} ->
   IO (Crucible.LLVMPtr sym wptr, Crucible.MemImpl sym)
-doAllocSymInit sym mem mut alignment sz loc sym_init  = do
+doAllocSymInit sym mem mut alignment sz loc initialization  = do
   (ptr, mem') <- Crucible.doMalloc sym Crucible.HeapAlloc mut loc mem sz alignment
-  mem'' <- if sym_init then do
-    arr <- W4.freshConstant
-      sym
-      (W4.systemSymbol "arr!")
-      (W4.BaseArrayRepr (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth) (W4.BaseBVRepr (W4.knownNat @8)))
-    Crucible.doArrayConstStore sym mem' ptr alignment arr sz
-  else
-    return mem'
+  mem'' <- case initialization of
+    LLVMAllocSpecSymbolicInitialization -> do
+      arr <- W4.freshConstant
+        sym
+        (W4.systemSymbol "arr!")
+        (W4.BaseArrayRepr (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth) (W4.BaseBVRepr (W4.knownNat @8)))
+      Crucible.doArrayConstStore sym mem' ptr alignment arr sz
+    LLVMAllocSpecNoInitialization -> return mem'
   return (ptr, mem'')
 
 ------------------------------------------------------------------------
