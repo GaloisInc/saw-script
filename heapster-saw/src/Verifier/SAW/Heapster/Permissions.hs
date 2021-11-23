@@ -3945,7 +3945,7 @@ splitLLVMBlockPerm off bp
 splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_EmptyShape) =
   Just (bp { llvmBlockLen = bvSub off (llvmBlockOffset bp) },
         bp { llvmBlockOffset = off,
-             llvmBlockLen = bvSub (llvmBlockLen bp) off })
+             llvmBlockLen = bvSub (llvmBlockEndOffset bp) off })
 splitLLVMBlockPerm off bp@(LLVMBlockPerm { llvmBlockShape = sh })
   | Just sh_len <- llvmShapeLength sh
   , bvLt sh_len (bvSub off (llvmBlockOffset bp)) =
