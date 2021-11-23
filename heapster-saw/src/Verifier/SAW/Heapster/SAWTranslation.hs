@@ -828,6 +828,13 @@ instance TransInfo info =>
   translate mb_x = RL.get (translateVar mb_x) <$> infoCtx <$> ask
 
 instance TransInfo info =>
+         Translate info ctx (RAssign ExprVar as) (ExprTransCtx as) where
+  translate mb_exprs = case mbMatch mb_exprs of
+    [nuMP| MNil |] -> return MNil
+    [nuMP| ns :>: n |] ->
+      (:>:) <$> translate ns <*> translate n
+
+instance TransInfo info =>
          Translate info ctx (PermExpr a) (ExprTrans a) where
   translate mb_tr = case mbMatch mb_tr of
     [nuMP| PExpr_Var x |] -> translate x
@@ -1979,6 +1986,15 @@ tpTransM :: TypeTransM ctx a -> ImpTransM ext blocks tops ret ps ctx a
 tpTransM =
   withInfoM (\(ImpTransInfo {..}) ->
               TypeTransInfo itiExprCtx itiPermEnv itiChecksFlag)
+
+-- | Run an implication translation computation in an "empty" environment, where
+-- there are no variables in scope and no permissions held anywhere
+inEmptyEnvImpTransM :: ImpTransM ext blocks tops ret RNil RNil a ->
+                       ImpTransM ext blocks tops ret ps ctx a
+inEmptyEnvImpTransM =
+  withInfoM (\(ImpTransInfo {..}) ->
+              ImpTransInfo { itiExprCtx = MNil, itiPermCtx = MNil,
+                             itiPermStack = MNil, itiPermStackVars = MNil, .. })
 
 -- | Get most recently bound variable
 getTopVarM :: ImpTransM ext blocks tops ret ps (ctx :> tp) (ExprTrans tp)
@@ -4059,6 +4075,8 @@ translateCallEntry :: forall ext tops args ghosts blocks ctx ret.
 translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
   -- First test that the stack == the required perms for entryID
   do let entry = typedEntryTransEntry entry_trans
+     ectx <- translate $ mbMap2 RL.append mb_tops_args mb_ghosts
+     stack <- itiPermStack <$> ask
      let mb_s =
            mbMap2 (\tops_args ghosts ->
                     permVarSubstOfNames $ RL.append tops_args ghosts)
@@ -4073,10 +4091,12 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
          -- If so, call the letRec-bound function
          translateApply nm f mb_perms
        Nothing ->
-         -- If not, continue by translating entry, setting the variable
-         -- permission map to empty (as in the beginning of a block)
-         clearVarPermsM $ translate $
-         fmap (\s -> varSubst s $ typedEntryBody entry) mb_s
+         inEmptyEnvImpTransM $ inCtxTransM ectx $
+         do perms_trans <- translate $ typedEntryPermsIn entry
+            withPermStackM
+              (const $ RL.members ectx)
+              (const $ typeTransF perms_trans $ transTerms stack)
+              (translate $ typedEntryBody entry)
 
 
 instance PermCheckExtC ext =>

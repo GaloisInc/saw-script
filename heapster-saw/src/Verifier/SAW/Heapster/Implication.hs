@@ -78,6 +78,16 @@ concatSomeRAssign :: [Some (RAssign f)] -> Some (RAssign f)
 concatSomeRAssign = foldl apSomeRAssign (Some MNil)
 -- foldl is intentional, appending RAssign matches on the second argument
 
+-- | Map a monadic function over an 'RAssign' list from left to right while
+-- maintaining an "accumulator" that is threaded through the mapping
+rlMapMWithAccum :: Monad m => (forall a. accum -> f a -> m (g a, accum)) ->
+                   accum -> RAssign f tps -> m (RAssign g tps, accum)
+rlMapMWithAccum _ accum MNil = return (MNil, accum)
+rlMapMWithAccum f accum (xs :>: x) =
+  do (ys,accum') <- rlMapMWithAccum f accum xs
+     (y,accum'') <- f accum' x
+     return (ys :>: y, accum'')
+
 
 ----------------------------------------------------------------------
 -- * Equality Proofs
@@ -3423,6 +3433,19 @@ implLetBindVars :: NuMatchingAny1 r => CruCtx tps -> PermExprs tps ->
 implLetBindVars CruCtxNil MNil = pure MNil
 implLetBindVars (CruCtxCons tps tp) (es :>: e) =
   (:>:) <$> implLetBindVars tps es <*> implLetBindVar tp e
+
+-- | Freshen up a sequence of names by replacing any duplicate names in the list
+-- with fresh, let-bound variables
+implFreshenNames :: NuMatchingAny1 r => RAssign ExprVar tps ->
+                    ImplM vars s r ps ps (RAssign ExprVar tps)
+implFreshenNames ns =
+  fmap fst $ rlMapMWithAccum
+  (\prevs n ->
+    if NameSet.member n prevs then
+      (implGetVarType n >>>= \tp -> implLetBindVar tp (PExpr_Var n) >>>= \n' ->
+        return (n', prevs))
+    else return (n, NameSet.insert n prevs))
+  NameSet.empty ns
 
 -- | Project out a field of a struct @x@ by binding a fresh variable @y@ for its
 -- contents, and assign the permissions for that field to @y@, replacing them
