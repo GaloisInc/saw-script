@@ -2805,6 +2805,21 @@ tcExpr (BVZext w2 _ (RegWithVal _ (bvMatchConst -> Just bv))) =
 tcExpr (BVSext w2 w (RegWithVal _ (bvMatchConst -> Just bv))) =
   withKnownNat w2 $ pure $ Just $ bvBV $ BV.sext w w2 bv
 
+tcExpr (BVNot w (RegWithVal _ (bvMatchConst -> Just bv))) =
+  withKnownNat w $ pure $ Just $ bvBV $ BV.complement w bv
+tcExpr (BVAnd w (RegWithVal _ (bvMatchConst ->
+                               Just bv1)) (RegWithVal _
+                                           (bvMatchConst -> Just bv2))) =
+  withKnownNat w $ pure $ Just $ bvBV $ BV.and bv1 bv2
+tcExpr (BVOr w (RegWithVal _ (bvMatchConst ->
+                               Just bv1)) (RegWithVal _
+                                           (bvMatchConst -> Just bv2))) =
+  withKnownNat w $ pure $ Just $ bvBV $ BV.or bv1 bv2
+tcExpr (BVXor w (RegWithVal _ (bvMatchConst ->
+                               Just bv1)) (RegWithVal _
+                                           (bvMatchConst -> Just bv2))) =
+  withKnownNat w $ pure $ Just $ bvBV $ BV.xor bv1 bv2
+
 tcExpr (BVAdd w (RegWithVal _ e1) (RegWithVal _ e2)) =
   withKnownNat w $ pure $ Just $ bvAdd e1 e2
 
