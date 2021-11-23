@@ -59,9 +59,9 @@ Ltac either_unfoldMbox m :=
                                   simpl foldMbox; simpl Mbox__rec in *; unfold_projs
   end.
 
-Hint Extern 0 (SAWCorePrelude.either _ _ _ _ _ (unfoldMbox ?m) |= _) =>
+Global Hint Extern 0 (SAWCorePrelude.either _ _ _ _ _ (unfoldMbox ?m) |= _) =>
   either_unfoldMbox m : refinesM.
-Hint Extern 0 (_ |= SAWCorePrelude.either _ _ _ _ _ (unfoldMbox ?m)) =>
+Global Hint Extern 0 (_ |= SAWCorePrelude.either _ _ _ _ _ (unfoldMbox ?m)) =>
   either_unfoldMbox m : refinesM.
 
 Lemma transMbox_Mbox_nil_r m : transMbox m Mbox_nil = m.
@@ -232,7 +232,7 @@ Definition mbox_drop_spec : Mbox -> bitvector 64 -> Mbox :=
   Mbox__rec _ (fun _ => Mbox_nil) (fun strt len next rec d ix =>
     if bvuge 64 ix len
     then Mbox_cons (intToBv 64 0) (intToBv 64 0) (rec (bvSub 64 ix len)) d
-    else Mbox_cons (bvAdd 64 ix strt) (bvSub 64 len ix) next d).
+    else Mbox_cons (bvAdd 64 strt ix) (bvSub 64 len ix) next d).
 
 Lemma mbox_drop_spec_ref
   : refinesFun mbox_drop (fun x ix => returnM (mbox_drop_spec x ix)).
@@ -382,9 +382,7 @@ Proof.
   (* Most of the remaining cases are taken care of with just bvAdd_id_l and bvAdd_id_r *)
   all: try rewrite bvAdd_id_r; try rewrite bvAdd_id_l; try reflexivity.
   (* The remaining case just needs a few more rewrites *)
-  - f_equal.
-    rewrite bvAdd_assoc; f_equal.
-    rewrite bvAdd_comm; reflexivity.
+  - rewrite bvAdd_assoc, bvAdd_comm, bvAdd_assoc; reflexivity.
   - cbn; rewrite transMbox_Mbox_nil_r; reflexivity.
 Time Qed.
 
