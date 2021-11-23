@@ -4944,14 +4944,6 @@ buildDistPerms :: (forall a. Name a -> ValuePerm a) -> RAssign Name ps ->
 buildDistPerms _ MNil = DistPermsNil
 buildDistPerms f (ns :>: n) = DistPermsCons (buildDistPerms f ns) n (f n)
 
--- | Like 'buildDistPerms', but accumulates some state through a @foldr@
-foldrAndBuildDistPerms :: (forall a. Name a -> b -> (ValuePerm a, b)) -> b ->
-                          RAssign Name ps -> (DistPerms ps, b)
-foldrAndBuildDistPerms _ b0 MNil = (DistPermsNil, b0)
-foldrAndBuildDistPerms f b0 (ns :>: n)
-  | (ps, b) <- foldrAndBuildDistPerms f b0 ns, (p, b') <- f n b
-  = (DistPermsCons ps n p, b')
-
 -- | Split a list of distinguished permissions into two
 splitDistPerms :: f ps1 -> RAssign g ps2 -> DistPerms (ps1 :++: ps2) ->
                   (DistPerms ps1, DistPerms ps2)
