@@ -3942,6 +3942,10 @@ splitLLVMBlockPerm off bp
   | bvEq off (llvmBlockOffset bp)
   = Just (bp { llvmBlockLen = bvInt 0, llvmBlockShape = PExpr_EmptyShape },
           bp)
+splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_EmptyShape) =
+  Just (bp { llvmBlockLen = bvSub off (llvmBlockOffset bp) },
+        bp { llvmBlockOffset = off,
+             llvmBlockLen = bvSub (llvmBlockLen bp) off })
 splitLLVMBlockPerm off bp@(LLVMBlockPerm { llvmBlockShape = sh })
   | Just sh_len <- llvmShapeLength sh
   , bvLt sh_len (bvSub off (llvmBlockOffset bp)) =
@@ -3951,10 +3955,6 @@ splitLLVMBlockPerm off bp@(LLVMBlockPerm { llvmBlockShape = sh })
     splitLLVMBlockPerm off (bp { llvmBlockShape =
                                    PExpr_SeqShape sh PExpr_EmptyShape })
 splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_Var _) = Nothing
-splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_EmptyShape) =
-  Just (bp { llvmBlockLen = bvSub off (llvmBlockOffset bp) },
-        bp { llvmBlockOffset = off,
-             llvmBlockLen = bvSub (llvmBlockLen bp) off })
 splitLLVMBlockPerm off bp@(llvmBlockShape ->
                            PExpr_NamedShape maybe_rw maybe_l nmsh args)
   | TrueRepr <- namedShapeCanUnfoldRepr nmsh
