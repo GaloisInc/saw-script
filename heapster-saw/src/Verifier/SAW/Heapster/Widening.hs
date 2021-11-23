@@ -501,14 +501,12 @@ equalizeLLVMBlockRanges' bp1 bp2
   | bvEq (llvmBlockLen bp1) (llvmBlockLen bp2) =
     return (bp1, bp2, [], [])
 equalizeLLVMBlockRanges' bp1 bp2
-  | bvLeq (llvmBlockLen bp1) (llvmBlockLen bp2) =
-    do (bp2', bp2'') <- splitLLVMBlockPerm (bvAdd (llvmBlockOffset bp1)
-                                            (llvmBlockLen bp1)) bp2
+  | bvLt (llvmBlockLen bp1) (llvmBlockLen bp2) =
+    do (bp2', bp2'') <- splitLLVMBlockPerm (llvmBlockEndOffset bp1) bp2
        return (bp1, bp2', [], [bp2''])
 equalizeLLVMBlockRanges' bp1 bp2
-  | bvLeq (llvmBlockLen bp2) (llvmBlockLen bp1) =
-    do (bp1', bp1'') <- splitLLVMBlockPerm (bvAdd (llvmBlockOffset bp2)
-                                            (llvmBlockLen bp2)) bp1
+  | bvLt (llvmBlockLen bp2) (llvmBlockLen bp1) =
+    do (bp1', bp1'') <- splitLLVMBlockPerm (llvmBlockEndOffset bp2) bp1
        return (bp1', bp2, [bp1''], [])
 equalizeLLVMBlockRanges' _ _ = Nothing
 
@@ -524,12 +522,12 @@ equalizeLLVMBlockRanges bp1 bp2
   | bvEq (llvmBlockOffset bp1) (llvmBlockOffset bp2) =
     equalizeLLVMBlockRanges' bp1 bp2
 equalizeLLVMBlockRanges bp1 bp2
-  | bvLeq (llvmBlockOffset bp1) (llvmBlockOffset bp2) =
+  | bvLt (llvmBlockOffset bp1) (llvmBlockOffset bp2) =
     do (bp1', bp1'') <- splitLLVMBlockPerm (llvmBlockOffset bp2) bp1
        (bp1_ret, bp2_ret, bps1, bps2) <- equalizeLLVMBlockRanges' bp1'' bp2
        return (bp1_ret, bp2_ret, bp1':bps1, bps2)
 equalizeLLVMBlockRanges bp1 bp2
-  | bvLeq (llvmBlockOffset bp2) (llvmBlockOffset bp1) =
+  | bvLt (llvmBlockOffset bp2) (llvmBlockOffset bp1) =
     do (bp2', bp2'') <- splitLLVMBlockPerm (llvmBlockOffset bp1) bp2
        (bp1_ret, bp2_ret, bps1, bps2) <- equalizeLLVMBlockRanges' bp1 bp2''
        return (bp1_ret, bp2_ret, bps1, bp2':bps2)
