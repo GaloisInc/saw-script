@@ -303,8 +303,8 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       sc <- getSharedContext
       opts <- getOptions
       basic_ss <- getBasicSS
-      sym <- liftIO $ newSAWCoreBackend sc
       rw <- getTopLevelRW
+      sym <- liftIO $ newSAWCoreBackendWithTimeout sc $ rwCrucibleTimeout rw
       cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms $ W4.getConfiguration sym
       _ <- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsingX86 rw
       liftIO $ W4.extendConfig

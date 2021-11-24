@@ -486,6 +486,7 @@ buildTopLevelEnv proxy opts =
                    , rwWhat4Eval = False
                    , rwPreservedRegs = []
                    , rwStackBaseAlign = defaultStackBaseAlign
+                   , rwCrucibleTimeout = 10000
                    }
        return (bic, ro0, rw0)
 
@@ -625,6 +626,11 @@ default_x86_stack_base_align :: TopLevel ()
 default_x86_stack_base_align = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwStackBaseAlign = defaultStackBaseAlign }
+
+set_crucible_timeout :: Integer -> TopLevel ()
+set_crucible_timeout t = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwCrucibleTimeout = t }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -2653,6 +2659,14 @@ primitives = Map.fromList
     (pureVal default_x86_stack_base_align)
     Experimental
     [ "Use the default stack allocation base alignment during x86 verification." ]
+
+  , prim "set_crucible_timeout" "Int -> TopLevel ()"
+    (pureVal set_crucible_timeout)
+    Experimental
+    [ "Set the timeout for the SMT solver during the LLVM and X86 Crucible symbolic execution,"
+    ,"in milliseconds (0 is no timeout). The default is 10000ms (10s)."
+    ,"This is used for path-sat checks, and sat checks when applying overrides."
+    ]
 
   , prim "llvm_array_value"
     "[SetupValue] -> SetupValue"

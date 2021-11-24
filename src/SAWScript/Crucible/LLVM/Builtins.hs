@@ -1376,6 +1376,7 @@ setupLLVMCrucibleContext pathSat lm action =
      what4HashConsing <- gets rwWhat4HashConsing
      laxPointerOrdering <- gets rwLaxPointerOrdering
      what4Eval <- gets rwWhat4Eval
+     crucibleTimeout <- gets rwCrucibleTimeout
      Crucible.llvmPtrWidth ctx $ \wptr ->
        Crucible.withPtrWidth wptr $
        do let ?lc = ctx^.Crucible.llvmTypeCtx
@@ -1388,7 +1389,7 @@ setupLLVMCrucibleContext pathSat lm action =
           cc <-
             io $
             do let verbosity = simVerbose opts
-               sym <- Common.newSAWCoreBackend sc
+               sym <- Common.newSAWCoreBackendWithTimeout sc crucibleTimeout
 
                let cfg = W4.getConfiguration sym
                verbSetting <- W4.getOptionSetting W4.verbosity cfg

@@ -450,6 +450,8 @@ data TopLevelRW =
 
   , rwPreservedRegs :: [String]
   , rwStackBaseAlign :: Integer
+
+  , rwCrucibleTimeout :: Integer
   }
 
 newtype TopLevel a =
