@@ -738,13 +738,12 @@ assumeAllocation ::
   Map MS.AllocIndex Ptr ->
   (MS.AllocIndex, LLVMAllocSpec) {- ^ llvm_alloc statement -} ->
   X86Sim (Map MS.AllocIndex Ptr)
-assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc False _symInit) = do
+assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc False initialization) = do
   cc <- use x86CrucibleContext
   sym <- use x86Sym
   mem <- use x86Mem
   sz' <- liftIO $ resolveSAWSymBV cc knownNat sz
-  (ptr, mem') <- liftIO $ C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut
-    (show $ W4.plSourceLoc loc) mem sz' align
+  (ptr, mem') <- liftIO $ LO.doAllocSymInit sym mem mut align sz' (show $ W4.plSourceLoc loc) initialization
   x86Mem .= mem'
   pure $ Map.insert i ptr env
 assumeAllocation env _ = pure env
