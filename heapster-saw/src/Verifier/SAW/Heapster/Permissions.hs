@@ -4550,21 +4550,6 @@ llvmAtomicPermOverlapsRange rng (Perm_LLVMBlock bp) =
   bvRangesOverlap rng (llvmBlockRange bp)
 llvmAtomicPermOverlapsRange _ _ = False
 
--- | Search through a list of permissions for either some permission that
--- definitely contains (as in 'bvPropHolds') the given offset or, failing that,
--- and if the supplied 'Bool' flag is 'True', for all permissions that could (as
--- in 'bvPropCouldHold') contain the given offset. Return the indices in the
--- list for the permissions that were found.
-llvmPermIndicesForOffset :: (1 <= w, KnownNat w) =>
-                            [AtomicPerm (LLVMPointerType w)] -> Bool ->
-                            PermExpr (BVType w) -> [Int]
-llvmPermIndicesForOffset ps imprecise_p off =
-  let ixs_props = findMaybeIndices (llvmPermContainsOffset off) ps in
-  case find (\(_,(_,holds)) -> holds) ixs_props of
-    Just (i,_) -> [i]
-    Nothing | imprecise_p -> map fst ixs_props
-    Nothing -> []
-
 -- | Return the total length of an LLVM array permission in bytes
 llvmArrayLengthBytes :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
                         PermExpr (BVType w)
