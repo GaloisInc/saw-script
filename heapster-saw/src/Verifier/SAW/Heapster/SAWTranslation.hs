@@ -786,6 +786,28 @@ bvMulOpenTerm n x y =
   applyOpenTermMulti (globalOpenTerm "Prelude.bvMul")
   [natOpenTerm n, x, y]
 
+bvSplitOpenTerm :: EndianForm -> OpenTerm -> OpenTerm -> OpenTerm ->
+                   (OpenTerm, OpenTerm)
+bvSplitOpenTerm BigEndian sz1 sz2 e =
+  (applyOpenTermMulti (globalOpenTerm "Prelude.take") [boolTypeOpenTerm,
+                                                       sz1, sz2, e],
+   applyOpenTermMulti (globalOpenTerm "Prelude.drop") [boolTypeOpenTerm,
+                                                       sz1, sz2, e])
+bvSplitOpenTerm LittleEndian sz1 sz2 e =
+  (applyOpenTermMulti (globalOpenTerm "Prelude.drop") [boolTypeOpenTerm,
+                                                       sz2, sz1, e],
+   applyOpenTermMulti (globalOpenTerm "Prelude.take") [boolTypeOpenTerm,
+                                                       sz2, sz1, e])
+
+bvConcatOpenTerm :: EndianForm -> OpenTerm -> OpenTerm ->
+                    OpenTerm -> OpenTerm -> OpenTerm
+bvConcatOpenTerm BigEndian sz1 sz2 e1 e2 =
+  applyOpenTermMulti (globalOpenTerm "Prelude.append")
+  [sz1, sz2, boolTypeOpenTerm, e1, e2]
+bvConcatOpenTerm LittleEndian sz1 sz2 e1 e2 =
+  applyOpenTermMulti (globalOpenTerm "Prelude.append")
+  [sz2, sz1, boolTypeOpenTerm, e2, e1]
+
 -- | Translate a variable to a 'Member' proof, raising an error if the variable
 -- is unbound
 translateVar :: Mb ctx (ExprVar a) -> Member ctx a
@@ -804,6 +826,13 @@ mbBindingType _ = knownRepr
 instance TransInfo info =>
          Translate info ctx (ExprVar a) (ExprTrans a) where
   translate mb_x = RL.get (translateVar mb_x) <$> infoCtx <$> ask
+
+instance TransInfo info =>
+         Translate info ctx (RAssign ExprVar as) (ExprTransCtx as) where
+  translate mb_exprs = case mbMatch mb_exprs of
+    [nuMP| MNil |] -> return MNil
+    [nuMP| ns :>: n |] ->
+      (:>:) <$> translate ns <*> translate n
 
 instance TransInfo info =>
          Translate info ctx (PermExpr a) (ExprTrans a) where
@@ -1958,6 +1987,15 @@ tpTransM =
   withInfoM (\(ImpTransInfo {..}) ->
               TypeTransInfo itiExprCtx itiPermEnv itiChecksFlag)
 
+-- | Run an implication translation computation in an "empty" environment, where
+-- there are no variables in scope and no permissions held anywhere
+inEmptyEnvImpTransM :: ImpTransM ext blocks tops ret RNil RNil a ->
+                       ImpTransM ext blocks tops ret ps ctx a
+inEmptyEnvImpTransM =
+  withInfoM (\(ImpTransInfo {..}) ->
+              ImpTransInfo { itiExprCtx = MNil, itiPermCtx = MNil,
+                             itiPermStack = MNil, itiPermStackVars = MNil, .. })
+
 -- | Get most recently bound variable
 getTopVarM :: ImpTransM ext blocks tops ret ps (ctx :> tp) (ExprTrans tp)
 getTopVarM = (\(_ :>: p) -> p) <$> itiExprCtx <$> ask
@@ -2418,21 +2456,15 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
         ptrans'])
     m
 
-  [nuMP| SImpl_SplitLLVMWordField x _ _ _ _ |] ->
+  [nuMP| SImpl_SplitLLVMTrueField x _ _ _ |] ->
     do ttrans <- translateSimplImplOut mb_simpl
        withPermStackM (:>: translateVar x)
          (\(pctx :>: _) -> RL.append pctx $ typeTransF ttrans [])
          m
 
-  [nuMP| SImpl_ConcatLLVMWordFields _ _ _ _ |] ->
+  [nuMP| SImpl_TruncateLLVMTrueField _ _ _ |] ->
     do ttrans <- translateSimplImplOut mb_simpl
-       withPermStackM RL.tail
-         (\(pctx :>: _ :>: _) -> RL.append pctx $ typeTransF ttrans [])
-         m
-
-  [nuMP| SImpl_SplitLLVMTrueField x _ _ _ |] ->
-    do ttrans <- translateSimplImplOut mb_simpl
-       withPermStackM (:>: translateVar x)
+       withPermStackM id
          (\(pctx :>: _) -> RL.append pctx $ typeTransF ttrans [])
          m
 
@@ -3445,6 +3477,88 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
            typeTransF tp_trans2 [transTerm1 ptrans])
          m
 
+  ([nuMP| Impl1_SplitLLVMWordField _ mb_fp mb_sz1 mb_endianness |], _) ->
+    translatePermImplUnary mb_impls $ \m ->
+    do let mb_e = case mbLLVMFieldContents mb_fp of
+             [nuP| ValPerm_Eq (PExpr_LLVMWord e) |] -> e
+             _ -> error "translatePermImpl1: Impl1_SplitLLVMWordField"
+       e_tm <- translate1 mb_e
+       sz1_tm <- translate mb_sz1
+       sz2_tm <- translateClosed $ mbLLVMFieldSize mb_fp
+       let sz2m1_tm =
+             applyOpenTermMulti (globalOpenTerm "Prelude.subNat") [sz2_tm,
+                                                                   sz1_tm]
+       let (e1_tm,e2_tm) =
+             bvSplitOpenTerm (mbLift mb_endianness) sz1_tm sz2m1_tm e_tm
+       inExtTransM (ETrans_Term e1_tm) $ inExtTransM (ETrans_Term e2_tm) $
+         translate
+         (mbCombine RL.typeCtxProxies $ flip mbMapCl mb_fp
+          ($(mkClosed
+             [| \sz1 endianness fp ->
+               impl1SplitLLVMWordFieldOutPerms fp sz1 endianness |])
+           `clApply` toClosed (mbLift mb_sz1)
+           `clApply` toClosed (mbLift mb_endianness))) >>= \pctx_out ->
+         withPermStackM
+         (\(vars :>: x) -> vars :>: x :>: x :>:
+                           Member_Step Member_Base :>: Member_Base)
+         (\(pctx :>: _) ->
+           -- NOTE: all output perms are eq or ptr to eq perms, so contain no
+           -- SAW core terms
+           pctx `RL.append` typeTransF pctx_out [])
+         m
+
+  ([nuMP| Impl1_TruncateLLVMWordField _ mb_fp mb_sz1 mb_endianness |], _) ->
+    translatePermImplUnary mb_impls $ \m ->
+    do let mb_e = case mbLLVMFieldContents mb_fp of
+             [nuP| ValPerm_Eq (PExpr_LLVMWord e) |] -> e
+             _ -> error "translatePermImpl1: Impl1_TruncateLLVMWordField"
+       e_tm <- translate1 mb_e
+       sz1_tm <- translate mb_sz1
+       sz2_tm <- translateClosed $ mbLLVMFieldSize mb_fp
+       let sz2m1_tm =
+             applyOpenTermMulti (globalOpenTerm "Prelude.subNat") [sz2_tm,
+                                                                   sz1_tm]
+       let (e1_tm,_) =
+             bvSplitOpenTerm (mbLift mb_endianness) sz1_tm sz2m1_tm e_tm
+       inExtTransM (ETrans_Term e1_tm) $
+         translate
+         (mbCombine RL.typeCtxProxies $ flip mbMapCl mb_fp
+          ($(mkClosed
+             [| \sz1 endianness fp ->
+               impl1TruncateLLVMWordFieldOutPerms fp sz1 endianness |])
+           `clApply` toClosed (mbLift mb_sz1)
+           `clApply` toClosed (mbLift mb_endianness))) >>= \pctx_out ->
+         withPermStackM (:>: Member_Base)
+         (\(pctx :>: _) ->
+           -- NOTE: all output perms are eq or ptr to eq perms, so contain no
+           -- SAW core terms
+           pctx `RL.append` typeTransF pctx_out [])
+         m
+
+  ([nuMP| Impl1_ConcatLLVMWordFields _ mb_fp1 mb_e2 mb_endianness |], _) ->
+    translatePermImplUnary mb_impls $ \m ->
+    do let mb_e1 = case mbLLVMFieldContents mb_fp1 of
+             [nuP| ValPerm_Eq (PExpr_LLVMWord e1) |] -> e1
+             _ -> error "translatePermImpl1: Impl1_ConcatLLVMWordFields"
+       e1_tm <- translate1 mb_e1
+       e2_tm <- translate1 mb_e2
+       sz1_tm <- translateClosed $ mbLLVMFieldSize mb_fp1
+       sz2_tm <- translateClosed $ mbExprBVTypeWidth mb_e2
+       let endianness = mbLift mb_endianness
+       let e_tm = bvConcatOpenTerm endianness sz1_tm sz2_tm e1_tm e2_tm
+       inExtTransM (ETrans_Term e_tm) $
+         translate (mbCombine RL.typeCtxProxies $
+                    mbMap2 (\fp1 e2 ->
+                             impl1ConcatLLVMWordFieldsOutPerms fp1 e2 endianness)
+                    mb_fp1 mb_e2) >>= \pctx_out ->
+         withPermStackM
+         (\(vars :>: x :>: _) -> (vars :>: x :>: Member_Base))
+         (\(pctx :>: _ :>: _) ->
+           -- NOTE: all output perms are eq or ptr to eq perms, so contain no
+           -- SAW core terms
+           pctx `RL.append` typeTransF pctx_out [])
+         m
+
   ([nuMP| Impl1_BeginLifetime |], _) ->
     translatePermImplUnary mb_impls $ \m ->
     inExtTransM ETrans_Lifetime $
@@ -3961,6 +4075,8 @@ translateCallEntry :: forall ext tops args ghosts blocks ctx ret.
 translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
   -- First test that the stack == the required perms for entryID
   do let entry = typedEntryTransEntry entry_trans
+     ectx <- translate $ mbMap2 RL.append mb_tops_args mb_ghosts
+     stack <- itiPermStack <$> ask
      let mb_s =
            mbMap2 (\tops_args ghosts ->
                     permVarSubstOfNames $ RL.append tops_args ghosts)
@@ -3975,10 +4091,12 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
          -- If so, call the letRec-bound function
          translateApply nm f mb_perms
        Nothing ->
-         -- If not, continue by translating entry, setting the variable
-         -- permission map to empty (as in the beginning of a block)
-         clearVarPermsM $ translate $
-         fmap (\s -> varSubst s $ typedEntryBody entry) mb_s
+         inEmptyEnvImpTransM $ inCtxTransM ectx $
+         do perms_trans <- translate $ typedEntryPermsIn entry
+            withPermStackM
+              (const $ RL.members ectx)
+              (const $ typeTransF perms_trans $ transTerms stack)
+              (translate $ typedEntryBody entry)
 
 
 instance PermCheckExtC ext =>
