@@ -3219,6 +3219,24 @@ primitives = Map.fromList
     , " is not exactly one such symbol"
     ]
 
+  , prim "heapster_find_symbols_with_type"
+    "HeapsterEnv -> String -> String -> TopLevel [String]"
+    (bicVal heapster_find_symbols_with_type)
+    Experimental
+    [ "Search for all symbols in any module contained in a HeapsterEnv that"
+    , " contain the supplied string as a substring and that have the specified"
+    , " LLVM type"
+    ]
+
+  , prim "heapster_find_symbol_with_type"
+    "HeapsterEnv -> String -> String -> TopLevel String"
+    (bicVal heapster_find_symbol_with_type)
+    Experimental
+    [ "Search for a symbol in any module contained in a HeapsterEnv that"
+    , " contains the supplied string as a substring and that has the specified"
+    , " LLVM type. Raise an error if there is not exactly one such symbol."
+    ]
+
   , prim "heapster_find_symbols"
     "HeapsterEnv -> String -> TopLevel [String]"
     (bicVal heapster_find_symbols)

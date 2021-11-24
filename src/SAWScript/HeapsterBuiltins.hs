@@ -41,6 +41,8 @@ module SAWScript.HeapsterBuiltins
        , heapster_join_point_hint
        , heapster_find_symbol
        , heapster_find_symbols
+       , heapster_find_symbol_with_type
+       , heapster_find_symbols_with_type
        , heapster_find_trait_method_symbol
        , heapster_assume_fun
        , heapster_assume_fun_rename
@@ -99,6 +101,7 @@ import Lang.Crucible.LLVM.TypeContext
 import Lang.Crucible.LLVM.DataLayout
 
 import qualified Text.LLVM.AST as L
+import qualified Text.LLVM.Parser as L
 
 import SAWScript.TopLevel
 import SAWScript.Value
@@ -872,6 +875,51 @@ heapster_find_symbol bic opts henv str =
     [sym] -> return sym
     [] -> fail ("No symbol found matching string: " ++ str)
     _ -> fail ("Found multiple symbols matching string " ++ str ++ ": " ++
+               concat (intersperse ", " $ map show syms))
+
+symString :: L.Symbol -> String
+symString (L.Symbol str) = str
+
+-- | Search for all symbols with the supplied string as a substring that have
+-- the supplied LLVM type
+heapster_find_symbols_with_type :: BuiltinContext -> Options -> HeapsterEnv ->
+                                   String -> String -> TopLevel [String]
+heapster_find_symbols_with_type _bic _opts henv str tp_str =
+  case L.parseType tp_str of
+    Left err ->
+      fail ("Error parsing LLVM type: " ++ tp_str ++ "\n" ++ show err)
+    Right (L.FunTy ret_tp arg_tps _) ->
+      return $
+      concatMap (\(Some lm) ->
+                  mapMaybe (\decl ->
+                             if isInfixOf str (symString $ L.decName decl) &&
+                                L.decRetType decl == ret_tp &&
+                                L.decArgs decl == arg_tps
+                             then Just (symString $ L.decName decl) else Nothing)
+                  (L.modDeclares $ modAST lm)
+                  ++
+                  mapMaybe (\defn ->
+                             if isInfixOf str (symString $ L.defName defn) &&
+                                L.defRetType defn == ret_tp &&
+                                map L.typedType (L.defArgs defn) == arg_tps
+                             then Just (symString $ L.defName defn) else Nothing)
+                  (L.modDefines $ modAST lm)) $
+      heapsterEnvLLVMModules henv
+    Right tp ->
+      fail ("Expected an LLVM function type, but found: " ++ show tp)
+
+-- | Search for a symbol by name and Crucible type in any LLVM module in a
+-- 'HeapsterEnv' that contains the supplied string as a substring
+heapster_find_symbol_with_type :: BuiltinContext -> Options -> HeapsterEnv ->
+                                  String -> String -> TopLevel String
+heapster_find_symbol_with_type bic opts henv str tp_str =
+  heapster_find_symbols_with_type bic opts henv str tp_str >>= \syms ->
+  case syms of
+    [sym] -> return sym
+    [] -> fail ("No symbol found matching string: " ++ str ++
+                " and type: " ++ tp_str)
+    _ -> fail ("Found multiple symbols matching string " ++ str ++
+               " and type: " ++ tp_str ++ ": " ++
                concat (intersperse ", " $ map show syms))
 
 -- | Search for a symbol name in any LLVM module in a 'HeapsterEnv' that
