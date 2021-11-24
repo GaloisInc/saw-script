@@ -15,6 +15,7 @@ module SAWScript.Crucible.Common
   , SAWCruciblePersonality(..)
   , newSAWCoreBackend
   , newSAWCoreBackendWithTimeout
+  , defaultSAWCoreBackendTimeout
   , sawCoreState
   ) where
 
@@ -49,6 +50,9 @@ data SAWCruciblePersonality sym = SAWCruciblePersonality
 
 newSAWCoreBackend :: SC.SharedContext -> IO Sym
 newSAWCoreBackend sc = newSAWCoreBackendWithTimeout sc 0
+
+defaultSAWCoreBackendTimeout :: Integer
+defaultSAWCoreBackendTimeout = 10000
 
 newSAWCoreBackendWithTimeout :: SC.SharedContext -> Integer -> IO Sym
 newSAWCoreBackendWithTimeout sc timeout =

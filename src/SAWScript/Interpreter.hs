@@ -82,6 +82,7 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
 -- Crucible
 import qualified Lang.Crucible.JVM as CJ
+import qualified SAWScript.Crucible.Common as CC
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
 import           SAWScript.Crucible.LLVM.Builtins
@@ -486,7 +487,7 @@ buildTopLevelEnv proxy opts =
                    , rwWhat4Eval = False
                    , rwPreservedRegs = []
                    , rwStackBaseAlign = defaultStackBaseAlign
-                   , rwCrucibleTimeout = 10000
+                   , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
                    }
        return (bic, ro0, rw0)
 
