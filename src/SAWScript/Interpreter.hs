@@ -2680,7 +2680,11 @@ primitives = Map.fromList
   , prim "disable_alloc_sym_init_check" "TopLevel ()"
     (pureVal disable_alloc_sym_init_check)
     Current
-    [ "Disable the allocation initialization check associated with alloc_sym_init during override application." ]
+    [ "Disable the allocation initialization check associated with alloc_sym_init during override application."
+    , "Disabling this check allows an override to apply when the memory region specified by the alloc_sym_init command"
+    , "in the override specification is not written to in the calling context."
+    , "This makes the implicit assumption that there is some unspecified byte at any valid memory address."
+    ]
 
   , prim "set_crucible_timeout" "Int -> TopLevel ()"
     (pureVal set_crucible_timeout)
