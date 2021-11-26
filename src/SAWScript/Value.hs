@@ -451,6 +451,8 @@ data TopLevelRW =
   , rwPreservedRegs :: [String]
   , rwStackBaseAlign :: Integer
 
+  , rwAllocSymInitCheck :: Bool
+
   , rwCrucibleTimeout :: Integer
   }
 

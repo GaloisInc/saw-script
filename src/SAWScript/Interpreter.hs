@@ -487,6 +487,7 @@ buildTopLevelEnv proxy opts =
                    , rwWhat4Eval = False
                    , rwPreservedRegs = []
                    , rwStackBaseAlign = defaultStackBaseAlign
+                   , rwAllocSymInitCheck = True
                    , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
                    }
        return (bic, ro0, rw0)
@@ -627,6 +628,16 @@ default_x86_stack_base_align :: TopLevel ()
 default_x86_stack_base_align = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwStackBaseAlign = defaultStackBaseAlign }
+
+enable_alloc_sym_init_check :: TopLevel ()
+enable_alloc_sym_init_check = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwAllocSymInitCheck = True }
+
+disable_alloc_sym_init_check :: TopLevel ()
+disable_alloc_sym_init_check = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwAllocSymInitCheck = False }
 
 set_crucible_timeout :: Integer -> TopLevel ()
 set_crucible_timeout t = do
@@ -2660,6 +2671,16 @@ primitives = Map.fromList
     (pureVal default_x86_stack_base_align)
     Experimental
     [ "Use the default stack allocation base alignment during x86 verification." ]
+
+  , prim "enable_alloc_sym_init_check" "TopLevel ()"
+    (pureVal enable_alloc_sym_init_check)
+    Experimental
+    [ "Enable the allocation initialization check associated with alloc_sym_init during override application." ]
+
+  , prim "disable_alloc_sym_init_check" "TopLevel ()"
+    (pureVal disable_alloc_sym_init_check)
+    Current
+    [ "Disable the allocation initialization check associated with alloc_sym_init during override application." ]
 
   , prim "set_crucible_timeout" "Int -> TopLevel ()"
     (pureVal set_crucible_timeout)

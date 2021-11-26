@@ -5,7 +5,10 @@
   execution.
 
 * New command `llvm_alloc_sym_init` like `llvm_alloc`, but assume that the
-  allocation is initialized with symbolic bytes.
+  allocation is initialized with symbolic bytes.  New commands
+  `disable_alloc_sym_init_check` and `enable_alloc_sym_init_check` to
+  disable or enable the allocation initialization check associated with
+  `llvm_alloc_sym_init` during override application.
 
 * New command `set_crucible_timeout` to set the timeout for the SMT solver
   during the LLVM and X86 Crucible symbolic execution. This is used for

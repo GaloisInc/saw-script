@@ -374,6 +374,7 @@ methodSpecHandler ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -597,6 +598,7 @@ methodSpecHandler_prestate ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -647,6 +649,7 @@ learnCond ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -741,7 +744,7 @@ refreshTerms sc ss =
 -- override's precondition are allocated, and meet the appropriate
 -- requirements for alignment and mutability.
 enforcePointerValidity ::
-  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, ?memOpts::Crucible.MemOptions, ?w4EvalTactic :: W4EvalTactic, ?checkAllocSymInit :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   SharedContext ->
   LLVMCrucibleContext arch ->
   W4.ProgramLoc ->
@@ -770,9 +773,47 @@ enforcePointerValidity sc cc loc ss =
             addAssert c $ Crucible.SimError loc $
               Crucible.AssertFailureSimError msg ""
 
-       | (LLVMAllocSpec mut _pty alignment psz _ploc fresh _sym_init, ptr) <- mems
+            case initialization of
+              LLVMAllocSpecSymbolicInitialization
+                | ?checkAllocSymInit ->
+                  do maybeOk <- liftIO $ checkMemLoad sym mem ptr psz' alignment
+                     let msg' = PP.vcat $ map (PP.pretty . unwords)
+                           [ [ "Memory region not initialized:" ]
+                           , [ "  pointer =", show (Crucible.ppPtr ptr) ]
+                           , [ "  size =", showTerm psz ]
+                           ]
+                     case maybeOk of
+                       Just ok ->
+                         addAssert ok $ Crucible.SimError loc $
+                           Crucible.AssertFailureSimError (show msg') ""
+                       Nothing -> failure loc (BadPointerLoad (Right msg') "")
+              _ -> return ()
+
+       | (LLVMAllocSpec mut _pty alignment psz _ploc fresh initialization, ptr) <- mems
        , not fresh -- Fresh symbolic pointers are not assumed to be valid; don't check them
        ]
+
+checkMemLoad ::
+  (?memOpts::Crucible.MemOptions, Crucible.IsSymInterface sym, Crucible.HasPtrWidth wptr, Crucible.HasLLVMAnn sym) =>
+  sym ->
+  Crucible.MemImpl sym ->
+  Crucible.LLVMPtr sym wptr ->
+  W4.SymBV sym wptr ->
+  Crucible.Alignment ->
+  IO (Maybe (W4.Pred sym))
+checkMemLoad sym mem ptr sz align =
+  case BV.asNatural <$> W4.asBV sz of
+    Just n -> do
+      res <- Crucible.loadRaw sym mem ptr (Crucible.arrayType n $ Crucible.bitvectorType 1) align
+      case res of
+        Crucible.NoErr pred_ _val -> do
+          return $ Just pred_
+        _ -> return Nothing
+    Nothing -> do
+      maybe_allocation_array <- Crucible.asMemAllocationArrayStore sym Crucible.PtrWidth ptr (Crucible.memImplHeap mem)
+      case maybe_allocation_array of
+        Just (ok, _arr, _sz) -> return $ Just ok
+        Nothing -> return Nothing
 
 ------------------------------------------------------------------------
 

@@ -488,7 +488,7 @@ withMethodSpec ::
   LLVMModule arch ->
   String            {- ^ Name of the function -} ->
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
-  ((?lc :: Crucible.TypeContext, ?memOpts::Crucible.MemOptions, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ((?lc :: Crucible.TypeContext, ?memOpts::Crucible.MemOptions, ?w4EvalTactic :: W4EvalTactic, ?checkAllocSymInit :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
    LLVMCrucibleContext arch -> MS.CrucibleMethodSpecIR (LLVM arch) -> TopLevel a) ->
   TopLevel a
 withMethodSpec pathSat lm nm setup action =
@@ -535,6 +535,7 @@ verifyMethodSpec ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -1047,6 +1048,7 @@ registerOverride ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
   , Crucible.HasPtrWidth wptr
   , wptr ~ Crucible.ArchWidth arch
   , Crucible.HasLLVMAnn Sym
@@ -1090,6 +1092,7 @@ registerInvariantOverride ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -1172,6 +1175,7 @@ verifySimulate ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
   , Crucible.HasPtrWidth wptr
   , wptr ~ Crucible.ArchWidth arch
   , Crucible.HasLLVMAnn Sym
@@ -1292,6 +1296,7 @@ verifyPoststate ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
   , Crucible.HasPtrWidth wptr
   , wptr ~ Crucible.ArchWidth arch
   , Crucible.HasLLVMAnn Sym
@@ -1360,7 +1365,7 @@ verifyPoststate cc mspec env0 globals ret =
 setupLLVMCrucibleContext ::
   Bool {- ^ enable path sat checking -} ->
   LLVMModule arch ->
-  ((?lc :: Crucible.TypeContext, ?memOpts::Crucible.MemOptions, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ((?lc :: Crucible.TypeContext, ?memOpts::Crucible.MemOptions, ?w4EvalTactic :: W4EvalTactic, ?checkAllocSymInit :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
    LLVMCrucibleContext arch -> TopLevel a) ->
   TopLevel a
 setupLLVMCrucibleContext pathSat lm action =
@@ -1376,6 +1381,7 @@ setupLLVMCrucibleContext pathSat lm action =
      what4HashConsing <- gets rwWhat4HashConsing
      laxPointerOrdering <- gets rwLaxPointerOrdering
      what4Eval <- gets rwWhat4Eval
+     allocSymInitCheck <- gets rwAllocSymInitCheck
      crucibleTimeout <- gets rwCrucibleTimeout
      Crucible.llvmPtrWidth ctx $ \wptr ->
        Crucible.withPtrWidth wptr $
@@ -1386,6 +1392,7 @@ setupLLVMCrucibleContext pathSat lm action =
           let ?intrinsicsOpts = Crucible.defaultIntrinsicsOptions
           let ?recordLLVMAnnotation = \_ _ -> return ()
           let ?w4EvalTactic = W4EvalTactic { doW4Eval = what4Eval }
+          let ?checkAllocSymInit = allocSymInitCheck
           cc <-
             io $
             do let verbosity = simVerbose opts

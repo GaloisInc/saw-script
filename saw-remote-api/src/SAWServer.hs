@@ -225,6 +225,7 @@ initialState readFileFn =
                 , rwStackBaseAlign = defaultStackBaseAlign
                 , rwProofs = []
                 , rwPreservedRegs = []
+                , rwAllocSymInitCheck = True
                 , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
                 }
      return (SAWState emptyEnv bic [] ro rw M.empty)
