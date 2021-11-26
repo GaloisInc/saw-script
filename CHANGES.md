@@ -14,6 +14,10 @@
   during the LLVM and X86 Crucible symbolic execution. This is used for
   path-sat checks, and sat checks when applying overrides.
 
+* New command `w4_unint_z3_using` like `w4_unint_z3`, but use the given Z3
+  tactic.
+
+
 # Version 0.9
 
 ## New Features
