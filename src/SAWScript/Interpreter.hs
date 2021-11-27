@@ -1356,7 +1356,7 @@ primitives = Map.fromList
     (pureVal goal_eval)
     Current
     [ "Evaluate the proof goal to a first-order combination of primitives."
-    , "Leave the given names, as defined with 'define', as uninterpreted." ]
+    , "Leave the given names as uninterpreted." ]
 
   , prim "beta_reduce_goal"    "ProofScript ()"
     (pureVal beta_reduce_goal)
@@ -1495,21 +1495,21 @@ primitives = Map.fromList
     (pureVal proveUnintZ3)
     Current
     [ "Use the Z3 theorem prover to prove the current goal. Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "unint_cvc4"            "[String] -> ProofScript ()"
     (pureVal proveUnintCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "unint_yices"           "[String] -> ProofScript ()"
     (pureVal proveUnintYices)
     Current
     [ "Use the Yices theorem prover to prove the current goal. Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "sbv_boolector"       "ProofScript ()"
@@ -1541,21 +1541,21 @@ primitives = Map.fromList
     (pureVal proveUnintZ3)
     Current
     [ "Use the Z3 theorem prover to prove the current goal. Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "sbv_unint_cvc4"        "[String] -> ProofScript ()"
     (pureVal proveUnintCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "sbv_unint_yices"       "[String] -> ProofScript ()"
     (pureVal proveUnintYices)
     Current
     [ "Use the Yices theorem prover to prove the current goal. Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "offline_aig"         "String -> ProofScript ()"
@@ -1646,29 +1646,28 @@ primitives = Map.fromList
     (pureVal w4_unint_z3)
     Current
     [ "Prove the current goal using What4 (Z3 backend). Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "w4_unint_z3_using" "String -> [String] -> ProofScript ()"
     (pureVal w4_unint_z3_using)
     Current
     [ "Prove the current goal using What4 (Z3 backend) using the given"
-    , "Z3 tactic. Leave the given list of names, as defined with"
-    , "'define', as uninterpreted."
+    , "Z3 tactic. Leave the given list of names as uninterpreted."
     ]
 
   , prim "w4_unint_yices"         "[String] -> ProofScript ()"
     (pureVal w4_unint_yices)
     Current
     [ "Prove the current goal using What4 (Yices backend). Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "w4_unint_cvc4"         "[String] -> ProofScript ()"
     (pureVal w4_unint_cvc4)
     Current
     [ "Prove the current goal using What4 (CVC4 backend). Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "w4_abc_aiger"        "ProofScript ()"
@@ -1699,24 +1698,21 @@ primitives = Map.fromList
     (pureVal offline_w4_unint_z3)
     Current
     [ "Write the current goal to the given file using What4 (Z3 backend) in"
-    ," SMT-Lib2 format. Leave the given list of names, as defined with"
-    , "'define', as uninterpreted."
+    ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 
   , prim "offline_w4_unint_yices" "[String] -> String -> ProofScript ()"
     (pureVal offline_w4_unint_yices)
     Current
     [ "Write the current goal to the given file using What4 (Yices backend) in"
-    ," SMT-Lib2 format. Leave the given list of names, as defined with"
-    , "'define', as uninterpreted."
+    ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 
   , prim "offline_w4_unint_cvc4"  "[String] -> String -> ProofScript ()"
     (pureVal offline_w4_unint_cvc4)
     Current
     [ "Write the current goal to the given file using What4 (CVC4 backend) in"
-    ," SMT-Lib2 format. Leave the given list of names, as defined with"
-    , "'define', as uninterpreted."
+    ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 
   , prim "split_goal"          "ProofScript ()"
