@@ -3219,13 +3219,12 @@ primitives = Map.fromList
     , " is not exactly one such symbol"
     ]
 
-  , prim "heapster_find_symbols_with_type"
-    "HeapsterEnv -> String -> String -> TopLevel [String]"
-    (bicVal heapster_find_symbols_with_type)
+  , prim "heapster_find_symbols"
+    "HeapsterEnv -> String -> TopLevel [String]"
+    (bicVal heapster_find_symbols)
     Experimental
     [ "Search for all symbols in any module contained in a HeapsterEnv that"
-    , " contain the supplied string as a substring and that have the specified"
-    , " LLVM type"
+    , " contain the supplied string as a substring"
     ]
 
   , prim "heapster_find_symbol_with_type"
@@ -3237,13 +3236,22 @@ primitives = Map.fromList
     , " LLVM type. Raise an error if there is not exactly one such symbol."
     ]
 
-  , prim "heapster_find_symbols"
-    "HeapsterEnv -> String -> TopLevel [String]"
-    (bicVal heapster_find_symbols)
+  , prim "heapster_find_symbols_with_type"
+    "HeapsterEnv -> String -> String -> TopLevel [String]"
+    (bicVal heapster_find_symbols_with_type)
     Experimental
     [ "Search for all symbols in any module contained in a HeapsterEnv that"
-    , " contain the supplied string as a substring"
+    , " contain the supplied string as a substring and that have the specified"
+    , " LLVM type"
     ]
+
+  , prim "heapster_find_symbol_commands"
+    "HeapsterEnv -> String -> TopLevel [String]"
+    (bicVal heapster_find_symbol_commands)
+    Experimental
+    [ "Map a search string str to a newline-separated sequence of SAW-script "
+    , " commands \"heapster_find_symbol_with_type str tp\", one for each LLVM "
+    , " type tp associated with a symbol whose name contains str" ]
 
   , prim "heapster_find_trait_method_symbol"
     "HeapsterEnv -> String -> TopLevel String"
