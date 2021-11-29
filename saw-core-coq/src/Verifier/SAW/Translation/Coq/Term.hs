@@ -226,7 +226,10 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
   case tf of
     Primitive pn  -> translateIdent (primName pn)
     UnitValue     -> pure (Coq.Var "tt")
-    UnitType      -> pure (Coq.Var "unit")
+    UnitType      ->
+      -- We need to explicitly tell Coq that we want unit to be a Type, since
+      -- all SAW core sorts are translated to Types
+      pure (Coq.Ascription (Coq.Var "unit") (Coq.Sort Coq.Type))
     PairValue x y -> Coq.App (Coq.Var "pair") <$> traverse translateTerm [x, y]
     PairType x y  -> Coq.App (Coq.Var "prod") <$> traverse translateTerm [x, y]
     PairLeft t    ->
@@ -537,7 +540,7 @@ translateTermUnshared t = withLocalTranslationState $ do
 
     Lambda {} -> do
       paramTerms <- translateParams params
-      e' <- translateTerm e
+      e' <- translateTermLet e
       pure (Coq.Lambda paramTerms e')
         where
           -- params are in normal, outermost first, order

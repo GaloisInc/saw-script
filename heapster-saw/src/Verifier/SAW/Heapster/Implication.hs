@@ -6917,12 +6917,17 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   , Just off <- partialSubst psubst (mbLLVMBlockOffset mb_bp)
   , Just len <- partialSubst psubst (mbLLVMBlockLen mb_bp)
   , Just i <- findIndex (llvmPermContainsOffsetBool off) ps
-  , (Perm_LLVMField (fp :: LLVMFieldPerm w sz)) <- ps!!i
-  , bvLeq (bvAdd off len) (bvAdd (llvmFieldOffset fp) (llvmFieldLen fp)) =
+  , Perm_LLVMField fp <- ps!!i
+  , len1 <- bvSub (llvmFieldEndOffset fp) off
+  , bvLeq len len1
+  , Just len1_int <- bvMatchConstInt len1
+  , Just (Some (sz1 :: NatRepr sz1)) <- someNat (8 * len1_int)
+  , Left LeqProof <- decideLeq (knownNat @1) sz1 =
 
     -- Recursively prove a membblock with shape fieldsh(eq(y)) for fresh evar y
+    withKnownNat sz1 $
     let mb_bp' =
-          mbCombine (MNil :>: (Proxy :: Proxy (LLVMPointerType sz))) $
+          mbCombine (MNil :>: (Proxy :: Proxy (LLVMPointerType sz1))) $
           mbMapCl $(mkClosed
                     [| \bp -> nu $ \y ->
                       bp { llvmBlockShape =
@@ -6988,9 +6993,8 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   , Just off <- partialSubst psubst (mbLLVMBlockOffset mb_bp)
   , Just len <- partialSubst psubst (mbLLVMBlockLen mb_bp)
   , Just i <- findIndex (llvmPermContainsOffsetBool off) ps
-  , Just off_lhs <- llvmAtomicPermOffset (ps!!i)
-  , Just len_lhs <- llvmAtomicPermLen (ps!!i)
-  , len1 <- bvSub len_lhs (bvSub off off_lhs)
+  , Just end_lhs <- llvmAtomicPermEndOffset (ps!!i)
+  , len1 <- bvSub end_lhs off
   , bvLt len1 len =
 
     -- Build existential memblock perms with fresh variables for shapes, where

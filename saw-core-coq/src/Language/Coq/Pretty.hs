@@ -129,6 +129,9 @@ ppTerm p e =
     ExplVar x ->
       parensIf (p > PrecApp) $
       string "@" <> ppIdent x
+    Ascription tm tp ->
+      parensIf (p > PrecLambda)
+      (ppTerm PrecApp tm <+> text ":" <+> ppTerm PrecApp tp)
     NatLit i ->
       integer i
     ZLit i ->
