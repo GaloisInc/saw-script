@@ -30,8 +30,6 @@ module Verifier.SAW.Heapster.SAWTranslation where
 
 import Prelude hiding (pi)
 
-import Numeric (showHex)
-import Data.Char
 import Data.Maybe
 import Numeric.Natural
 import Data.List hiding (inits)
@@ -69,7 +67,6 @@ import Lang.Crucible.CFG.Core
 
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Term.Functor
-import Verifier.SAW.Module
 import Verifier.SAW.SharedTerm
 
 import Verifier.SAW.Heapster.CruUtil
