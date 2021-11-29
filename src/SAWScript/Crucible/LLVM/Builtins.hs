@@ -932,7 +932,11 @@ setupGlobalAllocs cc mspec mem0 = foldM go mem0 $ mspec ^. MS.csGlobalAllocs
 -- function spec, write the given value to the address of the given
 -- pointer.
 setupPrePointsTos :: forall arch.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   MS.CrucibleMethodSpecIR (LLVM arch)       ->
   Options ->
   LLVMCrucibleContext arch       ->

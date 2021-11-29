@@ -1526,6 +1526,7 @@ instantiateExtResolveSAWSymBV sc cc w tm = do
 -- Return a map containing the overwritten memory allocations.
 invalidateMutableAllocs ::
   ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -1692,7 +1693,11 @@ executeGhost _sc _var (TypedTerm tp _) =
 -- the CrucibleSetup block. First we compute the value indicated by
 -- 'val', and then write it to the address indicated by 'ptr'.
 executePointsTo ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options                    ->
   SharedContext              ->
   LLVMCrucibleContext arch     ->
@@ -1723,7 +1728,7 @@ executePointsTo opts sc cc spec overwritten_allocs (LLVMPointsTo _loc cond ptr v
      writeGlobal memVar mem'
 
 storePointsToValue ::
-  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  (?memOpts :: Crucible.MemOptions, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options ->
   LLVMCrucibleContext arch ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
