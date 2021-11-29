@@ -3891,7 +3891,7 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
       -- reflexivity.
       implWithoutTracingM (implPushOrReflMultiM perms_in) >>>
       pure (PermImpl_Done $
-               TypedJumpTarget siteID Proxy (mkCruCtx args_tps) perms_in)
+            TypedJumpTarget siteID Proxy (mkCruCtx args_tps) perms_in)
 
 
 -- | Type-check a termination statement
@@ -4027,7 +4027,8 @@ proveCallSiteImpl srcID destID args ghosts vars mb_perms_in mb_perms_out =
         mbSeparate (cruCtxProxies ghosts) $
         mbValuePermsToDistPerms mb_perms_out in
   stmtTraceM (\i ->
-               pretty "proveCallSiteImpl:" <> line <>
+               pretty ("proveCallSiteImpl, src = " ++ show srcID ++
+                       ", dest = " ++ show destID) <> line <>
                indent 2 (permPretty i perms_in) <> line <>
                pretty "-o" <> line <>
                indent 2 (permPretty i perms_out)) >>>

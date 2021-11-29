@@ -80,17 +80,6 @@ import Verifier.SAW.Heapster.TypedCrucible
 import GHC.Stack
 
 
-scInsertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
-scInsertDef sc mnm ident def_tp def_tm =
-  do t <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
-     scRegisterGlobal sc ident t
-     scModifyModule sc mnm $ \m ->
-       insDef m $ Def { defIdent = ident,
-                        defQualifier = NoQualifier,
-                        defType = def_tp,
-                        defBody = Just def_tm }
-
-
 ----------------------------------------------------------------------
 -- * Translation Monads
 ----------------------------------------------------------------------
@@ -4688,24 +4677,6 @@ tcTranslateCFGTupleFun env checks endianness dlevel cfgs_and_perms =
       debugTrace dlevel ("Type-checking " ++ show sym) $
       translateCFG env' checks $
       tcCFG ?ptrWidth env' endianness dlevel fun_perm cfg
-
-
--- | Make a "coq-safe" identifier from a string that might contain
--- non-identifier characters, where we use the SAW core notion of identifier
--- characters as letters, digits, underscore and primes. Any disallowed
--- character is mapped to the string @__xNN@, where @NN@ is the hexadecimal code
--- for that character. Additionally, a SAW core identifier is not allowed to
--- start with a prime, so a leading underscore is added in such a case.
-mkSafeIdent :: ModuleName -> String -> Ident
-mkSafeIdent _ [] = "_"
-mkSafeIdent mnm nm =
-  let is_safe_char c = isAlphaNum c || c == '_' || c == '\'' in
-  mkIdent mnm $ Data.Text.pack $
-  (if nm!!0 == '\'' then ('_' :) else id) $
-  concatMap
-  (\c -> if is_safe_char c then [c] else
-           "__x" ++ showHex (ord c) "")
-  nm
 
 
 -- | Type-check a set of CFGs against their function permissions, translate the

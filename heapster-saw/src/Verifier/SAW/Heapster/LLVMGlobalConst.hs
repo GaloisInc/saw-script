@@ -29,6 +29,8 @@ import Lang.Crucible.LLVM.DataLayout
 import Lang.Crucible.LLVM.MemModel
 
 import Verifier.SAW.OpenTerm
+import Verifier.SAW.Term.Functor (ModuleName)
+import Verifier.SAW.SharedTerm
 import Verifier.SAW.Heapster.Permissions
 
 
@@ -201,11 +203,11 @@ llvmZeroInitValue tp =
   traceAndZeroM ("llvmZeroInitValue cannot handle type:\n"
                  ++ show (L.ppType tp))
 
--- | Add an LLVM global constant to a 'PermEnv', if the global has a type and
--- value we can translate to Heapster, otherwise silently ignore it
-permEnvAddGlobalConst :: (1 <= w, KnownNat w) => DebugLevel -> EndianForm ->
-                         NatRepr w -> PermEnv -> L.Global -> PermEnv
-permEnvAddGlobalConst dlevel endianness w env global =
+-- | Top-level call to 'translateLLVMValue', running the 'LLVMTransM' monad
+translateLLVMValueTop :: (1 <= w, KnownNat w) => DebugLevel -> EndianForm ->
+                         NatRepr w -> PermEnv -> L.Global ->
+                         Maybe (PermExpr (LLVMShapeType w), OpenTerm)
+translateLLVMValueTop dlevel endianness w env global =
   let sym = show (L.globalSym global) in
   let trans_info = LLVMTransInfo { llvmTransInfoEnv = env,
                                    llvmTransInfoEndianness = endianness,
@@ -213,13 +215,27 @@ permEnvAddGlobalConst dlevel endianness w env global =
   debugTrace dlevel ("Global: " ++ sym ++ "; value =\n" ++
                      maybe "None" ppLLVMValue
                      (L.globalValue global)) $
-  maybe env id $
   (\x -> case x of
       Just _ -> debugTrace dlevel (sym ++ " translated") x
       Nothing -> debugTrace dlevel (sym ++ " not translated") x) $
   flip runLLVMTransM trans_info $
   do val <- lift $ L.globalValue global
-     (sh, t) <- translateLLVMValue w (L.globalType global) val
-     let p = ValPerm_LLVMBlock $ llvmReadBlockOfShape sh
-     return $ permEnvAddGlobalSyms env
-       [PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p [t]]
+     translateLLVMValue w (L.globalType global) val
+
+-- | Add an LLVM global constant to a 'PermEnv', if the global has a type and
+-- value we can translate to Heapster, otherwise silently ignore it
+permEnvAddGlobalConst :: (1 <= w, KnownNat w) => SharedContext -> ModuleName ->
+                         DebugLevel -> EndianForm -> NatRepr w -> PermEnv ->
+                         L.Global -> IO PermEnv
+permEnvAddGlobalConst sc mod_name dlevel endianness w env global =
+  case translateLLVMValueTop dlevel endianness w env global of
+    Nothing -> return env
+    Just (sh, t) ->
+      do let ident = mkSafeIdent mod_name $ show $ L.globalSym global
+         complete_t <- completeOpenTerm sc t
+         tp <- completeOpenTermType sc t
+         scInsertDef sc mod_name ident tp complete_t
+         let p = ValPerm_LLVMBlock $ llvmReadBlockOfShape sh
+         let t_ident = globalOpenTerm ident
+         return $ permEnvAddGlobalSyms env
+           [PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p [t_ident]]
