@@ -23,7 +23,8 @@ Definition compose : forall (a : Type), forall (b : Type), forall (c : Type), (b
   fun (_1 : Type) (_2 : Type) (_3 : Type) (f : _2 -> _3) (g : _1 -> _2) (x : _1) => f (g x).
 
 Definition bvExp : forall (n : SAWCoreScaffolding.Nat), SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool -> SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool -> SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool :=
-  fun (n : SAWCoreScaffolding.Nat) (x : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (y : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) => SAWCoreVectorsAsCoqVectors.foldr SAWCoreScaffolding.Bool (SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) n (fun (b : SAWCoreScaffolding.Bool) (a : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) => if b then SAWCoreVectorsAsCoqVectors.bvMul n x (SAWCoreVectorsAsCoqVectors.bvMul n a a) else SAWCoreVectorsAsCoqVectors.bvMul n a a) (SAWCoreVectorsAsCoqVectors.bvNat n 1) (SAWCorePrelude.reverse n SAWCoreScaffolding.Bool y).
+  fun (n : SAWCoreScaffolding.Nat) (x : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (y : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) => SAWCoreVectorsAsCoqVectors.foldr SAWCoreScaffolding.Bool (SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) n (fun (b : SAWCoreScaffolding.Bool) (a : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) => let var__0   := SAWCoreVectorsAsCoqVectors.bvMul n a a in
+  if b then SAWCoreVectorsAsCoqVectors.bvMul n x var__0 else var__0) (SAWCoreVectorsAsCoqVectors.bvNat n 1) (SAWCorePrelude.reverse n SAWCoreScaffolding.Bool y).
 
 Definition updFst : forall (a : Type), forall (b : Type), (a -> a) -> prod a b -> prod a b :=
   fun (a : Type) (b : Type) (f : a -> a) (x : prod a b) => pair (f (SAWCoreScaffolding.fst x)) (SAWCoreScaffolding.snd x).
@@ -121,28 +122,28 @@ Definition IntModNum : forall (num : Num), Type :=
   fun (num : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer num.
 
 Definition Rational : Type :=
-  unit.
+  unit : Type.
 
 Definition ecRatio : SAWCoreScaffolding.Integer -> SAWCoreScaffolding.Integer -> Rational :=
   fun (x : SAWCoreScaffolding.Integer) (y : SAWCoreScaffolding.Integer) => tt.
 
 Definition eqRational : Rational -> Rational -> SAWCoreScaffolding.Bool :=
-  fun (x : unit) (y : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: (==) Rational"%string.
+  fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: (==) Rational"%string.
 
 Definition ltRational : Rational -> Rational -> SAWCoreScaffolding.Bool :=
-  fun (x : unit) (y : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: (<) Rational"%string.
+  fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: (<) Rational"%string.
 
 Definition addRational : Rational -> Rational -> Rational :=
-  fun (x : unit) (y : unit) => SAWCoreScaffolding.error Rational "Unimplemented: (+) Rational"%string.
+  fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error Rational "Unimplemented: (+) Rational"%string.
 
 Definition subRational : Rational -> Rational -> Rational :=
-  fun (x : unit) (y : unit) => SAWCoreScaffolding.error Rational "Unimplemented: (-) Rational"%string.
+  fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error Rational "Unimplemented: (-) Rational"%string.
 
 Definition mulRational : Rational -> Rational -> Rational :=
-  fun (x : unit) (y : unit) => SAWCoreScaffolding.error Rational "Unimplemented: (*) Rational"%string.
+  fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error Rational "Unimplemented: (*) Rational"%string.
 
 Definition negRational : Rational -> Rational :=
-  fun (x : unit) => SAWCoreScaffolding.error Rational "Unimplemented: negate Rational"%string.
+  fun (x : unit : Type) => SAWCoreScaffolding.error Rational "Unimplemented: negate Rational"%string.
 
 Definition integerToRational : SAWCoreScaffolding.Integer -> Rational :=
   fun (x : SAWCoreScaffolding.Integer) => SAWCoreScaffolding.error Rational "Unimplemented: fromInteger Rational"%string.
@@ -174,7 +175,9 @@ Definition eListSel : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inha
   fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (num : Num) => seq num a -> SAWCoreScaffolding.Nat -> a) (fun (n1 : SAWCoreScaffolding.Nat) => SAWCorePrelude.sawAt n1 a) (SAWCorePrelude.streamGet a) n.
 
 Definition from : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (b : Type), forall {Inh_b : SAWCoreScaffolding.Inhabited b}, forall (m : Num), forall (n : Num), seq m a -> (a -> seq n b) -> seq (tcMul m n) (prod a b) :=
-  fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (b : Type) {Inh_b : SAWCoreScaffolding.Inhabited b} (m : Num) (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (m1 : Num) => seq m1 a -> (a -> seq n b) -> seq (tcMul m1 n) (prod a b)) (fun (m1 : SAWCoreScaffolding.Nat) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => SAWCoreVectorsAsCoqVectors.Vec m1 a -> (a -> seq n1 b) -> seq (tcMul (TCNum m1) n1) (prod a b)) (fun (n1 : SAWCoreScaffolding.Nat) (xs : SAWCoreVectorsAsCoqVectors.Vec m1 a) (k : a -> SAWCoreVectorsAsCoqVectors.Vec n1 b) => SAWCorePrelude.join m1 n1 (prod a b) (SAWCorePrelude.map a (SAWCoreVectorsAsCoqVectors.Vec n1 (prod a b)) (fun (x : a) => SAWCorePrelude.map b (prod a b) (fun (y : b) => pair x y) n1 (k x)) m1 xs)) (SAWCorePrelude.natCase (fun (m' : SAWCoreScaffolding.Nat) => SAWCoreVectorsAsCoqVectors.Vec m' a -> (a -> SAWCorePrelude.Stream b) -> seq (SAWCorePrelude.if0Nat Num m' (TCNum 0) TCInf) (prod a b)) (fun (xs : SAWCoreVectorsAsCoqVectors.Vec 0 a) (k : a -> SAWCorePrelude.Stream b) => SAWCoreVectorsAsCoqVectors.EmptyVec (prod a b)) (fun (m' : SAWCoreScaffolding.Nat) (xs : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ m') a) (k : a -> SAWCorePrelude.Stream b) => (fun (x : a) => SAWCorePrelude.streamMap b (prod a b) (fun (y : b) => pair x y) (k x)) (SAWCorePrelude.sawAt (SAWCoreScaffolding.Succ m') a xs 0)) m1) n) (CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => SAWCorePrelude.Stream a -> (a -> seq n1 b) -> seq (tcMul TCInf n1) (prod a b)) (fun (n1 : SAWCoreScaffolding.Nat) => SAWCorePrelude.natCase (fun (n' : SAWCoreScaffolding.Nat) => SAWCorePrelude.Stream a -> (a -> SAWCoreVectorsAsCoqVectors.Vec n' b) -> seq (SAWCorePrelude.if0Nat Num n' (TCNum 0) TCInf) (prod a b)) (fun (xs : SAWCorePrelude.Stream a) (k : a -> SAWCoreVectorsAsCoqVectors.Vec 0 b) => SAWCoreVectorsAsCoqVectors.EmptyVec (prod a b)) (fun (n' : SAWCoreScaffolding.Nat) (xs : SAWCorePrelude.Stream a) (k : a -> SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n') b) => SAWCorePrelude.streamJoin (prod a b) n' (SAWCorePrelude.streamMap a (SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n') (prod a b)) (fun (x : a) => SAWCorePrelude.map b (prod a b) (fun (y : b) => pair x y) (SAWCoreScaffolding.Succ n') (k x)) xs)) n1) (fun (xs : SAWCorePrelude.Stream a) (k : a -> SAWCorePrelude.Stream b) => (fun (x : a) => SAWCorePrelude.streamMap b (prod a b) (fun (y : b) => pair x y) (k x)) (SAWCorePrelude.streamGet a xs 0)) n) m.
+  fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (b : Type) {Inh_b : SAWCoreScaffolding.Inhabited b} (m : Num) (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (m1 : Num) => seq m1 a -> (a -> seq n b) -> seq (tcMul m1 n) (prod a b)) (fun (m1 : SAWCoreScaffolding.Nat) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => SAWCoreVectorsAsCoqVectors.Vec m1 a -> (a -> seq n1 b) -> seq (tcMul (TCNum m1) n1) (prod a b)) (fun (n1 : SAWCoreScaffolding.Nat) (xs : SAWCoreVectorsAsCoqVectors.Vec m1 a) (k : a -> SAWCoreVectorsAsCoqVectors.Vec n1 b) => let var__0   := prod a b in
+  SAWCorePrelude.join m1 n1 var__0 (SAWCorePrelude.map a (SAWCoreVectorsAsCoqVectors.Vec n1 var__0) (fun (x : a) => SAWCorePrelude.map b (prod a b) (fun (y : b) => pair x y) n1 (k x)) m1 xs)) (SAWCorePrelude.natCase (fun (m' : SAWCoreScaffolding.Nat) => SAWCoreVectorsAsCoqVectors.Vec m' a -> (a -> SAWCorePrelude.Stream b) -> seq (SAWCorePrelude.if0Nat Num m' (TCNum 0) TCInf) (prod a b)) (fun (xs : SAWCoreVectorsAsCoqVectors.Vec 0 a) (k : a -> SAWCorePrelude.Stream b) => SAWCoreVectorsAsCoqVectors.EmptyVec (prod a b)) (fun (m' : SAWCoreScaffolding.Nat) (xs : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ m') a) (k : a -> SAWCorePrelude.Stream b) => (fun (x : a) => SAWCorePrelude.streamMap b (prod a b) (fun (y : b) => pair x y) (k x)) (SAWCorePrelude.sawAt (SAWCoreScaffolding.Succ m') a xs 0)) m1) n) (CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => SAWCorePrelude.Stream a -> (a -> seq n1 b) -> seq (tcMul TCInf n1) (prod a b)) (fun (n1 : SAWCoreScaffolding.Nat) => SAWCorePrelude.natCase (fun (n' : SAWCoreScaffolding.Nat) => SAWCorePrelude.Stream a -> (a -> SAWCoreVectorsAsCoqVectors.Vec n' b) -> seq (SAWCorePrelude.if0Nat Num n' (TCNum 0) TCInf) (prod a b)) (fun (xs : SAWCorePrelude.Stream a) (k : a -> SAWCoreVectorsAsCoqVectors.Vec 0 b) => SAWCoreVectorsAsCoqVectors.EmptyVec (prod a b)) (fun (n' : SAWCoreScaffolding.Nat) (xs : SAWCorePrelude.Stream a) (k : a -> SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n') b) => let var__0   := prod a b in
+  SAWCorePrelude.streamJoin var__0 n' (SAWCorePrelude.streamMap a (SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n') var__0) (fun (x : a) => SAWCorePrelude.map b (prod a b) (fun (y : b) => pair x y) (SAWCoreScaffolding.Succ n') (k x)) xs)) n1) (fun (xs : SAWCorePrelude.Stream a) (k : a -> SAWCorePrelude.Stream b) => (fun (x : a) => SAWCorePrelude.streamMap b (prod a b) (fun (y : b) => pair x y) (k x)) (SAWCorePrelude.streamGet a xs 0)) n) m.
 
 Definition mlet : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (b : Type), forall {Inh_b : SAWCoreScaffolding.Inhabited b}, forall (n : Num), a -> (a -> seq n b) -> seq n (prod a b) :=
   fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (b : Type) {Inh_b : SAWCoreScaffolding.Inhabited b} (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => a -> (a -> seq n1 b) -> seq n1 (prod a b)) (fun (n1 : SAWCoreScaffolding.Nat) (x : a) (f : a -> SAWCoreVectorsAsCoqVectors.Vec n1 b) => SAWCorePrelude.map b (prod a b) (fun (y : b) => pair x y) n1 (f x)) (fun (x : a) (f : a -> SAWCorePrelude.Stream b) => SAWCorePrelude.streamMap b (prod a b) (fun (y : b) => pair x y) (f x)) n.
@@ -185,11 +188,11 @@ Definition seqZip : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabi
 Definition seqBinary : forall (n : Num), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, (a -> a -> a) -> seq n a -> seq n a -> seq n a :=
   fun (num : Num) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (f : a -> a -> a) => CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => seq n a -> seq n a -> seq n a) (fun (n : SAWCoreScaffolding.Nat) => SAWCorePrelude.zipWith a a a f n) (SAWCorePrelude.streamMap2 a a a f) num.
 
-Definition unitUnary : unit -> unit :=
-  fun (_1 : unit) => tt.
+Definition unitUnary : (unit : Type) -> unit : Type :=
+  fun (_1 : unit : Type) => tt.
 
-Definition unitBinary : unit -> unit -> unit :=
-  fun (_1 : unit) (_2 : unit) => tt.
+Definition unitBinary : (unit : Type) -> (unit : Type) -> unit : Type :=
+  fun (_1 : unit : Type) (_2 : unit : Type) => tt.
 
 Definition pairUnary : forall (a : Type), forall (b : Type), (a -> a) -> (b -> b) -> prod a b -> prod a b :=
   fun (a : Type) (b : Type) (f : a -> a) (g : b -> b) (xy : prod a b) => pair (f (fst xy)) (g (snd xy)).
@@ -213,7 +216,7 @@ Definition integerCmp : SAWCoreScaffolding.Integer -> SAWCoreScaffolding.Integer
   fun (x : SAWCoreScaffolding.Integer) (y : SAWCoreScaffolding.Integer) (k : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.or (SAWCoreScaffolding.intLt x y) (SAWCoreScaffolding.and (SAWCoreScaffolding.intEq x y) k).
 
 Definition rationalCmp : Rational -> Rational -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool :=
-  fun (x : unit) (y : unit) (k : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.or (ltRational x y) (SAWCoreScaffolding.and (eqRational x y) k).
+  fun (x : unit : Type) (y : unit : Type) (k : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.or (ltRational x y) (SAWCoreScaffolding.and (eqRational x y) k).
 
 Definition bvCmp : forall (n : SAWCoreScaffolding.Nat), SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool -> SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool :=
   fun (n : SAWCoreScaffolding.Nat) (x : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (y : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (k : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.or (SAWCoreVectorsAsCoqVectors.bvult n x y) (SAWCoreScaffolding.and (SAWCorePrelude.bvEq n x y) k).
@@ -222,10 +225,11 @@ Definition bvSCmp : forall (n : SAWCoreScaffolding.Nat), SAWCoreVectorsAsCoqVect
   fun (n : SAWCoreScaffolding.Nat) (x : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (y : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (k : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.or (SAWCoreVectorsAsCoqVectors.bvslt n x y) (SAWCoreScaffolding.and (SAWCorePrelude.bvEq n x y) k).
 
 Definition vecCmp : forall (n : SAWCoreScaffolding.Nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) -> SAWCoreVectorsAsCoqVectors.Vec n a -> SAWCoreVectorsAsCoqVectors.Vec n a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool :=
-  fun (n : SAWCoreScaffolding.Nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (f : a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (ys : SAWCoreVectorsAsCoqVectors.Vec n a) (k : SAWCoreScaffolding.Bool) => SAWCoreVectorsAsCoqVectors.foldr (SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) SAWCoreScaffolding.Bool n (fun (f1 : SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) => f1) k (SAWCorePrelude.zipWith a a (SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) f n xs ys).
+  fun (n : SAWCoreScaffolding.Nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (f : a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (ys : SAWCoreVectorsAsCoqVectors.Vec n a) (k : SAWCoreScaffolding.Bool) => let var__0   := SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool in
+  SAWCoreVectorsAsCoqVectors.foldr var__0 SAWCoreScaffolding.Bool n (fun (f1 : var__0) => f1) k (SAWCorePrelude.zipWith a a var__0 f n xs ys).
 
-Definition unitCmp : unit -> unit -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool :=
-  fun (_1 : unit) (_2 : unit) (_3 : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.false.
+Definition unitCmp : (unit : Type) -> (unit : Type) -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool :=
+  fun (_1 : unit : Type) (_2 : unit : Type) (_3 : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.false.
 
 Definition pairCmp : forall (a : Type), forall (b : Type), (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) -> (b -> b -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) -> prod a b -> prod a b -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool :=
   fun (a : Type) (b : Type) (f : a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (g : b -> b -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (x12 : prod a b) (y12 : prod a b) (k : SAWCoreScaffolding.Bool) => f (fst x12) (fst y12) (g (snd x12) (snd y12) k).
@@ -260,8 +264,8 @@ Definition PEqWord : forall (n : SAWCoreScaffolding.Nat), PEq (SAWCoreVectorsAsC
 Definition PEqSeqBool : forall (n : Num), PEq (seq n SAWCoreScaffolding.Bool) :=
   fun (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => PEq (seq n1 SAWCoreScaffolding.Bool)) (fun (n1 : SAWCoreScaffolding.Nat) => PEqWord n1) (SAWCoreScaffolding.error (PEq (SAWCorePrelude.Stream SAWCoreScaffolding.Bool)) "invalid Eq instance"%string) n.
 
-Definition PEqUnit : PEq unit :=
-  RecordCons "eq" (fun (x : unit) (y : unit) => SAWCoreScaffolding.true) RecordNil.
+Definition PEqUnit : PEq (unit : Type) :=
+  RecordCons "eq" (fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.true) RecordNil.
 
 Definition PEqPair : forall (a : Type), forall (b : Type), PEq a -> PEq b -> PEq (prod a b) :=
   fun (a : Type) (b : Type) (pa : RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (pb : RecordTypeCons "eq" (b -> b -> SAWCoreScaffolding.Bool) RecordTypeNil) => RecordCons "eq" (SAWCorePrelude.pairEq a b (RecordProj pa "eq") (RecordProj pb "eq")) RecordNil.
@@ -290,7 +294,7 @@ Definition PCmpWord : forall (n : SAWCoreScaffolding.Nat), PCmp (SAWCoreVectorsA
 Definition PCmpSeqBool : forall (n : Num), PCmp (seq n SAWCoreScaffolding.Bool) :=
   fun (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => PCmp (seq n1 SAWCoreScaffolding.Bool)) (fun (n1 : SAWCoreScaffolding.Nat) => PCmpWord n1) (SAWCoreScaffolding.error (PCmp (SAWCorePrelude.Stream SAWCoreScaffolding.Bool)) "invalid Cmp instance"%string) n.
 
-Definition PCmpUnit : PCmp unit :=
+Definition PCmpUnit : PCmp (unit : Type) :=
   RecordCons "cmp" unitCmp (RecordCons "cmpEq" PEqUnit RecordNil).
 
 Definition PCmpPair : forall (a : Type), forall (b : Type), PCmp a -> PCmp b -> PCmp (prod a b) :=
@@ -311,7 +315,7 @@ Definition PSignedCmpWord : forall (n : SAWCoreScaffolding.Nat), PSignedCmp (SAW
 Definition PSignedCmpSeqBool : forall (n : Num), PSignedCmp (seq n SAWCoreScaffolding.Bool) :=
   fun (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => PSignedCmp (seq n1 SAWCoreScaffolding.Bool)) (fun (n1 : SAWCoreScaffolding.Nat) => PSignedCmpWord n1) (SAWCoreScaffolding.error (PSignedCmp (SAWCorePrelude.Stream SAWCoreScaffolding.Bool)) "invalid SignedCmp instance"%string) n.
 
-Definition PSignedCmpUnit : PSignedCmp unit :=
+Definition PSignedCmpUnit : PSignedCmp (unit : Type) :=
   RecordCons "scmp" unitCmp (RecordCons "signedCmpEq" PEqUnit RecordNil).
 
 Definition PSignedCmpPair : forall (a : Type), forall (b : Type), PSignedCmp a -> PSignedCmp b -> PSignedCmp (prod a b) :=
@@ -345,7 +349,8 @@ Definition PZeroFun : forall (a : Type), forall (b : Type), PZero b -> PZero (a 
   fun (a : Type) (b : Type) (pb : b) (_1 : a) => pb.
 
 Definition PLogic : Type -> Type :=
-  fun (a : Type) => RecordTypeCons "and" (a -> a -> a) (RecordTypeCons "logicZero" (PZero a) (RecordTypeCons "not" (a -> a) (RecordTypeCons "or" (a -> a -> a) (RecordTypeCons "xor" (a -> a -> a) RecordTypeNil)))).
+  fun (a : Type) => let var__0   := a -> a -> a in
+  RecordTypeCons "and" var__0 (RecordTypeCons "logicZero" (PZero a) (RecordTypeCons "not" (a -> a) (RecordTypeCons "or" var__0 (RecordTypeCons "xor" var__0 RecordTypeNil)))).
 
 Definition PLogicBit : PLogic SAWCoreScaffolding.Bool :=
   RecordCons "and" SAWCoreScaffolding.and (RecordCons "logicZero" PZeroBit (RecordCons "not" SAWCoreScaffolding.not (RecordCons "or" SAWCoreScaffolding.or (RecordCons "xor" SAWCoreScaffolding.xor RecordNil)))).
@@ -368,14 +373,15 @@ Definition PLogicSeqBool : forall (n : Num), PLogic (seq n SAWCoreScaffolding.Bo
 Definition PLogicFun : forall (a : Type), forall (b : Type), PLogic b -> PLogic (a -> b) :=
   fun (a : Type) (b : Type) (pb : RecordTypeCons "and" (b -> b -> b) (RecordTypeCons "logicZero" b (RecordTypeCons "not" (b -> b) (RecordTypeCons "or" (b -> b -> b) (RecordTypeCons "xor" (b -> b -> b) RecordTypeNil))))) => RecordCons "and" (funBinary a b (RecordProj pb "and")) (RecordCons "logicZero" (PZeroFun a b (RecordProj pb "logicZero")) (RecordCons "not" (compose a b b (RecordProj pb "not")) (RecordCons "or" (funBinary a b (RecordProj pb "or")) (RecordCons "xor" (funBinary a b (RecordProj pb "xor")) RecordNil)))).
 
-Definition PLogicUnit : PLogic unit :=
+Definition PLogicUnit : PLogic (unit : Type) :=
   RecordCons "and" unitBinary (RecordCons "logicZero" tt (RecordCons "not" unitUnary (RecordCons "or" unitBinary (RecordCons "xor" unitBinary RecordNil)))).
 
 Definition PLogicPair : forall (a : Type), forall (b : Type), PLogic a -> PLogic b -> PLogic (prod a b) :=
   fun (a : Type) (b : Type) (pa : RecordTypeCons "and" (a -> a -> a) (RecordTypeCons "logicZero" a (RecordTypeCons "not" (a -> a) (RecordTypeCons "or" (a -> a -> a) (RecordTypeCons "xor" (a -> a -> a) RecordTypeNil))))) (pb : RecordTypeCons "and" (b -> b -> b) (RecordTypeCons "logicZero" b (RecordTypeCons "not" (b -> b) (RecordTypeCons "or" (b -> b -> b) (RecordTypeCons "xor" (b -> b -> b) RecordTypeNil))))) => RecordCons "and" (pairBinary a b (RecordProj pa "and") (RecordProj pb "and")) (RecordCons "logicZero" (pair (RecordProj pa "logicZero") (RecordProj pb "logicZero")) (RecordCons "not" (pairUnary a b (RecordProj pa "not") (RecordProj pb "not")) (RecordCons "or" (pairBinary a b (RecordProj pa "or") (RecordProj pb "or")) (RecordCons "xor" (pairBinary a b (RecordProj pa "xor") (RecordProj pb "xor")) RecordNil)))).
 
 Definition PRing : Type -> Type :=
-  fun (a : Type) => RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" (PZero a) (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil))))).
+  fun (a : Type) => let var__0   := a -> a -> a in
+  RecordTypeCons "add" var__0 (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" var__0 (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" (PZero a) (RecordTypeCons "sub" var__0 RecordTypeNil))))).
 
 Definition PRingInteger : PRing SAWCoreScaffolding.Integer :=
   RecordCons "add" SAWCoreScaffolding.intAdd (RecordCons "int" (fun (i : SAWCoreScaffolding.Integer) => i) (RecordCons "mul" SAWCoreScaffolding.intMul (RecordCons "neg" SAWCoreScaffolding.intNeg (RecordCons "ringZero" PZeroInteger (RecordCons "sub" SAWCoreScaffolding.intSub RecordNil))))).
@@ -407,14 +413,15 @@ Definition PRingSeqBool : forall (n : Num), PRing (seq n SAWCoreScaffolding.Bool
 Definition PRingFun : forall (a : Type), forall (b : Type), PRing b -> PRing (a -> b) :=
   fun (a : Type) (b : Type) (pb : RecordTypeCons "add" (b -> b -> b) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> b) (RecordTypeCons "mul" (b -> b -> b) (RecordTypeCons "neg" (b -> b) (RecordTypeCons "ringZero" b (RecordTypeCons "sub" (b -> b -> b) RecordTypeNil)))))) => RecordCons "add" (funBinary a b (RecordProj pb "add")) (RecordCons "int" (fun (i : SAWCoreScaffolding.Integer) (_1 : a) => RecordProj pb "int" i) (RecordCons "mul" (funBinary a b (RecordProj pb "mul")) (RecordCons "neg" (compose a b b (RecordProj pb "neg")) (RecordCons "ringZero" (PZeroFun a b (RecordProj pb "ringZero")) (RecordCons "sub" (funBinary a b (RecordProj pb "sub")) RecordNil))))).
 
-Definition PRingUnit : PRing unit :=
+Definition PRingUnit : PRing (unit : Type) :=
   RecordCons "add" unitBinary (RecordCons "int" (fun (i : SAWCoreScaffolding.Integer) => tt) (RecordCons "mul" unitBinary (RecordCons "neg" unitUnary (RecordCons "ringZero" tt (RecordCons "sub" unitBinary RecordNil))))).
 
 Definition PRingPair : forall (a : Type), forall (b : Type), PRing a -> PRing b -> PRing (prod a b) :=
   fun (a : Type) (b : Type) (pa : RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (pb : RecordTypeCons "add" (b -> b -> b) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> b) (RecordTypeCons "mul" (b -> b -> b) (RecordTypeCons "neg" (b -> b) (RecordTypeCons "ringZero" b (RecordTypeCons "sub" (b -> b -> b) RecordTypeNil)))))) => RecordCons "add" (pairBinary a b (RecordProj pa "add") (RecordProj pb "add")) (RecordCons "int" (fun (i : SAWCoreScaffolding.Integer) => pair (RecordProj pa "int" i) (RecordProj pb "int" i)) (RecordCons "mul" (pairBinary a b (RecordProj pa "mul") (RecordProj pb "mul")) (RecordCons "neg" (pairUnary a b (RecordProj pa "neg") (RecordProj pb "neg")) (RecordCons "ringZero" (pair (RecordProj pa "ringZero") (RecordProj pb "ringZero")) (RecordCons "sub" (pairBinary a b (RecordProj pa "sub") (RecordProj pb "sub")) RecordNil))))).
 
 Definition PIntegral : Type -> Type :=
-  fun (a : Type) => RecordTypeCons "div" (a -> a -> a) (RecordTypeCons "integralRing" (PRing a) (RecordTypeCons "mod" (a -> a -> a) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> a -> r) (RecordTypeCons "toInt" (a -> SAWCoreScaffolding.Integer) RecordTypeNil)))).
+  fun (a : Type) => let var__0   := a -> a -> a in
+  RecordTypeCons "div" var__0 (RecordTypeCons "integralRing" (PRing a) (RecordTypeCons "mod" var__0 (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> a -> r) (RecordTypeCons "toInt" (a -> SAWCoreScaffolding.Integer) RecordTypeNil)))).
 
 Definition PIntegralInteger : PIntegral SAWCoreScaffolding.Integer :=
   RecordCons "div" SAWCoreScaffolding.intDiv (RecordCons "integralRing" PRingInteger (RecordCons "mod" SAWCoreScaffolding.intMod (RecordCons "posNegCases" (fun (r : Type) (pos : SAWCoreScaffolding.Nat -> r) (neg : SAWCoreScaffolding.Nat -> r) (i : SAWCoreScaffolding.Integer) => if SAWCoreScaffolding.intLe 0%Z i then pos (SAWCoreScaffolding.intToNat i) else neg (SAWCoreScaffolding.intToNat (SAWCoreScaffolding.intNeg i))) (RecordCons "toInt" (fun (i : SAWCoreScaffolding.Integer) => i) RecordNil)))).
@@ -429,19 +436,21 @@ Definition PField : Type -> Type :=
   fun (a : Type) => RecordTypeCons "fieldDiv" (a -> a -> a) (RecordTypeCons "fieldRing" (PRing a) (RecordTypeCons "recip" (a -> a) RecordTypeNil)).
 
 Definition PFieldRational : PField Rational :=
-  RecordCons "fieldDiv" (fun (x : unit) (y : unit) => SAWCoreScaffolding.error Rational "Unimplemented: (/.) Rational"%string) (RecordCons "fieldRing" PRingRational (RecordCons "recip" (fun (x : unit) => SAWCoreScaffolding.error Rational "Unimplemented: recip Rational"%string) RecordNil)).
+  RecordCons "fieldDiv" (fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error Rational "Unimplemented: (/.) Rational"%string) (RecordCons "fieldRing" PRingRational (RecordCons "recip" (fun (x : unit : Type) => SAWCoreScaffolding.error Rational "Unimplemented: recip Rational"%string) RecordNil)).
 
 Definition PFieldIntMod : forall (n : SAWCoreScaffolding.Nat), PField (SAWCoreScaffolding.IntMod n) :=
-  fun (n : SAWCoreScaffolding.Nat) => RecordCons "fieldDiv" (fun (x : SAWCoreScaffolding.IntMod n) (y : SAWCoreScaffolding.IntMod n) => SAWCoreScaffolding.error (SAWCoreScaffolding.IntMod n) "Unimplemented: (/.) IntMod"%string) (RecordCons "fieldRing" (PRingIntMod n) (RecordCons "recip" (fun (x : SAWCoreScaffolding.IntMod n) => SAWCoreScaffolding.error (SAWCoreScaffolding.IntMod n) "Unimplemented: recip IntMod"%string) RecordNil)).
+  fun (n : SAWCoreScaffolding.Nat) => let var__0   := SAWCoreScaffolding.IntMod n in
+  RecordCons "fieldDiv" (fun (x : var__0) (y : SAWCoreScaffolding.IntMod n) => SAWCoreScaffolding.error (SAWCoreScaffolding.IntMod n) "Unimplemented: (/.) IntMod"%string) (RecordCons "fieldRing" (PRingIntMod n) (RecordCons "recip" (fun (x : var__0) => SAWCoreScaffolding.error (SAWCoreScaffolding.IntMod n) "Unimplemented: recip IntMod"%string) RecordNil)).
 
 Definition PFieldIntModNum : forall (n : Num), PField (IntModNum n) :=
   fun (num : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => PField (IntModNum n)) PFieldIntMod (SAWCoreScaffolding.error (PField (IntModNum TCInf)) "PFieldIntModNum: no instance for inf"%string) num.
 
 Definition PRound : Type -> Type :=
-  fun (a : Type) => RecordTypeCons "ceiling" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "floor" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundAway" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundCmp" (PCmp a) (RecordTypeCons "roundField" (PField a) (RecordTypeCons "roundToEven" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "trunc" (a -> SAWCoreScaffolding.Integer) RecordTypeNil)))))).
+  fun (a : Type) => let var__0   := a -> SAWCoreScaffolding.Integer in
+  RecordTypeCons "ceiling" var__0 (RecordTypeCons "floor" var__0 (RecordTypeCons "roundAway" var__0 (RecordTypeCons "roundCmp" (PCmp a) (RecordTypeCons "roundField" (PField a) (RecordTypeCons "roundToEven" var__0 (RecordTypeCons "trunc" var__0 RecordTypeNil)))))).
 
 Definition PRoundRational : PRound Rational :=
-  RecordCons "ceiling" (fun (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: ceiling Rational"%string) (RecordCons "floor" (fun (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: floor Rational"%string) (RecordCons "roundAway" (fun (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: roundAway Rational"%string) (RecordCons "roundCmp" PCmpRational (RecordCons "roundField" PFieldRational (RecordCons "roundToEven" (fun (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: roundToEven Rational"%string) (RecordCons "trunc" (fun (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: trunc Rational"%string) RecordNil)))))).
+  RecordCons "ceiling" (fun (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: ceiling Rational"%string) (RecordCons "floor" (fun (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: floor Rational"%string) (RecordCons "roundAway" (fun (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: roundAway Rational"%string) (RecordCons "roundCmp" PCmpRational (RecordCons "roundField" PFieldRational (RecordCons "roundToEven" (fun (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: roundToEven Rational"%string) (RecordCons "trunc" (fun (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: trunc Rational"%string) RecordNil)))))).
 
 Definition PLiteral : forall (a : Type), Type :=
   fun (a : Type) => SAWCoreScaffolding.Nat -> a.
@@ -573,13 +582,16 @@ Definition ecFraction : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.In
   fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} => SAWCoreScaffolding.error a "Unimplemented: fraction"%string.
 
 Definition ecShiftL : forall (m : Num), forall (ix : Type), forall (a : Type), PIntegral ix -> PZero a -> seq m a -> ix -> seq m a :=
-  fun (m : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (m1 : Num) => forall (ix : Type), forall (a : Type), PIntegral ix -> PZero a -> seq m1 a -> ix -> seq m1 a) (fun (m1 : SAWCoreScaffolding.Nat) (ix : Type) (a : Type) (pix : RecordTypeCons "div" (ix -> ix -> ix) (RecordTypeCons "integralRing" (RecordTypeCons "add" (ix -> ix -> ix) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> ix) (RecordTypeCons "mul" (ix -> ix -> ix) (RecordTypeCons "neg" (ix -> ix) (RecordTypeCons "ringZero" ix (RecordTypeCons "sub" (ix -> ix -> ix) RecordTypeNil)))))) (RecordTypeCons "mod" (ix -> ix -> ix) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> ix -> r) (RecordTypeCons "toInt" (ix -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (pz : a) (xs : SAWCoreVectorsAsCoqVectors.Vec m1 a) => RecordProj pix "posNegCases" (SAWCoreVectorsAsCoqVectors.Vec m1 a) (SAWCoreVectorsAsCoqVectors.shiftL m1 a (ecZero a pz) xs) (SAWCoreVectorsAsCoqVectors.shiftR m1 a (ecZero a pz) xs)) (fun (ix : Type) (a : Type) (pix : RecordTypeCons "div" (ix -> ix -> ix) (RecordTypeCons "integralRing" (RecordTypeCons "add" (ix -> ix -> ix) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> ix) (RecordTypeCons "mul" (ix -> ix -> ix) (RecordTypeCons "neg" (ix -> ix) (RecordTypeCons "ringZero" ix (RecordTypeCons "sub" (ix -> ix -> ix) RecordTypeNil)))))) (RecordTypeCons "mod" (ix -> ix -> ix) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> ix -> r) (RecordTypeCons "toInt" (ix -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (pz : a) (xs : SAWCorePrelude.Stream a) => RecordProj pix "posNegCases" (SAWCorePrelude.Stream a) (SAWCorePrelude.streamShiftL a xs) (SAWCorePrelude.streamShiftR a pz xs)) m.
+  fun (m : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (m1 : Num) => forall (ix : Type), forall (a : Type), PIntegral ix -> PZero a -> seq m1 a -> ix -> seq m1 a) (fun (m1 : SAWCoreScaffolding.Nat) (ix : Type) (a : Type) (pix : RecordTypeCons "div" (ix -> ix -> ix) (RecordTypeCons "integralRing" (RecordTypeCons "add" (ix -> ix -> ix) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> ix) (RecordTypeCons "mul" (ix -> ix -> ix) (RecordTypeCons "neg" (ix -> ix) (RecordTypeCons "ringZero" ix (RecordTypeCons "sub" (ix -> ix -> ix) RecordTypeNil)))))) (RecordTypeCons "mod" (ix -> ix -> ix) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> ix -> r) (RecordTypeCons "toInt" (ix -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (pz : a) (xs : SAWCoreVectorsAsCoqVectors.Vec m1 a) => let var__0   := ecZero a pz in
+  RecordProj pix "posNegCases" (SAWCoreVectorsAsCoqVectors.Vec m1 a) (SAWCoreVectorsAsCoqVectors.shiftL m1 a var__0 xs) (SAWCoreVectorsAsCoqVectors.shiftR m1 a var__0 xs)) (fun (ix : Type) (a : Type) (pix : RecordTypeCons "div" (ix -> ix -> ix) (RecordTypeCons "integralRing" (RecordTypeCons "add" (ix -> ix -> ix) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> ix) (RecordTypeCons "mul" (ix -> ix -> ix) (RecordTypeCons "neg" (ix -> ix) (RecordTypeCons "ringZero" ix (RecordTypeCons "sub" (ix -> ix -> ix) RecordTypeNil)))))) (RecordTypeCons "mod" (ix -> ix -> ix) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> ix -> r) (RecordTypeCons "toInt" (ix -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (pz : a) (xs : SAWCorePrelude.Stream a) => RecordProj pix "posNegCases" (SAWCorePrelude.Stream a) (SAWCorePrelude.streamShiftL a xs) (SAWCorePrelude.streamShiftR a pz xs)) m.
 
 Definition ecShiftR : forall (m : Num), forall (ix : Type), forall (a : Type), PIntegral ix -> PZero a -> seq m a -> ix -> seq m a :=
-  fun (m : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (m1 : Num) => forall (ix : Type), forall (a : Type), PIntegral ix -> PZero a -> seq m1 a -> ix -> seq m1 a) (fun (m1 : SAWCoreScaffolding.Nat) (ix : Type) (a : Type) (pix : RecordTypeCons "div" (ix -> ix -> ix) (RecordTypeCons "integralRing" (RecordTypeCons "add" (ix -> ix -> ix) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> ix) (RecordTypeCons "mul" (ix -> ix -> ix) (RecordTypeCons "neg" (ix -> ix) (RecordTypeCons "ringZero" ix (RecordTypeCons "sub" (ix -> ix -> ix) RecordTypeNil)))))) (RecordTypeCons "mod" (ix -> ix -> ix) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> ix -> r) (RecordTypeCons "toInt" (ix -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (pz : a) (xs : SAWCoreVectorsAsCoqVectors.Vec m1 a) => RecordProj pix "posNegCases" (SAWCoreVectorsAsCoqVectors.Vec m1 a) (SAWCoreVectorsAsCoqVectors.shiftR m1 a (ecZero a pz) xs) (SAWCoreVectorsAsCoqVectors.shiftL m1 a (ecZero a pz) xs)) (fun (ix : Type) (a : Type) (pix : RecordTypeCons "div" (ix -> ix -> ix) (RecordTypeCons "integralRing" (RecordTypeCons "add" (ix -> ix -> ix) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> ix) (RecordTypeCons "mul" (ix -> ix -> ix) (RecordTypeCons "neg" (ix -> ix) (RecordTypeCons "ringZero" ix (RecordTypeCons "sub" (ix -> ix -> ix) RecordTypeNil)))))) (RecordTypeCons "mod" (ix -> ix -> ix) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> ix -> r) (RecordTypeCons "toInt" (ix -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (pz : a) (xs : SAWCorePrelude.Stream a) => RecordProj pix "posNegCases" (SAWCorePrelude.Stream a) (SAWCorePrelude.streamShiftR a pz xs) (SAWCorePrelude.streamShiftL a xs)) m.
+  fun (m : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (m1 : Num) => forall (ix : Type), forall (a : Type), PIntegral ix -> PZero a -> seq m1 a -> ix -> seq m1 a) (fun (m1 : SAWCoreScaffolding.Nat) (ix : Type) (a : Type) (pix : RecordTypeCons "div" (ix -> ix -> ix) (RecordTypeCons "integralRing" (RecordTypeCons "add" (ix -> ix -> ix) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> ix) (RecordTypeCons "mul" (ix -> ix -> ix) (RecordTypeCons "neg" (ix -> ix) (RecordTypeCons "ringZero" ix (RecordTypeCons "sub" (ix -> ix -> ix) RecordTypeNil)))))) (RecordTypeCons "mod" (ix -> ix -> ix) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> ix -> r) (RecordTypeCons "toInt" (ix -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (pz : a) (xs : SAWCoreVectorsAsCoqVectors.Vec m1 a) => let var__0   := ecZero a pz in
+  RecordProj pix "posNegCases" (SAWCoreVectorsAsCoqVectors.Vec m1 a) (SAWCoreVectorsAsCoqVectors.shiftR m1 a var__0 xs) (SAWCoreVectorsAsCoqVectors.shiftL m1 a var__0 xs)) (fun (ix : Type) (a : Type) (pix : RecordTypeCons "div" (ix -> ix -> ix) (RecordTypeCons "integralRing" (RecordTypeCons "add" (ix -> ix -> ix) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> ix) (RecordTypeCons "mul" (ix -> ix -> ix) (RecordTypeCons "neg" (ix -> ix) (RecordTypeCons "ringZero" ix (RecordTypeCons "sub" (ix -> ix -> ix) RecordTypeNil)))))) (RecordTypeCons "mod" (ix -> ix -> ix) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> ix -> r) (RecordTypeCons "toInt" (ix -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (pz : a) (xs : SAWCorePrelude.Stream a) => RecordProj pix "posNegCases" (SAWCorePrelude.Stream a) (SAWCorePrelude.streamShiftR a pz xs) (SAWCorePrelude.streamShiftL a xs)) m.
 
 Definition ecSShiftR : forall (n : Num), forall (ix : Type), PIntegral ix -> seq n SAWCoreScaffolding.Bool -> ix -> seq n SAWCoreScaffolding.Bool :=
-  finNumRec (fun (n : Num) => forall (ix : Type), PIntegral ix -> seq n SAWCoreScaffolding.Bool -> ix -> seq n SAWCoreScaffolding.Bool) (fun (n : SAWCoreScaffolding.Nat) (ix : Type) (pix : RecordTypeCons "div" (ix -> ix -> ix) (RecordTypeCons "integralRing" (RecordTypeCons "add" (ix -> ix -> ix) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> ix) (RecordTypeCons "mul" (ix -> ix -> ix) (RecordTypeCons "neg" (ix -> ix) (RecordTypeCons "ringZero" ix (RecordTypeCons "sub" (ix -> ix -> ix) RecordTypeNil)))))) (RecordTypeCons "mod" (ix -> ix -> ix) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> ix -> r) (RecordTypeCons "toInt" (ix -> SAWCoreScaffolding.Integer) RecordTypeNil))))) => SAWCorePrelude.natCase (fun (w : SAWCoreScaffolding.Nat) => SAWCoreVectorsAsCoqVectors.Vec w SAWCoreScaffolding.Bool -> ix -> SAWCoreVectorsAsCoqVectors.Vec w SAWCoreScaffolding.Bool) (fun (xs : SAWCoreVectorsAsCoqVectors.Vec 0 SAWCoreScaffolding.Bool) (_1 : ix) => xs) (fun (w : SAWCoreScaffolding.Nat) (xs : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ w) SAWCoreScaffolding.Bool) => RecordProj pix "posNegCases" (SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ w) SAWCoreScaffolding.Bool) (SAWCoreVectorsAsCoqVectors.bvSShr w xs) (SAWCoreVectorsAsCoqVectors.bvShl (SAWCoreScaffolding.Succ w) xs)) n).
+  finNumRec (fun (n : Num) => forall (ix : Type), PIntegral ix -> seq n SAWCoreScaffolding.Bool -> ix -> seq n SAWCoreScaffolding.Bool) (fun (n : SAWCoreScaffolding.Nat) (ix : Type) (pix : RecordTypeCons "div" (ix -> ix -> ix) (RecordTypeCons "integralRing" (RecordTypeCons "add" (ix -> ix -> ix) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> ix) (RecordTypeCons "mul" (ix -> ix -> ix) (RecordTypeCons "neg" (ix -> ix) (RecordTypeCons "ringZero" ix (RecordTypeCons "sub" (ix -> ix -> ix) RecordTypeNil)))))) (RecordTypeCons "mod" (ix -> ix -> ix) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> ix -> r) (RecordTypeCons "toInt" (ix -> SAWCoreScaffolding.Integer) RecordTypeNil))))) => SAWCorePrelude.natCase (fun (w : SAWCoreScaffolding.Nat) => SAWCoreVectorsAsCoqVectors.Vec w SAWCoreScaffolding.Bool -> ix -> SAWCoreVectorsAsCoqVectors.Vec w SAWCoreScaffolding.Bool) (fun (xs : SAWCoreVectorsAsCoqVectors.Vec 0 SAWCoreScaffolding.Bool) (_1 : ix) => xs) (fun (w : SAWCoreScaffolding.Nat) (xs : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ w) SAWCoreScaffolding.Bool) => let var__0   := SAWCoreScaffolding.Succ w in
+  RecordProj pix "posNegCases" (SAWCoreVectorsAsCoqVectors.Vec var__0 SAWCoreScaffolding.Bool) (SAWCoreVectorsAsCoqVectors.bvSShr w xs) (SAWCoreVectorsAsCoqVectors.bvShl var__0 xs)) n).
 
 Definition ecRotL : forall (m : Num), forall (ix : Type), forall (a : Type), PIntegral ix -> seq m a -> ix -> seq m a :=
   finNumRec (fun (m : Num) => forall (ix : Type), forall (a : Type), PIntegral ix -> seq m a -> ix -> seq m a) (fun (m : SAWCoreScaffolding.Nat) (ix : Type) (a : Type) (pix : RecordTypeCons "div" (ix -> ix -> ix) (RecordTypeCons "integralRing" (RecordTypeCons "add" (ix -> ix -> ix) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> ix) (RecordTypeCons "mul" (ix -> ix -> ix) (RecordTypeCons "neg" (ix -> ix) (RecordTypeCons "ringZero" ix (RecordTypeCons "sub" (ix -> ix -> ix) RecordTypeNil)))))) (RecordTypeCons "mod" (ix -> ix -> ix) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> ix -> r) (RecordTypeCons "toInt" (ix -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (xs : SAWCoreVectorsAsCoqVectors.Vec m a) => RecordProj pix "posNegCases" (SAWCoreVectorsAsCoqVectors.Vec m a) (SAWCoreVectorsAsCoqVectors.rotateL m a xs) (SAWCoreVectorsAsCoqVectors.rotateR m a xs)).
@@ -621,7 +633,8 @@ Definition ecFromToLessThan : forall (first : Num), forall (bound : Num), forall
   fun (first : Num) (bound : Num) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} => finNumRec (fun (first1 : Num) => PLiteralLessThan a -> seq (tcSub bound first1) a) (fun (first1 : SAWCoreScaffolding.Nat) => CryptolPrimitivesForSAWCore.Num_rect (fun (bound1 : Num) => PLiteralLessThan a -> seq (tcSub bound1 (TCNum first1)) a) (fun (bound1 : SAWCoreScaffolding.Nat) (pa : SAWCoreScaffolding.Nat -> a) => SAWCoreVectorsAsCoqVectors.gen (SAWCorePrelude.subNat bound1 first1) a (fun (i : SAWCoreScaffolding.Nat) => pa (SAWCorePrelude.addNat i first1))) (fun (pa : SAWCoreScaffolding.Nat -> a) => SAWCorePrelude.MkStream a (fun (i : SAWCoreScaffolding.Nat) => pa (SAWCorePrelude.addNat i first1))) bound) first.
 
 Definition ecFromThenTo : forall (first : Num), forall (next : Num), forall (last : Num), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (len : Num), PLiteral a -> PLiteral a -> PLiteral a -> seq len a :=
-  fun (first : Num) (next : Num) (_1 : Num) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} => finNumRec (fun (len : Num) => PLiteral a -> PLiteral a -> PLiteral a -> seq len a) (fun (len : SAWCoreScaffolding.Nat) (pa : SAWCoreScaffolding.Nat -> a) (_2 : SAWCoreScaffolding.Nat -> a) (_3 : SAWCoreScaffolding.Nat -> a) => SAWCoreVectorsAsCoqVectors.gen len a (fun (i : SAWCoreScaffolding.Nat) => pa (SAWCorePrelude.subNat (SAWCorePrelude.addNat (getFinNat first) (SAWCorePrelude.mulNat i (getFinNat next))) (SAWCorePrelude.mulNat i (getFinNat first))))).
+  fun (first : Num) (next : Num) (_1 : Num) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} => finNumRec (fun (len : Num) => PLiteral a -> PLiteral a -> PLiteral a -> seq len a) (fun (len : SAWCoreScaffolding.Nat) (pa : SAWCoreScaffolding.Nat -> a) (_2 : SAWCoreScaffolding.Nat -> a) (_3 : SAWCoreScaffolding.Nat -> a) => SAWCoreVectorsAsCoqVectors.gen len a (fun (i : SAWCoreScaffolding.Nat) => let var__0   := getFinNat first in
+  pa (SAWCorePrelude.subNat (SAWCorePrelude.addNat var__0 (SAWCorePrelude.mulNat i (getFinNat next))) (SAWCorePrelude.mulNat i var__0)))).
 
 Definition ecFromToBy : forall (first : Num), forall (last : Num), forall (stride : Num), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PLiteral a -> seq (tcAdd (TCNum 1) (tcDiv (tcSub last first) stride)) a :=
   finNumRec (fun (first : Num) => forall (last : Num), forall (stride : Num), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PLiteral a -> seq (tcAdd (TCNum 1) (tcDiv (tcSub last first) stride)) a) (fun (first : SAWCoreScaffolding.Nat) => finNumRec (fun (last : Num) => forall (stride : Num), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PLiteral a -> seq (tcAdd (TCNum 1) (tcDiv (tcSub last (TCNum first)) stride)) a) (fun (last : SAWCoreScaffolding.Nat) => finNumRec (fun (stride : Num) => forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PLiteral a -> seq (tcAdd (TCNum 1) (tcDiv (TCNum (SAWCorePrelude.subNat last first)) stride)) a) (fun (stride : SAWCoreScaffolding.Nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (pa : SAWCoreScaffolding.Nat -> a) => SAWCoreVectorsAsCoqVectors.gen (SAWCorePrelude.addNat 1 (SAWCorePrelude.divNat (SAWCorePrelude.subNat last first) stride)) a (fun (i : SAWCoreScaffolding.Nat) => pa (SAWCorePrelude.addNat first (SAWCorePrelude.mulNat i stride)))))).
@@ -636,10 +649,12 @@ Definition ecFromToDownByGreaterThan : forall (first : Num), forall (bound : Num
   finNumRec (fun (first : Num) => forall (bound : Num), forall (stride : Num), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PLiteral a -> seq (tcCeilDiv (tcSub first bound) stride) a) (fun (first : SAWCoreScaffolding.Nat) => finNumRec (fun (bound : Num) => forall (stride : Num), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PLiteral a -> seq (tcCeilDiv (tcSub (TCNum first) bound) stride) a) (fun (bound : SAWCoreScaffolding.Nat) => finNumRec (fun (stride : Num) => forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PLiteral a -> seq (tcCeilDiv (TCNum (SAWCorePrelude.subNat first bound)) stride) a) (fun (stride : SAWCoreScaffolding.Nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (pa : SAWCoreScaffolding.Nat -> a) => SAWCoreVectorsAsCoqVectors.gen (ceilDivNat (SAWCorePrelude.subNat first bound) stride) a (fun (i : SAWCoreScaffolding.Nat) => pa (SAWCorePrelude.subNat first (SAWCorePrelude.mulNat i stride)))))).
 
 Definition ecInfFrom : forall (a : Type), PIntegral a -> a -> seq TCInf a :=
-  fun (a : Type) (pa : RecordTypeCons "div" (a -> a -> a) (RecordTypeCons "integralRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "mod" (a -> a -> a) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> a -> r) (RecordTypeCons "toInt" (a -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (x : a) => SAWCorePrelude.MkStream a (fun (i : SAWCoreScaffolding.Nat) => RecordProj (RecordProj pa "integralRing") "add" x (RecordProj (RecordProj pa "integralRing") "int" (SAWCoreScaffolding.natToInt i))).
+  fun (a : Type) (pa : RecordTypeCons "div" (a -> a -> a) (RecordTypeCons "integralRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "mod" (a -> a -> a) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> a -> r) (RecordTypeCons "toInt" (a -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (x : a) => SAWCorePrelude.MkStream a (fun (i : SAWCoreScaffolding.Nat) => let var__0   := RecordProj pa "integralRing" in
+  RecordProj var__0 "add" x (RecordProj var__0 "int" (SAWCoreScaffolding.natToInt i))).
 
 Definition ecInfFromThen : forall (a : Type), PIntegral a -> a -> a -> seq TCInf a :=
-  fun (a : Type) (pa : RecordTypeCons "div" (a -> a -> a) (RecordTypeCons "integralRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "mod" (a -> a -> a) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> a -> r) (RecordTypeCons "toInt" (a -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (x : a) (y : a) => SAWCorePrelude.MkStream a (fun (i : SAWCoreScaffolding.Nat) => RecordProj (RecordProj pa "integralRing") "add" x (RecordProj (RecordProj pa "integralRing") "mul" (RecordProj (RecordProj pa "integralRing") "sub" y x) (RecordProj (RecordProj pa "integralRing") "int" (SAWCoreScaffolding.natToInt i)))).
+  fun (a : Type) (pa : RecordTypeCons "div" (a -> a -> a) (RecordTypeCons "integralRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "mod" (a -> a -> a) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> a -> r) (RecordTypeCons "toInt" (a -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (x : a) (y : a) => SAWCorePrelude.MkStream a (fun (i : SAWCoreScaffolding.Nat) => let var__0   := RecordProj pa "integralRing" in
+  RecordProj var__0 "add" x (RecordProj var__0 "mul" (RecordProj var__0 "sub" y x) (RecordProj var__0 "int" (SAWCoreScaffolding.natToInt i)))).
 
 Definition ecError : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (len : Num), seq len (SAWCoreVectorsAsCoqVectors.Vec 8 SAWCoreScaffolding.Bool) -> a :=
   fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (len : Num) (msg : CryptolPrimitivesForSAWCore.Num_rect (fun (num : Num) => Type) (fun (n : SAWCoreScaffolding.Nat) => SAWCoreVectorsAsCoqVectors.Vec n (SAWCoreVectorsAsCoqVectors.Vec 8 SAWCoreScaffolding.Bool)) (SAWCorePrelude.Stream (SAWCoreVectorsAsCoqVectors.Vec 8 SAWCoreScaffolding.Bool)) len) => SAWCoreScaffolding.error a "encountered call to the Cryptol 'error' function"%string.
@@ -663,25 +678,25 @@ Definition ecFoldlPrime : forall (n : Num), forall (a : Type), forall (b : Type)
   fun (n : Num) (a : Type) (b : Type) {Inh_b : SAWCoreScaffolding.Inhabited b} (pa : RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) => ecFoldl n a b.
 
 Definition TCFloat : Num -> Num -> Type :=
-  fun (_1 : Num) (_2 : Num) => unit.
+  fun (_1 : Num) (_2 : Num) => unit : Type.
 
 Definition PEqFloat : forall (e : Num), forall (p : Num), PEq (TCFloat e p) :=
-  fun (e : Num) (p : Num) => RecordCons "eq" (fun (x : unit) (y : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: (==) Float"%string) RecordNil.
+  fun (e : Num) (p : Num) => RecordCons "eq" (fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: (==) Float"%string) RecordNil.
 
 Definition PCmpFloat : forall (e : Num), forall (p : Num), PCmp (TCFloat e p) :=
-  fun (e : Num) (p : Num) => RecordCons "cmp" (fun (x : unit) (y : unit) (k : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: Cmp Float"%string) (RecordCons "cmpEq" (PEqFloat e p) RecordNil).
+  fun (e : Num) (p : Num) => RecordCons "cmp" (fun (x : unit : Type) (y : unit : Type) (k : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: Cmp Float"%string) (RecordCons "cmpEq" (PEqFloat e p) RecordNil).
 
 Definition PZeroFloat : forall (e : Num), forall (p : Num), PZero (TCFloat e p) :=
   fun (e : Num) (p : Num) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: Zero Float"%string.
 
 Definition PRingFloat : forall (e : Num), forall (p : Num), PRing (TCFloat e p) :=
-  fun (e : Num) (p : Num) => RecordCons "add" (fun (x : unit) (y : unit) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: (+) Float"%string) (RecordCons "int" (fun (i : SAWCoreScaffolding.Integer) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: toInteger Float"%string) (RecordCons "mul" (fun (x : unit) (y : unit) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: (*) Float"%string) (RecordCons "neg" (fun (x : unit) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: neg Float"%string) (RecordCons "ringZero" (PZeroFloat e p) (RecordCons "sub" (fun (x : unit) (y : unit) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: (-) Float"%string) RecordNil))))).
+  fun (e : Num) (p : Num) => RecordCons "add" (fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: (+) Float"%string) (RecordCons "int" (fun (i : SAWCoreScaffolding.Integer) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: toInteger Float"%string) (RecordCons "mul" (fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: (*) Float"%string) (RecordCons "neg" (fun (x : unit : Type) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: neg Float"%string) (RecordCons "ringZero" (PZeroFloat e p) (RecordCons "sub" (fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: (-) Float"%string) RecordNil))))).
 
 Definition PFieldFloat : forall (e : Num), forall (p : Num), PField (TCFloat e p) :=
-  fun (e : Num) (p : Num) => RecordCons "fieldDiv" (fun (x : unit) (y : unit) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: (/.) Float"%string) (RecordCons "fieldRing" (PRingFloat e p) (RecordCons "recip" (fun (x : unit) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: recip Float"%string) RecordNil)).
+  fun (e : Num) (p : Num) => RecordCons "fieldDiv" (fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: (/.) Float"%string) (RecordCons "fieldRing" (PRingFloat e p) (RecordCons "recip" (fun (x : unit : Type) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: recip Float"%string) RecordNil)).
 
 Definition PRoundFloat : forall (e : Num), forall (p : Num), PRound (TCFloat e p) :=
-  fun (e : Num) (p : Num) => RecordCons "ceiling" (fun (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: ceiling Float"%string) (RecordCons "floor" (fun (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: floor Float"%string) (RecordCons "roundAway" (fun (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: roundAway Float"%string) (RecordCons "roundCmp" (PCmpFloat e p) (RecordCons "roundField" (PFieldFloat e p) (RecordCons "roundToEven" (fun (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: roundToEven Float"%string) (RecordCons "trunc" (fun (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: trunc Float"%string) RecordNil)))))).
+  fun (e : Num) (p : Num) => RecordCons "ceiling" (fun (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: ceiling Float"%string) (RecordCons "floor" (fun (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: floor Float"%string) (RecordCons "roundAway" (fun (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: roundAway Float"%string) (RecordCons "roundCmp" (PCmpFloat e p) (RecordCons "roundField" (PFieldFloat e p) (RecordCons "roundToEven" (fun (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: roundToEven Float"%string) (RecordCons "trunc" (fun (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Integer "Unimplemented: trunc Float"%string) RecordNil)))))).
 
 Definition PLiteralFloat : forall (e : Num), forall (p : Num), PLiteral (TCFloat e p) :=
   fun (e : Num) (p : Num) (x : SAWCoreScaffolding.Nat) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: Literal Float"%string.
@@ -696,55 +711,55 @@ Definition ecFpFromBits : forall (e : Num), forall (p : Num), seq (tcAdd e p) SA
   fun (e : Num) (p : Num) (_1 : CryptolPrimitivesForSAWCore.Num_rect (fun (num : Num) => Type) (fun (n : SAWCoreScaffolding.Nat) => SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (SAWCorePrelude.Stream SAWCoreScaffolding.Bool) (CryptolPrimitivesForSAWCore.Num_rect (fun (num1' : Num) => Num) (fun (n1 : SAWCoreScaffolding.Nat) => CryptolPrimitivesForSAWCore.Num_rect (fun (num2' : Num) => Num) (fun (n2 : SAWCoreScaffolding.Nat) => TCNum (SAWCorePrelude.addNat n1 n2)) ((fun (x : SAWCoreScaffolding.Nat) => TCInf) n1) p) (CryptolPrimitivesForSAWCore.Num_rect (fun (num2' : Num) => Num) (fun (y : SAWCoreScaffolding.Nat) => TCInf) TCInf p) e)) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpFromBits"%string.
 
 Definition ecFpToBits : forall (e : Num), forall (p : Num), TCFloat e p -> seq (tcAdd e p) SAWCoreScaffolding.Bool :=
-  fun (e : Num) (p : Num) (_1 : unit) => SAWCoreScaffolding.error (seq (tcAdd e p) SAWCoreScaffolding.Bool) "Unimplemented: fpToBits"%string.
+  fun (e : Num) (p : Num) (_1 : unit : Type) => SAWCoreScaffolding.error (seq (tcAdd e p) SAWCoreScaffolding.Bool) "Unimplemented: fpToBits"%string.
 
 Definition ecFpEq : forall (e : Num), forall (p : Num), TCFloat e p -> TCFloat e p -> SAWCoreScaffolding.Bool :=
-  fun (e : Num) (p : Num) (_1 : unit) (_2 : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: =.="%string.
+  fun (e : Num) (p : Num) (_1 : unit : Type) (_2 : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: =.="%string.
 
 Definition ecFpAdd : forall (e : Num), forall (p : Num), SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p :=
-  fun (e : Num) (p : Num) (_1 : SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool) (_2 : unit) (_3 : unit) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpAdd"%string.
+  fun (e : Num) (p : Num) (_1 : SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool) (_2 : unit : Type) (_3 : unit : Type) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpAdd"%string.
 
 Definition ecFpSub : forall (e : Num), forall (p : Num), SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p :=
-  fun (e : Num) (p : Num) (_1 : SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool) (_2 : unit) (_3 : unit) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpSub"%string.
+  fun (e : Num) (p : Num) (_1 : SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool) (_2 : unit : Type) (_3 : unit : Type) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpSub"%string.
 
 Definition ecFpMul : forall (e : Num), forall (p : Num), SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p :=
-  fun (e : Num) (p : Num) (_1 : SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool) (_2 : unit) (_3 : unit) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpMul"%string.
+  fun (e : Num) (p : Num) (_1 : SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool) (_2 : unit : Type) (_3 : unit : Type) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpMul"%string.
 
 Definition ecFpDiv : forall (e : Num), forall (p : Num), SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p :=
-  fun (e : Num) (p : Num) (_1 : SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool) (_2 : unit) (_3 : unit) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpDiv"%string.
+  fun (e : Num) (p : Num) (_1 : SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool) (_2 : unit : Type) (_3 : unit : Type) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpDiv"%string.
 
 Definition ecFpToRational : forall (e : Num), forall (p : Num), TCFloat e p -> Rational :=
-  fun (e : Num) (p : Num) (_1 : unit) => SAWCoreScaffolding.error Rational "Unimplemented: fpToRational"%string.
+  fun (e : Num) (p : Num) (_1 : unit : Type) => SAWCoreScaffolding.error Rational "Unimplemented: fpToRational"%string.
 
 Definition ecFpFromRational : forall (e : Num), forall (p : Num), SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool -> Rational -> TCFloat e p :=
-  fun (e : Num) (p : Num) (_1 : SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool) (_2 : unit) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpFromRational"%string.
+  fun (e : Num) (p : Num) (_1 : SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool) (_2 : unit : Type) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpFromRational"%string.
 
 Definition fpIsNaN : forall (e : Num), forall (p : Num), TCFloat e p -> SAWCoreScaffolding.Bool :=
-  fun (e : Num) (p : Num) (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: fpIsNaN"%string.
+  fun (e : Num) (p : Num) (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: fpIsNaN"%string.
 
 Definition fpIsInf : forall (e : Num), forall (p : Num), TCFloat e p -> SAWCoreScaffolding.Bool :=
-  fun (e : Num) (p : Num) (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: fpIsInf"%string.
+  fun (e : Num) (p : Num) (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: fpIsInf"%string.
 
 Definition fpIsZero : forall (e : Num), forall (p : Num), TCFloat e p -> SAWCoreScaffolding.Bool :=
-  fun (e : Num) (p : Num) (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: fpIsZero"%string.
+  fun (e : Num) (p : Num) (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: fpIsZero"%string.
 
 Definition fpIsNeg : forall (e : Num), forall (p : Num), TCFloat e p -> SAWCoreScaffolding.Bool :=
-  fun (e : Num) (p : Num) (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: fpIsNeg"%string.
+  fun (e : Num) (p : Num) (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: fpIsNeg"%string.
 
 Definition fpIsNormal : forall (e : Num), forall (p : Num), TCFloat e p -> SAWCoreScaffolding.Bool :=
-  fun (e : Num) (p : Num) (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: fpIsNormal"%string.
+  fun (e : Num) (p : Num) (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: fpIsNormal"%string.
 
 Definition fpIsSubnormal : forall (e : Num), forall (p : Num), TCFloat e p -> SAWCoreScaffolding.Bool :=
-  fun (e : Num) (p : Num) (x : unit) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: fpIsSubnormal"%string.
+  fun (e : Num) (p : Num) (x : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: fpIsSubnormal"%string.
 
 Definition fpFMA : forall (e : Num), forall (p : Num), SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p -> TCFloat e p :=
-  fun (e : Num) (p : Num) (r : SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool) (x : unit) (y : unit) (z : unit) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpFMA"%string.
+  fun (e : Num) (p : Num) (r : SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool) (x : unit : Type) (y : unit : Type) (z : unit : Type) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpFMA"%string.
 
 Definition fpAbs : forall (e : Num), forall (p : Num), TCFloat e p -> TCFloat e p :=
-  fun (e : Num) (p : Num) (x : unit) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpAbs"%string.
+  fun (e : Num) (p : Num) (x : unit : Type) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpAbs"%string.
 
 Definition fpSqrt : forall (e : Num), forall (p : Num), SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool -> TCFloat e p -> TCFloat e p :=
-  fun (e : Num) (p : Num) (r : SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool) (x : unit) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpSqrt"%string.
+  fun (e : Num) (p : Num) (r : SAWCoreVectorsAsCoqVectors.Vec 3 SAWCoreScaffolding.Bool) (x : unit : Type) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpSqrt"%string.
 
 Definition ecUpdate : forall (n : Num), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (ix : Type), PIntegral ix -> seq n a -> ix -> a -> seq n a :=
   fun (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (ix : Type), PIntegral ix -> seq n1 a -> ix -> a -> seq n1 a) (fun (n1 : SAWCoreScaffolding.Nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (ix : Type) (pix : RecordTypeCons "div" (ix -> ix -> ix) (RecordTypeCons "integralRing" (RecordTypeCons "add" (ix -> ix -> ix) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> ix) (RecordTypeCons "mul" (ix -> ix -> ix) (RecordTypeCons "neg" (ix -> ix) (RecordTypeCons "ringZero" ix (RecordTypeCons "sub" (ix -> ix -> ix) RecordTypeNil)))))) (RecordTypeCons "mod" (ix -> ix -> ix) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> ix -> r) (RecordTypeCons "toInt" (ix -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (xs : SAWCoreVectorsAsCoqVectors.Vec n1 a) => RecordProj pix "posNegCases" (a -> SAWCoreVectorsAsCoqVectors.Vec n1 a) (SAWCorePrelude.upd n1 a xs) (fun (_1 : SAWCoreScaffolding.Nat) (_2 : a) => xs)) (fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (ix : Type) (pix : RecordTypeCons "div" (ix -> ix -> ix) (RecordTypeCons "integralRing" (RecordTypeCons "add" (ix -> ix -> ix) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> ix) (RecordTypeCons "mul" (ix -> ix -> ix) (RecordTypeCons "neg" (ix -> ix) (RecordTypeCons "ringZero" ix (RecordTypeCons "sub" (ix -> ix -> ix) RecordTypeNil)))))) (RecordTypeCons "mod" (ix -> ix -> ix) (RecordTypeCons "posNegCases" (forall (r : Type), (SAWCoreScaffolding.Nat -> r) -> (SAWCoreScaffolding.Nat -> r) -> ix -> r) (RecordTypeCons "toInt" (ix -> SAWCoreScaffolding.Integer) RecordTypeNil))))) (xs : SAWCorePrelude.Stream a) => RecordProj pix "posNegCases" (a -> SAWCorePrelude.Stream a) (SAWCorePrelude.streamUpd a xs) (fun (_1 : SAWCoreScaffolding.Nat) (_2 : a) => xs)) n.
@@ -823,19 +838,23 @@ Definition processSHA2_512 : forall (n : Num), seq n (SAWCoreVectorsAsCoqVectors
 
 Definition ec_double : forall (p : Num), prod (IntModNum p) (prod (IntModNum p) (IntModNum p)) -> let var__0   := IntModNum p in
   prod var__0 (prod var__0 var__0) :=
-  fun (p : Num) (x : prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p))) => SAWCoreScaffolding.error (prod (IntModNum p) (prod (IntModNum p) (IntModNum p))) "Unimplemented: ec_double"%string.
+  fun (p : Num) (x : prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p))) => let var__0   := IntModNum p in
+  SAWCoreScaffolding.error (prod var__0 (prod var__0 var__0)) "Unimplemented: ec_double"%string.
 
 Definition ec_add_nonzero : forall (p : Num), prod (IntModNum p) (prod (IntModNum p) (IntModNum p)) -> prod (IntModNum p) (prod (IntModNum p) (IntModNum p)) -> let var__0   := IntModNum p in
   prod var__0 (prod var__0 var__0) :=
-  fun (p : Num) (x : prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p))) (y : prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p))) => SAWCoreScaffolding.error (prod (IntModNum p) (prod (IntModNum p) (IntModNum p))) "Unimplemented: ec_add_nonzero"%string.
+  fun (p : Num) (x : prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p))) (y : prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p))) => let var__0   := IntModNum p in
+  SAWCoreScaffolding.error (prod var__0 (prod var__0 var__0)) "Unimplemented: ec_add_nonzero"%string.
 
 Definition ec_mult : forall (p : Num), IntModNum p -> prod (IntModNum p) (prod (IntModNum p) (IntModNum p)) -> let var__0   := IntModNum p in
   prod var__0 (prod var__0 var__0) :=
-  fun (p : Num) (x : CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (y : prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p))) => SAWCoreScaffolding.error (prod (IntModNum p) (prod (IntModNum p) (IntModNum p))) "Unimplemented: ec_mult"%string.
+  fun (p : Num) (x : CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (y : prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p))) => let var__0   := IntModNum p in
+  SAWCoreScaffolding.error (prod var__0 (prod var__0 var__0)) "Unimplemented: ec_mult"%string.
 
 Definition ec_twin_mult : forall (p : Num), IntModNum p -> prod (IntModNum p) (prod (IntModNum p) (IntModNum p)) -> prod (IntModNum p) (prod (IntModNum p) (IntModNum p)) -> let var__0   := IntModNum p in
   prod var__0 (prod var__0 var__0) :=
-  fun (p : Num) (x : CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (y : prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p))) (z : prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p))) => SAWCoreScaffolding.error (prod (IntModNum p) (prod (IntModNum p) (IntModNum p))) "Unimplemented: ec_twin_mult"%string.
+  fun (p : Num) (x : CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (y : prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p))) (z : prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (prod (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p) (CryptolPrimitivesForSAWCore.Num_rect (fun (n : Num) => Type) SAWCoreScaffolding.IntMod SAWCoreScaffolding.Integer p))) => let var__0   := IntModNum p in
+  SAWCoreScaffolding.error (prod var__0 (prod var__0 var__0)) "Unimplemented: ec_twin_mult"%string.
 
 Axiom replicate_False : forall (n : SAWCoreScaffolding.Nat), SAWCoreScaffolding.Eq (SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (SAWCorePrelude.replicate n SAWCoreScaffolding.Bool SAWCoreScaffolding.false) (SAWCoreVectorsAsCoqVectors.bvNat n 0) .
 
