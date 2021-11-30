@@ -39,12 +39,14 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
   , csParentName
     -- * LLVMAllocSpec
   , LLVMAllocSpec(..)
+  , LLVMAllocSpecInit(..)
   , allocSpecType
   , allocSpecAlign
   , allocSpecMut
   , allocSpecLoc
   , allocSpecBytes
   , allocSpecFresh
+  , allocSpecInit
   , mutIso
   , isMut
     -- * LLVMModule
@@ -188,6 +190,14 @@ type instance MS.MethodId (LLVM _) = LLVMMethodId
 --------------------------------------------------------------------------------
 -- *** LLVMAllocSpec
 
+-- | Allocation initialization policy
+data LLVMAllocSpecInit
+  = LLVMAllocSpecSymbolicInitialization
+    -- ^ allocation is initialized with a fresh symbolic array of bytes
+  | LLVMAllocSpecNoInitialization
+    -- ^ allocation not initialized
+  deriving (Eq, Ord, Show)
+
 data LLVMAllocSpec =
   LLVMAllocSpec
     { _allocSpecMut   :: CL.Mutability
@@ -196,6 +206,7 @@ data LLVMAllocSpec =
     , _allocSpecBytes :: Term
     , _allocSpecLoc   :: ProgramLoc
     , _allocSpecFresh :: Bool -- ^ Whether declared with @crucible_fresh_pointer@
+    , _allocSpecInit :: LLVMAllocSpecInit
     }
   deriving (Eq, Show)
 

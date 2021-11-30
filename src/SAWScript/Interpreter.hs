@@ -82,6 +82,7 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
 -- Crucible
 import qualified Lang.Crucible.JVM as CJ
+import qualified SAWScript.Crucible.Common as CC
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
 import           SAWScript.Crucible.LLVM.Builtins
@@ -483,8 +484,11 @@ buildTopLevelEnv proxy opts =
                    , rwDebugIntrinsics = True
                    , rwWhat4HashConsing = False
                    , rwWhat4HashConsingX86 = False
+                   , rwWhat4Eval = False
                    , rwPreservedRegs = []
                    , rwStackBaseAlign = defaultStackBaseAlign
+                   , rwAllocSymInitCheck = True
+                   , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
                    }
        return (bic, ro0, rw0)
 
@@ -595,6 +599,16 @@ disable_x86_what4_hash_consing = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwWhat4HashConsingX86 = False }
 
+enable_what4_eval :: TopLevel ()
+enable_what4_eval = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4Eval = True }
+
+disable_what4_eval :: TopLevel ()
+disable_what4_eval = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4Eval = False }
+
 add_x86_preserved_reg :: String -> TopLevel ()
 add_x86_preserved_reg r = do
   rw <- getTopLevelRW
@@ -614,6 +628,21 @@ default_x86_stack_base_align :: TopLevel ()
 default_x86_stack_base_align = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwStackBaseAlign = defaultStackBaseAlign }
+
+enable_alloc_sym_init_check :: TopLevel ()
+enable_alloc_sym_init_check = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwAllocSymInitCheck = True }
+
+disable_alloc_sym_init_check :: TopLevel ()
+disable_alloc_sym_init_check = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwAllocSymInitCheck = False }
+
+set_crucible_timeout :: Integer -> TopLevel ()
+set_crucible_timeout t = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwCrucibleTimeout = t }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -2326,6 +2355,13 @@ primitives = Map.fromList
     Experimental
     [ "Legacy alternative name for `llvm_alloc_with_size`." ]
 
+  , prim "llvm_alloc_sym_init" "LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_alloc_sym_init)
+    Experimental
+    [ "Like `llvm_alloc`, but assume that the allocation is initialized with"
+    , "symbolic bytes."
+    ]
+
   , prim "llvm_symbolic_alloc" "Bool -> Int -> Term -> LLVMSetup SetupValue"
     (pureVal llvm_symbolic_alloc)
     Current
@@ -2616,6 +2652,16 @@ primitives = Map.fromList
     Current
     [ "Use the default set of callee-saved registers during x86 verification." ]
 
+  , prim "enable_what4_eval" "TopLevel ()"
+    (pureVal enable_what4_eval)
+    Experimental
+    [ "Enable What4 translation for SAWCore expressions during Crucible symbolic execution." ]
+
+  , prim "disable_what4_eval" "TopLevel ()"
+    (pureVal disable_what4_eval)
+    Current
+    [ "Disable What4 translation for SAWCore expressions during Crucible symbolic execution." ]
+
   , prim "set_x86_stack_base_align" "Int -> TopLevel ()"
     (pureVal set_x86_stack_base_align)
     Experimental
@@ -2625,6 +2671,28 @@ primitives = Map.fromList
     (pureVal default_x86_stack_base_align)
     Experimental
     [ "Use the default stack allocation base alignment during x86 verification." ]
+
+  , prim "enable_alloc_sym_init_check" "TopLevel ()"
+    (pureVal enable_alloc_sym_init_check)
+    Experimental
+    [ "Enable the allocation initialization check associated with alloc_sym_init during override application." ]
+
+  , prim "disable_alloc_sym_init_check" "TopLevel ()"
+    (pureVal disable_alloc_sym_init_check)
+    Current
+    [ "Disable the allocation initialization check associated with alloc_sym_init during override application."
+    , "Disabling this check allows an override to apply when the memory region specified by the alloc_sym_init command"
+    , "in the override specification is not written to in the calling context."
+    , "This makes the implicit assumption that there is some unspecified byte at any valid memory address."
+    ]
+
+  , prim "set_crucible_timeout" "Int -> TopLevel ()"
+    (pureVal set_crucible_timeout)
+    Experimental
+    [ "Set the timeout for the SMT solver during the LLVM and X86 Crucible symbolic execution,"
+    ,"in milliseconds (0 is no timeout). The default is 10000ms (10s)."
+    ,"This is used for path-sat checks, and sat checks when applying overrides."
+    ]
 
   , prim "llvm_array_value"
     "[SetupValue] -> SetupValue"
