@@ -1834,6 +1834,16 @@ llvmFieldSize _ = knownNat
 llvmFieldSizeBytes :: KnownNat sz => LLVMFieldPerm w sz -> Integer
 llvmFieldSizeBytes fp = intValue (llvmFieldSize fp) `ceil_div` 8
 
+-- | Get the size of an 'LLVMFieldPerm' as an expression
+llvmFieldLen :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
+                LLVMFieldPerm w sz -> PermExpr (BVType w)
+llvmFieldLen fp = exprLLVMTypeBytesExpr $ llvmFieldContents fp
+
+-- | Get the ending offset of an 'LLVMFieldPerm'
+llvmFieldEndOffset :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
+                      LLVMFieldPerm w sz -> PermExpr (BVType w)
+llvmFieldEndOffset fp = bvAdd (llvmFieldOffset fp) (llvmFieldLen fp)
+
 -- | Helper to get a 'NatRepr' for the size of an 'LLVMFieldPerm' in a binding
 mbLLVMFieldSize :: KnownNat sz => Mb ctx (LLVMFieldPerm w sz) -> NatRepr sz
 mbLLVMFieldSize _ = knownNat
@@ -3224,11 +3234,6 @@ isLLVMAtomicPermWithOffset off p
   | Just off' <- llvmAtomicPermOffset p = bvEq off off'
 isLLVMAtomicPermWithOffset _ _ = False
 
--- | Get the size of an 'LLVMFieldPerm' as an expression
-llvmFieldLen :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
-                LLVMFieldPerm w sz -> PermExpr (BVType w)
-llvmFieldLen fp = exprLLVMTypeBytesExpr $ llvmFieldContents fp
-
 -- | Test if an 'AtomicPerm' is an array permission
 isLLVMArrayPerm :: AtomicPerm a -> Bool
 isLLVMArrayPerm (Perm_LLVMArray _) = True
@@ -3682,6 +3687,14 @@ llvmAtomicPermLen (Perm_LLVMField fp) = Just $ llvmFieldLen fp
 llvmAtomicPermLen (Perm_LLVMArray ap) = Just $ llvmArrayLengthBytes ap
 llvmAtomicPermLen (Perm_LLVMBlock bp) = Just $ llvmBlockLen bp
 llvmAtomicPermLen _ = Nothing
+
+-- | Get the ending offset of an atomic permission, if it has one. This
+-- includes array permissions which may have some cells borrowed.
+llvmAtomicPermEndOffset :: (1 <= w, KnownNat w) =>
+                           AtomicPerm (LLVMPointerType w) ->
+                           Maybe (PermExpr (BVType w))
+llvmAtomicPermEndOffset p =
+  bvAdd <$> llvmAtomicPermOffset p <*> llvmAtomicPermLen p
 
 -- | Get the range of offsets of an atomic permission, if it has one. Note that
 -- arrays with borrows do not have a well-defined range.
