@@ -197,7 +197,7 @@ proveWhat4_solver :: forall st t ff.
 proveWhat4_solver solver sym unintSet sc goal extraSetup =
   do
      (argNames, bvs, lit, stats) <- setupWhat4_solver solver sym unintSet sc goal
-     _ <- extraSetup
+     extraSetup
 
      -- log to stdout
      let logger _ str = putStrLn str
