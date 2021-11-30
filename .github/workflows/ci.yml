@@ -222,11 +222,11 @@ jobs:
 
       - uses: ocaml/setup-ocaml@v2
         with:
-          ocaml-compiler: 4.09.x  # coq-bits claims to support < 4.10 only
+          ocaml-compiler: 4.12.x
 
       - run: opam repo add coq-released https://coq.inria.fr/opam/released
 
-      - run: opam install --update-invariant -y coq=8.12.2 coq-bits=1.0.0
+      - run: opam install -y coq=8.13.2 coq-bits=1.1.0
 
       # FIXME: the following builds the Coq libraries for the SAW core
       # to Coq translator; if we do other Coq tests, this should become

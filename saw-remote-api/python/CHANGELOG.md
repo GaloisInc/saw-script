@@ -1,5 +1,4 @@
-# Revision history for saw-remote-api
-
+# Revision history for saw-client
 
 ## 0.9.1 -- YYYY-MM-DD
 
