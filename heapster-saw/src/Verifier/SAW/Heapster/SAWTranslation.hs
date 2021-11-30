@@ -3878,6 +3878,10 @@ instance (PermCheckExtC ext, TransInfo info) =>
     [nuMP| HandleLit _ |] -> return ETrans_Fun
 
     -- Bitvectors
+    [nuMP| BVUndef w |] ->
+      -- FIXME: we should really handle poison values; this translation just
+      -- treats them as if there were the bitvector 0 value
+      return $ ETrans_Term $ bvBVOpenTerm (mbLift w) $ BV.zero (mbLift w)
     [nuMP| BVLit w mb_bv |] ->
       return $ ETrans_Term $ bvBVOpenTerm (mbLift w) $ mbLift mb_bv
     [nuMP| BVConcat w1 w2 e1 e2 |] ->
