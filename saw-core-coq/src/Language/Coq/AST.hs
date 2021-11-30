@@ -29,6 +29,8 @@ data Term
     -- | A variable that needs to be printed with a leading at sign in order to
     -- make all arguments explicit
   | ExplVar Ident
+    -- | A ascription @tm : tp@ of a type to a term
+  | Ascription Term Term
   | NatLit Integer
   | ZLit Integer
   | List [Term]
