@@ -84,6 +84,7 @@ import SAWScript.Crucible.LLVM.ResolveSetupValue
 import qualified SAWScript.Crucible.LLVM.Override as LO
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as LMS (LLVM)
 
+import qualified What4.Concrete as W4
 import qualified What4.Config as W4
 import qualified What4.Expr as W4
 import qualified What4.FunctionName as W4
@@ -141,6 +142,7 @@ type X86Constraints =
   , C.LLVM.HasLLVMAnn Sym
   , ?memOpts :: C.LLVM.MemOptions
   , ?lc :: C.LLVM.TypeContext
+  , ?w4EvalTactic :: W4EvalTactic
   )
 
 newtype X86Sim a = X86Sim { unX86Sim :: StateT X86State IO a }
@@ -301,10 +303,18 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       sc <- getSharedContext
       opts <- getOptions
       basic_ss <- getBasicSS
-      sym <- liftIO $ newSAWCoreBackend sc
       rw <- getTopLevelRW
+      sym <- liftIO $ newSAWCoreBackendWithTimeout sc $ rwCrucibleTimeout rw
       cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms $ W4.getConfiguration sym
       _ <- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsingX86 rw
+      liftIO $ W4.extendConfig
+        [ W4.opt
+            LO.enableSMTArrayMemoryModel
+            (W4.ConcreteBool $ rwSMTArrayMemoryModel rw)
+            ("Enable SMT array memory model" :: Text)
+        ]
+        (W4.getConfiguration sym)
+      let ?w4EvalTactic = W4EvalTactic { doW4Eval = rwWhat4Eval rw }
       sawst <- liftIO $ sawCoreState sym
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
@@ -728,13 +738,12 @@ assumeAllocation ::
   Map MS.AllocIndex Ptr ->
   (MS.AllocIndex, LLVMAllocSpec) {- ^ llvm_alloc statement -} ->
   X86Sim (Map MS.AllocIndex Ptr)
-assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc False) = do
+assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc False initialization) = do
   cc <- use x86CrucibleContext
   sym <- use x86Sym
   mem <- use x86Mem
   sz' <- liftIO $ resolveSAWSymBV cc knownNat sz
-  (ptr, mem') <- liftIO $ C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut
-    (show $ W4.plSourceLoc loc) mem sz' align
+  (ptr, mem') <- liftIO $ LO.doAllocSymInit sym mem mut align sz' (show $ W4.plSourceLoc loc) initialization
   x86Mem .= mem'
   pure $ Map.insert i ptr env
 assumeAllocation env _ = pure env
@@ -750,15 +759,12 @@ assumePointsTo ::
   LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim ()
 assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
-  when (isJust cond) $ throwX86 "unsupported x86_64 command: llvm_conditional_points_to"
-  tval <- checkConcreteSizePointsToValue tptval
-  sym <- use x86Sym
+  opts <- use x86Options
   cc <- use x86CrucibleContext
   mem <- use x86Mem
   ptr <- resolvePtrSetupValue env tyenv tptr
-  val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
-  storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
-  mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
+  cond' <- liftIO $ mapM (resolveSAWPred cc . ttTerm) cond
+  mem' <- liftIO $ LO.storePointsToValue opts cc env tyenv nameEnv mem cond' ptr tptval Nothing
   x86Mem .= mem'
 
 resolvePtrSetupValue ::
@@ -784,11 +790,6 @@ resolvePtrSetupValue env tyenv tptr = do
         liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
     _ -> liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
          =<< resolveSetupVal cc mem env tyenv Map.empty tptr
-
-checkConcreteSizePointsToValue :: LLVMPointsToValue LLVMArch -> X86Sim (MS.SetupValue LLVM)
-checkConcreteSizePointsToValue = \case
-  ConcreteSizeValue val -> return val
-  SymbolicSizeValue{} -> throwX86 "unsupported x86_64 command: llvm_points_to_array_prefix"
 
 -- | Write each SetupValue passed to llvm_execute_func to the appropriate
 -- x86_64 register from the calling convention.
@@ -851,7 +852,6 @@ assertPost globals env premem preregs = do
   postregs <- use x86Regs
   let
     tyenv = ms ^. MS.csPreState . MS.csAllocs
-    nameEnv = MS.csTypeNames ms
 
   prersp <- getReg Macaw.RSP preregs
   expectedIP <- liftIO $ C.LLVM.doLoad sym premem prersp (C.LLVM.bitvectorType 8)
@@ -888,8 +888,9 @@ assertPost globals env premem preregs = do
         _ -> throwX86 $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)
     _ -> pure []
 
+
   pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)
-    $ assertPointsTo env tyenv nameEnv
+    $ assertPointsTo env tyenv
 
   let setupConditionMatchesPre = fmap -- assume preconditions
         (LO.executeSetupCondition opts sc cc ms)
@@ -930,24 +931,22 @@ assertPointsTo ::
   X86Constraints =>
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
-  Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim (LLVMOverrideMatcher md ())
-assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptexpected) = do
-  when (isJust cond) $ throwX86 "unsupported x86_64 command: llvm_conditional_points_to"
-  texpected <- checkConcreteSizePointsToValue tptexpected
-  sym <- use x86Sym
+assertPointsTo env tyenv pointsTo@(LLVMPointsTo loc cond tptr tptval) = do
   opts <- use x86Options
   sc <- use x86SharedContext
   cc <- use x86CrucibleContext
   ms <- use x86MethodSpec
-  mem <- use x86Mem
-  ptr <- resolvePtrSetupValue env tyenv tptr
-  memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv texpected
-  storTy <- liftIO $ C.LLVM.toStorableType memTy
 
-  actual <- liftIO $ C.LLVM.assertSafe sym =<< C.LLVM.loadRaw sym mem ptr storTy C.LLVM.noAlignment
-  pure $ LO.matchArg opts sc cc ms MS.PostState actual memTy texpected
+  ptr <- resolvePtrSetupValue env tyenv tptr
+  pure $ do
+    err <- LO.matchPointsToValue opts sc cc ms MS.PostState loc cond ptr tptval
+    case err of
+      Just msg -> do
+        doc <- LO.ppPointsToAsLLVMVal opts cc sc ms pointsTo
+        O.failure loc (O.BadPointerLoad (Right doc) msg)
+      Nothing -> pure ()
 
 -- | Gather and run the solver on goals from the simulator.
 checkGoals ::

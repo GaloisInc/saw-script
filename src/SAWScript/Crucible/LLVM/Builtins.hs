@@ -57,6 +57,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , llvm_alloc_readonly
     , llvm_alloc_readonly_aligned
     , llvm_alloc_with_size
+    , llvm_alloc_sym_init
     , llvm_symbolic_alloc
     , llvm_alloc_global
     , llvm_fresh_expanded_val
@@ -487,7 +488,7 @@ withMethodSpec ::
   LLVMModule arch ->
   String            {- ^ Name of the function -} ->
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
-  ((?lc :: Crucible.TypeContext, ?memOpts::Crucible.MemOptions, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ((?lc :: Crucible.TypeContext, ?memOpts::Crucible.MemOptions, ?w4EvalTactic :: W4EvalTactic, ?checkAllocSymInit :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
    LLVMCrucibleContext arch -> MS.CrucibleMethodSpecIR (LLVM arch) -> TopLevel a) ->
   TopLevel a
 withMethodSpec pathSat lm nm setup action =
@@ -533,6 +534,8 @@ withMethodSpec pathSat lm nm setup action =
 verifyMethodSpec ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -739,7 +742,7 @@ checkSpecReturnType cc mspec =
 -- Returns a tuple of (arguments, preconditions, pointer values,
 -- memory).
 verifyPrestate ::
-  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options ->
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
@@ -853,7 +856,7 @@ checkRegisterCompatibility mt mt' =
      return (st == st')
 
 resolveArguments ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch       ->
   Crucible.MemImpl Sym ->
   MS.CrucibleMethodSpecIR (LLVM arch)       ->
@@ -925,7 +928,7 @@ setupGlobalAllocs cc mspec mem0 = foldM go mem0 $ mspec ^. MS.csGlobalAllocs
 -- function spec, write the given value to the address of the given
 -- pointer.
 setupPrePointsTos :: forall arch.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   MS.CrucibleMethodSpecIR (LLVM arch)       ->
   Options ->
   LLVMCrucibleContext arch       ->
@@ -954,7 +957,7 @@ setupPrePointsTos mspec opts cc env pts mem0 = foldM go mem0 pts
 -- | Sets up globals (ghost variable), and collects boolean terms
 -- that should be assumed to be true.
 setupPrestateConditions ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   MS.CrucibleMethodSpecIR (LLVM arch)        ->
   LLVMCrucibleContext arch        ->
   Crucible.MemImpl Sym ->
@@ -1007,20 +1010,19 @@ assertEqualVals cc v1 v2 =
 
 -- TODO(langston): combine with/move to executeAllocation
 doAlloc ::
-  (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch       ->
   AllocIndex ->
   LLVMAllocSpec ->
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
-doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz loc fresh)
+doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz loc fresh initialization)
   | fresh = liftIO $ executeFreshPointer cc i
   | otherwise =
   StateT $ \mem ->
   do let sym = cc^.ccBackend
      sz' <- liftIO $ resolveSAWSymBV cc Crucible.PtrWidth sz
      let l = show (W4.plSourceLoc loc)
-     liftIO $
-       Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
+     liftIO $ doAllocSymInit sym mem mut alignment sz' l initialization
 
 --------------------------------------------------------------------------------
 
@@ -1045,6 +1047,8 @@ ppGlobalPair cc gp =
 registerOverride ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
   , Crucible.HasPtrWidth wptr
   , wptr ~ Crucible.ArchWidth arch
   , Crucible.HasLLVMAnn Sym
@@ -1087,6 +1091,8 @@ registerOverride opts cc sim_ctx top_loc cs =
 registerInvariantOverride ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -1168,6 +1174,8 @@ withBreakpointCfgAndBlockId context name parent k =
 verifySimulate ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
   , Crucible.HasPtrWidth wptr
   , wptr ~ Crucible.ArchWidth arch
   , Crucible.HasLLVMAnn Sym
@@ -1287,6 +1295,8 @@ scAndList sc = conj . filter nontrivial
 verifyPoststate ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
   , Crucible.HasPtrWidth wptr
   , wptr ~ Crucible.ArchWidth arch
   , Crucible.HasLLVMAnn Sym
@@ -1355,7 +1365,7 @@ verifyPoststate cc mspec env0 globals ret =
 setupLLVMCrucibleContext ::
   Bool {- ^ enable path sat checking -} ->
   LLVMModule arch ->
-  ((?lc :: Crucible.TypeContext, ?memOpts::Crucible.MemOptions, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ((?lc :: Crucible.TypeContext, ?memOpts::Crucible.MemOptions, ?w4EvalTactic :: W4EvalTactic, ?checkAllocSymInit :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
    LLVMCrucibleContext arch -> TopLevel a) ->
   TopLevel a
 setupLLVMCrucibleContext pathSat lm action =
@@ -1370,6 +1380,9 @@ setupLLVMCrucibleContext pathSat lm action =
      crucible_assert_then_assume_enabled <- gets rwCrucibleAssertThenAssume
      what4HashConsing <- gets rwWhat4HashConsing
      laxPointerOrdering <- gets rwLaxPointerOrdering
+     what4Eval <- gets rwWhat4Eval
+     allocSymInitCheck <- gets rwAllocSymInitCheck
+     crucibleTimeout <- gets rwCrucibleTimeout
      Crucible.llvmPtrWidth ctx $ \wptr ->
        Crucible.withPtrWidth wptr $
        do let ?lc = ctx^.Crucible.llvmTypeCtx
@@ -1378,10 +1391,12 @@ setupLLVMCrucibleContext pathSat lm action =
                           }
           let ?intrinsicsOpts = Crucible.defaultIntrinsicsOptions
           let ?recordLLVMAnnotation = \_ _ -> return ()
+          let ?w4EvalTactic = W4EvalTactic { doW4Eval = what4Eval }
+          let ?checkAllocSymInit = allocSymInitCheck
           cc <-
             io $
             do let verbosity = simVerbose opts
-               sym <- Common.newSAWCoreBackend sc
+               sym <- Common.newSAWCoreBackendWithTimeout sc crucibleTimeout
 
                let cfg = W4.getConfiguration sym
                verbSetting <- W4.getOptionSetting W4.verbosity cfg
@@ -1866,9 +1881,10 @@ llvm_alloc_with_mutability_and_size ::
   Crucible.Mutability    ->
   Maybe (Crucible.Bytes) ->
   Maybe Crucible.Alignment ->
+  LLVMAllocSpecInit ->
   L.Type           ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
-llvm_alloc_with_mutability_and_size mut sz alignment lty =
+llvm_alloc_with_mutability_and_size mut sz alignment initialization lty =
   LLVMCrucibleSetupM $
   do cctx <- getLLVMCrucibleContext
      loc <- getW4Position "llvm_alloc"
@@ -1913,13 +1929,14 @@ llvm_alloc_with_mutability_and_size mut sz alignment lty =
        , _allocSpecBytes = sz''
        , _allocSpecLoc = loc
        , _allocSpecFresh = False
+       , _allocSpecInit = initialization
        }
 
 llvm_alloc ::
   L.Type         ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
 llvm_alloc =
-  llvm_alloc_with_mutability_and_size Crucible.Mutable Nothing Nothing
+  llvm_alloc_with_mutability_and_size Crucible.Mutable Nothing Nothing LLVMAllocSpecNoInitialization
 
 llvm_alloc_aligned ::
   Int            ->
@@ -1932,7 +1949,7 @@ llvm_alloc_readonly ::
   L.Type         ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
 llvm_alloc_readonly =
-  llvm_alloc_with_mutability_and_size Crucible.Immutable Nothing Nothing
+  llvm_alloc_with_mutability_and_size Crucible.Immutable Nothing Nothing LLVMAllocSpecNoInitialization
 
 llvm_alloc_readonly_aligned ::
   Int            ->
@@ -1952,6 +1969,7 @@ llvm_alloc_aligned_with_mutability mut n lty =
        mut
        Nothing
        (Just alignment)
+       LLVMAllocSpecNoInitialization
        lty
 
 coerceAlignment :: Int -> CrucibleSetup (LLVM arch) Crucible.Alignment
@@ -1975,7 +1993,12 @@ llvm_alloc_with_size sz lty =
     Crucible.Mutable
     (Just (Crucible.toBytes sz))
     Nothing
+    LLVMAllocSpecNoInitialization
     lty
+
+llvm_alloc_sym_init :: L.Type -> LLVMCrucibleSetupM (AllLLVM SetupValue)
+llvm_alloc_sym_init =
+  llvm_alloc_with_mutability_and_size Crucible.Mutable Nothing Nothing LLVMAllocSpecSymbolicInitialization
 
 llvm_symbolic_alloc ::
   Bool ->
@@ -2008,6 +2031,7 @@ llvm_symbolic_alloc ro align_bytes sz =
            , _allocSpecBytes = sz
            , _allocSpecLoc = loc
            , _allocSpecFresh = False
+           , _allocSpecInit = LLVMAllocSpecNoInitialization
            }
      n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?= spec
@@ -2057,6 +2081,7 @@ constructFreshPointer mid loc memTy =
                      , _allocSpecBytes = sz
                      , _allocSpecLoc = loc
                      , _allocSpecFresh = True
+                     , _allocSpecInit = LLVMAllocSpecNoInitialization
                      }
      -- TODO: refactor
      case mid of
