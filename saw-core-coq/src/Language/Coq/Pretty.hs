@@ -133,7 +133,7 @@ ppTerm p e =
       parensIf (p > PrecLambda)
       (ppTerm PrecApp tm <+> text ":" <+> ppTerm PrecApp tp)
     NatLit i ->
-      if i > 20 then
+      if i > 1000 then
         -- Explicitly convert from Z if an integer is too big
         parensIf (p > PrecLambda) (text "Z.to_nat" <+> integer i <> text "%Z")
       else
