@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from cryptol import cryptoltypes
+from cryptol.quoting import to_cryptol_str_customf
 from .utils import deprecated
 from dataclasses import dataclass
 import dataclasses
@@ -81,8 +82,11 @@ class CryptolTerm(SetupVal):
     def to_json(self) -> Any:
         return {'setup value': 'Cryptol', 'expression': cryptoltypes.to_cryptol(self.expression)}
 
-    def __to_cryptol__(self, ty : Any) -> Any:
+    def __to_cryptol__(self, ty : Any) -> cryptoltypes.JSON:
         return self.expression.__to_cryptol__(ty)
+
+    def __to_cryptol_str__(self) -> str:
+        return self.expression.__to_cryptol_str__()
 
 class FreshVar(NamedSetupVal):
     __name : Optional[str]
@@ -92,8 +96,11 @@ class FreshVar(NamedSetupVal):
         self.spec = spec
         self.type = type
 
-    def __to_cryptol__(self, ty : Any) -> Any:
+    def __to_cryptol__(self, ty : Any) -> cryptoltypes.JSON:
         return cryptoltypes.CryptolLiteral(self.name()).__to_cryptol__(ty)
+
+    def __to_cryptol_str__(self) -> str:
+        return cryptoltypes.CryptolLiteral(self.name()).__to_cryptol_str__()
 
     def to_init_json(self) -> Any:
         #FIXME it seems we don't actually use two names ever... just the one...do we actually need both?
@@ -567,18 +574,21 @@ class Contract:
 
 # It's tempting to name this `global` to mirror SAWScript's `llvm_global`,
 # but that would clash with the Python keyword `global`.
-def global_var(name: str) -> SetupVal:
+def global_var(name: str) -> GlobalVarVal:
     """Returns a pointer to the named global ``name`` (i.e., a ``GlobalVarVal``)."""
     return GlobalVarVal(name)
 
-# FIXME Is `Any` too permissive here -- can we be a little more precise?
-def cryptol(data : Any) -> 'CryptolTerm':
-    """Constructs a Cryptol value from ``data`` (i.e., a ``CryptolTerm``, which is also a ``SetupVal``).
+def cry(s : str) -> CryptolTerm:
+    """Like ``cry`` from the Cryptol bindings, but retuns a ``CryptolTerm``
+    (which is also a ``SetupVal``)."""
+    return CryptolTerm(s)
 
-    ``data`` should be a string literal representing Cryptol syntax or the result of a Cryptol-realted server computation."""
-    return CryptolTerm(data)
+def cry_f(s : str) -> CryptolTerm:
+    """Like ``cry_f`` from the Cryptol bindings, but retuns a ``CryptolTerm``
+    (which is also a ``SetupVal``)."""
+    return CryptolTerm(to_cryptol_str_customf(s, frames=1, filename='<cryptol_f>'))
 
-def array(*elements: SetupVal) -> SetupVal:
+def array(*elements: SetupVal) -> ArrayVal:
     """Returns an array with the provided ``elements`` (i.e., an ``ArrayVal``).
 
     N.B., one or more ``elements`` must be provided.""" # FIXME why? document this here when we figure it out.
@@ -589,7 +599,7 @@ def array(*elements: SetupVal) -> SetupVal:
             raise ValueError('array expected a SetupVal, but got {e!r}')
     return ArrayVal(list(elements))
 
-def elem(base: SetupVal, index: int) -> SetupVal:
+def elem(base: SetupVal, index: int) -> ElemVal:
     """Returns the value of the array element at position ``index`` in ``base`` (i.e., an ``ElemVal``).
 
     Can also be created by using an ``int`` indexing key on a ``SetupVal``: ``base[index]``."""
@@ -599,7 +609,7 @@ def elem(base: SetupVal, index: int) -> SetupVal:
         raise ValueError('elem expected an int, but got {index!r}')
     return ElemVal(base, index)
 
-def field(base : SetupVal, field_name : str) -> SetupVal:
+def field(base : SetupVal, field_name : str) -> FieldVal:
     """Returns the value of struct ``base``'s field ``field_name`` (i.e., a ``FieldVal``).
 
     Can also be created by using a ``str`` indexing key on a ``SetupVal``: ``base[field_name]``."""
@@ -609,17 +619,17 @@ def field(base : SetupVal, field_name : str) -> SetupVal:
         raise ValueError('field expected a str, but got {field_name!r}')
     return FieldVal(base, field_name)
 
-def global_initializer(name: str) -> SetupVal:
+def global_initializer(name: str) -> GlobalInitializerVal:
     """Returns the initializer value of a named global ``name`` (i.e., a ``GlobalInitializerVal``)."""
     if not isinstance(name, str):
         raise ValueError('global_initializer expected a str naming a global value, but got {name!r}')
     return GlobalInitializerVal(name)
 
-def null() -> SetupVal:
+def null() -> NullVal:
     """Returns a null pointer value (i.e., a ``NullVal``)."""
     return NullVal()
 
-def struct(*fields : SetupVal) -> SetupVal:
+def struct(*fields : SetupVal) -> StructVal:
     """Returns an LLVM structure value with the given ``fields`` (i.e., a ``StructVal``)."""
     for field in fields:
         if not isinstance(field, SetupVal):

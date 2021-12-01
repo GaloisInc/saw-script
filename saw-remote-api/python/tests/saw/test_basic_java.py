@@ -3,7 +3,7 @@ from pathlib import Path
 
 import saw_client as saw
 
-from saw_client.jvm import Contract, java_int, cryptol
+from saw_client.jvm import Contract, java_int, cry, cry_f
 
 class Add(Contract):
     def __init__(self) -> None:
@@ -15,7 +15,7 @@ class Add(Contract):
 
         self.execute_func(x, y)
 
-        self.returns(cryptol("(+)")(x,y))
+        self.returns(cry_f("{x} + {y}"))
 
 class Double(Contract):
     def __init__(self) -> None:
@@ -26,7 +26,7 @@ class Double(Contract):
 
         self.execute_func(x)
 
-        self.returns(cryptol("(+)")(x,x))
+        self.returns(cry_f("{x} + {x}"))
 
 class AddTest(unittest.TestCase):
     def test_add(self):

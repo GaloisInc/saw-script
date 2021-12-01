@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
 from saw_client import *
-from saw_client.llvm import Contract, cryptol, null, i32
+from saw_client.llvm import Contract, cry, cry_f, null, i32
 
 
 class FContract1(Contract):
@@ -10,14 +10,14 @@ class FContract1(Contract):
 
         self.execute_func(p)
 
-        self.returns(cryptol("0 : [32]"))
+        self.returns(cry("0 : [32]"))
 
 
 class FContract2(Contract):
     def specification(self):
         self.execute_func(null())
 
-        self.returns(cryptol("1 : [32]"))
+        self.returns(cry("1 : [32]"))
 
 
 class LLVMAssertNullTest(unittest.TestCase):

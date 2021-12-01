@@ -28,7 +28,7 @@ python-versions = "*"
 
 [[package]]
 name = "charset-normalizer"
-version = "2.0.7"
+version = "2.0.8"
 description = "The Real First Universal Charset Detector. Open, modern and actively maintained alternative to Chardet."
 category = "main"
 optional = false
@@ -39,16 +39,21 @@ unicode_backport = ["unicodedata2"]
 
 [[package]]
 name = "cryptol"
-version = "2.12.0"
+version = "2.12.1"
 description = "Cryptol client for the Cryptol 2.12 RPC server"
 category = "main"
 optional = false
 python-versions = ">=3.7.0"
+develop = true
 
 [package.dependencies]
 argo-client = "0.0.9"
-BitVector = ">=3.4.9,<4.0.0"
-requests = ">=2.25.1,<3.0.0"
+BitVector = "^3.4.9"
+requests = "^2.25.1"
+
+[package.source]
+type = "directory"
+url = "../../deps/cryptol/cryptol-remote-api/python"
 
 [[package]]
 name = "idna"
@@ -132,7 +137,7 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "2e8d483be348117d70d8a2683748a807483cb4fba322c2be61dfe826bd7ef9fd"
+content-hash = "d1ec6c507e7a1f0f935f625feec468b2291974cc537e2891f1f0bbfcc70416bb"
 
 [metadata.files]
 argo-client = [
@@ -147,13 +152,10 @@ certifi = [
     {file = "certifi-2021.10.8.tar.gz", hash = "sha256:78884e7c1d4b00ce3cea67b44566851c4343c120abd683433ce934a68ea58872"},
 ]
 charset-normalizer = [
-    {file = "charset-normalizer-2.0.7.tar.gz", hash = "sha256:e019de665e2bcf9c2b64e2e5aa025fa991da8720daa3c1138cadd2fd1856aed0"},
-    {file = "charset_normalizer-2.0.7-py3-none-any.whl", hash = "sha256:f7af805c321bfa1ce6714c51f254e0d5bb5e5834039bc17db7ebe3a4cec9492b"},
+    {file = "charset-normalizer-2.0.8.tar.gz", hash = "sha256:735e240d9a8506778cd7a453d97e817e536bb1fc29f4f6961ce297b9c7a917b0"},
+    {file = "charset_normalizer-2.0.8-py3-none-any.whl", hash = "sha256:83fcdeb225499d6344c8f7f34684c2981270beacc32ede2e669e94f7fa544405"},
 ]
-cryptol = [
-    {file = "cryptol-2.12.0-py3-none-any.whl", hash = "sha256:32230c361f79bfd621c7c7872d338c8e315d55c368c38730fa792d4626321204"},
-    {file = "cryptol-2.12.0.tar.gz", hash = "sha256:bedde0bc55fff411bfd9575b5fd77890ce855a921340d2e805453c64fbae652e"},
-]
+cryptol = []
 idna = [
     {file = "idna-3.3-py3-none-any.whl", hash = "sha256:84d9dd047ffa80596e0f246e2eab0b391788b0503584e8945f2368256d2735ff"},
     {file = "idna-3.3.tar.gz", hash = "sha256:9d643ff0a55b762d5cdb124b8eaa99c66322e2157b69160bc32796e824360e6d"},

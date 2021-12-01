@@ -2,7 +2,7 @@ from pathlib import Path
 import unittest
 from saw_client import *
 from saw_client.exceptions import VerificationError
-from saw_client.llvm import Contract, LLVMType, PointerType, cryptol, void, i32, array_ty
+from saw_client.llvm import Contract, LLVMType, PointerType, cry, cry_f, void, i32, array_ty
 from typing import Union
 
 
@@ -18,7 +18,7 @@ class FPointsToContract(Contract):
 
         self.execute_func(p)
 
-        self.points_to(p, cryptol("{x} # {x}".format(x=x.name())))
+        self.points_to(p, cry_f("{x} # {x}"))
         self.returns(void)
 
 
