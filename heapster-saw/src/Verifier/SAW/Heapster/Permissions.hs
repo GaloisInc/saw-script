@@ -29,7 +29,9 @@ module Verifier.SAW.Heapster.Permissions where
 
 import Prelude hiding (pred)
 
-import Data.Char (isDigit)
+import Numeric (showHex)
+import Data.Char
+import qualified Data.Text as Text
 import Data.Word
 import Data.Maybe
 import Data.Either
@@ -80,7 +82,9 @@ import Lang.Crucible.LLVM.DataLayout
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.CFG.Core
-import Verifier.SAW.Term.Functor (Ident)
+import Verifier.SAW.Term.Functor (ModuleName)
+import Verifier.SAW.Module
+import Verifier.SAW.SharedTerm hiding (Constant)
 import Verifier.SAW.OpenTerm
 
 import Verifier.SAW.Heapster.CruUtil
@@ -192,6 +196,34 @@ nameSetFromFlags ns flags =
 -- recursively-defined name on one side of the equation already
 data RecurseFlag = RecLeft | RecRight | RecNone
   deriving (Eq, Show, Read)
+
+-- | Make a "coq-safe" identifier from a string that might contain
+-- non-identifier characters, where we use the SAW core notion of identifier
+-- characters as letters, digits, underscore and primes. Any disallowed
+-- character is mapped to the string @__xNN@, where @NN@ is the hexadecimal code
+-- for that character. Additionally, a SAW core identifier is not allowed to
+-- start with a prime, so a leading underscore is added in such a case.
+mkSafeIdent :: ModuleName -> String -> Ident
+mkSafeIdent _ [] = fromString "_"
+mkSafeIdent mnm nm =
+  let is_safe_char c = isAlphaNum c || c == '_' || c == '\'' in
+  mkIdent mnm $ Text.pack $
+  (if nm!!0 == '\'' then ('_' :) else id) $
+  concatMap
+  (\c -> if is_safe_char c then [c] else
+           "__x" ++ showHex (ord c) "")
+  nm
+
+-- | Insert a definition into a SAW core module
+scInsertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
+scInsertDef sc mnm ident def_tp def_tm =
+  do t <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
+     scRegisterGlobal sc ident t
+     scModifyModule sc mnm $ \m ->
+       insDef m $ Def { defIdent = ident,
+                        defQualifier = NoQualifier,
+                        defType = def_tp,
+                        defBody = Just def_tm }
 
 
 ----------------------------------------------------------------------
@@ -3958,7 +3990,7 @@ splitLLVMBlockPerm off bp
 splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_EmptyShape) =
   Just (bp { llvmBlockLen = bvSub off (llvmBlockOffset bp) },
         bp { llvmBlockOffset = off,
-             llvmBlockLen = bvSub (llvmBlockLen bp) off })
+             llvmBlockLen = bvSub (llvmBlockEndOffset bp) off })
 splitLLVMBlockPerm off bp@(LLVMBlockPerm { llvmBlockShape = sh })
   | Just sh_len <- llvmShapeLength sh
   , bvLt sh_len (bvSub off (llvmBlockOffset bp)) =
@@ -4562,21 +4594,6 @@ llvmAtomicPermOverlapsRange rng (Perm_LLVMField fp) =
 llvmAtomicPermOverlapsRange rng (Perm_LLVMBlock bp) =
   bvRangesOverlap rng (llvmBlockRange bp)
 llvmAtomicPermOverlapsRange _ _ = False
-
--- | Search through a list of permissions for either some permission that
--- definitely contains (as in 'bvPropHolds') the given offset or, failing that,
--- and if the supplied 'Bool' flag is 'True', for all permissions that could (as
--- in 'bvPropCouldHold') contain the given offset. Return the indices in the
--- list for the permissions that were found.
-llvmPermIndicesForOffset :: (1 <= w, KnownNat w) =>
-                            [AtomicPerm (LLVMPointerType w)] -> Bool ->
-                            PermExpr (BVType w) -> [Int]
-llvmPermIndicesForOffset ps imprecise_p off =
-  let ixs_props = findMaybeIndices (llvmPermContainsOffset off) ps in
-  case find (\(_,(_,holds)) -> holds) ixs_props of
-    Just (i,_) -> [i]
-    Nothing | imprecise_p -> map fst ixs_props
-    Nothing -> []
 
 -- | Return the total length of an LLVM array permission in bytes
 llvmArrayLengthBytes :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->

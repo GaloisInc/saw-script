@@ -273,7 +273,8 @@ parseAndInsDef henv nm term_tp term_string =
 mkHeapsterEnv :: DebugLevel -> ModuleName -> [Some LLVMModule] ->
                  TopLevel HeapsterEnv
 mkHeapsterEnv dlevel saw_mod_name llvm_mods@(Some first_mod:_) =
-  do let w = llvmModuleArchReprWidth first_mod
+  do sc <- getSharedContext
+     let w = llvmModuleArchReprWidth first_mod
      let endianness =
            llvmDataLayout (modTrans first_mod ^. transContext ^. llvmTypeCtx)
            ^. intLayout
@@ -281,10 +282,10 @@ mkHeapsterEnv dlevel saw_mod_name llvm_mods@(Some first_mod:_) =
        Left pf -> return pf
        Right _ -> fail "LLVM arch width is 0!"
      let globals = concatMap (\(Some lm) -> L.modGlobals $ modAST lm) llvm_mods
-         env =
-           withKnownNat w $ withLeqProof leq_proof $
-           foldl (permEnvAddGlobalConst dlevel endianness w)
-           heapster_default_env globals
+     env <-
+       liftIO $ withKnownNat w $ withLeqProof leq_proof $
+       foldM (permEnvAddGlobalConst sc saw_mod_name dlevel endianness w)
+       heapster_default_env globals
      env_ref <- liftIO $ newIORef env
      dlevel_ref <- liftIO $ newIORef dlevel
      checks_ref <- liftIO $ newIORef doChecks

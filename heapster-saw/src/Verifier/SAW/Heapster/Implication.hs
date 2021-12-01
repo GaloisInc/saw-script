@@ -4757,6 +4757,25 @@ implElimAppendIthLLVMBlock _ _ _ =
   error "implElimAppendIthLLVMBlock: malformed inputs"
 
 
+-- | Return the indices in a list of permissions for all of those that could be
+-- used to prove a permission containing the specified offset. Field and block
+-- permissions can only be used if they definitely (in the sense of
+-- 'bvPropHolds') contain the offset, while the 'Bool' flag indicates whether
+-- array permissions are allowed to only possibly contain (in the sense of
+-- 'bvPropCouldHold') the offset.
+permIndicesForProvingOffset :: (1 <= w, KnownNat w) =>
+                            [AtomicPerm (LLVMPointerType w)] -> Bool ->
+                            PermExpr (BVType w) -> [Int]
+permIndicesForProvingOffset ps imprecise_p off =
+  let ixs_holdss = flip findMaybeIndices ps $ \p ->
+        case llvmPermContainsOffset off p of
+          Just (_, True) -> Just True
+          Just _ | isLLVMArrayPerm p && imprecise_p -> Just False
+          _ -> Nothing in
+  case find (\(_,holds) -> holds) ixs_holdss of
+    Just (i,_) -> [i]
+    Nothing -> map fst ixs_holdss
+
 -- | Assume @x:p@ is on top of the stack, where @p@ is a @memblock@ permission
 -- that contains the supplied offset @off@, and repeatedly eliminate this
 -- @memblock@ permission until @p@ has been converted to a non-@memblock@
@@ -4818,7 +4837,7 @@ implGetLLVMPermForOffset ::
   (AtomicPerm (LLVMPointerType w))
 
 implGetLLVMPermForOffset x ps imprecise_p elim_blocks_p off mb_p =
-  case llvmPermIndicesForOffset ps imprecise_p off of
+  case permIndicesForProvingOffset ps imprecise_p off of
     -- If we didn't find any matches, try to unfold on the left
     [] ->
       implUnfoldOrFail x ps mb_p >>>= \_ ->
