@@ -30,8 +30,6 @@ module Verifier.SAW.Heapster.SAWTranslation where
 
 import Prelude hiding (pi)
 
-import Numeric (showHex)
-import Data.Char
 import Data.Maybe
 import Numeric.Natural
 import Data.List hiding (inits)
@@ -69,7 +67,6 @@ import Lang.Crucible.CFG.Core
 
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Term.Functor
-import Verifier.SAW.Module
 import Verifier.SAW.SharedTerm
 
 import Verifier.SAW.Heapster.CruUtil
@@ -78,17 +75,6 @@ import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.TypedCrucible
 
 import GHC.Stack
-
-
-scInsertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
-scInsertDef sc mnm ident def_tp def_tm =
-  do t <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
-     scRegisterGlobal sc ident t
-     scModifyModule sc mnm $ \m ->
-       insDef m $ Def { defIdent = ident,
-                        defQualifier = NoQualifier,
-                        defType = def_tp,
-                        defBody = Just def_tm }
 
 
 ----------------------------------------------------------------------
@@ -332,6 +318,15 @@ inExtMultiTransM MNil m = m
 inExtMultiTransM (ctx :>: etrans) m =
   inExtMultiTransM ctx $ inExtTransM etrans m
 
+-- | Run a translation computation in an extended context, where we let-bind any
+-- term in the supplied expression translation
+inExtTransLetBindM :: TransInfo info => TypeTrans (ExprTrans tp) ->
+                      ExprTrans tp -> TransM info (ctx :> tp) OpenTerm ->
+                      TransM info ctx OpenTerm
+inExtTransLetBindM tp_trans etrans m =
+  letTransMultiM "z" (typeTransTypes tp_trans) (transTerms etrans) $ \var_tms ->
+  inExtTransM (typeTransF tp_trans var_tms) m
+
 -- | Run a translation computation in context @(ctx1 :++: ctx2) :++: ctx2@ by
 -- copying the @ctx2@ portion of the current context
 inExtMultiTransCopyLastM :: TransInfo info => prx ctx1 -> RAssign any ctx2 ->
@@ -428,6 +423,18 @@ letTransM x tp rhs_m body_m =
   do r <- ask
      return $
        letOpenTerm (pack x) tp (runTransM rhs_m r) (\x' -> runTransM (body_m x') r)
+
+-- | Build 0 or more let-bindings in a translation monad, using the same
+-- variable name
+letTransMultiM :: String -> [OpenTerm] -> [OpenTerm] ->
+                  ([OpenTerm] -> TransM info ctx OpenTerm) ->
+                  TransM info ctx OpenTerm
+letTransMultiM _ [] [] f = f []
+letTransMultiM x (tp:tps) (rhs:rhss) f =
+  letTransM x tp (return rhs) $ \var_tm ->
+  letTransMultiM x tps rhss (\var_tms -> f (var_tm:var_tms))
+letTransMultiM _ _ _ _ =
+  error "letTransMultiM: numbers of types and right-hand sides disagree"
 
 -- | Build a bitvector type in a translation monad
 bitvectorTransM :: TransM info ctx OpenTerm -> TransM info ctx OpenTerm
@@ -3606,6 +3613,13 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
          , applyMultiTransM (return $ globalOpenTerm "Prelude.bvEqWithProof")
            [ return (natOpenTerm $ natVal2 prop) , translate1 e1, translate1 e2]]
 
+  -- If e1 and e2 are already unequal, short-circuit and do nothing
+  ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_Neq e1 e2) _ |], _)
+    | not $ mbLift (mbMap2 bvCouldEqual e1 e2) ->
+      translatePermImplUnary mb_impls $
+        withPermStackM (:>: translateVar x)
+          (:>: PTrans_Conj [APTrans_BVProp (BVPropTrans prop unitOpenTerm)])
+
   -- For an inequality test, we don't need a proof, so just insert an if
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_Neq e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
@@ -3864,6 +3878,10 @@ instance (PermCheckExtC ext, TransInfo info) =>
     [nuMP| HandleLit _ |] -> return ETrans_Fun
 
     -- Bitvectors
+    [nuMP| BVUndef w |] ->
+      -- FIXME: we should really handle poison values; this translation just
+      -- treats them as if there were the bitvector 0 value
+      return $ ETrans_Term $ bvBVOpenTerm (mbLift w) $ BV.zero (mbLift w)
     [nuMP| BVLit w mb_bv |] ->
       return $ ETrans_Term $ bvBVOpenTerm (mbLift w) $ mbLift mb_bv
     [nuMP| BVConcat w1 w2 e1 e2 |] ->
@@ -4140,10 +4158,11 @@ translateStmt :: PermCheckExtC ext =>
                  ImpTransM ext blocks tops ret ps_out (ctx :++: rets) OpenTerm ->
                  ImpTransM ext blocks tops ret ps_in ctx OpenTerm
 translateStmt loc mb_stmt m = case mbMatch mb_stmt of
-  [nuMP| TypedSetReg _ e |] ->
-    do etrans <- tpTransM $ translate e
+  [nuMP| TypedSetReg tp e |] ->
+    do tp_trans <- translate tp
+       etrans <- tpTransM $ translate e
        let ptrans = exprOutPerm e
-       inExtTransM etrans $
+       inExtTransLetBindM tp_trans etrans $
          withPermStackM (:>: Member_Base) (:>: extPermTrans ptrans) m
 
   [nuMP| TypedSetRegPermExpr _ e |] ->
@@ -4683,24 +4702,6 @@ tcTranslateCFGTupleFun env checks endianness dlevel cfgs_and_perms =
       tcCFG ?ptrWidth env' endianness dlevel fun_perm cfg
 
 
--- | Make a "coq-safe" identifier from a string that might contain
--- non-identifier characters, where we use the SAW core notion of identifier
--- characters as letters, digits, underscore and primes. Any disallowed
--- character is mapped to the string @__xNN@, where @NN@ is the hexadecimal code
--- for that character. Additionally, a SAW core identifier is not allowed to
--- start with a prime, so a leading underscore is added in such a case.
-mkSafeIdent :: ModuleName -> String -> Ident
-mkSafeIdent _ [] = "_"
-mkSafeIdent mnm nm =
-  let is_safe_char c = isAlphaNum c || c == '_' || c == '\'' in
-  mkIdent mnm $ Data.Text.pack $
-  (if nm!!0 == '\'' then ('_' :) else id) $
-  concatMap
-  (\c -> if is_safe_char c then [c] else
-           "__x" ++ showHex (ord c) "")
-  nm
-
-
 -- | Type-check a set of CFGs against their function permissions, translate the
 -- results to SAW core functions, and add them as definitions to the SAW core
 -- module with the given module name. The name of each definition will be the
@@ -4717,18 +4718,18 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
      let tup_fun_ident =
            mkSafeIdent mod_name (someCFGAndPermToName (head cfgs_and_perms)
                                  ++ "__tuple_fun")
-     tup_fun_tp <- completeOpenTerm sc $
+     tup_fun_tp <- completeNormOpenTerm sc $
        applyOpenTerm (globalOpenTerm "Prelude.lrtTupleType") lrts
-     tup_fun_tm <- completeOpenTerm sc $
+     tup_fun_tm <- completeNormOpenTerm sc $
        applyOpenTermMulti (globalOpenTerm "Prelude.multiFixM") [lrts, tup_fun]
      scInsertDef sc mod_name tup_fun_ident tup_fun_tp tup_fun_tm 
      new_entries <-
        zipWithM
        (\cfg_and_perm i ->
-         do tp <- completeOpenTerm sc $
+         do tp <- completeNormOpenTerm sc $
               applyOpenTerm (globalOpenTerm "Prelude.lrtToType") $
               someCFGAndPermLRT env cfg_and_perm
-            tm <- completeOpenTerm sc $
+            tm <- completeNormOpenTerm sc $
               projTupleOpenTerm i (globalOpenTerm tup_fun_ident)
             let ident = mkSafeIdent mod_name (someCFGAndPermToName cfg_and_perm)
             scInsertDef sc mod_name ident tp tm
@@ -4748,13 +4749,13 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
 translateCompleteFunPerm :: SharedContext -> PermEnv ->
                             FunPerm ghosts args ret -> IO Term
 translateCompleteFunPerm sc env fun_perm =
-  completeOpenTerm sc $
+  completeNormOpenTerm sc $
   runNilTypeTransM env noChecks (translate $ emptyMb fun_perm)
 
 -- | Translate a 'TypeRepr' to the SAW core type it represents
 translateCompleteType :: SharedContext -> PermEnv -> TypeRepr tp -> IO Term
 translateCompleteType sc env typ_perm =
-  completeOpenTerm sc $ typeTransType1 $
+  completeNormOpenTerm sc $ typeTransType1 $
   runNilTypeTransM env noChecks $ translate $ emptyMb typ_perm
 
 -- | Translate a 'TypeRepr' within the given context of type arguments to the
@@ -4762,7 +4763,7 @@ translateCompleteType sc env typ_perm =
 translateCompleteTypeInCtx :: SharedContext -> PermEnv ->
                               CruCtx args -> Mb args (TypeRepr a) -> IO Term
 translateCompleteTypeInCtx sc env args ret =
-  completeOpenTerm sc $
+  completeNormOpenTerm sc $
   runNilTypeTransM env noChecks (piExprCtx args (typeTransType1 <$>
                                                  translate ret'))
   where ret' = mbCombine (cruCtxProxies args) . emptyMb $ ret
@@ -4776,7 +4777,7 @@ translateCompletePureFun :: SharedContext -> PermEnv
                          -> Mb ctx (ValuePerm ret) -- ^ Return type perm
                          -> IO Term
 translateCompletePureFun sc env ctx args ret =
-  completeOpenTerm sc $ runNilTypeTransM env noChecks $
+  completeNormOpenTerm sc $ runNilTypeTransM env noChecks $
   piExprCtx ctx $ piPermCtx args' $ const $
   typeTransTupleType <$> translate ret'
   where args' = mbCombine pxys . emptyMb $ args

@@ -18,7 +18,7 @@ built.
 
 module Verifier.SAW.OpenTerm (
   -- * Open terms and converting to closed terms
-  OpenTerm(..), completeOpenTerm, completeOpenTermType,
+  OpenTerm(..), completeOpenTerm, completeNormOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
   closedOpenTerm, flatOpenTerm, sortOpenTerm, natOpenTerm,
   unitOpenTerm, unitTypeOpenTerm,
@@ -58,6 +58,10 @@ completeOpenTerm :: SharedContext -> OpenTerm -> IO Term
 completeOpenTerm sc (OpenTerm termM) =
   either (fail . show) return =<<
   runTCM (typedVal <$> termM) sc Nothing []
+
+-- | "Complete" an 'OpenTerm' to a closed term and 'betaNormalize' the result
+completeNormOpenTerm :: SharedContext -> OpenTerm -> IO Term
+completeNormOpenTerm sc m = completeOpenTerm sc m >>= betaNormalize sc
 
 -- | "Complete" an 'OpenTerm' to a closed term for its type
 completeOpenTermType :: SharedContext -> OpenTerm -> IO Term

@@ -2805,6 +2805,21 @@ tcExpr (BVZext w2 _ (RegWithVal _ (bvMatchConst -> Just bv))) =
 tcExpr (BVSext w2 w (RegWithVal _ (bvMatchConst -> Just bv))) =
   withKnownNat w2 $ pure $ Just $ bvBV $ BV.sext w w2 bv
 
+tcExpr (BVNot w (RegWithVal _ (bvMatchConst -> Just bv))) =
+  withKnownNat w $ pure $ Just $ bvBV $ BV.complement w bv
+tcExpr (BVAnd w (RegWithVal _ (bvMatchConst ->
+                               Just bv1)) (RegWithVal _
+                                           (bvMatchConst -> Just bv2))) =
+  withKnownNat w $ pure $ Just $ bvBV $ BV.and bv1 bv2
+tcExpr (BVOr w (RegWithVal _ (bvMatchConst ->
+                               Just bv1)) (RegWithVal _
+                                           (bvMatchConst -> Just bv2))) =
+  withKnownNat w $ pure $ Just $ bvBV $ BV.or bv1 bv2
+tcExpr (BVXor w (RegWithVal _ (bvMatchConst ->
+                               Just bv1)) (RegWithVal _
+                                           (bvMatchConst -> Just bv2))) =
+  withKnownNat w $ pure $ Just $ bvBV $ BV.xor bv1 bv2
+
 tcExpr (BVAdd w (RegWithVal _ e1) (RegWithVal _ e2)) =
   withKnownNat w $ pure $ Just $ bvAdd e1 e2
 
@@ -3876,7 +3891,7 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
       -- reflexivity.
       implWithoutTracingM (implPushOrReflMultiM perms_in) >>>
       pure (PermImpl_Done $
-               TypedJumpTarget siteID Proxy (mkCruCtx args_tps) perms_in)
+            TypedJumpTarget siteID Proxy (mkCruCtx args_tps) perms_in)
 
 
 -- | Type-check a termination statement
@@ -4012,7 +4027,8 @@ proveCallSiteImpl srcID destID args ghosts vars mb_perms_in mb_perms_out =
         mbSeparate (cruCtxProxies ghosts) $
         mbValuePermsToDistPerms mb_perms_out in
   stmtTraceM (\i ->
-               pretty "proveCallSiteImpl:" <> line <>
+               pretty ("proveCallSiteImpl, src = " ++ show srcID ++
+                       ", dest = " ++ show destID) <> line <>
                indent 2 (permPretty i perms_in) <> line <>
                pretty "-o" <> line <>
                indent 2 (permPretty i perms_out)) >>>
