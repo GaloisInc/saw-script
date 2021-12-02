@@ -70,6 +70,7 @@ module Verifier.SAW.SharedTerm
   , scExtCns
   , scGlobalDef
   , scRegisterGlobal
+  , scFreshenGlobalIdent
     -- ** Recursors and datatypes
   , scRecursorElimTypes
   , scRecursorRetTypeType
@@ -269,7 +270,7 @@ import Control.Lens
 import Control.Monad.State.Strict as State
 import Control.Monad.Reader
 import Data.Bits
-import Data.List (inits)
+import Data.List (inits, find)
 import Data.Maybe
 import qualified Data.Foldable as Fold
 import Data.Foldable (foldl', foldlM, foldrM, maximum)
@@ -440,6 +441,16 @@ scRegisterGlobal sc ident t =
       case HMap.lookup ident m of
         Just _ -> (m, True)
         Nothing -> (HMap.insert ident t m, False)
+
+-- | Find a variant of an identifier that is not already being used as a global,
+-- by possibly adding a numeric suffix
+scFreshenGlobalIdent :: SharedContext -> Ident -> IO Ident
+scFreshenGlobalIdent sc ident =
+  readIORef (scGlobalEnv sc) >>= \gmap ->
+  return $ fromJust $ find (\i -> not $ HMap.member i gmap) $
+  ident : map (mkIdent (identModule ident) .
+               Text.append (identBaseName ident) .
+               Text.pack . show) [(0::Integer) ..]
 
 -- | Create a function application term.
 scApply :: SharedContext
