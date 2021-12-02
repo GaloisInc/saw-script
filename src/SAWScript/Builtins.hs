@@ -808,6 +808,9 @@ w4_unint_boolector = wrapW4Prover Prover.proveWhat4_boolector
 w4_unint_z3 :: [String] -> ProofScript ()
 w4_unint_z3 = wrapW4Prover Prover.proveWhat4_z3
 
+w4_unint_z3_using :: String -> [String] -> ProofScript ()
+w4_unint_z3_using tactic = wrapW4Prover (Prover.proveWhat4_z3_using tactic)
+
 w4_unint_cvc4 :: [String] -> ProofScript ()
 w4_unint_cvc4 = wrapW4Prover Prover.proveWhat4_cvc4
 

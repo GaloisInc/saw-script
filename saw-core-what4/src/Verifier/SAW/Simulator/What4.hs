@@ -1431,7 +1431,7 @@ reconstructArgTerm atrm sc ts =
              pure (x, ts1)
         ArgTermVector ty ats ->
           do (xs, ts1) <- parseList ats ts0
-             x <- scVector sc ty xs
+             x <- scVectorReduced sc ty xs
              return (x, ts1)
         ArgTermUnit ->
           do x <- scUnitValue sc
