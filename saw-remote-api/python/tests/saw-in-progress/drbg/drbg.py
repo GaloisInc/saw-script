@@ -88,7 +88,6 @@ def drbg_state(spec, n):
     spec.points_to(llvm.field(state, "v"), v)
     return (state, keyp, cry_f("{{ bytes_used = {bytes_used}, ctx = {{ key = join {key} }}, v = join {v} }}"))
 
-
 class blob_zero_spec(Contract):
     def __init__(self,n):
         super().__init__()
@@ -97,7 +96,7 @@ class blob_zero_spec(Contract):
     def specification(self):
         (p, datap) = alloc_blob(self, self.n)
         self.execute_func(p)
-        self.points_to(datap, llvm.cry("zero:[{n}][8]".format(n=self.n)))
+        self.points_to(datap, llvm.cry_f("zero:[{self.n}][8]"))
         self.returns(llvm.cry("0:[32]"))
 
 class increment_drbg_counter_spec(Contract):
@@ -106,7 +105,7 @@ class increment_drbg_counter_spec(Contract):
         v = self.fresh_var(bytes_type(blocksize), "v")
         self.points_to(datap, v)
         self.execute_func(p)
-        self.points_to(datap, llvm.cry("split ((join {v}) +1): [{blocksize}][8]".format(v=v.name(),blocksize=blocksize)))
+        self.points_to(datap, llvm.cry_f("split ((join {v}) +1): [{blocksize}][8]"))
         self.returns(llvm.cry("0:[32]"))
 
 class bytes_used_spec(Contract):
@@ -123,7 +122,7 @@ class block_encrypt_spec(Contract):
         (msg, msgp) = ptr_to_fresh_readonly(self, "msg", bytes_type(blocksize))
         outp = alloc_bytes(self, blocksize)
         self.execute_func(keyp, msgp, outp)
-        self.points_to(outp, llvm.cry("encrypt_128 {key} {msg}".format(key=key.name(), msg=msg.name())))
+        self.points_to(outp, llvm.cry_f("encrypt_128 {key} {msg}"))
         self.returns(llvm.cry("0 : [32]"))
 
 class encryptUpdate_spec(Contract):
@@ -135,11 +134,11 @@ class encryptUpdate_spec(Contract):
         # but it is constant in the DRBG cryptol specification.
         (key, keyp) = ptr_to_fresh_readonly(self, "key", ctx_type)
         outp = alloc_bytes(self, self.n)
-        lenp = alloc_init(self, llvm_types.i32, llvm.cry("{} : [32]".format(self.n)))
+        lenp = alloc_init(self, llvm_types.i32, llvm.cry_f("{self.n} : [32]"))
         (msg, msgp) = ptr_to_fresh_readonly(self, "msg", (bytes_type(self.n)))
-        self.execute_func(keyp, outp, lenp, msgp, llvm.cry("`{blocksize} : [32]".format(blocksize=blocksize)))
-        self.points_to(outp, llvm.cry("encrypt_128 {} {}".format(key.name(), msg.name())))
-        self.points_to(lenp, llvm.cry("{} : [32]".format(self.n)))
+        self.execute_func(keyp, outp, lenp, msgp, llvm.cry_f("`{blocksize} : [32]"))
+        self.points_to(outp, llvm.cry_f("encrypt_128 {key} {msg}"))
+        self.points_to(lenp, llvm.cry_f("{self.n} : [32]"))
         self.returns (llvm.cry("1 : [32]"))
 
 class bits_spec(Contract):
@@ -152,16 +151,16 @@ class bits_spec(Contract):
         self.execute_func(sp, outp)
         res = cry_f("drbg_generate_internal `{{n={self.n}*8}} {s}")
         # Remove some of the parens here to get really bad error messages
-        c = llvm.cry("split (({res}).0) : [{n}][8]".format(res=res, n=self.n))
+        c = llvm.cry("split (({res}).0) : [{self.n}][8]")
         self.points_to(datap, c)
         ensure_drbg_state(self, sp, keyp, cry_f("{res}.1"))
         self.returns (llvm.cry(" 0 : [32] "))
 
 def ensure_drbg_state(spec, p, keyp, s):
-    spec.points_to(llvm.field(p, "bytes_used"), llvm.cry("({s}).bytes_used".format(s=s)))
+    spec.points_to(llvm.field(p, "bytes_used"), llvm.cry_f("{s}.bytes_used"))
     spec.points_to(llvm.field(p, "ctx"), keyp)
-    spec.points_to(keyp, llvm.cry("split (({s}).ctx.key) : [{keysize}][8]".format(s=s,keysize=keysize)))
-    spec.points_to(llvm.field(p, "v"), llvm.cry("split (({s}).v) : [{blocksize}][8]".format(s=s,blocksize=blocksize)))
+    spec.points_to(keyp, llvm.cry_f("split ({s}.ctx.key) : [{keysize}][8]"))
+    spec.points_to(llvm.field(p, "v"), llvm.cry_f("split ({s}.v) : [{blocksize}][8]"))
     mixes = spec.fresh_var(llvm_types.i64, "mixes")
     spec.points_to(llvm.field(p, "mixes"), mixes)
 
@@ -204,7 +203,7 @@ class cipher_cleanup_spec(Contract):
     def specification(self):
         ctx = self.alloc(ctx_type)
         self.execute_func(ctx)
-        self.points_to(ctx, llvm.cry("zero : [{keysize}][8]".format(keysize=keysize)))
+        self.points_to(ctx, llvm.cry_f("zero : [{keysize}][8]"))
         self.returns(llvm.cry("1:[32]"))
 
 class cipher_key_length_spec(Contract):
@@ -235,7 +234,7 @@ class get_public_random_spec(Contract):
         (p, datap) = alloc_blob(self, seedsize)
         self.execute_func(p)
         # TODO: blocked on 'fake_entropy'
-        #self.points_to(datap, llvm.cry("split fake_entropy : [{seedsize}][8]".format(seedsize=seedsize)))
+        #self.points_to(datap, llvm.cry_f("split fake_entropy : [{seedsize}][8]"))
         self.returns(llvm.cry("0: [32]"))
 
 class supports_rdrand_spec(Contract):

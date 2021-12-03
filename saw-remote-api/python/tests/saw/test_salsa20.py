@@ -56,10 +56,10 @@ class QuarterRoundContract(Contract):
         self.execute_func(y0_p, y1_p, y2_p, y3_p)
 
         res = cry_f("quarterround {[y0, y1, y2, y3]}")
-        self.points_to(y0_p, cry_f("{res} @ 0"))
-        self.points_to(y1_p, cry_f("{res} @ 1"))
-        self.points_to(y2_p, cry_f("{res} @ 2"))
-        self.points_to(y3_p, cry_f("{res} @ 3"))
+        self.points_to(y0_p, cry_f("{res}@0"))
+        self.points_to(y1_p, cry_f("{res}@1"))
+        self.points_to(y2_p, cry_f("{res}@2"))
+        self.points_to(y3_p, cry_f("{res}@3"))
         self.returns(void)
 
 
@@ -102,7 +102,7 @@ class ExpandContract(Contract):
         self.execute_func(k_p, n_p, ks_p)
 
         self.returns(void)
-        self.points_to(ks_p, cry_f("Salsa20_expansion`{{a=2}} {(k, n)}"))
+        self.points_to(ks_p, cry_f("Salsa20_expansion `{{a=2}} {(k, n)}"))
 
 
 
