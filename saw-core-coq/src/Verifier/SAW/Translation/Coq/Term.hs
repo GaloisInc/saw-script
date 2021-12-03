@@ -46,7 +46,7 @@ import           Prettyprinter
 import           Data.Parameterized.Pair
 import           Data.Parameterized.NatRepr
 import qualified Data.BitVector.Sized                          as BV
-import qualified Data.Vector                                   as Vector (reverse, toList)
+import qualified Data.Vector                                   as Vector (toList)
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
 import           Verifier.SAW.Recognizer
@@ -290,13 +290,8 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
           return (Coq.App (Coq.Var "intToBv")
                   [Coq.NatLit (intValue w), Coq.ZLit (BV.asSigned w bv)])
     ArrayValue _ vec -> do
-      let addElement accum element = do
-            elementTerm <- translateTerm element
-            return (Coq.App (Coq.Var "Vector.cons")
-                    [Coq.Var "_", elementTerm, Coq.Var "_", accum]
-                   )
-        in
-        foldM addElement (Coq.App (Coq.Var "Vector.nil") [Coq.Var "_"]) (Vector.reverse vec)
+      elems <- Vector.toList <$> mapM translateTerm vec
+      return (Coq.App (Coq.Var "Vector.of_list") [Coq.List elems])
     StringLit s -> pure (Coq.Scope (Coq.StringLit (Text.unpack s)) "string")
 
     ExtCns ec ->

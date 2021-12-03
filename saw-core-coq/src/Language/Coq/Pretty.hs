@@ -133,7 +133,11 @@ ppTerm p e =
       parensIf (p > PrecLambda)
       (ppTerm PrecApp tm <+> text ":" <+> ppTerm PrecApp tp)
     NatLit i ->
-      integer i
+      if i > 1000 then
+        -- Explicitly convert from Z if an integer is too big
+        parensIf (p > PrecLambda) (text "Z.to_nat" <+> integer i <> text "%Z")
+      else
+        integer i
     ZLit i ->
       -- we use hex unless our integer is a positive or negitive digit
       if abs i > 9  then let ui = toInteger (fromInteger i :: Word64)
