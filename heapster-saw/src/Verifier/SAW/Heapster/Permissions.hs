@@ -716,6 +716,10 @@ exprType _ = knownRepr
 bindingType :: KnownRepr TypeRepr a => Binding a b -> TypeRepr a
 bindingType _ = knownRepr
 
+-- | Convenience function to get the known types of a context of bound names
+bindingsTypes :: KnownRepr CruCtx ctx => Mb ctx a -> CruCtx ctx
+bindingsTypes _ = knownRepr
+
 -- | Convenience function to get the bit width of an LLVM pointer type
 exprLLVMTypeWidth :: KnownNat w => f (LLVMPointerType w) -> NatRepr w
 exprLLVMTypeWidth _ = knownNat
@@ -1631,8 +1635,8 @@ data AtomicPerm (a :: CrucibleType) where
   -- before the lifetime is ended, and @Pout@ is returned afterwards.
   -- Additionally, a lifetime may contain some other lifetimes, meaning the all
   -- must end before the current one can be ended.
-  Perm_LOwned :: [PermExpr LifetimeType] ->
-                 LOwnedPerms ps_in -> LOwnedPerms ps_out ->
+  Perm_LOwned :: KnownRepr CruCtx ctx => [PermExpr LifetimeType] ->
+                 Mb ctx (LOwnedPerms ps_in, LOwnedPerms ps_out) ->
                  AtomicPerm LifetimeType
 
   -- | Assertion that a lifetime is current during another lifetime
@@ -1774,12 +1778,13 @@ pattern ValPerm_LLVMBlockShape sh <- ValPerm_Conj [Perm_LLVMBlockShape sh]
     ValPerm_LLVMBlockShape sh = ValPerm_Conj [Perm_LLVMBlockShape sh]
 
 -- | A single @lowned@ permission
-pattern ValPerm_LOwned :: () => (a ~ LifetimeType) => [PermExpr LifetimeType] ->
-                          LOwnedPerms ps_in -> LOwnedPerms ps_out -> ValuePerm a
-pattern ValPerm_LOwned ls ps_in ps_out <- ValPerm_Conj [Perm_LOwned
-                                                        ls ps_in ps_out]
+pattern ValPerm_LOwned :: () => (a ~ LifetimeType, KnownRepr CruCtx ctx) =>
+                          [PermExpr LifetimeType] ->
+                          Mb ctx (LOwnedPerms ps_in, LOwnedPerms ps_out) ->
+                          ValuePerm a
+pattern ValPerm_LOwned ls ps_in_out <- ValPerm_Conj [Perm_LOwned ls ps_in_out]
   where
-    ValPerm_LOwned ls ps_in ps_out = ValPerm_Conj [Perm_LOwned ls ps_in ps_out]
+    ValPerm_LOwned ls ps_in_out = ValPerm_Conj [Perm_LOwned ls ps_in_out]
 
 -- | A single @lcurrent@ permission
 pattern ValPerm_LCurrent :: () => (a ~ LifetimeType) =>
@@ -1793,6 +1798,18 @@ pattern ValPerm_LFinished :: () => (a ~ LifetimeType) => ValuePerm a
 pattern ValPerm_LFinished <- ValPerm_Conj [Perm_LFinished]
   where
     ValPerm_LFinished = ValPerm_Conj [Perm_LFinished]
+
+-- | Build a @struct@ permission from a tuple of permissions for its fields
+pattern ValPerm_Struct :: (a ~ StructType as) =>
+                          RAssign ValuePerm (CtxToRList as) -> ValuePerm a
+pattern ValPerm_Struct ps <- ValPerm_Conj [Perm_Struct ps]
+  where
+    ValPerm_Struct ps = ValPerm_Conj [Perm_Struct ps]
+
+-- | Build a @struct@ permission in a binding from field permissions in bindings
+mbValPerm_Struct :: Mb ctx (RAssign ValuePerm (CtxToRList as)) ->
+                    Mb ctx (ValuePerm (StructType as))
+mbValPerm_Struct = mbMapCl $(mkClosed [| ValPerm_Struct |])
 
 -- | A sequence of value permissions
 {-
@@ -2054,6 +2071,10 @@ data LOwnedPerm a where
                      LLVMArrayPerm w -> LOwnedPerm (LLVMPointerType w)
   LOwnedPermBlock :: (1 <= w, KnownNat w) => PermExpr (LLVMPointerType w) ->
                      LLVMBlockPerm w -> LOwnedPerm (LLVMPointerType w)
+  -- | A @struct@ permission of the form @struct(eq(e1),...,eq(en))@
+  LOwnedPermStruct :: CtxRepr args -> PermExpr (StructType args) ->
+                      PermExprs (CtxToRList args) ->
+                      LOwnedPerm (StructType args)
 
 -- | A sequence of 'LOwnedPerm's
 type LOwnedPerms = RAssign LOwnedPerm
@@ -2075,6 +2096,11 @@ instance TestEquality LOwnedPerm where
     , e1 == e2 && bp1 == bp2
     = Just Refl
   testEquality (LOwnedPermBlock _ _) _ = Nothing
+  testEquality (LOwnedPermStruct tps1 e1 es1) (LOwnedPermStruct tps2 e2 es2)
+    | Just Refl <- testEquality tps1 tps2
+    , e1 == e2 && es1 == es2 =
+      Just Refl
+  testEquality (LOwnedPermStruct _ _ _) _ = Nothing
 
 instance Eq (LOwnedPerm a) where
   lop1 == lop2 | Just Refl <- testEquality lop1 lop2 = True
@@ -2082,6 +2108,20 @@ instance Eq (LOwnedPerm a) where
 
 instance Eq1 LOwnedPerm where
   eq1 = (==)
+
+-- | Like 'testEquality' but for 'LOwnedPerms' in bindings
+mbLOwnedPermsEq :: Mb ctx (LOwnedPerms tps1) -> Mb ctx (LOwnedPerms tps2) ->
+                   Maybe (tps1 :~: tps2)
+mbLOwnedPermsEq [nuP| MNil |] [nuP| MNil |] = Just Refl
+mbLOwnedPermsEq [nuP| mb_lops1 :>: mb_lop1 |] [nuP| mb_lops2 :>: mb_lop2 |]
+  | Just Refl <- mbLOwnedPermsEq mb_lops1 mb_lops2
+  , Just Refl <-
+    -- FIXME: using mbMap2 here makes this refresh all the bound names of
+    -- mb_lop1 and mb_lop2, so it is inefficient; instead, this function should
+    -- pattern-match on them as bindings
+    mbLift $ mbMap2 testEquality mb_lop1 mb_lop2 =
+    Just Refl
+mbLOwnedPermsEq _ _ = Nothing
 
 -- | Convert an 'LOwnedPerm' to the expression plus permission it represents
 lownedPermExprAndPerm :: LOwnedPerm a -> ExprAndPerm a
@@ -2091,6 +2131,8 @@ lownedPermExprAndPerm (LOwnedPermArray e ap) =
   ExprAndPerm e $ ValPerm_LLVMArray ap
 lownedPermExprAndPerm (LOwnedPermBlock e bp) =
   ExprAndPerm e $ ValPerm_LLVMBlock bp
+lownedPermExprAndPerm (LOwnedPermStruct _ e es) =
+  ExprAndPerm e $ ValPerm_Struct $ RL.map ValPerm_Eq es
 
 -- | Convert an 'LOwnedPerm' to a variable plus permission, if possible
 lownedPermVarAndPerm :: LOwnedPerm a -> Maybe (VarAndPerm a)
@@ -2100,14 +2142,17 @@ lownedPermVarAndPerm lop
 lownedPermVarAndPerm _ = Nothing
 
 -- | Convert an expression plus permission to an 'LOwnedPerm', if possible
-varAndPermLOwnedPerm :: VarAndPerm a -> Maybe (LOwnedPerm a)
-varAndPermLOwnedPerm (VarAndPerm x (ValPerm_LLVMField fp)) =
+varAndPermLOwnedPerm :: TypeRepr a -> VarAndPerm a -> Maybe (LOwnedPerm a)
+varAndPermLOwnedPerm _ (VarAndPerm x (ValPerm_LLVMField fp)) =
   Just $ LOwnedPermField (PExpr_Var x) fp
-varAndPermLOwnedPerm (VarAndPerm x (ValPerm_LLVMArray ap)) =
+varAndPermLOwnedPerm _ (VarAndPerm x (ValPerm_LLVMArray ap)) =
   Just $ LOwnedPermArray (PExpr_Var x) ap
-varAndPermLOwnedPerm (VarAndPerm x (ValPerm_LLVMBlock bp)) =
+varAndPermLOwnedPerm _ (VarAndPerm x (ValPerm_LLVMBlock bp)) =
   Just $ LOwnedPermBlock (PExpr_Var x) bp
-varAndPermLOwnedPerm _ = Nothing
+varAndPermLOwnedPerm (StructRepr tps) (VarAndPerm x (ValPerm_Struct ps))
+  | Just es <- matchEqValuePerms ps =
+    Just $ LOwnedPermStruct tps (PExpr_Var x) es
+varAndPermLOwnedPerm _ _ = Nothing
 
 -- | Get the expression part of an 'LOwnedPerm'
 lownedPermExpr :: LOwnedPerm a -> PermExpr a
@@ -2150,13 +2195,61 @@ llvmLownedPermModalities (LOwnedPermArray _ ap) =
 llvmLownedPermModalities (LOwnedPermBlock _ bp) =
   (llvmBlockRW bp, llvmBlockLifetime bp)
 
--- | Find an 'LOwnedPerm' for a particular variable in an 'LOwnedPerms' list
-findLOwnedPermForVar :: ExprVar a -> LOwnedPerms ps -> Maybe (LOwnedPerm a)
-findLOwnedPermForVar _ MNil = Nothing
-findLOwnedPermForVar x (_ :>: lop)
-  | Just (y, _) <- asVarOffset (lownedPermExpr lop)
-  , Just Refl <- testEquality x y = Just lop
-findLOwnedPermForVar x (lops :>: _) = findLOwnedPermForVar x lops
+-- | Find all 'LOwnedPerm's in an 'LOwnedPerms' list for a variable
+findLOwnedPermsForVar :: ExprVar a -> LOwnedPerms ps -> [LOwnedPerm a]
+findLOwnedPermsForVar (x :: ExprVar a) =
+  catMaybes . RL.mapToList
+  (\case
+      lop | Just (y, _) <- asVarOffset (lownedPermExpr lop)
+          , Just Refl <- testEquality x y
+            -> Just (lop :: LOwnedPerm a)
+      _ -> Nothing)
+
+-- | Generic function to try to lift something out of a binding, if possible
+-- FIXME: generalize this and move it somewhere better in the code?
+class NuMatching a => TryLift a where
+  tryLift :: Mb ctx a -> Maybe a
+
+instance TryLift a => TryLift [a] where
+  tryLift mb_l = case mbMatch mb_l of
+    [nuMP| [] |] -> Just []
+    [nuMP| mb_a : mb_as |] -> (:) <$> tryLift mb_a <*> tryLift mb_as
+
+instance TryLift (Name a) where
+  tryLift mb_x | Right x <- mbNameBoundP mb_x = Just x
+  tryLift _ = Nothing
+
+instance TryLift (PermExpr RWModalityType) where
+  tryLift [nuP| PExpr_RWModality rw |] = Just $ PExpr_RWModality $ mbLift rw
+  tryLift [nuP| PExpr_Var mb_x |] = PExpr_Var <$> tryLift mb_x
+  tryLift _ = Nothing
+
+instance TryLift (PermExpr LifetimeType) where
+  tryLift [nuP| PExpr_Always |] = Just $ PExpr_Always
+  tryLift [nuP| PExpr_Var mb_x |] = PExpr_Var <$> tryLift mb_x
+  tryLift _ = Nothing
+
+instance TryLift (PermExpr (BVType w)) where
+  tryLift [nuP| PExpr_Var mb_x |] = PExpr_Var <$> tryLift mb_x
+  tryLift [nuP| PExpr_BV mb_factors mb_bv |] =
+    PExpr_BV <$> tryLift mb_factors <*> Just (mbLift mb_bv)
+  tryLift _ = Nothing
+
+instance TryLift (BVFactor w) where
+  tryLift [nuP| BVFactor mb_n mb_x |] =
+    BVFactor (mbLift mb_n) <$> tryLift mb_x
+
+-- | Find modalitieis for a variable in an 'LOwnedPerms' list in a binding
+findMbLOwnedPermModalitiesForVar :: ExprVar (LLVMPointerType w) ->
+                                    Mb ctx (LOwnedPerms ps) ->
+                                    (Maybe (PermExpr RWModalityType),
+                                     Maybe (PermExpr LifetimeType))
+findMbLOwnedPermModalitiesForVar x mb_lops =
+  let [nuMP| (mb_rws, mb_ls) |] =
+        mbMatch $ fmap (unzip . map llvmLownedPermModalities .
+                        findLOwnedPermsForVar x) mb_lops in
+  (listToMaybe (mapMaybe tryLift $ mbList mb_rws),
+   listToMaybe (mapMaybe tryLift $ mbList mb_ls))
 
 -- | Find all 'LOwnedPerm's for a specific variable of LLVM pointer type in an
 -- 'LOwnedPerms' list, and return the ranges of offsets that each of those cover
@@ -2777,8 +2870,9 @@ data LifetimeCurrentPerms ps_l where
   -- | A variable @l@ that is @lowned@ is current, requiring perms
   --
   -- > l:lowned[ls](ps_in -o ps_out)
-  LOwnedCurrentPerms :: ExprVar LifetimeType -> [PermExpr LifetimeType] ->
-                        LOwnedPerms ps_in -> LOwnedPerms ps_out ->
+  LOwnedCurrentPerms :: KnownRepr CruCtx ctx =>
+                        ExprVar LifetimeType -> [PermExpr LifetimeType] ->
+                        Mb ctx (LOwnedPerms ps_in, LOwnedPerms ps_out) ->
                         LifetimeCurrentPerms (RNil :> LifetimeType)
 
   -- | A variable @l@ that is @lcurrent@ during another lifetime @l'@ is
@@ -2792,14 +2886,14 @@ data LifetimeCurrentPerms ps_l where
 lifetimeCurrentPermsLifetime :: LifetimeCurrentPerms ps_l ->
                                 PermExpr LifetimeType
 lifetimeCurrentPermsLifetime AlwaysCurrentPerms = PExpr_Always
-lifetimeCurrentPermsLifetime (LOwnedCurrentPerms l _ _ _) = PExpr_Var l
+lifetimeCurrentPermsLifetime (LOwnedCurrentPerms l _ _) = PExpr_Var l
 lifetimeCurrentPermsLifetime (CurrentTransPerms _ l) = PExpr_Var l
 
 -- | Convert a 'LifetimeCurrentPerms' to the 'DistPerms' it represent
 lifetimeCurrentPermsPerms :: LifetimeCurrentPerms ps_l -> DistPerms ps_l
 lifetimeCurrentPermsPerms AlwaysCurrentPerms = DistPermsNil
-lifetimeCurrentPermsPerms (LOwnedCurrentPerms l ls ps_in ps_out) =
-  DistPermsCons DistPermsNil l $ ValPerm_LOwned ls ps_in ps_out
+lifetimeCurrentPermsPerms (LOwnedCurrentPerms l ls ps_in_out) =
+  DistPermsCons DistPermsNil l $ ValPerm_LOwned ls ps_in_out
 lifetimeCurrentPermsPerms (CurrentTransPerms cur_ps l) =
   DistPermsCons (lifetimeCurrentPermsPerms cur_ps) l $
   ValPerm_Conj1 $ Perm_LCurrent $ lifetimeCurrentPermsLifetime cur_ps
@@ -2809,7 +2903,7 @@ mbLifetimeCurrentPermsProxies :: Mb ctx (LifetimeCurrentPerms ps_l) ->
                                  RAssign Proxy ps_l
 mbLifetimeCurrentPermsProxies mb_l = case mbMatch mb_l of
   [nuMP| AlwaysCurrentPerms |] -> MNil
-  [nuMP| LOwnedCurrentPerms _ _ _ _ |] -> MNil :>: Proxy
+  [nuMP| LOwnedCurrentPerms _ _ _ |] -> MNil :>: Proxy
   [nuMP| CurrentTransPerms cur_ps _ |] ->
     mbLifetimeCurrentPermsProxies cur_ps :>: Proxy
 
@@ -2944,11 +3038,12 @@ instance Eq (AtomicPerm a) where
   (Perm_LLVMBlockShape _) == _ = False
   (Perm_LLVMFrame frame1) == (Perm_LLVMFrame frame2) = frame1 == frame2
   (Perm_LLVMFrame _) == _ = False
-  (Perm_LOwned ls1 ps_in1 ps_out1) == (Perm_LOwned ls2 ps_in2 ps_out2)
-    | Just Refl <- testEquality ps_in1 ps_in2
-    , Just Refl <- testEquality ps_out1 ps_out2
+  (Perm_LOwned ls1 ps_io1) == (Perm_LOwned ls2 ps_io2)
+    | Just Refl <- testEquality (bindingsTypes ps_io1) (bindingsTypes ps_io2)
+    , Just Refl <- mbLOwnedPermsEq (mbFst ps_io1) (mbFst ps_io2)
+    , Just Refl <- mbLOwnedPermsEq (mbSnd ps_io1) (mbSnd ps_io2)
     = ls1 == ls2
-  (Perm_LOwned _ _ _) == _ = False
+  (Perm_LOwned _ _) == _ = False
   (Perm_LCurrent e1) == (Perm_LCurrent e2) = e1 == e2
   (Perm_LCurrent _) == _ = False
   Perm_LFinished == Perm_LFinished = True
@@ -3101,14 +3196,12 @@ instance PermPretty (AtomicPerm a) where
   permPrettyM (Perm_LLVMFrame fperm) =
     do pps <- mapM (\(e,i) -> (<> (colon <> pretty i)) <$> permPrettyM e) fperm
        return (pretty "llvmframe" <+> ppEncList False pps)
-  permPrettyM (Perm_LOwned ls ps_in ps_out) =
-    do pp_in <- permPrettyM ps_in
-       pp_out <- permPrettyM ps_out
+  permPrettyM (Perm_LOwned ls mb_ps_in_out) =
+    do mb_ps_in_out_pp <- ppMbImplPair mb_ps_in_out
        ls_pp <- case ls of
          [] -> return emptyDoc
          _ -> ppEncList False <$> mapM permPrettyM ls
-       return (pretty "lowned" <> ls_pp <+>
-               parens (align $ sep [pp_in, pretty "-o", pp_out]))
+       return (pretty "lowned" <> ls_pp <+> parens mb_ps_in_out_pp)
   permPrettyM (Perm_LCurrent l) = (pretty "lcurrent" <+>) <$> permPrettyM l
   permPrettyM Perm_LFinished = return (pretty "lfinished")
   permPrettyM (Perm_Struct ps) =
@@ -3132,6 +3225,20 @@ instance PermPretty (LOwnedPerm a) where
 
 instance PermPrettyF LOwnedPerm where
   permPrettyMF = permPrettyM
+
+-- | A pair type that is explicitly pretty-printed with an implication
+data PPImplPair a b = PPImplPair a b
+
+instance (PermPretty a, PermPretty b) => PermPretty (PPImplPair a b) where
+  permPrettyM (PPImplPair a b) =
+    do pp1 <- permPrettyM a
+       pp2 <- permPrettyM b
+       return $ align $ sep [pp1, pretty "-o", pp2]
+
+-- | Pretty-print a pair of objects in a binding as an implication
+ppMbImplPair :: (NuMatching a, NuMatching b, PermPretty a, PermPretty b) =>
+                Mb (ctx :: RList CrucibleType) (a, b) -> PermPPM (Doc ann)
+ppMbImplPair = permPrettyM . mbMapCl $(mkClosed [| \(x,y) -> PPImplPair x y |])
 
 instance PermPretty (FunPerm ghosts args ret) where
   permPrettyM (FunPerm ghosts args _ mb_ps_in mb_ps_out) =
@@ -3278,7 +3385,7 @@ isLLVMBlockPerm _ = False
 
 -- | Test if an 'AtomicPerm' is a lifetime permission
 isLifetimePerm :: AtomicPerm a -> Maybe (a :~: LifetimeType)
-isLifetimePerm (Perm_LOwned _ _ _) = Just Refl
+isLifetimePerm (Perm_LOwned _ _) = Just Refl
 isLifetimePerm (Perm_LCurrent _) = Just Refl
 isLifetimePerm Perm_LFinished = Just Refl
 isLifetimePerm _ = Nothing
@@ -4932,6 +5039,12 @@ eqValuePerms MNil = ValPerms_Nil
 eqValuePerms (xs :>: x) =
   ValPerms_Cons (eqValuePerms xs) (ValPerm_Eq (PExpr_Var x))
 
+-- | Pattern match on a sequence of 'ValuePerms' that are equality permissions
+matchEqValuePerms :: ValuePerms ps -> Maybe (RAssign PermExpr ps)
+matchEqValuePerms MNil = Just MNil
+matchEqValuePerms (ps :>: ValPerm_Eq e) = (:>: e) <$> matchEqValuePerms ps
+matchEqValuePerms _ = Nothing
+
 -- | Append two lists of permissions
 appendValuePerms :: ValuePerms ps1 -> ValuePerms ps2 -> ValuePerms (ps1 :++: ps2)
 appendValuePerms ps1 ValPerms_Nil = ps1
@@ -5045,7 +5158,7 @@ atomicPermIsCopyable (Perm_LLVMFunPtr _ _) = True
 atomicPermIsCopyable Perm_IsLLVMPtr = True
 atomicPermIsCopyable (Perm_LLVMBlockShape sh) = shapeIsCopyable PExpr_Write sh
 atomicPermIsCopyable (Perm_LLVMFrame _) = False
-atomicPermIsCopyable (Perm_LOwned _ _ _) = False
+atomicPermIsCopyable (Perm_LOwned _ _) = False
 atomicPermIsCopyable (Perm_LCurrent _) = True
 atomicPermIsCopyable Perm_LFinished = True
 atomicPermIsCopyable (Perm_Struct ps) = and $ RL.mapToList permIsCopyable ps
@@ -5293,8 +5406,8 @@ instance FreeVars (AtomicPerm tp) where
   freeVars Perm_IsLLVMPtr = NameSet.empty
   freeVars (Perm_LLVMBlockShape sh) = freeVars sh
   freeVars (Perm_LLVMFrame fperms) = freeVars $ map fst fperms
-  freeVars (Perm_LOwned ls ps_in ps_out) =
-    NameSet.unions [freeVars ls, freeVars ps_in, freeVars ps_out]
+  freeVars (Perm_LOwned ls ps_in_out) =
+    NameSet.unions [freeVars ls, freeVars ps_in_out]
   freeVars (Perm_LCurrent l) = freeVars l
   freeVars Perm_LFinished = NameSet.empty
   freeVars (Perm_Struct ps) = NameSet.unions $ RL.mapToList freeVars ps
@@ -5354,6 +5467,8 @@ instance FreeVars (LOwnedPerm a) where
     NameSet.unions [freeVars e, freeVars ap]
   freeVars (LOwnedPermBlock e bp) =
     NameSet.unions [freeVars e, freeVars bp]
+  freeVars (LOwnedPermStruct _ e es) =
+    NameSet.unions [freeVars e, freeVars es]
 
 instance FreeVars (LOwnedPerms ps) where
   freeVars = NameSet.unions . RL.mapToList freeVars
@@ -5417,7 +5532,8 @@ instance NeededVars (AtomicPerm a) where
   neededVars (Perm_LLVMArray ap) = neededVars ap
   neededVars (Perm_LLVMBlock bp) = neededVars bp
   neededVars (Perm_LLVMBlockShape _) = NameSet.empty
-  neededVars p@(Perm_LOwned _ _ _) = freeVars p
+  neededVars p@(Perm_LOwned _ _) = freeVars p
+  neededVars (Perm_Struct ps) = NameSet.unions $ RL.mapToList neededVars ps
   neededVars p = freeVars p
 
 instance NeededVars (LLVMFieldPerm w sz) where
@@ -5688,8 +5804,9 @@ instance SubstVar s m => Substable s (AtomicPerm a) m where
     [nuMP| Perm_LLVMBlockShape sh |] ->
       Perm_LLVMBlockShape <$> genSubst s sh
     [nuMP| Perm_LLVMFrame fp |] -> Perm_LLVMFrame <$> genSubst s fp
-    [nuMP| Perm_LOwned ls ps_in ps_out |] ->
-      Perm_LOwned <$> genSubst s ls <*> genSubst s ps_in <*> genSubst s ps_out
+    [nuMP| Perm_LOwned ls ps_in_out |] ->
+      give (mbLift $ fmap mbToProxy ps_in_out)
+      (Perm_LOwned <$> genSubst s ls <*> genSubst s ps_in_out)
     [nuMP| Perm_LCurrent e |] -> Perm_LCurrent <$> genSubst s e
     [nuMP| Perm_LFinished |] -> return Perm_LFinished
     [nuMP| Perm_Struct tps |] -> Perm_Struct <$> genSubst s tps
@@ -5813,6 +5930,8 @@ instance SubstVar s m => Substable s (LOwnedPerm a) m where
       LOwnedPermArray <$> genSubst s e <*> genSubst s ap
     [nuMP| LOwnedPermBlock e bp |] ->
       LOwnedPermBlock <$> genSubst s e <*> genSubst s bp
+    [nuMP| LOwnedPermStruct tps e es |] ->
+      LOwnedPermStruct (mbLift tps) <$> genSubst s e <*> genSubst s es
 
 instance SubstVar s m => Substable1 s LOwnedPerm m where
   genSubst1 = genSubst
@@ -5831,9 +5950,10 @@ instance SubstVar PermVarSubst m =>
          Substable PermVarSubst (LifetimeCurrentPerms ps) m where
   genSubst s mb_x = case mbMatch mb_x of
     [nuMP| AlwaysCurrentPerms |] -> return AlwaysCurrentPerms
-    [nuMP| LOwnedCurrentPerms l ls ps_in ps_out |] ->
-      LOwnedCurrentPerms <$> genSubst s l <*> genSubst s ls
-      <*> genSubst s ps_in <*> genSubst s ps_out
+    [nuMP| LOwnedCurrentPerms l ls mb_ps_in_out |] ->
+      give (mbLift $ fmap mbToProxy mb_ps_in_out)
+      (LOwnedCurrentPerms <$> genSubst s l <*> genSubst s ls
+       <*> genSubst s mb_ps_in_out)
     [nuMP| CurrentTransPerms ps l |] ->
       CurrentTransPerms <$> genSubst s ps <*> genSubst s l
 
@@ -6476,11 +6596,10 @@ instance AbstractVars (AtomicPerm a) where
   abstractPEVars ns1 ns2 (Perm_LLVMFrame fp) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMFrame |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 fp
-  abstractPEVars ns1 ns2 (Perm_LOwned ls ps_in ps_out) =
+  abstractPEVars ns1 ns2 (Perm_LOwned ls ps_in_out) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LOwned |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 ls
-    `clMbMbApplyM` abstractPEVars ns1 ns2 ps_in
-    `clMbMbApplyM` abstractPEVars ns1 ns2 ps_out
+    `clMbMbApplyM` abstractPEVars ns1 ns2 ps_in_out
   abstractPEVars ns1 ns2 (Perm_LCurrent e) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LCurrent |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
@@ -6614,6 +6733,11 @@ instance AbstractVars (LOwnedPerm a) where
     absVarsReturnH ns1 ns2 $(mkClosed [| LOwnedPermBlock |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
     `clMbMbApplyM` abstractPEVars ns1 ns2 bp
+  abstractPEVars ns1 ns2 (LOwnedPermStruct tps e es) =
+    absVarsReturnH ns1 ns2 ($(mkClosed [| LOwnedPermStruct |])
+                            `clApply` toClosed tps)
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e
+    `clMbMbApplyM` abstractPEVars ns1 ns2 es
 
 instance AbstractVars (LOwnedPerms ps) where
   abstractPEVars ns1 ns2 MNil =
@@ -6784,9 +6908,8 @@ instance AbstractNamedShape w (AtomicPerm a) where
   abstractNSM (Perm_NamedConj n args off) = 
     mbMap2 (Perm_NamedConj n) <$> abstractNSM args <*> abstractNSM off
   abstractNSM (Perm_LLVMFrame fp) = fmap Perm_LLVMFrame <$> abstractNSM fp
-  abstractNSM (Perm_LOwned ls ps_in ps_out) =
-    mbMap3 Perm_LOwned <$> abstractNSM ls <*> abstractNSM ps_in <*>
-    abstractNSM ps_out
+  abstractNSM (Perm_LOwned ls ps_in_out) =
+    mbMap2 Perm_LOwned <$> abstractNSM ls <*> abstractNSM ps_in_out
   abstractNSM (Perm_LCurrent e) = fmap Perm_LCurrent <$> abstractNSM e
   abstractNSM Perm_LFinished = pureBindingM Perm_LFinished
   abstractNSM (Perm_Struct ps) = fmap Perm_Struct <$> abstractNSM ps
@@ -6830,6 +6953,9 @@ instance AbstractNamedShape w (LOwnedPerm a) where
     mbMap2 LOwnedPermArray <$> abstractNSM e <*> abstractNSM ap
   abstractNSM (LOwnedPermBlock e bp) =
     mbMap2 LOwnedPermBlock <$> abstractNSM e <*> abstractNSM bp
+  abstractNSM (LOwnedPermStruct tps e es) =
+    mbMap3 LOwnedPermStruct <$> pureBindingM tps <*> abstractNSM e <*>
+    abstractNSM es
 
 instance AbstractNamedShape w (ValuePerms as) where
   abstractNSM ValPerms_Nil = pureBindingM ValPerms_Nil
@@ -6886,6 +7012,7 @@ $(mkNuMatching [t| forall args a. LifetimeFunctor args a |])
 $(mkNuMatching [t| forall ps. LifetimeCurrentPerms ps |])
 $(mkNuMatching [t| forall a. SomeLLVMBlockPerm a |])
 $(mkNuMatching [t| forall w. SomeBindingLLVMBlockPerm w |])
+$(mkNuMatching [t| forall a b . (NuMatching a, NuMatching b) => PPImplPair a b |])
 
 instance NuMatchingAny1 LOwnedPerm where
   nuMatchingAny1Proof = nuMatchingProof
@@ -7422,7 +7549,7 @@ instance GetDetVarsClauses (AtomicPerm a) where
   getDetVarsClauses (Perm_LLVMBlockShape sh) = getDetVarsClauses sh
   getDetVarsClauses (Perm_LLVMFrame frame_perm) =
     concat <$> mapM (getDetVarsClauses . fst) frame_perm
-  getDetVarsClauses (Perm_LOwned _ _ _) = return []
+  getDetVarsClauses (Perm_LOwned _ _) = return []
   getDetVarsClauses _ = return []
 
 instance (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
