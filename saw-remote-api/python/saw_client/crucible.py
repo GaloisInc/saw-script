@@ -287,7 +287,7 @@ class GhostValue:
     """A class containing the statement that a given ghost variable should have the
     value given by a Cryptol expression.
     """
-    def __init__(self, name: str, value: CryptolTerm) -> None:
+    def __init__(self, name: str, value: cryptoltypes.CryptolJSON) -> None:
         self.name = name
         self.value = value
 
@@ -454,7 +454,7 @@ class Contract:
         else:
             raise Exception("wrong state")
 
-    def ghost_value(self, var: GhostVariable, value: CryptolTerm) -> None:
+    def ghost_value(self, var: GhostVariable, value: cryptoltypes.CryptolJSON) -> None:
         """Declare that the given ghost variable should have a value specified by the given Cryptol expression.
 
         Usable either before or after `execute_func`.

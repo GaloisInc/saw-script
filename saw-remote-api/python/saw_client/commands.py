@@ -173,10 +173,10 @@ class Prove(SAWCommand):
     def __init__(
             self,
             connection : argo.HasProtocolState,
-            goal : cryptoltypes.CryptolJSON,
+            goal : Any,
             script : ProofScript,
             timeout : Optional[float]) -> None:
-        params = {'goal': goal,
+        params = {'goal': cryptoltypes.to_cryptol(goal) if hasattr(goal, '__to_cryptol__') else goal,
                   'script': script}
         super(Prove, self).__init__('SAW/prove', params, connection, timeout=timeout)
 

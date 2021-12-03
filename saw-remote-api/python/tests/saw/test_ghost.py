@@ -14,7 +14,7 @@ def post_counter(contract: Contract, counter: GhostVariable, n: CryptolTerm):
     contract.ghost_value(counter, cry_f("{n} + 1"))
 
 class GetAndIncrementContract(Contract):
-    def __init__(self, counter: str) -> None:
+    def __init__(self, counter: GhostVariable) -> None:
         super().__init__()
         self.counter = counter
 
@@ -25,7 +25,7 @@ class GetAndIncrementContract(Contract):
         self.returns(n)
 
 class FContract(Contract):
-    def __init__(self, counter: str) -> None:
+    def __init__(self, counter: GhostVariable) -> None:
         super().__init__()
         self.counter = counter
 
