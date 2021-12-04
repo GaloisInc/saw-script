@@ -2908,17 +2908,17 @@ mbLifetimeCurrentPermsProxies mb_l = case mbMatch mb_l of
     mbLifetimeCurrentPermsProxies cur_ps :>: Proxy
 
 -- | A lifetime functor is a function from a lifetime plus a set of 0 or more
--- rwmodalities to a permission that satisfies a number of properties discussed
--- in Issue #62 (FIXME: copy those here). Rather than try to enforce these
--- properties, we syntactically restrict lifetime functors to one of a few forms
--- that are guaranteed to satisfy the properties. The @args@ type lists all
--- arguments (which should all be rwmodalities) other than the lifetime
--- argument.
+-- expressions to a permission that satisfies a number of properties discussed
+-- in Issue #62 of the heapster-saw repo (FIXME: copy those here). Rather than
+-- try to enforce these properties, we syntactically restrict lifetime functors
+-- to one of a few forms that are guaranteed to satisfy the properties. The
+-- @args@ type lists all arguments other than the lifetime argument.
 data LifetimeFunctor args a where
-  -- | The functor @\(l,rw) -> [l]ptr((rw,off) |-> p)@
+  -- | The functor @\(l,rw,x) -> [l]ptr((rw,off) |-> eq(x))@
   LTFunctorField :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
-                    PermExpr (BVType w) -> ValuePerm (LLVMPointerType sz) ->
-                    LifetimeFunctor (RNil :> RWModalityType) (LLVMPointerType w)
+                    PermExpr (BVType w) ->
+                    LifetimeFunctor (RNil :> RWModalityType :> LLVMPointerType sz)
+                    (LLVMPointerType w)
 
   -- | The functor @\(l,rw) -> [l]array(rw,off,<len,*stride,sh,bs)@
   LTFunctorArray :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
@@ -2932,56 +2932,64 @@ data LifetimeFunctor args a where
                     PermExpr (LLVMShapeType w) ->
                     LifetimeFunctor (RNil :> RWModalityType) (LLVMPointerType w)
 
-  -- FIXME: add functors for arrays and named permissions
+  -- FIXME: add functors for named permissions
+
+-- | Get a list of the types of a 'LifetimeFunctor' as a 'KnownReprObj'
+ltFuncArgsKnown :: LifetimeFunctor args a -> KnownReprObj CruCtx args
+ltFuncArgsKnown (LTFunctorField _) = KnownReprObj
+ltFuncArgsKnown (LTFunctorArray _ _ _ _ _) = KnownReprObj
+ltFuncArgsKnown (LTFunctorBlock _ _ _) = KnownReprObj
+
+-- | Get a list of the types of a 'LifetimeFunctor' as a 'CruCtx'
+ltFuncArgs :: LifetimeFunctor args a -> CruCtx args
+ltFuncArgs = unKnownReprObj . ltFuncArgsKnown
 
 -- | Apply a functor to its arguments to get out a permission
 ltFuncApply :: LifetimeFunctor args a -> PermExprs args ->
                PermExpr LifetimeType -> ValuePerm a
-ltFuncApply (LTFunctorField off p) (MNil :>: rw) l =
-  ValPerm_LLVMField $ LLVMFieldPerm rw l off p
-ltFuncApply (LTFunctorArray off len stride sh bs) (MNil :>: rw) l =
+ltFuncApply (LTFunctorField off) (_ :>: rw :>: e) l =
+  ValPerm_LLVMField $ LLVMFieldPerm rw l off $ ValPerm_Eq e
+ltFuncApply (LTFunctorArray off len stride sh bs) (_ :>: rw) l =
   ValPerm_LLVMArray $ LLVMArrayPerm rw l off len stride sh bs
-ltFuncApply (LTFunctorBlock off len sh) (MNil :>: rw) l =
+ltFuncApply (LTFunctorBlock off len sh) (_ :>: rw) l =
   ValPerm_LLVMBlock $ LLVMBlockPerm rw l off len sh
 
 -- | Apply a functor to its arguments to get out an 'LOwnedPerm' on a variable
 ltFuncApplyLOP :: ExprVar a -> LifetimeFunctor args a -> PermExprs args ->
                   PermExpr LifetimeType -> LOwnedPerm a
-ltFuncApplyLOP x (LTFunctorField off p) (MNil :>: rw) l =
-  LOwnedPermField (PExpr_Var x) $ LLVMFieldPerm rw l off p
-ltFuncApplyLOP x (LTFunctorArray off len stride sh bs) (MNil :>: rw) l =
+ltFuncApplyLOP x (LTFunctorField off) (_ :>: rw :>: e) l =
+  LOwnedPermField (PExpr_Var x) $ LLVMFieldPerm rw l off $ ValPerm_Eq e
+ltFuncApplyLOP x (LTFunctorArray off len stride sh bs) (_ :>: rw) l =
   LOwnedPermArray (PExpr_Var x) $ LLVMArrayPerm rw l off len stride sh bs
-ltFuncApplyLOP x (LTFunctorBlock off len sh) (MNil :>: rw) l =
+ltFuncApplyLOP x (LTFunctorBlock off len sh) (_ :>: rw) l =
   LOwnedPermBlock (PExpr_Var x) $ LLVMBlockPerm rw l off len sh
 
--- | Apply a functor to a lifetime and the "minimal" rwmodalities, i.e., with
--- all read permissions
-ltFuncMinApply :: LifetimeFunctor args a -> PermExpr LifetimeType -> ValuePerm a
-ltFuncMinApply (LTFunctorField off p) l =
-  ValPerm_LLVMField $ LLVMFieldPerm PExpr_Read l off p
-ltFuncMinApply (LTFunctorArray off len stride sh bs) l =
-  ValPerm_LLVMArray $ LLVMArrayPerm PExpr_Read l off len stride sh bs
-ltFuncMinApply (LTFunctorBlock off len sh) l =
-  ValPerm_LLVMBlock $ LLVMBlockPerm PExpr_Read l off len sh
+-- | Apply a functor to just a lifetime, yielding a permission in a binding
+ltFuncMinApply :: LifetimeFunctor args a -> PermExpr LifetimeType ->
+                  Mb args (ValuePerm a)
+ltFuncMinApply func l =
+  nuMulti (cruCtxProxies $ ltFuncArgs func) $ \args ->
+  ltFuncApply func (RL.map PExpr_Var args) l
 
--- | Apply a functor to a lifetime and the "minimal" rwmodalities, i.e., with
--- all read permissions, getting out an 'LOwnedPerm'  on a variable
+-- | Apply a functor to just a lifetime, yielding an 'LOwnedPerm' in a binding
 ltFuncMinApplyLOP :: ExprVar a -> LifetimeFunctor args a ->
-                     PermExpr LifetimeType -> LOwnedPerm a
-ltFuncMinApplyLOP x (LTFunctorField off p) l =
-  LOwnedPermField (PExpr_Var x) $ LLVMFieldPerm PExpr_Read l off p
-ltFuncMinApplyLOP x (LTFunctorArray off len stride sh bs) l =
-  LOwnedPermArray (PExpr_Var x) $ LLVMArrayPerm PExpr_Read l off len stride sh bs
-ltFuncMinApplyLOP x (LTFunctorBlock off len sh) l =
-  LOwnedPermBlock (PExpr_Var x) $ LLVMBlockPerm PExpr_Read l off len sh
+                     PermExpr LifetimeType -> Mb args (LOwnedPerm a)
+ltFuncMinApplyLOP x func l =
+  nuMulti (cruCtxProxies $ ltFuncArgs func) $ \args ->
+  ltFuncApplyLOP x func (RL.map PExpr_Var args) l
 
--- | Convert a field permission to a lifetime functor and its arguments
+-- | Convert a field permission to a lifetime functor and its arguments,
+-- assuming that the contents of the field permission are of the form @eq(y)@
 fieldToLTFunc :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
                  LLVMFieldPerm w sz ->
-                 (LifetimeFunctor (RNil :> RWModalityType) (LLVMPointerType w),
-                  PermExprs (RNil :> RWModalityType))
-fieldToLTFunc fp = (LTFunctorField (llvmFieldOffset fp) (llvmFieldContents fp),
-                    MNil :>: llvmFieldRW fp)
+                 (LifetimeFunctor (RNil :> RWModalityType :>
+                                   LLVMPointerType sz) (LLVMPointerType w),
+                  PermExprs (RNil :> RWModalityType :> LLVMPointerType sz))
+fieldToLTFunc fp
+  | ValPerm_Eq e <- llvmFieldContents fp =
+    (LTFunctorField (llvmFieldOffset fp),
+     MNil :>: llvmFieldRW fp :>: e)
+fieldToLTFunc _ = error "fieldToLTFunc: contents not an equality permission"
 
 -- | Convert an array permission to a lifetime functor and its arguments
 arrayToLTFunc :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
@@ -2990,7 +2998,8 @@ arrayToLTFunc :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
 arrayToLTFunc (LLVMArrayPerm rw _ off len stride sh bs) =
   (LTFunctorArray off len stride sh bs, MNil :>: rw)
 
--- | Convert a block permission to a lifetime functor and its arguments
+-- | Convert a block permission to a lifetime functor with a single read/write
+-- modality argument
 blockToLTFunc :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
                  (LifetimeFunctor (RNil :> RWModalityType) (LLVMPointerType w),
                   PermExprs (RNil :> RWModalityType))
@@ -5982,13 +5991,13 @@ instance SubstVar PermVarSubst m =>
 
 instance SubstVar s m => Substable s (LifetimeFunctor args a) m where
   genSubst s mb_x = case mbMatch mb_x of
-    [nuMP| LTFunctorField off p |] ->
-      LTFunctorField <$> genSubst s off <*> genSubst s p
+    [nuMP| LTFunctorField off |] ->
+      LTFunctorField <$> genSubst s off
     [nuMP| LTFunctorArray off len stride sh bs |] ->
       LTFunctorArray <$> genSubst s off <*> genSubst s len <*>
       return (mbLift stride) <*> genSubst s sh <*> genSubst s bs
-    [nuMP| LTFunctorBlock off len sh |] ->
-      LTFunctorBlock <$> genSubst s off <*> genSubst s len <*> genSubst s sh
+    [nuMP| LTFunctorBlock off len mb_sh |] ->
+      LTFunctorBlock <$> genSubst s off <*> genSubst s len <*> genSubst s mb_sh
 
 
 ----------------------------------------------------------------------
