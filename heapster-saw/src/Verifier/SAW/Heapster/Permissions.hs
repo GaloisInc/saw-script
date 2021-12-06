@@ -3733,6 +3733,19 @@ llvmAtomicPermEndOffset p =
 llvmAtomicPermRange :: AtomicPerm (LLVMPointerType w) -> Maybe (BVRange w)
 llvmAtomicPermRange p = fmap llvmBlockRange $ llvmAtomicPermToBlock p
 
+-- | Test if an LLVM atomic permission contains some range of offsets that have
+-- an array shape
+llvmPermContainsArray :: AtomicPerm (LLVMPointerType w) -> Bool
+llvmPermContainsArray (Perm_LLVMArray _) = True
+llvmPermContainsArray (Perm_LLVMBlock bp) =
+  shapeContainsArray $ llvmBlockShape bp where
+  shapeContainsArray :: PermExpr (LLVMShapeType w) -> Bool
+  shapeContainsArray (PExpr_ArrayShape _ _ _) = True
+  shapeContainsArray (PExpr_SeqShape sh1 sh2) =
+    shapeContainsArray sh1 || shapeContainsArray sh2
+  shapeContainsArray _ = False
+llvmPermContainsArray _ = False
+
 -- | Set the range of an 'LLVMBlock'
 llvmBlockSetRange :: LLVMBlockPerm w -> BVRange w -> LLVMBlockPerm w
 llvmBlockSetRange bp (BVRange off len) =
