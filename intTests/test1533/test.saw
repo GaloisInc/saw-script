@@ -1,0 +1,14 @@
+enable_experimental;
+
+let get_x2_spec = do {
+  ss <- llvm_alloc (llvm_alias "struct.s");
+  z <- llvm_fresh_var "z" (llvm_int 8);
+  llvm_points_to (llvm_field ss "x2") (llvm_term z);
+  llvm_execute_func [ss];
+  llvm_return (llvm_term z);
+};
+
+m <- llvm_load_module "test.bc";
+
+llvm_verify     m            "get_x2" [] false get_x2_spec (w4_unint_z3 []);
+llvm_verify_x86 m "test.exe" "get_x2" [] false get_x2_spec (w4_unint_z3 []);
