@@ -1,3 +1,8 @@
+queue_rules:
+  - name: default
+    conditions:
+      - check-success=mergify
+
 pull_request_rules:
   - name: Automatic merge on approval, CI, and ready-to-merge label
     conditions:
@@ -6,9 +11,9 @@ pull_request_rules:
       - label=ready-to-merge
     actions:
       update: {}
-      merge:
+      queue:
         method: merge
-        strict: smart+fasttrack
+        name: default
   - name: Delete head branch after merge
     conditions:
       - merged
