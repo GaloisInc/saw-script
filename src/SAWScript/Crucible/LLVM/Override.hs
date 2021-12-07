@@ -633,7 +633,12 @@ methodSpecHandler_prestate opts sc cc args cs =
 --   and computing postcondition predicates.
 methodSpecHandler_poststate ::
   forall arch ret.
-  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
@@ -706,7 +711,12 @@ enforceCompleteSubstitution loc ss =
 
 
 -- execute a pre/post condition
-executeCond :: (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym)
+executeCond :: ( ?lc :: Crucible.TypeContext
+               , ?memOpts :: Crucible.MemOptions
+               , ?w4EvalTactic :: W4EvalTactic
+               , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+               , Crucible.HasLLVMAnn Sym
+               )
             => Options
             -> SharedContext
             -> LLVMCrucibleContext arch
@@ -1615,6 +1625,7 @@ instantiateExtResolveSAWSymBV sc cc w tm = do
 -- Return a map containing the overwritten memory allocations.
 invalidateMutableAllocs ::
   ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
@@ -1707,7 +1718,12 @@ invalidateMutableAllocs opts sc cc cs = do
 -- | Perform an allocation as indicated by an @llvm_alloc@ or
 -- @llvm_fresh_pointer@ statement from the postcondition section.
 executeAllocation ::
-  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options                        ->
   SharedContext ->
   LLVMCrucibleContext arch          ->
@@ -1734,7 +1750,11 @@ executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc fres
      assignVar cc loc var ptr
 
 doAllocSymInit ::
-  (Crucible.IsSymInterface sym, Crucible.HasPtrWidth wptr, Crucible.HasLLVMAnn sym) =>
+  ( ?memOpts :: Crucible.MemOptions
+  , Crucible.IsSymInterface sym
+  , Crucible.HasPtrWidth wptr
+  , Crucible.HasLLVMAnn sym
+  ) =>
   sym ->
   Crucible.MemImpl sym ->
   Crucible.Mutability ->
@@ -1799,7 +1819,12 @@ executeGhost _sc _var (TypedTerm tp _) =
 -- the CrucibleSetup block. First we compute the value indicated by
 -- 'val', and then write it to the address indicated by 'ptr'.
 executePointsTo ::
-  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options                    ->
   SharedContext              ->
   LLVMCrucibleContext arch     ->
@@ -1830,7 +1855,11 @@ executePointsTo opts sc cc spec overwritten_allocs (LLVMPointsTo _loc cond ptr v
      writeGlobal memVar mem'
 
 storePointsToValue ::
-  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?memOpts :: Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options ->
   LLVMCrucibleContext arch ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->

@@ -401,7 +401,7 @@ translate opts elf fun =
      sayLn ("Translating function: " ++ BSC.unpack name)
 
      let ?memOpts = Crucible.defaultMemOptions
-     let ?recordLLVMAnnotation = \_ _ -> return ()
+     let ?recordLLVMAnnotation = \_ _ _ -> return ()
 
      let sym   = backend opts
          sopts = Opts { optsSym = sym, optsCry = cryEnv opts, optsMvar = memvar opts }
