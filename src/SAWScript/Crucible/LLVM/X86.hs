@@ -762,7 +762,7 @@ assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
   opts <- use x86Options
   cc <- use x86CrucibleContext
   mem <- use x86Mem
-  ptr <- resolvePtrSetupValue env tyenv tptr
+  ptr <- resolvePtrSetupValue env tyenv nameEnv tptr
   cond' <- liftIO $ mapM (resolveSAWPred cc . ttTerm) cond
   mem' <- liftIO $ LO.storePointsToValue opts cc env tyenv nameEnv mem cond' ptr tptval Nothing
   x86Mem .= mem'
@@ -771,9 +771,10 @@ resolvePtrSetupValue ::
   X86Constraints =>
   Map MS.AllocIndex Ptr ->
   Map MS.AllocIndex LLVMAllocSpec ->
+  Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   MS.SetupValue LLVM ->
   X86Sim Ptr
-resolvePtrSetupValue env tyenv tptr = do
+resolvePtrSetupValue env tyenv nameEnv tptr = do
   sym <- use x86Sym
   cc <- use x86CrucibleContext
   mem <- use x86Mem
@@ -789,7 +790,7 @@ resolvePtrSetupValue env tyenv tptr = do
         let addr = fromIntegral $ Elf.steValue entry
         liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
     _ -> liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-         =<< resolveSetupVal cc mem env tyenv Map.empty tptr
+         =<< resolveSetupVal cc mem env tyenv nameEnv tptr
 
 -- | Write each SetupValue passed to llvm_execute_func to the appropriate
 -- x86_64 register from the calling convention.
@@ -852,6 +853,7 @@ assertPost globals env premem preregs = do
   postregs <- use x86Regs
   let
     tyenv = ms ^. MS.csPreState . MS.csAllocs
+    nameEnv = MS.csTypeNames ms
 
   prersp <- getReg Macaw.RSP preregs
   expectedIP <- liftIO $ C.LLVM.doLoad sym premem prersp (C.LLVM.bitvectorType 8)
@@ -890,7 +892,7 @@ assertPost globals env premem preregs = do
 
 
   pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)
-    $ assertPointsTo env tyenv
+    $ assertPointsTo env tyenv nameEnv
 
   let setupConditionMatchesPre = fmap -- assume preconditions
         (LO.executeSetupCondition opts sc cc ms)
@@ -931,15 +933,16 @@ assertPointsTo ::
   X86Constraints =>
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
+  Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim (LLVMOverrideMatcher md ())
-assertPointsTo env tyenv pointsTo@(LLVMPointsTo loc cond tptr tptval) = do
+assertPointsTo env tyenv nameEnv pointsTo@(LLVMPointsTo loc cond tptr tptval) = do
   opts <- use x86Options
   sc <- use x86SharedContext
   cc <- use x86CrucibleContext
   ms <- use x86MethodSpec
 
-  ptr <- resolvePtrSetupValue env tyenv tptr
+  ptr <- resolvePtrSetupValue env tyenv nameEnv tptr
   pure $ do
     err <- LO.matchPointsToValue opts sc cc ms MS.PostState loc cond ptr tptval
     case err of
