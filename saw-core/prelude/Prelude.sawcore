@@ -1337,6 +1337,25 @@ streamShiftL a xs i = streamDrop a i xs;
 streamShiftR : (a : sort 0) -> a -> Stream a -> Nat -> Stream a;
 streamShiftR a z xs i = streamAppend a i (replicate i a z) xs;
 
+-- TODO "streamScanl" should probably be a primitive.  However, stream
+-- primitives are complicated to implement because the backends have different
+-- implementations for streams, and there is no uniform place to implement them.
+--
+-- We explicitly use "fix" here to implement sharing in the stream.  A naive
+-- implementation that just iterates "f" separate for each index would waste work.
+-- The fixpoint is well founded because each element only refers to elements with
+-- smaller indices.
+streamScanl : (a b : sort 0) -> (b -> a -> b) -> b -> Stream a -> Stream b;
+streamScanl a b f z as =
+  fix (Stream b)
+    (\ (bs : Stream b) -> MkStream b
+      (natCase (\ (n : Nat) -> b)
+         -- zero case
+         z
+	 -- successor case
+	 (\ (n : Nat) -> f (streamGet b bs n) (streamGet a as n)))
+    );
+
 --------------------------------------------------------------------------------
 -- Integer values
 --   integer values of unbounded precision
@@ -1644,7 +1663,7 @@ genBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
            BVVec n len a;
 genBVVec n len a f =
   genWithProof (bvToNat n len) a
-    (\(i:Nat) (pf:IsLtNat i (bvToNat n len)) -> 
+    (\(i:Nat) (pf:IsLtNat i (bvToNat n len)) ->
       f (bvNat n i) (IsLtNat_to_bvult n len i pf));
 
 -- Generate a BVVec from the elements of an existing vector, using a default

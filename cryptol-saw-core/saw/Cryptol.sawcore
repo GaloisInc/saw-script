@@ -1576,7 +1576,7 @@ ecScanl :
 ecScanl n a b f z =
   Num#rec (\ (n : Num) -> seq n b -> seq (tcAdd (TCNum 1) n) a)
     (\ (n:Nat) -> \ (xs : Vec n b) -> scanl b a n f z xs)
-    (\ (xs : Stream b) -> MkStream a (Nat__rec (\ (i:Nat) -> a) z (\ (i:Nat) -> \ (x:a) -> f x (streamGet b xs i))))
+    (\ (xs : Stream b) -> streamScanl b a f z xs)
     n;
 
 --------------------------------------------------------------------------------
