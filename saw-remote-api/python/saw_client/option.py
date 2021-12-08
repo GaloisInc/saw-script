@@ -35,3 +35,9 @@ class SMTArrayMemoryModel(SAWOption):
 class What4HashConsing(SAWOption):
     def __str__(self) -> str:
         return "What4 hash consing"
+
+
+@dataclass
+class What4Eval(SAWOption):
+    def __str__(self) -> str:
+        return "What4 eval"

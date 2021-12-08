@@ -3,7 +3,9 @@
 
 ## 0.9.1 -- YYYY-MM-DD
 
-* NEW CHANGELOG ENTRIES SINCE 0.9.0 GO HERE
+* `SAW/set option`'s `"option"` parameter is now allowed to be `"What4 eval"`,
+  which controls whether to enable or disable What4 translation for SAWCore
+  expressions during Crucible symbolic execution.
 
 
 ## 0.9.0 -- 2021-11-19
