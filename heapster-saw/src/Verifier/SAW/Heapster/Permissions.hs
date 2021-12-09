@@ -42,6 +42,7 @@ import Data.String
 import Data.Proxy
 import Data.Reflection
 import Data.Functor.Constant
+import Data.Functor.Product
 import qualified Data.BitVector.Sized as BV
 import Data.BitVector.Sized (BV)
 import Numeric.Natural
@@ -71,7 +72,7 @@ import Data.Parameterized.Context (Assignment, AssignView(..),
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.BoolRepr
 import Data.Parameterized.NatRepr
-import Data.Parameterized.Pair
+import qualified Data.Parameterized.Pair as Pair
 
 import Prettyprinter as PP
 import Prettyprinter.Render.String (renderString)
@@ -1387,10 +1388,10 @@ bvFromBytes endianness bytes =
           BigEndian -> BV.bytesBE
           LittleEndian -> BV.bytesLE in
   case bv_fun bytes of
-    Pair sz bv
+    Pair.Pair sz bv
       | Left leq_proof <- decideLeq (knownNat @1) sz ->
         withKnownNat sz $ withLeqProof leq_proof $ Some $ BVExpr $ bvBV bv
-    Pair _ _ -> error "bvFromBytes: zero-sized bitvector"
+    Pair.Pair _ _ -> error "bvFromBytes: zero-sized bitvector"
 
 -- | Concatenate two bitvectors, using the current endianness to determine how
 -- they combine
@@ -1636,7 +1637,7 @@ data AtomicPerm (a :: CrucibleType) where
   -- Additionally, a lifetime may contain some other lifetimes, meaning the all
   -- must end before the current one can be ended.
   Perm_LOwned :: KnownRepr CruCtx ctx => [PermExpr LifetimeType] ->
-                 Mb ctx (LOwnedPerms ps_in, LOwnedPerms ps_out) ->
+                 Mb ctx (LOwnedExprPerms ps_in, LOwnedExprPerms ps_out) ->
                  AtomicPerm LifetimeType
 
   -- | Assertion that a lifetime is current during another lifetime
@@ -1780,8 +1781,8 @@ pattern ValPerm_LLVMBlockShape sh <- ValPerm_Conj [Perm_LLVMBlockShape sh]
 -- | A single @lowned@ permission
 pattern ValPerm_LOwned :: () => (a ~ LifetimeType, KnownRepr CruCtx ctx) =>
                           [PermExpr LifetimeType] ->
-                          Mb ctx (LOwnedPerms ps_in, LOwnedPerms ps_out) ->
-                          ValuePerm a
+                          Mb ctx (LOwnedExprPerms ps_in,
+                                  LOwnedExprPerms ps_out) -> ValuePerm a
 pattern ValPerm_LOwned ls ps_in_out <- ValPerm_Conj [Perm_LOwned ls ps_in_out]
   where
     ValPerm_LOwned ls ps_in_out = ValPerm_Conj [Perm_LOwned ls ps_in_out]
@@ -2062,45 +2063,56 @@ instance Eq (LLVMFieldShape w) where
   _ == _ = False
 
 
--- | A form of permission used in lifetime ownership permissions
+-- | A restricted form of permission used in lifetime ownership permissions
 data LOwnedPerm a where
   LOwnedPermField :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
-                     PermExpr (LLVMPointerType w) -> LLVMFieldPerm w sz ->
+                     LLVMFieldPerm w sz -> LOwnedPerm (LLVMPointerType w)
+  LOwnedPermArray :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
                      LOwnedPerm (LLVMPointerType w)
-  LOwnedPermArray :: (1 <= w, KnownNat w) => PermExpr (LLVMPointerType w) ->
-                     LLVMArrayPerm w -> LOwnedPerm (LLVMPointerType w)
-  LOwnedPermBlock :: (1 <= w, KnownNat w) => PermExpr (LLVMPointerType w) ->
-                     LLVMBlockPerm w -> LOwnedPerm (LLVMPointerType w)
-  -- | A @struct@ permission of the form @struct(eq(e1),...,eq(en))@
-  LOwnedPermStruct :: CtxRepr args -> PermExpr (StructType args) ->
-                      PermExprs (CtxToRList args) ->
+  LOwnedPermBlock :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
+                     LOwnedPerm (LLVMPointerType w)
+  LOwnedPermStruct :: CtxRepr args ->
+                      RAssign LOwnedStructPerm (CtxToRList args) ->
                       LOwnedPerm (StructType args)
+
+data LOwnedStructPerm a where
+  LOwnedStructLOP :: LOwnedPerm a -> LOwnedStructPerm a
+  LOwnedStructEq :: PermExpr a -> LOwnedStructPerm a
+  LOwnedStructTrue :: LOwnedStructPerm a
 
 -- | A sequence of 'LOwnedPerm's
 type LOwnedPerms = RAssign LOwnedPerm
 
+-- | An expression plus an 'LOwnedPerm'
+data LOwnedExprPerm a =
+  LOwnedExprPerm { lownedExprPermExpr :: PermExpr a,
+                   lownedExprPermLOP :: LOwnedPerm a }
+
+-- | A sequence of 'LOwnedPerm's
+type LOwnedExprPerms = RAssign LOwnedExprPerm
+
 instance TestEquality LOwnedPerm where
-  testEquality (LOwnedPermField e1 fp1) (LOwnedPermField e2 fp2)
-    | Just Refl <- testEquality (exprType e1) (exprType e2)
+  testEquality lop1@(LOwnedPermField fp1) lop2@(LOwnedPermField fp2)
+    | Just Refl <- testEquality (exprLLVMTypeWidth lop1) (exprLLVMTypeWidth lop2)
     , Just Refl <- testEquality (llvmFieldSize fp1) (llvmFieldSize fp2)
-    , e1 == e2 && fp1 == fp2
+    , fp1 == fp2
     = Just Refl
-  testEquality (LOwnedPermField _ _) _ = Nothing
-  testEquality (LOwnedPermArray e1 ap1) (LOwnedPermArray e2 ap2)
-    | Just Refl <- testEquality (exprType e1) (exprType e2)
-    , e1 == e2 && ap1 == ap2
+  testEquality (LOwnedPermField _) _ = Nothing
+  testEquality (LOwnedPermArray ap1) (LOwnedPermArray ap2)
+    | Just Refl <- testEquality (natRepr ap1) (natRepr ap2)
+    , ap1 == ap2
     = Just Refl
-  testEquality (LOwnedPermArray _ _) _ = Nothing
-  testEquality (LOwnedPermBlock e1 bp1) (LOwnedPermBlock e2 bp2)
-    | Just Refl <- testEquality (exprType e1) (exprType e2)
-    , e1 == e2 && bp1 == bp2
+  testEquality (LOwnedPermArray _) _ = Nothing
+  testEquality (LOwnedPermBlock bp1) (LOwnedPermBlock bp2)
+    | Just Refl <- testEquality (natRepr bp1) (natRepr bp2)
+    , bp1 == bp2
     = Just Refl
-  testEquality (LOwnedPermBlock _ _) _ = Nothing
-  testEquality (LOwnedPermStruct tps1 e1 es1) (LOwnedPermStruct tps2 e2 es2)
+  testEquality (LOwnedPermBlock _) _ = Nothing
+  testEquality (LOwnedPermStruct tps1 ps1) (LOwnedPermStruct tps2 ps2)
     | Just Refl <- testEquality tps1 tps2
-    , e1 == e2 && es1 == es2 =
-      Just Refl
-  testEquality (LOwnedPermStruct _ _ _) _ = Nothing
+    , ps1 == ps2
+    = Just Refl
+  testEquality (LOwnedPermStruct _ _) _ = Nothing
 
 instance Eq (LOwnedPerm a) where
   lop1 == lop2 | Just Refl <- testEquality lop1 lop2 = True
@@ -2109,100 +2121,144 @@ instance Eq (LOwnedPerm a) where
 instance Eq1 LOwnedPerm where
   eq1 = (==)
 
--- | Like 'testEquality' but for 'LOwnedPerms' in bindings
-mbLOwnedPermsEq :: Mb ctx (LOwnedPerms tps1) -> Mb ctx (LOwnedPerms tps2) ->
-                   Maybe (tps1 :~: tps2)
+instance (Eq (LOwnedStructPerm a)) where
+  LOwnedStructLOP lop1 == LOwnedStructLOP lop2 = lop1 == lop2
+  LOwnedStructLOP _ == _ = False
+  LOwnedStructEq e1 == LOwnedStructEq e2 = e1 == e2
+  LOwnedStructEq _ == _ = False
+  LOwnedStructTrue == LOwnedStructTrue = True
+  LOwnedStructTrue == _ = False
+
+instance Eq1 LOwnedStructPerm where
+  eq1 = (==)
+
+instance TestEquality LOwnedExprPerm where
+  testEquality (LOwnedExprPerm e1 lop1) (LOwnedExprPerm e2 lop2)
+    | Just Refl <- testEquality lop1 lop2
+    , e1 == e2
+    = Just Refl
+  testEquality _ _ = Nothing
+
+instance Eq (LOwnedExprPerm a) where
+  lop1 == lop2 | Just Refl <- testEquality lop1 lop2 = True
+  _ == _ = False
+
+instance Eq1 LOwnedExprPerm where
+  eq1 = (==)
+
+-- | Like 'testEquality' but for 'LOwnedExprPerms' in bindings
+mbLOwnedPermsEq :: Mb ctx (LOwnedExprPerms tps1) ->
+                   Mb ctx (LOwnedExprPerms tps2) -> Maybe (tps1 :~: tps2)
 mbLOwnedPermsEq [nuP| MNil |] [nuP| MNil |] = Just Refl
 mbLOwnedPermsEq [nuP| mb_lops1 :>: mb_lop1 |] [nuP| mb_lops2 :>: mb_lop2 |]
   | Just Refl <- mbLOwnedPermsEq mb_lops1 mb_lops2
   , Just Refl <-
     -- FIXME: using mbMap2 here makes this refresh all the bound names of
-    -- mb_lop1 and mb_lop2, so it is inefficient; instead, this function should
+    -- mb_lop1 and mb_lop2, because the above pattern-match made them all into
+    -- fresh pairs, so this is inefficient; instead, this function should
     -- pattern-match on them as bindings
     mbLift $ mbMap2 testEquality mb_lop1 mb_lop2 =
     Just Refl
 mbLOwnedPermsEq _ _ = Nothing
 
--- | Convert an 'LOwnedPerm' to the expression plus permission it represents
-lownedPermExprAndPerm :: LOwnedPerm a -> ExprAndPerm a
-lownedPermExprAndPerm (LOwnedPermField e fp) =
-  ExprAndPerm e $ ValPerm_LLVMField fp
-lownedPermExprAndPerm (LOwnedPermArray e ap) =
-  ExprAndPerm e $ ValPerm_LLVMArray ap
-lownedPermExprAndPerm (LOwnedPermBlock e bp) =
-  ExprAndPerm e $ ValPerm_LLVMBlock bp
-lownedPermExprAndPerm (LOwnedPermStruct _ e es) =
-  ExprAndPerm e $ ValPerm_Struct $ RL.map ValPerm_Eq es
+-- | Convert an 'LOwnedPerm' to an atomic permission
+lownedPermAPerm :: LOwnedPerm a -> AtomicPerm a
+lownedPermAPerm (LOwnedPermField fp) = Perm_LLVMField fp
+lownedPermAPerm (LOwnedPermArray ap) = Perm_LLVMArray ap
+lownedPermAPerm (LOwnedPermBlock bp) = Perm_LLVMBlock bp
+lownedPermAPerm (LOwnedPermStruct _ ps) =
+  Perm_Struct $ RL.map lownedStructPermPerm ps
 
--- | Convert an 'LOwnedPerm' to a variable plus permission, if possible
-lownedPermVarAndPerm :: LOwnedPerm a -> Maybe (VarAndPerm a)
-lownedPermVarAndPerm lop
-  | ExprAndPerm (PExpr_Var x) p <- lownedPermExprAndPerm lop =
-    Just $ VarAndPerm x p
-lownedPermVarAndPerm _ = Nothing
+-- | Convert an 'LOwnedPerm' to a permission
+lownedPermPerm :: LOwnedPerm a -> ValuePerm a
+lownedPermPerm = ValPerm_Conj1 . lownedPermAPerm
 
--- | Convert an expression plus permission to an 'LOwnedPerm', if possible
-varAndPermLOwnedPerm :: TypeRepr a -> VarAndPerm a -> Maybe (LOwnedPerm a)
-varAndPermLOwnedPerm _ (VarAndPerm x (ValPerm_LLVMField fp)) =
-  Just $ LOwnedPermField (PExpr_Var x) fp
-varAndPermLOwnedPerm _ (VarAndPerm x (ValPerm_LLVMArray ap)) =
-  Just $ LOwnedPermArray (PExpr_Var x) ap
-varAndPermLOwnedPerm _ (VarAndPerm x (ValPerm_LLVMBlock bp)) =
-  Just $ LOwnedPermBlock (PExpr_Var x) bp
-varAndPermLOwnedPerm (StructRepr tps) (VarAndPerm x (ValPerm_Struct ps))
-  | Just es <- matchEqValuePerms ps =
-    Just $ LOwnedPermStruct tps (PExpr_Var x) es
-varAndPermLOwnedPerm _ _ = Nothing
+-- | Convert an 'LOwnedStructPerm' to a permission
+lownedStructPermPerm :: LOwnedStructPerm a -> ValuePerm a
+lownedStructPermPerm (LOwnedStructLOP lop) = lownedPermPerm lop
+lownedStructPermPerm (LOwnedStructEq e) = ValPerm_Eq e
+lownedStructPermPerm LOwnedStructTrue = ValPerm_True
 
--- | Get the expression part of an 'LOwnedPerm'
-lownedPermExpr :: LOwnedPerm a -> PermExpr a
-lownedPermExpr = exprAndPermExpr . lownedPermExprAndPerm
+-- | Extract the permission from an 'LOwnedExprPerm'
+lownedExprPermPerm :: LOwnedExprPerm a -> ValuePerm a
+lownedExprPermPerm = lownedPermPerm . lownedExprPermLOP
 
 -- | Convert the expression part of an 'LOwnedPerm' to a variable, if possible
-lownedPermVar :: LOwnedPerm a -> Maybe (ExprVar a)
-lownedPermVar lop | PExpr_Var x <- lownedPermExpr lop = Just x
-lownedPermVar _ = Nothing
+lownedExprPermVar :: LOwnedExprPerm a -> Maybe (ExprVar a)
+lownedExprPermVar = asVar . lownedExprPermExpr
 
--- | Get the permission part of an 'LOwnedPerm'
-lownedPermPerm :: LOwnedPerm a -> ValuePerm a
-lownedPermPerm = exprAndPermPerm . lownedPermExprAndPerm
+-- | Convert the expressions of an 'LOwnedExprPerms' to variables, if possible
+lownedPermsVars :: LOwnedExprPerms ps -> Maybe (RAssign Name ps)
+lownedPermsVars = traverseRAssign lownedExprPermVar
 
--- | Convert the permission part of an 'LOwnedPerm' to a block permission on a
--- variable, if possible
-lownedPermVarBlockPerm :: LOwnedPerm a -> Maybe (ExprVar a, SomeLLVMBlockPerm a)
-lownedPermVarBlockPerm lop
-  | Just (x, perm_off) <- asVarOffset (lownedPermExpr lop)
-  , ValPerm_Conj1 p <- lownedPermPerm lop
-  , Just (SomeLLVMBlockPerm bp) <- llvmAtomicPermToSomeBlock p
-  , off <- llvmPermOffsetExpr perm_off =
-    Just (x, SomeLLVMBlockPerm (offsetLLVMBlockPerm off bp))
-lownedPermVarBlockPerm _ = Nothing
+-- | Convert an 'LOwnedExprPerm' to an expression plus permission
+lownedExprPermExprAndPerm :: LOwnedExprPerm a -> ExprAndPerm a
+lownedExprPermExprAndPerm (LOwnedExprPerm e lop) =
+  ExprAndPerm e (lownedPermPerm lop)
 
--- | Convert the permission part of an 'LOwnedPerm' in a binding to a block
--- permission on a variable in a binding, if possible
-mbLownedPermVarBlockPerm :: Mb ctx (LOwnedPerm a) ->
-                            Maybe (Mb ctx (ExprVar a, SomeLLVMBlockPerm a))
-mbLownedPermVarBlockPerm =
-  mbMaybe . mbMapCl $(mkClosed [| lownedPermVarBlockPerm |])
+-- | Convert an 'LOwnedExprPerm' to a variable plus permission, if possible
+lownedEPermVarAndPerm :: LOwnedExprPerm a -> Maybe (VarAndPerm a)
+lownedEPermVarAndPerm (LOwnedExprPerm e lop)
+  | Just x <- asVar e
+  = Just $ VarAndPerm x $ lownedPermPerm lop
+lownedEPermVarAndPerm _ = Nothing
+
+-- | Convert an 'LOwnedExprPerms' list to a 'DistPerms' if possible
+lownedPermsToDistPerms :: LOwnedExprPerms ps -> Maybe (DistPerms ps)
+lownedPermsToDistPerms = traverseRAssign lownedEPermVarAndPerm
+
+-- | Convert an 'LOwnedPerms' in a binding to a 'DistPerms' in a binding
+mbLOwnedPermsToDistPerms :: Mb ctx (LOwnedExprPerms ps) ->
+                            Maybe (Mb ctx (DistPerms ps))
+mbLOwnedPermsToDistPerms =
+  mbMaybe . mbMapCl $(mkClosed [| lownedPermsToDistPerms |])
+
+-- | Convert a permission to an 'LOwnedPerm', if possible
+permToLOwnedPerm :: TypeRepr a -> ValuePerm a -> Maybe (LOwnedPerm a)
+permToLOwnedPerm _ (ValPerm_LLVMField fp) = Just $ LOwnedPermField fp
+permToLOwnedPerm _ (ValPerm_LLVMArray ap) = Just $ LOwnedPermArray ap
+permToLOwnedPerm _ (ValPerm_LLVMBlock bp) = Just $ LOwnedPermBlock bp
+permToLOwnedPerm (StructRepr ctx) (ValPerm_Struct ps) =
+  LOwnedPermStruct ctx <$>
+  traverseRAssign (\(Pair tp p) -> permToLOwnedStructPerm tp p)
+  (RL.map2 Pair (cruCtxToTypes $ mkCruCtx ctx) ps)
+permToLOwnedPerm _ _ = Nothing
+
+-- | Convert a permission to an 'LOwnedStructPerm', if possible
+permToLOwnedStructPerm :: TypeRepr a -> ValuePerm a ->
+                          Maybe (LOwnedStructPerm a)
+permToLOwnedStructPerm _ (ValPerm_Eq e) = Just $ LOwnedStructEq e
+permToLOwnedStructPerm _ ValPerm_True = Just LOwnedStructTrue
+permToLOwnedStructPerm tp p = LOwnedStructLOP <$> permToLOwnedPerm tp p
+
+-- | Get the range of offsets covered by an 'LOwnedPerm' of LLVM type
+llvmLOwnedPermRange :: LOwnedPerm (LLVMPointerType w) -> Maybe (BVRange w)
+llvmLOwnedPermRange = llvmAtomicPermRange . lownedPermAPerm
 
 -- | Get the read/write and lifetime modalities of an 'LOwnedPerm' of LLVM type
-llvmLownedPermModalities :: LOwnedPerm (LLVMPointerType w) ->
+llvmLOwnedPermModalities :: LOwnedPerm (LLVMPointerType w) ->
                             (PermExpr RWModalityType, PermExpr LifetimeType)
-llvmLownedPermModalities (LOwnedPermField _ fp) =
+llvmLOwnedPermModalities (LOwnedPermField fp) =
   (llvmFieldRW fp, llvmFieldLifetime fp)
-llvmLownedPermModalities (LOwnedPermArray _ ap) =
+llvmLOwnedPermModalities (LOwnedPermArray ap) =
   (llvmArrayRW ap, llvmArrayLifetime ap)
-llvmLownedPermModalities (LOwnedPermBlock _ bp) =
+llvmLOwnedPermModalities (LOwnedPermBlock bp) =
   (llvmBlockRW bp, llvmBlockLifetime bp)
 
--- | Find all 'LOwnedPerm's in an 'LOwnedPerms' list for a variable
-findLOwnedPermsForVar :: ExprVar a -> LOwnedPerms ps -> [LOwnedPerm a]
+-- | Get the read/write and lifetime modalities of an LLVM 'LOwnedExprPerm'
+llvmLOwnedExprPermModalities :: LOwnedExprPerm (LLVMPointerType w) ->
+                                (PermExpr RWModalityType, PermExpr LifetimeType)
+llvmLOwnedExprPermModalities =
+  llvmLOwnedPermModalities . lownedExprPermLOP
+
+-- | Find all 'LOwnedPerm's in an 'LOwnedExprPerms' list for a variable
+findLOwnedPermsForVar :: ExprVar a -> LOwnedExprPerms ps -> [LOwnedExprPerm a]
 findLOwnedPermsForVar (x :: ExprVar a) =
   catMaybes . RL.mapToList
   (\case
-      lop | Just (y, _) <- asVarOffset (lownedPermExpr lop)
+      lop | Just (y, _) <- asVarOffset (lownedExprPermExpr lop)
           , Just Refl <- testEquality x y
-            -> Just (lop :: LOwnedPerm a)
+            -> Just (lop :: LOwnedExprPerm a)
       _ -> Nothing)
 
 -- | Generic function to try to lift something out of a binding, if possible
@@ -2241,24 +2297,43 @@ instance TryLift (BVFactor w) where
 
 -- | Find modalitieis for a variable in an 'LOwnedPerms' list in a binding
 findMbLOwnedPermModalitiesForVar :: ExprVar (LLVMPointerType w) ->
-                                    Mb ctx (LOwnedPerms ps) ->
+                                    Mb ctx (LOwnedExprPerms ps) ->
                                     (Maybe (PermExpr RWModalityType),
                                      Maybe (PermExpr LifetimeType))
 findMbLOwnedPermModalitiesForVar x mb_lops =
   let [nuMP| (mb_rws, mb_ls) |] =
-        mbMatch $ fmap (unzip . map llvmLownedPermModalities .
+        mbMatch $ fmap (unzip . map llvmLOwnedExprPermModalities .
                         findLOwnedPermsForVar x) mb_lops in
   (listToMaybe (mapMaybe tryLift $ mbList mb_rws),
    listToMaybe (mapMaybe tryLift $ mbList mb_ls))
 
+-- | Convert the permission part of an 'LOwnedExprPerm' to a block permission on
+-- a variable, if possible
+lownedExprPermVarBlockPerm :: LOwnedExprPerm a ->
+                              Maybe (ExprVar a, SomeLLVMBlockPerm a)
+lownedExprPermVarBlockPerm lop
+  | Just (x, perm_off) <- asVarOffset (lownedExprPermExpr lop)
+  , ValPerm_Conj1 p <- lownedExprPermPerm lop
+  , Just (SomeLLVMBlockPerm bp) <- llvmAtomicPermToSomeBlock p
+  , off <- llvmPermOffsetExpr perm_off =
+    Just (x, SomeLLVMBlockPerm (offsetLLVMBlockPerm off bp))
+lownedExprPermVarBlockPerm _ = Nothing
+
+-- | Convert the permission part of an 'LOwnedPerm' in a binding to a block
+-- permission on a variable in a binding, if possible
+mbLOwnedExprPermVarBlockPerm :: Mb ctx (LOwnedExprPerm a) ->
+                                Maybe (Mb ctx (ExprVar a, SomeLLVMBlockPerm a))
+mbLOwnedExprPermVarBlockPerm =
+  mbMaybe . mbMapCl $(mkClosed [| lownedExprPermVarBlockPerm |])
+
 -- | Find all 'LOwnedPerm's for a specific variable of LLVM pointer type in an
 -- 'LOwnedPerms' list, and return the ranges of offsets that each of those cover
 lownedPermsOffsetsForLLVMVar :: (1 <= w, KnownNat w) =>
-                                ExprVar (LLVMPointerType w) -> LOwnedPerms ps ->
-                                [BVRange w]
+                                ExprVar (LLVMPointerType w) ->
+                                LOwnedExprPerms ps -> [BVRange w]
 lownedPermsOffsetsForLLVMVar _ MNil = []
 lownedPermsOffsetsForLLVMVar x (lops :>: lop)
-  | Just (y, SomeLLVMBlockPerm bp) <- lownedPermVarBlockPerm lop
+  | Just (y, SomeLLVMBlockPerm bp) <- lownedExprPermVarBlockPerm lop
   , Just Refl <- testEquality x y =
     llvmBlockRange bp : lownedPermsOffsetsForLLVMVar x lops
 lownedPermsOffsetsForLLVMVar x (lops :>: _) =
@@ -2872,7 +2947,8 @@ data LifetimeCurrentPerms ps_l where
   -- > l:lowned[ls](ps_in -o ps_out)
   LOwnedCurrentPerms :: KnownRepr CruCtx ctx =>
                         ExprVar LifetimeType -> [PermExpr LifetimeType] ->
-                        Mb ctx (LOwnedPerms ps_in, LOwnedPerms ps_out) ->
+                        Mb ctx (LOwnedExprPerms ps_in,
+                                LOwnedExprPerms ps_out) ->
                         LifetimeCurrentPerms (RNil :> LifetimeType)
 
   -- | A variable @l@ that is @lcurrent@ during another lifetime @l'@ is
@@ -2954,15 +3030,18 @@ ltFuncApply (LTFunctorArray off len stride sh bs) (_ :>: rw) l =
 ltFuncApply (LTFunctorBlock off len sh) (_ :>: rw) l =
   ValPerm_LLVMBlock $ LLVMBlockPerm rw l off len sh
 
--- | Apply a functor to its arguments to get out an 'LOwnedPerm' on a variable
+-- | Apply a functor to its arguments to get out an 'LOwnedExprPerm'
 ltFuncApplyLOP :: ExprVar a -> LifetimeFunctor args a -> PermExprs args ->
-                  PermExpr LifetimeType -> LOwnedPerm a
+                  PermExpr LifetimeType -> LOwnedExprPerm a
 ltFuncApplyLOP x (LTFunctorField off) (_ :>: rw :>: e) l =
-  LOwnedPermField (PExpr_Var x) $ LLVMFieldPerm rw l off $ ValPerm_Eq e
+  LOwnedExprPerm (PExpr_Var x) $
+  LOwnedPermField $ LLVMFieldPerm rw l off $ ValPerm_Eq e
 ltFuncApplyLOP x (LTFunctorArray off len stride sh bs) (_ :>: rw) l =
-  LOwnedPermArray (PExpr_Var x) $ LLVMArrayPerm rw l off len stride sh bs
+  LOwnedExprPerm (PExpr_Var x) $
+  LOwnedPermArray $ LLVMArrayPerm rw l off len stride sh bs
 ltFuncApplyLOP x (LTFunctorBlock off len sh) (_ :>: rw) l =
-  LOwnedPermBlock (PExpr_Var x) $ LLVMBlockPerm rw l off len sh
+  LOwnedExprPerm (PExpr_Var x) $
+  LOwnedPermBlock $ LLVMBlockPerm rw l off len sh
 
 -- | Apply a functor to just a lifetime, yielding a permission in a binding
 ltFuncMinApply :: LifetimeFunctor args a -> PermExpr LifetimeType ->
@@ -2973,7 +3052,7 @@ ltFuncMinApply func l =
 
 -- | Apply a functor to just a lifetime, yielding an 'LOwnedPerm' in a binding
 ltFuncMinApplyLOP :: ExprVar a -> LifetimeFunctor args a ->
-                     PermExpr LifetimeType -> Mb args (LOwnedPerm a)
+                     PermExpr LifetimeType -> Mb args (LOwnedExprPerm a)
 ltFuncMinApplyLOP x func l =
   nuMulti (cruCtxProxies $ ltFuncArgs func) $ \args ->
   ltFuncApplyLOP x func (RL.map PExpr_Var args) l
@@ -3229,10 +3308,10 @@ instance PermPretty (PermOffset a) where
     do e_pp <- permPrettyM e
        return (pretty '@' <> parens e_pp)
 
-instance PermPretty (LOwnedPerm a) where
-  permPrettyM = permPrettyM . lownedPermExprAndPerm
+instance PermPretty (LOwnedExprPerm a) where
+  permPrettyM = permPrettyM . lownedExprPermExprAndPerm
 
-instance PermPrettyF LOwnedPerm where
+instance PermPrettyF LOwnedExprPerm where
   permPrettyMF = permPrettyM
 
 -- | A pair type that is explicitly pretty-printed with an implication
@@ -5222,41 +5301,27 @@ shapeIsCopyable rw (PExpr_ExShape mb_sh) =
   mbLift $ fmap (shapeIsCopyable rw) mb_sh
 
 
--- FIXME: need a traversal function for RAssign for the following two funs
-
--- | Convert an 'LOwnedPerms' list to a 'DistPerms'
-lownedPermsToDistPerms :: LOwnedPerms ps -> Maybe (DistPerms ps)
-lownedPermsToDistPerms MNil = Just MNil
-lownedPermsToDistPerms (lops :>: lop) =
-  (:>:) <$> lownedPermsToDistPerms lops <*> lownedPermVarAndPerm lop
-
--- | Convert the expressions of an 'LOwnedPerms' to variables, if possible
-lownedPermsVars :: LOwnedPerms ps -> Maybe (RAssign Name ps)
-lownedPermsVars MNil = Just MNil
-lownedPermsVars (lops :>: lop) =
-  (:>:) <$> lownedPermsVars lops <*> lownedPermVar lop
-
--- | Test if an 'LOwnedPerm' could help prove any of a list of permissions
-lownedPermCouldProve :: LOwnedPerm a -> DistPerms ps -> Bool
-lownedPermCouldProve (LOwnedPermField (PExpr_Var x) fp) ps =
+-- | Test if an 'LOwnedExprPerm' could help prove any of a list of permissions
+lownedPermCouldProve :: LOwnedExprPerm a -> DistPerms ps -> Bool
+lownedPermCouldProve (LOwnedExprPerm (PExpr_Var x) (LOwnedPermField fp)) ps =
   any (\case (llvmAtomicPermRange -> Just rng) ->
                bvCouldBeInRange (llvmFieldOffset fp) rng
              _ -> False) $
   varAtomicPermsInDistPerms x ps
-lownedPermCouldProve (LOwnedPermArray (PExpr_Var x) ap) ps =
+lownedPermCouldProve (LOwnedExprPerm (PExpr_Var x) (LOwnedPermArray ap)) ps =
   any (\case (llvmAtomicPermRange -> Just rng) ->
                bvRangesCouldOverlap (llvmArrayAbsOffsets ap) rng
              _ -> False) $
   varAtomicPermsInDistPerms x ps
-lownedPermCouldProve (LOwnedPermBlock (PExpr_Var x) bp) ps =
+lownedPermCouldProve (LOwnedExprPerm (PExpr_Var x) (LOwnedPermBlock bp)) ps =
   any (\case (llvmAtomicPermRange -> Just rng) ->
                bvRangesCouldOverlap (llvmBlockRange bp) rng
              _ -> False) $
   varAtomicPermsInDistPerms x ps
 lownedPermCouldProve _ _ = False
 
--- | Test if an 'LOwnedPerms' list could help prove any of a list of permissions
-lownedPermsCouldProve :: LOwnedPerms ps -> DistPerms ps' -> Bool
+-- | Test if an 'LOwnedExprPerms' list could help prove any of a list of permissions
+lownedPermsCouldProve :: LOwnedExprPerms ps -> DistPerms ps' -> Bool
 lownedPermsCouldProve lops ps =
   RL.foldr (\lop rest -> lownedPermCouldProve lop ps || rest) False lops
 
@@ -5470,16 +5535,23 @@ instance FreeVars (PermOffset tp) where
   freeVars (LLVMPermOffset e) = freeVars e
 
 instance FreeVars (LOwnedPerm a) where
-  freeVars (LOwnedPermField e fp) =
-    NameSet.unions [freeVars e, freeVars fp]
-  freeVars (LOwnedPermArray e ap) =
-    NameSet.unions [freeVars e, freeVars ap]
-  freeVars (LOwnedPermBlock e bp) =
-    NameSet.unions [freeVars e, freeVars bp]
-  freeVars (LOwnedPermStruct _ e es) =
-    NameSet.unions [freeVars e, freeVars es]
+  freeVars (LOwnedPermField fp) = freeVars fp
+  freeVars (LOwnedPermArray ap) = freeVars ap
+  freeVars (LOwnedPermBlock bp) = freeVars bp
+  freeVars (LOwnedPermStruct _ ps) = freeVars ps
 
-instance FreeVars (LOwnedPerms ps) where
+instance FreeVars (LOwnedStructPerm a) where
+  freeVars (LOwnedStructLOP lop) = freeVars lop
+  freeVars (LOwnedStructEq e) = freeVars e
+  freeVars LOwnedStructTrue = NameSet.empty
+
+instance FreeVars (RAssign LOwnedStructPerm ctx) where
+  freeVars = NameSet.unions . RL.mapToList freeVars
+
+instance FreeVars (LOwnedExprPerm a) where
+  freeVars (LOwnedExprPerm e lop) = NameSet.union (freeVars e) (freeVars lop)
+
+instance FreeVars (LOwnedExprPerms ps) where
   freeVars = NameSet.unions . RL.mapToList freeVars
 
 instance FreeVars (FunPerm ghosts args ret) where
@@ -5932,17 +6004,33 @@ instance SubstVar s m => Substable s (LLVMFieldShape w) m where
     LLVMFieldShape <$> genSubst s p
 
 instance SubstVar s m => Substable s (LOwnedPerm a) m where
-  genSubst s mb_x = case mbMatch mb_x of
-    [nuMP| LOwnedPermField e fp |] ->
-      LOwnedPermField <$> genSubst s e <*> genSubst s fp
-    [nuMP| LOwnedPermArray e ap |] ->
-      LOwnedPermArray <$> genSubst s e <*> genSubst s ap
-    [nuMP| LOwnedPermBlock e bp |] ->
-      LOwnedPermBlock <$> genSubst s e <*> genSubst s bp
-    [nuMP| LOwnedPermStruct tps e es |] ->
-      LOwnedPermStruct (mbLift tps) <$> genSubst s e <*> genSubst s es
+  genSubst s mb_lop = case mbMatch mb_lop of
+    [nuMP| LOwnedPermField fp |] ->
+      LOwnedPermField <$> genSubst s fp
+    [nuMP| LOwnedPermArray ap |] ->
+      LOwnedPermArray <$> genSubst s ap
+    [nuMP| LOwnedPermBlock bp |] ->
+      LOwnedPermBlock <$> genSubst s bp
+    [nuMP| LOwnedPermStruct tps ps |] ->
+      LOwnedPermStruct (mbLift tps) <$> genSubst s ps
 
-instance SubstVar s m => Substable1 s LOwnedPerm m where
+instance SubstVar s m => Substable s (LOwnedStructPerm a) m where
+  genSubst s mb_lop = case mbMatch mb_lop of
+    [nuMP| LOwnedStructLOP lop |] ->
+      LOwnedStructLOP <$> genSubst s lop
+    [nuMP| LOwnedStructEq e |] ->
+      LOwnedStructEq <$> genSubst s e
+    [nuMP| LOwnedStructTrue |] -> return LOwnedStructTrue
+
+instance SubstVar s m => Substable1 s LOwnedStructPerm m where
+  genSubst1 = genSubst
+
+instance SubstVar s m => Substable s (LOwnedExprPerm a) m where
+  genSubst s mb_lop = case mbMatch mb_lop of
+    [nuMP| LOwnedExprPerm e lop |] ->
+      LOwnedExprPerm <$> genSubst s e <*> genSubst s lop
+
+instance SubstVar s m => Substable1 s LOwnedExprPerm m where
   genSubst1 = genSubst
 
 instance SubstVar s m => Substable s (FunPerm ghosts args ret) m where
@@ -6730,25 +6818,45 @@ instance AbstractVars (DistPerms ps) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 x `clMbMbApplyM` abstractPEVars ns1 ns2 p
 
 instance AbstractVars (LOwnedPerm a) where
-  abstractPEVars ns1 ns2 (LOwnedPermField e fp) =
+  abstractPEVars ns1 ns2 (LOwnedPermField fp) =
     absVarsReturnH ns1 ns2 $(mkClosed [| LOwnedPermField |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e
     `clMbMbApplyM` abstractPEVars ns1 ns2 fp
-  abstractPEVars ns1 ns2 (LOwnedPermArray e ap) =
+  abstractPEVars ns1 ns2 (LOwnedPermArray ap) =
     absVarsReturnH ns1 ns2 $(mkClosed [| LOwnedPermArray |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e
     `clMbMbApplyM` abstractPEVars ns1 ns2 ap
-  abstractPEVars ns1 ns2 (LOwnedPermBlock e bp) =
+  abstractPEVars ns1 ns2 (LOwnedPermBlock bp) =
     absVarsReturnH ns1 ns2 $(mkClosed [| LOwnedPermBlock |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e
     `clMbMbApplyM` abstractPEVars ns1 ns2 bp
-  abstractPEVars ns1 ns2 (LOwnedPermStruct tps e es) =
+  abstractPEVars ns1 ns2 (LOwnedPermStruct tps ps) =
     absVarsReturnH ns1 ns2 ($(mkClosed [| LOwnedPermStruct |])
                             `clApply` toClosed tps)
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e
-    `clMbMbApplyM` abstractPEVars ns1 ns2 es
+    `clMbMbApplyM` abstractPEVars ns1 ns2 ps
 
-instance AbstractVars (LOwnedPerms ps) where
+instance AbstractVars (LOwnedStructPerm a) where
+  abstractPEVars ns1 ns2 (LOwnedStructLOP lop) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| LOwnedStructLOP |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 lop
+  abstractPEVars ns1 ns2 (LOwnedStructEq e) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| LOwnedStructEq |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e
+  abstractPEVars ns1 ns2 LOwnedStructTrue =
+    absVarsReturnH ns1 ns2 $(mkClosed [| LOwnedStructTrue |])
+
+instance AbstractVars (RAssign LOwnedStructPerm tps) where
+  abstractPEVars ns1 ns2 MNil =
+    absVarsReturnH ns1 ns2 $(mkClosed [| MNil |])
+  abstractPEVars ns1 ns2 (ps :>: p) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| (:>:) |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 ps
+    `clMbMbApplyM` abstractPEVars ns1 ns2 p
+
+instance AbstractVars (LOwnedExprPerm a) where
+  abstractPEVars ns1 ns2 (LOwnedExprPerm e lop) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| LOwnedExprPerm |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e
+    `clMbMbApplyM` abstractPEVars ns1 ns2 lop
+
+instance AbstractVars (LOwnedExprPerms ps) where
   abstractPEVars ns1 ns2 MNil =
     absVarsReturnH ns1 ns2 $(mkClosed [| MNil |])
   abstractPEVars ns1 ns2 (ps :>: p) =
@@ -6951,20 +7059,34 @@ instance AbstractNamedShape w' (LLVMBlockPerm w) where
                          <*> abstractNSM off <*> abstractNSM len
                          <*> abstractNSM sh
 
-instance AbstractNamedShape w (LOwnedPerms ps) where
+instance AbstractNamedShape w (LOwnedExprPerms ps) where
   abstractNSM MNil = pureBindingM MNil
   abstractNSM (fp :>: fps) = mbMap2 (:>:) <$> abstractNSM fp <*> abstractNSM fps
 
 instance AbstractNamedShape w (LOwnedPerm a) where
-  abstractNSM (LOwnedPermField e fp) =
-    mbMap2 LOwnedPermField <$> abstractNSM e <*> abstractNSM fp
-  abstractNSM (LOwnedPermArray e ap) =
-    mbMap2 LOwnedPermArray <$> abstractNSM e <*> abstractNSM ap
-  abstractNSM (LOwnedPermBlock e bp) =
-    mbMap2 LOwnedPermBlock <$> abstractNSM e <*> abstractNSM bp
-  abstractNSM (LOwnedPermStruct tps e es) =
-    mbMap3 LOwnedPermStruct <$> pureBindingM tps <*> abstractNSM e <*>
-    abstractNSM es
+  abstractNSM (LOwnedPermField fp) =
+    fmap LOwnedPermField <$> abstractNSM fp
+  abstractNSM (LOwnedPermArray ap) =
+    fmap LOwnedPermArray <$> abstractNSM ap
+  abstractNSM (LOwnedPermBlock bp) =
+    fmap LOwnedPermBlock <$> abstractNSM bp
+  abstractNSM (LOwnedPermStruct tps ps) =
+    mbMap2 LOwnedPermStruct <$> pureBindingM tps <*> abstractNSM ps
+
+instance AbstractNamedShape w (LOwnedStructPerm a) where
+  abstractNSM (LOwnedStructLOP lop) =
+    fmap LOwnedStructLOP <$> abstractNSM lop
+  abstractNSM (LOwnedStructEq e) =
+    fmap LOwnedStructEq <$> abstractNSM e
+  abstractNSM LOwnedStructTrue = pureBindingM LOwnedStructTrue
+
+instance AbstractNamedShape w (RAssign LOwnedStructPerm tps) where
+  abstractNSM MNil = pureBindingM MNil
+  abstractNSM (fp :>: fps) = mbMap2 (:>:) <$> abstractNSM fp <*> abstractNSM fps
+
+instance AbstractNamedShape w (LOwnedExprPerm a) where
+  abstractNSM (LOwnedExprPerm e lop) =
+    mbMap2 LOwnedExprPerm <$> abstractNSM e <*> abstractNSM lop
 
 instance AbstractNamedShape w (ValuePerms as) where
   abstractNSM ValPerms_Nil = pureBindingM ValPerms_Nil
@@ -7002,7 +7124,9 @@ $(mkNuMatching [t| RWModality |])
 $(mkNuMatching [t| forall w . LLVMArrayIndex w |])
 $(mkNuMatching [t| forall w . LLVMArrayBorrow w |])
 $(mkNuMatching [t| forall w . LLVMFieldShape w |])
-$(mkNuMatching [t| forall w . LOwnedPerm w |])
+$(mkNuMatching [t| forall a . LOwnedPerm a |])
+$(mkNuMatching [t| forall a . LOwnedStructPerm a |])
+$(mkNuMatching [t| forall a . LOwnedExprPerm a |])
 $(mkNuMatching [t| forall ghosts args ret. FunPerm ghosts args ret |])
 $(mkNuMatching [t| forall args ret. SomeFunPerm args ret |])
 $(mkNuMatching [t| forall ns. NameSortRepr ns |])
@@ -7024,6 +7148,12 @@ $(mkNuMatching [t| forall w. SomeBindingLLVMBlockPerm w |])
 $(mkNuMatching [t| forall a b . (NuMatching a, NuMatching b) => PPImplPair a b |])
 
 instance NuMatchingAny1 LOwnedPerm where
+  nuMatchingAny1Proof = nuMatchingProof
+
+instance NuMatchingAny1 LOwnedStructPerm where
+  nuMatchingAny1Proof = nuMatchingProof
+
+instance NuMatchingAny1 LOwnedExprPerm where
   nuMatchingAny1Proof = nuMatchingProof
 
 instance NuMatchingAny1 DistPerms where
