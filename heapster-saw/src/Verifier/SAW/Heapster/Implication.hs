@@ -31,7 +31,6 @@ module Verifier.SAW.Heapster.Implication where
 
 import Data.Maybe
 import Data.List
-import Data.Monoid
 import Data.Functor.Product
 import Data.Functor.Compose
 import Data.Reflection
@@ -52,7 +51,6 @@ import qualified Data.Binding.Hobbits.NameSet as NameSet
 import Prettyprinter as PP
 
 import Data.Parameterized.BoolRepr
-import Data.Parameterized.TraversableF
 
 import Lang.Crucible.Types
 import Lang.Crucible.LLVM.DataLayout
@@ -2187,7 +2185,8 @@ simplImplOut (SImpl_LLVMBlockIsPtr x bp) =
   distPerms2 x (ValPerm_Conj1 Perm_IsLLVMPtr)
   x (ValPerm_Conj [Perm_LLVMBlock bp])
 simplImplOut (SImpl_SplitLifetime x f args l l2 sub_ls
-              (mb_ps_in_out :: Mb ctx _))
+              (mb_ps_in_out :: Mb ctx (LOwnedExprPerms ps_in,
+                                       LOwnedExprPerms ps_out)))
   | ctx <- KnownReprObj :: KnownReprObj CruCtx ctx
   , ctx_args@KnownReprObj <- appendKnownCruCtx ctx (ltFuncArgsKnown f) =
     give (cruCtxProxies $ unKnownReprObj ctx_args) $
@@ -5529,9 +5528,42 @@ instance PermPretty (NeededPerm vars a) where
 instance PermPrettyF (NeededPerm vars) where
   permPrettyMF = permPrettyM
 
-neededPermStruct :: RAssign (NeededPerm vars) (CtxToRList ctx) ->
-                    NeededPerm vars (StructType ctx)
-neededPermStruct = error "FIXME HERE NOW"
+-- | An object of type @a@ in an extended binding with a 'KnownCruCtx'
+data InExtMb vars a where
+  InExtMb :: KnownCruCtx vars' -> Mb (vars :++: vars') a -> InExtMb vars a
+
+instance Functor (InExtMb vars) where
+  fmap f (InExtMb ctx mb_x) = InExtMb ctx $ fmap f mb_x
+
+instance Applicative (InExtMb RNil) where
+  pure x = InExtMb MNil $ emptyMb $ x
+  liftA2 f (InExtMb ctx1 mbmb_x1) (InExtMb ctx2 mbmb_x2) =
+    let prxs1 = RL.map (const Proxy) ctx1
+        prxs2 = RL.map (const Proxy) ctx2 in
+    InExtMb (RL.append ctx1 ctx2) $ mbCombine (RL.append prxs1 prxs2) $
+    mbMap2 (\mb_x1 mb_x2 ->
+             mbCombine prxs2 $ flip fmap mb_x1 $ \x1 ->
+             flip fmap mb_x2 $ \x2 -> f x1 x2)
+    (mbSeparate @_ @RNil prxs1 mbmb_x1) (mbSeparate prxs2 mbmb_x2)
+
+-- | Convert an 'InExtMb' of a 'ValuePerm' to a 'NeededPerm'
+inExtMbToNeeded :: InExtMb vars (ValuePerm a) -> NeededPerm vars a
+inExtMbToNeeded (InExtMb ctx mb_p) = NeededPerm ctx mb_p
+
+-- | Convert a 'NeededPerm' to an 'InExtMb' of a 'ValuePerm'
+neededToInExtMb :: NeededPerm vars a -> InExtMb vars (ValuePerm a)
+neededToInExtMb (NeededPerm ctx mb_p) = InExtMb ctx mb_p
+
+-- | Build a 'NeededPerm' for a struct permission from a sequence of
+-- 'NeededPerm's for the fields
+neededPermStruct :: RAssign (NeededPerm RNil) (CtxToRList ctx) ->
+                    NeededPerm RNil (StructType ctx)
+neededPermStruct = inExtMbToNeeded . fmap ValPerm_Struct . helper where
+  helper :: RAssign (NeededPerm RNil) tps ->
+            InExtMb RNil (RAssign ValuePerm tps)
+  helper MNil = pure MNil
+  helper (neededs :>: needed) =
+    (:>:) <$> helper neededs <*> neededToInExtMb needed
 
 -- | A sequence of permissions in bindings that need to be proved
 type NeededPerms vars = SomeRAssign (NeededPerm vars)
@@ -5758,6 +5790,7 @@ solveForLOwnedExprPermImpl loeps (LOwnedExprPerm e lop)
   , unoff_lops <- findLOwnedPermsForVar x loeps
   , lops <- map (offsetLOwnedPerm $ negatePermOffset off) unoff_lops =
     neededPermsForVar x $ solveForLOwnedPermImpl lops lop
+solveForLOwnedExprPermImpl _ _ = mempty
 
 solveForLOwnedExprPermsImpl :: LOwnedExprPerms ps_in ->
                                LOwnedExprPerms ps_out ->
@@ -5783,9 +5816,8 @@ solveForLOwnedImpl mb_ps_in_out_ mb_mb_ps_in_out_' =
   give ctx (substEqsWithProof mb_ps_in_out_) >>>= \eqp_in_out ->
   give vars (give ctx' $
              substEqsWithProof mb_mb_ps_in_out_') >>>= \eqp_in_out' ->
-  let eq_neededs =
-        neededSomeDistPerms (someEqProofPerms eqp_in_out) <>
-        neededSomeDistPerms (someEqProofPerms eqp_in_out') in
+  let eq_neededs1 = neededSomeDistPerms (someEqProofPerms eqp_in_out)
+      eq_neededs2 = neededSomeDistPerms (someEqProofPerms eqp_in_out') in
   let mb_ps_in_out = someEqProofRHS eqp_in_out in
   let mb_mb_ps_in_out' = someEqProofRHS eqp_in_out' in
 
@@ -5806,15 +5838,17 @@ solveForLOwnedImpl mb_ps_in_out_ mb_mb_ps_in_out_' =
   -- implications, the contravariant mb_ps_in' -o mb_ps_in for the input
   -- permissions and the covariant mb_ps_out -o mb_ps_out' for the output
   let implNeededs1 =
-        flip nuMultiWithElim (MNil :>: mb_s :>: mb_ps_in') $
-        \zs' (_ :>: Identity s :>: Identity ps_in') ->
-        solveForLOwnedExprPermsImpl ps_in' (subst s mb_ps_in) in
+        mbMap2 (\s ps_in' ->
+                 eq_neededs1 <>
+                 solveForLOwnedExprPermsImpl ps_in' (subst s mb_ps_in))
+        mb_s mb_ps_in' in
   (mbCombine ctx' <$> mbVarsM implNeededs1) >>>= \mbImplNeededs1 ->
   (mbCombine ctx' <$> mbVarsM mb_s) >>>= \mbmb_s ->
   let mbImplNeededs2 =
-        flip nuMultiWithElim (MNil :>: mbmb_s :>: mb_ps_out') $
-        \zs' (_ :>: Identity s :>: Identity ps_out') ->
-        solveForLOwnedExprPermsImpl (subst s mb_ps_out) ps_out' in
+        mbMap2 (\s ps_out' ->
+                 eq_neededs2 <>
+                 solveForLOwnedExprPermsImpl (subst s mb_ps_out) ps_out')
+        mbmb_s mb_ps_out' in
 
   -- Resolve all the TryUnify constraints
   let ImplNeededs neededs1 us1 = mbImplNeededPerms mbImplNeededs1
@@ -7486,8 +7520,6 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       give prxs (partialSubstForceM mb_mb_ps_in_outR "proveVarAtomicImpl") >>>=
       \mb_ps_in_outR ->
       let mb_ps_in_outL' = fmap (\s -> subst s mb_ps_in_outL) mb_s in
-      let [nuMP| (mb_ps_inL, mb_ps_outL) |] = mbMatch mb_ps_in_outL
-          [nuMP| (mb_ps_inR, mb_ps_outR) |] = mbMatch mb_ps_in_outR in
 
       -- Build the local implications ps_inR -o ps_inL and ps_outL -o ps_outR
       (case (mbLOwnedPermsPairToDistPerms mb_ps_in_outL',
@@ -8195,7 +8227,7 @@ implEndLifetimeRecM l =
       (withExtVarsMultiM' knownRepr $ proveVarsImplAppendInt $
        mbCombine (mbToProxy mb_ps_in) mb_mb_dps_in) >>>= \(_, args) ->
       -- Move the lowned permission for l to the top of the stack
-      let (ps_in, ps_out) = subst (substOfExprs args) mb_ps_in_out in
+      let (ps_in, _) = subst (substOfExprs args) mb_ps_in_out in
       implMoveUpM ps0 ps_in l MNil >>>
       -- End l
       implEndLifetimeM Proxy l args mb_ps_in_out >>>
