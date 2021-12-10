@@ -114,6 +114,10 @@ mbFst = mbMapCl $(mkClosed [| fst |])
 mbSnd :: NuMatching a => NuMatching b => Mb ctx (a,b) -> Mb ctx b
 mbSnd = mbMapCl $(mkClosed [| snd |])
 
+-- | Get a pair of elements in bindings from a pair in a binding
+mbPair :: (NuMatching a, NuMatching b) => Mb ctx (a,b) -> (Mb ctx a, Mb ctx b)
+mbPair mb_pair = (mbFst mb_pair, mbSnd mb_pair)
+
 -- | Get the first element of a triple in a binding
 mbFst3 :: NuMatching a => NuMatching b => NuMatching c =>
           Mb ctx (a,b,c) -> Mb ctx a
@@ -1636,7 +1640,8 @@ data AtomicPerm (a :: CrucibleType) where
   -- before the lifetime is ended, and @Pout@ is returned afterwards.
   -- Additionally, a lifetime may contain some other lifetimes, meaning the all
   -- must end before the current one can be ended.
-  Perm_LOwned :: KnownRepr CruCtx ctx => [PermExpr LifetimeType] ->
+  Perm_LOwned :: (KnownRepr CruCtx ctx, Given (RAssign Proxy ctx)) =>
+                 [PermExpr LifetimeType] ->
                  Mb ctx (LOwnedExprPerms ps_in, LOwnedExprPerms ps_out) ->
                  AtomicPerm LifetimeType
 
@@ -1779,7 +1784,8 @@ pattern ValPerm_LLVMBlockShape sh <- ValPerm_Conj [Perm_LLVMBlockShape sh]
     ValPerm_LLVMBlockShape sh = ValPerm_Conj [Perm_LLVMBlockShape sh]
 
 -- | A single @lowned@ permission
-pattern ValPerm_LOwned :: () => (a ~ LifetimeType, KnownRepr CruCtx ctx) =>
+pattern ValPerm_LOwned :: () => (a ~ LifetimeType, KnownRepr CruCtx ctx,
+                                 Given (RAssign Proxy ctx)) =>
                           [PermExpr LifetimeType] ->
                           Mb ctx (LOwnedExprPerms ps_in,
                                   LOwnedExprPerms ps_out) -> ValuePerm a
@@ -2183,6 +2189,21 @@ lownedStructPermPerm LOwnedStructTrue = ValPerm_True
 lownedExprPermPerm :: LOwnedExprPerm a -> ValuePerm a
 lownedExprPermPerm = lownedPermPerm . lownedExprPermLOP
 
+-- | Convert an 'LOwnedStructPerm' to an 'LOwnedPerm' if possible
+lownedStructPermLOP :: LOwnedStructPerm a -> Maybe (LOwnedPerm a)
+lownedStructPermLOP (LOwnedStructLOP lop) = Just lop
+lownedStructPermLOP _ = Nothing
+
+-- | Extract the expression of an equality 'LOwnedStructPerm', if possible
+lownedStructPermExpr :: LOwnedStructPerm a -> Maybe (PermExpr a)
+lownedStructPermExpr (LOwnedStructEq e) = Just e
+lownedStructPermExpr _ = Nothing
+
+-- | Extract the 'LOwnedStructPerm' for a field in a struct 'LOwnedPerm'
+lownedStructPermGet :: Member (CtxToRList ctx) a ->
+                       LOwnedPerm (StructType ctx) -> LOwnedStructPerm a
+lownedStructPermGet memb (LOwnedPermStruct _ ps) = RL.get memb ps
+
 -- | Convert the expression part of an 'LOwnedPerm' to a variable, if possible
 lownedExprPermVar :: LOwnedExprPerm a -> Maybe (ExprVar a)
 lownedExprPermVar = asVar . lownedExprPermExpr
@@ -2207,11 +2228,35 @@ lownedEPermVarAndPerm _ = Nothing
 lownedPermsToDistPerms :: LOwnedExprPerms ps -> Maybe (DistPerms ps)
 lownedPermsToDistPerms = traverseRAssign lownedEPermVarAndPerm
 
+-- | Convert a pair of 'LOwnedExprPerms' lists to a 'DistPerms' if possible
+lownedPermsPairToDistPerms :: (LOwnedExprPerms ps_in, LOwnedExprPerms ps_out) ->
+                              Maybe (DistPerms ps_in, DistPerms ps_out)
+lownedPermsPairToDistPerms (lops1,lops2) =
+  (,) <$> lownedPermsToDistPerms lops1 <*> lownedPermsToDistPerms lops2
+
 -- | Convert an 'LOwnedPerms' in a binding to a 'DistPerms' in a binding
 mbLOwnedPermsToDistPerms :: Mb ctx (LOwnedExprPerms ps) ->
                             Maybe (Mb ctx (DistPerms ps))
 mbLOwnedPermsToDistPerms =
   mbMaybe . mbMapCl $(mkClosed [| lownedPermsToDistPerms |])
+
+-- | Convert a pair of 'LOwnedPerms' lists in a binding to a pair of 'DistPerms'
+-- in a binding
+mbLOwnedPermsPairToDistPerms ::
+  Mb ctx (LOwnedExprPerms ps_in, LOwnedExprPerms ps_out) ->
+  Maybe (Mb ctx (DistPerms ps_in, DistPerms ps_out))
+mbLOwnedPermsPairToDistPerms =
+  mbMaybe . mbMapCl $(mkClosed [| lownedPermsPairToDistPerms |])
+
+-- | Add a 'PermOffset' to an 'LOwnedPerm'
+offsetLOwnedPerm :: PermOffset a -> LOwnedPerm a -> LOwnedPerm a
+offsetLOwnedPerm NoPermOffset lop = lop
+offsetLOwnedPerm (LLVMPermOffset off) (LOwnedPermField fp) =
+  LOwnedPermField $ offsetLLVMFieldPerm off fp
+offsetLOwnedPerm (LLVMPermOffset off) (LOwnedPermArray fp) =
+  LOwnedPermArray $ offsetLLVMArrayPerm off fp
+offsetLOwnedPerm (LLVMPermOffset off) (LOwnedPermBlock fp) =
+  LOwnedPermBlock $ offsetLLVMBlockPerm off fp
 
 -- | Convert a permission to an 'LOwnedPerm', if possible
 permToLOwnedPerm :: TypeRepr a -> ValuePerm a -> Maybe (LOwnedPerm a)
@@ -2252,13 +2297,14 @@ llvmLOwnedExprPermModalities =
   llvmLOwnedPermModalities . lownedExprPermLOP
 
 -- | Find all 'LOwnedPerm's in an 'LOwnedExprPerms' list for a variable
-findLOwnedPermsForVar :: ExprVar a -> LOwnedExprPerms ps -> [LOwnedExprPerm a]
+findLOwnedPermsForVar :: ExprVar a -> LOwnedExprPerms ps -> [LOwnedPerm a]
 findLOwnedPermsForVar (x :: ExprVar a) =
   catMaybes . RL.mapToList
   (\case
-      lop | Just (y, _) <- asVarOffset (lownedExprPermExpr lop)
+      lop | Just (y, off) <- asVarOffset (lownedExprPermExpr lop)
           , Just Refl <- testEquality x y
-            -> Just (lop :: LOwnedExprPerm a)
+            -> Just (offsetLOwnedPerm (negatePermOffset off)
+                     (lownedExprPermLOP lop :: LOwnedPerm a))
       _ -> Nothing)
 
 -- | Generic function to try to lift something out of a binding, if possible
@@ -2302,7 +2348,7 @@ findMbLOwnedPermModalitiesForVar :: ExprVar (LLVMPointerType w) ->
                                      Maybe (PermExpr LifetimeType))
 findMbLOwnedPermModalitiesForVar x mb_lops =
   let [nuMP| (mb_rws, mb_ls) |] =
-        mbMatch $ fmap (unzip . map llvmLOwnedExprPermModalities .
+        mbMatch $ fmap (unzip . map llvmLOwnedPermModalities .
                         findLOwnedPermsForVar x) mb_lops in
   (listToMaybe (mapMaybe tryLift $ mbList mb_rws),
    listToMaybe (mapMaybe tryLift $ mbList mb_ls))
@@ -2945,7 +2991,7 @@ data LifetimeCurrentPerms ps_l where
   -- | A variable @l@ that is @lowned@ is current, requiring perms
   --
   -- > l:lowned[ls](ps_in -o ps_out)
-  LOwnedCurrentPerms :: KnownRepr CruCtx ctx =>
+  LOwnedCurrentPerms :: (KnownRepr CruCtx ctx, Given (RAssign Proxy ctx)) =>
                         ExprVar LifetimeType -> [PermExpr LifetimeType] ->
                         Mb ctx (LOwnedExprPerms ps_in,
                                 LOwnedExprPerms ps_out) ->
@@ -3011,14 +3057,15 @@ data LifetimeFunctor args a where
   -- FIXME: add functors for named permissions
 
 -- | Get a list of the types of a 'LifetimeFunctor' as a 'KnownReprObj'
-ltFuncArgsKnown :: LifetimeFunctor args a -> KnownReprObj CruCtx args
-ltFuncArgsKnown (LTFunctorField _) = KnownReprObj
-ltFuncArgsKnown (LTFunctorArray _ _ _ _ _) = KnownReprObj
-ltFuncArgsKnown (LTFunctorBlock _ _ _) = KnownReprObj
+ltFuncArgsKnown :: LifetimeFunctor args a ->
+                   RAssign (KnownReprObj TypeRepr) args
+ltFuncArgsKnown (LTFunctorField _) = MNil :>: KnownReprObj :>: KnownReprObj
+ltFuncArgsKnown (LTFunctorArray _ _ _ _ _) = MNil :>: KnownReprObj
+ltFuncArgsKnown (LTFunctorBlock _ _ _) = MNil :>: KnownReprObj
 
 -- | Get a list of the types of a 'LifetimeFunctor' as a 'CruCtx'
 ltFuncArgs :: LifetimeFunctor args a -> CruCtx args
-ltFuncArgs = unKnownReprObj . ltFuncArgsKnown
+ltFuncArgs = cruCtxOfTypes . RL.map unKnownReprObj . ltFuncArgsKnown
 
 -- | Apply a functor to its arguments to get out a permission
 ltFuncApply :: LifetimeFunctor args a -> PermExprs args ->
@@ -5325,6 +5372,16 @@ lownedPermsCouldProve :: LOwnedExprPerms ps -> DistPerms ps' -> Bool
 lownedPermsCouldProve lops ps =
   RL.foldr (\lop rest -> lownedPermCouldProve lop ps || rest) False lops
 
+-- | Test if the output permission of a pair of 'LOwnedExprPerms' lists could
+-- help prove any of a list of permissions in their own binding
+mbLOwnedPairCouldProve :: Mb ctx (LOwnedExprPerms ps_in,
+                                  LOwnedExprPerms ps_out) ->
+                          Mb ctx' (DistPerms ps') -> Bool
+mbLOwnedPairCouldProve mb_ps_in_out mb_ps =
+  mbLift $ flip fmap mb_ps_in_out $ \(_,lops_out) ->
+  mbLift $ flip fmap mb_ps $ \ps ->
+  lownedPermsCouldProve lops_out ps
+
 
 -- | Convert a 'FunPerm' in a name-binding to a 'FunPerm' that takes those bound
 -- names as additional ghost arguments with the supplied input permissions and
@@ -5756,12 +5813,17 @@ instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) =>
                             Substable s (Binding (c :: CrucibleType) a) m where
   genSubst = genSubstMb RL.typeCtxProxies
 
+-- | Helper function to 'give' 'Proxy's for the empty list of bindings
+giveEmptyCtx :: (Given (RAssign Proxy (RNil :: RList CrucibleType)) => r) -> r
+giveEmptyCtx = give (MNil :: RAssign Proxy (RNil :: RList CrucibleType))
+
 genSubstMb ::
   Substable s a m =>
   NuMatching a =>
   RAssign Proxy (ctx :: RList CrucibleType) ->
   s ctx' -> Mb ctx' (Mb ctx a) -> m (Mb ctx a)
 genSubstMb p s mbmb =
+  -- FIXME: maybe we could compute p from mbmb using mbMapCl and mbLift?
   mbM $ nuMulti p $ \ns -> genSubst (extSubstMulti s ns) (mbCombine p mbmb)
 
 instance SubstVar s m => Substable s (Member ctx a) m where
@@ -5886,8 +5948,7 @@ instance SubstVar s m => Substable s (AtomicPerm a) m where
       Perm_LLVMBlockShape <$> genSubst s sh
     [nuMP| Perm_LLVMFrame fp |] -> Perm_LLVMFrame <$> genSubst s fp
     [nuMP| Perm_LOwned ls ps_in_out |] ->
-      give (mbLift $ fmap mbToProxy ps_in_out)
-      (Perm_LOwned <$> genSubst s ls <*> genSubst s ps_in_out)
+      Perm_LOwned <$> genSubst s ls <*> genSubst s ps_in_out
     [nuMP| Perm_LCurrent e |] -> Perm_LCurrent <$> genSubst s e
     [nuMP| Perm_LFinished |] -> return Perm_LFinished
     [nuMP| Perm_Struct tps |] -> Perm_Struct <$> genSubst s tps
@@ -6048,9 +6109,8 @@ instance SubstVar PermVarSubst m =>
   genSubst s mb_x = case mbMatch mb_x of
     [nuMP| AlwaysCurrentPerms |] -> return AlwaysCurrentPerms
     [nuMP| LOwnedCurrentPerms l ls mb_ps_in_out |] ->
-      give (mbLift $ fmap mbToProxy mb_ps_in_out)
-      (LOwnedCurrentPerms <$> genSubst s l <*> genSubst s ls
-       <*> genSubst s mb_ps_in_out)
+      LOwnedCurrentPerms <$> genSubst s l <*> genSubst s ls
+                         <*> genSubst s mb_ps_in_out
     [nuMP| CurrentTransPerms ps l |] ->
       CurrentTransPerms <$> genSubst s ps <*> genSubst s l
 
@@ -6086,6 +6146,10 @@ instance SubstVar s m => Substable s (LifetimeFunctor args a) m where
       return (mbLift stride) <*> genSubst s sh <*> genSubst s bs
     [nuMP| LTFunctorBlock off len mb_sh |] ->
       LTFunctorBlock <$> genSubst s off <*> genSubst s len <*> genSubst s mb_sh
+
+instance SubstVar s m => Substable s (PermSubst ctx) m where
+  genSubst s mb_s =
+    PermSubst <$> genSubst s (mbMapCl $(mkClosed [| unPermSubst |]) mb_s)
 
 
 ----------------------------------------------------------------------
@@ -6248,6 +6312,15 @@ newtype PSubstElem a = PSubstElem { unPSubstElem :: Maybe (PermExpr a) }
 -- context
 newtype PartialSubst ctx =
   PartialSubst { unPartialSubst :: RAssign PSubstElem ctx }
+
+-- | The 'PartialSubst' for the empty list of variables
+nilPSubst :: PartialSubst RNil
+nilPSubst = PartialSubst MNil
+
+-- | Extend a partial substitution with an optional expression
+consPSubst :: PartialSubst ctx -> Maybe (PermExpr a) -> PartialSubst (ctx :> a)
+consPSubst (PartialSubst elems) maybe_e =
+  PartialSubst $ elems :>: PSubstElem maybe_e
 
 -- | Build an empty partial substitution for a given set of variables, i.e., the
 -- partial substitution that assigns no expressions to those variables
@@ -7146,6 +7219,7 @@ $(mkNuMatching [t| forall ps. LifetimeCurrentPerms ps |])
 $(mkNuMatching [t| forall a. SomeLLVMBlockPerm a |])
 $(mkNuMatching [t| forall w. SomeBindingLLVMBlockPerm w |])
 $(mkNuMatching [t| forall a b . (NuMatching a, NuMatching b) => PPImplPair a b |])
+$(mkNuMatching [t| forall ctx . PermSubst ctx |])
 
 instance NuMatchingAny1 LOwnedPerm where
   nuMatchingAny1Proof = nuMatchingProof

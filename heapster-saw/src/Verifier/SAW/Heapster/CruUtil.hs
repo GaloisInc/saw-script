@@ -705,6 +705,14 @@ appendCruCtx :: CruCtx ctx1 -> CruCtx ctx2 -> CruCtx (ctx1 :++: ctx2)
 appendCruCtx ctx1 CruCtxNil = ctx1
 appendCruCtx ctx1 (CruCtxCons ctx2 tp) = CruCtxCons (appendCruCtx ctx1 ctx2) tp
 
+-- | Append a known context with a sequence of known types
+appendKnownCruCtx :: KnownReprObj CruCtx ctx1 ->
+                     RAssign (KnownReprObj TypeRepr) ctx2 ->
+                     KnownReprObj CruCtx (ctx1 :++: ctx2)
+appendKnownCruCtx ctx1 MNil = ctx1
+appendKnownCruCtx ctx1 (ctx2 :>: KnownReprObj)
+  | KnownReprObj <- appendKnownCruCtx ctx1 ctx2 = KnownReprObj
+
 -- | Split a context in two
 splitCruCtx :: prx1 ctx1 -> RAssign prx2 ctx2 -> CruCtx (ctx1 :++: ctx2) ->
                (CruCtx ctx1, CruCtx ctx2)
