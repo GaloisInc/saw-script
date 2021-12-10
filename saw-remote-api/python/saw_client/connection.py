@@ -6,6 +6,7 @@ from distutils.spawn import find_executable
 from argo_client.connection import ServerConnection, DynamicSocketProcess, HttpProcess, ManagedProcess
 from argo_client.interaction import Interaction, Command
 from .commands import *
+from .option import *
 from typing import Optional, Union, Any, List, TextIO
 
 # FIXME cryptol_path isn't always used...?
@@ -236,4 +237,12 @@ class SAWConnection:
         use of this command is associated with the top-level `prove` function.
         """
         self.most_recent_result = Prove(self, goal, proof_script, timeout)
+        return self.most_recent_result
+
+    def set_option(self,
+                   option : SAWOption,
+                   value : bool,
+                   timeout : Optional[float] = None) -> Command:
+        """Set a boolean-valued SAW option."""
+        self.most_recent_result = SAWSetOption(self, option, value, timeout)
         return self.most_recent_result
