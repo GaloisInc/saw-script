@@ -72,6 +72,9 @@ import GHC.Stack
 -- | An 'RAssign' over an existentially quantified context
 data SomeRAssign f = forall ctx. SomeRAssign (RAssign f ctx)
 
+-- FIXME HERE: this should move to Hobbits
+$(mkNuMatching [t| forall f. NuMatchingAny1 f => SomeRAssign f |])
+
 instance Semigroup (SomeRAssign f) where
   (SomeRAssign x) <> (SomeRAssign y) = SomeRAssign (RL.append x y)
 
@@ -5565,17 +5568,33 @@ neededPermStruct = inExtMbToNeeded . fmap ValPerm_Struct . helper where
   helper (neededs :>: needed) =
     (:>:) <$> helper neededs <*> neededToInExtMb needed
 
+mbNeededPerm :: RAssign Proxy vars -> Mb ctx (NeededPerm vars a) ->
+                NeededPerm (ctx :++: vars) a
+mbNeededPerm prxs (mbMatch -> [nuMP| NeededPerm mb_vars' mb_mb_p |]) =
+  let vars' = mbLift mb_vars' in
+  let prxs' = RL.map (const Proxy) vars' in
+  NeededPerm vars' $
+  let mb_mb_mb_p = mbMapCl ($(mkClosed [| mbSeparate |])
+                            `clApply` toClosed prxs') mb_mb_p in
+  mbCombine prxs' $ mbCombine prxs mb_mb_mb_p
+
 -- | A sequence of permissions in bindings that need to be proved
 type NeededPerms vars = SomeRAssign (NeededPerm vars)
 
 -- | A variable plus a 'NeededPerm'
-data NeededVarAndPerm vars a = NeededVarAndPerm (ExprVar a) (NeededPerm vars a)
+data NeededVarAndPerm vars a =
+  NeededVarAndPerm (Mb vars (ExprVar a)) (NeededPerm vars a)
+
+mbNeededVarAndPerm :: RAssign Proxy vars -> Mb ctx (NeededVarAndPerm vars a) ->
+                      NeededVarAndPerm (ctx :++: vars) a
+mbNeededVarAndPerm prxs (mbMatch ->
+                         [nuMP| NeededVarAndPerm mb_x mb_needed |]) =
+  NeededVarAndPerm (mbCombine prxs mb_x) (mbNeededPerm prxs mb_needed)
 
 instance PermPretty (NeededVarAndPerm vars a) where
-  permPrettyM (NeededVarAndPerm x mb_p) =
-    do pp_x <- permPrettyM x
-       pp_p <- permPrettyM mb_p
-       return (pp_x PP.<> colon PP.<> pp_p)
+  permPrettyM (NeededVarAndPerm mb_x (NeededPerm ctx mb_p)) =
+    permPrettyM (mbMap2 ColonPair
+                 (extMbMulti (RL.map (const Proxy) ctx) mb_x) mb_p)
 
 instance PermPrettyF (NeededVarAndPerm vars) where
   permPrettyMF = permPrettyM
@@ -5583,9 +5602,28 @@ instance PermPrettyF (NeededVarAndPerm vars) where
 -- | A sequence of variables with 'NeededPerm's
 type NeededVarsAndPerms vars = SomeRAssign (NeededVarAndPerm vars)
 
+mbNeededVarsAndPerms :: RAssign Proxy vars ->
+                        Mb ctx (NeededVarsAndPerms vars) ->
+                        NeededVarsAndPerms (ctx :++: vars)
+mbNeededVarsAndPerms prxs_top (mbMatch -> [nuMP| SomeRAssign mb_neededs |]) =
+  SomeRAssign $ helper prxs_top $ mbMatch mb_neededs
+  where
+    helper :: RAssign Proxy vars ->
+              MatchedMb ctx (RAssign (NeededVarAndPerm vars) ps) ->
+              RAssign (NeededVarAndPerm (ctx :++: vars)) ps
+    helper _ [nuMP| MNil |] = MNil
+    helper prxs [nuMP| mb_ns :>: mb_n |] =
+      helper prxs (mbMatch mb_ns) :>: mbNeededVarAndPerm prxs mb_n
+
 -- | A pair of expressions-in-bindings that we should try to unify
-data TryUnify vars where
+data TryUnify (vars :: RList CrucibleType) where
   TryUnify :: Mb vars (PermExpr a) -> Mb vars (PermExpr a) -> TryUnify vars
+
+-- | Turn a 'TryUnify' in a binding into a 'TryUnify' with an extended @vars@
+mbTryUnify :: RAssign Proxy vars -> Mb ctx (TryUnify vars) ->
+              TryUnify (ctx :++: vars)
+mbTryUnify prxs (mbMatch -> [nuMP| TryUnify mb_e1 mb_e2 |]) =
+  TryUnify (mbCombine prxs mb_e1) (mbCombine prxs mb_e2)
 
 -- | Additional permissions and information needed when trying to solve for how
 -- to prove a @ps_in -o ps_out@ implication. The @f@ is in practice either
@@ -5619,32 +5657,39 @@ neededTryUnify :: PermExpr a -> PermExpr a -> ImplNeededs f RNil
 neededTryUnify e1 e2 = ImplNeededs mempty [tryUnifyExprs e1 e2]
 
 -- | A single needed permission with a single existential variable
-mbNeededPerm :: KnownRepr TypeRepr tp => Mb (vars :> tp) (ValuePerm a) ->
+neededMbPerm :: KnownRepr TypeRepr tp => Mb (vars :> tp) (ValuePerm a) ->
                 NeededPerm vars a
-mbNeededPerm mb_p = NeededPerm (MNil :>: KnownReprObj) mb_p
+neededMbPerm mb_p = NeededPerm (MNil :>: KnownReprObj) mb_p
 
 -- | An existential sequence of needed permissions
 neededSomeDistPerms :: Some DistPerms -> ImplNeededVsPerms RNil
 neededSomeDistPerms (Some ps) =
   ImplNeededs (SomeRAssign $ RL.map (\(VarAndPerm x p) ->
-                                      NeededVarAndPerm x $
+                                      NeededVarAndPerm (emptyMb x) $
                                       NeededPerm MNil $ emptyMb p) ps) []
 
 -- | Convert an 'ImplNeededPerms' from a computation of 'NeededPerms' for a var
-neededPermsForVar :: ExprVar a -> SolveImplM vars [NeededPerm vars a] ->
-                     ImplNeededVsPerms vars
+neededPermsForVar :: ExprVar a -> SolveImplM RNil [NeededPerm RNil a] ->
+                     ImplNeededVsPerms RNil
 neededPermsForVar x (runWriter -> (ps, us)) =
-  ImplNeededs (mconcat $ map (someRAssign1 . NeededVarAndPerm x) ps) us
+  ImplNeededs (mconcat $ map (someRAssign1 .
+                              NeededVarAndPerm (emptyMb x)) ps) us
 
-mbImplNeededPerms :: Mb ctx (ImplNeededVsPerms ctx') ->
-                     ImplNeededVsPerms (ctx :++: ctx')
-mbImplNeededPerms = error "FIXME HERE NOW"
+mbImplNeededPerms :: RAssign Proxy vars -> Mb ctx (ImplNeededVsPerms vars) ->
+                     ImplNeededVsPerms (ctx :++: vars)
+mbImplNeededPerms prxs mbImplNeededs = case mbMatch mbImplNeededs of
+  [nuMP| ImplNeededs mbNeededs mbUnifies |] ->
+    ImplNeededs (mbNeededVarsAndPerms prxs mbNeededs)
+    (map (mbTryUnify prxs) $ mbList mbUnifies)
 
 -- | Prove the permission represented by a 'NeededPerm'
 proveNeededPerm :: NuMatchingAny1 r => NeededVarAndPerm vars a ->
                    ImplM vars s r (ps :> a) ps ()
-proveNeededPerm (NeededVarAndPerm x (NeededPerm ctx mb_p)) =
-  withExtVarsMultiM ctx $ proveVarImpl x mb_p
+proveNeededPerm (NeededVarAndPerm mb_x (NeededPerm ctx mb_p)) =
+  let prxs = RL.map (const Proxy) ctx in
+  withExtVarsMultiM ctx (getPSubst >>>= \psubst ->
+                          proveExVarImpl psubst (extMbMulti prxs mb_x) mb_p >>>
+                          return ())
 
 -- | Prove the permission represented by a 'NeededPerm'
 proveNeededPerms :: NuMatchingAny1 r => RAssign (NeededVarAndPerm vars) ps' ->
@@ -5717,7 +5762,7 @@ solveForLOwnedPermImplBlock lops bp =
   let rngs_rem = bvRangesDelete (llvmBlockRange bp) rngs_lhs in
   -- For each remaining range, create a memblock permission with existential
   -- shape, and list that as a needed permission
-  return $ flip map rngs_rem $ \rng -> mbNeededPerm $ nu $ \z ->
+  return $ flip map rngs_rem $ \rng -> neededMbPerm $ nu $ \z ->
   ValPerm_LLVMBlock $ (llvmBlockSetRange bp rng) { llvmBlockShape =
                                                      PExpr_Var z }
 
@@ -5851,8 +5896,8 @@ solveForLOwnedImpl mb_ps_in_out_ mb_mb_ps_in_out_' =
         mbmb_s mb_ps_out' in
 
   -- Resolve all the TryUnify constraints
-  let ImplNeededs neededs1 us1 = mbImplNeededPerms mbImplNeededs1
-      ImplNeededs neededs2 us2 = mbImplNeededPerms mbImplNeededs2 in
+  let ImplNeededs neededs1 us1 = mbImplNeededPerms MNil mbImplNeededs1
+      ImplNeededs neededs2 us2 = mbImplNeededPerms MNil mbImplNeededs2 in
   mapM_ (tryUnifyM ctx') (us1++us2) >>>
   return (mb_s, neededs1, neededs2)
 
@@ -8306,4 +8351,14 @@ proveVarImpl :: NuMatchingAny1 r => ExprVar a -> Mb vars (ValuePerm a) ->
                 ImplM vars s r (ps :> a) ps ()
 proveVarImpl x mb_p = proveVarsImplAppend $ fmap (distPerms1 x) mb_p
 
+$(mkNuMatching [t| forall vars a. NeededPerm vars a |])
+$(mkNuMatching [t| forall vars a. NeededVarAndPerm vars a |])
+$(mkNuMatching [t| forall a. TryUnify a |])
+$(mkNuMatching [t| forall f vars. NuMatchingAny1 (f vars) => ImplNeededs f vars |])
 $(mkNuMatching [t| forall ps. DistPermsSplit ps |])
+
+instance NuMatchingAny1 (NeededPerm vars) where
+  nuMatchingAny1Proof = nuMatchingProof
+
+instance NuMatchingAny1 (NeededVarAndPerm vars) where
+  nuMatchingAny1Proof = nuMatchingProof
