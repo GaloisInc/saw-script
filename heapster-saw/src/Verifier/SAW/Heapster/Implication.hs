@@ -5697,20 +5697,27 @@ proveNeededPerms :: NuMatchingAny1 r => RAssign (NeededVarAndPerm vars) ps' ->
 proveNeededPerms MNil = return ()
 proveNeededPerms (ps :>: p) = proveNeededPerms ps >>> proveNeededPerm p
 
+memberAppend :: RAssign Proxy ctx2 -> Member (ctx1 :++: ctx2) a ->
+                Either (Member ctx1 a) (Member ctx2 a)
+memberAppend MNil memb = Left memb
+memberAppend (_ :>: _) Member_Base = Right Member_Base
+memberAppend (ctx2 :>: _) (Member_Step memb) =
+  case memberAppend ctx2 memb of
+    Left memb1 -> Left memb1
+    Right memb2 -> Right $ Member_Step memb2
+
 -- | Try to unify a 'TryUnify' constraint
 tryUnifyM :: RAssign Proxy args -> TryUnify (vars :++: args) ->
              ImplM vars s r ps ps ()
-tryUnifyM = error "FIXME HERE NOW"
-{-
-tryUnifyM x mb_x = case mbMatch mb_x of
-  [nuMP| PExpr_Var mb_x' |]
-    | Left memb <- mbNameBoundP mb_x' ->
-      do psubst <- getPSubst
-         case psubstLookup psubst memb of
-           Nothing -> setVarM memb x
-           _ -> pure ()
-  _ -> pure ()
--}
+tryUnifyM args (TryUnify mb_e1 [nuP| PExpr_Var mb_x |])
+  | Left memb_vars_args <- mbNameBoundP mb_x
+  , Left memb_vars <- memberAppend args memb_vars_args =
+    getPSubst >>>= \psubst ->
+    case (psubstLookup psubst memb_vars,
+          partialSubst (extPSubstMulti args psubst) mb_e1) of
+      (Nothing, Just e1) -> setVarM memb_vars e1
+      _ -> return ()
+tryUnifyM _ _ = return ()
 
 
 {-

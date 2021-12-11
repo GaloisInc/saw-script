@@ -6373,6 +6373,12 @@ psubstSet memb e (PartialSubst elems) =
 extPSubst :: PartialSubst ctx -> PartialSubst (ctx :> a)
 extPSubst (PartialSubst elems) = PartialSubst $ elems :>: PSubstElem Nothing
 
+-- | Extend a partial substitution with 0 or more unassigned variables
+extPSubstMulti :: RAssign f ctx' -> PartialSubst ctx ->
+                  PartialSubst (ctx :++: ctx')
+extPSubstMulti MNil psubst = psubst
+extPSubstMulti (ctx' :>: _) psubst = extPSubst $ extPSubstMulti ctx' psubst
+
 -- | Shorten a partial substitution
 unextPSubst :: PartialSubst (ctx :> a) -> PartialSubst ctx
 unextPSubst (PartialSubst (elems :>: _)) = PartialSubst elems
