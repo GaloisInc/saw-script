@@ -3057,8 +3057,7 @@ data LifetimeFunctor args a where
   -- FIXME: add functors for named permissions
 
 -- | Get a list of the types of a 'LifetimeFunctor' as a 'KnownReprObj'
-ltFuncArgsKnown :: LifetimeFunctor args a ->
-                   RAssign (KnownReprObj TypeRepr) args
+ltFuncArgsKnown :: LifetimeFunctor args a -> KnownCruCtx args
 ltFuncArgsKnown (LTFunctorField _) = MNil :>: KnownReprObj :>: KnownReprObj
 ltFuncArgsKnown (LTFunctorArray _ _ _ _ _) = MNil :>: KnownReprObj
 ltFuncArgsKnown (LTFunctorBlock _ _ _) = MNil :>: KnownReprObj
