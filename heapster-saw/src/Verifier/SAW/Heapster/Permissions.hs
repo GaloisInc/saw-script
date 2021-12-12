@@ -2307,45 +2307,11 @@ findLOwnedPermsForVar (x :: ExprVar a) =
                      (lownedExprPermLOP lop :: LOwnedPerm a))
       _ -> Nothing)
 
--- | Generic function to try to lift something out of a binding, if possible
--- FIXME: generalize this and move it somewhere better in the code?
-class NuMatching a => TryLift a where
-  tryLift :: Mb ctx a -> Maybe a
-
-instance TryLift a => TryLift [a] where
-  tryLift mb_l = case mbMatch mb_l of
-    [nuMP| [] |] -> Just []
-    [nuMP| mb_a : mb_as |] -> (:) <$> tryLift mb_a <*> tryLift mb_as
-
-instance TryLift (Name a) where
-  tryLift mb_x | Right x <- mbNameBoundP mb_x = Just x
-  tryLift _ = Nothing
-
-instance TryLift (PermExpr RWModalityType) where
-  tryLift [nuP| PExpr_RWModality rw |] = Just $ PExpr_RWModality $ mbLift rw
-  tryLift [nuP| PExpr_Var mb_x |] = PExpr_Var <$> tryLift mb_x
-  tryLift _ = Nothing
-
-instance TryLift (PermExpr LifetimeType) where
-  tryLift [nuP| PExpr_Always |] = Just $ PExpr_Always
-  tryLift [nuP| PExpr_Var mb_x |] = PExpr_Var <$> tryLift mb_x
-  tryLift _ = Nothing
-
-instance TryLift (PermExpr (BVType w)) where
-  tryLift [nuP| PExpr_Var mb_x |] = PExpr_Var <$> tryLift mb_x
-  tryLift [nuP| PExpr_BV mb_factors mb_bv |] =
-    PExpr_BV <$> tryLift mb_factors <*> Just (mbLift mb_bv)
-  tryLift _ = Nothing
-
-instance TryLift (BVFactor w) where
-  tryLift [nuP| BVFactor mb_n mb_x |] =
-    BVFactor (mbLift mb_n) <$> tryLift mb_x
-
 -- | Find modalitieis for a variable in an 'LOwnedPerms' list in a binding
-findMbLOwnedPermModalitiesForVar :: ExprVar (LLVMPointerType w) ->
-                                    Mb ctx (LOwnedExprPerms ps) ->
-                                    (Maybe (PermExpr RWModalityType),
-                                     Maybe (PermExpr LifetimeType))
+findMbLOwnedPermModalitiesForVar ::
+  ExprVar (LLVMPointerType w) ->
+  Mb (ctx :: RList CrucibleType) (LOwnedExprPerms ps) ->
+  (Maybe (PermExpr RWModalityType), Maybe (PermExpr LifetimeType))
 findMbLOwnedPermModalitiesForVar x mb_lops =
   let [nuMP| (mb_rws, mb_ls) |] =
         mbMatch $ fmap (unzip . map llvmLOwnedPermModalities .
@@ -6426,6 +6392,13 @@ partialSubst = genSubst
 partialSubstForce :: Substable PartialSubst a Maybe => PartialSubst ctx ->
                      Mb ctx a -> String -> a
 partialSubstForce s mb msg = fromMaybe (error msg) $ partialSubst s mb
+
+-- | Try to lift an expression out of a binding using the empty 'PartialSubst'
+tryLift :: Substable PartialSubst a Maybe =>
+           Mb (ctx :: RList CrucibleType) a -> Maybe a
+tryLift mb_e =
+  genSubst (PartialSubst $
+            RL.map (const $ PSubstElem Nothing) $ mbToProxy mb_e) mb_e
 
 
 ----------------------------------------------------------------------
