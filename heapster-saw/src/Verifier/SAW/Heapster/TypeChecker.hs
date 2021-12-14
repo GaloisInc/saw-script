@@ -616,17 +616,17 @@ tcLifetimeAtomic (ExLFinished _) = return Perm_LFinished
 tcLifetimeAtomic e = tcError (pos e) "Expected lifetime perm"
 
 -- | Helper for lowned permission checking
-tcLOwnedPerms :: [(Located String,AstExpr)] -> Tc (Some LOwnedPerms)
+tcLOwnedPerms :: [(Located String,AstExpr)] -> Tc (Some LOwnedExprPerms)
 tcLOwnedPerms [] = pure (Some MNil)
 tcLOwnedPerms ((Located p n,e):xs) =
   do Some (Typed tp x) <- tcTypedName p n
      perm <- tcValPerm tp e
-     lop <- case varAndPermLOwnedPerm (VarAndPerm x perm) of
+     lop <- case permToLOwnedPerm perm of
               Just lop -> return lop
               Nothing -> tcError (pos e) ("Not a valid lifetime ownership permission: "
                                          ++ permPrettyString emptyPPInfo perm)
      Some lops <- tcLOwnedPerms xs
-     pure (Some (lops :>: lop))
+     pure (Some (lops :>: LOWnedExprPerm (PExpr_Var x) lop))
 
 -- | Helper for checking permission offsets
 tcPermOffset :: TypeRepr a -> Pos -> Maybe AstExpr -> Tc (PermOffset a)
