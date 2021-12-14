@@ -1684,6 +1684,8 @@ data ValuePerm (a :: CrucibleType) where
   -- permissions is the trivially true permission
   ValPerm_Conj :: [AtomicPerm a] -> ValuePerm a
 
+  -- | The false value permission
+  ValPerm_False :: ValuePerm a
 
 -- | Build an equality permission in a binding
 mbValPerm_Eq :: Mb ctx (PermExpr a) -> Mb ctx (ValuePerm a)
@@ -2923,6 +2925,8 @@ instance Eq (ValuePerm a) where
   (ValPerm_Var _ _) == _ = False
   (ValPerm_Conj aps1) == (ValPerm_Conj aps2) = aps1 == aps2
   (ValPerm_Conj _) == _ = False
+  ValPerm_False == ValPerm_False = True
+  ValPerm_False == _ = False
 
 instance Eq (AtomicPerm a) where
   (Perm_LLVMField fp1) == (Perm_LLVMField fp2)
@@ -3026,6 +3030,7 @@ instance PermPretty (ValuePerm a) where
   permPrettyM ValPerm_True = return $ pretty "true"
   permPrettyM (ValPerm_Conj ps) =
     (hang 2 . encloseSep mempty mempty (pretty "*")) <$> mapM permPrettyM ps
+  permPrettyM (ValPerm_False) = return $ pretty "false"
 
 instance PermPrettyF ValuePerm where
   permPrettyMF = permPrettyM
@@ -3327,6 +3332,7 @@ isConjPerm (ValPerm_Exists mb_p) = mbLift $ fmap isConjPerm mb_p
 isConjPerm (ValPerm_Named n _ _) = nameSortIsConj (namedPermNameSort n)
 isConjPerm (ValPerm_Var _ _) = False
 isConjPerm (ValPerm_Conj _) = True
+isConjPerm (ValPerm_False) = False
 
 -- | Return a struct permission where all fields have @true@ permissions
 trueStructAtomicPerm :: Assignment prx ctx -> AtomicPerm (StructType ctx)
@@ -4767,6 +4773,7 @@ offsetLLVMPerm off (ValPerm_Var x off') =
   ValPerm_Var x $ addPermOffsets off' (mkLLVMPermOffset off)
 offsetLLVMPerm off (ValPerm_Conj ps) =
   ValPerm_Conj $ mapMaybe (offsetLLVMAtomicPerm off) ps
+offsetLLVMPerm _ ValPerm_False = ValPerm_False
 
 -- | Test if an LLVM pointer permission can be offset by the given offset; i.e.,
 -- whether 'offsetLLVMAtomicPerm' returns a value
@@ -5041,6 +5048,7 @@ permIsCopyable (ValPerm_Named npn args _) =
   namedPermArgsAreCopyable (namedPermNameArgs npn) args
 permIsCopyable (ValPerm_Var _ _) = False
 permIsCopyable (ValPerm_Conj ps) = all atomicPermIsCopyable ps
+permIsCopyable ValPerm_False = True
 
 -- | The same as 'permIsCopyable' except for atomic permissions
 atomicPermIsCopyable :: AtomicPerm a -> Bool
@@ -5325,6 +5333,7 @@ instance FreeVars (ValuePerm tp) where
     NameSet.union (freeVars args) (freeVars off)
   freeVars (ValPerm_Var x off) = NameSet.insert x $ freeVars off
   freeVars (ValPerm_Conj ps) = freeVars ps
+  freeVars ValPerm_False = NameSet.empty
 
 instance FreeVars (ValuePerms tps) where
   freeVars ValPerms_Nil = NameSet.empty
@@ -5424,6 +5433,7 @@ instance NeededVars (ValuePerm a) where
   neededVars p@(ValPerm_Named _ _ _) = freeVars p
   neededVars p@(ValPerm_Var _ _) = freeVars p
   neededVars (ValPerm_Conj ps) = neededVars ps
+  neededVars ValPerm_False = NameSet.empty
 
 instance NeededVars (AtomicPerm a) where
   neededVars (Perm_LLVMField fp) = neededVars fp
@@ -5772,6 +5782,8 @@ instance SubstVar s m => Substable s (ValuePerm a) m where
       offsetPerm <$> genSubst s mb_off <*> substPermVar s mb_x
     [nuMP| ValPerm_Conj aps |] ->
       ValPerm_Conj <$> mapM (genSubst s) (mbList aps)
+    [nuMP| ValPerm_False |] ->
+      pure ValPerm_False
 
 instance SubstVar s m => Substable1 s ValuePerm m where
   genSubst1 = genSubst
@@ -6537,6 +6549,8 @@ instance AbstractVars (ValuePerm a) where
   abstractPEVars ns1 ns2 (ValPerm_Conj ps) =
     absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Conj |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 ps
+  abstractPEVars ns1 ns2 ValPerm_False =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_False |])
 
 instance AbstractVars (ValuePerms as) where
   abstractPEVars ns1 ns2 ValPerms_Nil =
@@ -6781,6 +6795,7 @@ instance AbstractNamedShape w (ValuePerm a) where
   abstractNSM (ValPerm_Var x off) =
     fmap (ValPerm_Var x) <$> abstractNSM off
   abstractNSM (ValPerm_Conj aps) = fmap ValPerm_Conj <$> abstractNSM aps
+  abstractNSM ValPerm_False = (pure . pure) ValPerm_False
 
 instance AbstractNamedShape w (PermOffset a) where
   abstractNSM NoPermOffset = pureBindingM NoPermOffset
