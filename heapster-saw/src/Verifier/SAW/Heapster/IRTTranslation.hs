@@ -132,6 +132,7 @@ instance ContainsIRTRecName (ValuePerm a) where
     containsIRTRecName n args
   containsIRTRecName _ (ValPerm_Var _ _) = False
   containsIRTRecName n (ValPerm_Conj ps) = containsIRTRecName n ps
+  containsIRTRecName _ ValPerm_False = False
 
 instance ContainsIRTRecName (RAssign ValuePerm tps) where
   containsIRTRecName _ MNil = False
@@ -318,6 +319,7 @@ instance IRTTyVars (ValuePerm a) where
     [nuMP| ValPerm_Var x _ |] ->
       irtTTranslateVar mb_p x
     [nuMP| ValPerm_Conj ps |] -> irtTyVars ps
+    [nuMP| ValPerm_False |] -> return ([], IRTVarsNil)
 
 -- | Get all IRT type variables in a binding, including any type variables
 -- from the bound variable
