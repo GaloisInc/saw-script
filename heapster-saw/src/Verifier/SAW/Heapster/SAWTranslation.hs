@@ -3413,6 +3413,15 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
            withPermStackM id ((:>: ptrans) . RL.tail) m)
          (transTerm1 top_ptrans)
 
+  -- A false elimination becomes a call to efq
+  ([nuMP| Impl1_ElimFalse mb_x |], _) ->
+    return $ const $
+    do mb_false <- nuMultiTransM $ const ValPerm_False
+       () <- assertTopPermM "Impl1_ElimFalse" mb_x mb_false
+       top_ptrans <- getTopPermM
+       applyMultiTransM (return $ globalOpenTerm "Prelude.efq")
+         [compReturnTypeTransM, return $ transTerm1 top_ptrans]
+
   -- A SimplImpl is translated using translateSimplImpl
   ([nuMP| Impl1_Simpl simpl mb_prx |], _) ->
     let prx' = mbLift mb_prx in
