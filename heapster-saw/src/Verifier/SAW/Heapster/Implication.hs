@@ -3070,6 +3070,13 @@ mbVarsM a =
   do px <- uses implStateVars cruCtxProxies
      pure (mbPure px a)
 
+-- | Add a multi-binding for the current existential variables @vars@ around an
+-- existing binding, prepending @vars@ to the binding list of that binding
+mbVarsAppM :: RAssign Proxy ctx -> Mb ctx a ->
+              ImplM vars s r ps ps (Mb (vars :++: ctx) a)
+mbVarsAppM prxs mb_a =
+  mbCombine prxs <$> mbVarsM mb_a
+
 -- | Build a multi-binding for the current existential variables using a
 -- function that expects a substitution of these new variables for old copies of
 -- those variables
@@ -5751,14 +5758,30 @@ data DetPath d p where
                    DetPath d p -> DetPath d (StructType ctx)
   DetPathEq :: Binding d (PermExpr p) -> DetPath d p
 
+data DetPathPerm d p where
+  DetPathPerm :: CruCtx vars -> Mb (vars :> d) (ValuePerm p) ->
+                 DetPathPerm d p
+
+-- | Get the permission specified by a 'DetPath'
+detPathMbPerm :: DetPath d p -> DetPathPerm d p
+detPathMbPerm (DetPathField off _) =
+  DetPathPerm knownRepr $ nuMulti (MNil :>: Proxy :>: Proxy :>: Proxy) $
+  \(_ :>: rw :>: l :>: x) ->
+  ValPerm_LLVMField $ LLVMFieldPerm (PExpr_Var rw) (PExpr_Var l) off
+  (ValPerm_Eq $ PExpr_Var x)
+detPathMbPerm (DetPathStruct ctx memb dpath)
+  | DetPathPerm vars mb_p <- detPathMbPerm dpath =
+    DetPathPerm vars $ flip fmap mb_p $ \p ->
+    ValPerm_Struct $ RL.set memb p $
+    RL.map (const ValPerm_True) $ assignToRList ctx
+detPathMbPerm (DetPathEq mb_e) = DetPathPerm CruCtxNil $ fmap ValPerm_Eq mb_e
+
 offsetDetPath :: PermOffset p -> DetPath d p -> DetPath d p
 offsetDetPath NoPermOffset dp = dp
 offsetDetPath (LLVMPermOffset off') (DetPathField off sz) =
   DetPathField (bvAdd off off') sz
 offsetDetPath (LLVMPermOffset off') (DetPathEq mb_e) =
-  -- FIXME HERE NOW: this disagrees with offsetLLVMPerm, which negates off', but
-  -- it seems like off' should not be negated; check this later!
-  DetPathEq $ fmap (flip addLLVMOffset off') mb_e
+  DetPathEq $ fmap (flip addLLVMOffset (bvNegate off')) mb_e
 
 -- | A 'DetPath' representing a permission on a specific variable
 data VarAndDetPath d = forall p. VarAndDetPath (ExprVar p) (DetPath d p)
@@ -5804,10 +5827,63 @@ findVarAndDetPath memb [nuMP| _ :>: LOwnedExprPerm mb_e mb_lop |]
 findVarAndDetPath memb [nuMP| mb_loeps :>: _ |] =
   findVarAndDetPath memb $ mbMatch mb_loeps
 
-resolveVarAndDetPath :: NuMatchingAny1 r => VarAndDetPath d ->
-                        MbLOwnedExprPerms ctx' ps_in' ->
+resolveStructDetPath :: DetPath d p -> Mb ctx' (LOwnedStructPerm p) ->
+                        Maybe (MbExpr ctx' d)
+resolveStructDetPath (DetPathEq [nuP| PExpr_Var mb_x |]) mb_losp
+  | Left Member_Base <- mbNameBoundP mb_x
+  , [nuP| LOwnedStructEq mb_e |] <- mb_losp
+  = Just $ MbExpr mb_e
+resolveStructDetPath (DetPathEq [nuP| PExpr_LLVMWord (PExpr_Var mb_x) |]) mb_losp
+  | Left Member_Base <- mbNameBoundP mb_x
+  , [nuP| LOwnedStructEq (PExpr_LLVMWord mb_e) |] <- mb_losp
+  = Just $ MbExpr mb_e
+resolveStructDetPath _ _ = Nothing
+
+resolveDetPath :: DetPath d p -> Mb ctx' (LOwnedPerm p) ->
+                  Maybe (MbExpr ctx' d)
+resolveDetPath (DetPathField off sz) [nuP| LOwnedPermField mb_fp |]
+  | Just off' <- tryLift $ mbLLVMFieldOffset mb_fp
+  , bvEq off off'
+  , Just Refl <- testEquality sz (mbLLVMFieldSize mb_fp)
+  , [nuP| ValPerm_Eq mb_e |] <- mbLLVMFieldContents mb_fp =
+    return $ MbExpr mb_e
+resolveDetPath (DetPathStruct _ memb dpath) mb_lop
+  | [nuP| LOwnedPermStruct _ mb_losps |] <- mb_lop
+  = resolveStructDetPath dpath (fmap (RL.get memb) mb_losps)
+resolveDetPath _ _ = Nothing
+
+-- | Search for the permission specified by a 'VarAndDetPath' in an
+-- 'MbLOwnedExprPerms' permissions list. If found, use it to instantiate the
+-- variable determined by the 'VarAndDetPath' permission. Otherwise, prove the
+-- 'VarAndDetPath' using the current primary permissions and use that proof to
+-- instantiate the variable.
+resolveVarAndDetPath :: NuMatchingAny1 r => TypeRepr d -> VarAndDetPath d ->
+                        Mb ctx' (LOwnedExprPerms ps_in') ->
                         ImplM vars s r ps ps (MbExpr ctx' d)
-resolveVarAndDetPath = error "FIXME HERE NOW"
+resolveVarAndDetPath _ (VarAndDetPath x dpath) mb_loeps
+  | [nuP| _ :>: LOwnedExprPerm mb_e mb_lop |] <- mb_loeps
+  , Just (asVarOffset -> Just (y, off)) <- tryLift mb_e
+  , Just Refl <- testEquality x y
+  , Just res_mb_expr <- resolveDetPath (offsetDetPath off dpath) mb_lop =
+    return res_mb_expr
+resolveVarAndDetPath tp vdpath@(VarAndDetPath x dpath) mb_loeps =
+  case mbMatch mb_loeps of
+    [nuMP| mb_loeps' :>: _ |] ->
+      resolveVarAndDetPath tp vdpath mb_loeps'
+    [nuMP| MNil |]
+      | DetPathPerm vars mb_p <- detPathMbPerm dpath ->
+        -- We ran out of left-hand sides, so determine detpath by proving its perm
+      mbVarsAppM (cruCtxProxies vars :>: Proxy) mb_p >>>= \mbmb_p ->
+      withExtVarsMultiM' (CruCtxCons vars tp) (proveVarImplInt x mbmb_p)
+      >>>= \(_,_ :>: res_e) ->
+
+      -- Pop the perm we proved off the stack
+      getTopDistPerm x >>>= \top_p ->
+      recombinePerm x top_p >>>
+
+      -- Return res_e in the required binding
+      return (MbExpr $ fmap (const res_e) mb_loeps)
+
 
 newtype MbExpr (ctx :: RList CrucibleType) a =
   MbExpr { unMbExpr :: Mb ctx (PermExpr a) }
@@ -5821,22 +5897,22 @@ mbRAssignMbExprs prxs (es :>: MbExpr mb_e) =
 solveForLOwnedPermImplSubst1 :: NuMatchingAny1 r =>
                                 MbLOwnedExprPerms ctx' ps_in' ->
                                 MbLOwnedExprPerms ctx ps_in ->
-                                Member ctx a ->
+                                CruCtx ctx -> Member ctx a ->
                                 ImplM vars s r ps ps (MbExpr ctx' a)
-solveForLOwnedPermImplSubst1 mb_in' mb_in memb =
+solveForLOwnedPermImplSubst1 mb_in' mb_in ctx memb =
   case findVarAndDetPath memb (mbMatch mb_in) of
-    Just vadp -> resolveVarAndDetPath vadp mb_in'
+    Just vadp -> resolveVarAndDetPath (cruCtxLookup ctx memb) vadp mb_in'
     Nothing -> implFailMsgM "solveForLOwnedPermImplSubst1"
 
 -- | FIXME HERE NOW: document this; building a subst for the vars needed to prove
 -- LHS -o RHS
-solveForLOwnedPermImplSubst :: NuMatchingAny1 r =>
+solveForLOwnedPermImplSubst :: (NuMatchingAny1 r, KnownRepr CruCtx ctx) =>
                                MbLOwnedExprPerms ctx' ps_in' ->
                                MbLOwnedExprPerms ctx ps_in ->
                                ImplM vars s r ps ps (Mb ctx' (PermSubst ctx))
 solveForLOwnedPermImplSubst mb_in' mb_in =
   (fmap substOfExprs . mbRAssignMbExprs (mbToProxy mb_in')) <$>
-  traverseRAssign (solveForLOwnedPermImplSubst1 mb_in' mb_in)
+  traverseRAssign (solveForLOwnedPermImplSubst1 mb_in' mb_in knownRepr)
   (RL.members $ mbToProxy mb_in)
 
 -- The above should repeatedly: pick out a LOP on the right with a determined
@@ -5989,8 +6065,8 @@ solveForLOwnedImpl mb_ps_in_out_ mb_mb_ps_in_out_' =
                  eq_neededs1 <>
                  solveForLOwnedExprPermsImpl ps_in' (subst s mb_ps_in))
         mb_s mb_ps_in' in
-  (mbCombine ctx' <$> mbVarsM implNeededs1) >>>= \mbImplNeededs1 ->
-  (mbCombine ctx' <$> mbVarsM mb_s) >>>= \mbmb_s ->
+  mbVarsAppM ctx' implNeededs1 >>>= \mbImplNeededs1 ->
+  mbVarsAppM ctx' mb_s >>>= \mbmb_s ->
   let mbImplNeededs2 =
         mbMap2 (\s ps_out' ->
                  eq_neededs2 <>
