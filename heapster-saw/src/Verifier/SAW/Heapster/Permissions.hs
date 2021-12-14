@@ -4943,8 +4943,8 @@ llvmBlockPermOfSize sz =
                   llvmBlockOffset = bvInt 0, llvmBlockLen = bvInt sz,
                   llvmBlockShape = PExpr_EmptyShape }
 
--- | Add an offset @off@ to an LLVM permission @p@, meaning change @p@ so that
--- it indicates that @x+off@ has permission @p@.
+-- | Add an offset @off@ to an LLVM permission @p@, meaning find a @p'@ such
+-- that @x@ has permission @p'@ iff @x+off@ has permission @p@.
 --
 -- FIXME: this should be the general-purpose function 'offsetPerm' that recurses
 -- through permissions; that would allow other sorts of offsets at other types
