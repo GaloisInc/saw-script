@@ -1278,6 +1278,12 @@ data PermImpl1 ps_in ps_outs where
                       Binding tp (ValuePerm a) ->
                       PermImpl1 (ps :> a) (RNil :> '(RNil :> tp, ps :> a))
 
+  -- | Eliminate a @false@ permission on the top of the stack, which is a
+  -- contradiction and so has no output disjuncts
+  --
+  -- > ps * x:false -o .
+  Impl1_ElimFalse :: ExprVar a -> PermImpl1 (ps :> a) RNil
+
   -- | Apply a 'SimplImpl'
   Impl1_Simpl :: SimplImpl ps_in ps_out -> Proxy ps ->
                  PermImpl1 (ps :++: ps_in) (RNil :> '(RNil, ps :++: ps_out))
@@ -2822,6 +2828,8 @@ instance SubstVar PermVarSubst m =>
       Impl1_ElimOr <$> genSubst s x <*> genSubst s p1 <*> genSubst s p2
     [nuMP| Impl1_ElimExists x p_body |] ->
       Impl1_ElimExists <$> genSubst s x <*> genSubst s p_body
+    [nuMP| Impl1_ElimFalse x |] ->
+      Impl1_ElimFalse <$> genSubst s x
     [nuMP| Impl1_Simpl simpl prx |] ->
       Impl1_Simpl <$> genSubst s simpl <*> return (mbLift prx)
     [nuMP| Impl1_LetBind tp e |] ->
@@ -3404,6 +3412,12 @@ implElimExistsM :: (NuMatchingAny1 r, KnownRepr TypeRepr tp) =>
 implElimExistsM x p =
   implApplyImpl1 (Impl1_ElimExists x p)
   (MNil :>: Impl1Cont (const $ pure ()))
+
+-- | Eliminate a false permission in the current permission set
+implElimFalseM :: NuMatchingAny1 r => ExprVar a ->
+                  ImplM vars s r ps_any (ps :> a) ()
+implElimFalseM x =
+  implApplyImpl1 (Impl1_ElimFalse x) MNil
 
 -- | Apply a simple implication rule to the top permissions on the stack
 implSimplM :: HasCallStack => NuMatchingAny1 r => Proxy ps ->
@@ -4967,6 +4981,7 @@ recombinePermExpl x x_p p =
 recombinePerm' :: NuMatchingAny1 r => ExprVar a -> ValuePerm a -> ValuePerm a ->
                   ImplM vars s r as (as :> a) ()
 recombinePerm' x _ p@ValPerm_True = implDropM x p
+recombinePerm' x _ ValPerm_False = implElimFalseM x
 recombinePerm' x _ p@(ValPerm_Eq (PExpr_Var y)) | y == x = implDropM x p
 recombinePerm' x ValPerm_True (ValPerm_Eq e) =
   simplEqPerm x e >>>= \e' -> implPopM x (ValPerm_Eq e')
