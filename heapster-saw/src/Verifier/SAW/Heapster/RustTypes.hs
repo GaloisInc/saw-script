@@ -1058,6 +1058,11 @@ abstractMbLOPsModalities mb_lops = case mbMatch mb_lops of
       mb_e mb_bp)
 
 
+{-
+FIXME HERE NOW: add cases for structs and existential permissions
+- for the latter, add determining eq permissions for each evar
+-}
+
 -- | Find all field or block permissions containing lifetime @l@ and return them
 -- as an 'LOwnedPerms' list
 lownedPermsForLifetime :: ExprVar LifetimeType -> DistPerms ctx ->
@@ -1094,7 +1099,17 @@ extMbOuter :: RAssign Proxy ctx1 -> Mb ctx2 a -> Mb (ctx1 :++: ctx2) a
 extMbOuter prxs mb_a = mbCombine (mbToProxy mb_a) $ nuMulti prxs $ const mb_a
 
 
--- | Add a lifetime described by a 'LifetimeDef' to a 'Some3FunPerm'
+FIXME HERE NOW:
+- update lownedPermsForLifetime to output LOwnedExprPerms
+- find all ptr shapes with different lifetimes and make new input evars for them
+
+
+-- | Add a lifetime described by a 'LifetimeDef' to a 'Some3FunPerm' in a
+-- binding for lifetime variable @l@ by: finding all input permissions @ps_in@
+-- and output permissions @ps_out@ that have @l@ as their lifetime; abstracting
+-- all read/write and lifetime modalities in @ps_in@ to @ps_in_abs@; and adding
+-- input permission @l:lowned(ps_in -o ps_in_abs)@ as an input permission and
+-- @l:lowned(ps_out -o ps_in_abs)@ as an output permission
 mbLifetimeFunPerm :: LifetimeDef Span -> Binding LifetimeType Some3FunPerm ->
                      RustConvM Some3FunPerm
 mbLifetimeFunPerm (LifetimeDef _ _ [] _)
@@ -1133,15 +1148,27 @@ mbLifetimeFunPerm (LifetimeDef _ _ [] _)
 mbLifetimeFunPerm (LifetimeDef _ _ _bounds _) _ =
   fail "Rust lifetime bounds not yet supported!"
 
+-- | Find all permissions of the form @[l]memblock(...,sh)@ in the input or
+-- output types of a function permission and all sub-shapes of @sh@ of the form
+-- @ptrsh(l',sh')@ for @l'@ not equal to @l@ and replace the sub-shape with
+-- @fieldsh(eq(z))@ for a new ghost variable @z@ which is itself assigned
+-- permissions @[l']memblock(...,sh')@.
+--
+-- FIXME: it is currently an error to do this in the output permissions, since
+-- that would require existentially-quanfieid ghost output permissions
+abstractLifetimeSubPerms :: Some3FunPerm -> Some3FunPerm
+abstractLifetimeSubPerms fperm =
+  -- FIXME HERE NOW: implement this for real!
+  fperm
+
 -- | Run a computation of a function permission in the context of a list of
 -- Rust lifetime definitions
 withLifetimes :: [LifetimeDef Span] -> RustConvM Some3FunPerm ->
                  RustConvM Some3FunPerm
-withLifetimes [] m = m
-withLifetimes (ldef : ldefs) m =
-  inRustCtx (rustCtx1 (lifetimeDefName ldef)
-             LifetimeRepr) (withLifetimes ldefs m) >>=
-  mbLifetimeFunPerm ldef
+withLifetimes [] m = abstractLifetimeSubPerms <$> m
+withLifetimes ldefs m =
+  let rust_ctx = rustCtx1 (lifetimeDefName ldef) LifetimeRepr in
+  inRustCtx rust_ctx (withLifetimes ldefs m) >>= mbLifetimeFunPerm ldef
 
 
 -- | Convert a monomorphic function type, i.e., one with no type arguments
