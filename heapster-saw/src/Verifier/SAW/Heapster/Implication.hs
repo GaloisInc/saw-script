@@ -532,8 +532,8 @@ data SimplImpl ps_in ps_out where
   -- > x:eq(handle) -o x:fun_perm
   SImpl_ConstFunPerm ::
     args ~ CtxToRList cargs =>
-    ExprVar (FunctionHandleType cargs ret) ->
-    FnHandle cargs ret -> FunPerm ghosts (CtxToRList cargs) ret -> Ident ->
+    ExprVar (FunctionHandleType cargs ret) -> FnHandle cargs ret ->
+    FunPerm ghosts (CtxToRList cargs) gouts ret -> Ident ->
     SimplImpl (RNil :> FunctionHandleType cargs ret)
     (RNil :> FunctionHandleType cargs ret)
 
@@ -7350,7 +7350,7 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
     foldr (\(i::Int,p) rest ->
             case p of
               Perm_Fun fun_perm
-                | Just (Refl,Refl,Refl) <- funPermEq3 fun_perm fun_perm' ->
+                | Just (Refl,Refl,Refl,Refl) <- funPermEq4 fun_perm fun_perm' ->
                   implCopyConjM x ps i >>> implPopM x (ValPerm_Conj ps)
               _ -> rest)
     (proveVarAtomicImplUnfoldOrFail x ps mb_p)
@@ -7665,8 +7665,8 @@ proveVarImplH x p mb_p = case (p, mbMatch mb_p) of
     use implStatePermEnv >>>= \env ->
     case lookupFunPerm env f of
       Just (SomeFunPerm fun_perm, ident)
-        | [nuMP| Just (Refl,Refl,Refl) |] <-
-            mbMatch $ fmap (funPermEq3 fun_perm) mb_fun_perm ->
+        | [nuMP| Just (Refl,Refl,Refl, Refl) |] <-
+            mbMatch $ fmap (funPermEq4 fun_perm) mb_fun_perm ->
           introEqCopyM x (PExpr_Fun f) >>>
           implPopM x p >>>
           implSimplM Proxy (SImpl_ConstFunPerm x f fun_perm ident)
@@ -7773,7 +7773,7 @@ distPermsToExDistPerms = emptyMb
 
 -- | Substitute arguments into a function permission to get the existentially
 -- quantified input permissions needed on the arguments
-funPermExDistIns :: FunPerm ghosts args ret -> RAssign Name args ->
+funPermExDistIns :: FunPerm ghosts args gouts ret -> RAssign Name args ->
                     ExDistPerms ghosts (ghosts :++: args)
 funPermExDistIns fun_perm args =
   fmap (varSubst (permVarSubstOfNames args)) $ mbSeparate args $

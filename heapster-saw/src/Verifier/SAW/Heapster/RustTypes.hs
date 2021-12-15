@@ -24,6 +24,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+-- {-# OPTIONS_GHC -freduction-depth=0 #-}
 
 module Verifier.SAW.Heapster.RustTypes where
 
@@ -676,9 +677,10 @@ shapeToBlockPerm :: (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
                     Maybe (ValuePerm (LLVMPointerType w))
 shapeToBlockPerm = fmap ValPerm_LLVMBlock . shapeToBlock
 
--- | Function permission that is existential over all types
+-- | Function permission that is existential over all types (note that there
+-- used to be 3 type variables instead of 4 for 'FunPerm', thus the name)
 data Some3FunPerm =
-  forall ghosts args ret. Some3FunPerm (FunPerm ghosts args ret)
+  forall ghosts args gouts ret. Some3FunPerm (FunPerm ghosts args gouts ret)
 
 instance PermPretty Some3FunPerm where
   permPrettyM (Some3FunPerm fun_perm) = permPrettyM fun_perm
@@ -732,7 +734,8 @@ funPerm3FromMbArgLayout ctx [nuMP| ALPerm mb_ps_in |]
   , ps_out_all <-
       RL.append ghost_perms (assignToRListAppend ctx1 ctx ps1_out $
                              trueValuePerms $ assignToRList ctx) :>: ret_perm =
-    return $ Some3FunPerm $ FunPerm ghosts ctx_args ret_tp mb_ps_in_all
+    return $ Some3FunPerm $
+    FunPerm ghosts ctx_args CruCtxNil ret_tp mb_ps_in_all
     (nuMulti (cruCtxProxies ctx_all :>: Proxy) $ \_ -> ps_out_all)
 funPerm3FromMbArgLayout ctx [nuMP| ALPerm_Exists mb_p |]
   ghosts ctx1 ps1_in ps1_out ret_tp ret_perm =
@@ -839,21 +842,23 @@ assocAppend fs1 ctx2 ctx3 fs23 =
 mbGhostsFunPerm3 :: CruCtx new_ghosts -> Mb new_ghosts Some3FunPerm ->
                     Some3FunPerm
 mbGhostsFunPerm3 new_ghosts (mbMatch -> [nuMP| Some3FunPerm
-                                                (FunPerm ghosts args
+                                                (FunPerm ghosts args gouts
                                                          ret ps_in ps_out) |]) =
   let new_prxs = cruCtxProxies new_ghosts
       ghosts_prxs = cruCtxProxies $ mbLift ghosts
+      gouts_prxs = cruCtxProxies $ mbLift gouts
       args_prxs = cruCtxProxies $ mbLift args in
-  Some3FunPerm $ FunPerm (appendCruCtx new_ghosts $
-                          mbLift ghosts) (mbLift args) (mbLift ret)
+  Some3FunPerm $ FunPerm (appendCruCtx new_ghosts $ mbLift ghosts)
+  (mbLift args) (mbLift gouts) (mbLift ret)
   (mbAssoc new_prxs ghosts_prxs args_prxs $
    fmap (assocAppend (RL.map (const ValPerm_True) new_prxs)
          ghosts_prxs args_prxs) $
          mbCombine (RL.append ghosts_prxs args_prxs) ps_in)
-  (mbAssoc new_prxs ghosts_prxs (args_prxs :>: Proxy) $
+  (mbAssoc new_prxs ghosts_prxs (RL.append args_prxs gouts_prxs :>: Proxy) $
    fmap (assocAppend (RL.map (const ValPerm_True) new_prxs)
-         ghosts_prxs (args_prxs :>: Proxy)) $
-         mbCombine (RL.append ghosts_prxs args_prxs :>: Proxy) ps_out)
+         ghosts_prxs (RL.append args_prxs gouts_prxs :>: Proxy)) $
+         mbCombine (RL.append ghosts_prxs $
+                    RL.append args_prxs gouts_prxs :>: Proxy) ps_out)
 
 
 -- | Try to compute the layout of a structure of the given shape as a value,
@@ -1093,6 +1098,13 @@ tyParamName (TyParam _ ident _ _ _) = name ident
 extMbOuter :: RAssign Proxy ctx1 -> Mb ctx2 a -> Mb (ctx1 :++: ctx2) a
 extMbOuter prxs mb_a = mbCombine (mbToProxy mb_a) $ nuMulti prxs $ const mb_a
 
+extMbAppInner :: NuMatching a => any ctx1 ->
+                 RAssign Proxy ctx2 -> RAssign Proxy ctx3 ->
+                 Mb (ctx1 :++: ctx2) a -> Mb (ctx1 :++: ctx2 :++: ctx3) a
+extMbAppInner (_ :: any ctx1) ctx2 ctx3 mb_a =
+  mbCombine (RL.append ctx2 ctx3) $
+  mbMapCl ($(mkClosed [| extMbMulti |]) `clApply` toClosed ctx3) $
+  mbSeparate @_ @ctx1 ctx2 mb_a
 
 -- | Add a lifetime described by a 'LifetimeDef' to a 'Some3FunPerm'
 mbLifetimeFunPerm :: LifetimeDef Span -> Binding LifetimeType Some3FunPerm ->
@@ -1100,36 +1112,46 @@ mbLifetimeFunPerm :: LifetimeDef Span -> Binding LifetimeType Some3FunPerm ->
 mbLifetimeFunPerm (LifetimeDef _ _ [] _)
                   (mbMatch -> [nuMP| Some3FunPerm fun_perm |]) =
   do let ghosts = mbLift $ fmap funPermGhosts fun_perm
+     let ghosts_prxs = cruCtxProxies ghosts
+     let gouts = mbLift $ fmap funPermGouts fun_perm
+     let gouts_prxs = cruCtxProxies gouts
      let args = mbLift $ fmap funPermArgs fun_perm
      let args_prxs = cruCtxProxies args
      let ret = mbLift $ fmap funPermRet fun_perm
+     let l_prxs = MNil :>: (Proxy :: Proxy LifetimeType)
      let mb_ps_in =
-           mbCombineAssoc (MNil :>: Proxy) (cruCtxProxies ghosts) args_prxs $
+           mbCombineAssoc l_prxs ghosts_prxs args_prxs $
            fmap (mbValuePermsToDistPerms . funPermIns) fun_perm
      let mb_ps_out =
-           mbCombineAssoc (MNil :>: Proxy) (cruCtxProxies ghosts) (args_prxs :>: Proxy) $
+           mbCombineAssoc l_prxs ghosts_prxs
+           (RL.append args_prxs gouts_prxs :>: Proxy) $
            fmap (mbValuePermsToDistPerms . funPermOuts) fun_perm
-     let mb_l =
-           extMbMulti (cruCtxProxies args) $
-           extMbMulti (cruCtxProxies ghosts) (nu id)
+     let mb_l = extMbMulti args_prxs $ extMbMulti ghosts_prxs $ nu id
+     let mb_l_out =
+           extMbMulti (RL.append args_prxs gouts_prxs :>: Proxy) $
+           extMbMulti ghosts_prxs $ nu id
      [nuMP| Some mb_lops_in |] <-
        mbMatchM $ mbMap2 lownedPermsForLifetime mb_l mb_ps_in
      [nuMP| Some mb_lops_out |] <-
-       mbMatchM $ mbMap2 lownedPermsForLifetime (extMb mb_l) mb_ps_out
+       mbMatchM $ mbMap2 lownedPermsForLifetime mb_l_out mb_ps_out
      case abstractMbLOPsModalities mb_lops_in of
        SomeTypedMb ghosts' mb_mb_lops_in_abs ->
          return $ mbGhostsFunPerm3 ghosts' $
          flip fmap mb_mb_lops_in_abs $ \mb_lops_in_abs ->
-         Some3FunPerm $ FunPerm (appendCruCtx
-                                 (singletonCruCtx LifetimeRepr) ghosts) args ret
+         Some3FunPerm $
+         FunPerm (appendCruCtx
+                  (singletonCruCtx LifetimeRepr) ghosts) args gouts ret
          (mbMap3 (\ps_in lops_in lops_in_abs ->
                    assocAppend (MNil :>: ValPerm_LOwned [] lops_in lops_in_abs)
                    ghosts args_prxs $ distPermsToValuePerms ps_in)
           mb_ps_in mb_lops_in mb_lops_in_abs)
          (mbMap3 (\ps_out lops_out lops_in_abs ->
                    assocAppend (MNil :>: ValPerm_LOwned [] lops_out lops_in_abs)
-                   ghosts (args_prxs :>: Proxy) $ distPermsToValuePerms ps_out)
-          mb_ps_out mb_lops_out (extMb mb_lops_in_abs))
+                   ghosts (RL.append args_prxs gouts_prxs :>: Proxy) $
+                   distPermsToValuePerms ps_out)
+          mb_ps_out mb_lops_out
+          (extMb (extMbAppInner (RL.append l_prxs ghosts_prxs)
+                  args_prxs gouts_prxs mb_lops_in_abs)))
 mbLifetimeFunPerm (LifetimeDef _ _ _bounds _) _ =
   fail "Rust lifetime bounds not yet supported!"
 
