@@ -1628,6 +1628,7 @@ permImplSucceeds (PermImpl_Step (Impl1_ElimOr _ _ _)
 permImplSucceeds (PermImpl_Step (Impl1_ElimExists _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
   mbLift $ fmap permImplSucceeds mb_impl
+permImplSucceeds (PermImpl_Step (Impl1_ElimFalse _) _) = 2
 permImplSucceeds (PermImpl_Step (Impl1_Simpl _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
   mbLift $ fmap permImplSucceeds mb_impl
@@ -2402,6 +2403,11 @@ applyImpl1 _ (Impl1_ElimExists x p_body) ps =
     mbPermSets1 (fmap (\p -> set (topDistPerm x) p ps) p_body)
   else
     error "applyImpl1: Impl1_ElimExists: unexpected permission"
+applyImpl1 _ (Impl1_ElimFalse x) ps =
+  if ps ^. topDistPerm x == ValPerm_False then
+    MbPermSets_Nil
+  else
+    error "applyImpl1: Impl1_ElimFalse: unexpected permission"
 applyImpl1 pp_info (Impl1_Simpl simpl prx) ps =
   mbPermSets1 $ emptyMb $ applySimplImpl pp_info prx simpl ps
 applyImpl1 _ (Impl1_LetBind tp e) ps =
