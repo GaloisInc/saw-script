@@ -318,13 +318,13 @@ inExtMultiTransM MNil m = m
 inExtMultiTransM (ctx :>: etrans) m =
   inExtMultiTransM ctx $ inExtTransM etrans m
 
--- | Run a translation computation in an extended context, where we let-bind any
+-- | Run a translation computation in an extended context, where we sawLet-bind any
 -- term in the supplied expression translation
-inExtTransLetBindM :: TransInfo info => TypeTrans (ExprTrans tp) ->
+inExtTransSAWLetBindM :: TransInfo info => TypeTrans (ExprTrans tp) ->
                       ExprTrans tp -> TransM info (ctx :> tp) OpenTerm ->
                       TransM info ctx OpenTerm
-inExtTransLetBindM tp_trans etrans m =
-  letTransMultiM "z" (typeTransTypes tp_trans) (transTerms etrans) $ \var_tms ->
+inExtTransSAWLetBindM tp_trans etrans m =
+  sawLetTransMultiM "z" (typeTransTypes tp_trans) (transTerms etrans) $ \var_tms ->
   inExtTransM (typeTransF tp_trans var_tms) m
 
 -- | Run a translation computation in context @(ctx1 :++: ctx2) :++: ctx2@ by
@@ -424,17 +424,26 @@ letTransM x tp rhs_m body_m =
      return $
        letOpenTerm (pack x) tp (runTransM rhs_m r) (\x' -> runTransM (body_m x') r)
 
--- | Build 0 or more let-bindings in a translation monad, using the same
+-- | Build a sawLet-binding in a translation monad
+sawLetTransM :: String -> OpenTerm -> TransM info ctx OpenTerm ->
+                (OpenTerm -> TransM info ctx OpenTerm) ->
+                TransM info ctx OpenTerm
+sawLetTransM x tp rhs_m body_m =
+  do r <- ask
+     return $
+       sawLetOpenTerm (pack x) tp (runTransM rhs_m r) (\x' -> runTransM (body_m x') r)
+
+-- | Build 0 or more sawLet-bindings in a translation monad, using the same
 -- variable name
-letTransMultiM :: String -> [OpenTerm] -> [OpenTerm] ->
+sawLetTransMultiM :: String -> [OpenTerm] -> [OpenTerm] ->
                   ([OpenTerm] -> TransM info ctx OpenTerm) ->
                   TransM info ctx OpenTerm
-letTransMultiM _ [] [] f = f []
-letTransMultiM x (tp:tps) (rhs:rhss) f =
-  letTransM x tp (return rhs) $ \var_tm ->
-  letTransMultiM x tps rhss (\var_tms -> f (var_tm:var_tms))
-letTransMultiM _ _ _ _ =
-  error "letTransMultiM: numbers of types and right-hand sides disagree"
+sawLetTransMultiM _ [] [] f = f []
+sawLetTransMultiM x (tp:tps) (rhs:rhss) f =
+  sawLetTransM x tp (return rhs) $ \var_tm ->
+  sawLetTransMultiM x tps rhss (\var_tms -> f (var_tm:var_tms))
+sawLetTransMultiM _ _ _ _ =
+  error "sawLetTransMultiM: numbers of types and right-hand sides disagree"
 
 -- | Build a bitvector type in a translation monad
 bitvectorTransM :: TransM info ctx OpenTerm -> TransM info ctx OpenTerm
@@ -4162,7 +4171,7 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
     do tp_trans <- translate tp
        etrans <- tpTransM $ translate e
        let ptrans = exprOutPerm e
-       inExtTransLetBindM tp_trans etrans $
+       inExtTransSAWLetBindM tp_trans etrans $
          withPermStackM (:>: Member_Base) (:>: extPermTrans ptrans) m
 
   [nuMP| TypedSetRegPermExpr _ e |] ->
