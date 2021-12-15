@@ -10,7 +10,7 @@ data AstFunPerm = AstFunPerm
   Pos
   [(Located String, AstType)]
   [(Located String, AstExpr)]
-  [(Located String, AstExpr)]
+  [(Located String, AstType)]
   [(Located String, AstExpr)]   -- ^ @-o@ position, context, inputs, outputs
   deriving Show
 
