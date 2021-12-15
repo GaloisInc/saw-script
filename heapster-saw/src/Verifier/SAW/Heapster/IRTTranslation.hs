@@ -470,6 +470,7 @@ instance IRTTyVars (PermExpr (LLVMShapeType w)) where
          (tps2, ixs2) <- irtTyVars sh2
          return (tps1 ++ tps2, IRTVarsAppend ixs1 ixs2)
     [nuMP| PExpr_ExShape sh |] -> irtTyVars sh -- see the instance for Binding!
+    [nuMP| PExpr_FalseShape |] -> return ([], IRTVarsNil)
 
 -- | Get all IRT type variables in a field shape
 instance IRTTyVars (LLVMFieldShape w) where

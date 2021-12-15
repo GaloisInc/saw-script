@@ -915,6 +915,8 @@ instance TransInfo info =>
            transTupleTerm <$> inExtTransM e (translate $ mbCombine RL.typeCtxProxies mb_sh)
          return $ ETrans_Term (dataTypeOpenTerm "Prelude.Sigma"
                                [typeTransTupleType tp_trans, tp_f_trm])
+    [nuMP| PExpr_FalseShape |] ->
+      return $ ETrans_Term $ globalOpenTerm "Prelude.EmptyType"
 
     [nuMP| PExpr_ValPerm p |] ->
       ETrans_Term <$> typeTransTupleType <$> translate p

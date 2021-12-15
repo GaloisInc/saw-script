@@ -657,6 +657,9 @@ data PermExpr (a :: CrucibleType) where
                    Binding a (PermExpr (LLVMShapeType w)) ->
                    PermExpr (LLVMShapeType w)
 
+  -- | A false shape
+  PExpr_FalseShape :: PermExpr (LLVMShapeType w)
+
   -- | A permission as an expression
   PExpr_ValPerm :: ValuePerm a -> PermExpr (ValuePermType a)
 
@@ -915,6 +918,9 @@ instance Eq (PermExpr a) where
     = mbLift $ mbMap2 (==) mb_sh1 mb_sh2
   (PExpr_ExShape _) == _ = False
 
+  PExpr_FalseShape == PExpr_FalseShape = True
+  PExpr_FalseShape == _ = False
+
   (PExpr_ValPerm p1) == (PExpr_ValPerm p2) = p1 == p2
   (PExpr_ValPerm _) == _ = False
 
@@ -990,6 +996,7 @@ instance PermPretty (PermExpr a) where
     flip permPrettyExprMb mb_sh $ \(_ :>: Constant pp_n) ppm ->
     do pp <- ppm
        return $ sep [pretty "exsh" <+> pp_n <> dot, pp]
+  permPrettyM PExpr_FalseShape = return $ pretty "falsesh"
   permPrettyM (PExpr_ValPerm p) = permPrettyM p
 
 instance (1 <= w, KnownNat w) => PermPretty (LLVMFieldShape w) where
@@ -3806,6 +3813,7 @@ llvmShapeLength (PExpr_ExShape mb_sh) =
     [nuMP| Just mb_len |] ->
       partialSubst (emptyPSubst $ singletonCruCtx $ knownRepr) mb_len
     _ -> Nothing
+llvmShapeLength PExpr_FalseShape = Just $ bvInt 0
 
 -- | Adjust the read/write and lifetime modalities of a block permission by
 -- setting those modalities that are supplied as arguments
@@ -3908,6 +3916,7 @@ modalizeShape rw l (PExpr_OrShape sh1 sh2) =
   PExpr_OrShape <$> modalizeShape rw l sh1 <*> modalizeShape rw l sh2
 modalizeShape rw l (PExpr_ExShape mb_sh) =
   PExpr_ExShape <$> mbM (fmap (modalizeShape rw l) mb_sh)
+modalizeShape _ _ PExpr_FalseShape = Just PExpr_FalseShape
 
 -- | Apply 'modalizeShape' to the shape of a block permission, raising an error
 -- if 'modalizeShape' cannot be applied
@@ -5119,6 +5128,7 @@ shapeIsCopyable rw (PExpr_OrShape sh1 sh2) =
   shapeIsCopyable rw sh1 && shapeIsCopyable rw sh2
 shapeIsCopyable rw (PExpr_ExShape mb_sh) =
   mbLift $ fmap (shapeIsCopyable rw) mb_sh
+shapeIsCopyable _ PExpr_FalseShape = True
 
 
 -- FIXME: need a traversal function for RAssign for the following two funs
@@ -5282,6 +5292,7 @@ instance FreeVars (PermExpr a) where
   freeVars (PExpr_OrShape sh1 sh2) =
     NameSet.union (freeVars sh1) (freeVars sh2)
   freeVars (PExpr_ExShape mb_sh) = NameSet.liftNameSet $ fmap freeVars mb_sh
+  freeVars PExpr_FalseShape = NameSet.empty
   freeVars (PExpr_ValPerm p) = freeVars p
 
 instance FreeVars (BVFactor w) where
@@ -5491,6 +5502,7 @@ readOnlyShape (PExpr_OrShape sh1 sh2) =
   PExpr_OrShape (readOnlyShape sh1) (readOnlyShape sh2)
 readOnlyShape (PExpr_ExShape mb_sh) =
   PExpr_ExShape $ fmap readOnlyShape mb_sh
+readOnlyShape PExpr_FalseShape = PExpr_FalseShape
 
 
 ----------------------------------------------------------------------
@@ -5676,6 +5688,7 @@ instance SubstVar s m => Substable s (PermExpr a) m where
       PExpr_OrShape <$> genSubst s sh1 <*> genSubst s sh2
     [nuMP| PExpr_ExShape mb_sh |] ->
       PExpr_ExShape <$> genSubstMb RL.typeCtxProxies s mb_sh
+    [nuMP| PExpr_FalseShape |] -> return PExpr_FalseShape
     [nuMP| PExpr_ValPerm p |] ->
       PExpr_ValPerm <$> genSubst s p
 
@@ -6429,6 +6442,8 @@ instance AbstractVars (PermExpr a) where
   abstractPEVars ns1 ns2 (PExpr_ExShape mb_sh) =
     absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_ExShape |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 mb_sh
+  abstractPEVars ns1 ns2 PExpr_FalseShape =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_FalseShape |])
   abstractPEVars ns1 ns2 (PExpr_ValPerm p) =
     absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_ValPerm |]))
     `clMbMbApplyM` abstractPEVars ns1 ns2 p
@@ -6775,6 +6790,7 @@ instance AbstractNamedShape w (PermExpr a) where
   abstractNSM (PExpr_OrShape sh1 sh2) =
     mbMap2 PExpr_OrShape <$> abstractNSM sh1 <*> abstractNSM sh2
   abstractNSM (PExpr_ExShape mb_sh) = fmap PExpr_ExShape <$> abstractNSM mb_sh
+  abstractNSM PExpr_FalseShape = pureBindingM PExpr_FalseShape
   abstractNSM (PExpr_ValPerm p) = fmap PExpr_ValPerm <$> abstractNSM p
 
 instance AbstractNamedShape w (PermExprs as) where
