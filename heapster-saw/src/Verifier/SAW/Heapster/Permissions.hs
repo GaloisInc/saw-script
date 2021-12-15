@@ -97,6 +97,15 @@ import Debug.Trace
 -- * Utility Functions and Definitions
 ----------------------------------------------------------------------
 
+-- | Call 'RL.split' twice to split a nested appended 'RAssign' into three
+rlSplit3 :: prx1 ctx1 -> RAssign prx2 ctx2 -> RAssign prx3 ctx3 ->
+            RAssign f ((ctx1 :++: ctx2) :++: ctx3) ->
+            (RAssign f ctx1, RAssign f ctx2, RAssign f ctx3)
+rlSplit3 (ctx1 :: prx1 ctx1) (ctx2 :: RAssign prx2 ctx2) ctx3 fs123 =
+  let (fs12, fs3) = RL.split (Proxy :: Proxy (ctx1 :++: ctx2)) ctx3 fs123 in
+  let (fs1, fs2) = RL.split ctx1 ctx2 fs12 in
+  (fs1, fs2, fs3)
+
 -- | Take the ceiling of a division
 ceil_div :: Integral a => a -> a -> a
 ceil_div a b = (a + b - fromInteger 1) `div` b
@@ -2177,7 +2186,7 @@ lownedPermsOffsetsForLLVMVar x (lops :>: _) =
 data FunPerm ghosts args gouts ret where
   FunPerm :: CruCtx ghosts -> CruCtx args -> CruCtx gouts -> TypeRepr ret ->
              MbValuePerms (ghosts :++: args) ->
-             MbValuePerms (ghosts :++: args :++: gouts :> ret) ->
+             MbValuePerms ((ghosts :++: args) :++: gouts :> ret) ->
              FunPerm ghosts args gouts ret
 
 -- | Extract the @args@ context from a function permission
@@ -2207,7 +2216,7 @@ funPermIns (FunPerm _ _ _ _ perms_in _) = perms_in
 
 -- | Extract the output permissions of a function permission
 funPermOuts :: FunPerm ghosts args gouts ret ->
-               MbValuePerms (ghosts :++: args :++: gouts :> ret)
+               MbValuePerms ((ghosts :++: args) :++: gouts :> ret)
 funPermOuts (FunPerm _ _ _ _ _ perms_out) = perms_out
 
 
@@ -3148,11 +3157,9 @@ instance PermPretty (FunPerm ghosts args gouts ret) where
     fmap mbLift $ strongMbM $
     flip nuMultiWithElim1 (mbValuePermsToDistPerms mb_ps_out) $
     \(ghosts_args_gouts_ns :>: ret_n) ps_out ->
-    let (ghosts_ns, args_gouts_ns) =
-          RL.split ghosts (RL.append (cruCtxProxies args)
-                           (cruCtxProxies gouts)) ghosts_args_gouts_ns in
-    let (args_ns, gouts_ns) =
-          RL.split args (cruCtxProxies gouts) args_gouts_ns in
+    let (ghosts_ns, args_ns, gouts_ns) =
+          rlSplit3 (cruCtxProxies ghosts) (cruCtxProxies args)
+          (cruCtxProxies gouts) ghosts_args_gouts_ns in
     let ps_in =
           varSubst (permVarSubstOfNames $ RL.append ghosts_ns args_ns)
           (mbValuePermsToDistPerms mb_ps_in) in
@@ -5224,11 +5231,14 @@ funPermDistIns fun_perm ghosts gexprs args =
 --
 -- > [gs/gctx]xs : [gexprs/gctx]ps'
 funPermDistOuts :: FunPerm ghosts args gouts ret -> RAssign Name ghosts ->
-                   PermExprs ghosts -> RAssign Name (args :++: gouts :> ret) ->
-                   DistPerms (ghosts :++: args :++: gouts :> ret)
-funPermDistOuts fun_perm ghosts gexprs args_gouts_ret =
-  valuePermsToDistPerms (RL.append ghosts args_gouts_ret) $
-  subst (appendSubsts (substOfExprs gexprs) (substOfVars args_gouts_ret)) $
+                   PermExprs ghosts -> RAssign Name args ->
+                   RAssign Name (gouts :> ret) ->
+                   DistPerms ((ghosts :++: args) :++: gouts :> ret)
+funPermDistOuts fun_perm ghosts gexprs args gouts_ret =
+  valuePermsToDistPerms (RL.append (RL.append ghosts args) gouts_ret) $
+  subst (appendSubsts
+         (appendSubsts (substOfExprs gexprs) (substOfVars args))
+         (substOfVars gouts_ret)) $
   funPermOuts fun_perm
 
 -- | Unfold a recursive permission given a 'RecPerm' for it
@@ -5869,9 +5879,7 @@ instance SubstVar s m => Substable s (FunPerm ghosts args gouts ret) m where
         ghosts_args_prxs =
           RL.append (cruCtxProxies ghosts) (cruCtxProxies args)
         ghosts_args_gouts_ret_prxs =
-          RL.append (cruCtxProxies ghosts) $
-          RL.append (cruCtxProxies args) $
-          (cruCtxProxies gouts) :>: Proxy in
+          RL.append ghosts_args_prxs (cruCtxProxies gouts) :>: Proxy in
     FunPerm ghosts args gouts ret
     <$> genSubstMb ghosts_args_prxs s perms_in
     <*> genSubstMb ghosts_args_gouts_ret_prxs s perms_out

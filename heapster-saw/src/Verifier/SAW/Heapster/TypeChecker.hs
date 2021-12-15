@@ -697,8 +697,8 @@ tcFunPerm args ret (AstFunPerm _ untyCtx ins untyCtxOut outs) =
      let args_ctx = mkArgsParsedCtx args
          perms_in_ctx = appendParsedCtx ghosts_ctx args_ctx
          perms_out_ctx =
-           consParsedCtx "ret" ret $
-           appendParsedCtx ghosts_ctx $ appendParsedCtx args_ctx gouts_ctx
+           appendParsedCtx (appendParsedCtx ghosts_ctx args_ctx)
+           (consParsedCtx "ret" ret gouts_ctx)
      perms_in  <- tcSortedMbValuePerms perms_in_ctx ins
      perms_out <- tcSortedMbValuePerms perms_out_ctx outs
      pure (SomeFunPerm (FunPerm ghosts args gouts ret perms_in perms_out))
