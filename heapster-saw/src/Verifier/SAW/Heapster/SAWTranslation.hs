@@ -3420,7 +3420,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
        () <- assertTopPermM "Impl1_ElimFalse" mb_x mb_false
        top_ptrans <- getTopPermM
        applyMultiTransM (return $ globalOpenTerm "Prelude.efq")
-         [compReturnTypeTransM, return $ transTerm1 top_ptrans]
+         [compReturnTypeM, return $ transTerm1 top_ptrans]
 
   -- A SimplImpl is translated using translateSimplImpl
   ([nuMP| Impl1_Simpl simpl mb_prx |], _) ->
