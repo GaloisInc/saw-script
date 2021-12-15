@@ -375,6 +375,9 @@ Definition and_triv2 : forall (x : SAWCoreScaffolding.Bool), SAWCoreScaffolding.
   fun (x : SAWCoreScaffolding.Bool) => let var__0   := SAWCoreScaffolding.not SAWCoreScaffolding.true in
   SAWCoreScaffolding.iteDep (fun (b : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool (SAWCoreScaffolding.and (SAWCoreScaffolding.not b) b) SAWCoreScaffolding.false) x (trans SAWCoreScaffolding.Bool (SAWCoreScaffolding.and var__0 SAWCoreScaffolding.true) var__0 SAWCoreScaffolding.false (and_True2 var__0) not_True) (and_False2 (SAWCoreScaffolding.not SAWCoreScaffolding.false)).
 
+Definition FalseProp : Prop :=
+  SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool SAWCoreScaffolding.true SAWCoreScaffolding.false.
+
 Definition EqTrue : SAWCoreScaffolding.Bool -> Prop :=
   fun (x : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool x SAWCoreScaffolding.true.
 
