@@ -20,7 +20,6 @@ module Verifier.SAW.OpenTerm (
   -- * Open terms and converting to closed terms
   OpenTerm(..), completeOpenTerm, completeNormOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
-  openTermType,
   closedOpenTerm, flatOpenTerm, sortOpenTerm, natOpenTerm,
   unitOpenTerm, unitTypeOpenTerm,
   stringLitOpenTerm, stringTypeOpenTerm,
@@ -69,14 +68,6 @@ completeOpenTermType :: SharedContext -> OpenTerm -> IO Term
 completeOpenTermType sc (OpenTerm termM) =
   either (fail . show) return =<<
   runTCM (typedType <$> termM) sc Nothing []
-
--- | Extract the type of an 'OpenTerm' as an 'OpenTerm'
-openTermType :: OpenTerm -> OpenTerm
-openTermType (OpenTerm termM) = OpenTerm $
-  do ctx <- askCtx
-     TypedTerm _ tp <- termM
-     tp_tp <- liftTCM scTypeOf' (map snd ctx) tp
-     return (TypedTerm tp tp_tp)
 
 -- | Embed a closed 'Term' into an 'OpenTerm'
 closedOpenTerm :: Term -> OpenTerm
@@ -270,12 +261,11 @@ letOpenTerm x tp rhs body_f = applyOpenTerm (lambdaOpenTerm x tp body_f) rhs
 
 -- | Build a let expression as an 'OpenTerm'. This is equivalent to
 -- > 'applyOpenTerm' ('lambdaOpenTerm' x tp body) rhs
-sawLetOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> (OpenTerm -> OpenTerm) ->
-                  OpenTerm
-sawLetOpenTerm x tp rhs body_f =
+sawLetOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> OpenTerm ->
+                  (OpenTerm -> OpenTerm) -> OpenTerm
+sawLetOpenTerm x tp tp_ret rhs body_f =
   applyOpenTermMulti (globalOpenTerm "Prelude.sawLet")
-  [tp, lambdaOpenTerm x tp (openTermType . body_f),
-   rhs, lambdaOpenTerm x tp body_f]
+  [tp, tp_ret, rhs, lambdaOpenTerm x tp body_f]
 
 -- | The monad for building 'OpenTerm's if you want to add in 'IO' actions. This
 -- is just the type-checking monad, but we give it a new name to keep this

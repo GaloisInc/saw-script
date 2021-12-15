@@ -320,11 +320,11 @@ inExtMultiTransM (ctx :>: etrans) m =
 
 -- | Run a translation computation in an extended context, where we sawLet-bind any
 -- term in the supplied expression translation
-inExtTransSAWLetBindM :: TransInfo info => TypeTrans (ExprTrans tp) ->
-                      ExprTrans tp -> TransM info (ctx :> tp) OpenTerm ->
-                      TransM info ctx OpenTerm
-inExtTransSAWLetBindM tp_trans etrans m =
-  sawLetTransMultiM "z" (typeTransTypes tp_trans) (transTerms etrans) $ \var_tms ->
+inExtTransSAWLetBindM :: TransInfo info => TypeTrans (ExprTrans tp) -> OpenTerm ->
+                         ExprTrans tp -> TransM info (ctx :> tp) OpenTerm ->
+                         TransM info ctx OpenTerm
+inExtTransSAWLetBindM tp_trans tp_ret etrans m =
+  sawLetTransMultiM "z" (typeTransTypes tp_trans) tp_ret (transTerms etrans) $ \var_tms ->
   inExtTransM (typeTransF tp_trans var_tms) m
 
 -- | Run a translation computation in context @(ctx1 :++: ctx2) :++: ctx2@ by
@@ -425,24 +425,25 @@ letTransM x tp rhs_m body_m =
        letOpenTerm (pack x) tp (runTransM rhs_m r) (\x' -> runTransM (body_m x') r)
 
 -- | Build a sawLet-binding in a translation monad
-sawLetTransM :: String -> OpenTerm -> TransM info ctx OpenTerm ->
+sawLetTransM :: String -> OpenTerm -> OpenTerm -> TransM info ctx OpenTerm ->
                 (OpenTerm -> TransM info ctx OpenTerm) ->
                 TransM info ctx OpenTerm
-sawLetTransM x tp rhs_m body_m =
+sawLetTransM x tp tp_ret rhs_m body_m =
   do r <- ask
      return $
-       sawLetOpenTerm (pack x) tp (runTransM rhs_m r) (\x' -> runTransM (body_m x') r)
+       sawLetOpenTerm (pack x) tp tp_ret (runTransM rhs_m r)
+                      (\x' -> runTransM (body_m x') r)
 
 -- | Build 0 or more sawLet-bindings in a translation monad, using the same
 -- variable name
-sawLetTransMultiM :: String -> [OpenTerm] -> [OpenTerm] ->
+sawLetTransMultiM :: String -> [OpenTerm] -> OpenTerm -> [OpenTerm] ->
                   ([OpenTerm] -> TransM info ctx OpenTerm) ->
                   TransM info ctx OpenTerm
-sawLetTransMultiM _ [] [] f = f []
-sawLetTransMultiM x (tp:tps) (rhs:rhss) f =
-  sawLetTransM x tp (return rhs) $ \var_tm ->
-  sawLetTransMultiM x tps rhss (\var_tms -> f (var_tm:var_tms))
-sawLetTransMultiM _ _ _ _ =
+sawLetTransMultiM _ [] _ [] f = f []
+sawLetTransMultiM x (tp:tps) ret_tp (rhs:rhss) f =
+  sawLetTransM x tp ret_tp (return rhs) $ \var_tm ->
+  sawLetTransMultiM x tps ret_tp rhss (\var_tms -> f (var_tm:var_tms))
+sawLetTransMultiM _ _ _ _ _ =
   error "sawLetTransMultiM: numbers of types and right-hand sides disagree"
 
 -- | Build a bitvector type in a translation monad
@@ -4169,9 +4170,10 @@ translateStmt :: PermCheckExtC ext =>
 translateStmt loc mb_stmt m = case mbMatch mb_stmt of
   [nuMP| TypedSetReg tp e |] ->
     do tp_trans <- translate tp
+       tp_ret <- compReturnTypeM
        etrans <- tpTransM $ translate e
        let ptrans = exprOutPerm e
-       inExtTransSAWLetBindM tp_trans etrans $
+       inExtTransSAWLetBindM tp_trans tp_ret etrans $
          withPermStackM (:>: Member_Base) (:>: extPermTrans ptrans) m
 
   [nuMP| TypedSetRegPermExpr _ e |] ->
