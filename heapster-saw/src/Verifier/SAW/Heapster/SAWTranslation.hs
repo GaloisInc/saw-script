@@ -3119,6 +3119,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          (\(pctx :>: ptrans) -> pctx :>: typeTransF ttrans [transTerm1 ptrans])
          m
 
+  [nuMP| SImpl_ElimLLVMBlockFalse _ _ |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       withPermStackM id
+         (\(pctx :>: ptrans) -> pctx :>: typeTransF ttrans [transTerm1 ptrans])
+         m
+
   [nuMP| SImpl_FoldNamed _ (NamedPerm_Rec rp) args _ |] ->
     do args_trans <- translate args
        ttrans <- translateSimplImplOutHead mb_simpl
