@@ -1131,6 +1131,13 @@ data SimplImpl ps_in ps_out where
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
+  -- | Eliminate a block of shape @falsesh@ to @false@
+  --
+  -- > x:memblock(..., falsesh) -o x:false
+  SImpl_ElimLLVMBlockFalse ::
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+
   -- | Fold a named permission (other than an opaque permission):
   --
   -- > x:(unfold P args) -o x:P<args>
@@ -1956,6 +1963,8 @@ simplImplIn (SImpl_IntroLLVMBlockEx x bp) =
       error "simplImplIn: SImpl_IntroLLVMBlockEx: non-existential shape"
 simplImplIn (SImpl_ElimLLVMBlockEx x bp) =
   distPerms1 x (ValPerm_LLVMBlock bp)
+simplImplIn (SImpl_ElimLLVMBlockFalse x bp) =
+  distPerms1 x (ValPerm_LLVMBlock bp)
 simplImplIn (SImpl_FoldNamed x np args off) =
   distPerms1 x (unfoldPerm np args off)
 simplImplIn (SImpl_UnfoldNamed x np args off) =
@@ -2302,6 +2311,11 @@ simplImplOut (SImpl_ElimLLVMBlockEx x bp) =
                      ValPerm_LLVMBlock (bp { llvmBlockShape = sh }))
     _ ->
       error "simplImplOut: SImpl_ElimLLVMBlockEx: non-existential shape"
+simplImplOut (SImpl_ElimLLVMBlockFalse x bp) =
+  case llvmBlockShape bp of
+    PExpr_FalseShape ->
+      distPerms1 x ValPerm_False
+    _ -> error "simplImplOut: SImpl_ElimLLVMBlockFalse: non-false shape"
 simplImplOut (SImpl_FoldNamed x np args off) =
   distPerms1 x (ValPerm_Named (namedPermName np) args off)
 simplImplOut (SImpl_UnfoldNamed x np args off) =
@@ -2788,6 +2802,8 @@ instance SubstVar PermVarSubst m =>
       SImpl_IntroLLVMBlockEx <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_ElimLLVMBlockEx x bp |] ->
       SImpl_ElimLLVMBlockEx <$> genSubst s x <*> genSubst s bp
+    [nuMP| SImpl_ElimLLVMBlockFalse x bp |] ->
+      SImpl_ElimLLVMBlockFalse <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_FoldNamed x np args off |] ->
       SImpl_FoldNamed <$> genSubst s x <*> genSubst s np <*> genSubst s args
                       <*> genSubst s off
