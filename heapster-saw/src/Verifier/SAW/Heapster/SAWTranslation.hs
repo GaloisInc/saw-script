@@ -916,7 +916,7 @@ instance TransInfo info =>
          return $ ETrans_Term (dataTypeOpenTerm "Prelude.Sigma"
                                [typeTransTupleType tp_trans, tp_f_trm])
     [nuMP| PExpr_FalseShape |] ->
-      return $ ETrans_Term $ globalOpenTerm "Prelude.EmptyType"
+      return $ ETrans_Term $ globalOpenTerm "Prelude.FalseProp"
 
     [nuMP| PExpr_ValPerm p |] ->
       ETrans_Term <$> typeTransTupleType <$> translate p
