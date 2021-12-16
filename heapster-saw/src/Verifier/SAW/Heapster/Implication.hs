@@ -4740,6 +4740,10 @@ implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                         PExpr_ExShape _mb_sh }) =
   implSimplM Proxy (SImpl_ElimLLVMBlockEx x bp)
 
+implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
+                                        PExpr_FalseShape }) =
+  implSimplM Proxy (SImpl_ElimLLVMBlockFalse x bp)
+
 -- If none of the above cases matched, we cannot eliminate, so fail
 implElimLLVMBlock _ bp =
   implTraceM (\i -> pretty "Could not eliminate permission" <+>
@@ -5126,6 +5130,12 @@ recombinePermConj x x_ps (Perm_LLVMBlock bp)
     implElimLLVMBlock x bp >>>
     getTopDistPerm x >>>= \p ->
     recombinePerm x p
+
+-- If p is a memblock permission on the false shape, eliminate the block to
+-- a false permission (and eliminate the false permission itself)
+recombinePermConj x _ (Perm_LLVMBlock bp)
+  | PExpr_FalseShape <- llvmBlockShape bp
+  = implElimLLVMBlock x bp >>> implElimFalseM x
 
 -- Default case: insert p at the end of the x_ps
 recombinePermConj x x_ps p =
