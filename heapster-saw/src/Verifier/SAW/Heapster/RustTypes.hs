@@ -1137,8 +1137,7 @@ mbLifetimeFunPerm (LifetimeDef _ _ [] _)
   do let ghosts = mbLift $ fmap funPermGhosts fun_perm
      let ghosts_prxs = cruCtxProxies ghosts
      let gouts = mbLift $ fmap funPermGouts fun_perm
-     let gouts_prxs = cruCtxProxies gouts
-     let rets_prxs = gouts_prxs :>: Proxy
+     let rets_prxs = cruCtxProxies gouts :>: Proxy
      let args = mbLift $ fmap funPermArgs fun_perm
      let args_prxs = cruCtxProxies args
      let ret = mbLift $ fmap funPermRet fun_perm
@@ -1147,7 +1146,7 @@ mbLifetimeFunPerm (LifetimeDef _ _ [] _)
            mbCombineAssoc l_prxs ghosts_prxs args_prxs $
            fmap (mbValuePermsToDistPerms . funPermIns) fun_perm
      let mb_ps_out =
-           mbCombineAssoc4 l_prxs ghosts_prxs args_prxs (gouts_prxs :>: Proxy) $
+           mbCombineAssoc4 l_prxs ghosts_prxs args_prxs rets_prxs $
            fmap (mbValuePermsToDistPerms . funPermOuts) fun_perm
      let mb_l = extMbMulti args_prxs $ extMbMulti ghosts_prxs $ nu id
      let mb_l_out =
@@ -1175,8 +1174,7 @@ mbLifetimeFunPerm (LifetimeDef _ _ [] _)
                    (((MNil :>: ValPerm_LOwned [] lops_out lops_in_abs)
                      `RL.append` ps_ghosts) `RL.append` ps_args)
                    `RL.append` ps_rets)
-          mb_ps_out mb_lops_out
-          (extMbMulti (gouts_prxs :>: Proxy) mb_lops_in_abs))
+          mb_ps_out mb_lops_out (extMbMulti rets_prxs mb_lops_in_abs))
 mbLifetimeFunPerm (LifetimeDef _ _ _bounds _) _ =
   fail "Rust lifetime bounds not yet supported!"
 

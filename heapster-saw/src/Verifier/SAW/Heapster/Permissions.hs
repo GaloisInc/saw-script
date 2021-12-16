@@ -2206,6 +2206,10 @@ funPermTops fun_perm =
 funPermRet :: FunPerm ghosts args gouts ret -> TypeRepr ret
 funPermRet (FunPerm _ _ _ ret _ _) = ret
 
+-- | Extract the return types including ghosts from a function permission
+funPermRets :: FunPerm ghosts args gouts ret -> CruCtx (gouts :> ret)
+funPermRets fun_perm = CruCtxCons (funPermGouts fun_perm) (funPermRet fun_perm)
+
 -- | Extract the @gouts@ context from a function permission
 funPermGouts :: FunPerm ghosts args gouts ret -> CruCtx gouts
 funPermGouts (FunPerm _ _ gouts _ _ _) = gouts
@@ -5368,6 +5372,11 @@ instance FreeVars (ValuePerms tps) where
   freeVars ValPerms_Nil = NameSet.empty
   freeVars (ValPerms_Cons ps p) = NameSet.union (freeVars ps) (freeVars p)
 
+instance FreeVars (DistPerms tps) where
+  freeVars dperms =
+    NameSet.unions $
+    RL.mapToList (\(VarAndPerm x p) -> NameSet.insert x (freeVars p)) dperms
+
 instance FreeVars (LLVMFieldPerm w sz) where
   freeVars (LLVMFieldPerm {..}) =
     NameSet.unions [freeVars llvmFieldRW, freeVars llvmFieldLifetime,
@@ -5953,14 +5962,11 @@ substOfVars :: RAssign ExprVar ctx -> PermSubst ctx
 substOfVars = PermSubst . RL.map PExpr_Var
 
 substOfExprs :: PermExprs ctx -> PermSubst ctx
-substOfExprs PExprs_Nil = PermSubst MNil
-substOfExprs (PExprs_Cons es e) = consSubst (substOfExprs es) e
+substOfExprs = PermSubst
 
 -- FIXME: Maybe PermSubst should just be PermExprs?
 exprsOfSubst :: PermSubst ctx -> PermExprs ctx
-exprsOfSubst (PermSubst MNil) = PExprs_Nil
-exprsOfSubst (PermSubst (es :>: e)) =
-  PExprs_Cons (exprsOfSubst $ PermSubst es) e
+exprsOfSubst = unPermSubst
 
 substLookup :: PermSubst ctx -> Member ctx a -> PermExpr a
 substLookup (PermSubst m) memb = RL.get memb m

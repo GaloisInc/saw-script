@@ -8025,6 +8025,16 @@ proveVarsImpl ps
   | Refl <- mbLift (fmap RL.prependRNilEq $ mbDistPermsToValuePerms ps) =
     proveVarsImplAppend ps
 
+-- | Prove a list of existentially-quantified distinguished permissions and put
+-- those proofs onto the stack, and then return the expressions assigned to the
+-- existential variables
+proveVarsImplEVarExprs :: NuMatchingAny1 r => ExDistPerms vars as ->
+                          ImplM vars s r as RNil (PermExprs vars)
+proveVarsImplEVarExprs ps =
+  proveVarsImpl ps >>>
+  use implStateVars >>>= \vars ->
+  fmap (exprsOfSubst . completePSubst vars) getPSubst
+
 -- | Prove a list of existentially-quantified permissions and put the proofs on
 -- the stack, similarly to 'proveVarsImpl', but ensure that the existential
 -- variables are themselves only instanitated with variables, not arbitrary
