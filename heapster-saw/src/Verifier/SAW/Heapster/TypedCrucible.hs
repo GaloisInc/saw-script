@@ -2998,7 +2998,7 @@ tcEmitStmt' ctx loc (ExtendAssign stmt_ext :: Stmt ext ctx ctx')
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
   = tcEmitLLVMStmt Proxy ctx loc stmt_ext
 
-tcEmitStmt' ctx loc (CallHandle ret freg_untyped _args_ctx args_untyped) =
+tcEmitStmt' ctx loc (CallHandle _ret freg_untyped _args_ctx args_untyped) =
   let freg = tcReg ctx freg_untyped
       args = tcRegs ctx args_untyped
       {- args_subst = typedRegsToVarSubst args -} in
@@ -3954,7 +3954,7 @@ tcTermStmt ctx (Return reg) =
   top_get >>>= \top_st ->
   let tops = stTopVars st
       rets = stRetTypes top_st
-      CruCtxCons gouts ret = rets
+      CruCtxCons gouts _ = rets
       mb_ret_perms =
         give (cruCtxProxies rets) $
         varSubst (permVarSubstOfNames tops) $
