@@ -1055,7 +1055,8 @@ data AtomicPermTrans ctx a where
                     AtomicPermTrans ctx (StructType args)
 
   -- | The translation of functional permission is a SAW term of functional type
-  APTrans_Fun :: Mb ctx (FunPerm ghosts (CtxToRList cargs) ret) -> OpenTerm ->
+  APTrans_Fun :: Mb ctx (FunPerm ghosts (CtxToRList cargs) gouts ret) ->
+                 OpenTerm ->
                  AtomicPermTrans ctx (FunctionHandleType cargs ret)
 
   -- | Propositional permissions are represented by a SAW term
@@ -1820,14 +1821,18 @@ instance TransInfo info =>
 
 -- Translate a FunPerm to a pi-abstraction (FIXME: more documentation!)
 instance TransInfo info =>
-         Translate info ctx (FunPerm ghosts args ret) OpenTerm where
-  translate (mbMatch -> [nuMP| FunPerm ghosts args ret perms_in perms_out |]) =
+         Translate info ctx (FunPerm ghosts args gouts ret) OpenTerm where
+  translate (mbMatch ->
+             [nuMP| FunPerm ghosts args gouts ret perms_in perms_out |]) =
     let ctx = appendCruCtx (mbLift ghosts) (mbLift args)
         pxys = cruCtxProxies ctx in
     piExprCtx ctx $
     piPermCtx (mbCombine pxys perms_in) $ \_ ->
     applyTransM (return $ globalOpenTerm "Prelude.CompM") $
     translateRetType (mbLift ret) $ mbCombine (pxys :>: Proxy) perms_out
+
+FIXME HERE NOW: add gouts to FunPerm type
+FIXME HERE NOW: translateRetType
 
 -- | Lambda-abstraction over a permission
 lambdaPermTrans :: TransInfo info => String -> Mb ctx (ValuePerm a) ->
@@ -4365,19 +4370,20 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
 instance PermCheckExtC ext =>
          Translate (ImpTransInfo ext blocks tops ret ps) ctx
          (TypedRet tops ret ps) OpenTerm where
-  translate (mbMatch -> [nuMP| TypedRet Refl tp r mb_perms |]) =
+  translate (mbMatch -> [nuMP| TypedRet Refl mb_rets mb_rets_ns mb_perms |]) =
     do let perms =
              mbMap2
-             (\reg mbps -> varSubst (singletonVarSubst $ typedRegVar reg) mbps)
-             r mb_perms
+             (\rets_ns ps -> varSubst (permVarSubstOfNames rets_ns) ps)
+             mb_rets_ns mb_perms
        () <- assertPermStackEqM "TypedRet" perms
-       r_trans <- translate r
-       tp_trans <- translate tp
+       rets_trans <- translate mb_rets
+       rets_ns_trans <- translate mb_rets_ns
        ret_tp <- returnTypeM
        sigma_trm <-
-         sigmaTransM "r" tp_trans (flip inExtTransM $
-                                   translate $ mbCombine RL.typeCtxProxies mb_perms)
-         r_trans (itiPermStack <$> ask)
+         sigmaTransM "r" rets_trans
+         (flip inExtTransMultiM $
+          translate $ mbCombine RL.typeCtxProxies mb_perms)
+         rets_ns_trans (itiPermStack <$> ask)
        return $
          applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
          [ret_tp, sigma_trm]
