@@ -937,6 +937,9 @@ layoutArgShapeByVal Rust (PExpr_OrShape sh1 sh2) =
 layoutArgShapeByVal Rust (PExpr_ExShape mb_sh) =
   existsArgLayout <$> mbM (fmap (layoutArgShapeByVal Rust) mb_sh)
 
+-- False shape is like the empty shape --> no values
+layoutArgShapeByVal Rust PExpr_FalseShape = return argLayout0
+
 layoutArgShapeByVal Rust sh =
   lift rsPPInfo >>= \ppInfo ->
   lift $ fail $ renderDoc $ fillSep
