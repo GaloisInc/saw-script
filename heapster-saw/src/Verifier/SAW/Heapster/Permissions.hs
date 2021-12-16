@@ -1801,6 +1801,13 @@ data ValuePerms as where
   ValPerms_Cons :: ValuePerms as -> ValuePerm a -> ValuePerms (as :> a)
 -}
 
+-- | A struct permission
+pattern ValPerm_Struct :: () => (a ~ StructType ctx) =>
+                          RAssign ValuePerm (CtxToRList ctx) -> ValuePerm a
+pattern ValPerm_Struct ps <- ValPerm_Conj [Perm_Struct ps]
+  where
+    ValPerm_Struct ps = ValPerm_Conj [Perm_Struct ps]
+
 type ValuePerms = RAssign ValuePerm
 
 pattern ValPerms_Nil :: () => (tps ~ RNil) => ValuePerms tps
@@ -1811,6 +1818,12 @@ pattern ValPerms_Cons :: () => (tps ~ (tps' :> a)) =>
 pattern ValPerms_Cons ps p = ps :>: p
 
 {-# COMPLETE ValPerms_Nil, ValPerms_Cons #-}
+
+matchStructPerm :: CruCtx tps -> ValuePerm (StructType (RListToCtx tps)) ->
+                   Maybe (RAssign ValuePerm tps)
+matchStructPerm tps (ValPerm_Conj [Perm_Struct ps])
+  | Refl <- cruCtxToReprEq tps = Just ps
+matchStructPerm _ _ = Nothing
 
 
 -- | Fold a function over a 'ValuePerms' list, where
@@ -2171,12 +2184,19 @@ lownedPermsOffsetsForLLVMVar x (lops :>: lop)
 lownedPermsOffsetsForLLVMVar x (lops :>: _) =
   lownedPermsOffsetsForLLVMVar x lops
 
+-- | Convert an 'RList' of types to the corresponding struct type
+type TupleType tps = StructType (RListToCtx tps)
+
+type StructPerm ctx = ValuePerm (StructType (RListToCtx ctx))
+
+type MbStructPerms ctx = Mb ctx (ValuePerm (StructType (RListToCtx ctx)))
+
 -- | A function permission is a set of input and output permissions inside a
 -- context of ghost variables
 data FunPerm ghosts args ret where
   FunPerm :: CruCtx ghosts -> CruCtx args -> TypeRepr ret ->
              MbValuePerms (ghosts :++: args) ->
-             MbValuePerms (ghosts :++: args :> ret) ->
+             MbStructPerms (ghosts :++: args :> ret) ->
              FunPerm ghosts args ret
 
 -- | Extract the @args@ context from a function permission
@@ -2196,13 +2216,18 @@ funPermTops fun_perm =
 funPermRet :: FunPerm ghosts args ret -> TypeRepr ret
 funPermRet (FunPerm _ _ ret _ _) = ret
 
+-- | Extract the context of all types in a function permission
+funPermAll :: FunPerm ghosts args ret -> CruCtx (ghosts :++: args :> ret)
+funPermAll (FunPerm ghosts args ret _ _) =
+  CruCtxCons (appendCruCtx ghosts args) ret
+
 -- | Extract the input permissions of a function permission
 funPermIns :: FunPerm ghosts args ret -> MbValuePerms (ghosts :++: args)
 funPermIns (FunPerm _ _ _ perms_in _) = perms_in
 
 -- | Extract the output permissions of a function permission
 funPermOuts :: FunPerm ghosts args ret ->
-               MbValuePerms (ghosts :++: args :> ret)
+               MbStructPerms (ghosts :++: args :> ret)
 funPermOuts (FunPerm _ _ _ _ perms_out) = perms_out
 
 
@@ -3134,19 +3159,22 @@ instance PermPrettyF LOwnedPerm where
   permPrettyMF = permPrettyM
 
 instance PermPretty (FunPerm ghosts args ret) where
-  permPrettyM (FunPerm ghosts args _ mb_ps_in mb_ps_out) =
-    let dps_in  = extMb $ mbValuePermsToDistPerms mb_ps_in
-        dps_out = mbValuePermsToDistPerms mb_ps_out
-        dps = mbMap2 (,) dps_in dps_out in
+  permPrettyM fun_perm@(FunPerm ghosts args _ mb_ps_in mb_ps_out) =
+    let mb_dps_in = extMb $ mbValuePermsToDistPerms mb_ps_in
+        mb_tup = mbMap2 (,) mb_dps_in mb_ps_out in
     fmap mbLift $ strongMbM $
-    flip nuMultiWithElim1 dps $ \(ghosts_args_ns :>: ret_n) (ps_in, ps_out) ->
+    flip nuMultiWithElim1 mb_tup $ \ns@(ghosts_args_ns :>: ret_n) (dps_in,
+                                                                   p_rets) ->
     let (ghosts_ns, args_ns) =
           RL.split Proxy (cruCtxProxies args) ghosts_args_ns in
     local (ppInfoAddExprName "ret" ret_n) $
     local (ppInfoAddExprNames "arg" args_ns) $
     local (ppInfoAddTypedExprNames ghosts ghosts_ns) $
-    do pp_ps_in  <- permPrettyM ps_in
-       pp_ps_out <- permPrettyM ps_out
+    do pp_ps_in  <- permPrettyM dps_in
+       pp_ps_out <-
+         case matchStructPerm (funPermAll fun_perm) p_rets of
+           Just ps -> permPrettyM $ RL.map2 VarAndPerm ns ps
+           _ -> ((pretty "rets" <> colon) <>) <$> permPrettyM p_rets
        pp_ghosts <- permPrettyM (RL.map2 VarAndType ghosts_ns $
                                  cruCtxToTypes ghosts)
        return $ align $
@@ -3246,6 +3274,16 @@ valPermExistsMulti MNil mb_p = elimEmptyMb mb_p
 valPermExistsMulti (ctx :>: KnownReprObj) mb_p =
   valPermExistsMulti ctx (fmap ValPerm_Exists $
                           mbSeparate (MNil :>: Proxy) mb_p)
+
+-- | Test if a permission is the @true@ permission
+isTruePerm :: ValuePerm a -> Bool
+isTruePerm ValPerm_True = True
+isTruePerm _ = False
+
+-- | Test if a permission is an equality permission
+isEqPerm :: ValuePerm a -> Bool
+isEqPerm (ValPerm_Eq _) = True
+isEqPerm _ = False
 
 -- | Test if an 'AtomicPerm' is a field permission
 isLLVMFieldPerm :: AtomicPerm a -> Bool
@@ -5152,6 +5190,7 @@ lownedPermsCouldProve lops ps =
   RL.foldr (\lop rest -> lownedPermCouldProve lop ps || rest) False lops
 
 
+{-
 -- | Convert a 'FunPerm' in a name-binding to a 'FunPerm' that takes those bound
 -- names as additional ghost arguments with the supplied input permissions and
 -- no output permissions
@@ -5172,6 +5211,7 @@ mbFunPerm ctx mb_ps (mbMatch -> [nuMP| FunPerm mb_ghosts mb_args mb_ret ps_in ps
        mbMap2 (\ps mb_ps_in -> fmap (RL.append ps) mb_ps_in) mb_ps ps_in)
       (fmap (RL.append ctx_perms) $
        mbCombine (prxys :>: Proxy) ps_out)
+-}
 
 -- | Substitute ghost and regular arguments into a function permission to get
 -- its input permissions for those arguments, where ghost arguments are given
@@ -5190,18 +5230,29 @@ funPermDistIns fun_perm ghosts gexprs args =
   (eqDistPerms ghosts gexprs)
 
 -- | Substitute ghost and regular arguments into a function permission to get
--- its input permissions for those arguments, where ghost arguments are given
+-- its output permissions for those arguments, where ghost arguments are given
 -- both as variables and expressions to which those variables are instantiated.
--- For a 'FunPerm' of the form @(gctx). xs:ps -o xs:ps'@, return
+-- These output permisisons are a pair of permissions on a struct of the
+-- arguments and the return value, where the first permission specifies that all
+-- but the last element of the struct equal the input arguments and the second
+-- permission is the output struct permissions of the function permission. That
+-- is, for a 'FunPerm' of the form @(gctx). xs:ps -o xs:ps'@, return the perms
 --
--- > [gs/gctx]xs : [gexprs/gctx]ps'
+-- > str : [gexprs/gctx]struct(ps'), str:eq(struct([gs/gctx]xs))
+--
+-- where @str@ is an output variable of struct type.
 funPermDistOuts :: FunPerm ghosts args ret -> RAssign Name ghosts ->
                    PermExprs ghosts -> RAssign Name (args :> ret) ->
-                   DistPerms (ghosts :++: args :> ret)
-funPermDistOuts fun_perm ghosts gexprs args_and_ret =
-  valuePermsToDistPerms (RL.append ghosts args_and_ret) $
-  subst (appendSubsts (substOfExprs gexprs) (substOfVars args_and_ret)) $
-  funPermOuts fun_perm
+                   ExprVar (TupleType (ghosts :++: args :> ret)) ->
+                   DistPerms (RNil :> TupleType (ghosts :++: args :> ret) :>
+                              TupleType (ghosts :++: args :> ret))
+funPermDistOuts fun_perm ghosts gexprs args_and_ret str
+  | ns <- namesToExprs $ RL.append ghosts args_and_ret
+  , Refl <- rlistToAssignEq ns =
+    distPerms2
+    str (subst (appendSubsts (substOfExprs gexprs) (substOfVars args_and_ret))
+         (funPermOuts fun_perm))
+    str (ValPerm_Eq $ PExpr_Struct ns)
 
 -- | Unfold a recursive permission given a 'RecPerm' for it
 unfoldRecPerm :: RecPerm b reach args a -> PermExprs args -> PermOffset a ->

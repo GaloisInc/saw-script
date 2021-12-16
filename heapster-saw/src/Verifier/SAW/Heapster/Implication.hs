@@ -69,6 +69,13 @@ import GHC.Stack
 
 -- * Helper functions (should be moved to Hobbits)
 
+-- | Find a 'Member' of an 'RAssign' that satisfies a property
+findRAssign :: (forall a. f a -> Bool) -> RAssign f (ctx :: RList k) ->
+               Maybe (Some @k (Member ctx))
+findRAssign _ MNil = Nothing
+findRAssign f (_ :>: x) | f x = Just $ Some Member_Base
+findRAssign f (xs :>: _) = fmapF Member_Step <$> findRAssign f xs
+
 -- | Append two existentially quantified 'RAssign' lists
 apSomeRAssign :: Some (RAssign f) -> Some (RAssign f) -> Some (RAssign f)
 apSomeRAssign (Some x) (Some y) = Some (RL.append x y)
@@ -525,6 +532,17 @@ data SimplImpl ps_in ps_out where
     ExprVar (StructType ctx) -> RAssign ValuePerm (CtxToRList ctx) ->
     Member (CtxToRList ctx) a -> ValuePerm a ->
     SimplImpl (RNil :> StructType ctx :> a) (RNil :> StructType ctx)
+
+  -- | Combine an equality permission @eq(y)@ in a field of a struct permission
+  -- with a permission @p@ in that same field of a different struct permission:
+  --
+  -- > x:(ps1', p, ps2), x:struct(ps1, eq(y), ps2) -o
+  -- >   x:(ps1', true, ps2), y:p, x:struct(ps1, eq(y), ps2)
+  SImpl_CombineStructEqPerm ::
+    ExprVar (StructType ctx) -> RAssign ValuePerm (CtxToRList ctx) ->
+    RAssign ValuePerm (CtxToRList ctx) -> Member (CtxToRList ctx) a ->
+    SimplImpl (RNil :> StructType ctx :> StructType ctx)
+    (RNil :> StructType ctx :> a :> StructType ctx)
 
   -- | Prove a function permission for a statically-known function (assuming
   -- that the given entry is in the current function environment):
@@ -1727,6 +1745,8 @@ simplImplIn (SImpl_IntroStructField x ps memb p) =
     ValPerm_Eq (PExpr_Var y) ->
       distPerms2 x (ValPerm_Conj1 $ Perm_Struct ps) y p
     _ -> error "simplImplIn: SImpl_IntroStructField: field does not have an equality permission to a variable"
+simplImplIn (SImpl_CombineStructEqPerm x ps1 ps2 _) =
+  distPerms2 x (ValPerm_Struct ps1) x (ValPerm_Struct ps2)
 simplImplIn (SImpl_ConstFunPerm x h _ _) =
   distPerms1 x (ValPerm_Eq $ PExpr_Fun h)
 simplImplIn (SImpl_CastLLVMWord x e1 e2) =
@@ -2034,6 +2054,13 @@ simplImplOut (SImpl_StructPermToEq x exprs) =
   distPerms1 x (ValPerm_Eq $ PExpr_Struct exprs)
 simplImplOut (SImpl_IntroStructField x ps memb p) =
   distPerms1 x (ValPerm_Conj1 $ Perm_Struct $ RL.set memb p ps)
+simplImplOut (SImpl_CombineStructEqPerm x ps1 ps2 memb) =
+  case RL.get memb ps2 of
+    ValPerm_Eq (PExpr_Var y) ->
+      distPerms3 x (ValPerm_Struct $ RL.set memb ValPerm_True ps1)
+      y (RL.get memb ps1) x (ValPerm_Struct ps1)
+    _ ->
+      error "simplImplOut: SImpl_CombineStructEqPerm: non-equality perm in struct"
 simplImplOut (SImpl_ConstFunPerm x _ fun_perm _) =
   distPerms1 x (ValPerm_Conj1 $ Perm_Fun fun_perm)
 simplImplOut (SImpl_CastLLVMWord x _ e2) =
@@ -2621,6 +2648,9 @@ instance SubstVar PermVarSubst m =>
     [nuMP| SImpl_IntroStructField x ps memb p |] ->
       SImpl_IntroStructField <$> genSubst s x <*> genSubst s ps
                              <*> genSubst s memb <*> genSubst s p
+    [nuMP| SImpl_CombineStructEqPerm x ps1 ps2 memb |] ->
+      SImpl_CombineStructEqPerm <$> genSubst s x <*> genSubst s ps1
+                                <*> genSubst s ps2 <*> genSubst s memb
     [nuMP| SImpl_ConstFunPerm x h fun_perm ident |] ->
       SImpl_ConstFunPerm <$> genSubst s x <*> return (mbLift h) <*>
                              genSubst s fun_perm <*> return (mbLift ident)
@@ -3505,6 +3535,17 @@ implIntroStructFields x ps (membs :>: memb)
     implIntroStructFields x (RL.set memb y_p ps) membs
 implIntroStructFields _ _ _ =
   error "implIntroStructFields: malformed input permission"
+
+-- | Combine an equality permission @eq(y)@ in a field of a struct permission
+-- with a permission @p@ in that same field of a different struct permission:
+implCombineStructEqPerm ::
+  NuMatchingAny1 r => ExprVar (StructType ctx) ->
+  RAssign ValuePerm (CtxToRList ctx) -> RAssign ValuePerm (CtxToRList ctx) ->
+  Member (CtxToRList ctx) a ->
+  ImplM vars s r (ps :> StructType ctx :> a :> StructType ctx)
+  (ps :> StructType ctx :> StructType ctx) ()
+implCombineStructEqPerm x ps1 ps2 memb =
+  implSimplM Proxy (SImpl_CombineStructEqPerm x ps1 ps2 memb)
 
 -- | Prove a struct permission @struct(p1,...,pn)@ from a struct permission
 -- @struct(eq(y1),...,eq(yn))@ on top of the stack of equality permissions to
@@ -5024,6 +5065,35 @@ recombinePerm' x _ p = implDropM x p
 -- permission conjucts for @x@
 recombinePermConj :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] ->
                      AtomicPerm a -> ImplM vars s r as (as :> a) ()
+
+-- If p is a struct permission with only true fields, drop it
+recombinePermConj x _ p@(Perm_Struct ps2)
+  | and $ RL.mapToList isTruePerm ps2
+  = implDropM x $ ValPerm_Conj1 p
+
+-- If p is a struct permission with a non-true field p_y, and that same field
+-- already has an equality permission to a variable y, then recombine p_y with
+-- the existing permissions for y and recurse
+recombinePermConj x [Perm_Struct ps1] (Perm_Struct ps2)
+  | Just (Some memb) <- findRAssign (not . isTruePerm) ps2
+  , ValPerm_Eq (PExpr_Var y) <- RL.get memb ps1 =
+    implPushM x (ValPerm_Struct ps1) >>>
+    implCombineStructEqPerm x ps2 ps1 memb >>>
+    implPopM x (ValPerm_Struct ps1) >>>
+    recombinePerm y (RL.get memb ps2) >>>
+    recombinePerm x (ValPerm_Struct $ RL.set memb ValPerm_True ps1)
+
+-- If p is a struct permission with a non-true field p_y, and that same field
+-- does not already have an equality permission, eliminate that field to get an
+-- equality permission and recurse
+recombinePermConj x [p1@(Perm_Struct ps1)] p2@(Perm_Struct ps2)
+  | Just (Some memb) <- findRAssign (not . isTruePerm) ps2
+  , not $ isEqPerm $ RL.get memb ps1 =
+    implPushM x (ValPerm_Conj1 p1) >>>
+    implElimStructField x ps1 memb >>>= \y ->
+    implPopM x (ValPerm_Conj1 $ Perm_Struct $
+                RL.set memb (ValPerm_Eq (PExpr_Var y)) ps1) >>>
+    recombinePerm x (ValPerm_Conj1 p2)
 
 -- If p is a field permission whose range is a subset of that of a permission we
 -- already hold, drop it
