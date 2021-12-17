@@ -2211,14 +2211,14 @@ lownedPermsOffsetsForLLVMVar x (lops :>: _) =
 
 type StructPerm ctx = ValuePerm (StructType (RListToCtx ctx))
 
-type MbStructPerms ctx = Mb ctx (ValuePerm (StructType (RListToCtx ctx)))
+type MbStructPerm ctx = Mb ctx (ValuePerm (StructType (RListToCtx ctx)))
 
 -- | A function permission is a set of input and output permissions inside a
 -- context of ghost variables
 data FunPerm ghosts args ret where
   FunPerm :: CruCtx ghosts -> CruCtx args -> TypeRepr ret ->
              MbValuePerms (ghosts :++: args) ->
-             MbStructPerms (ghosts :++: args :> ret) ->
+             MbStructPerm (ghosts :++: args :> ret) ->
              FunPerm ghosts args ret
 
 -- | Extract the @args@ context from a function permission
@@ -2249,7 +2249,7 @@ funPermIns (FunPerm _ _ _ perms_in _) = perms_in
 
 -- | Extract the output permissions of a function permission
 funPermOuts :: FunPerm ghosts args ret ->
-               MbStructPerms (ghosts :++: args :> ret)
+               MbStructPerm (ghosts :++: args :> ret)
 funPermOuts (FunPerm _ _ _ _ perms_out) = perms_out
 
 

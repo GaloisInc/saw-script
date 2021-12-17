@@ -1206,7 +1206,7 @@ data TypedEntry phase ext blocks tops ret args ghosts =
     -- | The input permissions for this entrypoint
     typedEntryPermsIn :: !(MbValuePerms ((tops :++: args) :++: ghosts)),
     -- | The output permissions for the function (cached locally)
-    typedEntryPermsOut :: !(MbStructPerms (tops :> ret)),
+    typedEntryPermsOut :: !(MbStructPerm (tops :> ret)),
     -- | The type-checked body of the entrypoint
     typedEntryBody :: !(TransData phase
                         (Mb ((tops :++: args) :++: ghosts)
@@ -1241,7 +1241,7 @@ completeTypedEntry _ = Nothing
 singleCallSiteEntry :: TypedCallSiteID blocks args vars ->
                        CruCtx tops -> CruCtx args -> TypeRepr ret ->
                        MbValuePerms ((tops :++: args) :++: vars) ->
-                       MbStructPerms (tops :> ret) ->
+                       MbStructPerm (tops :> ret) ->
                        TypedEntry TCPhase ext blocks tops ret args vars
 singleCallSiteEntry siteID tops args ret perms_in perms_out =
   TypedEntry
@@ -1361,7 +1361,7 @@ emptyBlockForPerms ::
   Block ext cblocks ret cargs -> CruCtx tops ->
   TypeRepr ret -> CruCtx ghosts ->
   MbValuePerms ((tops :++: CtxToRList cargs) :++: ghosts) ->
-  MbStructPerms (tops :> ret) ->
+  MbStructPerm (tops :> ret) ->
   TypedBlock TCPhase ext (CtxCtxToRList
                           cblocks) tops ret (CtxToRList cargs)
 emptyBlockForPerms names cblocks blk tops ret ghosts perms_in perms_out
@@ -1463,7 +1463,7 @@ entryAddCallSite siteID perms_in entry =
 blockAddCallSite :: TypedCallSiteID blocks args vars ->
                     CruCtx tops -> TypeRepr ret ->
                     MbValuePerms ((tops :++: args) :++: vars) ->
-                    MbStructPerms (tops :> ret) ->
+                    MbStructPerm (tops :> ret) ->
                     TypedBlock TCPhase ext blocks tops ret args ->
                     TypedBlock TCPhase ext blocks tops ret args
 -- If the entrypoint for the site ID exists, update it with entrySetCallSite
@@ -1644,7 +1644,7 @@ tpcfgInputPerms = funPermIns . tpcfgFunPerm
 
 -- | Get the output permissions for a 'CFG'
 tpcfgOutputPerms :: TypedCFG ext blocks ghosts inits ret ->
-                    MbStructPerms (ghosts :++: inits :> ret)
+                    MbStructPerm (ghosts :++: inits :> ret)
 tpcfgOutputPerms = funPermOuts . tpcfgFunPerm
 
 
@@ -1688,7 +1688,7 @@ data TopPermCheckState ext cblocks blocks tops ret =
     -- | The return type of the function being type-checked
     stRetType :: !(TypeRepr ret),
     -- | The return permission of the function being type-checked
-    stRetPerms :: !(MbStructPerms (tops :> ret)),
+    stRetPerms :: !(MbStructPerm (tops :> ret)),
     -- | A mapping from 'BlockID's to 'TypedBlockID's
     stBlockTrans :: !(Assignment (BlockIDTrans blocks) cblocks),
     -- | The current set of type-checked blocks

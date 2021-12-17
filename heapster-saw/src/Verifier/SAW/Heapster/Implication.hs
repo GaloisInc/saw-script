@@ -540,7 +540,8 @@ data SimplImpl ps_in ps_out where
   -- >   x:(ps1', true, ps2), y:p, x:struct(ps1, eq(y), ps2)
   SImpl_CombineStructEqPerm ::
     ExprVar (StructType ctx) -> RAssign ValuePerm (CtxToRList ctx) ->
-    RAssign ValuePerm (CtxToRList ctx) -> Member (CtxToRList ctx) a ->
+    RAssign ValuePerm (CtxToRList ctx) ->
+    Member (CtxToRList ctx) a -> ExprVar a ->
     SimplImpl (RNil :> StructType ctx :> StructType ctx)
     (RNil :> StructType ctx :> a :> StructType ctx)
 
@@ -1745,7 +1746,7 @@ simplImplIn (SImpl_IntroStructField x ps memb p) =
     ValPerm_Eq (PExpr_Var y) ->
       distPerms2 x (ValPerm_Conj1 $ Perm_Struct ps) y p
     _ -> error "simplImplIn: SImpl_IntroStructField: field does not have an equality permission to a variable"
-simplImplIn (SImpl_CombineStructEqPerm x ps1 ps2 _) =
+simplImplIn (SImpl_CombineStructEqPerm x ps1 ps2 _ _) =
   distPerms2 x (ValPerm_Struct ps1) x (ValPerm_Struct ps2)
 simplImplIn (SImpl_ConstFunPerm x h _ _) =
   distPerms1 x (ValPerm_Eq $ PExpr_Fun h)
@@ -2054,13 +2055,14 @@ simplImplOut (SImpl_StructPermToEq x exprs) =
   distPerms1 x (ValPerm_Eq $ PExpr_Struct exprs)
 simplImplOut (SImpl_IntroStructField x ps memb p) =
   distPerms1 x (ValPerm_Conj1 $ Perm_Struct $ RL.set memb p ps)
-simplImplOut (SImpl_CombineStructEqPerm x ps1 ps2 memb) =
+simplImplOut (SImpl_CombineStructEqPerm x ps1 ps2 memb y) =
   case RL.get memb ps2 of
-    ValPerm_Eq (PExpr_Var y) ->
-      distPerms3 x (ValPerm_Struct $ RL.set memb ValPerm_True ps1)
-      y (RL.get memb ps1) x (ValPerm_Struct ps1)
+    ValPerm_Eq (PExpr_Var y')
+      | y == y' ->
+        distPerms3 x (ValPerm_Struct $ RL.set memb ValPerm_True ps1)
+        y (RL.get memb ps1) x (ValPerm_Struct ps2)
     _ ->
-      error "simplImplOut: SImpl_CombineStructEqPerm: non-equality perm in struct"
+      error "simplImplOut: SImpl_CombineStructEqPerm: malformed input perms"
 simplImplOut (SImpl_ConstFunPerm x _ fun_perm _) =
   distPerms1 x (ValPerm_Conj1 $ Perm_Fun fun_perm)
 simplImplOut (SImpl_CastLLVMWord x _ e2) =
@@ -2648,9 +2650,10 @@ instance SubstVar PermVarSubst m =>
     [nuMP| SImpl_IntroStructField x ps memb p |] ->
       SImpl_IntroStructField <$> genSubst s x <*> genSubst s ps
                              <*> genSubst s memb <*> genSubst s p
-    [nuMP| SImpl_CombineStructEqPerm x ps1 ps2 memb |] ->
+    [nuMP| SImpl_CombineStructEqPerm x ps1 ps2 memb y |] ->
       SImpl_CombineStructEqPerm <$> genSubst s x <*> genSubst s ps1
                                 <*> genSubst s ps2 <*> genSubst s memb
+                                <*> genSubst s y
     [nuMP| SImpl_ConstFunPerm x h fun_perm ident |] ->
       SImpl_ConstFunPerm <$> genSubst s x <*> return (mbLift h) <*>
                              genSubst s fun_perm <*> return (mbLift ident)
@@ -3545,7 +3548,10 @@ implCombineStructEqPerm ::
   ImplM vars s r (ps :> StructType ctx :> a :> StructType ctx)
   (ps :> StructType ctx :> StructType ctx) ()
 implCombineStructEqPerm x ps1 ps2 memb =
-  implSimplM Proxy (SImpl_CombineStructEqPerm x ps1 ps2 memb)
+  case RL.get memb ps2 of
+    ValPerm_Eq (PExpr_Var y) ->
+      implSimplM Proxy (SImpl_CombineStructEqPerm x ps1 ps2 memb y)
+    _ -> error "implCombineStructEqPerm: malformed input perm"
 
 -- | Prove a struct permission @struct(p1,...,pn)@ from a struct permission
 -- @struct(eq(y1),...,eq(yn))@ on top of the stack of equality permissions to
