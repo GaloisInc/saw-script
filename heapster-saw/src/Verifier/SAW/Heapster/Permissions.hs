@@ -1801,12 +1801,37 @@ data ValuePerms as where
   ValPerms_Cons :: ValuePerms as -> ValuePerm a -> ValuePerms (as :> a)
 -}
 
--- | A struct permission
+-- | Pattern for matching @struct@ permissions
 pattern ValPerm_Struct :: () => (a ~ StructType ctx) =>
                           RAssign ValuePerm (CtxToRList ctx) -> ValuePerm a
 pattern ValPerm_Struct ps <- ValPerm_Conj [Perm_Struct ps]
   where
     ValPerm_Struct ps = ValPerm_Conj [Perm_Struct ps]
+
+-- | Convert an 'RList' of types to the corresponding struct type
+type TupleType tps = StructType (RListToCtx tps)
+
+-- | Convert a sequence of 'TypeRepr's to a 'TypeRepr' of a 'TupleType'
+tupleRepr :: CruCtx tps -> TypeRepr (TupleType tps)
+tupleRepr ctx = StructRepr (rlistToAssign $ cruCtxToTypes ctx)
+
+-- | Build a @struct@ expression from an arbitrary 'RAssign' of expressions
+mkPExpr_Struct :: RAssign PermExpr tps -> PermExpr (TupleType tps)
+mkPExpr_Struct exprs | Refl <- rlistToAssignEq exprs = PExpr_Struct exprs
+
+-- | Build a @struct@ permission from an arbitrary 'RAssign' of permissions
+mkValPerm_Struct :: RAssign ValuePerm ctx -> ValuePerm (TupleType ctx)
+mkValPerm_Struct (ps :: RAssign ValuePerm ctx)
+  | Refl <- rlistToAssignEq ps
+  = ValPerm_Struct (ps :: RAssign ValuePerm (CtxToRList (RListToCtx ctx)))
+
+-- | Pattern-match a 'ValPerm_Struct' on a @'TupleType' tps@ and cast it back to
+-- a sequence of permissions on @tps@
+matchValPermStruct :: RAssign f tps -> ValuePerm (TupleType tps) ->
+                      Maybe (RAssign ValuePerm tps)
+matchValPermStruct tps (ValPerm_Struct ps)
+  | Refl <- rlistToAssignEq tps = Just ps
+matchValPermStruct _ _ = Nothing
 
 type ValuePerms = RAssign ValuePerm
 
@@ -2183,9 +2208,6 @@ lownedPermsOffsetsForLLVMVar x (lops :>: lop)
     llvmBlockRange bp : lownedPermsOffsetsForLLVMVar x lops
 lownedPermsOffsetsForLLVMVar x (lops :>: _) =
   lownedPermsOffsetsForLLVMVar x lops
-
--- | Convert an 'RList' of types to the corresponding struct type
-type TupleType tps = StructType (RListToCtx tps)
 
 type StructPerm ctx = ValuePerm (StructType (RListToCtx ctx))
 

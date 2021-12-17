@@ -697,7 +697,8 @@ tcFunPerm args ret (AstFunPerm _ untyCtx ins outs) =
          ghosts_args_ctx = appendParsedCtx ghosts_ctx args_ctx
      perms_in  <- tcSortedMbValuePerms ghosts_args_ctx ins
      perms_out <- tcSortedMbValuePerms (consParsedCtx "ret" ret ghosts_args_ctx) outs
-     pure (SomeFunPerm (FunPerm ghosts args ret perms_in perms_out))
+     pure (SomeFunPerm (FunPerm ghosts args ret perms_in $
+                        fmap mkValPerm_Struct perms_out))
 
 ----------------------------------------------------------------------
 -- * Parsing Permission Sets and Function Permissions

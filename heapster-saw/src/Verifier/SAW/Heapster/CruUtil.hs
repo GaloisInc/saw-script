@@ -526,7 +526,7 @@ assignToRList asgn = case viewAssign asgn of
 assignToRListEq :: Assignment f ctx -> RListToCtx (CtxToRList ctx) :~: ctx
 assignToRListEq asgn = case viewAssign asgn of
   AssignEmpty -> Refl
-  AssignExtend asgn' f | Refl <- assignToRListEq asgn' -> Refl
+  AssignExtend asgn' _ | Refl <- assignToRListEq asgn' -> Refl
 
 -- | Convert a Crucible 'Assignment' to a Hobbits 'RAssign' and a proof that
 -- converting the 'RAssign' back to an 'Assignment' would have the same type
