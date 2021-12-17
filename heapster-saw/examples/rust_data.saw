@@ -34,7 +34,8 @@ heapster_define_rust_type env "pub enum Sum<X,Y> { Left (X), Right (Y) }";
 heapster_define_rust_type env "pub enum Option<X> { None, Some (X) }";
 
 // Location type from std::panic
-heapster_define_opaque_llvmshape env "panic::Location" 64 "" "16" "#()";
+heapster_define_llvmshape env "panic::Location" 64 ""
+  "exsh len:bv 64.ptrsh(arraysh(<len,*1,fieldsh(8,int8<>))); fieldsh(eq(llvmword(len))); u32<>; u32<>";
 
 // The str type
 // For now we have to define the shape explicitly without the int8 name because
