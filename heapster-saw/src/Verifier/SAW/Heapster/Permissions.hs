@@ -250,15 +250,24 @@ noDebugLevel = DebugLevel 0
 traceDebugLevel :: DebugLevel
 traceDebugLevel = DebugLevel 1
 
--- | Output a debug statement to @stderr@ using 'trace' if the supplied
--- 'DebugLevel' is at least 'traceDebugLevel'
-debugTrace :: DebugLevel -> String -> a -> a
-debugTrace dlevel | dlevel >= traceDebugLevel = trace
-debugTrace _ = const id
+-- | The debug level to enable more verbose tracing
+verboseDebugLevel :: DebugLevel
+verboseDebugLevel = DebugLevel 2
+
+-- | Output a debug statement to @stderr@ using 'trace' if the second
+-- 'DebugLevel' is at least the first, i.e., the first is the required level for
+-- emitting this trace and the second is the current level
+debugTrace :: DebugLevel -> DebugLevel -> String -> a -> a
+debugTrace req dlevel | dlevel >= req = trace
+debugTrace _ _ = const id
+
+-- | Call 'debugTrace' at 'traceDebugLevel'
+debugTraceTraceLvl :: DebugLevel -> String -> a -> a
+debugTraceTraceLvl = debugTrace traceDebugLevel
 
 -- | Like 'debugTrace' but take in a 'Doc' instead of a 'String'
-debugTracePretty :: DebugLevel -> Doc ann -> a -> a
-debugTracePretty dlevel d a = debugTrace dlevel (renderDoc d) a
+debugTracePretty :: DebugLevel -> DebugLevel -> Doc ann -> a -> a
+debugTracePretty req dlevel d a = debugTrace req dlevel (renderDoc d) a
 
 -- | The constant string functor
 newtype StringF a = StringF { unStringF :: String }

@@ -2269,14 +2269,24 @@ permGetPPInfo = gets stPPInfo
 getErrorPrefix :: PermCheckM ext cblocks blocks tops rets r ps r ps (Doc ())
 getErrorPrefix = gets (fromMaybe emptyDoc . stErrPrefix)
 
--- | Emit debugging output using the current 'PPInfo'
-stmtTraceM :: (PPInfo -> Doc ()) ->
-              PermCheckM ext cblocks blocks tops rets r ps r ps String
-stmtTraceM f =
+-- | Emit debugging output at the given 'DebugLevel'
+stmtDebugM :: DebugLevel -> (PPInfo -> Doc ()) ->
+              PermCheckM ext cblocks blocks tops ret r ps r ps String
+stmtDebugM reqlvl f =
   do dlevel <- stDebugLevel <$> top_get
      doc <- f <$> permGetPPInfo
      let str = renderDoc doc
-     debugTrace dlevel str (return str)
+     debugTrace reqlvl dlevel str (return str)
+
+-- | Emit debugging output at 'traceDebugLevel'
+stmtTraceM :: (PPInfo -> Doc ()) ->
+              PermCheckM ext cblocks blocks tops ret r ps r ps String
+stmtTraceM = stmtDebugM traceDebugLevel
+
+-- | Emit debugging output at 'verboseDebugLevel'
+stmtVerbTraceM :: (PPInfo -> Doc ()) ->
+                  PermCheckM ext cblocks blocks tops ret r ps r ps String
+stmtVerbTraceM = stmtDebugM verboseDebugLevel
 
 -- | Failure in the statement permission-checking monad
 stmtFailM :: (PPInfo -> Doc ()) -> PermCheckM ext cblocks blocks tops rets r1 ps1
@@ -2596,6 +2606,12 @@ emitStmt tps names loc stmt =
     (mbPure (cruCtxProxies tps) ()) >>>= \(ns, ()) ->
   setVarTypes Nothing names ns tps >>>
   gmodify (modifySTCurPerms (applyTypedStmt stmt ns)) >>>
+  gets (view distPerms . stCurPerms) >>>= \perms_out ->  
+  stmtVerbTraceM (\i ->
+                   pretty "Created new variables: "
+                   <+> permPretty i ns <> line <>
+                   pretty "Statement output permissions: " <+>
+                   permPretty i perms_out) >>>
   pure ns
 
 
@@ -4115,7 +4131,7 @@ widenEntry :: PermCheckExtC ext => DebugLevel -> PermEnv ->
               TypedEntry TCPhase ext blocks tops rets args ghosts ->
               Some (TypedEntry TCPhase ext blocks tops rets args)
 widenEntry dlevel env (TypedEntry {..}) =
-  debugTrace dlevel ("Widening entrypoint: " ++ show typedEntryID) $
+  debugTraceTraceLvl dlevel ("Widening entrypoint: " ++ show typedEntryID) $
   case foldl1' (widen dlevel env typedEntryTops typedEntryArgs) $
        map (fmapF typedCallSiteArgVarPerms) typedEntryCallers of
     Some (ArgVarPerms ghosts perms_in) ->
@@ -4144,14 +4160,14 @@ visitEntry ::
 visitEntry _ _ _ entry
   | isJust $ completeTypedEntry entry =
     (stDebugLevel <$> get) >>= \dlevel ->
-    debugTrace dlevel ("visitEntry " ++ show (typedEntryID entry)
-                       ++ ": no change") $
+    debugTraceTraceLvl dlevel ("visitEntry " ++ show (typedEntryID entry)
+                               ++ ": no change") $
     return $ Some entry
 -- Otherwise, visit the call sites, widen if needed, and type-check the body
 visitEntry names can_widen blk entry =
   (stDebugLevel <$> get) >>= \dlevel ->
   (stPermEnv <$> get) >>= \env ->
-  debugTracePretty dlevel
+  debugTracePretty traceDebugLevel dlevel
   (vsep [pretty ("visitEntry " ++ show (typedEntryID entry)
                  ++ " with input perms:"),
          permPretty emptyPPInfo (typedEntryPermsIn entry)])
@@ -4159,8 +4175,8 @@ visitEntry names can_widen blk entry =
 
   mapM (traverseF $
         visitCallSite entry) (typedEntryCallers entry) >>= \callers ->
-  debugTrace dlevel ("can_widen: " ++ show can_widen ++ ", any_fails: "
-                     ++ show (any (anyF typedCallSiteImplFails) callers)) $
+  debugTraceTraceLvl dlevel ("can_widen: " ++ show can_widen ++ ", any_fails: "
+                             ++ show (any (anyF typedCallSiteImplFails) callers)) $
   if can_widen && any (anyF typedCallSiteImplFails) callers then
     case widenEntry dlevel env entry of
       Some entry' ->

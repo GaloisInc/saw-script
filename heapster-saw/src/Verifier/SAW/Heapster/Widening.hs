@@ -194,7 +194,7 @@ traceM :: (PPInfo -> Doc ()) -> WideningM ()
 traceM f = do
   dlevel <- view wsDebugLevel <$> get
   str <- renderDoc <$> f <$> view wsPPInfo <$> get
-  debugTrace dlevel str $ return ()
+  debugTraceTraceLvl dlevel str $ return ()
 
 
 ----------------------------------------------------------------------

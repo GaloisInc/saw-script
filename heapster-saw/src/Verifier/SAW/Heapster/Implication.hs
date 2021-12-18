@@ -3395,13 +3395,24 @@ implApplyImpl1 impl1 mb_ms =
         f ns)
 
 -- | Emit debugging output using the current 'PPInfo' if the 'implStateDebugLevel'
--- is at least 1
-implTraceM :: (PPInfo -> PP.Doc ann) -> ImplM vars s r ps ps String
-implTraceM f =
+-- is at least the supplied debug level
+implDebugM :: DebugLevel -> (PPInfo -> PP.Doc ann) ->
+              ImplM vars s r ps ps String
+implDebugM reqlvl f =
   do dlevel <- use implStateDebugLevel
      doc <- uses implStatePPInfo f
      let str = renderDoc doc
-     debugTrace dlevel str (return str)
+     debugTrace reqlvl dlevel str (return str)
+
+-- | Emit debugging output using the current 'PPInfo' if the 'implStateDebugLevel'
+-- is at least 'traceDebugLevel'
+implTraceM :: (PPInfo -> PP.Doc ann) -> ImplM vars s r ps ps String
+implTraceM = implDebugM traceDebugLevel
+
+-- | Emit debugging output using the current 'PPInfo' if the 'implStateDebugLevel'
+-- is at least 'verboseDebugLevel'
+implVerbTraceM :: (PPInfo -> PP.Doc ann) -> ImplM vars s r ps ps String
+implVerbTraceM = implDebugM verboseDebugLevel
 
 -- | Run an 'ImplM' computation with the debug level set to 'noDebugLevel'
 implWithoutTracingM :: ImplM vars s r ps_out ps_in a ->
@@ -5093,11 +5104,10 @@ recombinePerm x p = getPerm x >>>= \x_p -> recombinePermExpl x x_p p
 recombinePermExpl :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
                      ValuePerm a -> ImplM vars s r as (as :> a) ()
 recombinePermExpl x x_p p =
-  {-
-  use implStatePPInfo >>>= \info ->
-  tracePretty (string "recombinePerm" <+> permPretty info x
-               </> permPretty info x_p </> string "<-"
-               </> permPretty info p) $ -}
+  implVerbTraceM (\i ->
+                   sep [pretty "recombinePerm" <+>
+                        permPretty i x <> colon <> permPretty i x_p,
+                        pretty "<-" <+> permPretty i p]) >>>
   recombinePerm' x x_p p
 
 -- | This is the implementation of 'recombinePermExpl'; see the documentation
