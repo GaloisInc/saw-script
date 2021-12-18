@@ -46,6 +46,7 @@ import Data.Parameterized.Context (Assignment, IsAppend(..),
                                    incSize, zeroSize, sizeInt,
                                    size, generate, extend)
 import qualified Data.Parameterized.Context as Ctx
+import Data.Parameterized.TraversableFC
 
 import Data.Binding.Hobbits
 import Data.Binding.Hobbits.MonadBind
@@ -534,26 +535,31 @@ instance RsConvert w (StructField Span) (PermExpr (LLVMShapeType w)) where
 -- similar to the language of permissions on a Crucible struct, except that the
 -- langauge is restricted to ensure that they can always be appended.
 data ArgLayoutPerm ctx where
-  ALPerm :: RAssign ValuePerm (CtxToRList ctx) -> ArgLayoutPerm ctx
+  ALPerm :: Assignment Proxy ctx -> RAssign ValuePerm (CtxToRList ctx) ->
+            ArgLayoutPerm ctx
   ALPerm_Or :: ArgLayoutPerm ctx -> ArgLayoutPerm ctx -> ArgLayoutPerm ctx
   ALPerm_Exists :: KnownRepr TypeRepr a =>
                    Binding a (ArgLayoutPerm ctx) -> ArgLayoutPerm ctx
 
+-- | Helper to apply the 'ALPerm' construct to a Crucible context of perms
+mkALPerm :: Assignment ValuePerm ctx -> ArgLayoutPerm ctx
+mkALPerm ps = ALPerm (assignProxies ps) (assignToRList ps)
+
 -- | Build an 'ArgLayoutPerm' that just assigns @true@ to every field
 trueArgLayoutPerm :: Assignment prx ctx -> ArgLayoutPerm ctx
-trueArgLayoutPerm ctx = ALPerm (RL.map (const ValPerm_True) $ assignToRList ctx)
+trueArgLayoutPerm ctx = mkALPerm (fmapFC (const ValPerm_True) ctx)
 
 -- | Build an 'ArgLayoutPerm' for 0 fields
 argLayoutPerm0 :: ArgLayoutPerm EmptyCtx
-argLayoutPerm0 = ALPerm MNil
+argLayoutPerm0 = ALPerm Ctx.empty MNil
 
 -- | Build an 'ArgLayoutPerm' for a single field
 argLayoutPerm1 :: ValuePerm a -> ArgLayoutPerm (EmptyCtx '::> a)
-argLayoutPerm1 p = ALPerm (MNil :>: p)
+argLayoutPerm1 p = mkALPerm (Ctx.extend Ctx.empty p)
 
 -- | Convert an 'ArgLayoutPerm' to a permission on a struct
 argLayoutPermToPerm :: ArgLayoutPerm ctx -> ValuePerm (StructType ctx)
-argLayoutPermToPerm (ALPerm ps) = ValPerm_Conj1 $ Perm_Struct ps
+argLayoutPermToPerm (ALPerm prxs ps) = ValPerm_Conj1 $ Perm_Struct prxs ps
 argLayoutPermToPerm (ALPerm_Or p1 p2) =
   ValPerm_Or (argLayoutPermToPerm p1) (argLayoutPermToPerm p2)
 argLayoutPermToPerm (ALPerm_Exists mb_p) =
@@ -562,7 +568,7 @@ argLayoutPermToPerm (ALPerm_Exists mb_p) =
 -- | Convert an 'ArgLayoutPerm' on a single field to a permission on single
 -- values of the type of that field
 argLayoutPerm1ToPerm :: ArgLayoutPerm (EmptyCtx '::> a) -> ValuePerm a
-argLayoutPerm1ToPerm (ALPerm (_ :>: p)) = p
+argLayoutPerm1ToPerm (ALPerm _ (_ :>: p)) = p
 argLayoutPerm1ToPerm (ALPerm_Or p1 p2) =
   ValPerm_Or (argLayoutPerm1ToPerm p1) (argLayoutPerm1ToPerm p2)
 argLayoutPerm1ToPerm (ALPerm_Exists mb_p) =
@@ -583,8 +589,8 @@ appendArgLayoutPerms ctx1 ctx2 (ALPerm_Exists mb_p) q =
   ALPerm_Exists $ fmap (\p -> appendArgLayoutPerms ctx1 ctx2 p q) mb_p
 appendArgLayoutPerms ctx1 ctx2 p (ALPerm_Exists mb_q) =
   ALPerm_Exists $ fmap (\q -> appendArgLayoutPerms ctx1 ctx2 p q) mb_q
-appendArgLayoutPerms ctx1 ctx2 (ALPerm ps) (ALPerm qs) =
-  ALPerm $ assignToRListAppend ctx1 ctx2 ps qs
+appendArgLayoutPerms ctx1 ctx2 (ALPerm prxs1 ps) (ALPerm prxs2 qs) =
+  ALPerm (prxs1 Ctx.<++> prxs2) $ assignToRListAppend ctx1 ctx2 ps qs
 
 -- | An argument layout captures how argument values are laid out as a Crucible
 -- struct of 0 or more machine words / fields
@@ -597,11 +603,13 @@ argLayoutNumFields (ArgLayout ctx _) = sizeInt $ size ctx
 
 -- | Construct an 'ArgLayout' for 0 arguments
 argLayout0 :: ArgLayout
-argLayout0 = ArgLayout Ctx.empty (ALPerm MNil)
+argLayout0 = ArgLayout Ctx.empty (ALPerm Ctx.empty MNil)
 
 -- | Construct an 'ArgLayout' for a single argument
 argLayout1 :: KnownRepr TypeRepr a => ValuePerm a -> ArgLayout
-argLayout1 p = ArgLayout (extend Ctx.empty knownRepr) (ALPerm (MNil :>: p))
+argLayout1 p =
+  ArgLayout (extend Ctx.empty knownRepr) $
+  ALPerm (extend Ctx.empty Proxy) (MNil :>: p)
 
 -- | Append two 'ArgLayout's, if possible
 appendArgLayout :: ArgLayout -> ArgLayout -> ArgLayout
@@ -625,16 +633,12 @@ disjoinArgLayouts (ArgLayout ctx1 p1) (ArgLayout ctx2 p2)
   | Just (IsAppend sz') <- ctxIsAppend ctx1 ctx2 =
     let ps' = generate sz' (const ValPerm_True) in
     Just $ ArgLayout ctx2 $
-    ALPerm_Or
-    (appendArgLayoutPerms ctx1 ps' p1 (ALPerm $ assignToRList ps'))
-    p2
+    ALPerm_Or (appendArgLayoutPerms ctx1 ps' p1 (mkALPerm ps')) p2
 disjoinArgLayouts (ArgLayout ctx1 p1) (ArgLayout ctx2 p2)
   | Just (IsAppend sz') <- ctxIsAppend ctx2 ctx1 =
     let ps' = generate sz' (const ValPerm_True) in
     Just $ ArgLayout ctx1 $
-    ALPerm_Or
-    p1
-    (appendArgLayoutPerms ctx2 ps' p2 (ALPerm $ assignToRList ps'))
+    ALPerm_Or p1 (appendArgLayoutPerms ctx2 ps' p2 (mkALPerm ps'))
 disjoinArgLayouts _ _ = Nothing
 
 -- | Make an existential 'ArgLayout'
@@ -718,7 +722,7 @@ funPerm3FromMbArgLayout :: CtxRepr ctx ->
 -- is, we build the function permission
 --
 -- (ghosts). arg1:p1, ..., argn:pn -o ret:ret_perm
-funPerm3FromMbArgLayout ctx [nuMP| ALPerm mb_ps_in |]
+funPerm3FromMbArgLayout ctx [nuMP| ALPerm _ mb_ps_in |]
   ghosts ctx1 ps1_in ps1_out ret_tp ret_perm
   | ctx_args <- mkCruCtx (ctx1 Ctx.<++> ctx)
   , ctx_all <- appendCruCtx ghosts ctx_args

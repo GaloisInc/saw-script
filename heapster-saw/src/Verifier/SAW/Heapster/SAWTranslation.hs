@@ -56,6 +56,8 @@ import Prettyprinter as PP
 import Prettyprinter.Render.String
 
 import Data.Parameterized.TraversableF
+import Data.Parameterized.Context (Assignment)
+import qualified Data.Parameterized.Context as Ctx
 
 import Lang.Crucible.Types
 import Lang.Crucible.LLVM.Extension
@@ -202,7 +204,8 @@ data ExprTrans (a :: CrucibleType) where
   ETrans_RWModality :: ExprTrans RWModalityType
 
   -- | Structs are translated as a sequence of translations of the fields
-  ETrans_Struct :: ExprTransCtx (CtxToRList ctx) -> ExprTrans (StructType ctx)
+  ETrans_Struct :: Assignment Proxy ctx -> ExprTransCtx (CtxToRList ctx) ->
+                   ExprTrans (StructType ctx)
 
   -- | The computational content of functions is in their FunPerms, so functions
   -- themselves have no computational content
@@ -221,7 +224,9 @@ type ExprTransCtx = RAssign ExprTrans
 
 -- | Build a @struct@ expression from an arbitrary 'RAssign' of expressions
 mkETrans_Struct :: ExprTransCtx tps -> ExprTrans (TupleType tps)
-mkETrans_Struct ectx | Refl <- rlistToAssignEq ectx = ETrans_Struct ectx
+mkETrans_Struct ectx
+  | Refl <- rlistToAssignEq ectx
+  = ETrans_Struct (rlistToAssign $ RL.map (const Proxy) ectx) ectx
 
 
 -- | Describes a Haskell type that represents the translation of a term-like
@@ -264,7 +269,7 @@ instance IsTermTrans (ExprTrans tp) where
   transTerms ETrans_LLVMFrame = []
   transTerms ETrans_Lifetime = []
   transTerms ETrans_RWModality = []
-  transTerms (ETrans_Struct etranss) =
+  transTerms (ETrans_Struct _ etranss) =
     concat $ RL.mapToList transTerms etranss
   transTerms ETrans_Fun = []
   transTerms ETrans_Unit = []
@@ -734,7 +739,8 @@ instance TransInfo info =>
     [nuMP| VectorRepr _ |] ->
       return $ error "translate: VectorRepr (can't map to Vec without size)"
     [nuMP| StructRepr tps |] ->
-      fmap ETrans_Struct <$> translate (fmap mkCruCtx tps)
+      fmap (ETrans_Struct $ assignProxies $ mbLift tps) <$>
+      translate (fmap mkCruCtx tps)
     [nuMP| VariantRepr _ |] ->
       return $ error "translate: VariantRepr"
     [nuMP| ReferenceRepr _ |] ->
@@ -869,8 +875,8 @@ instance TransInfo info =>
          bv_transs <- translate bvfactors
          return $ ETrans_Term $
            foldr (bvAddOpenTerm $ natValue w) (bvBVOpenTerm w $ mbLift off) bv_transs
-    [nuMP| PExpr_Struct args |] ->
-      ETrans_Struct <$> translate args
+    [nuMP| PExpr_Struct prxs args |] ->
+      ETrans_Struct (mbLift prxs) <$> translate args
     [nuMP| PExpr_Always |] ->
       return ETrans_Lifetime
     [nuMP| PExpr_LLVMWord _ |] -> return ETrans_LLVM
@@ -1055,7 +1061,8 @@ data AtomicPermTrans ctx a where
 
   -- | The translation of a struct permission is sequence of the translations of
   -- the permissions in the struct permission
-  APTrans_Struct :: PermTransCtx ctx (CtxToRList args) ->
+  APTrans_Struct :: Assignment Proxy args ->
+                    PermTransCtx ctx (CtxToRList args) ->
                     AtomicPermTrans ctx (StructType args)
 
   -- | The translation of functional permission is a SAW term of functional type
@@ -1207,7 +1214,7 @@ instance IsTermTrans (AtomicPermTrans ctx a) where
   transTerms (APTrans_LOwned _ _ _ t) = [t]
   transTerms (APTrans_LCurrent _) = []
   transTerms APTrans_LFinished = []
-  transTerms (APTrans_Struct pctx) = transTerms pctx
+  transTerms (APTrans_Struct _ pctx) = transTerms pctx
   transTerms (APTrans_Fun _ t) = [t]
   transTerms (APTrans_BVProp prop) = transTerms prop
 
@@ -1264,8 +1271,8 @@ atomicPermTransPerm _ (APTrans_LOwned ls ps_in ps_out _) =
   mbMap3 Perm_LOwned ls ps_in ps_out
 atomicPermTransPerm _ (APTrans_LCurrent l) = fmap Perm_LCurrent l
 atomicPermTransPerm prxs APTrans_LFinished = nus prxs $ const Perm_LFinished
-atomicPermTransPerm prxs (APTrans_Struct ps) =
-  fmap Perm_Struct $ permTransCtxPerms prxs ps
+atomicPermTransPerm prxs (APTrans_Struct ctx ps) =
+  fmap (Perm_Struct ctx) $ permTransCtxPerms prxs ps
 atomicPermTransPerm _ (APTrans_Fun fp _) = fmap Perm_Fun fp
 atomicPermTransPerm _ (APTrans_BVProp (BVPropTrans prop _)) =
   fmap Perm_BVProp prop
@@ -1327,7 +1334,8 @@ instance ExtPermTrans AtomicPermTrans where
     APTrans_LOwned (extMb ls) (extMb ps_in) (extMb ps_out) t
   extPermTrans (APTrans_LCurrent p) = APTrans_LCurrent $ extMb p
   extPermTrans APTrans_LFinished = APTrans_LFinished
-  extPermTrans (APTrans_Struct ps) = APTrans_Struct $ RL.map extPermTrans ps
+  extPermTrans (APTrans_Struct prxs ps) =
+    APTrans_Struct prxs $ RL.map extPermTrans ps
   extPermTrans (APTrans_Fun fp t) = APTrans_Fun (extMb fp) t
   extPermTrans (APTrans_BVProp prop_trans) =
     APTrans_BVProp $ extPermTrans prop_trans
@@ -1741,8 +1749,8 @@ instance TransInfo info =>
       return $ mkTypeTrans0 $ APTrans_LCurrent l
     [nuMP| Perm_LFinished |] ->
       return $ mkTypeTrans0 APTrans_LFinished
-    [nuMP| Perm_Struct ps |] ->
-      fmap APTrans_Struct <$> translate ps
+    [nuMP| Perm_Struct prxs ps |] ->
+      fmap (APTrans_Struct $ mbLift prxs) <$> translate ps
     [nuMP| Perm_Fun fun_perm |] ->
       translate fun_perm >>= \tp_term ->
       return $ mkTypeTrans1 tp_term (APTrans_Fun fun_perm)
@@ -2380,38 +2388,39 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
       pctx :>: PTrans_Conj (take i ps) :>: PTrans_Conj (drop i ps))
     m
 
-  [nuMP| SImpl_IntroStructTrue x _ |] ->
+  [nuMP| SImpl_IntroStructTrue x _ _ |] ->
     do tptrans <- translateSimplImplOutHead mb_simpl
        withPermStackM (:>: translateVar x)
          (\pctx -> pctx :>: typeTransF tptrans [])
          m
 
-  [nuMP| SImpl_StructEqToPerm _ _ |] ->
+  [nuMP| SImpl_StructEqToPerm _ _ _ |] ->
     do tptrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: _) -> pctx :>: typeTransF tptrans [])
          m
 
-  [nuMP| SImpl_StructPermToEq _ _ |] ->
+  [nuMP| SImpl_StructPermToEq _ _ _ |] ->
     do tptrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: _) -> pctx :>: typeTransF tptrans [])
          m
 
-  [nuMP| SImpl_IntroStructField _ _ memb _ |] ->
+  [nuMP| SImpl_IntroStructField _ _ _ memb _ |] ->
     do tptrans <- translateSimplImplOutHead mb_simpl
        withPermStackM RL.tail
-         (\(pctx :>: PTrans_Conj [APTrans_Struct pctx_str] :>: ptrans) ->
+         (\(pctx :>: PTrans_Conj [APTrans_Struct _ pctx_str] :>: ptrans) ->
            pctx :>: typeTransF tptrans (transTerms $
                                         RL.set (mbLift memb) ptrans pctx_str))
          m
 
-  [nuMP| SImpl_CombineStructEqPerm _ _ _ mb_memb y |] ->
+  [nuMP| SImpl_CombineStructEqPerm _ _ _ _ mb_memb y |] ->
     let memb = mbLift mb_memb in
     withPermStackM
     (\(vars :>: str) -> vars :>: translateVar y :>: str)
-    (\(pctx :>: PTrans_Conj [APTrans_Struct pctx_str1] :>: ptrans2) ->
-      pctx :>: PTrans_Conj [APTrans_Struct $ RL.set memb PTrans_True pctx_str1]
+    (\(pctx :>: PTrans_Conj [APTrans_Struct prxs pctx_str1] :>: ptrans2) ->
+      pctx :>: PTrans_Conj [APTrans_Struct prxs $
+                            RL.set memb PTrans_True pctx_str1]
       :>: RL.get memb pctx_str1 :>: ptrans2)
     m
 
@@ -3445,18 +3454,18 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
        inExtTransM etrans $
          withPermStackM (:>: Member_Base) (:>: PTrans_Eq (extMb e)) m
 
-  ([nuMP| Impl1_ElimStructField x _ _ memb |], _) ->
+  ([nuMP| Impl1_ElimStructField x _ _ _ memb |], _) ->
     translatePermImplUnary mb_impls $ \m ->
     do etrans_x <- translate x
        let etrans_y = case etrans_x of
-             ETrans_Struct flds -> RL.get (mbLift memb) flds
+             ETrans_Struct _ flds -> RL.get (mbLift memb) flds
              _ -> error "translatePermImpl1: Impl1_ElimStructField"
        let mb_y = mbCombine RL.typeCtxProxies $ fmap (const $ nu $ \y ->
                                                        PExpr_Var y) x
        inExtTransM etrans_y $
          withPermStackM (:>: Member_Base)
-         (\(pctx :>: PTrans_Conj [APTrans_Struct pctx_str]) ->
-           pctx :>: PTrans_Conj [APTrans_Struct $
+         (\(pctx :>: PTrans_Conj [APTrans_Struct prxs pctx_str]) ->
+           pctx :>: PTrans_Conj [APTrans_Struct prxs $
                                  RL.set (mbLift memb) (PTrans_Eq mb_y) pctx_str]
            :>: RL.get (mbLift memb) pctx_str)
          m
@@ -4035,6 +4044,25 @@ instance (PermCheckExtC ext, TransInfo info) =>
       (applyMultiTransM (return $ globalOpenTerm "Prelude.bvEq")
        [translate mb_w, translateRWV e,
         return (bvBVOpenTerm w (BV.zero w))])
+
+    -- Structs
+    [nuMP| MkStruct tps es |] ->
+      ETrans_Struct (assignProxies $ mbLift tps) <$>
+      traverseRAssign (translate . getCompose)
+      (mbRAssign (mbMapCl $(mkClosed [| assignToRList |]) es))
+    [nuMP| GetStruct e ix _ |] ->
+      translate e >>= \case
+      ETrans_Struct prxs ectx ->
+        let memb = indexToMember (Ctx.size prxs) $ mbLift ix in
+        return $ RL.get memb ectx
+      _ -> error "Unexpected translation of subexpression in translating GetStruct"
+    [nuMP| SetStruct _ e_str ix e |] ->
+      translate e >>= \etrans ->
+      translate e_str >>= \case
+      ETrans_Struct prxs ectx ->
+        let memb = indexToMember (Ctx.size prxs) $ mbLift ix in
+        return $ ETrans_Struct prxs $ RL.set memb etrans ectx
+      _ -> error "Unexpected translation of subexpression in translating GetStruct"
 
     -- Strings
     [nuMP| Expr.StringLit (UnicodeLiteral text) |] ->

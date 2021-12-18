@@ -156,7 +156,7 @@ instance ContainsIRTRecName (AtomicPerm a) where
   containsIRTRecName _ (Perm_LOwned _ _ _) = False
   containsIRTRecName _ (Perm_LCurrent _) = False
   containsIRTRecName _ Perm_LFinished = False
-  containsIRTRecName n (Perm_Struct ps) = containsIRTRecName n ps
+  containsIRTRecName n (Perm_Struct _ ps) = containsIRTRecName n ps
   containsIRTRecName _ (Perm_Fun _) = False
   containsIRTRecName _ (Perm_BVProp _) = False
 
@@ -415,7 +415,7 @@ instance IRTTyVars (AtomicPerm a) where
       throwError "lowned permission in an IRT definition!"
     [nuMP| Perm_LCurrent _ |] -> return ([], IRTVarsNil)
     [nuMP| Perm_LFinished |] -> return ([], IRTVarsNil)
-    [nuMP| Perm_Struct ps |] -> irtTyVars ps
+    [nuMP| Perm_Struct _ ps |] -> irtTyVars ps
     [nuMP| Perm_Fun _ |] ->
       throwError "fun perm in an IRT definition!"
     [nuMP| Perm_BVProp _ |] ->
@@ -662,7 +662,7 @@ instance IRTDescs (AtomicPerm a) where
       error "lowned permission made it to IRTDesc translation"
     ([nuMP| Perm_LCurrent _ |], _) -> return []
     ([nuMP| Perm_LFinished |], _) -> return []
-    ([nuMP| Perm_Struct ps |], _) ->
+    ([nuMP| Perm_Struct _ ps |], _) ->
       irtDescs ps ixs
     ([nuMP| Perm_Fun _ |], _) ->
       error "fun perm made it to IRTDesc translation"

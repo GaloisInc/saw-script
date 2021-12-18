@@ -365,7 +365,8 @@ tcBVFactor e = tcError (pos e) "Expected BV factor"
 
 -- | Check for a struct literal
 tcStruct :: CtxRepr fs -> AstExpr -> Tc (PermExpr (StructType fs))
-tcStruct ts (ExStruct p es) = PExpr_Struct <$> tcExprs p (mkCruCtx ts) es
+tcStruct ts (ExStruct p es) =
+  PExpr_Struct (assignProxies ts) <$> tcExprs p (mkCruCtx ts) es
 tcStruct _ e = tcError (pos e) "Expected struct"
 
 -- | Check a list of expressions. In case of arity issues
@@ -596,7 +597,8 @@ tcFrameAtomic e = tcError (pos e) "Expected llvmframe perm"
 
 -- | Check a struct permission literal
 tcStructAtomic :: CtxRepr tys -> AstExpr -> Tc (AtomicPerm (StructType tys))
-tcStructAtomic tys (ExStruct p es) = Perm_Struct <$> tcValuePerms p (assignToRList tys) es
+tcStructAtomic tys (ExStruct p es) =
+  Perm_Struct (assignProxies tys) <$> tcValuePerms p (assignToRList tys) es
 tcStructAtomic _ e = tcError (pos e) "Expected struct perm"
 
 -- | Check a block shape permission literal

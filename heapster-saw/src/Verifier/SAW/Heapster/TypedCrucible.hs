@@ -2878,21 +2878,21 @@ tcExpr (StringLit (UnicodeLiteral text)) =
 
 -- For a struct built from registers r1, ..., rn, return struct(r1,...,rn)
 tcExpr (MkStruct _ vars) =
-  pure $ Just $ PExpr_Struct $ namesToExprs $
+  pure $ Just $ PExpr_Struct (assignProxies vars) $ namesToExprs $
   RL.map (typedRegVar . regWithValReg) $ assignToRList vars
 
 -- For GetStruct x ix, if x has a value it will have been eta-expanded to a
 -- struct expression, so simply get out the required field of that struct
-tcExpr (GetStruct (RegWithVal r (PExpr_Struct es)) ix _) =
+tcExpr (GetStruct (RegWithVal r (PExpr_Struct _ es)) ix _) =
   getVarType (typedRegVar r) >>= \(StructRepr tps) ->
   let memb = indexToMember (Ctx.size tps) ix in
   pure $ Just $ RL.get memb (exprsToRAssign es)
 
 -- For SetStruct x ix y, if x has a value it will have been eta-expanded to a
 -- struct expression, so simply replace required field of that struct with y
-tcExpr (SetStruct tps (RegWithVal _ (PExpr_Struct es)) ix r') =
+tcExpr (SetStruct tps (RegWithVal _ (PExpr_Struct prxs es)) ix r') =
   let memb = indexToMember (Ctx.size tps) ix in
-  pure $ Just $ PExpr_Struct $ rassignToExprs $
+  pure $ Just $ PExpr_Struct prxs $ rassignToExprs $
   RL.set memb (PExpr_Var $ typedRegVar $ regWithValReg r') $
   exprsToRAssign es
 

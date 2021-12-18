@@ -575,7 +575,8 @@ data PermExpr (a :: CrucibleType) where
               [BVFactor w] -> BV w -> PermExpr (BVType w)
 
   -- | A struct expression is an expression for each argument of the struct type
-  PExpr_Struct :: PermExprs (CtxToRList args) -> PermExpr (StructType args)
+  PExpr_Struct :: Assignment Proxy args -> PermExprs (CtxToRList args) ->
+                  PermExpr (StructType args)
 
   -- | The @always@ lifetime that is always current
   PExpr_Always :: PermExpr LifetimeType
@@ -852,8 +853,8 @@ instance Eq (PermExpr a) where
       eqFactors _ _ = False
   (PExpr_BV _ _) == _ = False
 
-  (PExpr_Struct args1) == (PExpr_Struct args2) = args1 == args2 where
-  (PExpr_Struct _) == _ = False
+  (PExpr_Struct _ args1) == (PExpr_Struct _ args2) = args1 == args2 where
+  (PExpr_Struct _ _) == _ = False
 
   PExpr_Always == PExpr_Always = True
   PExpr_Always == _ = False
@@ -940,7 +941,7 @@ instance PermPretty (PermExpr a) where
          0 -> return factors_pp
          c | c > 0 -> return (factors_pp <> pretty "+" <> pretty c)
          c -> return (factors_pp <> pretty c)
-  permPrettyM (PExpr_Struct args) =
+  permPrettyM (PExpr_Struct _ args) =
     (\pp -> pretty "struct" <+> parens pp) <$> permPrettyM args
   permPrettyM PExpr_Always = return $ pretty "always"
   permPrettyM (PExpr_LLVMWord e) = (pretty "LLVMword" <+>) <$> permPrettyM e
@@ -1642,7 +1643,7 @@ data AtomicPerm (a :: CrucibleType) where
   Perm_LFinished :: AtomicPerm LifetimeType
 
   -- | A struct permission = a sequence of permissions for each field
-  Perm_Struct :: RAssign ValuePerm (CtxToRList ctx) ->
+  Perm_Struct :: Assignment Proxy ctx -> RAssign ValuePerm (CtxToRList ctx) ->
                  AtomicPerm (StructType ctx)
 
   -- | A function permission
@@ -1803,10 +1804,11 @@ data ValuePerms as where
 
 -- | Pattern for matching @struct@ permissions
 pattern ValPerm_Struct :: () => (a ~ StructType ctx) =>
+                          Assignment Proxy ctx ->
                           RAssign ValuePerm (CtxToRList ctx) -> ValuePerm a
-pattern ValPerm_Struct ps <- ValPerm_Conj [Perm_Struct ps]
+pattern ValPerm_Struct prxs ps <- ValPerm_Conj [Perm_Struct prxs ps]
   where
-    ValPerm_Struct ps = ValPerm_Conj [Perm_Struct ps]
+    ValPerm_Struct prxs ps = ValPerm_Conj [Perm_Struct prxs ps]
 
 -- | Convert an 'RList' of types to the corresponding struct type
 type TupleType tps = StructType (RListToCtx tps)
@@ -1817,19 +1819,21 @@ tupleRepr ctx = StructRepr (rlistToAssign $ cruCtxToTypes ctx)
 
 -- | Build a @struct@ expression from an arbitrary 'RAssign' of expressions
 mkPExpr_Struct :: RAssign PermExpr tps -> PermExpr (TupleType tps)
-mkPExpr_Struct exprs | Refl <- rlistToAssignEq exprs = PExpr_Struct exprs
+mkPExpr_Struct exprs
+  | Refl <- rlistToAssignEq exprs
+  = PExpr_Struct (rlistToAssign $ RL.map (const Proxy) exprs) exprs
 
 -- | Build a @struct@ permission from an arbitrary 'RAssign' of permissions
 mkValPerm_Struct :: RAssign ValuePerm ctx -> ValuePerm (TupleType ctx)
 mkValPerm_Struct (ps :: RAssign ValuePerm ctx)
   | Refl <- rlistToAssignEq ps
-  = ValPerm_Struct (ps :: RAssign ValuePerm (CtxToRList (RListToCtx ctx)))
+  = ValPerm_Struct (rlistToAssign $ RL.map (const Proxy) ps) ps
 
 -- | Pattern-match a 'ValPerm_Struct' on a @'TupleType' tps@ and cast it back to
 -- a sequence of permissions on @tps@
 matchValPermStruct :: RAssign f tps -> ValuePerm (TupleType tps) ->
                       Maybe (RAssign ValuePerm tps)
-matchValPermStruct tps (ValPerm_Struct ps)
+matchValPermStruct tps (ValPerm_Struct _ ps)
   | Refl <- rlistToAssignEq tps = Just ps
 matchValPermStruct _ _ = Nothing
 
@@ -1846,7 +1850,7 @@ pattern ValPerms_Cons ps p = ps :>: p
 
 matchStructPerm :: CruCtx tps -> ValuePerm (StructType (RListToCtx tps)) ->
                    Maybe (RAssign ValuePerm tps)
-matchStructPerm tps (ValPerm_Conj [Perm_Struct ps])
+matchStructPerm tps (ValPerm_Conj [Perm_Struct _ ps])
   | Refl <- cruCtxToReprEq tps = Just ps
 matchStructPerm _ _ = Nothing
 
@@ -3000,8 +3004,8 @@ instance Eq (AtomicPerm a) where
   (Perm_LCurrent _) == _ = False
   Perm_LFinished == Perm_LFinished = True
   Perm_LFinished == _ = False
-  (Perm_Struct ps1) == (Perm_Struct ps2) = ps1 == ps2
-  (Perm_Struct _) == _ = False
+  (Perm_Struct _ ps1) == (Perm_Struct _ ps2) = ps1 == ps2
+  (Perm_Struct _ _) == _ = False
   (Perm_Fun fperm1) == (Perm_Fun fperm2)
     | Just Refl <- funPermEq fperm1 fperm2 = True
   (Perm_Fun _) == _ = False
@@ -3158,7 +3162,7 @@ instance PermPretty (AtomicPerm a) where
                parens (align $ sep [pp_in, pretty "-o", pp_out]))
   permPrettyM (Perm_LCurrent l) = (pretty "lcurrent" <+>) <$> permPrettyM l
   permPrettyM Perm_LFinished = return (pretty "lfinished")
-  permPrettyM (Perm_Struct ps) =
+  permPrettyM (Perm_Struct _ ps) =
     ((pretty "struct" <+>) . parens) <$> permPrettyM ps
   permPrettyM (Perm_Fun fun_perm) = permPrettyM fun_perm
   permPrettyM (Perm_BVProp prop) = permPrettyM prop
@@ -3345,7 +3349,7 @@ isLifetimePerm _ = Nothing
 
 -- | Test if an 'AtomicPerm' is a struct permission
 isStructPerm :: AtomicPerm a -> Bool
-isStructPerm (Perm_Struct _) = True
+isStructPerm (Perm_Struct _ _) = True
 isStructPerm _ = False
 
 -- | Test if an 'AtomicPerm' is a function permission
@@ -3390,8 +3394,9 @@ isConjPerm (ValPerm_Conj _) = True
 
 -- | Return a struct permission where all fields have @true@ permissions
 trueStructAtomicPerm :: Assignment prx ctx -> AtomicPerm (StructType ctx)
-trueStructAtomicPerm =
-  Perm_Struct . RL.map (const ValPerm_True). assignToRList
+trueStructAtomicPerm prxs =
+  Perm_Struct (assignProxies prxs) $
+  RL.map (const ValPerm_True) $ assignToRList prxs
 
 -- | Take two list of atomic struct permissions, one for structs with fields
 -- given by @ctx1@ and one with those given by @ctx2@, and append them pointwise
@@ -3405,8 +3410,10 @@ tryAppendStructAPerms :: Assignment prx1 ctx1 -> Assignment prx2 ctx2 ->
                          [AtomicPerm (StructType ctx2)] ->
                          Maybe [AtomicPerm (StructType (ctx1 <+> ctx2))]
 tryAppendStructAPerms _ _ [] [] = return []
-tryAppendStructAPerms ctx1 ctx2 (Perm_Struct fs_ps:ps) (Perm_Struct fs_qs:qs) =
-  (Perm_Struct (assignToRListAppend ctx1 ctx2 fs_ps fs_qs) :) <$>
+tryAppendStructAPerms ctx1 ctx2 (Perm_Struct
+                                 prxs1 fs_ps:ps) (Perm_Struct prxs2 fs_qs:qs) =
+  (Perm_Struct (prxs1 Ctx.<++> prxs2)
+   (assignToRListAppend ctx1 ctx2 fs_ps fs_qs) :) <$>
   tryAppendStructAPerms ctx1 ctx2 ps qs
 tryAppendStructAPerms ctx1 ctx2 [] qs =
   tryAppendStructAPerms ctx1 ctx2 [trueStructAtomicPerm ctx1] qs
@@ -5121,7 +5128,7 @@ atomicPermIsCopyable (Perm_LLVMFrame _) = False
 atomicPermIsCopyable (Perm_LOwned _ _ _) = False
 atomicPermIsCopyable (Perm_LCurrent _) = True
 atomicPermIsCopyable Perm_LFinished = True
-atomicPermIsCopyable (Perm_Struct ps) = and $ RL.mapToList permIsCopyable ps
+atomicPermIsCopyable (Perm_Struct _ ps) = and $ RL.mapToList permIsCopyable ps
 atomicPermIsCopyable (Perm_Fun _) = True
 atomicPermIsCopyable (Perm_BVProp _) = True
 atomicPermIsCopyable (Perm_NamedConj n args _) =
@@ -5274,7 +5281,7 @@ funPermDistOuts fun_perm ghosts gexprs args_and_ret str
     distPerms2
     str (subst (appendSubsts (substOfExprs gexprs) (substOfVars args_and_ret))
          (funPermOuts fun_perm))
-    str (ValPerm_Eq $ PExpr_Struct ns)
+    str (ValPerm_Eq $ mkPExpr_Struct ns)
 
 -- | Unfold a recursive permission given a 'RecPerm' for it
 unfoldRecPerm :: RecPerm b reach args a -> PermExprs args -> PermOffset a ->
@@ -5323,7 +5330,7 @@ instance FreeVars (PermExpr a) where
   freeVars (PExpr_Nat _) = NameSet.empty
   freeVars (PExpr_String _) = NameSet.empty
   freeVars (PExpr_BV factors _) = freeVars factors
-  freeVars (PExpr_Struct elems) = freeVars elems
+  freeVars (PExpr_Struct _ elems) = freeVars elems
   freeVars PExpr_Always = NameSet.empty
   freeVars (PExpr_LLVMWord e) = freeVars e
   freeVars (PExpr_LLVMOffset ptr off) =
@@ -5383,7 +5390,7 @@ instance FreeVars (AtomicPerm tp) where
     NameSet.unions [freeVars ls, freeVars ps_in, freeVars ps_out]
   freeVars (Perm_LCurrent l) = freeVars l
   freeVars Perm_LFinished = NameSet.empty
-  freeVars (Perm_Struct ps) = NameSet.unions $ RL.mapToList freeVars ps
+  freeVars (Perm_Struct _ ps) = NameSet.unions $ RL.mapToList freeVars ps
   freeVars (Perm_Fun fun_perm) = freeVars fun_perm
   freeVars (Perm_BVProp prop) = freeVars prop
   freeVars (Perm_NamedConj _ args off) =
@@ -5703,8 +5710,8 @@ instance SubstVar s m => Substable s (PermExpr a) m where
     [nuMP| PExpr_BV factors off |] ->
       foldr bvAdd (PExpr_BV [] (mbLift off)) <$>
       mapM (substBVFactor s) (mbList factors)
-    [nuMP| PExpr_Struct args |] ->
-      PExpr_Struct <$> genSubst s args
+    [nuMP| PExpr_Struct prxs args |] ->
+      PExpr_Struct (mbLift prxs) <$> genSubst s args
     [nuMP| PExpr_Always |] -> return PExpr_Always
     [nuMP| PExpr_LLVMWord e |] ->
       PExpr_LLVMWord <$> genSubst s e
@@ -5778,7 +5785,8 @@ instance SubstVar s m => Substable s (AtomicPerm a) m where
       Perm_LOwned <$> genSubst s ls <*> genSubst s ps_in <*> genSubst s ps_out
     [nuMP| Perm_LCurrent e |] -> Perm_LCurrent <$> genSubst s e
     [nuMP| Perm_LFinished |] -> return Perm_LFinished
-    [nuMP| Perm_Struct tps |] -> Perm_Struct <$> genSubst s tps
+    [nuMP| Perm_Struct prxs tps |] ->
+      Perm_Struct (mbLift prxs) <$> genSubst s tps
     [nuMP| Perm_Fun fperm |] -> Perm_Fun <$> genSubst s fperm
     [nuMP| Perm_BVProp prop |] -> Perm_BVProp <$> genSubst s prop
     [nuMP| Perm_NamedConj n args off |] ->
@@ -6430,8 +6438,9 @@ instance AbstractVars (PermExpr a) where
     absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_BV |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 factors
     `clMbMbApplyM` abstractPEVars ns1 ns2 k
-  abstractPEVars ns1 ns2 (PExpr_Struct es) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Struct |])
+  abstractPEVars ns1 ns2 (PExpr_Struct prxs es) =
+    absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_Struct |])
+                            `clApply` toClosed prxs)
     `clMbMbApplyM` abstractPEVars ns1 ns2 es
   abstractPEVars ns1 ns2 PExpr_Always =
     absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Always |])
@@ -6572,8 +6581,9 @@ instance AbstractVars (AtomicPerm a) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
   abstractPEVars ns1 ns2 Perm_LFinished =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LFinished |])
-  abstractPEVars ns1 ns2 (Perm_Struct ps) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_Struct |])
+  abstractPEVars ns1 ns2 (Perm_Struct prxs ps) =
+    absVarsReturnH ns1 ns2 ($(mkClosed [| Perm_Struct |])
+                            `clApply` toClosed prxs)
     `clMbMbApplyM` abstractPEVars ns1 ns2 ps
   abstractPEVars ns1 ns2 (Perm_Fun fperm) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_Fun |])
@@ -6803,7 +6813,8 @@ instance AbstractNamedShape w (PermExpr a) where
   abstractNSM (PExpr_Nat n) = pureBindingM (PExpr_Nat n)
   abstractNSM (PExpr_String s) = pureBindingM (PExpr_String s)
   abstractNSM (PExpr_BV fs c) = pureBindingM (PExpr_BV fs c)
-  abstractNSM (PExpr_Struct es) = fmap PExpr_Struct <$> abstractNSM es
+  abstractNSM (PExpr_Struct prxs es) =
+    fmap (PExpr_Struct prxs) <$> abstractNSM es
   abstractNSM PExpr_Always = pureBindingM PExpr_Always
   abstractNSM (PExpr_LLVMWord e) = fmap PExpr_LLVMWord <$> abstractNSM e
   abstractNSM (PExpr_LLVMOffset x e) = fmap (PExpr_LLVMOffset x) <$> abstractNSM e
@@ -6875,7 +6886,7 @@ instance AbstractNamedShape w (AtomicPerm a) where
     abstractNSM ps_out
   abstractNSM (Perm_LCurrent e) = fmap Perm_LCurrent <$> abstractNSM e
   abstractNSM Perm_LFinished = pureBindingM Perm_LFinished
-  abstractNSM (Perm_Struct ps) = fmap Perm_Struct <$> abstractNSM ps
+  abstractNSM (Perm_Struct prxs ps) = fmap (Perm_Struct prxs) <$> abstractNSM ps
   abstractNSM (Perm_Fun fp) = fmap Perm_Fun <$> abstractNSM fp
   abstractNSM (Perm_BVProp prop) = pureBindingM (Perm_BVProp prop)
 

@@ -375,8 +375,8 @@ widenExpr' tp e1 (asVarOffset -> Just (x2, off2)) =
             return $ PExpr_Var x
 
 -- Widen two structs by widening their contents
-widenExpr' (StructRepr tps) (PExpr_Struct es1) (PExpr_Struct es2) =
-  PExpr_Struct <$> widenExprs (mkCruCtx tps) es1 es2
+widenExpr' (StructRepr tps) (PExpr_Struct ctx es1) (PExpr_Struct _ es2) =
+  PExpr_Struct ctx <$> widenExprs (mkCruCtx tps) es1 es2
 
 -- Widen llvmwords by widening the words
 widenExpr' (LLVMPointerRepr w) (PExpr_LLVMWord e1) (PExpr_LLVMWord e2) =

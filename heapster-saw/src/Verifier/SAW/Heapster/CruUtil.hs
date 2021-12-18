@@ -345,6 +345,12 @@ instance Closable (Assignment TypeRepr ctx) where
 instance Liftable (Assignment TypeRepr ctx) where
   mbLift = unClosed . mbLift . fmap toClosed
 
+instance Closable (Assignment Proxy ctx) where
+  toClosed = unsafeClose
+
+instance Liftable (Assignment Proxy ctx) where
+  mbLift = unClosed . mbLift . fmap toClosed
+
 
 $(mkNuMatching [t| forall f tp. NuMatchingAny1 f => BaseTerm f tp |])
 
@@ -571,6 +577,10 @@ rlistToAssign (rlist :>: f) = extend (rlistToAssign rlist) f
 rlistToAssignEq :: RAssign f ctx -> CtxToRList (RListToCtx ctx) :~: ctx
 rlistToAssignEq MNil = Refl
 rlistToAssignEq (rlist :>: _) | Refl <- rlistToAssignEq rlist = Refl
+
+-- | Convert any 'Assignment' to an 'Assignment' of 'Proxy's
+assignProxies :: Assignment f ctx -> Assignment Proxy ctx
+assignProxies = fmapFC (const Proxy)
 
 -- | Convert a Crucible 'Index' to a Hobbits 'Member'
 indexToMember :: Size ctx -> Index ctx tp -> Member (CtxToRList ctx) tp
