@@ -5016,14 +5016,15 @@ simplEqPerm _ e = pure e
 
 -- | Recombine the permission @x:p@ on top of the stack back into the existing
 -- permission for @x@
-recombinePerm :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+recombinePerm :: (NuMatchingAny1 r, HasCallStack) => ExprVar a -> ValuePerm a ->
                  ImplM vars s r as (as :> a) ()
 recombinePerm x p = getPerm x >>>= \x_p -> recombinePermExpl x x_p p
 
 -- | Recombine the permission @x:p@ on top of the stack back into the existing
 -- permission @x_p@ for @x@, where @x_p@ is given explicitly as the first
 -- permission argument and @p@ is the second
-recombinePermExpl :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+recombinePermExpl :: (NuMatchingAny1 r, HasCallStack) =>
+                     ExprVar a -> ValuePerm a ->
                      ValuePerm a -> ImplM vars s r as (as :> a) ()
 recombinePermExpl x x_p p =
   implVerbTraceM (\i ->
@@ -5034,10 +5035,14 @@ recombinePermExpl x x_p p =
 
 -- | This is the implementation of 'recombinePermExpl'; see the documentation
 -- for that function for details
-recombinePerm' :: NuMatchingAny1 r => ExprVar a -> ValuePerm a -> ValuePerm a ->
+recombinePerm' :: (NuMatchingAny1 r, HasCallStack) =>
+                  ExprVar a -> ValuePerm a -> ValuePerm a ->
                   ImplM vars s r as (as :> a) ()
 recombinePerm' x _ p@ValPerm_True = implDropM x p
 recombinePerm' x _ p@(ValPerm_Eq (PExpr_Var y)) | y == x = implDropM x p
+recombinePerm' x _ (ValPerm_Eq (PExpr_Struct prxs exprs)) =
+  implSimplM Proxy (SImpl_StructEqToPerm x prxs exprs) >>>
+  recombinePerm x (ValPerm_Struct prxs $ RL.map ValPerm_Eq exprs)
 recombinePerm' x ValPerm_True (ValPerm_Eq e) =
   simplEqPerm x e >>>= \e' -> implPopM x (ValPerm_Eq e')
 recombinePerm' x ValPerm_True p = implPopM x p
@@ -5110,17 +5115,17 @@ recombinePermConj x [Perm_Struct prxs ps1] (Perm_Struct _ ps2)
     implCombineStructEqPerm x prxs ps2 ps1 memb >>>
     implPopM x (ValPerm_Struct prxs ps1) >>>
     recombinePerm y (RL.get memb ps2) >>>
-    recombinePerm x (ValPerm_Struct prxs $ RL.set memb ValPerm_True ps1)
+    recombinePerm x (ValPerm_Struct prxs $ RL.set memb ValPerm_True ps2)
 
 -- If p is a struct permission with a non-true field p_y, and that same field
 -- does not already have an equality permission, eliminate that field to get an
 -- equality permission and recurse
-recombinePermConj x [p1@(Perm_Struct prxs ps1)] p2@(Perm_Struct _ ps2)
+recombinePermConj x [Perm_Struct prxs ps1] p2@(Perm_Struct _ ps2)
   | Just (Some memb) <- findRAssign (not . isTruePerm) ps2
   , not $ isEqPerm $ RL.get memb ps1 =
-    implPushM x (ValPerm_Conj1 p1) >>>
+    implPushM x (ValPerm_Struct prxs ps1) >>>
     implElimStructField x prxs ps1 memb >>>= \y ->
-    implPopM x (ValPerm_Conj1 $ Perm_Struct prxs $
+    implPopM x (ValPerm_Struct prxs $
                 RL.set memb (ValPerm_Eq (PExpr_Var y)) ps1) >>>
     recombinePerm x (ValPerm_Conj1 p2)
 

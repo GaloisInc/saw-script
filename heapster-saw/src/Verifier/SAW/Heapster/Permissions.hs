@@ -5276,7 +5276,8 @@ funPermDistIns fun_perm ghosts gexprs args =
 -- permission is the output struct permissions of the function permission. That
 -- is, for a 'FunPerm' of the form @(gctx). xs:ps -o xs:ps'@, return the perms
 --
--- > str : [gexprs/gctx]struct(ps'), str:eq(struct([gs/gctx]xs))
+-- > str : [gexprs/gctx]struct(ps'),
+-- > str : struct(eq([gs/gctx]x1),...,eq([gs/gctx]xn))
 --
 -- where @str@ is an output variable of struct type.
 funPermDistOuts :: FunPerm ghosts args ret -> RAssign Name ghosts ->
@@ -5290,7 +5291,7 @@ funPermDistOuts fun_perm ghosts gexprs args_and_ret str
     distPerms2
     str (subst (appendSubsts (substOfExprs gexprs) (substOfVars args_and_ret))
          (funPermOuts fun_perm))
-    str (ValPerm_Eq $ mkPExpr_Struct ns)
+    str (mkValPerm_Struct $ RL.map ValPerm_Eq ns)
 
 -- | Unfold a recursive permission given a 'RecPerm' for it
 unfoldRecPerm :: RecPerm b reach args a -> PermExprs args -> PermOffset a ->
