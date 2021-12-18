@@ -4749,7 +4749,7 @@ tcTranslateCFGTupleFun env checks endianness dlevel cfgs_and_perms =
   tupleOpenTerm $ flip map (zip cfgs_and_perms funs) $ \(cfg_and_perm, _) ->
   case cfg_and_perm of
     SomeCFGAndPerm sym _ cfg fun_perm ->
-      debugTrace dlevel ("Type-checking " ++ show sym) $
+      debugTraceTraceLvl dlevel ("Type-checking " ++ show sym) $
       translateCFG env' checks $
       tcCFG ?ptrWidth env' endianness dlevel fun_perm cfg
 

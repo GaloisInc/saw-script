@@ -70,7 +70,7 @@ runLLVMTransM = runReaderT
 traceAndZeroM :: String -> LLVMTransM a
 traceAndZeroM msg =
   do dlevel <- llvmTransInfoDebugLevel <$> ask
-     debugTrace dlevel msg mzero
+     debugTraceTraceLvl dlevel msg mzero
 
 -- | Helper function to pretty-print the value of a global
 ppLLVMValue :: L.Value -> String
@@ -212,12 +212,12 @@ translateLLVMValueTop dlevel endianness w env global =
   let trans_info = LLVMTransInfo { llvmTransInfoEnv = env,
                                    llvmTransInfoEndianness = endianness,
                                    llvmTransInfoDebugLevel = dlevel } in
-  debugTrace dlevel ("Global: " ++ sym ++ "; value =\n" ++
-                     maybe "None" ppLLVMValue
-                     (L.globalValue global)) $
+  debugTraceTraceLvl dlevel ("Global: " ++ sym ++ "; value =\n" ++
+                             maybe "None" ppLLVMValue
+                             (L.globalValue global)) $
   (\x -> case x of
-      Just _ -> debugTrace dlevel (sym ++ " translated") x
-      Nothing -> debugTrace dlevel (sym ++ " not translated") x) $
+      Just _ -> debugTraceTraceLvl dlevel (sym ++ " translated") x
+      Nothing -> debugTraceTraceLvl dlevel (sym ++ " not translated") x) $
   flip runLLVMTransM trans_info $
   do val <- lift $ L.globalValue global
      translateLLVMValue w (L.globalType global) val
