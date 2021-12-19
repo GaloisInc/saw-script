@@ -3645,11 +3645,8 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
          t1 <- translate1 e1
          t2 <- translate1 e2
          let pf_tm =
-               applyOpenTermMulti (globalOpenTerm "Prelude.unsafeAssert")
-               [globalOpenTerm "Prelude.Bool",
-                applyOpenTermMulti (globalOpenTerm
-                                    "Prelude.bvult") [natOpenTerm w, t1, t2],
-                trueOpenTerm]
+               applyOpenTermMulti (globalOpenTerm "Prelude.unsafeAssertBVULt")
+               [natOpenTerm w, t1, t2]
          withPermStackM (:>: translateVar x)
            (:>: bvPropPerm (BVPropTrans prop pf_tm))
            (trans k)
@@ -3681,11 +3678,8 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
          t1 <- translate1 e1
          t2 <- translate1 e2
          let pf_tm =
-               applyOpenTermMulti (globalOpenTerm "Prelude.unsafeAssert")
-               [globalOpenTerm "Prelude.Bool",
-                applyOpenTermMulti (globalOpenTerm
-                                    "Prelude.bvule") [natOpenTerm w, t1, t2],
-                trueOpenTerm]
+               applyOpenTermMulti (globalOpenTerm "Prelude.unsafeAssertBVULe")
+               [natOpenTerm w, t1, t2]
          withPermStackM (:>: translateVar x)
            (:>: bvPropPerm (BVPropTrans prop pf_tm))
            (trans k)
@@ -3718,13 +3712,10 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
          t2 <- translate1 e2
          t3 <- translate1 e3
          let pf_tm =
-               applyOpenTermMulti (globalOpenTerm "Prelude.unsafeAssert")
-               [globalOpenTerm "Prelude.Bool",
-                applyOpenTermMulti (globalOpenTerm "Prelude.bvule")
-                [natOpenTerm w, t1,
-                 applyOpenTermMulti (globalOpenTerm "Prelude.bvSub")
-                 [natOpenTerm w, t2, t3]],
-                trueOpenTerm]
+               applyOpenTermMulti (globalOpenTerm "Prelude.unsafeAssertBVULe")
+               [natOpenTerm w, t1,
+                applyOpenTermMulti (globalOpenTerm
+                                    "Prelude.bvSub") [natOpenTerm w, t2, t3]]
          withPermStackM (:>: translateVar x)
            (:>: bvPropPerm (BVPropTrans prop pf_tm))
            (trans k)

@@ -782,3 +782,19 @@ Hint Extern 3 (IntroArg _ (@eq bool ?x ?y) _) =>
     | msb _ _ => simple apply IntroArg_msb_false_iff_bvsle
     end
   end : refinesFun.
+
+
+(* Tactics for solving bitvector inequalities *)
+
+(* FIXME: these axioms should be easy to prove... *)
+
+(* 0 <= x for any x *)
+Axiom bvule_zero_any : forall n x, bvule n (intToBv n 0) x = true.
+
+(* x = y implies x <= y *)
+Axiom eq_implies_bvule : forall n x y, x = y -> bvule n x y = true.
+
+Ltac solveUnsafeAssertBVULt := reflexivity.
+Ltac solveUnsafeAssertBVULe :=
+  try reflexivity; try (apply bvule_zero_any);
+  try (apply eq_implies_bvule; reflexivity).
