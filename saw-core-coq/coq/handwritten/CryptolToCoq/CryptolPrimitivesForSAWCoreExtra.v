@@ -54,7 +54,7 @@ Ltac solveUnsafeAssertStep :=
   | [ |- min (S ?n) ?n = _ ] => rewrite (min_Snn n)
   end.
 
-Ltac solveUnsafeAssert := repeat (solveUnsafeAssertStep; simpl; try lia); trivial.
+Ltac solveUnsafeAssert := try reflexivity; repeat (solveUnsafeAssertStep; simpl; try lia); trivial.
 
 
 Fixpoint iterNat {a : Type} (n : nat) (f : a -> a) : a -> a :=
