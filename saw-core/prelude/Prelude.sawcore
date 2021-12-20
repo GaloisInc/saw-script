@@ -645,6 +645,9 @@ and_triv2 (x : Bool) : Eq Bool (and (not x) x) False =
 --------------------------------------------------------------------------------
 -- Converting Booleans to Propositions
 
+FalseProp : Prop;
+FalseProp = Eq Bool True False;
+
 EqTrue : Bool -> Prop;
 EqTrue x = Eq Bool x True;
 
@@ -1537,6 +1540,12 @@ foldW64List =
 
 --------------------------------------------------------------------------------
 -- Vector operations with built-in casts of their resulting lengths
+
+-- Specialized version of unsafeAssert for bitvector inequalities
+axiom unsafeAssertBVULt : (n : Nat) -> (x : Vec n Bool) -> (y : Vec n Bool) ->
+                          Eq Bool (bvult n x y) True;
+axiom unsafeAssertBVULe : (n : Nat) -> (x : Vec n Bool) -> (y : Vec n Bool) ->
+                          Eq Bool (bvule n x y) True;
 
 -- Decide equality on two bitvectors, returning a proof if they are equal
 primitive bvEqWithProof : (n : Nat) -> (v1 v2 : Vec n Bool) ->

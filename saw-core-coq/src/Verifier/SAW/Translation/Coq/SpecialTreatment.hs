@@ -215,6 +215,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("error",             mapsTo sawDefinitionsModule "error")
   , ("fix",               skip)
   , ("unsafeAssert",      replaceDropArgs 3 $ Coq.Ltac "solveUnsafeAssert")
+  , ("unsafeAssertBVULt", replaceDropArgs 3 $ Coq.Ltac "solveUnsafeAssertBVULt")
+  , ("unsafeAssertBVULe", replaceDropArgs 3 $ Coq.Ltac "solveUnsafeAssertBVULe")
   , ("unsafeCoerce",      skip)
   , ("unsafeCoerce_same", skip)
   ]
