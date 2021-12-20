@@ -952,6 +952,10 @@ Definition foldW64List : unfoldedW64List -> W64List :=
   either (unit : Type) (prod (@sigT (SAWCoreVectorsAsCoqVectors.Vec 64 SAWCoreScaffolding.Bool) (fun (_1 : SAWCoreVectorsAsCoqVectors.Vec 64 SAWCoreScaffolding.Bool) => unit : Type)) (prod W64List (unit : Type))) W64List (fun (_1 : unit : Type) => W64Nil) (fun (bv_l : prod (@sigT (SAWCoreVectorsAsCoqVectors.Vec 64 SAWCoreScaffolding.Bool) (fun (_1 : SAWCoreVectorsAsCoqVectors.Vec 64 SAWCoreScaffolding.Bool) => unit : Type)) (prod W64List (unit : Type))) => let var__0   := SAWCoreVectorsAsCoqVectors.Vec 64 SAWCoreScaffolding.Bool in
   W64Cons (@projT1 var__0 (fun (_1 : var__0) => unit : Type) (SAWCoreScaffolding.fst bv_l)) (SAWCoreScaffolding.fst (SAWCoreScaffolding.snd bv_l))).
 
+(* Prelude.unsafeAssertBVULt was skipped *)
+
+(* Prelude.unsafeAssertBVULe was skipped *)
+
 Axiom bvEqWithProof : forall (n : SAWCoreScaffolding.Nat), forall (v1 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (v2 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), Maybe (SAWCoreScaffolding.Eq (SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) v1 v2) .
 
 Definition bvultWithProof : forall (n : SAWCoreScaffolding.Nat), forall (v1 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (v2 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), Maybe (SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool (SAWCoreVectorsAsCoqVectors.bvult n v1 v2) SAWCoreScaffolding.true) :=

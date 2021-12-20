@@ -16,5 +16,5 @@ Import SAWCorePrelude.
 Lemma no_errors_explosion : refinesFun exp_explosion (fun _ => noErrorsSpec).
 Proof.
   unfold exp_explosion, exp_explosion__tuple_fun, noErrorsSpec.
-  timeout 10 time "no_errors_exp_explosion" prove_refinement.
+  timeout 2 time "no_errors_exp_explosion" prove_refinement.
 Qed.
