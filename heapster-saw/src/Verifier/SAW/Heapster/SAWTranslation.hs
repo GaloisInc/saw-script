@@ -3654,17 +3654,23 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
       (:>: PTrans_Conj [APTrans_BVProp (BVPropTrans prop unitOpenTerm)]) $
       trans k]
 
-  {-
+  -- If we know e1 < e2 statically, translate to unsafeAssert
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULt e1 e2) _ |],
-   [nuMP| MbPermImpls_Cons _ mb_impl' |])
+   [nuMP| MbPermImpls_Cons _ _ mb_impl' |])
     | mbLift (fmap bvPropHolds prop) ->
-      withPermStackM (:>: translateVar x)
-      (:>: bvPropPerm (BVPropTrans prop
-                       (ctorOpenTerm "Prelude.Refl" [globalOpenTerm "Prelude.Bool",
-                                                     globalOpenTerm "Prelude.True"])))
-      (translate $ mbCombine mb_impl')
-  -}
+      translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+      return $ \k ->
+      do let w = natVal4 e1
+         t1 <- translate1 e1
+         t2 <- translate1 e2
+         let pf_tm =
+               applyOpenTermMulti (globalOpenTerm "Prelude.unsafeAssertBVULt")
+               [natOpenTerm w, t1, t2]
+         withPermStackM (:>: translateVar x)
+           (:>: bvPropPerm (BVPropTrans prop pf_tm))
+           (trans k)
 
+  -- If we don't know e1 < e2 statically, translate to bvultWithProof
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULt e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
     translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
@@ -3681,17 +3687,23 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
            [ return (natOpenTerm $ natVal2 prop), translate1 e1, translate1 e2]
          ]
 
-  {-
+  -- If we know e1 <= e2 statically, translate to unsafeAssert
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq e1 e2) _ |],
-   [nuMP| MbPermImpls_Cons _ mb_impl' |])
+   [nuMP| MbPermImpls_Cons _ _ mb_impl' |])
     | mbLift (fmap bvPropHolds prop) ->
-      withPermStackM (:>: translateVar x)
-      (:>: bvPropPerm (BVPropTrans prop
-                       (ctorOpenTerm "Prelude.Refl" [globalOpenTerm "Prelude.Bool",
-                                                     globalOpenTerm "Prelude.True"])))
-      (translate $ mbCombine mb_impl')
-  -}
+      translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+      return $ \k ->
+      do let w = natVal4 e1
+         t1 <- translate1 e1
+         t2 <- translate1 e2
+         let pf_tm =
+               applyOpenTermMulti (globalOpenTerm "Prelude.unsafeAssertBVULe")
+               [natOpenTerm w, t1, t2]
+         withPermStackM (:>: translateVar x)
+           (:>: bvPropPerm (BVPropTrans prop pf_tm))
+           (trans k)
 
+  -- If we don't know e1 <= e2 statically, translate to bvuleWithProof
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
     translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
@@ -3708,7 +3720,26 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
            [ return (natOpenTerm $ natVal2 prop), translate1 e1, translate1 e2]
          ]
 
+  -- If we know e1 <= e2-e3 statically, translate to unsafeAssert
+  ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq_Diff e1 e2 e3) _ |],
+   [nuMP| MbPermImpls_Cons _ _ mb_impl' |])
+    | mbLift (fmap bvPropHolds prop) ->
+      translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+      return $ \k ->
+      do let w = natVal4 e1
+         t1 <- translate1 e1
+         t2 <- translate1 e2
+         t3 <- translate1 e3
+         let pf_tm =
+               applyOpenTermMulti (globalOpenTerm "Prelude.unsafeAssertBVULe")
+               [natOpenTerm w, t1,
+                applyOpenTermMulti (globalOpenTerm
+                                    "Prelude.bvSub") [natOpenTerm w, t2, t3]]
+         withPermStackM (:>: translateVar x)
+           (:>: bvPropPerm (BVPropTrans prop pf_tm))
+           (trans k)
 
+  -- If we don't know e1 <= e2-e3 statically, translate to bvuleWithProof
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq_Diff e1 e2 e3) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
     translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->

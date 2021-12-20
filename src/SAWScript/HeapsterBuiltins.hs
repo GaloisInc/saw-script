@@ -1204,7 +1204,9 @@ heapster_export_coq _bic _opts henv filename =
      saw_mod <- liftIO $ scFindModule sc $ heapsterEnvSAWModule henv
      let coq_doc =
            vcat [preamble coq_trans_conf {
-                   postPreamble = "From CryptolToCoq Require Import SAWCorePrelude."},
+                   postPreamble =
+                       "From CryptolToCoq Require Import SAWCorePrelude.\n" ++
+                       "From CryptolToCoq Require Import SAWCoreBitvectors." },
                  translateSAWModule coq_trans_conf saw_mod]
      liftIO $ writeFile filename (show coq_doc)
 
