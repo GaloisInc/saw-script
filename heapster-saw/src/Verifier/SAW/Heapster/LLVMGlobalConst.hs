@@ -16,6 +16,7 @@ import Control.Monad.Reader
 import GHC.TypeLits
 import qualified Text.PrettyPrint.HughesPJ as PPHPJ
 
+import qualified Data.BitVector.Sized as BV
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
 
@@ -119,13 +120,24 @@ translateLLVMValue w _ (L.ValPackedStruct elems) =
   return (foldr PExpr_SeqShape PExpr_EmptyShape shs, tupleOpenTerm ts)
 translateLLVMValue _ _ (L.ValString []) = mzero
 translateLLVMValue _ _ (L.ValString bytes) =
+  let sh =
+        foldr1 PExpr_SeqShape $
+        map (PExpr_FieldShape . LLVMFieldShape . ValPerm_Eq .
+             PExpr_LLVMWord . bvBV . BV.word8) bytes in
+  return (sh, unitOpenTerm)
+-- NOTE: we don't translate strings to one big bitvector value because that
+-- seems to mess up the endianness
+{-
+translateLLVMValue _ _ (L.ValString bytes) =
   do endianness <- llvmTransInfoEndianness <$> ask
      case bvFromBytes endianness bytes of
        Some (BVExpr e) ->
          return (PExpr_FieldShape (LLVMFieldShape $
                                    ValPerm_Eq $ PExpr_LLVMWord e),
                  unitOpenTerm)
-
+-}
+-- NOTE: we don't convert string values to arrays because we sometimes need to
+-- statically know the values of the bytes in a string value as eq perms
 {-
 translateLLVMValue w tp (L.ValString bytes) =
   translateLLVMValue w tp (L.ValArray

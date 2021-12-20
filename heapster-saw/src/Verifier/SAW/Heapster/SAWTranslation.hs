@@ -915,6 +915,8 @@ instance TransInfo info =>
            transTupleTerm <$> inExtTransM e (translate $ mbCombine RL.typeCtxProxies mb_sh)
          return $ ETrans_Term (dataTypeOpenTerm "Prelude.Sigma"
                                [typeTransTupleType tp_trans, tp_f_trm])
+    [nuMP| PExpr_FalseShape |] ->
+      return $ ETrans_Term $ globalOpenTerm "Prelude.FalseProp"
 
     [nuMP| PExpr_ValPerm p |] ->
       ETrans_Term <$> typeTransTupleType <$> translate p
@@ -1687,6 +1689,8 @@ instance TransInfo info =>
       fmap PTrans_Conj <$> listTypeTrans <$> translate ps
     [nuMP| ValPerm_Var x _ |] ->
       mkPermTypeTrans1 p <$> translate1 x
+    [nuMP| ValPerm_False |] ->
+      return $ mkPermTypeTrans1 p $ globalOpenTerm "Prelude.FalseProp"
 
 instance TransInfo info =>
          Translate info ctx (AtomicPerm a) (TypeTrans
@@ -3115,6 +3119,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          (\(pctx :>: ptrans) -> pctx :>: typeTransF ttrans [transTerm1 ptrans])
          m
 
+  [nuMP| SImpl_ElimLLVMBlockFalse _ _ |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       withPermStackM id
+         (\(pctx :>: ptrans) -> pctx :>: typeTransF ttrans [transTerm1 ptrans])
+         m
+
   [nuMP| SImpl_FoldNamed _ (NamedPerm_Rec rp) args _ |] ->
     do args_trans <- translate args
        ttrans <- translateSimplImplOutHead mb_simpl
@@ -3410,6 +3420,15 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
            inExtTransM etrans $
            withPermStackM id ((:>: ptrans) . RL.tail) m)
          (transTerm1 top_ptrans)
+
+  -- A false elimination becomes a call to efq
+  ([nuMP| Impl1_ElimFalse mb_x |], _) ->
+    return $ const $
+    do mb_false <- nuMultiTransM $ const ValPerm_False
+       () <- assertTopPermM "Impl1_ElimFalse" mb_x mb_false
+       top_ptrans <- getTopPermM
+       applyMultiTransM (return $ globalOpenTerm "Prelude.efq")
+         [compReturnTypeM, return $ transTerm1 top_ptrans]
 
   -- A SimplImpl is translated using translateSimplImpl
   ([nuMP| Impl1_Simpl simpl mb_prx |], _) ->
