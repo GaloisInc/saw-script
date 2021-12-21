@@ -820,11 +820,22 @@ mbAssoc ctx1 ctx2 ctx3 mb_a =
   mbSeparatePrx ctx1 (RL.append (RL.map (const Proxy) ctx2)
                       (RL.map (const Proxy) ctx3)) mb_a
 
-mbAssoc4 :: prx1 ctx1 -> RAssign prx2 ctx2 -> RAssign prx3 ctx3 ->
-            RAssign prx4 ctx4 ->
+appendAssoc4 :: RAssign Proxy ctx1 -> RAssign Proxy ctx2 ->
+                RAssign Proxy ctx3 -> RAssign Proxy ctx4 ->
+                ctx1 :++: ((ctx2 :++: ctx3) :++: ctx4) :~:
+                ((ctx1 :++: ctx2) :++: ctx3) :++: ctx4
+appendAssoc4 ctx1 ctx2 ctx3 ctx4
+  | Refl <- RL.appendAssoc ctx1 (RL.append ctx2 ctx3) ctx4
+  , Refl <- RL.appendAssoc ctx1 ctx2 ctx3
+  = Refl
+
+
+mbAssoc4 :: RAssign Proxy ctx1 -> RAssign Proxy ctx2 ->
+            RAssign Proxy ctx3 -> RAssign Proxy ctx4 ->
             Mb (ctx1 :++: ((ctx2 :++: ctx3) :++: ctx4)) a ->
             Mb (((ctx1 :++: ctx2) :++: ctx3) :++: ctx4) a
-mbAssoc4 = error "FIXME HERE NOW"
+mbAssoc4 ctx1 ctx2 ctx3 ctx4 mb_a
+  | Refl <- appendAssoc4 ctx1 ctx2 ctx3 ctx4 = mb_a
 
 mbCombineAssoc ::
   prx1 ctx1 ->
@@ -838,13 +849,13 @@ mbCombineAssoc _ ctx2 ctx3
   . fmap (mbSeparatePrx ctx2 ctx3)
 
 mbCombineAssoc4 ::
-  prx1 ctx1 ->
-  RAssign prx2 ctx2 ->
-  RAssign prx3 ctx3 ->
-  RAssign prx3 ctx4 ->
+  RAssign Proxy ctx1 -> RAssign Proxy ctx2 ->
+  RAssign Proxy ctx3 -> RAssign Proxy ctx4 ->
   Mb ctx1 (Mb ((ctx2 :++: ctx3) :++: ctx4) a) ->
   Mb (((ctx1 :++: ctx2) :++: ctx3) :++: ctx4) a
-mbCombineAssoc4 = error "FIXME HERE NOW"
+mbCombineAssoc4 ctx1 ctx2 ctx3 ctx4 mb_mb_a
+  | Refl <- appendAssoc4 ctx1 ctx2 ctx3 ctx4
+  = mbCombine ((ctx2 `RL.append` ctx3) `RL.append` ctx4) mb_mb_a
 
 assocAppend :: RAssign f ctx1 -> prx2 ctx2 -> RAssign prx3 ctx3 ->
                RAssign f (ctx2 :++: ctx3) ->

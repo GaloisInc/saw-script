@@ -687,7 +687,8 @@ tcSortedMbValuePerms ctx perms =
 
 -- | Check a function permission of the form
 --
--- > (x1:tp1, ...). arg1:p1, ... -o arg1:p1', ..., argn:pn', ret:p_ret
+-- > (x1:tp1, ...). arg1:p1, ... -o
+-- >   (y1:tp1', ..., ym:tpm'). arg1:p1', ..., argn:pn', ret:p_ret
 --
 -- for some arbitrary context @x1:tp1, ...@ of ghost variables
 tcFunPerm :: CruCtx args -> TypeRepr ret -> AstFunPerm -> Tc (SomeFunPerm args ret)
