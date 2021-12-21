@@ -26,6 +26,7 @@ class SwapLowLevelTest(unittest.TestCase):
         y = {"setup value": "Cryptol", "expression": "x" }
 
         contract = {
+            "mutable globals": [],
             "pre vars": [
                 {"server name": "x", "name": "x", "type": i32},
                 {"server name": "y", "name": "y", "type": i32}

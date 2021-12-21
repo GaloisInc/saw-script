@@ -13,6 +13,7 @@ class SevenTest(unittest.TestCase):
         c.llvm_load_module('m', seven_bc).result()
 
         contract = {
+            "mutable globals": [],
             "pre vars": [],
             "pre conds": [],
             "pre allocated": [],

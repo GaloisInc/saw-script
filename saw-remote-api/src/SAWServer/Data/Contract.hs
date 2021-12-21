@@ -29,7 +29,8 @@ data ContractMode
 
 data Contract ty cryptolExpr =
   Contract
-    { preVars       :: [ContractVar ty]
+    { mutableGlobals :: [Text]
+    , preVars       :: [ContractVar ty]
     , preConds      :: [cryptolExpr]
     , preAllocated  :: [Allocated ty]
     , preGhostValues  :: [GhostValue cryptolExpr]
@@ -110,7 +111,8 @@ instance FromJSON ty => FromJSON (ContractVar ty) where
 instance (FromJSON ty, FromJSON e) => FromJSON (Contract ty e) where
   parseJSON =
     withObject "contract" $ \o ->
-    Contract <$> o .:  "pre vars"
+    Contract <$> o .:  "mutable globals"
+             <*> o .:  "pre vars"
              <*> o .:  "pre conds"
              <*> o .:  "pre allocated"
              <*> o .:? "pre ghost values" .!= []

@@ -50,6 +50,7 @@ class Salsa20LowLevelTest(unittest.TestCase):
         crypt_res = {"setup value": "Cryptol", "expression" : "Salsa20_encrypt (k, v, m)" }
 
         rotl_contract = {
+            "mutable globals": [],
             "pre vars": [
                 {"server name": "value", "name": "value", "type": i32.to_json()},
                 {"server name": "shift", "name": "shift", "type": i32.to_json()}
@@ -66,6 +67,7 @@ class Salsa20LowLevelTest(unittest.TestCase):
         }
 
         qr_contract = {
+            "mutable globals": [],
             "pre vars": [
                 {"server name": "y0", "name": "y0", "type": i32.to_json()},
                 {"server name": "y1", "name": "y1", "type": i32.to_json()},
@@ -108,6 +110,7 @@ class Salsa20LowLevelTest(unittest.TestCase):
 
         def oneptr_update_contract(ty, res):
             return {
+                "mutable globals": [],
                 "pre vars": [
                     {"server name": "y", "name": "y", "type": ty.to_json()}
                 ],
@@ -140,6 +143,7 @@ class Salsa20LowLevelTest(unittest.TestCase):
         zero = {"setup value": "Cryptol", "expression" : "0 : [32]" }
 
         expand_contract = {
+            "mutable globals": [],
             "pre vars": [
                 {"server name": "k", "name": "k", "type": LLVMArrayType(i8, 32).to_json()},
                 {"server name": "n", "name": "n", "type": LLVMArrayType(i8, 16).to_json()}
@@ -175,6 +179,7 @@ class Salsa20LowLevelTest(unittest.TestCase):
         m = {"setup value": "Cryptol", "expression" : "m" }
         def crypt_contract(size : int):
             return {
+                "mutable globals": [],
                 "pre vars": [
                     {"server name": "k", "name": "k", "type": LLVMArrayType(i8, 32).to_json()},
                     {"server name": "v", "name": "v", "type": LLVMArrayType(i8, 8).to_json()},

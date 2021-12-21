@@ -26,6 +26,7 @@ import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.ByteString (ByteString)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
@@ -34,6 +35,7 @@ import qualified SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
 import SAWScript.Crucible.LLVM.Builtins
     ( llvm_alloc
     , llvm_alloc_aligned
+    , llvm_alloc_global
     , llvm_alloc_readonly
     , llvm_alloc_readonly_aligned
     , llvm_execute_func
@@ -89,7 +91,8 @@ compileLLVMContract ::
   Contract JSONLLVMType (P.Expr P.PName) ->
   LLVMCrucibleSetupM ()
 compileLLVMContract fileReader bic ghostEnv cenv0 c =
-  do allocsPre <- mapM setupAlloc (preAllocated c)
+  do mapM_ (llvm_alloc_global . T.unpack) (mutableGlobals c)
+     allocsPre <- mapM setupAlloc (preAllocated c)
      (envPre, cenvPre) <- setupState allocsPre (Map.empty, cenv0) (preVars c)
      mapM_ (\p -> getTypedTerm cenvPre p >>= llvm_precond) (preConds c)
      mapM_ (setupPointsTo (envPre, cenvPre)) (prePointsTos c)
