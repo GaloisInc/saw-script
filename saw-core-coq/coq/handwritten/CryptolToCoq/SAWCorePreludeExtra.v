@@ -47,6 +47,28 @@ Proof.
   apply addNat_add.
 Defined.
 
+Definition streamScanl (a b : sort 0) (f : b -> a -> b) (z:b) (xs:Stream a) : Stream b :=
+  MkStream b
+    (fix strm (n:nat) : b :=
+       match n with
+       | O => z
+       | S n' => f (strm n') (streamGet a xs n')
+       end).
+
+Lemma streamScanl_zero a b f z xs : streamGet b (streamScanl a b f z xs) 0 = z.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma streamScanl_succ a b f z xs : forall n,
+  streamGet b (streamScanl a b f z xs) (S n) =
+  f (streamGet b (streamScanl a b f z xs) n)
+    (streamGet a xs n).
+Proof.
+  intro n. reflexivity.
+Qed.
+
+
 Theorem fold_unfold_IRT As Ds D : forall x, foldIRT As Ds D (unfoldIRT As Ds D x) = x.
 Proof.
   induction x; simpl; unfold uncurry; f_equal; try easy.

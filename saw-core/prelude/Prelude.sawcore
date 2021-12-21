@@ -1345,6 +1345,9 @@ streamShiftR a z xs i = streamAppend a i (replicate i a z) xs;
 -- implementation that just iterates "f" separate for each index would waste work.
 -- The fixpoint is well founded because each element only refers to elements with
 -- smaller indices.
+--
+-- For Coq support, this definition is replaced with a naive implementation
+-- that performs independent iterations for each location.
 streamScanl : (a b : sort 0) -> (b -> a -> b) -> b -> Stream a -> Stream b;
 streamScanl a b f z as =
   fix (Stream b)
