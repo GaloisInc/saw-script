@@ -1427,12 +1427,12 @@ learnPointsTo ::
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
-  Options                    ->
-  SharedContext              ->
-  LLVMCrucibleContext arch      ->
-  MS.CrucibleMethodSpecIR (LLVM arch)       ->
-  PrePost                    ->
-  PointsTo (LLVM arch)       ->
+  Options ->
+  SharedContext ->
+  LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  PrePost ->
+  PointsTo (LLVM arch) ->
   OverrideMatcher (LLVM arch) md (Maybe (PP.Doc ann))
 learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
   do (_memTy, ptr1) <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
@@ -1449,11 +1449,11 @@ matchPointsToValue ::
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
-  Options                    ->
-  SharedContext              ->
-  LLVMCrucibleContext arch      ->
-  MS.CrucibleMethodSpecIR (LLVM arch)       ->
-  PrePost                    ->
+  Options ->
+  SharedContext ->
+  LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  PrePost ->
   W4.ProgramLoc ->
   Maybe TypedTerm ->
   LLVMPtr (Crucible.ArchWidth arch) ->
@@ -1550,11 +1550,11 @@ matchPointsToBitfieldValue ::
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
-  Options                    ->
-  SharedContext              ->
-  LLVMCrucibleContext arch      ->
-  MS.CrucibleMethodSpecIR (LLVM arch)       ->
-  PrePost                    ->
+  Options ->
+  SharedContext ->
+  LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  PrePost ->
   W4.ProgramLoc ->
   LLVMPtr (Crucible.ArchWidth arch) ->
   BitfieldIndex ->
@@ -2342,11 +2342,11 @@ instantiateSetupValue sc s v =
 
 resolveSetupValueLLVM ::
   (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  Options              ->
+  Options ->
   LLVMCrucibleContext arch ->
-  SharedContext        ->
+  SharedContext ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
-  SetupValue (LLVM arch)           ->
+  SetupValue (LLVM arch) ->
   OverrideMatcher (LLVM arch) md (Crucible.MemType, LLVMVal)
 resolveSetupValueLLVM opts cc sc spec sval =
   do m <- OM (use setupValueSub)
@@ -2361,12 +2361,12 @@ resolveSetupValueLLVM opts cc sc spec sval =
 
 resolveSetupValue ::
   (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  Options              ->
+  Options ->
   LLVMCrucibleContext arch ->
-  SharedContext        ->
+  SharedContext ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   Crucible.TypeRepr tp ->
-  SetupValue (LLVM arch)           ->
+  SetupValue (LLVM arch) ->
   OverrideMatcher (LLVM arch) md (Crucible.MemType, Crucible.RegValue Sym tp)
 resolveSetupValue opts cc sc spec tp sval =
   do (memTy, lval) <- resolveSetupValueLLVM opts cc sc spec sval
@@ -2379,11 +2379,11 @@ resolveSetupValue opts cc sc spec tp sval =
 -- for the salient details.
 resolveSetupValueBitfieldLLVM ::
   (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  Options              ->
+  Options ->
   LLVMCrucibleContext arch ->
-  SharedContext        ->
+  SharedContext ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
-  SetupValue (LLVM arch)           ->
+  SetupValue (LLVM arch) ->
   String ->
   OverrideMatcher (LLVM arch) md (BitfieldIndex, LLVMVal)
 resolveSetupValueBitfieldLLVM opts cc sc spec sval fieldName =
@@ -2402,11 +2402,11 @@ resolveSetupValueBitfieldLLVM opts cc sc spec sval fieldName =
 -- 'resolveSetupValueBitfieldLLVM' for other differences.
 resolveSetupValueBitfield ::
   (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  Options              ->
+  Options ->
   LLVMCrucibleContext arch ->
-  SharedContext        ->
+  SharedContext ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
-  SetupValue (LLVM arch)           ->
+  SetupValue (LLVM arch) ->
   String ->
   OverrideMatcher (LLVM arch) md (BitfieldIndex, LLVMPtr (Crucible.ArchWidth arch))
 resolveSetupValueBitfield opts cc sc spec sval fieldName =
