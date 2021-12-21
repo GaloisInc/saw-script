@@ -21,4 +21,7 @@ Lemma no_errors_sha512_block_data_order :
              (fun num _ _ => assumingM (sha512_block_data_order_precond num) noErrorsSpec).
 Proof.
   unfold sha512_block_data_order, sha512_block_data_order__tuple_fun.
+  (* time "sha512_block_data_order (1)" prove_refinement_match_letRecM_l. *)
+  (* 1-2: intros; apply noErrorsSpec. *)
+  (* time "sha512_block_data_order (2)" prove_refinement. *)
 Admitted.
