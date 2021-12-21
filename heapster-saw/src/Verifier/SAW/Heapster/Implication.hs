@@ -2930,6 +2930,9 @@ data ImplState vars ps =
               -- ^ Pretty-printing for all variables in scope
               _implStateNameTypes :: NameMap TypeRepr,
               -- ^ Types of all the variables in scope
+              _implStateUnitVar :: Maybe (ExprVar UnitType),
+              -- ^ A global unit variable that all other unit variables will be
+              -- equal to
               _implStateEndianness :: EndianForm,
               -- ^ The endianness of the current architecture
               _implStateFailPrefix :: String,
@@ -2952,6 +2955,7 @@ mkImplState vars perms env info fail_prefix dlevel nameTypes endianness =
   _implStatePermEnv = env,
   _implStatePPInfo = info,
   _implStateNameTypes = nameTypes,
+  _implStateUnitVar = Nothing,
   _implStateEndianness = endianness,
   _implStateFailPrefix = fail_prefix,
   _implStateDebugLevel = dlevel
@@ -2969,6 +2973,7 @@ unextImplState s =
   s { _implStateVars = unextCruCtx (_implStateVars s),
       _implStatePSubst = unextPSubst (_implStatePSubst s),
       _implStatePVarSubst = RL.tail (_implStatePVarSubst s) }
+
 
 -- | The implication monad is a state-continuation monad that uses 'ImplState'
 type ImplM vars s r ps_out ps_in =
@@ -3235,6 +3240,16 @@ implFindLOwnedPerms =
                   _ -> Nothing) <$>
   NameMap.assocs <$> view varPermMap <$> getPerms
 
+-- | Instantiate the current @implStateUnitVar@ with the given @ExprVar@ of type
+-- @UnitType@
+setUnitImplM :: Maybe (ExprVar UnitType) -> ImplM vars s r ps ps ()
+setUnitImplM e = do st <- get
+                    put st{ _implStateUnitVar = e }
+
+getUnitImplM :: ImplM vars s r ps ps (Maybe (ExprVar UnitType))
+getUnitImplM = do st <- get
+                  return $ _implStateUnitVar st
+
 -- | Look up the type of a free variable
 implGetVarType :: Name a -> ImplM vars s r ps ps (TypeRepr a)
 implGetVarType n =
@@ -3266,6 +3281,19 @@ implFindVarOfType tp =
 -- names have permissions
 implSetNameTypes :: RAssign Name ctx -> CruCtx ctx -> ImplM vars s r ps ps ()
 implSetNameTypes MNil _ = pure ()
+implSetNameTypes (ns :>: n) (CruCtxCons tps UnitRepr) =
+  do implStateNameTypes %= NameMap.insert n UnitRepr
+     -- When introducing a new unit-typed variable, check whether we have a
+     -- global unit variable in the current @ImplState@
+     u <- getUnitImplM
+     case u of
+       Nothing -> -- If not, initialize the state with the current variable and
+                  -- add the default initial permissions
+         do setUnitImplM (Just n)
+            implStatePerms %= initVarPerm n
+       Just x  -> -- If so, initialize n's permissions with @eq(x)@
+         implStatePerms %= initVarPermWith n (ValPerm_Eq (PExpr_Var x))
+     implSetNameTypes ns tps
 implSetNameTypes (ns :>: n) (CruCtxCons tps tp) =
   do implStateNameTypes %= NameMap.insert n tp
      implStatePerms     %= initVarPerm n

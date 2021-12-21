@@ -1828,6 +1828,9 @@ data PermCheckState ext blocks tops ret ps =
     stTopVars   :: !(RAssign Name tops),
     stCurEntry  :: !(Some (TypedEntryID blocks)),
     stVarTypes  :: !(NameMap TypeRepr),
+    stUnitVar   :: !(Maybe (ExprVar UnitType)),
+    -- ^ An optional global unit variable that all other unit variables will be
+    -- equal to
     stPPInfo    :: !PPInfo,
     stErrPrefix :: !(Maybe (Doc ())),
     stDebug     :: ![Maybe String]
@@ -1847,6 +1850,7 @@ emptyPermCheckState perms tops entryID names =
                    stTopVars   = tops,
                    stCurEntry  = Some entryID,
                    stVarTypes  = NameMap.empty,
+                   stUnitVar   = Nothing,
                    stPPInfo    = emptyPPInfo,
                    stErrPrefix = Nothing,
                    stDebug     = names }
@@ -2198,6 +2202,16 @@ getVarTypes :: RAssign Name tps ->
 getVarTypes MNil = pure CruCtxNil
 getVarTypes (xs :>: x) = CruCtxCons <$> getVarTypes xs <*> getVarType x
 
+dbgStringPP ::
+  Maybe String -> -- ^ The base name of the variable (e.g., "top", "arg", etc.)
+  Maybe String -> -- ^ The C name of the variable, if applicable
+  TypeRepr a -> -- ^ The type of the variable
+  String
+dbgStringPP _          (Just d) _  = "C[" ++ d ++ "]"
+dbgStringPP (Just str) _        tp = str ++ "_" ++ typeBaseName tp
+dbgStringPP Nothing    Nothing  tp = typeBaseName tp
+
+
 -- | Remember the type of a free variable, and ensure that it has a permission
 setVarType ::
   Maybe String -> -- ^ The base name of the variable (e.g., "top", "arg", etc.)
@@ -2206,16 +2220,34 @@ setVarType ::
   TypeRepr a -> -- ^ The type of the variable
   PermCheckM ext cblocks blocks tops ret r ps r ps ()
 setVarType maybe_str dbg x tp =
-  let str' =
-        case (maybe_str,dbg) of
-          (_,Just d) -> "C[" ++ d ++ "]"
-          (Just str,_) -> str ++ "_" ++ typeBaseName tp
-          (Nothing,Nothing) -> typeBaseName tp
-  in
-  modify $ \st ->
-  st { stCurPerms = initVarPerm x (stCurPerms st),
-       stVarTypes = NameMap.insert x tp (stVarTypes st),
-       stPPInfo = ppInfoAddExprName str' x (stPPInfo st) }
+    modify $ \st ->
+      st { stCurPerms = newPerms st,
+           stVarTypes = NameMap.insert x tp (stVarTypes st),
+           stUnitVar  = newUnitVar st,
+           stPPInfo   = ppInfoAddExprName (dbgStringPP maybe_str dbg tp)
+                                          x
+                                          (stPPInfo st)
+         }
+  where
+    -- When introducing a new unit-typed variable, check whether we have a
+    -- global unit variable in the current state. If so, initialize @x@'s
+    -- permissions with @eq(u)@.
+    newPerms st
+      | UnitRepr <- tp,
+        Just u   <- stUnitVar st = initVarPermWith
+                                     x
+                                     (ValPerm_Eq (PExpr_Var u))
+                                     (stCurPerms st)
+    newPerms st                  = initVarPerm x (stCurPerms st)
+
+    -- When introducing a new unit-typed variable, check whether we have a
+    -- global unit variable in the current state. If not, initialie the state
+    -- with the current variable
+    newUnitVar st
+      | UnitRepr <- tp,
+        Nothing  <- stUnitVar st = Just x
+    newUnitVar st                = stUnitVar st
+
 
 -- | Remember the types of a sequence of free variables
 setVarTypes ::

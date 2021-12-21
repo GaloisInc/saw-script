@@ -7581,11 +7581,18 @@ varPermsTransFreeVars =
             (SomeRAssign ns', Some rest) ->
               Some $ append ns' rest
 
+
+-- | Initialize the primary permission of a variable to the given permission if
+-- the variable is not yet set
+initVarPermWith :: ExprVar a -> ValuePerm a -> PermSet ps -> PermSet ps
+initVarPermWith x p =
+  over varPermMap $ \nmap ->
+  if NameMap.member x nmap then nmap else NameMap.insert x p nmap
+
 -- | Initialize the primary permission of a variable to @true@ if it is not set
 initVarPerm :: ExprVar a -> PermSet ps -> PermSet ps
 initVarPerm x =
-  over varPermMap $ \nmap ->
-  if NameMap.member x nmap then nmap else NameMap.insert x ValPerm_True nmap
+  initVarPermWith x ValPerm_True
 
 -- | Set the primary permissions for a sequence of variables to @true@
 initVarPerms :: RAssign Name (as :: RList CrucibleType) -> PermSet ps ->
