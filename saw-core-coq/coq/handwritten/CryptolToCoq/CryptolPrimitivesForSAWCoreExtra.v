@@ -60,8 +60,16 @@ Ltac solveUnsafeAssertStep :=
   | [ |- min (S ?n) ?n = _ ] => rewrite (min_Snn n)
   end.
 
-Ltac solveUnsafeAssert := repeat (repeat solveUnsafeAssertStep; simpl; try reflexivity; try lia); trivial.
+Ltac unfoldLets :=
+  repeat
+  match goal with
+    [ X := _ |- _ ] => progress (cbv delta [X])
+  end.
 
+Ltac solveUnsafeAssert :=
+  try (unfoldLets;
+       repeat (repeat solveUnsafeAssertStep; simpl; try reflexivity; try lia);
+       trivial).
 
 Fixpoint iterNat {a : Type} (n : nat) (f : a -> a) : a -> a :=
   match n with
