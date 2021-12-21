@@ -1467,7 +1467,7 @@ matchPointsToValue opts sc cc spec prepost loc maybe_cond ptr val =
      mem    <- readGlobal $ Crucible.llvmMemVar
                           $ ccLLVMContext cc
 
-     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
+     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME, see #338)
 
      case val of
        ConcreteSizeValue val' ->
@@ -1566,7 +1566,7 @@ matchPointsToBitfieldValue opts sc cc spec prepost loc ptr bfIndex val =
      mem    <- readGlobal $ Crucible.llvmMemVar
                           $ ccLLVMContext cc
 
-     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
+     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME, see #338)
 
      -- Unlike in matchPointsToValue, we compute the MemTy/StorageType not from
      -- the RHS value, but from the BitfieldIndex. This is because we need to
@@ -2037,7 +2037,7 @@ storePointsToValue ::
 storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_invalidate_msg = do
   let sym = cc ^. ccBackend
 
-  let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
+  let alignment = Crucible.noAlignment -- default to byte alignment (FIXME, see #338)
 
   smt_array_memory_model_enabled <- W4.getOpt
     =<< W4.getOptionSetting enableSMTArrayMemoryModel (W4.getConfiguration sym)
@@ -2124,7 +2124,7 @@ storePointsToBitfieldValue ::
 storePointsToBitfieldValue opts cc env tyenv nameEnv base_mem ptr bfIndex val = do
   let sym = cc ^. ccBackend
 
-  let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
+  let alignment = Crucible.noAlignment -- default to byte alignment (FIXME, see #338)
 
   smt_array_memory_model_enabled <- W4.getOpt
     =<< W4.getOptionSetting enableSMTArrayMemoryModel (W4.getConfiguration sym)
