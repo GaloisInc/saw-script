@@ -1135,6 +1135,15 @@ extMbOuter :: RAssign Proxy ctx1 -> Mb ctx2 a -> Mb (ctx1 :++: ctx2) a
 extMbOuter prxs mb_a = mbCombine (mbToProxy mb_a) $ nuMulti prxs $ const mb_a
 
 
+-- | Add a lifetime to with the supplied output 'LOwnedPerms' to a struct perm
+addLifetimeStructPerm :: prxs tps1 -> RAssign Proxy tps2 ->
+                         ExprVar LifetimeType -> LOwnedPerms lops ->
+                         RAssign ExprVar (tps1 :++: tps2) ->
+                         ValuePerm (TupleType (tps1 :++: tps2)) ->
+                         ValuePerm (TupleType
+                                    ((RNil :> LifetimeType :++: tps1) :++: tps2))
+addLifetimeStructPerm = error "FIXME HERE NOW"
+
 -- | Add a lifetime described by a 'LifetimeDef' to a 'Some3FunPerm'
 mbLifetimeFunPerm :: LifetimeDef Span -> Binding LifetimeType Some3FunPerm ->
                      RustConvM Some3FunPerm
@@ -1157,12 +1166,6 @@ mbLifetimeFunPerm (LifetimeDef _ _ [] _)
            extMbMulti (cruCtxProxies ghosts) (nu id)
      [nuMP| Some mb_lops_in |] <-
        mbMatchM $ mbMap2 lownedPermsForLifetime mb_l mb_ps_in
-     [nuMP| Some mb_lops_out |] <-
-       mbMatchM $
-       flip nuMultiWithElim1 mb_p_out $ \ns p_out ->
-       let (MNil :>: l, ghosts_ns, args_ns) =
-             rlSplit3 (MNil :>: LifetimeRepr) ghosts_prxs (args_prxs :>: Proxy) ns in
-       lownedPermsForLifetimeStruct l (RL.append ghosts_ns args_ns) p_out
      case abstractMbLOPsModalities mb_lops_in of
        SomeTypedMb ghosts' mb_mb_lops_in_abs ->
          return $ mbGhostsFunPerm3 ghosts' $
@@ -1173,11 +1176,14 @@ mbLifetimeFunPerm (LifetimeDef _ _ [] _)
                    assocAppend (MNil :>: ValPerm_LOwned [] lops_in lops_in_abs)
                    ghosts args_prxs $ distPermsToValuePerms ps_in)
           mb_ps_in mb_lops_in mb_lops_in_abs)
-         (mbMap3 (\p_out lops_out lops_in_abs ->
-                   assocAppendStructPerms
-                   (MNil :>: ValPerm_LOwned [] lops_out lops_in_abs)
-                   ghosts_prxs (args_prxs :>: Proxy) p_out)
-          mb_p_out mb_lops_out (extMb mb_lops_in_abs))
+         (flip nuMultiWithElim1 mb_p_out $ \ns p_out ->
+           let (MNil :>: l, ghosts_ns, rets_ns) =
+                 rlSplit3 (MNil :>: LifetimeRepr) ghosts_prxs (args_prxs
+                                                               :>: Proxy) ns in
+           addLifetimeStructPerm ghosts (args_prxs :>: Proxy) l
+           (varSubst (permVarSubstOfNames ns) (extMb mb_lops_in_abs))
+           (RL.append ghosts_ns rets_ns)
+           p_out)
 mbLifetimeFunPerm (LifetimeDef _ _ _bounds _) _ =
   fail "Rust lifetime bounds not yet supported!"
 
