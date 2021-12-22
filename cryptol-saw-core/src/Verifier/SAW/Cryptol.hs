@@ -812,7 +812,7 @@ prelPrims =
   , ("parmap",       flip scGlobalDef "Cryptol.ecParmap")      -- {a, b, n} (Eq b, fin n) => (a -> b) -> [n]a -> [n]b
   , ("foldl",        flip scGlobalDef "Cryptol.ecFoldl")       -- {n, a, b} (fin n) => (a -> b -> a) -> a -> [n]b -> a
   , ("foldl'",       flip scGlobalDef "Cryptol.ecFoldlPrime")  -- {n, a, b} (fin n, Eq a) => (a -> b -> a) -> a -> [n]b -> a
-
+  , ("scanl",        flip scGlobalDef "Cryptol.ecScanl")       -- {n, a, b}  (a -> b -> a) -> a -> [n]b -> [1+n]a
   , ("error",        flip scGlobalDef "Cryptol.ecError")       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
   , ("random",       flip scGlobalDef "Cryptol.ecRandom")      -- {a} => [32] -> a -- Random values
   , ("trace",        flip scGlobalDef "Cryptol.ecTrace")       -- {n,a,b} [n][8] -> a -> b -> b
@@ -1483,10 +1483,14 @@ importComp sc env lenT elemT expr mss =
               m <- importType sc env len
               a <- importType sc env ty
               (ys, n, b, argss, len') <- zipAll branches
-              zs <- scGlobalApply sc "Cryptol.seqZip" [a, b, m, n, xs, ys]
-              mn <- scGlobalApply sc "Cryptol.tcMin" [m, n]
               ab <- scTupleType sc [a, b]
-              return (zs, mn, ab, args : argss, C.tMin len len')
+              if len == len' then
+                do zs <- scGlobalApply sc "Cryptol.seqZipSame" [a, b, m, xs, ys]
+                   return (zs, m, ab, args : argss, len)
+              else
+                do zs <- scGlobalApply sc "Cryptol.seqZip" [a, b, m, n, xs, ys]
+                   mn <- scGlobalApply sc "Cryptol.tcMin" [m, n]
+                   return (zs, mn, ab, args : argss, C.tMin len len')
      (xs, n, a, argss, lenT') <- zipAll mss
      f <- lambdaTuples sc env elemT expr argss
      b <- importType sc env elemT

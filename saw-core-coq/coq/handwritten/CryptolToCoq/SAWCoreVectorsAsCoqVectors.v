@@ -118,6 +118,12 @@ Fixpoint foldl (a b : Type) (n : Nat) (f : b -> a -> b) (acc : b) (v : Vec n a) 
   | Vector.cons hd _ tl => foldl _ _ _ f (f acc hd) tl
   end.
 
+Fixpoint scanl (a b : Type) (n : Nat) (f : b -> a -> b) (acc : b) (v : Vec n a) : Vec (S n) b :=
+  match v in VectorDef.t _ n return Vec (S n) b with
+  | Vector.nil => [ acc ]
+  | Vector.cons h n' tl => Vector.cons b acc (S n') (scanl a b n' f (f acc h) tl)
+  end.
+
 Fixpoint foldl_dep (a : Type) (b : Nat -> Type) (n : Nat)
          (f : forall n, b n -> a -> b (S n)) (base : b O) (v : Vec n a) : b n :=
   match v with

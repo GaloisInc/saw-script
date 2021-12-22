@@ -1,0 +1,14 @@
+enable_experimental;
+enable_lax_loads_and_stores;
+
+let set_y_spec = do {
+  ss <- llvm_alloc (llvm_alias "struct.s");
+  // Note that the type is 8 bits, which is a different number of bits than
+  // what is specified in the bitfield.
+  z <- llvm_fresh_var "z" (llvm_int 8);
+  llvm_execute_func [ss, llvm_term z];
+  llvm_points_to_bitfield ss "y" (llvm_term z);
+};
+
+m <- llvm_load_module "test.bc";
+fails (llvm_verify m "set_y" [] false set_y_spec (w4_unint_z3 []));

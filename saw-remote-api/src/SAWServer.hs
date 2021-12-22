@@ -110,6 +110,12 @@ data SetupStep ty
                   (Maybe CryptolAST)
                   -- ^ The source, the target, the type to check the target,
                   --   and the condition that must hold in order for the source to point to the target
+  | SetupPointsToBitfield (CrucibleSetupVal CryptolAST)
+                          Text
+                          (CrucibleSetupVal CryptolAST)
+                          -- ^ The source bitfield,
+                          --   the name of the field within the bitfield,
+                          --   and the target.
   | SetupExecuteFunction [CrucibleSetupVal CryptolAST] -- ^ Function's arguments
   | SetupPrecond CryptolAST -- ^ Function's precondition
   | SetupPostcond CryptolAST -- ^ Function's postcondition
@@ -218,6 +224,7 @@ initialState readFileFn =
                 , rwCrucibleAssertThenAssume = False
                 , rwLaxArith = False
                 , rwLaxPointerOrdering = False
+                , rwLaxLoadsAndStores = False
                 , rwDebugIntrinsics = True
                 , rwWhat4HashConsing = False
                 , rwWhat4HashConsingX86 = False

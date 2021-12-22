@@ -410,6 +410,14 @@ withImportSAWCorePrelude config@(Coq.TranslationConfiguration { Coq.postPreamble
    ]
   }
 
+withImportSAWCorePreludeExtra :: Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
+withImportSAWCorePreludeExtra config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
+  config { Coq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToCoq Require Import SAWCorePreludeExtra."
+   ]
+  }
+
+
 withImportCryptolPrimitivesForSAWCore ::
   Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
 withImportCryptolPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
@@ -478,6 +486,7 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   let configuration =
         withImportCryptolPrimitivesForSAWCoreExtra $
         withImportCryptolPrimitivesForSAWCore $
+        withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
   let nm = takeBaseName inputFile
@@ -518,6 +527,7 @@ writeCoqCryptolPrimitivesForSAWCore outputFile notations skips = do
   () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrimitivesForSAWCore"]))
   m  <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   let configuration =
+        withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
   let doc = Coq.translateSAWModule configuration m
