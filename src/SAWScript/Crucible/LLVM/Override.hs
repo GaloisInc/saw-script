@@ -42,10 +42,12 @@ module SAWScript.Crucible.LLVM.Override
   , executeSetupCondition
   , matchArg
   , matchPointsToValue
+  , matchPointsToBitfieldValue
   , assertTermEqualities
   , methodSpecHandler
   , valueToSC
   , storePointsToValue
+  , storePointsToBitfieldValue
   , doAllocSymInit
 
   , diffMemTypes
@@ -90,7 +92,9 @@ import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr))
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.LLVM.Bytes as Crucible
+import qualified Lang.Crucible.LLVM.DataLayout as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
+import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
@@ -210,6 +214,14 @@ ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo loc cond ptr val) = do
   pure $ PP.vcat [ "Pointer:" PP.<+> pretty1
                  , "Pointee:" PP.<+> pretty2
                  , maybe PP.emptyDoc (\tt -> "Condition:" PP.<+> MS.ppTypedTerm tt) cond
+                 , "Assertion made at:" PP.<+>
+                   PP.pretty (W4.plSourceLoc loc)
+                 ]
+ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsToBitfield loc ptr fieldName val) = do
+  pretty1 <- ppSetupValueAsLLVMVal opts cc sc spec ptr
+  let pretty2 = MS.ppSetupValue val
+  pure $ PP.vcat [ "Pointer (bitfield):" PP.<+> pretty1 <> PP.pretty ("." ++ fieldName)
+                 , "Pointee:" PP.<+> pretty2
                  , "Assertion made at:" PP.<+>
                    PP.pretty (W4.plSourceLoc loc)
                  ]
@@ -972,14 +984,14 @@ matchPointsTos opts sc cc spec prepost = go False []
     go True delayed [] = go False [] delayed
 
     -- progress the next points-to in the work queue
-    go progress delayed (c@(LLVMPointsTo loc _ _ _):cs) =
+    go progress delayed (c:cs) =
       do ready <- checkPointsTo c
          if ready then
            do err <- learnPointsTo opts sc cc spec prepost c
               case err of
                 Just msg -> do
                   doc <- ppPointsToAsLLVMVal opts cc sc spec c
-                  failure loc (BadPointerLoad (Right doc) msg)
+                  failure (llvmPointsToProgramLoc c) (BadPointerLoad (Right doc) msg)
                 Nothing  -> go True delayed cs
          else
            do go progress (c:delayed) cs
@@ -987,6 +999,7 @@ matchPointsTos opts sc cc spec prepost = go False []
     -- determine if a precondition is ready to be checked
     checkPointsTo :: PointsTo (LLVM arch) -> OverrideMatcher (LLVM arch) md Bool
     checkPointsTo (LLVMPointsTo _loc _ p _) = checkSetupValue p
+    checkPointsTo (LLVMPointsToBitfield _loc p _ _) = checkSetupValue p
 
     checkSetupValue :: SetupValue (LLVM arch) -> OverrideMatcher (LLVM arch) md Bool
     checkSetupValue v =
@@ -1414,16 +1427,19 @@ learnPointsTo ::
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
-  Options                    ->
-  SharedContext              ->
-  LLVMCrucibleContext arch      ->
-  MS.CrucibleMethodSpecIR (LLVM arch)       ->
-  PrePost                    ->
-  PointsTo (LLVM arch)       ->
+  Options ->
+  SharedContext ->
+  LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  PrePost ->
+  PointsTo (LLVM arch) ->
   OverrideMatcher (LLVM arch) md (Maybe (PP.Doc ann))
 learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
   do (_memTy, ptr1) <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
      matchPointsToValue opts sc cc spec prepost loc maybe_cond ptr1 val
+learnPointsTo opts sc cc spec prepost (LLVMPointsToBitfield loc ptr fieldName val) =
+  do (bfIndex, ptr1) <- resolveSetupValueBitfield opts cc sc spec ptr fieldName
+     matchPointsToBitfieldValue opts sc cc spec prepost loc ptr1 bfIndex val
 
 matchPointsToValue ::
   forall arch md ann.
@@ -1433,11 +1449,11 @@ matchPointsToValue ::
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
-  Options                    ->
-  SharedContext              ->
-  LLVMCrucibleContext arch      ->
-  MS.CrucibleMethodSpecIR (LLVM arch)       ->
-  PrePost                    ->
+  Options ->
+  SharedContext ->
+  LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  PrePost ->
   W4.ProgramLoc ->
   Maybe TypedTerm ->
   LLVMPtr (Crucible.ArchWidth arch) ->
@@ -1451,7 +1467,7 @@ matchPointsToValue opts sc cc spec prepost loc maybe_cond ptr val =
      mem    <- readGlobal $ Crucible.llvmMemVar
                           $ ccLLVMContext cc
 
-     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
+     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME, see #338)
 
      case val of
        ConcreteSizeValue val' ->
@@ -1460,17 +1476,7 @@ matchPointsToValue opts sc cc spec prepost loc maybe_cond ptr val =
             -- then the load type should be determined by the rhs.
             storTy <- Crucible.toStorableType memTy
             res <- liftIO $ Crucible.loadRaw sym mem ptr storTy alignment
-            let summarizeBadLoad =
-                 let dataLayout = Crucible.llvmDataLayout (ccTypeCtx cc)
-                     sz = Crucible.memTypeSize dataLayout memTy
-                 in map (PP.pretty . unwords)
-                    [ [ "When reading through pointer:", show (Crucible.ppPtr ptr) ]
-                    , [ "in the ", stateCond prepost, "of an override" ]
-                    , [ "Tried to read something of size:"
-                      , show (Crucible.bytesToInteger sz)
-                      ]
-                    , [ "And type:", show (Crucible.ppMemType memTy) ]
-                    ]
+            let badLoadSummary = summarizeBadLoad cc memTy prepost ptr
             case res of
               Crucible.NoErr pred_ res_val -> do
                 pred_' <- case maybe_cond of
@@ -1479,32 +1485,10 @@ matchPointsToValue opts sc cc spec prepost loc maybe_cond ptr val =
                     liftIO $ W4.impliesPred sym cond' pred_
                   Nothing -> return pred_
                 addAssert pred_' $ Crucible.SimError loc $
-                  Crucible.AssertFailureSimError (show $ PP.vcat $ summarizeBadLoad) ""
+                  Crucible.AssertFailureSimError (show $ PP.vcat badLoadSummary) ""
                 pure Nothing <* matchArg opts sc cc spec prepost res_val memTy val'
               _ -> do
-                -- When we have a concrete failure, we do a little more computation to
-                -- try and find out why.
-                let (blk, _offset) = Crucible.llvmPointerView ptr
-                pure $ Just $ PP.vcat . (summarizeBadLoad ++) $
-                  case W4.asNat blk of
-                    Nothing -> ["<Read from unknown allocation>"]
-                    Just blk' ->
-                      let possibleAllocs =
-                            Crucible.possibleAllocs blk' (Crucible.memImplHeap mem)
-                      in [ PP.pretty $ unwords
-                           [ "Found"
-                           , show (length possibleAllocs)
-                           , "possibly matching allocation(s):"
-                           ]
-                         , bullets '-' (map (PP.viaShow . Crucible.ppSomeAlloc) possibleAllocs)
-                           -- TODO: remove 'viaShow' when crucible switches to prettyprinter
-                         ]
-                      -- This information tends to be overwhelming, but might be useful?
-                      -- We should brainstorm about better ways of presenting it.
-                      -- PP.<$$> PP.text (unwords [ "Here are the details on why reading"
-                      --                          , "from each matching write failed"
-                      --                          ])
-                      -- PP.<$$> PP.text (show err)
+                pure $ Just $ describeConcreteMemoryLoadFailure mem badLoadSummary ptr
 
        SymbolicSizeValue expected_arr_tm expected_sz_tm ->
          do maybe_allocation_array <- liftIO $
@@ -1554,6 +1538,164 @@ matchPointsToValue opts sc cc spec prepost loc maybe_cond ptr val =
                    return Nothing
 
               _ -> return $ Just errMsg
+
+-- | Like 'matchPointsToValue', but specifically geared towards the needs
+-- of fields within bitfields. In particular, this performs all of the
+-- necessary bit-twiddling on the LHS (a bitfield) to extract the necessary
+-- field and match it against the RHS.
+matchPointsToBitfieldValue ::
+  forall arch md ann.
+  ( ?memOpts :: Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
+  Options ->
+  SharedContext ->
+  LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  PrePost ->
+  W4.ProgramLoc ->
+  LLVMPtr (Crucible.ArchWidth arch) ->
+  BitfieldIndex ->
+  SetupValue (LLVM arch) ->
+  OverrideMatcher (LLVM arch) md (Maybe (PP.Doc ann))
+matchPointsToBitfieldValue opts sc cc spec prepost loc ptr bfIndex val =
+  do sym    <- Ov.getSymInterface
+
+     mem    <- readGlobal $ Crucible.llvmMemVar
+                          $ ccLLVMContext cc
+
+     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME, see #338)
+
+     -- Unlike in matchPointsToValue, we compute the MemTy/StorageType not from
+     -- the RHS value, but from the BitfieldIndex. This is because we need to
+     -- load the entire bitfield, which can be larger than the size of the RHS
+     -- value.
+     let memTy = biBitfieldType bfIndex
+     storTy <- Crucible.toStorableType memTy
+     res <- liftIO $ Crucible.loadRaw sym mem ptr storTy alignment
+     let badLoadSummary = summarizeBadLoad cc memTy prepost ptr
+     case res of
+       Crucible.NoErr pred_ res_val -> do
+         addAssert pred_ $ Crucible.SimError loc $
+           Crucible.AssertFailureSimError (show $ PP.vcat badLoadSummary) ""
+         case res_val of
+           -- This will only work if:
+           --
+           -- * The bitfield is in fact a bitvector, and
+           -- * The width of the RHS type is less than the width of the
+           --   bitfield type.
+           --
+           -- We check these criteria in this case.
+           Crucible.LLVMValInt bfBlk bfBV
+             |  let bfWidth = W4.bvWidth bfBV
+             ,  Some rhsWidth <- mkNatRepr $ fromIntegral $ biFieldSize bfIndex
+             -> case (testLeq (knownNat @1) rhsWidth, testLeq (incNat rhsWidth) bfWidth) of
+                  (Just LeqProof, Just LeqProof) ->
+                    do -- Here is where we perform the bit-twiddling needed
+                       -- to match the RHS value against the field within the
+                       -- bitfield. We will use this as a running example:
+                       --
+                       --   struct s {
+                       --     int32_t w;
+                       --     uint8_t x1:1;
+                       --     uint8_t x2:2;
+                       --     uint8_t y:1;
+                       --     int32_t z;
+                       --   };
+                       --
+                       -- Let us imagine that we are matching against the
+                       -- `y` field. The bitfield (bfBV) will look something
+                       -- like 0b????Y???, where `Y` denotes the value of the
+                       -- `y` bit.
+                       let -- The offset (in bits) of the field within the
+                           -- bitfield. For `y`, this is 3 (x1's offset is 0
+                           -- and `x2`'s offset is 1).
+                           bfOffset = biFieldOffset bfIndex
+                           bfOffsetBV = BV.mkBV bfWidth $ fromIntegral bfOffset
+
+                       -- Use a logical right shift to make the bits of the
+                       -- field within the bitfield become the least
+                       -- significant bits. In the `y` example, this is
+                       -- tantamount to shifting 0b????Y??? right by `bfOffset`
+                       -- (i.e., 3 bits) to become 0b000????Y.
+                       bfBV'  <- liftIO $ W4.bvLshr sym bfBV =<< W4.bvLit sym bfWidth bfOffsetBV
+
+                       -- Finally, truncate the bitfield such that only the
+                       -- bits for the field remain. In the `y` example, this
+                       -- means truncating 0b000????Y to `0bY`.
+                       bfBV'' <- liftIO $ W4.bvTrunc sym rhsWidth bfBV'
+
+                       -- Match the truncated bitfield against the RHS value.
+                       let res_val' = Crucible.LLVMValInt bfBlk bfBV''
+                       pure Nothing <* matchArg opts sc cc spec prepost res_val' memTy val
+                  _ ->
+                    fail $ unlines
+                      [ "llvm_points_to_bitfield: RHS value's size must be less then or equal to bitfield's size"
+                      , "Bitvector width: " ++ show bfWidth
+                      , "RHS value width: " ++ show rhsWidth
+                      ]
+           _ -> fail $ unlines
+                  [ "llvm_points_to_bitfield: The bitfield must be a bitvector"
+                  , "Bitfield value: " ++ show (Crucible.ppTermExpr res_val)
+                  ]
+       _ ->
+         -- When we have a concrete failure, we do a little more computation to
+         -- try and find out why.
+         pure $ Just $ describeConcreteMemoryLoadFailure mem badLoadSummary ptr
+
+-- | Give a general summary of why a call to 'Crucible.loadRaw' in
+-- @matchPointsTo{Bitfield}Value@ failed. This is used for error-message
+-- purposes.
+summarizeBadLoad ::
+  LLVMCrucibleContext arch ->
+  Crucible.MemType ->
+  PrePost ->
+  LLVMPtr wptr ->
+  [PP.Doc ann]
+summarizeBadLoad cc memTy prepost ptr =
+ let dataLayout = Crucible.llvmDataLayout (ccTypeCtx cc)
+     sz = Crucible.memTypeSize dataLayout memTy
+ in map (PP.pretty . unwords)
+    [ [ "When reading through pointer:", show (Crucible.ppPtr ptr) ]
+    , [ "in the ", stateCond prepost, "of an override" ]
+    , [ "Tried to read something of size:"
+      , show (Crucible.bytesToInteger sz)
+      ]
+    , [ "And type:", show (Crucible.ppMemType memTy) ]
+    ]
+
+-- | Give a summary of why a call to 'Crucible.loadRaw' in
+-- @matchPointsTo{Bitfield}Value@ concretely failed. This is used for
+-- error-message purposes.
+describeConcreteMemoryLoadFailure ::
+  Crucible.MemImpl Sym ->
+  [PP.Doc ann] {- A summary of why the load failed -} ->
+  LLVMPtr w ->
+  PP.Doc ann
+describeConcreteMemoryLoadFailure mem badLoadSummary ptr = do
+  let (blk, _offset) = Crucible.llvmPointerView ptr
+  PP.vcat . (badLoadSummary ++) $
+    case W4.asNat blk of
+      Nothing -> ["<Read from unknown allocation>"]
+      Just blk' ->
+        let possibleAllocs =
+              Crucible.possibleAllocs blk' (Crucible.memImplHeap mem)
+        in [ PP.pretty $ unwords
+             [ "Found"
+             , show (length possibleAllocs)
+             , "possibly matching allocation(s):"
+             ]
+           , bullets '-' (map (PP.viaShow . Crucible.ppSomeAlloc) possibleAllocs)
+             -- TODO: remove 'viaShow' when crucible switches to prettyprinter
+           ]
+        -- This information tends to be overwhelming, but might be useful?
+        -- We should brainstorm about better ways of presenting it.
+        -- PP.<$$> PP.text (unwords [ "Here are the details on why reading"
+        --                          , "from each matching write failed"
+        --                          ])
+        -- PP.<$$> PP.text (show err)
 
 ------------------------------------------------------------------------
 
@@ -1682,14 +1824,22 @@ invalidateMutableAllocs opts sc cc cs = do
 
   -- set of (concrete base pointer, size) for each postcondition memory write
   postPtrs <- Set.fromList <$> catMaybes <$> mapM
-    (\(LLVMPointsTo _loc _cond ptr val) -> case val of
-      ConcreteSizeValue val' -> do
-        (_, Crucible.LLVMPointer blk _) <- resolveSetupValue opts cc sc cs Crucible.PtrRepr ptr
-        sz <- (return . Crucible.storageTypeSize)
-          =<< Crucible.toStorableType
-          =<< typeOfSetupValue cc (MS.csAllocations cs) (MS.csTypeNames cs) val'
-        return $ Just (W4.asNat blk, sz)
-      SymbolicSizeValue{} -> return Nothing)
+    (\case
+      LLVMPointsTo _loc _cond ptr val -> case val of
+        ConcreteSizeValue val' -> do
+          (_, Crucible.LLVMPointer blk _) <- resolveSetupValue opts cc sc cs Crucible.PtrRepr ptr
+          sz <- (return . Crucible.storageTypeSize)
+            =<< Crucible.toStorableType
+            =<< typeOfSetupValue cc (MS.csAllocations cs) (MS.csTypeNames cs) val'
+          return $ Just (W4.asNat blk, sz)
+        SymbolicSizeValue{} -> return Nothing
+      LLVMPointsToBitfield _loc ptr fieldName _val -> do
+        (bfIndex, Crucible.LLVMPointer blk _) <-
+          resolveSetupValueBitfield opts cc sc cs ptr fieldName
+        let memTy = biBitfieldType bfIndex
+        storTy <- Crucible.toStorableType memTy
+        let sz = Crucible.storageTypeSize storTy
+        pure $ Just (W4.asNat blk, sz))
     (cs ^. MS.csPostState ^. MS.csPointsTos)
 
   -- partition allocations into those overwritten by a postcondition write
@@ -1853,6 +2003,19 @@ executePointsTo opts sc cc spec overwritten_allocs (LLVMPointsTo _loc cond ptr v
 
      mem' <- liftIO $ storePointsToValue opts cc m tyenv nameEnv mem cond' ptr' val' invalidate_msg
      writeGlobal memVar mem'
+executePointsTo opts sc cc spec _overwritten_allocs (LLVMPointsToBitfield _loc ptr fieldName val) =
+  do (bfIndex, ptr') <- resolveSetupValueBitfield opts cc sc spec ptr fieldName
+     let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
+     mem <- readGlobal memVar
+
+     m <- OM (use setupValueSub)
+     s <- OM (use termSub)
+     let tyenv = MS.csAllocations spec
+     let nameEnv = MS.csTypeNames spec
+     val' <- liftIO $ instantiateSetupValue sc s val
+
+     mem' <- liftIO $ storePointsToBitfieldValue opts cc m tyenv nameEnv mem ptr' bfIndex val'
+     writeGlobal memVar mem'
 
 storePointsToValue ::
   ( ?memOpts :: Crucible.MemOptions
@@ -1874,7 +2037,7 @@ storePointsToValue ::
 storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_invalidate_msg = do
   let sym = cc ^. ccBackend
 
-  let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
+  let alignment = Crucible.noAlignment -- default to byte alignment (FIXME, see #338)
 
   smt_array_memory_model_enabled <- W4.getOpt
     =<< W4.getOptionSetting enableSMTArrayMemoryModel (W4.getConfiguration sym)
@@ -1937,6 +2100,172 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
       Nothing ->
         Crucible.doConditionalWriteOperation sym base_mem cond store_op
     Nothing -> store_op base_mem
+
+-- | Like 'storePointsToValue', but specifically geared towards the needs
+-- of fields within bitfields. In particular, this performs all of the
+-- necessary bit-twiddling on the LHS (a bitfield) to store the RHS value in
+-- the right place in the bitfield.
+storePointsToBitfieldValue ::
+  ( ?memOpts :: Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
+  Options ->
+  LLVMCrucibleContext arch ->
+  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
+  Map AllocIndex (MS.AllocSpec (LLVM arch)) ->
+  Map AllocIndex (MS.TypeName (LLVM arch)) ->
+  Crucible.MemImpl Sym ->
+  LLVMPtr (Crucible.ArchWidth arch) ->
+  BitfieldIndex ->
+  SetupValue (LLVM arch) ->
+  IO (Crucible.MemImpl Sym)
+storePointsToBitfieldValue opts cc env tyenv nameEnv base_mem ptr bfIndex val = do
+  let sym = cc ^. ccBackend
+
+  let alignment = Crucible.noAlignment -- default to byte alignment (FIXME, see #338)
+
+  smt_array_memory_model_enabled <- W4.getOpt
+    =<< W4.getOptionSetting enableSMTArrayMemoryModel (W4.getConfiguration sym)
+
+  -- Unlike in storePointsToValue, we compute the MemTy/StorageType not from
+  -- the RHS value, but from the BitfieldIndex. This is because we need to
+  -- load the entire bitfield, which can be larger than the size of the RHS
+  -- value.
+  let memTy = biBitfieldType bfIndex
+  storTy <- Crucible.toStorableType memTy
+
+  case val of
+    SetupTerm _tm
+      | smt_array_memory_model_enabled ->
+        -- See #1540.
+        fail $ unlines
+          [ "llvm_points_to_bitfield currently does not work in"
+          , "combination with the enable_smt_array_memory_model option."
+          ]
+    _ -> do
+      -- Resolve the RHS value as an LLVMVal.
+      rhsVal <- X.handle (handleException opts) $
+        resolveSetupVal cc base_mem env tyenv nameEnv val
+
+      -- Load the bitfield that `ptr` points to.
+      bfLoadedVal <- Crucible.loadRaw sym base_mem ptr storTy alignment
+
+      -- Assert that the bitfield was loaded successfully. If not, abort.
+      let badLoadSummary = summarizeBadLoad cc memTy PreState ptr
+      bfVal <- case bfLoadedVal of
+        Crucible.NoErr p res_val -> do
+          let rsn = Crucible.AssertFailureSimError "Error loading bitvector" $
+                    show badLoadSummary
+          Crucible.assert sym p rsn
+          pure res_val
+        Crucible.Err _p ->
+          fail $ show $ describeConcreteMemoryLoadFailure base_mem badLoadSummary ptr
+
+      case (bfVal, rhsVal) of
+        -- This will only work if:
+        --
+        -- * Both the bitfield and the RHS value are bitvectors, and
+        -- * The width of the RHS type is less than or equal to the width
+        --   of the bitfield type.
+        --
+        -- We check these criteria in this case.
+        (Crucible.LLVMValInt bfBlk bfBV, Crucible.LLVMValInt _rhsBlk rhsBV)
+          -> let bfWidth = W4.bvWidth bfBV
+                 rhsWidth = W4.bvWidth rhsBV in
+             case testLeq (incNat rhsWidth) bfWidth of
+               Nothing ->
+                 fail $ unlines
+                   [ "llvm_points_to_bitfield: RHS value's size must be less then or equal to bitfield's size"
+                   , "Bitvector width: " ++ show bfWidth
+                   , "RHS value width: " ++ show rhsWidth
+                   ]
+               Just LeqProof ->
+                 do -- Here is where we perform the bit-twiddling needed
+                    -- to store the RHS value in the bitfield. We will use
+                    -- this as a running example:
+                    --
+                    --   struct s {
+                    --     int32_t w;
+                    --     uint8_t x1:1;
+                    --     uint8_t x2:2;
+                    --     uint8_t y:1;
+                    --     int32_t z;
+                    --   };
+                    --
+                    -- Let us imagine that we are setting the `y` field to
+                    -- be 1.
+                    let -- The offset (in bits) of the field within the
+                        -- bitfield. For `y`, this is 3 (x1's offset is 0
+                        -- and `x2`'s offset is 1).
+                        bfOffset   = biFieldOffset bfIndex
+                        bfOffsetBV = BV.mkBV bfWidth $ fromIntegral bfOffset
+
+                        -- A bitmask with the nth bit (zero-indexed) is
+                        -- set, where n equals the size of the field
+                        -- (in bits) within the bitfield. Since `y` is
+                        -- 1-bit, this would make `fieldBitsBV` be
+                        -- 0b00000010, or 2.
+                        fieldBitsBV = BV.bit' bfWidth $
+                                      fromIntegral $ biFieldSize bfIndex
+
+                        -- A bitmask with the (n-1) least significant bits
+                        -- set to 1, where n equals the value of
+                        -- `fieldBitsBV`. For `y`, `leastBitsBV` would be
+                        -- equal to 0b00000001, or 1.
+                        leastBitsBV = BV.sub bfWidth fieldBitsBV (BV.one bfWidth)
+
+                        -- A bitmask with the bits corresponding to the
+                        -- field within the bitfield set to 1, and all
+                        -- other bits are set to 0. For `y`, `bitmaskBV`
+                        -- would be equal to 0b00001000, or 8.
+                        bitmaskBV = BV.shl bfWidth leastBitsBV $ fromIntegral bfOffset
+
+                        -- A bitmask with the bits corresponding to the
+                        -- field within the bitfield set to 0, and all
+                        -- other bits are set to 1. For `y`, `compBitmaskBV`
+                        -- would be equal to 0b11110111, or 247.
+                        compBitmaskBV = BV.complement bfWidth bitmaskBV
+                    compBitmaskSymBV <- W4.bvLit sym bfWidth compBitmaskBV
+
+                    -- Clear all of the bits in the bitfield
+                    -- corresponding to the field, leaving all other bits
+                    -- unchanged. If the original bitvector was 0b????????,
+                    -- then `bfBV'` is 0b????0???.
+                    bfBV' <- W4.bvAndBits sym bfBV compBitmaskSymBV
+
+                    -- Zero-extend the RHS value to be the same width as
+                    -- the bitfield. In our running example, we
+                    -- sign-extend 0b1 (1) to 0b00000001.
+                    rhsBV' <- W4.bvZext sym bfWidth rhsBV
+
+                    -- Left-shift the zero-extended RHS value such that
+                    -- its contents are in the same position as the field
+                    -- in the bitfield. In our running example, `rhsBV''`
+                    -- is 0b00001000, or 8.
+                    rhsBV'' <- W4.bvShl sym rhsBV' =<< W4.bvLit sym bfWidth bfOffsetBV
+
+                    -- Finally, set the bits in the bitfield to the RHS
+                    -- value with a bitwise-XOR operation. (We could just as
+                    -- well use bitwise-OR, but bitwise-XOR plays nicer with
+                    -- how What4 represents bitvectors). In our running
+                    -- example, `bfBV''` is 0b????1???.
+                    bfBV'' <- W4.bvXorBits sym bfBV' rhsBV''
+
+                    -- Store the bitfield's value back to memory.
+                    --
+                    -- Bear in mind that this whole process is repeated once per
+                    -- field, even if the fields all reside within the same
+                    -- bitfield. See #1541 for an alternative approach that
+                    -- would optimize this further.
+                    let bfVal' = Crucible.LLVMValInt bfBlk bfBV''
+                    Crucible.storeConstRaw sym base_mem ptr storTy alignment bfVal'
+        _ -> fail $ unlines
+               [ "llvm_points_to_bitfield: Both the bitfield and RHS value must be bitvectors"
+               , "Bitfield value: " ++ show (Crucible.ppTermExpr bfVal)
+               , "RHS value: " ++ show (MS.ppSetupValue val)
+               ]
 
 
 ------------------------------------------------------------------------
@@ -2013,11 +2342,11 @@ instantiateSetupValue sc s v =
 
 resolveSetupValueLLVM ::
   (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  Options              ->
+  Options ->
   LLVMCrucibleContext arch ->
-  SharedContext        ->
+  SharedContext ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
-  SetupValue (LLVM arch)           ->
+  SetupValue (LLVM arch) ->
   OverrideMatcher (LLVM arch) md (Crucible.MemType, LLVMVal)
 resolveSetupValueLLVM opts cc sc spec sval =
   do m <- OM (use setupValueSub)
@@ -2032,18 +2361,59 @@ resolveSetupValueLLVM opts cc sc spec sval =
 
 resolveSetupValue ::
   (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  Options              ->
+  Options ->
   LLVMCrucibleContext arch ->
-  SharedContext        ->
+  SharedContext ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   Crucible.TypeRepr tp ->
-  SetupValue (LLVM arch)           ->
+  SetupValue (LLVM arch) ->
   OverrideMatcher (LLVM arch) md (Crucible.MemType, Crucible.RegValue Sym tp)
 resolveSetupValue opts cc sc spec tp sval =
   do (memTy, lval) <- resolveSetupValueLLVM opts cc sc spec sval
      sym <- Ov.getSymInterface
      val <- liftIO $ Crucible.unpackMemValue sym tp lval
      return (memTy, val)
+
+-- | Like 'resolveSetupValueLLVM', but specifically geared towards the needs
+-- of fields within bitfields. See the Haddocks for 'resolveSetupValBitfield'
+-- for the salient details.
+resolveSetupValueBitfieldLLVM ::
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  Options ->
+  LLVMCrucibleContext arch ->
+  SharedContext ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  SetupValue (LLVM arch) ->
+  String ->
+  OverrideMatcher (LLVM arch) md (BitfieldIndex, LLVMVal)
+resolveSetupValueBitfieldLLVM opts cc sc spec sval fieldName =
+  do m <- OM (use setupValueSub)
+     s <- OM (use termSub)
+     mem <- readGlobal (Crucible.llvmMemVar (ccLLVMContext cc))
+     let tyenv = MS.csAllocations spec
+         nameEnv = MS.csTypeNames spec
+     sval' <- liftIO $ instantiateSetupValue sc s sval
+     liftIO $ resolveSetupValBitfield cc mem m tyenv nameEnv sval' fieldName `X.catch` handleException opts
+
+-- | Like 'resolveSetupValue', but specifically geared towards the needs
+-- of fields within bitfields. Note that the LHS value must be a pointer, so
+-- there is no need to pass a 'Crucible.TypeRepr' here. Moreover, the second
+-- return value is always specialized to 'LLVMPtr'. See also the Haddocks for
+-- 'resolveSetupValueBitfieldLLVM' for other differences.
+resolveSetupValueBitfield ::
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  Options ->
+  LLVMCrucibleContext arch ->
+  SharedContext ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  SetupValue (LLVM arch) ->
+  String ->
+  OverrideMatcher (LLVM arch) md (BitfieldIndex, LLVMPtr (Crucible.ArchWidth arch))
+resolveSetupValueBitfield opts cc sc spec sval fieldName =
+  do (bfIndex, lval) <- resolveSetupValueBitfieldLLVM opts cc sc spec sval fieldName
+     sym <- Ov.getSymInterface
+     val <- liftIO $ Crucible.unpackMemValue sym Crucible.PtrRepr lval
+     pure (bfIndex, val)
 
 enableSMTArrayMemoryModel :: W4.ConfigOption W4.BaseBoolType
 enableSMTArrayMemoryModel = (W4.configOption W4.knownRepr "smt-array-memory-model")

@@ -481,6 +481,7 @@ buildTopLevelEnv proxy opts =
                    , rwProfilingFile = Nothing
                    , rwLaxArith = False
                    , rwLaxPointerOrdering = False
+                   , rwLaxLoadsAndStores = False
                    , rwDebugIntrinsics = True
                    , rwWhat4HashConsing = False
                    , rwWhat4HashConsingX86 = False
@@ -568,6 +569,16 @@ disable_lax_pointer_ordering :: TopLevel ()
 disable_lax_pointer_ordering = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxPointerOrdering = False }
+
+enable_lax_loads_and_stores :: TopLevel ()
+enable_lax_loads_and_stores = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxLoadsAndStores = True }
+
+disable_lax_loads_and_stores :: TopLevel ()
+disable_lax_loads_and_stores = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxLoadsAndStores = False }
 
 enable_debug_intrinsics :: TopLevel ()
 enable_debug_intrinsics = do
@@ -844,6 +855,16 @@ primitives = Map.fromList
     (pureVal disable_lax_pointer_ordering)
     Current
     [ "Disable lax rules for pointer ordering comparisons in Crucible." ]
+
+  , prim "enable_lax_loads_and_stores" "TopLevel ()"
+    (pureVal enable_lax_loads_and_stores)
+    Current
+    [ "Enable relaxed validity checking for memory loads and stores in Crucible." ]
+
+  , prim "disable_lax_loads_and_stores" "TopLevel ()"
+    (pureVal disable_lax_loads_and_stores)
+    Current
+    [ "Disable relaxed validity checking for memory loads and stores in Crucible." ]
 
   , prim "enable_debug_intrinsics" "TopLevel ()"
     (pureVal enable_debug_intrinsics)
@@ -2505,6 +2526,20 @@ primitives = Map.fromList
     (pureVal llvm_points_to_array_prefix)
     Experimental
     [ "Legacy alternative name for `llvm_points_to_array_prefix`." ]
+
+  , prim "llvm_points_to_bitfield" "SetupValue -> String -> SetupValue -> LLVMSetup ()"
+    (pureVal (llvm_points_to_bitfield))
+    Experimental
+    [ "A variant of `llvm_points_to` that is meant to be used on struct fields"
+    , "that reside within bitfields. `llvm_points_to_bitfield ptr fieldName rhs`"
+    , "should be used instead of `llvm_points_to (llvm_field ptr fieldName) rhs`,"
+    , "as the latter will not behave as one would expect for technical reasons."
+    , ""
+    , "This command should only be used in combination with"
+    , "`enable_lax_loads_and_stores`, as this option relaxes some assumptions"
+    , "about the memory model that are crucial to how `llvm_points_to_bitfield`"
+    , "operates."
+    ]
 
   , prim "llvm_equal" "SetupValue -> SetupValue -> LLVMSetup ()"
     (pureVal llvm_equal)
