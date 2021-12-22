@@ -813,12 +813,20 @@ mbSeparatePrx _ = mbSeparate
 mbAssoc :: prx1 ctx1 -> RAssign prx2 ctx2 -> RAssign prx3 ctx3 ->
            Mb (ctx1 :++: (ctx2 :++: ctx3)) a ->
            Mb ((ctx1 :++: ctx2) :++: ctx3) a
+mbAssoc ctx1 ctx2 ctx3 mb_a | Refl <- RL.appendAssoc ctx1 ctx2 ctx3 = mb_a
+{-
 mbAssoc ctx1 ctx2 ctx3 mb_a =
   mbCombine (RL.mapRAssign (const Proxy) ctx3) $
   mbCombine (RL.mapRAssign (const Proxy) ctx2) $
   fmap (mbSeparatePrx ctx2 ctx3) $
   mbSeparatePrx ctx1 (RL.append (RL.map (const Proxy) ctx2)
                       (RL.map (const Proxy) ctx3)) mb_a
+-}
+
+mbUnAssoc :: prx1 ctx1 -> RAssign prx2 ctx2 -> RAssign prx3 ctx3 ->
+             Mb ((ctx1 :++: ctx2) :++: ctx3) a ->
+             Mb (ctx1 :++: (ctx2 :++: ctx3)) a
+mbUnAssoc ctx1 ctx2 ctx3 mb_a | Refl <- RL.appendAssoc ctx1 ctx2 ctx3 = mb_a
 
 appendAssoc4 :: RAssign Proxy ctx1 -> RAssign Proxy ctx2 ->
                 RAssign Proxy ctx3 -> RAssign Proxy ctx4 ->
@@ -872,27 +880,43 @@ assocAppend4 fs1 ctx2 ctx3 ctx4 fs234 =
   let (fs2, fs3, fs4) = rlSplit3 ctx2 ctx3 ctx4 fs234 in
   RL.append (RL.append (RL.append fs1 fs2) fs3) fs4
 
--- | Add ghost variables for the bound names in a 'Some3FunPerm' in a binding
-mbGhostsFunPerm3 :: CruCtx new_ghosts -> Mb new_ghosts Some3FunPerm ->
-                    Some3FunPerm
-mbGhostsFunPerm3 new_ghosts (mbMatch -> [nuMP| Some3FunPerm
-                                                (FunPerm ghosts args gouts
-                                                         ret ps_in ps_out) |]) =
+-- | Add ghost variables with the supplied permissions for the bound names in a
+-- 'FunPerm' in a binding
+mbGhostsFunPerm ::
+  CruCtx new_ghosts ->
+  Mb ((new_ghosts :++: ghosts) :++: args) (ValuePerms new_ghosts) ->
+  Mb new_ghosts (FunPerm ghosts args gouts ret) ->
+  FunPerm (new_ghosts :++: ghosts) args gouts ret
+mbGhostsFunPerm new_ghosts mb_new_ps (mbMatch ->
+                                      [nuMP| FunPerm ghosts args
+                                           gouts ret ps_in ps_out |]) =
   let new_prxs = cruCtxProxies new_ghosts
       ghosts_prxs = cruCtxProxies $ mbLift ghosts
       rets_prxs = cruCtxProxies (mbLift gouts) :>: Proxy
       args_prxs = cruCtxProxies $ mbLift args in
-  Some3FunPerm $ FunPerm (appendCruCtx new_ghosts $ mbLift ghosts)
+  FunPerm (appendCruCtx new_ghosts $ mbLift ghosts)
   (mbLift args) (mbLift gouts) (mbLift ret)
-  (mbAssoc new_prxs ghosts_prxs args_prxs $
-   fmap (assocAppend (RL.map (const ValPerm_True) new_prxs)
-         ghosts_prxs args_prxs) $
-         mbCombine (RL.append ghosts_prxs args_prxs) ps_in)
+  (mbMap2 (\new_ps ps -> assocAppend new_ps ghosts_prxs args_prxs ps) mb_new_ps $
+   mbAssoc new_prxs ghosts_prxs args_prxs $
+   mbCombine (RL.append ghosts_prxs args_prxs) ps_in)
   (mbAssoc4 new_prxs ghosts_prxs args_prxs rets_prxs $
    fmap (assocAppend4 (RL.map (const ValPerm_True) new_prxs)
          ghosts_prxs args_prxs rets_prxs) $
          mbCombine (RL.append
                     (RL.append ghosts_prxs args_prxs) rets_prxs) ps_out)
+
+-- | Add ghost variables with no permissions for the bound names in a
+-- 'Some3FunPerm' in a binding
+mbGhostsFunPerm3 :: CruCtx new_ghosts -> Mb new_ghosts Some3FunPerm ->
+                    Some3FunPerm
+mbGhostsFunPerm3 new_ghosts (mbMatch -> [nuMP| Some3FunPerm fun_perm |]) =
+  let new_ps =
+        nuMulti (cruCtxProxies
+                 ((new_ghosts
+                   `appendCruCtx` mbLift (fmap funPermGhosts fun_perm))
+                  `appendCruCtx` mbLift (fmap funPermArgs fun_perm))) $
+        const $ RL.map (const ValPerm_True) (cruCtxProxies new_ghosts) in
+  Some3FunPerm $ mbGhostsFunPerm new_ghosts new_ps fun_perm
 
 
 -- | Try to compute the layout of a structure of the given shape as a value,
@@ -1199,6 +1223,75 @@ withLifetimes (ldef : ldefs) m =
              LifetimeRepr) (withLifetimes ldefs m) >>=
   mbLifetimeFunPerm ldef
 
+-- | An object of type @a@ inside some name-binding context where each bound
+-- name is assigned its own permission
+data SomeMbWithPerms a where
+  SomeMbWithPerms :: CruCtx ctx -> MbValuePerms ctx -> Mb ctx a ->
+                     SomeMbWithPerms a
+
+instance Functor SomeMbWithPerms where
+  fmap f (SomeMbWithPerms ctx ps mb_a) = SomeMbWithPerms ctx ps (fmap f mb_a)
+
+instance Applicative SomeMbWithPerms where
+  pure a = SomeMbWithPerms CruCtxNil (emptyMb MNil) $ emptyMb a
+  liftA2 f (SomeMbWithPerms ctx1 mb_ps1 mb_a1) (SomeMbWithPerms ctx2 mb_ps2 mb_a2) =
+    SomeMbWithPerms (appendCruCtx ctx1 ctx2)
+    (mbCombine (cruCtxProxies ctx2) $ flip fmap mb_ps1 $ \ps1 ->
+      flip fmap mb_ps2 $ \ps2 -> RL.append ps1 ps2)
+    (mbCombine (cruCtxProxies ctx2) $
+     flip fmap mb_a1 $ \a1 -> flip fmap mb_a2 $ \a2 -> f a1 a2)
+
+mbGoutsFunPerm ::
+  CruCtx new_gouts ->
+  Mb new_gouts (Mb ((ghosts :++: args) :++: gouts :> ret)
+                (ValuePerms new_gouts)) ->
+  Mb new_gouts (FunPerm ghosts args gouts ret) ->
+  FunPerm ghosts args (gouts :++: new_gouts) ret
+mbGoutsFunPerm = error "FIXME HERE NOW"
+        {-
+        let gouts' = mbLift mb_gouts'
+            gouts'_prxs = cruCtxProxies gouts' in
+        FunPerm ghosts args (appendCruCtx gouts gouts') ret ps_in' $
+        
+        fmap (mbSwap gouts'_prxs) $ mbSeparate (MNil :>: Proxy) $
+        mbMap2
+        (mbMap2 $ \gops' ps_out' ->
+          _)
+        mb_gops' mb_ps_out' -}
+
+abstractVarsForLifetimes :: ValuePerms ps -> SomeMbWithPerms (ValuePerms ps)
+abstractVarsForLifetimes = error "FIXME HERE NOW"
+
+-- | A 'SomeMbWithPerms' in a binding
+data MbSomeMbWithPerms ctx a where
+  MbSomeMbWithPerms :: CruCtx ctx' -> Mb ctx' (Mb ctx (ValuePerms ctx')) ->
+                       Mb ctx' (Mb ctx a) ->
+                       MbSomeMbWithPerms ctx a
+
+mbAbstractVarsForLifetimes :: Mb ctx (ValuePerms ps) ->
+                              MbSomeMbWithPerms ctx (ValuePerms ps)
+mbAbstractVarsForLifetimes = error "FIXME HERE NOW"
+
+
+-- | For both the input and output permissions of a function permission, find
+-- all permissions @p@ in with a lifetime that are contained inside a struct
+-- permission or a field or block permission with a different lifetime, and
+-- replace each such permission with an @eq(z)@ permission for a fresh ghost
+-- variable @z@ that is itself assigned permissions @p@.
+abstractFunVarsForLifetimes :: Some3FunPerm -> Some3FunPerm
+abstractFunVarsForLifetimes (Some3FunPerm
+                         (FunPerm ghosts args gouts ret ps_in ps_out))
+  | MbSomeMbWithPerms ghosts' mb_gps' mb_ps_in' <-
+      mbAbstractVarsForLifetimes ps_in
+  , MbSomeMbWithPerms gouts' mb_gops' mb_ps_out' <-
+      mbAbstractVarsForLifetimes ps_out
+  , ghosts_prxs <- cruCtxProxies ghosts
+  , args_prxs <- cruCtxProxies args =
+    Some3FunPerm $ mbGhostsFunPerm ghosts'
+    (mbCombineAssoc ghosts' ghosts_prxs args_prxs mb_gps') $
+    flip fmap mb_ps_in' $ \ps_in' ->
+    mbGoutsFunPerm gouts' mb_gops' $
+    fmap (FunPerm ghosts args gouts ret ps_in') mb_ps_out'
 
 -- | Convert a monomorphic function type, i.e., one with no type arguments
 rsConvertMonoFun :: (1 <= w, KnownNat w) => prx w -> Span -> Abi ->
@@ -1218,7 +1311,7 @@ rsConvertFun w abi (Generics ldefs _tparams@[]
   withLifetimes ldefs $
   do arg_shapes <- mapM (rsConvert w) args
      ret_shape <- maybe (return PExpr_EmptyShape) (rsConvert w) maybe_ret_tp
-     layoutFun abi arg_shapes ret_shape
+     abstractFunVarsForLifetimes <$> layoutFun abi arg_shapes ret_shape
 rsConvertFun _ _ _ _ = fail "rsConvertFun: unsupported Rust function type"
 
 
