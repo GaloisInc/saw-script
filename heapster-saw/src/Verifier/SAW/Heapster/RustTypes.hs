@@ -1241,26 +1241,163 @@ instance Applicative SomeMbWithPerms where
     (mbCombine (cruCtxProxies ctx2) $
      flip fmap mb_a1 $ \a1 -> flip fmap mb_a2 $ \a2 -> f a1 a2)
 
-mbGoutsFunPerm ::
-  CruCtx new_gouts ->
-  Mb new_gouts (Mb ((ghosts :++: args) :++: gouts :> ret)
-                (ValuePerms new_gouts)) ->
-  Mb new_gouts (FunPerm ghosts args gouts ret) ->
-  FunPerm ghosts args (gouts :++: new_gouts) ret
-mbGoutsFunPerm = error "FIXME HERE NOW"
-        {-
-        let gouts' = mbLift mb_gouts'
-            gouts'_prxs = cruCtxProxies gouts' in
-        FunPerm ghosts args (appendCruCtx gouts gouts') ret ps_in' $
-        
-        fmap (mbSwap gouts'_prxs) $ mbSeparate (MNil :>: Proxy) $
-        mbMap2
-        (mbMap2 $ \gops' ps_out' ->
-          _)
-        mb_gops' mb_ps_out' -}
+-- NOTE: the Monad instance fails here because it requires the output type of f
+-- to satisfy NuMatching. That is, it is a "restricted monad", that is only a
+-- monad over types that satisfy the NuMatching restriction. Thus we define
+-- bindSomeMbWithPerms to add this restriction.
+{-
+instance Monad SomeMbWithPerms where
+  return = pure
+  (SomeMbWithPerms ctx1 mb_ps1 mb_a) >>= f =
+    case mbMatch (fmap f mb_a) of
+      [nuMP| SomeMbWithPerms ctx2 mb_mb_ps2 mb_mb_b |] ->
+        let ctx2_prxs = cruCtxProxies $ mbLift ctx2 in
+        SomeMbWithPerms (appendCruCtx ctx1 $ mbLift ctx2)
+        (mbCombine ctx2_prxs $
+         mbMap2 (\ps1 mb_ps2 -> fmap (RL.append ps1) mb_ps2) mb_ps1 mb_mb_ps2)
+        (mbCombine ctx2_prxs mb_mb_b)
+-}
 
-abstractVarsForLifetimes :: ValuePerms ps -> SomeMbWithPerms (ValuePerms ps)
-abstractVarsForLifetimes = error "FIXME HERE NOW"
+-- | A monadic bind for 'SomeMbWithPerms', which requires a 'NuMatching'
+-- instance for the output type
+bindSomeMbWithPerms :: NuMatching b => SomeMbWithPerms a ->
+                       (a -> SomeMbWithPerms b) -> SomeMbWithPerms b
+bindSomeMbWithPerms (SomeMbWithPerms ctx1 mb_ps1 mb_a) f =
+  case mbMatch (fmap f mb_a) of
+    [nuMP| SomeMbWithPerms ctx2 mb_mb_ps2 mb_mb_b |] ->
+      let ctx2_prxs = cruCtxProxies $ mbLift ctx2 in
+      SomeMbWithPerms (appendCruCtx ctx1 $ mbLift ctx2)
+      (mbCombine ctx2_prxs $
+       mbMap2 (\ps1 mb_ps2 -> fmap (RL.append ps1) mb_ps2) mb_ps1 mb_mb_ps2)
+      (mbCombine ctx2_prxs mb_mb_b)
+
+-- | Make a 'SomeMbWithPerms' with a single bound variable
+someMbWithPermsVar1 :: TypeRepr a -> ValuePerm a -> SomeMbWithPerms (ExprVar a)
+someMbWithPermsVar1 tp p =
+  SomeMbWithPerms (singletonCruCtx tp) (nu $ const (MNil :>: p)) (nu id)
+
+-- | Move a 'SomeMbWithPerms' out of a binding by adding the bound variables as
+-- variables that are bound with @true@ permissions by the 'SomeMbWithPerms'
+mbSomeMbWithPerms :: NuMatching a => CruCtx ctx -> Mb ctx (SomeMbWithPerms a) ->
+                     SomeMbWithPerms a
+mbSomeMbWithPerms ctx (mbMatch -> [nuMP| SomeMbWithPerms ctx' mb_ps' mb_a |]) =
+  let ctx'_prxs = cruCtxProxies $ mbLift ctx' in
+  SomeMbWithPerms (appendCruCtx ctx $ mbLift ctx')
+  (fmap (RL.append $ trueValuePerms (cruCtxProxies ctx)) $
+   mbCombine ctx'_prxs mb_ps')
+  (mbCombine ctx'_prxs mb_a)
+
+-- | Add additional gnost output variables to a 'FunPerm'
+mbGoutsFunPerm ::
+  out_ctx ~ ((ghosts :++: args) :++: gouts :> ret) =>
+  CruCtx ghosts -> CruCtx args -> CruCtx gouts -> TypeRepr ret ->
+  MbValuePerms (ghosts :++: args) -> CruCtx new_gouts ->
+  Mb new_gouts (Mb out_ctx (ValuePerms new_gouts)) ->
+  Mb new_gouts (Mb out_ctx (ValuePerms out_ctx)) ->
+  FunPerm ghosts args (gouts :++: new_gouts) ret
+mbGoutsFunPerm ghosts args gouts ret ps_in gouts' mb_gps' mb_ps_out'
+  | ga_prxs <- cruCtxProxies $ appendCruCtx ghosts args
+  , gouts_prxs <- cruCtxProxies gouts
+  , gag_prxs <- RL.append ga_prxs gouts_prxs
+  , ret_prxs <- cruCtxProxies $ singletonCruCtx ret
+  , gouts'_prxs <- cruCtxProxies gouts'
+  , Refl <- RL.appendAssoc ga_prxs gouts_prxs gouts'_prxs =
+    FunPerm ghosts args (appendCruCtx gouts gouts') ret ps_in $
+    mbCombine ret_prxs $ mbCombine gouts'_prxs $
+    mbSwap gag_prxs $ fmap (mbSeparate ret_prxs) $
+    mbMap2
+    (mbMap2
+     (\gps' ps_out' ->
+       let (ga_perms, gouts_perms, MNil :>: ret_perm) =
+             rlSplit3 ga_prxs gouts_prxs ret_prxs ps_out' in
+       RL.append ga_perms (RL.append gouts_perms gps') :>: ret_perm))
+    mb_gps' mb_ps_out'
+
+-- | Find each subterm of the input that is a field, array, or block permission
+-- with a different lifetime than the supplied one. Abstract out these
+-- permissions by replacing each such permission @p@ with an @eq(x)@ permission
+-- for a fresh variable @x@ which is itself assigned permission @p@. Only do
+-- this abstraction, though, at locations where @x@ in the resulting permission
+-- is a determined variable. When the supplied lifetime is omitted, i.e., is
+-- 'Nothing', only perform this abstraction at strict subterms.
+class AbstractVarsForLifetimes a where
+  abstractVarsForLifetimes :: Maybe (PermExpr LifetimeType) -> a ->
+                              SomeMbWithPerms a
+
+instance AbstractVarsForLifetimes (ValuePerms ps) where
+  abstractVarsForLifetimes l = traverseRAssign (abstractVarsForLifetimes l)
+
+-- | Return the type of an atomic permission if we can compute it, specifically
+-- if it is a field, array, or block permission
+atomicPermType :: AtomicPerm a -> Maybe (TypeRepr a)
+atomicPermType (Perm_LLVMField _) = Just knownRepr
+atomicPermType (Perm_LLVMArray _) = Just knownRepr
+atomicPermType (Perm_LLVMBlock _) = Just knownRepr
+atomicPermType _ = Nothing
+
+instance AbstractVarsForLifetimes (ValuePerm a) where
+  abstractVarsForLifetimes (Just l) p@(ValPerm_Conj ps)
+    | any (/= l) (mapMaybe atomicPermLifetime ps)
+    , tp:_ <- mapMaybe atomicPermType ps =
+      bindSomeMbWithPerms (abstractVarsForLifetimes Nothing p) $ \p' ->
+      ValPerm_Eq <$> PExpr_Var <$> someMbWithPermsVar1 tp p'
+  abstractVarsForLifetimes l (ValPerm_Conj ps) =
+    ValPerm_Conj <$> traverse (abstractVarsForLifetimes l) ps
+  abstractVarsForLifetimes l (ValPerm_Exists mb_p) =
+    -- Any existentials also become abstracted variables, so they can be bound
+    -- as ghosts or gouts (depending on whether they occur in the input or
+    -- output permissions)
+    mbSomeMbWithPerms knownRepr $ fmap (abstractVarsForLifetimes l) mb_p
+  abstractVarsForLifetimes _ p = pure p
+
+-- NOTE: for AtomicPerms, we don't ever replace the permission itself, since we
+-- don't want to replace each individual permission pi in a conjunction p1*..*pn
+-- with an equality perm, but instead want to replace the entire conjunction all
+-- at once. This is handled in the above case for ValPerm_Conj.
+instance AbstractVarsForLifetimes (AtomicPerm a) where
+  abstractVarsForLifetimes _ (Perm_LLVMField fp) =
+    (\p -> Perm_LLVMField $ fp { llvmFieldContents = p }) <$>
+    abstractVarsForLifetimes (Just $ llvmFieldLifetime fp) (llvmFieldContents fp)
+  -- FIXME: we can't yet abstract array permissions, because shapes in arrays
+  -- could be repeated multiple times and thus we would have to somehow abstract
+  -- over multiple copies of the same variable for that to work...
+  abstractVarsForLifetimes _ (Perm_LLVMBlock bp) =
+    (\sh -> Perm_LLVMBlock $ bp { llvmBlockShape = sh }) <$>
+    abstractVarsForLifetimesSh (llvmBlockRW bp) (llvmBlockLifetime bp)
+    (llvmBlockShape bp)
+  abstractVarsForLifetimes _ (Perm_Struct ps) =
+    -- NOTE: for struct perms we want to abstract any permission with any
+    -- non-always lifetime, so we set l to always
+    Perm_Struct <$>
+    traverseRAssign (abstractVarsForLifetimes (Just PExpr_Always)) ps
+  abstractVarsForLifetimes _ p = pure p
+
+-- | Like 'abstractVarsForLifetimes' but for an LLVM shape inside a @memblock@
+-- with the given modalities
+abstractVarsForLifetimesSh :: (1 <= w, KnownNat w) => PermExpr RWModalityType ->
+                              PermExpr LifetimeType ->
+                              PermExpr (LLVMShapeType w) ->
+                              SomeMbWithPerms (PermExpr (LLVMShapeType w))
+abstractVarsForLifetimesSh _ l (PExpr_FieldShape (LLVMFieldShape p)) =
+    PExpr_FieldShape <$> LLVMFieldShape <$> abstractVarsForLifetimes (Just l) p
+abstractVarsForLifetimesSh rw l (PExpr_PtrShape maybe_rw (Just l') sh)
+  | l /= l'
+  , rw' <- maybe rw id maybe_rw
+  , Just len <- llvmShapeLength sh =
+    -- NOTE: abstracting a shape should return one with the same length
+    bindSomeMbWithPerms (abstractVarsForLifetimesSh rw' l' sh) $ \sh' ->
+    PExpr_FieldShape <$> LLVMFieldShape <$> ValPerm_Eq <$> PExpr_Var <$>
+    someMbWithPermsVar1 knownRepr (ValPerm_LLVMBlock $
+                                   LLVMBlockPerm rw' l' (bvInt 0) len sh')
+abstractVarsForLifetimesSh rw l (PExpr_PtrShape maybe_rw maybe_l sh) =
+  let rw' = maybe rw id maybe_rw in
+  PExpr_PtrShape maybe_rw maybe_l <$> abstractVarsForLifetimesSh rw' l sh
+abstractVarsForLifetimesSh rw l (PExpr_SeqShape sh1 sh2) =
+    PExpr_SeqShape <$> abstractVarsForLifetimesSh rw l sh1 <*>
+    abstractVarsForLifetimesSh rw l sh2
+abstractVarsForLifetimesSh rw l (PExpr_ExShape mb_sh) =
+  mbSomeMbWithPerms knownRepr $ fmap (abstractVarsForLifetimesSh rw l) mb_sh
+abstractVarsForLifetimesSh _ _ sh = pure sh
 
 -- | A 'SomeMbWithPerms' in a binding
 data MbSomeMbWithPerms ctx a where
@@ -1270,8 +1407,12 @@ data MbSomeMbWithPerms ctx a where
 
 mbAbstractVarsForLifetimes :: Mb ctx (ValuePerms ps) ->
                               MbSomeMbWithPerms ctx (ValuePerms ps)
-mbAbstractVarsForLifetimes = error "FIXME HERE NOW"
-
+mbAbstractVarsForLifetimes mb_ps
+  | [nuMP| SomeMbWithPerms ctx' mb_ctx_ps' mb_ps' |] <-
+      mbMatch (fmap (abstractVarsForLifetimes Nothing) mb_ps)
+  , ctx'_prxs <- cruCtxProxies $ mbLift ctx' =
+    MbSomeMbWithPerms (mbLift ctx') (mbSwap ctx'_prxs mb_ctx_ps')
+    (mbSwap ctx'_prxs mb_ps')
 
 -- | For both the input and output permissions of a function permission, find
 -- all permissions @p@ in with a lifetime that are contained inside a struct
@@ -1290,8 +1431,7 @@ abstractFunVarsForLifetimes (Some3FunPerm
     Some3FunPerm $ mbGhostsFunPerm ghosts'
     (mbCombineAssoc ghosts' ghosts_prxs args_prxs mb_gps') $
     flip fmap mb_ps_in' $ \ps_in' ->
-    mbGoutsFunPerm gouts' mb_gops' $
-    fmap (FunPerm ghosts args gouts ret ps_in') mb_ps_out'
+    mbGoutsFunPerm ghosts args gouts ret ps_in' gouts' mb_gops' mb_ps_out'
 
 -- | Convert a monomorphic function type, i.e., one with no type arguments
 rsConvertMonoFun :: (1 <= w, KnownNat w) => prx w -> Span -> Abi ->
