@@ -132,6 +132,7 @@ import qualified SAWScript.Crucible.Common.Override as Ov (getSymInterface)
 import           SAWScript.Crucible.LLVM.MethodSpecIR
 import           SAWScript.Crucible.LLVM.ResolveSetupValue
 import           SAWScript.Options
+import           SAWScript.Panic
 import           SAWScript.Utils (bullets, handleException)
 
 type LabeledPred sym = W4.LabeledPred (W4.Pred sym) Crucible.SimError
@@ -1608,28 +1609,37 @@ matchPointsToBitfieldValue opts sc cc spec prepost loc ptr bfIndex val =
                        -- Let us imagine that we are matching against the
                        -- `y` field. The bitfield (bfBV) will look something
                        -- like 0b????Y???, where `Y` denotes the value of the
-                       -- `y` bit.
-                       let -- The offset (in bits) of the field within the
-                           -- bitfield. For `y`, this is 3 (x1's offset is 0
-                           -- and `x2`'s offset is 1).
-                           bfOffset = biFieldOffset bfIndex
-                           bfOffsetBV = BV.mkBV bfWidth $ fromIntegral bfOffset
+                       -- `y` bit. Here, `bfWidth` (the width of the entire
+                       -- bitfield in bits) is 8, and `rhsWidth` (the width of
+                       -- the `y` field in bits) is 1.
 
-                       -- Use a logical right shift to make the bits of the
-                       -- field within the bitfield become the least
-                       -- significant bits. In the `y` example, this is
-                       -- tantamount to shifting 0b????Y??? right by `bfOffset`
-                       -- (i.e., 3 bits) to become 0b000????Y.
-                       bfBV'  <- liftIO $ W4.bvLshr sym bfBV =<< W4.bvLit sym bfWidth bfOffsetBV
+                       -- The offset (in bits) of the field within the
+                       -- bitfield. For `y`, this is 3 (x1's offset is 0 and
+                       -- `x2`'s offset is 1).
+                       Some bfOffset <- pure $ mkNatRepr $ fromIntegral
+                                             $ biFieldOffset bfIndex
 
-                       -- Finally, truncate the bitfield such that only the
-                       -- bits for the field remain. In the `y` example, this
-                       -- means truncating 0b000????Y to `0bY`.
-                       bfBV'' <- liftIO $ W4.bvTrunc sym rhsWidth bfBV'
+                       -- Next, convince the typechecker that
+                       -- (bfOffset + rhsWidth) <= bfWidth. This should always
+                       -- be the case if the BitfieldIndex is constructed
+                       -- correctly.
+                       LeqProof <- case testLeq (addNat bfOffset rhsWidth) bfWidth of
+                         Just prf -> pure prf
+                         Nothing -> panic
+                           "llvm_points_to_bitfield: Unexpected bitfield field offset"
+                           [ "Field offset: " ++ show bfOffset
+                           , "RHS value width: " ++ show rhsWidth
+                           , "Bitvector width: " ++ show bfWidth
+                           ]
 
-                       -- Match the truncated bitfield against the RHS value.
-                       let res_val' = Crucible.LLVMValInt bfBlk bfBV''
-                       pure Nothing <* matchArg opts sc cc spec prepost res_val' memTy val
+                       -- Finally, select the subsequence of bits from the
+                       -- bitfield corresponding to the field. In the `y`
+                       -- example, the means selecting `0bY` from `0b????Y???`.
+                       bfFieldBV <- liftIO $ W4.bvSelect sym bfOffset rhsWidth bfBV
+
+                       -- Match the selected field against the RHS value.
+                       let field_val = Crucible.LLVMValInt bfBlk bfFieldBV
+                       pure Nothing <* matchArg opts sc cc spec prepost field_val memTy val
                   _ ->
                     fail $ unlines
                       [ "llvm_points_to_bitfield: RHS value's size must be less then or equal to bitfield's size"
@@ -2237,7 +2247,7 @@ storePointsToBitfieldValue opts cc env tyenv nameEnv base_mem ptr bfIndex val = 
 
                     -- Zero-extend the RHS value to be the same width as
                     -- the bitfield. In our running example, we
-                    -- sign-extend 0b1 (1) to 0b00000001.
+                    -- zero-extend 0b1 (1) to 0b00000001.
                     rhsBV' <- W4.bvZext sym bfWidth rhsBV
 
                     -- Left-shift the zero-extended RHS value such that
