@@ -8,10 +8,10 @@ import Verifier.SAW.Heapster.Located
 -- @(context). inputs -o outputs@
 data AstFunPerm = AstFunPerm
   Pos
-  [(Located String, AstType)]
-  [(Located String, AstExpr)]
-  [(Located String, AstType)]
-  [(Located String, AstExpr)]   -- ^ @-o@ position, context, inputs, outputs
+  [(Located String, AstType)] -- ^ The context of ghost variables
+  [(Located String, AstExpr)] -- ^ The input permissions
+  [(Located String, AstType)] -- ^ The context of ghost output variables
+  [(Located String, AstExpr)] -- ^ The output permissions
   deriving Show
 
 -- | Unchecked array permission
