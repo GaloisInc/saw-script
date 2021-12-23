@@ -69,8 +69,83 @@ import Verifier.SAW.Heapster.Permissions
 
 
 ----------------------------------------------------------------------
--- * Helper Definitions for Translation
+-- * Helper Definitions
 ----------------------------------------------------------------------
+
+-- | A version of 'mbSeparate' that takes in an explicit phantom argument for
+-- the first context
+mbSeparatePrx :: prx1 ctx1 -> RAssign prx2 ctx2 -> Mb (ctx1 :++: ctx2) a ->
+                 Mb ctx1 (Mb ctx2 a)
+mbSeparatePrx _ = mbSeparate
+
+-- | Reassociate a binding list
+mbAssoc :: prx1 ctx1 -> RAssign prx2 ctx2 -> RAssign prx3 ctx3 ->
+           Mb (ctx1 :++: (ctx2 :++: ctx3)) a ->
+           Mb ((ctx1 :++: ctx2) :++: ctx3) a
+mbAssoc ctx1 ctx2 ctx3 mb_a | Refl <- RL.appendAssoc ctx1 ctx2 ctx3 = mb_a
+
+-- | Reassociate a binding list in the reverse direction of 'mbAssoc'
+mbUnAssoc :: prx1 ctx1 -> RAssign prx2 ctx2 -> RAssign prx3 ctx3 ->
+             Mb ((ctx1 :++: ctx2) :++: ctx3) a ->
+             Mb (ctx1 :++: (ctx2 :++: ctx3)) a
+mbUnAssoc ctx1 ctx2 ctx3 mb_a | Refl <- RL.appendAssoc ctx1 ctx2 ctx3 = mb_a
+
+-- | Prove type-level equality by reassociating four type lists
+appendAssoc4 :: RAssign Proxy ctx1 -> RAssign Proxy ctx2 ->
+                RAssign Proxy ctx3 -> RAssign Proxy ctx4 ->
+                ctx1 :++: ((ctx2 :++: ctx3) :++: ctx4) :~:
+                ((ctx1 :++: ctx2) :++: ctx3) :++: ctx4
+appendAssoc4 ctx1 ctx2 ctx3 ctx4
+  | Refl <- RL.appendAssoc ctx1 (RL.append ctx2 ctx3) ctx4
+  , Refl <- RL.appendAssoc ctx1 ctx2 ctx3
+  = Refl
+
+-- | Reassociate a binding list of four contexts
+mbAssoc4 :: RAssign Proxy ctx1 -> RAssign Proxy ctx2 ->
+            RAssign Proxy ctx3 -> RAssign Proxy ctx4 ->
+            Mb (ctx1 :++: ((ctx2 :++: ctx3) :++: ctx4)) a ->
+            Mb (((ctx1 :++: ctx2) :++: ctx3) :++: ctx4) a
+mbAssoc4 ctx1 ctx2 ctx3 ctx4 mb_a
+  | Refl <- appendAssoc4 ctx1 ctx2 ctx3 ctx4 = mb_a
+
+-- | Combine bindings lists using 'mbCombine' and reassociate them
+mbCombineAssoc ::
+  prx1 ctx1 ->
+  RAssign prx2 ctx2 ->
+  RAssign prx3 ctx3 ->
+  Mb ctx1 (Mb (ctx2 :++: ctx3) a) ->
+  Mb ((ctx1 :++: ctx2) :++: ctx3) a
+mbCombineAssoc _ ctx2 ctx3
+  = mbCombine (RL.mapRAssign (const Proxy) ctx3)
+  . mbCombine (RL.mapRAssign (const Proxy) ctx2)
+  . fmap (mbSeparatePrx ctx2 ctx3)
+
+-- | Combine bindings lists using 'mbCombine' and reassociate them
+mbCombineAssoc4 ::
+  RAssign Proxy ctx1 -> RAssign Proxy ctx2 ->
+  RAssign Proxy ctx3 -> RAssign Proxy ctx4 ->
+  Mb ctx1 (Mb ((ctx2 :++: ctx3) :++: ctx4) a) ->
+  Mb (((ctx1 :++: ctx2) :++: ctx3) :++: ctx4) a
+mbCombineAssoc4 ctx1 ctx2 ctx3 ctx4 mb_mb_a
+  | Refl <- appendAssoc4 ctx1 ctx2 ctx3 ctx4
+  = mbCombine ((ctx2 `RL.append` ctx3) `RL.append` ctx4) mb_mb_a
+
+-- | Prepend and reassociate an 'RAssign'
+assocAppend :: RAssign f ctx1 -> prx2 ctx2 -> RAssign prx3 ctx3 ->
+               RAssign f (ctx2 :++: ctx3) ->
+               RAssign f ((ctx1 :++: ctx2) :++: ctx3)
+assocAppend fs1 ctx2 ctx3 fs23 =
+  let (fs2, fs3) = RL.split ctx2 ctx3 fs23 in
+  RL.append (RL.append fs1 fs2) fs3
+
+-- | Prepend and reassociate an 'RAssign' to get one with four type contexts
+assocAppend4 :: RAssign f ctx1 -> prx2 ctx2 -> RAssign prx3 ctx3 ->
+                RAssign prx4 ctx4 ->
+                RAssign f ((ctx2 :++: ctx3) :++: ctx4) ->
+                RAssign f (((ctx1 :++: ctx2) :++: ctx3) :++: ctx4)
+assocAppend4 fs1 ctx2 ctx3 ctx4 fs234 =
+  let (fs2, fs3, fs4) = rlSplit3 ctx2 ctx3 ctx4 fs234 in
+  RL.append (RL.append (RL.append fs1 fs2) fs3) fs4
 
 -- | A permission of some llvm pointer type
 data SomeLLVMPerm =
@@ -770,117 +845,6 @@ funPerm3FromArgLayoutNoArgs :: ArgLayout -> TypeRepr ret -> ValuePerm ret ->
 funPerm3FromArgLayoutNoArgs layout ret ret_perm =
   funPerm3FromArgLayout layout Ctx.empty MNil MNil ret ret_perm
 
-
--- FIXME: should we save any of these?
-{-
--- | Extend a name binding by adding a name in the middle
-extMbMiddle ::
-  forall prx1 ctx1 prx2 ctx2 prxb a b.
-  prx1 ctx1 -> RAssign prx2 ctx2 -> prxb b ->
-  Mb (ctx1 :++: ctx2) a ->
-  Mb (ctx1 :++: ((RNil :> b) :++: ctx2)) a
-extMbMiddle (_ :: prx1 ctx1) ctx2 (_ :: prxb b) mb_a =
-  mbCombine (RL.append (MNil :>: (Proxy :: Proxy b)) pxys) $
-  fmap (mbCombine pxys . nu @_ @b . const) $
-  mbSeparate @_ @ctx1 ctx2 mb_a
-  where
-    pxys = RL.mapRAssign (const Proxy) ctx2
-
--- | Insert an object into the middle of an 'RAssign'
-rassignInsertMiddle :: prx1 ctx1 -> RAssign prx2 ctx2 -> f b ->
-                       RAssign f (ctx1 :++: ctx2) ->
-                       RAssign f (ctx1 :++: ((RNil :> b) :++: ctx2))
-rassignInsertMiddle ctx1 ctx2 fb fs =
-  let (fs1, fs2) = RL.split ctx1 ctx2 fs in
-  RL.append fs1 (RL.append (MNil :>: fb) fs2)
-
--- | Prepend an argument with input and output perms to a 'Some3FunPerm'
-funPerm3PrependArg :: TypeRepr arg -> ValuePerm arg -> ValuePerm arg ->
-                      Some3FunPerm -> Some3FunPerm
-funPerm3PrependArg arg_tp arg_in arg_out (Some3FunPerm
-                                          (FunPerm ghosts args ret
-                                           ps_in ps_out)) =
-  let args_prxs = cruCtxProxies args in
-  Some3FunPerm $ FunPerm ghosts (appendCruCtx (singletonCruCtx arg_tp) args) ret
-  (extMbMiddle ghosts args_prxs arg_tp $
-   fmap (rassignInsertMiddle ghosts args_prxs arg_in) ps_in)
-  (extMbMiddle ghosts (args_prxs :>: Proxy) arg_tp $
-   fmap (rassignInsertMiddle ghosts (args_prxs :>: Proxy) arg_out) ps_out)
--}
-
-mbSeparatePrx :: prx1 ctx1 -> RAssign prx2 ctx2 -> Mb (ctx1 :++: ctx2) a ->
-                 Mb ctx1 (Mb ctx2 a)
-mbSeparatePrx _ = mbSeparate
-
-mbAssoc :: prx1 ctx1 -> RAssign prx2 ctx2 -> RAssign prx3 ctx3 ->
-           Mb (ctx1 :++: (ctx2 :++: ctx3)) a ->
-           Mb ((ctx1 :++: ctx2) :++: ctx3) a
-mbAssoc ctx1 ctx2 ctx3 mb_a | Refl <- RL.appendAssoc ctx1 ctx2 ctx3 = mb_a
-{-
-mbAssoc ctx1 ctx2 ctx3 mb_a =
-  mbCombine (RL.mapRAssign (const Proxy) ctx3) $
-  mbCombine (RL.mapRAssign (const Proxy) ctx2) $
-  fmap (mbSeparatePrx ctx2 ctx3) $
-  mbSeparatePrx ctx1 (RL.append (RL.map (const Proxy) ctx2)
-                      (RL.map (const Proxy) ctx3)) mb_a
--}
-
-mbUnAssoc :: prx1 ctx1 -> RAssign prx2 ctx2 -> RAssign prx3 ctx3 ->
-             Mb ((ctx1 :++: ctx2) :++: ctx3) a ->
-             Mb (ctx1 :++: (ctx2 :++: ctx3)) a
-mbUnAssoc ctx1 ctx2 ctx3 mb_a | Refl <- RL.appendAssoc ctx1 ctx2 ctx3 = mb_a
-
-appendAssoc4 :: RAssign Proxy ctx1 -> RAssign Proxy ctx2 ->
-                RAssign Proxy ctx3 -> RAssign Proxy ctx4 ->
-                ctx1 :++: ((ctx2 :++: ctx3) :++: ctx4) :~:
-                ((ctx1 :++: ctx2) :++: ctx3) :++: ctx4
-appendAssoc4 ctx1 ctx2 ctx3 ctx4
-  | Refl <- RL.appendAssoc ctx1 (RL.append ctx2 ctx3) ctx4
-  , Refl <- RL.appendAssoc ctx1 ctx2 ctx3
-  = Refl
-
-
-mbAssoc4 :: RAssign Proxy ctx1 -> RAssign Proxy ctx2 ->
-            RAssign Proxy ctx3 -> RAssign Proxy ctx4 ->
-            Mb (ctx1 :++: ((ctx2 :++: ctx3) :++: ctx4)) a ->
-            Mb (((ctx1 :++: ctx2) :++: ctx3) :++: ctx4) a
-mbAssoc4 ctx1 ctx2 ctx3 ctx4 mb_a
-  | Refl <- appendAssoc4 ctx1 ctx2 ctx3 ctx4 = mb_a
-
-mbCombineAssoc ::
-  prx1 ctx1 ->
-  RAssign prx2 ctx2 ->
-  RAssign prx3 ctx3 ->
-  Mb ctx1 (Mb (ctx2 :++: ctx3) a) ->
-  Mb ((ctx1 :++: ctx2) :++: ctx3) a
-mbCombineAssoc _ ctx2 ctx3
-  = mbCombine (RL.mapRAssign (const Proxy) ctx3)
-  . mbCombine (RL.mapRAssign (const Proxy) ctx2)
-  . fmap (mbSeparatePrx ctx2 ctx3)
-
-mbCombineAssoc4 ::
-  RAssign Proxy ctx1 -> RAssign Proxy ctx2 ->
-  RAssign Proxy ctx3 -> RAssign Proxy ctx4 ->
-  Mb ctx1 (Mb ((ctx2 :++: ctx3) :++: ctx4) a) ->
-  Mb (((ctx1 :++: ctx2) :++: ctx3) :++: ctx4) a
-mbCombineAssoc4 ctx1 ctx2 ctx3 ctx4 mb_mb_a
-  | Refl <- appendAssoc4 ctx1 ctx2 ctx3 ctx4
-  = mbCombine ((ctx2 `RL.append` ctx3) `RL.append` ctx4) mb_mb_a
-
-assocAppend :: RAssign f ctx1 -> prx2 ctx2 -> RAssign prx3 ctx3 ->
-               RAssign f (ctx2 :++: ctx3) ->
-               RAssign f ((ctx1 :++: ctx2) :++: ctx3)
-assocAppend fs1 ctx2 ctx3 fs23 =
-  let (fs2, fs3) = RL.split ctx2 ctx3 fs23 in
-  RL.append (RL.append fs1 fs2) fs3
-
-assocAppend4 :: RAssign f ctx1 -> prx2 ctx2 -> RAssign prx3 ctx3 ->
-                RAssign prx4 ctx4 ->
-                RAssign f ((ctx2 :++: ctx3) :++: ctx4) ->
-                RAssign f (((ctx1 :++: ctx2) :++: ctx3) :++: ctx4)
-assocAppend4 fs1 ctx2 ctx3 ctx4 fs234 =
-  let (fs2, fs3, fs4) = rlSplit3 ctx2 ctx3 ctx4 fs234 in
-  RL.append (RL.append (RL.append fs1 fs2) fs3) fs4
 
 -- | Add ghost variables with the supplied permissions for the bound names in a
 -- 'FunPerm' in a binding
