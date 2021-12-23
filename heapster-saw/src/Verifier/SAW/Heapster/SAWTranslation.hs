@@ -1825,7 +1825,14 @@ instance TransInfo info =>
 instance TransInfo info =>
          Translate info ctx (LOwnedPerms ps) (TypeTrans
                                               (PermTransCtx ctx ps)) where
-  translate = translate . fmap (RL.map lownedPermPerm)
+  translate mb_lops =
+    translate $ flip fmap mb_lops $ \lops ->
+    -- NOTE: if we can't translate lops to a DistPerms, we just translate the
+    -- "raw" / un-offset permissions returned by lownedPermPerm, so that we at
+    -- least have something to return, and it doesn't really matter what because
+    -- in this case lops can't really be instantiated anyway
+    maybe (RL.map lownedPermPerm lops) distPermsToValuePerms $
+    lownedPermsToDistPerms lops
 
 -- Translate a FunPerm to a pi-abstraction (FIXME: more documentation!)
 instance TransInfo info =>

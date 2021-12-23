@@ -2104,8 +2104,8 @@ lownedPermExprAndPerm (LOwnedPermBlock e bp) =
 -- | Convert an 'LOwnedPerm' to a variable plus permission, if possible
 lownedPermVarAndPerm :: LOwnedPerm a -> Maybe (VarAndPerm a)
 lownedPermVarAndPerm lop
-  | ExprAndPerm (PExpr_Var x) p <- lownedPermExprAndPerm lop =
-    Just $ VarAndPerm x p
+  | Just (x, off) <- asVarOffset (lownedPermExpr lop) =
+    Just $ VarAndPerm x (offsetPerm off $ lownedPermPerm lop)
 lownedPermVarAndPerm _ = Nothing
 
 -- | Convert an expression plus permission to an 'LOwnedPerm', if possible
@@ -5155,9 +5155,7 @@ lownedPermsToDistPerms (lops :>: lop) =
 
 -- | Convert the expressions of an 'LOwnedPerms' to variables, if possible
 lownedPermsVars :: LOwnedPerms ps -> Maybe (RAssign Name ps)
-lownedPermsVars MNil = Just MNil
-lownedPermsVars (lops :>: lop) =
-  (:>:) <$> lownedPermsVars lops <*> lownedPermVar lop
+lownedPermsVars = fmap distPermsVars . lownedPermsToDistPerms
 
 -- | Test if an 'LOwnedPerm' could help prove any of a list of permissions
 lownedPermCouldProve :: LOwnedPerm a -> DistPerms ps -> Bool
