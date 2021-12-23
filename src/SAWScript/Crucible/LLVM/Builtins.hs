@@ -48,6 +48,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , llvm_conditional_points_to_at_type
     , llvm_points_to_internal
     , llvm_points_to_array_prefix
+    , llvm_points_to_bitfield
     , llvm_fresh_pointer
     , llvm_unsafe_assume_spec
     , llvm_fresh_var
@@ -192,7 +193,7 @@ import           SAWScript.Crucible.Common (Sym, SAWCruciblePersonality)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.Common.MethodSpec (SetupValue(..))
-import           SAWScript.Crucible.Common.Override hiding (getSymInterface)
+import           SAWScript.Crucible.Common.Override
 import qualified SAWScript.Crucible.Common.Setup.Builtins as Setup
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
@@ -348,7 +349,9 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
                 (\(_, setup_value) -> setupValueAsExtCns setup_value)
                 (Map.elems $ method_spec ^. MS.csArgBindings)
           let reference_input_parameters = mapMaybe
-                (\(LLVMPointsTo _ _ _ setup_value) -> llvmPointsToValueAsExtCns setup_value)
+                (\case
+                  LLVMPointsTo _ _ _ setup_value -> llvmPointsToValueAsExtCns setup_value
+                  LLVMPointsToBitfield _ _ _ val -> setupValueAsExtCns val)
                 (method_spec ^. MS.csPreState ^. MS.csPointsTos)
           let input_parameters = nub $ value_input_parameters ++ reference_input_parameters
           let pre_free_variables = Map.fromList $
@@ -369,7 +372,9 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
                   Nothing -> Nothing
           let reference_output_parameters =
                 mapMaybe
-                (\(LLVMPointsTo _ _ _ setup_value) -> llvmPointsToValueAsExtCns setup_value)
+                (\case
+                  LLVMPointsTo _ _ _ setup_value -> llvmPointsToValueAsExtCns setup_value
+                  LLVMPointsToBitfield _ _ _ val -> setupValueAsExtCns val)
                 (method_spec ^. MS.csPostState ^. MS.csPointsTos)
           let output_parameters =
                 nub $ filter (isNothing . (Map.!?) pre_free_variables) $
@@ -428,8 +433,11 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
             setup_value_substitute_output_parameter
             (method_spec ^. MS.csRetValue)
           extracted_post_state_points_tos <- liftIO $ mapM
-            (\(LLVMPointsTo x y z value) ->
-              LLVMPointsTo x y z <$> llvm_points_to_value_substitute_output_parameter value)
+            (\case
+              LLVMPointsTo x y z value ->
+                LLVMPointsTo x y z <$> llvm_points_to_value_substitute_output_parameter value
+              LLVMPointsToBitfield x y z value ->
+                LLVMPointsToBitfield x y z <$> setup_value_substitute_output_parameter value)
             (method_spec ^. MS.csPostState ^. MS.csPointsTos)
           let extracted_method_spec = method_spec &
                 MS.csRetValue .~ extracted_ret_value &
@@ -742,7 +750,11 @@ checkSpecReturnType cc mspec =
 -- Returns a tuple of (arguments, preconditions, pointer values,
 -- memory).
 verifyPrestate ::
-  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?memOpts :: Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options ->
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
@@ -882,7 +894,11 @@ resolveArguments cc mem mspec env = mapM resolveArg [0..(nArgs-1)]
 -- | For each "llvm_global_alloc" in the method specification, allocate and
 -- register the appropriate memory.
 setupGlobalAllocs :: forall arch.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   MemImpl ->
@@ -928,7 +944,12 @@ setupGlobalAllocs cc mspec mem0 = foldM go mem0 $ mspec ^. MS.csGlobalAllocs
 -- function spec, write the given value to the address of the given
 -- pointer.
 setupPrePointsTos :: forall arch.
-  (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts :: Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   MS.CrucibleMethodSpecIR (LLVM arch)       ->
   Options ->
   LLVMCrucibleContext arch       ->
@@ -944,15 +965,22 @@ setupPrePointsTos mspec opts cc env pts mem0 = foldM go mem0 pts
     go :: MemImpl -> MS.PointsTo (LLVM arch) -> IO MemImpl
     go mem (LLVMPointsTo _loc cond ptr val) =
       do ptr' <- resolveSetupVal cc mem env tyenv nameEnv ptr
-         ptr'' <- case ptr' of
-           Crucible.LLVMValInt blk off
-             | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth
-             -> return (Crucible.LLVMPointer blk off)
-           _ -> throwMethodSpec mspec "Non-pointer value found in points-to assertion"
+         ptr'' <- unpackPtrVal ptr'
 
          cond' <- mapM (resolveSAWPred cc . ttTerm) cond
 
          storePointsToValue opts cc env tyenv nameEnv mem cond' ptr'' val Nothing
+    go mem (LLVMPointsToBitfield _loc ptr fieldName val) =
+      do (bfIndex, ptr') <- resolveSetupValBitfield cc mem env tyenv nameEnv ptr fieldName
+         ptr'' <- unpackPtrVal ptr'
+
+         storePointsToBitfieldValue opts cc env tyenv nameEnv mem ptr'' bfIndex val
+
+    unpackPtrVal :: LLVMVal -> IO (LLVMPtr (Crucible.ArchWidth arch))
+    unpackPtrVal (Crucible.LLVMValInt blk off)
+        | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth
+        = return (Crucible.LLVMPointer blk off)
+    unpackPtrVal _ = throwMethodSpec mspec "Non-pointer value found in points-to assertion"
 
 -- | Sets up globals (ghost variable), and collects boolean terms
 -- that should be assumed to be true.
@@ -1010,7 +1038,11 @@ assertEqualVals cc v1 v2 =
 
 -- TODO(langston): combine with/move to executeAllocation
 doAlloc ::
-  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  ( ?memOpts :: Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   LLVMCrucibleContext arch       ->
   AllocIndex ->
   LLVMAllocSpec ->
@@ -1380,6 +1412,7 @@ setupLLVMCrucibleContext pathSat lm action =
      crucible_assert_then_assume_enabled <- gets rwCrucibleAssertThenAssume
      what4HashConsing <- gets rwWhat4HashConsing
      laxPointerOrdering <- gets rwLaxPointerOrdering
+     laxLoadsAndStores <- gets rwLaxLoadsAndStores
      what4Eval <- gets rwWhat4Eval
      allocSymInitCheck <- gets rwAllocSymInitCheck
      crucibleTimeout <- gets rwCrucibleTimeout
@@ -1388,9 +1421,10 @@ setupLLVMCrucibleContext pathSat lm action =
        do let ?lc = ctx^.Crucible.llvmTypeCtx
           let ?memOpts = Crucible.defaultMemOptions
                           { Crucible.laxPointerOrdering = laxPointerOrdering
+                          , Crucible.laxLoadsAndStores = laxLoadsAndStores
                           }
           let ?intrinsicsOpts = Crucible.defaultIntrinsicsOptions
-          let ?recordLLVMAnnotation = \_ _ -> return ()
+          let ?recordLLVMAnnotation = \_ _ _ -> return ()
           let ?w4EvalTactic = W4EvalTactic { doW4Eval = what4Eval }
           let ?checkAllocSymInit = allocSymInitCheck
           cc <-
@@ -2154,26 +2188,12 @@ llvm_points_to_internal mbCheckType cond (getAllLLVM -> ptr) (getAllLLVM -> val)
   do cc <- getLLVMCrucibleContext
      loc <- getW4Position "llvm_points_to"
      Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -> Crucible.withPtrWidth wptr $
-       do let ?lc = ccTypeCtx cc
-          st <- get
-          let rs = st ^. Setup.csResolvedState
-          if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
-            then throwCrucibleSetup loc "Multiple points-to preconditions on same pointer"
-            else Setup.csResolvedState %= MS.markResolved ptr []
+       do st <- get
           let env = MS.csAllocations (st ^. Setup.csMethodSpec)
               nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-          ptrTy <- typeOfSetupValue cc env nameEnv ptr
-          lhsTy <- case ptrTy of
-            Crucible.PtrType symTy ->
-              case Crucible.asMemType symTy of
-                Right lhsTy -> return lhsTy
-                Left err -> throwCrucibleSetup loc $ unlines
-                  [ "lhs not a valid pointer type: " ++ show ptrTy
-                  , "Details:"
-                  , err
-                  ]
 
-            _ -> throwCrucibleSetup loc $ "lhs not a pointer type: " ++ show ptrTy
+          let path = []
+          lhsTy <- llvm_points_to_check_lhs_validity ptr loc path
 
           valTy <- typeOfSetupValue cc env nameEnv val
           case mbCheckType of
@@ -2184,6 +2204,82 @@ llvm_points_to_internal mbCheckType cond (getAllLLVM -> ptr) (getAllLLVM -> val)
               checkMemTypeCompatibility loc ty' valTy
 
           Setup.addPointsTo (LLVMPointsTo loc cond ptr $ ConcreteSizeValue val)
+
+-- | Like 'llvm_points_to_internal', but specifically geared towards the needs
+-- of fields within bitfields. In particular, rather than checking
+-- 'Crucible.MemType' compatibility against the type that that LHS points to,
+-- which corresponds to the overall bitfield type, this checks compatibility
+-- against the type of the field /within/ the bitfield, which is often a
+-- smaller type.
+llvm_points_to_bitfield ::
+  AllLLVM SetupValue {- ^ lhs pointer -} ->
+  String             {- ^ name of field in bitfield -} ->
+  AllLLVM SetupValue {- ^ rhs value -} ->
+  LLVMCrucibleSetupM ()
+llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
+  LLVMCrucibleSetupM $
+  do cc <- getLLVMCrucibleContext
+     loc <- getW4Position "llvm_points_to_bitfield"
+     Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -> Crucible.withPtrWidth wptr $
+       do st <- get
+          let env = MS.csAllocations (st ^. Setup.csMethodSpec)
+              nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+
+          -- NB: Don't use [] for the path here. It's perfectly acceptable to
+          -- have multiple llvm_points_to_bitfield statements on the same
+          -- pointer provided that the field names are different, so we use
+          -- the field name as the path.
+          let path = [Left fieldName]
+          _ <- llvm_points_to_check_lhs_validity ptr loc path
+
+          bfIndex <- resolveSetupBitfieldIndexOrFail cc env nameEnv ptr fieldName
+          let lhsFieldTy = Crucible.IntType $ fromIntegral $ biFieldSize bfIndex
+          valTy <- typeOfSetupValue cc env nameEnv val
+          -- Currently, we require the type of the RHS value to precisely match
+          -- the type of the field within the bitfield. One could imagine
+          -- having finer-grained control over this (e.g.,
+          -- llvm_points_to_bitfield_at_type or llvm_points_to_bitfield_untyped),
+          -- but no one has asked for this yet.
+          checkMemTypeCompatibility loc lhsFieldTy valTy
+
+          Setup.addPointsTo (LLVMPointsToBitfield loc ptr fieldName val)
+
+-- | Perform a set of validity checks that are shared in common between
+-- 'llvm_points_to_internal' and 'llvm_points_to_bitfield':
+--
+-- * Check that there are no dupplicate points-to preconditions on the LHS
+--   pointer with the supplied path.
+--
+-- * Check that the LHS is in fact a valid pointer type.
+--
+-- Returns the 'Crucible.MemType' that the LHS points to.
+llvm_points_to_check_lhs_validity ::
+  SetupValue (LLVM arch) {- ^ lhs pointer -} ->
+  W4.ProgramLoc {- ^ the location in the program -} ->
+  [Either String Int] {- ^ the path from the pointer to the pointee -} ->
+  StateT (Setup.CrucibleSetupState (LLVM arch)) TopLevel Crucible.MemType
+llvm_points_to_check_lhs_validity ptr loc path =
+  do cc <- getLLVMCrucibleContext
+     let ?lc = ccTypeCtx cc
+     st <- get
+     let rs = st ^. Setup.csResolvedState
+     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr path rs
+       then throwCrucibleSetup loc "Multiple points-to preconditions on same pointer"
+       else Setup.csResolvedState %= MS.markResolved ptr path
+     let env = MS.csAllocations (st ^. Setup.csMethodSpec)
+         nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+     ptrTy <- typeOfSetupValue cc env nameEnv ptr
+     case ptrTy of
+       Crucible.PtrType symTy ->
+         case Crucible.asMemType symTy of
+           Right lhsTy -> return lhsTy
+           Left err -> throwCrucibleSetup loc $ unlines
+             [ "lhs not a valid pointer type: " ++ show ptrTy
+             , "Details:"
+             , err
+             ]
+
+       _ -> throwCrucibleSetup loc $ "lhs not a pointer type: " ++ show ptrTy
 
 llvm_points_to_array_prefix ::
   AllLLVM SetupValue ->

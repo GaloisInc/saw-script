@@ -510,7 +510,7 @@ setLoc l =
              let lty = llvmBytes w
                  ty  = locRepr l
              val <- packMemValue sym lty ty v
-             let alignment = noAlignment -- default to byte-aligned (FIXME)
+             let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)
              mem1 <- storeConstRaw sym mem loc lty alignment val
 
              return s { stateMem = mem1 }
@@ -885,7 +885,7 @@ setCryPost opts s (_nm,p) =
                do let ?ptrWidth = knownNat
                   loc <- adjustPtr sym mem ptrV (bytesToInteger (i *. u))
                   val <- packMemValue sym llT cruT v
-                  let alignment = noAlignment -- default to byte-aligned (FIXME)
+                  let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)
                   storeConstRaw sym mem loc llT alignment val
 
          let cur   = Proxy @p
@@ -933,7 +933,7 @@ allocate sym ar s =
     do let ?ptrWidth = knownNat @64
        let szInt = bytesToInteger (uncurry (*.) (areaSize ar))
        sz <- bvLit sym knownNat (BV.mkBV knownNat szInt)
-       let alignment = noAlignment -- default to byte-aligned (FIXME)
+       let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)
        (base,mem) <- doMalloc sym HeapAlloc mut (areaName ar) (stateMem s) sz alignment
        ptr <- adjustPtr sym mem base (bytesToInteger (areaPtr ar))
        return (base,ptr,mem)
@@ -960,7 +960,7 @@ fillFresh sym ptrOk p u todo mem =
          val <- packMemValue sym lty ty =<< freshVal sym ty ptrOk nm
          -- Here we use the write that ignore mutability.
          -- This is because we are writinging initialization code.
-         let alignment = noAlignment -- default to byte-aligned (FIXME)
+         let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)
          mem1 <- storeConstRaw sym mem p lty alignment val
          p1   <- adjustPtr sym mem1 p elS
          fillFresh sym ptrOk p1 u more mem1
@@ -1070,7 +1070,7 @@ setupGlobals opts gs fs s
 
        let ?ptrWidth = knownNat @64
        sz <- bvLit sym knownNat (BV.mkBV knownNat size)
-       let alignment = noAlignment -- default to byte-aligned (FIXME)
+       let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)
        (p,mem) <- doMalloc sym GlobalAlloc Immutable "Globals" (stateMem s) sz alignment
 
        let Just base = asNat (fst (llvmPointerView p))
@@ -1146,7 +1146,7 @@ setupGlobals opts gs fs s
          z    <- natLit sym 0
          val  <- LLVMValInt z <$> bvLit sym w (BV.mkBV w v)
          let ?ptrWidth = knownNat
-         let alignment = noAlignment -- default to byte-aligned (FIXME)
+         let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)
          mem1 <- storeConstRaw sym mem p lty alignment val
          p1   <- adjustPtr sym mem1 p szI
          return (p1,mem1)

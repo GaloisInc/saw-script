@@ -14,6 +14,7 @@ from . import connection
 from argo_client.connection import ServerConnection
 from . import llvm
 from . import exceptions
+from . import option
 from . import proofscript
 
 __designated_connection = None  # type: Optional[connection.SAWConnection]
@@ -357,7 +358,7 @@ class LogResults(View):
     def on_abort(self) -> None:
         print("🛑  Aborting proof script.", file=self.file)
 
-        
+
 def view(v: View) -> None:
     """Add a view to the global list of views. Future verification results will
        be handed to this view, and its on_finish() handler will be called at
@@ -645,6 +646,12 @@ def prove(goal: Any, proof_script: proofscript.ProofScript) -> ProofResult:
     else:
         pr.counterexample = None
     return pr
+
+def set_option(option : option.SAWOption, value : bool) -> None:
+    """Set a boolean-valued SAW option."""
+    global __designated_connection
+    if __designated_connection is not None:
+        __designated_connection.set_option(option=option,value=value)
 
 @atexit.register
 def script_exit() -> None:

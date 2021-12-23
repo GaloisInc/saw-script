@@ -268,6 +268,22 @@ class PointsTo:
                 "check points to type": check_target_type_json,
                 "condition": self.condition.to_json() if self.condition is not None else self.condition}
 
+
+class PointsToBitfield:
+    """The workhorse for ``points_to_bitfield``.
+    """
+    def __init__(self, pointer : SetupVal, field_name : str,
+                 target : SetupVal) -> None:
+        self.pointer = pointer
+        self.field_name = field_name
+        self.target = target
+
+    def to_json(self) -> Any:
+        return {"pointer": self.pointer.to_json(),
+                "field name": self.field_name,
+                "points to": self.target.to_json()}
+
+
 @dataclass
 class GhostVariable:
     name: str
@@ -292,6 +308,7 @@ class State:
     conditions : List[Condition] = dataclasses.field(default_factory=list)
     allocated : List[Allocated] = dataclasses.field(default_factory=list)
     points_to : List[PointsTo] = dataclasses.field(default_factory=list)
+    points_to_bitfield : List[PointsToBitfield] = dataclasses.field(default_factory=list)
     ghost_values : List[GhostValue] = dataclasses.field(default_factory=list)
 
     def to_json(self) -> JSON:
@@ -299,6 +316,7 @@ class State:
                 'conditions': [c.to_json() for c in self.conditions],
                 'allocated': [a.to_init_json() for a in self.allocated],
                 'points to': [p.to_json() for p in self.points_to],
+                'points to bitfield': [p.to_json() for p in self.points_to_bitfield],
                 'ghost values': [g.to_json() for g in self.ghost_values]
                }
 
@@ -444,6 +462,23 @@ class Contract:
         else:
             raise Exception("wrong state")
 
+    def points_to_bitfield(self, pointer : SetupVal, field_name : str,
+                           target : SetupVal) -> None:
+        """Declare that the memory location indicated by the ``pointer``
+        is a bitfield whose field, indicated by the ``field_name``,
+        contains the ``target``.
+
+        Currently, this function only supports LLVM verification. Attempting to
+        use this function for JVM verification will result in an error.
+        """
+        pt = PointsToBitfield(pointer, field_name, target)
+        if self.__state == 'pre':
+            self.__pre_state.points_to_bitfield.append(pt)
+        elif self.__state == 'post':
+            self.__post_state.points_to_bitfield.append(pt)
+        else:
+            raise Exception("wrong state")
+
     def ghost_value(self, var: GhostVariable, value: cryptoltypes.CryptolJSON) -> None:
         """Declare that the given ghost variable should have a value specified by the given Cryptol expression.
 
@@ -548,12 +583,14 @@ class Contract:
                  'pre allocated': [a.to_init_json() for a in self.__pre_state.allocated],
                  'pre ghost values': [g.to_json() for g in self.__pre_state.ghost_values],
                  'pre points tos': [pt.to_json() for pt in self.__pre_state.points_to],
+                 'pre points to bitfields': [pt.to_json() for pt in self.__pre_state.points_to_bitfield],
                  'argument vals': [a.to_json() for a in self.__arguments] if self.__arguments is not None else [],
                  'post vars': [v.to_init_json() for v in self.__post_state.fresh],
                  'post conds': [c.to_json() for c in self.__post_state.conditions],
                  'post allocated': [a.to_init_json() for a in self.__post_state.allocated],
                  'post ghost values': [g.to_json() for g in self.__post_state.ghost_values],
                  'post points tos': [pt.to_json() for pt in self.__post_state.points_to],
+                 'post points to bitfields': [pt.to_json() for pt in self.__post_state.points_to_bitfield],
                  'return val': self.__returns.to_json()}
 
             return self.__cached_json

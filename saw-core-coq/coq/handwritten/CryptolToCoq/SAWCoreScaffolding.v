@@ -6,6 +6,13 @@ From Coq Require        Numbers.NatInt.NZLog.
 From Coq Require Import Strings.String.
 From CryptolToCoq Require Export CompM.
 
+Definition sawLet_def A B (x : A) (y : A -> B) := y x.
+
+Global Notation "'sawLet' v ':=' x 'in' y" := (sawLet_def _ _ x (fun v => y))
+  (at level 70, v at level 99, right associativity).
+Global Notation "'sawLet' v ':' A ':=' x 'in' y" := (sawLet_def A _ x (fun v => y))
+  (at level 70, v at level 99, right associativity).
+
 (** A typeclass we use to restrict applications of the "error" axiom
   * to inhabited types. This allows the axiom to be realizable, and
   * prevents us from constructing an inconsistent environment.

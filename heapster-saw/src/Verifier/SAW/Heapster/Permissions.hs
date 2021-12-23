@@ -657,6 +657,9 @@ data PermExpr (a :: CrucibleType) where
                    Binding a (PermExpr (LLVMShapeType w)) ->
                    PermExpr (LLVMShapeType w)
 
+  -- | A false shape
+  PExpr_FalseShape :: PermExpr (LLVMShapeType w)
+
   -- | A permission as an expression
   PExpr_ValPerm :: ValuePerm a -> PermExpr (ValuePermType a)
 
@@ -915,6 +918,9 @@ instance Eq (PermExpr a) where
     = mbLift $ mbMap2 (==) mb_sh1 mb_sh2
   (PExpr_ExShape _) == _ = False
 
+  PExpr_FalseShape == PExpr_FalseShape = True
+  PExpr_FalseShape == _ = False
+
   (PExpr_ValPerm p1) == (PExpr_ValPerm p2) = p1 == p2
   (PExpr_ValPerm _) == _ = False
 
@@ -990,6 +996,7 @@ instance PermPretty (PermExpr a) where
     flip permPrettyExprMb mb_sh $ \(_ :>: Constant pp_n) ppm ->
     do pp <- ppm
        return $ sep [pretty "exsh" <+> pp_n <> dot, pp]
+  permPrettyM PExpr_FalseShape = return $ pretty "falsesh"
   permPrettyM (PExpr_ValPerm p) = permPrettyM p
 
 instance (1 <= w, KnownNat w) => PermPretty (LLVMFieldShape w) where
@@ -1684,6 +1691,8 @@ data ValuePerm (a :: CrucibleType) where
   -- permissions is the trivially true permission
   ValPerm_Conj :: [AtomicPerm a] -> ValuePerm a
 
+  -- | The false value permission
+  ValPerm_False :: ValuePerm a
 
 -- | Build an equality permission in a binding
 mbValPerm_Eq :: Mb ctx (PermExpr a) -> Mb ctx (ValuePerm a)
@@ -2923,6 +2932,8 @@ instance Eq (ValuePerm a) where
   (ValPerm_Var _ _) == _ = False
   (ValPerm_Conj aps1) == (ValPerm_Conj aps2) = aps1 == aps2
   (ValPerm_Conj _) == _ = False
+  ValPerm_False == ValPerm_False = True
+  ValPerm_False == _ = False
 
 instance Eq (AtomicPerm a) where
   (Perm_LLVMField fp1) == (Perm_LLVMField fp2)
@@ -3026,6 +3037,7 @@ instance PermPretty (ValuePerm a) where
   permPrettyM ValPerm_True = return $ pretty "true"
   permPrettyM (ValPerm_Conj ps) =
     (hang 2 . encloseSep mempty mempty (pretty "*")) <$> mapM permPrettyM ps
+  permPrettyM (ValPerm_False) = return $ pretty "false"
 
 instance PermPrettyF ValuePerm where
   permPrettyMF = permPrettyM
@@ -3327,6 +3339,7 @@ isConjPerm (ValPerm_Exists mb_p) = mbLift $ fmap isConjPerm mb_p
 isConjPerm (ValPerm_Named n _ _) = nameSortIsConj (namedPermNameSort n)
 isConjPerm (ValPerm_Var _ _) = False
 isConjPerm (ValPerm_Conj _) = True
+isConjPerm (ValPerm_False) = False
 
 -- | Return a struct permission where all fields have @true@ permissions
 trueStructAtomicPerm :: Assignment prx ctx -> AtomicPerm (StructType ctx)
@@ -3733,6 +3746,19 @@ llvmAtomicPermEndOffset p =
 llvmAtomicPermRange :: AtomicPerm (LLVMPointerType w) -> Maybe (BVRange w)
 llvmAtomicPermRange p = fmap llvmBlockRange $ llvmAtomicPermToBlock p
 
+-- | Test if an LLVM atomic permission contains some range of offsets that have
+-- an array shape
+llvmPermContainsArray :: AtomicPerm (LLVMPointerType w) -> Bool
+llvmPermContainsArray (Perm_LLVMArray _) = True
+llvmPermContainsArray (Perm_LLVMBlock bp) =
+  shapeContainsArray $ llvmBlockShape bp where
+  shapeContainsArray :: PermExpr (LLVMShapeType w) -> Bool
+  shapeContainsArray (PExpr_ArrayShape _ _ _) = True
+  shapeContainsArray (PExpr_SeqShape sh1 sh2) =
+    shapeContainsArray sh1 || shapeContainsArray sh2
+  shapeContainsArray _ = False
+llvmPermContainsArray _ = False
+
 -- | Set the range of an 'LLVMBlock'
 llvmBlockSetRange :: LLVMBlockPerm w -> BVRange w -> LLVMBlockPerm w
 llvmBlockSetRange bp (BVRange off len) =
@@ -3787,6 +3813,7 @@ llvmShapeLength (PExpr_ExShape mb_sh) =
     [nuMP| Just mb_len |] ->
       partialSubst (emptyPSubst $ singletonCruCtx $ knownRepr) mb_len
     _ -> Nothing
+llvmShapeLength PExpr_FalseShape = Just $ bvInt 0
 
 -- | Adjust the read/write and lifetime modalities of a block permission by
 -- setting those modalities that are supplied as arguments
@@ -3889,6 +3916,7 @@ modalizeShape rw l (PExpr_OrShape sh1 sh2) =
   PExpr_OrShape <$> modalizeShape rw l sh1 <*> modalizeShape rw l sh2
 modalizeShape rw l (PExpr_ExShape mb_sh) =
   PExpr_ExShape <$> mbM (fmap (modalizeShape rw l) mb_sh)
+modalizeShape _ _ PExpr_FalseShape = Just PExpr_FalseShape
 
 -- | Apply 'modalizeShape' to the shape of a block permission, raising an error
 -- if 'modalizeShape' cannot be applied
@@ -4754,6 +4782,7 @@ offsetLLVMPerm off (ValPerm_Var x off') =
   ValPerm_Var x $ addPermOffsets off' (mkLLVMPermOffset off)
 offsetLLVMPerm off (ValPerm_Conj ps) =
   ValPerm_Conj $ mapMaybe (offsetLLVMAtomicPerm off) ps
+offsetLLVMPerm _ ValPerm_False = ValPerm_False
 
 -- | Test if an LLVM pointer permission can be offset by the given offset; i.e.,
 -- whether 'offsetLLVMAtomicPerm' returns a value
@@ -5028,6 +5057,7 @@ permIsCopyable (ValPerm_Named npn args _) =
   namedPermArgsAreCopyable (namedPermNameArgs npn) args
 permIsCopyable (ValPerm_Var _ _) = False
 permIsCopyable (ValPerm_Conj ps) = all atomicPermIsCopyable ps
+permIsCopyable ValPerm_False = True
 
 -- | The same as 'permIsCopyable' except for atomic permissions
 atomicPermIsCopyable :: AtomicPerm a -> Bool
@@ -5098,6 +5128,7 @@ shapeIsCopyable rw (PExpr_OrShape sh1 sh2) =
   shapeIsCopyable rw sh1 && shapeIsCopyable rw sh2
 shapeIsCopyable rw (PExpr_ExShape mb_sh) =
   mbLift $ fmap (shapeIsCopyable rw) mb_sh
+shapeIsCopyable _ PExpr_FalseShape = True
 
 
 -- FIXME: need a traversal function for RAssign for the following two funs
@@ -5261,6 +5292,7 @@ instance FreeVars (PermExpr a) where
   freeVars (PExpr_OrShape sh1 sh2) =
     NameSet.union (freeVars sh1) (freeVars sh2)
   freeVars (PExpr_ExShape mb_sh) = NameSet.liftNameSet $ fmap freeVars mb_sh
+  freeVars PExpr_FalseShape = NameSet.empty
   freeVars (PExpr_ValPerm p) = freeVars p
 
 instance FreeVars (BVFactor w) where
@@ -5312,6 +5344,7 @@ instance FreeVars (ValuePerm tp) where
     NameSet.union (freeVars args) (freeVars off)
   freeVars (ValPerm_Var x off) = NameSet.insert x $ freeVars off
   freeVars (ValPerm_Conj ps) = freeVars ps
+  freeVars ValPerm_False = NameSet.empty
 
 instance FreeVars (ValuePerms tps) where
   freeVars ValPerms_Nil = NameSet.empty
@@ -5411,6 +5444,7 @@ instance NeededVars (ValuePerm a) where
   neededVars p@(ValPerm_Named _ _ _) = freeVars p
   neededVars p@(ValPerm_Var _ _) = freeVars p
   neededVars (ValPerm_Conj ps) = neededVars ps
+  neededVars ValPerm_False = NameSet.empty
 
 instance NeededVars (AtomicPerm a) where
   neededVars (Perm_LLVMField fp) = neededVars fp
@@ -5468,6 +5502,7 @@ readOnlyShape (PExpr_OrShape sh1 sh2) =
   PExpr_OrShape (readOnlyShape sh1) (readOnlyShape sh2)
 readOnlyShape (PExpr_ExShape mb_sh) =
   PExpr_ExShape $ fmap readOnlyShape mb_sh
+readOnlyShape PExpr_FalseShape = PExpr_FalseShape
 
 
 ----------------------------------------------------------------------
@@ -5653,6 +5688,7 @@ instance SubstVar s m => Substable s (PermExpr a) m where
       PExpr_OrShape <$> genSubst s sh1 <*> genSubst s sh2
     [nuMP| PExpr_ExShape mb_sh |] ->
       PExpr_ExShape <$> genSubstMb RL.typeCtxProxies s mb_sh
+    [nuMP| PExpr_FalseShape |] -> return PExpr_FalseShape
     [nuMP| PExpr_ValPerm p |] ->
       PExpr_ValPerm <$> genSubst s p
 
@@ -5759,6 +5795,8 @@ instance SubstVar s m => Substable s (ValuePerm a) m where
       offsetPerm <$> genSubst s mb_off <*> substPermVar s mb_x
     [nuMP| ValPerm_Conj aps |] ->
       ValPerm_Conj <$> mapM (genSubst s) (mbList aps)
+    [nuMP| ValPerm_False |] ->
+      pure ValPerm_False
 
 instance SubstVar s m => Substable1 s ValuePerm m where
   genSubst1 = genSubst
@@ -6404,6 +6442,8 @@ instance AbstractVars (PermExpr a) where
   abstractPEVars ns1 ns2 (PExpr_ExShape mb_sh) =
     absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_ExShape |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 mb_sh
+  abstractPEVars ns1 ns2 PExpr_FalseShape =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_FalseShape |])
   abstractPEVars ns1 ns2 (PExpr_ValPerm p) =
     absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_ValPerm |]))
     `clMbMbApplyM` abstractPEVars ns1 ns2 p
@@ -6524,6 +6564,8 @@ instance AbstractVars (ValuePerm a) where
   abstractPEVars ns1 ns2 (ValPerm_Conj ps) =
     absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Conj |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 ps
+  abstractPEVars ns1 ns2 ValPerm_False =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_False |])
 
 instance AbstractVars (ValuePerms as) where
   abstractPEVars ns1 ns2 ValPerms_Nil =
@@ -6748,6 +6790,7 @@ instance AbstractNamedShape w (PermExpr a) where
   abstractNSM (PExpr_OrShape sh1 sh2) =
     mbMap2 PExpr_OrShape <$> abstractNSM sh1 <*> abstractNSM sh2
   abstractNSM (PExpr_ExShape mb_sh) = fmap PExpr_ExShape <$> abstractNSM mb_sh
+  abstractNSM PExpr_FalseShape = pureBindingM PExpr_FalseShape
   abstractNSM (PExpr_ValPerm p) = fmap PExpr_ValPerm <$> abstractNSM p
 
 instance AbstractNamedShape w (PermExprs as) where
@@ -6768,6 +6811,7 @@ instance AbstractNamedShape w (ValuePerm a) where
   abstractNSM (ValPerm_Var x off) =
     fmap (ValPerm_Var x) <$> abstractNSM off
   abstractNSM (ValPerm_Conj aps) = fmap ValPerm_Conj <$> abstractNSM aps
+  abstractNSM ValPerm_False = (pure . pure) ValPerm_False
 
 instance AbstractNamedShape w (PermOffset a) where
   abstractNSM NoPermOffset = pureBindingM NoPermOffset

@@ -28,7 +28,9 @@ arrays_gen.v
 arrays_proofs.v
 clearbufs_gen.v
 clearbufs_proofs.v
+exp_explosion_gen.v
+exp_explosion_proofs.v
 mbox_gen.v
 mbox_proofs.v
-#sha512_gen.v
+sha512_gen.v
 #sha512_proofs.v

@@ -18,34 +18,56 @@ Theorem Nat_cases2_match_spec a f1 f2 f3 : forall x y,
   Nat_cases2 a f1 f2 f3 x y = Nat_cases2_match a f1 f2 f3 x y.
 Proof.
   induction x; induction y; simpl; congruence.
-Qed.
+Defined.
 
 Theorem minNat_min : forall x y, minNat x y = min x y.
 Proof.
   induction x; induction y; simpl; auto.
-Qed.
+Defined.
 
 Theorem maxNat_max : forall x y, maxNat x y = max x y.
 Proof.
   induction x; induction y; simpl; auto.
-Qed.
+Defined.
 
 Theorem addNat_add : forall x y, addNat x y = x + y.
 Proof.
   induction x; simpl; auto.
-Qed.
+Defined.
 
 Theorem subNat_sub : forall x y, subNat x y = x - y.
 Proof.
   induction x; induction y; simpl; auto.
-Qed.
+Defined.
 
 Theorem mulNat_mul : forall x y, mulNat x y = x * y.
 Proof.
   induction x; simpl; intros; auto.
   rewrite IHx.
   apply addNat_add.
+Defined.
+
+Definition streamScanl (a b : sort 0) (f : b -> a -> b) (z:b) (xs:Stream a) : Stream b :=
+  MkStream b
+    (fix strm (n:nat) : b :=
+       match n with
+       | O => z
+       | S n' => f (strm n') (streamGet a xs n')
+       end).
+
+Lemma streamScanl_zero a b f z xs : streamGet b (streamScanl a b f z xs) 0 = z.
+Proof.
+  reflexivity.
 Qed.
+
+Lemma streamScanl_succ a b f z xs : forall n,
+  streamGet b (streamScanl a b f z xs) (S n) =
+  f (streamGet b (streamScanl a b f z xs) n)
+    (streamGet a xs n).
+Proof.
+  intro n. reflexivity.
+Qed.
+
 
 Theorem fold_unfold_IRT As Ds D : forall x, foldIRT As Ds D (unfoldIRT As Ds D x) = x.
 Proof.

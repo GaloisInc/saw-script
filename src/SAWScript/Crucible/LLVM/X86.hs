@@ -297,9 +297,12 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       start <- io getCurrentTime
+      laxLoadsAndStores <- gets rwLaxLoadsAndStores
       let ?ptrWidth = knownNat @64
       let ?memOpts = C.LLVM.defaultMemOptions
-      let ?recordLLVMAnnotation = \_ _ -> return ()
+                       { C.LLVM.laxLoadsAndStores = laxLoadsAndStores
+                       }
+      let ?recordLLVMAnnotation = \_ _ _ -> return ()
       sc <- getSharedContext
       opts <- getOptions
       basic_ss <- getBasicSS
@@ -762,18 +765,26 @@ assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
   opts <- use x86Options
   cc <- use x86CrucibleContext
   mem <- use x86Mem
-  ptr <- resolvePtrSetupValue env tyenv tptr
+  ptr <- resolvePtrSetupValue env tyenv nameEnv tptr
   cond' <- liftIO $ mapM (resolveSAWPred cc . ttTerm) cond
   mem' <- liftIO $ LO.storePointsToValue opts cc env tyenv nameEnv mem cond' ptr tptval Nothing
+  x86Mem .= mem'
+assumePointsTo env tyenv nameEnv (LLVMPointsToBitfield _ tptr fieldName tptval) = do
+  opts <- use x86Options
+  cc <- use x86CrucibleContext
+  mem <- use x86Mem
+  (bfIndex, ptr) <- resolvePtrSetupValueBitfield env tyenv nameEnv tptr fieldName
+  mem' <- liftIO $ LO.storePointsToBitfieldValue opts cc env tyenv nameEnv mem ptr bfIndex tptval
   x86Mem .= mem'
 
 resolvePtrSetupValue ::
   X86Constraints =>
   Map MS.AllocIndex Ptr ->
   Map MS.AllocIndex LLVMAllocSpec ->
+  Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   MS.SetupValue LLVM ->
   X86Sim Ptr
-resolvePtrSetupValue env tyenv tptr = do
+resolvePtrSetupValue env tyenv nameEnv tptr = do
   sym <- use x86Sym
   cc <- use x86CrucibleContext
   mem <- use x86Mem
@@ -789,7 +800,43 @@ resolvePtrSetupValue env tyenv tptr = do
         let addr = fromIntegral $ Elf.steValue entry
         liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
     _ -> liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-         =<< resolveSetupVal cc mem env tyenv Map.empty tptr
+         =<< resolveSetupVal cc mem env tyenv nameEnv tptr
+
+-- | Like 'resolvePtrSetupValue', but specifically geared towards the needs of
+-- fields within bitfields. In addition to returning the resolved 'Ptr', this
+-- also returns the 'BitfieldIndex' for the field within the bitfield. This
+-- ends up being useful for call sites to this function so that they do not
+-- have to recompute it.
+resolvePtrSetupValueBitfield ::
+  X86Constraints =>
+  Map MS.AllocIndex Ptr ->
+  Map MS.AllocIndex LLVMAllocSpec ->
+  Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
+  MS.SetupValue LLVM ->
+  String ->
+  X86Sim (BitfieldIndex, Ptr)
+resolvePtrSetupValueBitfield env tyenv nameEnv tptr fieldName = do
+  sym <- use x86Sym
+  cc <- use x86CrucibleContext
+  mem <- use x86Mem
+  -- symTab <- use x86ElfSymtab
+  -- base <- use x86GlobalBase
+  case tptr of
+    -- TODO RGS: What should we do about the SetupGlobal case?
+    {-
+    MS.SetupGlobal () nm -> case
+      (Vector.!? 0)
+      . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
+      $ Elf.symtabEntries symTab of
+      Nothing -> throwX86 $ mconcat ["Global symbol \"", nm, "\" not found"]
+      Just entry -> do
+        let addr = fromIntegral $ Elf.steValue entry
+        liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
+    -}
+    _ -> do
+      (bfIndex, lval) <- liftIO $ resolveSetupValBitfield cc mem env tyenv nameEnv tptr fieldName
+      val <- liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64) lval
+      pure (bfIndex, val)
 
 -- | Write each SetupValue passed to llvm_execute_func to the appropriate
 -- x86_64 register from the calling convention.
@@ -852,6 +899,7 @@ assertPost globals env premem preregs = do
   postregs <- use x86Regs
   let
     tyenv = ms ^. MS.csPreState . MS.csAllocs
+    nameEnv = MS.csTypeNames ms
 
   prersp <- getReg Macaw.RSP preregs
   expectedIP <- liftIO $ C.LLVM.doLoad sym premem prersp (C.LLVM.bitvectorType 8)
@@ -890,7 +938,7 @@ assertPost globals env premem preregs = do
 
 
   pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)
-    $ assertPointsTo env tyenv
+    $ assertPointsTo env tyenv nameEnv
 
   let setupConditionMatchesPre = fmap -- assume preconditions
         (LO.executeSetupCondition opts sc cc ms)
@@ -931,17 +979,32 @@ assertPointsTo ::
   X86Constraints =>
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
+  Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim (LLVMOverrideMatcher md ())
-assertPointsTo env tyenv pointsTo@(LLVMPointsTo loc cond tptr tptval) = do
+assertPointsTo env tyenv nameEnv pointsTo@(LLVMPointsTo loc cond tptr tptval) = do
   opts <- use x86Options
   sc <- use x86SharedContext
   cc <- use x86CrucibleContext
   ms <- use x86MethodSpec
 
-  ptr <- resolvePtrSetupValue env tyenv tptr
+  ptr <- resolvePtrSetupValue env tyenv nameEnv tptr
   pure $ do
     err <- LO.matchPointsToValue opts sc cc ms MS.PostState loc cond ptr tptval
+    case err of
+      Just msg -> do
+        doc <- LO.ppPointsToAsLLVMVal opts cc sc ms pointsTo
+        O.failure loc (O.BadPointerLoad (Right doc) msg)
+      Nothing -> pure ()
+assertPointsTo env tyenv nameEnv pointsTo@(LLVMPointsToBitfield loc tptr fieldName tptval) = do
+  opts <- use x86Options
+  sc <- use x86SharedContext
+  cc <- use x86CrucibleContext
+  ms <- use x86MethodSpec
+
+  (bfIndex, ptr) <- resolvePtrSetupValueBitfield env tyenv nameEnv tptr fieldName
+  pure $ do
+    err <- LO.matchPointsToBitfieldValue opts sc cc ms MS.PostState loc ptr bfIndex tptval
     case err of
       Just msg -> do
         doc <- LO.ppPointsToAsLLVMVal opts cc sc ms pointsTo

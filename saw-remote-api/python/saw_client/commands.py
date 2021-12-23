@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Set, Union, overload
 from cryptol import cryptoltypes
 from . import exceptions
 from .proofscript import *
+from .option import *
 
 from typing import Any, List
 
@@ -199,3 +200,15 @@ class SAWResetServer(argo.Notification):
             {},
             connection
         )
+
+
+class SAWSetOption(SAWCommand):
+    def __init__(self, connection : argo.HasProtocolState,
+                 option : SAWOption, value : bool,
+                 timeout : Optional[float]) -> None:
+        params = {'option': str(option),
+                  'value': value}
+        super(SAWSetOption, self).__init__('SAW/set option', params, connection, timeout=timeout)
+
+    def process_result(self, _res : Any) -> Any:
+        return None

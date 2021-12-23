@@ -1,6 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
+/* A function that immediately panics */
+pub fn get_out () -> ! {
+    panic!("Uh oh!")
+}
 
 /* The logical and operation as a function on bool */
 pub fn bool_and (x:bool, y:bool) -> bool {

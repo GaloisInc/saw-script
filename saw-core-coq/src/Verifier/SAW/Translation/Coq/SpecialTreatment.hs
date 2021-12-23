@@ -179,6 +179,9 @@ cryptolPrimitivesModule = mkModuleName ["CryptolPrimitivesForSAWCore"]
 sawCoreScaffoldingModule :: ModuleName
 sawCoreScaffoldingModule = mkModuleName ["SAWCoreScaffolding"]
 
+preludeExtraModule :: ModuleName
+preludeExtraModule = mkModuleName ["SAWCorePreludeExtra"]
+
 cryptolPreludeSpecialTreatmentMap :: Map.Map String IdentSpecialTreatment
 cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
 
@@ -205,13 +208,18 @@ specialTreatmentMap configuration = Map.fromList $
 sawCorePreludeSpecialTreatmentMap :: TranslationConfiguration -> Map.Map String IdentSpecialTreatment
 sawCorePreludeSpecialTreatmentMap configuration =
   let vectorsModule = sawVectorDefinitionsModule configuration in
-  Map.fromList $ []
+  Map.fromList $
+
+  -- sawLet
+  [ ("sawLet", mapsTo sawCoreScaffoldingModule "sawLet_def") ]
 
   -- Unsafe SAW features
   ++
   [ ("error",             mapsTo sawDefinitionsModule "error")
   , ("fix",               skip)
   , ("unsafeAssert",      replaceDropArgs 3 $ Coq.Ltac "solveUnsafeAssert")
+  , ("unsafeAssertBVULt", replaceDropArgs 3 $ Coq.Ltac "solveUnsafeAssertBVULt")
+  , ("unsafeAssertBVULe", replaceDropArgs 3 $ Coq.Ltac "solveUnsafeAssertBVULe")
   , ("unsafeCoerce",      skip)
   , ("unsafeCoerce_same", skip)
   ]
@@ -342,6 +350,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("eq_Vec",        skip)
   , ("foldr",         mapsTo vectorsModule "foldr")
   , ("foldl",         mapsTo vectorsModule "foldl")
+  , ("scanl",         mapsTo vectorsModule "scanl")
   , ("gen",           mapsTo vectorsModule "gen")
   , ("rotateL",       mapsTo vectorsModule "rotateL")
   , ("rotateR",       mapsTo vectorsModule "rotateR")
@@ -354,6 +363,11 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("zip",           realize zipSnippet)
   -- cannot map directly to Vector.t because arguments are in a different order
   , ("Vec",           mapsTo vectorsModule "Vec")
+  ]
+
+  -- Streams
+  ++
+  [ ("streamScanl",   mapsTo preludeExtraModule "streamScanl")
   ]
 
   -- Integers
