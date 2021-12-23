@@ -55,10 +55,11 @@ import SAWServer
       setServerVal )
 import SAWServer.Data.Contract
     ( PointsTo(PointsTo),
+      PointsToBitfield,
       Allocated(Allocated),
       ContractVar(ContractVar),
-      Contract(preVars, preConds, preAllocated, prePointsTos,
-               argumentVals, postVars, postConds, postAllocated, postPointsTos,
+      Contract(preVars, preConds, preAllocated, prePointsTos, prePointsToBitfields,
+               argumentVals, postVars, postConds, postAllocated, postPointsTos, postPointsToBitfields,
                returnVal) )
 import SAWServer.Data.SetupValue ()
 import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
@@ -94,12 +95,14 @@ compileJVMContract fileReader bic cenv0 c =
      (envPre, cenvPre) <- setupState allocsPre (Map.empty, cenv0) (preVars c)
      mapM_ (\p -> getTypedTerm cenvPre p >>= jvm_precond) (preConds c)
      mapM_ (setupPointsTo (envPre, cenvPre)) (prePointsTos c)
+     mapM_ setupPointsToBitfields (prePointsToBitfields c)
      --mapM_ (setupGhostValue ghostEnv cenvPre) (preGhostValues c)
      traverse (getSetupVal (envPre, cenvPre)) (argumentVals c) >>= jvm_execute_func
      allocsPost <- mapM setupAlloc (postAllocated c)
      (envPost, cenvPost) <- setupState (allocsPre ++ allocsPost) (envPre, cenvPre) (postVars c)
      mapM_ (\p -> getTypedTerm cenvPost p >>= jvm_postcond) (postConds c)
      mapM_ (setupPointsTo (envPost, cenvPost)) (postPointsTos c)
+     mapM_ setupPointsToBitfields (postPointsToBitfields c)
      --mapM_ (setupGhostValue ghostEnv cenvPost) (postGhostValues c)
      case returnVal c of
        Just v -> getSetupVal (envPost, cenvPost) v >>= jvm_return
@@ -141,6 +144,10 @@ compileJVMContract fileReader bic cenv0 c =
              getSetupVal env base >>= \o -> jvm_elem_is o eidx sv
            GlobalLValue name -> jvm_static_field_is name sv
            _ -> JVMSetupM $ fail "Invalid points-to statement."
+
+    setupPointsToBitfields :: PointsToBitfield (P.Expr P.PName) -> JVMSetupM ()
+    setupPointsToBitfields _ =
+      JVMSetupM $ fail "Points-to-bitfield not supported in JVM API."
 
     --setupGhostValue _ _ _ = fail "Ghost values not supported yet in JVM API."
 

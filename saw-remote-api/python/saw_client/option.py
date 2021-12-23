@@ -20,6 +20,12 @@ class LaxPointerOrdering(SAWOption):
 
 
 @dataclass
+class LaxLoadsAndStores(SAWOption):
+    def __str__(self) -> str:
+        return "lax loads and stores"
+
+
+@dataclass
 class DebugIntrinsics(SAWOption):
     def __str__(self) -> str:
         return "debug intrinsics"

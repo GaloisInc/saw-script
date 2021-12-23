@@ -416,6 +416,8 @@ instance RsConvert w (Ty Span) (PermExpr (LLVMShapeType w)) where
   rsConvert w (TupTy tys _) =
     do tyShs <- mapM (rsConvert w) tys
        return $ foldr PExpr_SeqShape PExpr_EmptyShape tyShs
+  rsConvert _ (Never _) =
+    return $ PExpr_FalseShape
   rsConvert _ tp = fail ("Rust type not supported: " ++ show tp)
 
 instance RsConvert w (Arg Span) (PermExpr (LLVMShapeType w)) where
@@ -997,6 +999,9 @@ layoutArgShapeByVal Rust (PExpr_OrShape sh1 sh2) =
 -- For existential shapes, just add the existential variable to the ghosts
 layoutArgShapeByVal Rust (PExpr_ExShape mb_sh) =
   existsArgLayout <$> mbM (fmap (layoutArgShapeByVal Rust) mb_sh)
+
+-- False shape is like the empty shape --> no values
+layoutArgShapeByVal Rust PExpr_FalseShape = return argLayout0
 
 layoutArgShapeByVal Rust sh =
   lift rsPPInfo >>= \ppInfo ->

@@ -1131,6 +1131,13 @@ data SimplImpl ps_in ps_out where
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
+  -- | Eliminate a block of shape @falsesh@ to @false@
+  --
+  -- > x:memblock(..., falsesh) -o x:false
+  SImpl_ElimLLVMBlockFalse ::
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+
   -- | Fold a named permission (other than an opaque permission):
   --
   -- > x:(unfold P args) -o x:P<args>
@@ -1277,6 +1284,12 @@ data PermImpl1 ps_in ps_outs where
   Impl1_ElimExists :: KnownRepr TypeRepr tp => ExprVar a ->
                       Binding tp (ValuePerm a) ->
                       PermImpl1 (ps :> a) (RNil :> '(RNil :> tp, ps :> a))
+
+  -- | Eliminate a @false@ permission on the top of the stack, which is a
+  -- contradiction and so has no output disjuncts
+  --
+  -- > ps * x:false -o .
+  Impl1_ElimFalse :: ExprVar a -> PermImpl1 (ps :> a) RNil
 
   -- | Apply a 'SimplImpl'
   Impl1_Simpl :: SimplImpl ps_in ps_out -> Proxy ps ->
@@ -1622,6 +1635,7 @@ permImplSucceeds (PermImpl_Step (Impl1_ElimOr _ _ _)
 permImplSucceeds (PermImpl_Step (Impl1_ElimExists _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
   mbLift $ fmap permImplSucceeds mb_impl
+permImplSucceeds (PermImpl_Step (Impl1_ElimFalse _) _) = 2
 permImplSucceeds (PermImpl_Step (Impl1_Simpl _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
   mbLift $ fmap permImplSucceeds mb_impl
@@ -1948,6 +1962,8 @@ simplImplIn (SImpl_IntroLLVMBlockEx x bp) =
     _ ->
       error "simplImplIn: SImpl_IntroLLVMBlockEx: non-existential shape"
 simplImplIn (SImpl_ElimLLVMBlockEx x bp) =
+  distPerms1 x (ValPerm_LLVMBlock bp)
+simplImplIn (SImpl_ElimLLVMBlockFalse x bp) =
   distPerms1 x (ValPerm_LLVMBlock bp)
 simplImplIn (SImpl_FoldNamed x np args off) =
   distPerms1 x (unfoldPerm np args off)
@@ -2295,6 +2311,11 @@ simplImplOut (SImpl_ElimLLVMBlockEx x bp) =
                      ValPerm_LLVMBlock (bp { llvmBlockShape = sh }))
     _ ->
       error "simplImplOut: SImpl_ElimLLVMBlockEx: non-existential shape"
+simplImplOut (SImpl_ElimLLVMBlockFalse x bp) =
+  case llvmBlockShape bp of
+    PExpr_FalseShape ->
+      distPerms1 x ValPerm_False
+    _ -> error "simplImplOut: SImpl_ElimLLVMBlockFalse: non-false shape"
 simplImplOut (SImpl_FoldNamed x np args off) =
   distPerms1 x (ValPerm_Named (namedPermName np) args off)
 simplImplOut (SImpl_UnfoldNamed x np args off) =
@@ -2396,6 +2417,11 @@ applyImpl1 _ (Impl1_ElimExists x p_body) ps =
     mbPermSets1 (fmap (\p -> set (topDistPerm x) p ps) p_body)
   else
     error "applyImpl1: Impl1_ElimExists: unexpected permission"
+applyImpl1 _ (Impl1_ElimFalse x) ps =
+  if ps ^. topDistPerm x == ValPerm_False then
+    MbPermSets_Nil
+  else
+    error "applyImpl1: Impl1_ElimFalse: unexpected permission"
 applyImpl1 pp_info (Impl1_Simpl simpl prx) ps =
   mbPermSets1 $ emptyMb $ applySimplImpl pp_info prx simpl ps
 applyImpl1 _ (Impl1_LetBind tp e) ps =
@@ -2776,6 +2802,8 @@ instance SubstVar PermVarSubst m =>
       SImpl_IntroLLVMBlockEx <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_ElimLLVMBlockEx x bp |] ->
       SImpl_ElimLLVMBlockEx <$> genSubst s x <*> genSubst s bp
+    [nuMP| SImpl_ElimLLVMBlockFalse x bp |] ->
+      SImpl_ElimLLVMBlockFalse <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_FoldNamed x np args off |] ->
       SImpl_FoldNamed <$> genSubst s x <*> genSubst s np <*> genSubst s args
                       <*> genSubst s off
@@ -2822,6 +2850,8 @@ instance SubstVar PermVarSubst m =>
       Impl1_ElimOr <$> genSubst s x <*> genSubst s p1 <*> genSubst s p2
     [nuMP| Impl1_ElimExists x p_body |] ->
       Impl1_ElimExists <$> genSubst s x <*> genSubst s p_body
+    [nuMP| Impl1_ElimFalse x |] ->
+      Impl1_ElimFalse <$> genSubst s x
     [nuMP| Impl1_Simpl simpl prx |] ->
       Impl1_Simpl <$> genSubst s simpl <*> return (mbLift prx)
     [nuMP| Impl1_LetBind tp e |] ->
@@ -3404,6 +3434,12 @@ implElimExistsM :: (NuMatchingAny1 r, KnownRepr TypeRepr tp) =>
 implElimExistsM x p =
   implApplyImpl1 (Impl1_ElimExists x p)
   (MNil :>: Impl1Cont (const $ pure ()))
+
+-- | Eliminate a false permission in the current permission set
+implElimFalseM :: NuMatchingAny1 r => ExprVar a ->
+                  ImplM vars s r ps_any (ps :> a) ()
+implElimFalseM x =
+  implApplyImpl1 (Impl1_ElimFalse x) MNil
 
 -- | Apply a simple implication rule to the top permissions on the stack
 implSimplM :: HasCallStack => NuMatchingAny1 r => Proxy ps ->
@@ -4704,6 +4740,10 @@ implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                         PExpr_ExShape _mb_sh }) =
   implSimplM Proxy (SImpl_ElimLLVMBlockEx x bp)
 
+implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
+                                        PExpr_FalseShape }) =
+  implSimplM Proxy (SImpl_ElimLLVMBlockFalse x bp)
+
 -- If none of the above cases matched, we cannot eliminate, so fail
 implElimLLVMBlock _ bp =
   implTraceM (\i -> pretty "Could not eliminate permission" <+>
@@ -4967,6 +5007,7 @@ recombinePermExpl x x_p p =
 recombinePerm' :: NuMatchingAny1 r => ExprVar a -> ValuePerm a -> ValuePerm a ->
                   ImplM vars s r as (as :> a) ()
 recombinePerm' x _ p@ValPerm_True = implDropM x p
+recombinePerm' x _ ValPerm_False = implElimFalseM x
 recombinePerm' x _ p@(ValPerm_Eq (PExpr_Var y)) | y == x = implDropM x p
 recombinePerm' x ValPerm_True (ValPerm_Eq e) =
   simplEqPerm x e >>>= \e' -> implPopM x (ValPerm_Eq e')
@@ -5089,6 +5130,12 @@ recombinePermConj x x_ps (Perm_LLVMBlock bp)
     implElimLLVMBlock x bp >>>
     getTopDistPerm x >>>= \p ->
     recombinePerm x p
+
+-- If p is a memblock permission on the false shape, eliminate the block to
+-- a false permission (and eliminate the false permission itself)
+recombinePermConj x _ (Perm_LLVMBlock bp)
+  | PExpr_FalseShape <- llvmBlockShape bp
+  = implElimLLVMBlock x bp >>> implElimFalseM x
 
 -- Default case: insert p at the end of the x_ps
 recombinePermConj x x_ps p =

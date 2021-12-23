@@ -18,6 +18,8 @@ Module SAWCorePrelude.
 
 (* Prelude.fix was skipped *)
 
+(* Prelude.sawLet was skipped *)
+
 (* Prelude.UnitType was skipped *)
 
 (* Prelude.UnitType__rec was skipped *)
@@ -375,6 +377,9 @@ Definition and_triv2 : forall (x : SAWCoreScaffolding.Bool), SAWCoreScaffolding.
   fun (x : SAWCoreScaffolding.Bool) => let var__0   := SAWCoreScaffolding.not SAWCoreScaffolding.true in
   SAWCoreScaffolding.iteDep (fun (b : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool (SAWCoreScaffolding.and (SAWCoreScaffolding.not b) b) SAWCoreScaffolding.false) x (trans SAWCoreScaffolding.Bool (SAWCoreScaffolding.and var__0 SAWCoreScaffolding.true) var__0 SAWCoreScaffolding.false (and_True2 var__0) not_True) (and_False2 (SAWCoreScaffolding.not SAWCoreScaffolding.false)).
 
+Definition FalseProp : Prop :=
+  SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool SAWCoreScaffolding.true SAWCoreScaffolding.false.
+
 Definition EqTrue : SAWCoreScaffolding.Bool -> Prop :=
   fun (x : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool x SAWCoreScaffolding.true.
 
@@ -578,6 +583,8 @@ Fixpoint zip (a b : sort 0) (m n : Nat) (xs : Vec m a) (ys : Vec n b)
 (* Prelude.foldr was skipped *)
 
 (* Prelude.foldl was skipped *)
+
+(* Prelude.scanl was skipped *)
 
 Definition reverse : forall (n : SAWCoreScaffolding.Nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, SAWCoreVectorsAsCoqVectors.Vec n a -> SAWCoreVectorsAsCoqVectors.Vec n a :=
   fun (n : SAWCoreScaffolding.Nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (xs : SAWCoreVectorsAsCoqVectors.Vec n a) => SAWCoreVectorsAsCoqVectors.gen n a (fun (i : SAWCoreScaffolding.Nat) => SAWCorePrelude.sawAt n a xs (subNat (subNat n 1) i)).
@@ -825,6 +832,8 @@ Definition streamShiftL : forall (a : Type), Stream a -> SAWCoreScaffolding.Nat 
 Definition streamShiftR : forall (a : Type), a -> Stream a -> SAWCoreScaffolding.Nat -> Stream a :=
   fun (a : Type) (z : a) (xs : Stream a) (i : SAWCoreScaffolding.Nat) => streamAppend a i (replicate i a z) xs.
 
+(* Prelude.streamScanl was skipped *)
+
 (* Prelude.Integer was skipped *)
 
 (* Prelude.intAdd was skipped *)
@@ -946,6 +955,10 @@ Definition unfoldW64List : W64List -> unfoldedW64List :=
 Definition foldW64List : unfoldedW64List -> W64List :=
   either (unit : Type) (prod (@sigT (SAWCoreVectorsAsCoqVectors.Vec 64 SAWCoreScaffolding.Bool) (fun (_1 : SAWCoreVectorsAsCoqVectors.Vec 64 SAWCoreScaffolding.Bool) => unit : Type)) (prod W64List (unit : Type))) W64List (fun (_1 : unit : Type) => W64Nil) (fun (bv_l : prod (@sigT (SAWCoreVectorsAsCoqVectors.Vec 64 SAWCoreScaffolding.Bool) (fun (_1 : SAWCoreVectorsAsCoqVectors.Vec 64 SAWCoreScaffolding.Bool) => unit : Type)) (prod W64List (unit : Type))) => let var__0   := SAWCoreVectorsAsCoqVectors.Vec 64 SAWCoreScaffolding.Bool in
   W64Cons (@projT1 var__0 (fun (_1 : var__0) => unit : Type) (SAWCoreScaffolding.fst bv_l)) (SAWCoreScaffolding.fst (SAWCoreScaffolding.snd bv_l))).
+
+(* Prelude.unsafeAssertBVULt was skipped *)
+
+(* Prelude.unsafeAssertBVULe was skipped *)
 
 Axiom bvEqWithProof : forall (n : SAWCoreScaffolding.Nat), forall (v1 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), forall (v2 : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), Maybe (SAWCoreScaffolding.Eq (SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) v1 v2) .
 

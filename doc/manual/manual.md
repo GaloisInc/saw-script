@@ -1212,6 +1212,31 @@ Ultimately, we plan to implement a more generic tactic that leaves
 certain constants uninterpreted in whatever prover is ultimately used
 (provided that uninterpreted functions are expressible in the prover).
 
+Note that each of the `unint_*` tactics have variants that are prefixed
+with `sbv_` and `w4_`. The `sbv_`-prefixed tactics make use of the SBV
+library to represent and solve SMT queries:
+
+* `sbv_unint_cvc4 : [String] -> ProofScript ()`
+
+* `sbv_unint_yices : [String] -> ProofScript ()`
+
+* `sbv_unint_z3 : [String] -> ProofScript ()`
+
+The `w4_`-prefixed tactics make use of the What4 library instead of SBV:
+
+* `w4_unint_cvc4 : [String] -> ProofScript ()`
+
+* `w4_unint_yices : [String] -> ProofScript ()`
+
+* `w4_unint_z3 : [String] -> ProofScript ()`
+
+In most specifications, the choice of SBV versus What4 is not important, as
+both libraries are broadly compatible in terms of functionality. There are some
+situations where one library may outpeform the other, however, due to
+differences in how each library represents certain SMT queries. There are also
+some experimental features that are only supported with What4 at the moment,
+such as `enable_lax_loads_and_stores`.
+
 ## Other External Provers
 
 In addition to the built-in automated provers already discussed, SAW
@@ -2217,6 +2242,78 @@ the value of an array element.
 
 * `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()`
 specifies the name of an object field.
+
+### Bitfields
+
+SAW has experimental support for specifying `struct`s with bitfields, such as
+in the following example:
+
+~~~~ .c
+struct s {
+  uint8_t x:1;
+  uint8_t y:1;
+};
+~~~~
+
+Normally, a `struct` with two `uint8_t` fields would have an overall size of
+two bytes. However, because the `x` and `y` fields are declared with bitfield
+syntax, they are instead packed together into a single byte.
+
+Because bitfields have somewhat unusual memory representations in LLVM, some
+special care is required to write SAW specifications involving bitfields. For
+this reason, there is a dedicated `llvm_points_to_bitfield` function for this
+purpose:
+
+* `llvm_points_to_bitfield : SetupValue -> String -> SetupValue -> CrucibleSetup ()`
+
+The type of `llvm_points_to_bitfield` is similar that of `llvm_points_to`,
+except that it takes the name of a field within a bitfield as an additional
+argument. For example, here is how to assert that the `y` field in the `struct`
+example above should be `0`:
+
+~~~~
+ss <- llvm_alloc (llvm_alias "struct.s");
+llvm_points_to_bitfield ss "y" (llvm_term {{ 0 : [1] }});
+~~~~
+
+Note that the type of the right-hand side value (`0`, in this example) must
+be a bitvector whose length is equal to the size of the field within the
+bitfield. In this example, the `y` field was declared as `y:1`, so `y`'s value
+must be of type `[1]`.
+
+Note that the following specification is _not_ equivalent to the one above:
+
+~~~~
+ss <- llvm_alloc (llvm_alias "struct.s");
+llvm_points_to (llvm_field ss "y") (llvm_term {{ 0 : [1] }});
+~~~~
+
+`llvm_points_to` works quite differently from `llvm_points_to_bitfield` under
+the hood, so using `llvm_points_to` on bitfields will almost certainly not work
+as expected.
+
+In order to use `llvm_points_to_bitfield`, one must also use the
+`enable_lax_loads_and_stores` command:
+
+* `enable_lax_loads_and_stores: TopLevel ()`
+
+Both `llvm_points_to_bitfield` and `enable_lax_loads_and_stores` are
+experimental commands, so these also require using `enable_experimental` before
+they can be used.
+
+The `enable_lax_loads_and_stores` command relaxes some
+of SAW's assumptions about uninitialized memory, which is necessary to make
+`llvm_points_to_bitfield` work under the hood. For example, reading from
+uninitialized memory normally results in an error in SAW, but with
+`enable_lax_loads_and_stores`, such a read will instead return a symbolic
+value. At present, `enable_lax_loads_and_stores` only works with What4-based
+tactics (e.g., `w4_unint_z3`); using it with SBV-based tactics
+(e.g., `sbv_unint_z3`) will result in an error.
+
+Note that SAW relies on LLVM debug metadata in order to determine which struct
+fields reside within a bitfield. As a result, you must pass `-g` to `clang` when
+compiling code involving bitfields in order for SAW to be able to reason about
+them.
 
 ## Global variables
 

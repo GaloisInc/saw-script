@@ -326,13 +326,13 @@ inExtMultiTransM MNil m = m
 inExtMultiTransM (ctx :>: etrans) m =
   inExtMultiTransM ctx $ inExtTransM etrans m
 
--- | Run a translation computation in an extended context, where we let-bind any
+-- | Run a translation computation in an extended context, where we sawLet-bind any
 -- term in the supplied expression translation
-inExtTransLetBindM :: TransInfo info => TypeTrans (ExprTrans tp) ->
-                      ExprTrans tp -> TransM info (ctx :> tp) OpenTerm ->
-                      TransM info ctx OpenTerm
-inExtTransLetBindM tp_trans etrans m =
-  letTransMultiM "z" (typeTransTypes tp_trans) (transTerms etrans) $ \var_tms ->
+inExtTransSAWLetBindM :: TransInfo info => TypeTrans (ExprTrans tp) -> OpenTerm ->
+                         ExprTrans tp -> TransM info (ctx :> tp) OpenTerm ->
+                         TransM info ctx OpenTerm
+inExtTransSAWLetBindM tp_trans tp_ret etrans m =
+  sawLetTransMultiM "z" (typeTransTypes tp_trans) tp_ret (transTerms etrans) $ \var_tms ->
   inExtTransM (typeTransF tp_trans var_tms) m
 
 -- | Run a translation computation in context @(ctx1 :++: ctx2) :++: ctx2@ by
@@ -432,17 +432,27 @@ letTransM x tp rhs_m body_m =
      return $
        letOpenTerm (pack x) tp (runTransM rhs_m r) (\x' -> runTransM (body_m x') r)
 
--- | Build 0 or more let-bindings in a translation monad, using the same
+-- | Build a sawLet-binding in a translation monad
+sawLetTransM :: String -> OpenTerm -> OpenTerm -> TransM info ctx OpenTerm ->
+                (OpenTerm -> TransM info ctx OpenTerm) ->
+                TransM info ctx OpenTerm
+sawLetTransM x tp tp_ret rhs_m body_m =
+  do r <- ask
+     return $
+       sawLetOpenTerm (pack x) tp tp_ret (runTransM rhs_m r)
+                      (\x' -> runTransM (body_m x') r)
+
+-- | Build 0 or more sawLet-bindings in a translation monad, using the same
 -- variable name
-letTransMultiM :: String -> [OpenTerm] -> [OpenTerm] ->
+sawLetTransMultiM :: String -> [OpenTerm] -> OpenTerm -> [OpenTerm] ->
                   ([OpenTerm] -> TransM info ctx OpenTerm) ->
                   TransM info ctx OpenTerm
-letTransMultiM _ [] [] f = f []
-letTransMultiM x (tp:tps) (rhs:rhss) f =
-  letTransM x tp (return rhs) $ \var_tm ->
-  letTransMultiM x tps rhss (\var_tms -> f (var_tm:var_tms))
-letTransMultiM _ _ _ _ =
-  error "letTransMultiM: numbers of types and right-hand sides disagree"
+sawLetTransMultiM _ [] _ [] f = f []
+sawLetTransMultiM x (tp:tps) ret_tp (rhs:rhss) f =
+  sawLetTransM x tp ret_tp (return rhs) $ \var_tm ->
+  sawLetTransMultiM x tps ret_tp rhss (\var_tms -> f (var_tm:var_tms))
+sawLetTransMultiM _ _ _ _ _ =
+  error "sawLetTransMultiM: numbers of types and right-hand sides disagree"
 
 -- | Build a bitvector type in a translation monad
 bitvectorTransM :: TransM info ctx OpenTerm -> TransM info ctx OpenTerm
@@ -923,6 +933,8 @@ instance TransInfo info =>
            transTupleTerm <$> inExtTransM e (translate $ mbCombine RL.typeCtxProxies mb_sh)
          return $ ETrans_Term (dataTypeOpenTerm "Prelude.Sigma"
                                [typeTransTupleType tp_trans, tp_f_trm])
+    [nuMP| PExpr_FalseShape |] ->
+      return $ ETrans_Term $ globalOpenTerm "Prelude.FalseProp"
 
     [nuMP| PExpr_ValPerm p |] ->
       ETrans_Term <$> typeTransTupleType <$> translate p
@@ -1696,6 +1708,8 @@ instance TransInfo info =>
       fmap PTrans_Conj <$> listTypeTrans <$> translate ps
     [nuMP| ValPerm_Var x _ |] ->
       mkPermTypeTrans1 p <$> translate1 x
+    [nuMP| ValPerm_False |] ->
+      return $ mkPermTypeTrans1 p $ globalOpenTerm "Prelude.FalseProp"
 
 instance TransInfo info =>
          Translate info ctx (AtomicPerm a) (TypeTrans
@@ -3141,6 +3155,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          (\(pctx :>: ptrans) -> pctx :>: typeTransF ttrans [transTerm1 ptrans])
          m
 
+  [nuMP| SImpl_ElimLLVMBlockFalse _ _ |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       withPermStackM id
+         (\(pctx :>: ptrans) -> pctx :>: typeTransF ttrans [transTerm1 ptrans])
+         m
+
   [nuMP| SImpl_FoldNamed _ (NamedPerm_Rec rp) args _ |] ->
     do args_trans <- translate args
        ttrans <- translateSimplImplOutHead mb_simpl
@@ -3437,6 +3457,15 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
            withPermStackM id ((:>: ptrans) . RL.tail) m)
          (transTerm1 top_ptrans)
 
+  -- A false elimination becomes a call to efq
+  ([nuMP| Impl1_ElimFalse mb_x |], _) ->
+    return $ const $
+    do mb_false <- nuMultiTransM $ const ValPerm_False
+       () <- assertTopPermM "Impl1_ElimFalse" mb_x mb_false
+       top_ptrans <- getTopPermM
+       applyMultiTransM (return $ globalOpenTerm "Prelude.efq")
+         [compReturnTypeM, return $ transTerm1 top_ptrans]
+
   -- A SimplImpl is translated using translateSimplImpl
   ([nuMP| Impl1_Simpl simpl mb_prx |], _) ->
     let prx' = mbLift mb_prx in
@@ -3661,17 +3690,23 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
       (:>: PTrans_Conj [APTrans_BVProp (BVPropTrans prop unitOpenTerm)]) $
       trans k]
 
-  {-
+  -- If we know e1 < e2 statically, translate to unsafeAssert
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULt e1 e2) _ |],
-   [nuMP| MbPermImpls_Cons _ mb_impl' |])
+   [nuMP| MbPermImpls_Cons _ _ mb_impl' |])
     | mbLift (fmap bvPropHolds prop) ->
-      withPermStackM (:>: translateVar x)
-      (:>: bvPropPerm (BVPropTrans prop
-                       (ctorOpenTerm "Prelude.Refl" [globalOpenTerm "Prelude.Bool",
-                                                     globalOpenTerm "Prelude.True"])))
-      (translate $ mbCombine mb_impl')
-  -}
+      translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+      return $ \k ->
+      do let w = natVal4 e1
+         t1 <- translate1 e1
+         t2 <- translate1 e2
+         let pf_tm =
+               applyOpenTermMulti (globalOpenTerm "Prelude.unsafeAssertBVULt")
+               [natOpenTerm w, t1, t2]
+         withPermStackM (:>: translateVar x)
+           (:>: bvPropPerm (BVPropTrans prop pf_tm))
+           (trans k)
 
+  -- If we don't know e1 < e2 statically, translate to bvultWithProof
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULt e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
     translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
@@ -3688,17 +3723,23 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
            [ return (natOpenTerm $ natVal2 prop), translate1 e1, translate1 e2]
          ]
 
-  {-
+  -- If we know e1 <= e2 statically, translate to unsafeAssert
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq e1 e2) _ |],
-   [nuMP| MbPermImpls_Cons _ mb_impl' |])
+   [nuMP| MbPermImpls_Cons _ _ mb_impl' |])
     | mbLift (fmap bvPropHolds prop) ->
-      withPermStackM (:>: translateVar x)
-      (:>: bvPropPerm (BVPropTrans prop
-                       (ctorOpenTerm "Prelude.Refl" [globalOpenTerm "Prelude.Bool",
-                                                     globalOpenTerm "Prelude.True"])))
-      (translate $ mbCombine mb_impl')
-  -}
+      translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+      return $ \k ->
+      do let w = natVal4 e1
+         t1 <- translate1 e1
+         t2 <- translate1 e2
+         let pf_tm =
+               applyOpenTermMulti (globalOpenTerm "Prelude.unsafeAssertBVULe")
+               [natOpenTerm w, t1, t2]
+         withPermStackM (:>: translateVar x)
+           (:>: bvPropPerm (BVPropTrans prop pf_tm))
+           (trans k)
 
+  -- If we don't know e1 <= e2 statically, translate to bvuleWithProof
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
     translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
@@ -3715,7 +3756,26 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
            [ return (natOpenTerm $ natVal2 prop), translate1 e1, translate1 e2]
          ]
 
+  -- If we know e1 <= e2-e3 statically, translate to unsafeAssert
+  ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq_Diff e1 e2 e3) _ |],
+   [nuMP| MbPermImpls_Cons _ _ mb_impl' |])
+    | mbLift (fmap bvPropHolds prop) ->
+      translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
+      return $ \k ->
+      do let w = natVal4 e1
+         t1 <- translate1 e1
+         t2 <- translate1 e2
+         t3 <- translate1 e3
+         let pf_tm =
+               applyOpenTermMulti (globalOpenTerm "Prelude.unsafeAssertBVULe")
+               [natOpenTerm w, t1,
+                applyOpenTermMulti (globalOpenTerm
+                                    "Prelude.bvSub") [natOpenTerm w, t2, t3]]
+         withPermStackM (:>: translateVar x)
+           (:>: bvPropPerm (BVPropTrans prop pf_tm))
+           (trans k)
 
+  -- If we don't know e1 <= e2-e3 statically, translate to bvuleWithProof
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq_Diff e1 e2 e3) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
     translatePermImpl prx (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
@@ -4187,9 +4247,10 @@ translateStmt ::
 translateStmt loc mb_stmt m = case mbMatch mb_stmt of
   [nuMP| TypedSetReg tp e |] ->
     do tp_trans <- translate tp
+       tp_ret <- compReturnTypeM
        etrans <- tpTransM $ translate e
        let ptrans = exprOutPerm e
-       inExtTransLetBindM tp_trans etrans $
+       inExtTransSAWLetBindM tp_trans tp_ret etrans $
          withPermStackM (:>: Member_Base) (:>: extPermTrans ptrans) m
 
   [nuMP| TypedSetRegPermExpr _ e |] ->

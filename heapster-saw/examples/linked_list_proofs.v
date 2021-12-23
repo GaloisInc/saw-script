@@ -22,7 +22,7 @@ Qed.
 
 Lemma no_errors_is_elem_manual : refinesFun is_elem (fun _ _ => noErrorsSpec).
 Proof.
-  unfold is_elem, is_elem__tuple_fun.
+  unfold is_elem, is_elem__tuple_fun, sawLet_def.
   unfold noErrorsSpec.
   apply refinesFun_multiFixM_fst; intros x l.
   apply refinesM_letRecM_Nil_l.
@@ -62,7 +62,7 @@ Qed.
 
 Lemma is_elem_fun_ref_manual : refinesFun is_elem is_elem_fun.
 Proof.
-  unfold is_elem, is_elem__tuple_fun, is_elem_fun.
+  unfold is_elem, is_elem__tuple_fun, is_elem_fun, sawLet_def.
   apply refinesFun_multiFixM_fst; intros x l.
   apply refinesM_letRecM_Nil_l.
   apply refinesM_either_l; intros [] e_either.
