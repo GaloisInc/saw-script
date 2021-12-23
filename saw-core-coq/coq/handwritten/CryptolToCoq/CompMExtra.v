@@ -138,11 +138,12 @@ Hint Extern 1 (@letRecM ?lrts _ _ _ |= @letRecM ?lrts _ (lrtLambda (fun _ => _))
   try (apply refinesFunTuple_multiFixM; unfold refinesFunTuple; split_prod_goal);
   unfold lrtApply, lrtLambda; unfold_projs : refinesM.
 
-Inductive ArgName := Any | Either | Maybe | SigT | If | If0 |
+Inductive ArgName := Any | SAWLet | Either | Maybe | SigT | If | If0 |
                      Assert | Assuming | Exists | Forall.
 Ltac argName n :=
   match n with
   | Any      => fresh "a"
+  | SAWLet   => fresh "e_let"
   | Either   => fresh "e_either"
   | Maybe    => fresh "e_maybe"
   | SigT     => fresh "e_either"
@@ -293,8 +294,46 @@ Ltac IntroArg_rewrite_bool_eq n :=
 Hint Extern 2 (IntroArg ?n (@eq bool _ _) _) =>
   progress (IntroArg_rewrite_bool_eq n) : refinesFun.
 
-Hint Extern 4 (IntroArg ?n _ _) =>
-  let e := argName n in IntroArg_intro e; subst : refinesFun.
+Hint Extern 4 (IntroArg SAWLet _ _) =>
+  let e := argName SAWLet in IntroArg_intro e : refinesFun.
+Hint Extern 5 (IntroArg ?n (?x = ?y) _) =>
+  let e := argName n in IntroArg_intro e;
+    try first [ is_var x; subst x | is_var y; subst y ] : refinesFun.
+Hint Extern 6 (IntroArg ?n _ _) =>
+  let e := argName n in IntroArg_intro e : refinesFun.
+
+Definition refinesM_sawLet_const_l {A B} (x : A) (m : CompM B) P :
+  m |= P -> sawLet_def _ _ x (fun _ => m) |= P := fun pf => pf.
+Definition refinesM_sawLet_const_r {A B} (x : A) (m : CompM B) P :
+  P |= m -> P |= sawLet_def _ _ x (fun _ => m) := fun pf => pf.
+
+Definition refinesM_sawLet_bv_l_IntroArg {w B} x (m : bitvector w -> CompM B) P :
+  (FreshIntroArg Any _ (fun a =>
+     FreshIntroArg SAWLet (a = x) (fun _ => m a |= P))) ->
+  sawLet_def _ _ x m |= P.
+Proof. do 3 intro; eapply H; eauto. Qed.
+Definition refinesM_sawLet_bv_r_IntroArg {w B} x (m : bitvector w -> CompM B) P :
+  (FreshIntroArg Any _ (fun a =>
+     FreshIntroArg SAWLet (a = x) (fun _ => P |= m a))) ->
+  P |= sawLet_def _ _ x m.
+Proof. do 3 intro; eapply H; eauto. Qed.
+
+Definition refinesM_sawLet_unfold_l {A B} (x : A) (m : A -> CompM B) P :
+  m x |= P -> sawLet_def _ _ x m |= P := fun pf => pf.
+Definition refinesM_sawLet_unfold_r {A B} (x : A) (m : A -> CompM B) P :
+  P |= m x -> P |= sawLet_def _ _ x m := fun pf => pf.
+
+Ltac refinesM_sawLet_l :=
+  first [ simple apply refinesM_sawLet_const_l
+        | simple apply refinesM_sawLet_bv_l_IntroArg
+        | simple apply refinesM_sawLet_unfold_l ].
+Ltac refinesM_sawLet_r :=
+  first [ simple apply refinesM_sawLet_const_r
+        | simple apply refinesM_sawLet_bv_r_IntroArg
+        | simple apply refinesM_sawLet_unfold_r ].
+
+Hint Extern 1 (sawLet_def _ _ _ _ |= _) => refinesM_sawLet_l : refinesM.
+Hint Extern 1 (_ |= sawLet_def _ _ _ _ ) => refinesM_sawLet_r : refinesM.
 
 Definition refinesM_either_l_IntroArg {A B C} (f:A -> CompM C) (g:B -> CompM C) eith P :
   (FreshIntroArg Any _ (fun a =>

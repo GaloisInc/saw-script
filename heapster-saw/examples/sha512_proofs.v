@@ -14,8 +14,14 @@ Import SAWCorePrelude.
 Require Import Examples.sha512_gen.
 Import SHA512.
 
-Lemma no_errors_sha512_block_data_order_simpl1 :
-  refinesFun sha512_block_data_order_simpl1 (fun _ _ _ => noErrorsSpec).
+Definition sha512_block_data_order_precond num := isBvslt 64 (intToBv 64 0) num.
+
+Lemma no_errors_sha512_block_data_order :
+  refinesFun sha512_block_data_order
+             (fun num _ _ => assumingM (sha512_block_data_order_precond num) noErrorsSpec).
 Proof.
-  unfold sha512_block_data_order_simpl1, sha512_block_data_order_simpl1__tuple_fun.
-  Set Printing Depth 1000.
+  unfold sha512_block_data_order, sha512_block_data_order__tuple_fun.
+  (* time "sha512_block_data_order (1)" prove_refinement_match_letRecM_l. *)
+  (* 1-2: intros; apply noErrorsSpec. *)
+  (* time "sha512_block_data_order (2)" prove_refinement. *)
+Admitted.
