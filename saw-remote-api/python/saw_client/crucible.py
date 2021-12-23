@@ -5,13 +5,15 @@ from .utils import deprecated
 from dataclasses import dataclass
 import dataclasses
 import re
-from typing import Any, Dict, List, Optional, Set, Union, overload
+from typing import Any, Dict, List, Tuple, Optional, Set, Union, overload
 from typing_extensions import Literal
 import inspect
 import uuid
 
 from .llvm_type import *
 from .jvm_type import *
+
+JSON = Union[None, bool, int, float, str, Dict, Tuple, List]
 
 class SetupVal(metaclass=ABCMeta):
     """Represent a ``SetupValue`` in SawScript, which "corresponds to
@@ -20,7 +22,7 @@ class SetupVal(metaclass=ABCMeta):
     (both structures and arrays)."
     """
     @abstractmethod
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         """JSON representation for this ``SetupVal`` (i.e., how it is represented in expressions, etc).
 
         N.B., should be a JSON object with a ``'setup value'`` field with a unique tag which the
@@ -51,7 +53,7 @@ class NamedSetupVal(SetupVal):
     """Represents those ``SetupVal``s which are a named reference to some value, e.e., a variable
     or reference to allocated memory."""
     @abstractmethod
-    def to_init_json(self) -> Any:
+    def to_init_json(self) -> JSON:
         """JSON representation with the information for those ``SetupVal``s which require additional
         information to initialize/allocate them vs that which is required later to reference them.
 
@@ -70,20 +72,16 @@ class CryptolTerm(SetupVal):
             self.expression = code
 
     def __call__(self, *args : cryptoltypes.CryptolJSON) -> 'CryptolTerm':
-        out_term = self.expression
-        for a in args:
-            out_term = cryptoltypes.CryptolApplication(out_term, a)
-
-        return CryptolTerm(out_term)
+        return CryptolTerm(cryptoltypes.CryptolApplication(self.expression, *args))
 
     def __repr__(self) -> str:
         return f"CryptolTerm({self.expression!r})"
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'Cryptol', 'expression': cryptoltypes.to_cryptol(self.expression)}
 
-    def __to_cryptol__(self, ty : Any) -> cryptoltypes.JSON:
-        return self.expression.__to_cryptol__(ty)
+    def __to_cryptol__(self) -> cryptoltypes.JSON:
+        return self.expression.__to_cryptol__()
 
     def __to_cryptol_str__(self) -> str:
         return self.expression.__to_cryptol_str__()
@@ -96,13 +94,13 @@ class FreshVar(NamedSetupVal):
         self.spec = spec
         self.type = type
 
-    def __to_cryptol__(self, ty : Any) -> cryptoltypes.JSON:
-        return cryptoltypes.CryptolLiteral(self.name()).__to_cryptol__(ty)
+    def __to_cryptol__(self) -> cryptoltypes.JSON:
+        return cryptoltypes.CryptolLiteral(self.name()).__to_cryptol__()
 
     def __to_cryptol_str__(self) -> str:
         return cryptoltypes.CryptolLiteral(self.name()).__to_cryptol_str__()
 
-    def to_init_json(self) -> Any:
+    def to_init_json(self) -> JSON:
         #FIXME it seems we don't actually use two names ever... just the one...do we actually need both?
         name = self.name()
         return {"server name": name,
@@ -114,16 +112,8 @@ class FreshVar(NamedSetupVal):
             self.__name = self.spec.get_fresh_name()
         return self.__name
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'named', 'name': self.name()}
-
-    def __gt__(self, other : cryptoltypes.CryptolJSON) -> CryptolTerm:
-        gt = CryptolTerm("(>)")
-        return gt(self, other)
-
-    def __lt__(self, other : cryptoltypes.CryptolJSON) -> CryptolTerm:
-        lt = CryptolTerm("(<)")
-        return lt(self, other)
 
 
 class Allocated(NamedSetupVal):
@@ -137,7 +127,7 @@ class Allocated(NamedSetupVal):
         self.mutable = mutable
         self.alignment = alignment
 
-    def to_init_json(self) -> Any:
+    def to_init_json(self) -> JSON:
         if self.name is None:
             self.name = self.spec.get_fresh_name()
         return {"server name": self.name,
@@ -145,7 +135,7 @@ class Allocated(NamedSetupVal):
                 "mutable": self.mutable,
                 "alignment": self.alignment}
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         if self.name is None:
             self.name = self.spec.get_fresh_name()
         return {'setup value': 'named', 'name': self.name}
@@ -156,7 +146,7 @@ class StructVal(SetupVal):
     def __init__(self, fields : List[SetupVal]) -> None:
         self.fields = fields
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'tuple', 'elements': [fld.to_json() for fld in self.fields]}
 
 class ElemVal(SetupVal):
@@ -167,7 +157,7 @@ class ElemVal(SetupVal):
         self.base = base
         self.index = index
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'element lvalue',
                 'base': self.base.to_json(), 'index': self.index}
 
@@ -179,7 +169,7 @@ class FieldVal(SetupVal):
         self.base = base
         self.field_name = field_name
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'field',
                 'base': self.base.to_json(), 'field': self.field_name}
 
@@ -189,7 +179,7 @@ class GlobalInitializerVal(SetupVal):
     def __init__(self, name : str) -> None:
         self.name = name
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'global initializer', 'name': self.name}
 
 class GlobalVarVal(SetupVal):
@@ -198,11 +188,11 @@ class GlobalVarVal(SetupVal):
     def __init__(self, name : str) -> None:
         self.name = name
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'global lvalue', 'name': self.name}
 
 class NullVal(SetupVal):
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'null'}
 
 class ArrayVal(SetupVal):
@@ -211,7 +201,7 @@ class ArrayVal(SetupVal):
     def __init__(self, elements : List[SetupVal]) -> None:
         self.elements = elements
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'array',
                 'elements': [element.to_json() for element in self.elements]}
 
@@ -249,7 +239,7 @@ class Condition:
     def __init__(self, condition : CryptolTerm) -> None:
         self.cryptol_term = condition
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return cryptoltypes.to_cryptol(self.cryptol_term)
 
 
@@ -264,7 +254,7 @@ class PointsTo:
         self.check_target_type = check_target_type
         self.condition = condition
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         check_target_type_json: Optional[Dict[str, Any]]
         if self.check_target_type is None:
             check_target_type_json = None
@@ -291,7 +281,7 @@ class GhostValue:
         self.name = name
         self.value = value
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {"server name": self.name,
                 "value": cryptoltypes.to_cryptol(self.value)}
 
@@ -304,7 +294,7 @@ class State:
     points_to : List[PointsTo] = dataclasses.field(default_factory=list)
     ghost_values : List[GhostValue] = dataclasses.field(default_factory=list)
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'variables': [v.to_init_json() for v in self.fresh],
                 'conditions': [c.to_json() for c in self.conditions],
                 'allocated': [a.to_init_json() for a in self.allocated],
@@ -319,7 +309,7 @@ ContractState = \
 
 @dataclass
 class Void:
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return None
 
 void = Void()
@@ -351,7 +341,7 @@ class Contract:
     __definition_lineno : Optional[int]
     __definition_filename : Optional[str]
     __unique_id : uuid.UUID
-    __cached_json : Optional[Any]
+    __cached_json : JSON
 
     def __init__(self) -> None:
         self.__pre_state = State(self)
@@ -535,7 +525,7 @@ class Contract:
     def definition_filename(self) -> Optional[str]:
         return self.__definition_filename
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         if self.__cached_json is not None:
             return self.__cached_json
         else:
