@@ -207,7 +207,7 @@ funPerm ::                                      { AstFunPerm }
   : '(' ctx ')' '.' funPermList '-o' funPermList
                                                 { AstFunPerm (pos $6) $2 $5 [] $7 }
   | '(' ctx ')' '.' funPermList '-o' '(' ctx ')' '.' funPermList
-                                                { AstFunPerm (pos $6) $2 $5 $8 $10 }
+                                                { AstFunPerm (pos $6) $2 $5 $8 $11 }
 
 funPermList ::                                  { [(Located String, AstExpr)] }
   : 'empty'                                     { []                    }
