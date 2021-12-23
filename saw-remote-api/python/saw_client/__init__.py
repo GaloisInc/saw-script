@@ -625,7 +625,8 @@ def llvm_verify(module: LLVMModule,
 
     return result
 
-def prove(goal: Any, proof_script: proofscript.ProofScript) -> ProofResult:
+def prove(goal: cryptoltypes.CryptolJSON,
+          proof_script: proofscript.ProofScript) -> ProofResult:
     """Atempts to prove that the expression given as the first argument, `goal`, is
     true for all possible values of free symbolic variables. Uses the proof
     script (potentially specifying an automated prover) provided by the second

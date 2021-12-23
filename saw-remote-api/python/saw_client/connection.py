@@ -230,7 +230,7 @@ class SAWConnection:
         return self.most_recent_result
 
     def prove(self,
-              goal: Any,
+              goal: cryptoltypes.CryptolJSON,
               proof_script: ProofScript,
               timeout : Optional[float] = None) -> Command:
         """Create an instance of the `Prove` command. Documentation on the purpose and
