@@ -33,7 +33,7 @@ class AddContract(Contract):
 
         self.execute_func(p)
 
-        self.returns(cry_f('{x}@0 + {x}@1'))
+        self.returns_f('{x}@0 + {x}@1')
 
 
 class IdContract(Contract):

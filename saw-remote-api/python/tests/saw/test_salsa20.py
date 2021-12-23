@@ -32,12 +32,12 @@ class RotlContract(Contract):
     def specification(self) -> None:
         value = self.fresh_var(i32, "value")
         shift = self.fresh_var(i32, "shift")
-        self.precondition(cry_f("{shift} > 0"))
-        self.precondition(cry_f("{shift} < 32"))
+        self.precondition_f("{shift} > 0")
+        self.precondition_f("{shift} < 32")
 
         self.execute_func(value, shift)
 
-        self.returns(cry_f("{value} <<< {shift}"))
+        self.returns_f("{value} <<< {shift}")
 
 
 

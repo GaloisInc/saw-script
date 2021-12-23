@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
 from saw_client import *
-from saw_client.llvm import Contract, FreshVar, LLVMType, SetupVal, array_ty, cryptol, i64, void
+from saw_client.llvm import Contract, FreshVar, LLVMType, SetupVal, array_ty, cry, cry_f, i64, void
 from saw_client.option import LaxPointerOrdering
 
 
@@ -29,7 +29,7 @@ class ZipWithAddContract(Contract):
 
         self.execute_func(c_ptr, a_ptr, b_ptr)
 
-        self.points_to(c_ptr, cryptol(f'zipWith`{{ {LEN} }} (+) {a.name()} {b.name()}'))
+        self.points_to(c_ptr, cry_f('zipWith`{{ {LEN} }} (+) {a} {b}'))
         self.returns(void)
 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 def pre_counter(contract: Contract, counter: GhostVariable):
     n = contract.fresh_var(i32, "n")
-    contract.precondition(cry_f("{n} < 128"))
+    contract.precondition_f("{n} < 128")
     contract.ghost_value(counter, n)
     return n
 
@@ -32,10 +32,10 @@ class FContract(Contract):
     def specification(self) -> None:
         n = pre_counter(self, self.counter)
         i = self.fresh_var(i32, "i")
-        self.precondition(cry_f("{i} < 512"))
+        self.precondition_f("{i} < 512")
         self.execute_func(i)
         post_counter(self, self.counter, n)
-        self.returns(cry_f("{i} * {n}"))
+        self.returns_f("{i} * {n}")
 
 class GhostTest(unittest.TestCase):
 

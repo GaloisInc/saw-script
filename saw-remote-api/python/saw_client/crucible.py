@@ -521,6 +521,13 @@ class Contract:
         else:
             raise Exception("preconditions must be specified before execute_func is called in the contract")
 
+    def precondition_f(self, s : str) -> None:
+        """Parses the given string like ``cry_f``, then calls ``precondition``
+        on the result.
+        """
+        expression = to_cryptol_str_customf(s, frames=1, filename="<precondition_f>")
+        return self.precondition(expression)
+
     def postcondition(self, proposition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
         """Establishes ``proposition`` as a postcondition for the function ```Contract```
         being specified.
@@ -535,6 +542,13 @@ class Contract:
         else:
             raise Exception("postconditions must be specified after execute_func is called in the contract")
 
+    def postcondition_f(self, s : str) -> None:
+        """Parses the given string like ``cry_f``, then calls ``postcondition``
+        on the result.
+        """
+        expression = to_cryptol_str_customf(s, frames=1, filename="<postcondition_f>")
+        return self.postcondition(expression)
+
     def returns(self, val : Union[Void,SetupVal]) -> None:
         if self.__state == 'post':
             if self.__returns is None:
@@ -543,6 +557,13 @@ class Contract:
                 raise ValueError("Return value already specified")
         else:
             raise ValueError("Not in postcondition")
+
+    def returns_f(self, s : str) -> None:
+        """Parses the given string like ``cry_f``, then calls ``returns``
+        on the result.
+        """
+        expression = to_cryptol_str_customf(s, frames=1, filename="<returns_f>")
+        return self.returns(CryptolTerm(expression))
 
     def lemma_name(self, hint  : Optional[str] = None) -> str:
         if hint is None:

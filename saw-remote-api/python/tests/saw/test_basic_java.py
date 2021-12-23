@@ -15,7 +15,7 @@ class Add(Contract):
 
         self.execute_func(x, y)
 
-        self.returns(cry_f("{x} + {y}"))
+        self.returns_f("{x} + {y}")
 
 class Double(Contract):
     def __init__(self) -> None:
@@ -26,7 +26,7 @@ class Double(Contract):
 
         self.execute_func(x)
 
-        self.returns(cry_f("{x} + {x}"))
+        self.returns_f("{x} + {x}")
 
 class AddTest(unittest.TestCase):
     def test_add(self):
