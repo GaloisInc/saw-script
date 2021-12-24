@@ -77,6 +77,14 @@ import Verifier.SAW.Heapster.TypedCrucible
 import GHC.Stack
 
 
+-- | FIXME: document and move to Hobbits
+suffixMembers :: prx1 ctx1 -> RAssign prx2 ctx2 ->
+                 RAssign (Member (ctx1 :++: ctx2)) ctx2
+suffixMembers _ MNil = MNil
+suffixMembers ctx1 (ctx2 :>: _) =
+  RL.map Member_Step (suffixMembers ctx1 ctx2) :>: Member_Base
+
+
 ----------------------------------------------------------------------
 -- * Translation Monads
 ----------------------------------------------------------------------
@@ -1067,7 +1075,8 @@ data AtomicPermTrans ctx a where
                     AtomicPermTrans ctx (StructType args)
 
   -- | The translation of functional permission is a SAW term of functional type
-  APTrans_Fun :: Mb ctx (FunPerm ghosts (CtxToRList cargs) ret) -> OpenTerm ->
+  APTrans_Fun :: Mb ctx (FunPerm ghosts (CtxToRList cargs) gouts ret) ->
+                 OpenTerm ->
                  AtomicPermTrans ctx (FunctionHandleType cargs ret)
 
   -- | Propositional permissions are represented by a SAW term
@@ -1830,18 +1839,32 @@ instance TransInfo info =>
 instance TransInfo info =>
          Translate info ctx (LOwnedPerms ps) (TypeTrans
                                               (PermTransCtx ctx ps)) where
-  translate = translate . fmap (RL.map lownedPermPerm)
+  translate mb_lops =
+    translate $ flip fmap mb_lops $ \lops ->
+    -- NOTE: if we can't translate lops to a DistPerms, we just translate the
+    -- "raw" / un-offset permissions returned by lownedPermPerm, so that we at
+    -- least have something to return, and it doesn't really matter what because
+    -- in this case lops can't really be instantiated anyway
+    maybe (RL.map lownedPermPerm lops) distPermsToValuePerms $
+    lownedPermsToDistPerms lops
 
 -- Translate a FunPerm to a pi-abstraction (FIXME: more documentation!)
 instance TransInfo info =>
-         Translate info ctx (FunPerm ghosts args ret) OpenTerm where
-  translate (mbMatch -> [nuMP| FunPerm ghosts args ret perms_in perms_out |]) =
-    let ctx = appendCruCtx (mbLift ghosts) (mbLift args)
-        pxys = cruCtxProxies ctx in
-    piExprCtx ctx $
-    piPermCtx (mbCombine pxys perms_in) $ \_ ->
-    applyTransM (return $ globalOpenTerm "Prelude.CompM") $
-    translateRetType (mbLift ret) $ mbCombine (pxys :>: Proxy) perms_out
+         Translate info ctx (FunPerm ghosts args gouts ret) OpenTerm where
+  translate (mbMatch ->
+             [nuMP| FunPerm ghosts args gouts ret perms_in perms_out |]) =
+    let tops = appendCruCtx (mbLift ghosts) (mbLift args)
+        tops_prxs = cruCtxProxies tops
+        rets = CruCtxCons (mbLift gouts) (mbLift ret)
+        rets_prxs = cruCtxProxies rets in
+    (infoCtx <$> ask) >>= \ctx ->
+    case RL.appendAssoc ctx tops_prxs rets_prxs of
+      Refl ->
+        piExprCtx tops $
+        piPermCtx (mbCombine tops_prxs perms_in) $ \_ ->
+        applyTransM (return $ globalOpenTerm "Prelude.CompM") $
+        translateRetType rets $
+        mbCombine (RL.append tops_prxs rets_prxs) perms_out
 
 -- | Lambda-abstraction over a permission
 lambdaPermTrans :: TransInfo info => String -> Mb ctx (ValuePerm a) ->
@@ -1866,25 +1889,26 @@ piPermCtx ps f =
 
 
 -- | Build the return type for a function; FIXME: documentation
-translateRetType :: TransInfo info => TypeRepr ret ->
-                    Mb (ctx :> ret) (ValuePerms ps) ->
+translateRetType :: TransInfo info => CruCtx rets ->
+                    Mb (ctx :++: rets) (ValuePerms ps) ->
                     TransM info ctx OpenTerm
-translateRetType ret ret_perms =
-  do tptrans <- translateClosed ret
-     sigmaTypeTransM "ret" tptrans (\etrans ->
-                                     inExtTransM etrans $ translate ret_perms)
+translateRetType rets ret_perms =
+  do tptrans <- translateClosed rets
+     sigmaTypeTransM "ret" tptrans (flip inExtMultiTransM
+                                    (translate ret_perms))
 
 -- | Build the return type for the function resulting from an entrypoint
 translateEntryRetType :: TransInfo info =>
-                         TypedEntry phase ext blocks tops ret args ghosts ->
+                         TypedEntry phase ext blocks tops rets args ghosts ->
                          TransM info ((tops :++: args) :++: ghosts) OpenTerm
-translateEntryRetType (TypedEntry {..}) =
+translateEntryRetType (TypedEntry {..}
+                       :: TypedEntry phase ext blocks tops rets args ghosts) =
   let mb_perms_out =
-        mbCombine RL.typeCtxProxies $
+        mbCombine (cruCtxProxies typedEntryRets) $
         extMbMulti (cruCtxProxies typedEntryGhosts) $
         extMbMulti (cruCtxProxies typedEntryArgs) $
-        mbSeparate (MNil :>: Proxy) typedEntryPermsOut in
-  translateRetType typedEntryRet mb_perms_out
+        mbSeparate @_ @tops (cruCtxProxies typedEntryRets) typedEntryPermsOut in
+  translateRetType typedEntryRets mb_perms_out
 
 
 ----------------------------------------------------------------------
@@ -1895,24 +1919,24 @@ translateEntryRetType (TypedEntry {..}) =
 -- bound to its translation if it has one: only those entrypoints marked as the
 -- heads of strongly-connect components have translations as letrec-bound
 -- variables
-data TypedEntryTrans ext blocks tops ret args ghosts =
+data TypedEntryTrans ext blocks tops rets args ghosts =
   TypedEntryTrans { typedEntryTransEntry ::
-                      TypedEntry TransPhase ext blocks tops ret args ghosts,
+                      TypedEntry TransPhase ext blocks tops rets args ghosts,
                     typedEntryTransFun :: Maybe OpenTerm }
 
 -- | A mapping from a block to the SAW functions for each entrypoint
-data TypedBlockTrans ext blocks tops ret args =
+data TypedBlockTrans ext blocks tops rets args =
   TypedBlockTrans { typedBlockTransEntries ::
-                      [Some (TypedEntryTrans ext blocks tops ret args)] }
+                      [Some (TypedEntryTrans ext blocks tops rets args)] }
 
 -- | A mapping from all block entrypoints to their SAW translations
-type TypedBlockMapTrans ext blocks tops ret =
-  RAssign (TypedBlockTrans ext blocks tops ret) blocks
+type TypedBlockMapTrans ext blocks tops rets =
+  RAssign (TypedBlockTrans ext blocks tops rets) blocks
 
 -- | Look up the translation of an entry by entry ID
 lookupEntryTrans :: TypedEntryID blocks args ->
-                    TypedBlockMapTrans ext blocks tops ret ->
-                    Some (TypedEntryTrans ext blocks tops ret args)
+                    TypedBlockMapTrans ext blocks tops rets ->
+                    Some (TypedEntryTrans ext blocks tops rets args)
 lookupEntryTrans entryID blkMap =
   maybe (error "lookupEntryTrans") id $
   find (\(Some entryTrans) ->
@@ -1922,8 +1946,8 @@ lookupEntryTrans entryID blkMap =
 -- | Look up the translation of an entry by entry ID and make sure that it has
 -- the supplied ghost arguments
 lookupEntryTransCast :: TypedEntryID blocks args -> CruCtx ghosts ->
-                        TypedBlockMapTrans ext blocks tops ret ->
-                        TypedEntryTrans ext blocks tops ret args ghosts
+                        TypedBlockMapTrans ext blocks tops rets ->
+                        TypedEntryTrans ext blocks tops rets args ghosts
 lookupEntryTransCast entryID ghosts blkMap
   | Some entry_trans <- lookupEntryTrans entryID blkMap
   , Just Refl <- testEquality ghosts (typedEntryGhosts $
@@ -1939,7 +1963,7 @@ data SomeTypedCallSite blocks tops args vars =
 
 -- | Look up a call site by id in a 'TypedBlockMapTrans'
 lookupCallSite :: TypedCallSiteID blocks args vars ->
-                  TypedBlockMapTrans ext blocks tops ret ->
+                  TypedBlockMapTrans ext blocks tops rets ->
                   SomeTypedCallSite blocks tops args vars
 lookupCallSite siteID blkMap
   | Some entry_trans <- lookupEntryTrans (callSiteDest siteID) blkMap
@@ -1954,7 +1978,7 @@ lookupCallSite siteID blkMap
 
 
 -- | Contextual info for an implication translation
-data ImpTransInfo ext blocks tops ret ps ctx =
+data ImpTransInfo ext blocks tops rets ps ctx =
   ImpTransInfo
   {
     itiExprCtx :: ExprTransCtx ctx,
@@ -1962,12 +1986,12 @@ data ImpTransInfo ext blocks tops ret ps ctx =
     itiPermStack :: PermTransCtx ctx ps,
     itiPermStackVars :: RAssign (Member ctx) ps,
     itiPermEnv :: PermEnv,
-    itiBlockMapTrans :: TypedBlockMapTrans ext blocks tops ret,
+    itiBlockMapTrans :: TypedBlockMapTrans ext blocks tops rets,
     itiReturnType :: OpenTerm,
     itiChecksFlag :: ChecksFlag
   }
 
-instance TransInfo (ImpTransInfo ext blocks tops ret ps) where
+instance TransInfo (ImpTransInfo ext blocks tops rets ps) where
   infoCtx = itiExprCtx
   infoEnv = itiPermEnv
   extTransInfo etrans (ImpTransInfo {..}) =
@@ -1980,15 +2004,15 @@ instance TransInfo (ImpTransInfo ext blocks tops ret ps) where
 
 
 -- | The monad for translating permission implications
-type ImpTransM ext blocks tops ret ps =
-  TransM (ImpTransInfo ext blocks tops ret ps)
+type ImpTransM ext blocks tops rets ps =
+  TransM (ImpTransInfo ext blocks tops rets ps)
 
 -- | Run an 'ImpTransM' computation in a 'TypeTransM' context (FIXME: better
 -- documentation; e.g., the pctx starts on top of the stack)
-impTransM :: forall ctx ps ext blocks tops ret a.
+impTransM :: forall ctx ps ext blocks tops rets a.
              RAssign (Member ctx) ps -> PermTransCtx ctx ps ->
-             TypedBlockMapTrans ext blocks tops ret ->
-             OpenTerm -> ImpTransM ext blocks tops ret ps ctx a ->
+             TypedBlockMapTrans ext blocks tops rets ->
+             OpenTerm -> ImpTransM ext blocks tops rets ps ctx a ->
              TypeTransM ctx a
 impTransM pvars pctx mapTrans retType =
   withInfoM $ \(TypeTransInfo ectx env checks) ->
@@ -2003,45 +2027,45 @@ impTransM pvars pctx mapTrans retType =
 
 -- | Embed a type translation into an impure translation
 -- FIXME: should no longer need this...
-tpTransM :: TypeTransM ctx a -> ImpTransM ext blocks tops ret ps ctx a
+tpTransM :: TypeTransM ctx a -> ImpTransM ext blocks tops rets ps ctx a
 tpTransM =
   withInfoM (\(ImpTransInfo {..}) ->
               TypeTransInfo itiExprCtx itiPermEnv itiChecksFlag)
 
 -- | Run an implication translation computation in an "empty" environment, where
 -- there are no variables in scope and no permissions held anywhere
-inEmptyEnvImpTransM :: ImpTransM ext blocks tops ret RNil RNil a ->
-                       ImpTransM ext blocks tops ret ps ctx a
+inEmptyEnvImpTransM :: ImpTransM ext blocks tops rets RNil RNil a ->
+                       ImpTransM ext blocks tops rets ps ctx a
 inEmptyEnvImpTransM =
   withInfoM (\(ImpTransInfo {..}) ->
               ImpTransInfo { itiExprCtx = MNil, itiPermCtx = MNil,
                              itiPermStack = MNil, itiPermStackVars = MNil, .. })
 
 -- | Get most recently bound variable
-getTopVarM :: ImpTransM ext blocks tops ret ps (ctx :> tp) (ExprTrans tp)
+getTopVarM :: ImpTransM ext blocks tops rets ps (ctx :> tp) (ExprTrans tp)
 getTopVarM = (\(_ :>: p) -> p) <$> itiExprCtx <$> ask
 
 -- | Get the top permission on the stack
-getTopPermM :: ImpTransM ext blocks tops ret (ps :> tp) ctx (PermTrans ctx tp)
+getTopPermM :: ImpTransM ext blocks tops rets (ps :> tp) ctx (PermTrans ctx tp)
 getTopPermM = (\(_ :>: p) -> p) <$> itiPermStack <$> ask
 
 -- | Helper to disambiguate the @ext@ type variable
 getExtReprM :: PermCheckExtC ext =>
-               ImpTransM ext blocks tops ret ps ctx (ExtRepr ext)
+               ImpTransM ext blocks tops rets ps ctx (ExtRepr ext)
 getExtReprM = return knownRepr
 
 -- | Apply a transformation to the (translation of the) current perm stack
 withPermStackM :: (RAssign (Member ctx) ps_in -> RAssign (Member ctx) ps_out) ->
                   (PermTransCtx ctx ps_in -> PermTransCtx ctx ps_out) ->
-                  ImpTransM ext blocks tops ret ps_out ctx a ->
-                  ImpTransM ext blocks tops ret ps_in ctx a
+                  ImpTransM ext blocks tops rets ps_out ctx a ->
+                  ImpTransM ext blocks tops rets ps_in ctx a
 withPermStackM f_vars f_p =
   withInfoM $ \info ->
   info { itiPermStack = f_p (itiPermStack info),
          itiPermStackVars = f_vars (itiPermStackVars info) }
 
 -- | Get the current permission stack as a 'DistPerms' in context
-getPermStackDistPerms :: ImpTransM ext blocks tops ret ps ctx
+getPermStackDistPerms :: ImpTransM ext blocks tops rets ps ctx
                          (Mb ctx (DistPerms ps))
 getPermStackDistPerms =
   do stack <- itiPermStack <$> ask
@@ -2054,8 +2078,8 @@ getPermStackDistPerms =
        permTransCtxPerms prxs stack
 
 -- | Run a computation if the current 'ChecksFlag' is set
-ifChecksFlagM :: ImpTransM ext blocks tops ret ps ctx () ->
-                 ImpTransM ext blocks tops ret ps ctx ()
+ifChecksFlagM :: ImpTransM ext blocks tops rets ps ctx () ->
+                 ImpTransM ext blocks tops rets ps ctx ()
 ifChecksFlagM m =
   (itiChecksFlag <$> ask) >>= \checks ->
   if checksFlagSet checks then m else return ()
@@ -2064,7 +2088,7 @@ ifChecksFlagM m =
 -- fails to hold. The 'String' names the construct being translated.
 assertPermStackM :: HasCallStack => String ->
                     (RAssign (Member ctx) ps -> PermTransCtx ctx ps -> Bool) ->
-                    ImpTransM ext blocks tops ret ps ctx ()
+                    ImpTransM ext blocks tops rets ps ctx ()
 assertPermStackM nm f =
   ifChecksFlagM
   (ask >>= \info ->
@@ -2075,7 +2099,7 @@ assertPermStackM nm f =
 -- given 'DistPerms'
 assertPermStackTopEqM :: HasCallStack => ps ~ (ps1 :++: ps2) =>
                          String -> f ps1 -> Mb ctx (DistPerms ps2) ->
-                         ImpTransM ext blocks tops ret ps ctx ()
+                         ImpTransM ext blocks tops rets ps ctx ()
 assertPermStackTopEqM nm prx expected =
   ifChecksFlagM
   (getPermStackDistPerms >>= \perms ->
@@ -2090,7 +2114,7 @@ assertPermStackTopEqM nm prx expected =
 
 -- | Assert that the current permission stack equals the given 'DistPerms'
 assertPermStackEqM :: HasCallStack => String -> Mb ctx (DistPerms ps) ->
-                      ImpTransM ext blocks tops ret ps ctx ()
+                      ImpTransM ext blocks tops rets ps ctx ()
 assertPermStackEqM nm perms =
   -- FIXME: unify this function with assertPermStackTopEqM
   ifChecksFlagM
@@ -2105,7 +2129,7 @@ assertPermStackEqM nm perms =
 -- | Assert that the top permission is as given by the arguments
 assertTopPermM :: HasCallStack => String -> Mb ctx (ExprVar a) ->
                   Mb ctx (ValuePerm a) ->
-                  ImpTransM ext blocks tops ret (ps :> a) ctx ()
+                  ImpTransM ext blocks tops rets (ps :> a) ctx ()
 assertTopPermM nm x p =
   ifChecksFlagM
   (getPermStackDistPerms >>= \stack_perms ->
@@ -2122,13 +2146,13 @@ assertTopPermM nm x p =
 
 -- | Get the (translation of the) perms for a variable
 getVarPermM :: Mb ctx (ExprVar tp) ->
-               ImpTransM ext blocks tops ret ps ctx (PermTrans ctx tp)
+               ImpTransM ext blocks tops rets ps ctx (PermTrans ctx tp)
 getVarPermM x = RL.get (translateVar x) <$> itiPermCtx <$> ask
 
 -- | Assert that a variable has a given permission
 assertVarPermM :: HasCallStack => String -> Mb ctx (ExprVar tp) ->
                   Mb ctx (ValuePerm tp) ->
-                  ImpTransM ext blocks tops ret ps ctx ()
+                  ImpTransM ext blocks tops rets ps ctx ()
 assertVarPermM nm x p =
   do x_p <- permTransPerm (mbToProxy p) <$> getVarPermM x
      if x_p == p then return () else
@@ -2139,45 +2163,46 @@ assertVarPermM nm x p =
 
 -- | Set the (translation of the) perms for a variable in a computation
 setVarPermM :: Mb ctx (ExprVar tp) -> PermTrans ctx tp ->
-               ImpTransM ext blocks tops ret ps ctx a ->
-               ImpTransM ext blocks tops ret ps ctx a
+               ImpTransM ext blocks tops rets ps ctx a ->
+               ImpTransM ext blocks tops rets ps ctx a
 setVarPermM x p =
   local $ \info -> info { itiPermCtx =
                             RL.set (translateVar x) p $ itiPermCtx info }
 
 -- | Clear all permissions in the permission variable map in a sub-computation,
 -- leaving only those permissions on the top of the stack
-clearVarPermsM :: ImpTransM ext blocks tops ret ps ctx a ->
-                  ImpTransM ext blocks tops ret ps ctx a
+clearVarPermsM :: ImpTransM ext blocks tops rets ps ctx a ->
+                  ImpTransM ext blocks tops rets ps ctx a
 clearVarPermsM =
   local $ \info -> info { itiPermCtx =
                             RL.map (const PTrans_True) $ itiPermCtx info }
 
 -- | The current non-monadic return type
-returnTypeM :: ImpTransM ext blocks tops ret ps_out ctx OpenTerm
+returnTypeM :: ImpTransM ext blocks tops rets ps_out ctx OpenTerm
 returnTypeM = itiReturnType <$> ask
 
 -- | Build the monadic return type @CompM ret@, where @ret@ is the current
 -- return type in 'itiReturnType'
-compReturnTypeM :: ImpTransM ext blocks tops ret ps_out ctx OpenTerm
+compReturnTypeM :: ImpTransM ext blocks tops rets ps_out ctx OpenTerm
 compReturnTypeM =
   applyOpenTerm (globalOpenTerm "Prelude.CompM") <$> returnTypeM
 
 -- | Like 'compReturnTypeM' but build a 'TypeTrans'
-compReturnTypeTransM :: ImpTransM ext blocks tops ret ps_out ctx (TypeTrans OpenTerm)
+compReturnTypeTransM ::
+  ImpTransM ext blocks tops rets ps_out ctx (TypeTrans OpenTerm)
 compReturnTypeTransM =
   flip mkTypeTrans1 id <$> compReturnTypeM
 
 -- | Build an @errorM@ computation with the given error message
-mkErrorCompM :: String -> ImpTransM ext blocks tops ret ps_out ctx OpenTerm
+mkErrorCompM :: String -> ImpTransM ext blocks tops rets ps_out ctx OpenTerm
 mkErrorCompM msg =
   applyMultiTransM (return $ globalOpenTerm "Prelude.errorM")
   [returnTypeM, return $ stringLitOpenTerm $ pack msg]
 
 -- | The typeclass for the implication translation of a functor at any
 -- permission set inside any binding to an 'OpenTerm'
-class NuMatchingAny1 f => ImplTranslateF f ext blocks tops ret where
-  translateF :: Mb ctx (f ps) -> ImpTransM ext blocks tops ret ps ctx OpenTerm
+class NuMatchingAny1 f => ImplTranslateF f ext blocks tops rets where
+  translateF :: Mb ctx (f ps) -> ImpTransM ext blocks tops rets ps ctx OpenTerm
 
 
 ----------------------------------------------------------------------
@@ -2186,29 +2211,30 @@ class NuMatchingAny1 f => ImplTranslateF f ext blocks tops ret where
 
 -- | Translate the output permissions of a 'SimplImpl'
 translateSimplImplOut :: Mb ctx (SimplImpl ps_in ps_out) ->
-                         ImpTransM ext blocks tops ret ps ctx
+                         ImpTransM ext blocks tops rets ps ctx
                          (TypeTrans (PermTransCtx ctx ps_out))
 translateSimplImplOut = translate . mbSimplImplOut
 
 -- | Translate the head output permission of a 'SimplImpl'
 translateSimplImplOutHead :: Mb ctx (SimplImpl ps_in (ps_out :> a)) ->
-                             ImpTransM ext blocks tops ret ps ctx
+                             ImpTransM ext blocks tops rets ps ctx
                              (TypeTrans (PermTrans ctx a))
 translateSimplImplOutHead =
   translate . mbMapCl $(mkClosed [| varAndPermPerm . RL.head |]) . mbSimplImplOut
 
 -- | Translate the head of the tail of the output permission of a 'SimplImpl'
 translateSimplImplOutTailHead :: Mb ctx (SimplImpl ps_in (ps_out :> a :> b)) ->
-                                 ImpTransM ext blocks tops ret ps ctx
+                                 ImpTransM ext blocks tops rets ps ctx
                                  (TypeTrans (PermTrans ctx a))
 translateSimplImplOutTailHead =
   translate . mbMapCl $(mkClosed [| varAndPermPerm . RL.head . RL.tail |])
   . mbSimplImplOut
 
 -- | Translate a 'SimplImpl' to a function on translation computations
-translateSimplImpl :: Proxy ps -> Mb ctx (SimplImpl ps_in ps_out) ->
-                      ImpTransM ext blocks tops ret (ps :++: ps_out) ctx OpenTerm ->
-                      ImpTransM ext blocks tops ret (ps :++: ps_in) ctx OpenTerm
+translateSimplImpl ::
+  Proxy ps -> Mb ctx (SimplImpl ps_in ps_out) ->
+  ImpTransM ext blocks tops rets (ps :++: ps_out) ctx OpenTerm ->
+  ImpTransM ext blocks tops rets (ps :++: ps_in) ctx OpenTerm
 translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
   [nuMP| SImpl_Drop _ _ |] ->
     withPermStackM (\(xs :>: _) -> xs) (\(ps :>: _) -> ps) m
@@ -3288,9 +3314,9 @@ data ImplFailCont
 -- | "Force" the translation of a possibly failing computation to always return
 -- a computation, even if it is just the failing computation
 forceImplTrans :: Maybe (ImplFailCont ->
-                         ImpTransM ext blocks tops ret ps ctx OpenTerm) ->
+                         ImpTransM ext blocks tops rets ps ctx OpenTerm) ->
                   ImplFailCont ->
-                  ImpTransM ext blocks tops ret ps ctx OpenTerm
+                  ImpTransM ext blocks tops rets ps ctx OpenTerm
 forceImplTrans (Just trans) k = trans k
 forceImplTrans Nothing (ImplFailContTerm errM) = return errM
 forceImplTrans Nothing (ImplFailContMsg str) =
@@ -3301,7 +3327,7 @@ forceImplTrans Nothing (ImplFailContMsg str) =
 -- | Perform a failure by jumping to a failure continuation or signaling an
 -- error, using an alternate error message in the latter case
 implTransAltErr :: String -> ImplFailCont ->
-                   ImpTransM ext blocks tops ret ps ctx OpenTerm
+                   ImpTransM ext blocks tops rets ps ctx OpenTerm
 implTransAltErr _ (ImplFailContTerm errM) = return errM
 implTransAltErr str (ImplFailContMsg _) =
   returnTypeM >>= \tp ->
@@ -3313,25 +3339,25 @@ implTransAltErr str (ImplFailContMsg _) =
 -- the argument fails
 translatePermImplUnary ::
   RL.TypeCtx bs =>
-  ImplTranslateF r ext blocks tops ret =>
+  ImplTranslateF r ext blocks tops rets =>
   Mb ctx (MbPermImpls r (RNil :> '(bs,ps_out))) ->
-  (ImpTransM ext blocks tops ret ps_out (ctx :++: bs) OpenTerm ->
-   ImpTransM ext blocks tops ret ps ctx OpenTerm) ->
+  (ImpTransM ext blocks tops rets ps_out (ctx :++: bs) OpenTerm ->
+   ImpTransM ext blocks tops rets ps ctx OpenTerm) ->
   PermImplTransM (ImplFailCont ->
-                  ImpTransM ext blocks tops ret ps ctx OpenTerm)
+                  ImpTransM ext blocks tops rets ps ctx OpenTerm)
 translatePermImplUnary (mbMatch -> [nuMP| MbPermImpls_Cons _ _ mb_impl |]) f =
   translatePermImpl Proxy (mbCombine RL.typeCtxProxies mb_impl) >>= \trans ->
   return $ \k -> f $ trans k
 
 
 -- | Translate a 'PermImpl1' to a function on translation computations
-translatePermImpl1 :: ImplTranslateF r ext blocks tops ret =>
+translatePermImpl1 :: ImplTranslateF r ext blocks tops rets =>
                       Proxy '(ext, blocks, tops, ret) ->
                       Mb ctx (PermImpl1 ps ps_outs) ->
                       Mb ctx (MbPermImpls r ps_outs) ->
                       PermImplTransM
                       (ImplFailCont ->
-                       ImpTransM ext blocks tops ret ps ctx OpenTerm)
+                       ImpTransM ext blocks tops rets ps ctx OpenTerm)
 translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) of
   -- A failure translates to a call to the catch handler, which is the most recent
   -- Impl1_Catch, if one exists, or the SAW errorM function otherwise
@@ -3775,12 +3801,12 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
 -- | Translate a 'PermImpl' in the 'PermImplTransM' monad to a function that
 -- takes a failure continuation and returns a monadic computation to generate
 -- the translation as a term
-translatePermImpl :: ImplTranslateF r ext blocks tops ret =>
+translatePermImpl :: ImplTranslateF r ext blocks tops rets =>
                      Proxy '(ext, blocks, tops, ret) ->
                      Mb ctx (PermImpl r ps) ->
                      PermImplTransM
                      (ImplFailCont ->
-                      ImpTransM ext blocks tops ret ps ctx OpenTerm)
+                      ImpTransM ext blocks tops rets ps ctx OpenTerm)
 translatePermImpl prx mb_impl = case mbMatch mb_impl of
   [nuMP| PermImpl_Done r |] ->
     return $ const $ translateF r
@@ -3788,9 +3814,9 @@ translatePermImpl prx mb_impl = case mbMatch mb_impl of
     translatePermImpl1 prx impl1 mb_impls
 
 
-instance ImplTranslateF r ext blocks tops ret =>
-         Translate (ImpTransInfo
-                    ext blocks tops ret ps) ctx (AnnotPermImpl r ps) OpenTerm where
+instance ImplTranslateF r ext blocks tops rets =>
+         Translate (ImpTransInfo ext blocks tops rets ps)
+                   ctx (AnnotPermImpl r ps) OpenTerm where
   translate (mbMatch -> [nuMP| AnnotPermImpl err impl |]) =
     let (transF, (errs,_)) = runPermImplTransM $ translatePermImpl Proxy impl in
     forceImplTrans transF $
@@ -3799,7 +3825,7 @@ instance ImplTranslateF r ext blocks tops ret =>
                                 "\n\n--------------------\n\n" errs))
 
 -- We translate a LocalImplRet to a term that returns all current permissions
-instance ImplTranslateF (LocalImplRet ps) ext blocks ps_in ret where
+instance ImplTranslateF (LocalImplRet ps) ext blocks ps_in rets where
   translateF _ =
     do pctx <- itiPermStack <$> ask
        ret_tp <- returnTypeM
@@ -3808,7 +3834,7 @@ instance ImplTranslateF (LocalImplRet ps) ext blocks ps_in ret where
 
 -- | Translate a local implication to its output, adding an error message
 translateLocalPermImpl :: String -> Mb ctx (LocalPermImpl ps_in ps_out) ->
-                          ImpTransM ext blocks tops ret ps_in ctx OpenTerm
+                          ImpTransM ext blocks tops rets ps_in ctx OpenTerm
 translateLocalPermImpl err (mbMatch -> [nuMP| LocalPermImpl impl |]) =
   clearVarPermsM $ translate $ fmap (AnnotPermImpl err) impl
 
@@ -3822,7 +3848,7 @@ translateCurryLocalPermImpl ::
   PermTransCtx ctx ps1 -> RAssign (Member ctx) ps1 ->
   TypeTrans (PermTransCtx ctx ps2) -> RAssign (Member ctx) ps2 ->
   TypeTrans (PermTransCtx ctx ps_out) ->
-  ImpTransM ext blocks tops ret ps ctx OpenTerm
+  ImpTransM ext blocks tops rets ps ctx OpenTerm
 translateCurryLocalPermImpl err impl pctx1 vars1 tp_trans2 vars2 tp_trans_out =
   lambdaTransM "x_local" tp_trans2 $ \pctx2 ->
   local (\info -> info { itiReturnType = typeTransType1 tp_trans_out }) $
@@ -4124,7 +4150,7 @@ debugPrettyPermCtx prxs (ptranss :>: ptrans) =
 -- stack. The 'String' argument is the name of the construct being applied, for
 -- use in error reporting.
 translateApply :: String -> OpenTerm -> Mb ctx (DistPerms ps) ->
-                  ImpTransM ext blocks tops ret ps ctx OpenTerm
+                  ImpTransM ext blocks tops rets ps ctx OpenTerm
 translateApply nm f perms =
   do assertPermStackEqM nm perms
      expr_ctx <- itiExprCtx <$> ask
@@ -4143,12 +4169,12 @@ translateApply nm f perms =
 -- | Translate a call to (the translation of) an entrypoint, by either calling
 -- the letrec-bound variable for the entrypoint, if it has one, or by just
 -- translating the body of the entrypoint if it does not.
-translateCallEntry :: forall ext tops args ghosts blocks ctx ret.
+translateCallEntry :: forall ext tops args ghosts blocks ctx rets.
                       PermCheckExtC ext => String ->
-                      TypedEntryTrans ext blocks tops ret args ghosts ->
+                      TypedEntryTrans ext blocks tops rets args ghosts ->
                       Mb ctx (RAssign ExprVar (tops :++: args)) ->
                       Mb ctx (RAssign ExprVar ghosts) ->
-                      ImpTransM ext blocks tops ret
+                      ImpTransM ext blocks tops rets
                       ((tops :++: args) :++: ghosts) ctx OpenTerm
 translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
   -- First test that the stack == the required perms for entryID
@@ -4178,7 +4204,7 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
 
 
 instance PermCheckExtC ext =>
-         Translate (ImpTransInfo ext blocks tops ret ps) ctx
+         Translate (ImpTransInfo ext blocks tops rets ps) ctx
          (CallSiteImplRet blocks tops args ghosts ps) OpenTerm where
   translate (mbMatch ->
              [nuMP| CallSiteImplRet entryID ghosts Refl mb_tavars mb_gvars |]) =
@@ -4189,12 +4215,12 @@ instance PermCheckExtC ext =>
 
 instance PermCheckExtC ext =>
          ImplTranslateF (CallSiteImplRet blocks tops args ghosts)
-         ext blocks tops ret where
+         ext blocks tops rets where
   translateF mb_tgt = translate mb_tgt
 
 
 instance PermCheckExtC ext =>
-         Translate (ImpTransInfo ext blocks tops ret ps) ctx
+         Translate (ImpTransInfo ext blocks tops rets ps) ctx
          (TypedJumpTarget blocks tops ps) OpenTerm where
   translate (mbMatch -> [nuMP| TypedJumpTarget siteID _ _ mb_perms_in |]) =
     do SomeTypedCallSite site <-
@@ -4204,7 +4230,7 @@ instance PermCheckExtC ext =>
          varSubst (permVarSubstOfNames $ distPermsVars perms_in) mb_impl
 
 instance PermCheckExtC ext =>
-         ImplTranslateF (TypedJumpTarget blocks tops) ext blocks tops ret where
+         ImplTranslateF (TypedJumpTarget blocks tops) ext blocks tops rets where
   translateF mb_tgt = translate mb_tgt
 
 
@@ -4213,10 +4239,11 @@ instance PermCheckExtC ext =>
 ----------------------------------------------------------------------
 
 -- | Translate a 'TypedStmt' to a function on translation computations
-translateStmt :: PermCheckExtC ext =>
-                 ProgramLoc -> Mb ctx (TypedStmt ext rets ps_in ps_out) ->
-                 ImpTransM ext blocks tops ret ps_out (ctx :++: rets) OpenTerm ->
-                 ImpTransM ext blocks tops ret ps_in ctx OpenTerm
+translateStmt ::
+  PermCheckExtC ext => ProgramLoc ->
+  Mb ctx (TypedStmt ext stmt_rets ps_in ps_out) ->
+  ImpTransM ext blocks tops rets ps_out (ctx :++: stmt_rets) OpenTerm ->
+  ImpTransM ext blocks tops rets ps_in ctx OpenTerm
 translateStmt loc mb_stmt m = case mbMatch mb_stmt of
   [nuMP| TypedSetReg tp e |] ->
     do tp_trans <- translate tp
@@ -4231,16 +4258,19 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
        inExtTransM etrans $
          withPermStackM (:>: Member_Base) (:>: PTrans_Eq (extMb e)) m
 
-  [nuMP| stmt@(TypedCall _freg fun_perm _ gexprs args) |] ->
+  [nuMP| TypedCall _freg fun_perm _ gexprs args |] ->
     do f_trans <- getTopPermM
+       ectx_outer <- itiExprCtx <$> ask
        let f = case f_trans of
              PTrans_Conj [APTrans_Fun _ f_trm] -> f_trm
              _ -> error "translateStmt: TypedCall: unexpected function permission"
-       -- let perms_in = fmap (distPermsSnoc . typedStmtIn) stmt
-       let perms_out = mbCombine RL.typeCtxProxies
-                     $ fmap (\stmt' -> nu $ \ret ->
-                                          typedStmtOut stmt' (MNil :>: ret)) stmt
-       ret_tp <- translate $ fmap funPermRet fun_perm
+       let rets = mbLift $ mbMapCl $(mkClosed [| funPermRets |]) fun_perm
+       let rets_prxs = cruCtxProxies rets
+       rets_trans <- translateClosed rets
+       let perms_out =
+             mbCombine rets_prxs $ flip mbMapCl mb_stmt
+             ($(mkClosed [| \prxs stmt -> nuMulti prxs (typedStmtOut stmt) |])
+              `clApply` toClosed rets_prxs)
        ectx_gexprs <- translate gexprs
        ectx_args <- translate args
        pctx_in <- RL.tail <$> itiPermStack <$> ask
@@ -4250,18 +4280,21 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
              applyOpenTermMulti f (exprCtxToTerms ectx_gexprs
                                    ++ exprCtxToTerms ectx_args
                                    ++ permCtxToTerms pctx_ghosts_args)
-       fret_tp <- sigmaTypeTransM "ret" ret_tp (flip inExtTransM
-                                                (translate perms_out))
+       fret_tp <- sigmaTypeTransM "ret" rets_trans (flip inExtMultiTransM
+                                                    (translate perms_out))
        applyMultiTransM (return $ globalOpenTerm "Prelude.bindM")
          [return fret_tp, returnTypeM, return fret_trm,
           lambdaOpenTermTransM "call_ret_val" fret_tp $ \ret_val ->
-           sigmaElimTransM "elim_call_ret_val" ret_tp
-           (flip inExtTransM (translate perms_out)) compReturnTypeTransM
-           (\ret_trans pctx ->
-             inExtTransM ret_trans $
+           sigmaElimTransM "elim_call_ret_val" rets_trans
+           (flip inExtMultiTransM (translate perms_out)) compReturnTypeTransM
+           (\rets_ectx pctx ->
+             inExtMultiTransM rets_ectx $
              withPermStackM
              (\(vars :>: _) ->
-               (fst (RL.split Proxy ectx_gexprs vars) :>: Member_Base))
+               RL.append
+               (fst (RL.split
+                     (RL.append ectx_gexprs ectx_args) ectx_gexprs vars)) $
+               suffixMembers ectx_outer rets_prxs)
              (const pctx)
              m)
            ret_val]
@@ -4279,8 +4312,8 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
 -- | Translate a 'TypedStmt' to a function on translation computations
 translateLLVMStmt ::
   Mb ctx (TypedLLVMStmt r ps_in ps_out) ->
-  ImpTransM ext blocks tops ret ps_out (ctx :> r) OpenTerm ->
-  ImpTransM ext blocks tops ret ps_in ctx OpenTerm
+  ImpTransM ext blocks tops rets ps_out (ctx :> r) OpenTerm ->
+  ImpTransM ext blocks tops rets ps_in ctx OpenTerm
 translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
   [nuMP| ConstructLLVMWord (TypedReg x) |] ->
     inExtTransM ETrans_LLVM $
@@ -4424,32 +4457,34 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
 ----------------------------------------------------------------------
 
 instance PermCheckExtC ext =>
-         Translate (ImpTransInfo ext blocks tops ret ps) ctx
-         (TypedRet tops ret ps) OpenTerm where
-  translate (mbMatch -> [nuMP| TypedRet Refl tp r mb_perms |]) =
+         Translate (ImpTransInfo ext blocks tops rets ps) ctx
+         (TypedRet tops rets ps) OpenTerm where
+  translate (mbMatch -> [nuMP| TypedRet Refl mb_rets mb_rets_ns mb_perms |]) =
     do let perms =
              mbMap2
-             (\reg mbps -> varSubst (singletonVarSubst $ typedRegVar reg) mbps)
-             r mb_perms
+             (\rets_ns ps -> varSubst (permVarSubstOfNames rets_ns) ps)
+             mb_rets_ns mb_perms
        () <- assertPermStackEqM "TypedRet" perms
-       r_trans <- translate r
-       tp_trans <- translate tp
+       rets_trans <- translate mb_rets
+       let rets_prxs = cruCtxProxies $ mbLift mb_rets
+       rets_ns_trans <- translate mb_rets_ns
        ret_tp <- returnTypeM
        sigma_trm <-
-         sigmaTransM "r" tp_trans (flip inExtTransM $
-                                   translate $ mbCombine RL.typeCtxProxies mb_perms)
-         r_trans (itiPermStack <$> ask)
+         sigmaTransM "r" rets_trans
+         (flip inExtMultiTransM $
+          translate $ mbCombine rets_prxs mb_perms)
+         rets_ns_trans (itiPermStack <$> ask)
        return $
          applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
          [ret_tp, sigma_trm]
 
 instance PermCheckExtC ext =>
-         ImplTranslateF (TypedRet tops ret) ext blocks tops ret where
+         ImplTranslateF (TypedRet tops rets) ext blocks tops rets where
   translateF mb_ret = translate mb_ret
 
 instance PermCheckExtC ext =>
-         Translate (ImpTransInfo ext blocks tops ret ps) ctx
-         (TypedTermStmt blocks tops ret ps) OpenTerm where
+         Translate (ImpTransInfo ext blocks tops rets ps) ctx
+         (TypedTermStmt blocks tops rets ps) OpenTerm where
   translate mb_x = case mbMatch mb_x of
     [nuMP| TypedJump impl_tgt |] -> translate impl_tgt
     [nuMP| TypedBr reg impl_tgt1 impl_tgt2 |] ->
@@ -4464,8 +4499,8 @@ instance PermCheckExtC ext =>
 
 
 instance PermCheckExtC ext =>
-         Translate (ImpTransInfo ext blocks tops ret ps) ctx
-         (TypedStmtSeq ext blocks tops ret ps) OpenTerm where
+         Translate (ImpTransInfo ext blocks tops rets ps) ctx
+         (TypedStmtSeq ext blocks tops rets ps) OpenTerm where
   translate mb_x = case mbMatch mb_x of
     [nuMP| TypedImplStmt impl_seq |] -> translate impl_seq
     [nuMP| TypedConsStmt loc stmt pxys mb_seq |] ->
@@ -4474,7 +4509,7 @@ instance PermCheckExtC ext =>
 
 instance PermCheckExtC ext =>
          ImplTranslateF (TypedStmtSeq
-                         ext blocks tops ret) ext blocks tops ret where
+                         ext blocks tops rets) ext blocks tops rets where
   translateF mb_seq = translate mb_seq
 
 
@@ -4483,17 +4518,17 @@ instance PermCheckExtC ext =>
 ----------------------------------------------------------------------
 
 -- | An entrypoint over some regular and ghost arguments
-data SomeTypedEntry ext blocks tops ret =
+data SomeTypedEntry ext blocks tops rets =
   forall ghosts args.
-  SomeTypedEntry (TypedEntry TransPhase ext blocks tops ret args ghosts)
+  SomeTypedEntry (TypedEntry TransPhase ext blocks tops rets args ghosts)
 
 -- | Get all entrypoints in a block map that will be translated to letrec-bound
 -- variables, which is all entrypoints with in-degree > 1
 --
 -- FIXME: consider whether we want let and not letRec for entrypoints that have
 -- in-degree > 1 but are not the heads of loops
-typedBlockLetRecEntries :: TypedBlockMap TransPhase ext blocks tops ret ->
-                           [SomeTypedEntry ext blocks tops ret]
+typedBlockLetRecEntries :: TypedBlockMap TransPhase ext blocks tops rets ->
+                           [SomeTypedEntry ext blocks tops rets]
 typedBlockLetRecEntries =
   concat . RL.mapToList (map (\(Some entry) ->
                                SomeTypedEntry entry)
@@ -4504,8 +4539,8 @@ typedBlockLetRecEntries =
 -- corresponds to a letrec-bound variable
 foldBlockMapLetRec ::
   (forall args ghosts.
-   TypedEntry TransPhase ext blocks tops ret args ghosts -> b -> b) ->
-  b -> TypedBlockMap TransPhase ext blocks tops ret -> b
+   TypedEntry TransPhase ext blocks tops rets args ghosts -> b -> b) ->
+  b -> TypedBlockMap TransPhase ext blocks tops rets -> b
 foldBlockMapLetRec f r =
   foldr (\(SomeTypedEntry entry) -> f entry) r . typedBlockLetRecEntries
 
@@ -4526,7 +4561,7 @@ piLRTTransM x tps body_f =
 
 -- | Build a @LetRecType@ that describes the type of the translation of a
 -- 'TypedEntry'
-translateEntryLRT :: TypedEntry TransPhase ext blocks tops ret args ghosts ->
+translateEntryLRT :: TypedEntry TransPhase ext blocks tops rets args ghosts ->
                      TypeTransM ctx OpenTerm
 translateEntryLRT entry@(TypedEntry {..}) =
   inEmptyCtxTransM $
@@ -4540,7 +4575,7 @@ translateEntryLRT entry@(TypedEntry {..}) =
 
 -- | Build a @LetRecTypes@ list that describes the types of all of the
 -- entrypoints in a 'TypedBlockMap'
-translateBlockMapLRTs :: TypedBlockMap TransPhase ext blocks tops ret ->
+translateBlockMapLRTs :: TypedBlockMap TransPhase ext blocks tops rets ->
                          TypeTransM ctx OpenTerm
 translateBlockMapLRTs =
   foldBlockMapLetRec
@@ -4553,13 +4588,13 @@ translateBlockMapLRTs =
 -- | Lambda-abstract over all the entrypoints in a 'TypedBlockMap' that
 -- correspond to letrec-bound functions, putting the lambda-bound variables into
 -- a 'TypedBlockMapTrans' structure and passing it to the supplied body function
-lambdaBlockMap :: TypedBlockMap TransPhase ext blocks tops ret ->
-                  (TypedBlockMapTrans ext blocks tops ret ->
+lambdaBlockMap :: TypedBlockMap TransPhase ext blocks tops rets ->
+                  (TypedBlockMapTrans ext blocks tops rets ->
                    TypeTransM ctx OpenTerm) ->
                   TypeTransM ctx OpenTerm
 lambdaBlockMap = helper where
-  helper :: RAssign (TypedBlock TransPhase ext blocks tops ret) blks ->
-            (RAssign (TypedBlockTrans ext blocks tops ret) blks ->
+  helper :: RAssign (TypedBlock TransPhase ext blocks tops rets) blks ->
+            (RAssign (TypedBlockTrans ext blocks tops rets) blks ->
              TypeTransM ctx OpenTerm) ->
             TypeTransM ctx OpenTerm
   helper MNil f = f MNil
@@ -4587,8 +4622,8 @@ lambdaBlockMap = helper where
 -- over the top-level, local, and ghost arguments and (the translations of) the
 -- input permissions of the entrypoint
 translateEntryBody :: PermCheckExtC ext =>
-                      TypedBlockMapTrans ext blocks tops ret ->
-                      TypedEntry TransPhase ext blocks tops ret args ghosts ->
+                      TypedBlockMapTrans ext blocks tops rets ->
+                      TypedEntry TransPhase ext blocks tops rets args ghosts ->
                       TypeTransM ctx OpenTerm
 translateEntryBody mapTrans entry =
   inEmptyCtxTransM $
@@ -4601,8 +4636,8 @@ translateEntryBody mapTrans entry =
 -- | Translate all the entrypoints in a 'TypedBlockMap' that correspond to
 -- letrec-bound functions to SAW core functions as in 'translateEntryBody'
 translateBlockMapBodies :: PermCheckExtC ext =>
-                           TypedBlockMapTrans ext blocks tops ret ->
-                           TypedBlockMap TransPhase ext blocks tops ret ->
+                           TypedBlockMapTrans ext blocks tops rets ->
+                           TypedBlockMap TransPhase ext blocks tops rets ->
                            TypeTransM ctx OpenTerm
 translateBlockMapBodies mapTrans =
   foldBlockMapLetRec
@@ -4615,21 +4650,21 @@ translateBlockMapBodies mapTrans =
 translateCFG ::
   PermCheckExtC ext =>
   PermEnv -> ChecksFlag ->
-  TypedCFG ext blocks ghosts inits ret ->
+  TypedCFG ext blocks ghosts inits gouts ret ->
   OpenTerm
-translateCFG env checks (cfg :: TypedCFG ext blocks ghosts inits ret) =
+translateCFG env checks (cfg :: TypedCFG ext blocks ghosts inits gouts ret) =
   let h = tpcfgHandle cfg
       fun_perm = tpcfgFunPerm cfg
       blkMap = tpcfgBlockMap cfg
       ctx = typedFnHandleAllArgs h
       inits = typedFnHandleArgs h
       ghosts = typedFnHandleGhosts h
-      retType = typedFnHandleRetType h in
+      retTypes = typedFnHandleRetTypes h in
   runNilTypeTransM env checks $ lambdaExprCtx ctx $
 
   -- We translate retType before extending the expr context to contain another
   -- copy of inits, as it is easier to do it here
-  translateRetType retType (tpcfgOutputPerms cfg) >>= \retTypeTrans ->
+  translateRetType retTypes (tpcfgOutputPerms cfg) >>= \retTypeTrans ->
 
   -- Extend the expr context to contain another copy of the initial arguments
   -- inits, since the initial entrypoint for the entire function takes two
@@ -4687,7 +4722,7 @@ translateCFG env checks (cfg :: TypedCFG ext blocks ghosts inits ret) =
 -- a 'String' name we want to translate it to
 data SomeCFGAndPerm ext where
   SomeCFGAndPerm :: GlobalSymbol -> String -> CFG ext blocks inits ret ->
-                    FunPerm ghosts (CtxToRList inits) ret ->
+                    FunPerm ghosts (CtxToRList inits) gouts ret ->
                     SomeCFGAndPerm ext
 
 -- | Extract the 'GlobalSymbol' from a 'SomeCFGAndPerm'
@@ -4702,14 +4737,14 @@ someCFGAndPermToName (SomeCFGAndPerm _ nm _ _) = nm
 -- description of the SAW core type it translates to
 someCFGAndPermLRT :: PermEnv -> SomeCFGAndPerm ext -> OpenTerm
 someCFGAndPermLRT env (SomeCFGAndPerm _ _ _
-                       (FunPerm ghosts args ret perms_in perms_out)) =
+                       (FunPerm ghosts args gouts ret perms_in perms_out)) =
   runNilTypeTransM env noChecks $
   translateClosed (appendCruCtx ghosts args) >>= \ctx_trans ->
   piLRTTransM "arg" ctx_trans $ \ectx ->
   inCtxTransM ectx $
   translate perms_in >>= \perms_trans ->
   piLRTTransM "perm" perms_trans $ \_ ->
-  translateRetType ret perms_out >>= \ret_tp ->
+  translateRetType (CruCtxCons gouts ret) perms_out >>= \ret_tp ->
   return $ ctorOpenTerm "Prelude.LRT_Ret" [ret_tp]
 
 -- | Extract the 'FunPerm' of a 'SomeCFGAndPerm' as a permission on LLVM
@@ -4808,7 +4843,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
 
 -- | Translate a 'FunPerm' to the SAW core type it represents
 translateCompleteFunPerm :: SharedContext -> PermEnv ->
-                            FunPerm ghosts args ret -> IO Term
+                            FunPerm ghosts args gouts ret -> IO Term
 translateCompleteFunPerm sc env fun_perm =
   completeNormOpenTerm sc $
   runNilTypeTransM env noChecks (translate $ emptyMb fun_perm)

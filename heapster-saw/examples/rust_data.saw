@@ -309,8 +309,8 @@ heapster_assume_fun_rename_prim env hashmap_u64_u64_insert_sym "hashmap_u64_u64_
 // String::deref
 string_deref <- heapster_find_trait_method_symbol env
   "core::ops::deref::Deref::deref<String>";
-//heapster_assume_fun_rename_prim env string_deref "string_deref"
-//  "<'a> fn (&'a String) -> &'a str";
+heapster_assume_fun_rename_prim env string_deref "string_deref"
+  "<'a> fn (&'a String) -> &'a str";
 
 // String::fmt
 string_fmt <- heapster_find_trait_method_symbol env
