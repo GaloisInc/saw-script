@@ -3,7 +3,7 @@ import os
 import os.path
 from saw_client import *
 from saw_client.crucible import cry, cry_f
-from saw_client.llvm import Contract, cry, cry_f, array_ty, alias_ty, i8, i32, i64
+from saw_client.llvm import Contract, array_ty, alias_ty, i8, i32, i64
 from saw_client.proofscript import yices, ProofScript
 from cryptol import cryptoltypes
 #from saw.dashboard import Dashboard
