@@ -1,7 +1,8 @@
 from pathlib import Path
 import unittest
 from saw_client import *
-from saw_client.llvm import Contract, SetupVal, FreshVar, cry, cry_f, struct, LLVMType, void, array_ty, i32, alias_ty
+from saw_client.crucible import cry, cry_f
+from saw_client.llvm import Contract, SetupVal, FreshVar, struct, LLVMType, void, array_ty, i32, alias_ty
 
 
 def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None) -> Tuple[FreshVar, SetupVal]:

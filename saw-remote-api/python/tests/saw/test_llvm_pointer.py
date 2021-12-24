@@ -1,7 +1,8 @@
 from pathlib import Path
 import unittest
 from saw_client import *
-from saw_client.llvm import Contract, cry, cry_f, void, i8, ptr_ty
+from saw_client.crucible import cry, cry_f
+from saw_client.llvm import Contract, void, i8, ptr_ty
 
 
 class FContract(Contract):

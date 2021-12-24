@@ -2,7 +2,8 @@ from pathlib import Path
 import unittest
 from cryptol.cryptoltypes import to_cryptol
 from saw_client import *
-from saw_client.llvm import Contract, void, SetupVal, FreshVar, cry, cry_f, i8, i32, LLVMType, LLVMArrayType
+from saw_client.crucible import cry, cry_f
+from saw_client.llvm import Contract, void, SetupVal, FreshVar, i8, i32, LLVMType, LLVMArrayType
 from saw_client.proofscript import z3
 
 

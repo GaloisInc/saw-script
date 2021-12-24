@@ -1,7 +1,8 @@
 from pathlib import Path
 import unittest
 from saw_client import *
-from saw_client.llvm import Contract, FreshVar, LLVMType, SetupVal, array_ty, cry, cry_f, i64, void
+from saw_client.crucible import cry, cry_f
+from saw_client.llvm import Contract, FreshVar, LLVMType, SetupVal, array_ty, i64, void
 from saw_client.option import LaxPointerOrdering
 
 

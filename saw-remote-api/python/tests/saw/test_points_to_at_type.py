@@ -2,7 +2,8 @@ from pathlib import Path
 import unittest
 from saw_client import *
 from saw_client.exceptions import VerificationError
-from saw_client.llvm import Contract, LLVMType, PointerType, cry, cry_f, void, i32, array_ty
+from saw_client.crucible import cry, cry_f
+from saw_client.llvm import Contract, LLVMType, PointerType, void, i32, array_ty
 from typing import Union
 
 

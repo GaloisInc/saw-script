@@ -3,7 +3,8 @@ from pathlib import Path
 
 import saw_client as saw
 
-from saw_client.jvm import Contract, java_int, cry, cry_f
+from saw_client.crucible import cry, cry_f
+from saw_client.jvm import Contract, java_int
 
 class Add(Contract):
     def __init__(self) -> None:

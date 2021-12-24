@@ -1,5 +1,6 @@
 import saw_client as saw
-from saw_client.llvm import Contract, CryptolTerm, cry, cry_f, void, i32, GhostVariable
+from saw_client.crucible import cry, cry_f
+from saw_client.llvm import Contract, CryptolTerm, void, i32, GhostVariable
 
 import unittest
 from pathlib import Path

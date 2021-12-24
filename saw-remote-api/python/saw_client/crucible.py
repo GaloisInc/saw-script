@@ -522,9 +522,8 @@ class Contract:
             raise Exception("preconditions must be specified before execute_func is called in the contract")
 
     def precondition_f(self, s : str) -> None:
-        """Parses the given string like ``cry_f``, then calls ``precondition``
-        on the result.
-        """
+        """Declares a precondition using a ``cry_f``-style format string, i.e.
+        ``precondition_f(...)`` is equivalent to ``precondition(cry_f(...))``"""
         expression = to_cryptol_str_customf(s, frames=1, filename="<precondition_f>")
         return self.precondition(expression)
 
@@ -543,9 +542,8 @@ class Contract:
             raise Exception("postconditions must be specified after execute_func is called in the contract")
 
     def postcondition_f(self, s : str) -> None:
-        """Parses the given string like ``cry_f``, then calls ``postcondition``
-        on the result.
-        """
+        """Declares a postcondition using a ``cry_f``-style format string, i.e.
+        ``postcondition_f(...)`` is equivalent to ``postcondition(cry_f(...))``"""
         expression = to_cryptol_str_customf(s, frames=1, filename="<postcondition_f>")
         return self.postcondition(expression)
 
@@ -559,9 +557,8 @@ class Contract:
             raise ValueError("Not in postcondition")
 
     def returns_f(self, s : str) -> None:
-        """Parses the given string like ``cry_f``, then calls ``returns``
-        on the result.
-        """
+        """Declares a return value using a ``cry_f``-style format string, i.e.
+        ``returns_f(...)`` is equivalent to ``returns(cry_f(...))``"""
         expression = to_cryptol_str_customf(s, frames=1, filename="<returns_f>")
         return self.returns(CryptolTerm(expression))
 
@@ -622,21 +619,55 @@ class Contract:
 
 # It's tempting to name this `global` to mirror SAWScript's `llvm_global`,
 # but that would clash with the Python keyword `global`.
-def global_var(name: str) -> GlobalVarVal:
+def global_var(name: str) -> SetupVal:
     """Returns a pointer to the named global ``name`` (i.e., a ``GlobalVarVal``)."""
     return GlobalVarVal(name)
 
 def cry(s : str) -> CryptolTerm:
-    """Like ``cry`` from the Cryptol bindings, but retuns a ``CryptolTerm``
-    (which is also a ``SetupVal``)."""
+    """Embed a string of Cryptol syntax as a ``CryptolTerm`` (which is also a
+       ``SetupVal``) - also see ``cry_f``."""
     return CryptolTerm(s)
 
 def cry_f(s : str) -> CryptolTerm:
-    """Like ``cry_f`` from the Cryptol bindings, but retuns a ``CryptolTerm``
-    (which is also a ``SetupVal``)."""
-    return CryptolTerm(to_cryptol_str_customf(s, frames=1, filename='<cryptol_f>'))
+    """Embed a string of Cryptol syntax as a ``CryptolTerm`` (which is also a
+       ``SetupVal``), where the given string is parsed as an f-string, and the
+       values within brackets are converted to Cryptol syntax using
+       ``to_cryptol_str`` from the Cryptol Python library.
 
-def array(*elements: SetupVal) -> ArrayVal:
+       Like f-strings, values in brackets (``{``, ``}``) are parsed as python
+       expressions in the caller's context of local and global variables, and
+       to include a literal bracket in the final string, it must be doubled
+       (i.e. ``{{`` or ``}}``). The latter is needed when using explicit type
+       application or record syntax. For example, if ``x = [0,1]`` then
+       ``cry_f('length `{{2}} {x}')`` is equal to ``cry('length `{2} [0,1]')``
+       and ``cry_f('{{ x = {x} }}')`` is equal to ``cry('{ x = [0,1] }')``.
+
+       When formatting Cryptol, it is recomended to use this function rather
+       than any of python's built-in methods of string formatting (e.g.
+       f-strings, ``str.format``) as the latter will not always produce valid
+       Cryptol syntax. Specifically, this function differs from these methods
+       in the cases of ``BV``s, string literals, function application (this
+       function will add parentheses as needed), and dicts. For example,
+       ``cry_f('{ {"x": 5, "y": 4} }')`` equals ``cry('{x = 5, y = 4}')``
+       but ``f'{ {"x": 5, "y": 4} }'`` equals ``'{"x": 5, "y": 4}'``. Only
+       the former is valid Cryptol syntax for a record.
+       
+       Note that any conversion or format specifier will always result in the
+       argument being rendered as a Cryptol string literal with the conversion
+       and/or formating applied. For example, `cry('f {5}')` is equal to
+       ``cry('f 5')`` but ``cry_f('f {5!s}')`` is equal to ``cry(`f "5"`)``
+       and ``cry_f('f {5:+.2%}')`` is equal to ``cry('f "+500.00%"')``.
+
+       :example:
+
+       >>> x = BV(size=7, value=1)
+       >>> y = cry_f('fun1 {x}')
+       >>> cry_f('fun2 {y}')
+       'fun2 (fun1 (1 : [7]))'
+    """
+    return CryptolTerm(to_cryptol_str_customf(s, frames=1))
+
+def array(*elements: SetupVal) -> SetupVal:
     """Returns an array with the provided ``elements`` (i.e., an ``ArrayVal``).
 
     N.B., one or more ``elements`` must be provided.""" # FIXME why? document this here when we figure it out.
@@ -647,7 +678,7 @@ def array(*elements: SetupVal) -> ArrayVal:
             raise ValueError('array expected a SetupVal, but got {e!r}')
     return ArrayVal(list(elements))
 
-def elem(base: SetupVal, index: int) -> ElemVal:
+def elem(base: SetupVal, index: int) -> SetupVal:
     """Returns the value of the array element at position ``index`` in ``base`` (i.e., an ``ElemVal``).
 
     Can also be created by using an ``int`` indexing key on a ``SetupVal``: ``base[index]``."""
@@ -657,7 +688,7 @@ def elem(base: SetupVal, index: int) -> ElemVal:
         raise ValueError('elem expected an int, but got {index!r}')
     return ElemVal(base, index)
 
-def field(base : SetupVal, field_name : str) -> FieldVal:
+def field(base : SetupVal, field_name : str) -> SetupVal:
     """Returns the value of struct ``base``'s field ``field_name`` (i.e., a ``FieldVal``).
 
     Can also be created by using a ``str`` indexing key on a ``SetupVal``: ``base[field_name]``."""
@@ -667,17 +698,17 @@ def field(base : SetupVal, field_name : str) -> FieldVal:
         raise ValueError('field expected a str, but got {field_name!r}')
     return FieldVal(base, field_name)
 
-def global_initializer(name: str) -> GlobalInitializerVal:
+def global_initializer(name: str) -> SetupVal:
     """Returns the initializer value of a named global ``name`` (i.e., a ``GlobalInitializerVal``)."""
     if not isinstance(name, str):
         raise ValueError('global_initializer expected a str naming a global value, but got {name!r}')
     return GlobalInitializerVal(name)
 
-def null() -> NullVal:
+def null() -> SetupVal:
     """Returns a null pointer value (i.e., a ``NullVal``)."""
     return NullVal()
 
-def struct(*fields : SetupVal) -> StructVal:
+def struct(*fields : SetupVal) -> SetupVal:
     """Returns an LLVM structure value with the given ``fields`` (i.e., a ``StructVal``)."""
     for field in fields:
         if not isinstance(field, SetupVal):
