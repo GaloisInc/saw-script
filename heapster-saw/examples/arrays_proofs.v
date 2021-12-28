@@ -237,7 +237,7 @@ Proof.
   unfold even_odd_sums_diff_invar, noErrorsSpec.
   time "even_odd_sums_diff" prove_refinement.
   all: try assumption.
-  - enough (isBvult 64 (bvSub 64 a4 (intToBv 64 1)) (bvMul 64 (intToBv 64 2) a1))
+  - enough (isBvult 64 a2 (bvMul 64 (intToBv 64 2) a1))
       by (rewrite H in e_maybe; discriminate e_maybe).
     rewrite <- e_if.
     assert (isBvsle 64 (intToBv 64 0) a4) by (apply isBvslt_to_isBvsle; eauto).
@@ -246,7 +246,8 @@ Proof.
       (* apply isBvsle_bvSub_inj_pos. *)
       (* I give up I'm done messing around manually with bitvectors for now *)
       admit.
-    + apply isBvslt_pred_l; eauto.
+    + rewrite e_let.
+      apply isBvslt_pred_l; eauto.
       rewrite <- e_assuming; reflexivity.
   - (* (e_if4 is a contradiction) *)
     admit.

@@ -439,6 +439,7 @@ data TopLevelRW =
   , rwCrucibleAssertThenAssume :: Bool
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
+  , rwLaxLoadsAndStores :: Bool
   , rwLaxPointerOrdering :: Bool
   , rwDebugIntrinsics :: Bool
 

@@ -17,6 +17,14 @@
 * New command `w4_unint_z3_using` like `w4_unint_z3`, but use the given Z3
   tactic.
 
+* A new `llvm_points_to_bitfield` command has been introduced, providing a
+  version of `llvm_points_to` that is specifically tailored for structs
+  containing bitfields. In order to use `llvm_points_to_bitfield`, one must
+  also use the new `enable_lax_loads_and_stores` command, which relaxes some
+  of Crucible's assumptions about reading from uninitialized memory. (This
+  command also comes with a corresponding `disable_lax_loads_and_stores`
+  command.) For more details on how each of these commands should be used,
+  consult the "Bitfields" section of the SAW manual.
 
 # Version 0.9
 

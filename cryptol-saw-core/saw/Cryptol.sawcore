@@ -403,6 +403,16 @@ seqZip a b m n =
        n)
     m;
 
+zipSame : (a b : isort 0) -> (n : Nat) -> Vec n a -> Vec n b -> Vec n (a * b);
+zipSame a b n x y = gen n (a*b) (\ (i : Nat) -> (at n a x i, at n b y i));
+
+seqZipSame : (a b : isort 0) -> (n : Num) -> seq n a -> seq n b -> seq n (a * b);
+seqZipSame a b n =
+  Num#rec
+    (\ (n : Num) -> seq n a -> seq n b -> seq n (a * b))
+    (\ (n : Nat) -> zipSame a b n)
+    (streamMap2 a b (a*b) (\ (x:a) -> \ (y:b) -> (x,y)))
+    n;
 
 --------------------------------------------------------------------------------
 -- Ring and Logic functions
@@ -1559,6 +1569,15 @@ ecFoldl n a b f z =
 ecFoldlPrime :
   (n : Num) -> (a : sort 0) -> (b : isort 0) -> PEq a -> (a -> b -> a) -> a -> seq n b -> a;
 ecFoldlPrime n a b pa = ecFoldl n a b;
+
+-- scanl : {n, a, b}  (a -> b -> a) -> a -> [n]b -> [1+n]a
+ecScanl :
+  (n : Num) -> (a : sort 0) -> (b : sort 0) -> (a -> b -> a) -> a -> seq n b -> seq (tcAdd (TCNum 1) n) a;
+ecScanl n a b f z =
+  Num#rec (\ (n : Num) -> seq n b -> seq (tcAdd (TCNum 1) n) a)
+    (\ (n:Nat) -> \ (xs : Vec n b) -> scanl b a n f z xs)
+    (\ (xs : Stream b) -> streamScanl b a f z xs)
+    n;
 
 --------------------------------------------------------------------------------
 -- Floating point primitives (TODO)

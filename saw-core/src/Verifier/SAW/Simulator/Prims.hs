@@ -354,6 +354,7 @@ constMap bp = Map.fromList
   , ("Prelude.zip", vZipOp (bpUnpack bp))
   , ("Prelude.foldr", foldrOp (bpUnpack bp))
   , ("Prelude.foldl", foldlOp (bpUnpack bp))
+  , ("Prelude.scanl", scanlOp (bpUnpack bp))
   , ("Prelude.rotateL", rotateLOp bp)
   , ("Prelude.rotateR", rotateROp bp)
   , ("Prelude.shiftL", shiftLOp bp)
@@ -521,7 +522,7 @@ coerceOp =
 
 -- | Return the number of bits necessary to represent the given value,
 -- which should be a value of type Nat.
-natSize :: BasePrims l -> Value l -> Natural
+natSize :: HasCallStack => BasePrims l -> Value l -> Natural
 natSize _bp val =
   case val of
     VNat n -> widthNat n
@@ -1074,6 +1075,24 @@ foldlOp unpack =
     xv <- toVector unpack xs
     lift (V.foldl g (force z) xv)
 
+-- scanl : (a b : sort 0) -> (n : Nat) -> (b -> a -> b) -> b -> Vec n a -> Vec (addNat n 1) b;
+scanlOp :: forall l. (VMonadLazy l, Show (Extra l)) => Unpack l -> Prim l
+scanlOp unpack =
+  constFun $ -- a
+  constFun $ -- b
+  constFun $ -- n
+  strictFun $ \f ->
+  primFun $ \z ->
+  strictFun $ \xs ->
+  PrimExcept $ do
+    let g :: Vector (Thunk l) ->
+             Thunk l ->
+             EvalM l (Vector (Thunk l))
+        g bs v = do b <- delay (applyAll f [V.last bs, v])
+                    return (V.snoc bs b)
+    xv <- toVector unpack xs
+    lift (VVector <$> V.foldM g (V.singleton z) xv)
+
 -- op :: Integer -> Integer;
 intUnOp :: VMonad l => (VInt l -> MInt l) -> Prim l
 intUnOp f =
@@ -1377,4 +1396,3 @@ arrayRangeEqOp bp =
        j' <- toWord (bpPack bp) j
        l' <- toWord (bpPack bp) l
        VBool <$> (bpArrayRangeEq bp) f' i' g' j' l'
-

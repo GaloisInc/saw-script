@@ -33,6 +33,8 @@ setOption opt =
          updateRW rw { rwLaxArith = enabled }
        EnableLaxPointerOrdering enabled ->
          updateRW rw { rwLaxPointerOrdering = enabled }
+       EnableLaxLoadsAndStores enabled ->
+         updateRW rw { rwLaxLoadsAndStores = enabled }
        EnableDebugIntrinsics enabled ->
          updateRW rw { rwDebugIntrinsics = enabled }
        EnableSMTArrayMemoryModel enabled ->
@@ -46,6 +48,7 @@ setOption opt =
 data SetOptionParams
   = EnableLaxArithmetic Bool
   | EnableLaxPointerOrdering Bool
+  | EnableLaxLoadsAndStores Bool
   | EnableDebugIntrinsics Bool
   | EnableSMTArrayMemoryModel Bool
   | EnableWhat4HashConsing Bool
@@ -56,6 +59,7 @@ parseOption o name =
   case name of
     "lax arithmetic" -> EnableLaxArithmetic <$> o .: "value"
     "lax pointer ordering" -> EnableLaxPointerOrdering <$> o .: "value"
+    "lax loads and stores" -> EnableLaxLoadsAndStores <$> o .: "value"
     "debug intrinsics" -> EnableDebugIntrinsics <$> o .: "value"
     "SMT array memory model" -> EnableSMTArrayMemoryModel <$> o .: "value"
     "What4 hash consing" -> EnableWhat4HashConsing <$> o .: "value"
@@ -73,6 +77,7 @@ instance Doc.DescribedMethod SetOptionParams OK where
        Doc.Paragraph [Doc.Text "The option to set and its accompanying value (i.e., true or false); one of the following:"
                      , Doc.Literal "lax arithmetic", Doc.Text ", "
                      , Doc.Literal "lax pointer ordering", Doc.Text ", "
+                     , Doc.Literal "lax loads and stores", Doc.Text ", "
                      , Doc.Literal "debug intrinsics", Doc.Text ", "
                      , Doc.Literal "SMT array memory model", Doc.Text ", "
                      , Doc.Literal "What4 hash consing", Doc.Text ", or "

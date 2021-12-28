@@ -687,17 +687,22 @@ tcSortedMbValuePerms ctx perms =
 
 -- | Check a function permission of the form
 --
--- > (x1:tp1, ...). arg1:p1, ... -o arg1:p1', ..., argn:pn', ret:p_ret
+-- > (x1:tp1, ...). arg1:p1, ... -o
+-- >   (y1:tp1', ..., ym:tpm'). arg1:p1', ..., argn:pn', ret:p_ret
 --
 -- for some arbitrary context @x1:tp1, ...@ of ghost variables
 tcFunPerm :: CruCtx args -> TypeRepr ret -> AstFunPerm -> Tc (SomeFunPerm args ret)
-tcFunPerm args ret (AstFunPerm _ untyCtx ins outs) =
+tcFunPerm args ret (AstFunPerm _ untyCtx ins untyCtxOut outs) =
   do Some ghosts_ctx@(ParsedCtx _ ghosts) <- tcCtx untyCtx
+     Some gouts_ctx@(ParsedCtx _ gouts) <- tcCtx untyCtxOut
      let args_ctx = mkArgsParsedCtx args
-         ghosts_args_ctx = appendParsedCtx ghosts_ctx args_ctx
-     perms_in  <- tcSortedMbValuePerms ghosts_args_ctx ins
-     perms_out <- tcSortedMbValuePerms (consParsedCtx "ret" ret ghosts_args_ctx) outs
-     pure (SomeFunPerm (FunPerm ghosts args ret perms_in perms_out))
+         perms_in_ctx = appendParsedCtx ghosts_ctx args_ctx
+         perms_out_ctx =
+           appendParsedCtx (appendParsedCtx ghosts_ctx args_ctx)
+           (consParsedCtx "ret" ret gouts_ctx)
+     perms_in  <- tcSortedMbValuePerms perms_in_ctx ins
+     perms_out <- tcSortedMbValuePerms perms_out_ctx outs
+     pure (SomeFunPerm (FunPerm ghosts args gouts ret perms_in perms_out))
 
 ----------------------------------------------------------------------
 -- * Parsing Permission Sets and Function Permissions
