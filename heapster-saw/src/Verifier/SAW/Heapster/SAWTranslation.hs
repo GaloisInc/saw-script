@@ -2311,6 +2311,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        withPermStackM RL.tail
          (\(pctx :>: _ :>: _) -> pctx :>: typeTransF ttrans []) m
 
+  [nuMP| SImpl_UnitEq x _ |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       withPermStackM (:>: translateVar x)
+         (\pctx -> pctx :>: typeTransF ttrans []) m
+
+
   [nuMP| SImpl_CopyEq _ _ |] ->
     withPermStackM
     (\(vars :>: var) -> (vars :>: var :>: var))
