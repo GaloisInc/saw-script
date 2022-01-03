@@ -164,17 +164,18 @@ yosysIRToTerm sc ir modnm portnm = do
         )
         . Map.assocs
         $ m ^. modulePorts
-  derivedInputs <- forM inputports $ \(nm, inp) -> do
+  (derivedInputs, extCns) <- fmap unzip . forM inputports $ \(nm, inp) -> do
     tp <- liftIO . SC.scBitvector sc . fromIntegral $ length inp
     ec <- liftIO $ SC.scFreshEC sc nm tp
     t <- liftIO $ SC.scExtCns sc ec
-    deriveTermsByIndices sc inp t
+    derived <- deriveTermsByIndices sc inp t
+    pure (derived, ec)
   let inputs = foldr Map.union Map.empty derivedInputs
   env <- netgraphToTerms sc ng inputs
   case Map.lookup (p ^. portBits) env of
-    Just t -> do
-      let cty = Cryptol.tWord (Cryptol.tNum . length $ p ^. portBits)
-      pure $ SC.TypedTerm (SC.TypedTermSchema (Cryptol.tMono cty)) t
+    Just unwrapped -> do
+      t <- liftIO $ SC.scAbstractExts sc extCns unwrapped
+      liftIO $ SC.mkTypedTerm sc t
     Nothing -> throw . YosysError $ "Failed to find output for bits: " <> (Text.pack . show $ p ^. portBits)
 
 --------------------------------------------------------------------------------
