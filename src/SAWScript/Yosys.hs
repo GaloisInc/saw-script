@@ -25,8 +25,6 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Graph as Graph
 
-import qualified Cryptol.TypeCheck.Type as Cryptol
-
 import qualified Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.TypedTerm as SC
 
