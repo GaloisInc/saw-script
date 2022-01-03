@@ -643,7 +643,7 @@ def cry_f(s : str) -> CryptolTerm:
        and ``cry_f('{{ x = {x} }}')`` is equal to ``cry('{ x = [0,1] }')``.
 
        When formatting Cryptol, it is recomended to use this function rather
-       than any of python's built-in methods of string formatting (e.g.
+       than any of Python's built-in methods of string formatting (e.g.
        f-strings, ``str.format``) as the latter will not always produce valid
        Cryptol syntax. Specifically, this function differs from these methods
        in the cases of ``BV``s, string literals, function application (this
