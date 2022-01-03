@@ -75,8 +75,13 @@ moduleNetgraph m =
       = Graph.graphFromEdges nodes
   in Netgraph{..}
 
+--------------------------------------------------------------------------------
+-- ** Building a SAWCore term from a network graph
+
+-- | Given a Yosys cell and terms for its arguments, construct a term representing the output.
 cellToTerm :: MonadIO m => SC.SharedContext -> Cell -> [SC.Term] -> m SC.Term
 cellToTerm sc c args = case c ^. cellType of
+  -- TODO better handling here. consider multiple-output cells?
   CellTypeOr -> do
     w <- liftIO $ SC.scNat sc $ case Map.lookup "Y" $ c ^. cellConnections of
       Nothing -> panic "cellToTerm" ["Missing expected output name for $or cell"]
@@ -90,26 +95,54 @@ cellToTerm sc c args = case c ^. cellType of
     identity <- liftIO $ SC.scBvBool sc w =<< SC.scBool sc True
     liftIO $ foldM (SC.scBvAnd sc w) identity args
 
+-- | Given a bit pattern ([Bitrep]) and a term, construct a map associating that output pattern with
+-- the term, and each bit of that pattern with the corresponding bit of the term.
+deriveTermsByIndices :: MonadIO m => SC.SharedContext -> [Bitrep] -> SC.Term -> m (Map [Bitrep] SC.Term)
+deriveTermsByIndices sc rep t = do
+  boolty <- liftIO $ SC.scBoolType sc
+  telems <- forM [0..length rep] $ \index -> do
+    tlen <- liftIO . SC.scNat sc . fromIntegral $ length rep
+    idx <- liftIO . SC.scNat sc $ fromIntegral index
+    bit <- liftIO $ SC.scAt sc tlen boolty t idx
+    liftIO $ SC.scSingle sc boolty bit
+  pure . Map.fromList $ mconcat
+    [ [(rep, t)]
+    , zip ((:[]) <$> rep) telems
+    ]
+
+-- | Given a netgraph and an initial map from bit patterns to terms, populate that map with terms
+-- generated from the rest of the netgraph.
 netgraphToTerms :: MonadIO m => SC.SharedContext -> Netgraph -> Map [Bitrep] SC.Term -> m (Map [Bitrep] SC.Term)
-netgraphToTerms sc ng inputs = do
-  let sorted = Graph.reverseTopSort $ ng ^. netgraphGraph
-  foldM
-    ( \acc v -> do
-        let (c, out, inp) = ng ^. netgraphNodeFromVertex $ v
-        args <- forM inp $ \i ->
-          -- TODO: be smarter on this lookup! may want to insert terms for individual bits.
-          case Map.lookup i acc of
-            Just t -> pure t
-            Nothing -> throw . YosysError $ "Failed to find output bitvec: " <> Text.pack (show i)
-        t <- cellToTerm sc c args
-        pure $ Map.insert out t acc
-    )
-    inputs
-    sorted
+netgraphToTerms sc ng inputs
+  | length (Graph.scc $ ng ^. netgraphGraph ) > 1
+  = throw $ YosysError "Network graph contains a cycle; SAW does not currently support analysis of sequential circuits."
+  | otherwise = do
+      let sorted = Graph.reverseTopSort $ ng ^. netgraphGraph
+      foldM
+        ( \acc v -> do
+            let (c, out, inp) = ng ^. netgraphNodeFromVertex $ v
+            args <- forM inp $ \i -> -- for each input bit pattern
+              case Map.lookup i acc of
+                Just t -> pure t -- if we can find that pattern exactly, great! use that term
+                Nothing -> do -- otherwise, find each individual bit and append the terms
+                  one <- liftIO $ SC.scNat sc 1
+                  boolty <- liftIO $ SC.scBoolType sc
+                  many <- liftIO . SC.scNat sc . fromIntegral $ length i
+                  vecty <- liftIO $ SC.scVecType sc many boolty
+                  bits <- case sequence $ flip Map.lookup acc . (:[]) <$> i of
+                    Just bits -> pure bits
+                    Nothing -> throw . YosysError $ "Failed to find output bitvec: " <> Text.pack (show i)
+                  vecBits <- liftIO $ SC.scVector sc vecty bits
+                  liftIO $ SC.scJoin sc many one boolty vecBits
+            t <- cellToTerm sc c args -- once we've built a term, insert it along with each of its bits
+            derived <- deriveTermsByIndices sc out t
+            pure $ Map.union derived acc
+        )
+        inputs
+        sorted
 
---------------------------------------------------------------------------------
--- ** Building a SAWCore term from a network graph
-
+-- | Given a Yosys IR, the name of a VHDL module, and the name of an output port, construct a
+-- SAWCore term for the value of that output port.
 yosysIRToTerm :: MonadIO m => SC.SharedContext -> YosysIR -> Text -> Text -> m SC.TypedTerm
 yosysIRToTerm sc ir modnm portnm = do
   m <- case Map.lookup modnm $ ir ^. yosysModules of
@@ -131,11 +164,12 @@ yosysIRToTerm sc ir modnm portnm = do
         )
         . Map.assocs
         $ m ^. modulePorts
-  inputs <- fmap Map.fromList . forM inputports $ \(nm, inp) -> do
+  derivedInputs <- forM inputports $ \(nm, inp) -> do
     tp <- liftIO . SC.scBitvector sc . fromIntegral $ length inp
     ec <- liftIO $ SC.scFreshEC sc nm tp
     t <- liftIO $ SC.scExtCns sc ec
-    pure (inp, t)
+    deriveTermsByIndices sc inp t
+  let inputs = foldr Map.union Map.empty derivedInputs
   env <- netgraphToTerms sc ng inputs
   case Map.lookup (p ^. portBits) env of
     Just t -> do
