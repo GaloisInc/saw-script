@@ -18,6 +18,8 @@ Module SAWCorePrelude.
 
 (* Prelude.fix was skipped *)
 
+(* Prelude.sawLet was skipped *)
+
 (* Prelude.UnitType was skipped *)
 
 (* Prelude.UnitType__rec was skipped *)

@@ -18,6 +18,9 @@ id _ x = x;
 -- FIXME: We eventually need to remove this, as it violates soundness...
 primitive fix : (a : sort 1) -> (a -> a) -> a;
 
+sawLet : (a b : sort 0) -> a -> (a -> b) -> b;
+sawLet _ _ x f = f x;
+
 
 -- FIXME: below are some defined data-types that could be used in place of
 -- the SAW primitive types

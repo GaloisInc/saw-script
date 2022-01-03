@@ -208,7 +208,10 @@ specialTreatmentMap configuration = Map.fromList $
 sawCorePreludeSpecialTreatmentMap :: TranslationConfiguration -> Map.Map String IdentSpecialTreatment
 sawCorePreludeSpecialTreatmentMap configuration =
   let vectorsModule = sawVectorDefinitionsModule configuration in
-  Map.fromList $ []
+  Map.fromList $
+
+  -- sawLet
+  [ ("sawLet", mapsTo sawCoreScaffoldingModule "sawLet_def") ]
 
   -- Unsafe SAW features
   ++
