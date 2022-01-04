@@ -909,7 +909,7 @@ instance TransInfo info =>
         [nuMP| RecShapeBody _ trans_id _ |] ->
           ETrans_Term <$> applyOpenTermMulti (globalOpenTerm $ mbLift trans_id) <$>
           transTerms <$> translate args
-    [nuMP| PExpr_EqShape _ |] -> return $ ETrans_Term unitTypeOpenTerm
+    [nuMP| PExpr_EqShape _ _ |] -> return $ ETrans_Term unitTypeOpenTerm
     [nuMP| PExpr_PtrShape _ _ sh |] -> translate sh
     [nuMP| PExpr_FieldShape fsh |] ->
       ETrans_Term <$> tupleOfTypes <$> translate fsh
@@ -3523,8 +3523,10 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
              mbCombine RL.typeCtxProxies $
              mbMapCl $(mkClosed
                        [| \bp -> nu $ \y ->
+                         let len = llvmBlockLen bp in
                          ValPerm_Conj1 $ Perm_LLVMBlock $
-                         bp { llvmBlockShape = PExpr_EqShape $ PExpr_Var y } |])
+                         bp { llvmBlockShape =
+                                PExpr_EqShape len $ PExpr_Var y } |])
              mb_bp
        tp_trans1 <- translate mb_p_out1
        let mb_p_out2 =

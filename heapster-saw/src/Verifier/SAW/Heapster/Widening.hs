@@ -393,8 +393,9 @@ widenExpr' _ (PExpr_NamedShape Nothing Nothing nmsh1 args1)
     PExpr_NamedShape Nothing Nothing nmsh1 <$>
     widenExprs (namedShapeArgs nmsh1) args1 args2
 
-widenExpr' (LLVMShapeRepr w) (PExpr_EqShape e1) (PExpr_EqShape e2) =
-  PExpr_EqShape <$> widenExpr (LLVMBlockRepr w) e1 e2
+widenExpr' (LLVMShapeRepr w) (PExpr_EqShape len1 e1) (PExpr_EqShape len2 e2)
+  | bvEq len1 len2
+  = PExpr_EqShape len1 <$> widenExpr (LLVMBlockRepr w) e1 e2
 
 widenExpr' tp (PExpr_PtrShape Nothing Nothing sh1)
   (PExpr_PtrShape Nothing Nothing sh2) =

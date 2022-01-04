@@ -1012,9 +1012,9 @@ data SimplImpl ps_in ps_out where
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
   -- | Prove an llvmblock permission of shape @sh@ from one of equality shape
-  -- @eqsh(y)@ and a shape permission on @y@:
+  -- @eqsh(len,y)@ and a shape permission on @y@:
   --
-  -- > x:memblock(rw,l,off,len,eqsh(y)), y:shape(sh)
+  -- > x:memblock(rw,l,off,len,eqsh(len,y)), y:shape(sh)
   -- >   -o x:memblock(rw,l,off,len,sh)
   SImpl_IntroLLVMBlockFromEq ::
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
@@ -1329,7 +1329,7 @@ data PermImpl1 ps_in ps_outs where
   -- @eqsh(y)@ and a shape permission on @y@ for a fresh variable @y@:
   --
   -- > x:memblock(rw,l,off,len,sh)
-  -- >   -o y. x:memblock(rw,l,off,len,eqsh(y)),
+  -- >   -o y. x:memblock(rw,l,off,len,eqsh(len,y)),
   -- >         y:shape('modalizeShape'(rw,l,sh))
   Impl1_ElimLLVMBlockToEq ::
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
@@ -1920,7 +1920,8 @@ simplImplIn (SImpl_ElimLLVMBlockNamed x bp _) =
   distPerms1 x $ ValPerm_LLVMBlock bp
 simplImplIn (SImpl_IntroLLVMBlockFromEq x bp y) =
   distPerms2 x (ValPerm_Conj1 $ Perm_LLVMBlock $
-                bp { llvmBlockShape = PExpr_EqShape $ PExpr_Var y })
+                bp { llvmBlockShape =
+                       PExpr_EqShape (llvmBlockLen bp) $ PExpr_Var y })
   y (ValPerm_Conj1 $ Perm_LLVMBlockShape $ llvmBlockShape bp)
 simplImplIn (SImpl_IntroLLVMBlockPtr x bp) =
   case llvmBlockPtrShapeUnfold bp of
@@ -2452,7 +2453,8 @@ applyImpl1 _ (Impl1_ElimLLVMBlockToEq x bp) ps =
       pushPerm y (ValPerm_Conj1 $ Perm_LLVMBlockShape $
                   modalizeBlockShape bp) $
       set (topDistPerm x) (ValPerm_Conj1 $ Perm_LLVMBlock $
-                           bp { llvmBlockShape = PExpr_EqShape $ PExpr_Var y })
+                           bp { llvmBlockShape =
+                                  PExpr_EqShape (llvmBlockLen bp) (PExpr_Var y) })
       ps)
   else
     error "applyImpl1: Impl1_ElimLLVMBlockToEq: unexpected permission"
@@ -3614,7 +3616,7 @@ implElimLLVMBlockToEq ::
   ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w)
   (ExprVar (LLVMBlockType w))
 implElimLLVMBlockToEq _ (LLVMBlockPerm
-                         { llvmBlockShape = PExpr_EqShape (PExpr_Var y)}) =
+                         { llvmBlockShape = PExpr_EqShape _ (PExpr_Var y)}) =
   pure y
 implElimLLVMBlockToEq x bp =
   implApplyImpl1 (Impl1_ElimLLVMBlockToEq x bp)
@@ -4675,17 +4677,18 @@ implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
      then implSetRecRecurseLeftM else pure ()) >>>
     implSimplM Proxy (SImpl_ElimLLVMBlockNamed x bp nmsh)
 
--- For shape eqsh(y), prove y:block(sh) for some sh and then apply
+-- For shape eqsh(len,y), prove y:block(sh) for some sh and then apply
 -- SImpl_IntroLLVMBlockFromEq
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
-                                          PExpr_EqShape (PExpr_Var y) }) =
-  mbVarsM () >>>= \mb_unit ->
-  withExtVarsM (proveVarImplInt y $ mbCombine RL.typeCtxProxies $
-                flip mbConst mb_unit $
-                nu $ \sh -> ValPerm_Conj1 $
-                            Perm_LLVMBlockShape $ PExpr_Var sh) >>>= \(_, sh) ->
-  let bp' = bp { llvmBlockShape = sh } in
-  implSimplM Proxy (SImpl_IntroLLVMBlockFromEq x bp' y)
+                                          PExpr_EqShape len (PExpr_Var y) })
+  | bvEq len (llvmBlockLen bp) =
+    mbVarsM () >>>= \mb_unit ->
+    withExtVarsM (proveVarImplInt y $ mbCombine RL.typeCtxProxies $
+                  flip mbConst mb_unit $
+                  nu $ \sh -> ValPerm_Conj1 $
+                              Perm_LLVMBlockShape $ PExpr_Var sh) >>>= \(_, sh) ->
+    let bp' = bp { llvmBlockShape = sh } in
+    implSimplM Proxy (SImpl_IntroLLVMBlockFromEq x bp' y)
 
 -- For [l]ptrsh(rw,sh), eliminate to a pointer to a memblock with shape sh
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape = PExpr_PtrShape _ _ _ })
@@ -6669,23 +6672,25 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocks x ps' psubst (mb_bp:mb_bps)
 
 
--- If proving an equality shape eqsh(z) for evar z which has already been set,
--- substitute for z and recurse
+-- If proving an equality shape eqsh(len,z) for evar z which has already been
+-- set, substitute for z and recurse
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
-  | [nuMP| PExpr_EqShape (PExpr_Var mb_z) |] <- mb_sh
+  | [nuMP| PExpr_EqShape _ (PExpr_Var mb_z) |] <- mb_sh
   , Left memb <- mbNameBoundP mb_z
   , Just blk <- psubstLookup psubst memb =
-    let mb_bp' = fmap (\bp -> bp { llvmBlockShape =
-                                     PExpr_EqShape blk }) mb_bp in
+    let mb_bp' = fmap (\bp ->
+                        let PExpr_EqShape len _ = llvmBlockShape bp in
+                        bp { llvmBlockShape = PExpr_EqShape len blk }) mb_bp in
     proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps)
 
 
--- If proving an equality shape eqsh(z) for unset evar z, prove any memblock
+-- If proving an equality shape eqsh(len,z) for unset evar z, prove any memblock
 -- perm with the given offset and length and eliminate it to an llvmblock with
 -- an equality shape
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
-  | [nuMP| PExpr_EqShape (PExpr_Var mb_z) |] <- mb_sh
+  | [nuMP| PExpr_EqShape mb_len (PExpr_Var mb_z) |] <- mb_sh
   , Left memb <- mbNameBoundP mb_z
+  , Just len <- partialSubst psubst mb_len
   , Nothing <- psubstLookup psubst memb =
 
     -- Locally bind z_sh for the shape of the memblock perm and recurse
@@ -6703,7 +6708,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     -- Eliminate that block perm to have an equality shape, and set z to the
     -- resulting block
     implElimLLVMBlockToEq x bp >>>= \y_blk ->
-    let bp' = bp { llvmBlockShape = PExpr_EqShape $ PExpr_Var y_blk } in
+    let bp' = bp { llvmBlockShape = PExpr_EqShape len $ PExpr_Var y_blk } in
     setVarM memb (PExpr_Var y_blk) >>>
 
     -- Finally, recombine the resulting permission with the rest of them
@@ -6715,7 +6720,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 -- this exactly offset, length, and shape, because it would have matched the
 -- first case above, so try to eliminate a memblock and recurse
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
-  | [nuMP| PExpr_EqShape (PExpr_Var mb_z) |] <- mb_sh
+  | [nuMP| PExpr_EqShape _ (PExpr_Var mb_z) |] <- mb_sh
   , Right _ <- mbNameBoundP mb_z
   , Just off <- partialSubst psubst $ mbLLVMBlockOffset mb_bp
   , Just i <- findIndex (\case

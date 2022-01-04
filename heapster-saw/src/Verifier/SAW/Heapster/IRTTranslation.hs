@@ -457,7 +457,7 @@ instance IRTTyVars (PermExpr (LLVMShapeType w)) where
                   _ -> do sh' <- irtTSubstExt mb_sh
                           let sh_trans = transTupleTerm <$> translate sh'
                           return ([sh_trans], IRTVar ())
-    [nuMP| PExpr_EqShape _ |] -> return ([], IRTVarsNil)
+    [nuMP| PExpr_EqShape _ _ |] -> return ([], IRTVarsNil)
     [nuMP| PExpr_PtrShape _ _ sh |] -> irtTyVars sh
     [nuMP| PExpr_FieldShape fsh |] -> irtTyVars fsh
     [nuMP| PExpr_ArrayShape _ _ sh |] -> irtTyVars sh
@@ -677,7 +677,7 @@ instance IRTDescs (PermExpr (LLVMShapeType w)) where
   irtDescs mb_expr ixs = case (mbMatch mb_expr, ixs) of
     ([nuMP| PExpr_Var _ |], _) -> irtVarTDesc ixs
     ([nuMP| PExpr_EmptyShape |], _) -> return []
-    ([nuMP| PExpr_EqShape _ |], _) -> return []
+    ([nuMP| PExpr_EqShape _ _ |], _) -> return []
     ([nuMP| PExpr_NamedShape _ _ nmsh args |], _) ->
       case (mbMatch $ namedShapeBody <$> nmsh, ixs) of
         (_, IRTRecVar) ->

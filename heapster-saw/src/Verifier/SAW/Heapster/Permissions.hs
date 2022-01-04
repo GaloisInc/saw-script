@@ -622,8 +622,10 @@ data PermExpr (a :: CrucibleType) where
                       NamedShape b args w -> PermExprs args ->
                       PermExpr (LLVMShapeType w)
 
-  -- | The equality shape
-  PExpr_EqShape :: PermExpr (LLVMBlockType w) -> PermExpr (LLVMShapeType w)
+  -- | The equality shape, which describes some @N@ bytes of memory that are
+  -- equal to a given LLVM block
+  PExpr_EqShape :: PermExpr (BVType w) -> PermExpr (LLVMBlockType w) ->
+                   PermExpr (LLVMShapeType w)
 
   -- | A shape for a pointer to another memory block, i.e., a @memblock@
   -- permission, with a given shape. This @memblock@ permission will have the
@@ -900,8 +902,8 @@ instance Eq (PermExpr a) where
       maybe_rw1 == maybe_rw2 && maybe_l1 == maybe_l2 && args1 == args2
   (PExpr_NamedShape _ _ _ _) == _ = False
 
-  (PExpr_EqShape b1) == (PExpr_EqShape b2) = b1 == b2
-  (PExpr_EqShape _) == _ = False
+  (PExpr_EqShape len1 b1) == (PExpr_EqShape len2 b2) = len1 == len2 && b1 == b2
+  (PExpr_EqShape _ _) == _ = False
 
   (PExpr_PtrShape rw1 l1 sh1) == (PExpr_PtrShape rw2 l2 sh2) =
     rw1 == rw2 && l1 == l2 && sh1 == sh2
@@ -975,8 +977,10 @@ instance PermPretty (PermExpr a) where
        args_pp <- permPrettyM args
        return (l_pp <> rw_pp <> pretty (namedShapeName nmsh) <>
                pretty '<' <> align (args_pp <> pretty '>'))
-  permPrettyM (PExpr_EqShape b) =
-    ((pretty "eqsh" <>) . parens) <$> permPrettyM b
+  permPrettyM (PExpr_EqShape len b) =
+    do len_pp <- permPrettyM len
+       b_pp <- permPrettyM b
+       return (pretty "eqsh" <> parens (len_pp <> comma <> b_pp))
   permPrettyM (PExpr_PtrShape maybe_rw maybe_l sh) =
     do l_pp <- maybe (return mempty) permPrettyLifetimePrefix maybe_l
        rw_pp <- case maybe_rw of
@@ -3821,10 +3825,10 @@ llvmShapeLength (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
   -- FIXME: if the recursive shape contains itself *not* under a pointer, then
   -- this could diverge
   llvmShapeLength (unfoldNamedShape nmsh args)
-llvmShapeLength (PExpr_EqShape _) = Nothing
+llvmShapeLength (PExpr_EqShape len _) = Just len
 llvmShapeLength (PExpr_PtrShape _ _ sh)
-  | LLVMShapeRepr w <- exprType sh = Just $ bvInt (intValue w `ceil_div` 8)
-  | otherwise = Nothing
+  | w <- shapeLLVMTypeWidth sh
+  = Just $ bvInt (intValue w `ceil_div` 8)
 llvmShapeLength (PExpr_FieldShape fsh) =
   Just $ bvInt $ llvmFieldShapeLength fsh
 llvmShapeLength (PExpr_ArrayShape len stride _) = Just $ bvMult stride len
@@ -3936,7 +3940,7 @@ modalizeShape _ _ sh@(PExpr_NamedShape _ _ nmsh _)
 modalizeShape rw l (PExpr_NamedShape rw' l' nmsh args) =
   -- If a named shape already has modalities, they take precedence
   Just $ PExpr_NamedShape (rw' <|> rw) (l' <|> l) nmsh args
-modalizeShape _ _ sh@(PExpr_EqShape _) = Just sh
+modalizeShape _ _ sh@(PExpr_EqShape _ _) = Just sh
 modalizeShape rw l (PExpr_PtrShape rw' l' sh) =
   -- If a pointer shape already has modalities, they take precedence
   Just $ PExpr_PtrShape (rw' <|> rw) (l' <|> l) sh
@@ -4066,7 +4070,7 @@ splitLLVMBlockPerm off bp@(llvmBlockShape ->
   , Just sh' <- unfoldModalizeNamedShape maybe_rw maybe_l nmsh args =
     splitLLVMBlockPerm off (bp { llvmBlockShape = sh' })
 splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_NamedShape _ _ _ _) = Nothing
-splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_EqShape _) = Nothing
+splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_EqShape _ _) = Nothing
 splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_PtrShape _ _ _) = Nothing
 splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_FieldShape _) = Nothing
 splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_ArrayShape len stride sh)
@@ -5148,7 +5152,7 @@ shapeIsCopyable rw (PExpr_NamedShape maybe_rw' _ nmsh args) =
     -- the empty shape for the recursive shape
     RecShapeBody mb_sh _ _ ->
       shapeIsCopyable rw $ subst (substOfExprs (args :>: PExpr_EmptyShape)) mb_sh
-shapeIsCopyable _ (PExpr_EqShape _) = True
+shapeIsCopyable _ (PExpr_EqShape _ _) = True
 shapeIsCopyable rw (PExpr_PtrShape maybe_rw' _ sh) =
   let rw' = maybe rw id maybe_rw' in
   rw' == PExpr_Read && shapeIsCopyable rw' sh
@@ -5321,7 +5325,7 @@ instance FreeVars (PermExpr a) where
   freeVars PExpr_EmptyShape = NameSet.empty
   freeVars (PExpr_NamedShape rw l nmsh args) =
     NameSet.unions [freeVars rw, freeVars l, freeVars nmsh, freeVars args]
-  freeVars (PExpr_EqShape b) = freeVars b
+  freeVars (PExpr_EqShape len b) = NameSet.union (freeVars len) (freeVars b)
   freeVars (PExpr_PtrShape maybe_rw maybe_l sh) =
     NameSet.unions [freeVars maybe_rw, freeVars maybe_l, freeVars sh]
   freeVars (PExpr_FieldShape fld) = freeVars fld
@@ -5534,7 +5538,7 @@ readOnlyShape e@(PExpr_Var _) = e
 readOnlyShape PExpr_EmptyShape = PExpr_EmptyShape
 readOnlyShape (PExpr_NamedShape _ l nmsh args) =
   PExpr_NamedShape (Just PExpr_Read) l nmsh args
-readOnlyShape e@(PExpr_EqShape _) = e
+readOnlyShape e@(PExpr_EqShape _ _) = e
 readOnlyShape e@(PExpr_PtrShape _ (Just _) _) = e
 readOnlyShape (PExpr_PtrShape _ Nothing sh) =
   PExpr_PtrShape (Just PExpr_Read) Nothing $ readOnlyShape sh
@@ -5717,8 +5721,8 @@ instance SubstVar s m => Substable s (PermExpr a) m where
     [nuMP| PExpr_NamedShape rw l nmsh args |] ->
       PExpr_NamedShape <$> genSubst s rw <*> genSubst s l <*> genSubst s nmsh
                        <*> genSubst s args
-    [nuMP| PExpr_EqShape b |] ->
-      PExpr_EqShape <$> genSubst s b
+    [nuMP| PExpr_EqShape len b |] ->
+      PExpr_EqShape <$> genSubst s len <*> genSubst s b
     [nuMP| PExpr_PtrShape maybe_rw maybe_l sh |] ->
       PExpr_PtrShape <$> genSubst s maybe_rw <*> genSubst s maybe_l
                      <*> genSubst s sh
@@ -6463,8 +6467,9 @@ instance AbstractVars (PermExpr a) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 l
     `clMbMbApplyM` abstractPEVars ns1 ns2 nmsh
     `clMbMbApplyM` abstractPEVars ns1 ns2 args
-  abstractPEVars ns1 ns2 (PExpr_EqShape b) =
+  abstractPEVars ns1 ns2 (PExpr_EqShape len b) =
     absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_EqShape |]))
+    `clMbMbApplyM` abstractPEVars ns1 ns2 len
     `clMbMbApplyM` abstractPEVars ns1 ns2 b
   abstractPEVars ns1 ns2 (PExpr_PtrShape maybe_rw maybe_l sh) =
     absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_PtrShape |]))
@@ -6828,7 +6833,8 @@ instance AbstractNamedShape w (PermExpr a) where
               -> pure $ nu PExpr_Var
          True -> fail "named shape not applied to its arguments"
          False -> pureBindingM (PExpr_NamedShape maybe_rw maybe_l nmsh args)
-  abstractNSM (PExpr_EqShape b) = fmap PExpr_EqShape <$> abstractNSM b
+  abstractNSM (PExpr_EqShape len b) =
+    mbMap2 PExpr_EqShape <$> abstractNSM len <*> abstractNSM b
   abstractNSM (PExpr_PtrShape rw l sh) =
     mbMap3 PExpr_PtrShape <$> abstractNSM rw <*> abstractNSM l <*> abstractNSM sh
   abstractNSM (PExpr_FieldShape fsh) = fmap PExpr_FieldShape <$> abstractNSM fsh
@@ -7556,7 +7562,8 @@ getShapeDetVarsClauses (PExpr_Var x) =
 getShapeDetVarsClauses (PExpr_NamedShape _ _ _ args) =
   -- FIXME: maybe also include the variables determined by the modalities?
   getDetVarsClauses args
-getShapeDetVarsClauses (PExpr_EqShape e) = getDetVarsClauses e
+getShapeDetVarsClauses (PExpr_EqShape len e) =
+  map (detVarsClauseAddLHS (freeVars len)) <$> getDetVarsClauses e
 getShapeDetVarsClauses (PExpr_PtrShape _ _ sh) =
   -- FIXME: maybe also include the variables determined by the modalities?
   getShapeDetVarsClauses sh
