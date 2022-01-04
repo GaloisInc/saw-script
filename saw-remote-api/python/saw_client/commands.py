@@ -177,7 +177,7 @@ class Prove(SAWCommand):
             goal : cryptoltypes.CryptolJSON,
             script : ProofScript,
             timeout : Optional[float]) -> None:
-        params = {'goal': goal,
+        params = {'goal': cryptoltypes.to_cryptol(goal),
                   'script': script}
         super(Prove, self).__init__('SAW/prove', params, connection, timeout=timeout)
 

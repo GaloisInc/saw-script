@@ -1,7 +1,8 @@
 from pathlib import Path
 import unittest
 from saw_client import *
-from saw_client.llvm import Contract, LLVMIntType, alias_ty, cryptol, i8, void
+from saw_client.crucible import cry, cry_f
+from saw_client.llvm import Contract, LLVMIntType, alias_ty, i8, void
 from saw_client.option import LaxLoadsAndStores
 
 
@@ -17,7 +18,7 @@ class GetX2Contract(Contract):
 
         self.execute_func(ss)
 
-        self.returns(cryptol(f'zext {z.name()} : [8]'))
+        self.returns_f('zext {z} : [8]')
 
 
 class GetYContract(Contract):
@@ -38,7 +39,7 @@ class SetX2Contract(Contract):
 
         self.execute_func(ss, z)
 
-        self.points_to_bitfield(ss, 'x2', cryptol(f'drop {z.name()} : [2]'))
+        self.points_to_bitfield(ss, 'x2', cry_f('drop {z} : [2]'))
         self.returns(void)
 
 
@@ -47,7 +48,7 @@ class SetX2AltContract(Contract):
         ss = self.alloc(alias_ty('struct.s'))
         z = self.fresh_var(i2, 'z')
 
-        self.execute_func(ss, cryptol(f'zext {z.name()} : [8]'))
+        self.execute_func(ss, cry_f('zext {z} : [8]'))
 
         self.points_to_bitfield(ss, 'x2', z)
         self.returns(void)

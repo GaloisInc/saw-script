@@ -633,8 +633,7 @@ def prove(goal: cryptoltypes.CryptolJSON,
     argument.
     """
     conn = __get_designated_connection()
-    res = conn.prove(cryptoltypes.to_cryptol(goal),
-                     proof_script.to_json()).result()
+    res = conn.prove(goal, proof_script.to_json()).result()
     pr = ProofResult()
     if res['status'] == 'valid':
         pr.valid = True
