@@ -2258,7 +2258,9 @@ dbgStringPP Nothing    Nothing  tp = typeBaseName tp
 -- variables by lifting through the ImplM monad
 stmtHandleUnitVars :: PermCheckExtC ext =>
                       StmtPermCheckM ext cblocks blocks tops ret ps ps ()
-stmtHandleUnitVars = stmtEmbedImplM handleUnitVars
+stmtHandleUnitVars =
+    stmtEmbedImplM $ implTraceM (\i -> pretty "Calling handleUnitVars from TypedCrucible") >>>
+                     handleUnitVars
 
 -- | Remember the type of a free variable, and ensure that it has a permission
 setVarType ::
@@ -2624,6 +2626,7 @@ emitStmt ::
   StmtPermCheckM ext cblocks blocks tops rets ps_out ps_in
     (RAssign Name stmt_rets)
 emitStmt tps names loc stmt =
+  stmtTraceM (\i -> pretty "Emit statement") >>>
   gopenBinding
     ((TypedConsStmt loc stmt (cruCtxProxies tps) <$>) . strongMbM)
     (mbPure (cruCtxProxies tps) ()) >>>= \(ns, ()) ->
@@ -4111,6 +4114,7 @@ proveCallSiteImpl srcID destID args ghosts vars mb_perms_in mb_perms_out =
   pcmRunImplM ghosts err
     (CallSiteImplRet destID ghosts Refl (RL.append tops_ns args_ns))
     (-- TODO: is this too late in the process to handle unit variables?
+     implTraceM (\i -> pretty "Calling handleUnitVars from proveCallSiteImpl") >>>
      handleUnitVars >>>
      recombinePerms perms_in >>>
      proveVarsImplVarEVars perms_out

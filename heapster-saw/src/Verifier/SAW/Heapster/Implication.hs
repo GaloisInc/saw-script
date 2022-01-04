@@ -3323,7 +3323,9 @@ implSetNameTypes MNil _ = pure ()
 implSetNameTypes (ns :>: n) (CruCtxCons tps tp) =
   do implStateNameTypes %= NameMap.insert n tp
      implStatePerms     %= initVarPerm n
+     implTraceM (\i -> pretty "implSetNameTypes for:" <+> permPretty i n)
      handleUnitVar tp n
+     implTraceM (\i -> pretty "Done with implSetNameTypes for " <+> permPretty i n)
      implSetNameTypes ns tps
 
 
@@ -3342,8 +3344,15 @@ handleUnitVar UnitRepr n =
       setUnitImplM (Just n)
     Just x  -> -- If so, add a permission @n:eq(x)@, and then pop it off the
                -- stack
-      unitEqM n (PExpr_Var x) >>>
-      implPopM n (ValPerm_Eq (PExpr_Var x))
+      implTraceM (\i ->
+               pretty "about to call unitEqM:" <+> permPretty i n) >>>
+        unitEqM n (PExpr_Var x) >>>
+        implTraceM (\i ->
+               pretty "done with unitEqM:" <+> permPretty i n) >>>
+        implPopM n (ValPerm_Eq (PExpr_Var x)) >>>
+        implTraceM (\i ->
+               pretty "done with handleUnitVar:" <+> permPretty i n) >>>
+        pure ()
 handleUnitVar _ _ = pure ()
 
 -- | Unify the unit variables already added to the state NameMap
@@ -5091,6 +5100,9 @@ recombinePermExpl x x_p p =
   tracePretty (string "recombinePerm" <+> permPretty info x
                </> permPretty info x_p </> string "<-"
                </> permPretty info p) $ -}
+  implTraceM (\i -> pretty "recombinePerm" <+> permPretty i x
+               <+> permPretty i x_p <+> pretty "<-"
+               <+> permPretty i p) >>>
   recombinePerm' x x_p p
 
 -- | This is the implementation of 'recombinePermExpl'; see the documentation
