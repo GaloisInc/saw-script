@@ -3695,6 +3695,11 @@ simplify1PermForDetVars det_vars x (ValPerm_Conj ps)
     getPerm x >>>= \new_p ->
     simplify1PermForDetVars det_vars x new_p
 
+-- For permission l:lowned(ps_in -o ps_out) where l is not determined, end l
+simplify1PermForDetVars det_vars l (ValPerm_LOwned _ _ _)
+  | not (NameSet.member l det_vars)
+  = implEndLifetimeRecM l
+
 -- For lowned permission l:lowned[ls](ps_in -o ps_out), end any lifetimes in ls
 -- that are not determined and remove them from the lowned permission for ls
 simplify1PermForDetVars det_vars l (ValPerm_LOwned ls _ _)
