@@ -3282,17 +3282,18 @@ tcEmitLLVMStmt ::
   StmtPermCheckM LLVM cblocks blocks tops rets RNil RNil
     (CtxTrans (ctx ::> tp))
 
--- Type-check a word-sized load of an LLVM pointer by requiring a standard ptr
--- permission and using TypedLLVMLoad
+-- Type-check a load of an LLVM pointer by requiring a ptr permission and using
+-- TypedLLVMLoad, rounding up the size of the load to a whole number of bytes
 tcEmitLLVMStmt arch ctx loc (LLVM_Load _ ptr tp storage _)
-  | Just (Some (sz :: NatRepr sz)) <- someNat $ bytesToBits $ storageTypeSize storage
-  , Left LeqProof <- decideLeq (knownNat @1) sz
-  = withKnownNat ?ptrWidth $
-    withKnownNat sz $
+  | sz_bits <- bytesToBits $ storageTypeSize storage
+  , sz_rnd_bits <- 8 * ceil_div sz_bits 8
+  , Just (Some (sz_rnd :: NatRepr sz_rnd)) <- someNat sz_rnd_bits
+  , Left LeqProof <- decideLeq (knownNat @1) sz_rnd
+  = withKnownNat ?ptrWidth $ withKnownNat sz_rnd $
     let tptr = tcReg ctx ptr in
-    -- Prove [l]ptr((0,rw) |-> eq(y)) for some l, rw, and y
-    stmtProvePerm tptr (llvmPtr0EqExPerm sz) >>>= \impl_res ->
-    let fp = subst impl_res (llvmPtr0EqEx sz) in
+    -- Prove [l]ptr((sz_rnd,0,rw) |-> eq(y)) for some l, rw, and y
+    stmtProvePerm tptr (llvmPtr0EqExPerm sz_rnd) >>>= \impl_res ->
+    let fp = subst impl_res (llvmPtr0EqEx sz_rnd) in
     -- Emit a TypedLLVMLoad instruction
     emitTypedLLVMLoad arch loc tptr fp DistPermsNil >>>= \z ->
     -- Recombine the resulting permissions onto the stack
@@ -3300,6 +3301,8 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Load _ ptr tp storage _)
     -- Convert the return value to the requested type and return it
     (convertRegType knownRepr loc (TypedReg z) knownRepr tp >>>= \ret ->
       pure (addCtxName ctx $ typedRegVar ret))
+
+-- FIXME: add a case for stores of smaller-than-byte-sized values
 
 -- Type-check a store of an LLVM pointer
 tcEmitLLVMStmt arch ctx loc (LLVM_Store _ ptr tp storage _ val)
