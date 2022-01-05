@@ -6718,6 +6718,28 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     implSwapInsertConjM x (Perm_LLVMBlock bp) ps_out' 0
 
 
+-- For a recursive named shape with an equality permission on the left that has
+-- the same offset and length, eliminate the equality permission, because it
+-- might expose an occurrence of the same recursive named shape on the left, and
+-- because eliminating it is necessary anyway (unless the recursive permission
+-- on the right unfolds to an equality shape, which should never be the case in
+-- practice)
+proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
+  | [nuMP| PExpr_NamedShape _ _ mb_nmsh _ |] <- mb_sh
+  , mbNamedShapeIsRecursive mb_nmsh
+  , Just off <- partialSubst psubst $ mbLLVMBlockOffset mb_bp
+  , Just len <- partialSubst psubst $ mbLLVMBlockLen mb_bp
+  , Just i <- findIndex
+    (\case
+        Perm_LLVMBlock bp
+          | PExpr_EqShape _ _ <- llvmBlockShape bp ->
+              bvEq (llvmBlockOffset bp) off &&
+              bvEq (llvmBlockLen bp) len
+        _ -> False) ps =
+    implElimAppendIthLLVMBlock x ps i >>>= \ps' ->
+    proveVarLLVMBlocks x ps' psubst (mb_bp:mb_bps)
+
+
 -- For an unfoldable named shape, prove its unfolding first and then fold it
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_NamedShape _ _ mb_nmsh _ |] <- mb_sh
