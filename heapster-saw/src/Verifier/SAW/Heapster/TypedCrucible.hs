@@ -2256,11 +2256,14 @@ dbgStringPP Nothing    Nothing  tp = typeBaseName tp
 
 -- | After all variables have been added to the context, unify all unit-typed
 -- variables by lifting through the ImplM monad
-stmtHandleUnitVars :: PermCheckExtC ext =>
+stmtHandleUnitVars :: forall (tps :: RList CrucibleType)
+                             ext cblocks blocks tops ret ps.
+                      PermCheckExtC ext =>
+                      RAssign Name tps ->
                       StmtPermCheckM ext cblocks blocks tops ret ps ps ()
-stmtHandleUnitVars =
+stmtHandleUnitVars ns =
     stmtEmbedImplM $ implTraceM (\i -> pretty "Calling handleUnitVars from TypedCrucible") >>>
-                     handleUnitVars
+                     handleUnitVars ns
 
 -- | Remember the type of a free variable, and ensure that it has a permission
 setVarType ::
@@ -2632,9 +2635,8 @@ emitStmt tps names loc stmt =
     (mbPure (cruCtxProxies tps) ()) >>>= \(ns, ()) ->
   setVarTypes Nothing names ns tps >>>
   gmodify (modifySTCurPerms (applyTypedStmt stmt ns)) >>>
-  -- TODO: should emitStmt handle unit variables?
   -- Note: must come after both setVarTypes and gmodify
-  stmtHandleUnitVars >>>
+  stmtHandleUnitVars ns >>>
   pure ns
 
 
@@ -4078,7 +4080,7 @@ tcBlockEntryBody names blk entry@(TypedEntry {..}) =
                pretty "Input perms:"
                <> align (permPretty i perms)) >>>
   -- handle unit variables
-  stmtHandleUnitVars >>>
+  stmtHandleUnitVars ns >>>
   stmtRecombinePerms >>>
   tcEmitStmtSeq names ctx (blk ^. blockStmts)
 
@@ -4097,9 +4099,10 @@ proveCallSiteImpl ::
 proveCallSiteImpl srcID destID args ghosts vars mb_perms_in mb_perms_out =
   fmap CallSiteImpl $ runPermCheckM [] srcID args vars mb_perms_in $
   \tops_ns args_ns _ perms_in ->
-  let perms_out =
+  let ns = RL.append tops_ns args_ns
+      perms_out =
         give (cruCtxProxies ghosts) $
-        varSubst (permVarSubstOfNames $ RL.append tops_ns args_ns) $
+        varSubst (permVarSubstOfNames $ ns) $
         mbSeparate (cruCtxProxies ghosts) $
         mbValuePermsToDistPerms mb_perms_out in
   stmtTraceM (\i ->
@@ -4112,10 +4115,10 @@ proveCallSiteImpl srcID destID args ghosts vars mb_perms_in mb_perms_out =
   -- FIXME HERE NOW: add the input perms and call site to our error message
   let err = ppProofError ppInfo perms_out in
   pcmRunImplM ghosts err
-    (CallSiteImplRet destID ghosts Refl (RL.append tops_ns args_ns))
+    (CallSiteImplRet destID ghosts Refl ns)
     (-- TODO: is this too late in the process to handle unit variables?
      implTraceM (\i -> pretty "Calling handleUnitVars from proveCallSiteImpl") >>>
-     handleUnitVars >>>
+     handleUnitVars ns >>>
      recombinePerms perms_in >>>
      proveVarsImplVarEVars perms_out
      ) >>>= \impl ->

@@ -3356,13 +3356,27 @@ handleUnitVar UnitRepr n =
 handleUnitVar _ _ = pure ()
 
 -- | Unify the unit variables already added to the state NameMap
-handleUnitVars :: NuMatchingAny1 r =>
+handleUnitVars :: forall (tps :: RList CrucibleType)
+                          vars r s ps.
+                  NuMatchingAny1 r =>
+                  RAssign Name tps ->
                   ImplM vars s r ps ps ()
-handleUnitVars =
-    use implStateNameTypes >>>= \ns ->
-    forM_ (NameMap.assocs ns) $ \(NameAndElem n tp) ->
-      handleUnitVar tp n
-    
+handleUnitVars ns = use implStateNameTypes >>>= \nameMap ->
+                    handleUnitVars' nameMap ns
+
+handleUnitVars' :: forall (tps :: RList CrucibleType)
+                          vars r s ps.
+                   NuMatchingAny1 r =>
+                   NameMap TypeRepr ->
+                   RAssign Name tps ->
+                   ImplM vars s r ps ps ()
+handleUnitVars' _       MNil       = pure ()
+handleUnitVars' nameMap (ns :>: n) =
+  case NameMap.lookup n nameMap of
+    Nothing -> error "handleUnitVars: variable not added to nameMap"
+    Just tp -> handleUnitVar tp n >>>
+               handleUnitVars' nameMap ns
+
 
 ----------------------------------------------------------------------
 -- * The Permission Implication Rules as Monadic Operations
