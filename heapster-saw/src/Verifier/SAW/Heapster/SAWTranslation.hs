@@ -3065,6 +3065,20 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
 
     | otherwise -> fail "translateSimplImpl: ElimLLVMBlockNamed, unknown named shape"
 
+  [nuMP| SImpl_IntroLLVMBlockNamedMods _ _ |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       withPermStackM id
+         (\(pctx :>: ptrans) ->
+           pctx :>: typeTransF ttrans (transTerms ptrans))
+         m
+
+  [nuMP| SImpl_ElimLLVMBlockNamedMods _ _ |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       withPermStackM id
+         (\(pctx :>: ptrans) ->
+           pctx :>: typeTransF ttrans (transTerms ptrans))
+         m
+
   [nuMP| SImpl_IntroLLVMBlockFromEq _ _ _ |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM RL.tail

@@ -1011,6 +1011,22 @@ data SimplImpl ps_in ps_out where
     NamedShape 'True args w ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
+  -- | Add modalities to a named shape in a @memblock@ permission:
+  --
+  -- > x:memblock(rw,l,off,len,nmsh<args>)
+  -- >   -o memblock(rw',l',off,len,[l](rw)nmsh<args>)
+  SImpl_IntroLLVMBlockNamedMods ::
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+
+  -- | Eliminate modalities on a named shape in a @memblock@ permission:
+  --
+  -- > x:memblock(rw,l,off,len,[l'](rw')nmsh<args>)
+  -- >   -o memblock(rw',l',off,len,nmsh<args>)
+  SImpl_ElimLLVMBlockNamedMods ::
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+
   -- | Prove an llvmblock permission of shape @sh@ from one of equality shape
   -- @eqsh(len,y)@ and a shape permission on @y@:
   --
@@ -1918,6 +1934,17 @@ simplImplIn (SImpl_IntroLLVMBlockNamed x bp nmsh) =
     _ -> error "simplImplIn: SImpl_IntroLLVMBlockNamed: unexpected block shape"
 simplImplIn (SImpl_ElimLLVMBlockNamed x bp _) =
   distPerms1 x $ ValPerm_LLVMBlock bp
+simplImplIn (SImpl_IntroLLVMBlockNamedMods x bp) =
+  case llvmBlockShape bp of
+    PExpr_NamedShape maybe_rw maybe_l nmsh args
+      | rw <- fromMaybe (llvmBlockRW bp) maybe_rw
+      , l <- fromMaybe (llvmBlockLifetime bp) maybe_l ->
+        distPerms1 x $ ValPerm_LLVMBlock $
+        bp { llvmBlockRW = rw, llvmBlockLifetime = l,
+             llvmBlockShape = PExpr_NamedShape Nothing Nothing nmsh args }
+    _ -> error "simplImplIn: SImpl_IntroLLVMBlockNamedMods: malformed input permission"
+simplImplIn (SImpl_ElimLLVMBlockNamedMods x bp) =
+  distPerms1 x $ ValPerm_LLVMBlock bp
 simplImplIn (SImpl_IntroLLVMBlockFromEq x bp y) =
   distPerms2 x (ValPerm_Conj1 $ Perm_LLVMBlock $
                 bp { llvmBlockShape =
@@ -2253,6 +2280,17 @@ simplImplOut (SImpl_ElimLLVMBlockNamed x bp nmsh) =
       , Just sh' <- unfoldModalizeNamedShape rw l nmsh args ->
         distPerms1 x (ValPerm_LLVMBlock $ bp { llvmBlockShape = sh' })
     _ -> error "simplImplOut: SImpl_ElimLLVMBlockNamed: unexpected block shape"
+simplImplOut (SImpl_IntroLLVMBlockNamedMods x bp) =
+  distPerms1 x $ ValPerm_LLVMBlock bp
+simplImplOut (SImpl_ElimLLVMBlockNamedMods x bp) =
+  case llvmBlockShape bp of
+    PExpr_NamedShape maybe_rw maybe_l nmsh args
+      | rw <- fromMaybe (llvmBlockRW bp) maybe_rw
+      , l <- fromMaybe (llvmBlockLifetime bp) maybe_l ->
+        distPerms1 x $ ValPerm_LLVMBlock $
+        bp { llvmBlockRW = rw, llvmBlockLifetime = l,
+             llvmBlockShape = PExpr_NamedShape Nothing Nothing nmsh args }
+    _ -> error "simplImplOut: SImpl_ElimLLVMBlockNamedMods: malformed input permission"
 simplImplOut (SImpl_IntroLLVMBlockFromEq x bp _) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
 simplImplOut (SImpl_IntroLLVMBlockPtr x bp) =
@@ -2774,6 +2812,10 @@ instance SubstVar PermVarSubst m =>
     [nuMP| SImpl_ElimLLVMBlockNamed x bp nmsh |] ->
       SImpl_ElimLLVMBlockNamed <$> genSubst s x <*> genSubst s bp
                                <*> genSubst s nmsh
+    [nuMP| SImpl_IntroLLVMBlockNamedMods x bp |] ->
+      SImpl_IntroLLVMBlockNamedMods <$> genSubst s x <*> genSubst s bp
+    [nuMP| SImpl_ElimLLVMBlockNamedMods x bp |] ->
+      SImpl_ElimLLVMBlockNamedMods <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_IntroLLVMBlockFromEq x bp y |] ->
       SImpl_IntroLLVMBlockFromEq <$> genSubst s x <*> genSubst s bp
                                  <*> genSubst s y
@@ -4668,6 +4710,12 @@ implElimLLVMBlock x bp
     implSimplM Proxy (SImpl_IntroLLVMBlockSeqEmpty x bp) >>>
     implSimplM Proxy (SImpl_ElimLLVMBlockSeq x bp PExpr_EmptyShape)
 
+-- Eliminate modalities on named shapes
+implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
+                                          PExpr_NamedShape rw l _ _ })
+  | isJust rw || isJust l
+  = implSimplM Proxy (SImpl_ElimLLVMBlockNamedMods x bp)
+
 -- Unfold defined or recursive named shapes
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
                                           PExpr_NamedShape rw l nmsh args })
@@ -6448,8 +6496,8 @@ proveVarLLVMBlocks1 x ps psubst (mb_bp:mb_bps)
 
 
 -- If the offset and length of the top block matches one that we already have on
--- the left, but the left-hand permission has a defined shape, unfold the
--- defined shape
+-- the left, but the left-hand permission has either a defined shape or a named
+-- shape with modalities, eliminate the left-hand block.
 proveVarLLVMBlocks1 x ps psubst mb_bps_in@(mb_bp:_)
   | Just off <- partialSubst psubst $ mbLLVMBlockOffset mb_bp
   , Just len <- partialSubst psubst $ mbLLVMBlockLen mb_bp
@@ -6460,6 +6508,12 @@ proveVarLLVMBlocks1 x ps psubst mb_bps_in@(mb_bp:_)
           , DefinedShapeBody _ <- namedShapeBody nmsh ->
               bvEq (llvmBlockOffset bp) off &&
               bvEq (llvmBlockLen bp) len
+
+          | PExpr_NamedShape maybe_rw maybe_l _ _ <- llvmBlockShape bp
+          , isJust maybe_rw || isJust maybe_l ->
+              bvEq (llvmBlockOffset bp) off &&
+              bvEq (llvmBlockLen bp) len
+
         _ -> False) ps =
     implElimAppendIthLLVMBlock x ps i >>>= \ps' ->
     proveVarLLVMBlocks x ps' psubst mb_bps_in
@@ -6629,6 +6683,39 @@ proveVarLLVMBlocks2 x ps psubst mb_bp _ mb_bps
 
   -- Finally, recombine the resulting permission with the rest of them
   implSwapInsertConjM x (Perm_LLVMBlock bp_out) ps'' 0
+
+
+-- For a named shape with modalities, prove it without the modalities first and
+-- then add the modalities
+proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
+  | [nuMP| PExpr_NamedShape mb_maybe_rw mb_maybe_l _ _ |] <- mb_sh
+  , isJust (mbMaybe mb_maybe_rw) || isJust (mbMaybe mb_maybe_l) =
+
+    -- Recurse using the shape without the modalities
+    let mb_bp' =
+          flip mbMapCl mb_bp
+          $(mkClosed
+            [| \bp -> case llvmBlockShape bp of
+                PExpr_NamedShape maybe_rw maybe_l nmsh args
+                  | rw <- fromMaybe (llvmBlockRW bp) maybe_rw
+                  , l <- fromMaybe (llvmBlockLifetime bp) maybe_l ->
+                    bp { llvmBlockRW = rw, llvmBlockLifetime = l,
+                         llvmBlockShape =
+                           PExpr_NamedShape Nothing Nothing nmsh args }
+                _ -> error "Unreachable!" |]) in
+    proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps) >>>
+
+    -- Extract out the block perm we proved
+    getTopDistPerm x >>>= \(ValPerm_Conj ps_out) ->
+    let (_ : ps_out') = ps_out in
+    implSplitSwapConjsM x ps_out 1 >>>
+
+    -- Introduce the modalities
+    partialSubstForceM mb_bp "proveVarLLVMBlocks" >>>= \bp ->
+    implSimplM Proxy (SImpl_IntroLLVMBlockNamedMods x bp) >>>
+
+    -- Finally, recombine the resulting permission with the rest of them
+    implSwapInsertConjM x (Perm_LLVMBlock bp) ps_out' 0
 
 
 -- For an unfoldable named shape, prove its unfolding first and then fold it
