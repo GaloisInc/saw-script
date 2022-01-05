@@ -240,9 +240,9 @@ heapster_assume_fun env "llvm.expect.i1"
 heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
   "(rw:rwmodality, l1:lifetime, l2:lifetime, sh:llvmshape 64, \
    \ b:llvmblock 64, len:bv 64). \
-  \ arg0:[l1]memblock(W,0,len,sh), arg1:[l2]memblock(rw,0,len,eqsh(b)), \
+  \ arg0:[l1]memblock(W,0,len,sh), arg1:[l2]memblock(rw,0,len,eqsh(len,b)), \
   \ arg2:eq(llvmword(len)) -o \
-  \ arg0:[l1]memblock(W,0,len,eqsh(b)), arg1:[l2]memblock(rw,0,len,eqsh(b))"
+  \ arg0:[l1]memblock(W,0,len,eqsh(len,b)), arg1:[l2]memblock(rw,0,len,eqsh(len,b))"
   "\\ (X:sort 0) (len:Vec 64 Bool) (x:X) (_:#()) -> returnM (#() * #()) ((),())";
 
 // <str as alloc::string::ToString>::to_string
