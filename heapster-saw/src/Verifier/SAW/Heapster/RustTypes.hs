@@ -607,6 +607,12 @@ instance RsConvert w (StructField Span) (PermExpr (LLVMShapeType w)) where
 -- * Computing the ABI-Specific Layout of Rust Types
 ----------------------------------------------------------------------
 
+-- FIXME: add support for shapes like bool whose size is smaller than a byte,
+-- with the constraint that the end result should only have fields whose sizes
+-- are whole numbers of bytes. The idea would be to allow sub-byte-sized fields
+-- be appended, but to then round their sizes up to whole numbers of bytes at
+-- disjunctions and at the top level.
+
 -- | An 'ArgLayoutPerm' is a set of permissions on a sequence of 0 or more
 -- arguments, given by the @tps@ type-level argument. These permissions are
 -- similar to the language of permissions on a Crucible struct, except that the
