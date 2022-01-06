@@ -3340,13 +3340,14 @@ handleUnitVar UnitRepr n =
   -- When introducing a new unit-typed variable, check whether we have a global
   -- unit variable in the current @ImplState@
   getUnitImplM >>= \u -> case u of
-    Nothing -> -- If not, initialize the state with the current variable
+    Nothing ->
+      -- If not, initialize the state with the current variable
       setUnitImplM (Just n)
     Just x | x == n ->
       -- If n is equal to the global unit, do nothing
       pure ()
-    Just x  -> -- Otherwise, add a permission @n:eq(x)@, and then pop it off the
-               -- stack
+    Just x  ->
+      -- Otherwise, add a permission @n:eq(x)@, and then pop it off the stack
       implTraceM (\i ->
                pretty "about to call unitEqM:" <+> permPretty i n) >>>
         unitEqM n (PExpr_Var x) >>>
@@ -7889,6 +7890,21 @@ proveExVarImpl :: NuMatchingAny1 r => PartialSubst vars -> Mb vars (Name tp) ->
                   Mb vars (ValuePerm tp) ->
                   ImplM vars s r (ps :> tp) ps (Name tp)
 
+-- If the variable x is a free variable of type unit, and if there is a global
+-- unit u in the context, instanitate x to u and call proveVarImpl
+proveExVarImpl _psubst mb_x mb_p
+  | Right n <- mbNameBoundP mb_x
+  , Just  u <- getUnitImplM
+  = -- Note: we expect u to alwyas be a member of pvarsubst
+    use implStatePVarSubst >>>= \pvsubst ->
+    case RL.memberElem u pvsubst of
+      Just memu ->
+        implStatePVarSubst %= RL.set memu (Compose (Just u)) >>>
+        proveVarImplInt u mb_p >>>
+        pure u
+      Nothing ->
+        implFailMsgM "Universal unit variable not a member of pvarsubst"
+
 -- If the variable is a free variable, just call proveVarImpl
 proveExVarImpl _psubst mb_x mb_p
   | Right n <- mbNameBoundP mb_x
@@ -7987,6 +8003,8 @@ isProvablePerm _ _ (ValPerm_Conj ps)
 isProvablePerm unsetVars maybe_x p
   | neededs <- maybe id (\x -> NameSet.insert x) maybe_x $ neededVars p
   , NameSet.null $ NameSet.intersection neededs unsetVars = 2
+
+-- TODO: not sure if we need a special case for unit-typed variables...
 
 -- Special case: an LLVMFrame permission can always be proved
 isProvablePerm _ _ (ValPerm_Conj [Perm_LLVMFrame _]) = 2
