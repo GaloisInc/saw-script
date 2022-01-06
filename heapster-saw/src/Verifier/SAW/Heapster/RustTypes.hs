@@ -1097,22 +1097,26 @@ abstractMbLOPsModalities mb_lops = case mbMatch mb_lops of
 
 
 -- | Find all field or block permissions containing lifetime @l@ and return them
--- as an 'LOwnedPerms' list
+-- as an 'LOwnedPerms' list, also returning the result of removing these
+-- permissions from the input permissions
 lownedPermsForLifetime :: ExprVar LifetimeType -> DistPerms ctx ->
-                          RustConvM (Some LOwnedPerms)
-lownedPermsForLifetime _ MNil = return (Some MNil)
+                          RustConvM (Some LOwnedPerms, DistPerms ctx)
+lownedPermsForLifetime _ MNil = return (Some MNil, MNil)
 lownedPermsForLifetime l (perms :>: VarAndPerm x (ValPerm_LLVMField fp))
   | NameSet.member l (freeVars fp) =
-    do Some lops <- lownedPermsForLifetime l perms
-       return $ Some $ (lops :>: LOwnedPermField (PExpr_Var x) fp)
+    do (Some lops, perms') <- lownedPermsForLifetime l perms
+       return (Some (lops :>: LOwnedPermField (PExpr_Var x) fp),
+               perms' :>: VarAndPerm x ValPerm_True)
 lownedPermsForLifetime l (perms :>: VarAndPerm x (ValPerm_LLVMBlock bp))
   | NameSet.member l (freeVars bp) =
-    do Some lops <- lownedPermsForLifetime l perms
-       return $ Some $ (lops :>: LOwnedPermBlock (PExpr_Var x) bp)
+    do (Some lops, perms') <- lownedPermsForLifetime l perms
+       return (Some (lops :>: LOwnedPermBlock (PExpr_Var x) bp),
+               perms' :>: VarAndPerm x ValPerm_True)
 lownedPermsForLifetime l (perms :>: VarAndPerm x p)
   | Nothing <- testEquality x l
-  , not (NameSet.member l $ freeVars p)
-  = lownedPermsForLifetime l perms
+  , not (NameSet.member l $ freeVars p) =
+    lownedPermsForLifetime l perms >>= \(some_lops, perms') ->
+    return (some_lops, perms' :>: VarAndPerm x p)
 lownedPermsForLifetime l (_ :>: vap) =
   rsPPInfo >>= \ppInfo ->
   fail $ renderDoc $ fillSep
@@ -1162,9 +1166,9 @@ mbLifetimeFunPerm (LifetimeDef _ _ [] _)
      let mb_l_out =
            extMbMulti rets_prxs $ extMbMulti args_prxs $
            extMbMulti ghosts_prxs $ nu id
-     [nuMP| Some mb_lops_in |] <-
+     [nuMP| (Some mb_lops_in, mb_ps_in_rem) |] <-
        mbMatchM $ mbMap2 lownedPermsForLifetime mb_l mb_ps_in
-     [nuMP| Some mb_lops_out |] <-
+     [nuMP| (Some mb_lops_out, _) |] <-
        mbMatchM $ mbMap2 lownedPermsForLifetime mb_l_out mb_ps_out
      case abstractMbLOPsModalities mb_lops_in of
        SomeTypedMb ghosts' mb_mb_lops_in_abs ->
@@ -1173,10 +1177,10 @@ mbLifetimeFunPerm (LifetimeDef _ _ [] _)
          Some3FunPerm $
          FunPerm (appendCruCtx
                   (singletonCruCtx LifetimeRepr) ghosts) args gouts ret
-         (mbMap3 (\ps_in lops_in lops_in_abs ->
-                   assocAppend (MNil :>: ValPerm_LOwned [] lops_in lops_in_abs)
-                   ghosts args_prxs $ distPermsToValuePerms ps_in)
-          mb_ps_in mb_lops_in mb_lops_in_abs)
+         (mbMap2 (\ps_in_rem lops_in_abs ->
+                   assocAppend (MNil :>: ValPerm_LBorrowed lops_in_abs)
+                   ghosts args_prxs $ distPermsToValuePerms ps_in_rem)
+          mb_ps_in_rem mb_lops_in_abs)
          (mbMap3 (\ps_out lops_out lops_in_abs ->
                    let (ps_ghosts, ps_args, ps_rets) =
                          rlSplit3 ghosts_prxs args_prxs rets_prxs $

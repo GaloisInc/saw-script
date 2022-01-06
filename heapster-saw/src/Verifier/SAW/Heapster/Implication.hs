@@ -924,6 +924,20 @@ data SimplImpl ps_in ps_out where
                        SimplImpl (ps_in :> LifetimeType)
                        (ps_out  :> LifetimeType)
 
+  -- | Prove an @lborrowed(ps)@ permission from permissions @ps@ and an empty
+  -- @lowned@ permission:
+  --
+  -- > ps * l:lowned (empty -o empty) -o l:lborrowed(ps)
+  SImpl_IntroLBorrowed :: ExprVar LifetimeType -> LOwnedPerms ps ->
+                          SimplImpl (ps :> LifetimeType) (RNil :> LifetimeType)
+
+  -- | Eliminate an @l:lborrowed(ps)@ permission into the modalized version
+  -- @[l]ps@ of @ps@ plus the corresponding @lowned@ permission:
+  --
+  -- > l:lborrowed(ps) -o [l]ps * l:lowned ([l](R)ps -o ps)
+  SImpl_ElimLBorrowed :: ExprVar LifetimeType -> LOwnedPerms ps ->
+                         SimplImpl (RNil :> LifetimeType) (ps :> LifetimeType)
+
   -- | Reflexivity for @lcurrent@ proofs:
   --
   -- > . -o l:lcurrent(l)
@@ -1904,6 +1918,13 @@ simplImplIn (SImpl_EndLifetime l ps_in ps_out) =
       DistPermsCons perms_in l $ ValPerm_LOwned [] ps_in ps_out
     Nothing ->
       error "simplImplIn: SImpl_EndLifetime: non-variables in input permissions"
+simplImplIn (SImpl_IntroLBorrowed l lops) =
+  case lownedPermsToDistPerms lops of
+    Just dps -> DistPermsCons dps l (ValPerm_LOwned [] MNil MNil)
+    Nothing ->
+      error "simplImplIn: SImpl_IntroLBorrowed: malformed permissions list"
+simplImplIn (SImpl_ElimLBorrowed l lops) =
+  distPerms1 l (ValPerm_LBorrowed lops)
 simplImplIn (SImpl_LCurrentRefl _) = DistPermsNil
 simplImplIn (SImpl_LCurrentTrans l1 l2 l3) =
   distPerms2 l1 (ValPerm_LCurrent $ PExpr_Var l2) l2 (ValPerm_LCurrent l3)
@@ -2240,6 +2261,15 @@ simplImplOut (SImpl_EndLifetime l _ ps_out) =
     Just perms_out ->
       DistPermsCons perms_out l ValPerm_LFinished
     _ -> error "simplImplOut: SImpl_EndLifetime: non-variable in output permissions"
+simplImplOut (SImpl_IntroLBorrowed l lops) =
+  distPerms1 l (ValPerm_LBorrowed lops)
+simplImplOut (SImpl_ElimLBorrowed l lops) =
+  case lownedPermsToDistPerms lops of
+    Just dps ->
+      DistPermsCons dps l (ValPerm_LOwned
+                           [] (lownedPermsInForBorrow (PExpr_Var l) lops) lops)
+    Nothing ->
+      error "simplImplOut: SImpl_ElimLOwned: malformed permissions list"
 simplImplOut (SImpl_LCurrentRefl l) =
   distPerms1 l (ValPerm_LCurrent $ PExpr_Var l)
 simplImplOut (SImpl_LCurrentTrans l1 _ l3) =
@@ -2376,6 +2406,10 @@ simplImplOut (SImpl_NamedArgRead x npn args off memb) =
                 off)
 simplImplOut (SImpl_ReachabilityTrans x rp args off _ e) =
   distPerms1 x (ValPerm_Named (recPermName rp) (PExprs_Cons args e) off)
+
+-- | Compute the input permissions of a 'SimplImpl' implication in a binding
+mbSimplImplIn :: Mb ctx (SimplImpl ps_in ps_out) -> Mb ctx (DistPerms ps_in)
+mbSimplImplIn = mbMapCl $(mkClosed [| simplImplIn |])
 
 -- | Compute the output permissions of a 'SimplImpl' implication in a binding
 mbSimplImplOut :: Mb ctx (SimplImpl ps_in ps_out) -> Mb ctx (DistPerms ps_out)
@@ -2787,6 +2821,10 @@ instance SubstVar PermVarSubst m =>
     [nuMP| SImpl_EndLifetime l ps_in ps_out |] ->
       SImpl_EndLifetime <$> genSubst s l <*> genSubst s ps_in
                         <*> genSubst s ps_out
+    [nuMP| SImpl_IntroLBorrowed l lops |] ->
+      SImpl_IntroLBorrowed <$> genSubst s l <*> genSubst s lops
+    [nuMP| SImpl_ElimLBorrowed l lops |] ->
+      SImpl_ElimLBorrowed <$> genSubst s l <*> genSubst s lops
     [nuMP| SImpl_LCurrentRefl l |] ->
       SImpl_LCurrentRefl <$> genSubst s l
     [nuMP| SImpl_LCurrentTrans l1 l2 l3 |] ->
@@ -5188,6 +5226,15 @@ recombinePermConj x _ (Perm_LLVMBlock bp)
   | PExpr_FalseShape <- llvmBlockShape bp
   = implElimLLVMBlock x bp >>> implElimFalseM x
 
+-- If p is an lborrowed permission, eliminate it
+recombinePermConj x x_ps (Perm_LBorrowed lops)
+  | Just dps <- lownedPermsToDistPerms lops =
+    let prx = Proxy in
+    implSimplM prx (SImpl_ElimLBorrowed x lops) >>>
+    recombinePermConj x x_ps
+      (Perm_LOwned [] (lownedPermsInForBorrow (PExpr_Var x) lops) lops) >>>
+    recombinePermsPartial prx dps
+
 -- Default case: insert p at the end of the x_ps
 recombinePermConj x x_ps p =
   implPushM x (ValPerm_Conj x_ps) >>>
@@ -7451,6 +7498,16 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       implSimplM Proxy (SImpl_MapLifetime x [] ps_inL ps_outL ps_inR ps_outR
                         ps1 ps2 impl_in impl_out)
 
+  [nuMP| Perm_LBorrowed mb_lops |]
+    | Just mb_dps <- mbMaybe (mbMapCl
+                              $(mkClosed [| lownedPermsToDistPerms |]) mb_lops) ->
+      implPopM x (ValPerm_Conj ps) >>>
+      proveVarsImplAppendInt mb_dps >>>
+      partialSubstForceM mb_lops "proveVarAtomicImpl" >>>= \lops ->
+      mbVarsM (distPerms1 x $ ValPerm_LOwned [] MNil MNil) >>>= \mb_p' ->
+      proveVarsImplAppendInt mb_p' >>>
+      implSimplM Proxy (SImpl_IntroLBorrowed x lops)
+
   [nuMP| Perm_LCurrent mb_l' |] ->
     partialSubstForceM mb_l' "proveVarAtomicImpl" >>>= \l' ->
     case ps of
@@ -8017,8 +8074,9 @@ findProvablePerm unsetVars ps = case ps of
       (best_rank, extDistPermsSplit best x p)
 
 
--- | Find all existential lifetime variables with @lowned@ permissions in an
--- 'ExDistPerms' list, and instantiate them with fresh lifetimes
+-- | Find all existential lifetime variables with @lowned@ or @lborrowed@
+-- permissions in an 'ExDistPerms' list, and instantiate them with fresh
+-- lifetimes
 instantiateLifetimeVars :: NuMatchingAny1 r => ExDistPerms vars ps ->
                            ImplM vars s r ps_in ps_in ()
 instantiateLifetimeVars mb_ps =
@@ -8030,8 +8088,10 @@ instantiateLifetimeVars' :: NuMatchingAny1 r => PartialSubst vars ->
                             ExDistPerms vars ps -> ImplM vars s r ps_in ps_in ()
 instantiateLifetimeVars' psubst mb_ps = case mbMatch mb_ps of
   [nuMP| DistPermsNil |] -> pure ()
-  [nuMP| DistPermsCons mb_ps' mb_x (ValPerm_LOwned _ _ _) |]
-    | Left memb <- mbNameBoundP mb_x
+  [nuMP| DistPermsCons mb_ps' mb_x (ValPerm_Conj1 mb_p) |]
+    | [nuP| Just Refl |] <- mbMapCl $(mkClosed
+                                      [| isLifetimeOwnershipPerm |]) mb_p
+    , Left memb <- mbNameBoundP mb_x
     , Nothing <- psubstLookup psubst memb ->
       implBeginLifetimeM >>>= \l ->
       setVarM memb (PExpr_Var l) >>>

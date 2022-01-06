@@ -1655,6 +1655,13 @@ data AtomicPerm (a :: CrucibleType) where
                  LOwnedPerms ps_in -> LOwnedPerms ps_out ->
                  AtomicPerm LifetimeType
 
+  -- | A lifetime borrow permission @l:lborrowed(ps)@ describes a set of
+  -- permissions @ps@ that have been borrowed by lifetime @l@. It is logically
+  -- equivalent to @ps * l:lowned ([l](R)ps -o ps)@, where @[l](R)ps@ represents
+  -- the minimal possible versions of @ps@ in lifetime @l@ that could be given
+  -- back when @l@ is ended.
+  Perm_LBorrowed :: LOwnedPerms ps -> AtomicPerm LifetimeType
+
   -- | Assertion that a lifetime is current during another lifetime
   Perm_LCurrent :: PermExpr LifetimeType -> AtomicPerm LifetimeType
 
@@ -1796,6 +1803,13 @@ pattern ValPerm_LLVMBlockShape sh <- ValPerm_Conj [Perm_LLVMBlockShape sh]
     ValPerm_LLVMBlockShape sh = ValPerm_Conj [Perm_LLVMBlockShape sh]
 
 -- | A single @lowned@ permission
+pattern ValPerm_LBorrowed :: () => (a ~ LifetimeType) =>
+                             LOwnedPerms ps -> ValuePerm a
+pattern ValPerm_LBorrowed ps <- ValPerm_Conj [Perm_LBorrowed ps]
+  where
+    ValPerm_LBorrowed ps = ValPerm_Conj [Perm_LBorrowed ps]
+
+-- | A single @lborrow@ permission
 pattern ValPerm_LOwned :: () => (a ~ LifetimeType) => [PermExpr LifetimeType] ->
                           LOwnedPerms ps_in -> LOwnedPerms ps_out -> ValuePerm a
 pattern ValPerm_LOwned ls ps_in ps_out <- ValPerm_Conj [Perm_LOwned
@@ -2982,6 +2996,9 @@ instance Eq (AtomicPerm a) where
     , Just Refl <- testEquality ps_out1 ps_out2
     = ls1 == ls2
   (Perm_LOwned _ _ _) == _ = False
+  (Perm_LBorrowed lops1) == (Perm_LBorrowed lops2)
+    | Just Refl <- testEquality lops1 lops2 = True
+  (Perm_LBorrowed _) == _ = False
   (Perm_LCurrent e1) == (Perm_LCurrent e2) = e1 == e2
   (Perm_LCurrent _) == _ = False
   Perm_LFinished == Perm_LFinished = True
@@ -3148,6 +3165,8 @@ instance PermPretty (AtomicPerm a) where
          _ -> ppEncList False <$> mapM permPrettyM ls
        return (pretty "lowned" <> ls_pp <+>
                parens (align $ sep [pp_in, pretty "-o", pp_out]))
+  permPrettyM (Perm_LBorrowed lops) =
+    (pretty "lborrowed" <>) <$> parens <$> permPrettyM lops
   permPrettyM (Perm_LCurrent l) = (pretty "lcurrent" <+>) <$> permPrettyM l
   permPrettyM Perm_LFinished = return (pretty "lfinished")
   permPrettyM (Perm_Struct ps) =
@@ -3326,9 +3345,16 @@ isLLVMBlockPerm _ = False
 -- | Test if an 'AtomicPerm' is a lifetime permission
 isLifetimePerm :: AtomicPerm a -> Maybe (a :~: LifetimeType)
 isLifetimePerm (Perm_LOwned _ _ _) = Just Refl
+isLifetimePerm (Perm_LBorrowed _) = Just Refl
 isLifetimePerm (Perm_LCurrent _) = Just Refl
 isLifetimePerm Perm_LFinished = Just Refl
 isLifetimePerm _ = Nothing
+
+-- | Test if an 'AtomicPerm' is a lifetime permission that gives ownership
+isLifetimeOwnershipPerm :: AtomicPerm a -> Maybe (a :~: LifetimeType)
+isLifetimeOwnershipPerm (Perm_LOwned _ _ _) = Just Refl
+isLifetimeOwnershipPerm (Perm_LBorrowed _) = Just Refl
+isLifetimeOwnershipPerm _ = Nothing
 
 -- | Test if an 'AtomicPerm' is a struct permission
 isStructPerm :: AtomicPerm a -> Bool
@@ -5112,6 +5138,7 @@ atomicPermIsCopyable Perm_IsLLVMPtr = True
 atomicPermIsCopyable (Perm_LLVMBlockShape sh) = shapeIsCopyable PExpr_Write sh
 atomicPermIsCopyable (Perm_LLVMFrame _) = False
 atomicPermIsCopyable (Perm_LOwned _ _ _) = False
+atomicPermIsCopyable (Perm_LBorrowed _) = False
 atomicPermIsCopyable (Perm_LCurrent _) = True
 atomicPermIsCopyable Perm_LFinished = True
 atomicPermIsCopyable (Perm_Struct ps) = and $ RL.mapToList permIsCopyable ps
@@ -5174,6 +5201,18 @@ lownedPermsToDistPerms :: LOwnedPerms ps -> Maybe (DistPerms ps)
 lownedPermsToDistPerms MNil = Just MNil
 lownedPermsToDistPerms (lops :>: lop) =
   (:>:) <$> lownedPermsToDistPerms lops <*> lownedPermVarAndPerm lop
+
+-- | Convert an 'LOwnedPerms' list @ps@ to the input permission list @[l](R)ps@
+-- used in converting an @lborrowed@ permission to an @lowned@ permission
+lownedPermsInForBorrow :: PermExpr LifetimeType -> LOwnedPerms ps ->
+                          LOwnedPerms ps
+lownedPermsInForBorrow l = RL.map $ \case
+  LOwnedPermField x fp ->
+    LOwnedPermField x $ fp { llvmFieldRW = PExpr_Read, llvmFieldLifetime = l }
+  LOwnedPermArray x ap ->
+    LOwnedPermArray x $ ap { llvmArrayRW = PExpr_Read, llvmArrayLifetime = l }
+  LOwnedPermBlock x bp ->
+    LOwnedPermBlock x $ bp { llvmBlockRW = PExpr_Read, llvmBlockLifetime = l }
 
 -- | Convert the expressions of an 'LOwnedPerms' to variables, if possible
 lownedPermsVars :: LOwnedPerms ps -> Maybe (RAssign Name ps)
@@ -5371,6 +5410,7 @@ instance FreeVars (AtomicPerm tp) where
   freeVars (Perm_LLVMFrame fperms) = freeVars $ map fst fperms
   freeVars (Perm_LOwned ls ps_in ps_out) =
     NameSet.unions [freeVars ls, freeVars ps_in, freeVars ps_out]
+  freeVars (Perm_LBorrowed lops) = freeVars lops
   freeVars (Perm_LCurrent l) = freeVars l
   freeVars Perm_LFinished = NameSet.empty
   freeVars (Perm_Struct ps) = NameSet.unions $ RL.mapToList freeVars ps
@@ -5501,6 +5541,7 @@ instance NeededVars (AtomicPerm a) where
   neededVars (Perm_LLVMBlock bp) = neededVars bp
   neededVars (Perm_LLVMBlockShape _) = NameSet.empty
   neededVars p@(Perm_LOwned _ _ _) = freeVars p
+  neededVars (Perm_LBorrowed lops) = neededVars $ RL.map lownedPermPerm lops
   neededVars p = freeVars p
 
 instance NeededVars (LLVMFieldPerm w sz) where
@@ -5775,6 +5816,7 @@ instance SubstVar s m => Substable s (AtomicPerm a) m where
     [nuMP| Perm_LLVMFrame fp |] -> Perm_LLVMFrame <$> genSubst s fp
     [nuMP| Perm_LOwned ls ps_in ps_out |] ->
       Perm_LOwned <$> genSubst s ls <*> genSubst s ps_in <*> genSubst s ps_out
+    [nuMP| Perm_LBorrowed lops |] -> Perm_LBorrowed <$> genSubst s lops
     [nuMP| Perm_LCurrent e |] -> Perm_LCurrent <$> genSubst s e
     [nuMP| Perm_LFinished |] -> return Perm_LFinished
     [nuMP| Perm_Struct tps |] -> Perm_Struct <$> genSubst s tps
@@ -6574,6 +6616,9 @@ instance AbstractVars (AtomicPerm a) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 ls
     `clMbMbApplyM` abstractPEVars ns1 ns2 ps_in
     `clMbMbApplyM` abstractPEVars ns1 ns2 ps_out
+  abstractPEVars ns1 ns2 (Perm_LBorrowed lops) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LBorrowed |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 lops
   abstractPEVars ns1 ns2 (Perm_LCurrent e) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LCurrent |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
@@ -6886,6 +6931,7 @@ instance AbstractNamedShape w (AtomicPerm a) where
   abstractNSM (Perm_LOwned ls ps_in ps_out) =
     mbMap3 Perm_LOwned <$> abstractNSM ls <*> abstractNSM ps_in <*>
     abstractNSM ps_out
+  abstractNSM (Perm_LBorrowed lops) = fmap Perm_LBorrowed <$> abstractNSM lops
   abstractNSM (Perm_LCurrent e) = fmap Perm_LCurrent <$> abstractNSM e
   abstractNSM Perm_LFinished = pureBindingM Perm_LFinished
   abstractNSM (Perm_Struct ps) = fmap Perm_Struct <$> abstractNSM ps
@@ -7523,6 +7569,8 @@ instance GetDetVarsClauses (AtomicPerm a) where
   getDetVarsClauses (Perm_LLVMFrame frame_perm) =
     concat <$> mapM (getDetVarsClauses . fst) frame_perm
   getDetVarsClauses (Perm_LOwned _ _ _) = return []
+  getDetVarsClauses (Perm_LBorrowed lops) =
+    getDetVarsClauses $ RL.map lownedPermPerm lops
   getDetVarsClauses _ = return []
 
 instance (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
