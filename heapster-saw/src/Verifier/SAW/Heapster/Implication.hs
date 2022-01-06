@@ -3342,7 +3342,10 @@ handleUnitVar UnitRepr n =
   getUnitImplM >>= \u -> case u of
     Nothing -> -- If not, initialize the state with the current variable
       setUnitImplM (Just n)
-    Just x  -> -- If so, add a permission @n:eq(x)@, and then pop it off the
+    Just x | x == n ->
+      -- If n is equal to the global unit, do nothing
+      pure ()
+    Just x  -> -- Otherwise, add a permission @n:eq(x)@, and then pop it off the
                -- stack
       implTraceM (\i ->
                pretty "about to call unitEqM:" <+> permPretty i n) >>>
