@@ -1166,7 +1166,7 @@ mbLifetimeFunPerm (LifetimeDef _ _ [] _)
      let mb_l_out =
            extMbMulti rets_prxs $ extMbMulti args_prxs $
            extMbMulti ghosts_prxs $ nu id
-     [nuMP| (Some mb_lops_in, mb_ps_in_rem) |] <-
+     [nuMP| (Some mb_lops_in, _) |] <-
        mbMatchM $ mbMap2 lownedPermsForLifetime mb_l mb_ps_in
      [nuMP| (Some mb_lops_out, _) |] <-
        mbMatchM $ mbMap2 lownedPermsForLifetime mb_l_out mb_ps_out
@@ -1177,10 +1177,10 @@ mbLifetimeFunPerm (LifetimeDef _ _ [] _)
          Some3FunPerm $
          FunPerm (appendCruCtx
                   (singletonCruCtx LifetimeRepr) ghosts) args gouts ret
-         (mbMap2 (\ps_in_rem lops_in_abs ->
-                   assocAppend (MNil :>: ValPerm_LBorrowed lops_in_abs)
-                   ghosts args_prxs $ distPermsToValuePerms ps_in_rem)
-          mb_ps_in_rem mb_lops_in_abs)
+         (mbMap2 (\ps_in lops_in_abs ->
+                   assocAppend (MNil :>: ValPerm_LOwnedSimple lops_in_abs)
+                   ghosts args_prxs $ distPermsToValuePerms ps_in)
+          mb_ps_in mb_lops_in_abs)
          (mbMap3 (\ps_out lops_out lops_in_abs ->
                    let (ps_ghosts, ps_args, ps_rets) =
                          rlSplit3 ghosts_prxs args_prxs rets_prxs $

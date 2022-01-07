@@ -1055,17 +1055,17 @@ data AtomicPermTrans ctx a where
                        Mb ctx (LLVMFramePerm w) ->
                        AtomicPermTrans ctx (LLVMFrameType w)
 
-  -- | LOwned permissions translate to a monadic function from (the translation
-  -- of) the input permissions to the output permissions
+  -- | @lowned@ permissions translate to a monadic function from (the
+  -- translation of) the input permissions to the output permissions
   APTrans_LOwned :: Mb ctx [PermExpr LifetimeType] ->
                     Mb ctx (LOwnedPerms ps_in) ->
                     Mb ctx (LOwnedPerms ps_out) ->
                     OpenTerm -> AtomicPermTrans ctx LifetimeType
 
-  -- | LBorrowed permissions translate to the same thing as the permissions they
-  -- borrow
-  APTrans_LBorrowed :: Mb ctx (LOwnedPerms ps) -> PermTransCtx ctx ps ->
-                       AtomicPermTrans ctx LifetimeType
+  -- | Simple @lowned@ permissions have no translation, because they represent
+  -- @lowned@ permissions whose translations are just the identity function
+  APTrans_LOwnedSimple :: Mb ctx (LOwnedPerms ps) ->
+                          AtomicPermTrans ctx LifetimeType
 
   -- | LCurrent permissions have no computational content
   APTrans_LCurrent :: Mb ctx (PermExpr LifetimeType) ->
@@ -1227,7 +1227,7 @@ instance IsTermTrans (AtomicPermTrans ctx a) where
   transTerms (APTrans_DefinedNamedConj _ _ _ ptrans) = transTerms ptrans
   transTerms (APTrans_LLVMFrame _) = []
   transTerms (APTrans_LOwned _ _ _ t) = [t]
-  transTerms (APTrans_LBorrowed _ pctx) = transTerms pctx
+  transTerms (APTrans_LOwnedSimple _) = []
   transTerms (APTrans_LCurrent _) = []
   transTerms APTrans_LFinished = []
   transTerms (APTrans_Struct pctx) = transTerms pctx
@@ -1285,8 +1285,7 @@ atomicPermTransPerm _ (APTrans_DefinedNamedConj npn args off _) =
 atomicPermTransPerm _ (APTrans_LLVMFrame fp) = fmap Perm_LLVMFrame fp
 atomicPermTransPerm _ (APTrans_LOwned ls ps_in ps_out _) =
   mbMap3 Perm_LOwned ls ps_in ps_out
-atomicPermTransPerm _ (APTrans_LBorrowed lops _) =
-  fmap Perm_LBorrowed lops
+atomicPermTransPerm _ (APTrans_LOwnedSimple lops) = fmap Perm_LOwnedSimple lops
 atomicPermTransPerm _ (APTrans_LCurrent l) = fmap Perm_LCurrent l
 atomicPermTransPerm prxs APTrans_LFinished = nus prxs $ const Perm_LFinished
 atomicPermTransPerm prxs (APTrans_Struct ps) =
@@ -1350,8 +1349,7 @@ instance ExtPermTrans AtomicPermTrans where
   extPermTrans (APTrans_LLVMFrame fp) = APTrans_LLVMFrame $ extMb fp
   extPermTrans (APTrans_LOwned ls ps_in ps_out t) =
     APTrans_LOwned (extMb ls) (extMb ps_in) (extMb ps_out) t
-  extPermTrans (APTrans_LBorrowed lops pctx) =
-    APTrans_LBorrowed (extMb lops) (RL.map extPermTrans pctx)
+  extPermTrans (APTrans_LOwnedSimple lops) = APTrans_LOwnedSimple (extMb lops)
   extPermTrans (APTrans_LCurrent p) = APTrans_LCurrent $ extMb p
   extPermTrans APTrans_LFinished = APTrans_LFinished
   extPermTrans (APTrans_Struct ps) = APTrans_Struct $ RL.map extPermTrans ps
@@ -1766,8 +1764,8 @@ instance TransInfo info =>
                                             (globalOpenTerm "Prelude.CompM")
                                             tp_out)
          return $ mkTypeTrans1 tp (APTrans_LOwned ls ps_in ps_out)
-    [nuMP| Perm_LBorrowed lops |] ->
-      fmap (APTrans_LBorrowed lops) <$> translate lops
+    [nuMP| Perm_LOwnedSimple lops |] ->
+      return $ mkTypeTrans0 $ APTrans_LOwnedSimple lops
     [nuMP| Perm_LCurrent l |] ->
       return $ mkTypeTrans0 $ APTrans_LCurrent l
     [nuMP| Perm_LFinished |] ->
@@ -2955,36 +2953,24 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                   PTrans_Conj [APTrans_LFinished])
            m]
 
-  [nuMP| SImpl_IntroLBorrowed l _ |] ->
-    do ttrans <- translateSimplImplOutHead mb_simpl
-       let prx_ps_l = mbRAssignProxies $ mbSimplImplIn mb_simpl
-       withPermStackM
-         (\vars ->
-           let (vars0, _) = RL.split ps0 prx_ps_l vars in
-           vars0 :>: translateVar l)
+  [nuMP| SImpl_IntroLOwnedSimple _ _ |] ->
+    do let prx_ps_l = mbRAssignProxies $ mbSimplImplIn mb_simpl
+       ttrans <- translateSimplImplOut mb_simpl
+       withPermStackM id
          (\pctx ->
            let (pctx0, pctx_ps :>: _) = RL.split ps0 prx_ps_l pctx in
-           pctx0 :>: typeTransF ttrans (transTerms pctx_ps))
+           RL.append pctx0 $ typeTransF ttrans (transTerms pctx_ps))
          m
 
-  [nuMP| SImpl_ElimLBorrowed _ mb_lops |] ->
-    do ttrans <- translateSimplImplOut mb_simpl
+  [nuMP| SImpl_ElimLOwnedSimple _ mb_lops |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
        lops_tp <- typeTransTupleType <$> translate mb_lops
-       let fromJustOrError (Just x) = x
-           fromJustOrError Nothing = error "translateSimplImpl: SImpl_ElimLBorrowed"
        let f_tm =
              lambdaOpenTerm "ps" lops_tp $ \x ->
              applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
              [lops_tp, x]
-       withPermStackM
-         (\(vars0 :>: var_l) ->
-           let vars' =
-                 RL.map (translateVar . getCompose) $ mbRAssign $ 
-                 fmap (fromJustOrError . lownedPermsVars) mb_lops in
-           RL.append vars0 vars' :>: var_l)
-         (\(pctx0 :>: PTrans_Conj [APTrans_LBorrowed _ pctx']) ->
-           RL.append pctx0 $
-           typeTransF ttrans (transTerms pctx' ++ [f_tm]))
+       withPermStackM id
+         (\(pctx0 :>: _) -> pctx0 :>: typeTransF ttrans [f_tm])
          m
 
   [nuMP| SImpl_LCurrentRefl l |] ->
