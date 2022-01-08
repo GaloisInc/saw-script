@@ -3018,7 +3018,8 @@ type ImplM vars s r ps_out ps_in =
 -- | Run an 'ImplM' computation by passing it a @vars@ context, a starting
 -- permission set, top-level state, and a continuation to consume the output
 runImplM ::
-  CruCtx vars ->
+  NuMatchingAny1 r =>
+  CruCtx vars               {- ^ existential variables and their types -} ->
   PermSet ps_in ->
   PermEnv                   {- ^ permission environment   -} ->
   PPInfo                    {- ^ pretty-printer settings  -} ->
@@ -3032,28 +3033,36 @@ runImplM ::
   State (Closed s) (PermImpl r ps_in)
 runImplM vars perms env ppInfo fail_prefix dlevel nameTypes unitVar endianness m k =
   runGenStateContT
-    m
+    -- instantiate all unit evars to the global unit variable (with
+    -- 'handleUnitEVars') before running m
+    (handleUnitEVars >>> m)
     (mkImplState vars perms env ppInfo fail_prefix dlevel nameTypes unitVar endianness)
     (\s a -> PermImpl_Done <$> k (a, s))
+
+
 
 -- | Run an 'ImplM' computation that returns a 'PermImpl', by inserting that
 -- 'PermImpl' inside of the larger 'PermImpl' that is built up by the 'ImplM'
 -- computation.
-runImplImplM :: CruCtx vars -> PermSet ps_in -> PermEnv -> PPInfo ->
+runImplImplM :: NuMatchingAny1 r =>
+                CruCtx vars -> PermSet ps_in -> PermEnv -> PPInfo ->
                 String -> DebugLevel -> NameMap TypeRepr ->
                 Maybe (ExprVar UnitType) -> EndianForm ->
                 ImplM vars s r ps_out ps_in (PermImpl r ps_out) ->
                 State (Closed s) (PermImpl r ps_in)
 runImplImplM vars perms env ppInfo fail_prefix dlevel nameTypes u endianness m =
   runGenStateContT
-    m
+    -- instantiate all unit evars to the global unit variable (with
+    -- 'handleUnitEVars') before running m
+    (handleUnitEVars >>> m)
     (mkImplState vars perms env ppInfo fail_prefix dlevel nameTypes u endianness)
     (\_ -> pure)
 
 -- | Embed a sub-computation in a name-binding inside another 'ImplM'
 -- computation, throwing away any state from that sub-computation and returning
 -- a 'PermImpl' inside a name-binding
-embedImplM :: DistPerms ps_in ->
+embedImplM :: NuMatchingAny1 r' =>
+              DistPerms ps_in ->
               ImplM RNil s r' ps_out ps_in (r' ps_out) ->
               ImplM vars s r ps ps (PermImpl r' ps_in)
 embedImplM ps_in m =
@@ -3181,20 +3190,27 @@ getVarVarM memb =
 -- returning the optional expression it was bound to in the current partial
 -- substitution when it is done
 withExtVarsM :: KnownRepr TypeRepr tp =>
+                NuMatchingAny1 r =>
                 ImplM (vars :> tp) s r ps1 ps2 a ->
                 ImplM vars s r ps1 ps2 (a, PermExpr tp)
 withExtVarsM m =
-  gmodify extImplState   >>>
-  m                      >>>= \a ->
-  getPSubst              >>>= \psubst ->
-  gmodify unextImplState >>>
+  -- Add a new existential to the 'ImplState'
+  gmodify extImplState       >>>
+  -- If the new existential has type unit, instantiate it to the global unit
+  handleUnitEVar Member_Base >>>
+  -- Run the computation
+  m                          >>>= \a ->
+  getPSubst                  >>>= \psubst ->
+  -- Remove the existential after it has been instantiated
+  gmodify unextImplState     >>>
   pure (a, case psubstLookup psubst Member_Base of
              Just e -> e
              Nothing -> zeroOfType knownRepr)
 
 -- | Run an implication computation with an additional context of existential
 -- variables
-withExtVarsMultiM :: KnownCruCtx vars' ->
+withExtVarsMultiM :: NuMatchingAny1 r =>
+                     KnownCruCtx vars' ->
                      ImplM (vars :++: vars') s r ps1 ps2 a ->
                      ImplM vars s r ps1 ps2 a
 withExtVarsMultiM MNil m = m
@@ -3288,6 +3304,18 @@ getUnitImplM :: ImplM vars s r ps ps (Maybe (ExprVar UnitType))
 getUnitImplM = do st <- get
                   return $ _implStateUnitVar st
 
+-- | If the global unit varaible is not yet set, generate a fresh name and set
+-- it
+ensureUnitImplM :: NuMatchingAny1 r =>
+                   ImplM vars s r ps ps (ExprVar UnitType)
+ensureUnitImplM =
+  getUnitImplM >>>= \maybe_u ->
+  case maybe_u of
+    Nothing -> implIntroUnitVar >>>= \n ->
+               setUnitImplM (Just n) >>>
+               pure n
+    Just u  -> pure u
+
 -- | Look up the type of a free variable
 implGetVarType :: Name a -> ImplM vars s r ps ps (TypeRepr a)
 implGetVarType n =
@@ -3328,10 +3356,53 @@ implSetNameTypes (ns :>: n) (CruCtxCons tps tp) =
      implTraceM (\i -> pretty "Done with implSetNameTypes for " <+> permPretty i n)
      implSetNameTypes ns tps
 
+-- | When adding a new existential unit-typed variable, instantiate it with the
+-- underlying global unit if available; if not, update the global unit variable
+-- with a fresh variable
+handleUnitEVar :: forall (a :: CrucibleType) vars s r ps.
+                  NuMatchingAny1 r =>
+                  Member vars a -> ImplM vars s r ps ps ()
+-- Note: this only works in ImplM monad, not necessarily in TypedCrucible
+handleUnitEVar mem =
+  use implStateVars >>>= \vars ->
+  case cruCtxLookup vars mem of
+    UnitRepr -> -- get the global unit variable
+                ensureUnitImplM >>>= \u ->
+                use implStatePSubst >>>= \psubst ->
+                -- add the binding mem |-> u to the partial substition
+                -- implStatePSubst will fail if mem already is instantiated in
+                -- implStatePSubst
+                modifyPSubst (psubstSet mem (PExpr_Var u))
+                -- TODO: not sure if we should set implStatePSubst,
+                -- implStatePVarSubst, or both...
+    _        -> -- non-unit variables
+                pure ()
 
--- | When adding a new unit-typed variable, unify with the underlying global
--- unit if available, and if not, update the global unit variable with the
--- variable provided
+-- | Call handleUnitEVar on every existential variable in @vars@. Note that this
+-- will fail if called more than once on overlapping sets of @vars@.
+handleUnitEVars :: forall vars s r ps.
+                   NuMatchingAny1 r =>
+                   ImplM vars s r ps ps ()
+-- look up current cructx, then call handleUnitEVar for each member proof
+-- RL.members (CruCtxProxies vars)
+handleUnitEVars =
+    use implStateVars >>>= \vars ->
+    let mems :: RAssign (Member vars) vars
+        -- get the memberships of all variables
+        mems = RL.members (cruCtxProxies vars)
+    -- call handleUnitEVar on each variable
+    in RL.foldr handleUnitEVarM (pure ()) mems
+  where
+    handleUnitEVarM :: forall (a :: CrucibleType).
+                       Member vars a ->
+                       ImplM vars s r ps ps () ->
+                       ImplM vars s r ps ps ()
+    handleUnitEVarM mem m = handleUnitEVar mem >>> m
+
+
+-- | When adding a new universal unit-typed variable, unify with the underlying
+-- global unit if available, and if not, update the global unit variable with
+-- the variable provided
 handleUnitVar :: NuMatchingAny1 r =>
                  TypeRepr a -> ExprVar a -> ImplM vars s r ps ps ()
 handleUnitVar UnitRepr n =
@@ -3580,6 +3651,24 @@ implLetBindVars :: NuMatchingAny1 r => CruCtx tps -> PermExprs tps ->
 implLetBindVars CruCtxNil MNil = pure MNil
 implLetBindVars (CruCtxCons tps tp) (es :>: e) =
   (:>:) <$> implLetBindVars tps es <*> implLetBindVar tp e
+
+-- | Introduce a new univerally-quantified variable @x@ of unit type.
+--
+-- ps -o x. ps
+implIntroUnitVar :: NuMatchingAny1 r =>
+                    ImplM vars s r ps ps (Name UnitType)
+implIntroUnitVar =
+  -- Note that unlike @implLetbindVar@, this function does *not* bind @x@ to a
+  -- value @e@. Instead, we have almost the same operations as 'implLetBindVar'
+  -- but instead of calling 'recombinePerm', we instead call
+  -- 'implLetBindVarDropEq', which drops the residual equality permission
+  let e = PExpr_Unit in
+  implApplyImpl1 (Impl1_LetBind UnitRepr e)
+    (MNil :>: Impl1Cont (\(_ :>: n) -> pure n)) >>>= \n ->
+  -- Drop the n:eq(unit) permission
+  implDropM n (ValPerm_Eq e) >>>
+  pure n
+
 
 -- | Freshen up a sequence of names by replacing any duplicate names in the list
 -- with fresh, let-bound variables
@@ -7890,21 +7979,6 @@ proveExVarImpl :: NuMatchingAny1 r => PartialSubst vars -> Mb vars (Name tp) ->
                   Mb vars (ValuePerm tp) ->
                   ImplM vars s r (ps :> tp) ps (Name tp)
 
--- If the variable x is a free variable of type unit, and if there is a global
--- unit u in the context, instanitate x to u and call proveVarImpl
-proveExVarImpl _psubst mb_x mb_p
-  | Right n <- mbNameBoundP mb_x
-  , Just  u <- getUnitImplM
-  = -- Note: we expect u to alwyas be a member of pvarsubst
-    use implStatePVarSubst >>>= \pvsubst ->
-    case RL.memberElem u pvsubst of
-      Just memu ->
-        implStatePVarSubst %= RL.set memu (Compose (Just u)) >>>
-        proveVarImplInt u mb_p >>>
-        pure u
-      Nothing ->
-        implFailMsgM "Universal unit variable not a member of pvarsubst"
-
 -- If the variable is a free variable, just call proveVarImpl
 proveExVarImpl _psubst mb_x mb_p
   | Right n <- mbNameBoundP mb_x
@@ -8003,8 +8077,6 @@ isProvablePerm _ _ (ValPerm_Conj ps)
 isProvablePerm unsetVars maybe_x p
   | neededs <- maybe id (\x -> NameSet.insert x) maybe_x $ neededVars p
   , NameSet.null $ NameSet.intersection neededs unsetVars = 2
-
--- TODO: not sure if we need a special case for unit-typed variables...
 
 -- Special case: an LLVMFrame permission can always be proved
 isProvablePerm _ _ (ValPerm_Conj [Perm_LLVMFrame _]) = 2

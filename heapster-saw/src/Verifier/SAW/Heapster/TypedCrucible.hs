@@ -2339,6 +2339,7 @@ localPermCheckM m =
 
 -- | Call 'runImplM' in the 'PermCheckM' monad
 pcmRunImplM ::
+  NuMatchingAny1 r =>
   CruCtx vars -> Doc () -> (a -> r ps_out) ->
   ImplM vars (InnerPermCheckState blocks tops rets) r ps_out ps_in a ->
   PermCheckM ext cblocks blocks tops rets r' ps_in r' ps_in
@@ -2359,6 +2360,7 @@ pcmRunImplM vars fail_doc retF impl_m =
 
 -- | Call 'runImplImplM' in the 'PermCheckM' monad
 pcmRunImplImplM ::
+  NuMatchingAny1 r =>
   CruCtx vars -> Doc () ->
   ImplM vars (InnerPermCheckState blocks tops rets) r ps_out ps_in (PermImpl
                                                                     r ps_out) ->
@@ -2380,6 +2382,7 @@ pcmRunImplImplM vars fail_doc impl_m =
 -- | Embed an implication computation inside a permission-checking computation,
 -- also supplying an overall error message for failures
 pcmEmbedImplWithErrM ::
+  NuMatchingAny1 r =>
   (forall ps. AnnotPermImpl r ps -> r ps) -> CruCtx vars -> Doc () ->
   ImplM vars (InnerPermCheckState blocks tops rets) r ps_out ps_in a ->
   PermCheckM ext cblocks blocks tops rets (r ps_out) ps_out (r ps_in) ps_in
@@ -2409,6 +2412,7 @@ pcmEmbedImplWithErrM f_impl vars fail_doc m =
 
 -- | Embed an implication computation inside a permission-checking computation
 pcmEmbedImplM ::
+  NuMatchingAny1 r =>
   (forall ps. AnnotPermImpl r ps -> r ps) -> CruCtx vars ->
   ImplM vars (InnerPermCheckState blocks tops rets) r ps_out ps_in a ->
   PermCheckM ext cblocks blocks tops rets (r ps_out) ps_out (r ps_in) ps_in
@@ -2418,6 +2422,7 @@ pcmEmbedImplM f_impl vars m = pcmEmbedImplWithErrM f_impl vars mempty m
 -- | Special case of 'pcmEmbedImplM' for a statement type-checking context where
 -- @vars@ is empty
 stmtEmbedImplM ::
+  NuMatchingExtC ext =>
   ImplM RNil (InnerPermCheckState
               blocks tops rets) (TypedStmtSeq ext blocks tops rets) ps_out ps_in a ->
   StmtPermCheckM ext cblocks blocks tops rets ps_out ps_in a
