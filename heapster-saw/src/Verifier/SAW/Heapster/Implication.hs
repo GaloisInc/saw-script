@@ -3484,6 +3484,9 @@ implCatchM f p m1 m2 =
 implPushM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r (ps :> a) ps ()
 implPushM x p =
+  implVerbTraceM (\i ->
+                   sep [pretty "implPushM" <+>
+                        permPretty i x <> colon <> permPretty i p]) >>>
   implApplyImpl1 (Impl1_Push x p) (MNil :>: Impl1Cont (const $ pure ()))
 
 -- | Call 'implPushM' for multiple @x:p@ permissions
@@ -3509,6 +3512,9 @@ implPushOrReflMultiM (DistPermsCons ps x p) =
 implPopM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
             ImplM vars s r ps (ps :> a) ()
 implPopM x p =
+  implVerbTraceM (\i ->
+                   sep [pretty "implPopM" <+>
+                        permPretty i x <> colon <> permPretty i p]) >>>
   implApplyImpl1 (Impl1_Pop x p) (MNil :>: Impl1Cont (const $ pure ()))
 
 -- | Eliminate a disjunctive permission @x:(p1 \/ p2)@, building proof trees
@@ -4378,7 +4384,7 @@ implLLVMFieldTryProveWordEq ::
   (Maybe (PermExpr (BVType sz)))
 implLLVMFieldTryProveWordEq x fp =
   implElimLLVMFieldContentsM x fp >>>= \y -> getPerm y >>>= \p ->
-  implPushM y p >>> elimOrsExistsNamesM y >>>= \case
+  implPushM y p >>> implMaybeCopyPopM y p >>> elimOrsExistsNamesM y >>>= \case
   ValPerm_Eq e ->
     substEqsWithProof e >>>= \eqp ->
     case someEqProofRHS eqp of
@@ -8051,7 +8057,7 @@ extDistPermsSplit (DistPermsSplit prxs1 prxs2 ps12 x p) y p' =
 
 -- | The maximum priority returned by 'isProvablePerm'
 isProvablePermMax :: Int
-isProvablePermMax = 2
+isProvablePermMax = 3
 
 -- | Test if a permission is of a form where 'proveExVarImpl' will succeed,
 -- given the current set of existential variables whose values have not been
@@ -8059,6 +8065,11 @@ isProvablePermMax = 2
 -- first and 0 means it cannot be proved.
 isProvablePerm :: NameSet CrucibleType -> Maybe (ExprVar a) ->
                   ValuePerm a -> Int
+
+-- Simple lifetime permissions should be proved first, so get highest priority
+isProvablePerm unsetVars maybe_x p@(ValPerm_Conj [Perm_LOwnedSimple _])
+  | neededs <- maybe id (\x -> NameSet.insert x) maybe_x $ neededVars p
+  , NameSet.null $ NameSet.intersection neededs unsetVars = 3
 
 -- Lifetime permissions can always be proved, but we want to prove them after
 -- any other permissions that might depend on them, so they get priority 1
