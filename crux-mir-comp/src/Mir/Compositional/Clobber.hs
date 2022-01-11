@@ -127,7 +127,8 @@ freshSymbolic sym loc nameStr shp = go shp
         let nameSymbol = W4.safeSymbol nameStr
         expr <- liftIO $ W4.freshConstant sym nameSymbol btpr
         let ev = CreateVariableEvent loc nameStr btpr expr
-        liftIO $ addAssumptions sym (singleEvent ev)
+        ovrWithBackend $ \bak ->
+          liftIO $ addAssumptions bak (singleEvent ev)
         return expr
     go (ArrayShape (M.TyArray _ len) _ shp) =
         MirVector_Vector <$> V.replicateM len (go shp)

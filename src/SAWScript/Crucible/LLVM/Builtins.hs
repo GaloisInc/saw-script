@@ -516,7 +516,7 @@ withMethodSpec pathSat lm nm setup action =
      Crucible.llvmPtrWidth (mtrans ^. Crucible.transContext) $ \_ ->
        fmap NE.head $ forM defOrDecls $ \defOrDecl ->
          setupLLVMCrucibleContext pathSat lm $ \cc ->
-           do let sym = cc^.ccBackend
+           do let sym = cc^.ccSym
 
               pos <- getPosition
               let setupLoc = toW4Loc "_SAW_verify_prestate" pos
@@ -555,10 +555,11 @@ verifyMethodSpec ::
   Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
   TopLevel (SolverStats, Set TheoremNonce, OverrideState (LLVM arch))
 verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
+  ccWithBackend cc $ \bak ->
   do printOutLnTop Info $
        unwords ["Verifying", (methodSpec ^. csName) , "..."]
 
-     let sym = cc^.ccBackend
+     let sym = cc^.ccSym
 
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "llvm_verify" profFile
@@ -590,7 +591,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
        $ checkAssumptionsForContradictions cc tactic assumes
 
      -- save initial path conditions
-     frameIdent <- io $ Crucible.pushAssumptionFrame sym
+     frameIdent <- io $ Crucible.pushAssumptionFrame bak
 
      -- run the symbolic execution
      printOutLnTop Info $
@@ -605,7 +606,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
        methodSpec env globals3 ret
 
      -- restore previous assumption state
-     _ <- io $ Crucible.popAssumptionFrame sym frameIdent
+     _ <- io $ Crucible.popAssumptionFrame bak frameIdent
 
      -- attempt to verify the proof obligations
      printOutLnTop Info $
@@ -625,7 +626,7 @@ verifyObligations :: LLVMCrucibleContext arch
                   -> [(String, W4.ProgramLoc, Term)]
                   -> TopLevel (SolverStats, Set TheoremNonce)
 verifyObligations cc mspec tactic assumes asserts =
-  do let sym = cc^.ccBackend
+  do let sym = cc^.ccSym
      st     <- io $ Common.sawCoreState sym
      let sc  = saw_ctx st
      assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
@@ -765,7 +766,7 @@ verifyPrestate ::
       Crucible.SymGlobalState Sym)
 verifyPrestate opts cc mspec globals =
   do let ?lc = ccTypeCtx cc
-     let sym = cc^.ccBackend
+     let sym = cc^.ccSym
      let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
      liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
@@ -798,7 +799,7 @@ assumptionsContainContradiction ::
   TopLevel Bool
 assumptionsContainContradiction cc tactic assumptions =
   do
-     let sym = cc^.ccBackend
+     let sym = cc^.ccSym
      st <- io $ Common.sawCoreState sym
      let sc  = saw_ctx st
      pgl <- io $
@@ -905,14 +906,14 @@ setupGlobalAllocs :: forall arch.
   IO MemImpl
 setupGlobalAllocs cc mspec mem0 = foldM go mem0 $ mspec ^. MS.csGlobalAllocs
   where
-    sym = cc ^. ccBackend
+    sym = cc ^. ccSym
 
     go :: MemImpl -> MS.AllocGlobal (LLVM arch) -> IO MemImpl
     go mem (LLVMAllocGlobal _ symbol@(L.Symbol name)) = do
       let mtrans = ccLLVMModuleTrans cc
           gimap = Crucible.globalInitMap mtrans
       case Map.lookup symbol gimap of
-        Just (g, Right (mt, _)) ->
+        Just (g, Right (mt, _)) -> ccWithBackend cc $ \bak ->
           do when (L.gaConstant $ L.globalAttrs g) . throwMethodSpec mspec $ mconcat
                [ "Global variable \""
                , name
@@ -932,7 +933,7 @@ setupGlobalAllocs cc mspec mem0 = foldM go mem0 $ mspec ^. MS.csGlobalAllocs
                        ]
                      Just al -> return al
                  _ -> pure $ Crucible.memTypeAlign (Crucible.llvmDataLayout ?lc) mt
-             (ptr, mem') <- Crucible.doMalloc sym Crucible.GlobalAlloc Crucible.Mutable name mem sz' alignment
+             (ptr, mem') <- Crucible.doMalloc bak Crucible.GlobalAlloc Crucible.Mutable name mem sz' alignment
              pure $ Crucible.registerGlobal mem' [symbol] ptr
         _ -> throwMethodSpec mspec $ mconcat
           [ "Global variable \""
@@ -1030,7 +1031,7 @@ assertEqualVals ::
   LLVMVal ->
   IO Term
 assertEqualVals cc v1 v2 =
-  do let sym = cc^.ccBackend
+  do let sym = cc^.ccSym
      st <- Common.sawCoreState sym
      toSC sym st =<< equalValsPred cc v1 v2
 
@@ -1050,11 +1051,11 @@ doAlloc ::
 doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz loc fresh initialization)
   | fresh = liftIO $ executeFreshPointer cc i
   | otherwise =
+  ccWithBackend cc $ \bak ->
   StateT $ \mem ->
-  do let sym = cc^.ccBackend
-     sz' <- liftIO $ resolveSAWSymBV cc Crucible.PtrWidth sz
+  do sz' <- liftIO $ resolveSAWSymBV cc Crucible.PtrWidth sz
      let l = show (W4.plSourceLoc loc)
-     liftIO $ doAllocSymInit sym mem mut alignment sz' l initialization
+     liftIO $ doAllocSymInit bak mem mut alignment sz' l initialization
 
 --------------------------------------------------------------------------------
 
@@ -1092,7 +1093,8 @@ registerOverride ::
   [MS.CrucibleMethodSpecIR (LLVM arch)]     ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp args ret ()
 registerOverride opts cc sim_ctx top_loc cs =
-  do let sym = cc^.ccBackend
+  ccWithBackend cc $ \bak ->
+  do let sym = Common.backendGetSym bak
      sc <- saw_ctx <$> liftIO (Common.sawCoreState sym)
      let fstr = (head cs)^.csName
          fsym = L.Symbol fstr
@@ -1116,7 +1118,7 @@ registerOverride opts cc sim_ctx top_loc cs =
               mem <- Crucible.readGlobal mvar
               let bindPtr m decl =
                     do printOutLn opts Info $ "  variant `" ++ show (L.decName decl) ++ "`"
-                       Crucible.bindLLVMFunPtr sym decl h m
+                       Crucible.bindLLVMFunPtr bak decl h m
               mem' <- liftIO $ foldM bindPtr mem (d:ds)
               Crucible.writeGlobal mvar mem'
 
@@ -1135,7 +1137,7 @@ registerInvariantOverride ::
   [MS.CrucibleMethodSpecIR (LLVM arch)] ->
   IO (Crucible.ExecutionFeature (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp)
 registerInvariantOverride opts cc top_loc all_breakpoints cs =
-  do sc <- saw_ctx <$> Common.sawCoreState (cc^.ccBackend)
+  do sc <- saw_ctx <$> Common.sawCoreState (cc^.ccSym)
      let name = (head cs) ^. csName
      parent <-
        case nubOrd $ map (view csParentName) cs of
@@ -1226,6 +1228,7 @@ verifySimulate ::
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp =
   withCfgAndBlockId cc mspec $ \cfg entryId ->
+  ccWithBackend cc $ \bak ->
   do let argTys = Crucible.blockInputs $
            Crucible.getBlock entryId $ Crucible.cfgBlockMap cfg
      let retTy = Crucible.handleReturnType $ Crucible.cfgHandle cfg
@@ -1234,7 +1237,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
      let simCtx = cc^.ccLLVMSimContext
      psatf <-
        Crucible.pathSatisfiabilityFeature sym
-         (Crucible.considerSatisfiability sym)
+         (Crucible.considerSatisfiability bak)
      let patSatGenExecFeature = if checkSat then [psatf] else []
      when checkSat checkYicesVersion
      let (funcLemmas, invLemmas) =
@@ -1273,7 +1276,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
               liftIO $
                 for_ assumes $ \(Crucible.LabeledPred p (loc, reason)) ->
                   do expr <- resolveSAWPred cc p
-                     Crucible.addAssumption sym (Crucible.GenericAssumption loc reason expr)
+                     Crucible.addAssumption bak (Crucible.GenericAssumption loc reason expr)
               Crucible.regValue <$> (Crucible.callBlock cfg entryId args')
      res <- Crucible.executeCrucible execFeatures initExecState
      case res of
@@ -1302,7 +1305,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
                            ]
 
   where
-    sym = cc^.ccBackend
+    sym = cc^.ccSym
     prepareArgs ::
       Ctx.Assignment Crucible.TypeRepr xs ->
       [LLVMVal] ->
@@ -1340,6 +1343,7 @@ verifyPoststate ::
   Maybe (Crucible.MemType, LLVMVal) {- ^ optional return value                        -} ->
   TopLevel ([(String, W4.ProgramLoc, Term)], OverrideState (LLVM arch)) {- ^ generated labels and verification conditions -}
 verifyPoststate cc mspec env0 globals ret =
+  ccWithBackend cc $ \bak ->
   do poststateLoc <- toW4Loc "_SAW_verify_poststate" <$> getPosition
      sc <- getSharedContext
      opts <- getOptions
@@ -1368,15 +1372,15 @@ verifyPoststate cc mspec env0 globals ret =
          Left err      -> throwTopLevel (show err)
          Right (_, st) -> return st
      io $ for_ (view osAsserts st) $ \(W4.LabeledPred p r) ->
-       Crucible.addAssertion sym (Crucible.LabeledPred p r)
+       Crucible.addAssertion bak (Crucible.LabeledPred p r)
 
-     obligations <- io $ Crucible.getProofObligations sym
-     io $ Crucible.clearProofObligations sym
+     obligations <- io $ Crucible.getProofObligations bak
+     io $ Crucible.clearProofObligations bak
      sc_obligations <- io $ mapM (verifyObligation sc) (maybe [] Crucible.goalsToList obligations)
      return (sc_obligations, st)
 
   where
-    sym = cc^.ccBackend
+    sym = cc^.ccSym
 
     verifyObligation sc (Crucible.ProofGoal hyps (Crucible.LabeledPred concl err@(Crucible.SimError loc _))) =
       do st <- Common.sawCoreState sym
@@ -1430,7 +1434,8 @@ setupLLVMCrucibleContext pathSat lm action =
           cc <-
             io $
             do let verbosity = simVerbose opts
-               sym <- Common.newSAWCoreBackendWithTimeout sc crucibleTimeout
+               sym <- Common.newSAWCoreExprBuilder sc
+               Common.SomeOnlineBackend bak <- Common.newSAWCoreBackendWithTimeout sym crucibleTimeout
 
                let cfg = W4.getConfiguration sym
                verbSetting <- W4.getOptionSetting W4.verbosity cfg
@@ -1459,11 +1464,12 @@ setupLLVMCrucibleContext pathSat lm action =
                  crucible_assert_then_assume_enabled
 
                let bindings = Crucible.fnBindingsFromList []
-               let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
+               let simctx   = Crucible.initSimContext bak
+                                 intrinsics halloc stdout
                                  bindings (Crucible.llvmExtensionImpl ?memOpts)
                                  Common.SAWCruciblePersonality
-               mem <- Crucible.populateConstGlobals sym (Crucible.globalInitMap mtrans)
-                        =<< Crucible.initializeMemoryConstGlobals sym ctx llvm_mod
+               mem <- Crucible.populateConstGlobals bak (Crucible.globalInitMap mtrans)
+                        =<< Crucible.initializeMemoryConstGlobals bak ctx llvm_mod
 
                let globals  = Crucible.llvmGlobals (Crucible.llvmMemVar ctx) mem
 
@@ -1486,7 +1492,7 @@ setupLLVMCrucibleContext pathSat lm action =
 
                return
                   LLVMCrucibleContext{ _ccLLVMModule = lm
-                                     , _ccBackend = sym
+                                     , _ccBackend = Common.SomeOnlineBackend bak
                                      , _ccLLVMSimContext = lsimctx
                                      , _ccLLVMGlobals = lglobals
                                      , _ccBasicSS = basic_ss
@@ -1598,7 +1604,8 @@ extractFromLLVMCFG ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
   Options -> SharedContext -> LLVMCrucibleContext arch -> Crucible.AnyCFG Crucible.LLVM -> IO TypedTerm
 extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
-  do let sym = cc^.ccBackend
+  ccWithBackend cc $ \bak ->
+  do let sym = Common.backendGetSym bak
      st <- Common.sawCoreState sym
      let h   = Crucible.cfgHandle cfg
      (ecs, args) <- setupArgs sc sym h
@@ -1614,7 +1621,7 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
             tt <-
               case rt of
                 Crucible.LLVMPointerRepr w ->
-                  do bv <- Crucible.projectLLVM_bv sym rv
+                  do bv <- Crucible.projectLLVM_bv bak rv
                      t <- toSC sym st bv
                      let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
                      pure $ TypedTerm (TypedTermSchema (Cryptol.tMono cty)) t

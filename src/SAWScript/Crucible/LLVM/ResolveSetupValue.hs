@@ -79,7 +79,7 @@ import Verifier.SAW.Simulator.What4
 import Verifier.SAW.Simulator.What4.ReturnTrip
 import qualified Text.LLVM.DebugUtils as L
 
-import           SAWScript.Crucible.Common (Sym, sawCoreState)
+import           SAWScript.Crucible.Common (Sym, sawCoreState, HasSymInterface(..))
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..), ppTypedTermType)
 
 import SAWScript.Crucible.LLVM.MethodSpecIR
@@ -447,7 +447,12 @@ resolveSetupVal :: forall arch.
   Map AllocIndex Crucible.Ident ->
   SetupValue (LLVM arch) ->
   IO LLVMVal
-resolveSetupVal cc mem env tyenv nameEnv val = do
+resolveSetupVal cc mem env tyenv nameEnv val =
+  ccWithBackend cc $ \bak ->
+  let sym = backendGetSym bak
+      lc = ccTypeCtx cc
+      dl = Crucible.llvmDataLayout lc
+  in
   case val of
     SetupVar i
       | Just ptr <- Map.lookup i env -> return (Crucible.ptrToPtrVal ptr)
@@ -481,7 +486,7 @@ resolveSetupVal cc mem env tyenv nameEnv val = do
     SetupNull () ->
       Crucible.ptrToPtrVal <$> Crucible.mkNullPointer sym Crucible.PtrWidth
     SetupGlobal () name ->
-      Crucible.ptrToPtrVal <$> Crucible.doResolveGlobal sym mem (L.Symbol name)
+      Crucible.ptrToPtrVal <$> Crucible.doResolveGlobal bak mem (L.Symbol name)
     SetupGlobalInitializer () name ->
       case Map.lookup (L.Symbol name)
                       (Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
@@ -489,15 +494,12 @@ resolveSetupVal cc mem env tyenv nameEnv val = do
         Just (_, Left e) -> fail e
         Just (_, Right (_, Just v)) ->
           let ?lc = lc
-          in Crucible.constToLLVMVal @(Crucible.ArchWidth arch) sym mem v
+          in Crucible.constToLLVMVal @(Crucible.ArchWidth arch) bak mem v
         Just (_, Right (_, Nothing)) ->
           fail $ "resolveSetupVal: global has no initializer: " ++ name
         Nothing ->
           fail $ "resolveSetupVal: global not found: " ++ name
-  where
-    sym = cc^.ccBackend
-    lc = ccTypeCtx cc
-    dl = Crucible.llvmDataLayout lc
+
 
 -- | Like 'resolveSetupVal', but specifically geared towards the needs of
 -- fields within bitfields. This is very similar to calling 'resolveSetupVal'
@@ -522,8 +524,8 @@ resolveSetupValBitfield ::
   SetupValue (LLVM arch) ->
   String ->
   IO (BitfieldIndex, LLVMVal)
-resolveSetupValBitfield cc mem env tyenv nameEnv val fieldName = do
-  do let sym = cc^.ccBackend
+resolveSetupValBitfield cc mem env tyenv nameEnv val fieldName =
+  do let sym = cc^.ccSym
      lval       <- resolveSetupVal cc mem env tyenv nameEnv val
      bfIndex    <- resolveSetupBitfieldIndexOrFail cc tyenv nameEnv val fieldName
      delta      <- resolveSetupElemIndexOrFail cc tyenv nameEnv val (biBitfieldIndex bfIndex)
@@ -556,7 +558,7 @@ resolveSAWPred ::
   Term ->
   IO (W4.Pred Sym)
 resolveSAWPred cc tm = do
-  do let sym = cc^.ccBackend
+  do let sym = cc^.ccSym
      st <- sawCoreState sym
      let sc = saw_ctx st
      let ss = cc^.ccBasicSS
@@ -588,7 +590,7 @@ resolveSAWSymBV ::
   Term ->
   IO (W4.SymBV Sym w)
 resolveSAWSymBV cc w tm =
-  do let sym = cc^.ccBackend
+  do let sym = cc^.ccSym
      st <- sawCoreState sym
      let sc = saw_ctx st
      mx <- case getAllExts tm of
@@ -688,7 +690,7 @@ resolveSAWTerm cc tp tm =
       Cryptol.TVNewtype{} ->
         fail "resolveSAWTerm: invalid newtype"
   where
-    sym = cc^.ccBackend
+    sym = cc^.ccSym
     dl = Crucible.llvmDataLayout (ccTypeCtx cc)
 
 scPtrWidthBvNat ::
@@ -697,7 +699,7 @@ scPtrWidthBvNat ::
   a ->
   IO Term
 scPtrWidthBvNat cc n =
-  do let sym = cc^.ccBackend
+  do let sym = cc^.ccSym
      st <- sawCoreState sym
      let sc = saw_ctx st
      w <- scNat sc $ natValue Crucible.PtrWidth
@@ -803,7 +805,7 @@ equalValsPred cc v1 v2 =
    fromMaybe (W4.falsePred sym) <$> Crucible.testEqual sym v1 v2
 
   where
-  sym = cc^.ccBackend
+  sym = cc^.ccSym
 
 
 memArrayToSawCoreTerm ::
@@ -813,7 +815,7 @@ memArrayToSawCoreTerm ::
   TypedTerm ->
   IO Term
 memArrayToSawCoreTerm crucible_context endianess typed_term = do
-  let sym = crucible_context ^. ccBackend
+  let sym = crucible_context ^. ccSym
   let data_layout = Crucible.llvmDataLayout $ ccTypeCtx crucible_context
   st <- sawCoreState sym
   let saw_context = saw_ctx st

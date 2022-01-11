@@ -67,6 +67,8 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
   , ccLLVMModuleTrans
   , ccLLVMContext
   , ccTypeCtx
+  , ccWithBackend
+  , ccSym
     -- * PointsTo
   , LLVMPointsTo(..)
   , LLVMPointsToValue(..)
@@ -335,7 +337,7 @@ type instance MS.CrucibleContext (LLVM arch) = LLVMCrucibleContext arch
 data LLVMCrucibleContext arch =
   LLVMCrucibleContext
   { _ccLLVMModule      :: LLVMModule arch
-  , _ccBackend         :: Sym
+  , _ccBackend         :: SomeOnlineBackend
   , _ccLLVMSimContext  :: Crucible.SimContext (SAWCruciblePersonality Sym) Sym CL.LLVM
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
   , _ccBasicSS         :: Simpset TheoremNonce
@@ -354,6 +356,16 @@ ccLLVMContext = view CL.transContext . ccLLVMModuleTrans
 
 ccTypeCtx :: LLVMCrucibleContext arch -> CL.TypeContext
 ccTypeCtx = view CL.llvmTypeCtx . ccLLVMContext
+
+ccWithBackend ::
+  LLVMCrucibleContext arch ->
+  (forall solver. OnlineSolver solver => Backend solver -> a) ->
+  a
+ccWithBackend cc k =
+  case cc^.ccBackend of SomeOnlineBackend bak -> k bak
+
+ccSym :: Getter (LLVMCrucibleContext arch) Sym
+ccSym = to (\cc -> ccWithBackend cc backendGetSym)
 
 --------------------------------------------------------------------------------
 -- ** PointsTo

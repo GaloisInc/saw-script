@@ -206,7 +206,8 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      mapM_ (prepareClassTopLevel . J.unClassName) refs
 
      cc <- setupCrucibleContext cls
-     let sym = cc^.jccBackend
+     SomeOnlineBackend bak <- pure (cc^.jccBackend)
+     let sym = cc^.jccSym
      let jc = cc^.jccJVMContext
 
      pos <- getPosition
@@ -229,7 +230,7 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
 
      -- save initial path conditions
-     frameIdent <- io $ Crucible.pushAssumptionFrame sym
+     frameIdent <- io $ Crucible.pushAssumptionFrame bak
 
      -- run the symbolic execution
      top_loc <- SS.toW4Loc "jvm_verify" <$> getPosition
@@ -241,7 +242,7 @@ jvm_verify cls nm lemmas checkSat setup tactic =
                     methodSpec env globals3 ret
 
      -- restore previous assumption state
-     _ <- io $ Crucible.popAssumptionFrame sym frameIdent
+     _ <- io $ Crucible.popAssumptionFrame bak frameIdent
 
      -- attempt to verify the proof obligations
      (stats,thms) <- verifyObligations cc methodSpec tactic assumes asserts
@@ -280,7 +281,7 @@ verifyObligations ::
   [(String, W4.ProgramLoc, Term)] ->
   TopLevel (SolverStats, Set TheoremNonce)
 verifyObligations cc mspec tactic assumes asserts =
-  do let sym = cc^.jccBackend
+  do let sym = cc^.jccSym
      st <- io $ sawCoreState sym
      let sc = saw_ctx st
      assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
@@ -337,7 +338,8 @@ verifyPrestate ::
       Map AllocIndex JVMRefVal,
       Crucible.SymGlobalState Sym)
 verifyPrestate cc mspec globals0 =
-  do let sym = cc^.jccBackend
+  jccWithBackend cc $ \bak ->
+  do let sym = cc^.jccSym
      let jc = cc^.jccJVMContext
      let halloc = cc^.jccHandleAllocator
      let preallocs = mspec ^. MS.csPreState . MS.csAllocs
@@ -353,7 +355,7 @@ verifyPrestate cc mspec globals0 =
 
      -- make static fields mentioned in post-state section writable
      let updatedStaticFields = [ fid | JVMPointsToStatic _ fid _ <- postPointsTos ]
-     let makeWritable gs fid = CJ.doStaticFieldWritable sym jc gs fid (W4.truePred sym)
+     let makeWritable gs fid = CJ.doStaticFieldWritable bak jc gs fid (W4.truePred sym)
      globals0' <- liftIO $ foldM makeWritable globals0 updatedStaticFields
 
      -- determine which arrays and instance fields need to be writable
@@ -370,10 +372,10 @@ verifyPrestate cc mspec globals0 =
      let doAlloc a (_loc, alloc) =
            case alloc of
              AllocObject cname ->
-               StateT (CJ.doAllocateObject sym halloc jc cname (flip elem fids))
+               StateT (CJ.doAllocateObject bak halloc jc cname (flip elem fids))
                where fids = fromMaybe [] (Map.lookup a updatedFields)
              AllocArray len ty ->
-               StateT (CJ.doAllocateArray sym halloc jc len ty writable)
+               StateT (CJ.doAllocateArray bak halloc jc len ty writable)
                where
                  writable
                    | Set.member a updatedArrays = const True
@@ -469,7 +471,7 @@ setupPrePointsTos ::
   IO (Crucible.SymGlobalState Sym)
 setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
   where
-    sym = cc^.jccBackend
+    sym = cc^.jccSym
     jc = cc ^. jccJVMContext
     tyenv = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
@@ -480,18 +482,19 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
 
     doPointsTo :: Crucible.SymGlobalState Sym -> JVMPointsTo -> IO (Crucible.SymGlobalState Sym)
     doPointsTo mem pt =
+      jccWithBackend cc $ \bak ->
       case pt of
         JVMPointsToField _loc lhs fid (Just rhs) ->
           do let lhs' = lookupAllocIndex env lhs
              rhs' <- injectSetupVal rhs
-             CJ.doFieldStore sym mem lhs' fid rhs'
+             CJ.doFieldStore bak mem lhs' fid rhs'
         JVMPointsToStatic _loc fid (Just rhs) ->
           do rhs' <- injectSetupVal rhs
-             CJ.doStaticFieldStore sym jc mem fid rhs'
+             CJ.doStaticFieldStore bak jc mem fid rhs'
         JVMPointsToElem _loc lhs idx (Just rhs) ->
           do let lhs' = lookupAllocIndex env lhs
              rhs' <- injectSetupVal rhs
-             CJ.doArrayStore sym mem lhs' idx rhs'
+             CJ.doArrayStore bak mem lhs' idx rhs'
         JVMPointsToArray _loc lhs (Just rhs) ->
           do sc <- saw_ctx <$> sawCoreState sym
              let lhs' = lookupAllocIndex env lhs
@@ -501,7 +504,7 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
                  Nothing -> fail "setupPrePointsTos: not a monomorphic sequence type"
                  Just x -> pure x
              rhs' <- traverse (injectSetupVal . MS.SetupTerm) tts
-             doEntireArrayStore sym mem lhs' rhs'
+             doEntireArrayStore bak mem lhs' rhs'
         _ ->
           panic "setupPrePointsTo" ["invalid invariant", "jvm_modifies in pre-state"]
 
@@ -541,7 +544,7 @@ assertEqualVals ::
   JVMVal ->
   IO Term
 assertEqualVals cc v1 v2 =
-  do let sym = cc^.jccBackend
+  do let sym = cc^.jccSym
      st <- sawCoreState sym
      toSC sym st =<< equalValsPred cc v1 v2
 
@@ -564,7 +567,7 @@ registerOverride ::
   [MethodSpec] ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
 registerOverride opts cc _ctx top_loc cs =
-  do let sym = cc^.jccBackend
+  do let sym = cc^.jccSym
      let jc = cc^.jccJVMContext
      let c0 = head cs
      let method = c0 ^. MS.csMethod
@@ -600,8 +603,9 @@ verifySimulate ::
   Bool {- ^ path sat checking -} ->
   IO (Maybe (J.Type, JVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
+  jccWithBackend cc $ \bak ->
   do let jc = cc^.jccJVMContext
-     let sym = cc^.jccBackend
+     let sym = cc^.jccSym
      let method = mspec ^. MS.csMethod
      let verbosity = simVerbose opts
      let halloc = cc^.jccHandleAllocator
@@ -620,7 +624,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
      regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
      res <-
        do let feats = pfs
-          let simctx = CJ.jvmSimContext sym halloc stdout jc verbosity SAWCruciblePersonality
+          let simctx = CJ.jvmSimContext bak halloc stdout jc verbosity SAWCruciblePersonality
           let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler (Crucible.handleReturnType h)
           let fnCall = Crucible.regValue <$> Crucible.callFnVal (Crucible.HandleFnVal h) regmap
           let overrideSim =
@@ -633,7 +637,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
                    liftIO $
                      for_ assumes $ \(Crucible.LabeledPred p (loc, reason)) ->
                        do expr <- resolveSAWPred cc p
-                          Crucible.addAssumption sym (Crucible.GenericAssumption loc reason expr)
+                          Crucible.addAssumption bak (Crucible.GenericAssumption loc reason expr)
                    liftIO $ putStrLn "simulating function"
                    fnCall
           Crucible.executeCrucible (map Crucible.genericToExecutionFeature feats)
@@ -707,6 +711,7 @@ verifyPoststate ::
   Maybe (J.Type, JVMVal)            {- ^ optional return value                        -} ->
   TopLevel [(String, W4.ProgramLoc, Term)] {- ^ generated labels and verification conditions -}
 verifyPoststate cc mspec env0 globals ret =
+  jccWithBackend cc $ \bak ->
   do opts <- getOptions
      sc <- getSharedContext
      poststateLoc <- SS.toW4Loc "_SAW_verify_poststate" <$> getPosition
@@ -728,14 +733,14 @@ verifyPoststate cc mspec env0 globals ret =
      st <- case matchPost of
              Left err      -> fail (show err)
              Right (_, st) -> return st
-     io $ for_ (view osAsserts st) $ \assert -> Crucible.addAssertion sym assert
+     io $ for_ (view osAsserts st) $ \assert -> Crucible.addAssertion bak assert
 
-     obligations <- io $ Crucible.getProofObligations sym
-     io $ Crucible.clearProofObligations sym
+     obligations <- io $ Crucible.getProofObligations bak
+     io $ Crucible.clearProofObligations bak
      io $ mapM (verifyObligation sc) (maybe [] Crucible.goalsToList obligations)
 
   where
-    sym = cc^.jccBackend
+    sym = cc^.jccSym
 
     verifyObligation sc (Crucible.ProofGoal hyps (Crucible.LabeledPred concl (Crucible.SimError loc err))) =
       do st         <- sawCoreState sym
@@ -758,7 +763,8 @@ setupCrucibleContext jclass =
      jc <- getJVMTrans
      cb <- getJavaCodebase
      sc <- getSharedContext
-     sym <- io $ newSAWCoreBackend sc
+     sym <- io $ newSAWCoreExprBuilder sc
+     bak <- io $ newSAWCoreBackend sym
      opts <- getOptions
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
 
@@ -767,7 +773,7 @@ setupCrucibleContext jclass =
 
      return JVMCrucibleContext { _jccJVMClass = jclass
                                , _jccCodebase = cb
-                               , _jccBackend = sym
+                               , _jccBackend = bak
                                , _jccJVMContext = jc
                                , _jccHandleAllocator = halloc
                                }
