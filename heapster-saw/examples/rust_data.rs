@@ -122,6 +122,23 @@ pub extern fn mk_five_values_extern (x1:u32,x2:u32,x3:u32,x4:u32,x5:u32)
     FiveValues(x1,x2,x3,x4,x5)
 }
 
+pub fn proj_five_values (i:u64, fvs:FiveValues) -> u32 {
+    match fvs {
+        FiveValues(x0,x1,x2,x3,x4) =>
+            match i {
+                0 => x0,
+                1 => x1,
+                2 => x2,
+                3 => x3,
+                _ => x4
+            }
+    }
+}
+
+pub fn mk_proj0_five_values (x1:u32,x2:u32,x3:u32,x4:u32,x5:u32) -> u32 {
+    proj_five_values (0, mk_five_values (x1,x2,x3,x4,x5))
+}
+
 
 /* Test if a Result is Ok or Err */
 pub fn test_result <'a> (r:&'a Result<u64,u64>) -> bool {

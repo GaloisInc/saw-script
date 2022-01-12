@@ -71,6 +71,11 @@ heapster_define_rust_type env "pub enum List<X> { Nil, Cons (X,Box<List<X>>) }";
 // instead just make Void an opaque type
 heapster_define_opaque_llvmshape env "Void" 64 "" "64" "#()";
 
+ // Location type from std::panic
+heapster_define_llvmshape env "panic::Location" 64 ""
+  "exsh len:bv 64.ptrsh(arraysh(<len,*1,fieldsh(8,int8<>))); \
+                \ fieldsh(eq(llvmword(len))); u32<>; u32<>";
+
 // List64 type
 heapster_define_rust_type env "pub enum List64 { Nil64, Cons64 (u64,Box<List64>) }";
 
@@ -251,6 +256,12 @@ to_string_str <- heapster_find_symbol env
 heapster_assume_fun_rename_prim env to_string_str "to_string_str"
   "<'a> fn (&'a str) -> String";
 
+// core::panicking::panic
+panicking_panic_sym <- heapster_find_symbol env "9panicking5panic";
+heapster_assume_fun_rename_prim env panicking_panic_sym "panicking_panic"
+  "<'a, 'b> fn (&'a str, &'b panic::Location) -> !";
+// FIXME: the above should use the 'static lifetime, which needs Heapster support
+
 // NOTE: this is the more incorrect version, with no lifetime argument and no shapes
 //heapster_assume_fun_rename env to_string_str "to_string_str"
 //  "(len:bv 64). arg0:memblock(W,0,24,emptysh),
@@ -420,10 +431,27 @@ mk_two_values_sym <- heapster_find_symbol env "13mk_two_values";
 heapster_typecheck_fun_rename env mk_two_values_sym "mk_two_values" "<> fn (u32,u32) -> TwoValues";
 */
 
+// mk_five_values
+mk_five_values_sym <- heapster_find_symbol env "14mk_five_values";
+heapster_typecheck_fun_rename env mk_five_values_sym "mk_five_values"
+  "<> fn (x1:u32,x2:u32,x3:u32,x4:u32,x5:u32) -> FiveValues";
+
+// proj_five_values
+proj_five_values_sym <- heapster_find_symbol env "16proj_five_values";
+heapster_typecheck_fun_rename env proj_five_values_sym "proj_five_values"
+  "<> fn (i:u64, fvs:FiveValues) -> u32";
+
+// mk_proj0_five_values
+mk_proj0_five_values_sym <- heapster_find_symbol env "20mk_proj0_five_values";
+heapster_typecheck_fun_rename env mk_proj0_five_values_sym "mk_proj0_five_values"
+  "<> fn (x1:u32,x2:u32,x3:u32,x4:u32,x5:u32) -> u32";
+
 // ref_sum
+//heapster_set_debug_level env 1;
 ref_sum_sym <- heapster_find_symbol env "7ref_sum";
 heapster_typecheck_fun_rename env ref_sum_sym "ref_sum"
   "<'a,'b> fn (x:&'a u64, y:&'a u64) -> u64";
+//heapster_set_debug_level env 0;
 
 // double_dup_ref
 double_dup_ref_sym <- heapster_find_symbol env "14double_dup_ref";
