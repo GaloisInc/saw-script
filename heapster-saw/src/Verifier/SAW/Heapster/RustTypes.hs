@@ -739,6 +739,33 @@ argLayoutStructPerm (ArgLayout ghosts args mb_perms)
     valPermExistsMulti ghosts $ fmap (ValPerm_Conj1 . Perm_Struct) mb_perms
 -}
 
+-- | Like an 'ArgLayout' but with output permissions on arguments as well
+data ArgLayoutIO where
+  ArgLayoutIO :: CtxRepr ctx -> ArgLayoutPerm ctx ->
+                 RAssign ValuePerm (CtxToRList ctx) -> ArgLayoutIO
+
+-- | Append two 'ArgLayoutIO's, if possible
+appendArgLayoutIO :: ArgLayoutIO -> ArgLayoutIO -> ArgLayoutIO
+appendArgLayoutIO (ArgLayoutIO ctx1 p1 ps1) (ArgLayoutIO ctx2 p2 ps2) =
+  ArgLayoutIO (ctx1 Ctx.<++> ctx2) (appendArgLayoutPerms ctx1 ctx2 p1 p2)
+  (assignToRListAppend ctx1 ctx2 ps1 ps2)
+
+-- | Convert an 'ArgLayout' to an 'ArgLayoutIO' by adding @true@ output perms
+argLayoutAddTrueOuts :: ArgLayout -> ArgLayoutIO
+argLayoutAddTrueOuts (ArgLayout ctx p) =
+  ArgLayoutIO ctx p $ trueValuePerms $ assignToRList ctx
+
+-- | Construct an 'ArgLayoutIO' for 0 arguments
+argLayoutIO0 :: ArgLayoutIO
+argLayoutIO0 = ArgLayoutIO Ctx.empty (ALPerm MNil) MNil
+
+-- | Create an 'ArgLayoutIO' from a single input and output perm
+argLayoutIO1 :: KnownRepr TypeRepr a => ValuePerm a -> ValuePerm a ->
+                ArgLayoutIO
+argLayoutIO1 p_in p_out =
+  ArgLayoutIO (extend Ctx.empty knownRepr) (ALPerm
+                                            (MNil :>: p_in)) (MNil :>: p_out)
+
 -- | Convert a shape to a writeable block permission with that shape, or fail if
 -- the length of the shape is not defined
 --
@@ -792,6 +819,7 @@ un3SomeFunPerm args ret (Some3FunPerm fun_perm) =
 -- ghost variables in the 'ArgLayout'
 funPerm3FromMbArgLayout :: CtxRepr ctx ->
                            MatchedMb ghosts (ArgLayoutPerm ctx) ->
+                           ValuePerms (CtxToRList ctx) ->
                            CruCtx ghosts -> CtxRepr args ->
                            ValuePerms (CtxToRList args) ->
                            ValuePerms (CtxToRList args) ->
@@ -803,8 +831,8 @@ funPerm3FromMbArgLayout :: CtxRepr ctx ->
 -- is, we build the function permission
 --
 -- (ghosts). arg1:p1, ..., argn:pn -o ret:ret_perm
-funPerm3FromMbArgLayout ctx [nuMP| ALPerm mb_ps_in |]
-  ghosts ctx1 ps1_in ps1_out ret_tp ret_perm
+funPerm3FromMbArgLayout ctx [nuMP| ALPerm mb_ps_in |] ps_out
+                        ghosts ctx1 ps1_in ps1_out ret_tp ret_perm
   | ctx_args <- mkCruCtx (ctx1 Ctx.<++> ctx)
   , ctx_all <- appendCruCtx ghosts ctx_args
   , ghost_perms <- trueValuePerms $ cruCtxProxies ghosts
@@ -815,38 +843,38 @@ funPerm3FromMbArgLayout ctx [nuMP| ALPerm mb_ps_in |]
              RL.append ghost_perms
              (assignToRListAppend ctx1 ctx ps1_in ps_in)) mb_ps_in
   , ps_out_all <-
-      RL.append ghost_perms (assignToRListAppend ctx1 ctx ps1_out $
-                             trueValuePerms $ assignToRList ctx) :>: ret_perm =
+      RL.append ghost_perms (assignToRListAppend
+                             ctx1 ctx ps1_out ps_out) :>: ret_perm =
     return $ Some3FunPerm $
     FunPerm ghosts ctx_args CruCtxNil ret_tp mb_ps_in_all
     (nuMulti (cruCtxProxies ctx_all :>: Proxy) $ \_ -> ps_out_all)
-funPerm3FromMbArgLayout ctx [nuMP| ALPerm_Exists mb_p |]
-  ghosts ctx1 ps1_in ps1_out ret_tp ret_perm =
-  funPerm3FromMbArgLayout ctx (mbMatch $ mbCombine (MNil :>: Proxy) mb_p)
+funPerm3FromMbArgLayout ctx [nuMP| ALPerm_Exists mb_p |] ps_out
+                            ghosts ctx1 ps1_in ps1_out ret_tp ret_perm =
+  funPerm3FromMbArgLayout ctx (mbMatch $ mbCombine (MNil :>: Proxy) mb_p) ps_out
   (CruCtxCons ghosts knownRepr) ctx1 ps1_in ps1_out ret_tp ret_perm
-funPerm3FromMbArgLayout _ctx [nuMP| ALPerm_Or _ _ |]
-  _ghosts _ctx1 _ps1_in _ps1_out _ret_tp _ret_perm =
+funPerm3FromMbArgLayout _ctx [nuMP| ALPerm_Or _ _ |] _ps_out
+                        _ghosts _ctx1 _ps1_in _ps1_out _ret_tp _ret_perm =
   fail "Cannot (yet) handle Rust enums or other disjunctive types in functions"
 
 
--- | Build a function permission from an 'ArgLayout' that describes the
--- arguments and their input permissions and a return permission that describes
--- the output permissions on the return value. The arguments specified by the
--- 'ArgLayout' get no permissions on output. The caller also specifies
--- additional arguments to be prepended to the argument list that do have output
--- permissions as a struct of 0 or more fields along with input and output
--- permissions on those arguments.
-funPerm3FromArgLayout :: ArgLayout -> CtxRepr args ->
+-- | Build a function permission from an 'ArgLayoutIO' that describes the
+-- arguments and their input and output permissions and a return permission that
+-- describes the output permissions on the return value. The caller also
+-- specifies additional arguments to be prepended to the argument list that do
+-- have output permissions as a struct of 0 or more fields along with input and
+-- output permissions on those arguments.
+funPerm3FromArgLayout :: ArgLayoutIO -> CtxRepr args ->
                          ValuePerms (CtxToRList args) ->
                          ValuePerms (CtxToRList args) ->
                          TypeRepr ret -> ValuePerm ret ->
                          RustConvM Some3FunPerm
-funPerm3FromArgLayout (ArgLayout ctx p_in) ctx1 ps1_in ps1_out ret_tp ret_perm =
-  funPerm3FromMbArgLayout ctx (mbMatch $ emptyMb p_in) CruCtxNil
+funPerm3FromArgLayout (ArgLayoutIO
+                       ctx p_in ps_out) ctx1 ps1_in ps1_out ret_tp ret_perm =
+  funPerm3FromMbArgLayout ctx (mbMatch $ emptyMb p_in) ps_out CruCtxNil
   ctx1 ps1_in ps1_out ret_tp ret_perm
 
 -- | Like 'funPerm3FromArgLayout' but with no additional arguments
-funPerm3FromArgLayoutNoArgs :: ArgLayout -> TypeRepr ret -> ValuePerm ret ->
+funPerm3FromArgLayoutNoArgs :: ArgLayoutIO -> TypeRepr ret -> ValuePerm ret ->
                                RustConvM Some3FunPerm
 funPerm3FromArgLayoutNoArgs layout ret ret_perm =
   funPerm3FromArgLayout layout Ctx.empty MNil MNil ret ret_perm
@@ -998,13 +1026,17 @@ layoutArgShapeOrBlock abi sh =
      permPretty ppInfo sh]
 
 -- | Compute the layout of an argument with the given shape as 1 or more
--- register arguments of a function
+-- register arguments of a function. If the argument is laid out as a value,
+-- then it has no output permissions, but if it is laid out as a pointer, the
+-- memory occupied by that pointer is returned with an empty shape.
 layoutArgShape :: (1 <= w, KnownNat w) => Abi ->
-                  PermExpr (LLVMShapeType w) -> RustConvM ArgLayout
+                  PermExpr (LLVMShapeType w) -> RustConvM ArgLayoutIO
 layoutArgShape abi sh =
   layoutArgShapeOrBlock abi sh >>= \case
-  Right layout -> return layout
-  Left bp -> return $ argLayout1 $ ValPerm_LLVMBlock bp
+  Right layout -> return $ argLayoutAddTrueOuts layout
+  Left bp ->
+    return (argLayoutIO1 (ValPerm_LLVMBlock bp)
+            (ValPerm_LLVMBlock $ bp { llvmBlockShape = PExpr_EmptyShape }))
 
 -- | Compute the layout for the inputs and outputs of a function with the given
 -- shapes as arguments and return value as a function permission
@@ -1013,7 +1045,7 @@ layoutFun :: (1 <= w, KnownNat w) => Abi ->
              RustConvM Some3FunPerm
 layoutFun abi arg_shs ret_sh =
   do args_layout <-
-       foldr appendArgLayout argLayout0 <$> mapM (layoutArgShape abi) arg_shs
+       foldr appendArgLayoutIO argLayoutIO0 <$> mapM (layoutArgShape abi) arg_shs
      ret_layout_eith <- layoutArgShapeOrBlock abi ret_sh
      case ret_layout_eith of
 
