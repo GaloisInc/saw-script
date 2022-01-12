@@ -3420,7 +3420,8 @@ handleUnitVar UnitRepr n =
     Just x  ->
       -- Otherwise, add a permission @n:eq(x)@, and then pop it off the stack
       implTraceM (\i ->
-               pretty "about to call unitEqM:" <+> permPretty i n) >>>
+               pretty "about to call unitEqM:" <+> permPretty i n
+               <+> pretty ": eq(" <+> permPretty i x <+> pretty ")") >>>
         unitEqM n (PExpr_Var x) >>>
         implTraceM (\i ->
                pretty "done with unitEqM:" <+> permPretty i n) >>>
@@ -5192,14 +5193,14 @@ simplEqPerm _ e = pure e
 
 -- | Recombine the permission @x:p@ on top of the stack back into the existing
 -- permission for @x@
-recombinePerm :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+recombinePerm :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
                  ImplM vars s r as (as :> a) ()
 recombinePerm x p = getPerm x >>>= \x_p -> recombinePermExpl x x_p p
 
 -- | Recombine the permission @x:p@ on top of the stack back into the existing
 -- permission @x_p@ for @x@, where @x_p@ is given explicitly as the first
 -- permission argument and @p@ is the second
-recombinePermExpl :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+recombinePermExpl :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
                      ValuePerm a -> ImplM vars s r as (as :> a) ()
 recombinePermExpl x x_p p =
   {-
@@ -5214,7 +5215,7 @@ recombinePermExpl x x_p p =
 
 -- | This is the implementation of 'recombinePermExpl'; see the documentation
 -- for that function for details
-recombinePerm' :: NuMatchingAny1 r => ExprVar a -> ValuePerm a -> ValuePerm a ->
+recombinePerm' :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a -> ValuePerm a ->
                   ImplM vars s r as (as :> a) ()
 recombinePerm' x _ p@ValPerm_True = implDropM x p
 recombinePerm' x _ ValPerm_False = implElimFalseM x
@@ -5273,7 +5274,7 @@ recombinePerm' x _ p = implDropM x p
 -- | Recombine a single conjuct @x:p@ on top of the stack back into the existing
 -- conjuctive permission @x_p1 * ... * x_pn@ for @x@, returning the resulting
 -- permission conjucts for @x@
-recombinePermConj :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] ->
+recombinePermConj :: HasCallStack => NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] ->
                      AtomicPerm a -> ImplM vars s r as (as :> a) ()
 
 -- If p is a field permission whose range is a subset of that of a permission we
@@ -5355,13 +5356,13 @@ recombinePermConj x x_ps p =
 
 
 -- | Recombine the permissions on the stack back into the permission set
-recombinePerms :: NuMatchingAny1 r => DistPerms ps -> ImplM vars s r RNil ps ()
+recombinePerms :: HasCallStack => NuMatchingAny1 r => DistPerms ps -> ImplM vars s r RNil ps ()
 recombinePerms DistPermsNil = pure ()
 recombinePerms (DistPermsCons ps' x p) =
   recombinePerm x p >>> recombinePerms ps'
 
 -- | Recombine some of the permissions on the stack back into the permission set
-recombinePermsPartial :: NuMatchingAny1 r => f ps -> DistPerms ps' ->
+recombinePermsPartial :: HasCallStack => NuMatchingAny1 r => f ps -> DistPerms ps' ->
                          ImplM vars s r ps (ps :++: ps') ()
 recombinePermsPartial _ DistPermsNil = pure ()
 recombinePermsPartial ps (DistPermsCons ps' x p) =
@@ -5369,7 +5370,7 @@ recombinePermsPartial ps (DistPermsCons ps' x p) =
 
 -- | Recombine some of the permissions on the stack back into the permission
 -- set, but in reverse order
-recombinePermsRevPartial :: NuMatchingAny1 r => RAssign Proxy ps1 -> DistPerms ps2 ->
+recombinePermsRevPartial :: HasCallStack => NuMatchingAny1 r => RAssign Proxy ps1 -> DistPerms ps2 ->
                             ImplM vars s r ps1 (ps1 :++: ps2) ()
 recombinePermsRevPartial _ DistPermsNil = return ()
 recombinePermsRevPartial ps1 ps2@(DistPermsCons ps2' x p) =
@@ -5379,13 +5380,13 @@ recombinePermsRevPartial ps1 ps2@(DistPermsCons ps2' x p) =
 
 -- | Recombine the permissions on the stack back into the permission set, but in
 -- reverse order
-recombinePermsRev :: NuMatchingAny1 r => DistPerms ps ->
+recombinePermsRev :: HasCallStack => NuMatchingAny1 r => DistPerms ps ->
                      ImplM vars s r RNil ps ()
 recombinePermsRev ps
   | Refl <- RL.prependRNilEq ps = recombinePermsRevPartial MNil ps
 
 -- | Recombine the permissions for a 'LifetimeCurrentPerms' list
-recombineLifetimeCurrentPerms :: NuMatchingAny1 r =>
+recombineLifetimeCurrentPerms :: HasCallStack => NuMatchingAny1 r =>
                                  LifetimeCurrentPerms ps_l ->
                                  ImplM vars s r ps (ps :++: ps_l) ()
 recombineLifetimeCurrentPerms AlwaysCurrentPerms = pure ()

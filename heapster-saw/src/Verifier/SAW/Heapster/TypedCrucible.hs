@@ -82,6 +82,8 @@ import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.Widening
 
 
+import GHC.Stack (HasCallStack)
+
 ----------------------------------------------------------------------
 -- * Handling Crucible Extensions
 ----------------------------------------------------------------------
@@ -2339,6 +2341,7 @@ localPermCheckM m =
 
 -- | Call 'runImplM' in the 'PermCheckM' monad
 pcmRunImplM ::
+  HasCallStack =>
   NuMatchingAny1 r =>
   CruCtx vars -> Doc () -> (a -> r ps_out) ->
   ImplM vars (InnerPermCheckState blocks tops rets) r ps_out ps_in a ->
@@ -2360,6 +2363,7 @@ pcmRunImplM vars fail_doc retF impl_m =
 
 -- | Call 'runImplImplM' in the 'PermCheckM' monad
 pcmRunImplImplM ::
+  HasCallStack =>
   NuMatchingAny1 r =>
   CruCtx vars -> Doc () ->
   ImplM vars (InnerPermCheckState blocks tops rets) r ps_out ps_in (PermImpl
@@ -2382,6 +2386,7 @@ pcmRunImplImplM vars fail_doc impl_m =
 -- | Embed an implication computation inside a permission-checking computation,
 -- also supplying an overall error message for failures
 pcmEmbedImplWithErrM ::
+  HasCallStack =>
   NuMatchingAny1 r =>
   (forall ps. AnnotPermImpl r ps -> r ps) -> CruCtx vars -> Doc () ->
   ImplM vars (InnerPermCheckState blocks tops rets) r ps_out ps_in a ->
@@ -2412,6 +2417,7 @@ pcmEmbedImplWithErrM f_impl vars fail_doc m =
 
 -- | Embed an implication computation inside a permission-checking computation
 pcmEmbedImplM ::
+  HasCallStack =>
   NuMatchingAny1 r =>
   (forall ps. AnnotPermImpl r ps -> r ps) -> CruCtx vars ->
   ImplM vars (InnerPermCheckState blocks tops rets) r ps_out ps_in a ->
@@ -2422,6 +2428,7 @@ pcmEmbedImplM f_impl vars m = pcmEmbedImplWithErrM f_impl vars mempty m
 -- | Special case of 'pcmEmbedImplM' for a statement type-checking context where
 -- @vars@ is empty
 stmtEmbedImplM ::
+  HasCallStack =>
   NuMatchingExtC ext =>
   ImplM RNil (InnerPermCheckState
               blocks tops rets) (TypedStmtSeq ext blocks tops rets) ps_out ps_in a ->
@@ -2431,7 +2438,9 @@ stmtEmbedImplM m = snd <$> pcmEmbedImplM TypedImplStmt emptyCruCtx m
 -- | Recombine any outstanding distinguished permissions back into the main
 -- permission set, in the context of type-checking statements
 stmtRecombinePerms ::
-  PermCheckExtC ext => StmtPermCheckM ext cblocks blocks tops rets RNil ps_in ()
+  HasCallStack =>
+  PermCheckExtC ext =>
+  StmtPermCheckM ext cblocks blocks tops rets RNil ps_in ()
 stmtRecombinePerms =
   get >>>= \(!st) ->
   let dist_perms = view distPerms (stCurPerms st) in
@@ -3375,18 +3384,23 @@ tcEmitLLVMStmt arch ctx loc (LLVM_MemClear _ (ptr :: Reg ctx (LLVMPointerType wp
   -- For each field perm, prove it and write 0 to it
   (forM_ @_ @_ @_ @() flds $ \case
       Perm_LLVMField fp ->
+        stmtTraceM (const $ pretty "tcEmitLLVMStmt: memclear of pointer inside formM") >>>
         stmtProvePerm tptr (emptyMb $ ValPerm_Conj1 $ Perm_LLVMField fp) >>>
         emitTypedLLVMStore arch Nothing loc tptr fp (PExpr_LLVMWord (bvInt 0)) DistPermsNil >>>
-        stmtRecombinePerms
+        stmtRecombinePerms >>>
+        stmtTraceM (const $ pretty "tcEmitLLVMStmt: memclear of pointer: end of formM") >>>
+        pure ()
       _ -> error "Unexpected return value from llvmFieldsOfSize") >>>
 
   -- Return a fresh unit variable
   dbgNames >>= \names ->
+  stmtTraceM (const $ pretty "tcEmitLLVMStmt: memclear of pointer") >>>
   emitStmt knownRepr names loc
     (TypedSetReg knownRepr $
       TypedExpr EmptyApp
       (Just PExpr_Unit)) >>>= \(MNil :>: z) ->
   stmtRecombinePerms >>>
+  stmtTraceM (const $ pretty "tcEmitLLVMStmt: done with recombineperms") >>>
   pure (addCtxName ctx z)
 
 
@@ -3441,6 +3455,7 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PushFrame _ _) =
   setFramePtr ?ptrWidth (TypedReg fp) >>>
   stmtRecombinePerms >>>
   dbgNames >>>= \names ->
+  stmtTraceM (const $ pretty "tcEmitLLVMStmt: pushframe") >>>
   emitStmt knownRepr names loc
     (TypedSetReg knownRepr
       (TypedExpr EmptyApp Nothing)) >>>= \(MNil :>: y) ->
@@ -3601,13 +3616,16 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
     -- FIXME: if we have bvEq e1' e2' or not (bvCouldEqual e1' e2') then we
     -- should return a known Boolean value in place of the Nothing
     (PExpr_LLVMWord e1', PExpr_LLVMWord e2') ->
+      stmtTraceM (const $ pretty "tcEmitLLVMStmt: ptrEq 1") >>>
       emitStmt knownRepr noNames loc (TypedSetRegPermExpr
                               knownRepr e1') >>>= \(MNil :>: n1) ->
       stmtRecombinePerms >>>
+      stmtTraceM (const $ pretty "tcEmitLLVMStmt: ptrEq 2") >>>
       emitStmt knownRepr noNames loc (TypedSetRegPermExpr
                               knownRepr e2') >>>= \(MNil :>: n2) ->
       stmtRecombinePerms >>>
       dbgNames >>>= \names ->
+      stmtTraceM (const $ pretty "tcEmitLLVMStmt: ptrEq 3") >>>
       emitStmt knownRepr names loc
         (TypedSetReg knownRepr $
           TypedExpr (BaseIsEq knownRepr
@@ -3622,13 +3640,16 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
     -- FIXME: test off1 == off2 like above
     (asLLVMOffset -> Just (x1', off1), asLLVMOffset -> Just (x2', off2))
       | x1' == x2' ->
+        stmtTraceM (const $ pretty "tcEmitLLVMStmt: ptrEq 4") >>>
         emitStmt knownRepr noNames loc (TypedSetRegPermExpr
                                 knownRepr off1) >>>= \(MNil :>: n1) ->
         stmtRecombinePerms >>>
+        stmtTraceM (const $ pretty "tcEmitLLVMStmt: ptrEq 5") >>>
         emitStmt knownRepr noNames loc (TypedSetRegPermExpr
                                 knownRepr off2) >>>= \(MNil :>: n2) ->
         stmtRecombinePerms >>>
         dbgNames >>>= \names ->
+        stmtTraceM (const $ pretty "tcEmitLLVMStmt: ptrEq 6") >>>
         emitStmt knownRepr names loc
           (TypedSetReg knownRepr $
             TypedExpr (BaseIsEq knownRepr
@@ -3646,6 +3667,7 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
       stmtProvePerm r' (emptyMb $ ValPerm_Conj1 Perm_IsLLVMPtr) >>>
       emitLLVMStmt knownRepr Nothing loc (AssertLLVMPtr r') >>>
       dbgNames >>= \names ->
+      stmtTraceM (const $ pretty "tcEmitLLVMStmt: ptrEq 7") >>>
       emitStmt knownRepr names loc
         (TypedSetReg knownRepr $
           TypedExpr (BoolLit False)
@@ -3659,6 +3681,7 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
       stmtProvePerm r' (emptyMb $ ValPerm_Conj1 Perm_IsLLVMPtr) >>>
       emitLLVMStmt knownRepr Nothing loc (AssertLLVMPtr r') >>>
       dbgNames >>= \names ->
+      stmtTraceM (const $ pretty "tcEmitLLVMStmt: ptrEq 8") >>>
       emitStmt knownRepr names loc
         (TypedSetReg knownRepr $
           TypedExpr (BoolLit False)
@@ -3676,6 +3699,7 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
 tcEmitLLVMStmt _arch ctx loc LLVM_Debug{} =
 --  let tptr = tcReg ctx ptr in
   dbgNames >>= \names ->
+  stmtTraceM (const $ pretty "tcEmitLLVMStmt: debug") >>>
   emitStmt knownRepr names loc
     (TypedSetReg knownRepr (TypedExpr EmptyApp Nothing)) >>>= \(MNil :>: ret) ->
   stmtRecombinePerms >>>
