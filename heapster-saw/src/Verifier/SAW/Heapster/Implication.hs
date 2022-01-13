@@ -5239,6 +5239,9 @@ recombinePerm' x x_p@(ValPerm_Eq (PExpr_LLVMOffset y off)) (ValPerm_Conj ps) =
   castLLVMPtrM x (ValPerm_Conj ps) (bvNegate off) y >>>
   getPerm y >>>= \y_p ->
   recombinePermExpl y y_p (ValPerm_Conj $ mapMaybe (offsetLLVMAtomicPerm off) ps)
+recombinePerm' x _p p'@(ValPerm_Eq PExpr_Unit) =
+  -- When trying to combine a permission x:eq(()), just drop this permission
+  implDropM x p'
 recombinePerm' x p p'@(ValPerm_Eq _) =
   -- NOTE: we could handle this by swapping the stack with the variable perm and
   -- calling recombinePerm again, but this could potentially create permission
