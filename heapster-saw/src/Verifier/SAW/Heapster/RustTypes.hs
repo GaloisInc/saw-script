@@ -367,7 +367,15 @@ isNamedParams _ = error "Parenthesized types not supported"
 -- polymorphic type
 isOptionLike :: Item Span -> Bool
 isOptionLike (Enum _ _ _ variants (Generics _ [TyParam _ t _ _ _] _ _) _) =
-  error "Not yet implemented"
+  -- Short-circuit if no variant carries the type parameter. Otherwise check
+  -- that all other variants carry nothing
+  case find containsT variants of
+    Nothing -> False
+    Just v -> error "Not yet implemented"
+  where
+    containsT (Variant _ _ (TupleD [StructField _ _ (PathTy _ (Path _ [PathSegment t' _ _] _) _) _ _] _) _ _) =
+      name t == name t'
+    containsT _ = False
 isOptionLike _ = False
 
 -- | Get all of the 'RustName's of path parameters, if they're angle-bracketed
