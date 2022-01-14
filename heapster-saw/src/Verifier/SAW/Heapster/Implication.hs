@@ -235,6 +235,15 @@ someEqProofPerms (SomeEqProofCons some_eqp eq_step)
   | Some ps <- someEqProofPerms some_eqp =
     Some (RL.append ps $ eqProofStepPerms eq_step)
 
+someEqProofPP :: PermPretty a => PPInfo -> SomeEqProof a -> Doc ann
+someEqProofPP i pf =
+                pretty "SomeEqProof:"
+                <+> permPretty i (someEqProofLHS pf)
+                <+> pretty "="
+                <+> permPretty i (someEqProofRHS pf)
+                <+> line
+                <+> permPretty i (someEqProofPerms pf)
+
 -- | Construct a 'SomeEqProof' for @x=e@ or @e=x@ using an @x:eq(e)@ permission,
 -- where the 'Bool' flag is 'True' for @x=e@ and 'False' for @e=x@ like 'EqPerm'
 someEqProof1 :: ExprVar a -> PermExpr a -> Bool -> SomeEqProof (PermExpr a)
@@ -3572,6 +3581,8 @@ implCatchM f p m1 m2 =
 implPushM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r (ps :> a) ps ()
 implPushM x p =
+--  implTraceM (\i -> pretty "implPushM:" <+> permPretty i x <+>
+--                    pretty "|->" <+> permPretty i p) >>>
   implApplyImpl1 (Impl1_Push x p) (MNil :>: Impl1Cont (const $ pure ()))
 
 -- | Call 'implPushM' for multiple @x:p@ permissions
@@ -3852,7 +3863,9 @@ implDropM x p = implSimplM Proxy (SImpl_Drop x p)
 -- | Copy a permission on the top of the stack, assuming it is copyable
 implCopyM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r (ps :> a :> a) (ps :> a) ()
-implCopyM x p = implSimplM Proxy (SImpl_Copy x p)
+implCopyM x p = --implTraceM (\i -> pretty "implCopyM:" <+> permPretty i x
+                --                  <+> pretty "|->" <+> permPretty i p) >>>
+                implSimplM Proxy (SImpl_Copy x p)
 
 -- | Push a copyable permission using 'implPushM', copy that permission, and
 -- then pop it back to the variable permission for @x@
@@ -4041,7 +4054,7 @@ introCastM x y p = implSimplM Proxy (SImpl_Cast x y p)
 -- it is not. It is an error if any of the supplied perms are not equality
 -- perms, or if any @xi@ does not have permission @eq(ei)@ in the current
 -- permission set for @ei@ not equal to @xi@.
-implProveEqPerms :: NuMatchingAny1 r => DistPerms ps' ->
+implProveEqPerms :: NuMatchingAny1 r => HasCallStack => DistPerms ps' ->
                     ImplM vars s r (ps :++: (RNil :> a :++: ps')) (ps :> a) ()
 implProveEqPerms DistPermsNil = pure ()
 implProveEqPerms (DistPermsCons ps' x (ValPerm_Eq (PExpr_Var y)))
@@ -5178,7 +5191,7 @@ proveLifetimeCurrent (CurrentTransPerms cur_perms l) =
 -- | Simplify an equality permission @x:eq(e)@ that we assume is on the top of
 -- the stack by substituting any equality permissions on variables in @e@,
 -- returning the resulting expression
-simplEqPerm :: NuMatchingAny1 r => ExprVar a -> PermExpr a ->
+simplEqPerm :: HasCallStack => NuMatchingAny1 r => ExprVar a -> PermExpr a ->
                ImplM vars s r (as :> a) (as :> a) (PermExpr a)
 simplEqPerm x e@(PExpr_Var y) =
   getPerm y >>= \case
@@ -5481,7 +5494,7 @@ substEqsWithProof a =
 
 
 -- | The main work horse for 'proveEq' on expressions
-proveEqH :: forall vars a s r ps. NuMatchingAny1 r =>
+proveEqH :: forall vars a s r ps. NuMatchingAny1 r => HasCallStack =>
             PartialSubst vars -> PermExpr a ->
             Mb vars (PermExpr a) ->
             ImplM vars s r ps ps (SomeEqProof (PermExpr a))
@@ -5492,6 +5505,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
   (_, [nuMP| PExpr_Var z |])
     | Left memb <- mbNameBoundP z
     , Nothing <- psubstLookup psubst memb ->
+      implTraceM (\i -> pretty "proveEqH (unset var):" <+> permPretty i e) >>>
       substEqsWithProof e >>= \eqp ->
       setVarM memb (someEqProofRHS eqp) >>> pure eqp
 
@@ -5499,16 +5513,19 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
   (_, [nuMP| PExpr_Var z |])
     | Left memb <- mbNameBoundP z
     , Just e' <- psubstLookup psubst memb ->
+      implTraceM (\i -> pretty "proveEqH (set var):" <+> permPretty i e) >>>
       proveEqH psubst e (mbConst e' z)
 
   -- If the RHS = LHS, do a proof by reflexivity
   _ | Just e' <- partialSubst psubst mb_e
-    , e == e' -> pure (SomeEqProofRefl e)
+    , e == e' -> implTraceM (\i -> pretty "proveEqH (reflexivity):" <+> permPretty i e) >>>
+                pure (SomeEqProofRefl e)
 
   -- To prove x=y, try to see if either side has an eq permission, if necessary by
   -- eliminating compound permissions, and proceed by transitivity if possible
   (PExpr_Var x, [nuMP| PExpr_Var mb_y |])
     | Right y <- mbNameBoundP mb_y ->
+      implTraceM (\i -> pretty "proveEqH (left eq):" <+> permPretty i e) >>>
       getPerm x >>= \x_p ->
       getPerm y >>= \y_p ->
       case (x_p, y_p) of
@@ -5531,6 +5548,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
 
   -- To prove @x &+ o = e@, we subtract @o@ from the RHS and recurse
   (PExpr_LLVMOffset x off, _) ->
+    implTraceM (\i -> pretty "proveEqH (offsetL):" <+> permPretty i e) >>>
     proveEq (PExpr_Var x) (fmap (`addLLVMOffset` bvNegate off) mb_e) >>= \some_eqp ->
     pure $ fmap (`addLLVMOffset` off) some_eqp
 
@@ -5539,12 +5557,15 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
   (PExpr_Var x, [nuMP| PExpr_LLVMOffset mb_y mb_off |])
     | Right y <- mbNameBoundP mb_y
     , x == y ->
+      implTraceM (\i -> pretty "proveEqH (offsetR):" <+> permPretty i e) >>>
       proveEq (zeroOfType (BVRepr knownNat)) mb_off >>= \some_eqp ->
       pure $ someEqProofTrans (someEqProofZeroOffset y)
                               (fmap (PExpr_LLVMOffset y) some_eqp)
 
   -- To prove x=e, try to see if x:eq(e') and proceed by transitivity
   (PExpr_Var x, _) ->
+    implTraceM (\i -> pretty "proveEqH (x=e):" <+>
+                      permPretty i x <+> pretty "=" <+> permPretty i mb_e) >>>
     getVarEqPerm x >>= \case
     Just e' ->
       proveEq e' mb_e >>= \eqp2 ->
@@ -5554,6 +5575,8 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
   -- To prove e=x, try to see if x:eq(e') and proceed by transitivity
   (_, [nuMP| PExpr_Var z |])
     | Right x <- mbNameBoundP z ->
+    implTraceM (\i -> pretty "proveEqH (e=x):" <+>
+                      permPretty i e <+> pretty "=" <+> permPretty i x) >>>
       getVarEqPerm x >>= \case
         Just e' ->
           proveEq e (mbConst e' mb_e) >>= \eqp ->
@@ -5565,6 +5588,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
 
   -- Prove word(e1) = word(e2) by proving e1=e2
   (PExpr_LLVMWord e', [nuMP| PExpr_LLVMWord mb_e' |]) ->
+    implTraceM (\i -> pretty "proveEqH (word):" <+> permPretty i e) >>>
     fmap PExpr_LLVMWord <$> proveEqH psubst e' mb_e'
 
   -- Prove e = L_1*y_1 + ... + L_k*y_k + N*z + M where z is an unset variable,
@@ -5575,12 +5599,14 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
     | Just (n, memb, e_factors) <- getUnsetBVFactor psubst mb_factors
     , e' <- bvSub e (bvAdd e_factors (bvInt $ mbLift mb_m))
     , bvIsZero (bvMod e' n) ->
+    implTraceM (\i -> pretty "proveEqH (bv):" <+> permPretty i e) >>>
       setVarM memb (bvDiv e' n) >>> pure (SomeEqProofRefl e)
 
   -- FIXME: add cases to prove struct(es1)=struct(es2)
 
   -- Otherwise give up!
-  _ -> proveEqFail e mb_e
+  _ -> implTraceM (\i -> pretty "proveEqH (failure):" <+> permPretty i e) >>>
+       proveEqFail e mb_e
 
 
 -- | Build a proof on the top of the stack that @x:eq(e)@. Assume that all @x@
@@ -7415,6 +7441,7 @@ proveVarAtomicImplUnfoldOrFail x ps mb_ap =
 -- @true@. Any remaining perms for @x@ are popped off of the stack.
 proveVarAtomicImpl ::
   NuMatchingAny1 r =>
+  HasCallStack =>
   ExprVar a ->
   [AtomicPerm a] ->
   Mb vars (AtomicPerm a) ->
@@ -8315,8 +8342,12 @@ proveVarsImplVarEVars mb_ps =
         RL.map2 Pair xs (exprsOfSubst s) in
   let perms_eqpf = fmap (\es -> subst (substOfExprs es) $
                                 mbDistPermsToValuePerms mb_ps) vars_eqpf in
+  implTraceM (\i -> pretty "proveVarsImplVarEVars: perms_eqpf:"
+                <+> someEqProofPP i perms_eqpf) >>>
   implCastStackM perms_eqpf >>>
   pure xs
+
+
 
 -- | Prove @x:p'@, where @p@ may have existentially-quantified variables in it.
 proveVarImpl :: NuMatchingAny1 r => ExprVar a -> Mb vars (ValuePerm a) ->

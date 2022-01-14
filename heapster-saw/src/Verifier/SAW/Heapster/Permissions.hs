@@ -376,6 +376,16 @@ instance (PermPretty a, PermPretty b, PermPretty c) => PermPretty (a,b,c) where
 instance PermPretty a => PermPretty [a] where
   permPrettyM as = ppEncList False <$> mapM permPrettyM as
 
+
+instance PermPretty a => PermPretty (Maybe a) where
+  permPrettyM Nothing = return $ pretty "Nothing"
+  permPrettyM (Just a) = do
+    a_pp <- permPrettyM a
+    return (pretty "Just" <+> a_pp)
+
+instance PermPrettyF f => PermPretty (Some f) where
+  permPrettyM (Some x) = permPrettyMF x
+
 instance PermPretty (ExprVar a) where
   permPrettyM x =
     do maybe_str <- NameMap.lookup x <$> ppExprNames <$> ask
@@ -392,6 +402,10 @@ instance PermPretty (SomeName CrucibleType) where
 instance PermPrettyF f => PermPretty (RAssign f ctx) where
   permPrettyM xs =
     ppCommaSep <$> sequence (RL.mapToList permPrettyMF xs)
+
+instance PermPrettyF f => PermPrettyF (RAssign f) where
+  permPrettyMF xs = permPrettyM xs
+
 
 instance PermPretty (TypeRepr a) where
   permPrettyM UnitRepr = return $ pretty "unit"
