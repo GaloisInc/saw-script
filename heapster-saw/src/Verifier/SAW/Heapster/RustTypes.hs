@@ -375,6 +375,8 @@ isPolyOptionLike (Enum _ _ _ variants (Generics _ [TyParam _ t _ _ _] _ _) _) =
   where
     containsT (Variant _ _ (TupleD [StructField _ _ (PathTy _ (Path _ [PathSegment t' _ _] _) _) _ _] _) _ _) =
       name t == name t'
+    containsT (Variant _ _ (StructD [StructField _ _ (PathTy _ (Path _ [PathSegment t' _ _] _) _) _ _] _) _ _) =
+      name t == name t'
     containsT _ = False
 
     isUnitVariant (Variant _ _ (UnitD _) _ _) = True
