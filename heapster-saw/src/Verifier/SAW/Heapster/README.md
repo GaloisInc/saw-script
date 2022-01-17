@@ -137,20 +137,88 @@ Equality permissions are manipulated with the following simple implication rules
 
 ### The Implication Prover Algorithm
 
-The goal of the implication prover is to search for a permission implication proof using the implication rules discussed above.
+The goal of the implication prover is to search for a permission implication proof using the implication rules discussed above. The implication prover is not complete, however, meaning that there are proofs that can be made with the implication rules that the implication prover will not find. To date, work on the implication prover has focused on heuristics to make it work in practice on code that comes up in practice.
+
+#### The Implication Prover Monad
+
+The implication prover runs in the `ImplM` monad, whose type parameters are as follows:
+
+```
+ImplM vars s r ps_out ps_in a
+```
+
+An element of this type is an implication prover computation with return type `a`. The type variable `vars` lists the types of the existential variables, or _evars_, in scope. These represent "holes" in the permissions we are trying to prove. The type variables `s` and `r` describe the calling context of this implication computation at the top level: `s` describes the monadic state maintained by this calling context, while `r` describes the top-level result type required by this context. These types are left abstract in all of the implication prover.
+
+The type variables `ps_in` and `ps_out` describe the permission stack on the beginning and end of the computation. The existence of these two variables make `ImplM` a _generalized_ monad instead of just a standard monad, which means that these types can vary throughout an implication computation. The bind for `ImplM` is written `>>>=` instead of `>>=`, and has type
+
+```
+(>>>=) :: ImplM vars s r ps' ps_in a -> (a -> ImplM vars s r ps_out ps' b) -> ImplM vars s r ps_out ps_in b
+```
+
+That is, the bind `m >>>= f` first runs `m`, which changes the permissions stack from `ps_in` to `ps'`, and then it passes the output of `m` to `f`, which changes the permissions stack from `ps'` to `s_out`, so the overall computation changes the permissions stack from `ps_in` to `ps_out`. As a more concrete example, the computation for pushing a permission onto the top of the stack is declared as
+
+```
+implPushM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+             ImplM vars s r (ps :> a) ps ()
+```
+
+meaning that `implPushM` takes in a variable `x` and a permission `p` and returns a computation that starts in any permission stack `ps` and pushes permission `x:p` of type `a` onto the top of the stack.
 
 
-Explain algorithm:
+#### The Top-Level Implication Prover Algorithm
 
-- `ImplM` monad captures the form and types of perms on the stack; also has a notion of existential variables that need to be instantiated, some of which already are; display the `ImplM` type vars
+The main top-level entrypoints of the implication prover is `proveVarsImplAppend`, with type
 
-- Main entrypoints: `proveVarImpl`, `proveVarsImpl`, and `proveVarsImplAppend`; all written in terms of `proveVarsImplAppend`
+```
+proveVarsImplAppend :: Mb vars (DistPerms ps) -> ImplM vars s r (ps_in :++: ps) ps_in ()
+```
 
-- `proveVarsImplAppend`: first tries to do the proof without ending any lifetimes, and if that fails it tries to end lifetimes that could potentially help with the proof
+This function attempts to prove `n` permisisons `x1:p1, ..., xn:pn`, adding those permissions to the top of the permissions stack. These permissions are inside of a binding for the existential variables specified by `vars`, which represent "holes" or unknown expressions that will be solved by building the proof. As an example, the type-checker for the pointer read instruction calls the implication prover with the existentially quantified permission
 
-- The "internal-only" functions `proveVarsImplInt` and `proveVarsImplAppendInt`: repeatedly call `findProvablePerm` to choose the "best" permission on the RHS to attempt to prove; briefly explain that will only select a permission whose needed variables are all instantiated
+```
+(rw,l,z). [l]ptr((rw,0) |-> eq(z))
+```
 
-- Next level down is `proveExVarImpl`, which handles the possibility that we are trying to prove a permission `x:p` where `x` itself is an existential variable; this is not really all that common, except for some very specific cases that come up in situtations that are a little too detailed to go into here.
+expressing that it requires a pointer permission at offset 0 with any lifetime `l`, any read/write modality `rw`, that points to any value `z`.
+
+There are a number of wrapper functions that call `proveVarsImplAppend`, including:
+
+* `proveVarsImpl`, which assumes the input permission stack is empty;
+* `proveVarImpl`, which proves one permission; and
+* `proveVarsImplVarEVars`, which is like `proveVarsImpl` but where all existential variables are instantiated with fresh variables.
+
+The top-level implication prover algorithm is then implemented as a descending sequence of "levels", each of is implemented as a function that performs some particular function and then calls the next level:
+
+| Function Name | Purpose |
+--------------|----------|
+| `proveVarsImplAppend` | Try to prove the required permissions, and, if that failos, non-deterministically end some lifetimes that could help in the proof |
+| `proveVarsImplAppendInt` | Repeatedly call `findProvablePerm` to find the permission on the right that is most likely to be provable and then try to prove that permission |
+| `proveExVarImpl` | Handle the case of a right-hand permission `x:p` where `x` itself is an evar by instantiating `x`, if possible |
+| `proveVarImplInt` | Wrapper function that pushes the primary permissions for `x` onto the top of the stack, performs debug tracing, calls `proveVarImplH`, and then checks that the proved permission is correct |
+
+
+#### Proving a Single Permissino
+
+The main logic for proving a permission is in the function `proveVarImplH`. (The implication prover uses the convention of using "`H`" as a suffix for helper functions.) As with many functions in the implication prover, this function takes in: a variable `x` that we are trying to prove a permission on; a permission `p` for `x` which is currently on top of the stack; and a permission `mb_p` inside a context of evars that we are trying to prove for `x`. (The prefix "`mb`" refers to "multi-binding", a binding of 0 or more evars.) The function then works by pattern-matching on `p` (the left-hand side) and `mb_p` (the right-hand side), using the following cases, many of which call out to helper functions described below:
+
+| Left-hand side | Right-hand side | Algorithmic steps taken |
+|------------|--------------|--------------------|
+| `p` | `true` | Pop `p` and Introduce a vacuous proof of `true` |
+| `p` | `eq(e)` | Call `proveVarEq` to prove the equality |
+| `p1 or p2` | `mb_p` | Eliminate the disjunction and recurse |
+| `exists z. p` | `mb_p` | Eliminate the existential and recurse |
+| `eq(y)` | `mb_p` | Prove `y:mb_p` and then cast the proof to `x:mb_p` |
+| `eq(y &+ off)` | `mb_p` | Prove `y:(offsetPerm mb_p off)` and then case the proof to `x:mb_p` |
+| `p` | `mb_p1 or mb_p2` | Nondeterminsitically try to prove either `mb_p1` or `mb_p2` |
+| `p` | `exists z. mb_p` | Add a new evar for `z`, prove `x:mb_p`, and then use the value determined for `x` to introduce an existential permission |
+| `P<args,e>` | `P<mb_args,mb_e>` | For reachabilitiy permission `P`, nondeterministically prove the RHS by either reflexivity, meaning `x:eq(mb_e)`, or transitivity, meaning `e:P<mb_args,mb_e>` |
+| `P<args>` | `P<mb_args>` | For non-reachabilitiy named permission `P`, prove `args` _weakens to_ `mb_args`, where write modalities weaken to read, bigger lifetimes weaken to smaller ones, and otherwise arguments weaken to themselves | 
+| `p1 * ... * pi-1 * P<args> * pi+1 * ... pn` | `P<mb_args>` | Similar to above |
+
+
+
+FIXME HERE NOW
+
 
 The main logic for proving most of the permission constructs is in the next function down, `proveVarImplInt`, which proves a single permission on a variable `x`. It does this by first pushing the primary permsisions `p` for `x` onto the top of the stack and then proving an implication `x:p |- x:mb_p`, where `mb_p` is the desired permission that we want to prove for `x`. The "mb" prefix indicates that `mb_p` is a permission inside a multi-binding, i.e., a binding of 0 or more existential variables that could be used in the permission we are trying to prove. The `proveVarImplInt` then proceeds by case analysis on `p` and `mb_p`, in most cases using either an introduction rule for proving a construct in `mb_p` on the right or an elimination rule for eliminating a construct in `p` on the left combined with a recursive call to `proveVarImplInt` to prove the remaining implication for smaller `p` and/or smaller `mb_p`. The most complex cases are for proving an equality permission on the right or for proving an implication `x:p1 * ... * pn |- x:p1' * ... * pm'` between conjuncts permissions. For an equality permission on the right, the special-purpose helper function `proveVarEq` is used to prove equality permissions `x:eq(e)` based on the structure of `e`. For proving an implication of conjuncts, the function `proveVarConjImpl` is used, which is structured in a similar manner to `proveVarsImplAppendInt`, in that it repeatedly chooses the "best" permission on the right to prove, proves it, and then recursively proves the remaining permissions on the right until they have all been proved.
 
