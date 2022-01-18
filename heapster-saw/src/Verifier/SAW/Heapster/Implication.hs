@@ -3655,6 +3655,7 @@ implLetBindVar tp e =
   implApplyImpl1 (Impl1_LetBind tp e)
   (MNil :>: Impl1Cont (\(_ :>: n) -> pure n)) >>>= \n ->
   recombinePerm n (ValPerm_Eq e) >>>
+--  implPopM n (ValPerm_Eq e) >>>
   pure n
 
 -- | Bind a sequence of variables with 'implLetBindVar'
@@ -3871,7 +3872,7 @@ implCopyM x p = --implTraceM (\i -> pretty "implCopyM:" <+> permPretty i x
 -- then pop it back to the variable permission for @x@
 implPushCopyM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
                  ImplM vars s r (ps :> a) ps ()
-implPushCopyM x p = implPushM x p >>> implCopyM x p >>> recombinePerm x p
+implPushCopyM x p = implPushM x p >>> implCopyM x p >>> implPopM x p -- NOTE: this needs to be implPopM
 
 -- | Swap the top two permissions on the top of the stack
 implSwapM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
