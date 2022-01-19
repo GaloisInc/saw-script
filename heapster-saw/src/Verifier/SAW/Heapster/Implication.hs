@@ -3581,8 +3581,6 @@ implCatchM f p m1 m2 =
 implPushM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r (ps :> a) ps ()
 implPushM x p =
---  implTraceM (\i -> pretty "implPushM:" <+> permPretty i x <+>
---                    pretty "|->" <+> permPretty i p) >>>
   implApplyImpl1 (Impl1_Push x p) (MNil :>: Impl1Cont (const $ pure ()))
 
 -- | Call 'implPushM' for multiple @x:p@ permissions
@@ -3872,7 +3870,8 @@ implCopyM x p = --implTraceM (\i -> pretty "implCopyM:" <+> permPretty i x
 -- then pop it back to the variable permission for @x@
 implPushCopyM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
                  ImplM vars s r (ps :> a) ps ()
-implPushCopyM x p = implPushM x p >>> implCopyM x p >>> implPopM x p -- NOTE: this needs to be implPopM
+implPushCopyM x p =
+  implPushM x p >>> implCopyM x p >>> implPopM x p -- NOTE: this needs to be implPopM
 
 -- | Swap the top two permissions on the top of the stack
 implSwapM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
@@ -3966,7 +3965,7 @@ getSimpleVarPerm x =
   getPerm x >>= \p_init ->
   implPushM x p_init >>>
   elimOrsExistsNamesM x >>>= \p ->
-  recombinePerm x p >>> pure p
+  implPopM x p >>> pure p
 
 -- | Eliminate any disjunctions, existentials, recursive permissions, or defined
 -- permissions for a variable to try to get an equality permission
@@ -3978,13 +3977,13 @@ getVarEqPerm x =
   implPushM x p_init >>>
   elimOrsExistsNamesM x >>>=
   \case
-    p@(ValPerm_Eq e) -> recombinePerm x p >>> pure (Just e)
+    p@(ValPerm_Eq e) -> implPopM x p >>> pure (Just e)
     ValPerm_Conj [Perm_Struct ps] ->
       implElimStructAllFields x ps >>>= \ys ->
       implSimplM Proxy (SImpl_StructPermToEq x $ namesToExprs ys) >>>
-      recombinePerm x (ValPerm_Eq $ PExpr_Struct $ namesToExprs ys) >>>
+      implPopM x (ValPerm_Eq $ PExpr_Struct $ namesToExprs ys) >>>
       pure (Just $ PExpr_Struct $ namesToExprs ys)
-    p -> recombinePerm x p >>> pure Nothing
+    p -> implPopM x p >>> pure Nothing
 
 -- | Eliminate any disjunctions, existentials, recursive permissions, or defined
 -- permissions for any variables in the supplied expression and substitute any
@@ -4197,17 +4196,17 @@ implGetPopConjM :: HasCallStack => NuMatchingAny1 r =>
 implGetPopConjM x ps i =
   if atomicPermIsCopyable (ps!!i) then
     implCopyConjM x ps i >>>
-    recombinePerm x (ValPerm_Conj ps)
+    implPopM x (ValPerm_Conj ps)
   else
     implExtractConjM x ps i >>>
-    recombinePerm x (ValPerm_Conj $ deleteNth i ps)
+    implPopM x (ValPerm_Conj $ deleteNth i ps)
 
 -- | If the top element of the stack is copyable, then copy it and pop it, and
 -- otherwise just leave it alone on top of the stack
 implMaybeCopyPopM :: HasCallStack => NuMatchingAny1 r =>
                      ExprVar a -> ValuePerm a ->
                      ImplM vars s r (ps :> a) (ps :> a) ()
-implMaybeCopyPopM x p | permIsCopyable p = implCopyM x p >>> recombinePerm x p
+implMaybeCopyPopM x p | permIsCopyable p = implCopyM x p >>> implPopM x p
 implMaybeCopyPopM _ _ = pure ()
 
 -- | Insert an atomic permission below the top of the stack at the @i@th
