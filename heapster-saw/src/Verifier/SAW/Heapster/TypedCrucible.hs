@@ -3729,7 +3729,7 @@ castUnDetVarsForVar det_vars x =
         NameMap.assocs var_perm_map in
   let eqp = someEqProofFromSubst nondet_perms p in
   implPushM x p >>>
-  implCastPermM x eqp >>>
+  implCastPermM Proxy x eqp >>>
   implPopM x (someEqProofRHS eqp)
 
 -- | Simplify and drop permissions @p@ on variable @x@ so they only depend on

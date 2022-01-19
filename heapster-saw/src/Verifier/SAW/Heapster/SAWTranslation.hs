@@ -2318,18 +2318,16 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     (\(pctx :>: _ :>: ptrans) -> pctx :>: ptrans)
     m
 
-  [nuMP| SImpl_CastPerm (x::ExprVar a) eqp |] ->
-    do ttrans <- translateSimplImplOutHead mb_simpl
+  [nuMP| SImpl_CastPerm (_::ExprVar a) eqp |] ->
+    do ttrans <- translateSimplImplOut mb_simpl
        let prxs_a = MNil :>: (Proxy :: Proxy a)
        let prxs1 = mbLift $ mbMapCl $(mkClosed [| distPermsToProxies
                                                 . eqProofPerms |]) eqp
        let prxs = RL.append prxs_a prxs1
-       withPermStackM
-         (\vars -> fst (RL.split ps0 prxs vars) :>: translateVar x)
+       withPermStackM id
          (\pctx ->
-           let (pctx1, pctx2) = RL.split ps0 prxs pctx
-               (_ :>: ptrans, _) = RL.split prxs_a prxs1 pctx2 in
-           pctx1 :>: typeTransF ttrans (transTerms ptrans))
+           let (pctx1, pctx2) = RL.split ps0 prxs pctx in
+           RL.append pctx1 (typeTransF ttrans (transTerms pctx2)))
          m
 
   [nuMP| SImpl_IntroEqRefl x |] ->

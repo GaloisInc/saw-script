@@ -65,6 +65,7 @@ import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.GenMonad
 
 import GHC.Stack
+import Unsafe.Coerce
 
 
 -- * Helper functions (should be moved to Hobbits)
@@ -170,6 +171,12 @@ eqProofStepLiftA2 f (EqProofStep eq_perms1 g1) (EqProofStep eq_perms2 g2) =
   let (es1, es2) = RL.split eq_perms1 eq_perms2 es in
   f (g1 es1) (g2 es2)
 
+-- | Build an 'EqProofStep' for @(e1,...,en)=(x1,...,xn)@ from permissions
+-- @x1:eq(e1),...,xn:eq(en)@
+eqProofStepFromPermsRev :: RAssign ExprVar as -> PermExprs as ->
+                           EqProofStep as (PermExprs as)
+eqProofStepFromPermsRev xs es =
+  EqProofStep (RL.map2 (\x e -> EqPerm x e False) xs es) id
 
 -- | A proof that two objects are equal, using 0 or more 'EqProofStep' steps
 data EqProof ps a where
@@ -207,6 +214,18 @@ eqProofPerms :: EqProof ps a -> DistPerms ps
 eqProofPerms (EqProofRefl _) = DistPermsNil
 eqProofPerms (EqProofCons eqp eq_step) =
   appendDistPerms (eqProofPerms eqp) (eqProofStepPerms eq_step)
+
+-- | Build an 'EqProof' from a single 'EqProofStep'
+eqProofFromStep :: EqProofStep ps a -> EqProof ps a
+eqProofFromStep eq_step
+  | Refl <- RL.prependRNilEq (eqProofStepPerms eq_step)
+  = EqProofCons (EqProofRefl $ eqProofStepLHS eq_step) eq_step
+
+-- | Build an 'EqProof' that @(e1,...,en)=(x1,...,xn)@ from permissions
+-- @x1:eq(e1),...,xn:eq(en)@
+eqProofFromPermsRev :: RAssign ExprVar as -> PermExprs as ->
+                       EqProof as (PermExprs as)
+eqProofFromPermsRev xs es = eqProofFromStep $ eqProofStepFromPermsRev xs es
 
 instance Functor (EqProof ps) where
   fmap f (EqProofRefl a) = EqProofRefl $ f a
@@ -428,9 +447,9 @@ data SimplImpl ps_in ps_out where
   -- | Cast a proof of @x:p@ to one of @x:p'@ using a proof that @p=p'@ along
   -- with the equality permissions needed by that proof:
   --
-  -- > x1:eq(e1), ..., xn:eq(en), x:p -o x:p'
+  -- > x:p, x1:eq(e1), ..., xn:eq(en) -o x:p', x1:eq(e1), ..., xn:eq(en)
   SImpl_CastPerm :: ExprVar a -> EqProof ps (ValuePerm a) ->
-                    SimplImpl (RNil :> a :++: ps) (RNil :> a)
+                    SimplImpl (RNil :> a :++: ps) (RNil :> a :++: ps)
 
   -- | Introduce a proof that @x:eq(x)@:
   --
@@ -2049,7 +2068,8 @@ simplImplOut (SImpl_IntroOrL x p1 p2) = distPerms1 x (ValPerm_Or p1 p2)
 simplImplOut (SImpl_IntroOrR x p1 p2) = distPerms1 x (ValPerm_Or p1 p2)
 simplImplOut (SImpl_IntroExists x _ p) = distPerms1 x (ValPerm_Exists p)
 simplImplOut (SImpl_Cast x _ p) = distPerms1 x p
-simplImplOut (SImpl_CastPerm x eqp) = distPerms1 x (eqProofRHS eqp)
+simplImplOut (SImpl_CastPerm x eqp) =
+  appendDistPerms (distPerms1 x (eqProofRHS eqp)) (eqProofPerms eqp)
 simplImplOut (SImpl_IntroEqRefl x) = distPerms1 x (ValPerm_Eq $ PExpr_Var x)
 simplImplOut (SImpl_InvertEq x y) = distPerms1 y (ValPerm_Eq $ PExpr_Var x)
 simplImplOut (SImpl_InvTransEq x y _) = distPerms1 x (ValPerm_Eq $ PExpr_Var y)
@@ -2959,9 +2979,15 @@ instance SubstVar s m => Substable1 s (LocalImplRet ps) m where
 
 data ImplState vars ps =
   ImplState { _implStatePerms :: PermSet ps,
+              -- ^ The current primary permissions and permissions stack
               _implStateVars :: CruCtx vars,
+              -- ^ The types of all evars in scope
               _implStatePSubst :: PartialSubst vars,
+              -- ^ The partial instantiation of evars in scope
               _implStatePVarSubst :: RAssign (Compose Maybe ExprVar) vars,
+              -- ^ The partial instantiation of evars to fresh variables; used
+              -- by 'proveVarsImplVarEVars' and when evars need have permissions
+              -- proved on them
               _implStateRecRecurseFlag :: RecurseFlag,
               -- ^ Whether we are recursing under a recursive permission, either
               -- on the left hand or the right hand side
@@ -3187,7 +3213,9 @@ getVarVarM memb =
   getPSubst >>>= \psubst ->
   use implStatePVarSubst >>>= \pvsubst ->
   case (RL.get memb pvsubst, psubstLookup psubst memb) of
-    (Compose (Just n), _) -> pure n
+    (Compose (Just n), Just _) -> pure n
+    (Compose (Just n), Nothing) ->
+      setVarM memb (PExpr_Var n) >>> pure n
     (_, Just e) ->
       getExVarType memb >>>= \tp ->
       implLetBindVar tp e >>>= \n ->
@@ -3581,6 +3609,8 @@ implCatchM f p m1 m2 =
 implPushM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r (ps :> a) ps ()
 implPushM x p =
+  -- implTraceM (\i -> pretty "implPushM:" <+> permPretty i x <+>
+  --                   pretty "|->" <+> permPretty i p) >>>
   implApplyImpl1 (Impl1_Push x p) (MNil :>: Impl1Cont (const $ pure ()))
 
 -- | Call 'implPushM' for multiple @x:p@ permissions
@@ -3859,6 +3889,12 @@ implDropM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r ps (ps :> a) ()
 implDropM x p = implSimplM Proxy (SImpl_Drop x p)
 
+-- | Drop zero or more permissions from the top of the stack
+implDropMultiM :: HasCallStack => NuMatchingAny1 r => DistPerms ps' ->
+                  ImplM vars s r ps (ps :++: ps') ()
+implDropMultiM MNil = return ()
+implDropMultiM (ps :>: VarAndPerm x p) = implDropM x p >>> implDropMultiM ps
+
 -- | Copy a permission on the top of the stack, assuming it is copyable
 implCopyM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r (ps :> a :> a) (ps :> a) ()
@@ -3904,6 +3940,24 @@ implMoveUpM (ps :: prx ps) ps1 (x :: ExprVar a) ps2 =
         implSimplM (Proxy :: Proxy ps) (SImpl_MoveUp perms1 x p perms2)
     (DistPermsCons _ _x' _, _) -> error "implMoveUpM: unexpected variable"
 
+reflU :: () :~: ()
+reflU = Refl
+
+-- | Same as 'implMoveUpM' except the type lists are associated differently
+implMoveUpM' ::
+  NuMatchingAny1 r =>
+  prx ps -> RAssign f ps1 -> ExprVar a -> RAssign f ps2 ->
+  ImplM vars s r ((ps :++: ps1) :++: (RNil :> a :++: ps2))
+                 ((ps :> a :++: ps1) :++: ps2) ()
+implMoveUpM' (ps :: prx ps) (ps1 :: RAssign f ps1) (x :: ExprVar a)
+             (ps2 :: RAssign f ps2)
+  -- FIXME: build these proofs instead of just coercing them
+  | Refl <- unsafeCoerce reflU ::
+      ((ps :++: ps1) :++: (RNil :> a :++: ps2)) :~: (ps :++: ps1 :> a :++: ps2)
+  , Refl <- (unsafeCoerce reflU) ::
+      ((ps :> a :++: ps1) :++: ps2) :~: (ps :> a :++: ps1 :++: ps2) =
+    implMoveUpM ps ps1 x ps2
+
 -- | Move permission @p@ that is on the stack between two lists @ps1@ and @ps2@
 -- towards the bottom of the stack by moving it below both @ps1@ and @ps2@. That
 -- is, change the stack
@@ -3928,6 +3982,21 @@ implMoveDownM (ps :: prx ps) ps1x (x :: ExprVar a) ps2 =
       | Just Refl <- testEquality x x' ->
         implSimplM (Proxy :: Proxy ps) (SImpl_MoveDown perms1 x p perms2)
     _ -> error "implMoveDownM: unexpected variable"
+
+-- | Same as 'implMoveDownM' except the type lists are associated differently
+implMoveDownM' ::
+  NuMatchingAny1 r =>
+  prx ps -> RAssign f (ps1 :> a) -> ExprVar a -> RAssign f ps2 ->
+  ImplM vars s r ((ps :> a :++: ps1) :++: ps2)
+                 ((ps :++: ps1) :++: (RNil :> a :++: ps2)) ()
+implMoveDownM' (ps :: prx ps) (ps1x :: RAssign f (ps1 :> a)) (x :: ExprVar a)
+               (ps2 :: RAssign f ps2)
+  -- FIXME: build these proofs instead of just coercing them
+  | Refl <- unsafeCoerce reflU ::
+      ((ps :> a :++: ps1) :++: ps2) :~: (ps :> a :++: ps1 :++: ps2)
+  , Refl <- unsafeCoerce reflU ::
+      ((ps :++: ps1) :++: (RNil :> a :++: ps2)) :~: (ps :++: ps1 :> a :++: ps2)
+  = implMoveDownM ps ps1x x ps2
 
 -- | Eliminate disjunctives and existentials on the top of the stack and return
 -- the resulting permission
@@ -4068,35 +4137,42 @@ implProveEqPerms (DistPermsCons ps' x p@(ValPerm_Eq _)) =
 implProveEqPerms _ = error "implProveEqPerms: non-equality permission"
 
 -- | Cast a proof of @x:p@ to one of @x:p'@ using a proof that @p=p'@
-implCastPermM :: HasCallStack => NuMatchingAny1 r => ExprVar a ->
-                 SomeEqProof (ValuePerm a) ->
+implCastPermM :: HasCallStack => NuMatchingAny1 r =>
+                 Proxy ps -> ExprVar a -> SomeEqProof (ValuePerm a) ->
                  ImplM vars s r (ps :> a) (ps :> a) ()
-implCastPermM x some_eqp
-  | UnSomeEqProof eqp <- unSomeEqProof some_eqp =
+implCastPermM ps x some_eqp
+  | UnSomeEqProof eqp <- unSomeEqProof some_eqp
+  , Refl <- RL.appendAssoc ps (MNil :>: eqProofLHS eqp) (eqProofPerms eqp) =
     implProveEqPerms (eqProofPerms eqp) >>>
-    implSimplM Proxy (SImpl_CastPerm x eqp)
+    implSimplM ps (SImpl_CastPerm x eqp) >>>
+    implDropMultiM (eqProofPerms eqp)
+
+distPermsProxy :: DistPerms ps -> Proxy ps
+distPermsProxy _ = Proxy
 
 -- | Cast a permission somewhere in the stack using an equality proof
 implCastStackElemM :: HasCallStack => NuMatchingAny1 r => Member ps a ->
-                      SomeEqProof (ValuePerm a) -> ImplM vars s r ps ps ()
-implCastStackElemM memb some_eqp =
+                      EqProof ps' (ValuePerm a) ->
+                      ImplM vars s r (ps :++: ps') (ps :++: ps') ()
+implCastStackElemM memb eqp =
+  let ps' = eqProofPerms eqp in
   getDistPerms >>>= \all_perms ->
-  case RL.memberSplitAt all_perms memb of
+  let ps = fst $ RL.split Proxy ps' all_perms in
+  case RL.memberSplitAt ps memb of
     RL.SplitAtMemberRet ps0 px@(VarAndPerm x _) ps1 ->
-      implMoveUpM ps0 ps1 x MNil >>>
-      implCastPermM x some_eqp >>>
-      implMoveDownM ps0 (ps1 :>: px) x MNil
+      implMoveUpM' ps0 ps1 x ps' >>>
+      implSimplM (distPermsProxy $ RL.append ps0 ps1) (SImpl_CastPerm x eqp) >>>
+      implMoveDownM' ps0 (ps1 :>: px) x ps'
 
 -- | Cast all of the permissions on the stack using 'implCastPermM'
 implCastStackM :: HasCallStack => NuMatchingAny1 r =>
-                  SomeEqProof (ValuePerms ps) ->
-                  ImplM vars s r ps ps ()
-implCastStackM some_eqp =
-  getDistPerms >>>= \perms ->
+                  EqProof ps' (ValuePerms ps) ->
+                  ImplM vars s r ps (ps :++: ps') ()
+implCastStackM eqp =
   RL.foldr (\memb m ->
-             implCastStackElemM memb (fmap (RL.get memb) some_eqp) >>> m)
-  (pure ())
-  (RL.members perms)
+             implCastStackElemM memb (fmap (RL.get memb) eqp) >>> m)
+  (implDropMultiM (eqProofPerms eqp))
+  (RL.members $ eqProofLHS eqp)
 
 -- | Introduce a proof of @x:true@ onto the top of the stack, which is the same
 -- as an empty conjunction
@@ -4506,7 +4582,7 @@ implLLVMFieldTryProveWordEq x fp =
     substEqsWithProof e >>>= \eqp ->
     case someEqProofRHS eqp of
       PExpr_LLVMWord e' ->
-        implCastPermM y (fmap ValPerm_Eq eqp) >>>
+        implCastPermM Proxy y (fmap ValPerm_Eq eqp) >>>
         let fp' = llvmFieldSetEqWord fp e' in
         introLLVMFieldContentsM x y fp' >>>
         return (Just e')
@@ -5609,14 +5685,21 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
        proveEqFail e mb_e
 
 
--- | Build a proof on the top of the stack that @x:eq(e)@. Assume that all @x@
--- permissions are on the top of the stack and given by argument @p@, and pop
--- them back to the primary permission for @x@ at the end of the proof.
-proveVarEq :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
-              Mb vars (PermExpr a) -> ImplM vars s r (ps :> a) (ps :> a) ()
-proveVarEq x p mb_e =
-  recombinePerm x p >>> proveEq (PExpr_Var x) mb_e >>>= \some_eqp ->
-  introEqReflM x >>> implCastPermM x (fmap ValPerm_Eq some_eqp)
+-- | Build a proof on the top of the stack that @x:eq(e)@
+proveVarEq :: NuMatchingAny1 r => ExprVar a -> Mb vars (PermExpr a) ->
+              ImplM vars s r (ps :> a) ps ()
+proveVarEq x mb_e =
+  proveEq (PExpr_Var x) mb_e >>>= \some_eqp ->
+  introEqReflM x >>> implCastPermM Proxy x (fmap ValPerm_Eq some_eqp)
+
+-- | Build proofs that @x1:eq(e1),...,xn:eq(en)@ on top of the stack
+proveVarsEq :: NuMatchingAny1 r => RAssign ExprVar as ->
+               Mb vars (RAssign PermExpr as) ->
+               ImplM vars s r (ps :++: as) ps ()
+proveVarsEq MNil _ = return ()
+proveVarsEq (xs' :>: x) es =
+  let [nuMP| es' :>: mb_e |] = mbMatch es in
+  proveVarsEq xs' es' >>> proveVarEq x mb_e
 
 -- | Prove that @e1=e2@ using 'proveEq' and then cast permission @x:(f e1)@,
 -- which is on top of the stack, to @x:(f e2)@
@@ -5625,7 +5708,7 @@ proveEqCast :: (ProveEq a, NuMatchingAny1 r) => ExprVar b ->
                ImplM vars s r (ps :> b) (ps :> b) ()
 proveEqCast x f e mb_e =
   do some_eqp <- proveEq e mb_e
-     implCastPermM x (fmap f some_eqp)
+     implCastPermM Proxy x (fmap f some_eqp)
 
 
 ----------------------------------------------------------------------
@@ -7523,7 +7606,7 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
   [nuMP| Perm_LLVMFrame mb_fperms |]
     | [Perm_LLVMFrame fperms] <- ps ->
       proveEq fperms mb_fperms >>>= \eqp ->
-      implCastPermM x (fmap (ValPerm_Conj1 . Perm_LLVMFrame) eqp)
+      implCastPermM Proxy x (fmap (ValPerm_Conj1 . Perm_LLVMFrame) eqp)
 
   -- FIXME HERE: eventually we should handle lowned permissions on the right
   -- with arbitrary contained lifetimes, by equalizing the two sides
@@ -7757,7 +7840,7 @@ proveVarImplH x p mb_p = case (p, mbMatch mb_p) of
   -- disjunctive permissions first because some trivial equalities do not require
   -- any eq permissions on the left, and we do not eliminate equalities on the
   -- left first because that may be the equality we are trying to prove!
-  (_, [nuMP| ValPerm_Eq e |]) -> proveVarEq x p e
+  (_, [nuMP| ValPerm_Eq e |]) -> recombinePerm x p >>> proveVarEq x e
 
   -- Eliminate any disjunctions and existentials on the left
   (ValPerm_Or _ _, _) ->
@@ -8331,23 +8414,30 @@ proveVarsImplEVarExprs ps =
 proveVarsImplVarEVars :: NuMatchingAny1 r => ExDistPerms vars as ->
                          ImplM vars s r as RNil (RAssign ExprVar vars)
 proveVarsImplVarEVars mb_ps =
+  -- First, prove the required permissions mb_ps. Note that this will prove
+  -- [es/vars]mb_ps, for some instantiation es for the evars vars. The rest of
+  -- this function is then to cast this to [xs/vars]mb_ps for fresh vars xs.
   proveVarsImpl mb_ps >>>
+  -- Next, call getVarVarM to get fresh variables for all the evars
   use implStateVars >>>= \vars ->
-  -- gmodify (over implStatePSubst (completePSubst vars)) >>>
-  traverseRAssign getVarVarM (RL.members $ cruCtxProxies vars) >>>= \xs ->
+  let var_membs = RL.members $ cruCtxProxies vars in
+  traverseRAssign getVarVarM var_membs >>>= \xs ->
+  -- Now get the instantiations es for the evars; NOTE: we call completePSubst
+  -- as a convenience, but all evars should be set by getVarVarM
   getPSubst >>>= \psubst ->
-  let s = completePSubst vars psubst in
-  let vars_eqpf =
-        traverseRAssign (\(Pair x e) -> someEqProof1 x e False) $
-        RL.map2 Pair xs (exprsOfSubst s) in
-  let perms_eqpf = fmap (\es -> subst (substOfExprs es) $
-                                mbDistPermsToValuePerms mb_ps) vars_eqpf in
-  implTraceM (\i -> pretty "proveVarsImplVarEVars: perms_eqpf:"
-                <+> someEqProofPP i perms_eqpf) >>>
-  implCastStackM perms_eqpf >>>
-  pure xs
-
-
+  let s = completePSubst vars psubst
+      es = exprsOfSubst s
+      mb_es = fmap (const es) mb_ps in
+  -- Prove that x:eq(e) for each evar x and its instantiation e
+  proveVarsEq xs mb_es >>>
+  -- Build the proof that [es/vars]mb_ps = [xs/vars]mb_ps
+  let eqpf =
+        fmap (\es' -> subst (substOfExprs es') $
+                      mbDistPermsToValuePerms mb_ps) $
+        eqProofFromPermsRev xs es in
+  -- Use eqpf to cast the permission stack
+  implCastStackM eqpf >>>
+  return xs
 
 -- | Prove @x:p'@, where @p@ may have existentially-quantified variables in it.
 proveVarImpl :: NuMatchingAny1 r => ExprVar a -> Mb vars (ValuePerm a) ->
