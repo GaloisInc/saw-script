@@ -382,8 +382,8 @@ Proof.
   (* Most of the remaining cases are taken care of with just bvAdd_id_l and bvAdd_id_r *)
   all: try rewrite bvAdd_id_r; try rewrite bvAdd_id_l; try reflexivity.
   (* The remaining case just needs a few more rewrites *)
-  - rewrite bvAdd_assoc, bvAdd_comm, bvAdd_assoc; reflexivity.
-  - cbn; rewrite transMbox_Mbox_nil_r; reflexivity.
+  - simpl. f_equal. rewrite bvAdd_assoc. f_equal. rewrite bvAdd_comm. f_equal.
+    simpl. rewrite transMbox_Mbox_nil_r. reflexivity.
 Time Qed.
 
 
