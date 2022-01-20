@@ -169,21 +169,76 @@ FIXME HERE: explain that ImplM is a state-continuation monad, whose final output
 
 #### Needed and Determined Variables
 
-One difficulty in doing proof search which must be addressed by the implication prover is that existential variables mean we do not have most general types. For instance, there are two distinct ways to prove
+One difficulty in doing proof search which must be addressed by the implication prover is that existential variables mean we do not have most general types. (There are other ways in which Heapster does not have most general types, but this is a more aggregious one.) For instance, there are two distinct ways to prove
 
 ```
 x:ptr((R,0) |-> true) * x:ptr((R,8) |-> true) |- exists off:bv 64. x:ptr((R,off) |-> true)
 ```
 
-The difficulty is that if we choose the wrong value for `off` we might have to backtrack, potentially leading to an exponential search. The Heapster implication prover addresses this problem by requiring that all existential variables that could lead to this sort of problem in a permission `P` are assigned a uniquely determined value before it attempts to satisfy permission `P`. These variables are called the _needed_ variables of `P`, defined by the `neededVars` function in Permissions.hs, and include any variables in the offsets and lengths of pointer, array, and block permissions, among others. In our example above, `off` is a needed variable on the right-hand side, so the implication prover will not 
+by instantiating `off` to either 0 or 8. The difficulty is that if we choose the wrong value for `off` we might have to backtrack, potentially leading to an exponential search. The same problem occurs for function permissions with ghost variables, as ghost variables become existential variables that must be instantiated at call sites. Thus, for instance, Heapster cannot handle a function with permissions like
 
-FIXME HERE
+```
+(off:bv 64). arg0:ptr((R,off) |-> true) -o empty
+```
 
-so, because there is no the implication prover will not prove this implication, but will instead raise an error. (NOTE: )
+because it will not know how to instantiate `off` at the call site. Currently, this shows up as a type-checking error when such a function is called, but we could consider raising an error where such a function is defined. If you think about it, though, a function type like this does not really make any sense. How could a function take in a pointer to something where it doesn't know the offset of that pointer?
 
-The only way to prove a permission with needed variables is if there is some other permission which is proved first that _determines_ the value of that variable. A permission `P` determines an existential variable `x` iff there is only one possible value of `x` for which `P` can possibly be proved. The canonical example of determination is the permission `eq(x)`: the only possible way to prove `y:eq(x)` is if `x` is set to `y`.
+If, however, there is some other permission that _determines_ the offset, then this problem is resolved. Consider, for instance, the following function type:
 
-Returning to 
+```
+(off:bv 64). arg0:ptr((R,off) |-> true), arg1:eq(llvmword(off)) -o empty
+```
+
+This describes a function whose second argument says what the offset is for the first. Unlike the previous example, Heapster can handle this function type, because it will prove the equality permission on `arg1` first, and this proof will determine the value of `off` to be used for the permission on `arg0`. This function type also makes a lot more sense operationally, because now the function can know what the offset is. The more common version of this situation is passing the length of an array, using a type like this:
+
+```
+(len:bv 64). arg0:array(W,0,<len,*1,int8<>), arg1:eq(llvmword(len)) -o empty
+```
+
+A similar pattern can occur inside data structures. A common pattern in C is to have a `struct` with a variable-length array at the end, whose length is determined by one of the fields, like this:
+
+```
+struct foo {
+ ...;
+ int64_t len;
+ char data[];
+}
+```
+
+Rust slices are similar. A struct like this can be described by the Heapster shape
+
+```
+...; exsh len:bv 64.(fieldsh(eq(llvmword len));arraysh(<len,*1,fieldsh(int8<>)))
+```
+
+This shape can be proved by the Heapster implication prover because the existential variable `len` in the shape is determined by the equality permission in the `len` field in the struct. If the struct did not have this field, Heapster would not be able to prove permissions with this shape. Again, such a shape does not really make sense, as the program would never know how long the `data` field is.
+
+
+The Heapster implication prover addresses the problem of existential variables leading to non-unique types by requiring that all existential variables that could lead to this sort of problem in a permission `p` are assigned a uniquely determined value before it attempts to satisfy permission `p`. These variables are called the _needed_ variables of `p`, defined by the `neededVars` function in Permissions.hs. The needed variables include any free variables in the offsets and lengths of pointer, array, and block permissions, as well as any free variables of the more complicated permissions like lifetime ownership permissions. For equality permissions `eq(e)`, the free variables of `e` are not needed if `e` is a _determining_ expression, discussed below. In our example above, `off` is a needed variable on the right-hand side, so the implication prover will not prove this implication but will instead raise a type-checking error (with the `Impl1_Fail` rule described above).
+
+The only way to prove a permission with needed variables is if there is some other permission which is proved first that _determines_ the value of that variable. Intuitively, the idea is that a permission `p` determines an existential variable `x` if there is only one possible value of `x` for which `p` can possibly be proved. The canonical example of determination is the permission `eq(x)`: the only possible way to prove an `eq(x)` permission is to set `x` to the value that has this permission. If we are proving `y:eq(x)`, then `x` has to be set to `y`, while if we are proving a pointer permission `y:ptr((rw,off) |-> eq(x))`, `x` has to be set to the value pointed to by `y` at offset `off`. Note that, in this latter case, the implication prover will first prove some permission of the form `y:ptr((rw,off) |-> p)` and will then use the `Impl1_ElimLLVMFieldContents` rule to bind a local variable `z` for the value pointed to by `y` at offset `off`, so `x` will be set to this local variable `z`. In order to prove a pointer permission, however, the free variables in `off` (if there are any) must already be determined by some other permission, because these are needed variables of the pointer permission. Thus determined variables have a dependency structure, where some variables can only be determined if other variables are determined first. Further, a variable can not be determined by an equality inside an arbitrary permission. For instance, `eq(x) or p` does not determine `x`, because the proof may not take the left-hand branch of the disjunct.
+
+More generally, determined variables are defined by the `determinedVars` function. This function uses the helper function `isDeterminingExpr` to define whether an expression `e` used in an equality permission determines its variables. The following expression forms are determining:
+* `x`
+* `llvmword e` if `e` is determining
+* `N*x + K` for constants `N` and `K`
+* The permission `eq(e)` as an expression if `e` is determining
+* `x &+ off` if `off` is determining
+* Any expression with no free variables
+
+The `determinedVars` function is then defined as follows on permission `p`:
+
+| Permission `p` | Determined Variables |
+|-------------|----------------------|
+| `eq(e)` | The free variables of `e` if `e` is a determining expression, otherwise `[]` |
+| `p1 * ... * pn` | The determined variables of the `pi` |
+| `P<args>` | The free variables of each determining expression in `args` |
+| `[l]ptr((rw,off) |-> p)` | The determined variables of `l`, `rw`, and `p`, if the variables in `off` are determined |
+| `[l]array(rw,off,<len,*stride,sh,bs)` | The determined variables of `l`, `rw`, and `sh`, if the variables in `off`, `len`, and `bs` are determined |
+| `[l]memblock(rw,off,len,sh)` | The determined variables of `l`, `rw`, and `sh`, if the variables in `off` and `len` are determined |
+| `llvmframe[e1:i1, ..., en:in]` | The free variables of each `ei` that is a determining expression |
+
+
 
 #### The Top-Level Implication Prover Algorithm
 
@@ -219,7 +274,7 @@ The top-level implication prover algorithm is then implemented as a descending s
 
 #### Proving a Permission
 
-The main logic for proving a permission is in the function `proveVarImplH`. (The implication prover uses the convention of using "`H`" as a suffix for helper functions.) As with many functions in the implication prover, this function takes in: a variable `x` that we are trying to prove a permission on; a permission `p` for `x` which is currently on top of the stack; and a permission `mb_p` inside a context of evars that we are trying to prove for `x`. (The prefix "`mb`" refers to "multi-binding", a binding of 0 or more evars.) The function then works by pattern-matching on `p` (the left-hand side) and `mb_p` (the right-hand side), using the following cases, many of which call out to helper functions described below:
+The main logic for proving a permission is in the function `proveVarImplH`. (The implication prover uses the convention of using "`H`" as a suffix for helper functions.) As with many functions in the implication prover, this function takes in: a variable `x` that we are trying to prove a permission on; a permission `p` for `x` which is currently on top of the stack; and a permission `mb_p` inside a context of evars that we are trying to prove for `x`. (The prefix "`mb`" refers to "multi-binding", a binding of 0 or more evars.) The function then works by pattern-matching on `p` (the left-hand side) and `mb_p` (the right-hand side), using the following cases, some of which call out to helper functions described below:
 
 | Left-hand side | Right-hand side | Algorithmic steps taken |
 |------------|--------------|--------------------|
