@@ -15,7 +15,7 @@ The central components of Heapster are in the following files:
 
 * SAWTranslation.hs: This file defines the translation from type-checked Crucible CFGs to SAW core terms that represent their specifications.
 
-FIXME: describe the other files
+[comment]: <> (FIXME: describe the other files)
 
 
 ## Heapster Permission Implication
@@ -83,7 +83,7 @@ The one-step implication rules defined by the `|-(1)` judgment are defined by th
 | `Impl1_Simpl` | Apply a simple implication of the form `ps1 \|- ps2` | `ps * ps1 \|-(1) ps * ps2` |
 | `Impl1_ElimLLVMFieldContents` | Extract the contents of an LLVM pointer permission | `ps * x:ptr((rw,off) -> p) \|-(1) y. ps * x:ptr((rw,off) -> eq(y)) * y:p` |
 
-FIXME: explain the above rules!
+[comment]: <> (FIXME: explain the above rules!)
 
 The most common implication rule is `Impl1_Simpl`, which applies a "simple" implication rule that exactly only one disjunctive output permission and binds no variables. The simple implication rules are described by the type `SimplImpl ps_in ps_out`. A rule of this type assumes that permissions `ps_in` are on the top of the stack, though there can be more permissions below these on the stack. It then consumes `ps_in`, replacing them with permissions `ps_out`. (As above, the `ps_in` and `ps_out` type arguments in Haskell are actually datakinds capturing the types of the input and output permissions of the rule.) These include too many rules to list here, so we only describe enough of them to give a flavor of what they do.
 
@@ -164,6 +164,26 @@ implPushM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
 
 meaning that `implPushM` takes in a variable `x` and a permission `p` and returns a computation that starts in any permission stack `ps` and pushes permission `x:p` of type `a` onto the top of the stack.
 
+FIXME HERE: explain that ImplM is a state-continuation monad, whose final output is always a `PermImpl`
+
+
+#### Needed and Determined Variables
+
+One difficulty in doing proof search which must be addressed by the implication prover is that existential variables mean we do not have most general types. For instance, there are two distinct ways to prove
+
+```
+x:ptr((R,0) |-> true) * x:ptr((R,8) |-> true) |- exists off:bv 64. x:ptr((R,off) |-> true)
+```
+
+The difficulty is that if we choose the wrong value for `off` we might have to backtrack, potentially leading to an exponential search. The Heapster implication prover addresses this problem by requiring that all existential variables that could lead to this sort of problem in a permission `P` are assigned a uniquely determined value before it attempts to satisfy permission `P`. These variables are called the _needed_ variables of `P`, defined by the `neededVars` function in Permissions.hs, and include any variables in the offsets and lengths of pointer, array, and block permissions, among others. In our example above, `off` is a needed variable on the right-hand side, so the implication prover will not 
+
+FIXME HERE
+
+so, because there is no the implication prover will not prove this implication, but will instead raise an error. (NOTE: )
+
+The only way to prove a permission with needed variables is if there is some other permission which is proved first that _determines_ the value of that variable. A permission `P` determines an existential variable `x` iff there is only one possible value of `x` for which `P` can possibly be proved. The canonical example of determination is the permission `eq(x)`: the only possible way to prove `y:eq(x)` is if `x` is set to `y`.
+
+Returning to 
 
 #### The Top-Level Implication Prover Algorithm
 
@@ -197,7 +217,7 @@ The top-level implication prover algorithm is then implemented as a descending s
 | `proveVarImplInt` | Wrapper function that pushes the primary permissions for `x` onto the top of the stack, performs debug tracing, calls `proveVarImplH`, and then checks that the proved permission is correct |
 
 
-#### Proving a Single Permissino
+#### Proving a Permission
 
 The main logic for proving a permission is in the function `proveVarImplH`. (The implication prover uses the convention of using "`H`" as a suffix for helper functions.) As with many functions in the implication prover, this function takes in: a variable `x` that we are trying to prove a permission on; a permission `p` for `x` which is currently on top of the stack; and a permission `mb_p` inside a context of evars that we are trying to prove for `x`. (The prefix "`mb`" refers to "multi-binding", a binding of 0 or more evars.) The function then works by pattern-matching on `p` (the left-hand side) and `mb_p` (the right-hand side), using the following cases, many of which call out to helper functions described below:
 
@@ -211,36 +231,57 @@ The main logic for proving a permission is in the function `proveVarImplH`. (The
 | `eq(y &+ off)` | `mb_p` | Prove `y:(offsetPerm mb_p off)` and then case the proof to `x:mb_p` |
 | `p` | `mb_p1 or mb_p2` | Nondeterminsitically try to prove either `mb_p1` or `mb_p2` |
 | `p` | `exists z. mb_p` | Add a new evar for `z`, prove `x:mb_p`, and then use the value determined for `x` to introduce an existential permission |
+| `P<args>` | `mb_p` | Use the more specific rules below for named permissions |
+| `p1 * ... * pi-1 * P<args> * pi+1 * ... * pn` | `mb_p` | Use the more specific rules below for named permissions |
+| `p` | `P<mb_args>` | Use the more specific rules below for named permissions |
+| `eq(llvmword e)` | `p1 * ... * pn` | Fail, because we cannot prove any non-equality permissions for words, and the equality permissions were matched by an earlier case |
+| `eq(struct(e1,...,en))` | `mb_p` | Eliminate `eq(struct(e1,...,en))` to a `struct(eq(e1),...,eq(en))` permission with equalities for each field |
+| `eq(constant f)` | `(gs) ps_in -o ps_out` | Use an assumption on known function `f` |
+| `p1 * ... * pn` | `mb_p1 * ... * mb_pn` | Call `proveVarConjImpl` to prove a conjunction implies a conjunction |
+| `p` | `(X). X` | For existential permission variable `X`, set `X:=p` |
+| `X` | `X` | For universal permission variable `X`, prove `X -o X` by reflexivity |
+| `_` | `_` | In all other cases, fail |
+
+
+#### Proving Named Permissions
+
+| Left-hand side | Right-hand side | Algorithmic steps taken |
+|------------|--------------|--------------------|
 | `P<args,e>` | `P<mb_args,mb_e>` | For reachabilitiy permission `P`, nondeterministically prove the RHS by either reflexivity, meaning `x:eq(mb_e)`, or transitivity, meaning `e:P<mb_args,mb_e>` |
-| `P<args>` | `P<mb_args>` | For non-reachabilitiy named permission `P`, prove `args` _weakens to_ `mb_args`, where write modalities weaken to read, bigger lifetimes weaken to smaller ones, and otherwise arguments weaken to themselves | 
+| `P<args>` | `P<mb_args>` | For non-reachabilitiy named permission `P`, prove `args` _weakens to_ `mb_args`, where write modalities weaken to read, bigger lifetimes weaken to smaller ones, and otherwise arguments weaken to themselves |
 | `p1 * ... * pi-1 * P<args> * pi+1 * ... pn` | `P<mb_args>` | Similar to above |
+| `p` | `P<mb_args>` | If `P` is a _defined_ (i.e., non-recursive) name, unfold `P` to its definition and recurse |
+| `P<args>` | `mb_p` | If `P` is a defined name, unfold `P` to its definition and recurse |
+| `p1 * ... * pi-1 * P<args> * pi+1 * ... pn` | `mb_p` | If `P` is defined, unfold `P` to its definition and recurse |
+| `P1<args>` | `P2<mb_args>` | If `P1` and `P2` are both recursively-defined, nondeterminstically choose one side to unfold |
+| `p1 * ... * pi-1 * P1<args> * pi+1 * ... pn` | `P2<mb_args>` | If `P1` and `P2` are both recursively-defined, nondeterminstically choose one side to unfold |
+| `p` | `P<mb_args>` | If `P` is recursive, unfold `P` and recurse |
+| `P<args>` | `mb_p` | If `P1` and `P2` are both recursively-defined, nondeterminstically choose 
+
+FIXME HERE: mention the recursion flag: cannot unfold on the left and the right in the same proof
 
 
+#### Proving Equalities and Equality Permissions
 
-FIXME HERE NOW
-
-
-The main logic for proving most of the permission constructs is in the next function down, `proveVarImplInt`, which proves a single permission on a variable `x`. It does this by first pushing the primary permsisions `p` for `x` onto the top of the stack and then proving an implication `x:p |- x:mb_p`, where `mb_p` is the desired permission that we want to prove for `x`. The "mb" prefix indicates that `mb_p` is a permission inside a multi-binding, i.e., a binding of 0 or more existential variables that could be used in the permission we are trying to prove. The `proveVarImplInt` then proceeds by case analysis on `p` and `mb_p`, in most cases using either an introduction rule for proving a construct in `mb_p` on the right or an elimination rule for eliminating a construct in `p` on the left combined with a recursive call to `proveVarImplInt` to prove the remaining implication for smaller `p` and/or smaller `mb_p`. The most complex cases are for proving an equality permission on the right or for proving an implication `x:p1 * ... * pn |- x:p1' * ... * pm'` between conjuncts permissions. For an equality permission on the right, the special-purpose helper function `proveVarEq` is used to prove equality permissions `x:eq(e)` based on the structure of `e`. For proving an implication of conjuncts, the function `proveVarConjImpl` is used, which is structured in a similar manner to `proveVarsImplAppendInt`, in that it repeatedly chooses the "best" permission on the right to prove, proves it, and then recursively proves the remaining permissions on the right until they have all been proved.
-
-The `proveVarAtomicImpl` function is called by `proveVarConjImpl` to prove each conjunct. This function performs 
-
+FIXME HERE:
+- Explain the representaiton of equality proofs
+- `proveEq` builds an equality proof
+- `proveVarEq` then casts a reflexive equality proof `x:eq(x)` to one of `x:eq(e)` using a proof of `x=e`
 
 
-FIXME: put this discussion about needed and determined variables into the description of proveVarsImplAppendInt
+#### Proving Conjuncts of Permissions
 
-There are a number of difficulties in doing this proof search which must be addressed by the implication prover. The first is that existential permissions mean we do not have most general types; e.g., there are two distinct ways to prove
+FIXME HERE:
+- Explain that `proveVarConjImpl` repeatedly chooses the "best" permission to prove next; chooses defined permissions first, then recursive ones, then those whose needed vars are determined
+- give the table of cases
 
-```
-x:ptr((R,0) |-> true) * x:ptr((R,8) |-> true) |- exists off:bv 64. x:ptr((R,off) |-> true)
-```
 
-The difficulty is that if we choose the wrong value for `off` we might have to backtrack, potentially leading to an exponential search. The Heapster implication prover addresses this problem by requiring that all existential variables that could lead to this sort of problem in a permission `P` are assigned a uniquely determined value before it attempts to satisfy permission `P`. These variables are called the _needed_ variables of `P`, defined by the `neededVars` function in Permissions.hs, and include any variables in the offsets and lengths of pointer, array, and block permissions, among others. In our example above, `off` is a needed variable on the right-hand side, so the implication prover will not 
+#### Proving Field Permissions
 
-so, because there is no the implication prover will not prove this implication, but will instead raise an error. (NOTE: )
+#### Proving Array Permissions
 
-The only way to prove a permission with needed variables is if there is some other permission which is proved first that _determines_ the value of that variable. A permission `P` determines an existential variable `x` iff there is only one possible value of `x` for which `P` can possibly be proved. The canonical example of determination is the permission `eq(x)`: the only possible way to prove `y:eq(x)` is if `x` is set to `y`.
+#### Proving Block Permissions
 
-Returning to 
 
 ## Crucible Type-checker
 
