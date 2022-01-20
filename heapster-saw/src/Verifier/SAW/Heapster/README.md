@@ -164,7 +164,17 @@ implPushM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
 
 meaning that `implPushM` takes in a variable `x` and a permission `p` and returns a computation that starts in any permission stack `ps` and pushes permission `x:p` of type `a` onto the top of the stack.
 
-FIXME HERE: explain that ImplM is a state-continuation monad, whose final output is always a `PermImpl`
+If the permission stack does not change, meaning that `ps_in` equals `ps_out`, then `ImplM` forms a monad. For instance, the function
+
+```
+partialSubstForceM :: (NuMatchingAny1 r, PermPretty a,
+                       Substable PartialSubst a Maybe) =>
+                      Mb vars a -> String -> ImplM vars s r ps ps a
+```
+
+takes the current partial substitution for the evars and attempts to apply it to a value in a name-binding for those evars, raising an error if some evar that has not yet been instantiated is used in the value. (The "force" means to force the substitution to be defined or fail.) This function does not change the permission stack, and is in fact written in `do` notation in the code.
+
+The `ImplM` monad is defined as a generalized state-continuation monad. This construct is defined in `GenMonad.hs`, but we will not discuss it in too much detail here. The state that is maintained is given by the `ImplState` type, which contains information such as the current permission set, the types of all univeral and existential variables in scope, and the current instantiations of all the evars. The input and output types of the continuation portion of `ImplM` are both `PermImpl`, meaning each `ImplM` computation builds up an implication. The fact that `ImplM` is a continuation monad is only used in the `implApplyImpl1` function, which applies an `Impl1` rule by shifting the current continuation and re-applying it to build the sub-`PermImpl`s passed to that rule as an `MbPermImpls`. This means that rules with multiple disjunctive outputs, like or elimination and the catch rule, cause `ImplM` to fork its execution, running any subsequent computation once in each disjunctive branch. Thus, for performance reasons, it is helpful to reduce this forking as much as possible.
 
 
 #### Needed and Determined Variables
