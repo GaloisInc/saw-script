@@ -26,9 +26,9 @@ Heapster permission implication is a form of _affine logic_, which in turn is a 
 dollar * dollar * dollar |- candy_bar
 ```
 
-to represent the concept that a particular candy bar costs $3. Intuitively, the `dollar` proposition represents possession of a dollar, `candy_bar` represents possession of a (reasonably fancy) candy bar, and `*` represents the conjunction of two propositions. A "proof" using this rule consumes three `dollar` propositions and generates one `candy_bar` proposition, intuitively representing the purchase of this candy bar. Importantly, unlike standard classical or even intuitionistic logic, where `P and P` is equivalent to `P`, the conjunction `P * P` in linear logic represents two copies of the proposition `P`, which in general is different than `P` by itself; e.g., if we could prove `dollar |- dollar * dollar` then we could generate all the money we wanted. This is not to say that `P |- P * P` is never true, just that it is only true for some `P`, which correspond to resources that can be duplicated. See any introduction to linear logic for more details.
+to represent the concept that a particular candy bar costs $3. Intuitively, the `dollar` proposition represents possession of a dollar, `candy_bar` represents possession of a (reasonably fancy) candy bar, and `*` represents the conjunction of two propositions. A "proof" using this rule consumes three `dollar` propositions and generates one `candy_bar` proposition, intuitively representing the purchase of this candy bar. Importantly, unlike standard classical or even intuitionistic logic, where `p and p` is equivalent to `p`, the conjunction `p * p` in linear logic represents two copies of the proposition `p`, which in general is different than `p` by itself; e.g., if we could prove `dollar |- dollar * dollar` then we could generate all the money we wanted. This is not to say that `p |- p * p` is never true, just that it is only true for some `p`, which correspond to resources that can be duplicated. See any introduction to linear logic for more details.
 
-Affine logic is a version of linear logic where propositions can be "thrown away", that is, where the rule `P * Q |- P` holds for all `P` and `Q`. The reason we use affine logic here is that it is useful for describing a notion of _permissions_, where each `P` intuitively corresponds to permission to perform a particular action. It is always justified to forget some permission if you are not going to use it, but you can't in general give yourself more permissions. One of the central permissions used in Heapster is the permission to access memory through a particular pointer. The simplest form of this is the pointer permission `x:ptr((rw,off) |-> p)`, that represents a permission to read &mdash; and possibly write, depending on `rw` &mdash; memory at offset `off` from `x`, along with permission `y:p` to whatever value `y` is currently stored there. The `array` and `memblock` permissions also represent different forms of permission to read and possibly write memory, with different stipulations on the permissions held for the values currently stored there. Read-only permissions are copyable, meaning that `x:ptr((R,off) |-> p) |- x:ptr((R,off) |-> p) * x:ptr((R,off) |-> p)` can be proved in Heapster, as long as `p` does not contain any write permissions, while write permissions `x:ptr((W,off) |-> p)` are not. This corresponds to the one-writer or multiple readers paradigm of, e.g., Rust.
+Affine logic is a version of linear logic where propositions can be "thrown away", that is, where the rule `p * q |- p` holds for all `p` and `q`. The reason we use affine logic here is that it is useful for describing a notion of _permissions_, where each `p` intuitively corresponds to permission to perform a particular action. It is always justified to forget some permission if you are not going to use it, but you can't in general give yourself more permissions. One of the central permissions used in Heapster is the permission to access memory through a particular pointer. The simplest form of this is the pointer permission `x:ptr((rw,off) |-> p)`, that represents a permission to read &mdash; and possibly write, depending on `rw` &mdash; memory at offset `off` from `x`, along with permission `y:p` to whatever value `y` is currently stored there. The `array` and `memblock` permissions also represent different forms of permission to read and possibly write memory, with different stipulations on the permissions held for the values currently stored there. Read-only permissions are copyable, meaning that `x:ptr((R,off) |-> p) |- x:ptr((R,off) |-> p) * x:ptr((R,off) |-> p)` can be proved in Heapster, as long as `p` does not contain any write permissions, while write permissions `x:ptr((W,off) |-> p)` are not. This corresponds to the one-writer or multiple readers paradigm of, e.g., Rust.
 
 The remainder of this section explains Heapster implication in more detail and then describes the permission implication prover algorithm used by Heapster used to prove these implications.
 
@@ -38,10 +38,10 @@ The remainder of this section explains Heapster implication in more detail and t
 At any given point during type-checking and/or implication proving, Heapster maintains a _permission set_ that describes the current permissions to various objects that are currently held by the program. Permission sets are defined by the `PermSet` type in Permissions.hs, and have two components: the _permissions map_, which maps each variable `x` in scope to what is called the _primary_ permission held on `x`; and the _permissions stack_, which represents the permissions that are actively being used or manipulated. We write a permission set as:
 
 ```
-x1 -> Px1 * ... * xm -> Pxm; y1:P1 * ... * yn:Pn
+x1 -> px1 * ... * xm -> pxm; y1:p1 * ... * yn:pn
 ```
 
-The portion before the semicolon represents the permissions map, which maps each `xi` to its primary permission `Pxi`, while the portion after the semicolon represents the permissions stack, containing permissions `y1:P1` through `yn:Pn` in sequence. The final permissions `yn:Pn` is the top of the stack. We often write `PS` for a permission set.
+The portion before the semicolon represents the permissions map, which maps each `xi` to its primary permission `pxi`, while the portion after the semicolon represents the permissions stack, containing permissions `y1:p1` through `yn:pn` in sequence. The final permissions `yn:pn` is the top of the stack. We often write `PS` for a permission set.
 
 The general form of permission implication is the judgment
 
@@ -49,7 +49,7 @@ The general form of permission implication is the judgment
 PS |- (z1_1, ..., z1_k1 . PS1) \/ ... \/ (zn_1, ..., zn_kn . PSn)
 ```
 
-which says that, starting with permission set `PS` on the left-hand side of the turnstyle `|-`, we can prove one of the permission sets `PSi` on the right-hand side. Each disjunctive case could introduce 0 or more existential variables `zi_1, ..., zi_ki`, which can be used in the corresponding permission set `PSi`. We often omit the permissions map and/or the existential variables when they are not necessary; e.g., we write `PS1 |- PS2` instead of `PS1 |- ( [] . PS2)`. We also tend to omit the permissions map from implications, as permissions maps almost never change; thus, e.g., we might write `x:p |- y:q` instead of `x1 -> Px1 * ... * xm -> Pxm; x:p |- x1 -> Px1 * ... * xm -> Pxm; y:q`.
+which says that, starting with permission set `PS` on the left-hand side of the turnstyle `|-`, we can prove one of the permission sets `PSi` on the right-hand side. Each disjunctive case could introduce 0 or more existential variables `zi_1, ..., zi_ki`, which can be used in the corresponding permission set `PSi`. We often omit the permissions map and/or the existential variables when they are not necessary; e.g., we write `PS1 |- PS2` instead of `PS1 |- ( [] . PS2)`. We also tend to omit the permissions map from implications, as permissions maps almost never change; thus, e.g., we might write `x:p |- y:q` instead of `x1 -> px1 * ... * xm -> pxm; x:p |- x1 -> px1 * ... * xm -> pxm; y:q`.
 
 Permission implication in Heapster is actually a sort of "partial implication". The above-displayed implicaiton judgment in fact says that, if we hvae permission set `PS`, we can _try_ to get one of the permission sets `PSi`, though we can't control which one we get, and we might fail. What this failure means exactly is a little hard to define without going into the details of the translation to SAW core / Coq and relationship between the resulting term and the original program. As one way to understand what failure means here, consider that each permission set `PS` actually describes a set of possible states, one for each substitution of values for all the free variables in `PS`. For some of these states, we can exchange the permissions in `PS` for the permissions in one of the `PSi`, though in some of those states, trying to do this leads to undefined behavior, or at least behavior we are not going to reason about. Another way to think about Heapster implication is to always add an extra disjunction `\/ dunno` to each right-hand side, so an implication `PS |- PS1 \/ ... \/ PSn` becomes `PS |- PS1 \/ ... \/ PSn \/ dunno`, meaning that from permissions `PS` we either can get one of the `PSi` or we get a result that says that we have to give up on modeling the current execution of the program. At a slightly more technical level, failure means means that the translation of a failure is just the `errorM` computation, which, again, doesn't mean that the original computation actually has an error, just that we don't know how to reason about it. Either way, we will simply say "prove" or "implies" below instead of something like "partially prove in some states".
 
@@ -129,9 +129,9 @@ Equality permissions are manipulated with the following simple implication rules
 | `SImpl_CastPerm` | Cast a permission `p` to `p'`, assuming that `x1=e1`, ..., `xn=en` imply that `p=p'` | `x1:eq(e1) * ... * xn:eq(en) * x:p \|- x:p'` |
 
 
-[comment]: (FIXME: Implementation of the rules: `simplImplIn` and `simplImplOut`, `applyImpl1`: these all check for correct perms)
+[comment]: <> (FIXME: Implementation of the rules: `simplImplIn` and `simplImplOut`, `applyImpl1`: these all check for correct perms)
 
-[comment]: (FIXME: Explain overall pattern of the simplimpl rules: intro vs elim rules for most constructs)
+[comment]: <> (FIXME: Explain overall pattern of the simplimpl rules: intro vs elim rules for most constructs)
 
 
 ### The Implication Prover Algorithm
@@ -344,14 +344,32 @@ Equality permissions are proved by `proveVarEq`, which takes a variable `x` and 
 
 An equality proof in Heapster is a transitive sequence of equality proof steps `e=e',e'=e'',...`. Each step is a sequence of equality permissions `x1:eq(e1),...,xn:eq(en)`, where each equality `xi:eq(ei)` is oriented either left-to-right as `xi=ei` or right-to-left as `ei=xi`, along with a function `f` on `n` expressions. This represents the equality `f(left1,...,leftn)=f(right1,...,rightn)`, where `lefti` and `righti` are the left- and right-hand sides of the `i`th oriented version `xi=ei` or `ei=xi` of the permission `xi:eq(ei)`. Equality steps are represented by the Haskell type `EqProofStep ps a`, where `ps` is a list of the types of the variables `x1,...,xn` and `a` is the Haskell type of the objects being proved equal. (Equality proofs can be used not just on expressions, but at other types as well.) Entire equality proofs are represented by the type `EqProof ps a`, while the type `SomeEqProof a` is an equality proof where the permissions needed to prove it are existentially quantified.
 
-FIXME HERE: describe `proveEq` and `proveEqH`
+[comment]: <> (FIXME HERE: describe `proveEq` and `proveEqH`)
 
 
 #### Proving Conjuncts of Permissions
 
-FIXME HERE:
-- Explain that `proveVarConjImpl` repeatedly chooses the "best" permission to prove next; chooses defined permissions first, then recursive ones, then those whose needed vars are determined
-- give the table of cases
+Conjuncts `p1 * ... * pn` are proved by `proveVarConjImpl`, which repeatedly picks the "best" permission on the right to prove and calls `proveVarAtomicImpl` to prove it. Finding the "best" permission prioritizes defined permissions first, followed by recursive permissions, as this fits with the named permissions algorithm described above, followed by finding a permission whose needed variables have all been determined.
+
+The cases for `proveVarAtomicImpl` are as follows:
+
+| Permission to prove | Algorithmic steps taken |
+|----------------|--------------------|
+| `[l]ptr((rw,off) |-> p)` | Call `proveVarLLVMField` |
+| `[l]array(rw,off,<len,*stride,sh,bs)` | Call `proveVarLLVMArray` |
+| `[l]memblock(rw,off,len,sh)` | Call `proveVarLLVMBlock` |
+| `free(e)` | If there is a `free(e')` permission on the left, cast it to `free(e)` by proving `e'=e` |
+| `llvmfunptr(...)` | If there is an identical `llvmfunptr(...)` permission on the left, use it |
+| `is_llvmptr` | If there is an `is_llvmptr`, field, array, or block permission, use it (with the corresponding implication rule in the latter cases) to prove that the variable is a pointer |
+| `shape(sh)` | If there is a `shape(sh')` permission on the left, cast it to `shape(sh)` by proving `sh'=sh` |
+| `llvmframe[e1:i1,...,en:in]` | If there is an `llvmframe` permission on the left, cast it to the required permission |
+| `lowned[](ps_in -o ps_out)` | If there is an `lowned[ls](ps_in' -o ps_out')` permission on the left with `ls!=[]`, end the lifetimes in `ls` using `implEndLifetimeRecM` |
+| `lowned[](ps_in -o ps_out)` | If there is an `lowned[](ps_in' -o ps_out')` permission on the left, prove that `p1 * ps_in' -o ps_in` and `p2 * ps_out -o ps_out'` for some `p1` and `p2`, by calling `solveForPermListImpl` to solve for `p1` and `p2`, and then use these proofs with the `SImpl_MapLifetime` rule |
+| `l:[l']lcurrent` | Build the proof by taking the reflexive-transitive closure of any `lcurrent` and `lowned` permissions on the left, noting that `l:lowned[ls](ps_in -o ps_out)` implies `l:[li]lcurrent` for any `li` in the `ls` list |
+| `l:lfinished` | End lifetime `l` by calling `implEndLifetimeRecM` |
+| `struct(p1,...,pn)` | If we have `struct(q1,...,qn)` on the left, eliminate each field to a fresh variable using the `Impl1_ElimStructField` rule, yielding permission `struct(eq(x1),...,eq(xn))` along with permissions `x1:q1,...,xn:qn`, and then prove `x1:p1,...,xn:pn` and introduce them into the required struct permission |
+| `(xs).ps_in -o ps_out` | If the identical permission `(xs).ps_in -o ps_out` is on the left, use it |
+| `_` | In all other cases, call `proveVarAtomicImplUnfoldOrFail` to unfold any names on the left to try to make more progress, or fail if this is not possible |
 
 
 #### Proving Field Permissions
