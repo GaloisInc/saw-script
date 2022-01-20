@@ -129,10 +129,9 @@ Equality permissions are manipulated with the following simple implication rules
 | `SImpl_CastPerm` | Cast a permission `p` to `p'`, assuming that `x1=e1`, ..., `xn=en` imply that `p=p'` | `x1:eq(e1) * ... * xn:eq(en) * x:p \|- x:p'` |
 
 
+[comment]: (FIXME: Implementation of the rules: `simplImplIn` and `simplImplOut`, `applyImpl1`: these all check for correct perms)
 
-- Implementation of the rules: `simplImplIn` and `simplImplOut`, `applyImpl1`: these all check for correct perms
-
-- Explain overall pattern of the simplimpl rules: intro vs elim rules for most constructs
+[comment]: (FIXME: Explain overall pattern of the simplimpl rules: intro vs elim rules for most constructs)
 
 
 ### The Implication Prover Algorithm
@@ -152,7 +151,8 @@ An element of this type is an implication prover computation with return type `a
 The type variables `ps_in` and `ps_out` describe the permission stack on the beginning and end of the computation. The existence of these two variables make `ImplM` a _generalized_ monad instead of just a standard monad, which means that these types can vary throughout an implication computation. The bind for `ImplM` is written `>>>=` instead of `>>=`, and has type
 
 ```
-(>>>=) :: ImplM vars s r ps' ps_in a -> (a -> ImplM vars s r ps_out ps' b) -> ImplM vars s r ps_out ps_in b
+(>>>=) :: ImplM vars s r ps' ps_in a -> (a -> ImplM vars s r ps_out ps' b) ->
+          ImplM vars s r ps_out ps_in b
 ```
 
 That is, the bind `m >>>= f` first runs `m`, which changes the permissions stack from `ps_in` to `ps'`, and then it passes the output of `m` to `f`, which changes the permissions stack from `ps'` to `s_out`, so the overall computation changes the permissions stack from `ps_in` to `ps_out`. As a more concrete example, the computation for pushing a permission onto the top of the stack is declared as
@@ -310,6 +310,20 @@ The main logic for proving a permission is in the function `proveVarImplH`. (The
 
 #### Proving Named Permissions
 
+Named permissions are of the form `P<args>` for some permission name `P`. Each named permission represents some more complicated collection of permissions, that can depend on the argument expressions `args`. Permission names come in three sorts:
+
+* _Defined names_ are essentially abbreviations, where `P<args>` unfolds to some permission `p` that does not contain `P` itself (unless `P` occurs `args`);
+
+* _Recursive names_ `P` are similar to defined names but where `P<args>` unfolds to a permission that can contain `P`; and
+
+* _Opaque names_ are permissions which are too complicated to represent in Heapster, so Heapster just represents them with names.
+
+The "best" way to prove a named permission `P<args>` is by reflexivity, i.e., to find an instance of `P<args>` that is already in the current permissions set. The implication rules do allow some amount of weakening the arguments, so technically this is a search for `P<args'>` for some argument list `args'` that can be coerced to `args`. For opaque names, this is the only way to prove `P<args>`. For defined names, the other option is to just unfold `P<args>` to its definition, prove that permission, and then fold the result to `P<args>`. Similarly, recursive names can also be unfolded to prove them. Dually, if there is a permission `P<args>` with a defined or recursive name on the left, meaning it is already held in the current permission set, the implication prover will unfold this permission if it gets stuck trying to prove its goal any other way. This logic is implemented by the `implUnfoldOrFail` function, which is called in a number of places in the implication prover where it will otherwise fail.
+
+The one wrinkle is that unfolding recursive names can lead to non-termination. This can happen if we have an assumption `P1<args1>` on the left and we are trying to prove `P2<args2>` on the right where both `P1` and `P2` are recursive names. If we proceed by unfolding both `P1` and `P2`, then, because these unfoldings can each contain `P1` and `P2` again, we can end up back at the same proof goal, of having an assumption `P1<args1>` on the left and trying to prove `P2<args2>`. To prevent this infinite regress, the implication prover is restricted so that it will not unfold names on both the left and right sides in the same proof. This is done by maintainining a flag called `implStateRecRecurseFlag` that tracks whether there has been an unfolding of a recursive name on one side or the other. Whenever the implication prover has `P1<args1>` on the left and `P2<args2>` on the right for recursive names `P1` and `P2`, it then non-deterministically (using the `Impl1_Catch` rule to backtrack) chooses one side to unfold, and it proceeds from there. This handles the possibility that one of `P1` or `P2` contains the other as a sub-permission.
+
+In more detail, here are the cases of `proveVarImplH` that handle recursive permissions:
+
 | Left-hand side | Right-hand side | Algorithmic steps taken |
 |------------|--------------|--------------------|
 | `P<args,e>` | `P<mb_args,mb_e>` | For reachabilitiy permission `P`, nondeterministically prove the RHS by either reflexivity, meaning `x:eq(mb_e)`, or transitivity, meaning `e:P<mb_args,mb_e>` |
@@ -323,15 +337,14 @@ The main logic for proving a permission is in the function `proveVarImplH`. (The
 | `p` | `P<mb_args>` | If `P` is recursive, unfold `P` and recurse |
 | `P<args>` | `mb_p` | If `P1` and `P2` are both recursively-defined, nondeterminstically choose 
 
-FIXME HERE: mention the recursion flag: cannot unfold on the left and the right in the same proof
-
 
 #### Proving Equalities and Equality Permissions
 
-FIXME HERE:
-- Explain the representaiton of equality proofs
-- `proveEq` builds an equality proof
-- `proveVarEq` then casts a reflexive equality proof `x:eq(x)` to one of `x:eq(e)` using a proof of `x=e`
+Equality permissions are proved by `proveVarEq`, which takes a variable `x` and an expresson `mb_e` in a binding of the existential variables, and proves `x:eq(e)` for some instantiation `e` of the variables in `mb_e`. This function pushes a reflexive proof that `x:eq(x)`, calls `proveEq` to build an equality proof that `x=e`, and uses the equality proof with the `SImpl_CastPerm` rule to cast the proof of `x:eq(x)` on top of the stack to `x:eq(e)`. The meat of `proveVarEq` is thus in `proveEq`, which attempts to build equality proofs. The `proveEq` function is also called in other parts of the implication prover, e.g., to coerce the modalities of field, array, and block permissions.
+
+An equality proof in Heapster is a transitive sequence of equality proof steps `e=e',e'=e'',...`. Each step is a sequence of equality permissions `x1:eq(e1),...,xn:eq(en)`, where each equality `xi:eq(ei)` is oriented either left-to-right as `xi=ei` or right-to-left as `ei=xi`, along with a function `f` on `n` expressions. This represents the equality `f(left1,...,leftn)=f(right1,...,rightn)`, where `lefti` and `righti` are the left- and right-hand sides of the `i`th oriented version `xi=ei` or `ei=xi` of the permission `xi:eq(ei)`. Equality steps are represented by the Haskell type `EqProofStep ps a`, where `ps` is a list of the types of the variables `x1,...,xn` and `a` is the Haskell type of the objects being proved equal. (Equality proofs can be used not just on expressions, but at other types as well.) Entire equality proofs are represented by the type `EqProof ps a`, while the type `SomeEqProof a` is an equality proof where the permissions needed to prove it are existentially quantified.
+
+FIXME HERE: describe `proveEq` and `proveEqH`
 
 
 #### Proving Conjuncts of Permissions
