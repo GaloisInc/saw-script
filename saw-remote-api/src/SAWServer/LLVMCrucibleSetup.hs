@@ -26,6 +26,7 @@ import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.ByteString (ByteString)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
@@ -39,13 +40,16 @@ import SAWScript.Crucible.LLVM.Builtins
     , llvm_execute_func
     , llvm_fresh_var
     , llvm_points_to_internal
+    , llvm_points_to_bitfield
     , llvm_ghost_value
     , llvm_return
     , llvm_precond
     , llvm_postcond )
+import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS (GhostGlobal)
-import SAWScript.Value (BuiltinContext, LLVMCrucibleSetupM(..), biSharedContext)
+import SAWScript.Value
+    ( BuiltinContext, LLVMCrucibleSetupM(..), TopLevelRW(..), biSharedContext )
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.TypedTerm (TypedTerm)
@@ -57,10 +61,11 @@ import SAWServer as Server
       SAWState,
       CrucibleSetupVal(..),
       sawTask,
+      sawTopLevelRW,
       getHandleAlloc,
       setServerVal )
 import SAWServer.Data.Contract
-    ( PointsTo(..), GhostValue(..), Allocated(..), ContractVar(..), Contract(..) )
+    ( PointsTo(..), PointsToBitfield(..), GhostValue(..), Allocated(..), ContractVar(..), Contract(..) )
 import SAWServer.Data.LLVMType (JSONLLVMType, llvmType)
 import SAWServer.Data.SetupValue ()
 import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
@@ -90,12 +95,14 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
      (envPre, cenvPre) <- setupState allocsPre (Map.empty, cenv0) (preVars c)
      mapM_ (\p -> getTypedTerm cenvPre p >>= llvm_precond) (preConds c)
      mapM_ (setupPointsTo (envPre, cenvPre)) (prePointsTos c)
+     mapM_ (setupPointsToBitfield (envPre, cenvPre)) (prePointsToBitfields c)
      mapM_ (setupGhostValue ghostEnv cenvPre) (preGhostValues c)
      traverse (getSetupVal (envPre, cenvPre)) (argumentVals c) >>= llvm_execute_func
      allocsPost <- mapM setupAlloc (postAllocated c)
      (envPost, cenvPost) <- setupState (allocsPre ++ allocsPost) (envPre, cenvPre) (postVars c)
      mapM_ (\p -> getTypedTerm cenvPost p >>= llvm_postcond) (postConds c)
      mapM_ (setupPointsTo (envPost, cenvPost)) (postPointsTos c)
+     mapM_ (setupPointsToBitfield (envPost, cenvPost)) (postPointsToBitfields c)
      mapM_ (setupGhostValue ghostEnv cenvPost) (postGhostValues c)
      case returnVal c of
        Just v -> getSetupVal (envPost, cenvPost) v >>= llvm_return
@@ -128,6 +135,16 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
          cond' <- traverse (getTypedTerm (snd env)) cond
          let chkTgt' = fmap (fmap llvmType) chkTgt
          llvm_points_to_internal chkTgt' cond' ptr val
+
+    setupPointsToBitfield ::
+      (Map ServerName ServerSetupVal, CryptolEnv) ->
+      PointsToBitfield (P.Expr P.PName) ->
+      LLVMCrucibleSetupM ()
+    setupPointsToBitfield env (PointsToBitfield p fieldName v) =
+      do ptr <- getSetupVal env p
+         let fieldName' = Text.unpack fieldName
+         val <- getSetupVal env v
+         llvm_points_to_bitfield ptr fieldName' val
 
     setupGhostValue genv cenv (GhostValue serverName e) =
       do g <- resolve genv serverName
@@ -209,7 +226,11 @@ llvmLoadModule (LLVMLoadModuleParams serverName fileName) =
      case tasks of
        (_:_) -> Argo.raise $ notAtTopLevel $ map fst tasks
        [] ->
-         do let ?laxArith = False -- TODO read from config
+         do rw <- view sawTopLevelRW <$> Argo.getState
+            let ?transOpts = CL.defaultTranslationOptions
+                               { CL.laxArith        = rwLaxArith rw
+                               , CL.debugIntrinsics = rwDebugIntrinsics rw
+                               }
             halloc <- getHandleAlloc
             loaded <- liftIO (CMS.loadLLVMModule fileName halloc)
             case loaded of

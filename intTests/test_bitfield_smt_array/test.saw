@@ -1,0 +1,55 @@
+enable_experimental;
+enable_lax_loads_and_stores;
+enable_smt_array_memory_model;
+
+let get_x2_spec = do {
+  ss <- llvm_alloc (llvm_alias "struct.s");
+  z <- llvm_fresh_var "z" (llvm_int 2);
+  llvm_points_to_bitfield ss "x2" (llvm_term z);
+  llvm_execute_func [ss];
+  llvm_return (llvm_term {{ zext z : [8] }});
+};
+
+let get_y_spec = do {
+  ss <- llvm_alloc (llvm_alias "struct.s");
+  z <- llvm_fresh_var "z" (llvm_int 1);
+  llvm_points_to_bitfield ss "y" (llvm_term z);
+  llvm_execute_func [ss];
+  llvm_return (llvm_term z);
+};
+
+let set_x2_spec = do {
+  ss <- llvm_alloc (llvm_alias "struct.s");
+  z <- llvm_fresh_var "z" (llvm_int 8);
+  llvm_execute_func [ss, llvm_term z];
+  llvm_points_to_bitfield ss "x2" (llvm_term {{ drop z : [2] }});
+};
+
+let set_x2_alt_spec = do {
+  ss <- llvm_alloc (llvm_alias "struct.s");
+  z <- llvm_fresh_var "z" (llvm_int 2);
+  llvm_execute_func [ss, llvm_term {{ zext z : [8] }}];
+  llvm_points_to_bitfield ss "x2" (llvm_term z);
+};
+
+let set_y_spec = do {
+  ss <- llvm_alloc (llvm_alias "struct.s");
+  z <- llvm_fresh_var "z" (llvm_int 1);
+  llvm_execute_func [ss, llvm_term z];
+  llvm_points_to_bitfield ss "y" (llvm_term z);
+};
+
+let set_y_alt_spec = set_y_spec;
+
+m <- llvm_load_module "test.bc";
+
+llvm_verify m "get_x2" [] false get_x2_spec (w4_unint_z3 []);
+llvm_verify m "get_y" [] false get_y_spec (w4_unint_z3 []);
+llvm_verify m "set_x2" [] false set_x2_spec (w4_unint_z3 []);
+llvm_verify m "set_x2_alt" [] false set_x2_alt_spec (w4_unint_z3 []);
+llvm_verify m "set_y" [] false set_y_spec (w4_unint_z3 []);
+
+set_x2_ov <- llvm_unsafe_assume_spec m "set_x2" set_x2_spec;
+llvm_verify m "set_x2_alt" [set_x2_ov] false set_x2_alt_spec (w4_unint_z3 []);
+set_y_ov <- llvm_unsafe_assume_spec m "set_y" set_y_spec;
+llvm_verify m "set_y_alt" [set_y_ov] false set_y_alt_spec (w4_unint_z3 []);

@@ -18,6 +18,9 @@ id _ x = x;
 -- FIXME: We eventually need to remove this, as it violates soundness...
 primitive fix : (a : sort 1) -> (a -> a) -> a;
 
+sawLet : (a b : sort 0) -> a -> (a -> b) -> b;
+sawLet _ _ x f = f x;
+
 
 -- FIXME: below are some defined data-types that could be used in place of
 -- the SAW primitive types
@@ -76,7 +79,7 @@ uncurry (a b c : sort 0) (f : a -> b -> c) : a * b -> c
 
 primitive String : sort 0;
 
-primitive error : (a : sort 1) -> String -> a;
+primitive error : (a : isort 1) -> String -> a;
 
 
 --------------------------------------------------------------------------------
@@ -642,6 +645,9 @@ and_triv2 (x : Bool) : Eq Bool (and (not x) x) False =
 --------------------------------------------------------------------------------
 -- Converting Booleans to Propositions
 
+FalseProp : Prop;
+FalseProp = Eq Bool True False;
+
 EqTrue : Bool -> Prop;
 EqTrue x = Eq Bool x True;
 
@@ -859,9 +865,9 @@ minNat x y =
 -- | Maximum
 maxNat : Nat -> Nat -> Nat;
 maxNat x y =
-  Nat_cases2 Nat (\ (x':Nat) -> x')
-             (\ (y':Nat) -> Succ y')
-             (\ (y':Nat) -> \ (x':Nat) -> \ (sub_xy:Nat) -> sub_xy) y x;
+  Nat_cases2 Nat (\ (y':Nat) -> y')
+             (\ (x':Nat) -> Succ x')
+             (\ (x':Nat) -> \ (y':Nat) -> \ (max_xy:Nat) -> Succ max_xy) x y;
 
 -- | Width(n) = 1 + floor(log_2(n))
 primitive widthNat : Nat -> Nat;
@@ -931,26 +937,26 @@ atWithDefault' n_top a d =
 
 primitive atWithDefault : (n : Nat) -> (a : sort 0) -> a -> Vec n a -> Nat -> a;
 
-at : (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> a;
+at : (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> a;
 at n a v i = atWithDefault n a (error a "at: index out of bounds") v i;
 -- `at n a v i` has the precondition `ltNat i n`
 
 primitive EmptyVec : (a : sort 0) -> Vec 0 a;
 
-ConsVec : (a : sort 0) -> a -> (n : Nat) -> Vec n a -> Vec (Succ n) a;
+ConsVec : (a : isort 0) -> a -> (n : Nat) -> Vec n a -> Vec (Succ n) a;
 ConsVec a x n v =
   gen (Succ n) a (Nat_cases a x (\ (i:Nat) -> \ (a':a) -> at n a v i));
 
-upd : (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> a -> Vec n a;
+upd : (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> a -> Vec n a;
 upd n a v j x = gen n a (\ (i : Nat) -> ite a (equalNat i j) x (at n a v i));
 -- TODO: assertion that j < n
 
 -- | Defines a function that maps array elements from one range to another.
-map : (a b : sort 0) -> (a -> b) -> (n : Nat) -> Vec n a -> Vec n b;
+map : (a : isort 0) -> (b : sort 0) -> (a -> b) -> (n : Nat) -> Vec n a -> Vec n b;
 map a b f n v = gen n b (\ (i : Nat) -> f (at n a v i));
 
 -- | Defines a function that maps array elements from one range to another.
-zipWith : (a b c : sort 0)
+zipWith : (a b : isort 0) -> (c : sort 0)
         -> (a -> b -> c)
         -> (n : Nat) -> Vec n a -> Vec n b -> Vec n c;
 zipWith a b c f n x y = gen n c (\ (i : Nat) -> f (at n a x i) (at n b y i));
@@ -969,24 +975,26 @@ axiom at_single : (a : sort 0) -> (x : a) -> (i : Nat) -> Eq a (at 1 a (single a
 primitive zip : (a b : sort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) (a * b);
 
 primitive foldr : (a b : sort 0) -> (n : Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
+primitive foldl : (a b : sort 0) -> (n : Nat) -> (b -> a -> b) -> b -> Vec n a -> b;
+primitive scanl : (a b : sort 0) -> (n : Nat) -> (b -> a -> b) -> b -> Vec n a -> Vec (addNat 1 n) b;
 
-reverse : (n : Nat) -> (a : sort 0) -> Vec n a -> Vec n a;
+reverse : (n : Nat) -> (a : isort 0) -> Vec n a -> Vec n a;
 reverse n a xs = gen n a (\ (i : Nat) -> at n a xs (subNat (subNat n 1) i));
 
-transpose : (m n : Nat) -> (a : sort 0) -> Vec m (Vec n a) -> Vec n (Vec m a);
+transpose : (m n : Nat) -> (a : isort 0) -> Vec m (Vec n a) -> Vec n (Vec m a);
 transpose m n a xss =
   gen n (Vec m a) (\ (j : Nat) ->
     gen m a (\ (i : Nat) -> at n a (at m (Vec n a) xss i) j));
 
 -- | Return true if two vectors are equal, given a comparison function
 -- for elements.
-vecEq : (n : Nat) -> (a : sort 0) -> (a -> a -> Bool)
+vecEq : (n : Nat) -> (a : isort 0) -> (a -> a -> Bool)
       -> Vec n a -> Vec n a -> Bool;
 vecEq n a eqFn x y =
   foldr Bool Bool n and True (zipWith a a Bool eqFn n x y);
 
 -- | Take a prefix of a vector.
-take : (a : sort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec m a;
+take : (a : isort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec m a;
 take a m n v = gen m a (\ (i : Nat) -> at (addNat m n) a v i);
 
 vecCong : (a : sort 0) -> (m n : Nat) -> Eq Nat m n ->
@@ -1005,7 +1013,7 @@ axiom take0 : (a : sort 0)
              (coerceVec a (addNat m 0) m (eqNatAdd0 m) v);
 
 -- | Returns a suffix of a vector after a given number of elements.
-drop : (a : sort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec n a;
+drop : (a : isort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec n a;
 drop a m n v = gen n a (\ (i : Nat) -> at (addNat m n) a v (addNat m i));
 
 -- | Simplify drop 0-elements from a vector.
@@ -1015,14 +1023,14 @@ axiom drop0 : (a : sort 0)
        -> Eq (Vec n a) (drop a 0 n v) v;
 
 -- | Select a range [i,..,i+n] of values from the array.
-slice : (a : sort 0)
+slice : (a : isort 0)
       -> (m n o : Nat)
       -> Vec (addNat (addNat m n) o) a -> Vec n a;
 slice a m n o v = drop a m n (take a (addNat m n) o v);
 
 -- Concatenate arrays together.
 join  : (m n : Nat)
-       -> (a : sort 0)
+       -> (a : isort 0)
        -> Vec m (Vec n a)
        -> Vec (mulNat m n) a;
 join m n a v =
@@ -1030,14 +1038,14 @@ join m n a v =
     at n a (at m (Vec n a) v (divNat i n)) (modNat i n));
 
 -- Split array into list
-split : (m n : Nat) -> (a : sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
+split : (m n : Nat) -> (a : isort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
 split m n a v =
   gen m (Vec n a) (\ (i : Nat) ->
     gen n a (\ (j : Nat) ->
       at (mulNat m n) a v (addNat (mulNat i n) j)));
 
 -- Append two arrays together.
-append : (m n : Nat) -> (a : sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
+append : (m n : Nat) -> (a : isort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 append m n a x y =
   gen (addNat m n) a
     (\ (i : Nat) ->
@@ -1058,13 +1066,13 @@ primitive shiftL : (n : Nat) -> (a : sort 0) -> a -> Vec n a -> Nat -> Vec n a;
 primitive shiftR : (n : Nat) -> (a : sort 0) -> a -> Vec n a -> Nat -> Vec n a;
 
 joinLittleEndian  : (m n : Nat)
-                  -> (a : sort 0)
+                  -> (a : isort 0)
                   -> Vec m (Vec n a)
                   -> Vec (mulNat m n) a;
 joinLittleEndian m n a v = join m n a (reverse m (Vec n a) v);
 
 splitLittleEndian : (m n : Nat)
-                  -> (a : sort 0)
+                  -> (a : isort 0)
                   -> Vec (mulNat m n) a
                   -> Vec m (Vec n a);
 splitLittleEndian m n a v = reverse m (Vec n a) (split m n a v);
@@ -1091,28 +1099,28 @@ primitive bvToNat : (n : Nat) -> Vec n Bool -> Nat;
 axiom bvNat_bvToNat_id : (n : Nat) -> (x : Vec n Bool) ->
                          Eq (Vec n Bool) (bvNat n (bvToNat n x)) x;
 
-bvAt : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> Vec w Bool
+bvAt : (n : Nat) -> (a : isort 0) -> (w : Nat) -> Vec n a -> Vec w Bool
      -> a;
 bvAt n a w xs i = at n a xs (bvToNat w i);
 
-bvUpd : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> Vec w Bool
+bvUpd : (n : Nat) -> (a : isort 0) -> (w : Nat) -> Vec n a -> Vec w Bool
       -> a -> Vec n a;
 bvUpd n a w xs i y = upd n a xs (bvToNat w i) y;
 
-bvRotateL : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> Vec w Bool -> Vec n a;
+bvRotateL : (n : Nat) -> (a : isort 0) -> (w : Nat) -> Vec n a -> Vec w Bool -> Vec n a;
 bvRotateL n a w xs i = rotateL n a xs (bvToNat w i);
 
-bvRotateR : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> Vec w Bool -> Vec n a;
+bvRotateR : (n : Nat) -> (a : isort 0) -> (w : Nat) -> Vec n a -> Vec w Bool -> Vec n a;
 bvRotateR n a w xs i = rotateR n a xs (bvToNat w i);
 
-bvShiftL : (n : Nat) -> (a : sort 0) -> (w : Nat) -> a -> Vec n a -> Vec w Bool -> Vec n a;
+bvShiftL : (n : Nat) -> (a : isort 0) -> (w : Nat) -> a -> Vec n a -> Vec w Bool -> Vec n a;
 bvShiftL n a w z xs i = shiftL n a z xs (bvToNat w i);
 
-bvShiftR : (n : Nat) -> (a : sort 0) -> (w : Nat) -> a -> Vec n a -> Vec w Bool -> Vec n a;
+bvShiftR : (n : Nat) -> (a : isort 0) -> (w : Nat) -> a -> Vec n a -> Vec w Bool -> Vec n a;
 bvShiftR n a w z xs i = shiftR n a z xs (bvToNat w i);
 
 -- A version of bvShiftR that uses the 0th element of the input Vec as the default shift value
-bvSShiftR : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec (Succ n) a -> Vec w Bool -> Vec (Succ n) a;
+bvSShiftR : (n : Nat) -> (a : isort 0) -> (w : Nat) -> Vec (Succ n) a -> Vec w Bool -> Vec (Succ n) a;
 bvSShiftR n a w xs i = bvShiftR (Succ n) a w (at (Succ n) a xs 0) xs i;
 
 primitive bvAdd : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
@@ -1283,6 +1291,9 @@ data Stream (a : sort 0) : sort 0 where {
     MkStream : (Nat -> a) -> Stream a;
   }
 
+injectCode "Coq"
+  "Instance Inhabited_Stream (a:Type) (Ha:Inhabited a) : Inhabited (Stream a) := MkInhabited (Stream a) (MkStream a (fun _ => inhabitant)).";
+
 Stream__rec : (a:sort 0) -> (p:Stream a -> sort 0) ->
                ((f:Nat -> a) -> p (MkStream a f)) -> (str:Stream a) -> p str;
 Stream__rec a p f1 str = Stream#rec a p f1 str;
@@ -1323,7 +1334,7 @@ streamAppend a n xs ys =
   MkStream a (\ (i : Nat) ->
     atWithDefault n a (streamGet a ys (subNat i n)) xs i);
 
-streamJoin : (a : sort 0) -> (n : Nat)
+streamJoin : (a : isort 0) -> (n : Nat)
            -> Stream (Vec (Succ n) a)
            -> (Stream a);
 streamJoin a n s =
@@ -1342,6 +1353,28 @@ streamShiftL a xs i = streamDrop a i xs;
 
 streamShiftR : (a : sort 0) -> a -> Stream a -> Nat -> Stream a;
 streamShiftR a z xs i = streamAppend a i (replicate i a z) xs;
+
+-- TODO "streamScanl" should probably be a primitive.  However, stream
+-- primitives are complicated to implement because the backends have different
+-- implementations for streams, and there is no uniform place to implement them.
+--
+-- We explicitly use "fix" here to implement sharing in the stream.  A naive
+-- implementation that just iterates "f" separate for each index would waste work.
+-- The fixpoint is well founded because each element only refers to elements with
+-- smaller indices.
+--
+-- For Coq support, this definition is replaced with a naive implementation
+-- that performs independent iterations for each location.
+streamScanl : (a b : sort 0) -> (b -> a -> b) -> b -> Stream a -> Stream b;
+streamScanl a b f z as =
+  fix (Stream b)
+    (\ (bs : Stream b) -> MkStream b
+      (natCase (\ (n : Nat) -> b)
+         -- zero case
+         z
+	 -- successor case
+	 (\ (n : Nat) -> f (streamGet b bs n) (streamGet a as n)))
+    );
 
 --------------------------------------------------------------------------------
 -- Integer values
@@ -1464,20 +1497,20 @@ List__rec :
   (l : List a) -> P l;
 List__rec a P f1 f2 l = List#rec a P f1 f2 l;
 
-unfoldList : (a:sort 0) -> List a -> Either #() (a * List a * #());
+unfoldList : (a:sort 0) -> List a -> Either #() (a * List a);
 unfoldList a l =
-  List__rec a (\ (_:List a) -> Either #() (a * List a * #()))
-  (Left #() (a * List a * #()) ())
-  (\ (x:a) (l:List a) (_:Either #() (a * List a * #())) ->
-     Right #() (a * List a * #()) (x, l, ()))
+  List__rec a (\ (_:List a) -> Either #() (a * List a))
+  (Left #() (a * List a) ())
+  (\ (x:a) (l:List a) (_:Either #() (a * List a)) ->
+     Right #() (a * List a) (x, l))
   l;
 
-foldList : (a:sort 0) -> Either #() (a * List a * #()) -> List a;
+foldList : (a:sort 0) -> Either #() (a * List a) -> List a;
 foldList a =
-  either #() (a * List a * #()) (List a)
+  either #() (a * List a) (List a)
          (\ (_ : #()) -> Nil a)
-         (\ (tup : (a * List a * #())) ->
-            Cons a tup.(1) tup.(2).(1));
+         (\ (tup : (a * List a)) ->
+            Cons a tup.(1) tup.(2));
 
 -- A list of types, i.e. `List (sort 0)` if `List` was universe polymorphic
 data ListSort : sort 1
@@ -1544,6 +1577,12 @@ foldW64List =
 
 --------------------------------------------------------------------------------
 -- Vector operations with built-in casts of their resulting lengths
+
+-- Specialized version of unsafeAssert for bitvector inequalities
+axiom unsafeAssertBVULt : (n : Nat) -> (x : Vec n Bool) -> (y : Vec n Bool) ->
+                          Eq Bool (bvult n x y) True;
+axiom unsafeAssertBVULe : (n : Nat) -> (x : Vec n Bool) -> (y : Vec n Bool) ->
+                          Eq Bool (bvule n x y) True;
 
 -- Decide equality on two bitvectors, returning a proof if they are equal
 primitive bvEqWithProof : (n : Nat) -> (v1 v2 : Vec n Bool) ->
@@ -1622,6 +1661,12 @@ axiom bvult_sub_add_bvult : (n:Nat) -> (x y z:Vec n Bool) ->
                             is_bvule n y z -> is_bvult n x (bvSub n z y) ->
                             is_bvult n (bvAdd n y x) z;
 
+-- Axiom: x <u y+z and y <=u x implies (x-y) <u z
+axiom bvult_sum_bvult_sub : (n:Nat) -> (x y z:Vec n Bool) ->
+                            is_bvult n x (bvAdd n y z) ->
+                            Eq Bool (bvult n x y) False ->
+                            is_bvult n (bvSub n x y) z;
+
 -- When comparing a nat and a bitvector, IsLtNat and is_bvult are equivalent
 axiom IsLtNat_to_bvult : (n : Nat) -> (x : Vec n Bool) -> (i : Nat) ->
                          IsLtNat i (bvToNat n x) -> is_bvult n (bvNat n i) x;
@@ -1638,8 +1683,16 @@ genBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
            BVVec n len a;
 genBVVec n len a f =
   genWithProof (bvToNat n len) a
-    (\(i:Nat) (pf:IsLtNat i (bvToNat n len)) -> 
+    (\(i:Nat) (pf:IsLtNat i (bvToNat n len)) ->
       f (bvNat n i) (IsLtNat_to_bvult n len i pf));
+
+-- Generate a BVVec from the elements of an existing vector, using a default
+-- value when we run out of the existing vector
+genBVVecFromVec : (m : Nat) -> (a : sort 0) -> Vec m a -> a ->
+                  (n : Nat) -> (len : Vec n Bool) -> BVVec n len a;
+genBVVecFromVec m a v def n len =
+  genBVVec n len a (\ (i:Vec n Bool) (_:is_bvult n i len) ->
+                      atWithDefault m a def v (bvToNat n i));
 
 -- Ex Falso Quodlibet: if True = False then anything is possible
 efq : (a : sort 0) -> Eq Bool True False -> a;
@@ -1700,13 +1753,14 @@ axiom gen_at_BVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
                      (x : BVVec n len a) ->
                      Eq (BVVec n len a) (genBVVec n len a (atBVVec n len a x)) x;
 
--- Update the value at a specific index in a BVVec
+-- Update the value at a specific index in a BVVec if it is in range, otherwise
+-- do nothing
 updBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
            BVVec n len a -> (ix : Vec n Bool) ->
-           is_bvult n ix len -> a -> BVVec n len a;
-updBVVec n len a v ix pf elem =
-  genBVVec n len a (\ (i:Vec n Bool) (_:is_bvult n i len) ->
-                      ite a (bvEq n i ix) elem (atBVVec n len a v ix pf));
+           a -> BVVec n len a;
+updBVVec n len a v ix elem =
+  genBVVec n len a (\ (i:Vec n Bool) (pf:is_bvult n i len) ->
+                      ite a (bvEq n i ix) elem (atBVVec n len a v i pf));
 
 -- Adjust the value at a specific index in a BVVec by applying a function
 adjustBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
@@ -1759,6 +1813,21 @@ updSliceBVVec n len a v start' len' v_sub =
                  atBVVec n len' a v_sub (bvSub n i start') pf_sub)
               (bvultWithProof n (bvSub n i start') len'))
            (atBVVec n len a v i pf));
+
+-- Append two BVVecs
+appendBVVec : (n : Nat) -> (len1 len2 : Vec n Bool) -> (a : sort 0) ->
+              BVVec n len1 a -> BVVec n len2 a -> BVVec n (bvAdd n len1 len2) a;
+appendBVVec n len1 len2 a v1 v2 =
+  genBVVec n (bvAdd n len1 len2) a
+    (\ (i:Vec n Bool) (pf12:is_bvult n i (bvAdd n len1 len2)) ->
+       iteDep
+         (\ (b:Bool) -> Eq Bool (bvult n i len1) b -> a)
+         (bvult n i len1)
+         (\ (pf1:is_bvult n i len1) -> atBVVec n len1 a v1 i pf1)
+         (\ (not_pf1:Eq Bool (bvult n i len1) False) ->
+            atBVVec n len2 a v2 (bvSub n i len1)
+                    (bvult_sum_bvult_sub n i len1 len2 pf12 not_pf1))
+         (Refl Bool (bvult n i len1)));
 
 
 --------------------------------------------------------------------------------
@@ -1964,6 +2033,28 @@ primitive CompM : sort 0 -> sort 0;
 
 primitive returnM : (a:sort 0) -> a -> CompM a;
 primitive bindM : (a b:sort 0) -> CompM a -> (a -> CompM b) -> CompM b;
+primitive existsM : (a:sort 0) -> (b:sort 0) -> (a -> CompM b) -> CompM b;
+
+-- Raise an error in the computation monad
+primitive errorM : (a:sort 0) -> String -> CompM a;
+
+-- Apply a pure function to a computation
+fmapM : (a b: sort 0) -> (a -> b) -> CompM a -> CompM b;
+fmapM a b f m = bindM a b m (\ (x:a) -> returnM b (f x));
+
+-- Apply a computation of a function to a computation of an argument
+applyM : (a b: sort 0) -> CompM (a -> b) -> CompM a -> CompM b;
+applyM a b f m =
+  bindM (a -> b) b f (\ (f:a->b) -> bindM a b m (\ (x:a) -> returnM b (f x)));
+
+-- Apply a binary pure function to a computation
+fmapM2 : (a b c: sort 0) -> (a -> b -> c) -> CompM a -> CompM b -> CompM c;
+fmapM2 a b c f m1 m2 = applyM b c (fmapM a (b -> c) f m1) m2;
+
+-- Apply a trinary pure function to a computation
+fmapM3 : (a b c d: sort 0) -> (a -> b -> c -> d) ->
+         CompM a -> CompM b -> CompM c -> CompM d;
+fmapM3 a b c d f m1 m2 m3 = applyM c d (fmapM2 a b (c -> d) f m1 m2) m3;
 
 -- Bind two values and pass them to a binary function
 bindM2 : (a b c: sort 0) -> CompM a -> CompM b -> (a -> b -> CompM c) -> CompM c;
@@ -2020,8 +2111,40 @@ tupleCompMFunOut : (a b c: sort 0) -> c -> (a -> CompM b) -> (a -> CompM (c * b)
 tupleCompMFunOut a b c x f =
   \ (y:a) -> bindM b (c*b) (f y) (\ (z:b) -> returnM (c*b) (x,z));
 
--- Raise an error in the computation monad
-primitive errorM : (a:sort 0) -> String -> CompM a;
+-- Map a monadic function across a vector
+mapM : (a :sort 0) -> (b : isort 0) -> (a -> CompM b) -> (n : Nat) -> Vec n a -> CompM (Vec n b);
+mapM a b f =
+  Nat__rec
+    (\ (n:Nat) -> Vec n a -> CompM (Vec n b))
+    (\ (_:Vec 0 a) -> returnM (Vec 0 b) (EmptyVec b))
+    (\ (n:Nat) (rec_f:Vec n a -> CompM (Vec n b)) (v:Vec (Succ n) a) ->
+       fmapM2 b (Vec n b) (Vec (Succ n) b)
+              (\ (hd:b) (tl:Vec n b) -> ConsVec b hd n tl)
+              (f (head n a v))
+              (rec_f (tail n a v)));
+
+-- Map a monadic function across a BVVec
+mapBVVecM : (a : sort 0) -> (b : isort 0) -> (a -> CompM b) ->
+            (n : Nat) -> (len : Vec n Bool) -> BVVec n len a ->
+            CompM (BVVec n len b);
+mapBVVecM a b f n len = mapM a b f (bvToNat n len);
+
+-- Append two BVVecs and cast the resulting size, if possible
+appendCastBVVecM : (n : Nat) -> (len1 len2 len3 : Vec n Bool) -> (a : sort 0) ->
+                   BVVec n len1 a -> BVVec n len2 a ->
+                   CompM (BVVec n len3 a);
+appendCastBVVecM n len1 len2 len3 a v1 v2 =
+  maybe
+    (Eq (Vec n Bool) (bvAdd n len1 len2) len3) (CompM (BVVec n len3 a))
+    (errorM (BVVec n len3 a) "Could not cast BVVec")
+    (\ (pf:Eq (Vec n Bool) (bvAdd n len1 len2) len3) ->
+       returnM
+         (BVVec n len3 a)
+         (coerce (BVVec n (bvAdd n len1 len2) a) (BVVec n len3 a)
+                 (eq_cong (Vec n Bool) (bvAdd n len1 len2) len3 pf
+                          (sort 0) (\ (l:Vec n Bool) -> BVVec n l a))
+                 (appendBVVec n len1 len2 a v1 v2)))
+    (bvEqWithProof n (bvAdd n len1 len2) len3);
 
 -- Run the first computation, and, if it raises an error, catch the error and
 -- run the second computation
@@ -2398,6 +2521,9 @@ primitive Array : sort 0 -> sort 0 -> sort 0;
 primitive arrayConstant : (a b : sort 0) -> b -> (Array a b);
 primitive arrayLookup : (a b : sort 0) -> (Array a b) -> a -> b;
 primitive arrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
+primitive arrayCopy : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> Array (Vec n Bool) a -> Vec n Bool -> Vec n Bool -> Array (Vec n Bool) a;
+primitive arraySet : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> a -> Vec n Bool -> Array (Vec n Bool) a;
+primitive arrayRangeEq : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> Array (Vec n Bool) a -> Vec n Bool -> Vec n Bool -> Bool;
 primitive arrayEq     : (a b : sort 0) -> (Array a b) -> (Array a b) -> Bool;
 
 --------------------------------------------------------------------------------

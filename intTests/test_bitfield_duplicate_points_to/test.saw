@@ -1,0 +1,15 @@
+enable_experimental;
+enable_lax_loads_and_stores;
+
+let get_y_spec = do {
+  ss <- llvm_alloc (llvm_alias "struct.s");
+  z <- llvm_fresh_var "z" (llvm_int 1);
+  // Duplicate llvm_points_to_bitfield statements involving `y`
+  llvm_points_to_bitfield ss "y" (llvm_term z);
+  llvm_points_to_bitfield ss "y" (llvm_term z);
+  llvm_execute_func [ss];
+  llvm_return (llvm_term z);
+};
+
+m <- llvm_load_module "test.bc";
+fails (llvm_verify m "get_y" [] false get_y_spec (w4_unint_z3 []));

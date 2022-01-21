@@ -45,6 +45,7 @@ import Data.Parameterized.Context hiding ((:>), empty, take, view)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableFC
 import Data.Parameterized.BoolRepr
+import Data.Parameterized.Nonce (Nonce)
 
 -- import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import qualified Prettyprinter as PP
@@ -70,7 +71,7 @@ import Verifier.SAW.OpenTerm
 
 -- | The lens into an 'RAssign' associated with a 'Member' proof
 --
--- FIXME HERE: this should go into Hobbits, possibly using 
+-- FIXME HERE: this should go into Hobbits, possibly using
 member :: Member ctx a -> Lens' (RAssign f ctx) (f a)
 member memb = lens (RL.get memb) (flip (RL.set memb))
 
@@ -288,7 +289,7 @@ instance NuMatching ByteString where
 instance NuMatching (MemoryError sym) where
   nuMatchingProof = unsafeMbTypeRepr
 
-instance NuMatching (MemoryErrorReason sym w) where
+instance NuMatching MemoryErrorReason where
   nuMatchingProof = unsafeMbTypeRepr
 
 instance NuMatching (FnHandle args ret) where
@@ -302,6 +303,16 @@ instance NuMatching (FloatInfoRepr fi) where
 
 instance NuMatching RoundingMode where
   nuMatchingProof = unsafeMbTypeRepr
+
+instance NuMatching EndianForm where
+  nuMatchingProof = unsafeMbTypeRepr
+
+instance Closable EndianForm where
+  toClosed BigEndian = $(mkClosed [| BigEndian |])
+  toClosed LittleEndian = $(mkClosed [| LittleEndian |])
+
+instance Liftable EndianForm where
+  mbLift = unClosed . mbLift . fmap toClosed
 
 $(mkNuMatching [t| forall f. NuMatchingAny1 f => Some f |])
 
@@ -388,6 +399,17 @@ instance NuMatchingAny1 f => NuMatchingAny1 (LLVMExtensionExpr f) where
 {-
 $(mkNuMatching [t| forall w f tp. NuMatchingAny1 f => LLVMStmt w f tp |])
 -}
+
+$(mkNuMatching [t| forall tp. GlobalVar tp |])
+
+instance NuMatching (Nonce s tp) where
+  nuMatchingProof = unsafeMbTypeRepr
+
+instance Closable (Nonce s tp) where
+  toClosed = unsafeClose
+
+instance Liftable (Nonce s tp) where
+  mbLift = unClosed . mbLift . fmap toClosed
 
 instance Closable (BV.BV w) where
   toClosed = unsafeClose
@@ -719,7 +741,7 @@ cruCtxLookup (CruCtxCons _ tp) Member_Base = tp
 cruCtxLookup (CruCtxCons ctx _) (Member_Step memb) = cruCtxLookup ctx memb
 
 -- | Build a 'CruCtx' of the given length.
-cruCtxReplicate :: NatRepr n -> TypeRepr a -> Some CruCtx 
+cruCtxReplicate :: NatRepr n -> TypeRepr a -> Some CruCtx
 cruCtxReplicate n tp =
   case isZeroNat n of
     ZeroNat -> Some CruCtxNil

@@ -105,7 +105,8 @@ pure3 f x y z = pure (f x y z)
 prims :: Prims.BasePrims SBV
 prims =
   Prims.BasePrims
-  { Prims.bpAsBool  = svAsBool
+  { Prims.bpIsSymbolicEvaluator = True
+  , Prims.bpAsBool  = svAsBool
   , Prims.bpUnpack  = svUnpack
   , Prims.bpPack    = pure1 symFromBits
   , Prims.bpBvAt    = pure2 svAt
@@ -117,6 +118,7 @@ prims =
   , Prims.bpMuxBool  = pure3 svIte
   , Prims.bpMuxWord  = pure3 svIte
   , Prims.bpMuxInt   = pure3 svIte
+  , Prims.bpMuxArray = unsupportedSBVPrimitive "bpMuxArray"
   , Prims.bpMuxExtra = muxSbvExtra
     -- Booleans
   , Prims.bpTrue   = svTrue
@@ -183,6 +185,9 @@ prims =
   , Prims.bpArrayLookup = unsupportedSBVPrimitive "bpArrayLookup"
   , Prims.bpArrayUpdate = unsupportedSBVPrimitive "bpArrayUpdate"
   , Prims.bpArrayEq = unsupportedSBVPrimitive "bpArrayEq"
+  , Prims.bpArrayCopy = unsupportedSBVPrimitive "bpArrayCopy"
+  , Prims.bpArraySet = unsupportedSBVPrimitive "bpArraySet"
+  , Prims.bpArrayRangeEq = unsupportedSBVPrimitive "bpArrayRangeEq"
   }
 
 unsupportedSBVPrimitive :: String -> a

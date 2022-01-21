@@ -1,0 +1,12 @@
+test spec_mut_slice/3a1fbbbh::f_test[0]: ok
+test spec_mut_slice/3a1fbbbh::use_f[0]: FAILED
+
+failures:
+
+---- spec_mut_slice/3a1fbbbh::use_f[0] counterexamples ----
+[Crux] Found counterexample for verification goal
+[Crux]   ./lib/crucible/lib.rs:37:41: 37:58 !test/symb_eval/comp/spec_mut_slice.rs:48:5: 48:30: error: in spec_mut_slice/3a1fbbbh::use_f[0]
+[Crux]   MIR assertion at test/symb_eval/comp/spec_mut_slice.rs:48:5:
+[Crux]   	d < 10
+
+[Crux] Overall status: Invalid.

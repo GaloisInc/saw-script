@@ -161,7 +161,8 @@ prims :: forall sym.
    Sym sym => sym -> Prims.BasePrims (What4 sym)
 prims sym =
   Prims.BasePrims
-  { Prims.bpAsBool  = W.asConstantPred
+  { Prims.bpIsSymbolicEvaluator = True
+  , Prims.bpAsBool  = W.asConstantPred
     -- Bitvectors
   , Prims.bpUnpack  = SW.bvUnpackBE sym
   , Prims.bpPack    = SW.bvPackBE sym
@@ -174,6 +175,7 @@ prims sym =
   , Prims.bpMuxBool  = W.itePred sym
   , Prims.bpMuxWord  = SW.bvIte  sym
   , Prims.bpMuxInt   = W.intIte  sym
+  , Prims.bpMuxArray = arrayIte sym
   , Prims.bpMuxExtra = muxWhat4Extra sym
     -- Booleans
   , Prims.bpTrue   = W.truePred  sym
@@ -240,6 +242,9 @@ prims sym =
   , Prims.bpArrayLookup = arrayLookup sym
   , Prims.bpArrayUpdate = arrayUpdate sym
   , Prims.bpArrayEq = arrayEq sym
+  , Prims.bpArrayCopy = arrayCopy sym
+  , Prims.bpArraySet = arraySet sym
+  , Prims.bpArrayRangeEq = arrayRangeEq sym
   }
 
 
@@ -646,6 +651,75 @@ arrayUpdate sym arr idx elm
   | otherwise =
     panic "Verifier.SAW.Simulator.What4.Panic.arrayUpdate" ["argument type mismatch"]
 
+arrayCopy ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  SArray sym ->
+  SWord sym ->
+  SArray sym ->
+  SWord sym ->
+  SWord sym ->
+  IO (SArray sym)
+arrayCopy sym dest_arr dest_idx src_arr src_idx len
+  | SArray dest_arr_expr <- dest_arr
+  , DBV dest_idx_expr <- dest_idx
+  , SArray src_arr_expr <- src_arr
+  , DBV src_idx_expr <- src_idx
+  , DBV len_expr <- len
+  , W.BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) _ <- W.exprType dest_arr_expr
+  , Just Refl <- testEquality (W.exprType dest_arr_expr) (W.exprType src_arr_expr)
+  , Just Refl <- testEquality idx_repr (W.exprType dest_idx_expr)
+  , Just Refl <- testEquality idx_repr (W.exprType src_idx_expr)
+  , Just Refl <- testEquality idx_repr (W.exprType len_expr) =
+    SArray <$> W.arrayCopy sym dest_arr_expr dest_idx_expr src_arr_expr src_idx_expr len_expr
+  | otherwise =
+    panic "Verifier.SAW.Simulator.What4.Panic.arrayCopy" ["argument type mismatch"]
+
+arraySet ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  SArray sym ->
+  SWord sym ->
+  SValue sym ->
+  SWord sym ->
+  IO (SArray sym)
+arraySet sym arr idx elm len
+  | SArray arr_expr <- arr
+  , DBV idx_expr <- idx
+  , Just (Some elm_expr) <- valueToSymExpr elm
+  , DBV len_expr <- len
+  , W.BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr <- W.exprType arr_expr
+  , Just Refl <- testEquality idx_repr (W.exprType idx_expr)
+  , Just Refl <- testEquality idx_repr (W.exprType len_expr)
+  , Just Refl <- testEquality elm_repr (W.exprType elm_expr) =
+    SArray <$> W.arraySet sym arr_expr idx_expr elm_expr len_expr
+  | otherwise =
+    panic "Verifier.SAW.Simulator.What4.Panic.arraySet" ["argument type mismatch"]
+
+arrayRangeEq ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  SArray sym ->
+  SWord sym ->
+  SArray sym ->
+  SWord sym ->
+  SWord sym ->
+  IO (SBool sym)
+arrayRangeEq sym x_arr x_idx y_arr y_idx len
+  | SArray x_arr_expr <- x_arr
+  , DBV x_idx_expr <- x_idx
+  , SArray y_arr_expr <- y_arr
+  , DBV y_idx_expr <- y_idx
+  , DBV len_expr <- len
+  , W.BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) _ <- W.exprType x_arr_expr
+  , Just Refl <- testEquality (W.exprType x_arr_expr) (W.exprType y_arr_expr)
+  , Just Refl <- testEquality idx_repr (W.exprType x_idx_expr)
+  , Just Refl <- testEquality idx_repr (W.exprType y_idx_expr)
+  , Just Refl <- testEquality idx_repr (W.exprType len_expr) =
+    W.arrayRangeEq sym x_arr_expr x_idx_expr y_arr_expr y_idx_expr len_expr
+  | otherwise =
+    panic "Verifier.SAW.Simulator.What4.Panic.arrayRangeEq" ["argument type mismatch"]
+
 arrayEq ::
   W.IsSymExprBuilder sym =>
   sym ->
@@ -662,6 +736,24 @@ arrayEq sym lhs_arr rhs_arr
     W.arrayEq sym lhs_arr_expr rhs_arr_expr
   | otherwise =
     panic "Verifier.SAW.Simulator.What4.Panic.arrayEq" ["argument type mismatch"]
+
+arrayIte ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  W.Pred sym ->
+  SArray sym ->
+  SArray sym ->
+  IO (SArray sym)
+arrayIte sym cond lhs_arr rhs_arr
+  | SArray lhs_arr_expr <- lhs_arr
+  , SArray rhs_arr_expr <- rhs_arr
+  , W.BaseArrayRepr (Ctx.Empty Ctx.:> lhs_idx_repr) lhs_elm_repr <- W.exprType lhs_arr_expr
+  , W.BaseArrayRepr (Ctx.Empty Ctx.:> rhs_idx_repr) rhs_elm_repr <- W.exprType rhs_arr_expr
+  , Just Refl <- testEquality lhs_idx_repr rhs_idx_repr
+  , Just Refl <- testEquality lhs_elm_repr rhs_elm_repr =
+    SArray <$> W.arrayIte sym cond lhs_arr_expr rhs_arr_expr
+  | otherwise =
+    panic "Verifier.SAW.Simulator.What4.Panic.arrayIte" ["argument type mismatch"]
 
 ----------------------------------------------------------------------
 -- | A basic symbolic simulator/evaluator: interprets a saw-core Term as
@@ -1228,13 +1320,13 @@ parseUninterpretedSAW sym st sc ref trm app ty =
               parseUninterpretedSAW sym st sc ref trm' app' t2
 
     VBoolType
-      -> VBool <$> mkUninterpretedSAW sym st ref trm app BaseBoolRepr
+      -> VBool <$> mkUninterpretedSAW sym st sc ref trm app BaseBoolRepr
 
     VIntType
-      -> VInt  <$> mkUninterpretedSAW sym st ref trm app BaseIntegerRepr
+      -> VInt  <$> mkUninterpretedSAW sym st sc ref trm app BaseIntegerRepr
 
     VIntModType n
-      -> VIntMod n <$> mkUninterpretedSAW sym st ref (ArgTermFromIntMod n trm) app BaseIntegerRepr
+      -> VIntMod n <$> mkUninterpretedSAW sym st sc ref (ArgTermFromIntMod n trm) app BaseIntegerRepr
 
     -- 0 width bitvector is a constant
     VVecType 0 VBoolType
@@ -1242,7 +1334,7 @@ parseUninterpretedSAW sym st sc ref trm app ty =
 
     VVecType n VBoolType
       | Just (Some (PosNat w)) <- somePosNat n
-      -> (VWord . DBV) <$> mkUninterpretedSAW sym st ref trm app (BaseBVRepr w)
+      -> (VWord . DBV) <$> mkUninterpretedSAW sym st sc ref trm app (BaseBVRepr w)
 
     VVecType n ety | n >= 0
       ->  do ety' <- termOfTValue sc ety
@@ -1257,7 +1349,7 @@ parseUninterpretedSAW sym st sc ref trm app ty =
       | Just (Some idx_repr) <- valueAsBaseType ity
       , Just (Some elm_repr) <- valueAsBaseType ety
       -> (VArray . SArray) <$>
-          mkUninterpretedSAW sym st ref trm app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
+          mkUninterpretedSAW sym st sc ref trm app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
     VUnitType
       -> return VUnit
@@ -1275,12 +1367,16 @@ mkUninterpretedSAW ::
   forall n st fs t.
   B.ExprBuilder n st fs ->
   SAWCoreState n ->
+  SharedContext ->
   IORef (SymFnCache (B.ExprBuilder n st fs)) ->
   ArgTerm ->
   UnintApp (SymExpr (B.ExprBuilder n st fs)) ->
   BaseTypeRepr t ->
   IO (SymExpr (B.ExprBuilder n st fs) t)
-mkUninterpretedSAW sym st ref trm (UnintApp nm args tys) ret =
+mkUninterpretedSAW sym st sc ref trm (UnintApp nm args tys) ret
+  | Just Refl <- testEquality Ctx.empty tys =
+    bindSAWTerm sym st ret =<< reconstructArgTerm trm sc []
+  | otherwise =
   do fn <- mkSymFn sym ref nm tys ret
      sawRegisterSymFunInterp st fn (reconstructArgTerm trm)
      W.applySymFn sym fn args
@@ -1335,7 +1431,7 @@ reconstructArgTerm atrm sc ts =
              pure (x, ts1)
         ArgTermVector ty ats ->
           do (xs, ts1) <- parseList ats ts0
-             x <- scVector sc ty xs
+             x <- scVectorReduced sc ty xs
              return (x, ts1)
         ArgTermUnit ->
           do x <- scUnitValue sc
@@ -1390,6 +1486,7 @@ mkArgTerm sc ty val =
     (VIntType, VInt _)   -> return ArgTermVar
     (_, VWord ZBV)       -> return ArgTermBVZero     -- 0-width bitvector is a constant
     (_, VWord (DBV _))   -> return ArgTermVar
+    (_, VArray{})        -> return ArgTermVar
     (VUnitType, VUnit)   -> return ArgTermUnit
     (VIntModType n, VIntMod _ _) -> pure (ArgTermToIntMod n ArgTermVar)
 

@@ -20,7 +20,6 @@ import Lang.Crucible.Simulator
 import qualified What4.Expr.Builder as W4
 
 import Crux
-import Crux.Types
 
 import Mir.DefId
 import Mir.Generator (CollectionState)
@@ -31,13 +30,13 @@ import Mir.Compositional.Clobber (clobberGlobalsOverride)
 
 
 compositionalOverrides ::
-    forall sym t st fs args ret blocks rtp a r .
+    forall sym p t st fs args ret blocks rtp a r .
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     Maybe (SomeOnlineSolver sym) ->
     CollectionState ->
     Text ->
     CFG MIR blocks args ret ->
-    Maybe (OverrideSim (Model sym) sym MIR rtp a r ())
+    Maybe (OverrideSim (p sym) sym MIR rtp a r ())
 compositionalOverrides _symOnline cs name cfg
 
   | (normDefId "crucible::method_spec::raw::builder_new" <> "::_inst") `Text.isPrefixOf` name

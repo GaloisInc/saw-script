@@ -1,0 +1,50 @@
+enable_experimental;
+enable_lax_loads_and_stores;
+
+let get_x2_spec = do {
+  ss <- llvm_alloc (llvm_alias "struct.s");
+  z <- llvm_fresh_var "z" (llvm_int 2);
+  llvm_points_to_bitfield ss "x2" (llvm_term z);
+  llvm_execute_func [ss];
+  llvm_return (llvm_term {{ zext z : [8] }});
+};
+
+let get_y_spec = do {
+  ss <- llvm_alloc (llvm_alias "struct.s");
+  z <- llvm_fresh_var "z" (llvm_int 1);
+  llvm_points_to_bitfield ss "y" (llvm_term z);
+  llvm_execute_func [ss];
+  llvm_return (llvm_term z);
+};
+
+let set_x2_spec = do {
+  ss <- llvm_alloc (llvm_alias "struct.s");
+  z <- llvm_fresh_var "z" (llvm_int 8);
+  llvm_execute_func [ss, llvm_term z];
+  llvm_points_to_bitfield ss "x2" (llvm_term {{ drop z : [2] }});
+};
+
+let set_x2_alt_spec = do {
+  ss <- llvm_alloc (llvm_alias "struct.s");
+  z <- llvm_fresh_var "z" (llvm_int 2);
+  llvm_execute_func [ss, llvm_term {{ zext z : [8] }}];
+  llvm_points_to_bitfield ss "x2" (llvm_term z);
+};
+
+let set_y_spec = do {
+  ss <- llvm_alloc (llvm_alias "struct.s");
+  z <- llvm_fresh_var "z" (llvm_int 1);
+  llvm_execute_func [ss, llvm_term z];
+  llvm_points_to_bitfield ss "y" (llvm_term z);
+};
+
+let set_y_alt_spec = set_y_spec;
+
+m <- llvm_load_module "test.bc";
+
+llvm_verify_x86 m "test.exe" "get_x2" [] false get_x2_spec (w4_unint_z3 []);
+llvm_verify_x86 m "test.exe" "get_y" [] false get_y_spec (w4_unint_z3 []);
+llvm_verify_x86 m "test.exe" "set_x2" [] false set_x2_spec (w4_unint_z3 []);
+llvm_verify_x86 m "test.exe" "set_x2_alt" [] false set_x2_alt_spec (w4_unint_z3 []);
+llvm_verify_x86 m "test.exe" "set_y" [] false set_y_spec (w4_unint_z3 []);
+llvm_verify_x86 m "test.exe" "set_y_alt" [] false set_y_alt_spec (w4_unint_z3 []);

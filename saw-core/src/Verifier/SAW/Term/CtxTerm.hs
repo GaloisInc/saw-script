@@ -402,7 +402,7 @@ ctxVars2 vars1 vars2 =
 
 -- | Build a 'CtxTerm' for a 'Sort'
 ctxSort :: MonadTerm m => Sort -> m (CtxTerm ctx (Typ a))
-ctxSort s = CtxTerm <$> mkFlatTermF (Sort s)
+ctxSort s = CtxTerm <$> mkFlatTermF (Sort s False)
 
 -- | Apply two 'CtxTerm's
 ctxApply :: MonadTerm m => m (CtxTerm ctx (a -> b)) -> m (CtxTerm ctx a) ->

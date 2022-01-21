@@ -27,7 +27,7 @@ module SAWScript.X86
   ) where
 
 
-import Control.Lens (toListOf, folded, (^.))
+import Control.Lens ((^.))
 import Control.Exception(Exception(..),throwIO)
 import Control.Monad.IO.Class(liftIO)
 
@@ -72,7 +72,8 @@ import Lang.Crucible.Simulator.ExecutionTree
           )
 import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
 import Lang.Crucible.Backend
-          (getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred,proofGoalsToList)
+          (getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred,goalsToList
+          ,assumptionsPred)
 import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator,insertHandleMap,emptyHandleMap)
 
 
@@ -103,6 +104,8 @@ import Data.Macaw.Symbolic( ArchRegStruct
                           , GlobalMap
                           , MacawSimulatorState(..)
                           , macawExtensions
+                          , unsupportedSyscalls
+                          , defaultMacawArchStmtExtensionOverride
                           )
 import qualified Data.Macaw.Symbolic as Macaw ( LookupFunctionHandle(..) )
 import Data.Macaw.Symbolic( MacawExt
@@ -126,7 +129,7 @@ import Verifier.SAW.Recognizer(asBool)
 import Verifier.SAW.Simulator.What4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_ctx)
 
 -- Cryptol Verifier
-import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
+import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule,defaultPrimitiveOptions)
 import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 
 -- SAWScript
@@ -364,7 +367,7 @@ loadCry sym mb =
      env <- initCryptolEnv sc
      case mb of
        Nothing   -> return env
-       Just file -> snd <$> loadCryptolModule sc env file
+       Just file -> snd <$> loadCryptolModule sc defaultPrimitiveOptions env file
 
 
 --------------------------------------------------------------------------------
@@ -397,7 +400,8 @@ translate opts elf fun =
   do let name = funName fun
      sayLn ("Translating function: " ++ BSC.unpack name)
 
-     let ?recordLLVMAnnotation = \_ _ -> return ()
+     let ?memOpts = Crucible.defaultMemOptions
+     let ?recordLLVMAnnotation = \_ _ _ -> return ()
 
      let sym   = backend opts
          sopts = Opts { optsSym = sym, optsCry = cryEnv opts, optsMvar = memvar opts }
@@ -430,7 +434,7 @@ setSimulatorVerbosity verbosity sym = do
 
 
 doSim ::
-  Crucible.HasLLVMAnn Sym =>
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
   Options ->
   RelevantElf ->
   SymFuns Sym ->
@@ -471,13 +475,15 @@ doSim opts elf sfs name (globs,overs) st checkPost =
        -- The memory setup for this verifier does not have that problem, and
        -- thus does not need any additional validity predicates.
        let noExtraValidityPred _ _ _ _ = return Nothing
+       let archEvalFns = x86_64MacawEvalFn sfs defaultMacawArchStmtExtensionOverride
+       let lookupSyscall = unsupportedSyscalls "saw-script"
        let ctx :: SimContext (MacawSimulatorState Sym) Sym (MacawExt X86_64)
            ctx = SimContext { _ctxSymInterface = sym
                               , ctxSolverProof = \a -> a
                               , ctxIntrinsicTypes = llvmIntrinsicTypes
                               , simHandleAllocator = allocator opts
                               , printHandle = stdout
-                              , extensionImpl = macawExtensions (x86_64MacawEvalFn sfs) mvar globs (callHandler overs sym) noExtraValidityPred
+                              , extensionImpl = macawExtensions archEvalFns mvar globs (callHandler overs sym) lookupSyscall noExtraValidityPred
                               , _functionBindings = FnBindings $
                                 insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) emptyHandleMap
                               , _cruciblePersonality = MacawSimulatorState
@@ -564,15 +570,15 @@ gGoal sc g0 = boolToProp sc [] =<< go (gAssumes g)
 
 getGoals :: Sym -> IO [Goal]
 getGoals sym =
-  do obls <- proofGoalsToList <$> getProofObligations sym
+  do obls <- maybe [] goalsToList <$> getProofObligations sym
      st <- sawCoreState sym
      mapM (toGoal st) obls
   where
   toGoal st (ProofGoal asmps g) =
-    do as <- mapM (toSC sym st) (toListOf (folded . labeledPred) asmps)
+    do a1 <- toSC sym st =<< assumptionsPred sym asmps
        p  <- toSC sym st (g ^. labeledPred)
        let SimError loc msg = g^.labeledPredMsg
-       return Goal { gAssumes = as
+       return Goal { gAssumes = [a1]
                    , gShows   = p
                    , gLoc     = loc
                    , gMessage = msg

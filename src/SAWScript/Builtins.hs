@@ -810,6 +810,9 @@ w4_unint_boolector = wrapW4Prover Prover.proveWhat4_boolector
 w4_unint_z3 :: [String] -> ProofScript ()
 w4_unint_z3 = wrapW4Prover Prover.proveWhat4_z3
 
+w4_unint_z3_using :: String -> [String] -> ProofScript ()
+w4_unint_z3_using tactic = wrapW4Prover (Prover.proveWhat4_z3_using tactic)
+
 w4_unint_cvc4 :: [String] -> ProofScript ()
 w4_unint_cvc4 = wrapW4Prover Prover.proveWhat4_cvc4
 
@@ -1292,6 +1295,14 @@ eval_list t = do
   ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
   return (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
 
+term_theories :: [String] -> TypedTerm -> TopLevel [String]
+term_theories unints t = do
+  sc <- getSharedContext
+  unintSet <- resolveNames unints
+  hashConsing <- gets SV.rwWhat4HashConsing
+  prop <- io (predicateToProp sc Universal (ttTerm t))
+  Prover.what4Theories unintSet hashConsing prop
+
 default_typed_term :: TypedTerm -> TopLevel TypedTerm
 default_typed_term tt = do
   sc <- getSharedContext
@@ -1305,7 +1316,7 @@ defaultTypedTerm :: Options -> SharedContext -> C.SolverConfig -> TypedTerm -> I
 defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
   | null (C.sVars schema) = return tt
   | otherwise = do
-  mdefault <- C.withSolver cfg (\s -> C.defaultReplExpr s undefined schema)
+  mdefault <- C.withSolver (return ()) cfg (\s -> C.defaultReplExpr s undefined schema)
   let inst = do (soln, _) <- mdefault
                 mapM (`lookup` soln) (C.sVars schema)
   case inst of
@@ -1475,7 +1486,7 @@ cryptol_load fileReader path = do
   rw <- getTopLevelRW
   let ce = rwCryptol rw
   let ?fileReader = fileReader
-  (m, ce') <- io $ CEnv.loadCryptolModule sc ce path
+  (m, ce') <- io $ CEnv.loadCryptolModule sc CEnv.defaultPrimitiveOptions ce path
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m
 

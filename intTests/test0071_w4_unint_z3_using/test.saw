@@ -1,0 +1,13 @@
+enable_experimental;
+
+let {{
+bvToInteger : [1024] -> Integer
+bvToInteger = toInteger
+bvFromInteger : Integer  -> [1024]
+bvFromInteger = fromInteger
+}};
+
+prove_print
+  (w4_unint_z3_using "qfnia" ["bvToInteger", "bvFromInteger"])
+  {{ \(x : [1024]) -> bvFromInteger ((if (bvToInteger x) <= (bvToInteger (x * x)) then 1 else (bvToInteger x)) * (bvToInteger x)) == bvFromInteger ((if (bvToInteger x) <= (bvToInteger (x * x)) then (bvToInteger x) else (bvToInteger x) * (bvToInteger x))) }};
+

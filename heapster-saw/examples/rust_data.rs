@@ -1,4 +1,10 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt;
+
+/* A function that immediately panics */
+pub fn get_out () -> ! {
+    panic!("Uh oh!")
+}
 
 /* The logical and operation as a function on bool */
 pub fn bool_and (x:bool, y:bool) -> bool {
@@ -8,6 +14,17 @@ pub fn bool_and (x:bool, y:bool) -> bool {
 /* The logical and operation as a function on bools in a pair */
 pub fn bool_and_pair (xy:(bool,bool)) -> bool {
     xy.0 & xy.1
+}
+
+/* Read two integers from references and return their sum */
+pub fn ref_sum <'a,'b> (x:&'a u64, y:&'a u64) -> u64 {
+    return *x + *y;
+}
+
+/* Double the integer pointed to by a reference by duplicating the reference and
+ * passing it to ref_sum */
+pub fn double_dup_ref <'a> (x:&'a u64) -> u64 {
+    return ref_sum (x, x);
 }
 
 #[repr(C)]
@@ -229,8 +246,15 @@ impl MixedStruct {
     }
 }
 
+impl fmt::Display for MixedStruct {
+    fn fmt<'a, 'b>(&'a self, f: &'b mut fmt::Formatter) -> fmt::Result {
+        write!(f, "s = {}, i1 = {}, i2 = {}", self.s, self.i1, self.i2)
+    }
+}
+
 /* A 'true' enum */
 #[derive(Clone, Debug, PartialEq)]
+#[repr(u64)]
 pub enum TrueEnum {
     Foo,
     Bar,
@@ -244,6 +268,22 @@ pub fn cycle_true_enum (te: &TrueEnum) -> TrueEnum {
         TrueEnum::Baz => TrueEnum::Foo,
     }
 }
+
+impl fmt::Display for TrueEnum {
+    fn fmt<'a, 'b>(&'a self, f: &'b mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TrueEnum::Foo => f.write_str ("Foo"),
+            TrueEnum::Bar => f.write_str ("Bar"),
+            TrueEnum::Baz => f.write_str ("Baz"),
+            /*
+            TrueEnum::Foo => write!(f,"Foo"),
+            TrueEnum::Bar => write!(f,"Bar"),
+            TrueEnum::Baz => write!(f,"Baz"),
+             */
+        }
+    }
+}
+
 
 /* A linked list */
 #[derive(Clone, Debug, PartialEq)]
@@ -279,6 +319,33 @@ impl List<u64> {
     }
 }
 
+/* A linked list specialized to 64-bit elements */
+#[derive(Clone, Debug, PartialEq)]
+#[repr(C,u64)]
+pub enum List64 {
+    Nil64,
+    Cons64 (u64,Box<List64>)
+}
+
+pub fn box_list64_clone<'a>(x:&'a Box<List64>) -> Box<List64> {
+    return x.clone();
+}
+
+pub fn list64_clone<'a>(x:&'a List64) -> List64 {
+    match &x {
+        List64::Nil64 => List64::Nil64,
+        List64::Cons64(h,t) => List64::Cons64(*h,box_list64_clone(t)),
+    }
+}
+
+/* Test if a List64 is empty */
+pub fn list64_is_empty (l: &List64) -> bool {
+    match l {
+        List64::Nil64 => true,
+        List64::Cons64 (_,_) => false
+    }
+}
+
 /* Insert a mapping into m from the greatest of x and y to the other */
 pub fn hash_map_insert_gt_to_le (m: &mut HashMap<u64,u64>, x:u64, y:u64) -> () {
     if x > y {
@@ -287,6 +354,20 @@ pub fn hash_map_insert_gt_to_le (m: &mut HashMap<u64,u64>, x:u64, y:u64) -> () {
         m.insert (y, x);
     }
 }
+
+/* A binary tree */
+pub enum BinTree<X> {
+    BinLeaf (X),
+    BinNode (Box<BinTree<X>>,Box<BinTree<X>>)
+}
+
+pub fn bintree_is_leaf (t: &BinTree<u64>) -> bool {
+    match *t {
+        BinTree::BinLeaf (_) => true,
+        BinTree::BinNode (_,_) => false
+    }
+}
+
 
 /* A tree whose internal nodes contain vectors of children */
 pub enum Tree<X> {
@@ -315,3 +396,166 @@ pub fn tree_sum (t: &Tree<u64>) -> u64 {
     }
 }
 */
+
+/* A 20-element enum that just wraps around type X */
+#[repr(u64)]
+pub enum Enum20<X> {
+  Enum20_0(X),
+  Enum20_1(X),
+  Enum20_2(X),
+  Enum20_3(X),
+  Enum20_4(X),
+  Enum20_5(X),
+  Enum20_6(X),
+  Enum20_7(X),
+  Enum20_8(X),
+  Enum20_9(X),
+  Enum20_10(X),
+  Enum20_11(X),
+  Enum20_12(X),
+  Enum20_13(X),
+  Enum20_14(X),
+  Enum20_15(X),
+  Enum20_16(X),
+  Enum20_17(X),
+  Enum20_18(X),
+  Enum20_19(X),
+}
+
+pub fn enum20_list_proj<'a> (x:&'a Enum20<List<u64>>) -> &'a List<u64> {
+  match x {
+      Enum20::Enum20_0(l) => l,
+      Enum20::Enum20_1(l) => l,
+      Enum20::Enum20_2(l) => l,
+      Enum20::Enum20_3(l) => l,
+      Enum20::Enum20_4(l) => l,
+      Enum20::Enum20_5(l) => l,
+      Enum20::Enum20_6(l) => l,
+      Enum20::Enum20_7(l) => l,
+      Enum20::Enum20_8(l) => l,
+      Enum20::Enum20_9(l) => l,
+      Enum20::Enum20_10(l) => l,
+      Enum20::Enum20_11(l) => l,
+      Enum20::Enum20_12(l) => l,
+      Enum20::Enum20_13(l) => l,
+      Enum20::Enum20_14(l) => l,
+      Enum20::Enum20_15(l) => l,
+      Enum20::Enum20_16(l) => l,
+      Enum20::Enum20_17(l) => l,
+      Enum20::Enum20_18(l) => l,
+      Enum20::Enum20_19(l) => l,
+  }
+}
+
+/* A non-empty list type with 20 separate constructors */
+#[repr(u64)]
+pub enum List10<X> {
+  List10Head(X),
+  List10_0(X,Box<List10<X>>),
+  List10_1(X,Box<List10<X>>),
+  List10_2(X,Box<List10<X>>),
+  List10_3(X,Box<List10<X>>),
+  List10_4(X,Box<List10<X>>),
+  List10_5(X,Box<List10<X>>),
+  List10_6(X,Box<List10<X>>),
+  List10_7(X,Box<List10<X>>),
+  List10_8(X,Box<List10<X>>),
+  List10_9(X,Box<List10<X>>),
+}
+
+pub fn list10_head<'a> (x:&'a List10<List<u64>>) -> &'a List<u64> {
+  match x {
+      List10::List10Head(l) => l,
+      List10::List10_0(l,_) => l,
+      List10::List10_1(l,_) => l,
+      List10::List10_2(l,_) => l,
+      List10::List10_3(l,_) => l,
+      List10::List10_4(l,_) => l,
+      List10::List10_5(l,_) => l,
+      List10::List10_6(l,_) => l,
+      List10::List10_7(l,_) => l,
+      List10::List10_8(l,_) => l,
+      List10::List10_9(l,_) => l,
+  }
+}
+
+
+/* A non-empty list type with 20 separate constructors */
+#[repr(u64)]
+pub enum List20<X> {
+  List20Head(X),
+  List20_0(X,Box<List20<X>>),
+  List20_1(X,Box<List20<X>>),
+  List20_2(X,Box<List20<X>>),
+  List20_3(X,Box<List20<X>>),
+  List20_4(X,Box<List20<X>>),
+  List20_5(X,Box<List20<X>>),
+  List20_6(X,Box<List20<X>>),
+  List20_7(X,Box<List20<X>>),
+  List20_8(X,Box<List20<X>>),
+  List20_9(X,Box<List20<X>>),
+  List20_10(X,Box<List20<X>>),
+  List20_11(X,Box<List20<X>>),
+  List20_12(X,Box<List20<X>>),
+  List20_13(X,Box<List20<X>>),
+  List20_14(X,Box<List20<X>>),
+  List20_15(X,Box<List20<X>>),
+  List20_16(X,Box<List20<X>>),
+  List20_17(X,Box<List20<X>>),
+  List20_18(X,Box<List20<X>>),
+  List20_19(X,Box<List20<X>>),
+}
+
+pub fn list20_head<'a> (x:&'a List20<List<u64>>) -> &'a List<u64> {
+  match x {
+      List20::List20Head(l) => l,
+      List20::List20_0(l,_) => l,
+      List20::List20_1(l,_) => l,
+      List20::List20_2(l,_) => l,
+      List20::List20_3(l,_) => l,
+      List20::List20_4(l,_) => l,
+      List20::List20_5(l,_) => l,
+      List20::List20_6(l,_) => l,
+      List20::List20_7(l,_) => l,
+      List20::List20_8(l,_) => l,
+      List20::List20_9(l,_) => l,
+      List20::List20_10(l,_) => l,
+      List20::List20_11(l,_) => l,
+      List20::List20_12(l,_) => l,
+      List20::List20_13(l,_) => l,
+      List20::List20_14(l,_) => l,
+      List20::List20_15(l,_) => l,
+      List20::List20_16(l,_) => l,
+      List20::List20_17(l,_) => l,
+      List20::List20_18(l,_) => l,
+      List20::List20_19(l,_) => l,
+  }
+}
+
+impl Clone for List20<u64> {
+    fn clone<'a>(&'a self) -> Self {
+        match &self {
+            List20::List20Head(b) => List20::List20Head(*b),
+            List20::List20_0(h,t) => List20::List20_0(*h,t.clone()),
+            List20::List20_1(h,t) => List20::List20_1(*h,t.clone()),
+            List20::List20_2(h,t) => List20::List20_2(*h,t.clone()),
+            List20::List20_3(h,t) => List20::List20_3(*h,t.clone()),
+            List20::List20_4(h,t) => List20::List20_4(*h,t.clone()),
+            List20::List20_5(h,t) => List20::List20_5(*h,t.clone()),
+            List20::List20_6(h,t) => List20::List20_6(*h,t.clone()),
+            List20::List20_7(h,t) => List20::List20_7(*h,t.clone()),
+            List20::List20_8(h,t) => List20::List20_8(*h,t.clone()),
+            List20::List20_9(h,t) => List20::List20_9(*h,t.clone()),
+            List20::List20_10(h,t) => List20::List20_10(*h,t.clone()),
+            List20::List20_11(h,t) => List20::List20_11(*h,t.clone()),
+            List20::List20_12(h,t) => List20::List20_12(*h,t.clone()),
+            List20::List20_13(h,t) => List20::List20_13(*h,t.clone()),
+            List20::List20_14(h,t) => List20::List20_14(*h,t.clone()),
+            List20::List20_15(h,t) => List20::List20_15(*h,t.clone()),
+            List20::List20_16(h,t) => List20::List20_16(*h,t.clone()),
+            List20::List20_17(h,t) => List20::List20_17(*h,t.clone()),
+            List20::List20_18(h,t) => List20::List20_18(*h,t.clone()),
+            List20::List20_19(h,t) => List20::List20_19(*h,t.clone()),
+        }
+    }
+}

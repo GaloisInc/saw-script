@@ -8,7 +8,7 @@ From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import CompMExtra.
 
-Require Import Examples.iso_recursive.
+Require Import Examples.iso_recursive_gen.
 Import iso_recursive.
 
 Import SAWCorePrelude.

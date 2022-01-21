@@ -66,6 +66,7 @@ import Verifier.SAW.Heapster.UntypedAST
 'lifetime'      { Located $$ TLifetime                  }
 'lowned'        { Located $$ TLOwned                    }
 'lcurrent'      { Located $$ TLCurrent                  }
+'lfinished'     { Located $$ TLFinished                 }
 'rwmodality'    { Located $$ TRWModality                }
 'permlist'      { Located $$ TPermList                  }
 'struct'        { Located $$ TStruct                    }
@@ -133,8 +134,8 @@ expr ::                                         { AstExpr }
   | expr '+' expr                               { ExAdd (pos $2) $1 $3 }
   | expr '*' expr                               { ExMul (pos $2) $1 $3 }
   | 'struct' '(' list(expr) ')'                 { ExStruct (pos $1) $3 }
-  | 'array' '(' expr ',' '<' expr ',' '*' expr ',' '[' list(llvmFieldPermArray) ']' ')'
-                                                { ExArray (pos $1) $3 $6 $9 $12 }
+  | lifetime 'array' '(' expr ',' expr ',' '<' expr ',' '*' expr ',' expr ')'
+                                                { ExArray (pos $2) $1 $4 $6 $9 $12 $14 }
   | 'llvmword' '(' expr ')'                     { ExLlvmWord (pos $1) $3 }
   | 'llvmfunptr' '{' expr ',' expr '}' '(' funPerm ')'
                                                 { ExLlvmFunPtr (pos $1) $3 $5 $8 }
@@ -159,8 +160,8 @@ expr ::                                         { AstExpr }
   | lifetime 'ptrsh' '('          expr ')'      { ExPtrSh (pos $2) $1 Nothing $4 }
   | 'fieldsh' '(' expr ',' expr ')'             { ExFieldSh (pos $1) (Just $3) $5 }
   | 'fieldsh' '('          expr ')'             { ExFieldSh (pos $1) Nothing $3 }
-  | 'arraysh' '(' expr ',' expr ',' '[' list(shape) ']' ')'
-                                                { ExArraySh (pos $1) $3 $5 $8 }
+  | 'arraysh' '(' '<' expr ',' '*' expr ',' expr ')'
+                                                { ExArraySh (pos $1) $4 $7 $9 }
   | 'exsh' IDENT ':' type '.' expr              { ExExSh (pos $1) (locThing $2) $4 $6 }
 
 -- Value Permissions
@@ -179,9 +180,10 @@ expr ::                                         { AstExpr }
                                                 { ExPtr (pos $2) $1 $5 $7 Nothing $10 }
 
   | 'shape' '(' expr ')'                        { ExShape (pos $1) $3}
-  | 'lowned' '(' list(varExpr) '-o' list1(varExpr) ')'
-                                                { ExLOwned (pos $1) $3 $5}
+  | 'lowned' lifetimes '(' list(varExpr) '-o' list1(varExpr) ')'
+                                                { ExLOwned (pos $1) $2 $4 $6}
   | lifetime 'lcurrent'                         { ExLCurrent (pos $2) $1 }
+  | 'lfinished'                                 { ExLFinished (pos $1) }
 
 -- BV Props (Value Permissions)
 
@@ -193,10 +195,6 @@ expr ::                                         { AstExpr }
 frameEntry ::                                   { (AstExpr, Natural) }
   : expr ':' NAT                                { ($1, locThing $3) }
 
-shape ::                                        { (Maybe AstExpr, AstExpr) }
-  :  expr                                       { (Nothing, $1)         }
-  |  '(' expr ',' expr ')'                      { (Just $2, $4)         }
-
 identArgs ::                                    { Maybe [AstExpr]       }
   :                                             { Nothing               }
   | '<' list(expr) '>'                          { Just $2               }
@@ -207,7 +205,9 @@ permOffset ::                                   { Maybe AstExpr         }
 
 funPerm ::                                      { AstFunPerm }
   : '(' ctx ')' '.' funPermList '-o' funPermList
-                                                { AstFunPerm (pos $6) $2 $5 $7 }
+                                                { AstFunPerm (pos $6) $2 $5 [] $7 }
+  | '(' ctx ')' '.' funPermList '-o' '(' ctx ')' '.' funPermList
+                                                { AstFunPerm (pos $6) $2 $5 $8 $11 }
 
 funPermList ::                                  { [(Located String, AstExpr)] }
   : 'empty'                                     { []                    }
@@ -222,6 +222,10 @@ varType ::                                      { (Located String, AstType) }
 lifetime ::                                     { Maybe AstExpr         }
   :                                             { Nothing               }
   | '[' expr ']'                                { Just $2               }
+
+lifetimes ::                                    { [AstExpr]             }
+  :                                             { []                    }
+  | '[' list(expr) ']'                          { $2                    }
 
 llvmFieldPermArray ::                           { ArrayPerm             }
   : lifetime '(' expr ',' expr ',' expr ')' '|->' expr

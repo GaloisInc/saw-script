@@ -170,7 +170,8 @@ pure3 f x y z = pure (f x y z)
 prims :: AIG.IsAIG l g => g s -> Prims.BasePrims (BitBlast (l s))
 prims be =
   Prims.BasePrims
-  { Prims.bpAsBool  = AIG.asConstant be
+  { Prims.bpIsSymbolicEvaluator = True
+  , Prims.bpAsBool  = AIG.asConstant be
     -- Bitvectors
   , Prims.bpUnpack  = pure1 vFromLV
   , Prims.bpPack    = pure1 lvFromV
@@ -183,6 +184,7 @@ prims be =
   , Prims.bpMuxBool  = \b x y -> AIG.lazyMux be b (pure x) (pure y)
   , Prims.bpMuxWord  = \b x y -> AIG.iteM be b (pure x) (pure y)
   , Prims.bpMuxInt   = muxInt
+  , Prims.bpMuxArray = unsupportedAIGPrimitive "bpMuxArray"
   , Prims.bpMuxExtra = muxBExtra be
     -- Booleans
   , Prims.bpTrue   = AIG.trueLit be
@@ -251,6 +253,9 @@ prims be =
   , Prims.bpArrayLookup = unsupportedAIGPrimitive "bpArrayLookup"
   , Prims.bpArrayUpdate = unsupportedAIGPrimitive "bpArrayUpdate"
   , Prims.bpArrayEq = unsupportedAIGPrimitive "bpArrayEq"
+  , Prims.bpArrayCopy = unsupportedAIGPrimitive "bpArrayCopy"
+  , Prims.bpArraySet = unsupportedAIGPrimitive "bpArraySet"
+  , Prims.bpArrayRangeEq = unsupportedAIGPrimitive "bpArrayRangeEq"
   }
 
 unsupportedAIGPrimitive :: String -> a

@@ -1,0 +1,60 @@
+
+module clearbufs where
+
+import Prelude;
+
+V64 : sort 0;
+V64 = Vec 64 Bool;
+
+-- Harcoded 64 length bitvector value 16, used for mbox definitions
+bv64_16 : Vec 64 Bool;
+bv64_16 = [False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,True,False,False,False,False];
+
+data Mbox : sort 0 where {
+  Mbox_nil : Mbox;
+  Mbox_cons : Mbox -> (len : Vec 64 Bool) -> BVVec 64 len (Vec 64 Bool) -> Mbox;
+}
+
+-- A definition for the Mbox datatype; currently needed as a workaround in Heapster
+Mbox_def : sort 0;
+Mbox_def = Mbox;
+
+{- Mbox__rec : (P : Mbox -> sort 0) ->
+            (P Mbox_nil) ->
+            ((m:Mbox) -> P m -> (len:Vec 64 Bool) -> (d:BVVec 64 bv64_16 (Vec 64 Bool)) -> P (Mbox_cons m len d)) ->
+            (m:Mbox) -> P m;
+Mbox__rec P f1 f2 m = Mbox#rec P f1 f2 m; -}
+
+--unfoldMbox : Mbox -> Either #() (Mbox * Vec 64 Bool * BVVec 64 bv64_16 (Vec 64 Bool));
+primitive
+unfoldMbox : Mbox -> Either #() (Sigma (V64) (\ (len : V64) -> Mbox * BVVec 64 len (Vec 64 Bool)));
+
+{-unfoldMbox m =
+  Mbox__rec (\ (_:Mbox) -> Either #() (Mbox * Vec 64 Bool * BVVec 64 bv64_16 (Vec 64 Bool) * #()))
+  (Left #() (Mbox * Vec 64 Bool * BVVec 64 bv64_16 (Vec 64 Bool) * #()) ())
+  (\ (m:Mbox) (_:Either #() (Mbox * Vec 64 Bool * BVVec 64 bv64_16 (Vec 64 Bool) * #())) (len:Vec 64 Bool) (d:BVVec 64 bv64_16 (Vec 64 Bool)) ->
+     Right #() (Mbox * Vec 64 Bool * BVVec 64 bv64_16 (Vec 64 Bool) * #()) (m, len, d, ()))
+  m;
+  -}
+
+primitive
+foldMbox : Either #() (Sigma (V64) (\ (len : V64) -> Mbox * BVVec 64 len (Vec 64 Bool))) -> Mbox;
+
+--(Mbox * Vec 64 Bool * (BVVec 64 bv64_16 (Vec 64 Bool)) * #()) -> Mbox;
+{-
+foldMbox =
+  either #() (Mbox * Vec 64 Bool * (BVVec 64 bv64_16 (Vec 64 Bool)) * #()) Mbox
+         (\ (_:#()) -> Mbox_nil)
+         (\ (tup : (Mbox * Vec 64 Bool * (BVVec 64 bv64_16 (Vec 64 Bool)) * #())) ->
+            Mbox_cons tup.1 tup.2 tup.3);
+			-}
+
+primitive
+transMbox : Mbox -> Mbox -> Mbox;
+{-
+transMbox m1 m2 =
+  Mbox__rec (\ (_ : Mbox) -> Mbox)
+  m2
+  (\ (_ : Mbox) (rec:Mbox) (len : Vec 64 Bool) (vec : BVVec 64 bv64_16 (Vec 64 Bool)) -> Mbox_cons rec len vec)
+  m1;
+-}

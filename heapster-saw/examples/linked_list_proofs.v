@@ -8,7 +8,7 @@ From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import CompMExtra.
 
-Require Import Examples.linked_list.
+Require Import Examples.linked_list_gen.
 Import linked_list.
 
 Import SAWCorePrelude.
@@ -22,7 +22,7 @@ Qed.
 
 Lemma no_errors_is_elem_manual : refinesFun is_elem (fun _ _ => noErrorsSpec).
 Proof.
-  unfold is_elem, is_elem__tuple_fun.
+  unfold is_elem, is_elem__tuple_fun, sawLet_def.
   unfold noErrorsSpec.
   apply refinesFun_multiFixM_fst; intros x l.
   apply refinesM_letRecM_Nil_l.
@@ -36,21 +36,21 @@ Proof.
 Qed.
 
 (*
-Fixpoint is_elem_spec (x:bitvector 64) (l:W64List) : CompM {_:bitvector 64 & unit} :=
+Fixpoint is_elem_spec (x:bitvector 64) (l:W64List) : CompM (bitvector 64) :=
   match l with
-  | W64Nil => returnM (existT _ (intToBv 64 0) tt)
+  | W64Nil => returnM (intToBv 64 0)
   | W64Cons y l' =>
-    if bvEq 64 y x then returnM (existT _ (intToBv 64 1) tt) else
+    if bvEq 64 y x then returnM (intToBv 64 1) else
       is_elem_spec x l'
   end.
 *)
 
 Definition is_elem_fun (x:bitvector 64) :
-  list {_:bitvector 64 & unit} -> CompM {_:bitvector 64 & unit} :=
-  list_rect (fun _ => CompM {_:bitvector 64 & unit})
-            (returnM (existT _ (intToBv 64 0) tt))
+  list (bitvector 64) -> CompM (bitvector 64) :=
+  list_rect (fun _ => CompM (bitvector 64))
+            (returnM (intToBv 64 0))
             (fun y l' rec =>
-               if bvEq 64 (projT1 y) x then returnM (existT _ (intToBv 64 1) tt) else rec).
+               if bvEq 64 y x then returnM (intToBv 64 1) else rec).
 
 Arguments is_elem_fun /.
 
@@ -62,7 +62,7 @@ Qed.
 
 Lemma is_elem_fun_ref_manual : refinesFun is_elem is_elem_fun.
 Proof.
-  unfold is_elem, is_elem__tuple_fun, is_elem_fun.
+  unfold is_elem, is_elem__tuple_fun, is_elem_fun, sawLet_def.
   apply refinesFun_multiFixM_fst; intros x l.
   apply refinesM_letRecM_Nil_l.
   apply refinesM_either_l; intros [] e_either.
@@ -71,25 +71,24 @@ Proof.
   - reflexivity.
   - apply refinesM_if_r; intro e_if; unfold_projs; rewrite e_if; simpl.
     + reflexivity.
-    + rewrite_strat (outermost (terms existT_eta_unit)).
-      rewrite bindM_returnM_CompM.
+    + rewrite bindM_returnM_CompM.
       reflexivity.
 Qed.
 
 (* The pure version of is_elem *)
-Definition is_elem_pure (x:bitvector 64) (l:list {_:bitvector 64 & unit})
-  : {_:bitvector 64 & unit} :=
-  (list_rect (fun _ => {_:bitvector 64 & unit})
-             (existT _ (intToBv 64 0) tt)
+Definition is_elem_pure (x:bitvector 64) (l:list (bitvector 64))
+  : bitvector 64 :=
+  (list_rect (fun _ => bitvector 64)
+             (intToBv 64 0)
              (fun y l' rec =>
-                if bvEq 64 (projT1 y) x then existT _ (intToBv 64 1) tt else rec) l).
+                if bvEq 64 y x then intToBv 64 1 else rec) l).
 
 Arguments is_elem_pure /.
 
 Definition is_elem_lrt : LetRecType :=
   LRT_Fun (bitvector 64) (fun _ =>
-    LRT_Fun (list {_:bitvector 64 & unit}) (fun _ =>
-      LRT_Ret {_:bitvector 64 & unit})).
+    LRT_Fun (list (bitvector 64)) (fun _ =>
+      LRT_Ret (bitvector 64))).
 
 Lemma is_elem_pure_fun_ref : @refinesFun is_elem_lrt is_elem_fun (fun x l => returnM (is_elem_pure x l)).
 Proof.
@@ -115,11 +114,11 @@ Qed.
 
 
 (* A high-level specification of is_elem *)
-Definition is_elem_spec (x:bitvector 64) (l:list {_:bitvector 64 & unit})
-  : CompM {_:bitvector 64 & unit} :=
+Definition is_elem_spec (x:bitvector 64) (l:list (bitvector 64))
+  : CompM (bitvector 64) :=
   orM
-    (assertM (List.In (existT _ x tt) l) >> returnM (existT _ (intToBv 64 1) tt))
-    (assertM (~ List.In (existT _ x tt) l) >> returnM (existT _ (intToBv 64 0) tt)).
+    (assertM (List.In x l) >> returnM (intToBv 64 1))
+    (assertM (~ List.In x l) >> returnM (intToBv 64 0)).
 
 Arguments is_elem_spec /.
 
@@ -140,11 +139,7 @@ Proof.
   (* The a0 = (s1 :: a1) case where a <> s1, and we inductively assume
      the right assertion of our specification *)
   - continue_prove_refinement_right.
-    assert (deMorgan_inv : forall (P Q : Prop), ~ P /\ ~ Q -> ~ (P \/ Q)) by tauto.
-    apply deMorgan_inv.
-    split.
-    + injection as not_e_if; contradiction.
-    + assumption.
+    now intros [].
 Qed.
 
 
@@ -168,14 +163,14 @@ Section any.
 
   Hint Resolve refinesM_bind_lr | 0 : refinesM.
 
-  Definition any_fun (f:{_:bitvector 64 & unit} -> CompM {_:bitvector 64 & unit}) :
-    list {_:bitvector 64 & unit} -> CompM {_:bitvector 64 & unit} :=
-    list_rect (fun _ => CompM {_:bitvector 64 & unit})
-              (returnM (existT _ (intToBv 64 0) tt))
+  Definition any_fun (f:bitvector 64 -> CompM (bitvector 64)) :
+    list (bitvector 64) -> CompM (bitvector 64) :=
+    list_rect (fun _ => CompM (bitvector 64))
+              (returnM (intToBv 64 0))
               (fun y l' rec =>
                  f y >>= fun call_ret_val =>
-                  if not (bvEq 64 (projT1 call_ret_val) (intToBv 64 0))
-                  then returnM (existT _ (intToBv 64 1) tt) else rec).
+                  if not (bvEq 64 call_ret_val (intToBv 64 0))
+                  then returnM (intToBv 64 1) else rec).
 
   Lemma any_fun_ref : refinesFun any any_fun.
   Proof.
@@ -192,7 +187,7 @@ Section any.
     unfold any, any__tuple_fun. (* unfold noErrorsSpec at 1. *)
     time "no_errors_any (1/2)" prove_refinement with NoRewrite.
     - unfold noErrorsSpec; prove_refinement.
-    - rewrite (e_assuming (existT (fun _ : bitvector 64 => unit) s tt)).
+    - rewrite (e_assuming v).
       unfold noErrorsSpec at 1.
       time "no_errors_any (2/2)" prove_refinement.
       + unfold noErrorsSpec; prove_refinement.
@@ -213,12 +208,12 @@ Proof.
   time "no_errors_find_elem" prove_refinement.
 Qed.
 
-Definition find_elem_fun (x: {_: bitvector 64 & unit}) :
-  list {_:bitvector 64 & unit} -> CompM (list {_:bitvector 64 & unit}) :=
-  list_rect (fun _ => CompM (list {_:bitvector 64 & unit}))
+Definition find_elem_fun (x: bitvector 64) :
+  list (bitvector 64) -> CompM (list (bitvector 64)) :=
+  list_rect (fun _ => CompM (list (bitvector 64)))
             (returnM List.nil)
             (fun y l' rec =>
-               if bvEq 64 (projT1 y) (projT1 x)
+               if bvEq 64 y x
                then returnM (y :: l')
                else rec).
 
@@ -235,12 +230,12 @@ Proof.
 Qed.
 
 Definition sorted_insert_fun (x: bitvector 64) :
-  list {_:bitvector 64 & unit} -> CompM (list {_:bitvector 64 & unit}) :=
-  list_rect (fun _ => CompM (list {_:bitvector 64 & unit}))
-            (returnM (existT _ x tt :: List.nil))
+  list (bitvector 64) -> CompM (list (bitvector 64)) :=
+  list_rect (fun _ => CompM (list (bitvector 64)))
+            (returnM (x :: List.nil))
             (fun y l' rec =>
-               if bvsle 64 x (projT1 y)
-               then returnM ((existT _ x tt) :: y :: l')
+               if bvsle 64 x y
+               then returnM (x :: y :: l')
                else rec >>= (fun l => returnM (y :: l))).
 
 Lemma sorted_insert_fun_ref : refinesFun sorted_insert sorted_insert_fun.

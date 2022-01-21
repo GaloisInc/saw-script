@@ -4,17 +4,22 @@ cabal-version:       2.4
 -- http://haskell.org/cabal/users-guide/
 
 name:                saw-remote-api
-version:             0.1.0.0
+version:             0.9.1
 -- synopsis:
 -- description:
 -- bug-reports:
 license:             BSD-3-Clause
 license-file:        LICENSE
-author:              Kenny Foner
-maintainer:          kwf@galois.com
+author:              Galois, Inc.
+maintainer:          saw@galois.com
 -- copyright:
 category:            Network
 extra-source-files:  CHANGELOG.md
+
+common general
+  ghc-options:
+    -O2
+    -threaded
 
 common warnings
   ghc-options:
@@ -30,7 +35,7 @@ common errors
 
 common deps
   build-depends: base >=4.11.1.0 && <4.15,
-                 aeson,
+                 aeson >= 1.4.2 && < 2.0,
                  aig,
                  argo,
                  base64-bytestring,
@@ -86,7 +91,7 @@ library
                    SAWServer.VerifyCommon
 
 executable saw-remote-api
-  import: deps, warnings, errors
+  import: general, deps, warnings, errors
   main-is:             Main.hs
   build-depends:       saw-remote-api
   -- other-modules:

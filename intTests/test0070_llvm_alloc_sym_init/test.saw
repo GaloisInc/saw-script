@@ -1,0 +1,25 @@
+enable_experimental;
+
+m <- llvm_load_module "test.bc";
+
+let f_spec = do {
+  x_ptr <- llvm_alloc_sym_init (llvm_int 32);
+  llvm_execute_func [x_ptr];
+  x <- llvm_fresh_var "x" (llvm_int 32);
+  llvm_return (llvm_term x);
+};
+
+let test_spec = do {
+  llvm_execute_func [];
+  x <- llvm_fresh_var "x" (llvm_int 32);
+  llvm_return (llvm_term x);
+};
+
+f_ov <- llvm_verify m "f" [] false f_spec trivial;
+llvm_verify m "test_f_calloc" [f_ov] false test_spec trivial;
+fails (llvm_verify m "test_f_malloc" [f_ov] false test_spec trivial);
+disable_alloc_sym_init_check;
+llvm_verify m "test_f_malloc" [f_ov] false test_spec trivial;
+enable_alloc_sym_init_check;
+fails (llvm_verify m "test_f_malloc" [f_ov] false test_spec trivial);
+

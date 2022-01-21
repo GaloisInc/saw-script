@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# Language OverloadedStrings #-}
@@ -15,6 +16,7 @@ import           System.FilePath
 import           System.IO (IOMode(..), Handle, withFile, hClose, hGetContents, hGetLine, openFile)
 import           System.IO.Temp (withSystemTempFile)
 
+import           System.Environment (setEnv)
 import qualified System.Process as Proc
 
 import           Test.Tasty (defaultMain, testGroup, TestTree)
@@ -26,6 +28,7 @@ import           Test.Tasty.ExpectedFailure (expectFailBecause)
 import qualified Mir.Language as Mir
 
 import qualified Mir.Compositional as Mir
+import qualified Mir.Cryptol as Mir
 
 import qualified Crux as Crux
 import qualified Crux.Config.Common as Crux
@@ -69,17 +72,20 @@ data RunCruxMode = RcmConcrete | RcmSymbolic | RcmCoverage
   deriving (Show, Eq)
 
 runCrux :: FilePath -> Handle -> RunCruxMode -> IO ()
-runCrux rustFile outHandle mode = do
+runCrux rustFile outHandle mode = Mir.withMirLogging $ do
     -- goalTimeout is bumped from 60 to 180 because scalar.rs symbolic
     -- verification runs close to the timeout, causing flaky results
     -- (especially in CI).
     let quiet = True
-    let options = (defaultCruxOptions { Crux.inputFiles = [rustFile],
-                                        Crux.simVerbose = 0,
+    let outOpts = (Crux.outputOptions defaultCruxOptions)
+                    { Crux.simVerbose = 0
+                    , Crux.quietMode = quiet
+                    }
+    let options = (defaultCruxOptions { Crux.outputOptions = outOpts,
+                                        Crux.inputFiles = [rustFile],
                                         Crux.globalTimeout = Just 180,
                                         Crux.goalTimeout = Just 180,
                                         Crux.solver = "z3",
-                                        Crux.quietMode = quiet,
                                         Crux.checkPathSat = (mode == RcmCoverage),
                                         Crux.outDir = case mode of
                                             RcmCoverage -> getOutputDir rustFile
@@ -87,9 +93,14 @@ runCrux rustFile outHandle mode = do
                                         Crux.branchCoverage = (mode == RcmCoverage) } ,
                    Mir.defaultMirOptions { Mir.printResultOnly = (mode == RcmConcrete),
                                            Mir.defaultRlibsDir = "../deps/crucible/crux-mir/rlibs" })
-    let ?outputConfig = Crux.OutputConfig False outHandle outHandle quiet
-    _exitCode <- Mir.runTestsWithExtraOverrides Mir.compositionalOverrides options
+    let ?outputConfig = Crux.mkOutputConfig (outHandle, False) (outHandle, False)
+            Mir.mirLoggingToSayWhat (Just $ Crux.outputOptions $ fst options)
+    setEnv "CRYPTOLPATH" "."
+    _exitCode <- Mir.runTestsWithExtraOverrides overrides options
     return ()
+  where
+    overrides :: Mir.BindExtraOverridesFn
+    overrides = Mir.compositionalOverrides `Mir.orOverride` Mir.cryptolOverrides
 
 getOutputDir :: FilePath -> FilePath
 getOutputDir rustFile = takeDirectory rustFile </> "out"

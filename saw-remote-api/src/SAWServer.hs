@@ -47,9 +47,10 @@ import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
 import SAWScript.Crucible.LLVM.Builtins (CheckPointsToType)
 import SAWScript.Crucible.LLVM.X86 (defaultStackBaseAlign)
+import qualified SAWScript.Crucible.Common as CC (defaultSAWCoreBackendTimeout)
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS (ProvedSpec, GhostGlobal)
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModule)
-import SAWScript.Options (defaultOptions)
+import SAWScript.Options (Options(..), processEnv, defaultOptions)
 import SAWScript.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
 import SAWScript.Proof (newTheoremDB)
@@ -109,6 +110,12 @@ data SetupStep ty
                   (Maybe CryptolAST)
                   -- ^ The source, the target, the type to check the target,
                   --   and the condition that must hold in order for the source to point to the target
+  | SetupPointsToBitfield (CrucibleSetupVal CryptolAST)
+                          Text
+                          (CrucibleSetupVal CryptolAST)
+                          -- ^ The source bitfield,
+                          --   the name of the field within the bitfield,
+                          --   and the target.
   | SetupExecuteFunction [CrucibleSetupVal CryptolAST] -- ^ Function's arguments
   | SetupPrecond CryptolAST -- ^ Function's precondition
   | SetupPostcond CryptolAST -- ^ Function's postcondition
@@ -173,15 +180,13 @@ initialState readFileFn =
   -- warnings from the Cryptol type checker
   silence $
   do sc <- mkSharedContext
+     opts <- processEnv defaultOptions
      CryptolSAW.scLoadPreludeModule sc
      CryptolSAW.scLoadCryptolModule sc
      let mn = mkModuleName ["SAWScript"]
      scLoadModule sc (emptyModule mn)
      ss <- basic_ss sc
-     let jarFiles = []
-         classPaths = []
-         javaBinDirs = []
-     jcb <- JSS.loadCodebase jarFiles classPaths javaBinDirs
+     jcb <- JSS.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
      let bic = BuiltinContext { biSharedContext = sc
                               , biBasicSS = ss
                               }
@@ -193,7 +198,7 @@ initialState readFileFn =
      let ro = TopLevelRO
                 { roSharedContext = sc
                 , roJavaCodebase = jcb
-                , roOptions = defaultOptions
+                , roOptions = opts
                 , roHandleAlloc = halloc
                 , roPosition = PosInternal "SAWServer"
 #if USE_BUILTIN_ABC
@@ -219,11 +224,16 @@ initialState readFileFn =
                 , rwCrucibleAssertThenAssume = False
                 , rwLaxArith = False
                 , rwLaxPointerOrdering = False
+                , rwLaxLoadsAndStores = False
+                , rwDebugIntrinsics = True
                 , rwWhat4HashConsing = False
                 , rwWhat4HashConsingX86 = False
+                , rwWhat4Eval = False
                 , rwStackBaseAlign = defaultStackBaseAlign
                 , rwProofs = []
                 , rwPreservedRegs = []
+                , rwAllocSymInitCheck = True
+                , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
                 }
      return (SAWState emptyEnv bic [] ro rw M.empty)
 

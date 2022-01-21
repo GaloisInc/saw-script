@@ -55,6 +55,7 @@ module Verifier.SAW.Recognizer
   , asConstant
   , asExtCns
   , asSort
+  , asISort
     -- * Prelude recognizers.
   , asBool
   , asBoolType
@@ -313,8 +314,8 @@ asLocalVar :: Recognizer Term DeBruijnIndex
 asLocalVar (unwrapTermF -> LocalVar i) = return i
 asLocalVar _ = Nothing
 
-asConstant :: Recognizer Term (ExtCns Term, Term)
-asConstant (unwrapTermF -> Constant ec t) = return (ec, t)
+asConstant :: Recognizer Term (ExtCns Term, Maybe Term)
+asConstant (unwrapTermF -> Constant ec mt) = return (ec, mt)
 asConstant _ = Nothing
 
 asExtCns :: Recognizer Term (ExtCns Term)
@@ -328,8 +329,17 @@ asSort :: Recognizer Term Sort
 asSort t = do
   ftf <- asFTermF t
   case ftf of
-    Sort s -> return s
+    Sort s _ -> return s
     _      -> Nothing
+
+asISort :: Recognizer Term Sort
+asISort t = do
+  ftf <- asFTermF t
+  case ftf of
+    Sort s True -> return s
+    _           -> Nothing
+
+
 
 -- | Returns term as a constant Boolean if it is one.
 asBool :: Recognizer Term Bool

@@ -12,6 +12,7 @@ Stability   : provisional
 module SAWScript.Options where
 
 import Data.Char (toLower)
+import Data.List (partition)
 import Data.Time
 import System.Console.GetOpt
 import System.Environment
@@ -236,6 +237,12 @@ processEnv opts = do
     addSawOpt ("SAW_IMPORT_PATH", p) os =
       os { importPath = importPath os ++ splitSearchPath p }
     addSawOpt ("SAW_JDK_JAR", p) os = os { jarList = p : jarList os }
+    addSawOpt ("CLASSPATH", p) os = os { jarList = jarList os ++ jars
+                                       , classPath = classPath os ++ dirs
+                                       }
+                                    where
+                                      es = splitSearchPath p
+                                      (jars, dirs) = partition (".jar" `isExtensionOf`) es
     addSawOpt _ os = os
 
 pathDesc, pathDelim :: String

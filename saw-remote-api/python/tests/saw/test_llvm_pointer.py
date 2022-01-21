@@ -1,7 +1,8 @@
 from pathlib import Path
 import unittest
 from saw_client import *
-from saw_client.llvm import Contract, cryptol, void, i8, ptr_ty
+from saw_client.crucible import cry, cry_f
+from saw_client.llvm import Contract, void, i8, ptr_ty
 
 
 class FContract(Contract):
@@ -12,7 +13,7 @@ class FContract(Contract):
 
         p = self.alloc(i8)
         self.points_to(x, p)
-        self.points_to(p, cryptol("42 : [8]"))
+        self.points_to(p, cry("42 : [8]"))
         self.returns(void)
 
 

@@ -1,0 +1,82 @@
+module mbox where
+
+import Prelude;
+
+SigBV1 : sort 0 -> sort 0;
+SigBV1 a = Sigma (Vec 1 Bool) (\ (_:Vec 1 Bool) -> a);
+
+getSBoxValueSpec : Vec 64 Bool -> CompM (Vec 64 Bool);
+getSBoxValueSpec x = returnM (Vec 64 Bool) x;
+
+-- Harcoded 64 length bitvector value 16, used for mbox definitions
+bv64_16 : Vec 64 Bool;
+bv64_16 = [False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,True,False,False,False,False];
+
+bv64_128 : Vec 64 Bool;
+bv64_128 = [False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,True,False,False,False,False,False,False,False];
+
+
+data Mbox : sort 0 where {
+  Mbox_nil : Mbox;
+  Mbox_cons : Vec 64 Bool -> Vec 64 Bool -> Mbox -> BVVec 64 bv64_128 (Vec 8 Bool) -> Mbox;
+}
+
+-- A definition for the Mbox datatype; currently needed as a workaround in Heapster
+Mbox_def : sort 0;
+Mbox_def = Mbox;
+
+Mbox__rec : (P : Mbox -> sort 0) ->
+            (P Mbox_nil) ->
+            ((strt:Vec 64 Bool) -> (len:Vec 64 Bool) -> (m:Mbox) -> P m -> (d:BVVec 64 bv64_128 (Vec 8 Bool)) -> P (Mbox_cons strt len m d)) ->
+            (m:Mbox) -> P m;
+Mbox__rec P f1 f2 m = Mbox#rec P f1 f2 m;
+
+unfoldMbox : Mbox -> Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool));
+unfoldMbox m =
+  Mbox__rec (\ (_:Mbox) -> Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)))
+  (Left #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)) ())
+  (\ (strt:Vec 64 Bool) (len:Vec 64 Bool) (m:Mbox) (_:Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool))) (d:BVVec 64 bv64_128 (Vec 8 Bool)) ->
+     Right #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)) (strt, len, m, d))
+  m;
+
+foldMbox : Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)) -> Mbox;
+foldMbox =
+  either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)) Mbox
+         (\ (_:#()) -> Mbox_nil)
+         (\ (tup : (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool))) ->
+            Mbox_cons tup.1 tup.2 tup.3 tup.(2).(2).(2));
+
+{-
+getMbox : (a : sort 0) -> Mbox a -> a;
+getMbox a =
+  Mbox__rec a (\ (_ : Mbox a) -> a)
+  (\ (x : a) -> x)
+  (\ (_ : Vec 64 Bool) (_ : Vec 64 Bool) (_ : Mbox a) (rec : a) (_ : BVVec 64 bv64_128 (Vec 8 Bool)) -> rec);
+
+putMbox : (a b : sort 0) -> Mbox a -> b -> Mbox b;
+putMbox a b m b_val =
+  Mbox__rec a (\ (_ : Mbox a) -> Mbox b)
+  (\ (_ : a) -> Mbox_nil b b_val)
+  (\ (strt : Vec 64 Bool) (len : Vec 64 Bool) (_ : Mbox a) (rec : Mbox b) (vec : BVVec 64 bv64_128 (Vec 8 Bool) -> Mbox_cons b strt len rec vec)
+  m;
+-}
+
+transMbox : Mbox -> Mbox -> Mbox;
+transMbox m1 m2 =
+  Mbox__rec (\ (_ : Mbox) -> Mbox)
+  m2
+  (\ (strt : Vec 64 Bool) (len : Vec 64 Bool) (_ : Mbox) (rec : Mbox) (vec : BVVec 64 bv64_128 (Vec 8 Bool)) -> Mbox_cons strt len rec vec)
+  m1;
+
+mboxNewSpec : CompM (Mbox);
+mboxNewSpec =
+  returnM Mbox (Mbox_cons (bvNat 64 0) (bvNat 64 0) Mbox_nil (genBVVec 64 bv64_128 (Vec 8 Bool) (\ (i:Vec 64 Bool) (_:is_bvult 64 i bv64_128) -> (bvNat 8 0))));
+
+mboxFreeSpec : BVVec 64 bv64_128 (Vec 8 Bool) -> CompM (Vec 32 Bool);
+mboxFreeSpec _ = returnM (Vec 32 Bool) (bvNat 32 0);
+
+mboxAllFreedSpec : CompM (Vec 1 Bool);
+mboxAllFreedSpec = returnM (Vec 1 Bool) (bvNat 1 0);
+
+randSpec : CompM (Vec 32 Bool);
+randSpec = existsM (Vec 32 Bool) (Vec 32 Bool) (\ (x : Vec 32 Bool) -> returnM (Vec 32 Bool) x);

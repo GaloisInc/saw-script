@@ -39,12 +39,14 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
   , csParentName
     -- * LLVMAllocSpec
   , LLVMAllocSpec(..)
+  , LLVMAllocSpecInit(..)
   , allocSpecType
   , allocSpecAlign
   , allocSpecMut
   , allocSpecLoc
   , allocSpecBytes
   , allocSpecFresh
+  , allocSpecInit
   , mutIso
   , isMut
     -- * LLVMModule
@@ -68,6 +70,7 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
     -- * PointsTo
   , LLVMPointsTo(..)
   , LLVMPointsToValue(..)
+  , llvmPointsToProgramLoc
   , ppPointsTo
     -- * AllocGlobal
   , LLVMAllocGlobal(..)
@@ -188,6 +191,14 @@ type instance MS.MethodId (LLVM _) = LLVMMethodId
 --------------------------------------------------------------------------------
 -- *** LLVMAllocSpec
 
+-- | Allocation initialization policy
+data LLVMAllocSpecInit
+  = LLVMAllocSpecSymbolicInitialization
+    -- ^ allocation is initialized with a fresh symbolic array of bytes
+  | LLVMAllocSpecNoInitialization
+    -- ^ allocation not initialized
+  deriving (Eq, Ord, Show)
+
 data LLVMAllocSpec =
   LLVMAllocSpec
     { _allocSpecMut   :: CL.Mutability
@@ -196,6 +207,7 @@ data LLVMAllocSpec =
     , _allocSpecBytes :: Term
     , _allocSpecLoc   :: ProgramLoc
     , _allocSpecFresh :: Bool -- ^ Whether declared with @crucible_fresh_pointer@
+    , _allocSpecInit :: LLVMAllocSpecInit
     }
   deriving (Eq, Show)
 
@@ -248,7 +260,7 @@ modTrans = _modTrans
 -- | Load an LLVM module from the given bitcode file, then parse and
 -- translate to Crucible.
 loadLLVMModule ::
-  (?laxArith :: Bool) =>
+  (?transOpts :: CL.TranslationOptions) =>
   FilePath ->
   Crucible.HandleAllocator ->
   IO (Either LLVM.Error (Some LLVMModule))
@@ -257,9 +269,9 @@ loadLLVMModule file halloc =
      case parseResult of
        Left err -> return (Left err)
        Right llvm_mod ->
-         do let ?optLoopMerge = False
-            memVar <- CL.mkMemVar (Text.pack "saw:llvm_memory") halloc
-            Some mtrans <- CL.translateModule halloc memVar llvm_mod
+         do memVar <- CL.mkMemVar (Text.pack "saw:llvm_memory") halloc
+            -- FIXME: do something with the translation warnings
+            (Some mtrans, _warnings) <- CL.translateModule halloc memVar llvm_mod
             return (Right (Some (LLVMModule file llvm_mod mtrans)))
 
 instance TestEquality LLVMModule where
@@ -348,12 +360,21 @@ ccTypeCtx = view CL.llvmTypeCtx . ccLLVMContext
 
 type instance MS.PointsTo (LLVM arch) = LLVMPointsTo arch
 
-data LLVMPointsTo arch =
-  LLVMPointsTo ProgramLoc (Maybe TypedTerm) (MS.SetupValue (LLVM arch)) (LLVMPointsToValue arch)
+data LLVMPointsTo arch
+  = LLVMPointsTo ProgramLoc (Maybe TypedTerm) (MS.SetupValue (LLVM arch)) (LLVMPointsToValue arch)
+    -- | A variant of 'LLVMPointsTo' tailored to the @llvm_points_to_bitfield@
+    -- command, which doesn't quite fit into the 'LLVMPointsToValue' paradigm.
+    -- The 'String' represents the name of the field within the bitfield.
+  | LLVMPointsToBitfield ProgramLoc (MS.SetupValue (LLVM arch)) String (MS.SetupValue (LLVM arch))
 
 data LLVMPointsToValue arch
   = ConcreteSizeValue (MS.SetupValue (LLVM arch))
   | SymbolicSizeValue TypedTerm TypedTerm
+
+-- | Return the 'ProgramLoc' corresponding to an 'LLVMPointsTo' statement.
+llvmPointsToProgramLoc :: LLVMPointsTo arch -> ProgramLoc
+llvmPointsToProgramLoc (LLVMPointsTo pl _ _ _) = pl
+llvmPointsToProgramLoc (LLVMPointsToBitfield pl _ _ _) = pl
 
 ppPointsTo :: LLVMPointsTo arch -> PPL.Doc ann
 ppPointsTo (LLVMPointsTo _loc cond ptr val) =
@@ -361,6 +382,10 @@ ppPointsTo (LLVMPointsTo _loc cond ptr val) =
   PPL.<+> PPL.pretty "points to"
   PPL.<+> PPL.pretty val
   PPL.<+> maybe PPL.emptyDoc (\tt -> PPL.pretty "if" PPL.<+> MS.ppTypedTerm tt) cond
+ppPointsTo (LLVMPointsToBitfield _loc ptr fieldName val) =
+  MS.ppSetupValue ptr <> PPL.pretty ("." ++ fieldName)
+  PPL.<+> PPL.pretty "points to (bitfield)"
+  PPL.<+> MS.ppSetupValue val
 
 instance PPL.Pretty (LLVMPointsTo arch) where
   pretty = ppPointsTo

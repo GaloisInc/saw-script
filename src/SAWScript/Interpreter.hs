@@ -83,6 +83,7 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
 -- Crucible
 import qualified Lang.Crucible.JVM as CJ
+import qualified SAWScript.Crucible.Common as CC
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
 import           SAWScript.Crucible.LLVM.Builtins
@@ -482,10 +483,15 @@ buildTopLevelEnv proxy opts =
                    , rwProfilingFile = Nothing
                    , rwLaxArith = False
                    , rwLaxPointerOrdering = False
+                   , rwLaxLoadsAndStores = False
+                   , rwDebugIntrinsics = True
                    , rwWhat4HashConsing = False
                    , rwWhat4HashConsingX86 = False
+                   , rwWhat4Eval = False
                    , rwPreservedRegs = []
                    , rwStackBaseAlign = defaultStackBaseAlign
+                   , rwAllocSymInitCheck = True
+                   , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
                    }
        return (bic, ro0, rw0)
 
@@ -551,10 +557,40 @@ enable_lax_arithmetic = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxArith = True }
 
+disable_lax_arithmetic :: TopLevel ()
+disable_lax_arithmetic = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxArith = False }
+
 enable_lax_pointer_ordering :: TopLevel ()
 enable_lax_pointer_ordering = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxPointerOrdering = True }
+
+disable_lax_pointer_ordering :: TopLevel ()
+disable_lax_pointer_ordering = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxPointerOrdering = False }
+
+enable_lax_loads_and_stores :: TopLevel ()
+enable_lax_loads_and_stores = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxLoadsAndStores = True }
+
+disable_lax_loads_and_stores :: TopLevel ()
+disable_lax_loads_and_stores = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxLoadsAndStores = False }
+
+enable_debug_intrinsics :: TopLevel ()
+enable_debug_intrinsics = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwDebugIntrinsics = True }
+
+disable_debug_intrinsics :: TopLevel ()
+disable_debug_intrinsics = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwDebugIntrinsics = False }
 
 enable_what4_hash_consing :: TopLevel ()
 enable_what4_hash_consing = do
@@ -576,6 +612,16 @@ disable_x86_what4_hash_consing = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwWhat4HashConsingX86 = False }
 
+enable_what4_eval :: TopLevel ()
+enable_what4_eval = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4Eval = True }
+
+disable_what4_eval :: TopLevel ()
+disable_what4_eval = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4Eval = False }
+
 add_x86_preserved_reg :: String -> TopLevel ()
 add_x86_preserved_reg r = do
   rw <- getTopLevelRW
@@ -595,6 +641,21 @@ default_x86_stack_base_align :: TopLevel ()
 default_x86_stack_base_align = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwStackBaseAlign = defaultStackBaseAlign }
+
+enable_alloc_sym_init_check :: TopLevel ()
+enable_alloc_sym_init_check = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwAllocSymInitCheck = True }
+
+disable_alloc_sym_init_check :: TopLevel ()
+disable_alloc_sym_init_check = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwAllocSymInitCheck = False }
+
+set_crucible_timeout :: Integer -> TopLevel ()
+set_crucible_timeout t = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwCrucibleTimeout = t }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -782,10 +843,40 @@ primitives = Map.fromList
     Current
     [ "Enable lax rules for arithmetic overflow in Crucible." ]
 
+  , prim "disable_lax_arithmetic" "TopLevel ()"
+    (pureVal disable_lax_arithmetic)
+    Current
+    [ "Disable lax rules for arithmetic overflow in Crucible." ]
+
   , prim "enable_lax_pointer_ordering" "TopLevel ()"
     (pureVal enable_lax_pointer_ordering)
     Current
     [ "Enable lax rules for pointer ordering comparisons in Crucible." ]
+
+  , prim "disable_lax_pointer_ordering" "TopLevel ()"
+    (pureVal disable_lax_pointer_ordering)
+    Current
+    [ "Disable lax rules for pointer ordering comparisons in Crucible." ]
+
+  , prim "enable_lax_loads_and_stores" "TopLevel ()"
+    (pureVal enable_lax_loads_and_stores)
+    Current
+    [ "Enable relaxed validity checking for memory loads and stores in Crucible." ]
+
+  , prim "disable_lax_loads_and_stores" "TopLevel ()"
+    (pureVal disable_lax_loads_and_stores)
+    Current
+    [ "Disable relaxed validity checking for memory loads and stores in Crucible." ]
+
+  , prim "enable_debug_intrinsics" "TopLevel ()"
+    (pureVal enable_debug_intrinsics)
+    Current
+    [ "Enable translating statements using certain llvm.dbg intrinsic functions in Crucible." ]
+
+  , prim "disable_debug_intrinsics" "TopLevel ()"
+    (pureVal disable_debug_intrinsics)
+    Current
+    [ "Disable translating statements using certain llvm.dbg intrinsic functions in Crucible." ]
 
   , prim "enable_what4_hash_consing" "TopLevel ()"
     (pureVal enable_what4_hash_consing)
@@ -929,6 +1020,22 @@ primitives = Map.fromList
     [ "Take a list of 'fresh_symbolic' variable and another term containing"
     , "those variables, and return a new lambda abstraction over the list of"
     , "variables."
+    ]
+
+  , prim "term_theories" "[String] -> Term -> [String]"
+    (funVal2 term_theories)
+    Experimental
+    [ "Given a term of type \'Bool\', compute the SMT theories required"
+    , "to reason about this term. The functions (if any) given in the"
+    , "first argument will be treated as uninterpreted."
+    , ""
+    , "If the returned list is empty, the given term represents a problem"
+    , "that can be solved purely by boolean SAT reasoning."
+    , ""
+    , "Note: the given term will be simplified using the What4 backend"
+    , "before evaluating what theories are required.  For simple problems,"
+    , "this may simplify away some aspects of the problem altogether and may result"
+    , "in requiring fewer theories than one might expect."
     ]
 
   , prim "default_term" "Term -> Term"
@@ -1272,7 +1379,7 @@ primitives = Map.fromList
     (pureVal goal_eval)
     Current
     [ "Evaluate the proof goal to a first-order combination of primitives."
-    , "Leave the given names, as defined with 'define', as uninterpreted." ]
+    , "Leave the given names as uninterpreted." ]
 
   , prim "beta_reduce_goal"    "ProofScript ()"
     (pureVal beta_reduce_goal)
@@ -1411,21 +1518,21 @@ primitives = Map.fromList
     (pureVal proveUnintZ3)
     Current
     [ "Use the Z3 theorem prover to prove the current goal. Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "unint_cvc4"            "[String] -> ProofScript ()"
     (pureVal proveUnintCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "unint_yices"           "[String] -> ProofScript ()"
     (pureVal proveUnintYices)
     Current
     [ "Use the Yices theorem prover to prove the current goal. Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "sbv_boolector"       "ProofScript ()"
@@ -1457,21 +1564,21 @@ primitives = Map.fromList
     (pureVal proveUnintZ3)
     Current
     [ "Use the Z3 theorem prover to prove the current goal. Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "sbv_unint_cvc4"        "[String] -> ProofScript ()"
     (pureVal proveUnintCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "sbv_unint_yices"       "[String] -> ProofScript ()"
     (pureVal proveUnintYices)
     Current
     [ "Use the Yices theorem prover to prove the current goal. Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "offline_aig"         "String -> ProofScript ()"
@@ -1562,21 +1669,28 @@ primitives = Map.fromList
     (pureVal w4_unint_z3)
     Current
     [ "Prove the current goal using What4 (Z3 backend). Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
+    ]
+
+  , prim "w4_unint_z3_using" "String -> [String] -> ProofScript ()"
+    (pureVal w4_unint_z3_using)
+    Current
+    [ "Prove the current goal using What4 (Z3 backend) using the given"
+    , "Z3 tactic. Leave the given list of names as uninterpreted."
     ]
 
   , prim "w4_unint_yices"         "[String] -> ProofScript ()"
     (pureVal w4_unint_yices)
     Current
     [ "Prove the current goal using What4 (Yices backend). Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "w4_unint_cvc4"         "[String] -> ProofScript ()"
     (pureVal w4_unint_cvc4)
     Current
     [ "Prove the current goal using What4 (CVC4 backend). Leave the"
-    , "given list of names, as defined with 'define', as uninterpreted."
+    , "given list of names as uninterpreted."
     ]
 
   , prim "w4_abc_aiger"        "ProofScript ()"
@@ -1607,24 +1721,21 @@ primitives = Map.fromList
     (pureVal offline_w4_unint_z3)
     Current
     [ "Write the current goal to the given file using What4 (Z3 backend) in"
-    ," SMT-Lib2 format. Leave the given list of names, as defined with"
-    , "'define', as uninterpreted."
+    ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 
   , prim "offline_w4_unint_yices" "[String] -> String -> ProofScript ()"
     (pureVal offline_w4_unint_yices)
     Current
     [ "Write the current goal to the given file using What4 (Yices backend) in"
-    ," SMT-Lib2 format. Leave the given list of names, as defined with"
-    , "'define', as uninterpreted."
+    ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 
   , prim "offline_w4_unint_cvc4"  "[String] -> String -> ProofScript ()"
     (pureVal offline_w4_unint_cvc4)
     Current
     [ "Write the current goal to the given file using What4 (CVC4 backend) in"
-    ," SMT-Lib2 format. Leave the given list of names, as defined with"
-    , "'define', as uninterpreted."
+    ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 
   , prim "split_goal"          "ProofScript ()"
@@ -2271,6 +2382,13 @@ primitives = Map.fromList
     Experimental
     [ "Legacy alternative name for `llvm_alloc_with_size`." ]
 
+  , prim "llvm_alloc_sym_init" "LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_alloc_sym_init)
+    Experimental
+    [ "Like `llvm_alloc`, but assume that the allocation is initialized with"
+    , "symbolic bytes."
+    ]
+
   , prim "llvm_symbolic_alloc" "Bool -> Int -> Term -> LLVMSetup SetupValue"
     (pureVal llvm_symbolic_alloc)
     Current
@@ -2410,6 +2528,20 @@ primitives = Map.fromList
     (pureVal llvm_points_to_array_prefix)
     Experimental
     [ "Legacy alternative name for `llvm_points_to_array_prefix`." ]
+
+  , prim "llvm_points_to_bitfield" "SetupValue -> String -> SetupValue -> LLVMSetup ()"
+    (pureVal (llvm_points_to_bitfield))
+    Experimental
+    [ "A variant of `llvm_points_to` that is meant to be used on struct fields"
+    , "that reside within bitfields. `llvm_points_to_bitfield ptr fieldName rhs`"
+    , "should be used instead of `llvm_points_to (llvm_field ptr fieldName) rhs`,"
+    , "as the latter will not behave as one would expect for technical reasons."
+    , ""
+    , "This command should only be used in combination with"
+    , "`enable_lax_loads_and_stores`, as this option relaxes some assumptions"
+    , "about the memory model that are crucial to how `llvm_points_to_bitfield`"
+    , "operates."
+    ]
 
   , prim "llvm_equal" "SetupValue -> SetupValue -> LLVMSetup ()"
     (pureVal llvm_equal)
@@ -2561,6 +2693,16 @@ primitives = Map.fromList
     Current
     [ "Use the default set of callee-saved registers during x86 verification." ]
 
+  , prim "enable_what4_eval" "TopLevel ()"
+    (pureVal enable_what4_eval)
+    Experimental
+    [ "Enable What4 translation for SAWCore expressions during Crucible symbolic execution." ]
+
+  , prim "disable_what4_eval" "TopLevel ()"
+    (pureVal disable_what4_eval)
+    Current
+    [ "Disable What4 translation for SAWCore expressions during Crucible symbolic execution." ]
+
   , prim "set_x86_stack_base_align" "Int -> TopLevel ()"
     (pureVal set_x86_stack_base_align)
     Experimental
@@ -2570,6 +2712,28 @@ primitives = Map.fromList
     (pureVal default_x86_stack_base_align)
     Experimental
     [ "Use the default stack allocation base alignment during x86 verification." ]
+
+  , prim "enable_alloc_sym_init_check" "TopLevel ()"
+    (pureVal enable_alloc_sym_init_check)
+    Experimental
+    [ "Enable the allocation initialization check associated with alloc_sym_init during override application." ]
+
+  , prim "disable_alloc_sym_init_check" "TopLevel ()"
+    (pureVal disable_alloc_sym_init_check)
+    Current
+    [ "Disable the allocation initialization check associated with alloc_sym_init during override application."
+    , "Disabling this check allows an override to apply when the memory region specified by the alloc_sym_init command"
+    , "in the override specification is not written to in the calling context."
+    , "This makes the implicit assumption that there is some unspecified byte at any valid memory address."
+    ]
+
+  , prim "set_crucible_timeout" "Int -> TopLevel ()"
+    (pureVal set_crucible_timeout)
+    Experimental
+    [ "Set the timeout for the SMT solver during the LLVM and X86 Crucible symbolic execution,"
+    ,"in milliseconds (0 is no timeout). The default is 10000ms (10s)."
+    ,"This is used for path-sat checks, and sat checks when applying overrides."
+    ]
 
   , prim "llvm_array_value"
     "[SetupValue] -> SetupValue"
@@ -2973,12 +3137,29 @@ primitives = Map.fromList
     , " from the named LLVM bitcode file."
     ]
 
+  , prim "heapster_init_env_debug"
+    "String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env)
+    Experimental
+    [ "Create a new Heapster environment with the given SAW module name"
+    , " from the named LLVM bitcode file with debug tracing turned on"
+    ]
+
   , prim "heapster_init_env_from_file"
     "String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_init_env_from_file)
     Experimental
     [ "Create a new Heapster environment from the named LLVM bitcode file,"
     , " initialized with the module in the given SAW core file."
+    ]
+
+  , prim "heapster_init_env_from_file_debug"
+    "String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env_from_file_debug)
+    Experimental
+    [ "Create a new Heapster environment from the named LLVM bitcode file,"
+    , " initialized with the module in the given SAW core file, with debug"
+    , " tracing turned on"
     ]
 
   , prim "load_sawcore_from_file"
@@ -2994,6 +3175,15 @@ primitives = Map.fromList
     Experimental
     [ "Create a new Heapster environment from the named LLVM bitcode files,"
     , " initialized with the module in the given SAW core file."
+    ]
+
+  , prim "heapster_init_env_for_files_debug"
+    "String -> [String] -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env_for_files_debug)
+    Experimental
+    [ "Create a new Heapster environment from the named LLVM bitcode files,"
+    , " initialized with the module in the given SAW core file, with debug"
+    , " tracing turned on"
     ]
 
   , prim "heapster_get_cfg"
@@ -3163,6 +3353,32 @@ primitives = Map.fromList
     , " contain the supplied string as a substring"
     ]
 
+  , prim "heapster_find_symbol_with_type"
+    "HeapsterEnv -> String -> String -> TopLevel String"
+    (bicVal heapster_find_symbol_with_type)
+    Experimental
+    [ "Search for a symbol in any module contained in a HeapsterEnv that"
+    , " contains the supplied string as a substring and that has the specified"
+    , " LLVM type. Raise an error if there is not exactly one such symbol."
+    ]
+
+  , prim "heapster_find_symbols_with_type"
+    "HeapsterEnv -> String -> String -> TopLevel [String]"
+    (bicVal heapster_find_symbols_with_type)
+    Experimental
+    [ "Search for all symbols in any module contained in a HeapsterEnv that"
+    , " contain the supplied string as a substring and that have the specified"
+    , " LLVM type"
+    ]
+
+  , prim "heapster_find_symbol_commands"
+    "HeapsterEnv -> String -> TopLevel [String]"
+    (bicVal heapster_find_symbol_commands)
+    Experimental
+    [ "Map a search string str to a newline-separated sequence of SAW-script "
+    , " commands \"heapster_find_symbol_with_type str tp\", one for each LLVM "
+    , " type tp associated with a symbol whose name contains str" ]
+
   , prim "heapster_find_trait_method_symbol"
     "HeapsterEnv -> String -> TopLevel String"
     (bicVal heapster_find_trait_method_symbol)
@@ -3188,6 +3404,15 @@ primitives = Map.fromList
     [ "heapster_assume_fun_rename nm nm_t perms trans assumes that function nm"
     , " has permissions perms and translates to the SAW core term trans. If"
     , " trans is not an identifier then it is bound to the defined name nm_to."
+    ]
+
+  , prim "heapster_assume_fun_rename_prim"
+    "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_assume_fun_rename_prim)
+    Experimental
+    [
+      "heapster_assume_fun_rename_prim nm nm_to perms assumes that function nm"
+    , " has permissions perms as a primitive."
     ]
 
   , prim "heapster_assume_fun_multi"
@@ -3237,6 +3462,19 @@ primitives = Map.fromList
     (bicVal heapster_export_coq)
     Experimental
     [ "Export a Heapster environment to a Coq file" ]
+
+  , prim "heapster_set_debug_level"
+    "HeapsterEnv -> Int -> TopLevel ()"
+    (bicVal heapster_set_debug_level)
+    Experimental
+    [ "Set the debug level for Heapster; 0 = no debug output, 1 = debug output" ]
+
+  , prim "heapster_set_translation_checks"
+    "HeapsterEnv -> Bool -> TopLevel ()"
+    (bicVal heapster_set_translation_checks)
+    Experimental
+    [ "Tell Heapster whether to perform its translation-time checks of the "
+    , "well-formedness of type-checking proofs" ]
 
   , prim "heapster_parse_test"
     "LLVMModule -> String -> String -> TopLevel ()"

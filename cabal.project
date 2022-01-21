@@ -22,6 +22,7 @@ packages:
     deps/crucible/crucible-jvm
     deps/crucible/crucible-llvm
     deps/crucible/crucible-saw
+    deps/crucible/crucible-symio
     deps/crucible/crucible-syntax
     deps/crucible/crux
     deps/crucible/crux-mir
@@ -42,4 +43,4 @@ packages:
 source-repository-package
     type: git
     location: https://github.com/eddywestbrook/hobbits.git
-    tag: e5918895396b6bcee2fc39f6bd0d77a90a52ba5f
+    tag: e2df7a85ea8dfebce2be8065afdca96cbaef12ae

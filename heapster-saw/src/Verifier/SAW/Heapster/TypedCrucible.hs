@@ -77,10 +77,9 @@ import Lang.Crucible.LLVM.Errors.UndefinedBehavior as UB
 import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.GenMonad
 import Verifier.SAW.Heapster.Implication
+import Verifier.SAW.Heapster.NamePropagation
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.Widening
-
-import Debug.Trace
 
 
 ----------------------------------------------------------------------
@@ -192,36 +191,67 @@ regWithValExpr (RegNoVal (TypedReg x)) = PExpr_Var x
 data TypedExpr ext tp =
   TypedExpr !(App ext RegWithVal tp) !(Maybe (PermExpr tp))
 
--- | A "typed" function handle is a normal function handle along with a context
--- of ghost variables
-data TypedFnHandle ghosts args ret where
-  TypedFnHandle :: !(CruCtx ghosts) -> !(FnHandle cargs ret) ->
-                   TypedFnHandle ghosts (CtxToRList cargs) ret
+-- | A "typed" function handle is a normal function handle along with contexts
+-- of ghost input and output variables
+data TypedFnHandle ghosts args gouts ret where
+  TypedFnHandle :: !(CruCtx ghosts) -> !(CruCtx gouts) ->
+                   !(FnHandle cargs ret) ->
+                   TypedFnHandle ghosts (CtxToRList cargs) gouts ret
 
 -- | Extract out the context of ghost arguments from a 'TypedFnHandle'
-typedFnHandleGhosts :: TypedFnHandle ghosts args ret -> CruCtx ghosts
-typedFnHandleGhosts (TypedFnHandle ghosts _) = ghosts
+typedFnHandleGhosts :: TypedFnHandle ghosts args gouts ret -> CruCtx ghosts
+typedFnHandleGhosts (TypedFnHandle ghosts _ _) = ghosts
+
+-- | Extract out the context of output ghost arguments from a 'TypedFnHandle'
+typedFnHandleGouts :: TypedFnHandle ghosts args gouts ret -> CruCtx gouts
+typedFnHandleGouts (TypedFnHandle _ gouts _) = gouts
 
 -- | Extract out the context of regular arguments from a 'TypedFnHandle'
-typedFnHandleArgs :: TypedFnHandle ghosts args ret -> CruCtx args
-typedFnHandleArgs (TypedFnHandle _ h) = mkCruCtx $ handleArgTypes h
+typedFnHandleArgs :: TypedFnHandle ghosts args gouts ret -> CruCtx args
+typedFnHandleArgs (TypedFnHandle _ _ h) = mkCruCtx $ handleArgTypes h
 
 -- | Extract out the context of all arguments of a 'TypedFnHandle', including
 -- the lifetime argument
-typedFnHandleAllArgs :: TypedFnHandle ghosts args ret -> CruCtx (ghosts :++: args)
+typedFnHandleAllArgs :: TypedFnHandle ghosts args gouts ret ->
+                        CruCtx (ghosts :++: args)
 typedFnHandleAllArgs h =
   appendCruCtx (typedFnHandleGhosts h) (typedFnHandleArgs h)
 
 
 -- | Extract out the return type of a 'TypedFnHandle'
-typedFnHandleRetType :: TypedFnHandle ghosts args ret -> TypeRepr ret
-typedFnHandleRetType (TypedFnHandle _ h) = handleReturnType h
+typedFnHandleRetType :: TypedFnHandle ghosts args gouts ret -> TypeRepr ret
+typedFnHandleRetType (TypedFnHandle _ _ h) = handleReturnType h
+
+-- | Extract out all the return types of a 'TypedFnHandle'
+typedFnHandleRetTypes :: TypedFnHandle ghosts args gouts ret ->
+                         CruCtx (gouts :> ret)
+typedFnHandleRetTypes (TypedFnHandle _ gouts h) =
+  CruCtxCons gouts $ handleReturnType h
 
 
 -- | As in standard Crucible, blocks are identified by membership proofs that
--- their input arguments are in the @blocks@ list
-type TypedBlockID (a :: RList (RList CrucibleType)) =
-  Member a -- :: (b :: RList CrucibleType) -> Type
+-- their input arguments are in the @blocks@ list. We also track an 'Int' that
+-- gives the 'indexVal' of the original Crucible block ID, so that typed block
+-- IDs can be printed the same way as standard Crucible block IDs. The issue
+-- here is that 'Member' proofs count from the right of an 'RList', while
+-- Crucible uses membership proofs that count from the left, and so the sizes
+-- are not the same.
+data TypedBlockID (ctx :: RList (RList CrucibleType)) args =
+  TypedBlockID { typedBlockIDMember :: Member ctx args, typedBlockIDIx :: Int }
+  deriving Eq
+
+instance TestEquality (TypedBlockID ctx) where
+  testEquality (TypedBlockID memb1 _) (TypedBlockID memb2 _) =
+    testEquality memb1 memb2
+
+instance Show (TypedBlockID ctx args) where
+  show tblkID = "%" ++ show (typedBlockIDIx tblkID)
+
+-- | Convert a Crucible 'Index' to a 'TypedBlockID'
+indexToTypedBlockID :: Size ctx -> Index ctx args ->
+                       TypedBlockID (CtxCtxToRList ctx) (CtxToRList args)
+indexToTypedBlockID sz ix =
+  TypedBlockID (indexCtxToMember sz ix) (Ctx.indexVal ix)
 
 -- | All of our blocks have multiple entry points, for different inferred types,
 -- so a "typed" 'BlockID' is a normal Crucible 'BlockID' (which is just an index
@@ -231,19 +261,17 @@ data TypedEntryID (blocks :: RList (RList CrucibleType)) (args :: RList Crucible
   TypedEntryID { entryBlockID :: TypedBlockID blocks args, entryIndex :: Int }
   deriving Eq
 
--- | Compute the length of a 'Member' proof, which corresponds to its deBruijn
--- index, i.e., number of hops from the right
-memberLength :: Member a as -> Int
-memberLength Member_Base = 0
-memberLength (Member_Step memb) = 1 + memberLength memb
+-- | Get the 'Member' proof of the 'TypedBlockID' of a 'TypedEntryID'
+entryBlockMember :: TypedEntryID blocks args -> Member blocks args
+entryBlockMember = typedBlockIDMember . entryBlockID
 
 -- | Compute the indices corresponding to the 'BlockID' and 'entryIndex' of a
 -- 'TypedEntryID', for printing purposes
 entryIDIndices :: TypedEntryID blocks args -> (Int, Int)
-entryIDIndices (TypedEntryID memb ix) = (memberLength memb, ix)
+entryIDIndices (TypedEntryID tblkID ix) = (typedBlockIDIx tblkID, ix)
 
 instance Show (TypedEntryID blocks args) where
-  show entryID = "<entryID " ++ show (entryIDIndices entryID) ++ ">"
+  show (TypedEntryID {..}) = show entryBlockID ++ "(" ++ show entryIndex ++ ")"
 
 instance TestEquality (TypedEntryID blocks) where
   testEquality (TypedEntryID memb1 i1) (TypedEntryID memb2 i2)
@@ -253,16 +281,15 @@ instance TestEquality (TypedEntryID blocks) where
 -- | Each call site, that jumps or branches to another block, is identified by
 -- the entrypoint it occurs in and the entrypoint it calls, and is associated
 -- with the free variables at that call site, each of which could have
--- permissions being passed by the call
+-- permissions being passed by the call. Call sites also have an integer index
+-- to handle the case when one entrypoint calls another multiple times, which
+-- can happen if a disjunctive permission is eliminated in the former.
 data TypedCallSiteID blocks args vars =
   forall args_src.
   TypedCallSiteID { callSiteSrc :: TypedEntryID blocks args_src,
+                    callSiteIx :: Int,
                     callSiteDest :: TypedEntryID blocks args,
                     callSiteVars :: CruCtx vars }
-
--- FIXME HERE NOW: call sites IDs need an Int index, because the same entrypoint
--- could call the same entrypoint multiple times, if the latter is a join point
--- and the former does a disjunctive elimination
 
 -- | Get the 'TypedBlockID' of the callee of a call site
 callSiteDestBlock :: TypedCallSiteID blocks args vars ->
@@ -271,14 +298,15 @@ callSiteDestBlock = entryBlockID . callSiteDest
 
 instance TestEquality (TypedCallSiteID blocks args) where
   testEquality (TypedCallSiteID
-                src1 dest1 vars1) (TypedCallSiteID src2 dest2 vars2)
+                src1 ix1 dest1 vars1) (TypedCallSiteID src2 ix2 dest2 vars2)
     | Just Refl <- testEquality src1 src2
-    , dest1 == dest2 = testEquality vars1 vars2
+    , ix1 == ix2, dest1 == dest2 = testEquality vars1 vars2
   testEquality _ _ = Nothing
 
 instance Show (TypedCallSiteID blocks args vars) where
   show (TypedCallSiteID {..}) =
     "<siteID: src = " ++ show callSiteSrc ++
+    ", ix = " ++ show callSiteIx ++
     ", dest = " ++ show callSiteDest ++
     ", vars =" ++ renderDoc (permPretty emptyPPInfo callSiteVars) ++ ">"
 
@@ -287,23 +315,6 @@ callSiteIDCallerEq :: TypedEntryID blocks args_src ->
                       TypedCallSiteID blocks args vars -> Bool
 callSiteIDCallerEq entryID (TypedCallSiteID {..}) =
   isJust $ testEquality entryID callSiteSrc
-
--- | Test if two 'TypedCallSiteID's are "equivalent", meaning they have the same
--- source and destination but possibly different free variables
-callSiteIDEquiv :: TypedCallSiteID blocks args vars ->
-                   TypedCallSiteID blocks args' vars' -> Bool
-callSiteIDEquiv (TypedCallSiteID src1 dest1 _) (TypedCallSiteID src2 dest2 _) =
-  isJust (testEquality src1 src2) && isJust (testEquality dest1 dest2)
-
--- | Test equality of two 'TypedEntryID's with possibly different type arguments
-typedCallSiteIDEq :: TypedCallSiteID blocks args vars ->
-                     TypedCallSiteID blocks args' vars' ->
-                     Maybe (args :~: args', vars :~: vars')
-typedCallSiteIDEq (TypedCallSiteID
-                   src1 dest1 vars1) (TypedCallSiteID src2 dest2 vars2)
-  | isJust (testEquality src1 src2) =
-    (,) <$> testEquality dest1 dest2 <*> testEquality vars1 vars2
-typedCallSiteIDEq _ _ = Nothing
 
 -- | A typed target for jump and branch statements, where the argument registers
 -- (including top-level function arguments and free variables) are given with
@@ -327,7 +338,9 @@ instance NuMatchingAny1 RegWithVal where
   nuMatchingAny1Proof = nuMatchingProof
 
 $(mkNuMatching [t| forall ext tp. NuMatchingExtC ext => TypedExpr ext tp |])
-$(mkNuMatching [t| forall ghosts args ret. TypedFnHandle ghosts args ret |])
+$(mkNuMatching [t| forall ghosts args gouts ret.
+                TypedFnHandle ghosts args gouts ret |])
+$(mkNuMatching [t| forall blocks args. TypedBlockID blocks args |])
 $(mkNuMatching [t| forall blocks args. TypedEntryID blocks args |])
 $(mkNuMatching [t| forall blocks args ghosts. TypedCallSiteID blocks args ghosts |])
 $(mkNuMatching [t| forall blocks tops ps_in. TypedJumpTarget blocks tops ps_in |])
@@ -335,8 +348,19 @@ $(mkNuMatching [t| forall blocks tops ps_in. TypedJumpTarget blocks tops ps_in |
 instance NuMatchingAny1 (TypedJumpTarget blocks tops) where
   nuMatchingAny1Proof = nuMatchingProof
 
+instance NuMatchingAny1 (TypedBlockID blocks) where
+  nuMatchingAny1Proof = nuMatchingProof
+
 instance NuMatchingAny1 (TypedEntryID blocks) where
   nuMatchingAny1Proof = nuMatchingProof
+
+instance Closable (TypedBlockID blocks args) where
+  toClosed (TypedBlockID memb ix) =
+    $(mkClosed [| TypedBlockID |])
+    `clApply` toClosed memb `clApply` toClosed ix
+
+instance Liftable (TypedBlockID blocks args) where
+  mbLift = unClosed . mbLift . fmap toClosed
 
 instance Closable (TypedEntryID blocks args) where
   toClosed (TypedEntryID entryBlockID entryIndex) =
@@ -347,9 +371,10 @@ instance Liftable (TypedEntryID blocks args) where
   mbLift = unClosed . mbLift . fmap toClosed
 
 instance Closable (TypedCallSiteID blocks args vars) where
-  toClosed (TypedCallSiteID src dest vars) =
+  toClosed (TypedCallSiteID src ix dest vars) =
     $(mkClosed [| TypedCallSiteID |])
-    `clApply` toClosed src `clApply` toClosed dest `clApply` toClosed vars
+    `clApply` toClosed src `clApply` toClosed ix
+    `clApply` toClosed dest `clApply` toClosed vars
 
 instance Liftable (TypedCallSiteID blocks args vars) where
   mbLift = unClosed . mbLift . fmap toClosed
@@ -361,7 +386,7 @@ instance Liftable (TypedCallSiteID blocks args vars) where
 
 -- | Typed Crucible statements with the given Crucible syntax extension and the
 -- given set of return values
-data TypedStmt ext (rets :: RList CrucibleType) ps_in ps_out where
+data TypedStmt ext (stmt_rets :: RList CrucibleType) ps_in ps_out where
 
   -- | Assign a pure Crucible expressions to a register, where pure here means
   -- that its translation to SAW will be pure (i.e., no LLVM pointer operations)
@@ -383,11 +408,11 @@ data TypedStmt ext (rets :: RList CrucibleType) ps_in ps_out where
   -- > [gexprs/ghosts]ps_out
   TypedCall :: args ~ CtxToRList cargs =>
                !(TypedReg (FunctionHandleType cargs ret)) ->
-               !(FunPerm ghosts args ret) ->
+               !(FunPerm ghosts args gouts ret) ->
                !(TypedRegs ghosts) -> !(PermExprs ghosts) -> !(TypedRegs args) ->
-               TypedStmt ext (RNil :> ret)
+               TypedStmt ext (gouts :> ret)
                ((ghosts :++: args) :++: ghosts :> FunctionHandleType cargs ret)
-               (ghosts :++: args :> ret)
+               ((ghosts :++: args) :++: gouts :> ret)
 
   -- | Assert a boolean condition, printing the given string on failure
   TypedAssert :: !(TypedReg BoolType) -> !(TypedReg (StringType Unicode)) ->
@@ -458,7 +483,7 @@ data TypedLLVMStmt ret ps_in ps_out where
   -- Type:
   -- > ps, x:ptr((rw,0) |-> p), cur_ps
   -- > -o ps, x:ptr((rw,0) |-> eq(ret)), ret:p, cur_ps
-  TypedLLVMLoad :: 
+  TypedLLVMLoad ::
     (HasPtrWidth w, 1 <= sz, KnownNat sz) =>
     !(TypedReg (LLVMPointerType w)) ->
     !(LLVMFieldPerm w sz) ->
@@ -489,16 +514,14 @@ data TypedLLVMStmt ret ps_in ps_out where
       (ps :> LLVMPointerType w :++: ps_l)
       (ps :> LLVMPointerType w :++: ps_l)
 
-  -- | Allocate an object of the given size on the given LLVM frame, broken into
-  -- word-sized fields followed by a field at the end with the remaining size:
+  -- | Allocate an object of the given size on the given LLVM frame, described
+  -- as a memory block with empty shape:
   --
   -- Type:
   -- > fp:frame(ps) -o fp:frame(ps,(ret,i)),
-  -- >                 ret:ptr((W,0) |-> true, (W,M) |-> true, (W,2*M) |-> true,
-  -- >                         ..., (w, (i-1)*M, 8*(sz-(i-1)*M)) |-> true)
+  -- >                 ret:memblock(W,0,sz,emptysh)
   --
-  -- where @sz@ is the number of bytes allocated, @M@ is the machine word size in
-  -- bytes, and @i@ is the greatest natural number such that @(i-1)*M < sz@
+  -- where @sz@ is the number of bytes allocated
   TypedLLVMAlloca ::
     HasPtrWidth w =>
     !(TypedReg (LLVMFrameType w)) ->
@@ -530,7 +553,7 @@ data TypedLLVMStmt ret ps_in ps_out where
   -- referred to by a function pointer, assuming we know it has one:
   --
   -- Type: @x:llvm_funptr(p) -o ret:p@
-  TypedLLVMLoadHandle :: 
+  TypedLLVMLoadHandle ::
     HasPtrWidth w =>
     !(TypedReg (LLVMPointerType w)) ->
     !(TypeRepr (FunctionHandleType cargs ret)) ->
@@ -559,7 +582,7 @@ data TypedLLVMStmt ret ps_in ps_out where
     TypedLLVMStmt (LLVMPointerType w) RNil (RNil :> LLVMPointerType w)
 
 -- | Return the input permissions for a 'TypedStmt'
-typedStmtIn :: TypedStmt ext rets ps_in ps_out -> DistPerms ps_in
+typedStmtIn :: TypedStmt ext stmt_rets ps_in ps_out -> DistPerms ps_in
 typedStmtIn (TypedSetReg _ _) = DistPermsNil
 typedStmtIn (TypedSetRegPermExpr _ _) = DistPermsNil
 typedStmtIn (TypedCall (TypedReg f) fun_perm ghosts gexprs args) =
@@ -618,17 +641,17 @@ typedLLVMStmtIn (TypedLLVMResolveGlobal _ _) =
 typedLLVMStmtIn (TypedLLVMIte _ _ _ _) = DistPermsNil
 
 -- | Return the output permissions for a 'TypedStmt'
-typedStmtOut :: TypedStmt ext rets ps_in ps_out -> RAssign Name rets ->
-                DistPerms ps_out
+typedStmtOut :: TypedStmt ext stmt_rets ps_in ps_out ->
+                RAssign Name stmt_rets -> DistPerms ps_out
 typedStmtOut (TypedSetReg _ (TypedExpr _ (Just e))) (_ :>: ret) =
   distPerms1 ret (ValPerm_Eq e)
 typedStmtOut (TypedSetReg _ (TypedExpr _ Nothing)) (_ :>: ret) =
   distPerms1 ret ValPerm_True
 typedStmtOut (TypedSetRegPermExpr _ e) (_ :>: ret) =
   distPerms1 ret (ValPerm_Eq e)
-typedStmtOut (TypedCall _ fun_perm ghosts gexprs args) (_ :>: ret) =
-  funPermDistOuts fun_perm (typedRegsToVars
-                            ghosts) gexprs (typedRegsToVars args :>: ret)
+typedStmtOut (TypedCall _ fun_perm ghosts gexprs args) rets =
+  funPermDistOuts fun_perm (typedRegsToVars ghosts) gexprs
+  (typedRegsToVars args) rets
 typedStmtOut (TypedAssert _ _) _ = DistPermsNil
 typedStmtOut (TypedLLVMStmt llvmStmt) (_ :>: ret) =
   typedLLVMStmtOut llvmStmt ret
@@ -671,7 +694,7 @@ typedLLVMStmtOut (TypedLLVMAlloca
                   (TypedReg f) (fperms :: LLVMFramePerm w) len) ret =
   withKnownNat ?ptrWidth $
   distPerms2 f (ValPerm_Conj [Perm_LLVMFrame ((PExpr_Var ret, len):fperms)])
-  ret (llvmFieldsPermOfSize Proxy len)
+  ret (llvmEmptyBlockPermOfSize Proxy len)
 typedLLVMStmtOut TypedLLVMCreateFrame ret =
   withKnownNat ?ptrWidth $
   distPerms1 ret $ ValPerm_Conj [Perm_LLVMFrame []]
@@ -687,12 +710,12 @@ typedLLVMStmtOut (TypedLLVMIte _ _ (TypedReg x1) (TypedReg x2)) ret =
 -- | Check that the permission stack of the given permission set matches the
 -- input permissions of the given statement, and replace them with the output
 -- permissions of the statement
-applyTypedStmt :: TypedStmt ext rets ps_in ps_out -> RAssign Name rets ->
-                  PermSet ps_in -> PermSet ps_out
-applyTypedStmt stmt rets =
+applyTypedStmt :: TypedStmt ext stmt_rets ps_in ps_out ->
+                  RAssign Name stmt_rets -> PermSet ps_in -> PermSet ps_out
+applyTypedStmt stmt stmt_rets =
   modifyDistPerms $ \perms ->
   if perms == typedStmtIn stmt then
-    typedStmtOut stmt rets
+    typedStmtOut stmt stmt_rets
   else
     error "applyTypedStmt: unexpected input permissions!"
 
@@ -706,73 +729,73 @@ applyTypedStmt stmt rets =
 data AnnotPermImpl r ps = AnnotPermImpl !String !(PermImpl r ps)
 
 -- | Typed return argument
-data TypedRet tops ret ps =
+data TypedRet tops rets ps =
   TypedRet
-  !(ps :~: tops :> ret) !(TypeRepr ret) !(TypedReg ret)
-  !(Binding ret (DistPerms ps))
+  !(ps :~: tops :++: rets) !(CruCtx rets) !(RAssign ExprVar rets)
+  !(Mb rets (DistPerms ps))
 
 
 -- | Typed Crucible block termination statements
-data TypedTermStmt blocks tops ret ps_in where
+data TypedTermStmt blocks tops rets ps_in where
   -- | Jump to the given jump target
   TypedJump :: !(AnnotPermImpl (TypedJumpTarget blocks tops) ps_in) ->
-               TypedTermStmt blocks tops ret ps_in
+               TypedTermStmt blocks tops rets ps_in
 
   -- | Branch on condition: if true, jump to the first jump target, and
   -- otherwise jump to the second jump target
   TypedBr :: !(TypedReg BoolType) ->
              !(AnnotPermImpl (TypedJumpTarget blocks tops) ps_in) ->
              !(AnnotPermImpl (TypedJumpTarget blocks tops) ps_in) ->
-             TypedTermStmt blocks tops ret ps_in
+             TypedTermStmt blocks tops rets ps_in
 
   -- | Return from function, providing the return value and also proof that the
   -- current permissions imply the required return permissions
-  TypedReturn :: !(AnnotPermImpl (TypedRet tops ret) ps_in) ->
-                 TypedTermStmt blocks tops ret ps_in
+  TypedReturn :: !(AnnotPermImpl (TypedRet tops rets) ps_in) ->
+                 TypedTermStmt blocks tops rets ps_in
 
   -- | Block ends with an error
   TypedErrorStmt :: !(Maybe String) -> !(TypedReg (StringType Unicode)) ->
-                    TypedTermStmt blocks tops ret ps_in
+                    TypedTermStmt blocks tops rets ps_in
 
 
 -- | A typed sequence of Crucible statements
-data TypedStmtSeq ext blocks tops ret ps_in where
+data TypedStmtSeq ext blocks tops rets ps_in where
   -- | A permission implication step, which modifies the current permission
   -- set. This can include pattern-matches and/or assertion failures.
-  TypedImplStmt :: !(AnnotPermImpl (TypedStmtSeq ext blocks tops ret) ps_in) ->
-                   TypedStmtSeq ext blocks tops ret ps_in
+  TypedImplStmt :: !(AnnotPermImpl (TypedStmtSeq ext blocks tops rets) ps_in) ->
+                   TypedStmtSeq ext blocks tops rets ps_in
 
   -- | Typed version of 'ConsStmt', which binds new variables for the return
   -- value(s) of each statement
   TypedConsStmt :: !ProgramLoc ->
-                   !(TypedStmt ext rets ps_in ps_next) ->
-                   !(RAssign Proxy rets) ->
-                   !(Mb rets (TypedStmtSeq ext blocks tops ret ps_next)) ->
-                   TypedStmtSeq ext blocks tops ret ps_in
+                   !(TypedStmt ext stmt_rets ps_in ps_next) ->
+                   !(RAssign Proxy stmt_rets) ->
+                   !(Mb stmt_rets (TypedStmtSeq ext blocks tops rets ps_next)) ->
+                   TypedStmtSeq ext blocks tops rets ps_in
 
   -- | Typed version of 'TermStmt', which terminates the current block
   TypedTermStmt :: !ProgramLoc ->
-                   !(TypedTermStmt blocks tops ret ps_in) ->
-                   TypedStmtSeq ext blocks tops ret ps_in
+                   !(TypedTermStmt blocks tops rets ps_in) ->
+                   TypedStmtSeq ext blocks tops rets ps_in
 
 
 $(mkNuMatching [t| forall r ps. NuMatchingAny1 r => AnnotPermImpl r ps |])
 $(mkNuMatching [t| forall tp ps_out ps_in.
                 TypedLLVMStmt tp ps_out ps_in |])
-$(mkNuMatching [t| forall ext rets ps_in ps_out. NuMatchingExtC ext =>
-                TypedStmt ext rets ps_in ps_out |])
-$(mkNuMatching [t| forall tops ret ps. TypedRet tops ret ps |])
+$(mkNuMatching [t| forall ext stmt_rets ps_in ps_out. NuMatchingExtC ext =>
+                TypedStmt ext stmt_rets ps_in ps_out |])
+$(mkNuMatching [t| forall tops rets ps. TypedRet tops rets ps |])
 
-instance NuMatchingAny1 (TypedRet tops ret) where
+instance NuMatchingAny1 (TypedRet tops rets) where
   nuMatchingAny1Proof = nuMatchingProof
 
-$(mkNuMatching [t| forall blocks tops ret ps_in.
-                TypedTermStmt blocks tops ret ps_in |])
-$(mkNuMatching [t| forall ext blocks tops ret ps_in.
-                NuMatchingExtC ext => TypedStmtSeq ext blocks tops ret ps_in |])
+$(mkNuMatching [t| forall blocks tops rets ps_in.
+                TypedTermStmt blocks tops rets ps_in |])
+$(mkNuMatching [t| forall ext blocks tops rets ps_in.
+                NuMatchingExtC ext => TypedStmtSeq ext blocks tops rets ps_in |])
 
 instance NuMatchingExtC ext =>
-         NuMatchingAny1 (TypedStmtSeq ext blocks tops ret) where
+         NuMatchingAny1 (TypedStmtSeq ext blocks tops rets) where
   nuMatchingAny1Proof = nuMatchingProof
 
 
@@ -955,7 +978,6 @@ instance SubstVar PermVarSubst m =>
     [nuMP| TypedLLVMIte w r1 r2 r3 |] ->
       TypedLLVMIte (mbLift w) <$> genSubst s r1 <*> genSubst s r2 <*> genSubst s r3
 
-
 instance (PermCheckExtC ext, SubstVar PermVarSubst m) =>
          Substable PermVarSubst (TypedStmt ext rets ps_in ps_out) m where
   genSubst s mb_x = case mbMatch mb_x of
@@ -973,12 +995,14 @@ instance (PermCheckExtC ext, SubstVar PermVarSubst m) =>
 
 
 instance SubstVar PermVarSubst m =>
-         Substable PermVarSubst (TypedRet tops ret ps) m where
-  genSubst s (mbMatch -> [nuMP| TypedRet e tp ret mb_perms |]) =
-    TypedRet (mbLift e) (mbLift tp) <$> genSubst s ret <*> genSubst s mb_perms
+         Substable PermVarSubst (TypedRet tops rets ps) m where
+  genSubst s (mbMatch -> [nuMP| TypedRet e rets ret_vars mb_perms |]) =
+    give (cruCtxProxies $ mbLift rets)
+    (TypedRet (mbLift e) (mbLift rets) <$> genSubst s ret_vars
+     <*> genSubst s mb_perms)
 
 instance SubstVar PermVarSubst m =>
-         Substable1 PermVarSubst (TypedRet tops ret) m where
+         Substable1 PermVarSubst (TypedRet tops rets) m where
   genSubst1 = genSubst
 
 instance SubstVar PermVarSubst m =>
@@ -992,7 +1016,7 @@ instance SubstVar PermVarSubst m =>
   genSubst1 = genSubst
 
 instance SubstVar PermVarSubst m =>
-         Substable PermVarSubst (TypedTermStmt blocks tops ret ps_in) m where
+         Substable PermVarSubst (TypedTermStmt blocks tops rets ps_in) m where
   genSubst s mb_x = case mbMatch mb_x of
     [nuMP| TypedJump impl_tgt |] -> TypedJump <$> genSubst s impl_tgt
     [nuMP| TypedBr reg impl_tgt1 impl_tgt2 |] ->
@@ -1004,18 +1028,19 @@ instance SubstVar PermVarSubst m =>
       TypedErrorStmt (mbLift str) <$> genSubst s r
 
 instance (PermCheckExtC ext, SubstVar PermVarSubst m) =>
-         Substable PermVarSubst (TypedStmtSeq ext blocks tops ret ps_in) m where
+         Substable PermVarSubst (TypedStmtSeq ext blocks tops rets ps_in) m where
   genSubst s mb_x = case mbMatch mb_x of
     [nuMP| TypedImplStmt impl_seq |] ->
       TypedImplStmt <$> genSubst s impl_seq
     [nuMP| TypedConsStmt loc stmt pxys mb_seq |] ->
-      TypedConsStmt (mbLift loc) <$> genSubst s stmt <*> pure (mbLift pxys) <*> give (mbLift pxys) (genSubst s mb_seq)
+      TypedConsStmt (mbLift loc) <$> genSubst s stmt <*> pure (mbLift pxys)
+      <*> give (mbLift pxys) (genSubst s mb_seq)
     [nuMP| TypedTermStmt loc term_stmt |] ->
       TypedTermStmt (mbLift loc) <$> genSubst s term_stmt
 
 
 instance (PermCheckExtC ext, SubstVar PermVarSubst m) =>
-         Substable1 PermVarSubst (TypedStmtSeq ext blocks tops ret) m where
+         Substable1 PermVarSubst (TypedStmtSeq ext blocks tops rets) m where
   genSubst1 = genSubst
 
 
@@ -1176,7 +1201,7 @@ typedCallSiteArgVarPerms (TypedCallSite {..}) =
 -- implicitly take extra "ghost" arguments, that are needed to express the input
 -- and output permissions. The first of these ghost arguments are the top-level
 -- inputs to the entire function.
-data TypedEntry phase ext blocks tops ret args ghosts =
+data TypedEntry phase ext blocks tops rets args ghosts =
   TypedEntry
   {
     -- | The identifier for this particular entrypoing
@@ -1185,8 +1210,8 @@ data TypedEntry phase ext blocks tops ret args ghosts =
     typedEntryTops :: !(CruCtx tops),
     -- | The real arguments to this block
     typedEntryArgs :: !(CruCtx args),
-    -- | The return value from the entire function
-    typedEntryRet :: !(TypeRepr ret),
+    -- | The return values (including ghosts) from the entire function
+    typedEntryRets :: !(CruCtx rets),
     -- | The call sites that jump to this particular entrypoint
     typedEntryCallers :: ![Some (TypedCallSite phase blocks tops args ghosts)],
     -- | The ghost variables for this entrypoint
@@ -1194,21 +1219,21 @@ data TypedEntry phase ext blocks tops ret args ghosts =
     -- | The input permissions for this entrypoint
     typedEntryPermsIn :: !(MbValuePerms ((tops :++: args) :++: ghosts)),
     -- | The output permissions for the function (cached locally)
-    typedEntryPermsOut :: !(MbValuePerms (tops :> ret)),
+    typedEntryPermsOut :: !(MbValuePerms (tops :++: rets)),
     -- | The type-checked body of the entrypoint
     typedEntryBody :: !(TransData phase
                         (Mb ((tops :++: args) :++: ghosts)
-                         (TypedStmtSeq ext blocks tops ret
+                         (TypedStmtSeq ext blocks tops rets
                           ((tops :++: args) :++: ghosts))))
   }
 
 -- | Test if an entrypoint has in-degree greater than 1
-typedEntryHasMultiInDegree :: TypedEntry phase ext blocks tops ret args ghosts ->
+typedEntryHasMultiInDegree :: TypedEntry phase ext blocks tops rets args ghosts ->
                               Bool
 typedEntryHasMultiInDegree entry = length (typedEntryCallers entry) > 1
 
 -- | Get the types of all the inputs of an entrypoint
-typedEntryAllArgs :: TypedEntry phase ext blocks tops ret args ghosts ->
+typedEntryAllArgs :: TypedEntry phase ext blocks tops rets args ghosts ->
                      CruCtx ((tops :++: args) :++: ghosts)
 typedEntryAllArgs (TypedEntry {..}) =
   appendCruCtx (appendCruCtx typedEntryTops typedEntryArgs) typedEntryGhosts
@@ -1216,8 +1241,8 @@ typedEntryAllArgs (TypedEntry {..}) =
 -- | Transition a 'TypedEntry' from type-checking to translation phase if its
 -- body is present and all call site implications have been proved
 completeTypedEntry ::
-  TypedEntry TCPhase ext blocks tops ret args ghosts ->
-  Maybe (TypedEntry TransPhase ext blocks tops ret args ghosts)
+  TypedEntry TCPhase ext blocks tops rets args ghosts ->
+  Maybe (TypedEntry TransPhase ext blocks tops rets args ghosts)
 completeTypedEntry (TypedEntry { .. })
   | Just body <- typedEntryBody
   , Just callers <- mapM (traverseF completeTypedCallSite) typedEntryCallers
@@ -1227,34 +1252,24 @@ completeTypedEntry _ = Nothing
 -- | Build an entrypoint from a call site, using that call site's permissions as
 -- the entyrpoint input permissions
 singleCallSiteEntry :: TypedCallSiteID blocks args vars ->
-                       CruCtx tops -> CruCtx args -> TypeRepr ret ->
+                       CruCtx tops -> CruCtx args -> CruCtx rets ->
                        MbValuePerms ((tops :++: args) :++: vars) ->
-                       MbValuePerms (tops :> ret) ->
-                       TypedEntry TCPhase ext blocks tops ret args vars
-singleCallSiteEntry siteID tops args ret perms_in perms_out =
+                       MbValuePerms (tops :++: rets) ->
+                       TypedEntry TCPhase ext blocks tops rets args vars
+singleCallSiteEntry siteID tops args rets perms_in perms_out =
   TypedEntry
   {
     typedEntryID = callSiteDest siteID, typedEntryTops = tops,
-    typedEntryArgs = args, typedEntryRet = ret,
+    typedEntryArgs = args, typedEntryRets = rets,
     typedEntryCallers = [Some $ idTypedCallSite siteID tops args perms_in],
     typedEntryGhosts = callSiteVars siteID,
     typedEntryPermsIn = perms_in, typedEntryPermsOut = perms_out,
     typedEntryBody = Nothing
   }
 
--- | Test if an entrypoint contains a call site with the same caller as the
--- supplied call site id, and, if so, return the index in its list of callers
-typedEntryCallerIx :: TypedCallSiteID blocks args vars ->
-                      TypedEntry phase ext blocks tops ret args ghosts ->
-                      Maybe Int
-typedEntryCallerIx (TypedCallSiteID
-                    { callSiteSrc = callerID }) (typedEntryCallers -> callers) =
-  flip findIndex callers $ \(Some site) ->
-  callSiteIDCallerEq callerID $ typedCallSiteID site
-
 -- | Test if an entrypoint contains a call site with the given caller
 typedEntryHasCaller :: TypedEntryID blocks args_src ->
-                       TypedEntry phase ext blocks tops ret args ghosts ->
+                       TypedEntry phase ext blocks tops rets args ghosts ->
                        Bool
 typedEntryHasCaller callerID (typedEntryCallers -> callers) =
   any (\(Some site) ->
@@ -1265,7 +1280,7 @@ typedEntryHasCaller callerID (typedEntryCallers -> callers) =
 -- id to have the same variables.
 typedEntryCallerSite ::
   TypedCallSiteID blocks args vars ->
-  TypedEntry phase ext blocks tops ret args ghosts ->
+  TypedEntry phase ext blocks tops rets args ghosts ->
   Maybe (TypedCallSite phase blocks tops args ghosts vars)
 typedEntryCallerSite siteID (typedEntryCallers -> callers) =
   listToMaybe $ flip mapMaybe callers $ \(Some site) ->
@@ -1280,8 +1295,8 @@ typedEntryCallerSite siteID (typedEntryCallers -> callers) =
 data TypedBlockSort = JoinSort | MultiEntrySort
 
 -- | A typed Crucible block is a list of typed entrypoints to that block
-data TypedBlock phase ext (blocks :: RList (RList CrucibleType)) tops ret args =
-  forall cargs. (CtxToRList cargs ~ args) =>
+data TypedBlock phase ext (blocks :: RList (RList CrucibleType)) tops rets args =
+  forall gouts ret cargs. (CtxToRList cargs ~ args, rets ~ (gouts :> ret)) =>
   TypedBlock
   {
     -- | An identifier for this block
@@ -1293,192 +1308,295 @@ data TypedBlock phase ext (blocks :: RList (RList CrucibleType)) tops ret args =
     -- | Whether widening is allowed for entrypoints in this block; widening
     -- disallowed for user-supplied permissions
     typedBlockCanWiden :: Bool,
-    -- | The entrypoints into this block; note that the 'entryIndex' of each
-    -- entrypoint ID should equal the position of its entrypoint in this list
-    _typedBlockEntries :: [Some (TypedEntry phase ext blocks tops ret args)]
+    -- | The entrypoints into this block
+    _typedBlockEntries :: [Some (TypedEntry phase ext blocks tops rets args)],
+    -- | Debug name information for the current block
+    _typedBlockNames :: [Maybe String]
   }
 
-makeLenses ''TypedBlock
+-- NOTE: this doesn't work because of the rets ~ (gouts :> ret) constraint
+-- makeLenses ''TypedBlock
+
+-- | The lens for '_typedBlockEntries'
+typedBlockEntries :: Lens' (TypedBlock phase ext blocks tops rets args)
+                     [Some (TypedEntry phase ext blocks tops rets args)]
+typedBlockEntries =
+  lens _typedBlockEntries (\tblk entries ->
+                            tblk { _typedBlockEntries = entries })
+
+-- | The lens for '_typedBlockNames'
+typedBlockNames :: Lens' (TypedBlock phase ext blocks tops rets args)
+                   [Maybe String]
+typedBlockNames =
+  lens _typedBlockNames (\tblk ns -> tblk { _typedBlockNames = ns })
 
 -- | The input argument types of a block
-blockArgs :: TypedBlock phase ext blocks tops ret args -> CruCtx args
+blockArgs :: TypedBlock phase ext blocks tops rets args -> CruCtx args
 blockArgs (TypedBlock {..}) = mkCruCtx $ blockInputs typedBlockBlock
 
--- | The 'Lens' associated with a 'TypedEntryID'. Note that, unlike the standard
--- lens for list elements, it is an error to use a 'TypedEntryID' for an
--- entrypoint that does not exist.
+-- | Get the 'Int' index of the location of entrypoint in the
+-- 'typedBlockEntries' of a block, if it exists
+blockEntryMaybeIx :: TypedEntryID blocks args ->
+                     TypedBlock phase ext blocks tops rets args ->
+                     Maybe Int
+blockEntryMaybeIx entryID blk =
+  findIndex (\(Some entry) -> entryID == typedEntryID entry)
+  (blk ^. typedBlockEntries)
+
+-- | Get the 'Int' index of the location of entrypoint in the
+-- 'typedBlockEntries' of a block, or raise an error if it does not exist
+blockEntryIx :: TypedEntryID blocks args ->
+                TypedBlock phase ext blocks tops rets args ->
+                Int
+blockEntryIx entryID blk =
+  maybe (error "blockEntryIx: no such entrypoint!") id $
+  blockEntryMaybeIx entryID blk
+
+-- | Test if an entrypoint ID has a corresponding entrypoint in a block
+entryIDInBlock :: TypedEntryID blocks args ->
+                  TypedBlock phase ext blocks tops rets args -> Bool
+entryIDInBlock entryID blk = isJust $ blockEntryMaybeIx entryID blk
+
+-- | The 'Lens' for finding a 'TypedEntry' by id in a 'TypedBlock'
 entryByID :: TypedEntryID blocks args ->
              Lens' (TypedBlock phase ext blocks tops ret args)
              (Some (TypedEntry phase ext blocks tops ret args))
 entryByID entryID =
   lens
-  (\blk -> (blk ^. typedBlockEntries) !! entryIndex entryID)
-  (\blk e -> over typedBlockEntries (replaceNth (entryIndex entryID) e) blk)
+  (\blk -> view typedBlockEntries blk !! blockEntryIx entryID blk)
+  (\blk e ->
+    over typedBlockEntries (replaceNth (blockEntryIx entryID blk) e) blk)
 
--- | Build an empty 'TypedBlock' 
-emptyBlockOfSort :: Assignment CtxRepr cblocks -> TypedBlockSort ->
-                    Block ext cblocks ret cargs ->
-                    TypedBlock TCPhase ext (CtxCtxToRList
-                                            cblocks) tops ret (CtxToRList cargs)
-emptyBlockOfSort cblocks sort blk
+
+-- | Build an empty 'TypedBlock'
+emptyBlockOfSort ::
+  [Maybe String] ->
+  Assignment CtxRepr cblocks ->
+  TypedBlockSort ->
+  Block ext cblocks ret cargs ->
+  TypedBlock TCPhase ext (CtxCtxToRList cblocks) tops (gouts :> ret) (CtxToRList
+                                                                      cargs)
+emptyBlockOfSort names cblocks sort blk
   | Refl <- reprReprToCruCtxCtxEq cblocks
-  = TypedBlock (indexCtxToMember (size cblocks) $
-                blockIDIndex $ blockID blk) blk sort True []
+  = TypedBlock (indexToTypedBlockID (size cblocks) $
+                blockIDIndex $ blockID blk) blk sort True [] names
 
 -- | Build a block with a user-supplied input permission
-emptyBlockForPerms :: Assignment CtxRepr cblocks ->
-                      Block ext cblocks ret cargs -> CruCtx tops ->
-                      TypeRepr ret -> CruCtx ghosts ->
-                      MbValuePerms ((tops :++: CtxToRList cargs) :++: ghosts) ->
-                      MbValuePerms (tops :> ret) ->
-                      TypedBlock TCPhase ext (CtxCtxToRList
-                                              cblocks) tops ret (CtxToRList cargs)
-emptyBlockForPerms cblocks blk tops ret ghosts perms_in perms_out
+emptyBlockForPerms ::
+  [Maybe String] ->
+  Assignment CtxRepr cblocks ->
+  Block ext cblocks ret cargs -> CruCtx tops ->
+  TypeRepr ret -> CruCtx ghosts -> CruCtx gouts ->
+  MbValuePerms ((tops :++: CtxToRList cargs) :++: ghosts) ->
+  MbValuePerms (tops :++: gouts :> ret) ->
+  TypedBlock TCPhase ext (CtxCtxToRList
+                          cblocks) tops (gouts :> ret) (CtxToRList cargs)
+emptyBlockForPerms names cblocks blk tops ret ghosts gouts perms_in perms_out
   | Refl <- reprReprToCruCtxCtxEq cblocks
-  , blockID <- indexCtxToMember (size cblocks) $ blockIDIndex $ blockID blk
+  , blockID <- indexToTypedBlockID (size cblocks) $ blockIDIndex $ blockID blk
   , args <- mkCruCtx (blockInputs blk) =
     TypedBlock blockID blk JoinSort False
-    [Some $ TypedEntry {
+    [Some TypedEntry {
         typedEntryID = TypedEntryID blockID 0, typedEntryTops = tops,
-        typedEntryArgs = args, typedEntryRet = ret,
+        typedEntryArgs = args, typedEntryRets = CruCtxCons gouts ret,
         typedEntryCallers = [], typedEntryGhosts = ghosts,
         typedEntryPermsIn = perms_in, typedEntryPermsOut = perms_out,
         typedEntryBody = Nothing }]
+    names
 
 -- | Transition a 'TypedBlock' from type-checking to translation phase, by
 -- making sure that all of data needed for the translation phase is present
-completeTypedBlock :: TypedBlock TCPhase ext blocks tops ret args ->
-                      Maybe (TypedBlock TransPhase ext blocks tops ret args)
+completeTypedBlock :: TypedBlock TCPhase ext blocks tops rets args ->
+                      Maybe (TypedBlock TransPhase ext blocks tops rets args)
 completeTypedBlock (TypedBlock { .. })
   | Just entries <- mapM (traverseF completeTypedEntry) _typedBlockEntries
   = Just $ TypedBlock { _typedBlockEntries = entries, .. }
 completeTypedBlock _ = Nothing
 
--- | Test if an entrypoint ID has a corresponding entrypoint in a block
-entryIDInBlock :: TypedEntryID blocks args_src ->
-                  TypedBlock phase ext blocks tops ret args -> Bool
-entryIDInBlock entryID blk =
-  entryIndex entryID < length (blk ^. typedBlockEntries)
-
--- | Add a new entrypoint to a block, making sure that its 'entryIndex' lines up
--- with its new position in the list of entrypoints in the block
-addEntryToBlock :: TypedEntry phase ext blocks tops ret args ghosts ->
-                   TypedBlock phase ext blocks tops ret args ->
-                   TypedBlock phase ext blocks tops ret args
+-- | Add a new entrypoint to a block, making sure that its entry ID does not
+-- already exist in the block
+addEntryToBlock :: TypedEntry phase ext blocks tops rets args ghosts ->
+                   TypedBlock phase ext blocks tops rets args ->
+                   TypedBlock phase ext blocks tops rets args
 addEntryToBlock entry blk
-  | i <- entryIndex (typedEntryID entry)
-  , i == length (blk ^. typedBlockEntries) =
-    over typedBlockEntries (++ [Some entry]) blk
-addEntryToBlock _ _ = error "addEntryToBlock"
+  | entryIDInBlock (typedEntryID entry) blk =
+    error "addEntryToBlock: entry with the same ID already in block!"
+addEntryToBlock entry blk = over typedBlockEntries (++ [Some entry]) blk
 
--- | Look up the entrypoint containing a call site for a given caller. If none
--- exists, either return the first entrypoint, if the block has 'JoinSort', or
--- return a new entrypoint not yet in the block if it has 'MultiEntrySort'
-entryIDForCaller :: TypedEntryID blocks args_src ->
-                    TypedBlock phase ext blocks tops ret args ->
-                    TypedEntryID blocks args
-entryIDForCaller callerID blk
-  | Just (Some entry) <-
-      find (\(Some entry) -> typedEntryHasCaller callerID entry)
-      (blk ^. typedBlockEntries)
-  = typedEntryID entry
-entryIDForCaller _ blk@(typedBlockSort -> JoinSort) =
-  TypedEntryID (typedBlockID blk) 0
-entryIDForCaller _ blk =
-  TypedEntryID (typedBlockID blk) (length (blk ^. typedBlockEntries))
+-- | Return a 'Int' not in a list
+freshInt :: [Int] -> Int
+freshInt [] = 0
+freshInt xs = 1 + maximum xs
 
--- | Compute the call site for a call to a block from a given entrypoint, using
--- the entrypoint returned by 'entryIDForCaller'
-callSiteIDForCall :: TypedEntryID blocks args_src -> CruCtx vars ->
-                     TypedBlock phase ext blocks tops ret args ->
-                     TypedCallSiteID blocks args vars
-callSiteIDForCall callerID vars blk =
-  TypedCallSiteID callerID (entryIDForCaller callerID blk) vars
+-- | Build a new 'TypedCallSiteID' for a new call to a block from a given
+-- entrypoint. If the block has 'JoinSort', this will call the one and only
+-- entrypoint for that block, and otherwise, for a 'MultiEntrySort' block, it
+-- will create a new entrypoint id.
+newCallSiteID :: TypedEntryID blocks args_src -> CruCtx vars ->
+                 TypedBlock phase ext blocks tops rets args ->
+                 TypedCallSiteID blocks args vars
+
+-- If blk has JoinSort but has no entrypoints yet, we will create one. It cannot
+-- have any other callers, either, so we use caller index 0.
+newCallSiteID callerID vars blk@(typedBlockSort -> JoinSort)
+  | [] <- blk ^. typedBlockEntries =
+    let entryID = TypedEntryID (typedBlockID blk) 0
+        call_ix = 0 in
+  TypedCallSiteID callerID call_ix entryID vars
+
+-- If blk has JoinSort and does have an entrypoint already, choose a caller
+-- index that is greater than any already being used
+newCallSiteID callerID vars blk@(typedBlockSort -> JoinSort)
+  | Some entry:_ <- blk ^. typedBlockEntries =
+    let entryID = TypedEntryID (typedBlockID blk) 0
+        call_ix = freshInt (map
+                            (\(Some site) -> callSiteIx (typedCallSiteID site))
+                            (typedEntryCallers entry)) in
+  TypedCallSiteID callerID call_ix entryID vars
+
+-- If blk has MultiEntrySort, make a new entrypoint
+newCallSiteID callerID vars blk@(typedBlockSort -> MultiEntrySort) =
+    let entry_ix = freshInt (map
+                             (\(Some entry) -> entryIndex (typedEntryID entry))
+                             (blk ^. typedBlockEntries))
+        entryID = TypedEntryID (typedBlockID blk) entry_ix
+        call_ix = 0 in
+  TypedCallSiteID callerID call_ix entryID vars
+
+-- Should never happen...
+newCallSiteID _ _ _ = error "newCallSiteID: impossible case!"
 
 
--- | Set the call site in an entrypoint for a particular caller to have the
--- supplied permissions over the supplied variables. If the entrypoint already
--- has a call site for the same caller, replace that call site with a fresh one,
--- unless its permissions are the same, in which case we do nothing and,
--- notably, preserve any implication that is already there. Insert a new call
--- site if the entrypoint does not yet have one for this caller.
-entrySetCallSite :: TypedCallSiteID blocks args vars ->
+-- | Add a call site to an entrypoint. It is an error if the entrypoint already
+-- has a call site with the given call site id.
+entryAddCallSite :: TypedCallSiteID blocks args vars ->
                     MbValuePerms ((tops :++: args) :++: vars) ->
-                    TypedEntry TCPhase ext blocks tops ret args ghosts ->
-                    TypedEntry TCPhase ext blocks tops ret args ghosts
-
--- If the caller is already in the list of call sites and already has the
--- right permissions, do nothing
-entrySetCallSite siteID perms_in entry
-  | Just i <- typedEntryCallerIx siteID entry
-  , Some site <- typedEntryCallers entry !! i
-  , Just Refl <- testEquality (callSiteVars siteID) (callSiteVars $
-                                                     typedCallSiteID site)
-  , perms_in == typedCallSitePerms site =
-    trace ("entrySetCallSite (no change): " ++ show siteID) entry
--- If the caller is in the list of call sites but does not have the right
--- permissions, replace it with a new, empty call site
-entrySetCallSite siteID perms_in entry
-  | Just i <- typedEntryCallerIx siteID entry =
-    trace ("entrySetCallSite (replacing call site): " ++ show siteID) $
-    entry { typedEntryCallers =
-              replaceNth i (Some $ emptyTypedCallSite siteID perms_in)
-              (typedEntryCallers entry) }
--- Otherwise, the caller does not already have a call site, so add a new one
-entrySetCallSite siteID perms_in entry =
-  trace ("entrySetCallSite (new call site): " ++ show siteID) $
+                    TypedEntry TCPhase ext blocks tops rets args ghosts ->
+                    TypedEntry TCPhase ext blocks tops rets args ghosts
+entryAddCallSite siteID _ entry
+  | any (\(Some site) ->
+          isJust $ testEquality (typedCallSiteID site) siteID)
+    (typedEntryCallers entry)
+  = error "entryAddCallSite: call site already exists!"
+entryAddCallSite siteID perms_in entry =
   entry { typedEntryCallers =
             typedEntryCallers entry ++ [Some $
                                         emptyTypedCallSite siteID perms_in] }
 
--- | Set the call site to a block for a particular caller to have the supplied
--- permissions over the supplied variables, inserting one if it is not there and
--- replacing any that are already there
-blockSetCallSite :: TypedCallSiteID blocks args vars ->
-                    CruCtx tops -> TypeRepr ret ->
+-- | Add a call site to a block for a particular caller to have the supplied
+-- permissions over the supplied variables, adding a new entrypoint if that of
+-- the given call site ID does not yet exist. It is an error if the block
+-- already has a call site with the given call site id.
+blockAddCallSite :: TypedCallSiteID blocks args vars ->
+                    CruCtx tops -> CruCtx rets ->
                     MbValuePerms ((tops :++: args) :++: vars) ->
-                    MbValuePerms (tops :> ret) ->
-                    TypedBlock TCPhase ext blocks tops ret args ->
-                    TypedBlock TCPhase ext blocks tops ret args
+                    MbValuePerms (tops :++: rets) ->
+                    TypedBlock TCPhase ext blocks tops rets args ->
+                    TypedBlock TCPhase ext blocks tops rets args
 -- If the entrypoint for the site ID exists, update it with entrySetCallSite
-blockSetCallSite siteID _ _ perms_in _ blk
-  | entryIDInBlock (callSiteDest siteID) blk =
-    trace ("blockSetCallSite (existing entrypoint): " ++ show siteID) $
-    over (entryByID (callSiteDest siteID))
-    (fmapF $ entrySetCallSite siteID perms_in) blk
--- Otherwise, make a new entrypoint
-blockSetCallSite siteID tops ret perms_in perms_out blk =
-  trace ("blockSetCallSite (new entrypoint): " ++ show siteID) $
-  addEntryToBlock (singleCallSiteEntry
-                   siteID tops (blockArgs blk) ret perms_in perms_out) blk
+blockAddCallSite siteID _ _ perms_in _ blk
+  | Just _ <- blockEntryMaybeIx (callSiteDest siteID) blk =
+    over
+    (entryByID $ callSiteDest siteID)
+    (\(Some entry) -> Some $ entryAddCallSite siteID perms_in entry)
+    blk
 
+-- Otherwise, make a new entrypoint
+blockAddCallSite siteID tops rets perms_in perms_out blk =
+  addEntryToBlock (singleCallSiteEntry
+                   siteID tops (blockArgs blk) rets perms_in perms_out) blk
 
 -- | A map assigning a 'TypedBlock' to each 'BlockID'
-type TypedBlockMap phase ext blocks tops ret =
-  RAssign (TypedBlock phase ext blocks tops ret) blocks
+type TypedBlockMap phase ext blocks tops rets =
+  RAssign (TypedBlock phase ext blocks tops rets) blocks
 
-instance Show (TypedEntry phase ext blocks tops ret args ghosts) where
+instance Show (TypedEntry phase ext blocks tops rets args ghosts) where
   show (TypedEntry { .. }) =
-    "<entry " ++ show (entryIDIndices typedEntryID) ++ ">"
+    "<entry " ++ show typedEntryID ++ ">"
 
-instance Show (TypedBlock phase ext blocks tops ret args) where
+instance Show (TypedBlock phase ext blocks tops rets args) where
   show = concatMap (\(Some entry) -> show entry) . (^. typedBlockEntries)
 
-instance Show (TypedBlockMap phase ext blocks tops ret) where
+instance Show (TypedBlockMap phase ext blocks tops rets) where
   show blkMap = show $ RL.mapToList show blkMap
 
 -- | Transition a 'TypedBlockMap' from type-checking to translation phase, by
 -- making sure that all of data needed for the translation phase is present
-completeTypedBlockMap :: TypedBlockMap TCPhase ext blocks tops ret ->
-                         Maybe (TypedBlockMap TransPhase ext blocks tops ret)
+completeTypedBlockMap :: TypedBlockMap TCPhase ext blocks tops rets ->
+                         Maybe (TypedBlockMap TransPhase ext blocks tops rets)
 completeTypedBlockMap = traverseRAssign completeTypedBlock
+
+-- | The 'Lens' for finding a 'TypedBlock' by id in a 'TypedBlockMap'
+blockByID :: TypedBlockID blocks args ->
+             Lens'
+             (TypedBlockMap phase ext blocks tops rets)
+             (TypedBlock phase ext blocks tops rets args)
+blockByID blkID =
+  let memb = typedBlockIDMember blkID in
+  lens (RL.get memb) (flip $ RL.set memb)
+
+-- | Look up a 'TypedEntry' by its 'TypedEntryID'
+lookupEntry :: TypedEntryID blocks args ->
+               TypedBlockMap phase ext blocks tops rets ->
+               Some (TypedEntry phase ext blocks tops rets args)
+lookupEntry entryID =
+  view (blockByID (entryBlockID entryID) . entryByID entryID)
+
+-- | Find all call sites called by an entrypoint
+entryCallees :: TypedEntryID blocks args ->
+                TypedBlockMap phase ext blocks tops rets ->
+                [Some (TypedEntryID blocks)]
+entryCallees entryID =
+  concat . RL.mapToList
+  (\blk ->
+    flip mapMaybe (blk ^. typedBlockEntries) $ \(Some entry) ->
+    if typedEntryHasCaller entryID entry
+    then Just (Some $ typedEntryID entry)
+    else Nothing)
+
+-- | Delete any call sites whose source is a given entrypoint. For any call
+-- sites to entrypoints in multi-entry blocks, delete those entrypoints as well,
+-- etc.
+deleteEntryCallees :: TypedEntryID blocks args ->
+                      TypedBlockMap phase ext blocks tops rets ->
+                      TypedBlockMap phase ext blocks tops rets
+deleteEntryCallees topEntryID = execState (deleteCallees topEntryID) where
+  -- Delete call sites of a caller from all of its callees
+  deleteCallees :: TypedEntryID blocks args' ->
+                   State (TypedBlockMap phase ext blocks tops rets) ()
+  deleteCallees callerID =
+    get >>= \blkMap ->
+    mapM_ (\(Some calleeID) ->
+            deleteCall callerID calleeID) (entryCallees callerID blkMap)
+
+  -- Delete call sites of a caller to a particular callee
+  deleteCall :: TypedEntryID blocks args1 -> TypedEntryID blocks args2 ->
+                State (TypedBlockMap phase ext blocks tops rets) ()
+  deleteCall callerID calleeID =
+    (typedBlockSort <$> use (blockByID $ entryBlockID calleeID)) >>= \case
+    JoinSort ->
+      -- The target has JoinSort, so we want to keep the callee entrypoint. Thus
+      -- we just delete all call sites whose caller equals callerID.
+      modifying (blockByID (entryBlockID calleeID)
+                 . entryByID calleeID) $ \(Some callee) ->
+      let callers' =
+            flip filter (typedEntryCallers callee) $ \(Some site) ->
+            not $ callSiteIDCallerEq callerID $ typedCallSiteID site in
+      Some $ callee { typedEntryCallers = callers' }
+    MultiEntrySort ->
+      -- The target has MultiEntrySort, so callerID is the only caller to this
+      -- entrypoint, and thus we recursively delete the entrypoint
+      modifying (blockByID (entryBlockID calleeID) . typedBlockEntries)
+      (filter (\(Some entry) -> typedEntryID entry /= calleeID))
+      >>
+      deleteCallees calleeID
 
 -- | Build the input permissions for the initial block of a CFG, where the
 -- top-level variables (which in this case are the ghosts plus the normal
 -- arguments of the function permission) get the function input permissions and
 -- the normal arguments get equality permissions to their respective top-level
 -- variables.
-funPermToBlockInputs :: FunPerm ghosts args ret ->
+funPermToBlockInputs :: FunPerm ghosts args gouts ret ->
                         MbValuePerms ((ghosts :++: args) :++: args)
 funPermToBlockInputs fun_perm =
   let args_prxs = cruCtxProxies $ funPermArgs fun_perm in
@@ -1493,35 +1611,47 @@ funPermToBlockInputs fun_perm =
 -- supplied 'PermEnv' along with a list of 'Bool' flags indicating which blocks
 -- are at the head of a loop (or other strongly-connected component)
 initTypedBlockMap ::
+  KnownRepr ExtRepr ext =>
   PermEnv ->
-  FunPerm ghosts (CtxToRList init) ret ->
+  FunPerm ghosts (CtxToRList init) gouts ret ->
   CFG ext cblocks init ret ->
   Assignment (Constant Bool) cblocks ->
   TypedBlockMap TCPhase ext (CtxCtxToRList cblocks)
-    (ghosts :++: CtxToRList init) ret
+    (ghosts :++: CtxToRList init) (gouts :> ret)
 initTypedBlockMap env fun_perm cfg sccs =
   let block_map = cfgBlockMap cfg
       cblocks = fmapFC blockInputs block_map
+      namess = computeCfgNames knownRepr (size sccs) cfg
+      gouts = funPermGouts fun_perm
       ret = funPermRet fun_perm
       tops = funPermTops fun_perm
       top_perms_in = funPermToBlockInputs fun_perm
       perms_out = funPermOuts fun_perm in
   assignToRListRList
-  (\(Pair blk (Constant is_scc)) ->
+  (\(Pair blk (Pair (Constant is_scc) (Constant names))) ->
     let blkID = blockID blk
         hints = lookupBlockHints env (cfgHandle cfg) cblocks blkID in
     case hints of
       _ | Just Refl <- testEquality (cfgEntryBlockID cfg) blkID ->
-          emptyBlockForPerms cblocks blk tops ret CruCtxNil top_perms_in perms_out
+          emptyBlockForPerms names cblocks blk tops ret
+            CruCtxNil gouts top_perms_in perms_out
       (find isBlockEntryHint ->
        Just (BlockEntryHintSort tops' ghosts perms_in))
         | Just Refl <- testEquality tops tops' ->
-          emptyBlockForPerms cblocks blk tops ret ghosts perms_in perms_out
+          emptyBlockForPerms names cblocks blk tops ret
+            ghosts gouts perms_in perms_out
       _ | is_scc || any isJoinPointHint hints ->
-          emptyBlockOfSort cblocks JoinSort blk
-      _ -> emptyBlockOfSort cblocks MultiEntrySort blk) $
-  Ctx.zipWith Pair block_map sccs
+          emptyBlockOfSort names cblocks JoinSort blk
+      _ -> emptyBlockOfSort names cblocks MultiEntrySort blk) $
+  Ctx.zipWith Pair block_map (Ctx.zipWith Pair sccs namess)
 
+computeCfgNames ::
+  ExtRepr ext ->
+  Size cblocks ->
+  CFG ext cblocks init ret ->
+  Ctx.Assignment (Constant [Maybe String]) cblocks
+computeCfgNames ExtRepr_LLVM _ cfg = computeNames cfg
+computeCfgNames ExtRepr_Unit s _   = Ctx.replicate s (Constant [])
 
 -- | A typed Crucible CFG
 data TypedCFG
@@ -1529,22 +1659,23 @@ data TypedCFG
      (blocks :: RList (RList CrucibleType))
      (ghosts :: RList CrucibleType)
      (inits :: RList CrucibleType)
+     (gouts :: RList CrucibleType)
      (ret :: CrucibleType)
-  = TypedCFG { tpcfgHandle :: !(TypedFnHandle ghosts inits ret)
-             , tpcfgFunPerm :: !(FunPerm ghosts inits ret)
-             , tpcfgBlockMap ::
-                 !(TypedBlockMap TransPhase ext blocks (ghosts :++: inits) ret)
+  = TypedCFG { tpcfgHandle :: !(TypedFnHandle ghosts inits gouts ret)
+             , tpcfgFunPerm :: !(FunPerm ghosts inits gouts ret)
+             , tpcfgBlockMap :: !(TypedBlockMap TransPhase ext blocks
+                                  (ghosts :++: inits) (gouts :> ret))
              , tpcfgEntryID :: !(TypedEntryID blocks inits)
              }
 
 -- | Get the input permissions for a 'CFG'
-tpcfgInputPerms :: TypedCFG ext blocks ghosts inits ret ->
+tpcfgInputPerms :: TypedCFG ext blocks ghosts inits gouts ret ->
                    MbValuePerms (ghosts :++: inits)
 tpcfgInputPerms = funPermIns . tpcfgFunPerm
 
 -- | Get the output permissions for a 'CFG'
-tpcfgOutputPerms :: TypedCFG ext blocks ghosts inits ret ->
-                    MbValuePerms (ghosts :++: inits :> ret)
+tpcfgOutputPerms :: TypedCFG ext blocks ghosts inits gouts ret ->
+                    MbValuePerms ((ghosts :++: inits) :++: gouts :> ret)
 tpcfgOutputPerms = funPermOuts . tpcfgFunPerm
 
 
@@ -1569,36 +1700,30 @@ addCtxName ctx x = extend ctx (TypedReg x)
 
 -- | The translation of a Crucible block id
 newtype BlockIDTrans blocks args =
-  BlockIDTrans { unBlockIDTrans :: Member blocks (CtxToRList args) }
-
-extendBlockIDTrans :: BlockIDTrans blocks args ->
-                      BlockIDTrans (blocks :> tp) args
-extendBlockIDTrans (BlockIDTrans memb) = BlockIDTrans $ Member_Step memb
+  BlockIDTrans { unBlockIDTrans :: TypedBlockID blocks (CtxToRList args) }
 
 -- | Build a map from Crucible block IDs to 'Member' proofs
-buildBlockIDMap :: Assignment f cblocks ->
+buildBlockIDMap :: Size cblocks ->
                    Assignment (BlockIDTrans (CtxCtxToRList cblocks)) cblocks
-buildBlockIDMap (viewAssign -> AssignEmpty) = Ctx.empty
-buildBlockIDMap (viewAssign -> AssignExtend asgn _) =
-  Ctx.extend (fmapFC extendBlockIDTrans $ buildBlockIDMap asgn)
-  (BlockIDTrans Member_Base)
+buildBlockIDMap sz =
+  Ctx.generate sz $ \ix -> BlockIDTrans (indexToTypedBlockID sz ix)
 
 data SomePtrWidth where SomePtrWidth :: HasPtrWidth w => SomePtrWidth
 
 -- | Top-level state, maintained outside of permission-checking single blocks
-data TopPermCheckState ext cblocks blocks tops ret =
+data TopPermCheckState ext cblocks blocks tops rets =
   TopPermCheckState
   {
     -- | The top-level inputs of the function being type-checked
     stTopCtx :: !(CruCtx tops),
-    -- | The return type of the function being type-checked
-    stRetType :: !(TypeRepr ret),
+    -- | The return types including ghosts of the function being type-checked
+    stRetTypes :: !(CruCtx rets),
     -- | The return permission of the function being type-checked
-    stRetPerms :: !(MbValuePerms (tops :> ret)),
+    stRetPerms :: !(MbValuePerms (tops :++: rets)),
     -- | A mapping from 'BlockID's to 'TypedBlockID's
     stBlockTrans :: !(Assignment (BlockIDTrans blocks) cblocks),
     -- | The current set of type-checked blocks
-    _stBlockMap :: !(TypedBlockMap TCPhase ext blocks tops ret),
+    _stBlockMap :: !(TypedBlockMap TCPhase ext blocks tops rets),
     -- | The permissions environment
     stPermEnv :: !PermEnv,
     -- | The un-translated input types of all of the Crucible blocks
@@ -1612,7 +1737,9 @@ data TopPermCheckState ext cblocks blocks tops ret =
     stCBlocksEq :: RListToCtxCtx blocks :~: cblocks,
     -- | The endianness of the current architecture
     stEndianness :: !EndianForm,
-    stArchWidth :: SomePtrWidth
+    stArchWidth :: SomePtrWidth,
+    -- | The debugging level
+    stDebugLevel :: DebugLevel
   }
 
 makeLenses ''TopPermCheckState
@@ -1620,40 +1747,43 @@ makeLenses ''TopPermCheckState
 -- | Build an empty 'TopPermCheckState' from a Crucible 'BlockMap'
 emptyTopPermCheckState ::
   HasPtrWidth w =>
+  KnownRepr ExtRepr ext =>
   PermEnv ->
-  FunPerm ghosts (CtxToRList init) ret ->
+  FunPerm ghosts (CtxToRList init) gouts ret ->
   EndianForm ->
+  DebugLevel ->
   CFG ext cblocks init ret ->
   Assignment (Constant Bool) cblocks ->
   TopPermCheckState ext cblocks
     (CtxCtxToRList cblocks)
-    (ghosts :++: CtxToRList init) ret
-emptyTopPermCheckState env fun_perm endianness cfg sccs =
+    (ghosts :++: CtxToRList init) (gouts :> ret)
+emptyTopPermCheckState env fun_perm endianness dlevel cfg sccs =
   let blkMap = cfgBlockMap cfg in
   TopPermCheckState
   { stTopCtx = funPermTops fun_perm
-  , stRetType = funPermRet fun_perm
+  , stRetTypes = funPermRets fun_perm
   , stRetPerms = funPermOuts fun_perm
-  , stBlockTrans = buildBlockIDMap blkMap
+  , stBlockTrans = buildBlockIDMap (Ctx.size blkMap)
   , _stBlockMap = initTypedBlockMap env fun_perm cfg sccs
   , stPermEnv = env
   , stBlockTypes = fmapFC blockInputs blkMap
   , stCBlocksEq = reprReprToCruCtxCtxEq (fmapFC blockInputs blkMap)
   , stEndianness = endianness
   , stArchWidth = SomePtrWidth
+  , stDebugLevel = dlevel
   }
 
 
 -- | Look up a Crucible block id in a top-level perm-checking state
 stLookupBlockID :: BlockID cblocks args ->
-                   TopPermCheckState ext cblocks blocks tops ret ->
+                   TopPermCheckState ext cblocks blocks tops rets ->
                    TypedBlockID blocks (CtxToRList args)
 stLookupBlockID (BlockID ix) st =
   unBlockIDTrans $ stBlockTrans st Ctx.! ix
 
 -- | The top-level monad for permission-checking CFGs
-type TopPermCheckM ext cblocks blocks tops ret =
-  State (TopPermCheckState ext cblocks blocks tops ret)
+type TopPermCheckM ext cblocks blocks tops rets =
+  State (TopPermCheckState ext cblocks blocks tops rets)
 
 {-
 -- | A datakind for the type-level parameters needed to define blocks, including
@@ -1677,54 +1807,54 @@ type family BlkArgs (args :: BlkParams) :: RList CrucibleType where
 
 
 -- | A change to a 'TypedBlockMap'
-data TypedBlockMapDelta blocks tops ret where
-  -- | Set the call site to a block for a particular caller to have the supplied
+data TypedBlockMapDelta blocks tops rets where
+  -- | Add a call site to a block for a particular caller to have the supplied
   -- permissions over the supplied variables
-  TypedBlockMapSetCallSite :: TypedCallSiteID blocks args vars ->
+  TypedBlockMapAddCallSite :: TypedCallSiteID blocks args vars ->
                               MbValuePerms ((tops :++: args) :++: vars) ->
-                              TypedBlockMapDelta blocks tops ret
+                              TypedBlockMapDelta blocks tops rets
 
 -- | Apply a 'TypedBlockMapDelta' to a 'TypedBlockMap'
-applyTypedBlockMapDelta :: TypedBlockMapDelta blocks tops ret ->
-                           TopPermCheckState ext cblocks blocks tops ret ->
-                           TopPermCheckState ext cblocks blocks tops ret
-applyTypedBlockMapDelta (TypedBlockMapSetCallSite siteID perms_in) top_st =
-  over (stBlockMap . member (entryBlockID $ callSiteDest siteID))
-  (blockSetCallSite siteID (stTopCtx top_st) (stRetType top_st)
+applyTypedBlockMapDelta :: TypedBlockMapDelta blocks tops rets ->
+                           TopPermCheckState ext cblocks blocks tops rets ->
+                           TopPermCheckState ext cblocks blocks tops rets
+applyTypedBlockMapDelta (TypedBlockMapAddCallSite siteID perms_in) top_st =
+  over (stBlockMap . member (entryBlockMember $ callSiteDest siteID))
+  (blockAddCallSite siteID (stTopCtx top_st) (stRetTypes top_st)
    perms_in (stRetPerms top_st))
   top_st
 
 -- | Apply a list of 'TypedBlockMapDelta's to a 'TopPermCheckState'
-applyDeltasToTopState :: [TypedBlockMapDelta blocks tops ret] ->
-                         TopPermCheckState ext cblocks blocks tops ret ->
-                         TopPermCheckState ext cblocks blocks tops ret
+applyDeltasToTopState :: [TypedBlockMapDelta blocks tops rets] ->
+                         TopPermCheckState ext cblocks blocks tops rets ->
+                         TopPermCheckState ext cblocks blocks tops rets
 applyDeltasToTopState deltas top_st =
   foldl (flip applyTypedBlockMapDelta) top_st deltas
 
 -- | The state that can be modified by "inner" computations = a list of changes
 -- / "deltas" to the current 'TypedBlockMap'
-data InnerPermCheckState blocks tops ret =
+data InnerPermCheckState blocks tops rets =
   InnerPermCheckState
   {
-    innerStateDeltas :: [TypedBlockMapDelta blocks tops ret]
+    innerStateDeltas :: [TypedBlockMapDelta blocks tops rets]
   }
 
 -- | Build an empty, closed 'InnerPermCheckState'
-clEmptyInnerPermCheckState :: Closed (InnerPermCheckState blocks tops ret)
+clEmptyInnerPermCheckState :: Closed (InnerPermCheckState blocks tops rets)
 clEmptyInnerPermCheckState = $(mkClosed [| InnerPermCheckState [] |])
 
 
 -- | The "inner" monad that runs inside 'PermCheckM' continuations. It can see
 -- but not modify the top-level state, but it can add 'TypedBlockMapDelta's to
 -- be applied later to the top-level state.
-type InnerPermCheckM ext cblocks blocks tops ret =
-  ReaderT (TopPermCheckState ext cblocks blocks tops ret)
-  (State (Closed (InnerPermCheckState blocks tops ret)))
+type InnerPermCheckM ext cblocks blocks tops rets =
+  ReaderT (TopPermCheckState ext cblocks blocks tops rets)
+  (State (Closed (InnerPermCheckState blocks tops rets)))
 
 
 -- | The local state maintained while type-checking is the current permission
 -- set and the permissions required on return from the entire function.
-data PermCheckState ext blocks tops ret ps =
+data PermCheckState ext blocks tops rets ps =
   PermCheckState
   {
     stCurPerms  :: !(PermSet ps),
@@ -1733,55 +1863,66 @@ data PermCheckState ext blocks tops ret ps =
     stCurEntry  :: !(Some (TypedEntryID blocks)),
     stVarTypes  :: !(NameMap TypeRepr),
     stPPInfo    :: !PPInfo,
-    stErrPrefix :: !(Maybe (Doc ()))
+    stErrPrefix :: !(Maybe (Doc ())),
+    stDebug     :: ![Maybe String]
   }
 
 -- | Build a default, empty 'PermCheckState'
-emptyPermCheckState :: KnownRepr ExtRepr ext => PermSet ps ->
-                       RAssign ExprVar tops -> TypedEntryID blocks args ->
-                       PermCheckState ext blocks tops ret ps
-emptyPermCheckState perms tops entryID =
+emptyPermCheckState ::
+  KnownRepr ExtRepr ext =>
+  PermSet ps ->
+  RAssign ExprVar tops ->
+  TypedEntryID blocks args ->
+  [Maybe String] ->
+  PermCheckState ext blocks tops rets ps
+emptyPermCheckState perms tops entryID names =
   PermCheckState { stCurPerms  = perms,
                    stExtState  = emptyPermCheckExtState knownRepr,
                    stTopVars   = tops,
                    stCurEntry  = Some entryID,
                    stVarTypes  = NameMap.empty,
                    stPPInfo    = emptyPPInfo,
-                   stErrPrefix = Nothing }
+                   stErrPrefix = Nothing,
+                   stDebug     = names }
 
 -- | Like the 'set' method of a lens, but allows the @ps@ argument to change
-setSTCurPerms :: PermSet ps2 -> PermCheckState ext blocks tops ret ps1 ->
-                 PermCheckState ext blocks tops ret ps2
+setSTCurPerms :: PermSet ps2 -> PermCheckState ext blocks tops rets ps1 ->
+                 PermCheckState ext blocks tops rets ps2
 setSTCurPerms perms (PermCheckState {..}) =
   PermCheckState { stCurPerms = perms, .. }
 
 modifySTCurPerms :: (PermSet ps1 -> PermSet ps2) ->
-                    PermCheckState ext blocks tops ret ps1 ->
-                    PermCheckState ext blocks tops ret ps2
+                    PermCheckState ext blocks tops rets ps1 ->
+                    PermCheckState ext blocks tops rets ps2
 modifySTCurPerms f_perms st = setSTCurPerms (f_perms $ stCurPerms st) st
 
+nextDebugName :: PermCheckM ext cblocks blocks tops rets a ps a ps (Maybe String)
+nextDebugName =
+  do st <- get
+     put st { stDebug = drop 1 (stDebug st)}
+     pure (foldr (\x _ -> x) Nothing (stDebug st))
 
 -- | The generalized monad for permission-checking
-type PermCheckM ext cblocks blocks tops ret r1 ps1 r2 ps2 =
+type PermCheckM ext cblocks blocks tops rets r1 ps1 r2 ps2 =
   GenStateContT
-    (PermCheckState ext blocks tops ret ps1) r1
-    (PermCheckState ext blocks tops ret ps2) r2
-    (InnerPermCheckM ext cblocks blocks tops ret)
+    (PermCheckState ext blocks tops rets ps1) r1
+    (PermCheckState ext blocks tops rets ps2) r2
+    (InnerPermCheckM ext cblocks blocks tops rets)
 
 -- | The generalized monad for permission-checking statements
-type StmtPermCheckM ext cblocks blocks tops ret ps1 ps2 =
-  PermCheckM ext cblocks blocks tops ret
-   (TypedStmtSeq ext blocks tops ret ps1) ps1
-   (TypedStmtSeq ext blocks tops ret ps2) ps2
+type StmtPermCheckM ext cblocks blocks tops rets ps1 ps2 =
+  PermCheckM ext cblocks blocks tops rets
+   (TypedStmtSeq ext blocks tops rets ps1) ps1
+   (TypedStmtSeq ext blocks tops rets ps2) ps2
 
 -- | Lift an 'InnerPermCheckM' computation to a 'PermCheckM' computation
-liftPermCheckM :: InnerPermCheckM ext cblocks blocks tops ret a ->
-                  PermCheckM ext cblocks blocks tops ret r ps r ps a
+liftPermCheckM :: InnerPermCheckM ext cblocks blocks tops rets a ->
+                  PermCheckM ext cblocks blocks tops rets r ps r ps a
 liftPermCheckM = lift
 
 -- | Lift an 'InnerPermCheckM' to a 'TopPermCheckM'
-liftInnerToTopM :: InnerPermCheckM ext cblocks blocks tops ret a ->
-                   TopPermCheckM ext cblocks blocks tops ret a
+liftInnerToTopM :: InnerPermCheckM ext cblocks blocks tops rets a ->
+                   TopPermCheckM ext cblocks blocks tops rets a
 liftInnerToTopM m =
   do st <- get
      let (a, cl_inner_st) =
@@ -1792,8 +1933,8 @@ liftInnerToTopM m =
 
 -- | Get the current top-level state modulo the modifications to the current
 -- block info map
-top_get :: PermCheckM ext cblocks blocks tops ret r ps r ps
-           (TopPermCheckState ext cblocks blocks tops ret)
+top_get :: PermCheckM ext cblocks blocks tops rets r ps r ps
+           (TopPermCheckState ext cblocks blocks tops rets)
 top_get = gcaptureCC $ \k ->
   do top_st <- ask
      deltas <- innerStateDeltas <$> unClosed <$> get
@@ -1801,7 +1942,7 @@ top_get = gcaptureCC $ \k ->
 
 -- | Set the extension-specific state
 setInputExtState :: ExtRepr ext -> CruCtx as -> RAssign Name as ->
-                    PermCheckM ext cblocks blocks tops ret r ps r ps ()
+                    PermCheckM ext cblocks blocks tops rets r ps r ps ()
 setInputExtState ExtRepr_Unit _ _ = pure ()
 setInputExtState ExtRepr_LLVM tps ns
   | [SomeExprVarFrame rep n] <- findLLVMFrameVars tps ns
@@ -1815,14 +1956,16 @@ setInputExtState ExtRepr_LLVM _ _ =
 -- of top-level arguments, local arguments, ghost variables, and permissions on
 -- all three, and return a result inside a binding for these variables
 runPermCheckM ::
-  KnownRepr ExtRepr ext => TypedEntryID blocks some_args ->
+  KnownRepr ExtRepr ext =>
+  [Maybe String] ->
+  TypedEntryID blocks some_args ->
   CruCtx args -> CruCtx ghosts -> MbValuePerms ((tops :++: args) :++: ghosts) ->
   (RAssign ExprVar tops -> RAssign ExprVar args -> RAssign ExprVar ghosts ->
    DistPerms ((tops :++: args) :++: ghosts) ->
-   PermCheckM ext cblocks blocks tops ret () ps_out r ((tops :++: args)
-                                                       :++: ghosts) ()) ->
-  TopPermCheckM ext cblocks blocks tops ret (Mb ((tops :++: args) :++: ghosts) r)
-runPermCheckM entryID args ghosts mb_perms_in m =
+   PermCheckM ext cblocks blocks tops rets () ps_out r ((tops :++: args)
+                                                        :++: ghosts) ()) ->
+  TopPermCheckM ext cblocks blocks tops rets (Mb ((tops :++: args) :++: ghosts) r)
+runPermCheckM names entryID args ghosts mb_perms_in m =
   get >>= \(TopPermCheckState {..}) ->
   let args_prxs = cruCtxProxies args
       ghosts_prxs = cruCtxProxies ghosts in
@@ -1830,20 +1973,70 @@ runPermCheckM entryID args ghosts mb_perms_in m =
   flip nuMultiWithElim1 (mbValuePermsToDistPerms mb_perms_in) $ \ns perms_in ->
   let (tops_args, ghosts_ns) = RL.split Proxy ghosts_prxs ns
       (tops_ns, args_ns) = RL.split Proxy args_prxs tops_args
-      st = emptyPermCheckState (distPermSet perms_in) tops_ns entryID in
-  
+      (arg_names, local_names) = initialNames args names
+      st = emptyPermCheckState (distPermSet perms_in) tops_ns entryID local_names in
+
   let go x = runGenStateContT x st (\_ () -> pure ()) in
   go $
-  setVarTypes "top" tops_ns stTopCtx >>>
-  setVarTypes "local" args_ns args >>>
-  setVarTypes "ghost" ghosts_ns ghosts >>>
+  setVarTypes (Just "top") (noNames' stTopCtx) tops_ns stTopCtx >>>
+  setVarTypes (Just "local") arg_names args_ns args >>>
+  setVarTypes (Just "ghost") (noNames' ghosts) ghosts_ns ghosts >>>
   setInputExtState knownRepr ghosts ghosts_ns >>>
   m tops_ns args_ns ghosts_ns perms_in
 
+rassignLen :: RAssign f x -> Int
+rassignLen = go 0
+  where
+    go :: Int -> RAssign f x -> Int
+    go acc MNil = acc
+    go acc (xs :>: _) = (go $! (acc+1)) xs
+
+initialNames ::
+  CruCtx tps ->
+  [Maybe String] ->
+  (RAssign (Constant (Maybe String)) tps, [Maybe String])
+initialNames CruCtxNil xs = (MNil, xs)
+initialNames (CruCtxCons ts _) xs =
+  case initialNames ts xs of
+    (ys, z:zs) -> (ys :>: Constant z, zs)
+    (ys, []  ) -> (ys :>: Constant Nothing, [])
+
+-- | Compute an empty debug name assignment from a known context
+noNames ::
+  KnownRepr CruCtx tps =>
+  RAssign (Constant (Maybe String)) tps
+noNames = noNames' knownRepr
+
+-- | Compute an empty debug name assignment from a given context
+noNames' ::
+  CruCtx tps ->
+  RAssign (Constant (Maybe String)) tps
+noNames' CruCtxNil = MNil
+noNames' (CruCtxCons xs _) = noNames' xs :>: Constant Nothing
+
+-- | Call 'debugNames'' with a known type list.
+dbgNames ::
+  KnownRepr CruCtx tps =>
+  PermCheckM ext cblocks blocks tops rets a ps a ps
+    (RAssign (Constant (Maybe String)) tps)
+dbgNames = dbgNames' knownRepr
+
+-- | Pop as many local variable names from the debug information
+-- as needed to populate the given type list.
+dbgNames' ::
+  CruCtx tps ->
+  PermCheckM ext cblocks blocks tops rets a ps a ps
+    (RAssign (Constant (Maybe String)) tps)
+dbgNames' CruCtxNil = pure MNil
+dbgNames' (CruCtxCons ts _) =
+  do ns <- dbgNames' ts
+     n <- nextDebugName
+     pure (ns :>: Constant n)
+
 -- | Emit a 'TypedBlockMapDelta', which must be 'Closed', in an
 -- 'InnerPermCheckM' computation
-innerEmitDelta :: Closed (TypedBlockMapDelta blocks tops ret) ->
-                  InnerPermCheckM ext cblocks blocks tops ret ()
+innerEmitDelta :: Closed (TypedBlockMapDelta blocks tops rets) ->
+                  InnerPermCheckM ext cblocks blocks tops rets ()
 innerEmitDelta cl_delta =
   modify (clApply
           ($(mkClosed [| \delta st ->
@@ -1856,35 +2049,35 @@ innerEmitDelta cl_delta =
 callBlockWithPerms :: TypedEntryID blocks args_src ->
                       TypedBlockID blocks args -> CruCtx vars ->
                       Closed (MbValuePerms ((tops :++: args) :++: vars)) ->
-                      InnerPermCheckM ext cblocks blocks tops ret
+                      InnerPermCheckM ext cblocks blocks tops rets
                       (TypedCallSiteID blocks args vars)
 callBlockWithPerms srcEntryID destID vars cl_perms_in =
-  do blk <- view (stBlockMap . member destID) <$> ask
-     let siteID = callSiteIDForCall srcEntryID vars blk
-     innerEmitDelta ($(mkClosed [| TypedBlockMapSetCallSite |])
+  do blk <- view (stBlockMap . member (typedBlockIDMember destID)) <$> ask
+     let siteID = newCallSiteID srcEntryID vars blk
+     innerEmitDelta ($(mkClosed [| TypedBlockMapAddCallSite |])
                     `clApply` toClosed siteID `clApply` cl_perms_in)
      return siteID
 
 -- | Look up the current primary permission associated with a variable
 getVarPerm :: ExprVar a ->
-              PermCheckM ext cblocks blocks tops ret r ps r ps (ValuePerm a)
+              PermCheckM ext cblocks blocks tops rets r ps r ps (ValuePerm a)
 getVarPerm x = gets (view (varPerm x) . stCurPerms)
 
 -- | Set the current primary permission associated with a variable
 setVarPerm :: ExprVar a -> ValuePerm a ->
-              PermCheckM ext cblocks blocks tops ret r ps r ps ()
+              PermCheckM ext cblocks blocks tops rets r ps r ps ()
 setVarPerm x p = modify (modifySTCurPerms (set (varPerm x) p))
 
 -- | Look up the current primary permission associated with a register
 getRegPerm :: TypedReg a ->
-              PermCheckM ext cblocks blocks tops ret r ps r ps (ValuePerm a)
+              PermCheckM ext cblocks blocks tops rets r ps r ps (ValuePerm a)
 getRegPerm (TypedReg x) = getVarPerm x
 
 -- | Eliminate any disjunctions, existentials, or recursive permissions for a
 -- register and then return the resulting "simple" permission, leaving it on the
 -- top of the stack
 getPushSimpleRegPerm :: PermCheckExtC ext => TypedReg a ->
-                        StmtPermCheckM ext cblocks blocks tops ret
+                        StmtPermCheckM ext cblocks blocks tops rets
                         (ps :> a) ps (ValuePerm a)
 getPushSimpleRegPerm r =
   getRegPerm r >>>= \p_init ->
@@ -1896,7 +2089,7 @@ getPushSimpleRegPerm r =
 -- | Eliminate any disjunctions, existentials, or recursive permissions for a
 -- register and then return the resulting "simple" permission
 getSimpleRegPerm :: PermCheckExtC ext => TypedReg a ->
-                    StmtPermCheckM ext cblocks blocks tops ret ps ps
+                    StmtPermCheckM ext cblocks blocks tops rets ps ps
                     (ValuePerm a)
 getSimpleRegPerm r =
   snd <$> pcmEmbedImplM TypedImplStmt emptyCruCtx (getSimpleVarPerm $
@@ -1905,7 +2098,7 @@ getSimpleRegPerm r =
 -- | A version of 'getEqualsExpr' for 'TypedReg's
 getRegEqualsExpr ::
   PermCheckExtC ext => TypedReg a ->
-  StmtPermCheckM ext cblocks blocks tops ret ps ps (PermExpr a)
+  StmtPermCheckM ext cblocks blocks tops rets ps ps (PermExpr a)
 getRegEqualsExpr r =
   snd <$> pcmEmbedImplM TypedImplStmt emptyCruCtx (getEqualsExpr $
                                                    PExpr_Var $ typedRegVar r)
@@ -1917,7 +2110,7 @@ getRegEqualsExpr r =
 -- contents as the return value.
 getAtomicOrWordLLVMPerms ::
   (1 <= w, KnownNat w, PermCheckExtC ext) => TypedReg (LLVMPointerType w) ->
-  StmtPermCheckM ext cblocks blocks tops ret
+  StmtPermCheckM ext cblocks blocks tops rets
   (ps :> LLVMPointerType w)
   ps
   (Either (PermExpr (BVType w)) [AtomicPerm (LLVMPointerType w)])
@@ -1969,7 +2162,7 @@ getAtomicOrWordLLVMPerms r =
 -- bitvector word is found
 getAtomicLLVMPerms :: (1 <= w, KnownNat w, PermCheckExtC ext) =>
                       TypedReg (LLVMPointerType w) ->
-                      StmtPermCheckM ext cblocks blocks tops ret
+                      StmtPermCheckM ext cblocks blocks tops rets
                       (ps :> LLVMPointerType w)
                       ps
                       [AtomicPerm (LLVMPointerType w)]
@@ -2004,7 +2197,7 @@ findLLVMFrameVars (CruCtxCons tps _) (ns :>: _) = findLLVMFrameVars tps ns
 -- | Get the current frame pointer on LLVM architectures
 getFramePtr ::
   NatRepr w ->
-  PermCheckM LLVM cblocks blocks tops ret r ps r ps
+  PermCheckM LLVM cblocks blocks tops rets r ps r ps
     (Maybe (TypedReg (LLVMFrameType w)))
 getFramePtr w =
   gets stExtState >>= \case
@@ -2016,13 +2209,13 @@ getFramePtr w =
 setFramePtr ::
   NatRepr w ->
   TypedReg (LLVMFrameType w) ->
-  PermCheckM LLVM cblocks blocks tops ret r ps r ps ()
+  PermCheckM LLVM cblocks blocks tops rets r ps r ps ()
 setFramePtr rep fp =
   modify (\st -> st { stExtState = PermCheckExtState_LLVM (Just (SomeFrameReg rep fp)) })
 
 -- | Look up the type of a free variable, or raise an error if it is unknown
 getVarType :: ExprVar a ->
-              PermCheckM ext cblocks blocks tops ret r ps r ps (TypeRepr a)
+              PermCheckM ext cblocks blocks tops rets r ps r ps (TypeRepr a)
 getVarType x =
   gets (NameMap.lookup x . stVarTypes) >>= \case
     Just tp -> pure tp
@@ -2033,45 +2226,61 @@ getVarType x =
 
 -- | Look up the types of multiple free variables
 getVarTypes :: RAssign Name tps ->
-               PermCheckM ext cblocks blocks tops ret r ps r ps (CruCtx tps)
+               PermCheckM ext cblocks blocks tops rets r ps r ps (CruCtx tps)
 getVarTypes MNil = pure CruCtxNil
 getVarTypes (xs :>: x) = CruCtxCons <$> getVarTypes xs <*> getVarType x
 
 -- | Remember the type of a free variable, and ensure that it has a permission
-setVarType :: String -> ExprVar a -> TypeRepr a ->
-              PermCheckM ext cblocks blocks tops ret r ps r ps ()
-setVarType str x tp =
+setVarType ::
+  Maybe String -> -- ^ The base name of the variable (e.g., "top", "arg", etc.)
+  Maybe String -> -- ^ The C name of the variable, if applicable
+  ExprVar a -> -- ^ The Hobbits variable itself
+  TypeRepr a -> -- ^ The type of the variable
+  PermCheckM ext cblocks blocks tops rets r ps r ps ()
+setVarType maybe_str dbg x tp =
+  let str' =
+        case (maybe_str,dbg) of
+          (_,Just d) -> "C[" ++ d ++ "]"
+          (Just str,_) -> str ++ "_" ++ typeBaseName tp
+          (Nothing,Nothing) -> typeBaseName tp
+  in
   modify $ \st ->
   st { stCurPerms = initVarPerm x (stCurPerms st),
        stVarTypes = NameMap.insert x tp (stVarTypes st),
-       stPPInfo = ppInfoAddExprName str x (stPPInfo st) }
+       stPPInfo = ppInfoAddExprName str' x (stPPInfo st) }
 
 -- | Remember the types of a sequence of free variables
-setVarTypes :: String -> RAssign Name tps -> CruCtx tps ->
-               PermCheckM ext cblocks blocks tops ret r ps r ps ()
-setVarTypes _ _ CruCtxNil = pure ()
-setVarTypes str (xs :>: x) (CruCtxCons tps tp) =
-  setVarTypes str xs tps >>> setVarType str x tp
+setVarTypes ::
+  Maybe String -> -- ^ The bsae name of the variable (e.g., "top", "arg", etc.)
+  RAssign (Constant (Maybe String)) tps ->
+  RAssign Name tps ->
+  CruCtx tps ->
+  PermCheckM ext cblocks blocks tops rets r ps r ps ()
+setVarTypes _ MNil MNil CruCtxNil = pure ()
+setVarTypes str (ds :>: Constant d) (ns :>: n) (CruCtxCons ts t) =
+  do setVarTypes str ds ns ts
+     setVarType str d n t
 
 -- | Get the current 'PPInfo'
-permGetPPInfo :: PermCheckM ext cblocks blocks tops ret r ps r ps PPInfo
+permGetPPInfo :: PermCheckM ext cblocks blocks tops rets r ps r ps PPInfo
 permGetPPInfo = gets stPPInfo
 
 -- | Get the current prefix string to give context to error messages
-getErrorPrefix :: PermCheckM ext cblocks blocks tops ret r ps r ps (Doc ())
+getErrorPrefix :: PermCheckM ext cblocks blocks tops rets r ps r ps (Doc ())
 getErrorPrefix = gets (fromMaybe emptyDoc . stErrPrefix)
 
 -- | Emit debugging output using the current 'PPInfo'
 stmtTraceM :: (PPInfo -> Doc ()) ->
-              PermCheckM ext cblocks blocks tops ret r ps r ps String
+              PermCheckM ext cblocks blocks tops rets r ps r ps String
 stmtTraceM f =
-  do doc <- f <$> permGetPPInfo
+  do dlevel <- stDebugLevel <$> top_get
+     doc <- f <$> permGetPPInfo
      let str = renderDoc doc
-     trace str (pure str)
+     debugTrace dlevel str (return str)
 
 -- | Failure in the statement permission-checking monad
-stmtFailM :: (PPInfo -> Doc ()) -> PermCheckM ext cblocks blocks tops ret r1 ps1
-             (TypedStmtSeq ext blocks tops ret ps2) ps2 a
+stmtFailM :: (PPInfo -> Doc ()) -> PermCheckM ext cblocks blocks tops rets r1 ps1
+             (TypedStmtSeq ext blocks tops rets ps2) ps2 a
 stmtFailM msg =
   getErrorPrefix >>>= \err_prefix ->
   stmtTraceM (\i -> err_prefix <> line <>
@@ -2090,8 +2299,8 @@ data WithImplState vars a ps ps' =
 --
 -- FIXME: this is not used, but is still here in case we need it later...
 localPermCheckM ::
-  PermCheckM ext cblocks blocks tops ret r_out ps_out r_in ps_in r_out ->
-  PermCheckM ext cblocks blocks tops ret r' ps_in r' ps_in r_in
+  PermCheckM ext cblocks blocks tops rets r_out ps_out r_in ps_in r_out ->
+  PermCheckM ext cblocks blocks tops rets r' ps_in r' ps_in r_in
 localPermCheckM m =
   get >>= \st ->
   liftPermCheckM (runGenStateContT m st (\_ -> pure))
@@ -2099,8 +2308,8 @@ localPermCheckM m =
 -- | Call 'runImplM' in the 'PermCheckM' monad
 pcmRunImplM ::
   CruCtx vars -> Doc () -> (a -> r ps_out) ->
-  ImplM vars (InnerPermCheckState blocks tops ret) r ps_out ps_in a ->
-  PermCheckM ext cblocks blocks tops ret r' ps_in r' ps_in
+  ImplM vars (InnerPermCheckState blocks tops rets) r ps_out ps_in a ->
+  PermCheckM ext cblocks blocks tops rets r' ps_in r' ps_in
   (AnnotPermImpl r ps_in)
 pcmRunImplM vars fail_doc retF impl_m =
   getErrorPrefix >>>= \err_prefix ->
@@ -2108,17 +2317,19 @@ pcmRunImplM vars fail_doc retF impl_m =
   gets stCurPerms >>>= \perms_in ->
   gets stPPInfo   >>>= \ppInfo ->
   gets stVarTypes >>>= \varTypes ->
+  (stEndianness <$> top_get) >>>= \endianness ->
+  (stDebugLevel <$> top_get) >>>= \dlevel ->
   liftPermCheckM $ lift $
   fmap (AnnotPermImpl (renderDoc (err_prefix <> line <> fail_doc))) $
-  runImplM vars perms_in env ppInfo "" True varTypes impl_m
+  runImplM vars perms_in env ppInfo "" dlevel varTypes endianness impl_m
   (return . retF . fst)
 
 -- | Call 'runImplImplM' in the 'PermCheckM' monad
 pcmRunImplImplM ::
   CruCtx vars -> Doc () ->
-  ImplM vars (InnerPermCheckState blocks tops ret) r ps_out ps_in (PermImpl
-                                                                   r ps_out) ->
-  PermCheckM ext cblocks blocks tops ret r' ps_in r' ps_in
+  ImplM vars (InnerPermCheckState blocks tops rets) r ps_out ps_in (PermImpl
+                                                                    r ps_out) ->
+  PermCheckM ext cblocks blocks tops rets r' ps_in r' ps_in
   (AnnotPermImpl r ps_in)
 pcmRunImplImplM vars fail_doc impl_m =
   getErrorPrefix >>>= \err_prefix ->
@@ -2126,16 +2337,18 @@ pcmRunImplImplM vars fail_doc impl_m =
   gets stCurPerms >>>= \perms_in ->
   gets stPPInfo   >>>= \ppInfo ->
   gets stVarTypes >>>= \varTypes ->
+  (stEndianness <$> top_get) >>>= \endianness ->
+  (stDebugLevel <$> top_get) >>>= \dlevel ->
   liftPermCheckM $ lift $
   fmap (AnnotPermImpl (renderDoc (err_prefix <> line <> fail_doc))) $
-  runImplImplM vars perms_in env ppInfo "" True varTypes impl_m
+  runImplImplM vars perms_in env ppInfo "" dlevel varTypes endianness impl_m
 
 -- | Embed an implication computation inside a permission-checking computation,
 -- also supplying an overall error message for failures
 pcmEmbedImplWithErrM ::
   (forall ps. AnnotPermImpl r ps -> r ps) -> CruCtx vars -> Doc () ->
-  ImplM vars (InnerPermCheckState blocks tops ret) r ps_out ps_in a ->
-  PermCheckM ext cblocks blocks tops ret (r ps_out) ps_out (r ps_in) ps_in
+  ImplM vars (InnerPermCheckState blocks tops rets) r ps_out ps_in a ->
+  PermCheckM ext cblocks blocks tops rets (r ps_out) ps_out (r ps_in) ps_in
   (PermSubst vars, a)
 pcmEmbedImplWithErrM f_impl vars fail_doc m =
   getErrorPrefix >>>= \err_prefix ->
@@ -2145,8 +2358,11 @@ pcmEmbedImplWithErrM f_impl vars fail_doc m =
   gets stCurPerms >>>= \perms_in ->
   gets stPPInfo   >>>= \ppInfo ->
   gets stVarTypes >>>= \varTypes ->
+  (stEndianness <$> top_get) >>>= \endianness ->
+  (stDebugLevel <$> top_get) >>>= \dlevel ->
 
-  addReader (gcaptureCC (runImplM vars perms_in env ppInfo "" True varTypes m))
+  addReader (gcaptureCC
+             (runImplM vars perms_in env ppInfo "" dlevel varTypes endianness m))
     >>>= \(a, implSt) ->
 
   gmodify ((\st -> st { stPPInfo = implSt ^. implStatePPInfo,
@@ -2157,8 +2373,8 @@ pcmEmbedImplWithErrM f_impl vars fail_doc m =
 -- | Embed an implication computation inside a permission-checking computation
 pcmEmbedImplM ::
   (forall ps. AnnotPermImpl r ps -> r ps) -> CruCtx vars ->
-  ImplM vars (InnerPermCheckState blocks tops ret) r ps_out ps_in a ->
-  PermCheckM ext cblocks blocks tops ret (r ps_out) ps_out (r ps_in) ps_in
+  ImplM vars (InnerPermCheckState blocks tops rets) r ps_out ps_in a ->
+  PermCheckM ext cblocks blocks tops rets (r ps_out) ps_out (r ps_in) ps_in
   (PermSubst vars, a)
 pcmEmbedImplM f_impl vars m = pcmEmbedImplWithErrM f_impl vars mempty m
 
@@ -2166,14 +2382,14 @@ pcmEmbedImplM f_impl vars m = pcmEmbedImplWithErrM f_impl vars mempty m
 -- @vars@ is empty
 stmtEmbedImplM ::
   ImplM RNil (InnerPermCheckState
-              blocks tops ret) (TypedStmtSeq ext blocks tops ret) ps_out ps_in a ->
-  StmtPermCheckM ext cblocks blocks tops ret ps_out ps_in a
+              blocks tops rets) (TypedStmtSeq ext blocks tops rets) ps_out ps_in a ->
+  StmtPermCheckM ext cblocks blocks tops rets ps_out ps_in a
 stmtEmbedImplM m = snd <$> pcmEmbedImplM TypedImplStmt emptyCruCtx m
 
 -- | Recombine any outstanding distinguished permissions back into the main
 -- permission set, in the context of type-checking statements
 stmtRecombinePerms ::
-  PermCheckExtC ext => StmtPermCheckM ext cblocks blocks tops ret RNil ps_in ()
+  PermCheckExtC ext => StmtPermCheckM ext cblocks blocks tops rets RNil ps_in ()
 stmtRecombinePerms =
   get >>>= \(!st) ->
   let dist_perms = view distPerms (stCurPerms st) in
@@ -2189,7 +2405,7 @@ ppProofError ppInfo mb_ps =
 -- them to the top of the stack
 stmtProvePermsAppend :: PermCheckExtC ext =>
                         CruCtx vars -> ExDistPerms vars ps ->
-                        StmtPermCheckM ext cblocks blocks tops ret
+                        StmtPermCheckM ext cblocks blocks tops rets
                         (ps_in :++: ps) ps_in (PermSubst vars)
 stmtProvePermsAppend vars ps =
   permGetPPInfo >>>= \ppInfo ->
@@ -2200,7 +2416,7 @@ stmtProvePermsAppend vars ps =
 -- context of the empty permission stack
 stmtProvePerms :: PermCheckExtC ext =>
                   CruCtx vars -> ExDistPerms vars ps ->
-                  StmtPermCheckM ext cblocks blocks tops ret
+                  StmtPermCheckM ext cblocks blocks tops rets
                   ps RNil (PermSubst vars)
 stmtProvePerms vars ps =
   permGetPPInfo >>>= \ppInfo ->
@@ -2212,7 +2428,7 @@ stmtProvePerms vars ps =
 -- any existential lifetime variables
 stmtProvePermsFreshLs :: PermCheckExtC ext =>
                          CruCtx vars -> ExDistPerms vars ps ->
-                         StmtPermCheckM ext cblocks blocks tops ret
+                         StmtPermCheckM ext cblocks blocks tops rets
                          ps RNil (PermSubst vars)
 stmtProvePermsFreshLs vars ps =
   permGetPPInfo >>>= \ppInfo ->
@@ -2223,7 +2439,7 @@ stmtProvePermsFreshLs vars ps =
 -- | Prove a single permission in the context of type-checking statements
 stmtProvePerm :: (PermCheckExtC ext, KnownRepr CruCtx vars) =>
                  TypedReg a -> Mb vars (ValuePerm a) ->
-                 StmtPermCheckM ext cblocks blocks tops ret
+                 StmtPermCheckM ext cblocks blocks tops rets
                  (ps :> a) ps (PermSubst vars)
 stmtProvePerm (TypedReg x) mb_p =
   permGetPPInfo >>>= \ppInfo ->
@@ -2235,11 +2451,11 @@ stmtProvePerm (TypedReg x) mb_p =
 -- | Try to prove that a register equals a constant integer (of the given input
 -- type) using equality permissions in the context
 resolveConstant :: TypedReg tp ->
-                   StmtPermCheckM ext cblocks blocks tops ret ps ps
+                   StmtPermCheckM ext cblocks blocks tops rets ps ps
                    (Maybe Integer)
 resolveConstant = helper . PExpr_Var . typedRegVar where
   helper :: PermExpr a ->
-            StmtPermCheckM ext cblocks blocks tops ret ps ps
+            StmtPermCheckM ext cblocks blocks tops rets ps ps
             (Maybe Integer)
   helper (PExpr_Var x) =
     getVarPerm x >>= \case
@@ -2267,7 +2483,7 @@ resolveConstant = helper . PExpr_Var . typedRegVar where
 -- | Convert a register of one type to one of another type, if possible
 convertRegType :: PermCheckExtC ext => ExtRepr ext -> ProgramLoc ->
                   TypedReg tp1 -> TypeRepr tp1 -> TypeRepr tp2 ->
-                  StmtPermCheckM ext cblocks blocks tops ret RNil RNil
+                  StmtPermCheckM ext cblocks blocks tops rets RNil RNil
                   (TypedReg tp2)
 convertRegType _ _ reg tp1 tp2
   | Just Refl <- testEquality tp1 tp2 = pure reg
@@ -2275,9 +2491,10 @@ convertRegType _ loc reg (BVRepr w1) tp2@(BVRepr w2)
   | Left LeqProof <- decideLeq (knownNat :: NatRepr 1) w2
   , NatCaseGT LeqProof <- testNatCases w1 w2 =
     withKnownNat w2 $
-    emitStmt knownRepr loc (TypedSetReg tp2 $
-                            TypedExpr (BVTrunc w2 w1 $ RegNoVal reg)
-                            Nothing) >>>= \(_ :>: x) ->
+    emitStmt knownRepr noNames loc
+      (TypedSetReg tp2 $
+        TypedExpr (BVTrunc w2 w1 $ RegNoVal reg)
+        Nothing) >>>= \(MNil :>: x) ->
     stmtRecombinePerms >>>
     pure (TypedReg x)
 convertRegType _ loc reg (BVRepr w1) tp2@(BVRepr w2)
@@ -2287,9 +2504,10 @@ convertRegType _ loc reg (BVRepr w1) tp2@(BVRepr w2)
     -- FIXME: should this use endianness?
     -- (stEndianness <$> top_get) >>>= \endianness ->
     withKnownNat w2 $
-    emitStmt knownRepr loc (TypedSetReg tp2 $
-                            TypedExpr (BVSext w2 w1 $ RegNoVal reg)
-                            Nothing) >>>= \(_ :>: x) ->
+    emitStmt knownRepr noNames loc
+      (TypedSetReg tp2 $
+        TypedExpr (BVSext w2 w1 $ RegNoVal reg)
+        Nothing) >>>= \(MNil :>: x) ->
     stmtRecombinePerms >>>
     pure (TypedReg x)
 convertRegType ExtRepr_LLVM loc reg (LLVMPointerRepr w1) (BVRepr w2)
@@ -2297,7 +2515,7 @@ convertRegType ExtRepr_LLVM loc reg (LLVMPointerRepr w1) (BVRepr w2)
     withKnownNat w1 $
     stmtProvePerm reg (llvmExEqWord w1) >>>= \sbst ->
     let e = substLookup sbst Member_Base in
-    emitLLVMStmt knownRepr loc (DestructLLVMWord reg e) >>>= \x ->
+    emitLLVMStmt knownRepr Nothing loc (DestructLLVMWord reg e) >>>= \x ->
     stmtRecombinePerms >>>
     pure (TypedReg x)
 convertRegType ext loc reg (LLVMPointerRepr w1) (BVRepr w2) =
@@ -2306,7 +2524,7 @@ convertRegType ext loc reg (LLVMPointerRepr w1) (BVRepr w2) =
 convertRegType ExtRepr_LLVM loc reg (BVRepr w2) (LLVMPointerRepr w1)
   | Just Refl <- testEquality w1 w2 =
     withKnownNat w1 $
-    emitLLVMStmt knownRepr loc (ConstructLLVMWord reg) >>>= \x ->
+    emitLLVMStmt knownRepr Nothing loc (ConstructLLVMWord reg) >>>= \x ->
     stmtRecombinePerms >>> pure (TypedReg x)
 convertRegType ext loc reg (BVRepr w1) (LLVMPointerRepr w2) =
   convertRegType ext loc reg (BVRepr w1) (BVRepr w2) >>>= \reg' ->
@@ -2325,7 +2543,7 @@ convertRegType _ _ x tp1 tp2 =
 -- @bv@, using the current endianness to determine how this extraction works
 extractBVBytes :: (1 <= w, KnownNat w) =>
                   ProgramLoc -> NatRepr sz -> Bytes -> TypedReg (BVType w) ->
-                  StmtPermCheckM LLVM cblocks blocks tops ret RNil RNil
+                  StmtPermCheckM LLVM cblocks blocks tops rets RNil RNil
                   (TypedReg (BVType sz))
 extractBVBytes loc sz off_bytes (reg :: TypedReg (BVType w)) =
   let w :: NatRepr w = knownNat in
@@ -2338,9 +2556,10 @@ extractBVBytes loc sz off_bytes (reg :: TypedReg (BVType w)) =
       | Just (Some off) <- someNat (bytesToBits off_bytes)
       , Left off_sz_w_pf <- decideLeq (addNat off sz) w ->
         withLeqProof sz_pf $ withLeqProof off_sz_w_pf $
-        emitStmt knownRepr loc (TypedSetReg (BVRepr sz) $
-                                  TypedExpr (BVSelect off sz w $ RegNoVal reg)
-                                  Nothing) >>>= \(_ :>: x) ->
+        emitStmt knownRepr noNames loc
+          (TypedSetReg (BVRepr sz) $
+            TypedExpr (BVSelect off sz w $ RegNoVal reg)
+            Nothing) >>>= \(MNil :>: x) ->
         stmtRecombinePerms >>>
         pure (TypedReg x)
 
@@ -2351,9 +2570,10 @@ extractBVBytes loc sz off_bytes (reg :: TypedReg (BVType w)) =
                                     - intValue sz)
       , Left idx_sz_w_pf <- decideLeq (addNat idx sz) w ->
         withLeqProof sz_pf $ withLeqProof idx_sz_w_pf $
-        emitStmt knownRepr loc (TypedSetReg (BVRepr sz) $
-                                TypedExpr (BVSelect idx sz w $ RegNoVal reg)
-                                Nothing) >>>= \(_ :>: x) ->
+        emitStmt knownRepr noNames loc
+          (TypedSetReg (BVRepr sz) $
+            TypedExpr (BVSelect idx sz w $ RegNoVal reg)
+            Nothing) >>>= \(MNil :>: x) ->
         stmtRecombinePerms >>>
         pure (TypedReg x)
     _ -> error "extractBVBytes: negative offset!"
@@ -2363,26 +2583,31 @@ extractBVBytes loc sz off_bytes (reg :: TypedReg (BVType w)) =
 -- function says how that statement modifies the current permissions, given the
 -- freshly-bound names for the return values. Return those freshly-bound names
 -- for the return values.
-emitStmt :: CruCtx rets -> ProgramLoc ->
-            TypedStmt ext rets ps_in ps_out ->
-            StmtPermCheckM ext cblocks blocks tops ret ps_out ps_in
-            (RAssign Name rets)
-emitStmt tps loc stmt =
+emitStmt ::
+  CruCtx stmt_rets ->
+  RAssign (Constant (Maybe String)) stmt_rets ->
+  ProgramLoc ->
+  TypedStmt ext stmt_rets ps_in ps_out ->
+  StmtPermCheckM ext cblocks blocks tops rets ps_out ps_in
+    (RAssign Name stmt_rets)
+emitStmt tps names loc stmt =
   gopenBinding
     ((TypedConsStmt loc stmt (cruCtxProxies tps) <$>) . strongMbM)
     (mbPure (cruCtxProxies tps) ()) >>>= \(ns, ()) ->
-  setVarTypes "x" ns tps >>>
+  setVarTypes Nothing names ns tps >>>
   gmodify (modifySTCurPerms (applyTypedStmt stmt ns)) >>>
   pure ns
 
 
 -- | Call emitStmt with a 'TypedLLVMStmt'
-emitLLVMStmt :: TypeRepr tp -> ProgramLoc ->
-                TypedLLVMStmt tp ps_in ps_out ->
-                StmtPermCheckM LLVM cblocks blocks tops ret
-                ps_out ps_in (Name tp)
-emitLLVMStmt tp loc stmt =
-  RL.head <$> emitStmt (singletonCruCtx tp) loc (TypedLLVMStmt stmt)
+emitLLVMStmt ::
+  TypeRepr tp ->
+  Maybe String ->
+  ProgramLoc ->
+  TypedLLVMStmt tp ps_in ps_out ->
+  StmtPermCheckM LLVM cblocks blocks tops rets ps_out ps_in (Name tp)
+emitLLVMStmt tp name loc stmt =
+  RL.head <$> emitStmt (singletonCruCtx tp) (RL.singleton (Constant name)) loc (TypedLLVMStmt stmt)
 
 -- | A program location for code which was generated by the type-checker
 checkerProgramLoc :: ProgramLoc
@@ -2401,7 +2626,7 @@ tcReg ctx (Reg ix) = ctx ! ix
 
 -- | Type-check a Crucible register and also look up its value, if known
 tcRegWithVal :: PermCheckExtC ext => CtxTrans ctx -> Reg ctx tp ->
-                StmtPermCheckM ext cblocks blocks tops ret ps ps
+                StmtPermCheckM ext cblocks blocks tops rets ps ps
                 (RegWithVal tp)
 tcRegWithVal ctx r_untyped =
   let r = tcReg ctx r_untyped in
@@ -2419,7 +2644,7 @@ tcRegs ctx (viewAssign -> AssignExtend regs reg) =
 -- includes its permissions and all those relevant to any register it is equal
 -- to, possibly plus some offset
 ppRelevantPerms :: TypedReg tp ->
-                   PermCheckM ext cblocks blocks tops ret r ps r ps (Doc ())
+                   PermCheckM ext cblocks blocks tops rets r ps r ps (Doc ())
 ppRelevantPerms r =
   getRegPerm r >>>= \p ->
   permGetPPInfo >>>= \ppInfo ->
@@ -2436,7 +2661,7 @@ ppRelevantPerms r =
 -- | Pretty-print a Crucible 'Reg' and what 'TypedReg' it is equal to, along
 -- with the relevant permissions for that 'TypedReg'
 ppCruRegAndPerms :: CtxTrans ctx -> Reg ctx a ->
-                    PermCheckM ext cblocks blocks tops ret r ps r ps (Doc ())
+                    PermCheckM ext cblocks blocks tops rets r ps r ps (Doc ())
 ppCruRegAndPerms ctx r =
   permGetPPInfo >>>= \ppInfo ->
   ppRelevantPerms (tcReg ctx r) >>>= \doc ->
@@ -2447,7 +2672,7 @@ ppCruRegAndPerms ctx r =
 -- their permissions, the variables in those permissions etc., as in
 -- 'varPermsTransFreeVars'
 getRelevantPerms :: [SomeName CrucibleType] ->
-                    PermCheckM ext cblocks blocks tops ret r ps r ps 
+                    PermCheckM ext cblocks blocks tops rets r ps r ps
                       (Some DistPerms)
 getRelevantPerms (namesListToNames -> SomeRAssign ns) =
   gets stCurPerms >>>= \perms ->
@@ -2458,17 +2683,23 @@ getRelevantPerms (namesListToNames -> SomeRAssign ns) =
 -- to, and then pretty-print the permissions on those variables and all
 -- variables they contain, as well as the top-level input variables and the
 -- extension-specific variables
-ppCruRegsAndTopsPerms :: CtxTrans ctx -> [Some (Reg ctx)] ->
-                         PermCheckM ext cblocks blocks tops ret r ps r ps (Doc (), Doc ())
-ppCruRegsAndTopsPerms ctx regs =
+ppCruRegsAndTopsPerms ::
+  [Maybe String] ->
+  CtxTrans ctx ->
+  [Some (Reg ctx)] ->
+  PermCheckM ext cblocks blocks tops rets r ps r ps (Doc (), Doc ())
+ppCruRegsAndTopsPerms names ctx regs =
   permGetPPInfo >>>= \ppInfo ->
   gets stTopVars >>>= \tops ->
   gets (permCheckExtStateNames . stExtState) >>>= \(Some ext_ns) ->
   let vars_pp =
         fillSep $ punctuate comma $
-        map (\case Some r ->
-                     pretty r <+> pretty '=' <+>
-                     permPretty ppInfo (tcReg ctx r)) regs
+        map (\(Some r) ->
+          let name = listToMaybe (drop (indexVal (regIndex r)) names) in
+          pretty r <+> pretty '=' <+>
+          permPretty ppInfo (tcReg ctx r) <>
+          foldMap (\n -> pretty " @" <+> pretty n) name)
+          (nub regs)
       vars =
         namesToNamesList tops ++ namesToNamesList ext_ns ++
         map (\(Some r) -> SomeName $ typedRegVar $ tcReg ctx r) regs in
@@ -2477,10 +2708,15 @@ ppCruRegsAndTopsPerms ctx regs =
     Some perms -> pure (vars_pp, permPretty ppInfo perms)
 
 -- | Set the current prefix string to give context to error messages
-setErrorPrefix :: ProgramLoc -> Doc () -> CtxTrans ctx -> [Some (Reg ctx)] ->
-                  PermCheckM ext cblocks blocks tops ret r ps r ps ()
-setErrorPrefix loc stmt_pp ctx regs =
-  ppCruRegsAndTopsPerms ctx regs >>>= \(regs_pp, perms_pp) ->
+setErrorPrefix ::
+  [Maybe String] ->
+  ProgramLoc ->
+  Doc () ->
+  CtxTrans ctx ->
+  [Some (Reg ctx)] ->
+  PermCheckM ext cblocks blocks tops rets r ps r ps ()
+setErrorPrefix names loc stmt_pp ctx regs =
+  ppCruRegsAndTopsPerms names ctx regs >>>= \(regs_pp, perms_pp) ->
   let prefix =
         PP.sep
         [PP.group (pretty "At" <+> ppShortFileName (plSourceLoc loc)
@@ -2500,7 +2736,7 @@ archWidth _ = knownNat
 
 -- | Type-check a Crucibe block id into a 'TypedBlockID'
 tcBlockID :: BlockID cblocks args ->
-             StmtPermCheckM ext cblocks blocks tops ret ps ps
+             StmtPermCheckM ext cblocks blocks tops rets ps ps
              (TypedBlockID blocks (CtxToRList args))
 tcBlockID blkID = stLookupBlockID blkID <$> top_get
 
@@ -2508,11 +2744,10 @@ tcBlockID blkID = stLookupBlockID blkID <$> top_get
 -- 'PermExpr' value that we can use as an @eq(e)@ permission on the output of
 -- the expression
 tcExpr ::
-  forall ext tp cblocks blocks tops ret ps.
+  forall ext tp cblocks blocks tops rets ps.
   (PermCheckExtC ext, KnownRepr ExtRepr ext) =>
   App ext RegWithVal tp ->
-  StmtPermCheckM ext cblocks blocks tops ret ps ps
-    (Maybe (PermExpr tp))
+  StmtPermCheckM ext cblocks blocks tops rets ps ps (Maybe (PermExpr tp))
 tcExpr (ExtensionApp _e_ext :: App ext RegWithVal tp)
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
   = error "tcExpr: unexpected LLVM expression"
@@ -2593,8 +2828,27 @@ tcExpr (BVUndef _w) =
 
 tcExpr (BVLit w (BV.BV i)) = withKnownNat w $ pure $ Just $ bvInt i
 
-tcExpr (BVSext w2 _ (RegWithVal _ (bvMatchConstInt -> Just i))) =
-  withKnownNat w2 $ pure $ Just $ bvInt i
+tcExpr (BVTrunc w2 _ (RegWithVal _ (bvMatchConst -> Just bv))) =
+  withKnownNat w2 $ pure $ Just $ bvBV $ BV.trunc w2 bv
+tcExpr (BVZext w2 _ (RegWithVal _ (bvMatchConst -> Just bv))) =
+  withKnownNat w2 $ pure $ Just $ bvBV $ BV.zext w2 bv
+tcExpr (BVSext w2 w (RegWithVal _ (bvMatchConst -> Just bv))) =
+  withKnownNat w2 $ pure $ Just $ bvBV $ BV.sext w w2 bv
+
+tcExpr (BVNot w (RegWithVal _ (bvMatchConst -> Just bv))) =
+  withKnownNat w $ pure $ Just $ bvBV $ BV.complement w bv
+tcExpr (BVAnd w (RegWithVal _ (bvMatchConst ->
+                               Just bv1)) (RegWithVal _
+                                           (bvMatchConst -> Just bv2))) =
+  withKnownNat w $ pure $ Just $ bvBV $ BV.and bv1 bv2
+tcExpr (BVOr w (RegWithVal _ (bvMatchConst ->
+                               Just bv1)) (RegWithVal _
+                                           (bvMatchConst -> Just bv2))) =
+  withKnownNat w $ pure $ Just $ bvBV $ BV.or bv1 bv2
+tcExpr (BVXor w (RegWithVal _ (bvMatchConst ->
+                               Just bv1)) (RegWithVal _
+                                           (bvMatchConst -> Just bv2))) =
+  withKnownNat w $ pure $ Just $ bvBV $ BV.xor bv1 bv2
 
 tcExpr (BVAdd w (RegWithVal _ e1) (RegWithVal _ e2)) =
   withKnownNat w $ pure $ Just $ bvAdd e1 e2
@@ -2673,7 +2927,7 @@ tcExpr _ = pure Nothing
 -- 'True' even if the arguments do not satisfy the permissions.
 couldSatisfyPermsM :: PermCheckExtC ext => CruCtx args -> TypedRegs args ->
                       Mb ghosts (ValuePerms args) ->
-                      StmtPermCheckM ext cblocks blocks tops ret ps ps Bool
+                      StmtPermCheckM ext cblocks blocks tops rets ps ps Bool
 couldSatisfyPermsM CruCtxNil _ _ = pure True
 couldSatisfyPermsM (CruCtxCons tps (BVRepr _)) (TypedRegsCons args arg)
                    (mbMatch -> [nuMP| ValPerms_Cons ps (ValPerm_Eq mb_e) |]) =
@@ -2700,27 +2954,29 @@ tcEmitStmt ::
   CtxTrans ctx ->
   ProgramLoc ->
   Stmt ext ctx ctx' ->
-  StmtPermCheckM ext cblocks blocks tops ret RNil RNil (CtxTrans ctx')
+  StmtPermCheckM ext cblocks blocks tops rets RNil RNil (CtxTrans ctx')
 tcEmitStmt ctx loc stmt =
   do _     <- stmtTraceM (const (pretty "Type-checking statement:" <+>
-                        ppStmt (size ctx) stmt))
+                                 ppStmt (size ctx) stmt))
      !_    <- permGetPPInfo
      !pps  <- mapM (\(Some r) -> ppCruRegAndPerms ctx r) (stmtInputRegs stmt)
-     !_    <- stmtTraceM (\_-> pretty "Input perms:" <> softline <> ppCommaSep pps)
+     !_    <- stmtTraceM (\_-> pretty "Input perms:" <> softline <>
+                               ppCommaSep pps)
      !ctx' <- tcEmitStmt' ctx loc stmt
      !pps' <- mapM (\(Some r) -> ppCruRegAndPerms ctx' r)
                    (stmtOutputRegs (Ctx.size ctx') stmt)
-     _     <- stmtTraceM (const (pretty "Output perms:" <> softline <> ppCommaSep pps'))
+     _     <- stmtTraceM (const (pretty "Output perms:" <> softline <>
+                                 ppCommaSep pps'))
      pure ctx'
 
 
 tcEmitStmt' ::
-  forall ext ctx ctx' cblocks blocks tops ret.
+  forall ext ctx ctx' cblocks blocks tops rets.
   (PermCheckExtC ext, KnownRepr ExtRepr ext) =>
   CtxTrans ctx ->
   ProgramLoc ->
   Stmt ext ctx ctx' ->
-  StmtPermCheckM ext cblocks blocks tops ret RNil RNil
+  StmtPermCheckM ext cblocks blocks tops rets RNil RNil
     (CtxTrans ctx')
 
 tcEmitStmt' ctx loc (SetReg _ (App (ExtensionApp e_ext
@@ -2732,7 +2988,9 @@ tcEmitStmt' ctx loc (SetReg tp (App e)) =
   traverseFC (tcRegWithVal ctx) e >>= \e_with_vals ->
   tcExpr e_with_vals >>= \maybe_val ->
   let typed_e = TypedExpr e_with_vals maybe_val in
-  emitStmt (singletonCruCtx tp) loc (TypedSetReg tp typed_e) >>>= \(_ :>: x) ->
+  let stmt_rets = (singletonCruCtx tp) in
+  dbgNames' stmt_rets >>= \names ->
+  emitStmt stmt_rets names loc (TypedSetReg tp typed_e) >>>= \(_ :>: x) ->
   stmtRecombinePerms >>>
   pure (addCtxName ctx x)
 
@@ -2740,7 +2998,7 @@ tcEmitStmt' ctx loc (ExtendAssign stmt_ext :: Stmt ext ctx ctx')
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
   = tcEmitLLVMStmt Proxy ctx loc stmt_ext
 
-tcEmitStmt' ctx loc (CallHandle ret freg_untyped _args_ctx args_untyped) =
+tcEmitStmt' ctx loc (CallHandle _ret freg_untyped _args_ctx args_untyped) =
   let freg = tcReg ctx freg_untyped
       args = tcRegs ctx args_untyped
       {- args_subst = typedRegsToVarSubst args -} in
@@ -2757,13 +3015,15 @@ tcEmitStmt' ctx loc (CallHandle ret freg_untyped _args_ctx args_untyped) =
           pure (if could then Just (SomeFunPerm fun_perm) else Nothing)
         _ -> pure Nothing
       _ -> pure []) >>>= \maybe_fun_perms ->
-  (stmtEmbedImplM $ foldr1WithDefault implCatchM
+  (stmtEmbedImplM $ foldr1WithDefault (implCatchM "tcEmitStmt (fun perm)" $
+                                       typedRegVar freg)
    (implFailMsgM "Could not find function permission")
    (mapMaybe (fmap pure) maybe_fun_perms)) >>>= \some_fun_perm ->
   case some_fun_perm of
     SomeFunPerm fun_perm ->
       let ghosts = funPermGhosts fun_perm
-          args_ns = typedRegsToVars args in
+          args_ns = typedRegsToVars args
+          rets = funPermRets fun_perm in
       (stmtProvePermsFreshLs ghosts (funPermExDistIns
                                      fun_perm args_ns)) >>>= \gsubst ->
       let gexprs = exprsOfSubst gsubst in
@@ -2772,9 +3032,10 @@ tcEmitStmt' ctx loc (CallHandle ret freg_untyped _args_ctx args_untyped) =
       stmtProvePermsAppend CruCtxNil (emptyMb $
                                       eqDistPerms ghosts_ns gexprs) >>>= \_ ->
       stmtProvePerm freg (emptyMb $ ValPerm_Conj1 $ Perm_Fun fun_perm) >>>= \_ ->
-      (emitStmt (singletonCruCtx ret) loc
-       (TypedCall freg fun_perm (varsToTypedRegs
-                                 ghosts_ns) gexprs args)) >>>= \(_ :>: ret') ->
+      dbgNames' rets >>>= \names ->
+      emitStmt rets names loc (TypedCall freg fun_perm
+                               (varsToTypedRegs ghosts_ns) gexprs args)
+      >>>= \(_ :>: ret') ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret')
 
@@ -2783,7 +3044,7 @@ tcEmitStmt' ctx loc (Assert reg msg) =
   getRegEqualsExpr treg >>= \case
     PExpr_Bool True -> pure ctx
     PExpr_Bool False -> stmtFailM (\_ -> pretty "Failed assertion")
-    _ -> ctx <$ emitStmt CruCtxNil loc (TypedAssert (tcReg ctx reg) (tcReg ctx msg))
+    _ -> ctx <$ emitStmt CruCtxNil MNil loc (TypedAssert (tcReg ctx reg) (tcReg ctx msg))
 
 tcEmitStmt' _ _ _ = error "tcEmitStmt: unsupported statement"
 
@@ -2793,7 +3054,7 @@ tcEmitLLVMSetExpr ::
   CtxTrans ctx ->
   ProgramLoc ->
   LLVMExtensionExpr (Reg ctx) tp ->
-  StmtPermCheckM LLVM cblocks blocks tops ret RNil RNil
+  StmtPermCheckM LLVM cblocks blocks tops rets RNil RNil
     (CtxTrans (ctx ::> tp))
 
 -- Type-check a pointer-building expression, which is only valid when the block
@@ -2803,8 +3064,9 @@ tcEmitLLVMSetExpr ctx loc (LLVM_PointerExpr w blk_reg off_reg) =
       tblk_reg = tcReg ctx blk_reg in
   resolveConstant tblk_reg >>= \case
     Just 0 ->
+      nextDebugName >>>= \name ->
       withKnownNat w $
-      emitLLVMStmt knownRepr loc (ConstructLLVMWord toff_reg) >>>= \x ->
+      emitLLVMStmt knownRepr name loc (ConstructLLVMWord toff_reg) >>>= \x ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx x)
     _ -> stmtFailM (\i -> pretty "LLVM_PointerExpr: Non-zero pointer block: "
@@ -2827,14 +3089,18 @@ tcEmitLLVMSetExpr ctx loc (LLVM_PointerBlock w ptr_reg) =
   withKnownNat w $
   getAtomicOrWordLLVMPerms tptr_reg >>>= \case
     Left e ->
-      emitLLVMStmt knownRepr loc (AssertLLVMWord tptr_reg e) >>>= \ret ->
+      nextDebugName >>>= \name ->
+      emitLLVMStmt knownRepr name loc (AssertLLVMWord tptr_reg e) >>>= \ret ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret)
     Right _ ->
       stmtRecombinePerms >>>
       stmtProvePerm tptr_reg (emptyMb $ ValPerm_Conj1 Perm_IsLLVMPtr) >>>
-      emitLLVMStmt knownRepr loc (AssertLLVMPtr tptr_reg) >>>
-      emitStmt knownRepr loc (TypedSetReg knownRepr $
+      emitLLVMStmt knownRepr Nothing loc (AssertLLVMPtr tptr_reg) >>>
+      dbgNames >>>= \names ->
+      emitStmt
+        knownRepr names loc
+        (TypedSetReg knownRepr $
                               TypedExpr (NatLit 1)
                               (Just $ PExpr_Nat 1)) >>>= \(_ :>: ret) ->
       stmtRecombinePerms >>>
@@ -2857,17 +3123,20 @@ tcEmitLLVMSetExpr ctx loc (LLVM_PointerOffset w ptr_reg) =
   getAtomicOrWordLLVMPerms tptr_reg >>>= \eith ->
   case eith of
     Left e ->
-      emitLLVMStmt knownRepr loc (DestructLLVMWord
+      nextDebugName >>>= \name ->
+      emitLLVMStmt knownRepr name loc (DestructLLVMWord
                                   tptr_reg e) >>>= \ret ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret)
     Right _ ->
       stmtRecombinePerms >>>
       stmtProvePerm tptr_reg (emptyMb $ ValPerm_Conj1 Perm_IsLLVMPtr) >>>
-      emitLLVMStmt knownRepr loc (AssertLLVMPtr tptr_reg) >>>
-      emitStmt knownRepr loc (TypedSetReg knownRepr $
-                              TypedExpr (BVLit w $ BV.mkBV w 0)
-                              (Just $ bvInt 0)) >>>= \(_ :>: ret) ->
+      emitLLVMStmt knownRepr Nothing loc (AssertLLVMPtr tptr_reg) >>>
+      dbgNames >>>= \names ->
+      emitStmt knownRepr names loc
+        (TypedSetReg knownRepr $
+         TypedExpr (BVLit w $ BV.mkBV w 0)
+         (Just $ bvInt 0)) >>>= \(MNil :>: ret) ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret)
 
@@ -2880,23 +3149,28 @@ tcEmitLLVMSetExpr ctx loc (LLVM_PointerIte w cond_reg then_reg else_reg) =
       telse_reg = tcReg ctx else_reg in
   getRegEqualsExpr tcond_reg >>= \case
     PExpr_Bool True ->
-      emitStmt knownRepr loc (TypedSetRegPermExpr knownRepr $ PExpr_Var $
-                              typedRegVar tthen_reg) >>>= \(_ :>: ret) ->
+      dbgNames >>= \names ->
+      emitStmt knownRepr names loc
+        (TypedSetRegPermExpr knownRepr $
+          PExpr_Var $ typedRegVar tthen_reg) >>>= \(MNil :>: ret) ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret)
     PExpr_Bool False ->
-      emitStmt knownRepr loc (TypedSetRegPermExpr knownRepr $ PExpr_Var $
-                              typedRegVar telse_reg) >>>= \(_ :>: ret) ->
+      dbgNames >>>= \names ->
+      emitStmt knownRepr names loc
+        (TypedSetRegPermExpr knownRepr $
+          PExpr_Var $ typedRegVar telse_reg) >>>= \(MNil :>: ret) ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret)
     _ ->
-      emitLLVMStmt knownRepr loc (TypedLLVMIte w
+      nextDebugName >>>= \name ->
+      emitLLVMStmt knownRepr name loc (TypedLLVMIte w
                                   tcond_reg tthen_reg telse_reg) >>>= \ret ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret)
 
 -- For LLVM side conditions, treat each side condition as an assert
-tcEmitLLVMSetExpr ctx loc (LLVM_SideConditions tp conds reg) =
+tcEmitLLVMSetExpr ctx loc (LLVM_SideConditions _ tp conds reg) =
   let treg = tcReg ctx reg in
   foldr
   (\(LLVMSideCondition cond_reg ub) rest_m ->
@@ -2907,15 +3181,20 @@ tcEmitLLVMSetExpr ctx loc (LLVM_SideConditions tp conds reg) =
         rest_m
       PExpr_Bool False -> stmtFailM (\_ -> pretty err_str)
       _ ->
-        emitStmt knownRepr loc (TypedSetRegPermExpr knownRepr $
-                                PExpr_String err_str) >>>= \(_ :>: str_var) ->
+        emitStmt knownRepr noNames loc
+          (TypedSetRegPermExpr knownRepr $
+            PExpr_String err_str) >>>= \(MNil :>: str_var) ->
         stmtRecombinePerms >>>
-        emitStmt CruCtxNil loc (TypedAssert tcond_reg $
-                                TypedReg str_var) >>>= \_ ->
+        emitStmt CruCtxNil MNil loc
+          (TypedAssert tcond_reg $
+            TypedReg str_var) >>>= \MNil ->
         stmtRecombinePerms >>>
         rest_m)
-  (emitStmt (singletonCruCtx tp) loc (TypedSetRegPermExpr tp $ PExpr_Var $
-                                      typedRegVar treg) >>>= \(_ :>: ret) ->
+  (let rets = singletonCruCtx tp in
+   dbgNames' rets >>>= \names ->
+   emitStmt rets names loc
+     (TypedSetRegPermExpr tp $ PExpr_Var $
+       typedRegVar treg) >>>= \(MNil :>: ret) ->
     stmtRecombinePerms >>>
     pure (addCtxName ctx ret))
   conds
@@ -2932,9 +3211,9 @@ tcEmitLLVMSetExpr _ctx _loc X86Expr{} =
 withLifetimeCurrentPerms ::
   PermCheckExtC ext => PermExpr LifetimeType ->
   (forall ps_l. LifetimeCurrentPerms ps_l ->
-   StmtPermCheckM ext cblocks blocks tops ret (ps_out :++: ps_l)
+   StmtPermCheckM ext cblocks blocks tops rets (ps_out :++: ps_l)
    (ps_in :++: ps_l) a) ->
-  StmtPermCheckM ext cblocks blocks tops ret ps_out ps_in a
+  StmtPermCheckM ext cblocks blocks tops rets ps_out ps_in a
 withLifetimeCurrentPerms l m =
   -- Get the proof steps needed to prove that the lifetime l is current
   stmtEmbedImplM (getLifetimeCurrentPerms l) >>>= \(Some cur_perms) ->
@@ -2954,17 +3233,17 @@ withLifetimeCurrentPerms l m =
 -- permission off the stack before returning. Return the resulting return
 -- register.
 emitTypedLLVMLoad ::
-  forall w sz arch cblocks blocks tops ret ps.
+  forall w sz arch cblocks blocks tops rets ps.
   (HasPtrWidth w, 1 <= sz, KnownNat sz) =>
   Proxy arch -> ProgramLoc ->
   TypedReg (LLVMPointerType w) -> LLVMFieldPerm w sz -> DistPerms ps ->
-  StmtPermCheckM LLVM cblocks blocks tops ret
+  StmtPermCheckM LLVM cblocks blocks tops rets
   (ps :> LLVMPointerType w :> LLVMPointerType sz)
   (ps :> LLVMPointerType w)
   (Name (LLVMPointerType sz))
 emitTypedLLVMLoad _ loc treg fp ps =
   withLifetimeCurrentPerms (llvmFieldLifetime fp) $ \cur_perms ->
-  emitLLVMStmt knownRepr loc (TypedLLVMLoad treg fp ps cur_perms)
+  emitLLVMStmt knownRepr Nothing loc (TypedLLVMLoad treg fp ps cur_perms)
 
 
 -- | Emit a 'TypedLLVMStore' instruction, assuming the given LLVM field
@@ -2975,18 +3254,19 @@ emitTypedLLVMLoad _ loc treg fp ps =
 emitTypedLLVMStore ::
   (HasPtrWidth w, 1 <= sz, KnownNat sz) =>
   Proxy arch ->
+  Maybe String ->
   ProgramLoc ->
   TypedReg (LLVMPointerType w) ->
   LLVMFieldPerm w sz ->
   PermExpr (LLVMPointerType sz) ->
   DistPerms ps ->
-  StmtPermCheckM LLVM cblocks blocks tops ret
+  StmtPermCheckM LLVM cblocks blocks tops rets
     (ps :> LLVMPointerType w)
     (ps :> LLVMPointerType w)
     (Name UnitType)
-emitTypedLLVMStore _ loc treg_ptr fp e ps =
+emitTypedLLVMStore _ name loc treg_ptr fp e ps =
   withLifetimeCurrentPerms (llvmFieldLifetime fp) $ \cur_perms ->
-  emitLLVMStmt knownRepr loc (TypedLLVMStore treg_ptr fp e ps cur_perms)
+  emitLLVMStmt knownRepr name loc (TypedLLVMStore treg_ptr fp e ps cur_perms)
 
 open :: HasPtrWidth wptr => f (LLVMPointerType wptr) -> NatRepr wptr
 open _ = ?ptrWidth
@@ -2994,12 +3274,12 @@ open _ = ?ptrWidth
 -- | Typecheck a statement and emit it in the current statement sequence,
 -- starting and ending with an empty stack of distinguished permissions
 tcEmitLLVMStmt ::
-  forall arch ctx tp cblocks blocks tops ret.
+  forall arch ctx tp cblocks blocks tops rets.
   Proxy arch ->
   CtxTrans ctx ->
   ProgramLoc ->
   LLVMStmt (Reg ctx) tp ->
-  StmtPermCheckM LLVM cblocks blocks tops ret RNil RNil
+  StmtPermCheckM LLVM cblocks blocks tops rets RNil RNil
     (CtxTrans (ctx ::> tp))
 
 -- Type-check a word-sized load of an LLVM pointer by requiring a standard ptr
@@ -3033,7 +3313,8 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Store _ ptr tp storage _ val)
     stmtProvePerm tptr (llvmWriteTrueExLPerm sz $ bvInt 0) >>>= \sbst ->
     let l = substLookup sbst Member_Base in
     let fp = llvmFieldWriteTrueL sz (bvInt 0) l in
-    emitTypedLLVMStore arch loc tptr fp
+    nextDebugName >>>= \name ->
+    emitTypedLLVMStore arch name loc tptr fp
     (PExpr_Var $ typedRegVar tval') DistPermsNil >>>= \z ->
     stmtRecombinePerms >>>
     pure (addCtxName ctx z)
@@ -3047,15 +3328,18 @@ tcEmitLLVMStmt arch ctx loc (LLVM_MemClear _ (ptr :: Reg ctx (LLVMPointerType wp
 
   -- For each field perm, prove it and write 0 to it
   (forM_ @_ @_ @_ @() flds $ \case
-      LLVMArrayField fp ->
+      Perm_LLVMField fp ->
         stmtProvePerm tptr (emptyMb $ ValPerm_Conj1 $ Perm_LLVMField fp) >>>
-        emitTypedLLVMStore arch loc tptr fp (PExpr_LLVMWord (bvInt 0)) DistPermsNil >>>
-        stmtRecombinePerms) >>>
+        emitTypedLLVMStore arch Nothing loc tptr fp (PExpr_LLVMWord (bvInt 0)) DistPermsNil >>>
+        stmtRecombinePerms
+      _ -> error "Unexpected return value from llvmFieldsOfSize") >>>
 
   -- Return a fresh unit variable
-  emitStmt knownRepr loc (TypedSetReg knownRepr $
-                          TypedExpr EmptyApp
-                          (Just PExpr_Unit)) >>>= \(_ :>: z) ->
+  dbgNames >>= \names ->
+  emitStmt knownRepr names loc
+    (TypedSetReg knownRepr $
+      TypedExpr EmptyApp
+      (Just PExpr_Unit)) >>>= \(MNil :>: z) ->
   stmtRecombinePerms >>>
   pure (addCtxName ctx z)
 
@@ -3088,7 +3372,9 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_Alloca w _ sz_reg _ _) =
   case (maybe_fp, fp_perm, maybe_sz) of
     (Just fp, ValPerm_Conj [Perm_LLVMFrame fperms], Just sz) ->
       stmtProvePerm fp (emptyMb fp_perm) >>>= \_ ->
-      emitLLVMStmt knownRepr loc (TypedLLVMAlloca fp fperms sz) >>>= \y ->
+      nextDebugName >>>= \name ->
+      emitLLVMStmt knownRepr name loc
+        (TypedLLVMAlloca fp fperms sz) >>>= \y ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx y)
     (_, _, Nothing) ->
@@ -3105,11 +3391,13 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_Alloca w _ sz_reg _ _) =
 tcEmitLLVMStmt _arch ctx loc (LLVM_PushFrame _ _) =
   fmap stArchWidth top_get >>>= \SomePtrWidth ->
   withKnownNat ?ptrWidth $
-  emitLLVMStmt knownRepr loc TypedLLVMCreateFrame >>>= \fp ->
+  emitLLVMStmt knownRepr Nothing loc TypedLLVMCreateFrame >>>= \fp ->
   setFramePtr ?ptrWidth (TypedReg fp) >>>
   stmtRecombinePerms >>>
-  emitStmt knownRepr loc (TypedSetReg knownRepr
-                          (TypedExpr EmptyApp Nothing)) >>>= \(_ :>: y) ->
+  dbgNames >>>= \names ->
+  emitStmt knownRepr names loc
+    (TypedSetReg knownRepr
+      (TypedExpr EmptyApp Nothing)) >>>= \(MNil :>: y) ->
   stmtRecombinePerms >>>
   pure (addCtxName ctx y)
 
@@ -3123,8 +3411,9 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PopFrame _) =
       | Some del_perms <- llvmFrameDeletionPerms fperms ->
         stmtProvePerms knownRepr (distPermsToExDistPerms del_perms) >>>= \_ ->
         stmtProvePerm fp (emptyMb fp_perm) >>>= \_ ->
-        emitLLVMStmt knownRepr loc (TypedLLVMDeleteFrame
-                                    fp fperms del_perms) >>>= \y ->
+        nextDebugName >>>= \name ->
+        emitLLVMStmt knownRepr name loc
+          (TypedLLVMDeleteFrame fp fperms del_perms) >>>= \y ->
         modify (\st -> st { stExtState = PermCheckExtState_LLVM Nothing }) >>>
         pure (addCtxName ctx y)
     _ -> stmtFailM (const $ pretty "LLVM_PopFrame: no frame perms")
@@ -3134,8 +3423,9 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrAddOffset _w _ ptr off) =
   let tptr = tcReg ctx ptr
       toff = tcReg ctx off in
   getRegEqualsExpr toff >>>= \off_expr ->
+  nextDebugName >>>= \name ->
   withKnownNat ?ptrWidth $
-  emitLLVMStmt knownRepr loc (OffsetLLVMValue tptr off_expr) >>>= \ret ->
+  emitLLVMStmt knownRepr name loc (OffsetLLVMValue tptr off_expr) >>>= \ret ->
   stmtRecombinePerms >>>
   pure (addCtxName ctx ret)
 
@@ -3153,7 +3443,8 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_LoadHandle _ _ ptr args ret) =
       , Just Refl <- testEquality tp (FunctionHandleRepr args ret) ->
         stmtEmbedImplM (implCopyConjM x ps i >>>
                         recombinePerm x (ValPerm_Conj ps)) >>>
-        emitLLVMStmt (FunctionHandleRepr args ret) loc
+        nextDebugName >>>= \name ->
+        emitLLVMStmt (FunctionHandleRepr args ret) name loc
         (TypedLLVMLoadHandle tptr tp p) >>>= \ret' ->
         stmtRecombinePerms >>>
         pure (addCtxName ctx ret')
@@ -3164,8 +3455,9 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_ResolveGlobal w _ gsym) =
   (stPermEnv <$> top_get) >>>= \env ->
   case lookupGlobalSymbol env gsym w of
     Just (p, _) ->
+      nextDebugName >>>= \name ->
       withKnownNat ?ptrWidth $
-      emitLLVMStmt knownRepr loc (TypedLLVMResolveGlobal gsym p) >>>= \ret ->
+      emitLLVMStmt knownRepr name loc (TypedLLVMResolveGlobal gsym p) >>>= \ret ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret)
     Nothing ->
@@ -3263,17 +3555,19 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
     -- FIXME: if we have bvEq e1' e2' or not (bvCouldEqual e1' e2') then we
     -- should return a known Boolean value in place of the Nothing
     (PExpr_LLVMWord e1', PExpr_LLVMWord e2') ->
-      emitStmt knownRepr loc (TypedSetRegPermExpr
-                              knownRepr e1') >>>= \(_ :>: n1) ->
+      emitStmt knownRepr noNames loc (TypedSetRegPermExpr
+                              knownRepr e1') >>>= \(MNil :>: n1) ->
       stmtRecombinePerms >>>
-      emitStmt knownRepr loc (TypedSetRegPermExpr
-                              knownRepr e2') >>>= \(_ :>: n2) ->
+      emitStmt knownRepr noNames loc (TypedSetRegPermExpr
+                              knownRepr e2') >>>= \(MNil :>: n2) ->
       stmtRecombinePerms >>>
-      emitStmt knownRepr loc (TypedSetReg knownRepr $
-                              TypedExpr (BaseIsEq knownRepr
-                                         (RegWithVal (TypedReg n1) e1')
-                                         (RegWithVal (TypedReg n2) e2'))
-                              Nothing) >>>= \(_ :>: ret) ->
+      dbgNames >>>= \names ->
+      emitStmt knownRepr names loc
+        (TypedSetReg knownRepr $
+          TypedExpr (BaseIsEq knownRepr
+                      (RegWithVal (TypedReg n1) e1')
+                      (RegWithVal (TypedReg n2) e2'))
+          Nothing) >>>= \(MNil :>: ret) ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret)
 
@@ -3282,17 +3576,19 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
     -- FIXME: test off1 == off2 like above
     (asLLVMOffset -> Just (x1', off1), asLLVMOffset -> Just (x2', off2))
       | x1' == x2' ->
-        emitStmt knownRepr loc (TypedSetRegPermExpr
-                                knownRepr off1) >>>= \(_ :>: n1) ->
+        emitStmt knownRepr noNames loc (TypedSetRegPermExpr
+                                knownRepr off1) >>>= \(MNil :>: n1) ->
         stmtRecombinePerms >>>
-        emitStmt knownRepr loc (TypedSetRegPermExpr
-                                knownRepr off2) >>>= \(_ :>: n2) ->
+        emitStmt knownRepr noNames loc (TypedSetRegPermExpr
+                                knownRepr off2) >>>= \(MNil :>: n2) ->
         stmtRecombinePerms >>>
-        emitStmt knownRepr loc (TypedSetReg knownRepr $
-                                TypedExpr (BaseIsEq knownRepr
-                                           (RegWithVal (TypedReg n1) off1)
-                                           (RegWithVal (TypedReg n2) off2))
-                                Nothing) >>>= \(_ :>: ret) ->
+        dbgNames >>>= \names ->
+        emitStmt knownRepr names loc
+          (TypedSetReg knownRepr $
+            TypedExpr (BaseIsEq knownRepr
+                        (RegWithVal (TypedReg n1) off1)
+                        (RegWithVal (TypedReg n2) off2))
+            Nothing) >>>= \(MNil :>: ret) ->
         stmtRecombinePerms >>>
         pure (addCtxName ctx ret)
 
@@ -3302,10 +3598,12 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
     (PExpr_LLVMWord _e, asLLVMOffset -> Just (x', _)) ->
       let r' = TypedReg x' in
       stmtProvePerm r' (emptyMb $ ValPerm_Conj1 Perm_IsLLVMPtr) >>>
-      emitLLVMStmt knownRepr loc (AssertLLVMPtr r') >>>
-      emitStmt knownRepr loc (TypedSetReg knownRepr $
-                              TypedExpr (BoolLit False)
-                              Nothing) >>>= \(_ :>: ret) ->
+      emitLLVMStmt knownRepr Nothing loc (AssertLLVMPtr r') >>>
+      dbgNames >>= \names ->
+      emitStmt knownRepr names loc
+        (TypedSetReg knownRepr $
+          TypedExpr (BoolLit False)
+          Nothing) >>>= \(MNil :>: ret) ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret)
 
@@ -3313,10 +3611,12 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
     (asLLVMOffset -> Just (x', _), PExpr_LLVMWord _e) ->
       let r' = TypedReg x' in
       stmtProvePerm r' (emptyMb $ ValPerm_Conj1 Perm_IsLLVMPtr) >>>
-      emitLLVMStmt knownRepr loc (AssertLLVMPtr r') >>>
-      emitStmt knownRepr loc (TypedSetReg knownRepr $
-                              TypedExpr (BoolLit False)
-                              Nothing) >>>= \(_ :>: ret) ->
+      emitLLVMStmt knownRepr Nothing loc (AssertLLVMPtr r') >>>
+      dbgNames >>= \names ->
+      emitStmt knownRepr names loc
+        (TypedSetReg knownRepr $
+          TypedExpr (BoolLit False)
+          Nothing) >>>= \(MNil :>: ret) ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx ret)
 
@@ -3327,6 +3627,14 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
                   sep [pretty "Could not compare LLVM pointer values",
                        permPretty i x1, pretty "and", permPretty i x2])
 
+tcEmitLLVMStmt _arch ctx loc LLVM_Debug{} =
+--  let tptr = tcReg ctx ptr in
+  dbgNames >>= \names ->
+  emitStmt knownRepr names loc
+    (TypedSetReg knownRepr (TypedExpr EmptyApp Nothing)) >>>= \(MNil :>: ret) ->
+  stmtRecombinePerms >>>
+  pure (addCtxName ctx ret)
+
 tcEmitLLVMStmt _arch _ctx _loc stmt =
   error ("tcEmitLLVMStmt: unimplemented statement - " ++ show (ppApp (\_ -> mempty) stmt))
 
@@ -3336,6 +3644,23 @@ tcEmitLLVMStmt _arch _ctx _loc stmt =
 ----------------------------------------------------------------------
 -- * Permission Checking for Jump Targets and Termination Statements
 ----------------------------------------------------------------------
+
+-- | Cast the primary permission for @x@ using any equality permissions on
+-- variables *not* in the supplied list of determined variables. The idea here
+-- is that we are trying to simplify out and remove un-determined variables.
+castUnDetVarsForVar :: NuMatchingAny1 r => NameSet CrucibleType -> ExprVar a ->
+                       ImplM vars s r RNil RNil ()
+castUnDetVarsForVar det_vars x =
+  (view varPermMap <$> getPerms) >>>= \var_perm_map ->
+  getPerm x >>>= \p ->
+  let nondet_perms =
+        NameMap.fromList $
+        filter (\(NameMap.NameAndElem y _) -> not $ NameSet.member y det_vars) $
+        NameMap.assocs var_perm_map in
+  let eqp = someEqProofFromSubst nondet_perms p in
+  implPushM x p >>>
+  implCastPermM x eqp >>>
+  implPopM x (someEqProofRHS eqp)
 
 -- | Simplify and drop permissions @p@ on variable @x@ so they only depend on
 -- the determined variables given in the supplied list
@@ -3370,10 +3695,26 @@ simplify1PermForDetVars det_vars x (ValPerm_Conj ps)
     getPerm x >>>= \new_p ->
     simplify1PermForDetVars det_vars x new_p
 
+-- For lowned permission l:lowned[ls](ps_in -o ps_out), end any lifetimes in ls
+-- that are not determined and remove them from the lowned permission for ls
+simplify1PermForDetVars det_vars l (ValPerm_LOwned ls _ _)
+  | l':_ <- flip mapMaybe ls (asVar >=> \l' ->
+                               if NameSet.member l' det_vars then Nothing
+                               else return l') =
+    implEndLifetimeRecM l' >>>
+    getPerm l >>>= \p' -> simplify1PermForDetVars det_vars l p'
+
 -- If none of the above cases match but p has only determined free variables,
 -- just leave p as is
 simplify1PermForDetVars det_vars _ p
   | nameSetIsSubsetOf (freeVars p) det_vars = pure ()
+
+-- If p is an equality permission to a word with undetermined variables,
+-- existentially quantify over the word
+simplify1PermForDetVars _ x p@(ValPerm_Eq (PExpr_LLVMWord e)) =
+  let mb_p = nu $ \z -> ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var z in
+  implPushM x p >>> introExistsM x e mb_p >>>
+  implPopM x (ValPerm_Exists mb_p)
 
 -- Otherwise, drop p, because it is not determined
 simplify1PermForDetVars _det_vars x p =
@@ -3388,6 +3729,7 @@ simplifyPermsForDetVars det_vars_list =
   let det_vars = NameSet.fromList det_vars_list in
   (permSetVars <$> getPerms) >>>= \vars ->
   mapM_ (\(SomeName x) ->
+          castUnDetVarsForVar det_vars x >>>
           getPerm x >>>= simplify1PermForDetVars det_vars x) vars
 
 
@@ -3464,27 +3806,12 @@ generalizeUnneededEqPerms =
 
 -- | Type-check a Crucible jump target
 tcJumpTarget :: PermCheckExtC ext => CtxTrans ctx -> JumpTarget cblocks ctx ->
-                StmtPermCheckM ext cblocks blocks tops ret RNil RNil
+                StmtPermCheckM ext cblocks blocks tops rets RNil RNil
                 (AnnotPermImpl (TypedJumpTarget blocks tops) RNil)
 tcJumpTarget ctx (JumpTarget blkID args_tps args) =
   top_get >>= \top_st ->
   get >>= \st ->
   gets (permCheckExtStateNames . stExtState) >>= \(Some ext_ns) ->
-  let tops_ns = stTopVars st
-      args_t = tcRegs ctx args
-      args_ns = typedRegsToVars args_t
-      tops_args_ns = RL.append tops_ns args_ns
-      tops_args_ext_ns = RL.append tops_args_ns ext_ns
-      {-
-      (gen_perms_hint, join_point_hint) =
-        case stFnHandle top_st of
-          SomeHandle h ->
-            (lookupBlockGenPermsHint (stPermEnv top_st) h
-             (stBlockTypes top_st) blkID
-            ,
-            lookupBlockJoinPointHint (stPermEnv top_st) h
-            (stBlockTypes top_st) blkID) -} in
-
   tcBlockID blkID >>>= \tpBlkID ->
 
   -- Step 0: run all of the following steps inside a local ImplM computation,
@@ -3494,6 +3821,13 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
   -- that when we type-check a condition branch instruction (Br), the
   -- simplifications of each branch do not affect each other.
   pcmRunImplImplM CruCtxNil mempty $
+
+  -- NOTE: the args all must be distinct variables (this is required by
+  -- implPushOrReflMultiM below and also the translation of jump targets)
+  implFreshenNames (typedRegsToVars $ tcRegs ctx args) >>>= \args_ns ->
+  let tops_ns = stTopVars st
+      tops_args_ns = RL.append tops_ns args_ns
+      tops_args_ext_ns = RL.append tops_args_ns ext_ns in
 
   -- Step 1: Compute the variables whose values are determined by the
   -- permissions on the top and normal arguments as the starting point for
@@ -3529,8 +3863,8 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
           tops_set = NameSet.fromList $ namesToNamesList tops_ns
           ghosts_perms = varPermsMulti ghosts_ns cur_perms
           args_perms =
-            buildDistPerms (\n -> if NameSet.member n tops_set then
-                                    ValPerm_Eq (PExpr_Var n)
+            buildDistPerms (\n -> if NameSet.member n tops_set
+                                  then ValPerm_Eq (PExpr_Var n)
                                   else cur_perms ^. varPerm n) args_ns
           perms_in = appendDistPerms (appendDistPerms
                                       tops_perms args_perms) ghosts_perms in
@@ -3587,14 +3921,14 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
       -- reflexivity.
       implWithoutTracingM (implPushOrReflMultiM perms_in) >>>
       pure (PermImpl_Done $
-               TypedJumpTarget siteID Proxy (mkCruCtx args_tps) perms_in)
+            TypedJumpTarget siteID Proxy (mkCruCtx args_tps) perms_in)
 
 
 -- | Type-check a termination statement
 tcTermStmt :: PermCheckExtC ext => CtxTrans ctx ->
               TermStmt cblocks ret ctx ->
-              StmtPermCheckM ext cblocks blocks tops ret RNil RNil
-              (TypedTermStmt blocks tops ret RNil)
+              StmtPermCheckM ext cblocks blocks tops (gouts :> ret) RNil RNil
+              (TypedTermStmt blocks tops (gouts :> ret) RNil)
 tcTermStmt ctx (Jump tgt) =
   TypedJump <$> tcJumpTarget ctx tgt
 tcTermStmt ctx (Br reg tgt1 tgt2) =
@@ -3604,28 +3938,45 @@ tcTermStmt ctx (Br reg tgt1 tgt2) =
   let treg = tcReg ctx reg in
   getRegEqualsExpr treg >>>= \treg_expr ->
   case treg_expr of
-    PExpr_Bool True -> trace "tcTermStmt: br reg known to be true!" $
-                       TypedJump <$> tcJumpTarget ctx tgt1
-    PExpr_Bool False -> trace "tcTermStmt: br reg known to be false!" $
-                        TypedJump <$> tcJumpTarget ctx tgt2
-    _ -> trace "tcTermStmt: br reg unknown, checking both branches..." $
-         TypedBr treg <$> tcJumpTarget ctx tgt1 <*> tcJumpTarget ctx tgt2
+    PExpr_Bool True ->
+      stmtTraceM (const $ pretty "tcTermStmt: br reg known to be true!") >>
+      (TypedJump <$> tcJumpTarget ctx tgt1)
+    PExpr_Bool False ->
+      stmtTraceM (const $ pretty "tcTermStmt: br reg known to be false!") >>
+      (TypedJump <$> tcJumpTarget ctx tgt2)
+    _ ->
+      stmtTraceM (const $ pretty
+                  "tcTermStmt: br reg unknown, checking both branches...") >>
+      (TypedBr treg <$> tcJumpTarget ctx tgt1 <*> tcJumpTarget ctx tgt2)
 tcTermStmt ctx (Return reg) =
-  let treg = tcReg ctx reg in
+  let ret_n = typedRegVar $ tcReg ctx reg in
   get >>>= \st ->
   top_get >>>= \top_st ->
   let tops = stTopVars st
+      rets = stRetTypes top_st
+      CruCtxCons gouts _ = rets
       mb_ret_perms =
+        give (cruCtxProxies rets) $
         varSubst (permVarSubstOfNames tops) $
-        mbSeparate (MNil :>: Proxy) $
+        mbSeparate (cruCtxProxies rets) $
         mbValuePermsToDistPerms (stRetPerms top_st)
-      req_perms =
-        varSubst (singletonVarSubst $ typedRegVar treg) mb_ret_perms
-      err = ppProofError (stPPInfo st) req_perms in
+      mb_req_perms =
+        fmap (varSubst (singletonVarSubst ret_n)) $
+        mbSeparate (MNil :>: Proxy) mb_ret_perms
+      err = ppProofError (stPPInfo st) mb_req_perms in
+  mapM (\(SomeName x) -> ppRelevantPerms $ TypedReg x) (NameSet.toList $
+                                                        freeVars mb_req_perms)
+  >>>= \pps_before ->
+  stmtTraceM (\i ->
+               pretty "Type-checking return statement" <> line <>
+               pretty "Current perms:" <> softline <>
+               ppCommaSep pps_before <> line <>
+               pretty "Required perms:" <> softline <>
+               permPretty i mb_req_perms) >>>
   TypedReturn <$>
-  pcmRunImplM CruCtxNil err
-  (const $ TypedRet Refl (stRetType top_st) treg mb_ret_perms)
-  (proveVarsImpl $ distPermsToExDistPerms req_perms)
+  pcmRunImplM gouts err
+  (\gouts_ns -> TypedRet Refl rets (gouts_ns :>: ret_n) mb_ret_perms)
+  (proveVarsImplVarEVars mb_req_perms)
 tcTermStmt ctx (ErrorStmt reg) =
   let treg = tcReg ctx reg in
   getRegPerm treg >>>= \treg_p ->
@@ -3646,30 +3997,33 @@ tcTermStmt _ tstmt =
 -- an empty stack of distinguished permissions
 tcEmitStmtSeq ::
   (PermCheckExtC ext, KnownRepr ExtRepr ext) =>
+  [Maybe String] ->
   CtxTrans ctx ->
   StmtSeq ext cblocks ret ctx ->
-  PermCheckM ext cblocks blocks tops ret
+  PermCheckM ext cblocks blocks tops (gouts :> ret)
     () RNil
-    (TypedStmtSeq ext blocks tops ret RNil) RNil
+    (TypedStmtSeq ext blocks tops (gouts :> ret) RNil) RNil
     ()
-tcEmitStmtSeq ctx (ConsStmt loc stmt stmts) =
-  setErrorPrefix loc (ppStmt (Ctx.size ctx) stmt) ctx (stmtInputRegs stmt) >>>
-  tcEmitStmt ctx loc stmt >>>= \ctx' -> tcEmitStmtSeq ctx' stmts
-tcEmitStmtSeq ctx (TermStmt loc tstmt) =
-  setErrorPrefix loc (pretty tstmt) ctx (termStmtRegs tstmt) >>>
+tcEmitStmtSeq names ctx (ConsStmt loc stmt stmts) =
+  setErrorPrefix names loc (ppStmt (Ctx.size ctx) stmt) ctx (stmtInputRegs stmt) >>>
+  tcEmitStmt ctx loc stmt >>>= \ctx' -> tcEmitStmtSeq names ctx' stmts
+tcEmitStmtSeq names ctx (TermStmt loc tstmt) =
+  setErrorPrefix names loc (pretty tstmt) ctx (termStmtRegs tstmt) >>>
   tcTermStmt ctx tstmt >>>= \typed_tstmt ->
   gmapRet (>> return (TypedTermStmt loc typed_tstmt))
 
 -- | Type-check the body of a Crucible block as the body of an entrypoint
 tcBlockEntryBody ::
   (PermCheckExtC ext, KnownRepr ExtRepr ext) =>
+  [Maybe String] ->
   Block ext cblocks ret args ->
-  TypedEntry TCPhase ext blocks tops ret (CtxToRList args) ghosts ->
-  TopPermCheckM ext cblocks blocks tops ret
+  TypedEntry TCPhase ext blocks tops (gouts :> ret) (CtxToRList args) ghosts ->
+  TopPermCheckM ext cblocks blocks tops (gouts :> ret)
     (Mb ((tops :++: CtxToRList args) :++: ghosts)
-      (TypedStmtSeq ext blocks tops ret ((tops :++: CtxToRList args) :++: ghosts)))
-tcBlockEntryBody blk entry@(TypedEntry {..}) =
-  runPermCheckM typedEntryID typedEntryArgs typedEntryGhosts typedEntryPermsIn $
+      (TypedStmtSeq ext blocks tops (gouts :> ret)
+       ((tops :++: CtxToRList args) :++: ghosts)))
+tcBlockEntryBody names blk entry@(TypedEntry {..}) =
+  runPermCheckM names typedEntryID typedEntryArgs typedEntryGhosts typedEntryPermsIn $
   \tops_ns args_ns ghosts_ns perms ->
   let ctx = mkCtxTrans (blockInputs blk) args_ns
       ns = RL.append (RL.append tops_ns args_ns) ghosts_ns in
@@ -3685,7 +4039,7 @@ tcBlockEntryBody blk entry@(TypedEntry {..}) =
                pretty "Input perms:"
                <> align (permPretty i perms)) >>>
   stmtRecombinePerms >>>
-  tcEmitStmtSeq ctx (blk ^. blockStmts)
+  tcEmitStmtSeq names ctx (blk ^. blockStmts)
 
 
 -- | Prove that the permissions held at a call site from the given source
@@ -3695,12 +4049,12 @@ proveCallSiteImpl ::
   TypedEntryID blocks args -> CruCtx args -> CruCtx ghosts -> CruCtx vars ->
   MbValuePerms ((tops :++: args) :++: vars) ->
   MbValuePerms ((tops :++: args) :++: ghosts) ->
-  TopPermCheckM ext cblocks blocks tops ret (CallSiteImpl
-                                             blocks
-                                             ((tops :++: args) :++: vars)
-                                             tops args ghosts)
+  TopPermCheckM ext cblocks blocks tops rets (CallSiteImpl
+                                              blocks
+                                              ((tops :++: args) :++: vars)
+                                              tops args ghosts)
 proveCallSiteImpl srcID destID args ghosts vars mb_perms_in mb_perms_out =
-  fmap CallSiteImpl $ runPermCheckM srcID args vars mb_perms_in $
+  fmap CallSiteImpl $ runPermCheckM [] srcID args vars mb_perms_in $
   \tops_ns args_ns _ perms_in ->
   let perms_out =
         give (cruCtxProxies ghosts) $
@@ -3708,7 +4062,8 @@ proveCallSiteImpl srcID destID args ghosts vars mb_perms_in mb_perms_out =
         mbSeparate (cruCtxProxies ghosts) $
         mbValuePermsToDistPerms mb_perms_out in
   stmtTraceM (\i ->
-               pretty "proveCallSiteImpl:" <> line <>
+               pretty ("proveCallSiteImpl, src = " ++ show srcID ++
+                       ", dest = " ++ show destID) <> line <>
                indent 2 (permPretty i perms_in) <> line <>
                pretty "-o" <> line <>
                indent 2 (permPretty i perms_out)) >>>
@@ -3732,9 +4087,9 @@ callSiteSetGhosts _ (TypedCallSite {..}) =
 -- permissions if that implication does not already exist
 visitCallSite ::
   (PermCheckExtC ext, KnownRepr ExtRepr ext) =>
-  TypedEntry TCPhase ext blocks tops ret args ghosts ->
+  TypedEntry TCPhase ext blocks tops rets args ghosts ->
   TypedCallSite TCPhase blocks tops args ghosts vars ->
-  TopPermCheckM ext cblocks blocks tops ret
+  TopPermCheckM ext cblocks blocks tops rets
   (TypedCallSite TCPhase blocks tops args ghosts vars)
 visitCallSite _ site@(TypedCallSite { typedCallSiteImpl = Just _ }) =
   return site
@@ -3748,11 +4103,12 @@ visitCallSite (TypedEntry {..}) site@(TypedCallSite {..})
 
 -- | Widen the permissions held by all callers of an entrypoint to compute new,
 -- weaker input permissions that can hopefully be satisfied by them
-widenEntry :: PermCheckExtC ext =>
-              TypedEntry TCPhase ext blocks tops ret args ghosts ->
-              Some (TypedEntry TCPhase ext blocks tops ret args)
-widenEntry (TypedEntry {..}) =
-  case foldl1' (widen typedEntryTops typedEntryArgs) $
+widenEntry :: PermCheckExtC ext => DebugLevel -> PermEnv ->
+              TypedEntry TCPhase ext blocks tops rets args ghosts ->
+              Some (TypedEntry TCPhase ext blocks tops rets args)
+widenEntry dlevel env (TypedEntry {..}) =
+  debugTrace dlevel ("Widening entrypoint: " ++ show typedEntryID) $
+  case foldl1' (widen dlevel env typedEntryTops typedEntryArgs) $
        map (fmapF typedCallSiteArgVarPerms) typedEntryCallers of
     Some (ArgVarPerms ghosts perms_in) ->
       let callers =
@@ -3767,46 +4123,68 @@ widenEntry (TypedEntry {..}) =
 -- with those input permissions, if it has not been type-checked already.
 --
 -- If any of the call site implications fail, and the input "can widen" flag is
--- 'True', recompute the entrypoint input permissions using widening
+-- 'True', recompute the entrypoint input permissions using widening.
 visitEntry ::
   (PermCheckExtC ext, CtxToRList cargs ~ args, KnownRepr ExtRepr ext) =>
+  [Maybe String] ->
   Bool -> Block ext cblocks ret cargs ->
-  TypedEntry TCPhase ext blocks tops ret args ghosts ->
-  TopPermCheckM ext cblocks blocks tops ret
-  (Some (TypedEntry TCPhase ext blocks tops ret args))
+  TypedEntry TCPhase ext blocks tops (gouts :> ret) args ghosts ->
+  TopPermCheckM ext cblocks blocks tops (gouts :> ret)
+  (Some (TypedEntry TCPhase ext blocks tops (gouts :> ret) args))
 
 -- If the entry is already complete, do nothing
-visitEntry _ _ entry
+visitEntry _ _ _ entry
   | isJust $ completeTypedEntry entry =
-    trace ("visitEntry " ++ show (typedEntryID entry) ++ ": no change") $
+    (stDebugLevel <$> get) >>= \dlevel ->
+    debugTrace dlevel ("visitEntry " ++ show (typedEntryID entry)
+                       ++ ": no change") $
     return $ Some entry
 -- Otherwise, visit the call sites, widen if needed, and type-check the body
-visitEntry _ _ (TypedEntry {..})
-  | tracePretty (vsep [pretty ("visitEntry " ++ show typedEntryID
-                               ++ " with input perms:"),
-                       permPretty emptyPPInfo typedEntryPermsIn]) False = undefined
-visitEntry can_widen blk entry =
+visitEntry names can_widen blk entry =
+  (stDebugLevel <$> get) >>= \dlevel ->
+  (stPermEnv <$> get) >>= \env ->
+  debugTracePretty dlevel
+  (vsep [pretty ("visitEntry " ++ show (typedEntryID entry)
+                 ++ " with input perms:"),
+         permPretty emptyPPInfo (typedEntryPermsIn entry)])
+  (return ()) >>= \() ->
+
   mapM (traverseF $
         visitCallSite entry) (typedEntryCallers entry) >>= \callers ->
+  debugTrace dlevel ("can_widen: " ++ show can_widen ++ ", any_fails: "
+                     ++ show (any (anyF typedCallSiteImplFails) callers)) $
   if can_widen && any (anyF typedCallSiteImplFails) callers then
-    case widenEntry entry of
-      Some entry' -> visitEntry False blk entry'
+    case widenEntry dlevel env entry of
+      Some entry' ->
+        -- If we widen then we are throwing away the old body, so all of its
+        -- callees are no longer needed and can be deleted
+        modifying stBlockMap (deleteEntryCallees $ typedEntryID entry) >>
+        visitEntry names False blk entry'
   else
-    do body <- maybe (tcBlockEntryBody blk entry) return (typedEntryBody entry)
-       return $ Some $ entry { typedEntryCallers = callers,
-                               typedEntryBody = Just body }
+    if isJust (typedEntryBody entry) then
+      -- If the body was complete when we started and we are not widening, there
+      -- is no reason to re-type-check the body, so just update the callers
+      return $ Some $ entry { typedEntryCallers = callers }
+    else
+      do body <- maybe (tcBlockEntryBody names blk entry) return (typedEntryBody entry)
+         return $ Some $ entry { typedEntryCallers = callers,
+                                 typedEntryBody = Just body }
+
 
 -- | Visit a block by visiting all its entrypoints
 visitBlock ::
   (PermCheckExtC ext, KnownRepr ExtRepr ext) =>
-  TypedBlock TCPhase ext blocks tops ret args ->
-  TopPermCheckM ext cblocks blocks tops ret
-  (TypedBlock TCPhase ext blocks tops ret args)
-visitBlock blk@(TypedBlock {..}) =
+  Bool -> {- ^ Whether widening can be applied in type-checking this block -}
+  TypedBlock TCPhase ext blocks tops rets args ->
+  TopPermCheckM ext cblocks blocks tops rets
+  (TypedBlock TCPhase ext blocks tops rets args)
+visitBlock can_widen blk@(TypedBlock {..}) =
   (stCBlocksEq <$> get) >>= \Refl ->
   flip (set typedBlockEntries) blk <$>
   mapM (\(Some entry) ->
-         visitEntry typedBlockCanWiden typedBlockBlock entry) _typedBlockEntries
+         visitEntry _typedBlockNames (can_widen && typedBlockCanWiden)
+         typedBlockBlock entry)
+  _typedBlockEntries
 
 -- | Flatten a list of topological ordering components to a list of nodes in
 -- topological order paired with a flag denoting which nodes were loop heads
@@ -3828,39 +4206,56 @@ cfgOrderWithSCCs cfg =
    (fmapFC (const $ Constant False) $ cfgBlockMap cfg)
    nodes_sccs)
 
+-- | The maximum number of iterations through the CFG while we allow widening
+-- when type-checking before we give up and force everything to be done
+maxWideningIters :: Int
+maxWideningIters = 5
+
 -- | Type-check a Crucible CFG
 tcCFG ::
-  forall w ext cblocks ghosts inits ret.
+  forall w ext cblocks ghosts inits gouts ret.
   (PermCheckExtC ext, KnownRepr ExtRepr ext, 1 <= w, 16 <= w) =>
   NatRepr w ->
-  PermEnv -> EndianForm ->
-  FunPerm ghosts (CtxToRList inits) ret ->
+  PermEnv -> EndianForm -> DebugLevel ->
+  FunPerm ghosts (CtxToRList inits) gouts ret ->
   CFG ext cblocks inits ret ->
-  TypedCFG ext (CtxCtxToRList cblocks) ghosts (CtxToRList inits) ret
-tcCFG w env endianness fun_perm cfg =
+  TypedCFG ext (CtxCtxToRList cblocks) ghosts (CtxToRList inits) gouts ret
+tcCFG w env endianness dlevel fun_perm cfg =
   let h = cfgHandle cfg
       ghosts = funPermGhosts fun_perm
+      gouts = funPermGouts fun_perm
       (nodes, sccs) = cfgOrderWithSCCs cfg
-      init_st = let ?ptrWidth = w in emptyTopPermCheckState env fun_perm endianness cfg sccs
+      init_st =
+        let ?ptrWidth = w in
+        emptyTopPermCheckState env fun_perm endianness dlevel cfg sccs
       tp_nodes = map (\(Some blkID) ->
                        Some $ stLookupBlockID blkID init_st) nodes in
-  let tp_blk_map = flip evalState init_st $ main_loop tp_nodes in
-  TypedCFG { tpcfgHandle = TypedFnHandle ghosts h
+  let tp_blk_map =
+        flip evalState init_st $ main_loop maxWideningIters tp_nodes in
+  TypedCFG { tpcfgHandle = TypedFnHandle ghosts gouts h
            , tpcfgFunPerm = fun_perm
            , tpcfgBlockMap = tp_blk_map
            , tpcfgEntryID =
                TypedEntryID (stLookupBlockID (cfgEntryBlockID cfg) init_st) 0 }
   where
-    main_loop :: [Some (TypedBlockID blocks :: RList CrucibleType -> Type)] ->
-                 TopPermCheckM ext cblocks blocks tops ret
-                 (TypedBlockMap TransPhase ext blocks tops ret)
-    main_loop nodes =
+    main_loop :: Int ->
+                 [Some (TypedBlockID blocks :: RList CrucibleType -> Type)] ->
+                 TopPermCheckM ext cblocks blocks tops rets
+                 (TypedBlockMap TransPhase ext blocks tops rets)
+    main_loop rem_iters _
+      -- We may have to iterate through the CFG twice with widening turned off
+      -- to finally get everything to quiesce, once to ensure all block bodies
+      -- have type-checked and once again to ensure any back edged produced in
+      -- that last iteration have completed
+      | rem_iters < -2 = error "tcCFG: failed to complete on last iteration"
+    main_loop rem_iters nodes =
       get >>= \st ->
       case completeTypedBlockMap $ view stBlockMap st of
         Just blkMapOut -> return blkMapOut
         Nothing ->
           forM_ nodes (\(Some tpBlkID) ->
-                        use (stBlockMap . member tpBlkID) >>=
-                        (visitBlock >=>
-                         assign (stBlockMap . member tpBlkID))) >>
-          main_loop nodes
+                        let memb = typedBlockIDMember tpBlkID in
+                        use (stBlockMap . member memb) >>=
+                        (visitBlock (rem_iters > 0) >=>
+                         assign (stBlockMap . member memb))) >>
+          main_loop (rem_iters - 1) nodes

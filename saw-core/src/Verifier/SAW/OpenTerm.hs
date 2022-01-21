@@ -19,13 +19,15 @@ built.
 
 module Verifier.SAW.OpenTerm (
   -- * Open terms and converting to closed terms
-  OpenTerm(..), completeOpenTerm, completeOpenTermType,
+  OpenTerm(..), completeOpenTerm, completeNormOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
   closedOpenTerm, openOpenTerm, failOpenTerm,
   bindTCMOpenTerm, bindPPOpenTerm, openTermType,
   flatOpenTerm, sortOpenTerm, natOpenTerm,
   unitOpenTerm, unitTypeOpenTerm,
   stringLitOpenTerm, stringTypeOpenTerm,
+  trueOpenTerm, falseOpenTerm, boolOpenTerm, boolTypeOpenTerm,
+  arrayValueOpenTerm, bvLitOpenTerm, bvTypeOpenTerm,
   pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
   tupleOpenTerm', tupleTypeOpenTerm',
@@ -33,23 +35,29 @@ module Verifier.SAW.OpenTerm (
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, extCnsOpenTerm,
   applyOpenTerm, applyOpenTermMulti, applyPiOpenTerm, piArgOpenTerm,
   lambdaOpenTerm, lambdaOpenTermMulti, piOpenTerm, piOpenTermMulti,
-  arrowOpenTerm, letOpenTerm,
+  arrowOpenTerm, letOpenTerm, sawLetOpenTerm,
   -- * Monadic operations for building terms with binders
   OpenTermM(..), completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
   lambdaOpenTermAuxM, piOpenTermAuxM
   ) where
 
+import qualified Data.Vector as V
 import Control.Monad
-import Control.Monad.IO.Class
+import Control.Monad.State
+import Control.Monad.Writer
 import Data.Text (Text)
 import Numeric.Natural
+
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.Module
+import Verifier.SAW.Recognizer
 
 -- | An open term is represented as a type-checking computation that computes a
 -- SAW core term and its type
@@ -60,6 +68,11 @@ completeOpenTerm :: SharedContext -> OpenTerm -> IO Term
 completeOpenTerm sc (OpenTerm termM) =
   either (fail . show) return =<<
   runTCM (typedVal <$> termM) sc Nothing []
+
+-- | "Complete" an 'OpenTerm' to a closed term and 'betaNormalize' the result
+completeNormOpenTerm :: SharedContext -> OpenTerm -> IO Term
+completeNormOpenTerm sc m =
+  completeOpenTerm sc m >>= sawLetMinimize sc >>= betaNormalize sc
 
 -- | "Complete" an 'OpenTerm' to a closed term for its type
 completeOpenTermType :: SharedContext -> OpenTerm -> IO Term
@@ -117,7 +130,7 @@ flatOpenTerm ftf = OpenTerm $
 
 -- | Build an 'OpenTerm' for a sort
 sortOpenTerm :: Sort -> OpenTerm
-sortOpenTerm s = flatOpenTerm (Sort s)
+sortOpenTerm s = flatOpenTerm (Sort s False)
 
 -- | Build an 'OpenTerm' for a natural number literal
 natOpenTerm :: Natural -> OpenTerm
@@ -138,6 +151,39 @@ stringLitOpenTerm = flatOpenTerm . StringLit
 -- | Return the SAW core type @String@ of strings.
 stringTypeOpenTerm :: OpenTerm
 stringTypeOpenTerm = globalOpenTerm "Prelude.String"
+
+-- | The 'True' value as a SAW core term
+trueOpenTerm :: OpenTerm
+trueOpenTerm = globalOpenTerm "Prelude.True"
+
+-- | The 'False' value as a SAW core term
+falseOpenTerm :: OpenTerm
+falseOpenTerm = globalOpenTerm "Prelude.False"
+
+-- | Convert a 'Bool' to a SAW core term
+boolOpenTerm :: Bool -> OpenTerm
+boolOpenTerm True = globalOpenTerm "Prelude.True"
+boolOpenTerm False = globalOpenTerm "Prelude.False"
+
+-- | The 'Bool' type as a SAW core term
+boolTypeOpenTerm :: OpenTerm
+boolTypeOpenTerm = globalOpenTerm "Prelude.Bool"
+
+-- | Build an 'OpenTerm' for an array literal
+arrayValueOpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
+arrayValueOpenTerm tp elems =
+  flatOpenTerm $ ArrayValue tp $ V.fromList elems
+
+-- | Create a SAW core term for a bitvector literal
+bvLitOpenTerm :: [Bool] -> OpenTerm
+bvLitOpenTerm bits =
+  arrayValueOpenTerm boolTypeOpenTerm $ map boolOpenTerm bits
+
+-- | Create a SAW core term for the type of a bitvector
+bvTypeOpenTerm :: Integral a => a -> OpenTerm
+bvTypeOpenTerm n =
+  applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
+  [natOpenTerm (fromIntegral n), boolTypeOpenTerm]
 
 -- | Build an 'OpenTerm' for a pair
 pairOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
@@ -224,7 +270,9 @@ dataTypeOpenTerm d all_args = OpenTerm $ do
 -- | Build an 'OpenTerm' for a global name.
 globalOpenTerm :: Ident -> OpenTerm
 globalOpenTerm ident =
-  OpenTerm (liftTCM scGlobalDef ident >>= typeInferComplete)
+  OpenTerm (do trm <- liftTCM scGlobalDef ident
+               tp <- liftTCM scTypeOfGlobal ident
+               return $ TypedTerm trm tp)
 
 -- | Build an 'OpenTerm' for an external constant
 extCnsOpenTerm :: ExtCns Term -> OpenTerm
@@ -320,6 +368,14 @@ letOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> (OpenTerm -> OpenTerm) ->
                OpenTerm
 letOpenTerm x tp rhs body_f = applyOpenTerm (lambdaOpenTerm x tp body_f) rhs
 
+-- | Build a let expression as an 'OpenTerm'. This is equivalent to
+-- > 'applyOpenTerm' ('lambdaOpenTerm' x tp body) rhs
+sawLetOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> OpenTerm ->
+                  (OpenTerm -> OpenTerm) -> OpenTerm
+sawLetOpenTerm x tp tp_ret rhs body_f =
+  applyOpenTermMulti (globalOpenTerm "Prelude.sawLet")
+  [tp, tp_ret, rhs, lambdaOpenTerm x tp body_f]
+
 -- | The monad for building 'OpenTerm's if you want to add in 'IO' actions. This
 -- is just the type-checking monad, but we give it a new name to keep this
 -- module self-contained.
@@ -393,3 +449,104 @@ piOpenTermAuxM ::
 piOpenTermAuxM x tp body_f =
   do (tp', body, a) <- bindOpenTermAuxM x tp body_f
      return (OpenTerm (typeInferComplete $ Pi x tp' body), a)
+
+
+--------------------------------------------------------------------------------
+-- sawLet-minimization
+
+-- | A map from each deBruijn index to a count of its occurrences in a term
+newtype VarOccs = VarOccs [Integer]
+
+-- | Make a 'VarOccs' with a single occurrence of a deBruijn index
+varOccs1 :: DeBruijnIndex -> VarOccs
+varOccs1 i = VarOccs (take i (repeat 0) ++ [1])
+
+-- | Move a 'VarOccs' out of a binder by returning the number of occurrences of
+-- deBruijn index 0 along with the result of subtracting 1 from all other indices
+unconsVarOccs :: VarOccs -> (Integer, VarOccs)
+unconsVarOccs (VarOccs []) = (0, VarOccs [])
+unconsVarOccs (VarOccs (cnt:occs)) = (cnt, VarOccs occs)
+
+-- | Multiply every index in a 'VarOccs' by a constant
+multVarOccs :: Integer -> VarOccs -> VarOccs
+multVarOccs i (VarOccs occs) = VarOccs $ map (* i) occs
+
+-- | The infinite list of zeroes
+zeroes :: [Integer]
+zeroes = 0:zeroes
+
+instance Semigroup VarOccs where
+  (VarOccs occs1) <> (VarOccs occs2)
+    | length occs1 < length occs2
+    = VarOccs (zipWith (+) (occs1 ++ zeroes) occs2)
+  (VarOccs occs1) <> (VarOccs occs2)
+    = VarOccs (zipWith (+) occs1 (occs2 ++ zeroes))
+
+instance Monoid VarOccs where
+  mempty = VarOccs []
+
+-- | 'listen' to the output of a writer computation and return that output but
+-- drop it from the writer output of the computation
+listenDrop :: MonadWriter w m => m a -> m (a, w)
+listenDrop m = pass (listen m >>= \aw -> return (aw, const mempty))
+
+-- | The monad for sawLet minimization
+type SLMinM = StateT (IntMap (Term, VarOccs)) (WriterT VarOccs IO)
+
+-- | Find every subterm of the form @sawLet a b rhs (\ x -> body)@ and, whenever
+-- @x@ occurs at most once in @body@, unfold the @sawLet@ by substituting @rhs@
+-- into @body@
+sawLetMinimize :: SharedContext -> Term -> IO Term
+sawLetMinimize sc t_top =
+  fst <$> runWriterT (evalStateT (slMinTerm t_top) IntMap.empty) where
+  slMinTerm :: Term -> SLMinM Term
+  slMinTerm (Unshared tf) = slMinTermF tf
+  slMinTerm t@(STApp { stAppIndex = i }) =
+    do memo_table <- get
+       case IntMap.lookup i memo_table of
+         Just (t', occs) ->
+           -- NOTE: the fact that we explicitly tell occs here means that we are
+           -- going to double-count variable occurrences for multiple
+           -- occurrences of the same subterm. That is, a variable occurence
+           -- counts for each copy of a shared subterm.
+           tell occs >> return t'
+         Nothing ->
+           do (t', occs) <- listen $ slMinTermF (unwrapTermF t)
+              modify $ IntMap.insert i (t', occs)
+              return t'
+
+  slMinTermF :: TermF Term -> SLMinM Term
+  slMinTermF tf@(App (asApplyAll ->
+                      (isGlobalDef "Prelude.sawLet" -> Just _, [_a, _b, rhs]))
+                 (asLambda -> Just (_, _, body))) =
+    do (body', (unconsVarOccs ->
+                (x_cnt, body_occs))) <- listenDrop $ slMinTerm body
+       if x_cnt > 1 then slMinTermF' tf else
+         do (rhs', rhs_occs) <- listenDrop $ slMinTerm rhs
+            tell (multVarOccs x_cnt rhs_occs <> body_occs)
+            liftIO $ instantiateVar sc 0 rhs' body'
+  slMinTermF tf = slMinTermF' tf
+
+  slMinTermF' :: TermF Term -> SLMinM Term
+  slMinTermF' (FTermF ftf) = slMinFTermF ftf
+  slMinTermF' (App f arg) =
+    do f' <- slMinTerm f
+       arg' <- slMinTerm arg
+       liftIO $ scTermF sc (App f' arg')
+  slMinTermF' (Lambda x tp body) =
+    do tp' <- slMinTerm tp
+       (body', body_occs) <- listenDrop $ slMinTerm body
+       tell $ snd $ unconsVarOccs body_occs
+       liftIO $ scTermF sc (Lambda x tp' body')
+  slMinTermF' (Pi x tp body) =
+    do tp' <- slMinTerm tp
+       (body', body_occs) <- listenDrop $ slMinTerm body
+       tell $ snd $ unconsVarOccs body_occs
+       liftIO $ scTermF sc (Pi x tp' body')
+  slMinTermF' tf@(LocalVar i) =
+    tell (varOccs1 i) >> liftIO (scTermF sc tf)
+  slMinTermF' tf@(Constant _ _) = liftIO (scTermF sc tf)
+
+  slMinFTermF :: FlatTermF Term -> SLMinM Term
+  slMinFTermF ftf@(ExtCns _) = liftIO $ scFlatTermF sc ftf
+  slMinFTermF ftf = traverse slMinTerm ftf >>= liftIO . scFlatTermF sc

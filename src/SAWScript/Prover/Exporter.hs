@@ -50,21 +50,24 @@ import Control.Monad (unless)
 import Control.Monad.Except (runExceptT)
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
+import Data.Maybe (mapMaybe)
 import Data.Parameterized.Nonce (globalNonceGenerator)
 import Data.Parameterized.Some (Some(..))
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.SBV.Dynamic as SBV
 import System.Directory (removeFile)
+import System.FilePath (takeBaseName)
 import System.IO
 import System.IO.Temp(emptySystemTempFile)
 import Data.Text (pack)
-import Data.Text.Prettyprint.Doc.Render.Text
+import qualified Data.Vector as V
 import Prettyprinter (vcat)
+import Prettyprinter.Render.Text
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
-import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule)
+import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule, ImportPrimitiveOptions(..))
 import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
 import Verifier.SAW.FiniteValue
@@ -94,7 +97,7 @@ import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
 import What4.Config (extendConfig)
-import What4.Interface (getConfiguration)
+import What4.Interface (getConfiguration, IsSymExprBuilder)
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
 import What4.Protocol.SMTLib2.Response (smtParseOptions)
 import What4.Protocol.VerilogWriter (exprsVerilog)
@@ -147,8 +150,8 @@ writeAIG f t = do
      io $ AIG.writeAiger f aig
 
 withABCVerilog :: FilePath -> Term -> (FilePath -> String) -> TopLevel ()
-withABCVerilog baseName t buildCmd =
-  do verilogFile <- io $ emptySystemTempFile (baseName ++ ".v")
+withABCVerilog fileName t buildCmd =
+  do verilogFile <- io $ emptySystemTempFile (takeBaseName fileName ++ ".v")
      sc <- getSharedContext
      write_verilog sc verilogFile t
      io $
@@ -325,7 +328,7 @@ writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
      let argSValues = map (snd . snd) vars
      let argSValueNames = zip argSValues (map (toShortName . ecName) argNames)
      argTys' <- traverse f argTys
-     let mkInput (v, nm) = map (,nm) <$> flattenSValue v
+     let mkInput (v, nm) = map (,nm) <$> flattenSValue sym v
      ins <- concat <$> mapM mkInput argSValueNames
      edoc <- runExceptT $ exprsVerilog sym ins [Some bval] "f"
      case edoc of
@@ -337,20 +340,28 @@ writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
          hClose h
      return (zip argNames argTys')
 
-flattenSValue :: W4Sim.SValue sym -> IO [Some (W4.SymExpr sym)]
-flattenSValue (Sim.VBool b) = return [Some b]
-flattenSValue (Sim.VWord (W4Sim.DBV w)) = return [Some w]
-flattenSValue (Sim.VPair l r) =
+flattenSValue :: IsSymExprBuilder sym => sym -> W4Sim.SValue sym -> IO [Some (W4.SymExpr sym)]
+flattenSValue _ (Sim.VBool b) = return [Some b]
+flattenSValue _ (Sim.VWord (W4Sim.DBV w)) = return [Some w]
+flattenSValue sym (Sim.VPair l r) =
   do lv <- Sim.force l
      rv <- Sim.force r
-     ls <- flattenSValue lv
-     rs <- flattenSValue rv
+     ls <- flattenSValue sym lv
+     rs <- flattenSValue sym rv
      return (ls ++ rs)
-flattenSValue (Sim.VVector ts) =
+flattenSValue sym (Sim.VVector ts) =
   do vs <- mapM Sim.force ts
-     es <- mapM flattenSValue vs
-     return (concat es)
-flattenSValue sval = fail $ "write_verilog: unsupported result type: " ++ show sval
+     let getBool (Sim.VBool b) = Just b
+         getBool _ = Nothing
+         mbs = V.map getBool vs
+     case sequence mbs of
+       Just bs ->
+         do w <- W4Sim.bvPackBE sym bs
+            case w of
+              W4Sim.DBV bv -> return [Some bv]
+              W4Sim.ZBV -> return []
+       Nothing -> concat <$> mapM (flattenSValue sym) vs
+flattenSValue _ sval = fail $ "write_verilog: unsupported result type: " ++ show sval
 
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
@@ -361,8 +372,8 @@ writeVerilog sc path t = do
   -- order, followed by free variables (probably in the order seen
   -- during traversal, because that's at least _a_ deterministic order).
   (argNames, args, _, sval) <- W4Sim.w4EvalAny sym st sc mempty mempty t
-  es <- flattenSValue sval
-  let mkInput (v, nm) = map (, pack nm) <$> flattenSValue v
+  es <- flattenSValue sym sval
+  let mkInput (v, nm) = map (, pack nm) <$> flattenSValue sym v
   ins <- concat <$> mapM mkInput (zip args argNames)
   edoc <- runExceptT $ exprsVerilog sym ins es "f"
   case edoc of
@@ -399,6 +410,14 @@ withImportSAWCorePrelude config@(Coq.TranslationConfiguration { Coq.postPreamble
    ]
   }
 
+withImportSAWCorePreludeExtra :: Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
+withImportSAWCorePreludeExtra config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
+  config { Coq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToCoq Require Import SAWCorePreludeExtra."
+   ]
+  }
+
+
 withImportCryptolPrimitivesForSAWCore ::
   Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
 withImportCryptolPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
@@ -407,6 +426,16 @@ withImportCryptolPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq
    , "Import CryptolPrimitivesForSAWCore."
    ]
   }
+
+
+withImportCryptolPrimitivesForSAWCoreExtra ::
+  Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
+withImportCryptolPrimitivesForSAWCoreExtra config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
+  config { Coq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra."
+   ]
+  }
+
 
 writeCoqTerm ::
   String ->
@@ -417,8 +446,8 @@ writeCoqTerm ::
   TopLevel ()
 writeCoqTerm name notations skips path t = do
   let configuration =
-        withImportSAWCorePrelude $
         withImportCryptolPrimitivesForSAWCore $
+        withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
   case Coq.translateTermAsDeclImports configuration name t of
     Left err -> throwTopLevel $ "Error translating: " ++ show err
@@ -451,25 +480,21 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   let ?fileReader = BS.readFile
   env <- initCryptolEnv sc
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
-  (cm, _) <- loadCryptolModule sc env inputFile
-  let cryptolPreludeDecls = map Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
+  let primOpts = ImportPrimitiveOptions{ allowUnknownPrimitives = True }
+  (cm, _) <- loadCryptolModule sc primOpts env inputFile
+  let cryptolPreludeDecls = mapMaybe Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
   let configuration =
-        withImportSAWCorePrelude $
+        withImportCryptolPrimitivesForSAWCoreExtra $
         withImportCryptolPrimitivesForSAWCore $
+        withImportSAWCorePreludeExtra $
+        withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
-  case Coq.translateCryptolModule configuration cryptolPreludeDecls cm of
+  let nm = takeBaseName inputFile
+  case Coq.translateCryptolModule nm configuration cryptolPreludeDecls cm of
     Left e -> putStrLn $ show e
     Right cmDoc ->
       writeFile outputFile
-      (show . vcat $ [ Coq.preamble configuration
-                     , "From CryptolToCoq Require Import SAWCorePrelude."
-                     , "Import SAWCorePrelude."
-                     , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCore."
-                     , "Import CryptolPrimitives."
-                     , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra."
-                     , ""
-                     , cmDoc
-                     ])
+      (show . vcat $ [ Coq.preamble configuration, cmDoc])
 
 nameOfSAWCorePrelude :: Un.ModuleName
 nameOfSAWCorePrelude = Un.moduleName preludeModule
@@ -502,6 +527,7 @@ writeCoqCryptolPrimitivesForSAWCore outputFile notations skips = do
   () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrimitivesForSAWCore"]))
   m  <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   let configuration =
+        withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
   let doc = Coq.translateSAWModule configuration m

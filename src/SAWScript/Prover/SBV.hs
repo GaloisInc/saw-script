@@ -70,6 +70,8 @@ proveUnintSBVIO sc conf unintSet timeout goal =
                 r'   = SBVSim.getLabels labels dict argNames
             return (r', stats)
 
+       SBV.DeltaSat{} -> fail "Prover returned an unexpected DeltaSat result"
+
        SBV.SatExtField {} -> fail "Prover returned model in extension field"
 
        SBV.Unknown {} -> fail "Prover returned Unknown"

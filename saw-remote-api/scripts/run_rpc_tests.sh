@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 pushd $DIR/../python
@@ -11,6 +13,7 @@ function run_test {
 }
 
 echo "Setting up python environment for remote server clients..."
+poetry update
 poetry install
 
 echo "Typechecking code with mypy..."
@@ -25,6 +28,8 @@ if [[ ! -x "$SAW_SERVER" ]]; then
     exit 1
   fi
 fi
+
+export CLASSPATH=$(pwd)/tests/saw/test-files
 
 echo "Running saw-remote-api tests..."
 echo "Using server $SAW_SERVER"

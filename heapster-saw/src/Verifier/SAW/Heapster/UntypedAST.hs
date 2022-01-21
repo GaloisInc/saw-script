@@ -8,9 +8,10 @@ import Verifier.SAW.Heapster.Located
 -- @(context). inputs -o outputs@
 data AstFunPerm = AstFunPerm
   Pos
-  [(Located String, AstType)]
-  [(Located String, AstExpr)]
-  [(Located String, AstExpr)]   -- ^ @-o@ position, context, inputs, outputs
+  [(Located String, AstType)] -- ^ The context of ghost variables
+  [(Located String, AstExpr)] -- ^ The input permissions
+  [(Located String, AstType)] -- ^ The context of ghost output variables
+  [(Located String, AstExpr)] -- ^ The output permissions
   deriving Show
 
 -- | Unchecked array permission
@@ -61,7 +62,7 @@ data AstExpr
   | ExExSh Pos String AstType AstExpr -- ^ existentially quantified shape
   | ExFieldSh Pos (Maybe AstExpr) AstExpr -- ^ field shape
   | ExPtrSh Pos (Maybe AstExpr) (Maybe AstExpr) AstExpr -- ^ pointer shape
-  | ExArraySh Pos AstExpr AstExpr [(Maybe AstExpr, AstExpr)] -- array shape
+  | ExArraySh Pos AstExpr AstExpr AstExpr -- ^ array shape
 
   | ExEqual Pos AstExpr AstExpr -- ^ equal bitvector proposition
   | ExNotEqual Pos AstExpr AstExpr -- ^ not-equal bitvector proposition
@@ -69,14 +70,15 @@ data AstExpr
   | ExLessEqual Pos AstExpr AstExpr -- ^ less-than or equal-to bitvector proposition
 
   | ExEq Pos AstExpr            -- ^ equal permission
-  | ExLOwned Pos [(Located String, AstExpr)] [(Located String, AstExpr)] -- ^ owned permission
+  | ExLOwned Pos [AstExpr] [(Located String, AstExpr)] [(Located String, AstExpr)] -- ^ owned permission
   | ExLCurrent Pos (Maybe AstExpr) -- ^ current permission
+  | ExLFinished Pos -- ^ finished permission
   | ExShape Pos AstExpr -- ^ shape literal
   | ExFree Pos AstExpr -- ^ free literal
   | ExPtr Pos (Maybe AstExpr) AstExpr AstExpr (Maybe AstExpr) AstExpr -- ^ pointer permission
   | ExMemblock Pos (Maybe AstExpr) AstExpr AstExpr AstExpr AstExpr -- ^ memblock permission
   | ExLlvmFunPtr Pos AstExpr AstExpr AstFunPerm -- ^ function pointer permission
-  | ExArray Pos AstExpr AstExpr AstExpr [ArrayPerm] -- array permission
+  | ExArray Pos (Maybe AstExpr) AstExpr AstExpr AstExpr AstExpr AstExpr -- ^ array permission
   deriving Show
 
 -- | Returns outermost position
@@ -106,15 +108,16 @@ instance HasPos AstExpr where
   pos (ExNotEqual   p _ _      ) = p
   pos (ExLessThan   p _ _      ) = p
   pos (ExLessEqual  p _ _      ) = p
-  pos (ExLOwned     p _ _      ) = p
+  pos (ExLOwned     p _ _ _    ) = p
   pos (ExLCurrent   p _        ) = p
+  pos (ExLFinished  p          ) = p
   pos (ExShape      p _        ) = p
   pos (ExFree       p _        ) = p
   pos (ExPtr        p _ _ _ _ _) = p
   pos (ExMemblock   p _ _ _ _ _) = p
   pos (ExLlvmFunPtr p _ _ _    ) = p
   pos (ExLlvmFrame  p _        ) = p
-  pos (ExArray      p _ _ _ _  ) = p
+  pos (ExArray      p _ _ _ _ _ _) = p
   pos (ExArraySh    p _ _ _    ) = p
 
 -- | Returns outermost position

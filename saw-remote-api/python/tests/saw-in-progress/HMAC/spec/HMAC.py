@@ -1,9 +1,8 @@
 import os
 import os.path
 from cryptol.cryptoltypes import to_cryptol
-from saw import *
-from saw.llvm import Contract, LLVMType, LLVMArrayType, uint8_t, uint32_t, void, SetupVal, FreshVar, cryptol, struct
-import saw.llvm_types as ty
+from saw_client import *
+from saw_client.llvm import *
 from env_server import *
 
 # N.B., transliteration from HMAC.saw
@@ -29,8 +28,8 @@ def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None, *, re
     
     :returns A fresh variable bound to the pointers initial value and the newly allocated pointer. (The fresh
              variable will be assigned ``name`` if provided/available.)"""
-    var = c.declare_var(ty, name)
-    ptr = c.alloc(c, ty, points_to=var, read_only=read_only)
+    var = c.fresh_var(ty, name)
+    ptr = c.alloc(ty, points_to=var, read_only=read_only)
     return (var, ptr)
 
 # TODO(AMK) Um... what is this:
@@ -89,16 +88,16 @@ def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None, *, re
 
 
 def setup_hash_state(c : Contract, pstate : SetupVal) -> Tuple[Any, FreshVar]:
-    alg0 = c.fresh_var(ty.i32, "alg")
-    h0 = c.fresh_var(ty.array(8, ty.i64), "h0")
-    Nl0 = c.fresh_var(ty.i64, "Nl")
-    Nh0 = c.fresh_var(ty.i64, "Nh")
-    u0 = c.fresh_var(ty.array(16, ty.i64), "u")
-    num0 = c.fresh_var(ty.i32, "h0")
-    is_ready_for_input0 = c.fresh_var(ty.i8, "is_ready_for_input")
-    currently_in_hash0 = c.fresh_var(ty.i64, "currently_in_hash")
-    md_len0 = c.fresh_var(ty.i32, "md_len")
-    (_, pimpl) = ptr_to_fresh(c, ty.alias('struct.s2n_hash'), "impl", read_only=True)
+    alg0 = c.fresh_var(i32, "alg")
+    h0 = c.fresh_var(array_ty(8, i64), "h0")
+    Nl0 = c.fresh_var(i64, "Nl")
+    Nh0 = c.fresh_var(i64, "Nh")
+    u0 = c.fresh_var(array_ty(16, i64), "u")
+    num0 = c.fresh_var(i32, "h0")
+    is_ready_for_input0 = c.fresh_var(i8, "is_ready_for_input")
+    currently_in_hash0 = c.fresh_var(i64, "currently_in_hash")
+    md_len0 = c.fresh_var(i32, "md_len")
+    (_, pimpl) = ptr_to_fresh(c, alias_ty('struct.s2n_hash'), "impl", read_only=True)
     c.points_to(pstate, 
         struct(
             pimpl,

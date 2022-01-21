@@ -111,6 +111,7 @@ import Lang.Crucible.LLVM.ArraySizeProfile
 import           What4.ProgramLoc (ProgramLoc(..))
 
 import Verifier.SAW.Heapster.Permissions
+import Verifier.SAW.Heapster.SAWTranslation (ChecksFlag)
 
 -- Values ----------------------------------------------------------------------
 
@@ -183,8 +184,12 @@ data HeapsterEnv = HeapsterEnv {
   -- ^ The SAW module containing all our Heapster definitions
   heapsterEnvPermEnvRef :: IORef PermEnv,
   -- ^ The current permissions environment
-  heapsterEnvLLVMModules :: [Some CMSLLVM.LLVMModule]
+  heapsterEnvLLVMModules :: [Some CMSLLVM.LLVMModule],
   -- ^ The list of underlying 'LLVMModule's that we are translating
+  heapsterEnvDebugLevel :: IORef DebugLevel,
+  -- ^ The current debug level
+  heapsterEnvChecksFlag :: IORef ChecksFlag
+  -- ^ Whether translation checks are currently enabled
   }
 
 showHeapsterEnv :: HeapsterEnv -> String
@@ -436,14 +441,22 @@ data TopLevelRW =
   , rwCrucibleAssertThenAssume :: Bool
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
+  , rwLaxLoadsAndStores :: Bool
   , rwLaxPointerOrdering :: Bool
+  , rwDebugIntrinsics :: Bool
 
   -- FIXME: These might be better split into "simulator hash-consing" and "tactic hash-consing"
   , rwWhat4HashConsing :: Bool
   , rwWhat4HashConsingX86 :: Bool
 
+  , rwWhat4Eval :: Bool
+
   , rwPreservedRegs :: [String]
   , rwStackBaseAlign :: Integer
+
+  , rwAllocSymInitCheck :: Bool
+
+  , rwCrucibleTimeout :: Integer
   }
 
 newtype TopLevel a =
@@ -576,6 +589,9 @@ extendEnv sc x mt md v rw =
          VString s ->
            do tt <- typedTermOfString sc (unpack s)
               pure $ CEnv.bindTypedTerm (ident, tt) ce
+         VBool b ->
+           do tt <- typedTermOfBool sc b
+              pure $ CEnv.bindTypedTerm (ident, tt) ce
          _ ->
            pure ce
      pure $
@@ -592,13 +608,19 @@ extendEnv sc x mt md v rw =
 
 typedTermOfString :: SharedContext -> String -> IO TypedTerm
 typedTermOfString sc str =
-  do let schema = Cryptol.Forall [] [] (Cryptol.tString (length str))
+  do let schema = Cryptol.tMono (Cryptol.tString (length str))
      bvNat <- scGlobalDef sc "Prelude.bvNat"
      bvNat8 <- scApply sc bvNat =<< scNat sc 8
      byteT <- scBitvector sc 8
      let scChar c = scApply sc bvNat8 =<< scNat sc (fromIntegral (fromEnum c))
      ts <- traverse scChar str
      trm <- scVector sc byteT ts
+     pure (TypedTerm (TypedTermSchema schema) trm)
+
+typedTermOfBool :: SharedContext -> Bool -> IO TypedTerm
+typedTermOfBool sc b =
+  do let schema = Cryptol.tMono Cryptol.tBit
+     trm <- scBool sc b
      pure (TypedTerm (TypedTermSchema schema) trm)
 
 

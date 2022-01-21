@@ -2,7 +2,8 @@ from pathlib import Path
 import unittest
 from cryptol.cryptoltypes import to_cryptol
 from saw_client import *
-from saw_client.llvm import Contract, void, SetupVal, FreshVar, cryptol, i8, i32, LLVMType, LLVMArrayType
+from saw_client.crucible import cry, cry_f
+from saw_client.llvm import Contract, void, SetupVal, FreshVar, i8, i32, LLVMType, LLVMArrayType
 from saw_client.proofscript import z3
 
 
@@ -23,7 +24,7 @@ def oneptr_update_func(c : Contract, ty : LLVMType, fn_name : str) -> None:
 
     c.execute_func(x_p)
 
-    c.points_to(x_p, cryptol(fn_name)(x))
+    c.points_to(x_p, cry(fn_name)(x))
     c.returns(void)
     return None
 
@@ -32,12 +33,12 @@ class RotlContract(Contract):
     def specification(self) -> None:
         value = self.fresh_var(i32, "value")
         shift = self.fresh_var(i32, "shift")
-        self.precondition(shift > cryptol("0"))
-        self.precondition(shift < cryptol("32"))
+        self.precondition_f("{shift} > 0")
+        self.precondition_f("{shift} < 32")
 
         self.execute_func(value, shift)
 
-        self.returns(cryptol("(<<<)")(value, shift))
+        self.returns_f("{value} <<< {shift}")
 
 
 
@@ -55,11 +56,11 @@ class QuarterRoundContract(Contract):
 
         self.execute_func(y0_p, y1_p, y2_p, y3_p)
 
-        res = cryptol("quarterround")([y0, y1, y2, y3])
-        self.points_to(y0_p, cryptol("(@)")(res, cryptol("0")))
-        self.points_to(y1_p, cryptol("(@)")(res, cryptol("1")))
-        self.points_to(y2_p, cryptol("(@)")(res, cryptol("2")))
-        self.points_to(y3_p, cryptol("(@)")(res, cryptol("3")))
+        res = cry_f("quarterround {[y0, y1, y2, y3]}")
+        self.points_to(y0_p, cry_f("{res}@0"))
+        self.points_to(y1_p, cry_f("{res}@1"))
+        self.points_to(y2_p, cry_f("{res}@2"))
+        self.points_to(y3_p, cry_f("{res}@3"))
         self.returns(void)
 
 
@@ -102,7 +103,7 @@ class ExpandContract(Contract):
         self.execute_func(k_p, n_p, ks_p)
 
         self.returns(void)
-        self.points_to(ks_p, cryptol("Salsa20_expansion`{a=2}")((k, n)))
+        self.points_to(ks_p, cry_f("Salsa20_expansion `{{a=2}} {(k, n)}"))
 
 
 
@@ -116,10 +117,10 @@ class Salsa20CryptContract(Contract):
         (v, v_p) = ptr_to_fresh(self, LLVMArrayType(i8, 8))
         (m, m_p) = ptr_to_fresh(self, LLVMArrayType(i8, self.size))
 
-        self.execute_func(k_p, v_p, cryptol('0 : [32]'), m_p, cryptol(f'{self.size!r} : [32]'))
+        self.execute_func(k_p, v_p, cry('0 : [32]'), m_p, cry_f('{self.size} : [32]'))
 
-        self.points_to(m_p, cryptol("Salsa20_encrypt")((k, v, m)))
-        self.returns(cryptol('0 : [32]'))
+        self.points_to(m_p, cry_f("Salsa20_encrypt {(k, v, m)}"))
+        self.returns(cry('0 : [32]'))
 
 class Salsa20EasyTest(unittest.TestCase):
     def test_salsa20(self):

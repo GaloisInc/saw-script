@@ -18,16 +18,21 @@ Stability   : provisional
 module SAWScript.Crucible.LLVM.ResolveSetupValue
   ( LLVMVal, LLVMPtr
   , resolveSetupVal
+  , resolveSetupValBitfield
   , typeOfSetupValue
   , resolveTypedTerm
   , resolveSAWPred
   , resolveSAWSymBV
   , resolveSetupFieldIndex
   , resolveSetupFieldIndexOrFail
+  , BitfieldIndex(..)
+  , resolveSetupBitfieldIndex
+  , resolveSetupBitfieldIndexOrFail
   , resolveSetupElemIndexOrFail
   , equalValsPred
   , memArrayToSawCoreTerm
   , scPtrWidthBvNat
+  , W4EvalTactic(..)
   ) where
 
 import Control.Lens ((^.))
@@ -39,13 +44,16 @@ import Data.Maybe (fromMaybe, listToMaybe, fromJust)
 
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.Vector as V
+import           Data.Word (Word64)
 import           Numeric.Natural
 
 import qualified Text.LLVM.AST as L
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
+import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
 
 import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.NatRepr
@@ -55,6 +63,7 @@ import qualified What4.Interface    as W4
 
 import qualified Lang.Crucible.LLVM.Bytes       as Crucible
 import qualified Lang.Crucible.LLVM.MemModel    as Crucible
+import qualified Lang.Crucible.LLVM.MemType     as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 
@@ -64,14 +73,17 @@ import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 
 import Verifier.SAW.Cryptol (importType, emptyEnv)
+import Verifier.SAW.Name
 import Verifier.SAW.TypedTerm
+import Verifier.SAW.Simulator.What4
 import Verifier.SAW.Simulator.What4.ReturnTrip
-import Text.LLVM.DebugUtils as L
+import qualified Text.LLVM.DebugUtils as L
 
 import           SAWScript.Crucible.Common (Sym, sawCoreState)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..), ppTypedTermType)
 
 import SAWScript.Crucible.LLVM.MethodSpecIR
+import qualified SAWScript.Proof as SP
 
 --import qualified SAWScript.LLVMBuiltins as LB
 
@@ -90,17 +102,17 @@ resolveSetupValueInfo cc env nameEnv v =
   case v of
     SetupGlobal _ name ->
       case lookup (L.Symbol name) globalTys of
-        Just (L.Alias alias) -> L.Pointer (guessAliasInfo mdMap alias)
+        Just (L.Alias alias) -> L.Pointer (L.guessAliasInfo mdMap alias)
         _ -> L.Unknown
 
     SetupVar i
       | Just alias <- Map.lookup i nameEnv
-      -> L.Pointer (guessAliasInfo mdMap alias)
+      -> L.Pointer (L.guessAliasInfo mdMap alias)
 
     SetupField () a n ->
        fromMaybe L.Unknown $
        do L.Pointer (L.Structure xs) <- return (resolveSetupValueInfo cc env nameEnv a)
-          listToMaybe [L.Pointer i | (n',_,i) <- xs, n == n' ]
+          listToMaybe [L.Pointer i | L.StructFieldInfo{L.sfiName = n', L.sfiInfo = i} <- xs, n == n' ]
 
     _ -> L.Unknown
   where
@@ -119,7 +131,7 @@ resolveSetupFieldIndex ::
 resolveSetupFieldIndex cc env nameEnv v n =
   case resolveSetupValueInfo cc env nameEnv v of
     L.Pointer (L.Structure xs) ->
-      case [o | (n',o,_) <- xs, n == n' ] of
+      case [o | L.StructFieldInfo{L.sfiName = n', L.sfiOffset = o} <- xs, n == n' ] of
         [] -> Nothing
         o:_ ->
           do Crucible.PtrType symTy <- typeOfSetupValue cc env nameEnv v
@@ -152,7 +164,134 @@ resolveSetupFieldIndexOrFail cc env nameEnv v n =
             L.Pointer (L.Structure xs) -> unlines $
               [ msg
               , "The following field names were found for this struct:"
-              ] ++ map ("- "++) [n' | (n', _, _) <- xs]
+              ] ++ map ("- "++) [n' | L.StructFieldInfo{L.sfiName = n'} <- xs]
+            _ -> unlines [msg, "No field names were found for this struct"]
+
+-- | Information about a field within a bitfield in a struct. For example,
+-- given the following C struct:
+--
+-- @
+-- struct s {
+--   int32_t w;
+--   uint8_t x1:1;
+--   uint8_t x2:2;
+--   uint8_t y:1;
+--   int32_t z;
+-- };
+-- @
+--
+-- The 'BitfieldIndex'es for @x1@, @x2@, and @y@ are as follows:
+--
+-- @
+-- -- x1
+-- 'BitfieldIndex'
+--   { 'biFieldSize' = 1
+--   , 'biFieldOffset' = 0
+--   , 'biBitfieldIndex' = 4
+--   , 'biBitfieldType' = i8
+--   }
+--
+-- -- x2
+-- 'BitfieldIndex'
+--   { 'biFieldSize' = 2
+--   , 'biFieldOffset' = 1
+--   , 'biBitfieldIndex' = 4
+--   , 'biBitfieldType' = i8
+--   }
+--
+-- -- y
+-- 'BitfieldIndex'
+--   { 'biFieldSize' = 1
+--   , 'biFieldOffset' = 3
+--   , 'biBitfieldIndex' = 4
+--   , 'biBitfieldType' = i8
+--   }
+-- @
+--
+-- Note that the 'biFieldSize's and 'biFieldOffset's are specific to each
+-- individual field, while the 'biBitfieldIndex'es and 'biBitfieldType's are
+-- all the same, as the latter two all describe the same bitfield.
+data BitfieldIndex = BitfieldIndex
+  { biFieldSize :: Word64
+    -- ^ The size (in bits) of the field within the bitfield.
+  , biFieldOffset :: Word64
+    -- ^ The offset (in bits) of the field from the start of the bitfield,
+    --   counting from the least significant bit.
+  , biBitfieldIndex :: Int
+    -- ^ The struct field index corresponding to the overall bitfield, where
+    --   the index represents the number of bytes the bitfield is from the
+    --   start of the struct.
+  , biBitfieldType :: Crucible.MemType
+    -- ^ The 'Crucible.MemType' of the overall bitfield.
+  } deriving Show
+
+-- | Returns @'Just' bi@ if SAW is able to find a field within a bitfield with
+-- the supplied name in the LLVM debug metadata. Returns 'Nothing' otherwise.
+resolveSetupBitfieldIndex ::
+  LLVMCrucibleContext arch {- ^ crucible context  -} ->
+  Map AllocIndex LLVMAllocSpec {- ^ allocation types  -} ->
+  Map AllocIndex Crucible.Ident {- ^ allocation type names -} ->
+  SetupValue (LLVM arch) {- ^ pointer to struct -} ->
+  String {- ^ field name -} ->
+  Maybe BitfieldIndex {- ^ information about bitfield -}
+resolveSetupBitfieldIndex cc env nameEnv v n =
+  case resolveSetupValueInfo cc env nameEnv v of
+    L.Pointer (L.Structure xs)
+      |  (fieldOffsetStartingFromStruct, bfInfo):_ <-
+           [ (fieldOffsetStartingFromStruct, bfInfo)
+           | L.StructFieldInfo
+               { L.sfiName = n'
+               , L.sfiOffset = fieldOffsetStartingFromStruct
+               , L.sfiBitfield = Just bfInfo
+               } <- xs
+           , n == n'
+           ]
+      -> do Crucible.PtrType symTy <- typeOfSetupValue cc env nameEnv v
+            Crucible.StructType si <-
+              let ?lc = lc
+              in either (\_ -> Nothing) Just $ Crucible.asMemType symTy
+            bfIndex <-
+              V.findIndex (\fi -> Crucible.bytesToBits (Crucible.fiOffset fi)
+                                          == fromIntegral (L.biBitfieldOffset bfInfo))
+                          (Crucible.siFields si)
+            let bfType = Crucible.fiType $ Crucible.siFields si V.! bfIndex
+                fieldOffsetStartingFromBitfield =
+                  fieldOffsetStartingFromStruct - L.biBitfieldOffset bfInfo
+            pure $ BitfieldIndex { biFieldSize     = L.biFieldSize bfInfo
+                                 , biFieldOffset   = fieldOffsetStartingFromBitfield
+                                 , biBitfieldIndex = bfIndex
+                                 , biBitfieldType  = bfType
+                                 }
+
+    _ -> Nothing
+  where
+    lc = ccTypeCtx cc
+
+-- | Like 'resolveSetupBitfieldIndex', but if SAW cannot find the supplied
+-- name, fail instead of returning 'Nothing'.
+resolveSetupBitfieldIndexOrFail ::
+  Fail.MonadFail m =>
+  LLVMCrucibleContext arch {- ^ crucible context  -} ->
+  Map AllocIndex LLVMAllocSpec {- ^ allocation types  -} ->
+  Map AllocIndex Crucible.Ident {- ^ allocation type names -} ->
+  SetupValue (LLVM arch) {- ^ pointer to struct -} ->
+  String {- ^ field name -} ->
+  m BitfieldIndex {- ^ field index -}
+resolveSetupBitfieldIndexOrFail cc env nameEnv v n =
+  case resolveSetupBitfieldIndex cc env nameEnv v n of
+    Just i  -> pure i
+    Nothing ->
+      let msg = "Unable to resolve field name: " ++ show n
+      in
+        fail $
+          -- Show the user what fields were available (if any)
+          case resolveSetupValueInfo cc env nameEnv v of
+            L.Pointer (L.Structure xs) -> unlines $
+              [ msg
+              , "The following bitfield names were found for this struct:"
+              ] ++ map ("- "++) [n' | L.StructFieldInfo{ L.sfiName = n'
+                                                       , L.sfiBitfield = Just{}
+                                                       } <- xs]
             _ -> unlines [msg, "No field names were found for this struct"]
 
 typeOfSetupValue ::
@@ -289,10 +428,18 @@ resolveSetupElemIndexOrFail cc env nameEnv v i = do
     lc = ccTypeCtx cc
     dl = Crucible.llvmDataLayout lc
 
+
+-- | The tactic for What4 translation for SAWCore expressions during
+-- Crucible symbolic execution. The boolean option specifies whether
+-- non-user-defined symbols are translated. Note that ground constants are
+-- always translated.
+newtype W4EvalTactic = W4EvalTactic { doW4Eval :: Bool }
+  deriving (Eq, Ord, Show)
+
 -- | Translate a SetupValue into a Crucible LLVM value, resolving
 -- references
 resolveSetupVal :: forall arch.
-  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
   Crucible.MemImpl Sym ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
@@ -352,8 +499,44 @@ resolveSetupVal cc mem env tyenv nameEnv val = do
     lc = ccTypeCtx cc
     dl = Crucible.llvmDataLayout lc
 
+-- | Like 'resolveSetupVal', but specifically geared towards the needs of
+-- fields within bitfields. This is very similar to calling 'resolveSetupVal'
+-- on a 'SetupField', instead of computing an offset into the struct based off
+-- of the /field's/ offset from the beginning of the struct, this computes an
+-- offset based off of the overall /bitfield's/ offset from the beginning of
+-- the struct. This is important because in order to impose conditions on
+-- fields within bitfields, we must load/store the entire bitfield. The field's
+-- offset may be larger than the bitfield's offset, so the former offset is not
+-- suited for this purpose.
+--
+-- In addition to returning the resolved 'LLVMVal', this also returns the
+-- 'BitfieldIndex' for the field within the bitfield. This ends up being useful
+-- for call sites to this function so that they do not have to recompute it.
+resolveSetupValBitfield ::
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  LLVMCrucibleContext arch ->
+  Crucible.MemImpl Sym ->
+  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
+  Map AllocIndex LLVMAllocSpec ->
+  Map AllocIndex Crucible.Ident ->
+  SetupValue (LLVM arch) ->
+  String ->
+  IO (BitfieldIndex, LLVMVal)
+resolveSetupValBitfield cc mem env tyenv nameEnv val fieldName = do
+  do let sym = cc^.ccBackend
+     lval       <- resolveSetupVal cc mem env tyenv nameEnv val
+     bfIndex    <- resolveSetupBitfieldIndexOrFail cc tyenv nameEnv val fieldName
+     delta      <- resolveSetupElemIndexOrFail cc tyenv nameEnv val (biBitfieldIndex bfIndex)
+     offsetLval <- case lval of
+       Crucible.LLVMValInt blk off ->
+         do deltaBV <- W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) delta)
+            off'    <- W4.bvAdd sym off deltaBV
+            return (Crucible.LLVMValInt blk off')
+       _ -> fail "resolveSetupValBitfield: expected a pointer value"
+     pure (bfIndex, offsetLval)
+
 resolveTypedTerm ::
-  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
   TypedTerm       ->
   IO LLVMVal
@@ -368,6 +551,7 @@ resolveTypedTerm cc tm =
             ]
 
 resolveSAWPred ::
+  (?w4EvalTactic :: W4EvalTactic) =>
   LLVMCrucibleContext arch ->
   Term ->
   IO (W4.Pred Sym)
@@ -385,10 +569,20 @@ resolveSAWPred cc tm = do
              _ -> return Nothing
      case mx of
        Just x  -> return $ W4.backendPred sym x
-       Nothing -> bindSAWTerm sym st W4.BaseBoolRepr tm'
+       Nothing
+         | doW4Eval ?w4EvalTactic ->
+           do cryptol_ss <- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc
+              (_,tm'') <- rewriteSharedTerm sc cryptol_ss tm'
+              (_,tm''') <- rewriteSharedTerm sc ss tm''
+              if not (any (\(name, _, _) -> not (isPreludeName name)) (Map.elems $ getConstantSet tm''')) then
+                do (_names, (_mlabels, p)) <- w4Eval sym st sc mempty Set.empty tm'''
+                   return p
+              else bindSAWTerm sym st W4.BaseBoolRepr tm'
+         | otherwise ->
+           bindSAWTerm sym st W4.BaseBoolRepr tm'
 
 resolveSAWSymBV ::
-  (1 <= w) =>
+  (?w4EvalTactic :: W4EvalTactic, 1 <= w) =>
   LLVMCrucibleContext arch ->
   NatRepr w ->
   Term ->
@@ -405,10 +599,31 @@ resolveSAWSymBV cc w tm =
              _ -> return Nothing
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
-       Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm
+       Nothing
+         | doW4Eval ?w4EvalTactic ->
+           do let ss = cc^.ccBasicSS
+              (_,tm') <- rewriteSharedTerm sc ss tm
+              cryptol_ss <- Cryptol.mkCryptolSimpset @SP.TheoremNonce sc
+              (_,tm'') <- rewriteSharedTerm sc cryptol_ss tm'
+              (_,tm''') <- rewriteSharedTerm sc ss tm''
+              if not (any (\(name, _, _) -> not (isPreludeName name)) (Map.elems $ getConstantSet tm''')) then
+                do (_names, _, _, x) <- w4EvalAny sym st sc mempty Set.empty tm'''
+                   case valueToSymExpr x of
+                     Just (Some y)
+                       | Just Refl <- testEquality (W4.BaseBVRepr w) (W4.exprType y) ->
+                         return y
+                     _ -> fail $ "resolveSAWSymBV: unexpected w4Eval result " ++ show x
+              else bindSAWTerm sym st (W4.BaseBVRepr w) tm
+         | otherwise ->
+           bindSAWTerm sym st (W4.BaseBVRepr w) tm
+
+isPreludeName :: NameInfo -> Bool
+isPreludeName = \case
+  ModuleIdentifier ident -> identModule ident == preludeName
+  _ -> False
 
 resolveSAWTerm ::
-  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
   Cryptol.TValue ->
   Term ->

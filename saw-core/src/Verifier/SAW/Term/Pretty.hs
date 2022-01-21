@@ -467,7 +467,7 @@ ppFlatTermF prec tf =
     RecordValue alist ->
       ppRecord False <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
     RecordProj e fld -> ppProj fld <$> ppTerm' PrecArg e
-    Sort s -> return $ viaShow s
+    Sort s h -> return ((if h then pretty ("i"::String) else mempty) <> viaShow s)
     NatLit i -> ppNat <$> (ppOpts <$> ask) <*> return (toInteger i)
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecTerm) (V.toList args)
@@ -547,11 +547,17 @@ scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
         argsAndSubterms (unwrapTermF -> App f arg) = arg : argsAndSubterms f
         argsAndSubterms h =
           case unwrapTermF h of
-            Lambda _ t1 _ | not doBinders -> [t1]
-            Pi _ t1 _     | not doBinders -> [t1]
-            Constant{}                    -> []
-            FTermF (Primitive _)          -> []
-            tf                            -> Fold.toList tf
+            Lambda _ t1 _ | not doBinders  -> [t1]
+            Pi _ t1 _     | not doBinders  -> [t1]
+            Constant{}                     -> []
+            FTermF (Primitive _)           -> []
+            FTermF (DataTypeApp _ ps xs)   -> ps ++ xs
+            FTermF (CtorApp _ ps xs)       -> ps ++ xs
+            FTermF (RecursorType _ ps m _) -> ps ++ [m]
+            FTermF (Recursor crec)         -> recursorParams crec ++
+                                              [recursorMotive crec] ++
+                                              map fst (Map.elems (recursorElims crec))
+            tf                             -> Fold.toList tf
 
 -- | Return true if the printing of the given term should be memoized; we do not
 -- want to memoize the printing of terms that are "too small"
@@ -707,6 +713,7 @@ data PPModule = PPModule [ModuleName] [PPDecl]
 data PPDecl
   = PPTypeDecl Ident [(LocalName, Term)] [(LocalName, Term)] Sort [(Ident, Term)]
   | PPDefDecl Ident Term (Maybe Term)
+  | PPInjectCode Text.Text Text.Text
 
 -- | Pretty-print a 'PPModule'
 ppPPModule :: PPOpts -> PPModule -> SawDoc
@@ -730,3 +737,6 @@ ppPPModule opts (PPModule importNames decls) =
       case defBody of
         Just body -> Just <$> ppTerm' PrecTerm body
         Nothing -> return Nothing
+
+    ppDecl (PPInjectCode ns text) =
+      pure (pretty ("injectCode"::Text.Text) <+> viaShow ns <+> viaShow text)
