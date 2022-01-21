@@ -666,11 +666,11 @@ primitive
 ecAtBackM : (n : Num) -> (a ix : sort 0) -> PIntegralM ix -> mseq n a -> ix ->
             CompM a;
 
-ecFromToM : (first last : Num) -> (a : sort 0) -> PLiteral a -> PLiteral a ->
+ecFromToM : (first last : Num) -> (a : sort 0) -> PLiteral a ->
             mseq (tcAdd (TCNum 1) (tcSub last first)) a;
-ecFromToM first last a pa pb =
+ecFromToM first last a pa =
   seqToMseq (tcAdd (TCNum 1) (tcSub last first)) a
-            (ecFromTo first last a pa pb);
+            (ecFromTo first last a pa);
 
 ecFromToLessThanM : (first bound : Num) -> (a : sort 0) -> PLiteralLessThan a ->
                     mseq (tcSub bound first) a;
