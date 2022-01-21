@@ -249,6 +249,10 @@ The `determinedVars` function is then defined as follows on permission `p`:
 | `llvmframe[e1:i1, ..., en:in]` | The free variables of each `ei` that is a determining expression |
 
 
+#### Recombining Permissions
+
+FIXME HERE: explain `recombinePerm`
+
 
 #### The Top-Level Implication Prover Algorithm
 
@@ -374,7 +378,35 @@ The cases for `proveVarAtomicImpl` are as follows:
 
 #### Proving Field Permissions
 
+To prove a field permission `[l]ptr((rw,off) |-> p)`, the `proveVarLLVMField` function starts by first calling `implGetLLVMPermForOffset` to find a permission on the left that contains `off`. If this permission is a `memblock` permission, it is repeatedly eliminated, using the helper function `implElimLLVMBlock`, until an array or field permission is obtained. This permission is then passed to `proveVarLLVMFieldH`, which calls `proveVarLLVMFieldH2`, which dispatches based on the form of the permission. We call this the left-hand permission in this discussion, since `implGetLLVMPermForOffset` puts it on the top of the stack, i.e., the left of the implication.
+
+The main case `proveVarLLVMFieldH2` is when the left-hand permission is a field permission
+`[l']ptr((rw',off) |-> p')` of the same size as the required one. In this case, `proveVarLLVMFieldH2` performs the following steps:
+* Eliminate the contents of the field permission to get a permission of the form `[l']ptr((rw',off) |-> eq(y))` for some variable `y`;
+* Prove `y:p` with a recursive call to `proveVarImplInt`;
+* Use the `SImpl_IntroLLVMFieldContents` to combine the `y:p` permission into the left-hand permission to get `[l']ptr((rw',off) |-> p)`;
+* Coerce the lifetime `l'` to `l` by calling `proveVarLifetimeFunctor`, which splits or ends lifetimes as needed;
+* Coerce `rw'` to `rw` by calling `equalizeRWs`, which either proves the two are equal using `proveEq` and casting or weakens a write modality to a read modality; and
+* Duplicate and recombine the pointer permission if it is copyable.
+
+If the left-hand permission is a pointer permission that is bigger than required, split the left-hand permission by calling `implLLVMFieldSplit`, recombine the part that is not required, and recursively call `proveVarLLVMFieldH` with the remaining left-hand permission.
+
+If the left-hand permission is a pointer permission that is smaller than required:
+* Recursively call `proveVarLLVMFieldH` with the same left-hand permission to prove a pointer permission `[l]ptr((rw,off) |-> eq(y))` of the same size, i.e., with existential variable `y:llvmptr (8*sz)` where `sz` is the size of the left-hand permission in bytes;
+* Prove `[l]ptr((rw,off+sz) |-> eq(z))` for existential variables `z` of the remaining size;
+* Call `implLLVMFieldConcat` to concatenate these two field permissions; and
+* Call `proveVarLLVMFieldH` with the resulting permission of the correct size as the left-hand permission.
+
+If the left-hand permission is an array permission where the required permission lines up with one of the cells of the array, borrow or copy (depending on whether the array is copyable) the corresponding array cell and recursively call `proveVarLLVMFieldH` with the cell permission that was borrowed.
+
+If the left-hand permission is an array permission where the required permission covers multiple cells of the array, borrow or copy those cells (depending on whether the array is copyable) as a single array permission, coerce the resulting cells to a field using the `SImpl_LLVMArrayToField` rule, and pass the resulting permission as the left-hand permission of a recursive call to `proveVarLLVMFieldH`.
+
+In all other cases, `proveVarLLVMFieldH2` fails.
+
+
 #### Proving Array Permissions
+
+
 
 #### Proving Block Permissions
 
