@@ -116,7 +116,7 @@ typedSubsTermType :: TypedSubsTerm -> TypedSubsTerm
 typedSubsTermType tst =
   TypedSubsTerm { tpSubsIndex = Nothing, tpSubsFreeVars = tpSubsFreeVars tst,
                   tpSubsTermF = tpSubsTypeF tst,
-                  tpSubsTypeF = FTermF (Sort $ tpSubsSort tst),
+                  tpSubsTypeF = FTermF (Sort (tpSubsSort tst) False),
                   tpSubsSort = sortOf (tpSubsSort tst) }
 
 -- | Count the number of right-nested pi-abstractions of a 'TypedSubsTerm'
@@ -187,7 +187,7 @@ asTypedGlobalDef t =
       Just $ GlobalDef (ModuleIdentifier $
                         primName pn) (primVarIndex pn) (primType pn) t Nothing
     Constant ec body ->
-      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t (Just body)
+      Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t body
     FTermF (ExtCns ec) ->
       Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t Nothing
     _ -> Nothing
@@ -1114,17 +1114,21 @@ monadifyCompleteTerm sc env trm tp =
   runCompleteMonadifyM sc env tp $
   monadifyTerm (Just $ monadifyType [] tp) trm
 
--- | Monadify a 'Term' of the specified type, bind the result to a fresh SAW
--- core constant generated from the supplied name, and then convert that
--- constant back to a 'MonTerm'
+-- | Monadify a 'Term' of the specified type with an optional body, bind the
+-- result to a fresh SAW core constant generated from the supplied name, and
+-- then convert that constant back to a 'MonTerm'
 monadifyNamedTerm :: SharedContext -> MonadifyEnv ->
-                     NameInfo -> Term -> Term -> IO MonTerm
-monadifyNamedTerm sc env nmi trm tp =
+                     NameInfo -> Maybe Term -> Term -> IO MonTerm
+monadifyNamedTerm sc env nmi maybe_trm tp =
   trace ("Monadifying " ++ T.unpack (toAbsoluteName nmi)) $
   do let mtp = monadifyType [] tp
      comp_tp <- completeOpenTerm sc $ toCompType mtp
-     trm' <- monadifyCompleteTerm sc env trm tp
-     const_trm <- scConstant sc (toShortName nmi) trm' comp_tp
+     const_trm <-
+       case maybe_trm of
+         Just trm ->
+           do trm' <- monadifyCompleteTerm sc env trm tp
+              scConstant' sc nmi trm' comp_tp
+         Nothing -> scOpaqueConstant sc nmi tp
      return $ fromCompTerm mtp $ closedOpenTerm const_trm
 
 -- | Monadify a term with the specified type along with all constants it
@@ -1138,9 +1142,9 @@ monadifyTermInEnv sc top_env top_trm top_tp =
      let const_infos =
            filter (\(nmi,_,_) -> Map.notMember nmi top_env) $
            map snd $ Map.toAscList $ getConstantSet top_trm
-     forM_ const_infos $ \(nmi,tp,body) ->
+     forM_ const_infos $ \(nmi,tp,maybe_body) ->
        do env <- get
-          mtrm <- lift $ monadifyNamedTerm sc env nmi body tp
+          mtrm <- lift $ monadifyNamedTerm sc env nmi maybe_body tp
           put $ Map.insert nmi (monMacro0 mtrm) env
      env <- get
      lift $ monadifyCompleteTerm sc env top_trm top_tp
