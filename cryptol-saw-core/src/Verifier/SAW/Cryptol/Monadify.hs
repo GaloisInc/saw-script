@@ -78,6 +78,7 @@ import Control.Monad.Cont
 import qualified Control.Monad.Fail as Fail
 -- import Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Text as T
+import qualified Text.URI as URI
 
 import Verifier.SAW.Name
 import Verifier.SAW.Term.Functor
@@ -1114,6 +1115,15 @@ monadifyCompleteTerm sc env trm tp =
   runCompleteMonadifyM sc env tp $
   monadifyTerm (Just $ monadifyType [] tp) trm
 
+-- | Convert a name of a definition to the name of its monadified version
+monadifyName :: NameInfo -> IO NameInfo
+monadifyName (ModuleIdentifier ident) =
+  return $ ModuleIdentifier $ mkIdent (identModule ident) $
+  T.append (identBaseName ident) (T.pack "M")
+monadifyName (ImportedName uri _) =
+  do frag <- URI.mkFragment (T.pack "M")
+     return $ ImportedName (uri { URI.uriFragment = Just frag }) []
+
 -- | Monadify a 'Term' of the specified type with an optional body, bind the
 -- result to a fresh SAW core constant generated from the supplied name, and
 -- then convert that constant back to a 'MonTerm'
@@ -1122,13 +1132,14 @@ monadifyNamedTerm :: SharedContext -> MonadifyEnv ->
 monadifyNamedTerm sc env nmi maybe_trm tp =
   trace ("Monadifying " ++ T.unpack (toAbsoluteName nmi)) $
   do let mtp = monadifyType [] tp
+     nmi' <- monadifyName nmi
      comp_tp <- completeOpenTerm sc $ toCompType mtp
      const_trm <-
        case maybe_trm of
          Just trm ->
            do trm' <- monadifyCompleteTerm sc env trm tp
-              scConstant' sc nmi trm' comp_tp
-         Nothing -> scOpaqueConstant sc nmi tp
+              scConstant' sc nmi' trm' comp_tp
+         Nothing -> scOpaqueConstant sc nmi' tp
      return $ fromCompTerm mtp $ closedOpenTerm const_trm
 
 -- | Monadify a term with the specified type along with all constants it
@@ -1140,11 +1151,11 @@ monadifyTermInEnv sc top_env top_trm top_tp =
   flip runStateT top_env $
   do lift $ ensureCryptolMLoaded sc
      let const_infos =
-           filter (\(nmi,_,_) -> Map.notMember nmi top_env) $
            map snd $ Map.toAscList $ getConstantSet top_trm
      forM_ const_infos $ \(nmi,tp,maybe_body) ->
-       do env <- get
-          mtrm <- lift $ monadifyNamedTerm sc env nmi maybe_body tp
-          put $ Map.insert nmi (monMacro0 mtrm) env
+       get >>= \env ->
+       if Map.member nmi env then return () else
+         do mtrm <- lift $ monadifyNamedTerm sc env nmi maybe_body tp
+            put $ Map.insert nmi (monMacro0 mtrm) env
      env <- get
      lift $ monadifyCompleteTerm sc env top_trm top_tp
