@@ -1,22 +1,24 @@
 {-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
 {-# Language RecordWildCards #-}
+{-# Language ViewPatterns #-}
 {-# Language LambdaCase #-}
 {-# Language TupleSections #-}
 
 module SAWScript.Yosys
   ( YosysIR
-  , yosys_load_module
-  , yosys_extract
+  , yosys_load_file
+  , yosys_compositional_extract
   ) where
 
 import Control.Lens.TH (makeLenses)
-import Control.Lens (at, (^.))
+import Control.Lens (at, view, (^.))
 
 import Control.Monad (forM, foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
 
+import qualified Data.Tuple as Tuple
 import qualified Data.Maybe as Maybe
 import qualified Data.List as List
 import Data.Map (Map)
@@ -33,7 +35,29 @@ import SAWScript.Value
 import SAWScript.Yosys.IR
 
 --------------------------------------------------------------------------------
--- ** Building a network graph from Yosys IR
+-- ** Building the module graph from Yosys IR
+
+data Modgraph = Modgraph
+  { _modgraphGraph :: Graph.Graph
+  , _modgraphNodeFromVertex :: Graph.Vertex -> (Module, Text, [Text])
+  , _modgraphVertexFromKey :: Text -> Maybe Graph.Vertex
+  }
+makeLenses ''Modgraph
+
+yosysIRModgraph :: YosysIR -> Modgraph
+yosysIRModgraph ir =
+  let
+    moduleToNode :: (Text, Module) -> (Module, Text, [Text])
+    moduleToNode (nm, m) = (m, nm, deps)
+      where
+        deps = view cellType <$> Map.elems (m ^. moduleCells)
+    nodes = moduleToNode <$> Map.assocs (ir ^. yosysModules)
+    (_modgraphGraph, _modgraphNodeFromVertex, _modgraphVertexFromKey)
+      = Graph.graphFromEdges nodes
+  in Modgraph{..}
+
+--------------------------------------------------------------------------------
+-- ** Building a network graph from a Yosys module
 
 data Netgraph = Netgraph
   { _netgraphGraph :: Graph.Graph
@@ -41,6 +65,16 @@ data Netgraph = Netgraph
   , _netgraphVertexFromKey :: [Bitrep] -> Maybe Graph.Vertex
   }
 makeLenses ''Netgraph
+
+cellInputConnections :: Cell -> Map Text [Bitrep]
+cellInputConnections c = Map.intersection (c ^. cellConnections) inp
+  where
+    inp = Map.filter (\d -> d == DirectionInput || d == DirectionInout) $ c ^. cellPortDirections
+
+cellOutputConnections :: Cell -> Map [Bitrep] Text
+cellOutputConnections c = Map.fromList . fmap Tuple.swap . Map.toList $ Map.intersection (c ^. cellConnections) out
+  where
+    out = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
 
 moduleNetgraph :: Module -> Netgraph
 moduleNetgraph m =
@@ -76,22 +110,37 @@ moduleNetgraph m =
 --------------------------------------------------------------------------------
 -- ** Building a SAWCore term from a network graph
 
--- | Given a Yosys cell and terms for its arguments, construct a term representing the output.
-cellToTerm :: MonadIO m => SC.SharedContext -> Cell -> [SC.Term] -> m SC.Term
-cellToTerm sc c args = case c ^. cellType of
-  -- TODO better handling here. consider multiple-output cells?
-  CellTypeOr -> do
+-- | Given a Yosys cell and a map of terms for its arguments, construct a term representing the output.
+cellToTerm ::
+  MonadIO m =>
+  SC.SharedContext ->
+  Map Text SC.Term {- ^ Environment of user-defined cells -} ->
+  Cell {- ^ Cell type -} ->
+  Map Text SC.Term {- ^ Mapping of input names to input terms -} ->
+  m SC.Term
+cellToTerm sc env c args = case c ^. cellType of
+  "$or" -> do
     w <- liftIO $ SC.scNat sc $ case Map.lookup "Y" $ c ^. cellConnections of
       Nothing -> panic "cellToTerm" ["Missing expected output name for $or cell"]
       Just bits -> fromIntegral $ length bits
     identity <- liftIO $ SC.scBvBool sc w =<< SC.scBool sc False
-    liftIO $ foldM (SC.scBvOr sc w) identity args
-  CellTypeAnd -> do
+    res <- liftIO $ foldM (SC.scBvOr sc w) identity args
+    liftIO . SC.scRecord sc $ Map.fromList
+      [ ("Y", res)
+      ]
+  "$and" -> do
     w <- liftIO $ SC.scNat sc $ case Map.lookup "Y" $ c ^. cellConnections of
       Nothing -> panic "cellToTerm" ["Missing expected output name for $and cell"]
       Just bits -> fromIntegral $ length bits
     identity <- liftIO $ SC.scBvBool sc w =<< SC.scBool sc True
-    liftIO $ foldM (SC.scBvAnd sc w) identity args
+    res <- liftIO $ foldM (SC.scBvAnd sc w) identity args
+    liftIO . SC.scRecord sc $ Map.fromList
+      [ ("Y", res)
+      ]
+  (flip Map.lookup env -> Just term) -> do
+    r <- liftIO $ SC.scRecord sc args
+    liftIO $ SC.scApply sc term r
+  ct -> throw . YosysError $ "Unknown cell type: " <> ct
 
 -- | Given a bit pattern ([Bitrep]) and a term, construct a map associating that output pattern with
 -- the term, and each bit of that pattern with the corresponding bit of the term.
@@ -110,16 +159,25 @@ deriveTermsByIndices sc rep t = do
 
 -- | Given a netgraph and an initial map from bit patterns to terms, populate that map with terms
 -- generated from the rest of the netgraph.
-netgraphToTerms :: MonadIO m => SC.SharedContext -> Netgraph -> Map [Bitrep] SC.Term -> m (Map [Bitrep] SC.Term)
-netgraphToTerms sc ng inputs
-  | length (Graph.scc $ ng ^. netgraphGraph ) > 1
-  = throw $ YosysError "Network graph contains a cycle; SAW does not currently support analysis of sequential circuits."
+netgraphToTerms ::
+  MonadIO m =>
+  SC.SharedContext ->
+  Map Text SC.Term ->
+  Netgraph ->
+  Map [Bitrep] SC.Term ->
+  m (Map [Bitrep] SC.Term)
+netgraphToTerms sc env ng inputs
+  | length (Graph.components $ ng ^. netgraphGraph ) > 1
+  = do
+      liftIO . print  . Graph.transposeG $ ng ^. netgraphGraph
+      liftIO $ print (Graph.components $ ng ^. netgraphGraph )
+      throw $ YosysError "Network graph contains a cycle; SAW does not currently support analysis of sequential circuits."
   | otherwise = do
       let sorted = Graph.reverseTopSort $ ng ^. netgraphGraph
       foldM
         ( \acc v -> do
             let (c, out, inp) = ng ^. netgraphNodeFromVertex $ v
-            args <- forM inp $ \i -> -- for each input bit pattern
+            args <- forM (cellInputConnections c) $ \i -> -- for each input bit pattern
               case Map.lookup i acc of
                 Just t -> pure t -- if we can find that pattern exactly, great! use that term
                 Nothing -> do -- otherwise, find each individual bit and append the terms
@@ -132,27 +190,22 @@ netgraphToTerms sc ng inputs
                     Nothing -> throw . YosysError $ "Failed to find output bitvec: " <> Text.pack (show i)
                   vecBits <- liftIO $ SC.scVector sc vecty bits
                   liftIO $ SC.scJoin sc many one boolty vecBits
-            t <- cellToTerm sc c args -- once we've built a term, insert it along with each of its bits
-            derived <- deriveTermsByIndices sc out t
-            pure $ Map.union derived acc
+            r <- cellToTerm sc env c args -- once we've built a term, insert it along with each of its bits
+            ts <- forM (cellOutputConnections c) $ \o -> do
+              t <- liftIO $ SC.scRecordSelect sc r o
+              deriveTermsByIndices sc out t
+            pure $ Map.union (Map.unions ts) acc
         )
         inputs
         sorted
 
--- | Given a Yosys IR, the name of a VHDL module, and the name of an output port, construct a
--- SAWCore term for the value of that output port.
-yosysIRToTerm :: MonadIO m => SC.SharedContext -> YosysIR -> Text -> Text -> m SC.TypedTerm
-yosysIRToTerm sc ir modnm portnm = do
-  m <- case Map.lookup modnm $ ir ^. yosysModules of
-    Just m -> pure m
-    Nothing -> throw . YosysError $ "Failed to find module: " <> modnm --
-  p <- case Map.lookup portnm $ m ^. modulePorts of
-    Just p
-      | p ^. portDirection == DirectionOutput
-        || p ^. portDirection == DirectionInout
-        -> pure p
-      | otherwise -> throw . YosysError $ mconcat ["Port ", portnm, " is not an output port"]
-    Nothing -> throw . YosysError $ "Failed to find port: " <> portnm
+moduleToTerm ::
+  MonadIO m =>
+  SC.SharedContext ->
+  Map Text SC.Term ->
+  Module ->
+  m SC.Term
+moduleToTerm sc env m = do
   let ng = moduleNetgraph m
   let inputports = Maybe.mapMaybe
         ( \(nm, ip) ->
@@ -162,29 +215,71 @@ yosysIRToTerm sc ir modnm portnm = do
         )
         . Map.assocs
         $ m ^. modulePorts
-  (derivedInputs, extCns) <- fmap unzip . forM inputports $ \(nm, inp) -> do
-    tp <- liftIO . SC.scBitvector sc . fromIntegral $ length inp
-    ec <- liftIO $ SC.scFreshEC sc nm tp
-    t <- liftIO $ SC.scExtCns sc ec
-    derived <- deriveTermsByIndices sc inp t
-    pure (derived, ec)
-  let inputs = foldr Map.union Map.empty derivedInputs
-  env <- netgraphToTerms sc ng inputs
-  case Map.lookup (p ^. portBits) env of
-    Just unwrapped -> do
-      t <- liftIO $ SC.scAbstractExts sc extCns unwrapped
-      liftIO $ SC.mkTypedTerm sc t
-    Nothing -> throw . YosysError $ "Failed to find output for bits: " <> (Text.pack . show $ p ^. portBits)
+  let outputports = Maybe.mapMaybe
+        ( \(nm, ip) ->
+            if ip ^. portDirection == DirectionOutput || ip ^. portDirection == DirectionInout
+            then Just (nm, ip ^. portBits)
+            else Nothing
+        )
+        . Map.assocs
+        $ m ^. modulePorts
+  inputRecordType <- liftIO . SC.scRecordType sc =<< forM inputports
+    (\(nm, inp) -> do
+        tp <- liftIO . SC.scBitvector sc . fromIntegral $ length inp
+        pure (nm, tp)
+    )
+  outputRecordType <- liftIO . SC.scRecordType sc =<< forM outputports
+    (\(nm, out) -> do
+        tp <- liftIO . SC.scBitvector sc . fromIntegral $ length out
+        pure (nm, tp)
+    )
+  inputRecordEC <- liftIO $ SC.scFreshEC sc "input" inputRecordType
+  inputRecord <- liftIO $ SC.scExtCns sc inputRecordEC
+  derivedInputs <- forM inputports $ \(nm, inp) -> do
+    t <- liftIO $ SC.scRecordSelect sc inputRecord nm
+    deriveTermsByIndices sc inp t
+  let inputs = Map.unions derivedInputs
+  env <- netgraphToTerms sc env ng inputs
+  outputRecord <- liftIO . SC.scRecord sc . Map.fromList =<< forM outputports
+    (\(nm, out) -> do
+        case Map.lookup out env of
+          Nothing -> throw . YosysError $ "Failed to find module output bits: " <> Text.pack (show out)
+          Just t -> pure (nm, t)
+    )
+  liftIO $ SC.scAbstractExts sc [inputRecordEC] outputRecord
+
+-- | Given a Yosys IR and the name of a VHDL module, construct a SAWCore term for that module.
+yosysIRToTerm ::
+  MonadIO m =>
+  SC.SharedContext ->
+  YosysIR ->
+  Text ->
+  m SC.TypedTerm
+yosysIRToTerm sc ir modnm = do
+  let mg = yosysIRModgraph ir
+  let sorted = Graph.reverseTopSort $ mg ^. modgraphGraph
+  env <- foldM
+    (\acc v -> do
+        let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
+        t <- moduleToTerm sc acc m
+        pure $ Map.insert nm t acc
+    )
+    Map.empty
+    sorted
+  m <- case Map.lookup modnm env of
+    Just m -> pure m
+    Nothing -> throw . YosysError $ "Failed to find module: " <> modnm
+  liftIO $ SC.mkTypedTerm sc m
 
 --------------------------------------------------------------------------------
 -- ** Functions visible from SAWScript REPL
 
 {-# ANN module ("HLint: ignore Use camelCase" :: String) #-}
 
-yosys_load_module :: FilePath -> TopLevel YosysIR
-yosys_load_module = loadYosysIR
+yosys_load_file :: FilePath -> TopLevel YosysIR
+yosys_load_file = loadYosysIR
 
-yosys_extract :: YosysIR -> String -> String -> TopLevel SC.TypedTerm
-yosys_extract ir modnm portnm = do
+yosys_compositional_extract :: YosysIR -> String -> [()] -> ProofScript () -> TopLevel SC.TypedTerm
+yosys_compositional_extract ir modnm _lemmas _tactic = do
   sc <- getSharedContext
-  yosysIRToTerm sc ir (Text.pack modnm) (Text.pack portnm)
+  yosysIRToTerm sc ir (Text.pack modnm)

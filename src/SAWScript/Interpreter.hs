@@ -3157,12 +3157,12 @@ primitives = Map.fromList
 
     ---------------------------------------------------------------------
 
-  , prim "yosys_load_module"  "String -> TopLevel YosysIR"
-    (pureVal yosys_load_module)
+  , prim "yosys_load_file"  "String -> TopLevel YosysIR"
+    (pureVal yosys_load_file)
     Experimental
     []
-  , prim "yosys_extract"  "YosysIR -> String -> String -> TopLevel Term"
-    (pureVal yosys_extract)
+  , prim "yosys_compositional_extract"  "YosysIR -> String -> [()] -> ProofScript () -> TopLevel Term"
+    (pureVal yosys_compositional_extract)
     Experimental
     []
 
