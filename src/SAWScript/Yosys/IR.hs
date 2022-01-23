@@ -21,8 +21,9 @@ import qualified Data.Aeson as Aeson
 -- ** Representing and loading the Yosys JSON IR
 
 newtype YosysError = YosysError Text
-  deriving Show
 instance Exception YosysError
+instance Show YosysError where
+  show (YosysError msg) = Text.unpack $ "Error: " <> msg
 
 data Direction
   = DirectionInput
@@ -69,18 +70,9 @@ instance Aeson.FromJSON Port where
       _ -> pure False
     pure Port{..}
 
-data CellType
-  = CellTypeOr
-  | CellTypeAnd
-  deriving (Show, Eq, Ord)
-instance Aeson.FromJSON CellType where
-  parseJSON (Aeson.String "$or") = pure CellTypeOr
-  parseJSON (Aeson.String "$and") = pure CellTypeAnd
-  parseJSON v = fail $ "Failed to parse cell type: " <> show v
-
 data Cell = Cell
   { _cellHideName :: Bool
-  , _cellType :: CellType
+  , _cellType :: Text
   , _cellParameters :: Map Text Text
   , _cellAttributes :: Aeson.Value
   , _cellPortDirections :: Map Text Direction
