@@ -5,6 +5,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 {- |
 Module      : Verifier.SAW.Cryptol.Monadify
@@ -90,6 +91,17 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.PreludeM
 
 import Debug.Trace
+
+
+-- Type-check the Prelude, Cryptol, and CryptolM modules at compile time
+{-
+import Language.Haskell.TH
+import Verifier.SAW.Cryptol.Prelude
+
+$(runIO (mkSharedContext >>= \sc ->
+          scLoadPreludeModule sc >> scLoadCryptolModule sc >>
+          scLoadCryptolMModule sc >> return []))
+-}
 
 
 ----------------------------------------------------------------------
@@ -321,15 +333,16 @@ toCompType mtp@(MTyArrow _ _) = toArgType mtp
 toCompType mtp = applyOpenTerm (globalOpenTerm "Prelude.CompM") (toArgType mtp)
 
 -- | The mapping for monadifying Cryptol typeclasses
+-- FIXME: this is no longer needed, as it is now the identity
 typeclassMonMap :: [(Ident,Ident)]
 typeclassMonMap =
-  [("Cryptol.PEq", "CryptolM.PEqM"),
-   ("Cryptol.PCmp", "CryptolM.PCmpM"),
-   ("Cryptol.PSignedCmp", "CryptolM.PSignedCmpM"),
+  [("Cryptol.PEq", "Cryptol.PEq"),
+   ("Cryptol.PCmp", "Cryptol.PCmp"),
+   ("Cryptol.PSignedCmp", "Cryptol.PSignedCmp"),
    ("Cryptol.PZero", "Cryptol.PZero"),
    ("Cryptol.PLogic", "Cryptol.PLogic"),
-   ("Cryptol.PRing", "CryptolM.PRingM"),
-   ("Cryptol.PIntegral", "CryptolM.PIntegralM"),
+   ("Cryptol.PRing", "Cryptol.PRing"),
+   ("Cryptol.PIntegral", "Cryptol.PIntegral"),
    ("Cryptol.PLiteral", "Cryptol.PLiteral")]
 
 -- | A context of local variables used for monadifying types, which includes the
@@ -359,6 +372,14 @@ mkTermBaseType ctx k t =
 -- | Monadify a type and convert it to its corresponding argument type
 monadifyTypeArgType :: MonadifyTypeCtx -> Term -> OpenTerm
 monadifyTypeArgType ctx t = toArgType $ monadifyType ctx t
+
+-- | Apply a monadified type to a type or term argument in the sense of
+-- 'applyPiOpenTerm', meaning give the type of applying @f@ of a type to a
+-- particular argument @arg@
+applyMonType :: MonType -> Either MonType ArgMonTerm -> MonType
+applyMonType (MTyArrow _ tp_ret) (Right _) = tp_ret
+applyMonType (MTyForall _ _ f) (Left mtp) = f mtp
+applyMonType _ _ = error "applyMonType: application at incorrect type"
 
 -- | Convert a SAW core 'Term' to a monadification type
 monadifyType :: MonadifyTypeCtx -> Term -> MonType
@@ -723,6 +744,17 @@ argifyMonTerm (CompMonTerm mtp trm) =
        [tp, top_ret_tp, trm,
         lambdaOpenTerm "x" tp (toCompTerm . k . fromArgTerm mtp)]
 
+-- | Build a proof of @isFinite n@ by calling @assertFiniteM@ and binding the
+-- result to an 'ArgMonTerm'
+assertIsFinite :: MonType -> MonadifyM ArgMonTerm
+assertIsFinite (MTyNum n) =
+  argifyMonTerm (CompMonTerm
+                 (mkMonType0 (applyOpenTerm
+                              (globalOpenTerm "CryptolM.isFinite") n))
+                 (applyOpenTerm (globalOpenTerm "CryptolM.assertFiniteM") n))
+assertIsFinite _ =
+  fail ("assertIsFinite applied to non-Num argument")
+
 
 ----------------------------------------------------------------------
 -- * Monadification
@@ -744,11 +776,9 @@ monadifyArgTerm mtp t = toArgTerm <$> monadifyArg mtp t
 
 -- | Monadify a term
 monadifyTerm :: Maybe MonType -> Term -> MonadifyM MonTerm
-{-
 monadifyTerm _ t
   | trace ("Monadifying term: " ++ showTerm t) False
   = undefined
--}
 monadifyTerm mtp t@(STApp { stAppIndex = ix }) =
   memoizingM ix $ monadifyTerm' mtp t
 monadifyTerm mtp t =
@@ -927,6 +957,28 @@ iteMacro = MonMacro 4 $ \_ args ->
          [toCompType mtp, toArgTerm atrm_cond,
           toCompTerm mtrm1, toCompTerm mtrm2]
 
+
+-- | Make a 'MonMacro' that maps a named global whose first argument is @n:Num@
+-- to a global of semi-pure type that takes an additional argument of type
+-- @isFinite n@
+fin1Macro :: Ident -> Ident -> MonMacro
+fin1Macro from to =
+  MonMacro 1 $ \glob args ->
+  do if globalDefName glob == ModuleIdentifier from && length args == 1 then
+       return ()
+       else error ("Monadification macro for " ++ show from ++
+                   " applied incorrectly")
+     -- Monadify the first arg, n, and build a proof it is finite
+     n_mtp <- monadifyTypeM (head args)
+     let n = toArgType n_mtp
+     fin_pf <- assertIsFinite n_mtp
+     -- Apply the type of @glob@ to n, and apply @to@ to n and fin_pf
+     let glob_tp = monadifyType [] $ globalDefType glob
+     let glob_tp_app = applyMonType glob_tp $ Left n_mtp
+     let to_app = applyOpenTermMulti (globalOpenTerm to) [n, toArgTerm fin_pf]
+     -- Finally, return @to n fin_pf@ as a MonTerm of monadified type @to_tp n@
+     return $ ArgMonTerm $ fromSemiPureTerm glob_tp_app to_app
+
 -- | Helper function: build a @LetRecType@ for a nested pi type
 lrtFromMonType :: MonType -> OpenTerm
 lrtFromMonType (MTyForall x k body_f) =
@@ -965,6 +1017,12 @@ mmSemiPure :: Ident -> Ident -> MacroMapping
 mmSemiPure from_id to_id =
   (ModuleIdentifier from_id, semiPureGlobalMacro from_id to_id)
 
+-- | Build a 'MacroMapping' for an identifier to a semi-pure named function
+-- whose first argument is a @Num@ that requires an @isFinite@ proof
+mmSemiPureFin1 :: Ident -> Ident -> MacroMapping
+mmSemiPureFin1 from_id to_id =
+  (ModuleIdentifier from_id, fin1Macro from_id to_id)
+
 -- | Build a 'MacroMapping' for an identifier to itself as a semi-pure function
 mmSelf :: Ident -> MacroMapping
 mmSelf self_id =
@@ -990,7 +1048,7 @@ defaultMonEnv =
   , mmCustom "Prelude.fix" fixMacro
 
     -- Top-level sequence functions
-  , mmSemiPure "Cryptol.seqMap" "CryptolM.seqMapM"
+  , mmArg "Cryptol.seqMap" "CryptolM.seqMapM"
   , mmSemiPure "Cryptol.seq_cong1" "CryptolM.mseq_cong1"
   , mmArg "Cryptol.eListSel" "CryptolM.eListSelM"
 
@@ -998,94 +1056,72 @@ defaultMonEnv =
   , mmArg "Cryptol.from" "CryptolM.fromM"
     -- FIXME: continue here...
 
-    -- PEq constraints => PEqM constraints
-  , mmSemiPure "Cryptol.PEqBit" "CryptolM.PEqMBit"
-  , mmSemiPure "Cryptol.PEqInteger" "CryptolM.PEqMInteger"
-  , mmSemiPure "Cryptol.PEqRational" "CryptolM.PEqMRational"
-  , mmSemiPure "Cryptol.PEqIntMod" "CryptolM.PEqMIntMod"
-  , mmSemiPure "Cryptol.PEqIntModNum" "CryptolM.PEqMIntModNum"
-  , mmSemiPure "Cryptol.PEqSeq" "CryptolM.PEqMSeq"
-  , mmSemiPure "Cryptol.PEqSeqBool" "CryptolM.PEqMSeqBool"
-  , mmSemiPure "Cryptol.PEqUnit" "CryptolM.PEqMUnit"
-  , mmSemiPure "Cryptol.PEqPair" "CryptolM.PEqMPair"
+    -- PEq constraints
+  , mmSemiPureFin1 "Cryptol.PEqSeq" "CryptolM.PEqMSeq"
+  , mmSemiPureFin1 "Cryptol.PEqSeqBool" "CryptolM.PEqMSeqBool"
 
-    -- PCmp constraints => PCmpM constraints
-  , mmSemiPure "Cryptol.PCmpBit" "CryptolM.PCmpMBit"
-  , mmSemiPure "Cryptol.PCmpInteger" "CryptolM.PCmpMInteger"
-  , mmSemiPure "Cryptol.PCmpRational" "CryptolM.PCmpMRational"
-  , mmSemiPure "Cryptol.PCmpIntMod" "CryptolM.PCmpMIntMod"
-  , mmSemiPure "Cryptol.PCmpIntModNum" "CryptolM.PCmpMIntModNum"
-  , mmSemiPure "Cryptol.PCmpSeq" "CryptolM.PCmpMSeq"
-  , mmSemiPure "Cryptol.PCmpSeqBool" "CryptolM.PCmpMSeqBool"
-  , mmSemiPure "Cryptol.PCmpUnit" "CryptolM.PCmpMUnit"
-  , mmSemiPure "Cryptol.PCmpPair" "CryptolM.PCmpMPair"
+    -- PCmp constraints
+  , mmSemiPureFin1 "Cryptol.PCmpSeq" "CryptolM.PCmpMSeq"
+  , mmSemiPureFin1 "Cryptol.PCmpSeqBool" "CryptolM.PCmpMSeqBool"
 
-    -- PLogic constraints for sequences lift to monadic sequences
-  , mmSelf "Cryptol.PLogicBit"
+    -- PSignedCmp constraints
+  , mmSemiPureFin1 "Cryptol.PSignedCmpSeq" "CryptolM.PSignedCmpMSeq"
+  , mmSemiPureFin1 "Cryptol.PSignedCmpSeqBool" "CryptolM.PSignedCmpMSeqBool"
+
+    -- PZero constraints
+  , mmSemiPureFin1 "Cryptol.PZeroSeq" "CryptolM.PZeroMSeq"
+
+    -- PLogic constraints
   , mmSemiPure "Cryptol.PLogicSeq" "CryptolM.PLogicMSeq"
-  , mmSemiPure "Cryptol.PLogicSeqBool" "CryptolM.PLogicMSeqBool"
-  , mmSelf "Cryptol.PLogicUnit"
-  , mmSelf "Cryptol.PLogicPair"
+  , mmSemiPureFin1 "Cryptol.PLogicSeqBool" "CryptolM.PLogicMSeqBool"
 
-    -- PRing constraints => PRingM constraints
-  , mmSemiPure "Cryptol.PRingInteger" "CryptolM.PRingMInteger"
-  , mmSemiPure "Cryptol.PRingRational" "CryptolM.PRingMRational"
-  , mmSemiPure "Cryptol.PRingIntMod" "CryptolM.PRingMIntMod"
-  , mmSemiPure "Cryptol.PRingIntModNum" "CryptolM.PRingMIntModNum"
+    -- PRing constraints
   , mmSemiPure "Cryptol.PRingSeq" "CryptolM.PRingMSeq"
-  , mmSemiPure "Cryptol.PRingSeqBool" "CryptolM.PRingMSeqBool"
-  , mmSemiPure "Cryptol.PRingUnit" "CryptolM.PRingMUnit"
-  , mmSemiPure "Cryptol.PRingPair" "CryptolM.PRingMPair"
+  , mmSemiPureFin1 "Cryptol.PRingSeqBool" "CryptolM.PRingMSeqBool"
 
-    -- PIntegral constraints => PIntegralM constraints
-  , mmSemiPure "Cryptol.PIntegeralInteger" "CryptolM.PIntegeralMInteger"
-  , mmSemiPure "Cryptol.PIntegeralSeqBool" "CryptolM.PIntegeralMSeqBool"
+    -- PIntegral constraints
+  , mmSemiPureFin1 "Cryptol.PIntegeralSeqBool" "CryptolM.PIntegeralMSeqBool"
 
-    -- The one PLiteral constraint
-  , mmSemiPure "Cryptol.PLiteralSeqBool" "CryptolM.PLiteralSeqBoolM"
+    -- PLiteral constraints
+  , mmSemiPureFin1 "Cryptol.PLiteralSeqBool" "CryptolM.PLiteralSeqBoolM"
 
     -- The Cryptol Literal primitives
   , mmSelf "Cryptol.ecNumber"
   , mmSelf "Cryptol.ecFromZ"
 
-    -- The Cryptol PRing primitives
-  , mmSemiPure "Cryptol.ecFromInteger" "CryptolM.ecFromIntegerM"
-  , mmArg "Cryptol.ecPlus" "CryptolM.ecPlusM"
-  , mmArg "Cryptol.ecMinus" "CryptolM.ecMinusM"
-  , mmArg "Cryptol.ecMul" "CryptolM.ecMulM"
-  , mmArg "Cryptol.ecNeg" "CryptolM.ecNegM"
+    -- The Ring primitives
+  , mmSelf "Cryptol.ecPlus"
+  , mmSelf "Cryptol.ecMinus"
+  , mmSelf "Cryptol.ecMul"
+  , mmSelf "Cryptol.ecNeg"
+  , mmSelf "Cryptol.ecToInteger"
 
-    -- The Cryptol PIntegeral primitives
-  , mmArg "Cryptol.ecToInteger" "CryptolM.ecToIntegerM"
-  , mmArg "Cryptol.ecDiv" "CryptolM.ecDivM"
-  , mmArg "Cryptol.ecMod" "CryptolM.ecModM"
-  , mmArg "Cryptol.ecExp" "CryptolM.ecExpM"
-
-    -- The Cryptol PEq primitives
-  , mmArg "Cryptol.ecEq" "CryptolM.ecEqM"
-  , mmArg "Cryptol.ecNotEq" "CryptolM.ecNotEqM"
-  , mmArg "Cryptol.ecLt" "CryptolM.ecLtM"
-  , mmArg "Cryptol.ecGt" "CryptolM.ecGtM"
-  , mmArg "Cryptol.ecLtEq" "CryptolM.ecLtEqM"
-  , mmArg "Cryptol.ecGtEq" "CryptolM.ecGtEqM"
+    -- The comparison primitives
+  , mmSelf "Cryptol.ecEq"
+  , mmSelf "Cryptol.ecNotEq"
+  , mmSelf "Cryptol.ecLt"
+  , mmSelf "Cryptol.ecLtEq"
+  , mmSelf "Cryptol.ecGt"
+  , mmSelf "Cryptol.ecGtEq"
 
     -- Sequences
-  , mmArg "Cryptol.ecShiftL" "CryptolM.ecShiftLM"
-  , mmArg "Cryptol.ecShiftR" "CryptolM.ecShiftRM"
-  , mmArg "Cryptol.ecSShiftR" "CryptolM.ecSShiftRM"
-  , mmArg "Cryptol.ecRotL" "CryptolM.ecRotLM"
-  , mmArg "Cryptol.ecRotR" "CryptolM.ecRotRM"
-  , mmSemiPure "Cryptol.ecCat" "CryptolM.ecCatM"
+  , mmSemiPure "Cryptol.ecShiftL" "CryptolM.ecShiftLM"
+  , mmSemiPure "Cryptol.ecShiftR" "CryptolM.ecShiftRM"
+  , mmSemiPure "Cryptol.ecSShiftR" "CryptolM.ecSShiftRM"
+  , mmSemiPureFin1 "Cryptol.ecRotL" "CryptolM.ecRotLM"
+  , mmSemiPureFin1 "Cryptol.ecRotR" "CryptolM.ecRotRM"
+  , mmSemiPureFin1 "Cryptol.ecCat" "CryptolM.ecCatM"
   , mmSemiPure "Cryptol.ecTake" "CryptolM.ecTakeM"
-  , mmSemiPure "Cryptol.ecDrop" "CryptolM.ecDropM"
+  , mmSemiPureFin1 "Cryptol.ecDrop" "CryptolM.ecDropM"
   , mmSemiPure "Cryptol.ecJoin" "CryptolM.ecJoinM"
   , mmSemiPure "Cryptol.ecSplit" "CryptolM.ecSplitM"
+  , mmSemiPureFin1 "Cryptol.ecReverse" "CryptolM.ecReverseM"
   , mmSemiPure "Cryptol.ecTranspose" "CryptolM.ecTransposeM"
   , mmArg "Cryptol.ecAt" "CryptolM.ecAtM"
-  , mmArg "Cryptol.ecAtBack" "CryptolM.ecAtBackM"
-  , mmSemiPure "Cryptol.ecFromTo" "CryptolM.ecFromToM"
-  , mmSemiPure "Cryptol.ecFromToLessThan" "CryptolM.ecFromToLessThanM"
-  , mmSemiPure "Cryptol.ecFromThenTo" "CryptolM.ecFromThenToM"
+  -- , mmArgFin1 "Cryptol.ecAtBack" "CryptolM.ecAtBackM"
+  -- , mmSemiPureFin2 "Cryptol.ecFromTo" "CryptolM.ecFromToM"
+  , mmSemiPureFin1 "Cryptol.ecFromToLessThan" "CryptolM.ecFromToLessThanM"
+  -- , mmSemiPureNthFin 5 "Cryptol.ecFromThenTo" "CryptolM.ecFromThenToM"
   , mmSemiPure "Cryptol.ecInfFrom" "CryptolM.ecInfFromM"
   , mmSemiPure "Cryptol.ecInfFromThen" "CryptolM.ecInfFromThenM"
   , mmArg "Cryptol.ecError" "CryptolM.ecErrorM"
