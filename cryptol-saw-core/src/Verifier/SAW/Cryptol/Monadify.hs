@@ -776,9 +776,11 @@ monadifyArgTerm mtp t = toArgTerm <$> monadifyArg mtp t
 
 -- | Monadify a term
 monadifyTerm :: Maybe MonType -> Term -> MonadifyM MonTerm
+{-
 monadifyTerm _ t
   | trace ("Monadifying term: " ++ showTerm t) False
   = undefined
+-}
 monadifyTerm mtp t@(STApp { stAppIndex = ix }) =
   memoizingM ix $ monadifyTerm' mtp t
 monadifyTerm mtp t =

@@ -1563,12 +1563,12 @@ setMonadification sc cry_str saw_str =
        liftIO $
        case Map.lookup cry_nm (CEnv.eExtraTypes $ rwCryptol rw) of
          Just schema ->
-           putStrLn ("Found Cryptol type for name: " ++ show cry_str) >>
+           -- putStrLn ("Found Cryptol type for name: " ++ show cry_str) >>
            importSchemaCEnv sc (rwCryptol rw) schema
          Nothing
            | Just cry_nm_trans <- Map.lookup cry_nm (CEnv.eTermEnv $
                                                      rwCryptol rw) ->
-             putStrLn ("No Cryptol type for name: " ++ cry_str) >>
+             -- putStrLn ("No Cryptol type for name: " ++ cry_str) >>
              scTypeOf sc cry_nm_trans
          _ -> fail ("Could not find type for Cryptol name: " ++ cry_str)
      cry_mon_tp <- liftIO $ Monadify.monadifyCompleteArgType sc cry_saw_tp
