@@ -127,8 +127,8 @@ runSpec :: forall sym p t st fs args ret rtp.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     CollectionState -> FnHandle args ret -> MIRMethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym ret)
-runSpec cs mh ms = do
-    let col = cs ^. collection
+runSpec cs mh ms = ovrWithBackend $ \bak ->
+ do let col = cs ^. collection
     sym <- getSymInterface
     RegMap argVals <- getOverrideArgs
     let argVals' = Map.fromList $ zip [0..] $ MS.assignmentToList argVals
@@ -168,8 +168,7 @@ runSpec cs mh ms = do
         Some btpr <- liftIO $ termToType sym sc (SAW.ecType ec)
         expr <- liftIO $ W4.freshConstant sym nameSymbol btpr
         let ev = CreateVariableEvent loc nameStr btpr expr
-        ovrWithBackend $ \bak ->
-          liftIO $ addAssumptions bak (singleEvent ev)
+        liftIO $ addAssumptions bak (singleEvent ev)
         term <- liftIO $ eval expr
         return (SAW.ecVarIndex ec, term)
 
@@ -240,8 +239,7 @@ runSpec cs mh ms = do
                     show alloc ++ " (info: " ++ show info ++ ")"
 
         -- All references in `allocSub` must point to disjoint memory regions.
-        lift $ ovrWithBackend $ \bak ->
-          liftIO $ checkDisjoint bak (Map.toList allocSub)
+        liftIO $ checkDisjoint bak (Map.toList allocSub)
 
         -- TODO: see if we need any other assertions from LLVM OverrideMatcher
 
@@ -267,11 +265,10 @@ runSpec cs mh ms = do
         Left err -> error $ show err
         Right x -> return x
 
-    ovrWithBackend $ \bak -> do
-      forM_ (os ^. MS.osAsserts) $ \lp ->
-        liftIO $ addAssertion bak lp
-      forM_ (os ^. MS.osAssumes) $ \p ->
-        liftIO $ addAssumption bak (GenericAssumption loc "methodspec postcondition" p)
+    forM_ (os ^. MS.osAsserts) $ \lp ->
+      liftIO $ addAssertion bak lp
+    forM_ (os ^. MS.osAssumes) $ \p ->
+      liftIO $ addAssumption bak (GenericAssumption loc "methodspec postcondition" p)
 
     let preAllocMap = os ^. MS.setupValueSub
 
