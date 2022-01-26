@@ -68,10 +68,15 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-18.04, macos-10.15, windows-latest]
-        ghc: ["8.8.4", "8.10.7"]
+        ghc: ["8.8.4", "8.10.7", "9.0.2"]
         exclude:
           - os: windows-latest
             ghc: "8.8.4"
+          # Exclude 9.0 on Windows for now until
+          # https://github.com/commercialhaskell/stackage/issues/6400
+          # is resolved
+          - os: windows-latest
+            ghc: "9.0.2"
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
