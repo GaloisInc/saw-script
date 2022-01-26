@@ -1,5 +1,5 @@
 # Overall configuration notes:
-# - Artifact uploads for binaries are from GHC 8.10.3
+# - Artifact uploads for binaries are from GHC 8.10.7
 # - Builds for Ubuntu happen on 18.04 (would like to include 20.04, in addition)
 # - Builds for macOS builds on 10.15 (to avoid GHC bug on macOS 11; solvable with GHC > 8.10.4)
 # - Docker builds happen nightly, on manual invocation, and on release branch commits
@@ -68,7 +68,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-18.04, macos-10.15, windows-latest]
-        ghc: ["8.8.4", "8.10.3"]
+        ghc: ["8.8.4", "8.10.7"]
         exclude:
           - os: windows-latest
             ghc: "8.8.4"
@@ -133,7 +133,7 @@ jobs:
           dest: dist-tests
 
       - uses: actions/upload-artifact@v2
-        if: "matrix.ghc == '8.10.3'"
+        if: "matrix.ghc == '8.10.7'"
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
@@ -150,21 +150,21 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
 
-      - if: matrix.ghc == '8.10.3' && needs.config.outputs.release == 'true'
+      - if: matrix.ghc == '8.10.7' && needs.config.outputs.release == 'true'
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME.tar.gz
 
-      - if: matrix.ghc == '8.10.3' && needs.config.outputs.release == 'true'
+      - if: matrix.ghc == '8.10.7' && needs.config.outputs.release == 'true'
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME-with-solvers.tar.gz
 
-      - if: matrix.ghc == '8.10.3'
+      - if: matrix.ghc == '8.10.7'
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -172,7 +172,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '8.10.3'
+      - if: matrix.ghc == '8.10.7'
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -180,7 +180,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: "matrix.ghc == '8.10.3'"
+      - if: "matrix.ghc == '8.10.7'"
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
@@ -474,7 +474,7 @@ jobs:
           - hmac-failure
           - awslc
           - blst
-        ghc: ["8.10.3"]
+        ghc: ["8.10.7"]
     steps:
       - uses: actions/checkout@v2
       - run: |
