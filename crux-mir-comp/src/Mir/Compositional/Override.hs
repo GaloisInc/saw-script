@@ -127,8 +127,8 @@ runSpec :: forall sym p t st fs args ret rtp.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     CollectionState -> FnHandle args ret -> MIRMethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym ret)
-runSpec cs mh ms = do
-    let col = cs ^. collection
+runSpec cs mh ms = ovrWithBackend $ \bak ->
+ do let col = cs ^. collection
     sym <- getSymInterface
     RegMap argVals <- getOverrideArgs
     let argVals' = Map.fromList $ zip [0..] $ MS.assignmentToList argVals
@@ -168,7 +168,7 @@ runSpec cs mh ms = do
         Some btpr <- liftIO $ termToType sym sc (SAW.ecType ec)
         expr <- liftIO $ W4.freshConstant sym nameSymbol btpr
         let ev = CreateVariableEvent loc nameStr btpr expr
-        liftIO $ addAssumptions sym (singleEvent ev)
+        liftIO $ addAssumptions bak (singleEvent ev)
         term <- liftIO $ eval expr
         return (SAW.ecVarIndex ec, term)
 
@@ -239,7 +239,7 @@ runSpec cs mh ms = do
                     show alloc ++ " (info: " ++ show info ++ ")"
 
         -- All references in `allocSub` must point to disjoint memory regions.
-        liftIO $ checkDisjoint sym (Map.toList allocSub)
+        liftIO $ checkDisjoint bak (Map.toList allocSub)
 
         -- TODO: see if we need any other assertions from LLVM OverrideMatcher
 
@@ -266,10 +266,9 @@ runSpec cs mh ms = do
         Right x -> return x
 
     forM_ (os ^. MS.osAsserts) $ \lp ->
-        liftIO $ addAssertion sym lp
-
+      liftIO $ addAssertion bak lp
     forM_ (os ^. MS.osAssumes) $ \p ->
-        liftIO $ addAssumption sym (GenericAssumption loc "methodspec postcondition" p)
+      liftIO $ addAssumption bak (GenericAssumption loc "methodspec postcondition" p)
 
     let preAllocMap = os ^. MS.setupValueSub
 
@@ -465,7 +464,8 @@ matchArg sym sc eval allocSpecs shp rv sv = go shp rv sv
             Nothing -> return ()
             Just (Some ptr)
               | Just Refl <- testEquality tpr (ptr ^. mpType) -> do
-                eq <- liftIO $ mirRef_eqIO sym ref' (ptr ^. mpRef)
+                eq <- lift $ ovrWithBackend $ \bak ->
+                        liftIO $ mirRef_eqIO bak ref' (ptr ^. mpRef)
                 let loc = mkProgramLoc "matchArg" InternalPos
                 MS.addAssert eq $
                     SimError loc (AssertFailureSimError ("mismatch on " ++ show alloc) "")
@@ -555,16 +555,18 @@ condTerm _ (MS.SetupCond_Ghost _ _ _ _) = do
 
 
 checkDisjoint ::
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    sym ->
+    (sym ~ W4.ExprBuilder t st fs, IsSymBackend sym bak) =>
+    bak ->
     [(MS.AllocIndex, Some (MirPointer sym))] ->
     IO ()
-checkDisjoint sym refs = go refs
+checkDisjoint bak refs = go refs
   where
+    sym = backendGetSym bak
+
     go [] = return ()
     go ((alloc, Some ptr) : rest) = do
         forM_ rest $ \(alloc', Some ptr') -> do
-            disjoint <- W4.notPred sym =<< mirRef_overlapsIO sym (ptr ^. mpRef) (ptr' ^. mpRef)
-            assert sym disjoint $ GenericSimError $
+            disjoint <- W4.notPred sym =<< mirRef_overlapsIO bak (ptr ^. mpRef) (ptr' ^. mpRef)
+            assert bak disjoint $ GenericSimError $
                 "references " ++ show alloc ++ " and " ++ show alloc' ++ " must not overlap"
         go rest

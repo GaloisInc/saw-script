@@ -32,7 +32,7 @@ import Control.Lens.TH (makeLenses)
 
 import System.IO (stdout)
 import Control.Exception (throw)
-import Control.Lens (view, use, (&), (^.), (.~), (%~), (.=))
+import Control.Lens (Getter, to, view, use, (&), (^.), (.~), (%~), (.=))
 import Control.Monad.State
 import Control.Monad.Catch (MonadThrow)
 
@@ -149,7 +149,7 @@ newtype X86Sim a = X86Sim { unX86Sim :: StateT X86State IO a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadState X86State, MonadThrow)
 
 data X86State = X86State
-  { _x86Sym :: Sym
+  { _x86Backend :: SomeOnlineBackend
   , _x86Options :: Options
   , _x86SharedContext :: SharedContext
   , _x86CrucibleContext :: LLVMCrucibleContext LLVMArch
@@ -167,6 +167,9 @@ runX86Sim st m = runStateT (unX86Sim m) st
 
 throwX86 :: MonadThrow m => String -> m a
 throwX86 = throw . X86Error
+
+x86Sym :: Getter X86State Sym
+x86Sym = to (\st -> case _x86Backend st of SomeOnlineBackend bak -> backendGetSym bak)
 
 defaultStackBaseAlign :: Integer
 defaultStackBaseAlign = 16
@@ -253,7 +256,8 @@ llvmPointerOffset = snd . C.LLVM.llvmPointerView
 doPtrCmp ::
   (sym -> W4.SymBV sym w -> W4.SymBV sym w -> IO (W4.Pred sym)) ->
   Macaw.PtrOp sym w (C.RegValue sym C.BoolType)
-doPtrCmp f = Macaw.ptrOp $ \sym mem w xPtr xBits yPtr yBits x y -> do
+doPtrCmp f = Macaw.ptrOp $ \bak mem w xPtr xBits yPtr yBits x y -> do
+  let sym = backendGetSym bak
   let ptr_as_bv_for_cmp ptr = do
         page_size <- W4.bvLit sym (W4.bvWidth $ llvmPointerOffset ptr) $
           BV.mkBV (W4.bvWidth $ llvmPointerOffset ptr) 4096
@@ -307,7 +311,8 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       opts <- getOptions
       basic_ss <- getBasicSS
       rw <- getTopLevelRW
-      sym <- liftIO $ newSAWCoreBackendWithTimeout sc $ rwCrucibleTimeout rw
+      sym <- liftIO $ newSAWCoreExprBuilder sc
+      SomeOnlineBackend bak <- liftIO $ newSAWCoreBackendWithTimeout sym $ rwCrucibleTimeout rw
       cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms $ W4.getConfiguration sym
       _ <- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsingX86 rw
       liftIO $ W4.extendConfig
@@ -348,7 +353,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
         cc :: LLVMCrucibleContext x
         cc = LLVMCrucibleContext
           { _ccLLVMModule = llvmModule
-          , _ccBackend = sym
+          , _ccBackend = SomeOnlineBackend bak
           , _ccBasicSS = basic_ss
 
           -- It's unpleasant that we need to do this to use resolveSetupVal.
@@ -369,7 +374,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
 
       let ?lc = modTrans llvmModule ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
 
-      emptyState <- io $ initialState sym opts sc cc elf relf methodSpec globsyms maxAddr
+      emptyState <- io $ initialState bak opts sc cc elf relf methodSpec globsyms maxAddr
       balign <- integerToAlignment $ rwStackBaseAlign rw
       (env, preState) <- io . runX86Sim emptyState $ setupMemory globsyms balign
 
@@ -417,7 +422,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
           }
         ctx :: C.SimContext (Macaw.MacawSimulatorState Sym) Sym (Macaw.MacawExt Macaw.X86_64)
         ctx = C.SimContext
-              { C._ctxSymInterface = sym
+              { C._ctxBackend = SomeBackend bak
               , C.ctxSolverProof = id
               , C.ctxIntrinsicTypes = C.LLVM.llvmIntrinsicTypes
               , C.simHandleAllocator = halloc
@@ -450,7 +455,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
 
       psatf <-
          if checkSat then
-           do f <- liftIO (C.pathSatisfiabilityFeature sym (C.considerSatisfiability sym))
+           do f <- liftIO (C.pathSatisfiabilityFeature sym (C.considerSatisfiability bak))
               pure [C.genericToExecutionFeature f]
          else
            pure []
@@ -470,7 +475,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
             ar
         C.TimeoutResult{} -> fail "Execution timed out"
 
-      (stats,thms) <- checkGoals sym opts sc tactic
+      (stats,thms) <- checkGoals bak opts sc tactic
 
       end <- io getCurrentTime
       let diff = diffUTCTime end start
@@ -600,8 +605,8 @@ llvmSignature opts llvmModule nm =
 -- ** Building the initial state
 
 initialState ::
-  X86Constraints =>
-  Sym ->
+  (X86Constraints, OnlineSolver solver) =>
+  Backend solver ->
   Options ->
   SharedContext ->
   LLVMCrucibleContext LLVMArch ->
@@ -611,7 +616,8 @@ initialState ::
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Integer {- ^ Minimum size of the global allocation (here, the end of the .text segment -} ->
   IO X86State
-initialState sym opts sc cc elf relf ms globs maxAddr = do
+initialState bak opts sc cc elf relf ms globs maxAddr = do
+  let sym = backendGetSym bak
   emptyMem <- C.LLVM.emptyMem C.LLVM.LittleEndian
   emptyRegs <- traverseWithIndex (freshRegister sym) C.knownRepr
   symTab <- case Elf.decodeHeaderSymtab elf of
@@ -632,10 +638,10 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
     , globalEnd . fst <$> globs
     , allocGlobalEnd <$> ms ^. MS.csGlobalAllocs
     ]
-  (base, mem) <- C.LLVM.doMalloc sym C.LLVM.GlobalAlloc C.LLVM.Immutable
+  (base, mem) <- C.LLVM.doMalloc bak C.LLVM.GlobalAlloc C.LLVM.Immutable
     "globals" emptyMem sz align
   pure $ X86State
-    { _x86Sym = sym
+    { _x86Backend = SomeOnlineBackend bak
     , _x86Options = opts
     , _x86SharedContext = sc
     , _x86CrucibleContext = cc
@@ -683,6 +689,7 @@ setupGlobals ::
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   X86Sim ()
 setupGlobals globsyms = do
+  SomeOnlineBackend bak <- use x86Backend
   sym <- use x86Sym
   mem <- use x86Mem
   relf <- use x86RelevantElf
@@ -697,10 +704,10 @@ setupGlobals globsyms = do
       C.LLVM.LLVMValInt <$> W4.natLit sym 0 <*> W4.bvLit sym (knownNat @8) (BV.mkBV knownNat byte)
     writeGlobal :: Mem -> (String, Integer, [Integer]) -> IO Mem
     writeGlobal m (_nm, addr, bytes) = do
-      ptr <- C.LLVM.doPtrAddOffset sym m base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
+      ptr <- C.LLVM.doPtrAddOffset bak m base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
       v <- Vector.fromList <$> mapM convertByte bytes
       let st = C.LLVM.arrayType (fromIntegral $ length bytes) $ C.LLVM.bitvectorType 1
-      C.LLVM.storeConstRaw sym m ptr st C.LLVM.noAlignment
+      C.LLVM.storeConstRaw bak m ptr st C.LLVM.noAlignment
         $ C.LLVM.LLVMValArray (C.LLVM.bitvectorType 1) v
   globs <- liftIO $ mconcat <$> mapM readInitialGlobal globsyms
   mem' <- liftIO $ foldlM writeGlobal mem globs
@@ -714,20 +721,21 @@ allocateStack ::
   C.LLVM.Alignment {- ^ Stack base alignment -} ->
   X86Sim ()
 allocateStack szInt balign = do
+  SomeOnlineBackend bak <- use x86Backend
   sym <- use x86Sym
   mem <- use x86Mem
   regs <- use x86Regs
   sz <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ szInt + 8
-  (base, mem') <- liftIO $ C.LLVM.doMalloc sym C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz balign
+  (base, mem') <- liftIO $ C.LLVM.doMalloc bak C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz balign
   sn <- case W4.userSymbol "stack" of
     Left err -> throwX86 $ "Invalid symbol for stack: " <> show err
     Right sn -> pure sn
   fresh <- liftIO $ C.LLVM.LLVMPointer
     <$> W4.natLit sym 0
     <*> W4.freshConstant sym sn (W4.BaseBVRepr $ knownNat @64)
-  ptr <- liftIO $ C.LLVM.doPtrAddOffset sym mem' base =<< W4.bvLit sym knownNat (BV.mkBV knownNat szInt)
+  ptr <- liftIO $ C.LLVM.doPtrAddOffset bak mem' base =<< W4.bvLit sym knownNat (BV.mkBV knownNat szInt)
   writeAlign <- integerToAlignment defaultStackBaseAlign
-  finalMem <- liftIO $ C.LLVM.doStore sym mem' ptr
+  finalMem <- liftIO $ C.LLVM.doStore bak mem' ptr
     (C.LLVM.LLVMPointerRepr $ knownNat @64)
     (C.LLVM.bitvectorType 8) writeAlign fresh
   x86Mem .= finalMem
@@ -742,11 +750,11 @@ assumeAllocation ::
   (MS.AllocIndex, LLVMAllocSpec) {- ^ llvm_alloc statement -} ->
   X86Sim (Map MS.AllocIndex Ptr)
 assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc False initialization) = do
+  SomeOnlineBackend bak <- use x86Backend
   cc <- use x86CrucibleContext
-  sym <- use x86Sym
   mem <- use x86Mem
   sz' <- liftIO $ resolveSAWSymBV cc knownNat sz
-  (ptr, mem') <- liftIO $ LO.doAllocSymInit sym mem mut align sz' (show $ W4.plSourceLoc loc) initialization
+  (ptr, mem') <- liftIO $ LO.doAllocSymInit bak mem mut align sz' (show $ W4.plSourceLoc loc) initialization
   x86Mem .= mem'
   pure $ Map.insert i ptr env
 assumeAllocation env _ = pure env
@@ -785,6 +793,7 @@ resolvePtrSetupValue ::
   MS.SetupValue LLVM ->
   X86Sim Ptr
 resolvePtrSetupValue env tyenv nameEnv tptr = do
+  SomeOnlineBackend bak <- use x86Backend
   sym <- use x86Sym
   cc <- use x86CrucibleContext
   mem <- use x86Mem
@@ -798,7 +807,7 @@ resolvePtrSetupValue env tyenv nameEnv tptr = do
       Nothing -> throwX86 $ mconcat ["Global symbol \"", nm, "\" not found"]
       Just entry -> do
         let addr = fromIntegral $ Elf.steValue entry
-        liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
+        liftIO $ C.LLVM.doPtrAddOffset bak mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
     _ -> liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
          =<< resolveSetupVal cc mem env tyenv nameEnv tptr
 
@@ -891,6 +900,7 @@ assertPost ::
   Regs {- ^ The state of the registers before simulation -} ->
   X86Sim ()
 assertPost globals env premem preregs = do
+  SomeOnlineBackend bak <- use x86Backend
   sym <- use x86Sym
   opts <- use x86Options
   sc <- use x86SharedContext
@@ -902,17 +912,17 @@ assertPost globals env premem preregs = do
     nameEnv = MS.csTypeNames ms
 
   prersp <- getReg Macaw.RSP preregs
-  expectedIP <- liftIO $ C.LLVM.doLoad sym premem prersp (C.LLVM.bitvectorType 8)
+  expectedIP <- liftIO $ C.LLVM.doLoad bak premem prersp (C.LLVM.bitvectorType 8)
     (C.LLVM.LLVMPointerRepr $ knownNat @64) C.LLVM.noAlignment
   actualIP <- getReg Macaw.X86_IP postregs
   correctRetAddr <- liftIO $ C.LLVM.ptrEq sym C.LLVM.PtrWidth actualIP expectedIP
-  liftIO . C.addAssertion sym . C.LabeledPred correctRetAddr . C.SimError W4.initializationLoc
+  liftIO . C.addAssertion bak . C.LabeledPred correctRetAddr . C.SimError W4.initializationLoc
     $ C.AssertFailureSimError "Instruction pointer not set to return address" ""
 
-  stack <- liftIO $ C.LLVM.doPtrAddOffset sym premem prersp =<< W4.bvLit sym knownNat (BV.mkBV knownNat 8)
+  stack <- liftIO $ C.LLVM.doPtrAddOffset bak premem prersp =<< W4.bvLit sym knownNat (BV.mkBV knownNat 8)
   postrsp <- getReg Macaw.RSP postregs
   correctStack <- liftIO $ C.LLVM.ptrEq sym C.LLVM.PtrWidth stack postrsp
-  liftIO $ C.addAssertion sym . C.LabeledPred correctStack . C.SimError W4.initializationLoc
+  liftIO $ C.addAssertion bak . C.LabeledPred correctStack . C.SimError W4.initializationLoc
     $ C.AssertFailureSimError "Stack not preserved" ""
 
   returnMatches <- case (ms ^. MS.csRetValue, ms ^. MS.csRet) of
@@ -970,9 +980,9 @@ assertPost globals env premem preregs = do
     Left err -> throwX86 $ show err
     Right (_, st) -> pure st
   liftIO . forM_ (view O.osAssumes st) $
-    C.addAssumption sym . C.GenericAssumption (st ^. O.osLocation) "precondition"
+    C.addAssumption bak . C.GenericAssumption (st ^. O.osLocation) "precondition"
   liftIO . forM_ (view LO.osAsserts st) $ \(W4.LabeledPred p r) ->
-    C.addAssertion sym $ C.LabeledPred p r
+    C.addAssertion bak $ C.LabeledPred p r
 
 -- | Assert that a points-to postcondition holds.
 assertPointsTo ::
@@ -1013,13 +1023,14 @@ assertPointsTo env tyenv nameEnv pointsTo@(LLVMPointsToBitfield loc tptr fieldNa
 
 -- | Gather and run the solver on goals from the simulator.
 checkGoals ::
-  Sym ->
+  IsSymBackend Sym bak =>
+  bak ->
   Options ->
   SharedContext ->
   ProofScript () ->
   TopLevel (SolverStats, Set TheoremNonce)
-checkGoals sym opts sc tactic = do
-  gs <- liftIO $ getGoals sym
+checkGoals bak opts sc tactic = do
+  gs <- liftIO $ getGoals (SomeBackend bak)
   liftIO . printOutLn opts Info $ mconcat
     [ "Simulation finished, running solver on "
     , show $ length gs

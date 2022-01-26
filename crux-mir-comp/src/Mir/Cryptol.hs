@@ -63,9 +63,9 @@ import Mir.Compositional.Convert
 
 
 cryptolOverrides ::
-    forall sym p t st fs args ret blocks rtp a r .
+    forall sym bak p t st fs args ret blocks rtp a r .
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    Maybe (SomeOnlineSolver sym) ->
+    Maybe (SomeOnlineSolver sym bak) ->
     CollectionState ->
     Text ->
     CFG MIR blocks args ret ->

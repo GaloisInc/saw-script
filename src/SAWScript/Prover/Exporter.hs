@@ -314,7 +314,7 @@ write_verilog sc path t = io $ writeVerilog sc path t
 
 writeVerilogSAT :: FilePath -> SATQuery -> TopLevel [(ExtCns Term, FiniteType)]
 writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
-  do sym <- newSAWCoreBackend sc
+  do sym <- newSAWCoreExprBuilder sc
      -- For SAT checking, we don't care what order the variables are in,
      -- but only that we can correctly keep track of the connection
      -- between inputs and assignments.
@@ -365,7 +365,7 @@ flattenSValue _ sval = fail $ "write_verilog: unsupported result type: " ++ show
 
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
-  sym <- newSAWCoreBackend sc
+  sym <- newSAWCoreExprBuilder sc
   st  <- sawCoreState sym
   -- For writing Verilog in the general case, it's convenient for any
   -- lambda-bound inputs to appear first in the module input list, in

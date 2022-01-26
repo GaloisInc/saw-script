@@ -175,7 +175,7 @@ resolveSetupVal cc env _tyenv _nameEnv val =
     MS.SetupField empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
   where
-    sym = cc^.jccBackend
+    sym = cc^.jccSym
 
 resolveTypedTerm ::
   JVMCrucibleContext ->
@@ -196,7 +196,7 @@ resolveSAWPred ::
   Term ->
   IO (W4.Pred Sym)
 resolveSAWPred cc tm =
-  do let sym = cc^.jccBackend
+  do let sym = cc^.jccSym
      st <- sawCoreState sym
      bindSAWTerm sym st W4.BaseBoolRepr tm
 
@@ -247,7 +247,7 @@ resolveSAWTerm cc tp tm =
     Cryptol.TVNewtype{} ->
       fail "resolveSAWTerm: unsupported newtype"
   where
-    sym = cc^.jccBackend
+    sym = cc^.jccSym
 
 resolveBitvectorTerm ::
   forall w.
@@ -324,4 +324,4 @@ equalValsPred cc v1 v2 = go (v1, v2)
   go (LVal l1, LVal l2) = W4.bvEq sym l1 l2
   go _ = return (W4.falsePred sym)
 
-  sym = cc^.jccBackend
+  sym = cc^.jccSym

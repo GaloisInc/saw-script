@@ -6,13 +6,21 @@ Maintainer  : langston
 Stability   : provisional
 -}
 
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE RankNTypes #-}
 
 module SAWScript.Crucible.Common
   ( ppAbortedResult
   , Sym
+  , Backend
+  , SomeOnlineBackend(..)
+  , SomeBackend(..)
+  , IsSymBackend(..)
+  , HasSymInterface(..)
+  , OnlineSolver(..)
   , setupProfiling
   , SAWCruciblePersonality(..)
+  , newSAWCoreExprBuilder
   , newSAWCoreBackend
   , newSAWCoreBackendWithTimeout
   , defaultSAWCoreBackendTimeout
@@ -23,17 +31,21 @@ import           Lang.Crucible.Simulator (GenericExecutionFeature)
 import           Lang.Crucible.Simulator.ExecutionTree (AbortedResult(..), GlobalPair)
 import           Lang.Crucible.Simulator.CallFrame (SimFrame)
 import           Lang.Crucible.Simulator.Profiling
-import           Lang.Crucible.Backend (AbortExecReason(..), ppAbortExecReason, IsSymInterface)
-import           Lang.Crucible.Backend.Online
+import           Lang.Crucible.Backend
+                   (AbortExecReason(..), ppAbortExecReason, IsSymInterface, IsSymBackend(..),
+                    HasSymInterface(..), SomeBackend(..))
+import           Lang.Crucible.Backend.Online (OnlineBackend, newOnlineBackend)
 import qualified Data.Parameterized.Nonce as Nonce
+import           What4.Protocol.Online (OnlineSolver(..))
 import qualified What4.Solver.Z3 as Z3
 import qualified What4.Protocol.SMTLib2 as SMT2
+
 import qualified What4.Config as W4
 import qualified What4.Expr as W4
 import qualified What4.Interface as W4
-import qualified What4.Expr.Builder as W4
 import qualified What4.ProgramLoc as W4 (plSourceLoc)
 
+import Control.Lens ( (^.) )
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 import qualified Prettyprinter as PP
@@ -43,28 +55,36 @@ import Verifier.SAW.SharedTerm as SC
 import Verifier.SAW.Simulator.What4.ReturnTrip (SAWCoreState, newSAWCoreState)
 
 -- | The symbolic backend we use for SAW verification
-type Sym = OnlineBackendUserSt Nonce.GlobalNonceGenerator (SMT2.Writer Z3.Z3) SAWCoreState (W4.Flags W4.FloatReal)
+type Sym = W4.ExprBuilder Nonce.GlobalNonceGenerator SAWCoreState (W4.Flags W4.FloatReal)
+type Backend solver = OnlineBackend solver Nonce.GlobalNonceGenerator SAWCoreState (W4.Flags W4.FloatReal)
+
+data SomeOnlineBackend =
+  forall solver. OnlineSolver solver => 
+    SomeOnlineBackend (Backend solver)
 
 data SAWCruciblePersonality sym = SAWCruciblePersonality
 
+sawCoreState :: Sym -> IO (SAWCoreState Nonce.GlobalNonceGenerator)
+sawCoreState sym = pure (sym ^. W4.userState)
 
-newSAWCoreBackend :: SC.SharedContext -> IO Sym
-newSAWCoreBackend sc = newSAWCoreBackendWithTimeout sc 0
+newSAWCoreExprBuilder :: SC.SharedContext -> IO Sym
+newSAWCoreExprBuilder sc =
+  do st <- newSAWCoreState sc
+     W4.newExprBuilder W4.FloatRealRepr st Nonce.globalNonceGenerator
 
 defaultSAWCoreBackendTimeout :: Integer
 defaultSAWCoreBackendTimeout = 10000
 
-newSAWCoreBackendWithTimeout :: SC.SharedContext -> Integer -> IO Sym
-newSAWCoreBackendWithTimeout sc timeout =
-  do st <- newSAWCoreState sc
-     sym <- newOnlineBackend W4.FloatRealRepr Nonce.globalNonceGenerator (SMT2.defaultFeatures Z3.Z3) st
+newSAWCoreBackend :: Sym -> IO SomeOnlineBackend
+newSAWCoreBackend sym = newSAWCoreBackendWithTimeout sym 0
+
+newSAWCoreBackendWithTimeout :: Sym -> Integer -> IO SomeOnlineBackend
+newSAWCoreBackendWithTimeout sym timeout =
+  do bak <- newOnlineBackend sym (SMT2.defaultFeatures Z3.Z3)
      W4.extendConfig Z3.z3Options (W4.getConfiguration sym)
      z3TimeoutSetting <- W4.getOptionSetting Z3.z3Timeout (W4.getConfiguration sym)
      _ <- W4.setOpt z3TimeoutSetting timeout
-     return sym
-
-sawCoreState :: Sym -> IO (SAWCoreState Nonce.GlobalNonceGenerator)
-sawCoreState sym = pure (onlineUserState (W4.sbUserState sym))
+     return (SomeOnlineBackend (bak :: Backend (SMT2.Writer Z3.Z3)))
 
 ppAbortedResult :: (forall l args. GlobalPair Sym (SimFrame Sym ext l args) -> PP.Doc ann)
                 -> AbortedResult Sym ext
