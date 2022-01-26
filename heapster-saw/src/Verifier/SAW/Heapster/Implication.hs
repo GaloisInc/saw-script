@@ -37,6 +37,7 @@ import qualified Data.BitVector.Sized as BV
 import GHC.TypeLits
 import Control.Lens hiding ((:>), ix)
 import Control.Applicative
+import Control.Monad.Extra (concatMapM)
 import Control.Monad.State.Strict hiding (ap)
 
 import qualified Data.Type.RList as RL
@@ -1512,21 +1513,39 @@ idLocalPermImpl = LocalPermImpl $ PermImpl_Done $ LocalImplRet Refl
 
 -- type IsLLVMPointerTypeList w ps = RAssign ((:~:) (LLVMPointerType w)) ps
 
-$(mkNuMatching [t| forall a. EqPerm a |])
-$(mkNuMatching [t| forall ps a. NuMatching a => EqProofStep ps a |])
-$(mkNuMatching [t| forall ps a. NuMatching a => EqProof ps a |])
-$(mkNuMatching [t| forall ps_in ps_out. SimplImpl ps_in ps_out |])
-$(mkNuMatching [t| forall ps_in ps_outs. PermImpl1 ps_in ps_outs |])
-$(mkNuMatching [t| forall r bs_pss. NuMatchingAny1 r => MbPermImpls r bs_pss |])
-$(mkNuMatching [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |])
-$(mkNuMatching [t| forall ps_in ps_out. LocalPermImpl ps_in ps_out |])
-$(mkNuMatching [t| forall ps ps'. LocalImplRet ps ps' |])
-
 instance NuMatchingAny1 EqPerm where
   nuMatchingAny1Proof = nuMatchingProof
 
 instance NuMatchingAny1 (LocalImplRet ps) where
   nuMatchingAny1Proof = nuMatchingProof
+
+-- Many of these types are mutually recursive. Moreover, Template Haskell
+-- declaration splices strictly separate top-level groups, so if we were to
+-- write each $(mkNuMatching [t| ... |]) splice individually, the splices
+-- involving mutually recursive types would not typecheck. As a result, we
+-- must put everything into a single splice so that it forms a single top-level
+-- group.
+$(concatMapM mkNuMatching
+  [ [t| forall a. EqPerm a |]
+  , [t| forall ps a. NuMatching a => EqProofStep ps a |]
+  , [t| forall ps a. NuMatching a => EqProof ps a |]
+  , [t| forall ps_in ps_out. SimplImpl ps_in ps_out |]
+  , [t| forall ps_in ps_outs. PermImpl1 ps_in ps_outs |]
+  , [t| forall r bs_pss. NuMatchingAny1 r => MbPermImpls r bs_pss |]
+  , [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |]
+  , [t| forall ps_in ps_out. LocalPermImpl ps_in ps_out |]
+  , [t| forall ps ps'. LocalImplRet ps ps' |]
+  ])
+
+-- | A splitting of an existential list of permissions into a prefix, a single
+-- variable plus permission, and then a suffix
+data DistPermsSplit ps where
+  DistPermsSplit :: RAssign Proxy ps1 -> RAssign Proxy ps2 ->
+                    DistPerms (ps1 :++: ps2) ->
+                    ExprVar a -> ValuePerm a ->
+                    DistPermsSplit (ps1 :> a :++: ps2)
+
+$(mkNuMatching [t| forall ps. DistPermsSplit ps |])
 
 
 -- | Compile-time flag for whether to prune failure branches in 'implCatchM'
@@ -6245,7 +6264,7 @@ proveVarLLVMArrayH x first_p _ ps mb_ap =
 
 -- | Prove an array permission by proving its first cell and then its remaining
 -- cells and appending them together
-proveVarLLVMArray_FromHead :: 
+proveVarLLVMArray_FromHead ::
   (1 <= w, KnownNat w, NuMatchingAny1 r) =>
   ExprVar (LLVMPointerType w) -> Mb vars (LLVMArrayPerm w) ->
   ImplM vars s r (ps :> LLVMPointerType w) ps ()
@@ -7063,7 +7082,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     -- Prove the corresponding field permission
     proveVarImplInt x (mbValPerm_LLVMField mb_fp) >>>
     getTopDistPerm x >>>= \(ValPerm_LLVMField fp) ->
-    
+
     -- Finally, convert the field perm to a block and move it into position
     implSimplM Proxy (SImpl_IntroLLVMBlockField x fp) >>>
     implSwapInsertConjM x (Perm_LLVMBlock $ llvmFieldPermToBlock fp) ps' 0
@@ -7081,7 +7100,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarImplInt x (mbMapCl $(mkClosed [| ValPerm_LLVMArray . fromJust .
                                              llvmBlockPermToArray |]) mb_bp) >>>
     getTopDistPerm x >>>= \(ValPerm_LLVMArray ap) ->
-    
+
     -- Finally, convert the array perm to a block and move it into position
     implSimplM Proxy (SImpl_IntroLLVMBlockArray x ap) >>>
     implSwapInsertConjM x (Perm_LLVMBlock $ fromJust $
@@ -7124,7 +7143,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 
 
 -- If proving a tagged union shape, first prove an equality permission for the
--- tag and then use that equality permission to 
+-- tag and then use that equality permission to
 proveVarLLVMBlocks2 x ps psubst mb_bp _ mb_bps
   | Just [nuP| SomeTaggedUnionShape mb_tag_u |] <- mbLLVMBlockToTaggedUnion mb_bp
   , mb_shs <- mbTaggedUnionDisjs mb_tag_u
@@ -8125,14 +8144,6 @@ funPermExDistIns fun_perm args =
   fmap (varSubst (permVarSubstOfNames args)) $ mbSeparate args $
   mbValuePermsToDistPerms $ funPermIns fun_perm
 
--- | A splitting of an existential list of permissions into a prefix, a single
--- variable plus permission, and then a suffix
-data DistPermsSplit ps where
-  DistPermsSplit :: RAssign Proxy ps1 -> RAssign Proxy ps2 ->
-                    DistPerms (ps1 :++: ps2) ->
-                    ExprVar a -> ValuePerm a ->
-                    DistPermsSplit (ps1 :> a :++: ps2)
-
 -- | Make a "base case" 'DistPermsSplit' where the split is at the end
 baseDistPermsSplit :: DistPerms ps -> ExprVar a -> ValuePerm a ->
                       DistPermsSplit (ps :> a)
@@ -8418,5 +8429,3 @@ proveVarsImplVarEVars mb_ps =
 proveVarImpl :: NuMatchingAny1 r => ExprVar a -> Mb vars (ValuePerm a) ->
                 ImplM vars s r (ps :> a) ps ()
 proveVarImpl x mb_p = proveVarsImplAppend $ fmap (distPerms1 x) mb_p
-
-$(mkNuMatching [t| forall ps. DistPermsSplit ps |])

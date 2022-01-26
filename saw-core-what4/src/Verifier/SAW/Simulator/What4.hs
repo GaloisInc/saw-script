@@ -64,6 +64,7 @@ import qualified Control.Arrow as A
 
 import Data.Bits
 import Data.IORef
+import Data.Kind (Type)
 import Data.List (genericTake)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -117,7 +118,7 @@ import Verifier.SAW.Simulator.What4.ReturnTrip
 ---------------------------------------------------------------------
 -- empty datatype to index (open) type families
 -- for this backend
-data What4 (sym :: *)
+data What4 (sym :: Type)
 
 -- | A What4 symbolic array where the domain and co-domain types do not appear
 --   in the type
@@ -791,7 +792,7 @@ w4SolveBasic sym sc addlPrims ecMap ref unintSet t =
 ----------------------------------------------------------------------
 -- Uninterpreted function cache
 
-data SymFnWrapper sym :: Ctx.Ctx BaseType -> * where
+data SymFnWrapper sym :: Ctx.Ctx BaseType -> Type where
   SymFnWrapper :: !(W.SymFn sym args ret) -> SymFnWrapper sym (args Ctx.::> ret)
 
 type SymFnCache sym = Map W.SolverSymbol (MapF (Assignment BaseTypeRepr) (SymFnWrapper sym))
@@ -842,7 +843,7 @@ parseUninterpreted ::
 parseUninterpreted sym ref app ty =
   case ty of
     VPiType nm _ body
-      -> pure $ VFun nm $ \x -> 
+      -> pure $ VFun nm $ \x ->
            do x' <- force x
               app' <- applyUnintApp sym app x'
               t2 <- applyPiBody body (ready x')

@@ -554,10 +554,10 @@ anySetupTerm :: TypedTerm -> AllLLVM MS.SetupValue
 anySetupTerm typedTerm = mkAllLLVM (MS.SetupTerm typedTerm)
 
 anySetupArray :: [AllLLVM MS.SetupValue] -> AllLLVM MS.SetupValue
-anySetupArray vals = mkAllLLVM (MS.SetupArray () $ map getAllLLVM vals)
+anySetupArray vals = mkAllLLVM (MS.SetupArray () $ map (\a -> getAllLLVM a) vals)
 
 anySetupStruct :: Bool -> [AllLLVM MS.SetupValue] -> AllLLVM MS.SetupValue
-anySetupStruct b vals = mkAllLLVM (MS.SetupStruct () b $ map getAllLLVM vals)
+anySetupStruct b vals = mkAllLLVM (MS.SetupStruct () b $ map (\a -> getAllLLVM a) vals)
 
 anySetupElem :: AllLLVM MS.SetupValue -> Int -> AllLLVM MS.SetupValue
 anySetupElem val idx = mkAllLLVM (MS.SetupElem () (getAllLLVM val) idx)

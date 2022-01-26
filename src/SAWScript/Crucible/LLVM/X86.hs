@@ -423,7 +423,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
         ctx :: C.SimContext (Macaw.MacawSimulatorState Sym) Sym (Macaw.MacawExt Macaw.X86_64)
         ctx = C.SimContext
               { C._ctxBackend = SomeBackend bak
-              , C.ctxSolverProof = id
+              , C.ctxSolverProof = \x -> x
               , C.ctxIntrinsicTypes = C.LLVM.llvmIntrinsicTypes
               , C.simHandleAllocator = halloc
               , C.printHandle = stdout
