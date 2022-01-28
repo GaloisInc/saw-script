@@ -45,7 +45,7 @@ import qualified Language.JVM.Parser as J
 -- cryptol-saw-core
 import           Verifier.SAW.TypedTerm (TypedTerm)
 
-import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
@@ -182,13 +182,24 @@ data JVMCrucibleContext =
   { _jccJVMClass       :: J.Class
   , _jccCodebase       :: CB.Codebase
   , _jccJVMContext     :: CJ.JVMContext
-  , _jccBackend        :: Sym -- This is stored inside field _ctxSymInterface of Crucible.SimContext; why do we need another one?
+  , _jccBackend        :: SomeOnlineBackend
   , _jccHandleAllocator :: Crucible.HandleAllocator
   }
 
 makeLenses ''JVMCrucibleContext
 
 type instance MS.CrucibleContext CJ.JVM = JVMCrucibleContext
+
+
+jccWithBackend ::
+  JVMCrucibleContext ->
+  (forall solver. OnlineSolver solver => Backend solver -> a) ->
+  a
+jccWithBackend cc k =
+  case cc^.jccBackend of SomeOnlineBackend bak -> k bak
+
+jccSym :: Getter JVMCrucibleContext Sym
+jccSym = to (\jcc -> jccWithBackend jcc backendGetSym)
 
 --------------------------------------------------------------------------------
 
