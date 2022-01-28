@@ -271,8 +271,8 @@ partitionOWPsConcrete sym =
 -- | Like 'W4.partitionByPreds', but partitions on solver responses, not just
 --   concretized values.
 partitionBySymbolicPreds ::
-  (Foldable t) =>
-  Sym {- ^ solver connection -} ->
+  (OnlineSolver solver, Foldable t) =>
+  Backend solver {- ^ solver connection -} ->
   (a -> W4.Pred Sym) {- ^ how to extract predicates -} ->
   t a ->
   IO (Map Crucible.BranchResult [a])
@@ -286,22 +286,25 @@ partitionBySymbolicPreds sym getPred =
 --
 -- We should probably be using unsat cores for this.
 findFalsePreconditions ::
-  Sym ->
+  OnlineSolver solver =>
+  Backend solver ->
   OverrideWithPreconditions arch ->
   IO [LabeledPred Sym]
-findFalsePreconditions sym owp =
+findFalsePreconditions bak owp =
   fromMaybe [] . Map.lookup (Crucible.NoBranch False) <$>
-    partitionBySymbolicPreds sym (view W4.labeledPred) (owp ^. owpPreconditions)
+    partitionBySymbolicPreds bak (view W4.labeledPred) (owp ^. owpPreconditions)
 
 -- | Is this group of predicates collectively unsatisfiable?
 unsatPreconditions ::
-  Sym {- ^ solver connection -} ->
+  OnlineSolver solver =>
+  Backend solver {- ^ solver connection -} ->
   Fold s (W4.Pred Sym) {- ^ how to extract predicates -} ->
   s {- ^ a container full of predicates -}->
   IO Bool
-unsatPreconditions sym container getPreds = do
+unsatPreconditions bak container getPreds = do
+  let sym = backendGetSym bak
   conj <- W4.andAllOf sym container getPreds
-  Crucible.considerSatisfiability sym Nothing conj >>=
+  Crucible.considerSatisfiability bak Nothing conj >>=
     \case
       Crucible.NoBranch False -> pure True
       _ -> pure False
@@ -400,7 +403,9 @@ methodSpecHandler ::
   Crucible.FnHandle args ret {- ^ the handle for this function -} ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp args ret
      (Crucible.RegValue Sym ret)
-methodSpecHandler opts sc cc top_loc css h = do
+methodSpecHandler opts sc cc top_loc css h =
+  ccWithBackend cc $ \bak -> do
+  let sym = backendGetSym bak
   let fnName = head css ^. csName
   liftIO $ printOutLn opts Info $ unwords
     [ "Matching"
@@ -409,7 +414,6 @@ methodSpecHandler opts sc cc top_loc css h = do
     , fnName
     , "..."
     ]
-  sym <- Crucible.getSymInterface
   Crucible.RegMap args <- Crucible.getOverrideArgs
 
   -- First, run the precondition matcher phase.  Collect together a list of the results.
@@ -504,7 +508,7 @@ methodSpecHandler opts sc cc top_loc css h = do
                       $ Crucible.AssertFailureSimError "assumed false" (show rsn)
                   Right (ret,st') ->
                     do liftIO $ forM_ (st'^.osAssumes) $ \asum ->
-                         Crucible.addAssumption (cc^.ccBackend)
+                         Crucible.addAssumption bak
                           $ Crucible.GenericAssumption (st^.osLocation) "override postcondition" asum
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
@@ -577,7 +581,7 @@ methodSpecHandler opts sc cc top_loc css h = do
                   -- Now that we're failing, do the additional work of figuring out
                   -- if any overrides had symbolically false preconditions
                   symFalse <- catMaybes <$> (forM unknown $ \owp ->
-                    findFalsePreconditions sym owp <&>
+                    findFalsePreconditions bak owp <&>
                       \case
                         [] -> Nothing
                         ps -> Just (owp, ps))
@@ -587,10 +591,10 @@ methodSpecHandler opts sc cc top_loc css h = do
 
                   unsat <-
                     filterM
-                      (unsatPreconditions sym (owpPreconditions . each . W4.labeledPred))
+                      (unsatPreconditions bak (owpPreconditions . each . W4.labeledPred))
                       branches
 
-                  Crucible.addFailedAssertion sym
+                  Crucible.addFailedAssertion bak
                     (Crucible.GenericSimError (e prettyArgs symFalse unsat))
               , Just (W4.plSourceLoc top_loc)
               )
@@ -854,7 +858,8 @@ enforceDisjointness ::
   MS.StateSpec (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
 enforceDisjointness sc cc loc globals extras ss =
-  do sym <- Ov.getSymInterface
+  ccWithBackend cc $ \bak ->
+  do let sym = backendGetSym bak
      sub <- OM (use setupValueSub)
      mem <- readGlobal $ Crucible.llvmMemVar $ ccLLVMContext cc
      -- every csAllocs entry should be present in sub
@@ -872,7 +877,7 @@ enforceDisjointness sc cc loc globals extras ss =
      -- Ensure that all RW and RO regions are disjoint from mutable
      -- global regions.
      let resolveAllocGlobal g@(LLVMAllocGlobal _ nm) =
-           do ptr <- liftIO $ Crucible.doResolveGlobal sym mem nm
+           do ptr <- liftIO $ Crucible.doResolveGlobal bak mem nm
               pure (g, ptr)
      globals' <- traverse resolveAllocGlobal globals
      sequence_
@@ -889,7 +894,8 @@ enforceDisjointAllocSpec ::
   (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   SharedContext ->
   LLVMCrucibleContext arch ->
-  Sym -> W4.ProgramLoc ->
+  Sym ->
+  W4.ProgramLoc ->
   (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
   (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
@@ -1157,14 +1163,15 @@ matchArg ::
   SetupValue (LLVM arch)         {- ^ expected specification value          -} ->
   OverrideMatcher (LLVM arch) md ()
 
-matchArg opts sc cc cs prepost actual expectedTy expected = do
+matchArg opts sc cc cs prepost actual expectedTy expected =
+  ccWithBackend cc $ \bak -> do
+  let sym = backendGetSym bak
   mem <- readGlobal $ Crucible.llvmMemVar $ ccLLVMContext cc
   case (actual, expectedTy, expected) of
     (_, _, SetupTerm expectedTT)
       | TypedTermSchema (Cryptol.Forall [] [] tyexpr) <- ttType expectedTT
       , Right tval <- Cryptol.evalType mempty tyexpr
-        -> do sym      <- Ov.getSymInterface
-              failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
+        -> do failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
               realTerm <- valueToSC sym (cs ^. MS.csLoc) failMsg tval actual
               instantiateExtMatchTerm sc cc (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
 
@@ -1186,7 +1193,6 @@ matchArg opts sc cc cs prepost actual expectedTy expected = do
     (Crucible.LLVMValInt blk off, Crucible.PtrType _, SetupElem () v i) ->
       do let tyenv = MS.csAllocations cs
              nameEnv = MS.csTypeNames cs
-             sym = cc^.ccBackend
          i' <- resolveSetupElemIndexOrFail cc tyenv nameEnv v i
          off' <- liftIO $ W4.bvSub sym off
            =<< W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) i')
@@ -1196,6 +1202,7 @@ matchArg opts sc cc cs prepost actual expectedTy expected = do
              nameEnv = MS.csTypeNames cs
          i <- resolveSetupFieldIndexOrFail cc tyenv nameEnv v n
          matchArg opts sc cc cs prepost actual expectedTy (SetupElem () v i)
+
     (_, _, SetupGlobalInitializer () _) -> resolveAndMatch
 
     (Crucible.LLVMValInt blk off, _, _) ->
@@ -1204,14 +1211,12 @@ matchArg opts sc cc cs prepost actual expectedTy expected = do
           do assignVar cc (cs ^. MS.csLoc) var (Crucible.LLVMPointer blk off)
 
         SetupNull () | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
-          do sym <- Ov.getSymInterface
-             p   <- liftIO (Crucible.ptrIsNull sym Crucible.PtrWidth (Crucible.LLVMPointer blk off))
+          do p   <- liftIO (Crucible.ptrIsNull sym Crucible.PtrWidth (Crucible.LLVMPointer blk off))
              addAssert p =<<
                notEqual prepost opts (cs ^. MS.csLoc) cc sc cs expected actual
 
         SetupGlobal () name | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
-          do sym  <- Ov.getSymInterface
-             ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
+          do ptr2 <- liftIO $ Crucible.doResolveGlobal bak mem (L.Symbol name)
              pred_ <- liftIO $
                Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
              addAssert pred_ =<<
@@ -1787,8 +1792,9 @@ invalidateMutableAllocs ::
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   OverrideMatcher (LLVM arch) RW (Map (W4.SymNat Sym) Text)
-invalidateMutableAllocs opts sc cc cs = do
-  sym <- use syminterface
+invalidateMutableAllocs opts sc cc cs =
+  ccWithBackend cc $ \bak -> do
+  let sym = backendGetSym bak
   mem <- readGlobal . Crucible.llvmMemVar $ ccLLVMContext cc
   sub <- use setupValueSub
 
@@ -1818,7 +1824,7 @@ invalidateMutableAllocs opts sc cc cs = do
   globalPtrs <- liftIO . fmap catMaybes . forM mutableGlobals $ \(LLVMAllocGlobal loc s@(L.Symbol st)) ->
     case Map.lookup s gimap of
       Just (_, Right (mt, _)) -> do
-        ptr <- Crucible.doResolveGlobal sym mem s
+        ptr <- Crucible.doResolveGlobal bak mem s
         pure $ Just
           ( ptr
           , Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
@@ -1865,7 +1871,7 @@ invalidateMutableAllocs opts sc cc cs = do
 
   -- invalidate each allocation that is not overwritten by a postcondition write
   mem' <- foldM (\m (ptr, sz, msg) ->
-                    liftIO $ Crucible.doInvalidate sym ?ptrWidth m ptr msg
+                    liftIO $ Crucible.doInvalidate bak ?ptrWidth m ptr msg
                       =<< W4.bvLit sym ?ptrWidth (Crucible.bytesToBV ?ptrWidth sz)
                 ) mem danglingPtrs
 
@@ -1894,7 +1900,7 @@ executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc fres
   do ptr <- liftIO $ executeFreshPointer cc var
      OM (setupValueSub %= Map.insert var ptr)
   | otherwise =
-  do let sym = cc^.ccBackend
+  ccWithBackend cc $ \bak -> do
      {-
      memTy <- case Crucible.asMemType symTy of
                 Just memTy -> return memTy
@@ -1905,7 +1911,7 @@ executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc fres
      mem <- readGlobal memVar
      sz' <- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth sz
      let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
-     (ptr, mem') <- liftIO $ doAllocSymInit sym mem mut alignment sz' l initialization
+     (ptr, mem') <- liftIO $ doAllocSymInit bak mem mut alignment sz' l initialization
      writeGlobal memVar mem'
      assignVar cc loc var ptr
 
@@ -1914,8 +1920,9 @@ doAllocSymInit ::
   , Crucible.IsSymInterface sym
   , Crucible.HasPtrWidth wptr
   , Crucible.HasLLVMAnn sym
+  , IsSymBackend sym bak
   ) =>
-  sym ->
+  bak ->
   Crucible.MemImpl sym ->
   Crucible.Mutability ->
   Crucible.Alignment ->
@@ -1923,15 +1930,15 @@ doAllocSymInit ::
   String {- ^ source location for use in error messages -} ->
   LLVMAllocSpecInit {- ^ allocation initialization policy -} ->
   IO (Crucible.LLVMPtr sym wptr, Crucible.MemImpl sym)
-doAllocSymInit sym mem mut alignment sz loc initialization  = do
-  (ptr, mem') <- Crucible.doMalloc sym Crucible.HeapAlloc mut loc mem sz alignment
+doAllocSymInit bak mem mut alignment sz loc initialization  = do
+  (ptr, mem') <- Crucible.doMalloc bak Crucible.HeapAlloc mut loc mem sz alignment
   mem'' <- case initialization of
     LLVMAllocSpecSymbolicInitialization -> do
       arr <- W4.freshConstant
-        sym
+        (backendGetSym bak)
         (W4.systemSymbol "arr!")
         (W4.BaseArrayRepr (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth) (W4.BaseBVRepr (W4.knownNat @8)))
-      Crucible.doArrayConstStore sym mem' ptr alignment arr sz
+      Crucible.doArrayConstStore bak mem' ptr alignment arr sz
     LLVMAllocSpecNoInitialization -> return mem'
   return (ptr, mem'')
 
@@ -2044,8 +2051,9 @@ storePointsToValue ::
   LLVMPointsToValue arch ->
   Maybe Text ->
   IO (Crucible.MemImpl Sym)
-storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_invalidate_msg = do
-  let sym = cc ^. ccBackend
+storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_invalidate_msg =
+  ccWithBackend cc $ \bak -> do
+  let sym = backendGetSym bak
 
   let alignment = Crucible.noAlignment -- default to byte alignment (FIXME, see #338)
 
@@ -2072,11 +2080,11 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
                   sym
                   ?ptrWidth
                   (Crucible.bytesToBV ?ptrWidth $ Crucible.storageTypeSize storTy)
-                Crucible.doArrayConstStore sym mem ptr alignment arr sz
+                Crucible.doArrayConstStore bak mem ptr alignment arr sz
             _ -> do
               val'' <- X.handle (handleException opts) $
                 resolveSetupVal cc mem env tyenv nameEnv val'
-              Crucible.storeConstRaw sym mem ptr storTy alignment val''
+              Crucible.storeConstRaw bak mem ptr storTy alignment val''
         SymbolicSizeValue arr_tm sz_tm -> do
           st <- sawCoreState sym
           arr <- bindSAWTerm
@@ -2086,7 +2094,7 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
               (W4.BaseBVRepr (W4.knownNat @8)))
             (ttTerm arr_tm)
           sz <- resolveSAWSymBV cc ?ptrWidth $ ttTerm sz_tm
-          Crucible.doArrayConstStore sym mem ptr alignment arr sz
+          Crucible.doArrayConstStore bak mem ptr alignment arr sz
 
   case maybe_cond of
     Just cond -> case maybe_invalidate_msg of
@@ -2105,10 +2113,10 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
                   , "unsupported conditional invalidation of symbolic size points-to value"
                   , show (PP.pretty val)
                   ]
-              Crucible.doInvalidate sym ?ptrWidth mem ptr invalidate_msg sz
-        Crucible.mergeWriteOperations sym base_mem cond store_op invalidate_op
+              Crucible.doInvalidate bak ?ptrWidth mem ptr invalidate_msg sz
+        Crucible.mergeWriteOperations bak base_mem cond store_op invalidate_op
       Nothing ->
-        Crucible.doConditionalWriteOperation sym base_mem cond store_op
+        Crucible.doConditionalWriteOperation bak base_mem cond store_op
     Nothing -> store_op base_mem
 
 -- | Like 'storePointsToValue', but specifically geared towards the needs
@@ -2131,8 +2139,9 @@ storePointsToBitfieldValue ::
   BitfieldIndex ->
   SetupValue (LLVM arch) ->
   IO (Crucible.MemImpl Sym)
-storePointsToBitfieldValue opts cc env tyenv nameEnv base_mem ptr bfIndex val = do
-  let sym = cc ^. ccBackend
+storePointsToBitfieldValue opts cc env tyenv nameEnv base_mem ptr bfIndex val =
+  ccWithBackend cc $ \bak -> do
+  let sym = backendGetSym bak
 
   let alignment = Crucible.noAlignment -- default to byte alignment (FIXME, see #338)
 
@@ -2168,7 +2177,7 @@ storePointsToBitfieldValue opts cc env tyenv nameEnv base_mem ptr bfIndex val = 
         Crucible.NoErr p res_val -> do
           let rsn = Crucible.AssertFailureSimError "Error loading bitvector" $
                     show badLoadSummary
-          Crucible.assert sym p rsn
+          Crucible.assert bak p rsn
           pure res_val
         Crucible.Err _p ->
           fail $ show $ describeConcreteMemoryLoadFailure base_mem badLoadSummary ptr
@@ -2270,7 +2279,7 @@ storePointsToBitfieldValue opts cc env tyenv nameEnv base_mem ptr bfIndex val = 
                     -- bitfield. See #1541 for an alternative approach that
                     -- would optimize this further.
                     let bfVal' = Crucible.LLVMValInt bfBlk bfBV''
-                    Crucible.storeConstRaw sym base_mem ptr storTy alignment bfVal'
+                    Crucible.storeConstRaw bak base_mem ptr storTy alignment bfVal'
         _ -> fail $ unlines
                [ "llvm_points_to_bitfield: Both the bitfield and RHS value must be bitvectors"
                , "Bitfield value: " ++ show (Crucible.ppTermExpr bfVal)
@@ -2320,7 +2329,7 @@ executeFreshPointer ::
   IO (LLVMPtr (Crucible.ArchWidth arch)) {- ^ Symbolic pointer value -}
 executeFreshPointer cc (AllocIndex i) =
   do let mkName base = W4.systemSymbol (base ++ show i ++ "!")
-         sym         = cc^.ccBackend
+         sym         = cc^.ccSym
      blk <- W4.freshNat sym (mkName "blk")
      off <- W4.freshConstant sym (mkName "off") (W4.BaseBVRepr Crucible.PtrWidth)
      return (Crucible.LLVMPointer blk off)

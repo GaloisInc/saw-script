@@ -73,7 +73,7 @@ import Lang.Crucible.Simulator.ExecutionTree
 import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
 import Lang.Crucible.Backend
           (getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred,goalsToList
-          ,assumptionsPred)
+          ,assumptionsPred,IsSymBackend(..),SomeBackend(..),HasSymInterface(..))
 import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator,insertHandleMap,emptyHandleMap)
 
 
@@ -135,12 +135,14 @@ import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 -- SAWScript
 import SAWScript.X86Spec hiding (Prop)
 import SAWScript.Proof(boolToProp, Prop)
-import SAWScript.Crucible.Common (newSAWCoreBackend, sawCoreState)
+import SAWScript.Crucible.Common
+  ( newSAWCoreBackend, newSAWCoreExprBuilder
+  , sawCoreState, SomeOnlineBackend(..)
+  )
 
 
 --------------------------------------------------------------------------------
 -- Input Options
-
 
 -- | What we'd like done, plus additional information from the "outside world".
 data Options = Options
@@ -153,7 +155,7 @@ data Options = Options
   , archInfo :: ArchitectureInfo X86_64
     -- ^ Architectural flavor.  See "linuxInfo" and "bsdInfo".
 
-  , backend :: Sym
+  , backend :: SomeBackend Sym
     -- ^ The Crucible backend to use.
 
   , allocator :: HandleAllocator
@@ -200,7 +202,8 @@ proof fileReader archi file mbCry globs fun =
      halloc  <- newHandleAllocator
      scLoadPreludeModule sc
      scLoadCryptolModule sc
-     sym <- newSAWCoreBackend sc
+     sym <- newSAWCoreExprBuilder sc
+     SomeOnlineBackend bak <- newSAWCoreBackend sym
      let ?fileReader = fileReader
      cenv <- loadCry sym mbCry
      mvar <- mkMemVar "saw_x86:llvm_memory" halloc
@@ -208,7 +211,7 @@ proof fileReader archi file mbCry globs fun =
        { fileName = file
        , function = fun
        , archInfo = archi
-       , backend = sym
+       , backend = SomeBackend bak
        , allocator = halloc
        , memvar = mvar
        , cryEnv = cenv
@@ -403,8 +406,9 @@ translate opts elf fun =
      let ?memOpts = Crucible.defaultMemOptions
      let ?recordLLVMAnnotation = \_ _ _ -> return ()
 
-     let sym   = backend opts
-         sopts = Opts { optsSym = sym, optsCry = cryEnv opts, optsMvar = memvar opts }
+     let bak   = backend opts
+         sym   = case bak of SomeBackend b -> backendGetSym b
+         sopts = Opts { optsBackend = bak, optsCry = cryEnv opts, optsMvar = memvar opts }
 
      sfs <- registerSymFuns sopts
 
@@ -420,7 +424,7 @@ translate opts elf fun =
 
      addr <- doSim opts elf sfs name globs st checkPost
 
-     gs <- getGoals sym
+     gs <- getGoals bak
      sc <- saw_ctx <$> sawCoreState sym
      return (sc, addr, gs)
 
@@ -461,8 +465,9 @@ doSim opts elf sfs name (globs,overs) st checkPost =
 
      -- writeFile "XXX.hs" (show cfg)
 
-     let sym = backend opts
+     let sym  = case backend opts of SomeBackend bak -> backendGetSym bak
          mvar = memvar opts
+
      setSimulatorVerbosity 0 sym
 
      execResult <- statusBlock "  Simulating... " $ do
@@ -478,7 +483,7 @@ doSim opts elf sfs name (globs,overs) st checkPost =
        let archEvalFns = x86_64MacawEvalFn sfs defaultMacawArchStmtExtensionOverride
        let lookupSyscall = unsupportedSyscalls "saw-script"
        let ctx :: SimContext (MacawSimulatorState Sym) Sym (MacawExt X86_64)
-           ctx = SimContext { _ctxSymInterface = sym
+           ctx = SimContext { _ctxBackend = backend opts
                               , ctxSolverProof = \a -> a
                               , ctxIntrinsicTypes = llvmIntrinsicTypes
                               , simHandleAllocator = allocator opts
@@ -568,12 +573,14 @@ gGoal sc g0 = boolToProp sc [] =<< go (gAssumes g)
             []     -> return (gShows g)
             a : as -> scImplies sc a =<< go as
 
-getGoals :: Sym -> IO [Goal]
-getGoals sym =
-  do obls <- maybe [] goalsToList <$> getProofObligations sym
+getGoals :: SomeBackend Sym -> IO [Goal]
+getGoals (SomeBackend bak) =
+  do obls <- maybe [] goalsToList <$> getProofObligations bak
      st <- sawCoreState sym
      mapM (toGoal st) obls
   where
+  sym = backendGetSym bak
+
   toGoal st (ProofGoal asmps g) =
     do a1 <- toSC sym st =<< assumptionsPred sym asmps
        p  <- toSC sym st (g ^. labeledPred)

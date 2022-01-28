@@ -229,7 +229,7 @@ evalProp sc unints (Prop p) =
      vars <- traverse (scExtCns sc) ecs
      t0 <- instantiateVarList sc 0 (reverse vars) body'
 
-     sym <- Common.newSAWCoreBackend sc
+     sym <- Common.newSAWCoreExprBuilder sc
      st <- Common.sawCoreState sym
      (_names, (_mlabels, p')) <- W4Sim.w4Eval sym st sc mempty unints t0
      t1 <- W4Sim.toSC sym st p'
