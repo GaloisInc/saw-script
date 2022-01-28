@@ -5272,9 +5272,9 @@ recombinePerm x p = getPerm x >>>= \x_p -> recombinePermExpl x x_p p
 recombinePermExpl :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
                      ValuePerm a -> ImplM vars s r as (as :> a) ()
 recombinePermExpl x x_p p =
-  implTraceM (\i -> pretty "recombinePerm" <+> permPretty i x
-               <+> permPretty i x_p <+> pretty "<-"
-               <+> permPretty i p) >>>
+  -- implTraceM (\i -> pretty "recombinePerm" <+> permPretty i x
+  --              <+> permPretty i x_p <+> pretty "<-"
+  --              <+> permPretty i p) >>>
   recombinePerm' x x_p p
 
 -- | This is the implementation of 'recombinePermExpl'; see the documentation
@@ -5556,7 +5556,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
   (_, [nuMP| PExpr_Var z |])
     | Left memb <- mbNameBoundP z
     , Nothing <- psubstLookup psubst memb ->
-      implTraceM (\i -> pretty "proveEqH (unset var):" <+> permPretty i e) >>>
+      -- implTraceM (\i -> pretty "proveEqH (unset var):" <+> permPretty i e) >>>
       substEqsWithProof e >>= \eqp ->
       setVarM memb (someEqProofRHS eqp) >>> pure eqp
 
@@ -5564,20 +5564,20 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
   (_, [nuMP| PExpr_Var z |])
     | Left memb <- mbNameBoundP z
     , Just e' <- psubstLookup psubst memb ->
-      implTraceM (\i -> pretty "proveEqH (set var):" <+> permPretty i e) >>>
+      -- implTraceM (\i -> pretty "proveEqH (set var):" <+> permPretty i e) >>>
       proveEqH psubst e (mbConst e' z)
 
   -- If the RHS = LHS, do a proof by reflexivity
   _ | Just e' <- partialSubst psubst mb_e
     , e == e' ->
-      implTraceM (\i -> pretty "proveEqH (reflexivity):" <+> permPretty i e) >>>
+      -- implTraceM (\i -> pretty "proveEqH (reflexivity):" <+> permPretty i e) >>>
         pure (SomeEqProofRefl e)
 
   -- To prove x=y, try to see if either side has an eq permission, if necessary by
   -- eliminating compound permissions, and proceed by transitivity if possible
   (PExpr_Var x, [nuMP| PExpr_Var mb_y |])
     | Right y <- mbNameBoundP mb_y ->
-      implTraceM (\i -> pretty "proveEqH (left eq):" <+> permPretty i e) >>>
+      -- implTraceM (\i -> pretty "proveEqH (left eq):" <+> permPretty i e) >>>
       getPerm x >>= \x_p ->
       getPerm y >>= \y_p ->
       case (x_p, y_p) of
@@ -5600,7 +5600,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
 
   -- To prove @x &+ o = e@, we subtract @o@ from the RHS and recurse
   (PExpr_LLVMOffset x off, _) ->
-    implTraceM (\i -> pretty "proveEqH (offsetL):" <+> permPretty i e) >>>
+    -- implTraceM (\i -> pretty "proveEqH (offsetL):" <+> permPretty i e) >>>
     proveEq (PExpr_Var x) (fmap (`addLLVMOffset` bvNegate off) mb_e) >>= \some_eqp ->
     pure $ fmap (`addLLVMOffset` off) some_eqp
 
@@ -5609,15 +5609,15 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
   (PExpr_Var x, [nuMP| PExpr_LLVMOffset mb_y mb_off |])
     | Right y <- mbNameBoundP mb_y
     , x == y ->
-      implTraceM (\i -> pretty "proveEqH (offsetR):" <+> permPretty i e) >>>
+      -- implTraceM (\i -> pretty "proveEqH (offsetR):" <+> permPretty i e) >>>
       proveEq (zeroOfType (BVRepr knownNat)) mb_off >>= \some_eqp ->
       pure $ someEqProofTrans (someEqProofZeroOffset y)
                               (fmap (PExpr_LLVMOffset y) some_eqp)
 
   -- To prove x=e, try to see if x:eq(e') and proceed by transitivity
   (PExpr_Var x, _) ->
-    implTraceM (\i -> pretty "proveEqH (x=e):" <+>
-                      permPretty i x <+> pretty "=" <+> permPretty i mb_e) >>>
+    -- implTraceM (\i -> pretty "proveEqH (x=e):" <+>
+    --                   permPretty i x <+> pretty "=" <+> permPretty i mb_e) >>>
     getVarEqPerm x >>= \case
     Just e' ->
       proveEq e' mb_e >>= \eqp2 ->
@@ -5627,8 +5627,8 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
   -- To prove e=x, try to see if x:eq(e') and proceed by transitivity
   (_, [nuMP| PExpr_Var z |])
     | Right x <- mbNameBoundP z ->
-    implTraceM (\i -> pretty "proveEqH (e=x):" <+>
-                      permPretty i e <+> pretty "=" <+> permPretty i x) >>>
+    -- implTraceM (\i -> pretty "proveEqH (e=x):" <+>
+    --                   permPretty i e <+> pretty "=" <+> permPretty i x) >>>
       getVarEqPerm x >>= \case
         Just e' ->
           proveEq e (mbConst e' mb_e) >>= \eqp ->
@@ -5640,7 +5640,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
 
   -- Prove word(e1) = word(e2) by proving e1=e2
   (PExpr_LLVMWord e', [nuMP| PExpr_LLVMWord mb_e' |]) ->
-    implTraceM (\i -> pretty "proveEqH (word):" <+> permPretty i e) >>>
+    -- implTraceM (\i -> pretty "proveEqH (word):" <+> permPretty i e) >>>
     fmap PExpr_LLVMWord <$> proveEqH psubst e' mb_e'
 
   -- Prove e = L_1*y_1 + ... + L_k*y_k + N*z + M where z is an unset variable,
@@ -5651,14 +5651,13 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
     | Just (n, memb, e_factors) <- getUnsetBVFactor psubst mb_factors
     , e' <- bvSub e (bvAdd e_factors (bvInt $ mbLift mb_m))
     , bvIsZero (bvMod e' n) ->
-    implTraceM (\i -> pretty "proveEqH (bv):" <+> permPretty i e) >>>
+    -- implTraceM (\i -> pretty "proveEqH (bv):" <+> permPretty i e) >>>
       setVarM memb (bvDiv e' n) >>> pure (SomeEqProofRefl e)
 
   -- FIXME: add cases to prove struct(es1)=struct(es2)
 
   -- Otherwise give up!
-  _ -> implTraceM (\i -> pretty "proveEqH (failure):" <+> permPretty i e) >>>
-       proveEqFail e mb_e
+  _ -> proveEqFail e mb_e
 
 
 -- | Build a proof on the top of the stack that @x:eq(e)@
