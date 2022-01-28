@@ -5511,8 +5511,10 @@ instance NeededVars (ValuePerm a) where
   neededVars (ValPerm_Named name args offset)
   | OpaqueSortRepr _ <- namedPermNameSort name =
     NameSet.union (neededVars args) (freeVars offset)
-  -- FIXME: for non-opaque named permissions, we currently take all free
-  -- variables of @p@, but this may lead to some unexpected corner cases.
+  -- FIXME: for non-opaque named permissions, we currently define the
+  -- @neededVars@ as all free variables of @p@, but this is incorrect for
+  -- defined or recursive permissions that do determine their variable arguments
+  -- when unfolded.
   neededVars p@(ValPerm_Named _ _ _) = freeVars p
   neededVars p@(ValPerm_Var _ _) = freeVars p
   neededVars (ValPerm_Conj ps) = neededVars ps
