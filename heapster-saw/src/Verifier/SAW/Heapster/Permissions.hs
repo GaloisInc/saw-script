@@ -5100,6 +5100,10 @@ permIsCopyable (ValPerm_Eq _) = True
 permIsCopyable (ValPerm_Or p1 p2) = permIsCopyable p1 && permIsCopyable p2
 permIsCopyable (ValPerm_Exists mb_p) = mbLift $ fmap permIsCopyable mb_p
 permIsCopyable (ValPerm_Named npn args _) =
+  -- TODO: this is wrong. For transparent perms, should make this just unfold
+  -- the definition; for opaque perms, look at arguments. For recursive perms,
+  -- unfold and assume the recursive call is copyable, then see if the unfolded
+  -- version is still copyable
   namedPermArgsAreCopyable (namedPermNameArgs npn) args
 permIsCopyable (ValPerm_Var _ _) = False
 permIsCopyable (ValPerm_Conj ps) = all atomicPermIsCopyable ps

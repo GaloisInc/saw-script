@@ -1,58 +1,77 @@
 enable_experimental;
-env <- heapster_init_env "global_var" "global_var.bc";
+env <- heapster_init_env_from_file "global_var.sawcore" "global_var.bc";
 
 // Integer types
 heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
 
-// A heapster type for shared data
-heapster_define_opaque_perm env "shared_data_eq" "x:bv 64" "unit"
-    "\\ (_:Vec 64 Bool) -> UnitType";
 
 // Demonstrates one technique for dealing with global variables and environment
 // permissions like locks
 
+
+
 // A heapster type for the lock global variable"
-heapster_define_opaque_perm env "lock_perm" "x:bv 64" "unit"
-    "\\ (_:Vec 64 Bool) -> Bool";
-
-// Need to axiomatize acquire_lock so that it can return an environment
-// permission
 //
-// For now, just assume we can always acquire a lock
-heapster_assume_fun_rename_prim env
+// The rwmodality makes the permission not copyable when provided the write
+// modality.
+//
+// The argument 'l' represents the value of the lock itself.
+//
+// When extracted to Coq, u:lock_perm<W,l,dat> is a bitvector representing the value
+// stored in the shared_data pointer
+//
+// Note: want to add in an additional argument 'dat:llvmptr 64' but ran into
+// errors of the form "Could not determine enough variables"
+heapster_define_opaque_perm env "has_lock_perm"
+    "rw:rwmodality"
+    "unit"
+    "Vec 64 Bool";
+
+heapster_define_opaque_perm env "can_lock_perm"
+    "rw:rwmodality"
+    "unit"
+    "Vec 64 Bool";
+
+// Need to axiomatize acquire_lock because it touches the global variables
+heapster_assume_fun env
     "acquire_lock"
-    "acquire_lock"
-    "(u:unit). u:lock_perm<0> \ 
-    \ -o \
-    \ ret:int64<>, u:lock_perm<1>";
 
-// Need to axiomatize release_lock so it requires an environment permission
-heapster_assume_fun_rename_prim env
+    "(u:unit). \
+    \ arg0:ptr((W,0) |-> true), \
+    \ u:can_lock_perm<W> \
+    \ -o \
+    \ ret:eq(llvmword(1)), \
+    \ arg0:ptr((W,0) |-> ptr((W,0) |-> int64<>)), \
+    \ u:has_lock_perm<W>"
+
+    "acquireLockM";
+
+heapster_assume_fun env
     "release_lock"
-    "release_lock"
-    "(u:unit). u:lock_perm<1> \
-    \ -o \
-    \ ret:true, u:lock_perm<0>";
 
-// Need to axiomatize write_data because it accesses the global variable
-heapster_assume_fun_rename_prim env
-    "write_data"
-    "write_data"
-    "(u:unit). u:lock_perm<1>, arg0:int64<> \
+    "(u:unit). \
+    \ u:has_lock_perm<W>, \
+    \ arg0:ptr((W,0) |-> ptr((W,0) |-> int64<>)) \
     \ -o \
-    \ ret:true, u:lock_perm<1>";
+    \ ret:true, \
+    \ arg0:ptr((W,0) |-> eq(llvmword(0))), \
+    \ u:can_lock_perm<W>"
 
-// Need to axiomatize get_data because it accesses the global variable
-heapster_assume_fun_rename_prim env
-    "get_data"
-    "get_data"
-    "(u:unit). u:lock_perm<1> \
-    \ -o \
-    \ ret:int64<>, u:lock_perm<1>";
+    "releaseLockM";
+
+
 
 heapster_typecheck_fun env
-    "test"
-    "(u:unit). u:lock_perm<0> -o ret:true";
+    "acquire_release_acquire_release"
+    "(u:unit). u:can_lock_perm<W> \
+    \ -o \
+    \ ret:int64<>, u:can_lock_perm<W>";
 
+heapster_typecheck_fun env
+    "acquire_release_fail"
+    "(u:unit). u:can_lock_perm<W> \
+    \ -o \
+    \ ret:int64<>, u:can_lock_perm<W>";
+    
 
 heapster_export_coq env "global_var_gen.v";
