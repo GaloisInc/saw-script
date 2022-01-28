@@ -5508,8 +5508,12 @@ instance NeededVars (ValuePerm a) where
   neededVars (ValPerm_Eq e) = neededVars e
   neededVars (ValPerm_Or p1 p2) = NameSet.union (neededVars p1) (neededVars p2)
   neededVars (ValPerm_Exists mb_p) = NameSet.liftNameSet $ fmap neededVars mb_p
-  neededVars (ValPerm_Named _name args offset) =
-        NameSet.union (neededVars args) (freeVars offset)
+  neededVars (ValPerm_Named name args offset)
+  | OpaqueSortRepr _ <- namedPermNameSort name =
+    NameSet.union (neededVars args) (freeVars offset)
+  -- FIXME: for non-opaque named permissions, we currently take all free
+  -- variables of @p@, but this may lead to some unexpected corner cases.
+  neededVars p@(ValPerm_Named _ _ _) = freeVars p
   neededVars p@(ValPerm_Var _ _) = freeVars p
   neededVars (ValPerm_Conj ps) = neededVars ps
   neededVars ValPerm_False = NameSet.empty

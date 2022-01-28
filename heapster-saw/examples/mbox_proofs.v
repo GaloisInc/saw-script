@@ -467,6 +467,7 @@ Proof.
   - rewrite e_forall0 in e_maybe0.
     discriminate e_maybe0.
   (* TODO Add the sort of reasoning in the next two cases back into the automation? *)
+
   - rewrite a in e_maybe1.
     discriminate e_maybe1.
   - rewrite a1 in e_maybe2.
