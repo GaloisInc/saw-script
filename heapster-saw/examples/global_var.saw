@@ -17,11 +17,8 @@ heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x)
 //
 // When extracted to Coq, u:has_lock_perm<W> and u:can_lock_perm<W> are
 // bitvectors representing the value stored in the shared_data variable
-//
-// Note: wanted to add in an additional argument 'dat:llvmptr 64' but ran into
-// errors of the form "Could not determine enough variables"
 heapster_define_opaque_perm env "has_lock_perm"
-    "rw:rwmodality"
+    "rw:rwmodality, dat:llvmptr 64"
     "unit"
     "Vec 64 Bool";
 
@@ -38,21 +35,22 @@ heapster_assume_fun env
     \ arg0:ptr((W,0) |-> true), \
     \ u:can_lock_perm<W> \
     \ -o \
+    \ (dat:llvmptr 64). \
     \ ret:eq(llvmword(1)), \
-    \ arg0:ptr((W,0) |-> ptr((W,0) |-> int64<>)), \
-    \ u:has_lock_perm<W>"
+    \ arg0:ptr((W,0) |-> eq(dat)), \
+    \ dat:ptr((W,0) |-> int64<>), \
+    \ u:has_lock_perm<W,dat>"
 
     "acquireLockM";
 
 heapster_assume_fun env
     "release_lock"
 
-    "(u:unit). \
-    \ u:has_lock_perm<W>, \
-    \ arg0:ptr((W,0) |-> ptr((W,0) |-> int64<>)) \
+    "(u:unit, dat:llvmptr 64). \
+    \ u:has_lock_perm<W,dat>, \
+    \ dat:ptr((W,0) |-> int64<>) \
     \ -o \
     \ ret:true, \
-    \ arg0:ptr((W,0) |-> eq(llvmword(0))), \
     \ u:can_lock_perm<W>"
 
     "releaseLockM";

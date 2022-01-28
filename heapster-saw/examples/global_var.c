@@ -18,9 +18,8 @@ int64_t acquire_lock(int64_t** data) {
 }
 
 /* To be called after a thread is done accessing the shared data. */ 
-void release_lock(int64_t** data) {
+void release_lock(void) {
   lock = 0;
-  *data = NULL;
   return;
 }
 
@@ -30,14 +29,14 @@ int64_t acquire_release_acquire_release(void) {
   int64_t* data;
   acquire_lock(&data);
   *data = 42;
-  release_lock(&data);
+  release_lock();
   
   acquire_lock(&data);
   if (data == NULL) {
     return -1;
   }
   int64_t val = *data;
-  release_lock(&data);
+  release_lock();
   return val;
 }
 
@@ -45,13 +44,13 @@ int64_t acquire_release_fail(void) {
   int64_t* data;
   acquire_lock(&data);
   *data = 42;
-  release_lock(&data);
+  release_lock();
 
   *data = 84;
 
   // shared data should still be 42
   acquire_lock(&data);
   int64_t val = *data;
-  release_lock(&data);
+  release_lock();
   return val;
 }

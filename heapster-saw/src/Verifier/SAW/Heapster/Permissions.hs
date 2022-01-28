@@ -5500,11 +5500,16 @@ instance NeededVars (PermExpr a) where
   -- FIXME: need a better explanation of why this is the right answer...
   neededVars e = if isDeterminingExpr e then NameSet.empty else freeVars e
 
+instance NeededVars (PermExprs args) where
+  neededVars PExprs_Nil = NameSet.empty
+  neededVars (PExprs_Cons es e) = NameSet.union (neededVars es) (neededVars e)
+
 instance NeededVars (ValuePerm a) where
   neededVars (ValPerm_Eq e) = neededVars e
   neededVars (ValPerm_Or p1 p2) = NameSet.union (neededVars p1) (neededVars p2)
   neededVars (ValPerm_Exists mb_p) = NameSet.liftNameSet $ fmap neededVars mb_p
-  neededVars p@(ValPerm_Named _ _ _) = freeVars p
+  neededVars (ValPerm_Named _name args offset) =
+        NameSet.union (neededVars args) (freeVars offset)
   neededVars p@(ValPerm_Var _ _) = freeVars p
   neededVars (ValPerm_Conj ps) = neededVars ps
   neededVars ValPerm_False = NameSet.empty
