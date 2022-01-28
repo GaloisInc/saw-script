@@ -2642,7 +2642,6 @@ emitStmt ::
   StmtPermCheckM ext cblocks blocks tops rets ps_out ps_in
     (RAssign Name stmt_rets)
 emitStmt tps names loc stmt =
-  stmtTraceM (\i -> pretty "Emit statement") >>>
   gopenBinding
     ((TypedConsStmt loc stmt (cruCtxProxies tps) <$>) . strongMbM)
     (mbPure (cruCtxProxies tps) ()) >>>= \(ns, ()) ->
@@ -4144,7 +4143,7 @@ proveCallSiteImpl srcID destID args ghosts vars mb_perms_in mb_perms_out =
   let err = ppProofError ppInfo perms_out in
   pcmRunImplM ghosts err
     (CallSiteImplRet destID ghosts Refl ns)
-     handleUnitVars ns >>>
+    (handleUnitVars ns >>>
      recombinePerms perms_in >>>
      proveVarsImplVarEVars perms_out
      ) >>>= \impl ->

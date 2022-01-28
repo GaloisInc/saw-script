@@ -31,7 +31,6 @@ module Verifier.SAW.Heapster.Implication where
 
 import Data.Maybe
 import Data.List
-import Data.Functor.Product
 import Data.Functor.Compose
 import Data.Reflection
 import qualified Data.BitVector.Sized as BV
@@ -3403,10 +3402,8 @@ handleUnitEVar mem =
   case cruCtxLookup vars mem of
     UnitRepr -> -- get the global unit variable
                 ensureUnitImplM >>>= \u ->
-                use implStatePSubst >>>= \psubst ->
-                -- add the binding mem |-> u to the partial substition
-                -- implStatePSubst will fail if mem already is instantiated in
-                -- implStatePSubst
+                -- add the binding mem |-> u to implStatePSubst
+                -- will fail if mem already is instantiated in implStatePSubst
                 modifyPSubst (psubstSet mem (PExpr_Var u))
     _        -> -- non-unit variables
                 pure ()
