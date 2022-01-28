@@ -2264,8 +2264,7 @@ stmtHandleUnitVars :: forall (tps :: RList CrucibleType)
                       RAssign Name tps ->
                       StmtPermCheckM ext cblocks blocks tops ret ps ps ()
 stmtHandleUnitVars ns =
-    stmtEmbedImplM $ implTraceM (\i -> pretty "Calling handleUnitVars from TypedCrucible") >>>
-                     handleUnitVars ns
+    stmtEmbedImplM $ handleUnitVars ns
 
 -- | Remember the type of a free variable, and ensure that it has a permission
 setVarType ::
@@ -4145,8 +4144,6 @@ proveCallSiteImpl srcID destID args ghosts vars mb_perms_in mb_perms_out =
   let err = ppProofError ppInfo perms_out in
   pcmRunImplM ghosts err
     (CallSiteImplRet destID ghosts Refl ns)
-    (-- TODO: is this too late in the process to handle unit variables?
-     implTraceM (\i -> pretty "Calling handleUnitVars from proveCallSiteImpl") >>>
      handleUnitVars ns >>>
      recombinePerms perms_in >>>
      proveVarsImplVarEVars perms_out

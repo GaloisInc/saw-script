@@ -23,7 +23,6 @@ heapster_typecheck_fun env "is_elem"
   "(). arg0:int64<>, arg1:ListF<int64<>,always,R,llvmword(0)> -o \
      \ arg0:true, arg1:true, ret:int64<>";
 
-
 heapster_block_entry_hint env "incr_list" 3
   "top1:llvmptr 64"
   "frm:llvmframe 64,ghost:llvmptr 64"
@@ -34,7 +33,6 @@ heapster_block_entry_hint env "incr_list" 3
 heapster_typecheck_fun env "incr_list"
   "(). arg0:ListF<int64<>,always,W,llvmword(0)> -o \
      \ arg0:ListF<int64<>,always,W,llvmword(0)>, ret:true";
-
 
 heapster_block_entry_hint env "length" 3
   "top1:llvmptr 64"

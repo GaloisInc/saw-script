@@ -3388,9 +3388,7 @@ implSetNameTypes MNil _ = pure ()
 implSetNameTypes (ns :>: n) (CruCtxCons tps tp) =
   do implStateNameTypes %= NameMap.insert n tp
      implStatePerms     %= initVarPerm n
-     implTraceM (\i -> pretty "implSetNameTypes for:" <+> permPretty i n)
      handleUnitVar tp n
-     implTraceM (\i -> pretty "Done with implSetNameTypes for " <+> permPretty i n)
      implSetNameTypes ns tps
 
 -- | When adding a new existential unit-typed variable, instantiate it with the
@@ -3410,8 +3408,6 @@ handleUnitEVar mem =
                 -- implStatePSubst will fail if mem already is instantiated in
                 -- implStatePSubst
                 modifyPSubst (psubstSet mem (PExpr_Var u))
-                -- TODO: not sure if we should set implStatePSubst,
-                -- implStatePVarSubst, or both...
     _        -> -- non-unit variables
                 pure ()
 
@@ -3443,8 +3439,6 @@ handleUnitEVars =
 handleUnitVar :: NuMatchingAny1 r =>
                  TypeRepr a -> ExprVar a -> ImplM vars s r ps ps ()
 handleUnitVar UnitRepr n =
-  implTraceM (\i ->
-               pretty "handleUnitVar:" <+> permPretty i n) >>>
   -- When introducing a new unit-typed variable, check whether we have a global
   -- unit variable in the current @ImplState@
   getUnitImplM >>= \u -> case u of
@@ -3456,15 +3450,8 @@ handleUnitVar UnitRepr n =
       pure ()
     Just x  ->
       -- Otherwise, add a permission @n:eq(x)@, and then pop it off the stack
-      implTraceM (\i ->
-               pretty "about to call unitEqM:" <+> permPretty i n
-               <+> pretty ": eq(" <+> permPretty i x <+> pretty ")") >>>
         unitEqM n (PExpr_Var x) >>>
-        implTraceM (\i ->
-               pretty "done with unitEqM:" <+> permPretty i n) >>>
         implPopM n (ValPerm_Eq (PExpr_Var x)) >>>
-        implTraceM (\i ->
-               pretty "done with handleUnitVar:" <+> permPretty i n) >>>
         pure ()
 handleUnitVar _ _ = pure ()
 
@@ -3609,8 +3596,6 @@ implCatchM f p m1 m2 =
 implPushM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r (ps :> a) ps ()
 implPushM x p =
-  -- implTraceM (\i -> pretty "implPushM:" <+> permPretty i x <+>
-  --                   pretty "|->" <+> permPretty i p) >>>
   implApplyImpl1 (Impl1_Push x p) (MNil :>: Impl1Cont (const $ pure ()))
 
 -- | Call 'implPushM' for multiple @x:p@ permissions
@@ -3683,7 +3668,6 @@ implLetBindVar tp e =
   implApplyImpl1 (Impl1_LetBind tp e)
   (MNil :>: Impl1Cont (\(_ :>: n) -> pure n)) >>>= \n ->
   recombinePerm n (ValPerm_Eq e) >>>
---  implPopM n (ValPerm_Eq e) >>>
   pure n
 
 -- | Bind a sequence of variables with 'implLetBindVar'
@@ -3898,16 +3882,15 @@ implDropMultiM (ps :>: VarAndPerm x p) = implDropM x p >>> implDropMultiM ps
 -- | Copy a permission on the top of the stack, assuming it is copyable
 implCopyM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r (ps :> a :> a) (ps :> a) ()
-implCopyM x p = --implTraceM (\i -> pretty "implCopyM:" <+> permPretty i x
-                --                  <+> pretty "|->" <+> permPretty i p) >>>
-                implSimplM Proxy (SImpl_Copy x p)
+implCopyM x p = implSimplM Proxy (SImpl_Copy x p)
 
 -- | Push a copyable permission using 'implPushM', copy that permission, and
 -- then pop it back to the variable permission for @x@
 implPushCopyM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
                  ImplM vars s r (ps :> a) ps ()
 implPushCopyM x p =
-  implPushM x p >>> implCopyM x p >>> implPopM x p -- NOTE: this needs to be implPopM
+  implPushM x p >>> implCopyM x p >>> implPopM x p -- NOTE: must be implPopM and
+                                                   -- not recombinePerm
 
 -- | Swap the top two permissions on the top of the stack
 implSwapM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
@@ -5292,11 +5275,6 @@ recombinePerm x p = getPerm x >>>= \x_p -> recombinePermExpl x x_p p
 recombinePermExpl :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
                      ValuePerm a -> ImplM vars s r as (as :> a) ()
 recombinePermExpl x x_p p =
-  {-
-  use implStatePPInfo >>>= \info ->
-  tracePretty (string "recombinePerm" <+> permPretty info x
-               </> permPretty info x_p </> string "<-"
-               </> permPretty info p) $ -}
   implTraceM (\i -> pretty "recombinePerm" <+> permPretty i x
                <+> permPretty i x_p <+> pretty "<-"
                <+> permPretty i p) >>>
@@ -5594,8 +5572,9 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
 
   -- If the RHS = LHS, do a proof by reflexivity
   _ | Just e' <- partialSubst psubst mb_e
-    , e == e' -> implTraceM (\i -> pretty "proveEqH (reflexivity):" <+> permPretty i e) >>>
-                pure (SomeEqProofRefl e)
+    , e == e' ->
+      implTraceM (\i -> pretty "proveEqH (reflexivity):" <+> permPretty i e) >>>
+        pure (SomeEqProofRefl e)
 
   -- To prove x=y, try to see if either side has an eq permission, if necessary by
   -- eliminating compound permissions, and proceed by transitivity if possible
