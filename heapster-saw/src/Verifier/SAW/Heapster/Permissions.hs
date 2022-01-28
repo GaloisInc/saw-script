@@ -5509,8 +5509,8 @@ instance NeededVars (ValuePerm a) where
   neededVars (ValPerm_Or p1 p2) = NameSet.union (neededVars p1) (neededVars p2)
   neededVars (ValPerm_Exists mb_p) = NameSet.liftNameSet $ fmap neededVars mb_p
   neededVars (ValPerm_Named name args offset)
-  | OpaqueSortRepr _ <- namedPermNameSort name =
-    NameSet.union (neededVars args) (freeVars offset)
+    | OpaqueSortRepr _ <- namedPermNameSort name =
+      NameSet.union (neededVars args) (freeVars offset)
   -- FIXME: for non-opaque named permissions, we currently define the
   -- @neededVars@ as all free variables of @p@, but this is incorrect for
   -- defined or recursive permissions that do determine their variable arguments
