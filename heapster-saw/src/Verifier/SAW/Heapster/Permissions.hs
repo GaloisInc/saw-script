@@ -376,6 +376,16 @@ instance (PermPretty a, PermPretty b, PermPretty c) => PermPretty (a,b,c) where
 instance PermPretty a => PermPretty [a] where
   permPrettyM as = ppEncList False <$> mapM permPrettyM as
 
+
+instance PermPretty a => PermPretty (Maybe a) where
+  permPrettyM Nothing = return $ pretty "Nothing"
+  permPrettyM (Just a) = do
+    a_pp <- permPrettyM a
+    return (pretty "Just" <+> a_pp)
+
+instance PermPrettyF f => PermPretty (Some f) where
+  permPrettyM (Some x) = permPrettyMF x
+
 instance PermPretty (ExprVar a) where
   permPrettyM x =
     do maybe_str <- NameMap.lookup x <$> ppExprNames <$> ask
@@ -392,6 +402,10 @@ instance PermPretty (SomeName CrucibleType) where
 instance PermPrettyF f => PermPretty (RAssign f ctx) where
   permPrettyM xs =
     ppCommaSep <$> sequence (RL.mapToList permPrettyMF xs)
+
+instance PermPrettyF f => PermPrettyF (RAssign f) where
+  permPrettyMF xs = permPrettyM xs
+
 
 instance PermPretty (TypeRepr a) where
   permPrettyM UnitRepr = return $ pretty "unit"
@@ -5085,7 +5099,11 @@ permIsCopyable :: ValuePerm a -> Bool
 permIsCopyable (ValPerm_Eq _) = True
 permIsCopyable (ValPerm_Or p1 p2) = permIsCopyable p1 && permIsCopyable p2
 permIsCopyable (ValPerm_Exists mb_p) = mbLift $ fmap permIsCopyable mb_p
-permIsCopyable (ValPerm_Named npn args _) =
+permIsCopyable (ValPerm_Named npn args _offset) =
+  -- FIXME: this is wrong. For transparent perms, should make this just unfold
+  -- the definition; for opaque perms, look at arguments. For recursive perms,
+  -- unfold and assume the recursive call is copyable, then see if the unfolded
+  -- version is still copyable
   namedPermArgsAreCopyable (namedPermNameArgs npn) args
 permIsCopyable (ValPerm_Var _ _) = False
 permIsCopyable (ValPerm_Conj ps) = all atomicPermIsCopyable ps
@@ -5482,10 +5500,21 @@ instance NeededVars (PermExpr a) where
   -- FIXME: need a better explanation of why this is the right answer...
   neededVars e = if isDeterminingExpr e then NameSet.empty else freeVars e
 
+instance NeededVars (PermExprs args) where
+  neededVars PExprs_Nil = NameSet.empty
+  neededVars (PExprs_Cons es e) = NameSet.union (neededVars es) (neededVars e)
+
 instance NeededVars (ValuePerm a) where
   neededVars (ValPerm_Eq e) = neededVars e
   neededVars (ValPerm_Or p1 p2) = NameSet.union (neededVars p1) (neededVars p2)
   neededVars (ValPerm_Exists mb_p) = NameSet.liftNameSet $ fmap neededVars mb_p
+  neededVars (ValPerm_Named name args offset)
+    | OpaqueSortRepr _ <- namedPermNameSort name =
+      NameSet.union (neededVars args) (freeVars offset)
+  -- FIXME: for non-opaque named permissions, we currently define the
+  -- @neededVars@ as all free variables of @p@, but this is incorrect for
+  -- defined or recursive permissions that do determine their variable arguments
+  -- when unfolded.
   neededVars p@(ValPerm_Named _ _ _) = freeVars p
   neededVars p@(ValPerm_Var _ _) = freeVars p
   neededVars (ValPerm_Conj ps) = neededVars ps
@@ -7631,11 +7660,18 @@ varPermsTransFreeVars =
             (SomeRAssign ns', Some rest) ->
               Some $ append ns' rest
 
+
+-- | Initialize the primary permission of a variable to the given permission if
+-- the variable is not yet set
+initVarPermWith :: ExprVar a -> ValuePerm a -> PermSet ps -> PermSet ps
+initVarPermWith x p =
+  over varPermMap $ \nmap ->
+  if NameMap.member x nmap then nmap else NameMap.insert x p nmap
+
 -- | Initialize the primary permission of a variable to @true@ if it is not set
 initVarPerm :: ExprVar a -> PermSet ps -> PermSet ps
 initVarPerm x =
-  over varPermMap $ \nmap ->
-  if NameMap.member x nmap then nmap else NameMap.insert x ValPerm_True nmap
+  initVarPermWith x ValPerm_True
 
 -- | Set the primary permissions for a sequence of variables to @true@
 initVarPerms :: RAssign Name (as :: RList CrucibleType) -> PermSet ps ->

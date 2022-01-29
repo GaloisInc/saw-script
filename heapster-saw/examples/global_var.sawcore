@@ -1,0 +1,10 @@
+module GlobalVar where
+
+import Prelude;
+
+acquireLockM : Vec 64 Bool -> CompM (Vec 64 Bool * Vec 64 Bool);
+acquireLockM u = returnM (Vec 64 Bool * Vec 64 Bool)
+			 (u,u);
+
+releaseLockM : Vec 64 Bool -> Vec 64 Bool -> CompM (Vec 64 Bool);
+releaseLockM u new_u = returnM (Vec 64 Bool) new_u;
