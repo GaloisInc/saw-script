@@ -66,7 +66,7 @@ import Mir.Compositional.MethodSpec
 type MirOverrideMatcher sym a = forall p rorw rtp args ret.
     MS.OverrideMatcher' sym MIR rorw (OverrideSim (p sym) sym MIR rtp args ret) a
 
-data MethodSpec = MethodSpec 
+data MethodSpec = MethodSpec
     { _msCollectionState :: CollectionState
     , _msSpec :: MIRMethodSpec
     }
@@ -244,7 +244,7 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
         -- TODO: see if we need any other assertions from LLVM OverrideMatcher
 
 
-        -- Handle preconditions and postconditions.  
+        -- Handle preconditions and postconditions.
 
         -- Convert preconditions to `osAsserts`
         forM_ (ms ^. MS.csPreState . MS.csConditions) $ \cond -> do
@@ -379,7 +379,7 @@ matchArg sym sc eval allocSpecs shp rv sv = go shp rv sv
                         ""
     go (TupleShape _ _ flds) rvs (MS.SetupStruct () False svs) = goFields flds rvs svs
     go (ArrayShape _ _ shp) vec (MS.SetupArray () svs) = case vec of
-        MirVector_Vector v -> zipWithM_ (go shp) (toList v) svs
+        MirVector_Vector v -> zipWithM_ (\x y -> go shp x y) (toList v) svs
         MirVector_PartialVector pv -> forM_ (zip (toList pv) svs) $ \(p, sv) -> do
             rv <- liftIO $ readMaybeType sym "vector element" (shapeType shp) p
             go shp rv sv

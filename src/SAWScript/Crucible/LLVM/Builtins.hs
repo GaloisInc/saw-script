@@ -1735,7 +1735,7 @@ llvm_execute_func ::
   [AllLLVM MS.SetupValue] ->
   LLVMCrucibleSetupM ()
 llvm_execute_func args =
-  LLVMCrucibleSetupM $ Setup.crucible_execute_func (map getAllLLVM args)
+  LLVMCrucibleSetupM $ Setup.crucible_execute_func (map (\a -> getAllLLVM a) args)
 
 getLLVMCrucibleContext :: CrucibleSetup (LLVM arch) (LLVMCrucibleContext arch)
 getLLVMCrucibleContext = view Setup.csCrucibleContext <$> get
@@ -1837,7 +1837,7 @@ constructExpandedSetupValue cc sc loc t =
          traverse (constructExpandedSetupValue cc sc loc)
                   (Crucible.siFieldTypes si)
       -- FIXME: should this always be unpacked?
-      pure $ mkAllLLVM $ SetupStruct () False $ map getAllLLVM fields
+      pure $ mkAllLLVM $ SetupStruct () False $ map (\a -> getAllLLVM a) fields
 
     Crucible.PtrType symTy ->
       case Crucible.asMemType symTy of
@@ -1851,7 +1851,7 @@ constructExpandedSetupValue cc sc loc t =
     Crucible.ArrayType n memTy -> do
       elements_ <-
         replicateM (fromIntegral n) (constructExpandedSetupValue cc sc loc memTy)
-      pure $ mkAllLLVM $ SetupArray () $ map getAllLLVM elements_
+      pure $ mkAllLLVM $ SetupArray () $ map (\a -> getAllLLVM a) elements_
 
     Crucible.FloatType      -> failUnsupportedType "Float"
     Crucible.DoubleType     -> failUnsupportedType "Double"

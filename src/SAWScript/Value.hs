@@ -646,7 +646,7 @@ instance Applicative LLVMCrucibleSetupM where
 instance Monad LLVMCrucibleSetupM where
   return = pure
   LLVMCrucibleSetupM m >>= f =
-    LLVMCrucibleSetupM (m >>= runLLVMCrucibleSetupM . f)
+    LLVMCrucibleSetupM (m >>= \x -> runLLVMCrucibleSetupM (f x))
 
 throwCrucibleSetup :: ProgramLoc -> String -> CrucibleSetup ext a
 throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException loc msg
