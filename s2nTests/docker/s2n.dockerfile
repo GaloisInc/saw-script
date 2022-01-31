@@ -11,6 +11,7 @@ RUN apt-get update -y -q && \
     llvm-3.9 \
     make \
     sudo \
+    wget \
     && \
     rm -rf /var/lib/apt/lists/*
 
@@ -19,7 +20,7 @@ RUN mkdir -p /saw-script && \
     git clone https://github.com/GaloisInc/s2n.git && \
     mkdir -p s2n/test-deps/saw/bin && \
     cd s2n && \
-    git checkout 6586f1ad3b35efcd2287ab98a4be124449dcb780
+    git checkout 7f1017ee9b09ab6910f1d2bf56135663ca0b12c5
 
 
 
