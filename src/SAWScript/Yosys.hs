@@ -30,6 +30,10 @@ import qualified Data.Graph as Graph
 import qualified Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.TypedTerm as SC
 
+import qualified Cryptol.TypeCheck.Type as C
+import qualified Cryptol.Utils.Ident as C
+import qualified Cryptol.Utils.RecordMap as C
+
 import SAWScript.Panic (panic)
 import SAWScript.Value
 import SAWScript.Yosys.IR
@@ -110,6 +114,42 @@ moduleNetgraph m =
 --------------------------------------------------------------------------------
 -- ** Building a SAWCore term from a network graph
 
+cryptolRecordType ::
+  MonadIO m =>
+  SC.SharedContext ->
+  Map Text SC.Term ->
+  m SC.Term
+cryptolRecordType sc fields =
+  liftIO $ SC.scTupleType sc (fmap snd . C.canonicalFields . C.recordFromFields $ Map.assocs fields)
+
+cryptolRecord ::
+  MonadIO m =>
+  SC.SharedContext ->
+  Map Text SC.Term ->
+  m SC.Term
+cryptolRecord sc fields =
+  liftIO $ SC.scTuple sc (fmap snd . C.canonicalFields . C.recordFromFields $ Map.assocs fields)
+
+cryptolRecordSelect ::
+  MonadIO m =>
+  SC.SharedContext ->
+  Map Text a ->
+  SC.Term ->
+  Text ->
+  m SC.Term
+cryptolRecordSelect sc fields r nm =
+  case List.elemIndex nm ord of
+    Just i -> liftIO $ SC.scTupleSelector sc r (i + 1) (length ord)
+    Nothing -> throw . YosysError $ mconcat
+      [ "Could not build record selector term for field name \""
+      , nm
+      , "\" on record term: "
+      , Text.pack $ show r
+      , "\nFields are: "
+      , Text.pack $ show $ Map.keys fields
+      ]
+  where ord = fmap fst . C.canonicalFields . C.recordFromFields $ Map.assocs fields
+
 -- | Given a Yosys cell and a map of terms for its arguments, construct a term representing the output.
 cellToTerm ::
   MonadIO m =>
@@ -125,7 +165,7 @@ cellToTerm sc env c args = case c ^. cellType of
       Just bits -> fromIntegral $ length bits
     identity <- liftIO $ SC.scBvBool sc w =<< SC.scBool sc False
     res <- liftIO $ foldM (SC.scBvOr sc w) identity args
-    liftIO . SC.scRecord sc $ Map.fromList
+    cryptolRecord sc $ Map.fromList
       [ ("Y", res)
       ]
   "$and" -> do
@@ -134,11 +174,11 @@ cellToTerm sc env c args = case c ^. cellType of
       Just bits -> fromIntegral $ length bits
     identity <- liftIO $ SC.scBvBool sc w =<< SC.scBool sc True
     res <- liftIO $ foldM (SC.scBvAnd sc w) identity args
-    liftIO . SC.scRecord sc $ Map.fromList
+    cryptolRecord sc $ Map.fromList
       [ ("Y", res)
       ]
   (flip Map.lookup env -> Just term) -> do
-    r <- liftIO $ SC.scRecord sc args
+    r <- cryptolRecord sc args
     liftIO $ SC.scApply sc term r
   ct -> throw . YosysError $ "Unknown cell type: " <> ct
 
@@ -176,7 +216,7 @@ netgraphToTerms sc env ng inputs
       let sorted = Graph.reverseTopSort $ ng ^. netgraphGraph
       foldM
         ( \acc v -> do
-            let (c, out, inp) = ng ^. netgraphNodeFromVertex $ v
+            let (c, out, _) = ng ^. netgraphNodeFromVertex $ v
             args <- forM (cellInputConnections c) $ \i -> -- for each input bit pattern
               case Map.lookup i acc of
                 Just t -> pure t -- if we can find that pattern exactly, great! use that term
@@ -191,8 +231,9 @@ netgraphToTerms sc env ng inputs
                   vecBits <- liftIO $ SC.scVector sc vecty bits
                   liftIO $ SC.scJoin sc many one boolty vecBits
             r <- cellToTerm sc env c args -- once we've built a term, insert it along with each of its bits
+            let fields = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
             ts <- forM (cellOutputConnections c) $ \o -> do
-              t <- liftIO $ SC.scRecordSelect sc r o
+              t <- cryptolRecordSelect sc fields r o
               deriveTermsByIndices sc out t
             pure $ Map.union (Map.unions ts) acc
         )
@@ -204,7 +245,7 @@ moduleToTerm ::
   SC.SharedContext ->
   Map Text SC.Term ->
   Module ->
-  m SC.Term
+  m (SC.Term, SC.TypedTermType)
 moduleToTerm sc env m = do
   let ng = moduleNetgraph m
   let inputports = Maybe.mapMaybe
@@ -223,30 +264,30 @@ moduleToTerm sc env m = do
         )
         . Map.assocs
         $ m ^. modulePorts
-  inputRecordType <- liftIO . SC.scRecordType sc =<< forM inputports
+  inputRecordType <- cryptolRecordType sc . Map.fromList =<< forM inputports
     (\(nm, inp) -> do
         tp <- liftIO . SC.scBitvector sc . fromIntegral $ length inp
-        pure (nm, tp)
-    )
-  outputRecordType <- liftIO . SC.scRecordType sc =<< forM outputports
-    (\(nm, out) -> do
-        tp <- liftIO . SC.scBitvector sc . fromIntegral $ length out
         pure (nm, tp)
     )
   inputRecordEC <- liftIO $ SC.scFreshEC sc "input" inputRecordType
   inputRecord <- liftIO $ SC.scExtCns sc inputRecordEC
   derivedInputs <- forM inputports $ \(nm, inp) -> do
-    t <- liftIO $ SC.scRecordSelect sc inputRecord nm
+    t <- liftIO $ cryptolRecordSelect sc (Map.fromList inputports) inputRecord nm
     deriveTermsByIndices sc inp t
   let inputs = Map.unions derivedInputs
-  env <- netgraphToTerms sc env ng inputs
-  outputRecord <- liftIO . SC.scRecord sc . Map.fromList =<< forM outputports
+  terms <- netgraphToTerms sc env ng inputs
+  outputRecord <- cryptolRecord sc . Map.fromList =<< forM outputports
     (\(nm, out) -> do
-        case Map.lookup out env of
+        case Map.lookup out terms of
           Nothing -> throw . YosysError $ "Failed to find module output bits: " <> Text.pack (show out)
           Just t -> pure (nm, t)
     )
-  liftIO $ SC.scAbstractExts sc [inputRecordEC] outputRecord
+  t <- liftIO $ SC.scAbstractExts sc [inputRecordEC] outputRecord
+  let toCryptol (nm, rep) = (C.mkIdent nm, C.tWord . C.tNum $ length rep)
+  let cty = C.tFun
+        (C.tRec . C.recordFromFields $ toCryptol <$> inputports)
+        (C.tRec . C.recordFromFields $ toCryptol <$> outputports)
+  pure (t, SC.TypedTermSchema $ C.tMono cty)
 
 -- | Given a Yosys IR and the name of a VHDL module, construct a SAWCore term for that module.
 yosysIRToTerm ::
@@ -258,18 +299,18 @@ yosysIRToTerm ::
 yosysIRToTerm sc ir modnm = do
   let mg = yosysIRModgraph ir
   let sorted = Graph.reverseTopSort $ mg ^. modgraphGraph
-  env <- foldM
-    (\acc v -> do
+  (termEnv, typeEnv) <- foldM
+    (\(termEnv, typeEnv) v -> do
         let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
-        t <- moduleToTerm sc acc m
-        pure $ Map.insert nm t acc
+        (t, schema) <- moduleToTerm sc termEnv m
+        pure (Map.insert nm t termEnv, Map.insert nm schema typeEnv)
     )
-    Map.empty
+    (Map.empty, Map.empty)
     sorted
-  m <- case Map.lookup modnm env of
-    Just m -> pure m
-    Nothing -> throw . YosysError $ "Failed to find module: " <> modnm
-  liftIO $ SC.mkTypedTerm sc m
+  (m, schema) <- case (Map.lookup modnm termEnv, Map.lookup modnm typeEnv) of
+    (Just m, Just schema) -> pure (m, schema)
+    _ -> throw . YosysError $ "Failed to find module: " <> modnm
+  pure $ SC.TypedTerm schema m
 
 --------------------------------------------------------------------------------
 -- ** Functions visible from SAWScript REPL
