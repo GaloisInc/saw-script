@@ -63,6 +63,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , llvm_alloc_global
     , llvm_fresh_expanded_val
     , llvm_sizeof
+    , llvm_cast_pointer
 
     --
     -- These function are common to LLVM & JVM implementation (not for external use)
@@ -2101,6 +2102,15 @@ llvm_fresh_pointer lty =
   do loc <- getW4Position "llvm_fresh_pointer"
      memTy <- memTypeForLLVMType loc lty
      constructFreshPointer (llvmTypeAlias lty) loc memTy
+
+llvm_cast_pointer :: AllLLVM SetupValue -> L.Type -> LLVMCrucibleSetupM (AllLLVM SetupValue)
+llvm_cast_pointer ptr lty =
+  LLVMCrucibleSetupM $
+  do cctx <- getLLVMCrucibleContext
+     let ?lc = ccTypeCtx cctx
+     loc <- getW4Position "llvm_cast_pointer"
+     memTy <- memTypeForLLVMType loc lty
+     pure (mkAllLLVM (SetupCast () (getAllLLVM ptr) memTy))
 
 constructFreshPointer ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>

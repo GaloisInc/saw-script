@@ -2617,6 +2617,14 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_return`." ]
 
+  , prim "llvm_cast_pointer" "SetupValue -> LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_cast_pointer)
+    Current
+    [ "Cast the type of the given setup value (which must be a pointer value)."
+    , "The resulting setup value will be a pointer to the same location, treated"
+    , "as a pointer to the provided type."
+    ]
+
   , prim "llvm_verify"
     "LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
     (pureVal llvm_verify)

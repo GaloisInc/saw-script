@@ -160,6 +160,7 @@ type instance MS.HasSetupStruct (LLVM _) = 'True
 type instance MS.HasSetupArray (LLVM _) = 'True
 type instance MS.HasSetupElem (LLVM _) = 'True
 type instance MS.HasSetupField (LLVM _) = 'True
+type instance MS.HasSetupCast (LLVM _) = 'True
 type instance MS.HasSetupGlobal (LLVM _) = 'True
 type instance MS.HasSetupGlobalInitializer (LLVM _) = 'True
 

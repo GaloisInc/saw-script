@@ -68,6 +68,27 @@ data PrePost
   deriving (Eq, Ord, Show)
 
 --------------------------------------------------------------------------------
+-- *** Extension-specific information
+
+type family CrucibleContext ext :: Type
+
+-- | How to specify allocations in this syntax extension
+type family AllocSpec ext :: Type
+
+-- | The type of identifiers for types in this syntax extension
+type family TypeName ext :: Type
+
+-- | The type of types of the syntax extension we're dealing with
+type family ExtType ext :: Type
+
+-- | The type of points-to assertions
+type family PointsTo ext :: Type
+
+-- | The type of global allocations
+type family AllocGlobal ext :: Type
+
+
+--------------------------------------------------------------------------------
 -- ** SetupValue
 
 -- | An injective type family mapping type-level booleans to types
@@ -85,6 +106,7 @@ type family HasSetupArray ext :: Bool
 type family HasSetupElem ext :: Bool
 type family HasSetupField ext :: Bool
 type family HasSetupGlobal ext :: Bool
+type family HasSetupCast ext :: Bool
 type family HasSetupGlobalInitializer ext :: Bool
 
 -- | From the manual: \"The SetupValue type corresponds to values that can occur
@@ -99,6 +121,8 @@ data SetupValue ext where
   SetupArray  :: B (HasSetupArray ext) -> [SetupValue ext] -> SetupValue ext
   SetupElem   :: B (HasSetupElem ext) -> SetupValue ext -> Int -> SetupValue ext
   SetupField  :: B (HasSetupField ext) -> SetupValue ext -> String -> SetupValue ext
+  SetupCast   :: B (HasSetupCast ext) -> SetupValue ext -> ExtType ext -> SetupValue ext
+
   -- | A pointer to a global variable
   SetupGlobal :: B (HasSetupGlobal ext) -> String -> SetupValue ext
   -- | This represents the value of a global's initializer.
@@ -114,8 +138,10 @@ type SetupValueHas (c :: Type -> Constraint) ext =
   , c (B (HasSetupArray ext))
   , c (B (HasSetupElem ext))
   , c (B (HasSetupField ext))
+  , c (B (HasSetupCast ext))
   , c (B (HasSetupGlobal ext))
   , c (B (HasSetupGlobalInitializer ext))
+  , c (ExtType ext)
   )
 
 deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
@@ -128,7 +154,7 @@ deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
 --   are implementation details and won't be familiar to users.
 --   Consider using 'resolveSetupValue' and printing an 'LLVMVal'
 --   with @PP.pretty@ instead.
-ppSetupValue :: SetupValue ext -> PP.Doc ann
+ppSetupValue :: Show (ExtType ext) => SetupValue ext -> PP.Doc ann
 ppSetupValue setupval = case setupval of
   SetupTerm tm   -> ppTypedTerm tm
   SetupVar i     -> ppAllocIndex i
@@ -139,6 +165,7 @@ ppSetupValue setupval = case setupval of
   SetupArray _ vs  -> PP.brackets (commaList (map ppSetupValue vs))
   SetupElem _ v i  -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ show i)
   SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ f)
+  SetupCast _ v tp -> PP.parens (ppSetupValue v) PP.<> PP.pretty (" AS " ++ show tp)
   SetupGlobal _ nm -> PP.pretty ("global(" ++ nm ++ ")")
   SetupGlobalInitializer _ nm -> PP.pretty ("global_initializer(" ++ nm ++ ")")
   where
@@ -276,6 +303,7 @@ markResolved val0 path0 rs = go path0 val0
         SetupGlobal _ name -> rs & rsGlobals %~ Map.alter (ins path) name
         SetupElem _ v idx  -> go (Right idx : path) v
         SetupField _ v fld -> go (Left fld : path) v
+        -- TODO? What about casts?
         _                  -> rs
 
     ins path Nothing = Just [path]
@@ -296,6 +324,7 @@ testResolved val0 path0 rs = go path0 val0
         SetupGlobal _ c    -> test path (Map.lookup c (_rsGlobals rs))
         SetupElem _ v idx  -> go (Right idx : path) v
         SetupField _ v fld -> go (Left fld : path) v
+        -- TODO? What about casts?
         _                  -> False
 
     test _ Nothing = False
@@ -304,26 +333,6 @@ testResolved val0 path0 rs = go path0 val0
     overlap (x : xs) (y : ys) = x == y && overlap xs ys
     overlap [] _ = True
     overlap _ [] = True
-
---------------------------------------------------------------------------------
--- *** Extension-specific information
-
-type family CrucibleContext ext :: Type
-
--- | How to specify allocations in this syntax extension
-type family AllocSpec ext :: Type
-
--- | The type of identifiers for types in this syntax extension
-type family TypeName ext :: Type
-
--- | The type of types of the syntax extension we're dealing with
-type family ExtType ext :: Type
-
--- | The type of points-to assertions
-type family PointsTo ext :: Type
-
--- | The type of global allocations
-type family AllocGlobal ext :: Type
 
 --------------------------------------------------------------------------------
 -- *** StateSpec

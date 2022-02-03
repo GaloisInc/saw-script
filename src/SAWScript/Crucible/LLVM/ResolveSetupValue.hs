@@ -329,6 +329,14 @@ typeOfSetupValue' cc env nameEnv val =
                              , "instead got:"
                              , show (ppTypedTermType tp)
                              ]
+    SetupCast () v tp ->
+      do memTy <- typeOfSetupValue cc env nameEnv v
+         case memTy of
+           Crucible.PtrType _symTy -> return (Crucible.PtrType (Crucible.MemType tp))
+           _ -> fail $ unwords $
+                  [ "typeOfSetupValue: tried to cast the type of a non-pointer value"
+                  , "actual type of value: " ++ show memTy
+                  ]
     SetupStruct () packed vs ->
       do memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
          let si = Crucible.mkStructInfo dl packed memTys
@@ -458,6 +466,7 @@ resolveSetupVal cc mem env tyenv nameEnv val =
       | Just ptr <- Map.lookup i env -> return (Crucible.ptrToPtrVal ptr)
       | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
+    SetupCast () v _ -> resolveSetupVal cc mem env tyenv nameEnv v
     SetupStruct () packed vs -> do
       vals <- mapM (resolveSetupVal cc mem env tyenv nameEnv) vs
       let tps = map Crucible.llvmValStorableType vals
