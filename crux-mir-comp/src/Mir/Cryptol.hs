@@ -19,6 +19,7 @@ import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
 import Data.Functor.Const
 import Data.IORef
+import qualified Data.Kind as Kind
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.String (fromString)
@@ -63,9 +64,9 @@ import Mir.Compositional.Convert
 
 
 cryptolOverrides ::
-    forall sym p t st fs args ret blocks rtp a r .
+    forall sym bak p t st fs args ret blocks rtp a r .
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    Maybe (SomeOnlineSolver sym) ->
+    Maybe (SomeOnlineSolver sym bak) ->
     CollectionState ->
     Text ->
     CFG MIR blocks args ret ->
@@ -241,10 +242,10 @@ loadCryptolFunc col sig modulePath name = do
         cryptolRun sc (Text.unpack fnName) argShps retShp (SAW.ttTerm tt)
 
   where
-    listToCtx :: forall k (f :: k -> *). [Some f] -> Some (Assignment f)
+    listToCtx :: forall k (f :: k -> Kind.Type). [Some f] -> Some (Assignment f)
     listToCtx xs = go xs (Some Empty)
       where
-        go :: forall k (f :: k -> *). [Some f] -> Some (Assignment f) -> Some (Assignment f)
+        go :: forall k (f :: k -> Kind.Type). [Some f] -> Some (Assignment f) -> Some (Assignment f)
         go [] acc = acc
         go (Some x : xs) (Some acc) = go xs (Some $ acc :> x)
 

@@ -15,7 +15,7 @@ Description:
 
 library
   build-depends:
-    base == 4.*,
+    base >= 4.9,
     bv-sized >= 1.0.0,
     containers,
     lens,
