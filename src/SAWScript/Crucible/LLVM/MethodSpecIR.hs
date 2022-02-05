@@ -108,6 +108,7 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
     -- * ResolvedState
   , LLVMResolvedState
   , ResolvedPath
+  , ResolvedPathItem(..)
   , emptyResolvedState
   , rsAllocs
   , rsGlobals
@@ -615,7 +616,13 @@ getSomeLLVM x = All (Compose x)
 
 type instance MS.ResolvedState (LLVM arch) = LLVMResolvedState
 
-type ResolvedPath = [Either String Int]
+data ResolvedPathItem
+  = ResolvedField String
+  | ResolvedElem Int
+  | ResolvedCast CL.MemType
+ deriving (Show, Eq, Ord)
+
+type ResolvedPath = [ResolvedPathItem]
 
 -- | A datatype to keep track of which parts of the simulator state -- have been initialized already. For each allocation unit or global,
 -- we keep a list of element-paths that identify the initialized
@@ -635,7 +642,7 @@ makeLenses ''LLVMResolvedState
 -- | Record the initialization of the pointer represented by the given
 -- SetupValue.
 markResolved ::
-  MS.SetupValue ext ->
+  MS.SetupValue (LLVM arch) ->
   ResolvedPath {-^ path within this object (if any) -} ->
   LLVMResolvedState ->
   LLVMResolvedState
@@ -645,9 +652,9 @@ markResolved val0 path0 rs = go path0 val0
       case val of
         MS.SetupVar n         -> rs & rsAllocs %~ Map.alter (ins path) n
         MS.SetupGlobal _ name -> rs & rsGlobals %~ Map.alter (ins path) name
-        MS.SetupElem _ v idx  -> go (Right idx : path) v
-        MS.SetupField _ v fld -> go (Left fld : path) v
-        -- TODO? What about casts?
+        MS.SetupElem _ v idx  -> go (ResolvedElem idx : path) v
+        MS.SetupField _ v fld -> go (ResolvedField fld : path) v
+        MS.SetupCast _ v tp   -> go (ResolvedCast tp : path) v
         _                  -> rs
 
     ins path Nothing = Just [path]
@@ -656,7 +663,7 @@ markResolved val0 path0 rs = go path0 val0
 -- | Test whether the pointer represented by the given SetupValue has
 -- been initialized already.
 testResolved ::
-  MS.SetupValue ext ->
+  MS.SetupValue (LLVM arch) ->
   ResolvedPath {-^ path within this object (if any) -} ->
   LLVMResolvedState ->
   Bool
@@ -666,9 +673,9 @@ testResolved val0 path0 rs = go path0 val0
       case val of
         MS.SetupVar n         -> test path (Map.lookup n (_rsAllocs rs))
         MS.SetupGlobal _ c    -> test path (Map.lookup c (_rsGlobals rs))
-        MS.SetupElem _ v idx  -> go (Right idx : path) v
-        MS.SetupField _ v fld -> go (Left fld : path) v
-        -- TODO? What about casts?
+        MS.SetupElem _ v idx  -> go (ResolvedElem idx : path) v
+        MS.SetupField _ v fld -> go (ResolvedField fld : path) v
+        MS.SetupCast _ v tp   -> go (ResolvedCast tp : path) v
         _                  -> False
 
     test _ Nothing = False

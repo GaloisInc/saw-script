@@ -2246,7 +2246,7 @@ llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
           -- have multiple llvm_points_to_bitfield statements on the same
           -- pointer provided that the field names are different, so we use
           -- the field name as the path.
-          let path = [Left fieldName]
+          let path = [ResolvedField fieldName]
           _ <- llvm_points_to_check_lhs_validity ptr loc path
 
           bfIndex <- resolveSetupBitfieldIndexOrFail cc env nameEnv ptr fieldName
@@ -2273,7 +2273,7 @@ llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
 llvm_points_to_check_lhs_validity ::
   SetupValue (LLVM arch) {- ^ lhs pointer -} ->
   W4.ProgramLoc {- ^ the location in the program -} ->
-  [Either String Int] {- ^ the path from the pointer to the pointee -} ->
+  ResolvedPath {- ^ the path from the pointer to the pointee -} ->
   StateT (Setup.CrucibleSetupState (LLVM arch)) TopLevel Crucible.MemType
 llvm_points_to_check_lhs_validity ptr loc path =
   do cc <- getLLVMCrucibleContext
