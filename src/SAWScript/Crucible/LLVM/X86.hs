@@ -570,7 +570,7 @@ buildMethodSpec lm nm loc checkSat setup =
     let initialMethodSpec = MS.makeCrucibleMethodSpecIR @LLVM
           methodId mtargs mtret programLoc lm
     view Setup.csMethodSpec <$> execStateT (runLLVMCrucibleSetupM setup)
-      (Setup.makeCrucibleSetupState cc initialMethodSpec)
+      (Setup.makeCrucibleSetupState emptyResolvedState cc initialMethodSpec)
 
 llvmTypeToMemType ::
   C.LLVM.TypeContext ->

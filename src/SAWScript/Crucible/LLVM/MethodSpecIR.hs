@@ -105,11 +105,21 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
   , pattern SomeLLVM
   , mkSomeLLVM
   , getSomeLLVM
+    -- * ResolvedState
+  , LLVMResolvedState
+  , ResolvedPath
+  , emptyResolvedState
+  , rsAllocs
+  , rsGlobals
+  , markResolved
+  , testResolved
   ) where
 
 import           Control.Lens
 import           Control.Monad (when)
 import           Data.Functor.Compose (Compose(..))
+import           Data.Map ( Map )
+import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Type.Equality (TestEquality(..))
 import qualified Prettyprinter as PPL
@@ -168,6 +178,7 @@ type instance MS.HasGhostState (LLVM _) = 'True
 
 type instance MS.TypeName (LLVM arch) = CL.Ident
 type instance MS.ExtType (LLVM arch) = CL.MemType
+
 
 --------------------------------------------------------------------------------
 -- *** LLVMMethodId
@@ -508,7 +519,7 @@ initialCrucibleSetupState ::
   Either SetupError (Setup.CrucibleSetupState (LLVM arch))
 initialCrucibleSetupState cc def loc parent = do
   ms <- initialDefCrucibleMethodSpecIR (cc ^. ccLLVMModule) def loc parent
-  return $ Setup.makeCrucibleSetupState cc ms
+  return $ Setup.makeCrucibleSetupState emptyResolvedState cc ms
 
 initialCrucibleSetupStateDecl ::
   (?lc :: CL.TypeContext) =>
@@ -519,7 +530,7 @@ initialCrucibleSetupStateDecl ::
   Either SetupError (Setup.CrucibleSetupState (LLVM arch))
 initialCrucibleSetupStateDecl cc dec loc parent = do
   ms <- initialDeclCrucibleMethodSpecIR (cc ^. ccLLVMModule) dec loc parent
-  return $ Setup.makeCrucibleSetupState cc ms
+  return $ Setup.makeCrucibleSetupState emptyResolvedState cc ms
 
 --------------------------------------------------------------------------------
 -- ** AllLLVM/SomeLLVM
@@ -598,3 +609,71 @@ mkSomeLLVM x = Some (Compose x)
 
 getSomeLLVM :: forall t. (forall arch. t (LLVM arch)) -> AllLLVM t
 getSomeLLVM x = All (Compose x)
+
+--------------------------------------------------------------------------------
+-- *** ResolvedState
+
+type instance MS.ResolvedState (LLVM arch) = LLVMResolvedState
+
+type ResolvedPath = [Either String Int]
+
+-- | A datatype to keep track of which parts of the simulator state -- have been initialized already. For each allocation unit or global,
+-- we keep a list of element-paths that identify the initialized
+-- sub-components.
+data LLVMResolvedState =
+  ResolvedState
+    { _rsAllocs :: Map MS.AllocIndex [ResolvedPath]
+    , _rsGlobals :: Map String [ResolvedPath]
+    }
+  deriving (Eq, Ord, Show)
+
+emptyResolvedState :: LLVMResolvedState
+emptyResolvedState = ResolvedState Map.empty Map.empty
+
+makeLenses ''LLVMResolvedState
+
+-- | Record the initialization of the pointer represented by the given
+-- SetupValue.
+markResolved ::
+  MS.SetupValue ext ->
+  ResolvedPath {-^ path within this object (if any) -} ->
+  LLVMResolvedState ->
+  LLVMResolvedState
+markResolved val0 path0 rs = go path0 val0
+  where
+    go path val =
+      case val of
+        MS.SetupVar n         -> rs & rsAllocs %~ Map.alter (ins path) n
+        MS.SetupGlobal _ name -> rs & rsGlobals %~ Map.alter (ins path) name
+        MS.SetupElem _ v idx  -> go (Right idx : path) v
+        MS.SetupField _ v fld -> go (Left fld : path) v
+        -- TODO? What about casts?
+        _                  -> rs
+
+    ins path Nothing = Just [path]
+    ins path (Just paths) = Just (path : paths)
+
+-- | Test whether the pointer represented by the given SetupValue has
+-- been initialized already.
+testResolved ::
+  MS.SetupValue ext ->
+  ResolvedPath {-^ path within this object (if any) -} ->
+  LLVMResolvedState ->
+  Bool
+testResolved val0 path0 rs = go path0 val0
+  where
+    go path val =
+      case val of
+        MS.SetupVar n         -> test path (Map.lookup n (_rsAllocs rs))
+        MS.SetupGlobal _ c    -> test path (Map.lookup c (_rsGlobals rs))
+        MS.SetupElem _ v idx  -> go (Right idx : path) v
+        MS.SetupField _ v fld -> go (Left fld : path) v
+        -- TODO? What about casts?
+        _                  -> False
+
+    test _ Nothing = False
+    test path (Just paths) = any (overlap path) paths
+
+    overlap (x : xs) (y : ys) = x == y && overlap xs ys
+    overlap [] _ = True
+    overlap _ [] = True

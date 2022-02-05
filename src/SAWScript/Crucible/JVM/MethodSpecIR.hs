@@ -69,6 +69,8 @@ type instance MS.TypeName CJ.JVM = JIdent
 
 type instance MS.ExtType CJ.JVM = J.Type
 
+type instance MS.ResolvedState CJ.JVM = ()
+
 --------------------------------------------------------------------------------
 -- *** JVMMethodId
 
@@ -223,7 +225,7 @@ initialCrucibleSetupState ::
   ProgramLoc ->
   Setup.CrucibleSetupState CJ.JVM
 initialCrucibleSetupState cc (cls, method) loc =
-  Setup.makeCrucibleSetupState cc $
+  Setup.makeCrucibleSetupState () cc $
     initialDefCrucibleMethodSpecIR
       (cc ^. jccCodebase)
       (J.className cls)

@@ -2280,9 +2280,9 @@ llvm_points_to_check_lhs_validity ptr loc path =
      let ?lc = ccTypeCtx cc
      st <- get
      let rs = st ^. Setup.csResolvedState
-     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr path rs
+     if st ^. Setup.csPrePost == PreState && testResolved ptr path rs
        then throwCrucibleSetup loc "Multiple points-to preconditions on same pointer"
-       else Setup.csResolvedState %= MS.markResolved ptr path
+       else Setup.csResolvedState %= markResolved ptr path
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      ptrTy <- typeOfSetupValue cc env nameEnv ptr
@@ -2327,9 +2327,9 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
        do let ?lc = ccTypeCtx cc
           st <- get
           let rs = st ^. Setup.csResolvedState
-          if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
+          if st ^. Setup.csPrePost == PreState && testResolved ptr [] rs
             then throwCrucibleSetup loc "Multiple points-to preconditions on same pointer"
-            else Setup.csResolvedState %= MS.markResolved ptr []
+            else Setup.csResolvedState %= markResolved ptr []
           let env = MS.csAllocations (st ^. Setup.csMethodSpec)
               nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
           ptrTy <- typeOfSetupValue cc env nameEnv ptr

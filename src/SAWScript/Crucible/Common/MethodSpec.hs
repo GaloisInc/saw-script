@@ -87,6 +87,8 @@ type family PointsTo ext :: Type
 -- | The type of global allocations
 type family AllocGlobal ext :: Type
 
+-- | The type of "resolved" state
+type family ResolvedState ext :: Type
 
 --------------------------------------------------------------------------------
 -- ** SetupValue
@@ -270,69 +272,6 @@ type GhostGlobal = Crucible.GlobalVar GhostType
 --------------------------------------------------------------------------------
 -- ** Pre- and post-conditions
 
---------------------------------------------------------------------------------
--- *** ResolvedState
-
--- | A datatype to keep track of which parts of the simulator state -- have been initialized already. For each allocation unit or global,
--- we keep a list of element-paths that identify the initialized
--- sub-components.
-data ResolvedState =
-  ResolvedState
-    { _rsAllocs :: Map AllocIndex [[Either String Int]]
-    , _rsGlobals :: Map String [[Either String Int]]
-    }
-  deriving (Eq, Ord, Show)
-
-makeLenses ''ResolvedState
-
-emptyResolvedState :: ResolvedState
-emptyResolvedState = ResolvedState Map.empty Map.empty
-
--- | Record the initialization of the pointer represented by the given
--- SetupValue.
-markResolved ::
-  SetupValue ext ->
-  [Either String Int] {-^ path within this object (if any) -} ->
-  ResolvedState ->
-  ResolvedState
-markResolved val0 path0 rs = go path0 val0
-  where
-    go path val =
-      case val of
-        SetupVar n         -> rs & rsAllocs %~ Map.alter (ins path) n
-        SetupGlobal _ name -> rs & rsGlobals %~ Map.alter (ins path) name
-        SetupElem _ v idx  -> go (Right idx : path) v
-        SetupField _ v fld -> go (Left fld : path) v
-        -- TODO? What about casts?
-        _                  -> rs
-
-    ins path Nothing = Just [path]
-    ins path (Just paths) = Just (path : paths)
-
--- | Test whether the pointer represented by the given SetupValue has
--- been initialized already.
-testResolved ::
-  SetupValue ext ->
-  [Either String Int] {-^ path within this object (if any) -} ->
-  ResolvedState ->
-  Bool
-testResolved val0 path0 rs = go path0 val0
-  where
-    go path val =
-      case val of
-        SetupVar n         -> test path (Map.lookup n (_rsAllocs rs))
-        SetupGlobal _ c    -> test path (Map.lookup c (_rsGlobals rs))
-        SetupElem _ v idx  -> go (Right idx : path) v
-        SetupField _ v fld -> go (Left fld : path) v
-        -- TODO? What about casts?
-        _                  -> False
-
-    test _ Nothing = False
-    test path (Just paths) = any (overlap path) paths
-
-    overlap (x : xs) (y : ys) = x == y && overlap xs ys
-    overlap [] _ = True
-    overlap _ [] = True
 
 --------------------------------------------------------------------------------
 -- *** StateSpec
