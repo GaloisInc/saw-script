@@ -50,67 +50,67 @@ scope when they were created. The context also maintains a partial substitution
 for the existential variables, as they become instantiated with values, and it
 additionally remembers the bodies / unfoldings of the letrec-bound variables.
 
-The goal of the solver at any point is of the form C |- m1 <= m2, meaning that
+The goal of the solver at any point is of the form C |- m1 |= m2, meaning that
 we are trying to prove m1 refines m2 in context C. This proceed by cases:
 
-C |- returnM e1 <= returnM e2: prove C |- e1 = e2
+C |- returnM e1 |= returnM e2: prove C |- e1 = e2
 
-C |- errorM str1 <= errorM str2: vacuously true
+C |- errorM str1 |= errorM str2: vacuously true
 
-C |- if b then m1' else m1'' <= m2: prove C,b=true |- m1' <= m2 and
-C,b=false |- m1'' <= m2, skipping either case where C,b=X is unsatisfiable;
+C |- if b then m1' else m1'' |= m2: prove C,b=true |- m1' |= m2 and
+C,b=false |- m1'' |= m2, skipping either case where C,b=X is unsatisfiable;
 
-C |- m1 <= if b then m2' else m2'': similar to the above
+C |- m1 |= if b then m2' else m2'': similar to the above
 
-C |- either T U (CompM V) f1 f2 e <= m: prove C,x:T,e=inl x |- f1 x <= m and
-C,y:U,e=inl y |- f2 y <= m, again skippping any case with unsatisfiable context;
+C |- either T U (CompM V) f1 f2 e |= m: prove C,x:T,e=inl x |- f1 x |= m and
+C,y:U,e=inl y |- f2 y |= m, again skippping any case with unsatisfiable context;
 
-C |- m <= either T U (CompM V) f1 f2 e: similar to previous
+C |- m |= either T U (CompM V) f1 f2 e: similar to previous
 
-C |- m <= forallM f: make a new universal variable x and recurse
+C |- m |= forallM f: make a new universal variable x and recurse
 
-C |- existsM f <= m: make a new universal variable x and recurse (existential
+C |- existsM f |= m: make a new universal variable x and recurse (existential
 elimination uses universal variables and vice-versa)
 
-C |- m <= existsM f: make a new existential variable x and recurse
+C |- m |= existsM f: make a new existential variable x and recurse
 
-C |- forall f <= m: make a new existential variable x and recurse
+C |- forall f |= m: make a new existential variable x and recurse
 
-C |- m <= orM m1 m2: try to prove C |- m <= m1, and if that fails, backtrack and
-prove C |- m <= m2
+C |- m |= orM m1 m2: try to prove C |- m |= m1, and if that fails, backtrack and
+prove C |- m |= m2
 
-C |- orM m1 m2 <= m: prove both C |- m1 <= m and C |- m2 <= m
+C |- orM m1 m2 |= m: prove both C |- m1 |= m and C |- m2 |= m
 
-C |- letrec (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> body) <= m: create
+C |- letrec (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> body) |= m: create
 letrec-bound variables F1 through Fn in the context bound to their unfoldings f1
-through fn, respectively, and recurse on body <= m
+through fn, respectively, and recurse on body |= m
 
-C |- m <= letrec (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> body): similar to
+C |- m |= letrec (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> body): similar to
 previous case
 
-C |- F e1 ... en >>= k <= F e1' ... en' >>= k': prove C |- ei = ei' for each i
-and then prove k x <= k' x for new universal variable x
+C |- F e1 ... en >>= k |= F e1' ... en' >>= k': prove C |- ei = ei' for each i
+and then prove k x |= k' x for new universal variable x
 
-C |- F e1 ... en >>= k <= F' e1' ... em' >>= k':
+C |- F e1 ... en >>= k |= F' e1' ... em' >>= k':
 
-* If we have an assumption that forall x1 ... xj, F a1 ... an <= F' a1' .. am',
-  prove ei = ai and ei' = ai' and then that C |- k x <= k' x for fresh uvar x
+* If we have an assumption that forall x1 ... xj, F a1 ... an |= F' a1' .. am',
+  prove ei = ai and ei' = ai' and then that C |- k x |= k' x for fresh uvar x
 
-* If we have an assumption that forall x1, ..., xn, F e1'' ... en'' <= m' for
+* If we have an assumption that forall x1, ..., xn, F e1'' ... en'' |= m' for
   some ei'' and m', match the ei'' against the ei by instantiating the xj with
-  fresh evars, and if this succeeds then recursively prove C |- m' >>= k <= RHS
+  fresh evars, and if this succeeds then recursively prove C |- m' >>= k |= RHS
 
 (We don't do this one right now)
-* If we have an assumption that forall x1', ..., xn', m <= F e1'' ... en'' for
+* If we have an assumption that forall x1', ..., xn', m |= F e1'' ... en'' for
   some ei'' and m', match the ei'' against the ei by instantiating the xj with
-  fresh evars, and if this succeeds then recursively prove C |- LHS <= m' >>= k'
+  fresh evars, and if this succeeds then recursively prove C |- LHS |= m' >>= k'
 
 * If either side is a definition whose unfolding does not contain letrecM, fixM,
   or any related operations, unfold it
 
 * If F and F' have the same return type, add an assumption forall uvars in scope
-  that F e1 ... en <= F' e1' ... em' and unfold both sides, recursively proving
-  that F_body e1 ... en <= F_body' e1' ... em'. Then also prove k x <= k' x for
+  that F e1 ... en |= F' e1' ... em' and unfold both sides, recursively proving
+  that F_body e1 ... en |= F_body' e1' ... em'. Then also prove k x |= k' x for
   fresh uvar x.
 
 * Otherwise we don't know to "split" one of the sides into a bind whose
@@ -325,6 +325,8 @@ instance PrettyInCtx NormComp where
   prettyInCtx (ForallM tp f) =
     prettyAppList [return "forallM", prettyInCtx tp, return "_",
                    parens <$> prettyInCtx f]
+  prettyInCtx (FunBind f args CompFunReturn) =
+    prettyAppList (prettyInCtx f : map prettyInCtx args)
   prettyInCtx (FunBind f [] k) =
     prettyAppList [prettyInCtx f, return ">>=", prettyInCtx k]
   prettyInCtx (FunBind f args k) =
@@ -462,7 +464,7 @@ vsepM = fmap vsep . sequence
 instance PrettyInCtx FailCtx where
   prettyInCtx (FailCtxRefines m1 m2) =
     group <$> nest 2 <$>
-    ppWithPrefixSep "When proving refinement:" m1 "<=" m2
+    ppWithPrefixSep "When proving refinement:" m1 "|=" m2
   prettyInCtx (FailCtxMNF t) =
     group <$> nest 2 <$> vsepM [return "When normalizing computation:",
                                 prettyInCtx t]
@@ -473,7 +475,7 @@ instance PrettyInCtx MRFailure where
   prettyInCtx (TypesNotEq tp1 tp2) =
     ppWithPrefixSep "Types not equal:" tp1 "and" tp2
   prettyInCtx (CompsDoNotRefine m1 m2) =
-    ppWithPrefixSep "Could not prove refinement: " m1 "<=" m2
+    ppWithPrefixSep "Could not prove refinement: " m1 "|=" m2
   prettyInCtx (ReturnNotError t) =
     ppWithPrefix "errorM computation not equal to:" (ReturnM t)
   prettyInCtx (FunsNotEq nm1 nm2) =
@@ -536,7 +538,7 @@ asEVarApp _ _ = Nothing
 -- | An assumption that a named function refines some specificaiton. This has
 -- the form
 --
--- > forall x1, ..., xn. F e1 ... ek <= m
+-- > forall x1, ..., xn. F e1 ... ek |= m
 --
 -- for some universal context @x1:T1, .., xn:Tn@, some list of argument
 -- expressions @ei@ over the universal @xj@ variables, and some right-hand side
@@ -936,7 +938,7 @@ mrGetFunAssump nm = Map.lookup nm <$> mrFunAssumps <$> get
 withFunAssump :: FunName -> [Term] -> NormComp -> MRM a -> MRM a
 withFunAssump fname args rhs m =
   do mrDebugPPPrefixSep 1 "withFunAssump" (FunBind
-                                           fname args CompFunReturn) "<=" rhs
+                                           fname args CompFunReturn) "|=" rhs
      ctx <- mrUVarCtx
      assumps <- mrFunAssumps <$> get
      let assumps' = Map.insert fname (FunAssump ctx args rhs) assumps
@@ -1309,7 +1311,7 @@ mrRefines :: (ToNormComp a, ToNormComp b) => a -> b -> MRM ()
 mrRefines t1 t2 =
   do m1 <- toNormComp t1
      m2 <- toNormComp t2
-     mrDebugPPPrefixSep 1 "mrRefines" m1 "<=" m2
+     mrDebugPPPrefixSep 1 "mrRefines" m1 "|=" m2
      withFailureCtx (FailCtxRefines m1 m2) $ mrRefines' m1 m2
 
 -- | The main implementation of 'mrRefines'
@@ -1322,8 +1324,8 @@ mrRefines' (Ite cond1 m1 m1') m2_all@(Ite cond2 m2 m2') =
   liftSC1 scNot cond1 >>= \not_cond1 ->
   (mrEq cond1 cond2 >>= mrProvable) >>= \case
   True ->
-    -- If we can prove cond1 == cond2, then we just need to prove m1 <= m2 and
-    -- m1' <= m2'; further, we need only add assumptions about cond1, because it
+    -- If we can prove cond1 == cond2, then we just need to prove m1 |= m2 and
+    -- m1' |= m2'; further, we need only add assumptions about cond1, because it
     -- is provably equal to cond2
     withAssumption cond1 (mrRefines m1 m2) >>
     withAssumption not_cond1 (mrRefines m1' m2')
@@ -1404,8 +1406,8 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
 
   -- If we do not already have an assumption that f1 refines some specification,
   -- and both f1 and f2 are recursive but have the same return type, then try to
-  -- coinductively prove that f1 args1 <= f2 args2 under the assumption that f1
-  -- args1 <= f2 args2, and then try to prove that k1 <= k2
+  -- coinductively prove that f1 args1 |= f2 args2 under the assumption that f1
+  -- args1 |= f2 args2, and then try to prove that k1 |= k2
   Nothing
     | tps_eq
     , Just (f1_body, _) <- maybe_f1_body
@@ -1459,7 +1461,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
       normBindTerm f1_body k1 >>= \m1' -> mrRefines m1' m2
 
     -- Otherwise we would have to somehow split m2 into some computation of the
-    -- form m2' >>= k2 where f1 args1 <= m2' and k1 <= k2, but we don't know how
+    -- form m2' >>= k2 where f1 args1 |= m2' and k1 |= k2, but we don't know how
     -- to do this splitting, so give up
     _ ->
       throwError (CompsDoNotRefine m1 m2)
@@ -1473,8 +1475,8 @@ mrRefines' m1 m2@(FunBind f2 args2 k2) =
     normBindTerm f2_body k2 >>= \m2' -> mrRefines m1 m2'
 
   -- If f2 unfolds but is recursive, and k2 is the trivial continuation, meaning
-  -- m2 is just f2 args2, use the law of coinduction to prove m1 <= f2 args2 by
-  -- proving m1 <= f2_body under the assumption that m1 <= f2 args2
+  -- m2 is just f2 args2, use the law of coinduction to prove m1 |= f2 args2 by
+  -- proving m1 |= f2_body under the assumption that m1 |= f2 args2
   {- FIXME: implement something like this
   Just (f2_body, True)
     | CompFunReturn <- k2 ->
@@ -1482,7 +1484,7 @@ mrRefines' m1 m2@(FunBind f2 args2 k2) =
    -}
 
     -- Otherwise we would have to somehow split m1 into some computation of the
-    -- form m1' >>= k1 where m1' <= f2 args2 and k1 <= k2, but we don't know how
+    -- form m1' >>= k1 where m1' |= f2 args2 and k1 |= k2, but we don't know how
     -- to do this splitting, so give up
   _ ->
     throwError (CompsDoNotRefine m1 m2)
@@ -1541,7 +1543,7 @@ askMRSolver sc dlvl smt_conf timeout t1 t2 =
          do tps_are_eq <- mrConvertible tp1 tp2
             if tps_are_eq then return () else
               throwError (TypesNotEq (Type tp1) (Type tp2))
-            mrDebugPPPrefixSep 1 "mr_solver" t1 "<=" t2
+            mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2
             m1 <- mrApplyAll t1 vars >>= normCompTerm
             m2 <- mrApplyAll t2 vars >>= normCompTerm
             mrRefines m1 m2
