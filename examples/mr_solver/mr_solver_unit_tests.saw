@@ -74,4 +74,4 @@ loop1 <- parse_core
       \ (\\ (f: Vec 64 Bool -> CompM (Vec 64 Bool)) (x:Vec 64 Bool) -> f x)";
 
 // loop1 <= noErrorsRec1
-run_test "mr_solver loop1 noErrorsRec1" (mr_solver_debug 1 loop1 noErrorsRec1) true;
+run_test "mr_solver loop1 noErrorsRec1" (mr_solver loop1 noErrorsRec1) true;

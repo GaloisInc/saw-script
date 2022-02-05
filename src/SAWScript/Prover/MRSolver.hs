@@ -1373,12 +1373,10 @@ mrRefines' (FunBind (EVarFunName evar) args CompFunReturn) m2 =
   Nothing -> mrTrySetAppliedEVar evar args m2
 -}
 
-{-
-mrRefines' (FunBind f args1 k1) (FunBind f' args2 k2)
+mrRefines' (FunBind (LetRecName f) args1 k1) (FunBind (LetRecName f') args2 k2)
   | f == f' && length args1 == length args2 =
     zipWithM_ mrProveEq args1 args2 >>
     mrRefinesFun k1 k2
--}
 
 mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   mrFunOutType f1 args1 >>= \tp1 ->
