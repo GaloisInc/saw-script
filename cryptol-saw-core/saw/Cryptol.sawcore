@@ -1886,5 +1886,3 @@ axiom demote_add_distr
         (ecNumber (tcAdd x y) (TCNum w))
         (bvAdd w (ecNumber x (TCNum w)) (ecNumber y (TCNum w)));
 -}
-
---------------------------------------------------------------------------------

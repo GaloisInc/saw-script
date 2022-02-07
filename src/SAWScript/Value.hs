@@ -81,6 +81,7 @@ import SAWScript.X86 (X86Unsupported(..), X86Error(..))
 
 import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.CryptolEnv as CEnv
+import Verifier.SAW.Cryptol.Monadify as Monadify
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
 import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
@@ -429,6 +430,7 @@ data TopLevelRW =
   , rwTypedef :: Map SS.Name SS.Type
   , rwDocs    :: Map SS.Name String
   , rwCryptol :: CEnv.CryptolEnv
+  , rwMonadify :: Monadify.MonadifyEnv
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPOpts
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext

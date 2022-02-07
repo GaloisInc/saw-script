@@ -58,6 +58,7 @@ import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibl
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
+import Verifier.SAW.Cryptol.Monadify (defaultMonEnv)
 
 import qualified Argo
 --import qualified CryptolServer (validateServerState, ServerState(..))
@@ -216,6 +217,7 @@ initialState readFileFn =
                 , rwTypedef = mempty
                 , rwDocs = mempty
                 , rwCryptol = cenv
+                , rwMonadify = defaultMonEnv
                 , rwPPOpts = defaultPPOpts
                 , rwJVMTrans = jvmTrans
                 , rwPrimsAvail = mempty

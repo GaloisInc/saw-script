@@ -4,6 +4,8 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns #-}
 
 {- |
 Module      : Verifier.SAW.Cryptol
@@ -17,6 +19,7 @@ Portability : non-portable (language extensions)
 module Verifier.SAW.Cryptol where
 
 import Control.Monad (foldM, join, unless)
+import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
 import Data.List
@@ -1646,9 +1649,14 @@ asCryptolTypeValue v =
 scCryptolType :: SharedContext -> Term -> IO (Maybe (Either C.Kind C.Type))
 scCryptolType sc t =
   do modmap <- scGetModuleMap sc
-     case SC.evalSharedTerm modmap Map.empty Map.empty t of
-       SC.TValue tv -> return (asCryptolTypeValue tv)
-       _ -> return Nothing
+     catch
+       (case SC.evalSharedTerm modmap Map.empty Map.empty t of
+           -- NOTE: we make sure that asCryptolTypeValue gets evaluated, to
+           -- ensure that any panics in the simulator get caught here
+           SC.TValue tv
+             | Just !ret <- asCryptolTypeValue tv -> return $ Just ret
+           _ -> return Nothing)
+       (\ (_::SomeException) -> return Nothing)
 
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.
