@@ -177,9 +177,9 @@ memoFixTermFun f term_top =
      go term_top
 
 -- | Recursively test if a 'Term' contains @letRecM@
-containsLetRecM :: Term -> Bool
-containsLetRecM (asGlobalDef -> Just "Prelude.letRecM") = True
-containsLetRecM (unwrapTermF -> tf) = any containsLetRecM tf
+_containsLetRecM :: Term -> Bool
+_containsLetRecM (asGlobalDef -> Just "Prelude.letRecM") = True
+_containsLetRecM (unwrapTermF -> tf) = any _containsLetRecM tf
 
 
 ----------------------------------------------------------------------
@@ -979,13 +979,13 @@ debugPretty i pp = debugPrint i $ renderSawDoc defaultPPOpts pp
 
 -- | Pretty-print an object in the current context if the current debug level is
 -- at least the supplied 'Int'
-debugPrettyInCtx :: PrettyInCtx a => Int -> a -> MRM ()
-debugPrettyInCtx i a =
+_debugPrettyInCtx :: PrettyInCtx a => Int -> a -> MRM ()
+_debugPrettyInCtx i a =
   (mrUVars <$> get) >>= \ctx -> debugPrint i (showInCtx (map fst ctx) a)
 
 -- | Pretty-print an object relative to the current context
-mrPPInCtx :: PrettyInCtx a => a -> MRM SawDoc
-mrPPInCtx a =
+_mrPPInCtx :: PrettyInCtx a => a -> MRM SawDoc
+_mrPPInCtx a =
   runReader (prettyInCtx a) <$> map fst <$> mrUVars <$> get
 
 -- | Pretty-print the result of 'ppWithPrefixSep' relative to the current uvar
