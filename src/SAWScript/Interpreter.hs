@@ -1392,6 +1392,14 @@ primitives = Map.fromList
     [ "Apply an introduction rule to the current goal. Depending on the"
     , "rule, this will result in zero or more new subgoals."
     ]
+
+  , prim "goal_exact" "Term -> ProofScript ()"
+    (pureVal goal_exact)
+    Experimental
+    [ "Prove the current goal by giving an explicit proof term."
+    , "This will succeed if the type of the given term matches the current goal."
+    ]
+
   , prim "goal_assume"         "ProofScript Theorem"
     (pureVal goal_assume)
     Experimental

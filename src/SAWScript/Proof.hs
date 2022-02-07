@@ -68,6 +68,7 @@ module SAWScript.Proof
   , tacticId
   , tacticChange
   , tacticSolve
+  , tacticExact
 
   , Quantification(..)
   , predicateToProp
@@ -1131,6 +1132,20 @@ tacticTrivial _sc = Tactic \goal ->
     return ((), mempty, [], leafEvidence TrivialEvidence)
   else
     fail "trivial tactic: not a trivial goal"
+
+
+tacticExact :: (F.MonadFail m, MonadIO m) => SharedContext -> Term -> Tactic m ()
+tacticExact sc tm = Tactic \goal ->
+  do let gp = unProp (goalProp goal)
+     ty <- liftIO $ scTypeCheckError sc tm
+     ok <- liftIO $ scConvertible sc False gp ty
+     unless ok $ fail $ unlines
+         [ "Proof term does not prove the required proposition"
+         , showTerm gp
+         , showTerm tm
+         ]
+     return ((), mempty, [], leafEvidence (ProofTerm tm))
+
 
 -- | Examine the given proof goal and potentially do some work with it,
 --   but do not alter the proof state.

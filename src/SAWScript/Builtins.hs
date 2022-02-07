@@ -629,6 +629,11 @@ goal_apply thm =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticApply sc thm)
 
+goal_exact :: TypedTerm -> ProofScript ()
+goal_exact tm =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticExact sc (ttTerm tm))
+
 goal_assume :: ProofScript Theorem
 goal_assume =
   do sc <- SV.scriptTopLevel getSharedContext
