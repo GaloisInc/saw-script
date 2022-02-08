@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
 
 /* Increment the first byte pointed to by a 64-bit word pointer */
 void incr_u64_ptr_byte (uint64_t *x) {
@@ -30,4 +31,15 @@ void padded_struct_incr_all (padded_struct *p) {
   p->padded2++;
   p->padded3++;
   p->padded4++;
+}
+
+/* Test endianness by reading the first byte of a word */
+int64_t is_little_endian () {
+  int64_t x = 1;
+  int8_t is_le = *(int8_t*)(&x);
+  return is_le;
+}
+
+int main (int argc, char **argv) {
+  printf ("Little endian test: %lli\n", is_little_endian());
 }
