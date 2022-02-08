@@ -6975,8 +6975,40 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
                            llvmArrayPermToBlock ap) ps' 0
 
 
--- If proving a sequence shape, prove the two shapes and combine them; this
--- requires the first shape to have a well-defined length
+-- If proving a sequence shape with an unneeded empty shape, i.e., of the form
+-- sh1;emptysh where the length of sh1 equals the entire length of the required
+-- memblock permission, then prove sh1 by itself and then add the empty shape
+proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
+  | [nuMP| PExpr_SeqShape _ PExpr_EmptyShape |] <- mb_sh
+  , mbLift $ mbMapCl $(mkClosed
+                       [| \bp ->
+                         let PExpr_SeqShape sh1 _ = llvmBlockShape bp in
+                         bvEq (llvmBlockLen bp) (fromJust $
+                                                 llvmShapeLength sh1) |]) mb_bp =
+    -- Recursively call proveVarLLVMBlocks with sh1 in place of sh1;emptysh
+    let mb_bp' = mbMapCl $(mkClosed
+                           [| \bp ->
+                             let PExpr_SeqShape sh1 _ = llvmBlockShape bp in
+                             bp { llvmBlockShape = sh1 } |]) mb_bp in
+    proveVarLLVMBlocks x ps psubst (mb_bp':mb_bps) >>>
+
+    -- Extract the sh1 permission from the top of the stack and sequence an
+    -- empty shape onto the end of it
+    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    implExtractSwapConjM x ps' 0 >>>
+    let Perm_LLVMBlock bp = head ps'
+        sh1 = llvmBlockShape bp in
+    implSimplM Proxy (SImpl_IntroLLVMBlockSeqEmpty x bp) >>>
+
+    -- Finally, put the new sh1;emptysh permission back in place
+    implSwapInsertConjM x (Perm_LLVMBlock
+                           (bp { llvmBlockShape =
+                                   PExpr_SeqShape sh1 PExpr_EmptyShape }))
+                        (tail ps') 0
+
+
+-- If proving a sequence shape otherwise, prove the two shapes and combine them;
+-- this requires the first shape to have a well-defined length
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_SeqShape mb_sh1 _ |] <- mb_sh
   , mbLift $ mbMapCl $(mkClosed [| isJust . llvmShapeLength |]) mb_sh1 =
