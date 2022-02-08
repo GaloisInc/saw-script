@@ -1430,13 +1430,13 @@ bvConcat LittleEndian bv1 bv2
 -- to determine which is the first versus second part of the split
 bvSplit :: KnownNat sz1 => KnownNat sz2 => EndianForm ->
            NatRepr sz1 -> BV.BV sz2 -> Maybe (BV.BV sz1, BV.BV (sz2 - sz1))
-bvSplit BigEndian sz1 bv2
+bvSplit LittleEndian sz1 bv2
   | n0 <- knownNat @0
   , sz2 <- natRepr bv2
   , Left LeqProof <- decideLeq (addNat n0 sz1) sz2
   , Left LeqProof <- decideLeq (addNat sz1 (subNat sz2 sz1)) sz2 =
     Just (BV.select n0 sz1 bv2, BV.select sz1 (subNat sz2 sz1) bv2)
-bvSplit LittleEndian sz1 bv2
+bvSplit BigEndian sz1 bv2
   | n0 <- knownNat @0
   , sz2 <- natRepr bv2
   , Left LeqProof <- decideLeq sz1 sz2
