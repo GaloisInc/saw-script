@@ -145,7 +145,15 @@ termToProp sc tm =
       ty <- scTypeOf sc tm
       case evalSharedTerm mmap mempty mempty ty of
         TValue (VSort s) | s == propSort -> return (Prop tm)
-        _ -> fail $ unlines [ "termToProp: Term is not a proposition", showTerm tm, showTerm ty ]
+        _ ->
+          case asLambda tm of
+            Just _ ->
+              fail $ unlines [ "termToProp: Term is not a proposition."
+                             , "Note: the given term is a lambda; try using Pi terms instead."
+                             , showTerm tm, showTerm ty
+                             ]
+            Nothing ->
+              fail $ unlines [ "termToProp: Term is not a proposition", showTerm tm, showTerm ty ]
 
 
 -- | Turn a boolean-valued saw-core term into a proposition by asserting
