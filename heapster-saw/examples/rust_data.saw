@@ -302,8 +302,11 @@ heapster_assume_fun_rename_prim env panicking_panic_sym "panicking_panic"
 
 // HashMap::insert
 // FIXME: we currently pretend this always returns None
-hashmap_u64_u64_insert_sym <- heapster_find_symbol env
-  "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert";
+hashmap_u64_u64_insert_sym <- heapster_find_symbol_with_type env
+  "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert"
+  "{ i64,\
+\  i64 }(%\"std::collections::hash::map::HashMap<u64, u64, std::collections::hash::map::RandomState>\"*,\
+\        i64, i64)";
 heapster_assume_fun_rename_prim env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert"
   "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>";
 //heapster_assume_fun_rename env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert"
@@ -316,6 +319,13 @@ heapster_assume_fun_rename_prim env hashmap_u64_u64_insert_sym "hashmap_u64_u64_
 //    \         ((\\ (_:#()) -> returnM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #()) \
 //    \                                 (Cons (Vec 64 Bool * Vec 64 Bool) (k,v) h, ())), \
 //    \          Left #() (Vec 64 Bool) (), ())";
+
+hashmap_String_List64_insert_sym <- heapster_find_symbol_with_type env
+  "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert"
+  "void(%\"core::option::Option<List64>\"*,\
+\     %\"std::collections::hash::map::HashMap<alloc::string::String, List64, std::collections::hash::map::RandomState>\"*,\
+\     %\"alloc::string::String\"*, %List64*)";
+// FIXME: assume hashmap_String_List64_insert_sym
 
 // String::deref
 string_deref <- heapster_find_trait_method_symbol env
@@ -447,11 +457,9 @@ heapster_typecheck_fun_rename env mk_proj0_five_values_sym "mk_proj0_five_values
   "<> fn (x1:u32,x2:u32,x3:u32,x4:u32,x5:u32) -> u32";
 
 // ref_sum
-//heapster_set_debug_level env 1;
 ref_sum_sym <- heapster_find_symbol env "7ref_sum";
 heapster_typecheck_fun_rename env ref_sum_sym "ref_sum"
   "<'a,'b> fn (x:&'a u64, y:&'a u64) -> u64";
-//heapster_set_debug_level env 0;
 
 // double_dup_ref
 double_dup_ref_sym <- heapster_find_symbol env "14double_dup_ref";

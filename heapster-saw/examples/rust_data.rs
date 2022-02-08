@@ -47,6 +47,10 @@ pub extern fn mk_two_values_extern (x1:u32,x2:u32) -> TwoValues {
     TwoValues(x1,x2)
 }
 
+pub fn mk_two_values_opt (x1:u32,x2:u32) -> Option<TwoValues> {
+    Some(TwoValues(x1,x2))
+}
+
 pub fn two_values_proj1 (x:TwoValues) -> u32 {
     match x {
         TwoValues(x1,_) => x1
@@ -120,6 +124,10 @@ pub fn mk_five_values (x1:u32,x2:u32,x3:u32,x4:u32,x5:u32) -> FiveValues {
 pub extern fn mk_five_values_extern (x1:u32,x2:u32,x3:u32,x4:u32,x5:u32)
                                      -> FiveValues {
     FiveValues(x1,x2,x3,x4,x5)
+}
+
+pub fn mk_five_values_opt (x1:u32,x2:u32,x3:u32,x4:u32,x5:u32) -> Option<FiveValues> {
+    Some(FiveValues(x1,x2,x3,x4,x5))
 }
 
 pub fn proj_five_values (i:u64, fvs:FiveValues) -> u32 {
@@ -361,6 +369,36 @@ pub fn list64_is_empty (l: &List64) -> bool {
         List64::Nil64 => true,
         List64::Cons64 (_,_) => false
     }
+}
+
+/* Sum the elements of a List64 */
+pub fn list64_sum(l:&List64) -> u64 {
+    match l {
+        List64::Nil64 => 0,
+        List64::Cons64 (x,rest) => x + list64_sum (rest),
+    }
+}
+
+/* Build a HashMap with a String key already mapped to a list */
+pub fn hash_map_for_string_and_list64 (str:String,
+                                       l:List64) -> HashMap<String,List64> {
+    let mut map = HashMap::new();
+    map.insert (str, l);
+    return map;
+}
+
+pub fn opt_hash_map_for_string_and_list64 (str:String,
+                                           l:List64) -> Option<HashMap<String,List64>> {
+    Some(hash_map_for_string_and_list64 (str,l))
+}
+
+/* Sum the List64s in a HashMap */
+pub fn sum_hash_map_string_list64 (map:&HashMap<String,List64>) -> u64 {
+    let mut ret:u64 = 0;
+    for (_,l) in map.iter() {
+        ret += list64_sum (l);
+    }
+    return ret;
 }
 
 /* Insert a mapping into m from the greatest of x and y to the other */
