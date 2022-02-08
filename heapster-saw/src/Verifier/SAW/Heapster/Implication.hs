@@ -7024,12 +7024,17 @@ proveVarLLVMBlocks2 x ps psubst mb_bp _ mb_bps
     getTopDistPerm x >>>= \p' ->
     recombinePerm x p' >>>
 
-    -- Find the disjunct corresponding to e_tag, if there is one; otherwise, we
-    -- don't know which disjunct to use, so return each of them in turn,
-    -- combining them with implCatchM
+    -- Find the disjunct corresponding to e_tag, if there is one; if e_tag is
+    -- known to be different from all possible tags, we can fail right away;
+    -- otherwise, we don't know which disjunct to use, so return each of them in
+    -- turn, combining them with implCatchM
     (getEqualsExpr e_tag >>>= \case
         (bvMatchConst -> Just tag_bv)
           | Just i <- mbFindTaggedUnionIndex tag_bv mb_tag_u -> return i
+        (bvMatchConst -> Just tag_bv) ->
+          implFailVarM
+          "proveVarLLVMBlock (tag does not match any in disjuctive shape)"
+          x (ValPerm_Conj ps) (mbValPerm_LLVMBlock mb_bp)
         _ ->
           let len =
                 mbLift $ mbMapCl $(mkClosed [| length .
