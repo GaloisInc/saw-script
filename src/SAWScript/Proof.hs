@@ -24,7 +24,6 @@ module SAWScript.Proof
   , termToProp
   , propToTerm
   , propToRewriteRule
-  , propIsTrivial
   , propSize
   , prettyProp
   , ppProp
@@ -254,16 +253,21 @@ falseProp sc = Prop <$> (scEqTrue sc =<< scApplyPrelude_False sc)
 propSize :: Prop -> Integer
 propSize (Prop tm) = scSharedSize tm
 
--- | Test if the given proposition is trivially true.  This holds
---   just when the proposition is a (possibly empty) sequence of
---   Pi-types followed by an @EqTrue@ proposition for a
---   concretely-true boolean value.
-propIsTrivial :: Prop -> Bool
-propIsTrivial (Prop tm) = checkTrue tm
+trivialProofTerm :: SharedContext -> Prop -> IO (Either String Term)
+trivialProofTerm sc (Prop p) = runExceptT (loop =<< lift (scWhnf sc p))
   where
-    checkTrue :: Term -> Bool
-    checkTrue (asPiList -> (_, asEqTrue -> Just (asBool -> Just True))) = True
-    checkTrue _ = False
+    loop (asPi -> Just (nm, tp, tm)) =
+      do pf <- loop =<< lift (scWhnf sc tm)
+         lift $ scLambda sc nm tp pf
+
+    loop (asEq -> Just (tp, x, _y)) =
+      lift $ scCtorApp sc "Prelude.Refl" [tp, x]
+
+    loop _ = throwError $ unlines
+               [ "The trivial tactic can only prove quantified equalities, but"
+               , "the given goal is not in the correct form."
+               , showTerm p
+               ]
 
 -- | Pretty print the given proposition as a string.
 prettyProp :: PPOpts -> Prop -> String
@@ -396,10 +400,6 @@ data Evidence
     --   has been explicitly assumed without other evidence at the
     --   user's direction.
   | Admitted Text Pos Prop
-
-    -- | This type of evidence is produced when a given proposition is trivially
-    --   true.
-  | TrivialEvidence
 
     -- | This type of evidence is produced when a proposition can be deconstructed
     --   along a conjunction into two subgoals, each of which is supported by
@@ -715,7 +715,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
     check hyps e p@(Prop ptm) = case e of
       ProofTerm tm ->
         do ty <- scTypeCheckError sc tm
-           ok <- scConvertible sc False ptm ty
+           ok <- scConvertible sc True ptm ty
            unless ok $ fail $ unlines
                [ "Proof term does not prove the required proposition"
                , showTerm ptm
@@ -757,13 +757,6 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
                , showTerm p'
                ]
            return (mempty, TestedTheorem n)
-
-      TrivialEvidence ->
-        do unless (propIsTrivial p) $ fail $ unlines
-             [ "Proposition is not trivial"
-             , showTerm ptm
-             ]
-           return mempty
 
       SplitEvidence e1 e2 ->
         splitProp sc p >>= \case
@@ -1127,18 +1120,24 @@ tacticSplit sc = Tactic \(ProofGoal num ty name prop) ->
 
 -- | Attempt to solve a goal by recognizing it as a trivially true proposition.
 tacticTrivial :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
-tacticTrivial _sc = Tactic \goal ->
-  if (propIsTrivial (goalProp goal)) then
-    return ((), mempty, [], leafEvidence TrivialEvidence)
-  else
-    fail "trivial tactic: not a trivial goal"
-
+tacticTrivial sc = Tactic \goal ->
+  liftIO (trivialProofTerm sc (goalProp goal)) >>= \case
+    Left err -> fail err
+    Right pf ->
+       do let gp = unProp (goalProp goal)
+          ty <- liftIO $ scTypeCheckError sc pf
+          ok <- liftIO $ scConvertible sc True gp ty
+          unless ok $ fail $ unlines
+            [ "The trivial tactic cannot prove this equality"
+            , showTerm gp
+            ]
+          return ((), mempty, [], leafEvidence (ProofTerm pf))
 
 tacticExact :: (F.MonadFail m, MonadIO m) => SharedContext -> Term -> Tactic m ()
 tacticExact sc tm = Tactic \goal ->
   do let gp = unProp (goalProp goal)
      ty <- liftIO $ scTypeCheckError sc tm
-     ok <- liftIO $ scConvertible sc False gp ty
+     ok <- liftIO $ scConvertible sc True gp ty
      unless ok $ fail $ unlines
          [ "Proof term does not prove the required proposition"
          , showTerm gp
