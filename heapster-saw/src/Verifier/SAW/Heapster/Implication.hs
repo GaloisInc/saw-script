@@ -3180,7 +3180,7 @@ partialSubstForceM mb_e caller =
      case partialSubst psubst mb_e of
        Just e -> pure e
        Nothing ->
-         implTraceM (\i -> sep [pretty ("Incomplete susbtitution in " ++ caller
+         implTraceM (\i -> sep [pretty ("Incomplete substitution in " ++ caller
                                         ++ " for:"),
                                 permPretty i mb_e]) >>= implFailM
 
