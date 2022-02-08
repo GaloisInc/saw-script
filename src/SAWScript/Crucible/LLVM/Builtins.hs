@@ -2109,7 +2109,7 @@ llvm_cast_pointer ptr lty =
   do cctx <- getLLVMCrucibleContext
      let ?lc = ccTypeCtx cctx
      loc <- getW4Position "llvm_cast_pointer"
-     memTy <- memTypeForLLVMType loc lty
+     memTy <- memTypeForLLVMType loc (L.PtrTo lty)
      pure (mkAllLLVM (SetupCast () (getAllLLVM ptr) memTy))
 
 constructFreshPointer ::
