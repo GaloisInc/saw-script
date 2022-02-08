@@ -362,6 +362,27 @@ isNamedParams :: PathParameters a -> Bool
 isNamedParams (AngleBracketed _ tys _ _) = all isNamedType tys
 isNamedParams _ = error "Parenthesized types not supported"
 
+-- | Decide whether a Rust type definition is polymorphic and "Option-like";
+-- that is, it contains only one data-bearing variant, and the data is of the
+-- polymorphic type
+isPolyOptionLike :: Item Span -> Bool
+isPolyOptionLike (Enum _ _ _ variants (Generics _ [TyParam _ t _ _ _] _ _) _) =
+  -- Short-circuit if no variant carries the type parameter. Otherwise check
+  -- that all other variants carry nothing
+  case find containsT variants of
+    Nothing -> False
+    Just v -> all isUnitVariant (delete v variants)
+  where
+    containsT (Variant _ _ (TupleD [StructField _ _ (PathTy _ (Path _ [PathSegment t' _ _] _) _) _ _] _) _ _) =
+      name t == name t'
+    containsT (Variant _ _ (StructD [StructField _ _ (PathTy _ (Path _ [PathSegment t' _ _] _) _) _ _] _) _ _) =
+      name t == name t'
+    containsT _ = False
+
+    isUnitVariant (Variant _ _ (UnitD _) _ _) = True
+    isUnitVariant _ = False
+isPolyOptionLike _ = False
+
 -- | Get all of the 'RustName's of path parameters, if they're angle-bracketed
 pParamNames :: PathParameters a -> [RustName]
 pParamNames (AngleBracketed _ tys _ _) = mapMaybe tyName tys
