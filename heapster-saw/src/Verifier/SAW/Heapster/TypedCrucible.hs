@@ -3714,9 +3714,11 @@ simplify1PermForDetVars det_vars x (ValPerm_Conj ps)
     getPerm x >>>= \new_p ->
     simplify1PermForDetVars det_vars x new_p
 
--- For permission l:lowned(ps_in -o ps_out) where l is not determined, end l
-simplify1PermForDetVars det_vars l (ValPerm_LOwned _ _ _)
-  | not (NameSet.member l det_vars)
+-- For permission l:lowned[ls](ps_in -o ps_out) where l or some free variable in
+-- ps_in or ps_out is not determined, end l
+simplify1PermForDetVars det_vars l (ValPerm_LOwned _ ps_in ps_out)
+  | vars <- NameSet.insert l $ freeVars (ps_in,ps_out)
+  , not $ NameSet.nameSetIsSubsetOf vars det_vars
   = implEndLifetimeRecM l
 
 -- For lowned permission l:lowned[ls](ps_in -o ps_out), end any lifetimes in ls
