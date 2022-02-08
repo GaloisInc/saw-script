@@ -6937,6 +6937,14 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 
 -- If proving a field shape, prove the remaining blocks and then prove the
 -- corresponding field permission
+--
+-- FIXME: instead of proving the field for this field shape after the remaining
+-- shapes, proveVarLLVMBlocks should collect all field and array shapes that
+-- need to be proved and bottom out with a call to proveVarConjImpl, so that
+-- each of these shapes is proved in the proper order to make sure all variables
+-- get determined. The current approach just happens to work because the only
+-- undetermined variables in shapes coming from Rust types most of the time are
+-- the lengths of slices, which are stored after the array.
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_FieldShape (LLVMFieldShape mb_p) |] <- mb_sh
   , sz <- mbExprLLVMTypeWidth mb_p
@@ -6958,6 +6966,8 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 
 -- If proving a field shape, prove the remaining blocks and then prove the
 -- corresponding array permission
+--
+-- FIXME: see above FIXME on proving field shapes
 proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_ArrayShape _ _ _ |] <- mb_sh =
     -- Recursively prove the remaining block permissions
@@ -7063,7 +7073,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp _ mb_bps
     (getEqualsExpr e_tag >>>= \case
         (bvMatchConst -> Just tag_bv)
           | Just i <- mbFindTaggedUnionIndex tag_bv mb_tag_u -> return i
-        (bvMatchConst -> Just tag_bv) ->
+        (bvMatchConst -> Just _) ->
           implFailVarM
           "proveVarLLVMBlock (tag does not match any in disjuctive shape)"
           x (ValPerm_Conj ps) (mbValPerm_LLVMBlock mb_bp)
