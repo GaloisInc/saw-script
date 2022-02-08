@@ -68,7 +68,7 @@ type JIdent = String -- FIXME(huffman): what to put here?
 type instance MS.TypeName CJ.JVM = JIdent
 
 type instance MS.ExtType CJ.JVM = J.Type
-
+type instance MS.CastType CJ.JVM = ()
 type instance MS.ResolvedState CJ.JVM = ()
 
 --------------------------------------------------------------------------------

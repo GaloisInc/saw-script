@@ -41,6 +41,7 @@ type instance MS.MethodId MIR = DefId
 type instance MS.AllocSpec MIR = Some MirAllocSpec
 type instance MS.PointsTo MIR = MirPointsTo
 type instance MS.ResolvedState MIR = ()
+type instance MS.CastType MIR = ()
 
 type instance MS.Codebase MIR = CollectionState
 

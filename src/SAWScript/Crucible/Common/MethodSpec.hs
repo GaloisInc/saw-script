@@ -81,6 +81,9 @@ type family TypeName ext :: Type
 -- | The type of types of the syntax extension we're dealing with
 type family ExtType ext :: Type
 
+-- | The types that can appear in casts
+type family CastType ext :: Type
+
 -- | The type of points-to assertions
 type family PointsTo ext :: Type
 
@@ -123,7 +126,7 @@ data SetupValue ext where
   SetupArray  :: B (HasSetupArray ext) -> [SetupValue ext] -> SetupValue ext
   SetupElem   :: B (HasSetupElem ext) -> SetupValue ext -> Int -> SetupValue ext
   SetupField  :: B (HasSetupField ext) -> SetupValue ext -> String -> SetupValue ext
-  SetupCast   :: B (HasSetupCast ext) -> SetupValue ext -> ExtType ext -> SetupValue ext
+  SetupCast   :: B (HasSetupCast ext) -> SetupValue ext -> CastType ext -> SetupValue ext
 
   -- | A pointer to a global variable
   SetupGlobal :: B (HasSetupGlobal ext) -> String -> SetupValue ext
@@ -143,7 +146,7 @@ type SetupValueHas (c :: Type -> Constraint) ext =
   , c (B (HasSetupCast ext))
   , c (B (HasSetupGlobal ext))
   , c (B (HasSetupGlobalInitializer ext))
-  , c (ExtType ext)
+  , c (CastType ext)
   )
 
 deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
@@ -156,7 +159,7 @@ deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
 --   are implementation details and won't be familiar to users.
 --   Consider using 'resolveSetupValue' and printing an 'LLVMVal'
 --   with @PP.pretty@ instead.
-ppSetupValue :: Show (ExtType ext) => SetupValue ext -> PP.Doc ann
+ppSetupValue :: Show (CastType ext) => SetupValue ext -> PP.Doc ann
 ppSetupValue setupval = case setupval of
   SetupTerm tm   -> ppTypedTerm tm
   SetupVar i     -> ppAllocIndex i

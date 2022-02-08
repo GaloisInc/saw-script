@@ -109,7 +109,7 @@ resolveSetupValueInfo cc env nameEnv v =
       | Just alias <- Map.lookup i nameEnv
       -> L.Pointer (L.guessAliasInfo mdMap alias)
 
-    SetupCast () _ (Crucible.PtrType (Crucible.Alias alias))
+    SetupCast () _ (L.Alias alias)
       -> L.Pointer (L.guessAliasInfo mdMap alias)
 
     SetupField () a n ->
@@ -332,10 +332,17 @@ typeOfSetupValue' cc env nameEnv val =
                              , "instead got:"
                              , show (ppTypedTermType tp)
                              ]
-    SetupCast () v tp -> -- INVARIANT: tp is a pointer type
+    SetupCast () v ltp ->
       do memTy <- typeOfSetupValue cc env nameEnv v
          case memTy of
-           Crucible.PtrType _symTy -> return tp
+           Crucible.PtrType _symTy ->
+             case let ?lc = lc in Crucible.liftMemType (L.PtrTo ltp) of
+               Left err -> fail $ unlines [ "typeOfSetupValue: invalid type " ++ show ltp
+                                          , "Details:"
+                                          , err
+                                          ]
+               Right mt -> return mt
+
            _ -> fail $ unwords $
                   [ "typeOfSetupValue: tried to cast the type of a non-pointer value"
                   , "actual type of value: " ++ show memTy

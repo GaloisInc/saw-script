@@ -179,7 +179,7 @@ type instance MS.HasGhostState (LLVM _) = 'True
 
 type instance MS.TypeName (LLVM arch) = CL.Ident
 type instance MS.ExtType (LLVM arch) = CL.MemType
-
+type instance MS.CastType (LLVM arch) = L.Type
 
 --------------------------------------------------------------------------------
 -- *** LLVMMethodId
@@ -619,7 +619,7 @@ type instance MS.ResolvedState (LLVM arch) = LLVMResolvedState
 data ResolvedPathItem
   = ResolvedField String
   | ResolvedElem Int
-  | ResolvedCast CL.MemType
+  | ResolvedCast L.Type
  deriving (Show, Eq, Ord)
 
 type ResolvedPath = [ResolvedPathItem]

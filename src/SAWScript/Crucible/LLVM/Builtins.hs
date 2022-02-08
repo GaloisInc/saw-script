@@ -2103,14 +2103,8 @@ llvm_fresh_pointer lty =
      memTy <- memTypeForLLVMType loc lty
      constructFreshPointer (llvmTypeAlias lty) loc memTy
 
-llvm_cast_pointer :: AllLLVM SetupValue -> L.Type -> LLVMCrucibleSetupM (AllLLVM SetupValue)
-llvm_cast_pointer ptr lty =
-  LLVMCrucibleSetupM $
-  do cctx <- getLLVMCrucibleContext
-     let ?lc = ccTypeCtx cctx
-     loc <- getW4Position "llvm_cast_pointer"
-     memTy <- memTypeForLLVMType loc (L.PtrTo lty)
-     pure (mkAllLLVM (SetupCast () (getAllLLVM ptr) memTy))
+llvm_cast_pointer :: AllLLVM SetupValue -> L.Type -> AllLLVM SetupValue
+llvm_cast_pointer ptr lty = mkAllLLVM (SetupCast () (getAllLLVM ptr) lty)
 
 constructFreshPointer ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>

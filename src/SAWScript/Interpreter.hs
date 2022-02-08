@@ -2617,7 +2617,7 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_return`." ]
 
-  , prim "llvm_cast_pointer" "SetupValue -> LLVMType -> LLVMSetup SetupValue"
+  , prim "llvm_cast_pointer" "SetupValue -> LLVMType -> SetupValue"
     (pureVal llvm_cast_pointer)
     Current
     [ "Cast the type of the given setup value (which must be a pointer value)."
