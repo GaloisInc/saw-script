@@ -1304,8 +1304,10 @@ development, or as a way to provide some evidence for the validity of a
 specification believed to be true but difficult or infeasible to prove.
 
 * `trivial : ProofScript ()` states that the current goal should
-be trivially true (i.e., the constant `True` or a function that
-immediately returns `True`). It fails if that is not the case.
+be trivially true. This tactic recognizes instances of equality
+that can be demonstrated by conversion alone. In particular
+it is able to prove `EqTrue x` goals where `x` reduces to
+the constant value `True`. It fails if this is not the case.
 
 ## Multiple Goals
 
@@ -1330,6 +1332,11 @@ variable in the current proof goal, returning the variable as a `Term`.
 
 * `goal_when : String -> ProofScript () -> ProofScript ()` will run the
 given proof script only when the goal name contains the given string.
+
+* `goal_exact : Term -> ProofScript ()` will attempt to use the given
+term as an exact proof for the current goal. This tactic will succeed
+whever the type of the given term exactly matches the current goal,
+and will fail otherwise.
 
 * `split_goal : ProofScript ()` will split a goal of the form
 `Prelude.and prop1 prop2` into two separate goals `prop1` and `prop2`.

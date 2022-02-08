@@ -1392,6 +1392,14 @@ primitives = Map.fromList
     [ "Apply an introduction rule to the current goal. Depending on the"
     , "rule, this will result in zero or more new subgoals."
     ]
+
+  , prim "goal_exact"          "Term -> ProofScript ()"
+    (pureVal goal_exact)
+    Experimental
+    [ "Prove the current goal by giving an explicit proof term."
+    , "This will succeed if the type of the given term matches the current goal."
+    ]
+
   , prim "goal_assume"         "ProofScript Theorem"
     (pureVal goal_assume)
     Experimental
@@ -1658,7 +1666,11 @@ primitives = Map.fromList
   , prim "trivial"             "ProofScript ()"
     (pureVal trivial)
     Current
-    [ "Succeed only if the proof goal is a literal 'True'." ]
+    [ "Succeeds if the goal is trivial. This tactic recognizes goals"
+    , "that are instances of reflexivity, possibly with quantified variables."
+    , "In particular, it will prove goals of the form 'EqTrue x' when 'x' reduces"
+    , "to the constant value 'True'."
+    ]
 
   , prim "w4"                  "ProofScript ()"
     (pureVal w4_z3)
