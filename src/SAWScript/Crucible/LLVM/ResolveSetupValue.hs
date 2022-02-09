@@ -109,6 +109,9 @@ resolveSetupValueInfo cc env nameEnv v =
       | Just alias <- Map.lookup i nameEnv
       -> L.Pointer (L.guessAliasInfo mdMap alias)
 
+    SetupCast () _ (L.Alias alias)
+      -> L.Pointer (L.guessAliasInfo mdMap alias)
+
     SetupField () a n ->
        fromMaybe L.Unknown $
        do L.Pointer (L.Structure xs) <- return (resolveSetupValueInfo cc env nameEnv a)
@@ -329,6 +332,21 @@ typeOfSetupValue' cc env nameEnv val =
                              , "instead got:"
                              , show (ppTypedTermType tp)
                              ]
+    SetupCast () v ltp ->
+      do memTy <- typeOfSetupValue cc env nameEnv v
+         case memTy of
+           Crucible.PtrType _symTy ->
+             case let ?lc = lc in Crucible.liftMemType (L.PtrTo ltp) of
+               Left err -> fail $ unlines [ "typeOfSetupValue: invalid type " ++ show ltp
+                                          , "Details:"
+                                          , err
+                                          ]
+               Right mt -> return mt
+
+           _ -> fail $ unwords $
+                  [ "typeOfSetupValue: tried to cast the type of a non-pointer value"
+                  , "actual type of value: " ++ show memTy
+                  ]
     SetupStruct () packed vs ->
       do memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
          let si = Crucible.mkStructInfo dl packed memTys
@@ -458,6 +476,9 @@ resolveSetupVal cc mem env tyenv nameEnv val =
       | Just ptr <- Map.lookup i env -> return (Crucible.ptrToPtrVal ptr)
       | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
+    -- NB, SetupCast values should always be pointers. Pointer casts have no
+    -- effect on the actual computed LLVMVal.
+    SetupCast () v _lty -> resolveSetupVal cc mem env tyenv nameEnv v
     SetupStruct () packed vs -> do
       vals <- mapM (resolveSetupVal cc mem env tyenv nameEnv) vs
       let tps = map Crucible.llvmValStorableType vals

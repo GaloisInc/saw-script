@@ -1,0 +1,4 @@
+This example is derived from an older union example
+from `examples/llvm/union`.  It is intended to demonstrate
+the use of the `llvm_pointer_cast` operation for selecting
+the branches of unions.

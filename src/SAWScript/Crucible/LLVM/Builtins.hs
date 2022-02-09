@@ -63,6 +63,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , llvm_alloc_global
     , llvm_fresh_expanded_val
     , llvm_sizeof
+    , llvm_cast_pointer
 
     --
     -- These function are common to LLVM & JVM implementation (not for external use)
@@ -2102,6 +2103,9 @@ llvm_fresh_pointer lty =
      memTy <- memTypeForLLVMType loc lty
      constructFreshPointer (llvmTypeAlias lty) loc memTy
 
+llvm_cast_pointer :: AllLLVM SetupValue -> L.Type -> AllLLVM SetupValue
+llvm_cast_pointer ptr lty = mkAllLLVM (SetupCast () (getAllLLVM ptr) lty)
+
 constructFreshPointer ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
   Maybe Crucible.Ident ->
@@ -2236,7 +2240,7 @@ llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
           -- have multiple llvm_points_to_bitfield statements on the same
           -- pointer provided that the field names are different, so we use
           -- the field name as the path.
-          let path = [Left fieldName]
+          let path = [ResolvedField fieldName]
           _ <- llvm_points_to_check_lhs_validity ptr loc path
 
           bfIndex <- resolveSetupBitfieldIndexOrFail cc env nameEnv ptr fieldName
@@ -2263,16 +2267,16 @@ llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
 llvm_points_to_check_lhs_validity ::
   SetupValue (LLVM arch) {- ^ lhs pointer -} ->
   W4.ProgramLoc {- ^ the location in the program -} ->
-  [Either String Int] {- ^ the path from the pointer to the pointee -} ->
+  ResolvedPath {- ^ the path from the pointer to the pointee -} ->
   StateT (Setup.CrucibleSetupState (LLVM arch)) TopLevel Crucible.MemType
 llvm_points_to_check_lhs_validity ptr loc path =
   do cc <- getLLVMCrucibleContext
      let ?lc = ccTypeCtx cc
      st <- get
      let rs = st ^. Setup.csResolvedState
-     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr path rs
+     if st ^. Setup.csPrePost == PreState && testResolved ptr path rs
        then throwCrucibleSetup loc "Multiple points-to preconditions on same pointer"
-       else Setup.csResolvedState %= MS.markResolved ptr path
+       else Setup.csResolvedState %= markResolved ptr path
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      ptrTy <- typeOfSetupValue cc env nameEnv ptr
@@ -2317,9 +2321,9 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
        do let ?lc = ccTypeCtx cc
           st <- get
           let rs = st ^. Setup.csResolvedState
-          if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
+          if st ^. Setup.csPrePost == PreState && testResolved ptr [] rs
             then throwCrucibleSetup loc "Multiple points-to preconditions on same pointer"
-            else Setup.csResolvedState %= MS.markResolved ptr []
+            else Setup.csResolvedState %= markResolved ptr []
           let env = MS.csAllocations (st ^. Setup.csMethodSpec)
               nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
           ptrTy <- typeOfSetupValue cc env nameEnv ptr

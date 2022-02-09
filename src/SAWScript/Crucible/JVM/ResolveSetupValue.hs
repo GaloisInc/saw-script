@@ -144,6 +144,7 @@ typeOfSetupValue _cc env _nameEnv val =
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
+    MS.SetupCast empty _ _            -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
 
 lookupAllocIndex :: Map AllocIndex a -> AllocIndex -> a
@@ -173,6 +174,7 @@ resolveSetupVal cc env _tyenv _nameEnv val =
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
+    MS.SetupCast empty _ _            -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
   where
     sym = cc^.jccSym

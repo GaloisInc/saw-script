@@ -58,6 +58,7 @@ type instance MS.HasSetupStruct CJ.JVM = 'False
 type instance MS.HasSetupArray CJ.JVM = 'False
 type instance MS.HasSetupElem CJ.JVM = 'False
 type instance MS.HasSetupField CJ.JVM = 'False
+type instance MS.HasSetupCast CJ.JVM = 'False
 type instance MS.HasSetupGlobalInitializer CJ.JVM = 'False
 
 type instance MS.HasGhostState CJ.JVM = 'False
@@ -67,6 +68,8 @@ type JIdent = String -- FIXME(huffman): what to put here?
 type instance MS.TypeName CJ.JVM = JIdent
 
 type instance MS.ExtType CJ.JVM = J.Type
+type instance MS.CastType CJ.JVM = ()
+type instance MS.ResolvedState CJ.JVM = ()
 
 --------------------------------------------------------------------------------
 -- *** JVMMethodId
@@ -222,7 +225,7 @@ initialCrucibleSetupState ::
   ProgramLoc ->
   Setup.CrucibleSetupState CJ.JVM
 initialCrucibleSetupState cc (cls, method) loc =
-  Setup.makeCrucibleSetupState cc $
+  Setup.makeCrucibleSetupState () cc $
     initialDefCrucibleMethodSpecIR
       (cc ^. jccCodebase)
       (J.className cls)
