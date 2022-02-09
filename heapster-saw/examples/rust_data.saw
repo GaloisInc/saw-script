@@ -137,7 +137,7 @@ heapster_define_rust_type env
 // List20 type
 heapster_define_rust_type env
   "pub enum List20<X> { \
-  \ List20_Head(X,Box<List20<X>>), List20_0(X,Box<List20<X>>), \
+  \ List20Head(X), List20_0(X,Box<List20<X>>), \
   \ List20_1(X,Box<List20<X>>), List20_2(X,Box<List20<X>>), \
   \ List20_3(X,Box<List20<X>>), List20_4(X,Box<List20<X>>), \
   \ List20_5(X,Box<List20<X>>), List20_6(X,Box<List20<X>>), \
@@ -249,6 +249,13 @@ heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
   \ arg2:eq(llvmword(len)) -o \
   \ arg0:[l1]memblock(W,0,len,eqsh(len,b)), arg1:[l2]memblock(rw,0,len,eqsh(len,b))"
   "\\ (X:sort 0) (len:Vec 64 Bool) (x:X) (_:#()) -> returnM (#() * #()) ((),())";
+
+// Box<List20<u64>>::clone
+box_list20_u64_clone_sym <- heapster_find_symbol_with_type env
+  "alloc..boxed..Box$LT$T$GT$$u20$as$u20$core..clone..Clone$GT$5clone"
+  "%\"List20<u64>\"*(%\"List20<u64>\"**)";
+heapster_assume_fun_rename_prim env box_list20_u64_clone_sym "box_list20_u64_clone"
+  "<'a> fn(x:&'a Box<List20<u64>>) -> Box<List20<u64>>";
 
 // <str as alloc::string::ToString>::to_string
 to_string_str <- heapster_find_symbol env
