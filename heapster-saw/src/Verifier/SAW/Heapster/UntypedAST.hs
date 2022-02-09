@@ -54,7 +54,7 @@ data AstExpr
   | ExOr Pos AstExpr AstExpr
 
   | ExEmptySh Pos               -- ^ empty shape
-  | ExEqSh Pos AstExpr          -- ^ equal shape
+  | ExEqSh Pos AstExpr AstExpr  -- ^ equal shape
   | ExTrue Pos                  -- ^ trivial permission
   | ExExists Pos String AstType AstExpr -- ^ existentially quantified value
   | ExSeqSh Pos AstExpr AstExpr -- ^ sequenced shapes
@@ -94,7 +94,7 @@ instance HasPos AstExpr where
   pos (ExStruct     p _        ) = p
   pos (ExLlvmWord   p _        ) = p
   pos (ExEmptySh    p          ) = p
-  pos (ExEqSh       p _        ) = p
+  pos (ExEqSh       p _ _      ) = p
   pos (ExEq         p _        ) = p
   pos (ExOr         p _ _      ) = p
   pos (ExTrue       p          ) = p

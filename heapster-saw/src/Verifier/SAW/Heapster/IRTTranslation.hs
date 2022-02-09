@@ -155,6 +155,7 @@ instance ContainsIRTRecName (AtomicPerm a) where
   containsIRTRecName n (Perm_LLVMFrame fperm) =
     containsIRTRecName n (map fst fperm)
   containsIRTRecName _ (Perm_LOwned _ _ _) = False
+  containsIRTRecName _ (Perm_LOwnedSimple _) = False
   containsIRTRecName _ (Perm_LCurrent _) = False
   containsIRTRecName _ Perm_LFinished = False
   containsIRTRecName n (Perm_Struct ps) = containsIRTRecName n ps
@@ -415,6 +416,8 @@ instance IRTTyVars (AtomicPerm a) where
     [nuMP| Perm_LLVMFrame _ |] -> return ([], IRTVarsNil)
     [nuMP| Perm_LOwned _ _ _ |] ->
       throwError "lowned permission in an IRT definition!"
+    [nuMP| Perm_LOwnedSimple _ |] ->
+      throwError "lowned permission in an IRT definition!"
     [nuMP| Perm_LCurrent _ |] -> return ([], IRTVarsNil)
     [nuMP| Perm_LFinished |] -> return ([], IRTVarsNil)
     [nuMP| Perm_Struct ps |] -> irtTyVars ps
@@ -457,7 +460,7 @@ instance IRTTyVars (PermExpr (LLVMShapeType w)) where
                   _ -> do sh' <- irtTSubstExt mb_sh
                           let sh_trans = transTupleTerm <$> translate sh'
                           return ([sh_trans], IRTVar ())
-    [nuMP| PExpr_EqShape _ |] -> return ([], IRTVarsNil)
+    [nuMP| PExpr_EqShape _ _ |] -> return ([], IRTVarsNil)
     [nuMP| PExpr_PtrShape _ _ sh |] -> irtTyVars sh
     [nuMP| PExpr_FieldShape fsh |] -> irtTyVars fsh
     [nuMP| PExpr_ArrayShape _ _ sh |] -> irtTyVars sh
@@ -663,6 +666,8 @@ instance IRTDescs (AtomicPerm a) where
     ([nuMP| Perm_LLVMFrame _ |], _) -> return []
     ([nuMP| Perm_LOwned _ _ _ |], _) ->
       error "lowned permission made it to IRTDesc translation"
+    ([nuMP| Perm_LOwnedSimple _ |], _) ->
+      error "lowned permission made it to IRTDesc translation"
     ([nuMP| Perm_LCurrent _ |], _) -> return []
     ([nuMP| Perm_LFinished |], _) -> return []
     ([nuMP| Perm_Struct ps |], _) ->
@@ -677,7 +682,7 @@ instance IRTDescs (PermExpr (LLVMShapeType w)) where
   irtDescs mb_expr ixs = case (mbMatch mb_expr, ixs) of
     ([nuMP| PExpr_Var _ |], _) -> irtVarTDesc ixs
     ([nuMP| PExpr_EmptyShape |], _) -> return []
-    ([nuMP| PExpr_EqShape _ |], _) -> return []
+    ([nuMP| PExpr_EqShape _ _ |], _) -> return []
     ([nuMP| PExpr_NamedShape _ _ nmsh args |], _) ->
       case (mbMatch $ namedShapeBody <$> nmsh, ixs) of
         (_, IRTRecVar) ->

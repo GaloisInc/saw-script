@@ -424,7 +424,7 @@ tcLLVMShape (ExExSh _ var vartype sh) =
        withExprVar var (unKnownReprObj ktp') z (tcKExpr sh)
 tcLLVMShape (ExSeqSh _ x y) = PExpr_SeqShape <$> tcKExpr x <*> tcKExpr y
 tcLLVMShape ExEmptySh{} = pure PExpr_EmptyShape
-tcLLVMShape (ExEqSh _ v) = PExpr_EqShape <$> tcKExpr v
+tcLLVMShape (ExEqSh _ len v) = PExpr_EqShape <$> tcKExpr len <*> tcKExpr v
 tcLLVMShape (ExPtrSh _ maybe_l maybe_rw sh) =
   PExpr_PtrShape
   <$> traverse tcKExpr maybe_l

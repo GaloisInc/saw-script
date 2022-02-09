@@ -2302,14 +2302,24 @@ permGetPPInfo = gets stPPInfo
 getErrorPrefix :: PermCheckM ext cblocks blocks tops rets r ps r ps (Doc ())
 getErrorPrefix = gets (fromMaybe emptyDoc . stErrPrefix)
 
--- | Emit debugging output using the current 'PPInfo'
-stmtTraceM :: (PPInfo -> Doc ()) ->
-              PermCheckM ext cblocks blocks tops rets r ps r ps String
-stmtTraceM f =
+-- | Emit debugging output at the given 'DebugLevel'
+stmtDebugM :: DebugLevel -> (PPInfo -> Doc ()) ->
+              PermCheckM ext cblocks blocks tops ret r ps r ps String
+stmtDebugM reqlvl f =
   do dlevel <- stDebugLevel <$> top_get
      doc <- f <$> permGetPPInfo
      let str = renderDoc doc
-     debugTrace dlevel str (return str)
+     debugTrace reqlvl dlevel str (return str)
+
+-- | Emit debugging output at 'traceDebugLevel'
+stmtTraceM :: (PPInfo -> Doc ()) ->
+              PermCheckM ext cblocks blocks tops ret r ps r ps String
+stmtTraceM = stmtDebugM traceDebugLevel
+
+-- | Emit debugging output at 'verboseDebugLevel'
+stmtVerbTraceM :: (PPInfo -> Doc ()) ->
+                  PermCheckM ext cblocks blocks tops ret r ps r ps String
+stmtVerbTraceM = stmtDebugM verboseDebugLevel
 
 -- | Failure in the statement permission-checking monad
 stmtFailM :: (PPInfo -> Doc ()) -> PermCheckM ext cblocks blocks tops rets r1 ps1
@@ -2647,6 +2657,12 @@ emitStmt tps names loc stmt =
     (mbPure (cruCtxProxies tps) ()) >>>= \(ns, ()) ->
   setVarTypes Nothing names ns tps >>>
   gmodify (modifySTCurPerms (applyTypedStmt stmt ns)) >>>
+  gets (view distPerms . stCurPerms) >>>= \perms_out ->  
+  stmtVerbTraceM (\i ->
+                   pretty "Created new variables: "
+                   <+> permPretty i ns <> line <>
+                   pretty "Statement output permissions: " <+>
+                   permPretty i perms_out) >>>
   -- Note: must come after both setVarTypes and gmodify
   stmtHandleUnitVars ns >>>
   pure ns
@@ -3335,17 +3351,18 @@ tcEmitLLVMStmt ::
   StmtPermCheckM LLVM cblocks blocks tops rets RNil RNil
     (CtxTrans (ctx ::> tp))
 
--- Type-check a word-sized load of an LLVM pointer by requiring a standard ptr
--- permission and using TypedLLVMLoad
+-- Type-check a load of an LLVM pointer by requiring a ptr permission and using
+-- TypedLLVMLoad, rounding up the size of the load to a whole number of bytes
 tcEmitLLVMStmt arch ctx loc (LLVM_Load _ ptr tp storage _)
-  | Just (Some (sz :: NatRepr sz)) <- someNat $ bytesToBits $ storageTypeSize storage
-  , Left LeqProof <- decideLeq (knownNat @1) sz
-  = withKnownNat ?ptrWidth $
-    withKnownNat sz $
+  | sz_bits <- bytesToBits $ storageTypeSize storage
+  , sz_rnd_bits <- 8 * ceil_div sz_bits 8
+  , Just (Some (sz_rnd :: NatRepr sz_rnd)) <- someNat sz_rnd_bits
+  , Left LeqProof <- decideLeq (knownNat @1) sz_rnd
+  = withKnownNat ?ptrWidth $ withKnownNat sz_rnd $
     let tptr = tcReg ctx ptr in
-    -- Prove [l]ptr((0,rw) |-> eq(y)) for some l, rw, and y
-    stmtProvePerm tptr (llvmPtr0EqExPerm sz) >>>= \impl_res ->
-    let fp = subst impl_res (llvmPtr0EqEx sz) in
+    -- Prove [l]ptr((sz_rnd,0,rw) |-> eq(y)) for some l, rw, and y
+    stmtProvePerm tptr (llvmPtr0EqExPerm sz_rnd) >>>= \impl_res ->
+    let fp = subst impl_res (llvmPtr0EqEx sz_rnd) in
     -- Emit a TypedLLVMLoad instruction
     emitTypedLLVMLoad arch loc tptr fp DistPermsNil >>>= \z ->
     -- Recombine the resulting permissions onto the stack
@@ -3353,6 +3370,8 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Load _ ptr tp storage _)
     -- Convert the return value to the requested type and return it
     (convertRegType knownRepr loc (TypedReg z) knownRepr tp >>>= \ret ->
       pure (addCtxName ctx $ typedRegVar ret))
+
+-- FIXME: add a case for stores of smaller-than-byte-sized values
 
 -- Type-check a store of an LLVM pointer
 tcEmitLLVMStmt arch ctx loc (LLVM_Store _ ptr tp storage _ val)
@@ -3748,6 +3767,13 @@ simplify1PermForDetVars det_vars x (ValPerm_Conj ps)
     (getTopDistPerm x >>>= recombinePerm x) >>>
     getPerm x >>>= \new_p ->
     simplify1PermForDetVars det_vars x new_p
+
+-- For permission l:lowned[ls](ps_in -o ps_out) where l or some free variable in
+-- ps_in or ps_out is not determined, end l
+simplify1PermForDetVars det_vars l (ValPerm_LOwned _ ps_in ps_out)
+  | vars <- NameSet.insert l $ freeVars (ps_in,ps_out)
+  , not $ NameSet.nameSetIsSubsetOf vars det_vars
+  = implEndLifetimeRecM l
 
 -- For lowned permission l:lowned[ls](ps_in -o ps_out), end any lifetimes in ls
 -- that are not determined and remove them from the lowned permission for ls
@@ -4167,7 +4193,7 @@ widenEntry :: PermCheckExtC ext => DebugLevel -> PermEnv ->
               TypedEntry TCPhase ext blocks tops rets args ghosts ->
               Some (TypedEntry TCPhase ext blocks tops rets args)
 widenEntry dlevel env (TypedEntry {..}) =
-  debugTrace dlevel ("Widening entrypoint: " ++ show typedEntryID) $
+  debugTraceTraceLvl dlevel ("Widening entrypoint: " ++ show typedEntryID) $
   case foldl1' (widen dlevel env typedEntryTops typedEntryArgs) $
        map (fmapF typedCallSiteArgVarPerms) typedEntryCallers of
     Some (ArgVarPerms ghosts perms_in) ->
@@ -4196,14 +4222,14 @@ visitEntry ::
 visitEntry _ _ _ entry
   | isJust $ completeTypedEntry entry =
     (stDebugLevel <$> get) >>= \dlevel ->
-    debugTrace dlevel ("visitEntry " ++ show (typedEntryID entry)
-                       ++ ": no change") $
+    debugTraceTraceLvl dlevel ("visitEntry " ++ show (typedEntryID entry)
+                               ++ ": no change") $
     return $ Some entry
 -- Otherwise, visit the call sites, widen if needed, and type-check the body
 visitEntry names can_widen blk entry =
   (stDebugLevel <$> get) >>= \dlevel ->
   (stPermEnv <$> get) >>= \env ->
-  debugTracePretty dlevel
+  debugTracePretty traceDebugLevel dlevel
   (vsep [pretty ("visitEntry " ++ show (typedEntryID entry)
                  ++ " with input perms:"),
          permPretty emptyPPInfo (typedEntryPermsIn entry)])
@@ -4211,8 +4237,8 @@ visitEntry names can_widen blk entry =
 
   mapM (traverseF $
         visitCallSite entry) (typedEntryCallers entry) >>= \callers ->
-  debugTrace dlevel ("can_widen: " ++ show can_widen ++ ", any_fails: "
-                     ++ show (any (anyF typedCallSiteImplFails) callers)) $
+  debugTraceTraceLvl dlevel ("can_widen: " ++ show can_widen ++ ", any_fails: "
+                             ++ show (any (anyF typedCallSiteImplFails) callers)) $
   if can_widen && any (anyF typedCallSiteImplFails) callers then
     case widenEntry dlevel env entry of
       Some entry' ->

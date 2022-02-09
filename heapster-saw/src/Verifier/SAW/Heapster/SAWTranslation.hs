@@ -909,7 +909,7 @@ instance TransInfo info =>
         [nuMP| RecShapeBody _ trans_id _ |] ->
           ETrans_Term <$> applyOpenTermMulti (globalOpenTerm $ mbLift trans_id) <$>
           transTerms <$> translate args
-    [nuMP| PExpr_EqShape _ |] -> return $ ETrans_Term unitTypeOpenTerm
+    [nuMP| PExpr_EqShape _ _ |] -> return $ ETrans_Term unitTypeOpenTerm
     [nuMP| PExpr_PtrShape _ _ sh |] -> translate sh
     [nuMP| PExpr_FieldShape fsh |] ->
       ETrans_Term <$> tupleOfTypes <$> translate fsh
@@ -1055,12 +1055,17 @@ data AtomicPermTrans ctx a where
                        Mb ctx (LLVMFramePerm w) ->
                        AtomicPermTrans ctx (LLVMFrameType w)
 
-  -- | LOwned permissions translate to a monadic function from (the translation
-  -- of) the input permissions to the output permissions
+  -- | @lowned@ permissions translate to a monadic function from (the
+  -- translation of) the input permissions to the output permissions
   APTrans_LOwned :: Mb ctx [PermExpr LifetimeType] ->
                     Mb ctx (LOwnedPerms ps_in) ->
                     Mb ctx (LOwnedPerms ps_out) ->
                     OpenTerm -> AtomicPermTrans ctx LifetimeType
+
+  -- | Simple @lowned@ permissions have no translation, because they represent
+  -- @lowned@ permissions whose translations are just the identity function
+  APTrans_LOwnedSimple :: Mb ctx (LOwnedPerms ps) ->
+                          AtomicPermTrans ctx LifetimeType
 
   -- | LCurrent permissions have no computational content
   APTrans_LCurrent :: Mb ctx (PermExpr LifetimeType) ->
@@ -1222,6 +1227,7 @@ instance IsTermTrans (AtomicPermTrans ctx a) where
   transTerms (APTrans_DefinedNamedConj _ _ _ ptrans) = transTerms ptrans
   transTerms (APTrans_LLVMFrame _) = []
   transTerms (APTrans_LOwned _ _ _ t) = [t]
+  transTerms (APTrans_LOwnedSimple _) = []
   transTerms (APTrans_LCurrent _) = []
   transTerms APTrans_LFinished = []
   transTerms (APTrans_Struct pctx) = transTerms pctx
@@ -1279,6 +1285,7 @@ atomicPermTransPerm _ (APTrans_DefinedNamedConj npn args off _) =
 atomicPermTransPerm _ (APTrans_LLVMFrame fp) = fmap Perm_LLVMFrame fp
 atomicPermTransPerm _ (APTrans_LOwned ls ps_in ps_out _) =
   mbMap3 Perm_LOwned ls ps_in ps_out
+atomicPermTransPerm _ (APTrans_LOwnedSimple lops) = fmap Perm_LOwnedSimple lops
 atomicPermTransPerm _ (APTrans_LCurrent l) = fmap Perm_LCurrent l
 atomicPermTransPerm prxs APTrans_LFinished = nus prxs $ const Perm_LFinished
 atomicPermTransPerm prxs (APTrans_Struct ps) =
@@ -1342,6 +1349,7 @@ instance ExtPermTrans AtomicPermTrans where
   extPermTrans (APTrans_LLVMFrame fp) = APTrans_LLVMFrame $ extMb fp
   extPermTrans (APTrans_LOwned ls ps_in ps_out t) =
     APTrans_LOwned (extMb ls) (extMb ps_in) (extMb ps_out) t
+  extPermTrans (APTrans_LOwnedSimple lops) = APTrans_LOwnedSimple (extMb lops)
   extPermTrans (APTrans_LCurrent p) = APTrans_LCurrent $ extMb p
   extPermTrans APTrans_LFinished = APTrans_LFinished
   extPermTrans (APTrans_Struct ps) = APTrans_Struct $ RL.map extPermTrans ps
@@ -1756,6 +1764,8 @@ instance TransInfo info =>
                                             (globalOpenTerm "Prelude.CompM")
                                             tp_out)
          return $ mkTypeTrans1 tp (APTrans_LOwned ls ps_in ps_out)
+    [nuMP| Perm_LOwnedSimple lops |] ->
+      return $ mkTypeTrans0 $ APTrans_LOwnedSimple lops
     [nuMP| Perm_LCurrent l |] ->
       return $ mkTypeTrans0 $ APTrans_LCurrent l
     [nuMP| Perm_LFinished |] ->
@@ -2947,6 +2957,26 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                   PTrans_Conj [APTrans_LFinished])
            m]
 
+  [nuMP| SImpl_IntroLOwnedSimple _ _ |] ->
+    do let prx_ps_l = mbRAssignProxies $ mbSimplImplIn mb_simpl
+       ttrans <- translateSimplImplOut mb_simpl
+       withPermStackM id
+         (\pctx ->
+           let (pctx0, pctx_ps :>: _) = RL.split ps0 prx_ps_l pctx in
+           RL.append pctx0 $ typeTransF ttrans (transTerms pctx_ps))
+         m
+
+  [nuMP| SImpl_ElimLOwnedSimple _ mb_lops |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       lops_tp <- typeTransTupleType <$> translate mb_lops
+       let f_tm =
+             lambdaOpenTerm "ps" lops_tp $ \x ->
+             applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
+             [lops_tp, x]
+       withPermStackM id
+         (\(pctx0 :>: _) -> pctx0 :>: typeTransF ttrans [f_tm])
+         m
+
   [nuMP| SImpl_LCurrentRefl l |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM (:>: translateVar l) (:>: typeTransF ttrans []) m
@@ -3068,6 +3098,20 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            m
 
     | otherwise -> fail "translateSimplImpl: ElimLLVMBlockNamed, unknown named shape"
+
+  [nuMP| SImpl_IntroLLVMBlockNamedMods _ _ |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       withPermStackM id
+         (\(pctx :>: ptrans) ->
+           pctx :>: typeTransF ttrans (transTerms ptrans))
+         m
+
+  [nuMP| SImpl_ElimLLVMBlockNamedMods _ _ |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       withPermStackM id
+         (\(pctx :>: ptrans) ->
+           pctx :>: typeTransF ttrans (transTerms ptrans))
+         m
 
   [nuMP| SImpl_IntroLLVMBlockFromEq _ _ _ |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
@@ -3527,8 +3571,10 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
              mbCombine RL.typeCtxProxies $
              mbMapCl $(mkClosed
                        [| \bp -> nu $ \y ->
+                         let len = llvmBlockLen bp in
                          ValPerm_Conj1 $ Perm_LLVMBlock $
-                         bp { llvmBlockShape = PExpr_EqShape $ PExpr_Var y } |])
+                         bp { llvmBlockShape =
+                                PExpr_EqShape len $ PExpr_Var y } |])
              mb_bp
        tp_trans1 <- translate mb_p_out1
        let mb_p_out2 =
@@ -4797,7 +4843,7 @@ tcTranslateCFGTupleFun env checks endianness dlevel cfgs_and_perms =
   tupleOpenTerm $ flip map (zip cfgs_and_perms funs) $ \(cfg_and_perm, _) ->
   case cfg_and_perm of
     SomeCFGAndPerm sym _ cfg fun_perm ->
-      debugTrace dlevel ("Type-checking " ++ show sym) $
+      debugTraceTraceLvl dlevel ("Type-checking " ++ show sym) $
       translateCFG env' checks $
       tcCFG ?ptrWidth env' endianness dlevel fun_perm cfg
 

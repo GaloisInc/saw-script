@@ -155,7 +155,7 @@ expr ::                                         { AstExpr }
   | 'emptysh'                                   { ExEmptySh (pos $1) }
   | expr 'orsh' expr                            { ExOrSh (pos $2) $1 $3 }
   | expr ';' expr                               { ExSeqSh (pos $2) $1 $3 }
-  | 'eqsh' '(' expr ')'                         { ExEqSh (pos $1) $3 }
+  | 'eqsh' '(' expr ',' expr ')'                { ExEqSh (pos $1) $3 $5 }
   | lifetime 'ptrsh' '(' expr ',' expr ')'      { ExPtrSh (pos $2) $1 (Just $4) $6 }
   | lifetime 'ptrsh' '('          expr ')'      { ExPtrSh (pos $2) $1 Nothing $4 }
   | 'fieldsh' '(' expr ',' expr ')'             { ExFieldSh (pos $1) (Just $3) $5 }

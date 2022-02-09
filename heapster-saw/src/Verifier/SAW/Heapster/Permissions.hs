@@ -187,8 +187,10 @@ data PermExpr (a :: CrucibleType) where
                       NamedShape b args w -> PermExprs args ->
                       PermExpr (LLVMShapeType w)
 
-  -- | The equality shape
-  PExpr_EqShape :: PermExpr (LLVMBlockType w) -> PermExpr (LLVMShapeType w)
+  -- | The equality shape, which describes some @N@ bytes of memory that are
+  -- equal to a given LLVM block
+  PExpr_EqShape :: PermExpr (BVType w) -> PermExpr (LLVMBlockType w) ->
+                   PermExpr (LLVMShapeType w)
 
   -- | A shape for a pointer to another memory block, i.e., a @memblock@
   -- permission, with a given shape. This @memblock@ permission will have the
@@ -351,6 +353,15 @@ data AtomicPerm (a :: CrucibleType) where
   Perm_LOwned :: [PermExpr LifetimeType] ->
                  LOwnedPerms ps_in -> LOwnedPerms ps_out ->
                  AtomicPerm LifetimeType
+
+  -- | A simplified version of @lowned@, written just @lowned(ps)@, which
+  -- represents a lifetime where the permissions @ps@ have been borrowed and no
+  -- simplifications have been done. Semantically, this is logically equivalent
+  -- to @lowned ([l](R)ps -o ps)@, i.e., an @lowned@ permissions where the input
+  -- and output permissions are the same except that the input permissions are
+  -- the minimal possible versions of @ps@ in lifetime @l@ that could be given
+  -- back when @l@ is ended.
+  Perm_LOwnedSimple :: LOwnedPerms ps -> AtomicPerm LifetimeType
 
   -- | Assertion that a lifetime is current during another lifetime
   Perm_LCurrent :: PermExpr LifetimeType -> AtomicPerm LifetimeType
@@ -687,6 +698,9 @@ data LifetimeCurrentPerms ps_l where
   LOwnedCurrentPerms :: ExprVar LifetimeType -> [PermExpr LifetimeType] ->
                         LOwnedPerms ps_in -> LOwnedPerms ps_out ->
                         LifetimeCurrentPerms (RNil :> LifetimeType)
+  -- | A variable @l@ with a simple @lowned@ perm is also current
+  LOwnedSimpleCurrentPerms :: ExprVar LifetimeType -> LOwnedPerms ps ->
+                              LifetimeCurrentPerms (RNil :> LifetimeType)
 
   -- | A variable @l@ that is @lcurrent@ during another lifetime @l'@ is
   -- current, i.e., if @ps@ ensure @l'@ is current then we need perms
@@ -1045,15 +1059,24 @@ noDebugLevel = DebugLevel 0
 traceDebugLevel :: DebugLevel
 traceDebugLevel = DebugLevel 1
 
--- | Output a debug statement to @stderr@ using 'trace' if the supplied
--- 'DebugLevel' is at least 'traceDebugLevel'
-debugTrace :: DebugLevel -> String -> a -> a
-debugTrace dlevel | dlevel >= traceDebugLevel = trace
-debugTrace _ = const id
+-- | The debug level to enable more verbose tracing
+verboseDebugLevel :: DebugLevel
+verboseDebugLevel = DebugLevel 2
+
+-- | Output a debug statement to @stderr@ using 'trace' if the second
+-- 'DebugLevel' is at least the first, i.e., the first is the required level for
+-- emitting this trace and the second is the current level
+debugTrace :: DebugLevel -> DebugLevel -> String -> a -> a
+debugTrace req dlevel | dlevel >= req = trace
+debugTrace _ _ = const id
+
+-- | Call 'debugTrace' at 'traceDebugLevel'
+debugTraceTraceLvl :: DebugLevel -> String -> a -> a
+debugTraceTraceLvl = debugTrace traceDebugLevel
 
 -- | Like 'debugTrace' but take in a 'Doc' instead of a 'String'
-debugTracePretty :: DebugLevel -> Doc ann -> a -> a
-debugTracePretty dlevel d a = debugTrace dlevel (renderDoc d) a
+debugTracePretty :: DebugLevel -> DebugLevel -> Doc ann -> a -> a
+debugTracePretty req dlevel d a = debugTrace req dlevel (renderDoc d) a
 
 -- | The constant string functor
 newtype StringF a = StringF { unStringF :: String }
@@ -1545,8 +1568,8 @@ instance Eq (PermExpr a) where
       maybe_rw1 == maybe_rw2 && maybe_l1 == maybe_l2 && args1 == args2
   (PExpr_NamedShape _ _ _ _) == _ = False
 
-  (PExpr_EqShape b1) == (PExpr_EqShape b2) = b1 == b2
-  (PExpr_EqShape _) == _ = False
+  (PExpr_EqShape len1 b1) == (PExpr_EqShape len2 b2) = len1 == len2 && b1 == b2
+  (PExpr_EqShape _ _) == _ = False
 
   (PExpr_PtrShape rw1 l1 sh1) == (PExpr_PtrShape rw2 l2 sh2) =
     rw1 == rw2 && l1 == l2 && sh1 == sh2
@@ -1620,8 +1643,10 @@ instance PermPretty (PermExpr a) where
        args_pp <- permPrettyM args
        return (l_pp <> rw_pp <> pretty (namedShapeName nmsh) <>
                pretty '<' <> align (args_pp <> pretty '>'))
-  permPrettyM (PExpr_EqShape b) =
-    ((pretty "eqsh" <>) . parens) <$> permPrettyM b
+  permPrettyM (PExpr_EqShape len b) =
+    do len_pp <- permPrettyM len
+       b_pp <- permPrettyM b
+       return (pretty "eqsh" <> parens (len_pp <> comma <> b_pp))
   permPrettyM (PExpr_PtrShape maybe_rw maybe_l sh) =
     do l_pp <- maybe (return mempty) permPrettyLifetimePrefix maybe_l
        rw_pp <- case maybe_rw of
@@ -2062,13 +2087,13 @@ bvConcat LittleEndian bv1 bv2
 -- to determine which is the first versus second part of the split
 bvSplit :: KnownNat sz1 => KnownNat sz2 => EndianForm ->
            NatRepr sz1 -> BV.BV sz2 -> Maybe (BV.BV sz1, BV.BV (sz2 - sz1))
-bvSplit BigEndian sz1 bv2
+bvSplit LittleEndian sz1 bv2
   | n0 <- knownNat @0
   , sz2 <- natRepr bv2
   , Left LeqProof <- decideLeq (addNat n0 sz1) sz2
   , Left LeqProof <- decideLeq (addNat sz1 (subNat sz2 sz1)) sz2 =
     Just (BV.select n0 sz1 bv2, BV.select sz1 (subNat sz2 sz1) bv2)
-bvSplit LittleEndian sz1 bv2
+bvSplit BigEndian sz1 bv2
   | n0 <- knownNat @0
   , sz2 <- natRepr bv2
   , Left LeqProof <- decideLeq sz1 sz2
@@ -2298,6 +2323,13 @@ pattern ValPerm_LOwned ls ps_in ps_out <- ValPerm_Conj [Perm_LOwned
                                                         ls ps_in ps_out]
   where
     ValPerm_LOwned ls ps_in ps_out = ValPerm_Conj [Perm_LOwned ls ps_in ps_out]
+
+-- | A single simple @lowned@ permission
+pattern ValPerm_LOwnedSimple :: () => (a ~ LifetimeType) =>
+                                LOwnedPerms ps -> ValuePerm a
+pattern ValPerm_LOwnedSimple ps <- ValPerm_Conj [Perm_LOwnedSimple ps]
+  where
+    ValPerm_LOwnedSimple ps = ValPerm_Conj [Perm_LOwnedSimple ps]
 
 -- | A single @lcurrent@ permission
 pattern ValPerm_LCurrent :: () => (a ~ LifetimeType) =>
@@ -3029,6 +3061,7 @@ lifetimeCurrentPermsLifetime :: LifetimeCurrentPerms ps_l ->
                                 PermExpr LifetimeType
 lifetimeCurrentPermsLifetime AlwaysCurrentPerms = PExpr_Always
 lifetimeCurrentPermsLifetime (LOwnedCurrentPerms l _ _ _) = PExpr_Var l
+lifetimeCurrentPermsLifetime (LOwnedSimpleCurrentPerms l _) = PExpr_Var l
 lifetimeCurrentPermsLifetime (CurrentTransPerms _ l) = PExpr_Var l
 
 -- | Convert a 'LifetimeCurrentPerms' to the 'DistPerms' it represent
@@ -3036,6 +3069,8 @@ lifetimeCurrentPermsPerms :: LifetimeCurrentPerms ps_l -> DistPerms ps_l
 lifetimeCurrentPermsPerms AlwaysCurrentPerms = DistPermsNil
 lifetimeCurrentPermsPerms (LOwnedCurrentPerms l ls ps_in ps_out) =
   DistPermsCons DistPermsNil l $ ValPerm_LOwned ls ps_in ps_out
+lifetimeCurrentPermsPerms (LOwnedSimpleCurrentPerms l lops) =
+  distPerms1 l $ ValPerm_LOwnedSimple lops
 lifetimeCurrentPermsPerms (CurrentTransPerms cur_ps l) =
   DistPermsCons (lifetimeCurrentPermsPerms cur_ps) l $
   ValPerm_Conj1 $ Perm_LCurrent $ lifetimeCurrentPermsLifetime cur_ps
@@ -3046,6 +3081,7 @@ mbLifetimeCurrentPermsProxies :: Mb ctx (LifetimeCurrentPerms ps_l) ->
 mbLifetimeCurrentPermsProxies mb_l = case mbMatch mb_l of
   [nuMP| AlwaysCurrentPerms |] -> MNil
   [nuMP| LOwnedCurrentPerms _ _ _ _ |] -> MNil :>: Proxy
+  [nuMP| LOwnedSimpleCurrentPerms _ _ |] -> MNil :>: Proxy
   [nuMP| CurrentTransPerms cur_ps _ |] ->
     mbLifetimeCurrentPermsProxies cur_ps :>: Proxy
 
@@ -3160,6 +3196,9 @@ instance Eq (AtomicPerm a) where
     , Just Refl <- testEquality ps_out1 ps_out2
     = ls1 == ls2
   (Perm_LOwned _ _ _) == _ = False
+  (Perm_LOwnedSimple lops1) == (Perm_LOwnedSimple lops2)
+    | Just Refl <- testEquality lops1 lops2 = True
+  (Perm_LOwnedSimple _) == _ = False
   (Perm_LCurrent e1) == (Perm_LCurrent e2) = e1 == e2
   (Perm_LCurrent _) == _ = False
   Perm_LFinished == Perm_LFinished = True
@@ -3326,6 +3365,8 @@ instance PermPretty (AtomicPerm a) where
          _ -> ppEncList False <$> mapM permPrettyM ls
        return (pretty "lowned" <> ls_pp <+>
                parens (align $ sep [pp_in, pretty "-o", pp_out]))
+  permPrettyM (Perm_LOwnedSimple lops) =
+    (pretty "lowned" <>) <$> parens <$> permPrettyM lops
   permPrettyM (Perm_LCurrent l) = (pretty "lcurrent" <+>) <$> permPrettyM l
   permPrettyM Perm_LFinished = return (pretty "lfinished")
   permPrettyM (Perm_Struct ps) =
@@ -3504,9 +3545,16 @@ isLLVMBlockPerm _ = False
 -- | Test if an 'AtomicPerm' is a lifetime permission
 isLifetimePerm :: AtomicPerm a -> Maybe (a :~: LifetimeType)
 isLifetimePerm (Perm_LOwned _ _ _) = Just Refl
+isLifetimePerm (Perm_LOwnedSimple _) = Just Refl
 isLifetimePerm (Perm_LCurrent _) = Just Refl
 isLifetimePerm Perm_LFinished = Just Refl
 isLifetimePerm _ = Nothing
+
+-- | Test if an 'AtomicPerm' is a lifetime permission that gives ownership
+isLifetimeOwnershipPerm :: AtomicPerm a -> Maybe (a :~: LifetimeType)
+isLifetimeOwnershipPerm (Perm_LOwned _ _ _) = Just Refl
+isLifetimeOwnershipPerm (Perm_LOwnedSimple _) = Just Refl
+isLifetimeOwnershipPerm _ = Nothing
 
 -- | Test if an 'AtomicPerm' is a struct permission
 isStructPerm :: AtomicPerm a -> Bool
@@ -3998,10 +4046,10 @@ llvmShapeLength (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
   -- FIXME: if the recursive shape contains itself *not* under a pointer, then
   -- this could diverge
   llvmShapeLength (unfoldNamedShape nmsh args)
-llvmShapeLength (PExpr_EqShape _) = Nothing
+llvmShapeLength (PExpr_EqShape len _) = Just len
 llvmShapeLength (PExpr_PtrShape _ _ sh)
-  | LLVMShapeRepr w <- exprType sh = Just $ bvInt (intValue w `ceil_div` 8)
-  | otherwise = Nothing
+  | w <- shapeLLVMTypeWidth sh
+  = Just $ bvInt (intValue w `ceil_div` 8)
 llvmShapeLength (PExpr_FieldShape fsh) =
   Just $ bvInt $ llvmFieldShapeLength fsh
 llvmShapeLength (PExpr_ArrayShape len stride _) = Just $ bvMult stride len
@@ -4113,7 +4161,7 @@ modalizeShape _ _ sh@(PExpr_NamedShape _ _ nmsh _)
 modalizeShape rw l (PExpr_NamedShape rw' l' nmsh args) =
   -- If a named shape already has modalities, they take precedence
   Just $ PExpr_NamedShape (rw' <|> rw) (l' <|> l) nmsh args
-modalizeShape _ _ sh@(PExpr_EqShape _) = Just sh
+modalizeShape _ _ sh@(PExpr_EqShape _ _) = Just sh
 modalizeShape rw l (PExpr_PtrShape rw' l' sh) =
   -- If a pointer shape already has modalities, they take precedence
   Just $ PExpr_PtrShape (rw' <|> rw) (l' <|> l) sh
@@ -4239,7 +4287,7 @@ splitLLVMBlockPerm off bp@(llvmBlockShape ->
   , Just sh' <- unfoldModalizeNamedShape maybe_rw maybe_l nmsh args =
     splitLLVMBlockPerm off (bp { llvmBlockShape = sh' })
 splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_NamedShape _ _ _ _) = Nothing
-splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_EqShape _) = Nothing
+splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_EqShape _ _) = Nothing
 splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_PtrShape _ _ _) = Nothing
 splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_FieldShape _) = Nothing
 splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_ArrayShape len stride sh)
@@ -5264,6 +5312,7 @@ atomicPermIsCopyable Perm_IsLLVMPtr = True
 atomicPermIsCopyable (Perm_LLVMBlockShape sh) = shapeIsCopyable PExpr_Write sh
 atomicPermIsCopyable (Perm_LLVMFrame _) = False
 atomicPermIsCopyable (Perm_LOwned _ _ _) = False
+atomicPermIsCopyable (Perm_LOwnedSimple _) = False
 atomicPermIsCopyable (Perm_LCurrent _) = True
 atomicPermIsCopyable Perm_LFinished = True
 atomicPermIsCopyable (Perm_Struct ps) = and $ RL.mapToList permIsCopyable ps
@@ -5304,7 +5353,7 @@ shapeIsCopyable rw (PExpr_NamedShape maybe_rw' _ nmsh args) =
     -- the empty shape for the recursive shape
     RecShapeBody mb_sh _ _ ->
       shapeIsCopyable rw $ subst (substOfExprs (args :>: PExpr_EmptyShape)) mb_sh
-shapeIsCopyable _ (PExpr_EqShape _) = True
+shapeIsCopyable _ (PExpr_EqShape _ _) = True
 shapeIsCopyable rw (PExpr_PtrShape maybe_rw' _ sh) =
   let rw' = maybe rw id maybe_rw' in
   rw' == PExpr_Read && shapeIsCopyable rw' sh
@@ -5326,6 +5375,31 @@ lownedPermsToDistPerms :: LOwnedPerms ps -> Maybe (DistPerms ps)
 lownedPermsToDistPerms MNil = Just MNil
 lownedPermsToDistPerms (lops :>: lop) =
   (:>:) <$> lownedPermsToDistPerms lops <*> lownedPermVarAndPerm lop
+
+-- | Optionally set the modalities of the permissions in an 'LOwnedPerms' list
+modalizeLOwnedPerms ::Maybe (PermExpr RWModalityType) ->
+                      Maybe (PermExpr LifetimeType) -> LOwnedPerms ps ->
+                      LOwnedPerms ps
+modalizeLOwnedPerms rw l = RL.map $ \case
+  LOwnedPermField x fp ->
+    LOwnedPermField x $
+    fp { llvmFieldRW = fromMaybe (llvmFieldRW fp) rw,
+         llvmFieldLifetime = fromMaybe (llvmFieldLifetime fp) l }
+  LOwnedPermArray x ap ->
+    LOwnedPermArray x $
+    ap { llvmArrayRW = fromMaybe (llvmArrayRW ap) rw,
+         llvmArrayLifetime = fromMaybe (llvmArrayLifetime ap) l }
+  LOwnedPermBlock x bp ->
+    LOwnedPermBlock x $
+    bp { llvmBlockRW = fromMaybe (llvmBlockRW bp) rw,
+         llvmBlockLifetime = fromMaybe (llvmBlockLifetime bp) l }
+
+-- | Convert an 'LOwnedPerms' list @ps@ to the input permission list @[l](R)ps@
+-- used in a simple @lowned@ permission
+lownedPermsSimpleIn :: ExprVar LifetimeType -> LOwnedPerms ps ->
+                       LOwnedPerms ps
+lownedPermsSimpleIn l =
+  modalizeLOwnedPerms (Just PExpr_Read) (Just $ PExpr_Var l)
 
 -- | Convert the expressions of an 'LOwnedPerms' to variables, if possible
 lownedPermsVars :: LOwnedPerms ps -> Maybe (RAssign Name ps)
@@ -5477,7 +5551,7 @@ instance FreeVars (PermExpr a) where
   freeVars PExpr_EmptyShape = NameSet.empty
   freeVars (PExpr_NamedShape rw l nmsh args) =
     NameSet.unions [freeVars rw, freeVars l, freeVars nmsh, freeVars args]
-  freeVars (PExpr_EqShape b) = freeVars b
+  freeVars (PExpr_EqShape len b) = NameSet.union (freeVars len) (freeVars b)
   freeVars (PExpr_PtrShape maybe_rw maybe_l sh) =
     NameSet.unions [freeVars maybe_rw, freeVars maybe_l, freeVars sh]
   freeVars (PExpr_FieldShape fld) = freeVars fld
@@ -5523,6 +5597,7 @@ instance FreeVars (AtomicPerm tp) where
   freeVars (Perm_LLVMFrame fperms) = freeVars $ map fst fperms
   freeVars (Perm_LOwned ls ps_in ps_out) =
     NameSet.unions [freeVars ls, freeVars ps_in, freeVars ps_out]
+  freeVars (Perm_LOwnedSimple lops) = freeVars lops
   freeVars (Perm_LCurrent l) = freeVars l
   freeVars Perm_LFinished = NameSet.empty
   freeVars (Perm_Struct ps) = NameSet.unions $ RL.mapToList freeVars ps
@@ -5664,6 +5739,7 @@ instance NeededVars (AtomicPerm a) where
   neededVars (Perm_LLVMBlock bp) = neededVars bp
   neededVars (Perm_LLVMBlockShape _) = NameSet.empty
   neededVars p@(Perm_LOwned _ _ _) = freeVars p
+  neededVars (Perm_LOwnedSimple lops) = neededVars $ RL.map lownedPermPerm lops
   neededVars p = freeVars p
 
 instance NeededVars (LLVMFieldPerm w sz) where
@@ -5701,7 +5777,7 @@ readOnlyShape e@(PExpr_Var _) = e
 readOnlyShape PExpr_EmptyShape = PExpr_EmptyShape
 readOnlyShape (PExpr_NamedShape _ l nmsh args) =
   PExpr_NamedShape (Just PExpr_Read) l nmsh args
-readOnlyShape e@(PExpr_EqShape _) = e
+readOnlyShape e@(PExpr_EqShape _ _) = e
 readOnlyShape e@(PExpr_PtrShape _ (Just _) _) = e
 readOnlyShape (PExpr_PtrShape _ Nothing sh) =
   PExpr_PtrShape (Just PExpr_Read) Nothing $ readOnlyShape sh
@@ -5884,8 +5960,8 @@ instance SubstVar s m => Substable s (PermExpr a) m where
     [nuMP| PExpr_NamedShape rw l nmsh args |] ->
       PExpr_NamedShape <$> genSubst s rw <*> genSubst s l <*> genSubst s nmsh
                        <*> genSubst s args
-    [nuMP| PExpr_EqShape b |] ->
-      PExpr_EqShape <$> genSubst s b
+    [nuMP| PExpr_EqShape len b |] ->
+      PExpr_EqShape <$> genSubst s len <*> genSubst s b
     [nuMP| PExpr_PtrShape maybe_rw maybe_l sh |] ->
       PExpr_PtrShape <$> genSubst s maybe_rw <*> genSubst s maybe_l
                      <*> genSubst s sh
@@ -5938,6 +6014,7 @@ instance SubstVar s m => Substable s (AtomicPerm a) m where
     [nuMP| Perm_LLVMFrame fp |] -> Perm_LLVMFrame <$> genSubst s fp
     [nuMP| Perm_LOwned ls ps_in ps_out |] ->
       Perm_LOwned <$> genSubst s ls <*> genSubst s ps_in <*> genSubst s ps_out
+    [nuMP| Perm_LOwnedSimple lops |] -> Perm_LOwnedSimple <$> genSubst s lops
     [nuMP| Perm_LCurrent e |] -> Perm_LCurrent <$> genSubst s e
     [nuMP| Perm_LFinished |] -> return Perm_LFinished
     [nuMP| Perm_Struct tps |] -> Perm_Struct <$> genSubst s tps
@@ -6090,6 +6167,8 @@ instance SubstVar PermVarSubst m =>
     [nuMP| LOwnedCurrentPerms l ls ps_in ps_out |] ->
       LOwnedCurrentPerms <$> genSubst s l <*> genSubst s ls
       <*> genSubst s ps_in <*> genSubst s ps_out
+    [nuMP| LOwnedSimpleCurrentPerms l ps |] ->
+      LOwnedSimpleCurrentPerms <$> genSubst s l <*> genSubst s ps
     [nuMP| CurrentTransPerms ps l |] ->
       CurrentTransPerms <$> genSubst s ps <*> genSubst s l
 
@@ -6624,8 +6703,9 @@ instance AbstractVars (PermExpr a) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 l
     `clMbMbApplyM` abstractPEVars ns1 ns2 nmsh
     `clMbMbApplyM` abstractPEVars ns1 ns2 args
-  abstractPEVars ns1 ns2 (PExpr_EqShape b) =
+  abstractPEVars ns1 ns2 (PExpr_EqShape len b) =
     absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_EqShape |]))
+    `clMbMbApplyM` abstractPEVars ns1 ns2 len
     `clMbMbApplyM` abstractPEVars ns1 ns2 b
   abstractPEVars ns1 ns2 (PExpr_PtrShape maybe_rw maybe_l sh) =
     absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_PtrShape |]))
@@ -6730,6 +6810,9 @@ instance AbstractVars (AtomicPerm a) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 ls
     `clMbMbApplyM` abstractPEVars ns1 ns2 ps_in
     `clMbMbApplyM` abstractPEVars ns1 ns2 ps_out
+  abstractPEVars ns1 ns2 (Perm_LOwnedSimple lops) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LOwnedSimple |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 lops
   abstractPEVars ns1 ns2 (Perm_LCurrent e) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LCurrent |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
@@ -6989,7 +7072,8 @@ instance AbstractNamedShape w (PermExpr a) where
               -> pure $ nu PExpr_Var
          True -> fail "named shape not applied to its arguments"
          False -> pureBindingM (PExpr_NamedShape maybe_rw maybe_l nmsh args)
-  abstractNSM (PExpr_EqShape b) = fmap PExpr_EqShape <$> abstractNSM b
+  abstractNSM (PExpr_EqShape len b) =
+    mbMap2 PExpr_EqShape <$> abstractNSM len <*> abstractNSM b
   abstractNSM (PExpr_PtrShape rw l sh) =
     mbMap3 PExpr_PtrShape <$> abstractNSM rw <*> abstractNSM l <*> abstractNSM sh
   abstractNSM (PExpr_FieldShape fsh) = fmap PExpr_FieldShape <$> abstractNSM fsh
@@ -7041,6 +7125,8 @@ instance AbstractNamedShape w (AtomicPerm a) where
   abstractNSM (Perm_LOwned ls ps_in ps_out) =
     mbMap3 Perm_LOwned <$> abstractNSM ls <*> abstractNSM ps_in <*>
     abstractNSM ps_out
+  abstractNSM (Perm_LOwnedSimple lops) =
+    fmap Perm_LOwnedSimple <$> abstractNSM lops
   abstractNSM (Perm_LCurrent e) = fmap Perm_LCurrent <$> abstractNSM e
   abstractNSM Perm_LFinished = pureBindingM Perm_LFinished
   abstractNSM (Perm_Struct ps) = fmap Perm_Struct <$> abstractNSM ps
@@ -7554,6 +7640,8 @@ instance GetDetVarsClauses (AtomicPerm a) where
   getDetVarsClauses (Perm_LLVMFrame frame_perm) =
     concat <$> mapM (getDetVarsClauses . fst) frame_perm
   getDetVarsClauses (Perm_LOwned _ _ _) = return []
+  getDetVarsClauses (Perm_LOwnedSimple lops) =
+    getDetVarsClauses $ RL.map lownedPermPerm lops
   getDetVarsClauses _ = return []
 
 instance (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
@@ -7593,7 +7681,8 @@ getShapeDetVarsClauses (PExpr_Var x) =
 getShapeDetVarsClauses (PExpr_NamedShape _ _ _ args) =
   -- FIXME: maybe also include the variables determined by the modalities?
   getDetVarsClauses args
-getShapeDetVarsClauses (PExpr_EqShape e) = getDetVarsClauses e
+getShapeDetVarsClauses (PExpr_EqShape len e) =
+  map (detVarsClauseAddLHS (freeVars len)) <$> getDetVarsClauses e
 getShapeDetVarsClauses (PExpr_PtrShape _ _ sh) =
   -- FIXME: maybe also include the variables determined by the modalities?
   getShapeDetVarsClauses sh
