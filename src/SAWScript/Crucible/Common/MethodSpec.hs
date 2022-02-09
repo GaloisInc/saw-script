@@ -90,7 +90,7 @@ type family PointsTo ext :: Type
 -- | The type of global allocations
 type family AllocGlobal ext :: Type
 
--- | The type of "resolved" state
+-- | The type of \"resolved\" state
 type family ResolvedState ext :: Type
 
 --------------------------------------------------------------------------------

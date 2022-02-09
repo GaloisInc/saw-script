@@ -94,6 +94,7 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
   , getAllLLVM
   , anySetupTerm
   , anySetupArray
+  , anySetupCast
   , anySetupStruct
   , anySetupElem
   , anySetupField
@@ -575,6 +576,9 @@ anySetupStruct b vals = mkAllLLVM (MS.SetupStruct () b $ map (\a -> getAllLLVM a
 anySetupElem :: AllLLVM MS.SetupValue -> Int -> AllLLVM MS.SetupValue
 anySetupElem val idx = mkAllLLVM (MS.SetupElem () (getAllLLVM val) idx)
 
+anySetupCast :: AllLLVM MS.SetupValue -> L.Type -> AllLLVM MS.SetupValue
+anySetupCast val ty = mkAllLLVM (MS.SetupCast () (getAllLLVM val) ty)
+
 anySetupField :: AllLLVM MS.SetupValue -> String -> AllLLVM MS.SetupValue
 anySetupField val field = mkAllLLVM (MS.SetupField () (getAllLLVM val) field)
 
@@ -624,9 +628,21 @@ data ResolvedPathItem
 
 type ResolvedPath = [ResolvedPathItem]
 
--- | A datatype to keep track of which parts of the simulator state -- have been initialized already. For each allocation unit or global,
+-- | A datatype to keep track of which parts of the simulator state
+-- have been initialized already. For each allocation unit or global,
 -- we keep a list of element-paths that identify the initialized
 -- sub-components.
+--
+-- Note that the data collected and maintained by this datatype
+-- represents a \"best-effort\" check that attempts to prevent
+-- the user from stating unsatisfiable method specifications.
+--
+-- It will not prevent all cases of overlapping points-to
+-- specifications, especially in the presence of pointer casts.
+-- A typical result of overlapping specifications will be
+-- successful (vacuous) verifications of functions resulting in
+-- overrides that cannot be used at call sites (as their
+-- preconditions are unsatisfiable).
 data LLVMResolvedState =
   ResolvedState
     { _rsAllocs :: Map MS.AllocIndex [ResolvedPath]
@@ -655,7 +671,7 @@ markResolved val0 path0 rs = go path0 val0
         MS.SetupElem _ v idx  -> go (ResolvedElem idx : path) v
         MS.SetupField _ v fld -> go (ResolvedField fld : path) v
         MS.SetupCast _ v tp   -> go (ResolvedCast tp : path) v
-        _                  -> rs
+        _                     -> rs
 
     ins path Nothing = Just [path]
     ins path (Just paths) = Just (path : paths)
@@ -676,7 +692,7 @@ testResolved val0 path0 rs = go path0 val0
         MS.SetupElem _ v idx  -> go (ResolvedElem idx : path) v
         MS.SetupField _ v fld -> go (ResolvedField fld : path) v
         MS.SetupCast _ v tp   -> go (ResolvedCast tp : path) v
-        _                  -> False
+        _                     -> False
 
     test _ Nothing = False
     test path (Just paths) = any (overlap path) paths

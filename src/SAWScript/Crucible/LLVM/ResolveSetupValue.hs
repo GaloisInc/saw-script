@@ -476,7 +476,9 @@ resolveSetupVal cc mem env tyenv nameEnv val =
       | Just ptr <- Map.lookup i env -> return (Crucible.ptrToPtrVal ptr)
       | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
-    SetupCast () v _ -> resolveSetupVal cc mem env tyenv nameEnv v
+    -- NB, SetupCast values should always be pointers. Pointer casts have no
+    -- effect on the actual computed LLVMVal.
+    SetupCast () v _lty -> resolveSetupVal cc mem env tyenv nameEnv v
     SetupStruct () packed vs -> do
       vals <- mapM (resolveSetupVal cc mem env tyenv nameEnv) vs
       let tps = map Crucible.llvmValStorableType vals
