@@ -35,15 +35,15 @@ data Contract ty cryptolExpr =
     , preAllocated  :: [Allocated ty]
     , preGhostValues  :: [GhostValue cryptolExpr]
     , prePointsTos  :: [PointsTo ty cryptolExpr]
-    , prePointsToBitfields :: [PointsToBitfield cryptolExpr]
-    , argumentVals  :: [CrucibleSetupVal cryptolExpr]
+    , prePointsToBitfields :: [PointsToBitfield ty cryptolExpr]
+    , argumentVals  :: [CrucibleSetupVal ty cryptolExpr]
     , postVars      :: [ContractVar ty]
     , postConds     :: [cryptolExpr]
     , postAllocated :: [Allocated ty]
     , postGhostValues :: [GhostValue cryptolExpr]
     , postPointsTos :: [PointsTo ty cryptolExpr]
-    , postPointsToBitfields :: [PointsToBitfield cryptolExpr]
-    , returnVal     :: Maybe (CrucibleSetupVal cryptolExpr)
+    , postPointsToBitfields :: [PointsToBitfield ty cryptolExpr]
+    , returnVal     :: Maybe (CrucibleSetupVal ty cryptolExpr)
     }
     deriving stock (Functor, Foldable, Traversable)
 
@@ -64,17 +64,17 @@ data Allocated ty =
 
 data PointsTo ty cryptolExpr =
   PointsTo
-    { pointer           :: CrucibleSetupVal cryptolExpr
-    , pointsTo          :: CrucibleSetupVal cryptolExpr
+    { pointer           :: CrucibleSetupVal ty cryptolExpr
+    , pointsTo          :: CrucibleSetupVal ty cryptolExpr
     , checkPointsToType :: Maybe (CheckPointsToType ty)
     , condition         :: Maybe cryptolExpr
     } deriving stock (Functor, Foldable, Traversable)
 
-data PointsToBitfield cryptolExpr =
+data PointsToBitfield ty cryptolExpr =
   PointsToBitfield
-    { bfPointer   :: CrucibleSetupVal cryptolExpr
+    { bfPointer   :: CrucibleSetupVal ty cryptolExpr
     , bfFieldName :: Text
-    , bfPointsTo  :: CrucibleSetupVal cryptolExpr
+    , bfPointsTo  :: CrucibleSetupVal ty cryptolExpr
     } deriving stock (Functor, Foldable, Traversable)
 
 data CheckAgainstTag
@@ -96,7 +96,7 @@ instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (PointsTo ty cryptolExp
                <*> o .:? "check points to type"
                <*> o .:? "condition"
 
-instance FromJSON cryptolExpr => FromJSON (PointsToBitfield cryptolExpr) where
+instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (PointsToBitfield ty cryptolExpr) where
   parseJSON =
     withObject "Points-to-bitfield relationship" $ \o ->
       PointsToBitfield <$> o .: "pointer"

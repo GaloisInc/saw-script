@@ -87,13 +87,14 @@ instance Show SAWTask where
   show (JVMSetup n) = "(JVMSetup" ++ show n ++ ")"
 
 
-data CrucibleSetupVal e
+data CrucibleSetupVal ty e
   = NullValue
-  | ArrayValue [CrucibleSetupVal e]
-  | TupleValue [CrucibleSetupVal e]
+  | ArrayValue [CrucibleSetupVal ty e]
+  | TupleValue [CrucibleSetupVal ty e]
   -- | RecordValue [(String, CrucibleSetupVal e)]
-  | FieldLValue (CrucibleSetupVal e) String
-  | ElementLValue (CrucibleSetupVal e) Int
+  | FieldLValue (CrucibleSetupVal ty e) String
+  | CastLValue (CrucibleSetupVal ty e) ty
+  | ElementLValue (CrucibleSetupVal ty e) Int
   | GlobalInitializer String
   | GlobalLValue String
   | NamedValue ServerName
@@ -101,26 +102,25 @@ data CrucibleSetupVal e
   deriving stock (Foldable, Functor, Traversable)
 
 data SetupStep ty
-  = SetupReturn (CrucibleSetupVal CryptolAST) -- ^ The return value
+  = SetupReturn (CrucibleSetupVal ty CryptolAST) -- ^ The return value
   | SetupFresh ServerName Text ty -- ^ Server name to save in, debug name, fresh variable type
   | SetupAlloc ServerName ty Bool (Maybe Int) -- ^ Server name to save in, type of allocation, mutability, alignment
   | SetupGhostValue ServerName Text CryptolAST -- ^ Variable, term
-  | SetupPointsTo (CrucibleSetupVal CryptolAST)
-                  (CrucibleSetupVal CryptolAST)
+  | SetupPointsTo (CrucibleSetupVal ty CryptolAST)
+                  (CrucibleSetupVal ty CryptolAST)
                   (Maybe (CheckPointsToType ty))
                   (Maybe CryptolAST)
                   -- ^ The source, the target, the type to check the target,
                   --   and the condition that must hold in order for the source to point to the target
-  | SetupPointsToBitfield (CrucibleSetupVal CryptolAST)
+  | SetupPointsToBitfield (CrucibleSetupVal ty CryptolAST)
                           Text
-                          (CrucibleSetupVal CryptolAST)
+                          (CrucibleSetupVal ty CryptolAST)
                           -- ^ The source bitfield,
                           --   the name of the field within the bitfield,
                           --   and the target.
-  | SetupExecuteFunction [CrucibleSetupVal CryptolAST] -- ^ Function's arguments
+  | SetupExecuteFunction [CrucibleSetupVal ty CryptolAST] -- ^ Function's arguments
   | SetupPrecond CryptolAST -- ^ Function's precondition
   | SetupPostcond CryptolAST -- ^ Function's postcondition
-  deriving stock (Foldable, Functor, Traversable)
 
 instance Show (SetupStep ty) where
   show _ = "⟨SetupStep⟩" -- TODO
