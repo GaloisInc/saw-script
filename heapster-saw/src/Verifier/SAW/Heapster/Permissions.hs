@@ -354,6 +354,15 @@ data AtomicPerm (a :: CrucibleType) where
                  LOwnedPerms ps_in -> LOwnedPerms ps_out ->
                  AtomicPerm LifetimeType
 
+  -- | A simplified version of @lowned@, written just @lowned(ps)@, which
+  -- represents a lifetime where the permissions @ps@ have been borrowed and no
+  -- simplifications have been done. Semantically, this is logically equivalent
+  -- to @lowned ([l](R)ps -o ps)@, i.e., an @lowned@ permissions where the input
+  -- and output permissions are the same except that the input permissions are
+  -- the minimal possible versions of @ps@ in lifetime @l@ that could be given
+  -- back when @l@ is ended.
+  Perm_LOwnedSimple :: LOwnedPerms ps -> AtomicPerm LifetimeType
+
   -- | Assertion that a lifetime is current during another lifetime
   Perm_LCurrent :: PermExpr LifetimeType -> AtomicPerm LifetimeType
 
@@ -689,6 +698,9 @@ data LifetimeCurrentPerms ps_l where
   LOwnedCurrentPerms :: ExprVar LifetimeType -> [PermExpr LifetimeType] ->
                         LOwnedPerms ps_in -> LOwnedPerms ps_out ->
                         LifetimeCurrentPerms (RNil :> LifetimeType)
+  -- | A variable @l@ with a simple @lowned@ perm is also current
+  LOwnedSimpleCurrentPerms :: ExprVar LifetimeType -> LOwnedPerms ps ->
+                              LifetimeCurrentPerms (RNil :> LifetimeType)
 
   -- | A variable @l@ that is @lcurrent@ during another lifetime @l'@ is
   -- current, i.e., if @ps@ ensure @l'@ is current then we need perms

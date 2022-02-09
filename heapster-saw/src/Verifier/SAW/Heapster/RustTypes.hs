@@ -97,6 +97,11 @@ data ArgLayoutPerm ctx where
 data ArgLayout where
   ArgLayout :: CtxRepr ctx -> ArgLayoutPerm ctx -> ArgLayout
 
+-- | Like an 'ArgLayout' but with output permissions on arguments as well
+data ArgLayoutIO where
+  ArgLayoutIO :: CtxRepr ctx -> ArgLayoutPerm ctx ->
+                 RAssign ValuePerm (CtxToRList ctx) -> ArgLayoutIO
+
 -- | Function permission that is existential over all types (note that there
 -- used to be 3 type variables instead of 4 for 'FunPerm', thus the name)
 data Some3FunPerm =
@@ -782,11 +787,6 @@ argLayoutStructPerm (ArgLayout ghosts args mb_perms)
     Some $ Typed (StructRepr args_repr) $
     valPermExistsMulti ghosts $ fmap (ValPerm_Conj1 . Perm_Struct) mb_perms
 -}
-
--- | Like an 'ArgLayout' but with output permissions on arguments as well
-data ArgLayoutIO where
-  ArgLayoutIO :: CtxRepr ctx -> ArgLayoutPerm ctx ->
-                 RAssign ValuePerm (CtxToRList ctx) -> ArgLayoutIO
 
 -- | Append two 'ArgLayoutIO's, if possible
 appendArgLayoutIO :: ArgLayoutIO -> ArgLayoutIO -> ArgLayoutIO
