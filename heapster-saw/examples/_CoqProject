@@ -32,5 +32,7 @@ exp_explosion_gen.v
 exp_explosion_proofs.v
 mbox_gen.v
 mbox_proofs.v
+global_var_gen.v
+global_var_proofs.v
 sha512_gen.v
 #sha512_proofs.v

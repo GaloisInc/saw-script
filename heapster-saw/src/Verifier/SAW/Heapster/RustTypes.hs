@@ -69,6 +69,56 @@ import Verifier.SAW.Heapster.Permissions
 
 
 ----------------------------------------------------------------------
+-- * Data types and related types
+----------------------------------------------------------------------
+
+-- | A permission of some llvm pointer type
+data SomeLLVMPerm =
+  forall w. (1 <= w, KnownNat w) => SomeLLVMPerm (ValuePerm (LLVMPointerType w))
+
+-- | An 'ArgLayoutPerm' is a set of permissions on a sequence of 0 or more
+-- arguments, given by the @tps@ type-level argument. These permissions are
+-- similar to the language of permissions on a Crucible struct, except that the
+-- langauge is restricted to ensure that they can always be appended.
+--
+-- FIXME: add support for shapes like bool whose size is smaller than a byte,
+-- with the constraint that the end result should only have fields whose sizes
+-- are whole numbers of bytes. The idea would be to allow sub-byte-sized fields
+-- be appended, but to then round their sizes up to whole numbers of bytes at
+-- disjunctions and at the top level.
+data ArgLayoutPerm ctx where
+  ALPerm :: RAssign ValuePerm (CtxToRList ctx) -> ArgLayoutPerm ctx
+  ALPerm_Or :: ArgLayoutPerm ctx -> ArgLayoutPerm ctx -> ArgLayoutPerm ctx
+  ALPerm_Exists :: KnownRepr TypeRepr a =>
+                   Binding a (ArgLayoutPerm ctx) -> ArgLayoutPerm ctx
+
+-- | An argument layout captures how argument values are laid out as a Crucible
+-- struct of 0 or more machine words / fields
+data ArgLayout where
+  ArgLayout :: CtxRepr ctx -> ArgLayoutPerm ctx -> ArgLayout
+
+-- | Function permission that is existential over all types (note that there
+-- used to be 3 type variables instead of 4 for 'FunPerm', thus the name)
+data Some3FunPerm =
+  forall ghosts args gouts ret. Some3FunPerm (FunPerm ghosts args gouts ret)
+
+-- | A name-binding over some list of types
+data SomeTypedMb a where
+  SomeTypedMb :: CruCtx ctx -> Mb ctx a -> SomeTypedMb a
+
+
+----------------------------------------------------------------------
+-- * Template Haskell–generated instances
+----------------------------------------------------------------------
+
+$(mkNuMatching [t| SomeLLVMPerm |])
+$(mkNuMatching [t| forall ctx. ArgLayoutPerm ctx |])
+$(mkNuMatching [t| ArgLayout |])
+$(mkNuMatching [t| Some3FunPerm |])
+$(mkNuMatching [t| forall a. NuMatching a => SomeTypedMb a |])
+
+
+----------------------------------------------------------------------
 -- * Helper Definitions
 ----------------------------------------------------------------------
 
@@ -146,12 +196,6 @@ assocAppend4 :: RAssign f ctx1 -> prx2 ctx2 -> RAssign prx3 ctx3 ->
 assocAppend4 fs1 ctx2 ctx3 ctx4 fs234 =
   let (fs2, fs3, fs4) = rlSplit3 ctx2 ctx3 ctx4 fs234 in
   RL.append (RL.append (RL.append fs1 fs2) fs3) fs4
-
--- | A permission of some llvm pointer type
-data SomeLLVMPerm =
-  forall w. (1 <= w, KnownNat w) => SomeLLVMPerm (ValuePerm (LLVMPointerType w))
-
-$(mkNuMatching [t| SomeLLVMPerm |])
 
 -- | Info used for converting Rust types to shapes
 -- NOTE: @rciRecType@ should probably have some info about lifetimes
@@ -628,22 +672,6 @@ instance RsConvert w (StructField Span) (PermExpr (LLVMShapeType w)) where
 -- * Computing the ABI-Specific Layout of Rust Types
 ----------------------------------------------------------------------
 
--- FIXME: add support for shapes like bool whose size is smaller than a byte,
--- with the constraint that the end result should only have fields whose sizes
--- are whole numbers of bytes. The idea would be to allow sub-byte-sized fields
--- be appended, but to then round their sizes up to whole numbers of bytes at
--- disjunctions and at the top level.
-
--- | An 'ArgLayoutPerm' is a set of permissions on a sequence of 0 or more
--- arguments, given by the @tps@ type-level argument. These permissions are
--- similar to the language of permissions on a Crucible struct, except that the
--- langauge is restricted to ensure that they can always be appended.
-data ArgLayoutPerm ctx where
-  ALPerm :: RAssign ValuePerm (CtxToRList ctx) -> ArgLayoutPerm ctx
-  ALPerm_Or :: ArgLayoutPerm ctx -> ArgLayoutPerm ctx -> ArgLayoutPerm ctx
-  ALPerm_Exists :: KnownRepr TypeRepr a =>
-                   Binding a (ArgLayoutPerm ctx) -> ArgLayoutPerm ctx
-
 -- | Build an 'ArgLayoutPerm' that just assigns @true@ to every field
 trueArgLayoutPerm :: Assignment prx ctx -> ArgLayoutPerm ctx
 trueArgLayoutPerm ctx = ALPerm (RL.map (const ValPerm_True) $ assignToRList ctx)
@@ -690,11 +718,6 @@ appendArgLayoutPerms ctx1 ctx2 p (ALPerm_Exists mb_q) =
   ALPerm_Exists $ fmap (\q -> appendArgLayoutPerms ctx1 ctx2 p q) mb_q
 appendArgLayoutPerms ctx1 ctx2 (ALPerm ps) (ALPerm qs) =
   ALPerm $ assignToRListAppend ctx1 ctx2 ps qs
-
--- | An argument layout captures how argument values are laid out as a Crucible
--- struct of 0 or more machine words / fields
-data ArgLayout where
-  ArgLayout :: CtxRepr ctx -> ArgLayoutPerm ctx -> ArgLayout
 
 -- | Count the number of fields of an 'ArgLayout'
 argLayoutNumFields :: ArgLayout -> Int
@@ -807,11 +830,6 @@ shapeToBlock _ = Nothing
 shapeToBlockPerm :: (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
                     Maybe (ValuePerm (LLVMPointerType w))
 shapeToBlockPerm = fmap ValPerm_LLVMBlock . shapeToBlock
-
--- | Function permission that is existential over all types (note that there
--- used to be 3 type variables instead of 4 for 'FunPerm', thus the name)
-data Some3FunPerm =
-  forall ghosts args gouts ret. Some3FunPerm (FunPerm ghosts args gouts ret)
 
 instance PermPretty Some3FunPerm where
   permPrettyM (Some3FunPerm fun_perm) = permPrettyM fun_perm
@@ -1099,10 +1117,6 @@ layoutFun abi arg_shs ret_sh =
 ----------------------------------------------------------------------
 -- * Converting Function Types
 ----------------------------------------------------------------------
-
--- | A name-binding over some list of types
-data SomeTypedMb a where
-  SomeTypedMb :: CruCtx ctx -> Mb ctx a -> SomeTypedMb a
 
 instance Functor SomeTypedMb where
   fmap f (SomeTypedMb ctx mb_a) = SomeTypedMb ctx (fmap f mb_a)
@@ -1537,9 +1551,3 @@ parseNamedShapeFromRustDecl env w str
     fail ("Error parsing top-level item: " ++ show err)
 parseNamedShapeFromRustDecl _ _ str =
   fail ("Malformed Rust type: " ++ str)
-
-
-$(mkNuMatching [t| forall ctx. ArgLayoutPerm ctx |])
-$(mkNuMatching [t| ArgLayout |])
-$(mkNuMatching [t| Some3FunPerm |])
-$(mkNuMatching [t| forall a. NuMatching a => SomeTypedMb a |])

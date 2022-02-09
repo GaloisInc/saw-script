@@ -75,6 +75,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST hiding (FlatTermF(..))
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.CryptolEnv as CEnv
+import qualified Verifier.SAW.Cryptol.Monadify as Monadify
 
 import qualified Lang.JVM.Codebase as JCB
 
@@ -472,6 +473,7 @@ buildTopLevelEnv proxy opts =
                    , rwTypedef    = Map.empty
                    , rwDocs       = primDocEnv primsAvail
                    , rwCryptol    = ce0
+                   , rwMonadify   = Monadify.defaultMonEnv
                    , rwProofs     = []
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwJVMTrans   = jvmTrans
@@ -1390,6 +1392,14 @@ primitives = Map.fromList
     [ "Apply an introduction rule to the current goal. Depending on the"
     , "rule, this will result in zero or more new subgoals."
     ]
+
+  , prim "goal_exact"          "Term -> ProofScript ()"
+    (pureVal goal_exact)
+    Experimental
+    [ "Prove the current goal by giving an explicit proof term."
+    , "This will succeed if the type of the given term matches the current goal."
+    ]
+
   , prim "goal_assume"         "ProofScript Theorem"
     (pureVal goal_assume)
     Experimental
@@ -1656,7 +1666,11 @@ primitives = Map.fromList
   , prim "trivial"             "ProofScript ()"
     (pureVal trivial)
     Current
-    [ "Succeed only if the proof goal is a literal 'True'." ]
+    [ "Succeeds if the goal is trivial. This tactic recognizes goals"
+    , "that are instances of reflexivity, possibly with quantified variables."
+    , "In particular, it will prove goals of the form 'EqTrue x' when 'x' reduces"
+    , "to the constant value 'True'."
+    ]
 
   , prim "w4"                  "ProofScript ()"
     (pureVal w4_z3)
@@ -3104,11 +3118,28 @@ primitives = Map.fromList
 
     ---------------------------------------------------------------------
 
-  , prim "test_mr_solver"  "Int -> Int -> TopLevel Bool"
-    (pureVal testMRSolver)
+  , prim "mr_solver"  "Term -> Term -> TopLevel Bool"
+    (scVal (\sc -> mrSolver sc 0))
     Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to ask if two monadic terms are equal" ]
+    , " to ask if one monadic term refines another" ]
+
+  , prim "mr_solver_debug"  "Int -> Term -> Term -> TopLevel Bool"
+    (scVal mrSolver)
+    Experimental
+    [ "Call the monadic-recursive solver at the supplied debug level" ]
+
+  , prim "monadify_term" "Term -> TopLevel Term"
+    (scVal monadifyTypedTerm)
+    Experimental
+    [ "Monadify a Cryptol term, converting it to a form where all recursion"
+    , " and errors are represented as monadic operators"]
+
+  , prim "set_monadification" "String -> String -> TopLevel Term"
+    (scVal setMonadification)
+    Experimental
+    [ "Set the monadification of a specific Cryptol identifer to a SAW core "
+    , "identifier of monadic type" ]
 
   , prim "heapster_init_env"
     "String -> String -> TopLevel HeapsterEnv"

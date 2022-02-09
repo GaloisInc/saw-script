@@ -371,8 +371,8 @@ $(mkNuMatching [t| UB.PtrComparisonOperator |])
 $(mkNuMatching [t| forall v. NuMatching v => StorageTypeF v |])
 $(mkNuMatching [t| StorageType |])
 
-$(mkNuMatching [t| forall f. NuMatchingAny1 f => UB.UndefinedBehavior f |])
 $(mkNuMatching [t| forall f. NuMatchingAny1 f => Poison.Poison f |])
+$(mkNuMatching [t| forall f. NuMatchingAny1 f => UB.UndefinedBehavior f |])
 -- $(mkNuMatching [t| forall f. NuMatchingAny1 f => BadBehavior f |])
 -- $(mkNuMatching [t| forall f. NuMatchingAny1 f => LLVMSafetyAssertion f |])
 $(mkNuMatching [t| forall f. NuMatchingAny1 f => LLVMSideCondition f |])
@@ -390,17 +390,6 @@ instance NuMatchingAny1 (EmptyExprExtension f) where
 
 $(mkNuMatching [t| AVXOp1 |])
 $(mkNuMatching [t| forall f tp. NuMatchingAny1 f => ExtX86 f tp |])
-$(mkNuMatching [t| forall f tp. NuMatchingAny1 f =>
-                LLVMExtensionExpr f tp |])
-
-instance NuMatchingAny1 f => NuMatchingAny1 (LLVMExtensionExpr f) where
-  nuMatchingAny1Proof = nuMatchingProof
-
-{-
-$(mkNuMatching [t| forall w f tp. NuMatchingAny1 f => LLVMStmt w f tp |])
--}
-
-$(mkNuMatching [t| forall tp. GlobalVar tp |])
 
 instance NuMatching (Nonce s tp) where
   nuMatchingProof = unsafeMbTypeRepr
@@ -410,6 +399,17 @@ instance Closable (Nonce s tp) where
 
 instance Liftable (Nonce s tp) where
   mbLift = unClosed . mbLift . fmap toClosed
+
+$(mkNuMatching [t| forall tp. GlobalVar tp |])
+$(mkNuMatching [t| forall f tp. NuMatchingAny1 f =>
+                LLVMExtensionExpr f tp |])
+
+instance NuMatchingAny1 f => NuMatchingAny1 (LLVMExtensionExpr f) where
+  nuMatchingAny1Proof = nuMatchingProof
+
+{-
+$(mkNuMatching [t| forall w f tp. NuMatchingAny1 f => LLVMStmt w f tp |])
+-}
 
 instance Closable (BV.BV w) where
   toClosed = unsafeClose

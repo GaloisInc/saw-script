@@ -57,7 +57,7 @@ module Verifier.SAW.Term.Functor
   , Sort, mkSort, propSort, sortOf, maxSort
     -- * Sets of free variables
   , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
-  , decrBitSet, completeBitSet, singletonBitSet
+  , decrBitSet, multiDecrBitSet, completeBitSet, singletonBitSet, bitSetElems
   , looseVars, smallestFreeVar
   ) where
 
@@ -455,6 +455,12 @@ intersectBitSets (BitSet i1) (BitSet i2) = BitSet (i1 .&. i2)
 decrBitSet :: BitSet -> BitSet
 decrBitSet (BitSet i) = BitSet (shiftR i 1)
 
+-- | Decrement all elements of a 'BitSet' by some non-negative amount @N@,
+-- removing any value less than @N@. This is the same as calling 'decrBitSet'
+-- @N@ times.
+multiDecrBitSet :: Int -> BitSet -> BitSet
+multiDecrBitSet n (BitSet i) = BitSet (shiftR i n)
+
 -- | The 'BitSet' containing all elements less than a given index @i@
 completeBitSet :: Int -> BitSet
 completeBitSet i = BitSet (bit i - 1)
@@ -470,6 +476,16 @@ smallestBitSetElem (BitSet i) = Just $ go 0 i where
     | otherwise = shft + countTrailingZeros xw
     where xw :: Word64
           xw = fromInteger x
+
+-- | Compute the list of all elements of a 'BitSet'
+bitSetElems :: BitSet -> [Int]
+bitSetElems = go 0 where
+  -- Return the addition of shft to all elements of a BitSet
+  go :: Int -> BitSet -> [Int]
+  go shft bs = case smallestBitSetElem bs of
+    Nothing -> []
+    Just i ->
+      shft + i : go (shft + i + 1) (multiDecrBitSet (shft + i + 1) bs)
 
 -- | Compute the free variables of a term given free variables for its immediate
 -- subterms

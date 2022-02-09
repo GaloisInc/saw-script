@@ -1,7 +1,8 @@
 from pathlib import Path
 import unittest
 from saw_client import *
-from saw_client.llvm import Contract, cryptol, struct, void, i32, array_ty, struct_ty
+from saw_client.crucible import cry, cry_f
+from saw_client.llvm import Contract, struct, void, i32, array_ty, struct_ty
 
 
 class FContract(Contract):
@@ -12,7 +13,7 @@ class FContract(Contract):
 
         self.execute_func(pw)
 
-        self.points_to(pw, struct(cryptol('zero:[2][4][32]')))
+        self.points_to(pw, struct(cry('zero:[2][4][32]')))
         self.returns(void)
 
 

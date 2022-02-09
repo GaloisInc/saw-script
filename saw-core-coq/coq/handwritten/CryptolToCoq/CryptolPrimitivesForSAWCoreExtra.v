@@ -67,6 +67,7 @@ Ltac unfoldLets :=
   end.
 
 Ltac solveUnsafeAssert :=
+  try reflexivity;
   try (unfoldLets;
        repeat (repeat solveUnsafeAssertStep; simpl; try reflexivity; try lia);
        trivial).

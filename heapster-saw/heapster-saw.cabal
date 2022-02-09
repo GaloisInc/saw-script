@@ -38,6 +38,7 @@ library
     filepath,
     language-rust,
     hobbits ^>= 1.4,
+    extra,
   hs-source-dirs: src
   build-tool-depends:
     alex:alex,

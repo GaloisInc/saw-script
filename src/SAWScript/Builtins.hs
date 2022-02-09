@@ -54,8 +54,10 @@ import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 
+import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Verifier.SAW.Cryptol as Cryptol
 import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
+import qualified Verifier.SAW.Cryptol.Monadify as Monadify
 
 -- saw-core
 import Verifier.SAW.Grammar (parseSAWTerm)
@@ -626,6 +628,11 @@ goal_apply :: Theorem -> ProofScript ()
 goal_apply thm =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticApply sc thm)
+
+goal_exact :: TypedTerm -> ProofScript ()
+goal_exact tm =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticExact sc (ttTerm tm))
 
 goal_assume :: ProofScript Theorem
 goal_assume =
@@ -1498,23 +1505,90 @@ cryptol_add_path path =
      let rw' = rw { rwCryptol = ce' }
      putTopLevelRW rw'
 
-mr_solver_tests :: [SharedContext -> IO Term]
-mr_solver_tests =
-  let helper nm = \sc -> scGlobalDef sc nm in
-  map helper
-  [ "Prelude.test_fun0", "Prelude.test_fun1", "Prelude.test_fun2"
-  , "Prelude.test_fun3", "Prelude.test_fun4", "Prelude.test_fun5"
-  , "Prelude.test_fun6"]
+-- | Call 'Cryptol.importSchema' using a 'CEnv.CryptolEnv'
+importSchemaCEnv :: SharedContext -> CEnv.CryptolEnv -> Cryptol.Schema ->
+                    IO Term
+importSchemaCEnv sc cenv schema =
+  do cry_env <- let ?fileReader = StrictBS.readFile in CEnv.mkCryEnv cenv
+     Cryptol.importSchema sc cry_env schema
 
-testMRSolver :: Integer -> Integer -> TopLevel ()
-testMRSolver i1 i2 =
-  do sc <- getSharedContext
-     t1 <- liftIO $ (mr_solver_tests !! fromInteger i1) sc
-     t2 <- liftIO $ (mr_solver_tests !! fromInteger i2) sc
-     res <- liftIO $ Prover.askMRSolver sc SBV.z3 Nothing t1 t2
+monadifyTypedTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
+monadifyTypedTerm sc t =
+  do rw <- get
+     let menv = rwMonadify rw
+     (ret_t, menv') <-
+       liftIO $
+       case ttType t of
+         TypedTermSchema schema ->
+           do tp <- importSchemaCEnv sc (rwCryptol rw) schema
+              Monadify.monadifyTermInEnv sc menv (ttTerm t) tp
+         TypedTermKind _ ->
+           fail "monadify_term applied to a type"
+         TypedTermOther tp ->
+           Monadify.monadifyTermInEnv sc menv (ttTerm t) tp
+     modify (\s -> s { rwMonadify = menv' })
+     tp <- liftIO $ scTypeOf sc ret_t
+     return $ TypedTerm (TypedTermOther tp) ret_t
+
+-- | Ensure that a 'TypedTerm' has been monadified
+ensureMonadicTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
+ensureMonadicTerm _ t
+  | TypedTermOther tp <- ttType t
+  , Prover.isCompFunType tp = return t
+ensureMonadicTerm sc t = monadifyTypedTerm sc t
+
+mrSolver :: SharedContext -> Int -> TypedTerm -> TypedTerm -> TopLevel Bool
+mrSolver sc dlvl t1 t2 =
+  do m1 <- ttTerm <$> ensureMonadicTerm sc t1
+     m2 <- ttTerm <$> ensureMonadicTerm sc t2
+     res <- liftIO $ Prover.askMRSolver sc dlvl SBV.z3 Nothing m1 m2
      case res of
-       Just err -> io $ putStrLn $ Prover.showMRFailure err
-       Nothing -> io $ putStrLn "Success!"
+       Just err -> io (putStrLn $ Prover.showMRFailure err) >> return False
+       Nothing -> return True
+
+setMonadification :: SharedContext -> String -> String -> TopLevel ()
+setMonadification sc cry_str saw_str =
+  do rw <- get
+
+     -- Step 1: convert the first string to a Cryptol name
+     cry_nm <-
+       let ?fileReader = StrictBS.readFile in
+       liftIO (CEnv.resolveIdentifier
+               (rwCryptol rw) (Text.pack cry_str)) >>= \case
+       Just n -> return n
+       Nothing -> fail ("No such Cryptol identifer: " ++ cry_str)
+     cry_nmi <- liftIO $ Cryptol.importName cry_nm
+
+     -- Step 2: get the monadified type for this Cryptol name
+     --
+     -- FIXME: not sure if this is the correct way to get the type of a Cryptol
+     -- name, so we are falling back on just translating the name to SAW core
+     -- and monadifying its type there
+     cry_saw_tp <-
+       liftIO $
+       case Map.lookup cry_nm (CEnv.eExtraTypes $ rwCryptol rw) of
+         Just schema ->
+           -- putStrLn ("Found Cryptol type for name: " ++ show cry_str) >>
+           importSchemaCEnv sc (rwCryptol rw) schema
+         Nothing
+           | Just cry_nm_trans <- Map.lookup cry_nm (CEnv.eTermEnv $
+                                                     rwCryptol rw) ->
+             -- putStrLn ("No Cryptol type for name: " ++ cry_str) >>
+             scTypeOf sc cry_nm_trans
+         _ -> fail ("Could not find type for Cryptol name: " ++ cry_str)
+     cry_mon_tp <- liftIO $ Monadify.monadifyCompleteArgType sc cry_saw_tp
+
+     -- Step 3: convert the second string to a typed SAW core term, and check
+     -- that it has the same type as the monadified type for the Cryptol name
+     let saw_ident = parseIdent saw_str
+     saw_trm <- liftIO $ scGlobalDef sc saw_ident
+     saw_tp <- liftIO $ scTypeOf sc saw_trm
+     liftIO $ scCheckSubtype sc Nothing (TC.TypedTerm saw_trm saw_tp) cry_mon_tp
+
+     -- Step 4: Add a mapping from the Cryptol name to the SAW core term
+     put (rw { rwMonadify =
+                 Map.insert cry_nmi (Monadify.argGlobalMacro
+                                     cry_nmi saw_ident) (rwMonadify rw) })
 
 parseSharpSATResult :: String -> Maybe Integer
 parseSharpSATResult s = parse (lines s)

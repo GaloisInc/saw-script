@@ -1,16 +1,19 @@
 from abc import ABCMeta, abstractmethod
 from cryptol import cryptoltypes
+from cryptol.quoting import to_cryptol_str_customf
 from .utils import deprecated
 from dataclasses import dataclass
 import dataclasses
 import re
-from typing import Any, Dict, List, Optional, Set, Union, overload
+from typing import Any, Dict, List, Tuple, Optional, Set, Union, overload
 from typing_extensions import Literal
 import inspect
 import uuid
 
 from .llvm_type import *
 from .jvm_type import *
+
+JSON = Union[None, bool, int, float, str, Dict, Tuple, List]
 
 class SetupVal(metaclass=ABCMeta):
     """Represent a ``SetupValue`` in SawScript, which "corresponds to
@@ -19,7 +22,7 @@ class SetupVal(metaclass=ABCMeta):
     (both structures and arrays)."
     """
     @abstractmethod
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         """JSON representation for this ``SetupVal`` (i.e., how it is represented in expressions, etc).
 
         N.B., should be a JSON object with a ``'setup value'`` field with a unique tag which the
@@ -50,7 +53,7 @@ class NamedSetupVal(SetupVal):
     """Represents those ``SetupVal``s which are a named reference to some value, e.e., a variable
     or reference to allocated memory."""
     @abstractmethod
-    def to_init_json(self) -> Any:
+    def to_init_json(self) -> JSON:
         """JSON representation with the information for those ``SetupVal``s which require additional
         information to initialize/allocate them vs that which is required later to reference them.
 
@@ -69,20 +72,19 @@ class CryptolTerm(SetupVal):
             self.expression = code
 
     def __call__(self, *args : cryptoltypes.CryptolJSON) -> 'CryptolTerm':
-        out_term = self.expression
-        for a in args:
-            out_term = cryptoltypes.CryptolApplication(out_term, a)
-
-        return CryptolTerm(out_term)
+        return CryptolTerm(cryptoltypes.CryptolApplication(self.expression, *args))
 
     def __repr__(self) -> str:
         return f"CryptolTerm({self.expression!r})"
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'Cryptol', 'expression': cryptoltypes.to_cryptol(self.expression)}
 
-    def __to_cryptol__(self, ty : Any) -> Any:
-        return self.expression.__to_cryptol__(ty)
+    def __to_cryptol__(self) -> cryptoltypes.JSON:
+        return self.expression.__to_cryptol__()
+
+    def __to_cryptol_str__(self) -> str:
+        return self.expression.__to_cryptol_str__()
 
 class FreshVar(NamedSetupVal):
     __name : Optional[str]
@@ -92,10 +94,13 @@ class FreshVar(NamedSetupVal):
         self.spec = spec
         self.type = type
 
-    def __to_cryptol__(self, ty : Any) -> Any:
-        return cryptoltypes.CryptolLiteral(self.name()).__to_cryptol__(ty)
+    def __to_cryptol__(self) -> cryptoltypes.JSON:
+        return cryptoltypes.CryptolLiteral(self.name()).__to_cryptol__()
 
-    def to_init_json(self) -> Any:
+    def __to_cryptol_str__(self) -> str:
+        return cryptoltypes.CryptolLiteral(self.name()).__to_cryptol_str__()
+
+    def to_init_json(self) -> JSON:
         #FIXME it seems we don't actually use two names ever... just the one...do we actually need both?
         name = self.name()
         return {"server name": name,
@@ -107,16 +112,8 @@ class FreshVar(NamedSetupVal):
             self.__name = self.spec.get_fresh_name()
         return self.__name
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'named', 'name': self.name()}
-
-    def __gt__(self, other : cryptoltypes.CryptolJSON) -> CryptolTerm:
-        gt = CryptolTerm("(>)")
-        return gt(self, other)
-
-    def __lt__(self, other : cryptoltypes.CryptolJSON) -> CryptolTerm:
-        lt = CryptolTerm("(<)")
-        return lt(self, other)
 
 
 class Allocated(NamedSetupVal):
@@ -130,7 +127,7 @@ class Allocated(NamedSetupVal):
         self.mutable = mutable
         self.alignment = alignment
 
-    def to_init_json(self) -> Any:
+    def to_init_json(self) -> JSON:
         if self.name is None:
             self.name = self.spec.get_fresh_name()
         return {"server name": self.name,
@@ -138,7 +135,7 @@ class Allocated(NamedSetupVal):
                 "mutable": self.mutable,
                 "alignment": self.alignment}
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         if self.name is None:
             self.name = self.spec.get_fresh_name()
         return {'setup value': 'named', 'name': self.name}
@@ -149,7 +146,7 @@ class StructVal(SetupVal):
     def __init__(self, fields : List[SetupVal]) -> None:
         self.fields = fields
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'tuple', 'elements': [fld.to_json() for fld in self.fields]}
 
 class ElemVal(SetupVal):
@@ -160,7 +157,7 @@ class ElemVal(SetupVal):
         self.base = base
         self.index = index
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'element lvalue',
                 'base': self.base.to_json(), 'index': self.index}
 
@@ -172,7 +169,7 @@ class FieldVal(SetupVal):
         self.base = base
         self.field_name = field_name
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'field',
                 'base': self.base.to_json(), 'field': self.field_name}
 
@@ -182,7 +179,7 @@ class GlobalInitializerVal(SetupVal):
     def __init__(self, name : str) -> None:
         self.name = name
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'global initializer', 'name': self.name}
 
 class GlobalVarVal(SetupVal):
@@ -191,11 +188,11 @@ class GlobalVarVal(SetupVal):
     def __init__(self, name : str) -> None:
         self.name = name
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'global lvalue', 'name': self.name}
 
 class NullVal(SetupVal):
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'null'}
 
 class ArrayVal(SetupVal):
@@ -204,7 +201,7 @@ class ArrayVal(SetupVal):
     def __init__(self, elements : List[SetupVal]) -> None:
         self.elements = elements
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'setup value': 'array',
                 'elements': [element.to_json() for element in self.elements]}
 
@@ -242,7 +239,7 @@ class Condition:
     def __init__(self, condition : CryptolTerm) -> None:
         self.cryptol_term = condition
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return cryptoltypes.to_cryptol(self.cryptol_term)
 
 
@@ -257,7 +254,7 @@ class PointsTo:
         self.check_target_type = check_target_type
         self.condition = condition
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         check_target_type_json: Optional[Dict[str, Any]]
         if self.check_target_type is None:
             check_target_type_json = None
@@ -296,11 +293,11 @@ class GhostValue:
     """A class containing the statement that a given ghost variable should have the
     value given by a Cryptol expression.
     """
-    def __init__(self, name: str, value: CryptolTerm) -> None:
+    def __init__(self, name: str, value: cryptoltypes.CryptolJSON) -> None:
         self.name = name
         self.value = value
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {"server name": self.name,
                 "value": cryptoltypes.to_cryptol(self.value)}
 
@@ -314,7 +311,7 @@ class State:
     points_to_bitfield : List[PointsToBitfield] = dataclasses.field(default_factory=list)
     ghost_values : List[GhostValue] = dataclasses.field(default_factory=list)
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return {'variables': [v.to_init_json() for v in self.fresh],
                 'conditions': [c.to_json() for c in self.conditions],
                 'allocated': [a.to_init_json() for a in self.allocated],
@@ -330,7 +327,7 @@ ContractState = \
 
 @dataclass
 class Void:
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         return None
 
 void = Void()
@@ -362,7 +359,7 @@ class Contract:
     __definition_lineno : Optional[int]
     __definition_filename : Optional[str]
     __unique_id : uuid.UUID
-    __cached_json : Optional[Any]
+    __cached_json : JSON
 
     def __init__(self) -> None:
         self.__pre_state = State(self)
@@ -482,7 +479,7 @@ class Contract:
         else:
             raise Exception("wrong state")
 
-    def ghost_value(self, var: GhostVariable, value: CryptolTerm) -> None:
+    def ghost_value(self, var: GhostVariable, value: cryptoltypes.CryptolJSON) -> None:
         """Declare that the given ghost variable should have a value specified by the given Cryptol expression.
 
         Usable either before or after `execute_func`.
@@ -524,6 +521,12 @@ class Contract:
         else:
             raise Exception("preconditions must be specified before execute_func is called in the contract")
 
+    def precondition_f(self, s : str) -> None:
+        """Declares a precondition using a ``cry_f``-style format string, i.e.
+        ``precondition_f(...)`` is equivalent to ``precondition(cry_f(...))``"""
+        expression = to_cryptol_str_customf(s, frames=1, filename="<precondition_f>")
+        return self.precondition(expression)
+
     def postcondition(self, proposition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
         """Establishes ``proposition`` as a postcondition for the function ```Contract```
         being specified.
@@ -538,6 +541,12 @@ class Contract:
         else:
             raise Exception("postconditions must be specified after execute_func is called in the contract")
 
+    def postcondition_f(self, s : str) -> None:
+        """Declares a postcondition using a ``cry_f``-style format string, i.e.
+        ``postcondition_f(...)`` is equivalent to ``postcondition(cry_f(...))``"""
+        expression = to_cryptol_str_customf(s, frames=1, filename="<postcondition_f>")
+        return self.postcondition(expression)
+
     def returns(self, val : Union[Void,SetupVal]) -> None:
         if self.__state == 'post':
             if self.__returns is None:
@@ -546,6 +555,12 @@ class Contract:
                 raise ValueError("Return value already specified")
         else:
             raise ValueError("Not in postcondition")
+
+    def returns_f(self, s : str) -> None:
+        """Declares a return value using a ``cry_f``-style format string, i.e.
+        ``returns_f(...)`` is equivalent to ``returns(cry_f(...))``"""
+        expression = to_cryptol_str_customf(s, frames=1, filename="<returns_f>")
+        return self.returns(CryptolTerm(expression))
 
     def lemma_name(self, hint  : Optional[str] = None) -> str:
         if hint is None:
@@ -563,7 +578,7 @@ class Contract:
     def definition_filename(self) -> Optional[str]:
         return self.__definition_filename
 
-    def to_json(self) -> Any:
+    def to_json(self) -> JSON:
         if self.__cached_json is not None:
             return self.__cached_json
         else:
@@ -608,12 +623,49 @@ def global_var(name: str) -> SetupVal:
     """Returns a pointer to the named global ``name`` (i.e., a ``GlobalVarVal``)."""
     return GlobalVarVal(name)
 
-# FIXME Is `Any` too permissive here -- can we be a little more precise?
-def cryptol(data : Any) -> 'CryptolTerm':
-    """Constructs a Cryptol value from ``data`` (i.e., a ``CryptolTerm``, which is also a ``SetupVal``).
+def cry(s : str) -> CryptolTerm:
+    """Embed a string of Cryptol syntax as a ``CryptolTerm`` (which is also a
+       ``SetupVal``) - also see ``cry_f``."""
+    return CryptolTerm(s)
 
-    ``data`` should be a string literal representing Cryptol syntax or the result of a Cryptol-realted server computation."""
-    return CryptolTerm(data)
+def cry_f(s : str) -> CryptolTerm:
+    """Embed a string of Cryptol syntax as a ``CryptolTerm`` (which is also a
+       ``SetupVal``), where the given string is parsed as an f-string, and the
+       values within brackets are converted to Cryptol syntax using
+       ``to_cryptol_str`` from the Cryptol Python library.
+
+       Like f-strings, values in brackets (``{``, ``}``) are parsed as python
+       expressions in the caller's context of local and global variables, and
+       to include a literal bracket in the final string, it must be doubled
+       (i.e. ``{{`` or ``}}``). The latter is needed when using explicit type
+       application or record syntax. For example, if ``x = [0,1]`` then
+       ``cry_f('length `{{2}} {x}')`` is equal to ``cry('length `{2} [0,1]')``
+       and ``cry_f('{{ x = {x} }}')`` is equal to ``cry('{ x = [0,1] }')``.
+
+       When formatting Cryptol, it is recomended to use this function rather
+       than any of Python's built-in methods of string formatting (e.g.
+       f-strings, ``str.format``) as the latter will not always produce valid
+       Cryptol syntax. Specifically, this function differs from these methods
+       in the cases of ``BV``s, string literals, function application (this
+       function will add parentheses as needed), and dicts. For example,
+       ``cry_f('{ {"x": 5, "y": 4} }')`` equals ``cry('{x = 5, y = 4}')``
+       but ``f'{ {"x": 5, "y": 4} }'`` equals ``'{"x": 5, "y": 4}'``. Only
+       the former is valid Cryptol syntax for a record.
+       
+       Note that any conversion or format specifier will always result in the
+       argument being rendered as a Cryptol string literal with the conversion
+       and/or formating applied. For example, `cry('f {5}')` is equal to
+       ``cry('f 5')`` but ``cry_f('f {5!s}')`` is equal to ``cry(`f "5"`)``
+       and ``cry_f('f {5:+.2%}')`` is equal to ``cry('f "+500.00%"')``.
+
+       :example:
+
+       >>> x = BV(size=7, value=1)
+       >>> y = cry_f('fun1 {x}')
+       >>> cry_f('fun2 {y}')
+       'fun2 (fun1 (1 : [7]))'
+    """
+    return CryptolTerm(to_cryptol_str_customf(s, frames=1))
 
 def array(*elements: SetupVal) -> SetupVal:
     """Returns an array with the provided ``elements`` (i.e., an ``ArrayVal``).
