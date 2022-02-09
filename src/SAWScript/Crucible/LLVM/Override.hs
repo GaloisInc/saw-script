@@ -1022,6 +1022,7 @@ matchPointsTos opts sc cc spec prepost = go False []
         SetupArray _ xs            -> foldMap setupVars xs
         SetupElem _ x _            -> setupVars x
         SetupField _ x _           -> setupVars x
+        SetupCast _ x _            -> setupVars x
         SetupTerm _                -> Set.empty
         SetupNull _                -> Set.empty
         SetupGlobal _ _            -> Set.empty
@@ -2351,6 +2352,7 @@ instantiateSetupValue sc s v =
     SetupArray () vs         -> SetupArray ()    <$> mapM (instantiateSetupValue sc s) vs
     SetupElem{}              -> return v
     SetupField{}             -> return v
+    SetupCast{}              -> return v
     SetupNull{}              -> return v
     SetupGlobal{}            -> return v
     SetupGlobalInitializer{} -> return v

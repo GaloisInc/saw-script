@@ -94,6 +94,7 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
   , getAllLLVM
   , anySetupTerm
   , anySetupArray
+  , anySetupCast
   , anySetupStruct
   , anySetupElem
   , anySetupField
@@ -105,11 +106,22 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
   , pattern SomeLLVM
   , mkSomeLLVM
   , getSomeLLVM
+    -- * ResolvedState
+  , LLVMResolvedState
+  , ResolvedPath
+  , ResolvedPathItem(..)
+  , emptyResolvedState
+  , rsAllocs
+  , rsGlobals
+  , markResolved
+  , testResolved
   ) where
 
 import           Control.Lens
 import           Control.Monad (when)
 import           Data.Functor.Compose (Compose(..))
+import           Data.Map ( Map )
+import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Type.Equality (TestEquality(..))
 import qualified Prettyprinter as PPL
@@ -160,6 +172,7 @@ type instance MS.HasSetupStruct (LLVM _) = 'True
 type instance MS.HasSetupArray (LLVM _) = 'True
 type instance MS.HasSetupElem (LLVM _) = 'True
 type instance MS.HasSetupField (LLVM _) = 'True
+type instance MS.HasSetupCast (LLVM _) = 'True
 type instance MS.HasSetupGlobal (LLVM _) = 'True
 type instance MS.HasSetupGlobalInitializer (LLVM _) = 'True
 
@@ -167,6 +180,7 @@ type instance MS.HasGhostState (LLVM _) = 'True
 
 type instance MS.TypeName (LLVM arch) = CL.Ident
 type instance MS.ExtType (LLVM arch) = CL.MemType
+type instance MS.CastType (LLVM arch) = L.Type
 
 --------------------------------------------------------------------------------
 -- *** LLVMMethodId
@@ -507,7 +521,7 @@ initialCrucibleSetupState ::
   Either SetupError (Setup.CrucibleSetupState (LLVM arch))
 initialCrucibleSetupState cc def loc parent = do
   ms <- initialDefCrucibleMethodSpecIR (cc ^. ccLLVMModule) def loc parent
-  return $ Setup.makeCrucibleSetupState cc ms
+  return $ Setup.makeCrucibleSetupState emptyResolvedState cc ms
 
 initialCrucibleSetupStateDecl ::
   (?lc :: CL.TypeContext) =>
@@ -518,7 +532,7 @@ initialCrucibleSetupStateDecl ::
   Either SetupError (Setup.CrucibleSetupState (LLVM arch))
 initialCrucibleSetupStateDecl cc dec loc parent = do
   ms <- initialDeclCrucibleMethodSpecIR (cc ^. ccLLVMModule) dec loc parent
-  return $ Setup.makeCrucibleSetupState cc ms
+  return $ Setup.makeCrucibleSetupState emptyResolvedState cc ms
 
 --------------------------------------------------------------------------------
 -- ** AllLLVM/SomeLLVM
@@ -562,6 +576,9 @@ anySetupStruct b vals = mkAllLLVM (MS.SetupStruct () b $ map (\a -> getAllLLVM a
 anySetupElem :: AllLLVM MS.SetupValue -> Int -> AllLLVM MS.SetupValue
 anySetupElem val idx = mkAllLLVM (MS.SetupElem () (getAllLLVM val) idx)
 
+anySetupCast :: AllLLVM MS.SetupValue -> L.Type -> AllLLVM MS.SetupValue
+anySetupCast val ty = mkAllLLVM (MS.SetupCast () (getAllLLVM val) ty)
+
 anySetupField :: AllLLVM MS.SetupValue -> String -> AllLLVM MS.SetupValue
 anySetupField val field = mkAllLLVM (MS.SetupField () (getAllLLVM val) field)
 
@@ -597,3 +614,89 @@ mkSomeLLVM x = Some (Compose x)
 
 getSomeLLVM :: forall t. (forall arch. t (LLVM arch)) -> AllLLVM t
 getSomeLLVM x = All (Compose x)
+
+--------------------------------------------------------------------------------
+-- *** ResolvedState
+
+type instance MS.ResolvedState (LLVM arch) = LLVMResolvedState
+
+data ResolvedPathItem
+  = ResolvedField String
+  | ResolvedElem Int
+  | ResolvedCast L.Type
+ deriving (Show, Eq, Ord)
+
+type ResolvedPath = [ResolvedPathItem]
+
+-- | A datatype to keep track of which parts of the simulator state
+-- have been initialized already. For each allocation unit or global,
+-- we keep a list of element-paths that identify the initialized
+-- sub-components.
+--
+-- Note that the data collected and maintained by this datatype
+-- represents a \"best-effort\" check that attempts to prevent
+-- the user from stating unsatisfiable method specifications.
+--
+-- It will not prevent all cases of overlapping points-to
+-- specifications, especially in the presence of pointer casts.
+-- A typical result of overlapping specifications will be
+-- successful (vacuous) verifications of functions resulting in
+-- overrides that cannot be used at call sites (as their
+-- preconditions are unsatisfiable).
+data LLVMResolvedState =
+  ResolvedState
+    { _rsAllocs :: Map MS.AllocIndex [ResolvedPath]
+    , _rsGlobals :: Map String [ResolvedPath]
+    }
+  deriving (Eq, Ord, Show)
+
+emptyResolvedState :: LLVMResolvedState
+emptyResolvedState = ResolvedState Map.empty Map.empty
+
+makeLenses ''LLVMResolvedState
+
+-- | Record the initialization of the pointer represented by the given
+-- SetupValue.
+markResolved ::
+  MS.SetupValue (LLVM arch) ->
+  ResolvedPath {-^ path within this object (if any) -} ->
+  LLVMResolvedState ->
+  LLVMResolvedState
+markResolved val0 path0 rs = go path0 val0
+  where
+    go path val =
+      case val of
+        MS.SetupVar n         -> rs & rsAllocs %~ Map.alter (ins path) n
+        MS.SetupGlobal _ name -> rs & rsGlobals %~ Map.alter (ins path) name
+        MS.SetupElem _ v idx  -> go (ResolvedElem idx : path) v
+        MS.SetupField _ v fld -> go (ResolvedField fld : path) v
+        MS.SetupCast _ v tp   -> go (ResolvedCast tp : path) v
+        _                     -> rs
+
+    ins path Nothing = Just [path]
+    ins path (Just paths) = Just (path : paths)
+
+-- | Test whether the pointer represented by the given SetupValue has
+-- been initialized already.
+testResolved ::
+  MS.SetupValue (LLVM arch) ->
+  ResolvedPath {-^ path within this object (if any) -} ->
+  LLVMResolvedState ->
+  Bool
+testResolved val0 path0 rs = go path0 val0
+  where
+    go path val =
+      case val of
+        MS.SetupVar n         -> test path (Map.lookup n (_rsAllocs rs))
+        MS.SetupGlobal _ c    -> test path (Map.lookup c (_rsGlobals rs))
+        MS.SetupElem _ v idx  -> go (ResolvedElem idx : path) v
+        MS.SetupField _ v fld -> go (ResolvedField fld : path) v
+        MS.SetupCast _ v tp   -> go (ResolvedCast tp : path) v
+        _                     -> False
+
+    test _ Nothing = False
+    test path (Just paths) = any (overlap path) paths
+
+    overlap (x : xs) (y : ys) = x == y && overlap xs ys
+    overlap [] _ = True
+    overlap _ [] = True

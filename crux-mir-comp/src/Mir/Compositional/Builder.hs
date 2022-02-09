@@ -1,3 +1,4 @@
+{-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -611,6 +612,7 @@ substMethodSpec sc sm ms = do
         MS.SetupArray b svs -> MS.SetupArray b <$> mapM goSetupValue svs
         MS.SetupElem b sv idx -> MS.SetupElem b <$> goSetupValue sv <*> pure idx
         MS.SetupField b sv name -> MS.SetupField b <$> goSetupValue sv <*> pure name
+        MS.SetupCast v _ _ -> case v of {}
         MS.SetupGlobal _ _ -> return sv
         MS.SetupGlobalInitializer _ _ -> return sv
 

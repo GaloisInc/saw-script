@@ -2199,7 +2199,8 @@ pointer points to a value that does not agree with its static type.
 CrucibleSetup ()` works like `llvm_points_to` but omits type
 checking. Rather than omitting type checking across the board, we
 introduced this additional function to make it clear when a type
-reinterpretation is intentional.
+reinterpretation is intentional. As an alternative, one
+may instead use `llvm_cast_pointer` to line up the static types.
 
 ## Working with Compound Types
 
@@ -2213,7 +2214,7 @@ is the array index. For `struct` values, it is the field index.
 
 * `llvm_field : SetupValue -> String -> SetupValue` yields a pointer
 to a particular named `struct` field, if debugging information is
-available in the bitcode
+available in the bitcode.
 
 Either of these functions can be used with `llvm_points_to` to
 specify the value of a particular array element or `struct` field.
@@ -2239,6 +2240,22 @@ that every field immediately follows the previous in memory. The
 following command will create values of such types:
 
 * `llvm_packed_struct_value : [SetupValue] -> SetupValue`
+
+C programs will sometimes make use of pointer casting to implement
+various kinds of polymorphic behaviors, either via direct pointer
+casts, or by using `union` types to codify the pattern. To reason
+about such cases, the following operation is useful.
+
+* `llvm_cast_pointer : SetupValue -> LLVMType -> SetupValue`
+
+This function function casts the type of the input value (which must be a
+pointer) so that it points to values of the given type.  This mainly
+affects the results of subsequent `llvm_field` and `llvm_elem` calls,
+and any eventual `points_to` statements that the resulting pointer
+flows into.  This is especially useful for dealing with C `union`
+types, as the type information provided by LLVM is imprecise in these
+cases.
+
 
 In the experimental Java verification implementation, the following
 functions can be used to state the equivalent of a combination of

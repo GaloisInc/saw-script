@@ -55,7 +55,7 @@ data CrucibleSetupState ext =
   CrucibleSetupState
   { _csVarCounter      :: !MS.AllocIndex
   , _csPrePost         :: !MS.PrePost
-  , _csResolvedState   :: MS.ResolvedState
+  , _csResolvedState   :: MS.ResolvedState ext
   , _csMethodSpec      :: MS.CrucibleMethodSpecIR ext
   , _csCrucibleContext :: MS.CrucibleContext ext
   }
@@ -63,14 +63,15 @@ data CrucibleSetupState ext =
 makeLenses ''CrucibleSetupState
 
 makeCrucibleSetupState ::
+  MS.ResolvedState ext ->
   MS.CrucibleContext ext ->
   MS.CrucibleMethodSpecIR ext ->
   CrucibleSetupState ext
-makeCrucibleSetupState cc mspec =
+makeCrucibleSetupState rs cc mspec =
   CrucibleSetupState
     { _csVarCounter      = MS.AllocIndex 0
     , _csPrePost         = MS.PreState
-    , _csResolvedState   = MS.emptyResolvedState
+    , _csResolvedState   = rs
     , _csMethodSpec      = mspec
     , _csCrucibleContext = cc
     }

@@ -26,6 +26,13 @@
   command.) For more details on how each of these commands should be used,
   consult the "Bitfields" section of the SAW manual.
 
+* A new `llvm_cast_pointer` function has been added that allows users
+  to directly specify that a pointer should be treated as pointing to
+  a particular type. This mainly affects the results of subsequent
+  `llvm_field` and `llvm_elem` calls.  This is especially useful for
+  dealing with C `union` types, as the type information provided by
+  LLVM is imprecise in these cases.
+
 # Version 0.9
 
 ## New Features
