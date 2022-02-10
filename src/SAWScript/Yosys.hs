@@ -4,6 +4,7 @@
 {-# Language ViewPatterns #-}
 {-# Language LambdaCase #-}
 {-# Language TupleSections #-}
+{-# Language ScopedTypeVariables #-}
 
 module SAWScript.Yosys
   ( YosysIR
@@ -20,6 +21,7 @@ import Control.Exception (throw)
 
 import qualified Data.Tuple as Tuple
 import qualified Data.Maybe as Maybe
+import qualified Data.Foldable as Foldable
 import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -29,6 +31,7 @@ import qualified Data.Graph as Graph
 
 import qualified Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.TypedTerm as SC
+import qualified Verifier.SAW.Name as SC
 
 import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.Ident as C
@@ -44,7 +47,7 @@ import SAWScript.Yosys.IR
 data Modgraph = Modgraph
   { _modgraphGraph :: Graph.Graph
   , _modgraphNodeFromVertex :: Graph.Vertex -> (Module, Text, [Text])
-  , _modgraphVertexFromKey :: Text -> Maybe Graph.Vertex
+  -- , _modgraphVertexFromKey :: Text -> Maybe Graph.Vertex
   }
 makeLenses ''Modgraph
 
@@ -66,7 +69,7 @@ yosysIRModgraph ir =
 data Netgraph = Netgraph
   { _netgraphGraph :: Graph.Graph
   , _netgraphNodeFromVertex :: Graph.Vertex -> (Cell, [Bitrep], [[Bitrep]])
-  , _netgraphVertexFromKey :: [Bitrep] -> Maybe Graph.Vertex
+  -- , _netgraphVertexFromKey :: [Bitrep] -> Maybe Graph.Vertex
   }
 makeLenses ''Netgraph
 
@@ -152,6 +155,7 @@ cryptolRecordSelect sc fields r nm =
 
 -- | Given a Yosys cell and a map of terms for its arguments, construct a term representing the output.
 cellToTerm ::
+  forall m.
   MonadIO m =>
   SC.SharedContext ->
   Map Text SC.Term {- ^ Environment of user-defined cells -} ->
@@ -159,28 +163,121 @@ cellToTerm ::
   Map Text SC.Term {- ^ Mapping of input names to input terms -} ->
   m SC.Term
 cellToTerm sc env c args = case c ^. cellType of
-  "$or" -> do
-    w <- liftIO $ SC.scNat sc $ case Map.lookup "Y" $ c ^. cellConnections of
-      Nothing -> panic "cellToTerm" ["Missing expected output name for $or cell"]
-      Just bits -> fromIntegral $ length bits
-    identity <- liftIO $ SC.scBvBool sc w =<< SC.scBool sc False
-    res <- liftIO $ foldM (SC.scBvOr sc w) identity args
-    cryptolRecord sc $ Map.fromList
-      [ ("Y", res)
-      ]
-  "$and" -> do
-    w <- liftIO $ SC.scNat sc $ case Map.lookup "Y" $ c ^. cellConnections of
-      Nothing -> panic "cellToTerm" ["Missing expected output name for $and cell"]
-      Just bits -> fromIntegral $ length bits
-    identity <- liftIO $ SC.scBvBool sc w =<< SC.scBool sc True
-    res <- liftIO $ foldM (SC.scBvAnd sc w) identity args
-    cryptolRecord sc $ Map.fromList
-      [ ("Y", res)
-      ]
+  "$not" -> bvUnaryOp $ SC.scBvNot sc
+  "$pos" -> input "A"
+  "$neg" -> bvUnaryOp $ SC.scBvNeg sc
+  "$and" -> bvNAryOp $ SC.scBvAnd sc
+  "$or" -> bvNAryOp $ SC.scBvOr sc
+  "$xor" -> bvNAryOp $ SC.scBvXor sc
+  "$xnor" -> bvNAryOp $ \w x y -> do
+    r <- SC.scBvXor sc w x y
+    SC.scBvNot sc w r
+  "$reduce_and" -> bvReduce True =<< do
+    liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "and"
+  "$reduce_or" -> bvReduce False =<< do
+    liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "or"
+  "$reduce_xor" -> bvReduce False =<< do
+    liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "xor"
+  "$reduce_xnor" -> bvReduce True =<< do
+    boolTy <- liftIO $ SC.scBoolType sc
+    xEC <- liftIO $ SC.scFreshEC sc "x" boolTy
+    x <- liftIO $ SC.scExtCns sc xEC
+    yEC <- liftIO $ SC.scFreshEC sc "y" boolTy
+    y <- liftIO $ SC.scExtCns sc yEC
+    r <- liftIO $ SC.scXor sc x y
+    res <- liftIO $ SC.scNot sc r
+    liftIO $ SC.scAbstractExts sc [xEC, yEC] res
+  "$reduce_bool" -> bvReduce False =<< do
+    liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "or"
+  "$shl" -> bvBinaryOp $ SC.scBvShl sc
+  "$shr" -> bvBinaryOp $ SC.scBvShr sc
+  "$sshl" -> bvBinaryOp $ SC.scBvShl sc -- same as shl
+  "$sshr" -> bvBinaryOp $ SC.scBvSShr sc
+  -- "$shift" -> _
+  -- "$shiftx" -> _
+  "$lt" -> bvBinaryOp $ SC.scBvULt sc
+  "$le" -> bvBinaryOp $ SC.scBvULe sc
+  "$gt" -> bvBinaryOp $ SC.scBvUGt sc
+  "$ge" -> bvBinaryOp $ SC.scBvUGe sc
+  "$eq" -> bvBinaryOp $ SC.scBvEq sc
+  "$ne" -> bvBinaryOp $ \w x y -> do
+    r <- SC.scBvEq sc w x y
+    SC.scNot sc r
+  "$eqx" -> bvBinaryOp $ SC.scBvEq sc
+  "$nex" -> bvBinaryOp $ \w x y -> do
+    r <- SC.scBvEq sc w x y
+    SC.scNot sc r
+  "$add" -> bvNAryOp $ SC.scBvAdd sc
+  "$sub" -> bvBinaryOp $ SC.scBvSub sc
+  "$mul" -> bvNAryOp $ SC.scBvMul sc
+  "$div" -> bvBinaryOp $ SC.scBvUDiv sc
+  "$mod" -> bvBinaryOp $ SC.scBvURem sc
+  -- "$modfloor" -> _
+  -- "$logic_not" -> _
+  -- "$logic_and" -> _
+  "$logic_or" -> bvReduce False =<< do
+    liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "or"
+  -- "$mux" -> _
+  -- "$pmux" -> _
+  -- "$bmux" -> _
+  -- "$demux" -> _
+  -- "$lut" -> _
+  -- "$slice" -> _
+  -- "$concat" -> _
   (flip Map.lookup env -> Just term) -> do
     r <- cryptolRecord sc args
     liftIO $ SC.scApply sc term r
   ct -> throw . YosysError $ "Unknown cell type: " <> ct
+  where
+    nm = c ^. cellType
+    outputWidth :: m SC.Term
+    outputWidth =
+      liftIO $ SC.scNat sc $ case Map.lookup "Y" $ c ^. cellConnections of
+        Nothing -> panic "cellToTerm" [Text.unpack $ mconcat ["Missing expected output name for ", nm, " cell"]]
+        Just bits -> fromIntegral $ length bits
+    input :: Text -> m SC.Term
+    input inpNm =
+      case Map.lookup inpNm args of
+        Nothing -> panic "cellToTerm" [Text.unpack $ mconcat [nm, " missing input ", inpNm]]
+        Just a -> pure a
+    bvUnaryOp :: (SC.Term -> SC.Term -> IO SC.Term) -> m SC.Term
+    bvUnaryOp f = do
+      t <- input "A"
+      w <- outputWidth
+      res <- liftIO $ f w t
+      cryptolRecord sc $ Map.fromList
+        [ ("Y", res)
+        ]
+    bvBinaryOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m SC.Term
+    bvBinaryOp f = do
+      ta <- input "A"
+      tb <- input "B"
+      w <- outputWidth
+      res <- liftIO $ f w ta tb
+      cryptolRecord sc $ Map.fromList
+        [ ("Y", res)
+        ]
+    bvNAryOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m SC.Term
+    bvNAryOp f =
+      case Foldable.toList args of
+        [] -> panic "cellToTerm" [Text.unpack $ mconcat [nm, " cell given no inputs"]]
+        (t:rest) -> do
+          w <- outputWidth
+          res <- liftIO $ foldM (f w) t rest
+          cryptolRecord sc $ Map.fromList
+            [ ("Y", res)
+            ]
+    bvReduce :: Bool -> SC.Term -> m SC.Term
+    bvReduce boolIdentity boolFun = do
+      t <- input "A"
+      w <- outputWidth
+      boolTy <- liftIO $ SC.scBoolType sc
+      identity <- liftIO $ SC.scBool sc boolIdentity
+      scFoldr <- liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "foldr"
+      res <- liftIO $ SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]
+      cryptolRecord sc $ Map.fromList
+        [ ("Y", res)
+        ]
 
 -- | Given a bit pattern ([Bitrep]) and a term, construct a map associating that output pattern with
 -- the term, and each bit of that pattern with the corresponding bit of the term.
