@@ -8,8 +8,7 @@
 
 module SAWScript.Yosys
   ( YosysIR
-  , yosys_load_file
-  , yosys_compositional_extract
+  , yosys_import
   ) where
 
 import Control.Lens.TH (makeLenses)
@@ -19,6 +18,7 @@ import Control.Monad (forM, foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
 
+import Data.Bifunctor (first)
 import qualified Data.Tuple as Tuple
 import qualified Data.Maybe as Maybe
 import qualified Data.Foldable as Foldable
@@ -213,10 +213,25 @@ cellToTerm sc env c args = case c ^. cellType of
   "$div" -> bvBinaryOp $ SC.scBvUDiv sc
   "$mod" -> bvBinaryOp $ SC.scBvURem sc
   -- "$modfloor" -> _
-  -- "$logic_not" -> _
-  -- "$logic_and" -> _
-  "$logic_or" -> bvReduce False =<< do
-    liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "or"
+  "$logic_not" -> do
+    w <- outputWidth
+    ta <- input "A"
+    anz <- liftIO $ SC.scBvNonzero sc w ta
+    liftIO $ SC.scNot sc anz
+  "$logic_and" -> do
+    w <- outputWidth
+    ta <- input "A"
+    tb <- input "B"
+    anz <- liftIO $ SC.scBvNonzero sc w ta
+    bnz <- liftIO $ SC.scBvNonzero sc w tb
+    liftIO $ SC.scAnd sc anz bnz
+  "$logic_or" -> do
+    w <- outputWidth
+    ta <- input "A"
+    tb <- input "B"
+    anz <- liftIO $ SC.scBvNonzero sc w ta
+    bnz <- liftIO $ SC.scBvNonzero sc w tb
+    liftIO $ SC.scOr sc anz bnz
   -- "$mux" -> _
   -- "$pmux" -> _
   -- "$bmux" -> _
@@ -342,7 +357,7 @@ moduleToTerm ::
   SC.SharedContext ->
   Map Text SC.Term ->
   Module ->
-  m (SC.Term, SC.TypedTermType)
+  m (SC.Term, C.Type)
 moduleToTerm sc env m = do
   let ng = moduleNetgraph m
   let inputports = Maybe.mapMaybe
@@ -384,40 +399,36 @@ moduleToTerm sc env m = do
   let cty = C.tFun
         (C.tRec . C.recordFromFields $ toCryptol <$> inputports)
         (C.tRec . C.recordFromFields $ toCryptol <$> outputports)
-  pure (t, SC.TypedTermSchema $ C.tMono cty)
+  pure (t, cty)
 
 -- | Given a Yosys IR and the name of a VHDL module, construct a SAWCore term for that module.
-yosysIRToTerm ::
+yosysIRToRecordTerm ::
   MonadIO m =>
   SC.SharedContext ->
   YosysIR ->
-  Text ->
   m SC.TypedTerm
-yosysIRToTerm sc ir modnm = do
+yosysIRToRecordTerm sc ir = do
   let mg = yosysIRModgraph ir
   let sorted = Graph.reverseTopSort $ mg ^. modgraphGraph
   (termEnv, typeEnv) <- foldM
     (\(termEnv, typeEnv) v -> do
         let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
-        (t, schema) <- moduleToTerm sc termEnv m
-        pure (Map.insert nm t termEnv, Map.insert nm schema typeEnv)
+        (t, ty) <- moduleToTerm sc termEnv m
+        pure (Map.insert nm t termEnv, Map.insert nm ty typeEnv)
     )
     (Map.empty, Map.empty)
     sorted
-  (m, schema) <- case (Map.lookup modnm termEnv, Map.lookup modnm typeEnv) of
-    (Just m, Just schema) -> pure (m, schema)
-    _ -> throw . YosysError $ "Failed to find module: " <> modnm
-  pure $ SC.TypedTerm schema m
+  let cty = C.tRec . C.recordFromFields $ first C.mkIdent <$> Map.assocs typeEnv
+  record <- cryptolRecord sc termEnv
+  pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) record
 
 --------------------------------------------------------------------------------
 -- ** Functions visible from SAWScript REPL
 
 {-# ANN module ("HLint: ignore Use camelCase" :: String) #-}
 
-yosys_load_file :: FilePath -> TopLevel YosysIR
-yosys_load_file = loadYosysIR
-
-yosys_compositional_extract :: YosysIR -> String -> [()] -> ProofScript () -> TopLevel SC.TypedTerm
-yosys_compositional_extract ir modnm _lemmas _tactic = do
+yosys_import :: FilePath -> TopLevel SC.TypedTerm
+yosys_import path = do
   sc <- getSharedContext
-  yosysIRToTerm sc ir (Text.pack modnm)
+  ir <- loadYosysIR path
+  yosysIRToRecordTerm sc ir
