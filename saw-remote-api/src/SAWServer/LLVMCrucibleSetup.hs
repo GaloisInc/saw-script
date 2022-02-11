@@ -188,6 +188,9 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
     getSetupVal env (CastLValue base ty) =
       do base' <- getSetupVal env base
          LLVMCrucibleSetupM $ return $ CMS.anySetupCast base' (llvmType ty)
+    getSetupVal env (UnionLValue base fld) =
+      do base' <- getSetupVal env base
+         LLVMCrucibleSetupM $ return $ CMS.anySetupUnion base' fld
     getSetupVal env (ElementLValue base idx) =
       do base' <- getSetupVal env base
          LLVMCrucibleSetupM $ return $ CMS.anySetupElem base' idx

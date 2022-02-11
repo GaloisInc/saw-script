@@ -16,6 +16,7 @@ data SetupValTag
   | TagTupleValue
   | TagFieldLValue
   | TagCastLValue
+  | TagUnionLValue
   | TagElemLValue
   | TagGlobalInit
   | TagGlobalLValue
@@ -31,6 +32,7 @@ instance FromJSON SetupValTag where
       "tuple" -> pure TagTupleValue
       "field" -> pure TagFieldLValue
       "cast"  -> pure TagCastLValue
+      "union" -> pure TagUnionLValue
       "element lvalue" -> pure TagElemLValue
       "global initializer" -> pure TagGlobalInit
       "global lvalue" -> pure TagGlobalLValue
@@ -49,6 +51,7 @@ instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (CrucibleSetupVal ty cr
           TagTupleValue -> TupleValue <$> o .: "elements"
           TagFieldLValue -> FieldLValue <$> o .: "base" <*> o .: "field"
           TagCastLValue -> CastLValue <$> o .: "base" <*> o .: "type"
+          TagUnionLValue -> UnionLValue <$> o .: "base" <*> o .: "field"
           TagElemLValue -> ElementLValue <$> o .: "base" <*> o .: "index"
           TagGlobalInit -> GlobalInitializer <$> o .: "name"
           TagGlobalLValue -> GlobalLValue <$> o .: "name"
