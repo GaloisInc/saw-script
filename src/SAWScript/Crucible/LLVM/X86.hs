@@ -863,8 +863,8 @@ setArgs env tyenv nameEnv args
       cc <- use x86CrucibleContext
       mem <- use x86Mem
       let
-        setRegSetupValue rs (reg, sval) = typeOfSetupValue cc tyenv nameEnv sval >>= \ty ->
-          case ty of
+        setRegSetupValue rs (reg, sval) =
+          exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
             C.LLVM.PtrType _ -> do
               val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
                 =<< resolveSetupVal cc mem env tyenv nameEnv sval

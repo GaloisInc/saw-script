@@ -964,6 +964,7 @@ instantiateSetupValue sc s v =
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
     MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
   where
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t

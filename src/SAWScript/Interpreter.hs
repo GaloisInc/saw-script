@@ -2815,12 +2815,23 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_elem`." ]
 
+  , prim "llvm_union"
+    "SetupValue -> String -> SetupValue"
+    (pureVal CIR.anySetupUnion)
+    Current
+    [ "Turn a SetupValue representing a union pointer into"
+    , "a pointer to one of the branches of the union by field name."
+    , "Requires debug symbols to resolve union field names."
+    ]
+
   , prim "llvm_field"
     "SetupValue -> String -> SetupValue"
     (pureVal CIR.anySetupField)
     Current
     [ "Turn a SetupValue representing a struct pointer into"
-    , "a pointer to an element of the struct by field name." ]
+    , "a pointer to an element of the struct by field name."
+    , "Requires debug symbols to resolve struct field names."
+    ]
   , prim "crucible_field"
     "SetupValue -> String -> SetupValue"
     (pureVal CIR.anySetupField)

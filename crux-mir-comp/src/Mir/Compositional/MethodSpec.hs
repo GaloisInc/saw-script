@@ -30,6 +30,7 @@ type instance MS.HasSetupArray MIR = 'True
 type instance MS.HasSetupElem MIR = 'True
 type instance MS.HasSetupField MIR = 'True
 type instance MS.HasSetupCast MIR = 'False
+type instance MS.HasSetupUnion MIR = 'False
 type instance MS.HasSetupGlobalInitializer MIR = 'False
 
 type instance MS.HasGhostState MIR = 'False
