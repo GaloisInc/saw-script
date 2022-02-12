@@ -671,13 +671,18 @@ mrConvertible = liftSC4 scConvertibleEval scTypeCheckWHNF True
 -- compute the type @CompM [args/vars]a@ of @f@ applied to @args@. Return the
 -- type @[args/vars]a@ that @CompM@ is applied to.
 mrFunOutType :: FunName -> [Term] -> MRM Term
-mrFunOutType ((asPiList . funNameType) -> (vars, asCompM -> Just tp)) args
-  | length vars == length args =
-    substTermLike 0 args tp
-mrFunOutType _ _ =
-  -- NOTE: this is an error because we should only ever call mrFunOutType with a
-  -- well-formed application at a CompM type
-  error "mrFunOutType"
+mrFunOutType fname args =
+  liftSC1 scWhnf (funNameType fname) >>= \case
+  (asPiList -> (vars, asCompM -> Just tp))
+    | length vars == length args -> substTermLike 0 args tp
+  ftype@(asPiList -> (vars, _)) ->
+    do pp_ftype <- mrPPInCtx ftype
+       pp_fname <- mrPPInCtx fname
+       debugPrint 0 "mrFunOutType: function applied to the wrong number of args"
+       debugPrint 0 ("Expected: " ++ show (length vars) ++
+                     ", found: " ++ show (length args))
+       debugPretty 0 ("For function: " <> pp_fname <> " with type: " <> pp_ftype)
+       error"mrFunOutType"
 
 -- | Turn a 'LocalName' into one not in a list, adding a suffix if necessary
 uniquifyName :: LocalName -> [LocalName] -> LocalName
@@ -984,8 +989,8 @@ _debugPrettyInCtx i a =
   (mrUVars <$> get) >>= \ctx -> debugPrint i (showInCtx (map fst ctx) a)
 
 -- | Pretty-print an object relative to the current context
-_mrPPInCtx :: PrettyInCtx a => a -> MRM SawDoc
-_mrPPInCtx a =
+mrPPInCtx :: PrettyInCtx a => a -> MRM SawDoc
+mrPPInCtx a =
   runReader (prettyInCtx a) <$> map fst <$> mrUVars <$> get
 
 -- | Pretty-print the result of 'ppWithPrefixSep' relative to the current uvar
@@ -1121,10 +1126,11 @@ asCompM (asApp -> Just (isGlobalDef "Prelude.CompM" -> Just (), tp)) =
   return tp
 asCompM _ = fail "not a CompM type!"
 
--- | Test if a type is a monadic function type of 0 or more arguments
-isCompFunType :: Term -> Bool
-isCompFunType (asPiList -> (_, asCompM -> Just _)) = True
-isCompFunType _ = False
+-- | Test if a type normalizes to a monadic function type of 0 or more arguments
+isCompFunType :: SharedContext -> Term -> IO Bool
+isCompFunType sc t = scWhnf sc t >>= \case
+  (asPiList -> (_, asCompM -> Just _)) -> return True
+  _ -> return False
 
 -- | Pattern-match on a @LetRecTypes@ list in normal form and return a list of
 -- the types it specifies, each in normal form and with uvars abstracted out
@@ -1531,8 +1537,8 @@ askMRSolver ::
   Term -> Term -> IO (Maybe MRFailure)
 
 askMRSolver sc dlvl smt_conf timeout t1 t2 =
-  do tp1 <- scTypeOf sc t1
-     tp2 <- scTypeOf sc t2
+  do tp1 <- scTypeOf sc t1 >>= scWhnf sc
+     tp2 <- scTypeOf sc t2 >>= scWhnf sc
      init_st <- mkMRState sc Map.empty smt_conf timeout dlvl
      case asPiList tp1 of
        (uvar_ctx, asCompM -> Just _) ->
