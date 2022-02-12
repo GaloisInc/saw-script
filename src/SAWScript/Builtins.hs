@@ -1385,8 +1385,8 @@ tailPrim :: [a] -> TopLevel [a]
 tailPrim [] = fail "tail: empty list"
 tailPrim (_ : xs) = return xs
 
-parseCore :: String -> TopLevel Term
-parseCore input =
+parseCoreMod :: String -> String -> TopLevel Term
+parseCoreMod mnm_str input =
   do sc <- getSharedContext
      let base = "<interactive>"
          path = "<interactive>"
@@ -1397,15 +1397,26 @@ parseCore input =
            do let msg = show err
               printOutLnTop Opts.Error msg
               fail msg
-     let mnm = Just $ mkModuleName ["Cryptol"]
-     err_or_t <- io $ runTCM (typeInferComplete uterm) sc mnm []
+     let mnm =
+           mkModuleName $ Text.splitOn (Text.pack ".") $ Text.pack mnm_str
+     _ <- io $ scFindModule sc mnm -- Check that mnm exists
+     err_or_t <- io $ runTCM (typeInferComplete uterm) sc (Just mnm) []
      case err_or_t of
        Left err -> fail (show err)
        Right (TC.TypedTerm x _) -> return x
 
+parseCore :: String -> TopLevel Term
+parseCore = parseCoreMod "Cryptol"
+
 parse_core :: String -> TopLevel TypedTerm
 parse_core input = do
   t <- parseCore input
+  sc <- getSharedContext
+  io $ mkTypedTerm sc t
+
+parse_core_mod :: String -> String -> TopLevel TypedTerm
+parse_core_mod mnm input = do
+  t <- parseCoreMod mnm input
   sc <- getSharedContext
   io $ mkTypedTerm sc t
 
@@ -1532,9 +1543,11 @@ monadifyTypedTerm sc t =
 
 -- | Ensure that a 'TypedTerm' has been monadified
 ensureMonadicTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
-ensureMonadicTerm _ t
-  | TypedTermOther tp <- ttType t
-  , Prover.isCompFunType tp = return t
+ensureMonadicTerm sc t
+  | TypedTermOther tp <- ttType t =
+    io (Prover.isCompFunType sc tp) >>= \case
+      True -> return t
+      False -> monadifyTypedTerm sc t
 ensureMonadicTerm sc t = monadifyTypedTerm sc t
 
 mrSolver :: SharedContext -> Int -> TypedTerm -> TypedTerm -> TopLevel Bool
