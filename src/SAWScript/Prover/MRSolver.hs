@@ -193,18 +193,61 @@ newtype MRVar = MRVar { unMRVar :: ExtCns Term } deriving (Eq, Show, Ord)
 mrVarType :: MRVar -> Term
 mrVarType = ecType . unMRVar
 
+-- | A tuple or record projection of a 'Term'
+data TermProj = TermProjLeft | TermProjRight | TermProjRecord FieldName
+              deriving (Eq, Ord, Show)
+
+-- | Apply a 'TermProj' to perform a projection on a 'Term'
+doTermProj :: Term -> TermProj -> MRM Term
+doTermProj t TermProjLeft = liftSC1 scPairLeft t
+doTermProj t TermProjRight = liftSC1 scPairRight t
+doTermProj t (TermProjRecord fld) = liftSC2 scRecordSelect t fld
+
+-- | Apply a 'TermProj' to a type to get the output type of the projection,
+-- assuming that the type is already normalized
+doTypeProj :: Term -> TermProj -> MRM Term
+doTypeProj (asPairType -> Just (tp1, _)) TermProjLeft = return tp1
+doTypeProj (asPairType -> Just (_, tp2)) TermProjRight = return tp2
+doTypeProj (asRecordType -> Just tp_map) (TermProjRecord fld)
+  | Just tp <- Map.lookup fld tp_map
+  = return tp
+doTypeProj _ _ =
+  -- FIXME: better error message? This is an error and not an MRFailure because
+  -- we should only be projecting types for terms that we have already seen...
+  error "doTypeProj"
+
 -- | Names of functions to be used in computations, which are either names bound
 -- by letrec to for recursive calls to fixed-points, existential variables, or
--- global named constants
+-- (possibly projections of) of global named constants
 data FunName
-  = LetRecName MRVar | EVarFunName MRVar | GlobalName GlobalDef
+  = LetRecName MRVar | EVarFunName MRVar | GlobalName GlobalDef [TermProj]
   deriving (Eq, Ord, Show)
 
--- | Get the type of a 'FunName'
-funNameType :: FunName -> Term
-funNameType (LetRecName var) = mrVarType var
-funNameType (EVarFunName var) = mrVarType var
-funNameType (GlobalName gd) = globalDefType gd
+-- | Get and normalize the type of a 'FunName'
+funNameType :: FunName -> MRM Term
+funNameType (LetRecName var) = liftSC1 scWhnf $ mrVarType var
+funNameType (EVarFunName var) = liftSC1 scWhnf $ mrVarType var
+funNameType (GlobalName gd projs) =
+  liftSC1 scWhnf (globalDefType gd) >>= \gd_tp ->
+  foldM doTypeProj gd_tp projs
+
+-- | Recognize a 'Term' as (possibly a projection of) a global name
+asTypedGlobalProj :: Recognizer Term (GlobalDef, [TermProj])
+asTypedGlobalProj (asRecordSelector ->
+                   Just ((asTypedGlobalProj -> Just (d, projs)), fld)) =
+  return (d, TermProjRecord fld:projs)
+asTypedGlobalProj (asPairSelector ->
+                   Just ((asTypedGlobalProj -> Just (d, projs)), isRight))
+  | isRight = return (d, TermProjRight:projs)
+  | not isRight = return (d, TermProjLeft:projs)
+asTypedGlobalProj (asTypedGlobalDef -> Just glob) = Just (glob, [])
+asTypedGlobalProj _ = Nothing
+
+-- | Recognize a 'Term' as (possibly a projection of) a global name
+asGlobalFunName :: Recognizer Term FunName
+asGlobalFunName (asTypedGlobalProj -> Just (glob, projs)) =
+  Just $ GlobalName glob projs
+asGlobalFunName _ = Nothing
 
 -- | A term specifically known to be of type @sort i@ for some @i@
 newtype Type = Type Term deriving Show
@@ -287,10 +330,16 @@ instance PrettyInCtx Type where
 instance PrettyInCtx MRVar where
   prettyInCtx (MRVar ec) = return $ ppName $ ecName ec
 
+instance PrettyInCtx TermProj where
+  prettyInCtx TermProjLeft = return (pretty '.' <> "1")
+  prettyInCtx TermProjRight = return (pretty '.' <> "2")
+  prettyInCtx (TermProjRecord fld) = return (pretty '.' <> pretty fld)
+
 instance PrettyInCtx FunName where
   prettyInCtx (LetRecName var) = prettyInCtx var
   prettyInCtx (EVarFunName var) = prettyInCtx var
-  prettyInCtx (GlobalName i) = return $ viaShow i
+  prettyInCtx (GlobalName g projs) =
+    foldM (\pp proj -> (pp <>) <$> prettyInCtx proj) (viaShow g) projs
 
 instance PrettyInCtx Comp where
   prettyInCtx (CompTerm t) = prettyInCtx t
@@ -672,7 +721,7 @@ mrConvertible = liftSC4 scConvertibleEval scTypeCheckWHNF True
 -- type @[args/vars]a@ that @CompM@ is applied to.
 mrFunOutType :: FunName -> [Term] -> MRM Term
 mrFunOutType fname args =
-  liftSC1 scWhnf (funNameType fname) >>= \case
+  funNameType fname >>= \case
   (asPiList -> (vars, asCompM -> Just tp))
     | length vars == length args -> substTermLike 0 args tp
   ftype@(asPiList -> (vars, _)) ->
@@ -760,7 +809,7 @@ extCnsToFunName ec = let var = MRVar ec in mrVarInfo var >>= \case
   Just (FunVarInfo _) -> return $ LetRecName var
   Nothing
     | Just glob <- asTypedGlobalDef (Unshared $ FTermF $ ExtCns ec) ->
-      return $ GlobalName glob
+      return $ GlobalName glob []
   _ -> error "extCnsToFunName: unreachable"
 
 -- | Get the body of a function @f@ if it has one
@@ -769,7 +818,10 @@ mrFunNameBody (LetRecName var) =
   mrVarInfo var >>= \case
   Just (FunVarInfo body) -> return $ Just body
   _ -> error "mrFunBody: unknown letrec var"
-mrFunNameBody (GlobalName glob) = return $ globalDefBody glob
+mrFunNameBody (GlobalName glob projs)
+  | Just body <- globalDefBody glob
+  = Just <$> foldM doTermProj body projs
+mrFunNameBody (GlobalName _ _) = return Nothing
 mrFunNameBody (EVarFunName _) = return Nothing
 
 -- | Get the body of a function @f@ applied to some arguments, if possible
@@ -798,9 +850,9 @@ mrCallsFun f = memoFixTermFun $ \recurse t -> case t of
          _ | f == g -> return True
          Just body -> recurse body
          Nothing -> return False
-  (asTypedGlobalDef -> Just gdef) ->
+  (asTypedGlobalProj -> Just (gdef, projs)) ->
     case globalDefBody gdef of
-      _ | f == GlobalName gdef -> return True
+      _ | f == GlobalName gdef projs -> return True
       Just body -> recurse body
       Nothing -> return False
   (unwrapTermF -> tf) ->
@@ -1226,8 +1278,8 @@ normComp (CompTerm t) =
       do fun_name <- extCnsToFunName ec
          return $ FunBind fun_name args CompFunReturn
 
-    ((asTypedGlobalDef -> Just gdef), args) ->
-      return $ FunBind (GlobalName gdef) args CompFunReturn
+    ((asGlobalFunName -> Just f), args) ->
+      return $ FunBind f args CompFunReturn
 
     _ -> throwError (MalformedComp t)
 
