@@ -216,6 +216,15 @@ doTypeProj _ _ =
   -- we should only be projecting types for terms that we have already seen...
   error "doTypeProj"
 
+-- | Recognize a 'Term' as 0 or more projections
+asProjAll :: Term -> (Term, [TermProj])
+asProjAll (asRecordSelector -> Just ((asProjAll -> (t, projs)), fld)) =
+  (t, TermProjRecord fld:projs)
+asProjAll (asPairSelector -> Just ((asProjAll -> (t, projs)), isRight))
+  | isRight = (t, TermProjRight:projs)
+  | not isRight = (t, TermProjLeft:projs)
+asProjAll t = (t, [])
+
 -- | Names of functions to be used in computations, which are either names bound
 -- by letrec to for recursive calls to fixed-points, existential variables, or
 -- (possibly projections of) of global named constants
@@ -233,14 +242,8 @@ funNameType (GlobalName gd projs) =
 
 -- | Recognize a 'Term' as (possibly a projection of) a global name
 asTypedGlobalProj :: Recognizer Term (GlobalDef, [TermProj])
-asTypedGlobalProj (asRecordSelector ->
-                   Just ((asTypedGlobalProj -> Just (d, projs)), fld)) =
-  return (d, TermProjRecord fld:projs)
-asTypedGlobalProj (asPairSelector ->
-                   Just ((asTypedGlobalProj -> Just (d, projs)), isRight))
-  | isRight = return (d, TermProjRight:projs)
-  | not isRight = return (d, TermProjLeft:projs)
-asTypedGlobalProj (asTypedGlobalDef -> Just glob) = Just (glob, [])
+asTypedGlobalProj (asProjAll -> ((asTypedGlobalDef -> Just glob), projs)) =
+  Just (glob, projs)
 asTypedGlobalProj _ = Nothing
 
 -- | Recognize a 'Term' as (possibly a projection of) a global name
@@ -1202,6 +1205,48 @@ asNestedPairs (asPairValue -> Just (x, asNestedPairs -> Just xs)) = Just (x:xs)
 asNestedPairs (asFTermF -> Just UnitValue) = Just []
 asNestedPairs _ = Nothing
 
+-- | Syntactically project then @i@th element of the body of a lambda. That is,
+-- assuming the input 'Term' has the form
+--
+-- > \ (x1:T1) ... (xn:Tn) -> (e1, (e2, ... (en, ())))
+--
+-- return the bindings @x1:T1,...,xn:Tn@ and @ei@
+synProjFunBody :: Int -> Term -> Maybe ([(LocalName, Term)], Term)
+synProjFunBody i (asLambdaList -> (vars, asTupleValue -> Just es)) =
+  -- NOTE: we are doing 1-based indexing instead of 0-based, thus the -1
+  Just $ (vars, es !! (i-1))
+synProjFunBody _ _ = Nothing
+
+-- | Bind fresh function variables for a @letRecM@ or @multiFixM@ with the given
+-- @LetRecTypes@ and definitions for the function bodies as a lambda
+mrFreshLetRecVars :: Term -> Term -> MRM [Term]
+mrFreshLetRecVars lrts defs_f =
+  do
+    -- First, make fresh function constants for all the bound functions, using
+    -- the names bound by defs_f and just "F" if those run out
+    let fun_var_names =
+          map fst (fst $ asLambdaList defs_f) ++ repeat "F"
+    fun_tps <- asLRTList lrts
+    funs <- zipWithM mrFreshVar fun_var_names fun_tps
+    fun_tms <- mapM mrVarTerm funs
+
+    -- Next, apply the definition function defs_f to our function vars, yielding
+    -- the definitions of the individual letrec-bound functions in terms of the
+    -- new function constants
+    defs_tm <- mrApplyAll defs_f fun_tms
+    defs <- case asNestedPairs defs_tm of
+      Just defs -> return defs
+      Nothing -> throwError (MalformedDefsFun defs_f)
+
+    -- Remember the body associated with each fresh function constant
+    zipWithM_ (\f body ->
+                lambdaUVarsM body >>= \cl_body ->
+                mrSetVarInfo f (FunVarInfo cl_body)) funs defs
+
+    -- Finally, return the terms for the fresh function variables
+    return fun_tms
+
+
 -- | Normalize a 'Term' of monadic type to monadic normal form
 normCompTerm :: Term -> MRM NormComp
 normCompTerm = normComp . CompTerm
@@ -1236,28 +1281,9 @@ normComp (CompTerm t) =
       return $ ForallM (Type tp) (CompFunTerm body_tm)
     (isGlobalDef "Prelude.letRecM" -> Just (), [lrts, _, defs_f, body_f]) ->
       do
-        -- First, make fresh function constants for all the bound functions,
-        -- using the names bound by body_f and just "F" if those run out
-        let fun_var_names =
-              map fst (fst $ asLambdaList body_f) ++ repeat "F"
-        fun_tps <- asLRTList lrts
-        funs <- zipWithM mrFreshVar fun_var_names fun_tps
-        fun_tms <- mapM mrVarTerm funs
-
-        -- Next, apply the definition function defs_f to our function vars,
-        -- yielding the definitions of the individual letrec-bound functions in
-        -- terms of the new function constants
-        defs_tm <- mrApplyAll defs_f fun_tms
-        defs <- case asNestedPairs defs_tm of
-          Just defs -> return defs
-          Nothing -> throwError (MalformedDefsFun defs_f)
-
-        -- Remember the body associated with each fresh function constant
-        zipWithM_ (\f body ->
-                    lambdaUVarsM body >>= \cl_body ->
-                    mrSetVarInfo f (FunVarInfo cl_body)) funs defs
-
-        -- Finally, apply the body function to our function vars and recursively
+        -- Bind fresh function vars for the letrec-bound functions
+        fun_tms <- mrFreshLetRecVars lrts defs_f
+        -- Apply the body function to our function vars and recursively
         -- normalize the resulting computation
         body_tm <- mrApplyAll body_f fun_tms
         normComp (CompTerm body_tm)
@@ -1271,6 +1297,23 @@ normComp (CompTerm t) =
       | not (containsLetRecM body) ->
         mrApplyAll body args >>= normCompTerm
     -}
+
+    -- Recognize (multiFixM lrts (\ f1 ... fn -> (body1, ..., bodyn))).i args
+    (asTupleSelector ->
+     Just (asApplyAll -> (isGlobalDef "Prelude.multiFixM" -> Just (),
+                          [lrts, defs_f]),
+           i), args)
+      -- Extract out the function \f1 ... fn -> bodyi
+      | Just (vars, body_i) <- synProjFunBody i defs_f ->
+        do
+          -- Bind fresh function variables for the functions f1 ... fn
+          fun_tms <- mrFreshLetRecVars lrts defs_f
+          -- Re-abstract the body
+          body_f <- liftSC2 scLambdaList vars body_i
+          -- Apply body_f to f1 ... fn and the top-level arguments
+          body_tm <- mrApplyAll body_f (fun_tms ++ args)
+          normComp (CompTerm body_tm)
+
 
     -- For an ExtCns, we have to check what sort of variable it is
     -- FIXME: substitute for evars if they have been instantiated
