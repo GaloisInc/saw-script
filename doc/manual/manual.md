@@ -2256,7 +2256,7 @@ flows into.  This is especially useful for dealing with C `union`
 types, as the type information provided by LLVM is imprecise in these
 cases.
 
-We can automate the process of apply pointer casts if we have debug
+We can automate the process of applying pointer casts if we have debug
 information avaliable:
 
 * `llvm_union : SetupValue -> String -> SetupValue`

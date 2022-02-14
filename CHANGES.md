@@ -35,7 +35,7 @@
 
 * A new `llvm_union` function has been added that uses debug
   information to allow users to select fields from `union` types by
-  name. This automates the process of manally applying
+  name. This automates the process of manually applying
   `llvm_cast_pointer` with the type of the selected union field. Just
   as with `llvm_field`, debug symbols are required for `llvm_union` to
   work correctly.
