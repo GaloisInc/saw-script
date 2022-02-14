@@ -42,6 +42,7 @@ import Control.Monad.State
 import qualified Data.BitVector.Sized as BV
 import Data.Maybe (fromMaybe, fromJust)
 
+import qualified Data.Dwarf as Dwarf
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -168,7 +169,7 @@ resolveSetupValueInfo cc env nameEnv v =
     mdMap = Crucible.llvmMetadataMap (ccTypeCtx cc)
 
 -- | Given DWARF type information that is expected to describe a
---   struct, find it's name (if any) and information about its fields.
+--   struct, find its name (if any) and information about its fields.
 --   This procedure handles the common case where a typedef is used to
 --   give a name to an anonymous struct. If a struct both has a direct
 --   name and is included in a typedef, the direct name will be preferred.
@@ -179,7 +180,7 @@ findStruct = loop Nothing
        loop _ _ = Nothing
 
 -- | Given DWARF type information that is expected to describe a
---   union, find it's name (if any) and information about its fields.
+--   union, find its name (if any) and information about its fields.
 --   This procedure handles the common case where a typedef is used to
 --   give a name to an anonymous union. If a union both has a direct
 --   name and is included in a typedef, the direct name will be preferred.
@@ -271,51 +272,29 @@ reverseDebugInfoType = loop Nothing
 --   ad-hoc, and may miss cases.
 reverseBaseTypeInfo :: L.DIBasicType -> Maybe L.Type
 reverseBaseTypeInfo dibt =
--- TODO, find a nicer API than using these magic numbers, taken from:
-    -- https://github.com/llvm-mirror/llvm/blob/release_38/include/llvm/Support/Dwarf.def
-    -- DWARF attribute type encodings.
-    -- HANDLE_DW_ATE(0x01, address)
-    -- HANDLE_DW_ATE(0x02, boolean)
-    -- HANDLE_DW_ATE(0x03, complex_float)
-    -- HANDLE_DW_ATE(0x04, float)
-    -- HANDLE_DW_ATE(0x05, signed)
-    -- HANDLE_DW_ATE(0x06, signed_char)
-    -- HANDLE_DW_ATE(0x07, unsigned)
-    -- HANDLE_DW_ATE(0x08, unsigned_char)
-    -- HANDLE_DW_ATE(0x09, imaginary_float)
-    -- HANDLE_DW_ATE(0x0a, packed_decimal)
-    -- HANDLE_DW_ATE(0x0b, numeric_string)
-    -- HANDLE_DW_ATE(0x0c, edited)
-    -- HANDLE_DW_ATE(0x0d, signed_fixed)
-    -- HANDLE_DW_ATE(0x0e, unsigned_fixed)
-    -- HANDLE_DW_ATE(0x0f, decimal_float)
-    -- HANDLE_DW_ATE(0x10, UTF)
+ case Dwarf.DW_ATE (fromIntegral (L.dibtEncoding dibt)) of
+   Dwarf.DW_ATE_boolean -> Just $ L.PrimType $ L.Integer 1
 
- case L.dibtEncoding dibt of
-   -- boolean
-   0x02 -> Just $ L.PrimType $ L.Integer 1
+   Dwarf.DW_ATE_float ->
+     case L.dibtSize dibt of
+       16  -> Just $ L.PrimType $ L.FloatType $ L.Half
+       32  -> Just $ L.PrimType $ L.FloatType $ L.Float
+       64  -> Just $ L.PrimType $ L.FloatType $ L.Double
+       80  -> Just $ L.PrimType $ L.FloatType $ L.X86_fp80
+       128 -> Just $ L.PrimType $ L.FloatType $ L.Fp128
+       _   -> Nothing
 
-   -- floats
-   -- TODO? is this doing the right thing?
-   0x04 -> case L.dibtSize dibt of
-             16  -> Just $ L.PrimType $ L.FloatType $ L.Half
-             32  -> Just $ L.PrimType $ L.FloatType $ L.Float
-             64  -> Just $ L.PrimType $ L.FloatType $ L.Double
-             80  -> Just $ L.PrimType $ L.FloatType $ L.X86_fp80
-             128 -> Just $ L.PrimType $ L.FloatType $ L.Fp128
-             _   -> Nothing
+   Dwarf.DW_ATE_signed ->
+     Just $ L.PrimType $ L.Integer (fromIntegral (L.dibtSize dibt))
 
-   -- signed int
-   0x05 -> Just $ L.PrimType $ L.Integer (fromIntegral (L.dibtSize dibt))
+   Dwarf.DW_ATE_signed_char ->
+     Just $ L.PrimType $ L.Integer 8
 
-   -- signed_char
-   0x06 -> Just $ L.PrimType $ L.Integer 8
+   Dwarf.DW_ATE_unsigned ->
+     Just $ L.PrimType $ L.Integer (fromIntegral (L.dibtSize dibt))
 
-   -- unsigned int
-   0x07 -> Just $ L.PrimType $ L.Integer (fromIntegral (L.dibtSize dibt))
-
-   -- unsigned_char
-   0x08 -> Just $ L.PrimType $ L.Integer 8
+   Dwarf.DW_ATE_unsigned_char ->
+     Just $ L.PrimType $ L.Integer 8
 
    _ -> Nothing
 
@@ -363,7 +342,7 @@ reverseBaseTypeInfo dibt =
 -- @
 --
 -- Note that the 'biFieldSize's and 'biFieldOffset's are specific to each
--- individual field, while the 'biBitfieldIndex'es and 'biBitfieldType's are
+-- individual field, while the 'biBitfieldByteOffest's and 'biBitfieldType's are
 -- all the same, as the latter two all describe the same bitfield.
 data BitfieldIndex = BitfieldIndex
   { biFieldSize :: Word64
