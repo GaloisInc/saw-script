@@ -176,6 +176,7 @@ library
 
     SAWScript.Yosys
     SAWScript.Yosys.IR
+    SAWScript.Yosys.Theorem
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)

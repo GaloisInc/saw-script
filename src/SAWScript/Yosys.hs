@@ -12,8 +12,8 @@ module SAWScript.Yosys
   ) where
 
 import Control.Lens.TH (makeLenses)
-import Control.Lens (at, view, (^.))
 
+import Control.Lens (at, view, (^.))
 import Control.Monad (forM, foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
@@ -23,11 +23,14 @@ import qualified Data.Tuple as Tuple
 import qualified Data.Maybe as Maybe
 import qualified Data.Foldable as Foldable
 import qualified Data.List as List
+import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Graph as Graph
+
+import qualified Text.URI as URI
 
 import qualified Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.TypedTerm as SC
@@ -357,7 +360,7 @@ moduleToTerm ::
   SC.SharedContext ->
   Map Text SC.Term ->
   Module ->
-  m (SC.Term, C.Type)
+  m (SC.Term, SC.Term, C.Type)
 moduleToTerm sc env m = do
   let ng = moduleNetgraph m
   let inputports = Maybe.mapMaybe
@@ -381,6 +384,11 @@ moduleToTerm sc env m = do
         tp <- liftIO . SC.scBitvector sc . fromIntegral $ length inp
         pure (nm, tp)
     )
+  outputRecordType <- cryptolRecordType sc . Map.fromList =<< forM outputports
+    (\(nm, out) -> do
+        tp <- liftIO . SC.scBitvector sc . fromIntegral $ length out
+        pure (nm, tp)
+    )
   inputRecordEC <- liftIO $ SC.scFreshEC sc "input" inputRecordType
   inputRecord <- liftIO $ SC.scExtCns sc inputRecordEC
   derivedInputs <- forM inputports $ \(nm, inp) -> do
@@ -395,11 +403,12 @@ moduleToTerm sc env m = do
           Just t -> pure (nm, t)
     )
   t <- liftIO $ SC.scAbstractExts sc [inputRecordEC] outputRecord
+  ty <- liftIO $ SC.scFun sc inputRecordType outputRecordType
   let toCryptol (nm, rep) = (C.mkIdent nm, C.tWord . C.tNum $ length rep)
   let cty = C.tFun
         (C.tRec . C.recordFromFields $ toCryptol <$> inputports)
         (C.tRec . C.recordFromFields $ toCryptol <$> outputports)
-  pure (t, cty)
+  pure (t, ty, cty)
 
 -- | Given a Yosys IR and the name of a VHDL module, construct a SAWCore term for that module.
 yosysIRToRecordTerm ::
@@ -413,14 +422,27 @@ yosysIRToRecordTerm sc ir = do
   (termEnv, typeEnv) <- foldM
     (\(termEnv, typeEnv) v -> do
         let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
-        (t, ty) <- moduleToTerm sc termEnv m
-        pure (Map.insert nm t termEnv, Map.insert nm ty typeEnv)
+        (t, ty, cty) <- moduleToTerm sc termEnv m
+        let uri = URI.URI
+              { URI.uriScheme = URI.mkScheme "yosys"
+              , URI.uriAuthority = Left True
+              , URI.uriPath = (False,) <$> mapM URI.mkPathPiece (nm NE.:| [])
+              , URI.uriQuery = []
+              , URI.uriFragment = Nothing
+              }
+        let ni = SC.ImportedName uri [nm]
+        tc <- liftIO $ SC.scConstant' sc ni t ty
+        pure
+          ( Map.insert nm tc termEnv
+          , Map.insert nm cty typeEnv
+          )
     )
     (Map.empty, Map.empty)
     sorted
-  let cty = C.tRec . C.recordFromFields $ first C.mkIdent <$> Map.assocs typeEnv
   record <- cryptolRecord sc termEnv
-  pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) record
+  let cty = C.tRec . C.recordFromFields $ first C.mkIdent <$> Map.assocs typeEnv
+  let tt = SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) record
+  pure tt
 
 --------------------------------------------------------------------------------
 -- ** Functions visible from SAWScript REPL
