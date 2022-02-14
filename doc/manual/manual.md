@@ -2256,6 +2256,18 @@ flows into.  This is especially useful for dealing with C `union`
 types, as the type information provided by LLVM is imprecise in these
 cases.
 
+We can automate the process of apply pointer casts if we have debug
+information avaliable:
+
+* `llvm_union : SetupValue -> String -> SetupValue`
+
+Given a pointer setup value, this attempts to select the named union
+branch and cast the type of the pointer. For this to work, debug
+symbols must be included; moreover, the process of correlating LLVM
+type information with information contained in debug symbols is a bit
+heuristic. If `llvm_union` cannot figure out how to cast a pointer,
+one can fall back on the more manual `llvm_cast_pointer` instead.
+
 
 In the experimental Java verification implementation, the following
 functions can be used to state the equivalent of a combination of
