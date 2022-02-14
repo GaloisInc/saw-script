@@ -486,7 +486,7 @@ vecLt n a f g xs ys =
     (zipWith a a (Bool -> Bool) f n xs ys);
 
 unitCmp : #() -> #() -> Bool -> Bool;
-unitCmp _ _ _ = False;
+unitCmp _ _ k = k;
 
 unitLt : #() -> #() -> Bool;
 unitLt _ _ = False;
