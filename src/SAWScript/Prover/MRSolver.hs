@@ -794,6 +794,13 @@ lambdaUVarsM t = mrUVarCtx >>= \ctx -> liftSC2 scLambdaList ctx t
 piUVarsM :: Term -> MRM Term
 piUVarsM t = mrUVarCtx >>= \ctx -> liftSC2 scPiList ctx t
 
+-- | Instantiate all uvars in a term with fresh 'ExtCns's
+instantiateUVarsM :: TermLike a => a -> MRM a
+instantiateUVarsM a =
+  do ctx <- mrUVarCtx
+     ecs <- mapM (\(nm,tp) -> liftSC2 scFreshEC nm tp >>= liftSC1 scExtCns) ctx
+     substTermLike 0 ecs a
+
 -- | Convert an 'MRVar' to a 'Term', applying it to all the uvars in scope
 mrVarTerm :: MRVar -> MRM Term
 mrVarTerm (MRVar ec) =
@@ -1074,10 +1081,11 @@ mrProvableRaw prop_term =
      debugPrint 2 ("Calling SMT solver with proposition: " ++
                    prettyProp defaultPPOpts prop)
      (smt_res, _) <- liftSC4 SBV.proveUnintSBVIO smt_conf mempty timeout prop
-     debugPrint 2 "Finished calling SMT solver"
      case smt_res of
-       Just _ -> return False
-       Nothing -> return True
+       Just _ ->
+         debugPrint 2 "SMT solver response: not provable" >> return False
+       Nothing ->
+         debugPrint 2 "SMT solver response: provable" >> return True
 
 -- | Test if a Boolean term over the current uvars is provable given the current
 -- assumptions
@@ -1085,9 +1093,8 @@ mrProvable :: Term -> MRM Bool
 mrProvable bool_tm =
   do assumps <- mrAssumptions <$> get
      prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
-     forall_prop <- piUVarsM prop
-     forall_prop' <- liftSC2 scGeneralizeExts (getAllExts forall_prop) forall_prop
-     mrProvableRaw forall_prop'
+     forall_prop <- instantiateUVarsM prop
+     mrProvableRaw forall_prop
 
 -- | Build a Boolean 'Term' stating that two 'Term's are equal. This is like
 -- 'scEq' except that it works on open terms.
