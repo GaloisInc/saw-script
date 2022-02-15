@@ -382,7 +382,14 @@ asEq t =
        _ -> Nothing
 
 asEqTrue :: Recognizer Term Term
-asEqTrue = isGlobalDef "Prelude.EqTrue" @> return
+asEqTrue t =
+  case (isGlobalDef "Prelude.EqTrue" @> return) t of
+    Just x -> Just x
+    Nothing ->
+      do (a,x,y) <- asEq t
+         isGlobalDef "Prelude.Bool" a
+         isGlobalDef "Prelude.True" y
+         return x
 
 asArrayType :: Recognizer Term (Term :*: Term)
 asArrayType = (isGlobalDef "Prelude.Array" @> return) <@> return
