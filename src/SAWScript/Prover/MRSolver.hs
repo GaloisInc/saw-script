@@ -146,7 +146,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
 
-import SAWScript.Proof (termToProp)
+import SAWScript.Proof (termToProp, prettyProp)
 import qualified SAWScript.Prover.SBV as SBV
 
 
@@ -775,7 +775,7 @@ withUVars = helper [] where
   helper vars [] m = m $ reverse vars
   helper vars ((nm,tp):ctx) m =
     substTerm 0 vars tp >>= \tp' ->
-    withUVar nm (Type tp') $ \var -> helper (var:vars) ctx m
+    withUVarLift nm (Type tp') vars $ \var vars' -> helper (var:vars') ctx m
 
 -- | Build 'Term's for all the uvars currently in scope, ordered from least to
 -- most recently bound
@@ -1071,7 +1071,10 @@ mrProvableRaw prop_term =
   do smt_conf <- mrSMTConfig <$> get
      timeout <- mrSMTTimeout <$> get
      prop <- liftSC1 termToProp prop_term
+     debugPrint 2 ("Calling SMT solver with proposition: " ++
+                   prettyProp defaultPPOpts prop)
      (smt_res, _) <- liftSC4 SBV.proveUnintSBVIO smt_conf mempty timeout prop
+     debugPrint 2 "Finished calling SMT solver"
      case smt_res of
        Just _ -> return False
        Nothing -> return True
@@ -1083,7 +1086,8 @@ mrProvable bool_tm =
   do assumps <- mrAssumptions <$> get
      prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
      forall_prop <- piUVarsM prop
-     mrProvableRaw forall_prop
+     forall_prop' <- liftSC2 scGeneralizeExts (getAllExts forall_prop) forall_prop
+     mrProvableRaw forall_prop'
 
 -- | Build a Boolean 'Term' stating that two 'Term's are equal. This is like
 -- 'scEq' except that it works on open terms.
