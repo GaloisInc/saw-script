@@ -798,7 +798,17 @@ piUVarsM t = mrUVarCtx >>= \ctx -> liftSC2 scPiList ctx t
 instantiateUVarsM :: TermLike a => a -> MRM a
 instantiateUVarsM a =
   do ctx <- mrUVarCtx
-     ecs <- mapM (\(nm,tp) -> liftSC2 scFreshEC nm tp >>= liftSC1 scExtCns) ctx
+     -- Remember: the uvar context is outermost to innermost, so we bind
+     -- variables from left to right, substituting earlier ones into the types
+     -- of later ones, but all substitutions are in reverse order, since
+     -- substTerm and friends like innermost bindings first
+     let helper :: [Term] -> [(LocalName,Term)] -> MRM [Term]
+         helper tms [] = return tms
+         helper tms ((nm,tp):vars) =
+           do tp' <- substTerm 0 tms tp
+              tm <- liftSC2 scFreshEC nm tp' >>= liftSC1 scExtCns
+              helper (tm:tms) vars
+     ecs <- helper [] ctx
      substTermLike 0 ecs a
 
 -- | Convert an 'MRVar' to a 'Term', applying it to all the uvars in scope
