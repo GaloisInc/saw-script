@@ -1154,20 +1154,20 @@ ecNotEq a pa x y = not (ecEq a pa x y);
 
 -- Cmp
 ecLt : (a : sort 0) -> PCmp a -> a -> a -> Bool;
-ecLt a pa x y = pa.lt x y;
+ecLt a pa = pa.lt;
 
 ecGt : (a : sort 0) -> PCmp a -> a -> a -> Bool;
 ecGt a pa x y = ecLt a pa y x;
 
 ecLtEq  : (a : sort 0) -> PCmp a -> a -> a -> Bool;
-ecLtEq a pa x y = pa.le x y;
+ecLtEq a pa = pa.le;
 
 ecGtEq  : (a : sort 0) -> PCmp a -> a -> a -> Bool;
 ecGtEq a pa x y = ecLtEq a pa y x;
 
 -- SignedCmp
 ecSLt : (a : sort 0) -> PSignedCmp a -> a -> a -> Bool;
-ecSLt a pa x y = pa.slt x y;
+ecSLt a pa = pa.slt;
 
 -- Logic
 ecAnd : (a : sort 0) -> PLogic a -> a -> a -> a;
