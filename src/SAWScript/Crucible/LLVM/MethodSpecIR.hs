@@ -98,6 +98,7 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
   , anySetupStruct
   , anySetupElem
   , anySetupField
+  , anySetupUnion
   , anySetupNull
   , anySetupGlobal
   , anySetupGlobalInitializer
@@ -173,6 +174,7 @@ type instance MS.HasSetupArray (LLVM _) = 'True
 type instance MS.HasSetupElem (LLVM _) = 'True
 type instance MS.HasSetupField (LLVM _) = 'True
 type instance MS.HasSetupCast (LLVM _) = 'True
+type instance MS.HasSetupUnion (LLVM _) = 'True
 type instance MS.HasSetupGlobal (LLVM _) = 'True
 type instance MS.HasSetupGlobalInitializer (LLVM _) = 'True
 
@@ -581,6 +583,9 @@ anySetupCast val ty = mkAllLLVM (MS.SetupCast () (getAllLLVM val) ty)
 
 anySetupField :: AllLLVM MS.SetupValue -> String -> AllLLVM MS.SetupValue
 anySetupField val field = mkAllLLVM (MS.SetupField () (getAllLLVM val) field)
+
+anySetupUnion :: AllLLVM MS.SetupValue -> String -> AllLLVM MS.SetupValue
+anySetupUnion val uname = mkAllLLVM (MS.SetupUnion () (getAllLLVM val) uname)
 
 anySetupNull :: AllLLVM MS.SetupValue
 anySetupNull = mkAllLLVM (MS.SetupNull ())

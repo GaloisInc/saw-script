@@ -64,8 +64,8 @@ import           Control.Lens.Lens
 import           Control.Lens.Setter
 import           Control.Lens.TH
 import           Control.Exception as X
-import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad
+import           Control.Monad.Except
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_, toList)
 import           Data.List
@@ -192,11 +192,11 @@ mkStructuralMismatch ::
 mkStructuralMismatch _opts cc _sc spec llvmval setupval memTy =
   let tyEnv = MS.csAllocations spec
       nameEnv = MS.csTypeNames spec
-      maybeTy = typeOfSetupValue cc tyEnv nameEnv setupval
+      maybeMsgTy = either (const Nothing) Just $ runExcept (typeOfSetupValue cc tyEnv nameEnv setupval)
   in pure $ StructuralMismatch
               (PP.pretty llvmval)
               (MS.ppSetupValue setupval)
-              maybeTy
+              maybeMsgTy
               memTy
 
 -- | Instead of using 'ppPointsTo', which prints 'SetupValue', translate
@@ -1023,6 +1023,7 @@ matchPointsTos opts sc cc spec prepost = go False []
         SetupElem _ x _            -> setupVars x
         SetupField _ x _           -> setupVars x
         SetupCast _ x _            -> setupVars x
+        SetupUnion _ x _           -> setupVars x
         SetupTerm _                -> Set.empty
         SetupNull _                -> Set.empty
         SetupGlobal _ _            -> Set.empty
@@ -1194,15 +1195,21 @@ matchArg opts sc cc cs prepost actual expectedTy expected =
     (Crucible.LLVMValInt blk off, Crucible.PtrType _, SetupElem () v i) ->
       do let tyenv = MS.csAllocations cs
              nameEnv = MS.csTypeNames cs
-         i' <- resolveSetupElemIndexOrFail cc tyenv nameEnv v i
+         delta <- exceptToFail $ resolveSetupElemOffset cc tyenv nameEnv v i
          off' <- liftIO $ W4.bvSub sym off
-           =<< W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) i')
+           =<< W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) delta)
          matchArg opts sc cc cs prepost (Crucible.LLVMValInt blk off') expectedTy v
-    (_, Crucible.PtrType _, SetupField () v n) ->
+
+    (Crucible.LLVMValInt blk off, Crucible.PtrType _, SetupField () v n) ->
       do let tyenv = MS.csAllocations cs
              nameEnv = MS.csTypeNames cs
-         i <- resolveSetupFieldIndexOrFail cc tyenv nameEnv v n
-         matchArg opts sc cc cs prepost actual expectedTy (SetupElem () v i)
+         fld <- exceptToFail $
+                  do info <- resolveSetupValueInfo cc tyenv nameEnv v
+                     recoverStructFieldInfo cc tyenv nameEnv v info n
+         let delta = fromIntegral $ Crucible.fiOffset fld
+         off' <- liftIO $ W4.bvSub sym off
+                    =<< W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) delta)
+         matchArg opts sc cc cs prepost (Crucible.LLVMValInt blk off') expectedTy v
 
     (_, _, SetupGlobalInitializer () _) -> resolveAndMatch
 
@@ -1478,7 +1485,7 @@ matchPointsToValue opts sc cc spec prepost loc maybe_cond ptr val =
 
      case val of
        ConcreteSizeValue val' ->
-         do memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv val'
+         do memTy <- exceptToFail $ typeOfSetupValue cc tyenv nameEnv val'
             -- In case the types are different (from llvm_points_to_untyped)
             -- then the load type should be determined by the rhs.
             storTy <- Crucible.toStorableType memTy
@@ -1840,14 +1847,14 @@ invalidateMutableAllocs opts sc cc cs =
       _ -> pure Nothing
 
   -- set of (concrete base pointer, size) for each postcondition memory write
-  postPtrs <- Set.fromList <$> catMaybes <$> mapM
+  postPtrs <- Set.fromList <$> catMaybes <$> traverse
     (\case
       LLVMPointsTo _loc _cond ptr val -> case val of
         ConcreteSizeValue val' -> do
           (_, Crucible.LLVMPointer blk _) <- resolveSetupValue opts cc sc cs Crucible.PtrRepr ptr
-          sz <- (return . Crucible.storageTypeSize)
-            =<< Crucible.toStorableType
-            =<< typeOfSetupValue cc (MS.csAllocations cs) (MS.csTypeNames cs) val'
+          memTy <- exceptToFail $
+                     typeOfSetupValue cc (MS.csAllocations cs) (MS.csTypeNames cs) val'
+          sz <- Crucible.storageTypeSize <$> Crucible.toStorableType memTy
           return $ Just (W4.asNat blk, sz)
         SymbolicSizeValue{} -> return Nothing
       LLVMPointsToBitfield _loc ptr fieldName _val -> do
@@ -2063,7 +2070,7 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
 
   let store_op = \mem -> case val of
         ConcreteSizeValue val' -> do
-          memTy <- typeOfSetupValue cc tyenv nameEnv val'
+          memTy <- exceptToFail $ typeOfSetupValue cc tyenv nameEnv val'
           storTy <- Crucible.toStorableType memTy
           case val' of
             SetupTerm tm
@@ -2103,7 +2110,7 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
         let invalidate_op = \mem -> do
               sz <- case val of
                 ConcreteSizeValue val' -> do
-                  memTy <- typeOfSetupValue cc tyenv nameEnv val'
+                  memTy <- exceptToFail $ typeOfSetupValue cc tyenv nameEnv val'
                   storTy <- Crucible.toStorableType memTy
                   W4.bvLit
                     sym
@@ -2353,6 +2360,7 @@ instantiateSetupValue sc s v =
     SetupElem{}              -> return v
     SetupField{}             -> return v
     SetupCast{}              -> return v
+    SetupUnion{}             -> return v
     SetupNull{}              -> return v
     SetupGlobal{}            -> return v
     SetupGlobalInitializer{} -> return v
@@ -2375,7 +2383,7 @@ resolveSetupValueLLVM opts cc sc spec sval =
      mem <- readGlobal (Crucible.llvmMemVar (ccLLVMContext cc))
      let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec
-     memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv sval
+     memTy <- exceptToFail $ typeOfSetupValue cc tyenv nameEnv sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
      lval  <- liftIO $ resolveSetupVal cc mem m tyenv nameEnv sval' `X.catch` handleException opts
      return (memTy, lval)

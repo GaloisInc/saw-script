@@ -1,0 +1,52 @@
+m <- llvm_load_module "test.bc";
+
+let {{
+INC_1 = 0 : [32]
+INC_2 = 1 : [32]
+}};
+
+
+// The argument 'INC' specifies which 'alg' enum to test.
+let inc_spec INC = do {
+
+  stp <- llvm_alloc (llvm_alias "struct.st");
+  llvm_points_to (llvm_field stp "alg") (llvm_term {{ INC }});
+
+  if eval_bool {{ INC == INC_1 }} then
+    do {
+      let p = llvm_union (llvm_field stp "inc_st") "inc_1_st";
+
+      x0 <- llvm_fresh_var "x0" (llvm_int 32);
+      llvm_points_to (llvm_field p "x") (llvm_term x0);
+
+      llvm_execute_func [stp];
+
+      llvm_points_to (llvm_field p "x") (llvm_term {{ x0 + 1 }});
+    }
+  else if eval_bool {{ INC == INC_2 }} then
+    do {
+      let p = llvm_union (llvm_field stp "inc_st") "inc_2_st";
+
+      x0 <- llvm_fresh_var "x0" (llvm_int 32);
+      y0 <- llvm_fresh_var "y0" (llvm_int 32);
+
+      llvm_points_to (llvm_field p "x") (llvm_term x0);
+      llvm_points_to (llvm_field p "y") (llvm_term y0);
+
+      llvm_execute_func [stp];
+
+      llvm_points_to (llvm_field p "x") (llvm_term {{ x0 + 1 }});
+      llvm_points_to (llvm_field p "y") (llvm_term {{ y0 + 1 }});
+    }
+  else return (); // Unknown INC value
+
+  llvm_return (llvm_term {{ 0 : [32] }});
+};
+
+print "Verifying 'inc_1' using 'llvm_verify':";
+llvm_verify m "inc" [] true (inc_spec {{ INC_1 }}) abc;
+print "";
+
+print "Verifying 'inc_2' using 'llvm_verify':";
+llvm_verify m "inc" [] true (inc_spec {{ INC_2 }}) abc;
+print "";

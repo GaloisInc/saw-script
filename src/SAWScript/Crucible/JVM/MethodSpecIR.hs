@@ -59,6 +59,7 @@ type instance MS.HasSetupArray CJ.JVM = 'False
 type instance MS.HasSetupElem CJ.JVM = 'False
 type instance MS.HasSetupField CJ.JVM = 'False
 type instance MS.HasSetupCast CJ.JVM = 'False
+type instance MS.HasSetupUnion CJ.JVM = 'False
 type instance MS.HasSetupGlobalInitializer CJ.JVM = 'False
 
 type instance MS.HasGhostState CJ.JVM = 'False
