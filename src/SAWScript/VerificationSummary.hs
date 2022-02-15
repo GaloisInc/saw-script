@@ -172,9 +172,10 @@ prettyVerificationSummary vs@(VerificationSummary jspecs lspecs thms) =
       prettyTheorems ts =
         sectionWithItems "Theorems Proved or Assumed" (item . prettyTheorem) ts
       prettyTheorem t =
-        vsep [ if Set.null (solverStatsSolvers (thmStats t))
-               then "Axiom:"
-               else "Theorem:"
+        vsep [ case thmSummary t of
+                 ProvedTheorem{}   -> "Theorem:"
+                 TestedTheorem n   -> "Theorem (randomly tested on" <+> viaShow n <+> "samples):"
+                 AdmittedTheorem{} -> "Axiom:"
              , code (indent 2 (ppProp PP.defaultPPOpts (thmProp t)))
              , ""
              ]
