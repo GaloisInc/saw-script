@@ -261,6 +261,7 @@ data NormComp
   | ErrorM Term -- ^ A term @errorM a str@
   | Ite Term Comp Comp -- ^ If-then-else computation
   | Either CompFun CompFun Term -- ^ A sum elimination
+  | MaybeElim Type Comp CompFun Term -- ^ A maybe elimination
   | OrM Comp Comp -- ^ an @orM@ computation
   | ExistsM Type CompFun -- ^ an @existsM@ computation
   | ForallM Type CompFun -- ^ a @forallM@ computation
@@ -363,11 +364,16 @@ instance PrettyInCtx NormComp where
   prettyInCtx (ErrorM str) =
     prettyAppList [return "errorM", return "_", parens <$> prettyInCtx str]
   prettyInCtx (Ite cond t1 t2) =
-    prettyAppList [return "ite", return "_", prettyInCtx cond,
+    prettyAppList [return "ite", return "_", parens <$> prettyInCtx cond,
                    parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
   prettyInCtx (Either f g eith) =
     prettyAppList [return "either", return "_", return "_", return "_",
-                   prettyInCtx f, prettyInCtx g, prettyInCtx eith]
+                   parens <$> prettyInCtx f, parens <$> prettyInCtx g,
+                   parens <$> prettyInCtx eith]
+  prettyInCtx (MaybeElim tp m f mayb) =
+    prettyAppList [return "maybe", parens <$> prettyInCtx tp,
+                   return (parens "CompM _"), parens <$> prettyInCtx m,
+                   parens <$> prettyInCtx f, parens <$> prettyInCtx mayb]
   prettyInCtx (OrM t1 t2) =
     prettyAppList [return "orM", return "_",
                    parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
@@ -419,7 +425,11 @@ instance TermLike NormComp where
     Ite <$> liftTermLike n i cond <*> liftTermLike n i t1 <*> liftTermLike n i t2
   liftTermLike n i (Either f g eith) =
     Either <$> liftTermLike n i f <*> liftTermLike n i g <*> liftTermLike n i eith
-  liftTermLike n i (OrM t1 t2) = OrM <$> liftTermLike n i t1 <*> liftTermLike n i t2
+  liftTermLike n i (MaybeElim tp m f mayb) =
+    MaybeElim <$> liftTermLike n i tp <*> liftTermLike n i m
+              <*> liftTermLike n i f <*> liftTermLike n i mayb
+  liftTermLike n i (OrM t1 t2) =
+    OrM <$> liftTermLike n i t1 <*> liftTermLike n i t2
   liftTermLike n i (ExistsM tp f) =
     ExistsM <$> liftTermLike n i tp <*> liftTermLike n i f
   liftTermLike n i (ForallM tp f) =
@@ -435,6 +445,9 @@ instance TermLike NormComp where
   substTermLike n s (Either f g eith) =
     Either <$> substTermLike n s f <*> substTermLike n s g
     <*> substTermLike n s eith
+  substTermLike n s (MaybeElim tp m f mayb) =
+    MaybeElim <$> substTermLike n s tp <*> substTermLike n s m
+              <*> substTermLike n s f <*> substTermLike n s mayb
   substTermLike n s (OrM t1 t2) =
     OrM <$> substTermLike n s t1 <*> substTermLike n s t2
   substTermLike n s (ExistsM tp f) =
@@ -1294,6 +1307,8 @@ normComp (CompTerm t) =
       return $ Ite cond (CompTerm then_tm) (CompTerm else_tm)
     (isGlobalDef "Prelude.either" -> Just (), [_, _, _, f, g, eith]) ->
       return $ Either (CompFunTerm f) (CompFunTerm g) eith
+    (isGlobalDef "Prelude.maybe" -> Just (), [tp, _, m, f, mayb]) ->
+      return $ MaybeElim (Type tp) (CompTerm m) (CompFunTerm f) mayb
     (isGlobalDef "Prelude.orM" -> Just (), [_, m1, m2]) ->
       return $ OrM (CompTerm m1) (CompTerm m2)
     (isGlobalDef "Prelude.existsM" -> Just (), [tp, _, body_tm]) ->
@@ -1356,6 +1371,8 @@ normBind (Ite cond comp1 comp2) k =
   return $ Ite cond (CompBind comp1 k) (CompBind comp2 k)
 normBind (Either f g t) k =
   return $ Either (compFunComp f k) (compFunComp g k) t
+normBind (MaybeElim tp m f t) k =
+  return $ MaybeElim tp (CompBind m k) (compFunComp f k) t
 normBind (OrM comp1 comp2) k =
   return $ OrM (CompBind comp1 k) (CompBind comp2 k)
 normBind (ExistsM tp f) k = return $ ExistsM tp (compFunComp f k)
@@ -1463,6 +1480,24 @@ mrRefines' m1 (Ite cond2 m2 m2') =
   do not_cond2 <- liftSC1 scNot cond2
      withAssumption cond2 (mrRefines m1 m2)
      withAssumption not_cond2 (mrRefines m1 m2')
+mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
+  do cond <- mrEq' tp e1 e2
+     not_cond <- liftSC1 scNot cond
+     cond_pf <- piUVarsM cond >>= mrFreshVar "pf" >>= mrVarTerm
+     m1' <- applyNormCompFun f1 cond_pf
+     cond_holds <- mrProvable cond
+     if cond_holds then mrRefines m1' m2 else
+       withAssumption cond (mrRefines m1' m2) >>
+       withAssumption not_cond (mrRefines m1 m2)
+mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
+  do cond <- mrEq' tp e1 e2
+     not_cond <- liftSC1 scNot cond
+     cond_pf <- piUVarsM cond >>= mrFreshVar "pf" >>= mrVarTerm
+     m2' <- applyNormCompFun f2 cond_pf
+     cond_holds <- mrProvable cond
+     if cond_holds then mrRefines m1 m2' else
+       withAssumption cond (mrRefines m1 m2') >>
+       withAssumption not_cond (mrRefines m1 m2)
 -- FIXME: handle sum elimination
 -- mrRefines (Either f1 g1 e1) (Either f2 g2 e2) =
 mrRefines' m1 (ForallM tp f2) =
