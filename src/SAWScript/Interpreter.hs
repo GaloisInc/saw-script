@@ -2247,6 +2247,13 @@ primitives = Map.fromList
     Current
     [ "Create a theorem from the type of the given core expression." ]
 
+  , prim "specialize_theorem" "Theorem -> [Term] -> TopLevel Theorem"
+    (pureVal specialize_theorem)
+    Experimental
+    [ "Specialize a theorem by instantiating universal quantifiers"
+    , "with the given list of terms."
+    ]
+
   , prim "get_opt"            "Int -> String"
     (funVal1 get_opt)
     Current

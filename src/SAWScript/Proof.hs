@@ -54,6 +54,7 @@ module SAWScript.Proof
   , proofByTerm
   , constructTheorem
   , validateTheorem
+  , specializeTheorem
 
   , Evidence(..)
   , checkEvidence
@@ -351,6 +352,7 @@ reachableTheorems db roots =
      | otherwise =
          panic "reachableTheorems" ["Could not find theorem with identifier", show (indexValue curr)]
 
+
 -- | Check that the purported theorem is valid.
 --
 --   This checks that the given theorem object does not correspond
@@ -583,6 +585,29 @@ constructTheorem sc db p e loc ploc rsn elapsed =
        , _thmElapsedTime = elapsed
        , _thmSummary  = sy
        }
+
+
+-- | Given a theorem with quantified variables, build a new theorem that
+--   specializes the leading quantifiers with the given terms.
+--   This will fail if the given terms to not match the quantifier structure
+--   of the given theorem.
+specializeTheorem :: SharedContext -> TheoremDB -> Pos -> Text -> Theorem -> [Term] -> IO Theorem
+specializeTheorem _sc _db _loc _rsn thm [] = return thm
+specializeTheorem sc db loc rsn thm ts0 =
+  do let p0 = unProp (_thmProp thm)
+     res <- TC.runTCM (loop p0 ts0) sc Nothing []
+     case res of
+       Left err -> fail (unlines (["specialize_theorem: failed to specialize"] ++ TC.prettyTCError err))
+       Right p' ->
+         constructTheorem sc db (Prop p') (ApplyEvidence thm (map Left ts0)) loc Nothing rsn 0
+
+ where
+  loop p [] = return p
+  loop p (t:ts) =
+    do prop <- liftIO (scSort sc propSort)
+       t' <- TC.typeInferComplete t
+       p' <- TC.applyPiTyped (TC.NotFuncTypeInApp (TC.TypedTerm p prop) t') p t'
+       loop p' ts
 
 -- | Admit the given theorem without evidence.
 --   The provided message allows the user to
