@@ -278,6 +278,11 @@ typeInferCompleteTerm (Un.VecLit _ ts) =
      type_of_tp <- typeInfer tp
      typeInferComplete (ArrayValue (TypedTerm tp type_of_tp) $
                         V.fromList typed_ts)
+typeInferCompleteTerm (Un.BVLit _ []) = throwTCError EmptyVectorLit
+typeInferCompleteTerm (Un.BVLit _ bits) =
+  do tp <- liftTCM scBoolType
+     bit_tms <- mapM (liftTCM scBool) bits
+     typeInferComplete $ ArrayValue tp $ V.fromList bit_tms
 
 typeInferCompleteTerm (Un.BadTerm _) =
   -- Should be unreachable, since BadTerms represent parse errors, that should
