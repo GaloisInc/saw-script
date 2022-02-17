@@ -961,6 +961,8 @@ applyUnintApp sym app0 v =
     VCtorApp i ps xv          -> foldM (applyUnintApp sym) app' =<< traverse force (ps++xv)
                                    where app' = suffixUnintApp ("_" ++ (Text.unpack (identBaseName (primName i)))) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
+    VBVToNat w v'             -> applyUnintApp sym app' v'
+                                   where app' = suffixUnintApp ("_" ++ show w) app0
     TValue (suffixTValue -> Just s)
                               -> return (suffixUnintApp s app0)
     VFun _ _ ->
@@ -1399,6 +1401,7 @@ data ArgTerm
     -- ^ length, element type, list, index
   | ArgTermPairLeft ArgTerm
   | ArgTermPairRight ArgTerm
+  | ArgTermBVToNat Natural ArgTerm
 
 -- | Reassemble a saw-core term from an 'ArgTerm' and a list of parts.
 -- The length of the list should be equal to the number of
@@ -1468,6 +1471,10 @@ reconstructArgTerm atrm sc ts =
           do (x1, ts1) <- parse at1 ts0
              x <- scPairRight sc x1
              return (x, ts1)
+        ArgTermBVToNat w at1 ->
+          do (x1, ts1) <- parse at1 ts0
+             x <- scBvToNat sc w x1
+             pure (x, ts1)
 
     parseList :: [ArgTerm] -> [Term] -> IO ([Term], [Term])
     parseList [] ts0 = return ([], ts0)
@@ -1522,6 +1529,11 @@ mkArgTerm sc ty val =
     (_, VNat n) ->
       do x <- scNat sc n
          pure (ArgTermConst x)
+
+    (_, VBVToNat w v) ->
+      do let w' = fromIntegral w -- FIXME: make w :: Natural to avoid fromIntegral
+         x <- mkArgTerm sc (VVecType w' VBoolType) v
+         pure (ArgTermBVToNat w' x)
 
     _ -> fail $ "could not create uninterpreted function argument of type " ++ show ty
 
