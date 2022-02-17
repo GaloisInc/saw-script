@@ -181,6 +181,12 @@ asConstantNat t =
            _ -> Nothing
 
 -- | An enhanced matcher that can handle higher-order patterns.
+--
+--   This matching procedure will attempt to find an instantiation
+--   for the dangling variables appearing in @pattern@.
+--   The resulting instantation will return terms that are in the same
+--   variable-scoping context as @term@.  In particular, if @term@
+--   is closed, then the terms in the instantiation will also be closed.
 scMatch ::
   SharedContext ->
   Term {- ^ pattern -} ->
