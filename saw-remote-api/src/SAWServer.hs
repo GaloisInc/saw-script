@@ -94,6 +94,7 @@ data CrucibleSetupVal ty e
   -- | RecordValue [(String, CrucibleSetupVal e)]
   | FieldLValue (CrucibleSetupVal ty e) String
   | CastLValue (CrucibleSetupVal ty e) ty
+  | UnionLValue (CrucibleSetupVal ty e) String
   | ElementLValue (CrucibleSetupVal ty e) Int
   | GlobalInitializer String
   | GlobalLValue String

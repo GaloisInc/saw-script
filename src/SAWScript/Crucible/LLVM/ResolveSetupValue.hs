@@ -20,15 +20,15 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
   , resolveSetupVal
   , resolveSetupValBitfield
   , typeOfSetupValue
+  , exceptToFail
   , resolveTypedTerm
   , resolveSAWPred
   , resolveSAWSymBV
-  , resolveSetupFieldIndex
-  , resolveSetupFieldIndexOrFail
+  , recoverStructFieldInfo
+  , resolveSetupValueInfo
   , BitfieldIndex(..)
-  , resolveSetupBitfieldIndex
-  , resolveSetupBitfieldIndexOrFail
-  , resolveSetupElemIndexOrFail
+  , resolveSetupBitfield
+  , resolveSetupElemOffset
   , equalValsPred
   , memArrayToSawCoreTerm
   , scPtrWidthBvNat
@@ -37,11 +37,12 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
 
 import Control.Lens ((^.))
 import Control.Monad
-import qualified Control.Monad.Fail as Fail
+import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.BitVector.Sized as BV
-import Data.Maybe (fromMaybe, listToMaybe, fromJust)
+import Data.Maybe (fromMaybe, fromJust)
 
+import qualified Data.Dwarf as Dwarf
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -85,90 +86,219 @@ import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValu
 import SAWScript.Crucible.LLVM.MethodSpecIR
 import qualified SAWScript.Proof as SP
 
---import qualified SAWScript.LLVMBuiltins as LB
 
 type LLVMVal = Crucible.LLVMVal Sym
 type LLVMPtr wptr = Crucible.LLVMPtr Sym wptr
 
--- | Use the LLVM metadata to determine the struct field index
--- corresponding to the given field name.
+
+
+exceptToFail :: MonadFail m => Except String a -> m a
+exceptToFail m = either fail pure $ runExcept m
+
+-- | Attempt to look up LLVM debug metadata regarding the type of the
+--   given setup value.  This is a best-effort procedure, as the
+--   necessary debug information may not be avaliable. Even if this
+--   procedure succeeds, the returned information may be partial, in
+--   the sense that it may contain `Unknown` nodes.
 resolveSetupValueInfo ::
-  LLVMCrucibleContext wptr            {- ^ crucible context  -} ->
-  Map AllocIndex LLVMAllocSpec {- ^ allocation types  -} ->
+  LLVMCrucibleContext wptr        {- ^ crucible context  -} ->
+  Map AllocIndex LLVMAllocSpec    {- ^ allocation types  -} ->
   Map AllocIndex Crucible.Ident   {- ^ allocation type names -} ->
-  SetupValue (LLVM arch)                      {- ^ pointer to struct -} ->
-  L.Info                          {- ^ field index       -}
+  SetupValue (LLVM arch)          {- ^ pointer value -} ->
+  Except String L.Info            {- ^ debug type info of pointed-to type -}
 resolveSetupValueInfo cc env nameEnv v =
   case v of
     SetupGlobal _ name ->
       case lookup (L.Symbol name) globalTys of
-        Just (L.Alias alias) -> L.Pointer (L.guessAliasInfo mdMap alias)
-        _ -> L.Unknown
+        Just (L.Alias alias) -> pure (L.guessAliasInfo mdMap alias)
+        _ -> throwError $ "Debug info for global name '"++name++"' not found."
 
-    SetupVar i
-      | Just alias <- Map.lookup i nameEnv
-      -> L.Pointer (L.guessAliasInfo mdMap alias)
+    SetupVar i ->
+      case Map.lookup i nameEnv of
+        Just alias -> pure (L.guessAliasInfo mdMap alias)
+        Nothing    ->
+           -- TODO? is this a panic situation?
+           throwError $ "Type information for local allocation value not found: " ++ show i
 
-    SetupCast () _ (L.Alias alias)
-      -> L.Pointer (L.guessAliasInfo mdMap alias)
+    SetupCast () _ (L.Alias alias) -> pure (L.guessAliasInfo mdMap alias)
 
     SetupField () a n ->
-       fromMaybe L.Unknown $
-       do L.Pointer (L.Structure xs) <- return (resolveSetupValueInfo cc env nameEnv a)
-          listToMaybe [L.Pointer i | L.StructFieldInfo{L.sfiName = n', L.sfiInfo = i} <- xs, n == n' ]
+      do i <- resolveSetupValueInfo cc env nameEnv a
+         case findStruct i of
+           Nothing ->
+             throwError $ unlines $
+               [ "Unable to resolve struct field name: '" ++ n ++ "'"
+               , "Could not resolve setup value debug information into a struct type."
+               , case i of
+                   L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
+                   _ -> show i
+               ]
+           Just (snm, xs) ->
+             case [ i' | L.StructFieldInfo{L.sfiName = n', L.sfiInfo = i' } <- xs, n == n' ] of
+               [] -> throwError $ unlines $
+                       [ "Unable to resolve struct field name: '" ++ n ++ "'"] ++
+                       [ "Struct with name '" ++ str ++ "' found."  | Just str <- [snm] ] ++
+                       [ "The following field names were found for this struct:" ] ++
+                       map ("- "++) [n' | L.StructFieldInfo{L.sfiName = n'} <- xs]
+               i':_ -> pure i'
 
-    _ -> L.Unknown
+    SetupUnion () a u ->
+      do i <- resolveSetupValueInfo cc env nameEnv a
+         case findUnion i of
+           Nothing ->
+             throwError $ unlines $
+               [ "Unable to resolve union field name: '" ++ u ++ "'"
+               , "Could not resolve setup value debug information into a union type."
+               , case i of
+                   L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
+                   _ -> show i
+               ]
+           Just (unm, xs) ->
+             case [ i' | L.UnionFieldInfo{L.ufiName = n', L.ufiInfo = i'} <- xs, u == n' ] of
+               [] -> throwError $ unlines $
+                       [ "Unable to resolve union field name: '" ++ u ++ "'"] ++
+                       [ "Union with name '" ++ str ++ "' found."  | Just str <- [unm] ] ++
+                       [ "The following field names were found for this union:" ] ++
+                       map ("- "++) [n' | L.UnionFieldInfo{L.ufiName = n'} <- xs]
+               i':_ -> pure i'
+
+    _ -> pure L.Unknown
+
   where
     globalTys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals (ccLLVMModuleAST cc) ]
     mdMap = Crucible.llvmMetadataMap (ccTypeCtx cc)
 
--- | Use the LLVM metadata to determine the struct field index
--- corresponding to the given field name.
-resolveSetupFieldIndex ::
-  LLVMCrucibleContext arch {- ^ crucible context  -} ->
-  Map AllocIndex LLVMAllocSpec {- ^ allocation types  -} ->
-  Map AllocIndex Crucible.Ident   {- ^ allocation type names -} ->
-  SetupValue (LLVM arch) {- ^ pointer to struct -} ->
-  String                          {- ^ field name        -} ->
-  Maybe Int                       {- ^ field index       -}
-resolveSetupFieldIndex cc env nameEnv v n =
-  case resolveSetupValueInfo cc env nameEnv v of
-    L.Pointer (L.Structure xs) ->
-      case [o | L.StructFieldInfo{L.sfiName = n', L.sfiOffset = o} <- xs, n == n' ] of
-        [] -> Nothing
-        o:_ ->
-          do Crucible.PtrType symTy <- typeOfSetupValue cc env nameEnv v
-             Crucible.StructType si <-
-               let ?lc = lc
-               in either (\_ -> Nothing) Just $ Crucible.asMemType symTy
-             V.findIndex (\fi -> Crucible.bytesToBits (Crucible.fiOffset fi) == fromIntegral o) (Crucible.siFields si)
+-- | Given DWARF type information that is expected to describe a
+--   struct, find its name (if any) and information about its fields.
+--   This procedure handles the common case where a typedef is used to
+--   give a name to an anonymous struct. If a struct both has a direct
+--   name and is included in a typedef, the direct name will be preferred.
+findStruct :: L.Info -> Maybe (Maybe String, [L.StructFieldInfo])
+findStruct = loop Nothing
+ where loop _  (L.Typedef nm i)     = loop (Just nm) i
+       loop nm (L.Structure nm' xs) = Just (nm' <> nm, xs)
+       loop _ _ = Nothing
 
-    _ -> Nothing
-  where
-    lc = ccTypeCtx cc
+-- | Given DWARF type information that is expected to describe a
+--   union, find its name (if any) and information about its fields.
+--   This procedure handles the common case where a typedef is used to
+--   give a name to an anonymous union. If a union both has a direct
+--   name and is included in a typedef, the direct name will be preferred.
+findUnion :: L.Info -> Maybe (Maybe String, [L.UnionFieldInfo])
+findUnion = loop Nothing
+  where loop _  (L.Typedef nm i) = loop (Just nm) i
+        loop nm (L.Union nm' xs) = Just (nm' <> nm, xs)
+        loop _ _ = Nothing
 
-resolveSetupFieldIndexOrFail ::
-  Fail.MonadFail m =>
-  LLVMCrucibleContext arch {- ^ crucible context  -} ->
-  Map AllocIndex LLVMAllocSpec {- ^ allocation types  -} ->
-  Map AllocIndex Crucible.Ident   {- ^ allocation type names -} ->
-  SetupValue (LLVM arch) {- ^ pointer to struct -} ->
-  String                          {- ^ field name        -} ->
-  m Int                           {- ^ field index       -}
-resolveSetupFieldIndexOrFail cc env nameEnv v n =
-  case resolveSetupFieldIndex cc env nameEnv v n of
-    Just i  -> pure i
+-- | Given LLVM debug information about a setup value, attempt to
+--   find the corresponding @FieldInfo@ structure for the named
+--   field.
+recoverStructFieldInfo ::
+  LLVMCrucibleContext arch      {- ^ crucible context  -} ->
+  Map AllocIndex LLVMAllocSpec  {- ^ allocation types  -} ->
+  Map AllocIndex Crucible.Ident {- ^ allocation type names -} ->
+  SetupValue (LLVM arch)        {- ^ the value to examine -} ->
+  L.Info                        {- ^ extracted LLVM debug information about the type of the value -} ->
+  String                        {- ^ the name of the field -} ->
+  Except String Crucible.FieldInfo
+recoverStructFieldInfo cc env nameEnv v info n =
+  case findStruct info of
     Nothing ->
-      let msg = "Unable to resolve field name: " ++ show n
-      in
-        fail $
-          -- Show the user what fields were available (if any)
-          case resolveSetupValueInfo cc env nameEnv v of
-            L.Pointer (L.Structure xs) -> unlines $
-              [ msg
-              , "The following field names were found for this struct:"
-              ] ++ map ("- "++) [n' | L.StructFieldInfo{L.sfiName = n'} <- xs]
-            _ -> unlines [msg, "No field names were found for this struct"]
+      throwError $ unlines $
+        [ "Unable to resolve struct field name: '" ++ show n ++ "'"
+        , "Could not resolve setup value debug information into a struct type."
+        , case info of
+            L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
+            _ -> show info
+        ]
+    Just (snm,xs) ->
+      case [o | L.StructFieldInfo{L.sfiName = n', L.sfiOffset = o} <- xs, n == n' ] of
+        [] -> throwError $ unlines $
+                [ "Unable to resolve struct field name: '" ++ n ++ "'"] ++
+                [ "Struct with name '" ++ str ++ "' found."  | Just str <- [snm] ] ++
+                [ "The following field names were found for this struct:" ] ++
+                map ("- "++) [n' | L.StructFieldInfo{L.sfiName = n'} <- xs]
+        o:_ ->
+          do vty <- typeOfSetupValue cc env nameEnv v
+             case do Crucible.PtrType symTy <- pure vty
+                     Crucible.StructType si <- let ?lc = ccTypeCtx cc
+                                        in either (\_ -> Nothing) Just $ Crucible.asMemType symTy
+                     V.find (\fi -> Crucible.bytesToBits (Crucible.fiOffset fi) == fromIntegral o)
+                            (Crucible.siFields si)
+               of
+               Nothing ->
+                 throwError $ unlines $
+                   [ "Found struct field name: '" ++ n ++ "'"] ++
+                   [ "in struct with name '" ++ str ++ "'."  | Just str <- [snm] ] ++
+                   [ "However, the offset of this field found in the debug information could not"
+                   , "be correlated with the computed LLVM type of the setup value:"
+                   , show vty
+                   ]
+               Just fld -> return fld
+
+-- | Attempt to turn type information from DWARF debug data back into
+--   the corresponding LLVM type. This is a best-effort procedure, as
+--   we may have to make educated guesses about names, and there might
+--   not be enough data to succeed.
+reverseDebugInfoType :: L.Info -> Maybe L.Type
+reverseDebugInfoType = loop Nothing
+  where
+    loop n i = case i of
+      L.Unknown ->
+        case n of
+          Just nm -> Just (L.Alias (L.Ident nm))
+          Nothing -> Nothing
+
+      L.Pointer i' -> L.PtrTo <$> loop Nothing i'
+
+      L.Union n' _ ->
+        case n' <> n of
+          Just nm -> Just (L.Alias (L.Ident ("union."++ nm)))
+          Nothing -> Nothing
+
+      L.Structure n' xs ->
+        case n' <> n of
+          Just nm -> Just (L.Alias (L.Ident ("struct." ++ nm)))
+          Nothing -> L.Struct <$> mapM (reverseDebugInfoType . L.sfiInfo) xs
+
+      L.Typedef nm x -> loop (Just nm) x
+
+      L.ArrInfo x -> L.Array 0 <$> loop Nothing x
+
+      L.BaseType _nm bt -> reverseBaseTypeInfo bt
+
+-- | Attempt to turn DWARF basic type information back into
+--   LLVM type syntax.  This process is currently rather
+--   ad-hoc, and may miss cases.
+reverseBaseTypeInfo :: L.DIBasicType -> Maybe L.Type
+reverseBaseTypeInfo dibt =
+ case Dwarf.DW_ATE (fromIntegral (L.dibtEncoding dibt)) of
+   Dwarf.DW_ATE_boolean -> Just $ L.PrimType $ L.Integer 1
+
+   Dwarf.DW_ATE_float ->
+     case L.dibtSize dibt of
+       16  -> Just $ L.PrimType $ L.FloatType $ L.Half
+       32  -> Just $ L.PrimType $ L.FloatType $ L.Float
+       64  -> Just $ L.PrimType $ L.FloatType $ L.Double
+       80  -> Just $ L.PrimType $ L.FloatType $ L.X86_fp80
+       128 -> Just $ L.PrimType $ L.FloatType $ L.Fp128
+       _   -> Nothing
+
+   Dwarf.DW_ATE_signed ->
+     Just $ L.PrimType $ L.Integer (fromIntegral (L.dibtSize dibt))
+
+   Dwarf.DW_ATE_signed_char ->
+     Just $ L.PrimType $ L.Integer 8
+
+   Dwarf.DW_ATE_unsigned ->
+     Just $ L.PrimType $ L.Integer (fromIntegral (L.dibtSize dibt))
+
+   Dwarf.DW_ATE_unsigned_char ->
+     Just $ L.PrimType $ L.Integer 8
+
+   _ -> Nothing
+
+
 
 -- | Information about a field within a bitfield in a struct. For example,
 -- given the following C struct:
@@ -190,7 +320,7 @@ resolveSetupFieldIndexOrFail cc env nameEnv v n =
 -- 'BitfieldIndex'
 --   { 'biFieldSize' = 1
 --   , 'biFieldOffset' = 0
---   , 'biBitfieldIndex' = 4
+--   , 'biBitfieldByteOffset' = 4
 --   , 'biBitfieldType' = i8
 --   }
 --
@@ -198,7 +328,7 @@ resolveSetupFieldIndexOrFail cc env nameEnv v n =
 -- 'BitfieldIndex'
 --   { 'biFieldSize' = 2
 --   , 'biFieldOffset' = 1
---   , 'biBitfieldIndex' = 4
+--   , 'biBitfieldByteOffset' = 4
 --   , 'biBitfieldType' = i8
 --   }
 --
@@ -206,13 +336,13 @@ resolveSetupFieldIndexOrFail cc env nameEnv v n =
 -- 'BitfieldIndex'
 --   { 'biFieldSize' = 1
 --   , 'biFieldOffset' = 3
---   , 'biBitfieldIndex' = 4
+--   , 'biBitfieldByteOffset' = 4
 --   , 'biBitfieldType' = i8
 --   }
 -- @
 --
 -- Note that the 'biFieldSize's and 'biFieldOffset's are specific to each
--- individual field, while the 'biBitfieldIndex'es and 'biBitfieldType's are
+-- individual field, while the 'biBitfieldByteOffest's and 'biBitfieldType's are
 -- all the same, as the latter two all describe the same bitfield.
 data BitfieldIndex = BitfieldIndex
   { biFieldSize :: Word64
@@ -220,147 +350,145 @@ data BitfieldIndex = BitfieldIndex
   , biFieldOffset :: Word64
     -- ^ The offset (in bits) of the field from the start of the bitfield,
     --   counting from the least significant bit.
-  , biBitfieldIndex :: Int
-    -- ^ The struct field index corresponding to the overall bitfield, where
-    --   the index represents the number of bytes the bitfield is from the
-    --   start of the struct.
+  , biFieldByteOffset :: Crucible.Bytes
+    -- ^ The offset (in bytes) of the struct member in which this bitfield resides.
   , biBitfieldType :: Crucible.MemType
     -- ^ The 'Crucible.MemType' of the overall bitfield.
   } deriving Show
 
--- | Returns @'Just' bi@ if SAW is able to find a field within a bitfield with
--- the supplied name in the LLVM debug metadata. Returns 'Nothing' otherwise.
-resolveSetupBitfieldIndex ::
+-- | Given a pointer setup value and the name of a bitfield, attempt to
+--   determine were in the struct that bitfield resides by examining
+--   DWARF type metadata.
+resolveSetupBitfield ::
   LLVMCrucibleContext arch {- ^ crucible context  -} ->
   Map AllocIndex LLVMAllocSpec {- ^ allocation types  -} ->
   Map AllocIndex Crucible.Ident {- ^ allocation type names -} ->
   SetupValue (LLVM arch) {- ^ pointer to struct -} ->
   String {- ^ field name -} ->
-  Maybe BitfieldIndex {- ^ information about bitfield -}
-resolveSetupBitfieldIndex cc env nameEnv v n =
-  case resolveSetupValueInfo cc env nameEnv v of
-    L.Pointer (L.Structure xs)
-      |  (fieldOffsetStartingFromStruct, bfInfo):_ <-
-           [ (fieldOffsetStartingFromStruct, bfInfo)
-           | L.StructFieldInfo
-               { L.sfiName = n'
-               , L.sfiOffset = fieldOffsetStartingFromStruct
-               , L.sfiBitfield = Just bfInfo
-               } <- xs
-           , n == n'
+  Except String BitfieldIndex {- ^ information about bitfield -}
+resolveSetupBitfield cc env nameEnv v n =
+  do info <- resolveSetupValueInfo cc env nameEnv v
+     case findStruct info of
+       Nothing ->
+         throwError $ unlines $
+           [ "Unable to resolve struct bitfield name: '" ++ show n ++ "'"
+           , "Could not resolve setup value debug information into a struct type."
+           , case info of
+               L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
+               _ -> show info
            ]
-      -> do Crucible.PtrType symTy <- typeOfSetupValue cc env nameEnv v
-            Crucible.StructType si <-
-              let ?lc = lc
-              in either (\_ -> Nothing) Just $ Crucible.asMemType symTy
-            bfIndex <-
-              V.findIndex (\fi -> Crucible.bytesToBits (Crucible.fiOffset fi)
-                                          == fromIntegral (L.biBitfieldOffset bfInfo))
-                          (Crucible.siFields si)
-            let bfType = Crucible.fiType $ Crucible.siFields si V.! bfIndex
-                fieldOffsetStartingFromBitfield =
-                  fieldOffsetStartingFromStruct - L.biBitfieldOffset bfInfo
-            pure $ BitfieldIndex { biFieldSize     = L.biFieldSize bfInfo
-                                 , biFieldOffset   = fieldOffsetStartingFromBitfield
-                                 , biBitfieldIndex = bfIndex
-                                 , biBitfieldType  = bfType
-                                 }
+       Just (snm, xs) ->
+         case [ (fieldOffsetStartingFromStruct, bfInfo) | L.StructFieldInfo
+                     { L.sfiName = n'
+                     , L.sfiOffset = fieldOffsetStartingFromStruct
+                     , L.sfiBitfield = Just bfInfo
+                     } <- xs, n == n' ] of
 
-    _ -> Nothing
-  where
-    lc = ccTypeCtx cc
+           [] -> throwError $ unlines $
+                   [ "Unable to resolve struct bitfield name: '" ++ n ++ "'"] ++
+                   [ "Struct with name '" ++ str ++ "' found."  | Just str <- [snm] ] ++
+                   [ "The following bitfield names were found for this struct:" ] ++
+                   map ("- "++) [n' | L.StructFieldInfo{L.sfiName = n', L.sfiBitfield = Just{}} <- xs]
 
--- | Like 'resolveSetupBitfieldIndex', but if SAW cannot find the supplied
--- name, fail instead of returning 'Nothing'.
-resolveSetupBitfieldIndexOrFail ::
-  Fail.MonadFail m =>
-  LLVMCrucibleContext arch {- ^ crucible context  -} ->
-  Map AllocIndex LLVMAllocSpec {- ^ allocation types  -} ->
+           ((fieldOffsetStartingFromStruct, bfInfo):_) ->
+             do memTy <- typeOfSetupValue cc env nameEnv v
+                case do Crucible.PtrType symTy <- pure memTy
+                        Crucible.StructType si <- let ?lc = ccTypeCtx cc
+                                                   in either (\_ -> Nothing) Just $ Crucible.asMemType symTy
+                        fi <- V.find (\fi -> Crucible.bytesToBits (Crucible.fiOffset fi)
+                                                      == fromIntegral (L.biBitfieldOffset bfInfo))
+                                      (Crucible.siFields si)
+                        let fieldOffsetStartingFromBitfield =
+                              fieldOffsetStartingFromStruct - L.biBitfieldOffset bfInfo
+                        pure $ BitfieldIndex { biFieldSize       = L.biFieldSize bfInfo
+                                             , biFieldOffset     = fieldOffsetStartingFromBitfield
+                                             , biBitfieldType    = Crucible.fiType fi
+                                             , biFieldByteOffset = Crucible.fiOffset fi
+                                             }
+                  of
+                  Nothing ->
+                    throwError $ unlines $
+                      [ "Found struct field name: '" ++ n ++ "'"] ++
+                      [ "in struct with name '" ++ str ++ "'."  | Just str <- [snm] ] ++
+                      [ "However, the offset of this field found in the debug information could not"
+                      , "be correlated with the computed LLVM type of the setup value, or the field"
+                      , "is not a bitfield."
+                      , show memTy
+                      ]
+
+                  Just bfi -> return bfi
+
+-- | Attempt to compute the @MemType@ of a setup value.
+typeOfSetupValue :: forall arch.
+  LLVMCrucibleContext arch      {- ^ crucible context  -} ->
+  Map AllocIndex LLVMAllocSpec  {- ^ allocation types  -} ->
   Map AllocIndex Crucible.Ident {- ^ allocation type names -} ->
-  SetupValue (LLVM arch) {- ^ pointer to struct -} ->
-  String {- ^ field name -} ->
-  m BitfieldIndex {- ^ field index -}
-resolveSetupBitfieldIndexOrFail cc env nameEnv v n =
-  case resolveSetupBitfieldIndex cc env nameEnv v n of
-    Just i  -> pure i
-    Nothing ->
-      let msg = "Unable to resolve field name: " ++ show n
-      in
-        fail $
-          -- Show the user what fields were available (if any)
-          case resolveSetupValueInfo cc env nameEnv v of
-            L.Pointer (L.Structure xs) -> unlines $
-              [ msg
-              , "The following bitfield names were found for this struct:"
-              ] ++ map ("- "++) [n' | L.StructFieldInfo{ L.sfiName = n'
-                                                       , L.sfiBitfield = Just{}
-                                                       } <- xs]
-            _ -> unlines [msg, "No field names were found for this struct"]
-
-typeOfSetupValue ::
-  Fail.MonadFail m =>
-  LLVMCrucibleContext arch ->
-  Map AllocIndex LLVMAllocSpec ->
-  Map AllocIndex Crucible.Ident ->
-  SetupValue (LLVM arch) ->
-  m Crucible.MemType
+  SetupValue (LLVM arch)        {- ^ value to compute the type of -} ->
+  Except String Crucible.MemType
 typeOfSetupValue cc env nameEnv val =
-  do let ?lc = ccTypeCtx cc
-     typeOfSetupValue' cc env nameEnv val
-
-typeOfSetupValue' :: forall m arch.
-  Fail.MonadFail m =>
-  LLVMCrucibleContext arch ->
-  Map AllocIndex LLVMAllocSpec ->
-  Map AllocIndex Crucible.Ident ->
-  SetupValue (LLVM arch) ->
-  m Crucible.MemType
-typeOfSetupValue' cc env nameEnv val =
   case val of
     SetupVar i ->
       case Map.lookup i env of
-        Nothing -> fail ("typeOfSetupValue: Unresolved prestate variable:" ++ show i)
+        Nothing -> throwError ("typeOfSetupValue: Unresolved prestate variable:" ++ show i)
         Just spec ->
           return (Crucible.PtrType (Crucible.MemType (spec ^. allocSpecType)))
+
     SetupTerm tt ->
       case ttType tt of
         TypedTermSchema (Cryptol.Forall [] [] ty) ->
           case toLLVMType dl (Cryptol.evalValType mempty ty) of
-            Left err -> fail (toLLVMTypeErrToString err)
+            Left err -> throwError (toLLVMTypeErrToString err)
             Right memTy -> return memTy
-        tp -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
-                             , "instead got:"
-                             , show (ppTypedTermType tp)
-                             ]
-    SetupCast () v ltp ->
-      do memTy <- typeOfSetupValue cc env nameEnv v
-         case memTy of
-           Crucible.PtrType _symTy ->
-             case let ?lc = lc in Crucible.liftMemType (L.PtrTo ltp) of
-               Left err -> fail $ unlines [ "typeOfSetupValue: invalid type " ++ show ltp
-                                          , "Details:"
-                                          , err
-                                          ]
-               Right mt -> return mt
+        tp -> throwError $ unlines
+                [ "typeOfSetupValue: expected monomorphic term"
+                , "instead got:"
+                , show (ppTypedTermType tp)
+                ]
 
-           _ -> fail $ unwords $
-                  [ "typeOfSetupValue: tried to cast the type of a non-pointer value"
-                  , "actual type of value: " ++ show memTy
-                  ]
     SetupStruct () packed vs ->
       do memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
          let si = Crucible.mkStructInfo dl packed memTys
          return (Crucible.StructType si)
-    SetupArray () [] -> fail "typeOfSetupValue: invalid empty llvm_array_value"
+
+    SetupArray () [] -> throwError "typeOfSetupValue: invalid empty llvm_array_value"
     SetupArray () (v : vs) ->
       do memTy <- typeOfSetupValue cc env nameEnv v
          _memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
          -- TODO: check that all memTys are compatible with memTy
          return (Crucible.ArrayType (fromIntegral (length (v:vs))) memTy)
-    SetupField () v n -> do
-      i <- resolveSetupFieldIndexOrFail cc env nameEnv v n
-      typeOfSetupValue' cc env nameEnv (SetupElem () v i)
-    SetupElem () v i ->
+
+    SetupField () v n ->
+      do info <- resolveSetupValueInfo cc env nameEnv v
+         fld <- recoverStructFieldInfo cc env nameEnv v info n
+         pure $ Crucible.PtrType $ Crucible.MemType $ Crucible.fiType fld
+
+    SetupUnion () v n ->
+      do info <- resolveSetupValueInfo cc env nameEnv (SetupUnion () v n)
+         case reverseDebugInfoType info of
+           Nothing -> throwError $ unlines
+                        [ "Could not determine LLVM type from computed debug type information:"
+                        , show info
+                        ]
+           Just ltp -> typeOfSetupValue cc env nameEnv (SetupCast () v ltp)
+
+    SetupCast () v ltp ->
+      do memTy <- typeOfSetupValue cc env nameEnv v
+         case memTy of
+           Crucible.PtrType _symTy ->
+             case let ?lc = lc in Crucible.liftMemType (L.PtrTo ltp) of
+               Left err -> throwError $ unlines
+                             [ "typeOfSetupValue: invalid type " ++ show ltp
+                             , "Details:"
+                             , err
+                             ]
+               Right mt -> pure mt
+
+           _ -> throwError $ unwords $
+                  [ "typeOfSetupValue: tried to cast the type of a non-pointer value"
+                  , "actual type of value: " ++ show memTy
+                  ]
+
+    SetupElem () v i -> do
       do memTy <- typeOfSetupValue cc env nameEnv v
          let msg = "typeOfSetupValue: llvm_elem requires pointer to struct or array, found " ++ show memTy
          case memTy of
@@ -370,7 +498,7 @@ typeOfSetupValue' cc env nameEnv val =
                  case memTy' of
                    Crucible.ArrayType n memTy''
                      | fromIntegral i <= n -> return (Crucible.PtrType (Crucible.MemType memTy''))
-                     | otherwise -> fail $ unwords $
+                     | otherwise -> throwError $ unwords $
                          [ "typeOfSetupValue: array type index out of bounds"
                          , "(index: " ++ show i ++ ")"
                          , "(array length: " ++ show n ++ ")"
@@ -378,16 +506,18 @@ typeOfSetupValue' cc env nameEnv val =
                    Crucible.StructType si ->
                      case Crucible.siFieldInfo si i of
                        Just fi -> return (Crucible.PtrType (Crucible.MemType (Crucible.fiType fi)))
-                       Nothing -> fail $ "typeOfSetupValue: struct type index out of bounds: " ++ show i
-                   _ -> fail msg
-               Left err -> fail (unlines [msg, "Details:", err])
-           _ -> fail msg
+                       Nothing -> throwError $ "typeOfSetupValue: struct type index out of bounds: " ++ show i
+                   _ -> throwError msg
+               Left err -> throwError (unlines [msg, "Details:", err])
+           _ -> throwError msg
+
     SetupNull () ->
       -- We arbitrarily set the type of NULL to void*, because a) it
       -- is memory-compatible with any type that NULL can be used at,
       -- and b) it prevents us from doing a type-safe dereference
       -- operation.
       return (Crucible.PtrType Crucible.VoidType)
+
     -- A global and its initializer have the same type.
     SetupGlobal () name -> do
       let m = ccLLVMModuleAST cc
@@ -395,37 +525,42 @@ typeOfSetupValue' cc env nameEnv val =
                 [ (L.decName d, L.decFunType d) | d <- L.modDeclares m ] ++
                 [ (L.defName d, L.defFunType d) | d <- L.modDefines m ]
       case lookup (L.Symbol name) tys of
-        Nothing -> fail $ "typeOfSetupValue: unknown global " ++ show name
+        Nothing -> throwError $ "typeOfSetupValue: unknown global " ++ show name
         Just ty ->
           case let ?lc = lc in Crucible.liftType ty of
-            Left err -> fail $ unlines [ "typeOfSetupValue: invalid type " ++ show ty
-                                       , "Details:"
-                                       , err
-                                       ]
+            Left err -> throwError $ unlines
+                          [ "typeOfSetupValue: invalid type " ++ show ty
+                          , "Details:"
+                          , err
+                          ]
             Right symTy -> return (Crucible.PtrType symTy)
+
     SetupGlobalInitializer () name -> do
       case Map.lookup (L.Symbol name) (Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
         Just (g, _) ->
           case let ?lc = lc in Crucible.liftMemType (L.globalType g) of
-            Left err -> fail $ unlines [ "typeOfSetupValue: invalid type " ++ show (L.globalType g)
-                                       , "Details:"
-                                       , err
-                                       ]
+            Left err -> throwError $ unlines
+                          [ "typeOfSetupValue: invalid type " ++ show (L.globalType g)
+                          , "Details:"
+                          , err
+                          ]
             Right memTy -> return memTy
-        Nothing             -> fail $ "resolveSetupVal: global not found: " ++ name
+        Nothing -> throwError $ "resolveSetupVal: global not found: " ++ name
   where
     lc = ccTypeCtx cc
     dl = Crucible.llvmDataLayout lc
 
-resolveSetupElemIndexOrFail ::
-  Fail.MonadFail m =>
-  LLVMCrucibleContext arch {- ^ crucible context  -} ->
-  Map AllocIndex LLVMAllocSpec {- ^ allocation types  -} ->
+-- | Given a pointer setup value that points to an aggregate
+--   type (struct or array), attempt to compute  the byte offset of
+--   the nth element of that aggregate structure.
+resolveSetupElemOffset ::
+  LLVMCrucibleContext arch        {- ^ crucible context  -} ->
+  Map AllocIndex LLVMAllocSpec    {- ^ allocation types  -} ->
   Map AllocIndex Crucible.Ident   {- ^ allocation type names -} ->
-  SetupValue (LLVM arch) {- ^ base pointer -} ->
+  SetupValue (LLVM arch)          {- ^ base pointer -} ->
   Int                             {- ^ element index -} ->
-  m Crucible.Bytes                {- ^ element offset -}
-resolveSetupElemIndexOrFail cc env nameEnv v i = do
+  Except String Crucible.Bytes    {- ^ element offset -}
+resolveSetupElemOffset cc env nameEnv v i = do
   do memTy <- typeOfSetupValue cc env nameEnv v
      let msg = "resolveSetupVal: llvm_elem requires pointer to struct or array, found " ++ show memTy
      case memTy of
@@ -438,10 +573,10 @@ resolveSetupElemIndexOrFail cc env nameEnv v i = do
                Crucible.StructType si ->
                  case Crucible.siFieldOffset si i of
                    Just d -> return d
-                   Nothing -> fail $ "resolveSetupVal: struct type index out of bounds: " ++ show (i, memTy')
-               _ -> fail msg
-           Left err -> fail $ unlines [msg, "Details:", err]
-       _ -> fail msg
+                   Nothing -> throwError $ "resolveSetupVal: struct type index out of bounds: " ++ show (i, memTy')
+               _ -> throwError msg
+           Left err -> throwError $ unlines [msg, "Details:", err]
+       _ -> throwError msg
   where
     lc = ccTypeCtx cc
     dl = Crucible.llvmDataLayout lc
@@ -455,7 +590,7 @@ newtype W4EvalTactic = W4EvalTactic { doW4Eval :: Bool }
   deriving (Eq, Ord, Show)
 
 -- | Translate a SetupValue into a Crucible LLVM value, resolving
--- references
+--   references.
 resolveSetupVal :: forall arch.
   (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
@@ -479,6 +614,9 @@ resolveSetupVal cc mem env tyenv nameEnv val =
     -- NB, SetupCast values should always be pointers. Pointer casts have no
     -- effect on the actual computed LLVMVal.
     SetupCast () v _lty -> resolveSetupVal cc mem env tyenv nameEnv v
+    -- NB, SetupUnion values should always be pointers. Pointer casts have no
+    -- effect on the actual computed LLVMVal.
+    SetupUnion () v _n -> resolveSetupVal cc mem env tyenv nameEnv v
     SetupStruct () packed vs -> do
       vals <- mapM (resolveSetupVal cc mem env tyenv nameEnv) vs
       let tps = map Crucible.llvmValStorableType vals
@@ -493,10 +631,19 @@ resolveSetupVal cc mem env tyenv nameEnv val =
       let tp = Crucible.llvmValStorableType (V.head vals)
       return $ Crucible.LLVMValArray tp vals
     SetupField () v n -> do
-      i <- resolveSetupFieldIndexOrFail cc tyenv nameEnv v n
-      resolveSetupVal cc mem env tyenv nameEnv (SetupElem () v i)
+      do fld <- exceptToFail $
+                  do info <- resolveSetupValueInfo cc tyenv nameEnv v
+                     recoverStructFieldInfo cc tyenv nameEnv v info n
+         ptr <- resolveSetupVal cc mem env tyenv nameEnv v
+         case ptr of
+           Crucible.LLVMValInt blk off ->
+             do delta <- W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) (Crucible.fiOffset fld))
+                off'  <- W4.bvAdd sym off delta
+                return (Crucible.LLVMValInt blk off')
+           _ -> fail "resolveSetupVal: llvm_field requires pointer value"
+
     SetupElem () v i ->
-      do delta <- resolveSetupElemIndexOrFail cc tyenv nameEnv v i
+      do delta <- exceptToFail (resolveSetupElemOffset cc tyenv nameEnv v i)
          ptr <- resolveSetupVal cc mem env tyenv nameEnv v
          case ptr of
            Crucible.LLVMValInt blk off ->
@@ -547,21 +694,21 @@ resolveSetupValBitfield ::
   IO (BitfieldIndex, LLVMVal)
 resolveSetupValBitfield cc mem env tyenv nameEnv val fieldName =
   do let sym = cc^.ccSym
-     lval       <- resolveSetupVal cc mem env tyenv nameEnv val
-     bfIndex    <- resolveSetupBitfieldIndexOrFail cc tyenv nameEnv val fieldName
-     delta      <- resolveSetupElemIndexOrFail cc tyenv nameEnv val (biBitfieldIndex bfIndex)
+     lval <- resolveSetupVal cc mem env tyenv nameEnv val
+     bfIndex <- exceptToFail (resolveSetupBitfield cc tyenv nameEnv val fieldName)
+     let delta = biFieldByteOffset bfIndex
      offsetLval <- case lval of
-       Crucible.LLVMValInt blk off ->
-         do deltaBV <- W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) delta)
-            off'    <- W4.bvAdd sym off deltaBV
-            return (Crucible.LLVMValInt blk off')
-       _ -> fail "resolveSetupValBitfield: expected a pointer value"
-     pure (bfIndex, offsetLval)
+                     Crucible.LLVMValInt blk off ->
+                       do deltaBV <- W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) delta)
+                          off'    <- W4.bvAdd sym off deltaBV
+                          return (Crucible.LLVMValInt blk off')
+                     _ -> fail "resolveSetupValBitfield: expected a pointer value"
+     return (bfIndex, offsetLval)
 
 resolveTypedTerm ::
   (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
-  TypedTerm       ->
+  TypedTerm ->
   IO LLVMVal
 resolveTypedTerm cc tm =
   case ttType tm of

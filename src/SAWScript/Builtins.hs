@@ -1454,6 +1454,14 @@ core_thm input =
      thm <- io (proofByTerm sc db t pos "core_thm")
      SV.returnProof thm
 
+specialize_theorem :: Theorem -> [TypedTerm] -> TopLevel Theorem
+specialize_theorem thm ts =
+  do sc <- getSharedContext
+     db <- roTheoremDB <$> getTopLevelRO
+     pos <- SV.getPosition
+     thm' <- io (specializeTheorem sc db pos "specialize_theorem" thm (map ttTerm ts))
+     SV.returnProof thm'
+
 get_opt :: Int -> TopLevel String
 get_opt n = do
   prog <- io $ System.Environment.getProgName

@@ -2254,6 +2254,13 @@ primitives = Map.fromList
     Current
     [ "Create a theorem from the type of the given core expression." ]
 
+  , prim "specialize_theorem" "Theorem -> [Term] -> TopLevel Theorem"
+    (pureVal specialize_theorem)
+    Experimental
+    [ "Specialize a theorem by instantiating universal quantifiers"
+    , "with the given list of terms."
+    ]
+
   , prim "get_opt"            "Int -> String"
     (funVal1 get_opt)
     Current
@@ -2822,12 +2829,23 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_elem`." ]
 
+  , prim "llvm_union"
+    "SetupValue -> String -> SetupValue"
+    (pureVal CIR.anySetupUnion)
+    Current
+    [ "Turn a SetupValue representing a union pointer into"
+    , "a pointer to one of the branches of the union by field name."
+    , "Requires debug symbols to resolve union field names."
+    ]
+
   , prim "llvm_field"
     "SetupValue -> String -> SetupValue"
     (pureVal CIR.anySetupField)
     Current
     [ "Turn a SetupValue representing a struct pointer into"
-    , "a pointer to an element of the struct by field name." ]
+    , "a pointer to an element of the struct by field name."
+    , "Requires debug symbols to resolve struct field names."
+    ]
   , prim "crucible_field"
     "SetupValue -> String -> SetupValue"
     (pureVal CIR.anySetupField)

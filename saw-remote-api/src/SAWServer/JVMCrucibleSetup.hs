@@ -188,6 +188,8 @@ compileJVMContract fileReader bic cenv0 c =
       JVMSetupM $ fail "Field l-values unsupported in JVM API."
     getSetupVal _ (CastLValue _ _) =
       JVMSetupM $ fail "Cast l-values unsupported in JVM API."
+    getSetupVal _ (UnionLValue _ _) =
+      JVMSetupM $ fail "Union l-values unsupported in JVM API."
     getSetupVal _ (ElementLValue _ _) =
       JVMSetupM $ fail "Element l-values unsupported in JVM API."
     getSetupVal _ (GlobalInitializer _) =

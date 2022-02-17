@@ -232,6 +232,9 @@ ecRatio x y = ();
 eqRational : Rational -> Rational -> Bool;
 eqRational x y = error Bool "Unimplemented: (==) Rational";
 
+leRational : Rational -> Rational -> Bool;
+leRational x y = error Bool "Unimplemented: (<=) Rational";
+
 ltRational : Rational -> Rational -> Bool;
 ltRational x y = error Bool "Unimplemented: (<) Rational";
 
@@ -455,6 +458,9 @@ errorBinary s a _ _ = error a s;
 boolCmp : Bool -> Bool -> Bool -> Bool;
 boolCmp x y k = ite Bool x (and y k) (or y k);
 
+boolLt : Bool -> Bool -> Bool;
+boolLt x y = and (not x) y;
+
 integerCmp : Integer -> Integer -> Bool -> Bool;
 integerCmp x y k = or (intLt x y) (and (intEq x y) k);
 
@@ -473,13 +479,34 @@ vecCmp n a f xs ys k =
   foldr (Bool -> Bool) Bool n (\ (f : Bool -> Bool) -> f) k
     (zipWith a a (Bool -> Bool) f n xs ys);
 
+vecLt :
+  (n : Nat) -> (a : isort 0) ->
+  (a -> a -> Bool -> Bool) ->
+  (a -> a -> Bool) ->
+  (Vec n a -> Vec n a -> Bool);
+vecLt n a f g xs ys =
+  foldr (Bool -> Bool) Bool n (\ (f : Bool -> Bool) -> f) False
+    (zipWith a a (Bool -> Bool) f n xs ys);
+
 unitCmp : #() -> #() -> Bool -> Bool;
-unitCmp _ _ _ = False;
+unitCmp _ _ k = k;
+
+unitLe : #() -> #() -> Bool;
+unitLe _ _ = True;
+
+unitLt : #() -> #() -> Bool;
+unitLt _ _ = False;
 
 pairCmp : (a b : sort 0) -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
         -> a * b -> a * b -> Bool -> Bool;
 pairCmp a b f g x12 y12 k =
   f (fst a b x12) (fst a b y12) (g (snd a b x12) (snd a b y12) k);
+
+pairLt :
+  (a b : sort 0) -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool) ->
+  a * b -> a * b -> Bool;
+pairLt a b f g x y =
+  f (fst a b x) (fst a b y) (g (snd a b x) (snd a b y));
 
 --------------------------------------------------------------------------------
 -- Dictionaries and overloading
@@ -534,23 +561,31 @@ PEqPair a b pa pb = { eq = pairEq a b pa.eq pb.eq };
 
 -- Cmp class
 
+-- `cmp x y k` computes `if k then x <= y else x < y`
 PCmp : sort 0 -> sort 1;
 PCmp a =
   #{ cmpEq : PEq a
    , cmp : a -> a -> Bool -> Bool
+   , le : a -> a -> Bool
+   , lt : a -> a -> Bool
    };
 
 PCmpBit : PCmp Bool;
-PCmpBit = { cmpEq = PEqBit, cmp = boolCmp };
+PCmpBit = { cmpEq = PEqBit, cmp = boolCmp, le = implies, lt = boolLt };
 
 PCmpInteger : PCmp Integer;
-PCmpInteger = { cmpEq = PEqInteger, cmp = integerCmp };
+PCmpInteger = { cmpEq = PEqInteger, cmp = integerCmp, le = intLe, lt = intLt };
 
 PCmpRational : PCmp Rational;
-PCmpRational = { cmpEq = PEqRational, cmp = rationalCmp };
+PCmpRational = { cmpEq = PEqRational, cmp = rationalCmp, le = leRational, lt = ltRational };
 
 PCmpVec : (n : Nat) -> (a : isort 0) -> PCmp a -> PCmp (Vec n a);
-PCmpVec n a pa = { cmpEq = PEqVec n a pa.cmpEq, cmp = vecCmp n a pa.cmp };
+PCmpVec n a pa =
+  { cmpEq = PEqVec n a pa.cmpEq
+  , cmp = vecCmp n a pa.cmp
+  , le = \ (x : Vec n a) -> \ (y : Vec n a) -> vecCmp n a pa.cmp x y True
+  , lt = \ (x : Vec n a) -> \ (y : Vec n a) -> vecCmp n a pa.cmp x y False
+  };
 
 PCmpSeq : (n : Num) -> (a : isort 0) -> PCmp a -> PCmp (seq n a);
 PCmpSeq n =
@@ -560,7 +595,7 @@ PCmpSeq n =
           n;
 
 PCmpWord : (n : Nat) -> PCmp (Vec n Bool);
-PCmpWord n = { cmpEq = PEqWord n, cmp = bvCmp n };
+PCmpWord n = { cmpEq = PEqWord n, cmp = bvCmp n, le = bvule n, lt = bvult n };
 
 PCmpSeqBool : (n : Num) -> PCmp (seq n Bool);
 PCmpSeqBool n =
@@ -570,26 +605,33 @@ PCmpSeqBool n =
           n;
 
 PCmpUnit : PCmp #();
-PCmpUnit = { cmpEq = PEqUnit, cmp = unitCmp };
+PCmpUnit = { cmpEq = PEqUnit, cmp = unitCmp, le = unitLe, lt = unitLt };
 
 PCmpPair : (a b : sort 0) -> PCmp a -> PCmp b -> PCmp (a * b);
 PCmpPair a b pa pb =
   { cmpEq  = PEqPair a b pa.cmpEq pb.cmpEq
   , cmp = pairCmp a b pa.cmp pb.cmp
+  , le = pairLt a b pa.cmp pb.le
+  , lt = pairLt a b pa.cmp pb.lt
   };
 
 -- SignedCmp class
 
+-- `scmp x y k` computes `if k then sle x y else slt x y`
 PSignedCmp : sort 0 -> sort 1;
 PSignedCmp a =
    #{ signedCmpEq : PEq a
     , scmp : a -> a -> Bool -> Bool
+    , sle : a -> a -> Bool
+    , slt : a -> a -> Bool
     };
 
 PSignedCmpVec : (n : Nat) -> (a : isort 0) -> PSignedCmp a -> PSignedCmp (Vec n a);
 PSignedCmpVec n a pa =
    { signedCmpEq = PEqVec n a pa.signedCmpEq
    , scmp = vecCmp n a pa.scmp
+   , sle = \ (x : Vec n a) -> \ (y : Vec n a) -> vecCmp n a pa.scmp x y True
+   , slt = \ (x : Vec n a) -> \ (y : Vec n a) -> vecCmp n a pa.scmp x y False
    };
 
 PSignedCmpSeq : (n : Num) -> (a : isort 0) -> PSignedCmp a -> PSignedCmp (seq n a);
@@ -600,7 +642,7 @@ PSignedCmpSeq n =
           n;
 
 PSignedCmpWord : (n : Nat) -> PSignedCmp (Vec n Bool);
-PSignedCmpWord n = { signedCmpEq = PEqWord n, scmp = bvSCmp n };
+PSignedCmpWord n = { signedCmpEq = PEqWord n, scmp = bvSCmp n, sle = bvsle n, slt = bvslt n };
 
 PSignedCmpSeqBool : (n : Num) -> PSignedCmp (seq n Bool);
 PSignedCmpSeqBool n =
@@ -610,12 +652,14 @@ PSignedCmpSeqBool n =
           n;
 
 PSignedCmpUnit : PSignedCmp #();
-PSignedCmpUnit = { signedCmpEq = PEqUnit, scmp = unitCmp };
+PSignedCmpUnit = { signedCmpEq = PEqUnit, scmp = unitCmp, sle = unitLe, slt = unitLt };
 
 PSignedCmpPair : (a b : sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp (a * b);
 PSignedCmpPair a b pa pb =
   { signedCmpEq = PEqPair a b pa.signedCmpEq pb.signedCmpEq
   , scmp = pairCmp a b pa.scmp pb.scmp
+  , sle = pairLt a b pa.scmp pb.sle
+  , slt = pairLt a b pa.scmp pb.slt
   };
 
 
@@ -1110,20 +1154,20 @@ ecNotEq a pa x y = not (ecEq a pa x y);
 
 -- Cmp
 ecLt : (a : sort 0) -> PCmp a -> a -> a -> Bool;
-ecLt a pa x y = pa.cmp x y False;
+ecLt a pa = pa.lt;
 
 ecGt : (a : sort 0) -> PCmp a -> a -> a -> Bool;
 ecGt a pa x y = ecLt a pa y x;
 
 ecLtEq  : (a : sort 0) -> PCmp a -> a -> a -> Bool;
-ecLtEq a pa x y = not (ecLt a pa y x);
+ecLtEq a pa = pa.le;
 
 ecGtEq  : (a : sort 0) -> PCmp a -> a -> a -> Bool;
-ecGtEq a pa x y = not (ecLt a pa x y);
+ecGtEq a pa x y = ecLtEq a pa y x;
 
 -- SignedCmp
 ecSLt : (a : sort 0) -> PSignedCmp a -> a -> a -> Bool;
-ecSLt a pa x y = pa.scmp x y False;
+ecSLt a pa = pa.slt;
 
 -- Logic
 ecAnd : (a : sort 0) -> PLogic a -> a -> a -> a;
@@ -1592,6 +1636,8 @@ PCmpFloat : (e p : Num) -> PCmp (TCFloat e p);
 PCmpFloat e p =
   { cmpEq = PEqFloat e p
   , cmp = \(x y : TCFloat e p) (k : Bool) -> error Bool "Unimplemented: Cmp Float"
+  , le = \(x y : TCFloat e p) -> error Bool "Unimplemented: Cmp Float"
+  , lt = \(x y : TCFloat e p) -> error Bool "Unimplemented: Cmp Float"
   };
 
 PZeroFloat : (e p : Num) -> PZero (TCFloat e p);
