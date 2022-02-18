@@ -80,6 +80,7 @@ import Verifier.SAW.Lexer
   'injectCode' { PosPair _ (TKey "injectCode") }
 
   nat      { PosPair _ (TNat _) }
+  bvlit    { PosPair _ (TBitvector _) }
   '_'      { PosPair _ (TIdent "_") }
   ident    { PosPair _ (TIdent _) }
   identrec { PosPair _ (TRecursor _) }
@@ -177,6 +178,7 @@ AppTerm : AtomTerm                 { $1 }
 AtomTerm :: { Term }
 AtomTerm
   : nat                          { NatLit (pos $1) (tokNat (val $1)) }
+  | bvlit                        { BVLit (pos $1) (tokBits (val $1)) }
   | string                       { StringLit (pos $1) (Text.pack (tokString (val $1))) }
   | Ident                        { Name $1 }
   | IdentRec                     { Recursor Nothing $1 }
