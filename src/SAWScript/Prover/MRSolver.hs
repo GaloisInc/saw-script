@@ -1259,38 +1259,13 @@ mrEq' (asVectorType -> Just (n, asBoolType -> Just ())) t1 t2 =
 mrEq' _ _ _ = error "mrEq': unsupported type"
 
 -- | A "simple" strategy for proving equality between two terms, which we assume
--- are of the same type. This strategy first checks if either side is an
--- uninstantiated evar, in which case it set that evar to the other side. If
--- not, it builds an equality proposition by applying the supplied function to
--- both sides, and passes this proposition to an SMT solver.
+-- are of the same type, which builds an equality proposition by applying the
+-- supplied function to both sides and passes this proposition to an SMT solver.
 mrProveEqSimple :: (Term -> Term -> MRM Term) -> MRVarMap -> Term -> Term ->
                    MRM ()
-
--- If t1 is an instantiated evar, substitute and recurse
-mrProveEqSimple eqf var_map (asEVarApp var_map -> Just (_, args, Just f)) t2 =
-  mrApplyAll f args >>= \t1' -> mrProveEqSimple eqf var_map t1' t2
-
--- If t1 is an uninstantiated evar, instantiate it with t2
-mrProveEqSimple _ var_map t1@(asEVarApp var_map ->
-                              Just (evar, args, Nothing)) t2 =
-  do t2' <- mrSubstEVars t2
-     success <- mrTrySetAppliedEVar evar args t2'
-     if success then return () else throwError (TermsNotEq t1 t2)
-
--- If t2 is an instantiated evar, substitute and recurse
-mrProveEqSimple eqf var_map t1 (asEVarApp var_map -> Just (_, args, Just f)) =
-  mrApplyAll f args >>= \t2' -> mrProveEqSimple eqf var_map t1 t2'
-
--- If t2 is an uninstantiated evar, instantiate it with t1
-mrProveEqSimple _ var_map t1 t2@(asEVarApp var_map ->
-                                 Just (evar, args, Nothing)) =
-  do t1' <- mrSubstEVars t1
-     success <- mrTrySetAppliedEVar evar args t1'
-     if success then return () else throwError (TermsNotEq t1 t2)
-
--- Otherwise, try to prove both sides are equal. The use of mrSubstEVars instead
--- of mrSubstEVarsStrict means that we allow evars in the terms we send to the
--- SMT solver, but we treat them as uvars.
+-- NOTE: The use of mrSubstEVars instead of mrSubstEVarsStrict means that we
+-- allow evars in the terms we send to the SMT solver, but we treat them as
+-- uvars.
 mrProveEqSimple eqf _ t1 t2 =
   do t1' <- mrSubstEVars t1
      t2' <- mrSubstEVars t2
@@ -1303,28 +1278,64 @@ mrProveEqSimple eqf _ t1 t2 =
 -- | Prove that two terms are equal, instantiating evars if necessary, or
 -- throwing an error if this is not possible
 mrProveEq :: Term -> Term -> MRM ()
-mrProveEq t1_top t2_top =
-  (do mrDebugPPPrefixSep 1 "mrProveEq" t1_top "==" t2_top
-      tp <- mrTypeOf t1_top
-      varmap <- mrVars <$> get
-      proveEq varmap tp t1_top t2_top)
-  where
-    proveEq :: Map MRVar MRVarInfo -> Term -> Term -> Term -> MRM ()
-    proveEq var_map (asDataType -> Just (pn, [])) t1 t2
-      | primName pn == "Prelude.Nat" =
-        mrProveEqSimple (liftSC2 scEqualNat) var_map t1 t2
-    proveEq var_map (asVectorType -> Just (n, asBoolType -> Just ())) t1 t2 =
-      -- FIXME: make a better solver for bitvector equalities
-      mrProveEqSimple (liftSC3 scBvEq n) var_map t1 t2
-    proveEq var_map (asBoolType -> Just _) t1 t2 =
-      mrProveEqSimple (liftSC2 scBoolEq) var_map t1 t2
-    proveEq var_map (asIntegerType -> Just _) t1 t2 =
-      mrProveEqSimple (liftSC2 scIntEq) var_map t1 t2
-    proveEq _ _ t1 t2 =
-      -- As a fallback, for types we can't handle, just check convertibility
-      mrConvertible t1 t2 >>= \case
-      True -> return ()
-      False -> throwError (TermsNotEq t1 t2)
+mrProveEq t1 t2 =
+  do mrDebugPPPrefixSep 1 "mrProveEq" t1 "==" t2
+     tp <- mrTypeOf t1
+     varmap <- mrVars <$> get
+     mrProveEqH varmap tp t1 t2
+
+
+-- | The main workhorse for 'prProveEq'
+mrProveEqH :: Map MRVar MRVarInfo -> Term -> Term -> Term -> MRM ()
+
+-- If t1 is an instantiated evar, substitute and recurse
+mrProveEqH var_map tp (asEVarApp var_map -> Just (_, args, Just f)) t2 =
+  mrApplyAll f args >>= \t1' -> mrProveEqH var_map tp t1' t2
+
+-- If t1 is an uninstantiated evar, instantiate it with t2
+mrProveEqH var_map _tp t1@(asEVarApp var_map -> Just (evar, args, Nothing)) t2 =
+  do t2' <- mrSubstEVars t2
+     success <- mrTrySetAppliedEVar evar args t2'
+     if success then return () else throwError (TermsNotEq t1 t2)
+
+-- If t2 is an instantiated evar, substitute and recurse
+mrProveEqH var_map tp t1 (asEVarApp var_map -> Just (_, args, Just f)) =
+  mrApplyAll f args >>= \t2' -> mrProveEqH var_map tp t1 t2'
+
+-- If t2 is an uninstantiated evar, instantiate it with t1
+mrProveEqH var_map _tp t1 t2@(asEVarApp var_map -> Just (evar, args, Nothing)) =
+  do t1' <- mrSubstEVars t1
+     success <- mrTrySetAppliedEVar evar args t1'
+     if success then return () else throwError (TermsNotEq t1 t2)
+
+-- For the nat, bitvector, Boolean, and integer types, call mrProveEqSimple
+mrProveEqH var_map (asDataType -> Just (pn, [])) t1 t2
+  | primName pn == "Prelude.Nat" =
+    mrProveEqSimple (liftSC2 scEqualNat) var_map t1 t2
+mrProveEqH var_map (asVectorType -> Just (n, asBoolType -> Just ())) t1 t2 =
+  -- FIXME: make a better solver for bitvector equalities
+  mrProveEqSimple (liftSC3 scBvEq n) var_map t1 t2
+mrProveEqH var_map (asBoolType -> Just _) t1 t2 =
+  mrProveEqSimple (liftSC2 scBoolEq) var_map t1 t2
+mrProveEqH var_map (asIntegerType -> Just _) t1 t2 =
+  mrProveEqSimple (liftSC2 scIntEq) var_map t1 t2
+
+-- For non-bitvector vector types, prove all projections are equal by
+-- quantifying over a universal index variable and proving equality at that
+-- index
+mrProveEqH var_map (asBVVecType -> Just (n, len, tp)) t1 t2 =
+  withUVar "eq_ix" (Type tp) $ \ix ->
+  liftSC2 scGlobalApply "Prelude.is_bvult" [n, ix, len] >>= \pf_tp ->
+  withUVar "eq_pf" (Type pf_tp) $ \pf ->
+  do t1' <- liftSC2 scGlobalApply "Prelude.atBVVec" [n, len, tp, t1, ix, pf]
+     t2' <- liftSC2 scGlobalApply "Prelude.atBVVec" [n, len, tp, t2, ix, pf]
+     mrProveEqH var_map tp t1' t2'
+
+-- As a fallback, for types we can't handle, just check convertibility
+mrProveEqH _ _ t1 t2 =
+  mrConvertible t1 t2 >>= \case
+  True -> return ()
+  False -> throwError (TermsNotEq t1 t2)
 
 
 ----------------------------------------------------------------------
