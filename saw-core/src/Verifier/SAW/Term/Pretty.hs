@@ -490,7 +490,9 @@ ppBitsToHex (b8:b4:b2:b1:bits') =
   ppBitsToHex bits'
   where toInt True = 1
         toInt False = 0
-ppBitsToHex _ = ""
+ppBitsToHex [] = ""
+ppBitsToHex bits =
+  panic "ppBitsToHex" ["length of bit list is not a multiple of 4", show bits]
 
 -- | Pretty-print a name, using the best unambiguous alias from the
 -- naming environment.
