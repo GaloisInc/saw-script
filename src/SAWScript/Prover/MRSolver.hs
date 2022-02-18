@@ -1169,9 +1169,15 @@ smtNormPrims sc = Map.fromList
                 scGlobalDef sc "Prelude.genBVVec")),
 
     ("Prelude.atBVVec",
+     Prim (do tp <- scTypeOfGlobal sc "Prelude.atBVVec"
+              VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
+                scGlobalDef sc "Prelude.atBVVec")
+     -- FIXME HERE NOW: use the following for atBVVec!
+     {-
      PrimFun $ \_n -> PrimFun $ \_len -> tvalFun $ \a ->
       primGenBVVec $ \f -> primBVTermFun sc $ \ix -> PrimFun $ \_pf ->
-      Prim (VExtra <$> VExtraTerm a <$> scApply sc f ix))
+      Prim (VExtra <$> VExtraTerm a <$> scApply sc f ix) -}
+    )
   ]
 
 -- | Normalize a 'Term' before building an SMT query for it
@@ -1590,7 +1596,8 @@ mrRefines' m1 (Ite cond2 m2 m2') =
 mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
-     cond_pf <- piUVarsM cond >>= mrFreshVar "pf" >>= mrVarTerm
+     cond_pf <-
+       liftSC1 scEqTrue cond >>= piUVarsM >>= mrFreshVar "pf" >>= mrVarTerm
      m1' <- applyNormCompFun f1 cond_pf
      cond_holds <- mrProvable cond
      if cond_holds then mrRefines m1' m2 else
@@ -1599,7 +1606,8 @@ mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
 mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
-     cond_pf <- piUVarsM cond >>= mrFreshVar "pf" >>= mrVarTerm
+     cond_pf <-
+       liftSC1 scEqTrue cond >>= piUVarsM >>= mrFreshVar "pf" >>= mrVarTerm
      m2' <- applyNormCompFun f2 cond_pf
      cond_holds <- mrProvable cond
      if cond_holds then mrRefines m1 m2' else
