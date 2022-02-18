@@ -26,7 +26,6 @@ library
   build-depends:
     base == 4.*,
     array,
-    bv-sized,
     bytestring,
     containers,
     data-inttrie,
