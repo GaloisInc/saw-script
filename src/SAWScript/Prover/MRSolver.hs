@@ -135,6 +135,7 @@ import Control.Monad.Trans.Maybe
 import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 import Prettyprinter
 
@@ -144,7 +145,13 @@ import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
+import Verifier.SAW.OpenTerm
 import Verifier.SAW.Cryptol.Monadify
+
+import Verifier.SAW.Simulator
+import qualified Verifier.SAW.Prim as Prim
+import Verifier.SAW.Simulator.TermModel
+import Verifier.SAW.Simulator.Prims
 
 import SAWScript.Proof (termToProp, prettyProp)
 import qualified SAWScript.Prover.SBV as SBV
@@ -691,11 +698,9 @@ catchErrorEither m = catchError (Right <$> m) (return . Left)
 -- FIXME: replace these individual lifting functions with a more general
 -- typeclass like LiftTCM
 
-{-
 -- | Lift a nullary SharedTerm computation into 'MRM'
 liftSC0 :: (SharedContext -> IO a) -> MRM a
 liftSC0 f = (mrSC <$> get) >>= \sc -> liftIO (f sc)
--}
 
 -- | Lift a unary SharedTerm computation into 'MRM'
 liftSC1 :: (SharedContext -> a -> IO b) -> a -> MRM b
@@ -713,6 +718,11 @@ liftSC3 f a b c = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c)
 liftSC4 :: (SharedContext -> a -> b -> c -> d -> IO e) -> a -> b -> c -> d ->
            MRM e
 liftSC4 f a b c d = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c d)
+
+-- | Lift a quaternary SharedTerm computation into 'MRM'
+liftSC5 :: (SharedContext -> a -> b -> c -> d -> e -> IO f) ->
+           a -> b -> c -> d -> e -> MRM f
+liftSC5 f a b c d e = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c d e)
 
 -- | Apply a 'Term' to a list of arguments and beta-reduce in Mr. Monad
 mrApplyAll :: Term -> [Term] -> MRM Term
@@ -807,9 +817,9 @@ lambdaUVarsM t = mrUVarCtx >>= \ctx -> liftSC2 scLambdaList ctx t
 piUVarsM :: Term -> MRM Term
 piUVarsM t = mrUVarCtx >>= \ctx -> liftSC2 scPiList ctx t
 
--- | Instantiate all uvars in a term with fresh 'ExtCns's
-instantiateUVarsM :: TermLike a => a -> MRM a
-instantiateUVarsM a =
+-- | Instantiate all uvars in a term using the supplied function
+instantiateUVarsM :: TermLike a => (LocalName -> Term -> MRM Term) -> a -> MRM a
+instantiateUVarsM f a =
   do ctx <- mrUVarCtx
      -- Remember: the uvar context is outermost to innermost, so we bind
      -- variables from left to right, substituting earlier ones into the types
@@ -819,7 +829,7 @@ instantiateUVarsM a =
          helper tms [] = return tms
          helper tms ((nm,tp):vars) =
            do tp' <- substTerm 0 tms tp
-              tm <- liftSC2 scFreshEC nm tp' >>= liftSC1 scExtCns
+              tm <- f nm tp'
               helper (tm:tms) vars
      ecs <- helper [] ctx
      substTermLike 0 ecs a
@@ -1069,8 +1079,8 @@ debugPretty i pp = debugPrint i $ renderSawDoc defaultPPOpts pp
 
 -- | Pretty-print an object in the current context if the current debug level is
 -- at least the supplied 'Int'
-_debugPrettyInCtx :: PrettyInCtx a => Int -> a -> MRM ()
-_debugPrettyInCtx i a =
+debugPrettyInCtx :: PrettyInCtx a => Int -> a -> MRM ()
+debugPrettyInCtx i a =
   (mrUVars <$> get) >>= \ctx -> debugPrint i (showInCtx (map fst ctx) a)
 
 -- | Pretty-print an object relative to the current context
@@ -1092,6 +1102,86 @@ mrDebugPPPrefixSep i pre a1 sp a2 =
 ----------------------------------------------------------------------
 -- * Calling Out to SMT
 ----------------------------------------------------------------------
+
+-- | Test if a 'Term' is a 'BVVec' type
+asBVVecType :: Recognizer Term (Term, Term, Term)
+asBVVecType (asApplyAll ->
+             (isGlobalDef "Prelude.Vec" -> Just _,
+              [(asApplyAll ->
+                (isGlobalDef "Prelude.bvToNat" -> Just _, [n, len])), a])) =
+  Just (n, len, a)
+asBVVecType _ = Nothing
+
+-- | Apply @genBVVec@ to arguments @n@, @len@, and @a@, along with a function of
+-- type @Vec n Bool -> a@
+genBVVecTerm :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
+genBVVecTerm sc n_tm len_tm a_tm f_tm =
+  let n = closedOpenTerm n_tm
+      len = closedOpenTerm len_tm
+      a = closedOpenTerm a_tm
+      f = closedOpenTerm f_tm in
+  completeOpenTerm sc $
+  applyOpenTermMulti (globalOpenTerm "Prelude.genBVVec")
+  [n, len, a,
+   lambdaOpenTerm "i" (vectorTypeOpenTerm n boolTypeOpenTerm) $ \i ->
+    lambdaOpenTerm "_" (applyGlobalOpenTerm "Prelude.is_bvult" [n, i, len]) $ \_ ->
+    applyOpenTerm f i]
+
+-- | Match a term of the form @genBVVec n len a (\ i _ -> f i)@ and return @f@
+asGenBVVecTerm :: Recognizer Term Term
+asGenBVVecTerm (asApplyAll ->
+                   (isGlobalDef "Prelude.genBVVec" -> Just _,
+                    [_, _, _,
+                     (asLambdaList -> ([_,_], asApp ->
+                                       Just (f, asLocalVar -> Just 1)))])) =
+  Just f
+asGenBVVecTerm _ = Nothing
+
+type TmPrim = Prim TermModel
+
+-- | An implementation of a primitive function that expects a @genBVVec@ term
+primGenBVVec :: (Term -> TmPrim) -> TmPrim
+primGenBVVec f =
+  PrimFilterFun "genBVVecPrim"
+  (\case
+      VExtra (VExtraTerm _ (asGenBVVecTerm -> Just g)) -> return g
+      _ -> mzero)
+  f
+
+-- | An implementation of a primitive function that expects a bitvector term
+primBVTermFun :: SharedContext -> (Term -> TmPrim) -> TmPrim
+primBVTermFun sc =
+  PrimFilterFun "primBVTermFun" $
+  \case
+    VExtra (VExtraTerm _ w_tm) -> return w_tm
+    VWord (Left (_,w_tm)) -> return w_tm
+    VWord (Right bv) ->
+      lift $ scBvConst sc (fromIntegral (Prim.width bv)) (Prim.unsigned bv)
+    _ -> mzero
+
+-- | Implementations of primitives for normalizing SMT terms
+smtNormPrims :: SharedContext -> Map Ident TmPrim
+smtNormPrims sc = Map.fromList
+  [
+    ("Prelude.genBVVec",
+     Prim (do tp <- scTypeOfGlobal sc "Prelude.genBVVec"
+              VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
+                scGlobalDef sc "Prelude.genBVVec")),
+
+    ("Prelude.atBVVec",
+     PrimFun $ \_n -> PrimFun $ \_len -> tvalFun $ \a ->
+      primGenBVVec $ \f -> primBVTermFun sc $ \ix -> PrimFun $ \_pf ->
+      Prim (VExtra <$> VExtraTerm a <$> scApply sc f ix))
+  ]
+
+-- | Normalize a 'Term' before building an SMT query for it
+normSMTProp :: Term -> MRM Term
+normSMTProp t =
+  debugPrint 2 "Normalizing term:" >>
+  debugPrettyInCtx 2 t >>
+  liftSC0 return >>= \sc ->
+  liftSC0 scGetModuleMap >>= \modmap ->
+  liftSC5 normalizeSharedTerm modmap (smtNormPrims sc) Map.empty Set.empty t
 
 -- | Test if a closed Boolean term is "provable", i.e., its negation is
 -- unsatisfiable, using an SMT solver. By "closed" we mean that it contains no
@@ -1116,8 +1206,25 @@ mrProvable :: Term -> MRM Bool
 mrProvable bool_tm =
   do assumps <- mrAssumptions <$> get
      prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
-     forall_prop <- instantiateUVarsM prop
-     mrProvableRaw forall_prop
+     prop_inst <- flip instantiateUVarsM prop $ \nm tp ->
+       liftSC1 scWhnf tp >>= \case
+       (asBVVecType -> Just (n, len, a)) ->
+         -- For variables of type BVVec, create a Vec n Bool -> a function as an
+         -- ExtCns and apply genBVVec to it
+         do
+           debugPrint 2 ("Is BVVec variable: " ++ show nm)
+           ec_tp <-
+             liftSC1 completeOpenTerm $
+             arrowOpenTerm "_" (applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
+                                [closedOpenTerm n, boolTypeOpenTerm])
+             (closedOpenTerm a)
+           ec <- liftSC2 scFreshEC nm ec_tp >>= liftSC1 scExtCns
+           liftSC4 genBVVecTerm n len a ec
+       tp' ->
+         debugPrint 2 ("Is not BVVec variable: " ++ show nm ++ " of type:") >>
+         debugPrettyInCtx 2 tp' >>
+         liftSC2 scFreshEC nm tp >>= liftSC1 scExtCns
+     normSMTProp prop_inst >>= mrProvableRaw
 
 -- | Build a Boolean 'Term' stating that two 'Term's are equal. This is like
 -- 'scEq' except that it works on open terms.
