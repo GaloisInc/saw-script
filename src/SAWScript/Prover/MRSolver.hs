@@ -125,6 +125,7 @@ module SAWScript.Prover.MRSolver
 
 import Data.List (find, findIndex)
 import qualified Data.Text as T
+import qualified Data.Vector as V
 import Data.IORef
 import System.IO (hPutStrLn, stderr)
 import Control.Monad.Reader
@@ -148,10 +149,10 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Cryptol.Monadify
 
-import Verifier.SAW.Simulator
 import qualified Verifier.SAW.Prim as Prim
 import Verifier.SAW.Simulator.TermModel
 import Verifier.SAW.Simulator.Prims
+import Verifier.SAW.Simulator.MonadLazy
 
 import SAWScript.Proof (termToProp, prettyProp)
 import qualified SAWScript.Prover.SBV as SBV
@@ -1139,6 +1140,14 @@ asGenBVVecTerm _ = Nothing
 
 type TmPrim = Prim TermModel
 
+-- | Convert a Boolean value to a 'Term'; like 'readBackValue' but that function
+-- requires a 'SimulatorConfig' which we cannot easily generate here...
+boolValToTerm :: SharedContext -> Value TermModel -> IO Term
+boolValToTerm _ (VBool (Left tm)) = return tm
+boolValToTerm sc (VBool (Right b)) = scBool sc b
+boolValToTerm _ (VExtra (VExtraTerm _tp tm)) = return tm
+boolValToTerm _ v = error ("boolValToTerm: unexpected value: " ++ show v)
+
 -- | An implementation of a primitive function that expects a @genBVVec@ term
 primGenBVVec :: (Term -> TmPrim) -> TmPrim
 primGenBVVec f =
@@ -1157,7 +1166,12 @@ primBVTermFun sc =
     VWord (Left (_,w_tm)) -> return w_tm
     VWord (Right bv) ->
       lift $ scBvConst sc (fromIntegral (Prim.width bv)) (Prim.unsigned bv)
-    _ -> mzero
+    VVector vs ->
+      lift $
+      do tms <- traverse (boolValToTerm sc <=< force) (V.toList vs)
+         tp <- scBoolType sc
+         scVectorReduced sc tp tms
+    v -> lift (putStrLn ("primBVTermFun: unhandled value: " ++ show v)) >> mzero
 
 -- | Implementations of primitives for normalizing SMT terms
 smtNormPrims :: SharedContext -> Map Ident TmPrim
@@ -1169,14 +1183,9 @@ smtNormPrims sc = Map.fromList
                 scGlobalDef sc "Prelude.genBVVec")),
 
     ("Prelude.atBVVec",
-     Prim (do tp <- scTypeOfGlobal sc "Prelude.atBVVec"
-              VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
-                scGlobalDef sc "Prelude.atBVVec")
-     -- FIXME HERE NOW: use the following for atBVVec!
-     {-
      PrimFun $ \_n -> PrimFun $ \_len -> tvalFun $ \a ->
       primGenBVVec $ \f -> primBVTermFun sc $ \ix -> PrimFun $ \_pf ->
-      Prim (VExtra <$> VExtraTerm a <$> scApply sc f ix) -}
+      Prim (VExtra <$> VExtraTerm a <$> scApply sc f ix)
     )
   ]
 
