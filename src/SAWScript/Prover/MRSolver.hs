@@ -1249,9 +1249,7 @@ mrProvable bool_tm =
              (closedOpenTerm a)
            ec <- liftSC2 scFreshEC nm ec_tp >>= liftSC1 scExtCns
            liftSC4 genBVVecTerm n len a ec
-       tp' ->
-         debugPrettyInCtx 2 tp' >>
-         liftSC2 scFreshEC nm tp >>= liftSC1 scExtCns
+       tp' -> liftSC2 scFreshEC nm tp' >>= liftSC1 scExtCns
      normSMTProp prop_inst >>= mrProvableRaw
 
 -- | Build a Boolean 'Term' stating that two 'Term's are equal. This is like
@@ -1658,6 +1656,26 @@ mrRefines' (ReturnM e1) (ReturnM e2) = mrProveEq e1 e2
 mrRefines' (ErrorM _) (ErrorM _) = return ()
 mrRefines' (ReturnM e) (ErrorM _) = throwError (ReturnNotError e)
 mrRefines' (ErrorM _) (ReturnM e) = throwError (ReturnNotError e)
+mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
+  do cond <- mrEq' tp e1 e2
+     not_cond <- liftSC1 scNot cond
+     cond_pf <-
+       liftSC1 scEqTrue cond >>= piUVarsM >>= mrFreshVar "pf" >>= mrVarTerm
+     m1' <- applyNormCompFun f1 cond_pf
+     cond_holds <- mrProvable cond
+     if cond_holds then mrRefines m1' m2 else
+       withAssumption cond (mrRefines m1' m2) >>
+       withAssumption not_cond (mrRefines m1 m2)
+mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
+  do cond <- mrEq' tp e1 e2
+     not_cond <- liftSC1 scNot cond
+     cond_pf <-
+       liftSC1 scEqTrue cond >>= piUVarsM >>= mrFreshVar "pf" >>= mrVarTerm
+     m2' <- applyNormCompFun f2 cond_pf
+     cond_holds <- mrProvable cond
+     if cond_holds then mrRefines m1 m2' else
+       withAssumption cond (mrRefines m1 m2') >>
+       withAssumption not_cond (mrRefines m1 m2)
 mrRefines' (Ite cond1 m1 m1') m2_all@(Ite cond2 m2 m2') =
   liftSC1 scNot cond1 >>= \not_cond1 ->
   (mrEq cond1 cond2 >>= mrProvable) >>= \case
@@ -1679,26 +1697,6 @@ mrRefines' m1 (Ite cond2 m2 m2') =
   do not_cond2 <- liftSC1 scNot cond2
      withAssumption cond2 (mrRefines m1 m2)
      withAssumption not_cond2 (mrRefines m1 m2')
-mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
-  do cond <- mrEq' tp e1 e2
-     not_cond <- liftSC1 scNot cond
-     cond_pf <-
-       liftSC1 scEqTrue cond >>= piUVarsM >>= mrFreshVar "pf" >>= mrVarTerm
-     m1' <- applyNormCompFun f1 cond_pf
-     cond_holds <- mrProvable cond
-     if cond_holds then mrRefines m1' m2 else
-       withAssumption cond (mrRefines m1' m2) >>
-       withAssumption not_cond (mrRefines m1 m2)
-mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
-  do cond <- mrEq' tp e1 e2
-     not_cond <- liftSC1 scNot cond
-     cond_pf <-
-       liftSC1 scEqTrue cond >>= piUVarsM >>= mrFreshVar "pf" >>= mrVarTerm
-     m2' <- applyNormCompFun f2 cond_pf
-     cond_holds <- mrProvable cond
-     if cond_holds then mrRefines m1 m2' else
-       withAssumption cond (mrRefines m1 m2') >>
-       withAssumption not_cond (mrRefines m1 m2)
 -- FIXME: handle sum elimination
 -- mrRefines (Either f1 g1 e1) (Either f2 g2 e2) =
 mrRefines' m1 (ForallM tp f2) =
