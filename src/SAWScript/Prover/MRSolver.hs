@@ -154,7 +154,7 @@ import Verifier.SAW.Simulator.TermModel
 import Verifier.SAW.Simulator.Prims
 import Verifier.SAW.Simulator.MonadLazy
 
-import SAWScript.Proof (termToProp, prettyProp)
+import SAWScript.Proof (termToProp, propToTerm, prettyProp)
 import qualified SAWScript.Prover.SBV as SBV
 
 -- import Debug.Trace
@@ -952,8 +952,11 @@ mrFreshEVars = helper [] where
 mrSetEVarClosed :: MRVar -> Term -> MRM ()
 mrSetEVarClosed var val =
   do val_tp <- mrTypeOf val
+     -- NOTE: need to instantiate any evars in the type of var, to ensure the
+     -- following subtyping check will succeed
+     var_tp <- mrSubstEVars $ mrVarType var
      -- FIXME: catch subtyping errors and report them as being evar failures
-     liftSC3 scCheckSubtype Nothing (TypedTerm val val_tp) (mrVarType var)
+     liftSC3 scCheckSubtype Nothing (TypedTerm val val_tp) var_tp
      modify $ \st ->
        st { mrVars =
             Map.alter
@@ -1223,7 +1226,8 @@ mrProvableRaw prop_term =
      prop <- liftSC1 termToProp prop_term
      debugPrint 2 ("Calling SMT solver with proposition: " ++
                    prettyProp defaultPPOpts prop)
-     (smt_res, _) <- liftSC4 SBV.proveUnintSBVIO smt_conf mempty timeout prop
+     unints <- Set.map ecVarIndex <$> getAllExtSet <$> liftSC1 propToTerm prop
+     (smt_res, _) <- liftSC4 SBV.proveUnintSBVIO smt_conf unints timeout prop
      case smt_res of
        Just _ ->
          debugPrint 2 "SMT solver response: not provable" >> return False
