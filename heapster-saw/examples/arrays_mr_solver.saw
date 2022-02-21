@@ -1,3 +1,3 @@
 include "arrays.saw";
 contains0 <- parse_core_mod "arrays" "contains0";
-mr_solver_debug 2 contains0 contains0;
+mr_solver_debug 1 contains0 contains0;
