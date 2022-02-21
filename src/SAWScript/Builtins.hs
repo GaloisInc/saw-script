@@ -1562,7 +1562,7 @@ mrSolver :: SharedContext -> Int -> TypedTerm -> TypedTerm -> TopLevel Bool
 mrSolver sc dlvl t1 t2 =
   do m1 <- ttTerm <$> ensureMonadicTerm sc t1
      m2 <- ttTerm <$> ensureMonadicTerm sc t2
-     res <- liftIO $ Prover.askMRSolver sc dlvl SBV.z3 Nothing m1 m2
+     res <- liftIO $ Prover.askMRSolver sc dlvl Nothing m1 m2
      case res of
        Just err -> io (putStrLn $ Prover.showMRFailure err) >> return False
        Nothing -> return True

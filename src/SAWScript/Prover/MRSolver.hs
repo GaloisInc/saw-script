@@ -118,10 +118,7 @@ C |- F e1 ... en >>= k |= F' e1' ... em' >>= k':
 -}
 
 module SAWScript.Prover.MRSolver
-  (askMRSolver, MRFailure(..), showMRFailure, isCompFunType
-  , SBV.SMTConfig
-  , SBV.z3, SBV.cvc4, SBV.yices, SBV.mathSAT, SBV.boolector
-  ) where
+  (askMRSolver, MRFailure(..), showMRFailure, isCompFunType) where
 
 import Data.List (find, findIndex)
 import qualified Data.Text as T
@@ -155,7 +152,8 @@ import Verifier.SAW.Simulator.Prims
 import Verifier.SAW.Simulator.MonadLazy
 
 import SAWScript.Proof (termToProp, propToTerm, prettyProp)
-import qualified SAWScript.Prover.SBV as SBV
+import What4.Solver
+import SAWScript.Prover.What4
 
 -- import Debug.Trace
 
@@ -632,8 +630,6 @@ data FunAssump = FunAssump {
 data MRState = MRState {
   -- | Global shared context for building terms, etc.
   mrSC :: SharedContext,
-  -- | Global SMT configuration for the duration of the MR. Solver call
-  mrSMTConfig :: SBV.SMTConfig,
   -- | SMT timeout for SMT calls made by Mr. Solver
   mrSMTTimeout :: Maybe Integer,
   -- | The context of universal variables, which are free SAW core variables, in
@@ -653,11 +649,11 @@ data MRState = MRState {
 
 -- | Build a default, empty state from SMT configuration parameters and a set of
 -- function refinement assumptions
-mkMRState :: SharedContext -> Map FunName FunAssump -> SBV.SMTConfig ->
+mkMRState :: SharedContext -> Map FunName FunAssump ->
              Maybe Integer -> Int -> IO MRState
-mkMRState sc fun_assumps smt_config timeout dlvl =
+mkMRState sc fun_assumps timeout dlvl =
   scBool sc True >>= \true_tm ->
-  return $ MRState { mrSC = sc, mrSMTConfig = smt_config,
+  return $ MRState { mrSC = sc,
                      mrSMTTimeout = timeout, mrUVars = [], mrVars = Map.empty,
                      mrFunAssumps = fun_assumps, mrAssumptions = true_tm,
                      mrDebugLevel = dlvl }
@@ -1221,15 +1217,18 @@ normSMTProp t =
 -- | Test if a closed Boolean term is "provable", i.e., its negation is
 -- unsatisfiable, using an SMT solver. By "closed" we mean that it contains no
 -- uvars or 'MRVar's.
+--
+-- FIXME: use the timeout!
 mrProvableRaw :: Term -> MRM Bool
 mrProvableRaw prop_term =
-  do smt_conf <- mrSMTConfig <$> get
-     timeout <- mrSMTTimeout <$> get
+  do sc <- mrSC <$> get
      prop <- liftSC1 termToProp prop_term
+     unints <- Set.map ecVarIndex <$> getAllExtSet <$> liftSC1 propToTerm prop
      debugPrint 2 ("Calling SMT solver with proposition: " ++
                    prettyProp defaultPPOpts prop)
-     unints <- Set.map ecVarIndex <$> getAllExtSet <$> liftSC1 propToTerm prop
-     (smt_res, _) <- liftSC4 SBV.proveUnintSBVIO smt_conf unints timeout prop
+     sym <- liftIO $ setupWhat4_sym True
+     (smt_res, _) <-
+       liftIO $ proveWhat4_solver z3Adapter sym unints sc prop (return ())
      case smt_res of
        Just _ ->
          debugPrint 2 "SMT solver response: not provable" >> return False
@@ -1888,14 +1887,13 @@ mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 askMRSolver ::
   SharedContext ->
   Int {- ^ The debug level -} ->
-  SBV.SMTConfig {- ^ SBV configuration -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
   Term -> Term -> IO (Maybe MRFailure)
 
-askMRSolver sc dlvl smt_conf timeout t1 t2 =
+askMRSolver sc dlvl timeout t1 t2 =
   do tp1 <- scTypeOf sc t1 >>= scWhnf sc
      tp2 <- scTypeOf sc t2 >>= scWhnf sc
-     init_st <- mkMRState sc Map.empty smt_conf timeout dlvl
+     init_st <- mkMRState sc Map.empty timeout dlvl
      case asPiList tp1 of
        (uvar_ctx, asCompM -> Just _) ->
          fmap (either Just (const Nothing)) $ runMRM init_st $
