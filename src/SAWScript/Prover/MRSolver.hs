@@ -805,6 +805,8 @@ withUVars = helper [] where
   helper :: [Term] -> [(LocalName,Term)] -> ([Term] -> MRM a) -> MRM a
   helper vars [] m = m $ reverse vars
   helper vars ((nm,tp):ctx) m =
+    -- FIXME: I think substituting here is wrong, but works on closed terms, so
+    -- it's fine to use at the top level at least...
     substTerm 0 vars tp >>= \tp' ->
     withUVarLift nm (Type tp') vars $ \var vars' -> helper (var:vars') ctx m
 
