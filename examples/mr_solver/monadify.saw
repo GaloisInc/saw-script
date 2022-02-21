@@ -12,13 +12,11 @@ my_absM <- monadify_term my_abs;
 print "[my_abs] monadified term:";
 print_term my_absM;
 
-/*
 err_if_lt0 <- unfold_term ["err_if_lt0"] {{ err_if_lt0 }};
 print "[err_if_lt0] original term:";
 err_if_lt0M <- monadify_term err_if_lt0;
 print "[err_if_lt0] monadified term:";
 print_term err_if_lt0M;
-*/
 
 /*
 sha1 <- {{ sha1 }};
