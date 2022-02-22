@@ -719,7 +719,7 @@ liftSC4 :: (SharedContext -> a -> b -> c -> d -> IO e) -> a -> b -> c -> d ->
            MRM e
 liftSC4 f a b c d = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c d)
 
--- | Lift a quaternary SharedTerm computation into 'MRM'
+-- | Lift a quinary SharedTerm computation into 'MRM'
 liftSC5 :: (SharedContext -> a -> b -> c -> d -> e -> IO f) ->
            a -> b -> c -> d -> e -> MRM f
 liftSC5 f a b c d e = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c d e)
