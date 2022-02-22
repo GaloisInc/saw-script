@@ -123,7 +123,10 @@ import Lang.Crucible.Types
 import Verifier.SAW.SharedTerm
   (Term,scApplyAll,scVector,scBitvector,scAt,scNat)
 import Data.Macaw.Memory(RegionIndex)
-import Data.Macaw.Symbolic(GlobalMap(..), ToCrucibleType, LookupFunctionHandle(..), MacawCrucibleRegTypes)
+import Data.Macaw.Symbolic
+  ( GlobalMap(..), ToCrucibleType, LookupFunctionHandle(..)
+  , MacawCrucibleRegTypes, MacawSimulatorState
+  )
 import Data.Macaw.Symbolic.Backend ( crucArchRegTypes )
 import Data.Macaw.X86.X86Reg
 import Data.Macaw.X86.Symbolic
@@ -1203,7 +1206,7 @@ _debugDumpGoals opts =
   sh (ProofGoal _hyps g) = print (view labeledPredMsg g)
 
 
-type Overrides = Map (Natural,Integer) (Sym -> LookupFunctionHandle Sym X86_64)
+type Overrides = Map (Natural,Integer) (Sym -> LookupFunctionHandle (MacawSimulatorState Sym) Sym X86_64)
 
 -- | Use a specification to verify a function.
 -- Returns the initial state for the function, and a post-condition.
