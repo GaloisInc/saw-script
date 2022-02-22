@@ -185,7 +185,7 @@ data Fun = Fun { funName :: ByteString, funSpec :: FunSpec }
 
 --------------------------------------------------------------------------------
 
-type CallHandler = Sym -> Macaw.LookupFunctionHandle Sym X86_64
+type CallHandler = Sym -> Macaw.LookupFunctionHandle (MacawSimulatorState Sym) Sym X86_64
 
 -- | Run a top-level proof.
 -- Should be used when making a standalone proof script.
