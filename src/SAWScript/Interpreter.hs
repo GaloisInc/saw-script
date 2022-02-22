@@ -2225,6 +2225,13 @@ primitives = Map.fromList
     [ "Parse a Term from a String in SAWCore syntax."
     ]
 
+  , prim "parse_core_mod"      "String -> String -> Term"
+    (funVal2 parse_core_mod)
+    Current
+    [ "Parse a Term from the second supplied String in SAWCore syntax,"
+    , "relative to the module specified by the first String"
+    ]
+
   , prim "prove_core"         "ProofScript () -> String -> TopLevel Theorem"
     (pureVal prove_core)
     Current
