@@ -197,6 +197,40 @@ jobs:
           name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
           path: "dist/bin/saw"
 
+  mr-solver-tests:
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-10.15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          BUILD_TARGET_OS: ${{ matrix.os }}
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: "${{ runner.os }}-bins"
+          path: dist/bin
+
+      - name: Update PATH to include SAW
+        shell: bash
+        run: |
+          chmod +x dist/bin/*
+          echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
+
+      - working-directory: examples/mr_solver
+        shell: bash
+        run: |
+          saw monadify.saw
+          saw mr_solver_unit_tests.saw
+
   heapster-tests:
     needs: [build]
     strategy:

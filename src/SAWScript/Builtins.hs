@@ -323,15 +323,17 @@ hoistIfsPrim t = do
 
   return t{ ttTerm = t' }
 
+isConvertiblePrim :: TypedTerm -> TypedTerm -> TopLevel Bool
+isConvertiblePrim x y = do
+   sc <- getSharedContext
+   io $ scConvertible sc False (ttTerm x) (ttTerm y)
+
 checkConvertiblePrim :: TypedTerm -> TypedTerm -> TopLevel ()
 checkConvertiblePrim x y = do
-   sc <- getSharedContext
-   str <- io $ do
-     c <- scConvertible sc False (ttTerm x) (ttTerm y)
-     pure (if c
-            then "Convertible"
-            else "Not convertible")
-   printOutLnTop Info str
+   c <- isConvertiblePrim x y
+   printOutLnTop Info (if c
+                        then "Convertible"
+                        else "Not convertible")
 
 
 readCore :: FilePath -> TopLevel TypedTerm
