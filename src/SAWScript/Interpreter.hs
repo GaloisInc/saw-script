@@ -1071,10 +1071,15 @@ primitives = Map.fromList
     , "object that can be passed to 'read_sbv'."
     ]
 
+  , prim "is_convertible"  "Term -> Term -> TopLevel Bool"
+    (pureVal isConvertiblePrim)
+    Current
+    [ "Returns true iff the two terms are convertible." ]
+
   , prim "check_convertible"  "Term -> Term -> TopLevel ()"
     (pureVal checkConvertiblePrim)
     Current
-    [ "Check if two terms are convertible." ]
+    [ "Check if two terms are convertible and print the result." ]
 
   , prim "replace"             "Term -> Term -> Term -> TopLevel Term"
     (pureVal replacePrim)
