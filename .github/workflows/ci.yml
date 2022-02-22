@@ -225,8 +225,6 @@ jobs:
           chmod +x dist/bin/*
           echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
 
-      # NOTE: This currently only tests that monadification doesn't fail, not
-      # that it actually produces correct output.
       - working-directory: examples/mr_solver
         shell: bash
         run: |
