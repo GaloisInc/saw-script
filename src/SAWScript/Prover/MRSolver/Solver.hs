@@ -366,7 +366,7 @@ mrRefines t1 t2 =
 
 -- | The main implementation of 'mrRefines'
 mrRefines' :: NormComp -> NormComp -> MRM ()
-mrRefines' (ReturnM e1) (ReturnM e2) = mrProveEq e1 e2
+mrRefines' (ReturnM e1) (ReturnM e2) = mrAssertProveEq e1 e2
 mrRefines' (ErrorM _) (ErrorM _) = return ()
 mrRefines' (ReturnM e) (ErrorM _) = throwError (ReturnNotError e)
 mrRefines' (ErrorM _) (ReturnM e) = throwError (ReturnNotError e)
@@ -445,7 +445,7 @@ mrRefines' (FunBind (EVarFunName evar) args CompFunReturn) m2 =
 
 mrRefines' (FunBind (LetRecName f) args1 k1) (FunBind (LetRecName f') args2 k2)
   | f == f' && length args1 == length args2 =
-    zipWithM_ mrProveEq args1 args2 >>
+    zipWithM_ mrAssertProveEq args1 args2 >>
     mrRefinesFun k1 k2
 
 mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
@@ -462,15 +462,18 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   -- prove that args1 = args1' and args2 = args2', and then that k1 |= k2
   (Just coIndHyp, _) ->
     do (args1', args2') <- instantiateCoIndHyp coIndHyp
-       zipWithM_ mrProveEq args1' args1
-       zipWithM_ mrProveEq args2' args2
-       mrRefinesFun k1 k2
+       eq1 <- and <$> zipWithM mrProveEq args1' args1
+       eq2 <- and <$> zipWithM mrProveEq args2' args2
+       if eq1 && eq2 then mrRefinesFun k1 k2
+       else let m1' = FunBind f1 args1' CompFunReturn
+                m2' = FunBind f2 args2' CompFunReturn
+             in throwError (CoIndHypMismatchFailure (m1, m2) (m1', m2'))
 
   -- If we have an assumption that f1 args' refines some rhs, then prove that
   -- args1 = args' and then that rhs refines m2
   (_, Just fassump) ->
     do (assump_args, assump_rhs) <- instantiateFunAssump fassump
-       zipWithM_ mrProveEq assump_args args1
+       zipWithM_ mrAssertProveEq assump_args args1
        m1' <- normBind assump_rhs k1
        mrRefines m1' m2
 
@@ -508,7 +511,7 @@ mrRefines' m1@(FunBind f@(GlobalName _) args k1) m2 =
     -- If we have an assumption that f args' refines some rhs, then prove that
     -- args = args' and then that rhs refines m2
     do (assump_args, assump_rhs) <- instantiateFunAssump fassump
-       zipWithM_ mrProveEq assump_args args
+       zipWithM_ mrAssertProveEq assump_args args
        m1' <- normBind assump_rhs k1
        mrRefines m1' m2
   Nothing ->
@@ -525,7 +528,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
   -- args1 = args' and then that rhs refines m2
   Just fassump ->
     do (assump_args, assump_rhs) <- instantiateFunAssump fassump
-       zipWithM_ mrProveEq assump_args args1
+       zipWithM_ mrAssertProveEq assump_args args1
        m1' <- normBind assump_rhs k1
        mrRefines m1' m2
 

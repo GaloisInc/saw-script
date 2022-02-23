@@ -66,6 +66,8 @@ data MRFailure
   | MalformedDefsFun Term
   | MalformedComp Term
   | NotCompFunType Term
+  | CoIndHypMismatchWidened FunName FunName CoIndHyp
+  | CoIndHypMismatchFailure (NormComp, NormComp) (NormComp, NormComp)
     -- | A local variable binding
   | MRFailureLocalVar LocalName MRFailure
     -- | Information about the context of the failure
@@ -122,6 +124,13 @@ instance PrettyInCtx MRFailure where
     ppWithPrefix "Could not handle computation:" t
   prettyInCtx (NotCompFunType tp) =
     ppWithPrefix "Not a computation or computational function type:" tp
+  prettyInCtx (CoIndHypMismatchWidened nm1 nm2 _) =
+    ppWithPrefixSep "[Internal] Trying to widen co-inductive hypothesis on:" nm1 "," nm2
+  prettyInCtx (CoIndHypMismatchFailure (tm1, tm2) (tm1', tm2')) =
+    vsepM [return "Could not match co-inductive hypotheis:",
+           ppWithPrefixSep "" tm1' "|=" tm2',
+           return "with goal:",
+           ppWithPrefixSep "" tm1 "|=" tm2]
   prettyInCtx (MRFailureLocalVar x err) =
     local (x:) $ prettyInCtx err
   prettyInCtx (MRFailureCtx ctx err) =
@@ -178,7 +187,8 @@ data CoIndHyp = CoIndHyp {
   -- | The LHS argument expressions @y1, ..., ym@ over the 'coIndHypCtx' uvars
   coIndHypLHS :: [Term],
   -- | The RHS argument expressions @y1, ..., ym@ over the 'coIndHypCtx' uvars
-  coIndHypRHS :: [Term] }
+  coIndHypRHS :: [Term]
+} deriving Show
 
 -- | A map from pairs of function names to co-inductive hypotheses over those
 -- names
@@ -200,7 +210,8 @@ data FunAssump = FunAssump {
   -- | The argument expressions @e1, ..., en@ over the 'fassumpCtx' uvars
   fassumpArgs :: [Term],
   -- | The right-hand side upper bound @m@ over the 'fassumpCtx' uvars
-  fassumpRHS :: NormComp }
+  fassumpRHS :: NormComp
+}
 
 -- | A map from function names to function refinement assumptions over that
 -- name

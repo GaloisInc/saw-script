@@ -262,16 +262,21 @@ mrProveEqSimple eqf t1 t2 =
      t2' <- mrSubstEVars t2
      TermInCtx [] <$> eqf t1' t2'
 
-
--- | Prove that two terms are equal, instantiating evars if necessary, or
--- throwing an error if this is not possible
-mrProveEq :: Term -> Term -> MRM ()
+-- | Prove that two terms are equal, instantiating evars if necessary,
+-- returning true on success
+mrProveEq :: Term -> Term -> MRM Bool
 mrProveEq t1 t2 =
   do mrDebugPPPrefixSep 1 "mrProveEq" t1 "==" t2
      tp <- mrTypeOf t1
      varmap <- mrVars <$> get
      cond_in_ctx <- mrProveEqH varmap tp t1 t2
-     success <- withTermInCtx cond_in_ctx mrProvable
+     withTermInCtx cond_in_ctx mrProvable
+
+-- | Prove that two terms are equal, instantiating evars if necessary, or
+-- throwing an error if this is not possible
+mrAssertProveEq :: Term -> Term -> MRM ()
+mrAssertProveEq t1 t2 =
+  do success <- mrProveEq t1 t2
      if success then return () else
        throwError (TermsNotEq t1 t2)
 
