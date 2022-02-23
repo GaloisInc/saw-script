@@ -454,11 +454,21 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   mrConvertible tp1 tp2 >>= \tps_eq ->
   mrFunBodyRecInfo f1 args1 >>= \maybe_f1_body ->
   mrFunBodyRecInfo f2 args2 >>= \maybe_f2_body ->
-  mrGetFunAssump f1 >>= \case
+  mrGetCoIndHyp f1 f2 >>= \maybe_coIndHyp ->
+  mrGetFunAssump f1 >>= \maybe_fassump ->
+  case (maybe_coIndHyp, maybe_fassump) of
+
+  -- If we have a co-inductive assumption that f1 args1' |= f2 args2', then
+  -- prove that args1 = args1' and args2 = args2', and then that k1 |= k2
+  (Just coIndHyp, _) ->
+    do (args1', args2') <- instantiateCoIndHyp coIndHyp
+       zipWithM_ mrProveEq args1' args1
+       zipWithM_ mrProveEq args2' args2
+       mrRefinesFun k1 k2
 
   -- If we have an assumption that f1 args' refines some rhs, then prove that
   -- args1 = args' and then that rhs refines m2
-  Just fassump ->
+  (_, Just fassump) ->
     do (assump_args, assump_rhs) <- instantiateFunAssump fassump
        zipWithM_ mrProveEq assump_args args1
        m1' <- normBind assump_rhs k1
@@ -472,16 +482,15 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   _ | Just (f2_body, False) <- maybe_f2_body ->
       normBindTerm f2_body k2 >>= \m2' -> mrRefines m1 m2'
 
-  -- If we do not already have an assumption that f1 refines some specification,
-  -- and both f1 and f2 are recursive but have the same return type, then try to
-  -- coinductively prove that f1 args1 |= f2 args2 under the assumption that f1
-  -- args1 |= f2 args2, and then try to prove that k1 |= k2
-  Nothing
-    | tps_eq
+  -- If we don't have a co-inducitve hypothesis for f1 and f2, don't have an
+  -- assumption that f1 refines some specification, and both f1 and f2 are
+  -- recursive and have the same return type, then try to coinductively prove
+  -- that f1 args1 |= f2 args2 under the assumption that f1 args1 |= f2 args2,
+  -- and then try to prove that k1 |= k2
+  _ | tps_eq
     , Just (f1_body, _) <- maybe_f1_body
     , Just (f2_body, _) <- maybe_f2_body ->
-      do withFunAssump f1 args1 (FunBind f2 args2 CompFunReturn) $
-           mrRefines f1_body f2_body
+      do withCoIndHyp f1 args1 f2 args2 $ mrRefines f1_body f2_body
          mrRefinesFun k1 k2
 
   -- If we cannot line up f1 and f2, then making progress here would require us
@@ -489,7 +498,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   -- related to the function call on the other side and k' is related to the
   -- continuation on the other side, but we don't know how to do that, so give
   -- up
-  Nothing ->
+  _ ->
     throwError (CompsDoNotRefine m1 m2)
 
 {- FIXME: handle FunBind on just one side
