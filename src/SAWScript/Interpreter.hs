@@ -3339,6 +3339,11 @@ primitives = Map.fromList
     Experimental
     []
 
+  , prim "yosys_verify"  "Term -> [Term] -> Term -> [YosysTheorem] -> ProofScript () -> TopLevel YosysTheorem"
+    (pureVal yosys_verify)
+    Experimental
+    []
+
     ---------------------------------------------------------------------
 
   , prim "mr_solver_prove" "Term -> Term -> TopLevel ()"
