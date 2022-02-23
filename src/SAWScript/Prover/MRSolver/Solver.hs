@@ -602,10 +602,10 @@ askMRSolver ::
 askMRSolver sc dlvl timeout t1 t2 =
   do tp1 <- scTypeOf sc t1 >>= scWhnf sc
      tp2 <- scTypeOf sc t2 >>= scWhnf sc
-     init_st <- mkMRState sc Map.empty timeout dlvl
+     let init_info = MRInfo sc timeout dlvl Map.empty
      case asPiList tp1 of
        (uvar_ctx, asCompM -> Just _) ->
-         fmap (either Just (const Nothing)) $ runMRM init_st $
+         fmap (either Just (const Nothing)) $ runMRM init_info $
          withUVars uvar_ctx $ \vars ->
          do tps_are_eq <- mrConvertible tp1 tp2
             if tps_are_eq then return () else

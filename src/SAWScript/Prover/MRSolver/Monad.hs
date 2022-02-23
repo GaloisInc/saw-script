@@ -1,6 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -163,6 +164,26 @@ asEVarApp var_map (asExtCnsApp -> Just (ec, args))
     Just (MRVar ec, args, maybe_inst)
 asEVarApp _ _ = Nothing
 
+-- | A co-inductive hypothesis of the form:
+--
+-- > forall x1, ..., xn. F y1 ... ym |= G z1 ... zl
+--
+-- for some universal context @x1:T1, ..., xn:Tn@ and some lists of argument
+-- expressions @y1, ..., ym@ and @z1, ..., zl@ over the universal context.
+data CoIndHyp = CoIndHyp {
+  -- | The uvars that were in scope when this assmption was created, in order
+  -- from outermost to innermost; that is, the uvars as "seen from outside their
+  -- scope", which is the reverse of the order of 'mrUVars', below
+  coIndHypCtx :: [(LocalName,Term)],
+  -- | The LHS argument expressions @y1, ..., ym@ over the 'coIndHypCtx' uvars
+  coIndHypLHS :: [Term],
+  -- | The RHS argument expressions @y1, ..., ym@ over the 'coIndHypCtx' uvars
+  coIndHypRHS :: [Term] }
+
+-- | A map from pairs of function names to co-inductive hypotheses over those
+-- names
+type CoIndHyps = Map (FunName, FunName) CoIndHyp
+
 -- | An assumption that a named function refines some specificaiton. This has
 -- the form
 --
@@ -181,42 +202,45 @@ data FunAssump = FunAssump {
   -- | The right-hand side upper bound @m@ over the 'fassumpCtx' uvars
   fassumpRHS :: NormComp }
 
--- | State maintained by MR. Solver
-data MRState = MRState {
+-- | A map from function names to function refinement assumptions over that
+-- name
+type FunAssumps = Map FunName FunAssump
+
+-- | Parameters for MR. Solver
+data MRInfo = MRInfo {
   -- | Global shared context for building terms, etc.
   mrSC :: SharedContext,
   -- | SMT timeout for SMT calls made by Mr. Solver
   mrSMTTimeout :: Maybe Integer,
+  -- | The debug level, which controls debug printing
+  mrDebugLevel :: Int,
+  -- | The set of function refinements to be assumed by to Mr. Solver
+  mrFunAssumps :: FunAssumps
+}
+
+-- | State maintained by MR. Solver
+data MRState = MRState {
   -- | The context of universal variables, which are free SAW core variables, in
   -- order from innermost to outermost, i.e., where element @0@ corresponds to
   -- deBruijn index @0@
   mrUVars :: [(LocalName,Type)],
   -- | The existential and letrec-bound variables
   mrVars :: MRVarMap,
-  -- | The current assumptions of function refinement
-  mrFunAssumps :: Map FunName FunAssump,
+  -- | The current set of co-inductive hypotheses
+  mrCoIndHyps :: CoIndHyps,
   -- | The current assumptions, which are conjoined into a single Boolean term;
   -- note that these have the current UVars free
-  mrAssumptions :: Term,
-  -- | The debug level, which controls debug printing
-  mrDebugLevel :: Int
+  mrAssumptions :: Term
 }
 
--- | Build a default, empty state from SMT configuration parameters and a set of
--- function refinement assumptions
-mkMRState :: SharedContext -> Map FunName FunAssump ->
-             Maybe Integer -> Int -> IO MRState
-mkMRState sc fun_assumps timeout dlvl =
-  scBool sc True >>= \true_tm ->
-  return $ MRState { mrSC = sc,
-                     mrSMTTimeout = timeout, mrUVars = [], mrVars = Map.empty,
-                     mrFunAssumps = fun_assumps, mrAssumptions = true_tm,
-                     mrDebugLevel = dlvl }
-
--- | Mr. Monad, the monad used by MR. Solver, which is the state-exception monad
-newtype MRM a = MRM { unMRM :: StateT MRState (ExceptT MRFailure IO) a }
+-- | Mr. Monad, the monad used by MR. Solver, which has 'MRInfo' as as a
+-- shared environment, 'MRState' as state, and 'MRFailure' as an exception
+-- type, all over an 'IO' monad
+newtype MRM a = MRM { unMRM :: ReaderT MRInfo (StateT MRState
+                                              (ExceptT MRFailure IO)) a }
               deriving (Functor, Applicative, Monad, MonadIO,
-                        MonadState MRState, MonadError MRFailure)
+                        MonadReader MRInfo, MonadState MRState,
+                                            MonadError MRFailure)
 
 instance MonadTerm MRM where
   mkTermF = liftSC1 scTermF
@@ -225,8 +249,12 @@ instance MonadTerm MRM where
   substTerm = liftSC3 instantiateVarList
 
 -- | Run an 'MRM' computation and return a result or an error
-runMRM :: MRState -> MRM a -> IO (Either MRFailure a)
-runMRM init_st m = runExceptT $ flip evalStateT init_st $ unMRM m
+runMRM :: MRInfo -> MRM a -> IO (Either MRFailure a)
+runMRM init_info m =
+  do true_tm <- scBool (mrSC init_info) True
+     let init_st = MRState { mrUVars = [], mrVars = Map.empty,
+                             mrAssumptions = true_tm, mrCoIndHyps = Map.empty }
+     runExceptT $ flip evalStateT init_st $ flip runReaderT init_info $ unMRM m
 
 -- | Apply a function to any failure thrown by an 'MRM' computation
 mapFailure :: (MRFailure -> MRFailure) -> MRM a -> MRM a
@@ -255,29 +283,29 @@ catchErrorEither m = catchError (Right <$> m) (return . Left)
 
 -- | Lift a nullary SharedTerm computation into 'MRM'
 liftSC0 :: (SharedContext -> IO a) -> MRM a
-liftSC0 f = (mrSC <$> get) >>= \sc -> liftIO (f sc)
+liftSC0 f = (mrSC <$> ask) >>= \sc -> liftIO (f sc)
 
 -- | Lift a unary SharedTerm computation into 'MRM'
 liftSC1 :: (SharedContext -> a -> IO b) -> a -> MRM b
-liftSC1 f a = (mrSC <$> get) >>= \sc -> liftIO (f sc a)
+liftSC1 f a = (mrSC <$> ask) >>= \sc -> liftIO (f sc a)
 
 -- | Lift a binary SharedTerm computation into 'MRM'
 liftSC2 :: (SharedContext -> a -> b -> IO c) -> a -> b -> MRM c
-liftSC2 f a b = (mrSC <$> get) >>= \sc -> liftIO (f sc a b)
+liftSC2 f a b = (mrSC <$> ask) >>= \sc -> liftIO (f sc a b)
 
 -- | Lift a ternary SharedTerm computation into 'MRM'
 liftSC3 :: (SharedContext -> a -> b -> c -> IO d) -> a -> b -> c -> MRM d
-liftSC3 f a b c = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c)
+liftSC3 f a b c = (mrSC <$> ask) >>= \sc -> liftIO (f sc a b c)
 
 -- | Lift a quaternary SharedTerm computation into 'MRM'
 liftSC4 :: (SharedContext -> a -> b -> c -> d -> IO e) -> a -> b -> c -> d ->
            MRM e
-liftSC4 f a b c d = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c d)
+liftSC4 f a b c d = (mrSC <$> ask) >>= \sc -> liftIO (f sc a b c d)
 
 -- | Lift a quinary SharedTerm computation into 'MRM'
 liftSC5 :: (SharedContext -> a -> b -> c -> d -> e -> IO f) ->
            a -> b -> c -> d -> e -> MRM f
-liftSC5 f a b c d e = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c d e)
+liftSC5 f a b c d e = (mrSC <$> ask) >>= \sc -> liftIO (f sc a b c d e)
 
 
 ----------------------------------------------------------------------
@@ -624,9 +652,38 @@ mrSubstEVarsStrict top_t =
 _mrSubstEVarsStrict :: Term -> MRM (Maybe Term)
 _mrSubstEVarsStrict = mrSubstEVarsStrict
 
+-- | Get the 'CoIndHyp' for a pair of 'FunName's, if there is one
+mrGetCoIndHyp :: FunName -> FunName -> MRM (Maybe CoIndHyp)
+mrGetCoIndHyp nm1 nm2 = Map.lookup (nm1, nm2) <$> mrCoIndHyps <$> get
+
+-- | Run a computation under the additional co-inductive assumption that a
+-- named function applied to some arguments refines another named function
+-- applied some arguments, where all the aforementioned arguments are 'Term's
+-- that can have the current uvars free
+withCoIndHyp :: FunName -> [Term] -> FunName -> [Term] -> MRM a -> MRM a
+withCoIndHyp nm1 args1 nm2 args2 m =
+  do mrDebugPPPrefixSep 1 "withCoIndHyp" (FunBind nm1 args1 CompFunReturn)
+                                    "|=" (FunBind nm2 args2 CompFunReturn)
+     ctx <- mrUVarCtx
+     hyps <- mrCoIndHyps <$> get
+     let hyps' = Map.insert (nm1, nm2) (CoIndHyp ctx args1 args2) hyps
+     modify (\s -> s { mrCoIndHyps = hyps' })
+     ret <- m
+     modify (\s -> s { mrCoIndHyps = hyps })
+     return ret
+
+-- | Generate fresh evars for the context of a 'CoIndHyp' and
+-- substitute them into its arguments and right-hand side
+instantiateCoIndHyp :: CoIndHyp -> MRM ([Term], [Term])
+instantiateCoIndHyp (CoIndHyp {..}) =
+  do evars <- mrFreshEVars coIndHypCtx
+     lhs <- substTermLike 0 evars coIndHypLHS
+     rhs <- substTermLike 0 evars coIndHypRHS
+     return (lhs, rhs)
+
 -- | Look up the 'FunAssump' for a 'FunName', if there is one
 mrGetFunAssump :: FunName -> MRM (Maybe FunAssump)
-mrGetFunAssump nm = Map.lookup nm <$> mrFunAssumps <$> get
+mrGetFunAssump nm = Map.lookup nm <$> mrFunAssumps <$> ask
 
 -- | Run a computation under the additional assumption that a named function
 -- applied to a list of arguments refines a given right-hand side, all of which
@@ -636,12 +693,9 @@ withFunAssump fname args rhs m =
   do mrDebugPPPrefixSep 1 "withFunAssump" (FunBind
                                            fname args CompFunReturn) "|=" rhs
      ctx <- mrUVarCtx
-     assumps <- mrFunAssumps <$> get
+     assumps <- mrFunAssumps <$> ask
      let assumps' = Map.insert fname (FunAssump ctx args rhs) assumps
-     modify (\s -> s { mrFunAssumps = assumps' })
-     ret <- m
-     modify (\s -> s { mrFunAssumps = assumps })
-     return ret
+     local (\info -> info { mrFunAssumps = assumps' }) m
 
 -- | Generate fresh evars for the context of a 'FunAssump' and substitute them
 -- into its arguments and right-hand side
@@ -666,7 +720,7 @@ withAssumption phi m =
 -- | Print a 'String' if the debug level is at least the supplied 'Int'
 debugPrint :: Int -> String -> MRM ()
 debugPrint i str =
-  (mrDebugLevel <$> get) >>= \lvl ->
+  (mrDebugLevel <$> ask) >>= \lvl ->
   if lvl >= i then liftIO (hPutStrLn stderr str) else return ()
 
 -- | Print a document if the debug level is at least the supplied 'Int'

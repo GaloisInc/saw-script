@@ -162,7 +162,7 @@ normSMTProp t =
 -- FIXME: use the timeout!
 mrProvableRaw :: Term -> MRM Bool
 mrProvableRaw prop_term =
-  do sc <- mrSC <$> get
+  do sc <- mrSC <$> ask
      prop <- liftSC1 termToProp prop_term
      unints <- Set.map ecVarIndex <$> getAllExtSet <$> liftSC1 propToTerm prop
      debugPrint 2 ("Calling SMT solver with proposition: " ++
