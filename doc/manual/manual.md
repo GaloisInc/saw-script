@@ -3125,32 +3125,32 @@ This generally follows the same conventions and idioms used in the rest of SAWSC
   The resulting term is a Cryptol record, where each field corresponds to one HDL module exported by Yosys.
   Each HDL module is in turn represented by a function from a record of input port values to a records of output port values.
   For example, consider a Yosys JSON file derived from the following VHDL entities:
-~~~~ {.vhd}
-entity half is
-  port (
-    a : in std_logic;
-    b : in std_logic;
-    c : out std_logic;
-    s : out std_logic
-  );
-end half;
-
-entity full is
-  port (
-    a : in std_logic;
-    b : in std_logic;
-    cin : in std_logic;
-    cout : out std_logic;
-    s : out std_logic
-  );
-end full;
-~~~~
+  ~~~~ {.vhdl}
+  entity half is
+    port (
+      a : in std_logic;
+      b : in std_logic;
+      c : out std_logic;
+      s : out std_logic
+    );
+  end half;
+  
+  entity full is
+    port (
+      a : in std_logic;
+      b : in std_logic;
+      cin : in std_logic;
+      cout : out std_logic;
+      s : out std_logic
+    );
+  end full;
+  ~~~~
   The resulting `Term` will have the type
-~~~~
-{ half : {a : [1], b : [1]} -> {c : [1], s : [1]}
-, full : {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
-}
-~~~~
+  ~~~~
+  { half : {a : [1], b : [1]} -> {c : [1], s : [1]}
+  , full : {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
+  }
+  ~~~~
 * `yosys_verify : Term -> [Term] -> Term -> [YosysTheorem] -> ProofScript () -> TopLevel YosysTheorem` proves equality between an HDL module and a specification.
   The first parameter is the HDL module - given a record `m` from `yosys_import`, this will typically look something like `{{ m.foo }}`.
   The second parameter is a list of preconditions for the equality.
