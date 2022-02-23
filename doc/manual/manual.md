@@ -3125,7 +3125,7 @@ This generally follows the same conventions and idioms used in the rest of SAWSC
   The resulting term is a Cryptol record, where each field corresponds to one HDL module exported by Yosys.
   Each HDL module is in turn represented by a function from a record of input port values to a records of output port values.
   For example, consider a Yosys JSON file derived from the following VHDL entities:
-  ~~~~ {.vhdl}
+  ~~~~vhdl
   entity half is
     port (
       a : in std_logic;
