@@ -18,7 +18,6 @@ module SAWScript.Prover.MRSolver.SMT where
 
 import qualified Data.Vector as V
 import Control.Monad.Reader
-import Control.Monad.State
 import Control.Monad.Except
 
 import Data.Map (Map)
@@ -162,7 +161,7 @@ normSMTProp t =
 -- FIXME: use the timeout!
 mrProvableRaw :: Term -> MRM Bool
 mrProvableRaw prop_term =
-  do sc <- mrSC <$> ask
+  do sc <- mrSC
      prop <- liftSC1 termToProp prop_term
      unints <- Set.map ecVarIndex <$> getAllExtSet <$> liftSC1 propToTerm prop
      debugPrint 2 ("Calling SMT solver with proposition: " ++
@@ -180,7 +179,7 @@ mrProvableRaw prop_term =
 -- assumptions
 mrProvable :: Term -> MRM Bool
 mrProvable bool_tm =
-  do assumps <- mrAssumptions <$> ask
+  do assumps <- mrAssumptions
      prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
      prop_inst <- flip instantiateUVarsM prop $ \nm tp ->
        liftSC1 scWhnf tp >>= \case
@@ -268,7 +267,7 @@ mrProveEq :: Term -> Term -> MRM Bool
 mrProveEq t1 t2 =
   do mrDebugPPPrefixSep 1 "mrProveEq" t1 "==" t2
      tp <- mrTypeOf t1
-     varmap <- mrVars <$> get
+     varmap <- mrVars
      cond_in_ctx <- mrProveEqH varmap tp t1 t2
      withTermInCtx cond_in_ctx mrProvable
 
@@ -348,7 +347,7 @@ mrProveEqH _ (asBVVecType -> Just (n, len, tp)) t1 t2 =
                                                         t1'', ix'', pf'']
      t2_prj <- liftSC2 scGlobalApply "Prelude.atBVVec" [n'', len'', tp'',
                                                         t2'', ix'', pf'']
-     var_map <- mrVars <$> get
+     var_map <- mrVars
      extTermInCtx [("eq_ix",ix_tp),("eq_pf",pf_tp)] <$>
        mrProveEqH var_map tp'' t1_prj t2_prj
 
