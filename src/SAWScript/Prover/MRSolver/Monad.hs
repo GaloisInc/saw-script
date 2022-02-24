@@ -127,10 +127,10 @@ instance PrettyInCtx MRFailure where
   prettyInCtx (CoIndHypMismatchWidened nm1 nm2 _) =
     ppWithPrefixSep "[Internal] Trying to widen co-inductive hypothesis on:" nm1 "," nm2
   prettyInCtx (CoIndHypMismatchFailure (tm1, tm2) (tm1', tm2')) =
-    vsepM [return "Could not match co-inductive hypotheis:",
-           ppWithPrefixSep "" tm1' "|=" tm2',
-           return "with goal:",
-           ppWithPrefixSep "" tm1 "|=" tm2]
+    do pp <- ppWithPrefixSep "" tm1 "|=" tm2
+       pp' <- ppWithPrefixSep "" tm1' "|=" tm2'
+       return $ "Could not match co-inductive hypothesis:" <> pp' <> line <>
+                                              "with goal:" <> pp
   prettyInCtx (MRFailureLocalVar x err) =
     local (x:) $ prettyInCtx err
   prettyInCtx (MRFailureCtx ctx err) =

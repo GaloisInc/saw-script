@@ -114,7 +114,6 @@ C |- F e1 ... en >>= k |= F' e1' ... em' >>= k':
 
 module SAWScript.Prover.MRSolver.Solver where
 
-import Control.Monad.Reader
 import Control.Monad.Except
 import qualified Data.Map as Map
 
@@ -458,16 +457,21 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   mrGetFunAssump f1 >>= \maybe_fassump ->
   case (maybe_coIndHyp, maybe_fassump) of
 
-  -- If we have a co-inductive assumption that f1 args1' |= f2 args2', then
-  -- prove that args1 = args1' and args2 = args2', and then that k1 |= k2
-  (Just coIndHyp, _) ->
-    do (args1', args2') <- instantiateCoIndHyp coIndHyp
-       eq1 <- and <$> zipWithM mrProveEq args1' args1
-       eq2 <- and <$> zipWithM mrProveEq args2' args2
-       if eq1 && eq2 then mrRefinesFun k1 k2
-       else let m1' = FunBind f1 args1' CompFunReturn
-                m2' = FunBind f2 args2' CompFunReturn
-             in throwError (CoIndHypMismatchFailure (m1, m2) (m1', m2'))
+  -- If we have a co-inductive assumption that f1 args1' |= f2 args2':
+  -- * If it is convertible to our goal, continue and prove that k1 |= k2
+  -- * If it can be widened with our goal, restart the current proof branch
+  --   with the widened hypothesis (done by throwing a
+  --   'CoIndHypMismatchWidened' error for 'withCoIndHyp' to catch)
+  -- * Otherwise, throw a 'CoIndHypMismatchFailure' error.
+  (Just hyp, _) ->
+    do (args1', args2') <- instantiateCoIndHyp hyp
+       mrWidenCoIndHyp f1 f2 args1 args2 args1' args2' >>= \case
+         Convertible -> mrRefinesFun k1 k2
+         Widened hyp' -> throwError (CoIndHypMismatchWidened f1 f2 hyp')
+         CouldNotWiden ->
+           let m1' = FunBind f1 args1' CompFunReturn
+               m2' = FunBind f2 args2' CompFunReturn
+            in throwError (CoIndHypMismatchFailure (m1, m2) (m1', m2'))
 
   -- If we have an assumption that f1 args' refines some rhs, then prove that
   -- args1 = args' and then that rhs refines m2
@@ -598,6 +602,26 @@ mrRefinesFun f1 f2
        m2' <- applyNormCompFun f2' x
        mrRefines m1' m2'
 mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
+
+
+-- | The result type of 'mrWidenCoIndHyp'
+data WidenCoIndHypResult = Convertible | Widened CoIndHyp | CouldNotWiden
+
+-- | Given a goal and a co-inductive hypothesis over the same pair of function
+-- names, try to widen them into a more general co-inductive hypothesis which
+-- implies both the given goal and the given co-inductive hypothesis. Returns
+-- 'Convertible' if the goal and co-inductive hypothesis are convertible (and
+-- therefore no widening needs to be done), 'Widened' if widening was
+-- successful, and 'CouldNotWiden' if the terms are neither convertible nor
+-- able to be widened.
+-- FIXME: Finish implementing this function!
+mrWidenCoIndHyp :: FunName -> FunName ->
+                    [Term] -> [Term] -> [Term] -> [Term] ->
+                    MRM WidenCoIndHypResult
+mrWidenCoIndHyp _f1 _f2 args1 args2 args1' args2' =
+  do eq1 <- and <$> zipWithM mrProveEq args1' args1
+     eq2 <- and <$> zipWithM mrProveEq args2' args2
+     return $ if eq1 && eq2 then Convertible else CouldNotWiden
 
 
 ----------------------------------------------------------------------

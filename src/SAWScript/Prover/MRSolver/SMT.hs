@@ -17,7 +17,6 @@ namely 'mrProvable' and 'mrProveEq'.
 module SAWScript.Prover.MRSolver.SMT where
 
 import qualified Data.Vector as V
-import Control.Monad.Reader
 import Control.Monad.Except
 
 import Data.Map (Map)
