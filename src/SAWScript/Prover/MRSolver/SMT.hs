@@ -180,7 +180,7 @@ mrProvableRaw prop_term =
 -- assumptions
 mrProvable :: Term -> MRM Bool
 mrProvable bool_tm =
-  do assumps <- mrAssumptions <$> get
+  do assumps <- mrAssumptions <$> ask
      prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
      prop_inst <- flip instantiateUVarsM prop $ \nm tp ->
        liftSC1 scWhnf tp >>= \case

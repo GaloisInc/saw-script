@@ -217,7 +217,7 @@ data FunAssump = FunAssump {
 -- name
 type FunAssumps = Map FunName FunAssump
 
--- | Parameters for MR. Solver
+-- | Parameters and locals for MR. Solver
 data MRInfo = MRInfo {
   -- | Global shared context for building terms, etc.
   mrSC :: SharedContext,
@@ -226,22 +226,22 @@ data MRInfo = MRInfo {
   -- | The debug level, which controls debug printing
   mrDebugLevel :: Int,
   -- | The set of function refinements to be assumed by to Mr. Solver
-  mrFunAssumps :: FunAssumps
-}
-
--- | State maintained by MR. Solver
-data MRState = MRState {
-  -- | The context of universal variables, which are free SAW core variables, in
-  -- order from innermost to outermost, i.e., where element @0@ corresponds to
-  -- deBruijn index @0@
+  mrFunAssumps :: FunAssumps,
+  -- | The current context of universal variables, which are free SAW core
+  -- variables, in order from innermost to outermost, i.e., where element @0@
+  -- corresponds to deBruijn index @0@
   mrUVars :: [(LocalName,Type)],
-  -- | The existential and letrec-bound variables
-  mrVars :: MRVarMap,
   -- | The current set of co-inductive hypotheses
   mrCoIndHyps :: CoIndHyps,
   -- | The current assumptions, which are conjoined into a single Boolean term;
   -- note that these have the current UVars free
   mrAssumptions :: Term
+}
+
+-- | State maintained by MR. Solver
+data MRState = MRState {
+  -- | The existential and letrec-bound variables
+  mrVars :: MRVarMap
 }
 
 -- | Mr. Monad, the monad used by MR. Solver, which has 'MRInfo' as as a
@@ -260,11 +260,15 @@ instance MonadTerm MRM where
   substTerm = liftSC3 instantiateVarList
 
 -- | Run an 'MRM' computation and return a result or an error
-runMRM :: MRInfo -> MRM a -> IO (Either MRFailure a)
-runMRM init_info m =
-  do true_tm <- scBool (mrSC init_info) True
-     let init_st = MRState { mrUVars = [], mrVars = Map.empty,
-                             mrAssumptions = true_tm, mrCoIndHyps = Map.empty }
+runMRM :: SharedContext -> Maybe Integer -> Int -> FunAssumps ->
+          MRM a -> IO (Either MRFailure a)
+runMRM sc timeout debug assumps m =
+  do true_tm <- scBool sc True
+     let init_info = MRInfo { mrSC = sc, mrSMTTimeout = timeout,
+                              mrDebugLevel = debug, mrFunAssumps = assumps,
+                              mrUVars = [], mrCoIndHyps = Map.empty,
+                              mrAssumptions = true_tm }
+     let init_st = MRState { mrVars = Map.empty }
      runExceptT $ flip evalStateT init_st $ flip runReaderT init_info $ unMRM m
 
 -- | Apply a function to any failure thrown by an 'MRM' computation
@@ -358,7 +362,7 @@ mrApplyAll f args = liftSC2 scApplyAll f args >>= liftSC1 betaNormalize
 -- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in
 -- the order as seen "from the outside"
 mrUVarCtx :: MRM [(LocalName,Term)]
-mrUVarCtx = reverse <$> map (\(nm,Type tp) -> (nm,tp)) <$> mrUVars <$> get
+mrUVarCtx = reverse <$> map (\(nm,Type tp) -> (nm,tp)) <$> mrUVars <$> ask
 
 -- | Get the type of a 'Term' in the current uvar context
 mrTypeOf :: Term -> MRM Term
@@ -399,15 +403,12 @@ uniquifyName nm nms =
 -- assumptions made in the sub-computation will be lost when it completes.
 withUVar :: LocalName -> Type -> (Term -> MRM a) -> MRM a
 withUVar nm tp m =
-  do st <- get
-     let nm' = uniquifyName nm (map fst $ mrUVars st)
-     assumps' <- liftTerm 0 1 $ mrAssumptions st
-     put (st { mrUVars = (nm',tp) : mrUVars st,
-               mrAssumptions = assumps' })
-     ret <- mapFailure (MRFailureLocalVar nm') (liftSC1 scLocalVar 0 >>= m)
-     modify (\st' -> st' { mrUVars = mrUVars st,
-                           mrAssumptions = mrAssumptions st })
-     return ret
+  do info <- ask
+     let nm' = uniquifyName nm (map fst $ mrUVars info)
+     assumps' <- liftTerm 0 1 $ mrAssumptions info
+     local (\_ -> info { mrUVars = (nm',tp) : mrUVars info,
+                         mrAssumptions = assumps' }) $
+       mapFailure (MRFailureLocalVar nm') (liftSC1 scLocalVar 0 >>= m)
 
 -- | Run a MR Solver computation in a context extended with a universal variable
 -- and pass it the lifting (in the sense of 'incVars') of an MR Solver term
@@ -436,7 +437,7 @@ withUVars = helper [] where
 -- most recently bound
 getAllUVarTerms :: MRM [Term]
 getAllUVarTerms =
-  (length <$> mrUVars <$> get) >>= \len ->
+  (length <$> mrUVars <$> ask) >>= \len ->
   mapM (liftSC1 scLocalVar) [len-1, len-2 .. 0]
 
 -- | Lambda-abstract all the current uvars out of a 'Term', with the least
@@ -665,23 +666,34 @@ _mrSubstEVarsStrict = mrSubstEVarsStrict
 
 -- | Get the 'CoIndHyp' for a pair of 'FunName's, if there is one
 mrGetCoIndHyp :: FunName -> FunName -> MRM (Maybe CoIndHyp)
-mrGetCoIndHyp nm1 nm2 = Map.lookup (nm1, nm2) <$> mrCoIndHyps <$> get
+mrGetCoIndHyp nm1 nm2 = Map.lookup (nm1, nm2) <$> mrCoIndHyps <$> ask
 
--- | Run a computation under the additional co-inductive assumption that a
--- named function applied to some arguments refines another named function
--- applied some arguments, where all the aforementioned arguments are 'Term's
--- that can have the current uvars free
+-- | Run a compuation under the additional co-inductive assumption that
+-- @forall x1, ..., xn. F y1 ... ym |= G z1 ... zl@, where @F@ and @G@ are
+-- the given 'FunName's, @y1, ..., ym@ and @z1, ..., zl@ are the given
+-- argument lists, and @x1, ..., xn@ is the current context of uvars. If
+-- while running the given computation a 'CoIndHypMismatchWidened' error is
+-- reached with the given names, the state is restored and the computation is
+-- re-run with the widened hypothesis. This is done recursively, meaning this
+-- function will only return once no 'CoIndHypMismatchWidened' errors are
+-- raised with the given names.
 withCoIndHyp :: FunName -> [Term] -> FunName -> [Term] -> MRM a -> MRM a
 withCoIndHyp nm1 args1 nm2 args2 m =
+  do ctx <- mrUVarCtx
+     withCoIndHyp' (nm1, nm2) (CoIndHyp ctx args1 args2) m
+
+-- | The main loop of 'withCoIndHyp'
+withCoIndHyp' :: (FunName, FunName) -> CoIndHyp -> MRM a -> MRM a
+withCoIndHyp' (nm1, nm2) hyp@(CoIndHyp _ args1 args2) m =
   do mrDebugPPPrefixSep 1 "withCoIndHyp" (FunBind nm1 args1 CompFunReturn)
                                     "|=" (FunBind nm2 args2 CompFunReturn)
-     ctx <- mrUVarCtx
-     hyps <- mrCoIndHyps <$> get
-     let hyps' = Map.insert (nm1, nm2) (CoIndHyp ctx args1 args2) hyps
-     modify (\s -> s { mrCoIndHyps = hyps' })
-     ret <- m
-     modify (\s -> s { mrCoIndHyps = hyps })
-     return ret
+     st <- get
+     hyps' <- Map.insert (nm1, nm2) hyp <$> mrCoIndHyps <$> ask
+     (local (\info -> info { mrCoIndHyps = hyps' }) m) `catchError` \case
+       CoIndHypMismatchWidened nm1' nm2' hyp' | nm1 == nm1' && nm2 == nm2'
+         -> -- FIXME: Could restoring the state here cause any problems?
+            put st >> withCoIndHyp' (nm1, nm2) hyp' m
+       e -> throwError e
 
 -- | Generate fresh evars for the context of a 'CoIndHyp' and
 -- substitute them into its arguments and right-hand side
@@ -721,12 +733,9 @@ instantiateFunAssump fassump =
 -- executing a sub-computation
 withAssumption :: Term -> MRM a -> MRM a
 withAssumption phi m =
-  do assumps <- mrAssumptions <$> get
+  do assumps <- mrAssumptions <$> ask
      assumps' <- liftSC2 scAnd phi assumps
-     modify (\s -> s { mrAssumptions = assumps' })
-     ret <- m
-     modify (\s -> s { mrAssumptions = assumps })
-     return ret
+     local (\info -> info { mrAssumptions = assumps' }) m
 
 -- | Print a 'String' if the debug level is at least the supplied 'Int'
 debugPrint :: Int -> String -> MRM ()
@@ -742,19 +751,19 @@ debugPretty i pp = debugPrint i $ renderSawDoc defaultPPOpts pp
 -- at least the supplied 'Int'
 debugPrettyInCtx :: PrettyInCtx a => Int -> a -> MRM ()
 debugPrettyInCtx i a =
-  (mrUVars <$> get) >>= \ctx -> debugPrint i (showInCtx (map fst ctx) a)
+  (mrUVars <$> ask) >>= \ctx -> debugPrint i (showInCtx (map fst ctx) a)
 
 -- | Pretty-print an object relative to the current context
 mrPPInCtx :: PrettyInCtx a => a -> MRM SawDoc
 mrPPInCtx a =
-  runReader (prettyInCtx a) <$> map fst <$> mrUVars <$> get
+  runReader (prettyInCtx a) <$> map fst <$> mrUVars <$> ask
 
 -- | Pretty-print the result of 'ppWithPrefixSep' relative to the current uvar
 -- context to 'stderr' if the debug level is at least the 'Int' provided
 mrDebugPPPrefixSep :: PrettyInCtx a => Int -> String -> a -> String -> a ->
                       MRM ()
 mrDebugPPPrefixSep i pre a1 sp a2 =
-  (mrUVars <$> get) >>= \ctx ->
+  (mrUVars <$> ask) >>= \ctx ->
   debugPretty i $
   flip runReader (map fst ctx) (group <$> nest 2 <$>
                                 ppWithPrefixSep pre a1 sp a2)
