@@ -223,19 +223,19 @@ data MRInfo = MRInfo {
   mriSC :: SharedContext,
   -- | SMT timeout for SMT calls made by Mr. Solver
   mriSMTTimeout :: Maybe Integer,
-  -- | The debug level, which controls debug printing
-  mriDebugLevel :: Int,
-  -- | The set of function refinements to be assumed by to Mr. Solver
-  mriFunAssumps :: FunAssumps,
   -- | The current context of universal variables, which are free SAW core
   -- variables, in order from innermost to outermost, i.e., where element @0@
   -- corresponds to deBruijn index @0@
   mriUVars :: [(LocalName,Type)],
+  -- | The set of function refinements to be assumed by to Mr. Solver
+  mriFunAssumps :: FunAssumps,
   -- | The current set of co-inductive hypotheses
   mriCoIndHyps :: CoIndHyps,
   -- | The current assumptions, which are conjoined into a single Boolean term;
   -- note that these have the current UVars free
-  mriAssumptions :: Term
+  mriAssumptions :: Term,
+  -- | The debug level, which controls debug printing
+  mriDebugLevel :: Int
 }
 
 -- | State maintained by MR. Solver
@@ -253,6 +253,12 @@ newtype MRM a = MRM { unMRM :: ReaderT MRInfo (StateT MRState
                         MonadReader MRInfo, MonadState MRState,
                                             MonadError MRFailure)
 
+instance MonadTerm MRM where
+  mkTermF = liftSC1 scTermF
+  liftTerm = liftSC3 incVars
+  whnfTerm = liftSC1 scWhnf
+  substTerm = liftSC3 instantiateVarList
+
 -- | Get the current value of 'mriSC'
 mrSC :: MRM SharedContext
 mrSC = mriSC <$> ask
@@ -261,17 +267,13 @@ mrSC = mriSC <$> ask
 mrSMTTimeout :: MRM (Maybe Integer)
 mrSMTTimeout = mriSMTTimeout <$> ask
 
--- | Get the current value of 'mrDebugLevel'
-mrDebugLevel :: MRM Int
-mrDebugLevel = mriDebugLevel <$> ask
+-- | Get the current value of 'mrUVars'
+mrUVars :: MRM [(LocalName,Type)]
+mrUVars = mriUVars <$> ask
 
 -- | Get the current value of 'mrFunAssumps'
 mrFunAssumps :: MRM FunAssumps
 mrFunAssumps = mriFunAssumps <$> ask
-
--- | Get the current value of 'mrUVars'
-mrUVars :: MRM [(LocalName,Type)]
-mrUVars = mriUVars <$> ask
 
 -- | Get the current value of 'mrCoIndHyps'
 mrCoIndHyps :: MRM CoIndHyps
@@ -281,15 +283,13 @@ mrCoIndHyps = mriCoIndHyps <$> ask
 mrAssumptions :: MRM Term
 mrAssumptions = mriAssumptions <$> ask
 
+-- | Get the current value of 'mrDebugLevel'
+mrDebugLevel :: MRM Int
+mrDebugLevel = mriDebugLevel <$> ask
+
 -- | Get the current value of 'mrVars'
 mrVars :: MRM MRVarMap
 mrVars = mrsVars <$> get
-
-instance MonadTerm MRM where
-  mkTermF = liftSC1 scTermF
-  liftTerm = liftSC3 incVars
-  whnfTerm = liftSC1 scWhnf
-  substTerm = liftSC3 instantiateVarList
 
 -- | Run an 'MRM' computation and return a result or an error
 runMRM :: SharedContext -> Maybe Integer -> Int -> FunAssumps ->
@@ -764,7 +764,8 @@ instantiateFunAssump fassump =
 -- executing a sub-computation
 withAssumption :: Term -> MRM a -> MRM a
 withAssumption phi m =
-  do assumps' <- mrAssumptions >>= liftSC2 scAnd phi
+  do assumps <- mrAssumptions
+     assumps' <- liftSC2 scAnd phi assumps
      local (\info -> info { mriAssumptions = assumps' }) m
 
 -- | Print a 'String' if the debug level is at least the supplied 'Int'
