@@ -114,7 +114,6 @@ C |- F e1 ... en >>= k |= F' e1' ... em' >>= k':
 
 module SAWScript.Prover.MRSolver.Solver where
 
-import Control.Monad.Reader
 import Control.Monad.Except
 import qualified Data.Map as Map
 
@@ -366,7 +365,7 @@ mrRefines t1 t2 =
 
 -- | The main implementation of 'mrRefines'
 mrRefines' :: NormComp -> NormComp -> MRM ()
-mrRefines' (ReturnM e1) (ReturnM e2) = mrProveEq e1 e2
+mrRefines' (ReturnM e1) (ReturnM e2) = mrAssertProveEq e1 e2
 mrRefines' (ErrorM _) (ErrorM _) = return ()
 mrRefines' (ReturnM e) (ErrorM _) = throwError (ReturnNotError e)
 mrRefines' (ErrorM _) (ReturnM e) = throwError (ReturnNotError e)
@@ -445,7 +444,7 @@ mrRefines' (FunBind (EVarFunName evar) args CompFunReturn) m2 =
 
 mrRefines' (FunBind (LetRecName f) args1 k1) (FunBind (LetRecName f') args2 k2)
   | f == f' && length args1 == length args2 =
-    zipWithM_ mrProveEq args1 args2 >>
+    zipWithM_ mrAssertProveEq args1 args2 >>
     mrRefinesFun k1 k2
 
 mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
@@ -454,13 +453,31 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   mrConvertible tp1 tp2 >>= \tps_eq ->
   mrFunBodyRecInfo f1 args1 >>= \maybe_f1_body ->
   mrFunBodyRecInfo f2 args2 >>= \maybe_f2_body ->
-  mrGetFunAssump f1 >>= \case
+  mrGetCoIndHyp f1 f2 >>= \maybe_coIndHyp ->
+  mrGetFunAssump f1 >>= \maybe_fassump ->
+  case (maybe_coIndHyp, maybe_fassump) of
+
+  -- If we have a co-inductive assumption that f1 args1' |= f2 args2':
+  -- * If it is convertible to our goal, continue and prove that k1 |= k2
+  -- * If it can be widened with our goal, restart the current proof branch
+  --   with the widened hypothesis (done by throwing a
+  --   'CoIndHypMismatchWidened' error for 'withCoIndHyp' to catch)
+  -- * Otherwise, throw a 'CoIndHypMismatchFailure' error.
+  (Just hyp, _) ->
+    do (args1', args2') <- instantiateCoIndHyp hyp
+       mrWidenCoIndHyp f1 f2 args1 args2 args1' args2' >>= \case
+         Convertible -> mrRefinesFun k1 k2
+         Widened hyp' -> throwError (CoIndHypMismatchWidened f1 f2 hyp')
+         CouldNotWiden ->
+           let m1' = FunBind f1 args1' CompFunReturn
+               m2' = FunBind f2 args2' CompFunReturn
+            in throwError (CoIndHypMismatchFailure (m1, m2) (m1', m2'))
 
   -- If we have an assumption that f1 args' refines some rhs, then prove that
   -- args1 = args' and then that rhs refines m2
-  Just fassump ->
+  (_, Just fassump) ->
     do (assump_args, assump_rhs) <- instantiateFunAssump fassump
-       zipWithM_ mrProveEq assump_args args1
+       zipWithM_ mrAssertProveEq assump_args args1
        m1' <- normBind assump_rhs k1
        mrRefines m1' m2
 
@@ -472,16 +489,15 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   _ | Just (f2_body, False) <- maybe_f2_body ->
       normBindTerm f2_body k2 >>= \m2' -> mrRefines m1 m2'
 
-  -- If we do not already have an assumption that f1 refines some specification,
-  -- and both f1 and f2 are recursive but have the same return type, then try to
-  -- coinductively prove that f1 args1 |= f2 args2 under the assumption that f1
-  -- args1 |= f2 args2, and then try to prove that k1 |= k2
-  Nothing
-    | tps_eq
+  -- If we don't have a co-inducitve hypothesis for f1 and f2, don't have an
+  -- assumption that f1 refines some specification, and both f1 and f2 are
+  -- recursive and have the same return type, then try to coinductively prove
+  -- that f1 args1 |= f2 args2 under the assumption that f1 args1 |= f2 args2,
+  -- and then try to prove that k1 |= k2
+  _ | tps_eq
     , Just (f1_body, _) <- maybe_f1_body
     , Just (f2_body, _) <- maybe_f2_body ->
-      do withFunAssump f1 args1 (FunBind f2 args2 CompFunReturn) $
-           mrRefines f1_body f2_body
+      do withCoIndHyp f1 args1 f2 args2 $ mrRefines f1_body f2_body
          mrRefinesFun k1 k2
 
   -- If we cannot line up f1 and f2, then making progress here would require us
@@ -489,7 +505,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   -- related to the function call on the other side and k' is related to the
   -- continuation on the other side, but we don't know how to do that, so give
   -- up
-  Nothing ->
+  _ ->
     throwError (CompsDoNotRefine m1 m2)
 
 {- FIXME: handle FunBind on just one side
@@ -499,7 +515,7 @@ mrRefines' m1@(FunBind f@(GlobalName _) args k1) m2 =
     -- If we have an assumption that f args' refines some rhs, then prove that
     -- args = args' and then that rhs refines m2
     do (assump_args, assump_rhs) <- instantiateFunAssump fassump
-       zipWithM_ mrProveEq assump_args args
+       zipWithM_ mrAssertProveEq assump_args args
        m1' <- normBind assump_rhs k1
        mrRefines m1' m2
   Nothing ->
@@ -516,7 +532,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
   -- args1 = args' and then that rhs refines m2
   Just fassump ->
     do (assump_args, assump_rhs) <- instantiateFunAssump fassump
-       zipWithM_ mrProveEq assump_args args1
+       zipWithM_ mrAssertProveEq assump_args args1
        m1' <- normBind assump_rhs k1
        mrRefines m1' m2
 
@@ -588,6 +604,26 @@ mrRefinesFun f1 f2
 mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 
 
+-- | The result type of 'mrWidenCoIndHyp'
+data WidenCoIndHypResult = Convertible | Widened CoIndHyp | CouldNotWiden
+
+-- | Given a goal and a co-inductive hypothesis over the same pair of function
+-- names, try to widen them into a more general co-inductive hypothesis which
+-- implies both the given goal and the given co-inductive hypothesis. Returns
+-- 'Convertible' if the goal and co-inductive hypothesis are convertible (and
+-- therefore no widening needs to be done), 'Widened' if widening was
+-- successful, and 'CouldNotWiden' if the terms are neither convertible nor
+-- able to be widened.
+-- FIXME: Finish implementing this function!
+mrWidenCoIndHyp :: FunName -> FunName ->
+                    [Term] -> [Term] -> [Term] -> [Term] ->
+                    MRM WidenCoIndHypResult
+mrWidenCoIndHyp _f1 _f2 args1 args2 args1' args2' =
+  do eq1 <- and <$> zipWithM mrProveEq args1' args1
+     eq2 <- and <$> zipWithM mrProveEq args2' args2
+     return $ if eq1 && eq2 then Convertible else CouldNotWiden
+
+
 ----------------------------------------------------------------------
 -- * External Entrypoints
 ----------------------------------------------------------------------
@@ -602,10 +638,10 @@ askMRSolver ::
 askMRSolver sc dlvl timeout t1 t2 =
   do tp1 <- scTypeOf sc t1 >>= scWhnf sc
      tp2 <- scTypeOf sc t2 >>= scWhnf sc
-     init_st <- mkMRState sc Map.empty timeout dlvl
      case asPiList tp1 of
        (uvar_ctx, asCompM -> Just _) ->
-         fmap (either Just (const Nothing)) $ runMRM init_st $
+         fmap (either Just (const Nothing)) $
+         runMRM sc timeout dlvl Map.empty $
          withUVars uvar_ctx $ \vars ->
          do tps_are_eq <- mrConvertible tp1 tp2
             if tps_are_eq then return () else
