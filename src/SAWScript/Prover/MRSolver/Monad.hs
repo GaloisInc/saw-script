@@ -278,31 +278,31 @@ instance MonadTerm MRM where
 mrSC :: MRM SharedContext
 mrSC = mriSC <$> ask
 
--- | Get the current value of 'mrSMTTimeout'
+-- | Get the current value of 'mriSMTTimeout'
 mrSMTTimeout :: MRM (Maybe Integer)
 mrSMTTimeout = mriSMTTimeout <$> ask
 
--- | Get the current value of 'mrUVars'
+-- | Get the current value of 'mriUVars'
 mrUVars :: MRM [(LocalName,Type)]
 mrUVars = mriUVars <$> ask
 
--- | Get the current value of 'mrFunAssumps'
+-- | Get the current value of 'mriFunAssumps'
 mrFunAssumps :: MRM FunAssumps
 mrFunAssumps = mriFunAssumps <$> ask
 
--- | Get the current value of 'mrCoIndHyps'
+-- | Get the current value of 'mriCoIndHyps'
 mrCoIndHyps :: MRM CoIndHyps
 mrCoIndHyps = mriCoIndHyps <$> ask
 
--- | Get the current value of 'mrAssumptions'
+-- | Get the current value of 'mriAssumptions'
 mrAssumptions :: MRM Term
 mrAssumptions = mriAssumptions <$> ask
 
--- | Get the current value of 'mrDebugLevel'
+-- | Get the current value of 'mriDebugLevel'
 mrDebugLevel :: MRM Int
 mrDebugLevel = mriDebugLevel <$> ask
 
--- | Get the current value of 'mrVars'
+-- | Get the current value of 'mrsVars'
 mrVars :: MRM MRVarMap
 mrVars = mrsVars <$> get
 

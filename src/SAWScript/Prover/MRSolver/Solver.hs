@@ -216,8 +216,8 @@ normComp (CompTerm t) =
       return (ErrorM str)
     (isGlobalDef "Prelude.ite" -> Just (), [_, cond, then_tm, else_tm]) ->
       return $ Ite cond (CompTerm then_tm) (CompTerm else_tm)
-    (isGlobalDef "Prelude.either" -> Just (), [_, _, _, f, g, eith]) ->
-      return $ Either (CompFunTerm f) (CompFunTerm g) eith
+    (isGlobalDef "Prelude.either" -> Just (), [ltp, rtp, _, f, g, eith]) ->
+      return $ Either (Type ltp) (Type rtp) (CompFunTerm f) (CompFunTerm g) eith
     (isGlobalDef "Prelude.maybe" -> Just (), [tp, _, m, f, mayb]) ->
       return $ MaybeElim (Type tp) (CompTerm m) (CompFunTerm f) mayb
     (isGlobalDef "Prelude.orM" -> Just (), [_, m1, m2]) ->
@@ -280,8 +280,8 @@ normBind (ReturnM t) k = applyNormCompFun k t
 normBind (ErrorM msg) _ = return (ErrorM msg)
 normBind (Ite cond comp1 comp2) k =
   return $ Ite cond (CompBind comp1 k) (CompBind comp2 k)
-normBind (Either f g t) k =
-  return $ Either (compFunComp f k) (compFunComp g k) t
+normBind (Either ltp rtp f g t) k =
+  return $ Either ltp rtp (compFunComp f k) (compFunComp g k) t
 normBind (MaybeElim tp m f t) k =
   return $ MaybeElim tp (CompBind m k) (compFunComp f k) t
 normBind (OrM comp1 comp2) k =
@@ -449,10 +449,12 @@ mrRefines t1 t2 =
 
 -- | The main implementation of 'mrRefines'
 mrRefines' :: NormComp -> NormComp -> MRM ()
+
 mrRefines' (ReturnM e1) (ReturnM e2) = mrAssertProveEq e1 e2
 mrRefines' (ErrorM _) (ErrorM _) = return ()
 mrRefines' (ReturnM e) (ErrorM _) = throwMRFailure (ReturnNotError e)
 mrRefines' (ErrorM _) (ReturnM e) = throwMRFailure (ReturnNotError e)
+
 mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
@@ -473,6 +475,7 @@ mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
      if cond_holds then mrRefines m1 m2' else
        withAssumption cond (mrRefines m1 m2') >>
        withAssumption not_cond (mrRefines m1 m2)
+
 mrRefines' (Ite cond1 m1 m1') m2_all@(Ite cond2 m2 m2') =
   liftSC1 scNot cond1 >>= \not_cond1 ->
   (mrEq cond1 cond2 >>= mrProvable) >>= \case
@@ -494,8 +497,10 @@ mrRefines' m1 (Ite cond2 m2 m2') =
   do not_cond2 <- liftSC1 scNot cond2
      withAssumption cond2 (mrRefines m1 m2)
      withAssumption not_cond2 (mrRefines m1 m2')
+
 -- FIXME: handle sum elimination
 -- mrRefines (Either f1 g1 e1) (Either f2 g2 e2) =
+
 mrRefines' m1 (ForallM tp f2) =
   let nm = maybe "x" id (compFunVarName f2) in
   withUVarLift nm tp (m1,f2) $ \x (m1',f2') ->
@@ -506,6 +511,7 @@ mrRefines' (ExistsM tp f1) m2 =
   withUVarLift nm tp (f1,m2) $ \x (f1',m2') ->
   applyNormCompFun f1' x >>= \m1' ->
   mrRefines m1' m2'
+
 mrRefines' m1 (OrM m2 m2') =
   mrOr (mrRefines m1 m2) (mrRefines m1 m2')
 mrRefines' (OrM m1 m1') m2 =

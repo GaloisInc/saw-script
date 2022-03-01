@@ -86,7 +86,7 @@ data NormComp
   = ReturnM Term -- ^ A term @returnM a x@
   | ErrorM Term -- ^ A term @errorM a str@
   | Ite Term Comp Comp -- ^ If-then-else computation
-  | Either CompFun CompFun Term -- ^ A sum elimination
+  | Either Type Type CompFun CompFun Term -- ^ A sum elimination
   | MaybeElim Type Comp CompFun Term -- ^ A maybe elimination
   | OrM Comp Comp -- ^ an @orM@ computation
   | ExistsM Type CompFun -- ^ an @existsM@ computation
@@ -198,9 +198,12 @@ instance TermLike NormComp where
   liftTermLike n i (ReturnM t) = ReturnM <$> liftTermLike n i t
   liftTermLike n i (ErrorM str) = ErrorM <$> liftTermLike n i str
   liftTermLike n i (Ite cond t1 t2) =
-    Ite <$> liftTermLike n i cond <*> liftTermLike n i t1 <*> liftTermLike n i t2
-  liftTermLike n i (Either f g eith) =
-    Either <$> liftTermLike n i f <*> liftTermLike n i g <*> liftTermLike n i eith
+    Ite <$> liftTermLike n i cond <*> liftTermLike n i t1
+        <*> liftTermLike n i t2
+  liftTermLike n i (Either ltp rtp f g eith) =
+    Either <$> liftTermLike n i ltp <*> liftTermLike n i rtp
+           <*> liftTermLike n i f <*> liftTermLike n i g
+           <*> liftTermLike n i eith
   liftTermLike n i (MaybeElim tp m f mayb) =
     MaybeElim <$> liftTermLike n i tp <*> liftTermLike n i m
               <*> liftTermLike n i f <*> liftTermLike n i mayb
@@ -217,10 +220,11 @@ instance TermLike NormComp where
   substTermLike n s (ErrorM str) = ErrorM <$> substTermLike n s str
   substTermLike n s (Ite cond t1 t2) =
     Ite <$> substTermLike n s cond <*> substTermLike n s t1
-    <*> substTermLike n s t2
-  substTermLike n s (Either f g eith) =
-    Either <$> substTermLike n s f <*> substTermLike n s g
-    <*> substTermLike n s eith
+        <*> substTermLike n s t2
+  substTermLike n s (Either ltp rtp f g eith) =
+    Either <$> substTermLike n s ltp <*> substTermLike n s rtp
+           <*> substTermLike n s f <*> substTermLike n s g
+           <*> substTermLike n s eith
   substTermLike n s (MaybeElim tp m f mayb) =
     MaybeElim <$> substTermLike n s tp <*> substTermLike n s m
               <*> substTermLike n s f <*> substTermLike n s mayb
@@ -337,8 +341,10 @@ instance PrettyInCtx NormComp where
   prettyInCtx (Ite cond t1 t2) =
     prettyAppList [return "ite", return "_", parens <$> prettyInCtx cond,
                    parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
-  prettyInCtx (Either f g eith) =
-    prettyAppList [return "either", return "_", return "_", return "_",
+  prettyInCtx (Either ltp rtp f g eith) =
+    prettyAppList [return "either",
+                   parens <$> prettyInCtx ltp, parens <$> prettyInCtx rtp,
+                   return (parens "CompM _"),
                    parens <$> prettyInCtx f, parens <$> prettyInCtx g,
                    parens <$> prettyInCtx eith]
   prettyInCtx (MaybeElim tp m f mayb) =
@@ -355,10 +361,9 @@ instance PrettyInCtx NormComp where
     prettyAppList [return "forallM", prettyInCtx tp, return "_",
                    parens <$> prettyInCtx f]
   prettyInCtx (FunBind f args CompFunReturn) =
-    prettyAppList (prettyInCtx f : map prettyInCtx args)
+    prettyAppList (prettyInCtx f : map (fmap parens . prettyInCtx) args)
   prettyInCtx (FunBind f [] k) =
     prettyAppList [prettyInCtx f, return ">>=", prettyInCtx k]
   prettyInCtx (FunBind f args k) =
-    prettyAppList
-    [parens <$> prettyAppList (prettyInCtx f : map prettyInCtx args),
-     return ">>=", prettyInCtx k]
+    prettyAppList [prettyInCtx (FunBind f args CompFunReturn),
+                   return ">>=", prettyInCtx k]
