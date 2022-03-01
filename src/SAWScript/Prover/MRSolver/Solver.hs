@@ -114,6 +114,8 @@ C |- F e1 ... en >>= k |= F' e1' ... em' >>= k':
 
 module SAWScript.Prover.MRSolver.Solver where
 
+import Data.Either
+import Data.List (findIndices)
 import Control.Monad.Except
 import qualified Data.Map as Map
 
@@ -139,7 +141,7 @@ asLRTList (asCtor -> Just (primName -> "Prelude.LRT_Cons", [lrt, lrts])) =
   do tp <- liftSC2 scGlobalApply "Prelude.lrtToType" [lrt]
      tp_norm_closed <- liftSC1 scWhnf tp >>= piUVarsM
      (tp_norm_closed :) <$> asLRTList lrts
-asLRTList t = throwError (MalformedLetRecTypes t)
+asLRTList t = throwMRFailure (MalformedLetRecTypes t)
 
 -- | Match a right-nested series of pairs. This is similar to 'asTupleValue'
 -- except that it expects a unit value to always be at the end.
@@ -179,7 +181,7 @@ mrFreshLetRecVars lrts defs_f =
     defs_tm <- mrApplyAll defs_f fun_tms
     defs <- case asNestedPairs defs_tm of
       Just defs -> return defs
-      Nothing -> throwError (MalformedDefsFun defs_f)
+      Nothing -> throwMRFailure (MalformedDefsFun defs_f)
 
     -- Remember the body associated with each fresh function constant
     zipWithM_ (\f body ->
@@ -269,7 +271,7 @@ normComp (CompTerm t) =
     ((asGlobalFunName -> Just f), args) ->
       return $ FunBind f args CompFunReturn
 
-    _ -> throwError (MalformedComp t)
+    _ -> throwMRFailure (MalformedComp t)
 
 
 -- | Bind a computation in whnf with a function, and normalize
@@ -314,16 +316,16 @@ applyNormCompFun f arg = applyCompFun f arg >>= normComp
 -- not allowed, either because it is a global function we are treating as opaque
 -- or because it is a locally-bound function variable
 mrLookupFunDef :: FunName -> MRM Term
-mrLookupFunDef f@(GlobalName _) = throwError (CannotLookupFunDef f)
+mrLookupFunDef f@(GlobalName _) = throwMRFailure (CannotLookupFunDef f)
 mrLookupFunDef f@(LocalName var) =
   mrVarInfo var >>= \case
   Just (FunVarInfo body) -> return body
-  Just _ -> throwError (CannotLookupFunDef f)
+  Just _ -> throwMRFailure (CannotLookupFunDef f)
   Nothing -> error "mrLookupFunDef: unknown variable!"
 
 -- | Unfold a call to function @f@ in term @f args >>= g@
 mrUnfoldFunBind :: FunName -> [Term] -> Mark -> CompFun -> MRM Comp
-mrUnfoldFunBind f _ mark _ | inMark f mark = throwError (RecursiveUnfold f)
+mrUnfoldFunBind f _ mark _ | inMark f mark = throwMRFailure (RecursiveUnfold f)
 mrUnfoldFunBind f args mark g =
   do f_def <- mrLookupFunDef f
      CompBind <$>
@@ -367,8 +369,8 @@ mrRefines t1 t2 =
 mrRefines' :: NormComp -> NormComp -> MRM ()
 mrRefines' (ReturnM e1) (ReturnM e2) = mrAssertProveEq e1 e2
 mrRefines' (ErrorM _) (ErrorM _) = return ()
-mrRefines' (ReturnM e) (ErrorM _) = throwError (ReturnNotError e)
-mrRefines' (ErrorM _) (ReturnM e) = throwError (ReturnNotError e)
+mrRefines' (ReturnM e) (ErrorM _) = throwMRFailure (ReturnNotError e)
+mrRefines' (ErrorM _) (ReturnM e) = throwMRFailure (ReturnNotError e)
 mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
@@ -430,9 +432,9 @@ mrRefines' (OrM m1 m1') m2 =
 -- FIXME: the following cases don't work unless we either allow evars to be set
 -- to NormComps or we can turn NormComps back into terms
 mrRefines' m1@(FunBind (EVarFunName _) _ _) m2 =
-  throwError (CompsDoNotRefine m1 m2)
+  throwMRFailure (CompsDoNotRefine m1 m2)
 mrRefines' m1 m2@(FunBind (EVarFunName _) _ _) =
-  throwError (CompsDoNotRefine m1 m2)
+  throwMRFailure (CompsDoNotRefine m1 m2)
 {-
 mrRefines' (FunBind (EVarFunName evar) args CompFunReturn) m2 =
   mrGetEVar evar >>= \case
@@ -464,14 +466,8 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   --   'CoIndHypMismatchWidened' error for 'withCoIndHyp' to catch)
   -- * Otherwise, throw a 'CoIndHypMismatchFailure' error.
   (Just hyp, _) ->
-    do (args1', args2') <- instantiateCoIndHyp hyp
-       mrWidenCoIndHyp f1 f2 args1 args2 args1' args2' >>= \case
-         Convertible -> mrRefinesFun k1 k2
-         Widened hyp' -> throwError (CoIndHypMismatchWidened f1 f2 hyp')
-         CouldNotWiden ->
-           let m1' = FunBind f1 args1' CompFunReturn
-               m2' = FunBind f2 args2' CompFunReturn
-            in throwError (CoIndHypMismatchFailure (m1, m2) (m1', m2'))
+    matchCoIndHyp f1 f2 hyp args1 args2 >>
+    mrRefinesFun k1 k2
 
   -- If we have an assumption that f1 args' refines some rhs, then prove that
   -- args1 = args' and then that rhs refines m2
@@ -506,7 +502,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   -- continuation on the other side, but we don't know how to do that, so give
   -- up
   _ ->
-    throwError (CompsDoNotRefine m1 m2)
+    throwMRFailure (CompsDoNotRefine m1 m2)
 
 {- FIXME: handle FunBind on just one side
 mrRefines' m1@(FunBind f@(GlobalName _) args k1) m2 =
@@ -521,7 +517,7 @@ mrRefines' m1@(FunBind f@(GlobalName _) args k1) m2 =
   Nothing ->
     -- We don't want to do inter-procedural proofs, so if we don't know anything
     -- about f already then give up
-    throwError (CompsDoNotRefine m1 m2)
+    throwMRFailure (CompsDoNotRefine m1 m2)
 -}
 
 
@@ -548,7 +544,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
     -- form m2' >>= k2 where f1 args1 |= m2' and k1 |= k2, but we don't know how
     -- to do this splitting, so give up
     _ ->
-      throwError (CompsDoNotRefine m1 m2)
+      throwMRFailure (CompsDoNotRefine m1 m2)
 
 
 mrRefines' m1 m2@(FunBind f2 args2 k2) =
@@ -571,7 +567,7 @@ mrRefines' m1 m2@(FunBind f2 args2 k2) =
     -- form m1' >>= k1 where m1' |= f2 args2 and k1 |= k2, but we don't know how
     -- to do this splitting, so give up
   _ ->
-    throwError (CompsDoNotRefine m1 m2)
+    throwMRFailure (CompsDoNotRefine m1 m2)
 
 
 -- NOTE: the rules that introduce existential variables need to go last, so that
@@ -588,7 +584,7 @@ mrRefines' (ForallM tp f1) m2 =
      mrRefines m1' m2
 
 -- If none of the above cases match, then fail
-mrRefines' m1 m2 = throwError (CompsDoNotRefine m1 m2)
+mrRefines' m1 m2 = throwMRFailure (CompsDoNotRefine m1 m2)
 
 
 -- | Prove that one function refines another for all inputs
@@ -604,24 +600,80 @@ mrRefinesFun f1 f2
 mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 
 
--- | The result type of 'mrWidenCoIndHyp'
-data WidenCoIndHypResult = Convertible | Widened CoIndHyp | CouldNotWiden
+-- | Run a compuation under the additional co-inductive assumption that
+-- @forall x1, ..., xn. F y1 ... ym |= G z1 ... zl@, where @F@ and @G@ are
+-- the given 'FunName's, @y1, ..., ym@ and @z1, ..., zl@ are the given
+-- argument lists, and @x1, ..., xn@ is the current context of uvars. If
+-- while running the given computation a 'CoIndHypMismatchWidened' error is
+-- reached with the given names, the state is restored and the computation is
+-- re-run with the widened hypothesis.
+withCoIndHyp :: FunName -> [Term] -> FunName -> [Term] -> MRM a -> MRM a
+withCoIndHyp nm1 args1 nm2 args2 m =
+  do ctx <- mrUVarCtx
+     withCoIndHyp' nm1 nm2 (CoIndHyp ctx args1 args2) m
 
--- | Given a goal and a co-inductive hypothesis over the same pair of function
--- names, try to widen them into a more general co-inductive hypothesis which
--- implies both the given goal and the given co-inductive hypothesis. Returns
--- 'Convertible' if the goal and co-inductive hypothesis are convertible (and
--- therefore no widening needs to be done), 'Widened' if widening was
--- successful, and 'CouldNotWiden' if the terms are neither convertible nor
--- able to be widened.
--- FIXME: Finish implementing this function!
-mrWidenCoIndHyp :: FunName -> FunName ->
-                    [Term] -> [Term] -> [Term] -> [Term] ->
-                    MRM WidenCoIndHypResult
-mrWidenCoIndHyp _f1 _f2 args1 args2 args1' args2' =
-  do eq1 <- and <$> zipWithM mrProveEq args1' args1
-     eq2 <- and <$> zipWithM mrProveEq args2' args2
-     return $ if eq1 && eq2 then Convertible else CouldNotWiden
+-- | Test if a 'MRFailure' contains a widening
+
+-- | The main loop of 'withCoIndHyp'
+withCoIndHyp' :: FunName -> FunName -> CoIndHyp -> MRM a -> MRM a
+withCoIndHyp' nm1 nm2 hyp m =
+  withCoIndHypRaw nm1 nm2 hyp m `catchError` \case
+  MRExnWiden nm1' nm2' new_vars
+    | nm1 == nm1' && nm2 == nm2' ->
+        -- NOTE: the state gets reset here because we defined MRM with ExceptT
+        -- at a lower level than StateT
+        do hyp' <- generalizeCoIndHyp hyp new_vars
+           withCoIndHyp' nm1 nm2 hyp' m
+  e -> throwError e
+
+-- | Test that a coinductive hypothesis for the given function names matches the
+-- given arguments, otherwise throw an exception saying that widening is needed
+matchCoIndHyp :: FunName -> FunName -> CoIndHyp -> [Term] -> [Term] -> MRM ()
+matchCoIndHyp f1 f2 hyp args1 args2 =
+  do (args1', args2') <- instantiateCoIndHyp hyp
+     eqs1 <- zipWithM mrProveEq args1' args1
+     eqs2 <- zipWithM mrProveEq args2' args2
+     if and (eqs1 ++ eqs2) then return () else
+       throwError $ MRExnWiden f1 f2
+       (map Left (findIndices not eqs1) ++ map Right (findIndices not eqs1))
+
+coIndHypArg :: CoIndHyp -> Either Int Int -> Term
+coIndHypArg (CoIndHyp _ args1 _) (Left i) = args1 !! i
+coIndHypArg (CoIndHyp _ _ args2) (Right i) = args2 !! i
+
+-- | Generalize some of the arguments of a coinductive hypothesis
+generalizeCoIndHyp :: CoIndHyp -> [Either Int Int] -> MRM CoIndHyp
+generalizeCoIndHyp hyp [] = return hyp
+generalizeCoIndHyp hyp (arg_spec:arg_specs) =
+  withOnlyUVars (coIndHypCtx hyp) $ do
+  -- Get the arg and type associated with arg_spec
+  let arg = coIndHypArg hyp arg_spec
+  arg_tp <- mrTypeOf arg
+  -- Sort out the other args that equal arg
+  eq_uneq_specs <- forM arg_specs $ \spec' ->
+    do let arg' = coIndHypArg hyp spec'
+       tp' <- mrTypeOf arg'
+       tps_eq <- mrConvertible arg_tp tp'
+       args_eq <- if tps_eq then mrProveEq arg arg' else return False
+       return $ if args_eq then Left spec' else Right spec'
+  let (eq_specs, uneq_specs) = partitionEithers eq_uneq_specs
+  -- Add a new variable of type arg_tp, set all eq_specs to it, and recurse
+  hyp' <- generalizeCoIndHypArgs hyp arg_tp eq_specs
+  generalizeCoIndHyp hyp' uneq_specs
+
+-- | Add a new variable of the given type to the context of a coinductive
+-- hypothesis and set the specified arguments to that new variable
+generalizeCoIndHypArgs :: CoIndHyp -> Term -> [Either Int Int] -> MRM CoIndHyp
+generalizeCoIndHypArgs (CoIndHyp ctx args1 args2) tp specs =
+  do let set_arg i args =
+           take i args ++ (Unshared $ LocalVar 0) : drop (i+1) args
+     let (specs1, specs2) = partitionEithers specs
+     -- NOTE: need to lift the arguments because we are adding a variable
+     args1' <- liftTermLike 0 1 args1
+     args2' <- liftTermLike 0 1 args2
+     let args1'' = foldr set_arg args1' specs1
+         args2'' = foldr set_arg args2' specs2
+     return $ CoIndHyp (ctx ++ [("z",tp)]) args1'' args2''
 
 
 ----------------------------------------------------------------------
@@ -645,7 +697,7 @@ askMRSolver sc dlvl timeout t1 t2 =
          withUVars uvar_ctx $ \vars ->
          do tps_are_eq <- mrConvertible tp1 tp2
             if tps_are_eq then return () else
-              throwError (TypesNotEq (Type tp1) (Type tp2))
+              throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
             mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2
             m1 <- mrApplyAll t1 vars >>= normCompTerm
             m2 <- mrApplyAll t2 vars >>= normCompTerm

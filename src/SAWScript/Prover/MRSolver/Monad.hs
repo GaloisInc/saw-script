@@ -66,8 +66,6 @@ data MRFailure
   | MalformedDefsFun Term
   | MalformedComp Term
   | NotCompFunType Term
-  | CoIndHypMismatchWidened FunName FunName CoIndHyp
-  | CoIndHypMismatchFailure (NormComp, NormComp) (NormComp, NormComp)
     -- | A local variable binding
   | MRFailureLocalVar LocalName MRFailure
     -- | Information about the context of the failure
@@ -124,13 +122,6 @@ instance PrettyInCtx MRFailure where
     ppWithPrefix "Could not handle computation:" t
   prettyInCtx (NotCompFunType tp) =
     ppWithPrefix "Not a computation or computational function type:" tp
-  prettyInCtx (CoIndHypMismatchWidened nm1 nm2 _) =
-    ppWithPrefixSep "[Internal] Trying to widen co-inductive hypothesis on:" nm1 "," nm2
-  prettyInCtx (CoIndHypMismatchFailure (tm1, tm2) (tm1', tm2')) =
-    do pp <- ppWithPrefixSep "" tm1 "|=" tm2
-       pp' <- ppWithPrefixSep "" tm1' "|=" tm2'
-       return $ "Could not match co-inductive hypothesis:" <> pp' <> line <>
-                                              "with goal:" <> pp
   prettyInCtx (MRFailureLocalVar x err) =
     local (x:) $ prettyInCtx err
   prettyInCtx (MRFailureCtx ctx err) =
@@ -244,14 +235,20 @@ data MRState = MRState {
   mrsVars :: MRVarMap
 }
 
+-- | The exception type for MR. Solver, which is either a 'MRFailure' or a
+-- widening request
+data MRExn = MRExnFailure MRFailure
+           | MRExnWiden FunName FunName [Either Int Int]
+           deriving Show
+
 -- | Mr. Monad, the monad used by MR. Solver, which has 'MRInfo' as as a
 -- shared environment, 'MRState' as state, and 'MRFailure' as an exception
 -- type, all over an 'IO' monad
 newtype MRM a = MRM { unMRM :: ReaderT MRInfo (StateT MRState
-                                              (ExceptT MRFailure IO)) a }
+                                              (ExceptT MRExn IO)) a }
               deriving (Functor, Applicative, Monad, MonadIO,
                         MonadReader MRInfo, MonadState MRState,
-                                            MonadError MRFailure)
+                                            MonadError MRExn)
 
 instance MonadTerm MRM where
   mkTermF = liftSC1 scTermF
@@ -301,23 +298,41 @@ runMRM sc timeout debug assumps m =
                               mriUVars = [], mriCoIndHyps = Map.empty,
                               mriAssumptions = true_tm }
      let init_st = MRState { mrsVars = Map.empty }
-     runExceptT $ flip evalStateT init_st $ flip runReaderT init_info $ unMRM m
+     res <- runExceptT $ flip evalStateT init_st $
+       flip runReaderT init_info $ unMRM m
+     case res of
+       Right a -> return $ Right a
+       Left (MRExnFailure failure) -> return $ Left failure
+       Left exn -> fail ("runMRM: unexpected internal exception: " ++ show exn)
+
+-- | Throw an 'MRFailure'
+throwMRFailure :: MRFailure -> MRM a
+throwMRFailure = throwError . MRExnFailure
 
 -- | Apply a function to any failure thrown by an 'MRM' computation
-mapFailure :: (MRFailure -> MRFailure) -> MRM a -> MRM a
-mapFailure f m = catchError m (throwError . f)
+mapMRFailure :: (MRFailure -> MRFailure) -> MRM a -> MRM a
+mapMRFailure f m = catchError m $ \case
+  MRExnFailure failure -> throwError $ MRExnFailure $ f failure
+  e -> throwError e
+
+-- | Catch any 'MRFailure' raised by a computation
+catchFailure :: MRM a -> (MRFailure -> MRM a) -> MRM a
+catchFailure m f =
+  m `catchError` \case
+  MRExnFailure failure -> f failure
+  e -> throwError e
 
 -- | Try two different 'MRM' computations, combining their failures if needed.
 -- Note that the 'MRState' will reset if the first computation fails.
 mrOr :: MRM a -> MRM a -> MRM a
 mrOr m1 m2 =
-  catchError m1 $ \err1 ->
-  catchError m2 $ \err2 ->
-  throwError $ MRFailureDisj err1 err2
+  catchFailure m1 $ \err1 ->
+  catchFailure m2 $ \err2 ->
+  throwMRFailure $ MRFailureDisj err1 err2
 
 -- | Run an 'MRM' computation in an extended failure context
 withFailureCtx :: FailCtx -> MRM a -> MRM a
-withFailureCtx ctx = mapFailure (MRFailureCtx ctx)
+withFailureCtx ctx = mapMRFailure (MRFailureCtx ctx)
 
 {-
 -- | Catch any errors thrown by a computation and coerce them to a 'Left'
@@ -430,16 +445,19 @@ uniquifyName nm nms =
     Just nm' -> nm'
     Nothing -> error "uniquifyName"
 
+-- | Turn a list of 'LocalName's into one names not in a list, adding suffixes
+-- if necessary
+uniquifyNames :: [LocalName] -> [LocalName] -> [LocalName]
+uniquifyNames [] _ = []
+uniquifyNames (nm:nms) nms_other =
+  let nm' = uniquifyName nm nms_other in
+  nm' : uniquifyNames nms (nm' : nms_other)
+
 -- | Run a MR Solver computation in a context extended with a universal
 -- variable, which is passed as a 'Term' to the sub-computation. Note that any
 -- assumptions made in the sub-computation will be lost when it completes.
 withUVar :: LocalName -> Type -> (Term -> MRM a) -> MRM a
-withUVar nm tp m =
-  do nm' <- uniquifyName nm <$> map fst <$> mrUVars
-     assumps' <- mrAssumptions >>= liftTerm 0 1
-     local (\info -> info { mriUVars = (nm',tp) : mriUVars info,
-                            mriAssumptions = assumps' }) $
-       mapFailure (MRFailureLocalVar nm') (liftSC1 scLocalVar 0 >>= m)
+withUVar nm (Type tp) m = withUVars [(nm,tp)] (\[v] -> m v)
 
 -- | Run a MR Solver computation in a context extended with a universal variable
 -- and pass it the lifting (in the sense of 'incVars') of an MR Solver term
@@ -453,16 +471,25 @@ withUVarLift nm tp t m =
 -- The variables are bound "outside in", meaning the first variable in the list
 -- is bound outermost, and so will have the highest deBruijn index.
 withUVars :: [(LocalName,Term)] -> ([Term] -> MRM a) -> MRM a
-withUVars = helper [] where
-  -- The extra input list gives the variables that have already been bound, in
-  -- order from most to least recently bound
-  helper :: [Term] -> [(LocalName,Term)] -> ([Term] -> MRM a) -> MRM a
-  helper vars [] m = m $ reverse vars
-  helper vars ((nm,tp):ctx) m =
-    -- FIXME: I think substituting here is wrong, but works on closed terms, so
-    -- it's fine to use at the top level at least...
-    substTerm 0 vars tp >>= \tp' ->
-    withUVarLift nm (Type tp') vars $ \var vars' -> helper (var:vars') ctx m
+withUVars [] f = f []
+withUVars ctx f =
+  do nms <- uniquifyNames (map fst ctx) <$> map fst <$> mrUVars
+     let ctx_u = zip nms $ map (Type . snd) ctx
+     assumps' <- mrAssumptions >>= liftTerm 0 (length ctx)
+     vars <- reverse <$> mapM (liftSC1 scLocalVar) [0 .. length ctx - 1]
+     local (\info -> info { mriUVars = reverse ctx_u ++ mriUVars info,
+                            mriAssumptions = assumps' }) $
+       foldr (\nm m -> mapMRFailure (MRFailureLocalVar nm) m) (f vars) nms
+
+-- | Run a MR Solver in a top-level context, i.e., with no uvars or assumptions
+withNoUVars :: MRM a -> MRM a
+withNoUVars m =
+  do true_tm <- liftSC1 scBool True
+     local (\info -> info { mriUVars = [], mriAssumptions = true_tm }) m
+
+-- | Run a MR Solver in a context of only the specified UVars, no others
+withOnlyUVars :: [(LocalName,Term)] -> MRM a -> MRM a
+withOnlyUVars vars m = withNoUVars $ withUVars vars $ const m
 
 -- | Build 'Term's for all the uvars currently in scope, ordered from least to
 -- most recently bound
@@ -699,32 +726,13 @@ _mrSubstEVarsStrict = mrSubstEVarsStrict
 mrGetCoIndHyp :: FunName -> FunName -> MRM (Maybe CoIndHyp)
 mrGetCoIndHyp nm1 nm2 = Map.lookup (nm1, nm2) <$> mrCoIndHyps
 
--- | Run a compuation under the additional co-inductive assumption that
--- @forall x1, ..., xn. F y1 ... ym |= G z1 ... zl@, where @F@ and @G@ are
--- the given 'FunName's, @y1, ..., ym@ and @z1, ..., zl@ are the given
--- argument lists, and @x1, ..., xn@ is the current context of uvars. If
--- while running the given computation a 'CoIndHypMismatchWidened' error is
--- reached with the given names, the state is restored and the computation is
--- re-run with the widened hypothesis. This is done recursively, meaning this
--- function will only return once no 'CoIndHypMismatchWidened' errors are
--- raised with the given names.
-withCoIndHyp :: FunName -> [Term] -> FunName -> [Term] -> MRM a -> MRM a
-withCoIndHyp nm1 args1 nm2 args2 m =
-  do ctx <- mrUVarCtx
-     withCoIndHyp' (nm1, nm2) (CoIndHyp ctx args1 args2) m
-
--- | The main loop of 'withCoIndHyp'
-withCoIndHyp' :: (FunName, FunName) -> CoIndHyp -> MRM a -> MRM a
-withCoIndHyp' (nm1, nm2) hyp@(CoIndHyp _ args1 args2) m =
+-- | Run a compuation under an additional co-inductive assumption
+withCoIndHypRaw :: FunName -> FunName -> CoIndHyp -> MRM a -> MRM a
+withCoIndHypRaw nm1 nm2 hyp@(CoIndHyp _ args1 args2) m =
   do mrDebugPPPrefixSep 1 "withCoIndHyp" (FunBind nm1 args1 CompFunReturn)
                                     "|=" (FunBind nm2 args2 CompFunReturn)
-     st <- get
      hyps' <- Map.insert (nm1, nm2) hyp <$> mrCoIndHyps
-     (local (\info -> info { mriCoIndHyps = hyps' }) m) `catchError` \case
-       CoIndHypMismatchWidened nm1' nm2' hyp' | nm1 == nm1' && nm2 == nm2'
-         -> -- FIXME: Could restoring the state here cause any problems?
-            put st >> withCoIndHyp' (nm1, nm2) hyp' m
-       e -> throwError e
+     local (\info -> info { mriCoIndHyps = hyps' }) m
 
 -- | Generate fresh evars for the context of a 'CoIndHyp' and
 -- substitute them into its arguments and right-hand side
