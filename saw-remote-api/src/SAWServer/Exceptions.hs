@@ -11,6 +11,7 @@ module SAWServer.Exceptions (
   , notASimpset
   , notATerm
   , notAJVMClass
+  , notAYosysTheorem
   -- * Wrong monad errors
   , notSettingUpCryptol
   , notSettingUpLLVMCrucible
@@ -155,6 +156,17 @@ notAtTopLevel tasks =
   makeJSONRPCException
     10120 "Not at top level"
     (Just (JSON.object ["tasks" .= tasks]))
+
+notAYosysTheorem ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a Yosys theorem -}->
+  JSONRPCException
+notAYosysTheorem name =
+  makeJSONRPCException 10130
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not a Yosys theorem")
+    (Just $ object ["name" .= name])
 
 cantLoadLLVMModule :: String -> JSONRPCException
 cantLoadLLVMModule err =

@@ -12,6 +12,53 @@ class SAWCommand(argo.Command):
     def process_error(self, ae : argo.ArgoException) -> Exception:
         return exceptions.make_saw_exception(ae)
 
+class YosysImport(SAWCommand):
+    def __init__(self,
+                 connection : argo.HasProtocolState,
+                 name : str,
+                 path : str,
+                 timeout : Optional[float]) -> None:
+        super(YosysImport, self).__init__(
+            'SAW/Yosys/import',
+            {'name': name, 'path': path},
+            connection,
+            #timeout=timeout
+        )
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
+class YosysVerify(SAWCommand):
+    def __init__(
+            self,
+            connection : argo.HasProtocolState,
+            imp: str,
+            module : str,
+            preconds: List[str],
+            spec : str,
+            lemmas : List[str],
+            script : ProofScript,
+            lemma_name : str,
+            timeout : Optional[float]) -> None:
+        params = {
+            'import': imp,
+            'module': module,
+            'preconds': preconds,
+            'spec': spec,
+            'lemmas': lemmas,
+            'script': script,
+            'lemma name': lemma_name
+        }
+        super(YosysVerify, self).__init__(
+            'SAW/Yosys/verify',
+            params,
+            connection,
+            #timeout=timeout
+        )
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
 class CryptolLoadFile(SAWCommand):
     def __init__(self, connection : argo.HasProtocolState,
                  filename : str,
@@ -20,7 +67,7 @@ class CryptolLoadFile(SAWCommand):
             'SAW/Cryptol/load file',
             {'file': filename},
             connection,
-            timeout=timeout
+            #timeout=timeout
         )
 
     def process_result(self, _res : Any) -> Any:

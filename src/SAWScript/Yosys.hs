@@ -438,16 +438,16 @@ moduleToTerm sc env m = do
         (C.tRec . C.recordFromFields $ toCryptol <$> outputports)
   pure (t, ty, cty)
 
--- | Given a Yosys IR and the name of a VHDL module, construct a SAWCore term for that module.
-yosysIRToRecordTerm ::
+-- | Given a Yosys IR and the name of a VHDL module, construct records associating module names with SAWCore terms and Cryptol types.
+yosysIRToTerms ::
   MonadIO m =>
   SC.SharedContext ->
   YosysIR ->
-  m SC.TypedTerm
-yosysIRToRecordTerm sc ir = do
+  m (Map Text SC.Term, Map Text C.Type)
+yosysIRToTerms sc ir = do
   let mg = yosysIRModgraph ir
   let sorted = Graph.reverseTopSort $ mg ^. modgraphGraph
-  (termEnv, typeEnv) <- foldM
+  foldM
     (\(termEnv, typeEnv) v -> do
         let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
         -- liftIO . putStrLn . Text.unpack $ mconcat ["Converting module: ", nm]
@@ -468,6 +468,15 @@ yosysIRToRecordTerm sc ir = do
     )
     (Map.empty, Map.empty)
     sorted
+
+-- | Given a Yosys IR and the name of a VHDL module, construct a SAWCore term for that module.
+yosysIRToRecordTerm ::
+  MonadIO m =>
+  SC.SharedContext ->
+  YosysIR ->
+  m SC.TypedTerm
+yosysIRToRecordTerm sc ir = do
+  (termEnv, typeEnv) <- yosysIRToTerms sc ir
   record <- cryptolRecord sc termEnv
   let cty = C.tRec . C.recordFromFields $ first C.mkIdent <$> Map.assocs typeEnv
   let tt = SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) record
@@ -487,7 +496,7 @@ yosys_import path = do
 yosys_verify :: SC.TypedTerm -> [SC.TypedTerm] -> SC.TypedTerm -> [YosysTheorem] -> ProofScript () -> TopLevel YosysTheorem
 yosys_verify ymod preconds other specs tactic = do
   sc <- getSharedContext
-  newmod <- foldM (\term thm -> applyOverride sc thm term)
+  newmod <- foldM (flip $ applyOverride sc)
     (SC.ttTerm ymod)
     specs
   mpc <- case preconds of
