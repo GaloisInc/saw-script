@@ -177,6 +177,7 @@ mrProvableRaw prop_term =
 -- | Test if a Boolean term over the current uvars is provable given the current
 -- assumptions
 mrProvable :: Term -> MRM Bool
+mrProvable (asBool -> Just b) = return b
 mrProvable bool_tm =
   do assumps <- mrAssumptions
      prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
@@ -276,12 +277,10 @@ mrAssertProveEq :: Term -> Term -> MRM ()
 mrAssertProveEq t1 t2 =
   do success <- mrProveEq t1 t2
      if success then return () else
-       throwError (TermsNotEq t1 t2)
+       throwMRFailure (TermsNotEq t1 t2)
 
--- | The main workhorse for 'prProveEq'. Build a Boolean term expressing that
--- the third and fourth arguments, whose type is given by the second. This is
--- done in a continuation monad so that the output term can be in a context with
--- additional universal variables.
+-- | The main workhorse for 'mrProveEq'. Build a Boolean term expressing that
+-- the third and fourth arguments, whose type is given by the second.
 mrProveEqH :: Map MRVar MRVarInfo -> Term -> Term -> Term -> MRM TermInCtx
 
 {-
@@ -308,6 +307,10 @@ mrProveEqH var_map _tp t1 (asEVarApp var_map -> Just (evar, args, Nothing)) =
   do t1' <- mrSubstEVars t1
      success <- mrTrySetAppliedEVar evar args t1'
      TermInCtx [] <$> liftSC1 scBool success
+
+-- For unit types, always return true
+mrProveEqH _ (asTupleType -> Just []) _ _ =
+  TermInCtx [] <$> liftSC1 scBool True
 
 -- For the nat, bitvector, Boolean, and integer types, call mrProveEqSimple
 mrProveEqH _ (asDataType -> Just (pn, [])) t1 t2
