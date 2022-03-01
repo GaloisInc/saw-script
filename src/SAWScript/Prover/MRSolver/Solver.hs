@@ -498,8 +498,30 @@ mrRefines' m1 (Ite cond2 m2 m2') =
      withAssumption cond2 (mrRefines m1 m2)
      withAssumption not_cond2 (mrRefines m1 m2')
 
--- FIXME: handle sum elimination
--- mrRefines (Either f1 g1 e1) (Either f2 g2 e2) =
+-- FIXME: finish handling sum elimination
+mrRefines' (Either (Type ltp1) (Type rtp1) f1 g1 t1) m2 =
+  -- FIXME: call `mrGetDataTypeAssump` like below
+  case asEither t1 of
+    Just (Left  x) -> do m1' <- applyNormCompFun f1 x
+                         mrRefines m1' m2
+    Just (Right x) -> do m1' <- applyNormCompFun g1 x
+                         mrRefines m1' m2
+    Nothing -> do let lnm = maybe "x" id (compFunVarName f1)
+                      rnm = maybe "x" id (compFunVarName f1)
+                  xl <- piUVarsM ltp1 >>= mrFreshVar lnm >>= mrVarTerm
+                  xr <- piUVarsM rtp1 >>= mrFreshVar rnm >>= mrVarTerm
+                  lm1' <- applyNormCompFun f1 xl
+                  rm1' <- applyNormCompFun g1 xr
+                  withDataTypeAssump t1 (IsLeft  xl) (mrRefines lm1' m2)
+                  withDataTypeAssump t1 (IsRight xr) (mrRefines rm1' m2)
+mrRefines' m1 (Either (Type ltp2) (Type rtp2) f2 g2 t2) =
+  -- FIXME: check `asEither` like above
+  mrGetDataTypeAssump t2 >>= \case
+    Just (IsLeft  x) -> do m2' <- applyNormCompFun f2 x
+                           mrRefines m1 m2'
+    Just (IsRight x) -> do m2' <- applyNormCompFun g2 x
+                           mrRefines m1 m2'
+    Nothing -> undefined
 
 mrRefines' m1 (ForallM tp f2) =
   let nm = maybe "x" id (compFunVarName f2) in

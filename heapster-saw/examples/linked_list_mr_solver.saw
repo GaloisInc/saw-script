@@ -1,0 +1,8 @@
+include "linked_list.saw";
+
+heapster_typecheck_fun env "is_head"
+  "(). arg0:int64<>, arg1:List<int64<>,always,R> -o \
+     \ arg0:true, arg1:true, ret:int64<>";
+
+is_head <- parse_core_mod "linked_list" "is_head";
+mr_solver_debug 2 is_head is_head;
