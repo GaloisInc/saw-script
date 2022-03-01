@@ -185,6 +185,12 @@ data CoIndHyp = CoIndHyp {
   coIndHypRHS :: [Term]
 } deriving Show
 
+-- | Extract the @i@th argument on either the left- or right-hand side of a
+-- coinductive hypothesis
+coIndHypArg :: CoIndHyp -> Either Int Int -> Term
+coIndHypArg (CoIndHyp _ _ _ args1 _) (Left i) = args1 !! i
+coIndHypArg (CoIndHyp _ _ _ _ args2) (Right i) = args2 !! i
+
 -- | A map from pairs of function names to co-inductive hypotheses over those
 -- names
 type CoIndHyps = Map (FunName, FunName) CoIndHyp
@@ -434,7 +440,7 @@ mrTypeOf :: Term -> MRM Term
 mrTypeOf t =
   -- NOTE: scTypeOf' wants the type context in the most recently bound var
   -- first, i.e., in the mrUVarCtxRev order
-  mrUVarCtxRev >>= \ctx -> liftSC2 scTypeOf' (map snd $ reverse ctx) t
+  mrUVarCtxRev >>= \ctx -> liftSC2 scTypeOf' (map snd ctx) t
 
 -- | Check if two 'Term's are convertible in the 'MRM' monad
 mrConvertible :: Term -> Term -> MRM Bool
