@@ -40,6 +40,7 @@ import SAWServer.ProofScript
     ( makeSimpsetDescr, makeSimpset, proveDescr, prove )
 import SAWServer.SaveTerm ( saveTermDescr, saveTerm )
 import SAWServer.SetOption ( setOptionDescr, setOption )
+import SAWServer.Yosys (yosysImportDescr, yosysImport, yosysVerifyDescr, yosysVerify)
 
 
 main :: IO ()
@@ -109,6 +110,15 @@ sawMethods =
      "SAW/LLVM/assume"
      llvmAssumeDescr
      llvmAssume
+  -- Yosys
+  , Argo.command
+     "SAW/Yosys/import"
+     yosysImportDescr
+     yosysImport
+  , Argo.command
+     "SAW/Yosys/verify"
+     yosysVerifyDescr
+     yosysVerify
   -- General
   , Argo.command
      "SAW/create ghost variable"

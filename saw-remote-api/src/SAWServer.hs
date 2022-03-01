@@ -55,6 +55,7 @@ import SAWScript.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
 import SAWScript.Proof (newTheoremDB)
 import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts, SAWSimpset)
+import SAWScript.Yosys.Theorem (YosysTheorem)
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
@@ -62,6 +63,7 @@ import Verifier.SAW.Cryptol.Monadify (defaultMonEnv)
 import SAWScript.Prover.MRSolver (emptyMREnv)
 
 import qualified Argo
+--import qualified CryptolServer (validateServerState, ServerState(..))
 --import qualified CryptolServer (validateServerState, ServerState(..))
 import SAWServer.Exceptions
     ( serverValNotFound,
@@ -71,7 +73,9 @@ import SAWServer.Exceptions
       notASimpset,
       notATerm,
       notAJVMClass,
-      notAJVMMethodSpecIR )
+      notAJVMMethodSpecIR,
+      notAYosysTheorem,
+    )
 
 type SAWCont = (SAWEnv, SAWTask)
 
@@ -307,6 +311,7 @@ data ServerVal
   | VJVMMethodSpecIR (CMS.ProvedSpec CJ.JVM)
   | VLLVMMethodSpecIR (CMS.SomeLLVM CMS.ProvedSpec)
   | VGhostVar CMS.GhostGlobal
+  | VYosysTheorem YosysTheorem
 
 instance Show ServerVal where
   show (VTerm t) = "(VTerm " ++ show t ++ ")"
@@ -320,6 +325,7 @@ instance Show ServerVal where
   show (VLLVMMethodSpecIR _) = "VLLVMMethodSpecIR"
   show (VJVMMethodSpecIR _) = "VJVMMethodSpecIR"
   show (VGhostVar x) = "(VGhostVar " ++ show x ++ ")"
+  show (VYosysTheorem _) = "VYosysTheorem"
 
 class IsServerVal a where
   toServerVal :: a -> ServerVal
@@ -347,6 +353,9 @@ instance IsServerVal JSS.Class where
 
 instance IsServerVal CMS.GhostGlobal where
   toServerVal = VGhostVar
+
+instance IsServerVal YosysTheorem where
+  toServerVal = VYosysTheorem
 
 class KnownCrucibleSetupType a where
   knownCrucibleSetupRepr :: CrucibleSetupTypeRepr a
@@ -449,3 +458,10 @@ getGhosts :: Argo.Command SAWState [(ServerName, CMS.GhostGlobal)]
 getGhosts =
   do SAWEnv serverEnv <- view sawEnv <$> Argo.getState
      return [ (n, g) | (n, VGhostVar g) <- M.toList serverEnv ]
+
+getYosysTheorem :: ServerName -> Argo.Command SAWState YosysTheorem
+getYosysTheorem n =
+  do v <- getServerVal n
+     case v of
+       VYosysTheorem t -> return t
+       _other -> Argo.raise (notAYosysTheorem n)

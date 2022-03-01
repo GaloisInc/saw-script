@@ -85,6 +85,31 @@ cryptolRecordSelect sc fields r nm =
       ]
   where ord = fmap fst . C.canonicalFields . C.recordFromFields $ Map.assocs fields
 
+cryptolRecordSelectTyped :: 
+  MonadIO m =>
+  SC.SharedContext ->
+  SC.TypedTerm ->
+  Text ->
+  m SC.TypedTerm
+cryptolRecordSelectTyped sc r nm = do
+  fields <- Map.mapKeys C.identText . Map.fromList . C.canonicalFields <$> case SC.ttType r of
+    SC.TypedTermSchema (C.Forall [] [] (C.TRec fs)) -> pure fs
+    _ -> throw . YosysError $ mconcat
+      [ "Type\n"
+      , Text.pack . show $ SC.ttType r
+      , "\nis not a record type"
+      ]
+  cty <- case Map.lookup nm fields of
+    Just cty -> pure cty
+    _ -> throw . YosysError $ mconcat
+      [ "Record type\n"
+      , Text.pack . show $ SC.ttType r
+      , "\ndoes not have field "
+      , nm
+      ]
+  t <- cryptolRecordSelect sc fields (SC.ttTerm r) nm
+  pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) t
+
 eqBvRecords ::
   (MonadIO m, MonadThrow m) =>
   SC.SharedContext ->

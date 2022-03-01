@@ -229,6 +229,23 @@ class SAWConnection:
             LLVMAssume(self, module, function, contract, lemma_name, timeout)
         return self.most_recent_result
 
+    def yosys_import(self, name: str, path: str, timeout : Optional[float] = None)  -> Command:
+        self.most_recent_result = YosysImport(self, name, path, timeout)
+        return self.most_recent_result
+
+    def yosys_verify(self,
+                     imp: str,
+                     module: str,
+                     preconds: List[str],
+                     spec: str,
+                     lemmas: List[str],
+                     script: ProofScript,
+                     lemma_name: str,
+                     timeout : Optional[float] = None) -> Command:
+        self.most_recent_result = \
+            YosysVerify(self, imp, module, preconds, spec, lemmas, script, lemma_name, timeout)
+        return self.most_recent_result
+
     def prove(self,
               goal: cryptoltypes.CryptolJSON,
               proof_script: ProofScript,
