@@ -122,7 +122,6 @@ import qualified Data.Map as Map
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
-import Verifier.SAW.Term.Pretty
 
 import SAWScript.Prover.MRSolver.Term
 import SAWScript.Prover.MRSolver.Monad
@@ -613,8 +612,6 @@ withCoIndHyp f1 args1 f2 args2 m =
   do ctx <- mrUVarCtx
      withCoIndHyp' (CoIndHyp ctx f1 f2 args1 args2) m
 
--- | Test if a 'MRFailure' contains a widening
-
 -- | The main loop of 'withCoIndHyp'
 withCoIndHyp' :: CoIndHyp -> MRM a -> MRM a
 withCoIndHyp' hyp m =
@@ -627,6 +624,7 @@ withCoIndHyp' hyp m =
            hyp' <- generalizeCoIndHyp hyp new_vars
            withCoIndHyp' hyp' m
   e -> throwError e
+
 
 -- | Test that a coinductive hypothesis for the given function names matches the
 -- given arguments, otherwise throw an exception saying that widening is needed
