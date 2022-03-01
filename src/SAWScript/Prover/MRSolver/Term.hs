@@ -1,6 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 {- |
 Module      : SAWScript.Prover.MRSolver.Term
@@ -18,6 +20,7 @@ normalization - see @Solver.hs@ for the description of this normalization.
 
 module SAWScript.Prover.MRSolver.Term where
 
+import Data.String
 import Data.IORef
 import Control.Monad.Reader
 import qualified Data.IntMap as IntMap
@@ -264,6 +267,10 @@ showInCtx :: PrettyInCtx a => [LocalName] -> a -> String
 showInCtx ctx a =
   renderSawDoc defaultPPOpts $ runReader (prettyInCtx a) ctx
 
+-- | Pretty-print an object in the empty SAW core context
+ppInEmptyCtx :: PrettyInCtx a => a -> SawDoc
+ppInEmptyCtx a = runReader (prettyInCtx a) []
+
 -- | A generic function for pretty-printing an object in a SAW core context of
 -- locally-bound names
 class PrettyInCtx a where
@@ -275,6 +282,22 @@ instance PrettyInCtx Term where
 -- | Combine a list of pretty-printed documents that represent an application
 prettyAppList :: [PPInCtxM SawDoc] -> PPInCtxM SawDoc
 prettyAppList = fmap (group . hang 2 . vsep) . sequence
+
+-- | FIXME: move this helper function somewhere better...
+ppCtx :: [(LocalName,Term)] -> SawDoc
+ppCtx = helper [] where
+  helper :: [LocalName] -> [(LocalName,Term)] -> SawDoc
+  helper _ [] = ""
+  helper ns ((n,tp):ctx) =
+    let ns' = n:ns in
+    ppTermInCtx defaultPPOpts ns' (Unshared $ LocalVar 0) <> ":" <>
+    ppTermInCtx defaultPPOpts ns tp <> ", " <> helper ns' ctx
+
+instance PrettyInCtx String where
+  prettyInCtx str = return $ fromString str
+
+instance PrettyInCtx SawDoc where
+  prettyInCtx pp = return pp
 
 instance PrettyInCtx Type where
   prettyInCtx (Type t) = prettyInCtx t

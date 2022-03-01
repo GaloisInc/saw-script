@@ -122,6 +122,7 @@ import qualified Data.Map as Map
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Term.Pretty
 
 import SAWScript.Prover.MRSolver.Term
 import SAWScript.Prover.MRSolver.Monad
@@ -466,7 +467,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   --   'CoIndHypMismatchWidened' error for 'withCoIndHyp' to catch)
   -- * Otherwise, throw a 'CoIndHypMismatchFailure' error.
   (Just hyp, _) ->
-    matchCoIndHyp f1 f2 hyp args1 args2 >>
+    matchCoIndHyp hyp args1 args2 >>
     mrRefinesFun k1 k2
 
   -- If we have an assumption that f1 args' refines some rhs, then prove that
@@ -608,44 +609,47 @@ mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 -- reached with the given names, the state is restored and the computation is
 -- re-run with the widened hypothesis.
 withCoIndHyp :: FunName -> [Term] -> FunName -> [Term] -> MRM a -> MRM a
-withCoIndHyp nm1 args1 nm2 args2 m =
+withCoIndHyp f1 args1 f2 args2 m =
   do ctx <- mrUVarCtx
-     withCoIndHyp' nm1 nm2 (CoIndHyp ctx args1 args2) m
+     withCoIndHyp' (CoIndHyp ctx f1 f2 args1 args2) m
 
 -- | Test if a 'MRFailure' contains a widening
 
 -- | The main loop of 'withCoIndHyp'
-withCoIndHyp' :: FunName -> FunName -> CoIndHyp -> MRM a -> MRM a
-withCoIndHyp' nm1 nm2 hyp m =
-  withCoIndHypRaw nm1 nm2 hyp m `catchError` \case
+withCoIndHyp' :: CoIndHyp -> MRM a -> MRM a
+withCoIndHyp' hyp m =
+  withCoIndHypRaw hyp m `catchError` \case
   MRExnWiden nm1' nm2' new_vars
-    | nm1 == nm1' && nm2 == nm2' ->
-        -- NOTE: the state gets reset here because we defined MRM with ExceptT
-        -- at a lower level than StateT
-        do hyp' <- generalizeCoIndHyp hyp new_vars
-           withCoIndHyp' nm1 nm2 hyp' m
+    | coIndHypLHSFun hyp == nm1' && coIndHypRHSFun hyp == nm2' ->
+        -- NOTE: the state automatically gets reset here because we defined MRM
+        -- with ExceptT at a lower level than StateT
+        do mrDebugPPPrefixSep 1 "Widening recursive assumption for" nm1' "|=" nm2'
+           hyp' <- generalizeCoIndHyp hyp new_vars
+           withCoIndHyp' hyp' m
   e -> throwError e
 
 -- | Test that a coinductive hypothesis for the given function names matches the
 -- given arguments, otherwise throw an exception saying that widening is needed
-matchCoIndHyp :: FunName -> FunName -> CoIndHyp -> [Term] -> [Term] -> MRM ()
-matchCoIndHyp f1 f2 hyp args1 args2 =
+matchCoIndHyp :: CoIndHyp -> [Term] -> [Term] -> MRM ()
+matchCoIndHyp hyp args1 args2 =
   do (args1', args2') <- instantiateCoIndHyp hyp
      eqs1 <- zipWithM mrProveEq args1' args1
      eqs2 <- zipWithM mrProveEq args2' args2
      if and (eqs1 ++ eqs2) then return () else
-       throwError $ MRExnWiden f1 f2
+       throwError $ MRExnWiden (coIndHypLHSFun hyp) (coIndHypRHSFun hyp)
        (map Left (findIndices not eqs1) ++ map Right (findIndices not eqs1))
 
 coIndHypArg :: CoIndHyp -> Either Int Int -> Term
-coIndHypArg (CoIndHyp _ args1 _) (Left i) = args1 !! i
-coIndHypArg (CoIndHyp _ _ args2) (Right i) = args2 !! i
+coIndHypArg (CoIndHyp _ _ _ args1 _) (Left i) = args1 !! i
+coIndHypArg (CoIndHyp _ _ _ _ args2) (Right i) = args2 !! i
+
 
 -- | Generalize some of the arguments of a coinductive hypothesis
 generalizeCoIndHyp :: CoIndHyp -> [Either Int Int] -> MRM CoIndHyp
 generalizeCoIndHyp hyp [] = return hyp
-generalizeCoIndHyp hyp (arg_spec:arg_specs) =
+generalizeCoIndHyp hyp all_specs@(arg_spec:arg_specs) =
   withOnlyUVars (coIndHypCtx hyp) $ do
+  mrDebugPPPrefixSep 2 "generalizeCoIndHyp" hyp "with arg specs" (show all_specs)
   -- Get the arg and type associated with arg_spec
   let arg = coIndHypArg hyp arg_spec
   arg_tp <- mrTypeOf arg
@@ -657,14 +661,15 @@ generalizeCoIndHyp hyp (arg_spec:arg_specs) =
        args_eq <- if tps_eq then mrProveEq arg arg' else return False
        return $ if args_eq then Left spec' else Right spec'
   let (eq_specs, uneq_specs) = partitionEithers eq_uneq_specs
-  -- Add a new variable of type arg_tp, set all eq_specs to it, and recurse
-  hyp' <- generalizeCoIndHypArgs hyp arg_tp eq_specs
+  -- Add a new variable of type arg_tp, set all eq_specs plus our original
+  -- arg_spec to it, and recurse
+  hyp' <- generalizeCoIndHypArgs hyp arg_tp (arg_spec:eq_specs)
   generalizeCoIndHyp hyp' uneq_specs
 
 -- | Add a new variable of the given type to the context of a coinductive
 -- hypothesis and set the specified arguments to that new variable
 generalizeCoIndHypArgs :: CoIndHyp -> Term -> [Either Int Int] -> MRM CoIndHyp
-generalizeCoIndHypArgs (CoIndHyp ctx args1 args2) tp specs =
+generalizeCoIndHypArgs (CoIndHyp ctx f1 f2 args1 args2) tp specs =
   do let set_arg i args =
            take i args ++ (Unshared $ LocalVar 0) : drop (i+1) args
      let (specs1, specs2) = partitionEithers specs
@@ -673,7 +678,7 @@ generalizeCoIndHypArgs (CoIndHyp ctx args1 args2) tp specs =
      args2' <- liftTermLike 0 1 args2
      let args1'' = foldr set_arg args1' specs1
          args2'' = foldr set_arg args2' specs2
-     return $ CoIndHyp (ctx ++ [("z",tp)]) args1'' args2''
+     return $ CoIndHyp (ctx ++ [("z",tp)]) f1 f2 args1'' args2''
 
 
 ----------------------------------------------------------------------

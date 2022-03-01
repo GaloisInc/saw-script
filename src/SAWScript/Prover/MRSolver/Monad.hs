@@ -79,8 +79,8 @@ ppWithPrefix :: PrettyInCtx a => String -> a -> PPInCtxM SawDoc
 ppWithPrefix str a = (pretty str <>) <$> nest 2 <$> (line <>) <$> prettyInCtx a
 
 -- | Pretty-print two objects, prefixed with a 'String' and with a separator
-ppWithPrefixSep :: PrettyInCtx a => String -> a -> String -> a ->
-                   PPInCtxM SawDoc
+ppWithPrefixSep :: (PrettyInCtx a, PrettyInCtx b) =>
+                   String -> a -> String -> b -> PPInCtxM SawDoc
 ppWithPrefixSep d1 t2 d3 t4 =
   prettyInCtx t2 >>= \d2 -> prettyInCtx t4 >>= \d4 ->
   return $ group (pretty d1 <> nest 2 (line <> d2) <> line <>
@@ -175,6 +175,10 @@ data CoIndHyp = CoIndHyp {
   -- from outermost to innermost; that is, the uvars as "seen from outside their
   -- scope", which is the reverse of the order of 'mrUVars', below
   coIndHypCtx :: [(LocalName,Term)],
+  -- | The LHS function name
+  coIndHypLHSFun :: FunName,
+  -- | The RHS function name
+  coIndHypRHSFun :: FunName,
   -- | The LHS argument expressions @y1, ..., ym@ over the 'coIndHypCtx' uvars
   coIndHypLHS :: [Term],
   -- | The RHS argument expressions @y1, ..., ym@ over the 'coIndHypCtx' uvars
@@ -184,6 +188,14 @@ data CoIndHyp = CoIndHyp {
 -- | A map from pairs of function names to co-inductive hypotheses over those
 -- names
 type CoIndHyps = Map (FunName, FunName) CoIndHyp
+
+instance PrettyInCtx CoIndHyp where
+  prettyInCtx (CoIndHyp ctx f1 f2 args1 args2) =
+    local (const $ map fst $ reverse ctx) $
+    prettyAppList [return (ppCtx ctx <> "."),
+                   prettyInCtx (FunBind f1 args1 CompFunReturn),
+                   return "|=",
+                   prettyInCtx (FunBind f2 args2 CompFunReturn)]
 
 -- | An assumption that a named function refines some specificaiton. This has
 -- the form
@@ -409,11 +421,20 @@ mrApplyAll f args = liftSC2 scApplyAll f args >>= liftSC1 betaNormalize
 -- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in
 -- the order as seen "from the outside"
 mrUVarCtx :: MRM [(LocalName,Term)]
-mrUVarCtx = reverse <$> map (\(nm,Type tp) -> (nm,tp)) <$> mrUVars
+mrUVarCtx = reverse <$> mrUVarCtxRev
+
+-- | Get the current context of uvars as a list of variable names and their
+-- types as SAW core 'Term's, with the most recently bound uvar first, i.e., in
+-- the order as seen "from the inside"
+mrUVarCtxRev :: MRM [(LocalName,Term)]
+mrUVarCtxRev = map (\(nm,Type tp) -> (nm,tp)) <$> mrUVars
 
 -- | Get the type of a 'Term' in the current uvar context
 mrTypeOf :: Term -> MRM Term
-mrTypeOf t = mrUVarCtx >>= \ctx -> liftSC2 scTypeOf' (map snd ctx) t
+mrTypeOf t =
+  -- NOTE: scTypeOf' wants the type context in the most recently bound var
+  -- first, i.e., in the mrUVarCtxRev order
+  mrUVarCtxRev >>= \ctx -> liftSC2 scTypeOf' (map snd $ reverse ctx) t
 
 -- | Check if two 'Term's are convertible in the 'MRM' monad
 mrConvertible :: Term -> Term -> MRM Bool
@@ -434,7 +455,7 @@ mrFunOutType fname args =
        debugPrint 0 ("Expected: " ++ show (length vars) ++
                      ", found: " ++ show (length args))
        debugPretty 0 ("For function: " <> pp_fname <> " with type: " <> pp_ftype)
-       error"mrFunOutType"
+       error "mrFunOutType"
 
 -- | Turn a 'LocalName' into one not in a list, adding a suffix if necessary
 uniquifyName :: LocalName -> [LocalName] -> LocalName
@@ -727,11 +748,11 @@ mrGetCoIndHyp :: FunName -> FunName -> MRM (Maybe CoIndHyp)
 mrGetCoIndHyp nm1 nm2 = Map.lookup (nm1, nm2) <$> mrCoIndHyps
 
 -- | Run a compuation under an additional co-inductive assumption
-withCoIndHypRaw :: FunName -> FunName -> CoIndHyp -> MRM a -> MRM a
-withCoIndHypRaw nm1 nm2 hyp@(CoIndHyp _ args1 args2) m =
-  do mrDebugPPPrefixSep 1 "withCoIndHyp" (FunBind nm1 args1 CompFunReturn)
-                                    "|=" (FunBind nm2 args2 CompFunReturn)
-     hyps' <- Map.insert (nm1, nm2) hyp <$> mrCoIndHyps
+withCoIndHypRaw :: CoIndHyp -> MRM a -> MRM a
+withCoIndHypRaw hyp m =
+  do debugPretty 1 ("withCoIndHyp" <+> ppInEmptyCtx hyp)
+     hyps' <- Map.insert (coIndHypLHSFun hyp,
+                          coIndHypRHSFun hyp) hyp <$> mrCoIndHyps
      local (\info -> info { mriCoIndHyps = hyps' }) m
 
 -- | Generate fresh evars for the context of a 'CoIndHyp' and
@@ -799,8 +820,8 @@ mrPPInCtx a =
 
 -- | Pretty-print the result of 'ppWithPrefixSep' relative to the current uvar
 -- context to 'stderr' if the debug level is at least the 'Int' provided
-mrDebugPPPrefixSep :: PrettyInCtx a => Int -> String -> a -> String -> a ->
-                      MRM ()
+mrDebugPPPrefixSep :: (PrettyInCtx a, PrettyInCtx b) =>
+                      Int -> String -> a -> String -> b -> MRM ()
 mrDebugPPPrefixSep i pre a1 sp a2 =
   mrUVars >>= \ctx ->
   debugPretty i $
