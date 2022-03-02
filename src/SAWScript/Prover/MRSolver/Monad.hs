@@ -485,7 +485,7 @@ mrFunOutType :: FunName -> [Term] -> MRM Term
 mrFunOutType fname args =
   funNameType fname >>= \case
   (asPiList -> (vars, asCompM -> Just tp))
-    | length vars == length args -> substTermLike 0 args tp
+    | length vars == length args -> substTermLike 0 (reverse args) tp
   ftype@(asPiList -> (vars, _)) ->
     do pp_ftype <- mrPPInCtx ftype
        pp_fname <- mrPPInCtx fname

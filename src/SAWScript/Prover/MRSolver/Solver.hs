@@ -619,6 +619,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   -- continuation on the other side, but we don't know how to do that, so give
   -- up
   _ ->
+    mrDebugPPPrefixSep 1 "mrRefines: bind types not equal:" tp1 "/=" tp2 >>
     throwMRFailure (CompsDoNotRefine m1 m2)
 
 {- FIXME: handle FunBind on just one side

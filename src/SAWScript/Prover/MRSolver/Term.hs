@@ -88,6 +88,18 @@ asGlobalFunName (asTypedGlobalProj -> Just (glob, projs)) =
   Just $ GlobalName glob projs
 asGlobalFunName _ = Nothing
 
+-- | Convert a 'FunName' to an unshared term, for printing
+funNameTerm :: FunName -> Term
+funNameTerm (LetRecName var) = Unshared $ FTermF $ ExtCns $ unMRVar var
+funNameTerm (EVarFunName var) = Unshared $ FTermF $ ExtCns $ unMRVar var
+funNameTerm (GlobalName gdef []) = globalDefTerm gdef
+funNameTerm (GlobalName gdef (TermProjLeft:projs)) =
+  Unshared $ FTermF $ PairLeft $ funNameTerm (GlobalName gdef projs)
+funNameTerm (GlobalName gdef (TermProjRight:projs)) =
+  Unshared $ FTermF $ PairRight $ funNameTerm (GlobalName gdef projs)
+funNameTerm (GlobalName gdef (TermProjRecord fname:projs)) =
+  Unshared $ FTermF $ RecordProj (funNameTerm (GlobalName gdef projs)) fname
+
 -- | A term specifically known to be of type @sort i@ for some @i@
 newtype Type = Type Term deriving (Generic, Show)
 
@@ -281,9 +293,14 @@ class PrettyInCtx a where
 instance PrettyInCtx Term where
   prettyInCtx t = flip (ppTermInCtx defaultPPOpts) t <$> ask
 
--- | Combine a list of pretty-printed documents that represent an application
+-- | Combine a list of pretty-printed documents like applications are combined
 prettyAppList :: [PPInCtxM SawDoc] -> PPInCtxM SawDoc
 prettyAppList = fmap (group . hang 2 . vsep) . sequence
+
+-- | Pretty-print the application of a 'Term'
+prettyTermApp :: Term -> [Term] -> PPInCtxM SawDoc
+prettyTermApp f_top args =
+  prettyInCtx $ foldl (\f arg -> Unshared $ App f arg) f_top args
 
 -- | FIXME: move this helper function somewhere better...
 ppCtx :: [(LocalName,Term)] -> SawDoc
@@ -316,7 +333,8 @@ instance PrettyInCtx FunName where
   prettyInCtx (LetRecName var) = prettyInCtx var
   prettyInCtx (EVarFunName var) = prettyInCtx var
   prettyInCtx (GlobalName g projs) =
-    foldM (\pp proj -> (pp <>) <$> prettyInCtx proj) (viaShow g) projs
+    foldM (\pp proj -> (pp <>) <$> prettyInCtx proj) (ppName $
+                                                      globalDefName g) projs
 
 instance PrettyInCtx Comp where
   prettyInCtx (CompTerm t) = prettyInCtx t
@@ -359,9 +377,9 @@ instance PrettyInCtx NormComp where
     prettyAppList [return "forallM", prettyInCtx tp, return "_",
                    parens <$> prettyInCtx f]
   prettyInCtx (FunBind f args CompFunReturn) =
-    prettyAppList (prettyInCtx f : map (fmap parens . prettyInCtx) args)
+    prettyTermApp (funNameTerm f) args
   prettyInCtx (FunBind f [] k) =
     prettyAppList [prettyInCtx f, return ">>=", prettyInCtx k]
   prettyInCtx (FunBind f args k) =
-    prettyAppList [prettyInCtx (FunBind f args CompFunReturn),
+    prettyAppList [parens <$> prettyTermApp (funNameTerm f) args,
                    return ">>=", prettyInCtx k]
