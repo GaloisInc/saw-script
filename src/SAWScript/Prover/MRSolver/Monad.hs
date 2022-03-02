@@ -4,6 +4,9 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DerivingStrategies #-}
 
 {- |
 Module      : SAWScript.Prover.MRSolver.Monad
@@ -26,6 +29,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
 import Control.Monad.Trans.Maybe
+import GHC.Generics
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -231,6 +235,7 @@ type FunAssumps = Map FunName FunAssump
 
 -- | ...
 data DataTypeAssump = IsLeft Term | IsRight Term
+                    deriving (Generic, Show, TermLike)
 
 instance PrettyInCtx DataTypeAssump where
   prettyInCtx (IsLeft  x) = prettyInCtx x >>= ppWithPrefix "Left _ _" 
@@ -286,9 +291,9 @@ data MRExn = MRExnFailure MRFailure
 -- type, all over an 'IO' monad
 newtype MRM a = MRM { unMRM :: ReaderT MRInfo (StateT MRState
                                               (ExceptT MRExn IO)) a }
-              deriving (Functor, Applicative, Monad, MonadIO,
-                        MonadReader MRInfo, MonadState MRState,
-                                            MonadError MRExn)
+              deriving newtype (Functor, Applicative, Monad, MonadIO,
+                                MonadReader MRInfo, MonadState MRState,
+                                                    MonadError MRExn)
 
 instance MonadTerm MRM where
   mkTermF = liftSC1 scTermF
@@ -530,16 +535,19 @@ withUVars ctx f =
   do nms <- uniquifyNames (map fst ctx) <$> map fst <$> mrUVars
      let ctx_u = zip nms $ map (Type . snd) ctx
      assumps' <- mrAssumptions >>= liftTerm 0 (length ctx)
+     dataTypeAssumps' <- mrDataTypeAssumps >>= mapM (liftTermLike 0 (length ctx))
      vars <- reverse <$> mapM (liftSC1 scLocalVar) [0 .. length ctx - 1]
      local (\info -> info { mriUVars = reverse ctx_u ++ mriUVars info,
-                            mriAssumptions = assumps' }) $
+                            mriAssumptions = assumps',
+                            mriDataTypeAssumps = dataTypeAssumps' }) $
        foldr (\nm m -> mapMRFailure (MRFailureLocalVar nm) m) (f vars) nms
 
 -- | Run a MR Solver in a top-level context, i.e., with no uvars or assumptions
 withNoUVars :: MRM a -> MRM a
 withNoUVars m =
   do true_tm <- liftSC1 scBool True
-     local (\info -> info { mriUVars = [], mriAssumptions = true_tm }) m
+     local (\info -> info { mriUVars = [], mriAssumptions = true_tm,
+                            mriDataTypeAssumps = HashMap.empty }) m
 
 -- | Run a MR Solver in a context of only the specified UVars, no others
 withOnlyUVars :: [(LocalName,Term)] -> MRM a -> MRM a

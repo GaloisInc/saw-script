@@ -3,6 +3,15 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# OPTIONS_GHC -fno-warn-partial-type-signatures #-}
 
 {- |
 Module      : SAWScript.Prover.MRSolver.Term
@@ -24,6 +33,7 @@ import Data.String
 import Data.IORef
 import Control.Monad.Reader
 import qualified Data.IntMap as IntMap
+import GHC.Generics
 
 import Prettyprinter
 
@@ -31,7 +41,7 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm (MonadTerm(..))
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.Recognizer
+import Verifier.SAW.Recognizer hiding ((:*:))
 import Verifier.SAW.Cryptol.Monadify
 
 
@@ -79,7 +89,7 @@ asGlobalFunName (asTypedGlobalProj -> Just (glob, projs)) =
 asGlobalFunName _ = Nothing
 
 -- | A term specifically known to be of type @sort i@ for some @i@
-newtype Type = Type Term deriving Show
+newtype Type = Type Term deriving (Generic, Show)
 
 -- | A Haskell representation of a @CompM@ in "monadic normal form"
 data NormComp
@@ -93,7 +103,7 @@ data NormComp
   | ForallM Type CompFun -- ^ a @forallM@ computation
   | FunBind FunName [Term] CompFun
     -- ^ Bind a monadic function with @N@ arguments in an @a -> CompM b@ term
-  deriving Show
+  deriving (Generic, Show)
 
 -- | A computation function of type @a -> CompM b@ for some @a@ and @b@
 data CompFun
@@ -103,7 +113,7 @@ data CompFun
   | CompFunReturn
     -- | The monadic composition @f >=> g@
   | CompFunComp CompFun CompFun
-  deriving Show
+  deriving (Generic, Show)
 
 -- | Compose two 'CompFun's, simplifying if one is a 'CompFunReturn'
 compFunComp :: CompFun -> CompFun -> CompFun
@@ -127,7 +137,7 @@ compFunInputType _ = Nothing
 
 -- | A computation of type @CompM a@ for some @a@
 data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
-          deriving Show
+          deriving (Generic, Show)
 
 -- | Match a type as being of the form @CompM a@ for some @a@
 asCompM :: Term -> Maybe Term
@@ -173,90 +183,78 @@ memoFixTermFun f term_top =
 -- * Lifting MR Solver Terms
 ----------------------------------------------------------------------
 
--- | A term-like object is one that supports lifting and substitution
+-- | A term-like object is one that supports lifting and substitution. This
+-- class can be derived using @DeriveAnyClass@.
 class TermLike a where
   liftTermLike :: MonadTerm m => DeBruijnIndex -> DeBruijnIndex -> a -> m a
   substTermLike :: MonadTerm m => DeBruijnIndex -> [Term] -> a -> m a
 
-instance (TermLike a, TermLike b) => TermLike (a,b) where
-  liftTermLike n i (a,b) = (,) <$> liftTermLike n i a <*> liftTermLike n i b
-  substTermLike n s (a,b) = (,) <$> substTermLike n s a <*> substTermLike n s b
+  -- Default instances for @DeriveAnyClass@
+  default liftTermLike :: (Generic a, GTermLike (Rep a), MonadTerm m) =>
+                          DeBruijnIndex -> DeBruijnIndex -> a -> m a
+  liftTermLike n i = fmap to . gLiftTermLike n i . from
+  default substTermLike :: (Generic a, GTermLike (Rep a), MonadTerm m) =>
+                           DeBruijnIndex -> [Term] -> a -> m a
+  substTermLike n i = fmap to . gSubstTermLike n i . from
 
-instance TermLike a => TermLike [a] where
-  liftTermLike n i l = mapM (liftTermLike n i) l
-  substTermLike n s l = mapM (substTermLike n s) l
+-- | A generic version of 'TermLike' for @DeriveAnyClass@, based on:
+-- https://hackage.haskell.org/package/base-4.16.0.0/docs/GHC-Generics.html#g:12
+class GTermLike f where
+  gLiftTermLike :: MonadTerm m => DeBruijnIndex -> DeBruijnIndex -> f p -> m (f p)
+  gSubstTermLike :: MonadTerm m => DeBruijnIndex -> [Term] -> f p -> m (f p)
+
+-- | 'TermLike' on empty types
+instance GTermLike V1 where
+  gLiftTermLike _ _ = \case {}
+  gSubstTermLike _ _ = \case {}
+
+-- | 'TermLike' on unary types
+instance GTermLike U1 where
+  gLiftTermLike _ _ U1 = return U1
+  gSubstTermLike _ _ U1 = return U1
+
+-- | 'TermLike' on sums
+instance (GTermLike f, GTermLike g) => GTermLike (f :+: g) where
+  gLiftTermLike n i (L1 a) = L1 <$> gLiftTermLike n i a
+  gLiftTermLike n i (R1 b) = R1 <$> gLiftTermLike n i b
+  gSubstTermLike n s (L1 a) = L1 <$> gSubstTermLike n s a
+  gSubstTermLike n s (R1 b) = R1 <$> gSubstTermLike n s b
+
+-- | 'TermLike' on products
+instance (GTermLike f, GTermLike g) => GTermLike (f :*: g) where
+  gLiftTermLike n i (a :*: b) = (:*:) <$> gLiftTermLike n i a <*> gLiftTermLike n i b
+  gSubstTermLike n s (a :*: b) = (:*:) <$> gSubstTermLike n s a <*> gSubstTermLike n s b
+
+-- | 'TermLike' on fields
+instance TermLike a => GTermLike (K1 i a) where
+  gLiftTermLike n i (K1 a) = K1 <$> liftTermLike n i a
+  gSubstTermLike n i (K1 a) = K1 <$> substTermLike n i a
+
+-- | 'GTermLike' ignores meta-information
+instance GTermLike a => GTermLike (M1 i c a) where
+  gLiftTermLike n i (M1 a) = M1 <$> gLiftTermLike n i a
+  gSubstTermLike n i (M1 a) = M1 <$> gSubstTermLike n i a
+
+deriving instance _ => TermLike (a,b)
+deriving instance _ => TermLike (a,b,c)
+deriving instance _ => TermLike (a,b,c,d)
+deriving instance _ => TermLike (a,b,c,d,e)
+deriving instance _ => TermLike (a,b,c,d,e,f)
+deriving instance _ => TermLike (a,b,c,d,e,f,g)
+deriving instance _ => TermLike [a]
 
 instance TermLike Term where
   liftTermLike = liftTerm
   substTermLike = substTerm
 
-instance TermLike Type where
-  liftTermLike n i (Type tp) = Type <$> liftTerm n i tp
-  substTermLike n s (Type tp) = Type <$> substTerm n s tp
+instance TermLike FunName where
+  liftTermLike _ _ = return
+  substTermLike _ _ = return
 
-instance TermLike NormComp where
-  liftTermLike n i (ReturnM t) = ReturnM <$> liftTermLike n i t
-  liftTermLike n i (ErrorM str) = ErrorM <$> liftTermLike n i str
-  liftTermLike n i (Ite cond t1 t2) =
-    Ite <$> liftTermLike n i cond <*> liftTermLike n i t1
-        <*> liftTermLike n i t2
-  liftTermLike n i (Either ltp rtp f g eith) =
-    Either <$> liftTermLike n i ltp <*> liftTermLike n i rtp
-           <*> liftTermLike n i f <*> liftTermLike n i g
-           <*> liftTermLike n i eith
-  liftTermLike n i (MaybeElim tp m f mayb) =
-    MaybeElim <$> liftTermLike n i tp <*> liftTermLike n i m
-              <*> liftTermLike n i f <*> liftTermLike n i mayb
-  liftTermLike n i (OrM t1 t2) =
-    OrM <$> liftTermLike n i t1 <*> liftTermLike n i t2
-  liftTermLike n i (ExistsM tp f) =
-    ExistsM <$> liftTermLike n i tp <*> liftTermLike n i f
-  liftTermLike n i (ForallM tp f) =
-    ForallM <$> liftTermLike n i tp <*> liftTermLike n i f
-  liftTermLike n i (FunBind nm args f) =
-    FunBind nm <$> mapM (liftTermLike n i) args <*> liftTermLike n i f
-
-  substTermLike n s (ReturnM t) = ReturnM <$> substTermLike n s t
-  substTermLike n s (ErrorM str) = ErrorM <$> substTermLike n s str
-  substTermLike n s (Ite cond t1 t2) =
-    Ite <$> substTermLike n s cond <*> substTermLike n s t1
-        <*> substTermLike n s t2
-  substTermLike n s (Either ltp rtp f g eith) =
-    Either <$> substTermLike n s ltp <*> substTermLike n s rtp
-           <*> substTermLike n s f <*> substTermLike n s g
-           <*> substTermLike n s eith
-  substTermLike n s (MaybeElim tp m f mayb) =
-    MaybeElim <$> substTermLike n s tp <*> substTermLike n s m
-              <*> substTermLike n s f <*> substTermLike n s mayb
-  substTermLike n s (OrM t1 t2) =
-    OrM <$> substTermLike n s t1 <*> substTermLike n s t2
-  substTermLike n s (ExistsM tp f) =
-    ExistsM <$> substTermLike n s tp <*> substTermLike n s f
-  substTermLike n s (ForallM tp f) =
-    ForallM <$> substTermLike n s tp <*> substTermLike n s f
-  substTermLike n s (FunBind nm args f) =
-    FunBind nm <$> mapM (substTermLike n s) args <*> substTermLike n s f
-
-instance TermLike CompFun where
-  liftTermLike n i (CompFunTerm t) = CompFunTerm <$> liftTermLike n i t
-  liftTermLike _ _ CompFunReturn = return CompFunReturn
-  liftTermLike n i (CompFunComp f g) =
-    CompFunComp <$> liftTermLike n i f <*> liftTermLike n i g
-
-  substTermLike n s (CompFunTerm t) = CompFunTerm <$> substTermLike n s t
-  substTermLike _ _ CompFunReturn = return CompFunReturn
-  substTermLike n s (CompFunComp f g) =
-    CompFunComp <$> substTermLike n s f <*> substTermLike n s g
-
-instance TermLike Comp where
-  liftTermLike n i (CompTerm t) = CompTerm <$> liftTermLike n i t
-  liftTermLike n i (CompBind m f) =
-    CompBind <$> liftTermLike n i m <*> liftTermLike n i f
-  liftTermLike n i (CompReturn t) = CompReturn <$> liftTermLike n i t
-  substTermLike n s (CompTerm t) = CompTerm <$> substTermLike n s t
-  substTermLike n s (CompBind m f) =
-    CompBind <$> substTermLike n s m <*> substTermLike n s f
-  substTermLike n s (CompReturn t) = CompReturn <$> substTermLike n s t
+deriving instance TermLike Type
+deriving instance TermLike NormComp
+deriving instance TermLike CompFun
+deriving instance TermLike Comp
 
 
 ----------------------------------------------------------------------
