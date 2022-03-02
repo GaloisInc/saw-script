@@ -233,7 +233,8 @@ data FunAssump = FunAssump {
 -- name
 type FunAssumps = Map FunName FunAssump
 
--- | ...
+-- | An assumption that something is equal to one of the constructors of a
+-- datatype, e.g. equal to @Left@ of some 'Term' or @Right@ of some 'Term'
 data DataTypeAssump = IsLeft Term | IsRight Term
                     deriving (Generic, Show, TermLike)
 
@@ -241,14 +242,14 @@ instance PrettyInCtx DataTypeAssump where
   prettyInCtx (IsLeft  x) = prettyInCtx x >>= ppWithPrefix "Left _ _" 
   prettyInCtx (IsRight x) = prettyInCtx x >>= ppWithPrefix "Right _ _"
 
--- | ...
+-- | Recognize a term as a @Left@ or @Right@
 asEither :: Recognizer Term (Either Term Term)
 asEither (asCtor -> Just (c, [_, _, x]))
   | primName c == "Prelude.Left"  = return $ Left x
   | primName c == "Prelude.Right" = return $ Right x
 asEither _ = Nothing
 
--- | ...
+-- | A map from 'Term's to 'DataTypeAssump's over that term
 type DataTypeAssumps = HashMap Term DataTypeAssump
 
 -- | Parameters and locals for MR. Solver
@@ -268,7 +269,7 @@ data MRInfo = MRInfo {
   -- | The current assumptions, which are conjoined into a single Boolean term;
   -- note that these have the current UVars free
   mriAssumptions :: Term,
-  -- | ...
+  -- | The current set of 'DataTypeAssump's
   mriDataTypeAssumps :: DataTypeAssumps,
   -- | The debug level, which controls debug printing
   mriDebugLevel :: Int
@@ -839,14 +840,15 @@ withAssumption phi m =
      assumps' <- liftSC2 scAnd phi assumps
      local (\info -> info { mriAssumptions = assumps' }) m
 
--- | ...
+-- | Add a 'DataTypeAssump' to the current context while executing a
+-- sub-computations
 withDataTypeAssump :: Term -> DataTypeAssump -> MRM a -> MRM a
 withDataTypeAssump x assump m =
   do mrDebugPPPrefixSep 1 "withDataTypeAssump" x "==" assump
      dataTypeAssumps' <- HashMap.insert x assump <$> mrDataTypeAssumps
      local (\info -> info { mriDataTypeAssumps = dataTypeAssumps' }) m
 
--- | ...
+-- | Get the 'DataTypeAssump' associated to the given term, if one exists
 mrGetDataTypeAssump :: Term -> MRM (Maybe DataTypeAssump)
 mrGetDataTypeAssump x = HashMap.lookup x <$> mrDataTypeAssumps
 
