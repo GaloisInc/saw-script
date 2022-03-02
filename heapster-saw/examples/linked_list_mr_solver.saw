@@ -1,8 +1,23 @@
 include "linked_list.saw";
 
+let eq_bool b1 b2 =
+  if b1 then
+    if b2 then true else false
+  else
+    if b2 then false else true;
+
+let fail = do { print "Test failed"; exit 1; };
+let run_test name test expected =
+  do { if expected then print (str_concat "Test: " name) else
+         print (str_concat (str_concat "Test: " name) " (expecting failure)");
+       actual <- test;
+       if eq_bool actual expected then print "Success\n" else
+         do { print "Test failed\n"; exit 1; }; };
+
+
 heapster_typecheck_fun env "is_head"
   "(). arg0:int64<>, arg1:List<int64<>,always,R> -o \
      \ arg0:true, arg1:true, ret:int64<>";
 
 is_head <- parse_core_mod "linked_list" "is_head";
-mr_solver_debug 2 is_head is_head;
+run_test "is_head |= is_head" (mr_solver is_head is_head) true;

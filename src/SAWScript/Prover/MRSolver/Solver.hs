@@ -455,6 +455,7 @@ mrRefines' (ErrorM _) (ErrorM _) = return ()
 mrRefines' (ReturnM e) (ErrorM _) = throwMRFailure (ReturnNotError e)
 mrRefines' (ErrorM _) (ReturnM e) = throwMRFailure (ReturnNotError e)
 
+-- FIXME: Add support for arbitrary maybe asusmptions, like the either case
 mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
@@ -498,30 +499,38 @@ mrRefines' m1 (Ite cond2 m2 m2') =
      withAssumption cond2 (mrRefines m1 m2)
      withAssumption not_cond2 (mrRefines m1 m2')
 
--- FIXME: finish handling sum elimination
-mrRefines' (Either (Type ltp1) (Type rtp1) f1 g1 t1) m2 =
-  -- FIXME: call `mrGetDataTypeAssump` like below
-  case asEither t1 of
-    Just (Left  x) -> do m1' <- applyNormCompFun f1 x
-                         mrRefines m1' m2
-    Just (Right x) -> do m1' <- applyNormCompFun g1 x
-                         mrRefines m1' m2
-    Nothing -> do let lnm = maybe "x" id (compFunVarName f1)
-                      rnm = maybe "x" id (compFunVarName f1)
-                  xl <- piUVarsM ltp1 >>= mrFreshVar lnm >>= mrVarTerm
-                  xr <- piUVarsM rtp1 >>= mrFreshVar rnm >>= mrVarTerm
-                  lm1' <- applyNormCompFun f1 xl
-                  rm1' <- applyNormCompFun g1 xr
-                  withDataTypeAssump t1 (IsLeft  xl) (mrRefines lm1' m2)
-                  withDataTypeAssump t1 (IsRight xr) (mrRefines rm1' m2)
-mrRefines' m1 (Either (Type ltp2) (Type rtp2) f2 g2 t2) =
-  -- FIXME: check `asEither` like above
-  mrGetDataTypeAssump t2 >>= \case
-    Just (IsLeft  x) -> do m2' <- applyNormCompFun f2 x
-                           mrRefines m1 m2'
-    Just (IsRight x) -> do m2' <- applyNormCompFun g2 x
-                           mrRefines m1 m2'
-    Nothing -> undefined
+mrRefines' (Either ltp1 rtp1 f1 g1 t1) m2 =
+  liftSC1 scWhnf t1 >>= \t1' ->
+  mrGetDataTypeAssump t1' >>= \mb_assump ->
+  case (mb_assump, asEither t1') of
+    (Just (IsLeft  x), _) -> applyNormCompFun f1 x >>= flip mrRefines m2
+    (Just (IsRight x), _) -> applyNormCompFun g1 x >>= flip mrRefines m2
+    (_, Just (Left  x)) -> applyNormCompFun f1 x >>= flip mrRefines m2
+    (_, Just (Right x)) -> applyNormCompFun g1 x >>= flip mrRefines m2
+    _ -> let lnm = maybe "x_left" id (compFunVarName f1)
+             rnm = maybe "x_right" id (compFunVarName g1)
+         in withUVarLift lnm ltp1 (f1, t1', m2) (\x (f1', t1'', m2') ->
+             applyNormCompFun f1' x >>= withDataTypeAssump t1'' (IsLeft x)
+                                        . flip mrRefines m2') >>
+            withUVarLift rnm rtp1 (g1, t1', m2) (\x (g1', t1'', m2') ->
+             applyNormCompFun g1' x >>= withDataTypeAssump t1'' (IsRight x)
+                                        . flip mrRefines m2')
+mrRefines' m1 (Either ltp2 rtp2 f2 g2 t2) =
+  liftSC1 scWhnf t2 >>= \t2' ->
+  mrGetDataTypeAssump t2' >>= \mb_assump ->
+  case (mb_assump, asEither t2') of
+    (Just (IsLeft  x), _) -> applyNormCompFun f2 x >>= mrRefines m1
+    (Just (IsRight x), _) -> applyNormCompFun g2 x >>= mrRefines m1
+    (_, Just (Left  x)) -> applyNormCompFun f2 x >>= mrRefines m1
+    (_, Just (Right x)) -> applyNormCompFun g2 x >>= mrRefines m1
+    _ -> let lnm = maybe "x_left" id (compFunVarName f2)
+             rnm = maybe "x_right" id (compFunVarName g2)
+         in withUVarLift lnm ltp2 (f2, t2', m1) (\x (f2', t2'', m1') ->
+             applyNormCompFun f2' x >>= withDataTypeAssump t2'' (IsLeft x)
+                                        . mrRefines m1') >>
+            withUVarLift rnm rtp2 (g2, t2', m1) (\x (g2', t2'', m1') ->
+             applyNormCompFun g2' x >>= withDataTypeAssump t2'' (IsRight x)
+                                        . mrRefines m1')
 
 mrRefines' m1 (ForallM tp f2) =
   let nm = maybe "x" id (compFunVarName f2) in
