@@ -21,3 +21,6 @@ heapster_typecheck_fun env "is_head"
 
 is_head <- parse_core_mod "linked_list" "is_head";
 run_test "is_head |= is_head" (mr_solver is_head is_head) true;
+
+is_elem <- parse_core_mod "linked_list" "is_elem";
+run_test "is_elem |= is_elem" (mr_solver is_elem is_elem) true;

@@ -115,7 +115,7 @@ C |- F e1 ... en >>= k |= F' e1' ... em' >>= k':
 module SAWScript.Prover.MRSolver.Solver where
 
 import Data.Either
-import Data.List (findIndices)
+import Data.List (findIndices, intercalate)
 import Control.Monad.Except
 import qualified Data.Map as Map
 
@@ -366,6 +366,7 @@ withCoIndHyp' hyp m =
         -- NOTE: the state automatically gets reset here because we defined MRM
         -- with ExceptT at a lower level than StateT
         do mrDebugPPPrefixSep 1 "Widening recursive assumption for" nm1' "|=" nm2'
+           debugPrint 2 $ "Widening indices: " ++ intercalate ", " (map show new_vars)
            hyp' <- generalizeCoIndHyp hyp new_vars
            withCoIndHyp' hyp' m
   e -> throwError e
@@ -380,7 +381,7 @@ matchCoIndHyp hyp args1 args2 =
      eqs2 <- zipWithM mrProveEq args2' args2
      if and (eqs1 ++ eqs2) then return () else
        throwError $ MRExnWiden (coIndHypLHSFun hyp) (coIndHypRHSFun hyp)
-       (map Left (findIndices not eqs1) ++ map Right (findIndices not eqs1))
+       (map Left (findIndices not eqs1) ++ map Right (findIndices not eqs2))
 
 -- | Generalize some of the arguments of a coinductive hypothesis
 generalizeCoIndHyp :: CoIndHyp -> [Either Int Int] -> MRM CoIndHyp
@@ -477,27 +478,24 @@ mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
        withAssumption cond (mrRefines m1 m2') >>
        withAssumption not_cond (mrRefines m1 m2)
 
-mrRefines' (Ite cond1 m1 m1') m2_all@(Ite cond2 m2 m2') =
-  liftSC1 scNot cond1 >>= \not_cond1 ->
-  (mrEq cond1 cond2 >>= mrProvable) >>= \case
-  True ->
-    -- If we can prove cond1 == cond2, then we just need to prove m1 |= m2 and
-    -- m1' |= m2'; further, we need only add assumptions about cond1, because it
-    -- is provably equal to cond2
-    withAssumption cond1 (mrRefines m1 m2) >>
-    withAssumption not_cond1 (mrRefines m1' m2')
-  False ->
-    -- Otherwise, prove each branch of the LHS refines the whole RHS
-    withAssumption cond1 (mrRefines m1 m2_all) >>
-    withAssumption not_cond1 (mrRefines m1' m2_all)
 mrRefines' (Ite cond1 m1 m1') m2 =
-  do not_cond1 <- liftSC1 scNot cond1
-     withAssumption cond1 (mrRefines m1 m2)
-     withAssumption not_cond1 (mrRefines m1' m2)
+  liftSC1 scNot cond1 >>= \not_cond1 ->
+  mrProvable cond1 >>= \cond1_true_pv->
+  mrProvable not_cond1 >>= \cond1_false_pv ->
+  case (cond1_true_pv, cond1_false_pv) of
+    (True, _) -> mrRefines m1 m2
+    (_, True) -> mrRefines m1' m2
+    _ -> withAssumption cond1 (mrRefines m1 m2) >>
+         withAssumption not_cond1 (mrRefines m1' m2)
 mrRefines' m1 (Ite cond2 m2 m2') =
-  do not_cond2 <- liftSC1 scNot cond2
-     withAssumption cond2 (mrRefines m1 m2)
-     withAssumption not_cond2 (mrRefines m1 m2')
+  liftSC1 scNot cond2 >>= \not_cond2 ->
+  mrProvable cond2 >>= \cond2_true_pv->
+  mrProvable not_cond2 >>= \cond2_false_pv ->
+  case (cond2_true_pv, cond2_false_pv) of
+    (True, _) -> mrRefines m1 m2
+    (_, True) -> mrRefines m1 m2'
+    _ -> withAssumption cond2 (mrRefines m1 m2) >>
+         withAssumption not_cond2 (mrRefines m1 m2')
 
 mrRefines' (Either ltp1 rtp1 f1 g1 t1) m2 =
   liftSC1 scWhnf t1 >>= \t1' ->

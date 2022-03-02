@@ -81,11 +81,6 @@ asGenBVVecTerm (asApplyAll ->
   = Just (n, len, a, e)
 asGenBVVecTerm _ = Nothing
 
--- | Build a pair of two terms
-pairTerm :: SharedContext -> Term -> Term -> IO Term
-pairTerm sc x y =
-  completeOpenTerm sc $ pairOpenTerm (closedOpenTerm x) (closedOpenTerm y)
-
 type TmPrim = Prim TermModel
 
 -- | Convert a Boolean value to a 'Term'; like 'readBackValue' but that function
@@ -206,7 +201,7 @@ mrProvable bool_tm =
           (asPairType -> Just (tp1, tp2)) -> do
             e1 <- instUVar nm tp1
             e2 <- instUVar nm tp2
-            liftSC2 pairTerm e1 e2
+            liftSC2 scPairValue e1 e2
           -- Otherwise, create a global variable with the given name and type
           tp' -> liftSC2 scFreshEC nm tp' >>= liftSC1 scExtCns
 
@@ -282,7 +277,9 @@ mrProveEq t1 t2 =
      tp <- mrTypeOf t1
      varmap <- mrVars
      cond_in_ctx <- mrProveEqH varmap tp t1 t2
-     withTermInCtx cond_in_ctx mrProvable
+     res <- withTermInCtx cond_in_ctx mrProvable
+     debugPrint 1 $ "mrProveEq: " ++ if res then "Success" else "Failure"
+     return res
 
 -- | Prove that two terms are equal, instantiating evars if necessary, or
 -- throwing an error if this is not possible
