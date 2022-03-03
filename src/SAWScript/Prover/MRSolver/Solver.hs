@@ -501,10 +501,10 @@ mrRefines' (Either ltp1 rtp1 f1 g1 t1) m2 =
   liftSC1 scWhnf t1 >>= \t1' ->
   mrGetDataTypeAssump t1' >>= \mb_assump ->
   case (mb_assump, asEither t1') of
-    (Just (IsLeft  x), _) -> applyNormCompFun f1 x >>= flip mrRefines m2
-    (Just (IsRight x), _) -> applyNormCompFun g1 x >>= flip mrRefines m2
     (_, Just (Left  x)) -> applyNormCompFun f1 x >>= flip mrRefines m2
     (_, Just (Right x)) -> applyNormCompFun g1 x >>= flip mrRefines m2
+    (Just (IsLeft  x), _) -> applyNormCompFun f1 x >>= flip mrRefines m2
+    (Just (IsRight x), _) -> applyNormCompFun g1 x >>= flip mrRefines m2
     _ -> let lnm = maybe "x_left" id (compFunVarName f1)
              rnm = maybe "x_right" id (compFunVarName g1)
          in withUVarLift lnm ltp1 (f1, t1', m2) (\x (f1', t1'', m2') ->
@@ -517,10 +517,10 @@ mrRefines' m1 (Either ltp2 rtp2 f2 g2 t2) =
   liftSC1 scWhnf t2 >>= \t2' ->
   mrGetDataTypeAssump t2' >>= \mb_assump ->
   case (mb_assump, asEither t2') of
-    (Just (IsLeft  x), _) -> applyNormCompFun f2 x >>= mrRefines m1
-    (Just (IsRight x), _) -> applyNormCompFun g2 x >>= mrRefines m1
     (_, Just (Left  x)) -> applyNormCompFun f2 x >>= mrRefines m1
     (_, Just (Right x)) -> applyNormCompFun g2 x >>= mrRefines m1
+    (Just (IsLeft  x), _) -> applyNormCompFun f2 x >>= mrRefines m1
+    (Just (IsRight x), _) -> applyNormCompFun g2 x >>= mrRefines m1
     _ -> let lnm = maybe "x_left" id (compFunVarName f2)
              rnm = maybe "x_right" id (compFunVarName g2)
          in withUVarLift lnm ltp2 (f2, t2', m1) (\x (f2', t2'', m1') ->
