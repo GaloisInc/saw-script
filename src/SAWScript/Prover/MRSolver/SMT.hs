@@ -181,21 +181,29 @@ mrProvable (asBool -> Just b) = return b
 mrProvable bool_tm =
   do assumps <- mrAssumptions
      prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
-     prop_inst <- flip instantiateUVarsM prop $ \nm tp ->
-       liftSC1 scWhnf tp >>= \case
-       (asBVVecType -> Just (n, len, a)) ->
-         -- For variables of type BVVec, create a Vec n Bool -> a function as an
-         -- ExtCns and apply genBVVec to it
-         do
-           ec_tp <-
-             liftSC1 completeOpenTerm $
-             arrowOpenTerm "_" (applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
-                                [closedOpenTerm n, boolTypeOpenTerm])
-             (closedOpenTerm a)
-           ec <- liftSC2 scFreshEC nm ec_tp >>= liftSC1 scExtCns
-           liftSC4 genBVVecTerm n len a ec
-       tp' -> liftSC2 scFreshEC nm tp' >>= liftSC1 scExtCns
+     prop_inst <- instantiateUVarsM instUVar prop
      normSMTProp prop_inst >>= mrProvableRaw
+  where -- | Given a UVar name and type, generate a 'Term' to be passed to
+        -- SMT, with special cases for BVVec and pair types
+        instUVar :: LocalName -> Term -> MRM Term
+        instUVar nm tp = liftSC1 scWhnf tp >>= \case
+          -- For variables of type BVVec, create a @Vec n Bool -> a@ function
+          -- as an ExtCns and apply genBVVec to it
+          (asBVVecType -> Just (n, len, a)) -> do
+             ec_tp <-
+               liftSC1 completeOpenTerm $
+               arrowOpenTerm "_" (applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
+                                  [closedOpenTerm n, boolTypeOpenTerm])
+               (closedOpenTerm a)
+             ec <- instUVar nm ec_tp
+             liftSC4 genBVVecTerm n len a ec
+          -- For pairs, recurse on both sides and combine the result as a pair
+          (asPairType -> Just (tp1, tp2)) -> do
+            e1 <- instUVar nm tp1
+            e2 <- instUVar nm tp2
+            liftSC2 scPairValue e1 e2
+          -- Otherwise, create a global variable with the given name and type
+          tp' -> liftSC2 scFreshEC nm tp' >>= liftSC1 scExtCns
 
 
 ----------------------------------------------------------------------
@@ -269,7 +277,9 @@ mrProveEq t1 t2 =
      tp <- mrTypeOf t1
      varmap <- mrVars
      cond_in_ctx <- mrProveEqH varmap tp t1 t2
-     withTermInCtx cond_in_ctx mrProvable
+     res <- withTermInCtx cond_in_ctx mrProvable
+     debugPrint 1 $ "mrProveEq: " ++ if res then "Success" else "Failure"
+     return res
 
 -- | Prove that two terms are equal, instantiating evars if necessary, or
 -- throwing an error if this is not possible

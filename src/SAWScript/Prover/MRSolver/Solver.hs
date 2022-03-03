@@ -115,7 +115,7 @@ C |- F e1 ... en >>= k |= F' e1' ... em' >>= k':
 module SAWScript.Prover.MRSolver.Solver where
 
 import Data.Either
-import Data.List (findIndices)
+import Data.List (findIndices, intercalate)
 import Control.Monad.Except
 import qualified Data.Map as Map
 
@@ -216,8 +216,8 @@ normComp (CompTerm t) =
       return (ErrorM str)
     (isGlobalDef "Prelude.ite" -> Just (), [_, cond, then_tm, else_tm]) ->
       return $ Ite cond (CompTerm then_tm) (CompTerm else_tm)
-    (isGlobalDef "Prelude.either" -> Just (), [_, _, _, f, g, eith]) ->
-      return $ Either (CompFunTerm f) (CompFunTerm g) eith
+    (isGlobalDef "Prelude.either" -> Just (), [ltp, rtp, _, f, g, eith]) ->
+      return $ Either (Type ltp) (Type rtp) (CompFunTerm f) (CompFunTerm g) eith
     (isGlobalDef "Prelude.maybe" -> Just (), [tp, _, m, f, mayb]) ->
       return $ MaybeElim (Type tp) (CompTerm m) (CompFunTerm f) mayb
     (isGlobalDef "Prelude.orM" -> Just (), [_, m1, m2]) ->
@@ -280,8 +280,8 @@ normBind (ReturnM t) k = applyNormCompFun k t
 normBind (ErrorM msg) _ = return (ErrorM msg)
 normBind (Ite cond comp1 comp2) k =
   return $ Ite cond (CompBind comp1 k) (CompBind comp2 k)
-normBind (Either f g t) k =
-  return $ Either (compFunComp f k) (compFunComp g k) t
+normBind (Either ltp rtp f g t) k =
+  return $ Either ltp rtp (compFunComp f k) (compFunComp g k) t
 normBind (MaybeElim tp m f t) k =
   return $ MaybeElim tp (CompBind m k) (compFunComp f k) t
 normBind (OrM comp1 comp2) k =
@@ -366,6 +366,7 @@ withCoIndHyp' hyp m =
         -- NOTE: the state automatically gets reset here because we defined MRM
         -- with ExceptT at a lower level than StateT
         do mrDebugPPPrefixSep 1 "Widening recursive assumption for" nm1' "|=" nm2'
+           debugPrint 2 $ "Widening indices: " ++ intercalate ", " (map show new_vars)
            hyp' <- generalizeCoIndHyp hyp new_vars
            withCoIndHyp' hyp' m
   e -> throwError e
@@ -380,7 +381,7 @@ matchCoIndHyp hyp args1 args2 =
      eqs2 <- zipWithM mrProveEq args2' args2
      if and (eqs1 ++ eqs2) then return () else
        throwError $ MRExnWiden (coIndHypLHSFun hyp) (coIndHypRHSFun hyp)
-       (map Left (findIndices not eqs1) ++ map Right (findIndices not eqs1))
+       (map Left (findIndices not eqs1) ++ map Right (findIndices not eqs2))
 
 -- | Generalize some of the arguments of a coinductive hypothesis
 generalizeCoIndHyp :: CoIndHyp -> [Either Int Int] -> MRM CoIndHyp
@@ -449,10 +450,13 @@ mrRefines t1 t2 =
 
 -- | The main implementation of 'mrRefines'
 mrRefines' :: NormComp -> NormComp -> MRM ()
+
 mrRefines' (ReturnM e1) (ReturnM e2) = mrAssertProveEq e1 e2
 mrRefines' (ErrorM _) (ErrorM _) = return ()
 mrRefines' (ReturnM e) (ErrorM _) = throwMRFailure (ReturnNotError e)
 mrRefines' (ErrorM _) (ReturnM e) = throwMRFailure (ReturnNotError e)
+
+-- FIXME: Add support for arbitrary maybe asusmptions, like the either case
 mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
@@ -473,29 +477,59 @@ mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
      if cond_holds then mrRefines m1 m2' else
        withAssumption cond (mrRefines m1 m2') >>
        withAssumption not_cond (mrRefines m1 m2)
-mrRefines' (Ite cond1 m1 m1') m2_all@(Ite cond2 m2 m2') =
-  liftSC1 scNot cond1 >>= \not_cond1 ->
-  (mrEq cond1 cond2 >>= mrProvable) >>= \case
-  True ->
-    -- If we can prove cond1 == cond2, then we just need to prove m1 |= m2 and
-    -- m1' |= m2'; further, we need only add assumptions about cond1, because it
-    -- is provably equal to cond2
-    withAssumption cond1 (mrRefines m1 m2) >>
-    withAssumption not_cond1 (mrRefines m1' m2')
-  False ->
-    -- Otherwise, prove each branch of the LHS refines the whole RHS
-    withAssumption cond1 (mrRefines m1 m2_all) >>
-    withAssumption not_cond1 (mrRefines m1' m2_all)
+
 mrRefines' (Ite cond1 m1 m1') m2 =
-  do not_cond1 <- liftSC1 scNot cond1
-     withAssumption cond1 (mrRefines m1 m2)
-     withAssumption not_cond1 (mrRefines m1' m2)
+  liftSC1 scNot cond1 >>= \not_cond1 ->
+  mrProvable cond1 >>= \cond1_true_pv->
+  mrProvable not_cond1 >>= \cond1_false_pv ->
+  case (cond1_true_pv, cond1_false_pv) of
+    (True, _) -> mrRefines m1 m2
+    (_, True) -> mrRefines m1' m2
+    _ -> withAssumption cond1 (mrRefines m1 m2) >>
+         withAssumption not_cond1 (mrRefines m1' m2)
 mrRefines' m1 (Ite cond2 m2 m2') =
-  do not_cond2 <- liftSC1 scNot cond2
-     withAssumption cond2 (mrRefines m1 m2)
-     withAssumption not_cond2 (mrRefines m1 m2')
--- FIXME: handle sum elimination
--- mrRefines (Either f1 g1 e1) (Either f2 g2 e2) =
+  liftSC1 scNot cond2 >>= \not_cond2 ->
+  mrProvable cond2 >>= \cond2_true_pv->
+  mrProvable not_cond2 >>= \cond2_false_pv ->
+  case (cond2_true_pv, cond2_false_pv) of
+    (True, _) -> mrRefines m1 m2
+    (_, True) -> mrRefines m1 m2'
+    _ -> withAssumption cond2 (mrRefines m1 m2) >>
+         withAssumption not_cond2 (mrRefines m1 m2')
+
+mrRefines' (Either ltp1 rtp1 f1 g1 t1) m2 =
+  liftSC1 scWhnf t1 >>= \t1' ->
+  mrGetDataTypeAssump t1' >>= \mb_assump ->
+  case (mb_assump, asEither t1') of
+    (_, Just (Left  x)) -> applyNormCompFun f1 x >>= flip mrRefines m2
+    (_, Just (Right x)) -> applyNormCompFun g1 x >>= flip mrRefines m2
+    (Just (IsLeft  x), _) -> applyNormCompFun f1 x >>= flip mrRefines m2
+    (Just (IsRight x), _) -> applyNormCompFun g1 x >>= flip mrRefines m2
+    _ -> let lnm = maybe "x_left" id (compFunVarName f1)
+             rnm = maybe "x_right" id (compFunVarName g1)
+         in withUVarLift lnm ltp1 (f1, t1', m2) (\x (f1', t1'', m2') ->
+             applyNormCompFun f1' x >>= withDataTypeAssump t1'' (IsLeft x)
+                                        . flip mrRefines m2') >>
+            withUVarLift rnm rtp1 (g1, t1', m2) (\x (g1', t1'', m2') ->
+             applyNormCompFun g1' x >>= withDataTypeAssump t1'' (IsRight x)
+                                        . flip mrRefines m2')
+mrRefines' m1 (Either ltp2 rtp2 f2 g2 t2) =
+  liftSC1 scWhnf t2 >>= \t2' ->
+  mrGetDataTypeAssump t2' >>= \mb_assump ->
+  case (mb_assump, asEither t2') of
+    (_, Just (Left  x)) -> applyNormCompFun f2 x >>= mrRefines m1
+    (_, Just (Right x)) -> applyNormCompFun g2 x >>= mrRefines m1
+    (Just (IsLeft  x), _) -> applyNormCompFun f2 x >>= mrRefines m1
+    (Just (IsRight x), _) -> applyNormCompFun g2 x >>= mrRefines m1
+    _ -> let lnm = maybe "x_left" id (compFunVarName f2)
+             rnm = maybe "x_right" id (compFunVarName g2)
+         in withUVarLift lnm ltp2 (f2, t2', m1) (\x (f2', t2'', m1') ->
+             applyNormCompFun f2' x >>= withDataTypeAssump t2'' (IsLeft x)
+                                        . mrRefines m1') >>
+            withUVarLift rnm rtp2 (g2, t2', m1) (\x (g2', t2'', m1') ->
+             applyNormCompFun g2' x >>= withDataTypeAssump t2'' (IsRight x)
+                                        . mrRefines m1')
+
 mrRefines' m1 (ForallM tp f2) =
   let nm = maybe "x" id (compFunVarName f2) in
   withUVarLift nm tp (m1,f2) $ \x (m1',f2') ->
@@ -506,6 +540,7 @@ mrRefines' (ExistsM tp f1) m2 =
   withUVarLift nm tp (f1,m2) $ \x (f1',m2') ->
   applyNormCompFun f1' x >>= \m1' ->
   mrRefines m1' m2'
+
 mrRefines' m1 (OrM m2 m2') =
   mrOr (mrRefines m1 m2) (mrRefines m1 m2')
 mrRefines' (OrM m1 m1') m2 =
@@ -584,6 +619,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   -- continuation on the other side, but we don't know how to do that, so give
   -- up
   _ ->
+    mrDebugPPPrefixSep 1 "mrRefines: bind types not equal:" tp1 "/=" tp2 >>
     throwMRFailure (CompsDoNotRefine m1 m2)
 
 {- FIXME: handle FunBind on just one side

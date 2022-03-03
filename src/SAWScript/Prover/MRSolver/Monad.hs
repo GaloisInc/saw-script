@@ -4,6 +4,9 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DerivingStrategies #-}
 
 {- |
 Module      : SAWScript.Prover.MRSolver.Monad
@@ -26,9 +29,13 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
 import Control.Monad.Trans.Maybe
+import GHC.Generics
 
 import Data.Map (Map)
 import qualified Data.Map as Map
+
+import Data.HashMap.Lazy (HashMap)
+import qualified Data.HashMap.Lazy as HashMap
 
 import Prettyprinter
 
@@ -226,6 +233,25 @@ data FunAssump = FunAssump {
 -- name
 type FunAssumps = Map FunName FunAssump
 
+-- | An assumption that something is equal to one of the constructors of a
+-- datatype, e.g. equal to @Left@ of some 'Term' or @Right@ of some 'Term'
+data DataTypeAssump = IsLeft Term | IsRight Term
+                    deriving (Generic, Show, TermLike)
+
+instance PrettyInCtx DataTypeAssump where
+  prettyInCtx (IsLeft  x) = prettyInCtx x >>= ppWithPrefix "Left _ _" 
+  prettyInCtx (IsRight x) = prettyInCtx x >>= ppWithPrefix "Right _ _"
+
+-- | Recognize a term as a @Left@ or @Right@
+asEither :: Recognizer Term (Either Term Term)
+asEither (asCtor -> Just (c, [_, _, x]))
+  | primName c == "Prelude.Left"  = return $ Left x
+  | primName c == "Prelude.Right" = return $ Right x
+asEither _ = Nothing
+
+-- | A map from 'Term's to 'DataTypeAssump's over that term
+type DataTypeAssumps = HashMap Term DataTypeAssump
+
 -- | Parameters and locals for MR. Solver
 data MRInfo = MRInfo {
   -- | Global shared context for building terms, etc.
@@ -243,6 +269,8 @@ data MRInfo = MRInfo {
   -- | The current assumptions, which are conjoined into a single Boolean term;
   -- note that these have the current UVars free
   mriAssumptions :: Term,
+  -- | The current set of 'DataTypeAssump's
+  mriDataTypeAssumps :: DataTypeAssumps,
   -- | The debug level, which controls debug printing
   mriDebugLevel :: Int
 }
@@ -264,9 +292,9 @@ data MRExn = MRExnFailure MRFailure
 -- type, all over an 'IO' monad
 newtype MRM a = MRM { unMRM :: ReaderT MRInfo (StateT MRState
                                               (ExceptT MRExn IO)) a }
-              deriving (Functor, Applicative, Monad, MonadIO,
-                        MonadReader MRInfo, MonadState MRState,
-                                            MonadError MRExn)
+              deriving newtype (Functor, Applicative, Monad, MonadIO,
+                                MonadReader MRInfo, MonadState MRState,
+                                                    MonadError MRExn)
 
 instance MonadTerm MRM where
   mkTermF = liftSC1 scTermF
@@ -278,31 +306,35 @@ instance MonadTerm MRM where
 mrSC :: MRM SharedContext
 mrSC = mriSC <$> ask
 
--- | Get the current value of 'mrSMTTimeout'
+-- | Get the current value of 'mriSMTTimeout'
 mrSMTTimeout :: MRM (Maybe Integer)
 mrSMTTimeout = mriSMTTimeout <$> ask
 
--- | Get the current value of 'mrUVars'
+-- | Get the current value of 'mriUVars'
 mrUVars :: MRM [(LocalName,Type)]
 mrUVars = mriUVars <$> ask
 
--- | Get the current value of 'mrFunAssumps'
+-- | Get the current value of 'mriFunAssumps'
 mrFunAssumps :: MRM FunAssumps
 mrFunAssumps = mriFunAssumps <$> ask
 
--- | Get the current value of 'mrCoIndHyps'
+-- | Get the current value of 'mriCoIndHyps'
 mrCoIndHyps :: MRM CoIndHyps
 mrCoIndHyps = mriCoIndHyps <$> ask
 
--- | Get the current value of 'mrAssumptions'
+-- | Get the current value of 'mriAssumptions'
 mrAssumptions :: MRM Term
 mrAssumptions = mriAssumptions <$> ask
 
--- | Get the current value of 'mrDebugLevel'
+-- | Get the current value of 'mriDataTypeAssumps'
+mrDataTypeAssumps :: MRM DataTypeAssumps
+mrDataTypeAssumps = mriDataTypeAssumps <$> ask
+
+-- | Get the current value of 'mriDebugLevel'
 mrDebugLevel :: MRM Int
 mrDebugLevel = mriDebugLevel <$> ask
 
--- | Get the current value of 'mrVars'
+-- | Get the current value of 'mrsVars'
 mrVars :: MRM MRVarMap
 mrVars = mrsVars <$> get
 
@@ -314,7 +346,8 @@ runMRM sc timeout debug assumps m =
      let init_info = MRInfo { mriSC = sc, mriSMTTimeout = timeout,
                               mriDebugLevel = debug, mriFunAssumps = assumps,
                               mriUVars = [], mriCoIndHyps = Map.empty,
-                              mriAssumptions = true_tm }
+                              mriAssumptions = true_tm,
+                              mriDataTypeAssumps = HashMap.empty }
      let init_st = MRState { mrsVars = Map.empty }
      res <- runExceptT $ flip evalStateT init_st $
        flip runReaderT init_info $ unMRM m
@@ -453,7 +486,7 @@ mrFunOutType :: FunName -> [Term] -> MRM Term
 mrFunOutType fname args =
   funNameType fname >>= \case
   (asPiList -> (vars, asCompM -> Just tp))
-    | length vars == length args -> substTermLike 0 args tp
+    | length vars == length args -> substTermLike 0 (reverse args) tp
   ftype@(asPiList -> (vars, _)) ->
     do pp_ftype <- mrPPInCtx ftype
        pp_fname <- mrPPInCtx fname
@@ -503,16 +536,19 @@ withUVars ctx f =
   do nms <- uniquifyNames (map fst ctx) <$> map fst <$> mrUVars
      let ctx_u = zip nms $ map (Type . snd) ctx
      assumps' <- mrAssumptions >>= liftTerm 0 (length ctx)
+     dataTypeAssumps' <- mrDataTypeAssumps >>= mapM (liftTermLike 0 (length ctx))
      vars <- reverse <$> mapM (liftSC1 scLocalVar) [0 .. length ctx - 1]
      local (\info -> info { mriUVars = reverse ctx_u ++ mriUVars info,
-                            mriAssumptions = assumps' }) $
+                            mriAssumptions = assumps',
+                            mriDataTypeAssumps = dataTypeAssumps' }) $
        foldr (\nm m -> mapMRFailure (MRFailureLocalVar nm) m) (f vars) nms
 
 -- | Run a MR Solver in a top-level context, i.e., with no uvars or assumptions
 withNoUVars :: MRM a -> MRM a
 withNoUVars m =
   do true_tm <- liftSC1 scBool True
-     local (\info -> info { mriUVars = [], mriAssumptions = true_tm }) m
+     local (\info -> info { mriUVars = [], mriAssumptions = true_tm,
+                            mriDataTypeAssumps = HashMap.empty }) m
 
 -- | Run a MR Solver in a context of only the specified UVars, no others
 withOnlyUVars :: [(LocalName,Term)] -> MRM a -> MRM a
@@ -799,9 +835,22 @@ instantiateFunAssump fassump =
 -- executing a sub-computation
 withAssumption :: Term -> MRM a -> MRM a
 withAssumption phi m =
-  do assumps <- mrAssumptions
+  do mrDebugPPPrefix 1 "withAssumption" phi
+     assumps <- mrAssumptions
      assumps' <- liftSC2 scAnd phi assumps
      local (\info -> info { mriAssumptions = assumps' }) m
+
+-- | Add a 'DataTypeAssump' to the current context while executing a
+-- sub-computations
+withDataTypeAssump :: Term -> DataTypeAssump -> MRM a -> MRM a
+withDataTypeAssump x assump m =
+  do mrDebugPPPrefixSep 1 "withDataTypeAssump" x "==" assump
+     dataTypeAssumps' <- HashMap.insert x assump <$> mrDataTypeAssumps
+     local (\info -> info { mriDataTypeAssumps = dataTypeAssumps' }) m
+
+-- | Get the 'DataTypeAssump' associated to the given term, if one exists
+mrGetDataTypeAssump :: Term -> MRM (Maybe DataTypeAssump)
+mrGetDataTypeAssump x = HashMap.lookup x <$> mrDataTypeAssumps
 
 -- | Print a 'String' if the debug level is at least the supplied 'Int'
 debugPrint :: Int -> String -> MRM ()
@@ -823,6 +872,14 @@ debugPrettyInCtx i a =
 mrPPInCtx :: PrettyInCtx a => a -> MRM SawDoc
 mrPPInCtx a =
   runReader (prettyInCtx a) <$> map fst <$> mrUVars
+
+-- | Pretty-print the result of 'ppWithPrefix' relative to the current uvar
+-- context to 'stderr' if the debug level is at least the 'Int' provided
+mrDebugPPPrefix :: PrettyInCtx a => Int -> String -> a -> MRM ()
+mrDebugPPPrefix i pre a =
+  mrUVars >>= \ctx ->
+  debugPretty i $
+  flip runReader (map fst ctx) (group <$> nest 2 <$> ppWithPrefix pre a)
 
 -- | Pretty-print the result of 'ppWithPrefixSep' relative to the current uvar
 -- context to 'stderr' if the debug level is at least the 'Int' provided
