@@ -76,6 +76,7 @@ import SAWScript.JavaPretty (prettyClass)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
+import SAWScript.Prover.MRSolver.Monad as MRSolver
 import SAWScript.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))
 
@@ -431,6 +432,7 @@ data TopLevelRW =
   , rwDocs    :: Map SS.Name String
   , rwCryptol :: CEnv.CryptolEnv
   , rwMonadify :: Monadify.MonadifyEnv
+  , rwMRSolverEnv :: MRSolver.MREnv
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPOpts
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext

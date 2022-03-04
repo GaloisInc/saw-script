@@ -9,7 +9,8 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWScript.Prover.MRSolver
-  (askMRSolver, MRFailure(..), showMRFailure, isCompFunType) where
+  (askMRSolver, MRFailure(..), showMRFailure, isCompFunType,
+   MREnv(..), emptyMREnv, mrEnvAddPrecond) where
 
 import SAWScript.Prover.MRSolver.Term
 import SAWScript.Prover.MRSolver.Monad

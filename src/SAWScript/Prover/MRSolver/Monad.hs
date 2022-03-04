@@ -73,6 +73,7 @@ data MRFailure
   | MalformedDefsFun Term
   | MalformedComp Term
   | NotCompFunType Term
+  | PrecondNotProvable FunName FunName Term
     -- | A local variable binding
   | MRFailureLocalVar LocalName MRFailure
     -- | Information about the context of the failure
@@ -129,6 +130,10 @@ instance PrettyInCtx MRFailure where
     ppWithPrefix "Could not handle computation:" t
   prettyInCtx (NotCompFunType tp) =
     ppWithPrefix "Not a computation or computational function type:" tp
+  prettyInCtx (PrecondNotProvable f g pre) =
+    prettyAppList [return "Could not prove precondition for functions",
+                   prettyInCtx f, return "and", prettyInCtx g,
+                   return ":", prettyInCtx pre]
   prettyInCtx (MRFailureLocalVar x err) =
     local (x:) $ prettyInCtx err
   prettyInCtx (MRFailureCtx ctx err) =
@@ -189,23 +194,31 @@ data CoIndHyp = CoIndHyp {
   -- | The LHS argument expressions @y1, ..., ym@ over the 'coIndHypCtx' uvars
   coIndHypLHS :: [Term],
   -- | The RHS argument expressions @y1, ..., ym@ over the 'coIndHypCtx' uvars
-  coIndHypRHS :: [Term]
+  coIndHypRHS :: [Term],
+  -- | The precondition for the left-hand arguments, as a closed function from
+  -- the left-hand arguments to @Bool@
+  coIndHypPrecondLHS :: Term,
+  -- | The precondition for the right-hand arguments, as a closed function from
+  -- the left-hand arguments to @Bool@
+  coIndHypPrecondRHS :: Term
 } deriving Show
 
 -- | Extract the @i@th argument on either the left- or right-hand side of a
 -- coinductive hypothesis
 coIndHypArg :: CoIndHyp -> Either Int Int -> Term
-coIndHypArg (CoIndHyp _ _ _ args1 _) (Left i) = args1 !! i
-coIndHypArg (CoIndHyp _ _ _ _ args2) (Right i) = args2 !! i
+coIndHypArg hyp (Left i) = (coIndHypLHS hyp) !! i
+coIndHypArg hyp (Right i) = (coIndHypRHS hyp) !! i
 
 -- | A map from pairs of function names to co-inductive hypotheses over those
 -- names
 type CoIndHyps = Map (FunName, FunName) CoIndHyp
 
 instance PrettyInCtx CoIndHyp where
-  prettyInCtx (CoIndHyp ctx f1 f2 args1 args2) =
+  prettyInCtx (CoIndHyp ctx f1 f2 args1 args2 pre1 pre2) =
     local (const $ map fst $ reverse ctx) $
     prettyAppList [return (ppCtx ctx <> "."),
+                   prettyTermApp pre1 args1, return "=>",
+                   prettyTermApp pre2 args2, return "=>",
                    prettyInCtx (FunBind f1 args1 CompFunReturn),
                    return "|=",
                    prettyInCtx (FunBind f2 args2 CompFunReturn)]
@@ -231,6 +244,8 @@ data FunAssump = FunAssump {
 
 -- | A map from function names to function refinement assumptions over that
 -- name
+--
+-- FIXME: this should probably be an 'IntMap' on the 'VarIndex' of globals
 type FunAssumps = Map FunName FunAssump
 
 -- | An assumption that something is equal to one of the constructors of a
@@ -252,6 +267,26 @@ asEither _ = Nothing
 -- | A map from 'Term's to 'DataTypeAssump's over that term
 type DataTypeAssumps = HashMap Term DataTypeAssump
 
+-- | A global MR Solver environment
+data MREnv = MREnv {
+  -- | The set of function refinements to be assumed by to Mr. Solver (which
+  -- have hopefully been proved previously...)
+  mreFunAssumps :: FunAssumps,
+  -- | The preconditions associated with functions by the user
+  mrePreconditions :: Map FunName Term
+  }
+
+-- | The empty 'MREnv'
+emptyMREnv :: MREnv
+emptyMREnv = MREnv { mreFunAssumps = Map.empty,
+                     mrePreconditions = Map.empty }
+
+-- | Add a precondition to an 'MREnv'
+mrEnvAddPrecond :: GlobalDef -> Term -> MREnv -> MREnv
+mrEnvAddPrecond gdef pre env =
+  env { mrePreconditions =
+          Map.insert (GlobalName gdef []) pre (mrePreconditions env) }
+
 -- | Parameters and locals for MR. Solver
 data MRInfo = MRInfo {
   -- | Global shared context for building terms, etc.
@@ -262,8 +297,8 @@ data MRInfo = MRInfo {
   -- variables, in order from innermost to outermost, i.e., where element @0@
   -- corresponds to deBruijn index @0@
   mriUVars :: [(LocalName,Type)],
-  -- | The set of function refinements to be assumed by to Mr. Solver
-  mriFunAssumps :: FunAssumps,
+  -- | The top-level Mr Solver environment
+  mriEnv :: MREnv,
   -- | The current set of co-inductive hypotheses
   mriCoIndHyps :: CoIndHyps,
   -- | The current assumptions, which are conjoined into a single Boolean term;
@@ -314,9 +349,9 @@ mrSMTTimeout = mriSMTTimeout <$> ask
 mrUVars :: MRM [(LocalName,Type)]
 mrUVars = mriUVars <$> ask
 
--- | Get the current value of 'mriFunAssumps'
+-- | Get the current function assumptions
 mrFunAssumps :: MRM FunAssumps
-mrFunAssumps = mriFunAssumps <$> ask
+mrFunAssumps = mreFunAssumps <$> mriEnv <$> ask
 
 -- | Get the current value of 'mriCoIndHyps'
 mrCoIndHyps :: MRM CoIndHyps
@@ -339,12 +374,12 @@ mrVars :: MRM MRVarMap
 mrVars = mrsVars <$> get
 
 -- | Run an 'MRM' computation and return a result or an error
-runMRM :: SharedContext -> Maybe Integer -> Int -> FunAssumps ->
+runMRM :: SharedContext -> Maybe Integer -> Int -> MREnv ->
           MRM a -> IO (Either MRFailure a)
-runMRM sc timeout debug assumps m =
+runMRM sc timeout debug env m =
   do true_tm <- scBool sc True
      let init_info = MRInfo { mriSC = sc, mriSMTTimeout = timeout,
-                              mriDebugLevel = debug, mriFunAssumps = assumps,
+                              mriDebugLevel = debug, mriEnv = env,
                               mriUVars = [], mriCoIndHyps = Map.empty,
                               mriAssumptions = true_tm,
                               mriDataTypeAssumps = HashMap.empty }
@@ -473,6 +508,7 @@ mrTypeOf :: Term -> MRM Term
 mrTypeOf t =
   -- NOTE: scTypeOf' wants the type context in the most recently bound var
   -- first, i.e., in the mrUVarCtxRev order
+  mrDebugPPPrefix 2 "mrTypeOf:" t >>
   mrUVarCtxRev >>= \ctx -> liftSC2 scTypeOf' (map snd ctx) t
 
 -- | Check if two 'Term's are convertible in the 'MRM' monad
@@ -792,7 +828,7 @@ mrGetCoIndHyp nm1 nm2 = Map.lookup (nm1, nm2) <$> mrCoIndHyps
 -- | Run a compuation under an additional co-inductive assumption
 withCoIndHypRaw :: CoIndHyp -> MRM a -> MRM a
 withCoIndHypRaw hyp m =
-  do debugPretty 1 ("withCoIndHyp" <+> ppInEmptyCtx hyp)
+  do debugPretty 2 ("withCoIndHypRaw" <+> ppInEmptyCtx hyp)
      hyps' <- Map.insert (coIndHypLHSFun hyp,
                           coIndHypRHSFun hyp) hyp <$> mrCoIndHyps
      local (\info -> info { mriCoIndHyps = hyps' }) m
@@ -820,7 +856,9 @@ withFunAssump fname args rhs m =
      ctx <- mrUVarCtx
      assumps <- mrFunAssumps
      let assumps' = Map.insert fname (FunAssump ctx args rhs) assumps
-     local (\info -> info { mriFunAssumps = assumps' }) m
+     local (\info ->
+             let env' = (mriEnv info) { mreFunAssumps = assumps' } in
+             info { mriEnv = env' }) m
 
 -- | Generate fresh evars for the context of a 'FunAssump' and substitute them
 -- into its arguments and right-hand side
@@ -831,6 +869,16 @@ instantiateFunAssump fassump =
      rhs <- substTermLike 0 evars $ fassumpRHS fassump
      return (args, rhs)
 
+-- | Look up the precondition associated with a function name, returning the
+-- trivial @True@ one if there is none
+mrGetPrecond :: FunName -> MRM Term
+mrGetPrecond nm =
+  (Map.lookup nm <$> mrePreconditions <$> mriEnv <$> ask) >>= \case
+  Just t -> return t
+  Nothing ->
+    do (nm_args, _) <- asPiList <$> funNameType nm
+       liftSC1 scBool True >>= liftSC2 scPiList nm_args
+
 -- | Add an assumption of type @Bool@ to the current path condition while
 -- executing a sub-computation
 withAssumption :: Term -> MRM a -> MRM a
@@ -839,6 +887,12 @@ withAssumption phi m =
      assumps <- mrAssumptions
      assumps' <- liftSC2 scAnd phi assumps
      local (\info -> info { mriAssumptions = assumps' }) m
+
+-- | Remove any existing assumptions and replace them with a Boolean term
+withOnlyAssumption :: Term -> MRM a -> MRM a
+withOnlyAssumption phi m =
+  do mrDebugPPPrefix 1 "withOnlyAssumption" phi
+     local (\info -> info { mriAssumptions = phi }) m
 
 -- | Add a 'DataTypeAssump' to the current context while executing a
 -- sub-computations

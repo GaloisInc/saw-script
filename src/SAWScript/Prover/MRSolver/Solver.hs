@@ -117,7 +117,8 @@ module SAWScript.Prover.MRSolver.Solver where
 import Data.Either
 import Data.List (findIndices, intercalate)
 import Control.Monad.Except
-import qualified Data.Map as Map
+
+import Prettyprinter
 
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
@@ -345,17 +346,42 @@ handling the recursive ones
 -- * Handling Coinductive Hypotheses
 ----------------------------------------------------------------------
 
--- | Run a compuation under the additional co-inductive assumption that
--- @forall x1, ..., xn. F y1 ... ym |= G z1 ... zl@, where @F@ and @G@ are
--- the given 'FunName's, @y1, ..., ym@ and @z1, ..., zl@ are the given
--- argument lists, and @x1, ..., xn@ is the current context of uvars. If
--- while running the given computation a 'CoIndHypMismatchWidened' error is
--- reached with the given names, the state is restored and the computation is
--- re-run with the widened hypothesis.
+-- | Prove the precondition of a coinductive hypothesis applied to the given
+-- left- and right-hand arguments
+proveCoIndHypPreCond :: CoIndHyp -> [Term] -> [Term] -> MRM ()
+proveCoIndHypPreCond hyp args1 args2 =
+  do pre1 <- liftSC2 scApplyAll (coIndHypPrecondLHS hyp) args1
+     pre2 <- liftSC2 scApplyAll (coIndHypPrecondRHS hyp) args2
+     -- FIXME: pre is just for printing / debugging purposes...
+     pre <- liftSC2 scAnd pre1 pre2
+     success <- liftSC2 scAnd pre1 pre2 >>= mrProvable
+     if success then return () else
+       throwMRFailure $
+       PrecondNotProvable (coIndHypLHSFun hyp) (coIndHypRHSFun hyp) pre
+
+-- | Run a compuation @m@ under the additional co-inductive assumption that
+--
+-- > forall x1, ..., xn. preF y1 ... ym -> preG z1 ... zl ->
+-- >   F y1 ... ym |= G z1 ... zl@
+--
+-- where @F@ and @G@ are the given 'FunName's, @y1, ..., ym@ and @z1, ..., zl@
+-- are the given argument lists, @x1, ..., xn@ is the current context of uvars,
+-- and @preF@ and @preG@ are the preconditions associated with @F@ and @G@,
+-- respectively. Note that @m@ is run with /only/ these preconditions as
+-- assumptions; all other assumptions are thrown away. If while running the
+-- given computation a 'CoIndHypMismatchWidened' error is reached with the given
+-- names, the state is restored and the computation is re-run with the widened
+-- hypothesis.
 withCoIndHyp :: FunName -> [Term] -> FunName -> [Term] -> MRM a -> MRM a
 withCoIndHyp f1 args1 f2 args2 m =
   do ctx <- mrUVarCtx
-     withCoIndHyp' (CoIndHyp ctx f1 f2 args1 args2) m
+     pre1 <- mrGetPrecond f1
+     pre2 <- mrGetPrecond f2
+     pre <- liftSC2 scAnd pre1 pre2
+     let hyp = CoIndHyp ctx f1 f2 args1 args2 pre1 pre2
+     debugPretty 1 ("withCoIndHyp" <+> ppInEmptyCtx hyp)
+     proveCoIndHypPreCond hyp args1 args2
+     withOnlyAssumption pre $ withCoIndHyp' hyp m
 
 -- | The main loop of 'withCoIndHyp'
 withCoIndHyp' :: CoIndHyp -> MRM a -> MRM a
@@ -382,6 +408,8 @@ matchCoIndHyp hyp args1 args2 =
      if and (eqs1 ++ eqs2) then return () else
        throwError $ MRExnWiden (coIndHypLHSFun hyp) (coIndHypRHSFun hyp)
        (map Left (findIndices not eqs1) ++ map Right (findIndices not eqs2))
+     proveCoIndHypPreCond hyp args1 args2
+
 
 -- | Generalize some of the arguments of a coinductive hypothesis
 generalizeCoIndHyp :: CoIndHyp -> [Either Int Int] -> MRM CoIndHyp
@@ -412,7 +440,7 @@ generalizeCoIndHyp hyp all_specs@(arg_spec:arg_specs) =
 -- | Add a new variable of the given type to the context of a coinductive
 -- hypothesis and set the specified arguments to that new variable
 generalizeCoIndHypArgs :: CoIndHyp -> Term -> [Either Int Int] -> MRM CoIndHyp
-generalizeCoIndHypArgs (CoIndHyp ctx f1 f2 args1 args2) tp specs =
+generalizeCoIndHypArgs (CoIndHyp ctx f1 f2 args1 args2 pre1 pre2) tp specs =
   do let set_arg i args =
            take i args ++ (Unshared $ LocalVar 0) : drop (i+1) args
      let (specs1, specs2) = partitionEithers specs
@@ -421,7 +449,7 @@ generalizeCoIndHypArgs (CoIndHyp ctx f1 f2 args1 args2) tp specs =
      args2' <- liftTermLike 0 1 args2
      let args1'' = foldr set_arg args1' specs1
          args2'' = foldr set_arg args2' specs2
-     return $ CoIndHyp (ctx ++ [("z",tp)]) f1 f2 args1'' args2''
+     return $ CoIndHyp (ctx ++ [("z",tp)]) f1 f2 args1'' args2'' pre1 pre2
 
 
 ----------------------------------------------------------------------
@@ -726,16 +754,17 @@ mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 askMRSolver ::
   SharedContext ->
   Int {- ^ The debug level -} ->
+  MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
   Term -> Term -> IO (Maybe MRFailure)
 
-askMRSolver sc dlvl timeout t1 t2 =
+askMRSolver sc dlvl env timeout t1 t2 =
   do tp1 <- scTypeOf sc t1 >>= scWhnf sc
      tp2 <- scTypeOf sc t2 >>= scWhnf sc
      case asPiList tp1 of
        (uvar_ctx, asCompM -> Just _) ->
          fmap (either Just (const Nothing)) $
-         runMRM sc timeout dlvl Map.empty $
+         runMRM sc timeout dlvl env $
          withUVars uvar_ctx $ \vars ->
          do tps_are_eq <- mrConvertible tp1 tp2
             if tps_are_eq then return () else
