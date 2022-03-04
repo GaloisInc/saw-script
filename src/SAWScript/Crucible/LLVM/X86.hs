@@ -496,59 +496,12 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
          else
            pure []
 
-      simpleLoopFixpointFeature <- maybeToList <$> mapM
-        (\func -> liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $ \fixpoint_substitution condition ->
-          do let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
-             let body_exprs = map (mapSome $ Crucible.LLVM.Fixpoint.bodyValue) (MapF.elems fixpoint_substitution)
-             let uninterpreted_constants = foldMap
-                   (viewSome $ Set.map (mapSome $ W4.varExpr sym) . W4.exprUninterpConstants sym)
-                   (Some condition : body_exprs)
-             let filtered_uninterpreted_constants = Set.toList $ Set.filter
-                   (\(Some variable) ->
-                     not (List.isPrefixOf "creg_join_var" $ show $ W4.printSymExpr variable)
-                     && not (List.isPrefixOf "cmem_join_var" $ show $ W4.printSymExpr variable)
-                     && not (List.isPrefixOf "cundefined" $ show $ W4.printSymExpr variable)
-                     && not (List.isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable))
-                   uninterpreted_constants
-             body_tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
-             implicit_parameters <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet body_tms
-
-             arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
-               toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
-             applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ arguments
-             applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i ->
-               scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
-             result_substitution <- MapF.fromList <$> zipWithM
-               (\(MapF.Pair variable _) applied_func_selector ->
-                 MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)
-               fixpoint_substitution_as_list
-               applied_func_selectors
-
-             explicit_parameters <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
-               toSC sym sawst variable
-             inner_func <- case asConstant (ttTerm func) of
-               Just (_, Just (asApplyAll -> (isGlobalDef "Prelude.fix" -> Just (), [_, inner_func]))) ->
-                 return inner_func
-               _ -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
-             func_body <- betaNormalize sc
-               =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ explicit_parameters))
-
-             step_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
-               toSC sym sawst $ Crucible.LLVM.Fixpoint.bodyValue fixpoint_entry
-             tail_applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ step_arguments
-             explicit_parameters_tuple <- scTuple sc explicit_parameters
-             let lhs = Prelude.last step_arguments
-             w <- scNat sc 64
-             rhs <- scBvMul sc w (head implicit_parameters) =<< scBvNat sc w =<< scNat sc 128
-             loop_condition <- scBvULt sc w lhs rhs
-             output_tuple_type <- scTupleType sc =<< mapM (scTypeOf sc) explicit_parameters
-             loop_body <- scIte sc output_tuple_type loop_condition tail_applied_func explicit_parameters_tuple
-
-             induction_step_condition <- scEq sc loop_body func_body
-             result_condition <- bindSAWTerm sym sawst W4.BaseBoolRepr induction_step_condition
-
-             return (result_substitution, result_condition))
-        maybeFixpointFunc
+      simpleLoopFixpointFeature <-
+        case maybeFixpointFunc of
+          Nothing -> return []
+          Just func ->
+            do f <- liftIO (setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func)
+               return [f]
 
       let execFeatures = simpleLoopFixpointFeature ++ psatf
 
@@ -573,6 +526,79 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       returnProof $ SomeLLVM ps
 
   | otherwise = fail "LLVM module must be 64-bit"
+
+
+
+setupSimpleLoopFixpointFeature ::
+  ( sym ~ W4.B.ExprBuilder n st fs
+  , C.IsSymInterface sym
+  , ?memOpts::C.LLVM.MemOptions
+  , C.LLVM.HasLLVMAnn sym
+  ) =>
+  sym ->
+  SharedContext ->
+  SAWCoreState n ->
+  C.CFG ext blocks init ret ->
+  C.GlobalVar C.LLVM.Mem ->
+  TypedTerm ->
+  IO (C.ExecutionFeature p sym ext rtp)
+
+setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
+  Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar fixpoint_func
+
+ where
+  fixpoint_func fixpoint_substitution condition =
+    do let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
+       let body_exprs = map (mapSome $ Crucible.LLVM.Fixpoint.bodyValue) (MapF.elems fixpoint_substitution)
+       let uninterpreted_constants = foldMap
+             (viewSome $ Set.map (mapSome $ W4.varExpr sym) . W4.exprUninterpConstants sym)
+             (Some condition : body_exprs)
+       let filtered_uninterpreted_constants = Set.toList $ Set.filter
+             (\(Some variable) ->
+               not (List.isPrefixOf "creg_join_var" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "cmem_join_var" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "cundefined" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable))
+             uninterpreted_constants
+       body_tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
+       implicit_parameters <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet body_tms
+
+       arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+         toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
+       applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ arguments
+       applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i ->
+         scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
+       result_substitution <- MapF.fromList <$> zipWithM
+         (\(MapF.Pair variable _) applied_func_selector ->
+           MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)
+         fixpoint_substitution_as_list
+         applied_func_selectors
+
+       explicit_parameters <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
+         toSC sym sawst variable
+       inner_func <- case asConstant (ttTerm func) of
+         Just (_, Just (asApplyAll -> (isGlobalDef "Prelude.fix" -> Just (), [_, inner_func]))) ->
+           return inner_func
+         _ -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
+       func_body <- betaNormalize sc
+         =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ explicit_parameters))
+
+       step_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+         toSC sym sawst $ Crucible.LLVM.Fixpoint.bodyValue fixpoint_entry
+       tail_applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ step_arguments
+       explicit_parameters_tuple <- scTuple sc explicit_parameters
+       let lhs = Prelude.last step_arguments
+       w <- scNat sc 64
+       rhs <- scBvMul sc w (head implicit_parameters) =<< scBvNat sc w =<< scNat sc 128
+       loop_condition <- scBvULt sc w lhs rhs
+       output_tuple_type <- scTupleType sc =<< mapM (scTypeOf sc) explicit_parameters
+       loop_body <- scIte sc output_tuple_type loop_condition tail_applied_func explicit_parameters_tuple
+
+       induction_step_condition <- scEq sc loop_body func_body
+       result_condition <- bindSAWTerm sym sawst W4.BaseBoolRepr induction_step_condition
+
+       return (result_substitution, result_condition)
+
 
 --------------------------------------------------------------------------------
 -- ** Computing the CFG
