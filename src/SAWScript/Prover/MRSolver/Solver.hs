@@ -114,6 +114,7 @@ C |- F e1 ... en >>= k |= F' e1' ... em' >>= k':
 
 module SAWScript.Prover.MRSolver.Solver where
 
+import Data.Maybe
 import Data.Either
 import Data.List (findIndices, intercalate)
 import Control.Monad.Except
@@ -346,20 +347,17 @@ handling the recursive ones
 -- * Handling Coinductive Hypotheses
 ----------------------------------------------------------------------
 
--- | Prove the precondition of a coinductive hypothesis applied to the given
--- left- and right-hand arguments
-proveCoIndHypPreCond :: CoIndHyp -> [Term] -> [Term] -> MRM ()
-proveCoIndHypPreCond hyp args1 args2 =
-  do pre1 <- liftSC2 scApplyAll (coIndHypPrecondLHS hyp) args1
-     pre2 <- liftSC2 scApplyAll (coIndHypPrecondRHS hyp) args2
-     -- FIXME: pre is just for printing / debugging purposes...
+-- | Prove the precondition of a coinductive hypothesis
+proveCoIndHypPreCond :: CoIndHyp -> MRM ()
+proveCoIndHypPreCond hyp =
+  do (pre1, pre2) <- applyCoIndHypPreconds hyp
      pre <- liftSC2 scAnd pre1 pre2
-     success <- liftSC2 scAnd pre1 pre2 >>= mrProvable
+     success <- mrProvable pre
      if success then return () else
        throwMRFailure $
        PrecondNotProvable (coIndHypLHSFun hyp) (coIndHypRHSFun hyp) pre
 
--- | Run a compuation @m@ under the additional co-inductive assumption that
+-- | Co-inductively prove the refinement
 --
 -- > forall x1, ..., xn. preF y1 ... ym -> preG z1 ... zl ->
 -- >   F y1 ... ym |= G z1 ... zl@
@@ -367,35 +365,47 @@ proveCoIndHypPreCond hyp args1 args2 =
 -- where @F@ and @G@ are the given 'FunName's, @y1, ..., ym@ and @z1, ..., zl@
 -- are the given argument lists, @x1, ..., xn@ is the current context of uvars,
 -- and @preF@ and @preG@ are the preconditions associated with @F@ and @G@,
--- respectively. Note that @m@ is run with /only/ these preconditions as
--- assumptions; all other assumptions are thrown away. If while running the
--- given computation a 'CoIndHypMismatchWidened' error is reached with the given
--- names, the state is restored and the computation is re-run with the widened
--- hypothesis.
-withCoIndHyp :: FunName -> [Term] -> FunName -> [Term] -> MRM a -> MRM a
-withCoIndHyp f1 args1 f2 args2 m =
+-- respectively. This proof is performed by coinductively assuming the
+-- refinement holds and proving the refinement with the definitions of @F@ and
+-- @G@ unfolded to their bodies. Note that this refinement is performed with
+-- /only/ the preconditions @preF@ and @preG@ as assumptions; all other
+-- assumptions are thrown away. If while running the refinement computation a
+-- 'CoIndHypMismatchWidened' error is reached with the given names, the state is
+-- restored and the computation is re-run with the widened hypothesis.
+mrRefinesCoInd :: FunName -> [Term] -> FunName -> [Term] -> MRM ()
+mrRefinesCoInd f1 args1 f2 args2 =
   do ctx <- mrUVarCtx
-     pre1 <- mrGetPrecond f1
-     pre2 <- mrGetPrecond f2
-     pre <- liftSC2 scAnd pre1 pre2
-     let hyp = CoIndHyp ctx f1 f2 args1 args2 pre1 pre2
-     debugPretty 1 ("withCoIndHyp" <+> ppInEmptyCtx hyp)
-     proveCoIndHypPreCond hyp args1 args2
-     withOnlyAssumption pre $ withCoIndHyp' hyp m
+     preF1 <- mrGetPrecond f1
+     preF2 <- mrGetPrecond f2
+     let hyp = CoIndHyp ctx f1 f2 args1 args2 preF1 preF2
+     proveCoIndHypPreCond hyp
+     proveCoIndHyp hyp
 
--- | The main loop of 'withCoIndHyp'
-withCoIndHyp' :: CoIndHyp -> MRM a -> MRM a
-withCoIndHyp' hyp m =
-  withCoIndHypRaw hyp m `catchError` \case
-  MRExnWiden nm1' nm2' new_vars
-    | coIndHypLHSFun hyp == nm1' && coIndHypRHSFun hyp == nm2' ->
-        -- NOTE: the state automatically gets reset here because we defined MRM
-        -- with ExceptT at a lower level than StateT
-        do mrDebugPPPrefixSep 1 "Widening recursive assumption for" nm1' "|=" nm2'
-           debugPrint 2 $ "Widening indices: " ++ intercalate ", " (map show new_vars)
-           hyp' <- generalizeCoIndHyp hyp new_vars
-           withCoIndHyp' hyp' m
-  e -> throwError e
+-- | Prove the refinement represented by a 'CoIndHyp' coinductively. This is the
+-- main loop implementing 'mrRefinesCoInd'. See that function for documentation.
+proveCoIndHyp :: CoIndHyp -> MRM ()
+proveCoIndHyp hyp =
+  do let f1 = coIndHypLHSFun hyp
+         f2 = coIndHypRHSFun hyp
+         args1 = coIndHypLHS hyp
+         args2 = coIndHypRHS hyp
+     debugPretty 1 ("proveCoIndHyp" <+> ppInEmptyCtx hyp)
+     lhs <- fromMaybe (error "proveCoIndHyp") <$> mrFunBody f1 args1
+     rhs <- fromMaybe (error "proveCoIndHyp") <$> mrFunBody f2 args2
+     (pre1, pre2) <- applyCoIndHypPreconds hyp
+     pre <- liftSC2 scAnd pre1 pre2
+     (withOnlyUVars (coIndHypCtx hyp) $ withOnlyAssumption pre $
+      withCoIndHyp hyp $ mrRefines lhs rhs) `catchError` \case
+       MRExnWiden nm1' nm2' new_vars
+         | f1 == nm1' && f2 == nm2' ->
+           -- NOTE: the state automatically gets reset here because we defined
+           -- MRM with ExceptT at a lower level than StateT
+           do mrDebugPPPrefixSep 1 "Widening recursive assumption for" nm1' "|=" nm2'
+              debugPrint 2 ("Widening indices: " ++
+                            intercalate ", " (map show new_vars))
+              hyp' <- generalizeCoIndHyp hyp new_vars
+              proveCoIndHyp hyp'
+       e -> throwError e
 
 
 -- | Test that a coinductive hypothesis for the given function names matches the
@@ -408,7 +418,7 @@ matchCoIndHyp hyp args1 args2 =
      if and (eqs1 ++ eqs2) then return () else
        throwError $ MRExnWiden (coIndHypLHSFun hyp) (coIndHypRHSFun hyp)
        (map Left (findIndices not eqs1) ++ map Right (findIndices not eqs2))
-     proveCoIndHypPreCond hyp args1 args2
+     proveCoIndHypPreCond hyp
 
 
 -- | Generalize some of the arguments of a coinductive hypothesis
@@ -608,7 +618,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   -- * If it is convertible to our goal, continue and prove that k1 |= k2
   -- * If it can be widened with our goal, restart the current proof branch
   --   with the widened hypothesis (done by throwing a
-  --   'CoIndHypMismatchWidened' error for 'withCoIndHyp' to catch)
+  --   'CoIndHypMismatchWidened' error for 'proveCoIndHyp' to catch)
   -- * Otherwise, throw a 'CoIndHypMismatchFailure' error.
   (Just hyp, _) ->
     matchCoIndHyp hyp args1 args2 >>
@@ -636,10 +646,9 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   -- that f1 args1 |= f2 args2 under the assumption that f1 args1 |= f2 args2,
   -- and then try to prove that k1 |= k2
   _ | tps_eq
-    , Just (f1_body, _) <- maybe_f1_body
-    , Just (f2_body, _) <- maybe_f2_body ->
-      do withCoIndHyp f1 args1 f2 args2 $ mrRefines f1_body f2_body
-         mrRefinesFun k1 k2
+    , Just _ <- maybe_f1_body
+    , Just _ <- maybe_f2_body ->
+      mrRefinesCoInd f1 args1 f2 args2 >> mrRefinesFun k1 k2
 
   -- If we cannot line up f1 and f2, then making progress here would require us
   -- to somehow split either m1 or m2 into some bind m' >>= k' such that m' is

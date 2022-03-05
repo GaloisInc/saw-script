@@ -2158,6 +2158,10 @@ orM a m1 m2 = existsM Bool a (\ (b:Bool) -> ite (CompM a) b m1 m2);
 -- those computations diverge from each other.
 primitive forallM : (a b:sort 0) -> (a -> CompM b) -> CompM b;
 
+-- A hint to Mr Solver that a recursive function has the given precondition
+precondHint : (a : sort 0) -> Bool -> a -> a;
+precondHint _ _ a = a;
+
 -- NOTE: for the simplicity and efficiency of MR solver, we define all
 -- fixed-point computations in CompM via a primitive multiFixM, defined below.
 -- Thus, even though fixM is really the primitive operation, we write this file

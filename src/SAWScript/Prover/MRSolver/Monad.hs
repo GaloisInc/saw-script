@@ -197,10 +197,10 @@ data CoIndHyp = CoIndHyp {
   coIndHypRHS :: [Term],
   -- | The precondition for the left-hand arguments, as a closed function from
   -- the left-hand arguments to @Bool@
-  coIndHypPrecondLHS :: Term,
+  coIndHypPrecondLHS :: Maybe Term,
   -- | The precondition for the right-hand arguments, as a closed function from
   -- the left-hand arguments to @Bool@
-  coIndHypPrecondRHS :: Term
+  coIndHypPrecondRHS :: Maybe Term
 } deriving Show
 
 -- | Extract the @i@th argument on either the left- or right-hand side of a
@@ -217,8 +217,12 @@ instance PrettyInCtx CoIndHyp where
   prettyInCtx (CoIndHyp ctx f1 f2 args1 args2 pre1 pre2) =
     local (const $ map fst $ reverse ctx) $
     prettyAppList [return (ppCtx ctx <> "."),
-                   prettyTermApp pre1 args1, return "=>",
-                   prettyTermApp pre2 args2, return "=>",
+                   (case pre1 of
+                       Just f -> prettyTermApp f args1
+                       Nothing -> return "True"), return "=>",
+                   (case pre2 of
+                       Just f -> prettyTermApp f args2
+                       Nothing -> return "True"), return "=>",
                    prettyInCtx (FunBind f1 args1 CompFunReturn),
                    return "|=",
                    prettyInCtx (FunBind f2 args2 CompFunReturn)]
@@ -266,6 +270,8 @@ asEither _ = Nothing
 
 -- | A map from 'Term's to 'DataTypeAssump's over that term
 type DataTypeAssumps = HashMap Term DataTypeAssump
+
+-- FIXME HERE NOW: remove preconditions from MREnv
 
 -- | A global MR Solver environment
 data MREnv = MREnv {
@@ -826,8 +832,8 @@ mrGetCoIndHyp :: FunName -> FunName -> MRM (Maybe CoIndHyp)
 mrGetCoIndHyp nm1 nm2 = Map.lookup (nm1, nm2) <$> mrCoIndHyps
 
 -- | Run a compuation under an additional co-inductive assumption
-withCoIndHypRaw :: CoIndHyp -> MRM a -> MRM a
-withCoIndHypRaw hyp m =
+withCoIndHyp :: CoIndHyp -> MRM a -> MRM a
+withCoIndHyp hyp m =
   do debugPretty 2 ("withCoIndHypRaw" <+> ppInEmptyCtx hyp)
      hyps' <- Map.insert (coIndHypLHSFun hyp,
                           coIndHypRHSFun hyp) hyp <$> mrCoIndHyps
@@ -841,6 +847,25 @@ instantiateCoIndHyp (CoIndHyp {..}) =
      lhs <- substTermLike 0 evars coIndHypLHS
      rhs <- substTermLike 0 evars coIndHypRHS
      return (lhs, rhs)
+
+-- | Apply the preconditions of a 'CoIndHyp' to their respective arguments,
+-- yielding @Bool@ conditions, using the constant @True@ value when a
+-- precondition is absent
+applyCoIndHypPreconds :: CoIndHyp -> MRM (Term, Term)
+applyCoIndHypPreconds hyp =
+  let apply_precond :: Maybe Term -> [Term] -> MRM Term
+      apply_precond (Just (asLambdaList -> (vars, phi))) args
+        | length vars == length args
+          -- NOTE: applying to a list of arguments == substituting the reverse
+          -- of that list, because the first argument corresponds to the
+          -- greatest deBruijn index
+        = substTerm 0 (reverse args) phi
+      apply_precond (Just _) _ =
+        error "applyCoIndHypPreconds: wrong number of arguments for precondition!"
+      apply_precond Nothing _ = liftSC1 scBool True in
+  do pre1 <- apply_precond (coIndHypPrecondLHS hyp) (coIndHypLHS hyp)
+     pre2 <- apply_precond (coIndHypPrecondRHS hyp) (coIndHypRHS hyp)
+     return (pre1, pre2)
 
 -- | Look up the 'FunAssump' for a 'FunName', if there is one
 mrGetFunAssump :: FunName -> MRM (Maybe FunAssump)
@@ -869,15 +894,27 @@ instantiateFunAssump fassump =
      rhs <- substTermLike 0 evars $ fassumpRHS fassump
      return (args, rhs)
 
--- | Look up the precondition associated with a function name, returning the
--- trivial @True@ one if there is none
-mrGetPrecond :: FunName -> MRM Term
+-- FIXME HERE NOW: delete this and remove the preconditions from the env
+-- | Look up the precondition associated with a function name, if there is one
+-- mrLookupPrecond :: FunName -> MRM (Maybe Term)
+-- mrLookupPrecond nm = Map.lookup nm <$> mrePreconditions <$> mriEnv <$> ask
+
+-- | Get the precondition hint associated with a function name, by unfolding the
+-- name and checking if its body has the form
+--
+-- > \ x1 ... xn -> precondHint a phi m
+--
+-- If so, return @\ x1 ... xn -> phi@ as a term with the @xi@ variables free.
+-- Otherwise, return 'Nothing'.
+mrGetPrecond :: FunName -> MRM (Maybe Term)
 mrGetPrecond nm =
-  (Map.lookup nm <$> mrePreconditions <$> mriEnv <$> ask) >>= \case
-  Just t -> return t
-  Nothing ->
-    do (nm_args, _) <- asPiList <$> funNameType nm
-       liftSC1 scBool True >>= liftSC2 scPiList nm_args
+  mrFunNameBody nm >>= \case
+  Just (asLambdaList ->
+        (args,
+         asApplyAll -> (isGlobalDef "Prelude.precondHint" -> Just (),
+                        [_, phi, _]))) ->
+    Just <$> liftSC2 scLambdaList args phi
+  _ -> return Nothing
 
 -- | Add an assumption of type @Bool@ to the current path condition while
 -- executing a sub-computation
