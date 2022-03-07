@@ -85,18 +85,13 @@ Definition is_elem_pure (x:bitvector 64) (l:list (bitvector 64))
 
 Arguments is_elem_pure /.
 
-Definition is_elem_lrt : LetRecType :=
-  LRT_Fun (bitvector 64) (fun _ =>
-    LRT_Fun (list (bitvector 64)) (fun _ =>
-      LRT_Ret (bitvector 64))).
-
-Lemma is_elem_pure_fun_ref : @refinesFun is_elem_lrt is_elem_fun (fun x l => returnM (is_elem_pure x l)).
+Lemma is_elem_pure_fun_ref : @refinesFun is_elem__lrt is_elem_fun (fun x l => returnM (is_elem_pure x l)).
 Proof.
-  unfold is_elem_fun, is_elem_lrt, is_elem_pure.
+  unfold is_elem_fun, is_elem_pure.
   time "is_elem_pure_fun_ref" prove_refinement.
 Qed.
 
-Lemma is_elem_pure_fun_ref_manual : @refinesFun is_elem_lrt is_elem_fun (fun x l => returnM (is_elem_pure x l)).
+Lemma is_elem_pure_fun_ref_manual : @refinesFun is_elem__lrt is_elem_fun (fun x l => returnM (is_elem_pure x l)).
 Proof.
   unfold is_elem_fun, is_elem_pure.
   intros x l; induction l; simpl.

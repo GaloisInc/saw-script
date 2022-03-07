@@ -4808,24 +4808,17 @@ someCFGAndPermPtrPerm (SomeCFGAndPerm _ _ _ fun_perm) =
 
 
 -- | Type-check a set of 'CFG's against their function permissions and translate
--- the result to a pair of a @LetRecTypes@ SAW core term @lrts@ describing the
--- function permissions and a mutually-recursive function-binding argument
+-- the result to a mutually-recursive function-binding argument
 --
 -- > \(f1:tp1) -> ... -> \(fn:tpn) -> (tp1, ..., tpn)
 --
 -- that defines the functions mutually recursively in terms of themselves, where
--- each @tpi@ is the @i@th type in @lrts@
+-- each @tpi@ is the @i@th type in the given list of @LetRecType@s
 tcTranslateCFGTupleFun ::
   HasPtrWidth w =>
   PermEnv -> ChecksFlag -> EndianForm -> DebugLevel -> [SomeCFGAndPerm LLVM] ->
-  (OpenTerm, OpenTerm)
-tcTranslateCFGTupleFun env checks endianness dlevel cfgs_and_perms =
-  let lrts = map (someCFGAndPermLRT env) cfgs_and_perms in
-  let lrts_tm =
-        foldr (\lrt lrts' -> ctorOpenTerm "Prelude.LRT_Cons" [lrt,lrts'])
-        (ctorOpenTerm "Prelude.LRT_Nil" [])
-        lrts in
-  (lrts_tm ,) $
+  [OpenTerm] -> OpenTerm
+tcTranslateCFGTupleFun env checks endianness dlevel cfgs_and_perms lrts =
   lambdaOpenTermMulti (zip
                        (map (pack . someCFGAndPermToName) cfgs_and_perms)
                        (map (applyOpenTerm
@@ -4859,8 +4852,26 @@ tcTranslateAddCFGs ::
   EndianForm -> DebugLevel -> [SomeCFGAndPerm LLVM] ->
   IO PermEnv
 tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
-  do let (lrts, tup_fun) =
-           tcTranslateCFGTupleFun env checks endianness dlevel cfgs_and_perms
+  do -- add each function's 'LetRecType' as a definition
+     lrt_idents <-
+       forM cfgs_and_perms $ \cfg_and_perm ->
+         do let lrt = someCFGAndPermLRT env cfg_and_perm
+                lrt_ident =
+                  mkSafeIdent mod_name (someCFGAndPermToName cfg_and_perm
+                                        ++ "__lrt")
+            lrt_tp <- completeNormOpenTerm sc $
+              dataTypeOpenTerm "Prelude.LetRecType" []
+            lrt_tm <- completeNormOpenTerm sc lrt
+            scInsertDef sc mod_name lrt_ident lrt_tp lrt_tm
+            return $ lrt_ident
+     let lrt_tms = map globalOpenTerm lrt_idents
+         lrts =
+           foldr (\lrt lrts' -> ctorOpenTerm "Prelude.LRT_Cons" [lrt, lrts'])
+                 (ctorOpenTerm "Prelude.LRT_Nil" [])
+                 lrt_tms
+     -- add @"n__tuple_fun"@ as a definition
+     let tup_fun = tcTranslateCFGTupleFun env checks endianness dlevel
+                                          cfgs_and_perms lrt_tms
      let tup_fun_ident =
            mkSafeIdent mod_name (someCFGAndPermToName (head cfgs_and_perms)
                                  ++ "__tuple_fun")
@@ -4868,13 +4879,14 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
        applyOpenTerm (globalOpenTerm "Prelude.lrtTupleType") lrts
      tup_fun_tm <- completeNormOpenTerm sc $
        applyOpenTermMulti (globalOpenTerm "Prelude.multiFixM") [lrts, tup_fun]
-     scInsertDef sc mod_name tup_fun_ident tup_fun_tp tup_fun_tm 
+     scInsertDef sc mod_name tup_fun_ident tup_fun_tp tup_fun_tm
+     -- add each function as a definition, returning the list of
+     -- 'PermEnvGlobalEntry's to add to the 'PermEnv'
      new_entries <-
-       zipWithM
-       (\cfg_and_perm i ->
+       mapM
+       (\(cfg_and_perm, lrt, i) ->
          do tp <- completeNormOpenTerm sc $
-              applyOpenTerm (globalOpenTerm "Prelude.lrtToType") $
-              someCFGAndPermLRT env cfg_and_perm
+              applyOpenTerm (globalOpenTerm "Prelude.lrtToType") lrt
             tm <- completeNormOpenTerm sc $
               projTupleOpenTerm i (globalOpenTerm tup_fun_ident)
             let ident = mkSafeIdent mod_name (someCFGAndPermToName cfg_and_perm)
@@ -4883,7 +4895,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
               (someCFGAndPermSym cfg_and_perm)
               (someCFGAndPermPtrPerm cfg_and_perm)
               [globalOpenTerm ident])
-       cfgs_and_perms [0 ..]
+       (zip3 cfgs_and_perms lrt_tms [0 ..])
      return $ permEnvAddGlobalSyms env new_entries
 
 

@@ -697,6 +697,9 @@ Hint Extern 5 (@refinesFun (LRT_Ret _) _ _) =>
 Hint Extern 5 (@refinesFun (LRT_Fun _ _) _ _) =>
   simple apply refinesFunStep : refinesFun.
 
+Hint Extern 6 (@refinesFun ?lrt _ _) =>
+  progress unfold lrt : refinesFun.
+
 
 (***
  *** Top-level tactics to put it all together

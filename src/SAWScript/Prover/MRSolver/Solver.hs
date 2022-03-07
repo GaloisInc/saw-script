@@ -122,6 +122,7 @@ import qualified Data.Map as Map
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Cryptol.Monadify
 
 import SAWScript.Prover.MRSolver.Term
 import SAWScript.Prover.MRSolver.Monad
@@ -135,6 +136,8 @@ import SAWScript.Prover.MRSolver.SMT
 -- | Pattern-match on a @LetRecTypes@ list in normal form and return a list of
 -- the types it specifies, each in normal form and with uvars abstracted out
 asLRTList :: Term -> MRM [Term]
+asLRTList (asTypedGlobalDef -> Just (globalDefBody -> Just body)) =
+  asLRTList body
 asLRTList (asCtor -> Just (primName -> "Prelude.LRT_Nil", [])) =
   return []
 asLRTList (asCtor -> Just (primName -> "Prelude.LRT_Cons", [lrt, lrts])) =
