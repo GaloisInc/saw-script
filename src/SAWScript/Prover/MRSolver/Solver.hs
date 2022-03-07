@@ -228,6 +228,8 @@ normComp (CompTerm t) =
       return $ ExistsM (Type tp) (CompFunTerm body_tm)
     (isGlobalDef "Prelude.forallM" -> Just (), [tp, _, body_tm]) ->
       return $ ForallM (Type tp) (CompFunTerm body_tm)
+    (isGlobalDef "Prelude.precondHint" -> Just (), [_, _, body_tm]) ->
+      normCompTerm body_tm
     (isGlobalDef "Prelude.letRecM" -> Just (), [lrts, _, defs_f, body_f]) ->
       do
         -- Bind fresh function vars for the letrec-bound functions
