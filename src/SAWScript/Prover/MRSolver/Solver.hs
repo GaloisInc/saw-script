@@ -439,7 +439,6 @@ generalizeCoIndHyp hyp all_specs@(arg_spec:arg_specs) =
     do let arg' = coIndHypArg hyp spec'
        tp' <- mrTypeOf arg'
        mrDebugPPPrefixSep 2 "generalizeCoIndHyp: the type of" arg' "is" tp'
-       debugPrint 2 ("arg' = " ++ show arg')
        tps_eq <- mrConvertible arg_tp tp'
        args_eq <- if tps_eq then mrProveEq arg arg' else return False
        return $ if args_eq then Left spec' else Right spec'

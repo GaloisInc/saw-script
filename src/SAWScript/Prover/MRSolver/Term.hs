@@ -56,6 +56,10 @@ newtype MRVar = MRVar { unMRVar :: ExtCns Term } deriving (Eq, Show, Ord)
 mrVarType :: MRVar -> Term
 mrVarType = ecType . unMRVar
 
+-- | Print the string name of an 'MRVar'
+showMRVar :: MRVar -> String
+showMRVar = show . ppName . ecName . unMRVar
+
 -- | A tuple or record projection of a 'Term'
 data TermProj = TermProjLeft | TermProjRight | TermProjRecord FieldName
               deriving (Eq, Ord, Show)
@@ -323,6 +327,9 @@ instance PrettyInCtx Type where
 
 instance PrettyInCtx MRVar where
   prettyInCtx (MRVar ec) = return $ ppName $ ecName ec
+
+instance PrettyInCtx [Term] where
+  prettyInCtx xs = list <$> mapM prettyInCtx xs
 
 instance PrettyInCtx TermProj where
   prettyInCtx TermProjLeft = return (pretty '.' <> "1")

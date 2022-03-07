@@ -274,7 +274,12 @@ mrProveEqSimple eqf t1 t2 =
 mrProveEq :: Term -> Term -> MRM Bool
 mrProveEq t1 t2 =
   do mrDebugPPPrefixSep 1 "mrProveEq" t1 "==" t2
-     tp <- mrTypeOf t1
+     tp <- mrTypeOf t1 >>= mrSubstEVars
+     tp2 <- mrTypeOf t2 >>= mrSubstEVars
+     tps_eq <- mrConvertible tp tp2
+     if tps_eq then return () else
+       error ("mrProveEq: types not equal:\n" ++
+              showTerm tp ++ "\n" ++ showTerm tp2)
      varmap <- mrVars
      cond_in_ctx <- mrProveEqH varmap tp t1 t2
      res <- withTermInCtx cond_in_ctx mrProvable
