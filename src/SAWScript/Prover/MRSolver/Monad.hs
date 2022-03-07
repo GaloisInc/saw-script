@@ -744,7 +744,15 @@ mrSetEVarClosed var val =
      -- following subtyping check will succeed
      var_tp <- mrSubstEVars $ mrVarType var
      -- FIXME: catch subtyping errors and report them as being evar failures
-     liftSC3 scCheckSubtype Nothing (TypedTerm val val_tp) var_tp
+     eith_err <-
+       liftSC2 (runTCM $ checkSubtype (TypedTerm val val_tp) var_tp) Nothing []
+     case eith_err of
+       Left _ ->
+         error ("mrSetEVarClosed: incorrect instantiation for evar " ++
+                showMRVar var ++
+                "\nexpected type:\n" ++ showTerm var_tp ++
+                "\nactual type:\n" ++ showTerm val_tp)
+       Right _ -> return ()
      modify $ \st ->
        st { mrsVars =
             Map.alter
@@ -766,6 +774,8 @@ mrTrySetAppliedEVar evar args t =
   let (evar_vars, _) = asPiList (mrVarType evar) in
   -- Get all the free variables of t
   let free_vars = bitSetElems (looseVars t) in
+  -- Get the maximum deBruijn index of free_vars
+  let max_fv = maximum free_vars in
   -- For each free var of t, find an arg equal to it
   case mapM (\i -> findIndex (\case
                                  (asLocalVar -> Just j) -> i == j
@@ -776,15 +786,17 @@ mrTrySetAppliedEVar evar args t =
           -- Build a list of the input vars x1 ... xn as terms, noting that the
           -- first variable is the least recently bound and so has the highest
           -- deBruijn index
-          let arg_ixs = [length args - 1, length args - 2 .. 0]
+          let arg_ixs = reverse [0 .. length args - 1]
           arg_vars <- mapM (liftSC1 scLocalVar) arg_ixs
 
-          -- For free variable of t, we substitute the corresponding variable
-          -- xi, substituting error terms for the variables that are not free
-          -- (since we have nothing else to substitute for them)
+          -- For each free variable of t, we substitute the corresponding
+          -- variable xi, substituting error terms for the variables that are
+          -- not free (since we have nothing else to substitute for them)
           let var_map = zip free_vars fv_arg_ixs
-          let subst = flip map [0 .. length args - 1] $ \i ->
-                maybe (error "mrTrySetAppliedEVar: unexpected free variable")
+          let subst = flip map [0 .. max_fv] $ \i ->
+                maybe (error
+                       ("mrTrySetAppliedEVar: unexpected free variable "
+                        ++ show i ++ " in term\n" ++ showTerm t))
                 (arg_vars !!) (lookup i var_map)
           body <- substTerm 0 subst t
 
