@@ -227,31 +227,6 @@ instance PrettyInCtx CoIndHyp where
                    return "|=",
                    prettyInCtx (FunBind f2 args2 CompFunReturn)]
 
--- | An assumption that a named function refines some specificaiton. This has
--- the form
---
--- > forall x1, ..., xn. F e1 ... ek |= m
---
--- for some universal context @x1:T1, .., xn:Tn@, some list of argument
--- expressions @ei@ over the universal @xj@ variables, and some right-hand side
--- computation expression @m@.
-data FunAssump = FunAssump {
-  -- | The uvars that were in scope when this assmption was created, in order
-  -- from outermost to innermost; that is, the uvars as "seen from outside their
-  -- scope", which is the reverse of the order of 'mrUVars', below
-  fassumpCtx :: [(LocalName,Term)],
-  -- | The argument expressions @e1, ..., en@ over the 'fassumpCtx' uvars
-  fassumpArgs :: [Term],
-  -- | The right-hand side upper bound @m@ over the 'fassumpCtx' uvars
-  fassumpRHS :: NormComp
-}
-
--- | A map from function names to function refinement assumptions over that
--- name
---
--- FIXME: this should probably be an 'IntMap' on the 'VarIndex' of globals
-type FunAssumps = Map FunName FunAssump
-
 -- | An assumption that something is equal to one of the constructors of a
 -- datatype, e.g. equal to @Left@ of some 'Term' or @Right@ of some 'Term'
 data DataTypeAssump = IsLeft Term | IsRight Term
@@ -272,26 +247,6 @@ asEither _ = Nothing
 type DataTypeAssumps = HashMap Term DataTypeAssump
 
 -- FIXME HERE NOW: remove preconditions from MREnv
-
--- | A global MR Solver environment
-data MREnv = MREnv {
-  -- | The set of function refinements to be assumed by to Mr. Solver (which
-  -- have hopefully been proved previously...)
-  mreFunAssumps :: FunAssumps,
-  -- | The preconditions associated with functions by the user
-  mrePreconditions :: Map FunName Term
-  }
-
--- | The empty 'MREnv'
-emptyMREnv :: MREnv
-emptyMREnv = MREnv { mreFunAssumps = Map.empty,
-                     mrePreconditions = Map.empty }
-
--- | Add a precondition to an 'MREnv'
-mrEnvAddPrecond :: GlobalDef -> Term -> MREnv -> MREnv
-mrEnvAddPrecond gdef pre env =
-  env { mrePreconditions =
-          Map.insert (GlobalName gdef []) pre (mrePreconditions env) }
 
 -- | Parameters and locals for MR. Solver
 data MRInfo = MRInfo {

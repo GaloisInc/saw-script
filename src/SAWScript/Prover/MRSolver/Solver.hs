@@ -760,20 +760,21 @@ mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 -- * External Entrypoints
 ----------------------------------------------------------------------
 
--- | Test two monadic, recursive terms for equivalence
+-- | Test two monadic, recursive terms for refinement. On success, if the
+-- left-hand term is a named function, add the refinement to the 'MREnv'
+-- environment.
 askMRSolver ::
   SharedContext ->
   Int {- ^ The debug level -} ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
-  Term -> Term -> IO (Maybe MRFailure)
+  Term -> Term -> IO (Either MRFailure MREnv)
 
 askMRSolver sc dlvl env timeout t1 t2 =
   do tp1 <- scTypeOf sc t1 >>= scWhnf sc
      tp2 <- scTypeOf sc t2 >>= scWhnf sc
      case asPiList tp1 of
        (uvar_ctx, asCompM -> Just _) ->
-         fmap (either Just (const Nothing)) $
          runMRM sc timeout dlvl env $
          withUVars uvar_ctx $ \vars ->
          do tps_are_eq <- mrConvertible tp1 tp2
@@ -783,4 +784,12 @@ askMRSolver sc dlvl env timeout t1 t2 =
             m1 <- mrApplyAll t1 vars >>= normCompTerm
             m2 <- mrApplyAll t2 vars >>= normCompTerm
             mrRefines m1 m2
-       _ -> return $ Just $ NotCompFunType tp1
+            -- If t1 is a named function, add forall xs. f1 xs |= m2 to the env
+            case asGlobalFunName t1 of
+              Just f1 ->
+                let fassump = FunAssump { fassumpCtx = uvar_ctx,
+                                          fassumpArgs = vars,
+                                          fassumpRHS = m2 } in
+                return $ mrEnvAddFunAssump f1 fassump env
+              Nothing -> return env
+       _ -> return $ Left $ NotCompFunType tp1

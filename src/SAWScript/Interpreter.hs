@@ -3169,11 +3169,6 @@ primitives = Map.fromList
     Experimental
     [ "Call the monadic-recursive solver at the supplied debug level" ]
 
-  , prim "mr_solver_set_precond"  "Term -> Term -> TopLevel ()"
-    (scVal mrSolverSetPrecond)
-    Experimental
-    [ "Set the precondition for use in Mr Solver of a function to a function" ]
-
   , prim "monadify_term" "Term -> TopLevel Term"
     (scVal monadifyTypedTerm)
     Experimental

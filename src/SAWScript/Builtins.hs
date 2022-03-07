@@ -71,7 +71,6 @@ import Verifier.SAW.SATQuery
 import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
 import qualified Verifier.SAW.SCTypeCheck as TC (TypedTerm(..))
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import Verifier.SAW.Prim (rethrowEvalError)
@@ -1571,28 +1570,8 @@ mrSolver sc dlvl t1 t2 =
      let env = rwMRSolverEnv rw
      res <- liftIO $ Prover.askMRSolver sc dlvl env Nothing m1 m2
      case res of
-       Just err -> io (putStrLn $ Prover.showMRFailure err) >> return False
-       Nothing -> return True
-
--- | Set the precondition for a named function, given as a SAW core term
-mrSolverSetPrecond :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
-mrSolverSetPrecond sc f pre =
-  do rw <- get
-     f_mon <- ttTerm <$> ensureMonadicTerm sc f
-     gdef <- case Monadify.asTypedGlobalDef f_mon of
-       Just gdef -> return gdef
-       Nothing -> fail "mr_solver_set_precond: Not an identifier"
-     -- NOTE: do not monadify pre, as it is supposed to be pure
-     (asPiList -> (f_args, _)) <- io $ scTypeOf sc f_mon
-     pre_tp <- io (scTypeOf sc $ ttTerm pre)
-     pre_tp_req <- io (scBoolType sc >>= scPiList sc f_args)
-     correct_tp <- io (scConvertible sc True pre_tp pre_tp_req)
-     if correct_tp then return () else
-       fail ("mr_solver_set_precond: incorrect type for precondition\n" ++
-             "Expected: " ++ showTerm pre_tp_req ++ "\n" ++
-             "Actual: " ++ showTerm pre_tp)
-     let env = rwMRSolverEnv rw
-     put (rw { rwMRSolverEnv = Prover.mrEnvAddPrecond gdef (ttTerm pre) env })
+       Left err -> io (putStrLn $ Prover.showMRFailure err) >> return False
+       Right env' -> put (rw { rwMRSolverEnv = env' }) >> return True
 
 setMonadification :: SharedContext -> String -> String -> TopLevel ()
 setMonadification sc cry_str saw_str =
