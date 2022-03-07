@@ -152,21 +152,9 @@ asNestedPairs (asPairValue -> Just (x, asNestedPairs -> Just xs)) = Just (x:xs)
 asNestedPairs (asFTermF -> Just UnitValue) = Just []
 asNestedPairs _ = Nothing
 
--- | Syntactically project then @i@th element of the body of a lambda. That is,
--- assuming the input 'Term' has the form
---
--- > \ (x1:T1) ... (xn:Tn) -> (e1, (e2, ... (en, ())))
---
--- return the bindings @x1:T1,...,xn:Tn@ and @ei@
-synProjFunBody :: Int -> Term -> Maybe ([(LocalName, Term)], Term)
-synProjFunBody i (asLambdaList -> (vars, asTupleValue -> Just es)) =
-  -- NOTE: we are doing 1-based indexing instead of 0-based, thus the -1
-  Just $ (vars, es !! (i-1))
-synProjFunBody _ _ = Nothing
-
 -- | Bind fresh function variables for a @letRecM@ or @multiFixM@ with the given
 -- @LetRecTypes@ and definitions for the function bodies as a lambda
-mrFreshLetRecVars :: Term -> Term -> MRM [Term]
+mrFreshLetRecVars :: Term -> Term -> MRM [MRVar]
 mrFreshLetRecVars lrts defs_f =
   do
     -- First, make fresh function constants for all the bound functions, using
@@ -190,8 +178,8 @@ mrFreshLetRecVars lrts defs_f =
                 lambdaUVarsM body >>= \cl_body ->
                 mrSetVarInfo f (FunVarInfo cl_body)) funs defs
 
-    -- Finally, return the terms for the fresh function variables
-    return fun_tms
+    -- Finally, return the fresh function variables
+    return funs
 
 
 -- | Normalize a 'Term' of monadic type to monadic normal form
@@ -233,7 +221,7 @@ normComp (CompTerm t) =
     (isGlobalDef "Prelude.letRecM" -> Just (), [lrts, _, defs_f, body_f]) ->
       do
         -- Bind fresh function vars for the letrec-bound functions
-        fun_tms <- mrFreshLetRecVars lrts defs_f
+        fun_tms <- mrFreshLetRecVars lrts defs_f >>= mapM mrVarTerm
         -- Apply the body function to our function vars and recursively
         -- normalize the resulting computation
         body_tm <- mrApplyAll body_f fun_tms
@@ -253,18 +241,16 @@ normComp (CompTerm t) =
     (asTupleSelector ->
      Just (asApplyAll -> (isGlobalDef "Prelude.multiFixM" -> Just (),
                           [lrts, defs_f]),
-           i), args)
-      -- Extract out the function \f1 ... fn -> bodyi
-      | Just (vars, body_i) <- synProjFunBody i defs_f ->
+           i), args) ->
         do
           -- Bind fresh function variables for the functions f1 ... fn
-          fun_tms <- mrFreshLetRecVars lrts defs_f
-          -- Re-abstract the body
-          body_f <- liftSC2 scLambdaList vars body_i
-          -- Apply body_f to f1 ... fn and the top-level arguments
-          body_tm <- mrApplyAll body_f (fun_tms ++ args)
-          normComp (CompTerm body_tm)
-
+          funs <- mrFreshLetRecVars lrts defs_f
+          -- NOTE: we are doing 1-based indexing instead of 0-based, thus the -1
+          fi <- if i > 0 && i <= length funs then return $ funs !! (i-1)
+                else throwMRFailure (MalformedComp t)
+          -- Return fi applied to the current context of uvars + its arguments
+          uvars <- getAllUVarTerms
+          return $ FunBind (LetRecName fi) (uvars ++ args) CompFunReturn
 
     -- For an ExtCns, we have to check what sort of variable it is
     -- FIXME: substitute for evars if they have been instantiated
