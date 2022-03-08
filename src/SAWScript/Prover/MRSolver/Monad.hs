@@ -246,8 +246,6 @@ asEither _ = Nothing
 -- | A map from 'Term's to 'DataTypeAssump's over that term
 type DataTypeAssumps = HashMap Term DataTypeAssump
 
--- FIXME HERE NOW: remove preconditions from MREnv
-
 -- | Parameters and locals for MR. Solver
 data MRInfo = MRInfo {
   -- | Global shared context for building terms, etc.
@@ -801,7 +799,7 @@ mrGetCoIndHyp nm1 nm2 = Map.lookup (nm1, nm2) <$> mrCoIndHyps
 -- | Run a compuation under an additional co-inductive assumption
 withCoIndHyp :: CoIndHyp -> MRM a -> MRM a
 withCoIndHyp hyp m =
-  do debugPretty 2 ("withCoIndHypRaw" <+> ppInEmptyCtx hyp)
+  do debugPretty 2 ("withCoIndHyp" <+> ppInEmptyCtx hyp)
      hyps' <- Map.insert (coIndHypLHSFun hyp,
                           coIndHypRHSFun hyp) hyp <$> mrCoIndHyps
      local (\info -> info { mriCoIndHyps = hyps' }) m
@@ -860,11 +858,6 @@ instantiateFunAssump fassump =
      args <- substTermLike 0 evars $ fassumpArgs fassump
      rhs <- substTermLike 0 evars $ fassumpRHS fassump
      return (args, rhs)
-
--- FIXME HERE NOW: delete this and remove the preconditions from the env
--- | Look up the precondition associated with a function name, if there is one
--- mrLookupPrecond :: FunName -> MRM (Maybe Term)
--- mrLookupPrecond nm = Map.lookup nm <$> mrePreconditions <$> mriEnv <$> ask
 
 -- | Get the precondition hint associated with a function name, by unfolding the
 -- name and checking if its body has the form
