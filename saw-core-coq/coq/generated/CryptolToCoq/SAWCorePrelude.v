@@ -377,11 +377,11 @@ Definition and_triv2 : forall (x : SAWCoreScaffolding.Bool), SAWCoreScaffolding.
   fun (x : SAWCoreScaffolding.Bool) => let var__0   := SAWCoreScaffolding.not SAWCoreScaffolding.true in
   SAWCoreScaffolding.iteDep (fun (b : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool (SAWCoreScaffolding.and (SAWCoreScaffolding.not b) b) SAWCoreScaffolding.false) x (trans SAWCoreScaffolding.Bool (SAWCoreScaffolding.and var__0 SAWCoreScaffolding.true) var__0 SAWCoreScaffolding.false (and_True2 var__0) not_True) (and_False2 (SAWCoreScaffolding.not SAWCoreScaffolding.false)).
 
-Definition FalseProp : Prop :=
-  SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool SAWCoreScaffolding.true SAWCoreScaffolding.false.
-
 Definition EqTrue : SAWCoreScaffolding.Bool -> Prop :=
   fun (x : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool x SAWCoreScaffolding.true.
+
+Definition TrueProp : Prop :=
+  EqTrue SAWCoreScaffolding.true.
 
 Definition TrueI : EqTrue SAWCoreScaffolding.true :=
   SAWCoreScaffolding.Refl SAWCoreScaffolding.Bool SAWCoreScaffolding.true.
@@ -533,6 +533,9 @@ Axiom expByNat : forall (a : Type), a -> (a -> a -> a) -> a -> SAWCoreScaffoldin
 Axiom head : forall (n : SAWCoreScaffolding.Nat), forall (a : Type), SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) a -> a .
 
 Axiom tail : forall (n : SAWCoreScaffolding.Nat), forall (a : Type), SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) a -> SAWCoreVectorsAsCoqVectors.Vec n a .
+
+Definition atWithDefault' : forall (n : SAWCoreScaffolding.Nat), forall (a : Type), a -> SAWCoreVectorsAsCoqVectors.Vec n a -> SAWCoreScaffolding.Nat -> a :=
+  fun (n_top : SAWCoreScaffolding.Nat) (a : Type) (d : a) => Nat__rec (fun (n : SAWCoreScaffolding.Nat) => SAWCoreVectorsAsCoqVectors.Vec n a -> SAWCoreScaffolding.Nat -> a) (fun (_1 : SAWCoreVectorsAsCoqVectors.Vec 0 a) (_2 : SAWCoreScaffolding.Nat) => d) (fun (n : SAWCoreScaffolding.Nat) (rec_f : SAWCoreVectorsAsCoqVectors.Vec n a -> SAWCoreScaffolding.Nat -> a) (v : SAWCoreVectorsAsCoqVectors.Vec (SAWCoreScaffolding.Succ n) a) (i : SAWCoreScaffolding.Nat) => Nat_cases a (head n a v) (fun (i_prev : SAWCoreScaffolding.Nat) (_1 : a) => rec_f (tail n a v) i_prev) i) n_top.
 
 (* Prelude.atWithDefault was skipped *)
 
@@ -1009,9 +1012,15 @@ Definition genBVVec : forall (n : SAWCoreScaffolding.Nat), forall (len : SAWCore
 Definition genBVVecFromVec : forall (m : SAWCoreScaffolding.Nat), forall (a : Type), SAWCoreVectorsAsCoqVectors.Vec m a -> a -> forall (n : SAWCoreScaffolding.Nat), forall (len : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool), BVVec n len a :=
   fun (m : SAWCoreScaffolding.Nat) (a : Type) (v : SAWCoreVectorsAsCoqVectors.Vec m a) (def : a) (n : SAWCoreScaffolding.Nat) (len : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) => genBVVec n len a (fun (i : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (_1 : SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool (SAWCoreVectorsAsCoqVectors.bvult n i len) SAWCoreScaffolding.true) => SAWCoreVectorsAsCoqVectors.atWithDefault m a def v (SAWCoreVectorsAsCoqVectors.bvToNat n i)).
 
-Definition efq : forall (a : Type), SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool SAWCoreScaffolding.true SAWCoreScaffolding.false -> a :=
+Definition FalseProp : Prop :=
+  SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool SAWCoreScaffolding.true SAWCoreScaffolding.false.
+
+Definition efq : forall (a : Type), FalseProp -> a :=
   fun (a : Type) (contra : SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool SAWCoreScaffolding.true SAWCoreScaffolding.false) => let var__0   := if SAWCoreScaffolding.true then unit : Type else a in
   SAWCoreScaffolding.coerce (unit : Type) a (trans Type (unit : Type) var__0 a (sym Type var__0 (unit : Type) (ite_true Type (unit : Type) a)) (trans Type var__0 (if SAWCoreScaffolding.false then unit : Type else a) a (eq_cong SAWCoreScaffolding.Bool SAWCoreScaffolding.true SAWCoreScaffolding.false contra Type (fun (b : SAWCoreScaffolding.Bool) => if b then unit : Type else a)) (ite_false Type (unit : Type) a))) tt.
+
+Definition efq1 : forall (a : Type), SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool SAWCoreScaffolding.true SAWCoreScaffolding.false -> a :=
+  fun (a : Type) (contra : SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool SAWCoreScaffolding.true SAWCoreScaffolding.false) => SAWCoreScaffolding.Eq__rec Bit Bit1 (fun (b : Bit) (_1 : SAWCoreScaffolding.Eq Bit Bit1 b) => SAWCorePrelude.Bit_rect (fun (_2 : Bit) => Type) (unit : Type) a b) tt Bit0 (efq (SAWCoreScaffolding.Eq Bit Bit1 Bit0) contra).
 
 Definition emptyBVVec : forall (n : SAWCoreScaffolding.Nat), forall (a : Type), BVVec n (SAWCoreVectorsAsCoqVectors.bvNat n 0) a :=
   fun (n : SAWCoreScaffolding.Nat) (a : Type) => genBVVec n (SAWCoreVectorsAsCoqVectors.bvNat n 0) a (fun (i : SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) (pf : SAWCoreScaffolding.Eq SAWCoreScaffolding.Bool (SAWCoreVectorsAsCoqVectors.bvult n i (SAWCoreVectorsAsCoqVectors.bvNat n 0)) SAWCoreScaffolding.true) => let var__0   := SAWCoreVectorsAsCoqVectors.bvult n i (SAWCoreVectorsAsCoqVectors.bvNat n 0) in
@@ -1130,8 +1139,6 @@ Definition foldIRT : forall (As : ListSort), forall (Ds : IRTSubsts As), forall 
 
 (* Prelude.bindM was skipped *)
 
-(* Prelude.existsM was skipped *)
-
 (* Prelude.errorM was skipped *)
 
 Definition fmapM : forall (a : Type), forall (b : Type), (a -> b) -> CompM a -> CompM b :=
@@ -1146,6 +1153,21 @@ Definition fmapM2 : forall (a : Type), forall (b : Type), forall (c : Type), (a 
 
 Definition fmapM3 : forall (a : Type), forall (b : Type), forall (c : Type), forall (d : Type), (a -> b -> c -> d) -> CompM a -> CompM b -> CompM c -> CompM d :=
   fun (a : Type) (b : Type) (c : Type) (d : Type) (f : a -> b -> c -> d) (m1 : CompM a) (m2 : CompM b) (m3 : CompM c) => applyM c d (fmapM2 a b (c -> d) f m1 m2) m3.
+
+Definition bindM2 : forall (a : Type), forall (b : Type), forall (c : Type), CompM a -> CompM b -> (a -> b -> CompM c) -> CompM c :=
+  fun (a : Type) (b : Type) (c : Type) (m1 : CompM a) (m2 : CompM b) (f : a -> b -> CompM c) => @bindM CompM _ a c m1 (fun (x : a) => @bindM CompM _ b c m2 (f x)).
+
+Definition bindM3 : forall (a : Type), forall (b : Type), forall (c : Type), forall (d : Type), CompM a -> CompM b -> CompM c -> (a -> b -> c -> CompM d) -> CompM d :=
+  fun (a : Type) (b : Type) (c : Type) (d : Type) (m1 : CompM a) (m2 : CompM b) (m3 : CompM c) (f : a -> b -> c -> CompM d) => @bindM CompM _ a d m1 (fun (x : a) => bindM2 b c d m2 m3 (f x)).
+
+Definition bindApplyM : forall (a : Type), forall (b : Type), (a -> CompM b) -> CompM a -> CompM b :=
+  fun (a : Type) (b : Type) (f : a -> CompM b) (m : CompM a) => @bindM CompM _ a b m f.
+
+Definition bindApplyM2 : forall (a : Type), forall (b : Type), forall (c : Type), (a -> b -> CompM c) -> CompM a -> CompM b -> CompM c :=
+  fun (a : Type) (b : Type) (c : Type) (f : a -> b -> CompM c) (m1 : CompM a) (m2 : CompM b) => @bindM CompM _ a c m1 (fun (x : a) => @bindM CompM _ b c m2 (f x)).
+
+Definition bindApplyM3 : forall (a : Type), forall (b : Type), forall (c : Type), forall (d : Type), (a -> b -> c -> CompM d) -> CompM a -> CompM b -> CompM c -> CompM d :=
+  fun (a : Type) (b : Type) (c : Type) (d : Type) (f : a -> b -> c -> CompM d) (m1 : CompM a) (m2 : CompM b) (m3 : CompM c) => bindM3 a b c d m1 m2 m3 f.
 
 Definition composeM : forall (a : Type), forall (b : Type), forall (c : Type), (a -> CompM b) -> (b -> CompM c) -> a -> CompM c :=
   fun (a : Type) (b : Type) (c : Type) (f : a -> CompM b) (g : b -> CompM c) (x : a) => @bindM CompM _ b c (f x) g.
@@ -1171,7 +1193,15 @@ Definition appendCastBVVecM : forall (n : SAWCoreScaffolding.Nat), forall (len1 
   let var__5   := BVVec n len3 a in
   @returnM CompM _ var__5 (SAWCoreScaffolding.coerce (BVVec n var__4 a) var__5 (eq_cong var__3 var__4 len3 pf Type (fun (l : var__3) => BVVec n l a)) (appendBVVec n len1 len2 a v1 v2))) (bvEqWithProof n var__0 len3).
 
-(* Prelude.fixM was skipped *)
+(* Prelude.existsM was skipped *)
+
+Definition orM : forall (a : Type), CompM a -> CompM a -> CompM a :=
+  fun (a : Type) (m1 : CompM a) (m2 : CompM a) => @CompM.existsM SAWCoreScaffolding.Bool a (fun (b : SAWCoreScaffolding.Bool) => if b then m1 else m2).
+
+(* Prelude.forallM was skipped *)
+
+Definition precondHint : forall (a : Type), SAWCoreScaffolding.Bool -> a -> a :=
+  fun (_1 : Type) (_2 : SAWCoreScaffolding.Bool) (a : _1) => a.
 
 (* Prelude.LetRecType was skipped *)
 
@@ -1183,13 +1213,18 @@ Definition appendCastBVVecM : forall (n : SAWCoreScaffolding.Nat), forall (len1 
 
 (* Prelude.lrtTupleType was skipped *)
 
-(* Prelude.multiFixM was skipped *)
-
 (* Prelude.letRecM was skipped *)
 
 Definition letRecM1 : forall (a : Type), forall (b : Type), forall (c : Type), ((a -> CompM b) -> a -> CompM b) -> ((a -> CompM b) -> CompM c) -> CompM c :=
   fun (a : Type) (b : Type) (c : Type) (fn : (a -> CompM b) -> a -> CompM b) (body : (a -> CompM b) -> CompM c) => let var__0   := a -> CompM b in
   @CompM.letRecM (CompM.LRT_Cons (CompM.LRT_Fun a (fun (_1 : a) => CompM.LRT_Ret b)) CompM.LRT_Nil) c (fun (f : var__0) => pair (fn f) tt) (fun (f : var__0) => body f).
+
+(* Prelude.fixM was skipped *)
+
+(* Prelude.multiFixM was skipped *)
+
+Definition multiArgFixM : forall (lrt : CompM.LetRecType), (CompM.lrtToType lrt -> CompM.lrtToType lrt) -> CompM.lrtToType lrt :=
+  fun (lrt : CompM.LetRecType) (F : CompM.LetRecType_rect (fun (lrt1 : CompM.LetRecType) => Type) (fun (b : Type) => CompM b) (fun (a : Type) (_1 : a -> CompM.LetRecType) (b : a -> Type) => forall (x : a), b x) lrt -> CompM.LetRecType_rect (fun (lrt1 : CompM.LetRecType) => Type) (fun (b : Type) => CompM b) (fun (a : Type) (_2 : a -> CompM.LetRecType) (b : a -> Type) => forall (x : a), b x) lrt) => SAWCoreScaffolding.fst (@CompM.multiFixM (CompM.LRT_Cons lrt CompM.LRT_Nil) (fun (f : CompM.LetRecType_rect (fun (lrt1 : CompM.LetRecType) => Type) (fun (b : Type) => CompM b) (fun (a : Type) (_1 : a -> CompM.LetRecType) (b : a -> Type) => forall (x : a), b x) lrt) => pair (F f) tt)).
 
 (* Prelude.test_fun0 was skipped *)
 

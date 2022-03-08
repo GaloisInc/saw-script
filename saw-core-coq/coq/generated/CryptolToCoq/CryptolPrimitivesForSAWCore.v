@@ -131,6 +131,9 @@ Definition ecRatio : SAWCoreScaffolding.Integer -> SAWCoreScaffolding.Integer ->
 Definition eqRational : Rational -> Rational -> SAWCoreScaffolding.Bool :=
   fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: (==) Rational"%string.
 
+Definition leRational : Rational -> Rational -> SAWCoreScaffolding.Bool :=
+  fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: (<=) Rational"%string.
+
 Definition ltRational : Rational -> Rational -> SAWCoreScaffolding.Bool :=
   fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: (<) Rational"%string.
 
@@ -219,6 +222,9 @@ Definition errorBinary : forall (s : SAWCoreScaffolding.String), forall (a : Typ
 Definition boolCmp : SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool :=
   fun (x : SAWCoreScaffolding.Bool) (y : SAWCoreScaffolding.Bool) (k : SAWCoreScaffolding.Bool) => if x then SAWCoreScaffolding.and y k else SAWCoreScaffolding.or y k.
 
+Definition boolLt : SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool :=
+  fun (x : SAWCoreScaffolding.Bool) (y : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.and (SAWCoreScaffolding.not x) y.
+
 Definition integerCmp : SAWCoreScaffolding.Integer -> SAWCoreScaffolding.Integer -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool :=
   fun (x : SAWCoreScaffolding.Integer) (y : SAWCoreScaffolding.Integer) (k : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.or (SAWCoreScaffolding.intLt x y) (SAWCoreScaffolding.and (SAWCoreScaffolding.intEq x y) k).
 
@@ -235,11 +241,24 @@ Definition vecCmp : forall (n : SAWCoreScaffolding.Nat), forall (a : Type), fora
   fun (n : SAWCoreScaffolding.Nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (f : a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (ys : SAWCoreVectorsAsCoqVectors.Vec n a) (k : SAWCoreScaffolding.Bool) => let var__0   := SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool in
   SAWCoreVectorsAsCoqVectors.foldr var__0 SAWCoreScaffolding.Bool n (fun (f1 : var__0) => f1) k (SAWCorePrelude.zipWith a a var__0 f n xs ys).
 
+Definition vecLt : forall (n : SAWCoreScaffolding.Nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) -> (a -> a -> SAWCoreScaffolding.Bool) -> SAWCoreVectorsAsCoqVectors.Vec n a -> SAWCoreVectorsAsCoqVectors.Vec n a -> SAWCoreScaffolding.Bool :=
+  fun (n : SAWCoreScaffolding.Nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (f : a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (g : a -> a -> SAWCoreScaffolding.Bool) (xs : SAWCoreVectorsAsCoqVectors.Vec n a) (ys : SAWCoreVectorsAsCoqVectors.Vec n a) => let var__0   := SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool in
+  SAWCoreVectorsAsCoqVectors.foldr var__0 SAWCoreScaffolding.Bool n (fun (f1 : var__0) => f1) SAWCoreScaffolding.false (SAWCorePrelude.zipWith a a var__0 f n xs ys).
+
 Definition unitCmp : (unit : Type) -> (unit : Type) -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool :=
-  fun (_1 : unit : Type) (_2 : unit : Type) (_3 : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.false.
+  fun (_1 : unit : Type) (_2 : unit : Type) (k : SAWCoreScaffolding.Bool) => k.
+
+Definition unitLe : (unit : Type) -> (unit : Type) -> SAWCoreScaffolding.Bool :=
+  fun (_1 : unit : Type) (_2 : unit : Type) => SAWCoreScaffolding.true.
+
+Definition unitLt : (unit : Type) -> (unit : Type) -> SAWCoreScaffolding.Bool :=
+  fun (_1 : unit : Type) (_2 : unit : Type) => SAWCoreScaffolding.false.
 
 Definition pairCmp : forall (a : Type), forall (b : Type), (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) -> (b -> b -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) -> prod a b -> prod a b -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool :=
   fun (a : Type) (b : Type) (f : a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (g : b -> b -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (x12 : prod a b) (y12 : prod a b) (k : SAWCoreScaffolding.Bool) => f (fst x12) (fst y12) (g (snd x12) (snd y12) k).
+
+Definition pairLt : forall (a : Type), forall (b : Type), (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) -> (b -> b -> SAWCoreScaffolding.Bool) -> prod a b -> prod a b -> SAWCoreScaffolding.Bool :=
+  fun (a : Type) (b : Type) (f : a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (g : b -> b -> SAWCoreScaffolding.Bool) (x : prod a b) (y : prod a b) => f (fst x) (fst y) (g (snd x) (snd y)).
 
 Definition PEq : Type -> Type :=
   fun (a : Type) => RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil.
@@ -278,55 +297,61 @@ Definition PEqPair : forall (a : Type), forall (b : Type), PEq a -> PEq b -> PEq
   fun (a : Type) (b : Type) (pa : RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (pb : RecordTypeCons "eq" (b -> b -> SAWCoreScaffolding.Bool) RecordTypeNil) => RecordCons "eq" (SAWCorePrelude.pairEq a b (RecordProj pa "eq") (RecordProj pb "eq")) RecordNil.
 
 Definition PCmp : Type -> Type :=
-  fun (a : Type) => RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (PEq a) RecordTypeNil).
+  fun (a : Type) => let var__0   := a -> a -> SAWCoreScaffolding.Bool in
+  RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (PEq a) (RecordTypeCons "le" var__0 (RecordTypeCons "lt" var__0 RecordTypeNil))).
 
 Definition PCmpBit : PCmp SAWCoreScaffolding.Bool :=
-  RecordCons "cmp" boolCmp (RecordCons "cmpEq" PEqBit RecordNil).
+  RecordCons "cmp" boolCmp (RecordCons "cmpEq" PEqBit (RecordCons "le" implies (RecordCons "lt" boolLt RecordNil))).
 
 Definition PCmpInteger : PCmp SAWCoreScaffolding.Integer :=
-  RecordCons "cmp" integerCmp (RecordCons "cmpEq" PEqInteger RecordNil).
+  RecordCons "cmp" integerCmp (RecordCons "cmpEq" PEqInteger (RecordCons "le" SAWCoreScaffolding.intLe (RecordCons "lt" SAWCoreScaffolding.intLt RecordNil))).
 
 Definition PCmpRational : PCmp Rational :=
-  RecordCons "cmp" rationalCmp (RecordCons "cmpEq" PEqRational RecordNil).
+  RecordCons "cmp" rationalCmp (RecordCons "cmpEq" PEqRational (RecordCons "le" leRational (RecordCons "lt" ltRational RecordNil))).
 
 Definition PCmpVec : forall (n : SAWCoreScaffolding.Nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PCmp a -> PCmp (SAWCoreVectorsAsCoqVectors.Vec n a) :=
-  fun (n : SAWCoreScaffolding.Nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (pa : RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) => RecordCons "cmp" (vecCmp n a (RecordProj pa "cmp")) (RecordCons "cmpEq" (PEqVec n a (RecordProj pa "cmpEq")) RecordNil).
+  fun (n : SAWCoreScaffolding.Nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (pa : RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "le" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "lt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) => let var__0   := SAWCoreVectorsAsCoqVectors.Vec n a in
+  RecordCons "cmp" (vecCmp n a (RecordProj pa "cmp")) (RecordCons "cmpEq" (PEqVec n a (RecordProj pa "cmpEq")) (RecordCons "le" (fun (x : var__0) (y : SAWCoreVectorsAsCoqVectors.Vec n a) => vecCmp n a (RecordProj pa "cmp") x y SAWCoreScaffolding.true) (RecordCons "lt" (fun (x : var__0) (y : SAWCoreVectorsAsCoqVectors.Vec n a) => vecCmp n a (RecordProj pa "cmp") x y SAWCoreScaffolding.false) RecordNil))).
 
 Definition PCmpSeq : forall (n : Num), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PCmp a -> PCmp (seq n a) :=
-  fun (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PCmp a -> PCmp (seq n1 a)) (fun (n1 : SAWCoreScaffolding.Nat) => PCmpVec n1) (fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (pa : RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) => SAWCoreScaffolding.error (PCmp (SAWCorePrelude.Stream a)) "invalid Cmp instance"%string) n.
+  fun (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PCmp a -> PCmp (seq n1 a)) (fun (n1 : SAWCoreScaffolding.Nat) => PCmpVec n1) (fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (pa : RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "le" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "lt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) => SAWCoreScaffolding.error (PCmp (SAWCorePrelude.Stream a)) "invalid Cmp instance"%string) n.
 
 Definition PCmpWord : forall (n : SAWCoreScaffolding.Nat), PCmp (SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) :=
-  fun (n : SAWCoreScaffolding.Nat) => RecordCons "cmp" (bvCmp n) (RecordCons "cmpEq" (PEqWord n) RecordNil).
+  fun (n : SAWCoreScaffolding.Nat) => RecordCons "cmp" (bvCmp n) (RecordCons "cmpEq" (PEqWord n) (RecordCons "le" (SAWCoreVectorsAsCoqVectors.bvule n) (RecordCons "lt" (SAWCoreVectorsAsCoqVectors.bvult n) RecordNil))).
 
 Definition PCmpSeqBool : forall (n : Num), PCmp (seq n SAWCoreScaffolding.Bool) :=
   fun (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => PCmp (seq n1 SAWCoreScaffolding.Bool)) (fun (n1 : SAWCoreScaffolding.Nat) => PCmpWord n1) (SAWCoreScaffolding.error (PCmp (SAWCorePrelude.Stream SAWCoreScaffolding.Bool)) "invalid Cmp instance"%string) n.
 
 Definition PCmpUnit : PCmp (unit : Type) :=
-  RecordCons "cmp" unitCmp (RecordCons "cmpEq" PEqUnit RecordNil).
+  RecordCons "cmp" unitCmp (RecordCons "cmpEq" PEqUnit (RecordCons "le" unitLe (RecordCons "lt" unitLt RecordNil))).
 
 Definition PCmpPair : forall (a : Type), forall (b : Type), PCmp a -> PCmp b -> PCmp (prod a b) :=
-  fun (a : Type) (b : Type) (pa : RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) (pb : RecordTypeCons "cmp" (b -> b -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (b -> b -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) => RecordCons "cmp" (pairCmp a b (RecordProj pa "cmp") (RecordProj pb "cmp")) (RecordCons "cmpEq" (PEqPair a b (RecordProj pa "cmpEq") (RecordProj pb "cmpEq")) RecordNil).
+  fun (a : Type) (b : Type) (pa : RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "le" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "lt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) (pb : RecordTypeCons "cmp" (b -> b -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (b -> b -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "le" (b -> b -> SAWCoreScaffolding.Bool) (RecordTypeCons "lt" (b -> b -> SAWCoreScaffolding.Bool) RecordTypeNil)))) => let var__0   := RecordProj pa "cmp" in
+  RecordCons "cmp" (pairCmp a b var__0 (RecordProj pb "cmp")) (RecordCons "cmpEq" (PEqPair a b (RecordProj pa "cmpEq") (RecordProj pb "cmpEq")) (RecordCons "le" (pairLt a b var__0 (RecordProj pb "le")) (RecordCons "lt" (pairLt a b var__0 (RecordProj pb "lt")) RecordNil))).
 
 Definition PSignedCmp : Type -> Type :=
-  fun (a : Type) => RecordTypeCons "scmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "signedCmpEq" (PEq a) RecordTypeNil).
+  fun (a : Type) => let var__0   := a -> a -> SAWCoreScaffolding.Bool in
+  RecordTypeCons "scmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "signedCmpEq" (PEq a) (RecordTypeCons "sle" var__0 (RecordTypeCons "slt" var__0 RecordTypeNil))).
 
 Definition PSignedCmpVec : forall (n : SAWCoreScaffolding.Nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PSignedCmp a -> PSignedCmp (SAWCoreVectorsAsCoqVectors.Vec n a) :=
-  fun (n : SAWCoreScaffolding.Nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (pa : RecordTypeCons "scmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "signedCmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) => RecordCons "scmp" (vecCmp n a (RecordProj pa "scmp")) (RecordCons "signedCmpEq" (PEqVec n a (RecordProj pa "signedCmpEq")) RecordNil).
+  fun (n : SAWCoreScaffolding.Nat) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (pa : RecordTypeCons "scmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "signedCmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "sle" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "slt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) => let var__0   := SAWCoreVectorsAsCoqVectors.Vec n a in
+  RecordCons "scmp" (vecCmp n a (RecordProj pa "scmp")) (RecordCons "signedCmpEq" (PEqVec n a (RecordProj pa "signedCmpEq")) (RecordCons "sle" (fun (x : var__0) (y : SAWCoreVectorsAsCoqVectors.Vec n a) => vecCmp n a (RecordProj pa "scmp") x y SAWCoreScaffolding.true) (RecordCons "slt" (fun (x : var__0) (y : SAWCoreVectorsAsCoqVectors.Vec n a) => vecCmp n a (RecordProj pa "scmp") x y SAWCoreScaffolding.false) RecordNil))).
 
 Definition PSignedCmpSeq : forall (n : Num), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PSignedCmp a -> PSignedCmp (seq n a) :=
-  fun (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PSignedCmp a -> PSignedCmp (seq n1 a)) (fun (n1 : SAWCoreScaffolding.Nat) => PSignedCmpVec n1) (fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (pa : RecordTypeCons "scmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "signedCmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) => SAWCoreScaffolding.error (PSignedCmp (SAWCorePrelude.Stream a)) "invalid SignedCmp instance"%string) n.
+  fun (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, PSignedCmp a -> PSignedCmp (seq n1 a)) (fun (n1 : SAWCoreScaffolding.Nat) => PSignedCmpVec n1) (fun (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (pa : RecordTypeCons "scmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "signedCmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "sle" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "slt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) => SAWCoreScaffolding.error (PSignedCmp (SAWCorePrelude.Stream a)) "invalid SignedCmp instance"%string) n.
 
 Definition PSignedCmpWord : forall (n : SAWCoreScaffolding.Nat), PSignedCmp (SAWCoreVectorsAsCoqVectors.Vec n SAWCoreScaffolding.Bool) :=
-  fun (n : SAWCoreScaffolding.Nat) => RecordCons "scmp" (bvSCmp n) (RecordCons "signedCmpEq" (PEqWord n) RecordNil).
+  fun (n : SAWCoreScaffolding.Nat) => RecordCons "scmp" (bvSCmp n) (RecordCons "signedCmpEq" (PEqWord n) (RecordCons "sle" (SAWCoreVectorsAsCoqVectors.bvsle n) (RecordCons "slt" (SAWCoreVectorsAsCoqVectors.bvslt n) RecordNil))).
 
 Definition PSignedCmpSeqBool : forall (n : Num), PSignedCmp (seq n SAWCoreScaffolding.Bool) :=
   fun (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => PSignedCmp (seq n1 SAWCoreScaffolding.Bool)) (fun (n1 : SAWCoreScaffolding.Nat) => PSignedCmpWord n1) (SAWCoreScaffolding.error (PSignedCmp (SAWCorePrelude.Stream SAWCoreScaffolding.Bool)) "invalid SignedCmp instance"%string) n.
 
 Definition PSignedCmpUnit : PSignedCmp (unit : Type) :=
-  RecordCons "scmp" unitCmp (RecordCons "signedCmpEq" PEqUnit RecordNil).
+  RecordCons "scmp" unitCmp (RecordCons "signedCmpEq" PEqUnit (RecordCons "sle" unitLe (RecordCons "slt" unitLt RecordNil))).
 
 Definition PSignedCmpPair : forall (a : Type), forall (b : Type), PSignedCmp a -> PSignedCmp b -> PSignedCmp (prod a b) :=
-  fun (a : Type) (b : Type) (pa : RecordTypeCons "scmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "signedCmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) (pb : RecordTypeCons "scmp" (b -> b -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "signedCmpEq" (RecordTypeCons "eq" (b -> b -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) => RecordCons "scmp" (pairCmp a b (RecordProj pa "scmp") (RecordProj pb "scmp")) (RecordCons "signedCmpEq" (PEqPair a b (RecordProj pa "signedCmpEq") (RecordProj pb "signedCmpEq")) RecordNil).
+  fun (a : Type) (b : Type) (pa : RecordTypeCons "scmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "signedCmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "sle" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "slt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) (pb : RecordTypeCons "scmp" (b -> b -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "signedCmpEq" (RecordTypeCons "eq" (b -> b -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "sle" (b -> b -> SAWCoreScaffolding.Bool) (RecordTypeCons "slt" (b -> b -> SAWCoreScaffolding.Bool) RecordTypeNil)))) => let var__0   := RecordProj pa "scmp" in
+  RecordCons "scmp" (pairCmp a b var__0 (RecordProj pb "scmp")) (RecordCons "signedCmpEq" (PEqPair a b (RecordProj pa "signedCmpEq") (RecordProj pb "signedCmpEq")) (RecordCons "sle" (pairLt a b var__0 (RecordProj pb "sle")) (RecordCons "slt" (pairLt a b var__0 (RecordProj pb "slt")) RecordNil))).
 
 Definition PZero : Type -> Type :=
   fun (a : Type) => a.
@@ -523,19 +548,19 @@ Definition ecFieldDiv : forall (a : Type), PField a -> a -> a -> a :=
   fun (a : Type) (pf : RecordTypeCons "fieldDiv" (a -> a -> a) (RecordTypeCons "fieldRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "recip" (a -> a) RecordTypeNil))) => RecordProj pf "fieldDiv".
 
 Definition ecCeiling : forall (a : Type), PRound a -> a -> SAWCoreScaffolding.Integer :=
-  fun (a : Type) (pr : RecordTypeCons "ceiling" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "floor" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundAway" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundCmp" (RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) (RecordTypeCons "roundField" (RecordTypeCons "fieldDiv" (a -> a -> a) (RecordTypeCons "fieldRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "recip" (a -> a) RecordTypeNil))) (RecordTypeCons "roundToEven" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "trunc" (a -> SAWCoreScaffolding.Integer) RecordTypeNil))))))) => RecordProj pr "ceiling".
+  fun (a : Type) (pr : RecordTypeCons "ceiling" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "floor" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundAway" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundCmp" (RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "le" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "lt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) (RecordTypeCons "roundField" (RecordTypeCons "fieldDiv" (a -> a -> a) (RecordTypeCons "fieldRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "recip" (a -> a) RecordTypeNil))) (RecordTypeCons "roundToEven" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "trunc" (a -> SAWCoreScaffolding.Integer) RecordTypeNil))))))) => RecordProj pr "ceiling".
 
 Definition ecFloor : forall (a : Type), PRound a -> a -> SAWCoreScaffolding.Integer :=
-  fun (a : Type) (pr : RecordTypeCons "ceiling" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "floor" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundAway" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundCmp" (RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) (RecordTypeCons "roundField" (RecordTypeCons "fieldDiv" (a -> a -> a) (RecordTypeCons "fieldRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "recip" (a -> a) RecordTypeNil))) (RecordTypeCons "roundToEven" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "trunc" (a -> SAWCoreScaffolding.Integer) RecordTypeNil))))))) => RecordProj pr "floor".
+  fun (a : Type) (pr : RecordTypeCons "ceiling" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "floor" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundAway" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundCmp" (RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "le" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "lt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) (RecordTypeCons "roundField" (RecordTypeCons "fieldDiv" (a -> a -> a) (RecordTypeCons "fieldRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "recip" (a -> a) RecordTypeNil))) (RecordTypeCons "roundToEven" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "trunc" (a -> SAWCoreScaffolding.Integer) RecordTypeNil))))))) => RecordProj pr "floor".
 
 Definition ecTruncate : forall (a : Type), PRound a -> a -> SAWCoreScaffolding.Integer :=
-  fun (a : Type) (pr : RecordTypeCons "ceiling" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "floor" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundAway" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundCmp" (RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) (RecordTypeCons "roundField" (RecordTypeCons "fieldDiv" (a -> a -> a) (RecordTypeCons "fieldRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "recip" (a -> a) RecordTypeNil))) (RecordTypeCons "roundToEven" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "trunc" (a -> SAWCoreScaffolding.Integer) RecordTypeNil))))))) => RecordProj pr "trunc".
+  fun (a : Type) (pr : RecordTypeCons "ceiling" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "floor" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundAway" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundCmp" (RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "le" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "lt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) (RecordTypeCons "roundField" (RecordTypeCons "fieldDiv" (a -> a -> a) (RecordTypeCons "fieldRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "recip" (a -> a) RecordTypeNil))) (RecordTypeCons "roundToEven" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "trunc" (a -> SAWCoreScaffolding.Integer) RecordTypeNil))))))) => RecordProj pr "trunc".
 
 Definition ecRoundAway : forall (a : Type), PRound a -> a -> SAWCoreScaffolding.Integer :=
-  fun (a : Type) (pr : RecordTypeCons "ceiling" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "floor" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundAway" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundCmp" (RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) (RecordTypeCons "roundField" (RecordTypeCons "fieldDiv" (a -> a -> a) (RecordTypeCons "fieldRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "recip" (a -> a) RecordTypeNil))) (RecordTypeCons "roundToEven" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "trunc" (a -> SAWCoreScaffolding.Integer) RecordTypeNil))))))) => RecordProj pr "roundAway".
+  fun (a : Type) (pr : RecordTypeCons "ceiling" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "floor" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundAway" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundCmp" (RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "le" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "lt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) (RecordTypeCons "roundField" (RecordTypeCons "fieldDiv" (a -> a -> a) (RecordTypeCons "fieldRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "recip" (a -> a) RecordTypeNil))) (RecordTypeCons "roundToEven" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "trunc" (a -> SAWCoreScaffolding.Integer) RecordTypeNil))))))) => RecordProj pr "roundAway".
 
 Definition ecRoundToEven : forall (a : Type), PRound a -> a -> SAWCoreScaffolding.Integer :=
-  fun (a : Type) (pr : RecordTypeCons "ceiling" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "floor" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundAway" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundCmp" (RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) (RecordTypeCons "roundField" (RecordTypeCons "fieldDiv" (a -> a -> a) (RecordTypeCons "fieldRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "recip" (a -> a) RecordTypeNil))) (RecordTypeCons "roundToEven" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "trunc" (a -> SAWCoreScaffolding.Integer) RecordTypeNil))))))) => RecordProj pr "roundToEven".
+  fun (a : Type) (pr : RecordTypeCons "ceiling" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "floor" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundAway" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "roundCmp" (RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "le" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "lt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) (RecordTypeCons "roundField" (RecordTypeCons "fieldDiv" (a -> a -> a) (RecordTypeCons "fieldRing" (RecordTypeCons "add" (a -> a -> a) (RecordTypeCons "int" (SAWCoreScaffolding.Integer -> a) (RecordTypeCons "mul" (a -> a -> a) (RecordTypeCons "neg" (a -> a) (RecordTypeCons "ringZero" a (RecordTypeCons "sub" (a -> a -> a) RecordTypeNil)))))) (RecordTypeCons "recip" (a -> a) RecordTypeNil))) (RecordTypeCons "roundToEven" (a -> SAWCoreScaffolding.Integer) (RecordTypeCons "trunc" (a -> SAWCoreScaffolding.Integer) RecordTypeNil))))))) => RecordProj pr "roundToEven".
 
 Definition ecLg2 : forall (n : Num), seq n SAWCoreScaffolding.Bool -> seq n SAWCoreScaffolding.Bool :=
   fun (n : Num) => CryptolPrimitivesForSAWCore.Num_rect (fun (n1 : Num) => seq n1 SAWCoreScaffolding.Bool -> seq n1 SAWCoreScaffolding.Bool) SAWCoreVectorsAsCoqVectors.bvLg2 (SAWCoreScaffolding.error (SAWCorePrelude.Stream SAWCoreScaffolding.Bool -> SAWCorePrelude.Stream SAWCoreScaffolding.Bool) "ecLg2: expected finite word"%string) n.
@@ -556,19 +581,19 @@ Definition ecNotEq : forall (a : Type), PEq a -> a -> a -> SAWCoreScaffolding.Bo
   fun (a : Type) (pa : RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (x : a) (y : a) => SAWCoreScaffolding.not (ecEq a pa x y).
 
 Definition ecLt : forall (a : Type), PCmp a -> a -> a -> SAWCoreScaffolding.Bool :=
-  fun (a : Type) (pa : RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) (x : a) (y : a) => RecordProj pa "cmp" x y SAWCoreScaffolding.false.
+  fun (a : Type) (pa : RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "le" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "lt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) => RecordProj pa "lt".
 
 Definition ecGt : forall (a : Type), PCmp a -> a -> a -> SAWCoreScaffolding.Bool :=
-  fun (a : Type) (pa : RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) (x : a) (y : a) => ecLt a pa y x.
+  fun (a : Type) (pa : RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "le" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "lt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) (x : a) (y : a) => ecLt a pa y x.
 
 Definition ecLtEq : forall (a : Type), PCmp a -> a -> a -> SAWCoreScaffolding.Bool :=
-  fun (a : Type) (pa : RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) (x : a) (y : a) => SAWCoreScaffolding.not (ecLt a pa y x).
+  fun (a : Type) (pa : RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "le" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "lt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) => RecordProj pa "le".
 
 Definition ecGtEq : forall (a : Type), PCmp a -> a -> a -> SAWCoreScaffolding.Bool :=
-  fun (a : Type) (pa : RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) (x : a) (y : a) => SAWCoreScaffolding.not (ecLt a pa x y).
+  fun (a : Type) (pa : RecordTypeCons "cmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "cmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "le" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "lt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) (x : a) (y : a) => ecLtEq a pa y x.
 
 Definition ecSLt : forall (a : Type), PSignedCmp a -> a -> a -> SAWCoreScaffolding.Bool :=
-  fun (a : Type) (pa : RecordTypeCons "scmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "signedCmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) RecordTypeNil)) (x : a) (y : a) => RecordProj pa "scmp" x y SAWCoreScaffolding.false.
+  fun (a : Type) (pa : RecordTypeCons "scmp" (a -> a -> SAWCoreScaffolding.Bool -> SAWCoreScaffolding.Bool) (RecordTypeCons "signedCmpEq" (RecordTypeCons "eq" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil) (RecordTypeCons "sle" (a -> a -> SAWCoreScaffolding.Bool) (RecordTypeCons "slt" (a -> a -> SAWCoreScaffolding.Bool) RecordTypeNil)))) => RecordProj pa "slt".
 
 Definition ecAnd : forall (a : Type), PLogic a -> a -> a -> a :=
   fun (a : Type) (pa : RecordTypeCons "and" (a -> a -> a) (RecordTypeCons "logicZero" a (RecordTypeCons "not" (a -> a) (RecordTypeCons "or" (a -> a -> a) (RecordTypeCons "xor" (a -> a -> a) RecordTypeNil))))) => RecordProj pa "and".
@@ -694,7 +719,8 @@ Definition PEqFloat : forall (e : Num), forall (p : Num), PEq (TCFloat e p) :=
   fun (e : Num) (p : Num) => RecordCons "eq" (fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: (==) Float"%string) RecordNil.
 
 Definition PCmpFloat : forall (e : Num), forall (p : Num), PCmp (TCFloat e p) :=
-  fun (e : Num) (p : Num) => RecordCons "cmp" (fun (x : unit : Type) (y : unit : Type) (k : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: Cmp Float"%string) (RecordCons "cmpEq" (PEqFloat e p) RecordNil).
+  fun (e : Num) (p : Num) => let var__0   := fun (x : unit : Type) (y : unit : Type) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: Cmp Float"%string in
+  RecordCons "cmp" (fun (x : unit : Type) (y : unit : Type) (k : SAWCoreScaffolding.Bool) => SAWCoreScaffolding.error SAWCoreScaffolding.Bool "Unimplemented: Cmp Float"%string) (RecordCons "cmpEq" (PEqFloat e p) (RecordCons "le" var__0 (RecordCons "lt" var__0 RecordNil))).
 
 Definition PZeroFloat : forall (e : Num), forall (p : Num), PZero (TCFloat e p) :=
   fun (e : Num) (p : Num) => SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: Zero Float"%string.
