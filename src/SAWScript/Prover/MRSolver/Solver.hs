@@ -133,14 +133,21 @@ import SAWScript.Prover.MRSolver.SMT
 -- * Normalizing and Matching on Terms
 ----------------------------------------------------------------------
 
--- | Pattern-match on a @LetRecTypes@ list in normal form and return a list of
+-- | Like 'asCtorParams', but unfolds any constants until a constructor is hit
+asCtorParamsUnfold :: Recognizer Term (PrimName Term, [Term], [Term])
+asCtorParamsUnfold (asConstant -> Just (_, Just body)) =
+  asCtorParamsUnfold body
+asCtorParamsUnfold t = asCtorParams t
+  
+-- | Pattern-match on a @LetRecTypes@ list in normal form (or a constant which
+-- unfolds to a @LetRecTypes@ list in normal form), and return a list of
 -- the types it specifies, each in normal form and with uvars abstracted out
 asLRTList :: Term -> MRM [Term]
-asLRTList (asTypedGlobalDef -> Just (globalDefBody -> Just body)) =
-  asLRTList body
-asLRTList (asCtor -> Just (primName -> "Prelude.LRT_Nil", [])) =
+asLRTList (asCtorParamsUnfold ->
+            Just (primName -> "Prelude.LRT_Nil", [], [])) =
   return []
-asLRTList (asCtor -> Just (primName -> "Prelude.LRT_Cons", [lrt, lrts])) =
+asLRTList (asCtorParamsUnfold ->
+            Just (primName -> "Prelude.LRT_Cons", [], [lrt, lrts])) =
   do tp <- liftSC2 scGlobalApply "Prelude.lrtToType" [lrt]
      tp_norm_closed <- liftSC1 scWhnf tp >>= piUVarsM
      (tp_norm_closed :) <$> asLRTList lrts
@@ -196,6 +203,7 @@ normComp (CompBind m f) =
   do norm <- normComp m
      normBind norm f
 normComp (CompTerm t) =
+  (>>) (mrDebugPPPrefix 3 "normComp" t) $
   withFailureCtx (FailCtxMNF t) $
   case asApplyAll t of
     (isGlobalDef "Prelude.returnM" -> Just (), [_, x]) ->
@@ -226,16 +234,6 @@ normComp (CompTerm t) =
         body_tm <- mrApplyAll body_f fun_tms
         normComp (CompTerm body_tm)
 
-    -- Only unfold constants that are not recursive functions, i.e., whose
-    -- bodies do not contain letrecs
-    {- FIXME: this should be handled by mrRefines; we want it to be handled there
-       so that we use refinement assumptions before unfolding constants, to give
-       the user control over refinement proofs
-    ((asConstant -> Just (_, body)), args)
-      | not (containsLetRecM body) ->
-        mrApplyAll body args >>= normCompTerm
-    -}
-
     -- Recognize (multiFixM lrts (\ f1 ... fn -> (body1, ..., bodyn))).i args
     (asTupleSelector ->
      Just (asApplyAll -> (isGlobalDef "Prelude.multiFixM" -> Just (),
@@ -250,6 +248,24 @@ normComp (CompTerm t) =
           -- Return fi applied to the current context of uvars + its arguments
           uvars <- getAllUVarTerms
           return $ FunBind (LetRecName fi) (uvars ++ args) CompFunReturn
+
+    -- Always unfold: letRecFun, lrtPiMap, lrtToTypeMap
+    (hd@(asGlobalDef -> Just ident), args)
+      | ident `elem` ["Prelude.letRecFun", "Prelude.lrtPiMap",
+                      "Prelude.lrtToTypeMap"]
+      , Just (_, Just body) <- asConstant hd ->
+      do t' <- mrApplyAll body args
+         normComp (CompTerm t')
+
+    -- Always unfold the recursors for LetRecType and LetRecTypes
+    (asRecursorApp -> Just (rc, crec, ixs, arg), args)
+      | primName (recursorDataType crec) `elem` ["Prelude.LetRecType",
+                                                 "Prelude.LetRecTypes"]
+      , Just (c, _, cargs) <- asCtorParamsUnfold arg ->
+      do hd' <- liftSC4 scReduceRecursor rc crec c cargs 
+                  >>= liftSC1 betaNormalize
+         t' <- mrApplyAll hd' args
+         normComp (CompTerm t')
 
     -- For an ExtCns, we have to check what sort of variable it is
     -- FIXME: substitute for evars if they have been instantiated

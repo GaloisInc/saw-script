@@ -2186,6 +2186,20 @@ lrtToType lrt =
   (\ (a:sort 0) (_: a -> LetRecType) (b: a -> sort 0) -> (x:a) -> b x)
   lrt;
 
+-- Apply a function to the return value of a lrtToType function
+lrtToTypeMap : (lrt:LetRecType) -> ((b : sort 0) -> CompM b -> CompM b) ->
+               lrtToType lrt -> lrtToType lrt;
+lrtToTypeMap lrt_top f = 
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> lrtToType lrt -> lrtToType lrt)
+  (\ (b:sort 0) (ret:CompM b) -> f b ret)
+  (\ (a:sort 0) (lrtF: a -> LetRecType)
+     (rec: (x:a) -> lrtToType (lrtF x) -> lrtToType (lrtF x))
+     (g: (x:a) -> lrtToType (lrtF x))
+     (x:a) ->
+     rec x (g x))
+  lrt_top;
+
 -- NOTE: the following are needed to define multiFixM instead of making it a
 -- primitive, which we are keeping commented here in case that is needed
 {-
@@ -2441,11 +2455,13 @@ multiFixM lrts_top F_top =
   F_top;
 
 
--- The specification that a CompM value contains no errors - intuitively, that
--- either a value is returned, or there is an infinite loop
-noErrorsSpec : (a:sort 0) -> (b:a -> sort 0) -> (x:a) -> CompM (b x);
-noErrorsSpec a b = fixM a b (\ (rec : (x:a) -> CompM (b x)) (x:a) -> 
-  orM (b x) (existsM (b x) (b x) (returnM (b x))) (rec x));
+-- The specification that a function of a given LetRecType contains no errors.
+-- Intuitively, this means that for all inputs, either something is returned,
+-- or there is an infinite loop
+noErrorsSpec : (lrt:LetRecType) -> lrtToType lrt;
+noErrorsSpec lrt =
+  multiArgFixM lrt (lrtToTypeMap lrt
+    (\ (b:sort 0) (rec:CompM b) -> orM b (existsM b b (returnM b)) rec));
 
 
 -- Test computations

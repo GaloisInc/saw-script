@@ -484,17 +484,13 @@ mrConvertible = liftSC4 scConvertibleEval scTypeCheckWHNF True
 -- type @[args/vars]a@ that @CompM@ is applied to.
 mrFunOutType :: FunName -> [Term] -> MRM Term
 mrFunOutType fname args =
-  funNameType fname >>= \case
-  (asPiList -> (vars, asCompM -> Just tp))
-    | length vars == length args -> substTermLike 0 (reverse args) tp
-  ftype@(asPiList -> (vars, _)) ->
-    do pp_ftype <- mrPPInCtx ftype
-       pp_fname <- mrPPInCtx fname
-       debugPrint 0 "mrFunOutType: function applied to the wrong number of args"
-       debugPrint 0 ("Expected: " ++ show (length vars) ++
-                     ", found: " ++ show (length args))
-       debugPretty 0 ("For function: " <> pp_fname <> " with type: " <> pp_ftype)
-       error "mrFunOutType"
+  liftSC2 scApplyAll (funNameTerm fname) args >>= liftSC1 scTypeOf >>= \case
+    (asCompM -> Just tp) -> liftSC1 scWhnf tp
+    _ -> do pp_ftype <- funNameType fname >>= mrPPInCtx
+            pp_fname <- mrPPInCtx fname
+            debugPrint 0 "mrFunOutType: function does not have CompM return type"
+            debugPretty 0 ("Function:" <> pp_fname <> " with type: " <> pp_ftype)
+            error "mrFunOutType"
 
 -- | Turn a 'LocalName' into one not in a list, adding a suffix if necessary
 uniquifyName :: LocalName -> [LocalName] -> LocalName
