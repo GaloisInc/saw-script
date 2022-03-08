@@ -729,8 +729,6 @@ mrTrySetAppliedEVar evar args t =
   let (evar_vars, _) = asPiList (mrVarType evar) in
   -- Get all the free variables of t
   let free_vars = bitSetElems (looseVars t) in
-  -- Get the maximum deBruijn index of free_vars
-  let max_fv = maximum free_vars in
   -- For each free var of t, find an arg equal to it
   case mapM (\i -> findIndex (\case
                                  (asLocalVar -> Just j) -> i == j
@@ -748,7 +746,9 @@ mrTrySetAppliedEVar evar args t =
           -- variable xi, substituting error terms for the variables that are
           -- not free (since we have nothing else to substitute for them)
           let var_map = zip free_vars fv_arg_ixs
-          let subst = flip map [0 .. max_fv] $ \i ->
+          let subst_vars = if free_vars == [] then [] else
+                             [0 .. maximum free_vars]
+          let subst = flip map subst_vars $ \i ->
                 maybe (error
                        ("mrTrySetAppliedEVar: unexpected free variable "
                         ++ show i ++ " in term\n" ++ showTerm t))
