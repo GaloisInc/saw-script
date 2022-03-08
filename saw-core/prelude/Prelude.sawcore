@@ -1718,9 +1718,9 @@ efq a contra =
 -- Ex Falso Quodlibet at sort 1
 efq1 : (a : sort 1) -> Eq Bool True False -> a;
 efq1 a contra =
-  Eq#rec Bit Bit1
-         (\ (b:Bit) (_:Eq Bit Bit1 b) -> Bit#rec (\ (_:Bit) -> sort 1) #() a b)
-         () Bit0 (efq (Eq Bit Bit1 Bit0) contra);
+  Eq__rec Bit Bit1
+          (\ (b:Bit) (_:Eq Bit Bit1 b) -> Bit#rec (\ (_:Bit) -> sort 1) #() a b)
+          () Bit0 (efq (Eq Bit Bit1 Bit0) contra);
 
 -- Generate an empty BVVec
 emptyBVVec : (n : Nat) -> (a : sort 0) -> BVVec n (bvNat n 0) a;
