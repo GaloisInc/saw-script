@@ -1195,8 +1195,7 @@ Definition appendCastBVVecM : forall (n : SAWCoreScaffolding.Nat), forall (len1 
 
 (* Prelude.existsM was skipped *)
 
-Definition orM : forall (a : Type), CompM a -> CompM a -> CompM a :=
-  fun (a : Type) (m1 : CompM a) (m2 : CompM a) => @CompM.existsM SAWCoreScaffolding.Bool a (fun (b : SAWCoreScaffolding.Bool) => if b then m1 else m2).
+(* Prelude.orM was skipped *)
 
 (* Prelude.forallM was skipped *)
 
