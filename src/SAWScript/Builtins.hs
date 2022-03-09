@@ -106,7 +106,8 @@ import qualified Cryptol.Backend.Monad as C (runEval)
 import qualified Cryptol.Eval.Type as C (evalType)
 import qualified Cryptol.Eval.Value as C (fromVBit, fromVWord)
 import qualified Cryptol.Eval.Concrete as C (Concrete(..), bvVal)
-import qualified Cryptol.Utils.Ident as C (mkIdent, packModName)
+import qualified Cryptol.Utils.Ident as C (mkIdent, packModName,
+                                           textToModName, PrimIdent(..))
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
 import qualified SAWScript.SBVParser as SBV
@@ -1525,6 +1526,16 @@ cryptol_add_path path =
      let ce' = ce { CEnv.eModuleEnv = me' }
      let rw' = rw { rwCryptol = ce' }
      putTopLevelRW rw'
+
+cryptol_add_prim_type :: String -> String -> TypedTerm -> TopLevel ()
+cryptol_add_prim_type mnm nm tp =
+  do rw <- getTopLevelRW
+     let env = rwCryptol rw
+     let prim_name =
+           C.PrimIdent (C.textToModName $ Text.pack mnm) (Text.pack nm)
+     let env' = env { CEnv.ePrimTypes =
+                        Map.insert prim_name (ttTerm tp) (CEnv.ePrimTypes env) }
+     putTopLevelRW (rw { rwCryptol = env' })
 
 -- | Call 'Cryptol.importSchema' using a 'CEnv.CryptolEnv'
 importSchemaCEnv :: SharedContext -> CEnv.CryptolEnv -> Cryptol.Schema ->
