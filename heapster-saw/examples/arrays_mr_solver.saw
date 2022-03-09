@@ -16,4 +16,8 @@ let run_test name test expected =
 
 // Test that contains0 |= contains0
 contains0 <- parse_core_mod "arrays" "contains0";
-run_test "contains0 |= contains0" (mr_solver contains0 contains0) true;
+// run_test "contains0 |= contains0" (mr_solver contains0 contains0) true;
+
+noErrorsContains0 <- parse_core_mod "arrays" "noErrorsContains0";
+run_test "contains0 |= noErrorsContains0"
+  (mr_solver_debug 0 contains0 noErrorsContains0) true;

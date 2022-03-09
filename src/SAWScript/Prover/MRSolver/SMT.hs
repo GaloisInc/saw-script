@@ -274,7 +274,7 @@ mrProveEqSimple eqf t1 t2 =
 mrProveEq :: Term -> Term -> MRM Bool
 mrProveEq t1 t2 =
   do mrDebugPPPrefixSep 1 "mrProveEq" t1 "==" t2
-     tp <- mrTypeOf t1
+     tp <- mrTypeOf t1 >>= mrSubstEVars
      varmap <- mrVars
      cond_in_ctx <- mrProveEqH varmap tp t1 t2
      res <- withTermInCtx cond_in_ctx mrProvable

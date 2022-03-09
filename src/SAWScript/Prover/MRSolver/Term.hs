@@ -37,6 +37,9 @@ import GHC.Generics
 
 import Prettyprinter
 
+import Data.Map (Map)
+import qualified Data.Map as Map
+
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm (MonadTerm(..))
 import Verifier.SAW.Term.Pretty
@@ -55,6 +58,10 @@ newtype MRVar = MRVar { unMRVar :: ExtCns Term } deriving (Eq, Show, Ord)
 -- | Get the type of an 'MRVar'
 mrVarType :: MRVar -> Term
 mrVarType = ecType . unMRVar
+
+-- | Print the string name of an 'MRVar'
+showMRVar :: MRVar -> String
+showMRVar = show . ppName . ecName . unMRVar
 
 -- | A tuple or record projection of a 'Term'
 data TermProj = TermProjLeft | TermProjRight | TermProjRecord FieldName
@@ -162,6 +169,52 @@ isCompFunType :: SharedContext -> Term -> IO Bool
 isCompFunType sc t = scWhnf sc t >>= \case
   (asPiList -> (_, asCompM -> Just _)) -> return True
   _ -> return False
+
+
+----------------------------------------------------------------------
+-- * Mr Solver Environments
+----------------------------------------------------------------------
+
+-- | An assumption that a named function refines some specification. This has
+-- the form
+--
+-- > forall x1, ..., xn. F e1 ... ek |= m
+--
+-- for some universal context @x1:T1, .., xn:Tn@, some list of argument
+-- expressions @ei@ over the universal @xj@ variables, and some right-hand side
+-- computation expression @m@.
+data FunAssump = FunAssump {
+  -- | The uvars that were in scope when this assmption was created, in order
+  -- from outermost to innermost; that is, the uvars as "seen from outside their
+  -- scope", which is the reverse of the order of 'mrUVars', below
+  fassumpCtx :: [(LocalName,Term)],
+  -- | The argument expressions @e1, ..., en@ over the 'fassumpCtx' uvars
+  fassumpArgs :: [Term],
+  -- | The right-hand side upper bound @m@ over the 'fassumpCtx' uvars
+  fassumpRHS :: NormComp
+}
+
+-- | A map from function names to function refinement assumptions over that
+-- name
+--
+-- FIXME: this should probably be an 'IntMap' on the 'VarIndex' of globals
+type FunAssumps = Map FunName FunAssump
+
+-- | A global MR Solver environment
+data MREnv = MREnv {
+  -- | The set of function refinements to be assumed by to Mr. Solver (which
+  -- have hopefully been proved previously...)
+  mreFunAssumps :: FunAssumps
+  }
+
+-- | The empty 'MREnv'
+emptyMREnv :: MREnv
+emptyMREnv = MREnv { mreFunAssumps = Map.empty }
+
+-- | Add a 'FunAssump' to a Mr Solver environment
+mrEnvAddFunAssump :: FunName -> FunAssump -> MREnv -> MREnv
+mrEnvAddFunAssump f fassump env =
+  env { mreFunAssumps = Map.insert f fassump (mreFunAssumps env) }
 
 
 ----------------------------------------------------------------------
@@ -323,6 +376,9 @@ instance PrettyInCtx Type where
 
 instance PrettyInCtx MRVar where
   prettyInCtx (MRVar ec) = return $ ppName $ ecName ec
+
+instance PrettyInCtx [Term] where
+  prettyInCtx xs = list <$> mapM prettyInCtx xs
 
 instance PrettyInCtx TermProj where
   prettyInCtx TermProjLeft = return (pretty '.' <> "1")

@@ -58,6 +58,7 @@ module Verifier.SAW.Term.Functor
     -- * Sets of free variables
   , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
   , decrBitSet, multiDecrBitSet, completeBitSet, singletonBitSet, bitSetElems
+  , smallestBitSetElem
   , looseVars, smallestFreeVar
   ) where
 
@@ -485,7 +486,7 @@ bitSetElems = go 0 where
   go shft bs = case smallestBitSetElem bs of
     Nothing -> []
     Just i ->
-      shft + i : go (shft + i + 1) (multiDecrBitSet (shft + i + 1) bs)
+      shft + i : go (shft + i + 1) (multiDecrBitSet (i + 1) bs)
 
 -- | Compute the free variables of a term given free variables for its immediate
 -- subterms

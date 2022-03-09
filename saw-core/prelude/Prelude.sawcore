@@ -1718,9 +1718,9 @@ efq a contra =
 -- Ex Falso Quodlibet at sort 1
 efq1 : (a : sort 1) -> Eq Bool True False -> a;
 efq1 a contra =
-  Eq#rec Bit Bit1
-         (\ (b:Bit) (_:Eq Bit Bit1 b) -> Bit#rec (\ (_:Bit) -> sort 1) #() a b)
-         () Bit0 (efq (Eq Bit Bit1 Bit0) contra);
+  Eq__rec Bit Bit1
+          (\ (b:Bit) (_:Eq Bit Bit1 b) -> Bit#rec (\ (_:Bit) -> sort 1) #() a b)
+          () Bit0 (efq (Eq Bit Bit1 Bit0) contra);
 
 -- Generate an empty BVVec
 emptyBVVec : (n : Nat) -> (a : sort 0) -> BVVec n (bvNat n 0) a;
@@ -2158,6 +2158,10 @@ orM a m1 m2 = existsM Bool a (\ (b:Bool) -> ite (CompM a) b m1 m2);
 -- those computations diverge from each other.
 primitive forallM : (a b:sort 0) -> (a -> CompM b) -> CompM b;
 
+-- A hint to Mr Solver that a recursive function has the given precondition
+precondHint : (a : sort 0) -> Bool -> a -> a;
+precondHint _ _ a = a;
+
 -- NOTE: for the simplicity and efficiency of MR solver, we define all
 -- fixed-point computations in CompM via a primitive multiFixM, defined below.
 -- Thus, even though fixM is really the primitive operation, we write this file
@@ -2261,27 +2265,6 @@ lrtPi lrts b =
   b
   (\ (lrt:LetRecType) (_:LetRecTypes) (rest:sort 0) -> lrtToType lrt -> rest)
   lrts;
-
--- Apply a function the the body of a multi-arity lrtPi function
-lrtPiMap : (a b : sort 0) -> (f : a -> b) -> (lrts : LetRecTypes) ->
-           lrtPi lrts a -> lrtPi lrts b;
-lrtPiMap a b f lrts_top =
-  LetRecTypes#rec
-  (\ (lrts:LetRecTypes) -> lrtPi lrts a -> lrtPi lrts b)
-  (\ (x:a) -> f x)
-  (\ (lrt:LetRecType) (lrts:LetRecTypes) (rec:lrtPi lrts a -> lrtPi lrts b)
-     (f:lrtToType lrt -> lrtPi lrts a) (g:lrtToType lrt) ->
-     rec (f g))
-  lrts_top;
-
--- Convert a multi-arity lrtPi that returns a pair to a pair of lrtPi functions
--- that return the individual arguments
-lrtPiPair : (a b:sort 0) -> (lrts : LetRecTypes) -> lrtPi lrts #(a,b) ->
-            #(lrtPi lrts a, lrtPi lrts b);
-lrtPiPair a b lrts f =
-  (lrtPiMap #(a,b) a (\ (tup:#(a,b)) -> tup.(1)) lrts f,
-   lrtPiMap #(a,b) b (\ (tup:#(a,b)) -> tup.(2)) lrts f);
-
 
 -- Build the product type (lrtToType lrt1, ..., lrtToType lrtn) from the
 -- LetRecTypes list [lrt1, ..., lrtn]
@@ -2387,6 +2370,32 @@ fixM a b f x =
           (\ (g: (y:a) -> CompM (b y)) -> (f g, ()))
           (\ (g: (y:a) -> CompM (b y)) -> g x);
 
+
+-- The following commented block allows multiFixM to be defined in terms of and
+-- to reduce to letRecM, which is useful if we want to define all our automated
+-- reasoning in terms of letRecM instead of multiFixM
+
+-- Apply a function the the body of a multi-arity lrtPi function
+{-
+lrtPiMap : (a b : sort 0) -> (f : a -> b) -> (lrts : LetRecTypes) ->
+           lrtPi lrts a -> lrtPi lrts b;
+lrtPiMap a b f lrts_top =
+  LetRecTypes#rec
+  (\ (lrts:LetRecTypes) -> lrtPi lrts a -> lrtPi lrts b)
+  (\ (x:a) -> f x)
+  (\ (lrt:LetRecType) (lrts:LetRecTypes) (rec:lrtPi lrts a -> lrtPi lrts b)
+     (f:lrtToType lrt -> lrtPi lrts a) (g:lrtToType lrt) ->
+     rec (f g))
+  lrts_top;
+
+-- Convert a multi-arity lrtPi that returns a pair to a pair of lrtPi functions
+-- that return the individual arguments
+lrtPiPair : (a b:sort 0) -> (lrts : LetRecTypes) -> lrtPi lrts #(a,b) ->
+            #(lrtPi lrts a, lrtPi lrts b);
+lrtPiPair a b lrts f =
+  (lrtPiMap #(a,b) a (\ (tup:#(a,b)) -> tup.(1)) lrts f,
+   lrtPiMap #(a,b) b (\ (tup:#(a,b)) -> tup.(2)) lrts f);
+
 -- Build a monadic function that takes in its arguments and then calls letRecM.
 -- That is, build a function
 --
@@ -2439,6 +2448,21 @@ multiFixM lrts_top F_top =
       rec (lrtPiPair (lrtToType lrt) (lrtTupleType lrts) lrts_top F).(2)))
   lrts_top
   F_top;
+-}
+
+-- Construct a fixed-point for a tuple of mutually-recursive functions
+--
+-- NOTE: Currently, Mr Solver actually works better with a primitive multiFixM,
+-- so that's what we are going to do for now...
+primitive
+multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
+            lrtTupleType lrts;
+
+-- Build a multi-argument fixed-point of type A1 -> ... -> An -> CompM B
+multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
+               lrtToType lrt;
+multiArgFixM lrt F =
+  (multiFixM (LRT_Cons lrt LRT_Nil) (\ (f:lrtToType lrt) -> (F f, ()))).(1);
 
 
 -- Test computations
