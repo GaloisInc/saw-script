@@ -843,6 +843,10 @@ translateVar _ = error "translateVar: unbound variable!"
 mbExprType :: KnownRepr TypeRepr a => Mb ctx (PermExpr a) -> TypeRepr a
 mbExprType _ = knownRepr
 
+-- | Get the 'TypeRepr' of an expression
+mbVarType :: KnownRepr TypeRepr a => Mb ctx (ExprVar a) -> TypeRepr a
+mbVarType _ = knownRepr
+
 -- | Get the 'TypeRepr' bound by a binding
 mbBindingType :: KnownRepr TypeRepr tp => Mb ctx (Binding tp a) -> TypeRepr tp
 mbBindingType _ = knownRepr
@@ -2666,6 +2670,20 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        let arr_term =
              applyOpenTermMulti (globalOpenTerm "Prelude.emptyBVVec")
              [w_term, elem_tp]
+       withPermStackM (:>: translateVar x)
+         (\pctx ->
+           pctx :>:
+           PTrans_Conj [APTrans_LLVMArray $ typeTransF ap_tp_trans [arr_term]])
+         m
+
+-- translate1/translateClosed ( zeroOfType <- get the default element )
+  [nuMP| SImpl_LLVMArrayBorrowed x mb_bp mb_ap |] ->
+    do (w_tm, len_tm, elem_tp, ap_tp_trans) <- translateLLVMArrayPerm mb_ap
+       let zeroElt = mbMapCl $(mkClosed [| zeroOfType . BVRepr . shapeLLVMTypeWidth |]) (mbLLVMArrayCellShape mb_ap)
+       zeroTerm <- translate1 zeroElt
+       let arr_term =
+             applyOpenTermMulti (globalOpenTerm "Prelude.repeatBVVec")
+             [w_tm, len_tm, elem_tp, zeroTerm]
        withPermStackM (:>: translateVar x)
          (\pctx ->
            pctx :>:

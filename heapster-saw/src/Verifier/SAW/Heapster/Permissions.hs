@@ -2450,9 +2450,17 @@ mbLLVMArrayLifetime = mbMapCl $(mkClosed [| llvmArrayLifetime |])
 mbLLVMArrayOffset :: Mb ctx (LLVMArrayPerm w) -> Mb ctx (PermExpr (BVType w))
 mbLLVMArrayOffset = mbMapCl $(mkClosed [| llvmArrayOffset |])
 
+-- | Get the offset-in-binding of an array permission in binding
+mbLLVMArrayOffsetBytes :: Mb ctx (LLVMArrayPerm w) -> Mb ctx (PermExpr (BVType w))
+mbLLVMArrayOffsetBytes = mbMapCl $(mkClosed [| llvmArrayOffset |])
+
 -- | Get the length-in-binding of an array permission in binding
 mbLLVMArrayLen :: Mb ctx (LLVMArrayPerm w) -> Mb ctx (PermExpr (BVType w))
 mbLLVMArrayLen = mbMapCl $(mkClosed [| llvmArrayLen |])
+
+-- | Get the length-in-binding of an array permission in binding
+mbLLVMArrayLenBytes :: (1 <= w, KnownNat w) => Mb ctx (LLVMArrayPerm w) -> Mb ctx (PermExpr (BVType w))
+mbLLVMArrayLenBytes = mbMapCl $(mkClosed [| llvmArrayLengthBytes |])
 
 -- | Get the stride of an array permission in binding
 mbLLVMArrayStride :: Mb ctx (LLVMArrayPerm w) -> Bytes
@@ -3954,6 +3962,12 @@ llvmAtomicPermToBlock (Perm_LLVMArray ap) = llvmArrayPermToBlock ap
 llvmAtomicPermToBlock (Perm_LLVMBlock bp) = Just bp
 llvmAtomicPermToBlock _ = Nothing
 
+-- | Convert an atomic permission to several @memblocks@, if possible
+llvmAtomicPermToBlocks :: AtomicPerm (LLVMPointerType w) ->
+                          Maybe [LLVMBlockPerm w]
+llvmAtomicPermToBlocks (Perm_LLVMArray ap) = llvmArrayToBlocks ap
+llvmAtomicPermToBlocks p = pure <$> llvmAtomicPermToBlock p
+
 -- | Convert an atomic permission whose type is unknown to a @memblock@, if
 -- possible, along with a proof that its type is a valid llvm pointer type
 llvmAtomicPermToSomeBlock :: AtomicPerm a -> Maybe (SomeLLVMBlockPerm a)
@@ -4854,6 +4868,20 @@ llvmAtomicPermOverlapsRange rng (Perm_LLVMField fp) =
 llvmAtomicPermOverlapsRange rng (Perm_LLVMBlock bp) =
   bvRangesOverlap rng (llvmBlockRange bp)
 llvmAtomicPermOverlapsRange _ _ = False
+
+-- | Test if an atomic LLVM permission has a range that overlaps with (in the
+-- sense of 'bvPropCouldHold') the offsets in a given range
+llvmAtomicPermCouldOverlapRange :: (1 <= w, KnownNat w) => BVRange w ->
+                               AtomicPerm (LLVMPointerType w) -> Bool
+llvmAtomicPermCouldOverlapRange rng (Perm_LLVMArray ap) =
+  bvRangesCouldOverlap rng (llvmArrayAbsOffsets ap) &&
+  not (null $ bvRangesDelete rng $
+       map (llvmArrayBorrowOffsets ap) (llvmArrayBorrows ap))
+llvmAtomicPermCouldOverlapRange rng (Perm_LLVMField fp) =
+  bvRangesCouldOverlap rng (llvmFieldRange fp)
+llvmAtomicPermCouldOverlapRange rng (Perm_LLVMBlock bp) =
+  bvRangesCouldOverlap rng (llvmBlockRange bp)
+llvmAtomicPermCouldOverlapRange _ _ = False
 
 -- | Return the total length of an LLVM array permission in bytes
 llvmArrayLengthBytes :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
