@@ -12,6 +12,7 @@ module SAWServer.Exceptions (
   , notATerm
   , notAJVMClass
   , notAYosysTheorem
+  , notAYosysImport
   -- * Wrong monad errors
   , notSettingUpCryptol
   , notSettingUpLLVMCrucible
@@ -166,6 +167,17 @@ notAYosysTheorem name =
     ("The server value with name " <>
      T.pack (show name) <>
      " is not a Yosys theorem")
+    (Just $ object ["name" .= name])
+
+notAYosysImport ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a Yosys import -}->
+  JSONRPCException
+notAYosysImport name =
+  makeJSONRPCException 10131
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not a Yosys import")
     (Just $ object ["name" .= name])
 
 cantLoadLLVMModule :: String -> JSONRPCException

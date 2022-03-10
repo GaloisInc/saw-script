@@ -6,21 +6,28 @@ module SAWServer.Yosys where
 
 import Control.Lens (view)
 
+import Control.Monad (forM)
+import Control.Monad.IO.Class (liftIO)
+import Control.Exception (throw)
+
 import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.Text (Text)
+import qualified Data.Map as Map
 
 import qualified Argo
 import qualified Argo.Doc as Doc
 
-import SAWServer (SAWState, ServerName, sawTask, setServerVal, getTerm, getYosysTheorem)
+import CryptolServer.Data.Expression (Expression(..), getCryptolExpr)
+
+import SAWServer (SAWState, ServerName, YosysImport(..), sawTask, setServerVal, getYosysImport, getYosysTheorem)
+import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
 import SAWServer.Exceptions (notAtTopLevel)
 import SAWServer.OK (OK, ok)
 import SAWServer.ProofScript (ProofScript, interpretProofScript)
 import SAWServer.TopLevel (tl)
 
-import SAWScript.Value (getSharedContext)
-import SAWScript.Yosys (yosys_import, yosys_verify)
-import SAWScript.Yosys.Theorem (cryptolRecordSelectTyped)
+import SAWScript.Value (getSharedContext, getTopLevelRW, rwCryptol)
+import SAWScript.Yosys (loadYosysIR, yosysIRToTypedTerms, yosys_verify)
 
 -- newtype YosysModule = YosysModule (Map String ServerName)
 
@@ -48,8 +55,11 @@ yosysImport params = do
   case tasks of
     (_:_) -> Argo.raise $ notAtTopLevel $ fst <$> tasks
     [] -> do
-      t <- tl . yosys_import $ yosysImportPath params
-      setServerVal (yosysImportServerName params) t
+      imp <- tl $ do
+        sc <- getSharedContext
+        ir <- loadYosysIR $ yosysImportPath params
+        YosysImport <$> yosysIRToTypedTerms sc ir
+      setServerVal (yosysImportServerName params) imp
       ok
 
 yosysImportDescr :: Doc.Block
@@ -59,8 +69,8 @@ yosysImportDescr =
 data YosysVerifyParams = YosysVerifyParams
   { yosysVerifyImport :: ServerName
   , yosysVerifyModule :: Text
-  , yosysVerifyPreconds :: [ServerName]
-  , yosysVerifySpec :: ServerName
+  , yosysVerifyPreconds :: [Expression]
+  , yosysVerifySpec :: Expression
   , yosysVerifyLemmas :: [ServerName]
   , yosysVerifyScript :: ProofScript
   , yosysVerifyLemmaName :: ServerName
@@ -83,7 +93,7 @@ instance Doc.DescribedMethod YosysVerifyParams OK where
     , ("module", Doc.Paragraph [Doc.Text "The HDL module to verify."])
     , ("preconds", Doc.Paragraph [Doc.Text "Any preconditions for the verificatiion."])
     , ("spec", Doc.Paragraph [Doc.Text "The specification to verify for the module."])
-    , ("lemmas", Doc.Paragraph [Doc.Text "The specifications to use for other modules during this verification."])
+    , ("lemmas", Doc.Paragraph [Doc.Text "The lemmas to use for other modules during this verification."])
     , ("script", Doc.Paragraph [Doc.Text "The script to use to prove the validity of the resulting verification conditions."])
     , ("lemma name", Doc.Paragraph [Doc.Text "The name to refer to the result by later."])
     ]
@@ -95,14 +105,27 @@ yosysVerify params = do
   case tasks of
     (_:_) -> Argo.raise $ notAtTopLevel $ fst <$> tasks
     [] -> do
-      impTerm <- getTerm $ yosysVerifyImport params
-      specTerm <- getTerm $ yosysVerifySpec params
+      fileReader <- Argo.getFileReader
+      YosysImport imp <- getYosysImport $ yosysVerifyImport params
+      let Just modTerm = Map.lookup (yosysVerifyModule params) imp
       lemmas <- mapM getYosysTheorem $ yosysVerifyLemmas params
       proofScript <- interpretProofScript $ yosysVerifyScript params
+      cexp <- getCryptolExpr $ yosysVerifySpec params
+      precondExprs <- mapM getCryptolExpr $ yosysVerifyPreconds params
       l <- tl $ do
+        rw <- getTopLevelRW
         sc <- getSharedContext
-        modTerm <- cryptolRecordSelectTyped sc impTerm $ yosysVerifyModule params
-        yosys_verify modTerm [] specTerm lemmas proofScript
+        let cenv = rwCryptol rw
+        preconds <- forM precondExprs $ \pc -> do
+          (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader sc cenv pc
+          case eterm of
+            Right (t, _) -> pure t
+            Left err -> throw $ CryptolModuleException err warnings
+        (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader sc cenv cexp
+        specTerm <- case eterm of
+          Right (t, _) -> pure t
+          Left err -> throw $ CryptolModuleException err warnings
+        yosys_verify modTerm preconds specTerm lemmas proofScript
       setServerVal (yosysVerifyLemmaName params) l
       ok
 

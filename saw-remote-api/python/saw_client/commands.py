@@ -22,7 +22,7 @@ class YosysImport(SAWCommand):
             'SAW/Yosys/import',
             {'name': name, 'path': path},
             connection,
-            #timeout=timeout
+            timeout=timeout
         )
 
     def process_result(self, res : Any) -> Any:
@@ -53,7 +53,7 @@ class YosysVerify(SAWCommand):
             'SAW/Yosys/verify',
             params,
             connection,
-            #timeout=timeout
+            timeout=timeout
         )
 
     def process_result(self, res : Any) -> Any:
@@ -67,7 +67,7 @@ class CryptolLoadFile(SAWCommand):
             'SAW/Cryptol/load file',
             {'file': filename},
             connection,
-            #timeout=timeout
+            timeout=timeout
         )
 
     def process_result(self, _res : Any) -> Any:

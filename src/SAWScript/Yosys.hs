@@ -10,6 +10,8 @@ module SAWScript.Yosys
   ( YosysIR
   , yosys_import
   , yosys_verify
+  , loadYosysIR
+  , yosysIRToTypedTerms
   ) where
 
 import Control.Lens.TH (makeLenses)
@@ -438,7 +440,7 @@ moduleToTerm sc env m = do
         (C.tRec . C.recordFromFields $ toCryptol <$> outputports)
   pure (t, ty, cty)
 
--- | Given a Yosys IR and the name of a VHDL module, construct records associating module names with SAWCore terms and Cryptol types.
+-- | Given a Yosys IR, construct records associating module names with SAWCore terms and Cryptol types.
 yosysIRToTerms ::
   MonadIO m =>
   SC.SharedContext ->
@@ -469,7 +471,21 @@ yosysIRToTerms sc ir = do
     (Map.empty, Map.empty)
     sorted
 
--- | Given a Yosys IR and the name of a VHDL module, construct a SAWCore term for that module.
+-- | Given a Yosys IR, construct a record of TypedTerms
+yosysIRToTypedTerms ::
+  MonadIO m =>
+  SC.SharedContext ->
+  YosysIR ->
+  m (Map Text SC.TypedTerm)
+yosysIRToTypedTerms sc ir = do
+  (termEnv, typeEnv) <- yosysIRToTerms sc ir
+  res <- forM (Map.assocs termEnv) $ \(nm, t) ->
+    case Map.lookup nm typeEnv of
+      Nothing -> throw . YosysError $ "No type for Yosys module: " <> nm
+      Just ty -> pure (nm, SC.TypedTerm (SC.TypedTermSchema $ C.tMono ty) t)
+  pure $ Map.fromList res
+
+-- | Given a Yosys IR, construct a SAWCore record for all modules.
 yosysIRToRecordTerm ::
   MonadIO m =>
   SC.SharedContext ->
