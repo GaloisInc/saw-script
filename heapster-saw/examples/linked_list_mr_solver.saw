@@ -1,5 +1,9 @@
 include "linked_list.saw";
 
+/***
+ *** Testing infrastructure
+ ***/
+
 let eq_bool b1 b2 =
   if b1 then
     if b2 then true else false
@@ -15,12 +19,37 @@ let run_test name test expected =
          do { print "Test failed\n"; exit 1; }; };
 
 
+/***
+ *** Setup Cryptol environment
+ ***/
+
+include "either.saw";
+
+list_tp <- parse_core "\\ (a:sort 0) -> List a";
+cryptol_add_prim_type "LinkedList" "List" list_tp;
+
+fold_fun <- parse_core "foldList";
+cryptol_add_prim "LinkedList" "foldList" fold_fun;
+
+unfold_fun <- parse_core "unfoldList";
+cryptol_add_prim "LinkedList" "unfoldList" unfold_fun;
+
+import "linked_list.cry";
+
+
+/***
+ *** The actual tests
+ ***/
+
 heapster_typecheck_fun env "is_head"
   "(). arg0:int64<>, arg1:List<int64<>,always,R> -o \
      \ arg0:true, arg1:true, ret:int64<>";
 
+/*
 is_head <- parse_core_mod "linked_list" "is_head";
 run_test "is_head |= is_head" (mr_solver is_head is_head) true;
+*/
 
 is_elem <- parse_core_mod "linked_list" "is_elem";
-run_test "is_elem |= is_elem" (mr_solver is_elem is_elem) true;
+run_test "is_elem |= is_elem_spec" (mr_solver_debug 2 is_elem {{ is_elem_spec }}) true;
+//run_test "is_elem |= is_elem" (mr_solver_debug 1 is_elem is_elem) true;
