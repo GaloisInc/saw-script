@@ -209,6 +209,8 @@ normComp (CompBind m f) =
 normComp (CompTerm t) =
   withFailureCtx (FailCtxMNF t) $
   case asApplyAll t of
+    (f@(asLambda -> Just _), args) ->
+      mrApplyAll f args >>= normCompTerm
     (isGlobalDef "Prelude.returnM" -> Just (), [_, x]) ->
       return $ ReturnM x
     (isGlobalDef "Prelude.bindM" -> Just (), [_, _, m, f]) ->
