@@ -73,6 +73,7 @@ import SAWServer.Exceptions
       notATerm,
       notAJVMClass,
       notAJVMMethodSpecIR,
+      notAYosysImport,
       notAYosysTheorem,
     )
 
@@ -294,6 +295,8 @@ data CrucibleSetupTypeRepr :: Type -> Type where
   UnitRepr :: CrucibleSetupTypeRepr ()
   TypedTermRepr :: CrucibleSetupTypeRepr TypedTerm
 
+newtype YosysImport = YosysImport { yosysImport :: Map Text TypedTerm }
+
 data ServerVal
   = VTerm TypedTerm
   | VSimpset SAWSimpset
@@ -306,6 +309,7 @@ data ServerVal
   | VJVMMethodSpecIR (CMS.ProvedSpec CJ.JVM)
   | VLLVMMethodSpecIR (CMS.SomeLLVM CMS.ProvedSpec)
   | VGhostVar CMS.GhostGlobal
+  | VYosysImport YosysImport
   | VYosysTheorem YosysTheorem
 
 instance Show ServerVal where
@@ -320,6 +324,7 @@ instance Show ServerVal where
   show (VLLVMMethodSpecIR _) = "VLLVMMethodSpecIR"
   show (VJVMMethodSpecIR _) = "VJVMMethodSpecIR"
   show (VGhostVar x) = "(VGhostVar " ++ show x ++ ")"
+  show (VYosysImport _) = "VYosysImport"
   show (VYosysTheorem _) = "VYosysTheorem"
 
 class IsServerVal a where
@@ -348,6 +353,9 @@ instance IsServerVal JSS.Class where
 
 instance IsServerVal CMS.GhostGlobal where
   toServerVal = VGhostVar
+
+instance IsServerVal YosysImport where
+  toServerVal = VYosysImport
 
 instance IsServerVal YosysTheorem where
   toServerVal = VYosysTheorem
@@ -453,6 +461,13 @@ getGhosts :: Argo.Command SAWState [(ServerName, CMS.GhostGlobal)]
 getGhosts =
   do SAWEnv serverEnv <- view sawEnv <$> Argo.getState
      return [ (n, g) | (n, VGhostVar g) <- M.toList serverEnv ]
+
+getYosysImport :: ServerName -> Argo.Command SAWState YosysImport
+getYosysImport n =
+  do v <- getServerVal n
+     case v of
+       VYosysImport t -> return t
+       _other -> Argo.raise (notAYosysImport n)
 
 getYosysTheorem :: ServerName -> Argo.Command SAWState YosysTheorem
 getYosysTheorem n =

@@ -178,7 +178,8 @@ theoremReplacement sc thm = do
     Just pc -> do
       precond <- liftIO $ SC.scApply sc pc r
       thenCase <- liftIO $ SC.scApply sc (thm ^. theoremBody) r
-      liftIO $ SC.scIte sc (thm ^. theoremOutputType) precond thenCase (thm ^. theoremModule)
+      elseCase <- liftIO $ SC.scApply sc (thm ^. theoremModule) r
+      liftIO $ SC.scIte sc (thm ^. theoremOutputType) precond thenCase elseCase
   liftIO $ SC.scAbstractExts sc [ec] body
 
 buildTheorem ::
