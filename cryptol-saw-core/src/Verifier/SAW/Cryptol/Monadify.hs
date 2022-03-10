@@ -398,6 +398,7 @@ monadifyType ctx tp@(asPi -> Just (_, _, tp_out))
 monadifyType ctx tp@(asPi -> Just (x, tp_in, tp_out)) =
   MTyArrow (monadifyType ctx tp_in)
   (monadifyType ((x,tp,Nothing):ctx) tp_out)
+monadifyType _ (asTupleType -> Just []) = mkMonType0 unitTypeOpenTerm
 monadifyType ctx (asPairType -> Just (tp1, tp2)) =
   MTyPair (monadifyType ctx tp1) (monadifyType ctx tp2)
 monadifyType ctx (asRecordType -> Just tps) =
@@ -528,6 +529,36 @@ instance FromArgTerm MonTerm where
 fromCompTerm :: MonType -> OpenTerm -> MonTerm
 fromCompTerm mtp t | isBaseType mtp = CompMonTerm mtp t
 fromCompTerm mtp t = ArgMonTerm $ fromArgTerm mtp t
+
+-- | Test if a monadification type @tp@ is pure, meaning @MT(tp)=tp@
+monTypeIsPure :: MonType -> Bool
+monTypeIsPure (MTyForall _ _ _) = False -- NOTE: this could potentially be true
+monTypeIsPure (MTyArrow _ _) = False
+monTypeIsPure (MTySeq _ _) = False
+monTypeIsPure (MTyPair mtp1 mtp2) = monTypeIsPure mtp1 && monTypeIsPure mtp2
+monTypeIsPure (MTyRecord fld_mtps) = all (monTypeIsPure . snd) fld_mtps
+monTypeIsPure (MTyBase _ _) = True
+monTypeIsPure (MTyNum _) = True
+
+-- | Test if a monadification type @tp@ is semi-pure, meaning @SemiP(tp) = tp@,
+-- where @SemiP@ is defined in the documentation for 'fromSemiPureTermFun' below
+monTypeIsSemiPure :: MonType -> Bool
+monTypeIsSemiPure (MTyForall _ k tp_f) =
+  monTypeIsSemiPure $ tp_f $ MTyBase k $
+  -- This dummy OpenTerm should never be inspected by the recursive call
+  error "monTypeIsSemiPure"
+monTypeIsSemiPure (MTyArrow tp_in tp_out) =
+  monTypeIsPure tp_in && monTypeIsSemiPure tp_out
+monTypeIsSemiPure (MTySeq _ _) = False
+monTypeIsSemiPure (MTyPair mtp1 mtp2) =
+  -- NOTE: functions in pairs are not semi-pure; only pure types in pairs are
+  -- semi-pure
+  monTypeIsPure mtp1 && monTypeIsPure mtp2
+monTypeIsSemiPure (MTyRecord fld_mtps) =
+  -- Same as pairs, record types are only semi-pure if they are pure
+  all (monTypeIsPure . snd) fld_mtps
+monTypeIsSemiPure (MTyBase _ _) = True
+monTypeIsSemiPure (MTyNum _) = True
 
 -- | Build a monadification term from a function on terms which, when viewed as
 -- a lambda, is a "semi-pure" function of the given monadification type, meaning
@@ -857,8 +888,13 @@ monadifyTerm' _ (asApplyAll -> (asTypedGlobalDef -> Just glob, args)) =
     do let (macro_args, reg_args) = splitAt (macroNumArgs macro) args
        mtrm_f <- macroApply macro glob macro_args
        monadifyApply mtrm_f reg_args
-  Nothing -> error ("Monadification failed: unhandled constant: "
-                    ++ globalDefString glob)
+  Nothing ->
+    monadifyTypeM (globalDefType glob) >>= \glob_mtp ->
+    if monTypeIsSemiPure glob_mtp then
+      monadifyApply (ArgMonTerm $ fromSemiPureTerm glob_mtp $
+                     globalDefOpenTerm glob) args
+    else error ("Monadification failed: unhandled constant: "
+                ++ globalDefString glob)
 monadifyTerm' _ (asApp -> Just (f, arg)) =
   do mtrm_f <- monadifyTerm Nothing f
      monadifyApply mtrm_f [arg]
