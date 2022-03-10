@@ -1527,6 +1527,17 @@ cryptol_add_path path =
      let rw' = rw { rwCryptol = ce' }
      putTopLevelRW rw'
 
+cryptol_add_prim :: String -> String -> TypedTerm -> TopLevel ()
+cryptol_add_prim mnm nm trm =
+  do rw <- getTopLevelRW
+     let env = rwCryptol rw
+     let prim_name =
+           C.PrimIdent (C.textToModName $ Text.pack mnm) (Text.pack nm)
+     let env' =
+           env { CEnv.ePrims =
+                   Map.insert prim_name (ttTerm trm) (CEnv.ePrims env) }
+     putTopLevelRW (rw { rwCryptol = env' })
+
 cryptol_add_prim_type :: String -> String -> TypedTerm -> TopLevel ()
 cryptol_add_prim_type mnm nm tp =
   do rw <- getTopLevelRW
