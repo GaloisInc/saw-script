@@ -1560,14 +1560,18 @@ ensureMonadicTerm sc t
       False -> monadifyTypedTerm sc t
 ensureMonadicTerm sc t = monadifyTypedTerm sc t
 
+-- | Run Mr Solver with the given debug level to prove that the first term
+-- refines the second
 mrSolver :: SharedContext -> Int -> TypedTerm -> TypedTerm -> TopLevel Bool
 mrSolver sc dlvl t1 t2 =
-  do m1 <- ttTerm <$> ensureMonadicTerm sc t1
+  do rw <- get
+     m1 <- ttTerm <$> ensureMonadicTerm sc t1
      m2 <- ttTerm <$> ensureMonadicTerm sc t2
-     res <- liftIO $ Prover.askMRSolver sc dlvl Nothing m1 m2
+     let env = rwMRSolverEnv rw
+     res <- liftIO $ Prover.askMRSolver sc dlvl env Nothing m1 m2
      case res of
-       Just err -> io (putStrLn $ Prover.showMRFailure err) >> return False
-       Nothing -> return True
+       Left err -> io (putStrLn $ Prover.showMRFailure err) >> return False
+       Right env' -> put (rw { rwMRSolverEnv = env' }) >> return True
 
 setMonadification :: SharedContext -> String -> String -> TopLevel ()
 setMonadification sc cry_str saw_str =

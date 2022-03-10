@@ -17,8 +17,6 @@ namely 'mrProvable' and 'mrProveEq'.
 module SAWScript.Prover.MRSolver.SMT where
 
 import qualified Data.Vector as V
-import Control.Monad.Reader
-import Control.Monad.State
 import Control.Monad.Except
 
 import Data.Map (Map)
@@ -162,7 +160,7 @@ normSMTProp t =
 -- FIXME: use the timeout!
 mrProvableRaw :: Term -> MRM Bool
 mrProvableRaw prop_term =
-  do sc <- mrSC <$> get
+  do sc <- mrSC
      prop <- liftSC1 termToProp prop_term
      unints <- Set.map ecVarIndex <$> getAllExtSet <$> liftSC1 propToTerm prop
      debugPrint 2 ("Calling SMT solver with proposition: " ++
@@ -179,24 +177,33 @@ mrProvableRaw prop_term =
 -- | Test if a Boolean term over the current uvars is provable given the current
 -- assumptions
 mrProvable :: Term -> MRM Bool
+mrProvable (asBool -> Just b) = return b
 mrProvable bool_tm =
-  do assumps <- mrAssumptions <$> get
+  do assumps <- mrAssumptions
      prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
-     prop_inst <- flip instantiateUVarsM prop $ \nm tp ->
-       liftSC1 scWhnf tp >>= \case
-       (asBVVecType -> Just (n, len, a)) ->
-         -- For variables of type BVVec, create a Vec n Bool -> a function as an
-         -- ExtCns and apply genBVVec to it
-         do
-           ec_tp <-
-             liftSC1 completeOpenTerm $
-             arrowOpenTerm "_" (applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
-                                [closedOpenTerm n, boolTypeOpenTerm])
-             (closedOpenTerm a)
-           ec <- liftSC2 scFreshEC nm ec_tp >>= liftSC1 scExtCns
-           liftSC4 genBVVecTerm n len a ec
-       tp' -> liftSC2 scFreshEC nm tp' >>= liftSC1 scExtCns
+     prop_inst <- instantiateUVarsM instUVar prop
      normSMTProp prop_inst >>= mrProvableRaw
+  where -- | Given a UVar name and type, generate a 'Term' to be passed to
+        -- SMT, with special cases for BVVec and pair types
+        instUVar :: LocalName -> Term -> MRM Term
+        instUVar nm tp = liftSC1 scWhnf tp >>= \case
+          -- For variables of type BVVec, create a @Vec n Bool -> a@ function
+          -- as an ExtCns and apply genBVVec to it
+          (asBVVecType -> Just (n, len, a)) -> do
+             ec_tp <-
+               liftSC1 completeOpenTerm $
+               arrowOpenTerm "_" (applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
+                                  [closedOpenTerm n, boolTypeOpenTerm])
+               (closedOpenTerm a)
+             ec <- instUVar nm ec_tp
+             liftSC4 genBVVecTerm n len a ec
+          -- For pairs, recurse on both sides and combine the result as a pair
+          (asPairType -> Just (tp1, tp2)) -> do
+            e1 <- instUVar nm tp1
+            e2 <- instUVar nm tp2
+            liftSC2 scPairValue e1 e2
+          -- Otherwise, create a global variable with the given name and type
+          tp' -> liftSC2 scFreshEC nm tp' >>= liftSC1 scExtCns
 
 
 ----------------------------------------------------------------------
@@ -262,23 +269,28 @@ mrProveEqSimple eqf t1 t2 =
      t2' <- mrSubstEVars t2
      TermInCtx [] <$> eqf t1' t2'
 
+-- | Prove that two terms are equal, instantiating evars if necessary,
+-- returning true on success
+mrProveEq :: Term -> Term -> MRM Bool
+mrProveEq t1 t2 =
+  do mrDebugPPPrefixSep 1 "mrProveEq" t1 "==" t2
+     tp <- mrTypeOf t1 >>= mrSubstEVars
+     varmap <- mrVars
+     cond_in_ctx <- mrProveEqH varmap tp t1 t2
+     res <- withTermInCtx cond_in_ctx mrProvable
+     debugPrint 1 $ "mrProveEq: " ++ if res then "Success" else "Failure"
+     return res
 
 -- | Prove that two terms are equal, instantiating evars if necessary, or
 -- throwing an error if this is not possible
-mrProveEq :: Term -> Term -> MRM ()
-mrProveEq t1 t2 =
-  do mrDebugPPPrefixSep 1 "mrProveEq" t1 "==" t2
-     tp <- mrTypeOf t1
-     varmap <- mrVars <$> get
-     cond_in_ctx <- mrProveEqH varmap tp t1 t2
-     success <- withTermInCtx cond_in_ctx mrProvable
+mrAssertProveEq :: Term -> Term -> MRM ()
+mrAssertProveEq t1 t2 =
+  do success <- mrProveEq t1 t2
      if success then return () else
-       throwError (TermsNotEq t1 t2)
+       throwMRFailure (TermsNotEq t1 t2)
 
--- | The main workhorse for 'prProveEq'. Build a Boolean term expressing that
--- the third and fourth arguments, whose type is given by the second. This is
--- done in a continuation monad so that the output term can be in a context with
--- additional universal variables.
+-- | The main workhorse for 'mrProveEq'. Build a Boolean term expressing that
+-- the third and fourth arguments, whose type is given by the second.
 mrProveEqH :: Map MRVar MRVarInfo -> Term -> Term -> Term -> MRM TermInCtx
 
 {-
@@ -305,6 +317,10 @@ mrProveEqH var_map _tp t1 (asEVarApp var_map -> Just (evar, args, Nothing)) =
   do t1' <- mrSubstEVars t1
      success <- mrTrySetAppliedEVar evar args t1'
      TermInCtx [] <$> liftSC1 scBool success
+
+-- For unit types, always return true
+mrProveEqH _ (asTupleType -> Just []) _ _ =
+  TermInCtx [] <$> liftSC1 scBool True
 
 -- For the nat, bitvector, Boolean, and integer types, call mrProveEqSimple
 mrProveEqH _ (asDataType -> Just (pn, [])) t1 t2
@@ -343,7 +359,7 @@ mrProveEqH _ (asBVVecType -> Just (n, len, tp)) t1 t2 =
                                                         t1'', ix'', pf'']
      t2_prj <- liftSC2 scGlobalApply "Prelude.atBVVec" [n'', len'', tp'',
                                                         t2'', ix'', pf'']
-     var_map <- mrVars <$> get
+     var_map <- mrVars
      extTermInCtx [("eq_ix",ix_tp),("eq_pf",pf_tp)] <$>
        mrProveEqH var_map tp'' t1_prj t2_prj
 

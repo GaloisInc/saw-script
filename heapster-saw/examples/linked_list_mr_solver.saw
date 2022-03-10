@@ -1,4 +1,4 @@
-include "arrays.saw";
+include "linked_list.saw";
 
 let eq_bool b1 b2 =
   if b1 then
@@ -14,10 +14,13 @@ let run_test name test expected =
        if eq_bool actual expected then print "Success\n" else
          do { print "Test failed\n"; exit 1; }; };
 
-// Test that contains0 |= contains0
-contains0 <- parse_core_mod "arrays" "contains0";
-// run_test "contains0 |= contains0" (mr_solver contains0 contains0) true;
 
-noErrorsContains0 <- parse_core_mod "arrays" "noErrorsContains0";
-run_test "contains0 |= noErrorsContains0"
-  (mr_solver_debug 0 contains0 noErrorsContains0) true;
+heapster_typecheck_fun env "is_head"
+  "(). arg0:int64<>, arg1:List<int64<>,always,R> -o \
+     \ arg0:true, arg1:true, ret:int64<>";
+
+is_head <- parse_core_mod "linked_list" "is_head";
+run_test "is_head |= is_head" (mr_solver is_head is_head) true;
+
+is_elem <- parse_core_mod "linked_list" "is_elem";
+run_test "is_elem |= is_elem" (mr_solver is_elem is_elem) true;
