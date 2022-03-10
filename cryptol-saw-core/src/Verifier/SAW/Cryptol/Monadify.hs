@@ -959,6 +959,25 @@ iteMacro = MonMacro 4 $ \_ args ->
          [toCompType mtp, toArgTerm atrm_cond,
           toCompTerm mtrm1, toCompTerm mtrm2]
 
+-- | The macro for the either elimination function, which converts the
+-- application @either a b c@ to @either a b (CompM c)@
+eitherMacro :: MonMacro
+eitherMacro = MonMacro 3 $ \_ args ->
+  do let (tp_a, tp_b, tp_c) =
+           case args of
+             [t1, t2, t3] -> (t1, t2, t3)
+             _ -> error "eitherMacro: wrong number of arguments!"
+     mtp_a <- monadifyTypeM tp_a
+     mtp_b <- monadifyTypeM tp_b
+     mtp_c <- monadifyTypeM tp_c
+     let eith_app = applyGlobalOpenTerm "Prelude.either" [toArgType mtp_a,
+                                                          toArgType mtp_b,
+                                                          toCompType mtp_c]
+     let tp_eith = dataTypeOpenTerm "Prelude.Either" [toArgType mtp_a,
+                                                      toArgType mtp_b]
+     return $ fromCompTerm (MTyArrow (MTyArrow mtp_a mtp_c)
+                            (MTyArrow (MTyArrow mtp_b mtp_c)
+                             (MTyArrow (mkMonType0 tp_eith) mtp_c))) eith_app
 
 -- | Make a 'MonMacro' that maps a named global whose first argument is @n:Num@
 -- to a global of semi-pure type that takes an additional argument of type
@@ -1048,6 +1067,7 @@ defaultMonEnv =
     mmCustom "Prelude.unsafeAssert" unsafeAssertMacro
   , mmCustom "Prelude.ite" iteMacro
   , mmCustom "Prelude.fix" fixMacro
+  , mmCustom "Prelude.either" eitherMacro
 
     -- Top-level sequence functions
   , mmArg "Cryptol.seqMap" "CryptolM.seqMapM"
