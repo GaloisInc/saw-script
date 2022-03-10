@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ImplicitParams #-}
 
 {- |
 Module      : SAWScript.Prover.MRSolver.SMT
@@ -136,7 +137,16 @@ smtNormPrims sc = Map.fromList
      PrimFun $ \_n -> PrimFun $ \_len -> tvalFun $ \a ->
       primGenBVVec sc $ \f -> primBVTermFun sc $ \ix -> PrimFun $ \_pf ->
       Prim (VExtra <$> VExtraTerm a <$> scApply sc f ix)
-    )
+    ),
+    ("Prelude.CompM",
+     PrimFilterFun "CompM" (\case
+                               TValue tv -> return tv
+                               _ -> mzero) $ \tv ->
+      Prim (do let ?recordEC = \_ec -> return ()
+               let cfg = error "FIXME: smtNormPrims: need the simulator config"
+               tv_trm <- readBackTValue sc cfg tv
+               TValue <$> VTyTerm (mkSort 0) <$>
+                 scGlobalApply sc "Prelude.CompM" [tv_trm]))
   ]
 
 -- | Normalize a 'Term' before building an SMT query for it
