@@ -448,7 +448,7 @@ funNameType (GlobalName gd projs) =
 
 -- | Apply a 'Term' to a list of arguments and beta-reduce in Mr. Monad
 mrApplyAll :: Term -> [Term] -> MRM Term
-mrApplyAll f args = liftSC2 scApplyAll f args >>= liftSC1 betaNormalize
+mrApplyAll f args = liftSC2 scApplyAllBeta f args
 
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in
