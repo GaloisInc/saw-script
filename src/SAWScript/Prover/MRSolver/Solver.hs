@@ -497,27 +497,63 @@ mrRefines' (ErrorM _) (ErrorM _) = return ()
 mrRefines' (ReturnM e) (ErrorM _) = throwMRFailure (ReturnNotError e)
 mrRefines' (ErrorM _) (ReturnM e) = throwMRFailure (ReturnNotError e)
 
--- FIXME: Add support for arbitrary maybe asusmptions, like the either case
+-- A maybe eliminator on an equality type on the left
 mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
-     cond_pf <-
-       liftSC1 scEqTrue cond >>= piUVarsM >>= mrFreshVar "pf" >>= mrVarTerm
+     cond_pf <- liftSC1 scEqTrue cond >>= mrDummyProof
      m1' <- applyNormCompFun f1 cond_pf
      cond_holds <- mrProvable cond
      if cond_holds then mrRefines m1' m2 else
        withAssumption cond (mrRefines m1' m2) >>
        withAssumption not_cond (mrRefines m1 m2)
+
+-- A maybe eliminator on an equality type on the right
 mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
-     cond_pf <-
-       liftSC1 scEqTrue cond >>= piUVarsM >>= mrFreshVar "pf" >>= mrVarTerm
+     cond_pf <- liftSC1 scEqTrue cond >>= mrDummyProof
      m2' <- applyNormCompFun f2 cond_pf
      cond_holds <- mrProvable cond
      if cond_holds then mrRefines m1 m2' else
        withAssumption cond (mrRefines m1 m2') >>
        withAssumption not_cond (mrRefines m1 m2)
+
+-- A maybe eliminator on an isFinite type on the left
+mrRefines' (MaybeElim (Type (asIsFinite -> Just n1)) m1 f1 _) m2 =
+  do n1_norm <- liftSC1 scWhnf n1
+     maybe_assump <- mrGetDataTypeAssump n1_norm
+     fin_pf <-
+       liftSC2 scGlobalApply "CryptolM.isFinite" [n1_norm] >>= mrDummyProof
+     case (maybe_assump, asNum n1_norm) of
+       (_, Just (Left _)) -> applyNormCompFun f1 fin_pf >>= flip mrRefines m2
+       (_, Just (Right _)) -> mrRefines m1 m2
+       (Just (IsNum _), _) -> applyNormCompFun f1 fin_pf >>= flip mrRefines m2
+       (Just IsInf, _) -> mrRefines m1 m2
+       _ ->
+         withDataTypeAssump n1_norm IsInf (mrRefines m1 m2) >>
+         liftSC0 scNatType >>= \nat_tp ->
+         (withUVarLift "n" (Type nat_tp) (n1_norm, f1, m2) $ \ n (n1', f1', m2') ->
+           withDataTypeAssump n1' (IsNum n)
+           (applyNormCompFun f1' n >>= flip mrRefines m2'))
+
+-- A maybe eliminator on an isFinite type on the right
+mrRefines' m1 (MaybeElim (Type (asIsFinite -> Just n2)) m2 f2 _) =
+  do n2_norm <- liftSC1 scWhnf n2
+     maybe_assump <- mrGetDataTypeAssump n2_norm
+     fin_pf <-
+       liftSC2 scGlobalApply "CryptolM.isFinite" [n2_norm] >>= mrDummyProof
+     case (maybe_assump, asNum n2_norm) of
+       (_, Just (Left _)) -> applyNormCompFun f2 fin_pf >>= mrRefines m1
+       (_, Just (Right _)) -> mrRefines m1 m2
+       (Just (IsNum _), _) -> applyNormCompFun f2 fin_pf >>= mrRefines m1
+       (Just IsInf, _) -> mrRefines m1 m2
+       _ ->
+         withDataTypeAssump n2_norm IsInf (mrRefines m1 m2) >>
+         liftSC0 scNatType >>= \nat_tp ->
+         (withUVarLift "n" (Type nat_tp) (n2_norm, f2, m1) $ \ n (n2', f2', m1') ->
+           withDataTypeAssump n2' (IsNum n)
+           (applyNormCompFun f2' n >>= mrRefines m1'))
 
 mrRefines' (Ite cond1 m1 m1') m2 =
   liftSC1 scNot cond1 >>= \not_cond1 ->
