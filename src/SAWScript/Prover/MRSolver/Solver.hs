@@ -152,18 +152,6 @@ asNestedPairs (asPairValue -> Just (x, asNestedPairs -> Just xs)) = Just (x:xs)
 asNestedPairs (asFTermF -> Just UnitValue) = Just []
 asNestedPairs _ = Nothing
 
--- | Syntactically project then @i@th element of the body of a lambda. That is,
--- assuming the input 'Term' has the form
---
--- > \ (x1:T1) ... (xn:Tn) -> (e1, (e2, ... (en, ())))
---
--- return the bindings @x1:T1,...,xn:Tn@ and @ei@
-synProjFunBody :: Int -> Term -> Maybe ([(LocalName, Term)], Term)
-synProjFunBody i (asLambdaList -> (vars, asTupleValue -> Just es)) =
-  -- NOTE: we are doing 1-based indexing instead of 0-based, thus the -1
-  Just $ (vars, es !! (i-1))
-synProjFunBody _ _ = Nothing
-
 -- | Bind fresh function variables for a @letRecM@ or @multiFixM@ with the given
 -- @LetRecTypes@ and definitions for the function bodies as a lambda
 mrFreshLetRecVars :: Term -> Term -> MRM [Term]
@@ -266,7 +254,10 @@ normComp (CompTerm t) =
         fun_tms <- mrFreshLetRecVars lrts defs_f
         -- Apply fi to the top-level arguments, keeping in mind that tuple
         -- selectors are one-based, not zero-based, so we subtract 1 from i
-        body_tm <- mrApplyAll (fun_tms !! (i-1)) args
+        body_tm <-
+          if i > 0 && i <= length fun_tms then
+            mrApplyAll (fun_tms !! (i-1)) args
+          else throwMRFailure (MalformedComp t)
         normComp (CompTerm body_tm)
 
 
@@ -523,7 +514,7 @@ mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
 
 -- A maybe eliminator on an isFinite type on the left
 mrRefines' (MaybeElim (Type (asIsFinite -> Just n1)) m1 f1 _) m2 =
-  do n1_norm <- liftSC1 scWhnf n1
+  do n1_norm <- mrNormOpenTerm n1
      maybe_assump <- mrGetDataTypeAssump n1_norm
      fin_pf <-
        liftSC2 scGlobalApply "CryptolM.isFinite" [n1_norm] >>= mrDummyProof
@@ -541,7 +532,7 @@ mrRefines' (MaybeElim (Type (asIsFinite -> Just n1)) m1 f1 _) m2 =
 
 -- A maybe eliminator on an isFinite type on the right
 mrRefines' m1 (MaybeElim (Type (asIsFinite -> Just n2)) m2 f2 _) =
-  do n2_norm <- liftSC1 scWhnf n2
+  do n2_norm <- mrNormOpenTerm n2
      maybe_assump <- mrGetDataTypeAssump n2_norm
      fin_pf <-
        liftSC2 scGlobalApply "CryptolM.isFinite" [n2_norm] >>= mrDummyProof
@@ -577,7 +568,7 @@ mrRefines' m1 (Ite cond2 m2 m2') =
          withAssumption not_cond2 (mrRefines m1 m2')
 
 mrRefines' (Either ltp1 rtp1 f1 g1 t1) m2 =
-  liftSC1 scWhnf t1 >>= \t1' ->
+  mrNormOpenTerm t1 >>= \t1' ->
   mrGetDataTypeAssump t1' >>= \mb_assump ->
   case (mb_assump, asEither t1') of
     (_, Just (Left  x)) -> applyNormCompFun f1 x >>= flip mrRefines m2
@@ -593,7 +584,7 @@ mrRefines' (Either ltp1 rtp1 f1 g1 t1) m2 =
              applyNormCompFun g1' x >>= withDataTypeAssump t1'' (IsRight x)
                                         . flip mrRefines m2')
 mrRefines' m1 (Either ltp2 rtp2 f2 g2 t2) =
-  liftSC1 scWhnf t2 >>= \t2' ->
+  mrNormOpenTerm t2 >>= \t2' ->
   mrGetDataTypeAssump t2' >>= \mb_assump ->
   case (mb_assump, asEither t2') of
     (_, Just (Left  x)) -> applyNormCompFun f2 x >>= mrRefines m1
