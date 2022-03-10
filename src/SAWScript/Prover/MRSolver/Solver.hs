@@ -251,21 +251,23 @@ normComp (CompTerm t) =
         mrApplyAll body args >>= normCompTerm
     -}
 
+    -- Recognize and unfold a multiArgFixM
+    (f@(isGlobalDef "Prelude.multiArgFixM" -> Just ()), args)
+      | Just (_, Just body) <- asConstant f ->
+        mrApplyAll body args >>= normCompTerm
+
     -- Recognize (multiFixM lrts (\ f1 ... fn -> (body1, ..., bodyn))).i args
     (asTupleSelector ->
      Just (asApplyAll -> (isGlobalDef "Prelude.multiFixM" -> Just (),
                           [lrts, defs_f]),
-           i), args)
-      -- Extract out the function \f1 ... fn -> bodyi
-      | Just (vars, body_i) <- synProjFunBody i defs_f ->
-        do
-          -- Bind fresh function variables for the functions f1 ... fn
-          fun_tms <- mrFreshLetRecVars lrts defs_f
-          -- Re-abstract the body
-          body_f <- liftSC2 scLambdaList vars body_i
-          -- Apply body_f to f1 ... fn and the top-level arguments
-          body_tm <- mrApplyAll body_f (fun_tms ++ args)
-          normComp (CompTerm body_tm)
+           i), args) ->
+      do
+        -- Bind fresh function variables for the functions f1 ... fn
+        fun_tms <- mrFreshLetRecVars lrts defs_f
+        -- Apply fi to the top-level arguments, keeping in mind that tuple
+        -- selectors are one-based, not zero-based, so we subtract 1 from i
+        body_tm <- mrApplyAll (fun_tms !! (i-1)) args
+        normComp (CompTerm body_tm)
 
 
     -- For an ExtCns, we have to check what sort of variable it is
