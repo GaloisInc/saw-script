@@ -6428,27 +6428,12 @@ proveVarLLVMArrayH x _p psubst ps mb_ap
 proveVarLLVMArrayH x first_p psubst ps mb_ap =
   partialSubstForceM mb_ap "proveVarLLVMArray: debug" >>>= \ap ->
   maybe (implFailM "boop") return (skeletonArray ps ap) >>>= \skel ->
-  -- skel = skeletonArray ps ap in
-  implTraceM (\i ->
-                pretty "abakst debug:" <+> PP.group (permPretty i (ValPerm_Conj (filterBorrowed ps)))) >>>
-  implTraceM (\i ->
-                pretty "abakst debug:" <+> PP.group (permPretty i (gatherRangesForArray ps ap))) >>>
-  implTraceM (\i ->
-                pretty "abakst debug:" <+> PP.group (permPretty i skel)) >>>
   -- Prove a block permission
   findBlockPerm ps >>>= \i ->
-  -- implGetConjM x ps i >>>= \ps' ->
   recombinePerm x (ValPerm_Conj ps) >>>
   let ~(Just b) = extractFirstBlock (ps !! i) in
-  -- proveVarLLVMBlock x
   implLLVMArrayBorrowed x b skel >>>
-  -- recombinePerm x (ValPerm_Conj1 (ps !! i)) >>>
   proveVarLLVMArrayH x first_p psubst [Perm_LLVMArray skel] mb_ap
-    -- x
-    -- skel
-    -- (llvmArrayLen skel)
-    -- (llvmArrayBorrows ap)
-    -- mb_ap >>>= \_ -> return ()
   where
     findBlockPerm =
        maybe (implFailM "proveVarLLVMArrayH") return . findIndex (isJust . extractFirstBlock)
@@ -6458,7 +6443,6 @@ proveVarLLVMArrayH x first_p psubst ps mb_ap =
         Perm_LLVMArray ap
           | Just (b:_) <- llvmArrayToBlocks ap -> Just b
         _ -> llvmAtomicPermToBlock p
-
 
 proveVarLLVMArrayH x first_p _ ps mb_ap =
   implTraceM (\i ->
@@ -6621,7 +6605,10 @@ skeletonArray ::
   Maybe (LLVMArrayPerm w)
 skeletonArray lhs rhs =
   case gatherRangesForArray lhs rhs of
-    (unzip -> (bs,rs)):_ | Just n <- len' ->
+    (unzip -> (bs,rs)):_
+      | null rs ->
+        undefined
+      | Just n <- len' ->
       Just rhs { llvmArrayBorrows = chopBorrows [] bs (llvmArrayBorrows rhs)
                , llvmArrayLen     = n
                , llvmArrayOffset  = o'
@@ -6673,7 +6660,7 @@ gatherRangesForArray lhs rhs =
     lhs_ranges     = permToBorrowRange rhs <$> lhs_not_borrows
     rhs_ranges     = [ (b, llvmArrayBorrowAbsOffsets rhs b) | b <- llvmArrayBorrows rhs ]
     lhs_not_borrows = filterBorrowed lhs
-    rhs_len_bytes = llvmArrayLengthBytes rhs
+    rhs_off_bytes = bvAdd (llvmArrayOffset rhs) (llvmArrayLengthBytes rhs)
 
     rangeForOffset prec off (_, range) =
       if prec then bvEq off (bvRangeOffset range) else bvPropCouldHold prop
@@ -6682,13 +6669,9 @@ gatherRangesForArray lhs rhs =
 
     collectRanges :: Bool -> PermExpr (BVType w) -> [(LLVMArrayBorrow w, BVRange w)] -> [[(LLVMArrayBorrow w, BVRange w)]]
     collectRanges prec off0 ranges
-      | bvLeq rhs_len_bytes off0 = [[]]
+      | bvLeq rhs_off_bytes off0 = [[]]
       | otherwise =
         case filter (rangeForOffset prec off0) ranges of
-          -- r | trace ("filter: " ++ renderDoc (permPretty emptyPPInfo (r, rhs_len_bytes, off0))) False ->
-          --     undefined
-          -- _ | bvLeq rhs_len_bytes off0 -> [[]]
-
           [] -> []
 
           rs ->
