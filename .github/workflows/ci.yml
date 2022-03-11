@@ -498,7 +498,7 @@ jobs:
 
   s2n-tests:
     name: "Test s2n proofs"
-    timeout-minutes: 60
+    timeout-minutes: 120
     needs: build
     runs-on: ubuntu-18.04
     strategy:
