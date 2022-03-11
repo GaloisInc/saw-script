@@ -64,47 +64,14 @@ instance (ToAtomic p t, t ~ LLVMPointerType 64) => ToConj [p] where
 instance (t ~ LLVMPointerType 64) => ToConj [AtomicPerm t] where
   conj = ValPerm_Conj
 
-arrayTests :: TestTree
-arrayTests = testGroup "arrayTests"
-          [ testCase "too small" $
-              int64array 0 3 =/=> int64array 0 6
+class ArrayIndexExpr a where
+  toIdx :: a -> PermExpr (BVType 64)
 
-          , testCase "bigger" $
-              int64array 0 6 ===> int64array 0 3
+instance Integral i => ArrayIndexExpr i where
+  toIdx i = bvInt (toInteger i)
 
-          , testGroup "sum of two arrays"
-            [ testCase "exact" $
-              [ int64array 0 3, int64array 24 3 ] ===> int64array 0 6
-
-            , testCase "larger" $
-               [ int64array 0 3, int64array 24 3 ] ===> int64array 0 5
-
-            , testCase "not enough" $
-              [ int64array 0 3, int64array 24 3 ] =/=> int64array 0 7
-            ]
-
-          , testGroup "borrows on rhs"
-            [ testCase "matched borrows" $
-                int64ArrayPerm 0 3 \\\ (1,2) ===> int64ArrayPerm 0 3 \\\ (1,2)
-
-            , testCase "sum of matched borrows" $
-               [ int64ArrayPerm 0 3 \\\ (1,2) , int64ArrayPerm 24 3 ]
-               ===>
-               int64ArrayPerm 0 6 \\\ (1,2)
-
-            , testCase "rhs borrow intersects two lhs borrows " $
-              -- TODO: variant with enough perms to prove this
-              int64ArrayPerm 0 5 \\\ (1, 3) \\\ (7,3) =/=> int64ArrayPerm 0 5 \\\ (2,6)
-
-            , testCase "too much lhs borrowed" $
-              int64ArrayPerm 0 10 \\\ (5,2) =/=> int64ArrayPerm 0 10 \\\ (5,1)
-
-            , testCase "sum of borrows" $
-              [ int64ArrayPerm 0 3 \\\ (1,2) , int64ArrayPerm 24 4 \\\ (1,2) ]
-              ===>
-              int64ArrayPerm 0 7 \\\ (1,2) \\\ (3,3)
-            ]
-          ]
+instance t ~ BVType 64 => ArrayIndexExpr (Name t) where
+  toIdx x = PExpr_Var x
 
 doesNotImply :: ValuePerm (LLVMPointerType 64) -> ValuePerm (LLVMPointerType 64) -> Assertion
 doesNotImply l r =
@@ -114,11 +81,9 @@ doesImply :: ValuePerm (LLVMPointerType 64) -> ValuePerm (LLVMPointerType 64) ->
 doesImply l r =
   assertBool "should succeed" (checkImpl l r)
 
+
 checkImpl :: ValuePerm (LLVMPointerType 64) -> ValuePerm (LLVMPointerType 64) -> Bool
-checkImpl lhs rhs =
-  case mbMatch (nu $ \x -> checkVarImpl (pset x) (proveVarImpl x perm_rhs)) of
-    [nuMP| False |] -> False
-    _ -> True
+checkImpl lhs rhs = mbLift (nu $ \x -> checkVarImpl (pset x) (proveVarImpl x perm_rhs))
   where
     perm_lhs = lhs
     perm_rhs = emptyMb rhs
@@ -129,15 +94,6 @@ intShape = PExpr_FieldShape $ LLVMFieldShape intField
 
 intField :: ValuePerm (LLVMPointerType 64)
 intField = ValPerm_Exists $ nu $ \x -> ValPerm_Eq (PExpr_LLVMWord (PExpr_Var x))
-
-class ArrayIndexExpr a where
-  toIdx :: a -> PermExpr (BVType 64)
-
-instance Integral i => ArrayIndexExpr i where
-  toIdx i = bvInt (toInteger i)
-
-instance t ~ BVType 64 => ArrayIndexExpr (Name t) where
-  toIdx x = PExpr_Var x
 
 int64array :: ArrayIndexExpr a => a -> a -> AtomicPerm (LLVMPointerType 64)
 int64array off len = Perm_LLVMArray (int64ArrayPerm off len)
@@ -160,6 +116,38 @@ arrayPerm off len stride shape  = LLVMArrayPerm
   , llvmArrayCellShape = shape
   , llvmArrayBorrows = []
   }
+
+arrayTests :: TestTree
+arrayTests =
+  testGroup "arrayTests"
+  [ testCase "too small" $ int64array 0 3 =/=> int64array 0 6
+  , testCase "bigger"    $ int64array 0 6 ===> int64array 0 3
+
+  , testGroup "sum of two arrays"
+    [ testCase "exact"      $ [ int64array 0 3, int64array 24 3 ] ===> int64array 0 6
+    , testCase "larger"     $ [ int64array 0 3, int64array 24 3 ] ===> int64array 0 5
+    , testCase "not enough" $ [ int64array 0 3, int64array 24 3 ] =/=> int64array 0 7
+    ]
+
+  , testGroup "borrows on rhs"
+    [ testCase "matched borrows" $
+      int64ArrayPerm 0 3 \\\ (1,2) ===> int64ArrayPerm 0 3 \\\ (1,2)
+
+    , testCase "sum of matched borrows" $
+      [ int64ArrayPerm 0 3 \\\ (1,2) , int64ArrayPerm 24 3 ]
+      ===> int64ArrayPerm 0 6 \\\ (1,2)
+
+    , testCase "rhs borrow intersects two lhs borrows " $
+      -- TODO: variant with enough perms to prove this
+      int64ArrayPerm 0 5 \\\ (1, 3) \\\ (7,3) =/=> int64ArrayPerm 0 5 \\\ (2,6)
+
+    , testCase "too much lhs borrowed" $ int64ArrayPerm 0 10 \\\ (5,2) =/=> int64ArrayPerm 0 10 \\\ (5,1)
+
+    , testCase "sum of borrows" $
+      [ int64ArrayPerm 0 3 \\\ (1,2) , int64ArrayPerm 24 4 \\\ (1,2) ]
+      ===> int64ArrayPerm 0 7 \\\ (1,2) \\\ (3,3)
+    ]
+  ]
 
 main :: IO ()
 main = defaultMain arrayTests
