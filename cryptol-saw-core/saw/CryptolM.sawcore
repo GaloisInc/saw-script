@@ -24,12 +24,20 @@ numAssertEqM n m =
 isFinite : Num -> Prop;
 isFinite = Num_rec (\ (_:Num) -> Prop) (\ (_:Nat) -> TrueProp) FalseProp;
 
+-- Check whether a Num is finite
+checkFinite : (n:Num) -> Maybe (isFinite n);
+checkFinite =
+  Num_rec (\ (n:Num) -> Maybe (isFinite n))
+          (\ (n:Nat) -> Just (isFinite (TCNum n)) (Refl Bool True))
+          (Nothing (isFinite TCInf));
+
 -- Assert that a Num is finite, or fail
 assertFiniteM : (n:Num) -> CompM (isFinite n);
-assertFiniteM =
-  Num_rec (\ (n:Num) -> CompM (isFinite n))
-          (\ (_:Nat) -> returnM TrueProp TrueI)
-          (errorM FalseProp "assertFiniteM: Num not finite");
+assertFiniteM n =
+  maybe (isFinite n) (CompM (isFinite n))
+        (errorM (isFinite n) "assertFiniteM: Num not finite")
+        (returnM (isFinite n))
+        (checkFinite n);
 
 -- Recurse over a Num known to be finite
 Num_rec_fin : (p: Num -> sort 1) -> ((n:Nat) -> p (TCNum n)) ->

@@ -1878,6 +1878,20 @@ primitives = Map.fromList
     , "Cryptol source files."
     ]
 
+  , prim "cryptol_add_prim"    "String -> String -> Term -> TopLevel ()"
+    (pureVal cryptol_add_prim)
+    Experimental
+    [ "cryptol_add_prim mod nm trm sets the translation of Cryptol primitive"
+    , "nm in module mod to trm"
+    ]
+
+  , prim "cryptol_add_prim_type"    "String -> String -> Term -> TopLevel ()"
+    (pureVal cryptol_add_prim_type)
+    Experimental
+    [ "cryptol_add_prim_type mod nm tp sets the translation of Cryptol"
+    , "primitive type nm in module mod to tp"
+    ]
+
   -- Java stuff
 
   , prim "java_bool"           "JavaType"

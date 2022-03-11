@@ -126,6 +126,8 @@ data CryptolEnv = CryptolEnv
   , eExtraTypes :: Map T.Name T.Schema  -- ^ Cryptol types for extra names in scope
   , eExtraTSyns :: Map T.Name T.TySyn   -- ^ Extra Cryptol type synonyms in scope
   , eTermEnv    :: Map T.Name Term      -- ^ SAWCore terms for *all* names in scope
+  , ePrims      :: Map C.PrimIdent Term -- ^ SAWCore terms for primitives
+  , ePrimTypes  :: Map C.PrimIdent Term -- ^ SAWCore terms for primitive type names
   }
 
 
@@ -217,6 +219,8 @@ initCryptolEnv sc = do
     , eExtraTypes = Map.empty
     , eExtraTSyns = Map.empty
     , eTermEnv    = termEnv
+    , ePrims      = Map.empty
+    , ePrimTypes  = Map.empty
     }
 
 -- Parse -----------------------------------------------------------------------
@@ -297,6 +301,8 @@ mkCryEnv env =
      let cryEnv = C.emptyEnv
            { C.envE = fmap (\t -> (t, 0)) terms
            , C.envC = types'
+           , C.envPrims = ePrims env
+           , C.envPrimTypes = ePrimTypes env
            }
      return cryEnv
 

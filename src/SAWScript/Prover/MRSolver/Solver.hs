@@ -152,18 +152,6 @@ asNestedPairs (asPairValue -> Just (x, asNestedPairs -> Just xs)) = Just (x:xs)
 asNestedPairs (asFTermF -> Just UnitValue) = Just []
 asNestedPairs _ = Nothing
 
--- | Syntactically project then @i@th element of the body of a lambda. That is,
--- assuming the input 'Term' has the form
---
--- > \ (x1:T1) ... (xn:Tn) -> (e1, (e2, ... (en, ())))
---
--- return the bindings @x1:T1,...,xn:Tn@ and @ei@
-synProjFunBody :: Int -> Term -> Maybe ([(LocalName, Term)], Term)
-synProjFunBody i (asLambdaList -> (vars, asTupleValue -> Just es)) =
-  -- NOTE: we are doing 1-based indexing instead of 0-based, thus the -1
-  Just $ (vars, es !! (i-1))
-synProjFunBody _ _ = Nothing
-
 -- | Bind fresh function variables for a @letRecM@ or @multiFixM@ with the given
 -- @LetRecTypes@ and definitions for the function bodies as a lambda
 mrFreshLetRecVars :: Term -> Term -> MRM [Term]
@@ -209,6 +197,8 @@ normComp (CompBind m f) =
 normComp (CompTerm t) =
   withFailureCtx (FailCtxMNF t) $
   case asApplyAll t of
+    (f@(asLambda -> Just _), args) ->
+      mrApplyAll f args >>= normCompTerm
     (isGlobalDef "Prelude.returnM" -> Just (), [_, x]) ->
       return $ ReturnM x
     (isGlobalDef "Prelude.bindM" -> Just (), [_, _, m, f]) ->
@@ -249,21 +239,26 @@ normComp (CompTerm t) =
         mrApplyAll body args >>= normCompTerm
     -}
 
+    -- Recognize and unfold a multiArgFixM
+    (f@(isGlobalDef "Prelude.multiArgFixM" -> Just ()), args)
+      | Just (_, Just body) <- asConstant f ->
+        mrApplyAll body args >>= normCompTerm
+
     -- Recognize (multiFixM lrts (\ f1 ... fn -> (body1, ..., bodyn))).i args
     (asTupleSelector ->
      Just (asApplyAll -> (isGlobalDef "Prelude.multiFixM" -> Just (),
                           [lrts, defs_f]),
-           i), args)
-      -- Extract out the function \f1 ... fn -> bodyi
-      | Just (vars, body_i) <- synProjFunBody i defs_f ->
-        do
-          -- Bind fresh function variables for the functions f1 ... fn
-          fun_tms <- mrFreshLetRecVars lrts defs_f
-          -- Re-abstract the body
-          body_f <- liftSC2 scLambdaList vars body_i
-          -- Apply body_f to f1 ... fn and the top-level arguments
-          body_tm <- mrApplyAll body_f (fun_tms ++ args)
-          normComp (CompTerm body_tm)
+           i), args) ->
+      do
+        -- Bind fresh function variables for the functions f1 ... fn
+        fun_tms <- mrFreshLetRecVars lrts defs_f
+        -- Apply fi to the top-level arguments, keeping in mind that tuple
+        -- selectors are one-based, not zero-based, so we subtract 1 from i
+        body_tm <-
+          if i > 0 && i <= length fun_tms then
+            mrApplyAll (fun_tms !! (i-1)) args
+          else throwMRFailure (MalformedComp t)
+        normComp (CompTerm body_tm)
 
 
     -- For an ExtCns, we have to check what sort of variable it is
@@ -495,27 +490,63 @@ mrRefines' (ErrorM _) (ErrorM _) = return ()
 mrRefines' (ReturnM e) (ErrorM _) = throwMRFailure (ReturnNotError e)
 mrRefines' (ErrorM _) (ReturnM e) = throwMRFailure (ReturnNotError e)
 
--- FIXME: Add support for arbitrary maybe asusmptions, like the either case
+-- A maybe eliminator on an equality type on the left
 mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
-     cond_pf <-
-       liftSC1 scEqTrue cond >>= piUVarsM >>= mrFreshVar "pf" >>= mrVarTerm
+     cond_pf <- liftSC1 scEqTrue cond >>= mrDummyProof
      m1' <- applyNormCompFun f1 cond_pf
      cond_holds <- mrProvable cond
      if cond_holds then mrRefines m1' m2 else
        withAssumption cond (mrRefines m1' m2) >>
        withAssumption not_cond (mrRefines m1 m2)
+
+-- A maybe eliminator on an equality type on the right
 mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
-     cond_pf <-
-       liftSC1 scEqTrue cond >>= piUVarsM >>= mrFreshVar "pf" >>= mrVarTerm
+     cond_pf <- liftSC1 scEqTrue cond >>= mrDummyProof
      m2' <- applyNormCompFun f2 cond_pf
      cond_holds <- mrProvable cond
      if cond_holds then mrRefines m1 m2' else
        withAssumption cond (mrRefines m1 m2') >>
        withAssumption not_cond (mrRefines m1 m2)
+
+-- A maybe eliminator on an isFinite type on the left
+mrRefines' (MaybeElim (Type (asIsFinite -> Just n1)) m1 f1 _) m2 =
+  do n1_norm <- mrNormOpenTerm n1
+     maybe_assump <- mrGetDataTypeAssump n1_norm
+     fin_pf <-
+       liftSC2 scGlobalApply "CryptolM.isFinite" [n1_norm] >>= mrDummyProof
+     case (maybe_assump, asNum n1_norm) of
+       (_, Just (Left _)) -> applyNormCompFun f1 fin_pf >>= flip mrRefines m2
+       (_, Just (Right _)) -> mrRefines m1 m2
+       (Just (IsNum _), _) -> applyNormCompFun f1 fin_pf >>= flip mrRefines m2
+       (Just IsInf, _) -> mrRefines m1 m2
+       _ ->
+         withDataTypeAssump n1_norm IsInf (mrRefines m1 m2) >>
+         liftSC0 scNatType >>= \nat_tp ->
+         (withUVarLift "n" (Type nat_tp) (n1_norm, f1, m2) $ \ n (n1', f1', m2') ->
+           withDataTypeAssump n1' (IsNum n)
+           (applyNormCompFun f1' n >>= flip mrRefines m2'))
+
+-- A maybe eliminator on an isFinite type on the right
+mrRefines' m1 (MaybeElim (Type (asIsFinite -> Just n2)) m2 f2 _) =
+  do n2_norm <- mrNormOpenTerm n2
+     maybe_assump <- mrGetDataTypeAssump n2_norm
+     fin_pf <-
+       liftSC2 scGlobalApply "CryptolM.isFinite" [n2_norm] >>= mrDummyProof
+     case (maybe_assump, asNum n2_norm) of
+       (_, Just (Left _)) -> applyNormCompFun f2 fin_pf >>= mrRefines m1
+       (_, Just (Right _)) -> mrRefines m1 m2
+       (Just (IsNum _), _) -> applyNormCompFun f2 fin_pf >>= mrRefines m1
+       (Just IsInf, _) -> mrRefines m1 m2
+       _ ->
+         withDataTypeAssump n2_norm IsInf (mrRefines m1 m2) >>
+         liftSC0 scNatType >>= \nat_tp ->
+         (withUVarLift "n" (Type nat_tp) (n2_norm, f2, m1) $ \ n (n2', f2', m1') ->
+           withDataTypeAssump n2' (IsNum n)
+           (applyNormCompFun f2' n >>= mrRefines m1'))
 
 mrRefines' (Ite cond1 m1 m1') m2 =
   liftSC1 scNot cond1 >>= \not_cond1 ->
@@ -537,7 +568,7 @@ mrRefines' m1 (Ite cond2 m2 m2') =
          withAssumption not_cond2 (mrRefines m1 m2')
 
 mrRefines' (Either ltp1 rtp1 f1 g1 t1) m2 =
-  liftSC1 scWhnf t1 >>= \t1' ->
+  mrNormOpenTerm t1 >>= \t1' ->
   mrGetDataTypeAssump t1' >>= \mb_assump ->
   case (mb_assump, asEither t1') of
     (_, Just (Left  x)) -> applyNormCompFun f1 x >>= flip mrRefines m2
@@ -553,7 +584,7 @@ mrRefines' (Either ltp1 rtp1 f1 g1 t1) m2 =
              applyNormCompFun g1' x >>= withDataTypeAssump t1'' (IsRight x)
                                         . flip mrRefines m2')
 mrRefines' m1 (Either ltp2 rtp2 f2 g2 t2) =
-  liftSC1 scWhnf t2 >>= \t2' ->
+  mrNormOpenTerm t2 >>= \t2' ->
   mrGetDataTypeAssump t2' >>= \mb_assump ->
   case (mb_assump, asEither t2') of
     (_, Just (Left  x)) -> applyNormCompFun f2 x >>= mrRefines m1

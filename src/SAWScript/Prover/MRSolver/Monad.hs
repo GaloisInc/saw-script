@@ -229,12 +229,15 @@ instance PrettyInCtx CoIndHyp where
 
 -- | An assumption that something is equal to one of the constructors of a
 -- datatype, e.g. equal to @Left@ of some 'Term' or @Right@ of some 'Term'
-data DataTypeAssump = IsLeft Term | IsRight Term
-                    deriving (Generic, Show, TermLike)
+data DataTypeAssump
+  = IsLeft Term | IsRight Term | IsNum Term | IsInf
+  deriving (Generic, Show, TermLike)
 
 instance PrettyInCtx DataTypeAssump where
   prettyInCtx (IsLeft  x) = prettyInCtx x >>= ppWithPrefix "Left _ _" 
   prettyInCtx (IsRight x) = prettyInCtx x >>= ppWithPrefix "Right _ _"
+  prettyInCtx (IsNum   x) = prettyInCtx x >>= ppWithPrefix "TCNum"
+  prettyInCtx IsInf = return "TCInf"
 
 -- | Recognize a term as a @Left@ or @Right@
 asEither :: Recognizer Term (Either Term Term)
@@ -242,6 +245,20 @@ asEither (asCtor -> Just (c, [_, _, x]))
   | primName c == "Prelude.Left"  = return $ Left x
   | primName c == "Prelude.Right" = return $ Right x
 asEither _ = Nothing
+
+-- | Recognize a term as a @TCNum n@ or @TCInf@
+asNum :: Recognizer Term (Either Term ())
+asNum (asCtor -> Just (c, [n]))
+  | primName c == "Cryptol.TCNum"  = return $ Left n
+asNum (asCtor -> Just (c, []))
+  | primName c == "Cryptol.TCInf"  = return $ Right ()
+asNum _ = Nothing
+
+-- | Recognize a term as being of the form @isFinite n@
+asIsFinite :: Recognizer Term Term
+asIsFinite (asApp -> Just (isGlobalDef "CryptolM.isFinite" -> Just (), n)) =
+  Just n
+asIsFinite _ = Nothing
 
 -- | A map from 'Term's to 'DataTypeAssump's over that term
 type DataTypeAssumps = HashMap Term DataTypeAssump
@@ -448,7 +465,7 @@ funNameType (GlobalName gd projs) =
 
 -- | Apply a 'Term' to a list of arguments and beta-reduce in Mr. Monad
 mrApplyAll :: Term -> [Term] -> MRM Term
-mrApplyAll f args = liftSC2 scApplyAll f args >>= liftSC1 betaNormalize
+mrApplyAll f args = liftSC2 scApplyAllBeta f args
 
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in
@@ -589,6 +606,13 @@ mrVarTerm (MRVar ec) =
   do var_tm <- liftSC1 scExtCns ec
      vars <- getAllUVarTerms
      liftSC2 scApplyAll var_tm vars
+
+-- | Create a dummy proof term of the specified type, which can be open but
+-- should be of @Prop@ sort, by creating an 'ExtCns' axiom. This is sound as
+-- long as we only use the resulting term in computation branches where we know
+-- the proposition holds.
+mrDummyProof :: Term -> MRM Term
+mrDummyProof tp = piUVarsM tp >>= mrFreshVar "pf" >>= mrVarTerm
 
 -- | Get the 'VarInfo' associated with a 'MRVar'
 mrVarInfo :: MRVar -> MRM (Maybe MRVarInfo)

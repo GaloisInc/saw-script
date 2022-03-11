@@ -82,10 +82,13 @@ data Env = Env
   , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
   , envS :: [Term]                 -- ^ SAW-Core bound variable environment (for type checking)
   , envRefPrims :: Map C.PrimIdent C.Expr
+  , envPrims :: Map C.PrimIdent Term -- ^ Translations for other primitives
+  , envPrimTypes :: Map C.PrimIdent Term -- ^ Translations for primitive types
   }
 
 emptyEnv :: Env
-emptyEnv = Env Map.empty Map.empty Map.empty Map.empty [] Map.empty
+emptyEnv =
+  Env Map.empty Map.empty Map.empty Map.empty [] Map.empty Map.empty Map.empty
 
 liftTerm :: (Term, Int) -> (Term, Int)
 liftTerm (t, j) = (t, j + 1)
@@ -102,6 +105,8 @@ liftEnv env =
       , envC = envC env
       , envS = envS env
       , envRefPrims = envRefPrims env
+      , envPrims = envPrims env
+      , envPrimTypes = envPrimTypes env
       }
 
 bindTParam :: SharedContext -> C.TParam -> Env -> IO Env
@@ -262,7 +267,11 @@ importType sc env ty =
                                b <- go (tyargs !! 1)
                                scFun sc a b
             C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
-            C.TCAbstract{} -> panic "importType TODO: abstract type" []
+            C.TCAbstract (C.UserTC n _)
+              | Just prim <- C.asPrim n
+              , Just t <- Map.lookup prim (envPrimTypes env) ->
+                scApplyAllBeta sc t =<< traverse go tyargs
+              | True -> panic ("importType: unknown primitive type: " ++ show n) []
         C.PC pc ->
           case pc of
             C.PLiteral -> -- we omit first argument to class Literal
@@ -667,6 +676,9 @@ importPrimitive sc primOpts env n sch
          e <- importExpr sc env expr
          nmi <- importName n
          scConstant' sc nmi e t
+
+  -- lookup primitive in the extra primitive lookup table
+  | Just nm <- C.asPrim n, Just t <- Map.lookup nm (envPrims env) = return t
 
   -- Optionally, create an opaque constant representing the primitive
   -- if it doesn't match one of the ones we know about.

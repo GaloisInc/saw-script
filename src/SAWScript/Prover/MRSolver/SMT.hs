@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ImplicitParams #-}
 
 {- |
 Module      : SAWScript.Prover.MRSolver.SMT
@@ -123,7 +124,7 @@ primBVTermFun sc =
          scVectorReduced sc tp tms
     v -> lift (putStrLn ("primBVTermFun: unhandled value: " ++ show v)) >> mzero
 
--- | Implementations of primitives for normalizing SMT terms
+-- | Implementations of primitives for normalizing Mr Solver terms
 smtNormPrims :: SharedContext -> Map Ident TmPrim
 smtNormPrims sc = Map.fromList
   [
@@ -136,17 +137,40 @@ smtNormPrims sc = Map.fromList
      PrimFun $ \_n -> PrimFun $ \_len -> tvalFun $ \a ->
       primGenBVVec sc $ \f -> primBVTermFun sc $ \ix -> PrimFun $ \_pf ->
       Prim (VExtra <$> VExtraTerm a <$> scApply sc f ix)
-    )
+    ),
+    ("Prelude.CompM",
+     PrimFilterFun "CompM" (\case
+                               TValue tv -> return tv
+                               _ -> mzero) $ \tv ->
+      Prim (do let ?recordEC = \_ec -> return ()
+               let cfg = error "FIXME: smtNormPrims: need the simulator config"
+               tv_trm <- readBackTValue sc cfg tv
+               TValue <$> VTyTerm (mkSort 0) <$>
+                 scGlobalApply sc "Prelude.CompM" [tv_trm]))
   ]
 
--- | Normalize a 'Term' before building an SMT query for it
-normSMTProp :: Term -> MRM Term
-normSMTProp t =
+-- | Normalize a 'Term' using some Mr Solver specific primitives
+mrNormTerm :: Term -> MRM Term
+mrNormTerm t =
   debugPrint 2 "Normalizing term:" >>
   debugPrettyInCtx 2 t >>
   liftSC0 return >>= \sc ->
   liftSC0 scGetModuleMap >>= \modmap ->
   liftSC5 normalizeSharedTerm modmap (smtNormPrims sc) Map.empty Set.empty t
+
+-- | Normalize an open term by wrapping it in lambdas, normalizing, and then
+-- removing those lambdas
+mrNormOpenTerm :: Term -> MRM Term
+mrNormOpenTerm body =
+  do ctx <- mrUVarCtx
+     fun_term <- liftSC2 scLambdaList ctx body
+     normed_fun <- mrNormTerm fun_term
+     return (peel_lambdas (length ctx) normed_fun)
+       where
+         peel_lambdas :: Int -> Term -> Term
+         peel_lambdas 0 t = t
+         peel_lambdas i (asLambda -> Just (_, _, t)) = peel_lambdas (i-1) t
+         peel_lambdas _ _ = error "mrNormOpenTerm: unexpected non-lambda term!"
 
 
 ----------------------------------------------------------------------
@@ -182,7 +206,7 @@ mrProvable bool_tm =
   do assumps <- mrAssumptions
      prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
      prop_inst <- instantiateUVarsM instUVar prop
-     normSMTProp prop_inst >>= mrProvableRaw
+     mrNormTerm prop_inst >>= mrProvableRaw
   where -- | Given a UVar name and type, generate a 'Term' to be passed to
         -- SMT, with special cases for BVVec and pair types
         instUVar :: LocalName -> Term -> MRM Term
