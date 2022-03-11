@@ -51,5 +51,19 @@ run_test "is_head |= is_head" (mr_solver is_head is_head) true;
 */
 
 is_elem <- parse_core_mod "linked_list" "is_elem";
-run_test "is_elem |= is_elem_spec" (mr_solver_debug 2 is_elem {{ is_elem_spec }}) true;
 //run_test "is_elem |= is_elem" (mr_solver_debug 1 is_elem is_elem) true;
+
+/*
+is_elem_noErrorsSpec <- parse_core
+  "\\ (x:Vec 64 Bool) (y:List (Vec 64 Bool)) -> \
+    \ fixM (Vec 64 Bool * List (Vec 64 Bool)) \
+    \      (\\ (pr : Vec 64 Bool * List (Vec 64 Bool)) -> Vec 64 Bool) \
+    \      (\\ (rec : (x : Vec 64 Bool * List (Vec 64 Bool)) -> CompM (Vec 64 Bool)) \
+    \          (x : Vec 64 Bool * List (Vec 64 Bool)) -> \
+    \          orM (Vec 64 Bool) \
+    \              (existsM (Vec 64 Bool) (Vec 64 Bool) (returnM (Vec 64 Bool))) \
+    \              (rec x)) (x, y)";
+run_test "is_elem |= noErrorsSpec" (mr_solver is_elem is_elem_noErrorsSpec) true;
+*/
+
+run_test "is_elem |= is_elem_spec" (mr_solver is_elem {{ is_elem_spec }}) true;

@@ -229,21 +229,6 @@ normComp (CompTerm t) =
         body_tm <- mrApplyAll body_f fun_tms
         normComp (CompTerm body_tm)
 
-    -- Only unfold constants that are not recursive functions, i.e., whose
-    -- bodies do not contain letrecs
-    {- FIXME: this should be handled by mrRefines; we want it to be handled there
-       so that we use refinement assumptions before unfolding constants, to give
-       the user control over refinement proofs
-    ((asConstant -> Just (_, body)), args)
-      | not (containsLetRecM body) ->
-        mrApplyAll body args >>= normCompTerm
-    -}
-
-    -- Recognize and unfold a multiArgFixM
-    (f@(isGlobalDef "Prelude.multiArgFixM" -> Just ()), args)
-      | Just (_, Just body) <- asConstant f ->
-        mrApplyAll body args >>= normCompTerm
-
     -- Recognize (multiFixM lrts (\ f1 ... fn -> (body1, ..., bodyn))).i args
     (asTupleSelector ->
      Just (asApplyAll -> (isGlobalDef "Prelude.multiFixM" -> Just (),
@@ -260,6 +245,11 @@ normComp (CompTerm t) =
           else throwMRFailure (MalformedComp t)
         normComp (CompTerm body_tm)
 
+    -- Always unfold: sawLet, multiArgFixM
+    (f@(asGlobalDef -> Just ident), args)
+      | ident `elem` ["Prelude.sawLet", "Prelude.multiArgFixM"]
+      , Just (_, Just body) <- asConstant f ->
+        mrApplyAll body args >>= normCompTerm
 
     -- For an ExtCns, we have to check what sort of variable it is
     -- FIXME: substitute for evars if they have been instantiated
@@ -547,6 +537,8 @@ mrRefines' m1 (MaybeElim (Type (asIsFinite -> Just n2)) m2 f2 _) =
          (withUVarLift "n" (Type nat_tp) (n2_norm, f2, m1) $ \ n (n2', f2', m1') ->
            withDataTypeAssump n2' (IsNum n)
            (applyNormCompFun f2' n >>= mrRefines m1'))
+
+-- FIXME: Add support for arbitrary maybe asusmptions, like the either case
 
 mrRefines' (Ite cond1 m1 m1') m2 =
   liftSC1 scNot cond1 >>= \not_cond1 ->
