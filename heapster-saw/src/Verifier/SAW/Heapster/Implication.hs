@@ -6427,13 +6427,14 @@ proveVarLLVMArrayH x _p psubst ps mb_ap
 
 proveVarLLVMArrayH x first_p psubst ps mb_ap =
   partialSubstForceM mb_ap "proveVarLLVMArray: debug" >>>= \ap ->
-  let skel = skeletonArray ps ap in
+  maybe (implFailM "boop") return (skeletonArray ps ap) >>>= \skel ->
+  -- skel = skeletonArray ps ap in
   implTraceM (\i ->
                 pretty "abakst debug:" <+> PP.group (permPretty i (ValPerm_Conj (filterBorrowed ps)))) >>>
   implTraceM (\i ->
                 pretty "abakst debug:" <+> PP.group (permPretty i (gatherRangesForArray ps ap))) >>>
   implTraceM (\i ->
-                pretty "abakst debug:" <+> PP.group (permPretty i (skeletonArray ps ap))) >>>
+                pretty "abakst debug:" <+> PP.group (permPretty i skel)) >>>
   -- Prove a block permission
   findBlockPerm ps >>>= \i ->
   -- implGetConjM x ps i >>>= \ps' ->
@@ -6442,12 +6443,12 @@ proveVarLLVMArrayH x first_p psubst ps mb_ap =
   -- proveVarLLVMBlock x
   implLLVMArrayBorrowed x b skel >>>
   -- recombinePerm x (ValPerm_Conj1 (ps !! i)) >>>
-  proveVarLLVMArray_FromArray2
-    x
-    skel
-    (llvmArrayLen skel)
-    (llvmArrayBorrows ap)
-    mb_ap >>>= \_ -> return ()
+  proveVarLLVMArrayH x first_p psubst [Perm_LLVMArray skel] mb_ap
+    -- x
+    -- skel
+    -- (llvmArrayLen skel)
+    -- (llvmArrayBorrows ap)
+    -- mb_ap >>>= \_ -> return ()
   where
     findBlockPerm =
        maybe (implFailM "proveVarLLVMArrayH") return . findIndex (isJust . extractFirstBlock)
@@ -6617,20 +6618,48 @@ skeletonArray ::
   (1 <= w, KnownNat w) =>
   [AtomicPerm (LLVMPointerType w)] ->
   LLVMArrayPerm w ->
-  LLVMArrayPerm w
+  Maybe (LLVMArrayPerm w)
 skeletonArray lhs rhs =
   case gatherRangesForArray lhs rhs of
     (unzip -> (bs,rs)):_ | Just n <- len' ->
-      rhs { llvmArrayBorrows = bs
-          , llvmArrayLen     = n
-          , llvmArrayOffset  = o'
-          }
+      Just rhs { llvmArrayBorrows = chopBorrows [] bs (llvmArrayBorrows rhs)
+               , llvmArrayLen     = n
+               , llvmArrayOffset  = o'
+               }
       where
         o'   = bvRangeOffset (head rs)
         v    = bvRangeOffset (last rs) `bvAdd` bvRangeLength (last rs)
         len' = matchLLVMArrayCell rhs v
+    _ -> Nothing
 
-        dbg x = renderDoc (permPretty emptyPPInfo x)
+  where
+    dbg p = permPretty emptyPPInfo p
+
+    overlapsWith b = or . fmap (not . bvPropCouldHold) . llvmArrayBorrowsDisjoint b
+    -- We need to chop up any ranges that overlap with borrows on the rhs:
+    chopBorrows x y z
+      | trace ("chopBorrows: " ++ renderDoc (dbg (x,y,z))) False = undefined
+    chopBorrows bs_skip bs_lhs bs_rhs
+      | Just bi    <- findIndex (flip notElem bs_rhs) bs_lhs
+      , Just b_rhs <- find (overlapsWith (bs_lhs!!bi)) bs_rhs
+      = let b         = bs_lhs!!bi
+            b_rhs_off = llvmArrayBorrowCells b_rhs
+            bs_lhs'   =  llvmArrayBorrowRangeDelete b b_rhs_off ++ deleteNth bi bs_lhs
+        in chopBorrows bs_skip bs_lhs' bs_rhs
+      | Just bi    <- findIndex (flip notElem bs_rhs) bs_lhs
+      = chopBorrows ((bs_lhs!!bi):bs_skip) (deleteNth bi bs_lhs) bs_rhs
+      | otherwise
+      = bs_skip ++ bs_lhs
+
+
+
+  -- | Just bi <- findIndex (flip notElem bs) (llvmArrayBorrows ap_lhs)
+  -- , Just b_rhs <- find (and . fmap (not . bvPropCouldHold) . llvmArrayBorrowsDisjoint (bs!!bi)) bs =
+  --   let b      = bs!!bi
+  --       b_rhs_off = llvmArrayBorrowCells b_rhs
+  --       new_bs = llvmArrayBorrowRangeDelete b b_rhs_off
+  --       lhs_bs' = new_bs ++ deleteNth bi (llvmArrayBorrows ap_lhs)
+  --       ap_lhs' = ap_lhs { llvmArrayBorrows = lhs_bs' }
 
 gatherRangesForArray ::
   forall w.
@@ -6765,6 +6794,20 @@ proveVarLLVMArray_FromArray2H ::
   ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w)
   (LLVMArrayPerm w)
 
+-- -- If there is a borrow in ap that overlaps with a borrow in ap_lhs,
+-- -- then remove the overlapping bit from the borrow of ap_lhs
+-- proveVarLLVMArray_FromArray2H x ap_lhs len bs mb_ap
+--   | Just bi <- findIndex (flip notElem bs) (llvmArrayBorrows ap_lhs)
+--   , Just b_rhs <- find (and . fmap (not . bvPropCouldHold) . llvmArrayBorrowsDisjoint (bs!!bi)) bs =
+--     let b      = bs!!bi
+--         b_rhs_off = llvmArrayBorrowCells b_rhs
+--         new_bs = llvmArrayBorrowRangeDelete b b_rhs_off
+--         lhs_bs' = new_bs ++ deleteNth bi (llvmArrayBorrows ap_lhs)
+--         ap_lhs' = ap_lhs { llvmArrayBorrows = lhs_bs' }
+--     in
+--     implTraceM (\info -> pretty "Proving borrowed permission...") >>>
+--     proveVarLLVMArray_FromArray2H x ap_lhs' len bs mb_ap
+
 -- If there is a borrow in ap_lhs that is not in ap, return it to ap_lhs
 --
 -- FIXME: when an array ap_ret is being borrowed from ap_lhs, this code requires
@@ -6772,6 +6815,7 @@ proveVarLLVMArray_FromArray2H ::
 -- allows some of ap_ret to be borrowed
 proveVarLLVMArray_FromArray2H x ap_lhs len bs mb_ap
   | Just b <- find (flip notElem bs) (llvmArrayBorrows ap_lhs) =
+  -- Find a borrow on the rhs that overlaps b and subtract the overlapped part
 
     -- Prove the rest of ap with b borrowed
     proveVarLLVMArray_FromArray2 x ap_lhs len (b:bs) mb_ap >>>= \ap' ->

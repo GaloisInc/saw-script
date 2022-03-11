@@ -4662,6 +4662,30 @@ cellOffsetLLVMArrayBorrow off (FieldBorrow ix) =
 cellOffsetLLVMArrayBorrow off (RangeBorrow rng) =
   RangeBorrow $ offsetBVRange off rng
 
+llvmArrayBorrowCells :: (KnownNat w, 1 <= w) => LLVMArrayBorrow w -> BVRange w
+llvmArrayBorrowCells (FieldBorrow idx) = bvRangeOfIndex idx
+llvmArrayBorrowCells (RangeBorrow r) = r
+
+llvmArrayBorrowRangeDelete ::
+  (HasCallStack, 1 <= w, KnownNat w) =>
+  LLVMArrayBorrow w ->
+  BVRange w ->
+  [LLVMArrayBorrow w]
+llvmArrayBorrowRangeDelete borrow rng =
+  catMaybes (go <$> bvRangeDelete borrow_range rng)
+  where
+    borrow_range = llvmArrayBorrowCells borrow
+
+    go new_range
+      | bvIsZero (bvRangeLength new_range) = Nothing
+      | RangeBorrow _ <- borrow  = Just $ RangeBorrow new_range
+      | FieldBorrow idx <- borrow
+      , bvEq (bvRangeLength new_range) (bvInt 1) = Just $ FieldBorrow idx
+      | otherwise =
+        error "llvmArrayBorrowRangeDelete: found non unit new_range for FieldBorrow"
+
+
+
 -- | Test if a byte offset @o@ statically aligns with a statically-known offset
 -- into some array cell, i.e., whether
 --
