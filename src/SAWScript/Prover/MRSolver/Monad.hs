@@ -237,7 +237,7 @@ instance PrettyInCtx DataTypeAssump where
   prettyInCtx (IsLeft  x) = prettyInCtx x >>= ppWithPrefix "Left _ _" 
   prettyInCtx (IsRight x) = prettyInCtx x >>= ppWithPrefix "Right _ _"
   prettyInCtx (IsNum   x) = prettyInCtx x >>= ppWithPrefix "TCNum"
-  prettyInCtx (IsRight x) = prettyInCtx x >>= ppWithPrefix "TCInf"
+  prettyInCtx IsInf = return "TCInf"
 
 -- | Recognize a term as a @Left@ or @Right@
 asEither :: Recognizer Term (Either Term Term)
