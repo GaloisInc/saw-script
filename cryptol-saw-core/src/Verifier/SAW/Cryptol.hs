@@ -1818,7 +1818,6 @@ genNewtypeConstructors sc newtypes env0 =
     newtypeConstr :: Newtype -> C.Expr
     newtypeConstr nt = foldr tFn fn (C.ntParams nt)
       where
-        -- FIXME? What about the `ntConstraints` for the Newtype...?
         paramName = C.asParamName (ntName nt)
         recTy = C.TRec $ ntFields nt
         fn = C.EAbs paramName recTy (C.EVar paramName) -- EAbs Name Type Expr -- ETAbs TParam Expr
