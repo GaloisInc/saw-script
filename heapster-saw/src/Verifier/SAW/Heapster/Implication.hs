@@ -68,6 +68,7 @@ import GHC.Stack
 import Unsafe.Coerce
 import Debug.Trace (trace)
 import Lang.Crucible.LLVM.Bytes (bytesToInteger)
+import Data.Functor.Constant (Constant(..))
 
 
 -- * Helper functions (should be moved to Hobbits)
@@ -8910,3 +8911,22 @@ proveVarsImplVarEVars mb_ps =
 proveVarImpl :: NuMatchingAny1 r => ExprVar a -> Mb vars (ValuePerm a) ->
                 ImplM vars s r (ps :> a) ps ()
 proveVarImpl x mb_p = proveVarsImplAppend $ fmap (distPerms1 x) mb_p
+
+checkVarImpl ::
+  PermSet ps_in ->
+  ImplM RNil Int (Constant ()) ps_out ps_in a ->
+  Bool
+checkVarImpl ps act = 0 /= permImplSucceeds (evalState st (toClosed 0))
+  where
+    st = runImplM
+           CruCtxNil
+           ps
+           emptyPermEnv
+           emptyPPInfo
+           "checkVarImpl"
+           (DebugLevel 1)
+           NameMap.empty
+           Nothing
+           LittleEndian
+           act
+           (\_ -> return (Constant ()))
