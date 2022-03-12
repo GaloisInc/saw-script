@@ -10,6 +10,7 @@
 {-# LANGUAGE IncoherentInstances #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
@@ -24,23 +25,20 @@ import Test.Tasty.HUnit
 import Lang.Crucible.Types (BVType)
 
 infix 5 ===>
-infix 5 =/=>
 infixl 8 \\
 infixl 8 \\\
 infixl 8 \\\\
 
-(===>) :: (ToConj p1, ToConj p2) => p1 -> p2 -> IO ()
-xs ===> ys = conj xs `doesImply` conj ys
-(=/=>) :: (ToConj p1, ToConj p2) => p1 -> p2 -> IO ()
-xs =/=> ys = conj xs `doesNotImply` conj ys
+(===>) :: (ToConj p1, ToConj p2) => p1 -> p2 -> Bool
+xs ===> ys = conj xs `checkImpl` conj ys
 
 (\\) :: LLVMArrayPerm w -> [LLVMArrayBorrow w] -> LLVMArrayPerm w
 (\\) a bs = a { llvmArrayBorrows = llvmArrayBorrows a ++ bs }
 
-(\\\) :: (Integral a1, Integral a2) => LLVMArrayPerm 64 -> (a1, a2) -> LLVMArrayPerm 64
+(\\\) :: (ArrayIndexExpr a1, ArrayIndexExpr a2) => LLVMArrayPerm 64 -> (a1, a2) -> LLVMArrayPerm 64
 (\\\) a (i, l) = a \\ [RangeBorrow (BVRange (toIdx i) (toIdx l))]
 
-(\\\\) :: (Integral a) => LLVMArrayPerm 64 -> a -> LLVMArrayPerm 64
+(\\\\) :: (ArrayIndexExpr a) => LLVMArrayPerm 64 -> a -> LLVMArrayPerm 64
 (\\\\) a i = a \\ [FieldBorrow (toIdx i)]
 
 class t ~ LLVMPointerType 64 => ToAtomic a t | a -> t where
@@ -67,20 +65,30 @@ instance (t ~ LLVMPointerType 64) => ToConj [AtomicPerm t] where
 class ArrayIndexExpr a where
   toIdx :: a -> PermExpr (BVType 64)
 
+instance ArrayIndexExpr (PermExpr (BVType 64)) where
+  toIdx = id
+
 instance Integral i => ArrayIndexExpr i where
   toIdx i = bvInt (toInteger i)
 
 instance t ~ BVType 64 => ArrayIndexExpr (Name t) where
   toIdx x = PExpr_Var x
 
-doesNotImply :: ValuePerm (LLVMPointerType 64) -> ValuePerm (LLVMPointerType 64) -> Assertion
-doesNotImply l r =
-  assertBool "should fail" (not $ checkImpl l r)
+-- doesNotImply :: ValuePerm (LLVMPointerType 64) -> ValuePerm (LLVMPointerType 64) -> Bool
+-- doesNotImply l r = not $ checkImpl l r
 
-doesImply :: ValuePerm (LLVMPointerType 64) -> ValuePerm (LLVMPointerType 64) -> Assertion
-doesImply l r =
-  assertBool "should succeed" (checkImpl l r)
+-- doesImply :: ValuePerm (LLVMPointerType 64) -> ValuePerm (LLVMPointerType 64) -> Bool
+-- doesImply = checkImpl
 
+passes = assertBool "should succeed"
+fails = assertBool "should fail" . not
+
+withName :: (Name (BVType 64) -> Bool) -> Bool
+withName k = mbLift (nu k)
+
+goo :: Bool
+goo = withName $ \l ->
+  int64ArrayPerm 0 l \\\\ 0 ===> int64array 0 l
 
 checkImpl :: ValuePerm (LLVMPointerType 64) -> ValuePerm (LLVMPointerType 64) -> Bool
 checkImpl lhs rhs = mbLift (nu $ \x -> checkVarImpl (pset x) (proveVarImpl x perm_rhs))
@@ -90,15 +98,26 @@ checkImpl lhs rhs = mbLift (nu $ \x -> checkVarImpl (pset x) (proveVarImpl x per
     pset x = PermSet { _varPermMap = singleton x perm_lhs, _distPerms = DistPermsNil }
 
 intShape :: PermExpr (LLVMShapeType 64)
-intShape = PExpr_FieldShape $ LLVMFieldShape intField
+intShape = PExpr_FieldShape $ LLVMFieldShape intValuePerm
 
-intField :: ValuePerm (LLVMPointerType 64)
-intField = ValPerm_Exists $ nu $ \x -> ValPerm_Eq (PExpr_LLVMWord (PExpr_Var x))
+intValuePerm :: ValuePerm (LLVMPointerType 64)
+intValuePerm = ValPerm_Exists $ nu $ \x -> ValPerm_Eq (PExpr_LLVMWord (PExpr_Var x))
 
-int64array :: ArrayIndexExpr a => a -> a -> AtomicPerm (LLVMPointerType 64)
+intFieldPerm :: ArrayIndexExpr a => a -> LLVMFieldPerm 64 64
+intFieldPerm off = LLVMFieldPerm
+  { llvmFieldRW = PExpr_Write
+  , llvmFieldLifetime = PExpr_Always
+  , llvmFieldOffset = toIdx off
+  , llvmFieldContents = intValuePerm
+  }
+
+int64field :: ArrayIndexExpr a => a -> AtomicPerm (LLVMPointerType 64)
+int64field off = Perm_LLVMField (intFieldPerm off)
+
+int64array :: (ArrayIndexExpr a1, ArrayIndexExpr a2) => a1 -> a2 -> AtomicPerm (LLVMPointerType 64)
 int64array off len = Perm_LLVMArray (int64ArrayPerm off len)
 
-int64ArrayPerm :: ArrayIndexExpr a => a -> a -> LLVMArrayPerm 64
+int64ArrayPerm :: (ArrayIndexExpr a1, ArrayIndexExpr a2) => a1 -> a2 -> LLVMArrayPerm 64
 int64ArrayPerm off len = arrayPerm (toIdx off) (toIdx len) 8 intShape
 
 arrayPerm ::
@@ -120,30 +139,47 @@ arrayPerm off len stride shape  = LLVMArrayPerm
 arrayTests :: TestTree
 arrayTests =
   testGroup "arrayTests"
-  [ testCase "too small" $ int64array 0 3 =/=> int64array 0 6
-  , testCase "bigger"    $ int64array 0 6 ===> int64array 0 3
+  [ testCase "too small" $ fails  $ int64array 0 3 ===> int64array 0 6
+  , testCase "bigger"    $ passes $ int64array 0 6 ===> int64array 0 3
 
   , testGroup "sum of two arrays"
-    [ testCase "exact"      $ [ int64array 0 3, int64array 24 3 ] ===> int64array 0 6
-    , testCase "larger"     $ [ int64array 0 3, int64array 24 3 ] ===> int64array 0 5
-    , testCase "not enough" $ [ int64array 0 3, int64array 24 3 ] =/=> int64array 0 7
+    [ testCase "exact"      $ passes $ [ int64array 0 3, int64array 24 3 ] ===> int64array 0 6
+    , testCase "larger"     $ passes $ [ int64array 0 3, int64array 24 3 ] ===> int64array 0 5
+    , testCase "not enough" $ fails  $ [ int64array 0 3, int64array 24 3 ] ===> int64array 0 7
+    ]
+
+  , testGroup "symbolic"
+    [ testCase "borrowed concrete field" $ fails $
+      withName $ \l ->
+        int64ArrayPerm 0 l \\\\ 0 ===> int64array 0 l
+    , testCase "borrowed concrete field" $ passes $
+      withName $ \l ->
+        [atomic (int64ArrayPerm 0 l \\\\ 0), int64field 0]  ===> int64array 0 l
+    , testCase "borrowed symbolic field" $ passes $
+      withName $ \l -> withName $ \i ->
+        [atomic (int64ArrayPerm 0 l \\\\ i), int64field (bvMult 8 (toIdx i))]  ===> int64array 0 l
     ]
 
   , testGroup "borrows on rhs"
-    [ testCase "matched borrows" $
+    [ testCase "matched borrows" $ passes $
       int64ArrayPerm 0 3 \\\ (1,2) ===> int64ArrayPerm 0 3 \\\ (1,2)
 
-    , testCase "sum of matched borrows" $
+    , testCase "sum of matched borrows" $ passes $
       [ int64ArrayPerm 0 3 \\\ (1,2) , int64ArrayPerm 24 3 ]
       ===> int64ArrayPerm 0 6 \\\ (1,2)
 
-    , testCase "rhs borrow intersects two lhs borrows " $
-      -- TODO: variant with enough perms to prove this
-      int64ArrayPerm 0 5 \\\ (1, 3) \\\ (7,3) =/=> int64ArrayPerm 0 5 \\\ (2,6)
+    , testCase "rhs borrow intersects two lhs borrows " $ fails $
+      int64ArrayPerm 0 10 \\\ (1, 3) \\\ (7,3) ===> int64ArrayPerm 0 10 \\\ (2,6)
 
-    , testCase "too much lhs borrowed" $ int64ArrayPerm 0 10 \\\ (5,2) =/=> int64ArrayPerm 0 10 \\\ (5,1)
+    , testCase "rhs borrow intersects two lhs borrows " $ passes $
+      [ int64ArrayPerm 0 5 \\\ (1, 3) \\\ (7,3)
+      , int64ArrayPerm 8 3
+      , int64ArrayPerm 56 3
+      ] ===> int64ArrayPerm 0 5 \\\ (2,6)
 
-    , testCase "sum of borrows" $
+    , testCase "too much lhs borrowed" $ fails $ int64ArrayPerm 0 10 \\\ (5,2) ===> int64ArrayPerm 0 10 \\\ (5,1)
+
+    , testCase "sum of borrows" $ passes $
       [ int64ArrayPerm 0 3 \\\ (1,2) , int64ArrayPerm 24 4 \\\ (1,2) ]
       ===> int64ArrayPerm 0 7 \\\ (1,2) \\\ (3,3)
     ]
