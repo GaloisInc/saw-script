@@ -148,6 +148,17 @@ arrayTests =
     , testCase "not enough" $ fails  $ [ int64array 0 3, int64array 24 3 ] ===> int64array 0 7
     ]
 
+  , testGroup "sum of fields"
+    [ testCase "some fields" $ passes $
+      [ int64field 0, int64field 8, int64field 16 ] ===> int64array 0 3
+    , testCase "some extra fields" $ passes $
+      [ int64field 0, int64field 8, int64field 16 ] ===> int64array 8 2
+    , testCase "insufficient fields (1)" $ fails $
+      [ int64field 0, int64field 8, int64field 16 ] ===> int64array 8 3
+    , testCase "insufficient fields (2)" $ fails $
+      [ int64field 0, int64field 8, int64field 16 ] ===> int64array 0 4
+    ]
+
   , testGroup "symbolic"
     [ testCase "borrowed concrete field" $ fails $
       withName $ \l ->
