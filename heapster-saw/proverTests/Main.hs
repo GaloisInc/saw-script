@@ -74,21 +74,14 @@ instance Integral i => ArrayIndexExpr i where
 instance t ~ BVType 64 => ArrayIndexExpr (Name t) where
   toIdx x = PExpr_Var x
 
--- doesNotImply :: ValuePerm (LLVMPointerType 64) -> ValuePerm (LLVMPointerType 64) -> Bool
--- doesNotImply l r = not $ checkImpl l r
-
--- doesImply :: ValuePerm (LLVMPointerType 64) -> ValuePerm (LLVMPointerType 64) -> Bool
--- doesImply = checkImpl
-
+passes :: Bool -> Assertion
 passes = assertBool "should succeed"
+
+fails :: Bool -> Assertion
 fails = assertBool "should fail" . not
 
 withName :: (Name (BVType 64) -> Bool) -> Bool
 withName k = mbLift (nu k)
-
-goo :: Bool
-goo = withName $ \l ->
-  int64ArrayPerm 0 l \\\\ 0 ===> int64array 0 l
 
 checkImpl :: ValuePerm (LLVMPointerType 64) -> ValuePerm (LLVMPointerType 64) -> Bool
 checkImpl lhs rhs = mbLift (nu $ \x -> checkVarImpl (pset x) (proveVarImpl x perm_rhs))
