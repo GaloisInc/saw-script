@@ -1,0 +1,5 @@
+
+module Arrays where
+
+zero_array_spec : {n} fin n => [n][64] -> [n][64]
+zero_array_spec xs = [ 0 | _ <- xs ]

@@ -118,10 +118,12 @@ import Data.Maybe
 import Data.Either
 import Data.List (findIndices, intercalate)
 import Control.Monad.Except
+import qualified Data.Text as Text
 
 import Prettyprinter
 
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.CtxTerm (substTerm)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 
@@ -250,6 +252,14 @@ normComp (CompTerm t) =
       | ident `elem` ["Prelude.sawLet", "Prelude.multiArgFixM"]
       , Just (_, Just body) <- asConstant f ->
         mrApplyAll body args >>= normCompTerm
+
+    -- Always unfold recursors applied to constructors
+    (asRecursorApp-> Just (rc, crec, _, arg), args)
+      | Just (c, _, cargs) <- asCtorParams arg ->
+      do hd' <- liftSC4 scReduceRecursor rc crec c cargs 
+                  >>= liftSC1 betaNormalize
+         t' <- mrApplyAll hd' args
+         normComp (CompTerm t')
 
     -- For an ExtCns, we have to check what sort of variable it is
     -- FIXME: substitute for evars if they have been instantiated
@@ -783,6 +793,82 @@ mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 -- * External Entrypoints
 ----------------------------------------------------------------------
 
+-- | The main loop of 'askMRSolver'. The first argument is an accumulator of
+-- variables to introduce, innermost first.
+askMRSolverH :: [Term] -> Term -> Term -> Term -> Term -> MRM MREnv
+
+-- If we need to introduce a bitvector on one side and a nat on the other,
+-- introduce a bitvector variable and substitute `bvToNat` of that variable on
+-- the nat side
+askMRSolverH vars (asPi -> Just (nm1, tp@(asBitvectorType -> Just n), body1)) t1
+                  (asPi -> Just (nm2, asDataType -> Just (primName -> "Cryptol.Num", _), body2)) t2 =
+  let nm = if Text.head nm2 == '_' then nm1 else nm2 in
+  withUVarLift nm (Type tp) vars $ \var vars' ->
+  do nat_tm <- liftSC2 scBvToNat n var
+     num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
+     body2' <- substTerm 0 (num_tm : vars') body2
+     t1' <- mrApplyAll t1 [var]
+     t2' <- mrApplyAll t2 [num_tm]
+     askMRSolverH (var : vars') body1 t1' body2' t2'
+{-
+-- If we want to support this, we need to keep around a list of the LHS
+-- arguments for the FunAssump at the end
+askMRSolverH vars (asPi -> Just (nm1, asDataType -> Just (primName -> "Cryptol.Num", _), body1)) t1
+                  (asPi -> Just (nm2, tp@(asBitvectorType -> Just n), body2)) t2 =
+  let nm = if Text.head nm2 == '_' then nm1 else nm2 in
+  withUVarLift nm (Type tp) vars $ \var vars' ->
+  do nat_tm <- liftSC2 scBvToNat n var
+     num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
+     body1' <- substTerm 0 (num_tm : vars') body1
+     t1' <- mrApplyAll t1 [num_tm]
+     t2' <- mrApplyAll t2 [var]
+     askMRSolverH (var : vars') body1' t1' body2 t2'
+-}
+
+-- Introduce variables of the same type together
+askMRSolverH vars tp11@(asPi -> Just (nm1, tp1, body1)) t1
+                  tp22@(asPi -> Just (nm2, tp2, body2)) t2 =
+  do tps_are_eq <- mrConvertible tp1 tp2
+     if tps_are_eq then return () else
+       throwMRFailure (TypesNotEq (Type tp11) (Type tp22))
+     let nm = if Text.head nm2 == '_' then nm1 else nm2
+     withUVarLift nm (Type tp1) vars $ \var vars' ->
+       do t1' <- mrApplyAll t1 [var]
+          t2' <- mrApplyAll t2 [var]
+          askMRSolverH (var : vars') body1 t1' body2 t2'
+
+-- Error if we don't have the same number of arguments on both sides
+askMRSolverH _ tp1@(asPi -> Just _) _ tp2 _ =
+  throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+askMRSolverH _ tp1 _ tp2@(asPi -> Just _) _ =
+  throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+
+-- The base case: both sides are CompM of the same type
+askMRSolverH vars tp1@(asCompM -> Just _) t1 tp2@(asCompM -> Just _) t2 =
+  do tps_are_eq <- mrConvertible tp1 tp2
+     if tps_are_eq then return () else
+       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+     mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2
+     m1 <- normCompTerm t1 
+     m2 <- normCompTerm t2
+     mrRefines m1 m2
+     -- If t1 is a named function, add forall xs. f1 xs |= m2 to the env
+     case asGlobalFunName t1 of
+       Just f1 ->
+         mrUVarCtx >>= \uvar_ctx ->
+         let fassump = FunAssump { fassumpCtx = uvar_ctx,
+                                   fassumpArgs = reverse vars,
+                                   fassumpRHS = m2 } in
+         mrEnvAddFunAssump f1 fassump <$> mrEnv
+       Nothing -> mrEnv
+
+-- Error if we don't have CompM at the end
+askMRSolverH _ (asCompM -> Just _) _ tp2 _ =
+  throwMRFailure (NotCompFunType tp2)
+askMRSolverH _ tp1 _ _ _ =
+  throwMRFailure (NotCompFunType tp1)
+
+
 -- | Test two monadic, recursive terms for refinement. On success, if the
 -- left-hand term is a named function, add the refinement to the 'MREnv'
 -- environment.
@@ -796,23 +882,4 @@ askMRSolver ::
 askMRSolver sc dlvl env timeout t1 t2 =
   do tp1 <- scTypeOf sc t1 >>= scWhnf sc
      tp2 <- scTypeOf sc t2 >>= scWhnf sc
-     case asPiList tp1 of
-       (uvar_ctx, asCompM -> Just _) ->
-         runMRM sc timeout dlvl env $
-         withUVars uvar_ctx $ \vars ->
-         do tps_are_eq <- mrConvertible tp1 tp2
-            if tps_are_eq then return () else
-              throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
-            mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2
-            m1 <- mrApplyAll t1 vars >>= normCompTerm
-            m2 <- mrApplyAll t2 vars >>= normCompTerm
-            mrRefines m1 m2
-            -- If t1 is a named function, add forall xs. f1 xs |= m2 to the env
-            case asGlobalFunName t1 of
-              Just f1 ->
-                let fassump = FunAssump { fassumpCtx = uvar_ctx,
-                                          fassumpArgs = vars,
-                                          fassumpRHS = m2 } in
-                return $ mrEnvAddFunAssump f1 fassump env
-              Nothing -> return env
-       _ -> return $ Left $ NotCompFunType tp1
+     runMRM sc timeout dlvl env $ askMRSolverH [] tp1 t1 tp2 t2
