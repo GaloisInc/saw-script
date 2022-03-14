@@ -6536,29 +6536,21 @@ proveVarLLVMArray_FromArray x ap_lhs mb_ap =
   "proveVarLLVMArray: incomplete array offset" >>>= \bs ->
   proveVarLLVMArray_FromArray1 x ps ap_lhs off len bs mb_ap
 
+-- | Given atomic permissions P, filters out any q from P such that q is borrowed from some
+-- q' also in P
 filterBorrowed ::
   forall w.
   (1 <= w, KnownNat w) =>
   [AtomicPerm (LLVMPointerType w)] ->
   [AtomicPerm (LLVMPointerType w)]
 filterBorrowed ps =
-  trace ("Borrowed Ranges: " ++ dbg) $
   filter (not . isABorrow) ps
   where
-    dbg = permPrettyString emptyPPInfo borrowedRanges
-
     isABorrow :: AtomicPerm (LLVMPointerType w) -> Bool
     isABorrow p =
       case p of
         (llvmAtomicPermRange -> Just r) ->
-          trace ("Perm: " ++
-                   renderDoc (
-                     (permPretty emptyPPInfo p) <+>
-                     (permPretty emptyPPInfo r) -- <+>
-                     -- (permPretty emptyPPInfo allRanges)
-                   ))
-
-            (r `elem` borrowedRanges)
+            r `elem` borrowedRanges
 
         Perm_LLVMArray a ->
           llvmArrayAbsOffsets a `elem` borrowedRanges
@@ -6578,24 +6570,69 @@ filterBorrowed ps =
     goBorrow :: LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
     goBorrow = llvmArrayBorrowOffsets
 
+-- | Given an array permission ap and permission p,
+-- calculate the borrow of ap corresponding to p, plus the
+-- range of bytes covered by p
 permToBorrowRange ::
   forall w. (1 <= w, KnownNat w) =>
   LLVMArrayPerm w ->
   AtomicPerm (LLVMPointerType w) ->
-  (LLVMArrayBorrow w, BVRange w)
+  Maybe (LLVMArrayBorrow w, BVRange w)
 permToBorrowRange ap p =
   case p of
-    Perm_LLVMField {}
-      | Just r <- llvmAtomicPermRange p
-      , Just idx <- matchLLVMArrayCell ap (bvRangeOffset r) -> (FieldBorrow idx, r)
-
     Perm_LLVMArray ap'
-    -- TODO: test shape/stride are the same...is this necessary?
       | Just idx <- matchLLVMArrayCell ap (llvmArrayOffset ap') ->
-        (RangeBorrow (BVRange idx n), llvmArrayAbsOffsets ap')
+        Just (RangeBorrow (BVRange idx n), llvmArrayAbsOffsets ap')
         where
           n = llvmArrayLen ap'
-      -- | otherwise -> (undefined, llvmArrayAbsOffsets ap)
+
+    _ | Just r <- llvmAtomicPermRange p
+      , Just idx <- matchLLVMArrayCell ap (bvRangeOffset r) -> Just (FieldBorrow idx, r)
+
+    _ -> Nothing
+
+-- | Given a list ps of permissions, find the subseqeuences of ps
+-- that could cover the given array permission
+gatherRangesForArray ::
+  forall w.
+  (1 <= w, KnownNat w) =>
+  [AtomicPerm (LLVMPointerType w)] ->
+  LLVMArrayPerm w ->
+  [[(LLVMArrayBorrow w, BVRange w)]]
+gatherRangesForArray lhs rhs =
+  collectRanges False (llvmArrayOffset rhs) (lhs_ranges ++ rhs_ranges)
+  where
+    -- This is what we have to work with
+    lhs_ranges     = catMaybes (permToBorrowRange rhs <$> lhs_not_borrows)
+    lhs_not_borrows = filterBorrowed lhs
+    -- We don't need to worry about covering  the bits of the rhs that are borrowed
+    rhs_ranges     = [ (b, llvmArrayBorrowAbsOffsets rhs b) | b <- llvmArrayBorrows rhs ]
+    -- This is the extent of the rhs array permission
+    rhs_off_bytes = bvAdd (llvmArrayOffset rhs) (llvmArrayLengthBytes rhs)
+
+    -- check if the given offset is covered by the given borrow/range.
+    -- the first parameter controls whether the start of the range must
+    -- be equal to the given offset, or merely fall in the range
+    rangeForOffset prec off (_, range) =
+      if prec then bvEq off (bvRangeOffset range) else bvPropCouldHold prop
+      where
+        prop = bvPropInRange off range
+
+    collectRanges ::
+      Bool ->
+      PermExpr (BVType w) ->
+      [(LLVMArrayBorrow w, BVRange w)] ->
+      [[(LLVMArrayBorrow w, BVRange w)]]
+    collectRanges prec off0 ranges
+      | bvLeq rhs_off_bytes off0 = [[]]
+      | otherwise =
+        case filter (rangeForOffset prec off0) ranges of
+          [] -> []
+
+          rs ->
+            [ (borrow, r):rest | (borrow, r) <- rs,
+                                 let next_offset = bvRangeOffset r `bvAdd` bvRangeLength r,
+                                 rest <- collectRanges True next_offset  ranges ]
 
 skeletonArray ::
   forall w.
@@ -6620,12 +6657,8 @@ skeletonArray lhs rhs =
     _ -> Nothing
 
   where
-    dbg p = permPretty emptyPPInfo p
-
     overlapsWith b = or . fmap (not . bvPropCouldHold) . llvmArrayBorrowsDisjoint b
     -- We need to chop up any ranges that overlap with borrows on the rhs:
-    chopBorrows x y z
-      | trace ("chopBorrows: " ++ renderDoc (dbg (x,y,z))) False = undefined
     chopBorrows bs_skip bs_lhs bs_rhs
       | Just bi    <- findIndex (flip notElem bs_rhs) bs_lhs
       , Just b_rhs <- find (overlapsWith (bs_lhs!!bi)) bs_rhs
@@ -6637,46 +6670,6 @@ skeletonArray lhs rhs =
       = chopBorrows ((bs_lhs!!bi):bs_skip) (deleteNth bi bs_lhs) bs_rhs
       | otherwise
       = bs_skip ++ bs_lhs
-
-
-
-  -- | Just bi <- findIndex (flip notElem bs) (llvmArrayBorrows ap_lhs)
-  -- , Just b_rhs <- find (and . fmap (not . bvPropCouldHold) . llvmArrayBorrowsDisjoint (bs!!bi)) bs =
-  --   let b      = bs!!bi
-  --       b_rhs_off = llvmArrayBorrowCells b_rhs
-  --       new_bs = llvmArrayBorrowRangeDelete b b_rhs_off
-  --       lhs_bs' = new_bs ++ deleteNth bi (llvmArrayBorrows ap_lhs)
-  --       ap_lhs' = ap_lhs { llvmArrayBorrows = lhs_bs' }
-
-gatherRangesForArray ::
-  forall w.
-  (1 <= w, KnownNat w) =>
-  [AtomicPerm (LLVMPointerType w)] ->
-  LLVMArrayPerm w ->
-  [[(LLVMArrayBorrow w, BVRange w)]]
-gatherRangesForArray lhs rhs =
-  collectRanges False (llvmArrayOffset rhs) (lhs_ranges ++ rhs_ranges)
-  where
-    lhs_ranges     = permToBorrowRange rhs <$> lhs_not_borrows
-    rhs_ranges     = [ (b, llvmArrayBorrowAbsOffsets rhs b) | b <- llvmArrayBorrows rhs ]
-    lhs_not_borrows = filterBorrowed lhs
-    rhs_off_bytes = bvAdd (llvmArrayOffset rhs) (llvmArrayLengthBytes rhs)
-
-    rangeForOffset prec off (_, range) =
-      if prec then bvEq off (bvRangeOffset range) else bvPropCouldHold prop
-      where
-        prop = bvPropInRange off range
-
-    collectRanges :: Bool -> PermExpr (BVType w) -> [(LLVMArrayBorrow w, BVRange w)] -> [[(LLVMArrayBorrow w, BVRange w)]]
-    collectRanges prec off0 ranges
-      | bvLeq rhs_off_bytes off0 = [[]]
-      | otherwise =
-        case filter (rangeForOffset prec off0) ranges of
-          [] -> []
-
-          rs ->
-            [ (borrow, r):rest | (borrow, r) <- rs,
-                                 rest <- collectRanges True (bvRangeOffset r `bvAdd` bvRangeLength r) ranges ]
 
 -- | Prove an array permission @mb_ap@ with length and borrows set to the
 -- supplied expression and list using the array permission @ap_lhs@ on top of
