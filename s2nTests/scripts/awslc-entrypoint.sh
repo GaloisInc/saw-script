@@ -3,6 +3,7 @@ set -xe
 
 cd /saw-script/aws-lc-verification/SAW
 ./scripts/install.sh
+rm bin/saw
 cp /saw-bin/saw bin/saw
 cp /saw-bin/abc bin/abc
 
