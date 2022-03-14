@@ -803,27 +803,23 @@ askMRSolverH :: [Term] -> Term -> Term -> Term -> Term -> MRM MREnv
 askMRSolverH vars (asPi -> Just (nm1, tp@(asBitvectorType -> Just n), body1)) t1
                   (asPi -> Just (nm2, asDataType -> Just (primName -> "Cryptol.Num", _), body2)) t2 =
   let nm = if Text.head nm2 == '_' then nm1 else nm2 in
-  withUVarLift nm (Type tp) vars $ \var vars' ->
+  withUVarLift nm (Type tp) (vars, t1, t2) $ \var (vars', t1', t2') ->
   do nat_tm <- liftSC2 scBvToNat n var
      num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
      body2' <- substTerm 0 (num_tm : vars') body2
-     t1' <- mrApplyAll t1 [var]
-     t2' <- mrApplyAll t2 [num_tm]
-     askMRSolverH (var : vars') body1 t1' body2' t2'
-{-
--- If we want to support this, we need to keep around a list of the LHS
--- arguments for the FunAssump at the end
+     t1'' <- mrApplyAll t1' [var]
+     t2'' <- mrApplyAll t2' [num_tm]
+     askMRSolverH (var : vars') body1 t1'' body2' t2''
 askMRSolverH vars (asPi -> Just (nm1, asDataType -> Just (primName -> "Cryptol.Num", _), body1)) t1
                   (asPi -> Just (nm2, tp@(asBitvectorType -> Just n), body2)) t2 =
   let nm = if Text.head nm2 == '_' then nm1 else nm2 in
-  withUVarLift nm (Type tp) vars $ \var vars' ->
+  withUVarLift nm (Type tp) (vars, t1, t2) $ \var (vars', t1', t2') ->
   do nat_tm <- liftSC2 scBvToNat n var
      num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
      body1' <- substTerm 0 (num_tm : vars') body1
-     t1' <- mrApplyAll t1 [num_tm]
-     t2' <- mrApplyAll t2 [var]
-     askMRSolverH (var : vars') body1' t1' body2 t2'
--}
+     t1'' <- mrApplyAll t1' [num_tm]
+     t2'' <- mrApplyAll t2' [var]
+     askMRSolverH (var : vars') body1' t1'' body2 t2''
 
 -- Introduce variables of the same type together
 askMRSolverH vars tp11@(asPi -> Just (nm1, tp1, body1)) t1
@@ -832,10 +828,10 @@ askMRSolverH vars tp11@(asPi -> Just (nm1, tp1, body1)) t1
      if tps_are_eq then return () else
        throwMRFailure (TypesNotEq (Type tp11) (Type tp22))
      let nm = if Text.head nm2 == '_' then nm1 else nm2
-     withUVarLift nm (Type tp1) vars $ \var vars' ->
-       do t1' <- mrApplyAll t1 [var]
-          t2' <- mrApplyAll t2 [var]
-          askMRSolverH (var : vars') body1 t1' body2 t2'
+     withUVarLift nm (Type tp1) (vars, t1, t2) $ \var (vars', t1', t2') ->
+       do t1'' <- mrApplyAll t1' [var]
+          t2'' <- mrApplyAll t2' [var]
+          askMRSolverH (var : vars') body1 t1'' body2 t2''
 
 -- Error if we don't have the same number of arguments on both sides
 askMRSolverH _ tp1@(asPi -> Just _) _ tp2 _ =
@@ -844,23 +840,22 @@ askMRSolverH _ tp1 _ tp2@(asPi -> Just _) _ =
   throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
 
 -- The base case: both sides are CompM of the same type
-askMRSolverH vars tp1@(asCompM -> Just _) t1 tp2@(asCompM -> Just _) t2 =
+askMRSolverH _ tp1@(asCompM -> Just _) t1 tp2@(asCompM -> Just _) t2 =
   do tps_are_eq <- mrConvertible tp1 tp2
      if tps_are_eq then return () else
        throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
-     mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2
      m1 <- normCompTerm t1 
      m2 <- normCompTerm t2
      mrRefines m1 m2
      -- If t1 is a named function, add forall xs. f1 xs |= m2 to the env
-     case asGlobalFunName t1 of
-       Just f1 ->
+     case asApplyAll t1 of
+       ((asGlobalFunName -> Just f1), args) ->
          mrUVarCtx >>= \uvar_ctx ->
          let fassump = FunAssump { fassumpCtx = uvar_ctx,
-                                   fassumpArgs = reverse vars,
+                                   fassumpArgs = args,
                                    fassumpRHS = m2 } in
          mrEnvAddFunAssump f1 fassump <$> mrEnv
-       Nothing -> mrEnv
+       _ -> mrEnv
 
 -- Error if we don't have CompM at the end
 askMRSolverH _ (asCompM -> Just _) _ tp2 _ =
@@ -882,4 +877,6 @@ askMRSolver ::
 askMRSolver sc dlvl env timeout t1 t2 =
   do tp1 <- scTypeOf sc t1 >>= scWhnf sc
      tp2 <- scTypeOf sc t2 >>= scWhnf sc
-     runMRM sc timeout dlvl env $ askMRSolverH [] tp1 t1 tp2 t2
+     runMRM sc timeout dlvl env $
+       mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2 >>
+       askMRSolverH [] tp1 t1 tp2 t2

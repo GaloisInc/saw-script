@@ -500,7 +500,7 @@ mrConvertible = liftSC4 scConvertibleEval scTypeCheckWHNF True
 -- type @[args/vars]a@ that @CompM@ is applied to.
 mrFunOutType :: FunName -> [Term] -> MRM Term
 mrFunOutType fname args =
-  liftSC2 scApplyAll (funNameTerm fname) args >>= liftSC1 scTypeOf >>= \case
+  mrApplyAll (funNameTerm fname) args >>= mrTypeOf >>= \case
     (asCompM -> Just tp) -> liftSC1 scWhnf tp
     _ -> do pp_ftype <- funNameType fname >>= mrPPInCtx
             pp_fname <- mrPPInCtx fname
