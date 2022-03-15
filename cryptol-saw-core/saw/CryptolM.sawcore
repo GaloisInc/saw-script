@@ -59,14 +59,20 @@ mseq num a =
 
 vecMapM : (a b : isort 0) -> (n : Nat) -> (a -> CompM b) -> Vec n a ->
           CompM (Vec n b);
-vecMapM a b n_top f =
-  Nat__rec (\ (n:Nat) -> Vec n a -> CompM (Vec n b))
-           (\ (_:Vec 0 a) -> returnM (Vec 0 b) (EmptyVec b))
-           (\ (n:Nat) (rec:Vec n a -> CompM (Vec n b)) (v:Vec (Succ n) a) ->
-              fmapM2 b (Vec n b) (Vec (Succ n) b)
-                       (\ (x:b) (xs:Vec n b) -> ConsVec b x n xs)
-                       (f (head n a v)) (rec (tail n a v)))
-           n_top;
+vecMapM a b n f xs =
+  multiArgFixM
+    (LRT_Fun Nat (\ (i:Nat) ->
+     LRT_Fun (Vec n b) (\ (_:Vec n b) ->
+     LRT_Ret (Vec n b))))
+    (\ (rec : Nat -> Vec n b -> CompM (Vec n b)) (i:Nat) (ys:Vec n b) ->
+       maybe (IsLtNat i n) (CompM (Vec n b))
+             (returnM (Vec n b) ys)
+             (\ (pf:IsLtNat i n) ->
+                bindM b (Vec n b)
+                      (f (atWithProof n a xs i pf))
+                      (\ (y:b) -> rec (Succ i) (updWithProof n b ys i y pf)))
+             (proveLtNat i n))
+    0 (genWithProof n b (\ (i:Nat) (pf:IsLtNat i n) -> error b "vecMapM"));
 
 -- Computational version of seqMap
 seqMapM : (a b : sort 0) -> (n : Num) -> (a -> CompM b) -> mseq n a ->
@@ -97,17 +103,19 @@ seqToMseq n_top a =
 --------------------------------------------------------------------------------
 -- Auxiliary functions
 
-atM : (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> CompM a;
-atM n_top a =
-  Nat__rec
-    (\ (n:Nat) -> Vec n a -> Nat -> CompM a)
-    (\ (_:Vec 0 a) (_:Nat) -> errorM a "atM: index out of bounds")
-    (\ (n:Nat) (rec_f: Vec n a -> Nat -> CompM a) (v:Vec (Succ n) a) (i:Nat) ->
-       Nat_cases (CompM a)
-                 (returnM a (head n a v))
-                 (\ (i_prev:Nat) (_:CompM a) -> rec_f (tail n a v) i_prev) i)
-    n_top;
+atM : (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> CompM a;
+atM n a xs i =
+  maybe (IsLtNat i n) (CompM a)
+        (errorM a "atM: invalid sequence index")
+        (\ (pf:IsLtNat i n) -> returnM a (atWithProof n a xs i pf))
+        (proveLtNat i n);
 
+updateM : (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> a -> CompM (Vec n a);
+updateM n a xs i x =
+  maybe (IsLtNat i n) (CompM (Vec n a))
+        (errorM (Vec n a) "updateM: invalid sequence index")
+        (\ (pf:IsLtNat i n) -> returnM (Vec n a) (updWithProof n a xs i x pf))
+        (proveLtNat i n);
 
 eListSelM : (a : isort 0) -> (n : Num) -> mseq n a -> Nat -> CompM a;
 eListSelM a =
@@ -347,15 +355,35 @@ primitive
 ecTransposeM : (m n : Num) -> (a : sort 0) -> mseq m (mseq n a) ->
                mseq n (mseq m a);
 
-ecAtM : (n : Num) -> (a ix: sort 0) -> PIntegral ix -> mseq n a -> ix -> CompM a;
+ecAtM : (n : Num) -> (a : isort 0) -> (ix : sort 0) -> PIntegral ix ->
+        mseq n a -> ix -> CompM a;
 ecAtM n_top a ix pix =
   Num_rec
     (\ (n:Num) -> mseq n a -> ix -> CompM a)
     (\ (n:Nat) (v:Vec n a) ->
-       pix.posNegCases (CompM a) (atM n a v) (\ (_:Nat) -> atM n a v 0))
+       pix.posNegCases (CompM a) (atM n a v)
+                       (\ (_:Nat) -> errorM a "ecAtM: invalid sequence index"))
     (\ (s:Stream (CompM a)) ->
        pix.posNegCases (CompM a) (streamGet (CompM a) s)
-                       (\ (_:Nat) -> (streamGet (CompM a) s) 0))
+                       (\ (_:Nat) -> errorM a "ecAtM: invalid sequence index"))
+    n_top;
+
+ecUpdateM : (n : Num) -> (a : isort 0) -> (ix : sort 0) -> PIntegral ix ->
+            mseq n a -> ix -> a -> CompM (mseq n a);
+ecUpdateM n_top a ix pix =
+  Num_rec
+    (\ (n:Num) -> mseq n a -> ix -> a -> CompM (mseq n a))
+    (\ (n:Nat) (v:Vec n a) (i:ix) (x:a) ->
+       pix.posNegCases (CompM (Vec n a))
+                       (\ (i:Nat) -> updateM n a v i x)
+                       (\ (_:Nat) -> errorM (Vec n a)
+                                       "ecUpdateM: invalid sequence index") i)
+    (\ (s:Stream (CompM a)) (i:ix) (x:a) ->
+       pix.posNegCases (CompM (Stream (CompM a)))
+                       (\ (i:Nat) -> returnM (Stream (CompM a))
+                                       (streamUpd (CompM a) s i (returnM a x)))
+                       (\ (_:Nat) -> errorM (Stream (CompM a))
+                                       "ecUpdateM: invalid sequence index") i)
     n_top;
 
 -- FIXME

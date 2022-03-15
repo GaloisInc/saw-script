@@ -1176,6 +1176,7 @@ defaultMonEnv =
   , mmSemiPureFin1 "Cryptol.ecReverse" "CryptolM.ecReverseM"
   , mmSemiPure "Cryptol.ecTranspose" "CryptolM.ecTransposeM"
   , mmArg "Cryptol.ecAt" "CryptolM.ecAtM"
+  , mmArg "Cryptol.ecUpdate" "CryptolM.ecUpdateM"
   -- , mmArgFin1 "Cryptol.ecAtBack" "CryptolM.ecAtBackM"
   -- , mmSemiPureFin2 "Cryptol.ecFromTo" "CryptolM.ecFromToM"
   , mmSemiPureFin1 "Cryptol.ecFromToLessThan" "CryptolM.ecFromToLessThanM"
