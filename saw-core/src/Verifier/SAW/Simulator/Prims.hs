@@ -499,8 +499,8 @@ selectV mux maxValue valueFn v = impl len 0
 bvNatOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Prim l
 bvNatOp bp =
   natFun $ \w ->
-  natFun $ \x ->
-    Prim (VWord <$> bpBvLit bp (fromIntegral w) (toInteger x)) -- FIXME check for overflow on w
+  strictFun $ \v ->
+    Prim (VWord <$> natToWord bp (fromIntegral w) v) -- FIXME check for overflow on w
 
 -- bvToNat : (n : Nat) -> Vec n Bool -> Nat;
 bvToNatOp :: VMonad l => Prim l
