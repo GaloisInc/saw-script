@@ -118,6 +118,7 @@ import Data.Maybe
 import Data.Either
 import Data.List (findIndices, intercalate)
 import Control.Monad.Except
+import qualified Data.Map as Map
 import qualified Data.Text as Text
 
 import Prettyprinter
@@ -247,19 +248,28 @@ normComp (CompTerm t) =
           else throwMRFailure (MalformedComp t)
         normComp (CompTerm body_tm)
 
-    -- Always unfold: sawLet, multiArgFixM
+    -- Always unfold: sawLet, multiArgFixM, Num_rec
     (f@(asGlobalDef -> Just ident), args)
-      | ident `elem` ["Prelude.sawLet", "Prelude.multiArgFixM"]
+      | ident `elem` ["Prelude.sawLet", "Prelude.multiArgFixM",
+                      "Cryptol.Num_rec"]
       , Just (_, Just body) <- asConstant f ->
         mrApplyAll body args >>= normCompTerm
 
     -- Always unfold recursors applied to constructors
-    (asRecursorApp-> Just (rc, crec, _, arg), args)
+    (asRecursorApp -> Just (rc, crec, _, arg), args)
       | Just (c, _, cargs) <- asCtorParams arg ->
       do hd' <- liftSC4 scReduceRecursor rc crec c cargs 
                   >>= liftSC1 betaNormalize
          t' <- mrApplyAll hd' args
          normComp (CompTerm t')
+
+    -- Always unfold record selectors applied to record values (after scWhnf)
+    (asRecordSelector -> Just (r, fld), args) ->
+      do r' <- liftSC1 scWhnf r
+         case asRecordValue r' of
+           Just (Map.lookup fld -> Just f) -> do t' <- mrApplyAll f args
+                                                 normComp (CompTerm t')
+           _ -> throwMRFailure (MalformedComp t)
 
     -- For an ExtCns, we have to check what sort of variable it is
     -- FIXME: substitute for evars if they have been instantiated
@@ -490,34 +500,71 @@ mrRefines' (ErrorM _) (ErrorM _) = return ()
 mrRefines' (ReturnM e) (ErrorM _) = throwMRFailure (ReturnNotError e)
 mrRefines' (ErrorM _) (ReturnM e) = throwMRFailure (ReturnNotError e)
 
--- A maybe eliminator on an equality type on the left
+-- maybe elimination on equality types
 mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
      cond_pf <- liftSC1 scEqTrue cond >>= mrDummyProof
      m1' <- applyNormCompFun f1 cond_pf
      cond_holds <- mrProvable cond
-     if cond_holds then mrRefines m1' m2 else
-       withAssumption cond (mrRefines m1' m2) >>
-       withAssumption not_cond (mrRefines m1 m2)
-
--- A maybe eliminator on an equality type on the right
+     not_cond_holds <- mrProvable not_cond
+     case (cond_holds, not_cond_holds) of
+       (True, _) -> mrRefines m1' m2
+       (_, True) -> mrRefines m1 m2
+       _ -> withAssumption cond (mrRefines m1' m2) >>
+            withAssumption not_cond (mrRefines m1 m2)
 mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
      cond_pf <- liftSC1 scEqTrue cond >>= mrDummyProof
      m2' <- applyNormCompFun f2 cond_pf
      cond_holds <- mrProvable cond
-     if cond_holds then mrRefines m1 m2' else
-       withAssumption cond (mrRefines m1 m2') >>
-       withAssumption not_cond (mrRefines m1 m2)
+     not_cond_holds <- mrProvable not_cond
+     case (cond_holds, not_cond_holds) of
+       (True, _) -> mrRefines m1 m2'
+       (_, True) -> mrRefines m1 m2
+       _ -> withAssumption cond (mrRefines m1 m2') >>
+            withAssumption not_cond (mrRefines m1 m2)
 
--- A maybe eliminator on an isFinite type on the left
+-- maybe elimination on Nat inequalities
+mrRefines' (MaybeElim (Type (asIsLeOrLtNat -> Just (st, x1, y1))) m1 f1 _) m2 =
+  do x1_norm <- mrNormOpenTerm x1
+     y1_norm <- mrNormOpenTerm y1
+     y1_norm_for_cond <- if st then return y1_norm
+                               else liftSC2 scCtorApp "Prelude.Succ" [y1_norm]
+     cond <- liftSC2 scLtNat x1_norm y1_norm_for_cond
+     not_cond <- liftSC1 scNot cond
+     cond_pf <- mrIsLeOrLtNat st x1_norm y1_norm >>= mrDummyProof
+     m1' <- applyNormCompFun f1 cond_pf
+     cond_holds <- mrProvable cond
+     not_cond_holds <- mrProvable not_cond
+     case (cond_holds, not_cond_holds) of
+       (True, _) -> mrRefines m1' m2
+       (_, True) -> mrRefines m1 m2
+       _ -> withAssumption cond (mrRefines m1' m2) >>
+            withAssumption not_cond (mrRefines m1 m2)
+mrRefines' m1 (MaybeElim (Type (asIsLeOrLtNat -> Just (st, x2, y2))) m2 f2 _) =
+  do x2_norm <- mrNormOpenTerm x2
+     y2_norm <- mrNormOpenTerm y2
+     y2_norm_for_cond <- if st then return y2_norm
+                               else liftSC2 scCtorApp "Prelude.Succ" [y2_norm]
+     cond <- liftSC2 scLtNat x2_norm y2_norm_for_cond
+     not_cond <- liftSC1 scNot cond
+     cond_pf <- mrIsLeOrLtNat st x2 y2 >>= mrDummyProof
+     m2' <- applyNormCompFun f2 cond_pf
+     cond_holds <- mrProvable cond
+     not_cond_holds <- mrProvable not_cond
+     case (cond_holds, not_cond_holds) of
+       (True, _) -> mrRefines m1 m2'
+       (_, True) -> mrRefines m1 m2
+       _ -> withAssumption cond (mrRefines m1 m2') >>
+            withAssumption not_cond (mrRefines m1 m2)
+
+-- maybe elimination on isFinite types
 mrRefines' (MaybeElim (Type (asIsFinite -> Just n1)) m1 f1 _) m2 =
   do n1_norm <- mrNormOpenTerm n1
      maybe_assump <- mrGetDataTypeAssump n1_norm
-     fin_pf <-
-       liftSC2 scGlobalApply "CryptolM.isFinite" [n1_norm] >>= mrDummyProof
+     fin_pf <- mrIsFinite n1_norm >>= mrDummyProof
      case (maybe_assump, asNum n1_norm) of
        (_, Just (Left _)) -> applyNormCompFun f1 fin_pf >>= flip mrRefines m2
        (_, Just (Right _)) -> mrRefines m1 m2
@@ -529,13 +576,10 @@ mrRefines' (MaybeElim (Type (asIsFinite -> Just n1)) m1 f1 _) m2 =
          (withUVarLift "n" (Type nat_tp) (n1_norm, f1, m2) $ \ n (n1', f1', m2') ->
            withDataTypeAssump n1' (IsNum n)
            (applyNormCompFun f1' n >>= flip mrRefines m2'))
-
--- A maybe eliminator on an isFinite type on the right
 mrRefines' m1 (MaybeElim (Type (asIsFinite -> Just n2)) m2 f2 _) =
   do n2_norm <- mrNormOpenTerm n2
      maybe_assump <- mrGetDataTypeAssump n2_norm
-     fin_pf <-
-       liftSC2 scGlobalApply "CryptolM.isFinite" [n2_norm] >>= mrDummyProof
+     fin_pf <- mrIsFinite n2_norm >>= mrDummyProof
      case (maybe_assump, asNum n2_norm) of
        (_, Just (Left _)) -> applyNormCompFun f2 fin_pf >>= mrRefines m1
        (_, Just (Right _)) -> mrRefines m1 m2
@@ -547,8 +591,6 @@ mrRefines' m1 (MaybeElim (Type (asIsFinite -> Just n2)) m2 f2 _) =
          (withUVarLift "n" (Type nat_tp) (n2_norm, f2, m1) $ \ n (n2', f2', m1') ->
            withDataTypeAssump n2' (IsNum n)
            (applyNormCompFun f2' n >>= mrRefines m1'))
-
--- FIXME: Add support for arbitrary maybe asusmptions, like the either case
 
 mrRefines' (Ite cond1 m1 m1') m2 =
   liftSC1 scNot cond1 >>= \not_cond1 ->

@@ -260,6 +260,27 @@ asIsFinite (asApp -> Just (isGlobalDef "CryptolM.isFinite" -> Just (), n)) =
   Just n
 asIsFinite _ = Nothing
 
+-- | Create a term representing the type @IsFinite n@
+mrIsFinite :: Term -> MRM Term
+mrIsFinite n = liftSC2 scGlobalApply "CryptolM.isFinite" [n]
+
+-- | Recognize a term as being of the form @IsLeNat m n@ or @IsLtNat m n@,
+-- where the 'Bool' in the result is true iff the inequality is strict (i.e.
+-- the latter was matched)
+asIsLeOrLtNat :: Recognizer Term (Bool, Term, Term)
+asIsLeOrLtNat (asApplyAll -> (isGlobalDef "Prelude.IsLeNat" -> Just (), [m, n])) =
+  Just (False, m, n)
+asIsLeOrLtNat (asApplyAll -> (isGlobalDef "Prelude.IsLtNat" -> Just (), [m, n])) =
+  Just (True, m, n)
+asIsLeOrLtNat _ = Nothing
+
+-- | Create a term representing the type @IsLeNat m n@ or @IsLtNat m n@,
+-- where the resulting inequality is strict iff the given 'Bool' is true (i.e.
+-- the latter is created iff the 'Bool' is true)
+mrIsLeOrLtNat :: Bool -> Term -> Term -> MRM Term
+mrIsLeOrLtNat False m n = liftSC2 scGlobalApply "Prelude.IsLeNat" [m, n]
+mrIsLeOrLtNat True m n = liftSC2 scGlobalApply "Prelude.IsLtNat" [m, n]
+
 -- | A map from 'Term's to 'DataTypeAssump's over that term
 type DataTypeAssumps = HashMap Term DataTypeAssump
 
