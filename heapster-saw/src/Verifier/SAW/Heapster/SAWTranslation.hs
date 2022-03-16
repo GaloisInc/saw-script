@@ -133,32 +133,20 @@ typeTransType1 (TypeTrans [] _) = unitTypeOpenTerm
 typeTransType1 (TypeTrans [tp] _) = tp
 typeTransType1 _ = error ("typeTransType1" ++ nlPrettyCallStack callStack)
 
--- | Build the tuple type @T1 * (T2 * ... * (Tn-1 * Tn))@ of @n@ types, with the
--- special case that 0 types maps to the unit type @#()@ (and 1 type just maps
--- to itself). Note that this is different from 'tupleTypeOpenTerm', which
--- always ends with unit, i.e., which returns @T1*(T2*...*(Tn-1*(Tn*#())))@.
+-- | Build the tuple type @#(T1, T2, ... Tn-1, Tn)@ of @n@ types.
 tupleOfTypes :: [OpenTerm] -> OpenTerm
-tupleOfTypes [] = unitTypeOpenTerm
-tupleOfTypes [tp] = tp
-tupleOfTypes (tp:tps) = pairTypeOpenTerm tp $ tupleOfTypes tps
+tupleOfTypes tps = tupleTypeOpenTerm tps
 
--- | Build the tuple @(t1,(t2,(...,(tn-1,tn))))@ of @n@ terms, with the
--- special case that 0 types maps to the unit value @()@ (and 1 value just maps
--- to itself). Note that this is different from 'tupleOpenTerm', which
--- always ends with unit, i.e., which returns @t1*(t2*...*(tn-1*(tn*())))@.
+-- | Build the tuple @(t1, t2, ..., tn-1, tn)@ of @n@ terms.
 tupleOfTerms :: [OpenTerm] -> OpenTerm
-tupleOfTerms [] = unitOpenTerm
-tupleOfTerms [t] = t
-tupleOfTerms (t:ts) = pairOpenTerm t $ tupleOfTerms ts
+tupleOfTerms ts = tupleOpenTerm ts
 
 -- | Project the @i@th element from a term of type @'tupleOfTypes' tps@. Note
 -- that this requires knowing the length of @tps@.
 projTupleOfTypes :: [OpenTerm] -> Integer -> OpenTerm -> OpenTerm
-projTupleOfTypes [] _ _ = error "projTupleOfTypes: projection of empty tuple!"
-projTupleOfTypes [_] 0 tup = tup
-projTupleOfTypes (_:_) 0 tup = pairLeftOpenTerm tup
-projTupleOfTypes (_:tps) i tup =
-  projTupleOfTypes tps (i-1) $ pairRightOpenTerm tup
+projTupleOfTypes tps i tup
+  | i < toInteger (length tps) = projTupleOpenTerm i tup
+  | otherwise = error "projTupleOfTypes: invalid tuple index"
 
 -- | Map the 'typeTransTypes' field of a 'TypeTrans' to a single type, where a
 -- single type is mapped to itself, an empty list of types is mapped to @unit@,
