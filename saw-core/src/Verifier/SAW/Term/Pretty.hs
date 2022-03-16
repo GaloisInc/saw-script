@@ -342,13 +342,22 @@ ppLetBlock defs body =
     ppEqn (var,d) = ppMemoVar var <+> pretty '=' <+> d
 
 
--- | Pretty-print pairs as "(x, y)"
-ppPair :: Prec -> SawDoc -> SawDoc -> SawDoc
-ppPair prec x y = ppParensPrec prec PrecCommas (group (vcat [x <> pretty ',', y]))
+-- -- | Pretty-print pairs as "(x, y)"
+-- ppPair :: Prec -> SawDoc -> SawDoc -> SawDoc
+-- ppPair prec x y = ppParensPrec prec PrecCommas (group (vcat [x <> pretty ',', y]))
 
--- | Pretty-print pair types as "x * y"
-ppPairType :: Prec -> SawDoc -> SawDoc -> SawDoc
-ppPairType prec x y = ppParensPrec prec PrecProd (x <+> pretty '*' <+> y)
+ppCommaSep :: [SawDoc] -> SawDoc
+ppCommaSep [] = emptyDoc
+ppCommaSep [x] = x
+ppCommaSep (x : xs) = group (vcat [x <> pretty ',', ppCommaSep xs])
+
+-- | Pretty-print tuples as "(x, y, z)"
+ppTuple :: [SawDoc] -> SawDoc
+ppTuple xs = parens (align (ppCommaSep xs))
+
+-- -- | Pretty-print pair types as "x * y"
+-- ppPairType :: Prec -> SawDoc -> SawDoc -> SawDoc
+-- ppPairType prec x y = ppParensPrec prec PrecProd (x <+> pretty '*' <+> y)
 
 -- | Pretty-print records (if the flag is 'False') or record types (if the flag
 -- is 'True'), where the latter are preceded by the string @#@, either as:
@@ -422,12 +431,8 @@ ppFlatTermF :: Prec -> FlatTermF Term -> PPM SawDoc
 ppFlatTermF prec tf =
   case tf of
     Primitive ec  -> annotate PrimitiveStyle <$> ppBestName (ModuleIdentifier (primName ec))
-    UnitValue     -> return "(-empty-)"
-    UnitType      -> return "#(-empty-)"
-    PairValue x y -> ppPair prec <$> ppTerm' PrecTerm x <*> ppTerm' PrecCommas y
-    PairType x y  -> ppPairType prec <$> ppTerm' PrecApp x <*> ppTerm' PrecProd y
-    PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
-    PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
+    TupleValue xs -> ppTuple <$> traverse (ppTerm' PrecCommas) (V.toList xs)
+    TupleSelector t i -> ppProj (Text.pack (show i)) <$> ppTerm' PrecArg t
 
     RecursorType d params motive _motiveTy ->
       do params_pp <- mapM (ppTerm' PrecArg) params
@@ -585,8 +590,7 @@ shouldMemoizeTerm :: Term -> Bool
 shouldMemoizeTerm t =
   case unwrapTermF t of
     FTermF Primitive{} -> False
-    FTermF UnitValue -> False
-    FTermF UnitType -> False
+    FTermF (TupleValue xs) -> not (V.null xs)
     FTermF (CtorApp _ [] []) -> False
     FTermF (DataTypeApp _ [] []) -> False
     FTermF Sort{} -> False

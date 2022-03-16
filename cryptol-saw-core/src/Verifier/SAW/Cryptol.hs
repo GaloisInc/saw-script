@@ -922,21 +922,18 @@ importExpr sc env expr =
       case sel of
         C.TupleSel i _maybeLen ->
           do e' <- importExpr sc env e
-             let t = fastTypeOf (envC env) e
-             case C.tIsTuple t of
-               Just ts -> scTupleSelector sc e' (i+1) (length ts)
-               Nothing -> panic "importExpr" ["invalid tuple selector", show i, pretty t]
+             scTupleSelector sc e' i
         C.RecordSel x _ ->
           do e' <- importExpr sc env e
              let t = fastTypeOf (envC env) e
              case C.tNoUser t of
                C.TRec fm ->
                  do i <- the (elemIndex x (map fst (C.canonicalFields fm)))
-                    scTupleSelector sc e' (i+1) (length (C.canonicalFields fm))
+                    scTupleSelector sc e' i
                C.TNewtype nt _args ->
                  do let fs = C.ntFields nt
                     i <- the (elemIndex x (map fst (C.canonicalFields fs)))
-                    scTupleSelector sc e' (i+1) (length (C.canonicalFields fs))
+                    scTupleSelector sc e' i
                _ -> panic "importExpr" ["invalid record selector", pretty x, pretty t]
         C.ListSel i _maybeLen ->
           do let t = fastTypeOf (envC env) e
@@ -1633,13 +1630,10 @@ asCryptolTypeValue v =
 
     SC.VDataType _ _ _ -> Nothing
 
-    SC.VUnitType -> return (Right (C.tTuple []))
-    SC.VPairType v1 v2 -> do
-      Right t1 <- asCryptolTypeValue v1
-      Right t2 <- asCryptolTypeValue v2
-      case C.tIsTuple t2 of
-        Just ts -> return (Right (C.tTuple (t1 : ts)))
-        Nothing -> return (Right (C.tTuple [t1, t2]))
+    SC.VTupleType vs ->
+      do es <- traverse asCryptolTypeValue vs
+         ts <- traverse asRight es
+         pure (Right (C.tTuple (Vector.toList ts)))
 
     SC.VPiType _nm v1 (SC.VNondependentPi v2) ->
       do Right t1 <- asCryptolTypeValue v1
@@ -1656,7 +1650,8 @@ asCryptolTypeValue v =
     SC.VRecordType{} -> Nothing
     SC.VRecursorType{} -> Nothing
     SC.VTyTerm{} -> Nothing
-
+  where
+    asRight = either (const Nothing) Just
 
 scCryptolType :: SharedContext -> Term -> IO (Maybe (Either C.Kind C.Type))
 scCryptolType sc t =
@@ -1734,24 +1729,25 @@ exportValue ty v = case ty of
 
 exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
-  case (tys, v) of
-    ([]    , SC.VUnit    ) -> []
-    ([t]   , _           ) -> [exportValue t v]
-    (t : ts, SC.VPair x y) -> (exportValue t (run x)) : exportTupleValue ts (run y)
-    _                      -> error $ "exportValue: expected tuple"
+  case v of
+    SC.VTuple (Vector.toList -> xs)
+      | length xs == length tys ->
+        [ exportValue t (run x) | (t, x) <- zip tys xs ]
+    _ -> panic "Verifier.SAW.Cryptol.exportValue" ["expected tuple"]
   where
     run = SC.runIdentity . force
 
 exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.Value)]
 exportRecordValue fields v =
-  case (fields, v) of
-    ([]         , SC.VUnit    ) -> []
-    ([(n, t)]   , _           ) -> [(n, exportValue t v)]
-    ((n, t) : ts, SC.VPair x y) -> (n, exportValue t (run x)) : exportRecordValue ts (run y)
-    (_, SC.VRecordValue (alistAllFields
-                         (map (C.identText . fst) fields) -> Just ths)) ->
+  case v of
+    -- TODO: remove VTuple case when cryptol-saw-core importer switches record imports to use record types.
+    SC.VTuple (Vector.toList -> xs)
+      | length xs == length fields ->
+        [ (n, exportValue t (run x)) | ((n, t), x) <- zip (Map.assocs (Map.fromList fields)) xs ]
+    SC.VRecordValue (alistAllFields
+                      (map (C.identText . fst) fields) -> Just ths) ->
       zipWith (\(n,t) x -> (n, exportValue t (run x))) fields ths
-    _                              -> error $ "exportValue: expected record"
+    _ -> panic "Verifier.SAW.Cryptol.exportValue" ["expected record"]
   where
     run = SC.runIdentity . force
 

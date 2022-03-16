@@ -28,9 +28,7 @@ module Verifier.SAW.OpenTerm (
   stringLitOpenTerm, stringTypeOpenTerm,
   trueOpenTerm, falseOpenTerm, boolOpenTerm, boolTypeOpenTerm,
   arrayValueOpenTerm, vectorTypeOpenTerm, bvLitOpenTerm, bvTypeOpenTerm,
-  pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
-  tupleOpenTerm', tupleTypeOpenTerm',
   recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, extCnsOpenTerm,
   applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
@@ -139,11 +137,11 @@ natOpenTerm = flatOpenTerm . NatLit
 
 -- | The 'OpenTerm' for the unit value
 unitOpenTerm :: OpenTerm
-unitOpenTerm = flatOpenTerm UnitValue
+unitOpenTerm = tupleOpenTerm []
 
 -- | The 'OpenTerm' for the unit type
 unitTypeOpenTerm :: OpenTerm
-unitTypeOpenTerm = flatOpenTerm UnitType
+unitTypeOpenTerm = tupleTypeOpenTerm []
 
 -- | Build a SAW core string literal.
 stringLitOpenTerm :: Text -> OpenTerm
@@ -190,45 +188,23 @@ bvTypeOpenTerm n =
   applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
   [natOpenTerm (fromIntegral n), boolTypeOpenTerm]
 
--- | Build an 'OpenTerm' for a pair
-pairOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
-pairOpenTerm t1 t2 = flatOpenTerm $ PairValue t1 t2
-
--- | Build an 'OpenTerm' for a pair type
-pairTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
-pairTypeOpenTerm t1 t2 = flatOpenTerm $ PairType t1 t2
-
--- | Build an 'OpenTerm' for the left projection of a pair
-pairLeftOpenTerm :: OpenTerm -> OpenTerm
-pairLeftOpenTerm t = flatOpenTerm $ PairLeft t
-
--- | Build an 'OpenTerm' for the right projection of a pair
-pairRightOpenTerm :: OpenTerm -> OpenTerm
-pairRightOpenTerm t = flatOpenTerm $ PairRight t
-
--- | Build a right-nested tuple as an 'OpenTerm'
+-- | Build a tuple as an 'OpenTerm'
 tupleOpenTerm :: [OpenTerm] -> OpenTerm
-tupleOpenTerm = foldr pairOpenTerm unitOpenTerm
+tupleOpenTerm ts = flatOpenTerm $ TupleValue (V.fromList ts)
 
--- | Build a right-nested tuple type as an 'OpenTerm'
+-- | Build a tuple type as an 'OpenTerm'
 tupleTypeOpenTerm :: [OpenTerm] -> OpenTerm
-tupleTypeOpenTerm = foldr pairTypeOpenTerm unitTypeOpenTerm
+tupleTypeOpenTerm ts = applyGlobalOpenTerm "Prelude.Tuple" [typeListOpenTerm ts]
 
--- | Project the @n@th element of a right-nested tuple type
+typeListOpenTerm :: [OpenTerm] -> OpenTerm
+typeListOpenTerm [] =
+  ctorOpenTerm "Prelude.TypeNil" []
+typeListOpenTerm (t : ts) =
+  ctorOpenTerm "Prelude.TypeCons" [t, typeListOpenTerm ts]
+
+-- | Project the @n@th element of a tuple type
 projTupleOpenTerm :: Integer -> OpenTerm -> OpenTerm
-projTupleOpenTerm 0 t = pairLeftOpenTerm t
-projTupleOpenTerm i t = projTupleOpenTerm (i-1) (pairRightOpenTerm t)
-
--- | Build a right-nested tuple as an 'OpenTerm' but without adding a final unit
--- as the right-most element
-tupleOpenTerm' :: [OpenTerm] -> OpenTerm
-tupleOpenTerm' [] = unitOpenTerm
-tupleOpenTerm' ts = foldr1 pairTypeOpenTerm ts
-
--- | Build a right-nested tuple type as an 'OpenTerm'
-tupleTypeOpenTerm' :: [OpenTerm] -> OpenTerm
-tupleTypeOpenTerm' [] = unitTypeOpenTerm
-tupleTypeOpenTerm' ts = foldr1 pairTypeOpenTerm ts
+projTupleOpenTerm i t = flatOpenTerm $ TupleSelector t (fromInteger i) -- FIXME: unchecked fromInteger
 
 -- | Build a record value as an 'OpenTerm'
 recordOpenTerm :: [(FieldName, OpenTerm)] -> OpenTerm

@@ -482,18 +482,10 @@ instance TypeInfer (TermF TypedTerm) where
 instance TypeInfer (FlatTermF TypedTerm) where
   typeInfer (Primitive ec) =
     typeCheckWHNF $ typedVal $ primType ec
-  typeInfer UnitValue = liftTCM scUnitType
-  typeInfer UnitType = liftTCM scSort (mkSort 0)
-  typeInfer (PairValue (TypedTerm _ tx) (TypedTerm _ ty)) =
-    liftTCM scPairType tx ty
-  typeInfer (PairType (TypedTerm _ tx) (TypedTerm _ ty)) =
-    do sx <- ensureSort tx
-       sy <- ensureSort ty
-       liftTCM scSort (max sx sy)
-  typeInfer (PairLeft (TypedTerm _ tp)) =
-    ensurePairType tp >>= \(t1,_) -> return t1
-  typeInfer (PairRight (TypedTerm _ tp)) =
-    ensurePairType tp >>= \(_,t2) -> return t2
+  typeInfer (TupleValue tts) =
+    liftTCM scTupleType (map typedType (V.toList tts))
+  typeInfer (TupleSelector (TypedTerm _ tp) i) =
+    ensureTupleType tp >>= \ts -> pure (ts !! i)
 
   typeInfer (DataTypeApp d params args) =
     -- Look up the DataType structure, check the length of the params and args,
@@ -581,10 +573,10 @@ ensureRecognizer f err trm =
 ensureSort :: Term -> TCM Sort
 ensureSort tp = ensureRecognizer asSort (NotSort tp) tp
 
--- | Ensure a 'Term' is a pair type, normalizing if necessary, and return the
--- two components of that pair type
-ensurePairType :: Term -> TCM (Term, Term)
-ensurePairType tp = ensureRecognizer asPairType (NotSort tp) tp
+-- | Ensure a 'Term' is a tuple type, normalizing if necessary, and return the
+-- components of that tuple type
+ensureTupleType :: Term -> TCM [Term]
+ensureTupleType tp = ensureRecognizer asTupleType (NotSort tp) tp
 
 -- | Ensure a 'Term' is a record type, normalizing if necessary, and return the
 -- components of that record type

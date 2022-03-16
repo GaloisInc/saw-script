@@ -47,6 +47,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IMap
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Vector as V
 import Data.Traversable
 import GHC.Stack
 
@@ -142,8 +143,8 @@ evalTermF cfg lam recEval tf env =
                                       pure (VDependentPi (\x -> toTValue <$> lam t2 ((x,v) : env)))
                                     else
                                       do -- put dummy values in the environment; the term should never reference them
-                                         let val = ready VUnit
-                                         let tp  = VUnitType
+                                         let val = ready (VTuple mempty)
+                                         let tp  = VTupleType mempty
                                          VNondependentPi . toTValue <$> lam t2 ((val,tp):env)
                                   return $ TValue $ VPiType nm v body
 
@@ -158,25 +159,11 @@ evalTermF cfg lam recEval tf env =
           do pn' <- traverse evalType pn
              simPrimitive cfg pn'
 
-        UnitValue           -> return VUnit
+        TupleValue xs       -> VTuple <$> traverse recEvalDelay xs
 
-        UnitType            -> return $ TValue VUnitType
-
-        PairValue x y       -> do tx <- recEvalDelay x
-                                  ty <- recEvalDelay y
-                                  return $ VPair tx ty
-
-        PairType x y        -> do vx <- evalType x
-                                  vy <- evalType y
-                                  return $ TValue $ VPairType vx vy
-
-        PairLeft x          -> recEval x >>= \case
-                                 VPair l _r -> force l
-                                 _ -> simNeutral cfg env (NeutralPairLeft (NeutralBox x))
-
-        PairRight x         -> recEval x >>= \case
-                                 VPair _l r -> force r
-                                 _ -> simNeutral cfg env (NeutralPairRight (NeutralBox x))
+        TupleSelector x i   -> recEval x >>= \case
+                                 VTuple ys -> force (ys V.! i)
+                                 _ -> simNeutral cfg env (NeutralTupleProj (NeutralBox x) i)
 
         CtorApp c ps ts     -> do c'  <- traverse evalType c
                                   ps' <- mapM recEvalDelay ps
