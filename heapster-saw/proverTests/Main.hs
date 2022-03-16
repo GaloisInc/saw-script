@@ -167,16 +167,6 @@ arrayTests =
     [ testCase "exact"      $ passes $ [ int64array 0 3, int64array 24 3 ] ===> int64array 0 6
     , testCase "larger"     $ passes $ [ int64array 0 3, int64array 24 3 ] ===> int64array 0 5
     , testCase "not enough" $ fails  $ [ int64array 0 3, int64array 24 3 ] ===> int64array 0 7
-
-    {-
-    -- TODO Can this work? if we're building a skeleton array of borrows,
-    -- then no index on the RHS corresponds to the ith element on the left where
-    -- i % 2 == 1
-    , testCase "different shapes (smaller on left) " $ passes $
-      [ int32array 0 3, int32array 12 3] ===> int64array 0 3
-    , testCase "different shapes (smaller on right) " $ passes $
-      int64array 0 3 ===> int32array 0 6
-    -}
     ]
 
   , testGroup "sum of fields"
@@ -198,7 +188,7 @@ arrayTests =
     , testCase "memblocks array 1:1" $ passes $
       memblock_int64array 0 3 ===> int64array 0 3
     , testCase "memblocks array 2:1" $ passes $
-      [ memblock_int64array 0 3, memblock_int64array 24 4 ] ===> int64array 0 7
+      [ memblock_int64array 8 3, memblock_int64array 32 4 ] ===> int64array 8 7
     ]
 
   , testGroup "symbolic"
@@ -211,6 +201,9 @@ arrayTests =
     , testCase "borrowed symbolic field" $ passes $
       withName $ \l -> withName $ \i ->
         [atomic (int64ArrayPerm 0 l \\\\ i), int64field (bvMult 8 (toIdx i))]  ===> int64array 0 l
+    , testCase "symbolic length append" $ passes $
+      withName $ \l ->
+        [int64ArrayPerm 0 l, int64ArrayPerm (bvMult 8 (toIdx l)) l] ===> int64array 0 (bvMult 2 (toIdx l))
     ]
 
   , testGroup "borrows on rhs"
