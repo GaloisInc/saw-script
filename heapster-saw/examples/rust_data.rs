@@ -614,3 +614,10 @@ impl Clone for List20<u64> {
         }
     }
 }
+
+pub fn array_puncture() -> Vec {
+    if arr.len() > 0 {
+        arr[0] = 1;
+    }
+//    arr[1] = 2;
+}

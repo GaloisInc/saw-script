@@ -3723,6 +3723,19 @@ llvmPtr0EqExPerm :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) => prx sz ->
                     (ValuePerm (LLVMPointerType w))
 llvmPtr0EqExPerm = fmap (ValPerm_Conj1 . Perm_LLVMField) . llvmPtr0EqEx
 
+llvmExBlock :: (1 <= w, KnownNat w) =>
+  PermExpr (BVType w) -> PermExpr (BVType w) ->
+  PermExpr (LLVMShapeType w) ->
+  Mb (RNil :> RWModalityType :> LifetimeType)
+  (LLVMBlockPerm w)
+llvmExBlock off len shape =
+  nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: rw :>: l) ->
+  LLVMBlockPerm { llvmBlockRW = PExpr_Var rw,
+                  llvmBlockLifetime = PExpr_Var l,
+                  llvmBlockOffset = off,
+                  llvmBlockLen = len,
+                  llvmBlockShape = shape }
+
 -- | Create a permission to read a known value from offset 0 of an LLVM pointer
 -- in the given lifetime, i.e., return @exists y.[l]ptr ((0,R) |-> eq(e))@
 llvmRead0EqPerm :: (1 <= w, KnownNat w) => PermExpr LifetimeType ->
@@ -4791,6 +4804,36 @@ llvmSubArrayRange _ _ = error "llvmSubArrayRange"
 llvmSubArrayBorrow :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
                       LLVMArrayPerm w -> LLVMArrayBorrow w
 llvmSubArrayBorrow ap1 ap2 = RangeBorrow $ llvmSubArrayRange ap1 ap2
+
+-- | Given atomic permissions ps, filters out any q from ps such that q is
+-- borrowed from some q' also in ps
+filterBorrowedPermissions :: forall w. (1 <= w, KnownNat w) =>
+                             [AtomicPerm (LLVMPointerType w)] ->
+                             [AtomicPerm (LLVMPointerType w)]
+filterBorrowedPermissions ps = filter (not . isABorrow) ps
+  where
+    isABorrow :: AtomicPerm (LLVMPointerType w) -> Bool
+    isABorrow p =
+      case p of
+        (llvmAtomicPermRange -> Just r) ->
+            r `elem` borrowedRanges
+        Perm_LLVMArray a ->
+          llvmArrayAbsOffsets a `elem` borrowedRanges
+        _ -> False
+
+    borrowedRanges :: [BVRange w]
+    borrowedRanges = ps >>= go
+
+    go :: AtomicPerm (LLVMPointerType w) -> [BVRange w]
+    go p =
+      case p of
+        Perm_LLVMArray arrayPerm ->
+          goBorrow arrayPerm <$> llvmArrayBorrows arrayPerm
+        _ -> []
+
+    goBorrow :: LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
+    goBorrow = llvmArrayBorrowOffsets
+
 
 -- | Return the propositions stating that the first array permission @ap@
 -- contains the second @sub_ap@, meaning that array indices that are in @sub_ap@

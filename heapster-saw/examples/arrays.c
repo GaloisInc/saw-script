@@ -31,6 +31,21 @@ int64_t contains0 (int64_t *arr, uint64_t len) {
   return 0;
 }
 
+int64_t poke_small (int64_t *arr) {
+  arr[2] = 0;
+  return 0;
+}
+
+int64_t poke (int64_t *arr, int64_t i) {
+  if (i < 2) {
+    arr[1] = 0;
+    poke_small(&arr[i]);
+  }
+  return 0;
+}
+
+int64_t test_array_append(int64_t *arr) {return 0;}
+
 /* Test if an array contains 0 */
 int64_t contains0_after (int64_t *arr, uint64_t len, uint64_t i) {
   for (; i < len; ++i) {

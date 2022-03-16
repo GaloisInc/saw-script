@@ -28,6 +28,28 @@ heapster_typecheck_fun env "contains0"
   "(len:bv 64). arg0:int64array<len>, arg1:eq(llvmword(len)) -o \
               \ arg0:int64array<len>, arg1:true, ret:int64<>";
 
+// heapster_set_debug_level env 0;
+// heapster_typecheck_fun env "poke_small"
+//   "(). arg0:int64array<5> -o \
+//               \ arg0:int64array<5>,ret:int64<>";
+// heapster_set_debug_level env 0;
+//
+// heapster_set_debug_level env 1;
+// heapster_typecheck_fun env "test_array_append"
+//   // "(). arg0:array(W,0,<3,*8,fieldsh(int64<>))*array(W,24,<3,*8,fieldsh(int64<>))*ptr((W,48) |-> int64<>) -o \
+//   //    \ arg0:int64array<7>,ret:int64<>";
+//   "(). arg0:array(W,0,<3,*8,fieldsh(int64<>))*array(W,24,<3,*8,fieldsh(int64<>))*ptr((W,48) |-> int64<>) -o \
+//      \ arg0:array(W,0,<3,*8,fieldsh(int64<>)),ret:int64<>";
+//
+// heapster_set_debug_level env 0;
+
+//  heapster_set_debug_level env 0;
+//  heapster_typecheck_fun env "poke"
+//    "(). arg0:int64array<8>,arg1:int64<> -o \
+//       \ arg0:int64array<8>,ret:int64<>";
+//  heapster_set_debug_level env 0;
+
+
 heapster_typecheck_fun env "zero_array"
   "(len:bv 64). arg0:int64array<len>, arg1:eq(llvmword(len)) -o \
               \ arg0:int64array<len>, arg1:true, ret:true";

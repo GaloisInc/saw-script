@@ -1,7 +1,4 @@
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -11,6 +8,7 @@
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Main where
 
@@ -23,6 +21,7 @@ import Lang.Crucible.LLVM.MemModel (LLVMPointerType)
 import Verifier.SAW.Heapster.Implication (proveVarImpl, checkVarImpl)
 import Test.Tasty.HUnit
 import Lang.Crucible.Types (BVType)
+import GHC.TypeLits
 
 infix 5 ===>
 infixl 8 \\
@@ -90,28 +89,54 @@ checkImpl lhs rhs = mbLift (nu $ \x -> checkVarImpl (pset x) (proveVarImpl x per
     perm_rhs = emptyMb rhs
     pset x = PermSet { _varPermMap = singleton x perm_lhs, _distPerms = DistPermsNil }
 
-intShape :: PermExpr (LLVMShapeType 64)
-intShape = PExpr_FieldShape $ LLVMFieldShape intValuePerm
+memblockPerm :: (ArrayIndexExpr a1, ArrayIndexExpr a2) =>
+             a1 -> a2 -> PermExpr (LLVMShapeType 64) -> LLVMBlockPerm 64
+memblockPerm off len shape  = LLVMBlockPerm
+ { llvmBlockRW = PExpr_Write
+ , llvmBlockLifetime = PExpr_Always
+ , llvmBlockOffset = toIdx off
+ , llvmBlockLen = toIdx len
+ , llvmBlockShape = shape
+ }
 
-intValuePerm :: ValuePerm (LLVMPointerType 64)
+intValuePerm :: (KnownNat sz, 1 <= sz) => ValuePerm (LLVMPointerType sz)
 intValuePerm = ValPerm_Exists $ nu $ \x -> ValPerm_Eq (PExpr_LLVMWord (PExpr_Var x))
 
-intFieldPerm :: ArrayIndexExpr a => a -> LLVMFieldPerm 64 64
-intFieldPerm off = LLVMFieldPerm
+fieldShape :: (KnownNat sz, 1 <= sz) => ValuePerm (LLVMPointerType sz) -> PermExpr (LLVMShapeType 64)
+fieldShape p = PExpr_FieldShape (LLVMFieldShape p)
+
+fieldPerm :: ArrayIndexExpr a => a -> ValuePerm (LLVMPointerType w) -> LLVMFieldPerm 64 w
+fieldPerm off contents = LLVMFieldPerm
   { llvmFieldRW = PExpr_Write
   , llvmFieldLifetime = PExpr_Always
   , llvmFieldOffset = toIdx off
-  , llvmFieldContents = intValuePerm
+  , llvmFieldContents = contents
   }
 
+field :: (KnownNat sz, 1 <= sz, ArrayIndexExpr a) =>
+            a -> ValuePerm (LLVMPointerType sz) -> AtomicPerm (LLVMPointerType 64)
+field off contents = Perm_LLVMField (fieldPerm off contents)
+
+memblock_int64field :: (ArrayIndexExpr a) => a -> AtomicPerm (LLVMPointerType 64)
+memblock_int64field off = Perm_LLVMBlock $ memblockPerm off 8 (fieldShape (intValuePerm @64))
+
+memblock_int64array :: (ArrayIndexExpr a1, ArrayIndexExpr a2) => a1 -> a2 -> AtomicPerm (LLVMPointerType 64)
+memblock_int64array off len = Perm_LLVMBlock $ memblockPerm off (bvMult 8 (toIdx len)) (arrayShape len 8 (fieldShape (intValuePerm @64)))
+
 int64field :: ArrayIndexExpr a => a -> AtomicPerm (LLVMPointerType 64)
-int64field off = Perm_LLVMField (intFieldPerm off)
+int64field off = field off (intValuePerm :: ValuePerm (LLVMPointerType 64))
 
 int64array :: (ArrayIndexExpr a1, ArrayIndexExpr a2) => a1 -> a2 -> AtomicPerm (LLVMPointerType 64)
 int64array off len = Perm_LLVMArray (int64ArrayPerm off len)
 
+int32array :: (ArrayIndexExpr a1, ArrayIndexExpr a2) => a1 -> a2 -> AtomicPerm (LLVMPointerType 64)
+int32array off len = Perm_LLVMArray (int32ArrayPerm off len)
+
 int64ArrayPerm :: (ArrayIndexExpr a1, ArrayIndexExpr a2) => a1 -> a2 -> LLVMArrayPerm 64
-int64ArrayPerm off len = arrayPerm (toIdx off) (toIdx len) 8 intShape
+int64ArrayPerm off len = arrayPerm (toIdx off) (toIdx len) 8 (fieldShape (intValuePerm @ 64))
+
+int32ArrayPerm :: (ArrayIndexExpr a1, ArrayIndexExpr a2) => a1 -> a2 -> LLVMArrayPerm 64
+int32ArrayPerm off len = arrayPerm (toIdx off) (toIdx len) 4 (fieldShape (intValuePerm @ 32))
 
 arrayPerm ::
   PermExpr (BVType w) ->
@@ -129,6 +154,9 @@ arrayPerm off len stride shape  = LLVMArrayPerm
   , llvmArrayBorrows = []
   }
 
+arrayShape :: (ArrayIndexExpr a) => a -> Bytes -> PermExpr (LLVMShapeType 64) -> PermExpr (LLVMShapeType 64)
+arrayShape len = PExpr_ArrayShape (toIdx len)
+
 arrayTests :: TestTree
 arrayTests =
   testGroup "arrayTests"
@@ -139,6 +167,16 @@ arrayTests =
     [ testCase "exact"      $ passes $ [ int64array 0 3, int64array 24 3 ] ===> int64array 0 6
     , testCase "larger"     $ passes $ [ int64array 0 3, int64array 24 3 ] ===> int64array 0 5
     , testCase "not enough" $ fails  $ [ int64array 0 3, int64array 24 3 ] ===> int64array 0 7
+
+    {-
+    -- TODO Can this work? if we're building a skeleton array of borrows,
+    -- then no index on the RHS corresponds to the ith element on the left where
+    -- i % 2 == 1
+    , testCase "different shapes (smaller on left) " $ passes $
+      [ int32array 0 3, int32array 12 3] ===> int64array 0 3
+    , testCase "different shapes (smaller on right) " $ passes $
+      int64array 0 3 ===> int32array 0 6
+    -}
     ]
 
   , testGroup "sum of fields"
@@ -150,6 +188,17 @@ arrayTests =
       [ int64field 0, int64field 8, int64field 16 ] ===> int64array 8 3
     , testCase "insufficient fields (2)" $ fails $
       [ int64field 0, int64field 8, int64field 16 ] ===> int64array 0 4
+    ]
+
+  , testGroup "mix of permission types"
+    [ testCase "memblocks 1:1" $ passes $
+      memblock_int64field 0 ===> int64array 0 1
+    , testCase "memblocks insufficient" $ fails $
+      [ memblock_int64field 0, memblock_int64field 8 ] ===> int64array 0 3
+    , testCase "memblocks array 1:1" $ passes $
+      memblock_int64array 0 3 ===> int64array 0 3
+    , testCase "memblocks array 2:1" $ passes $
+      [ memblock_int64array 0 3, memblock_int64array 24 4 ] ===> int64array 0 7
     ]
 
   , testGroup "symbolic"
@@ -171,6 +220,10 @@ arrayTests =
     , testCase "sum of matched borrows" $ passes $
       [ int64ArrayPerm 0 3 \\\ (1,2) , int64ArrayPerm 24 3 ]
       ===> int64ArrayPerm 0 6 \\\ (1,2)
+
+    , testCase "borrowed lhs/rhs offset" $ passes $
+      [ int64ArrayPerm 24 3,
+        int64ArrayPerm 48 2 ] ===> int64ArrayPerm 24 5 \\\ (3, 2)
 
     , testCase "rhs borrow intersects two lhs borrows " $ fails $
       int64ArrayPerm 0 10 \\\ (1, 3) \\\ (7,3) ===> int64ArrayPerm 0 10 \\\ (2,6)

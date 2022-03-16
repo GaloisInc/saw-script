@@ -2677,16 +2677,15 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
 -- translate1/translateClosed ( zeroOfType <- get the default element )
-  [nuMP| SImpl_LLVMArrayBorrowed x mb_bp mb_ap |] ->
+  [nuMP| SImpl_LLVMArrayBorrowed x _ mb_ap |] ->
     do (w_tm, len_tm, elem_tp, ap_tp_trans) <- translateLLVMArrayPerm mb_ap
-       let zeroElt = mbMapCl $(mkClosed [| zeroOfType . BVRepr . shapeLLVMTypeWidth |]) (mbLLVMArrayCellShape mb_ap)
-       zeroTerm <- translate1 zeroElt
-       let arr_term =
-             applyOpenTermMulti (globalOpenTerm "Prelude.repeatBVVec")
-             [w_tm, len_tm, elem_tp, zeroTerm]
        withPermStackM (:>: translateVar x)
-         (\pctx ->
+         (\(pctx :>: ptrans_block) ->
+           let arr_term =
+                 applyOpenTermMulti (globalOpenTerm "Prelude.repeatBVVec")
+                 [w_tm, len_tm, elem_tp, transTerm1 ptrans_block] in
            pctx :>:
+           ptrans_block :>:
            PTrans_Conj [APTrans_LLVMArray $ typeTransF ap_tp_trans [arr_term]])
          m
 
