@@ -28,6 +28,7 @@ module Verifier.SAW.OpenTerm (
   stringLitOpenTerm, stringTypeOpenTerm,
   trueOpenTerm, falseOpenTerm, boolOpenTerm, boolTypeOpenTerm,
   arrayValueOpenTerm, vectorTypeOpenTerm, bvLitOpenTerm, bvTypeOpenTerm,
+  pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
   recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, extCnsOpenTerm,
@@ -187,6 +188,22 @@ bvTypeOpenTerm :: Integral a => a -> OpenTerm
 bvTypeOpenTerm n =
   applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
   [natOpenTerm (fromIntegral n), boolTypeOpenTerm]
+
+-- | Build an 'OpenTerm' for a pair
+pairOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
+pairOpenTerm t1 t2 = tupleOpenTerm [t1, t2]
+
+-- | Build an 'OpenTerm' for a pair type
+pairTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
+pairTypeOpenTerm t1 t2 = tupleTypeOpenTerm [t1, t2]
+
+-- | Build an 'OpenTerm' for the left projection of a pair
+pairLeftOpenTerm :: OpenTerm -> OpenTerm
+pairLeftOpenTerm t = projTupleOpenTerm 0 t
+
+-- | Build an 'OpenTerm' for the right projection of a pair
+pairRightOpenTerm :: OpenTerm -> OpenTerm
+pairRightOpenTerm t = projTupleOpenTerm 1 t
 
 -- | Build a tuple as an 'OpenTerm'
 tupleOpenTerm :: [OpenTerm] -> OpenTerm
