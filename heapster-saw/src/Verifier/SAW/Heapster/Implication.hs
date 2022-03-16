@@ -6555,6 +6555,9 @@ proveVarLLVMArrayH x _p psubst ps mb_ap
         Perm_LLVMArray ap -> Just $ BVRange (llvmArrayOffset ap) (llvmArrayLengthBytes ap)
         _ -> Nothing
 
+-- Otherwise, try and build a completely borrowed array that references existing
+-- permissions that cover the range of mb_ap, and recurse (hitting the special
+-- case above).
 proveVarLLVMArrayH x first_p psubst ps mb_ap
   | Just ap <- partialSubst psubst mb_ap
   , Just borrowed <- borrowedLLVMArrayForArray ps ap =
