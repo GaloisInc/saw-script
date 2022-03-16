@@ -7,7 +7,7 @@ include Makefile.coq
 
 # If running in CI, always set $SAW=`which saw`. Otherwise, if saw is not in the
 # current path, fall back on cabal run saw
-# SAW=$(shell which saw)
+SAW=$(shell which saw)
 ifeq ($(SAW),)
   ifeq ($(CI),)
 	    SAW=cabal run saw

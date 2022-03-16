@@ -252,7 +252,7 @@ heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
 
 // Box<List20<u64>>::clone
 box_list20_u64_clone_sym <- heapster_find_symbol_with_type env
-  "alloc..boxed..Box$LT$T$C$A$GT$$u20$as$u20$core..clone..Clone$GT$5clone"
+  "alloc..boxed..Box$LT$T$GT$$u20$as$u20$core..clone..Clone$GT$5clone"
   "%\"List20<u64>\"*(%\"List20<u64>\"**)";
 heapster_assume_fun_rename_prim env box_list20_u64_clone_sym "box_list20_u64_clone"
   "<'a> fn(x:&'a Box<List20<u64>>) -> Box<List20<u64>>";
@@ -309,30 +309,30 @@ heapster_assume_fun_rename_prim env panicking_panic_sym "panicking_panic"
 
 // HashMap::insert
 // FIXME: we currently pretend this always returns None
-// hashmap_u64_u64_insert_sym <- heapster_find_symbol_with_type env
-//   "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert"
-//   "{ i64,\
-// \  i64 }(%\"std::collections::hash::map::HashMap<u64, u64, std::collections::hash::map::RandomState>\"*,\
-// \        i64, i64)";
-// heapster_assume_fun_rename_prim env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert"
-//   "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>";
-// //heapster_assume_fun_rename env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert"
-// //  "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>"
-// //  "\\ (endl:HashMap (Vec 64 Bool) (Vec 64 Bool) * #() -> \
-// //    \       CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) \
-// //    \ (h:HashMap (Vec 64 Bool) (Vec 64 Bool)) (k:Vec 64 Bool) (v:Vec 64 Bool) -> \
-// //    \ returnM ((#() -> CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) * \
-// //    \          Either #() (Vec 64 Bool) * #()) \
-// //    \         ((\\ (_:#()) -> returnM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #()) \
-// //    \                                 (Cons (Vec 64 Bool * Vec 64 Bool) (k,v) h, ())), \
-// //    \          Left #() (Vec 64 Bool) (), ())";
+hashmap_u64_u64_insert_sym <- heapster_find_symbol_with_type env
+  "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert"
+  "{ i64,\
+\  i64 }(%\"std::collections::hash::map::HashMap<u64, u64, std::collections::hash::map::RandomState>\"*,\
+\        i64, i64)";
+heapster_assume_fun_rename_prim env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert"
+  "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>";
+//heapster_assume_fun_rename env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert"
+//  "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>"
+//  "\\ (endl:HashMap (Vec 64 Bool) (Vec 64 Bool) * #() -> \
+//    \       CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) \
+//    \ (h:HashMap (Vec 64 Bool) (Vec 64 Bool)) (k:Vec 64 Bool) (v:Vec 64 Bool) -> \
+//    \ returnM ((#() -> CompM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #())) * \
+//    \          Either #() (Vec 64 Bool) * #()) \
+//    \         ((\\ (_:#()) -> returnM (HashMap (Vec 64 Bool) (Vec 64 Bool) * #()) \
+//    \                                 (Cons (Vec 64 Bool * Vec 64 Bool) (k,v) h, ())), \
+//    \          Left #() (Vec 64 Bool) (), ())";
 
-// hashmap_String_List64_insert_sym <- heapster_find_symbol_with_type env
-//   "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert"
-//   "void(%\"core::option::Option<List64>\"*,\
-// \     %\"std::collections::hash::map::HashMap<alloc::string::String, List64, std::collections::hash::map::RandomState>\"*,\
-// \     %\"alloc::string::String\"*, %List64*)";
-// // FIXME: assume hashmap_String_List64_insert_sym
+hashmap_String_List64_insert_sym <- heapster_find_symbol_with_type env
+  "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert"
+  "void(%\"core::option::Option<List64>\"*,\
+\     %\"std::collections::hash::map::HashMap<alloc::string::String, List64, std::collections::hash::map::RandomState>\"*,\
+\     %\"alloc::string::String\"*, %List64*)";
+// FIXME: assume hashmap_String_List64_insert_sym
 
 // String::deref
 string_deref <- heapster_find_trait_method_symbol env
@@ -434,14 +434,6 @@ heapster_assume_fun_rename_prim env begin_panic_sym "begin_panic" "<'a, 'b> fn(&
 /***
  *** Type-Checked Functions
  ***/
-heapster_set_debug_level env 1;
-array_puncture_sym <- heapster_find_symbol env "14array_puncture";
-heapster_get_cfg env array_puncture_sym;
-heapster_typecheck_fun_rename env array_puncture_sym "array_puncture"
-"<'a> fn (arr:&'a Vec<u64>) -> ()";
-
-heapster_set_debug_level env 0;
-
 get_out_sym <- heapster_find_symbol env "7get_out";
 heapster_typecheck_fun_rename env get_out_sym "get_out" "<> fn() -> !";
 
@@ -597,6 +589,7 @@ heapster_set_translation_checks env false;
 list20_head_sym <- heapster_find_symbol env "11list20_head";
 heapster_typecheck_fun_rename env list20_head_sym "list20_head"
   "<'a> fn (x:&'a List20<List<u64>>) -> &'a List<u64>";
+
 
 /***
  *** Export to Coq
