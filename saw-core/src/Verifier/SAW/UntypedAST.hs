@@ -67,17 +67,14 @@ data Term
   | Lambda Pos TermCtx Term
   | Pi Pos TermCtx Term
   | Recursor (Maybe ModuleName) (PosPair Text)
-  | UnitValue Pos
-  | UnitType Pos
     -- | New-style records
   | RecordValue Pos [(PosPair FieldName, Term)]
   | RecordType Pos [(PosPair FieldName, Term)]
   | RecordProj Term FieldName
-    -- | Simple pairs
-  | PairValue Pos Term Term
-  | PairType Pos Term Term
-  | PairLeft Term
-  | PairRight Term
+    -- | Tuples
+  | TupleValue Pos [Term]
+  | TupleType Pos [Term]
+  | TupleProj Term Int
     -- | Identifies a type constraint on the term, i.e., a type ascription
   | TypeConstraint Term Pos Term
   | NatLit Pos Natural
@@ -117,15 +114,12 @@ instance Positioned Term where
       App x _              -> pos x
       Pi p _ _             -> p
       Recursor _ i         -> pos i
-      UnitValue p          -> p
-      UnitType p           -> p
       RecordValue p _      -> p
       RecordType p _       -> p
       RecordProj x _       -> pos x
-      PairValue p _ _      -> p
-      PairType p _ _       -> p
-      PairLeft x           -> pos x
-      PairRight x          -> pos x
+      TupleValue p _       -> p
+      TupleType p _        -> p
+      TupleProj x _        -> pos x
       TypeConstraint _ p _ -> p
       NatLit p _           -> p
       StringLit p _        -> p
@@ -240,21 +234,14 @@ asApp = go []
 
 -- | Build a tuple value @(x1, .., xn)@.
 mkTupleValue :: Pos -> [Term] -> Term
-mkTupleValue p [] = UnitValue p
 mkTupleValue _ [x] = x
-mkTupleValue p (x:xs) = PairValue (pos x) x (mkTupleValue p xs)
+mkTupleValue p xs = TupleValue p xs
 
 -- | Build a tuple type @#(x1, .., xn)@.
 mkTupleType :: Pos -> [Term] -> Term
-mkTupleType p [] = UnitType p
 mkTupleType _ [x] = x
-mkTupleType p (x:xs) = PairType (pos x) x (mkTupleType p xs)
+mkTupleType p xs = TupleType p xs
 
--- | Build a projection @t.i@ of a tuple. NOTE: This function does not
--- work to access the last component in a tuple, since it always
--- generates a @PairLeft@.
+-- | Build a projection @t.i@ of a tuple.
 mkTupleSelector :: Term -> Natural -> Term
-mkTupleSelector t i
-  | i == 1    = PairLeft t
-  | i > 1     = mkTupleSelector (PairRight t) (i - 1)
-  | otherwise = error "mkTupleSelector: non-positive index"
+mkTupleSelector t i = TupleProj t (fromIntegral i) -- FIXME: unchecked fromIntegral

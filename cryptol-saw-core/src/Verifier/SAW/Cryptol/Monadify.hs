@@ -224,7 +224,7 @@ data MonType
   = MTyForall LocalName MonKind (MonType -> MonType)
   | MTyArrow MonType MonType
   | MTySeq OpenTerm MonType
-  | MTyPair MonType MonType
+  | MTyTuple [MonType]
   | MTyRecord [(FieldName, MonType)]
   | MTyBase MonKind OpenTerm -- A "base type" or type var of a given kind
   | MTyNum OpenTerm
@@ -241,7 +241,7 @@ boolMonType = mkMonType0 $ globalOpenTerm "Prelude.Bool"
 monTypeIsMono :: MonType -> Bool
 monTypeIsMono (MTyForall _ _ _) = False
 monTypeIsMono (MTyArrow tp1 tp2) = monTypeIsMono tp1 && monTypeIsMono tp2
-monTypeIsMono (MTyPair tp1 tp2) = monTypeIsMono tp1 && monTypeIsMono tp2
+monTypeIsMono (MTyTuple tps) = all monTypeIsMono tps
 monTypeIsMono (MTyRecord tps) = all (monTypeIsMono . snd) tps
 monTypeIsMono (MTySeq _ tp) = monTypeIsMono tp
 monTypeIsMono (MTyBase _ _) = True
@@ -253,7 +253,7 @@ isBaseType :: MonType -> Bool
 isBaseType (MTyForall _ _ _) = False
 isBaseType (MTyArrow _ _) = False
 isBaseType (MTySeq _ _) = True
-isBaseType (MTyPair _ _) = True
+isBaseType (MTyTuple _) = True
 isBaseType (MTyRecord _) = True
 isBaseType (MTyBase (MKType _) _) = True
 isBaseType (MTyBase _ _) = True
@@ -273,10 +273,10 @@ monTypeKind (MTyArrow t1 t2) =
   do s1 <- monTypeKind t1 >>= monKindToSort
      s2 <- monTypeKind t2 >>= monKindToSort
      return $ MKType $ maxSort [s1, s2]
-monTypeKind (MTyPair tp1 tp2) =
-  do sort1 <- monTypeKind tp1 >>= monKindToSort
-     sort2 <- monTypeKind tp2 >>= monKindToSort
-     return $ MKType $ maxSort [sort1, sort2]
+monTypeKind (MTyTuple tps) =
+  do kinds <- traverse monTypeKind tps
+     sorts <- traverse monKindToSort kinds
+     pure $ MKType $ maxSort sorts
 monTypeKind (MTyRecord tps) =
   do sorts <- mapM (monTypeKind . snd >=> monKindToSort) tps
      return $ MKType $ maxSort sorts
@@ -319,8 +319,8 @@ toArgType (MTyArrow t1 t2) =
   arrowOpenTerm "_" (toArgType t1) (toCompType t2)
 toArgType (MTySeq n t) =
   applyOpenTermMulti (globalOpenTerm "CryptolM.mseq") [n, toArgType t]
-toArgType (MTyPair mtp1 mtp2) =
-  pairTypeOpenTerm (toArgType mtp1) (toArgType mtp2)
+toArgType (MTyTuple mtps) =
+  tupleTypeOpenTerm (map toArgType mtps)
 toArgType (MTyRecord tps) =
   recordTypeOpenTerm $ map (\(f,tp) -> (f, toArgType tp)) tps
 toArgType (MTyBase _ t) = t
@@ -399,8 +399,8 @@ monadifyType ctx tp@(asPi -> Just (x, tp_in, tp_out)) =
   MTyArrow (monadifyType ctx tp_in)
   (monadifyType ((x,tp,Nothing):ctx) tp_out)
 monadifyType _ (asTupleType -> Just []) = mkMonType0 unitTypeOpenTerm
-monadifyType ctx (asPairType -> Just (tp1, tp2)) =
-  MTyPair (monadifyType ctx tp1) (monadifyType ctx tp2)
+monadifyType ctx (asTupleType -> Just tps) =
+  MTyTuple (map (monadifyType ctx) tps)
 monadifyType ctx (asRecordType -> Just tps) =
   MTyRecord $ map (\(fld,tp) -> (fld, monadifyType ctx tp)) $ Map.toList tps
 monadifyType ctx (asDataType -> Just (eq_pn, [k_trm, tp1, tp2]))
@@ -535,7 +535,7 @@ monTypeIsPure :: MonType -> Bool
 monTypeIsPure (MTyForall _ _ _) = False -- NOTE: this could potentially be true
 monTypeIsPure (MTyArrow _ _) = False
 monTypeIsPure (MTySeq _ _) = False
-monTypeIsPure (MTyPair mtp1 mtp2) = monTypeIsPure mtp1 && monTypeIsPure mtp2
+monTypeIsPure (MTyTuple mtps) = all monTypeIsPure mtps
 monTypeIsPure (MTyRecord fld_mtps) = all (monTypeIsPure . snd) fld_mtps
 monTypeIsPure (MTyBase _ _) = True
 monTypeIsPure (MTyNum _) = True
@@ -550,10 +550,9 @@ monTypeIsSemiPure (MTyForall _ k tp_f) =
 monTypeIsSemiPure (MTyArrow tp_in tp_out) =
   monTypeIsPure tp_in && monTypeIsSemiPure tp_out
 monTypeIsSemiPure (MTySeq _ _) = False
-monTypeIsSemiPure (MTyPair mtp1 mtp2) =
-  -- NOTE: functions in pairs are not semi-pure; only pure types in pairs are
-  -- semi-pure
-  monTypeIsPure mtp1 && monTypeIsPure mtp2
+monTypeIsSemiPure (MTyTuple mtps) = all monTypeIsPure mtps
+  -- NOTE: functions in tuples are not semi-pure; only pure types in
+  -- tuples are semi-pure
 monTypeIsSemiPure (MTyRecord fld_mtps) =
   -- Same as pairs, record types are only semi-pure if they are pure
   all (monTypeIsPure . snd) fld_mtps
@@ -836,24 +835,24 @@ monadifyTerm' (Just mtp@(MTyArrow _ _)) t =
   get >>= \table ->
   return $ monadifyLambdas (monStEnv ro_st) table (monStCtx ro_st) mtp t
 -}
-monadifyTerm' (Just mtp@(MTyPair mtp1 mtp2)) (asPairValue ->
-                                              Just (trm1, trm2)) =
-  fromArgTerm mtp <$> (pairOpenTerm <$>
-                       monadifyArgTerm (Just mtp1) trm1 <*>
-                       monadifyArgTerm (Just mtp2) trm2)
+monadifyTerm' (Just mtp@(MTyTuple mtps)) (asTupleValue -> Just trms)
+  | length mtps == length trms =
+    fromArgTerm mtp <$>
+    tupleOpenTerm <$>
+    zipWithM monadifyArgTerm (map Just mtps) trms
 monadifyTerm' (Just mtp@(MTyRecord fs_mtps)) (asRecordValue -> Just trm_map)
   | length fs_mtps == Map.size trm_map
   , (fs,mtps) <- unzip fs_mtps
   , Just trms <- mapM (\f -> Map.lookup f trm_map) fs =
     fromArgTerm mtp <$> recordOpenTerm <$> zip fs <$>
     zipWithM monadifyArgTerm (map Just mtps) trms
-monadifyTerm' _ (asPairSelector -> Just (trm, False)) =
+monadifyTerm' _ (asTupleSelector -> Just (trm, i)) =
   do mtrm <- monadifyArg Nothing trm
-     mtp <- case getMonType mtrm of
-       MTyPair t _ -> return t
-       _ -> fail "Monadification failed: projection on term of non-pair type"
-     return $ fromArgTerm mtp $
-       pairLeftOpenTerm $ toArgTerm mtrm
+     mtp <-
+       case getMonType mtrm of
+         MTyTuple ts | i < length ts -> pure (ts !! i)
+         _ -> fail "Monadification failed: projection on term of non-tuple type"
+     pure $ fromArgTerm mtp $ projTupleOpenTerm (toInteger i) $ toArgTerm mtrm
 monadifyTerm' (Just mtp@(MTySeq n mtp_elem)) (asFTermF ->
                                               Just (ArrayValue _ trms)) =
   do trms' <- traverse (monadifyArgTerm $ Just mtp_elem) trms
@@ -861,13 +860,6 @@ monadifyTerm' (Just mtp@(MTySeq n mtp_elem)) (asFTermF ->
        applyOpenTermMulti (globalOpenTerm "CryptolM.seqToMseq")
        [n, toArgType mtp_elem,
         flatOpenTerm $ ArrayValue (toArgType mtp_elem) trms']
-monadifyTerm' _ (asPairSelector -> Just (trm, True)) =
-  do mtrm <- monadifyArg Nothing trm
-     mtp <- case getMonType mtrm of
-       MTyPair _ t -> return t
-       _ -> fail "Monadification failed: projection on term of non-pair type"
-     return $ fromArgTerm mtp $
-       pairRightOpenTerm $ toArgTerm mtrm
 monadifyTerm' _ (asRecordSelector -> Just (trm, fld)) =
   do mtrm <- monadifyArg Nothing trm
      mtp <- case getMonType mtrm of

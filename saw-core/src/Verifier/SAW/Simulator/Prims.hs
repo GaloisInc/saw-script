@@ -1194,9 +1194,9 @@ muxValue bp tp0 b = value tp0
               y <- g a
               value tp' x y
 
-    value VUnitType VUnit VUnit = return VUnit
-    value (VPairType t1 t2) (VPair x1 x2) (VPair y1 y2) =
-      VPair <$> thunk t1 x1 y1 <*> thunk t2 x2 y2
+    value (VTupleType ts) (VTuple xs) (VTuple ys)
+      | V.length ts == V.length xs && V.length ts == V.length ys
+      = VTuple <$> V.sequence (V.zipWith3 thunk ts xs ys)
 
     value (VRecordType fs) (VRecordValue elems1) (VRecordValue elems2) =
       do let em1 = Map.fromList elems1

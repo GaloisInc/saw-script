@@ -27,9 +27,6 @@ module Verifier.SAW.Recognizer
   , asApp
   , (<@>), (@>), (<@)
   , asApplyAll
-  , asPairType
-  , asPairValue
-  , asPairSelector
   , asTupleType
   , asTupleValue
   , asTupleSelector
@@ -76,6 +73,7 @@ import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
+import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
 import Verifier.SAW.Term.Functor
@@ -161,63 +159,29 @@ asApplyAll = go []
             Nothing -> (t, xs)
             Just (t', x) -> go (x : xs) t'
 
-asPairType :: Recognizer Term (Term, Term)
-asPairType t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairType x y -> return (x, y)
-    _            -> Nothing
-
-asPairValue :: Recognizer Term (Term, Term)
-asPairValue t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairValue x y -> return (x, y)
-    _             -> Nothing
-
-asPairSelector :: Recognizer Term (Term, Bool)
-asPairSelector t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairLeft x  -> return (x, False)
-    PairRight x -> return (x, True)
-    _           -> Nothing
-
-destTupleType :: Term -> [Term]
-destTupleType t =
-  case unwrapTermF t of
-    FTermF (PairType x y) -> x : destTupleType y
-    _ -> [t]
-
-destTupleValue :: Term -> [Term]
-destTupleValue t =
-  case unwrapTermF t of
-    FTermF (PairValue x y) -> x : destTupleType y
-    _ -> [t]
+asTypeList :: Recognizer Term [Term]
+asTypeList (asCtor -> Just (c, []))
+  | primName c == preludeTypeNilIdent = Just []
+asTypeList (asCtor -> Just (c, [t, asTypeList -> Just ts]))
+  | primName c == preludeTypeConsIdent = Just (t : ts)
+asTypeList _ = Nothing
 
 asTupleType :: Recognizer Term [Term]
-asTupleType t =
-  do ftf <- asFTermF t
-     case ftf of
-       UnitType     -> Just []
-       PairType x y -> Just (x : destTupleType y)
-       _            -> Nothing
+asTupleType = isGlobalDef "Prelude.Tuple" @> asTypeList
 
 asTupleValue :: Recognizer Term [Term]
 asTupleValue t =
   do ftf <- asFTermF t
      case ftf of
-       UnitValue     -> Just []
-       PairValue x y -> Just (x : destTupleValue y)
+       TupleValue xs -> Just (V.toList xs)
        _             -> Nothing
 
 asTupleSelector :: Recognizer Term (Term, Int)
-asTupleSelector t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairLeft x  -> return (x, 1)
-    PairRight y -> do (x, i) <- asTupleSelector y; return (x, i+1)
-    _           -> Nothing
+asTupleSelector t =
+  do ftf <- asFTermF t
+     case ftf of
+       TupleSelector x i -> Just (x, i)
+       _                 -> Nothing
 
 asRecordType :: Recognizer Term (Map FieldName Term)
 asRecordType t = do
