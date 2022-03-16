@@ -566,8 +566,8 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
        arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
          toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
        applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ arguments
-       applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i ->
-         scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
+       applied_func_selectors <- forM [0 .. (length fixpoint_substitution_as_list - 1)] $ \i ->
+         scTupleSelector sc applied_func i
        result_substitution <- MapF.fromList <$> zipWithM
          (\(MapF.Pair variable _) applied_func_selector ->
            MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)

@@ -145,13 +145,6 @@ asLRTList (asCtor -> Just (primName -> "Prelude.LRT_Cons", [lrt, lrts])) =
      (tp_norm_closed :) <$> asLRTList lrts
 asLRTList t = throwMRFailure (MalformedLetRecTypes t)
 
--- | Match a right-nested series of pairs. This is similar to 'asTupleValue'
--- except that it expects a unit value to always be at the end.
-asNestedPairs :: Recognizer Term [Term]
-asNestedPairs (asPairValue -> Just (x, asNestedPairs -> Just xs)) = Just (x:xs)
-asNestedPairs (asFTermF -> Just UnitValue) = Just []
-asNestedPairs _ = Nothing
-
 -- | Bind fresh function variables for a @letRecM@ or @multiFixM@ with the given
 -- @LetRecTypes@ and definitions for the function bodies as a lambda
 mrFreshLetRecVars :: Term -> Term -> MRM [Term]
@@ -169,7 +162,7 @@ mrFreshLetRecVars lrts defs_f =
     -- the definitions of the individual letrec-bound functions in terms of the
     -- new function constants
     defs_tm <- mrApplyAll defs_f fun_tms
-    defs <- case asNestedPairs defs_tm of
+    defs <- case asTupleValue defs_tm of
       Just defs -> return defs
       Nothing -> throwMRFailure (MalformedDefsFun defs_f)
 
