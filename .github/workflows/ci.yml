@@ -271,6 +271,10 @@ jobs:
       # Coq translator and builds them; if we do other Coq tests, these steps
       # should become their own build artifact, to avoid re-compiling the Coq
       # libraries
+      - working-directory: saw-core-coq/saw
+        shell: bash
+        run: saw generate_scaffolding.saw
+
       - working-directory: saw-core-coq/coq
         shell: bash
         run: opam exec -- make -j
