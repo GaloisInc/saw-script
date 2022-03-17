@@ -272,6 +272,7 @@ jobs:
       # should become their own build artifact, to avoid re-compiling the Coq
       # libraries
       - working-directory: saw-core-coq/saw
+        path: dist/bin
         run: saw generate_scaffolding.saw
 
       - working-directory: saw-core-coq/coq
