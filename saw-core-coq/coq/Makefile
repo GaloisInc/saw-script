@@ -5,8 +5,10 @@ Makefile.coq: _CoqProject
 
 include Makefile.coq
 
-# If running in CI, always set $SAW=`which saw`. Otherwise, if saw is not in the
-# current path, fall back on cabal run saw
+# Set the SAW variable to the appropriate command. Always look in the path
+# first, otherwise fall back on cabal run saw, unless running in CI because if
+# saw is not in the path in CI then something else is terribly wrong and that
+# should be an error
 SAW=$(shell which saw)
 ifeq ($(SAW),)
   ifeq ($(CI),)
