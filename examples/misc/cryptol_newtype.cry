@@ -1,6 +1,0 @@
-
-type MyT1 = { value : [2] }
-someT1 = { value = 0b00 }
-
-newtype MyNewT2 = { myT1 : MyT1 }
-someT2 = MyNewT2 { myT1 = someT1 }
