@@ -84,6 +84,8 @@ data Term
   | StringLit Pos Text
     -- | Vector literal.
   | VecLit Pos [Term]
+    -- | Bitvector literal.
+  | BVLit Pos [Bool]
   | BadTerm Pos
  deriving (Show, TH.Lift)
 
@@ -128,6 +130,7 @@ instance Positioned Term where
       NatLit p _           -> p
       StringLit p _        -> p
       VecLit p _           -> p
+      BVLit p _            -> p
       BadTerm p            -> p
 
 instance Positioned TermVar where

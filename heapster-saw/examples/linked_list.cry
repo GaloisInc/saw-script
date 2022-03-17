@@ -1,0 +1,14 @@
+
+module LinkedList where
+
+import Either
+
+primitive type List : * -> *
+
+primitive foldList : {a} Either () (a, List a) -> List a
+primitive unfoldList : {a} List a -> Either () (a, List a)
+
+is_elem_spec : [64] -> List [64] -> [64]
+is_elem_spec x l =
+  either (\ _ -> 0) (\ (y,l') -> if x == y then 1 else is_elem_spec x l')
+         (unfoldList l)

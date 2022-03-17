@@ -67,6 +67,7 @@ import SAWScript.Value
 import SAWScript.Proof (newTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
+import SAWScript.Prover.MRSolver (emptyMREnv)
 import Verifier.SAW.Conversion
 --import Verifier.SAW.PrettySExp
 import Verifier.SAW.Prim (rethrowEvalError)
@@ -474,6 +475,7 @@ buildTopLevelEnv proxy opts =
                    , rwDocs       = primDocEnv primsAvail
                    , rwCryptol    = ce0
                    , rwMonadify   = Monadify.defaultMonEnv
+                   , rwMRSolverEnv = emptyMREnv
                    , rwProofs     = []
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwJVMTrans   = jvmTrans
@@ -1071,10 +1073,15 @@ primitives = Map.fromList
     , "object that can be passed to 'read_sbv'."
     ]
 
+  , prim "is_convertible"  "Term -> Term -> TopLevel Bool"
+    (pureVal isConvertiblePrim)
+    Current
+    [ "Returns true iff the two terms are convertible." ]
+
   , prim "check_convertible"  "Term -> Term -> TopLevel ()"
     (pureVal checkConvertiblePrim)
     Current
-    [ "Check if two terms are convertible." ]
+    [ "Check if two terms are convertible and print the result." ]
 
   , prim "replace"             "Term -> Term -> Term -> TopLevel Term"
     (pureVal replacePrim)
@@ -1871,6 +1878,20 @@ primitives = Map.fromList
     , "Cryptol source files."
     ]
 
+  , prim "cryptol_add_prim"    "String -> String -> Term -> TopLevel ()"
+    (pureVal cryptol_add_prim)
+    Experimental
+    [ "cryptol_add_prim mod nm trm sets the translation of Cryptol primitive"
+    , "nm in module mod to trm"
+    ]
+
+  , prim "cryptol_add_prim_type"    "String -> String -> Term -> TopLevel ()"
+    (pureVal cryptol_add_prim_type)
+    Experimental
+    [ "cryptol_add_prim_type mod nm tp sets the translation of Cryptol"
+    , "primitive type nm in module mod to tp"
+    ]
+
   -- Java stuff
 
   , prim "java_bool"           "JavaType"
@@ -2225,6 +2246,13 @@ primitives = Map.fromList
     [ "Parse a Term from a String in SAWCore syntax."
     ]
 
+  , prim "parse_core_mod"      "String -> String -> Term"
+    (funVal2 parse_core_mod)
+    Current
+    [ "Parse a Term from the second supplied String in SAWCore syntax,"
+    , "relative to the module specified by the first String"
+    ]
+
   , prim "prove_core"         "ProofScript () -> String -> TopLevel Theorem"
     (pureVal prove_core)
     Current
@@ -2246,6 +2274,13 @@ primitives = Map.fromList
     (funVal1 core_thm)
     Current
     [ "Create a theorem from the type of the given core expression." ]
+
+  , prim "specialize_theorem" "Theorem -> [Term] -> TopLevel Theorem"
+    (pureVal specialize_theorem)
+    Experimental
+    [ "Specialize a theorem by instantiating universal quantifiers"
+    , "with the given list of terms."
+    ]
 
   , prim "get_opt"            "Int -> String"
     (funVal1 get_opt)
@@ -2693,6 +2728,15 @@ primitives = Map.fromList
     Experimental
     [ "Legacy alternative name for `llvm_verify_x86`." ]
 
+  , prim "llvm_verify_fixpoint_x86"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
+    (pureVal llvm_verify_fixpoint_x86)
+    Experimental
+    [ "An experimental variant of 'llvm_verify_x86'. This variant can prove some properties"
+    , "involving simple loops with the help of a user-provided term that describes how"
+    , "the live variables in the loop evolve as the loop computes."
+    ]
+
   , prim "enable_x86_what4_hash_consing" "TopLevel ()"
     (pureVal enable_x86_what4_hash_consing)
     Experimental
@@ -2815,12 +2859,23 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_elem`." ]
 
+  , prim "llvm_union"
+    "SetupValue -> String -> SetupValue"
+    (pureVal CIR.anySetupUnion)
+    Current
+    [ "Turn a SetupValue representing a union pointer into"
+    , "a pointer to one of the branches of the union by field name."
+    , "Requires debug symbols to resolve union field names."
+    ]
+
   , prim "llvm_field"
     "SetupValue -> String -> SetupValue"
     (pureVal CIR.anySetupField)
     Current
     [ "Turn a SetupValue representing a struct pointer into"
-    , "a pointer to an element of the struct by field name." ]
+    , "a pointer to an element of the struct by field name."
+    , "Requires debug symbols to resolve struct field names."
+    ]
   , prim "crucible_field"
     "SetupValue -> String -> SetupValue"
     (pureVal CIR.anySetupField)

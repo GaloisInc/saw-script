@@ -6,6 +6,17 @@ typedef struct list64_t {
   struct list64_t *next;
 } list64_t;
 
+/* Test if a value is the head of a list, returning 1 if so and 0 otherwiese */
+int64_t is_head (int64_t x, list64_t *l) {
+  if (l == NULL) {
+    return 0;
+  } else if (l->data == x) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
 /* Test if a specific value is in a list, returning 1 if so and 0 otherwise */
 int64_t is_elem (int64_t x, list64_t *l) {
   if (l == NULL) {

@@ -112,6 +112,7 @@ type family HasSetupElem ext :: Bool
 type family HasSetupField ext :: Bool
 type family HasSetupGlobal ext :: Bool
 type family HasSetupCast ext :: Bool
+type family HasSetupUnion ext :: Bool
 type family HasSetupGlobalInitializer ext :: Bool
 
 -- | From the manual: \"The SetupValue type corresponds to values that can occur
@@ -127,6 +128,7 @@ data SetupValue ext where
   SetupElem   :: B (HasSetupElem ext) -> SetupValue ext -> Int -> SetupValue ext
   SetupField  :: B (HasSetupField ext) -> SetupValue ext -> String -> SetupValue ext
   SetupCast   :: B (HasSetupCast ext) -> SetupValue ext -> CastType ext -> SetupValue ext
+  SetupUnion  :: B (HasSetupUnion ext) -> SetupValue ext -> String -> SetupValue ext
 
   -- | A pointer to a global variable
   SetupGlobal :: B (HasSetupGlobal ext) -> String -> SetupValue ext
@@ -144,6 +146,7 @@ type SetupValueHas (c :: Type -> Constraint) ext =
   , c (B (HasSetupElem ext))
   , c (B (HasSetupField ext))
   , c (B (HasSetupCast ext))
+  , c (B (HasSetupUnion ext))
   , c (B (HasSetupGlobal ext))
   , c (B (HasSetupGlobalInitializer ext))
   , c (CastType ext)
@@ -170,6 +173,7 @@ ppSetupValue setupval = case setupval of
   SetupArray _ vs  -> PP.brackets (commaList (map ppSetupValue vs))
   SetupElem _ v i  -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ show i)
   SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ f)
+  SetupUnion _ v u -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ u)
   SetupCast _ v tp -> PP.parens (ppSetupValue v) PP.<> PP.pretty (" AS " ++ show tp)
   SetupGlobal _ nm -> PP.pretty ("global(" ++ nm ++ ")")
   SetupGlobalInitializer _ nm -> PP.pretty ("global_initializer(" ++ nm ++ ")")

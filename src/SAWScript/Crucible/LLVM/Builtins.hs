@@ -697,7 +697,7 @@ checkSpecArgumentTypes cc mspec = mapM_ resolveArg [0..(nArgs-1)]
     resolveArg i =
       case Map.lookup i (mspec ^. MS.csArgBindings) of
         Just (mt, sv) -> do
-          mt' <- typeOfSetupValue cc tyenv nameEnv sv
+          mt' <- exceptToFail (typeOfSetupValue cc tyenv nameEnv sv)
           checkArgTy i mt mt'
         Nothing -> throwMethodSpec mspec $ unwords
           ["Argument", show i, "unspecified when verifying", show nm]
@@ -721,7 +721,7 @@ checkSpecReturnType cc mspec =
              " has void return type"
            ]
     (Just sv, Just retTy) ->
-      do retTy' <-
+      do retTy' <- exceptToFail $
            typeOfSetupValue cc
              (MS.csAllocations mspec) -- map allocation indices to allocations
              (mspec ^. MS.csPreState . MS.csVarTypeNames) -- map alloc indices to var names
@@ -2206,7 +2206,7 @@ llvm_points_to_internal mbCheckType cond (getAllLLVM -> ptr) (getAllLLVM -> val)
           let path = []
           lhsTy <- llvm_points_to_check_lhs_validity ptr loc path
 
-          valTy <- typeOfSetupValue cc env nameEnv val
+          valTy <- exceptToFail $ typeOfSetupValue cc env nameEnv val
           case mbCheckType of
             Nothing                          -> pure ()
             Just CheckAgainstPointerType     -> checkMemTypeCompatibility loc lhsTy valTy
@@ -2243,9 +2243,9 @@ llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
           let path = [ResolvedField fieldName]
           _ <- llvm_points_to_check_lhs_validity ptr loc path
 
-          bfIndex <- resolveSetupBitfieldIndexOrFail cc env nameEnv ptr fieldName
+          bfIndex <- exceptToFail $ resolveSetupBitfield cc env nameEnv ptr fieldName
           let lhsFieldTy = Crucible.IntType $ fromIntegral $ biFieldSize bfIndex
-          valTy <- typeOfSetupValue cc env nameEnv val
+          valTy <- exceptToFail $ typeOfSetupValue cc env nameEnv val
           -- Currently, we require the type of the RHS value to precisely match
           -- the type of the field within the bitfield. One could imagine
           -- having finer-grained control over this (e.g.,
@@ -2279,7 +2279,7 @@ llvm_points_to_check_lhs_validity ptr loc path =
        else Setup.csResolvedState %= markResolved ptr path
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-     ptrTy <- typeOfSetupValue cc env nameEnv ptr
+     ptrTy <- exceptToFail $ typeOfSetupValue cc env nameEnv ptr
      case ptrTy of
        Crucible.PtrType symTy ->
          case Crucible.asMemType symTy of
@@ -2326,7 +2326,7 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
             else Setup.csResolvedState %= markResolved ptr []
           let env = MS.csAllocations (st ^. Setup.csMethodSpec)
               nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-          ptrTy <- typeOfSetupValue cc env nameEnv ptr
+          ptrTy <- exceptToFail $ typeOfSetupValue cc env nameEnv ptr
           _ <- case ptrTy of
             Crucible.PtrType symTy ->
               case Crucible.asMemType symTy of
@@ -2351,8 +2351,8 @@ llvm_equal (getAllLLVM -> val1) (getAllLLVM -> val2) =
      st <- get
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-     ty1 <- typeOfSetupValue cc env nameEnv val1
-     ty2 <- typeOfSetupValue cc env nameEnv val2
+     ty1 <- exceptToFail $ typeOfSetupValue cc env nameEnv val1
+     ty2 <- exceptToFail $ typeOfSetupValue cc env nameEnv val2
 
      b <- liftIO $ checkRegisterCompatibility ty1 ty2
      unless b $ throwCrucibleSetup loc $ unlines

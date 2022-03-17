@@ -6,6 +6,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE PatternGuards #-}
 
 {- |
 Module      : Verifier.SAW.Term.Pretty
@@ -40,6 +41,7 @@ module Verifier.SAW.Term.Pretty
   , ppName
   ) where
 
+import Data.Char (intToDigit)
 import Data.Maybe (isJust)
 import Control.Monad.Reader
 import Control.Monad.State.Strict as State
@@ -62,6 +64,7 @@ import qualified Data.IntMap.Strict as IntMap
 import Verifier.SAW.Name
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Utils (panic)
+import Verifier.SAW.Recognizer
 
 --------------------------------------------------------------------------------
 -- * Doc annotations
@@ -469,10 +472,27 @@ ppFlatTermF prec tf =
     RecordProj e fld -> ppProj fld <$> ppTerm' PrecArg e
     Sort s h -> return ((if h then pretty ("i"::String) else mempty) <> viaShow s)
     NatLit i -> ppNat <$> (ppOpts <$> ask) <*> return (toInteger i)
+    ArrayValue (asBoolType -> Just _) args
+      | Just bits <- mapM asBool $ V.toList args ->
+        if length bits `mod` 4 == 0 then
+          return $ pretty ("0x" ++ ppBitsToHex bits)
+        else
+          return $ pretty ("0b" ++ map (\b -> if b then '1' else '0') bits)
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecTerm) (V.toList args)
     StringLit s -> return $ viaShow s
     ExtCns cns -> annotate ExtCnsStyle <$> ppBestName (ecName cns)
+
+-- | Pretty-print a big endian list of bit values as a hexadecimal number
+ppBitsToHex :: [Bool] -> String
+ppBitsToHex (b8:b4:b2:b1:bits') =
+  intToDigit (8 * toInt b8 + 4 * toInt b4 + 2 * toInt b2 + toInt b1) :
+  ppBitsToHex bits'
+  where toInt True = 1
+        toInt False = 0
+ppBitsToHex [] = ""
+ppBitsToHex bits =
+  panic "ppBitsToHex" ["length of bit list is not a multiple of 4", show bits]
 
 -- | Pretty-print a name, using the best unambiguous alias from the
 -- naming environment.

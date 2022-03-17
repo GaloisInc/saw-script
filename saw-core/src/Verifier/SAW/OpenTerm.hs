@@ -27,13 +27,14 @@ module Verifier.SAW.OpenTerm (
   unitOpenTerm, unitTypeOpenTerm,
   stringLitOpenTerm, stringTypeOpenTerm,
   trueOpenTerm, falseOpenTerm, boolOpenTerm, boolTypeOpenTerm,
-  arrayValueOpenTerm, bvLitOpenTerm, bvTypeOpenTerm,
+  arrayValueOpenTerm, vectorTypeOpenTerm, bvLitOpenTerm, bvTypeOpenTerm,
   pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
   tupleOpenTerm', tupleTypeOpenTerm',
   recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, extCnsOpenTerm,
-  applyOpenTerm, applyOpenTermMulti, applyPiOpenTerm, piArgOpenTerm,
+  applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
+  applyPiOpenTerm, piArgOpenTerm,
   lambdaOpenTerm, lambdaOpenTermMulti, piOpenTerm, piOpenTermMulti,
   arrowOpenTerm, letOpenTerm, sawLetOpenTerm,
   -- * Monadic operations for building terms with binders
@@ -179,6 +180,10 @@ bvLitOpenTerm :: [Bool] -> OpenTerm
 bvLitOpenTerm bits =
   arrayValueOpenTerm boolTypeOpenTerm $ map boolOpenTerm bits
 
+-- | Create a SAW core term for a vector type
+vectorTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
+vectorTypeOpenTerm n a = applyGlobalOpenTerm "Prelude.Vec" [n,a]
+
 -- | Create a SAW core term for the type of a bitvector
 bvTypeOpenTerm :: Integral a => a -> OpenTerm
 bvTypeOpenTerm n =
@@ -286,6 +291,10 @@ applyOpenTerm (OpenTerm f) (OpenTerm arg) =
 -- | Apply an 'OpenTerm' to 0 or more arguments
 applyOpenTermMulti :: OpenTerm -> [OpenTerm] -> OpenTerm
 applyOpenTermMulti = foldl applyOpenTerm
+
+-- | Apply a named global to 0 or more arguments
+applyGlobalOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
+applyGlobalOpenTerm ident = applyOpenTermMulti (globalOpenTerm ident)
 
 -- | Compute the output type of applying a function of a given type to an
 -- argument. That is, given @tp@ and @arg@, compute the type of applying any @f@

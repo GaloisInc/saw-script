@@ -613,6 +613,7 @@ substMethodSpec sc sm ms = do
         MS.SetupElem b sv idx -> MS.SetupElem b <$> goSetupValue sv <*> pure idx
         MS.SetupField b sv name -> MS.SetupField b <$> goSetupValue sv <*> pure name
         MS.SetupCast v _ _ -> case v of {}
+        MS.SetupUnion v _ _ -> case v of {}
         MS.SetupGlobal _ _ -> return sv
         MS.SetupGlobalInitializer _ _ -> return sv
 

@@ -59,6 +59,7 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
 import Verifier.SAW.Cryptol.Monadify (defaultMonEnv)
+import SAWScript.Prover.MRSolver (emptyMREnv)
 
 import qualified Argo
 --import qualified CryptolServer (validateServerState, ServerState(..))
@@ -94,6 +95,7 @@ data CrucibleSetupVal ty e
   -- | RecordValue [(String, CrucibleSetupVal e)]
   | FieldLValue (CrucibleSetupVal ty e) String
   | CastLValue (CrucibleSetupVal ty e) ty
+  | UnionLValue (CrucibleSetupVal ty e) String
   | ElementLValue (CrucibleSetupVal ty e) Int
   | GlobalInitializer String
   | GlobalLValue String
@@ -218,6 +220,7 @@ initialState readFileFn =
                 , rwDocs = mempty
                 , rwCryptol = cenv
                 , rwMonadify = defaultMonEnv
+                , rwMRSolverEnv = emptyMREnv
                 , rwPPOpts = defaultPPOpts
                 , rwJVMTrans = jvmTrans
                 , rwPrimsAvail = mempty

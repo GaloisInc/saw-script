@@ -1,4 +1,4 @@
-all: Makefile.coq
+all: Makefile.coq mr-solver-tests
 
 Makefile.coq: _CoqProject
 	coq_makefile -f _CoqProject -o Makefile.coq
@@ -32,3 +32,12 @@ rust_data.bc: rust_data.rs
 
 rust_lifetimes.bc: rust_lifetimes.rs
 	rustc --crate-type=lib --emit=llvm-bc rust_lifetimes.rs
+
+# Lists all the Mr Solver tests, without their ".saw" suffix
+MR_SOLVER_TESTS = arrays_mr_solver linked_list_mr_solver
+
+.PHONY: mr-solver-tests $(MR_SOLVER_TESTS)
+mr-solver-tests: $(MR_SOLVER_TESTS)
+
+$(MR_SOLVER_TESTS):
+	$(SAW) $@.saw

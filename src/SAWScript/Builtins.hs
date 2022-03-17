@@ -106,7 +106,8 @@ import qualified Cryptol.Backend.Monad as C (runEval)
 import qualified Cryptol.Eval.Type as C (evalType)
 import qualified Cryptol.Eval.Value as C (fromVBit, fromVWord)
 import qualified Cryptol.Eval.Concrete as C (Concrete(..), bvVal)
-import qualified Cryptol.Utils.Ident as C (mkIdent, packModName)
+import qualified Cryptol.Utils.Ident as C (mkIdent, packModName,
+                                           textToModName, PrimIdent(..))
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
 import qualified SAWScript.SBVParser as SBV
@@ -323,15 +324,17 @@ hoistIfsPrim t = do
 
   return t{ ttTerm = t' }
 
+isConvertiblePrim :: TypedTerm -> TypedTerm -> TopLevel Bool
+isConvertiblePrim x y = do
+   sc <- getSharedContext
+   io $ scConvertible sc False (ttTerm x) (ttTerm y)
+
 checkConvertiblePrim :: TypedTerm -> TypedTerm -> TopLevel ()
 checkConvertiblePrim x y = do
-   sc <- getSharedContext
-   str <- io $ do
-     c <- scConvertible sc False (ttTerm x) (ttTerm y)
-     pure (if c
-            then "Convertible"
-            else "Not convertible")
-   printOutLnTop Info str
+   c <- isConvertiblePrim x y
+   printOutLnTop Info (if c
+                        then "Convertible"
+                        else "Not convertible")
 
 
 readCore :: FilePath -> TopLevel TypedTerm
@@ -1385,8 +1388,8 @@ tailPrim :: [a] -> TopLevel [a]
 tailPrim [] = fail "tail: empty list"
 tailPrim (_ : xs) = return xs
 
-parseCore :: String -> TopLevel Term
-parseCore input =
+parseCoreMod :: String -> String -> TopLevel Term
+parseCoreMod mnm_str input =
   do sc <- getSharedContext
      let base = "<interactive>"
          path = "<interactive>"
@@ -1397,15 +1400,26 @@ parseCore input =
            do let msg = show err
               printOutLnTop Opts.Error msg
               fail msg
-     let mnm = Just $ mkModuleName ["Cryptol"]
-     err_or_t <- io $ runTCM (typeInferComplete uterm) sc mnm []
+     let mnm =
+           mkModuleName $ Text.splitOn (Text.pack ".") $ Text.pack mnm_str
+     _ <- io $ scFindModule sc mnm -- Check that mnm exists
+     err_or_t <- io $ runTCM (typeInferComplete uterm) sc (Just mnm) []
      case err_or_t of
        Left err -> fail (show err)
        Right (TC.TypedTerm x _) -> return x
 
+parseCore :: String -> TopLevel Term
+parseCore = parseCoreMod "Cryptol"
+
 parse_core :: String -> TopLevel TypedTerm
 parse_core input = do
   t <- parseCore input
+  sc <- getSharedContext
+  io $ mkTypedTerm sc t
+
+parse_core_mod :: String -> String -> TopLevel TypedTerm
+parse_core_mod mnm input = do
+  t <- parseCoreMod mnm input
   sc <- getSharedContext
   io $ mkTypedTerm sc t
 
@@ -1442,6 +1456,14 @@ core_thm input =
      db <- roTheoremDB <$> getTopLevelRO
      thm <- io (proofByTerm sc db t pos "core_thm")
      SV.returnProof thm
+
+specialize_theorem :: Theorem -> [TypedTerm] -> TopLevel Theorem
+specialize_theorem thm ts =
+  do sc <- getSharedContext
+     db <- roTheoremDB <$> getTopLevelRO
+     pos <- SV.getPosition
+     thm' <- io (specializeTheorem sc db pos "specialize_theorem" thm (map ttTerm ts))
+     SV.returnProof thm'
 
 get_opt :: Int -> TopLevel String
 get_opt n = do
@@ -1505,6 +1527,27 @@ cryptol_add_path path =
      let rw' = rw { rwCryptol = ce' }
      putTopLevelRW rw'
 
+cryptol_add_prim :: String -> String -> TypedTerm -> TopLevel ()
+cryptol_add_prim mnm nm trm =
+  do rw <- getTopLevelRW
+     let env = rwCryptol rw
+     let prim_name =
+           C.PrimIdent (C.textToModName $ Text.pack mnm) (Text.pack nm)
+     let env' =
+           env { CEnv.ePrims =
+                   Map.insert prim_name (ttTerm trm) (CEnv.ePrims env) }
+     putTopLevelRW (rw { rwCryptol = env' })
+
+cryptol_add_prim_type :: String -> String -> TypedTerm -> TopLevel ()
+cryptol_add_prim_type mnm nm tp =
+  do rw <- getTopLevelRW
+     let env = rwCryptol rw
+     let prim_name =
+           C.PrimIdent (C.textToModName $ Text.pack mnm) (Text.pack nm)
+     let env' = env { CEnv.ePrimTypes =
+                        Map.insert prim_name (ttTerm tp) (CEnv.ePrimTypes env) }
+     putTopLevelRW (rw { rwCryptol = env' })
+
 -- | Call 'Cryptol.importSchema' using a 'CEnv.CryptolEnv'
 importSchemaCEnv :: SharedContext -> CEnv.CryptolEnv -> Cryptol.Schema ->
                     IO Term
@@ -1532,19 +1575,25 @@ monadifyTypedTerm sc t =
 
 -- | Ensure that a 'TypedTerm' has been monadified
 ensureMonadicTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
-ensureMonadicTerm _ t
-  | TypedTermOther tp <- ttType t
-  , Prover.isCompFunType tp = return t
+ensureMonadicTerm sc t
+  | TypedTermOther tp <- ttType t =
+    io (Prover.isCompFunType sc tp) >>= \case
+      True -> return t
+      False -> monadifyTypedTerm sc t
 ensureMonadicTerm sc t = monadifyTypedTerm sc t
 
+-- | Run Mr Solver with the given debug level to prove that the first term
+-- refines the second
 mrSolver :: SharedContext -> Int -> TypedTerm -> TypedTerm -> TopLevel Bool
 mrSolver sc dlvl t1 t2 =
-  do m1 <- ttTerm <$> ensureMonadicTerm sc t1
+  do rw <- get
+     m1 <- ttTerm <$> ensureMonadicTerm sc t1
      m2 <- ttTerm <$> ensureMonadicTerm sc t2
-     res <- liftIO $ Prover.askMRSolver sc dlvl SBV.z3 Nothing m1 m2
+     let env = rwMRSolverEnv rw
+     res <- liftIO $ Prover.askMRSolver sc dlvl env Nothing m1 m2
      case res of
-       Just err -> io (putStrLn $ Prover.showMRFailure err) >> return False
-       Nothing -> return True
+       Left err -> io (putStrLn $ Prover.showMRFailure err) >> return False
+       Right env' -> put (rw { rwMRSolverEnv = env' }) >> return True
 
 setMonadification :: SharedContext -> String -> String -> TopLevel ()
 setMonadification sc cry_str saw_str =
