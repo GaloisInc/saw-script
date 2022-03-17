@@ -273,7 +273,6 @@ jobs:
       # libraries
       - working-directory: saw-core-coq/coq
         shell: bash
-        path: dist/bin
         run: opam exec -- make -j
 
       - working-directory: heapster-saw/examples
