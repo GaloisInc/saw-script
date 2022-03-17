@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {- |
 Module      : Verifier.SAW.SCTypeCheck
@@ -573,10 +574,31 @@ ensureRecognizer f err trm =
 ensureSort :: Term -> TCM Sort
 ensureSort tp = ensureRecognizer asSort (NotSort tp) tp
 
--- | Ensure a 'Term' is a tuple type, normalizing if necessary, and return the
--- components of that tuple type
+-- | Ensure a 'Term' is a @TypeList@, normalizing if necessary, and
+-- return the components of that @TypeList@. Note that this function
+-- cannot be correctly implemented with 'ensureRecognizer', because
+-- that function does not normalize deeply enough.
+ensureTypeList :: Term -> TCM (Maybe [Term])
+ensureTypeList t =
+  do t' <- typeCheckWHNF t
+     case asCtor t' of
+       Just (c, [])
+         | primName c == "Prelude.TypeNil" -> pure (Just [])
+       Just (c, [t1, t2])
+         | primName c == "Prelude.TypeCons" ->
+           do ts <- ensureTypeList t2
+              pure ((t1 :) <$> ts)
+       _ -> pure Nothing
+
+-- | Ensure a 'Term' is a tuple type, normalizing if necessary, and
+-- return the components of that tuple type. Note that this function
+-- cannot be correctly implemented with 'ensureRecognizer', because
+-- that function does not normalize deeply enough.
 ensureTupleType :: Term -> TCM [Term]
-ensureTupleType tp = ensureRecognizer asTupleType (NotSort tp) tp
+ensureTupleType tp =
+  do let err = NotTupleType tp
+     t <- ensureRecognizer (isGlobalDef "Prelude.Tuple" @> Just) err tp
+     maybe (throwTCError err) pure =<< ensureTypeList t
 
 -- | Ensure a 'Term' is a record type, normalizing if necessary, and return the
 -- components of that record type
