@@ -133,18 +133,27 @@ typeTransType1 (TypeTrans [] _) = unitTypeOpenTerm
 typeTransType1 (TypeTrans [tp] _) = tp
 typeTransType1 _ = error ("typeTransType1" ++ nlPrettyCallStack callStack)
 
--- | Build the tuple type @#(T1, T2, ... Tn-1, Tn)@ of @n@ types.
+-- | Build the tuple type @#(T1, T2, ... Tn-1, Tn)@ of @n@ types, with
+-- the special case that 0 types maps to the unit type @#()@ (and 1
+-- type just maps to itself).
 tupleOfTypes :: [OpenTerm] -> OpenTerm
+tupleOfTypes [] = unitTypeOpenTerm
+tupleOfTypes [tp] = tp
 tupleOfTypes tps = tupleTypeOpenTerm tps
 
--- | Build the tuple @(t1, t2, ..., tn-1, tn)@ of @n@ terms.
+-- | Build the tuple @(t1, t2, ..., tn-1, tn)@ of @n@ terms, with the
+-- special case that 0 types maps to the unit value @()@ (and 1 value
+-- just maps to itself).
 tupleOfTerms :: [OpenTerm] -> OpenTerm
+tupleOfTerms [] = unitOpenTerm
+tupleOfTerms [t] = t
 tupleOfTerms ts = tupleOpenTerm ts
 
 -- | Project the @i@th element from a term of type @'tupleOfTypes' tps@. Note
 -- that this requires knowing the length of @tps@.
 projTupleOfTypes :: [OpenTerm] -> Integer -> OpenTerm -> OpenTerm
 projTupleOfTypes tps i tup
+  | i == 0 && length tps == 1 = tup
   | i < toInteger (length tps) = projTupleOpenTerm i tup
   | otherwise = error "projTupleOfTypes: invalid tuple index"
 
