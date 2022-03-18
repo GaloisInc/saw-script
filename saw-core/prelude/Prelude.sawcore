@@ -52,13 +52,13 @@ primitive consTuple : (t : sort 0) -> (ts : TypeList) -> t -> Tuple ts -> Tuple 
 -- Pair types
 
 fst : (a b : sort 0) -> #(a, b) -> a;
-fst a b tup = tup.(0);
+fst a b tup = tup.0;
 
 snd : (a b : sort 0) -> #(a, b) -> b;
-snd a b tup = tup.(1);
+snd a b tup = tup.1;
 
 uncurry (a b c : sort 0) (f : a -> b -> c) : #(a, b) -> c
-  = (\ (x : #(a, b)) -> f x.(0) x.(1));
+  = (\ (x : #(a, b)) -> f x.0 x.1);
 
 --------------------------------------------------------------------------------
 -- String values
@@ -875,10 +875,10 @@ expNat b e =
 primitive divModNat : Nat -> Nat -> #(Nat, Nat);
 
 divNat : Nat -> Nat -> Nat;
-divNat x y = (divModNat x y).(0);
+divNat x y = (divModNat x y).0;
 
 modNat : Nat -> Nat -> Nat;
-modNat x y = (divModNat x y).(1);
+modNat x y = (divModNat x y).1;
 
 -- There are implicit constructors from integer literals.
 
@@ -1504,7 +1504,7 @@ foldList a =
   either #() #(a, List a) (List a)
          (\ (_ : #()) -> Nil a)
          (\ (tup : #(a, List a)) ->
-            Cons a tup.(0) tup.(1));
+            Cons a tup.0 tup.1);
 
 -- A list of types, i.e. `List (sort 0)` if `List` was universe polymorphic
 data ListSort : sort 1
@@ -1563,8 +1563,8 @@ foldW64List =
          (\ (_:#()) -> W64Nil)
          (\ (bv_l : #(Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()), W64List)) ->
             W64Cons (Sigma_proj1 (Vec 64 Bool)
-                                 (\ (_:Vec 64 Bool) -> #()) bv_l.(0))
-                    bv_l.(1));
+                                 (\ (_:Vec 64 Bool) -> #()) bv_l.0)
+                    bv_l.1);
 
 
 --------------------------------------------------------------------------------
@@ -2088,7 +2088,7 @@ composeM a b c f g x = bindM b c (f x) g;
 tupleCompMFunBoth : (a b c: sort 0) -> (a -> CompM b) -> #(c, a) -> CompM #(c, b);
 tupleCompMFunBoth a b c f =
   \ (x : #(c, a)) ->
-    bindM b #(c, b) (f x.(1)) (\ (y:b) -> returnM #(c, b) (x.(0), y));
+    bindM b #(c, b) (f x.1) (\ (y:b) -> returnM #(c, b) (x.0, y));
 
 -- Tuple a valu onto the output of a monadic function
 tupleCompMFunOut : (a b c: sort 0) -> c -> (a -> CompM b) -> (a -> CompM #(c, b));
@@ -2454,7 +2454,7 @@ multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
 multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
                lrtToType lrt;
 multiArgFixM lrt F =
-  (multiFixM (LRT_Cons lrt LRT_Nil) (\ (f:lrtToType lrt) -> (F f, ()))).(0);
+  (multiFixM (LRT_Cons lrt LRT_Nil) (\ (f:lrtToType lrt) -> (F f, ()))).0;
 
 
 -- Test computations
