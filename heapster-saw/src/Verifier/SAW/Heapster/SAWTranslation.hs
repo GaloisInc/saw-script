@@ -4582,14 +4582,15 @@ typedBlockLetRecEntries =
                          . filter (anyF typedEntryHasMultiInDegree)
                          . (^. typedBlockEntries))
 
--- | Fold a function over each 'TypedEntry' in a 'TypedBlockMap' that
+-- | Map a monadic function over each 'TypedEntry' in a 'TypedBlockMap' that
 -- corresponds to a letrec-bound variable
-foldBlockMapLetRec ::
+mapBlockMapLetRec ::
   (forall args ghosts.
-   TypedEntry TransPhase ext blocks tops rets args ghosts -> b -> b) ->
-  b -> TypedBlockMap TransPhase ext blocks tops rets -> b
-foldBlockMapLetRec f r =
-  foldr (\(SomeTypedEntry entry) -> f entry) r . typedBlockLetRecEntries
+   TypedEntry TransPhase ext blocks tops rets args ghosts ->
+   TypeTransM ctx b) ->
+  TypedBlockMap TransPhase ext blocks tops rets -> TypeTransM ctx [b]
+mapBlockMapLetRec f =
+  mapM (\(SomeTypedEntry entry) -> f entry) . typedBlockLetRecEntries
 
 -- | Construct a @LetRecType@ inductive description
 --
@@ -4624,13 +4625,10 @@ translateEntryLRT entry@(TypedEntry {..}) =
 -- entrypoints in a 'TypedBlockMap'
 translateBlockMapLRTs :: TypedBlockMap TransPhase ext blocks tops rets ->
                          TypeTransM ctx OpenTerm
-translateBlockMapLRTs =
-  foldBlockMapLetRec
-  (\entry rest_m ->
-    do entryType <- translateEntryLRT entry
-       rest <- rest_m
-       return $ ctorOpenTerm "Prelude.LRT_Cons" [entryType, rest])
-  (return $ ctorOpenTerm "Prelude.LRT_Nil" [])
+translateBlockMapLRTs blk_map =
+  foldr (\entryType rest -> ctorOpenTerm "Prelude.LRT_Cons" [entryType, rest])
+        (ctorOpenTerm "Prelude.LRT_Nil" []) <$>
+  mapBlockMapLetRec translateEntryLRT blk_map
 
 -- | Lambda-abstract over all the entrypoints in a 'TypedBlockMap' that
 -- correspond to letrec-bound functions, putting the lambda-bound variables into
@@ -4686,11 +4684,8 @@ translateBlockMapBodies :: PermCheckExtC ext =>
                            TypedBlockMapTrans ext blocks tops rets ->
                            TypedBlockMap TransPhase ext blocks tops rets ->
                            TypeTransM ctx OpenTerm
-translateBlockMapBodies mapTrans =
-  foldBlockMapLetRec
-  (\entry restM ->
-    pairOpenTerm <$> translateEntryBody mapTrans entry <*> restM)
-  (return unitOpenTerm)
+translateBlockMapBodies mapTrans blk_map =
+  tupleOpenTerm <$> mapBlockMapLetRec (translateEntryBody mapTrans) blk_map
 
 
 -- | Translate a typed CFG to a SAW term
