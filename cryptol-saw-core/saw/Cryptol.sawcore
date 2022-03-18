@@ -22,10 +22,10 @@ bvExp n x y = foldr Bool (Vec n Bool) n
   (reverse n Bool y);
 
 updFst : (a b : sort 0) -> (a -> a) -> #(a, b) -> #(a, b);
-updFst a b f x = (f x.(0), x.(1));
+updFst a b f x = (f x.0, x.1);
 
 updSnd : (a b : sort 0) -> (b -> b) -> #(a, b) -> #(a, b);
-updSnd a b f x = (x.(0), f x.(1));
+updSnd a b f x = (x.0, f x.1);
 
 --------------------------------------------------------------------------------
 -- Extended natural numbers

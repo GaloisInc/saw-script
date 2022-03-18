@@ -181,13 +181,12 @@ AtomTerm
   | 'isort' nat                  { Sort (pos $1) (mkSort (tokNat (val $2))) True }
   | AtomTerm '.' Ident           { RecordProj $1 (val $3) }
   | AtomTerm '.' IdentRec        {% parseRecursorProj $1 $3 }
-  | AtomTerm '.' nat             {% parseTupleSelector $1 (fmap tokNat $3) }
+  | AtomTerm '.' nat             { mkTupleSelector $1 (tokNat (val $3)) }
   | '(' sepBy(Term, ',') ')'     { mkTupleValue (pos $1) $2 }
   | '#' '(' sepBy(Term, ',') ')'       { mkTupleType (pos $1) $3 }
   |     '[' sepBy(Term, ',') ']'       { VecLit (pos $1) $2 }
   |     '{' sepBy(FieldValue, ',') '}' { RecordValue (pos $1) $2 }
   | '#' '{' sepBy(FieldType, ',') '}'  { RecordType  (pos $1) $3 }
-  | AtomTerm '.' '(' nat ')'           { mkTupleSelector $1 (tokNat (val $4)) }
 
 Ident :: { PosPair Text }
 Ident : ident { fmap (Text.pack . tokIdent) $1 }
@@ -342,12 +341,6 @@ parseRecursorProj (parseModuleName -> Just mnm) i =
 parseRecursorProj t _ =
   do addParseError (pos t) "Malformed recursor projection"
      return (badTerm (pos t))
-
-parseTupleSelector :: Term -> PosPair Natural -> Parser Term
-parseTupleSelector t i =
-  if val i >= 1 then return (mkTupleSelector t (val i)) else
-    do addParseError (pos t) "non-positive tuple projection index"
-       return (badTerm (pos t))
 
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
