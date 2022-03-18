@@ -27,20 +27,20 @@ ListF__rec : (a b:sort 0) -> (P : ListF a b -> sort 0) ->
              (l:ListF a b) -> P l;
 ListF__rec a b P f1 f2 l = ListF#rec a b P f1 f2 l;
 
-unfoldListF : (a b:sort 0) -> ListF a b -> Either b (a * ListF a b);
+unfoldListF : (a b:sort 0) -> ListF a b -> Either b #(a, ListF a b);
 unfoldListF a b l =
-  ListF__rec a b (\ (_:ListF a b) -> Either b (a * ListF a b))
-  (\ (x:b) -> Left b (a * ListF a b) x)
-  (\ (x:a) (l:ListF a b) (_:Either b (a * ListF a b)) ->
-     Right b (a * ListF a b) (x, l))
+  ListF__rec a b (\ (_:ListF a b) -> Either b #(a, ListF a b))
+  (\ (x:b) -> Left b #(a, ListF a b) x)
+  (\ (x:a) (l:ListF a b) (_:Either b #(a, ListF a b)) ->
+     Right b #(a, ListF a b) (x, l))
   l;
 
-foldListF : (a b:sort 0) -> Either b (a * ListF a b) -> ListF a b;
+foldListF : (a b:sort 0) -> Either b #(a, ListF a b) -> ListF a b;
 foldListF a b =
-  either b (a * ListF a b) (ListF a b)
+  either b #(a, ListF a b) (ListF a b)
          (\ (x : b) -> NilF a b x)
-         (\ (tup : (a * ListF a b)) ->
-            ConsF a b tup.(1) tup.(2));
+         (\ (tup : #(a, ListF a b)) ->
+            ConsF a b tup.0 tup.1);
 
 getListF : (a b:sort 0) -> ListF a b -> b;
 getListF a b =
