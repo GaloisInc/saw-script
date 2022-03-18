@@ -29,7 +29,7 @@ module Verifier.SAW.OpenTerm (
   trueOpenTerm, falseOpenTerm, boolOpenTerm, boolTypeOpenTerm,
   arrayValueOpenTerm, vectorTypeOpenTerm, bvLitOpenTerm, bvTypeOpenTerm,
   pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
-  tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
+  tupleOpenTerm, tupleTypeOpenTerm, typeListOpenTerm, projTupleOpenTerm,
   recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, extCnsOpenTerm,
   applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
