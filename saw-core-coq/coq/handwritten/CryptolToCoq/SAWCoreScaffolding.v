@@ -42,12 +42,27 @@ Instance Inhabited_Intro (a:Type) (b:a -> Type) (Hb: forall x, Inhabited (b x))
 Global Hint Extern 5 (Inhabited ?A) =>
   (apply (@MkInhabited A); intuition (eauto with typeclass_instances inh)) : typeclass_instances.
 
+Definition TypeList : Type := list Type.
+Definition TypeNil : TypeList := nil.
+Definition TypeCons : Type -> TypeList -> TypeList := cons.
+
+Definition TypeList__rec :
+  forall (p : TypeList -> Type)
+         (f1 : p TypeNil) (f2 : forall t ts, p ts -> p (TypeCons t ts))
+         (ts : TypeList), p ts := @list_rect Type.
+
+(* The append of a list of tuple types to a type *)
 Fixpoint TupleApp (a : Type) (ts : list Type) : Type :=
   match ts with
   | nil => a
   | cons t ts' => TupleApp (prod a t) ts'
   end.
 
+(* A tuple of types, satisfying
+   Tuple [] = ()
+   Tuple [a] = a
+   Tuple [a1, ..., an] = (... ((a1, a2), a3), ..., an)
+  which lines up with the Coq tuple notation *)
 Definition Tuple (ts : list Type) : Type :=
   match ts with
   | nil => unit
@@ -57,7 +72,7 @@ Definition Tuple (ts : list Type) : Type :=
 Fixpoint headTuple {a : Type} {ts : TypeList} : Tuple (cons a ts) -> a :=
   match ts with
   | nil => @id a
-  | cons t ts' => compose fst (@headTuple (a * t) ts')
+  | cons t ts' => fun tup => fst (@headTuple (a * t) ts' tup)
   end.
 
 Fixpoint mapTupleApp {a b : Type} {ts : list Type} (f : a -> b) : TupleApp a ts -> TupleApp b ts :=

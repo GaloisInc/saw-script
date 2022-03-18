@@ -213,6 +213,17 @@ sawCorePreludeSpecialTreatmentMap configuration =
   -- sawLet
   [ ("sawLet", mapsTo sawCoreScaffoldingModule "sawLet_def") ]
 
+  -- Tuples
+  ++
+  [ ("TypeList",  mapsTo sawCoreScaffoldingModule "TypeList")
+  , ("TypeNil",   mapsTo sawCoreScaffoldingModule "TypeNil")
+  , ("TypeCons",  mapsTo sawCoreScaffoldingModule "TypeCons")
+  , ("TypeList__rec", mapsTo sawCoreScaffoldingModule "TypeList__rec")
+  , ("Tuple",     mapsTo sawCoreScaffoldingModule "Tuple")
+  , ("headTuple", mapsTo sawCoreScaffoldingModule "headTuple")
+  , ("tailTuple", mapsTo sawCoreScaffoldingModule "tailTuple")
+  , ("consTuple", mapsTo sawCoreScaffoldingModule "consTuple")]
+
   -- Unsafe SAW features
   ++
   [ ("error",             mapsTo sawDefinitionsModule "error")
