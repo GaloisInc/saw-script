@@ -42,6 +42,42 @@ Instance Inhabited_Intro (a:Type) (b:a -> Type) (Hb: forall x, Inhabited (b x))
 Global Hint Extern 5 (Inhabited ?A) =>
   (apply (@MkInhabited A); intuition (eauto with typeclass_instances inh)) : typeclass_instances.
 
+Fixpoint TupleApp (a : Type) (ts : list Type) : Type :=
+  match ts with
+  | nil => a
+  | cons t ts' => TupleApp (prod a t) ts'
+  end.
+
+Definition Tuple (ts : list Type) : Type :=
+  match ts with
+  | nil => unit
+  | cons t ts' => TupleApp t ts'
+  end.
+
+Fixpoint headTuple {a : Type} {ts : TypeList} : Tuple (cons a ts) -> a :=
+  match ts with
+  | nil => @id a
+  | cons t ts' => compose fst (@headTuple (a * t) ts')
+  end.
+
+Fixpoint mapTupleApp {a b : Type} {ts : list Type} (f : a -> b) : TupleApp a ts -> TupleApp b ts :=
+  match ts with
+  | nil => f
+  | cons t ts' => @mapTupleApp (a * t) (b * t) ts' (fun x => (f (fst x), snd x))
+  end.
+
+Definition tailTuple {a : Type} {ts : list Type} : Tuple (cons a ts) -> Tuple ts :=
+  match ts with
+  | nil => (fun _ : a => tt)
+  | cons t ts' => @mapTupleApp (a * t) t ts' snd
+  end.
+
+Definition consTuple {a : Type} {ts : list Type} (x : a) : Tuple ts -> Tuple (cons a ts) :=
+  match ts with
+  | nil => (fun _ : unit => x)
+  | cons t ts' => @mapTupleApp t (a * t) ts' (pair x)
+  end.
+
 Definition String := String.string.
 
 Instance Inhabited_String : Inhabited String :=
