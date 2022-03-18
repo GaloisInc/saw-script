@@ -3,17 +3,17 @@ module rust_data where
 
 import Prelude;
 
-unfoldListPermH : (a:sort 0) -> List a -> Either #() (#() * a * List a);
+unfoldListPermH : (a:sort 0) -> List a -> Either #() #(#(), a, List a);
 unfoldListPermH a l =
-  List__rec a (\ (_:List a) -> Either #() (#() * a * List a))
-  (Left #() (#() * a * List a) ())
-  (\ (x:a) (l:List a) (_:Either #() (#() * a * List a)) ->
-     Right #() (#() * a * List a) ((), x, l))
+  List__rec a (\ (_:List a) -> Either #() #(#(), a, List a))
+  (Left #() #(#(), a, List a) ())
+  (\ (x:a) (l:List a) (_:Either #() #(#(), a, List a)) ->
+     Right #() #(#(), a, List a) ((), x, l))
   l;
 
-foldListPermH : (a:sort 0) -> Either #() (#() * a * List a) -> List a;
+foldListPermH : (a:sort 0) -> Either #() #(#(), a, List a) -> List a;
 foldListPermH a =
-  either #() (#() * a * List a) (List a)
+  either #() #(#(), a, List a) (List a)
          (\ (_ : #()) -> Nil a)
-         (\ (tup : (#() * a * List a)) ->
-            Cons a tup.(2).(1) tup.(2).(2));
+         (\ (tup : #(#(), a, List a)) ->
+            Cons a tup.1 tup.2);

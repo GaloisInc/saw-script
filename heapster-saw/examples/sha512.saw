@@ -10,7 +10,7 @@ heapster_define_perm env "int8" " " "llvmptr 8" "exists x:bv 8.eq(llvmword(x))";
 heapster_assume_fun env "CRYPTO_load_u64_be"
   "(). arg0:ptr((R,0) |-> int64<>) -o \
      \ arg0:ptr((R,0) |-> int64<>), ret:int64<>"
-  "\\ (x:Vec 64 Bool) -> returnM (Vec 64 Bool * Vec 64 Bool) (x, x)";
+  "\\ (x:Vec 64 Bool) -> returnM #(Vec 64 Bool, Vec 64 Bool) (x, x)";
 
 heapster_typecheck_fun env "return_state"
   "(). arg0:array(W,0,<8,*8,fieldsh(int64<>)) -o \
