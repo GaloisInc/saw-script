@@ -154,6 +154,11 @@ compFunInputType (CompFunTerm (asLambda -> Just (_, tp, _))) = Just $ Type tp
 compFunInputType (CompFunComp f _) = compFunInputType f
 compFunInputType _ = Nothing
 
+-- | Returns true iff the given 'CompFun' is 'CompFunReturn'
+isCompFunReturn :: CompFun -> Bool
+isCompFunReturn CompFunReturn = True
+isCompFunReturn _ = False
+
 -- | A computation of type @CompM a@ for some @a@
 data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
           deriving (Generic, Show)
@@ -169,6 +174,12 @@ isCompFunType :: SharedContext -> Term -> IO Bool
 isCompFunType sc t = scWhnf sc t >>= \case
   (asPiList -> (_, asCompM -> Just _)) -> return True
   _ -> return False
+
+-- | Recognize a 'Term' as an appliction of `bvToNat`
+asBvToNat :: Recognizer Term (Term, Term)
+asBvToNat (asApplyAll -> ((isGlobalDef "Prelude.bvToNat" -> Just ()),
+                          [n, x])) = Just (n, x)
+asBvToNat _ = Nothing
 
 
 ----------------------------------------------------------------------

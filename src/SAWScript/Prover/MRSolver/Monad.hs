@@ -509,7 +509,7 @@ mrTypeOf :: Term -> MRM Term
 mrTypeOf t =
   -- NOTE: scTypeOf' wants the type context in the most recently bound var
   -- first, i.e., in the mrUVarCtxRev order
-  mrDebugPPPrefix 2 "mrTypeOf:" t >>
+  mrDebugPPPrefix 3 "mrTypeOf:" t >>
   mrUVarCtxRev >>= \ctx -> liftSC2 scTypeOf' (map snd ctx) t
 
 -- | Check if two 'Term's are convertible in the 'MRM' monad
@@ -648,6 +648,18 @@ extCnsToFunName ec = let var = MRVar ec in mrVarInfo var >>= \case
     | Just glob <- asTypedGlobalDef (Unshared $ FTermF $ ExtCns ec) ->
       return $ GlobalName glob []
   _ -> error "extCnsToFunName: unreachable"
+
+-- | Get the 'FunName' of a global definition
+mrGlobalDef :: Ident -> MRM FunName
+mrGlobalDef ident = asTypedGlobalDef <$> liftSC1 scGlobalDef ident >>= \case
+  Just glob -> return $ GlobalName glob []
+  _ -> error $ "mrGlobalDef: could not get GlobalDef of: " ++ show ident
+
+-- | Get the body of a global definition, raising an 'error' if none is found
+mrGlobalDefBody :: Ident -> MRM Term
+mrGlobalDefBody ident = asConstant <$> liftSC1 scGlobalDef ident >>= \case
+  Just (_, Just body) -> return body
+  _ -> error $ "mrGlobalDefBody: global has no definition: " ++ show ident
 
 -- | Get the body of a function @f@ if it has one
 mrFunNameBody :: FunName -> MRM (Maybe Term)

@@ -19,6 +19,7 @@ module SAWScript.Prover.MRSolver.SMT where
 
 import qualified Data.Vector as V
 import Control.Monad.Except
+import qualified Control.Exception as X
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -30,6 +31,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.OpenTerm
 
+import Verifier.SAW.Prim (EvalError(..))
 import qualified Verifier.SAW.Prim as Prim
 import Verifier.SAW.Simulator.TermModel
 import Verifier.SAW.Simulator.Prims
@@ -190,12 +192,21 @@ mrProvableRaw prop_term =
      debugPrint 2 ("Calling SMT solver with proposition: " ++
                    prettyProp defaultPPOpts prop)
      sym <- liftIO $ setupWhat4_sym True
-     (smt_res, _) <-
-       liftIO $ proveWhat4_solver z3Adapter sym unints sc prop (return ())
+     -- If there are any saw-core `error`s in the term, this will throw a
+     -- Haskell error - in this case we want to just return False, not stop
+     -- execution (e.g. see `bvVecMapM` in `CryptolM.sawcore`)
+     smt_res <- liftIO $
+       (Right <$> proveWhat4_solver z3Adapter sym unints sc prop (return ()))
+         `X.catch` \case
+           UserError msg -> return $ Left msg
+           e -> X.throw e
      case smt_res of
-       Just _ ->
+       Left msg ->
+         debugPrint 2 ("SMT solver encountered a saw-core error term: " ++ msg)
+           >> return False
+       Right (Just _, _) ->
          debugPrint 2 "SMT solver response: not provable" >> return False
-       Nothing ->
+       Right (Nothing, _) ->
          debugPrint 2 "SMT solver response: provable" >> return True
 
 -- | Test if a Boolean term over the current uvars is provable given the current

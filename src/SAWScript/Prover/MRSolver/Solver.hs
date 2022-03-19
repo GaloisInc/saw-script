@@ -127,6 +127,7 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm (substTerm)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Cryptol.Monadify
 
 import SAWScript.Prover.MRSolver.Term
 import SAWScript.Prover.MRSolver.Monad
@@ -205,7 +206,7 @@ normComp (CompTerm t) =
     (isGlobalDef "Prelude.returnM" -> Just (), [_, x]) ->
       return $ ReturnM x
     (isGlobalDef "Prelude.bindM" -> Just (), [_, _, m, f]) ->
-      do norm <- normComp (CompTerm m)
+      do norm <- normCompTerm m
          normBind norm (CompFunTerm f)
     (isGlobalDef "Prelude.errorM" -> Just (), [_, str]) ->
       return (ErrorM str)
@@ -230,7 +231,7 @@ normComp (CompTerm t) =
         -- Apply the body function to our function vars and recursively
         -- normalize the resulting computation
         body_tm <- mrApplyAll body_f fun_tms
-        normComp (CompTerm body_tm)
+        normCompTerm body_tm
 
     -- Recognize (multiFixM lrts (\ f1 ... fn -> (body1, ..., bodyn))).i args
     (asTupleSelector ->
@@ -246,7 +247,31 @@ normComp (CompTerm t) =
           if i > 0 && i <= length fun_tms then
             mrApplyAll (fun_tms !! (i-1)) args
           else throwMRFailure (MalformedComp t)
-        normComp (CompTerm body_tm)
+        normCompTerm body_tm
+
+    -- Convert `vecMapM (bvToNat ...)` into `bvVecMapM`
+    (asGlobalDef -> Just "CryptolM.vecMapM", [a, b, asBvToNat -> Just (w, n),
+                                              f, xs]) ->
+      do body <- mrGlobalDefBody "CryptolM.bvVecMapM"
+         mrApplyAll body [a, b, w, n, f, xs] >>= normCompTerm
+
+    -- Convert `atM (bvToNat ...)` into `bvVecAtM`
+    (asGlobalDef -> Just "CryptolM.atM", [asBvToNat -> Just (w1, n), a, xs,
+                                          asBvToNat -> Just (w2, i)]) ->
+      do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
+         ws_are_eq <- mrConvertible w1 w2
+         if ws_are_eq then
+           mrApplyAll body [w1, n, a, xs, i] >>= normCompTerm
+         else throwMRFailure (MalformedComp t)
+
+    -- Convert `updateM (bvToNat ...)` into `bvVecUpdateM`
+    (asGlobalDef -> Just "CryptolM.updateM", [asBvToNat -> Just (w1, n), a, xs,
+                                              asBvToNat -> Just (w2, i), x]) ->
+      do body <- mrGlobalDefBody "CryptolM.bvVecUpdateM"
+         ws_are_eq <- mrConvertible w1 w2
+         if ws_are_eq then
+           mrApplyAll body [w1, n, a, xs, i, x] >>= normCompTerm
+         else throwMRFailure (MalformedComp t)
 
     -- Always unfold: sawLet, multiArgFixM, Num_rec
     (f@(asGlobalDef -> Just ident), args)
@@ -261,14 +286,14 @@ normComp (CompTerm t) =
       do hd' <- liftSC4 scReduceRecursor rc crec c cargs 
                   >>= liftSC1 betaNormalize
          t' <- mrApplyAll hd' args
-         normComp (CompTerm t')
+         normCompTerm t'
 
     -- Always unfold record selectors applied to record values (after scWhnf)
     (asRecordSelector -> Just (r, fld), args) ->
       do r' <- liftSC1 scWhnf r
          case asRecordValue r' of
            Just (Map.lookup fld -> Just f) -> do t' <- mrApplyAll f args
-                                                 normComp (CompTerm t')
+                                                 normCompTerm t'
            _ -> throwMRFailure (MalformedComp t)
 
     -- For an ExtCns, we have to check what sort of variable it is
@@ -297,8 +322,14 @@ normBind (OrM comp1 comp2) k =
   return $ OrM (CompBind comp1 k) (CompBind comp2 k)
 normBind (ExistsM tp f) k = return $ ExistsM tp (compFunComp f k)
 normBind (ForallM tp f) k = return $ ForallM tp (compFunComp f k)
-normBind (FunBind f args k1) k2 =
-  return $ FunBind f args (compFunComp k1 k2)
+normBind (FunBind f args k1) k2
+  -- Turn `bvVecMapM ... >>= k` into `bvVecMapBindM ... k`
+  | GlobalName (globalDefString -> "CryptolM.bvVecMapM") [] <- f
+  , not (isCompFunReturn k2) =
+    do f' <- mrGlobalDef "CryptolM.bvVecMapBindM"
+       cont <- compFunToTerm (compFunComp k1 k2)
+       return $ FunBind f' (args ++ [cont]) CompFunReturn
+  | otherwise = return $ FunBind f args (compFunComp k1 k2)
 
 -- | Bind a 'Term' for a computation with a function and normalize
 normBindTerm :: Term -> CompFun -> MRM NormComp
@@ -313,6 +344,36 @@ applyCompFun (CompFunComp f g) t =
 applyCompFun CompFunReturn t =
   return $ CompReturn t
 applyCompFun (CompFunTerm f) t = CompTerm <$> mrApplyAll f [t]
+
+-- | Convert a 'CompFun' which is not a 'CompFunReturn' into a 'Term'
+compFunToTerm :: CompFun -> MRM Term
+compFunToTerm (CompFunTerm t) = return t
+compFunToTerm (CompFunComp f g) =
+  do f' <- compFunToTerm f
+     g' <- compFunToTerm g
+     f_tp <- mrTypeOf f'
+     g_tp <- mrTypeOf g'
+     case (f_tp, g_tp) of
+       (asPi -> Just (_, a, asCompM -> Just b),
+        asPi -> Just (_, _, asCompM -> Just c)) ->
+         liftSC2 scGlobalApply "Prelude.composeM" [a, b, c, f', g']
+       _ -> error "compFunToTerm: type(s) not of the form: a -> CompM b"
+compFunToTerm CompFunReturn = error "compFunToTerm: got a CompFunReturn"
+
+-- | Convert a 'Comp' into a 'Term'
+compToTerm :: Comp -> MRM Term
+compToTerm (CompTerm t) = return t
+compToTerm (CompReturn t) =
+   do tp <- mrTypeOf t
+      liftSC2 scGlobalApply "Prelude.returnM" [tp, t]
+compToTerm (CompBind m CompFunReturn) = compToTerm m
+compToTerm (CompBind m f) =
+  do m' <- compToTerm m
+     f' <- compFunToTerm f
+     mrTypeOf f' >>= \case
+       (asPi -> Just (_, a, asCompM -> Just b)) ->
+         liftSC2 scGlobalApply "Prelude.bindM" [a, b, m', f']
+       _ -> error "compToTerm: type not of the form: a -> CompM b"
 
 -- | Apply a 'CompFun' to a term and normalize the resulting computation
 applyNormCompFun :: CompFun -> Term -> MRM NormComp
