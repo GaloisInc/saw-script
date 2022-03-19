@@ -215,7 +215,14 @@ normComp (CompTerm t) =
     (isGlobalDef "Prelude.either" -> Just (), [ltp, rtp, _, f, g, eith]) ->
       return $ Either (Type ltp) (Type rtp) (CompFunTerm f) (CompFunTerm g) eith
     (isGlobalDef "Prelude.maybe" -> Just (), [tp, _, m, f, mayb]) ->
-      return $ MaybeElim (Type tp) (CompTerm m) (CompFunTerm f) mayb
+      do tp' <- case asApplyAll tp of
+                  -- Always unfold: is_bvult, is_bvule
+                  (tpf@(asGlobalDef -> Just ident), args)
+                    | ident `elem` ["Prelude.is_bvult", "Prelude.is_bvule"]
+                    , Just (_, Just body) <- asConstant tpf ->
+                      mrApplyAll body args
+                  _ -> return tp
+         return $ MaybeElim (Type tp') (CompTerm m) (CompFunTerm f) mayb
     (isGlobalDef "Prelude.orM" -> Just (), [_, m1, m2]) ->
       return $ OrM (CompTerm m1) (CompTerm m2)
     (isGlobalDef "Prelude.existsM" -> Just (), [tp, _, body_tm]) ->
@@ -578,40 +585,6 @@ mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
      cond_pf <- liftSC1 scEqTrue cond >>= mrDummyProof
-     m2' <- applyNormCompFun f2 cond_pf
-     cond_holds <- mrProvable cond
-     not_cond_holds <- mrProvable not_cond
-     case (cond_holds, not_cond_holds) of
-       (True, _) -> mrRefines m1 m2'
-       (_, True) -> mrRefines m1 m2
-       _ -> withAssumption cond (mrRefines m1 m2') >>
-            withAssumption not_cond (mrRefines m1 m2)
-
--- maybe elimination on Nat inequalities
-mrRefines' (MaybeElim (Type (asIsLeOrLtNat -> Just (st, x1, y1))) m1 f1 _) m2 =
-  do x1_norm <- mrNormOpenTerm x1
-     y1_norm <- mrNormOpenTerm y1
-     y1_norm_for_cond <- if st then return y1_norm
-                               else liftSC2 scCtorApp "Prelude.Succ" [y1_norm]
-     cond <- liftSC2 scLtNat x1_norm y1_norm_for_cond
-     not_cond <- liftSC1 scNot cond
-     cond_pf <- mrIsLeOrLtNat st x1_norm y1_norm >>= mrDummyProof
-     m1' <- applyNormCompFun f1 cond_pf
-     cond_holds <- mrProvable cond
-     not_cond_holds <- mrProvable not_cond
-     case (cond_holds, not_cond_holds) of
-       (True, _) -> mrRefines m1' m2
-       (_, True) -> mrRefines m1 m2
-       _ -> withAssumption cond (mrRefines m1' m2) >>
-            withAssumption not_cond (mrRefines m1 m2)
-mrRefines' m1 (MaybeElim (Type (asIsLeOrLtNat -> Just (st, x2, y2))) m2 f2 _) =
-  do x2_norm <- mrNormOpenTerm x2
-     y2_norm <- mrNormOpenTerm y2
-     y2_norm_for_cond <- if st then return y2_norm
-                               else liftSC2 scCtorApp "Prelude.Succ" [y2_norm]
-     cond <- liftSC2 scLtNat x2_norm y2_norm_for_cond
-     not_cond <- liftSC1 scNot cond
-     cond_pf <- mrIsLeOrLtNat st x2 y2 >>= mrDummyProof
      m2' <- applyNormCompFun f2 cond_pf
      cond_holds <- mrProvable cond
      not_cond_holds <- mrProvable not_cond
