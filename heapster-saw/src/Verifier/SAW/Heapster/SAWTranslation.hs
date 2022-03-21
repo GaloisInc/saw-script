@@ -2685,8 +2685,8 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                  applyOpenTermMulti (globalOpenTerm "Prelude.repeatBVVec")
                  [w_tm, len_tm, elem_tp, transTerm1 ptrans_block] in
            pctx :>:
-           ptrans_block :>:
-           PTrans_Conj [APTrans_LLVMArray $ typeTransF ap_tp_trans [arr_term]])
+           PTrans_Conj [APTrans_LLVMArray $ typeTransF ap_tp_trans [arr_term]] :>:
+           ptrans_block)
          m
 
   [nuMP| SImpl_LLVMArrayFromBlock _ _ |] ->
