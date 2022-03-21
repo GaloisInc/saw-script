@@ -22,6 +22,7 @@ noErrorsContains0 <- parse_core_mod "arrays" "noErrorsContains0";
 // run_test "contains0 |= noErrorsContains0"
 //   (mr_solver_debug 0 contains0 noErrorsContains0) true;
 
+include "precondHint.saw";
 import "arrays.cry";
 
 zero_array <- parse_core_mod "arrays" "zero_array";

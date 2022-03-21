@@ -1,0 +1,6 @@
+/* Helper SAW script for defining precondHint in Cryptol */
+
+precondHint <- parse_core "precondHint";
+cryptol_add_prim "PrecondHint" "precondHint" precondHint;
+
+import "PrecondHint.cry";

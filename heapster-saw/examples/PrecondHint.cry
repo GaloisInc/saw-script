@@ -1,0 +1,6 @@
+
+/* The definition of precondHint in Cryptol */
+
+module PrecondHint where
+
+primitive precondHint : {a} Bit -> a -> a
