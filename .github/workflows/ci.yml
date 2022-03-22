@@ -267,9 +267,10 @@ jobs:
 
       - run: opam install -y coq=8.13.2 coq-bits=1.1.0
 
-      # FIXME: the following builds the Coq libraries for the SAW core
-      # to Coq translator; if we do other Coq tests, this should become
-      # its own build artifact, to avoid downloading it twice
+      # FIXME: the following steps generate Coq libraries for the SAW core to
+      # Coq translator and builds them; if we do other Coq tests, these steps
+      # should become their own build artifact, to avoid re-compiling the Coq
+      # libraries
       - working-directory: saw-core-coq/coq
         shell: bash
         run: opam exec -- make -j

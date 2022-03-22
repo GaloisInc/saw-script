@@ -7,6 +7,7 @@ RUN git clone https://github.com/GaloisInc/blst-verification.git /workdir && \
     cd /workdir && \
     git checkout 05d29b0e9d826053185e5bdba287045aab0b4669 && \
     git config --file=.gitmodules submodule.blst.url https://github.com/supranational/blst && \
+    git config --file=.gitmodules submodule.cryptol-specs.url https://github.com/GaloisInc/cryptol-specs && \
     git submodule sync && \
     git submodule update --init
 
