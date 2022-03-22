@@ -566,7 +566,8 @@ withNoUVars m =
      local (\info -> info { mriUVars = [], mriAssumptions = true_tm,
                             mriDataTypeAssumps = HashMap.empty }) m
 
--- | Run a MR Solver in a context of only the specified UVars, no others
+-- | Run a MR Solver in a context of only the specified UVars, no others -
+-- note that this also clears all assumptions
 withOnlyUVars :: [(LocalName,Term)] -> MRM a -> MRM a
 withOnlyUVars vars m = withNoUVars $ withUVars vars $ const m
 
@@ -905,15 +906,39 @@ instantiateFunAssump fassump =
 -- > \ x1 ... xn -> precondHint a phi m
 --
 -- If so, return @\ x1 ... xn -> phi@ as a term with the @xi@ variables free.
--- Otherwise, return 'Nothing'.
+-- Otherwise, return 'Nothing'. Note that this function will also look past
+-- any initial @bindM ... (assertFiniteM ...)@ applications and combine
+-- multiple top-level applications of @precondHint@.
 mrGetPrecond :: FunName -> MRM (Maybe Term)
 mrGetPrecond nm =
   mrFunNameBody nm >>= \case
-  Just (asLambdaList ->
-        (args,
-         asApplyAll -> (isGlobalDef "Prelude.precondHint" -> Just (),
-                        [_, phi, _]))) ->
-    Just <$> liftSC2 scLambdaList args phi
+    Just body -> mrGetPrecondBody body
+    _ -> return Nothing
+
+-- | The main loop of 'mrGetPrecond', which operates on a function's body
+mrGetPrecondBody :: Term -> MRM (Maybe Term)
+mrGetPrecondBody tm = case asApplyAll tm of
+  -- go inside any top-level lambdas
+  (asLambda -> Just (nm, tp, body), []) ->
+    do body' <- liftSC1 betaNormalize body
+       mb_phi <- mrGetPrecondBody body'
+       liftSC3 scLambda nm tp `mapM` mb_phi
+  -- always beta-reduce
+  (f@(asLambda -> Just _), args) ->
+    do tm' <- mrApplyAll f args
+       mrGetPrecondBody tm'
+  -- go inside any top-level applications of of bindM ... (assertFiniteM ...)
+  (isGlobalDef "Prelude.bindM" -> Just (),
+   [_, _,
+    asApp -> Just (isGlobalDef "CryptolM.assertFiniteM" -> Just (),
+                   asCtor -> Just (primName -> "Cryptol.TCNum", _)),
+    k]) ->
+    do pf <- liftSC1 scGlobalDef "Prelude.TrueI"
+       body <- mrApplyAll k [pf]
+       mrGetPrecondBody body
+  -- otherwise, return Just iff there is a top-level precondHint
+  (isGlobalDef "Prelude.precondHint" -> Just (),
+   [_, phi, _]) -> return $ Just phi
   _ -> return Nothing
 
 -- | Add an assumption of type @Bool@ to the current path condition while

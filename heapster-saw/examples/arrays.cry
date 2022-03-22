@@ -6,9 +6,9 @@ import PrecondHint
 zero_array_loop_spec : {n} Literal n [64] => [n][64] -> [n][64]
 zero_array_loop_spec ys = loop 0 ys
   where loop : [64] -> [n][64] -> [n][64]
-        loop i xs = if i < `n then loop (i+1) (update xs i 0) else xs
+        loop i xs = precondHint (i <= 0x0fffffffffffffff)
+                                (if i < `n then loop (i+1) (update xs i 0)
+                                           else xs)
 
 zero_array_spec : {n} Literal n [64] => [n][64] -> [n][64]
-zero_array_spec xs =
-  precondHint ((0xf000000000000000 <=$ `n) && (`n <=$ 0x0fffffffffffffff))
-              [ 0 | _ <- xs ]
+zero_array_spec xs = precondHint (`n <= 0x0fffffffffffffff) [ 0 | _ <- xs ]
