@@ -27,4 +27,4 @@ import "arrays.cry";
 
 zero_array <- parse_core_mod "arrays" "zero_array";
 run_test "zero_array |= zero_array_spec"
-  (mr_solver_debug 0 zero_array {{ zero_array_loop_spec }}) true;
+  (mr_solver_debug 0 zero_array {{ zero_array_spec }}) true;

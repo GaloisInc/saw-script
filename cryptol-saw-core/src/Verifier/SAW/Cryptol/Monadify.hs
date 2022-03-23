@@ -1027,15 +1027,28 @@ invariantHintMacro = MonMacro 3 $ \_ args ->
      atrm_cond <- monadifyArg (Just boolMonType) cond
      mtp <- monadifyTypeM tp
      mtrm <- resetMonadifyM (toArgType mtp) $ monadifyTerm (Just mtp) m
-     case mtrm of
-       ArgMonTerm atrm ->
-         return $ fromArgTerm mtp $
-         applyOpenTermMulti (globalOpenTerm "Prelude.invariantHint")
-         [toArgType mtp, toArgTerm atrm_cond, toArgTerm atrm]
-       _ ->
-         return $ fromCompTerm mtp $
-         applyOpenTermMulti (globalOpenTerm "Prelude.invariantHint")
-         [toCompType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
+     return $ fromCompTerm mtp $
+       applyOpenTermMulti (globalOpenTerm "Prelude.invariantHint")
+       [toCompType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
+
+-- | The macro for @asserting@ or @assuming@, which converts @asserting@ to
+-- @assertingM@ or @assuming@ to @assumingM@ (depending on whether the given
+-- 'Bool' is true or false, respectively) and which contains any binds in the
+-- body to the body
+assertingOrAssumingMacro :: Bool -> MonMacro
+assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
+  do let (tp, cond, m) =
+           case args of
+             [t1, t2, t3] -> (t1, t2, t3)
+             _ -> error "assertingOrAssumingMacro: wrong number of arguments!"
+     atrm_cond <- monadifyArg (Just boolMonType) cond
+     mtp <- monadifyTypeM tp
+     mtrm <- resetMonadifyM (toArgType mtp) $ monadifyTerm (Just mtp) m
+     let ident = if doAsserting then "Prelude.assertingM"
+                                else "Prelude.assumingM"
+     return $ fromCompTerm mtp $
+       applyOpenTermMulti (globalOpenTerm ident)
+       [toArgType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
 
 -- | Make a 'MonMacro' that maps a named global whose first argument is @n:Num@
 -- to a global of semi-pure type that takes an additional argument of type
@@ -1126,6 +1139,8 @@ defaultMonEnv =
   , mmCustom "Prelude.fix" fixMacro
   , mmCustom "Prelude.either" eitherMacro
   , mmCustom "Prelude.invariantHint" invariantHintMacro
+  , mmCustom "Prelude.asserting" (assertingOrAssumingMacro True)
+  , mmCustom "Prelude.assuming" (assertingOrAssumingMacro False)
 
     -- Top-level sequence functions
   , mmArg "Cryptol.seqMap" "CryptolM.seqMapM"
