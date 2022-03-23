@@ -133,32 +133,29 @@ typeTransType1 (TypeTrans [] _) = unitTypeOpenTerm
 typeTransType1 (TypeTrans [tp] _) = tp
 typeTransType1 _ = error ("typeTransType1" ++ nlPrettyCallStack callStack)
 
--- | Build the tuple type @T1 * (T2 * ... * (Tn-1 * Tn))@ of @n@ types, with the
--- special case that 0 types maps to the unit type @#()@ (and 1 type just maps
--- to itself). Note that this is different from 'tupleTypeOpenTerm', which
--- always ends with unit, i.e., which returns @T1*(T2*...*(Tn-1*(Tn*#())))@.
+-- | Build the tuple type @#(T1, T2, ... Tn-1, Tn)@ of @n@ types, with
+-- the special case that 0 types maps to the unit type @#()@ (and 1
+-- type just maps to itself).
 tupleOfTypes :: [OpenTerm] -> OpenTerm
 tupleOfTypes [] = unitTypeOpenTerm
 tupleOfTypes [tp] = tp
-tupleOfTypes (tp:tps) = pairTypeOpenTerm tp $ tupleOfTypes tps
+tupleOfTypes tps = tupleTypeOpenTerm tps
 
--- | Build the tuple @(t1,(t2,(...,(tn-1,tn))))@ of @n@ terms, with the
--- special case that 0 types maps to the unit value @()@ (and 1 value just maps
--- to itself). Note that this is different from 'tupleOpenTerm', which
--- always ends with unit, i.e., which returns @t1*(t2*...*(tn-1*(tn*())))@.
+-- | Build the tuple @(t1, t2, ..., tn-1, tn)@ of @n@ terms, with the
+-- special case that 0 types maps to the unit value @()@ (and 1 value
+-- just maps to itself).
 tupleOfTerms :: [OpenTerm] -> OpenTerm
 tupleOfTerms [] = unitOpenTerm
 tupleOfTerms [t] = t
-tupleOfTerms (t:ts) = pairOpenTerm t $ tupleOfTerms ts
+tupleOfTerms ts = tupleOpenTerm ts
 
 -- | Project the @i@th element from a term of type @'tupleOfTypes' tps@. Note
 -- that this requires knowing the length of @tps@.
 projTupleOfTypes :: [OpenTerm] -> Integer -> OpenTerm -> OpenTerm
-projTupleOfTypes [] _ _ = error "projTupleOfTypes: projection of empty tuple!"
-projTupleOfTypes [_] 0 tup = tup
-projTupleOfTypes (_:_) 0 tup = pairLeftOpenTerm tup
-projTupleOfTypes (_:tps) i tup =
-  projTupleOfTypes tps (i-1) $ pairRightOpenTerm tup
+projTupleOfTypes tps i tup
+  | i == 0 && length tps == 1 = tup
+  | i < toInteger (length tps) = projTupleOpenTerm i tup
+  | otherwise = error "projTupleOfTypes: invalid tuple index"
 
 -- | Map the 'typeTransTypes' field of a 'TypeTrans' to a single type, where a
 -- single type is mapped to itself, an empty list of types is mapped to @unit@,
@@ -4585,14 +4582,15 @@ typedBlockLetRecEntries =
                          . filter (anyF typedEntryHasMultiInDegree)
                          . (^. typedBlockEntries))
 
--- | Fold a function over each 'TypedEntry' in a 'TypedBlockMap' that
+-- | Map a monadic function over each 'TypedEntry' in a 'TypedBlockMap' that
 -- corresponds to a letrec-bound variable
-foldBlockMapLetRec ::
+mapBlockMapLetRec ::
   (forall args ghosts.
-   TypedEntry TransPhase ext blocks tops rets args ghosts -> b -> b) ->
-  b -> TypedBlockMap TransPhase ext blocks tops rets -> b
-foldBlockMapLetRec f r =
-  foldr (\(SomeTypedEntry entry) -> f entry) r . typedBlockLetRecEntries
+   TypedEntry TransPhase ext blocks tops rets args ghosts ->
+   TypeTransM ctx b) ->
+  TypedBlockMap TransPhase ext blocks tops rets -> TypeTransM ctx [b]
+mapBlockMapLetRec f =
+  mapM (\(SomeTypedEntry entry) -> f entry) . typedBlockLetRecEntries
 
 -- | Construct a @LetRecType@ inductive description
 --
@@ -4627,13 +4625,10 @@ translateEntryLRT entry@(TypedEntry {..}) =
 -- entrypoints in a 'TypedBlockMap'
 translateBlockMapLRTs :: TypedBlockMap TransPhase ext blocks tops rets ->
                          TypeTransM ctx OpenTerm
-translateBlockMapLRTs =
-  foldBlockMapLetRec
-  (\entry rest_m ->
-    do entryType <- translateEntryLRT entry
-       rest <- rest_m
-       return $ ctorOpenTerm "Prelude.LRT_Cons" [entryType, rest])
-  (return $ ctorOpenTerm "Prelude.LRT_Nil" [])
+translateBlockMapLRTs blk_map =
+  foldr (\entryType rest -> ctorOpenTerm "Prelude.LRT_Cons" [entryType, rest])
+        (ctorOpenTerm "Prelude.LRT_Nil" []) <$>
+  mapBlockMapLetRec translateEntryLRT blk_map
 
 -- | Lambda-abstract over all the entrypoints in a 'TypedBlockMap' that
 -- correspond to letrec-bound functions, putting the lambda-bound variables into
@@ -4689,11 +4684,8 @@ translateBlockMapBodies :: PermCheckExtC ext =>
                            TypedBlockMapTrans ext blocks tops rets ->
                            TypedBlockMap TransPhase ext blocks tops rets ->
                            TypeTransM ctx OpenTerm
-translateBlockMapBodies mapTrans =
-  foldBlockMapLetRec
-  (\entry restM ->
-    pairOpenTerm <$> translateEntryBody mapTrans entry <*> restM)
-  (return unitOpenTerm)
+translateBlockMapBodies mapTrans blk_map =
+  tupleOpenTerm <$> mapBlockMapLetRec (translateEntryBody mapTrans) blk_map
 
 
 -- | Translate a typed CFG to a SAW term

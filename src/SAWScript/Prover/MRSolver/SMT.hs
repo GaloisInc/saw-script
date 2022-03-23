@@ -221,11 +221,9 @@ mrProvable bool_tm =
                (closedOpenTerm a)
              ec <- instUVar nm ec_tp
              liftSC4 genBVVecTerm n len a ec
-          -- For pairs, recurse on both sides and combine the result as a pair
-          (asPairType -> Just (tp1, tp2)) -> do
-            e1 <- instUVar nm tp1
-            e2 <- instUVar nm tp2
-            liftSC2 scPairValue e1 e2
+          -- For tuples, recurse on all components and combine the result as a tuple
+          (asTupleType -> Just tps) ->
+            liftSC1 scTuple =<< traverse (instUVar nm) tps
           -- Otherwise, create a global variable with the given name and type
           tp' -> liftSC2 scFreshEC nm tp' >>= liftSC1 scExtCns
 
@@ -267,6 +265,12 @@ andTermInCtx (TermInCtx ctx1 t1) (TermInCtx ctx2 t2) =
     -- ctx1
     t2' <- liftTermLike (length ctx2) (length ctx1) t2
     TermInCtx (ctx1++ctx2) <$> liftSC2 scAnd t1' t2'
+
+-- | Conjoin a list of 'TermInCtx's, assuming they all have Boolean type.
+allTermInCtx :: [TermInCtx] -> MRM TermInCtx
+allTermInCtx [] = TermInCtx [] <$> liftSC1 scBool True
+allTermInCtx [x] = pure x
+allTermInCtx (x : xs) = andTermInCtx x =<< allTermInCtx xs
 
 -- | Extend the context of a 'TermInCtx' with additional universal variables
 -- bound "outside" the 'TermInCtx'
@@ -358,15 +362,13 @@ mrProveEqH _ (asBoolType -> Just _) t1 t2 =
 mrProveEqH _ (asIntegerType -> Just _) t1 t2 =
   mrProveEqSimple (liftSC2 scIntEq) t1 t2
 
--- For pair types, prove both the left and right projections are equal
-mrProveEqH var_map (asPairType -> Just (tpL, tpR)) t1 t2 =
-  do t1L <- liftSC1 scPairLeft t1
-     t2L <- liftSC1 scPairLeft t2
-     t1R <- liftSC1 scPairRight t1
-     t2R <- liftSC1 scPairRight t2
-     condL <- mrProveEqH var_map tpL t1L t2L
-     condR <- mrProveEqH var_map tpR t1R t2R
-     andTermInCtx condL condR
+-- For tuple types, prove all of the projections are equal
+mrProveEqH var_map (asTupleType -> Just tps) t1 t2 =
+  do let idxs = [0 .. length tps - 1]
+     ts1 <- liftSC1 (\sc t -> traverse (scTupleSelector sc t) idxs) t1
+     ts2 <- liftSC1 (\sc t -> traverse (scTupleSelector sc t) idxs) t2
+     conds <- sequence $ zipWith3 (mrProveEqH var_map) tps ts1 ts2
+     allTermInCtx conds
 
 -- For non-bitvector vector types, prove all projections are equal by
 -- quantifying over a universal index variable and proving equality at that

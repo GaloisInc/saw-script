@@ -3,39 +3,48 @@ module arrays where
 
 import Prelude;
 
+letRecM_single :
+  (lrt : LetRecType) ->
+  (B : sort 0) ->
+  (lrtToType lrt -> lrtToType lrt) ->
+  (lrtToType lrt -> CompM B) -> CompM B;
+letRecM_single lrt B fn body =
+  letRecM
+    (LRT_Cons lrt LRT_Nil) B
+    (\ (x : lrtToType lrt) -> consTuple (lrtToType lrt) TypeNil (fn x) ())
+    (\ (x : lrtToType lrt) -> body x);
+
 -- The helper function for noErrorsContains0
 --
 -- noErrorsContains0H len i v =
 --   orM (exists x. returnM x) (noErrorsContains0H len (i+1) v)
 noErrorsContains0H : (len i:Vec 64 Bool) -> BVVec 64 len (Vec 64 Bool) ->
-                     CompM (BVVec 64 len (Vec 64 Bool) * Vec 64 Bool);
+                     CompM #(BVVec 64 len (Vec 64 Bool), Vec 64 Bool);
 noErrorsContains0H len_top i_top v_top =
-  letRecM
-    (LRT_Cons
-     (LRT_Fun (Vec 64 Bool) (\ (len:Vec 64 Bool) ->
-      LRT_Fun (Vec 64 Bool) (\ (_:Vec 64 Bool) ->
-      LRT_Fun (BVVec 64 len (Vec 64 Bool)) (\ (_:BVVec 64 len (Vec 64 Bool)) ->
-      LRT_Ret (BVVec 64 len (Vec 64 Bool) * Vec 64 Bool)))))
-     LRT_Nil)
-    (BVVec 64 len_top (Vec 64 Bool) * Vec 64 Bool)
+  letRecM_single
+    (LRT_Fun (Vec 64 Bool) (\ (len:Vec 64 Bool) ->
+     LRT_Fun (Vec 64 Bool) (\ (_:Vec 64 Bool) ->
+     LRT_Fun (BVVec 64 len (Vec 64 Bool)) (\ (_:BVVec 64 len (Vec 64 Bool)) ->
+     LRT_Ret #(BVVec 64 len (Vec 64 Bool), Vec 64 Bool)))))
+    #(BVVec 64 len_top (Vec 64 Bool), Vec 64 Bool)
     (\ (f : (len i:Vec 64 Bool) -> BVVec 64 len (Vec 64 Bool) ->
-            CompM (BVVec 64 len (Vec 64 Bool) * Vec 64 Bool)) ->
-       ((\ (len:Vec 64 Bool) (i:Vec 64 Bool) (v:BVVec 64 len (Vec 64 Bool)) ->
-           precondHint
-             (CompM (BVVec 64 len (Vec 64 Bool) * Vec 64 Bool))
-             (and (bvsle 64 0x0000000000000000 i)
-                  (bvsle 64 i 0x0fffffffffffffff))
-             (orM (BVVec 64 len (Vec 64 Bool) * Vec 64 Bool)
-                  (existsM (BVVec 64 len (Vec 64 Bool) * Vec 64 Bool)
-                           (BVVec 64 len (Vec 64 Bool) * Vec 64 Bool)
-                           (returnM (BVVec 64 len (Vec 64 Bool) * Vec 64 Bool)))
-                  (f len (bvAdd 64 i 0x0000000000000001) v))), ()))
+            CompM #(BVVec 64 len (Vec 64 Bool), Vec 64 Bool)) ->
+       (\ (len:Vec 64 Bool) (i:Vec 64 Bool) (v:BVVec 64 len (Vec 64 Bool)) ->
+          precondHint
+            (CompM #(BVVec 64 len (Vec 64 Bool), Vec 64 Bool))
+            (and (bvsle 64 0x0000000000000000 i)
+                 (bvsle 64 i 0x0fffffffffffffff))
+            (orM #(BVVec 64 len (Vec 64 Bool), Vec 64 Bool)
+                 (existsM #(BVVec 64 len (Vec 64 Bool), Vec 64 Bool)
+                          #(BVVec 64 len (Vec 64 Bool), Vec 64 Bool)
+                          (returnM #(BVVec 64 len (Vec 64 Bool), Vec 64 Bool)))
+                 (f len (bvAdd 64 i 0x0000000000000001) v))))
     (\ (f : (len i:Vec 64 Bool) -> BVVec 64 len (Vec 64 Bool) ->
-            CompM (BVVec 64 len (Vec 64 Bool) * Vec 64 Bool)) ->
+            CompM #(BVVec 64 len (Vec 64 Bool), Vec 64 Bool)) ->
        f len_top i_top v_top);
 
 -- The specification that contains0 has no errors
 noErrorsContains0 : (len:Vec 64 Bool) -> BVVec 64 len (Vec 64 Bool) ->
-                    CompM (BVVec 64 len (Vec 64 Bool) * Vec 64 Bool);
+                    CompM #(BVVec 64 len (Vec 64 Bool), Vec 64 Bool);
 noErrorsContains0 len v =
   noErrorsContains0H len 0x0000000000000000 v;

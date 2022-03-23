@@ -438,15 +438,14 @@ liftSC5 f a b c d e = mrSC >>= \sc -> liftIO (f sc a b c d e)
 
 -- | Apply a 'TermProj' to perform a projection on a 'Term'
 doTermProj :: Term -> TermProj -> MRM Term
-doTermProj t TermProjLeft = liftSC1 scPairLeft t
-doTermProj t TermProjRight = liftSC1 scPairRight t
+doTermProj t (TermProjTuple i) = liftSC1 (\sc x -> scTupleSelector sc x i) t
 doTermProj t (TermProjRecord fld) = liftSC2 scRecordSelect t fld
 
 -- | Apply a 'TermProj' to a type to get the output type of the projection,
 -- assuming that the type is already normalized
 doTypeProj :: Term -> TermProj -> MRM Term
-doTypeProj (asPairType -> Just (tp1, _)) TermProjLeft = return tp1
-doTypeProj (asPairType -> Just (_, tp2)) TermProjRight = return tp2
+doTypeProj (asTupleType -> Just tps) (TermProjTuple i)
+  | i < length tps = pure (tps !! i)
 doTypeProj (asRecordType -> Just tp_map) (TermProjRecord fld)
   | Just tp <- Map.lookup fld tp_map
   = return tp

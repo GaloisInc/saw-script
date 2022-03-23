@@ -8,10 +8,10 @@ listInsertM a l s =
   returnM (List a) (Cons a s l);
 
 listRemoveM : (a : sort 0) -> (a -> a -> Bool) -> List a -> a ->
-              CompM (List a * a);
+              CompM #(List a, a);
 listRemoveM a test_eq l s =
   returnM
-    (List a * a)
+    #(List a, a)
     (List__rec
       a (\ (_:List a) -> List a)
       (Nil a)
@@ -30,10 +30,10 @@ stringListInsertM : List String -> String -> CompM (List String);
 stringListInsertM l s =
   returnM (List String) (Cons String s l);
 
-stringListRemoveM : List String -> String -> CompM (stringList * String);
+stringListRemoveM : List String -> String -> CompM #(stringList, String);
 stringListRemoveM l s =
   returnM
-    (stringList * String)
+    #(stringList, String)
     (List__rec
       String (\ (_:List String) -> List String)
       (Nil String)

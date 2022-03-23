@@ -25,28 +25,28 @@ Mbox_def = Mbox;
             (m:Mbox) -> P m;
 Mbox__rec P f1 f2 m = Mbox#rec P f1 f2 m; -}
 
---unfoldMbox : Mbox -> Either #() (Mbox * Vec 64 Bool * BVVec 64 bv64_16 (Vec 64 Bool));
+--unfoldMbox : Mbox -> Either #() #(Mbox, Vec 64 Bool, BVVec 64 bv64_16 (Vec 64 Bool));
 primitive
-unfoldMbox : Mbox -> Either #() (Sigma (V64) (\ (len : V64) -> Mbox * BVVec 64 len (Vec 64 Bool)));
+unfoldMbox : Mbox -> Either #() (Sigma (V64) (\ (len : V64) -> #(Mbox, BVVec 64 len (Vec 64 Bool))));
 
 {-unfoldMbox m =
-  Mbox__rec (\ (_:Mbox) -> Either #() (Mbox * Vec 64 Bool * BVVec 64 bv64_16 (Vec 64 Bool) * #()))
-  (Left #() (Mbox * Vec 64 Bool * BVVec 64 bv64_16 (Vec 64 Bool) * #()) ())
-  (\ (m:Mbox) (_:Either #() (Mbox * Vec 64 Bool * BVVec 64 bv64_16 (Vec 64 Bool) * #())) (len:Vec 64 Bool) (d:BVVec 64 bv64_16 (Vec 64 Bool)) ->
-     Right #() (Mbox * Vec 64 Bool * BVVec 64 bv64_16 (Vec 64 Bool) * #()) (m, len, d, ()))
+  Mbox__rec (\ (_:Mbox) -> Either #() #(Mbox, Vec 64 Bool, BVVec 64 bv64_16 (Vec 64 Bool), #()))
+  (Left #() #(Mbox, Vec 64 Bool, BVVec 64 bv64_16 (Vec 64 Bool), #()) ())
+  (\ (m:Mbox) (_:Either #() #(Mbox, Vec 64 Bool, BVVec 64 bv64_16 (Vec 64 Bool), #())) (len:Vec 64 Bool) (d:BVVec 64 bv64_16 (Vec 64 Bool)) ->
+     Right #() #(Mbox, Vec 64 Bool, BVVec 64 bv64_16 (Vec 64 Bool), #()) (m, len, d, ()))
   m;
   -}
 
 primitive
-foldMbox : Either #() (Sigma (V64) (\ (len : V64) -> Mbox * BVVec 64 len (Vec 64 Bool))) -> Mbox;
+foldMbox : Either #() (Sigma (V64) (\ (len : V64) -> #(Mbox, BVVec 64 len (Vec 64 Bool)))) -> Mbox;
 
---(Mbox * Vec 64 Bool * (BVVec 64 bv64_16 (Vec 64 Bool)) * #()) -> Mbox;
+--#(Mbox, Vec 64 Bool, (BVVec 64 bv64_16 (Vec 64 Bool)), #()) -> Mbox;
 {-
 foldMbox =
-  either #() (Mbox * Vec 64 Bool * (BVVec 64 bv64_16 (Vec 64 Bool)) * #()) Mbox
+  either #() #(Mbox, Vec 64 Bool, (BVVec 64 bv64_16 (Vec 64 Bool)), #()) Mbox
          (\ (_:#()) -> Mbox_nil)
-         (\ (tup : (Mbox * Vec 64 Bool * (BVVec 64 bv64_16 (Vec 64 Bool)) * #())) ->
-            Mbox_cons tup.1 tup.2 tup.3);
+         (\ (tup : #(Mbox, Vec 64 Bool, (BVVec 64 bv64_16 (Vec 64 Bool)), #())) ->
+            Mbox_cons tup.0 tup.1 tup.2);
 			-}
 
 primitive

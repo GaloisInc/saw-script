@@ -122,23 +122,23 @@ eListSelM a =
 -- FIXME
 primitive
 fromM : (a b : sort 0) -> (m n : Num) -> mseq m a -> (a -> CompM (mseq n b)) ->
-        CompM (seq (tcMul m n) (a * b));
+        CompM (seq (tcMul m n) #(a, b));
 
 -- FIXME
 primitive
 mletM : (a b : sort 0) -> (n : Num) -> a -> (a -> CompM (mseq n b)) ->
-        CompM (mseq n (a * b));
+        CompM (mseq n #(a, b));
 
 -- FIXME
 primitive
 seqZipM : (a b : sort 0) -> (m n : Num) -> mseq m a -> mseq n b ->
-          CompM (mseq (tcMin m n) (a * b));
+          CompM (mseq (tcMin m n) #(a, b));
 {-
 seqZipM a b m n ms1 ms2 =
   seqMap
-    (CompM a * CompM b) (CompM (a * b)) (tcMin m n)
-    (\ (p : CompM a * CompM b) ->
-       bindM2 a b (a*b) p.(1) p.(2) (\ (x:a) (y:b) -> returnM (a*b) (x,y)))
+    #(CompM a, CompM b) (CompM #(a, b)) (tcMin m n)
+    (\ (p : #(CompM a, CompM b)) ->
+       bindM2 a b #(a, b) p.(0) p.(1) (\ (x:a) (y:b) -> returnM #(a, b) (x, y)))
     (seqZip (CompM a) (CompM b) m n ms1 ms2);
 -}
 

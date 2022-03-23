@@ -64,16 +64,15 @@ showMRVar :: MRVar -> String
 showMRVar = show . ppName . ecName . unMRVar
 
 -- | A tuple or record projection of a 'Term'
-data TermProj = TermProjLeft | TermProjRight | TermProjRecord FieldName
+data TermProj = TermProjTuple Int | TermProjRecord FieldName
               deriving (Eq, Ord, Show)
 
 -- | Recognize a 'Term' as 0 or more projections
 asProjAll :: Term -> (Term, [TermProj])
 asProjAll (asRecordSelector -> Just ((asProjAll -> (t, projs)), fld)) =
   (t, TermProjRecord fld:projs)
-asProjAll (asPairSelector -> Just ((asProjAll -> (t, projs)), isRight))
-  | isRight = (t, TermProjRight:projs)
-  | not isRight = (t, TermProjLeft:projs)
+asProjAll (asTupleSelector -> Just ((asProjAll -> (t, projs)), i)) =
+  (t, TermProjTuple i : projs)
 asProjAll t = (t, [])
 
 -- | Names of functions to be used in computations, which are either names bound
@@ -100,10 +99,8 @@ funNameTerm :: FunName -> Term
 funNameTerm (LetRecName var) = Unshared $ FTermF $ ExtCns $ unMRVar var
 funNameTerm (EVarFunName var) = Unshared $ FTermF $ ExtCns $ unMRVar var
 funNameTerm (GlobalName gdef []) = globalDefTerm gdef
-funNameTerm (GlobalName gdef (TermProjLeft:projs)) =
-  Unshared $ FTermF $ PairLeft $ funNameTerm (GlobalName gdef projs)
-funNameTerm (GlobalName gdef (TermProjRight:projs)) =
-  Unshared $ FTermF $ PairRight $ funNameTerm (GlobalName gdef projs)
+funNameTerm (GlobalName gdef (TermProjTuple i : projs)) =
+  Unshared $ FTermF $ TupleSelector (funNameTerm (GlobalName gdef projs)) i
 funNameTerm (GlobalName gdef (TermProjRecord fname:projs)) =
   Unshared $ FTermF $ RecordProj (funNameTerm (GlobalName gdef projs)) fname
 
@@ -381,8 +378,7 @@ instance PrettyInCtx [Term] where
   prettyInCtx xs = list <$> mapM prettyInCtx xs
 
 instance PrettyInCtx TermProj where
-  prettyInCtx TermProjLeft = return (pretty '.' <> "1")
-  prettyInCtx TermProjRight = return (pretty '.' <> "2")
+  prettyInCtx (TermProjTuple i) = return (pretty '.' <> pretty i)
   prettyInCtx (TermProjRecord fld) = return (pretty '.' <> pretty fld)
 
 instance PrettyInCtx FunName where

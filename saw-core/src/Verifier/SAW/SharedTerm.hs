@@ -124,14 +124,9 @@ module Verifier.SAW.SharedTerm
   , scEqTrue
   , scBool
   , scBoolType
-    -- *** Unit, pairs, and tuples
+    -- *** Tuples
   , scUnitValue
   , scUnitType
-  , scPairValue
-  , scPairType
-  , scPairLeft
-  , scPairRight
-  , scPairValueReduced
   , scTuple
   , scTupleType
   , scTupleSelector
@@ -777,7 +772,7 @@ scReduceNatRecursor sc rec crec n
 data WHNFElim
   = ElimApp Term
   | ElimProj FieldName
-  | ElimPair Bool
+  | ElimTuple Int
   | ElimRecursor Term (CompiledRecursor Term) [Term]
 
 -- | Test if a term is a constructor application that should be converted to a
@@ -818,9 +813,11 @@ scWhnf sc t0 =
     go xs                     (convertsToNat    -> Just k) = scFlatTermF sc (NatLit k) >>= go xs
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go xs                     (asRecordSelector -> Just (t, n)) = go (ElimProj n : xs) t
-    go xs                     (asPairSelector -> Just (t, i))   = go (ElimPair i : xs) t
+    go xs                     (asTupleSelector -> Just (t, i))  = go (ElimTuple i : xs) t
     go (ElimApp x : xs)       (asLambda -> Just (_, _, body))   = betaReduce xs [x] body
-    go (ElimPair i : xs)      (asPairValue -> Just (a, b))      = go xs (if i then b else a)
+    go (ElimTuple i : xs)     (asTupleValue -> Just ts)         = case V.fromList ts V.!? i of
+                                                                    Just t -> go xs t
+                                                                    Nothing -> error "scWhnf: invalid tuple index"
     go (ElimProj fld : xs)    (asRecordValue -> Just elems)     = case Map.lookup fld elems of
                                                                     Just t -> go xs t
                                                                     Nothing ->
@@ -835,13 +832,6 @@ scWhnf sc t0 =
     go xs                     (asGlobalDef -> Just c)           = scRequireDef sc c >>= tryDef c xs
     go xs                     (asRecursorApp ->
                                 Just (r, crec, ixs, arg))       = go (ElimRecursor r crec ixs : xs) arg
-    go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
-                                                                     t' <- scPairValue sc a b'
-                                                                     foldM reapply t' xs
-    go xs                     (asPairType -> Just (a, b))       = do a' <- memo a
-                                                                     b' <- memo b
-                                                                     t' <- scPairType sc a' b'
-                                                                     foldM reapply t' xs
     go xs                     (asRecordType -> Just elems)      = do elems' <- mapM (\(i,t) -> (i,) <$> memo t)
                                                                                     (Map.assocs elems)
                                                                      t' <- scRecordType sc elems'
@@ -868,7 +858,7 @@ scWhnf sc t0 =
     reapply :: Term -> WHNFElim -> IO Term
     reapply t (ElimApp x) = scApply sc t x
     reapply t (ElimProj i) = scRecordSelect sc t i
-    reapply t (ElimPair i) = scPairSelector sc t i
+    reapply t (ElimTuple i) = scTupleSelector sc t i
     reapply t (ElimRecursor r _crec ixs) =
       scFlatTermF sc (RecursorApp r ixs t)
 
@@ -1018,26 +1008,17 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
     ftermf tf =
       case tf of
         Primitive ec -> return (primType ec)
-        UnitValue -> lift $ scUnitType sc
-        UnitType -> lift $ scSort sc (mkSort 0)
-        PairValue x y -> do
-          tx <- memo x
-          ty <- memo y
-          lift $ scPairType sc tx ty
-        PairType x y -> do
-          sx <- sort x
-          sy <- sort y
-          lift $ scSort sc (max sx sy)
-        PairLeft t -> do
-          tp <- (liftIO . scWhnf sc) =<< memo t
-          case asPairType tp of
-            Just (t1, _) -> return t1
-            Nothing -> fail "scTypeOf: type error: expected pair type"
-        PairRight t -> do
-          tp <- (liftIO . scWhnf sc) =<< memo t
-          case asPairType tp of
-            Just (_, t2) -> return t2
-            Nothing -> fail "scTypeOf: type error: expected pair type"
+        TupleValue xs ->
+          liftIO . scTupleType sc =<< traverse memo (V.toList xs)
+        TupleSelector x i ->
+          do tp <- (liftIO . scWhnf sc) =<< memo x
+             case asTupleType tp of
+               Nothing -> fail "scTypeOf: type error: expected pair type"
+               Just ts ->
+                case V.fromList ts V.!? i of
+                  Nothing ->
+                    fail $ "scTypeOf: tuple selector out of range (" ++ show i ++ " > " ++ show (length ts) ++ ")"
+                  Just t -> pure t
         CtorApp c params args -> do
           lift $ foldM (reducePi sc) (primType c) (params ++ args)
         DataTypeApp dt params args -> do
@@ -1354,69 +1335,41 @@ scRecordType sc elem_tps = scFlatTermF sc (RecordType elem_tps)
 
 -- | Create a unit-valued term.
 scUnitValue :: SharedContext -> IO Term
-scUnitValue sc = scFlatTermF sc UnitValue
+scUnitValue sc = scTuple sc []
 
 -- | Create a term representing the unit type.
 scUnitType :: SharedContext -> IO Term
-scUnitType sc = scFlatTermF sc UnitType
-
--- | Create a pair term from two terms.
-scPairValue :: SharedContext
-            -> Term -- ^ The left projection
-            -> Term -- ^ The right projection
-            -> IO Term
-scPairValue sc x y = scFlatTermF sc (PairValue x y)
-
--- | Create a term representing a pair type from two other terms, each
--- representing a type.
-scPairType :: SharedContext
-           -> Term -- ^ Left projection type
-           -> Term -- ^ Right projection type
-           -> IO Term
-scPairType sc x y = scFlatTermF sc (PairType x y)
+scUnitType sc = scTupleType sc []
 
 -- | Create an n-place tuple from a list (of length n) of 'Term's.
 -- Note that tuples are nested pairs, associating to the right e.g.
 -- @(a, (b, (c, d)))@.
 scTuple :: SharedContext -> [Term] -> IO Term
-scTuple sc [] = scUnitValue sc
-scTuple _ [t] = return t
-scTuple sc (t : ts) = scPairValue sc t =<< scTuple sc ts
+scTuple sc ts = scFlatTermF sc (TupleValue (V.fromList ts))
+
+scTypeList :: SharedContext -> [Term] -> IO Term
+scTypeList sc [] = scCtorApp sc "Prelude.TypeNil" []
+scTypeList sc (t : ts) =
+  do ts' <- scTypeList sc ts
+     scCtorApp sc "Prelude.TypeCons" [t, ts']
 
 -- | Create a term representing the type of an n-place tuple, from a list
 -- (of length n) of 'Term's, each representing a type.
 scTupleType :: SharedContext -> [Term] -> IO Term
-scTupleType sc [] = scUnitType sc
-scTupleType _ [t] = return t
-scTupleType sc (t : ts) = scPairType sc t =<< scTupleType sc ts
+scTupleType sc ts =
+  do ts' <- scTypeList sc ts
+     scGlobalApply sc "Prelude.Tuple" [ts']
 
--- | Create a term giving the left projection of a 'Term' representing a pair.
-scPairLeft :: SharedContext -> Term -> IO Term
-scPairLeft sc t = scFlatTermF sc (PairLeft t)
-
--- | Create a term giving the right projection of a 'Term' representing a pair.
-scPairRight :: SharedContext -> Term -> IO Term
-scPairRight sc t = scFlatTermF sc (PairRight t)
-
--- | Create a term representing either the left or right projection of the
--- given 'Term', depending on the given 'Bool': left if @False@, right if @True@.
-scPairSelector :: SharedContext -> Term -> Bool -> IO Term
-scPairSelector sc t False = scPairLeft sc t
-scPairSelector sc t True = scPairRight sc t
-
--- | @scTupleSelector sc t i n@ returns a term selecting the @i@th component of
+-- | @scTupleSelector sc t i@ returns a term selecting the @i@th component of
 -- an @n@-place tuple 'Term', @t@.
 scTupleSelector ::
-  SharedContext -> Term ->
-  Int {- ^ 1-based index -} ->
-  Int {- ^ tuple size -} ->
+  SharedContext ->
+  Term {- ^ tuple -} ->
+  Int {- ^ 0-based index -} ->
   IO Term
-scTupleSelector sc t i n
-  | n == 1    = return t
-  | i == 1    = scPairLeft sc t
-  | i > 1     = do t' <- scPairRight sc t
-                   scTupleSelector sc t' (i - 1) (n - 1)
-  | otherwise = fail "scTupleSelector: non-positive index"
+scTupleSelector sc t i
+  | i < 0 = fail "scTupleSelector: negative index"
+  | otherwise = scFlatTermF sc (TupleSelector t i)
 
 -- | Create a term representing the type of a non-dependent function, given a
 -- parameter and result type (as 'Term's).
@@ -1549,20 +1502,25 @@ scGlobalApply sc i ts =
     do c <- scGlobalDef sc i
        scApplyAll sc c ts
 
--- | An optimized variant of 'scPairValue' that will reduce pairs of
--- the form @(x.L, x.R)@ to @x@.
-scPairValueReduced :: SharedContext -> Term -> Term -> IO Term
-scPairValueReduced sc x y =
-  case (unwrapTermF x, unwrapTermF y) of
-    (FTermF (PairLeft a), FTermF (PairRight b)) | a == b -> return a
-    _ -> scPairValue sc x y
-
 -- | An optimized variant of 'scPairTuple' that will reduce tuples of
--- the form @(x.1, x.2, x.3)@ to @x@.
+-- the form @(x.0, x.1, x.2)@ to @x@.
 scTupleReduced :: SharedContext -> [Term] -> IO Term
-scTupleReduced sc [] = scUnitValue sc
-scTupleReduced _ [t] = return t
-scTupleReduced sc (t : ts) = scPairValueReduced sc t =<< scTupleReduced sc ts
+scTupleReduced sc ts =
+  case asTupleRedex ts of
+    Just t -> pure t
+    Nothing -> scTuple sc ts
+
+asTupleRedex :: [Term] -> Maybe Term
+asTupleRedex [] = Nothing
+asTupleRedex (t0 : ts0) =
+  do (x, i) <- asTupleSelector t0
+     go x i ts0
+  where
+    go x _ [] = Just x
+    go x i (t : ts) =
+      do (y, j) <- asTupleSelector t
+         guard (j == i + 1 && x == y)
+         go x j ts
 
 -- | An optimized variant of 'scVector' that will reduce vectors of
 -- the form @[at x 0, at x 1, at x 2, at x 3]@ to just @x@.

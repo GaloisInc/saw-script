@@ -143,14 +143,9 @@ data FlatTermF e
     -- | A primitive or axiom without a definition.
   = Primitive !(PrimName e)
 
-    -- Tuples are represented as nested pairs, grouped to the right,
-    -- terminated with unit at the end.
-  | UnitValue
-  | UnitType
-  | PairValue e e
-  | PairType e e
-  | PairLeft e
-  | PairRight e
+  | TupleValue (Vector e)
+    -- | A zero-indexed tuple field selection.
+  | TupleSelector e Int
 
     -- | An inductively-defined type, applied to parameters and type indices
   | DataTypeApp !(PrimName e) ![e] ![e]
@@ -273,19 +268,16 @@ zipRec f (CompiledRecursor d1 ps1 m1 mty1 es1 ord1) (CompiledRecursor d2 ps2 m2 
 
 -- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
 -- pointwise to immediate subterms, if the two 'FlatTermF's are the same
--- constructor; otherwise, return 'Nothing' if they use different constructors
+-- constructor; otherwise, return 'Nothing' if they use different constructors.
 zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y ->
                     Maybe (FlatTermF z)
 zipWithFlatTermF f = go
   where
     go (Primitive pn1) (Primitive pn2) = Primitive <$> zipPrimName f pn1 pn2
-    go UnitValue UnitValue = Just UnitValue
-    go UnitType UnitType = Just UnitType
-    go (PairValue x1 x2) (PairValue y1 y2) = Just (PairValue (f x1 y1) (f x2 y2))
-    go (PairType x1 x2) (PairType y1 y2) = Just (PairType (f x1 y1) (f x2 y2))
-    go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
-    go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
-
+    go (TupleValue xs) (TupleValue ys)
+      | V.length xs == V.length ys = Just $ TupleValue (V.zipWith f xs ys)
+    go (TupleSelector x i) (TupleSelector y j)
+      | i == j = Just (TupleSelector (f x y) i)
     go (CtorApp cx psx lx) (CtorApp cy psy ly) =
       do c <- zipPrimName f cx cy
          Just $ CtorApp c (zipWith f psx psy) (zipWith f lx ly)

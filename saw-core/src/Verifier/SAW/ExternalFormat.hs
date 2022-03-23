@@ -145,12 +145,8 @@ scWriteExternal t0 =
             Primitive ec ->
                do stashPrimName ec
                   pure $ unwords ["Primitive", show (primVarIndex ec), show (primType ec)]
-            UnitValue           -> pure $ unwords ["Unit"]
-            UnitType            -> pure $ unwords ["UnitT"]
-            PairValue x y       -> pure $ unwords ["Pair", show x, show y]
-            PairType x y        -> pure $ unwords ["PairT", show x, show y]
-            PairLeft e          -> pure $ unwords ["ProjL", show e]
-            PairRight e         -> pure $ unwords ["ProjR", show e]
+            TupleValue xs       -> pure $ unwords ("Tuple" : map show (V.toList xs))
+            TupleSelector x i   -> pure $ unwords ["TupleSelector", show x, show i]
             CtorApp i ps es     ->
               do stashPrimName i
                  pure $ unwords ("Ctor" : show (primVarIndex i) : show (primType i) :
@@ -302,12 +298,9 @@ scReadExternal sc input =
         ["Constant",i,t,e]  -> Constant <$> readEC i t <*> (Just <$> readIdx e)
         ["ConstantOpaque",i,t]  -> Constant <$> readEC i t <*> pure Nothing
         ["Primitive", i, t] -> FTermF <$> (Primitive <$> readPrimName i t)
-        ["Unit"]            -> pure $ FTermF UnitValue
-        ["UnitT"]           -> pure $ FTermF UnitType
-        ["Pair", x, y]      -> FTermF <$> (PairValue <$> readIdx x <*> readIdx y)
-        ["PairT", x, y]     -> FTermF <$> (PairType <$> readIdx x <*> readIdx y)
-        ["ProjL", x]        -> FTermF <$> (PairLeft <$> readIdx x)
-        ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
+        ("Tuple" : xs)      -> FTermF <$> (TupleValue <$> (V.fromList <$> traverse readIdx xs))
+        ["TupleSelector", x, i]
+                            -> FTermF <$> (TupleSelector <$> readIdx x <*> pure (read i))
         ("Ctor" : i : t : (separateArgs -> Just (ps, es))) ->
           FTermF <$> (CtorApp <$> readPrimName i t <*> traverse readIdx ps <*> traverse readIdx es)
         ("Data" : i : t : (separateArgs -> Just (ps, es))) ->

@@ -26,7 +26,7 @@ heapster_assume_fun env "llvm.uadd.with.overflow.i64"
   "(). arg0:int64<>, arg1:int64<> -o \
      \ ret:struct(int64<>,int1<>)"
   "\\ (x y:Vec 64 Bool) -> \
-    \ returnM (Vec 64 Bool * Vec 1 Bool) \
+    \ returnM #(Vec 64 Bool, Vec 1 Bool) \
     \         (bvAdd 64 x y, gen 1 Bool (\\ (_:Nat) -> bvCarry 64 x y))";
 
 // llvm.expect.i1

@@ -73,7 +73,7 @@ heapster_assume_fun env "__memcpy_chk"
   "(len:bv 64). arg0:byte_array<W,len>, arg1:byte_array<W,len>, arg2:eq(llvmword (len)) -o \
               \ arg0:byte_array<W,len>, arg1:byte_array<W,len>"
   "\\ (len:Vec 64 Bool) (_ src : BVVec 64 len (Vec 8 Bool)) -> \
-    \ returnM (BVVec 64 len (Vec 8 Bool) * BVVec 64 len (Vec 8 Bool)) (src, src)";
+    \ returnM #(BVVec 64 len (Vec 8 Bool), BVVec 64 len (Vec 8 Bool)) (src, src)";
 
 
 //------------------------------------------------------------------------------

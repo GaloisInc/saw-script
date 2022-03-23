@@ -157,18 +157,12 @@ Term : LTerm { $1 }
 
 -- Term with uses of pi and lambda, but no type ascriptions
 LTerm :: { Term }
-LTerm : ProdTerm                         { $1 }
+LTerm : AppTerm                          { $1 }
       | PiArg '->' LTerm                 { Pi (pos $2) $1 $3 }
       | '\\' VarCtx '->' LTerm           { Lambda (pos $1) $2 $4 }
 
 PiArg :: { [(TermVar, Term)] }
-PiArg : ProdTerm { mkPiArg $1 }
-
--- Term formed from infix product type operator (right-associative)
-ProdTerm :: { Term }
-ProdTerm
-  : AppTerm                        { $1 }
-  | AppTerm '*' ProdTerm           { PairType (pos $1) $1 $3 }
+PiArg : AppTerm { mkPiArg $1 }
 
 -- Term formed from applications of atomic expressions
 AppTerm :: { Term }
@@ -187,13 +181,12 @@ AtomTerm
   | 'isort' nat                  { Sort (pos $1) (mkSort (tokNat (val $2))) True }
   | AtomTerm '.' Ident           { RecordProj $1 (val $3) }
   | AtomTerm '.' IdentRec        {% parseRecursorProj $1 $3 }
-  | AtomTerm '.' nat             {% parseTupleSelector $1 (fmap tokNat $3) }
+  | AtomTerm '.' nat             { mkTupleSelector $1 (tokNat (val $3)) }
   | '(' sepBy(Term, ',') ')'     { mkTupleValue (pos $1) $2 }
   | '#' '(' sepBy(Term, ',') ')'       { mkTupleType (pos $1) $3 }
   |     '[' sepBy(Term, ',') ']'       { VecLit (pos $1) $2 }
   |     '{' sepBy(FieldValue, ',') '}' { RecordValue (pos $1) $2 }
   | '#' '{' sepBy(FieldType, ',') '}'  { RecordType  (pos $1) $3 }
-  | AtomTerm '.' '(' nat ')'           {% mkTupleProj $1 (tokNat (val $4)) }
 
 Ident :: { PosPair Text }
 Ident : ident { fmap (Text.pack . tokIdent) $1 }
@@ -336,14 +329,6 @@ mkPiArg (TypeConstraint (exprAsIdentList -> Just xs) _ t) =
   map (\x -> (x, t)) xs
 mkPiArg lhs = [(UnusedVar (pos lhs), lhs)]
 
--- | Parse a tuple projection of the form @t.(1)@ or @t.(2)@
-mkTupleProj :: Term -> Natural -> Parser Term
-mkTupleProj t 1 = return $ PairLeft t
-mkTupleProj t 2 = return $ PairRight t
-mkTupleProj t _ =
-  do addParseError (pos t) "Projections must be either .(1) or .(2)"
-     return (badTerm (pos t))
-
 -- | Parse a term as a dotted list of strings
 parseModuleName :: Term -> Maybe [Text]
 parseModuleName (RecordProj t fname) = (++ [fname]) <$> parseModuleName t
@@ -356,12 +341,6 @@ parseRecursorProj (parseModuleName -> Just mnm) i =
 parseRecursorProj t _ =
   do addParseError (pos t) "Malformed recursor projection"
      return (badTerm (pos t))
-
-parseTupleSelector :: Term -> PosPair Natural -> Parser Term
-parseTupleSelector t i =
-  if val i >= 1 then return (mkTupleSelector t (val i)) else
-    do addParseError (pos t) "non-positive tuple projection index"
-       return (badTerm (pos t))
 
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
