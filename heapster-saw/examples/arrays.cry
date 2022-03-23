@@ -1,7 +1,7 @@
 
 module Arrays where
 
-import PrecondHint
+import SpecPrims
 
 zero_array_loop_spec : {n} Literal n [64] => [n][64] -> [n][64]
 zero_array_loop_spec ys = loop 0 ys

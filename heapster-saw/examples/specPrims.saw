@@ -1,0 +1,9 @@
+/* Helper SAW script for using specification primitives in Cryptol */
+
+import "SpecPrims.cry";
+
+set_monadification "exists" "Prelude.existsM";
+set_monadification "forall" "Prelude.forallM";
+// set_monadification "asserting" "Prelude.assertingM";
+// set_monadification "assuming" "Prelude.assumingM";
+set_monadification "precondHint" "Prelude.precondHint";

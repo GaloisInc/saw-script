@@ -10,9 +10,9 @@ exists f = error "Cannot run exists"
 forall : {a, b} (a -> b) -> b
 forall f = error "Cannot run forall"
 
-// The specification that a computation has no errors
-noErrors : {a} a
-noErrors = exists (\x -> x)
+// The specification that a computation returns some value with no errors
+returnsSpec : {a} a
+returnsSpec = exists (\x -> x)
 
 // The specification that matches any computation. This calls exists at the
 // function type () -> a, which is monadified to () -> CompM a. This means that
@@ -25,10 +25,13 @@ anySpec = exists (\f -> f ())
 // The specification which asserts that the first argument is True and then
 // returns the second argument
 asserting : {a} Bit -> a -> a
-asserting b x =
-  if b then x else error "Assertion failed"
+asserting b x = if b then x else error "Assertion failed"
 
 // The specification which assumes that the first argument is True and then
 // returns the second argument
 assuming : {a} Bit -> a -> a
 assuming b x = if b then x else anySpec
+
+// A hint to Mr. Solver for specifying a loop invariant
+precondHint : {a} Bit -> a -> a
+precondHint b x = x
