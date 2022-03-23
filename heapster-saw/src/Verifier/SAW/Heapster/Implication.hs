@@ -6375,30 +6375,6 @@ findSomeBlock ps range = msum (couldProve <$> ps)
           | bvCouldBeInRange (llvmBlockOffset bp) range -> Just bp
         _ -> Nothing
 
--- | Given an array permission ap and permission p, calculate the borrow of ap
--- corresponding to p, plus the range of bytes covered by p.
-permToBorrowRange ::
-  forall w. (1 <= w, KnownNat w) =>
-  LLVMArrayPerm w ->
-  AtomicPerm (LLVMPointerType w) ->
-  Maybe (LLVMArrayBorrow w, BVRange w)
-permToBorrowRange ap p =
-  case p of
-    Perm_LLVMArray ap'
-      | Just idx <- matchLLVMArrayCell ap (llvmArrayOffset ap') ->
-        Just (RangeBorrow (BVRange idx n), llvmArrayAbsOffsets ap')
-        where
-          n = llvmArrayLen ap'
-
-    Perm_LLVMField fp
-      | intValue (llvmFieldSize fp) /= llvmArrayStrideBits ap -> Nothing
-
-    _ | Just r <- llvmAtomicPermRange p
-      , Just idx <- matchLLVMArrayCell ap (bvRangeOffset r) ->
-        Just (FieldBorrow idx, r)
-
-    _ -> Nothing
-
 -- | Given a list ps of permissions, find the subseqeuences of ps
 -- that could cover the given array permission. Also returns the permissions
 -- corresponding to the  given ranges.
@@ -6407,25 +6383,27 @@ gatherRangesForArray ::
   (1 <= w, KnownNat w) =>
   [AtomicPerm (LLVMPointerType w)] ->
   LLVMArrayPerm w ->
-  [[(Maybe (AtomicPerm (LLVMPointerType w)), (LLVMArrayBorrow w, BVRange w))]]
+  [[(Maybe (AtomicPerm (LLVMPointerType w)), LLVMArrayBorrow w)]]
 gatherRangesForArray lhs rhs =
   collectRanges False (llvmArrayOffset rhs) (lhs_ranges ++ rhs_ranges)
   where
     -- This is what we have to work with:
     lhs_not_borrows = filterBorrowedPermissions lhs
     -- For each possible lhs permission, calculate the corresponding borrow
-    lhs_ranges = [ (Just p, r) | p <- lhs_not_borrows, r <- maybeToList (permToBorrowRange rhs p) ]
+    lhs_ranges = [ (Just p, b) | p <- lhs_not_borrows
+                               , b <- maybeToList (permToLLVMArrayBorrow rhs p) ]
     -- We don't need to worry about covering  the bits of the rhs that are borrowed
-    rhs_ranges     = [ (Nothing, (b, llvmArrayBorrowAbsOffsets rhs b)) | b <- llvmArrayBorrows rhs ]
+    rhs_ranges = [ (Nothing, b) | b <- llvmArrayBorrows rhs ]
     -- This is the extent of the rhs array permission
     rhs_off_bytes = bvAdd (llvmArrayOffset rhs) (llvmArrayLengthBytes rhs)
 
     -- check if the given offset is covered by the given borrow/range.
     -- the first parameter controls whether the start of the range must
     -- be equal to the given offset, or merely fall in the range
-    rangeForOffset prec off (_, (_, range)) =
+    rangeForOffset prec off (_, b) =
       if prec then bvEq off (bvRangeOffset range) else bvPropCouldHold prop
       where
+        range = llvmArrayBorrowRange rhs b
         prop = bvPropInRange off range
 
     -- Build the possible sequences of permissions that cover the rhs.
@@ -6435,12 +6413,13 @@ gatherRangesForArray lhs rhs =
     collectRanges ::
       Bool ->
       PermExpr (BVType w) ->
-      [(Maybe (AtomicPerm (LLVMPointerType w)), (LLVMArrayBorrow w, BVRange w))] ->
-      [[(Maybe (AtomicPerm (LLVMPointerType w)), (LLVMArrayBorrow w, BVRange w))]]
+      [(Maybe (AtomicPerm (LLVMPointerType w)), LLVMArrayBorrow w)] ->
+      [[(Maybe (AtomicPerm (LLVMPointerType w)), LLVMArrayBorrow w)]]
     collectRanges prec off0 ranges
       | bvLeq rhs_off_bytes off0 = [[]]
       | otherwise =
-            [ h:rest | h@(_, (_, r)) <- filter (rangeForOffset prec off0) ranges,
+            [ h:rest | h@(_, b) <- filter (rangeForOffset prec off0) ranges,
+                       let r           = llvmArrayBorrowRange rhs b,
                        let next_offset = bvRangeOffset r `bvAdd` bvRangeLength r,
                        rest <- collectRanges True next_offset (filter (/= h) ranges) ]
 
@@ -6460,7 +6439,7 @@ borrowedLLVMArrayForArray ::
 borrowedLLVMArrayForArray lhs rhs =
   case gatherRangesForArray lhs rhs of
     -- NOTE: This only returns the first such sequence
-    (unzip -> (ps,unzip -> (bs,rs))):_
+    (unzip -> (ps, bs)):_
       | not (null rs)
       , Just n <- len' ->
       Just (catMaybes ps, rhs { llvmArrayBorrows = chopBorrows [] bs (llvmArrayBorrows rhs)
@@ -6468,6 +6447,7 @@ borrowedLLVMArrayForArray lhs rhs =
                               , llvmArrayOffset  = o'
                               })
       where
+        rs   = llvmArrayBorrowRange rhs <$> bs
         o'   = bvRangeOffset (head rs)
         v    = bvRangeOffset (last rs) `bvAdd` bvRangeLength (last rs)
         len' = matchLLVMArrayCell rhs v

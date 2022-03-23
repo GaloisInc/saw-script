@@ -4606,6 +4606,41 @@ permForLLVMArrayBorrow ap (RangeBorrow (BVRange off len)) =
        llvmArrayLen = len,
        llvmArrayBorrows = [] }
 
+-- | Build the borrow corresponding to borrowing a given permission from the array.
+-- This is a partial function as the permission @p@ must be:
+-- (1) An array whose offset corresponds to a cell of @ap@
+-- (2) A field or block corresponding to an array cell
+-- TODO: Extend this to allow blocks that span multiple cells
+permToLLVMArrayBorrow ::
+  forall w. (1 <= w, KnownNat w) =>
+  LLVMArrayPerm w ->
+  AtomicPerm (LLVMPointerType w) ->
+  Maybe (LLVMArrayBorrow w)
+permToLLVMArrayBorrow ap p =
+  case p of
+    Perm_LLVMArray ap'
+      | Just idx <- matchLLVMArrayCell ap (llvmArrayOffset ap') ->
+        Just (RangeBorrow (BVRange idx n))
+        where
+          n = llvmArrayLen ap'
+
+    Perm_LLVMField fp
+      | intValue (llvmFieldSize fp) /= llvmArrayStrideBits ap -> Nothing
+
+    Perm_LLVMBlock bp
+      | not (bvEq (llvmBlockLen bp) (bvInt (bytesToInteger (llvmArrayStride ap)))) -> Nothing
+
+    _ | Just r <- llvmAtomicPermRange p
+      , Just idx <- matchLLVMArrayCell ap (bvRangeOffset r) ->
+        Just (FieldBorrow idx)
+
+    _ -> Nothing
+
+llvmArrayBorrowRange :: (1 <= w, KnownNat w) =>
+                        LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
+llvmArrayBorrowRange ap borrow =
+  llvmArrayCellsToOffsets ap (llvmArrayBorrowCells borrow)
+
 -- | Add a borrow to an 'LLVMArrayPerm'
 llvmArrayAddBorrow :: LLVMArrayBorrow w -> LLVMArrayPerm w -> LLVMArrayPerm w
 llvmArrayAddBorrow b ap = ap { llvmArrayBorrows = b : llvmArrayBorrows ap }
