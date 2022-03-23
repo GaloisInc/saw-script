@@ -6361,23 +6361,10 @@ proveVarLLVMFieldH2 x p _ mb_fp =
 ----------------------------------------------------------------------
 
 -- | Search for a permission that _could_ prove a block at an offset in the
--- given range fails if none is found. Assumes the given permissions are on the
--- top of the stack. Returns the block permission, and leaves it on the top of
--- the stack.
-proveSomeBlockM :: forall w r s vars ps.
-  (1 <= w, KnownNat w, NuMatchingAny1 r) =>
-  ExprVar (LLVMPointerType w) ->
-  [AtomicPerm (LLVMPointerType w)] ->
-  [AtomicPerm (LLVMPointerType w)] ->
-  BVRange w ->
-  ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) (LLVMBlockPerm w)
-proveSomeBlockM x ps ps' range
-  | bp:_ <- catMaybes (couldProve <$> ps') =
-      mbVarsM bp >>>= \mb_bp ->
-      proveVarLLVMBlock x ps mb_bp >>>
-      return bp
-  | otherwise =
-    implFailM "proveSomeBlockM"
+-- given range.
+findSomeBlock :: forall w. (1 <= w, KnownNat w) =>
+                 [AtomicPerm (LLVMPointerType w)] -> BVRange w -> Maybe (LLVMBlockPerm w)
+findSomeBlock ps range = msum (couldProve <$> ps)
   where
     couldProve :: AtomicPerm (LLVMPointerType w) -> Maybe (LLVMBlockPerm w)
     couldProve p =
@@ -6578,8 +6565,10 @@ proveVarLLVMArrayH x first_p psubst ps mb_ap
   -- NOTE: borrowedLLVMArrayForArray only returns a single possible covering, though
   -- there may be multiple. It may be necessary to modify this to return a list, but
   -- we'd like to avoid the blowup in branches (see `borrowedLLVMArrayForArray`)
-  , Just (ps', borrowed) <- borrowedLLVMArrayForArray ps ap =
-  proveSomeBlockM x ps ps' (llvmArrayAbsOffsets ap) >>>= \bp ->
+  , Just (ps', borrowed) <- borrowedLLVMArrayForArray ps ap
+  , Just bp <- findSomeBlock ps' (llvmArrayAbsOffsets ap) =
+  mbVarsM bp >>>= \mb_bp ->
+  proveVarLLVMBlock x ps mb_bp >>>
   implLLVMArrayBorrowed x bp borrowed >>>
   recombinePerm x (ValPerm_Conj1 (Perm_LLVMBlock bp)) >>>
   -- The recursive call should now hit the case above
