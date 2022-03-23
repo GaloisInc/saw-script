@@ -786,7 +786,12 @@ data SimplImpl ps_in ps_out where
     ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
     SimplImpl RNil (RNil :> LLVMPointerType w)
 
-  -- | Prove an array whose borrows @bs@ cover the entire array:
+  -- | Prove an array whose borrows @bs@ cover the entire array.
+  -- The input memblock is proof that @x@ is a pointer, and can be located
+  -- anywhere as long as it has the same shape as the output array.
+  --
+  -- NOTE: the block permission is used by the SAW translation to produce
+  -- the default cell value for the translation of the output array.
   --
   -- > x:[l2]memblock(rw,off1,<len1,*stride,sh,bs1)
   -- > -o x:[2]memblock(rw,off1,<len1,*stride,sh,bs1) *  x:[l]array(rw,off,<len,*stride,sh,bs)
