@@ -20,6 +20,8 @@ errorM str >>= k              = errorM
 (m >>= k1) >>= k2             = m >>= \x -> k1 x >>= k2
 (existsM f) >>= k             = existsM (\x -> f x >>= k)
 (forallM f) >>= k             = forallM (\x -> f x >>= k)
+(assumingM b m) >>= k         = assumingM b (m >>= k)
+(assertingM b m) >>= k        = assertingM b (m >>= k)
 (orM m1 m2) >>= k             = orM (m1 >>= k) (m2 >>= k)
 (if b then m1 else m2) >>= k  = if b then m1 >>= k else m2 >>1 k
 (either f1 f2 e) >>= k        = either (\x -> f1 x >= k) (\x -> f2 x >= k) e
@@ -199,6 +201,7 @@ normComp (CompBind m f) =
   do norm <- normComp m
      normBind norm f
 normComp (CompTerm t) =
+  (>>) (mrDebugPPPrefix 3 "normCompTerm:" t) $
   withFailureCtx (FailCtxMNF t) $
   case asApplyAll t of
     (f@(asLambda -> Just _), args) ->
@@ -225,6 +228,10 @@ normComp (CompTerm t) =
          return $ MaybeElim (Type tp') (CompTerm m) (CompFunTerm f) mayb
     (isGlobalDef "Prelude.orM" -> Just (), [_, m1, m2]) ->
       return $ OrM (CompTerm m1) (CompTerm m2)
+    (isGlobalDef "Prelude.assertingM" -> Just (), [_, cond, body_tm]) ->
+      return $ AssertingM cond (CompTerm body_tm)
+    (isGlobalDef "Prelude.assumingM" -> Just (), [_, cond, body_tm]) ->
+      return $ AssumingM cond (CompTerm body_tm)
     (isGlobalDef "Prelude.existsM" -> Just (), [tp, _, body_tm]) ->
       return $ ExistsM (Type tp) (CompFunTerm body_tm)
     (isGlobalDef "Prelude.forallM" -> Just (), [tp, _, body_tm]) ->
@@ -325,6 +332,8 @@ normBind (MaybeElim tp m f t) k =
   return $ MaybeElim tp (CompBind m k) (compFunComp f k) t
 normBind (OrM comp1 comp2) k =
   return $ OrM (CompBind comp1 k) (CompBind comp2 k)
+normBind (AssertingM cond comp) k = return $ AssertingM cond (CompBind comp k)
+normBind (AssumingM cond comp) k = return $ AssumingM cond (CompBind comp k)
 normBind (ExistsM tp f) k = return $ ExistsM tp (compFunComp f k)
 normBind (ForallM tp f) k = return $ ForallM tp (compFunComp f k)
 normBind (FunBind f args k1) k2
@@ -676,6 +685,11 @@ mrRefines' m1 (Either ltp2 rtp2 f2 g2 t2) =
              applyNormCompFun g2' x >>= withDataTypeAssump t2'' (IsRight x)
                                         . mrRefines m1')
 
+mrRefines' m1 (AssumingM cond2 m2) =
+  withAssumption cond2 $ mrRefines m1 m2
+mrRefines' (AssertingM cond1 m1) m2 =
+  withAssumption cond1 $ mrRefines m1 m2
+
 mrRefines' m1 (ForallM tp f2) =
   let nm = maybe "x" id (compFunVarName f2) in
   withUVarLift nm tp (m1,f2) $ \x (m1',f2') ->
@@ -832,6 +846,15 @@ mrRefines' m1 m2@(FunBind f2 args2 k2) =
   _ ->
     throwMRFailure (CompsDoNotRefine m1 m2)
 
+
+mrRefines' m1 (AssertingM cond2 m2) =
+  mrProvable cond2 >>= \cond2_pv ->
+  if cond2_pv then mrRefines m1 m2
+  else throwMRFailure (AssertionNotProvable cond2)
+mrRefines' (AssumingM cond1 m1) m2 =
+  mrProvable cond1 >>= \cond1_pv ->
+  if cond1_pv then mrRefines m1 m2
+  else throwMRFailure (AssumptionNotProvable cond1)
 
 -- NOTE: the rules that introduce existential variables need to go last, so that
 -- they can quantify over as many universals as possible

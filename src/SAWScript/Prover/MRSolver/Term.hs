@@ -118,6 +118,8 @@ data NormComp
   | Either Type Type CompFun CompFun Term -- ^ A sum elimination
   | MaybeElim Type Comp CompFun Term -- ^ A maybe elimination
   | OrM Comp Comp -- ^ an @orM@ computation
+  | AssertingM Term Comp -- ^ an @assertingM@ computation
+  | AssumingM Term Comp -- ^ an @assumingM@ computation
   | ExistsM Type CompFun -- ^ an @existsM@ computation
   | ForallM Type CompFun -- ^ a @forallM@ computation
   | FunBind FunName [Term] CompFun
@@ -437,6 +439,12 @@ instance PrettyInCtx NormComp where
   prettyInCtx (OrM t1 t2) =
     prettyAppList [return "orM", return "_",
                    parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
+  prettyInCtx (AssertingM cond t) =
+    prettyAppList [return "assertingM", parens <$> prettyInCtx cond,
+                   parens <$> prettyInCtx t]
+  prettyInCtx (AssumingM cond t) =
+    prettyAppList [return "assumingM", parens <$> prettyInCtx cond,
+                   parens <$> prettyInCtx t]
   prettyInCtx (ExistsM tp f) =
     prettyAppList [return "existsM", prettyInCtx tp, return "_",
                    parens <$> prettyInCtx f]

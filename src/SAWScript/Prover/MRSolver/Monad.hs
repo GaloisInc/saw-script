@@ -73,6 +73,8 @@ data MRFailure
   | MalformedDefsFun Term
   | MalformedComp Term
   | NotCompFunType Term
+  | AssertionNotProvable Term
+  | AssumptionNotProvable Term
   | InvariantNotProvable FunName FunName Term
     -- | A local variable binding
   | MRFailureLocalVar LocalName MRFailure
@@ -130,6 +132,10 @@ instance PrettyInCtx MRFailure where
     ppWithPrefix "Could not handle computation:" t
   prettyInCtx (NotCompFunType tp) =
     ppWithPrefix "Not a computation or computational function type:" tp
+  prettyInCtx (AssertionNotProvable cond) =
+    ppWithPrefix "Failed to prove assertion:" cond
+  prettyInCtx (AssumptionNotProvable cond) =
+    ppWithPrefix "Failed to prove condition for `assuming`:" cond
   prettyInCtx (InvariantNotProvable f g pre) =
     prettyAppList [return "Could not prove loop invariant for functions",
                    prettyInCtx f, return "and", prettyInCtx g,
