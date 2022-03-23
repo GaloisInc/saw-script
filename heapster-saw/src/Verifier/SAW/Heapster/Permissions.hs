@@ -4575,7 +4575,7 @@ permForLLVMArrayBorrow ap (FieldBorrow cell) =
   ValPerm_LLVMBlock $ llvmArrayCellPerm ap cell
 permForLLVMArrayBorrow ap (RangeBorrow (BVRange off len)) =
   ValPerm_Conj1 $ Perm_LLVMArray $
-  ap { llvmArrayOffset = llvmArrayCellToOffset ap off,
+  ap { llvmArrayOffset = llvmArrayCellToAbsOffset ap off,
        llvmArrayLen = len,
        llvmArrayBorrows = [] }
 
