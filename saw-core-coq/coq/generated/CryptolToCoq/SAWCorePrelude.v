@@ -1197,10 +1197,22 @@ Definition appendCastBVVecM : forall (n : SAWCoreScaffolding.Nat), forall (len1 
 
 (* Prelude.orM was skipped *)
 
+Definition anySpec : forall (a : Type), CompM a :=
+  fun (a : Type) => let var__0   := CompM a in
+  @CompM.existsM var__0 a (fun (m : var__0) => m).
+
 (* Prelude.forallM was skipped *)
 
-Definition precondHint : forall (a : Type), SAWCoreScaffolding.Bool -> a -> a :=
+(* Prelude.assertingM was skipped *)
+
+(* Prelude.assumingM was skipped *)
+
+Definition invariantHint : forall (a : Type), SAWCoreScaffolding.Bool -> a -> a :=
   fun (_1 : Type) (_2 : SAWCoreScaffolding.Bool) (a : _1) => a.
+
+(* Prelude.asserting was skipped *)
+
+(* Prelude.assuming was skipped *)
 
 (* Prelude.LetRecType was skipped *)
 

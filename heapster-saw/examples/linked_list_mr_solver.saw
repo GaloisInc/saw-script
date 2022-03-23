@@ -51,7 +51,7 @@ run_test "is_head |= is_head" (mr_solver is_head is_head) true;
 */
 
 is_elem <- parse_core_mod "linked_list" "is_elem";
-//run_test "is_elem |= is_elem" (mr_solver_debug 1 is_elem is_elem) true;
+// run_test "is_elem |= is_elem" (mr_solver_debug 0 is_elem is_elem) true;
 
 /*
 is_elem_noErrorsSpec <- parse_core

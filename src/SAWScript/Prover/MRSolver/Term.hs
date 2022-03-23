@@ -177,7 +177,7 @@ isCompFunType sc t = scWhnf sc t >>= \case
   (asPiList -> (_, asCompM -> Just _)) -> return True
   _ -> return False
 
--- | Recognize a 'Term' as an appliction of `bvToNat`
+-- | Recognize a 'Term' as an application of `bvToNat`
 asBvToNat :: Recognizer Term (Term, Term)
 asBvToNat (asApplyAll -> ((isGlobalDef "Prelude.bvToNat" -> Just ()),
                           [n, x])) = Just (n, x)

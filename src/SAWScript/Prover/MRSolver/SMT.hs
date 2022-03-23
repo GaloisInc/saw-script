@@ -194,7 +194,7 @@ mrProvableRaw prop_term =
      sym <- liftIO $ setupWhat4_sym True
      -- If there are any saw-core `error`s in the term, this will throw a
      -- Haskell error - in this case we want to just return False, not stop
-     -- execution (e.g. see `bvVecMapM` in `CryptolM.sawcore`)
+     -- execution
      smt_res <- liftIO $
        (Right <$> proveWhat4_solver z3Adapter sym unints sc prop (return ()))
          `X.catch` \case

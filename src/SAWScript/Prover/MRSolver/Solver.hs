@@ -887,9 +887,9 @@ mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 -- variables to introduce, innermost first.
 askMRSolverH :: [Term] -> Term -> Term -> Term -> Term -> MRM MREnv
 
--- If we need to introduce a bitvector on one side and a nat on the other,
--- introduce a bitvector variable and substitute `bvToNat` of that variable on
--- the nat side
+-- If we need to introduce a bitvector on one side and a Num on the other,
+-- introduce a bitvector variable and substitute `TCNum` of `bvToNat` of that
+-- variable on the Num side
 askMRSolverH vars (asPi -> Just (nm1, tp@(asBitvectorType -> Just n), body1)) t1
                   (asPi -> Just (nm2, asDataType -> Just (primName -> "Cryptol.Num", _), body2)) t2 =
   let nm = if Text.head nm2 == '_' then nm1 else nm2 in
