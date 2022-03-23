@@ -261,13 +261,15 @@ normComp (CompTerm t) =
           else throwMRFailure (MalformedComp t)
         normCompTerm body_tm
 
-    -- Convert `vecMapM (bvToNat ...)` into `bvVecMapM`
+    -- Convert `vecMapM (bvToNat ...)` into `bvVecMapInvarM`, with the
+    -- invariant being the current set of assumptions
     (asGlobalDef -> Just "CryptolM.vecMapM", [a, b, asBvToNat -> Just (w, n),
                                               f, xs]) ->
-      do body <- mrGlobalDefBody "CryptolM.bvVecMapM"
-         mrApplyAll body [a, b, w, n, f, xs] >>= normCompTerm
+      do invar <- mrAssumptions
+         liftSC2 scGlobalApply "CryptolM.bvVecMapInvarM"
+                               [a, b, w, n, f, xs, invar] >>= normCompTerm
 
-    -- Convert `atM (bvToNat ...)` into `bvVecAtM`
+    -- Convert `atM (bvToNat ...)` into the unfolding of `bvVecAtM`
     (asGlobalDef -> Just "CryptolM.atM", [asBvToNat -> Just (w1, n), a, xs,
                                           asBvToNat -> Just (w2, i)]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
@@ -276,7 +278,7 @@ normComp (CompTerm t) =
            mrApplyAll body [w1, n, a, xs, i] >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
-    -- Convert `updateM (bvToNat ...)` into `bvVecUpdateM`
+    -- Convert `updateM (bvToNat ...)` into the unfolding of `bvVecUpdateM`
     (asGlobalDef -> Just "CryptolM.updateM", [asBvToNat -> Just (w1, n), a, xs,
                                               asBvToNat -> Just (w2, i), x]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecUpdateM"
@@ -337,12 +339,19 @@ normBind (AssumingM cond comp) k = return $ AssumingM cond (CompBind comp k)
 normBind (ExistsM tp f) k = return $ ExistsM tp (compFunComp f k)
 normBind (ForallM tp f) k = return $ ForallM tp (compFunComp f k)
 normBind (FunBind f args k1) k2
-  -- Turn `bvVecMapM ... >>= k` into `bvVecMapBindM ... k`
-  | GlobalName (globalDefString -> "CryptolM.bvVecMapM") [] <- f
-  , not (isCompFunReturn k2) =
-    do f' <- mrGlobalDef "CryptolM.bvVecMapBindM"
+  -- Turn `bvVecMapInvarM ... >>= k` into `bvVecMapInvarBindM ... k`
+  | GlobalName (globalDefString -> "CryptolM.bvVecMapInvarM") [] <- f
+  , not (isCompFunReturn (compFunComp k1 k2)) =
+    do f' <- mrGlobalDef "CryptolM.bvVecMapInvarBindM"
        cont <- compFunToTerm (compFunComp k1 k2)
        return $ FunBind f' (args ++ [cont]) CompFunReturn
+  -- Turn `bvVecMapInvarBindM ... k1 >>= k2` into
+  -- `bvVecMapInvarBindM ... (composeM ... k1 k2)`
+  | GlobalName (globalDefString -> "CryptolM.bvVecMapInvarBindM") [] <- f
+  , (args_pre, [cont]) <- splitAt 8 args
+  , not (isCompFunReturn (compFunComp k1 k2)) =
+    do cont' <- compFunToTerm (compFunComp (compFunComp (CompFunTerm cont) k1) k2)
+       return $ FunBind f (args_pre ++ [cont']) CompFunReturn
   | otherwise = return $ FunBind f args (compFunComp k1 k2)
 
 -- | Bind a 'Term' for a computation with a function and normalize
@@ -781,23 +790,6 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
     mrDebugPPPrefixSep 1 "mrRefines: bind types not equal:" tp1 "/=" tp2 >>
     throwMRFailure (CompsDoNotRefine m1 m2)
 
-{- FIXME: handle FunBind on just one side
-mrRefines' m1@(FunBind f@(GlobalName _) args k1) m2 =
-  mrGetFunAssump f >>= \case
-  Just fassump ->
-    -- If we have an assumption that f args' refines some rhs, then prove that
-    -- args = args' and then that rhs refines m2
-    do (assump_args, assump_rhs) <- instantiateFunAssump fassump
-       zipWithM_ mrAssertProveEq assump_args args
-       m1' <- normBind assump_rhs k1
-       mrRefines m1' m2
-  Nothing ->
-    -- We don't want to do inter-procedural proofs, so if we don't know anything
-    -- about f already then give up
-    throwMRFailure (CompsDoNotRefine m1 m2)
--}
-
-
 mrRefines' m1@(FunBind f1 args1 k1) m2 =
   mrGetFunAssump f1 >>= \case
 
@@ -820,9 +812,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
     -- Otherwise we would have to somehow split m2 into some computation of the
     -- form m2' >>= k2 where f1 args1 |= m2' and k1 |= k2, but we don't know how
     -- to do this splitting, so give up
-    _ ->
-      throwMRFailure (CompsDoNotRefine m1 m2)
-
+    _ -> mrRefines'' m1 m2
 
 mrRefines' m1 m2@(FunBind f2 args2 k2) =
   mrFunBodyRecInfo f2 args2 >>= \case
@@ -843,34 +833,37 @@ mrRefines' m1 m2@(FunBind f2 args2 k2) =
     -- Otherwise we would have to somehow split m1 into some computation of the
     -- form m1' >>= k1 where m1' |= f2 args2 and k1 |= k2, but we don't know how
     -- to do this splitting, so give up
-  _ ->
-    throwMRFailure (CompsDoNotRefine m1 m2)
+  _ -> mrRefines'' m1 m2
 
+mrRefines' m1 m2 = mrRefines'' m1 m2
 
-mrRefines' m1 (AssertingM cond2 m2) =
+-- | The cases of 'mrRefines' which must occur after the ones in 'mrRefines''.
+-- For example, the rules that introduce existential variables need to go last,
+-- so that they can quantify over as many universals as possible
+mrRefines'' :: NormComp -> NormComp -> MRM ()
+
+mrRefines'' m1 (AssertingM cond2 m2) =
   mrProvable cond2 >>= \cond2_pv ->
   if cond2_pv then mrRefines m1 m2
   else throwMRFailure (AssertionNotProvable cond2)
-mrRefines' (AssumingM cond1 m1) m2 =
+mrRefines'' (AssumingM cond1 m1) m2 =
   mrProvable cond1 >>= \cond1_pv ->
   if cond1_pv then mrRefines m1 m2
   else throwMRFailure (AssumptionNotProvable cond1)
 
--- NOTE: the rules that introduce existential variables need to go last, so that
--- they can quantify over as many universals as possible
-mrRefines' m1 (ExistsM tp f2) =
+mrRefines'' m1 (ExistsM tp f2) =
   do let nm = maybe "x" id (compFunVarName f2)
      evar <- mrFreshEVar nm tp
      m2' <- applyNormCompFun f2 evar
      mrRefines m1 m2'
-mrRefines' (ForallM tp f1) m2 =
+mrRefines'' (ForallM tp f1) m2 =
   do let nm = maybe "x" id (compFunVarName f1)
      evar <- mrFreshEVar nm tp
      m1' <- applyNormCompFun f1 evar
      mrRefines m1' m2
 
 -- If none of the above cases match, then fail
-mrRefines' m1 m2 = throwMRFailure (CompsDoNotRefine m1 m2)
+mrRefines'' m1 m2 = throwMRFailure (CompsDoNotRefine m1 m2)
 
 
 -- | Prove that one function refines another for all inputs

@@ -57,57 +57,67 @@ mseq : Num -> sort 0 -> sort 0;
 mseq num a =
   Num_rec (\ (_:Num) -> sort 0) (\ (n:Nat) -> Vec n a) (Stream (CompM a)) num;
 
-bvVecMapBindM : (a b c : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
-                (a -> CompM b) -> BVVec n len a ->
-                (BVVec n len b -> CompM c) -> CompM c;
-bvVecMapBindM a b c n len f xs cont =
-  multiArgFixM
-    (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
-     LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
-     LRT_Ret c)))
-    (\ (rec : Vec n Bool -> BVVec n len b -> CompM c)
-       (i:Vec n Bool) (ys:BVVec n len b) ->
-       invariantHint (CompM c) (bvule n i len)
-         (maybe (is_bvult n i len) (CompM c)
-                (cont ys)
-                (\ (pf:is_bvult n i len) ->
-                   bindM b c
-                         (f (atBVVec n len a xs i pf))
-                         (\ (y:b) -> rec (bvAdd n i (bvNat n 1))
-                                         (updBVVec n len b ys i y)))
-                (bvultWithProof n i len)))
-    (bvNat n 0)
-    (genBVVec n len b (\ (i:Vec n Bool) (pf:is_bvult n i len) ->
-                         error b "bvVecMapM"));
+bvVecMapInvarBindM : (a b c : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
+                     (a -> CompM b) -> BVVec n len a ->
+                     Bool -> (BVVec n len b -> CompM c) -> CompM c;
+bvVecMapInvarBindM a b c n len f xs invar cont =
+  existsM (BVVec n len b) c (\ (ys0:BVVec n len b) ->
+    multiArgFixM
+      (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
+       LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
+       LRT_Ret c)))
+      (\ (rec : Vec n Bool -> BVVec n len b -> CompM c)
+         (i:Vec n Bool) (ys:BVVec n len b) ->
+         invariantHint (CompM c) (and (bvule n i len) invar)
+           (maybe (is_bvult n i len) (CompM c)
+                  (cont ys)
+                  (\ (pf:is_bvult n i len) ->
+                     bindM b c
+                           (f (atBVVec n len a xs i pf))
+                           (\ (y:b) -> rec (bvAdd n i (bvNat n 1))
+                                           (updBVVec n len b ys i y)))
+                  (bvultWithProof n i len)))
+      (bvNat n 0) ys0);
+
+bvVecMapInvarM : (a b : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
+                 (a -> CompM b) -> BVVec n len a ->
+                 Bool -> CompM (BVVec n len b);
+bvVecMapInvarM a b n len f xs invar =
+  bvVecMapInvarBindM a b (BVVec n len b) n len f xs invar
+                                                    (returnM (BVVec n len b));
 
 bvVecMapM : (a b : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
             (a -> CompM b) -> BVVec n len a -> CompM (BVVec n len b);
-bvVecMapM a b n len f xs =
-  bvVecMapBindM a b (BVVec n len b) n len f xs (returnM (BVVec n len b));
+bvVecMapM a b n len f xs = bvVecMapInvarM a b n len f xs True;
 
-vecMapBindM : (a b c : isort 0) -> (n : Nat) -> (a -> CompM b) -> Vec n a ->
-              (Vec n b -> CompM c) -> CompM c;
-vecMapBindM a b c n f xs cont =
-  multiArgFixM
-    (LRT_Fun Nat (\ (_:Nat) ->
-     LRT_Fun (Vec n b) (\ (_:Vec n b) ->
-     LRT_Ret c)))
-    (\ (rec : Nat -> Vec n b -> CompM c) (i:Nat) (ys:Vec n b) ->
-       invariantHint (CompM c) (ltNat i (Succ n))
-         (maybe (IsLtNat i n) (CompM c)
-                (cont ys)
-                (\ (pf:IsLtNat i n) ->
-                   bindM b c
-                         (f (atWithProof n a xs i pf))
-                         (\ (y:b) -> rec (Succ i)
-                                         (updWithProof n b ys i y pf)))
-                (proveLtNat i n)))
-    0 (genWithProof n b (\ (i:Nat) (pf:IsLtNat i n) -> error b "vecMapM"));
+vecMapInvarBindM : (a b c : isort 0) -> (n : Nat) -> (a -> CompM b) ->
+                   Vec n a -> Bool -> (Vec n b -> CompM c) -> CompM c;
+vecMapInvarBindM a b c n f xs invar cont =
+  existsM (Vec n b) c (\ (ys0:Vec n b) ->
+    multiArgFixM
+      (LRT_Fun Nat (\ (_:Nat) ->
+       LRT_Fun (Vec n b) (\ (_:Vec n b) ->
+       LRT_Ret c)))
+      (\ (rec : Nat -> Vec n b -> CompM c) (i:Nat) (ys:Vec n b) ->
+         invariantHint (CompM c) (and (ltNat i (Succ n)) invar)
+           (maybe (IsLtNat i n) (CompM c)
+                  (cont ys)
+                  (\ (pf:IsLtNat i n) ->
+                     bindM b c
+                           (f (atWithProof n a xs i pf))
+                           (\ (y:b) -> rec (Succ i)
+                                           (updWithProof n b ys i y pf)))
+                  (proveLtNat i n)))
+      0 ys0);
+
+vecMapInvarM : (a b : isort 0) -> (n : Nat) -> (a -> CompM b) -> Vec n a ->
+               Bool -> CompM (Vec n b);
+vecMapInvarM a b n f xs invar =
+  vecMapInvarBindM a b (Vec n b) n f xs invar (returnM (Vec n b));
 
 vecMapM : (a b : isort 0) -> (n : Nat) -> (a -> CompM b) -> Vec n a ->
           CompM (Vec n b);
-vecMapM a b n f xs =
-  vecMapBindM a b (Vec n b) n f xs (returnM (Vec n b));
+vecMapM a b n f xs = vecMapInvarM a b n f xs True;
 
 -- Computational version of seqMap
 seqMapM : (a b : sort 0) -> (n : Num) -> (a -> CompM b) -> mseq n a ->
