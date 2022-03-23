@@ -67,15 +67,15 @@ bvVecMapBindM a b c n len f xs cont =
      LRT_Ret c)))
     (\ (rec : Vec n Bool -> BVVec n len b -> CompM c)
        (i:Vec n Bool) (ys:BVVec n len b) ->
-       precondHint (CompM c) (bvule n (bvNat n 0) i)
-                   (maybe (is_bvult n i len) (CompM c)
-                          (cont ys)
-                          (\ (pf:is_bvult n i len) ->
-                             bindM b c
-                                   (f (atBVVec n len a xs i pf))
-                                   (\ (y:b) -> rec (bvAdd n i (bvNat n 1))
-                                                   (updBVVec n len b ys i y)))
-                          (bvultWithProof n i len)))
+       invariantHint (CompM c) (bvule n i len)
+         (maybe (is_bvult n i len) (CompM c)
+                (cont ys)
+                (\ (pf:is_bvult n i len) ->
+                   bindM b c
+                         (f (atBVVec n len a xs i pf))
+                         (\ (y:b) -> rec (bvAdd n i (bvNat n 1))
+                                         (updBVVec n len b ys i y)))
+                (bvultWithProof n i len)))
     (bvNat n 0)
     (genBVVec n len b (\ (i:Vec n Bool) (pf:is_bvult n i len) ->
                          error b "bvVecMapM"));
@@ -93,15 +93,15 @@ vecMapBindM a b c n f xs cont =
      LRT_Fun (Vec n b) (\ (_:Vec n b) ->
      LRT_Ret c)))
     (\ (rec : Nat -> Vec n b -> CompM c) (i:Nat) (ys:Vec n b) ->
-       precondHint (CompM c) (ltNat 0 (Succ i))
-                   (maybe (IsLtNat i n) (CompM c)
-                         (cont ys)
-                         (\ (pf:IsLtNat i n) ->
-                            bindM b c
-                                  (f (atWithProof n a xs i pf))
-                                  (\ (y:b) -> rec (Succ i)
-                                                  (updWithProof n b ys i y pf)))
-                         (proveLtNat i n)))
+       invariantHint (CompM c) (ltNat i (Succ n))
+         (maybe (IsLtNat i n) (CompM c)
+                (cont ys)
+                (\ (pf:IsLtNat i n) ->
+                   bindM b c
+                         (f (atWithProof n a xs i pf))
+                         (\ (y:b) -> rec (Succ i)
+                                         (updWithProof n b ys i y pf)))
+                (proveLtNat i n)))
     0 (genWithProof n b (\ (i:Nat) (pf:IsLtNat i n) -> error b "vecMapM"));
 
 vecMapM : (a b : isort 0) -> (n : Nat) -> (a -> CompM b) -> Vec n a ->

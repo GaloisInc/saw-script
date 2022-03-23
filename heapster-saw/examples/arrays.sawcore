@@ -21,7 +21,7 @@ noErrorsContains0H len_top i_top v_top =
     (\ (f : (len i:Vec 64 Bool) -> BVVec 64 len (Vec 64 Bool) ->
             CompM (BVVec 64 len (Vec 64 Bool) * Vec 64 Bool)) ->
        ((\ (len:Vec 64 Bool) (i:Vec 64 Bool) (v:BVVec 64 len (Vec 64 Bool)) ->
-           precondHint
+           invariantHint
              (CompM (BVVec 64 len (Vec 64 Bool) * Vec 64 Bool))
              (and (bvsle 64 0x0000000000000000 i)
                   (bvsle 64 i 0x0fffffffffffffff))

@@ -6,4 +6,4 @@ set_monadification "exists" "Prelude.existsM";
 set_monadification "forall" "Prelude.forallM";
 // set_monadification "asserting" "Prelude.assertingM";
 // set_monadification "assuming" "Prelude.assumingM";
-set_monadification "precondHint" "Prelude.precondHint";
+set_monadification "invariantHint" "Prelude.invariantHint";

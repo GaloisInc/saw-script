@@ -32,6 +32,6 @@ asserting b x = if b then x else error "Assertion failed"
 assuming : {a} Bit -> a -> a
 assuming b x = if b then x else anySpec
 
-// A hint to Mr. Solver for specifying a loop invariant
-precondHint : {a} Bit -> a -> a
-precondHint b x = x
+// A hint to Mr Solver that a recursive function has the given loop invariant
+invariantHint : {a} Bit -> a -> a
+invariantHint b x = x

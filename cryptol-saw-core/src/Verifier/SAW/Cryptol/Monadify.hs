@@ -1015,26 +1015,26 @@ eitherMacro = MonMacro 3 $ \_ args ->
                             (MTyArrow (MTyArrow mtp_b mtp_c)
                              (MTyArrow (mkMonType0 tp_eith) mtp_c))) eith_app
 
--- | The macro for precondHint, which converts @precondHint a cond m@
--- to @precondHint (CompM a) cond m@ and which contains any binds in the body
+-- | The macro for invariantHint, which converts @invariantHint a cond m@
+-- to @invariantHint (CompM a) cond m@ and which contains any binds in the body
 -- to the body
-precondHintMacro :: MonMacro
-precondHintMacro = MonMacro 3 $ \_ args ->
+invariantHintMacro :: MonMacro
+invariantHintMacro = MonMacro 3 $ \_ args ->
   do let (tp, cond, m) =
            case args of
              [t1, t2, t3] -> (t1, t2, t3)
-             _ -> error "precondHintMacro: wrong number of arguments!"
+             _ -> error "invariantHintMacro: wrong number of arguments!"
      atrm_cond <- monadifyArg (Just boolMonType) cond
      mtp <- monadifyTypeM tp
      mtrm <- resetMonadifyM (toArgType mtp) $ monadifyTerm (Just mtp) m
      case mtrm of
        ArgMonTerm atrm ->
          return $ fromArgTerm mtp $
-         applyOpenTermMulti (globalOpenTerm "Prelude.precondHint")
+         applyOpenTermMulti (globalOpenTerm "Prelude.invariantHint")
          [toArgType mtp, toArgTerm atrm_cond, toArgTerm atrm]
        _ ->
          return $ fromCompTerm mtp $
-         applyOpenTermMulti (globalOpenTerm "Prelude.precondHint")
+         applyOpenTermMulti (globalOpenTerm "Prelude.invariantHint")
          [toCompType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
 
 -- | Make a 'MonMacro' that maps a named global whose first argument is @n:Num@
@@ -1125,7 +1125,7 @@ defaultMonEnv =
   , mmCustom "Prelude.ite" iteMacro
   , mmCustom "Prelude.fix" fixMacro
   , mmCustom "Prelude.either" eitherMacro
-  , mmCustom "Prelude.precondHint" precondHintMacro
+  , mmCustom "Prelude.invariantHint" invariantHintMacro
 
     -- Top-level sequence functions
   , mmArg "Cryptol.seqMap" "CryptolM.seqMapM"

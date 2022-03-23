@@ -73,7 +73,7 @@ data MRFailure
   | MalformedDefsFun Term
   | MalformedComp Term
   | NotCompFunType Term
-  | PrecondNotProvable FunName FunName Term
+  | InvariantNotProvable FunName FunName Term
     -- | A local variable binding
   | MRFailureLocalVar LocalName MRFailure
     -- | Information about the context of the failure
@@ -130,8 +130,8 @@ instance PrettyInCtx MRFailure where
     ppWithPrefix "Could not handle computation:" t
   prettyInCtx (NotCompFunType tp) =
     ppWithPrefix "Not a computation or computational function type:" tp
-  prettyInCtx (PrecondNotProvable f g pre) =
-    prettyAppList [return "Could not prove precondition for functions",
+  prettyInCtx (InvariantNotProvable f g pre) =
+    prettyAppList [return "Could not prove loop invariant for functions",
                    prettyInCtx f, return "and", prettyInCtx g,
                    return ":", prettyInCtx pre]
   prettyInCtx (MRFailureLocalVar x err) =
@@ -195,12 +195,12 @@ data CoIndHyp = CoIndHyp {
   coIndHypLHS :: [Term],
   -- | The RHS argument expressions @y1, ..., ym@ over the 'coIndHypCtx' uvars
   coIndHypRHS :: [Term],
-  -- | The precondition for the left-hand arguments, as a closed function from
+  -- | The invariant for the left-hand arguments, as a closed function from
   -- the left-hand arguments to @Bool@
-  coIndHypPrecondLHS :: Maybe Term,
-  -- | The precondition for the right-hand arguments, as a closed function from
+  coIndHypInvariantLHS :: Maybe Term,
+  -- | The invariant for the right-hand arguments, as a closed function from
   -- the left-hand arguments to @Bool@
-  coIndHypPrecondRHS :: Maybe Term
+  coIndHypInvariantRHS :: Maybe Term
 } deriving Show
 
 -- | Extract the @i@th argument on either the left- or right-hand side of a
@@ -214,13 +214,13 @@ coIndHypArg hyp (Right i) = (coIndHypRHS hyp) !! i
 type CoIndHyps = Map (FunName, FunName) CoIndHyp
 
 instance PrettyInCtx CoIndHyp where
-  prettyInCtx (CoIndHyp ctx f1 f2 args1 args2 pre1 pre2) =
+  prettyInCtx (CoIndHyp ctx f1 f2 args1 args2 invar1 invar2) =
     local (const $ map fst $ reverse ctx) $
     prettyAppList [return (ppCtx ctx <> "."),
-                   (case pre1 of
+                   (case invar1 of
                        Just f -> prettyTermApp f args1
                        Nothing -> return "True"), return "=>",
-                   (case pre2 of
+                   (case invar2 of
                        Just f -> prettyTermApp f args2
                        Nothing -> return "True"), return "=>",
                    prettyInCtx (FunBind f1 args1 CompFunReturn),
@@ -854,24 +854,24 @@ instantiateCoIndHyp (CoIndHyp {..}) =
      rhs <- substTermLike 0 evars coIndHypRHS
      return (lhs, rhs)
 
--- | Apply the preconditions of a 'CoIndHyp' to their respective arguments,
--- yielding @Bool@ conditions, using the constant @True@ value when a
--- precondition is absent
-applyCoIndHypPreconds :: CoIndHyp -> MRM (Term, Term)
-applyCoIndHypPreconds hyp =
-  let apply_precond :: Maybe Term -> [Term] -> MRM Term
-      apply_precond (Just (asLambdaList -> (vars, phi))) args
+-- | Apply the invariants of a 'CoIndHyp' to their respective arguments,
+-- yielding @Bool@ conditions, using the constant @True@ value when an
+-- invariant is absent
+applyCoIndHypInvariants :: CoIndHyp -> MRM (Term, Term)
+applyCoIndHypInvariants hyp =
+  let apply_invariant :: Maybe Term -> [Term] -> MRM Term
+      apply_invariant (Just (asLambdaList -> (vars, phi))) args
         | length vars == length args
           -- NOTE: applying to a list of arguments == substituting the reverse
           -- of that list, because the first argument corresponds to the
           -- greatest deBruijn index
         = substTerm 0 (reverse args) phi
-      apply_precond (Just _) _ =
-        error "applyCoIndHypPreconds: wrong number of arguments for precondition!"
-      apply_precond Nothing _ = liftSC1 scBool True in
-  do pre1 <- apply_precond (coIndHypPrecondLHS hyp) (coIndHypLHS hyp)
-     pre2 <- apply_precond (coIndHypPrecondRHS hyp) (coIndHypRHS hyp)
-     return (pre1, pre2)
+      apply_invariant (Just _) _ =
+        error "applyCoIndHypInvariants: wrong number of arguments for invariant!"
+      apply_invariant Nothing _ = liftSC1 scBool True in
+  do invar1 <- apply_invariant (coIndHypInvariantLHS hyp) (coIndHypLHS hyp)
+     invar2 <- apply_invariant (coIndHypInvariantRHS hyp) (coIndHypRHS hyp)
+     return (invar1, invar2)
 
 -- | Look up the 'FunAssump' for a 'FunName', if there is one
 mrGetFunAssump :: FunName -> MRM (Maybe FunAssump)
@@ -900,33 +900,32 @@ instantiateFunAssump fassump =
      rhs <- substTermLike 0 evars $ fassumpRHS fassump
      return (args, rhs)
 
--- | Get the precondition hint associated with a function name, by unfolding the
+-- | Get the invariant hint associated with a function name, by unfolding the
 -- name and checking if its body has the form
 --
--- > \ x1 ... xn -> precondHint a phi m
+-- > \ x1 ... xn -> invariantHint a phi m
 --
 -- If so, return @\ x1 ... xn -> phi@ as a term with the @xi@ variables free.
 -- Otherwise, return 'Nothing'. Note that this function will also look past
--- any initial @bindM ... (assertFiniteM ...)@ applications and combine
--- multiple top-level applications of @precondHint@.
-mrGetPrecond :: FunName -> MRM (Maybe Term)
-mrGetPrecond nm =
+-- any initial @bindM ... (assertFiniteM ...)@ applications.
+mrGetInvariant :: FunName -> MRM (Maybe Term)
+mrGetInvariant nm =
   mrFunNameBody nm >>= \case
-    Just body -> mrGetPrecondBody body
+    Just body -> mrGetInvariantBody body
     _ -> return Nothing
 
--- | The main loop of 'mrGetPrecond', which operates on a function's body
-mrGetPrecondBody :: Term -> MRM (Maybe Term)
-mrGetPrecondBody tm = case asApplyAll tm of
+-- | The main loop of 'mrGetInvariant', which operates on a function body
+mrGetInvariantBody :: Term -> MRM (Maybe Term)
+mrGetInvariantBody tm = case asApplyAll tm of
   -- go inside any top-level lambdas
   (asLambda -> Just (nm, tp, body), []) ->
     do body' <- liftSC1 betaNormalize body
-       mb_phi <- mrGetPrecondBody body'
+       mb_phi <- mrGetInvariantBody body'
        liftSC3 scLambda nm tp `mapM` mb_phi
   -- always beta-reduce
   (f@(asLambda -> Just _), args) ->
     do tm' <- mrApplyAll f args
-       mrGetPrecondBody tm'
+       mrGetInvariantBody tm'
   -- go inside any top-level applications of of bindM ... (assertFiniteM ...)
   (isGlobalDef "Prelude.bindM" -> Just (),
    [_, _,
@@ -935,9 +934,9 @@ mrGetPrecondBody tm = case asApplyAll tm of
     k]) ->
     do pf <- liftSC1 scGlobalDef "Prelude.TrueI"
        body <- mrApplyAll k [pf]
-       mrGetPrecondBody body
-  -- otherwise, return Just iff there is a top-level precondHint
-  (isGlobalDef "Prelude.precondHint" -> Just (),
+       mrGetInvariantBody body
+  -- otherwise, return Just iff there is a top-level invariant hint
+  (isGlobalDef "Prelude.invariantHint" -> Just (),
    [_, phi, _]) -> return $ Just phi
   _ -> return Nothing
 

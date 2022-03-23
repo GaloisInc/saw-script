@@ -229,8 +229,6 @@ normComp (CompTerm t) =
       return $ ExistsM (Type tp) (CompFunTerm body_tm)
     (isGlobalDef "Prelude.forallM" -> Just (), [tp, _, body_tm]) ->
       return $ ForallM (Type tp) (CompFunTerm body_tm)
-    (isGlobalDef "Prelude.precondHint" -> Just (), [_, _, body_tm]) ->
-      normCompTerm body_tm
     (isGlobalDef "Prelude.letRecM" -> Just (), [lrts, _, defs_f, body_f]) ->
       do
         -- Bind fresh function vars for the letrec-bound functions
@@ -280,10 +278,10 @@ normComp (CompTerm t) =
            mrApplyAll body [w1, n, a, xs, i, x] >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
-    -- Always unfold: sawLet, multiArgFixM, Num_rec
+    -- Always unfold: sawLet, multiArgFixM, invariantHint, Num_rec
     (f@(asGlobalDef -> Just ident), args)
       | ident `elem` ["Prelude.sawLet", "Prelude.multiArgFixM",
-                      "Cryptol.Num_rec"]
+                      "Prelude.invariantHint", "Cryptol.Num_rec"]
       , Just (_, Just body) <- asConstant f ->
         mrApplyAll body args >>= normCompTerm
 
@@ -422,15 +420,15 @@ handling the recursive ones
 -- * Handling Coinductive Hypotheses
 ----------------------------------------------------------------------
 
--- | Prove the precondition of a coinductive hypothesis
-proveCoIndHypPreCond :: CoIndHyp -> MRM ()
-proveCoIndHypPreCond hyp =
-  do (pre1, pre2) <- applyCoIndHypPreconds hyp
-     pre <- liftSC2 scAnd pre1 pre2
-     success <- mrProvable pre
+-- | Prove the invariant of a coinductive hypothesis
+proveCoIndHypInvariant :: CoIndHyp -> MRM ()
+proveCoIndHypInvariant hyp =
+  do (invar1, invar2) <- applyCoIndHypInvariants hyp
+     invar <- liftSC2 scAnd invar1 invar2
+     success <- mrProvable invar
      if success then return () else
        throwMRFailure $
-       PrecondNotProvable (coIndHypLHSFun hyp) (coIndHypRHSFun hyp) pre
+       InvariantNotProvable (coIndHypLHSFun hyp) (coIndHypRHSFun hyp) invar
 
 -- | Co-inductively prove the refinement
 --
@@ -439,21 +437,21 @@ proveCoIndHypPreCond hyp =
 --
 -- where @F@ and @G@ are the given 'FunName's, @y1, ..., ym@ and @z1, ..., zl@
 -- are the given argument lists, @x1, ..., xn@ is the current context of uvars,
--- and @preF@ and @preG@ are the preconditions associated with @F@ and @G@,
+-- and @invarF@ and @invarG@ are the invariants associated with @F@ and @G@,
 -- respectively. This proof is performed by coinductively assuming the
 -- refinement holds and proving the refinement with the definitions of @F@ and
 -- @G@ unfolded to their bodies. Note that this refinement is performed with
--- /only/ the preconditions @preF@ and @preG@ as assumptions; all other
+-- /only/ the invariants @invarF@ and @invarG@ as assumptions; all other
 -- assumptions are thrown away. If while running the refinement computation a
 -- 'CoIndHypMismatchWidened' error is reached with the given names, the state is
 -- restored and the computation is re-run with the widened hypothesis.
 mrRefinesCoInd :: FunName -> [Term] -> FunName -> [Term] -> MRM ()
 mrRefinesCoInd f1 args1 f2 args2 =
   do ctx <- mrUVarCtx
-     preF1 <- mrGetPrecond f1
-     preF2 <- mrGetPrecond f2
+     preF1 <- mrGetInvariant f1
+     preF2 <- mrGetInvariant f2
      let hyp = CoIndHyp ctx f1 f2 args1 args2 preF1 preF2
-     proveCoIndHypPreCond hyp
+     proveCoIndHypInvariant hyp
      proveCoIndHyp hyp
 
 -- | Prove the refinement represented by a 'CoIndHyp' coinductively. This is the
@@ -467,9 +465,9 @@ proveCoIndHyp hyp =
      debugPretty 1 ("proveCoIndHyp" <+> ppInEmptyCtx hyp)
      lhs <- fromMaybe (error "proveCoIndHyp") <$> mrFunBody f1 args1
      rhs <- fromMaybe (error "proveCoIndHyp") <$> mrFunBody f2 args2
-     (pre1, pre2) <- applyCoIndHypPreconds hyp
-     pre <- liftSC2 scAnd pre1 pre2
-     (withOnlyUVars (coIndHypCtx hyp) $ withOnlyAssumption pre $
+     (invar1, invar2) <- applyCoIndHypInvariants hyp
+     invar <- liftSC2 scAnd invar1 invar2
+     (withOnlyUVars (coIndHypCtx hyp) $ withOnlyAssumption invar $
       withCoIndHyp hyp $ mrRefines lhs rhs) `catchError` \case
        MRExnWiden nm1' nm2' new_vars
          | f1 == nm1' && f2 == nm2' ->
@@ -493,7 +491,7 @@ matchCoIndHyp hyp args1 args2 =
      if and (eqs1 ++ eqs2) then return () else
        throwError $ MRExnWiden (coIndHypLHSFun hyp) (coIndHypRHSFun hyp)
        (map Left (findIndices not eqs1) ++ map Right (findIndices not eqs2))
-     proveCoIndHypPreCond hyp
+     proveCoIndHypInvariant hyp
 
 
 -- | Generalize some of the arguments of a coinductive hypothesis
@@ -524,7 +522,7 @@ generalizeCoIndHyp hyp all_specs@(arg_spec:arg_specs) =
 -- | Add a new variable of the given type to the context of a coinductive
 -- hypothesis and set the specified arguments to that new variable
 generalizeCoIndHypArgs :: CoIndHyp -> Term -> [Either Int Int] -> MRM CoIndHyp
-generalizeCoIndHypArgs (CoIndHyp ctx f1 f2 args1 args2 pre1 pre2) tp specs =
+generalizeCoIndHypArgs (CoIndHyp ctx f1 f2 args1 args2 invar1 invar2) tp specs =
   do let set_arg i args =
            take i args ++ (Unshared $ LocalVar 0) : drop (i+1) args
      let (specs1, specs2) = partitionEithers specs
@@ -533,7 +531,7 @@ generalizeCoIndHypArgs (CoIndHyp ctx f1 f2 args1 args2 pre1 pre2) tp specs =
      args2' <- liftTermLike 0 1 args2
      let args1'' = foldr set_arg args1' specs1
          args2'' = foldr set_arg args2' specs2
-     return $ CoIndHyp (ctx ++ [("z",tp)]) f1 f2 args1'' args2'' pre1 pre2
+     return $ CoIndHyp (ctx ++ [("z",tp)]) f1 f2 args1'' args2'' invar1 invar2
 
 
 ----------------------------------------------------------------------
