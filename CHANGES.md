@@ -40,6 +40,13 @@
   as with `llvm_field`, debug symbols are required for `llvm_union` to
   work correctly.
 
+* A new highly experimental `llvm_verify_fixpoint_x86` function that
+  allows partial correctness verification of loops using loop
+  invariants instead of full symbolic unrolling. Only certain very simple
+  styles of loops can currently be accommodated, and the user is
+  required to provide a term that describes how the live variables in
+  the loop evolve over an iteration.
+
 # Version 0.9
 
 ## New Features
