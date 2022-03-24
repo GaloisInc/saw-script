@@ -6408,7 +6408,7 @@ gatherRangesForArray lhs rhs =
     rangeForOffset prec off (_, b) =
       if prec then bvEq off (bvRangeOffset range) else bvPropCouldHold prop
       where
-        range = llvmArrayBorrowRange rhs b
+        range = llvmArrayAbsBorrowRange rhs b
         prop = bvPropInRange off range
 
     -- Build the possible sequences of permissions that cover the rhs.
@@ -6424,7 +6424,7 @@ gatherRangesForArray lhs rhs =
       | bvLeq rhs_off_bytes off0 = [[]]
       | otherwise =
             [ h:rest | h@(_, b) <- filter (rangeForOffset prec off0) ranges,
-                       let r           = llvmArrayBorrowRange rhs b,
+                       let r           = llvmArrayAbsBorrowRange rhs b,
                        let next_offset = bvRangeOffset r `bvAdd` bvRangeLength r,
                        rest <- collectRanges True next_offset (filter (/= h) ranges) ]
 
@@ -6452,7 +6452,7 @@ borrowedLLVMArrayForArray lhs rhs =
                               , llvmArrayOffset  = o'
                               })
       where
-        rs   = llvmArrayBorrowRange rhs <$> bs
+        rs   = llvmArrayAbsBorrowRange rhs <$> bs
         o'   = bvRangeOffset (head rs)
         v    = bvRangeOffset (last rs) `bvAdd` bvRangeLength (last rs)
         len' = matchLLVMArrayCell rhs v

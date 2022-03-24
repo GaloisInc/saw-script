@@ -4624,11 +4624,17 @@ permToLLVMArrayBorrow ap p =
         where
           n = llvmArrayLen ap'
 
+    Perm_LLVMBlock bp
+      | PExpr_ArrayShape len bytes _ <- llvmBlockShape bp
+      , bytes == llvmArrayStride ap
+      , Just idx <- matchLLVMArrayCell ap (llvmBlockOffset bp) ->
+        Just (RangeBorrow (BVRange idx len))
+
     Perm_LLVMField fp
       | intValue (llvmFieldSize fp) /= llvmArrayStrideBits ap -> Nothing
-
     Perm_LLVMBlock bp
       | not (bvEq (llvmBlockLen bp) (bvInt (bytesToInteger (llvmArrayStride ap)))) -> Nothing
+
 
     _ | Just r <- llvmAtomicPermRange p
       , Just idx <- matchLLVMArrayCell ap (bvRangeOffset r) ->
@@ -4640,6 +4646,13 @@ llvmArrayBorrowRange :: (1 <= w, KnownNat w) =>
                         LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
 llvmArrayBorrowRange ap borrow =
   llvmArrayCellsToOffsets ap (llvmArrayBorrowCells borrow)
+
+llvmArrayAbsBorrowRange :: (1 <= w, KnownNat w) =>
+                        LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
+llvmArrayAbsBorrowRange ap borrow =
+  range { bvRangeOffset = bvAdd (llvmArrayOffset ap) (bvRangeOffset range) }
+  where
+    range = llvmArrayCellsToOffsets ap (llvmArrayBorrowCells borrow)
 
 -- | Add a borrow to an 'LLVMArrayPerm'
 llvmArrayAddBorrow :: LLVMArrayBorrow w -> LLVMArrayPerm w -> LLVMArrayPerm w
