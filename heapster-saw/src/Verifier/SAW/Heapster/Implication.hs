@@ -6466,12 +6466,13 @@ borrowedLLVMArrayForArray lhs rhs =
     (unzip -> (ps, bs)):_
       | not (null rs)
       , Just n <- len' ->
-      Just (catMaybes ps, rhs { llvmArrayBorrows = chopBorrows [] bs (llvmArrayBorrows rhs)
+      Just (catMaybes ps, rhs { llvmArrayBorrows = bs'
                               , llvmArrayLen     = n
                               , llvmArrayOffset  = o'
                               })
       where
         rs   = llvmArrayAbsBorrowRange rhs <$> bs
+        bs'  = chopBorrows [] bs (llvmArrayBorrows rhs) ++ llvmArrayBorrows rhs
         o'   = bvRangeOffset (head rs)
         v    = bvRangeOffset (last rs) `bvAdd` bvRangeLength (last rs)
         len' = matchLLVMArrayCell rhs v
