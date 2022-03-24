@@ -6628,20 +6628,6 @@ proveVarLLVMArray_FromArray2H ::
   ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w)
   (LLVMArrayPerm w)
 
--- -- If there is a borrow in ap that overlaps with a borrow in ap_lhs,
--- -- then remove the overlapping bit from the borrow of ap_lhs
--- proveVarLLVMArray_FromArray2H x ap_lhs len bs mb_ap
---   | Just bi <- findIndex (flip notElem bs) (llvmArrayBorrows ap_lhs)
---   , Just b_rhs <- find (and . fmap (not . bvPropCouldHold) . llvmArrayBorrowsDisjoint (bs!!bi)) bs =
---     let b      = bs!!bi
---         b_rhs_off = llvmArrayBorrowCells b_rhs
---         new_bs = llvmArrayBorrowRangeDelete b b_rhs_off
---         lhs_bs' = new_bs ++ deleteNth bi (llvmArrayBorrows ap_lhs)
---         ap_lhs' = ap_lhs { llvmArrayBorrows = lhs_bs' }
---     in
---     implTraceM (\info -> pretty "Proving borrowed permission...") >>>
---     proveVarLLVMArray_FromArray2H x ap_lhs' len bs mb_ap
-
 -- If there is a borrow in ap_lhs that is not in ap, return it to ap_lhs
 --
 -- FIXME: when an array ap_ret is being borrowed from ap_lhs, this code requires
