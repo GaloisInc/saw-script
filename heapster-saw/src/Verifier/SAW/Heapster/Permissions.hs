@@ -4984,7 +4984,7 @@ llvmAtomicPermOverlapsRange rng (Perm_LLVMBlock bp) =
   bvRangesOverlap rng (llvmBlockRange bp)
 llvmAtomicPermOverlapsRange _ _ = False
 
--- | Test if an atomic LLVM permission has a range that overlaps with (in the
+-- | Test if an atomic LLVM permission has a range that could overlap with (in the
 -- sense of 'bvPropCouldHold') the offsets in a given range
 llvmAtomicPermCouldOverlapRange :: (1 <= w, KnownNat w) => BVRange w ->
                                AtomicPerm (LLVMPointerType w) -> Bool
