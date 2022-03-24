@@ -2,6 +2,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
+-- This is to stop GHC 8.8.4's pattern match checker exceeding its limit when
+-- checking the pattern match in the 'CompTerm' case of 'normComp'
+{-# LANGUAGE CPP #-}
+#if __GLASGOW_HASKELL__ <= 808
+{-# OPTIONS_GHC -fno-warn-incomplete-patterns -fno-warn-overlapping-patterns #-}
+#endif
+
 {- |
 Module      : SAWScript.Prover.MRSolver.Solver
 Copyright   : Galois, Inc. 2022
