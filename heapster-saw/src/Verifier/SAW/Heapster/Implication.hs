@@ -1961,8 +1961,27 @@ simplImplIn (SImpl_LLVMArrayEmpty _ ap) =
 simplImplIn (SImpl_LLVMArrayBorrowed x bp ap) =
   if bvIsZero (llvmArrayLen ap) then
     error "simplImplIn: SImpl_LLVMArrayBorrowed: empty array permission"
+  else if not totallyBorrowed then
+    error "simplImplIn: SImpl_LLVMArrayBorrowed: array permission not completely borrowed"
   else
     distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
+  where
+    totallyBorrowed
+      | Just r <- borrowRange = not (bvLt (bvRangeLength r) (llvmArrayLen ap))
+      | otherwise = False
+
+    -- Walk the borrowed indices in sequence
+    borrowRange = foldl checkNext (Just (BVRange (bvInt 0) (bvInt 0))) (llvmArrayBorrows ap)
+    checkNext (Just r) (FieldBorrow ix) =
+      if bvCouldEqual ix (bvRangeEnd r)
+      then Just r { bvRangeLength = bvRangeLength r `bvAdd` bvInt 1 }
+      else Nothing
+    checkNext (Just r) (RangeBorrow ixs) =
+      if bvCouldEqual (bvRangeOffset ixs) (bvRangeEnd r)
+      then Just r { bvRangeLength = bvRangeLength r `bvAdd` bvRangeLength ixs }
+      else Nothing
+    checkNext _ _ = Nothing
+
 
 simplImplIn (SImpl_LLVMArrayFromBlock x bp) =
   distPerms1 x $ ValPerm_LLVMBlock bp
