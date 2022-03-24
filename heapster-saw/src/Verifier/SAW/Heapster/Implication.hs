@@ -6542,6 +6542,21 @@ proveVarLLVMArrayH x _p psubst ps mb_ap
             BVRange (llvmArrayOffset ap) (llvmArrayLengthBytes ap)
         _ -> False
 
+-- Check if there's a block with array shape and eliminate it. This new array
+-- could then be used in the case above, so recurse.
+proveVarLLVMArrayH x p psubst ps mb_ap
+  | Just i <- findIndex arrayBlock ps
+  , Perm_LLVMBlock bp <- ps !! i
+  , Just ap <- llvmBlockPermToArray bp =
+    implExtractSwapConjM x ps i >>>
+    implElimLLVMBlock x bp >>>
+    implSwapInsertConjM x (Perm_LLVMArray ap) (deleteNth i ps) i >>>
+    proveVarLLVMArrayH x p psubst (replaceNth i (Perm_LLVMArray ap) ps) mb_ap
+  where
+    arrayBlock (Perm_LLVMBlock bp)
+      | PExpr_ArrayShape {} <- llvmBlockShape bp = True
+    arrayBlock _ = False
+
 -- Otherwise, try and build a completely borrowed array that references existing
 -- permissions that cover the range of mb_ap, and recurse (hitting the special
 -- case above).
