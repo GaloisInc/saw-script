@@ -3723,19 +3723,6 @@ llvmPtr0EqExPerm :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) => prx sz ->
                     (ValuePerm (LLVMPointerType w))
 llvmPtr0EqExPerm = fmap (ValPerm_Conj1 . Perm_LLVMField) . llvmPtr0EqEx
 
-llvmExBlock :: (1 <= w, KnownNat w) =>
-  PermExpr (BVType w) -> PermExpr (BVType w) ->
-  PermExpr (LLVMShapeType w) ->
-  Mb (RNil :> RWModalityType :> LifetimeType)
-  (LLVMBlockPerm w)
-llvmExBlock off len shape =
-  nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: rw :>: l) ->
-  LLVMBlockPerm { llvmBlockRW = PExpr_Var rw,
-                  llvmBlockLifetime = PExpr_Var l,
-                  llvmBlockOffset = off,
-                  llvmBlockLen = len,
-                  llvmBlockShape = shape }
-
 -- | Create a permission to read a known value from offset 0 of an LLVM pointer
 -- in the given lifetime, i.e., return @exists y.[l]ptr ((0,R) |-> eq(e))@
 llvmRead0EqPerm :: (1 <= w, KnownNat w) => PermExpr LifetimeType ->
