@@ -4723,10 +4723,16 @@ cellOffsetLLVMArrayBorrow off (FieldBorrow ix) =
 cellOffsetLLVMArrayBorrow off (RangeBorrow rng) =
   RangeBorrow $ offsetBVRange off rng
 
+-- | Produce a @BVRange@ of borrowed cells from a borrow, which will be either a
+-- unit range (in the case of a @FieldBorrow@) or just the ranged spanned by the
+-- given @RangeBorrow@.
 llvmArrayBorrowCells :: (KnownNat w, 1 <= w) => LLVMArrayBorrow w -> BVRange w
 llvmArrayBorrowCells (FieldBorrow idx) = bvRangeOfIndex idx
 llvmArrayBorrowCells (RangeBorrow r) = r
 
+-- | Given a borrow @borrow@ and range (of borrowed indices) @rng@,
+-- delete @rng@ from @borrow@, and return the borrows that describe
+-- the remaining borrowed cells.
 llvmArrayBorrowRangeDelete ::
   (HasCallStack, 1 <= w, KnownNat w) =>
   LLVMArrayBorrow w ->

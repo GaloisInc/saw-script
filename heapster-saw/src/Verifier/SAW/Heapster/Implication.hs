@@ -8790,6 +8790,7 @@ proveVarImpl :: NuMatchingAny1 r => ExprVar a -> Mb vars (ValuePerm a) ->
                 ImplM vars s r (ps :> a) ps ()
 proveVarImpl x mb_p = proveVarsImplAppend $ fmap (distPerms1 x) mb_p
 
+-- | Try to prove @x:p@, returning whether or not this was successful
 checkVarImpl ::
   PermSet ps_in ->
   ImplM RNil Int (Constant ()) ps_out ps_in a ->
