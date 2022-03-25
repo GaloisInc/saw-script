@@ -1966,21 +1966,15 @@ simplImplIn (SImpl_LLVMArrayBorrowed x bp ap) =
   else
     distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
   where
-    totallyBorrowed
-      | Just r <- borrowRange = not (bvLt (bvRangeLength r) (llvmArrayLen ap))
-      | otherwise = False
+    -- If all the subtractions below could be empty, then we've subtracted the
+    -- whole array
+    totallyBorrowed = all (bvCouldEqual (bvInt 0)) (bvRangeLength <$> remaining)
 
-    -- Walk the borrowed indices in sequence
-    borrowRange = foldl checkNext (Just (BVRange (bvInt 0) (bvInt 0))) (llvmArrayBorrows ap)
-    checkNext (Just r) (FieldBorrow ix) =
-      if bvCouldEqual ix (bvRangeEnd r)
-      then Just r { bvRangeLength = bvRangeLength r `bvAdd` bvInt 1 }
-      else Nothing
-    checkNext (Just r) (RangeBorrow ixs) =
-      if bvCouldEqual (bvRangeOffset ixs) (bvRangeEnd r)
-      then Just r { bvRangeLength = bvRangeLength r `bvAdd` bvRangeLength ixs }
-      else Nothing
-    checkNext _ _ = Nothing
+    remaining =
+      -- iteratively subtract each borrow from the total range of array indices
+      foldr (\b xs -> xs >>= (`bvRangeDelete` llvmArrayBorrowCells b))
+            [llvmArrayCells ap]
+            (llvmArrayBorrows ap)
 
 
 simplImplIn (SImpl_LLVMArrayFromBlock x bp) =
