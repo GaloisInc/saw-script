@@ -2,6 +2,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
+-- This is to stop GHC 8.8.4's pattern match checker exceeding its limit when
+-- checking the pattern match in the 'CompTerm' case of 'normComp'
+{-# LANGUAGE CPP #-}
+#if __GLASGOW_HASKELL__ <= 808
+{-# OPTIONS_GHC -fno-warn-incomplete-patterns -fno-warn-overlapping-patterns #-}
+#endif
+
 {- |
 Module      : SAWScript.Prover.MRSolver.Solver
 Copyright   : Galois, Inc. 2022
@@ -20,6 +27,8 @@ errorM str >>= k              = errorM
 (m >>= k1) >>= k2             = m >>= \x -> k1 x >>= k2
 (existsM f) >>= k             = existsM (\x -> f x >>= k)
 (forallM f) >>= k             = forallM (\x -> f x >>= k)
+(assumingM b m) >>= k         = assumingM b (m >>= k)
+(assertingM b m) >>= k        = assertingM b (m >>= k)
 (orM m1 m2) >>= k             = orM (m1 >>= k) (m2 >>= k)
 (if b then m1 else m2) >>= k  = if b then m1 >>= k else m2 >>1 k
 (either f1 f2 e) >>= k        = either (\x -> f1 x >= k) (\x -> f2 x >= k) e
@@ -118,12 +127,16 @@ import Data.Maybe
 import Data.Either
 import Data.List (findIndices, intercalate)
 import Control.Monad.Except
+import qualified Data.Map as Map
+import qualified Data.Text as Text
 
 import Prettyprinter
 
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.CtxTerm (substTerm)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Cryptol.Monadify
 
 import SAWScript.Prover.MRSolver.Term
 import SAWScript.Prover.MRSolver.Monad
@@ -195,6 +208,7 @@ normComp (CompBind m f) =
   do norm <- normComp m
      normBind norm f
 normComp (CompTerm t) =
+  (>>) (mrDebugPPPrefix 3 "normCompTerm:" t) $
   withFailureCtx (FailCtxMNF t) $
   case asApplyAll t of
     (f@(asLambda -> Just _), args) ->
@@ -202,7 +216,7 @@ normComp (CompTerm t) =
     (isGlobalDef "Prelude.returnM" -> Just (), [_, x]) ->
       return $ ReturnM x
     (isGlobalDef "Prelude.bindM" -> Just (), [_, _, m, f]) ->
-      do norm <- normComp (CompTerm m)
+      do norm <- normCompTerm m
          normBind norm (CompFunTerm f)
     (isGlobalDef "Prelude.errorM" -> Just (), [_, str]) ->
       return (ErrorM str)
@@ -211,15 +225,24 @@ normComp (CompTerm t) =
     (isGlobalDef "Prelude.either" -> Just (), [ltp, rtp, _, f, g, eith]) ->
       return $ Either (Type ltp) (Type rtp) (CompFunTerm f) (CompFunTerm g) eith
     (isGlobalDef "Prelude.maybe" -> Just (), [tp, _, m, f, mayb]) ->
-      return $ MaybeElim (Type tp) (CompTerm m) (CompFunTerm f) mayb
+      do tp' <- case asApplyAll tp of
+                  -- Always unfold: is_bvult, is_bvule
+                  (tpf@(asGlobalDef -> Just ident), args)
+                    | ident `elem` ["Prelude.is_bvult", "Prelude.is_bvule"]
+                    , Just (_, Just body) <- asConstant tpf ->
+                      mrApplyAll body args
+                  _ -> return tp
+         return $ MaybeElim (Type tp') (CompTerm m) (CompFunTerm f) mayb
     (isGlobalDef "Prelude.orM" -> Just (), [_, m1, m2]) ->
       return $ OrM (CompTerm m1) (CompTerm m2)
+    (isGlobalDef "Prelude.assertingM" -> Just (), [_, cond, body_tm]) ->
+      return $ AssertingM cond (CompTerm body_tm)
+    (isGlobalDef "Prelude.assumingM" -> Just (), [_, cond, body_tm]) ->
+      return $ AssumingM cond (CompTerm body_tm)
     (isGlobalDef "Prelude.existsM" -> Just (), [tp, _, body_tm]) ->
       return $ ExistsM (Type tp) (CompFunTerm body_tm)
     (isGlobalDef "Prelude.forallM" -> Just (), [tp, _, body_tm]) ->
       return $ ForallM (Type tp) (CompFunTerm body_tm)
-    (isGlobalDef "Prelude.precondHint" -> Just (), [_, _, body_tm]) ->
-      normCompTerm body_tm
     (isGlobalDef "Prelude.letRecM" -> Just (), [lrts, _, defs_f, body_f]) ->
       do
         -- Bind fresh function vars for the letrec-bound functions
@@ -227,22 +250,7 @@ normComp (CompTerm t) =
         -- Apply the body function to our function vars and recursively
         -- normalize the resulting computation
         body_tm <- mrApplyAll body_f fun_tms
-        normComp (CompTerm body_tm)
-
-    -- Only unfold constants that are not recursive functions, i.e., whose
-    -- bodies do not contain letrecs
-    {- FIXME: this should be handled by mrRefines; we want it to be handled there
-       so that we use refinement assumptions before unfolding constants, to give
-       the user control over refinement proofs
-    ((asConstant -> Just (_, body)), args)
-      | not (containsLetRecM body) ->
-        mrApplyAll body args >>= normCompTerm
-    -}
-
-    -- Recognize and unfold a multiArgFixM
-    (f@(isGlobalDef "Prelude.multiArgFixM" -> Just ()), args)
-      | Just (_, Just body) <- asConstant f ->
-        mrApplyAll body args >>= normCompTerm
+        normCompTerm body_tm
 
     -- Recognize (multiFixM lrts (\ f1 ... fn -> (body1, ..., bodyn))).i args
     (asTupleSelector ->
@@ -258,8 +266,56 @@ normComp (CompTerm t) =
           if i > 0 && i <= length fun_tms then
             mrApplyAll (fun_tms !! (i-1)) args
           else throwMRFailure (MalformedComp t)
-        normComp (CompTerm body_tm)
+        normCompTerm body_tm
 
+    -- Convert `vecMapM (bvToNat ...)` into `bvVecMapInvarM`, with the
+    -- invariant being the current set of assumptions
+    (asGlobalDef -> Just "CryptolM.vecMapM", [a, b, asBvToNat -> Just (w, n),
+                                              f, xs]) ->
+      do invar <- mrAssumptions
+         liftSC2 scGlobalApply "CryptolM.bvVecMapInvarM"
+                               [a, b, w, n, f, xs, invar] >>= normCompTerm
+
+    -- Convert `atM (bvToNat ...)` into the unfolding of `bvVecAtM`
+    (asGlobalDef -> Just "CryptolM.atM", [asBvToNat -> Just (w1, n), a, xs,
+                                          asBvToNat -> Just (w2, i)]) ->
+      do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
+         ws_are_eq <- mrConvertible w1 w2
+         if ws_are_eq then
+           mrApplyAll body [w1, n, a, xs, i] >>= normCompTerm
+         else throwMRFailure (MalformedComp t)
+
+    -- Convert `updateM (bvToNat ...)` into the unfolding of `bvVecUpdateM`
+    (asGlobalDef -> Just "CryptolM.updateM", [asBvToNat -> Just (w1, n), a, xs,
+                                              asBvToNat -> Just (w2, i), x]) ->
+      do body <- mrGlobalDefBody "CryptolM.bvVecUpdateM"
+         ws_are_eq <- mrConvertible w1 w2
+         if ws_are_eq then
+           mrApplyAll body [w1, n, a, xs, i, x] >>= normCompTerm
+         else throwMRFailure (MalformedComp t)
+
+    -- Always unfold: sawLet, multiArgFixM, invariantHint, Num_rec
+    (f@(asGlobalDef -> Just ident), args)
+      | ident `elem` ["Prelude.sawLet", "Prelude.multiArgFixM",
+                      "Prelude.invariantHint", "Cryptol.Num_rec"]
+      , Just (_, Just body) <- asConstant f ->
+        mrApplyAll body args >>= normCompTerm
+
+    -- Always unfold recursors applied to constructors
+    (asRecursorApp -> Just (rc, crec, _, arg), args)
+      | Just (c, _, cargs) <- asCtorParams arg ->
+      do hd' <- liftSC4 scReduceRecursor rc crec c cargs 
+                  >>= liftSC1 betaNormalize
+         t' <- mrApplyAll hd' args
+         normCompTerm t'
+
+    -- Always unfold record selectors applied to record values (after scWhnf)
+    (asRecordSelector -> Just (r, fld), args) ->
+      do r' <- liftSC1 scWhnf r
+         case asRecordValue r' of
+           Just (Map.lookup fld -> Just f) -> do t' <- mrApplyAll f args
+                                                 normCompTerm t'
+           _ -> throwMRFailure (MalformedComp t)
 
     -- For an ExtCns, we have to check what sort of variable it is
     -- FIXME: substitute for evars if they have been instantiated
@@ -285,10 +341,25 @@ normBind (MaybeElim tp m f t) k =
   return $ MaybeElim tp (CompBind m k) (compFunComp f k) t
 normBind (OrM comp1 comp2) k =
   return $ OrM (CompBind comp1 k) (CompBind comp2 k)
+normBind (AssertingM cond comp) k = return $ AssertingM cond (CompBind comp k)
+normBind (AssumingM cond comp) k = return $ AssumingM cond (CompBind comp k)
 normBind (ExistsM tp f) k = return $ ExistsM tp (compFunComp f k)
 normBind (ForallM tp f) k = return $ ForallM tp (compFunComp f k)
-normBind (FunBind f args k1) k2 =
-  return $ FunBind f args (compFunComp k1 k2)
+normBind (FunBind f args k1) k2
+  -- Turn `bvVecMapInvarM ... >>= k` into `bvVecMapInvarBindM ... k`
+  | GlobalName (globalDefString -> "CryptolM.bvVecMapInvarM") [] <- f
+  , not (isCompFunReturn (compFunComp k1 k2)) =
+    do f' <- mrGlobalDef "CryptolM.bvVecMapInvarBindM"
+       cont <- compFunToTerm (compFunComp k1 k2)
+       return $ FunBind f' (args ++ [cont]) CompFunReturn
+  -- Turn `bvVecMapInvarBindM ... k1 >>= k2` into
+  -- `bvVecMapInvarBindM ... (composeM ... k1 k2)`
+  | GlobalName (globalDefString -> "CryptolM.bvVecMapInvarBindM") [] <- f
+  , (args_pre, [cont]) <- splitAt 8 args
+  , not (isCompFunReturn (compFunComp k1 k2)) =
+    do cont' <- compFunToTerm (compFunComp (compFunComp (CompFunTerm cont) k1) k2)
+       return $ FunBind f (args_pre ++ [cont']) CompFunReturn
+  | otherwise = return $ FunBind f args (compFunComp k1 k2)
 
 -- | Bind a 'Term' for a computation with a function and normalize
 normBindTerm :: Term -> CompFun -> MRM NormComp
@@ -303,6 +374,36 @@ applyCompFun (CompFunComp f g) t =
 applyCompFun CompFunReturn t =
   return $ CompReturn t
 applyCompFun (CompFunTerm f) t = CompTerm <$> mrApplyAll f [t]
+
+-- | Convert a 'CompFun' which is not a 'CompFunReturn' into a 'Term'
+compFunToTerm :: CompFun -> MRM Term
+compFunToTerm (CompFunTerm t) = return t
+compFunToTerm (CompFunComp f g) =
+  do f' <- compFunToTerm f
+     g' <- compFunToTerm g
+     f_tp <- mrTypeOf f'
+     g_tp <- mrTypeOf g'
+     case (f_tp, g_tp) of
+       (asPi -> Just (_, a, asCompM -> Just b),
+        asPi -> Just (_, _, asCompM -> Just c)) ->
+         liftSC2 scGlobalApply "Prelude.composeM" [a, b, c, f', g']
+       _ -> error "compFunToTerm: type(s) not of the form: a -> CompM b"
+compFunToTerm CompFunReturn = error "compFunToTerm: got a CompFunReturn"
+
+-- | Convert a 'Comp' into a 'Term'
+compToTerm :: Comp -> MRM Term
+compToTerm (CompTerm t) = return t
+compToTerm (CompReturn t) =
+   do tp <- mrTypeOf t
+      liftSC2 scGlobalApply "Prelude.returnM" [tp, t]
+compToTerm (CompBind m CompFunReturn) = compToTerm m
+compToTerm (CompBind m f) =
+  do m' <- compToTerm m
+     f' <- compFunToTerm f
+     mrTypeOf f' >>= \case
+       (asPi -> Just (_, a, asCompM -> Just b)) ->
+         liftSC2 scGlobalApply "Prelude.bindM" [a, b, m', f']
+       _ -> error "compToTerm: type not of the form: a -> CompM b"
 
 -- | Apply a 'CompFun' to a term and normalize the resulting computation
 applyNormCompFun :: CompFun -> Term -> MRM NormComp
@@ -344,15 +445,15 @@ handling the recursive ones
 -- * Handling Coinductive Hypotheses
 ----------------------------------------------------------------------
 
--- | Prove the precondition of a coinductive hypothesis
-proveCoIndHypPreCond :: CoIndHyp -> MRM ()
-proveCoIndHypPreCond hyp =
-  do (pre1, pre2) <- applyCoIndHypPreconds hyp
-     pre <- liftSC2 scAnd pre1 pre2
-     success <- mrProvable pre
+-- | Prove the invariant of a coinductive hypothesis
+proveCoIndHypInvariant :: CoIndHyp -> MRM ()
+proveCoIndHypInvariant hyp =
+  do (invar1, invar2) <- applyCoIndHypInvariants hyp
+     invar <- liftSC2 scAnd invar1 invar2
+     success <- mrProvable invar
      if success then return () else
        throwMRFailure $
-       PrecondNotProvable (coIndHypLHSFun hyp) (coIndHypRHSFun hyp) pre
+       InvariantNotProvable (coIndHypLHSFun hyp) (coIndHypRHSFun hyp) invar
 
 -- | Co-inductively prove the refinement
 --
@@ -361,21 +462,21 @@ proveCoIndHypPreCond hyp =
 --
 -- where @F@ and @G@ are the given 'FunName's, @y1, ..., ym@ and @z1, ..., zl@
 -- are the given argument lists, @x1, ..., xn@ is the current context of uvars,
--- and @preF@ and @preG@ are the preconditions associated with @F@ and @G@,
+-- and @invarF@ and @invarG@ are the invariants associated with @F@ and @G@,
 -- respectively. This proof is performed by coinductively assuming the
 -- refinement holds and proving the refinement with the definitions of @F@ and
 -- @G@ unfolded to their bodies. Note that this refinement is performed with
--- /only/ the preconditions @preF@ and @preG@ as assumptions; all other
+-- /only/ the invariants @invarF@ and @invarG@ as assumptions; all other
 -- assumptions are thrown away. If while running the refinement computation a
 -- 'CoIndHypMismatchWidened' error is reached with the given names, the state is
 -- restored and the computation is re-run with the widened hypothesis.
 mrRefinesCoInd :: FunName -> [Term] -> FunName -> [Term] -> MRM ()
 mrRefinesCoInd f1 args1 f2 args2 =
   do ctx <- mrUVarCtx
-     preF1 <- mrGetPrecond f1
-     preF2 <- mrGetPrecond f2
+     preF1 <- mrGetInvariant f1
+     preF2 <- mrGetInvariant f2
      let hyp = CoIndHyp ctx f1 f2 args1 args2 preF1 preF2
-     proveCoIndHypPreCond hyp
+     proveCoIndHypInvariant hyp
      proveCoIndHyp hyp
 
 -- | Prove the refinement represented by a 'CoIndHyp' coinductively. This is the
@@ -389,9 +490,9 @@ proveCoIndHyp hyp =
      debugPretty 1 ("proveCoIndHyp" <+> ppInEmptyCtx hyp)
      lhs <- fromMaybe (error "proveCoIndHyp") <$> mrFunBody f1 args1
      rhs <- fromMaybe (error "proveCoIndHyp") <$> mrFunBody f2 args2
-     (pre1, pre2) <- applyCoIndHypPreconds hyp
-     pre <- liftSC2 scAnd pre1 pre2
-     (withOnlyUVars (coIndHypCtx hyp) $ withOnlyAssumption pre $
+     (invar1, invar2) <- applyCoIndHypInvariants hyp
+     invar <- liftSC2 scAnd invar1 invar2
+     (withOnlyUVars (coIndHypCtx hyp) $ withOnlyAssumption invar $
       withCoIndHyp hyp $ mrRefines lhs rhs) `catchError` \case
        MRExnWiden nm1' nm2' new_vars
          | f1 == nm1' && f2 == nm2' ->
@@ -415,7 +516,7 @@ matchCoIndHyp hyp args1 args2 =
      if and (eqs1 ++ eqs2) then return () else
        throwError $ MRExnWiden (coIndHypLHSFun hyp) (coIndHypRHSFun hyp)
        (map Left (findIndices not eqs1) ++ map Right (findIndices not eqs2))
-     proveCoIndHypPreCond hyp
+     proveCoIndHypInvariant hyp
 
 
 -- | Generalize some of the arguments of a coinductive hypothesis
@@ -446,7 +547,7 @@ generalizeCoIndHyp hyp all_specs@(arg_spec:arg_specs) =
 -- | Add a new variable of the given type to the context of a coinductive
 -- hypothesis and set the specified arguments to that new variable
 generalizeCoIndHypArgs :: CoIndHyp -> Term -> [Either Int Int] -> MRM CoIndHyp
-generalizeCoIndHypArgs (CoIndHyp ctx f1 f2 args1 args2 pre1 pre2) tp specs =
+generalizeCoIndHypArgs (CoIndHyp ctx f1 f2 args1 args2 invar1 invar2) tp specs =
   do let set_arg i args =
            take i args ++ (Unshared $ LocalVar 0) : drop (i+1) args
      let (specs1, specs2) = partitionEithers specs
@@ -455,7 +556,7 @@ generalizeCoIndHypArgs (CoIndHyp ctx f1 f2 args1 args2 pre1 pre2) tp specs =
      args2' <- liftTermLike 0 1 args2
      let args1'' = foldr set_arg args1' specs1
          args2'' = foldr set_arg args2' specs2
-     return $ CoIndHyp (ctx ++ [("z",tp)]) f1 f2 args1'' args2'' pre1 pre2
+     return $ CoIndHyp (ctx ++ [("z",tp)]) f1 f2 args1'' args2'' invar1 invar2
 
 
 ----------------------------------------------------------------------
@@ -490,34 +591,37 @@ mrRefines' (ErrorM _) (ErrorM _) = return ()
 mrRefines' (ReturnM e) (ErrorM _) = throwMRFailure (ReturnNotError e)
 mrRefines' (ErrorM _) (ReturnM e) = throwMRFailure (ReturnNotError e)
 
--- A maybe eliminator on an equality type on the left
+-- maybe elimination on equality types
 mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
      cond_pf <- liftSC1 scEqTrue cond >>= mrDummyProof
      m1' <- applyNormCompFun f1 cond_pf
      cond_holds <- mrProvable cond
-     if cond_holds then mrRefines m1' m2 else
-       withAssumption cond (mrRefines m1' m2) >>
-       withAssumption not_cond (mrRefines m1 m2)
-
--- A maybe eliminator on an equality type on the right
+     not_cond_holds <- mrProvable not_cond
+     case (cond_holds, not_cond_holds) of
+       (True, _) -> mrRefines m1' m2
+       (_, True) -> mrRefines m1 m2
+       _ -> withAssumption cond (mrRefines m1' m2) >>
+            withAssumption not_cond (mrRefines m1 m2)
 mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
      cond_pf <- liftSC1 scEqTrue cond >>= mrDummyProof
      m2' <- applyNormCompFun f2 cond_pf
      cond_holds <- mrProvable cond
-     if cond_holds then mrRefines m1 m2' else
-       withAssumption cond (mrRefines m1 m2') >>
-       withAssumption not_cond (mrRefines m1 m2)
+     not_cond_holds <- mrProvable not_cond
+     case (cond_holds, not_cond_holds) of
+       (True, _) -> mrRefines m1 m2'
+       (_, True) -> mrRefines m1 m2
+       _ -> withAssumption cond (mrRefines m1 m2') >>
+            withAssumption not_cond (mrRefines m1 m2)
 
--- A maybe eliminator on an isFinite type on the left
+-- maybe elimination on isFinite types
 mrRefines' (MaybeElim (Type (asIsFinite -> Just n1)) m1 f1 _) m2 =
   do n1_norm <- mrNormOpenTerm n1
      maybe_assump <- mrGetDataTypeAssump n1_norm
-     fin_pf <-
-       liftSC2 scGlobalApply "CryptolM.isFinite" [n1_norm] >>= mrDummyProof
+     fin_pf <- mrIsFinite n1_norm >>= mrDummyProof
      case (maybe_assump, asNum n1_norm) of
        (_, Just (Left _)) -> applyNormCompFun f1 fin_pf >>= flip mrRefines m2
        (_, Just (Right _)) -> mrRefines m1 m2
@@ -529,13 +633,10 @@ mrRefines' (MaybeElim (Type (asIsFinite -> Just n1)) m1 f1 _) m2 =
          (withUVarLift "n" (Type nat_tp) (n1_norm, f1, m2) $ \ n (n1', f1', m2') ->
            withDataTypeAssump n1' (IsNum n)
            (applyNormCompFun f1' n >>= flip mrRefines m2'))
-
--- A maybe eliminator on an isFinite type on the right
 mrRefines' m1 (MaybeElim (Type (asIsFinite -> Just n2)) m2 f2 _) =
   do n2_norm <- mrNormOpenTerm n2
      maybe_assump <- mrGetDataTypeAssump n2_norm
-     fin_pf <-
-       liftSC2 scGlobalApply "CryptolM.isFinite" [n2_norm] >>= mrDummyProof
+     fin_pf <- mrIsFinite n2_norm >>= mrDummyProof
      case (maybe_assump, asNum n2_norm) of
        (_, Just (Left _)) -> applyNormCompFun f2 fin_pf >>= mrRefines m1
        (_, Just (Right _)) -> mrRefines m1 m2
@@ -599,6 +700,11 @@ mrRefines' m1 (Either ltp2 rtp2 f2 g2 t2) =
             withUVarLift rnm rtp2 (g2, t2', m1) (\x (g2', t2'', m1') ->
              applyNormCompFun g2' x >>= withDataTypeAssump t2'' (IsRight x)
                                         . mrRefines m1')
+
+mrRefines' m1 (AssumingM cond2 m2) =
+  withAssumption cond2 $ mrRefines m1 m2
+mrRefines' (AssertingM cond1 m1) m2 =
+  withAssumption cond1 $ mrRefines m1 m2
 
 mrRefines' m1 (ForallM tp f2) =
   let nm = maybe "x" id (compFunVarName f2) in
@@ -691,23 +797,6 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
     mrDebugPPPrefixSep 1 "mrRefines: bind types not equal:" tp1 "/=" tp2 >>
     throwMRFailure (CompsDoNotRefine m1 m2)
 
-{- FIXME: handle FunBind on just one side
-mrRefines' m1@(FunBind f@(GlobalName _) args k1) m2 =
-  mrGetFunAssump f >>= \case
-  Just fassump ->
-    -- If we have an assumption that f args' refines some rhs, then prove that
-    -- args = args' and then that rhs refines m2
-    do (assump_args, assump_rhs) <- instantiateFunAssump fassump
-       zipWithM_ mrAssertProveEq assump_args args
-       m1' <- normBind assump_rhs k1
-       mrRefines m1' m2
-  Nothing ->
-    -- We don't want to do inter-procedural proofs, so if we don't know anything
-    -- about f already then give up
-    throwMRFailure (CompsDoNotRefine m1 m2)
--}
-
-
 mrRefines' m1@(FunBind f1 args1 k1) m2 =
   mrGetFunAssump f1 >>= \case
 
@@ -730,9 +819,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
     -- Otherwise we would have to somehow split m2 into some computation of the
     -- form m2' >>= k2 where f1 args1 |= m2' and k1 |= k2, but we don't know how
     -- to do this splitting, so give up
-    _ ->
-      throwMRFailure (CompsDoNotRefine m1 m2)
-
+    _ -> mrRefines'' m1 m2
 
 mrRefines' m1 m2@(FunBind f2 args2 k2) =
   mrFunBodyRecInfo f2 args2 >>= \case
@@ -753,25 +840,37 @@ mrRefines' m1 m2@(FunBind f2 args2 k2) =
     -- Otherwise we would have to somehow split m1 into some computation of the
     -- form m1' >>= k1 where m1' |= f2 args2 and k1 |= k2, but we don't know how
     -- to do this splitting, so give up
-  _ ->
-    throwMRFailure (CompsDoNotRefine m1 m2)
+  _ -> mrRefines'' m1 m2
 
+mrRefines' m1 m2 = mrRefines'' m1 m2
 
--- NOTE: the rules that introduce existential variables need to go last, so that
--- they can quantify over as many universals as possible
-mrRefines' m1 (ExistsM tp f2) =
+-- | The cases of 'mrRefines' which must occur after the ones in 'mrRefines''.
+-- For example, the rules that introduce existential variables need to go last,
+-- so that they can quantify over as many universals as possible
+mrRefines'' :: NormComp -> NormComp -> MRM ()
+
+mrRefines'' m1 (AssertingM cond2 m2) =
+  mrProvable cond2 >>= \cond2_pv ->
+  if cond2_pv then mrRefines m1 m2
+  else throwMRFailure (AssertionNotProvable cond2)
+mrRefines'' (AssumingM cond1 m1) m2 =
+  mrProvable cond1 >>= \cond1_pv ->
+  if cond1_pv then mrRefines m1 m2
+  else throwMRFailure (AssumptionNotProvable cond1)
+
+mrRefines'' m1 (ExistsM tp f2) =
   do let nm = maybe "x" id (compFunVarName f2)
      evar <- mrFreshEVar nm tp
      m2' <- applyNormCompFun f2 evar
      mrRefines m1 m2'
-mrRefines' (ForallM tp f1) m2 =
+mrRefines'' (ForallM tp f1) m2 =
   do let nm = maybe "x" id (compFunVarName f1)
      evar <- mrFreshEVar nm tp
      m1' <- applyNormCompFun f1 evar
      mrRefines m1' m2
 
 -- If none of the above cases match, then fail
-mrRefines' m1 m2 = throwMRFailure (CompsDoNotRefine m1 m2)
+mrRefines'' m1 m2 = throwMRFailure (CompsDoNotRefine m1 m2)
 
 
 -- | Prove that one function refines another for all inputs
@@ -791,6 +890,77 @@ mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 -- * External Entrypoints
 ----------------------------------------------------------------------
 
+-- | The main loop of 'askMRSolver'. The first argument is an accumulator of
+-- variables to introduce, innermost first.
+askMRSolverH :: [Term] -> Term -> Term -> Term -> Term -> MRM MREnv
+
+-- If we need to introduce a bitvector on one side and a Num on the other,
+-- introduce a bitvector variable and substitute `TCNum` of `bvToNat` of that
+-- variable on the Num side
+askMRSolverH vars (asPi -> Just (nm1, tp@(asBitvectorType -> Just n), body1)) t1
+                  (asPi -> Just (nm2, asDataType -> Just (primName -> "Cryptol.Num", _), body2)) t2 =
+  let nm = if Text.head nm2 == '_' then nm1 else nm2 in
+  withUVarLift nm (Type tp) (vars, t1, t2) $ \var (vars', t1', t2') ->
+  do nat_tm <- liftSC2 scBvToNat n var
+     num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
+     body2' <- substTerm 0 (num_tm : vars') body2
+     t1'' <- mrApplyAll t1' [var]
+     t2'' <- mrApplyAll t2' [num_tm]
+     askMRSolverH (var : vars') body1 t1'' body2' t2''
+askMRSolverH vars (asPi -> Just (nm1, asDataType -> Just (primName -> "Cryptol.Num", _), body1)) t1
+                  (asPi -> Just (nm2, tp@(asBitvectorType -> Just n), body2)) t2 =
+  let nm = if Text.head nm2 == '_' then nm1 else nm2 in
+  withUVarLift nm (Type tp) (vars, t1, t2) $ \var (vars', t1', t2') ->
+  do nat_tm <- liftSC2 scBvToNat n var
+     num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
+     body1' <- substTerm 0 (num_tm : vars') body1
+     t1'' <- mrApplyAll t1' [num_tm]
+     t2'' <- mrApplyAll t2' [var]
+     askMRSolverH (var : vars') body1' t1'' body2 t2''
+
+-- Introduce variables of the same type together
+askMRSolverH vars tp11@(asPi -> Just (nm1, tp1, body1)) t1
+                  tp22@(asPi -> Just (nm2, tp2, body2)) t2 =
+  do tps_are_eq <- mrConvertible tp1 tp2
+     if tps_are_eq then return () else
+       throwMRFailure (TypesNotEq (Type tp11) (Type tp22))
+     let nm = if Text.head nm2 == '_' then nm1 else nm2
+     withUVarLift nm (Type tp1) (vars, t1, t2) $ \var (vars', t1', t2') ->
+       do t1'' <- mrApplyAll t1' [var]
+          t2'' <- mrApplyAll t2' [var]
+          askMRSolverH (var : vars') body1 t1'' body2 t2''
+
+-- Error if we don't have the same number of arguments on both sides
+askMRSolverH _ tp1@(asPi -> Just _) _ tp2 _ =
+  throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+askMRSolverH _ tp1 _ tp2@(asPi -> Just _) _ =
+  throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+
+-- The base case: both sides are CompM of the same type
+askMRSolverH _ tp1@(asCompM -> Just _) t1 tp2@(asCompM -> Just _) t2 =
+  do tps_are_eq <- mrConvertible tp1 tp2
+     if tps_are_eq then return () else
+       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+     m1 <- normCompTerm t1 
+     m2 <- normCompTerm t2
+     mrRefines m1 m2
+     -- If t1 is a named function, add forall xs. f1 xs |= m2 to the env
+     case asApplyAll t1 of
+       ((asGlobalFunName -> Just f1), args) ->
+         mrUVarCtx >>= \uvar_ctx ->
+         let fassump = FunAssump { fassumpCtx = uvar_ctx,
+                                   fassumpArgs = args,
+                                   fassumpRHS = m2 } in
+         mrEnvAddFunAssump f1 fassump <$> mrEnv
+       _ -> mrEnv
+
+-- Error if we don't have CompM at the end
+askMRSolverH _ (asCompM -> Just _) _ tp2 _ =
+  throwMRFailure (NotCompFunType tp2)
+askMRSolverH _ tp1 _ _ _ =
+  throwMRFailure (NotCompFunType tp1)
+
+
 -- | Test two monadic, recursive terms for refinement. On success, if the
 -- left-hand term is a named function, add the refinement to the 'MREnv'
 -- environment.
@@ -804,23 +974,6 @@ askMRSolver ::
 askMRSolver sc dlvl env timeout t1 t2 =
   do tp1 <- scTypeOf sc t1 >>= scWhnf sc
      tp2 <- scTypeOf sc t2 >>= scWhnf sc
-     case asPiList tp1 of
-       (uvar_ctx, asCompM -> Just _) ->
-         runMRM sc timeout dlvl env $
-         withUVars uvar_ctx $ \vars ->
-         do tps_are_eq <- mrConvertible tp1 tp2
-            if tps_are_eq then return () else
-              throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
-            mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2
-            m1 <- mrApplyAll t1 vars >>= normCompTerm
-            m2 <- mrApplyAll t2 vars >>= normCompTerm
-            mrRefines m1 m2
-            -- If t1 is a named function, add forall xs. f1 xs |= m2 to the env
-            case asGlobalFunName t1 of
-              Just f1 ->
-                let fassump = FunAssump { fassumpCtx = uvar_ctx,
-                                          fassumpArgs = vars,
-                                          fassumpRHS = m2 } in
-                return $ mrEnvAddFunAssump f1 fassump env
-              Nothing -> return env
-       _ -> return $ Left $ NotCompFunType tp1
+     runMRM sc timeout dlvl env $
+       mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2 >>
+       askMRSolverH [] tp1 t1 tp2 t2
