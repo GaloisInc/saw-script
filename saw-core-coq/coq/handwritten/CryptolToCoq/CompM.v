@@ -888,6 +888,9 @@ Qed.
 Definition assertM (P:Prop) : CompM unit :=
   existsM (fun pf:P => returnM tt).
 
+Definition assertingM {A} (P:Prop) (m:CompM A) : CompM A :=
+  assertM P >> m.
+
 Definition assertM_eq (P:Prop) (pf:P) : assertM P ~= returnM tt.
 Proof.
   intro opt_a; split.
