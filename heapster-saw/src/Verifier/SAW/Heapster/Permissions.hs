@@ -2450,9 +2450,17 @@ mbLLVMArrayLifetime = mbMapCl $(mkClosed [| llvmArrayLifetime |])
 mbLLVMArrayOffset :: Mb ctx (LLVMArrayPerm w) -> Mb ctx (PermExpr (BVType w))
 mbLLVMArrayOffset = mbMapCl $(mkClosed [| llvmArrayOffset |])
 
+-- | Get the offset-in-binding of an array permission in binding
+mbLLVMArrayOffsetBytes :: Mb ctx (LLVMArrayPerm w) -> Mb ctx (PermExpr (BVType w))
+mbLLVMArrayOffsetBytes = mbMapCl $(mkClosed [| llvmArrayOffset |])
+
 -- | Get the length-in-binding of an array permission in binding
 mbLLVMArrayLen :: Mb ctx (LLVMArrayPerm w) -> Mb ctx (PermExpr (BVType w))
 mbLLVMArrayLen = mbMapCl $(mkClosed [| llvmArrayLen |])
+
+-- | Get the length-in-binding of an array permission in binding
+mbLLVMArrayLenBytes :: (1 <= w, KnownNat w) => Mb ctx (LLVMArrayPerm w) -> Mb ctx (PermExpr (BVType w))
+mbLLVMArrayLenBytes = mbMapCl $(mkClosed [| llvmArrayLengthBytes |])
 
 -- | Get the stride of an array permission in binding
 mbLLVMArrayStride :: Mb ctx (LLVMArrayPerm w) -> Bytes
@@ -3954,6 +3962,12 @@ llvmAtomicPermToBlock (Perm_LLVMArray ap) = llvmArrayPermToBlock ap
 llvmAtomicPermToBlock (Perm_LLVMBlock bp) = Just bp
 llvmAtomicPermToBlock _ = Nothing
 
+-- | Convert an atomic permission to several @memblocks@, if possible
+llvmAtomicPermToBlocks :: AtomicPerm (LLVMPointerType w) ->
+                          Maybe [LLVMBlockPerm w]
+llvmAtomicPermToBlocks (Perm_LLVMArray ap) = llvmArrayToBlocks ap
+llvmAtomicPermToBlocks p = pure <$> llvmAtomicPermToBlock p
+
 -- | Convert an atomic permission whose type is unknown to a @memblock@, if
 -- possible, along with a proof that its type is a valid llvm pointer type
 llvmAtomicPermToSomeBlock :: AtomicPerm a -> Maybe (SomeLLVMBlockPerm a)
@@ -4579,6 +4593,54 @@ permForLLVMArrayBorrow ap (RangeBorrow (BVRange off len)) =
        llvmArrayLen = len,
        llvmArrayBorrows = [] }
 
+-- | Build the borrow corresponding to borrowing a given permission from the array.
+-- This is a partial function as the permission @p@ must be:
+-- (1) An array whose offset corresponds to a cell of @ap@
+-- (2) A field or block corresponding to an array cell
+-- TODO: Extend this to allow blocks that span multiple cells
+permToLLVMArrayBorrow ::
+  forall w. (1 <= w, KnownNat w) =>
+  LLVMArrayPerm w ->
+  AtomicPerm (LLVMPointerType w) ->
+  Maybe (LLVMArrayBorrow w)
+permToLLVMArrayBorrow ap p =
+  case p of
+    Perm_LLVMArray ap'
+      | Just idx <- matchLLVMArrayCell ap (llvmArrayOffset ap') ->
+        Just (RangeBorrow (BVRange idx n))
+        where
+          n = llvmArrayLen ap'
+
+    Perm_LLVMBlock bp
+      | PExpr_ArrayShape len bytes _ <- llvmBlockShape bp
+      , bytes == llvmArrayStride ap
+      , Just idx <- matchLLVMArrayCell ap (llvmBlockOffset bp) ->
+        Just (RangeBorrow (BVRange idx len))
+
+    Perm_LLVMField fp
+      | intValue (llvmFieldSize fp) /= llvmArrayStrideBits ap -> Nothing
+    Perm_LLVMBlock bp
+      | not (bvEq (llvmBlockLen bp) (bvInt (bytesToInteger (llvmArrayStride ap)))) -> Nothing
+
+
+    _ | Just r <- llvmAtomicPermRange p
+      , Just idx <- matchLLVMArrayCell ap (bvRangeOffset r) ->
+        Just (FieldBorrow idx)
+
+    _ -> Nothing
+
+llvmArrayBorrowRange :: (1 <= w, KnownNat w) =>
+                        LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
+llvmArrayBorrowRange ap borrow =
+  llvmArrayCellsToOffsets ap (llvmArrayBorrowCells borrow)
+
+llvmArrayAbsBorrowRange :: (1 <= w, KnownNat w) =>
+                        LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
+llvmArrayAbsBorrowRange ap borrow =
+  range { bvRangeOffset = bvAdd (llvmArrayOffset ap) (bvRangeOffset range) }
+  where
+    range = llvmArrayCellsToOffsets ap (llvmArrayBorrowCells borrow)
+
 -- | Add a borrow to an 'LLVMArrayPerm'
 llvmArrayAddBorrow :: LLVMArrayBorrow w -> LLVMArrayPerm w -> LLVMArrayPerm w
 llvmArrayAddBorrow b ap = ap { llvmArrayBorrows = b : llvmArrayBorrows ap }
@@ -4647,6 +4709,36 @@ cellOffsetLLVMArrayBorrow off (FieldBorrow ix) =
   FieldBorrow (bvAdd ix off)
 cellOffsetLLVMArrayBorrow off (RangeBorrow rng) =
   RangeBorrow $ offsetBVRange off rng
+
+-- | Produce a @BVRange@ of borrowed cells from a borrow, which will be either a
+-- unit range (in the case of a @FieldBorrow@) or just the ranged spanned by the
+-- given @RangeBorrow@.
+llvmArrayBorrowCells :: (KnownNat w, 1 <= w) => LLVMArrayBorrow w -> BVRange w
+llvmArrayBorrowCells (FieldBorrow idx) = bvRangeOfIndex idx
+llvmArrayBorrowCells (RangeBorrow r) = r
+
+-- | Given a borrow @borrow@ and range (of borrowed indices) @rng@,
+-- delete @rng@ from @borrow@, and return the borrows that describe
+-- the remaining borrowed cells.
+llvmArrayBorrowRangeDelete ::
+  (HasCallStack, 1 <= w, KnownNat w) =>
+  LLVMArrayBorrow w ->
+  BVRange w ->
+  [LLVMArrayBorrow w]
+llvmArrayBorrowRangeDelete borrow rng =
+  catMaybes (go <$> bvRangeDelete borrow_range rng)
+  where
+    borrow_range = llvmArrayBorrowCells borrow
+
+    go new_range
+      | bvIsZero (bvRangeLength new_range) = Nothing
+      | RangeBorrow _ <- borrow  = Just $ RangeBorrow new_range
+      | FieldBorrow idx <- borrow
+      , bvEq (bvRangeLength new_range) (bvInt 1) = Just $ FieldBorrow idx
+      | otherwise =
+        error "llvmArrayBorrowRangeDelete: found non unit new_range for FieldBorrow"
+
+
 
 -- | Test if a byte offset @o@ statically aligns with a statically-known offset
 -- into some array cell, i.e., whether
@@ -4754,6 +4846,36 @@ llvmSubArrayBorrow :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
                       LLVMArrayPerm w -> LLVMArrayBorrow w
 llvmSubArrayBorrow ap1 ap2 = RangeBorrow $ llvmSubArrayRange ap1 ap2
 
+-- | Given atomic permissions ps, filters out any q from ps such that q is
+-- borrowed from some q' also in ps
+filterBorrowedPermissions :: forall w. (1 <= w, KnownNat w) =>
+                             [AtomicPerm (LLVMPointerType w)] ->
+                             [AtomicPerm (LLVMPointerType w)]
+filterBorrowedPermissions ps = filter (not . isABorrow) ps
+  where
+    isABorrow :: AtomicPerm (LLVMPointerType w) -> Bool
+    isABorrow p =
+      case p of
+        (llvmAtomicPermRange -> Just r) ->
+            r `elem` borrowedRanges
+        Perm_LLVMArray a ->
+          llvmArrayAbsOffsets a `elem` borrowedRanges
+        _ -> False
+
+    borrowedRanges :: [BVRange w]
+    borrowedRanges = ps >>= go
+
+    go :: AtomicPerm (LLVMPointerType w) -> [BVRange w]
+    go p =
+      case p of
+        Perm_LLVMArray arrayPerm ->
+          goBorrow arrayPerm <$> llvmArrayBorrows arrayPerm
+        _ -> []
+
+    goBorrow :: LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
+    goBorrow = llvmArrayBorrowOffsets
+
+
 -- | Return the propositions stating that the first array permission @ap@
 -- contains the second @sub_ap@, meaning that array indices that are in @sub_ap@
 -- (in the sense of 'llvmArrayIndexInArray') are in @ap@. This requires that the
@@ -4854,6 +4976,20 @@ llvmAtomicPermOverlapsRange rng (Perm_LLVMField fp) =
 llvmAtomicPermOverlapsRange rng (Perm_LLVMBlock bp) =
   bvRangesOverlap rng (llvmBlockRange bp)
 llvmAtomicPermOverlapsRange _ _ = False
+
+-- | Test if an atomic LLVM permission has a range that could overlap with (in the
+-- sense of 'bvPropCouldHold') the offsets in a given range
+llvmAtomicPermCouldOverlapRange :: (1 <= w, KnownNat w) => BVRange w ->
+                               AtomicPerm (LLVMPointerType w) -> Bool
+llvmAtomicPermCouldOverlapRange rng (Perm_LLVMArray ap) =
+  bvRangesCouldOverlap rng (llvmArrayAbsOffsets ap) &&
+  not (null $ bvRangesDelete rng $
+       map (llvmArrayBorrowOffsets ap) (llvmArrayBorrows ap))
+llvmAtomicPermCouldOverlapRange rng (Perm_LLVMField fp) =
+  bvRangesCouldOverlap rng (llvmFieldRange fp)
+llvmAtomicPermCouldOverlapRange rng (Perm_LLVMBlock bp) =
+  bvRangesCouldOverlap rng (llvmBlockRange bp)
+llvmAtomicPermCouldOverlapRange _ _ = False
 
 -- | Return the total length of an LLVM array permission in bytes
 llvmArrayLengthBytes :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
