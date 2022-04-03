@@ -79,7 +79,7 @@ cryptolRecordSelect sc fields r nm =
       [ "Could not build record selector term for field name \""
       , nm
       , "\" on record term: "
-      , Text.pack $ show r
+      , Text.pack $ SC.showTerm r
       , "\nFields are: "
       , Text.pack . show $ Map.keys fields
       ]

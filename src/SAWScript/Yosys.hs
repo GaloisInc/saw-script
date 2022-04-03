@@ -3,6 +3,7 @@
 {-# Language RecordWildCards #-}
 {-# Language ViewPatterns #-}
 {-# Language LambdaCase #-}
+{-# Language MultiWayIf #-}
 {-# Language TupleSections #-}
 {-# Language ScopedTypeVariables #-}
 
@@ -21,7 +22,6 @@ import Control.Monad (forM, foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
 
-import Data.Bifunctor (first)
 import qualified Data.Tuple as Tuple
 import qualified Data.Maybe as Maybe
 import qualified Data.Foldable as Foldable
@@ -79,13 +79,15 @@ yosysIRModgraph ir =
 
 data Netgraph = Netgraph
   { _netgraphGraph :: Graph.Graph
-  , _netgraphNodeFromVertex :: Graph.Vertex -> (Cell, Bitrep, [Bitrep])
+  , _netgraphNodeFromVertex :: Graph.Vertex -> ((Text, Cell), Bitrep, [Bitrep])
   -- , _netgraphVertexFromKey :: Bitrep -> Maybe Graph.Vertex
   }
 makeLenses ''Netgraph
 
 cellInputConnections :: Cell -> Map Text [Bitrep]
-cellInputConnections c = Map.intersection (c ^. cellConnections) inp
+cellInputConnections c
+  | c ^. cellType == "$dff" = Map.empty
+  | otherwise = Map.intersection (c ^. cellConnections) inp
   where
     inp = Map.filter (\d -> d == DirectionInput || d == DirectionInout) $ c ^. cellPortDirections
 
@@ -110,8 +112,10 @@ moduleNetgraph m =
       )
       . Map.assocs
       $ m ^. modulePorts
-    cellToNodes :: Cell -> [(Cell, Bitrep, [Bitrep])]
-    cellToNodes c = (c, , inputBits) <$> outputBits
+    cellToNodes :: (Text, Cell) -> [((Text, Cell), Bitrep, [Bitrep])]
+    cellToNodes (nm, c)
+      | c ^. cellType == "$dff" = ((nm, c), , []) <$> outputBits
+      | otherwise = ((nm, c), , inputBits) <$> outputBits
       where
         inputBits :: [Bitrep]
         inputBits =
@@ -120,7 +124,7 @@ moduleNetgraph m =
           . mconcat
           . Maybe.mapMaybe
           ( \(p, bits) ->
-              case (c ^. cellPortDirections . at p) of
+              case c ^. cellPortDirections . at p of
                 Just DirectionInput -> Just bits
                 Just DirectionInout -> Just bits
                 _ -> Nothing
@@ -139,7 +143,7 @@ moduleNetgraph m =
           )
           . Map.assocs
           $ c ^. cellConnections
-    nodes = concatMap cellToNodes . Map.elems $ m ^. moduleCells
+    nodes = concatMap cellToNodes . Map.assocs $ m ^. moduleCells
     (_netgraphGraph, _netgraphNodeFromVertex, _netgraphVertexFromKey)
       = Graph.graphFromEdges nodes
   in Netgraph{..}
@@ -147,18 +151,38 @@ moduleNetgraph m =
 --------------------------------------------------------------------------------
 -- ** Building a SAWCore term from a network graph
 
+data ConvertedModule = ConvertedModule
+  { _convertedModuleTerm :: SC.Term
+  , _convertedModuleType :: SC.Term
+  , _convertedModuleCryptolType :: C.Type
+  , _convertedModuleStateFields :: Maybe (Map Text (SC.Term, C.Type))
+  }
+makeLenses ''ConvertedModule
+
 -- | Given a Yosys cell and a map of terms for its arguments, construct a term representing the output.
 cellToTerm ::
-  forall m.
+  forall m a.
   MonadIO m =>
   SC.SharedContext ->
-  Map Text SC.Term {- ^ Environment of user-defined cells -} ->
+  Map Text ConvertedModule {- ^ Environment of user-defined cells -} ->
+  Map Text a {- ^ Mapping from output names used to construct record lookups -} ->
+  Maybe SC.Term {- ^ State term for this cell, if it exists -} ->
   Cell {- ^ Cell type -} ->
   Map Text SC.Term {- ^ Mapping of input names to input terms -} ->
-  m SC.Term
-cellToTerm sc env c args = case c ^. cellType of
+  m (SC.Term, Maybe SC.Term)
+cellToTerm sc env outputFields mst c args = case c ^. cellType of
+  "$dff"
+    | Just st <- mst -> do
+        fmap (,Nothing) . cryptolRecord sc $ Map.fromList
+          [ ("Q", st)
+          ]
+    | otherwise -> panic "cellToTerm" [Text.unpack $ mconcat ["Flip-flop cell has no associated state term"]]
   "$not" -> bvUnaryOp $ SC.scBvNot sc
-  "$pos" -> input "A"
+  "$pos" -> do
+    res <- input "A"
+    fmap (,Nothing) . cryptolRecord sc $ Map.fromList
+      [ ("Y", res)
+      ]
   "$neg" -> bvUnaryOp $ SC.scBvNeg sc
   "$and" -> bvNAryOp $ SC.scBvAnd sc
   "$or" -> bvNAryOp $ SC.scBvOr sc
@@ -211,21 +235,30 @@ cellToTerm sc env c args = case c ^. cellType of
     w <- outputWidth
     ta <- input "A"
     anz <- liftIO $ SC.scBvNonzero sc w ta
-    liftIO $ SC.scNot sc anz
+    res <- liftIO $ SC.scNot sc anz
+    fmap (,Nothing) . cryptolRecord sc $ Map.fromList
+      [ ("Y", res)
+      ]
   "$logic_and" -> do
     w <- outputWidth
     ta <- input "A"
     tb <- input "B"
     anz <- liftIO $ SC.scBvNonzero sc w ta
     bnz <- liftIO $ SC.scBvNonzero sc w tb
-    liftIO $ SC.scAnd sc anz bnz
+    res <- liftIO $ SC.scAnd sc anz bnz
+    fmap (,Nothing) . cryptolRecord sc $ Map.fromList
+      [ ("Y", res)
+      ]
   "$logic_or" -> do
     w <- outputWidth
     ta <- input "A"
     tb <- input "B"
     anz <- liftIO $ SC.scBvNonzero sc w ta
     bnz <- liftIO $ SC.scBvNonzero sc w tb
-    liftIO $ SC.scOr sc anz bnz
+    res <- liftIO $ SC.scOr sc anz bnz
+    fmap (,Nothing) . cryptolRecord sc $ Map.fromList
+      [ ("Y", res)
+      ]
   "$mux" -> do
     w <- outputWidth
     ta <- input "A"
@@ -233,16 +266,25 @@ cellToTerm sc env c args = case c ^. cellType of
     ts <- input "S"
     snz <- liftIO $ SC.scBvNonzero sc w ts
     ty <- liftIO $ SC.scBitvector sc outputWidthNat
-    liftIO $ SC.scIte sc ty snz tb ta
+    res <- liftIO $ SC.scIte sc ty snz tb ta
+    fmap (,Nothing) . cryptolRecord sc $ Map.fromList
+      [ ("Y", res)
+      ]
   -- "$pmux" -> _
   -- "$bmux" -> _
   -- "$demux" -> _
   -- "$lut" -> _
   -- "$slice" -> _
   -- "$concat" -> _
-  (flip Map.lookup env -> Just term) -> do
-    r <- cryptolRecord sc args
-    liftIO $ SC.scApply sc term r
+  (flip Map.lookup env -> Just cm) -> do
+    r <- cryptolRecord sc $ case mst of
+      Nothing -> args
+      Just st -> Map.insert "__state__" st args
+    res <- liftIO $ SC.scApply sc (cm ^. convertedModuleTerm) r
+    post <- case mst of
+      Nothing -> pure Nothing
+      Just _ -> Just <$> cryptolRecordSelect sc outputFields res "__state__"
+    pure (res, post)
   ct -> throw . YosysError $ "Unknown cell type: " <> ct
   where
     nm = c ^. cellType
@@ -258,24 +300,24 @@ cellToTerm sc env c args = case c ^. cellType of
       case Map.lookup inpNm args of
         Nothing -> panic "cellToTerm" [Text.unpack $ mconcat [nm, " missing input ", inpNm]]
         Just a -> pure a
-    bvUnaryOp :: (SC.Term -> SC.Term -> IO SC.Term) -> m SC.Term
+    bvUnaryOp :: (SC.Term -> SC.Term -> IO SC.Term) -> m (SC.Term, Maybe SC.Term)
     bvUnaryOp f = do
       t <- input "A"
       w <- outputWidth
       res <- liftIO $ f w t
-      cryptolRecord sc $ Map.fromList
+      fmap (,Nothing) . cryptolRecord sc $ Map.fromList
         [ ("Y", res)
         ]
-    bvBinaryOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m SC.Term
+    bvBinaryOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m (SC.Term, Maybe SC.Term)
     bvBinaryOp f = do
       ta <- input "A"
       tb <- input "B"
       w <- outputWidth
       res <- liftIO $ f w ta tb
-      cryptolRecord sc $ Map.fromList
+      fmap (,Nothing) . cryptolRecord sc $ Map.fromList
         [ ("Y", res)
         ]
-    bvBinaryCmp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m SC.Term
+    bvBinaryCmp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m (SC.Term, Maybe SC.Term)
     bvBinaryCmp f = do
       ta <- input "A"
       tb <- input "B"
@@ -283,20 +325,20 @@ cellToTerm sc env c args = case c ^. cellType of
       bit <- liftIO $ f w ta tb
       boolty <- liftIO $ SC.scBoolType sc
       res <- liftIO $ SC.scSingle sc boolty bit
-      cryptolRecord sc $ Map.fromList
+      fmap (,Nothing) . cryptolRecord sc $ Map.fromList
         [ ("Y", res)
         ]
-    bvNAryOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m SC.Term
+    bvNAryOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m (SC.Term, Maybe SC.Term)
     bvNAryOp f =
       case Foldable.toList args of
         [] -> panic "cellToTerm" [Text.unpack $ mconcat [nm, " cell given no inputs"]]
         (t:rest) -> do
           w <- outputWidth
           res <- liftIO $ foldM (f w) t rest
-          cryptolRecord sc $ Map.fromList
+          fmap (,Nothing) . cryptolRecord sc $ Map.fromList
             [ ("Y", res)
             ]
-    bvReduce :: Bool -> SC.Term -> m SC.Term
+    bvReduce :: Bool -> SC.Term -> m (SC.Term, Maybe SC.Term)
     bvReduce boolIdentity boolFun = do
       t <- input "A"
       w <- outputWidth
@@ -306,7 +348,7 @@ cellToTerm sc env c args = case c ^. cellType of
       bit <- liftIO $ SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]
       boolty <- liftIO $ SC.scBoolType sc
       res <- liftIO $ SC.scSingle sc boolty bit
-      cryptolRecord sc $ Map.fromList
+      fmap (,Nothing) . cryptolRecord sc $ Map.fromList
         [ ("Y", res)
         ]
 
@@ -333,8 +375,8 @@ lookupPatternTerm ::
   m SC.Term
 lookupPatternTerm sc pat ts =
   case Map.lookup pat ts of
-    Just t -> pure t -- if we can find that pattern exactly, great! use that term
-    Nothing -> do -- otherwise, find each individual bit and append the terms
+    Just t -> pure t
+    Nothing -> do
       one <- liftIO $ SC.scNat sc 1
       boolty <- liftIO $ SC.scBoolType sc
       many <- liftIO . SC.scNat sc . fromIntegral $ length pat
@@ -352,43 +394,82 @@ lookupPatternTerm sc pat ts =
 netgraphToTerms ::
   MonadIO m =>
   SC.SharedContext ->
-  Map Text SC.Term ->
+  Map Text ConvertedModule ->
+  Map Text (SC.Term, C.Type) ->
+  Maybe SC.Term ->
   Netgraph ->
   Map [Bitrep] SC.Term ->
-  m (Map [Bitrep] SC.Term)
-netgraphToTerms sc env ng inputs
-  | length (Graph.scc $ ng ^. netgraphGraph ) /= length (ng ^. netgraphGraph)
+  m (Map [Bitrep] SC.Term, Map Text SC.Term)
+netgraphToTerms sc env stateFields mst ng inputs
+  | length (Graph.scc $ ng ^. netgraphGraph) /= length (ng ^. netgraphGraph)
   = do
-      throw $ YosysError "Network graph contains a cycle; SAW does not currently support analysis of sequential circuits."
+      throw $ YosysError "Network graph contains a cycle after splitting on DFFs; SAW does not currently support analysis of this circuit"
   | otherwise = do
       let sorted = Graph.reverseTopSort $ ng ^. netgraphGraph
       foldM
-        ( \acc v -> do
-            let (c, _output, _deps) = ng ^. netgraphNodeFromVertex $ v
+        ( \(acc, stateAcc) v -> do
+            let ((nm, c), _output, _deps) = ng ^. netgraphNodeFromVertex $ v
             -- liftIO $ putStrLn $ mconcat ["Building term for output: ", show output, " and inputs: ", show deps]
+
             args <- forM (cellInputConnections c) $ \i -> do -- for each input bit pattern
+              -- if we can find that pattern exactly, great! use that term
+              -- otherwise, find each individual bit and append the terms
               lookupPatternTerm sc i acc
-            r <- cellToTerm sc env c args -- once we've built a term, insert it along with each of its bits
-            let fields = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
+
+            let portFields = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
+            (cellmst, outputFields) <- case mst of
+              Just st
+                | Just _ <- Map.lookup nm stateFields -> do
+                    cellmst <- Just <$> cryptolRecordSelect sc stateFields st nm
+                    pure (cellmst, if c ^. cellType == "$dff" then portFields else Map.insert "__state__" DirectionOutput portFields)
+              _ -> pure (Nothing, portFields)
+
+            (r, mpost) <- cellToTerm sc env outputFields cellmst c args
+
+            -- once we've built a term, insert it along with each of its bits
             ts <- forM (Map.assocs $ cellOutputConnections c) $ \(out, o) -> do
-              t <- cryptolRecordSelect sc fields r o
+              t <- cryptolRecordSelect sc outputFields r o
               deriveTermsByIndices sc out t
-            pure $ Map.union (Map.unions ts) acc
+            pure
+              ( Map.union (Map.unions ts) acc
+              , case mpost of
+                  Nothing -> stateAcc
+                  Just post -> Map.insert nm post stateAcc
+              )
         )
-        inputs
+        (inputs, Map.empty)
         sorted
 
-moduleToTerm ::
+convertModule ::
   MonadIO m =>
   SC.SharedContext ->
-  Map Text SC.Term ->
+  Map Text ConvertedModule ->
   Module ->
-  m (SC.Term, SC.Term, C.Type)
-moduleToTerm sc env m = do
+  m ConvertedModule
+convertModule sc env m = do
   let ng = moduleNetgraph m
+  let clockCandidates = List.nub
+        . Maybe.mapMaybe
+        ( \(_nm, c) -> if c ^. cellType == "$dff"
+          then Map.lookup "CLK" (c ^. cellConnections)
+          else Nothing
+        )
+        . Map.assocs
+        $ m ^. moduleCells
+  let clockBits = case clockCandidates of
+        [] -> []
+        [b] -> b
+        _ -> throw . YosysError $ mconcat
+          [ "Multiple clocks detected (bits: "
+          , Text.pack $ show clockCandidates
+          , ")\nSAW only supports sequential circuits with a single clock"
+          ]
+
   let inputports = Maybe.mapMaybe
         ( \(nm, ip) ->
-            if ip ^. portDirection == DirectionInput || ip ^. portDirection == DirectionInout
+            if
+              (ip ^. portDirection == DirectionInput || ip ^. portDirection == DirectionInout)
+              && (ip ^. portBits /= clockBits)
             then Just (nm, ip ^. portBits)
             else Nothing
         )
@@ -402,21 +483,53 @@ moduleToTerm sc env m = do
         )
         . Map.assocs
         $ m ^. modulePorts
-  inputRecordType <- cryptolRecordType sc . Map.fromList =<< forM inputports
+
+  stateFields <- Map.fromList
+        . Maybe.catMaybes
+        <$> mapM
+        ( \v ->
+            let ((nm, c), _output, _deps) = ng ^. netgraphNodeFromVertex $ v
+            in if
+              | c ^. cellType == "$dff"
+              , Just b <- Map.lookup "Q" $ c ^. cellConnections -> do
+                  let w = length b
+                  ty <- liftIO $ SC.scBitvector sc $ fromIntegral w
+                  let cty = C.tWord $ C.tNum w
+                  pure $ Just (nm, (ty, cty))
+              | Just cm <- Map.lookup (c ^. cellType) env
+              , Just fields <- cm ^. convertedModuleStateFields -> do
+                  ty <- cryptolRecordType sc (fst <$> fields)
+                  let cty = C.tRec . C.recordFromFields $ (\(cnm, (_, t)) -> (C.mkIdent cnm, t)) <$> Map.assocs fields
+                  pure $ Just (nm, (ty, cty))
+              | otherwise -> pure Nothing
+        )
+        (Graph.vertices $ ng ^. netgraphGraph)
+  stateRecordType <- cryptolRecordType sc $ fst <$> stateFields
+  let stateRecordCryptolType = C.tRec . C.recordFromFields $ (\(cnm, (_, t)) -> (C.mkIdent cnm, t)) <$> Map.assocs stateFields
+
+  let addStateType fs = if Map.null stateFields then fs else Map.insert "__state__" stateRecordType fs
+  inputFields <- addStateType . Map.fromList <$> forM inputports
     (\(nm, inp) -> do
         tp <- liftIO . SC.scBitvector sc . fromIntegral $ length inp
         pure (nm, tp)
     )
-  outputRecordType <- cryptolRecordType sc . Map.fromList =<< forM outputports
+  outputFields <- addStateType . Map.fromList <$> forM outputports
     (\(nm, out) -> do
         tp <- liftIO . SC.scBitvector sc . fromIntegral $ length out
         pure (nm, tp)
     )
+  inputRecordType <- cryptolRecordType sc inputFields
+  outputRecordType <- cryptolRecordType sc outputFields
   inputRecordEC <- liftIO $ SC.scFreshEC sc "input" inputRecordType
   inputRecord <- liftIO $ SC.scExtCns sc inputRecordEC
+
   derivedInputs <- forM inputports $ \(nm, inp) -> do
-    t <- liftIO $ cryptolRecordSelect sc (Map.fromList inputports) inputRecord nm
+    t <- liftIO $ cryptolRecordSelect sc inputFields inputRecord nm
     deriveTermsByIndices sc inp t
+
+  stateRecordTerm <- if Map.null stateFields
+    then pure Nothing
+    else liftIO $ Just <$> cryptolRecordSelect sc inputFields inputRecord "__state__"
 
   zeroTerm <- liftIO $ SC.scBvConst sc 1 0
   oneTerm <- liftIO $ SC.scBvConst sc 1 1
@@ -429,31 +542,55 @@ moduleToTerm sc env m = do
         , derivedInputs
         ]
 
-  terms <- netgraphToTerms sc env ng inputs
-  outputRecord <- cryptolRecord sc . Map.fromList =<< forM outputports
+  (terms, modulePostStates) <- netgraphToTerms sc env stateFields stateRecordTerm ng inputs
+  dffBackedges <- fmap (Map.fromList . Maybe.catMaybes)
+        . mapM
+        ( \(nm, c) -> if
+            | c ^. cellType == "$dff"
+            , Just b <- Map.lookup "D" (c ^. cellConnections)
+            -> do
+                t <- lookupPatternTerm sc b terms
+                pure $ Just (nm, t)
+            | otherwise -> pure Nothing
+        )
+        . Map.assocs
+        $ m ^. moduleCells
+  let postStateFields = Map.union dffBackedges modulePostStates
+  postStateRecord <- cryptolRecord sc postStateFields
+
+  let addState fs = if Map.null stateFields then fs else Map.insert "__state__" postStateRecord fs
+  outputRecord <- cryptolRecord sc . addState . Map.fromList =<< forM outputports
     (\(nm, out) -> (nm,) <$> lookupPatternTerm sc out terms)
+
   t <- liftIO $ SC.scAbstractExts sc [inputRecordEC] outputRecord
   ty <- liftIO $ SC.scFun sc inputRecordType outputRecordType
+
+  let addStateCryptolType fs = if Map.null stateFields then fs else ("__state__", stateRecordCryptolType):fs
   let toCryptol (nm, rep) = (C.mkIdent nm, C.tWord . C.tNum $ length rep)
   let cty = C.tFun
-        (C.tRec . C.recordFromFields $ toCryptol <$> inputports)
-        (C.tRec . C.recordFromFields $ toCryptol <$> outputports)
-  pure (t, ty, cty)
+        (C.tRec . C.recordFromFields . addStateCryptolType $ toCryptol <$> inputports)
+        (C.tRec . C.recordFromFields . addStateCryptolType $ toCryptol <$> outputports)
+  pure ConvertedModule
+    { _convertedModuleTerm = t
+    , _convertedModuleType = ty
+    , _convertedModuleCryptolType = cty
+    , _convertedModuleStateFields = if Map.null stateFields then Nothing else Just stateFields
+    }
 
 -- | Given a Yosys IR, construct records associating module names with SAWCore terms and Cryptol types.
 yosysIRToTerms ::
   MonadIO m =>
   SC.SharedContext ->
   YosysIR ->
-  m (Map Text SC.Term, Map Text C.Type)
+  m (Map Text ConvertedModule)
 yosysIRToTerms sc ir = do
   let mg = yosysIRModgraph ir
   let sorted = Graph.reverseTopSort $ mg ^. modgraphGraph
   foldM
-    (\(termEnv, typeEnv) v -> do
+    (\env v -> do
         let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
         -- liftIO . putStrLn . Text.unpack $ mconcat ["Converting module: ", nm]
-        (t, ty, cty) <- moduleToTerm sc termEnv m
+        cm <- convertModule sc env m
         let uri = URI.URI
               { URI.uriScheme = URI.mkScheme "yosys"
               , URI.uriAuthority = Left True
@@ -462,13 +599,11 @@ yosysIRToTerms sc ir = do
               , URI.uriFragment = Nothing
               }
         let ni = SC.ImportedName uri [nm]
-        tc <- liftIO $ SC.scConstant' sc ni t ty
-        pure
-          ( Map.insert nm tc termEnv
-          , Map.insert nm cty typeEnv
-          )
+        tc <- liftIO $ SC.scConstant' sc ni (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)
+        let cm' = cm { _convertedModuleTerm = tc }
+        pure $ Map.insert nm cm' env
     )
-    (Map.empty, Map.empty)
+    Map.empty
     sorted
 
 -- | Given a Yosys IR, construct a record of TypedTerms
@@ -478,11 +613,14 @@ yosysIRToTypedTerms ::
   YosysIR ->
   m (Map Text SC.TypedTerm)
 yosysIRToTypedTerms sc ir = do
-  (termEnv, typeEnv) <- yosysIRToTerms sc ir
-  res <- forM (Map.assocs termEnv) $ \(nm, t) ->
-    case Map.lookup nm typeEnv of
-      Nothing -> throw . YosysError $ "No type for Yosys module: " <> nm
-      Just ty -> pure (nm, SC.TypedTerm (SC.TypedTermSchema $ C.tMono ty) t)
+  env <- yosysIRToTerms sc ir
+  res <- forM (Map.assocs env) $ \(nm, cm) ->
+    pure
+    ( nm
+    , SC.TypedTerm
+      (SC.TypedTermSchema $ C.tMono $ cm ^. convertedModuleCryptolType)
+      $ cm ^. convertedModuleTerm
+    )
   pure $ Map.fromList res
 
 -- | Given a Yosys IR, construct a SAWCore record for all modules.
@@ -492,9 +630,9 @@ yosysIRToRecordTerm ::
   YosysIR ->
   m SC.TypedTerm
 yosysIRToRecordTerm sc ir = do
-  (termEnv, typeEnv) <- yosysIRToTerms sc ir
-  record <- cryptolRecord sc termEnv
-  let cty = C.tRec . C.recordFromFields $ first C.mkIdent <$> Map.assocs typeEnv
+  env <- yosysIRToTerms sc ir
+  record <- cryptolRecord sc $ view convertedModuleTerm <$> env
+  let cty = C.tRec . C.recordFromFields $ (\(nm, cm) -> (C.mkIdent nm, cm ^. convertedModuleCryptolType)) <$> Map.assocs env
   let tt = SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) record
   pure tt
 
