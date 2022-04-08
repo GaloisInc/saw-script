@@ -30,6 +30,7 @@ pub enum Expr {
 #[repr(u64)]
 pub enum Stmt {
     Return(Var),
+    Skip,
     Assign(Var,Expr),
     IfStmt(Expr,Box<Stmt>,Box<Stmt>),
     WhileStmt(Expr,Box<Stmt>),
@@ -133,6 +134,7 @@ pub fn eval_expr <'a, 'b> (env : &'a Env, e : &'b Expr) -> Result<Value,Error> {
 pub fn eval_stmt <'a, 'b> (env : &'a mut Env, stmt : &'b Stmt) -> Result<Value,Error> {
     match stmt {
         Stmt::Return (x) => env_lookup (env, x),
+        Stmt::Skip => Ok (Value::IntValue (0)),
         Stmt::Assign (x,e) =>
         { let v = eval_expr (env, e) ?;
           env_update (env, x, v);
