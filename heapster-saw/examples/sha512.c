@@ -1,11 +1,16 @@
+// ============================================================================
+// The code in this file is based off of that in:
+// https://github.com/awslabs/aws-lc/
+// (commit: d84d2f329dccbc7f3866eab54951bd012e317041)
+// ============================================================================
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 
-
-// ===========================================================================
-// Functions from internal.h
-// ===========================================================================
+// ============================================================================
+// Helper functions from crypto/internal.h
+// ============================================================================
 
 static inline void *OPENSSL_memcpy(void *dst, const void *src, size_t n) {
   if (n == 0) {
@@ -31,13 +36,12 @@ static inline uint64_t CRYPTO_load_u64_be(const void *ptr) {
   return CRYPTO_bswap8(ret);
 }
 
+// ============================================================================
+// The defintion of sha512_block_data_order from crypto/fipsmodule/sha/sha512.c
+// with only one addition (return_state), needed for Heapster typechecking 
+// ============================================================================
 
-// ===========================================================================
-// The original definition of sha512_block_data_order from sha512.c - with one
-// addition, needed for Heapster typechecking (return_state)
-// ===========================================================================
-
-// Used in sha512_block_data_order, needed for Heapster typechecking
+// Used in sha512_block_data_order below, needed for Heapster typechecking
 void return_state(uint64_t *state) { }
 
 static const uint64_t K512[80] = {
@@ -195,7 +199,126 @@ static void sha512_block_data_order(uint64_t *state, const uint8_t *in,
 }
 
 
+// ============================================================================
+// A definition equivalent to sha512_block_data_order which uses multiple
+// functions, for use with Mr. Solver
+// ============================================================================
+
+static void round_00_15(uint64_t i,
+                        uint64_t *a, uint64_t *b, uint64_t *c, uint64_t *d,
+                        uint64_t *e, uint64_t *f, uint64_t *g, uint64_t *h,
+                        uint64_t *T1) {
+  *T1 += *h + Sigma1(*e) + Ch(*e, *f, *g) + K512[i];
+  *h = Sigma0(*a) + Maj(*a, *b, *c);
+  *d += *T1;
+  *h += *T1;
+}
+
+static void round_16_80(uint64_t i, uint64_t j,
+                        uint64_t *a, uint64_t *b, uint64_t *c, uint64_t *d,
+                        uint64_t *e, uint64_t *f, uint64_t *g, uint64_t *h,
+                        uint64_t *X,
+                        uint64_t* s0, uint64_t *s1, uint64_t *T1) {
+  *s0 = X[(j + 1) & 0x0f];
+  *s0 = sigma0(*s0);
+  *s1 = X[(j + 14) & 0x0f];
+  *s1 = sigma1(*s1);
+  *T1 = X[(j) & 0x0f] += *s0 + *s1 + X[(j + 9) & 0x0f];
+  round_00_15(i + j, a, b, c, d, e, f, g, h, T1);
+}
+
+static void processBlock(uint64_t *a, uint64_t *b, uint64_t *c, uint64_t *d,
+                         uint64_t *e, uint64_t *f, uint64_t *g, uint64_t *h,
+                         const uint8_t *in) {
+  uint64_t s0, s1, T1;
+  uint64_t X[16];
+  int i;
+  
+  T1 = X[0] = CRYPTO_load_u64_be(in);
+  round_00_15(0, a, b, c, d, e, f, g, h, &T1);
+  T1 = X[1] = CRYPTO_load_u64_be(in + 8);
+  round_00_15(1, h, a, b, c, d, e, f, g, &T1);
+  T1 = X[2] = CRYPTO_load_u64_be(in + 2 * 8);
+  round_00_15(2, g, h, a, b, c, d, e, f, &T1);
+  T1 = X[3] = CRYPTO_load_u64_be(in + 3 * 8);
+  round_00_15(3, f, g, h, a, b, c, d, e, &T1);
+  T1 = X[4] = CRYPTO_load_u64_be(in + 4 * 8);
+  round_00_15(4, e, f, g, h, a, b, c, d, &T1);
+  T1 = X[5] = CRYPTO_load_u64_be(in + 5 * 8);
+  round_00_15(5, d, e, f, g, h, a, b, c, &T1);
+  T1 = X[6] = CRYPTO_load_u64_be(in + 6 * 8);
+  round_00_15(6, c, d, e, f, g, h, a, b, &T1);
+  T1 = X[7] = CRYPTO_load_u64_be(in + 7 * 8);
+  round_00_15(7, b, c, d, e, f, g, h, a, &T1);
+  T1 = X[8] = CRYPTO_load_u64_be(in + 8 * 8);
+  round_00_15(8, a, b, c, d, e, f, g, h, &T1);
+  T1 = X[9] = CRYPTO_load_u64_be(in + 9 * 8);
+  round_00_15(9, h, a, b, c, d, e, f, g, &T1);
+  T1 = X[10] = CRYPTO_load_u64_be(in + 10 * 8);
+  round_00_15(10, g, h, a, b, c, d, e, f, &T1);
+  T1 = X[11] = CRYPTO_load_u64_be(in + 11 * 8);
+  round_00_15(11, f, g, h, a, b, c, d, e, &T1);
+  T1 = X[12] = CRYPTO_load_u64_be(in + 12 * 8);
+  round_00_15(12, e, f, g, h, a, b, c, d, &T1);
+  T1 = X[13] = CRYPTO_load_u64_be(in + 13 * 8);
+  round_00_15(13, d, e, f, g, h, a, b, c, &T1);
+  T1 = X[14] = CRYPTO_load_u64_be(in + 14 * 8);
+  round_00_15(14, c, d, e, f, g, h, a, b, &T1);
+  T1 = X[15] = CRYPTO_load_u64_be(in + 15 * 8);
+  round_00_15(15, b, c, d, e, f, g, h, a, &T1);
+
+  for (i = 16; i < 80; i += 16) {
+    round_16_80(i, 0, a, b, c, d, e, f, g, h, X, &s0, &s1, &T1);
+    round_16_80(i, 1, h, a, b, c, d, e, f, g, X, &s0, &s1, &T1);
+    round_16_80(i, 2, g, h, a, b, c, d, e, f, X, &s0, &s1, &T1);
+    round_16_80(i, 3, f, g, h, a, b, c, d, e, X, &s0, &s1, &T1);
+    round_16_80(i, 4, e, f, g, h, a, b, c, d, X, &s0, &s1, &T1);
+    round_16_80(i, 5, d, e, f, g, h, a, b, c, X, &s0, &s1, &T1);
+    round_16_80(i, 6, c, d, e, f, g, h, a, b, X, &s0, &s1, &T1);
+    round_16_80(i, 7, b, c, d, e, f, g, h, a, X, &s0, &s1, &T1);
+    round_16_80(i, 8, a, b, c, d, e, f, g, h, X, &s0, &s1, &T1);
+    round_16_80(i, 9, h, a, b, c, d, e, f, g, X, &s0, &s1, &T1);
+    round_16_80(i, 10, g, h, a, b, c, d, e, f, X, &s0, &s1, &T1);
+    round_16_80(i, 11, f, g, h, a, b, c, d, e, X, &s0, &s1, &T1);
+    round_16_80(i, 12, e, f, g, h, a, b, c, d, X, &s0, &s1, &T1);
+    round_16_80(i, 13, d, e, f, g, h, a, b, c, X, &s0, &s1, &T1);
+    round_16_80(i, 14, c, d, e, f, g, h, a, b, X, &s0, &s1, &T1);
+    round_16_80(i, 15, b, c, d, e, f, g, h, a, X, &s0, &s1, &T1);
+  }
+}
+
+static void processBlocks(uint64_t *state, const uint8_t *in, size_t num) {
+  uint64_t a, b, c, d, e, f, g, h;
+
+  while (num--) {
+
+    a = state[0];
+    b = state[1];
+    c = state[2];
+    d = state[3];
+    e = state[4];
+    f = state[5];
+    g = state[6];
+    h = state[7];
+    
+    processBlock(&a, &b, &c, &d, &e, &f, &g, &h, in);
+    
+    state[0] += a;
+    state[1] += b;
+    state[2] += c;
+    state[3] += d;
+    state[4] += e;
+    state[5] += f;
+    state[6] += g;
+    state[7] += h;
+
+    in += 16 * 8;
+  }
+}
+
+
 // Needed for Heapster to be able to see the static functions above
 void dummy(uint64_t *state, const uint8_t *in, size_t num) {
   sha512_block_data_order(state, in, num);
+  processBlocks(state, in, num);
 }
