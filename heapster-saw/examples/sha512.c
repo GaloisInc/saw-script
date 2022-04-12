@@ -2,6 +2,11 @@
 #include <stdint.h>
 #include <string.h>
 
+
+// ===========================================================================
+// Functions from internal.h
+// ===========================================================================
+
 static inline void *OPENSSL_memcpy(void *dst, const void *src, size_t n) {
   if (n == 0) {
     return dst;
@@ -25,6 +30,15 @@ static inline uint64_t CRYPTO_load_u64_be(const void *ptr) {
   OPENSSL_memcpy(&ret, ptr, sizeof(ret));
   return CRYPTO_bswap8(ret);
 }
+
+
+// ===========================================================================
+// The original definition of sha512_block_data_order from sha512.c - with one
+// addition, needed for Heapster typechecking (return_state)
+// ===========================================================================
+
+// Used in sha512_block_data_order, needed for Heapster typechecking
+void return_state(uint64_t *state) { }
 
 static const uint64_t K512[80] = {
     UINT64_C(0x428a2f98d728ae22), UINT64_C(0x7137449123ef65cd),
@@ -69,9 +83,7 @@ static const uint64_t K512[80] = {
     UINT64_C(0x5fcb6fab3ad6faec), UINT64_C(0x6c44198c4a475817),
 };
 
-#ifndef ROTR
 #define ROTR(x, s) (((x) >> s) | (x) << (64 - s))
-#endif
 
 #define Sigma0(x) (ROTR((x), 28) ^ ROTR((x), 34) ^ ROTR((x), 39))
 #define Sigma1(x) (ROTR((x), 14) ^ ROTR((x), 18) ^ ROTR((x), 41))
@@ -98,8 +110,6 @@ static const uint64_t K512[80] = {
     T1 = X[(j) & 0x0f] += s0 + s1 + X[(j + 9) & 0x0f]; \
     ROUND_00_15(i + j, a, b, c, d, e, f, g, h);        \
   } while (0)
-
-void return_state(uint64_t *state) { }
 
 static void sha512_block_data_order(uint64_t *state, const uint8_t *in,
                                     size_t num) {
@@ -184,7 +194,8 @@ static void sha512_block_data_order(uint64_t *state, const uint8_t *in,
   }
 }
 
-// needed for Heapster to be able to see the static function above
+
+// Needed for Heapster to be able to see the static functions above
 void dummy(uint64_t *state, const uint8_t *in, size_t num) {
   sha512_block_data_order(state, in, num);
 }
