@@ -78,3 +78,16 @@ run_test "processBlocks |= processBlocks" (mr_solver processBlocks processBlocks
 run_test "processBlock |= processBlock" (mr_solver processBlock processBlock) true;
 run_test "round_16_80 |= round_16_80" (mr_solver round_16_80 round_16_80) true;
 run_test "round_00_15 |= round_00_15" (mr_solver round_00_15 round_00_15) true;
+
+import "sha512.cry";
+// FIXME: Why aren't we monadifying these automatically when they're used?
+monadify_term {{ K }};
+monadify_term {{ SIGMA_0 }};
+monadify_term {{ SIGMA_1 }};
+monadify_term {{ sigma_0 }};
+monadify_term {{ sigma_1 }};
+monadify_term {{ Ch }};
+monadify_term {{ Maj }};
+
+// run_test "round_00_15 |= round_00_15_spec" (mr_solver round_00_15 {{ round_00_15_spec }}) true;
+// run_test "round_16_80 |= round_16_80_spec" (mr_solver round_16_80 {{ round_16_80_spec }}) true;
