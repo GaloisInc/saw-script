@@ -1,6 +1,8 @@
 enable_experimental;
 env <- heapster_init_env "SHA512" "sha512.bc";
 
+// Heapster
+
 heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
 heapster_define_perm env "int32" " " "llvmptr 32" "exists x:bv 32.eq(llvmword(x))";
 heapster_define_perm env "int8" " " "llvmptr 8" "exists x:bv 8.eq(llvmword(x))";
@@ -49,3 +51,30 @@ heapster_typecheck_fun env "processBlocks"
               \ arg2:true, ret:true";
 
 heapster_export_coq env "sha512_mr_solver_gen.v";
+
+// Mr. Solver
+
+let eq_bool b1 b2 =
+  if b1 then
+    if b2 then true else false
+  else
+    if b2 then false else true;
+
+let fail = do { print "Test failed"; exit 1; };
+let run_test name test expected =
+  do { if expected then print (str_concat "Test: " name) else
+         print (str_concat (str_concat "Test: " name) " (expecting failure)");
+       actual <- test;
+       if eq_bool actual expected then print "Success\n" else
+         do { print "Test failed\n"; exit 1; }; };
+
+round_00_15 <- parse_core_mod "SHA512" "round_00_15";
+round_16_80 <- parse_core_mod "SHA512" "round_16_80";
+processBlock <- parse_core_mod "SHA512" "processBlock";
+processBlocks <- parse_core_mod "SHA512" "processBlocks";
+
+// Test that every function refines itself
+run_test "processBlocks |= processBlocks" (mr_solver processBlocks processBlocks) true;
+run_test "processBlock |= processBlock" (mr_solver processBlock processBlock) true;
+run_test "round_16_80 |= round_16_80" (mr_solver round_16_80 round_16_80) true;
+run_test "round_00_15 |= round_00_15" (mr_solver round_00_15 round_00_15) true;
