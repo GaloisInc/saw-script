@@ -1,0 +1,175 @@
+enable_experimental;
+env <- heapster_init_env "interp" "interp.bc";
+
+/***
+ *** Types
+ ***/
+
+// Integer types
+heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
+heapster_define_perm env "int32" " " "llvmptr 32" "exists x:bv 32.eq(llvmword(x))";
+heapster_define_perm env "int8" " " "llvmptr 8" "exists x:bv 8.eq(llvmword(x))";
+heapster_define_perm env "int1" " " "llvmptr 1" "exists x:bv 1.eq(llvmword(x))";
+
+heapster_define_llvmshape env "u64" 64 "" "fieldsh(int64<>)";
+heapster_define_llvmshape env "u32" 64 "" "fieldsh(32,int32<>)";
+heapster_define_llvmshape env "u8" 64 "" "fieldsh(8,int8<>)";
+
+heapster_define_llvmshape env "usize" 64 "" "fieldsh(int64<>)";
+heapster_define_llvmshape env "char" 64 "" "fieldsh(32,int32<>)";
+
+// bool type
+heapster_define_llvmshape env "bool" 64 "" "fieldsh(1,int1<>)";
+
+// Box type
+heapster_define_llvmshape env "Box" 64 "T:llvmshape 64" "ptrsh(T)";
+
+// The Option type
+heapster_define_rust_type env "pub enum Option<X> { None, Some (X) }";
+
+// Result type
+heapster_define_rust_type env "pub enum Result<X,Y> { Ok (X), Err (Y) }";
+
+// The String type
+heapster_define_llvmshape env "String" 64 ""
+  "exsh cap:bv 64. ptrsh(arraysh(<cap,*1,fieldsh(8,int8<>))); \
+                 \ fieldsh(int64<>);fieldsh(eq(llvmword(cap)))";
+
+// Opaque type for Vec<T>
+heapster_define_opaque_llvmshape env "Vec" 64
+  "T:llvmshape 64" "24"
+  "\\ (T:sort 0) -> List T";
+
+// Opaque type for HashMap<T,U>
+heapster_define_opaque_llvmshape env "HashMap" 64
+  "T:llvmshape 64, U:llvmshape 64" "56"
+  "\\ (T:sort 0) (U:sort 0) -> List (T * U)";
+
+// Var type
+heapster_define_rust_type env "pub struct Var(String);";
+
+// FunName type
+heapster_define_rust_type env "pub struct FunName(String);";
+
+// PrimOp2 type
+heapster_define_rust_type env
+  "pub enum PrimOp2 { AddOp, MulOp }";
+
+// Lit type
+heapster_define_rust_type env
+  "pub enum Lit { \
+    \ BoolLit (bool), \
+    \ IntLit (u64), }";
+
+heapster_define_rust_type env
+  "pub enum Expr { \
+    \ LitExpr(Lit), \
+    \ VarExpr(Var), \
+    \ Apply2Expr(PrimOp2, Box<Expr>, Box<Expr>) }";
+
+heapster_define_rust_type env
+  "pub enum Stmt { \
+    \ Return(Var), \
+    \ Skip, \
+    \ Assign(Var,Expr), \
+    \ IfStmt(Expr,Box<Stmt>,Box<Stmt>), \
+    \ WhileStmt(Expr,Box<Stmt>), \
+    \ CallStmt(FunName, Vec<Expr>) }";
+
+heapster_define_rust_type env
+  "pub enum Value { \
+   \ BoolValue (bool), \
+   \ IntValue (u64) }";
+
+heapster_define_rust_type env
+  "pub enum Error { \
+   \ UnboundVar(Var), \
+   \ UnknownFun(FunName), \
+   \ Unimplemented, \
+   \ IncorrectType, \
+   \ WrongNumberOfArgs, }";
+
+heapster_define_rust_type env
+  "pub struct FunDef (Vec<Var>,Stmt);";
+
+heapster_define_rust_type env
+  "pub struct Env (HashMap<Var, Value>, \
+                 \ HashMap<FunName, FunDef>);";
+
+
+/***
+ *** Assumed Functions
+ ***/
+
+// exchange_malloc
+exchange_malloc_sym <- heapster_find_symbol env "15exchange_malloc";
+//heapster_assume_fun_rename env exchange_malloc_sym "exchange_malloc"
+//  "(len:bv 64). arg0:eq(llvmword(len)), arg1:true -o
+//              \ ret:array(0,<len,*1,[(W,0,8) |-> true])"
+//  "\\ (len:Vec 64 Bool) -> returnM (BVVec 64 len #()) (repeatBVVec 64 len #() ())";
+heapster_assume_fun_rename env exchange_malloc_sym "exchange_malloc"
+  "(len:bv 64). arg0:eq(llvmword(len)), arg1:true -o \
+              \ ret:memblock(W,0,len,emptysh)"
+  "\\ (len:Vec 64 Bool) -> returnM #() ()";
+
+// llvm.uadd.with.overflow.i64
+heapster_assume_fun env "llvm.uadd.with.overflow.i64"
+  "(). arg0:int64<>, arg1:int64<> -o ret:struct(int64<>,int1<>)"
+  "\\ (x y:Vec 64 Bool) -> \
+    \ returnM (Vec 64 Bool * Vec 1 Bool) (bvAdd 64 x y, single Bool (bvCarry 64 x y))";
+
+// llvm.expect.i1
+heapster_assume_fun env "llvm.expect.i1"
+  "().arg0:int1<>, arg1:int1<> -o ret:int1<>" "\\ (x y:Vec 1 Bool) -> returnM (Vec 1 Bool) x";
+
+
+// memcpy
+heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
+  "(rw:rwmodality, l1:lifetime, l2:lifetime, sh:llvmshape 64, \
+   \ b:llvmblock 64, len:bv 64). \
+  \ arg0:[l1]memblock(W,0,len,sh), arg1:[l2]memblock(rw,0,len,eqsh(len,b)), \
+  \ arg2:eq(llvmword(len)) -o \
+  \ arg0:[l1]memblock(W,0,len,eqsh(len,b)), arg1:[l2]memblock(rw,0,len,eqsh(len,b))"
+  "\\ (X:sort 0) (len:Vec 64 Bool) (x:X) (_:#()) -> returnM (#() * #()) ((),())";
+
+// HashMap::insert
+// FIXME: we currently pretend this always returns None
+/*
+hashmap_var_val_insert_sym <- heapster_find_symbol_with_type env
+  "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert"
+  "{ i64,\
+\  i64 }(%\"std::collections::hash::map::HashMap<Var, Value, std::collections::hash::map::RandomState>\"*,\
+\        %\"Var\", %\"Value\")";
+heapster_assume_fun_rename_prim env hashmap_var_val_insert_sym "hashmap_var_val_insert"
+  "<'a> fn (&'a mut HashMap<Var,Value>,Var,Value) -> Option<Value>";
+*/
+
+// Var::clone
+var_clone_sym <- heapster_find_symbol env
+  "$LT$interp..Var$u20$as$u20$core..clone..Clone$GT$5clone";
+heapster_assume_fun_rename_prim env var_clone_sym "var_clone"
+  "<'a> fn(x:&'a Var) -> Var";
+
+// HashMap<Var,Value>::get
+hashmap_var_val_get_sym <- heapster_find_symbol_with_type env
+  "24HashMap$LT$K$C$V$C$S$GT$3get"
+  "i64*(%\"std::collections::hash::map::HashMap<Var, Value, std::collections::hash::map::RandomState>\"*, \
+      \ %Var*)";
+// FIXME: Rust layout bug: cannot handle Option<&'a Value>
+//heapster_assume_fun_rename_prim env hashmap_var_val_get_sym "hashmap_var_val_get"
+//  "<'a> fn(x:&'a HashMap<Var,Value>, &'a Var) -> Option<&'a Value>";
+
+
+/***
+ *** Type-checked Functions
+ ***/
+
+env_lookup_sym <- heapster_find_symbol env "10env_lookup";
+heapster_typecheck_fun_rename env env_lookup_sym "env_lookup" "<'a,'b> fn (env : &'a Env, x : &'b Var) -> Result<Value,Error>";
+
+
+/***
+ *** Export to Coq
+ ***/
+
+heapster_export_coq env "interp_gen.v";
