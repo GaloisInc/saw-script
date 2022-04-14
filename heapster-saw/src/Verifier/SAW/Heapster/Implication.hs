@@ -67,7 +67,6 @@ import Verifier.SAW.Heapster.GenMonad
 import GHC.Stack
 import Unsafe.Coerce
 import Data.Functor.Constant (Constant(..))
-import What4.Protocol.VerilogWriter.ABCVerilog (inputDoc)
 
 
 -- * Helper functions (should be moved to Hobbits)
