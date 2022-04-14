@@ -118,6 +118,8 @@ data NormComp
   | Either Type Type CompFun CompFun Term -- ^ A sum elimination
   | MaybeElim Type Comp CompFun Term -- ^ A maybe elimination
   | OrM Comp Comp -- ^ an @orM@ computation
+  | AssertingM Term Comp -- ^ an @assertingM@ computation
+  | AssumingM Term Comp -- ^ an @assumingM@ computation
   | ExistsM Type CompFun -- ^ an @existsM@ computation
   | ForallM Type CompFun -- ^ a @forallM@ computation
   | FunBind FunName [Term] CompFun
@@ -154,6 +156,11 @@ compFunInputType (CompFunTerm (asLambda -> Just (_, tp, _))) = Just $ Type tp
 compFunInputType (CompFunComp f _) = compFunInputType f
 compFunInputType _ = Nothing
 
+-- | Returns true iff the given 'CompFun' is 'CompFunReturn'
+isCompFunReturn :: CompFun -> Bool
+isCompFunReturn CompFunReturn = True
+isCompFunReturn _ = False
+
 -- | A computation of type @CompM a@ for some @a@
 data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
           deriving (Generic, Show)
@@ -169,6 +176,12 @@ isCompFunType :: SharedContext -> Term -> IO Bool
 isCompFunType sc t = scWhnf sc t >>= \case
   (asPiList -> (_, asCompM -> Just _)) -> return True
   _ -> return False
+
+-- | Recognize a 'Term' as an application of `bvToNat`
+asBvToNat :: Recognizer Term (Term, Term)
+asBvToNat (asApplyAll -> ((isGlobalDef "Prelude.bvToNat" -> Just ()),
+                          [n, x])) = Just (n, x)
+asBvToNat _ = Nothing
 
 
 ----------------------------------------------------------------------
@@ -426,6 +439,12 @@ instance PrettyInCtx NormComp where
   prettyInCtx (OrM t1 t2) =
     prettyAppList [return "orM", return "_",
                    parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
+  prettyInCtx (AssertingM cond t) =
+    prettyAppList [return "assertingM", parens <$> prettyInCtx cond,
+                   parens <$> prettyInCtx t]
+  prettyInCtx (AssumingM cond t) =
+    prettyAppList [return "assumingM", parens <$> prettyInCtx cond,
+                   parens <$> prettyInCtx t]
   prettyInCtx (ExistsM tp f) =
     prettyAppList [return "existsM", prettyInCtx tp, return "_",
                    parens <$> prettyInCtx f]
