@@ -33,6 +33,7 @@ import Prelude hiding (span)
 import Data.Maybe
 import Data.List hiding (span)
 import GHC.TypeLits
+import qualified Data.BitVector.Sized as BV
 import Data.Functor.Constant
 import Data.Functor.Product
 import Control.Applicative
@@ -66,6 +67,8 @@ import Lang.Crucible.LLVM.MemModel hiding (Mutability(..))
 
 import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.Permissions
+
+import Debug.Trace
 
 
 ----------------------------------------------------------------------
@@ -303,11 +306,10 @@ class RsConvert w a b | w a -> b where
 -- * Converting Named Rust Types
 ----------------------------------------------------------------------
 
--- FIXME HERE: I think we no longer need SomeShapeFun
-
--- | A shape function with existentially quantified arguments
-data SomeShapeFun w =
-  forall args. SomeShapeFun (CruCtx args) (Mb args (PermExpr (LLVMShapeType w)))
+-- | A function that builds a shape from a sequence of 'PermExpr' arguments and
+-- a 'String' representation of them for printing errors
+type ShapeFun w =
+  Some TypedPermExprs -> String -> RustConvM (PermExpr (LLVMShapeType w))
 
 -- | A sequence of 'PermExprs' along with their types
 type TypedPermExprs = RAssign (Typed PermExpr)
@@ -333,33 +335,88 @@ typedExprsOfList :: TypeRepr a -> [PermExpr a] -> Some TypedPermExprs
 typedExprsOfList tp =
   foldl (\(Some es) e -> Some (es :>: Typed tp e)) (Some MNil)
 
--- | Apply a 'SomeShapeFun', if possible
-tryApplySomeShapeFun :: SomeShapeFun w -> Some TypedPermExprs ->
+-- | Build a 'ShapeFun' for the given 'RustName' from a function on permission
+-- expressions of the supplied types
+mkShapeFun :: RustName -> CruCtx ctx ->
+              (PermExprs ctx -> PermExpr (LLVMShapeType w)) -> ShapeFun w
+mkShapeFun nm ctx f = \some_exprs exprs_str -> case some_exprs of
+  Some exprs
+    | Just Refl <- testEquality ctx (typedPermExprsCtx exprs) ->
+      return $ f (typedPermExprsExprs exprs)
+  _ ->
+    fail $ renderDoc $ fillSep
+    [ pretty "Converting application of type:" <+> pretty (show nm)
+    , pretty "To arguments:" <+> pretty exprs_str
+    , pretty "Arguments not of expected types:" <+> pretty ctx ]
+
+-- | Build a 'ShapeFun' with no arguments
+constShapeFun :: RustName -> PermExpr (LLVMShapeType w) -> ShapeFun w
+constShapeFun nm sh = mkShapeFun nm CruCtxNil (const sh)
+
+-- | Test if a shape is "option-like", meaning it is a tagged union shape with
+-- two tags, one of which has contents and one which has no contents; i.e., it
+-- is of the form
+--
+-- > (fieldsh(eq(llvmword(bv1)));sh) orsh (fieldsh(eq(llvmword(bv2))))
+--
+-- or
+--
+-- > (fieldsh(eq(llvmword(bv1)))) orsh (fieldsh(eq(llvmword(bv2)));sh)
+--
+-- where @sh@ is non-empty. If so, return the non-empty shape @sh@, called the
+-- "payload" shape.
+matchOptionLikeShape :: PermExpr (LLVMShapeType w) ->
                         Maybe (PermExpr (LLVMShapeType w))
-tryApplySomeShapeFun (SomeShapeFun ctx mb_sh) (Some exprs)
-  | Just Refl <- testEquality ctx (typedPermExprsCtx exprs) =
-    Just $ subst (substOfExprs $ typedPermExprsExprs exprs) mb_sh
-tryApplySomeShapeFun _ _ = Nothing
+matchOptionLikeShape top_sh = case asTaggedUnionShape top_sh of
+  Just (SomeTaggedUnionShape (taggedUnionDisjsNoTags ->
+                              [PExpr_EmptyShape, PExpr_EmptyShape])) -> Nothing
+  Just (SomeTaggedUnionShape (taggedUnionDisjsNoTags ->
+                              [PExpr_EmptyShape, sh])) -> Just sh
+  Just (SomeTaggedUnionShape (taggedUnionDisjsNoTags ->
+                              [sh, PExpr_EmptyShape])) -> Just sh
+  _ -> Nothing
 
--- | Build a 'SomeShapeFun' with no arguments
-constShapeFun :: PermExpr (LLVMShapeType w) -> SomeShapeFun w
-constShapeFun sh = SomeShapeFun CruCtxNil (emptyMb sh)
+-- | Test if a shape-in-binding is "option-like" as per 'matchOptionLikeShape'
+matchMbOptionLikeShape :: Mb ctx (PermExpr (LLVMShapeType w)) ->
+                          Maybe (Mb ctx (PermExpr (LLVMShapeType w)))
+matchMbOptionLikeShape =
+  mbMaybe . mbMapCl $(mkClosed [| matchOptionLikeShape |])
 
--- | Build the shape @fieldsh(exists z:bv sz.eq(llvmword(z))@
-sizedIntShapeFun :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
-                    prx1 w -> prx2 sz -> SomeShapeFun w
-sizedIntShapeFun _ sz =
-  constShapeFun $ PExpr_FieldShape (LLVMFieldShape $
-                                    ValPerm_Exists $ llvmExEqWord sz)
+-- | Build a `ShapeFun` from a `SomeNamedShape`
+namedShapeShapeFun :: (1 <= w, KnownNat w) => RustName -> NatRepr w ->
+                      SomeNamedShape -> RustConvM (ShapeFun w)
+-- For an option-like shape, try to do discriminant elision
+namedShapeShapeFun nm w (SomeNamedShape nmsh)
+  | Just Refl <- testEquality w (natRepr nmsh)
+  , DefinedShapeBody mb_sh <- namedShapeBody nmsh
+  , Just mb_payload_sh <- matchMbOptionLikeShape mb_sh =
+    trace ("Is option-like: " ++ show nm) $
+    return $ mkShapeFun nm (namedShapeArgs nmsh) $ \exprs ->
+    case subst (substOfExprs exprs) mb_payload_sh of
 
--- | Build a `SomeShapeFun` from `SomeNamedShape`
-namedShapeShapeFun :: NatRepr w -> SomeNamedShape -> RustConvM (SomeShapeFun w)
-namedShapeShapeFun w (SomeNamedShape nmsh)
-  | Just Refl <- testEquality w (natRepr nmsh) = return $
-    SomeShapeFun (namedShapeArgs nmsh)
-                 (nuMulti (cruCtxProxies (namedShapeArgs nmsh))
-                          (\ns -> PExpr_NamedShape Nothing Nothing nmsh (namesToExprs ns)))
-namedShapeShapeFun w (SomeNamedShape nmsh) =
+      -- If the payload is a pointer shape, return payload orsh eq(0)
+      payload_sh
+        | isLLVMPointerShape payload_sh ->
+          PExpr_OrShape payload_sh $ llvmEqWordShape w 0
+
+      -- If the payload is a tagged union shape, add an extra tag with an empty
+      -- shape for its argument
+      payload_sh
+        | Just (SomeTaggedUnionShape tag_u) <- asTaggedUnionShape payload_sh ->
+          let new_tag =
+                foldr max 0 $ map ((1+) . BV.asUnsigned) $
+                taggedUnionTags tag_u in
+          taggedUnionToShape $
+          taggedUnionCons (BV.mkBV knownNat new_tag) (llvmEqWordShape w new_tag) tag_u
+
+      -- Otherwise, just use the named shape itself
+      _ -> PExpr_NamedShape Nothing Nothing nmsh exprs
+
+namedShapeShapeFun nm w (SomeNamedShape nmsh)
+  | Just Refl <- testEquality w (natRepr nmsh) =
+    return $ mkShapeFun nm (namedShapeArgs nmsh) $
+    \exprs -> PExpr_NamedShape Nothing Nothing nmsh exprs
+namedShapeShapeFun _ w (SomeNamedShape nmsh) =
   fail $ renderDoc $ fillSep
   [pretty "Incorrect size of shape" <+> pretty (namedShapeName nmsh),
    pretty "Expected:" <+> pretty (intValue w),
@@ -376,15 +433,15 @@ flattenRustName (RustName ids) = concat $ intersperse "::" $ map name ids
 instance Show RustName where
   show = show . flattenRustName
 
-instance RsConvert w RustName (SomeShapeFun w) where
+instance RsConvert w RustName (ShapeFun w) where
   rsConvert w nm =
     do let str = flattenRustName nm
        env <- rciPermEnv <$> ask
        case lookupNamedShape env str of
-         Just nmsh -> namedShapeShapeFun (natRepr w) nmsh
+         Just nmsh -> namedShapeShapeFun nm (natRepr w) nmsh
          Nothing ->
            do n <- lookupName str (LLVMShapeRepr (natRepr w))
-              return $ constShapeFun (PExpr_Var n)
+              return $ constShapeFun nm (PExpr_Var n)
 
 -- | Get the "name" = sequence of identifiers out of a Rust path
 rsPathName :: Path a -> RustName
@@ -538,17 +595,9 @@ instance RsConvert w (Ty Span) (PermExpr (LLVMShapeType w)) where
          Just (rec_n, _, _)
            | rec_n == rsPathName path -> fail "Arguments do not match"
          _ ->
-           do someShapeFn@(SomeShapeFun expected _ ) <- rsConvert w (rsPathName path)
-              someTypedArgs@(Some tyArgs) <- rsConvert w (rsPathParams path)
-              let actual = typedPermExprsCtx tyArgs
-              case tryApplySomeShapeFun someShapeFn someTypedArgs of
-                Just shTp -> return shTp
-                Nothing ->
-                  fail $ renderDoc $ fillSep
-                  [ pretty "Converting PathTy: " <+> pretty (show $ rsPathName path)
-                  , pretty "Expected arguments:" <+> pretty expected
-                  , pretty "Actual arguments:" <+> pretty actual
-                  ]
+           do shapeFn <- rsConvert w (rsPathName path)
+              someTypedArgs <- rsConvert w (rsPathParams path)
+              shapeFn someTypedArgs $ show (RustPP.prettyUnresolved path)
   rsConvert (w :: prx w) (BareFn _ abi rust_ls2 fn_tp span) =
     do Some3FunPerm fun_perm <- rsConvertMonoFun w span abi rust_ls2 fn_tp
        let args = funPermArgs fun_perm
