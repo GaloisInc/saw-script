@@ -68,8 +68,6 @@ import Lang.Crucible.LLVM.MemModel hiding (Mutability(..))
 import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.Permissions
 
-import Debug.Trace
-
 
 ----------------------------------------------------------------------
 -- * Data types and related types
@@ -390,24 +388,22 @@ namedShapeShapeFun nm w (SomeNamedShape nmsh)
   | Just Refl <- testEquality w (natRepr nmsh)
   , DefinedShapeBody mb_sh <- namedShapeBody nmsh
   , Just mb_payload_sh <- matchMbOptionLikeShape mb_sh =
-    trace ("Is option-like: " ++ show nm) $
     return $ mkShapeFun nm (namedShapeArgs nmsh) $ \exprs ->
-    case subst (substOfExprs exprs) mb_payload_sh of
+    case simplifyShape (subst (substOfExprs exprs) mb_payload_sh) of
 
       -- If the payload is a pointer shape, return payload orsh eq(0)
-      payload_sh
-        | isLLVMPointerShape payload_sh ->
-          PExpr_OrShape payload_sh $ llvmEqWordShape w 0
+      payload_sh@(isLLVMPointerShape -> True) ->
+        PExpr_OrShape payload_sh $ llvmEqWordShape w 0
 
       -- If the payload is a tagged union shape, add an extra tag with an empty
       -- shape for its argument
-      payload_sh
-        | Just (SomeTaggedUnionShape tag_u) <- asTaggedUnionShape payload_sh ->
-          let new_tag =
-                foldr max 0 $ map ((1+) . BV.asUnsigned) $
-                taggedUnionTags tag_u in
-          taggedUnionToShape $
-          taggedUnionCons (BV.mkBV knownNat new_tag) (llvmEqWordShape w new_tag) tag_u
+      (asTaggedUnionShape -> Just (SomeTaggedUnionShape tag_u)) ->
+        let new_tag =
+              foldr max 0 $ map ((1+) . BV.asUnsigned) $
+              taggedUnionTags tag_u in
+        taggedUnionToShape $
+        taggedUnionCons (BV.mkBV knownNat new_tag) (llvmEqWordShape w new_tag)
+        tag_u
 
       -- Otherwise, just use the named shape itself
       _ -> PExpr_NamedShape Nothing Nothing nmsh exprs

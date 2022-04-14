@@ -4059,6 +4059,16 @@ llvmBlockEndOffset = bvRangeEnd . llvmBlockRange
 llvmFieldShapeLength :: LLVMFieldShape w -> Integer
 llvmFieldShapeLength (LLVMFieldShape p) = exprLLVMTypeBytes p
 
+-- | Simplify a shape, removing any trailing empty shapes and unfolding any
+-- unfoldable named shapes
+simplifyShape :: PermExpr (LLVMShapeType w) -> PermExpr (LLVMShapeType w)
+simplifyShape (PExpr_SeqShape sh PExpr_EmptyShape) = simplifyShape sh
+simplifyShape (PExpr_NamedShape rw l nmsh args)
+  | TrueRepr <- namedShapeCanUnfoldRepr nmsh
+  , Just sh <- unfoldModalizeNamedShape rw l nmsh args =
+    simplifyShape sh
+simplifyShape sh = sh
+
 -- | Test if a shape describes a pointer
 isLLVMPointerShape :: PermExpr (LLVMShapeType w) -> Bool
 isLLVMPointerShape (PExpr_FieldShape (LLVMFieldShape (ValPerm_Conj1 p))) =
