@@ -371,11 +371,28 @@ pub fn list64_is_empty (l: &List64) -> bool {
     }
 }
 
+/* Return the tail of a List64, or None if it is the empty list */
+pub fn list64_tail (l: List64) -> Option<List64> {
+    match l {
+        List64::Nil64 => None,
+        List64::Cons64 (_,tl) => Some (*tl)
+    }
+}
+
 /* Sum the elements of a List64 */
 pub fn list64_sum(l:&List64) -> u64 {
     match l {
         List64::Nil64 => 0,
         List64::Cons64 (x,rest) => x + list64_sum (rest),
+    }
+}
+
+/* Find an element in a List64 and return a mutable reference to it */
+pub fn list64_find_mut <'a> (x:u64, l:&'a mut List64) -> Option<&'a mut u64> {
+    match l {
+        List64::Nil64 => None,
+        List64::Cons64 (y,rest) =>
+            if x == *y { Some (y) } else { list64_find_mut (x,rest) }
     }
 }
 

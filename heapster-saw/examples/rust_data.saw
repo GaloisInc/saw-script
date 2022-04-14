@@ -557,6 +557,11 @@ list64_clone_sym <- heapster_find_symbol env "12list64_clone";
 heapster_typecheck_fun_rename env list64_clone_sym "list64_clone"
   "<'a> fn (x:&'a List64) -> List64";
 
+// list64_tail
+list64_tail_sym <- heapster_find_symbol env "11list64_tail";
+heapster_typecheck_fun_rename env list64_tail_sym "list64_tail"
+  "<> fn (l:List64) -> Option<List64>";
+
 hash_map_insert_gt_to_le_sym <- heapster_find_symbol env "hash_map_insert_gt_to_le";
 heapster_typecheck_fun_rename
   env hash_map_insert_gt_to_le_sym
