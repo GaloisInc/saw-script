@@ -1,5 +1,3 @@
-use std::collections::{HashMap};
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Var(String);
 
@@ -61,12 +59,12 @@ pub struct FunDef {
 
 #[derive(Clone, Debug)]
 pub struct Env {
-    var_map : HashMap<Var, Value>,
-    fun_map : HashMap<FunName, FunDef>,
+    var_map : Vec<(Var, Value)>,
+    fun_map : Vec<(FunName, FunDef)>,
 }
 
 pub fn fresh_env_from_env <'a> (e : &'a Env) -> Env {
-    Env { var_map : HashMap::new (),
+    Env { var_map : Vec::new (),
           fun_map : e.fun_map.clone () }
 }
 
@@ -91,20 +89,24 @@ pub fn lit_value <'a> (l:&'a Lit) -> Value {
     }
 }
 
-pub fn env_lookup <'a,'b> (env : &'a Env, x : &'b Var) -> Result<Value,Error> {
-    match env.var_map.get (x) {
-        Some (v) => Ok(*v),
+pub fn ref_ref_eq <'a, 'b, 'c, T: Eq> (v1 : &'a T, v2 : &'b&'c T) -> bool {
+    v1 == *v2
+}
+
+pub fn env_lookup <'a, 'b> (env : &'a Env, x : &'b Var) -> Result <Value, Error> {
+    match env.var_map.iter().rev().find(|y| ref_ref_eq(x, &&y.0)) {
+        Some(v) => Ok(v.1),
         None => Err(Error::UnboundVar (x.clone ()))
     }
 }
 
 pub fn env_update <'a,'b> (env : &'a mut Env, x : &'b Var, v : Value) {
-    env.var_map.insert (x.clone(), v);
+    env.var_map.push ( (x.clone(), v) );
 }
 
 pub fn fun_lookup <'a,'b> (env : &'a Env, f : &'b FunName) -> Result<&'a FunDef,Error> {
-    match env.fun_map.get (f) {
-        Some (d) => Ok(d),
+    match env.fun_map.iter().rev().find(|g| ref_ref_eq(f, &&g.0)) {
+        Some (d) => Ok(&d.1),
         None => Err(Error::UnknownFun (f.clone ()))
     }
 }
