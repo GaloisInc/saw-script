@@ -1960,21 +1960,10 @@ simplImplIn (SImpl_LLVMArrayEmpty _ ap) =
 simplImplIn (SImpl_LLVMArrayBorrowed x bp ap) =
   if bvIsZero (llvmArrayLen ap) then
     error "simplImplIn: SImpl_LLVMArrayBorrowed: empty array permission"
-  else if not totallyBorrowed then
+  else if not (llvmArrayIsBorrowed ap) then
     error "simplImplIn: SImpl_LLVMArrayBorrowed: array permission not completely borrowed"
   else
     distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
-  where
-    -- If all the subtractions below could be empty, then we've subtracted the
-    -- whole array
-    totallyBorrowed = all (bvCouldEqual (bvInt 0)) (bvRangeLength <$> remaining)
-
-    remaining =
-      -- iteratively subtract each borrow from the total range of array indices
-      foldr (\b xs -> xs >>= (`bvRangeDelete` llvmArrayBorrowCells b))
-            [llvmArrayCells ap]
-            (llvmArrayBorrows ap)
-
 
 simplImplIn (SImpl_LLVMArrayFromBlock x bp) =
   distPerms1 x $ ValPerm_LLVMBlock bp
