@@ -46,7 +46,7 @@ import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
-  (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..))
+  (asPrim, asParamName, nameUnique, nameIdent, nameInfo, NameInfo(..))
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..), mkIdent
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
@@ -54,6 +54,7 @@ import qualified Cryptol.Utils.Ident as C
   , ModPath(..), modPathSplit
   )
 import qualified Cryptol.Utils.RecordMap as C
+import Cryptol.TypeCheck.Type as C (Newtype(..))
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
 
@@ -1424,7 +1425,7 @@ proveEq sc env t1 t2
        t' <- importType sc env t1
        scCtorApp sc "Prelude.Refl" [s, t']
   | otherwise =
-    case (C.tNoUser t1, C.tNoUser t2) of
+    case (tNoUser t1, tNoUser t2) of
       (C.tIsSeq -> Just (n1, a1), C.tIsSeq -> Just (n2, a2)) ->
         do n1' <- importType sc env n1
            n2' <- importType sc env n2
@@ -1471,6 +1472,14 @@ proveEq sc env t1 t2
           proveEq sc env (C.tTuple (map snd (C.canonicalFields tm1))) (C.tTuple (map snd (C.canonicalFields tm2)))
       (_, _) ->
         panic "proveEq" ["Internal type error:", pretty t1, pretty t2]
+
+-- | Resolve user types (type aliases and newtypes) to their simpler SAW-compatible forms.
+tNoUser :: C.Type -> C.Type
+tNoUser initialTy =
+  case C.tNoUser initialTy of
+    C.TNewtype nt _ -> C.TRec $ C.ntFields nt
+    t -> t
+  
 
 -- | Deconstruct a cryptol tuple type as a pair according to the
 -- saw-core tuple type encoding.
@@ -1804,3 +1813,30 @@ importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
 
     _ -> panic "importFirstOrderValue"
                 ["Expected finite value of type:", show t, "but got", show v]
+
+-- | Generate functions to construct newtypes in the term environment.
+-- (I.e., make identity functions that take the record the newtype wraps.)
+genNewtypeConstructors :: SharedContext -> Map C.Name Newtype -> Env -> IO Env
+genNewtypeConstructors sc newtypes env0 =
+  foldM genConstr env0 newtypes
+  where
+    genConstr :: Env -> Newtype -> IO Env
+    genConstr env nt = do
+      constr <- importExpr sc env (newtypeConstr nt)
+      let env' = env { envE = Map.insert (ntName nt) (constr, 0) (envE env)
+                     , envC = Map.insert (ntName nt) (newtypeSchema nt) (envC env)
+                     }
+      return env'
+    newtypeConstr :: Newtype -> C.Expr
+    newtypeConstr nt = foldr tFn fn (C.ntParams nt)
+      where
+        paramName = C.asParamName (ntName nt)
+        recTy = C.TRec $ ntFields nt
+        fn = C.EAbs paramName recTy (C.EVar paramName) -- EAbs Name Type Expr -- ETAbs TParam Expr
+        tFn tp body =
+          if elem (C.tpKind tp) [C.KType, C.KNum]
+            then C.ETAbs tp body
+            else panic "genNewtypeConstructors" ["illegal newtype parameter kind", show (C.tpKind tp)]
+    newtypeSchema :: Newtype -> C.Schema
+    newtypeSchema nt = C.Forall (ntParams nt) (ntConstraints nt)
+                       $ C.TRec (ntFields nt) `C.tFun` C.TRec (ntFields nt)
