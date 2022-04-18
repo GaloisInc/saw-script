@@ -35,10 +35,11 @@ pub enum Stmt {
     CallStmt(FunName, Vec<Expr>)
 }
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     BoolValue (bool),
-    IntValue (u64)
+    IntValue (u64),
+    StringValue (String)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -71,14 +72,14 @@ pub fn fresh_env_from_env <'a> (e : &'a Env) -> Env {
 pub fn value_bool (v:Value) -> Result<bool,Error> {
     match v {
         Value::BoolValue (b) => Ok (b),
-        Value::IntValue (_) => Err (Error::IncorrectType),
+        _ => Err (Error::IncorrectType),
     }
 }
 
 pub fn value_u64 (v:Value) -> Result<u64,Error> {
     match v {
-        Value::BoolValue (_) => Err (Error::IncorrectType),
-        Value::IntValue (i) => Ok (i)
+        Value::IntValue (i) => Ok (i),
+        _ => Err (Error::IncorrectType)
     }
 }
 
@@ -95,7 +96,7 @@ pub fn ref_ref_eq <'a, 'b, 'c, T: Eq> (v1 : &'a T, v2 : &'b&'c T) -> bool {
 
 pub fn env_lookup <'a, 'b> (env : &'a Env, x : &'b Var) -> Result <Value, Error> {
     match env.var_map.iter().rev().find(|y| ref_ref_eq(x, &&y.0)) {
-        Some(v) => Ok(v.1),
+        Some(v) => Ok(v.1.clone()),
         None => Err(Error::UnboundVar (x.clone ()))
     }
 }
@@ -111,7 +112,7 @@ pub fn fun_lookup <'a,'b> (env : &'a Env, f : &'b FunName) -> Result<&'a FunDef,
     }
 }
 
-pub fn eval_primop2 (f : PrimOp2, v1: Value, v2:Value) -> Result<Value,Error> {
+pub fn eval_primop2 <'a> (f : &'a PrimOp2, v1: Value, v2:Value) -> Result<Value,Error> {
     match f {
         PrimOp2::AddOp => { let i1 = value_u64 (v1)?;
                             let i2 = value_u64 (v2)?;
@@ -129,7 +130,7 @@ pub fn eval_expr <'a, 'b> (env : &'a Env, e : &'b Expr) -> Result<Value,Error> {
         Expr::Apply2Expr (f, arg1, arg2) =>
             { let v1 = eval_expr (env, arg1)?;
               let v2 = eval_expr (env, arg2)?;
-              eval_primop2 (*f, v1, v2) }
+              eval_primop2 (f, v1, v2) }
     }
 }
 
