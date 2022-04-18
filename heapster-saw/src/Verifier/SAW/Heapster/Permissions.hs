@@ -2528,6 +2528,10 @@ exprPermVarAndPerm (ExprAndPerm e p)
     Just $ VarAndPerm x (offsetPerm off p)
 exprPermVarAndPerm _ = Nothing
 
+-- | Convert an 'ExprPerms' to a 'DistPerms', if possible
+exprPermsToDistPerms :: ExprPerms ctx -> Maybe (DistPerms a)
+exprPermsToDistPerms = traverseRAssign exprPermVarAndPerm
+
 -- | Convert an expression plus permission to an 'ExprAndPerm'
 varAndPermExprPerm :: VarAndPerm a -> ExprAndPerm a
 varAndPermExprPerm (VarAndPerm x p) = ExprAndPerm (PExpr_Var x) p
@@ -4185,6 +4189,12 @@ modalizeBlockShape :: LLVMBlockPerm w -> PermExpr (LLVMShapeType w)
 modalizeBlockShape (LLVMBlockPerm {..}) =
   maybe (error "modalizeBlockShape") id $
   modalize (Just llvmBlockRW) (Just llvmBlockLifetime) llvmBlockShape
+
+-- | Convert an 'ExprPerms' list @ps@ to the input permission list @[l](R)ps@
+-- used in a simple @lowned@ permission
+lownedPermsSimpleIn :: ExprVar LifetimeType -> ExprPerms ps ->
+                       ExprPerms ps
+lownedPermsSimpleIn l = modalize (Just PExpr_Read) (Just $ PExpr_Var l)
 
 -- | Unfold a named shape
 unfoldNamedShape :: KnownNat w => NamedShape 'True args w -> PermExprs args ->
