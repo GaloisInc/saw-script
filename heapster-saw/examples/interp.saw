@@ -40,10 +40,14 @@ heapster_define_opaque_llvmshape env "Vec" 64
   "T:llvmshape 64" "24"
   "\\ (T:sort 0) -> List T";
 
-// Opaque type for HashMap<T,U>
-heapster_define_opaque_llvmshape env "HashMap" 64
-  "T:llvmshape 64, U:llvmshape 64" "56"
-  "\\ (T:sort 0) (U:sort 0) -> List (T * U)";
+// Iter type: we define this as a sequence of two LLVM values, which have opaque
+// permissions; this allows Iter to be laid out as a pair of LLVM values while
+// still having an opaque "view" of those values
+heapster_define_opaque_perm env "Iter_fld1" "T:llvmshape 64"
+  "llvmptr 64" "\\ (T:sort 0) -> List T";
+heapster_define_opaque_perm env "Iter_fld2" "" "llvmptr 64" "#()";
+heapster_define_llvmshape env "Iter" 64 "l:lifetime, T:llvmshape 64"
+  "fieldsh(Iter_fld1<T>);fieldsh(Iter_fld2<>)";
 
 // Var type
 heapster_define_rust_type env "pub struct Var(String);";
@@ -93,24 +97,13 @@ heapster_define_rust_type env
   "pub struct FunDef (Vec<Var>,Stmt);";
 
 heapster_define_rust_type env
-  "pub struct Env (HashMap<Var, Value>, \
-                 \ HashMap<FunName, FunDef>);";
+  "pub struct Env (Vec<(Var, Value)>, \
+                 \ Vec<(FunName, FunDef)>);";
 
 
 /***
  *** Assumed Functions
  ***/
-
-// exchange_malloc
-exchange_malloc_sym <- heapster_find_symbol env "15exchange_malloc";
-//heapster_assume_fun_rename env exchange_malloc_sym "exchange_malloc"
-//  "(len:bv 64). arg0:eq(llvmword(len)), arg1:true -o
-//              \ ret:array(0,<len,*1,[(W,0,8) |-> true])"
-//  "\\ (len:Vec 64 Bool) -> returnM (BVVec 64 len #()) (repeatBVVec 64 len #() ())";
-heapster_assume_fun_rename env exchange_malloc_sym "exchange_malloc"
-  "(len:bv 64). arg0:eq(llvmword(len)), arg1:true -o \
-              \ ret:memblock(W,0,len,emptysh)"
-  "\\ (len:Vec 64 Bool) -> returnM #() ()";
 
 // llvm.uadd.with.overflow.i64
 heapster_assume_fun env "llvm.uadd.with.overflow.i64"
@@ -132,41 +125,32 @@ heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
   \ arg0:[l1]memblock(W,0,len,eqsh(len,b)), arg1:[l2]memblock(rw,0,len,eqsh(len,b))"
   "\\ (X:sort 0) (len:Vec 64 Bool) (x:X) (_:#()) -> returnM (#() * #()) ((),())";
 
-// HashMap::insert
-// FIXME: we currently pretend this always returns None
-/*
-hashmap_var_val_insert_sym <- heapster_find_symbol_with_type env
-  "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert"
-  "{ i64,\
-\  i64 }(%\"std::collections::hash::map::HashMap<Var, Value, std::collections::hash::map::RandomState>\"*,\
-\        %\"Var\", %\"Value\")";
-heapster_assume_fun_rename_prim env hashmap_var_val_insert_sym "hashmap_var_val_insert"
-  "<'a> fn (&'a mut HashMap<Var,Value>,Var,Value) -> Option<Value>";
-*/
-
 // Var::clone
 var_clone_sym <- heapster_find_symbol env
   "$LT$interp..Var$u20$as$u20$core..clone..Clone$GT$5clone";
 heapster_assume_fun_rename_prim env var_clone_sym "var_clone"
   "<'a> fn(x:&'a Var) -> Var";
 
-// HashMap<Var,Value>::get
-hashmap_var_val_get_sym <- heapster_find_symbol_with_type env
-  "24HashMap$LT$K$C$V$C$S$GT$3get"
-  "i64*(%\"std::collections::hash::map::HashMap<Var, Value, std::collections::hash::map::RandomState>\"*, \
-      \ %Var*)";
-// FIXME: Rust layout bug: cannot handle Option<&'a Value>
-//heapster_assume_fun_rename_prim env hashmap_var_val_get_sym "hashmap_var_val_get"
-//  "<'a> fn(x:&'a HashMap<Var,Value>, &'a Var) -> Option<&'a Value>";
+// Vec<(Var, Value)>::deref
+vec_deref_sym <- heapster_find_symbol_with_type env
+  "core..ops..deref..Deref$GT$5deref"
+  "{ [0 x { %Var, %Value }]*, i64 }(%\"alloc::vec::Vec<(Var, Value)>\"*)";
+heapster_assume_fun_rename_prim env vec_deref_sym "vec_deref"
+  "<'a> fn(&'a Vec<(Var, Value)>) -> &'a[(Var, Value)]";
 
+// &[(Var, Value)]::iter
+slice_iter_sym <- heapster_find_symbol_with_type env
+  "core5slice29_$LT$impl$u20$$u5b$T$u5d$$GT$4iter"
+  "{ i64*, i64* }([0 x { %Var, %Value }]*, i64)";
+heapster_assume_fun_rename_prim env slice_iter_sym "slice_iter"
+  "<'a> fn(&'a[(Var, Value)]) -> Iter<'a, (Var, Value)>";
 
 /***
  *** Type-checked Functions
  ***/
 
-env_lookup_sym <- heapster_find_symbol env "10env_lookup";
+env_lookup_sym <- heapster_find_symbol env "10env_lookup17";
 heapster_typecheck_fun_rename env env_lookup_sym "env_lookup" "<'a,'b> fn (env : &'a Env, x : &'b Var) -> Result<Value,Error>";
-
 
 /***
  *** Export to Coq
