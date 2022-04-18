@@ -83,7 +83,8 @@ heapster_define_rust_type env
 heapster_define_rust_type env
   "pub enum Value { \
    \ BoolValue (bool), \
-   \ IntValue (u64) }";
+   \ IntValue (u64), \
+   \ StringValue (String) }";
 
 heapster_define_rust_type env
   "pub enum Error { \
@@ -129,28 +130,126 @@ heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
 var_clone_sym <- heapster_find_symbol env
   "$LT$interp..Var$u20$as$u20$core..clone..Clone$GT$5clone";
 heapster_assume_fun_rename_prim env var_clone_sym "var_clone"
-  "<'a> fn(x:&'a Var) -> Var";
+  "<'a> fn (x:&'a Var) -> Var";
 
 // Vec<(Var, Value)>::deref
 vec_deref_sym <- heapster_find_symbol_with_type env
   "core..ops..deref..Deref$GT$5deref"
   "{ [0 x { %Var, %Value }]*, i64 }(%\"alloc::vec::Vec<(Var, Value)>\"*)";
 heapster_assume_fun_rename_prim env vec_deref_sym "vec_deref"
-  "<'a> fn(&'a Vec<(Var, Value)>) -> &'a[(Var, Value)]";
+  "<'a> fn (&'a Vec<(Var, Value)>) -> &'a[(Var, Value)]";
 
 // &[(Var, Value)]::iter
 slice_iter_sym <- heapster_find_symbol_with_type env
   "core5slice29_$LT$impl$u20$$u5b$T$u5d$$GT$4iter"
   "{ i64*, i64* }([0 x { %Var, %Value }]*, i64)";
 heapster_assume_fun_rename_prim env slice_iter_sym "slice_iter"
-  "<'a> fn(&'a[(Var, Value)]) -> Iter<'a, (Var, Value)>";
+  "<'a> fn (&'a[(Var, Value)]) -> Iter<'a, (Var, Value)>";
+
+// Vec<(Var, Value)>::new
+vec_new_sym <- heapster_find_symbol env "Vec$LT$T$GT$3new";
+heapster_assume_fun_rename_prim env vec_new_sym "vec_new"
+  "<> fn () -> Vec<(Var, Value)>";
+
+// Vec<(Var, Value)>::push
+vec_push_sym <- heapster_find_symbol env "4push";
+heapster_assume_fun_rename_prim env vec_push_sym "vec_push"
+  "<'a> fn(&'a mut Vec<(Var, Value)>, (Var, Value))";
+
+// Vec<(FunName, FunDef)>::clone
+vec_clone_sym <- heapster_find_symbol_with_type env
+  "core..clone..Clone$GT$5clone"
+  "void(%\"alloc::vec::Vec<(FunName, FunDef)>\"*, %\"alloc::vec::Vec<(FunName, FunDef)>\"*)";
+heapster_assume_fun_rename_prim env vec_clone_sym "vec_clone"
+  "<'a> fn (&'a Vec<(FunName, FunDef)>) -> Vec<(FunName, FunDef)>";
+
+// Value::drop_in_place
+Value__drop_in_place_sym <- heapster_find_symbol_with_type env
+  "core3ptr34drop_in_place$LT$interp..Value$"
+  "void(%Value*)";
+heapster_assume_fun_rename_prim env Value__drop_in_place_sym
+  "Value__drop_in_place"
+  "<> fn(Value)";
+
+// TODO: Are these lifetimes right?
+// &Var::eq
+var_eq_sym <- heapster_find_symbol_with_type env
+  "PartialEq$LT$$RF$B$GT$$u20$for$u20$$RF$A$GT$2eq"
+  "i1(%Var**, %Var**)";
+heapster_assume_fun_rename_prim env var_eq_sym "var_eq"
+  "<'a, 'b, 'c> fn (&'b&'a Var, &'c&'a Var) -> bool";
+
+// TODO: Are these lifetimes right?
+// &FunName::eq
+fun_eq_sym <- heapster_find_symbol_with_type env
+  "PartialEq$LT$$RF$B$GT$$u20$for$u20$$RF$A$GT$2eq"
+  "i1(%FunName**, %FunName**)";
+heapster_assume_fun_rename_prim env fun_eq_sym "fun_eq"
+  "<'a, 'b, 'c> fn (&'b&'a FunName, &'c&'a FunName) -> bool";
 
 /***
  *** Type-checked Functions
  ***/
 
+fresh_env_from_env_sym <- heapster_find_symbol env "18fresh_env_from_env";
+heapster_typecheck_fun_rename env fresh_env_from_env_sym "fresh_env_from_env"
+  "<'a> fn (&'a Env) -> Env";
+
+// TODO: Investigate the error this one produces when actually checked
+value_bool_sym <- heapster_find_symbol env "10value_bool";
+heapster_assume_fun_rename_prim env value_bool_sym "value_bool"
+  "<> fn (Value) -> Result<bool, Error>";
+
+value_u64_sym <- heapster_find_symbol env "9value_u64";
+heapster_typecheck_fun_rename env value_u64_sym "value_u64"
+  "<> fn (Value) -> Result<u64, Error>";
+
+// TODO: Investigate the error this one produces when actually checked
+lit_value_sym <- heapster_find_symbol env "9lit_value";
+heapster_assume_fun_rename_prim env lit_value_sym "lit_value"
+  "<'a> fn(&'a Lit) -> Value";
+
+// TODO: See above note on the `eq` implementation
+ref_ref_eq_var_sym <- heapster_find_symbol_with_type env
+  "10ref_ref_eq"
+  "i1(%Var*, %Var**)";
+heapster_typecheck_fun_rename env ref_ref_eq_var_sym "ref_ref_eq_var"
+  "<'a, 'b, 'c> fn (&'a Var, &'b&'c Var) -> bool";
+
+// TODO: See above note on the `eq` implementation
+ref_ref_eq_fun_sym <- heapster_find_symbol_with_type env
+  "10ref_ref_eq"
+  "i1(%FunName*, %FunName**)";
+heapster_typecheck_fun_rename env ref_ref_eq_fun_sym "ref_ref_eq_fun"
+  "<'a, 'b, 'c> fn (&'a FunName, &'b&'c FunName) -> bool";
+
+// TODO: Remove assumption once the fix is merged
 env_lookup_sym <- heapster_find_symbol env "10env_lookup17";
-heapster_typecheck_fun_rename env env_lookup_sym "env_lookup" "<'a,'b> fn (env : &'a Env, x : &'b Var) -> Result<Value,Error>";
+heapster_assume_fun_rename_prim env env_lookup_sym "env_lookup"
+  "<'a,'b> fn (env : &'a Env, x : &'b Var) -> Result<Value,Error>";
+
+env_update_sym <- heapster_find_symbol env "10env_update";
+heapster_typecheck_fun_rename env env_update_sym "env_update"
+  "<'a,'b> fn (&'a mut Env, &'b Var, Value)";
+
+// TODO: Remove assumption once the fix is merged
+fun_lookup_sym <- heapster_find_symbol env "10fun_lookup17";
+heapster_assume_fun_rename_prim env fun_lookup_sym "fun_lookup"
+  "<'a, 'b> fn (&'a Env, &'b FunName) -> Result<&'a FunDef, Error>";
+
+// TODO: Add stuff related to the `?` operator
+eval_primop2_sym <- heapster_find_symbol env "12eval_primop2";
+heapster_typecheck_fun_rename env eval_primop2_sym "eval_primop2"
+  "<'a> fn (&'a PrimOp2, Value, Value) -> Result<Value, Error>";
+
+// TODO: Add stuff related to the `?` operator
+eval_expr_sym <- heapster_find_symbol env "9eval_expr";
+heapster_typecheck_fun_rename env eval_expr_sym "eval_expr"
+  "<'a, 'b> fn(&'a Env, &'b Expr) -> Result<Value, Error>";
+
+eval_stmt_sym <- heapster_find_symbol env "9eval_stmt";
+heapster_typecheck_fun_rename env eval_stmt_sym "eval_stmt"
+  "<'a, 'b> fn (&'a mut Env, &'b Stmt) -> Result<Value, Error>";
 
 /***
  *** Export to Coq
