@@ -3735,6 +3735,35 @@ castUnDetVarsForVar det_vars x =
   implCastPermM Proxy x eqp >>>
   implPopM x (someEqProofRHS eqp)
 
+
+-- | Simplify @lowned@ permissions @p@ on variable @x@ so they only depend on
+-- the determined variables given in the supplied list. This function only ends
+-- lifetimes, so that all lifetime ending happens before other unneeded
+-- permissions are dropped.
+simplify1LOwnedPermForDetVars :: NuMatchingAny1 r =>
+                                 NameSet CrucibleType -> Name a -> ValuePerm a ->
+                                 ImplM vars s r RNil RNil ()
+
+-- For permission l:lowned[ls](ps_in -o ps_out) where l or some free variable in
+-- ps_in or ps_out is not determined, end l
+simplify1LOwnedPermForDetVars det_vars l (ValPerm_LOwned _ ps_in ps_out)
+  | vars <- NameSet.insert l $ freeVars (ps_in,ps_out)
+  , not $ NameSet.nameSetIsSubsetOf vars det_vars
+  = implEndLifetimeRecM l
+
+-- For lowned permission l:lowned[ls](ps_in -o ps_out), end any lifetimes in ls
+-- that are not determined and remove them from the lowned permission for ls
+simplify1LOwnedPermForDetVars det_vars l (ValPerm_LOwned ls _ _)
+  | l':_ <- flip mapMaybe ls (asVar >=> \l' ->
+                               if NameSet.member l' det_vars then Nothing
+                               else return l') =
+    implEndLifetimeRecM l' >>>
+    getPerm l >>>= \p' -> simplify1PermForDetVars det_vars l p'
+
+-- Otherwise do nothing
+simplify1LOwnedPermForDetVars _ _ _ = return ()
+
+
 -- | Simplify and drop permissions @p@ on variable @x@ so they only depend on
 -- the determined variables given in the supplied list
 simplify1PermForDetVars :: NuMatchingAny1 r =>
@@ -3768,22 +3797,6 @@ simplify1PermForDetVars det_vars x (ValPerm_Conj ps)
     getPerm x >>>= \new_p ->
     simplify1PermForDetVars det_vars x new_p
 
--- For permission l:lowned[ls](ps_in -o ps_out) where l or some free variable in
--- ps_in or ps_out is not determined, end l
-simplify1PermForDetVars det_vars l (ValPerm_LOwned _ ps_in ps_out)
-  | vars <- NameSet.insert l $ freeVars (ps_in,ps_out)
-  , not $ NameSet.nameSetIsSubsetOf vars det_vars
-  = implEndLifetimeRecM l
-
--- For lowned permission l:lowned[ls](ps_in -o ps_out), end any lifetimes in ls
--- that are not determined and remove them from the lowned permission for ls
-simplify1PermForDetVars det_vars l (ValPerm_LOwned ls _ _)
-  | l':_ <- flip mapMaybe ls (asVar >=> \l' ->
-                               if NameSet.member l' det_vars then Nothing
-                               else return l') =
-    implEndLifetimeRecM l' >>>
-    getPerm l >>>= \p' -> simplify1PermForDetVars det_vars l p'
-
 -- If none of the above cases match but p has only determined free variables,
 -- just leave p as is
 simplify1PermForDetVars det_vars _ p
@@ -3808,8 +3821,15 @@ simplifyPermsForDetVars :: NuMatchingAny1 r => [SomeName CrucibleType] ->
 simplifyPermsForDetVars det_vars_list =
   let det_vars = NameSet.fromList det_vars_list in
   (permSetVars <$> getPerms) >>>= \vars ->
+  -- Step 1: cast all the primary permissions using non-determined variables, to
+  -- try to simplify them out
+  mapM_ (\(SomeName x) -> castUnDetVarsForVar det_vars x) vars >>>
+  -- Step 2: end any unneeded lifetimes, but do this before any other unneeded
+  -- permissions have been dropped, in case they are needed to end lifetimes
   mapM_ (\(SomeName x) ->
-          castUnDetVarsForVar det_vars x >>>
+          getPerm x >>>= simplify1LOwnedPermForDetVars det_vars x) vars >>>
+  -- Step 3: simplify any other remaining permissions
+  mapM_ (\(SomeName x) ->
           getPerm x >>>= simplify1PermForDetVars det_vars x) vars
 
 
@@ -3920,6 +3940,18 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
         namesToNamesList tops_args_ext_ns ++
         determinedVars orig_cur_perms tops_args_ext_ns in
 
+  implTraceM (\i ->
+               pretty ("tcJumpTarget " ++ show blkID) <>
+               {- (if gen_perms_hint then pretty "(gen)" else emptyDoc) <> -}
+               line <>
+               (case permSetAllVarPerms orig_cur_perms of
+                   Some all_perms ->
+                     pretty "Current perms:" <+>
+                     align (permPretty i all_perms))
+               <> line <>
+               pretty "Determined vars:"<+>
+               align (list (map (permPretty i) det_vars))) >>>
+
   -- Step 2: Simplify and drop permissions so they do not depend on undetermined
   -- variables
   simplifyPermsForDetVars det_vars >>>
@@ -3950,15 +3982,7 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
                                       tops_perms args_perms) ghosts_perms in
       implTraceM (\i ->
                    pretty ("tcJumpTarget " ++ show blkID) <>
-                   {- (if gen_perms_hint then pretty "(gen)" else emptyDoc) <> -}
                    line <>
-                   (case permSetAllVarPerms orig_cur_perms of
-                       Some all_perms ->
-                         pretty "Current perms:" <+>
-                         align (permPretty i all_perms))
-                   <> line <>
-                   pretty "Determined vars:"<+>
-                   align (list (map (permPretty i) det_vars)) <> line <>
                    pretty "Input perms:" <+>
                    hang 2 (permPretty i perms_in)) >>>
 
