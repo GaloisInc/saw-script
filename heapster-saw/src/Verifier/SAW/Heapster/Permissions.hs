@@ -272,10 +272,21 @@ type PermVar (a :: CrucibleType) = Name (ValuePermType a)
 data BVRange w = BVRange { bvRangeOffset :: PermExpr (BVType w),
                            bvRangeLength :: PermExpr (BVType w) }
 
--- | A range of offsets that makes sense for a given Crucible type
-data RangeForType a where
-  RangeForLLVMType :: (1 <= w, KnownNat w) => BVRange w ->
-                      RangeForType (LLVMPointerType w)
+-- | A range of offsets, possibly inside bindings for zero or more existential
+-- variables, that makes sense for a given Crucible type
+data MbRangeForType a where
+  MbRangeForLLVMType :: (1 <= w, KnownNat w) => KnownCruCtx vars ->
+                        Mb vars (BVRange w) ->
+                        MbRangeForType (LLVMPointerType w)
+  MbRangeForStructType :: Member (CtxToRList args) a ->
+                          MbRangeForType a ->
+                          MbRangeForType (StructType args)
+
+-- | Build an 'MbRangeForLLVMType' from a 'BVRange'
+rangeForLLVMType :: (1 <= w, KnownNat w) => BVRange w ->
+                    MbRangeForType (LLVMPointerType w)
+rangeForLLVMType rng = MbRangeForLLVMType MNil $ emptyMb rng
+
 
 -- | Propositions about bitvectors
 data BVProp w
@@ -855,7 +866,7 @@ $(mkNuMatching [t| forall b args w. NamedShape b args w |])
 $(mkNuMatching [t| forall w . LLVMFieldShape w |])
 $(mkNuMatching [t| forall a . PermExpr a |])
 $(mkNuMatching [t| forall w. BVRange w |])
-$(mkNuMatching [t| forall a. RangeForType a |])
+$(mkNuMatching [t| forall a. MbRangeForType a |])
 $(mkNuMatching [t| forall w. BVProp w |])
 $(mkNuMatching [t| forall w sz . LLVMFieldPerm w sz |])
 $(mkNuMatching [t| forall w . LLVMArrayBorrow w |])
@@ -1981,11 +1992,6 @@ bvRangesCouldOverlap :: (1 <= w, KnownNat w) => BVRange w -> BVRange w -> Bool
 bvRangesCouldOverlap rng1 rng2 =
   not $ all bvPropHolds $ bvPropRangesDisjoint rng1 rng2
 
--- | Test if two 'RangeForType's could overlap as in 'bvRangesCouldOverlap'
-rangeFTsCouldOverlap :: RangeForType a -> RangeForType a -> Bool
-rangeFTsCouldOverlap (RangeForLLVMType rng1) (RangeForLLVMType rng2) =
-  bvRangesCouldOverlap rng1 rng2
-
 -- | Get the ending offset of a range
 bvRangeEnd :: (1 <= w, KnownNat w) => BVRange w -> PermExpr (BVType w)
 bvRangeEnd (BVRange off len) = bvAdd off len
@@ -2049,6 +2055,34 @@ bvRangesDelete :: (1 <= w, KnownNat w) => BVRange w -> [BVRange w] ->
                   [BVRange w]
 bvRangesDelete rng_top =
   foldr (\rng_del rngs -> concatMap (flip bvRangeDelete rng_del) rngs) [rng_top]
+
+
+-- | Convert an 'MbRangeForType' in a binding to an 'MbRangeForType'
+mbMbRangeForType :: KnownCruCtx ctx -> Mb ctx (MbRangeForType a) ->
+                    MbRangeForType a
+mbMbRangeForType ctx mb_rngft = case mbMatch mb_rngft of
+  [nuMP| MbRangeForLLVMType vars rng |] ->
+    MbRangeForLLVMType (RL.append ctx $ mbLift vars)
+    (mbCombine (RL.map (const Proxy) (mbLift vars)) rng)
+  [nuMP| MbRangeForStructType memb rng |] ->
+    MbRangeForStructType (mbLift memb) $ mbMbRangeForType ctx rng
+
+-- | Like 'bvRangeDelete' but for 'MbRangeForType's
+mbRangeFTDelete :: MbRangeForType a -> MbRangeForType a ->
+                   [MbRangeForType a]
+mbRangeFTDelete = error "FIXME HERE NOW"
+
+-- | Delete all ranges in any of a list of ranges from 
+mbRangeFTsDelete :: [MbRangeForType a] -> [MbRangeForType a] ->
+                    [MbRangeForType a]
+mbRangeFTsDelete rngs_l rngs_r =
+  foldr (\rng_r rngs -> concatMap (flip mbRangeFTDelete rng_r) rngs) rngs_l rngs_r
+
+-- | Take the intersection of all the offsets represented in one list of
+-- 'MbRangeForType's with those of another
+intersectMbRangeFTs :: [MbRangeForType a] -> [MbRangeForType a] ->
+                       [MbRangeForType a]
+intersectMbRangeFTs = error "FIXME HERE NOW"
 
 -- | Build a bitvector expression from an integer
 bvInt :: (1 <= w, KnownNat w) => Integer -> PermExpr (BVType w)
@@ -2529,7 +2563,7 @@ exprPermVarAndPerm (ExprAndPerm e p)
 exprPermVarAndPerm _ = Nothing
 
 -- | Convert an 'ExprPerms' to a 'DistPerms', if possible
-exprPermsToDistPerms :: ExprPerms ctx -> Maybe (DistPerms a)
+exprPermsToDistPerms :: ExprPerms ctx -> Maybe (DistPerms ctx)
 exprPermsToDistPerms = traverseRAssign exprPermVarAndPerm
 
 -- | Convert an expression plus permission to an 'ExprAndPerm'
@@ -2561,6 +2595,17 @@ mbExprAndPermVarBlockPerm :: Mb ctx (ExprAndPerm a) ->
                              Maybe (Mb ctx (ExprVar a, SomeLLVMBlockPerm a))
 mbExprAndPermVarBlockPerm =
   mbMaybe . mbMapCl $(mkClosed [| exprAndPermVarBlockPerm |])
+
+-- | Get all the permisisons in an 'ExprPerms' list associated with a particular
+-- expression
+exprPermsForExpr :: CruCtx ps -> ExprPerms ps ->
+                    TypeRepr a -> PermExpr a -> [ValuePerm a]
+exprPermsForExpr _ MNil _ _ = []
+exprPermsForExpr (CruCtxCons tps tp) (ps :>: ExprAndPerm _ p) tp' e'
+  | Just Refl <- testEquality tp tp' =
+    p : exprPermsForExpr tps ps tp' e'
+exprPermsForExpr (CruCtxCons tps _) (ps :>: _) tp' e' =
+  exprPermsForExpr tps ps tp' e'
 
 -- | Find an 'ExprAndPerm' for a particular variable in an 'ExprPerms' list
 findExprAndPermForVar :: ExprVar a -> ExprPerms ps -> Maybe (ExprAndPerm a)
@@ -3411,19 +3456,6 @@ exPermBody tp (ValPerm_Exists (p :: Binding tp' (ValuePerm a)))
   | Just Refl <- testEquality tp (knownRepr :: TypeRepr tp') = p
 exPermBody _ _ = error "exPermBody"
 
--- | A representation of a context of types as a sequence of 'KnownRepr'
--- instances
---
--- FIXME: this can go away when existentials take explicit 'TypeRepr's instead
--- of 'KnownRepr TypeRepr' instances, as per issue #79
-type KnownCruCtx = RAssign (KnownReprObj TypeRepr)
-
--- | Convert a 'KnownCruCtx' to a 'CruCtx'
-knownCtxToCruCtx :: KnownCruCtx ctx -> CruCtx ctx
-knownCtxToCruCtx MNil = CruCtxNil
-knownCtxToCruCtx (ctx :>: KnownReprObj) =
-  CruCtxCons (knownCtxToCruCtx ctx) knownRepr
-
 -- | Construct 0 or more nested existential permissions
 valPermExistsMulti :: KnownCruCtx ctx -> Mb ctx (ValuePerm a) -> ValuePerm a
 valPermExistsMulti MNil mb_p = elimEmptyMb mb_p
@@ -4065,16 +4097,13 @@ matchLLVMFieldShapeSeq _ = Nothing
 -- | Get all the top-level ranges of offsets potentially covered by a permission
 -- in any of its disjunctive branches
 class GetOffsets f where
-  getOffsets :: f a -> [RangeForType a]
+  getOffsets :: f a -> [MbRangeForType a]
 
 instance GetOffsets ValuePerm where
   getOffsets (ValPerm_Eq _) = []
   getOffsets (ValPerm_Or p1 p2) = getOffsets p1 ++ getOffsets p2
   getOffsets (ValPerm_Exists mb_p) =
-    -- Lift the ranges of the body of the existential, throwing away any that
-    -- depend on the existentially-bound variable
-    catMaybes $
-    map (partialSubst (emptyPSubst $ singletonCruCtx knownRepr)) $
+    map (mbMbRangeForType (MNil :>: KnownReprObj)) $
     mbList $ fmap getOffsets mb_p
   getOffsets (ValPerm_Named _ _ _) = []
   getOffsets (ValPerm_Var _ _) = []
@@ -4083,11 +4112,16 @@ instance GetOffsets ValuePerm where
 
 instance GetOffsets AtomicPerm where
   getOffsets (Perm_LLVMField fp) =
-    [RangeForLLVMType $ llvmFieldRange fp]
+    [rangeForLLVMType $ llvmFieldRange fp]
   getOffsets (Perm_LLVMArray ap) =
-    [RangeForLLVMType $ llvmArrayRange ap]
+    [rangeForLLVMType $ llvmArrayRange ap]
   getOffsets (Perm_LLVMBlock bp) =
-    [RangeForLLVMType $ llvmBlockRange bp]
+    [rangeForLLVMType $ llvmBlockRange bp]
+  getOffsets (Perm_Struct ps) =
+    concat $ RL.mapToList (\memb ->
+                            map (MbRangeForStructType memb) $
+                            getOffsets $ RL.get memb ps) $
+    RL.members ps
   getOffsets _ = []
 
 
@@ -4166,21 +4200,29 @@ instance Modalize (AtomicPerm a) where
     Just $ Perm_LLVMBlock $
     bp { llvmBlockRW = fromMaybe (llvmBlockRW bp) rw,
          llvmBlockLifetime = fromMaybe (llvmBlockLifetime bp) l }
-  modalize rw l p@(Perm_LLVMFree _) = Just p
-  modalize rw l p@(Perm_LLVMFunPtr _ _) = Just p
+  modalize _ _ p@(Perm_LLVMFree _) = Just p
+  modalize _ _ p@(Perm_LLVMFunPtr _ _) = Just p
   modalize rw l (Perm_LLVMBlockShape sh) =
     Perm_LLVMBlockShape <$> modalize rw l sh
-  modalize rw l p@(Perm_IsLLVMPtr) = Just p
-  modalize rw l p@(Perm_NamedConj _ _ _) = Just p
-  modalize rw l p@(Perm_LLVMFrame _) = Just p
-  modalize rw l p@(Perm_LOwned _ _ _ _ _) = Just p
-  modalize rw l p@(Perm_LOwnedSimple _ _) = Just p
-  modalize rw l p@(Perm_LCurrent _) = Just p
-  modalize rw l p@(Perm_LFinished) = Just p
+  modalize _ _ p@(Perm_IsLLVMPtr) = Just p
+  modalize _ _ p@(Perm_NamedConj _ _ _) = Just p
+  modalize _ _ p@(Perm_LLVMFrame _) = Just p
+  modalize _ _ p@(Perm_LOwned _ _ _ _ _) = Just p
+  modalize _ _ p@(Perm_LOwnedSimple _ _) = Just p
+  modalize _ _ p@(Perm_LCurrent _) = Just p
+  modalize _ _ p@(Perm_LFinished) = Just p
   modalize rw l (Perm_Struct ps) =
     Perm_Struct <$> traverseRAssign (modalize rw l) ps
-  modalize rw l p@(Perm_Fun _) = Just p
-  modalize rw l p@(Perm_BVProp _) = Just p
+  modalize _ _ p@(Perm_Fun _) = Just p
+  modalize _ _ p@(Perm_BVProp _) = Just p
+
+instance Modalize (ExprAndPerm a) where
+  modalize rw l (ExprAndPerm e p) =
+    ExprAndPerm e <$> modalize rw l p
+
+instance Modalize (ExprPerms ctx) where
+  modalize rw l perms = traverseRAssign (modalize rw l) perms
+
 
 -- | Apply 'modalize' to the shape of a block permission, using the
 -- modalities of that block permission, raising an error if 'modalize'
@@ -4193,7 +4235,7 @@ modalizeBlockShape (LLVMBlockPerm {..}) =
 -- | Convert an 'ExprPerms' list @ps@ to the input permission list @[l](R)ps@
 -- used in a simple @lowned@ permission
 lownedPermsSimpleIn :: ExprVar LifetimeType -> ExprPerms ps ->
-                       ExprPerms ps
+                       Maybe (ExprPerms ps)
 lownedPermsSimpleIn l = modalize (Just PExpr_Read) (Just $ PExpr_Var l)
 
 -- | Unfold a named shape
@@ -6073,9 +6115,12 @@ instance SubstVar s m => Substable s (BVRange w) m where
   genSubst s (mbMatch -> [nuMP| BVRange e1 e2 |]) =
     BVRange <$> genSubst s e1 <*> genSubst s e2
 
-instance SubstVar s m => Substable s (RangeForType a) m where
-  genSubst s (mbMatch -> [nuMP| RangeForLLVMType rng |]) =
-    RangeForLLVMType <$> genSubst s rng
+instance SubstVar s m => Substable s (MbRangeForType a) m where
+  genSubst s (mbMatch -> [nuMP| MbRangeForLLVMType vars rng |]) =
+    MbRangeForLLVMType (mbLift vars) <$>
+    genSubstMb (RL.map (const Proxy) $ mbLift vars) s rng
+  genSubst s (mbMatch -> [nuMP| MbRangeForStructType memb rng |]) =
+    MbRangeForStructType (mbLift memb) <$> genSubst s rng
 
 instance SubstVar s m => Substable s (BVProp w) m where
   genSubst s mb_prop = case mbMatch mb_prop of
@@ -6516,6 +6561,10 @@ completePSubst ctx (PartialSubst pselems) = PermSubst $ helper ctx pselems where
 -- | Look up an optional expression in a partial substitution
 psubstLookup :: PartialSubst ctx -> Member ctx a -> Maybe (PermExpr a)
 psubstLookup (PartialSubst m) memb = unPSubstElem $ RL.get memb m
+
+-- | Get 'Proxy's for the domain of a 'PartialSubst'
+psubstProxies :: PartialSubst ctx -> RAssign Proxy ctx
+psubstProxies (PartialSubst m) = RL.map (const Proxy) m
 
 -- | Append two partial substitutions
 psubstAppend :: PartialSubst ctx1 -> PartialSubst ctx2 ->
@@ -7207,7 +7256,7 @@ instance AbstractNamedShape w (AtomicPerm a) where
     mbMap2 (Perm_NamedConj n) <$> abstractNSM args <*> abstractNSM off
   abstractNSM (Perm_LLVMFrame fp) = fmap Perm_LLVMFrame <$> abstractNSM fp
   abstractNSM (Perm_LOwned ls tps_in tps_out ps_in ps_out) =
-    mbMap3 (\ls -> Perm_LOwned ls tps_in tps_out) <$>
+    mbMap3 (\ls' -> Perm_LOwned ls' tps_in tps_out) <$>
     abstractNSM ls <*> abstractNSM ps_in <*> abstractNSM ps_out
   abstractNSM (Perm_LOwnedSimple tps lops) =
     fmap (Perm_LOwnedSimple tps) <$> abstractNSM lops

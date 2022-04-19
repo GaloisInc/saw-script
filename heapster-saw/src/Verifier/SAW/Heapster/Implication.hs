@@ -2033,17 +2033,17 @@ simplImplIn (SImpl_RemoveContainedLifetime l ls tps_in tps_out ps_in ps_out l2) 
 simplImplIn (SImpl_WeakenLifetime x f args l l2) =
   let (l',l'_p) = lcurrentPerm l l2 in
   distPerms2 x (ltFuncApply f args l) l' l'_p
-simplImplIn (SImpl_MapLifetime l ls tps_in tps_out ps_in ps_out _ _ ps1 ps2 _ _) =
+simplImplIn (SImpl_MapLifetime l ls tps_in tps_out ps_in ps_out _ _ _ _ ps1 ps2 _ _) =
   RL.append ps1 $ DistPermsCons ps2 l $
   ValPerm_LOwned ls tps_in tps_out ps_in ps_out
 simplImplIn (SImpl_EndLifetime l tps_in tps_out ps_in ps_out) =
-  case lownedPermsToDistPerms ps_in of
+  case exprPermsToDistPerms ps_in of
     Just perms_in ->
       DistPermsCons perms_in l $ ValPerm_LOwned [] tps_in tps_out ps_in ps_out
     Nothing ->
       error "simplImplIn: SImpl_EndLifetime: non-variables in input permissions"
 simplImplIn (SImpl_IntroLOwnedSimple l _ lops) =
-  case lownedPermsToDistPerms lops of
+  case exprPermsToDistPerms lops of
     Just dps -> DistPermsCons dps l (ValPerm_LOwned [] CruCtxNil CruCtxNil MNil MNil)
     Nothing ->
       error "simplImplIn: SImpl_IntroLOwnedSimple: malformed permissions list"
@@ -2396,7 +2396,7 @@ simplImplOut (SImpl_WeakenLifetime x f args _ l2) =
   distPerms1 x (ltFuncApply f args $ PExpr_Var l2)
 simplImplOut (SImpl_MapLifetime l ls _ _ _ _ tps_in' tps_out' ps_in' ps_out' _ _ _ _) =
   distPerms1 l $ ValPerm_LOwned ls tps_in' tps_out' ps_in' ps_out'
-simplImplOut (SImpl_EndLifetime l _ ps_out) =
+simplImplOut (SImpl_EndLifetime l _ _ _ ps_out) =
   case exprPermsToDistPerms ps_out of
     Just perms_out ->
       DistPermsCons perms_out l ValPerm_LFinished
@@ -2940,35 +2940,44 @@ instance SubstVar PermVarSubst m =>
                           <*> genSubst s sub_ls
                           <*> genSubst s tps_in <*> genSubst s tps_out
                           <*> genSubst s ps_in <*> genSubst s ps_out
-    [nuMP| SImpl_SubsumeLifetime l ls ps_in ps_out l2 |] ->
+    [nuMP| SImpl_SubsumeLifetime l ls tps_in tps_out ps_in ps_out l2 |] ->
       SImpl_SubsumeLifetime <$> genSubst s l <*> genSubst s ls
+                            <*> genSubst s tps_in <*> genSubst s tps_out
                             <*> genSubst s ps_in <*> genSubst s ps_out
                             <*> genSubst s l2
-    [nuMP| SImpl_ContainedLifetimeCurrent l ls ps_in ps_out l2 |] ->
+    [nuMP| SImpl_ContainedLifetimeCurrent l ls tps_in tps_out ps_in ps_out l2 |] ->
       SImpl_ContainedLifetimeCurrent <$> genSubst s l <*> genSubst s ls
+                                     <*> genSubst s tps_in <*> genSubst s tps_out
                                      <*> genSubst s ps_in <*> genSubst s ps_out
                                      <*> genSubst s l2
-    [nuMP| SImpl_RemoveContainedLifetime l ls ps_in ps_out l2 |] ->
+    [nuMP| SImpl_RemoveContainedLifetime l ls tps_in tps_out ps_in ps_out l2 |] ->
       SImpl_RemoveContainedLifetime <$> genSubst s l <*> genSubst s ls
+                                    <*> genSubst s tps_in <*> genSubst s tps_out
                                     <*> genSubst s ps_in <*> genSubst s ps_out
                                     <*> genSubst s l2
     [nuMP| SImpl_WeakenLifetime x f args l l2 |] ->
       SImpl_WeakenLifetime <$> genSubst s x <*> genSubst s f <*> genSubst s args
                            <*> genSubst s l <*> genSubst s l2
-    [nuMP| SImpl_MapLifetime l ls ps_in ps_out ps_in' ps_out'
-                            ps1 ps2 impl1 impl2 |] ->
-      SImpl_MapLifetime <$> genSubst s l <*> genSubst s ls <*> genSubst s ps_in
-                        <*> genSubst s ps_out <*> genSubst s ps_in'
-                        <*> genSubst s ps_out' <*> genSubst s ps1
-                        <*> genSubst s ps2 <*> genSubst s impl1
-                        <*> genSubst s impl2
-    [nuMP| SImpl_EndLifetime l ps_in ps_out |] ->
-      SImpl_EndLifetime <$> genSubst s l <*> genSubst s ps_in
-                        <*> genSubst s ps_out
-    [nuMP| SImpl_IntroLOwnedSimple l lops |] ->
-      SImpl_IntroLOwnedSimple <$> genSubst s l <*> genSubst s lops
-    [nuMP| SImpl_ElimLOwnedSimple l lops |] ->
-      SImpl_ElimLOwnedSimple <$> genSubst s l <*> genSubst s lops
+    [nuMP| SImpl_MapLifetime l ls tps_in tps_out ps_in ps_out
+                             tps_in' tps_out' ps_in' ps_out'
+                             ps1 ps2 impl1 impl2 |] ->
+      SImpl_MapLifetime <$> genSubst s l <*> genSubst s ls
+                        <*> genSubst s tps_in <*> genSubst s tps_out
+                        <*> genSubst s ps_in <*> genSubst s ps_out
+                        <*> genSubst s tps_in' <*> genSubst s tps_out'
+                        <*> genSubst s ps_in' <*> genSubst s ps_out'
+                        <*> genSubst s ps1 <*> genSubst s ps2
+                        <*> genSubst s impl1 <*> genSubst s impl2
+    [nuMP| SImpl_EndLifetime l tps_in tps_out ps_in ps_out |] ->
+      SImpl_EndLifetime <$> genSubst s l
+                        <*> genSubst s tps_in <*> genSubst s tps_out
+                        <*> genSubst s ps_in <*> genSubst s ps_out
+    [nuMP| SImpl_IntroLOwnedSimple l tps lops |] ->
+      SImpl_IntroLOwnedSimple <$> genSubst s l
+                              <*> genSubst s tps <*> genSubst s lops
+    [nuMP| SImpl_ElimLOwnedSimple l tps lops |] ->
+      SImpl_ElimLOwnedSimple <$> genSubst s l
+                             <*> genSubst s tps <*> genSubst s lops
     [nuMP| SImpl_LCurrentRefl l |] ->
       SImpl_LCurrentRefl <$> genSubst s l
     [nuMP| SImpl_LCurrentTrans l1 l2 l3 |] ->
@@ -4582,15 +4591,18 @@ implBeginLifetimeM =
 -- Recombine all the returned permissions @ps_out@ and @l:lfinished@ returned by
 -- ending @l@, leaving just @ps@ on the stack.
 implEndLifetimeM :: NuMatchingAny1 r => Proxy ps -> ExprVar LifetimeType ->
-                    LOwnedPerms ps_in -> LOwnedPerms ps_out ->
+                    CruCtx ps_in -> CruCtx ps_out ->
+                    ExprPerms ps_in -> ExprPerms ps_out ->
                     ImplM vars s r ps (ps :++: ps_in :> LifetimeType) ()
-implEndLifetimeM ps l ps_in ps_out@(lownedPermsToDistPerms -> Just dps_out)
-  | isJust (lownedPermsToDistPerms ps_in) =
-    implSimplM ps (SImpl_EndLifetime l ps_in ps_out) >>>
+implEndLifetimeM ps l tps_in tps_out ps_in ps_out
+  | Just dps_out <- exprPermsToDistPerms ps_out
+  , isJust (exprPermsToDistPerms ps_in) =
+    implSimplM ps (SImpl_EndLifetime l tps_in tps_out ps_in ps_out) >>>
     implTraceM (\i -> pretty "Ending lifetime:" <+> permPretty i l) >>>
     implDropLifetimePermsM l >>>
     recombinePermsPartial ps (DistPermsCons dps_out l ValPerm_LFinished)
-implEndLifetimeM _ _ _ _ = implFailM "implEndLifetimeM: lownedPermsToDistPerms"
+implEndLifetimeM _ _ _ _ _ _ =
+  implFailM "implEndLifetimeM: exprPermsToDistPerms"
 
 -- | Drop any permissions of the form @x:[l]p@ in the primary permissions for
 -- @x@, which are supplied as an argument
@@ -4631,7 +4643,7 @@ implSplitLifetimeM :: (KnownRepr TypeRepr a, NuMatchingAny1 r) =>
                       PermExprs args -> PermExpr LifetimeType ->
                       ExprVar LifetimeType -> [PermExpr LifetimeType] ->
                       CruCtx ps_in -> CruCtx ps_out ->
-                      LOwnedPerms ps_in -> LOwnedPerms ps_out ->
+                      ExprPerms ps_in -> ExprPerms ps_out ->
                       ImplM vars s r (ps :> a)
                       (ps :> a :> LifetimeType :> LifetimeType) ()
 implSplitLifetimeM x f args l l2 sub_ls tps_in tps_out ps_in ps_out =
@@ -4650,12 +4662,13 @@ implSplitLifetimeM x f args l l2 sub_ls tps_in tps_out ps_in ps_out =
 -- permission with @l1:lowned[l2,ls] (ps_in1 -o ps_out1)@.
 implSubsumeLifetimeM :: NuMatchingAny1 r => ExprVar LifetimeType ->
                         [PermExpr LifetimeType] ->
-                        LOwnedPerms ps_in -> LOwnedPerms ps_out ->
+                        CruCtx ps_in -> CruCtx ps_out ->
+                        ExprPerms ps_in -> ExprPerms ps_out ->
                         PermExpr LifetimeType ->
                         ImplM vars s r (ps :> LifetimeType)
                         (ps :> LifetimeType) ()
-implSubsumeLifetimeM l ls ps_in ps_out l2 =
-  implSimplM Proxy (SImpl_SubsumeLifetime l ls ps_in ps_out l2)
+implSubsumeLifetimeM l ls tps_in tps_out ps_in ps_out l2 =
+  implSimplM Proxy (SImpl_SubsumeLifetime l ls tps_in tps_out ps_in ps_out l2)
 
 
 -- | Prove a lifetime @l@ is current during a lifetime @l2@ it contains,
@@ -4666,11 +4679,12 @@ implSubsumeLifetimeM l ls ps_in ps_out l2 =
 -- is on top of the stack, and replacing it with @l1:[l2]lcurrent@.
 implContainedLifetimeCurrentM :: NuMatchingAny1 r => ExprVar LifetimeType ->
                                  [PermExpr LifetimeType] ->
-                                 LOwnedPerms ps_in -> LOwnedPerms ps_out ->
+                                 CruCtx ps_in -> CruCtx ps_out ->
+                                 ExprPerms ps_in -> ExprPerms ps_out ->
                                  PermExpr LifetimeType ->
                                  ImplM vars s r (ps :> LifetimeType)
                                  (ps :> LifetimeType) ()
-implContainedLifetimeCurrentM l ls ps_in ps_out l2 =
+implContainedLifetimeCurrentM l ls tps_in tps_out ps_in ps_out l2 =
   implSimplM Proxy (SImpl_ContainedLifetimeCurrent
                     l ls tps_in tps_out ps_in ps_out l2) >>>
   recombinePerm l (ValPerm_LOwned ls tps_in tps_out ps_in ps_out)
@@ -4687,7 +4701,7 @@ implContainedLifetimeCurrentM l ls ps_in ps_out l2 =
 implRemoveContainedLifetimeM :: NuMatchingAny1 r => ExprVar LifetimeType ->
                                 [PermExpr LifetimeType] ->
                                 CruCtx ps_in -> CruCtx ps_out ->
-                                LOwnedPerms ps_in -> LOwnedPerms ps_out ->
+                                ExprPerms ps_in -> ExprPerms ps_out ->
                                 ExprVar LifetimeType ->
                                 ImplM vars s r ps
                                 (ps :> LifetimeType :> LifetimeType) ()
@@ -4710,7 +4724,7 @@ lifetimesThatCouldProve mb_ps =
                  VarAndPerm l (ValPerm_LOwned ls tps_in tps_out ps_in ps_out)
                    | mbLift $ fmap (lownedPermsCouldProve ps_out) mb_ps ->
                      ((l, Perm_LOwned ls tps_in tps_out ps_in ps_out) :)
-                 VarAndPerm l (ValPerm_LOwnedSimple tp ps)
+                 VarAndPerm l (ValPerm_LOwnedSimple tps ps)
                    | mbLift $ fmap (lownedPermsCouldProve ps) mb_ps ->
                      ((l, Perm_LOwnedSimple tps ps) :)
                  _ -> id)
@@ -5497,11 +5511,15 @@ recombinePerm' x _ p@(ValPerm_Eq (PExpr_Var y)) | y == x = implDropM x p
 recombinePerm' x ValPerm_True (ValPerm_Eq e) =
   simplEqPerm x e >>>= \e' -> implPopM x (ValPerm_Eq e')
 recombinePerm' x x_p (ValPerm_LOwnedSimple tps lops) =
-  -- If p is a simple lowned permission, eliminate it
-  -- FIXME: do we want to do this? If not, we need more subtle rules for proving
-  -- simple lowned permissions, and probably widening support for it too...
-  implSimplM Proxy (SImpl_ElimLOwnedSimple x tps lops) >>>
-  recombinePerm' x x_p (ValPerm_LOwned [] tps tps (lownedPermsSimpleIn x lops) lops)
+  case lownedPermsSimpleIn x lops of
+    Just ps_simple ->
+      -- If p is a simple lowned permission, eliminate it
+      -- FIXME: do we want to do this? If not, we need more subtle rules for proving
+      -- simple lowned permissions, and probably widening support for it too...
+      implSimplM Proxy (SImpl_ElimLOwnedSimple x tps lops) >>>
+      recombinePerm' x x_p (ValPerm_LOwned [] tps tps ps_simple lops)
+    Nothing ->
+      error "recombinePerm: cannot compute input permissions for simple lowned permission"
 recombinePerm' x ValPerm_True p = implPopM x p
 recombinePerm' x (ValPerm_Eq (PExpr_Var y)) _
   | y == x = error "recombinePerm: variable x has permission eq(x)!"
@@ -6059,6 +6077,11 @@ someDistPermsToNeededPerms prxs =
   fmapF $ RL.map (\(VarAndPerm x p) ->
                    NeededPerm MNil x (nuMulti prxs (const p)))
 
+-- | Generate a set of 'NeededPerms' for a list of ranges on an expression
+neededPermsForRanges :: RAssign Proxy vars -> PermExpr a -> [MbRangeForType a] ->
+                        NeededPerms vars
+neededPermsForRanges = error "FIXME HERE NOW"
+
 -- | Prove the permission represented by a 'NeededPerm'
 proveNeededPerm :: NuMatchingAny1 r => NeededPerm vars a ->
                    ImplM vars s r (ps :> a) ps ()
@@ -6083,127 +6106,65 @@ tryUnifyVars x mb_x = case mbMatch mb_x of
            _ -> pure ()
   _ -> pure ()
 
+getExprRanges :: PermExpr a -> ImplM vars s r ps ps [MbRangeForType a]
+getExprRanges = error "FIXME HERE NOW"
 
-FIXME HERE NOW: rewrite solveForPermListImpl
-- make NeededPerms be either equalities or blocks with existential shape
-- can define partial join and meet operations:
-    meet (eq _) (block bp) = bp
-    meet (block bp1) (block bp2) = block (intersect the ranges)
-    join/meet (eq e1) (eq e2) = eq e1  if e1 == e2, undef otherwise
-    join false _ = join _ false = false
-    meet false p = meet p false = p
-- solveForPermListImpl is really just a subtraction:
-    solveImpl p q = empty if p == q
-    solveImpl (or p1 p2) q =
-      pick the feasible one (supported by the current LHS) of
-        (solveImpl p1 q) (solveImpl p2 q)
-    solveImpl p (or q1 q2) = meet (solveImpl p q1) (solveImpl p q2)
-    solveImpl (eq e) (eq e) = empty
-    solveImpl _ (eq e) = false (because we already substituted eqs)
-    solveImpl (block bp1) (block bp2) = block (bp2 - bp1)
-    solveImpl (exists p) q = tryLift (solveImpl p q) (false if cannot lift)
-    solveImpl p (exists q) = ...? substitute for the bound name...?
-
--- | Find all the permissions @ps@ that need to be added to the given list
--- @lops@ of 'LOwnedPerms' to prove the given block permission. That is, given
--- @bp@, solve for the least @ps@ such that @x:ps * lops |- x:bp@. This is done
--- by finding all field, array, and block permissions for @x@ in @lops@ and
--- subtracting (via 'bvRangesDelete') their ranges from the range of @bp@. For
--- whatever ranges are left, return block permissions for those ranges with
--- fresh existential variables for their shapes, since a block permission with
--- an existential shape is the most general form of block permission.
---
--- NOTE: This function requires the range of the block permission to be known,
--- i.e., to not have any existential variables, so that 'bvRangesDelete' knows
--- how to perform the range subtraction. The range of the block permission is
--- passed as the third argument. The ranges of permissions in @lowned@
--- permissions should always be known anyway, so this should not be a problem.
-solveForPermListImplBlock :: (NuMatchingAny1 r, 1 <= w, KnownNat w) =>
-                             LOwnedPerms ps_l -> ExprVar (LLVMPointerType w) ->
-                             BVRange w -> Mb vars (LLVMBlockPerm w) ->
-                             ImplM vars s r ps ps (NeededPerms vars)
-
--- If there is at least one perm for x in lops, use it to set the modalities of
--- mb_bp, and then delete the left-hand ranges from the right-hand range
-solveForPermListImplBlock lops x bp_rng mb_bp
-  | Just some_lop <- findLOwnedPermForVar x lops =
-
-    -- Use the modalities of some_lop to set the modalities of mb_bp
-    let (rw,l) = llvmLownedPermModalities some_lop in
-    tryUnifyVars rw (mbLLVMBlockRW mb_bp) >>>
-    tryUnifyVars l (mbLLVMBlockLifetime mb_bp) >>>
-
-    -- Find all the ranges covered by perms for x in lops, and subtract them
-    -- from the range of mb_bp
-    let rngs_lhs = lownedPermsOffsetsForLLVMVar x lops in
-    let rngs_rem = bvRangesDelete bp_rng rngs_lhs in
-    {-
-    implTraceM (\i -> pretty "solveForPermListImplBlock for" <+>
-                      permPretty i x <> colon <> line <>
-                      permPretty i bp_rng <+>
-                      pretty "-" <+> permPretty i rngs_lhs <+> pretty "=" <+>
-                      permPretty i rngs_rem) >>> -}
-
-    -- Subtract all ranges of offsets in lops from that of mb_bp, and, for each
-    -- remaining range, create a memblock permission with existential shape
-    let mb_ex_bps =
-          fmap (\bp ->
-                 map (\rng -> nu $ \z ->
-                       (llvmBlockSetRange bp rng)
-                       { llvmBlockShape = PExpr_Var z })
-                 rngs_rem) mb_bp in
-    return $ concatSomeRAssign $
-    map (\mb_ex_bp -> mbNeededPerms1 x $ mbValPerm_LLVMBlock $
-                      mbCombine RL.typeCtxProxies mb_ex_bp) $
-    mbList mb_ex_bps
-
--- If none of our lowned perms contain x, we need all of mb_bp
-solveForPermListImplBlock _ x _ mb_bp =
-  return $ neededPerms1 x $ mbValPerm_LLVMBlock mb_bp
-
+-- FIXME HERE NOW: explain the justification of the following approach, that we
+-- expect any offsets mentioned at all on the right will be useful in the proof
+-- if the do not occur on the left but are currently held for the given variable
 
 -- | The second stage of 'solveForPermListImpl', after equality permissions have
--- been substituted into the 'LOwnedPerms'
-solveForPermListImpl1 :: NuMatchingAny1 r => LOwnedPerms ps_l ->
-                         Mb vars (LOwnedPerms ps_r) ->
+-- been substituted into the 'ExprPerms'
+solveForPermListImplH :: NuMatchingAny1 r => PartialSubst vars ->
+                         CruCtx ps_l -> ExprPerms ps_l ->
+                         CruCtx ps_r -> Mb vars (ExprPerms ps_r) ->
                          ImplM vars s r ps ps (NeededPerms vars)
-solveForPermListImpl1 ps_l mb_ps = case mbMatch mb_ps of
+solveForPermListImplH psubst tps_l ps_l tps_r mb_ps = case mbMatch mb_ps of
   -- If the RHS is empty, we are done
   [nuMP| MNil |] ->
     pure (Some MNil)
 
-  -- If the head of the RHS converts to a block permission, call
-  -- solveForPermListImplBlock, and recurse on the tail
-  [nuMP| mb_ps_r :>: mb_p_r |]
-    | Just [nuP| (mb_x, SomeLLVMBlockPerm mb_bp) |] <-
-        mbLownedPermVarBlockPerm mb_p_r
-    , Right x <- mbNameBoundP mb_x ->
-      do bp_rng <-
-           partialSubstForceM (mbLLVMBlockRange mb_bp) "solveForPermListImpl1"
-         neededs1 <- solveForPermListImplBlock ps_l x bp_rng mb_bp
-         neededs2 <- solveForPermListImpl1 ps_l mb_ps_r
-         pure (apSomeRAssign neededs1 neededs2)
+  -- If the head of the RHS is on an expression that has been defined, get all
+  -- the offsets its permission mentions, subtract any ranges on the LHS for
+  -- that expression, and then return block permisisons for any of the remaining
+  -- ranges that are currently held for the expression
+  [nuMP| mb_ps_r' :>: ExprAndPerm mb_e mb_p |]
+    | Just e <- partialSubst psubst mb_e
+    , vars <- psubstProxies psubst
+    , CruCtxCons tps_r' tp_r <- tps_r
+    , lhs_ps <- exprPermsForExpr tps_l ps_l tp_r e
+    , lhs_rngs <- concatMap getOffsets lhs_ps
+    , rhs_rngs <- map (mbMbRangeForType vars) $ mbList $ fmap getOffsets mb_p
+    , needed_rngs <- mbRangeFTsDelete rhs_rngs lhs_rngs ->
+      getExprRanges e >>>= \expr_rngs ->
+      apSomeRAssign
+      (neededPermsForRanges vars e $
+       intersectMbRangeFTs needed_rngs expr_rngs) <$>
+      solveForPermListImplH psubst tps_l ps_l tps_r' mb_ps_r'
 
   -- Otherwise, drop the head and recurse on the tail
-  [nuMP| mb_ps_r :>: _ |] ->
-    solveForPermListImpl1 ps_l mb_ps_r
+  [nuMP| mb_ps_r' :>: _ |]
+    | CruCtxCons tps_r' tp_r <- tps_r ->
+      solveForPermListImplH psubst tps_l ps_l tps_r' mb_ps_r'
 
 -- | Determine what additional permissions from the variable permissions, if
 -- any, would be needed to prove one list of permissions implies another. Also
 -- instantiate any existential variables as needed for the implication. This is
 -- just a "best guess", so just do nothing and return if nothing can be done.
-solveForPermListImpl :: NuMatchingAny1 r => LOwnedPerms ps_l ->
-                        Mb vars (LOwnedPerms ps_r) ->
+solveForPermListImpl :: NuMatchingAny1 r => CruCtx ps_l -> ExprPerms ps_l ->
+                        CruCtx ps_r -> Mb vars (ExprPerms ps_r) ->
                         ImplM vars s r ps ps (NeededPerms vars)
-solveForPermListImpl ps_l mb_ps_r =
+solveForPermListImpl tps_l ps_l tps_r mb_ps_r =
   let prxs = mbToProxy mb_ps_r in
   substEqsWithProof ps_l >>>= \eqp_l ->
+  getPSubst >>>= \psubst ->
   give prxs (substEqsWithProof mb_ps_r) >>>= \eqp_r ->
   let neededs =
         someDistPermsToNeededPerms prxs $
         apSomeRAssign (someEqProofPerms eqp_l) (someEqProofPerms eqp_r) in
   apSomeRAssign neededs <$>
-  solveForPermListImpl1 (someEqProofRHS eqp_l) (someEqProofRHS eqp_r)
+  solveForPermListImplH psubst tps_l (someEqProofRHS eqp_l)
+                        tps_r (someEqProofRHS eqp_r)
 
 
 ----------------------------------------------------------------------
@@ -7960,9 +7921,9 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       proveVarImplInt x (mbValPerm_Conj1 mb_p)
 
   [nuMP| Perm_LOwned [] mb_tps_inR mb_tps_outR mb_ps_inR mb_ps_outR |]
-    | [Perm_LOwned [] tps_inL tps_outL ps_inL ps_outL] <- ps ->
-
-      FIXME HERE NOW: figure out maplifetime proofs
+    | [Perm_LOwned [] tps_inL tps_outL ps_inL ps_outL] <- ps
+    , tps_inR <- mbLift mb_tps_inR
+    , tps_outR <- mbLift mb_tps_outR ->
 
       -- Compute the necessary "permission subtractions" to figure out what
       -- additional permissions are needed to prove both ps_inR -o ps_inL and
@@ -7972,8 +7933,8 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       -- name-binding, so ps_inR cannot have any evars.
       partialSubstForceM mb_ps_inR "proveVarAtomicImpl" >>>= \ps_inR ->
       let mb_ps_inL = mbConst ps_inL mb_ps_inR in
-      solveForPermListImpl ps_inR mb_ps_inL >>>= \(Some neededs1) ->
-      solveForPermListImpl ps_outL mb_ps_outR >>>= \(Some neededs2) ->
+      solveForPermListImpl tps_inR ps_inR tps_inL mb_ps_inL >>>= \(Some neededs1) ->
+      solveForPermListImpl tps_outL ps_outL tps_outR mb_ps_outR >>>= \(Some neededs2) ->
 
       -- Prove ps1 and ps2, which can have evars, and then look at the
       -- substitution instances of ps1 and ps2 that were actually proved on top
@@ -7992,11 +7953,11 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       partialSubstForceM mb_ps_outR "proveVarAtomicImpl" >>>= \ps_outR ->
 
       -- Build the local implications ps_inR -o ps_inL and ps_outL -o ps_outR
-      (case (lownedPermsToDistPerms ps_inL, lownedPermsToDistPerms ps_outL,
-             lownedPermsToDistPerms ps_inR, lownedPermsToDistPerms ps_outR) of
+      (case (exprPermsToDistPerms ps_inL, exprPermsToDistPerms ps_outL,
+             exprPermsToDistPerms ps_inR, exprPermsToDistPerms ps_outR) of
           (Just dps_inL, Just dps_outL, Just dps_inR, Just dps_outR) ->
             pure (dps_inL, dps_outL, dps_inR, dps_outR)
-          _ -> implFailMsgM "proveVarAtomicImpl: lownedPermsToDistPerms")
+          _ -> implFailMsgM "proveVarAtomicImpl: exprPermsToDistPerms")
       >>>= \(dps_inL, dps_outL, dps_inR, dps_outR) ->
       localProveVars (RL.append ps1 dps_inR) dps_inL >>>= \impl_in ->
       localProveVars (RL.append ps2 dps_outL) dps_outR >>>= \impl_out ->
@@ -8004,7 +7965,9 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       -- Finally, apply the MapLifetime proof step, first moving the input
       -- lowned permissions to the top of the stack
       implMoveUpM ps0 ps12 x MNil >>>
-      implSimplM Proxy (SImpl_MapLifetime x [] ps_inL ps_outL ps_inR ps_outR
+      implSimplM Proxy (SImpl_MapLifetime x []
+                        tps_inL tps_outL ps_inL ps_outL
+                        tps_inR tps_outR ps_inR ps_outR
                         ps1 ps2 impl_in impl_out)
 
   [nuMP| Perm_LOwnedSimple mb_tps mb_lops |]
@@ -8718,7 +8681,7 @@ implEndLifetimeRecM l =
       -- Move the lowned permission for l to the top of the stack
       implMoveUpM ps0 ps_in l MNil >>>
       -- End l
-      implEndLifetimeM Proxy l tps_int tps_out ps_in ps_out >>>
+      implEndLifetimeM Proxy l tps_in tps_out ps_in ps_out >>>
       -- Find all lowned perms that contain l and remove l from them
       implFindLOwnedPerms >>>= \lowned_ps ->
       forM_ lowned_ps $ \case
@@ -8727,7 +8690,7 @@ implEndLifetimeRecM l =
             implPushM l' p' >>> implPushCopyM l ValPerm_LFinished >>>
             implRemoveContainedLifetimeM l' ls' tps_in' tps_out' ps_in' ps_out' l
         _ -> return ()
-  (ValPerm_LOwned ((asVar -> Just l') : _) _ _) ->
+  (ValPerm_LOwned ((asVar -> Just l') : _) _ _ _ _) ->
     implEndLifetimeRecM l' >>> implEndLifetimeRecM l
   _ ->
     implTraceM (\i ->
