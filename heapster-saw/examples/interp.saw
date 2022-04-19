@@ -24,6 +24,14 @@ heapster_define_llvmshape env "bool" 64 "" "fieldsh(1,int1<>)";
 // Box type
 heapster_define_llvmshape env "Box" 64 "T:llvmshape 64" "ptrsh(T)";
 
+// Infallible type
+// Note that this type is actually uninhabited
+heapster_define_opaque_llvmshape env "Infallible" 64 "" "64" "#()";
+
+// ControlFlow type
+heapster_define_rust_type env
+  "pub enum ControlFlow<B, C> { Continue (C), Break (B) }";
+
 // The Option type
 heapster_define_rust_type env "pub enum Option<X> { None, Some (X) }";
 
@@ -48,6 +56,9 @@ heapster_define_opaque_perm env "Iter_fld1" "T:llvmshape 64"
 heapster_define_opaque_perm env "Iter_fld2" "" "llvmptr 64" "#()";
 heapster_define_llvmshape env "Iter" 64 "l:lifetime, T:llvmshape 64"
   "fieldsh(Iter_fld1<T>);fieldsh(Iter_fld2<>)";
+
+// Rev type: A simple wrapper around a type, so we define it for real
+heapster_define_rust_type env "pub struct Rev<T> { iter: T, }";
 
 // Var type
 heapster_define_rust_type env "pub struct Var(String);";
@@ -133,18 +144,26 @@ heapster_assume_fun_rename_prim env var_clone_sym "var_clone"
   "<'a> fn (x:&'a Var) -> Var";
 
 // Vec<(Var, Value)>::deref
-vec_deref_sym <- heapster_find_symbol_with_type env
+vec_var_deref_sym <- heapster_find_symbol_with_type env
   "core..ops..deref..Deref$GT$5deref"
   "{ [0 x { %Var, %Value }]*, i64 }(%\"alloc::vec::Vec<(Var, Value)>\"*)";
-heapster_assume_fun_rename_prim env vec_deref_sym "vec_deref"
+heapster_assume_fun_rename_prim env vec_var_deref_sym "vec_var_deref"
   "<'a> fn (&'a Vec<(Var, Value)>) -> &'a[(Var, Value)]";
 
 // &[(Var, Value)]::iter
-slice_iter_sym <- heapster_find_symbol_with_type env
+slice_var_iter_sym <- heapster_find_symbol_with_type env
   "core5slice29_$LT$impl$u20$$u5b$T$u5d$$GT$4iter"
   "{ i64*, i64* }([0 x { %Var, %Value }]*, i64)";
-heapster_assume_fun_rename_prim env slice_iter_sym "slice_iter"
+heapster_assume_fun_rename_prim env slice_var_iter_sym "slice_var_iter"
   "<'a> fn (&'a[(Var, Value)]) -> Iter<'a, (Var, Value)>";
+
+// NOTE: Unfortunately there are two symbols with the same type for rev,
+// so we need to just use the full hash for searching
+// Iter<'a, (Var, Value)>::rev
+iter_var_rev_sym <- heapster_find_symbol env
+  "core4iter6traits8iterator8Iterator3rev17hd35750bd4d210bc7E";
+heapster_assume_fun_rename_prim env iter_var_rev_sym "iter_var_rev"
+  "<'a> fn (Iter<'a, (Var, Value)>) -> Rev<Iter<'a, (Var, Value)>>";
 
 // Vec<(Var, Value)>::new
 vec_new_sym <- heapster_find_symbol env "Vec$LT$T$GT$3new";
@@ -162,6 +181,28 @@ vec_clone_sym <- heapster_find_symbol_with_type env
   "void(%\"alloc::vec::Vec<(FunName, FunDef)>\"*, %\"alloc::vec::Vec<(FunName, FunDef)>\"*)";
 heapster_assume_fun_rename_prim env vec_clone_sym "vec_clone"
   "<'a> fn (&'a Vec<(FunName, FunDef)>) -> Vec<(FunName, FunDef)>";
+
+// Vec<(FunName, FunDef)>::deref
+vec_fun_deref_sym <- heapster_find_symbol_with_type env
+  "core..ops..deref..Deref$GT$5deref"
+  "{ [0 x { %FunName, %FunDef }]*, i64 }(%\"alloc::vec::Vec<(FunName, FunDef)>\"*)";
+heapster_assume_fun_rename_prim env vec_fun_deref_sym "vec_fun_deref"
+  "<'a> fn (&'a Vec<(FunName, FunDef)>) -> &'a[(FunName, FunDef)]";
+
+// &[(FunName, FunDef)]::iter
+slice_fun_iter_sym <- heapster_find_symbol_with_type env
+  "core5slice29_$LT$impl$u20$$u5b$T$u5d$$GT$4iter"
+  "{ i64*, i64* }([0 x { %FunName, %FunDef }]*, i64)";
+heapster_assume_fun_rename_prim env slice_fun_iter_sym "slice_fun_iter"
+  "<'a> fn (&'a[(FunName, FunDef)]) -> Iter<'a, (FunName, FunDef)>";
+
+// NOTE: Unfortunately there are two symbols with the same type for rev,
+// so we need to just use the full hash for searching
+// Iter<'a, (FunName, FunDef)>::rev
+iter_fun_rev_sym <- heapster_find_symbol env
+  "core4iter6traits8iterator8Iterator3rev17h221acc9c965305cbE";
+heapster_assume_fun_rename_prim env iter_fun_rev_sym "iter_fun_rev"
+  "<'a> fn (Iter<'a, (Var, Value)>) -> Rev<Iter<'a, (Var, Value)>>";
 
 // Value::drop_in_place
 Value__drop_in_place_sym <- heapster_find_symbol_with_type env
@@ -187,6 +228,27 @@ fun_eq_sym <- heapster_find_symbol_with_type env
 heapster_assume_fun_rename_prim env fun_eq_sym "fun_eq"
   "<'a, 'b, 'c> fn (&'b&'a FunName, &'c&'a FunName) -> bool";
 
+// Result<u64, Error>::branch
+u64_branch_sym <- heapster_find_symbol_with_type env
+  "core..ops..try_trait..Try$GT$6branch"
+  "void(%\"core::ops::control_flow::ControlFlow<core::result::Result<core::convert::Infallible, Error>, u64>\"*, %\"core::result::Result<u64, Error>\"*)";
+heapster_assume_fun_rename_prim env u64_branch_sym "u64_branch"
+  "<> fn (Result<u64, Error>) -> ControlFlow<Result<Infallible, Error>, u64>";
+
+// Result<Value, Error>::branch
+value_branch_sym <- heapster_find_symbol_with_type env
+  "core..ops..try_trait..Try$GT$6branch"
+  "void(%\"core::ops::control_flow::ControlFlow<core::result::Result<core::convert::Infallible, Error>, Value>\"*, %\"core::result::Result<Value, Error>\"*)";
+heapster_assume_fun_rename_prim env value_branch_sym "value_branch"
+  "<> fn (Result<Value, Error>) -> ControlFlow<Result<Infallible, Error>, Value>";
+
+// Result<&FunDef, Error>::branch
+fun_branch_sym <- heapster_find_symbol_with_type env
+  "core..ops..try_trait..Try$GT$6branch"
+  "void(%\"core::ops::control_flow::ControlFlow<core::result::Result<core::convert::Infallible, Error>, &FunDef>\"*, %\"core::result::Result<&FunDef, Error>\"*)";
+heapster_assume_fun_rename_prim env fun_branch_sym "fun_branch"
+  "<'a> fn (Result<&'a FunDef, Error>) -> ControlFlow<Result<Infallible, Error>, &'a FunDef>";
+
 /***
  *** Type-checked Functions
  ***/
@@ -197,7 +259,7 @@ heapster_typecheck_fun_rename env fresh_env_from_env_sym "fresh_env_from_env"
 
 // TODO: Investigate the error this one produces when actually checked
 value_bool_sym <- heapster_find_symbol env "10value_bool";
-heapster_assume_fun_rename_prim env value_bool_sym "value_bool"
+heapster_typecheck_fun_rename env value_bool_sym "value_bool"
   "<> fn (Value) -> Result<bool, Error>";
 
 value_u64_sym <- heapster_find_symbol env "9value_u64";
@@ -206,7 +268,7 @@ heapster_typecheck_fun_rename env value_u64_sym "value_u64"
 
 // TODO: Investigate the error this one produces when actually checked
 lit_value_sym <- heapster_find_symbol env "9lit_value";
-heapster_assume_fun_rename_prim env lit_value_sym "lit_value"
+heapster_typecheck_fun_rename env lit_value_sym "lit_value"
   "<'a> fn(&'a Lit) -> Value";
 
 // TODO: See above note on the `eq` implementation
@@ -223,18 +285,16 @@ ref_ref_eq_fun_sym <- heapster_find_symbol_with_type env
 heapster_typecheck_fun_rename env ref_ref_eq_fun_sym "ref_ref_eq_fun"
   "<'a, 'b, 'c> fn (&'a FunName, &'b&'c FunName) -> bool";
 
-// TODO: Remove assumption once the fix is merged
 env_lookup_sym <- heapster_find_symbol env "10env_lookup17";
-heapster_assume_fun_rename_prim env env_lookup_sym "env_lookup"
+heapster_typecheck_fun_rename env env_lookup_sym "env_lookup"
   "<'a,'b> fn (env : &'a Env, x : &'b Var) -> Result<Value,Error>";
 
 env_update_sym <- heapster_find_symbol env "10env_update";
 heapster_typecheck_fun_rename env env_update_sym "env_update"
   "<'a,'b> fn (&'a mut Env, &'b Var, Value)";
 
-// TODO: Remove assumption once the fix is merged
 fun_lookup_sym <- heapster_find_symbol env "10fun_lookup17";
-heapster_assume_fun_rename_prim env fun_lookup_sym "fun_lookup"
+heapster_typecheck_fun_rename env fun_lookup_sym "fun_lookup"
   "<'a, 'b> fn (&'a Env, &'b FunName) -> Result<&'a FunDef, Error>";
 
 // TODO: Add stuff related to the `?` operator
