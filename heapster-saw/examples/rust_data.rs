@@ -190,6 +190,13 @@ impl Sum<u64,u64> {
     }
 }
 
+pub fn is_left_u64_u64 (x:Sum<u64,u64>) -> bool {
+    match x {
+        Sum::Left (_) => true,
+        Sum::Right (_) => true,
+    }
+}
+
 pub fn mk_string_sum_left (x:&str) -> Sum<String,u64> {
     Sum::Left (x.to_string())
 }

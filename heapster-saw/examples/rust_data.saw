@@ -501,6 +501,13 @@ test_sum_impl_sym <- heapster_find_symbol env "13test_sum_impl";
 heapster_typecheck_fun_rename env test_sum_impl_sym "test_sum_impl"
   "().arg0:memblock(R,0,16,Sum<fieldsh(int64<>),fieldsh(int64<>)>) -o ret:int1<>";
 
+// FIXME: needs disjunctive permissions across multiple arguments
+// is_left_u64_u64
+is_left_u64_u64_sym <- heapster_find_symbol env "15is_left_u64_u64";
+//heapster_typecheck_fun_rename env is_left_u64_u64_sym "is_left_u64_u64"
+//  "<> fn (x:Sum<u64,u64>) -> bool";
+
+
 // NOTE: Fails because of `clone` in the implementation
 // MixedStruct::get_s
 // mixed_struct_get_s <- heapster_find_symbol env "11MixedStruct5get_s";
