@@ -37,6 +37,7 @@ $white+                         ;
 "<=u"                           { token_ TUnsignedLe    }
 "or"                            { token_ TOr            }
 "true"                          { token_ TTrue          }
+"false"                         { token_ TFalse         }
 "empty"                         { token_ TEmpty         }
 "exists"                        { token_ TExists        }
 "eq"                            { token_ TEq            }
@@ -61,6 +62,7 @@ $white+                         ;
 "struct"                        { token_ TStruct        }
 "shape"                         { token_ TShape         }
 "emptysh"                       { token_ TEmptySh       }
+"falsesh"                       { token_ TFalseSh       }
 "eqsh"                          { token_ TEqSh          }
 "ptrsh"                         { token_ TPtrSh         }
 "fieldsh"                       { token_ TFieldSh       }
