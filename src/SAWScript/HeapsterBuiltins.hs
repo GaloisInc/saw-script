@@ -63,6 +63,7 @@ import Data.List
 import Data.List.Extra (splitOn)
 import Data.IORef
 import Data.Functor.Product
+import Data.Functor.Constant (getConstant)
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
@@ -115,6 +116,7 @@ import SAWScript.Crucible.LLVM.Builtins
 import SAWScript.Crucible.LLVM.MethodSpecIR
 
 import Verifier.SAW.Heapster.CruUtil
+import Verifier.SAW.Heapster.HintExtract
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.SAWTranslation
 import Verifier.SAW.Heapster.IRTTranslation
@@ -125,6 +127,8 @@ import Verifier.SAW.Heapster.LLVMGlobalConst
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
 import Prettyprinter
+
+import Debug.Trace (trace, traceShowM)
 
 
 -- | Extract out the contents of the 'Right' of an 'Either', calling 'fail' if
@@ -1143,6 +1147,12 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
        do AnyCFG cfg <-
             failOnNothing ("Could not find symbol definition: " ++ nm) $
             lookupFunctionCFG lm nm
+          env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+-- heapster_add_block_hints :: HeapsterEnv -> String -> [Int] ->
+--                             (forall ext blocks init ret args.
+--                              CFG ext blocks init ret -> BlockID blocks args ->
+--                              TopLevel (BlockHintSort args)) ->
+--                             TopLevel ()
           let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
           let ret = handleReturnType $ cfgHandle cfg
           SomeFunPerm fun_perm <-
@@ -1150,8 +1160,14 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
             --              permPretty emptyPPInfo args) $
             withKnownNat w $
             parseFunPermStringMaybeRust "permissions" w env args ret perms_string
+          let mods = [ modAST m | Some m <- heapsterEnvLLVMModules henv ]
+          let hints = extractHints env mods fun_perm cfg
+          let env' = foldlFC (\env'' mhint -> maybe env'' (permEnvAddHint env'') (getConstant mhint)) env hints
+          liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
           return (SomeCFGAndPerm (GlobalSymbol $
                                   fromString nm) nm_to cfg fun_perm)
+     env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     traceShowM ("#Hints: " ++ show (length (permEnvHints env)))
      sc <- getSharedContext
      let saw_modname = heapsterEnvSAWModule henv
      env' <- liftIO $
