@@ -26,7 +26,7 @@ heapster_define_llvmshape env "Box" 64 "T:llvmshape 64" "ptrsh(T)";
 
 // Infallible type
 // Note that this type is actually uninhabited
-heapster_define_opaque_llvmshape env "Infallible" 64 "" "64" "#()";
+heapster_define_llvmshape env "Infallible" 64 "" "falsesh";
 
 // ControlFlow type
 heapster_define_rust_type env
@@ -37,6 +37,11 @@ heapster_define_rust_type env "pub enum Option<X> { None, Some (X) }";
 
 // Result type
 heapster_define_rust_type env "pub enum Result<X,Y> { Ok (X), Err (Y) }";
+
+// Special case for types of the form Result<bool,T>
+heapster_define_llvmshape env "Resultbool" 64 "T:llvmshape 64"
+  "(fieldsh(8,eq(llvmword(0)));fieldsh(8,int8<>);fieldsh(48,true);emptysh) orsh \
+ \ (fieldsh(8,eq(llvmword(1)));fieldsh(56,true);T)";
 
 // The String type
 heapster_define_llvmshape env "String" 64 ""
@@ -260,7 +265,7 @@ heapster_typecheck_fun_rename env fresh_env_from_env_sym "fresh_env_from_env"
 // TODO: Investigate the error this one produces when actually checked
 value_bool_sym <- heapster_find_symbol env "10value_bool";
 heapster_typecheck_fun_rename env value_bool_sym "value_bool"
-  "<> fn (Value) -> Result<bool, Error>";
+  "<> fn (Value) -> Resultbool<Error>";
 
 value_u64_sym <- heapster_find_symbol env "9value_u64";
 heapster_typecheck_fun_rename env value_u64_sym "value_u64"
