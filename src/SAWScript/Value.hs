@@ -392,6 +392,11 @@ toplevelCallCC = VLambda body
            m (VLambda (\v -> return (VTopLevel (k ((VTopLevel (return v)))))))
    body _ = error "toplevelCallCC : expected lambda"
 
+toplevelSubshell :: Value
+toplevelSubshell = VLambda $ \_ ->
+  do m <- roSubshell <$> ask
+     return (VTopLevel (toValue <$> m))
+
 applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x
 applyValue _ _ = throwTopLevel "applyValue"
@@ -439,6 +444,10 @@ data TopLevelRO =
     --   when displaying exceptions and such
     --   NB, stored with most recent calls on
     --   top of the stack.
+  , roSubshell      :: TopLevel ()
+    -- ^ An action for entering a subshell.  This
+    --   may raise an error if the current execution
+    --   mode doesn't support subshells (e.g., the remote API)
   }
 
 data TopLevelRW =
