@@ -207,7 +207,7 @@ heapster_assume_fun_rename_prim env slice_fun_iter_sym "slice_fun_iter"
 iter_fun_rev_sym <- heapster_find_symbol env
   "core4iter6traits8iterator8Iterator3rev17h221acc9c965305cbE";
 heapster_assume_fun_rename_prim env iter_fun_rev_sym "iter_fun_rev"
-  "<'a> fn (Iter<'a, (Var, Value)>) -> Rev<Iter<'a, (Var, Value)>>";
+  "<'a> fn (Iter<'a, (FunName, FunDef)>) -> Rev<Iter<'a, (FunName, FunDef)>>";
 
 // Value::drop_in_place
 Value__drop_in_place_sym <- heapster_find_symbol_with_type env
