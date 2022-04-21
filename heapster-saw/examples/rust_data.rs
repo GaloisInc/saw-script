@@ -163,6 +163,11 @@ pub fn test_result <'a> (r:&'a Result<u64,u64>) -> bool {
     }
 }
 
+/* Make a Result whose other branch is uninhabited */
+pub fn mk_result_infallible (x:u64) -> Result<Infallible,u64> {
+  Err(x)
+}
+
 /* Extract a value from a Result whose other branch is uninhabited */
 pub fn extract_from_result_infallible <'a> (r:&'a Result<Infallible,u64>) -> u64 {
     match r {
