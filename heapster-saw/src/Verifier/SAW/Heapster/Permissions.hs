@@ -2093,6 +2093,12 @@ mbMbRangeForType ctx mb_rngft = case mbMatch mb_rngft of
   [nuMP| MbRangeForStructType prxs memb rng |] ->
     MbRangeForStructType (mbLift prxs) (mbLift memb) $ mbMbRangeForType ctx rng
 
+-- | Add a 'PermOffset' to an 'MbRangeForType
+offsetMbRangeForType :: PermOffset a -> MbRangeForType a -> MbRangeForType a
+offsetMbRangeForType NoPermOffset rng = rng
+offsetMbRangeForType (LLVMPermOffset off) (MbRangeForLLVMType vars mb_rng) =
+  MbRangeForLLVMType vars $ fmap (offsetBVRange off) mb_rng
+
 -- | Like 'bvRangeDelete' but for 'MbRangeForType's
 mbRangeFTDelete :: MbRangeForType a -> MbRangeForType a ->
                    [MbRangeForType a]

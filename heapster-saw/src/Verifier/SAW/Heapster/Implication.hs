@@ -6074,13 +6074,13 @@ someDistPermsToNeededPerms prxs =
   fmapF $ RL.map (\(VarAndPerm x p) ->
                    NeededPerm MNil x (nuMulti prxs (const p)))
 
--- | FIXME HERE NOW: docs
+-- | A permission in some context of existential variables extending @vars@
 data SomeMbPerm vars a where
   SomeMbPerm :: KnownCruCtx vars' ->
                 Mb (vars :++: vars') (ValuePerm a) ->
                 SomeMbPerm vars a
 
--- | FIXME HERE NOW: docs
+-- | Convert an 'MbRangeForType' to a corresponding permission-in-binding
 someMbPermForRange :: RAssign Proxy vars -> MbRangeForType a ->
                       SomeMbPerm vars a
 someMbPermForRange vars (MbRangeForLLVMType vars' mb_rng) =
@@ -6156,8 +6156,32 @@ tryUnifyVars x mb_x = case mbMatch mb_x of
            _ -> pure ()
   _ -> pure ()
 
-getExprRanges :: PermExpr a -> ImplM vars s r ps ps [MbRangeForType a]
-getExprRanges = error "FIXME HERE NOW"
+-- | Get the ranges of offsets covered by the current permissions on an
+-- expression, eliminating permissions if necessary
+getExprRanges :: NuMatchingAny1 r => TypeRepr a -> PermExpr a ->
+                 ImplM vars s r ps ps [MbRangeForType a]
+getExprRanges tp@(LLVMPointerRepr w) (asVar -> Just x) =
+  getSimpleVarPerm x >>>= \case
+  ValPerm_Conj ps ->
+    withKnownNat w $ pure $
+    mapMaybe (fmap (MbRangeForLLVMType MNil . emptyMb . llvmBlockRange) .
+              llvmAtomicPermToBlock) ps
+  ValPerm_Eq e -> getExprRanges tp e
+  _ -> return []
+getExprRanges tp@(LLVMPointerRepr _) (asVarOffset -> Just (x,off)) =
+  map (offsetMbRangeForType $ negatePermOffset off) <$>
+  getExprRanges tp (PExpr_Var x)
+getExprRanges (StructRepr tps) (PExpr_Struct es) =
+  let prxs = RL.map (const Proxy) es in
+  concat <$> RL.toList <$>
+  traverseRAssign (\memb ->
+                    Constant <$> map (MbRangeForStructType prxs memb) <$>
+                    getExprRanges (RL.get memb $ cruCtxToTypes $ mkCruCtx tps)
+                    (RL.get memb es))
+  (RL.members es)
+getExprRanges _ _ =
+  -- NOTE: this assumes that struct variables have already been eliminated
+  pure []
 
 -- FIXME HERE NOW: explain the justification of the following approach, that we
 -- expect any offsets mentioned at all on the right will be useful in the proof
@@ -6182,7 +6206,7 @@ solveForPermListImplH vars tps_l ps_l (CruCtxCons tps_r' tp_r) (ps_r' :>:
   , lhs_rngs <- concatMap getOffsets lhs_ps
   , rhs_rngs <- getOffsets p
   , needed_rngs <- mbRangeFTsDelete rhs_rngs lhs_rngs =
-    getExprRanges e >>>= \expr_rngs ->
+    getExprRanges tp_r e >>>= \expr_rngs ->
     apSomeRAssign
     (neededPermsForRanges vars e $
      mbRangeFTsSubsetTo expr_rngs needed_rngs) <$>
@@ -6197,6 +6221,7 @@ solveForPermListImpl :: NuMatchingAny1 r => CruCtx ps_l -> ExprPerms ps_l ->
                         ImplM vars s r ps ps (NeededPerms vars)
 solveForPermListImpl tps_l ps_l tps_r mb_ps_r =
   let prxs = mbToProxy mb_ps_r in
+  -- FIXME HERE NOW: eliminate struct variables
   substEqsWithProof ps_l >>>= \eqp_l ->
   (psubstProxies <$> getPSubst) >>>= \vars ->
   partialSubstForceM mb_ps_r "solveForPermListImpl" >>>= \ps_r ->
