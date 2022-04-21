@@ -380,6 +380,19 @@ matchMbOptionLikeShape :: Mb ctx (PermExpr (LLVMShapeType w)) ->
 matchMbOptionLikeShape =
   mbMaybe . mbMapCl $(mkClosed [| matchOptionLikeShape |])
 
+-- | Test if a shape is a sum type where one branch is empty, i.e., a tagged
+-- union shape with two tags, one of which has the false shape as contents. If
+-- so, return the non-false shape @sh@.
+matchSumFalseShape :: PermExpr (LLVMShapeType w) ->
+                      Maybe (PermExpr (LLVMShapeType w))
+matchSumFalseShape top_sh = case asTaggedUnionShape $ simplifyShape top_sh of
+  Just (SomeTaggedUnionShape (taggedUnionDisjsNoTags -> [sh1, sh2]))
+    | PExpr_FalseShape <- simplifyShape sh1 -> Just sh2
+  Just (SomeTaggedUnionShape (taggedUnionDisjsNoTags -> [sh1, sh2]))
+    | PExpr_FalseShape <- simplifyShape sh2 -> Just sh1
+  _ -> Nothing
+
+
 -- | Build a `ShapeFun` from a `SomeNamedShape`
 namedShapeShapeFun :: (1 <= w, KnownNat w) => RustName -> NatRepr w ->
                       SomeNamedShape -> RustConvM (ShapeFun w)
@@ -410,8 +423,17 @@ namedShapeShapeFun nm w (SomeNamedShape nmsh)
 
 namedShapeShapeFun nm w (SomeNamedShape nmsh)
   | Just Refl <- testEquality w (natRepr nmsh) =
-    return $ mkShapeFun nm (namedShapeArgs nmsh) $
-    \exprs -> PExpr_NamedShape Nothing Nothing nmsh exprs
+    return $ mkShapeFun nm (namedShapeArgs nmsh) $ \exprs ->
+    case namedShapeBody nmsh of
+      -- Test if nmsh applied to exprs unfolds to a sum with false, and if so,
+      -- return just the non-false payload shape
+      DefinedShapeBody mb_sh
+        | unfolded_sh <- simplifyShape (subst (substOfExprs exprs) mb_sh)
+        , Just sh <- matchSumFalseShape unfolded_sh ->
+          sh
+      -- Otherwise just return the named shape applied to exprs
+      _ -> PExpr_NamedShape Nothing Nothing nmsh exprs
+
 namedShapeShapeFun _ w (SomeNamedShape nmsh) =
   fail $ renderDoc $ fillSep
   [pretty "Incorrect size of shape" <+> pretty (namedShapeName nmsh),
