@@ -6096,6 +6096,12 @@ genSubstMb p s mbmb =
 instance SubstVar s m => Substable s (Member ctx a) m where
   genSubst _ mb_memb = return $ mbLift mb_memb
 
+instance SubstVar s m => Substable s (TypeRepr a) m where
+  genSubst _ mb_tp = return $ mbLift mb_tp
+
+instance SubstVar s m => Substable s (CruCtx ctx) m where
+  genSubst _ mb_ctx = return $ mbLift mb_ctx
+
 instance (NuMatchingAny1 f, Substable1 s f m) =>
          Substable s (RAssign f ctx) m where
   genSubst s mb_xs = case mbMatch mb_xs of

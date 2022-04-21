@@ -2357,13 +2357,15 @@ simplImplOut (SImpl_LLVMBlockIsPtr x bp) =
   x (ValPerm_Conj [Perm_LLVMBlock bp])
 simplImplOut (SImpl_SplitLifetime x f args l l2 sub_ls tps_in tps_out ps_in ps_out) =
   distPerms2 x (ltFuncApply f args $ PExpr_Var l2)
-  l2 (ValPerm_LOwned sub_ls tps_in tps_out
+  l2 (ValPerm_LOwned sub_ls
+      (appendCruCtx (singletonCruCtx $ exprType x) tps_in)
+      (appendCruCtx (singletonCruCtx $ exprType x) tps_out)
       (RL.append (MNil :>:
                   ExprAndPerm (PExpr_Var x)
-                  (ltFuncMinApply f (PExpr_Var l2)) ps_in))
+                  (ltFuncMinApply f (PExpr_Var l2))) ps_in)
       (RL.append (MNil :>:
                   ExprAndPerm (PExpr_Var x)
-                  (ltFuncApply f args l) ps_out)))
+                  (ltFuncApply f args l)) ps_out))
 simplImplOut (SImpl_SubsumeLifetime l ls tps_in tps_out ps_in ps_out l2) =
   distPerms1 l (ValPerm_LOwned (l2:ls) tps_in tps_out ps_in ps_out)
 simplImplOut (SImpl_ContainedLifetimeCurrent l ls tps_in tps_out ps_in ps_out l2) =
@@ -2390,12 +2392,15 @@ simplImplOut (SImpl_EndLifetime l _ _ _ ps_out) =
       DistPermsCons perms_out l ValPerm_LFinished
     _ -> error "simplImplOut: SImpl_EndLifetime: non-variable in output permissions"
 simplImplOut (SImpl_IntroLOwnedSimple l tps lops) =
-  case exprPermsToDistPerms (modalize Nothing (Just (PExpr_Var l)) lops) of
+  case modalize Nothing (Just (PExpr_Var l)) lops >>= exprPermsToDistPerms of
     Just dps -> DistPermsCons dps l $ ValPerm_LOwnedSimple tps lops
     Nothing ->
       error "simplImplOut: SImpl_IntroLOwnedSimple: non-variables in permission list"
 simplImplOut (SImpl_ElimLOwnedSimple l tps lops) =
-  distPerms1 l (ValPerm_LOwned [] tps tps (modalize Nothing l lops) lops)
+  case modalize Nothing (Just $ PExpr_Var l) lops of
+    Just lops' -> distPerms1 l (ValPerm_LOwned [] tps tps lops' lops)
+    Nothing ->
+      error "simplImplOut: SImpl_ElimLOwnedSimple: could not modalize permission list"
 simplImplOut (SImpl_LCurrentRefl l) =
   distPerms1 l (ValPerm_LCurrent $ PExpr_Var l)
 simplImplOut (SImpl_LCurrentTrans l1 _ l3) =
@@ -6103,37 +6108,29 @@ getExprRanges = error "FIXME HERE NOW"
 
 -- | The second stage of 'solveForPermListImpl', after equality permissions have
 -- been substituted into the 'ExprPerms'
-solveForPermListImplH :: NuMatchingAny1 r => PartialSubst vars ->
+solveForPermListImplH :: NuMatchingAny1 r => RAssign Proxy vars ->
                          CruCtx ps_l -> ExprPerms ps_l ->
-                         CruCtx ps_r -> Mb vars (ExprPerms ps_r) ->
+                         CruCtx ps_r -> ExprPerms ps_r ->
                          ImplM vars s r ps ps (NeededPerms vars)
-solveForPermListImplH psubst tps_l ps_l tps_r mb_ps = case mbMatch mb_ps of
-  -- If the RHS is empty, we are done
-  [nuMP| MNil |] ->
-    pure (Some MNil)
+-- If the RHS is empty, we are done
+solveForPermListImplH _ _ _ _ MNil =
+  pure (Some MNil)
 
-  -- If the head of the RHS is on an expression that has been defined, get all
-  -- the offsets its permission mentions, subtract any ranges on the LHS for
-  -- that expression, and then return block permisisons for any of the remaining
-  -- ranges that are currently held for the expression
-  [nuMP| mb_ps_r' :>: ExprAndPerm mb_e mb_p |]
-    | Just e <- partialSubst psubst mb_e
-    , vars <- psubstProxies psubst
-    , CruCtxCons tps_r' tp_r <- tps_r
-    , lhs_ps <- exprPermsForExpr tps_l ps_l tp_r e
-    , lhs_rngs <- concatMap getOffsets lhs_ps
-    , rhs_rngs <- map (mbMbRangeForType vars) $ mbList $ fmap getOffsets mb_p
-    , needed_rngs <- mbRangeFTsDelete rhs_rngs lhs_rngs ->
-      getExprRanges e >>>= \expr_rngs ->
-      apSomeRAssign
-      (neededPermsForRanges vars e $
-       intersectMbRangeFTs needed_rngs expr_rngs) <$>
-      solveForPermListImplH psubst tps_l ps_l tps_r' mb_ps_r'
-
-  -- Otherwise, drop the head and recurse on the tail
-  [nuMP| mb_ps_r' :>: _ |]
-    | CruCtxCons tps_r' tp_r <- tps_r ->
-      solveForPermListImplH psubst tps_l ps_l tps_r' mb_ps_r'
+-- Otherwise, get all the offsets its permission mentions, subtract any ranges
+-- on the LHS for that expression, and then return block permisisons for any of
+-- the remaining ranges that are currently held for the expression
+solveForPermListImplH vars tps_l ps_l (CruCtxCons tps_r' tp_r) (ps_r' :>:
+                                                                ExprAndPerm e p)
+  | lhs_ps <- exprPermsForExpr tps_l ps_l tp_r e
+  , lhs_rngs <- concatMap getOffsets lhs_ps
+  , rhs_rngs <- getOffsets p
+  , needed_rngs <- mbRangeFTsDelete rhs_rngs lhs_rngs =
+    
+    getExprRanges e >>>= \expr_rngs ->
+    apSomeRAssign
+    (neededPermsForRanges vars e $
+     intersectMbRangeFTs needed_rngs expr_rngs) <$>
+    solveForPermListImplH vars tps_l ps_l tps_r' ps_r'
 
 -- | Determine what additional permissions from the variable permissions, if
 -- any, would be needed to prove one list of permissions implies another. Also
@@ -6145,13 +6142,14 @@ solveForPermListImpl :: NuMatchingAny1 r => CruCtx ps_l -> ExprPerms ps_l ->
 solveForPermListImpl tps_l ps_l tps_r mb_ps_r =
   let prxs = mbToProxy mb_ps_r in
   substEqsWithProof ps_l >>>= \eqp_l ->
-  getPSubst >>>= \psubst ->
-  give prxs (substEqsWithProof mb_ps_r) >>>= \eqp_r ->
+  (psubstProxies <$> getPSubst) >>>= \vars ->
+  partialSubstForceM mb_ps_r "solveForPermListImpl" >>>= \ps_r ->
+  give prxs (substEqsWithProof ps_r) >>>= \eqp_r ->
   let neededs =
         someDistPermsToNeededPerms prxs $
         apSomeRAssign (someEqProofPerms eqp_l) (someEqProofPerms eqp_r) in
   apSomeRAssign neededs <$>
-  solveForPermListImplH psubst tps_l (someEqProofRHS eqp_l)
+  solveForPermListImplH vars tps_l (someEqProofRHS eqp_l)
                         tps_r (someEqProofRHS eqp_r)
 
 
