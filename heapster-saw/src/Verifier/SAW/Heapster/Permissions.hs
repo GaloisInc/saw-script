@@ -2003,6 +2003,11 @@ bvRangeSuffix :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> BVRange w ->
 bvRangeSuffix off' (BVRange off len) =
   BVRange off' (bvSub len (bvSub off' off))
 
+-- | Build the range of offsets not in a 'BVRange'
+bvRangeInvert :: (1 <= w, KnownNat w) => BVRange w -> BVRange w
+bvRangeInvert (BVRange off len) =
+  BVRange (bvAdd off len) (bvSub (bvInt 0) len)
+
 -- | Subtract a bitvector word from the offset of a 'BVRange'
 bvRangeSub :: (1 <= w, KnownNat w) => BVRange w -> PermExpr (BVType w) ->
               BVRange w
@@ -2056,10 +2061,30 @@ bvRangesDelete :: (1 <= w, KnownNat w) => BVRange w -> [BVRange w] ->
 bvRangesDelete rng_top =
   foldr (\rng_del rngs -> concatMap (flip bvRangeDelete rng_del) rngs) [rng_top]
 
+-- | Find all offsets in the first range that could (in the sense of
+-- 'bvPropCouldHold') be in the second. This is an asymmetric form of
+-- intersection, and is equivalent to 'bvRangeDelete' of the complement of the
+-- second range
+bvRangeSubsetTo :: (1 <= w, KnownNat w) => BVRange w -> BVRange w ->
+                   [BVRange w]
+bvRangeSubsetTo rng1 rng2 = bvRangeDelete rng1 $ bvRangeInvert rng2
+
+-- | Find all offsets in any of the first list of ranges that could (in the
+-- sense of 'bvPropCouldHold') be in one of those in the second list
+bvRangesSubsetTo :: (1 <= w, KnownNat w) => [BVRange w] -> [BVRange w] ->
+                    [BVRange w]
+bvRangesSubsetTo rngs1 rngs2 =
+  flip concatMap rngs1 $ \rng1 -> flip concatMap rngs2 $ \rng2 ->
+  bvRangeSubsetTo rng1 rng2
 
 -- | Convert an 'MbRangeForType' in a binding to an 'MbRangeForType'
 mbMbRangeForType :: KnownCruCtx ctx -> Mb ctx (MbRangeForType a) ->
                     MbRangeForType a
+-- If the range can be lifted out of the binding, do so
+mbMbRangeForType ctx mb_rngft
+  | Just rngft <- partialSubst (emptyPSubst $ knownCtxToCruCtx ctx) mb_rngft
+  = rngft
+-- Otherwise, add the new variables to the existing bound variables
 mbMbRangeForType ctx mb_rngft = case mbMatch mb_rngft of
   [nuMP| MbRangeForLLVMType vars rng |] ->
     MbRangeForLLVMType (RL.append ctx $ mbLift vars)
@@ -2070,7 +2095,18 @@ mbMbRangeForType ctx mb_rngft = case mbMatch mb_rngft of
 -- | Like 'bvRangeDelete' but for 'MbRangeForType's
 mbRangeFTDelete :: MbRangeForType a -> MbRangeForType a ->
                    [MbRangeForType a]
-mbRangeFTDelete = error "FIXME HERE NOW"
+mbRangeFTDelete (MbRangeForLLVMType vars1 mb_rng1) (MbRangeForLLVMType
+                                                    vars2 mb_rng2) =
+  map (MbRangeForLLVMType (RL.append vars1 vars2)) $ mbList $
+  mbCombine (RL.map (const Proxy) vars2) $
+  flip fmap mb_rng1 $ \rng1 -> flip fmap mb_rng2 $ \rng2 ->
+  bvRangeDelete rng1 rng2
+mbRangeFTDelete (MbRangeForStructType memb1 rng1) (MbRangeForStructType
+                                                   memb2 rng2)
+  | Just Refl <- testEquality memb1 memb2 =
+    map (MbRangeForStructType memb1) $ mbRangeFTDelete rng1 rng2
+mbRangeFTDelete rng1@(MbRangeForStructType _ _) (MbRangeForStructType _ _) =
+  [rng1]
 
 -- | Delete all ranges in any of a list of ranges from 
 mbRangeFTsDelete :: [MbRangeForType a] -> [MbRangeForType a] ->
@@ -2078,11 +2114,29 @@ mbRangeFTsDelete :: [MbRangeForType a] -> [MbRangeForType a] ->
 mbRangeFTsDelete rngs_l rngs_r =
   foldr (\rng_r rngs -> concatMap (flip mbRangeFTDelete rng_r) rngs) rngs_l rngs_r
 
--- | Take the intersection of all the offsets represented in one list of
--- 'MbRangeForType's with those of another
-intersectMbRangeFTs :: [MbRangeForType a] -> [MbRangeForType a] ->
-                       [MbRangeForType a]
-intersectMbRangeFTs = error "FIXME HERE NOW"
+-- | Find all the offsets in the first 'MbRangeForType' that could be in the
+-- second, in a manner similar to 'bvRangeSubsetTo'
+mbRangeFTSubsetTo :: MbRangeForType a -> MbRangeForType a ->
+                     [MbRangeForType a]
+mbRangeFTSubsetTo (MbRangeForLLVMType vars1 mb_rng1) (MbRangeForLLVMType
+                                                      vars2 mb_rng2) =
+  map (MbRangeForLLVMType (RL.append vars1 vars2)) $ mbList $
+  mbCombine (RL.map (const Proxy) vars2) $
+  flip fmap mb_rng1 $ \rng1 -> flip fmap mb_rng2 $ \rng2 ->
+  bvRangeSubsetTo rng1 rng2
+mbRangeFTSubsetTo (MbRangeForStructType memb1 rng1) (MbRangeForStructType
+                                                     memb2 rng2)
+  | Just Refl <- testEquality memb1 memb2 =
+    map (MbRangeForStructType memb1) $ mbRangeFTSubsetTo rng1 rng2
+mbRangeFTSubsetTo (MbRangeForStructType _ _) (MbRangeForStructType _ _) = []
+
+-- | Find all the offsets in an 'MbRangeForType' in the first list that could be
+-- in one in the second, in a manner similar to 'bvRangesSubsetTo'
+mbRangeFTsSubsetTo :: [MbRangeForType a] -> [MbRangeForType a] ->
+                      [MbRangeForType a]
+mbRangeFTsSubsetTo rngs1 rngs2 =
+  flip concatMap rngs1 $ \rng1 -> flip concatMap rngs2 $ \rng2 ->
+  mbRangeFTSubsetTo rng1 rng2
 
 -- | Build a bitvector expression from an integer
 bvInt :: (1 <= w, KnownNat w) => Integer -> PermExpr (BVType w)

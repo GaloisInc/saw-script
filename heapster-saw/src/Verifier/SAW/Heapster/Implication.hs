@@ -6116,20 +6116,19 @@ solveForPermListImplH :: NuMatchingAny1 r => RAssign Proxy vars ->
 solveForPermListImplH _ _ _ _ MNil =
   pure (Some MNil)
 
--- Otherwise, get all the offsets its permission mentions, subtract any ranges
--- on the LHS for that expression, and then return block permisisons for any of
--- the remaining ranges that are currently held for the expression
+-- Otherwise, get all the offsets mentioned in RHS permissions for expression e,
+-- subtract any ranges on the LHS for e, and then return block permisisons for
+-- any of the remaining ranges that are currently held for e
 solveForPermListImplH vars tps_l ps_l (CruCtxCons tps_r' tp_r) (ps_r' :>:
                                                                 ExprAndPerm e p)
   | lhs_ps <- exprPermsForExpr tps_l ps_l tp_r e
   , lhs_rngs <- concatMap getOffsets lhs_ps
   , rhs_rngs <- getOffsets p
   , needed_rngs <- mbRangeFTsDelete rhs_rngs lhs_rngs =
-    
     getExprRanges e >>>= \expr_rngs ->
     apSomeRAssign
     (neededPermsForRanges vars e $
-     intersectMbRangeFTs needed_rngs expr_rngs) <$>
+     mbRangeFTsSubsetTo expr_rngs needed_rngs) <$>
     solveForPermListImplH vars tps_l ps_l tps_r' ps_r'
 
 -- | Determine what additional permissions from the variable permissions, if
