@@ -457,6 +457,7 @@ buildTopLevelEnv proxy opts =
                    , roBasicSS = ss
                    , roTheoremDB = thmDB
                    , roStackTrace = []
+                   , roSubshell = fail "Subshells not supported"
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -499,15 +500,21 @@ buildTopLevelEnv proxy opts =
                    }
        return (bic, ro0, rw0)
 
-processFile :: AIGProxy
-            -> Options
-            -> FilePath -> IO ()
-processFile proxy opts file = do
+processFile ::
+  AIGProxy ->
+  Options ->
+  FilePath ->
+  Maybe (TopLevel ()) ->
+  IO ()
+processFile proxy opts file mbSubshell = do
   (_, ro, rw) <- buildTopLevelEnv proxy opts
+  let ro' = case mbSubshell of
+              Nothing -> ro
+              Just m  -> ro{ roSubshell = m }
   oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
   setCurrentDirectory (takeDirectory file')
-  _ <- runTopLevel (interpretFile file' True) ro rw
+  _ <- runTopLevel (interpretFile file' True) ro' rw
             `X.catch` (handleException opts)
   setCurrentDirectory oldpath
   return ()
@@ -845,6 +852,11 @@ primitives = Map.fromList
     , "where it can speed up the process of experimenting with"
     , "mid-proof changes. Finalized proofs should not use this facility."
     ]
+
+  , prim "subshell"            "() -> TopLevel ()"
+    (\_ _ -> toplevelSubshell)
+    Experimental
+    []
 
   , prim "define"              "String -> Term -> TopLevel Term"
     (pureVal definePrim)

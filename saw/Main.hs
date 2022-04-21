@@ -21,6 +21,8 @@ import SAWScript.Options
 import SAWScript.Utils
 import SAWScript.Interpreter (processFile)
 import qualified SAWScript.REPL as REPL
+import qualified SAWScript.REPL.Haskeline as REPL
+import qualified SAWScript.REPL.Monad as REPL
 import SAWScript.Version (shortVersionText)
 import SAWScript.Value (AIGProxy(..))
 import qualified Data.AIG.CompactGraph as AIG
@@ -41,12 +43,13 @@ main = do
         [] -> checkZ3 opts'' *> REPL.run opts''
         _ | runInteractively opts'' -> checkZ3 opts'' *> REPL.run opts''
         [file] -> checkZ3 opts'' *>
-          processFile (AIGProxy AIG.compactProxy) opts'' file `catch`
+          processFile (AIGProxy AIG.compactProxy) opts'' file subsh `catch`
           (\(ErrorCall msg) -> err opts'' msg)
         (_:_) -> err opts'' "Multiple files not yet supported."
     (_, _, errs) -> do hPutStrLn stderr (concat errs ++ usageInfo header options)
                        exitProofUnknown
-  where header = "Usage: saw [OPTION...] [-I | file]"
+  where subsh = Just (REPL.subshell (REPL.replBody Nothing (return ())))
+        header = "Usage: saw [OPTION...] [-I | file]"
         checkZ3 opts = do
           p <- findExecutable "z3"
           unless (isJust p)
@@ -55,3 +58,4 @@ main = do
           when (verbLevel opts >= Error)
             (hPutStrLn stderr msg)
           exitProofUnknown
+

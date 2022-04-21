@@ -19,6 +19,8 @@ module SAWScript.REPL.Monad (
   , catch
   , catchFail
   , catchOther
+  , subshell
+  , Refs(..)
 
     -- ** Errors
   , REPLException(..)
@@ -62,6 +64,9 @@ import Cryptol.Utils.PP
 import Control.Applicative (Applicative(..), pure, (<*>))
 #endif
 import Control.Monad (unless, ap)
+import Control.Monad.Reader (ask)
+import Control.Monad.State (put, get)
+import Control.Monad.IO.Class (liftIO)
 import qualified Control.Monad.Fail as Fail
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef)
 import Data.Map (Map)
@@ -81,7 +86,7 @@ import qualified Data.AIG.CompactGraph as AIG
 import SAWScript.AST (Located(getVal))
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.Options (Options)
-import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..))
+import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..))
 import SAWScript.Value (AIGProxy(..))
 import Verifier.SAW (SharedContext)
 
@@ -92,8 +97,8 @@ deriving instance Typeable AIG.Proxy
 -- REPL Environment.
 data Refs = Refs
   { eContinue   :: IORef Bool
-  , eIsBatch    :: IORef Bool
-  , eTopLevelRO :: IORef TopLevelRO
+  , eIsBatch    :: Bool
+  , eTopLevelRO :: TopLevelRO
   , environment :: IORef TopLevelRW
   }
 
@@ -102,13 +107,11 @@ defaultRefs :: Bool -> Options -> IO Refs
 defaultRefs isBatch opts =
   do (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy AIG.compactProxy) opts
      contRef <- newIORef True
-     batchRef <- newIORef isBatch
-     roRef <- newIORef ro
      rwRef <- newIORef rw
      return Refs
        { eContinue   = contRef
-       , eIsBatch    = batchRef
-       , eTopLevelRO = roRef
+       , eIsBatch    = isBatch
+       , eTopLevelRO = ro
        , environment = rwRef
        }
 
@@ -132,6 +135,23 @@ runREPL :: Bool -> Options -> REPL a -> IO a
 runREPL isBatch opts m =
   do refs <- defaultRefs isBatch opts
      unREPL m refs
+
+subshell :: REPL () -> TopLevel ()
+subshell (REPL m) = TopLevel_ $
+  do ro <- ask
+     rw <- get
+     rw' <- liftIO $
+       do contRef <- newIORef True
+          rwRef <- newIORef rw
+          let refs = Refs
+                     { eContinue = contRef
+                     , eIsBatch  = False
+                     , eTopLevelRO = ro
+                     , environment = rwRef
+                     }
+          m refs
+          readIORef rwRef
+     put rw'
 
 instance Functor REPL where
   {-# INLINE fmap #-}
@@ -250,7 +270,7 @@ modifyRef r f = REPL (\refs -> modifyIORef (r refs) f)
 
 -- | Construct the prompt for the current environment.
 getPrompt :: REPL String
-getPrompt = mkPrompt <$> readRef eIsBatch
+getPrompt = mkPrompt <$> (REPL (return . eIsBatch))
 
 shouldContinue :: REPL Bool
 shouldContinue = readRef eContinue
@@ -260,7 +280,7 @@ stop = modifyRef eContinue (const False)
 
 unlessBatch :: REPL () -> REPL ()
 unlessBatch body =
-  do batch <- readRef eIsBatch
+  do batch <- REPL (return . eIsBatch)
      unless batch body
 
 setREPLTitle :: REPL ()
@@ -357,7 +377,7 @@ getSharedContext :: REPL SharedContext
 getSharedContext = fmap roSharedContext getTopLevelRO
 
 getTopLevelRO :: REPL TopLevelRO
-getTopLevelRO = readRef eTopLevelRO
+getTopLevelRO = REPL (return . eTopLevelRO)
 
 getEnvironmentRef :: REPL (IORef TopLevelRW)
 getEnvironmentRef = environment <$> getRefs
