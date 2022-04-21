@@ -3492,6 +3492,14 @@ isLLVMBlockPerm :: AtomicPerm a -> Bool
 isLLVMBlockPerm (Perm_LLVMBlock _) = True
 isLLVMBlockPerm _ = False
 
+-- | Test if an 'AtomicPerm' is any form of pointer permission
+isLLVMPointerPerm :: AtomicPerm a -> Bool
+isLLVMPointerPerm (Perm_LLVMField _) = True
+isLLVMPointerPerm (Perm_LLVMArray _) = True
+isLLVMPointerPerm (Perm_LLVMBlock _) = True
+isLLVMPointerPerm (Perm_LLVMFunPtr _ _) = True
+isLLVMPointerPerm _ = False
+
 -- | Test if an 'AtomicPerm' is a lifetime permission
 isLifetimePerm :: AtomicPerm a -> Maybe (a :~: LifetimeType)
 isLifetimePerm (Perm_LOwned _ _ _ _ _) = Just Refl
@@ -3627,6 +3635,13 @@ mkPermLLVMFunPtrs (_w :: f w) fun_perms@(SomeFunPerm fun_perm:_) =
                        (cruCtxToRepr $ funPermArgs fun_perm)
                        (funPermRet fun_perm))
       (ValPerm_Conj $ map (\(SomeFunPerm fp) -> Perm_Fun fp) fun_perms)
+
+-- | The shape for an @eq(llvmword(w))@ permission
+llvmEqWordShape :: (1 <= w, KnownNat w) => prx w -> Integer ->
+                   PermExpr (LLVMShapeType w)
+llvmEqWordShape w i =
+  PExpr_FieldShape $ LLVMFieldShape $ ValPerm_Eq $
+  PExpr_LLVMWord $ bvIntOfSize w i
 
 -- | Existential permission @x:eq(word(e))@ for some @e@
 llvmExEqWord :: (1 <= w, KnownNat w) => prx w ->
@@ -3992,6 +4007,23 @@ llvmBlockEndOffset = bvRangeEnd . llvmBlockRange
 llvmFieldShapeLength :: LLVMFieldShape w -> Integer
 llvmFieldShapeLength (LLVMFieldShape p) = exprLLVMTypeBytes p
 
+-- | Simplify a shape, removing any trailing empty shapes and unfolding any
+-- unfoldable named shapes
+simplifyShape :: PermExpr (LLVMShapeType w) -> PermExpr (LLVMShapeType w)
+simplifyShape (PExpr_SeqShape sh PExpr_EmptyShape) = simplifyShape sh
+simplifyShape (PExpr_NamedShape rw l nmsh args)
+  | TrueRepr <- namedShapeCanUnfoldRepr nmsh
+  , Just sh <- unfoldModalizeNamedShape rw l nmsh args =
+    simplifyShape sh
+simplifyShape sh = sh
+
+-- | Test if a shape describes a pointer
+isLLVMPointerShape :: PermExpr (LLVMShapeType w) -> Bool
+isLLVMPointerShape (PExpr_FieldShape (LLVMFieldShape (ValPerm_Conj1 p))) =
+  isLLVMPointerPerm p
+isLLVMPointerShape (PExpr_PtrShape _ _ _) = True
+isLLVMPointerShape _ = False
+
 -- | Return the expression for the length of a shape if there is one
 llvmShapeLength :: (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
                    Maybe (PermExpr (BVType w))
@@ -4237,6 +4269,17 @@ modalizeBlockShape (LLVMBlockPerm {..}) =
 lownedPermsSimpleIn :: ExprVar LifetimeType -> ExprPerms ps ->
                        Maybe (ExprPerms ps)
 lownedPermsSimpleIn l = modalize (Just PExpr_Read) (Just $ PExpr_Var l)
+
+-- | Extract the shape-in-bindings for an unfoldable shape
+namedShapeBodyShape :: KnownNat w => NamedShape 'True args w ->
+                       Mb args (PermExpr (LLVMShapeType w))
+namedShapeBodyShape (NamedShape _ _ (DefinedShapeBody mb_sh)) = mb_sh
+namedShapeBodyShape sh@(NamedShape _ _ (RecShapeBody mb_sh _ _)) =
+  let (prxs :>: _) = mbToProxy mb_sh in
+  nuMulti prxs $ \ns ->
+  subst (substOfExprs (namesToExprs ns :>:
+                       PExpr_NamedShape Nothing Nothing sh (namesToExprs ns)))
+  mb_sh
 
 -- | Unfold a named shape
 unfoldNamedShape :: KnownNat w => NamedShape 'True args w -> PermExprs args ->
@@ -4492,6 +4535,20 @@ getShapeBVTag :: PermExpr (LLVMShapeType w) -> Maybe SomeBV
 getShapeBVTag sh | Just some_bv <- shapeToTag sh = Just some_bv
 getShapeBVTag (PExpr_SeqShape sh1 _) = getShapeBVTag sh1
 getShapeBVTag _ = Nothing
+
+-- | Remove the leading tag from a shape where 'getShapeBVTag' succeeded
+shapeRemoveTag :: PermExpr (LLVMShapeType w) -> PermExpr (LLVMShapeType w)
+shapeRemoveTag (PExpr_SeqShape sh1 sh2) | isJust (shapeToTag sh1) = sh2
+shapeRemoveTag (PExpr_SeqShape sh1 sh2) =
+  PExpr_SeqShape (shapeRemoveTag sh1) sh2
+shapeRemoveTag sh | isJust (shapeToTag sh) = PExpr_EmptyShape
+shapeRemoveTag sh =
+  error ("shapeRemoveTag: " ++ permPrettyString emptyPPInfo sh)
+
+-- | Extract the disjunctive shapes from a 'TaggedUnionShape' but removing the
+-- leading tags
+taggedUnionDisjsNoTags :: TaggedUnionShape w sz -> [PermExpr (LLVMShapeType w)]
+taggedUnionDisjsNoTags = map shapeRemoveTag . taggedUnionDisjs
 
 -- | Test if a shape is a tagged union shape and, if so, convert it to the
 -- 'TaggedUnionShape' representation
@@ -4780,7 +4837,25 @@ llvmArrayBorrowRangeDelete borrow rng =
       | otherwise =
         error "llvmArrayBorrowRangeDelete: found non unit new_range for FieldBorrow"
 
+-- | Return whether or not the borrows in @ap@ cover the range of cells [0, len). Specifically,
+-- if the borrowed cells (as ranges) can be arranged in as a sequence of non-overlapping but contiguous
+-- ranges (in the sense of @bvCouldEqual@) that extends at least as far as @len@ (in the sense of @bvLeq@)
+llvmArrayIsBorrowed ::
+  (HasCallStack, 1 <= w, KnownNat w) =>
+  LLVMArrayPerm w ->
+  Bool
+llvmArrayIsBorrowed ap =
+  go (bvInt 0) (llvmArrayBorrowCells <$> llvmArrayBorrows ap)
+  where
+    end = bvRangeEnd (llvmArrayCells ap)
 
+    go off borrows
+      | bvLeq end off
+      = True
+      | Just i <- findIndex (permForOff off) borrows
+      = go (bvAdd off (bvRangeLength (borrows!!i))) (deleteNth i borrows)
+
+    permForOff o b = bvCouldEqual o (bvRangeOffset b)
 
 -- | Test if a byte offset @o@ statically aligns with a statically-known offset
 -- into some array cell, i.e., whether

@@ -436,6 +436,7 @@ tcLLVMShape (ExArraySh _ len stride sh) =
   <$> tcKExpr len
   <*> (Bytes . fromIntegral <$> tcNatural stride)
   <*> tcKExpr sh
+tcLLVMShape (ExFalseSh _) = pure PExpr_FalseShape
 tcLLVMShape e = tcError (pos e) "Expected shape"
 
 -- | Field and array helper for 'tcLLVMShape'
@@ -466,6 +467,7 @@ tcValPermInCtx ctx tp = inParsedCtxM ctx . const . tcValPerm tp
 -- | Parse a value permission of a known type
 tcValPerm :: TypeRepr a -> AstExpr -> Tc (ValuePerm a)
 tcValPerm _  ExTrue{} = pure ValPerm_True
+tcValPerm _  ExFalse{} = pure ValPerm_False
 tcValPerm ty (ExOr _ x y) = ValPerm_Or <$> tcValPerm ty x <*> tcValPerm ty y
 tcValPerm ty (ExEq _ e) = ValPerm_Eq <$> tcExpr ty e
 tcValPerm ty (ExExists _ var vartype e) =

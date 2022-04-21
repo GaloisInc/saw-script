@@ -135,6 +135,7 @@ jobs:
           targets: |
             integration_tests
             cryptol-saw-core-tc-test
+            prover_tests
           dest: dist-tests
 
       - uses: actions/upload-artifact@v2
