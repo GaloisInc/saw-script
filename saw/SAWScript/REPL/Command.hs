@@ -30,6 +30,8 @@ module SAWScript.REPL.Command (
 
 --import Verifier.SAW.SharedTerm (SharedContext)
 
+import Data.IORef
+
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Trie
 import SAWScript.Position (getPos)
@@ -228,8 +230,10 @@ sawScriptCmd str = do
     Left err -> io $ print err
     Right stmt ->
       do ro <- getTopLevelRO
-         rwRef <- getEnvironmentRef
-         io $ runTopLevel (interpretStmt True stmt) ro rwRef
+         ref <- getEnvironmentRef
+         rw <- io $ readIORef ref
+         (_, rw') <- io $ runTopLevel (interpretStmt True stmt) ro rw
+         io $ writeIORef ref rw'
 
 replFileName :: String
 replFileName = "<stdin>"

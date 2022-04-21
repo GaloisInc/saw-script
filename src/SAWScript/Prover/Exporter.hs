@@ -203,13 +203,16 @@ writeSAIG file tt numLatches = do
 
 -- | Given a term a type '(i, s) -> (o, s)', call @writeSAIG@ on term
 -- with latch bits set to '|s|', the width of 's'.
-writeSAIGInferLatches :: FilePath -> TypedTerm -> TopLevel ()
-writeSAIGInferLatches file tt = do
+writeSAIGInferLatches :: TypedTerm -> TopLevel (FilePath -> IO ())
+writeSAIGInferLatches tt = do
   sc <- getSharedContext
   ty <- io $ scTypeOf sc (ttTerm tt)
   s <- getStateType sc ty
   let numLatches = sizeFiniteType s
-  writeSAIG file (ttTerm tt) numLatches
+  AIGProxy proxy <- getProxy
+  return $ \file ->
+    do aig <- bitblastPrim proxy sc (ttTerm tt)
+       AIG.writeAigerWithLatches file aig numLatches
   where
     die :: String -> TopLevel a
     die why = throwTopLevel $
