@@ -6053,6 +6053,10 @@ instance PermPrettyF (NeededPerm vars) where
 -- | A sequence of permissions in bindings that need to be proved
 type NeededPerms vars = Some (RAssign (NeededPerm vars))
 
+-- | No permissions needed
+neededPerms0 :: NeededPerms vars
+neededPerms0 = Some MNil
+
 -- | A single needed permission
 neededPerms1 :: ExprVar a -> Mb vars (ValuePerm a) -> NeededPerms vars
 neededPerms1 x mb_p = Some (MNil :>: NeededPerm MNil x mb_p)
@@ -6070,10 +6074,63 @@ someDistPermsToNeededPerms prxs =
   fmapF $ RL.map (\(VarAndPerm x p) ->
                    NeededPerm MNil x (nuMulti prxs (const p)))
 
+-- | FIXME HERE NOW: docs
+data SomeMbPerm vars a where
+  SomeMbPerm :: KnownCruCtx vars' ->
+                Mb (vars :++: vars') (ValuePerm a) ->
+                SomeMbPerm vars a
+
+-- | FIXME HERE NOW: docs
+someMbPermForRange :: RAssign Proxy vars -> MbRangeForType a ->
+                      SomeMbPerm vars a
+someMbPermForRange vars (MbRangeForLLVMType vars' mb_rng) =
+  -- For a range on an LLVMPointerType, create a block permission with
+  -- existential modalities and shape
+  let bp_prxs = MNil :>: Proxy :>: Proxy :>: Proxy
+      bp_vars = MNil :>: KnownReprObj :>: KnownReprObj :>: KnownReprObj
+      vars'_bp_vars = RL.append vars' bp_vars
+      vars'_bp_prxs = RL.map (const Proxy) vars'_bp_vars in
+  SomeMbPerm vars'_bp_vars $
+  mbCombine vars'_bp_prxs $ nuMulti vars $ const $
+  mbCombine bp_prxs $ flip fmap mb_rng $ \rng ->
+  nuMulti bp_prxs $ \(_ :>: rw :>: l :>: sh) ->
+  ValPerm_LLVMBlock $
+  LLVMBlockPerm { llvmBlockRW = PExpr_Var rw,
+                  llvmBlockLifetime = PExpr_Var l,
+                  llvmBlockOffset = bvRangeOffset rng,
+                  llvmBlockLen = bvRangeLength rng,
+                  llvmBlockShape = PExpr_Var sh }
+someMbPermForRange vars (MbRangeForStructType prxs memb rng)
+  | SomeMbPerm vars' mb_p <- someMbPermForRange vars rng =
+    SomeMbPerm vars' $ flip fmap mb_p $ \p ->
+    ValPerm_Conj1 $ Perm_Struct $
+    RL.set memb p $ RL.map (const ValPerm_True) prxs
+
+-- | Convert a 'SomeMbPerm' on an expression to a 'NeededPerms'
+someMbPermToNeededs :: PermExpr a -> SomeMbPerm vars a -> NeededPerms vars
+someMbPermToNeededs (asVarOffset -> Just (x,off)) (SomeMbPerm vars' mb_p) =
+  Some $ MNil :>: NeededPerm vars' x (fmap (offsetPerm off) mb_p)
+someMbPermToNeededs (PExpr_Struct es) (SomeMbPerm vars'
+                                       [nuP| ValPerm_Struct mb_ps |]) =
+  concatSomeRAssign $ RL.toList $
+  RL.map2 (\e (Compose mb_p) ->
+            Constant $ someMbPermToNeededs e $ SomeMbPerm vars' mb_p)
+  es (mbRAssign mb_ps)
+someMbPermToNeededs _ _ =
+  -- In this case, we can't convert to permissions, so we just throw it away
+  neededPerms0
+
+-- | Generate a set of 'NeededPerms' for a range on an expression
+neededPermsForRange :: RAssign Proxy vars -> PermExpr a -> MbRangeForType a ->
+                       NeededPerms vars
+neededPermsForRange vars e rng =
+  someMbPermToNeededs e $ someMbPermForRange vars rng
+
 -- | Generate a set of 'NeededPerms' for a list of ranges on an expression
 neededPermsForRanges :: RAssign Proxy vars -> PermExpr a -> [MbRangeForType a] ->
                         NeededPerms vars
-neededPermsForRanges = error "FIXME HERE NOW"
+neededPermsForRanges vars e =
+  concatSomeRAssign . map (neededPermsForRange vars e)
 
 -- | Prove the permission represented by a 'NeededPerm'
 proveNeededPerm :: NuMatchingAny1 r => NeededPerm vars a ->
@@ -6114,7 +6171,7 @@ solveForPermListImplH :: NuMatchingAny1 r => RAssign Proxy vars ->
                          ImplM vars s r ps ps (NeededPerms vars)
 -- If the RHS is empty, we are done
 solveForPermListImplH _ _ _ _ MNil =
-  pure (Some MNil)
+  pure neededPerms0
 
 -- Otherwise, get all the offsets mentioned in RHS permissions for expression e,
 -- subtract any ranges on the LHS for e, and then return block permisisons for

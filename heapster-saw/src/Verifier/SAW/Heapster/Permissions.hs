@@ -278,7 +278,8 @@ data MbRangeForType a where
   MbRangeForLLVMType :: (1 <= w, KnownNat w) => KnownCruCtx vars ->
                         Mb vars (BVRange w) ->
                         MbRangeForType (LLVMPointerType w)
-  MbRangeForStructType :: Member (CtxToRList args) a ->
+  MbRangeForStructType :: RAssign Proxy (CtxToRList args) ->
+                          Member (CtxToRList args) a ->
                           MbRangeForType a ->
                           MbRangeForType (StructType args)
 
@@ -2089,8 +2090,8 @@ mbMbRangeForType ctx mb_rngft = case mbMatch mb_rngft of
   [nuMP| MbRangeForLLVMType vars rng |] ->
     MbRangeForLLVMType (RL.append ctx $ mbLift vars)
     (mbCombine (RL.map (const Proxy) (mbLift vars)) rng)
-  [nuMP| MbRangeForStructType memb rng |] ->
-    MbRangeForStructType (mbLift memb) $ mbMbRangeForType ctx rng
+  [nuMP| MbRangeForStructType prxs memb rng |] ->
+    MbRangeForStructType (mbLift prxs) (mbLift memb) $ mbMbRangeForType ctx rng
 
 -- | Like 'bvRangeDelete' but for 'MbRangeForType's
 mbRangeFTDelete :: MbRangeForType a -> MbRangeForType a ->
@@ -2101,11 +2102,11 @@ mbRangeFTDelete (MbRangeForLLVMType vars1 mb_rng1) (MbRangeForLLVMType
   mbCombine (RL.map (const Proxy) vars2) $
   flip fmap mb_rng1 $ \rng1 -> flip fmap mb_rng2 $ \rng2 ->
   bvRangeDelete rng1 rng2
-mbRangeFTDelete (MbRangeForStructType memb1 rng1) (MbRangeForStructType
-                                                   memb2 rng2)
+mbRangeFTDelete (MbRangeForStructType prxs1 memb1 rng1) (MbRangeForStructType
+                                                         _ memb2 rng2)
   | Just Refl <- testEquality memb1 memb2 =
-    map (MbRangeForStructType memb1) $ mbRangeFTDelete rng1 rng2
-mbRangeFTDelete rng1@(MbRangeForStructType _ _) (MbRangeForStructType _ _) =
+    map (MbRangeForStructType prxs1 memb1) $ mbRangeFTDelete rng1 rng2
+mbRangeFTDelete rng1@(MbRangeForStructType _ _ _) (MbRangeForStructType _ _ _) =
   [rng1]
 
 -- | Delete all ranges in any of a list of ranges from 
@@ -2124,11 +2125,11 @@ mbRangeFTSubsetTo (MbRangeForLLVMType vars1 mb_rng1) (MbRangeForLLVMType
   mbCombine (RL.map (const Proxy) vars2) $
   flip fmap mb_rng1 $ \rng1 -> flip fmap mb_rng2 $ \rng2 ->
   bvRangeSubsetTo rng1 rng2
-mbRangeFTSubsetTo (MbRangeForStructType memb1 rng1) (MbRangeForStructType
-                                                     memb2 rng2)
+mbRangeFTSubsetTo (MbRangeForStructType prxs1 memb1 rng1) (MbRangeForStructType
+                                                           _ memb2 rng2)
   | Just Refl <- testEquality memb1 memb2 =
-    map (MbRangeForStructType memb1) $ mbRangeFTSubsetTo rng1 rng2
-mbRangeFTSubsetTo (MbRangeForStructType _ _) (MbRangeForStructType _ _) = []
+    map (MbRangeForStructType prxs1 memb1) $ mbRangeFTSubsetTo rng1 rng2
+mbRangeFTSubsetTo (MbRangeForStructType _ _ _) (MbRangeForStructType _ _ _) = []
 
 -- | Find all the offsets in an 'MbRangeForType' in the first list that could be
 -- in one in the second, in a manner similar to 'bvRangesSubsetTo'
@@ -2438,6 +2439,14 @@ pattern ValPerm_LFinished :: () => (a ~ LifetimeType) => ValuePerm a
 pattern ValPerm_LFinished <- ValPerm_Conj [Perm_LFinished]
   where
     ValPerm_LFinished = ValPerm_Conj [Perm_LFinished]
+
+-- | A single @struct@ permission
+pattern ValPerm_Struct :: () => (a ~ StructType ctx) =>
+                          RAssign ValuePerm (CtxToRList ctx) ->
+                          ValuePerm a
+pattern ValPerm_Struct ps <- ValPerm_Conj [Perm_Struct ps]
+  where
+    ValPerm_Struct ps = ValPerm_Conj [Perm_Struct ps]
 
 pattern ValPerms_Nil :: () => (tps ~ RNil) => ValuePerms tps
 pattern ValPerms_Nil = MNil
@@ -4205,7 +4214,8 @@ instance GetOffsets AtomicPerm where
     [rangeForLLVMType $ llvmBlockRange bp]
   getOffsets (Perm_Struct ps) =
     concat $ RL.mapToList (\memb ->
-                            map (MbRangeForStructType memb) $
+                            map (MbRangeForStructType
+                                 (RL.map (const Proxy) ps) memb) $
                             getOffsets $ RL.get memb ps) $
     RL.members ps
   getOffsets _ = []
@@ -6255,8 +6265,8 @@ instance SubstVar s m => Substable s (MbRangeForType a) m where
   genSubst s (mbMatch -> [nuMP| MbRangeForLLVMType vars rng |]) =
     MbRangeForLLVMType (mbLift vars) <$>
     genSubstMb (RL.map (const Proxy) $ mbLift vars) s rng
-  genSubst s (mbMatch -> [nuMP| MbRangeForStructType memb rng |]) =
-    MbRangeForStructType (mbLift memb) <$> genSubst s rng
+  genSubst s (mbMatch -> [nuMP| MbRangeForStructType prxs memb rng |]) =
+    MbRangeForStructType (mbLift prxs) (mbLift memb) <$> genSubst s rng
 
 instance SubstVar s m => Substable s (BVProp w) m where
   genSubst s mb_prop = case mbMatch mb_prop of
