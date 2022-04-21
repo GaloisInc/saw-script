@@ -4908,6 +4908,7 @@ llvmArrayIsBorrowed ap =
       = True
       | Just i <- findIndex (permForOff off) borrows
       = go (bvAdd off (bvRangeLength (borrows!!i))) (deleteNth i borrows)
+    go _ _ = False
 
     permForOff o b = bvCouldEqual o (bvRangeOffset b)
 
