@@ -38,7 +38,6 @@ import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
 import Data.Foldable (foldrM)
-import Data.IORef
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -283,8 +282,7 @@ interpretStmts env stmts =
 
 stmtInterpreter :: StmtInterpreter
 stmtInterpreter ro rw stmts =
-  do ref <- newIORef rw
-     runTopLevel (interpretStmts emptyLocal stmts) ro ref
+  fst <$> runTopLevel (interpretStmts emptyLocal stmts) ro rw
 
 processStmtBind :: Bool -> SS.Pattern -> Maybe SS.Type -> SS.Expr -> TopLevel ()
 processStmtBind printBinds pat _mc expr = do -- mx mt
@@ -458,6 +456,7 @@ buildTopLevelEnv proxy opts =
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
                    , roTheoremDB = thmDB
+                   , roStackTrace = []
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -508,8 +507,7 @@ processFile proxy opts file = do
   oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
   setCurrentDirectory (takeDirectory file')
-  ref <- newIORef rw
-  _ <- runTopLevel (interpretFile file' True) ro ref
+  _ <- runTopLevel (interpretFile file' True) ro rw
             `X.catch` (handleException opts)
   setCurrentDirectory oldpath
   return ()
@@ -822,6 +820,31 @@ primitives = Map.fromList
     (pureVal ((++) :: String -> String -> String))
     Current
     [ "Concatenate two strings to yield a third." ]
+
+  , prim "callcc" "{a} ((a -> TopLevel ()) -> TopLevel a) -> TopLevel a"
+    (\_ _ -> toplevelCallCC)
+    Experimental
+    [ "Call-with-current-continuation."
+    , ""
+    , "This is a highly experimental control operator that can be used"
+    , "to capure the surrounding top-level computation as a continuation."
+    , "The consequences of delaying and reentering the current continuation"
+    , "may be somewhat unpredictable, so use this operator with great caution."
+    ]
+
+  , prim "checkpoint"          "TopLevel (() -> TopLevel ())"
+    (pureVal checkpoint)
+    Experimental
+    [ "Capure the current state of the SAW interpreter, and return"
+    , "A TopLevel monadic action that, if invoked, will reset the"
+    , "state of the interpreter back to to what it was at the"
+    , "moment checkpoint was invoked."
+    , ""
+    , "NOTE that this facility is highly experimental and may not"
+    , "be entirely reliable.  It is intended only for proof development"
+    , "where it can speed up the process of experimenting with"
+    , "mid-proof changes. Finalized proofs should not use this facility."
+    ]
 
   , prim "define"              "String -> Term -> TopLevel Term"
     (pureVal definePrim)
@@ -2288,6 +2311,11 @@ primitives = Map.fromList
     [ "Exit SAWScript, returning the supplied exit code to the parent"
     , "process."
     ]
+
+  , prim "fail" "{a} String -> TopLevel a"
+    (\_ _ -> toValue failPrim)
+    Current
+    [ "Throw an exception in the top level monad." ]
 
   , prim "fails"               "{a} TopLevel a -> TopLevel ()"
     (\_ _ -> toValue failsPrim)

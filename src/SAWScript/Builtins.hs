@@ -207,11 +207,13 @@ readSBV path unintlst =
 -- support for latches in the 'AIGNetwork' SAWScript type.
 dsecPrint :: TypedTerm -> TypedTerm -> TopLevel ()
 dsecPrint t1 t2 = do
-  withSystemTempFile ".aig" $ \path1 _handle1 -> do
-  withSystemTempFile ".aig" $ \path2 _handle2 -> do
-  Prover.writeSAIGInferLatches path1 t1
-  Prover.writeSAIGInferLatches path2 t2
-  io $ callCommand (abcDsec path1 path2)
+  write_t1 <- Prover.writeSAIGInferLatches t1
+  write_t2 <- Prover.writeSAIGInferLatches t2
+  io $ withSystemTempFile ".aig" $ \path1 _handle1 ->
+       withSystemTempFile ".aig" $ \path2 _handle2 ->
+        do write_t1 path1
+           write_t2 path2
+           callCommand (abcDsec path1 path2)
   where
     -- The '-w' here may be overkill ...
     abcDsec path1 path2 = printf "abc -c 'read %s; dsec -v -w %s;'" path1 path2
@@ -739,7 +741,9 @@ writeAIGPrim :: FilePath -> Term -> TopLevel ()
 writeAIGPrim = Prover.writeAIG
 
 writeSAIGPrim :: FilePath -> TypedTerm -> TopLevel ()
-writeSAIGPrim = Prover.writeSAIGInferLatches
+writeSAIGPrim file tt =
+  do write_tt <- Prover.writeSAIGInferLatches tt
+     io $ write_tt file
 
 writeSAIGComputedPrim :: FilePath -> Term -> Int -> TopLevel ()
 writeSAIGComputedPrim = Prover.writeSAIG
@@ -1317,12 +1321,14 @@ timePrim a = do
   printOutLnTop Info $ printf "Time: %s\n" (show diff)
   return r
 
+failPrim :: String -> TopLevel SV.Value
+failPrim msg = fail msg
+
 failsPrim :: TopLevel SV.Value -> TopLevel ()
 failsPrim m = do
   topRO <- getTopLevelRO
   topRW <- getTopLevelRW
-  ref <- liftIO $ newIORef topRW
-  x <- liftIO $ Ex.try (runTopLevel m topRO ref)
+  x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
   case x of
     Left (ex :: Ex.SomeException) ->
       do liftIO $ putStrLn "== Anticipated failure message =="
