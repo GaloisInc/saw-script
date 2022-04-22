@@ -18,7 +18,9 @@ namely 'mrProvable' and 'mrProveEq'.
 module SAWScript.Prover.MRSolver.SMT where
 
 import qualified Data.Vector as V
+import Numeric.Natural (Natural)
 import Control.Monad.Except
+import Control.Monad.Trans.Maybe
 import qualified Control.Exception as X
 
 import Data.Map (Map)
@@ -33,6 +35,7 @@ import Verifier.SAW.OpenTerm
 
 import Verifier.SAW.Prim (EvalError(..))
 import qualified Verifier.SAW.Prim as Prim
+import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Simulator.TermModel
 import Verifier.SAW.Simulator.Prims
 import Verifier.SAW.Simulator.MonadLazy
@@ -84,6 +87,14 @@ asGenBVVecTerm (asApplyAll ->
   = Just (n, len, a, e)
 asGenBVVecTerm _ = Nothing
 
+-- | Match a term of the form @genFromBVVec n len a v def m@
+asGenFromBVVecTerm :: Recognizer Term (Term, Term, Term, Term, Term, Term)
+asGenFromBVVecTerm (asApplyAll ->
+                       (isGlobalDef "Prelude.genFromBVVec" -> Just _,
+                        [n, len, a, v, def, m]))
+  = Just (n, len, a, v, def, m)
+asGenFromBVVecTerm _ = Nothing
+
 type TmPrim = Prim TermModel
 
 -- | Convert a Boolean value to a 'Term'; like 'readBackValue' but that function
@@ -112,8 +123,11 @@ primGenBVVec sc f =
 
 -- | An implementation of a primitive function that expects a bitvector term
 primBVTermFun :: SharedContext -> (Term -> TmPrim) -> TmPrim
-primBVTermFun sc =
-  PrimFilterFun "primBVTermFun" $
+primBVTermFun = PrimFilterFun "primBVTermFun" . primBVTermFilterFun
+
+primBVTermFilterFun :: SharedContext ->
+                       Value TermModel -> MaybeT (EvalM TermModel) Term
+primBVTermFilterFun sc = 
   \case
     VExtra (VExtraTerm _ w_tm) -> return w_tm
     VWord (Left (_,w_tm)) -> return w_tm
@@ -126,6 +140,30 @@ primBVTermFun sc =
          scVectorReduced sc tp tms
     v -> lift (putStrLn ("primBVTermFun: unhandled value: " ++ show v)) >> mzero
 
+-- | An implementation of a primitive function that expects either a
+-- @genFromBVVec@ term or a vector literal
+-- NOTE: Currently this can only handle vector literals for vectors of
+-- bitvectors, i.e. multi-dimensional arrays are not yet supported
+-- FIXME: For the 'Left' case, bundle the @n@ and @len@ and check that they
+-- match the ones given later on in 'bvVecFromBVVecOrLit'
+primFromBVVecOrLit :: SharedContext -> (Either Term [Term] -> TmPrim) -> TmPrim
+primFromBVVecOrLit sc =
+  PrimFilterFun "primFromBVVecOrLit" $
+  \case
+    VExtra (VExtraTerm _ (asGenFromBVVecTerm -> Just (_, _, _, v, _, _))) ->
+      return $ Left v
+    VVector vs ->
+      Right <$> traverse (primBVTermFilterFun sc <=< lift . force) (V.toList vs)
+    _ -> mzero
+
+-- | Turn the result of 'primFromBVVecOrLit' into a BVVec term of the
+-- appropriate type
+bvVecFromBVVecOrLit :: SharedContext -> Natural -> Term -> TValue TermModel ->
+                       Either Term [Term] -> IO Term
+bvVecFromBVVecOrLit _ _ _ _ (Left v) = return v
+bvVecFromBVVecOrLit sc n len a (Right vs) =
+  error "FIXME: Implement bvVecFromBVVecOrLit"
+
 -- | Implementations of primitives for normalizing Mr Solver terms
 smtNormPrims :: SharedContext -> Map Ident TmPrim
 smtNormPrims sc = Map.fromList
@@ -133,8 +171,19 @@ smtNormPrims sc = Map.fromList
     ("Prelude.genBVVec",
      Prim (do tp <- scTypeOfGlobal sc "Prelude.genBVVec"
               VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
-                scGlobalDef sc "Prelude.genBVVec")),
-
+                scGlobalDef sc "Prelude.genBVVec")
+    ),
+    ("Prelude.genBVVecFromVec",
+     natFun $ \_m -> tvalFun $ \a -> primFromBVVecOrLit sc $ \eith ->
+     PrimFun $ \_def -> natFun $ \n -> primBVTermFun sc $ \len ->
+      Prim (VExtra <$> VExtraTerm undefined <$>
+            bvVecFromBVVecOrLit sc n len a eith)
+    ),
+    ("Prelude.genFromBVVec",
+     Prim (do tp <- scTypeOfGlobal sc "Prelude.genFromBVVec"
+              VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
+                scGlobalDef sc "Prelude.genFromBVVec")
+    ),
     ("Prelude.atBVVec",
      PrimFun $ \_n -> PrimFun $ \_len -> tvalFun $ \a ->
       primGenBVVec sc $ \f -> primBVTermFun sc $ \ix -> PrimFun $ \_pf ->

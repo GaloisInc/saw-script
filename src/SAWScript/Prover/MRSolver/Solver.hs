@@ -126,6 +126,7 @@ module SAWScript.Prover.MRSolver.Solver where
 import Data.Maybe
 import Data.Either
 import Data.List (findIndices, intercalate)
+import Data.Bits (shiftL)
 import Control.Monad.Except
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -276,7 +277,8 @@ normComp (CompTerm t) =
          liftSC2 scGlobalApply "CryptolM.bvVecMapInvarM"
                                [a, b, w, n, f, xs, invar] >>= normCompTerm
 
-    -- Convert `atM (bvToNat ...)` into the unfolding of `bvVecAtM`
+    -- Convert `atM (bvToNat ...) ... (bvToNat ...)` into the unfolding of
+    -- `bvVecAtM`
     (asGlobalDef -> Just "CryptolM.atM", [asBvToNat -> Just (w1, n), a, xs,
                                           asBvToNat -> Just (w2, i)]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
@@ -285,7 +287,25 @@ normComp (CompTerm t) =
            mrApplyAll body [w1, n, a, xs, i] >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
-    -- Convert `updateM (bvToNat ...)` into the unfolding of `bvVecUpdateM`
+    -- Convert `atM n ... xs (bvToNat ...)` for a constant `n` into the
+    -- unfolding of `bvVecAtM` after converting `n` to a bitvector constant
+    -- and applying `genBVVecFromVec` to `xs`
+    (asGlobalDef -> Just "CryptolM.atM", [n_tm@(asNat -> Just n), a, xs,
+                                          asBvToNat ->
+                                            Just (w_tm@(asNat -> Just w),
+                                                  i)]) ->
+      do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
+         if n < 1 `shiftL` fromIntegral w then do
+           n' <- liftSC2 scBvConst w (toInteger n)
+           err_str <- liftSC1 scString "..."
+           err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str]
+           xs' <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
+                                        [n_tm, a, xs, err_tm, w_tm, n'] 
+           mrApplyAll body [w_tm, n', a, xs', i] >>= normCompTerm
+         else throwMRFailure (MalformedComp t)
+
+    -- Convert `updateM (bvToNat ...) ... (bvToNat ...)` into the unfolding of
+    -- `bvVecUpdateM`
     (asGlobalDef -> Just "CryptolM.updateM", [asBvToNat -> Just (w1, n), a, xs,
                                               asBvToNat -> Just (w2, i), x]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecUpdateM"
