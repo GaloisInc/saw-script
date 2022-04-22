@@ -33,11 +33,11 @@ module SAWScript.Interpreter
 import Control.Applicative
 import Data.Traversable hiding ( mapM )
 #endif
+import Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
-import Data.Foldable (foldrM)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -109,37 +109,11 @@ import SAWScript.VerificationSummary
 
 -- Environment -----------------------------------------------------------------
 
-data LocalBinding
-  = LocalLet SS.LName (Maybe SS.Schema) (Maybe String) Value
-  | LocalTypedef SS.Name SS.Type
-
-type LocalEnv = [LocalBinding]
-
-emptyLocal :: LocalEnv
-emptyLocal = []
-
-extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv -> LocalEnv
-extendLocal x mt md v env = LocalLet x mt md v : env
-
-addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
-addTypedef name ty rw = rw { rwTypedef = Map.insert name ty (rwTypedef rw) }
-
-mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
-mergeLocalEnv sc env rw = foldrM addBinding rw env
-  where addBinding (LocalLet x mt md v) = extendEnv sc x mt md v
-        addBinding (LocalTypedef n ty) = pure . addTypedef n ty
-
-getMergedEnv :: LocalEnv -> TopLevel TopLevelRW
-getMergedEnv env =
-  do sc <- getSharedContext
-     rw <- getTopLevelRW
-     liftIO $ mergeLocalEnv sc env rw
-
 bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
 bindPatternLocal pat ms v env =
   case pat of
     SS.PWild _   -> env
-    SS.PVar x _  -> extendLocal x ms Nothing v env
+    SS.PVar x mt  -> extendLocal x (ms <|> (SS.tMono <$> mt)) Nothing v env
     SS.PTuple ps ->
       case v of
         VTuple vs -> foldr ($) env (zipWith3 bindPatternLocal ps mss vs)
@@ -147,17 +121,17 @@ bindPatternLocal pat ms v env =
                   Nothing -> repeat Nothing
                   Just (SS.Forall ks (SS.TyCon (SS.TupleCon _) ts))
                     -> [ Just (SS.Forall ks t) | t <- ts ]
-                  _ -> error "bindPattern: expected tuple value"
-        _ -> error "bindPattern: expected tuple value"
+                  Just t -> error ("bindPatternLocal: expected tuple type " ++ show t)
+        _ -> error "bindPatternLocal: expected tuple value"
     SS.LPattern _ pat' -> bindPatternLocal pat' ms v env
 
 bindPatternEnv :: SS.Pattern -> Maybe SS.Schema -> Value -> TopLevelRW -> TopLevel TopLevelRW
 bindPatternEnv pat ms v env =
   case pat of
     SS.PWild _   -> pure env
-    SS.PVar x _  ->
+    SS.PVar x mt ->
       do sc <- getSharedContext
-         liftIO $ extendEnv sc x ms Nothing v env
+         liftIO $ extendEnv sc x (ms <|> (SS.tMono <$> mt)) Nothing v env
     SS.PTuple ps ->
       case v of
         VTuple vs -> foldr (=<<) (pure env) (zipWith3 bindPatternEnv ps mss vs)
@@ -165,60 +139,61 @@ bindPatternEnv pat ms v env =
                   Nothing -> repeat Nothing
                   Just (SS.Forall ks (SS.TyCon (SS.TupleCon _) ts))
                     -> [ Just (SS.Forall ks t) | t <- ts ]
-                  _ -> error "bindPattern: expected tuple value"
-        _ -> error "bindPattern: expected tuple value"
+                  Just t -> error ("bindPatternEnv: expected tuple type " ++ show t)
+        _ -> error "bindPatternEnv: expected tuple value"
     SS.LPattern _ pat' -> bindPatternEnv pat' ms v env
 
 -- Interpretation of SAWScript -------------------------------------------------
 
-interpret :: LocalEnv -> SS.Expr -> TopLevel Value
-interpret env expr =
+interpret :: SS.Expr -> TopLevel Value
+interpret expr =
     let ?fileReader = BS.readFile in
     case expr of
       SS.Bool b              -> return $ VBool b
       SS.String s            -> return $ VString (Text.pack s)
       SS.Int z               -> return $ VInteger z
       SS.Code str            -> do sc <- getSharedContext
-                                   cenv <- fmap rwCryptol (getMergedEnv env)
+                                   cenv <- fmap rwCryptol getMergedEnv
                                    --io $ putStrLn $ "Parsing code: " ++ show str
                                    --showCryptolEnv' cenv
                                    t <- io $ CEnv.parseTypedTerm sc cenv
                                            $ locToInput str
                                    return (toValue t)
-      SS.CType str           -> do cenv <- fmap rwCryptol (getMergedEnv env)
+      SS.CType str           -> do cenv <- fmap rwCryptol getMergedEnv
                                    s <- io $ CEnv.parseSchema cenv
                                            $ locToInput str
                                    return (toValue s)
-      SS.Array es            -> VArray <$> traverse (interpret env) es
-      SS.Block stmts         -> interpretStmts env stmts
-      SS.Tuple es            -> VTuple <$> traverse (interpret env) es
-      SS.Record bs           -> VRecord <$> traverse (interpret env) bs
-      SS.Index e1 e2         -> do a <- interpret env e1
-                                   i <- interpret env e2
+      SS.Array es            -> VArray <$> traverse interpret es
+      SS.Block stmts         -> interpretStmts stmts
+      SS.Tuple es            -> VTuple <$> traverse interpret es
+      SS.Record bs           -> VRecord <$> traverse interpret bs
+      SS.Index e1 e2         -> do a <- interpret e1
+                                   i <- interpret e2
                                    return (indexValue a i)
-      SS.Lookup e n          -> do a <- interpret env e
+      SS.Lookup e n          -> do a <- interpret e
                                    return (lookupValue a n)
-      SS.TLookup e i         -> do a <- interpret env e
+      SS.TLookup e i         -> do a <- interpret e
                                    return (tupleLookupValue a i)
-      SS.Var x               -> do rw <- getMergedEnv env
+      SS.Var x               -> do rw <- getMergedEnv
                                    case Map.lookup x (rwValues rw) of
                                      Nothing -> fail $ "unknown variable: " ++ SS.getVal x
                                      Just v -> return (addTrace (show x) v)
-      SS.Function pat e      -> do let f v = interpret (bindPatternLocal pat Nothing v env) e
+      SS.Function pat e      -> do env <- getLocalEnv
+                                   let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
                                    return $ VLambda f
-      SS.Application e1 e2   -> do v1 <- interpret env e1
-                                   v2 <- interpret env e2
+      SS.Application e1 e2   -> do v1 <- interpret e1
+                                   v2 <- interpret e2
                                    case v1 of
                                      VLambda f -> f v2
                                      _ -> fail $ "interpret Application: " ++ show v1
-      SS.Let dg e            -> do env' <- interpretDeclGroup env dg
-                                   interpret env' e
-      SS.TSig e _            -> interpret env e
-      SS.IfThenElse e1 e2 e3 -> do v1 <- interpret env e1
+      SS.Let dg e            -> do env' <- interpretDeclGroup dg
+                                   withLocalEnv env' (interpret e)
+      SS.TSig e _            -> interpret e
+      SS.IfThenElse e1 e2 e3 -> do v1 <- interpret e1
                                    case v1 of
-                                     VBool b -> interpret env (if b then e2 else e3)
+                                     VBool b -> interpret (if b then e2 else e3)
                                      _ -> fail $ "interpret IfThenElse: " ++ show v1
-      SS.LExpr _ e           -> interpret env e
+      SS.LExpr _ e           -> interpret e
 
 locToInput :: Located String -> CEnv.InputText
 locToInput l = CEnv.InputText { CEnv.inpText = getVal l
@@ -236,53 +211,58 @@ locToInput l = CEnv.InputText { CEnv.inpText = getVal l
 
 interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
 interpretDecl env (SS.Decl _ pat mt expr) = do
-  v <- interpret env expr
+  v <- interpret expr
   return (bindPatternLocal pat mt v env)
 
 interpretFunction :: LocalEnv -> SS.Expr -> Value
 interpretFunction env expr =
     case expr of
       SS.Function pat e -> VLambda f
-        where f v = interpret (bindPatternLocal pat Nothing v env) e
+        where f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
       SS.TSig e _ -> interpretFunction env e
       _ -> error "interpretFunction: not a function"
 
-interpretDeclGroup :: LocalEnv -> SS.DeclGroup -> TopLevel LocalEnv
-interpretDeclGroup env (SS.NonRecursive d) = interpretDecl env d
-interpretDeclGroup env (SS.Recursive ds) = return env'
-  where
-    env' = foldr addDecl env ds
-    addDecl (SS.Decl _ pat mty e) = bindPatternLocal pat mty (interpretFunction env' e)
+interpretDeclGroup :: SS.DeclGroup -> TopLevel LocalEnv
+interpretDeclGroup (SS.NonRecursive d) =
+    do env <- getLocalEnv
+       interpretDecl env d
+interpretDeclGroup (SS.Recursive ds) =
+    do env <- getLocalEnv
+       let addDecl (SS.Decl _ pat mty e) = bindPatternLocal pat mty (interpretFunction env' e)
+           env' = foldr addDecl env ds
+       return env'
 
-interpretStmts :: LocalEnv -> [SS.Stmt] -> TopLevel Value
-interpretStmts env stmts =
+interpretStmts :: [SS.Stmt] -> TopLevel Value
+interpretStmts stmts =
     let ?fileReader = BS.readFile in
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind pos (SS.PWild _) _ e] -> withPosition pos (interpret env e)
+      [SS.StmtBind pos (SS.PWild _) _ e] -> withPosition pos (interpret e)
       SS.StmtBind pos pat _mcxt e : ss ->
-          do v1 <- withPosition pos (interpret env e)
-             let f v = interpretStmts (bindPatternLocal pat Nothing v env) ss
+          do env <- getLocalEnv
+             v1 <- withPosition pos (interpret e)
+             let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretStmts ss)
              bindValue pos v1 (VLambda f)
-      SS.StmtLet _ bs : ss -> interpret env (SS.Let bs (SS.Block ss))
+      SS.StmtLet _ bs : ss -> interpret (SS.Let bs (SS.Block ss))
       SS.StmtCode _ s : ss ->
           do sc <- getSharedContext
-             rw <- getMergedEnv env
+             rw <- getMergedEnv
 
              ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput s
              -- FIXME: Local bindings get saved into the global cryptol environment here.
              -- We should change parseDecls to return only the new bindings instead.
              putTopLevelRW $ rw{rwCryptol = ce'}
-             interpretStmts env ss
+             interpretStmts ss
       SS.StmtImport _ _ : _ ->
           do fail "block import unimplemented"
       SS.StmtTypedef _ name ty : ss ->
-          do let env' = LocalTypedef (getVal name) ty : env
-             interpretStmts env' ss
+          do env <- getLocalEnv
+             let env' = LocalTypedef (getVal name) ty : env
+             withLocalEnv env' (interpretStmts ss)
 
 stmtInterpreter :: StmtInterpreter
 stmtInterpreter ro rw stmts =
-  fst <$> runTopLevel (interpretStmts emptyLocal stmts) ro rw
+  fst <$> runTopLevel (withLocalEnv emptyLocal (interpretStmts stmts)) ro rw
 
 processStmtBind :: Bool -> SS.Pattern -> Maybe SS.Type -> SS.Expr -> TopLevel ()
 processStmtBind printBinds pat _mc expr = do -- mx mt
@@ -297,13 +277,13 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
                 Nothing -> expr
                 Just t -> SS.TSig expr (SS.tBlock ctx t)
   let decl = SS.Decl (SS.getPos expr) pat Nothing expr'
-  rw <- getTopLevelRW
+  rw <- getMergedEnv
   let opts = rwPPOpts rw
 
   ~(SS.Decl _ _ (Just schema) expr'') <-
     either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
 
-  val <- interpret emptyLocal expr''
+  val <- interpret expr''
 
   -- Run the resulting TopLevel action.
   (result, ty) <-
@@ -344,8 +324,8 @@ interpretStmt printBinds stmt =
     SS.StmtLet _ dg           -> do rw <- getTopLevelRW
                                     dg' <- either failTypecheck return $
                                            checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
-                                    env <- interpretDeclGroup emptyLocal dg'
-                                    getMergedEnv env >>= putTopLevelRW
+                                    env <- interpretDeclGroup dg'
+                                    withLocalEnv env getMergedEnv >>= putTopLevelRW
     SS.StmtCode _ lstr        -> do rw <- getTopLevelRW
                                     sc <- getSharedContext
                                     --io $ putStrLn $ "Processing toplevel code: " ++ show lstr
@@ -458,6 +438,7 @@ buildTopLevelEnv proxy opts =
                    , roTheoremDB = thmDB
                    , roStackTrace = []
                    , roSubshell = fail "Subshells not supported"
+                   , roLocalEnv = []
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc

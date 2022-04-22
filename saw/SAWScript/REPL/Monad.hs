@@ -44,6 +44,7 @@ module SAWScript.REPL.Monad (
     -- ** SAWScript stuff
   , getSharedContext
   , getTopLevelRO
+  , getValueEnvironment
   , getEnvironment, modifyEnvironment, putEnvironment
   , getEnvironmentRef
   , getSAWScriptNames
@@ -87,7 +88,7 @@ import SAWScript.AST (Located(getVal))
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.Options (Options)
 import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..))
-import SAWScript.Value (AIGProxy(..))
+import SAWScript.Value (AIGProxy(..), mergeLocalEnv)
 import Verifier.SAW (SharedContext)
 
 deriving instance Typeable AIG.Proxy
@@ -384,6 +385,12 @@ getEnvironmentRef = environment <$> getRefs
 
 getEnvironment :: REPL TopLevelRW
 getEnvironment = readRef environment
+
+getValueEnvironment :: REPL TopLevelRW
+getValueEnvironment =
+  do ro <- getTopLevelRO
+     rw <- getEnvironment
+     io (mergeLocalEnv (roSharedContext ro) (roLocalEnv ro) rw)
 
 putEnvironment :: TopLevelRW -> REPL ()
 putEnvironment = modifyEnvironment . const

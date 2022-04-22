@@ -47,6 +47,7 @@ import Control.Monad.Reader (ReaderT(..), ask, asks, local)
 import Control.Monad.State (StateT(..), gets)
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.IORef
+import Data.Foldable(foldrM)
 import Data.List ( intersperse )
 import qualified Data.Map as M
 import Data.Map ( Map )
@@ -395,7 +396,8 @@ toplevelCallCC = VLambda body
 toplevelSubshell :: Value
 toplevelSubshell = VLambda $ \_ ->
   do m <- roSubshell <$> ask
-     return (VTopLevel (toValue <$> m))
+     env <- getLocalEnv
+     return (VTopLevel (toValue <$> withLocalEnv env m))
 
 applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x
@@ -427,6 +429,35 @@ data PrimitiveLifecycle
                          request at the moment. -}
   deriving (Eq, Ord, Show)
 
+data LocalBinding
+  = LocalLet SS.LName (Maybe SS.Schema) (Maybe String) Value
+  | LocalTypedef SS.Name SS.Type
+ deriving (Show)
+
+type LocalEnv = [LocalBinding]
+
+emptyLocal :: LocalEnv
+emptyLocal = []
+
+extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv -> LocalEnv
+extendLocal x mt md v env = LocalLet x mt md v : env
+
+addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
+addTypedef name ty rw = rw { rwTypedef = M.insert name ty (rwTypedef rw) }
+
+mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
+mergeLocalEnv sc env rw = foldrM addBinding rw env
+  where addBinding (LocalLet x mt md v) = extendEnv sc x mt md v
+        addBinding (LocalTypedef n ty) = pure . addTypedef n ty
+
+getMergedEnv :: TopLevel TopLevelRW
+getMergedEnv =
+  do sc <- getSharedContext
+     env <- getLocalEnv
+     rw <- getTopLevelRW
+     liftIO $ mergeLocalEnv sc env rw
+
+
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
   TopLevelRO
@@ -448,6 +479,7 @@ data TopLevelRO =
     -- ^ An action for entering a subshell.  This
     --   may raise an error if the current execution
     --   mode doesn't support subshells (e.g., the remote API)
+  , roLocalEnv      :: LocalEnv
   }
 
 data TopLevelRW =
@@ -559,6 +591,12 @@ throwTopLevel msg = do
 
 withPosition :: SS.Pos -> TopLevel a -> TopLevel a
 withPosition pos (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roPosition = pos }) m)
+
+withLocalEnv :: LocalEnv -> TopLevel a -> TopLevel a
+withLocalEnv env (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roLocalEnv = env }) m)
+
+getLocalEnv :: TopLevel LocalEnv
+getLocalEnv = TopLevel_ (asks roLocalEnv)
 
 getPosition :: TopLevel SS.Pos
 getPosition = TopLevel_ (asks roPosition)
