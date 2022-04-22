@@ -3746,14 +3746,14 @@ simplify1LOwnedPermForDetVars :: NuMatchingAny1 r =>
 
 -- For permission l:lowned[ls](ps_in -o ps_out) where l or some free variable in
 -- ps_in or ps_out is not determined, end l
-simplify1LOwnedPermForDetVars det_vars l (ValPerm_LOwned _ ps_in ps_out)
+simplify1LOwnedPermForDetVars det_vars l (ValPerm_LOwned _ _ _ ps_in ps_out)
   | vars <- NameSet.insert l $ freeVars (ps_in,ps_out)
   , not $ NameSet.nameSetIsSubsetOf vars det_vars
   = implEndLifetimeRecM l
 
 -- For lowned permission l:lowned[ls](ps_in -o ps_out), end any lifetimes in ls
 -- that are not determined and remove them from the lowned permission for ls
-simplify1LOwnedPermForDetVars det_vars l (ValPerm_LOwned ls _ _)
+simplify1LOwnedPermForDetVars det_vars l (ValPerm_LOwned ls _ _ _ _)
   | l':_ <- flip mapMaybe ls (asVar >=> \l' ->
                                if NameSet.member l' det_vars then Nothing
                                else return l') =
