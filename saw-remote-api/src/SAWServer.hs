@@ -212,6 +212,9 @@ initialState readFileFn =
                 , roInitWorkDir = cwd
                 , roBasicSS = ss
                 , roTheoremDB = db
+                , roStackTrace = []
+                , roSubshell = fail "SAW server does not support subshells."
+                , roLocalEnv = []
                 }
          rw = TopLevelRW
                 { rwValues = mempty
