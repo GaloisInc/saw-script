@@ -2658,6 +2658,14 @@ exprPermVarAndPerm (ExprAndPerm e p)
     Just $ VarAndPerm x (offsetPerm off p)
 exprPermVarAndPerm _ = Nothing
 
+-- | Get the permisisons in an 'ExprPerms'
+exprPermsToValuePerms :: ExprPerms ctx -> ValuePerms ctx
+exprPermsToValuePerms = RL.map exprAndPermPerm
+
+-- | Get the permisisons in an 'ExprPerms' in bindings
+mbExprPermsToValuePerms :: Mb ctx (ExprPerms ps) -> Mb ctx (ValuePerms ps)
+mbExprPermsToValuePerms = mbMapCl $(mkClosed [| exprPermsToValuePerms |])
+
 -- | Convert an 'ExprPerms' to a 'DistPerms', if possible
 exprPermsToDistPerms :: ExprPerms ctx -> Maybe (DistPerms ctx)
 exprPermsToDistPerms = traverseRAssign exprPermVarAndPerm
@@ -2674,6 +2682,10 @@ distPermsToExprPerms = RL.map varAndPermExprPerm
 exprAndPermVar :: ExprAndPerm a -> Maybe (ExprVar a)
 exprAndPermVar (ExprAndPerm (PExpr_Var x) _) = Just x
 exprAndPermVar _ = Nothing
+
+-- | Convert the expressions in an 'ExprPerms' to variables, if possible
+exprPermsVars :: ExprPerms ps -> Maybe (RAssign Name ps)
+exprPermsVars = traverseRAssign exprAndPermVar
 
 -- | Convert the permission part of an 'ExprAndPerm' to a block permission on a
 -- variable, if possible
