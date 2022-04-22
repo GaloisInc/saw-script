@@ -695,7 +695,8 @@ renderSawDoc :: PPOpts -> SawDoc -> String
 renderSawDoc ppOpts doc =
   Text.Lazy.unpack (renderLazy (style (layoutPretty layoutOpts doc)))
   where
-    layoutOpts = LayoutOptions (AvailablePerLine 80 0.8)
+    -- ribbon width 64, with effectively unlimited right margin
+    layoutOpts = LayoutOptions (AvailablePerLine 8000 0.008)
     style = if ppColor ppOpts then reAnnotateS colorStyle else unAnnotateS
 
 -- | Pretty-print a term and render it to a string, using the given options
