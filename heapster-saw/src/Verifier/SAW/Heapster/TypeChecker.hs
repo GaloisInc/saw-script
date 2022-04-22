@@ -609,12 +609,13 @@ tcBlockAtomic e = tcError (pos e) "Expected llvmblock perm"
 -- | Check a lifetime permission literal
 tcLifetimeAtomic :: AstExpr -> Tc (AtomicPerm LifetimeType)
 tcLifetimeAtomic (ExLOwned _ ls ps_in ps_out) =
-  do Some ps_in' <- tcLOwnedPerms ps_in
-     Some ps_out' <- tcLOwnedPerms ps_out
+  do Some ps_in' <- tcDistPerms ps_in
+     Some ps_out' <- tcDistPerms ps_out
      ls' <- mapM tcKExpr ls
-     let (tps_in, ps_in') = (RL.map typedType )
-     pure (Perm_LOwned ls' (RL.map typedType ps_in') (RL.map typedType ps_out')
-           (RL.map typedObj ps_in') (RL.map typedObj ps_out') y')
+     let eps_in = distPermsToExprPerms $ unTypeDistPerms ps_in'
+     let eps_out = distPermsToExprPerms $ unTypeDistPerms ps_out'
+     pure (Perm_LOwned ls' (typedDistPermsCtx ps_in')
+           (typedDistPermsCtx ps_out') eps_in eps_out)
 tcLifetimeAtomic (ExLCurrent _ l) = Perm_LCurrent <$> tcOptLifetime l
 tcLifetimeAtomic (ExLFinished _) = return Perm_LFinished
 tcLifetimeAtomic e = tcError (pos e) "Expected lifetime perm"
@@ -625,7 +626,7 @@ tcDistPerms [] = pure (Some MNil)
 tcDistPerms ((Located p n,e):xs) =
   do Some (Typed tp x) <- tcTypedName p n
      perm <- tcValPerm tp e
-     Some ps <- tcLOwnedPerms xs
+     Some ps <- tcDistPerms xs
      pure (Some (ps :>: Typed tp (VarAndPerm x perm)))
 
 -- | Helper for checking permission offsets
