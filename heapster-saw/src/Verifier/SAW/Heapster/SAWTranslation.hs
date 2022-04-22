@@ -1855,7 +1855,11 @@ instance TransInfo info =>
 instance TransInfo info =>
          Translate info ctx (ExprPerms ps) (TypeTrans
                                             (PermTransCtx ctx ps)) where
-  translate = translate . mbExprPermsToValuePerms
+  translate mb_eps
+    | Just mb_ps <- mbExprPermsToValuePerms mb_eps = translate mb_ps
+  translate mb_ps =
+    error ("Translating expression permissions that could not be converted " ++
+           "to variable permissions:" ++ permPrettyString emptyPPInfo mb_ps)
 
 -- Translate a FunPerm to a pi-abstraction (FIXME: more documentation!)
 instance TransInfo info =>

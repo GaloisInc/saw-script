@@ -2658,17 +2658,22 @@ exprPermVarAndPerm (ExprAndPerm e p)
     Just $ VarAndPerm x (offsetPerm off p)
 exprPermVarAndPerm _ = Nothing
 
--- | Get the permisisons in an 'ExprPerms'
-exprPermsToValuePerms :: ExprPerms ctx -> ValuePerms ctx
-exprPermsToValuePerms = RL.map exprAndPermPerm
-
--- | Get the permisisons in an 'ExprPerms' in bindings
-mbExprPermsToValuePerms :: Mb ctx (ExprPerms ps) -> Mb ctx (ValuePerms ps)
-mbExprPermsToValuePerms = mbMapCl $(mkClosed [| exprPermsToValuePerms |])
-
 -- | Convert an 'ExprPerms' to a 'DistPerms', if possible
 exprPermsToDistPerms :: ExprPerms ctx -> Maybe (DistPerms ctx)
 exprPermsToDistPerms = traverseRAssign exprPermVarAndPerm
+
+-- | Get the permissions resulting from converting an 'ExprPerms' to a
+-- 'DistPerms', if possible. Note taht this can be different from just getting
+-- the permissions in the 'ExprPerms', because they may be offset by offsets on
+-- variables in the expressions.
+exprPermsToValuePerms :: ExprPerms ctx -> Maybe (ValuePerms ctx)
+exprPermsToValuePerms = fmap distPermsToValuePerms . exprPermsToDistPerms
+
+-- | Get the permisisons in an 'ExprPerms' in bindings
+mbExprPermsToValuePerms :: Mb ctx (ExprPerms ps) ->
+                           Maybe (Mb ctx (ValuePerms ps))
+mbExprPermsToValuePerms =
+  mbMaybe . mbMapCl $(mkClosed [| exprPermsToValuePerms |])
 
 -- | Convert an expression plus permission to an 'ExprAndPerm'
 varAndPermExprPerm :: VarAndPerm a -> ExprAndPerm a
@@ -2678,14 +2683,9 @@ varAndPermExprPerm (VarAndPerm x p) = ExprAndPerm (PExpr_Var x) p
 distPermsToExprPerms :: DistPerms ps -> ExprPerms ps
 distPermsToExprPerms = RL.map varAndPermExprPerm
 
--- | Convert the expression part of an 'ExprAndPerm' to a variable, if possible
-exprAndPermVar :: ExprAndPerm a -> Maybe (ExprVar a)
-exprAndPermVar (ExprAndPerm (PExpr_Var x) _) = Just x
-exprAndPermVar _ = Nothing
-
 -- | Convert the expressions in an 'ExprPerms' to variables, if possible
 exprPermsVars :: ExprPerms ps -> Maybe (RAssign Name ps)
-exprPermsVars = traverseRAssign exprAndPermVar
+exprPermsVars = fmap distPermsVars . exprPermsToDistPerms
 
 -- | Convert the permission part of an 'ExprAndPerm' to a block permission on a
 -- variable, if possible
