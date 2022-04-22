@@ -69,28 +69,6 @@ import Unsafe.Coerce
 import Data.Functor.Constant (Constant(..))
 
 
--- * Helper functions (should be moved to Hobbits)
-
--- | Append two existentially quantified 'RAssign' lists
-apSomeRAssign :: Some (RAssign f) -> Some (RAssign f) -> Some (RAssign f)
-apSomeRAssign (Some x) (Some y) = Some (RL.append x y)
-
--- | Concatenate a list of existentially quantified 'RAssign' lists
-concatSomeRAssign :: [Some (RAssign f)] -> Some (RAssign f)
-concatSomeRAssign = foldl apSomeRAssign (Some MNil)
--- foldl is intentional, appending RAssign matches on the second argument
-
--- | Map a monadic function over an 'RAssign' list from left to right while
--- maintaining an "accumulator" that is threaded through the mapping
-rlMapMWithAccum :: Monad m => (forall a. accum -> f a -> m (g a, accum)) ->
-                   accum -> RAssign f tps -> m (RAssign g tps, accum)
-rlMapMWithAccum _ accum MNil = return (MNil, accum)
-rlMapMWithAccum f accum (xs :>: x) =
-  do (ys,accum') <- rlMapMWithAccum f accum xs
-     (y,accum'') <- f accum' x
-     return (ys :>: y, accum'')
-
-
 ----------------------------------------------------------------------
 -- * Equality Proofs
 ----------------------------------------------------------------------

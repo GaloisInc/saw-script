@@ -93,6 +93,28 @@ import GHC.Stack
 import Debug.Trace
 
 
+-- * Helper functions (should be moved to Hobbits)
+
+-- | Append two existentially quantified 'RAssign' lists
+apSomeRAssign :: Some (RAssign f) -> Some (RAssign f) -> Some (RAssign f)
+apSomeRAssign (Some x) (Some y) = Some (RL.append x y)
+
+-- | Concatenate a list of existentially quantified 'RAssign' lists
+concatSomeRAssign :: [Some (RAssign f)] -> Some (RAssign f)
+concatSomeRAssign = foldl apSomeRAssign (Some MNil)
+-- foldl is intentional, appending RAssign matches on the second argument
+
+-- | Map a monadic function over an 'RAssign' list from left to right while
+-- maintaining an "accumulator" that is threaded through the mapping
+rlMapMWithAccum :: Monad m => (forall a. accum -> f a -> m (g a, accum)) ->
+                   accum -> RAssign f tps -> m (RAssign g tps, accum)
+rlMapMWithAccum _ accum MNil = return (MNil, accum)
+rlMapMWithAccum f accum (xs :>: x) =
+  do (ys,accum') <- rlMapMWithAccum f accum xs
+     (y,accum'') <- f accum' x
+     return (ys :>: y, accum'')
+
+
 ----------------------------------------------------------------------
 -- * Data types and related types
 ----------------------------------------------------------------------
@@ -287,6 +309,10 @@ data MbRangeForType a where
 rangeForLLVMType :: (1 <= w, KnownNat w) => BVRange w ->
                     MbRangeForType (LLVMPointerType w)
 rangeForLLVMType rng = MbRangeForLLVMType MNil $ emptyMb rng
+
+-- | A name-binding over some list of typed existential variables
+data SomeTypedMb a where
+  SomeTypedMb :: CruCtx ctx -> Mb ctx a -> SomeTypedMb a
 
 
 -- | Propositions about bitvectors
@@ -868,6 +894,7 @@ $(mkNuMatching [t| forall w . LLVMFieldShape w |])
 $(mkNuMatching [t| forall a . PermExpr a |])
 $(mkNuMatching [t| forall w. BVRange w |])
 $(mkNuMatching [t| forall a. MbRangeForType a |])
+$(mkNuMatching [t| forall a. NuMatching a => SomeTypedMb a |])
 $(mkNuMatching [t| forall w. BVProp w |])
 $(mkNuMatching [t| forall w sz . LLVMFieldPerm w sz |])
 $(mkNuMatching [t| forall w . LLVMArrayBorrow w |])
@@ -2719,6 +2746,12 @@ funPermOuts :: FunPerm ghosts args gouts ret ->
                MbValuePerms ((ghosts :++: args) :++: gouts :> ret)
 funPermOuts (FunPerm _ _ _ _ _ perms_out) = perms_out
 
+-- | Build the context of types for the output permissions of a function
+funPermOutCtx :: FunPerm ghosts args gouts ret ->
+                 CruCtx ((ghosts :++: args) :++: gouts :> ret)
+funPermOutCtx fun_perm =
+  appendCruCtx (funPermTops fun_perm) (funPermRets fun_perm)
+
 
 -- | Test whether a name of a given 'NameSort' can be folded / unfolded
 type family NameSortCanFold (ns::NameSort) :: Bool where
@@ -3042,6 +3075,10 @@ trueDistPerms (ns :>: n) = DistPermsCons (trueDistPerms ns) n ValPerm_True
 
 -- | A list of "distinguished" permissions with types
 type TypedDistPerms = RAssign (Typed VarAndPerm)
+
+-- | Get the 'CruCtx' for a 'TypedDistPerms'
+typedDistPermsCtx :: TypedDistPerms ctx -> CruCtx ctx
+typedDistPermsCtx = cruCtxOfTypes . RL.map typedType
 
 -- | Convert a permission list expression to a 'TypedDistPerms', if possible
 permListToTypedPerms :: PermExpr PermListType -> Maybe (Some TypedDistPerms)
@@ -4339,6 +4376,89 @@ modalizeBlockShape (LLVMBlockPerm {..}) =
 lownedPermsSimpleIn :: ExprVar LifetimeType -> ExprPerms ps ->
                        Maybe (ExprPerms ps)
 lownedPermsSimpleIn l = modalize (Just PExpr_Read) (Just $ PExpr_Var l)
+
+instance Functor SomeTypedMb where
+  fmap f (SomeTypedMb ctx mb_a) = SomeTypedMb ctx (fmap f mb_a)
+
+instance Applicative SomeTypedMb where
+  pure a = SomeTypedMb CruCtxNil $ emptyMb a
+  liftA2 f (SomeTypedMb ctx1 mb_a1) (SomeTypedMb ctx2 mb_a2) =
+    SomeTypedMb (appendCruCtx ctx1 ctx2) $
+    mbCombine (cruCtxProxies ctx2) $
+    flip fmap mb_a1 $ \a1 -> flip fmap mb_a2 $ \a2 -> f a1 a2
+
+-- | Commute a 'SomeTypedMb' out of a name-binding
+mbSomeTypedMb :: NuMatching a => Mb ctx (SomeTypedMb a) ->
+                 SomeTypedMb (Mb ctx a)
+mbSomeTypedMb (mbMatch -> [nuMP| SomeTypedMb ctx mb_a |]) =
+  SomeTypedMb (mbLift ctx) $ mbSwap (cruCtxProxies $ mbLift ctx) mb_a
+
+-- | Generic function to abstract all the read/write and lifetime modalities in
+-- a permission
+class AbstractModalities a where
+  abstractModalities :: a -> SomeTypedMb a
+
+instance (NuMatching a, AbstractModalities a) =>
+         AbstractModalities (Mb ctx a) where
+  abstractModalities mb_a = mbSomeTypedMb $ fmap abstractModalities mb_a
+
+instance AbstractModalities (ExprAndPerm a) where
+  abstractModalities (ExprAndPerm e p) =
+    ExprAndPerm e <$> abstractModalities p
+
+instance AbstractModalities (RAssign ExprAndPerm a) where
+  abstractModalities MNil = pure MNil
+  abstractModalities (eps :>: ep) =
+    (:>:) <$> abstractModalities eps <*> abstractModalities ep
+
+instance AbstractModalities (ValuePerm a) where
+  abstractModalities p@(ValPerm_Eq _) = pure p
+  abstractModalities (ValPerm_Or p1 p2) =
+    ValPerm_Or <$> abstractModalities p1 <*> abstractModalities p2
+  abstractModalities (ValPerm_Exists mb_p) =
+    ValPerm_Exists <$> abstractModalities mb_p
+  abstractModalities p@(ValPerm_Named _ _ _) =
+    -- Cannot abstract modalities out of an arbitrary named permission; this
+    -- would require special-purpose modality arguments to every named
+    -- permission, so we could be sure that abstract these would abstract its
+    -- unfolding
+    pure p
+  abstractModalities p@(ValPerm_Var _ _) = pure p
+  abstractModalities (ValPerm_Conj ps) =
+    ValPerm_Conj <$> traverse abstractModalities ps
+  abstractModalities ValPerm_False = pure ValPerm_False
+
+instance AbstractModalities (AtomicPerm a) where
+  abstractModalities (Perm_LLVMField fp) =
+    SomeTypedMb knownRepr $
+    nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: rw :>: l) ->
+    Perm_LLVMField $ fp { llvmFieldRW = PExpr_Var rw,
+                          llvmFieldLifetime = PExpr_Var l }
+  abstractModalities (Perm_LLVMArray fp) =
+    SomeTypedMb knownRepr $
+    nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: rw :>: l) ->
+    Perm_LLVMArray $ fp { llvmArrayRW = PExpr_Var rw,
+                          llvmArrayLifetime = PExpr_Var l }
+  abstractModalities (Perm_LLVMBlock fp) =
+    SomeTypedMb knownRepr $
+    nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: rw :>: l) ->
+    Perm_LLVMBlock $ fp { llvmBlockRW = PExpr_Var rw,
+                          llvmBlockLifetime = PExpr_Var l }
+  abstractModalities p@(Perm_LLVMFree _) = pure p
+  abstractModalities p@(Perm_LLVMFunPtr _ _) = pure p
+  abstractModalities p@(Perm_LLVMBlockShape _) = pure p
+  abstractModalities p@(Perm_IsLLVMPtr) = pure p
+  abstractModalities p@(Perm_NamedConj _ _ _) = pure p
+  abstractModalities p@(Perm_LLVMFrame _) = pure p
+  abstractModalities p@(Perm_LOwned _ _ _ _ _) = pure p
+  abstractModalities p@(Perm_LOwnedSimple _ _) = pure p
+  abstractModalities p@(Perm_LCurrent _) = pure p
+  abstractModalities p@(Perm_LFinished) = pure p
+  abstractModalities (Perm_Struct ps) =
+    Perm_Struct <$> traverseRAssign abstractModalities ps
+  abstractModalities p@(Perm_Fun _) = pure p
+  abstractModalities p@(Perm_BVProp _) = pure p
+
 
 -- | Extract the shape-in-bindings for an unfoldable shape
 namedShapeBodyShape :: KnownNat w => NamedShape 'True args w ->
