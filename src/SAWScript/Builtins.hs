@@ -1343,10 +1343,9 @@ caseSatResultPrim sr vUnsat vSat = do
       tt <- io $ typedTermOfFirstOrderValue sc fov
       SV.applyValue vSat (SV.toValue tt)
 
-
 envCmd :: TopLevel ()
 envCmd = do
-  m <- rwTypes <$> getTopLevelRW
+  m <- rwTypes <$> SV.getMergedEnv
   opts <- getOptions
   let showLName = getVal
   io $ sequence_ [ printOutLn opts Info (showLName x ++ " : " ++ pShow v) | (x, v) <- Map.assocs m ]
