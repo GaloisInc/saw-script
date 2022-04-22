@@ -39,7 +39,9 @@ import SAWScript.Position (getPos)
 import Cryptol.Parser (ParseError())
 import Cryptol.Utils.PP hiding ((</>))
 
+import Control.Exception (displayException)
 import Control.Monad (guard)
+
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
 import Data.List (intercalate)
@@ -146,7 +148,7 @@ runCommand c = case c of
                      `SAWScript.REPL.Monad.catchOther` handlerPrint
     where
     handlerPP re = io (putStrLn "" >> print (pp re))
-    handlerPrint e = io (putStrLn "" >> print e)
+    handlerPrint e = io (putStrLn "" >> putStrLn (displayException e))
     handlerFail s = io (putStrLn "" >> putStrLn s)
 
   Unknown cmd -> io (putStrLn ("Unknown command: " ++ cmd))

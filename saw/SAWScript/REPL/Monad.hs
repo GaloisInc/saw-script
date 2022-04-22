@@ -8,6 +8,7 @@ Stability   : provisional
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
 module SAWScript.REPL.Monad (
@@ -76,6 +77,7 @@ import Data.Typeable (Typeable)
 import System.Console.ANSI (setTitle)
 import qualified Control.Exception as X
 import System.IO.Error (isUserError, ioeGetErrorString)
+import System.Exit (ExitCode)
 
 import Verifier.SAW.SharedTerm (Term)
 import Verifier.SAW.CryptolEnv
@@ -238,9 +240,14 @@ catchFail m k = REPL (\ ref -> X.catchJust sel (unREPL m ref) (\s -> unREPL (k s
     sel e | isUserError e = Just (ioeGetErrorString e)
           | otherwise     = Nothing
 
--- | Handle any other exception
+-- | Handle any other exception (except that we ignore async exceptions and exitWith)
 catchOther :: REPL a -> (X.SomeException -> REPL a) -> REPL a
-catchOther = catchEx
+catchOther m k = REPL (\ref -> X.catchJust flt (unREPL m ref) (\s -> unREPL (k s) ref))
+ where
+  flt e
+    | Just (_ :: X.AsyncException) <- X.fromException e = Nothing
+    | Just (_ :: ExitCode)       <- X.fromException e = Nothing
+    | otherwise = Just e
 
 rethrowEvalError :: IO a -> IO a
 rethrowEvalError m = run `X.catch` rethrow
