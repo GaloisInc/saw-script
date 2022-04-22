@@ -2375,7 +2375,7 @@ simplImplOut (SImpl_IntroLOwnedSimple l tps lops) =
     Nothing ->
       error "simplImplOut: SImpl_IntroLOwnedSimple: non-variables in permission list"
 simplImplOut (SImpl_ElimLOwnedSimple l tps lops) =
-  case modalize Nothing (Just $ PExpr_Var l) lops of
+  case lownedPermsSimpleIn l lops of
     Just lops' -> distPerms1 l (ValPerm_LOwned [] tps tps lops' lops)
     Nothing ->
       error "simplImplOut: SImpl_ElimLOwnedSimple: could not modalize permission list"
