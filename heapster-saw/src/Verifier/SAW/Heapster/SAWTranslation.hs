@@ -2483,6 +2483,8 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_CastLLVMPtr _ _ _ _ |] ->
+    -- FIXME: offsetLLVMPerm can throw away conjuncts, like free and llvmfunptr
+    -- permissions, that change the type of the translation
     do tptrans <- translateSimplImplOutHead mb_simpl
        withPermStackM RL.tail
          (\(pctx :>: _ :>: ptrans) ->
