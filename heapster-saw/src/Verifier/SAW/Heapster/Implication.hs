@@ -5500,28 +5500,26 @@ recombinePerm' x x_p@(ValPerm_Eq (PExpr_Var y)) p =
   implPushCopyM x x_p >>>
   invertEqM x y >>> implSwapM x p y (ValPerm_Eq (PExpr_Var x)) >>>
   introCastM y x p >>> getPerm y >>>= \y_p -> recombinePermExpl y y_p p
-recombinePerm' x x_p@(ValPerm_Eq (PExpr_LLVMOffset y off)) (ValPerm_Conj ps) =
+recombinePerm' x x_p@(ValPerm_Eq (PExpr_LLVMOffset y off)) p =
   implPushCopyM x x_p >>>
   implSimplM Proxy (SImpl_InvertLLVMOffsetEq x off y) >>>
-  implSwapM x (ValPerm_Conj ps) y (ValPerm_Eq
-                                   (PExpr_LLVMOffset x (bvNegate off))) >>>
-  castLLVMPtrM x (ValPerm_Conj ps) (bvNegate off) y >>>
+  implSwapM x p y (ValPerm_Eq (PExpr_LLVMOffset x (bvNegate off))) >>>
+  castLLVMPtrM x p (bvNegate off) y >>>
   getPerm y >>>= \y_p ->
-  recombinePermExpl y y_p (ValPerm_Conj $ mapMaybe (offsetLLVMAtomicPerm off) ps)
+  recombinePermExpl y y_p (offsetLLVMPerm off p)
 recombinePerm' x _p p'@(ValPerm_Eq PExpr_Unit) =
   -- When trying to combine a permission x:eq(()), just drop this permission
   implDropM x p'
 recombinePerm' x p p'@(ValPerm_Eq _) =
   -- NOTE: we could handle this by swapping the stack with the variable perm and
   -- calling recombinePerm again, but this could potentially create permission
-  -- equality cycles with, e.g., x:eq(y) * y:eq(x). Plus, we don't expect any
-  -- functions or typed instructions to return equality permissions unless it is
-  -- for a new, fresh variable, in which case the above cases will handle it
+  -- equality cycles with, e.g., x:eq(y) * y:eq(x). So instead we just drop the
+  -- new equality permission.
   implTraceM (\i ->
                pretty "recombinePerm: unexpected equality permission being recombined" <> softline <>
                permPretty i x <+> colon <+> permPretty i p <+>
                pretty "<-" <+> permPretty i p') >>>
-  error "recombinePerm: unexpected equality permission being recombined"
+  implDropM x p'
 recombinePerm' x x_p (ValPerm_Or _ _) =
   elimOrsExistsM x >>>= \p' -> recombinePermExpl x x_p p'
 recombinePerm' x x_p (ValPerm_Exists _) =
