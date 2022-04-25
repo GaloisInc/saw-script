@@ -42,6 +42,7 @@ import Data.String
 import Data.Proxy
 import Data.Reflection
 import Data.Functor.Constant
+import Data.Functor.Compose
 import qualified Data.BitVector.Sized as BV
 import Data.BitVector.Sized (BV)
 import Numeric.Natural
@@ -5841,6 +5842,17 @@ lownedPermsCouldProve :: ExprPerms a -> DistPerms ps -> Bool
 lownedPermsCouldProve lops ps =
   RL.foldr (\lop rest -> lownedPermCouldProve lop ps || rest) False lops
 
+-- | Find all lifetimes with ownership permissions in a 'DistPerms' in binding
+lownedsInMbDistPerms :: Mb ctx (DistPerms ps) -> [ExprVar LifetimeType]
+lownedsInMbDistPerms =
+  catMaybes . RL.mapToList
+  (\case
+      Compose [nuP| VarAndPerm mb_l (ValPerm_Conj1 mb_p) |]
+        | Just Refl
+          <- mbLift $ mbMapCl $(mkClosed [| isLifetimeOwnershipPerm |]) mb_p
+        , Right l <- mbNameBoundP mb_l -> Just l
+      _ -> Nothing)
+  . mbRAssign
 
 {-
 -- | Convert a 'FunPerm' in a name-binding to a 'FunPerm' that takes those bound

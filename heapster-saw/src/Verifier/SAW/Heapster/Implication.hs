@@ -4690,13 +4690,16 @@ lifetimesThatCouldProve :: NuMatchingAny1 r => Mb vars (DistPerms ps') ->
                                                   AtomicPerm LifetimeType)]
 lifetimesThatCouldProve mb_ps =
   do Some all_perms <- uses implStatePerms permSetAllVarPerms
+     let needed_ls = lownedsInMbDistPerms mb_ps
      pure (RL.foldr
              (\case
                  VarAndPerm l (ValPerm_LOwned ls tps_in tps_out ps_in ps_out)
-                   | mbLift $ fmap (lownedPermsCouldProve ps_out) mb_ps ->
+                   | notElem l needed_ls
+                   , mbLift $ fmap (lownedPermsCouldProve ps_out) mb_ps ->
                      ((l, Perm_LOwned ls tps_in tps_out ps_in ps_out) :)
                  VarAndPerm l (ValPerm_LOwnedSimple tps ps)
-                   | mbLift $ fmap (lownedPermsCouldProve ps) mb_ps ->
+                   | notElem l needed_ls
+                   , mbLift $ fmap (lownedPermsCouldProve ps) mb_ps ->
                      ((l, Perm_LOwnedSimple tps ps) :)
                  _ -> id)
              []
