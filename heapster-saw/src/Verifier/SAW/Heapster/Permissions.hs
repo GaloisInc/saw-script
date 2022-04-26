@@ -2688,42 +2688,6 @@ distPermsToExprPerms = RL.map varAndPermExprPerm
 exprPermsVars :: ExprPerms ps -> Maybe (RAssign Name ps)
 exprPermsVars = fmap distPermsVars . exprPermsToDistPerms
 
--- | Convert the permission part of an 'ExprAndPerm' to a block permission on a
--- variable, if possible
-exprAndPermVarBlockPerm :: ExprAndPerm a -> Maybe (ExprVar a, SomeLLVMBlockPerm a)
-exprAndPermVarBlockPerm (ExprAndPerm e (ValPerm_Conj1 p))
-  | Just (x, perm_off) <- asVarOffset e
-  , Just (SomeLLVMBlockPerm bp) <- llvmAtomicPermToSomeBlock p
-  , off <- llvmPermOffsetExpr perm_off =
-    Just (x, SomeLLVMBlockPerm (offsetLLVMBlockPerm off bp))
-exprAndPermVarBlockPerm _ = Nothing
-
--- | Convert the permission part of an 'ExprAndPerm' in a binding to a block
--- permission on a variable in a binding, if possible
-mbExprAndPermVarBlockPerm :: Mb ctx (ExprAndPerm a) ->
-                             Maybe (Mb ctx (ExprVar a, SomeLLVMBlockPerm a))
-mbExprAndPermVarBlockPerm =
-  mbMaybe . mbMapCl $(mkClosed [| exprAndPermVarBlockPerm |])
-
--- | Get all the permisisons in an 'ExprPerms' list associated with a particular
--- expression
-exprPermsForExpr :: CruCtx ps -> ExprPerms ps ->
-                    TypeRepr a -> PermExpr a -> [ValuePerm a]
-exprPermsForExpr _ MNil _ _ = []
-exprPermsForExpr (CruCtxCons tps tp) (ps :>: ExprAndPerm _ p) tp' e'
-  | Just Refl <- testEquality tp tp' =
-    p : exprPermsForExpr tps ps tp' e'
-exprPermsForExpr (CruCtxCons tps _) (ps :>: _) tp' e' =
-  exprPermsForExpr tps ps tp' e'
-
--- | Find an 'ExprAndPerm' for a particular variable in an 'ExprPerms' list
-findExprAndPermForVar :: ExprVar a -> ExprPerms ps -> Maybe (ExprAndPerm a)
-findExprAndPermForVar _ MNil = Nothing
-findExprAndPermForVar x (_ :>: e_and_p@(ExprAndPerm
-                                        (asVarOffset -> Just (y, _)) _))
-  | Just Refl <- testEquality x y = Just e_and_p
-findExprAndPermForVar x (es_ps :>: _) = findExprAndPermForVar x es_ps
-
 
 -- | Extract the @args@ context from a function permission
 funPermArgs :: FunPerm ghosts args gouts ret -> CruCtx args
@@ -3065,6 +3029,13 @@ valuePermsToDistPerms (ns :>: n) (ps :>: p) =
 -- distinguished permissions for those variables
 mbValuePermsToDistPerms :: MbValuePerms ps -> MbDistPerms ps
 mbValuePermsToDistPerms = nuMultiWithElim1 valuePermsToDistPerms
+
+-- | Extract the permissions for a particular variable in a 'DistPerms' list
+distPermsForVar :: ExprVar a -> DistPerms ps -> [ValuePerm a]
+distPermsForVar _ MNil = []
+distPermsForVar x (ps :>: VarAndPerm y p)
+  | Just Refl <- testEquality x y = p : distPermsForVar x ps
+distPermsForVar x (ps :>: _) = distPermsForVar x ps
 
 -- | Extract the permissions from a 'DistPerms'
 distPermsToValuePerms :: DistPerms ps -> ValuePerms ps
@@ -3504,6 +3475,14 @@ instance PermPretty (BVRange w) where
   permPrettyM (BVRange e1 e2) =
     (\pp1 pp2 -> braces (pp1 <> comma <+> pp2))
     <$> permPrettyM e1 <*> permPrettyM e2
+
+instance PermPretty (MbRangeForType a) where
+  permPrettyM (MbRangeForLLVMType _ mb_rng) = permPrettyM mb_rng
+  permPrettyM (MbRangeForStructType prxs memb rng) =
+    do pp_rng <- permPrettyM rng
+       return $ hcat $ intersperse comma $
+         RL.toList $ RL.set memb (Constant pp_rng) $
+         RL.map (const $ Constant PP.emptyDoc) prxs
 
 instance PermPretty (BVProp w) where
   permPrettyM (BVProp_Eq e1 e2) =

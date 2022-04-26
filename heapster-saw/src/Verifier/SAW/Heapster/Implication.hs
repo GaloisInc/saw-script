@@ -6169,48 +6169,57 @@ getExprRanges _ _ =
 -- | The second stage of 'solveForPermListImpl', after equality permissions have
 -- been substituted into the 'ExprPerms'
 solveForPermListImplH :: NuMatchingAny1 r => RAssign Proxy vars ->
-                         CruCtx ps_l -> ExprPerms ps_l ->
-                         CruCtx ps_r -> ExprPerms ps_r ->
+                         DistPerms ps_l -> CruCtx ps_r -> DistPerms ps_r ->
                          ImplM vars s r ps ps (NeededPerms vars)
 -- If the RHS is empty, we are done
-solveForPermListImplH _ _ _ _ MNil =
+solveForPermListImplH _ _ _ MNil =
   pure neededPerms0
 
 -- Otherwise, get all the offsets mentioned in RHS permissions for expression e,
 -- subtract any ranges on the LHS for e, and then return block permisisons for
 -- any of the remaining ranges that are currently held for e
-solveForPermListImplH vars tps_l ps_l (CruCtxCons tps_r' tp_r) (ps_r' :>:
-                                                                ExprAndPerm e p)
-  | lhs_ps <- exprPermsForExpr tps_l ps_l tp_r e
+solveForPermListImplH vars ps_l (CruCtxCons tps_r' tp_r) (ps_r' :>:
+                                                          VarAndPerm x p)
+  | lhs_ps <- distPermsForVar x ps_l
   , lhs_rngs <- concatMap getOffsets lhs_ps
   , rhs_rngs <- getOffsets p
   , needed_rngs <- mbRangeFTsDelete rhs_rngs lhs_rngs =
-    getExprRanges tp_r e >>>= \expr_rngs ->
-    apSomeRAssign
-    (neededPermsForRanges vars e $
-     mbRangeFTsSubsetTo expr_rngs needed_rngs) <$>
-    solveForPermListImplH vars tps_l ps_l tps_r' ps_r'
+    getExprRanges tp_r (PExpr_Var x) >>>= \expr_rngs ->
+    let res_rngs = mbRangeFTsSubsetTo expr_rngs needed_rngs in
+    implVerbTraceM
+    (\i -> pretty "solveForPermListImplH" <+>
+           permPretty i x <> colon <> line <> pretty "  " <>
+           align (sep [pretty "RHS:" <+> permPretty i p,
+                       pretty "LHS:" <+> permPretty i lhs_ps,
+                       pretty "Needed ranges:" <+> permPretty i needed_rngs,
+                       pretty "Held ranges:" <+> permPretty i expr_rngs,
+                       pretty "Result ranges:" <+> permPretty i res_rngs]))
+    >>>= \_ ->
+    apSomeRAssign (neededPermsForRanges vars (PExpr_Var x) res_rngs) <$>
+    solveForPermListImplH vars ps_l tps_r' ps_r'
 
 -- | Determine what additional permissions from the variable permissions, if
 -- any, would be needed to prove one list of permissions implies another. Also
 -- instantiate any existential variables as needed for the implication. This is
 -- just a "best guess", so just do nothing and return if nothing can be done.
-solveForPermListImpl :: NuMatchingAny1 r => CruCtx ps_l -> ExprPerms ps_l ->
+solveForPermListImpl :: NuMatchingAny1 r => ExprPerms ps_l ->
                         CruCtx ps_r -> Mb vars (ExprPerms ps_r) ->
                         ImplM vars s r ps ps (NeededPerms vars)
-solveForPermListImpl tps_l ps_l tps_r mb_ps_r =
+solveForPermListImpl ps_l tps_r mb_ps_r =
   let prxs = mbToProxy mb_ps_r in
   -- FIXME HERE NOW: eliminate struct variables
   substEqsWithProof ps_l >>>= \eqp_l ->
   (psubstProxies <$> getPSubst) >>>= \vars ->
   partialSubstForceM mb_ps_r "solveForPermListImpl" >>>= \ps_r ->
   give prxs (substEqsWithProof ps_r) >>>= \eqp_r ->
-  let neededs =
-        someDistPermsToNeededPerms prxs $
-        apSomeRAssign (someEqProofPerms eqp_l) (someEqProofPerms eqp_r) in
-  apSomeRAssign neededs <$>
-  solveForPermListImplH vars tps_l (someEqProofRHS eqp_l)
-                        tps_r (someEqProofRHS eqp_r)
+  case (exprPermsToDistPerms (someEqProofRHS eqp_l),
+        exprPermsToDistPerms (someEqProofRHS eqp_r)) of
+    (Just dps_l, Just dps_r) ->
+      let neededs =
+            someDistPermsToNeededPerms prxs $
+            apSomeRAssign (someEqProofPerms eqp_l) (someEqProofPerms eqp_r) in
+      apSomeRAssign neededs <$>
+      solveForPermListImplH vars dps_l tps_r dps_r
 
 
 ----------------------------------------------------------------------
@@ -7979,8 +7988,8 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       -- name-binding, so ps_inR cannot have any evars.
       partialSubstForceM mb_ps_inR "proveVarAtomicImpl" >>>= \ps_inR ->
       let mb_ps_inL = mbConst ps_inL mb_ps_inR in
-      solveForPermListImpl tps_inR ps_inR tps_inL mb_ps_inL >>>= \(Some neededs1) ->
-      solveForPermListImpl tps_outL ps_outL tps_outR mb_ps_outR >>>= \(Some neededs2) ->
+      solveForPermListImpl ps_inR tps_inL mb_ps_inL >>>= \(Some neededs1) ->
+      solveForPermListImpl ps_outL tps_outR mb_ps_outR >>>= \(Some neededs2) ->
 
       -- Prove ps1 and ps2, which can have evars, and then look at the
       -- substitution instances of ps1 and ps2 that were actually proved on top
