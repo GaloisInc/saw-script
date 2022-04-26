@@ -2663,6 +2663,15 @@ exprPermVarAndPerm _ = Nothing
 exprPermsToDistPerms :: ExprPerms ctx -> Maybe (DistPerms ctx)
 exprPermsToDistPerms = traverseRAssign exprPermVarAndPerm
 
+-- | Find all permissions in an 'ExprPerms' list for a variable
+exprPermsForVar :: ExprVar a -> ExprPerms ps -> [ValuePerm a]
+exprPermsForVar _ MNil = []
+exprPermsForVar x (ps :>: e_and_p)
+  | Just (VarAndPerm y p) <- exprPermVarAndPerm e_and_p
+  , Just Refl <- testEquality x y
+  = p : exprPermsForVar x ps
+exprPermsForVar x (ps :>: _) = exprPermsForVar x ps
+
 -- | Get the permissions resulting from converting an 'ExprPerms' to a
 -- 'DistPerms', if possible. Note taht this can be different from just getting
 -- the permissions in the 'ExprPerms', because they may be offset by offsets on

@@ -6169,18 +6169,18 @@ getExprRanges _ _ =
 -- | The second stage of 'solveForPermListImpl', after equality permissions have
 -- been substituted into the 'ExprPerms'
 solveForPermListImplH :: NuMatchingAny1 r => RAssign Proxy vars ->
-                         DistPerms ps_l -> CruCtx ps_r -> DistPerms ps_r ->
+                         ExprPerms ps_l -> CruCtx ps_r -> ExprPerms ps_r ->
                          ImplM vars s r ps ps (NeededPerms vars)
 -- If the RHS is empty, we are done
 solveForPermListImplH _ _ _ MNil =
   pure neededPerms0
 
--- Otherwise, get all the offsets mentioned in RHS permissions for expression e,
--- subtract any ranges on the LHS for e, and then return block permisisons for
--- any of the remaining ranges that are currently held for e
-solveForPermListImplH vars ps_l (CruCtxCons tps_r' tp_r) (ps_r' :>:
-                                                          VarAndPerm x p)
-  | lhs_ps <- distPermsForVar x ps_l
+-- If the RHS is a varible x, get all the offsets mentioned in RHS permissions
+-- for x, subtract any ranges on the LHS for x, and then return block
+-- permisisons for any of the remaining ranges that are currently held for x
+solveForPermListImplH vars ps_l (CruCtxCons tps_r' tp_r) (ps_r' :>: e_and_p)
+  | Just (VarAndPerm x p) <- exprPermVarAndPerm e_and_p
+  , lhs_ps <- exprPermsForVar x ps_l
   , lhs_rngs <- concatMap getOffsets lhs_ps
   , rhs_rngs <- getOffsets p
   , needed_rngs <- mbRangeFTsDelete rhs_rngs lhs_rngs =
@@ -6198,6 +6198,10 @@ solveForPermListImplH vars ps_l (CruCtxCons tps_r' tp_r) (ps_r' :>:
     apSomeRAssign (neededPermsForRanges vars (PExpr_Var x) res_rngs) <$>
     solveForPermListImplH vars ps_l tps_r' ps_r'
 
+-- If the RHS is not a variable, ignore it and keep going
+solveForPermListImplH vars ps_l (CruCtxCons tps_r' _) (ps_r' :>: _) =
+  solveForPermListImplH vars ps_l tps_r' ps_r'
+
 -- | Determine what additional permissions from the variable permissions, if
 -- any, would be needed to prove one list of permissions implies another. Also
 -- instantiate any existential variables as needed for the implication. This is
@@ -6212,14 +6216,10 @@ solveForPermListImpl ps_l tps_r mb_ps_r =
   (psubstProxies <$> getPSubst) >>>= \vars ->
   partialSubstForceM mb_ps_r "solveForPermListImpl" >>>= \ps_r ->
   give prxs (substEqsWithProof ps_r) >>>= \eqp_r ->
-  case (exprPermsToDistPerms (someEqProofRHS eqp_l),
-        exprPermsToDistPerms (someEqProofRHS eqp_r)) of
-    (Just dps_l, Just dps_r) ->
-      let neededs =
-            someDistPermsToNeededPerms prxs $
-            apSomeRAssign (someEqProofPerms eqp_l) (someEqProofPerms eqp_r) in
-      apSomeRAssign neededs <$>
-      solveForPermListImplH vars dps_l tps_r dps_r
+  let neededs =
+        someDistPermsToNeededPerms prxs $
+        apSomeRAssign (someEqProofPerms eqp_l) (someEqProofPerms eqp_r) in
+  apSomeRAssign neededs <$> solveForPermListImplH vars ps_l tps_r ps_r
 
 
 ----------------------------------------------------------------------
