@@ -6219,7 +6219,9 @@ solveForPermListImpl ps_l tps_r mb_ps_r =
   let neededs =
         someDistPermsToNeededPerms prxs $
         apSomeRAssign (someEqProofPerms eqp_l) (someEqProofPerms eqp_r) in
-  apSomeRAssign neededs <$> solveForPermListImplH vars ps_l tps_r ps_r
+  let ps_l' = someEqProofRHS eqp_l
+      ps_r' = someEqProofRHS eqp_r in
+  apSomeRAssign neededs <$> solveForPermListImplH vars ps_l' tps_r ps_r'
 
 
 ----------------------------------------------------------------------
