@@ -122,6 +122,10 @@ eqProofStepRHS (EqProofStep eq_perms f) = f (RL.map eqPermRHS eq_perms)
 eqProofStepPerms :: EqProofStep ps a -> DistPerms ps
 eqProofStepPerms (EqProofStep eq_perms _) = RL.map eqPermVarAndPerm eq_perms
 
+-- | Get the equalities required by an 'EqProofStep'
+eqProofStepEqs :: EqProofStep ps a -> RAssign EqPerm ps
+eqProofStepEqs (EqProofStep eq_perms _) = eq_perms
+
 instance Functor (EqProofStep ps) where
   fmap f (EqProofStep eq_perms g) = EqProofStep eq_perms (f . g)
 
@@ -225,6 +229,12 @@ someEqProofLHS (SomeEqProofCons some_eqp _) = someEqProofLHS some_eqp
 someEqProofRHS :: SomeEqProof a -> a
 someEqProofRHS (SomeEqProofRefl a) = a
 someEqProofRHS (SomeEqProofCons _ eq_step) = eqProofStepRHS eq_step
+
+-- | Get all the equality permissions used by a 'SomeEqProof'
+someEqProofEqs :: SomeEqProof a -> Some (RAssign EqPerm)
+someEqProofEqs (SomeEqProofRefl _) = Some MNil
+someEqProofEqs (SomeEqProofCons some_eqp eq_step) =
+  apSomeRAssign (Some $ eqProofStepEqs eq_step) (someEqProofEqs some_eqp)
 
 -- | Get all the equality permissions used by a 'SomeEqProof'
 someEqProofPerms :: SomeEqProof a -> Some DistPerms
@@ -3300,11 +3310,15 @@ getExVarType memb =
 getPSubst :: ImplM vars s r ps ps (PartialSubst vars)
 getPSubst = use implStatePSubst
 
+-- | Get phantom arguments for the current existential variables
+getVarProxies :: ImplM vars s r ps ps (RAssign Proxy vars)
+getVarProxies = uses implStateVars cruCtxProxies
+
 -- | Add a multi-binding for the current existential variables around a value
 -- (that does not use those variables)
 mbVarsM :: a -> ImplM vars s r ps ps (Mb vars a)
 mbVarsM a =
-  do px <- uses implStateVars cruCtxProxies
+  do px <- getVarProxies
      pure (mbPure px a)
 
 -- | Build a multi-binding for the current existential variables using a
@@ -3314,7 +3328,7 @@ mbSubstM :: ((forall a. Substable PermVarSubst a Identity =>
               Mb vars a -> a) -> b) ->
             ImplM vars s r ps ps (Mb vars b)
 mbSubstM f =
-  do vars <- uses implStateVars cruCtxProxies
+  do vars <- getVarProxies
      return (nuMulti vars $ \ns ->
               f (varSubst $ permVarSubstOfNames ns))
 
@@ -3342,7 +3356,7 @@ modifyPSubst f = implStatePSubst %= f
 -- raising an error if it is already set
 setVarM :: Member vars a -> PermExpr a -> ImplM vars s r ps ps ()
 setVarM memb e =
-  do vars <- uses implStateVars cruCtxProxies
+  do vars <- getVarProxies
      _ <- implTraceM (\i -> pretty "Setting" <+>
                        permPretty i (nuMulti vars $ \ns -> RL.get memb ns) <+>
                        pretty "=" <+> permPretty i e)
@@ -3458,6 +3472,10 @@ getAtomicPerms x = getPerm x >>= \case
 -- | Get the distinguished permission stack
 getDistPerms :: ImplM vars s r ps ps (DistPerms ps)
 getDistPerms = use (implStatePerms . distPerms)
+
+-- | Get ghost arguments to represent the current stack at the type level
+getDistPermsProxies :: ImplM vars s r ps ps (RAssign Proxy ps)
+getDistPermsProxies = RL.map (const Proxy) <$> getDistPerms
 
 -- | Get the top permission in the stack
 getTopDistPerm :: ExprVar a -> ImplM vars s r (ps :> a) (ps :> a) (ValuePerm a)
@@ -6013,45 +6031,41 @@ proveVarLifetimeFunctor' x f args l mb_l psubst = case mbMatch mb_l of
 -- * Solving for Permission List Implications
 ----------------------------------------------------------------------
 
--- | A permission that needs to be proved for an implication, which has at least
--- those evars mentioned in @vars@ but possibly more
-data NeededPerm vars a where
-  NeededPerm :: KnownCruCtx vars' -> ExprVar a ->
-                Mb (vars :++: vars') (ValuePerm a) ->
-                NeededPerm vars a
+-- | A permission that needs to be proved for an implication
+data NeededPerm a
+     -- | An equality permission that is needed
+  = NeededEq (EqPerm a)
+    -- | A block or struct permission for a range
+  | NeededRange (ExprVar a) (MbRangeForType a)
 
-instance PermPretty (NeededPerm vars a) where
-  permPrettyM (NeededPerm _ x mb_p) =
+instance PermPretty (NeededPerm a) where
+  permPrettyM (NeededEq eq_perm) =
+    do x_pp <- permPrettyM (eqPermVar eq_perm)
+       p_pp <- permPrettyM (eqPermPerm eq_perm)
+       return (x_pp <> colon <> p_pp)
+  permPrettyM (NeededRange x rng) =
     do x_pp <- permPrettyM x
-       pp_mb_p <- permPrettyM mb_p
-       return (x_pp <> colon <> pp_mb_p)
+       rng_pp <- permPrettyM rng
+       return (x_pp <> colon <> pretty "range" <> parens (rng_pp))
 
-instance PermPrettyF (NeededPerm vars) where
+instance PermPrettyF NeededPerm where
   permPrettyMF = permPrettyM
 
 -- | A sequence of permissions in bindings that need to be proved
-type NeededPerms vars = Some (RAssign (NeededPerm vars))
+type NeededPerms = Some (RAssign NeededPerm)
+
+-- | Convert a sequence of 'EqPerm's to a 'NeededPerms'
+eqPermsToNeededPerms :: Some (RAssign EqPerm) -> NeededPerms
+eqPermsToNeededPerms = fmapF (RL.map NeededEq)
+
+-- | Convert a sequence of 'MbRangeForType's to a 'NeededPerms'
+neededPermsForRanges :: ExprVar a -> [MbRangeForType a] -> NeededPerms
+neededPermsForRanges x rngs =
+  concatSomeRAssign $ map (\rng -> Some (MNil :>: NeededRange x rng)) rngs
 
 -- | No permissions needed
-neededPerms0 :: NeededPerms vars
+neededPerms0 :: NeededPerms
 neededPerms0 = Some MNil
-
--- | A single needed permission
-neededPerms1 :: ExprVar a -> Mb vars (ValuePerm a) -> NeededPerms vars
-neededPerms1 x mb_p = Some (MNil :>: NeededPerm MNil x mb_p)
-
--- | A single needed permission with a single existential variable
-mbNeededPerms1 :: KnownRepr TypeRepr tp => ExprVar a ->
-                  Mb (vars :> tp) (ValuePerm a) -> NeededPerms vars
-mbNeededPerms1 x mb_p =
-  Some (MNil :>: NeededPerm (MNil :>: KnownReprObj) x mb_p)
-
--- | Convert an existential 'DistPerms' not in a binding to a 'NeededPerms'
-someDistPermsToNeededPerms :: RAssign Proxy vars -> Some DistPerms ->
-                              NeededPerms vars
-someDistPermsToNeededPerms prxs =
-  fmapF $ RL.map (\(VarAndPerm x p) ->
-                   NeededPerm MNil x (nuMulti prxs (const p)))
 
 -- | A permission in some context of existential variables extending @vars@
 data SomeMbPerm vars a where
@@ -6085,6 +6099,7 @@ someMbPermForRange vars (MbRangeForStructType prxs memb rng)
     ValPerm_Conj1 $ Perm_Struct $
     RL.set memb p $ RL.map (const ValPerm_True) prxs
 
+{-
 -- | Convert a 'SomeMbPerm' on an expression to a 'NeededPerms'
 someMbPermToNeededs :: PermExpr a -> SomeMbPerm vars a -> NeededPerms vars
 someMbPermToNeededs (asVarOffset -> Just (x,off)) (SomeMbPerm vars' mb_p) =
@@ -6110,18 +6125,51 @@ neededPermsForRanges :: RAssign Proxy vars -> PermExpr a -> [MbRangeForType a] -
                         NeededPerms vars
 neededPermsForRanges vars e =
   concatSomeRAssign . map (neededPermsForRange vars e)
+-}
 
--- | Prove the permission represented by a 'NeededPerm'
-proveNeededPerm :: NuMatchingAny1 r => NeededPerm vars a ->
+-- | Prove a 'SomeMbPerm'
+proveSomeMbPerm :: NuMatchingAny1 r => ExprVar a -> SomeMbPerm vars a ->
                    ImplM vars s r (ps :> a) ps ()
-proveNeededPerm (NeededPerm ctx x mb_p) =
-  withExtVarsMultiM ctx $ proveVarImpl x mb_p
+proveSomeMbPerm x (SomeMbPerm ctx mb_p) =
+  withExtVarsMultiM ctx $ proveVarImplInt x mb_p
 
--- | Prove the permission represented by a 'NeededPerm'
-proveNeededPerms :: NuMatchingAny1 r => RAssign (NeededPerm vars) ps' ->
-                    ImplM vars s r (ps :++: ps') ps ()
-proveNeededPerms MNil = return ()
-proveNeededPerms (ps :>: p) = proveNeededPerms ps >>> proveNeededPerm p
+-- | Prove the permission represented by a 'NeededPerm', returning zero or more
+-- auxiliary permissions that are also needed
+proveNeededPerm :: NuMatchingAny1 r => RAssign Proxy vars -> NeededPerm a ->
+                   ImplM vars s r (ps :> a) ps (Some DistPerms)
+proveNeededPerm _ (NeededEq eq_perm) =
+  mbVarsM (eqPermPerm eq_perm) >>>= \mb_p ->
+  proveVarImplInt (eqPermVar eq_perm) mb_p >>>
+  return (Some MNil)
+proveNeededPerm vars (NeededRange x rng@(MbRangeForLLVMType _ _)) =
+  proveSomeMbPerm x (someMbPermForRange vars rng) >>>
+  getTopDistPerm x >>>= \(ValPerm_LLVMBlock bp) ->
+  case NameSet.toRAssign (findEqVarFieldsInShape (llvmBlockShape bp)) of
+    NameSet.SomeRAssign ns ->
+      Some <$> traverseRAssign (\n -> VarAndPerm n <$> getPerm n) ns
+proveNeededPerm vars (NeededRange x rng) =
+  proveSomeMbPerm x (someMbPermForRange vars rng) >>>
+  return (Some MNil)
+
+-- | Prove the permissions represented by a sequence of 'NeededPerms', returning
+-- zero or more auxiliary permissions that are also needed
+proveNeededPerms :: NuMatchingAny1 r => RAssign Proxy vars ->
+                    RAssign NeededPerm ps' ->
+                    ImplM vars s r (ps :++: ps') ps (Some DistPerms)
+proveNeededPerms _ MNil = return (Some MNil)
+proveNeededPerms vars (ps :>: p) =
+  proveNeededPerms vars ps >>>= \auxs1 ->
+  proveNeededPerm vars p >>>= \auxs2 ->
+  return (apSomeRAssign auxs1 auxs2)
+
+-- | Call 'proveNeededPerms' and then reassociate the resulting stack
+proveNeededPermsAssoc ::
+  NuMatchingAny1 r => RAssign Proxy vars ->
+  prx ps -> prx1 ps1 -> RAssign NeededPerm ps2 ->
+  ImplM vars s r (ps :++: (ps1 :++: ps2)) (ps :++: ps1) (Some DistPerms)
+proveNeededPermsAssoc vars ps ps1 ps2
+  | Refl <- RL.appendAssoc ps ps1 ps2
+  = proveNeededPerms vars ps2
 
 -- | If the second argument is an unset variable, set it to the first, otherwise
 -- do nothing
@@ -6170,7 +6218,7 @@ getExprRanges _ _ =
 -- been substituted into the 'ExprPerms'
 solveForPermListImplH :: NuMatchingAny1 r => RAssign Proxy vars ->
                          ExprPerms ps_l -> CruCtx ps_r -> ExprPerms ps_r ->
-                         ImplM vars s r ps ps (NeededPerms vars)
+                         ImplM vars s r ps ps NeededPerms
 -- If the RHS is empty, we are done
 solveForPermListImplH _ _ _ MNil =
   pure neededPerms0
@@ -6195,7 +6243,7 @@ solveForPermListImplH vars ps_l (CruCtxCons tps_r' tp_r) (ps_r' :>: e_and_p)
                        pretty "Held ranges:" <+> permPretty i expr_rngs,
                        pretty "Result ranges:" <+> permPretty i res_rngs]))
     >>>= \_ ->
-    apSomeRAssign (neededPermsForRanges vars (PExpr_Var x) res_rngs) <$>
+    apSomeRAssign (neededPermsForRanges x res_rngs) <$>
     solveForPermListImplH vars ps_l tps_r' ps_r'
 
 -- If the RHS is not a variable, ignore it and keep going
@@ -6208,7 +6256,7 @@ solveForPermListImplH vars ps_l (CruCtxCons tps_r' _) (ps_r' :>: _) =
 -- just a "best guess", so just do nothing and return if nothing can be done.
 solveForPermListImpl :: NuMatchingAny1 r => ExprPerms ps_l ->
                         CruCtx ps_r -> Mb vars (ExprPerms ps_r) ->
-                        ImplM vars s r ps ps (NeededPerms vars)
+                        ImplM vars s r ps ps NeededPerms
 solveForPermListImpl ps_l tps_r mb_ps_r =
   let prxs = mbToProxy mb_ps_r in
   -- FIXME HERE NOW: eliminate struct variables
@@ -6216,10 +6264,10 @@ solveForPermListImpl ps_l tps_r mb_ps_r =
   (psubstProxies <$> getPSubst) >>>= \vars ->
   partialSubstForceM mb_ps_r "solveForPermListImpl" >>>= \ps_r ->
   give prxs (substEqsWithProof ps_r) >>>= \eqp_r ->
-  let neededs =
-        someDistPermsToNeededPerms prxs $
-        apSomeRAssign (someEqProofPerms eqp_l) (someEqProofPerms eqp_r) in
-  let ps_l' = someEqProofRHS eqp_l
+  let neededs1 = eqPermsToNeededPerms $ someEqProofEqs eqp_l
+      neededs2 = eqPermsToNeededPerms $ someEqProofEqs eqp_r
+      neededs = apSomeRAssign neededs1 neededs2
+      ps_l' = someEqProofRHS eqp_l
       ps_r' = someEqProofRHS eqp_r in
   apSomeRAssign neededs <$> solveForPermListImplH vars ps_l' tps_r ps_r'
 
@@ -7993,20 +8041,32 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       solveForPermListImpl ps_inR tps_inL mb_ps_inL >>>= \(Some neededs1) ->
       solveForPermListImpl ps_outL tps_outR mb_ps_outR >>>= \(Some neededs2) ->
 
-      -- Prove ps1 and ps2, which can have evars, and then look at the
-      -- substitution instances of ps1 and ps2 that were actually proved on top
-      -- of the stack. We do it this way because we can't substitute expressions
-      -- for variables in a DistPerms, because DistPerms need to have variables
-      -- on the LHSs and not arbitrary expressions
-      getDistPerms >>>= \ps0_with_a ->
-      let ps0 = RL.tail ps0_with_a in
-      let neededs12 = RL.append neededs1 neededs2 in
+      -- Prove neededs1 and neededs2 along with their corresponding auxiliary
+      -- permissions, and then look at the substitution instances of these
+      -- permissions that were actually proved on top of the stack. We do it
+      -- this way because we can't substitute expressions for variables in a
+      -- DistPerms, because DistPerms need to have variables on the LHSs and not
+      -- arbitrary expressions
       implTraceM (\i -> hang 2
                         (pretty "Proving needed perms for lowned implication:"
-                         <> line <> permPretty i neededs12)) >>>
-      proveNeededPerms neededs12 >>>
-      getTopDistPerms ps0_with_a neededs12 >>>= \ps12 ->
-      let (ps1,ps2) = RL.split neededs1 neededs2 ps12 in
+                         <> line <> permPretty i neededs1 <> line <>
+                         pretty "And:" <> line <> permPretty i neededs2)) >>>
+      getVarProxies >>>= \vars ->
+      getDistPermsProxies >>>= \prxs0_a ->
+      let prxs0 = RL.tail prxs0_a in
+      proveNeededPerms vars neededs1 >>>= \(Some auxs1) ->
+      mbVarsM auxs1 >>>= \mb_auxs1 ->
+      proveVarsImplAppendIntAssoc prxs0_a neededs1 mb_auxs1 >>>
+      let prxs1 =
+            RL.map (const Proxy) neededs1 `RL.append` RL.map (const Proxy) auxs1 in
+      proveNeededPermsAssoc vars prxs0_a prxs1 neededs2 >>>= \(Some auxs2) ->
+      mbVarsM auxs2 >>>= \mb_auxs2 ->
+      proveVarsImplAppendIntAssoc4 prxs0_a prxs1 neededs2 mb_auxs2 >>>
+      let prxs2 =
+            RL.map (const Proxy) neededs2 `RL.append` RL.map (const Proxy) auxs2
+          prxs12 = RL.append prxs1 prxs2 in
+      getTopDistPerms prxs0_a prxs12 >>>= \ps12 ->
+      let (ps1,ps2) = RL.split prxs1 prxs2 ps12 in
       partialSubstForceM mb_ps_outR "proveVarAtomicImpl" >>>= \ps_outR ->
 
       -- Build the local implications ps_inR -o ps_inL and ps_outL -o ps_outR
@@ -8021,7 +8081,7 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
 
       -- Finally, apply the MapLifetime proof step, first moving the input
       -- lowned permissions to the top of the stack
-      implMoveUpM ps0 ps12 x MNil >>>
+      implMoveUpM prxs0 ps12 x MNil >>>
       implSimplM Proxy (SImpl_MapLifetime x []
                         tps_inL tps_outL ps_inL ps_outL
                         tps_inR tps_outR ps_inR ps_outR
@@ -8671,6 +8731,26 @@ proveVarsImplAppendInt mb_ps =
                 "Could not determine enough variables to prove permissions:",
                 permPretty i mb_ps]]) >>>=
         implFailM
+
+-- | Like 'proveVarsImplAppendInt' but re-associate the appends
+proveVarsImplAppendIntAssoc ::
+  NuMatchingAny1 r => prx ps_in -> prx1 ps1 -> ExDistPerms vars ps ->
+  ImplM vars s r (ps_in :++: (ps1 :++: ps)) (ps_in :++: ps1) ()
+proveVarsImplAppendIntAssoc ps_in ps1 ps
+  | ps_prxs <- mbLift $ mbMapCl $(mkClosed [| RL.map (const Proxy) |]) ps
+  , Refl <- RL.appendAssoc ps_in ps1 ps_prxs =
+    proveVarsImplAppendInt ps
+
+-- | Like 'proveVarsImplAppendInt' but re-associate the appends
+proveVarsImplAppendIntAssoc4 ::
+  NuMatchingAny1 r => prx ps_in -> prx1 ps1 -> prx2 ps2 ->
+  ExDistPerms vars ps ->
+  ImplM vars s r (ps_in :++: (ps1 :++: (ps2 :++: ps))) (ps_in :++: (ps1 :++: ps2)) ()
+proveVarsImplAppendIntAssoc4 ps_in (ps1 :: prx1 ps1) (ps2 :: prx2 ps2) ps
+  | ps_prxs <- mbLift $ mbMapCl $(mkClosed [| RL.map (const Proxy) |]) ps
+  , ps12 <- Proxy :: Proxy (ps1 :++: ps2)
+  , Refl <- RL.appendAssoc ps1 ps2 ps_prxs =
+    proveVarsImplAppendIntAssoc ps_in ps12 ps
 
 -- | Prove a list of existentially-quantified distinguished permissions and put
 -- those proofs onto the stack. This is the same as 'proveVarsImplAppendInt'

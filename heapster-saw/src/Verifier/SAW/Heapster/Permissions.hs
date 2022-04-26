@@ -50,6 +50,8 @@ import GHC.TypeLits
 import Data.Kind
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Control.Applicative hiding (empty)
 import Control.Monad.Identity hiding (ap)
 import Control.Monad.State hiding (ap)
@@ -4130,6 +4132,47 @@ isLLVMPointerShape (PExpr_FieldShape (LLVMFieldShape (ValPerm_Conj1 p))) =
   isLLVMPointerPerm p
 isLLVMPointerShape (PExpr_PtrShape _ _ _) = True
 isLLVMPointerShape _ = False
+
+-- | Find any shapes of the form @fieldsh(eq(y))@ in a shape and return the @y@
+-- variables
+findEqVarFieldsInShape :: PermExpr (LLVMShapeType w) -> NameSet CrucibleType
+findEqVarFieldsInShape sh =
+  runReader (findEqVarFieldsInShapeH sh) Set.empty
+
+-- | Find any shapes of the form @fieldsh(eq(y))@ in a shape and return the @y@
+-- variables, using the supplied 'Set' to indicate recursive named shapes that
+-- have already been unfolded to get the current shape, to avoid infinite loops
+findEqVarFieldsInShapeH :: PermExpr (LLVMShapeType w) ->
+                           Reader (Set String) (NameSet CrucibleType)
+findEqVarFieldsInShapeH (PExpr_NamedShape _ _ nmsh args)
+  | DefinedShapeBody _ <- namedShapeBody nmsh =
+    -- NOTE: we don't need to modalize the unfolding because that doesn't change
+    -- the variable fields
+    findEqVarFieldsInShapeH (unfoldNamedShape nmsh args)
+findEqVarFieldsInShapeH (PExpr_NamedShape _ _ nmsh args)
+  | RecShapeBody _ _ _ <- namedShapeBody nmsh =
+    do seen_names <- ask
+       if Set.member (namedShapeName nmsh) seen_names then
+         return NameSet.empty
+         else
+         -- NOTE: we don't need to modalize the unfolding because that doesn't
+         -- change the variable fields
+         local (Set.insert (namedShapeName nmsh)) $
+         findEqVarFieldsInShapeH (unfoldNamedShape nmsh args)
+findEqVarFieldsInShapeH (PExpr_PtrShape _ _ sh) = findEqVarFieldsInShapeH sh
+findEqVarFieldsInShapeH (PExpr_FieldShape (LLVMFieldShape
+                                           (ValPerm_Eq (PExpr_Var y)))) =
+  return $ NameSet.singleton y
+findEqVarFieldsInShapeH (PExpr_FieldShape _) = return $ NameSet.empty
+findEqVarFieldsInShapeH (PExpr_ArrayShape _ _ sh) = findEqVarFieldsInShapeH sh
+findEqVarFieldsInShapeH (PExpr_SeqShape sh1 sh2) =
+  NameSet.union <$> findEqVarFieldsInShapeH sh1 <*> findEqVarFieldsInShapeH sh2
+findEqVarFieldsInShapeH (PExpr_OrShape sh1 sh2) =
+  NameSet.union <$> findEqVarFieldsInShapeH sh1 <*> findEqVarFieldsInShapeH sh2
+findEqVarFieldsInShapeH (PExpr_ExShape mb_sh) =
+  fmap NameSet.liftNameSet $ strongMbM $
+  fmap findEqVarFieldsInShapeH mb_sh
+findEqVarFieldsInShapeH _ = return $ NameSet.empty
 
 -- | Return the expression for the length of a shape if there is one
 llvmShapeLength :: (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
