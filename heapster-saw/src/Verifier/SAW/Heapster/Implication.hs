@@ -5495,7 +5495,8 @@ recombinePermExpl x x_p p =
 
 -- | This is the implementation of 'recombinePermExpl'; see the documentation
 -- for that function for details
-recombinePerm' :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a -> ValuePerm a ->
+recombinePerm' :: HasCallStack => NuMatchingAny1 r =>
+                  ExprVar a -> ValuePerm a -> ValuePerm a ->
                   ImplM vars s r as (as :> a) ()
 recombinePerm' x _ p@ValPerm_True = implDropM x p
 recombinePerm' x _ ValPerm_False = implElimFalseM x
@@ -6250,16 +6251,28 @@ solveForPermListImplH vars ps_l (CruCtxCons tps_r' tp_r) (ps_r' :>: e_and_p)
 solveForPermListImplH vars ps_l (CruCtxCons tps_r' _) (ps_r' :>: _) =
   solveForPermListImplH vars ps_l tps_r' ps_r'
 
--- | Determine what additional permissions from the variable permissions, if
--- any, would be needed to prove one list of permissions implies another. Also
--- instantiate any existential variables as needed for the implication. This is
--- just a "best guess", so just do nothing and return if nothing can be done.
+-- | Determine what additional permissions from the current set of variable
+-- permissions, if any, would be needed to prove one list of permissions implies
+-- another. This is just a "best guess", so just do nothing and return if
+-- nothing can be done.
+--
+-- At a high level, this algorithm currently works as follows. It starts by
+-- substituting any equality permissions in the current permission set,
+-- returning those equalities as needed permissions. Next, it finds all LLVM
+-- pointer offsets and ranges of offsets for any LLVM variable @x@ that are
+-- mentioned on the right and subtracts those for the same variable that are
+-- mentioned on the left. It then returns ranges for any of these remaining
+-- offsets that are held as permissions in the current permission set. The
+-- intuition is that these offsets are the ones that are important to the right-
+-- or left-hand sides, but we don't know exactly how the proof will go, so we
+-- only pick those offsets that can actually be satisfied by the current
+-- permission set without failing.
 solveForPermListImpl :: NuMatchingAny1 r => ExprPerms ps_l ->
                         CruCtx ps_r -> Mb vars (ExprPerms ps_r) ->
                         ImplM vars s r ps ps NeededPerms
 solveForPermListImpl ps_l tps_r mb_ps_r =
   let prxs = mbToProxy mb_ps_r in
-  -- FIXME HERE NOW: eliminate struct variables
+  -- FIXME HERE: eliminate struct variables
   substEqsWithProof ps_l >>>= \eqp_l ->
   (psubstProxies <$> getPSubst) >>>= \vars ->
   partialSubstForceM mb_ps_r "solveForPermListImpl" >>>= \ps_r ->
