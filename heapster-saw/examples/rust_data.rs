@@ -421,6 +421,14 @@ pub fn list64_sum(l:&List64) -> u64 {
     }
 }
 
+/* Return a mutable reference to the head of a list, or None if it is empty */
+pub fn list64_head_mut <'a> (l:&'a mut List64) -> Option<&'a mut u64> {
+    match l {
+        List64::Nil64 => None,
+        List64::Cons64 (h,_) => Some (h),
+    }
+}
+
 /* Find an element in a List64 and return a mutable reference to it */
 pub fn list64_find_mut <'a> (x:u64, l:&'a mut List64) -> Option<&'a mut u64> {
     match l {

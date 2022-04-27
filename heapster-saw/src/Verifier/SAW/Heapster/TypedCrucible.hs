@@ -81,8 +81,8 @@ import Verifier.SAW.Heapster.NamePropagation
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.Widening
 
-
 import GHC.Stack (HasCallStack)
+
 
 ----------------------------------------------------------------------
 -- * Handling Crucible Extensions
@@ -1946,6 +1946,15 @@ top_get = gcaptureCC $ \k ->
      deltas <- innerStateDeltas <$> unClosed <$> get
      k $ applyDeltasToTopState deltas top_st
 
+-- | Get the current top-level state modulo the modifications to the current
+-- block info map in an 'InnerPermCheckM' computation
+inner_top_get :: InnerPermCheckM ext cblocks blocks tops rets
+                 (TopPermCheckState ext cblocks blocks tops rets)
+inner_top_get =
+  do top_st <- ask
+     deltas <- innerStateDeltas <$> unClosed <$> get
+     return $ applyDeltasToTopState deltas top_st
+
 -- | Set the extension-specific state
 setInputExtState :: ExtRepr ext -> CruCtx as -> RAssign Name as ->
                     PermCheckM ext cblocks blocks tops rets r ps r ps ()
@@ -2066,10 +2075,11 @@ callBlockWithPerms :: TypedEntryID blocks args_src ->
                       InnerPermCheckM ext cblocks blocks tops rets
                       (TypedCallSiteID blocks args vars)
 callBlockWithPerms srcEntryID destID vars cl_perms_in =
-  do blk <- view (stBlockMap . member (typedBlockIDMember destID)) <$> ask
+  do top_st <- inner_top_get
+     let blk = view (stBlockMap . member (typedBlockIDMember destID)) top_st
      let siteID = newCallSiteID srcEntryID vars blk
      innerEmitDelta ($(mkClosed [| TypedBlockMapAddCallSite |])
-                    `clApply` toClosed siteID `clApply` cl_perms_in)
+                     `clApply` toClosed siteID `clApply` cl_perms_in)
      return siteID
 
 -- | Look up the current primary permission associated with a variable
@@ -3746,14 +3756,14 @@ simplify1LOwnedPermForDetVars :: NuMatchingAny1 r =>
 
 -- For permission l:lowned[ls](ps_in -o ps_out) where l or some free variable in
 -- ps_in or ps_out is not determined, end l
-simplify1LOwnedPermForDetVars det_vars l (ValPerm_LOwned _ ps_in ps_out)
+simplify1LOwnedPermForDetVars det_vars l (ValPerm_LOwned _ _ _ ps_in ps_out)
   | vars <- NameSet.insert l $ freeVars (ps_in,ps_out)
   , not $ NameSet.nameSetIsSubsetOf vars det_vars
   = implEndLifetimeRecM l
 
 -- For lowned permission l:lowned[ls](ps_in -o ps_out), end any lifetimes in ls
 -- that are not determined and remove them from the lowned permission for ls
-simplify1LOwnedPermForDetVars det_vars l (ValPerm_LOwned ls _ _)
+simplify1LOwnedPermForDetVars det_vars l (ValPerm_LOwned ls _ _ _ _)
   | l':_ <- flip mapMaybe ls (asVar >=> \l' ->
                                if NameSet.member l' det_vars then Nothing
                                else return l') =
@@ -3909,7 +3919,12 @@ tcJumpTarget :: PermCheckExtC ext => CtxTrans ctx -> JumpTarget cblocks ctx ->
                 StmtPermCheckM ext cblocks blocks tops rets RNil RNil
                 (AnnotPermImpl (TypedJumpTarget blocks tops) RNil)
 tcJumpTarget ctx (JumpTarget blkID args_tps args) =
-  top_get >>= \top_st ->
+  -- NOTE: we need to get the "raw" top-level state, without deltas being
+  -- applied to it, to run the InnerPermCheckM inside the ImplM monad below.
+  -- FIXME: there should be a nicer way to do this... maybe if we got rid of
+  -- InnerPermCheckM and just had TopPermCheckM be a state monad on a Closed
+  -- TopPermCheckState?
+  (gcaptureCC $ \k -> ask >>= k) >>>= \top_st_raw ->
   get >>= \st ->
   gets (permCheckExtStateNames . stExtState) >>= \(Some ext_ns) ->
   tcBlockID blkID >>>= \tpBlkID ->
@@ -4011,7 +4026,7 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
       implGetVarTypes ghosts_ns >>>= \ghosts_tps ->
       (case stCurEntry st of
           Some curEntryID ->
-            lift $ flip runReaderT top_st $
+            lift $ flip runReaderT top_st_raw $
             callBlockWithPerms curEntryID tpBlkID
             ghosts_tps cl_mb_perms_in) >>>= \siteID ->
       implTraceM (\_ ->
