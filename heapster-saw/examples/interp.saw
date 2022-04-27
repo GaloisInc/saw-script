@@ -75,15 +75,9 @@ heapster_define_rust_type env "pub struct FunName(String);";
 heapster_define_rust_type env
   "pub enum PrimOp2 { AddOp, MulOp }";
 
-// Lit type
-heapster_define_rust_type env
-  "pub enum Lit { \
-    \ BoolLit (bool), \
-    \ IntLit (u64), }";
-
 heapster_define_rust_type env
   "pub enum Expr { \
-    \ LitExpr(Lit), \
+    \ LitExpr(u64), \
     \ VarExpr(Var), \
     \ Apply2Expr(PrimOp2, Box<Expr>, Box<Expr>) }";
 
@@ -96,18 +90,13 @@ heapster_define_rust_type env
     \ WhileStmt(Expr,Box<Stmt>), \
     \ CallStmt(FunName, Vec<Expr>) }";
 
-heapster_define_rust_type env
-  "pub enum Value { \
-   \ BoolValue (bool), \
-   \ IntValue (u64), \
-   \ StringValue (String) }";
+heapster_define_rust_type env "pub struct Value(u64);";
 
 heapster_define_rust_type env
   "pub enum Error { \
    \ UnboundVar(Var), \
    \ UnknownFun(FunName), \
    \ Unimplemented, \
-   \ IncorrectType, \
    \ WrongNumberOfArgs, }";
 
 heapster_define_rust_type env
@@ -151,14 +140,14 @@ heapster_assume_fun_rename_prim env var_clone_sym "var_clone"
 // Vec<(Var, Value)>::deref
 vec_var_deref_sym <- heapster_find_symbol_with_type env
   "core..ops..deref..Deref$GT$5deref"
-  "{ [0 x { %Var, %Value }]*, i64 }(%\"alloc::vec::Vec<(Var, Value)>\"*)";
+  "{ [0 x { %Var, i64 }]*, i64 }(%\"alloc::vec::Vec<(Var, Value)>\"*)";
 heapster_assume_fun_rename_prim env vec_var_deref_sym "vec_var_deref"
   "<'a> fn (&'a Vec<(Var, Value)>) -> &'a[(Var, Value)]";
 
 // &[(Var, Value)]::iter
 slice_var_iter_sym <- heapster_find_symbol_with_type env
   "core5slice29_$LT$impl$u20$$u5b$T$u5d$$GT$4iter"
-  "{ i64*, i64* }([0 x { %Var, %Value }]*, i64)";
+  "{ i64*, i64* }([0 x { %Var, i64 }]*, i64)";
 heapster_assume_fun_rename_prim env slice_var_iter_sym "slice_var_iter"
   "<'a> fn (&'a[(Var, Value)]) -> Iter<'a, (Var, Value)>";
 
@@ -166,7 +155,7 @@ heapster_assume_fun_rename_prim env slice_var_iter_sym "slice_var_iter"
 // so we need to just use the full hash for searching
 // Iter<'a, (Var, Value)>::rev
 iter_var_rev_sym <- heapster_find_symbol env
-  "core4iter6traits8iterator8Iterator3rev17hd35750bd4d210bc7E";
+  "core4iter6traits8iterator8Iterator3rev17h37ff05e4846ccabbE";
 heapster_assume_fun_rename_prim env iter_var_rev_sym "iter_var_rev"
   "<'a> fn (Iter<'a, (Var, Value)>) -> Rev<Iter<'a, (Var, Value)>>";
 
@@ -209,14 +198,6 @@ iter_fun_rev_sym <- heapster_find_symbol env
 heapster_assume_fun_rename_prim env iter_fun_rev_sym "iter_fun_rev"
   "<'a> fn (Iter<'a, (FunName, FunDef)>) -> Rev<Iter<'a, (FunName, FunDef)>>";
 
-// Value::drop_in_place
-Value__drop_in_place_sym <- heapster_find_symbol_with_type env
-  "core3ptr34drop_in_place$LT$interp..Value$"
-  "void(%Value*)";
-heapster_assume_fun_rename_prim env Value__drop_in_place_sym
-  "Value__drop_in_place"
-  "<> fn(Value)";
-
 // TODO: Are these lifetimes right?
 // &Var::eq
 var_eq_sym <- heapster_find_symbol_with_type env
@@ -232,13 +213,6 @@ fun_eq_sym <- heapster_find_symbol_with_type env
   "i1(%FunName**, %FunName**)";
 heapster_assume_fun_rename_prim env fun_eq_sym "fun_eq"
   "<'a, 'b, 'c> fn (&'b&'a FunName, &'c&'a FunName) -> bool";
-
-// Result<u64, Error>::branch
-u64_branch_sym <- heapster_find_symbol_with_type env
-  "core..ops..try_trait..Try$GT$6branch"
-  "void(%\"core::ops::control_flow::ControlFlow<core::result::Result<core::convert::Infallible, Error>, u64>\"*, %\"core::result::Result<u64, Error>\"*)";
-heapster_assume_fun_rename_prim env u64_branch_sym "u64_branch"
-  "<> fn (Result<u64, Error>) -> ControlFlow<Result<Infallible, Error>, u64>";
 
 // Result<Value, Error>::branch
 value_branch_sym <- heapster_find_symbol_with_type env
@@ -261,20 +235,6 @@ heapster_assume_fun_rename_prim env fun_branch_sym "fun_branch"
 fresh_env_from_env_sym <- heapster_find_symbol env "18fresh_env_from_env";
 heapster_typecheck_fun_rename env fresh_env_from_env_sym "fresh_env_from_env"
   "<'a> fn (&'a Env) -> Env";
-
-// TODO: Investigate the error this one produces when actually checked
-value_bool_sym <- heapster_find_symbol env "10value_bool";
-heapster_typecheck_fun_rename env value_bool_sym "value_bool"
-  "<> fn (Value) -> Resultbool<Error>";
-
-value_u64_sym <- heapster_find_symbol env "9value_u64";
-heapster_typecheck_fun_rename env value_u64_sym "value_u64"
-  "<> fn (Value) -> Result<u64, Error>";
-
-// TODO: Investigate the error this one produces when actually checked
-lit_value_sym <- heapster_find_symbol env "9lit_value";
-heapster_typecheck_fun_rename env lit_value_sym "lit_value"
-  "<'a> fn(&'a Lit) -> Value";
 
 // TODO: See above note on the `eq` implementation
 ref_ref_eq_var_sym <- heapster_find_symbol_with_type env
@@ -302,16 +262,16 @@ fun_lookup_sym <- heapster_find_symbol env "10fun_lookup17";
 heapster_typecheck_fun_rename env fun_lookup_sym "fun_lookup"
   "<'a, 'b> fn (&'a Env, &'b FunName) -> Result<&'a FunDef, Error>";
 
-// TODO: Add stuff related to the `?` operator
 eval_primop2_sym <- heapster_find_symbol env "12eval_primop2";
 heapster_typecheck_fun_rename env eval_primop2_sym "eval_primop2"
-  "<'a> fn (&'a PrimOp2, Value, Value) -> Result<Value, Error>";
+  "<'a> fn (&'a PrimOp2, Value, Value) -> Value";
 
 // TODO: Add stuff related to the `?` operator
 eval_expr_sym <- heapster_find_symbol env "9eval_expr";
 heapster_typecheck_fun_rename env eval_expr_sym "eval_expr"
   "<'a, 'b> fn(&'a Env, &'b Expr) -> Result<Value, Error>";
 
+// TODO: Add stuff related to the `?` operator
 eval_stmt_sym <- heapster_find_symbol env "9eval_stmt";
 heapster_typecheck_fun_rename env eval_stmt_sym "eval_stmt"
   "<'a, 'b> fn (&'a mut Env, &'b Stmt) -> Result<Value, Error>";
