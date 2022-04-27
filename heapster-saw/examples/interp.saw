@@ -25,7 +25,6 @@ heapster_define_llvmshape env "bool" 64 "" "fieldsh(1,int1<>)";
 heapster_define_llvmshape env "Box" 64 "T:llvmshape 64" "ptrsh(T)";
 
 // Infallible type
-// Note that this type is actually uninhabited
 heapster_define_llvmshape env "Infallible" 64 "" "falsesh";
 
 // ControlFlow type
@@ -37,11 +36,6 @@ heapster_define_rust_type env "pub enum Option<X> { None, Some (X) }";
 
 // Result type
 heapster_define_rust_type env "pub enum Result<X,Y> { Ok (X), Err (Y) }";
-
-// Special case for types of the form Result<bool,T>
-heapster_define_llvmshape env "Resultbool" 64 "T:llvmshape 64"
-  "(fieldsh(8,eq(llvmword(0)));fieldsh(8,int8<>);fieldsh(48,true);emptysh) orsh \
- \ (fieldsh(8,eq(llvmword(1)));fieldsh(56,true);T)";
 
 // The String type
 heapster_define_llvmshape env "String" 64 ""
@@ -90,8 +84,6 @@ heapster_define_rust_type env
     \ WhileStmt(Expr,Box<Stmt>), \
     \ CallStmt(FunName, Vec<Expr>) }";
 
-heapster_define_rust_type env "pub struct Value(u64);";
-
 heapster_define_rust_type env
   "pub enum Error { \
    \ UnboundVar(Var), \
@@ -103,8 +95,8 @@ heapster_define_rust_type env
   "pub struct FunDef (Vec<Var>,Stmt);";
 
 heapster_define_rust_type env
-  "pub struct Env (Vec<(Var, Value)>, \
-                 \ Vec<(FunName, FunDef)>);";
+  "pub struct Env { var_map: Vec<(Var, u64)>, \
+                  \ fun_map: Vec<(FunName, FunDef)>, }";
 
 
 /***
@@ -140,34 +132,34 @@ heapster_assume_fun_rename_prim env var_clone_sym "var_clone"
 // Vec<(Var, Value)>::deref
 vec_var_deref_sym <- heapster_find_symbol_with_type env
   "core..ops..deref..Deref$GT$5deref"
-  "{ [0 x { %Var, i64 }]*, i64 }(%\"alloc::vec::Vec<(Var, Value)>\"*)";
+  "{ [0 x { %Var, i64 }]*, i64 }(%\"alloc::vec::Vec<(Var, u64)>\"*)";
 heapster_assume_fun_rename_prim env vec_var_deref_sym "vec_var_deref"
-  "<'a> fn (&'a Vec<(Var, Value)>) -> &'a[(Var, Value)]";
+  "<'a> fn (&'a Vec<(Var, u64)>) -> &'a[(Var, u64)]";
 
 // &[(Var, Value)]::iter
 slice_var_iter_sym <- heapster_find_symbol_with_type env
   "core5slice29_$LT$impl$u20$$u5b$T$u5d$$GT$4iter"
   "{ i64*, i64* }([0 x { %Var, i64 }]*, i64)";
 heapster_assume_fun_rename_prim env slice_var_iter_sym "slice_var_iter"
-  "<'a> fn (&'a[(Var, Value)]) -> Iter<'a, (Var, Value)>";
+  "<'a> fn (&'a[(Var, u64)]) -> Iter<'a, (Var, u64)>";
 
 // NOTE: Unfortunately there are two symbols with the same type for rev,
 // so we need to just use the full hash for searching
 // Iter<'a, (Var, Value)>::rev
 iter_var_rev_sym <- heapster_find_symbol env
-  "core4iter6traits8iterator8Iterator3rev17h37ff05e4846ccabbE";
+  "core4iter6traits8iterator8Iterator3rev17h4b2583a4d05f0facE";
 heapster_assume_fun_rename_prim env iter_var_rev_sym "iter_var_rev"
-  "<'a> fn (Iter<'a, (Var, Value)>) -> Rev<Iter<'a, (Var, Value)>>";
+  "<'a> fn (Iter<'a, (Var, u64)>) -> Rev<Iter<'a, (Var, u64)>>";
 
 // Vec<(Var, Value)>::new
 vec_new_sym <- heapster_find_symbol env "Vec$LT$T$GT$3new";
 heapster_assume_fun_rename_prim env vec_new_sym "vec_new"
-  "<> fn () -> Vec<(Var, Value)>";
+  "<> fn () -> Vec<(Var, u64)>";
 
 // Vec<(Var, Value)>::push
 vec_push_sym <- heapster_find_symbol env "4push";
 heapster_assume_fun_rename_prim env vec_push_sym "vec_push"
-  "<'a> fn(&'a mut Vec<(Var, Value)>, (Var, Value))";
+  "<'a> fn(&'a mut Vec<(Var, u64)>, (Var, u64))";
 
 // Vec<(FunName, FunDef)>::clone
 vec_clone_sym <- heapster_find_symbol_with_type env
@@ -217,9 +209,9 @@ heapster_assume_fun_rename_prim env fun_eq_sym "fun_eq"
 // Result<Value, Error>::branch
 value_branch_sym <- heapster_find_symbol_with_type env
   "core..ops..try_trait..Try$GT$6branch"
-  "void(%\"core::ops::control_flow::ControlFlow<core::result::Result<core::convert::Infallible, Error>, Value>\"*, %\"core::result::Result<Value, Error>\"*)";
+  "void(%\"core::ops::control_flow::ControlFlow<core::result::Result<core::convert::Infallible, Error>, u64>\"*, %\"core::result::Result<u64, Error>\"*)";
 heapster_assume_fun_rename_prim env value_branch_sym "value_branch"
-  "<> fn (Result<Value, Error>) -> ControlFlow<Result<Infallible, Error>, Value>";
+  "<> fn (Result<u64, Error>) -> ControlFlow<Result<Infallible, Error>, u64>";
 
 // Result<&FunDef, Error>::branch
 fun_branch_sym <- heapster_find_symbol_with_type env
@@ -252,11 +244,11 @@ heapster_typecheck_fun_rename env ref_ref_eq_fun_sym "ref_ref_eq_fun"
 
 env_lookup_sym <- heapster_find_symbol env "10env_lookup17";
 heapster_typecheck_fun_rename env env_lookup_sym "env_lookup"
-  "<'a,'b> fn (env : &'a Env, x : &'b Var) -> Result<Value,Error>";
+  "<'a,'b> fn (env : &'a Env, x : &'b Var) -> Result<u64,Error>";
 
 env_update_sym <- heapster_find_symbol env "10env_update";
 heapster_typecheck_fun_rename env env_update_sym "env_update"
-  "<'a,'b> fn (&'a mut Env, &'b Var, Value)";
+  "<'a,'b> fn (&'a mut Env, &'b Var, u64)";
 
 fun_lookup_sym <- heapster_find_symbol env "10fun_lookup17";
 heapster_typecheck_fun_rename env fun_lookup_sym "fun_lookup"
@@ -264,17 +256,17 @@ heapster_typecheck_fun_rename env fun_lookup_sym "fun_lookup"
 
 eval_primop2_sym <- heapster_find_symbol env "12eval_primop2";
 heapster_typecheck_fun_rename env eval_primop2_sym "eval_primop2"
-  "<'a> fn (&'a PrimOp2, Value, Value) -> Value";
+  "<'a> fn (&'a PrimOp2, u64, u64) -> u64";
 
 // TODO: Add stuff related to the `?` operator
 eval_expr_sym <- heapster_find_symbol env "9eval_expr";
 heapster_typecheck_fun_rename env eval_expr_sym "eval_expr"
-  "<'a, 'b> fn(&'a Env, &'b Expr) -> Result<Value, Error>";
+  "<'a, 'b> fn(&'a Env, &'b Expr) -> Result<u64, Error>";
 
 // TODO: Add stuff related to the `?` operator
 eval_stmt_sym <- heapster_find_symbol env "9eval_stmt";
 heapster_typecheck_fun_rename env eval_stmt_sym "eval_stmt"
-  "<'a, 'b> fn (&'a mut Env, &'b Stmt) -> Result<Value, Error>";
+  "<'a, 'b> fn (&'a mut Env, &'b Stmt) -> Result<u64, Error>";
 
 /***
  *** Export to Coq
