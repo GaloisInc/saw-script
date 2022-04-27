@@ -749,6 +749,19 @@ cruCtxReplicate n tp =
       | Some ctx <- cruCtxReplicate (predNat n) tp
       -> Some (CruCtxCons ctx tp)
 
+-- | A representation of a context of types as a sequence of 'KnownRepr'
+-- instances
+--
+-- FIXME: this can go away when existentials take explicit 'TypeRepr's instead
+-- of 'KnownRepr TypeRepr' instances, as per issue #79
+type KnownCruCtx = RAssign (KnownReprObj TypeRepr)
+
+-- | Convert a 'KnownCruCtx' to a 'CruCtx'
+knownCtxToCruCtx :: KnownCruCtx ctx -> CruCtx ctx
+knownCtxToCruCtx MNil = CruCtxNil
+knownCtxToCruCtx (ctx :>: KnownReprObj) =
+  CruCtxCons (knownCtxToCruCtx ctx) knownRepr
+
 
 ----------------------------------------------------------------------
 -- * Misc Operations on Crucible Objects

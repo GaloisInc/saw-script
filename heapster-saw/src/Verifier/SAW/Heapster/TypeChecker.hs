@@ -608,27 +608,26 @@ tcBlockAtomic e = tcError (pos e) "Expected llvmblock perm"
 
 -- | Check a lifetime permission literal
 tcLifetimeAtomic :: AstExpr -> Tc (AtomicPerm LifetimeType)
-tcLifetimeAtomic (ExLOwned _ ls x y) =
-  do Some x' <- tcLOwnedPerms x
-     Some y' <- tcLOwnedPerms y
+tcLifetimeAtomic (ExLOwned _ ls ps_in ps_out) =
+  do Some ps_in' <- tcDistPerms ps_in
+     Some ps_out' <- tcDistPerms ps_out
      ls' <- mapM tcKExpr ls
-     pure (Perm_LOwned ls' x' y')
+     let eps_in = distPermsToExprPerms $ unTypeDistPerms ps_in'
+     let eps_out = distPermsToExprPerms $ unTypeDistPerms ps_out'
+     pure (Perm_LOwned ls' (typedDistPermsCtx ps_in')
+           (typedDistPermsCtx ps_out') eps_in eps_out)
 tcLifetimeAtomic (ExLCurrent _ l) = Perm_LCurrent <$> tcOptLifetime l
 tcLifetimeAtomic (ExLFinished _) = return Perm_LFinished
 tcLifetimeAtomic e = tcError (pos e) "Expected lifetime perm"
 
--- | Helper for lowned permission checking
-tcLOwnedPerms :: [(Located String,AstExpr)] -> Tc (Some LOwnedPerms)
-tcLOwnedPerms [] = pure (Some MNil)
-tcLOwnedPerms ((Located p n,e):xs) =
+-- | Check a sequence @x1:p1, ..., xn:pn@ of variables and permissions
+tcDistPerms :: [(Located String,AstExpr)] -> Tc (Some TypedDistPerms)
+tcDistPerms [] = pure (Some MNil)
+tcDistPerms ((Located p n,e):xs) =
   do Some (Typed tp x) <- tcTypedName p n
      perm <- tcValPerm tp e
-     lop <- case varAndPermLOwnedPerm (VarAndPerm x perm) of
-              Just lop -> return lop
-              Nothing -> tcError (pos e) ("Not a valid lifetime ownership permission: "
-                                         ++ permPrettyString emptyPPInfo perm)
-     Some lops <- tcLOwnedPerms xs
-     pure (Some (lops :>: lop))
+     Some ps <- tcDistPerms xs
+     pure (Some (ps :>: Typed tp (VarAndPerm x perm)))
 
 -- | Helper for checking permission offsets
 tcPermOffset :: TypeRepr a -> Pos -> Maybe AstExpr -> Tc (PermOffset a)
