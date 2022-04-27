@@ -573,15 +573,39 @@ io f = (TopLevel_ (liftIO f))
       do pos <- getPosition
          rethrow (SS.TopLevelException pos ("Error in x86 code: " ++ s))
 
+
+
+
+combineRW :: TopLevelCheckpoint -> TopLevelRW -> IO TopLevelRW
+combineRW (TopLevelCheckpoint chk) rw =
+  do cenv' <- CEnv.combineCryptolEnv (rwCryptol chk) (rwCryptol rw)
+     return chk{ rwCryptol = cenv' }
+
+-- | Represents the mutable state of the TopLevel monad
+--   that can later be restored.
+newtype TopLevelCheckpoint =
+  TopLevelCheckpoint TopLevelRW
+
+makeCheckpoint :: TopLevel TopLevelCheckpoint
+makeCheckpoint =
+  do rw <- getTopLevelRW
+     return (TopLevelCheckpoint rw)
+
+restoreCheckpoint :: TopLevelCheckpoint -> TopLevel ()
+restoreCheckpoint chk =
+  do rw <- getTopLevelRW
+     rw' <- io (combineRW chk rw)
+     putTopLevelRW rw'
+
 -- | Capture the current state of the TopLevel monad
 --   and return an action that, if invoked, resets
 --   the state back to that point.
 checkpoint :: TopLevel (() -> TopLevel ())
 checkpoint =
-  do rw <- getTopLevelRW
+  do chk <- makeCheckpoint
      return $ \_ ->
        do printOutLnTop Info "Restoring state from checkpoint"
-          putTopLevelRW rw
+          restoreCheckpoint chk
 
 throwTopLevel :: String -> TopLevel a
 throwTopLevel msg = do

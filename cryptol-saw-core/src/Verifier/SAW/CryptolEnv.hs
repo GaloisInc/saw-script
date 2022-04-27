@@ -16,6 +16,7 @@ module Verifier.SAW.CryptolEnv
   , loadCryptolModule
   , bindCryptolModule
   , lookupCryptolModule
+  , combineCryptolEnv
   , importModule
   , bindTypedTerm
   , bindType
@@ -341,6 +342,15 @@ genTermEnv sc modEnv cryEnv0 = do
   traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv)
 
 --------------------------------------------------------------------------------
+
+
+combineCryptolEnv :: CryptolEnv -> CryptolEnv -> IO CryptolEnv
+combineCryptolEnv chkEnv newEnv =
+  do let newMEnv = eModuleEnv newEnv
+     let chkMEnv = eModuleEnv chkEnv
+     let menv' = chkMEnv{ ME.meNameSeeds = ME.meNameSeeds newMEnv }
+     return chkEnv{ eModuleEnv = menv' }
+
 
 checkNotParameterized :: T.Module -> IO ()
 checkNotParameterized m =
