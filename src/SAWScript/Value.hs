@@ -576,21 +576,26 @@ io f = (TopLevel_ (liftIO f))
 
 
 
-
 combineRW :: TopLevelCheckpoint -> TopLevelRW -> IO TopLevelRW
-combineRW (TopLevelCheckpoint chk) rw =
+combineRW (TopLevelCheckpoint chk scc) rw =
   do cenv' <- CEnv.combineCryptolEnv (rwCryptol chk) (rwCryptol rw)
-     return chk{ rwCryptol = cenv' }
+     sc' <- restoreSharedContext scc (rwSharedContext rw)
+     return chk{ rwCryptol = cenv'
+               , rwSharedContext = sc'
+               }
 
 -- | Represents the mutable state of the TopLevel monad
 --   that can later be restored.
-newtype TopLevelCheckpoint =
-  TopLevelCheckpoint TopLevelRW
+data TopLevelCheckpoint =
+  TopLevelCheckpoint
+    TopLevelRW
+    SharedContextCheckpoint
 
 makeCheckpoint :: TopLevel TopLevelCheckpoint
 makeCheckpoint =
-  do rw <- getTopLevelRW
-     return (TopLevelCheckpoint rw)
+  do rw  <- getTopLevelRW
+     scc <- io (checkpointSharedContext (rwSharedContext rw))
+     return (TopLevelCheckpoint rw scc)
 
 restoreCheckpoint :: TopLevelCheckpoint -> TopLevel ()
 restoreCheckpoint chk =
