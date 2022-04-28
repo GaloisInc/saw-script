@@ -125,7 +125,7 @@ module SAWScript.Prover.MRSolver.Solver where
 
 import Data.Maybe
 import Data.Either
-import Data.List (findIndices, intercalate)
+import Data.List (findIndices, intercalate, foldl')
 import Data.Bits (shiftL)
 import Control.Monad.Except
 import qualified Data.Map as Map
@@ -147,6 +147,19 @@ import SAWScript.Prover.MRSolver.SMT
 ----------------------------------------------------------------------
 -- * Normalizing and Matching on Terms
 ----------------------------------------------------------------------
+
+-- | Like 'asVectorType', but returns 'Nothing' if 'asBVVecType' returns 'Just'
+asNonBVVecVectorType :: Recognizer Term (Term, Term)
+asNonBVVecVectorType (asBVVecType -> Just _) = Nothing
+asNonBVVecVectorType t = asVectorType t
+
+-- | Like 'scBvNat', but if given a bitvector literal it is converted to a
+-- natural number literal
+mrBvToNat :: Term -> Term -> MRM Term
+mrBvToNat _ (asArrayValue -> Just (asBoolType -> Just _,
+                                   mapM asBool -> Just bits)) =
+  liftSC1 scNat $ foldl' (\n bit -> if bit then 2*n+1 else 2*n) 0 bits
+mrBvToNat n len = liftSC2 scBvNat n len
 
 -- | Pattern-match on a @LetRecTypes@ list in normal form and return a list of
 -- the types it specifies, each in normal form and with uvars abstracted out
@@ -297,7 +310,7 @@ normComp (CompTerm t) =
       do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
          if n < 1 `shiftL` fromIntegral w then do
            n' <- liftSC2 scBvConst w (toInteger n)
-           err_str <- liftSC1 scString "..."
+           err_str <- liftSC1 scString "FIXME: normComp (atM) error"
            err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str]
            xs' <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
                                         [n_tm, a, xs, err_tm, w_tm, n'] 
@@ -312,6 +325,23 @@ normComp (CompTerm t) =
          ws_are_eq <- mrConvertible w1 w2
          if ws_are_eq then
            mrApplyAll body [w1, n, a, xs, i, x] >>= normCompTerm
+         else throwMRFailure (MalformedComp t)
+
+    -- Convert `updateM n ... xs (bvToNat ...)` for a constant `n` into the
+    -- unfolding of `bvVecUpdateM` after converting `n` to a bitvector constant
+    -- and applying `genBVVecFromVec` to `xs`
+    (asGlobalDef -> Just "CryptolM.updateM", [n_tm@(asNat -> Just n), a, xs,
+                                              asBvToNat ->
+                                                Just (w_tm@(asNat -> Just w),
+                                                      i), x]) ->
+      do body <- mrGlobalDefBody "CryptolM.bvVecUpdateM"
+         if n < 1 `shiftL` fromIntegral w then do
+           n' <- liftSC2 scBvConst w (toInteger n)
+           err_str <- liftSC1 scString "FIXME: normComp (updateM) error"
+           err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str]
+           xs' <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
+                                        [n_tm, a, xs, err_tm, w_tm, n'] 
+           mrApplyAll body [w_tm, n', a, xs', i, x] >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
     -- Always unfold: sawLet, multiArgFixM, invariantHint, Num_rec
@@ -938,6 +968,44 @@ askMRSolverH vars (asPi -> Just (nm1, asDataType -> Just (primName -> "Cryptol.N
      t2'' <- mrApplyAll t2' [var]
      askMRSolverH (var : vars') body1' t1'' body2 t2''
 
+-- If we need to introduce a BVVec on one side and a non-BVVec vector on the
+-- other, introduce a BVVec variable and substitute `genBVVecFromVec` of that
+-- variable on the non-BVVec side
+askMRSolverH vars tp1@(asPi -> Just (nm1, tp@(asBVVecType -> Just (n, len, a)), body1)) t1
+                  tp2@(asPi -> Just (nm2, asNonBVVecVectorType -> Just (m, a'), body2)) t2 =
+  do m' <- mrBvToNat n len
+     ms_are_eq <- mrConvertible m' m
+     as_are_eq <- mrConvertible a a'
+     if ms_are_eq && as_are_eq then return () else
+       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+     let nm = if Text.head nm2 == '_' then nm1 else nm2
+     withUVarLift nm (Type tp) (vars, t1, t2) $ \var (vars', t1', t2') ->
+       do err_str_tm <- liftSC1 scString "FIXME: askMRSolverH error"
+          err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str_tm]
+          bvvec_tm <- liftSC2 scGlobalApply "Prelude.genFromBVVec"
+                                            [n, len, a, var, err_tm, m]
+          body2' <- substTerm 0 (bvvec_tm : vars') body2
+          t1'' <- mrApplyAll t1' [var]
+          t2'' <- mrApplyAll t2' [bvvec_tm]
+          askMRSolverH (var : vars') body1 t1'' body2' t2''
+askMRSolverH vars tp1@(asPi -> Just (nm1, asNonBVVecVectorType -> Just (m, a'), body2)) t1
+                  tp2@(asPi -> Just (nm2, tp@(asBVVecType -> Just (n, len, a)), body1)) t2 =
+  do m' <- mrBvToNat n len
+     ms_are_eq <- mrConvertible m' m
+     as_are_eq <- mrConvertible a a'
+     if ms_are_eq && as_are_eq then return () else
+       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+     let nm = if Text.head nm2 == '_' then nm1 else nm2
+     withUVarLift nm (Type tp) (vars, t1, t2) $ \var (vars', t1', t2') ->
+       do err_str_tm <- liftSC1 scString "FIXME: askMRSolverH error"
+          err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str_tm]
+          bvvec_tm <- liftSC2 scGlobalApply "Prelude.genFromBVVec"
+                                            [n, len, a, var, err_tm, m]
+          body1' <- substTerm 0 (bvvec_tm : vars') body1
+          t1'' <- mrApplyAll t1' [var]
+          t2'' <- mrApplyAll t2' [bvvec_tm]
+          askMRSolverH (var : vars') body1' t1'' body2 t2''
+
 -- Introduce variables of the same type together
 askMRSolverH vars tp11@(asPi -> Just (nm1, tp1, body1)) t1
                   tp22@(asPi -> Just (nm2, tp2, body2)) t2 =
@@ -957,11 +1025,8 @@ askMRSolverH _ tp1 _ tp2@(asPi -> Just _) _ =
   throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
 
 -- The base case: both sides are CompM of the same type
-askMRSolverH _ tp1@(asCompM -> Just _) t1 tp2@(asCompM -> Just _) t2 =
-  do tps_are_eq <- mrConvertible tp1 tp2
-     if tps_are_eq then return () else
-       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
-     m1 <- normCompTerm t1 
+askMRSolverH _ (asCompM -> Just _) t1 (asCompM -> Just _) t2 =
+  do m1 <- normCompTerm t1 
      m2 <- normCompTerm t2
      mrRefines m1 m2
      -- If t1 is a named function, add forall xs. f1 xs |= m2 to the env

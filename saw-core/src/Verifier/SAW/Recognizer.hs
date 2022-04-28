@@ -46,6 +46,7 @@ module Verifier.SAW.Recognizer
   , asNat
   , asBvNat
   , asUnsignedConcreteBv
+  , asArrayValue
   , asStringLit
   , asLambda
   , asLambdaList
@@ -75,6 +76,7 @@ import Control.Lens
 import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Vector as V
 import Data.Text (Text)
 import Numeric.Natural (Natural)
 
@@ -286,6 +288,11 @@ asUnsignedConcreteBv :: Recognizer Term Natural
 asUnsignedConcreteBv term = do
   (n :*: v) <- asBvNat term
   return $ mod v (2 ^ n)
+
+asArrayValue :: Recognizer Term (Term, [Term])
+asArrayValue (unwrapTermF -> FTermF (ArrayValue tp tms)) =
+  return (tp, V.toList tms)
+asArrayValue _ = Nothing
 
 asStringLit :: Recognizer Term Text
 asStringLit t = do StringLit i <- asFTermF t; return i
