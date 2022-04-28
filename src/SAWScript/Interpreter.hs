@@ -347,26 +347,6 @@ interpretStmt printBinds stmt =
     SS.StmtTypedef _ name ty   -> do rw <- getTopLevelRW
                                      putTopLevelRW $ addTypedef (getVal name) ty rw
 
-writeVerificationSummary :: TopLevel ()
-writeVerificationSummary = do
-  do
-    db <- roTheoremDB <$> getTopLevelRO
-    values <- rwProofs <$> getTopLevelRW
-    let jspecs  = [ s | VJVMMethodSpec s <- values ]
-        lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
-        thms    = [ t | VTheorem t <- values ]
-    summary <- io (computeVerificationSummary db jspecs lspecs thms)
-    opts <- roOptions <$> getTopLevelRO
-    dir <- roInitWorkDir <$> getTopLevelRO
-    case summaryFile opts of
-      Nothing -> return ()
-      Just f -> let
-        f' = if hasDrive f then f else dir </> f
-        formatSummary = case summaryFormat opts of
-                       JSON -> jsonVerificationSummary
-                       Pretty -> prettyVerificationSummary
-        in io $ writeFile f' $ formatSummary summary
-
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
 interpretFile file runMain = do
   opts <- getOptions
@@ -427,15 +407,13 @@ buildTopLevelEnv proxy opts =
        thmDB <- newTheoremDB
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
-                   { roSharedContext = sc
-                   , roJavaCodebase = jcb
+                   { roJavaCodebase = jcb
                    , roOptions = opts
                    , roHandleAlloc = halloc
                    , roPosition = SS.Unknown
                    , roProxy = proxy
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
-                   , roTheoremDB = thmDB
                    , roStackTrace = []
                    , roSubshell = fail "Subshells not supported"
                    , roLocalEnv = []
@@ -459,6 +437,8 @@ buildTopLevelEnv proxy opts =
                    , rwMRSolverEnv = emptyMREnv
                    , rwProofs     = []
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
+                   , rwSharedContext = sc
+                   , rwTheoremDB = thmDB
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False

@@ -382,7 +382,7 @@ setCryptolEnv :: CryptolEnv -> REPL ()
 setCryptolEnv x = modifyCryptolEnv (const x)
 
 getSharedContext :: REPL SharedContext
-getSharedContext = fmap roSharedContext getTopLevelRO
+getSharedContext = rwSharedContext <$> getEnvironment
 
 getTopLevelRO :: REPL TopLevelRO
 getTopLevelRO = REPL (return . eTopLevelRO)
@@ -397,7 +397,7 @@ getValueEnvironment :: REPL TopLevelRW
 getValueEnvironment =
   do ro <- getTopLevelRO
      rw <- getEnvironment
-     io (mergeLocalEnv (roSharedContext ro) (roLocalEnv ro) rw)
+     io (mergeLocalEnv (rwSharedContext rw) (roLocalEnv ro) rw)
 
 putEnvironment :: TopLevelRW -> REPL ()
 putEnvironment = modifyEnvironment . const
