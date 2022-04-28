@@ -591,10 +591,9 @@ data TopLevelCheckpoint =
     TopLevelRW
     SharedContextCheckpoint
 
-makeCheckpoint :: TopLevel TopLevelCheckpoint
-makeCheckpoint =
-  do rw  <- getTopLevelRW
-     scc <- io (checkpointSharedContext (rwSharedContext rw))
+makeCheckpoint :: TopLevelRW -> IO TopLevelCheckpoint
+makeCheckpoint rw =
+  do scc <- checkpointSharedContext (rwSharedContext rw)
      return (TopLevelCheckpoint rw scc)
 
 restoreCheckpoint :: TopLevelCheckpoint -> TopLevel ()
@@ -603,13 +602,12 @@ restoreCheckpoint chk =
      rw' <- io (combineRW chk rw)
      putTopLevelRW rw'
 
-
 -- | Capture the current state of the TopLevel monad
 --   and return an action that, if invoked, resets
 --   the state back to that point.
 checkpoint :: TopLevel (() -> TopLevel ())
-checkpoint =
-  do chk <- makeCheckpoint
+checkpoint = TopLevel_ $
+  do chk <- liftIO . makeCheckpoint =<< get
      return $ \_ ->
        do printOutLnTop Info "Restoring state from checkpoint"
           restoreCheckpoint chk

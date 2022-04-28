@@ -20,6 +20,8 @@ module SAWScript.REPL.Monad (
   , catch
   , catchFail
   , catchOther
+  , exceptionProtect
+  , liftTopLevel
   , subshell
   , Refs(..)
 
@@ -65,12 +67,12 @@ import Cryptol.Utils.PP
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative(..), pure, (<*>))
 #endif
-import Control.Monad (unless, ap)
+import Control.Monad (unless, ap, void)
 import Control.Monad.Reader (ask)
 import Control.Monad.State (put, get)
 import Control.Monad.IO.Class (liftIO)
 import qualified Control.Monad.Fail as Fail
-import Data.IORef (IORef, newIORef, readIORef, modifyIORef)
+import Data.IORef (IORef, newIORef, readIORef, modifyIORef, writeIORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Typeable (Typeable)
@@ -89,8 +91,9 @@ import qualified Data.AIG.CompactGraph as AIG
 import SAWScript.AST (Located(getVal))
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.Options (Options)
-import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..))
-import SAWScript.Value (AIGProxy(..), mergeLocalEnv)
+import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel,
+                            makeCheckpoint, restoreCheckpoint)
+import SAWScript.Value (AIGProxy(..), mergeLocalEnv, IsValue, Value)
 import Verifier.SAW (SharedContext)
 
 deriving instance Typeable AIG.Proxy
@@ -260,7 +263,34 @@ rethrowEvalError m = run `X.catch` rethrow
   rethrow (EvalErrorEx _ exn) = X.throwIO (EvalError exn)
 
 
+exceptionProtect :: REPL () -> REPL ()
+exceptionProtect cmd =
+      do chk <- io . makeCheckpoint =<< getEnvironment
+         cmd `catch`      (handlerPP chk)
+             `catchFail`  (handlerFail chk)
+             `catchOther` (handlerPrint chk)
 
+    where
+    handlerPP chk re =
+      do io (putStrLn "" >> print (pp re))
+         void $ liftTopLevel (restoreCheckpoint chk)
+         return ()
+    handlerPrint chk e =
+      do io (putStrLn "" >> putStrLn (X.displayException e))
+         void $ liftTopLevel (restoreCheckpoint chk)
+
+    handlerFail chk s =
+      do io (putStrLn "" >> putStrLn s)
+         void $ liftTopLevel (restoreCheckpoint chk)
+
+liftTopLevel :: IsValue a => TopLevel a -> REPL Value
+liftTopLevel m =
+  do ro  <- getTopLevelRO
+     ref <- getEnvironmentRef
+     io $ do rw <- readIORef ref
+             (v,rw') <- runTopLevel m ro rw
+             writeIORef ref rw'
+             return v
 
 -- Primitives ------------------------------------------------------------------
 
