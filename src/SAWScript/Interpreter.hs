@@ -44,7 +44,7 @@ import qualified Data.Set as Set
 import Data.Set ( Set )
 import qualified Data.Text as Text
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
-import System.FilePath (takeDirectory, hasDrive, (</>))
+import System.FilePath (takeDirectory)
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
@@ -104,8 +104,6 @@ import qualified Prettyprinter.Render.Text as PP (putDoc)
 import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
-
-import SAWScript.VerificationSummary
 
 -- Environment -----------------------------------------------------------------
 
