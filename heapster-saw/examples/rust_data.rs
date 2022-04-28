@@ -1,10 +1,13 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::fmt;
+use std::convert::{Infallible};
 
+/*
 /* A function that immediately panics */
 pub fn get_out () -> ! {
     panic!("Uh oh!")
 }
+*/
 
 /* The logical and operation as a function on bool */
 pub fn bool_and (x:bool, y:bool) -> bool {
@@ -37,6 +40,7 @@ pub fn bool_and_struct (xy:BoolStruct) -> bool {
 
 /* A struct containing 2 32-bit values, to test how structs that fit into 1
  * 64-bit value are represented */
+#[repr(C)]
 pub struct TwoValues(u32,u32);
 
 pub fn mk_two_values (x1:u32,x2:u32) -> TwoValues {
@@ -65,6 +69,7 @@ pub extern fn two_values_proj1_extern (x:TwoValues) -> u32 {
 
 /* A struct containing 3 32-bit values, to test how structs that fit but don't
  * fill up 2 64-bit values are represented */
+#[repr(C)]
 pub struct ThreeValues(u32,u32,u32);
 
 pub fn mk_three_values (x1:u32,x2:u32,x3:u32) -> ThreeValues {
@@ -90,6 +95,7 @@ pub extern fn three_values_proj1_extern (x:ThreeValues) -> u32 {
 
 /* A struct containing 4 32-bit values, to test how structs that fit into 2
  * 64-bit values are represented */
+#[repr(C)]
 pub struct FourValues(u32,u32,u32,u32);
 
 pub fn mk_four_values (x1:u32,x2:u32,x3:u32,x4:u32) -> FourValues {
@@ -115,6 +121,7 @@ pub extern fn four_values_proj1_extern (x:FourValues) -> u32 {
 
 /* A struct containing 5 32-bit values, to test how structs that do not quite
  * fit into 2 64-bit values are represented */
+#[repr(C)]
 pub struct FiveValues(u32,u32,u32,u32,u32);
 
 pub fn mk_five_values (x1:u32,x2:u32,x3:u32,x4:u32,x5:u32) -> FiveValues {
@@ -156,9 +163,23 @@ pub fn test_result <'a> (r:&'a Result<u64,u64>) -> bool {
     }
 }
 
+/* Make a Result whose other branch is uninhabited */
+pub fn mk_result_infallible (x:u64) -> Result<Infallible,u64> {
+  Err(x)
+}
+
+/* Extract a value from a Result whose other branch is uninhabited */
+pub fn extract_from_result_infallible <'a> (r:&'a Result<Infallible,u64>) -> u64 {
+    match r {
+        Ok(i) => match *i { },
+        Err(x) => *x,
+    }
+}
+
 /* Sum of two types; yes, this is like Result, but defined locally so we can
  * make an impl block on it */
 #[derive(Clone, Debug, PartialEq)]
+#[repr(C)]
 pub enum Sum<X,Y> {
     Left (X),
     Right (Y)
@@ -212,6 +233,7 @@ pub extern fn mk_sum_sum_left_asym_extern (x:Sum<u32,u64>) -> Sum<Sum<u32,u64>,u
 
 
 /* A struct containing a string */
+#[repr(C)]
 pub struct StrStruct(String);
 
 impl StrStruct {
@@ -219,9 +241,13 @@ impl StrStruct {
     pub fn new(name: &str) -> StrStruct {
         StrStruct(name.to_string())
     }
+
+    // &str not considered FFI safe, so Rust doesn't like extern here
+    /*
     pub extern fn new_extern(name: &str) -> StrStruct {
         StrStruct(name.to_string())
     }
+    */
 
     /* Accessor for StrStruct */
     pub fn name(&self) -> String {
@@ -229,11 +255,15 @@ impl StrStruct {
             StrStruct(s) => s.to_string(),
         }
     }
+
+    // String not considered FFI safe, so Rust doesn't like extern here
+    /*
     pub extern fn name_extern(&self) -> String {
         match self {
             StrStruct(s) => s.to_string(),
         }
     }
+     */
 
     /* Version of name that maps to &str */
     pub fn name_str (&self) -> &str {
@@ -242,15 +272,19 @@ impl StrStruct {
         }
     }
 
+    // &str not considered FFI safe, so Rust doesn't like extern here
+    /*
     pub extern fn name_str_extern (&self) -> &str {
         match self {
             StrStruct(s) => s.as_str(),
         }
     }
+     */
 }
 
 /* A struct with a mix of different field types */
 #[derive(Clone, Debug, PartialEq)]
+#[repr(C)]
 pub struct MixedStruct {
     pub s: String,
     pub i1: u64,
@@ -371,11 +405,36 @@ pub fn list64_is_empty (l: &List64) -> bool {
     }
 }
 
+/* Return the tail of a List64, or None if it is the empty list */
+pub fn list64_tail (l: List64) -> Option<List64> {
+    match l {
+        List64::Nil64 => None,
+        List64::Cons64 (_,tl) => Some (*tl)
+    }
+}
+
 /* Sum the elements of a List64 */
 pub fn list64_sum(l:&List64) -> u64 {
     match l {
         List64::Nil64 => 0,
         List64::Cons64 (x,rest) => x + list64_sum (rest),
+    }
+}
+
+/* Return a mutable reference to the head of a list, or None if it is empty */
+pub fn list64_head_mut <'a> (l:&'a mut List64) -> Option<&'a mut u64> {
+    match l {
+        List64::Nil64 => None,
+        List64::Cons64 (h,_) => Some (h),
+    }
+}
+
+/* Find an element in a List64 and return a mutable reference to it */
+pub fn list64_find_mut <'a> (x:u64, l:&'a mut List64) -> Option<&'a mut u64> {
+    match l {
+        List64::Nil64 => None,
+        List64::Cons64 (y,rest) =>
+            if x == *y { Some (y) } else { list64_find_mut (x,rest) }
     }
 }
 
@@ -391,6 +450,7 @@ pub fn opt_hash_map_for_string_and_list64 (str:String,
                                            l:List64) -> Option<HashMap<String,List64>> {
     Some(hash_map_for_string_and_list64 (str,l))
 }
+
 
 /* Sum the List64s in a HashMap */
 pub fn sum_hash_map_string_list64 (map:&HashMap<String,List64>) -> u64 {
