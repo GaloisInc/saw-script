@@ -3333,6 +3333,30 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                                                     transTerm1 ptrans_y])])
          m
 
+  [nuMP| SImpl_IntroAnyEqEq _ _ _ |] ->
+    do tp_trans <- translateSimplImplOutHead mb_simpl
+       withPermStackM RL.tail
+         (\(pctx :>: _ :>: _) ->
+           pctx :>: typeTransF tp_trans []) m
+
+  [nuMP| SImpl_IntroAnyWordPtr _ _ _ |] ->
+    do tp_trans <- translateSimplImplOutHead mb_simpl
+       withPermStackM RL.tail
+         (\(pctx :>: _ :>: _) ->
+           pctx :>: typeTransF tp_trans []) m
+
+  [nuMP| SImpl_ElimAnyToEq _ _ |] ->
+    do tp_trans <- translateSimplImplOutHead mb_simpl
+       withPermStackM id
+         (\(pctx :>: _) ->
+           pctx :>: typeTransF tp_trans []) m
+
+  [nuMP| SImpl_ElimAnyToPtr _ _ |] ->
+    do tp_trans <- translateSimplImplOutHead mb_simpl
+       withPermStackM id
+         (\(pctx :>: _) ->
+           pctx :>: typeTransF tp_trans []) m
+
 
 -- | A flag to indicate whether the translation of a permission implication
 -- contains any failures

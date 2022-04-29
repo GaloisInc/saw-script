@@ -117,6 +117,12 @@ rlMapMWithAccum f accum (xs :>: x) =
      (y,accum'') <- f accum' x
      return (ys :>: y, accum'')
 
+-- | Map a monomorphic binary function across a pair of 'RAssign's to create a
+-- standard list, similarly to 'zipWith'
+mapToList2 :: (forall a. f a -> g a -> b) ->
+              RAssign f tps -> RAssign g tps -> [b]
+mapToList2 f fs gs = RL.toList $ RL.map2 (\x y -> Constant $ f x y) fs gs
+
 
 ----------------------------------------------------------------------
 -- * Data types and related types
@@ -2490,6 +2496,10 @@ pattern ValPerm_Struct :: () => (a ~ StructType ctx) =>
 pattern ValPerm_Struct ps <- ValPerm_Conj [Perm_Struct ps]
   where
     ValPerm_Struct ps = ValPerm_Conj [Perm_Struct ps]
+
+-- | A single @any@ permission
+pattern ValPerm_Any :: ValuePerm a
+pattern ValPerm_Any = ValPerm_Conj [Perm_Any]
 
 pattern ValPerms_Nil :: () => (tps ~ RNil) => ValuePerms tps
 pattern ValPerms_Nil = MNil
@@ -5978,6 +5988,22 @@ unfoldPerm :: NameSortCanFold ns ~ 'True => NamedPerm ns args a ->
               PermExprs args -> PermOffset a -> ValuePerm a
 unfoldPerm (NamedPerm_Defined dp) = unfoldDefinedPerm dp
 unfoldPerm (NamedPerm_Rec rp) = unfoldRecPerm rp
+
+-- | Test if two expressions are definitely unequal
+exprsUnequal :: PermExpr a -> PermExpr a -> Bool
+exprsUnequal (PExpr_Var _) _ = False
+exprsUnequal (PExpr_Bool b1) (PExpr_Bool b2) = b1 /= b2
+exprsUnequal (PExpr_Nat n1) (PExpr_Nat n2) = n1 /= n2
+exprsUnequal (PExpr_String str1) (PExpr_String str2) = str1 /= str2
+exprsUnequal e1@(PExpr_BV _ _) e2 = not $ bvCouldEqual e1 e2
+{- FIXME: we need to prove the types are equal on both sides for this case:
+exprsUnequal (PExpr_Struct es1) (PExpr_Struct es2) =
+  any $ mapToList2 exprsUnequal es1 es2
+-}
+exprsUnequal _ _ =
+  -- FIXME: maybe we want more cases for shapes and even function handles,
+  -- though those shouldn't factor into the current uses of exprsUnequal
+  False
 
 -- | Generic function to get free variables
 class FreeVars a where
