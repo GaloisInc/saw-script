@@ -6606,6 +6606,42 @@ borrowedLLVMArrayForArray lhs rhs =
       | otherwise
       = bs_skip ++ bs_lhs
 
+-- | TODO: hide the bool parameter
+solveForArray ::
+  (1 <= w, KnownNat w, NuMatchingAny1 r) =>
+  Bool ->
+  [AtomicPerm (LLVMPointerType w)] ->
+  Mb vars (LLVMArrayPerm w) ->
+  ImplM vars s r ps ps ()
+solveForArray should_fail ps mb_ap =
+  getPSubst >>>= \psubst ->
+  case partialSubst psubst mb_ap of
+    Just _ap -> return ()
+    Nothing
+      | should_fail ->
+        implFailM "goo goo"
+      | otherwise ->
+        solveForArrayH ps psubst mb_ap
+
+solveForArrayH ::
+  (1 <= w, KnownNat w, NuMatchingAny1 r) =>
+  [AtomicPerm (LLVMPointerType w)] ->
+  PartialSubst vars ->
+  Mb vars (LLVMArrayPerm w) ->
+  ImplM vars s r ps ps ()
+solveForArrayH ps psubst mb_ap
+  | Nothing <- partialSubst psubst $ mbLLVMArrayLifetime mb_ap
+  , Just l:_ <- atomicPermLifetime <$> ps =
+  tryUnifyVars l (mbLLVMArrayLifetime mb_ap) >>>
+  solveForArray False ps mb_ap
+solveForArrayH ps psubst mb_ap
+  | Nothing <- partialSubst psubst $ mbLLVMArrayRW mb_ap
+  , Just l:_ <- atomicPermModality <$> ps =
+  tryUnifyVars l (mbLLVMArrayRW mb_ap) >>>
+  solveForArray False ps mb_ap
+solveForArrayH ps _ mb_ap =
+  solveForArray True ps mb_ap
+
 
 -- | Prove an LLVM array permission @ap@ from permissions @x:(p1 * ... *pn)@ on
 -- the top of the stack, ensuring that any remaining permissions for @x@ get
@@ -6701,6 +6737,12 @@ proveVarLLVMArrayH x p psubst ps mb_ap
 -- Otherwise, try and build a completely borrowed array that references existing
 -- permissions that cover the range of mb_ap, and recurse (hitting the special
 -- case above).
+proveVarLLVMArrayH x first_p psubst ps mb_ap
+  | Nothing <- partialSubst psubst mb_ap =
+  solveForArray False ps mb_ap >>>
+  getPSubst >>>= \psubst' ->
+  proveVarLLVMArrayH x first_p psubst' ps mb_ap
+
 proveVarLLVMArrayH x first_p psubst ps mb_ap
   | Just ap <- partialSubst psubst mb_ap
   -- NOTE: borrowedLLVMArrayForArray only returns a single possible covering, though
