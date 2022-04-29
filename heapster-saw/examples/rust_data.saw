@@ -27,6 +27,9 @@ heapster_define_llvmshape env "Box" 64 "T:llvmshape 64" "ptrsh(T)";
 // Result type
 heapster_define_rust_type env "pub enum Result<X,Y> { Ok (X), Err (Y) }";
 
+// Infallable type
+heapster_define_llvmshape env "Infallible" 64 "" "falsesh";
+
 // Sum type
 heapster_define_rust_type env "pub enum Sum<X,Y> { Left (X), Right (Y) }";
 
@@ -252,7 +255,7 @@ heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
 
 // Box<List20<u64>>::clone
 box_list20_u64_clone_sym <- heapster_find_symbol_with_type env
-  "alloc..boxed..Box$LT$T$GT$$u20$as$u20$core..clone..Clone$GT$5clone"
+  "alloc..boxed..Box$LT$T$C$A$GT$$u20$as$u20$core..clone..Clone$GT$5clone"
   "%\"List20<u64>\"*(%\"List20<u64>\"**)";
 heapster_assume_fun_rename_prim env box_list20_u64_clone_sym "box_list20_u64_clone"
   "<'a> fn(x:&'a Box<List20<u64>>) -> Box<List20<u64>>";
@@ -328,7 +331,7 @@ heapster_assume_fun_rename_prim env panicking_panic_sym "panicking_panic"
 hashmap_u64_u64_insert_sym <- heapster_find_symbol_with_type env
   "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert"
   "{ i64,\
-\  i64 }(%\"std::collections::hash::map::HashMap<u64, u64, std::collections::hash::map::RandomState>\"*,\
+\  i64 }(%\"std::collections::hash::map::HashMap<u64, u64>\"*,\
 \        i64, i64)";
 heapster_assume_fun_rename_prim env hashmap_u64_u64_insert_sym "hashmap_u64_u64_insert"
   "<'a> fn (&'a mut HashMap<u64,u64>,u64,u64) -> Option<u64>";
@@ -346,7 +349,7 @@ heapster_assume_fun_rename_prim env hashmap_u64_u64_insert_sym "hashmap_u64_u64_
 hashmap_String_List64_insert_sym <- heapster_find_symbol_with_type env
   "std11collections4hash3map24HashMap$LT$K$C$V$C$S$GT$6insert"
   "void(%\"core::option::Option<List64>\"*,\
-\     %\"std::collections::hash::map::HashMap<alloc::string::String, List64, std::collections::hash::map::RandomState>\"*,\
+\     %\"std::collections::hash::map::HashMap<alloc::string::String, List64>\"*,\
 \     %\"alloc::string::String\"*, %List64*)";
 // FIXME: assume hashmap_String_List64_insert_sym
 
@@ -444,14 +447,18 @@ heapster_assume_fun_rename_prim env Formatter__write_fmt_sym "Formatter__write_f
   "<'a> fn (&'a mut fmt::Formatter, fmt::Arguments) -> fmt::Result";
 
 // std::panicking::begin_panic
-begin_panic_sym <- heapster_find_symbol env "3std9panicking11begin_panic17";
-heapster_assume_fun_rename_prim env begin_panic_sym "begin_panic" "<'a, 'b> fn(&'a str, &'b panic::Location) -> !";
+// FIXME: add this back in when we add get_out back
+//begin_panic_sym <- heapster_find_symbol env "3std9panicking11begin_panic17";
+//heapster_assume_fun_rename_prim env begin_panic_sym "begin_panic" "<'a, 'b> fn(&'a str, &'b panic::Location) -> !";
+
 
 /***
  *** Type-Checked Functions
  ***/
-get_out_sym <- heapster_find_symbol env "7get_out";
-heapster_typecheck_fun_rename env get_out_sym "get_out" "<> fn() -> !";
+
+// FIXME: SAW cannot currently handle get_out in the binary
+//get_out_sym <- heapster_find_symbol env "7get_out";
+//heapster_typecheck_fun_rename env get_out_sym "get_out" "<> fn() -> !";
 
 // bool_and
 bool_and_sym <- heapster_find_symbol env "8bool_and";
@@ -495,6 +502,17 @@ heapster_typecheck_fun_rename env test_result_sym "test_result"
   "<'a> fn (r:&'a Result<u64,u64>) -> bool";
 //heapster_typecheck_fun_rename env test_result_sym "test_result"
 //  "().arg0:memblock(R,0,16,Result<fieldsh(int64<>),fieldsh(int64<>)>) -o ret:int1<>";
+
+// mk_result_infallible
+mk_result_infallible_sym <- heapster_find_symbol env "20mk_result_infallible";
+heapster_typecheck_fun_rename env mk_result_infallible_sym "mk_result_infallible"
+  "<> fn (x:u64) -> Result<Infallible,u64>";
+
+// extract_from_result_infallible
+extract_from_result_infallible_sym <- heapster_find_symbol env "30extract_from_result_infallible";
+heapster_typecheck_fun_rename env extract_from_result_infallible_sym "extract_from_result_infallible"
+  "<'a> fn (r:&'a Result<Infallible,u64>) -> u64";
+
 
 // test_sum_impl
 test_sum_impl_sym <- heapster_find_symbol env "13test_sum_impl";
@@ -578,6 +596,17 @@ list64_tail_sym <- heapster_find_symbol env "11list64_tail";
 heapster_typecheck_fun_rename env list64_tail_sym "list64_tail"
   "<> fn (l:List64) -> Option<List64>";
 
+// list64_head_mut
+list64_head_mut_sym <- heapster_find_symbol env "15list64_head_mut";
+heapster_typecheck_fun_rename env list64_head_mut_sym "list64_head_mut"
+  "<'a> fn (l:&'a mut List64) -> Option<&'a mut u64>";
+
+// list64_find_mut
+list64_find_mut_sym <- heapster_find_symbol env "15list64_find_mut";
+heapster_typecheck_fun_rename env list64_find_mut_sym "list64_find_mut"
+  "<'a> fn (x:u64, l:&'a mut List64) -> Option<&'a mut u64>";
+
+/*
 hash_map_insert_gt_to_le_sym <- heapster_find_symbol env "hash_map_insert_gt_to_le";
 heapster_typecheck_fun_rename
   env hash_map_insert_gt_to_le_sym
@@ -610,6 +639,7 @@ heapster_set_translation_checks env false;
 list20_head_sym <- heapster_find_symbol env "11list20_head";
 heapster_typecheck_fun_rename env list20_head_sym "list20_head"
   "<'a> fn (x:&'a List20<List<u64>>) -> &'a List<u64>";
+*/
 
 
 /***

@@ -133,10 +133,10 @@ int32array :: (ArrayIndexExpr a1, ArrayIndexExpr a2) => a1 -> a2 -> AtomicPerm (
 int32array off len = Perm_LLVMArray (int32ArrayPerm off len)
 
 int64ArrayPerm :: (ArrayIndexExpr a1, ArrayIndexExpr a2) => a1 -> a2 -> LLVMArrayPerm 64
-int64ArrayPerm off len = arrayPerm (toIdx off) (toIdx len) 8 (fieldShape (intValuePerm @ 64))
+int64ArrayPerm off len = arrayPerm (toIdx off) (toIdx len) 8 (fieldShape (intValuePerm @64))
 
 int32ArrayPerm :: (ArrayIndexExpr a1, ArrayIndexExpr a2) => a1 -> a2 -> LLVMArrayPerm 64
-int32ArrayPerm off len = arrayPerm (toIdx off) (toIdx len) 4 (fieldShape (intValuePerm @ 32))
+int32ArrayPerm off len = arrayPerm (toIdx off) (toIdx len) 4 (fieldShape (intValuePerm @32))
 
 arrayPerm ::
   PermExpr (BVType w) ->
