@@ -223,6 +223,9 @@ data ExprTrans (a :: CrucibleType) where
   -- that this construct should not be used for the types handled above.
   ETrans_Term :: OpenTerm -> ExprTrans a
 
+  -- | The translation of Vectors of any type
+  ETrans_AnyVector :: ExprTrans (VectorType AnyType)
+
 
 -- | A context mapping bound names to their type-level SAW translations
 type ExprTransCtx = RAssign ExprTrans
@@ -701,6 +704,8 @@ instance TransInfo info =>
       return $ error "translate: SequenceRepr"
     [nuMP| BVRepr w |] ->
       returnType1 =<< bitvectorTransM (translate w)
+    [nuMP| VectorRepr AnyRepr |] ->
+      return $ mkTypeTrans0 ETrans_AnyVector
 
     -- Our special-purpose intrinsic types, whose translations do not have
     -- computational content

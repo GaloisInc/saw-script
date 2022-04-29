@@ -46,6 +46,7 @@ library
   exposed-modules:
     Verifier.SAW.Heapster.CruUtil
     Verifier.SAW.Heapster.GenMonad
+    Verifier.SAW.Heapster.HintExtract
     Verifier.SAW.Heapster.Implication
     Verifier.SAW.Heapster.IRTTranslation
     Verifier.SAW.Heapster.Lexer
