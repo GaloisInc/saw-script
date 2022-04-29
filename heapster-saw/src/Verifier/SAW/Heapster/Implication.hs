@@ -3420,6 +3420,13 @@ setVarM memb e =
                        pretty "=" <+> permPretty i e)
      modifyPSubst (psubstSet memb e)
 
+-- | Set the value for an existential variable to the zero of its type if it has
+-- not yet been set
+zeroUnsetVarM :: Member vars (a :: CrucibleType) -> ImplM vars s r ps ps ()
+zeroUnsetVarM memb =
+  do tp <- RL.get memb <$> cruCtxToTypes <$> use implStateVars
+     setVarM memb (zeroOfType tp)
+
 -- | Get a free variable that is provably equal to the value of an existential
 -- variable, let-binding a fresh variable if the evar is instantiated with a
 -- non-variable expression. It is an error if the evar has no instantiation in
@@ -5967,7 +5974,8 @@ proveVarEq x mb_e =
   p@(ValPerm_Conj ps)
     | Just i <- findIndex (== Perm_Any) ps ->
       implPushM x p >>> implCopyConjM x ps i >>> implPopM x p >>>
-      -- FIXME: we could instantiate evars in mb_e if needed
+      -- Zero out all bound variables in mb_e that have not yet been set
+      mapM_ (\(Some memb) -> zeroUnsetVarM memb) (boundVars mb_e) >>>
       partialSubstForceM mb_e "proveVarEq" >>>= \e ->
       implSimplM Proxy (SImpl_ElimAnyToEq x e)
   _ ->
@@ -7570,7 +7578,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     implSwapInsertConjM x (Perm_LLVMBlock $ llvmFieldPermToBlock fp) ps' 0
 
 
--- If proving a field shape, prove the remaining blocks and then prove the
+-- If proving an array shape, prove the remaining blocks and then prove the
 -- corresponding array permission
 --
 -- FIXME: see above FIXME on proving field shapes
@@ -7790,6 +7798,23 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
                                             PExpr_EmptyShape } |]) mb_bp in
     proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps)
 
+
+-- If the shape of mb_bp is an unset variable z, mb_bp has a fixed constant
+-- length, and there is an any permission on the left, recursively prove a
+-- memblock permission with shape fieldsh(any)
+proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
+  | [nuMP| PExpr_Var mb_z |] <- mb_sh
+  , Left memb <- mbNameBoundP mb_z
+  , Nothing <- psubstLookup psubst memb
+  , elem Perm_Any ps
+  , Just len <- partialSubst psubst (mbLLVMBlockLen mb_bp)
+  , Just len_int <- bvMatchConstInt len
+  , Just (Some (sz :: NatRepr sz)) <- someNat (8 * len_int)
+  , Left LeqProof <- decideLeq (knownNat @1) sz
+  , p <- ValPerm_Any :: ValuePerm (LLVMPointerType sz) =
+    setVarM memb (withKnownNat sz $ PExpr_FieldShape $ LLVMFieldShape p) >>>
+    getPSubst >>>= \psubst' ->
+    proveVarLLVMBlocks2 x ps psubst' mb_bp mb_sh mb_bps
 
 -- If the shape of mb_bp is an unset variable z and there is a field permission
 -- on the left that contains all the offsets of mb_bp, recursively prove a
@@ -8288,6 +8313,10 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
     recombinePerm x (ValPerm_Conj ps) >>>
     partialSubstForceM mb_prop "proveVarAtomicImpl" >>>= \prop ->
     implTryProveBVProp x prop
+
+  [nuMP| Perm_Any |]
+    | Just i <- findIndex (== Perm_Any) ps ->
+      implCopyConjM x ps i >>> implPopM x (ValPerm_Conj ps)
 
   _ -> proveVarAtomicImplUnfoldOrFail x ps mb_p
 

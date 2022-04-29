@@ -6002,7 +6002,7 @@ exprsUnequal (PExpr_Struct es1) (PExpr_Struct es2) =
 -}
 exprsUnequal _ _ =
   -- FIXME: maybe we want more cases for shapes and even function handles,
-  -- though those shouldn't factor into the current uses of exprsUnequal
+  -- though those shouldn't matter for the current uses of exprsUnequal
   False
 
 -- | Generic function to get free variables
@@ -6013,6 +6013,16 @@ class FreeVars a where
 freeVarsRAssign :: FreeVars a => a -> Some (RAssign ExprVar)
 freeVarsRAssign =
   foldl (\(Some ns) (SomeName n) -> Some (ns :>: n)) (Some MNil) . toList . freeVars
+
+-- | Get the bound variables of an expression or permission
+boundVars :: (NuMatching a, FreeVars a) => Mb (ctx :: RList CrucibleType) a ->
+             [Some @CrucibleType (Member ctx)]
+boundVars mb_a =
+  mapMaybe (\case
+               [nuP| SomeName mb_n |]
+                 | Left memb <- mbNameBoundP mb_n -> Just (Some memb)
+               _ -> Nothing) $
+  mbList $ mbMapCl $(mkClosed [| toList . freeVars |]) mb_a
 
 instance FreeVars a => FreeVars (Maybe a) where
   freeVars = maybe NameSet.empty freeVars
