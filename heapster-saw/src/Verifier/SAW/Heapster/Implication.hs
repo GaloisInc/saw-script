@@ -6689,6 +6689,15 @@ proveVarLLVMArrayH x p psubst ps mb_ap
       | PExpr_ArrayShape {} <- llvmBlockShape bp = True
     arrayBlock _ = False
 
+proveVarLLVMArrayH x p psubst ps mb_ap
+  | Just i <- findIndex seqFieldBlock ps =
+    implElimAppendIthLLVMBlock x ps i >>>= \ps' ->
+    proveVarLLVMArrayH x p psubst ps' mb_ap
+  where
+    seqFieldBlock (Perm_LLVMBlock bp)
+      | Just flds <- matchLLVMFieldShapeSeq (llvmBlockShape bp) = length flds > 1
+    seqFieldBlock _ = False
+
 -- Otherwise, try and build a completely borrowed array that references existing
 -- permissions that cover the range of mb_ap, and recurse (hitting the special
 -- case above).
