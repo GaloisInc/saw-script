@@ -146,10 +146,12 @@ heapster_assume_fun_rename_prim env slice_var_iter_sym "slice_var_iter"
 // NOTE: Unfortunately there are two symbols with the same type for rev,
 // so we need to just use the full hash for searching
 // Iter<'a, (Var, Value)>::rev
+/*
 iter_var_rev_sym <- heapster_find_symbol env
   "core4iter6traits8iterator8Iterator3rev17h4b2583a4d05f0facE";
 heapster_assume_fun_rename_prim env iter_var_rev_sym "iter_var_rev"
   "<'a> fn (Iter<'a, (Var, u64)>) -> Rev<Iter<'a, (Var, u64)>>";
+*/
 
 // Vec<(Var, Value)>::new
 vec_new_sym <- heapster_find_symbol env "Vec$LT$T$GT$3new";
@@ -185,10 +187,12 @@ heapster_assume_fun_rename_prim env slice_fun_iter_sym "slice_fun_iter"
 // NOTE: Unfortunately there are two symbols with the same type for rev,
 // so we need to just use the full hash for searching
 // Iter<'a, (FunName, FunDef)>::rev
+/*
 iter_fun_rev_sym <- heapster_find_symbol env
   "core4iter6traits8iterator8Iterator3rev17h221acc9c965305cbE";
 heapster_assume_fun_rename_prim env iter_fun_rev_sym "iter_fun_rev"
   "<'a> fn (Iter<'a, (FunName, FunDef)>) -> Rev<Iter<'a, (FunName, FunDef)>>";
+*/
 
 // TODO: Are these lifetimes right?
 // &Var::eq
@@ -264,9 +268,17 @@ heapster_typecheck_fun_rename env eval_expr_sym "eval_expr"
   "<'a, 'b> fn(&'a Env, &'b Expr) -> Result<u64, Error>";
 
 // TODO: Add stuff related to the `?` operator
+/*
 eval_stmt_sym <- heapster_find_symbol env "9eval_stmt";
 heapster_typecheck_fun_rename env eval_stmt_sym "eval_stmt"
   "<'a, 'b> fn (&'a mut Env, &'b Stmt) -> Result<u64, Error>";
+*/
+
+heapster_set_debug_level env 1;
+eval_stmt_alt_sym <- heapster_find_symbol env "13eval_stmt_alt";
+heapster_typecheck_fun_rename env eval_stmt_alt_sym "eval_stmt_alt"
+  "<'a, 'b> fn (&'a mut Env, &'b Stmt) -> Result<u64, Error>";
+heapster_set_debug_level env 0;
 
 /***
  *** Export to Coq

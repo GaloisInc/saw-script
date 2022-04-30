@@ -126,3 +126,52 @@ pub fn eval_stmt <'a, 'b> (env : &'a mut Env, stmt : &'b Stmt) -> Result<u64, Er
         }
     }
 }
+
+
+pub fn eval_stmt_alt <'a, 'b> (env : &'a mut Env, stmt : &'b Stmt) -> Result<u64, Error> {
+    match stmt {
+        Stmt::Return (x) => env_lookup (env, x),
+        Stmt::Skip => Ok (0),
+        Stmt::Assign (x,e) =>
+        { match eval_expr (env, e) {
+            Ok (v) => { env_update (env, x, v); Ok (0) },
+            Err (e) => Err (e),
+        }}
+        Stmt::IfStmt (e, stmt1, stmt2) =>
+        { match eval_expr (env, e) {
+            Ok (v) => {
+                if v != 0 { eval_stmt_alt (env, stmt1) }
+                else { eval_stmt_alt (env, stmt2) }
+            },
+            Err (e) => Err (e),
+        }},
+        Stmt::WhileStmt (e, body) =>
+        { match eval_expr (env, e) {
+            Ok (v) => {
+                if v != 0 {
+                    match eval_stmt_alt (env, body) {
+                        Ok (_) => eval_stmt_alt (env, stmt),
+                        Err (e) => Err (e) }
+                }
+                else { Ok(0) } },
+            Err (e) => Err (e),
+        }}
+        Stmt::CallStmt (_, _) => Err (Error::Unimplemented)
+        /*
+        Stmt::CallStmt (f, args) =>
+        { match fun_lookup (env, f) {
+            Ok (f_def) => {
+                let mut new_env = fresh_env_from_env (env);
+                if args.len () == f_def.fun_args.len () {
+                    for (x, arg) in f_def.fun_args.iter().zip(args.iter()) {
+                        match eval_expr (env, arg) {
+                            Ok (v) => env_update (&mut new_env, x, v),
+                            Err (e) => Err (e)
+                        }
+                    };
+                    eval_stmt (&mut new_env, &(*f_def).fun_body)
+                } else { Err (Error::WrongNumberOfArgs)}},
+            Err (e) => Err (e)
+        }} */
+    }
+}
