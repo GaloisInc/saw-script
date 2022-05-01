@@ -175,8 +175,12 @@ library
     SAWScript.X86Spec
 
     SAWScript.Yosys
+    SAWScript.Yosys.Cell
     SAWScript.Yosys.IR
+    SAWScript.Yosys.Netgraph
+    SAWScript.Yosys.State
     SAWScript.Yosys.Theorem
+    SAWScript.Yosys.Utils
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)

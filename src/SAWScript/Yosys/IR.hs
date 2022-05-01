@@ -3,13 +3,15 @@
 {-# Language RecordWildCards #-}
 {-# Language LambdaCase #-}
 {-# Language TupleSections #-}
+{-# Language FlexibleInstances #-}
+{-# Language DeriveFunctor #-}
 
 module SAWScript.Yosys.IR where
 
 import Control.Lens.TH (makeLenses)
 
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Exception (Exception, throw)
+import Control.Exception (throw)
 
 import Data.Map (Map)
 import Data.Text (Text)
@@ -17,13 +19,10 @@ import qualified Data.Text as Text
 
 import qualified Data.Aeson as Aeson
 
+import SAWScript.Yosys.Utils
+
 --------------------------------------------------------------------------------
 -- ** Representing and loading the Yosys JSON IR
-
-newtype YosysError = YosysError Text
-instance Exception YosysError
-instance Show YosysError where
-  show (YosysError msg) = Text.unpack $ "Error: " <> msg
 
 data Direction
   = DirectionInput
@@ -70,16 +69,16 @@ instance Aeson.FromJSON Port where
       _ -> pure False
     pure Port{..}
 
-data Cell = Cell
+data Cell bs = Cell
   { _cellHideName :: Bool
   , _cellType :: Text
   , _cellParameters :: Map Text Text
   , _cellAttributes :: Aeson.Value
   , _cellPortDirections :: Map Text Direction
-  , _cellConnections :: Map Text [Bitrep]
-  } deriving (Show, Eq, Ord)
+  , _cellConnections :: Map Text bs
+  } deriving (Show, Eq, Ord, Functor)
 makeLenses ''Cell
-instance Aeson.FromJSON Cell where
+instance Aeson.FromJSON (Cell [Bitrep]) where
   parseJSON = Aeson.withObject "cell" $ \o -> do
     _cellHideName <- o Aeson..:? "hide_name" >>= \case
       Just (Aeson.Number 1) -> pure True
@@ -94,7 +93,7 @@ instance Aeson.FromJSON Cell where
 data Module = Module
   { _moduleAttributes :: Aeson.Value
   , _modulePorts :: Map Text Port
-  , _moduleCells :: Map Text Cell
+  , _moduleCells :: Map Text (Cell [Bitrep])
   } deriving (Show, Eq, Ord)
 makeLenses ''Module
 instance Aeson.FromJSON Module where
