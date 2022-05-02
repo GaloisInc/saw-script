@@ -53,6 +53,7 @@ data AstExpr
   | ExLlvmFrame Pos [(AstExpr, Natural)] -- ^ llvmframe literal
   | ExOr Pos AstExpr AstExpr    -- ^ or permission
   | ExFalse Pos                 -- ^ false permission
+  | ExAny Pos                   -- ^ any permission
 
   | ExEmptySh Pos               -- ^ empty shape
   | ExEqSh Pos AstExpr AstExpr  -- ^ equal shape
@@ -101,6 +102,7 @@ instance HasPos AstExpr where
   pos (ExOr         p _ _      ) = p
   pos (ExFalse      p          ) = p
   pos (ExTrue       p          ) = p
+  pos (ExAny        p          ) = p
   pos (ExExists     p _ _ _    ) = p
   pos (ExSeqSh      p _ _      ) = p
   pos (ExOrSh       p _ _      ) = p
