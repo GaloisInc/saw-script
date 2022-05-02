@@ -243,9 +243,9 @@ permEnvAddGlobalConst sc mod_name dlevel endianness w env global =
   case translateLLVMValueTop dlevel endianness w env global of
     Nothing -> return env
     Just (sh, t) ->
-      do ident <-
-           scFreshenGlobalIdent sc $
-           mkSafeIdent mod_name $ show $ L.globalSym global
+      do let (L.Symbol glob_str) = L.globalSym global
+         ident <-
+           scFreshenGlobalIdent sc $ mkSafeIdent mod_name $ show glob_str
          complete_t <- completeOpenTerm sc t
          tp <- completeOpenTermType sc t
          scInsertDef sc mod_name ident tp complete_t
