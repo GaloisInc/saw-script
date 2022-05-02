@@ -88,47 +88,17 @@ pub fn eval_expr <'a, 'b> (env : &'a Env, e : &'b Expr) -> Result<u64,Error> {
     match e {
         Expr::LitExpr (l) => Ok(*l),
         Expr::VarExpr (x) => env_lookup (env, x),
-        Expr::Apply2Expr (f, arg1, arg2) =>
-            { let v1 = eval_expr (env, arg1)?;
-              let v2 = eval_expr (env, arg2)?;
-              Ok(eval_primop2 (f, v1, v2)) }
+        Expr::Apply2Expr (f, arg1, arg2) => match eval_expr (env, arg1) {
+            Ok(v1) => match eval_expr (env, arg2) {
+                Ok(v2) => Ok(eval_primop2(f, v1, v2)),
+                e => e,
+            }
+            e => e,
+        }
     }
 }
 
 pub fn eval_stmt <'a, 'b> (env : &'a mut Env, stmt : &'b Stmt) -> Result<u64, Error> {
-    match stmt {
-        Stmt::Return (x) => env_lookup (env, x),
-        Stmt::Skip => Ok (0),
-        Stmt::Assign (x,e) =>
-        { let v = eval_expr (env, e) ?;
-          env_update (env, x, v);
-          Ok (0)
-        }
-        Stmt::IfStmt (e, stmt1, stmt2) =>
-        { let v = eval_expr (env, e) ?;
-          if v != 0 { eval_stmt (env, stmt1) } else { eval_stmt (env, stmt2) }
-        },
-        Stmt::WhileStmt (e, body) =>
-        { let v = eval_expr (env, e) ?;
-          if v != 0 { let _ = eval_stmt (env, body) ?;
-                      eval_stmt (env, stmt) }
-          else { Ok(0) } }
-        Stmt::CallStmt (f, args) =>
-        { let f_def = fun_lookup (env, f) ?;
-          let mut new_env = fresh_env_from_env (env);
-          if args.len () == f_def.fun_args.len () {
-              for (x, arg) in f_def.fun_args.iter().zip(args.iter()) {
-                  let v = eval_expr (env, arg) ?;
-                  env_update (&mut new_env, x, v)
-              };
-              eval_stmt (&mut new_env, &(*f_def).fun_body)
-          } else { Err (Error::WrongNumberOfArgs)}
-        }
-    }
-}
-
-
-pub fn eval_stmt_alt <'a, 'b> (env : &'a mut Env, stmt : &'b Stmt) -> Result<u64, Error> {
     match stmt {
         Stmt::Return (x) => env_lookup (env, x),
         Stmt::Skip => Ok (0),
@@ -140,8 +110,8 @@ pub fn eval_stmt_alt <'a, 'b> (env : &'a mut Env, stmt : &'b Stmt) -> Result<u64
         Stmt::IfStmt (e, stmt1, stmt2) =>
         { match eval_expr (env, e) {
             Ok (v) => {
-                if v != 0 { eval_stmt_alt (env, stmt1) }
-                else { eval_stmt_alt (env, stmt2) }
+                if v != 0 { eval_stmt (env, stmt1) }
+                else { eval_stmt (env, stmt2) }
             },
             Err (e) => Err (e),
         }},
@@ -149,8 +119,8 @@ pub fn eval_stmt_alt <'a, 'b> (env : &'a mut Env, stmt : &'b Stmt) -> Result<u64
         { match eval_expr (env, e) {
             Ok (v) => {
                 if v != 0 {
-                    match eval_stmt_alt (env, body) {
-                        Ok (_) => eval_stmt_alt (env, stmt),
+                    match eval_stmt (env, body) {
+                        Ok (_) => eval_stmt (env, stmt),
                         Err (e) => Err (e) }
                 }
                 else { Ok(0) } },

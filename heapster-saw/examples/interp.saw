@@ -24,13 +24,6 @@ heapster_define_llvmshape env "bool" 64 "" "fieldsh(1,int1<>)";
 // Box type
 heapster_define_llvmshape env "Box" 64 "T:llvmshape 64" "ptrsh(T)";
 
-// Infallible type
-heapster_define_llvmshape env "Infallible" 64 "" "falsesh";
-
-// ControlFlow type
-heapster_define_rust_type env
-  "pub enum ControlFlow<B, C> { Continue (C), Break (B) }";
-
 // The Option type
 heapster_define_rust_type env "pub enum Option<X> { None, Some (X) }";
 
@@ -210,19 +203,12 @@ fun_eq_sym <- heapster_find_symbol_with_type env
 heapster_assume_fun_rename_prim env fun_eq_sym "fun_eq"
   "<'a, 'b, 'c> fn (&'b&'a FunName, &'c&'a FunName) -> bool";
 
-// Result<Value, Error>::branch
-value_branch_sym <- heapster_find_symbol_with_type env
-  "core..ops..try_trait..Try$GT$6branch"
-  "void(%\"core::ops::control_flow::ControlFlow<core::result::Result<core::convert::Infallible, Error>, u64>\"*, %\"core::result::Result<u64, Error>\"*)";
-heapster_assume_fun_rename_prim env value_branch_sym "value_branch"
-  "<> fn (Result<u64, Error>) -> ControlFlow<Result<Infallible, Error>, u64>";
-
-// Result<&FunDef, Error>::branch
-fun_branch_sym <- heapster_find_symbol_with_type env
-  "core..ops..try_trait..Try$GT$6branch"
-  "void(%\"core::ops::control_flow::ControlFlow<core::result::Result<core::convert::Infallible, Error>, &FunDef>\"*, %\"core::result::Result<&FunDef, Error>\"*)";
-heapster_assume_fun_rename_prim env fun_branch_sym "fun_branch"
-  "<'a> fn (Result<&'a FunDef, Error>) -> ControlFlow<Result<Infallible, Error>, &'a FunDef>";
+// Result<u64, Error>::drop_in_place
+res_drop_in_place_sym <- heapster_find_symbol_with_type env
+  "core3ptr68drop_in_place$LT$core..result..Result$LT$u64$C$interp..Error"
+  "void(%\"core::result::Result<u64, Error>\"*)";
+heapster_assume_fun_rename_prim env res_drop_in_place_sym "res_drop_in_place"
+  "<> fn(Result<u64, Error>)";
 
 /***
  *** Type-checked Functions
@@ -262,23 +248,13 @@ eval_primop2_sym <- heapster_find_symbol env "12eval_primop2";
 heapster_typecheck_fun_rename env eval_primop2_sym "eval_primop2"
   "<'a> fn (&'a PrimOp2, u64, u64) -> u64";
 
-// TODO: Add stuff related to the `?` operator
 eval_expr_sym <- heapster_find_symbol env "9eval_expr";
 heapster_typecheck_fun_rename env eval_expr_sym "eval_expr"
   "<'a, 'b> fn(&'a Env, &'b Expr) -> Result<u64, Error>";
 
-// TODO: Add stuff related to the `?` operator
-/*
 eval_stmt_sym <- heapster_find_symbol env "9eval_stmt";
 heapster_typecheck_fun_rename env eval_stmt_sym "eval_stmt"
   "<'a, 'b> fn (&'a mut Env, &'b Stmt) -> Result<u64, Error>";
-*/
-
-heapster_set_debug_level env 1;
-eval_stmt_alt_sym <- heapster_find_symbol env "13eval_stmt_alt";
-heapster_typecheck_fun_rename env eval_stmt_alt_sym "eval_stmt_alt"
-  "<'a, 'b> fn (&'a mut Env, &'b Stmt) -> Result<u64, Error>";
-heapster_set_debug_level env 0;
 
 /***
  *** Export to Coq
