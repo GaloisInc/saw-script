@@ -4078,6 +4078,13 @@ atomicPermLifetime (Perm_LLVMArray ap) = Just $ llvmArrayLifetime ap
 atomicPermLifetime (Perm_LLVMBlock bp) = Just $ llvmBlockLifetime bp
 atomicPermLifetime _ = Nothing
 
+-- | Get the modality of an atomic perm if it is a field, array, or memblock
+atomicPermModality :: AtomicPerm a -> Maybe (PermExpr RWModalityType)
+atomicPermModality (Perm_LLVMField fp) = Just $ llvmFieldRW fp
+atomicPermModality (Perm_LLVMArray ap) = Just $ llvmArrayRW ap
+atomicPermModality (Perm_LLVMBlock bp) = Just $ llvmBlockRW bp
+atomicPermModality _ = Nothing
+
 -- | Get the starting offset of an atomic permission, if it has one. This
 -- includes array permissions which may have some cells borrowed.
 llvmAtomicPermOffset :: AtomicPerm (LLVMPointerType w) ->

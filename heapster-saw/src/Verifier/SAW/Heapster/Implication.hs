@@ -773,15 +773,15 @@ data SimplImpl ps_in ps_out where
     ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
     SimplImpl RNil (RNil :> LLVMPointerType w)
 
-  -- | Prove an array whose borrows @bs@ cover the entire array.
-  -- The input memblock is proof that @x@ is a pointer, and can be located
-  -- anywhere as long as it has the same shape as the output array.
+  -- | Prove an array whose borrows @bs@ cover the entire array using a
+  -- permission that instantiates at least one of its cells. This latter
+  -- permission ensures that the @x@ is a pointer, and is also used in the
+  -- translation to give a default value to the cells of the output array
+  -- permission:
   --
-  -- NOTE: the block permission is used by the SAW translation to produce
-  -- the default cell value for the translation of the output array.
-  --
-  -- > x:[l2]memblock(rw,off1,<len1,*stride,sh,bs1)
-  -- > -o x:[2]memblock(rw,off1,<len1,*stride,sh,bs1) *  x:[l]array(rw,off,<len,*stride,sh,bs)
+  -- > x:[l2]memblock(rw,off1,<len1,*stride,sh)
+  -- > -o x:[2]memblock(rw,off1,<len1,*stride,sh)
+  -- >    * x:[l]array(rw,off,<len,*stride,sh,bs)
   SImpl_LLVMArrayBorrowed ::
     (1 <= w, KnownNat w) =>
     ExprVar (LLVMPointerType w) ->
@@ -1979,15 +1979,11 @@ simplImplIn (SImpl_LLVMArrayToField x ap _) =
 simplImplIn (SImpl_LLVMArrayEmpty _ ap) =
   if bvIsZero (llvmArrayLen ap) then DistPermsNil else
     error "simplImplIn: SImpl_LLVMArrayEmpty: malformed empty array permission"
-
 simplImplIn (SImpl_LLVMArrayBorrowed x bp ap) =
-  if bvIsZero (llvmArrayLen ap) then
-    error "simplImplIn: SImpl_LLVMArrayBorrowed: empty array permission"
-  else if not (llvmArrayIsBorrowed ap) then
-    error "simplImplIn: SImpl_LLVMArrayBorrowed: array permission not completely borrowed"
-  else
+  if llvmArrayIsBorrowed ap && llvmBlockShape bp == llvmArrayCellShape ap then
     distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
-
+  else
+    error "simplImplIn: SImpl_LLVMArrayBorrowed: array permission not completely borrowed or of the wrong shape"
 simplImplIn (SImpl_LLVMArrayFromBlock x bp) =
   distPerms1 x $ ValPerm_LLVMBlock bp
 
@@ -5157,11 +5153,14 @@ implLLVMArrayEmpty ::
   ImplM vars s r (ps :> LLVMPointerType w) ps ()
 implLLVMArrayEmpty x ap = implSimplM Proxy (SImpl_LLVMArrayEmpty x ap)
 
+-- | Prove an array permission whose borrows cover the array using a permission
+-- that instantiates at least one of its cells
 implLLVMArrayBorrowed ::
   (1 <= w, KnownNat w, NuMatchingAny1 r) =>
   ExprVar (LLVMPointerType w) -> LLVMBlockPerm w -> LLVMArrayPerm w ->
   ImplM vars s r (ps :> LLVMPointerType w :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
-implLLVMArrayBorrowed x blk ap = implSimplM Proxy (SImpl_LLVMArrayBorrowed x blk ap)
+implLLVMArrayBorrowed x blk ap =
+  implSimplM Proxy (SImpl_LLVMArrayBorrowed x blk ap)
 
 -- | Prove the @memblock@ permission returned by @'llvmAtomicPermToBlock' p@
 -- from a proof of @p@ on top of the stack, assuming it returned one
@@ -6597,9 +6596,10 @@ proveVarLLVMFieldH2 x p _ mb_fp =
 ----------------------------------------------------------------------
 
 -- | Search for a permission that _could_ prove a block at an offset in the
--- given range.
+-- given range
 findSomeBlock :: forall w. (1 <= w, KnownNat w) =>
-                 [AtomicPerm (LLVMPointerType w)] -> BVRange w -> Maybe (LLVMBlockPerm w)
+                 [AtomicPerm (LLVMPointerType w)] -> BVRange w ->
+                 Maybe (LLVMBlockPerm w)
 findSomeBlock ps range = msum (couldProve <$> ps)
   where
     couldProve :: AtomicPerm (LLVMPointerType w) -> Maybe (LLVMBlockPerm w)
@@ -6706,6 +6706,42 @@ borrowedLLVMArrayForArray lhs rhs =
       | otherwise
       = bs_skip ++ bs_lhs
 
+-- | TODO: hide the bool parameter
+solveForArray ::
+  (1 <= w, KnownNat w, NuMatchingAny1 r) =>
+  Bool ->
+  [AtomicPerm (LLVMPointerType w)] ->
+  Mb vars (LLVMArrayPerm w) ->
+  ImplM vars s r ps ps ()
+solveForArray should_fail ps mb_ap =
+  getPSubst >>>= \psubst ->
+  case partialSubst psubst mb_ap of
+    Just _ap -> return ()
+    Nothing
+      | should_fail ->
+        implFailM "goo goo"
+      | otherwise ->
+        solveForArrayH ps psubst mb_ap
+
+solveForArrayH ::
+  (1 <= w, KnownNat w, NuMatchingAny1 r) =>
+  [AtomicPerm (LLVMPointerType w)] ->
+  PartialSubst vars ->
+  Mb vars (LLVMArrayPerm w) ->
+  ImplM vars s r ps ps ()
+solveForArrayH ps psubst mb_ap
+  | Nothing <- partialSubst psubst $ mbLLVMArrayLifetime mb_ap
+  , Just l:_ <- atomicPermLifetime <$> ps =
+  tryUnifyVars l (mbLLVMArrayLifetime mb_ap) >>>
+  solveForArray False ps mb_ap
+solveForArrayH ps psubst mb_ap
+  | Nothing <- partialSubst psubst $ mbLLVMArrayRW mb_ap
+  , Just l:_ <- atomicPermModality <$> ps =
+  tryUnifyVars l (mbLLVMArrayRW mb_ap) >>>
+  solveForArray False ps mb_ap
+solveForArrayH ps _ mb_ap =
+  solveForArray True ps mb_ap
+
 
 -- | Prove an LLVM array permission @ap@ from permissions @x:(p1 * ... *pn)@ on
 -- the top of the stack, ensuring that any remaining permissions for @x@ get
@@ -6789,22 +6825,38 @@ proveVarLLVMArrayH x p psubst ps mb_ap
       | PExpr_ArrayShape {} <- llvmBlockShape bp = True
     arrayBlock _ = False
 
+proveVarLLVMArrayH x p psubst ps mb_ap
+  | Just i <- findIndex seqFieldBlock ps =
+    implElimAppendIthLLVMBlock x ps i >>>= \ps' ->
+    proveVarLLVMArrayH x p psubst ps' mb_ap
+  where
+    seqFieldBlock (Perm_LLVMBlock bp)
+      | Just flds <- matchLLVMFieldShapeSeq (llvmBlockShape bp) = length flds > 1
+    seqFieldBlock _ = False
+
 -- Otherwise, try and build a completely borrowed array that references existing
 -- permissions that cover the range of mb_ap, and recurse (hitting the special
 -- case above).
+proveVarLLVMArrayH x first_p psubst ps mb_ap
+  | Nothing <- partialSubst psubst mb_ap =
+  solveForArray False ps mb_ap >>>
+  getPSubst >>>= \psubst' ->
+  proveVarLLVMArrayH x first_p psubst' ps mb_ap
+
 proveVarLLVMArrayH x first_p psubst ps mb_ap
   | Just ap <- partialSubst psubst mb_ap
   -- NOTE: borrowedLLVMArrayForArray only returns a single possible covering, though
   -- there may be multiple. It may be necessary to modify this to return a list, but
   -- we'd like to avoid the blowup in branches (see `borrowedLLVMArrayForArray`)
   , Just (ps', borrowed) <- borrowedLLVMArrayForArray ps ap
-  , Just bp <- findSomeBlock ps' (llvmArrayAbsOffsets ap) =
-  mbVarsM bp >>>= \mb_bp ->
-  proveVarLLVMBlock x ps mb_bp >>>
-  implLLVMArrayBorrowed x bp borrowed >>>
-  recombinePerm x (ValPerm_Conj1 (Perm_LLVMBlock bp)) >>>
-  -- The recursive call should now hit the case above
-  proveVarLLVMArrayH x first_p psubst [Perm_LLVMArray borrowed] mb_ap
+  , Just bp_lhs <- findSomeBlock ps' (llvmArrayAbsOffsets ap) =
+    let bp = bp_lhs { llvmBlockShape = llvmArrayCellShape ap } in
+    mbVarsM bp >>>= \mb_bp ->
+    proveVarLLVMBlock x ps mb_bp >>>
+    implLLVMArrayBorrowed x bp borrowed >>>
+    recombinePerm x (ValPerm_Conj1 (Perm_LLVMBlock bp)) >>>
+    -- The recursive call should now hit the case above
+    proveVarLLVMArrayH x first_p psubst [Perm_LLVMArray borrowed] mb_ap
 
 proveVarLLVMArrayH x _ _ ps mb_ap =
   -- TODO: Review this note?
