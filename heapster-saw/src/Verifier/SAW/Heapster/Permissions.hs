@@ -117,6 +117,12 @@ rlMapMWithAccum f accum (xs :>: x) =
      (y,accum'') <- f accum' x
      return (ys :>: y, accum'')
 
+-- | Map a monomorphic binary function across a pair of 'RAssign's to create a
+-- standard list, similarly to 'zipWith'
+mapToList2 :: (forall a. f a -> g a -> b) ->
+              RAssign f tps -> RAssign g tps -> [b]
+mapToList2 f fs gs = RL.toList $ RL.map2 (\x y -> Constant $ f x y) fs gs
+
 
 ----------------------------------------------------------------------
 -- * Data types and related types
@@ -428,6 +434,13 @@ data AtomicPerm (a :: CrucibleType) where
   Perm_BVProp :: (1 <= w, KnownNat w) => BVProp w ->
                  AtomicPerm (LLVMPointerType w)
 
+  -- | A false / unsatisfiable permission from which any permission can be
+  -- proved. This is different from the false permission because it translated
+  -- to the unit type instead of the empty type in specifications, and is used
+  -- in cases where the empty type cannot be proved in specifications
+  Perm_Any :: AtomicPerm a
+
+
 -- | A value permission is a permission to do something with a value, such as
 -- use it as a pointer. This also includes a limited set of predicates on values
 -- (you can think about this as "permission to assume the value satisfies this
@@ -458,7 +471,7 @@ data ValuePerm (a :: CrucibleType) where
   -- permissions is the trivially true permission
   ValPerm_Conj :: [AtomicPerm a] -> ValuePerm a
 
-  -- | The false value permission
+  -- | The false / unsatisfiable permission
   ValPerm_False :: ValuePerm a
 
 -- | A sequence of value permissions
@@ -2484,6 +2497,10 @@ pattern ValPerm_Struct ps <- ValPerm_Conj [Perm_Struct ps]
   where
     ValPerm_Struct ps = ValPerm_Conj [Perm_Struct ps]
 
+-- | A single @any@ permission
+pattern ValPerm_Any :: ValuePerm a
+pattern ValPerm_Any = ValPerm_Conj [Perm_Any]
+
 pattern ValPerms_Nil :: () => (tps ~ RNil) => ValuePerms tps
 pattern ValPerms_Nil = MNil
 
@@ -3284,6 +3301,8 @@ instance Eq (AtomicPerm a) where
   (Perm_NamedConj _ _ _) == _ = False
   (Perm_BVProp p1) == (Perm_BVProp p2) = p1 == p2
   (Perm_BVProp _) == _ = False
+  Perm_Any == Perm_Any = True
+  Perm_Any == _ = False
 
 instance Eq1 ValuePerm where
   eq1 = (==)
@@ -3443,6 +3462,7 @@ instance PermPretty (AtomicPerm a) where
     ((pretty "struct" <+>) . parens) <$> permPrettyM ps
   permPrettyM (Perm_Fun fun_perm) = permPrettyM fun_perm
   permPrettyM (Perm_BVProp prop) = permPrettyM prop
+  permPrettyM Perm_Any = return $ pretty "any"
   permPrettyM (Perm_NamedConj n args off) =
     do n_pp <- permPrettyM n
        args_pp <- permPrettyM args
@@ -4405,6 +4425,7 @@ instance Modalize (AtomicPerm a) where
     Perm_Struct <$> traverseRAssign (modalize rw l) ps
   modalize _ _ p@(Perm_Fun _) = Just p
   modalize _ _ p@(Perm_BVProp _) = Just p
+  modalize _ _ p@Perm_Any = Just p
 
 instance Modalize (ExprAndPerm a) where
   modalize rw l (ExprAndPerm e p) =
@@ -4509,6 +4530,7 @@ instance AbstractModalities (AtomicPerm a) where
     Perm_Struct <$> traverseRAssign abstractModalities ps
   abstractModalities p@(Perm_Fun _) = pure p
   abstractModalities p@(Perm_BVProp _) = pure p
+  abstractModalities p@Perm_Any = pure p
 
 
 -- | Extract the shape-in-bindings for an unfoldable shape
@@ -5534,6 +5556,7 @@ offsetLLVMAtomicPerm _ p@Perm_IsLLVMPtr = Just p
 offsetLLVMAtomicPerm off (Perm_NamedConj n args off') =
   Just $ Perm_NamedConj n args $ addPermOffsets off' (mkLLVMPermOffset off)
 offsetLLVMAtomicPerm _ p@(Perm_BVProp _) = Just p
+offsetLLVMAtomicPerm _ p@Perm_Any = Just p
 
 -- | Add an offset to a field permission
 offsetLLVMFieldPerm :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
@@ -5813,6 +5836,7 @@ atomicPermIsCopyable Perm_LFinished = True
 atomicPermIsCopyable (Perm_Struct ps) = and $ RL.mapToList permIsCopyable ps
 atomicPermIsCopyable (Perm_Fun _) = True
 atomicPermIsCopyable (Perm_BVProp _) = True
+atomicPermIsCopyable Perm_Any = True
 atomicPermIsCopyable (Perm_NamedConj n args _) =
   namedPermArgsAreCopyable (namedPermNameArgs n) args
 
@@ -5972,6 +5996,22 @@ unfoldPerm :: NameSortCanFold ns ~ 'True => NamedPerm ns args a ->
 unfoldPerm (NamedPerm_Defined dp) = unfoldDefinedPerm dp
 unfoldPerm (NamedPerm_Rec rp) = unfoldRecPerm rp
 
+-- | Test if two expressions are definitely unequal
+exprsUnequal :: PermExpr a -> PermExpr a -> Bool
+exprsUnequal (PExpr_Var _) _ = False
+exprsUnequal (PExpr_Bool b1) (PExpr_Bool b2) = b1 /= b2
+exprsUnequal (PExpr_Nat n1) (PExpr_Nat n2) = n1 /= n2
+exprsUnequal (PExpr_String str1) (PExpr_String str2) = str1 /= str2
+exprsUnequal e1@(PExpr_BV _ _) e2 = not $ bvCouldEqual e1 e2
+{- FIXME: we need to prove the types are equal on both sides for this case:
+exprsUnequal (PExpr_Struct es1) (PExpr_Struct es2) =
+  any $ mapToList2 exprsUnequal es1 es2
+-}
+exprsUnequal _ _ =
+  -- FIXME: maybe we want more cases for shapes and even function handles,
+  -- though those shouldn't matter for the current uses of exprsUnequal
+  False
+
 -- | Generic function to get free variables
 class FreeVars a where
   freeVars :: a -> NameSet CrucibleType
@@ -5980,6 +6020,16 @@ class FreeVars a where
 freeVarsRAssign :: FreeVars a => a -> Some (RAssign ExprVar)
 freeVarsRAssign =
   foldl (\(Some ns) (SomeName n) -> Some (ns :>: n)) (Some MNil) . toList . freeVars
+
+-- | Get the bound variables of an expression or permission
+boundVars :: (NuMatching a, FreeVars a) => Mb (ctx :: RList CrucibleType) a ->
+             [Some @CrucibleType (Member ctx)]
+boundVars mb_a =
+  mapMaybe (\case
+               [nuP| SomeName mb_n |]
+                 | Left memb <- mbNameBoundP mb_n -> Just (Some memb)
+               _ -> Nothing) $
+  mbList $ mbMapCl $(mkClosed [| toList . freeVars |]) mb_a
 
 instance FreeVars a => FreeVars (Maybe a) where
   freeVars = maybe NameSet.empty freeVars
@@ -6065,6 +6115,7 @@ instance FreeVars (AtomicPerm tp) where
   freeVars (Perm_Struct ps) = NameSet.unions $ RL.mapToList freeVars ps
   freeVars (Perm_Fun fun_perm) = freeVars fun_perm
   freeVars (Perm_BVProp prop) = freeVars prop
+  freeVars Perm_Any = NameSet.empty
   freeVars (Perm_NamedConj _ args off) =
     NameSet.union (freeVars args) (freeVars off)
 
@@ -6491,6 +6542,7 @@ instance SubstVar s m => Substable s (AtomicPerm a) m where
     [nuMP| Perm_Struct tps |] -> Perm_Struct <$> genSubst s tps
     [nuMP| Perm_Fun fperm |] -> Perm_Fun <$> genSubst s fperm
     [nuMP| Perm_BVProp prop |] -> Perm_BVProp <$> genSubst s prop
+    [nuMP| Perm_Any |] -> return Perm_Any
     [nuMP| Perm_NamedConj n args off |] ->
       Perm_NamedConj (mbLift n) <$> genSubst s args <*> genSubst s off
 
@@ -7302,6 +7354,8 @@ instance AbstractVars (AtomicPerm a) where
   abstractPEVars ns1 ns2 (Perm_BVProp prop) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_BVProp |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 prop
+  abstractPEVars ns1 ns2 Perm_Any =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_Any |])
   abstractPEVars ns1 ns2 (Perm_NamedConj n args off) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_NamedConj |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 n
@@ -7599,6 +7653,7 @@ instance AbstractNamedShape w (AtomicPerm a) where
   abstractNSM (Perm_Struct ps) = fmap Perm_Struct <$> abstractNSM ps
   abstractNSM (Perm_Fun fp) = fmap Perm_Fun <$> abstractNSM fp
   abstractNSM (Perm_BVProp prop) = pureBindingM (Perm_BVProp prop)
+  abstractNSM Perm_Any = pureBindingM Perm_Any
 
 instance AbstractNamedShape w' (LLVMFieldPerm w sz) where
   abstractNSM (LLVMFieldPerm rw l off p) =

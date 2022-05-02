@@ -161,6 +161,7 @@ instance ContainsIRTRecName (AtomicPerm a) where
   containsIRTRecName n (Perm_Struct ps) = containsIRTRecName n ps
   containsIRTRecName _ (Perm_Fun _) = False
   containsIRTRecName _ (Perm_BVProp _) = False
+  containsIRTRecName _ Perm_Any = False
 
 instance ContainsIRTRecName (LLVMFieldPerm w sz) where
   containsIRTRecName n fp = containsIRTRecName n $ llvmFieldContents fp
@@ -425,6 +426,8 @@ instance IRTTyVars (AtomicPerm a) where
       throwError "fun perm in an IRT definition!"
     [nuMP| Perm_BVProp _ |] ->
       throwError "BVProp in an IRT definition!"
+    [nuMP| Perm_Any |] ->
+      throwError "any perm in an IRT definition!"
 
 -- | Get all IRT type variables in a shape expression
 instance IRTTyVars (PermExpr (LLVMShapeType w)) where
@@ -676,6 +679,8 @@ instance IRTDescs (AtomicPerm a) where
       error "fun perm made it to IRTDesc translation"
     ([nuMP| Perm_BVProp _ |], _) ->
       error "BVProp made it to IRTDesc translation"
+    ([nuMP| Perm_Any |], _) ->
+      error "any perm made it to IRTDesc translation"
 
 -- | Get the IRTDescs associated to a shape expression
 instance IRTDescs (PermExpr (LLVMShapeType w)) where

@@ -223,6 +223,9 @@ data ExprTrans (a :: CrucibleType) where
   -- that this construct should not be used for the types handled above.
   ETrans_Term :: OpenTerm -> ExprTrans a
 
+  -- | The translation of Vectors of any type
+  ETrans_AnyVector :: ExprTrans (VectorType AnyType)
+
 
 -- | A context mapping bound names to their type-level SAW translations
 type ExprTransCtx = RAssign ExprTrans
@@ -701,6 +704,8 @@ instance TransInfo info =>
       return $ error "translate: SequenceRepr"
     [nuMP| BVRepr w |] ->
       returnType1 =<< bitvectorTransM (translate w)
+    [nuMP| VectorRepr AnyRepr |] ->
+      return $ mkTypeTrans0 ETrans_AnyVector
 
     -- Our special-purpose intrinsic types, whose translations do not have
     -- computational content
@@ -1093,6 +1098,9 @@ data AtomicPermTrans ctx a where
   APTrans_BVProp :: (1 <= w, KnownNat w) => BVPropTrans ctx w ->
                     AtomicPermTrans ctx (LLVMPointerType w)
 
+  -- | Any permissions have no SAW terms
+  APTrans_Any :: AtomicPermTrans ctx a
+
 
 -- | The translation of a proof of a 'BVProp'
 data BVPropTrans ctx w = BVPropTrans (Mb ctx (BVProp w)) OpenTerm
@@ -1238,6 +1246,7 @@ instance IsTermTrans (AtomicPermTrans ctx a) where
   transTerms (APTrans_Struct pctx) = transTerms pctx
   transTerms (APTrans_Fun _ t) = [t]
   transTerms (APTrans_BVProp prop) = transTerms prop
+  transTerms APTrans_Any = []
 
 instance IsTermTrans (BVPropTrans ctx w) where
   transTerms (BVPropTrans _ t) = [t]
@@ -1299,6 +1308,7 @@ atomicPermTransPerm prxs (APTrans_Struct ps) =
 atomicPermTransPerm _ (APTrans_Fun fp _) = fmap Perm_Fun fp
 atomicPermTransPerm _ (APTrans_BVProp (BVPropTrans prop _)) =
   fmap Perm_BVProp prop
+atomicPermTransPerm prxs APTrans_Any = nuMulti prxs $ const $ Perm_Any
 
 -- | Extract out the permissions from a context of permission translations
 permTransCtxPerms :: RAssign Proxy ctx -> PermTransCtx ctx ps ->
@@ -1363,6 +1373,7 @@ instance ExtPermTrans AtomicPermTrans where
   extPermTrans (APTrans_Fun fp t) = APTrans_Fun (extMb fp) t
   extPermTrans (APTrans_BVProp prop_trans) =
     APTrans_BVProp $ extPermTrans prop_trans
+  extPermTrans APTrans_Any = APTrans_Any
 
 instance ExtPermTrans LLVMArrayPermTrans where
   extPermTrans (LLVMArrayPermTrans ap len sh {- bs -} t) =
@@ -1785,6 +1796,7 @@ instance TransInfo info =>
       return $ mkTypeTrans1 tp_term (APTrans_Fun fun_perm)
     [nuMP| Perm_BVProp prop |] ->
       fmap APTrans_BVProp <$> translate prop
+    [nuMP| Perm_Any |] -> return $ mkTypeTrans0 APTrans_Any
 
 -- | Translate an array permission to a 'TypeTrans' for an array permission
 -- translation, also returning the translations of the bitvector width as a
@@ -3325,6 +3337,30 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                                                 ++ [transTerm1 ptrans_x,
                                                     transTerm1 ptrans_y])])
          m
+
+  [nuMP| SImpl_IntroAnyEqEq _ _ _ |] ->
+    do tp_trans <- translateSimplImplOutHead mb_simpl
+       withPermStackM RL.tail
+         (\(pctx :>: _ :>: _) ->
+           pctx :>: typeTransF tp_trans []) m
+
+  [nuMP| SImpl_IntroAnyWordPtr _ _ _ |] ->
+    do tp_trans <- translateSimplImplOutHead mb_simpl
+       withPermStackM RL.tail
+         (\(pctx :>: _ :>: _) ->
+           pctx :>: typeTransF tp_trans []) m
+
+  [nuMP| SImpl_ElimAnyToEq _ _ |] ->
+    do tp_trans <- translateSimplImplOutHead mb_simpl
+       withPermStackM id
+         (\(pctx :>: _) ->
+           pctx :>: typeTransF tp_trans []) m
+
+  [nuMP| SImpl_ElimAnyToPtr _ _ |] ->
+    do tp_trans <- translateSimplImplOutHead mb_simpl
+       withPermStackM id
+         (\(pctx :>: _) ->
+           pctx :>: typeTransF tp_trans []) m
 
 
 -- | A flag to indicate whether the translation of a permission implication
