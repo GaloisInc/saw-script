@@ -30,6 +30,14 @@ heapster_define_rust_type env "pub enum Option<X> { None, Some (X) }";
 // Result type
 heapster_define_rust_type env "pub enum Result<X,Y> { Ok (X), Err (Y) }";
 
+// str type
+heapster_define_llvmshape env "str" 64 ""
+  "exsh len:bv 64.arraysh(<len,*1,fieldsh(8,int8<>))";
+
+// Location type from std::panic
+heapster_define_llvmshape env "panic::Location" 64 ""
+  "exsh len:bv 64.ptrsh(arraysh(<len,*1,fieldsh(8,int8<>))); fieldsh(eq(llvmword(len))); u32<>; u32<>";
+
 // The String type
 heapster_define_llvmshape env "String" 64 ""
   "exsh cap:bv 64. ptrsh(arraysh(<cap,*1,fieldsh(8,int8<>))); \
@@ -102,6 +110,12 @@ heapster_assume_fun env "llvm.uadd.with.overflow.i64"
   "\\ (x y:Vec 64 Bool) -> \
     \ returnM (Vec 64 Bool * Vec 1 Bool) (bvAdd 64 x y, single Bool (bvCarry 64 x y))";
 
+// llvm.umul.with.overflow.i64
+heapster_assume_fun env "llvm.umul.with.overflow.i64"
+  "(). arg0:int64<>, arg1:int64<> -o ret:struct(int64<>,int1<>)"
+  "\\ (x y:Vec 64 Bool) -> \
+    \ returnM (Vec 64 Bool * Vec 1 Bool) (bvMul 64 x y, single Bool (bvCarry 64 x y))";
+
 // llvm.expect.i1
 heapster_assume_fun env "llvm.expect.i1"
   "().arg0:int1<>, arg1:int1<> -o ret:int1<>" "\\ (x y:Vec 1 Bool) -> returnM (Vec 1 Bool) x";
@@ -115,6 +129,11 @@ heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
   \ arg2:eq(llvmword(len)) -o \
   \ arg0:[l1]memblock(W,0,len,eqsh(len,b)), arg1:[l2]memblock(rw,0,len,eqsh(len,b))"
   "\\ (X:sort 0) (len:Vec 64 Bool) (x:X) (_:#()) -> returnM (#() * #()) ((),())";
+
+// panic
+panic_sym <- heapster_find_symbol env "core9panicking5panic";
+heapster_assume_fun_rename_prim env panic_sym "panic"
+  "<'a, 'b> fn (&'a str, &'b panic::Location) -> !";
 
 // Var::clone
 var_clone_sym <- heapster_find_symbol env
@@ -139,12 +158,10 @@ heapster_assume_fun_rename_prim env slice_var_iter_sym "slice_var_iter"
 // NOTE: Unfortunately there are two symbols with the same type for rev,
 // so we need to just use the full hash for searching
 // Iter<'a, (Var, Value)>::rev
-/*
 iter_var_rev_sym <- heapster_find_symbol env
   "core4iter6traits8iterator8Iterator3rev17h4b2583a4d05f0facE";
 heapster_assume_fun_rename_prim env iter_var_rev_sym "iter_var_rev"
   "<'a> fn (Iter<'a, (Var, u64)>) -> Rev<Iter<'a, (Var, u64)>>";
-*/
 
 // Vec<(Var, Value)>::new
 vec_new_sym <- heapster_find_symbol env "Vec$LT$T$GT$3new";
@@ -180,12 +197,10 @@ heapster_assume_fun_rename_prim env slice_fun_iter_sym "slice_fun_iter"
 // NOTE: Unfortunately there are two symbols with the same type for rev,
 // so we need to just use the full hash for searching
 // Iter<'a, (FunName, FunDef)>::rev
-/*
 iter_fun_rev_sym <- heapster_find_symbol env
   "core4iter6traits8iterator8Iterator3rev17h221acc9c965305cbE";
 heapster_assume_fun_rename_prim env iter_fun_rev_sym "iter_fun_rev"
   "<'a> fn (Iter<'a, (FunName, FunDef)>) -> Rev<Iter<'a, (FunName, FunDef)>>";
-*/
 
 // TODO: Are these lifetimes right?
 // &Var::eq
@@ -244,9 +259,11 @@ fun_lookup_sym <- heapster_find_symbol env "10fun_lookup17";
 heapster_typecheck_fun_rename env fun_lookup_sym "fun_lookup"
   "<'a, 'b> fn (&'a Env, &'b FunName) -> Result<&'a FunDef, Error>";
 
+heapster_set_debug_level env 1;
 eval_primop2_sym <- heapster_find_symbol env "12eval_primop2";
 heapster_typecheck_fun_rename env eval_primop2_sym "eval_primop2"
   "<'a> fn (&'a PrimOp2, u64, u64) -> u64";
+heapster_set_debug_level env 0;
 
 eval_expr_sym <- heapster_find_symbol env "9eval_expr";
 heapster_typecheck_fun_rename env eval_expr_sym "eval_expr"
