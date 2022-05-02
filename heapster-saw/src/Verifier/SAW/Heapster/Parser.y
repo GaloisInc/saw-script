@@ -48,6 +48,7 @@ import Verifier.SAW.Heapster.UntypedAST
 'or'            { Located $$ TOr                        }
 'true'          { Located $$ TTrue                      }
 'false'         { Located $$ TFalse                     }
+'any'           { Located $$ TAny                       }
 'empty'         { Located $$ TEmpty                     }
 'exists'        { Located $$ TExists                    }
 'eq'            { Located $$ TEq                        }
@@ -171,6 +172,7 @@ expr ::                                         { AstExpr }
 
   | 'true'                                      { ExTrue (pos $1) }
   | 'false'                                     { ExFalse (pos $1) }
+  | 'any'                                       { ExAny (pos $1) }
   | expr 'or' expr                              { ExOr (pos $2) $1 $3 }
   | 'eq' '(' expr ')'                           { ExEq (pos $1) $3 }
   | 'exists' IDENT ':' type '.' expr            { ExExists (pos $1) (locThing $2) $4 $6 }
