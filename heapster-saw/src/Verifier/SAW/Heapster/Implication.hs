@@ -6270,7 +6270,7 @@ solveForPermListImplH vars ps_l (CruCtxCons tps_r' tp_r) (ps_r' :>: e_and_p)
   , rhs_rngs <- getOffsets p
   , needed_rngs <- mbRangeFTsDelete rhs_rngs lhs_rngs =
     getExprRanges tp_r (PExpr_Var x) >>>= \expr_rngs ->
-    let res_rngs = mbRangeFTsSubsetTo expr_rngs needed_rngs in
+    let res_rngs = mbRangeFTsSubsetTo needed_rngs expr_rngs in
     implVerbTraceM
     (\i -> pretty "solveForPermListImplH" <+>
            permPretty i x <> colon <> line <> pretty "  " <>
