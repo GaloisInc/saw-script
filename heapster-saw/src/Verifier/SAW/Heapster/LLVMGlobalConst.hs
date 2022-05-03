@@ -83,7 +83,8 @@ ppLLVMConstExpr :: L.ConstExpr -> String
 ppLLVMConstExpr ce =
   L.withConfig (L.Config True True True) (show $ PPHPJ.nest 2 $ L.ppConstExpr ce)
 
--- | Translate a typed LLVM 'L.Value' to a Heapster permission + translation
+-- | Translate a typed LLVM 'L.Value' to a Heapster shape + an element of the
+-- translation of that shape to a SAW core type
 translateLLVMValue :: (1 <= w, KnownNat w) => NatRepr w -> L.Type -> L.Value ->
                       LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
 translateLLVMValue w tp@(L.PrimType (L.Integer n)) (L.ValInteger i) =
@@ -124,7 +125,8 @@ translateLLVMValue _ _ (L.ValString bytes) =
         foldr1 PExpr_SeqShape $
         map (PExpr_FieldShape . LLVMFieldShape . ValPerm_Eq .
              PExpr_LLVMWord . bvBV . BV.word8) bytes in
-  return (sh, unitOpenTerm)
+  let tm = foldr1 pairOpenTerm $ map (const unitOpenTerm) bytes in
+  return (sh, tm)
 -- NOTE: we don't translate strings to one big bitvector value because that
 -- seems to mess up the endianness
 {-
@@ -243,9 +245,9 @@ permEnvAddGlobalConst sc mod_name dlevel endianness w env global =
   case translateLLVMValueTop dlevel endianness w env global of
     Nothing -> return env
     Just (sh, t) ->
-      do ident <-
-           scFreshenGlobalIdent sc $
-           mkSafeIdent mod_name $ show $ L.globalSym global
+      do let (L.Symbol glob_str) = L.globalSym global
+         ident <-
+           scFreshenGlobalIdent sc $ mkSafeIdent mod_name $ show glob_str
          complete_t <- completeOpenTerm sc t
          tp <- completeOpenTermType sc t
          scInsertDef sc mod_name ident tp complete_t

@@ -19,7 +19,7 @@ RUN chown -R root:root /home/saw/rootfs
 
 FROM debian:buster-slim
 RUN apt-get update \
-    && apt-get install -y libgmp10 libgomp1 libffi6 wget libncurses5 unzip openjdk-11-jdk-headless
+    && apt-get install -y libgmp10 libgomp1 libffi6 wget libncurses5 unzip libreadline-dev openjdk-11-jdk-headless
 COPY --from=build /home/saw/rootfs /
 RUN useradd -m saw && chown -R saw:saw /home/saw
 USER saw

@@ -524,6 +524,7 @@ tcAtomicPerm (LLVMFrameRepr w) e = withKnownNat w (tcFrameAtomic e)
 tcAtomicPerm (LLVMBlockRepr w) e = withKnownNat w (tcBlockAtomic e)
 tcAtomicPerm (StructRepr tys) e = tcStructAtomic tys e
 tcAtomicPerm LifetimeRepr e = tcLifetimeAtomic e
+tcAtomicPerm _ (ExAny _) = return Perm_Any
 tcAtomicPerm _ e = tcError (pos e) "Expected perm"
 
 -- | Build a field permission using an 'LLVMFieldShape'

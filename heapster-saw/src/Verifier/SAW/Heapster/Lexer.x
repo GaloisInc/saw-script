@@ -38,6 +38,7 @@ $white+                         ;
 "or"                            { token_ TOr            }
 "true"                          { token_ TTrue          }
 "false"                         { token_ TFalse         }
+"any"                           { token_ TAny           }
 "empty"                         { token_ TEmpty         }
 "exists"                        { token_ TExists        }
 "eq"                            { token_ TEq            }
