@@ -1150,7 +1150,9 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
             withKnownNat w $
             parseFunPermStringMaybeRust "permissions" w env args ret perms_string
           let mods = [ modAST m | Some m <- heapsterEnvLLVMModules henv ]
-          let hints = extractHints env mods fun_perm cfg
+          hints <- case extractHints env mods fun_perm cfg of
+            Left err -> fail ("Error parsing LLVM-level hints: " ++ err)
+            Right hints -> return hints
           let env' = foldlFC (\e h -> maybe e (permEnvAddHint e) (getConstant h))
                              env
                              hints
