@@ -138,6 +138,16 @@ int64ArrayPerm off len = arrayPerm (toIdx off) (toIdx len) 8 (fieldShape (intVal
 int32ArrayPerm :: (ArrayIndexExpr a1, ArrayIndexExpr a2) => a1 -> a2 -> LLVMArrayPerm 64
 int32ArrayPerm off len = arrayPerm (toIdx off) (toIdx len) 4 (fieldShape (intValuePerm @32))
 
+charShape :: PermExpr (LLVMShapeType 64)
+charShape = fieldShape (intValuePerm @8)
+
+charArray :: (ArrayIndexExpr a1, ArrayIndexExpr a2) => a1 -> a2 -> AtomicPerm (LLVMPointerType 64)
+charArray off len = Perm_LLVMArray (arrayPerm (toIdx off) (toIdx len) 1 (fieldShape (intValuePerm @8)))
+
+str3Block :: (ArrayIndexExpr a) => a -> AtomicPerm (LLVMPointerType 64)
+str3Block off = Perm_LLVMBlock $
+  memblockPerm off 3 (PExpr_SeqShape charShape (PExpr_SeqShape charShape charShape))
+
 arrayPerm ::
   PermExpr (BVType w) ->
   PermExpr (BVType w) ->
@@ -178,6 +188,7 @@ arrayTests =
       [ int64field 0, int64field 8, int64field 16 ] ===> int64array 8 3
     , testCase "insufficient fields (2)" $ fails $
       [ int64field 0, int64field 8, int64field 16 ] ===> int64array 0 4
+    , testCase "string" $ passes $ str3Block 0 ===> charArray 0 3
     ]
 
   , testGroup "mix of permission types"

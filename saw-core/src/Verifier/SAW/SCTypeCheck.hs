@@ -584,7 +584,7 @@ ensureSort tp = ensureRecognizer asSort (NotSort tp) tp
 -- | Ensure a 'Term' is a pair type, normalizing if necessary, and return the
 -- two components of that pair type
 ensurePairType :: Term -> TCM (Term, Term)
-ensurePairType tp = ensureRecognizer asPairType (NotSort tp) tp
+ensurePairType tp = ensureRecognizer asPairType (NotTupleType tp) tp
 
 -- | Ensure a 'Term' is a record type, normalizing if necessary, and return the
 -- components of that record type
