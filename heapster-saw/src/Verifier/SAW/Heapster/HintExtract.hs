@@ -5,23 +5,24 @@
 {-# Language ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ParallelListComp #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Verifier.SAW.Heapster.HintExtract ( heapsterRequireName, extractHints ) where
 
-import Control.Applicative ((<|>))
 import Data.String (fromString)
 import Data.Functor.Constant (Constant(..))
 import Control.Lens ((^.))
+import Control.Monad.Except
 import Data.Maybe (fromMaybe, maybeToList)
 import qualified Data.Map as Map
 import Data.Char (chr)
 import Text.LLVM.AST as L
 
-import Data.Binding.Hobbits (RAssign ((:>:)))
-import Data.Type.RList (mapRAssign, type (:++:), RAssign (MNil))
 import Data.Parameterized (toListFC, fmapFC, (:~:)(..), testEquality)
 import qualified Data.Parameterized.Context as Ctx
+import Data.Parameterized.TraversableFC (traverseFC)
 
+import Data.Type.RList (mapRAssign, (:++:))
 import Lang.Crucible.LLVM.Extension ( LLVM, LLVMStmt(..))
 import Lang.Crucible.CFG.Core ( Some(Some)
                               , CtxRepr
@@ -33,13 +34,16 @@ import Lang.Crucible.CFG.Core ( Some(Some)
                               , StmtSeq(..)
                               , Stmt (..), BlockID )
 
-import Verifier.SAW.Heapster.CruUtil(globalSymbolName, mkCruCtx, CruCtx(..), CtxToRList, cruCtxLen)
+import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.ParsedCtx
-import Verifier.SAW.Heapster.Permissions (PermEnv, Hint (..), BlockHintSort(..), BlockHint(..), MbValuePerms, funPermTops, FunPerm)
+import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.PermParser
 
 heapsterRequireName :: String
 heapsterRequireName = "heapster.require"
+
+-- | The monad we use for extracting hints, which just has 'String' errors
+type ExtractM = Except String
 
 -- | Extract block hints from calls to `heapster.require` in the Crucible CFG.
 extractHints ::
@@ -51,34 +55,29 @@ extractHints ::
   -- ^ The FunPerm corresponding to the CFG we are scanning
   CFG LLVM blocks init ret ->
   -- ^ The Crucible CFG for which to build the block hint map
-  Ctx.Assignment (Constant (Maybe Hint)) blocks
-extractHints env modules perm cfg = blocks
+  Either String (Ctx.Assignment (Constant (Maybe Hint)) blocks)
+extractHints env modules perm cfg =
+  runExcept $ traverseFC extractHint (cfgBlockMap cfg)
   where
-      globals = 
-        Map.fromList 
-          [ (globalSym g, str) | m <- modules, 
-                                 g <- modGlobals m, 
-                                 ValString chars <- maybeToList (globalValue g),
-                                 let str = chr . fromEnum <$> chars ]
+    globals =
+      Map.fromList
+        [ (globalSym g, str) | m <- modules,
+                               g <- modGlobals m,
+                               ValString chars <- maybeToList (globalValue g),
+                               let str = chr . fromEnum <$> chars ]
 
-      blocks = fmapFC extractHint (cfgBlockMap cfg)
-
-      extractHint :: 
-        forall ctx. 
-        Block LLVM blocks ret ctx ->
-        Constant (Maybe Hint) ctx
-      extractHint block = 
-        case extractBlockHints env globals (funPermTops perm) block of
-          Constant (Just (SomeHintSpec ghosts valuePerms)) -> 
-            Constant $ Just $
-            mkBlockEntryHint 
-              cfg 
-              (blockID block) 
-              (funPermTops perm)
-              ghosts
-              valuePerms
-          _ -> 
-            Constant Nothing
+    extractHint :: Block LLVM blocks ret ctx ->
+                   ExtractM (Constant (Maybe Hint) ctx)
+    extractHint block =
+      extractBlockHints env globals (funPermTops perm) block >>= \case
+      Just (SomeHintSpec ghosts valuePerms) ->
+        return $ Constant $ Just (mkBlockEntryHint
+                                  cfg
+                                  (blockID block)
+                                  (funPermTops perm)
+                                  ghosts
+                                  valuePerms)
+      _ -> return $ Constant Nothing
 
 -- | Packs up the ghosts in a parsed hint permission spec
 data SomeHintSpec tops ctx where
@@ -96,14 +95,16 @@ extractBlockHints ::
   CruCtx tops ->
   -- ^ top context derived from current function's perm
   Block LLVM blocks ret ctx ->
-  Constant (Maybe (SomeHintSpec tops ctx)) blocks
+  ExtractM (Maybe (SomeHintSpec tops ctx))
 extractBlockHints env globals tops block = 
-  Constant $ extractStmtsHint who env globals tops inputs stmts
+  extractStmtsHint who env globals tops inputs stmts
   where
     stmts = block ^. blockStmts
     inputs = blockInputs block
     who = show (blockID block)
 
+-- | Test if a sequence of statements starts with the Crucible representation of
+-- a call to the dummy function @heapster.require@
 extractStmtsHint ::
   forall blocks ret ctx tops.
   String ->
@@ -115,20 +116,18 @@ extractStmtsHint ::
   CtxRepr ctx ->
   -- ^ block arguments
   StmtSeq LLVM blocks ret ctx -> 
-  Maybe (SomeHintSpec tops ctx)
+  ExtractM (Maybe (SomeHintSpec tops ctx))
 extractStmtsHint who env globals tops inputs = loop Ctx.zeroSize 
   where
     loop :: 
       forall rest.
       Ctx.Size rest ->
       StmtSeq LLVM blocks ret (ctx Ctx.<+> rest) ->
-      Maybe (SomeHintSpec tops ctx)
+      ExtractM (Maybe (SomeHintSpec tops ctx))
     loop sz_rest s =
-      case s of 
-        _ | Just p <- extractHintFromSequence who env globals tops inputs sz_rest s -> 
-          Just p
-
-        ConsStmt _ s' rest -> 
+      extractHintFromSequence who env globals tops inputs sz_rest s >>= \case
+      Just p -> return $ Just p
+      _ | ConsStmt _ s' rest <- s ->
           let inc_rest :: forall tp. Ctx.Size (rest Ctx.::> tp)
               inc_rest = Ctx.incSize sz_rest in
           case s' of 
@@ -148,8 +147,7 @@ extractStmtsHint who env globals tops inputs = loop Ctx.zeroSize
             DropRefCell {} -> loop sz_rest rest 
             Assert {} -> loop sz_rest rest 
             Assume {} -> loop sz_rest rest 
-
-        TermStmt {} -> Nothing
+      _ -> return Nothing
 
 -- | Try to recognize the sequence of Crucible instructions leading up to
 -- a call to heapster.require. If found, build a hint by parsing the provided
@@ -171,8 +169,8 @@ extractHintFromSequence ::
   Ctx.Size rest -> 
   -- ^ keeps track of how deep we are into the current block
   StmtSeq LLVM blocks ret (ctx Ctx.<+> rest) -> 
-  Maybe (SomeHintSpec tops ctx)
-extractHintFromSequence who env globals tops blockInputs sz s =
+  ExtractM (Maybe (SomeHintSpec tops ctx))
+extractHintFromSequence who env globals tops blockIns sz s =
   case s of
     ConsStmt _ (ExtendAssign (LLVM_ResolveGlobal _ _ f))
       (ConsStmt _ (ExtendAssign (LLVM_ResolveGlobal _ _ ghosts))
@@ -191,20 +189,20 @@ extractHintFromSequence who env globals tops blockInputs sz s =
             -- "demote" the context of each reg to the block input context, 
             -- proving that each arg is in fact defined in a previous block
             -- (and is thus valid for use in this spec)
-            case sequence (toBlockArg (Ctx.size blockInputs) sizeAtCall <$> args) of
+            case sequence (toBlockArg (Ctx.size blockIns) sizeAtCall <$> args) of
               Just demoted ->
-                Just $ requireArgsToHint who env blockInputs tops demoted ghosts_str spec_str
+                Just <$> requireArgsToHint who env blockIns tops demoted ghosts_str spec_str
               Nothing ->
-                error (who ++ ": spec refers to block-defined expressions")
+                throwError (who ++ ": spec refers to block-defined expressions")
 
-    _ -> Nothing
+    _ -> return Nothing
 
   where
     fnPtrReg :: forall a b tp. Reg (ctx Ctx.<+> rest Ctx.::> tp Ctx.::> a Ctx.::> b) tp
-    fnPtrReg = Reg (Ctx.skipIndex (Ctx.skipIndex (Ctx.nextIndex (Ctx.addSize (Ctx.size blockInputs) sz))))
+    fnPtrReg = Reg (Ctx.skipIndex (Ctx.skipIndex (Ctx.nextIndex (Ctx.addSize (Ctx.size blockIns) sz))))
 
     fnHdlReg :: forall a b c tp. Reg ((ctx Ctx.<+> rest) Ctx.::> a Ctx.::> b Ctx.::> c Ctx.::> tp) tp
-    fnHdlReg = Reg (Ctx.lastIndex (Ctx.addSize (Ctx.size blockInputs) sizeAtCall))
+    fnHdlReg = Reg (Ctx.lastIndex (Ctx.addSize (Ctx.size blockIns) sizeAtCall))
 
     sizeAtCall :: forall a b c d. Ctx.Size (rest Ctx.::> a Ctx.::> b Ctx.::> c Ctx.::> d)
     sizeAtCall = Ctx.incSize (Ctx.incSize (Ctx.incSize (Ctx.incSize sz)))
@@ -221,25 +219,28 @@ requireArgsToHint ::
   [Some (Reg ctx)] {-^ The actual arguments to the require, demoted to block args -} ->
   String {-^ The ghost ctx to parse -} ->
   String {-^ The permissions to parse -} ->
-  SomeHintSpec tops ctx
-requireArgsToHint who env blockInputs tops args ghostString specString =
+  ExtractM (SomeHintSpec tops ctx)
+requireArgsToHint who env blockIns tops args ghostString specString =
   case parseParsedCtxString who env ghostString of
     Just (Some ghost_ctx) ->
       let full_ctx = appendParsedCtx (appendParsedCtx top_ctx ctx_rename) ghost_ctx 
-          sub = buildHintSub blockInputs args
-          ctx = mkArgsParsedCtx (mkCruCtx blockInputs)
+          sub = buildHintSub blockIns args
+          ctx = mkArgsParsedCtx (mkCruCtx blockIns)
           top_ctx = mkTopParsedCtx tops 
           ctx_rename = renameParsedCtx sub ctx
-      in maybe (error (who ++ ": error parsing ghost context"))
-               (SomeHintSpec (parsedCtxCtx ghost_ctx))
+      in maybe (throwError (who ++ ": error parsing permissions"))
+               (return . SomeHintSpec (parsedCtxCtx ghost_ctx))
                (parsePermsString who env full_ctx specString)
+    Nothing ->
+      throwError (who ++ ": error parsing ghost context")
 
 -- | Apply a substitution to the names in a ParsedCtx
 renameParsedCtx :: [(String, String)] -> ParsedCtx ctx -> ParsedCtx ctx
 renameParsedCtx sub ctx = ctx { parsedCtxNames = renamed }
   where 
-    renamed = mapRAssign (\(Constant x) -> Constant (subst x)) (parsedCtxNames ctx)
-    subst x = fromMaybe x (lookup x sub)
+    renamed = mapRAssign (\(Constant x) ->
+                           Constant (substNames x)) (parsedCtxNames ctx)
+    substNames x = fromMaybe x (lookup x sub)
 
 -- | Build a susbstitution to apply to block arguments based on the actual arguments
 -- provided to a `requires` call, i.e. given

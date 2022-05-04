@@ -3226,7 +3226,7 @@ mkImplState vars perms env info fail_prefix dlevel nameTypes u endianness =
   ImplState {
   _implStateVars = vars,
   _implStatePerms = perms,
-  _implStatePSubst = emptyPSubst vars,
+  _implStatePSubst = emptyPSubst $ cruCtxProxies vars,
   _implStatePVarSubst = RL.map (const $ Compose Nothing) (cruCtxProxies vars),
   _implStateRecRecurseFlag = RecNone,
   _implStatePermEnv = env,
@@ -3536,7 +3536,7 @@ getDistPerms = use (implStatePerms . distPerms)
 
 -- | Get ghost arguments to represent the current stack at the type level
 getDistPermsProxies :: ImplM vars s r ps ps (RAssign Proxy ps)
-getDistPermsProxies = RL.map (const Proxy) <$> getDistPerms
+getDistPermsProxies = rlToProxies <$> getDistPerms
 
 -- | Get the top permission in the stack
 getTopDistPerm :: ExprVar a -> ImplM vars s r (ps :> a) (ps :> a) (ValuePerm a)
@@ -5744,7 +5744,7 @@ recombinePermsRevPartial :: HasCallStack => NuMatchingAny1 r => RAssign Proxy ps
                             ImplM vars s r ps1 (ps1 :++: ps2) ()
 recombinePermsRevPartial _ DistPermsNil = return ()
 recombinePermsRevPartial ps1 ps2@(DistPermsCons ps2' x p) =
-  implMoveDownM ps1 (RL.map (const Proxy) ps2) x MNil >>>
+  implMoveDownM ps1 (rlToProxies ps2) x MNil >>>
   recombinePermsRevPartial (ps1 :>: Proxy) ps2' >>>
   recombinePerm x p
 
@@ -6164,56 +6164,18 @@ data SomeMbPerm vars a where
 -- | Convert an 'MbRangeForType' to a corresponding permission-in-binding
 someMbPermForRange :: RAssign Proxy vars -> MbRangeForType a ->
                       SomeMbPerm vars a
-someMbPermForRange vars (MbRangeForLLVMType vars' mb_rng) =
-  -- For a range on an LLVMPointerType, create a block permission with
-  -- existential modalities and shape
-  let bp_prxs = MNil :>: Proxy :>: Proxy :>: Proxy
-      bp_vars = MNil :>: KnownReprObj :>: KnownReprObj :>: KnownReprObj
-      vars'_bp_vars = RL.append vars' bp_vars
-      vars'_bp_prxs = RL.map (const Proxy) vars'_bp_vars in
-  SomeMbPerm vars'_bp_vars $
-  mbCombine vars'_bp_prxs $ nuMulti vars $ const $
-  mbCombine bp_prxs $ flip fmap mb_rng $ \rng ->
-  nuMulti bp_prxs $ \(_ :>: rw :>: l :>: sh) ->
-  ValPerm_LLVMBlock $
-  LLVMBlockPerm { llvmBlockRW = PExpr_Var rw,
-                  llvmBlockLifetime = PExpr_Var l,
-                  llvmBlockOffset = bvRangeOffset rng,
-                  llvmBlockLen = bvRangeLength rng,
-                  llvmBlockShape = PExpr_Var sh }
-someMbPermForRange vars (MbRangeForStructType prxs memb rng)
-  | SomeMbPerm vars' mb_p <- someMbPermForRange vars rng =
-    SomeMbPerm vars' $ flip fmap mb_p $ \p ->
-    ValPerm_Conj1 $ Perm_Struct $
-    RL.set memb p $ RL.map (const ValPerm_True) prxs
-
-{-
--- | Convert a 'SomeMbPerm' on an expression to a 'NeededPerms'
-someMbPermToNeededs :: PermExpr a -> SomeMbPerm vars a -> NeededPerms vars
-someMbPermToNeededs (asVarOffset -> Just (x,off)) (SomeMbPerm vars' mb_p) =
-  Some $ MNil :>: NeededPerm vars' x (fmap (offsetPerm off) mb_p)
-someMbPermToNeededs (PExpr_Struct es) (SomeMbPerm vars'
-                                       [nuP| ValPerm_Struct mb_ps |]) =
-  concatSomeRAssign $ RL.toList $
-  RL.map2 (\e (Compose mb_p) ->
-            Constant $ someMbPermToNeededs e $ SomeMbPerm vars' mb_p)
-  es (mbRAssign mb_ps)
-someMbPermToNeededs _ _ =
-  -- In this case, we can't convert to permissions, so we just throw it away
-  neededPerms0
-
--- | Generate a set of 'NeededPerms' for a range on an expression
-neededPermsForRange :: RAssign Proxy vars -> PermExpr a -> MbRangeForType a ->
-                       NeededPerms vars
-neededPermsForRange vars e rng =
-  someMbPermToNeededs e $ someMbPermForRange vars rng
-
--- | Generate a set of 'NeededPerms' for a list of ranges on an expression
-neededPermsForRanges :: RAssign Proxy vars -> PermExpr a -> [MbRangeForType a] ->
-                        NeededPerms vars
-neededPermsForRanges vars e =
-  concatSomeRAssign . map (neededPermsForRange vars e)
--}
+someMbPermForRange vars (MbRangeForLLVMType vars' mb_rw mb_l mb_rng) =
+  SomeMbPerm (vars' :>: KnownReprObj) $
+  mbCombine (rlToProxies vars' :>: Proxy) $ nuMulti vars $ const $
+  mbCombine (MNil :>: Proxy) $
+  mbMap3 (\rw l rng -> nu $ \sh ->
+           ValPerm_LLVMBlock $
+           LLVMBlockPerm { llvmBlockRW = rw,
+                           llvmBlockLifetime = l,
+                           llvmBlockOffset = bvRangeOffset rng,
+                           llvmBlockLen = bvRangeLength rng,
+                           llvmBlockShape = PExpr_Var sh })
+  mb_rw mb_l mb_rng
 
 -- | Prove a 'SomeMbPerm'
 proveSomeMbPerm :: NuMatchingAny1 r => ExprVar a -> SomeMbPerm vars a ->
@@ -6229,15 +6191,12 @@ proveNeededPerm _ (NeededEq eq_perm) =
   mbVarsM (eqPermPerm eq_perm) >>>= \mb_p ->
   proveVarImplInt (eqPermVar eq_perm) mb_p >>>
   return (Some MNil)
-proveNeededPerm vars (NeededRange x rng@(MbRangeForLLVMType _ _)) =
+proveNeededPerm vars (NeededRange x rng@(MbRangeForLLVMType _ _ _ _)) =
   proveSomeMbPerm x (someMbPermForRange vars rng) >>>
   getTopDistPerm x >>>= \(ValPerm_LLVMBlock bp) ->
   case NameSet.toRAssign (findEqVarFieldsInShape (llvmBlockShape bp)) of
     NameSet.SomeRAssign ns ->
       Some <$> traverseRAssign (\n -> VarAndPerm n <$> getPerm n) ns
-proveNeededPerm vars (NeededRange x rng) =
-  proveSomeMbPerm x (someMbPermForRange vars rng) >>>
-  return (Some MNil)
 
 -- | Prove the permissions represented by a sequence of 'NeededPerms', returning
 -- zero or more auxiliary permissions that are also needed
@@ -6275,32 +6234,15 @@ tryUnifyVars x mb_x = case mbMatch mb_x of
 -- expression, eliminating permissions if necessary
 getExprRanges :: NuMatchingAny1 r => TypeRepr a -> PermExpr a ->
                  ImplM vars s r ps ps [MbRangeForType a]
-getExprRanges tp@(LLVMPointerRepr w) (asVar -> Just x) =
+getExprRanges tp (asVar -> Just x) =
   getSimpleVarPerm x >>>= \case
-  ValPerm_Conj ps ->
-    withKnownNat w $ pure $
-    mapMaybe (fmap (MbRangeForLLVMType MNil . emptyMb . llvmBlockRange) .
-              llvmAtomicPermToBlock) ps
+  p@(ValPerm_Conj _) -> return $ getOffsets p
   ValPerm_Eq e -> getExprRanges tp e
   _ -> return []
-getExprRanges tp@(LLVMPointerRepr _) (asVarOffset -> Just (x,off)) =
+getExprRanges tp (asVarOffset -> Just (x,off)) =
   map (offsetMbRangeForType $ negatePermOffset off) <$>
   getExprRanges tp (PExpr_Var x)
-getExprRanges (StructRepr tps) (PExpr_Struct es) =
-  let prxs = RL.map (const Proxy) es in
-  concat <$> RL.toList <$>
-  traverseRAssign (\memb ->
-                    Constant <$> map (MbRangeForStructType prxs memb) <$>
-                    getExprRanges (RL.get memb $ cruCtxToTypes $ mkCruCtx tps)
-                    (RL.get memb es))
-  (RL.members es)
-getExprRanges _ _ =
-  -- NOTE: this assumes that struct variables have already been eliminated
-  pure []
-
--- FIXME HERE NOW: explain the justification of the following approach, that we
--- expect any offsets mentioned at all on the right will be useful in the proof
--- if the do not occur on the left but are currently held for the given variable
+getExprRanges _ _ = pure []
 
 -- | The second stage of 'solveForPermListImpl', after equality permissions have
 -- been substituted into the 'ExprPerms'
@@ -6314,6 +6256,13 @@ solveForPermListImplH _ _ _ MNil =
 -- If the RHS is a varible x, get all the offsets mentioned in RHS permissions
 -- for x, subtract any ranges on the LHS for x, and then return block
 -- permisisons for any of the remaining ranges that are currently held for x
+--
+-- FIXME: mbRangeFTsDelete always treats evars on the left and right as distinct
+-- fresh expressions, whereas RHS evars could be instantiated to expressions,
+-- even LHS evars. This means that this implementaiton of solveForPermListImpl
+-- will require more permissions from the current primary permissions on a
+-- variable than strictly needed when the RHS covers an existentially-quantified
+-- range of offsets
 solveForPermListImplH vars ps_l (CruCtxCons tps_r' tp_r) (ps_r' :>: e_and_p)
   | Just (VarAndPerm x p) <- exprPermVarAndPerm e_and_p
   , lhs_ps <- exprPermsForVar x ps_l
@@ -6321,7 +6270,7 @@ solveForPermListImplH vars ps_l (CruCtxCons tps_r' tp_r) (ps_r' :>: e_and_p)
   , rhs_rngs <- getOffsets p
   , needed_rngs <- mbRangeFTsDelete rhs_rngs lhs_rngs =
     getExprRanges tp_r (PExpr_Var x) >>>= \expr_rngs ->
-    let res_rngs = mbRangeFTsSubsetTo expr_rngs needed_rngs in
+    let res_rngs = mbRangeFTsSubsetTo needed_rngs expr_rngs in
     implVerbTraceM
     (\i -> pretty "solveForPermListImplH" <+>
            permPretty i x <> colon <> line <> pretty "  " <>
@@ -8239,13 +8188,11 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       proveNeededPerms vars neededs1 >>>= \(Some auxs1) ->
       mbVarsM auxs1 >>>= \mb_auxs1 ->
       proveVarsImplAppendIntAssoc prxs0_a neededs1 mb_auxs1 >>>
-      let prxs1 =
-            RL.map (const Proxy) neededs1 `RL.append` RL.map (const Proxy) auxs1 in
+      let prxs1 = rlToProxies neededs1 `RL.append` rlToProxies auxs1 in
       proveNeededPermsAssoc vars prxs0_a prxs1 neededs2 >>>= \(Some auxs2) ->
       mbVarsM auxs2 >>>= \mb_auxs2 ->
       proveVarsImplAppendIntAssoc4 prxs0_a prxs1 neededs2 mb_auxs2 >>>
-      let prxs2 =
-            RL.map (const Proxy) neededs2 `RL.append` RL.map (const Proxy) auxs2
+      let prxs2 = rlToProxies neededs2 `RL.append` rlToProxies auxs2
           prxs12 = RL.append prxs1 prxs2 in
       getTopDistPerms prxs0_a prxs12 >>>= \ps12 ->
       let (ps1,ps2) = RL.split prxs1 prxs2 ps12 in
@@ -8290,7 +8237,7 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       implSimplM (Proxy :: Proxy ps0) (SImpl_IntroLOwnedSimple x tps lops) >>>
       getDistPerms >>>= \perms ->
       let (_, ps_lops_l@(ps_lops :>: p_l)) =
-            RL.split ps0 (RL.map (const Proxy) lops :>: Proxy) perms in
+            RL.split ps0 (rlToProxies lops :>: Proxy) perms in
       implMoveDownM ps0 ps_lops_l x MNil >>>
       recombinePermsPartial (ps0 :>: p_l) ps_lops
 
@@ -8331,7 +8278,7 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
   -- If we do not have a struct permission on the left, introduce a vacuous struct
   -- permission and fall back to the previous case
   [nuMP| Perm_Struct mb_str_ps |] ->
-    let prxs = mbLift $ fmap (RL.map (const Proxy)) mb_str_ps in
+    let prxs = mbLift $ fmap rlToProxies mb_str_ps in
     implSimplM Proxy (SImpl_IntroStructTrue x prxs) >>>
     implInsertConjM x (Perm_Struct $ trueValuePerms prxs) ps (length ps) >>>
     proveVarAtomicImpl x (ps ++ [Perm_Struct $ trueValuePerms prxs]) mb_p
@@ -8792,7 +8739,7 @@ funPermExDistIns fun_perm args =
 baseDistPermsSplit :: DistPerms ps -> ExprVar a -> ValuePerm a ->
                       DistPermsSplit (ps :> a)
 baseDistPermsSplit ps x p =
-  DistPermsSplit (RL.map (const Proxy) ps) MNil ps x p
+  DistPermsSplit (rlToProxies ps) MNil ps x p
 
 -- | Extend the @ps@ argument of a 'DistPermsSplit'
 extDistPermsSplit :: DistPermsSplit ps -> ExprVar b -> ValuePerm b ->
@@ -8923,7 +8870,7 @@ proveVarsImplAppendIntAssoc ::
   NuMatchingAny1 r => prx ps_in -> prx1 ps1 -> ExDistPerms vars ps ->
   ImplM vars s r (ps_in :++: (ps1 :++: ps)) (ps_in :++: ps1) ()
 proveVarsImplAppendIntAssoc ps_in ps1 ps
-  | ps_prxs <- mbLift $ mbMapCl $(mkClosed [| RL.map (const Proxy) |]) ps
+  | ps_prxs <- mbLift $ mbMapCl $(mkClosed [| rlToProxies |]) ps
   , Refl <- RL.appendAssoc ps_in ps1 ps_prxs =
     proveVarsImplAppendInt ps
 
@@ -8933,7 +8880,7 @@ proveVarsImplAppendIntAssoc4 ::
   ExDistPerms vars ps ->
   ImplM vars s r (ps_in :++: (ps1 :++: (ps2 :++: ps))) (ps_in :++: (ps1 :++: ps2)) ()
 proveVarsImplAppendIntAssoc4 ps_in (ps1 :: prx1 ps1) (ps2 :: prx2 ps2) ps
-  | ps_prxs <- mbLift $ mbMapCl $(mkClosed [| RL.map (const Proxy) |]) ps
+  | ps_prxs <- mbLift $ mbMapCl $(mkClosed [| rlToProxies |]) ps
   , ps12 <- Proxy :: Proxy (ps1 :++: ps2)
   , Refl <- RL.appendAssoc ps1 ps2 ps_prxs =
     proveVarsImplAppendIntAssoc ps_in ps12 ps
