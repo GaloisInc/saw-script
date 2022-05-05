@@ -122,3 +122,15 @@ uint64_t even_odd_sums_diff(const uint64_t *arr, size_t len) {
   }
   return sum;
 }
+
+uint64_t alloc_sum_array_test (void) {
+  uint64_t X[8];
+  X[0] = 0; X[1] = 1; X[2] = 2; X[3] = 3;
+  X[4] = 4; X[5] = 5; X[6] = 6; X[7] = 7;
+  /*
+  for (uint64_t i = 0; i < 16; ++i) {
+    X[i] = i;
+  }
+  */
+  return sum_inc_ptr (X, 8);
+}

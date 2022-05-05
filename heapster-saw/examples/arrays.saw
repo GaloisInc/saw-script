@@ -62,4 +62,8 @@ heapster_typecheck_fun env "even_odd_sums_diff"
   "(l:bv 64). arg0:array(W,0,<2*l,*8,fieldsh(int64<>)), arg1:eq(llvmword(2*l)) -o \
             \ arg0:array(W,0,<2*l,*8,fieldsh(int64<>)), arg1:true, ret:int64<>";
 
+heapster_set_debug_level env 2;
+heapster_typecheck_fun env "alloc_sum_array_test" "(). empty -o ret:int64<>";
+heapster_set_debug_level env 0;
+
 heapster_export_coq env "arrays_gen.v";
