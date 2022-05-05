@@ -5129,7 +5129,7 @@ llvmArrayBorrowsPermuteTo ap bs =
 -- | Add a cell offset to an 'LLVMArrayBorrow', meaning we change the borrow to
 -- be relative to an array with that many more cells added to the front
 cellOffsetLLVMArrayBorrow :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-                              LLVMArrayBorrow w -> LLVMArrayBorrow w
+                             LLVMArrayBorrow w -> LLVMArrayBorrow w
 cellOffsetLLVMArrayBorrow off (FieldBorrow ix) =
   FieldBorrow (bvAdd ix off)
 cellOffsetLLVMArrayBorrow off (RangeBorrow rng) =
@@ -5173,13 +5173,12 @@ gatherCoveringRanges :: (1 <= w, KnownNat w) => BVRange w -> [BVRange w] ->
                         Maybe [BVRange w]
 gatherCoveringRanges rng _ | bvIsZero (bvRangeLength rng) = Just []
 gatherCoveringRanges rng rngs
-  | off <- bvRangeOffset rng
-  , Just i <- findIndex (bvEq off . bvRangeOffset) rngs
+  | Just i <- findIndex (bvInRange (bvRangeOffset rng)) rngs
   , rng' <- rngs!!i =
     -- If rng' covers all of rng, then we are done
     if bvRangeSubset rng rng' then Just [rng'] else
       (rng' :) <$>
-      gatherCoveringRanges (bvRangeSuffix (bvAdd off (bvRangeLength rng')) rng)
+      gatherCoveringRanges (bvRangeSuffix (bvRangeEnd rng') rng)
                            (deleteNth i rngs)
 gatherCoveringRanges _ _ = Nothing
 
@@ -5369,6 +5368,7 @@ llvmMakeSubArray ap off len
   , cell_rng <- BVRange cell len =
     ap { llvmArrayOffset = off, llvmArrayLen = len,
          llvmArrayBorrows =
+           map (cellOffsetLLVMArrayBorrow (bvNegate cell)) $
            filter (not . all bvPropHolds .
                    llvmArrayBorrowsDisjoint (RangeBorrow cell_rng)) $
            llvmArrayBorrows ap }
