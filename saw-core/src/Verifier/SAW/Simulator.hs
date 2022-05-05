@@ -29,6 +29,8 @@ module Verifier.SAW.Simulator
   , checkPrimitives
   ) where
 
+import Debug.Trace
+
 import Prelude hiding (mapM)
 
 import Control.Applicative ((<|>))
@@ -149,6 +151,7 @@ evalTermF cfg lam recEval tf env =
 
     LocalVar i              -> force (fst (env !! i))
     Constant ec t           -> do ec' <- traverse evalType ec
+                                  traceShowM ("Constant" :: [Char], showTerm <$> ec, ecVarIndex ec')
                                   fromMaybe
                                     (simNeutral cfg env (NeutralConstant ec))
                                     (simConstant cfg tf ec' <|> (recEval <$> t))
@@ -247,6 +250,7 @@ evalTermF cfg lam recEval tf env =
         StringLit s         -> return $ VString s
 
         ExtCns ec           -> do ec' <- traverse evalType ec
+                                  traceShowM ("ExtCns" :: [Char], showTerm <$> ec)
                                   simExtCns cfg tf ec'
   where
     evalType :: Term -> EvalM l (TValue l)

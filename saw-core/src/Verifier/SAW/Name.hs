@@ -278,7 +278,7 @@ data SAWNamingEnv = SAWNamingEnv
   { resolvedNames :: !(Map VarIndex NameInfo)
   , absoluteNames :: !(Map URI VarIndex)
   , aliasNames    :: !(Map Text (Set VarIndex))
-  }
+  } deriving Show
 -- Invariants: The 'resolvedNames' and 'absoluteNames' maps should be
 -- inverses of each other. That is, 'resolvedNames' maps @i@ to @n@ if
 -- and only if 'absoluteNames' maps @nameURI n@ to @i@. Also, every

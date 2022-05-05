@@ -57,6 +57,7 @@ module Verifier.SAW.SharedTerm
   , scPrettyTermInCtx
     -- * SharedContext interface for building shared terms
   , SharedContext
+  , scNamingEnv
   , mkSharedContext
   , scGetModuleMap
     -- ** Low-level generic term constructors
@@ -400,11 +401,13 @@ scFindBestName sc nmi =
 scResolveNameByURI :: SharedContext -> URI -> IO (Maybe VarIndex)
 scResolveNameByURI sc uri =
   do env <- readIORef (scNamingEnv sc)
+     putStrLn $ "Resolving URI" <> show uri <> ", got " <> show (resolveURI env uri)
      pure $! resolveURI env uri
 
 scResolveName :: SharedContext -> Text -> IO [(VarIndex, NameInfo)]
 scResolveName sc nm =
   do env <- readIORef (scNamingEnv sc)
+     putStrLn $ "Resolving " <> Text.unpack nm <> ", got " <> show (resolveName env nm)
      pure (resolveName env nm)
 
 scShowTerm :: SharedContext -> PPOpts -> Term -> IO String

@@ -173,6 +173,7 @@ setupWhat4_solver solver sym unintSet sc goal =
      let varList  = Map.toList (satVariables satq)
      let argNames = map fst varList
      (varMap, lit) <- W.w4Solve sym sc satq
+     print $ B.ppExpr lit
      let bvs = map (fst . snd) varMap
 
      extendConfig (solver_adapter_config_options solver)

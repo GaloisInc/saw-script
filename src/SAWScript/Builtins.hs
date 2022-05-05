@@ -464,7 +464,9 @@ printGoalSize =
 resolveNames :: [String] -> TopLevel (Set VarIndex)
 resolveNames nms =
   do sc <- getSharedContext
-     Set.fromList . mconcat <$> mapM (resolveName sc) nms
+     idxs <- Set.fromList . mconcat <$> mapM (resolveName sc) nms
+     liftIO $ print idxs
+     pure idxs
 
 -- | Given a user-provided name, resolve it to some
 --   'ExtCns' that represents an unfoldable 'Constant'

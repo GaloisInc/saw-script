@@ -772,11 +772,20 @@ w4SolveBasic ::
   IO (SValue sym)
 w4SolveBasic sym sc addlPrims ecMap ref unintSet t =
   do m <- scGetModuleMap sc
+     -- scnmenv <- readIORef $ scNamingEnv sc
+     -- print $ scnmenv
+     -- print (unintSet, ecMap)
      let extcns (EC ix nm ty)
-            | Just v <- Map.lookup ix ecMap = return v
-            | otherwise = parseUninterpreted sym ref (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
+            | Just v <- Map.lookup ix ecMap = do
+                print ("found!" :: [Char], ix, ecMap)
+                return v
+            | otherwise = do
+                print ("parseUninterpreted" :: [Char], ix, ecMap)
+                parseUninterpreted sym ref (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
      let uninterpreted ec
-           | Set.member (ecVarIndex ec) unintSet = Just (extcns ec)
+           | Set.member (ecVarIndex ec) unintSet = Just $ do
+               print ("uninterpreted" :: [Char])
+               extcns ec
            | otherwise                           = Nothing
      let neutral _ nt = fail ("w4SolveBasic: could not evaluate neutral term: " ++ show nt)
      let primHandler pn msg env _tv =

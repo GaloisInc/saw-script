@@ -205,7 +205,10 @@ scWriteExternal t0 =
 type ReadM = State.StateT (Map Int Term, Map VarIndex NameInfo, Map VarIndex VarIndex) IO
 
 scReadExternal :: SharedContext -> String -> IO Term
-scReadExternal sc input =
+scReadExternal sc input = do
+  -- let ref = scNamingEnv sc
+  -- scnmenv <- readIORef ref
+  -- print $ scnmenv
   case lines input of
     ( (words -> ["SAWCoreTerm", final]) : nmlist : rows ) ->
       case readNames nmlist of
@@ -272,13 +275,21 @@ scReadExternal sc input =
              lift (scResolveNameByURI sc (moduleIdentToURI ident)) >>= \case
                Just vi' -> pure (EC vi' nmi t')
                Nothing  -> lift $ fail $ "scReadExternal: missing module identifier: " ++ show ident
-           _ ->
-             case Map.lookup vi vs of
-               Just vi' -> pure $ EC vi' nmi t'
-               Nothing ->
-                 do vi' <- lift $ scFreshGlobalVar sc
-                    State.put (ts, nms, Map.insert vi vi' vs)
-                    pure $ EC vi' nmi t'
+           ImportedName uri _aliases -> do
+             liftIO $ print ("external format importedname", uri)
+             lift (scResolveNameByURI sc uri) >>= \case
+               Just vi' -> do
+                 liftIO $ print (vi', nmi)
+                 pure (EC vi' nmi t')
+               Nothing  -> case Map.lookup vi vs of
+                 Just vi' -> do
+                   liftIO $ print (vi', nmi)
+                   pure $ EC vi' nmi t'
+                 Nothing ->
+                   do vi' <- lift $ scFreshGlobalVar sc
+                      State.put (ts, nms, Map.insert vi vi' vs)
+                      liftIO $ print (vi', nmi)
+                      pure $ EC vi' nmi t'
 
     readEC :: String -> String -> ReadM (ExtCns Term)
     readEC i t =
