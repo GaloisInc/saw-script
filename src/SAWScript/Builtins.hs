@@ -466,17 +466,12 @@ resolveNames nms =
   do sc <- getSharedContext
      Set.fromList . mconcat <$> mapM (resolveName sc) nms
 
--- | Given a user-provided name, resolve it to some
---   'ExtCns' that represents an unfoldable 'Constant'
---   value or a fresh uninterpreted constant.
---
---   We first attempt to find the name in the local Cryptol
---   environment; if the name is found, attempt to resolve it to
---   an 'ExtCns' in the SAWCore environment.  If the given name
---   does not resolve to a cryptol value in the current environment that
---  maps to an 'ExtCns', then instead directly look it up
---  in the SAWCore naming environment.  If both stages
---  fail, then throw an exception.
+-- | Given a user-provided name, resolve it to (potentially several)
+-- 'ExtCns' that each represent an unfoldable 'Constant' value or a
+-- fresh uninterpreted constant.
+-- The given name is searched for in both the local Cryptol environment
+-- and the SAWCore naming environment. If it is found in neither, an
+-- exception is thrown.
 resolveName :: SharedContext -> String -> TopLevel [VarIndex]
 resolveName sc nm =
   do cenv <- rwCryptol <$> getTopLevelRW
