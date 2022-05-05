@@ -1314,7 +1314,7 @@ primitives = Map.fromList
     ]
 
   , prim "prove_prop"         "ProofScript () -> Term -> TopLevel Theorem"
-    (pureVal proveProp)
+    (pureVal provePropPrim)
     Current
     [ "Use the given proof script to attempt to prove that a term representing"
     , "a proposition is valid. For example, this is useful for proving a goal"
