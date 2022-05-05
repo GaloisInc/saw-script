@@ -132,5 +132,5 @@ uint64_t alloc_sum_array_test (void) {
     X[i] = i;
   }
   */
-  return sum_inc_ptr (X, 8);
+  return sum_inc_ptr_64 (X, 8);
 }
