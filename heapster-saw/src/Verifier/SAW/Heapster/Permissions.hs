@@ -416,7 +416,8 @@ data AtomicPerm (a :: CrucibleType) where
   -- back when @l@ is ended.
   Perm_LOwnedSimple :: CruCtx ps -> ExprPerms ps -> AtomicPerm LifetimeType
 
-  -- | Assertion that a lifetime is current during another lifetime
+  -- | Assertion that a lifetime is current during another lifetime;
+  -- @l1:lcurrent l2@ can also be read as @l1@ contains @l2@ as a sub-lifetime
   Perm_LCurrent :: PermExpr LifetimeType -> AtomicPerm LifetimeType
 
   -- | Assertion that a lifetime has finished

@@ -3556,6 +3556,25 @@ implFindLOwnedPerms =
                   _ -> Nothing) <$>
   NameMap.assocs <$> view varPermMap <$> getPerms
 
+-- | Find all lifetimes contained in a lifetime @l@, including itself
+containedLifetimes :: ExprVar LifetimeType ->
+                      ImplM vars s r ps ps [ExprVar LifetimeType]
+containedLifetimes orig_l = execStateT (helper $ PExpr_Var orig_l) [] where
+  helper :: PermExpr LifetimeType ->
+            StateT [ExprVar LifetimeType] (ImplM vars s r ps ps) ()
+  helper PExpr_Always = return ()
+  helper (PExpr_Var l) =
+    do prevs <- get
+       if elem l prevs then return () else
+         put (l : prevs) >>
+         (lift $ getPerm l) >>= \case
+         ValPerm_Conj ps ->
+           forM_ ps $ \case
+           Perm_LCurrent l' -> helper l'
+           Perm_LOwned ls _ _ _ _ -> mapM_ helper ls
+           _ -> return ()
+         _ -> return ()
+
 -- | Instantiate the current @implStateUnitVar@ with the given @ExprVar@ of type
 -- @UnitType@
 setUnitImplM :: Maybe (ExprVar UnitType) -> ImplM vars s r ps ps ()
@@ -5706,11 +5725,13 @@ recombinePermConj x x_ps (Perm_LLVMBlock bp)
 -- FIXME: if the elimination fails, this shouldn't fail, it should just
 -- recombine without eliminating, so we should special case those shapes where
 -- the elimination will fail
+{-
 recombinePermConj x x_ps (Perm_LLVMBlock bp)
   | any (llvmAtomicPermOverlapsRange $ llvmBlockRange bp) x_ps =
     implElimLLVMBlock x bp >>>
     getTopDistPerm x >>>= \p ->
     recombinePerm x p
+-}
 
 -- If p is a memblock permission on the false shape, eliminate the block to
 -- a false permission (and eliminate the false permission itself)
@@ -8295,21 +8316,38 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       recombinePermsPartial (ps0 :>: p_l) ps_lops
 
   [nuMP| Perm_LCurrent mb_l' |] ->
+    -- We are trying to prove x is current whenever l' is, meaning that the
+    -- duration of l' is guaranteed to be contained inside that of x
     partialSubstForceM mb_l' "proveVarAtomicImpl" >>>= \l' ->
     case ps of
       _ | l' == PExpr_Var x ->
+          -- If l' == x, proceed by reflexivity of lcurrent
           recombinePerm x (ValPerm_Conj ps) >>>
           implSimplM Proxy (SImpl_LCurrentRefl x)
-      [Perm_LCurrent l] | l == l' -> pure ()
+      [Perm_LCurrent l]
+        -- If we already have x:lcurrent l' on the LHS, we are done
+        | l == l' -> pure ()
       [Perm_LCurrent (PExpr_Var l)] ->
+        -- If we have x:lcurrent l for some other l, prove l:lcurrent l' and
+        -- proceed by transitivity of lcurent
         proveVarImplInt l (mbValPerm_Conj1 mb_p) >>>
         implSimplM Proxy (SImpl_LCurrentTrans x l l')
       [Perm_LOwned ls tps_in tps_out ps_in ps_out]
         | elem l' ls ->
+          -- If we already have a lifetime ownership permission for x that
+          -- contains l' as a sub-lifetime, use that
           implContainedLifetimeCurrentM x ls tps_in tps_out ps_in ps_out l'
-      [Perm_LOwned ls tps_in tps_out ps_in ps_out] ->
-        implSubsumeLifetimeM x ls tps_in tps_out ps_in ps_out l' >>>
-        implContainedLifetimeCurrentM x (l':ls) tps_in tps_out ps_in ps_out l'
+      [Perm_LOwned ls tps_in tps_out ps_in ps_out]
+        | PExpr_Var n' <- l' ->
+          -- If we have a lifetime ownership permission for x that does not
+          -- contain l', add l' as a sub-lifetime of x, but only if l' does not
+          -- already contain x
+          containedLifetimes n' >>>= \sub_ls ->
+          if elem x sub_ls then
+            proveVarAtomicImplUnfoldOrFail x ps mb_p
+          else
+            implSubsumeLifetimeM x ls tps_in tps_out ps_in ps_out l' >>>
+            implContainedLifetimeCurrentM x (l':ls) tps_in tps_out ps_in ps_out l'
       _ -> proveVarAtomicImplUnfoldOrFail x ps mb_p
 
   [nuMP| Perm_LFinished |] ->
@@ -8990,6 +9028,7 @@ localMbProveVars mb_ps_in mb_ps_out =
 implEndLifetimeRecM :: NuMatchingAny1 r => ExprVar LifetimeType ->
                        ImplM vars s r ps ps ()
 implEndLifetimeRecM l =
+  implVerbTraceM (\i -> pretty "implEndLifetimeRecM" <+> permPretty i l) >>>
   getPerm l >>>= \case
   ValPerm_LFinished -> return ()
   p@(ValPerm_LOwned [] tps_in tps_out ps_in ps_out)
