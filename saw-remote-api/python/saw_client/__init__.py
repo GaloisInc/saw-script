@@ -655,6 +655,13 @@ def eval_int(expr: cryptoltypes.CryptolJSON) -> int:
     res = conn.eval_int(expr).result()
     return res['value']
 
+def eval_bool(expr: cryptoltypes.CryptolJSON) -> int:
+    """Atempts to evaluate the given expression as a concrete boolean.
+    """
+    conn = __get_designated_connection()
+    res = conn.eval_bool(expr).result()
+    return res['value']
+
 def set_option(option : option.SAWOption, value : bool) -> None:
     """Set a boolean-valued SAW option."""
     global __designated_connection
