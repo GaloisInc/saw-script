@@ -780,8 +780,8 @@ data SimplImpl ps_in ps_out where
   -- translation to give a default value to the cells of the output array
   -- permission:
   --
-  -- > x:[l2]memblock(rw,off1,<stride,sh)
-  -- > -o x:[l2]memblock(rw,off1,<stride,sh)
+  -- > x:[l2]memblock(rw,off1,stride,sh)
+  -- > -o x:[l2]memblock(rw,off1,stride,sh)
   -- >    * x:[l]array(rw,off,<len,*stride,sh,bs)
   SImpl_LLVMArrayBorrowed ::
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
@@ -6690,8 +6690,10 @@ proveVarLLVMArray x ps mb_ap =
 --
 -- 4. By eliminating a @memblock@ permission with array shape.
 --
+-- NOTE: these "ways" do *not* line up with the cases of the function, labeled
+-- as "case 1", "case 2", etc. outputs in the code below.
 --
--- To determine which case to use, the algorithm searches for a permission
+-- To determine which way to use, the algorithm searches for a permission
 -- currently held on the left that is either an array permission with exactly
 -- the required offset and length or that includes them in its range, or is a
 -- block permission that that includes the required offset and length in its
@@ -6702,9 +6704,9 @@ proveVarLLVMArray x ps mb_ap =
 -- we already hold on the left, so they can be returned, or to be in the desired
 -- output permission, so we do not have to return them.
 --
--- In all of these cases, an array permission with the required offset and
--- length is either found on the left or created, and all cases then reduce to
--- case 1. At this point, the algorithm equalizes the borrows, meaning that it
+-- In all of these ways, an array permission with the required offset and
+-- length is either found on the left or created, and all ways then reduce to
+-- way 1. At this point, the algorithm equalizes the borrows, meaning that it
 -- returns any borrows on the left that are not on the right (where the right is
 -- the desired output permission) and borrows any borrows on the right that are
 -- not on the left. It then adjusts the read/write and lifetime modalities and
@@ -6724,9 +6726,9 @@ proveVarLLVMArrayH x psubst ps mb_ap
     partialSubstForceM mb_ap "proveVarLLVMArray: incomplete psubst" >>>= \ap ->
     implLLVMArrayEmpty x ap
 
--- If we have a single array permission that covers the RHS, then we are in case
--- 1 or 2, so either use that or borrow or copy a portion of it and proceed to
--- proveVarLLVMArray_FromArray
+-- If we have a single array permission that covers the RHS, then we are using
+-- way 1 or 2, so either use that or borrow or copy a portion of it and proceed
+-- to proveVarLLVMArray_FromArray
 proveVarLLVMArrayH x psubst ps mb_ap
   | Just off <- partialSubst psubst $ mbLLVMArrayOffset mb_ap
   , Just len <- partialSubst psubst $ mbLLVMArrayLen mb_ap
@@ -6768,7 +6770,10 @@ proveVarLLVMArrayH x psubst ps mb_ap
     suitableAP _ _ _ _ = False
 
 -- Check if there is a block that contains the required offset and length, in
--- which case eliminate it
+-- which case eliminate it, allowing us to either satisfy way 4 (eliminate a
+-- memblock to an array), or to generate a set of permissions that can contain
+-- array and/or pointer permissions that can be used to satisfy one of ways 1-3
+-- when we recurse
 proveVarLLVMArrayH x psubst ps mb_ap
   | Just rng <- partialSubst psubst $ mbLLVMArrayRange mb_ap
   , Just i <- findIndex (\p -> isLLVMBlockPerm p &&
@@ -6778,9 +6783,10 @@ proveVarLLVMArrayH x psubst ps mb_ap
     implElimAppendIthLLVMBlock x ps i >>>= \ps' ->
     proveVarLLVMArray x ps' mb_ap
 
--- The following step needs the modalities of mb_ap to be determined, so we do
--- that by finding an arbitrary permission on the left that overlaps with a
--- non-borrowed portion of mb_ap and using it to instantiate the modalities
+-- This case prepares us to hit case 4 below, which needs the modalities of
+-- mb_ap to be determined; this is done by finding an arbitrary permission on
+-- the left that overlaps with a non-borrowed portion of mb_ap and using it to
+-- instantiate the modalities
 proveVarLLVMArrayH x psubst ps mb_ap
   | Just off <- partialSubst psubst $ mbLLVMArrayOffset mb_ap
   , Just lenBytes <- partialSubst psubst $ mbLLVMArrayLenBytes mb_ap
@@ -6794,9 +6800,10 @@ proveVarLLVMArrayH x psubst ps mb_ap
     tryUnifyVars l (mbLLVMArrayLifetime mb_ap) >>>
     proveVarLLVMArray x ps mb_ap
 
--- Otherwise, try and build a completely borrowed array whose borrows are made
--- up of either borrows in the desired output permission mb_ap or are ranges on
--- permissions that we already hold on the left
+-- If none of the above match, try and build a completely borrowed array whose
+-- borrows are made up of either borrows in the desired output permission mb_ap
+-- or are ranges on permissions that we already hold on the left, which is way 3
+-- for building an array permission
 proveVarLLVMArrayH x psubst ps mb_ap
   | Just ap <- partialSubst psubst mb_ap
   , len <- llvmArrayLen ap
@@ -6883,9 +6890,12 @@ proveVarLLVMArray_FromArrayH ::
 
 -- If there is a borrow in ap_lhs that is not in ap, return it to ap_lhs
 --
--- FIXME: when an array ap_ret is being borrowed from ap_lhs, this code requires
--- all of it to be returned, with no borrows, even though it could be that ap
--- allows some of ap_ret to be borrowed
+-- FIXME: when an array is returned to ap_lhs, this code requires all of it to
+-- be returned, with no borrows, even though it could be that some portion of
+-- that borrow is borrowed in mb_ap. E.g., if ap_lhs has the range [0,8)
+-- borrowed while mb_ap only needs to have [2,3) borrowed, this code will first
+-- return all of [0,8) and then borrow [2,3), while the array return rule allows
+-- all of [0,8) except [2,3) to be returned as one step.
 proveVarLLVMArray_FromArrayH x ap_lhs len bs mb_ap
   | Just b <- find (flip notElem bs) (llvmArrayBorrows ap_lhs) =
 
