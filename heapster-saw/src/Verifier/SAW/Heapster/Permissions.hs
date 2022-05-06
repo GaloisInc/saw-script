@@ -5773,6 +5773,14 @@ distPermsVars :: DistPerms ps -> RAssign Name ps
 distPermsVars DistPermsNil = MNil
 distPermsVars (DistPermsCons ps x _) = distPermsVars ps :>: x
 
+-- | Extract the non-bound variables in a 'DistPerms' in context
+mbDistPermsVars :: Mb ctx (DistPerms ps) -> [Some ExprVar]
+mbDistPermsVars =
+  concat . RL.mapToList (\case
+                            Compose [nuP| VarAndPerm mb_n _ |]
+                              | Right n <- mbNameBoundP mb_n -> [Some n]
+                            _ -> []) . mbRAssign
+
 -- | Append two lists of distinguished permissions
 appendDistPerms :: DistPerms ps1 -> DistPerms ps2 -> DistPerms (ps1 :++: ps2)
 appendDistPerms ps1 DistPermsNil = ps1

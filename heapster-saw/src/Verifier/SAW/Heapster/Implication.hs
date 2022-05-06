@@ -4782,26 +4782,39 @@ implRemoveContainedLifetimeM l ls tps_in tps_out ps_in ps_out l2 =
 
 
 -- | Find all lifetimes that we currently own which could, if ended, help prove
--- the specified permissions, and return them with their @lowned@ permissions
+-- the specified permissions, and return them with their @lowned@ permissions.
+-- Currently, this just returns any lifetime with an @lowned@ permission that
+-- gives back permissions on a variable that is needed on the right-hand side,
+-- after the current equality permissions have been used to cast both sides, as
+-- long as that lifetime is not also needed for a proof on the right.
 lifetimesThatCouldProve :: NuMatchingAny1 r => Mb vars (DistPerms ps') ->
-                           ImplM vars s r ps ps [(ExprVar LifetimeType,
-                                                  AtomicPerm LifetimeType)]
+                           ImplM vars s r ps ps [ExprVar LifetimeType]
 lifetimesThatCouldProve mb_ps =
-  do Some all_perms <- uses implStatePerms permSetAllVarPerms
+
+  FIXME HERE NOW: need a stricter test here
+
+  do (unzip -> (ls, ps)) <- implFindLOwnedPerms
+     ps' <- someEqProofRHS <$> substEqsWithProof ps
+     rhs_vars <-
+       NameSet.unions <$>
+       mapM (\(Some n) -> freeVars <$> someEqProofRHS <$>
+                          substEqsWithProof (PExpr_Var n))
+       (mbDistPermsVars mb_ps)
      let needed_ls = lownedsInMbDistPerms mb_ps
-     pure (RL.foldr
-             (\case
-                 VarAndPerm l (ValPerm_LOwned ls tps_in tps_out ps_in ps_out)
-                   | notElem l needed_ls
-                   , mbLift $ fmap (lownedPermsCouldProve ps_out) mb_ps ->
-                     ((l, Perm_LOwned ls tps_in tps_out ps_in ps_out) :)
-                 VarAndPerm l (ValPerm_LOwnedSimple tps ps)
-                   | notElem l needed_ls
-                   , mbLift $ fmap (lownedPermsCouldProve ps) mb_ps ->
-                     ((l, Perm_LOwnedSimple tps ps) :)
-                 _ -> id)
-             []
-             all_perms)
+     return $ mapMaybe
+       (\case
+           (l, ValPerm_LOwned _ _ _ _ ps_out)
+             | notElem l needed_ls
+             , Just out_vars <- exprPermsVars ps_out
+             , or (RL.mapToList (flip NameSet.member rhs_vars) out_vars) ->
+               Just l
+           (l, ValPerm_LOwnedSimple _ ps_out)
+             | notElem l needed_ls
+             , Just out_vars <- exprPermsVars ps_out
+             , or (RL.mapToList (flip NameSet.member rhs_vars) out_vars) ->
+               Just l
+           _ -> Nothing)
+       (zip ls ps')
 
 -- | Combine proofs of @x:ptr(pps,(off,spl) |-> eq(y))@ and @y:p@ on the top of
 -- the permission stack into a proof of @x:ptr(pps,(off,spl |-> p))@
@@ -9016,12 +9029,12 @@ proveVarsImplAppend :: NuMatchingAny1 r => ExDistPerms vars ps ->
                        ImplM vars s r (ps_in :++: ps) ps_in ()
 proveVarsImplAppend mb_ps =
   use implStatePerms >>>= \(_ :: PermSet ps_in) ->
-  lifetimesThatCouldProve mb_ps >>>= \ls_ps ->
+  lifetimesThatCouldProve mb_ps >>>= \ls ->
   foldr1 (implCatchM "proveVarsImplAppend" mb_ps)
   ((proveVarsImplAppendInt mb_ps)
    :
-   flip map ls_ps
-   (\(l,_) ->
+   flip map ls
+   (\l ->
      implTraceM (\i ->
                   sep [pretty "Ending lifetime" <+> permPretty i l,
                        pretty "in order to prove:",
