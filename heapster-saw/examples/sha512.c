@@ -227,6 +227,9 @@ static void round_16_80(uint64_t i, uint64_t j,
   round_00_15(i + j, a, b, c, d, e, f, g, h, T1);
 }
 
+// Used in processBlock below, needed for Heapster typechecking
+void return_X(uint64_t *X) { }
+
 static void processBlock(uint64_t *a, uint64_t *b, uint64_t *c, uint64_t *d,
                          uint64_t *e, uint64_t *f, uint64_t *g, uint64_t *h,
                          const uint8_t *in) {
@@ -266,6 +269,8 @@ static void processBlock(uint64_t *a, uint64_t *b, uint64_t *c, uint64_t *d,
   round_00_15(14, c, d, e, f, g, h, a, b, &T1);
   T1 = X[15] = CRYPTO_load_u64_be(in + 15 * 8);
   round_00_15(15, b, c, d, e, f, g, h, a, &T1);
+
+  return_X(X); // for Heapster
 
   for (i = 16; i < 80; i += 16) {
     round_16_80(i, 0, a, b, c, d, e, f, g, h, X, &s0, &s1, &T1);
