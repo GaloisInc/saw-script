@@ -280,7 +280,6 @@ scReadExternal sc input =
                  Nothing ->
                    do vi' <- lift $ scFreshGlobalVar sc
                       State.put (ts, nms, Map.insert vi vi' vs)
-                      liftIO $ print (vi', nmi)
                       pure $ EC vi' nmi t'
 
     readEC :: String -> String -> ReadM (ExtCns Term)
