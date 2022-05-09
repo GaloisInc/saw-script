@@ -37,7 +37,7 @@ import SAWServer.TopLevel ( tl )
 -- The phantom type here is used to prevent a functional dependency conflict when
 -- writing instances of Doc.DescribedMethod, and should match the type parameter
 -- of EvalResult
-data EvalParams evalty cryptolExpr =
+newtype EvalParams evalty cryptolExpr =
   EvalParams
   { evalExpr :: cryptolExpr
   }
@@ -47,7 +47,7 @@ instance (FromJSON cryptolExpr) => FromJSON (EvalParams a cryptolExpr) where
     withObject "SAW/eval params" $ \o ->
     EvalParams <$> o .: "expr"
 
-data EvalResult evalty =
+newtype EvalResult evalty =
   EvalResult
   { evalValue :: evalty
   }
