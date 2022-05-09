@@ -179,7 +179,7 @@ pub fn extract_from_result_infallible <'a> (r:&'a Result<Infallible,u64>) -> u64
 /* Sum of two types; yes, this is like Result, but defined locally so we can
  * make an impl block on it */
 #[derive(Clone, Debug, PartialEq)]
-#[repr(C)]
+#[repr(C,u64)]
 pub enum Sum<X,Y> {
     Left (X),
     Right (Y)

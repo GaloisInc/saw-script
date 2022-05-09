@@ -123,6 +123,15 @@ mapToList2 :: (forall a. f a -> g a -> b) ->
               RAssign f tps -> RAssign g tps -> [b]
 mapToList2 f fs gs = RL.toList $ RL.map2 (\x y -> Constant $ f x y) fs gs
 
+-- | Convert any 'RAssign' sequence to a sequence of 'Proxy' objects
+rlToProxies :: RAssign f ctx -> RAssign Proxy ctx
+rlToProxies = RL.map (const Proxy)
+
+-- | Extend the context of a name-binding to the left with multiple types
+extMbMultiL :: RAssign Proxy ctx1 -> Mb ctx2 a -> Mb (ctx1 :++: ctx2) a
+extMbMultiL vars mb_a =
+  mbCombine (mbToProxy mb_a) $ nuMulti vars $ const mb_a
+
 
 ----------------------------------------------------------------------
 -- * Data types and related types
@@ -304,20 +313,20 @@ data BVRange w = BVRange { bvRangeOffset :: PermExpr (BVType w),
                            bvRangeLength :: PermExpr (BVType w) }
 
 -- | A range of offsets, possibly inside bindings for zero or more existential
--- variables, that makes sense for a given Crucible type
+-- variables, that makes sense for a given Crucible type, along with read/write
+-- and lifetime modalities
 data MbRangeForType a where
-  MbRangeForLLVMType :: (1 <= w, KnownNat w) => KnownCruCtx vars ->
-                        Mb vars (BVRange w) ->
-                        MbRangeForType (LLVMPointerType w)
-  MbRangeForStructType :: RAssign Proxy (CtxToRList args) ->
-                          Member (CtxToRList args) a ->
-                          MbRangeForType a ->
-                          MbRangeForType (StructType args)
+  MbRangeForLLVMType ::
+    (1 <= w, KnownNat w) => KnownCruCtx vars ->
+    Mb vars (PermExpr RWModalityType) -> Mb vars (PermExpr LifetimeType) ->
+    Mb vars (BVRange w) -> MbRangeForType (LLVMPointerType w)
 
--- | Build an 'MbRangeForLLVMType' from a 'BVRange'
-rangeForLLVMType :: (1 <= w, KnownNat w) => BVRange w ->
-                    MbRangeForType (LLVMPointerType w)
-rangeForLLVMType rng = MbRangeForLLVMType MNil $ emptyMb rng
+-- | Build an 'MbRangeForType' from a 'BVRange'
+rangeForLLVMType :: (1 <= w, KnownNat w) =>
+                    PermExpr RWModalityType -> PermExpr LifetimeType ->
+                    BVRange w -> MbRangeForType (LLVMPointerType w)
+rangeForLLVMType rw l rng =
+  MbRangeForLLVMType MNil (emptyMb rw) (emptyMb l) (emptyMb rng)
 
 -- | A name-binding over some list of typed existential variables
 data SomeTypedMb a where
@@ -1249,7 +1258,6 @@ instance (PermPretty a, PermPretty b, PermPretty c) => PermPretty (a,b,c) where
 instance PermPretty a => PermPretty [a] where
   permPrettyM as = ppEncList False <$> mapM permPrettyM as
 
-
 instance PermPretty a => PermPretty (Maybe a) where
   permPrettyM Nothing = return $ pretty "Nothing"
   permPrettyM (Just a) = do
@@ -1321,14 +1329,24 @@ instance PermPrettyF VarAndType where
   permPrettyMF = permPrettyM
 
 
-permPrettyExprMb :: PermPretty a =>
-                    (RAssign (Constant (Doc ann)) ctx -> PermPPM (Doc ann) -> PermPPM (Doc ann)) ->
-                    Mb (ctx :: RList CrucibleType) a -> PermPPM (Doc ann)
-permPrettyExprMb f mb =
+-- | Pretty-print a name-binding using a function that takes the pretty-printed
+-- names along with the body of the name-binding
+permPrettyMb :: (RAssign (Constant (Doc ann)) ctx -> a -> PermPPM (Doc ann)) ->
+                Mb (ctx :: RList CrucibleType) a -> PermPPM (Doc ann)
+permPrettyMb f mb =
   fmap mbLift $ strongMbM $ flip nuMultiWithElim1 mb $ \ns a ->
   local (ppInfoAddExprNames "z" ns) $
-  do docs <- traverseRAssign (\n -> Constant <$> permPrettyM n) ns
-     PP.group <$> hang 2 <$> f docs (permPrettyM a)
+  do ns_pp <- traverseRAssign (\n -> Constant <$> permPrettyM n) ns
+     PP.group <$> hang 2 <$> f ns_pp a
+
+-- | Pretty-print an expression-like construct in a name-binding using a
+-- function that combines the pretty-printed names along with the pretty-printed
+-- body of the name-binding
+permPrettyExprMb :: PermPretty a =>
+                    (RAssign (Constant (Doc ann)) ctx -> PermPPM (Doc ann) ->
+                     PermPPM (Doc ann)) ->
+                    Mb (ctx :: RList CrucibleType) a -> PermPPM (Doc ann)
+permPrettyExprMb f = permPrettyMb (\ns_pp a -> f ns_pp (permPrettyM a))
 
 instance PermPretty a => PermPretty (Mb (ctx :: RList CrucibleType) a) where
   permPrettyM =
@@ -2126,37 +2144,60 @@ mbMbRangeForType :: KnownCruCtx ctx -> Mb ctx (MbRangeForType a) ->
                     MbRangeForType a
 -- If the range can be lifted out of the binding, do so
 mbMbRangeForType ctx mb_rngft
-  | Just rngft <- partialSubst (emptyPSubst $ knownCtxToCruCtx ctx) mb_rngft
+  | Just rngft <- partialSubst (emptyPSubst ctx) mb_rngft
   = rngft
 -- Otherwise, add the new variables to the existing bound variables
 mbMbRangeForType ctx mb_rngft = case mbMatch mb_rngft of
-  [nuMP| MbRangeForLLVMType vars rng |] ->
+  [nuMP| MbRangeForLLVMType vars rw l rng |] ->
     MbRangeForLLVMType (RL.append ctx $ mbLift vars)
+    (mbCombine (RL.map (const Proxy) (mbLift vars)) rw)
+    (mbCombine (RL.map (const Proxy) (mbLift vars)) l)
     (mbCombine (RL.map (const Proxy) (mbLift vars)) rng)
-  [nuMP| MbRangeForStructType prxs memb rng |] ->
-    MbRangeForStructType (mbLift prxs) (mbLift memb) $ mbMbRangeForType ctx rng
 
 -- | Add a 'PermOffset' to an 'MbRangeForType
 offsetMbRangeForType :: PermOffset a -> MbRangeForType a -> MbRangeForType a
 offsetMbRangeForType NoPermOffset rng = rng
-offsetMbRangeForType (LLVMPermOffset off) (MbRangeForLLVMType vars mb_rng) =
-  MbRangeForLLVMType vars $ fmap (offsetBVRange off) mb_rng
+offsetMbRangeForType (LLVMPermOffset off) (MbRangeForLLVMType
+                                           vars mb_rw mb_l mb_rng) =
+  MbRangeForLLVMType vars mb_rw mb_l $ fmap (offsetBVRange off) mb_rng
 
--- | Like 'bvRangeDelete' but for 'MbRangeForType's
+-- | Test if the first read/write modality in a binding is "covered" by the
+-- second, meaning a permission relative to the second can be coerced to a
+-- similar permission relative to the first
+mbRWModsCoveredBy ::
+  Mb (ctx1 :: RList CrucibleType) (PermExpr RWModalityType) ->
+  Mb (ctx2 :: RList CrucibleType) (PermExpr RWModalityType) -> Bool
+mbRWModsCoveredBy _ [nuP| PExpr_Write |] = True
+mbRWModsCoveredBy [nuP| PExpr_Read |] _ = True
+mbRWModsCoveredBy mb_rw1 mb_rw2 =
+  fromMaybe False ((==) <$> tryLift mb_rw1 <*> tryLift mb_rw2)
+
+-- | Test if the first lifetime modality in a binding is "covered" by the
+-- second, meaning a permission relative to the second can be coerced to a
+-- similar permission relative to the first
+mbLifetimeCoveredBy ::
+  Mb (ctx1 :: RList CrucibleType) (PermExpr LifetimeType) ->
+  Mb (ctx2 :: RList CrucibleType) (PermExpr LifetimeType) -> Bool
+mbLifetimeCoveredBy _ [nuP| PExpr_Always |] = True
+mbLifetimeCoveredBy mb_l1 mb_l2 =
+  fromMaybe False ((==) <$> tryLift mb_l1 <*> tryLift mb_l2)
+
+-- | Delete one range from another, where the deletion only happens if the
+-- modalities of the RHS cover those of the LHS
 mbRangeFTDelete :: MbRangeForType a -> MbRangeForType a ->
                    [MbRangeForType a]
-mbRangeFTDelete (MbRangeForLLVMType vars1 mb_rng1) (MbRangeForLLVMType
-                                                    vars2 mb_rng2) =
-  map (MbRangeForLLVMType (RL.append vars1 vars2)) $ mbList $
-  mbCombine (RL.map (const Proxy) vars2) $
-  flip fmap mb_rng1 $ \rng1 -> flip fmap mb_rng2 $ \rng2 ->
-  bvRangeDelete rng1 rng2
-mbRangeFTDelete (MbRangeForStructType prxs1 memb1 rng1) (MbRangeForStructType
-                                                         _ memb2 rng2)
-  | Just Refl <- testEquality memb1 memb2 =
-    map (MbRangeForStructType prxs1 memb1) $ mbRangeFTDelete rng1 rng2
-mbRangeFTDelete rng1@(MbRangeForStructType _ _ _) (MbRangeForStructType _ _ _) =
-  [rng1]
+mbRangeFTDelete
+  (MbRangeForLLVMType vars1 mb_rw1 mb_l1 mb_rng1)
+  (MbRangeForLLVMType vars2 mb_rw2 mb_l2 mb_rng2)
+  | mbRWModsCoveredBy mb_rw1 mb_rw2
+  , mbLifetimeCoveredBy mb_l1 mb_l2
+  , mb_rw2' <- extMbMultiL (rlToProxies vars1) mb_rw2
+  , mb_l2' <- extMbMultiL (rlToProxies vars1) mb_l2 =
+    map (MbRangeForLLVMType (RL.append vars1 vars2) mb_rw2' mb_l2') $ mbList $
+    mbCombine (RL.map (const Proxy) vars2) $
+    flip fmap mb_rng1 $ \rng1 -> flip fmap mb_rng2 $ \rng2 ->
+    bvRangeDelete rng1 rng2
+mbRangeFTDelete mb_rng _ = [mb_rng]
 
 -- | Delete all ranges in any of a list of ranges from 
 mbRangeFTsDelete :: [MbRangeForType a] -> [MbRangeForType a] ->
@@ -2165,20 +2206,19 @@ mbRangeFTsDelete rngs_l rngs_r =
   foldr (\rng_r rngs -> concatMap (flip mbRangeFTDelete rng_r) rngs) rngs_l rngs_r
 
 -- | Find all the offsets in the first 'MbRangeForType' that could be in the
--- second, in a manner similar to 'bvRangeSubsetTo'
+-- second, in a manner similar to 'bvRangeSubsetTo', preserving the modalities
+-- of the first
 mbRangeFTSubsetTo :: MbRangeForType a -> MbRangeForType a ->
                      [MbRangeForType a]
-mbRangeFTSubsetTo (MbRangeForLLVMType vars1 mb_rng1) (MbRangeForLLVMType
-                                                      vars2 mb_rng2) =
-  map (MbRangeForLLVMType (RL.append vars1 vars2)) $ mbList $
-  mbCombine (RL.map (const Proxy) vars2) $
-  flip fmap mb_rng1 $ \rng1 -> flip fmap mb_rng2 $ \rng2 ->
-  bvRangeSubsetTo rng1 rng2
-mbRangeFTSubsetTo (MbRangeForStructType prxs1 memb1 rng1) (MbRangeForStructType
-                                                           _ memb2 rng2)
-  | Just Refl <- testEquality memb1 memb2 =
-    map (MbRangeForStructType prxs1 memb1) $ mbRangeFTSubsetTo rng1 rng2
-mbRangeFTSubsetTo (MbRangeForStructType _ _ _) (MbRangeForStructType _ _ _) = []
+mbRangeFTSubsetTo
+  (MbRangeForLLVMType vars1 mb_rw1 mb_l1 mb_rng1)
+  (MbRangeForLLVMType vars2 _ _ mb_rng2)
+  | mb_rw1' <- extMbMulti (rlToProxies vars2) mb_rw1
+  , mb_l1' <- extMbMulti (rlToProxies vars2) mb_l1 =
+    map (MbRangeForLLVMType (RL.append vars1 vars2) mb_rw1' mb_l1') $ mbList $
+    mbCombine (RL.map (const Proxy) vars2) $
+    flip fmap mb_rng1 $ \rng1 -> flip fmap mb_rng2 $ \rng2 ->
+    bvRangeSubsetTo rng1 rng2
 
 -- | Find all the offsets in an 'MbRangeForType' in the first list that could be
 -- in one in the second, in a manner similar to 'bvRangesSubsetTo'
@@ -2618,6 +2658,11 @@ mbLLVMArrayLen = mbMapCl $(mkClosed [| llvmArrayLen |])
 -- | Get the length-in-binding of an array permission in binding
 mbLLVMArrayLenBytes :: (1 <= w, KnownNat w) => Mb ctx (LLVMArrayPerm w) -> Mb ctx (PermExpr (BVType w))
 mbLLVMArrayLenBytes = mbMapCl $(mkClosed [| llvmArrayLengthBytes |])
+
+-- | Get the range of offsets of an array permission in binding
+mbLLVMArrayRange :: (1 <= w, KnownNat w) => Mb ctx (LLVMArrayPerm w) ->
+                    Mb ctx (BVRange w)
+mbLLVMArrayRange = mbMapCl $(mkClosed [| llvmArrayRange |])
 
 -- | Get the stride of an array permission in binding
 mbLLVMArrayStride :: Mb ctx (LLVMArrayPerm w) -> Bytes
@@ -3508,12 +3553,15 @@ instance PermPretty (BVRange w) where
     <$> permPrettyM e1 <*> permPrettyM e2
 
 instance PermPretty (MbRangeForType a) where
-  permPrettyM (MbRangeForLLVMType _ mb_rng) = permPrettyM mb_rng
-  permPrettyM (MbRangeForStructType prxs memb rng) =
-    do pp_rng <- permPrettyM rng
-       return $ hcat $ intersperse comma $
-         RL.toList $ RL.set memb (Constant pp_rng) $
-         RL.map (const $ Constant PP.emptyDoc) prxs
+  permPrettyM (MbRangeForLLVMType _ mb_rw mb_l mb_rng) =
+    permPrettyMb
+    (\ns_pp (rw,l,rng) ->
+      do pp_rw <- permPrettyM rw
+         pp_l_prefix <- permPrettyLifetimePrefix l
+         pp_rng <- permPrettyM rng
+         return (ppEncList True (RL.toList ns_pp) <> dot <> line <>
+                 pp_l_prefix <> parens pp_rw <> pp_rng)) $
+    mbMap3 (,,) mb_rw mb_l mb_rng
 
 instance PermPretty (BVProp w) where
   permPrettyM (BVProp_Eq e1 e2) =
@@ -4239,7 +4287,7 @@ llvmShapeLength (PExpr_ExShape mb_sh) =
   -- we cannot return it
   case mbMatch $ fmap llvmShapeLength mb_sh of
     [nuMP| Just mb_len |] ->
-      partialSubst (emptyPSubst $ singletonCruCtx $ knownRepr) mb_len
+      partialSubst (emptyPSubst (MNil :>: Proxy)) mb_len
     _ -> Nothing
 llvmShapeLength PExpr_FalseShape = Just $ bvInt 0
 
@@ -4321,17 +4369,14 @@ instance GetOffsets ValuePerm where
 
 instance GetOffsets AtomicPerm where
   getOffsets (Perm_LLVMField fp) =
-    [rangeForLLVMType $ llvmFieldRange fp]
+    [rangeForLLVMType
+     (llvmFieldRW fp) (llvmFieldLifetime fp) (llvmFieldRange fp)]
   getOffsets (Perm_LLVMArray ap) =
-    [rangeForLLVMType $ llvmArrayRange ap]
+    [rangeForLLVMType
+     (llvmArrayRW ap) (llvmArrayLifetime ap) (llvmArrayRange ap)]
   getOffsets (Perm_LLVMBlock bp) =
-    [rangeForLLVMType $ llvmBlockRange bp]
-  getOffsets (Perm_Struct ps) =
-    concat $ RL.mapToList (\memb ->
-                            map (MbRangeForStructType
-                                 (RL.map (const Proxy) ps) memb) $
-                            getOffsets $ RL.get memb ps) $
-    RL.members ps
+    [rangeForLLVMType
+     (llvmBlockRW bp) (llvmBlockLifetime bp) (llvmBlockRange bp)]
   getOffsets _ = []
 
 
@@ -4917,6 +4962,15 @@ llvmArrayCellsToOffsets :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
 llvmArrayCellsToOffsets ap (BVRange cell num_cells) =
   BVRange (llvmArrayCellToOffset ap cell) (llvmArrayCellToOffset ap num_cells)
 
+-- | Convert a range of absolute byte offsets to a range of cell numbers in an
+-- array permission, if possible
+llvmArrayAbsOffsetsToCells :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                              BVRange w -> Maybe (BVRange w)
+llvmArrayAbsOffsetsToCells ap rng
+  | Just cell <- matchLLVMArrayCell ap (bvRangeOffset rng) =
+    Just $ BVRange cell (bvDiv (bvRangeLength rng) (llvmArrayStride ap))
+llvmArrayAbsOffsetsToCells _ _ = Nothing
+
 -- | Return the clopen range @[0,len)@ of the cells of an array permission
 llvmArrayCells :: (1 <= w, KnownNat w) => LLVMArrayPerm w -> BVRange w
 llvmArrayCells ap = BVRange (bvInt 0) (llvmArrayLen ap)
@@ -4991,17 +5045,26 @@ permToLLVMArrayBorrow ap p =
 
     _ -> Nothing
 
+-- | Get the range of offsets spanned by a borrow relative to the start of an
+-- array permission
 llvmArrayBorrowRange :: (1 <= w, KnownNat w) =>
                         LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
 llvmArrayBorrowRange ap borrow =
   llvmArrayCellsToOffsets ap (llvmArrayBorrowCells borrow)
 
+-- | Get the "absolute" range of offsets spanned by a borrow relative to the
+-- pointer with this array permission
 llvmArrayAbsBorrowRange :: (1 <= w, KnownNat w) =>
-                        LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
+                           LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
 llvmArrayAbsBorrowRange ap borrow =
   range { bvRangeOffset = bvAdd (llvmArrayOffset ap) (bvRangeOffset range) }
   where
     range = llvmArrayCellsToOffsets ap (llvmArrayBorrowCells borrow)
+
+-- | Get the absolute offset at which an array borrow starts
+llvmArrayBorrowAbsOffset :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                            LLVMArrayBorrow w -> PermExpr (BVType w)
+llvmArrayBorrowAbsOffset ap b = bvRangeOffset $ llvmArrayAbsBorrowRange ap b
 
 -- | Add a borrow to an 'LLVMArrayPerm'
 llvmArrayAddBorrow :: LLVMArrayBorrow w -> LLVMArrayPerm w -> LLVMArrayPerm w
@@ -5066,7 +5129,7 @@ llvmArrayBorrowsPermuteTo ap bs =
 -- | Add a cell offset to an 'LLVMArrayBorrow', meaning we change the borrow to
 -- be relative to an array with that many more cells added to the front
 cellOffsetLLVMArrayBorrow :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-                              LLVMArrayBorrow w -> LLVMArrayBorrow w
+                             LLVMArrayBorrow w -> LLVMArrayBorrow w
 cellOffsetLLVMArrayBorrow off (FieldBorrow ix) =
   FieldBorrow (bvAdd ix off)
 cellOffsetLLVMArrayBorrow off (RangeBorrow rng) =
@@ -5079,6 +5142,8 @@ llvmArrayBorrowCells :: (KnownNat w, 1 <= w) => LLVMArrayBorrow w -> BVRange w
 llvmArrayBorrowCells (FieldBorrow idx) = bvRangeOfIndex idx
 llvmArrayBorrowCells (RangeBorrow r) = r
 
+-- FIXME: delete? not used, and should be implementable via bvRangeDelete
+{-
 -- | Given a borrow @borrow@ and range (of borrowed indices) @rng@,
 -- delete @rng@ from @borrow@, and return the borrows that describe
 -- the remaining borrowed cells.
@@ -5099,27 +5164,42 @@ llvmArrayBorrowRangeDelete borrow rng =
       , bvEq (bvRangeLength new_range) (bvInt 1) = Just $ FieldBorrow idx
       | otherwise =
         error "llvmArrayBorrowRangeDelete: found non unit new_range for FieldBorrow"
+-}
 
--- | Return whether or not the borrows in @ap@ cover the range of cells [0, len). Specifically,
--- if the borrowed cells (as ranges) can be arranged in as a sequence of non-overlapping but contiguous
--- ranges (in the sense of @bvCouldEqual@) that extends at least as far as @len@ (in the sense of @bvLeq@)
-llvmArrayIsBorrowed ::
-  (HasCallStack, 1 <= w, KnownNat w) =>
-  LLVMArrayPerm w ->
-  Bool
+-- | Take in a range @rng@ and a list of ranges @rngs@ and try to find a
+-- sequence of non-overlapping but contiguous ranges in @rngs@ that covers the
+-- desired range @rng@
+gatherCoveringRanges :: (1 <= w, KnownNat w) => BVRange w -> [BVRange w] ->
+                        Maybe [BVRange w]
+gatherCoveringRanges rng _ | bvIsZero (bvRangeLength rng) = Just []
+gatherCoveringRanges rng rngs
+  | Just i <- findIndex (bvInRange (bvRangeOffset rng)) rngs
+  , rng' <- rngs!!i =
+    -- If rng' covers all of rng, then we are done
+    if bvRangeSubset rng rng' then Just [rng'] else
+      (rng' :) <$>
+      gatherCoveringRanges (bvRangeSuffix (bvRangeEnd rng') rng)
+                           (deleteNth i rngs)
+gatherCoveringRanges _ _ = Nothing
+
+-- | Test if the borrows in @ap@ cover a given range of offsets. That is, test
+-- if the ranges of the borrows in @ap@ can be arranged as a sequence of
+-- non-overlapping but contiguous ranges that extends at least as far as @len@
+-- (in the sense of @bvLeq@).
+llvmArrayRangeIsBorrowed :: (HasCallStack, 1 <= w, KnownNat w) =>
+                            LLVMArrayPerm w -> BVRange w -> Bool
+llvmArrayRangeIsBorrowed ap rng =
+  isJust $ gatherCoveringRanges rng $
+  map (llvmArrayBorrowAbsOffsets ap) (llvmArrayBorrows ap)
+
+-- | Test whether the borrows in @ap@ cover the range of cells @[0, len)@. That
+-- is, test if the ranges of the borrows in @ap@ can be arranged as a sequence
+-- of non-overlapping but contiguous ranges that extends at least as far as
+-- @len@ (in the sense of @bvLeq@)
+llvmArrayIsBorrowed :: (HasCallStack, 1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                       Bool
 llvmArrayIsBorrowed ap =
-  go (bvInt 0) (llvmArrayBorrowCells <$> llvmArrayBorrows ap)
-  where
-    end = bvRangeEnd (llvmArrayCells ap)
-
-    go off borrows
-      | bvLeq end off
-      = True
-      | Just i <- findIndex (permForOff off) borrows
-      = go (bvAdd off (bvRangeLength (borrows!!i))) (deleteNth i borrows)
-    go _ _ = False
-
-    permForOff o b = bvCouldEqual o (bvRangeOffset b)
+  llvmArrayRangeIsBorrowed ap (llvmArrayAbsOffsets ap)
 
 -- | Test if a byte offset @o@ statically aligns with a statically-known offset
 -- into some array cell, i.e., whether
@@ -5288,6 +5368,7 @@ llvmMakeSubArray ap off len
   , cell_rng <- BVRange cell len =
     ap { llvmArrayOffset = off, llvmArrayLen = len,
          llvmArrayBorrows =
+           map (cellOffsetLLVMArrayBorrow (bvNegate cell)) $
            filter (not . all bvPropHolds .
                    llvmArrayBorrowsDisjoint (RangeBorrow cell_rng)) $
            llvmArrayBorrows ap }
@@ -5327,22 +5408,41 @@ llvmPermContainsOffsetBool :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
 llvmPermContainsOffsetBool off p =
   maybe False snd $ llvmPermContainsOffset off p
 
--- | Test if an atomic LLVM permission contains (in the sense of 'bvPropHolds')
--- all offsets in a given range
-llvmAtomicPermContainsRange :: (1 <= w, KnownNat w) => BVRange w ->
-                               AtomicPerm (LLVMPointerType w) -> Bool
-llvmAtomicPermContainsRange rng (Perm_LLVMArray ap)
+-- | Build the propositions stating that an atomic LLVM permission contains all
+-- offsets in a given range
+llvmAtomicPermContainsRangeProps :: (1 <= w, KnownNat w) => BVRange w ->
+                                    AtomicPerm (LLVMPointerType w) ->
+                                    Maybe [BVProp w]
+llvmAtomicPermContainsRangeProps rng (Perm_LLVMArray ap)
   | Just ix1 <- matchLLVMArrayIndex ap (bvRangeOffset rng)
   , Just ix2 <- matchLLVMArrayIndex ap (bvRangeEnd rng)
   , props <- llvmArrayBorrowInArray ap (RangeBorrow $ BVRange
                                         (llvmArrayIndexCell ix1)
                                         (llvmArrayIndexCell ix2)) =
+    Just props
+llvmAtomicPermContainsRangeProps rng (Perm_LLVMField fp) =
+  Just $ bvPropRangeSubset rng (llvmFieldRange fp)
+llvmAtomicPermContainsRangeProps rng (Perm_LLVMBlock bp) =
+  Just $ bvPropRangeSubset rng (llvmBlockRange bp)
+llvmAtomicPermContainsRangeProps _ _ = Nothing
+
+-- | Test if an atomic LLVM permission contains (in the sense of 'bvPropHolds')
+-- all offsets in a given range
+llvmAtomicPermContainsRange :: (1 <= w, KnownNat w) => BVRange w ->
+                               AtomicPerm (LLVMPointerType w) -> Bool
+llvmAtomicPermContainsRange rng p
+  | Just props <- llvmAtomicPermContainsRangeProps rng p =
     all bvPropHolds props
-llvmAtomicPermContainsRange rng (Perm_LLVMField fp) =
-  bvRangeSubset rng (llvmFieldRange fp)
-llvmAtomicPermContainsRange rng (Perm_LLVMBlock bp) =
-  bvRangeSubset rng (llvmBlockRange bp)
 llvmAtomicPermContainsRange _ _ = False
+
+-- | Test if an atomic LLVM permission could contain (in the sense of
+-- 'bvPropCouldHold') all offsets in a given range
+llvmAtomicPermCouldContainRange :: (1 <= w, KnownNat w) => BVRange w ->
+                                   AtomicPerm (LLVMPointerType w) -> Bool
+llvmAtomicPermCouldContainRange rng p
+  | Just props <- llvmAtomicPermContainsRangeProps rng p =
+    all bvPropCouldHold props
+llvmAtomicPermCouldContainRange _ _ = False
 
 -- | Test if an atomic LLVM permission has a range that overlaps with (in the
 -- sense of 'bvPropHolds') the offsets in a given range
@@ -5397,7 +5497,7 @@ llvmArrayToBlocks _ = Nothing
 llvmArrayBorrowOffsets :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
                           LLVMArrayBorrow w -> BVRange w
 llvmArrayBorrowOffsets ap (FieldBorrow ix) =
-  bvRangeOfIndex $ llvmArrayCellToOffset ap ix
+  BVRange (llvmArrayCellToOffset ap ix) (bvInt $ toInteger $ llvmArrayStride ap)
 llvmArrayBorrowOffsets ap (RangeBorrow r) = llvmArrayCellsToOffsets ap r
 
 -- | Get the range of byte offsets represented by an array borrow relative to
@@ -6501,11 +6601,11 @@ instance SubstVar s m => Substable s (BVRange w) m where
     BVRange <$> genSubst s e1 <*> genSubst s e2
 
 instance SubstVar s m => Substable s (MbRangeForType a) m where
-  genSubst s (mbMatch -> [nuMP| MbRangeForLLVMType vars rng |]) =
+  genSubst s (mbMatch -> [nuMP| MbRangeForLLVMType vars rw l rng |]) =
     MbRangeForLLVMType (mbLift vars) <$>
+    genSubstMb (RL.map (const Proxy) $ mbLift vars) s rw <*>
+    genSubstMb (RL.map (const Proxy) $ mbLift vars) s l <*>
     genSubstMb (RL.map (const Proxy) $ mbLift vars) s rng
-  genSubst s (mbMatch -> [nuMP| MbRangeForStructType prxs memb rng |]) =
-    MbRangeForStructType (mbLift prxs) (mbLift memb) <$> genSubst s rng
 
 instance SubstVar s m => Substable s (BVProp w) m where
   genSubst s mb_prop = case mbMatch mb_prop of
@@ -6880,11 +6980,8 @@ newtype PartialSubst ctx =
 
 -- | Build an empty partial substitution for a given set of variables, i.e., the
 -- partial substitution that assigns no expressions to those variables
-emptyPSubst :: CruCtx ctx -> PartialSubst ctx
-emptyPSubst = PartialSubst . helper where
-  helper :: CruCtx ctx -> RAssign PSubstElem ctx
-  helper CruCtxNil = MNil
-  helper (CruCtxCons ctx' _) = helper ctx' :>: PSubstElem Nothing
+emptyPSubst :: RAssign any ctx -> PartialSubst ctx
+emptyPSubst = PartialSubst . RL.map (\_ -> PSubstElem Nothing)
 
 -- | Return the set of variables that have been assigned values by a partial
 -- substitution inside a binding for all of its variables
@@ -6981,6 +7078,12 @@ partialSubst = genSubst
 partialSubstForce :: Substable PartialSubst a Maybe => PartialSubst ctx ->
                      Mb ctx a -> String -> a
 partialSubstForce s mb msg = fromMaybe (error msg) $ partialSubst s mb
+
+-- | Try to lift an expression out of a multi-binding by substituting with the
+-- empty partial substitution
+tryLift :: Substable PartialSubst a Maybe =>
+           Mb (ctx :: RList CrucibleType) a -> Maybe a
+tryLift mb_a = partialSubst (emptyPSubst $ mbToProxy mb_a) mb_a
 
 
 ----------------------------------------------------------------------
