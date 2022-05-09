@@ -4,7 +4,7 @@ cabal-version:       2.4
 -- http://haskell.org/cabal/users-guide/
 
 name:                saw-remote-api
-version:             0.9.1
+version:             0.9.2
 -- synopsis:
 -- description:
 -- bug-reports:

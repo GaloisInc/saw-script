@@ -252,7 +252,7 @@ class SAWConnection:
               expr: cryptoltypes.CryptolJSON,
               timeout : Optional[float] = None) -> Command:
         """Create an instance of the `EvalBool` command. Documentation on the purpose and
-        use of this command is associated with the top-level `eval_int` function.
+        use of this command is associated with the top-level `eval_bool` function.
         """
         self.most_recent_result = EvalBool(self, expr, timeout)
         return self.most_recent_result

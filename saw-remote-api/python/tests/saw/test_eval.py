@@ -1,12 +1,8 @@
-from cryptol import cryptoltypes
+import cryptol
 import saw_client as saw
 
 import unittest
 from pathlib import Path
-
-
-def cry(exp):
-    return cryptoltypes.CryptolLiteral(exp)
 
 class ProverTest(unittest.TestCase):
 
@@ -15,10 +11,10 @@ class ProverTest(unittest.TestCase):
 
         if __name__ == "__main__": saw.view(saw.LogResults())
 
-        expr1 = cry('(6 : [8]) * 7')
+        expr1 = cryptol.cry_f('(6 : [8]) * 7')
         self.assertEqual(saw.eval_int(expr1), 42)
 
-        expr2 = cry('(1 < 2) : Bit')
+        expr2 = cryptol.cry_f('(1 < 2) : Bit')
         self.assertTrue(saw.eval_bool(expr2))
 
 

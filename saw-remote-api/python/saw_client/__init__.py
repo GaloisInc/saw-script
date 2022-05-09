@@ -658,7 +658,7 @@ def eval_int(expr: cryptoltypes.CryptolJSON) -> int:
         raise ValueError(str(v) + " is not an integer")
     return v
 
-def eval_bool(expr: cryptoltypes.CryptolJSON) -> int:
+def eval_bool(expr: cryptoltypes.CryptolJSON) -> bool:
     """Atempts to evaluate the given expression as a concrete boolean.
     """
     conn = __get_designated_connection()

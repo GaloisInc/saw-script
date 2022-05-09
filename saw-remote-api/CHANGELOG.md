@@ -1,7 +1,11 @@
 # Revision history for saw-remote-api
 
+## 0.9.2 -- 2022-05-09
 
-## 0.9.1 -- YYYY-MM-DD
+* Introduced new methods `SAW/eval int` and `SAW/eval bool` that allow the
+  evaluation of Cryptol expressions into Python values.
+
+## 0.9.1 -- 2021-12-21
 
 * `SAW/set option`'s `"option"` parameter is now allowed to be `"What4 eval"`,
   which controls whether to enable or disable What4 translation for SAWCore

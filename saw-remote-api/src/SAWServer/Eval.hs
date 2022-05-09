@@ -34,9 +34,12 @@ import SAWServer
 import SAWServer.CryptolExpression ( CryptolModuleException(..), getTypedTermOfCExp )
 import SAWServer.TopLevel ( tl )
 
-data EvalParams a cryptolExpr =
+-- The phantom type here is used to prevent a functional dependency conflict when
+-- writing instances of Doc.DescribedMethod, and should match the type parameter
+-- of EvalResult
+data EvalParams evalty cryptolExpr =
   EvalParams
-  { evalIntExpr :: cryptolExpr
+  { evalExpr :: cryptolExpr
   }
 
 instance (FromJSON cryptolExpr) => FromJSON (EvalParams a cryptolExpr) where
@@ -44,9 +47,9 @@ instance (FromJSON cryptolExpr) => FromJSON (EvalParams a cryptolExpr) where
     withObject "SAW/eval params" $ \o ->
     EvalParams <$> o .: "expr"
 
-data EvalResult a =
+data EvalResult evalty =
   EvalResult
-  { evalValue :: a
+  { evalValue :: evalty
   }
 
 instance ToJSON a => ToJSON (EvalResult a) where
@@ -78,7 +81,7 @@ eval f params = do
   fileReader <- Argo.getFileReader
   let cenv = SV.rwCryptol (view sawTopLevelRW state)
       bic = view sawBIC state
-  cexp <- getCryptolExpr $ evalIntExpr params
+  cexp <- getCryptolExpr $ evalExpr params
   (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader (SV.biSharedContext bic) cenv cexp
   t <- case eterm of
          Right (t, _) -> return t -- TODO: report warnings

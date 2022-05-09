@@ -1,6 +1,11 @@
 # Revision history for saw-client
 
-## 0.9.1 -- YYYY-MM-DD
+## 0.9.2 -- 2022-05-09
+
+* Added two new commands, `eval_int` and `eval_bool`, that evaluate Cryptol
+  expressions to Python integers or booleans.
+
+## 0.9.1 -- 2021-12-21
 
 * Add a `set_option` command to `saw_client` that allows enabling and disabling
   global SAW options. For example, SAWScript's `enable_lax_pointer_ordering` is
