@@ -40,14 +40,14 @@ heapster_typecheck_fun env "return_X"
 
 heapster_set_translation_checks env false;
 heapster_typecheck_fun env "processBlock"
-  "(num:bv 64). arg0:int64_ptr<>, arg1:int64_ptr<>, arg2:int64_ptr<>, \
-              \ arg3:int64_ptr<>, arg4:int64_ptr<>, arg5:int64_ptr<>, \
-              \ arg6:int64_ptr<>, arg7:int64_ptr<>, \
-              \ arg8:array(R,0,<16*num,*8,fieldsh(int64<>)) -o \
-              \ arg0:int64_ptr<>, arg1:int64_ptr<>, arg2:int64_ptr<>, \
-              \ arg3:int64_ptr<>, arg4:int64_ptr<>, arg5:int64_ptr<>, \
-              \ arg6:int64_ptr<>, arg7:int64_ptr<>, \
-              \ arg8:array(R,0,<16*num,*8,fieldsh(int64<>)), ret:true";
+  "(). arg0:int64_ptr<>, arg1:int64_ptr<>, arg2:int64_ptr<>, \
+     \ arg3:int64_ptr<>, arg4:int64_ptr<>, arg5:int64_ptr<>, \
+     \ arg6:int64_ptr<>, arg7:int64_ptr<>, \
+     \ arg8:array(R,0,<16,*8,fieldsh(int64<>)) -o \
+     \ arg0:int64_ptr<>, arg1:int64_ptr<>, arg2:int64_ptr<>, \
+     \ arg3:int64_ptr<>, arg4:int64_ptr<>, arg5:int64_ptr<>, \
+     \ arg6:int64_ptr<>, arg7:int64_ptr<>, \
+     \ arg8:array(R,0,<16,*8,fieldsh(int64<>)), ret:true";
 
 // FIXME: This translation contains errors
 heapster_set_translation_checks env false;
@@ -83,10 +83,9 @@ processBlock <- parse_core_mod "SHA512" "processBlock";
 processBlocks <- parse_core_mod "SHA512" "processBlocks";
 
 // Test that every function refines itself
-run_test "processBlocks |= processBlocks" (mr_solver processBlocks processBlocks) true;
-// FIXME: Why does this hang?
+// run_test "processBlocks |= processBlocks" (mr_solver processBlocks processBlocks) true;
 // run_test "processBlock |= processBlock" (mr_solver processBlock processBlock) true;
-run_test "round_16_80 |= round_16_80" (mr_solver round_16_80 round_16_80) true;
+// run_test "round_16_80 |= round_16_80" (mr_solver round_16_80 round_16_80) true;
 // run_test "round_00_15 |= round_00_15" (mr_solver round_00_15 round_00_15) true;
 
 import "sha512.cry";
