@@ -6734,7 +6734,8 @@ proveVarLLVMArrayH x psubst ps mb_ap
   , Just len <- partialSubst psubst $ mbLLVMArrayLen mb_ap
   , Just lenBytes <- partialSubst psubst $ mbLLVMArrayLenBytes mb_ap
   , stride <- mbLLVMArrayStride mb_ap
-  , Just i   <- findIndex (suitableAP off lenBytes stride) ps
+  , Just bs  <- partialSubst psubst $ mbLLVMArrayBorrows mb_ap
+  , Just i   <- findIndex (suitableAP off lenBytes stride bs) ps
   , Perm_LLVMArray ap_lhs <- ps!!i =
     implVerbTraceM (\info -> pretty "proveVarLLVMArrayH case 1: using" <+>
                              permPretty info ap_lhs) >>>
@@ -6742,7 +6743,7 @@ proveVarLLVMArrayH x psubst ps mb_ap
     recombinePerm x (ValPerm_Conj ps') >>>
 
     partialSubstForceM (mbLLVMArrayBorrows mb_ap)
-    "proveVarLLVMArrayH: incomplete array borrows" >>>= \bs ->
+    "proveVarLLVMArrayH: incomplete array borrows" >>>
 
     if bvEq off (llvmArrayOffset ap_lhs) && bvEq len (llvmArrayLen ap_lhs) then
       proveVarLLVMArray_FromArray x ap_lhs len bs mb_ap
@@ -6752,22 +6753,26 @@ proveVarLLVMArrayH x psubst ps mb_ap
       proveVarLLVMArray_FromArray x (llvmMakeSubArray ap_lhs off len) len bs mb_ap
   where
     -- Test if an atomic permission is a "suitable" array permission for the
-    -- given offset, length, and stride, meaning that it has the required
-    -- stride, could contain the offset and length, and does not have all of the
-    -- offset and length borrowed
+    -- given offset, length, stride, and borrows, meaning that it has the
+    -- given stride, could contain the given offset and length, and either
+    -- has exactly the given borrows or at least does not have all of the
+    -- given offset and length borrowed
     suitableAP ::
       (1 <= w, KnownNat w) =>
       PermExpr (BVType w) -> PermExpr (BVType w) -> Bytes ->
-      AtomicPerm (LLVMPointerType w) -> Bool
-    suitableAP off len stride (Perm_LLVMArray ap) =
+      [LLVMArrayBorrow w] -> AtomicPerm (LLVMPointerType w) -> Bool
+    suitableAP off len stride bs (Perm_LLVMArray ap) =
       -- Test that the strides are equal
       llvmArrayStride ap == stride &&
-      -- Make sure the range [off,len) is not fully borrowed
-      not (llvmArrayRangeIsBorrowed ap (BVRange off len)) &&
       -- Test if this permission *could* cover the desired off/len
       all bvPropCouldHold (bvPropRangeSubset (BVRange off len)
-                                             (llvmArrayAbsOffsets ap))
-    suitableAP _ _ _ _ = False
+                                             (llvmArrayAbsOffsets ap)) &&
+      -- Test that either the sets of borrows are equal ...
+      (all (flip elem bs) (llvmArrayBorrows ap) &&
+       all (flip elem (llvmArrayBorrows ap)) bs) ||
+      -- ...or the range [off,len) is not fully borrowed
+      not (llvmArrayRangeIsBorrowed ap (BVRange off len))
+    suitableAP _ _ _ _ _ = False
 
 -- Check if there is a block that contains the required offset and length, in
 -- which case eliminate it, allowing us to either satisfy way 4 (eliminate a
@@ -6809,8 +6814,8 @@ proveVarLLVMArrayH x psubst ps mb_ap
   , len <- llvmArrayLen ap
   , lhs_cells@(lhs_cell_rng:_) <- concatMap (permCells ap) ps
   , rhs_cells <- map llvmArrayBorrowCells (llvmArrayBorrows ap)
-  , Just cells <- gatherCoveringRanges (llvmArrayCells ap) (lhs_cells ++
-                                                            rhs_cells)
+  , Just cells <- gatherCoveringRanges (llvmArrayCells ap) (rhs_cells ++
+                                                            lhs_cells)
   , bs <- map cellRangeToBorrow cells
   , ap_borrowed <- ap { llvmArrayBorrows = bs }
   , cell_bp <- blockForCell ap (bvRangeOffset lhs_cell_rng) =

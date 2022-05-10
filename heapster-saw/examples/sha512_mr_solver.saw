@@ -28,7 +28,7 @@ heapster_typecheck_fun env "round_16_80"
     \ arg2:int64_ptr<>, arg3:int64_ptr<>, arg4:int64_ptr<>, arg5:int64_ptr<>, \
     \ arg6:int64_ptr<>, arg7:int64_ptr<>, arg8:int64_ptr<>, arg9:int64_ptr<>, \
     \ arg10:array(W,0,<16,*8,fieldsh(int64<>)), \
-    \ arg11:int64_ptr<>, arg12:int64_ptr<>, arg13:int64_ptr<> -o \
+    \ arg11:ptr((W,0) |-> true), arg12:ptr((W,0) |-> true), arg13:int64_ptr<> -o \
     \ arg2:int64_ptr<>, arg3:int64_ptr<>, arg4:int64_ptr<>, arg5:int64_ptr<>, \
     \ arg6:int64_ptr<>, arg7:int64_ptr<>, arg8:int64_ptr<>, arg9:int64_ptr<>, \
     \ arg10:array(W,0,<16,*8,fieldsh(int64<>)), \
@@ -37,8 +37,6 @@ heapster_typecheck_fun env "round_16_80"
 heapster_typecheck_fun env "return_X"
   "(). arg0:array(W,0,<16,*8,fieldsh(int64<>)) -o \
      \ arg0:array(W,0,<16,*8,fieldsh(int64<>))";
-
-heapster_set_debug_level env 1;
 
 heapster_set_translation_checks env false;
 heapster_typecheck_fun env "processBlock"
@@ -51,9 +49,7 @@ heapster_typecheck_fun env "processBlock"
               \ arg6:int64_ptr<>, arg7:int64_ptr<>, \
               \ arg8:array(R,0,<16*num,*8,fieldsh(int64<>)), ret:true";
 
-heapster_export_coq env "sha512_mr_solver_gen.v";
-
-/*
+// FIXME: This translation contains errors
 heapster_set_translation_checks env false;
 heapster_typecheck_fun env "processBlocks"
   "(num:bv 64). arg0:array(W,0,<8,*8,fieldsh(int64<>)), \
@@ -62,6 +58,8 @@ heapster_typecheck_fun env "processBlocks"
               \ arg0:array(W,0,<8,*8,fieldsh(int64<>)), \
               \ arg1:array(R,0,<16*num,*8,fieldsh(int64<>)), \
               \ arg2:true, ret:true";
+
+heapster_export_coq env "sha512_mr_solver_gen.v";
 
 // Mr. Solver
 
@@ -81,13 +79,14 @@ let run_test name test expected =
 
 round_00_15 <- parse_core_mod "SHA512" "round_00_15";
 round_16_80 <- parse_core_mod "SHA512" "round_16_80";
-// processBlock <- parse_core_mod "SHA512" "processBlock";
-// processBlocks <- parse_core_mod "SHA512" "processBlocks";
+processBlock <- parse_core_mod "SHA512" "processBlock";
+processBlocks <- parse_core_mod "SHA512" "processBlocks";
 
 // Test that every function refines itself
-// run_test "processBlocks |= processBlocks" (mr_solver processBlocks processBlocks) true;
+run_test "processBlocks |= processBlocks" (mr_solver processBlocks processBlocks) true;
+// FIXME: Why does this hang?
 // run_test "processBlock |= processBlock" (mr_solver processBlock processBlock) true;
-// run_test "round_16_80 |= round_16_80" (mr_solver round_16_80 round_16_80) true;
+run_test "round_16_80 |= round_16_80" (mr_solver round_16_80 round_16_80) true;
 // run_test "round_00_15 |= round_00_15" (mr_solver round_00_15 round_00_15) true;
 
 import "sha512.cry";
@@ -105,5 +104,6 @@ monadify_term {{ Maj }};
 monadify_term {{ round_00_15_spec }};
 
 run_test "round_00_15 |= round_00_15_spec" (mr_solver round_00_15 {{ round_00_15_spec }}) true;
-run_test "round_16_80 |= round_16_80_spec" (mr_solver_debug 0 round_16_80 {{ round_16_80_spec }}) true;
-*/
+
+// FIXME: Need to add heterogenous equality on output types for this to work
+// run_test "round_16_80 |= round_16_80_spec" (mr_solver_debug 0 round_16_80 {{ round_16_80_spec }}) true;
