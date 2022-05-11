@@ -1313,7 +1313,7 @@ primitives = Map.fromList
     , "if unsuccessful."
     ]
 
-  , prim "prove_prop"         "ProofScript () -> Term -> TopLevel Theorem"
+  , prim "prove_extcore"         "ProofScript () -> Term -> TopLevel Theorem"
     (pureVal provePropPrim)
     Current
     [ "Use the given proof script to attempt to prove that a term representing"
