@@ -924,13 +924,13 @@ provePrim script t = do
     _ -> return ()
   return res
 
-provePrintPrim ::
+proveHelper ::
   ProofScript () ->
   TypedTerm ->
+  (Term -> TopLevel Prop) ->
   TopLevel Theorem
-provePrintPrim script t = do
-  sc <- getSharedContext
-  prop <- io $ predicateToProp sc Universal (ttTerm t)
+proveHelper script t f = do
+  prop <- f $ ttTerm t
   let goal = ProofGoal 0 "prove" "prove" prop
   opts <- rwPPOpts <$> getTopLevelRW
   res <- SV.runProofScript script goal Nothing "prove_print_prim"
@@ -944,25 +944,21 @@ provePrintPrim script t = do
     InvalidProof _stats _cex pst -> failProof pst
     UnfinishedProof pst -> failProof pst
 
+provePrintPrim ::
+  ProofScript () ->
+  TypedTerm ->
+  TopLevel Theorem
+provePrintPrim script t = do
+  sc <- getSharedContext
+  proveHelper script t $ io . predicateToProp sc Universal
+
 provePropPrim ::
   ProofScript () ->
   TypedTerm ->
   TopLevel Theorem
 provePropPrim script t = do
   sc <- getSharedContext
-  prop <- io (termToProp sc $ ttTerm t)
-  let goal = ProofGoal 0 "prove" "prove" prop
-  opts <- rwPPOpts <$> getTopLevelRW
-  res <- SV.runProofScript script goal Nothing "prove_prop"
-  let failProof pst =
-         fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
-                          ++ SV.showsProofResult opts res ""
-  case res of
-    ValidProof _stats thm ->
-      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) $ ttTerm t)
-         SV.returnProof thm
-    InvalidProof _stats _cex pst -> failProof pst
-    UnfinishedProof pst -> failProof pst
+  proveHelper script t $ io . termToProp sc
 
 satPrim ::
   ProofScript () ->
