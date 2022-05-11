@@ -6768,10 +6768,10 @@ proveVarLLVMArrayH x psubst ps mb_ap
       all bvPropCouldHold (bvPropRangeSubset (BVRange off len)
                                              (llvmArrayAbsOffsets ap)) &&
       -- Test that either the sets of borrows are equal ...
-      (all (flip elem bs) (llvmArrayBorrows ap) &&
-       all (flip elem (llvmArrayBorrows ap)) bs) ||
-      -- ...or the range [off,len) is not fully borrowed
-      not (llvmArrayRangeIsBorrowed ap (BVRange off len))
+      ((all (flip elem bs) (llvmArrayBorrows ap) &&
+        all (flip elem (llvmArrayBorrows ap)) bs) ||
+       -- ...or the range [off,len) is not fully borrowed
+       not (llvmArrayRangeIsBorrowed ap (BVRange off len)))
     suitableAP _ _ _ _ _ = False
 
 -- Check if there is a block that contains the required offset and length, in
