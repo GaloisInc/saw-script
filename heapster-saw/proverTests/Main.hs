@@ -243,6 +243,10 @@ arrayTests =
     , testCase "sum of borrows" $ passes $
       [ int64ArrayPerm 0 3 \\\ (1,2) , int64ArrayPerm 24 4 \\\ (1,2) ]
       ===> int64ArrayPerm 0 7 \\\ (1,2) \\\ (3,3)
+
+    , testCase "fully-borrowed refl" $ passes $
+      int64ArrayPerm 0 4 \\\ (0, 2) \\\ (2, 2)
+      ===> int64ArrayPerm 0 4 \\\ (0, 2) \\\ (2, 2)
     ]
   ]
 
