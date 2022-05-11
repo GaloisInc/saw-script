@@ -505,6 +505,54 @@ Return fields
   
 
 
+SAW/eval int (command)
+~~~~~~~~~~~~~~~~~~~~~~
+
+Attempt to evaluate the given term to a concrete integer.
+
+Parameter fields
+++++++++++++++++
+
+
+``expr``
+  The Cryptol expression to evaluate.
+  
+  
+
+Return fields
++++++++++++++
+
+
+``value``
+  The integer value of the expresssion.
+  
+  
+
+
+SAW/eval bool (command)
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Attempt to evaluate the given term to a concrete boolean.
+
+Parameter fields
+++++++++++++++++
+
+
+``expr``
+  The Cryptol expression to evaluate.
+  
+  
+
+Return fields
++++++++++++++
+
+
+``value``
+  The boolean value of the expresssion.
+  
+  
+
+
 SAW/set option (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
