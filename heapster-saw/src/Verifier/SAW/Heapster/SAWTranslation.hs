@@ -4899,6 +4899,8 @@ tcTranslateCFGTupleFun env checks endianness dlevel cfgs_and_perms =
   case cfg_and_perm of
     SomeCFGAndPerm sym _ cfg fun_perm ->
       debugTraceTraceLvl dlevel ("Type-checking " ++ show sym) $
+      debugTrace verboseDebugLevel dlevel
+      ("With type:\n" ++ permPrettyString emptyPPInfo fun_perm) $
       translateCFG env' checks $
       tcCFG ?ptrWidth env' endianness dlevel fun_perm cfg
 
