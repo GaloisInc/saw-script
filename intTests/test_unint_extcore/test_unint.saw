@@ -1,0 +1,9 @@
+import "unint.cry";
+
+fails (prove_print (w4_unint_yices ["g"]) {{ \x -> f x > 0 }});
+
+write_core "unint.core" {{ \x -> f x > 0 }};
+
+prop <- read_core "unint.core";
+
+fails (prove_print (w4_unint_yices ["g"]) {{ \x -> prop x }});

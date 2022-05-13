@@ -1694,6 +1694,13 @@ genBVVecFromVec m a v def n len =
   genBVVec n len a (\ (i:Vec n Bool) (_:is_bvult n i len) ->
                       atWithDefault m a def v (bvToNat n i));
 
+-- Generate a vector from the elements of an existing BVVec, using a default
+-- value when we run out of the existing BVVec - the inverse of genBVVecFromVec
+genFromBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+               BVVec n len a -> a -> (m : Nat) -> Vec m a;
+genFromBVVec n len a v def m =
+  gen m a (\ (i:Nat) -> atWithDefault (bvToNat n len) a def v i);
+
 -- The false proposition
 FalseProp : Prop;
 FalseProp = Eq Bool True False;

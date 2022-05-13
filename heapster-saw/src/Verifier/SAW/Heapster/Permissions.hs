@@ -2685,6 +2685,11 @@ mbLLVMArrayLen = mbMapCl $(mkClosed [| llvmArrayLen |])
 mbLLVMArrayLenBytes :: (1 <= w, KnownNat w) => Mb ctx (LLVMArrayPerm w) -> Mb ctx (PermExpr (BVType w))
 mbLLVMArrayLenBytes = mbMapCl $(mkClosed [| llvmArrayLengthBytes |])
 
+-- | Get the range of offsets of an array permission in binding
+mbLLVMArrayRange :: (1 <= w, KnownNat w) => Mb ctx (LLVMArrayPerm w) ->
+                    Mb ctx (BVRange w)
+mbLLVMArrayRange = mbMapCl $(mkClosed [| llvmArrayRange |])
+
 -- | Get the stride of an array permission in binding
 mbLLVMArrayStride :: Mb ctx (LLVMArrayPerm w) -> Bytes
 mbLLVMArrayStride = mbLift . mbMapCl $(mkClosed [| llvmArrayStride |])
@@ -4991,6 +4996,15 @@ llvmArrayCellsToOffsets :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
 llvmArrayCellsToOffsets ap (BVRange cell num_cells) =
   BVRange (llvmArrayCellToOffset ap cell) (llvmArrayCellToOffset ap num_cells)
 
+-- | Convert a range of absolute byte offsets to a range of cell numbers in an
+-- array permission, if possible
+llvmArrayAbsOffsetsToCells :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                              BVRange w -> Maybe (BVRange w)
+llvmArrayAbsOffsetsToCells ap rng
+  | Just cell <- matchLLVMArrayCell ap (bvRangeOffset rng) =
+    Just $ BVRange cell (bvDiv (bvRangeLength rng) (llvmArrayStride ap))
+llvmArrayAbsOffsetsToCells _ _ = Nothing
+
 -- | Return the clopen range @[0,len)@ of the cells of an array permission
 llvmArrayCells :: (1 <= w, KnownNat w) => LLVMArrayPerm w -> BVRange w
 llvmArrayCells ap = BVRange (bvInt 0) (llvmArrayLen ap)
@@ -5065,17 +5079,26 @@ permToLLVMArrayBorrow ap p =
 
     _ -> Nothing
 
+-- | Get the range of offsets spanned by a borrow relative to the start of an
+-- array permission
 llvmArrayBorrowRange :: (1 <= w, KnownNat w) =>
                         LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
 llvmArrayBorrowRange ap borrow =
   llvmArrayCellsToOffsets ap (llvmArrayBorrowCells borrow)
 
+-- | Get the "absolute" range of offsets spanned by a borrow relative to the
+-- pointer with this array permission
 llvmArrayAbsBorrowRange :: (1 <= w, KnownNat w) =>
-                        LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
+                           LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
 llvmArrayAbsBorrowRange ap borrow =
   range { bvRangeOffset = bvAdd (llvmArrayOffset ap) (bvRangeOffset range) }
   where
     range = llvmArrayCellsToOffsets ap (llvmArrayBorrowCells borrow)
+
+-- | Get the absolute offset at which an array borrow starts
+llvmArrayBorrowAbsOffset :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                            LLVMArrayBorrow w -> PermExpr (BVType w)
+llvmArrayBorrowAbsOffset ap b = bvRangeOffset $ llvmArrayAbsBorrowRange ap b
 
 -- | Add a borrow to an 'LLVMArrayPerm'
 llvmArrayAddBorrow :: LLVMArrayBorrow w -> LLVMArrayPerm w -> LLVMArrayPerm w
@@ -5140,7 +5163,7 @@ llvmArrayBorrowsPermuteTo ap bs =
 -- | Add a cell offset to an 'LLVMArrayBorrow', meaning we change the borrow to
 -- be relative to an array with that many more cells added to the front
 cellOffsetLLVMArrayBorrow :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-                              LLVMArrayBorrow w -> LLVMArrayBorrow w
+                             LLVMArrayBorrow w -> LLVMArrayBorrow w
 cellOffsetLLVMArrayBorrow off (FieldBorrow ix) =
   FieldBorrow (bvAdd ix off)
 cellOffsetLLVMArrayBorrow off (RangeBorrow rng) =
@@ -5153,6 +5176,8 @@ llvmArrayBorrowCells :: (KnownNat w, 1 <= w) => LLVMArrayBorrow w -> BVRange w
 llvmArrayBorrowCells (FieldBorrow idx) = bvRangeOfIndex idx
 llvmArrayBorrowCells (RangeBorrow r) = r
 
+-- FIXME: delete? not used, and should be implementable via bvRangeDelete
+{-
 -- | Given a borrow @borrow@ and range (of borrowed indices) @rng@,
 -- delete @rng@ from @borrow@, and return the borrows that describe
 -- the remaining borrowed cells.
@@ -5173,27 +5198,42 @@ llvmArrayBorrowRangeDelete borrow rng =
       , bvEq (bvRangeLength new_range) (bvInt 1) = Just $ FieldBorrow idx
       | otherwise =
         error "llvmArrayBorrowRangeDelete: found non unit new_range for FieldBorrow"
+-}
 
--- | Return whether or not the borrows in @ap@ cover the range of cells [0, len). Specifically,
--- if the borrowed cells (as ranges) can be arranged in as a sequence of non-overlapping but contiguous
--- ranges (in the sense of @bvCouldEqual@) that extends at least as far as @len@ (in the sense of @bvLeq@)
-llvmArrayIsBorrowed ::
-  (HasCallStack, 1 <= w, KnownNat w) =>
-  LLVMArrayPerm w ->
-  Bool
+-- | Take in a range @rng@ and a list of ranges @rngs@ and try to find a
+-- sequence of non-overlapping but contiguous ranges in @rngs@ that covers the
+-- desired range @rng@
+gatherCoveringRanges :: (1 <= w, KnownNat w) => BVRange w -> [BVRange w] ->
+                        Maybe [BVRange w]
+gatherCoveringRanges rng _ | bvIsZero (bvRangeLength rng) = Just []
+gatherCoveringRanges rng rngs
+  | Just i <- findIndex (bvInRange (bvRangeOffset rng)) rngs
+  , rng' <- rngs!!i =
+    -- If rng' covers all of rng, then we are done
+    if bvRangeSubset rng rng' then Just [rng'] else
+      (rng' :) <$>
+      gatherCoveringRanges (bvRangeSuffix (bvRangeEnd rng') rng)
+                           (deleteNth i rngs)
+gatherCoveringRanges _ _ = Nothing
+
+-- | Test if the borrows in @ap@ cover a given range of offsets. That is, test
+-- if the ranges of the borrows in @ap@ can be arranged as a sequence of
+-- non-overlapping but contiguous ranges that extends at least as far as @len@
+-- (in the sense of @bvLeq@).
+llvmArrayRangeIsBorrowed :: (HasCallStack, 1 <= w, KnownNat w) =>
+                            LLVMArrayPerm w -> BVRange w -> Bool
+llvmArrayRangeIsBorrowed ap rng =
+  isJust $ gatherCoveringRanges rng $
+  map (llvmArrayBorrowAbsOffsets ap) (llvmArrayBorrows ap)
+
+-- | Test whether the borrows in @ap@ cover the range of cells @[0, len)@. That
+-- is, test if the ranges of the borrows in @ap@ can be arranged as a sequence
+-- of non-overlapping but contiguous ranges that extends at least as far as
+-- @len@ (in the sense of @bvLeq@)
+llvmArrayIsBorrowed :: (HasCallStack, 1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                       Bool
 llvmArrayIsBorrowed ap =
-  go (bvInt 0) (llvmArrayBorrowCells <$> llvmArrayBorrows ap)
-  where
-    end = bvRangeEnd (llvmArrayCells ap)
-
-    go off borrows
-      | bvLeq end off
-      = True
-      | Just i <- findIndex (permForOff off) borrows
-      = go (bvAdd off (bvRangeLength (borrows!!i))) (deleteNth i borrows)
-    go _ _ = False
-
-    permForOff o b = bvCouldEqual o (bvRangeOffset b)
+  llvmArrayRangeIsBorrowed ap (llvmArrayAbsOffsets ap)
 
 -- | Test if a byte offset @o@ statically aligns with a statically-known offset
 -- into some array cell, i.e., whether
@@ -5362,6 +5402,7 @@ llvmMakeSubArray ap off len
   , cell_rng <- BVRange cell len =
     ap { llvmArrayOffset = off, llvmArrayLen = len,
          llvmArrayBorrows =
+           map (cellOffsetLLVMArrayBorrow (bvNegate cell)) $
            filter (not . all bvPropHolds .
                    llvmArrayBorrowsDisjoint (RangeBorrow cell_rng)) $
            llvmArrayBorrows ap }
@@ -5401,22 +5442,41 @@ llvmPermContainsOffsetBool :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
 llvmPermContainsOffsetBool off p =
   maybe False snd $ llvmPermContainsOffset off p
 
--- | Test if an atomic LLVM permission contains (in the sense of 'bvPropHolds')
--- all offsets in a given range
-llvmAtomicPermContainsRange :: (1 <= w, KnownNat w) => BVRange w ->
-                               AtomicPerm (LLVMPointerType w) -> Bool
-llvmAtomicPermContainsRange rng (Perm_LLVMArray ap)
+-- | Build the propositions stating that an atomic LLVM permission contains all
+-- offsets in a given range
+llvmAtomicPermContainsRangeProps :: (1 <= w, KnownNat w) => BVRange w ->
+                                    AtomicPerm (LLVMPointerType w) ->
+                                    Maybe [BVProp w]
+llvmAtomicPermContainsRangeProps rng (Perm_LLVMArray ap)
   | Just ix1 <- matchLLVMArrayIndex ap (bvRangeOffset rng)
   , Just ix2 <- matchLLVMArrayIndex ap (bvRangeEnd rng)
   , props <- llvmArrayBorrowInArray ap (RangeBorrow $ BVRange
                                         (llvmArrayIndexCell ix1)
                                         (llvmArrayIndexCell ix2)) =
+    Just props
+llvmAtomicPermContainsRangeProps rng (Perm_LLVMField fp) =
+  Just $ bvPropRangeSubset rng (llvmFieldRange fp)
+llvmAtomicPermContainsRangeProps rng (Perm_LLVMBlock bp) =
+  Just $ bvPropRangeSubset rng (llvmBlockRange bp)
+llvmAtomicPermContainsRangeProps _ _ = Nothing
+
+-- | Test if an atomic LLVM permission contains (in the sense of 'bvPropHolds')
+-- all offsets in a given range
+llvmAtomicPermContainsRange :: (1 <= w, KnownNat w) => BVRange w ->
+                               AtomicPerm (LLVMPointerType w) -> Bool
+llvmAtomicPermContainsRange rng p
+  | Just props <- llvmAtomicPermContainsRangeProps rng p =
     all bvPropHolds props
-llvmAtomicPermContainsRange rng (Perm_LLVMField fp) =
-  bvRangeSubset rng (llvmFieldRange fp)
-llvmAtomicPermContainsRange rng (Perm_LLVMBlock bp) =
-  bvRangeSubset rng (llvmBlockRange bp)
 llvmAtomicPermContainsRange _ _ = False
+
+-- | Test if an atomic LLVM permission could contain (in the sense of
+-- 'bvPropCouldHold') all offsets in a given range
+llvmAtomicPermCouldContainRange :: (1 <= w, KnownNat w) => BVRange w ->
+                                   AtomicPerm (LLVMPointerType w) -> Bool
+llvmAtomicPermCouldContainRange rng p
+  | Just props <- llvmAtomicPermContainsRangeProps rng p =
+    all bvPropCouldHold props
+llvmAtomicPermCouldContainRange _ _ = False
 
 -- | Test if an atomic LLVM permission has a range that overlaps with (in the
 -- sense of 'bvPropHolds') the offsets in a given range
@@ -5471,7 +5531,7 @@ llvmArrayToBlocks _ = Nothing
 llvmArrayBorrowOffsets :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
                           LLVMArrayBorrow w -> BVRange w
 llvmArrayBorrowOffsets ap (FieldBorrow ix) =
-  bvRangeOfIndex $ llvmArrayCellToOffset ap ix
+  BVRange (llvmArrayCellToOffset ap ix) (bvInt $ toInteger $ llvmArrayStride ap)
 llvmArrayBorrowOffsets ap (RangeBorrow r) = llvmArrayCellsToOffsets ap r
 
 -- | Get the range of byte offsets represented by an array borrow relative to
@@ -8242,10 +8302,14 @@ detVarsClauseAddLHSVar :: ExprVar a -> DetVarsClause -> DetVarsClause
 detVarsClauseAddLHSVar n (DetVarsClause lhs rhs) =
   DetVarsClause (NameSet.insert n lhs) rhs
 
+newtype SeenDetVarsClauses :: CrucibleType -> * where
+  SeenDetVarsClauses :: [DetVarsClause] -> SeenDetVarsClauses tp
+
 -- | Generic function to compute the 'DetVarsClause's for a permission
 class GetDetVarsClauses a where
   getDetVarsClauses ::
-    a -> ReaderT (PermSet ps) (State (NameSet CrucibleType)) [DetVarsClause]
+    a -> ReaderT (PermSet ps) (State (NameMap SeenDetVarsClauses))
+                              [DetVarsClause]
 
 instance GetDetVarsClauses a => GetDetVarsClauses [a] where
   getDetVarsClauses l = concat <$> mapM getDetVarsClauses l
@@ -8257,11 +8321,13 @@ instance GetDetVarsClauses (ExprVar a) where
   getDetVarsClauses x =
     do seen_vars <- get
        perms <- ask
-       if NameSet.member x seen_vars then return [] else
-         do modify (NameSet.insert x)
-            perm_clauses <- getDetVarsClauses (perms ^. varPerm x)
-            return (DetVarsClause NameSet.empty (SomeName x) :
-                    map (detVarsClauseAddLHSVar x) perm_clauses)
+       perm_clauses <- case NameMap.lookup x seen_vars of
+         Just (SeenDetVarsClauses perm_clauses) -> return perm_clauses
+         Nothing -> do perm_clauses <- getDetVarsClauses (perms ^. varPerm x)
+                       modify (NameMap.insert x (SeenDetVarsClauses perm_clauses))
+                       return perm_clauses
+       return (DetVarsClause NameSet.empty (SomeName x) :
+               map (detVarsClauseAddLHSVar x) perm_clauses)
 
 instance GetDetVarsClauses (PermExpr a) where
   getDetVarsClauses e
@@ -8333,7 +8399,7 @@ instance GetDetVarsClauses (LLVMFieldShape w) where
 -- | Compute the 'DetVarsClause's for a block permission with the given shape
 getShapeDetVarsClauses ::
   (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
-  ReaderT (PermSet ps) (State (NameSet CrucibleType)) [DetVarsClause]
+  ReaderT (PermSet ps) (State (NameMap SeenDetVarsClauses)) [DetVarsClause]
 getShapeDetVarsClauses (PExpr_Var x) =
   getDetVarsClauses x
 getShapeDetVarsClauses (PExpr_NamedShape _ _ _ args) =
@@ -8359,20 +8425,23 @@ getShapeDetVarsClauses _ = return []
 -- is always a uniquely determined value of @y@ for any proof of @exists y.x:p@.
 determinedVars :: PermSet ps -> RAssign ExprVar ns -> [SomeName CrucibleType]
 determinedVars top_perms vars =
-  let vars_set = NameSet.fromList $ mapToList SomeName vars
+  let vars_map = NameMap.fromList $
+        mapToList (\v -> NameAndElem v (SeenDetVarsClauses [])) vars
+      vars_set = NameSet.fromList $ mapToList SomeName vars
       multigraph =
         evalState (runReaderT (getDetVarsClauses (distPermsToValuePerms $
                                                   varPermsMulti vars top_perms))
                    top_perms)
-        vars_set in
+        vars_map in
   evalState (determinedVarsForGraph multigraph) vars_set
   where
     -- Find all variables that are not already marked as determined in our
     -- NameSet state but that are determined given the current determined
-    -- variables, mark these variables as determiend, and then repeat, returning
+    -- variables, mark these variables as determined, and then repeat, returning
     -- all variables that are found in order
     determinedVarsForGraph :: [DetVarsClause] ->
-                              State (NameSet CrucibleType) [SomeName CrucibleType]
+                              State (NameSet CrucibleType)
+                                    [SomeName CrucibleType]
     determinedVarsForGraph graph =
       do det_vars <- concat <$> mapM determinedVarsForClause graph
          if det_vars == [] then return [] else
@@ -8381,7 +8450,8 @@ determinedVars top_perms vars =
     -- If the LHS of a clause has become determined but its RHS is not, return
     -- its RHS, otherwise return nothing
     determinedVarsForClause :: DetVarsClause ->
-                               State (NameSet CrucibleType) [SomeName CrucibleType]
+                               State (NameSet CrucibleType)
+                                     [SomeName CrucibleType]
     determinedVarsForClause (DetVarsClause lhs_vars (SomeName rhs_var)) =
       do det_vars <- get
          if not (NameSet.member rhs_var det_vars) &&
