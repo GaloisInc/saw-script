@@ -13,6 +13,8 @@
   `set_option(LaxLoadsAndStores(), True)` in order for `points_to_bitfield` to
   work as expected. `points_to_bitfield` is only supported for LLVM (and not
   JVM) verification.
+* Added two new commands, `eval_int` and `eval_bool`, that evaluate Cryptol
+  expressions to Python integers or booleans.
 
 
 ## 0.9.0 -- 2021-11-19
