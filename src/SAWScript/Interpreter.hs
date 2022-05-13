@@ -1313,6 +1313,15 @@ primitives = Map.fromList
     , "if unsuccessful."
     ]
 
+  , prim "prove_extcore"         "ProofScript () -> Term -> TopLevel Theorem"
+    (pureVal provePropPrim)
+    Current
+    [ "Use the given proof script to attempt to prove that a term representing"
+    , "a proposition is valid. For example, this is useful for proving a goal"
+    , "obtained with 'offline_extcore'. Returns a Theorem if successful, and"
+    , "aborts if unsuccessful."
+    ]
+
   , prim "sat"                 "ProofScript () -> Term -> TopLevel SatResult"
     (pureVal satPrim)
     Current
