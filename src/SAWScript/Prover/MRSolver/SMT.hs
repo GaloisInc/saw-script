@@ -305,7 +305,7 @@ mrProvable (asBool -> Just b) = return b
 mrProvable bool_tm =
   do assumps <- mrAssumptions
      prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
-     prop_inst <- instantiateUVarsM instUVar prop
+     prop_inst <- mrSubstEVars prop >>= instantiateUVarsM instUVar
      mrNormTerm prop_inst >>= mrProvableRaw
   where -- | Given a UVar name and type, generate a 'Term' to be passed to
         -- SMT, with special cases for BVVec and pair types
