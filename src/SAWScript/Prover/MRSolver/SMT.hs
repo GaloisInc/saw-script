@@ -18,6 +18,7 @@ namely 'mrProvable' and 'mrProveEq'.
 module SAWScript.Prover.MRSolver.SMT where
 
 import qualified Data.Vector as V
+import Numeric.Natural (Natural)
 import Control.Monad.Except
 import qualified Control.Exception as X
 
@@ -33,9 +34,9 @@ import Verifier.SAW.OpenTerm
 
 import Verifier.SAW.Prim (EvalError(..))
 import qualified Verifier.SAW.Prim as Prim
+import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Simulator.TermModel
 import Verifier.SAW.Simulator.Prims
-import Verifier.SAW.Simulator.MonadLazy
 
 import SAWScript.Proof (termToProp, propToTerm, prettyProp)
 import What4.Solver
@@ -84,6 +85,14 @@ asGenBVVecTerm (asApplyAll ->
   = Just (n, len, a, e)
 asGenBVVecTerm _ = Nothing
 
+-- | Match a term of the form @genFromBVVec n len a v def m@
+asGenFromBVVecTerm :: Recognizer Term (Term, Term, Term, Term, Term, Term)
+asGenFromBVVecTerm (asApplyAll ->
+                       (isGlobalDef "Prelude.genFromBVVec" -> Just _,
+                        [n, len, a, v, def, m]))
+  = Just (n, len, a, v, def, m)
+asGenFromBVVecTerm _ = Nothing
+
 type TmPrim = Prim TermModel
 
 -- | Convert a Boolean value to a 'Term'; like 'readBackValue' but that function
@@ -126,6 +135,73 @@ primBVTermFun sc =
          scVectorReduced sc tp tms
     v -> lift (putStrLn ("primBVTermFun: unhandled value: " ++ show v)) >> mzero
 
+-- | A datatype representing either a @genFromBVVec n len _ v _ _@ term or
+-- a vector literal, the latter being represented as a list of 'Term's
+data FromBVVecOrLit = FromBVVec { fromBVVec_n :: Natural
+                                , fromBVVec_len :: Term
+                                , fromBVVec_vec :: Term }
+                    | BVVecLit [Term]
+
+-- | An implementation of a primitive function that expects either a
+-- @genFromBVVec@ term or a vector literal
+primFromBVVecOrLit :: SharedContext -> TValue TermModel ->
+                      (FromBVVecOrLit -> TmPrim) -> TmPrim
+primFromBVVecOrLit sc a =
+  PrimFilterFun "primFromBVVecOrLit" $
+  \case
+    VExtra (VExtraTerm _ (asGenFromBVVecTerm -> Just (asNat -> Just n, len, _,
+                                                      v, _, _))) ->
+      return $ FromBVVec n len v
+    VVector vs ->
+      lift $ BVVecLit <$>
+        traverse (readBackValueNoConfig "primFromBVVecOrLit" sc a <=< force)
+                 (V.toList vs)
+    _ -> mzero
+
+-- | Turn a 'FromBVVecOrLit' into a BVVec term, assuming it has the given
+-- bit-width (given as both a 'Natural' and a 'Term'), length, and element type
+-- FIXME: Properly handle empty vector literals
+bvVecFromBVVecOrLit :: SharedContext -> Natural -> Term -> Term -> Term ->
+                       FromBVVecOrLit -> IO Term
+bvVecFromBVVecOrLit sc n _ len _ (FromBVVec n' len' v) =
+  do len_cvt_len' <- scConvertible sc True len len'
+     if n == n' && len_cvt_len' then return v
+     else error "bvVecFromBVVecOrLit: genFromBVVec type mismatch"
+bvVecFromBVVecOrLit sc n n' len a (BVVecLit vs) =
+  do body <- mkBody 0 vs
+     i_tp <- scBitvector sc n
+     var0 <- scLocalVar sc 0
+     pf_tp <- scGlobalApply sc "Prelude.is_bvult" [n', var0, len]
+     f <- scLambdaList sc [("i", i_tp), ("pf", pf_tp)] body 
+     scGlobalApply sc "Prelude.genBVVec" [n', len, a, f]
+  where mkBody :: Integer -> [Term] -> IO Term
+        mkBody _ [] = error "bvVecFromBVVecOrLit: empty vector"
+        mkBody _ [x] = return $ x
+        mkBody i (x:xs) =
+          do var1 <- scLocalVar sc 1
+             i' <- scBvConst sc n i
+             cond <- scBvEq sc n' var1 i'
+             body' <- mkBody (i+1) xs
+             scIte sc a cond x body'
+
+-- | A version of 'readBackTValue' which uses 'error' as the simulator config
+-- Q: Is there every a case where this will actually error?
+readBackTValueNoConfig :: String -> SharedContext ->
+                          TValue TermModel -> IO Term
+readBackTValueNoConfig err_str sc tv =
+  let ?recordEC = \_ec -> return () in
+  let cfg = error $ "FIXME: need the simulator config in " ++ err_str
+   in readBackTValue sc cfg tv
+
+-- | A version of 'readBackValue' which uses 'error' as the simulator config
+-- Q: Is there every a case where this will actually error?
+readBackValueNoConfig :: String -> SharedContext ->
+                         TValue TermModel -> Value TermModel -> IO Term
+readBackValueNoConfig err_str sc tv v =
+  let ?recordEC = \_ec -> return () in
+  let cfg = error $ "FIXME: need the simulator config in " ++ err_str
+   in readBackValue sc cfg tv v
+
 -- | Implementations of primitives for normalizing Mr Solver terms
 smtNormPrims :: SharedContext -> Map Ident TmPrim
 smtNormPrims sc = Map.fromList
@@ -133,8 +209,23 @@ smtNormPrims sc = Map.fromList
     ("Prelude.genBVVec",
      Prim (do tp <- scTypeOfGlobal sc "Prelude.genBVVec"
               VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
-                scGlobalDef sc "Prelude.genBVVec")),
-
+                scGlobalDef sc "Prelude.genBVVec")
+    ),
+    ("Prelude.genBVVecFromVec",
+     natFun $ \_m -> tvalFun $ \a -> primFromBVVecOrLit sc a $ \eith ->
+      PrimFun $ \_def -> natFun $ \n -> primBVTermFun sc $ \len ->
+      Prim (do n' <- scNat sc n
+               a' <- readBackTValueNoConfig "smtNormPrims (genBVVecFromVec)"
+                                            sc a
+               tp <- scGlobalApply sc "Prelude.BVVec" [n', len, a']
+               VExtra <$> VExtraTerm (VTyTerm (mkSort 0) tp) <$>
+                 bvVecFromBVVecOrLit sc n n' len a' eith)
+    ),
+    ("Prelude.genFromBVVec",
+     Prim (do tp <- scTypeOfGlobal sc "Prelude.genFromBVVec"
+              VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
+                scGlobalDef sc "Prelude.genFromBVVec")
+    ),
     ("Prelude.atBVVec",
      PrimFun $ \_n -> PrimFun $ \_len -> tvalFun $ \a ->
       primGenBVVec sc $ \f -> primBVTermFun sc $ \ix -> PrimFun $ \_pf ->
@@ -144,9 +235,7 @@ smtNormPrims sc = Map.fromList
      PrimFilterFun "CompM" (\case
                                TValue tv -> return tv
                                _ -> mzero) $ \tv ->
-      Prim (do let ?recordEC = \_ec -> return ()
-               let cfg = error "FIXME: smtNormPrims: need the simulator config"
-               tv_trm <- readBackTValue sc cfg tv
+      Prim (do tv_trm <- readBackTValueNoConfig "smtNormPrims (CompM)" sc tv
                TValue <$> VTyTerm (mkSort 0) <$>
                  scGlobalApply sc "Prelude.CompM" [tv_trm]))
   ]

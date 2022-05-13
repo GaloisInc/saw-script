@@ -8205,10 +8205,14 @@ detVarsClauseAddLHSVar :: ExprVar a -> DetVarsClause -> DetVarsClause
 detVarsClauseAddLHSVar n (DetVarsClause lhs rhs) =
   DetVarsClause (NameSet.insert n lhs) rhs
 
+newtype SeenDetVarsClauses :: CrucibleType -> * where
+  SeenDetVarsClauses :: [DetVarsClause] -> SeenDetVarsClauses tp
+
 -- | Generic function to compute the 'DetVarsClause's for a permission
 class GetDetVarsClauses a where
   getDetVarsClauses ::
-    a -> ReaderT (PermSet ps) (State (NameSet CrucibleType)) [DetVarsClause]
+    a -> ReaderT (PermSet ps) (State (NameMap SeenDetVarsClauses))
+                              [DetVarsClause]
 
 instance GetDetVarsClauses a => GetDetVarsClauses [a] where
   getDetVarsClauses l = concat <$> mapM getDetVarsClauses l
@@ -8220,11 +8224,13 @@ instance GetDetVarsClauses (ExprVar a) where
   getDetVarsClauses x =
     do seen_vars <- get
        perms <- ask
-       if NameSet.member x seen_vars then return [] else
-         do modify (NameSet.insert x)
-            perm_clauses <- getDetVarsClauses (perms ^. varPerm x)
-            return (DetVarsClause NameSet.empty (SomeName x) :
-                    map (detVarsClauseAddLHSVar x) perm_clauses)
+       perm_clauses <- case NameMap.lookup x seen_vars of
+         Just (SeenDetVarsClauses perm_clauses) -> return perm_clauses
+         Nothing -> do perm_clauses <- getDetVarsClauses (perms ^. varPerm x)
+                       modify (NameMap.insert x (SeenDetVarsClauses perm_clauses))
+                       return perm_clauses
+       return (DetVarsClause NameSet.empty (SomeName x) :
+               map (detVarsClauseAddLHSVar x) perm_clauses)
 
 instance GetDetVarsClauses (PermExpr a) where
   getDetVarsClauses e
@@ -8296,7 +8302,7 @@ instance GetDetVarsClauses (LLVMFieldShape w) where
 -- | Compute the 'DetVarsClause's for a block permission with the given shape
 getShapeDetVarsClauses ::
   (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
-  ReaderT (PermSet ps) (State (NameSet CrucibleType)) [DetVarsClause]
+  ReaderT (PermSet ps) (State (NameMap SeenDetVarsClauses)) [DetVarsClause]
 getShapeDetVarsClauses (PExpr_Var x) =
   getDetVarsClauses x
 getShapeDetVarsClauses (PExpr_NamedShape _ _ _ args) =
@@ -8322,20 +8328,23 @@ getShapeDetVarsClauses _ = return []
 -- is always a uniquely determined value of @y@ for any proof of @exists y.x:p@.
 determinedVars :: PermSet ps -> RAssign ExprVar ns -> [SomeName CrucibleType]
 determinedVars top_perms vars =
-  let vars_set = NameSet.fromList $ mapToList SomeName vars
+  let vars_map = NameMap.fromList $
+        mapToList (\v -> NameAndElem v (SeenDetVarsClauses [])) vars
+      vars_set = NameSet.fromList $ mapToList SomeName vars
       multigraph =
         evalState (runReaderT (getDetVarsClauses (distPermsToValuePerms $
                                                   varPermsMulti vars top_perms))
                    top_perms)
-        vars_set in
+        vars_map in
   evalState (determinedVarsForGraph multigraph) vars_set
   where
     -- Find all variables that are not already marked as determined in our
     -- NameSet state but that are determined given the current determined
-    -- variables, mark these variables as determiend, and then repeat, returning
+    -- variables, mark these variables as determined, and then repeat, returning
     -- all variables that are found in order
     determinedVarsForGraph :: [DetVarsClause] ->
-                              State (NameSet CrucibleType) [SomeName CrucibleType]
+                              State (NameSet CrucibleType)
+                                    [SomeName CrucibleType]
     determinedVarsForGraph graph =
       do det_vars <- concat <$> mapM determinedVarsForClause graph
          if det_vars == [] then return [] else
@@ -8344,7 +8353,8 @@ determinedVars top_perms vars =
     -- If the LHS of a clause has become determined but its RHS is not, return
     -- its RHS, otherwise return nothing
     determinedVarsForClause :: DetVarsClause ->
-                               State (NameSet CrucibleType) [SomeName CrucibleType]
+                               State (NameSet CrucibleType)
+                                     [SomeName CrucibleType]
     determinedVarsForClause (DetVarsClause lhs_vars (SomeName rhs_var)) =
       do det_vars <- get
          if not (NameSet.member rhs_var det_vars) &&
