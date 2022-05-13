@@ -3238,10 +3238,10 @@ mkImplState vars perms env info fail_prefix dlevel nameTypes u endianness =
   _implStateDebugLevel = dlevel
   }
 
-extImplState :: KnownRepr TypeRepr tp => ImplState vars ps ->
+extImplState :: TypeRepr tp -> ImplState vars ps ->
                 ImplState (vars :> tp) ps
-extImplState s =
-  s { _implStateVars = extCruCtx (_implStateVars s),
+extImplState tp s =
+  s { _implStateVars = CruCtxCons (_implStateVars s) tp,
       _implStatePSubst = extPSubst (_implStatePSubst s),
       _implStatePVarSubst = (_implStatePVarSubst s) :>: Compose Nothing }
 
@@ -3443,16 +3443,16 @@ getVarVarM memb =
       pure n
     _ -> error "getVarVarM"
 
+
 -- | Run an implication computation with one more existential variable,
 -- returning the optional expression it was bound to in the current partial
 -- substitution when it is done
-withExtVarsM :: KnownRepr TypeRepr tp =>
-                NuMatchingAny1 r =>
-                ImplM (vars :> tp) s r ps1 ps2 a ->
-                ImplM vars s r ps1 ps2 (a, PermExpr tp)
-withExtVarsM m =
+withExtVarsM' :: NuMatchingAny1 r =>
+                 TypeRepr tp -> ImplM (vars :> tp) s r ps1 ps2 a ->
+                 ImplM vars s r ps1 ps2 (a, PermExpr tp)
+withExtVarsM' tp m =
   -- Add a new existential to the 'ImplState'
-  gmodify extImplState       >>>
+  gmodify (extImplState tp)  >>>
   -- If the new existential has type unit, instantiate it to the global unit
   handleUnitEVar Member_Base >>>
   -- Run the computation
@@ -3462,17 +3462,26 @@ withExtVarsM m =
   gmodify unextImplState     >>>
   pure (a, case psubstLookup psubst Member_Base of
              Just e -> e
-             Nothing -> zeroOfType knownRepr)
+             Nothing -> zeroOfType tp)
+
+-- | Run an implication computation with one more existential variable,
+-- returning the optional expression it was bound to in the current partial
+-- substitution when it is done
+withExtVarsM :: KnownRepr TypeRepr tp =>
+                NuMatchingAny1 r =>
+                ImplM (vars :> tp) s r ps1 ps2 a ->
+                ImplM vars s r ps1 ps2 (a, PermExpr tp)
+withExtVarsM = withExtVarsM' knownRepr
 
 -- | Run an implication computation with an additional context of existential
 -- variables
 withExtVarsMultiM :: NuMatchingAny1 r =>
-                     KnownCruCtx vars' ->
+                     CruCtx vars' ->
                      ImplM (vars :++: vars') s r ps1 ps2 a ->
                      ImplM vars s r ps1 ps2 a
-withExtVarsMultiM MNil m = m
-withExtVarsMultiM (ctx :>: KnownReprObj) m =
-  withExtVarsMultiM ctx (withExtVarsM m >>>= \(a,_) -> return a)
+withExtVarsMultiM CruCtxNil m = m
+withExtVarsMultiM (CruCtxCons ctx tp) m =
+  withExtVarsMultiM ctx (withExtVarsM' tp m >>>= \(a,_) -> return a)
 
 -- | Perform either the first, second, or both computations with an 'implCatchM'
 -- between, depending on the recursion flag. The 'String' names the function
@@ -4780,41 +4789,48 @@ implRemoveContainedLifetimeM l ls tps_in tps_out ps_in ps_out l2 =
   recombinePerm l (ValPerm_LOwned (delete (PExpr_Var l2) ls)
                    tps_in tps_out ps_in ps_out)
 
-
 -- | Find all lifetimes that we currently own which could, if ended, help prove
--- the specified permissions, and return them with their @lowned@ permissions.
--- Currently, this just returns any lifetime with an @lowned@ permission that
--- gives back permissions on a variable that is needed on the right-hand side,
--- after the current equality permissions have been used to cast both sides, as
--- long as that lifetime is not also needed for a proof on the right.
+-- the specified permissions, and return them with their @lowned@ permissions,
+-- in a topological order, where child lifetimes come before their parents.
 lifetimesThatCouldProve :: NuMatchingAny1 r => Mb vars (DistPerms ps') ->
                            ImplM vars s r ps ps [ExprVar LifetimeType]
 lifetimesThatCouldProve mb_ps =
-
-  FIXME HERE NOW: need a stricter test here
-
-  do (unzip -> (ls, ps)) <- implFindLOwnedPerms
-     ps' <- someEqProofRHS <$> substEqsWithProof ps
-     rhs_vars <-
-       NameSet.unions <$>
-       mapM (\(Some n) -> freeVars <$> someEqProofRHS <$>
-                          substEqsWithProof (PExpr_Var n))
-       (mbDistPermsVars mb_ps)
-     let needed_ls = lownedsInMbDistPerms mb_ps
-     return $ mapMaybe
-       (\case
-           (l, ValPerm_LOwned _ _ _ _ ps_out)
-             | notElem l needed_ls
-             , Just out_vars <- exprPermsVars ps_out
-             , or (RL.mapToList (flip NameSet.member rhs_vars) out_vars) ->
-               Just l
-           (l, ValPerm_LOwnedSimple _ ps_out)
-             | notElem l needed_ls
-             , Just out_vars <- exprPermsVars ps_out
-             , or (RL.mapToList (flip NameSet.member rhs_vars) out_vars) ->
-               Just l
-           _ -> Nothing)
-       (zip ls ps')
+  do varTypes <- use implStateVars
+     -- Cast all lowneds we currently hold using any equality perms we hold
+     (unzip -> (ls, ps)) <- implFindLOwnedPerms
+     ps' <- substEqs ps
+     let ls_ps' = zip ls ps'
+     -- Convert mb_ps to ExprPerms so we can cast them as well; DistPerms can't
+     -- be cast because casting substitutes expressions for variables, and
+     -- DistPerms are pairs of a variable with a permission
+     mb_ps' <-
+       give (cruCtxProxies varTypes) $
+       substEqs (mbDistPermsToExprPerms mb_ps)
+     -- Make sure we don't end any lifetimes that we still need in mb_ps
+     let needed_ls = lownedsInMbExprPerms mb_ps'
+     -- Find any lifetime in ps' not in needed_ls that could prove a permission
+     -- we need in mb_ps'
+     pp <- use implStatePPInfo
+     return $ map fst $ sortLOwnedPerms $ flip mapMaybe ls_ps' $ \case
+       (l, p@(ValPerm_LOwned _ _ _ _ ps_out)) ->
+         let b =
+               notElem l needed_ls &&
+               lownedPermsCouldProve varTypes ps_out mb_ps' in
+         tracePretty (hang 2 $
+                      sep [pretty "Testing if lifetime could prove perms:",
+                           pretty "Lifetime = " <> permPretty pp l,
+                           pretty "ps_out = " <> permPretty pp ps_out,
+                           pretty "neededs = " <> permPretty pp mb_ps',
+                           pretty "result = " <> pretty b]) $
+         if b then Just (l,p) else Nothing
+       {- FIXME HERE NOW: remove the tracing above and put this case back
+       (l, ValPerm_LOwned _ _ _ _ ps_out) ->
+         | notElem l needed_ls
+         , lownedPermsCouldProve varTypes ps_out mb_ps' -> Just l -}
+       (l, p@(ValPerm_LOwnedSimple _ ps_out))
+         | notElem l needed_ls
+         , lownedPermsCouldProve varTypes ps_out mb_ps' -> Just (l,p)
+       _ -> Nothing
 
 -- | Combine proofs of @x:ptr(pps,(off,spl) |-> eq(y))@ and @y:p@ on the top of
 -- the permission stack into a proof of @x:ptr(pps,(off,spl |-> p))@
@@ -5882,6 +5898,13 @@ substEqsWithProof a =
   do var_ps <- use (implStatePerms . varPermMap)
      pure (someEqProofFromSubst var_ps a)
 
+-- | Substitute any equality permissions for the variables in an expression
+-- using 'substEqsWithProof', but just return the result expression and not the
+-- proof
+substEqs :: (AbstractVars a, FreeVars a,
+             Substable PermSubst a Identity, NuMatchingAny1 r) =>
+            a -> ImplM vars s r ps ps a
+substEqs a = someEqProofRHS <$> substEqsWithProof a
 
 -- | The main work horse for 'proveEq' on expressions
 proveEqH :: forall vars a s r ps. NuMatchingAny1 r => HasCallStack =>
@@ -6191,7 +6214,7 @@ neededPerms0 = Some MNil
 
 -- | A permission in some context of existential variables extending @vars@
 data SomeMbPerm vars a where
-  SomeMbPerm :: KnownCruCtx vars' ->
+  SomeMbPerm :: CruCtx vars' ->
                 Mb (vars :++: vars') (ValuePerm a) ->
                 SomeMbPerm vars a
 
@@ -6199,8 +6222,8 @@ data SomeMbPerm vars a where
 someMbPermForRange :: RAssign Proxy vars -> MbRangeForType a ->
                       SomeMbPerm vars a
 someMbPermForRange vars (MbRangeForLLVMType vars' mb_rw mb_l mb_rng) =
-  SomeMbPerm (vars' :>: KnownReprObj) $
-  mbCombine (rlToProxies vars' :>: Proxy) $ nuMulti vars $ const $
+  SomeMbPerm (CruCtxCons vars' knownRepr) $
+  mbCombine (cruCtxProxies vars' :>: Proxy) $ nuMulti vars $ const $
   mbCombine (MNil :>: Proxy) $
   mbMap3 (\rw l rng -> nu $ \sh ->
            ValPerm_LLVMBlock $
@@ -9030,6 +9053,7 @@ proveVarsImplAppend :: NuMatchingAny1 r => ExDistPerms vars ps ->
 proveVarsImplAppend mb_ps =
   use implStatePerms >>>= \(_ :: PermSet ps_in) ->
   lifetimesThatCouldProve mb_ps >>>= \ls ->
+  implVerbTraceM (\i -> pretty "Lifetimes that could prove:" <+> permPretty i ls) >>>
   foldr1 (implCatchM "proveVarsImplAppend" mb_ps)
   ((proveVarsImplAppendInt mb_ps)
    :
