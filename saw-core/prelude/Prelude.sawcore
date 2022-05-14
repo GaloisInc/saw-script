@@ -680,9 +680,18 @@ Either__rec : (s t : sort 0) -> (p : Either s t -> sort 0) ->
                (e : Either s t) -> p e;
 Either__rec s t p f1 f2 e = Either#rec s t p f1 f2 e;
 
+-- The eliminator for the Either type
 either : (a b c : sort 0) -> (a -> c) -> (b -> c) -> Either a b -> c;
 either a b c f g e =
   Either__rec a b (\ (p: Either a b) -> c) f g e;
+
+-- Eta-expanded version of the Left constructor
+left : (a b : sort 0) -> a -> Either a b;
+left a b x = Left a b x;
+
+-- Eta-expanded version of the Right constructor
+right : (a b : sort 0) -> b -> Either a b;
+right a b x = Right a b x;
 
 eitherCong0 : (t x y : sort 0) -> Eq (sort 0) x y ->
                Eq (sort 0) (Either x t) (Either y t);
