@@ -13,6 +13,16 @@ Import rust_data.
 
 Import SAWCorePrelude.
 
+
+Lemma no_errors_is_elem : refinesFun is_elem (fun _ _ => noErrorsSpec).
+Proof.
+  unfold is_elem, is_elem__tuple_fun, noErrorsSpec,
+         list_64_drop_in_place, _ZN5alloc5alloc8box_free17hc52ecccd139e11ceE,
+         llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64.
+  time "no_errors_is_elem" prove_refinement.
+Qed.
+
+
 (* Print bool_and__tuple_fun. *)
 
 (* Print test_result__tuple_fun. *)

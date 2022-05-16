@@ -273,8 +273,14 @@ for BoxFree_funs
      // to boxfree before using it again. We could have it take in a memblock
      // permission with existential length and shape, but that would require
      // handling existential lengths...
-     heapster_assume_fun_rename_prim env x x
-       "(). empty -o empty");
+     heapster_assume_fun_rename env x x "(). empty -o empty" "returnM #() ()");
+
+// List<u64>::drop_in_place
+list_64_drop_in_place_sym <-
+  heapster_find_symbol env "47drop_in_place$LT$rust_data..List$LT$u64$GT$$GT$";
+heapster_assume_fun_rename env list_64_drop_in_place_sym "list_64_drop_in_place"
+  "<> fn(List<u64>)"
+  "\\ (l:List_IRT (Vec 64 Bool)) -> returnM #() ()";
 
 // <str as alloc::string::ToString>::to_string
 to_string_str <- heapster_find_symbol env
@@ -575,6 +581,11 @@ heapster_typecheck_fun_rename env list_head_impl_sym "list_head_impl"
 //  "(rw:rwmodality). arg0:List<fieldsh(int64<>),8,rw,always> -o \
 //                  \ ret:(struct(eq(llvmword(0)), exists z:bv 64. eq(llvmword(z)))) or \
 //                  \     (struct(eq(llvmword(1)),true))";
+
+// is_elem
+is_elem_sym <- heapster_find_symbol env "7is_elem";
+heapster_typecheck_fun_rename env is_elem_sym "is_elem"
+  "<> fn (x:u64, l:List<u64>) -> bool";
 
 // list64_is_empty
 list64_is_empty_sym <- heapster_find_symbol env "15list64_is_empty";

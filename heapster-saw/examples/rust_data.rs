@@ -378,6 +378,14 @@ impl List<u64> {
     }
 }
 
+pub fn is_elem (x:u64, l:List<u64>) -> bool {
+    match l {
+        List::Nil => false,
+        List::Cons (y,tl) =>
+            if x == y { true } else { is_elem (x,*tl) }
+    }
+}
+
 /* A linked list specialized to 64-bit elements */
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C,u64)]
