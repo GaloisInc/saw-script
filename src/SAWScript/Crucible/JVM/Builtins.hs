@@ -290,7 +290,14 @@ verifyObligations cc mspec tactic assumes asserts =
        goal   <- io $ scImplies sc assume assert
        goal'  <- io $ boolToProp sc [] goal -- TODO, generalize over inputs
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
-           proofgoal = ProofGoal n "vc" goalname goal'
+           proofgoal = ProofGoal
+                       { goalNum = n
+                       , goalType = "vc"
+                       , goalName = nm
+                       , goalLoc  = show ploc
+                       , goalDesc = msg
+                       , goalProp = goal'
+                       }
        res <- runProofScript tactic proofgoal (Just ploc) $ Text.unwords
                  ["JVM verification condition:", Text.pack (show n), Text.pack goalname]
        case res of

@@ -674,6 +674,8 @@ newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
 newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
  deriving (Functor, Applicative, Monad)
 
+-- TODO: remove the "reason" parameter and compute it from the
+--       initial proof goal instead
 runProofScript :: ProofScript a -> ProofGoal -> Maybe ProgramLoc -> Text -> TopLevel ProofResult
 runProofScript (ProofScript m) gl ploc rsn =
   do pos <- getPosition

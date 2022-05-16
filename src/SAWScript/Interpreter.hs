@@ -1454,7 +1454,23 @@ primitives = Map.fromList
     (pureVal print_goal)
     Current
     [ "Print the current goal that a proof script is attempting to prove." ]
-
+  , prim "write_goal" "String -> ProofScript ()"
+    (pureVal write_goal)
+    Current
+    [ "Write the current goal that a proof script is attempting to prove"
+    , "into the named file."
+    ]
+  , prim "print_goal_summary" "ProofScript ()"
+    (pureVal print_goal_summary)
+    Current
+    [ "Print the number and description of the goal that a proof script"
+    , "is attempting to prove."
+    ]
+  , prim "goal_num" "ProofScript Int"
+    (pureVal goal_num)
+    Current
+    [ "Returns the number of the current proof goal."
+    ]
   , prim "print_goal_depth"    "Int -> ProofScript ()"
     (pureVal print_goal_depth)
     Current

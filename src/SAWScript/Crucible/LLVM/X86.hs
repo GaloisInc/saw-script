@@ -518,7 +518,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
             ar
         C.TimeoutResult{} -> fail "Execution timed out"
 
-      (stats,thms) <- checkGoals bak opts sc tactic
+      (stats,thms) <- checkGoals bak opts nm sc tactic
 
       end <- io getCurrentTime
       let diff = diffUTCTime end start
@@ -1142,10 +1142,11 @@ checkGoals ::
   IsSymBackend Sym bak =>
   bak ->
   Options ->
+  String ->
   SharedContext ->
   ProofScript () ->
   TopLevel (SolverStats, Set TheoremNonce)
-checkGoals bak opts sc tactic = do
+checkGoals bak opts nm sc tactic = do
   gs <- liftIO $ getGoals (SomeBackend bak)
   liftIO . printOutLn opts Info $ mconcat
     [ "Simulation finished, running solver on "
@@ -1154,7 +1155,14 @@ checkGoals bak opts sc tactic = do
     ]
   outs <- forM (zip [0..] gs) $ \(n, g) -> do
     term <- liftIO $ gGoal sc g
-    let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
+    let proofgoal = ProofGoal
+                    { goalNum  = n
+                    , goalType = "vc"
+                    , goalName = nm
+                    , goalLoc  = show $ gLoc g
+                    , goalDesc = show $ gMessage g
+                    , goalProp = term
+                    }
     res <- runProofScript tactic proofgoal (Just (gLoc g)) $ Text.unwords
               ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))]
     case res of

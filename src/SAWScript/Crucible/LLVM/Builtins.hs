@@ -589,7 +589,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
        io $ verifyPrestate opts cc methodSpec globals1
 
      when (detectVacuity opts)
-       $ checkAssumptionsForContradictions cc tactic assumes
+       $ checkAssumptionsForContradictions cc methodSpec tactic assumes
 
      -- save initial path conditions
      frameIdent <- io $ Crucible.pushAssumptionFrame bak
@@ -637,7 +637,14 @@ verifyObligations cc mspec tactic assumes asserts =
        do goal   <- io $ scImplies sc assume assert
           goal'  <- io $ boolToProp sc [] goal
           let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
-              proofgoal = ProofGoal n "vc" goalname goal'
+              proofgoal = ProofGoal
+                          { goalNum  = n
+                          , goalType = "vc"
+                          , goalName = nm
+                          , goalLoc  = show ploc
+                          , goalDesc = msg
+                          , goalProp = goal'
+                          }
           res <- runProofScript tactic proofgoal (Just ploc) $ Text.unwords
                     ["LLVM verification condition", Text.pack (show n), Text.pack goalname]
           case res of
@@ -795,10 +802,11 @@ verifyPrestate opts cc mspec globals =
 assumptionsContainContradiction ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
   ProofScript () ->
   [Crucible.LabeledPred Term AssumptionReason] ->
   TopLevel Bool
-assumptionsContainContradiction cc tactic assumptions =
+assumptionsContainContradiction cc methodSpec tactic assumptions =
   do
      let sym = cc^.ccSym
      st <- io $ Common.sawCoreState sym
@@ -810,7 +818,14 @@ assumptionsContainContradiction cc tactic assumptions =
          -- implies falsehood
          goal  <- scImplies sc assume =<< toSC sym st (W4.falsePred sym)
          goal' <- boolToProp sc [] goal
-         return $ ProofGoal 0 "vc" "vacuousness check" goal'
+         return $ ProofGoal
+                  { goalNum  = 0
+                  , goalType = "vacuousness check"
+                  , goalName = show (methodSpec^.MS.csMethod)
+                  , goalLoc  = show (methodSpec^.MS.csLoc)
+                  , goalDesc = "vacuousness check"
+                  , goalProp = goal'
+                  }
      res <- runProofScript tactic pgl Nothing "vacuousness check"
      case res of
        ValidProof _ _     -> return True
@@ -826,16 +841,17 @@ assumptionsContainContradiction cc tactic assumptions =
 computeMinimalContradictingCore ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
   ProofScript () ->
   [Crucible.LabeledPred Term AssumptionReason] ->
   TopLevel ()
-computeMinimalContradictingCore cc tactic assumes =
+computeMinimalContradictingCore cc methodSpec tactic assumes =
   do
      printOutLnTop Warn "Contradiction detected! Computing minimal core of contradictory assumptions:"
      -- test subsets of assumptions of increasing sizes until we find a
      -- contradictory one
      let cores = sortBy (compare `on` length) (subsequences assumes)
-     findM (assumptionsContainContradiction cc tactic) cores >>= \case
+     findM (assumptionsContainContradiction cc methodSpec tactic) cores >>= \case
       Nothing -> printOutLnTop Warn "No minimal core: the assumptions did not contains a contradiction."
       Just core ->
         forM_ core $ \assume ->
@@ -848,13 +864,14 @@ computeMinimalContradictingCore cc tactic assumes =
 checkAssumptionsForContradictions ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
   ProofScript () ->
   [Crucible.LabeledPred Term AssumptionReason] ->
   TopLevel ()
-checkAssumptionsForContradictions cc tactic assumes =
+checkAssumptionsForContradictions cc methodSpec tactic assumes =
   whenM
-    (assumptionsContainContradiction cc tactic assumes)
-    (computeMinimalContradictingCore cc tactic assumes)
+    (assumptionsContainContradiction cc methodSpec tactic assumes)
+    (computeMinimalContradictingCore cc methodSpec tactic assumes)
 
 -- | Check two MemTypes for register compatiblity.  This is a stricter
 --   check than the memory compatiblity check that is done for points-to

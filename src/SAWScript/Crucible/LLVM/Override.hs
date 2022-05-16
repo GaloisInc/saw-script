@@ -1372,9 +1372,9 @@ matchTerm sc cc loc prepost real expect =
        _ ->
          do t <- liftIO $ scEq sc real expect
             let msg = unlines $
-                  [ "Literal equality " ++ stateCond prepost
-                  , "Expected term: " ++ prettyTerm expect
-                  , "Actual term:   " ++ prettyTerm real
+                  [ "Literal equality " ++ stateCond prepost ++ " at " ++ show loc
+--                  , "Expected term: " ++ prettyTerm expect
+--                  , "Actual term:   " ++ prettyTerm real
                   ]
             addTermEq t $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
   where prettyTerm = show . ppTermDepth 20

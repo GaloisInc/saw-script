@@ -221,7 +221,6 @@ executable saw
     , cryptol-saw-core
     , aig
 
-
   GHC-options: -O2 -Wall -Werror -threaded -fno-ignore-asserts -fno-spec-constr-count -rtsopts
 
 test-suite integration_tests
