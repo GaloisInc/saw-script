@@ -3,10 +3,10 @@
 eith_tp <- parse_core "\\ (a b:sort 0) -> Either a b";
 cryptol_add_prim_type "Either" "Either" eith_tp;
 
-left_fun <- parse_core "\\ (a b:sort 0) (x:a) -> Left a b x";
+left_fun <- parse_core "left";
 cryptol_add_prim "Either" "Left" left_fun;
 
-right_fun <- parse_core "\\ (a b:sort 0) (x:b) -> Right a b x";
+right_fun <- parse_core "right";
 cryptol_add_prim "Either" "Right" right_fun;
 
 either_fun <- parse_core "either";
