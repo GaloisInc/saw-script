@@ -122,11 +122,11 @@ primCellToTerm sc c args = case c ^. cellType of
       [ ("Y", res)
       ]
   "$mux" -> do
-    w <- outputWidth
     ta <- input "A"
     tb <- input "B"
     ts <- input "S"
-    snz <- liftIO $ SC.scBvNonzero sc w ts
+    swidth <- connWidth "S"
+    snz <- liftIO $ SC.scBvNonzero sc swidth ts
     ty <- liftIO $ SC.scBitvector sc outputWidthNat
     res <- liftIO $ SC.scIte sc ty snz tb ta
     fmap Just . cryptolRecord sc $ Map.fromList
@@ -141,13 +141,15 @@ primCellToTerm sc c args = case c ^. cellType of
   _ -> pure Nothing
   where
     nm = c ^. cellType
-    outputWidthNat :: Natural
-    outputWidthNat =
-      case Map.lookup "Y" $ c ^. cellConnections of
+    connWidthNat :: Text -> Natural
+    connWidthNat onm =
+      case Map.lookup onm $ c ^. cellConnections of
         Nothing -> panic "cellToTerm" [Text.unpack $ mconcat ["Missing expected output name for ", nm, " cell"]]
         Just bits -> fromIntegral $ length bits
-    outputWidth :: m SC.Term
-    outputWidth = liftIO $ SC.scNat sc outputWidthNat
+    connWidth :: Text -> m SC.Term
+    connWidth onm = liftIO . SC.scNat sc $ connWidthNat onm
+    outputWidthNat = connWidthNat "Y"
+    outputWidth = connWidth "Y"
     input :: Text -> m SC.Term
     input inpNm =
       case Map.lookup inpNm args of
