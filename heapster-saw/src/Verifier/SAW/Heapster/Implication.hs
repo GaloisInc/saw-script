@@ -4789,6 +4789,26 @@ implRemoveContainedLifetimeM l ls tps_in tps_out ps_in ps_out l2 =
   recombinePerm l (ValPerm_LOwned (delete (PExpr_Var l2) ls)
                    tps_in tps_out ps_in ps_out)
 
+-- | Find all equality permissions @eq(e)@ contained in a permission we
+-- currently hold on @x@, and return all of the free variables of @e@ along with
+-- their contained eq vars
+getContainedEqVars :: ExprVar a -> ImplM vars s r ps ps (NameSet CrucibleType)
+getContainedEqVars x = getContainedEqVarsExcept (NameSet.singleton x) x
+
+-- | Find all equality permissions @eq(e)@ contained in a permission we
+-- currently hold on @x@, and return all of the free variables of @e@ not in the
+-- supplied set, along with their contained eq vars
+getContainedEqVarsExcept :: NameSet CrucibleType -> ExprVar a ->
+                            ImplM vars s r ps ps (NameSet CrucibleType)
+getContainedEqVarsExcept excl x =
+  getPerm x >>>= \p ->
+  let p_eq_vars = containedEqVars p
+      new_excl = NameSet.union excl p_eq_vars
+      new_vars = NameSet.difference p_eq_vars excl in
+  NameSet.unions <$> (new_vars :) <$>
+  mapM (\(NameSet.SomeName y) ->
+         getContainedEqVarsExcept new_excl y) (NameSet.toList new_vars)
+
 -- | Find all lifetimes that we currently own which could, if ended, help prove
 -- the specified permissions, and return them with their @lowned@ permissions,
 -- in a topological order, where child lifetimes come before their parents.
@@ -4806,6 +4826,13 @@ lifetimesThatCouldProve mb_ps =
      mb_ps' <-
        give (cruCtxProxies varTypes) $
        substEqs (mbDistPermsToExprPerms mb_ps)
+     -- For all permissions x:p in mb_ps that we need to prove, find all the
+     -- variables y such that an eq(e) permission with y in the free variables
+     -- of e is contained in a permission we currently hold on x
+     containedVars <-
+       NameSet.unions <$>
+       mapM (\(NameSet.SomeName n) ->
+              getContainedEqVars n) (mbExprPermsVarsList mb_ps')
      -- Make sure we don't end any lifetimes that we still need in mb_ps
      let needed_ls = lownedsInMbExprPerms mb_ps'
      -- Find any lifetime in ps' not in needed_ls that could prove a permission
@@ -4815,7 +4842,10 @@ lifetimesThatCouldProve mb_ps =
        (l, p@(ValPerm_LOwned _ _ _ _ ps_out)) ->
          let b =
                notElem l needed_ls &&
-               lownedPermsCouldProve varTypes ps_out mb_ps' in
+               (lownedPermsCouldProve varTypes ps_out mb_ps' ||
+                not (NameSet.null $
+                     NameSet.intersection containedVars $
+                     exprPermsVarsSet ps_out)) in
          tracePretty (hang 2 $
                       sep [pretty "Testing if lifetime could prove perms:",
                            pretty "Lifetime = " <> permPretty pp l,
@@ -4829,7 +4859,10 @@ lifetimesThatCouldProve mb_ps =
          , lownedPermsCouldProve varTypes ps_out mb_ps' -> Just l -}
        (l, p@(ValPerm_LOwnedSimple _ ps_out))
          | notElem l needed_ls
-         , lownedPermsCouldProve varTypes ps_out mb_ps' -> Just (l,p)
+         , lownedPermsCouldProve varTypes ps_out mb_ps' ||
+           not (NameSet.null $
+                NameSet.intersection containedVars $
+                exprPermsVarsSet ps_out) -> Just (l,p)
        _ -> Nothing
 
 -- | Combine proofs of @x:ptr(pps,(off,spl) |-> eq(y))@ and @y:p@ on the top of

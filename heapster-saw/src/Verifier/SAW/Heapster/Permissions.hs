@@ -2791,6 +2791,33 @@ mbDistPermsToExprPerms = mbMapCl $(mkClosed [| distPermsToExprPerms |])
 exprPermsVars :: ExprPerms ps -> Maybe (RAssign Name ps)
 exprPermsVars = fmap distPermsVars . exprPermsToDistPerms
 
+-- | Convert the expressions in an 'ExprPerms' to variables, if possible, and
+-- collect them into a list
+exprPermsVarsList :: ExprPerms ps -> [SomeName CrucibleType]
+exprPermsVarsList ps =
+  case exprPermsVars ps of
+    Just ns -> RL.mapToList SomeName ns
+    Nothing -> []
+
+-- | Convert the expressions in an 'ExprPerms'-in-binding to variables, if
+-- possible, and collect them into a list
+mbExprPermsVarsList :: Mb ctx (ExprPerms ps) -> [SomeName CrucibleType]
+mbExprPermsVarsList =
+  concatMap (\case
+                [nuP| SomeName mb_n |]
+                  | Right n <- mbNameBoundP mb_n -> [SomeName n]
+                _ -> []) .
+  mbList . mbMapCl $(mkClosed [| exprPermsVarsList |])
+
+-- | Convert the expressions in an 'ExprPerms' to variables, if possible, and
+-- collect them into a set
+exprPermsVarsSet :: ExprPerms ps -> NameSet CrucibleType
+exprPermsVarsSet = NameSet.fromList . exprPermsVarsList
+
+-- | Convert the expressions in an 'ExprPerms'-in-binding to variables, if
+-- possible, and collect them in a 'NameSet'
+mbExprPermsVarsSet :: Mb ctx (ExprPerms ps) -> NameSet CrucibleType
+mbExprPermsVarsSet = NameSet.liftNameSet . fmap exprPermsVarsSet
 
 -- | Extract the @args@ context from a function permission
 funPermArgs :: FunPerm ghosts args gouts ret -> CruCtx args
@@ -6384,6 +6411,57 @@ instance FreeVars (NamedShapeBody b args w) where
   freeVars (DefinedShapeBody mb_sh) = freeVars mb_sh
   freeVars (OpaqueShapeBody mb_len _) = freeVars mb_len
   freeVars (RecShapeBody mb_sh _ _) = freeVars mb_sh
+
+
+-- | Find all equality permissions @eq(e)@ contained in another permission
+class ContainedEqVars a where
+  containedEqVars :: a -> NameSet CrucibleType
+
+instance ContainedEqVars (ValuePerm a) where
+  containedEqVars (ValPerm_Eq e) = freeVars e
+  containedEqVars (ValPerm_Or p1 p2) =
+    NameSet.union (containedEqVars p1) (containedEqVars p2)
+  containedEqVars (ValPerm_Exists mb_p) =
+    NameSet.liftNameSet $ fmap containedEqVars mb_p
+  containedEqVars (ValPerm_Named _ _ _) =
+    -- FIXME: we should probably unfold named permissions here...
+    NameSet.empty
+  containedEqVars (ValPerm_Var _ _) = NameSet.empty
+  containedEqVars (ValPerm_Conj ps) = NameSet.unions $ map containedEqVars ps
+  containedEqVars ValPerm_False = NameSet.empty
+
+instance ContainedEqVars (AtomicPerm a) where
+  containedEqVars (Perm_LLVMField fp) = containedEqVars (llvmFieldContents fp)
+  containedEqVars (Perm_LLVMArray ap) = containedEqVars (llvmArrayCellShape ap)
+  containedEqVars (Perm_LLVMBlock bp) = containedEqVars (llvmBlockShape bp)
+  containedEqVars (Perm_LLVMBlockShape sh) = containedEqVars sh
+  containedEqVars _ = NameSet.empty
+
+instance ContainedEqVars (PermExpr (LLVMShapeType w)) where
+  containedEqVars (PExpr_Var _) = NameSet.empty
+  containedEqVars PExpr_EmptyShape = NameSet.empty
+  containedEqVars (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
+                                              (DefinedShapeBody _)) args) =
+    containedEqVars (unfoldNamedShape nmsh args)
+  containedEqVars (PExpr_NamedShape _ _ (NamedShape _ _
+                                         (OpaqueShapeBody _ _)) _) =
+    NameSet.empty
+  containedEqVars (PExpr_NamedShape _ _ (NamedShape _ _
+                                         (RecShapeBody mb_sh _ _)) args) =
+    -- NOTE: we unfold the shape with the empty shape substituted for recursive
+    -- occurrences of the shape name, to avoid an infinite loop
+    containedEqVars $ subst (substOfExprs (args :>: PExpr_EmptyShape)) mb_sh
+  containedEqVars (PExpr_EqShape _ blk) = freeVars blk
+  containedEqVars (PExpr_PtrShape _ _ sh) = containedEqVars sh
+  containedEqVars (PExpr_FieldShape (LLVMFieldShape p)) = containedEqVars p
+  containedEqVars (PExpr_ArrayShape _ _ sh) = containedEqVars sh
+  containedEqVars (PExpr_SeqShape sh1 sh2) =
+    NameSet.union (containedEqVars sh1) (containedEqVars sh2)
+  containedEqVars (PExpr_OrShape sh1 sh2) =
+    NameSet.union (containedEqVars sh1) (containedEqVars sh2)
+  containedEqVars (PExpr_ExShape mb_sh) =
+    NameSet.liftNameSet $ fmap containedEqVars mb_sh
+  containedEqVars PExpr_FalseShape = NameSet.empty
 
 
 -- | Test if an expression @e@ is a /determining/ expression, meaning that
