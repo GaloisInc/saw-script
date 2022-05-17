@@ -53,7 +53,24 @@ Definition is_elem_fun : bitvector 64 -> List_IRT (bitvector 64) ->
                   if bvEq 64 y x then returnM (tt, intToBv 1 1) else is_elem x l')
                (unfoldList_IRT _ l), tt))).
 
-Lemma is_elem_fun_ref : refinesFun is_elem is_elem_fun.
+Definition is_elem_fun2 : bitvector 64 -> List_IRT (bitvector 64) ->
+                          CompM (unit * bitvector 1) :=
+  fun x l =>
+    letRecM
+      (LRT_Cons (LRT_Fun _ (fun _ => LRT_Fun _ (fun _ => LRT_Ret _))) LRT_Nil)
+      (fun is_elem =>
+         (fun x l =>
+            either
+              _ _ _
+              (fun _ => returnM (tt, intToBv 1 0))
+              (fun arg =>
+                 let y := fst (snd arg) in
+                 let l' := fst (snd (snd arg)) in
+                 if bvEq 64 y x then returnM (tt, intToBv 1 1) else is_elem x l')
+              (unfoldList_IRT _ l), tt))
+      (fun is_elem => is_elem x l).
+
+Lemma is_elem_fun_ref : refinesFun is_elem is_elem_fun2.
 Proof.
   unfold is_elem, is_elem__tuple_fun, noErrorsSpec,
          list_64_drop_in_place, _ZN5alloc5alloc8box_free17hc52ecccd139e11ceE,
