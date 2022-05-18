@@ -50,15 +50,6 @@ import SAWScript.Prover.MRSolver.Monad
 -- * Various SMT-specific Functions on Terms
 ----------------------------------------------------------------------
 
--- | Test if a 'Term' is a 'BVVec' type
-asBVVecType :: Recognizer Term (Term, Term, Term)
-asBVVecType (asApplyAll ->
-             (isGlobalDef "Prelude.Vec" -> Just _,
-              [(asApplyAll ->
-                (isGlobalDef "Prelude.bvToNat" -> Just _, [n, len])), a])) =
-  Just (n, len, a)
-asBVVecType _ = Nothing
-
 -- | Apply @genBVVec@ to arguments @n@, @len@, and @a@, along with a function of
 -- type @Vec n Bool -> a@
 genBVVecTerm :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
@@ -343,8 +334,7 @@ mrEq t1 t2 = mrTypeOf t1 >>= \tp -> mrEq' tp t1 t2
 -- are equal, where the first 'Term' gives their type (which we assume is the
 -- same for both). This is like 'scEq' except that it works on open terms.
 mrEq' :: Term -> Term -> Term -> MRM Term
-mrEq' (asDataType -> Just (pn, [])) t1 t2
-  | primName pn == "Prelude.Nat" = liftSC2 scEqualNat t1 t2
+mrEq' (asNatType -> Just _) t1 t2 = liftSC2 scEqualNat t1 t2
 mrEq' (asBoolType -> Just _) t1 t2 = liftSC2 scBoolEq t1 t2
 mrEq' (asIntegerType -> Just _) t1 t2 = liftSC2 scIntEq t1 t2
 mrEq' (asVectorType -> Just (n, asBoolType -> Just ())) t1 t2 =

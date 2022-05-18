@@ -125,7 +125,7 @@ module SAWScript.Prover.MRSolver.Solver where
 
 import Data.Maybe
 import Data.Either
-import Data.List (findIndices, intercalate, foldl')
+import Data.List (findIndices, intercalate)
 import Data.Bits (shiftL)
 import Control.Monad.Except
 import qualified Data.Map as Map
@@ -147,19 +147,6 @@ import SAWScript.Prover.MRSolver.SMT
 ----------------------------------------------------------------------
 -- * Normalizing and Matching on Terms
 ----------------------------------------------------------------------
-
--- | Like 'asVectorType', but returns 'Nothing' if 'asBVVecType' returns 'Just'
-asNonBVVecVectorType :: Recognizer Term (Term, Term)
-asNonBVVecVectorType (asBVVecType -> Just _) = Nothing
-asNonBVVecVectorType t = asVectorType t
-
--- | Like 'scBvNat', but if given a bitvector literal it is converted to a
--- natural number literal
-mrBvToNat :: Term -> Term -> MRM Term
-mrBvToNat _ (asArrayValue -> Just (asBoolType -> Just _,
-                                   mapM asBool -> Just bits)) =
-  liftSC1 scNat $ foldl' (\n bit -> if bit then 2*n+1 else 2*n) 0 bits
-mrBvToNat n len = liftSC2 scBvNat n len
 
 -- | Pattern-match on a @LetRecTypes@ list in normal form and return a list of
 -- the types it specifies, each in normal form and with uvars abstracted out

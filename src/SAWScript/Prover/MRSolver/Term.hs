@@ -177,11 +177,51 @@ isCompFunType sc t = scWhnf sc t >>= \case
   (asPiList -> (_, asCompM -> Just _)) -> return True
   _ -> return False
 
+
+----------------------------------------------------------------------
+-- * Useful 'Recognizer's for 'Term's
+----------------------------------------------------------------------
+
 -- | Recognize a 'Term' as an application of `bvToNat`
 asBvToNat :: Recognizer Term (Term, Term)
 asBvToNat (asApplyAll -> ((isGlobalDef "Prelude.bvToNat" -> Just ()),
                           [n, x])) = Just (n, x)
 asBvToNat _ = Nothing
+
+-- | Recognize a term as a @Left@ or @Right@
+asEither :: Recognizer Term (Either Term Term)
+asEither (asCtor -> Just (c, [_, _, x]))
+  | primName c == "Prelude.Left"  = return $ Left x
+  | primName c == "Prelude.Right" = return $ Right x
+asEither _ = Nothing
+
+-- | Recognize a term as a @TCNum n@ or @TCInf@
+asNum :: Recognizer Term (Either Term ())
+asNum (asCtor -> Just (c, [n]))
+  | primName c == "Cryptol.TCNum"  = return $ Left n
+asNum (asCtor -> Just (c, []))
+  | primName c == "Cryptol.TCInf"  = return $ Right ()
+asNum _ = Nothing
+
+-- | Recognize a term as being of the form @isFinite n@
+asIsFinite :: Recognizer Term Term
+asIsFinite (asApp -> Just (isGlobalDef "CryptolM.isFinite" -> Just (), n)) =
+  Just n
+asIsFinite _ = Nothing
+
+-- | Test if a 'Term' is a 'BVVec' type
+asBVVecType :: Recognizer Term (Term, Term, Term)
+asBVVecType (asApplyAll ->
+             (isGlobalDef "Prelude.Vec" -> Just _,
+              [(asApplyAll ->
+                (isGlobalDef "Prelude.bvToNat" -> Just _, [n, len])), a])) =
+  Just (n, len, a)
+asBVVecType _ = Nothing
+
+-- | Like 'asVectorType', but returns 'Nothing' if 'asBVVecType' returns 'Just'
+asNonBVVecVectorType :: Recognizer Term (Term, Term)
+asNonBVVecVectorType (asBVVecType -> Just _) = Nothing
+asNonBVVecVectorType t = asVectorType t
 
 
 ----------------------------------------------------------------------
