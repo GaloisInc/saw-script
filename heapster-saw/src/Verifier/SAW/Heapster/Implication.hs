@@ -3238,10 +3238,10 @@ mkImplState vars perms env info fail_prefix dlevel nameTypes u endianness =
   _implStateDebugLevel = dlevel
   }
 
-extImplState :: KnownRepr TypeRepr tp => ImplState vars ps ->
+extImplState :: TypeRepr tp -> ImplState vars ps ->
                 ImplState (vars :> tp) ps
-extImplState s =
-  s { _implStateVars = extCruCtx (_implStateVars s),
+extImplState tp s =
+  s { _implStateVars = CruCtxCons (_implStateVars s) tp,
       _implStatePSubst = extPSubst (_implStatePSubst s),
       _implStatePVarSubst = (_implStatePVarSubst s) :>: Compose Nothing }
 
@@ -3443,16 +3443,16 @@ getVarVarM memb =
       pure n
     _ -> error "getVarVarM"
 
+
 -- | Run an implication computation with one more existential variable,
 -- returning the optional expression it was bound to in the current partial
 -- substitution when it is done
-withExtVarsM :: KnownRepr TypeRepr tp =>
-                NuMatchingAny1 r =>
-                ImplM (vars :> tp) s r ps1 ps2 a ->
-                ImplM vars s r ps1 ps2 (a, PermExpr tp)
-withExtVarsM m =
+withExtVarsM' :: NuMatchingAny1 r =>
+                 TypeRepr tp -> ImplM (vars :> tp) s r ps1 ps2 a ->
+                 ImplM vars s r ps1 ps2 (a, PermExpr tp)
+withExtVarsM' tp m =
   -- Add a new existential to the 'ImplState'
-  gmodify extImplState       >>>
+  gmodify (extImplState tp)  >>>
   -- If the new existential has type unit, instantiate it to the global unit
   handleUnitEVar Member_Base >>>
   -- Run the computation
@@ -3462,17 +3462,26 @@ withExtVarsM m =
   gmodify unextImplState     >>>
   pure (a, case psubstLookup psubst Member_Base of
              Just e -> e
-             Nothing -> zeroOfType knownRepr)
+             Nothing -> zeroOfType tp)
+
+-- | Run an implication computation with one more existential variable,
+-- returning the optional expression it was bound to in the current partial
+-- substitution when it is done
+withExtVarsM :: KnownRepr TypeRepr tp =>
+                NuMatchingAny1 r =>
+                ImplM (vars :> tp) s r ps1 ps2 a ->
+                ImplM vars s r ps1 ps2 (a, PermExpr tp)
+withExtVarsM = withExtVarsM' knownRepr
 
 -- | Run an implication computation with an additional context of existential
 -- variables
 withExtVarsMultiM :: NuMatchingAny1 r =>
-                     KnownCruCtx vars' ->
+                     CruCtx vars' ->
                      ImplM (vars :++: vars') s r ps1 ps2 a ->
                      ImplM vars s r ps1 ps2 a
-withExtVarsMultiM MNil m = m
-withExtVarsMultiM (ctx :>: KnownReprObj) m =
-  withExtVarsMultiM ctx (withExtVarsM m >>>= \(a,_) -> return a)
+withExtVarsMultiM CruCtxNil m = m
+withExtVarsMultiM (CruCtxCons ctx tp) m =
+  withExtVarsMultiM ctx (withExtVarsM' tp m >>>= \(a,_) -> return a)
 
 -- | Perform either the first, second, or both computations with an 'implCatchM'
 -- between, depending on the recursion flag. The 'String' names the function
@@ -3555,6 +3564,25 @@ implFindLOwnedPerms =
                   NameAndElem l p@(ValPerm_LOwnedSimple _ _) -> Just (l,p)
                   _ -> Nothing) <$>
   NameMap.assocs <$> view varPermMap <$> getPerms
+
+-- | Find all lifetimes contained in a lifetime @l@, including itself
+containedLifetimes :: ExprVar LifetimeType ->
+                      ImplM vars s r ps ps [ExprVar LifetimeType]
+containedLifetimes orig_l = execStateT (helper $ PExpr_Var orig_l) [] where
+  helper :: PermExpr LifetimeType ->
+            StateT [ExprVar LifetimeType] (ImplM vars s r ps ps) ()
+  helper PExpr_Always = return ()
+  helper (PExpr_Var l) =
+    do prevs <- get
+       if elem l prevs then return () else
+         put (l : prevs) >>
+         (lift $ getPerm l) >>= \case
+         ValPerm_Conj ps ->
+           forM_ ps $ \case
+           Perm_LCurrent l' -> helper l'
+           Perm_LOwned ls _ _ _ _ -> mapM_ helper ls
+           _ -> return ()
+         _ -> return ()
 
 -- | Instantiate the current @implStateUnitVar@ with the given @ExprVar@ of type
 -- @UnitType@
@@ -4761,28 +4789,69 @@ implRemoveContainedLifetimeM l ls tps_in tps_out ps_in ps_out l2 =
   recombinePerm l (ValPerm_LOwned (delete (PExpr_Var l2) ls)
                    tps_in tps_out ps_in ps_out)
 
+-- | Find all equality permissions @eq(e)@ contained in a permission we
+-- currently hold on @x@, and return all of the free variables of @e@ along with
+-- their contained eq vars
+getContainedEqVars :: ExprVar a -> ImplM vars s r ps ps (NameSet CrucibleType)
+getContainedEqVars x = getContainedEqVarsExcept (NameSet.singleton x) x
+
+-- | Find all equality permissions @eq(e)@ contained in a permission we
+-- currently hold on @x@, and return all of the free variables of @e@ not in the
+-- supplied set, along with their contained eq vars
+getContainedEqVarsExcept :: NameSet CrucibleType -> ExprVar a ->
+                            ImplM vars s r ps ps (NameSet CrucibleType)
+getContainedEqVarsExcept excl x =
+  getPerm x >>>= \p ->
+  let p_eq_vars = containedEqVars p
+      new_excl = NameSet.union excl p_eq_vars
+      new_vars = NameSet.difference p_eq_vars excl in
+  NameSet.unions <$> (new_vars :) <$>
+  mapM (\(NameSet.SomeName y) ->
+         getContainedEqVarsExcept new_excl y) (NameSet.toList new_vars)
 
 -- | Find all lifetimes that we currently own which could, if ended, help prove
--- the specified permissions, and return them with their @lowned@ permissions
+-- the specified permissions, and return them with their @lowned@ permissions,
+-- in a topological order, where child lifetimes come before their parents.
 lifetimesThatCouldProve :: NuMatchingAny1 r => Mb vars (DistPerms ps') ->
-                           ImplM vars s r ps ps [(ExprVar LifetimeType,
-                                                  AtomicPerm LifetimeType)]
+                           ImplM vars s r ps ps [ExprVar LifetimeType]
 lifetimesThatCouldProve mb_ps =
-  do Some all_perms <- uses implStatePerms permSetAllVarPerms
-     let needed_ls = lownedsInMbDistPerms mb_ps
-     pure (RL.foldr
-             (\case
-                 VarAndPerm l (ValPerm_LOwned ls tps_in tps_out ps_in ps_out)
-                   | notElem l needed_ls
-                   , mbLift $ fmap (lownedPermsCouldProve ps_out) mb_ps ->
-                     ((l, Perm_LOwned ls tps_in tps_out ps_in ps_out) :)
-                 VarAndPerm l (ValPerm_LOwnedSimple tps ps)
-                   | notElem l needed_ls
-                   , mbLift $ fmap (lownedPermsCouldProve ps) mb_ps ->
-                     ((l, Perm_LOwnedSimple tps ps) :)
-                 _ -> id)
-             []
-             all_perms)
+  do varTypes <- use implStateVars
+     -- Cast all lowneds we currently hold using any equality perms we hold
+     (unzip -> (ls, ps)) <- implFindLOwnedPerms
+     ps' <- substEqs ps
+     let ls_ps' = zip ls ps'
+     -- Convert mb_ps to ExprPerms so we can cast them as well; DistPerms can't
+     -- be cast because casting substitutes expressions for variables, and
+     -- DistPerms are pairs of a variable with a permission
+     mb_ps' <-
+       give (cruCtxProxies varTypes) $
+       substEqs (mbDistPermsToExprPerms mb_ps)
+     -- For all permissions x:p in mb_ps that we need to prove, find all the
+     -- variables y such that an eq(e) permission with y in the free variables
+     -- of e is contained in a permission we currently hold on x
+     containedVars <-
+       NameSet.unions <$>
+       mapM (\(NameSet.SomeName n) ->
+              getContainedEqVars n) (mbExprPermsVarsList mb_ps')
+     -- Make sure we don't end any lifetimes that we still need in mb_ps
+     let needed_ls = lownedsInMbExprPerms mb_ps'
+     -- Find any lifetime in ps' not in needed_ls that could prove a permission
+     -- we need in mb_ps'
+     return $ map fst $ sortLOwnedPerms $ flip mapMaybe ls_ps' $ \case
+       (l, p@(ValPerm_LOwned _ _ _ _ ps_out))
+         | notElem l needed_ls
+         , lownedPermsCouldProve varTypes ps_out mb_ps' ||
+           not (NameSet.null $
+                NameSet.intersection containedVars $
+                exprPermsVarsSet ps_out) ->
+           Just (l,p)
+       (l, p@(ValPerm_LOwnedSimple _ ps_out))
+         | notElem l needed_ls
+         , lownedPermsCouldProve varTypes ps_out mb_ps' ||
+           not (NameSet.null $
+                NameSet.intersection containedVars $
+                exprPermsVarsSet ps_out) -> Just (l,p)
+       _ -> Nothing
 
 -- | Combine proofs of @x:ptr(pps,(off,spl) |-> eq(y))@ and @y:p@ on the top of
 -- the permission stack into a proof of @x:ptr(pps,(off,spl |-> p))@
@@ -5706,11 +5775,13 @@ recombinePermConj x x_ps (Perm_LLVMBlock bp)
 -- FIXME: if the elimination fails, this shouldn't fail, it should just
 -- recombine without eliminating, so we should special case those shapes where
 -- the elimination will fail
+{-
 recombinePermConj x x_ps (Perm_LLVMBlock bp)
   | any (llvmAtomicPermOverlapsRange $ llvmBlockRange bp) x_ps =
     implElimLLVMBlock x bp >>>
     getTopDistPerm x >>>= \p ->
     recombinePerm x p
+-}
 
 -- If p is a memblock permission on the false shape, eliminate the block to
 -- a false permission (and eliminate the false permission itself)
@@ -5848,6 +5919,13 @@ substEqsWithProof a =
   do var_ps <- use (implStatePerms . varPermMap)
      pure (someEqProofFromSubst var_ps a)
 
+-- | Substitute any equality permissions for the variables in an expression
+-- using 'substEqsWithProof', but just return the result expression and not the
+-- proof
+substEqs :: (AbstractVars a, FreeVars a,
+             Substable PermSubst a Identity, NuMatchingAny1 r) =>
+            a -> ImplM vars s r ps ps a
+substEqs a = someEqProofRHS <$> substEqsWithProof a
 
 -- | The main work horse for 'proveEq' on expressions
 proveEqH :: forall vars a s r ps. NuMatchingAny1 r => HasCallStack =>
@@ -6157,7 +6235,7 @@ neededPerms0 = Some MNil
 
 -- | A permission in some context of existential variables extending @vars@
 data SomeMbPerm vars a where
-  SomeMbPerm :: KnownCruCtx vars' ->
+  SomeMbPerm :: CruCtx vars' ->
                 Mb (vars :++: vars') (ValuePerm a) ->
                 SomeMbPerm vars a
 
@@ -6165,8 +6243,8 @@ data SomeMbPerm vars a where
 someMbPermForRange :: RAssign Proxy vars -> MbRangeForType a ->
                       SomeMbPerm vars a
 someMbPermForRange vars (MbRangeForLLVMType vars' mb_rw mb_l mb_rng) =
-  SomeMbPerm (vars' :>: KnownReprObj) $
-  mbCombine (rlToProxies vars' :>: Proxy) $ nuMulti vars $ const $
+  SomeMbPerm (CruCtxCons vars' knownRepr) $
+  mbCombine (cruCtxProxies vars' :>: Proxy) $ nuMulti vars $ const $
   mbCombine (MNil :>: Proxy) $
   mbMap3 (\rw l rng -> nu $ \sh ->
            ValPerm_LLVMBlock $
@@ -6734,7 +6812,8 @@ proveVarLLVMArrayH x psubst ps mb_ap
   , Just len <- partialSubst psubst $ mbLLVMArrayLen mb_ap
   , Just lenBytes <- partialSubst psubst $ mbLLVMArrayLenBytes mb_ap
   , stride <- mbLLVMArrayStride mb_ap
-  , Just i   <- findIndex (suitableAP off lenBytes stride) ps
+  , Just bs  <- partialSubst psubst $ mbLLVMArrayBorrows mb_ap
+  , Just i   <- findIndex (suitableAP off lenBytes stride bs) ps
   , Perm_LLVMArray ap_lhs <- ps!!i =
     implVerbTraceM (\info -> pretty "proveVarLLVMArrayH case 1: using" <+>
                              permPretty info ap_lhs) >>>
@@ -6742,7 +6821,7 @@ proveVarLLVMArrayH x psubst ps mb_ap
     recombinePerm x (ValPerm_Conj ps') >>>
 
     partialSubstForceM (mbLLVMArrayBorrows mb_ap)
-    "proveVarLLVMArrayH: incomplete array borrows" >>>= \bs ->
+    "proveVarLLVMArrayH: incomplete array borrows" >>>
 
     if bvEq off (llvmArrayOffset ap_lhs) && bvEq len (llvmArrayLen ap_lhs) then
       proveVarLLVMArray_FromArray x ap_lhs len bs mb_ap
@@ -6752,22 +6831,26 @@ proveVarLLVMArrayH x psubst ps mb_ap
       proveVarLLVMArray_FromArray x (llvmMakeSubArray ap_lhs off len) len bs mb_ap
   where
     -- Test if an atomic permission is a "suitable" array permission for the
-    -- given offset, length, and stride, meaning that it has the required
-    -- stride, could contain the offset and length, and does not have all of the
-    -- offset and length borrowed
+    -- given offset, length, stride, and borrows, meaning that it has the
+    -- given stride, could contain the given offset and length, and either
+    -- has exactly the given borrows or at least does not have all of the
+    -- given offset and length borrowed
     suitableAP ::
       (1 <= w, KnownNat w) =>
       PermExpr (BVType w) -> PermExpr (BVType w) -> Bytes ->
-      AtomicPerm (LLVMPointerType w) -> Bool
-    suitableAP off len stride (Perm_LLVMArray ap) =
+      [LLVMArrayBorrow w] -> AtomicPerm (LLVMPointerType w) -> Bool
+    suitableAP off len stride bs (Perm_LLVMArray ap) =
       -- Test that the strides are equal
       llvmArrayStride ap == stride &&
-      -- Make sure the range [off,len) is not fully borrowed
-      not (llvmArrayRangeIsBorrowed ap (BVRange off len)) &&
       -- Test if this permission *could* cover the desired off/len
       all bvPropCouldHold (bvPropRangeSubset (BVRange off len)
-                                             (llvmArrayAbsOffsets ap))
-    suitableAP _ _ _ _ = False
+                                             (llvmArrayAbsOffsets ap)) &&
+      -- Test that either the sets of borrows are equal ...
+      ((all (flip elem bs) (llvmArrayBorrows ap) &&
+        all (flip elem (llvmArrayBorrows ap)) bs) ||
+       -- ...or the range [off,len) is not fully borrowed
+       not (llvmArrayRangeIsBorrowed ap (BVRange off len)))
+    suitableAP _ _ _ _ _ = False
 
 -- Check if there is a block that contains the required offset and length, in
 -- which case eliminate it, allowing us to either satisfy way 4 (eliminate a
@@ -6809,8 +6892,8 @@ proveVarLLVMArrayH x psubst ps mb_ap
   , len <- llvmArrayLen ap
   , lhs_cells@(lhs_cell_rng:_) <- concatMap (permCells ap) ps
   , rhs_cells <- map llvmArrayBorrowCells (llvmArrayBorrows ap)
-  , Just cells <- gatherCoveringRanges (llvmArrayCells ap) (lhs_cells ++
-                                                            rhs_cells)
+  , Just cells <- gatherCoveringRanges (llvmArrayCells ap) (rhs_cells ++
+                                                            lhs_cells)
   , bs <- map cellRangeToBorrow cells
   , ap_borrowed <- ap { llvmArrayBorrows = bs }
   , cell_bp <- blockForCell ap (bvRangeOffset lhs_cell_rng) =
@@ -8293,21 +8376,38 @@ proveVarAtomicImpl x ps mb_p = case mbMatch mb_p of
       recombinePermsPartial (ps0 :>: p_l) ps_lops
 
   [nuMP| Perm_LCurrent mb_l' |] ->
+    -- We are trying to prove x is current whenever l' is, meaning that the
+    -- duration of l' is guaranteed to be contained inside that of x
     partialSubstForceM mb_l' "proveVarAtomicImpl" >>>= \l' ->
     case ps of
       _ | l' == PExpr_Var x ->
+          -- If l' == x, proceed by reflexivity of lcurrent
           recombinePerm x (ValPerm_Conj ps) >>>
           implSimplM Proxy (SImpl_LCurrentRefl x)
-      [Perm_LCurrent l] | l == l' -> pure ()
+      [Perm_LCurrent l]
+        -- If we already have x:lcurrent l' on the LHS, we are done
+        | l == l' -> pure ()
       [Perm_LCurrent (PExpr_Var l)] ->
+        -- If we have x:lcurrent l for some other l, prove l:lcurrent l' and
+        -- proceed by transitivity of lcurent
         proveVarImplInt l (mbValPerm_Conj1 mb_p) >>>
         implSimplM Proxy (SImpl_LCurrentTrans x l l')
       [Perm_LOwned ls tps_in tps_out ps_in ps_out]
         | elem l' ls ->
+          -- If we already have a lifetime ownership permission for x that
+          -- contains l' as a sub-lifetime, use that
           implContainedLifetimeCurrentM x ls tps_in tps_out ps_in ps_out l'
-      [Perm_LOwned ls tps_in tps_out ps_in ps_out] ->
-        implSubsumeLifetimeM x ls tps_in tps_out ps_in ps_out l' >>>
-        implContainedLifetimeCurrentM x (l':ls) tps_in tps_out ps_in ps_out l'
+      [Perm_LOwned ls tps_in tps_out ps_in ps_out]
+        | PExpr_Var n' <- l' ->
+          -- If we have a lifetime ownership permission for x that does not
+          -- contain l', add l' as a sub-lifetime of x, but only if l' does not
+          -- already contain x
+          containedLifetimes n' >>>= \sub_ls ->
+          if elem x sub_ls then
+            proveVarAtomicImplUnfoldOrFail x ps mb_p
+          else
+            implSubsumeLifetimeM x ls tps_in tps_out ps_in ps_out l' >>>
+            implContainedLifetimeCurrentM x (l':ls) tps_in tps_out ps_in ps_out l'
       _ -> proveVarAtomicImplUnfoldOrFail x ps mb_p
 
   [nuMP| Perm_LFinished |] ->
@@ -8988,6 +9088,7 @@ localMbProveVars mb_ps_in mb_ps_out =
 implEndLifetimeRecM :: NuMatchingAny1 r => ExprVar LifetimeType ->
                        ImplM vars s r ps ps ()
 implEndLifetimeRecM l =
+  implVerbTraceM (\i -> pretty "implEndLifetimeRecM" <+> permPretty i l) >>>
   getPerm l >>>= \case
   ValPerm_LFinished -> return ()
   p@(ValPerm_LOwned [] tps_in tps_out ps_in ps_out)
@@ -9028,12 +9129,13 @@ proveVarsImplAppend :: NuMatchingAny1 r => ExDistPerms vars ps ->
                        ImplM vars s r (ps_in :++: ps) ps_in ()
 proveVarsImplAppend mb_ps =
   use implStatePerms >>>= \(_ :: PermSet ps_in) ->
-  lifetimesThatCouldProve mb_ps >>>= \ls_ps ->
+  lifetimesThatCouldProve mb_ps >>>= \ls ->
+  implVerbTraceM (\i -> pretty "Lifetimes that could prove:" <+> permPretty i ls) >>>
   foldr1 (implCatchM "proveVarsImplAppend" mb_ps)
   ((proveVarsImplAppendInt mb_ps)
    :
-   flip map ls_ps
-   (\(l,_) ->
+   flip map ls
+   (\l ->
      implTraceM (\i ->
                   sep [pretty "Ending lifetime" <+> permPretty i l,
                        pretty "in order to prove:",

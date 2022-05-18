@@ -317,7 +317,7 @@ data BVRange w = BVRange { bvRangeOffset :: PermExpr (BVType w),
 -- and lifetime modalities
 data MbRangeForType a where
   MbRangeForLLVMType ::
-    (1 <= w, KnownNat w) => KnownCruCtx vars ->
+    (1 <= w, KnownNat w) => CruCtx vars ->
     Mb vars (PermExpr RWModalityType) -> Mb vars (PermExpr LifetimeType) ->
     Mb vars (BVRange w) -> MbRangeForType (LLVMPointerType w)
 
@@ -326,7 +326,7 @@ rangeForLLVMType :: (1 <= w, KnownNat w) =>
                     PermExpr RWModalityType -> PermExpr LifetimeType ->
                     BVRange w -> MbRangeForType (LLVMPointerType w)
 rangeForLLVMType rw l rng =
-  MbRangeForLLVMType MNil (emptyMb rw) (emptyMb l) (emptyMb rng)
+  MbRangeForLLVMType CruCtxNil (emptyMb rw) (emptyMb l) (emptyMb rng)
 
 -- | A name-binding over some list of typed existential variables
 data SomeTypedMb a where
@@ -425,7 +425,8 @@ data AtomicPerm (a :: CrucibleType) where
   -- back when @l@ is ended.
   Perm_LOwnedSimple :: CruCtx ps -> ExprPerms ps -> AtomicPerm LifetimeType
 
-  -- | Assertion that a lifetime is current during another lifetime
+  -- | Assertion that a lifetime is current during another lifetime;
+  -- @l1:lcurrent l2@ can also be read as @l1@ contains @l2@ as a sub-lifetime
   Perm_LCurrent :: PermExpr LifetimeType -> AtomicPerm LifetimeType
 
   -- | Assertion that a lifetime has finished
@@ -2140,19 +2141,19 @@ bvRangesSubsetTo rngs1 rngs2 =
   bvRangeSubsetTo rng1 rng2
 
 -- | Convert an 'MbRangeForType' in a binding to an 'MbRangeForType'
-mbMbRangeForType :: KnownCruCtx ctx -> Mb ctx (MbRangeForType a) ->
+mbMbRangeForType :: CruCtx ctx -> Mb ctx (MbRangeForType a) ->
                     MbRangeForType a
 -- If the range can be lifted out of the binding, do so
 mbMbRangeForType ctx mb_rngft
-  | Just rngft <- partialSubst (emptyPSubst ctx) mb_rngft
+  | Just rngft <- partialSubst (emptyPSubst $ cruCtxProxies ctx) mb_rngft
   = rngft
 -- Otherwise, add the new variables to the existing bound variables
 mbMbRangeForType ctx mb_rngft = case mbMatch mb_rngft of
   [nuMP| MbRangeForLLVMType vars rw l rng |] ->
-    MbRangeForLLVMType (RL.append ctx $ mbLift vars)
-    (mbCombine (RL.map (const Proxy) (mbLift vars)) rw)
-    (mbCombine (RL.map (const Proxy) (mbLift vars)) l)
-    (mbCombine (RL.map (const Proxy) (mbLift vars)) rng)
+    MbRangeForLLVMType (appendCruCtx ctx $ mbLift vars)
+    (mbCombine (cruCtxProxies $ mbLift vars) rw)
+    (mbCombine (cruCtxProxies $ mbLift vars) l)
+    (mbCombine (cruCtxProxies $ mbLift vars) rng)
 
 -- | Add a 'PermOffset' to an 'MbRangeForType
 offsetMbRangeForType :: PermOffset a -> MbRangeForType a -> MbRangeForType a
@@ -2161,25 +2162,31 @@ offsetMbRangeForType (LLVMPermOffset off) (MbRangeForLLVMType
                                            vars mb_rw mb_l mb_rng) =
   MbRangeForLLVMType vars mb_rw mb_l $ fmap (offsetBVRange off) mb_rng
 
--- | Test if the first read/write modality in a binding is "covered" by the
--- second, meaning a permission relative to the second can be coerced to a
--- similar permission relative to the first
-mbRWModsCoveredBy ::
+-- | Test if the first read/write modality in a binding "covers" the second,
+-- meaning a permission relative to the first implies or can be coerced to a
+-- similar permission relative to the second, possibly by instantiating evars on
+-- the right
+mbRWModCovers ::
   Mb (ctx1 :: RList CrucibleType) (PermExpr RWModalityType) ->
   Mb (ctx2 :: RList CrucibleType) (PermExpr RWModalityType) -> Bool
-mbRWModsCoveredBy _ [nuP| PExpr_Write |] = True
-mbRWModsCoveredBy [nuP| PExpr_Read |] _ = True
-mbRWModsCoveredBy mb_rw1 mb_rw2 =
+mbRWModCovers [nuP| PExpr_Write |] _ = True
+mbRWModCovers _ [nuP| PExpr_Read |] = True
+mbRWModCovers _ [nuP| PExpr_Var mb_x |]
+  | Left _ <- mbNameBoundP mb_x = True
+mbRWModCovers mb_rw2 mb_rw1 =
   fromMaybe False ((==) <$> tryLift mb_rw1 <*> tryLift mb_rw2)
 
--- | Test if the first lifetime modality in a binding is "covered" by the
--- second, meaning a permission relative to the second can be coerced to a
--- similar permission relative to the first
-mbLifetimeCoveredBy ::
+-- | Test if the first lifetime in a binding "covers" the second, meaning a
+-- permission relative to the second implies or can be coerced to a similar
+-- permission relative to the first, possibly by instantiating evars on the
+-- right
+mbLifetimeCovers ::
   Mb (ctx1 :: RList CrucibleType) (PermExpr LifetimeType) ->
   Mb (ctx2 :: RList CrucibleType) (PermExpr LifetimeType) -> Bool
-mbLifetimeCoveredBy _ [nuP| PExpr_Always |] = True
-mbLifetimeCoveredBy mb_l1 mb_l2 =
+mbLifetimeCovers _ [nuP| PExpr_Always |] = True
+mbLifetimeCovers _ [nuP| PExpr_Var mb_x |]
+  | Left _ <- mbNameBoundP mb_x = True
+mbLifetimeCovers mb_l1 mb_l2 =
   fromMaybe False ((==) <$> tryLift mb_l1 <*> tryLift mb_l2)
 
 -- | Delete one range from another, where the deletion only happens if the
@@ -2189,12 +2196,12 @@ mbRangeFTDelete :: MbRangeForType a -> MbRangeForType a ->
 mbRangeFTDelete
   (MbRangeForLLVMType vars1 mb_rw1 mb_l1 mb_rng1)
   (MbRangeForLLVMType vars2 mb_rw2 mb_l2 mb_rng2)
-  | mbRWModsCoveredBy mb_rw1 mb_rw2
-  , mbLifetimeCoveredBy mb_l1 mb_l2
-  , mb_rw2' <- extMbMultiL (rlToProxies vars1) mb_rw2
-  , mb_l2' <- extMbMultiL (rlToProxies vars1) mb_l2 =
-    map (MbRangeForLLVMType (RL.append vars1 vars2) mb_rw2' mb_l2') $ mbList $
-    mbCombine (RL.map (const Proxy) vars2) $
+  | mbRWModCovers mb_rw2 mb_rw1
+  , mbLifetimeCovers mb_l2 mb_l1
+  , mb_rw2' <- extMbMultiL (cruCtxProxies vars1) mb_rw2
+  , mb_l2' <- extMbMultiL (cruCtxProxies vars1) mb_l2 =
+    map (MbRangeForLLVMType (appendCruCtx vars1 vars2) mb_rw2' mb_l2') $
+    mbList $ mbCombine (cruCtxProxies vars2) $
     flip fmap mb_rng1 $ \rng1 -> flip fmap mb_rng2 $ \rng2 ->
     bvRangeDelete rng1 rng2
 mbRangeFTDelete mb_rng _ = [mb_rng]
@@ -2213,10 +2220,10 @@ mbRangeFTSubsetTo :: MbRangeForType a -> MbRangeForType a ->
 mbRangeFTSubsetTo
   (MbRangeForLLVMType vars1 mb_rw1 mb_l1 mb_rng1)
   (MbRangeForLLVMType vars2 _ _ mb_rng2)
-  | mb_rw1' <- extMbMulti (rlToProxies vars2) mb_rw1
-  , mb_l1' <- extMbMulti (rlToProxies vars2) mb_l1 =
-    map (MbRangeForLLVMType (RL.append vars1 vars2) mb_rw1' mb_l1') $ mbList $
-    mbCombine (RL.map (const Proxy) vars2) $
+  | mb_rw1' <- extMbMulti (cruCtxProxies vars2) mb_rw1
+  , mb_l1' <- extMbMulti (cruCtxProxies vars2) mb_l1 =
+    map (MbRangeForLLVMType (appendCruCtx vars1 vars2) mb_rw1' mb_l1') $ mbList $
+    mbCombine (cruCtxProxies vars2) $
     flip fmap mb_rng1 $ \rng1 -> flip fmap mb_rng2 $ \rng2 ->
     bvRangeSubsetTo rng1 rng2
 
@@ -2227,6 +2234,25 @@ mbRangeFTsSubsetTo :: [MbRangeForType a] -> [MbRangeForType a] ->
 mbRangeFTsSubsetTo rngs1 rngs2 =
   flip concatMap rngs1 $ \rng1 -> flip concatMap rngs2 $ \rng2 ->
   mbRangeFTSubsetTo rng1 rng2
+
+-- | Test if one 'MbRangeForType' could cover part of another, using
+-- 'mbRWModCovers' and 'mbLifetimeCovers' for the modalities
+mbRangeFTCouldCoverPart :: MbRangeForType a -> MbRangeForType a -> Bool
+mbRangeFTCouldCoverPart
+  (MbRangeForLLVMType _ mb_rw1 mb_l1 mb_rng1)
+  (MbRangeForLLVMType _ mb_rw2 mb_l2 mb_rng2) =
+  mbRWModCovers mb_rw1 mb_rw2 &&
+  mbLifetimeCovers mb_l1 mb_l2 &&
+  (mbLift $ flip fmap mb_rng1 $ \rng1 ->
+    mbLift $ flip fmap mb_rng2 $ \rng2 ->
+    bvRangesCouldOverlap rng1 rng2)
+
+-- | Test if any offsets in one list of 'MbRangeForType's could (as in
+-- 'bvPropCouldHold') covert some offsets in another
+mbRangeFTsCouldCoverPart :: [MbRangeForType a] -> [MbRangeForType a] -> Bool
+mbRangeFTsCouldCoverPart rngs1 rngs2 =
+  or $ flip concatMap rngs1 $ \rng1 ->
+  map (mbRangeFTCouldCoverPart rng1) rngs2
 
 -- | Build a bitvector expression from an integer
 bvInt :: (1 <= w, KnownNat w) => Integer -> PermExpr (BVType w)
@@ -2757,10 +2783,41 @@ varAndPermExprPerm (VarAndPerm x p) = ExprAndPerm (PExpr_Var x) p
 distPermsToExprPerms :: DistPerms ps -> ExprPerms ps
 distPermsToExprPerms = RL.map varAndPermExprPerm
 
+-- | Convert a 'DistPerms' in a binding to an 'ExprPerms' in a binding
+mbDistPermsToExprPerms :: Mb ctx (DistPerms ps) -> Mb ctx (ExprPerms ps)
+mbDistPermsToExprPerms = mbMapCl $(mkClosed [| distPermsToExprPerms |])
+
 -- | Convert the expressions in an 'ExprPerms' to variables, if possible
 exprPermsVars :: ExprPerms ps -> Maybe (RAssign Name ps)
 exprPermsVars = fmap distPermsVars . exprPermsToDistPerms
 
+-- | Convert the expressions in an 'ExprPerms' to variables, if possible, and
+-- collect them into a list
+exprPermsVarsList :: ExprPerms ps -> [SomeName CrucibleType]
+exprPermsVarsList ps =
+  case exprPermsVars ps of
+    Just ns -> RL.mapToList SomeName ns
+    Nothing -> []
+
+-- | Convert the expressions in an 'ExprPerms'-in-binding to variables, if
+-- possible, and collect them into a list
+mbExprPermsVarsList :: Mb ctx (ExprPerms ps) -> [SomeName CrucibleType]
+mbExprPermsVarsList =
+  concatMap (\case
+                [nuP| SomeName mb_n |]
+                  | Right n <- mbNameBoundP mb_n -> [SomeName n]
+                _ -> []) .
+  mbList . mbMapCl $(mkClosed [| exprPermsVarsList |])
+
+-- | Convert the expressions in an 'ExprPerms' to variables, if possible, and
+-- collect them into a set
+exprPermsVarsSet :: ExprPerms ps -> NameSet CrucibleType
+exprPermsVarsSet = NameSet.fromList . exprPermsVarsList
+
+-- | Convert the expressions in an 'ExprPerms'-in-binding to variables, if
+-- possible, and collect them in a 'NameSet'
+mbExprPermsVarsSet :: Mb ctx (ExprPerms ps) -> NameSet CrucibleType
+mbExprPermsVarsSet = NameSet.liftNameSet . fmap exprPermsVarsSet
 
 -- | Extract the @args@ context from a function permission
 funPermArgs :: FunPerm ghosts args gouts ret -> CruCtx args
@@ -4360,7 +4417,7 @@ instance GetOffsets ValuePerm where
   getOffsets (ValPerm_Eq _) = []
   getOffsets (ValPerm_Or p1 p2) = getOffsets p1 ++ getOffsets p2
   getOffsets (ValPerm_Exists mb_p) =
-    map (mbMbRangeForType (MNil :>: KnownReprObj)) $
+    map (mbMbRangeForType knownRepr) $
     mbList $ fmap getOffsets mb_p
   getOffsets (ValPerm_Named _ _ _) = []
   getOffsets (ValPerm_Var _ _) = []
@@ -4379,6 +4436,10 @@ instance GetOffsets AtomicPerm where
      (llvmBlockRW bp) (llvmBlockLifetime bp) (llvmBlockRange bp)]
   getOffsets _ = []
 
+-- | Get the range of offsets potentially covered by a permission in a binding
+mbGetOffsets :: GetOffsets f => CruCtx ctx -> Mb ctx (f a) -> [MbRangeForType a]
+mbGetOffsets ctx =
+  map (mbMbRangeForType ctx) . mbList . mbMapCl $(mkClosed [| getOffsets |])
 
 -- | Add the given read/write and lifetime modalities to all top-level pointer
 -- permissions or shapes in a permission or shape. Top-level here means we do
@@ -5832,6 +5893,14 @@ distPermsVars :: DistPerms ps -> RAssign Name ps
 distPermsVars DistPermsNil = MNil
 distPermsVars (DistPermsCons ps x _) = distPermsVars ps :>: x
 
+-- | Extract the non-bound variables in a 'DistPerms' in context
+mbDistPermsVars :: Mb ctx (DistPerms ps) -> [Some ExprVar]
+mbDistPermsVars =
+  concat . RL.mapToList (\case
+                            Compose [nuP| VarAndPerm mb_n _ |]
+                              | Right n <- mbNameBoundP mb_n -> [Some n]
+                            _ -> []) . mbRAssign
+
 -- | Append two lists of distinguished permissions
 appendDistPerms :: DistPerms ps1 -> DistPerms ps2 -> DistPerms (ps1 :++: ps2)
 appendDistPerms ps1 DistPermsNil = ps1
@@ -5987,22 +6056,77 @@ shapeIsCopyable rw (PExpr_ExShape mb_sh) =
 shapeIsCopyable _ PExpr_FalseShape = True
 
 
--- | Test if a permission that might be in a lifetime ownership permission (so
--- not a lifetime permission) could help prove any of a list of permissions. For
--- now, this just tests if the variable on the left occurs on the right.
-lownedPermCouldProve :: ExprAndPerm a -> DistPerms ps -> Bool
-lownedPermCouldProve (ExprAndPerm (PExpr_Var x) _) (_ :>: VarAndPerm y _)
-  | Just Refl <- testEquality x y = True
-lownedPermCouldProve e_and_p (ps :>: _) = lownedPermCouldProve e_and_p ps
-lownedPermCouldProve _ MNil = False
+-- | Get the lifetime children of a lifetime permission, returning the empty
+-- list of children for a non-@lowned@ permission
+lownedPermChildren :: ValuePerm LifetimeType -> [PermExpr LifetimeType]
+lownedPermChildren (ValPerm_LOwned ls _ _ _ _) = ls
+lownedPermChildren _ = []
+
+-- | Topologically sort a list of lifetimes with their ownership permissions so
+-- that child lifetimes come before their parents
+sortLOwnedPerms :: [(ExprVar LifetimeType, ValuePerm LifetimeType)] ->
+                   [(ExprVar LifetimeType, ValuePerm LifetimeType)]
+sortLOwnedPerms ls_ps =
+  evalState (concat <$> mapM visit ls_ps) NameSet.empty where
+  visit :: (ExprVar LifetimeType, ValuePerm LifetimeType) ->
+           State (NameSet CrucibleType) [(ExprVar LifetimeType,
+                                          ValuePerm LifetimeType)]
+  visit (l, p) =
+    (NameSet.member l <$> get) >>= \case
+    True -> return []
+    False ->
+      do
+        -- Mark l as visited
+        modify (NameSet.insert l)
+        -- Find all children of (l,p) with a permission in the initial ls_ps
+        let ls_ps' =
+              mapMaybe (\case
+                           PExpr_Var l' -> (l',) <$> lookup l' ls_ps
+                           _ -> Nothing)
+              (lownedPermChildren p)
+        -- Visit all children of (l,p) and return any of them and their
+        -- recursive children that have not been visited yet
+        rec_ret <- concat <$> mapM visit ls_ps'
+        -- Add (l,p) after all of its children
+        return (rec_ret ++ [(l,p)])
+
+-- | Test if a list of permissions that might be in a lifetime ownership
+-- permission (so not a lifetime permission) could help prove a permission on an
+-- expression in a binding
+lownedPermsCouldProve1 :: CruCtx ctx -> ExprPerms ps_l ->
+                          Mb ctx (ExprAndPerm a) -> Bool
+lownedPermsCouldProve1 ctx ps_l (mbMapCl $(mkClosed [| exprPermVarAndPerm |]) ->
+                                 [nuP| Just (VarAndPerm mb_x mb_p) |])
+  | Right x <- mbNameBoundP mb_x =
+    mbRangeFTsCouldCoverPart (concatMap getOffsets $ exprPermsForVar x ps_l) $
+    mbGetOffsets ctx mb_p
+lownedPermsCouldProve1 _ _ _ = False
 
 -- | Test if a list of permissions that might be in a lifetime ownership
 -- permission (so not a lifetime permission) could help prove any of a list of
--- permissions. For now, this just tests if there is any overlap between
--- variables on the left and on the right.
-lownedPermsCouldProve :: ExprPerms a -> DistPerms ps -> Bool
-lownedPermsCouldProve lops ps =
-  RL.foldr (\lop rest -> lownedPermCouldProve lop ps || rest) False lops
+-- permissions on expressions in a binding
+lownedPermsCouldProve :: CruCtx ctx -> ExprPerms ps_l ->
+                         Mb ctx (ExprPerms ps_r) -> Bool
+lownedPermsCouldProve ctx lops =
+  or . RL.mapToList (lownedPermsCouldProve1 ctx lops . getCompose) . mbRAssign
+
+-- | Find all lifetimes with ownership permissions in an 'ExprPerms'
+lownedsInExprPerms :: ExprPerms ps -> [ExprVar LifetimeType]
+lownedsInExprPerms =
+  catMaybes . RL.mapToList
+  (\case
+      ExprAndPerm (PExpr_Var l) (ValPerm_Conj ps)
+        | Refl:_ <- mapMaybe isLifetimeOwnershipPerm ps -> Just l
+      _ -> Nothing)
+
+-- | Find all lifetimes with ownership permissions in an 'ExprPerms' in binding
+lownedsInMbExprPerms :: Mb (ctx :: RList CrucibleType) (ExprPerms ps) ->
+                        [ExprVar LifetimeType]
+lownedsInMbExprPerms mb_ps =
+  mapMaybe (\case
+               (mbNameBoundP -> Right l) -> Just l
+               _ -> Nothing) $
+  mbList $ mbMapCl $(mkClosed [| lownedsInExprPerms |]) mb_ps
 
 -- | Find all lifetimes with ownership permissions in a 'DistPerms' in binding
 lownedsInMbDistPerms :: Mb ctx (DistPerms ps) -> [ExprVar LifetimeType]
@@ -6287,6 +6411,57 @@ instance FreeVars (NamedShapeBody b args w) where
   freeVars (DefinedShapeBody mb_sh) = freeVars mb_sh
   freeVars (OpaqueShapeBody mb_len _) = freeVars mb_len
   freeVars (RecShapeBody mb_sh _ _) = freeVars mb_sh
+
+
+-- | Find all equality permissions @eq(e)@ contained in another permission
+class ContainedEqVars a where
+  containedEqVars :: a -> NameSet CrucibleType
+
+instance ContainedEqVars (ValuePerm a) where
+  containedEqVars (ValPerm_Eq e) = freeVars e
+  containedEqVars (ValPerm_Or p1 p2) =
+    NameSet.union (containedEqVars p1) (containedEqVars p2)
+  containedEqVars (ValPerm_Exists mb_p) =
+    NameSet.liftNameSet $ fmap containedEqVars mb_p
+  containedEqVars (ValPerm_Named _ _ _) =
+    -- FIXME: we should probably unfold named permissions here...
+    NameSet.empty
+  containedEqVars (ValPerm_Var _ _) = NameSet.empty
+  containedEqVars (ValPerm_Conj ps) = NameSet.unions $ map containedEqVars ps
+  containedEqVars ValPerm_False = NameSet.empty
+
+instance ContainedEqVars (AtomicPerm a) where
+  containedEqVars (Perm_LLVMField fp) = containedEqVars (llvmFieldContents fp)
+  containedEqVars (Perm_LLVMArray ap) = containedEqVars (llvmArrayCellShape ap)
+  containedEqVars (Perm_LLVMBlock bp) = containedEqVars (llvmBlockShape bp)
+  containedEqVars (Perm_LLVMBlockShape sh) = containedEqVars sh
+  containedEqVars _ = NameSet.empty
+
+instance ContainedEqVars (PermExpr (LLVMShapeType w)) where
+  containedEqVars (PExpr_Var _) = NameSet.empty
+  containedEqVars PExpr_EmptyShape = NameSet.empty
+  containedEqVars (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
+                                              (DefinedShapeBody _)) args) =
+    containedEqVars (unfoldNamedShape nmsh args)
+  containedEqVars (PExpr_NamedShape _ _ (NamedShape _ _
+                                         (OpaqueShapeBody _ _)) _) =
+    NameSet.empty
+  containedEqVars (PExpr_NamedShape _ _ (NamedShape _ _
+                                         (RecShapeBody mb_sh _ _)) args) =
+    -- NOTE: we unfold the shape with the empty shape substituted for recursive
+    -- occurrences of the shape name, to avoid an infinite loop
+    containedEqVars $ subst (substOfExprs (args :>: PExpr_EmptyShape)) mb_sh
+  containedEqVars (PExpr_EqShape _ blk) = freeVars blk
+  containedEqVars (PExpr_PtrShape _ _ sh) = containedEqVars sh
+  containedEqVars (PExpr_FieldShape (LLVMFieldShape p)) = containedEqVars p
+  containedEqVars (PExpr_ArrayShape _ _ sh) = containedEqVars sh
+  containedEqVars (PExpr_SeqShape sh1 sh2) =
+    NameSet.union (containedEqVars sh1) (containedEqVars sh2)
+  containedEqVars (PExpr_OrShape sh1 sh2) =
+    NameSet.union (containedEqVars sh1) (containedEqVars sh2)
+  containedEqVars (PExpr_ExShape mb_sh) =
+    NameSet.liftNameSet $ fmap containedEqVars mb_sh
+  containedEqVars PExpr_FalseShape = NameSet.empty
 
 
 -- | Test if an expression @e@ is a /determining/ expression, meaning that
@@ -6603,9 +6778,9 @@ instance SubstVar s m => Substable s (BVRange w) m where
 instance SubstVar s m => Substable s (MbRangeForType a) m where
   genSubst s (mbMatch -> [nuMP| MbRangeForLLVMType vars rw l rng |]) =
     MbRangeForLLVMType (mbLift vars) <$>
-    genSubstMb (RL.map (const Proxy) $ mbLift vars) s rw <*>
-    genSubstMb (RL.map (const Proxy) $ mbLift vars) s l <*>
-    genSubstMb (RL.map (const Proxy) $ mbLift vars) s rng
+    genSubstMb (cruCtxProxies $ mbLift vars) s rw <*>
+    genSubstMb (cruCtxProxies $ mbLift vars) s l <*>
+    genSubstMb (cruCtxProxies $ mbLift vars) s rng
 
 instance SubstVar s m => Substable s (BVProp w) m where
   genSubst s mb_prop = case mbMatch mb_prop of
@@ -8205,10 +8380,14 @@ detVarsClauseAddLHSVar :: ExprVar a -> DetVarsClause -> DetVarsClause
 detVarsClauseAddLHSVar n (DetVarsClause lhs rhs) =
   DetVarsClause (NameSet.insert n lhs) rhs
 
+newtype SeenDetVarsClauses :: CrucibleType -> * where
+  SeenDetVarsClauses :: [DetVarsClause] -> SeenDetVarsClauses tp
+
 -- | Generic function to compute the 'DetVarsClause's for a permission
 class GetDetVarsClauses a where
   getDetVarsClauses ::
-    a -> ReaderT (PermSet ps) (State (NameSet CrucibleType)) [DetVarsClause]
+    a -> ReaderT (PermSet ps) (State (NameMap SeenDetVarsClauses))
+                              [DetVarsClause]
 
 instance GetDetVarsClauses a => GetDetVarsClauses [a] where
   getDetVarsClauses l = concat <$> mapM getDetVarsClauses l
@@ -8220,11 +8399,13 @@ instance GetDetVarsClauses (ExprVar a) where
   getDetVarsClauses x =
     do seen_vars <- get
        perms <- ask
-       if NameSet.member x seen_vars then return [] else
-         do modify (NameSet.insert x)
-            perm_clauses <- getDetVarsClauses (perms ^. varPerm x)
-            return (DetVarsClause NameSet.empty (SomeName x) :
-                    map (detVarsClauseAddLHSVar x) perm_clauses)
+       perm_clauses <- case NameMap.lookup x seen_vars of
+         Just (SeenDetVarsClauses perm_clauses) -> return perm_clauses
+         Nothing -> do perm_clauses <- getDetVarsClauses (perms ^. varPerm x)
+                       modify (NameMap.insert x (SeenDetVarsClauses perm_clauses))
+                       return perm_clauses
+       return (DetVarsClause NameSet.empty (SomeName x) :
+               map (detVarsClauseAddLHSVar x) perm_clauses)
 
 instance GetDetVarsClauses (PermExpr a) where
   getDetVarsClauses e
@@ -8296,7 +8477,7 @@ instance GetDetVarsClauses (LLVMFieldShape w) where
 -- | Compute the 'DetVarsClause's for a block permission with the given shape
 getShapeDetVarsClauses ::
   (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
-  ReaderT (PermSet ps) (State (NameSet CrucibleType)) [DetVarsClause]
+  ReaderT (PermSet ps) (State (NameMap SeenDetVarsClauses)) [DetVarsClause]
 getShapeDetVarsClauses (PExpr_Var x) =
   getDetVarsClauses x
 getShapeDetVarsClauses (PExpr_NamedShape _ _ _ args) =
@@ -8322,20 +8503,23 @@ getShapeDetVarsClauses _ = return []
 -- is always a uniquely determined value of @y@ for any proof of @exists y.x:p@.
 determinedVars :: PermSet ps -> RAssign ExprVar ns -> [SomeName CrucibleType]
 determinedVars top_perms vars =
-  let vars_set = NameSet.fromList $ mapToList SomeName vars
+  let vars_map = NameMap.fromList $
+        mapToList (\v -> NameAndElem v (SeenDetVarsClauses [])) vars
+      vars_set = NameSet.fromList $ mapToList SomeName vars
       multigraph =
         evalState (runReaderT (getDetVarsClauses (distPermsToValuePerms $
                                                   varPermsMulti vars top_perms))
                    top_perms)
-        vars_set in
+        vars_map in
   evalState (determinedVarsForGraph multigraph) vars_set
   where
     -- Find all variables that are not already marked as determined in our
     -- NameSet state but that are determined given the current determined
-    -- variables, mark these variables as determiend, and then repeat, returning
+    -- variables, mark these variables as determined, and then repeat, returning
     -- all variables that are found in order
     determinedVarsForGraph :: [DetVarsClause] ->
-                              State (NameSet CrucibleType) [SomeName CrucibleType]
+                              State (NameSet CrucibleType)
+                                    [SomeName CrucibleType]
     determinedVarsForGraph graph =
       do det_vars <- concat <$> mapM determinedVarsForClause graph
          if det_vars == [] then return [] else
@@ -8344,7 +8528,8 @@ determinedVars top_perms vars =
     -- If the LHS of a clause has become determined but its RHS is not, return
     -- its RHS, otherwise return nothing
     determinedVarsForClause :: DetVarsClause ->
-                               State (NameSet CrucibleType) [SomeName CrucibleType]
+                               State (NameSet CrucibleType)
+                                     [SomeName CrucibleType]
     determinedVarsForClause (DetVarsClause lhs_vars (SomeName rhs_var)) =
       do det_vars <- get
          if not (NameSet.member rhs_var det_vars) &&

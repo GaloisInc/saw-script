@@ -880,6 +880,9 @@ monadifyTerm' _ (asLocalVar -> Just ix) =
   ctx | ix >= length ctx -> fail "Monadification failed: vaiable out of scope!"
   ctx | (_,_,Right mtrm) <- ctx !! ix -> return mtrm
   _ -> fail "Monadification failed: type variable used in term position!"
+monadifyTerm' _ (asTupleValue -> Just []) =
+  return $ ArgMonTerm $
+  fromSemiPureTerm (mkMonType0 unitTypeOpenTerm) unitOpenTerm
 monadifyTerm' _ (asCtor -> Just (pn, args)) =
   monadifyApply (ArgMonTerm $ mkCtorArgMonTerm pn) args
 monadifyTerm' _ (asApplyAll -> (asTypedGlobalDef -> Just glob, args)) =

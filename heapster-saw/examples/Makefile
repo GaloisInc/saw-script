@@ -37,7 +37,7 @@ interp.bc: interp.rs
 	rustc --crate-type=lib --emit=llvm-bc interp.rs
 
 # Lists all the Mr Solver tests, without their ".saw" suffix
-MR_SOLVER_TESTS = arrays_mr_solver linked_list_mr_solver
+MR_SOLVER_TESTS = arrays_mr_solver linked_list_mr_solver sha512_mr_solver
 
 .PHONY: mr-solver-tests $(MR_SOLVER_TESTS)
 mr-solver-tests: $(MR_SOLVER_TESTS)

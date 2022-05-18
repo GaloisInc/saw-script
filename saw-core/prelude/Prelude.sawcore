@@ -680,9 +680,18 @@ Either__rec : (s t : sort 0) -> (p : Either s t -> sort 0) ->
                (e : Either s t) -> p e;
 Either__rec s t p f1 f2 e = Either#rec s t p f1 f2 e;
 
+-- The eliminator for the Either type
 either : (a b c : sort 0) -> (a -> c) -> (b -> c) -> Either a b -> c;
 either a b c f g e =
   Either__rec a b (\ (p: Either a b) -> c) f g e;
+
+-- Eta-expanded version of the Left constructor
+left : (a b : sort 0) -> a -> Either a b;
+left a b x = Left a b x;
+
+-- Eta-expanded version of the Right constructor
+right : (a b : sort 0) -> b -> Either a b;
+right a b x = Right a b x;
 
 eitherCong0 : (t x y : sort 0) -> Eq (sort 0) x y ->
                Eq (sort 0) (Either x t) (Either y t);
@@ -1693,6 +1702,13 @@ genBVVecFromVec : (m : Nat) -> (a : sort 0) -> Vec m a -> a ->
 genBVVecFromVec m a v def n len =
   genBVVec n len a (\ (i:Vec n Bool) (_:is_bvult n i len) ->
                       atWithDefault m a def v (bvToNat n i));
+
+-- Generate a vector from the elements of an existing BVVec, using a default
+-- value when we run out of the existing BVVec - the inverse of genBVVecFromVec
+genFromBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+               BVVec n len a -> a -> (m : Nat) -> Vec m a;
+genFromBVVec n len a v def m =
+  gen m a (\ (i:Nat) -> atWithDefault (bvToNat n len) a def v i);
 
 -- The false proposition
 FalseProp : Prop;
