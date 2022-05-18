@@ -24,6 +24,8 @@ module SAWScript.Prover.MRSolver.Monad where
 
 import Data.List (find, findIndex, foldl')
 import qualified Data.Text as T
+import Numeric.Natural (Natural)
+import Data.Bits (testBit)
 import System.IO (hPutStrLn, stderr)
 import Control.Monad.Reader
 import Control.Monad.State
@@ -467,6 +469,14 @@ mrBvToNat _ (asArrayValue -> Just (asBoolType -> Just _,
                                    mapM asBool -> Just bits)) =
   liftSC1 scNat $ foldl' (\n bit -> if bit then 2*n+1 else 2*n) 0 bits
 mrBvToNat n len = liftSC2 scBvNat n len
+
+-- | Like 'scBvConst', but returns a bitvector literal
+mrBvConst :: Natural -> Integer -> MRM Term
+mrBvConst n x =
+  do bool_tp <- liftSC0 scBoolType
+     bits <- mapM (liftSC1 scBool . testBit x)
+                  [(fromIntegral n - 1), (fromIntegral n - 2) .. 0]
+     liftSC2 scVector bool_tp bits
 
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in

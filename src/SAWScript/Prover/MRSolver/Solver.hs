@@ -296,7 +296,7 @@ normComp (CompTerm t) =
                                                   i)]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
          if n < 1 `shiftL` fromIntegral w then do
-           n' <- liftSC2 scBvConst w (toInteger n)
+           n' <- mrBvConst w (toInteger n)
            err_str <- liftSC1 scString "FIXME: normComp (atM) error"
            err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str]
            xs' <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
@@ -321,14 +321,14 @@ normComp (CompTerm t) =
                                               asBvToNat ->
                                                 Just (w_tm@(asNat -> Just w),
                                                       i), x]) ->
-      do body <- mrGlobalDefBody "CryptolM.bvVecUpdateM"
+      do body <- mrGlobalDefBody "CryptolM.fromBVVecUpdateM"
          if n < 1 `shiftL` fromIntegral w then do
-           n' <- liftSC2 scBvConst w (toInteger n)
+           n' <- mrBvConst w (toInteger n)
            err_str <- liftSC1 scString "FIXME: normComp (updateM) error"
            err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str]
            xs' <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
                                         [n_tm, a, xs, err_tm, w_tm, n'] 
-           mrApplyAll body [w_tm, n', a, xs', i, x] >>= normCompTerm
+           mrApplyAll body [w_tm, n', a, xs', i, x, err_tm, n_tm] >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
     -- Always unfold: sawLet, multiArgFixM, invariantHint, Num_rec
