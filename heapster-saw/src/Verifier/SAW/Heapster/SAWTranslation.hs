@@ -219,12 +219,12 @@ data ExprTrans (a :: CrucibleType) where
   -- | The unit type has no computational content
   ETrans_Unit :: ExprTrans UnitType
 
+  -- | The translation of Vectors of the Crucible any type have no content
+  ETrans_AnyVector :: ExprTrans (VectorType AnyType)
+
   -- | The translation for every other expression type is just a SAW term. Note
   -- that this construct should not be used for the types handled above.
   ETrans_Term :: OpenTerm -> ExprTrans a
-
-  -- | The translation of Vectors of any type
-  ETrans_AnyVector :: ExprTrans (VectorType AnyType)
 
 
 -- | A context mapping bound names to their type-level SAW translations
@@ -275,6 +275,7 @@ instance IsTermTrans (ExprTrans tp) where
     concat $ RL.mapToList transTerms etranss
   transTerms ETrans_Fun = []
   transTerms ETrans_Unit = []
+  transTerms ETrans_AnyVector = []
   transTerms (ETrans_Term t) = [t]
 
 instance IsTermTrans (ExprTransCtx ctx) where
