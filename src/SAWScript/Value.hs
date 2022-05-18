@@ -769,8 +769,8 @@ instance IsValue a => IsValue (TopLevel a) where
 instance FromValue a => FromValue (TopLevel a) where
     fromValue (VTopLevel action) = fmap fromValue action
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind _pos m1 v2) = do
-      v1 <- fromValue m1
+    fromValue (VBind pos m1 v2) = do
+      v1 <- withPosition pos (fromValue m1)
       m2 <- applyValue v2 v1
       fromValue m2
     fromValue _ = error "fromValue TopLevel"
@@ -781,10 +781,10 @@ instance IsValue a => IsValue (ProofScript a) where
 instance FromValue a => FromValue (ProofScript a) where
     fromValue (VProofScript m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind _pos m1 v2) = do
-      v1 <- fromValue m1
-      m2 <- scriptTopLevel $ applyValue v2 v1
-      fromValue m2
+    fromValue (VBind pos m1 v2) = ProofScript $ do
+      v1 <- underExceptT (underStateT (withPosition pos)) (unProofScript (fromValue m1))
+      m2 <- lift $ lift $ applyValue v2 v1
+      unProofScript (fromValue m2)
     fromValue _ = error "fromValue ProofScript"
 
 ---------------------------------------------------------------------------------
@@ -798,7 +798,7 @@ instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
       -- TODO: Should both of these be run with the new position?
       v1 <- underStateT (withPosition pos) (runLLVMCrucibleSetupM (fromValue m1))
       m2 <- lift $ applyValue v2 v1
-      underStateT (withPosition pos) (runLLVMCrucibleSetupM (fromValue m2))
+      runLLVMCrucibleSetupM (fromValue m2)
     fromValue _ = error "fromValue CrucibleSetup"
 
 instance IsValue a => IsValue (JVMSetupM a) where
@@ -807,8 +807,8 @@ instance IsValue a => IsValue (JVMSetupM a) where
 instance FromValue a => FromValue (JVMSetupM a) where
     fromValue (VJVMSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind _pos m1 v2) = JVMSetupM $ do
-      v1 <- runJVMSetupM (fromValue m1)
+    fromValue (VBind pos m1 v2) = JVMSetupM $ do
+      v1 <- underStateT (withPosition pos) (runJVMSetupM (fromValue m1))
       m2 <- lift $ applyValue v2 v1
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"

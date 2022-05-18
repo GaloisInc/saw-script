@@ -260,9 +260,9 @@ interpretStmts env stmts =
     let ?fileReader = BS.readFile in
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind _ (SS.PWild _) _ e] -> interpret env e
-      SS.StmtBind pos pat _ e : ss ->
-          do v1 <- interpret env e
+      [SS.StmtBind pos (SS.PWild _) _ e] -> withPosition pos (interpret env e)
+      SS.StmtBind pos pat _mcxt e : ss ->
+          do v1 <- withPosition pos (interpret env e)
              let f v = interpretStmts (bindPatternLocal pat Nothing v env) ss
              bindValue pos v1 (VLambda f)
       SS.StmtLet _ bs : ss -> interpret env (SS.Let bs (SS.Block ss))
