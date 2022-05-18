@@ -340,7 +340,7 @@ ecShiftRM : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
 ecShiftRM =
   Num_rec (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
                         mseq m a -> ix -> mseq m a)
-          (\ (m:Nat) -> ecShiftL (TCNum m))
+          (\ (m:Nat) -> ecShiftR (TCNum m))
           (\ (ix a : sort 0) (pix:PIntegral ix) (pa:PZero a) ->
              ecShiftR TCInf ix (CompM a) pix (PZeroCompM a pa));
 
