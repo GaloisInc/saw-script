@@ -4837,26 +4837,14 @@ lifetimesThatCouldProve mb_ps =
      let needed_ls = lownedsInMbExprPerms mb_ps'
      -- Find any lifetime in ps' not in needed_ls that could prove a permission
      -- we need in mb_ps'
-     pp <- use implStatePPInfo
      return $ map fst $ sortLOwnedPerms $ flip mapMaybe ls_ps' $ \case
-       (l, p@(ValPerm_LOwned _ _ _ _ ps_out)) ->
-         let b =
-               notElem l needed_ls &&
-               (lownedPermsCouldProve varTypes ps_out mb_ps' ||
-                not (NameSet.null $
-                     NameSet.intersection containedVars $
-                     exprPermsVarsSet ps_out)) in
-         tracePretty (hang 2 $
-                      sep [pretty "Testing if lifetime could prove perms:",
-                           pretty "Lifetime = " <> permPretty pp l,
-                           pretty "ps_out = " <> permPretty pp ps_out,
-                           pretty "neededs = " <> permPretty pp mb_ps',
-                           pretty "result = " <> pretty b]) $
-         if b then Just (l,p) else Nothing
-       {- FIXME HERE NOW: remove the tracing above and put this case back
-       (l, ValPerm_LOwned _ _ _ _ ps_out) ->
+       (l, p@(ValPerm_LOwned _ _ _ _ ps_out))
          | notElem l needed_ls
-         , lownedPermsCouldProve varTypes ps_out mb_ps' -> Just l -}
+         , lownedPermsCouldProve varTypes ps_out mb_ps' ||
+           not (NameSet.null $
+                NameSet.intersection containedVars $
+                exprPermsVarsSet ps_out) ->
+           Just (l,p)
        (l, p@(ValPerm_LOwnedSimple _ ps_out))
          | notElem l needed_ls
          , lownedPermsCouldProve varTypes ps_out mb_ps' ||
