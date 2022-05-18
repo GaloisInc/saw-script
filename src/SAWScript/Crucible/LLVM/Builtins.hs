@@ -1409,7 +1409,8 @@ verifyPoststate cc mspec env0 globals ret =
 
     matchResult opts sc =
       case (ret, mspec ^. MS.csRetValue) of
-        (Just (rty,r), Just expect) -> matchArg opts sc cc mspec PostState r rty expect
+        (Just (rty,r), Just expect) ->
+          matchArg opts sc cc mspec PostState (mspec ^. MS.csLoc) r rty expect
         (Nothing     , Just _ )     ->
           fail "verifyPoststate: unexpected llvm_return specification"
         _ -> return ()
