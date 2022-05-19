@@ -641,7 +641,7 @@ verifyObligations cc mspec tactic assumes asserts =
                           { goalNum  = n
                           , goalType = "vc"
                           , goalName = nm
-                          , goalLoc  = show ploc
+                          , goalLoc  = show (W4.plSourceLoc ploc) ++ " in " ++ show (W4.plFunction ploc)
                           , goalDesc = msg
                           , goalProp = goal'
                           }
@@ -811,6 +811,7 @@ assumptionsContainContradiction cc methodSpec tactic assumptions =
      let sym = cc^.ccSym
      st <- io $ Common.sawCoreState sym
      let sc  = saw_ctx st
+     let ploc = methodSpec^.MS.csLoc
      pgl <- io $
       do
          -- conjunction of all assumptions
@@ -822,7 +823,7 @@ assumptionsContainContradiction cc methodSpec tactic assumptions =
                   { goalNum  = 0
                   , goalType = "vacuousness check"
                   , goalName = show (methodSpec^.MS.csMethod)
-                  , goalLoc  = show (methodSpec^.MS.csLoc)
+                  , goalLoc  = show (W4.plSourceLoc ploc) ++ " in " ++ show (W4.plFunction ploc)
                   , goalDesc = "vacuousness check"
                   , goalProp = goal'
                   }
