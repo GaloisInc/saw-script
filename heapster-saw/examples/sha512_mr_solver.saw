@@ -106,6 +106,4 @@ monadify_term {{ Maj }};
 monadify_term {{ round_00_15_spec }};
 
 run_test "round_00_15 |= round_00_15_spec" (mr_solver round_00_15 {{ round_00_15_spec }}) true;
-
-// FIXME: Need to add heterogenous equality on output types for this to work
-// run_test "round_16_80 |= round_16_80_spec" (mr_solver_debug 0 round_16_80 {{ round_16_80_spec }}) true;
+run_test "round_16_80 |= round_16_80_spec" (mr_solver round_16_80 {{ round_16_80_spec }}) true;

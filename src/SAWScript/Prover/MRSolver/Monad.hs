@@ -4,6 +4,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -64,7 +65,7 @@ data FailCtx
 
 -- | That's MR. Failure to you
 data MRFailure
-  = TermsNotEq Term Term
+  = TermsNotRel Bool Term Term
   | TypesNotEq Type Type
   | CompsDoNotRefine NormComp NormComp
   | ReturnNotError Term
@@ -85,6 +86,9 @@ data MRFailure
     -- | Records a disjunctive branch we took, where both cases failed
   | MRFailureDisj MRFailure MRFailure
   deriving Show
+
+pattern TermsNotEq :: Term -> Term -> MRFailure
+pattern TermsNotEq t1 t2 = TermsNotRel False t1 t2
 
 -- | Pretty-print an object prefixed with a 'String' that describes it
 ppWithPrefix :: PrettyInCtx a => String -> a -> PPInCtxM SawDoc
@@ -111,8 +115,10 @@ instance PrettyInCtx FailCtx where
                                 prettyInCtx t]
 
 instance PrettyInCtx MRFailure where
-  prettyInCtx (TermsNotEq t1 t2) =
+  prettyInCtx (TermsNotRel False t1 t2) =
     ppWithPrefixSep "Could not prove terms equal:" t1 "and" t2
+  prettyInCtx (TermsNotRel True t1 t2) =
+    ppWithPrefixSep "Could not prove terms heterogeneously related:" t1 "and" t2
   prettyInCtx (TypesNotEq tp1 tp2) =
     ppWithPrefixSep "Types not equal:" tp1 "and" tp2
   prettyInCtx (CompsDoNotRefine m1 m2) =

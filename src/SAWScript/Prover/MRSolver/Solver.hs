@@ -623,7 +623,7 @@ mrRefines t1 t2 =
 -- | The main implementation of 'mrRefines'
 mrRefines' :: NormComp -> NormComp -> MRM ()
 
-mrRefines' (ReturnM e1) (ReturnM e2) = mrAssertProveEq e1 e2
+mrRefines' (ReturnM e1) (ReturnM e2) = mrAssertProveRel True e1 e2
 mrRefines' (ErrorM _) (ErrorM _) = return ()
 mrRefines' (ReturnM e) (ErrorM _) = throwMRFailure (ReturnNotError e)
 mrRefines' (ErrorM _) (ReturnM e) = throwMRFailure (ReturnNotError e)

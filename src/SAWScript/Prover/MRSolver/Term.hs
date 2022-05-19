@@ -433,6 +433,14 @@ instance PrettyInCtx MRVar where
 instance PrettyInCtx [Term] where
   prettyInCtx xs = list <$> mapM prettyInCtx xs
 
+instance PrettyInCtx a => PrettyInCtx (Maybe a) where
+  prettyInCtx (Just x) = (<+>) "Just" <$> prettyInCtx x
+  prettyInCtx Nothing = return "Nothing"
+
+instance (PrettyInCtx a, PrettyInCtx b) => PrettyInCtx (a,b) where
+  prettyInCtx (x, y) = (\x' y' -> parens (x' <> "," <> y')) <$> prettyInCtx x
+                                                            <*> prettyInCtx y
+
 instance PrettyInCtx TermProj where
   prettyInCtx TermProjLeft = return (pretty '.' <> "1")
   prettyInCtx TermProjRight = return (pretty '.' <> "2")
