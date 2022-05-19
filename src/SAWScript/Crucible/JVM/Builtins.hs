@@ -31,6 +31,7 @@ module SAWScript.Crucible.JVM.Builtins
     , jvm_execute_func
     , jvm_postcond
     , jvm_precond
+    , jvm_assert
     , jvm_modifies_field
     , jvm_modifies_static_field
     , jvm_modifies_elem
@@ -1254,6 +1255,11 @@ generic_array_is ptr mval =
      when (st ^. Setup.csPrePost == PreState && isNothing mval) $
        X.throwM $ JVMArrayModifyPrestate ptr'
      Setup.addPointsTo pt
+
+jvm_assert :: TypedTerm -> JVMSetupM ()
+jvm_assert term = JVMSetupM $ do
+  loc <- SS.toW4Loc "jvm_assert" <$> lift getPosition
+  Setup.addCondition (MS.SetupCond_Pred loc term)
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
 jvm_precond term = JVMSetupM $ do

@@ -2639,6 +2639,14 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_precond`." ]
 
+  , prim "llvm_assert" "Term -> LLVMSetup ()"
+    (pureVal llvm_assert)
+    Current
+    [ "State that the given predicate must hold.  Acts as `llvm_precond`"
+    , "or `llvm_postcond` depending on the phase of specification in which"
+    , "it appears (i.e., before or after `llvm_execute_func`."
+    ]
+
   , prim "llvm_postcond" "Term -> LLVMSetup ()"
     (pureVal llvm_postcond)
     Current
@@ -3143,6 +3151,14 @@ primitives = Map.fromList
     Current
     [ "State that the given predicate is a pre-condition on execution of the"
     , "method being verified."
+    ]
+
+  , prim "jvm_assert" "Term -> JVMSetup ()"
+    (pureVal jvm_assert)
+    Current
+    [ "State that the given predicate must hold.  Acts as `jvm_precond`"
+    , "or `jvm_postcond` depending on the phase of specification in which"
+    , "it appears (i.e., before or after `jvm_execute_func`."
     ]
 
   , prim "jvm_postcond" "Term -> JVMSetup ()"

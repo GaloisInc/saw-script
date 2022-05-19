@@ -30,6 +30,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , llvm_return
     , llvm_precond
     , llvm_postcond
+    , llvm_assert
     , llvm_cfg
     , llvm_extract
     , llvm_compositional_extract
@@ -1731,6 +1732,12 @@ checkMemTypeCompatibility loc t1 t2 =
 
 --------------------------------------------------------------------------------
 -- Setup builtins
+
+llvm_assert :: TypedTerm -> LLVMCrucibleSetupM ()
+llvm_assert term =
+  LLVMCrucibleSetupM $
+  do loc <- getW4Position "llvm_assert"
+     Setup.addCondition (MS.SetupCond_Pred loc term)
 
 llvm_precond :: TypedTerm -> LLVMCrucibleSetupM ()
 llvm_precond term =
