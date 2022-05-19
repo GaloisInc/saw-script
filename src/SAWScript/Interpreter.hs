@@ -3344,6 +3344,21 @@ primitives = Map.fromList
     Experimental
     []
 
+  , prim "yosys_import_sequential"  "String -> String -> TopLevel YosysSequential"
+    (pureVal yosys_import_sequential)
+    Experimental
+    []
+
+  , prim "yosys_extract_sequential"  "YosysSequential -> Int -> TopLevel Term"
+    (pureVal yosys_extract_sequential)
+    Experimental
+    []
+
+  , prim "yosys_extract_sequential_raw"  "YosysSequential -> TopLevel Term"
+    (pureVal yosys_extract_sequential_raw)
+    Experimental
+    []
+
     ---------------------------------------------------------------------
 
   , prim "mr_solver_prove" "Term -> Term -> TopLevel ()"

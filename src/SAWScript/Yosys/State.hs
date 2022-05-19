@@ -8,11 +8,14 @@
 
 module SAWScript.Yosys.State where
 
+import Control.Lens.TH (makeLenses)
+
 import Control.Lens ((^.))
-import Control.Monad (forM)
+import Control.Monad (forM, foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
 
+import Data.Bifunctor (bimap)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -20,6 +23,8 @@ import qualified Data.Text as Text
 import qualified Data.Graph as Graph
 
 import qualified Verifier.SAW.SharedTerm as SC
+import qualified Verifier.SAW.TypedTerm as SC
+import qualified Verifier.SAW.Name as SC
 
 import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.Ident as C
@@ -100,15 +105,48 @@ findDffs ng =
   . Graph.vertices
   $ ng ^. netgraphGraph
 
+data YosysSequential = YosysSequential
+  { _yosysSequentialTerm :: SC.TypedTerm
+  , _yosysSequentialStateFields :: Map Text (SC.Term, C.Type)
+  , _yosysSequentialInputFields :: Map Text (SC.Term, C.Type)
+  , _yosysSequentialOutputFields :: Map Text (SC.Term, C.Type)
+  }
+makeLenses ''YosysSequential
+
+fieldsToType ::
+  MonadIO m =>
+  SC.SharedContext ->
+  Map Text (SC.Term, C.Type) ->
+  m SC.Term
+fieldsToType sc = cryptolRecordType sc . fmap fst
+
+fieldsToCryptolType ::
+  MonadIO m =>
+  Map Text (SC.Term, C.Type) ->
+  m C.Type
+fieldsToCryptolType fields = pure . C.tRec . C.recordFromFields $ bimap C.mkIdent snd <$> Map.assocs fields
+
+insertStateField ::
+  MonadIO m =>
+  SC.SharedContext ->
+  Map Text (SC.Term, C.Type) ->
+  Map Text (SC.Term, C.Type) ->
+  m (Map Text (SC.Term, C.Type))
+insertStateField sc stateFields fields = do
+  stateRecordType <- fieldsToType sc stateFields
+  stateRecordCryptolType <- fieldsToCryptolType stateFields
+  pure $ Map.insert "__state__" (stateRecordType, stateRecordCryptolType) fields
+
 convertModuleInline ::
   MonadIO m =>
   SC.SharedContext ->
   Map Text Module ->
   Module ->
-  m ConvertedModule
+  m YosysSequential
 convertModuleInline sc mmap m = do
   ng <- moduleToInlineNetgraph mmap m
 
+  -- construct SAWCore and Cryptol types
   let dffs = findDffs ng
   stateFields <- fmap Map.fromList . forM dffs $ \c ->
     case Map.lookup "Q" $ c ^. cellConnections of
@@ -117,21 +155,27 @@ convertModuleInline sc mmap m = do
         t <- liftIO . SC.scBitvector sc . fromIntegral $ length b
         let cty = C.tWord . C.tNum $ length b
         pure ("nm", (t, cty))
-  stateRecordType <- cryptolRecordType sc $ fst <$> stateFields
-  let stateRecordCryptolType = C.tRec . C.recordFromFields $ (\(cnm, (_, t)) -> (C.mkIdent cnm, t)) <$> Map.assocs stateFields
 
   let inputPorts = moduleInputPorts m
   let outputPorts = moduleOutputPorts m
   inputFields <- forM inputPorts $ \inp -> do
-    liftIO . SC.scBitvector sc . fromIntegral $ length inp
+    ty <- liftIO . SC.scBitvector sc . fromIntegral $ length inp
+    let cty = C.tWord . C.tNum $ length inp
+    pure (ty, cty)
   outputFields <- forM outputPorts $ \out -> do
-    liftIO . SC.scBitvector sc . fromIntegral $ length out
+    ty <- liftIO . SC.scBitvector sc . fromIntegral $ length out
+    let cty = C.tWord . C.tNum $ length out
+    pure (ty, cty)
 
-  let domainFields = Map.insert "__state__" stateRecordType inputFields
-  let codomainFields = Map.insert "__state__" stateRecordType outputFields
+  domainFields <- insertStateField sc stateFields inputFields
+  codomainFields <- insertStateField sc stateFields outputFields
 
-  domainRecordType <- cryptolRecordType sc domainFields
-  codomainRecordType <- cryptolRecordType sc codomainFields
+  domainRecordType <- fieldsToType sc domainFields
+  domainCryptolRecordType <- fieldsToCryptolType domainFields
+  -- codomainRecordType <- fieldsToType sc codomainFields
+  codomainCryptolRecordType <- fieldsToCryptolType codomainFields
+
+  -- convert module into term
   domainRecordEC <- liftIO $ SC.scFreshEC sc "input" domainRecordType
   domainRecord <- liftIO $ SC.scExtCns sc domainRecordEC
 
@@ -172,15 +216,90 @@ convertModuleInline sc mmap m = do
   outputRecord <- cryptolRecord sc . Map.insert "__state__" postStateRecord =<< forM outputPorts
     (\out -> lookupPatternTerm sc (qualifyBitrep "top" <$> out) terms)
 
+  -- construct result
   t <- liftIO $ SC.scAbstractExts sc [domainRecordEC] outputRecord
-  ty <- liftIO $ SC.scFun sc domainRecordType codomainRecordType
-
-  let toCryptol (nm, rep) = (C.mkIdent nm, C.tWord . C.tNum $ length rep)
-  let cty = C.tFun
-        (C.tRec . C.recordFromFields . (("__state__", stateRecordCryptolType):) $ toCryptol <$> Map.assocs inputPorts)
-        (C.tRec . C.recordFromFields . (("__state__", stateRecordCryptolType):) $ toCryptol <$> Map.assocs outputPorts)
-  pure ConvertedModule
-    { _convertedModuleTerm = t
-    , _convertedModuleType = ty
-    , _convertedModuleCryptolType = cty
+  -- ty <- liftIO $ SC.scFun sc domainRecordType codomainRecordType
+  let cty = C.tFun domainCryptolRecordType codomainCryptolRecordType
+  pure YosysSequential
+    { _yosysSequentialTerm = SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) t
+    , _yosysSequentialStateFields = stateFields
+    , _yosysSequentialInputFields = inputFields
+    , _yosysSequentialOutputFields = outputFields
     }
+
+composeYosysSequential ::
+  forall m.
+  MonadIO m =>
+  SC.SharedContext ->
+  YosysSequential ->
+  Integer ->
+  m SC.TypedTerm
+composeYosysSequential sc s n = do
+  let t = SC.ttTerm $ s ^. yosysSequentialTerm
+
+  width <- liftIO . SC.scNat sc $ fromIntegral n
+  extendedInputFields <- forM (s ^. yosysSequentialInputFields) $ \(ty, cty) -> do
+    exty <- liftIO $ SC.scVecType sc width ty
+    let excty = C.tSeq (C.tNum n) cty
+    pure (exty, excty)
+  extendedOutputFields <- forM (s ^. yosysSequentialOutputFields) $ \(ty, cty) -> do
+    exty <- liftIO $ SC.scVecType sc width ty
+    let excty = C.tSeq (C.tNum n) cty
+    pure (exty, excty)
+  extendedInputType <- fieldsToType sc extendedInputFields
+  extendedInputCryptolType <- fieldsToCryptolType extendedInputFields
+  extendedInputRecordEC <- liftIO $ SC.scFreshEC sc "input" extendedInputType
+  extendedInputRecord <- liftIO $ SC.scExtCns sc extendedInputRecordEC
+  extendedOutputCryptolType <- fieldsToCryptolType extendedOutputFields
+
+  allInputs <- fmap Map.fromList . forM (Map.keys extendedInputFields) $ \nm -> do
+    inp <- liftIO $ cryptolRecordSelect sc extendedInputFields extendedInputRecord nm
+    pure (nm, inp)
+
+  codomainFields <- insertStateField sc (s ^. yosysSequentialStateFields) $ s ^. yosysSequentialOutputFields
+
+  let
+    buildIntermediateInput :: Integer -> SC.Term -> m SC.Term
+    buildIntermediateInput i st = do
+      inps <- fmap Map.fromList . forM (Map.assocs allInputs) $ \(nm, inp) -> do
+        case Map.lookup nm $ s ^. yosysSequentialInputFields of
+          Nothing -> throw . YosysError $ "Invalid input: " <> nm
+          Just (elemty, _) -> do
+            idx <- liftIO . SC.scNat sc $ fromIntegral i
+            idxed <- liftIO $ SC.scAt sc width elemty inp idx
+            pure (nm, idxed)
+      let inpsWithSt = Map.insert "__state__" st inps
+      cryptolRecord sc inpsWithSt
+
+    summarizeOutput :: SC.Term -> m (SC.Term, Map Text SC.Term)
+    summarizeOutput outrec = do
+      outstate <- liftIO $ cryptolRecordSelect sc codomainFields outrec "__state__"
+      outputs <- fmap Map.fromList . forM (Map.assocs $ s ^. yosysSequentialOutputFields) $ \(nm, (ty, _)) -> do
+        out <- liftIO $ cryptolRecordSelect sc codomainFields outrec nm
+        wrapped <- liftIO $ SC.scSingle sc ty out
+        pure (nm, wrapped)
+      pure (outstate, outputs)
+
+    compose1 :: Integer -> (SC.Term, Map Text SC.Term) -> m (SC.Term, Map Text SC.Term)
+    compose1 i (st, outs) = do
+      inprec <- buildIntermediateInput i st
+      outrec <- liftIO $ SC.scApply sc t inprec
+      (st', outs') <- summarizeOutput outrec
+      mergedOuts <- fmap Map.fromList . forM (Map.assocs outs') $ \(nm, arr) -> do
+        case (Map.lookup nm $ s ^. yosysSequentialOutputFields, Map.lookup nm outs) of
+          (Just (ty, _), Just rest) -> do
+            restlen <- liftIO . SC.scNat sc $ fromIntegral i
+            arrlen <- liftIO $ SC.scNat sc 1
+            appended <- liftIO $ SC.scAppend sc restlen arrlen ty rest arr
+            pure (nm, appended)
+          _ -> pure (nm, arr)
+      pure (st', mergedOuts)
+
+  stateType <- fieldsToType sc $ s ^. yosysSequentialStateFields
+  initialStateMsg <- liftIO $ SC.scString sc "Attempted to read initial state of sequential circuit"
+  initialState <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [stateType, initialStateMsg]
+  (_, outputs) <- foldM (\acc i -> compose1 i acc) (initialState, Map.empty) [0..n]
+  outputRecord <- cryptolRecord sc outputs
+  res <- liftIO $ SC.scAbstractExts sc [extendedInputRecordEC] outputRecord
+  let cty = C.tFun extendedInputCryptolType extendedOutputCryptolType
+  pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) res

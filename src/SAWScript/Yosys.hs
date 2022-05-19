@@ -11,6 +11,9 @@ module SAWScript.Yosys
   ( YosysIR
   , yosys_import
   , yosys_verify
+  , yosys_import_sequential
+  , yosys_extract_sequential
+  , yosys_extract_sequential_raw
   , loadYosysIR
   , yosysIRToTypedTerms
   ) where
@@ -18,6 +21,7 @@ module SAWScript.Yosys
 import Control.Lens.TH (makeLenses)
 
 import Control.Lens (view, (^.))
+import Control.Exception (throw)
 import Control.Monad (forM, foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 
@@ -123,41 +127,20 @@ yosysIRToRecordTerm sc ir = do
   let tt = SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) record
   pure tt
 
--- | Given a Yosys IR, construct a map from module names to SAWCore terms alongside SAWCore and Cryptol types
-convertYosysIRInline ::
+-- | Given a Yosys IR, construct a value representing a specific module with all submodules inlined
+yosysIRToSequential ::
   MonadIO m =>
   SC.SharedContext ->
   YosysIR ->
-  m (Map Text ConvertedModule)
-convertYosysIRInline sc ir = do
-  res <- forM (Map.assocs $ ir ^. yosysModules) $ \(nm, m) -> do
-    -- liftIO $ putStrLn $ "Converting: " <> Text.unpack nm
-    cm <- convertModuleInline sc (ir ^. yosysModules) m
-    let uri = URI.URI
-          { URI.uriScheme = URI.mkScheme "yosys"
-          , URI.uriAuthority = Left True
-          , URI.uriPath = (False,) <$> mapM URI.mkPathPiece (nm NE.:| [])
-          , URI.uriQuery = []
-          , URI.uriFragment = Nothing
-          }
-    let ni = SC.ImportedName uri [nm]
-    tc <- liftIO $ SC.scConstant' sc ni (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)
-    let cm' = cm { _convertedModuleTerm = tc }
-    pure (nm, cm')
-  pure $ Map.fromList res
-
--- | Given a Yosys IR, construct a SAWCore record containing terms for each module
-yosysIRToRecordTermInline ::
-  MonadIO m =>
-  SC.SharedContext ->
-  YosysIR ->
-  m SC.TypedTerm
-yosysIRToRecordTermInline sc ir = do
-  env <- convertYosysIRInline sc ir
-  record <- cryptolRecord sc $ view convertedModuleTerm <$> env
-  let cty = C.tRec . C.recordFromFields $ (\(nm, cm) -> (C.mkIdent nm, cm ^. convertedModuleCryptolType)) <$> Map.assocs env
-  let tt = SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) record
-  pure tt
+  Text ->
+  m YosysSequential
+yosysIRToSequential sc ir nm = do
+  case Map.lookup nm $ ir ^. yosysModules of
+    Nothing -> throw . YosysError $ mconcat
+      [ "Could not find module: "
+      , nm
+      ]
+    Just m -> convertModuleInline sc (ir ^. yosysModules) m
 
 --------------------------------------------------------------------------------
 -- ** Functions visible from SAWScript REPL
@@ -168,7 +151,7 @@ yosys_import :: FilePath -> TopLevel SC.TypedTerm
 yosys_import path = do
   sc <- getSharedContext
   ir <- loadYosysIR path
-  yosysIRToRecordTermInline sc ir
+  yosysIRToRecordTerm sc ir
 
 yosys_verify :: SC.TypedTerm -> [SC.TypedTerm] -> SC.TypedTerm -> [YosysTheorem] -> ProofScript () -> TopLevel YosysTheorem
 yosys_verify ymod preconds other specs tactic = do
@@ -185,3 +168,17 @@ yosys_verify ymod preconds other specs tactic = do
   prop <- theoremProp sc thm
   _ <- Builtins.provePrintPrim tactic prop
   pure thm
+
+yosys_import_sequential :: Text -> FilePath -> TopLevel YosysSequential
+yosys_import_sequential nm path = do
+  sc <- getSharedContext
+  ir <- loadYosysIR path
+  yosysIRToSequential sc ir nm
+
+yosys_extract_sequential :: YosysSequential -> Integer -> TopLevel SC.TypedTerm
+yosys_extract_sequential s n = do
+  sc <- getSharedContext
+  composeYosysSequential sc s n
+
+yosys_extract_sequential_raw :: YosysSequential -> TopLevel SC.TypedTerm
+yosys_extract_sequential_raw s = pure $ s ^. yosysSequentialTerm
