@@ -125,7 +125,7 @@ module SAWScript.Prover.MRSolver.Solver where
 
 import Data.Maybe
 import Data.Either
-import Data.List (findIndices, intercalate, foldl')
+import Data.List (findIndices, intercalate)
 import Data.Bits (shiftL)
 import Control.Monad.Except
 import qualified Data.Map as Map
@@ -147,19 +147,6 @@ import SAWScript.Prover.MRSolver.SMT
 ----------------------------------------------------------------------
 -- * Normalizing and Matching on Terms
 ----------------------------------------------------------------------
-
--- | Like 'asVectorType', but returns 'Nothing' if 'asBVVecType' returns 'Just'
-asNonBVVecVectorType :: Recognizer Term (Term, Term)
-asNonBVVecVectorType (asBVVecType -> Just _) = Nothing
-asNonBVVecVectorType t = asVectorType t
-
--- | Like 'scBvNat', but if given a bitvector literal it is converted to a
--- natural number literal
-mrBvToNat :: Term -> Term -> MRM Term
-mrBvToNat _ (asArrayValue -> Just (asBoolType -> Just _,
-                                   mapM asBool -> Just bits)) =
-  liftSC1 scNat $ foldl' (\n bit -> if bit then 2*n+1 else 2*n) 0 bits
-mrBvToNat n len = liftSC2 scBvNat n len
 
 -- | Pattern-match on a @LetRecTypes@ list in normal form and return a list of
 -- the types it specifies, each in normal form and with uvars abstracted out
@@ -309,7 +296,7 @@ normComp (CompTerm t) =
                                                   i)]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
          if n < 1 `shiftL` fromIntegral w then do
-           n' <- liftSC2 scBvConst w (toInteger n)
+           n' <- mrBvConst w (toInteger n)
            err_str <- liftSC1 scString "FIXME: normComp (atM) error"
            err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str]
            xs' <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
@@ -334,14 +321,14 @@ normComp (CompTerm t) =
                                               asBvToNat ->
                                                 Just (w_tm@(asNat -> Just w),
                                                       i), x]) ->
-      do body <- mrGlobalDefBody "CryptolM.bvVecUpdateM"
+      do body <- mrGlobalDefBody "CryptolM.fromBVVecUpdateM"
          if n < 1 `shiftL` fromIntegral w then do
-           n' <- liftSC2 scBvConst w (toInteger n)
+           n' <- mrBvConst w (toInteger n)
            err_str <- liftSC1 scString "FIXME: normComp (updateM) error"
            err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str]
            xs' <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
                                         [n_tm, a, xs, err_tm, w_tm, n'] 
-           mrApplyAll body [w_tm, n', a, xs', i, x] >>= normCompTerm
+           mrApplyAll body [w_tm, n', a, xs', i, x, err_tm, n_tm] >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
     -- Always unfold: sawLet, multiArgFixM, invariantHint, Num_rec
@@ -636,7 +623,7 @@ mrRefines t1 t2 =
 -- | The main implementation of 'mrRefines'
 mrRefines' :: NormComp -> NormComp -> MRM ()
 
-mrRefines' (ReturnM e1) (ReturnM e2) = mrAssertProveEq e1 e2
+mrRefines' (ReturnM e1) (ReturnM e2) = mrAssertProveRel True e1 e2
 mrRefines' (ErrorM _) (ErrorM _) = return ()
 mrRefines' (ReturnM e) (ErrorM _) = throwMRFailure (ReturnNotError e)
 mrRefines' (ErrorM _) (ReturnM e) = throwMRFailure (ReturnNotError e)

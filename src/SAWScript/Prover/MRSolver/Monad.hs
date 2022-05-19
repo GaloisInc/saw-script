@@ -4,6 +4,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -22,8 +23,10 @@ monadic combinators for operating on terms.
 
 module SAWScript.Prover.MRSolver.Monad where
 
-import Data.List (find, findIndex)
+import Data.List (find, findIndex, foldl')
 import qualified Data.Text as T
+import Numeric.Natural (Natural)
+import Data.Bits (testBit)
 import System.IO (hPutStrLn, stderr)
 import Control.Monad.Reader
 import Control.Monad.State
@@ -62,7 +65,7 @@ data FailCtx
 
 -- | That's MR. Failure to you
 data MRFailure
-  = TermsNotEq Term Term
+  = TermsNotRel Bool Term Term
   | TypesNotEq Type Type
   | CompsDoNotRefine NormComp NormComp
   | ReturnNotError Term
@@ -83,6 +86,9 @@ data MRFailure
     -- | Records a disjunctive branch we took, where both cases failed
   | MRFailureDisj MRFailure MRFailure
   deriving Show
+
+pattern TermsNotEq :: Term -> Term -> MRFailure
+pattern TermsNotEq t1 t2 = TermsNotRel False t1 t2
 
 -- | Pretty-print an object prefixed with a 'String' that describes it
 ppWithPrefix :: PrettyInCtx a => String -> a -> PPInCtxM SawDoc
@@ -109,8 +115,10 @@ instance PrettyInCtx FailCtx where
                                 prettyInCtx t]
 
 instance PrettyInCtx MRFailure where
-  prettyInCtx (TermsNotEq t1 t2) =
+  prettyInCtx (TermsNotRel False t1 t2) =
     ppWithPrefixSep "Could not prove terms equal:" t1 "and" t2
+  prettyInCtx (TermsNotRel True t1 t2) =
+    ppWithPrefixSep "Could not prove terms heterogeneously related:" t1 "and" t2
   prettyInCtx (TypesNotEq tp1 tp2) =
     ppWithPrefixSep "Types not equal:" tp1 "and" tp2
   prettyInCtx (CompsDoNotRefine m1 m2) =
@@ -244,27 +252,6 @@ instance PrettyInCtx DataTypeAssump where
   prettyInCtx (IsRight x) = prettyInCtx x >>= ppWithPrefix "Right _ _"
   prettyInCtx (IsNum   x) = prettyInCtx x >>= ppWithPrefix "TCNum"
   prettyInCtx IsInf = return "TCInf"
-
--- | Recognize a term as a @Left@ or @Right@
-asEither :: Recognizer Term (Either Term Term)
-asEither (asCtor -> Just (c, [_, _, x]))
-  | primName c == "Prelude.Left"  = return $ Left x
-  | primName c == "Prelude.Right" = return $ Right x
-asEither _ = Nothing
-
--- | Recognize a term as a @TCNum n@ or @TCInf@
-asNum :: Recognizer Term (Either Term ())
-asNum (asCtor -> Just (c, [n]))
-  | primName c == "Cryptol.TCNum"  = return $ Left n
-asNum (asCtor -> Just (c, []))
-  | primName c == "Cryptol.TCInf"  = return $ Right ()
-asNum _ = Nothing
-
--- | Recognize a term as being of the form @isFinite n@
-asIsFinite :: Recognizer Term Term
-asIsFinite (asApp -> Just (isGlobalDef "CryptolM.isFinite" -> Just (), n)) =
-  Just n
-asIsFinite _ = Nothing
 
 -- | Create a term representing the type @IsFinite n@
 mrIsFinite :: Term -> MRM Term
@@ -480,6 +467,22 @@ funNameType (GlobalName gd projs) =
 -- | Apply a 'Term' to a list of arguments and beta-reduce in Mr. Monad
 mrApplyAll :: Term -> [Term] -> MRM Term
 mrApplyAll f args = liftSC2 scApplyAllBeta f args
+
+-- | Like 'scBvNat', but if given a bitvector literal it is converted to a
+-- natural number literal
+mrBvToNat :: Term -> Term -> MRM Term
+mrBvToNat _ (asArrayValue -> Just (asBoolType -> Just _,
+                                   mapM asBool -> Just bits)) =
+  liftSC1 scNat $ foldl' (\n bit -> if bit then 2*n+1 else 2*n) 0 bits
+mrBvToNat n len = liftSC2 scBvNat n len
+
+-- | Like 'scBvConst', but returns a bitvector literal
+mrBvConst :: Natural -> Integer -> MRM Term
+mrBvConst n x =
+  do bool_tp <- liftSC0 scBoolType
+     bits <- mapM (liftSC1 scBool . testBit x)
+                  [(fromIntegral n - 1), (fromIntegral n - 2) .. 0]
+     liftSC2 scVector bool_tp bits
 
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in
