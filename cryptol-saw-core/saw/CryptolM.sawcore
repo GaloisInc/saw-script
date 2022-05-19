@@ -172,6 +172,17 @@ bvVecUpdateM n len a xs i x =
                                            (updBVVec n len a xs i x))
         (bvultWithProof n i len);
 
+fromBVVecUpdateM : (n : Nat) -> (len : Vec n Bool) -> (a : isort 0) ->
+                   BVVec n len a -> Vec n Bool -> a ->
+                   a -> (m : Nat) -> CompM (Vec m a);
+fromBVVecUpdateM n len a xs i x def m =
+  maybe (is_bvult n i len) (CompM (Vec m a))
+        (errorM (Vec m a) "bvVecUpdateM: invalid sequence index")
+        (\ (_:is_bvult n i len) -> returnM (Vec m a)
+                                           (genFromBVVec n len a
+                                             (updBVVec n len a xs i x) def m))
+        (bvultWithProof n i len);
+
 updateM : (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> a -> CompM (Vec n a);
 updateM n a xs i x =
   maybe (IsLtNat i n) (CompM (Vec n a))
@@ -340,7 +351,7 @@ ecShiftRM : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
 ecShiftRM =
   Num_rec (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
                         mseq m a -> ix -> mseq m a)
-          (\ (m:Nat) -> ecShiftL (TCNum m))
+          (\ (m:Nat) -> ecShiftR (TCNum m))
           (\ (ix a : sort 0) (pix:PIntegral ix) (pa:PZero a) ->
              ecShiftR TCInf ix (CompM a) pix (PZeroCompM a pa));
 
