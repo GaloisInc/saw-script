@@ -30,6 +30,7 @@ import Data.Monoid
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State
 import qualified Control.Exception as Ex
+import Data.Char (toLower)
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
@@ -116,6 +117,7 @@ import SAWScript.ImportAIG
 import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
 import SAWScript.Proof
+import SAWScript.Crucible.Common (PathSatSolver(..))
 import SAWScript.TopLevel
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
@@ -1741,6 +1743,13 @@ approxmc t = do
   case msg of
     [l] -> io $ putStrLn l
     _ -> fail $ "Garbled result from approxmc\n\n" ++ out
+
+set_path_sat_solver :: String -> TopLevel ()
+set_path_sat_solver nm =
+  case map toLower nm of
+    "z3"    -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Z3 })
+    "yices" -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Yices })
+    _ -> fail $ "Unknown path sat solver: " ++ show nm
 
 summarize_verification :: TopLevel ()
 summarize_verification =

@@ -18,6 +18,7 @@ module SAWScript.Crucible.Common
   , IsSymBackend(..)
   , HasSymInterface(..)
   , OnlineSolver(..)
+  , PathSatSolver(..)
   , setupProfiling
   , SAWCruciblePersonality(..)
   , newSAWCoreExprBuilder
@@ -38,6 +39,7 @@ import           Lang.Crucible.Backend.Online (OnlineBackend, newOnlineBackend)
 import qualified Data.Parameterized.Nonce as Nonce
 import           What4.Protocol.Online (OnlineSolver(..))
 import qualified What4.Solver.Z3 as Z3
+import qualified What4.Solver.Yices as Yices
 import qualified What4.Protocol.SMTLib2 as SMT2
 
 import qualified What4.Config as W4
@@ -53,6 +55,12 @@ import qualified Prettyprinter as PP
 
 import Verifier.SAW.SharedTerm as SC
 import Verifier.SAW.Simulator.What4.ReturnTrip (SAWCoreState, newSAWCoreState)
+
+data PathSatSolver
+  = PathSat_Z3
+  | PathSat_Yices
+ deriving (Eq, Ord, Show)
+
 
 -- | The symbolic backend we use for SAW verification
 type Sym = W4.ExprBuilder Nonce.GlobalNonceGenerator SAWCoreState (W4.Flags W4.FloatReal)
@@ -75,11 +83,18 @@ newSAWCoreExprBuilder sc =
 defaultSAWCoreBackendTimeout :: Integer
 defaultSAWCoreBackendTimeout = 10000
 
-newSAWCoreBackend :: Sym -> IO SomeOnlineBackend
-newSAWCoreBackend sym = newSAWCoreBackendWithTimeout sym 0
+newSAWCoreBackend :: PathSatSolver -> Sym -> IO SomeOnlineBackend
+newSAWCoreBackend pss sym = newSAWCoreBackendWithTimeout pss sym 0
 
-newSAWCoreBackendWithTimeout :: Sym -> Integer -> IO SomeOnlineBackend
-newSAWCoreBackendWithTimeout sym timeout =
+newSAWCoreBackendWithTimeout :: PathSatSolver -> Sym -> Integer -> IO SomeOnlineBackend
+newSAWCoreBackendWithTimeout PathSat_Yices sym timeout =
+  do bak <- newOnlineBackend sym Yices.yicesDefaultFeatures
+     W4.extendConfig Yices.yicesOptions (W4.getConfiguration sym)
+     yicesTimeoutSetting <- W4.getOptionSetting Yices.yicesGoalTimeout (W4.getConfiguration sym)
+     _ <- W4.setOpt yicesTimeoutSetting timeout
+     return (SomeOnlineBackend (bak :: Backend Yices.Connection))
+
+newSAWCoreBackendWithTimeout PathSat_Z3 sym timeout =
   do bak <- newOnlineBackend sym (SMT2.defaultFeatures Z3.Z3)
      W4.extendConfig Z3.z3Options (W4.getConfiguration sym)
      z3TimeoutSetting <- W4.getOptionSetting Z3.z3Timeout (W4.getConfiguration sym)

@@ -494,6 +494,7 @@ buildTopLevelEnv proxy opts =
                    , rwStackBaseAlign = defaultStackBaseAlign
                    , rwAllocSymInitCheck = True
                    , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
+                   , rwPathSatSolver = CC.PathSat_Z3
                    }
        return (bic, ro0, rw0)
 
@@ -869,6 +870,13 @@ primitives = Map.fromList
     (pureVal disable_lax_loads_and_stores)
     Current
     [ "Disable relaxed validity checking for memory loads and stores in Crucible." ]
+
+  , prim "set_path_sat_solver" "String -> TopLevel ()"
+    (pureVal set_path_sat_solver)
+    Experimental
+    [ "Set the path satisfiablity solver to use.  Accepted values"
+    , "currently are 'z3' and 'yices'."
+    ]
 
   , prim "enable_debug_intrinsics" "TopLevel ()"
     (pureVal enable_debug_intrinsics)

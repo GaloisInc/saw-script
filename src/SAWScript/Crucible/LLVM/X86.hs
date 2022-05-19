@@ -338,6 +338,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       start <- io getCurrentTime
       laxLoadsAndStores <- gets rwLaxLoadsAndStores
+      pathSatSolver <- gets rwPathSatSolver
       let ?ptrWidth = knownNat @64
       let ?memOpts = C.LLVM.defaultMemOptions
                        { C.LLVM.laxLoadsAndStores = laxLoadsAndStores
@@ -348,7 +349,8 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       basic_ss <- getBasicSS
       rw <- getTopLevelRW
       sym <- liftIO $ newSAWCoreExprBuilder sc
-      SomeOnlineBackend bak <- liftIO $ newSAWCoreBackendWithTimeout sym $ rwCrucibleTimeout rw
+      SomeOnlineBackend bak <- liftIO $
+        newSAWCoreBackendWithTimeout pathSatSolver sym $ rwCrucibleTimeout rw
       cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms $ W4.getConfiguration sym
       _ <- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsingX86 rw
       liftIO $ W4.extendConfig

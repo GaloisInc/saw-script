@@ -63,6 +63,7 @@ import qualified Data.AIG as AIG
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Exceptions as SS
 import qualified SAWScript.Position as SS
+import qualified SAWScript.Crucible.Common as Common
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
@@ -459,6 +460,8 @@ data TopLevelRW =
   , rwAllocSymInitCheck :: Bool
 
   , rwCrucibleTimeout :: Integer
+
+  , rwPathSatSolver :: Common.PathSatSolver
   }
 
 newtype TopLevel a =

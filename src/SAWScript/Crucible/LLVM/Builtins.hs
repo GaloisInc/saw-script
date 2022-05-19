@@ -1438,6 +1438,7 @@ setupLLVMCrucibleContext pathSat lm action =
      what4HashConsing <- gets rwWhat4HashConsing
      laxPointerOrdering <- gets rwLaxPointerOrdering
      laxLoadsAndStores <- gets rwLaxLoadsAndStores
+     pathSatSolver <- gets rwPathSatSolver
      what4Eval <- gets rwWhat4Eval
      allocSymInitCheck <- gets rwAllocSymInitCheck
      crucibleTimeout <- gets rwCrucibleTimeout
@@ -1456,7 +1457,8 @@ setupLLVMCrucibleContext pathSat lm action =
             io $
             do let verbosity = simVerbose opts
                sym <- Common.newSAWCoreExprBuilder sc
-               Common.SomeOnlineBackend bak <- Common.newSAWCoreBackendWithTimeout sym crucibleTimeout
+               Common.SomeOnlineBackend bak <-
+                 Common.newSAWCoreBackendWithTimeout pathSatSolver sym crucibleTimeout
 
                let cfg = W4.getConfiguration sym
                verbSetting <- W4.getOptionSetting W4.verbosity cfg
