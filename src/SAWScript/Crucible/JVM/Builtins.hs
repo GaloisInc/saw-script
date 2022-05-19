@@ -725,6 +725,13 @@ verifyPoststate cc mspec env0 globals ret =
      poststateLoc <- SS.toW4Loc "_SAW_verify_poststate" <$> getPosition
      io $ W4.setCurrentProgramLoc sym poststateLoc
 
+     -- This discards all the obligations generated during
+     -- symbolic execution itself, i.e., which are not directly
+     -- generated from specification postconditions. This
+     -- is, in general, unsound.
+     skipSafetyProofs <- gets rwSkipSafetyProofs
+     when skipSafetyProofs (io (Crucible.clearProofObligations bak))
+
      let ecs0 = Map.fromList
            [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars

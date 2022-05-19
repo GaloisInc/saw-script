@@ -462,6 +462,7 @@ data TopLevelRW =
   , rwCrucibleTimeout :: Integer
 
   , rwPathSatSolver :: Common.PathSatSolver
+  , rwSkipSafetyProofs :: Bool
   }
 
 newtype TopLevel a =

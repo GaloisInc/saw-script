@@ -1369,6 +1369,13 @@ verifyPoststate cc mspec env0 globals ret =
      opts <- getOptions
      io $ W4.setCurrentProgramLoc sym poststateLoc
 
+     -- This discards all the obligations generated during
+     -- symbolic execution itself, i.e., which are not directly
+     -- generated from specification postconditions. This
+     -- is, in general, unsound.
+     skipSafetyProofs <- gets rwSkipSafetyProofs
+     when skipSafetyProofs (io (Crucible.clearProofObligations bak))
+
      let ecs0 = Map.fromList
            [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
@@ -1394,9 +1401,12 @@ verifyPoststate cc mspec env0 globals ret =
      io $ for_ (view osAsserts st) $ \(W4.LabeledPred p r) ->
        Crucible.addAssertion bak (Crucible.LabeledPred p r)
 
-     obligations <- io $ Crucible.getProofObligations bak
-     io $ Crucible.clearProofObligations bak
-     sc_obligations <- io $ mapM (verifyObligation sc) (maybe [] Crucible.goalsToList obligations)
+     obligations <- io $
+       do obls <- Crucible.getProofObligations bak
+          Crucible.clearProofObligations bak
+          return (maybe [] Crucible.goalsToList obls)
+
+     sc_obligations <- io $ mapM (verifyObligation sc) obligations
      return (sc_obligations, st)
 
   where

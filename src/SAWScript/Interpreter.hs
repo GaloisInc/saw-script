@@ -495,6 +495,7 @@ buildTopLevelEnv proxy opts =
                    , rwAllocSymInitCheck = True
                    , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
                    , rwPathSatSolver = CC.PathSat_Z3
+                   , rwSkipSafetyProofs = False
                    }
        return (bic, ro0, rw0)
 
@@ -524,6 +525,18 @@ add_primitives lc bic opts = do
   , rwDocs       = rwDocs rw `Map.union` primDocEnv lcs
   , rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
+
+enable_safety_proofs :: TopLevel ()
+enable_safety_proofs = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw{ rwSkipSafetyProofs = False }
+
+disable_safety_proofs :: TopLevel ()
+disable_safety_proofs = do
+  opts <- getOptions
+  io $ printOutLn opts Warn "Safety proofs disabled! This is unsound!"
+  rw <- getTopLevelRW
+  putTopLevelRW rw{ rwSkipSafetyProofs = True }
 
 enable_smt_array_memory_model :: TopLevel ()
 enable_smt_array_memory_model = do
@@ -830,6 +843,22 @@ primitives = Map.fromList
     (pureVal disable_smt_array_memory_model)
     Current
     [ "Disable the SMT array memory model." ]
+
+  , prim "enable_safety_proofs" "TopLevel ()"
+    (pureVal enable_safety_proofs)
+    Experimental
+    [ "Restore the default state, where safety obligations"
+    , "encountered during symbolic execution are proofed normally."
+    ]
+
+  , prim "disable_safety_proofs" "TopLevel ()"
+    (pureVal disable_safety_proofs)
+    Experimental
+    [ "Disable checking of safety obligations encountered during symbolic"
+    , "execution. This is unsound! However, it can be useful during"
+    , "initial proof construction to focus only on the stated correcness"
+    , "specifications."
+    ]
 
  , prim "enable_crucible_assert_then_assume" "TopLevel ()"
     (pureVal enable_crucible_assert_then_assume)
