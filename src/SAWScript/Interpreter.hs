@@ -848,7 +848,7 @@ primitives = Map.fromList
     (pureVal enable_safety_proofs)
     Experimental
     [ "Restore the default state, where safety obligations"
-    , "encountered during symbolic execution are proofed normally."
+    , "encountered during symbolic execution are proved normally."
     ]
 
   , prim "disable_safety_proofs" "TopLevel ()"
@@ -856,7 +856,7 @@ primitives = Map.fromList
     Experimental
     [ "Disable checking of safety obligations encountered during symbolic"
     , "execution. This is unsound! However, it can be useful during"
-    , "initial proof construction to focus only on the stated correcness"
+    , "initial proof construction to focus only on the stated correctness"
     , "specifications."
     ]
 
@@ -903,7 +903,7 @@ primitives = Map.fromList
   , prim "set_path_sat_solver" "String -> TopLevel ()"
     (pureVal set_path_sat_solver)
     Experimental
-    [ "Set the path satisfiablity solver to use.  Accepted values"
+    [ "Set the path satisfiability solver to use.  Accepted values"
     , "currently are 'z3' and 'yices'."
     ]
 
@@ -1123,7 +1123,7 @@ primitives = Map.fromList
   , prim "replace"             "Term -> Term -> Term -> TopLevel Term"
     (pureVal replacePrim)
     Current
-    [ "'replace x y z' rewrites occurences of term x into y inside the"
+    [ "'replace x y z' rewrites occurrences of term x into y inside the"
     , "term z.  x and y must be closed terms."
     ]
 
