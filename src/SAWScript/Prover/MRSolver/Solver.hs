@@ -1038,14 +1038,13 @@ askMRSolverH _ tp1 _ _ _ =
 -- environment.
 askMRSolver ::
   SharedContext ->
-  Int {- ^ The debug level -} ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
   Term -> Term -> IO (Either MRFailure MREnv)
 
-askMRSolver sc dlvl env timeout t1 t2 =
+askMRSolver sc env timeout t1 t2 =
   do tp1 <- scTypeOf sc t1 >>= scWhnf sc
      tp2 <- scTypeOf sc t2 >>= scWhnf sc
-     runMRM sc timeout dlvl env $
+     runMRM sc timeout env $
        mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2 >>
        askMRSolverH [] tp1 t1 tp2 t2

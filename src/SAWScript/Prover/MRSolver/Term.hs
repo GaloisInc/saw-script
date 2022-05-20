@@ -257,17 +257,23 @@ type FunAssumps = Map FunName FunAssump
 data MREnv = MREnv {
   -- | The set of function refinements to be assumed by to Mr. Solver (which
   -- have hopefully been proved previously...)
-  mreFunAssumps :: FunAssumps
-  }
+  mreFunAssumps :: FunAssumps,
+  -- | The debug level, which controls debug printing
+  mreDebugLevel :: Int
+}
 
 -- | The empty 'MREnv'
 emptyMREnv :: MREnv
-emptyMREnv = MREnv { mreFunAssumps = Map.empty }
+emptyMREnv = MREnv { mreFunAssumps = Map.empty, mreDebugLevel = 0 }
 
 -- | Add a 'FunAssump' to a Mr Solver environment
 mrEnvAddFunAssump :: FunName -> FunAssump -> MREnv -> MREnv
 mrEnvAddFunAssump f fassump env =
   env { mreFunAssumps = Map.insert f fassump (mreFunAssumps env) }
+
+-- | Set the debug level of a Mr Solver environment
+mrEnvSetDebugLevel :: Int -> MREnv -> MREnv
+mrEnvSetDebugLevel dlvl env = env { mreDebugLevel = dlvl }
 
 
 ----------------------------------------------------------------------

@@ -1606,6 +1606,12 @@ mrSolver sc dlvl t1 t2 =
        Left err -> io (putStrLn $ Prover.showMRFailure err) >> return False
        Right env' -> put (rw { rwMRSolverEnv = env' }) >> return True
 
+-- | Set the debug level of the 'Prover.MREnv'
+mrSolverSetDebug :: Int -> TopLevel ()
+mrSolverSetDebug dlvl =
+  modify (\rw -> rw { rwMRSolverEnv =
+                        Prover.mrEnvSetDebugLevel dlvl (rwMRSolverEnv rw) })
+
 setMonadification :: SharedContext -> String -> String -> TopLevel ()
 setMonadification sc cry_str saw_str =
   do rw <- get

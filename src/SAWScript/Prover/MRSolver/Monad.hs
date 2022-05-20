@@ -278,9 +278,7 @@ data MRInfo = MRInfo {
   -- note that these have the current UVars free
   mriAssumptions :: Term,
   -- | The current set of 'DataTypeAssump's
-  mriDataTypeAssumps :: DataTypeAssumps,
-  -- | The debug level, which controls debug printing
-  mriDebugLevel :: Int
+  mriDataTypeAssumps :: DataTypeAssumps
 }
 
 -- | State maintained by MR. Solver
@@ -338,9 +336,9 @@ mrAssumptions = mriAssumptions <$> ask
 mrDataTypeAssumps :: MRM DataTypeAssumps
 mrDataTypeAssumps = mriDataTypeAssumps <$> ask
 
--- | Get the current value of 'mriDebugLevel'
+-- | Get the current debug level
 mrDebugLevel :: MRM Int
-mrDebugLevel = mriDebugLevel <$> ask
+mrDebugLevel = mreDebugLevel <$> mriEnv <$> ask
 
 -- | Get the current value of 'mriEnv'
 mrEnv :: MRM MREnv
@@ -351,12 +349,12 @@ mrVars :: MRM MRVarMap
 mrVars = mrsVars <$> get
 
 -- | Run an 'MRM' computation and return a result or an error
-runMRM :: SharedContext -> Maybe Integer -> Int -> MREnv ->
+runMRM :: SharedContext -> Maybe Integer -> MREnv ->
           MRM a -> IO (Either MRFailure a)
-runMRM sc timeout debug env m =
+runMRM sc timeout env m =
   do true_tm <- scBool sc True
      let init_info = MRInfo { mriSC = sc, mriSMTTimeout = timeout,
-                              mriDebugLevel = debug, mriEnv = env,
+                              mriEnv = env,
                               mriUVars = [], mriCoIndHyps = Map.empty,
                               mriAssumptions = true_tm,
                               mriDataTypeAssumps = HashMap.empty }
