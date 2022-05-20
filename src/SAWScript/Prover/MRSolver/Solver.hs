@@ -927,9 +927,14 @@ mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 -- * External Entrypoints
 ----------------------------------------------------------------------
 
+-- | The result of a successful call to Mr. Solver: either a 'FunAssump' to
+-- (optionally) add to the 'MREnv', or 'Nothing' if the left-hand-side was not
+-- a function name
+type MRSolverResult = Maybe (FunName, FunAssump)
+
 -- | The main loop of 'askMRSolver'. The first argument is an accumulator of
 -- variables to introduce, innermost first.
-askMRSolverH :: [Term] -> Term -> Term -> Term -> Term -> MRM MREnv
+askMRSolverH :: [Term] -> Term -> Term -> Term -> Term -> MRM MRSolverResult
 
 -- If we need to introduce a bitvector on one side and a Num on the other,
 -- introduce a bitvector variable and substitute `TCNum` of `bvToNat` of that
@@ -1020,11 +1025,10 @@ askMRSolverH _ (asCompM -> Just _) t1 (asCompM -> Just _) t2 =
      case asApplyAll t1 of
        ((asGlobalFunName -> Just f1), args) ->
          mrUVarCtx >>= \uvar_ctx ->
-         let fassump = FunAssump { fassumpCtx = uvar_ctx,
-                                   fassumpArgs = args,
-                                   fassumpRHS = m2 } in
-         mrEnvAddFunAssump f1 fassump <$> mrEnv
-       _ -> mrEnv
+         return $ Just (f1, FunAssump { fassumpCtx = uvar_ctx,
+                                        fassumpArgs = args,
+                                        fassumpRHS = m2 })
+       _ -> return Nothing
 
 -- Error if we don't have CompM at the end
 askMRSolverH _ (asCompM -> Just _) _ tp2 _ =
@@ -1040,7 +1044,7 @@ askMRSolver ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
-  Term -> Term -> IO (Either MRFailure MREnv)
+  Term -> Term -> IO (Either MRFailure MRSolverResult)
 
 askMRSolver sc env timeout t1 t2 =
   do tp1 <- scTypeOf sc t1 >>= scWhnf sc

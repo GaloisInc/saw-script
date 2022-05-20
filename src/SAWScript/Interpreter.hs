@@ -3190,16 +3190,22 @@ primitives = Map.fromList
 
     ---------------------------------------------------------------------
 
-  , prim "mr_solver"  "Term -> Term -> TopLevel Bool"
-    (scVal (\sc -> mrSolver sc 0))
+  , prim "mr_solver_prove" "Term -> Term -> TopLevel ()"
+    (scVal mrSolverProve)
     Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to ask if one monadic term refines another" ]
+    , " to prove that one monadic term refines another. If this can"
+    , " be done, this refinement will be used in future calls to"
+    , " Mr. Solver, and if it cannot, the script will exit." ]
 
-  , prim "mr_solver_debug"  "Int -> Term -> Term -> TopLevel Bool"
-    (scVal mrSolver)
+  , prim "mr_solver_check" "Term -> Term -> TopLevel Bool"
+    (scVal mrSolverCheck)
     Experimental
-    [ "Call the monadic-recursive solver at the supplied debug level" ]
+    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
+    , " to prove that one monadic term refines another, returning"
+    , " true iff this can be done. Unlike mr_solver_prove, this"
+    , " refinement will not be considered in future calls to"
+    , " Mr. Solver." ]
 
   , prim "mr_solver_set_debug_level" "Int -> TopLevel ()"
     (pureVal mrSolverSetDebug)

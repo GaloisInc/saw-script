@@ -38,6 +38,7 @@ import Data.IORef
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
+import Data.Either (isRight)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -70,6 +71,7 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.SATQuery
 import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
 import qualified Verifier.SAW.SCTypeCheck as TC (TypedTerm(..))
+import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
@@ -78,6 +80,7 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (prepareSATQuery, runManyTests)
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.Simulator.TermModel as TM
+import Verifier.SAW.Term.Pretty (SawDoc, renderSawDoc)
 
 import SAWScript.Position
 
@@ -1593,18 +1596,89 @@ ensureMonadicTerm sc t
       False -> monadifyTypedTerm sc t
 ensureMonadicTerm sc t = monadifyTypedTerm sc t
 
--- | Run Mr Solver with the given debug level to prove that the first term
--- refines the second
-mrSolver :: SharedContext -> Int -> TypedTerm -> TypedTerm -> TopLevel Bool
-mrSolver sc dlvl t1 t2 =
-  do rw <- get
-     m1 <- ttTerm <$> ensureMonadicTerm sc t1
-     m2 <- ttTerm <$> ensureMonadicTerm sc t2
-     let env = rwMRSolverEnv rw
-     res <- liftIO $ Prover.askMRSolver sc dlvl env Nothing m1 m2
+-- | A wrapper for 'Prover.askMRSolver' from @MRSolver.hs@ which if the first
+-- argument is @Just str@, prints out @str@ followed by an abridged version
+-- of the refinement being asked
+askMRSolver :: Maybe SawDoc -> SharedContext -> TypedTerm -> TypedTerm ->
+               TopLevel (NominalDiffTime,
+                         Either Prover.MRFailure Prover.MRSolverResult)
+askMRSolver printStr sc t1 t2 =
+  do env <- rwMRSolverEnv <$> get
+     m1 <- collapseEta <$> ttTerm <$> ensureMonadicTerm sc t1
+     m2 <- collapseEta <$> ttTerm <$> ensureMonadicTerm sc t2
+     case printStr of
+       Nothing -> return ()
+       Just str -> printOutLnTop Info $ renderSawDoc defaultPPOpts $
+         "[MRSolver] " <> str <> ": " <> ppTmHead m1 <>
+                               " |= " <> ppTmHead m2
+     time1 <- liftIO getCurrentTime
+     res <- io $ Prover.askMRSolver sc env Nothing m1 m2
+     time2 <- liftIO getCurrentTime
+     return (diffUTCTime time2 time1, res)
+  where -- Turn a term of the form @\x1 ... xn -> f x1 ... xn@ into @f@
+        collapseEta :: Term -> Term
+        collapseEta (asLambdaList -> (lamVars,
+                     asApplyAll -> (t@(smallestFreeVar -> Nothing),
+                                    mapM asLocalVar -> Just argVars)))
+          | argVars == [(length lamVars - 1), (length lamVars - 2) .. 0] = t
+        collapseEta t = t
+        -- Pretty-print the name of the top-level function call, followed by
+        -- "..." if it is given any arguments, or just "..." if there is no
+        -- top-level call
+        ppTmHead :: Term -> SawDoc
+        ppTmHead (asLambdaList -> (_,
+                  asApplyAll -> (t@(
+                  Prover.asProjAll -> (
+                  Monadify.asTypedGlobalDef -> Just _, _)), args))) =
+          ppTerm defaultPPOpts t <> if length args > 0 then " ..." else ""
+        ppTmHead _ = "..."
+
+-- | Run Mr Solver to prove that the first term refines the second, adding
+-- any relevant 'Prover.FunAssump's to the 'Prover.MREnv' if this can be done,
+-- or printing an error message and exiting if it cannot.
+mrSolverProve :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
+mrSolverProve sc t1 t2 =
+  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
+     (diff, res) <- askMRSolver (Just "Proving") sc t1 t2
      case res of
-       Left err -> io (putStrLn $ Prover.showMRFailure err) >> return False
-       Right env' -> put (rw { rwMRSolverEnv = env' }) >> return True
+       Left err | dlvl == 0 ->
+         io (putStrLn $ Prover.showMRFailure err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         io (Exit.exitWith $ Exit.ExitFailure 1)
+       Left err | otherwise ->
+         -- we ignore the MRFailure context here since it will have already
+         -- been printed by the debug trace
+         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         io (Exit.exitWith $ Exit.ExitFailure 1)
+       Right (Just (fnm, fassump)) ->
+         let assump_str = "a rewrite" :: String in
+         printOutLnTop Info (
+           printf "[MRSolver] Success in %s, added as %s assumption"
+                  (show diff) assump_str) >>
+         modify (\rw -> rw { rwMRSolverEnv =
+           Prover.mrEnvAddFunAssump fnm fassump (rwMRSolverEnv rw) })
+       Right Nothing -> 
+         printOutLnTop Info $ printf "[MRSolver] Success in %s" (show diff)
+
+-- | Run Mr Solver to prove that the first term refines the second, returning
+-- true iff this can be done. This function will not modify the 'Prover.MREnv'.
+mrSolverCheck :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel Bool
+mrSolverCheck sc t1 t2 =
+  Prover.mreDebugLevel <$> rwMRSolverEnv <$> get >>= \case
+    0 -> isRight <$> snd <$> askMRSolver Nothing sc t1 t2
+    _ -> do
+      (diff, res) <- askMRSolver (Just "Checking") sc t1 t2
+      case res of
+        Left err ->
+          -- we ignore the MRFailure context here since it will have already
+          -- been printed by the debug trace
+          io (putStrLn $ Prover.showMRFailureNoCtx err) >>
+          printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+          return False
+        Right _ ->
+          printOutLnTop Info (printf "[MRSolver] Success in %s" (show diff)) >>
+          return True
 
 -- | Set the debug level of the 'Prover.MREnv'
 mrSolverSetDebug :: Int -> TopLevel ()

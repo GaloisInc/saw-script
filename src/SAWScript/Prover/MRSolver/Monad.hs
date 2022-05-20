@@ -90,6 +90,15 @@ data MRFailure
 pattern TermsNotEq :: Term -> Term -> MRFailure
 pattern TermsNotEq t1 t2 = TermsNotRel False t1 t2
 
+-- | Remove the context from a 'MRFailure', i.e. remove all applications of the 
+-- 'MRFailureLocalVar' and 'MRFailureCtx' constructors
+mrFailureWithoutCtx :: MRFailure -> MRFailure
+mrFailureWithoutCtx (MRFailureLocalVar _ err) = mrFailureWithoutCtx err
+mrFailureWithoutCtx (MRFailureCtx _ err) = mrFailureWithoutCtx err
+mrFailureWithoutCtx (MRFailureDisj err1 err2) =
+  MRFailureDisj (mrFailureWithoutCtx err1) (mrFailureWithoutCtx err2)
+mrFailureWithoutCtx err = err
+
 -- | Pretty-print an object prefixed with a 'String' that describes it
 ppWithPrefix :: PrettyInCtx a => String -> a -> PPInCtxM SawDoc
 ppWithPrefix str a = (pretty str <>) <$> nest 2 <$> (line <>) <$> prettyInCtx a
@@ -160,6 +169,11 @@ instance PrettyInCtx MRFailure where
 -- | Render a 'MRFailure' to a 'String'
 showMRFailure :: MRFailure -> String
 showMRFailure = showInCtx []
+
+-- | Render a 'MRFailure' to a 'String' without its context (see
+-- 'mrFailureWithoutCtx')
+showMRFailureNoCtx :: MRFailure -> String
+showMRFailureNoCtx = showMRFailure . mrFailureWithoutCtx
 
 
 ----------------------------------------------------------------------
