@@ -60,7 +60,7 @@ qualifyBitrep nm (Bitrep i) = QualBitrep nm i
 --------------------------------------------------------------------------------
 -- ** Constructing a graph of the entire circuit.
 
-type CircgraphNode = (Cell [QualBitrep], QualBitrep, [QualBitrep])
+type CircgraphNode = ((Text, Cell [QualBitrep]), QualBitrep, [QualBitrep])
 
 rebindQualify :: Text -> Map [Bitrep] [QualBitrep] -> [Bitrep] -> [QualBitrep]
 rebindQualify inm binds bits = case Map.lookup bits binds of
@@ -70,7 +70,6 @@ rebindQualify inm binds bits = case Map.lookup bits binds of
 moduleToInlineNetgraph :: forall m. MonadIO m => Map Text Module -> Module -> m (Netgraph QualBitrep)
 moduleToInlineNetgraph mmap topm = do
   nodes <- go "top" Map.empty topm
-  -- liftIO $ putStrLn $ unlines $ (\(c, out, inp) -> show (c ^. cellType, out, inp)) <$> nodes
   let (_netgraphGraph, _netgraphNodeFromVertex, _) = Graph.graphFromEdges nodes
   pure Netgraph{..}
   where
@@ -79,9 +78,9 @@ moduleToInlineNetgraph mmap topm = do
       fmap mconcat . forM (Map.assocs $ m ^. moduleCells) $ \(cnm, fmap (rebindQualify inm binds) -> c) -> do
         if
           | c ^. cellType == "$dff"
-            -> pure $ (\(out, _inp) -> (c, out, [])) <$> cellToEdges c
+            -> pure $ (\(out, _inp) -> ((cnm, c), out, [])) <$> cellToEdges c
           | Text.isPrefixOf "$" (c ^. cellType)
-            -> pure $ (\(out, inp) -> (c, out, inp)) <$> cellToEdges c
+            -> pure $ (\(out, inp) -> ((cnm, c), out, inp)) <$> cellToEdges c
           | Just subm <- Map.lookup (c ^. cellType) mmap
             -> do
               sbinds <- forM (Map.assocs $ subm ^. modulePorts) $ \(pnm, p) -> do
@@ -98,10 +97,11 @@ moduleToInlineNetgraph mmap topm = do
 
 findDffs ::
   Netgraph QualBitrep ->
-  [Cell [QualBitrep]]
+  Map Text (Cell [QualBitrep])
 findDffs ng =
-  filter (\c -> c ^. cellType == "$dff")
-  . fmap (\v -> let (c, _, _) = ng ^. netgraphNodeFromVertex $ v in c)
+  Map.fromList
+  . filter (\(_, c) -> c ^. cellType == "$dff")
+  . fmap (\v -> let (n, _, _) = ng ^. netgraphNodeFromVertex $ v in n)
   . Graph.vertices
   $ ng ^. netgraphGraph
 
@@ -148,13 +148,13 @@ convertModuleInline sc mmap m = do
 
   -- construct SAWCore and Cryptol types
   let dffs = findDffs ng
-  stateFields <- fmap Map.fromList . forM dffs $ \c ->
+  stateFields <- forM dffs $ \c ->
     case Map.lookup "Q" $ c ^. cellConnections of
       Nothing -> panic "convertModuleInline" ["Missing expected output name for $dff cell"]
       Just b -> do
         t <- liftIO . SC.scBitvector sc . fromIntegral $ length b
         let cty = C.tWord . C.tNum $ length b
-        pure ("nm", (t, cty))
+        pure (t, cty)
 
   let inputPorts = moduleInputPorts m
   let outputPorts = moduleOutputPorts m
@@ -184,11 +184,11 @@ convertModuleInline sc mmap m = do
     deriveTermsByIndices sc (qualifyBitrep "top" <$> inp) t
 
   preStateRecord <- liftIO $ cryptolRecordSelect sc domainFields domainRecord "__state__"
-  derivedPreState <- forM dffs $ \c ->
+  derivedPreState <- forM (Map.assocs dffs) $ \(cnm, c) ->
     case Map.lookup "Q" $ c ^. cellConnections of
       Nothing -> panic "convertModuleInline" ["Missing expected output name for $dff cell"]
       Just b -> do
-        t <- liftIO $ cryptolRecordSelect sc stateFields preStateRecord "nm"
+        t <- liftIO $ cryptolRecordSelect sc stateFields preStateRecord cnm
         deriveTermsByIndices sc b t
 
   zeroTerm <- liftIO $ SC.scBvConst sc 1 0
@@ -210,8 +210,8 @@ convertModuleInline sc mmap m = do
       Nothing -> panic "convertModuleInline" ["Missing expected input name for $dff cell"]
       Just b -> do
         t <- lookupPatternTerm sc b terms
-        pure ("nm", t)
-  postStateRecord <- cryptolRecord sc $ Map.fromList postStateFields
+        pure t
+  postStateRecord <- cryptolRecord sc postStateFields
 
   outputRecord <- cryptolRecord sc . Map.insert "__state__" postStateRecord =<< forM outputPorts
     (\out -> lookupPatternTerm sc (qualifyBitrep "top" <$> out) terms)

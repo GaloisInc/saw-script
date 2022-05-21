@@ -80,7 +80,7 @@ cellToEdges c = (, inputBits) <$> outputBits
 
 data Netgraph b = Netgraph
   { _netgraphGraph :: Graph.Graph
-  , _netgraphNodeFromVertex :: Graph.Vertex -> (Cell [b], b, [b])
+  , _netgraphNodeFromVertex :: Graph.Vertex -> ((Text, Cell [b]), b, [b])
   -- , _netgraphVertexFromKey :: Bitrep -> Maybe Graph.Vertex
   }
 makeLenses ''Netgraph
@@ -101,10 +101,10 @@ moduleNetgraph m =
       )
       . Map.assocs
       $ m ^. modulePorts --
-    cellToNodes :: Cell [Bitrep] -> [(Cell [Bitrep], Bitrep, [Bitrep])]
-    cellToNodes c
-      | c ^. cellType == "$dff" = (c, , []) <$> outputBits
-      | otherwise = (c, , inputBits) <$> outputBits
+    cellToNodes :: (Text, Cell [Bitrep]) -> [((Text, Cell [Bitrep]), Bitrep, [Bitrep])]
+    cellToNodes (nm, c)
+      | c ^. cellType == "$dff" = ((nm, c), , []) <$> outputBits
+      | otherwise = ((nm, c), , inputBits) <$> outputBits
       where
         inputBits :: [Bitrep]
         inputBits =
@@ -132,7 +132,7 @@ moduleNetgraph m =
           )
           . Map.assocs
           $ c ^. cellConnections
-    nodes = concatMap cellToNodes . Map.elems $ m ^. moduleCells
+    nodes = concatMap cellToNodes . Map.assocs $ m ^. moduleCells
     (_netgraphGraph, _netgraphNodeFromVertex, _netgraphVertexFromKey)
       = Graph.graphFromEdges nodes
   in Netgraph{..}
@@ -201,7 +201,7 @@ netgraphToTerms sc env ng inputs
       let sorted = Graph.reverseTopSort $ ng ^. netgraphGraph
       foldM
         ( \acc v -> do
-            let (c, _output, _deps) = ng ^. netgraphNodeFromVertex $ v
+            let ((_, c), _output, _deps) = ng ^. netgraphNodeFromVertex $ v
             let outputFields = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
             if
               -- special handling for $dff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state
