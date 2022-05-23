@@ -682,11 +682,13 @@ ppTermInMonCtx ctx t =
   scPrettyTermInCtx defaultPPOpts (map (\(x,_,_) -> x) ctx) t
 
 -- | A memoization table for monadifying terms
-type MonadifyMemoTable = IntMap MonTerm
+data MonadifyMemoTable =
+  MonadifyMemoTable { monTmTable    :: IntMap MonTerm
+                    , monArgTmTable :: IntMap ArgMonTerm }
 
 -- | The empty memoization table
 emptyMemoTable :: MonadifyMemoTable
-emptyMemoTable = IntMap.empty
+emptyMemoTable = MonadifyMemoTable IntMap.empty IntMap.empty
 
 
 ----------------------------------------------------------------------
@@ -752,14 +754,26 @@ runCompleteMonadifyM sc env top_ret_tp m =
   runMonadifyM env [] (toArgType $ monadifyType [] top_ret_tp) m
 
 -- | Memoize a computation of the monadified term associated with a 'TermIndex'
-memoizingM :: TermIndex -> MonadifyM MonTerm -> MonadifyM MonTerm
-memoizingM i m =
-  (IntMap.lookup i <$> get) >>= \case
+memoMonTerm :: TermIndex -> MonadifyM MonTerm -> MonadifyM MonTerm
+memoMonTerm i m =
+  (IntMap.lookup i <$> monTmTable <$> get) >>= \case
   Just ret ->
     return ret
   Nothing ->
     do ret <- m
-       modify (IntMap.insert i ret)
+       modify (\t -> t { monTmTable = IntMap.insert i ret (monTmTable t) })
+       return ret
+
+-- | Memoize a computation of the monadified term of argument type associated
+-- with a 'TermIndex'
+memoArgMonTerm :: TermIndex -> MonadifyM ArgMonTerm -> MonadifyM ArgMonTerm
+memoArgMonTerm i m =
+  (IntMap.lookup i <$> monArgTmTable <$> get) >>= \case
+  Just ret ->
+    return ret
+  Nothing ->
+    do ret <- m
+       modify (\t -> t { monArgTmTable = IntMap.insert i ret (monArgTmTable t) })
        return ret
 
 -- | Turn a 'MonTerm' of type @CompMT(tp)@ to a term of argument type @MT(tp)@
@@ -799,7 +813,15 @@ monadifyTypeM tp =
 
 -- | Monadify a term to a monadified term of argument type
 monadifyArg :: Maybe MonType -> Term -> MonadifyM ArgMonTerm
-monadifyArg mtp t = monadifyTerm mtp t >>= argifyMonTerm
+{-
+monadifyArg _ t
+  | trace ("Monadifying term of argument type: " ++ showTerm t) False
+  = undefined
+-}
+monadifyArg mtp t@(STApp { stAppIndex = ix }) =
+  memoArgMonTerm ix $ monadifyTerm' mtp t >>= argifyMonTerm
+monadifyArg mtp t =
+  monadifyTerm' mtp t >>= argifyMonTerm
 
 -- | Monadify a term to argument type and convert back to a term
 monadifyArgTerm :: Maybe MonType -> Term -> MonadifyM OpenTerm
@@ -813,7 +835,7 @@ monadifyTerm _ t
   = undefined
 -}
 monadifyTerm mtp t@(STApp { stAppIndex = ix }) =
-  memoizingM ix $ monadifyTerm' mtp t
+  memoMonTerm ix $ monadifyTerm' mtp t
 monadifyTerm mtp t =
   monadifyTerm' mtp t
 
