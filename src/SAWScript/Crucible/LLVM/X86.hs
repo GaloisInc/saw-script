@@ -338,6 +338,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       start <- io getCurrentTime
       laxLoadsAndStores <- gets rwLaxLoadsAndStores
+      pathSatSolver <- gets rwPathSatSolver
       let ?ptrWidth = knownNat @64
       let ?memOpts = C.LLVM.defaultMemOptions
                        { C.LLVM.laxLoadsAndStores = laxLoadsAndStores
@@ -348,7 +349,8 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       basic_ss <- getBasicSS
       rw <- getTopLevelRW
       sym <- liftIO $ newSAWCoreExprBuilder sc
-      SomeOnlineBackend bak <- liftIO $ newSAWCoreBackendWithTimeout sym $ rwCrucibleTimeout rw
+      SomeOnlineBackend bak <- liftIO $
+        newSAWCoreBackendWithTimeout pathSatSolver sym $ rwCrucibleTimeout rw
       cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms $ W4.getConfiguration sym
       _ <- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsingX86 rw
       liftIO $ W4.extendConfig
@@ -518,7 +520,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
             ar
         C.TimeoutResult{} -> fail "Execution timed out"
 
-      (stats,thms) <- checkGoals bak opts sc tactic
+      (stats,thms) <- checkGoals bak opts nm sc tactic
 
       end <- io getCurrentTime
       let diff = diffUTCTime end start
@@ -1058,7 +1060,7 @@ assertPost globals env premem preregs = do
                     _ -> pure $ C.LLVM.LLVMValInt base off
                 _ -> throwX86 "Width of return type is zero bits"
           postRAXTrunc <- viewSome truncateRAX (mkNatRepr retTyBits)
-          pure [LO.matchArg opts sc cc ms MS.PostState postRAXTrunc retTy expectedRet]
+          pure [LO.matchArg opts sc cc ms MS.PostState (ms ^. MS.csLoc) postRAXTrunc retTy expectedRet]
         _ -> throwX86 $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)
     _ -> pure []
 
@@ -1142,10 +1144,11 @@ checkGoals ::
   IsSymBackend Sym bak =>
   bak ->
   Options ->
+  String ->
   SharedContext ->
   ProofScript () ->
   TopLevel (SolverStats, Set TheoremNonce)
-checkGoals bak opts sc tactic = do
+checkGoals bak opts nm sc tactic = do
   gs <- liftIO $ getGoals (SomeBackend bak)
   liftIO . printOutLn opts Info $ mconcat
     [ "Simulation finished, running solver on "
@@ -1154,7 +1157,14 @@ checkGoals bak opts sc tactic = do
     ]
   outs <- forM (zip [0..] gs) $ \(n, g) -> do
     term <- liftIO $ gGoal sc g
-    let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
+    let proofgoal = ProofGoal
+                    { goalNum  = n
+                    , goalType = "vc"
+                    , goalName = nm
+                    , goalLoc  = show $ gLoc g
+                    , goalDesc = show $ gMessage g
+                    , goalProp = term
+                    }
     res <- runProofScript tactic proofgoal (Just (gLoc g)) $ Text.unwords
               ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))]
     case res of

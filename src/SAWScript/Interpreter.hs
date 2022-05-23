@@ -260,9 +260,9 @@ interpretStmts env stmts =
     let ?fileReader = BS.readFile in
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind _ (SS.PWild _) _ e] -> interpret env e
-      SS.StmtBind pos pat _ e : ss ->
-          do v1 <- interpret env e
+      [SS.StmtBind pos (SS.PWild _) _ e] -> withPosition pos (interpret env e)
+      SS.StmtBind pos pat _mcxt e : ss ->
+          do v1 <- withPosition pos (interpret env e)
              let f v = interpretStmts (bindPatternLocal pat Nothing v env) ss
              bindValue pos v1 (VLambda f)
       SS.StmtLet _ bs : ss -> interpret env (SS.Let bs (SS.Block ss))
@@ -494,6 +494,8 @@ buildTopLevelEnv proxy opts =
                    , rwStackBaseAlign = defaultStackBaseAlign
                    , rwAllocSymInitCheck = True
                    , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
+                   , rwPathSatSolver = CC.PathSat_Z3
+                   , rwSkipSafetyProofs = False
                    }
        return (bic, ro0, rw0)
 
@@ -523,6 +525,18 @@ add_primitives lc bic opts = do
   , rwDocs       = rwDocs rw `Map.union` primDocEnv lcs
   , rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
+
+enable_safety_proofs :: TopLevel ()
+enable_safety_proofs = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw{ rwSkipSafetyProofs = False }
+
+disable_safety_proofs :: TopLevel ()
+disable_safety_proofs = do
+  opts <- getOptions
+  io $ printOutLn opts Warn "Safety proofs disabled! This is unsound!"
+  rw <- getTopLevelRW
+  putTopLevelRW rw{ rwSkipSafetyProofs = True }
 
 enable_smt_array_memory_model :: TopLevel ()
 enable_smt_array_memory_model = do
@@ -830,6 +844,22 @@ primitives = Map.fromList
     Current
     [ "Disable the SMT array memory model." ]
 
+  , prim "enable_safety_proofs" "TopLevel ()"
+    (pureVal enable_safety_proofs)
+    Experimental
+    [ "Restore the default state, where safety obligations"
+    , "encountered during symbolic execution are proofed normally."
+    ]
+
+  , prim "disable_safety_proofs" "TopLevel ()"
+    (pureVal disable_safety_proofs)
+    Experimental
+    [ "Disable checking of safety obligations encountered during symbolic"
+    , "execution. This is unsound! However, it can be useful during"
+    , "initial proof construction to focus only on the stated correcness"
+    , "specifications."
+    ]
+
  , prim "enable_crucible_assert_then_assume" "TopLevel ()"
     (pureVal enable_crucible_assert_then_assume)
     Current
@@ -869,6 +899,13 @@ primitives = Map.fromList
     (pureVal disable_lax_loads_and_stores)
     Current
     [ "Disable relaxed validity checking for memory loads and stores in Crucible." ]
+
+  , prim "set_path_sat_solver" "String -> TopLevel ()"
+    (pureVal set_path_sat_solver)
+    Experimental
+    [ "Set the path satisfiablity solver to use.  Accepted values"
+    , "currently are 'z3' and 'yices'."
+    ]
 
   , prim "enable_debug_intrinsics" "TopLevel ()"
     (pureVal enable_debug_intrinsics)
@@ -1454,7 +1491,23 @@ primitives = Map.fromList
     (pureVal print_goal)
     Current
     [ "Print the current goal that a proof script is attempting to prove." ]
-
+  , prim "write_goal" "String -> ProofScript ()"
+    (pureVal write_goal)
+    Current
+    [ "Write the current goal that a proof script is attempting to prove"
+    , "into the named file."
+    ]
+  , prim "print_goal_summary" "ProofScript ()"
+    (pureVal print_goal_summary)
+    Current
+    [ "Print the number and description of the goal that a proof script"
+    , "is attempting to prove."
+    ]
+  , prim "goal_num" "ProofScript Int"
+    (pureVal goal_num)
+    Current
+    [ "Returns the number of the current proof goal."
+    ]
   , prim "print_goal_depth"    "Int -> ProofScript ()"
     (pureVal print_goal_depth)
     Current
@@ -2623,6 +2676,14 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_precond`." ]
 
+  , prim "llvm_assert" "Term -> LLVMSetup ()"
+    (pureVal llvm_assert)
+    Current
+    [ "State that the given predicate must hold.  Acts as `llvm_precond`"
+    , "or `llvm_postcond` depending on the phase of specification in which"
+    , "it appears (i.e., before or after `llvm_execute_func`."
+    ]
+
   , prim "llvm_postcond" "Term -> LLVMSetup ()"
     (pureVal llvm_postcond)
     Current
@@ -3127,6 +3188,14 @@ primitives = Map.fromList
     Current
     [ "State that the given predicate is a pre-condition on execution of the"
     , "method being verified."
+    ]
+
+  , prim "jvm_assert" "Term -> JVMSetup ()"
+    (pureVal jvm_assert)
+    Current
+    [ "State that the given predicate must hold.  Acts as `jvm_precond`"
+    , "or `jvm_postcond` depending on the phase of specification in which"
+    , "it appears (i.e., before or after `jvm_execute_func`."
     ]
 
   , prim "jvm_postcond" "Term -> JVMSetup ()"
