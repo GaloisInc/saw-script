@@ -1652,10 +1652,12 @@ mrSolverProve sc t1 t2 =
          printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
          io (Exit.exitWith $ Exit.ExitFailure 1)
        Right (Just (fnm, fassump)) ->
-         let assump_str = "a rewrite" :: String in
+         let assump_str = case Prover.fassumpRHS fassump of
+                            Prover.OpaqueFunAssump _ _ -> "an opaque"
+                            Prover.RewriteFunAssump _ -> "a rewrite" in
          printOutLnTop Info (
            printf "[MRSolver] Success in %s, added as %s assumption"
-                  (show diff) assump_str) >>
+                  (show diff) (assump_str :: String)) >>
          modify (\rw -> rw { rwMRSolverEnv =
            Prover.mrEnvAddFunAssump fnm fassump (rwMRSolverEnv rw) })
        Right Nothing -> 

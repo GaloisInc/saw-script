@@ -228,6 +228,16 @@ asNonBVVecVectorType t = asVectorType t
 -- * Mr Solver Environments
 ----------------------------------------------------------------------
 
+-- | The right-hand-side of a 'FunAssump': either a 'FunName' and arguments, if
+-- it is an opaque 'FunAsump', or a 'NormComp', if it is a rewrite 'FunAssump'
+data FunAssumpRHS = OpaqueFunAssump FunName [Term]
+                  | RewriteFunAssump NormComp
+
+-- | Convert a 'FunAssumpRHS' to a 'NormComp'
+funAssumpRHSAsNormComp :: FunAssumpRHS -> NormComp
+funAssumpRHSAsNormComp (OpaqueFunAssump f args) = FunBind f args CompFunReturn
+funAssumpRHSAsNormComp (RewriteFunAssump rhs) = rhs
+
 -- | An assumption that a named function refines some specification. This has
 -- the form
 --
@@ -244,7 +254,7 @@ data FunAssump = FunAssump {
   -- | The argument expressions @e1, ..., en@ over the 'fassumpCtx' uvars
   fassumpArgs :: [Term],
   -- | The right-hand side upper bound @m@ over the 'fassumpCtx' uvars
-  fassumpRHS :: NormComp
+  fassumpRHS :: FunAssumpRHS
 }
 
 -- | A map from function names to function refinement assumptions over that

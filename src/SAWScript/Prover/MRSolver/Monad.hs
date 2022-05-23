@@ -907,19 +907,11 @@ withFunAssump fname args rhs m =
                                            fname args CompFunReturn) "|=" rhs
      ctx <- mrUVarCtx
      assumps <- mrFunAssumps
-     let assumps' = Map.insert fname (FunAssump ctx args rhs) assumps
+     let assump = FunAssump ctx args (RewriteFunAssump rhs)
+     let assumps' = Map.insert fname assump assumps
      local (\info ->
              let env' = (mriEnv info) { mreFunAssumps = assumps' } in
              info { mriEnv = env' }) m
-
--- | Generate fresh evars for the context of a 'FunAssump' and substitute them
--- into its arguments and right-hand side
-instantiateFunAssump :: FunAssump -> MRM ([Term], NormComp)
-instantiateFunAssump fassump =
-  do evars <- mrFreshEVars $ fassumpCtx fassump
-     args <- substTermLike 0 evars $ fassumpArgs fassump
-     rhs <- substTermLike 0 evars $ fassumpRHS fassump
-     return (args, rhs)
 
 -- | Get the invariant hint associated with a function name, by unfolding the
 -- name and checking if its body has the form
