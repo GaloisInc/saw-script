@@ -2,7 +2,7 @@ include "arrays.saw";
 
 // Test that contains0 |= contains0
 contains0 <- parse_core_mod "arrays" "contains0";
-// mr_solver_prove contains0 contains0;
+mr_solver_test contains0 contains0;
 
 noErrorsContains0 <- parse_core_mod "arrays" "noErrorsContains0";
 mr_solver_prove contains0 noErrorsContains0;

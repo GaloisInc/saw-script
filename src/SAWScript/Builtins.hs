@@ -38,7 +38,6 @@ import Data.IORef
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
-import Data.Either (isRight)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -1634,24 +1633,26 @@ askMRSolver printStr sc t1 t2 =
         ppTmHead _ = "..."
 
 -- | Run Mr Solver to prove that the first term refines the second, adding
--- any relevant 'Prover.FunAssump's to the 'Prover.MREnv' if this can be done,
--- or printing an error message and exiting if it cannot.
-mrSolverProve :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
-mrSolverProve sc t1 t2 =
+-- any relevant 'Prover.FunAssump's to the 'Prover.MREnv' if the first argument
+-- is true and this can be done, or printing an error message and exiting if it
+-- cannot.
+mrSolverProve :: Bool -> SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
+mrSolverProve addToEnv sc t1 t2 =
   do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
-     (diff, res) <- askMRSolver (Just "Proving") sc t1 t2
+     let printStr = if addToEnv then "Proving" else "Testing"
+     (diff, res) <- askMRSolver (Just printStr) sc t1 t2
      case res of
        Left err | dlvl == 0 ->
          io (putStrLn $ Prover.showMRFailure err) >>
          printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
          io (Exit.exitWith $ Exit.ExitFailure 1)
-       Left err | otherwise ->
+       Left err ->
          -- we ignore the MRFailure context here since it will have already
          -- been printed by the debug trace
          io (putStrLn $ Prover.showMRFailureNoCtx err) >>
          printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
          io (Exit.exitWith $ Exit.ExitFailure 1)
-       Right (Just (fnm, fassump)) ->
+       Right (Just (fnm, fassump)) | addToEnv ->
          let assump_str = case Prover.fassumpRHS fassump of
                             Prover.OpaqueFunAssump _ _ -> "an opaque"
                             Prover.RewriteFunAssump _ -> "a rewrite" in
@@ -1660,27 +1661,28 @@ mrSolverProve sc t1 t2 =
                   (show diff) (assump_str :: String)) >>
          modify (\rw -> rw { rwMRSolverEnv =
            Prover.mrEnvAddFunAssump fnm fassump (rwMRSolverEnv rw) })
-       Right Nothing -> 
+       _ ->
          printOutLnTop Info $ printf "[MRSolver] Success in %s" (show diff)
 
 -- | Run Mr Solver to prove that the first term refines the second, returning
 -- true iff this can be done. This function will not modify the 'Prover.MREnv'.
-mrSolverCheck :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel Bool
-mrSolverCheck sc t1 t2 =
-  Prover.mreDebugLevel <$> rwMRSolverEnv <$> get >>= \case
-    0 -> isRight <$> snd <$> askMRSolver Nothing sc t1 t2
-    _ -> do
-      (diff, res) <- askMRSolver (Just "Checking") sc t1 t2
-      case res of
-        Left err ->
-          -- we ignore the MRFailure context here since it will have already
-          -- been printed by the debug trace
-          io (putStrLn $ Prover.showMRFailureNoCtx err) >>
-          printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
-          return False
-        Right _ ->
-          printOutLnTop Info (printf "[MRSolver] Success in %s" (show diff)) >>
-          return True
+mrSolverQuery :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel Bool
+mrSolverQuery sc t1 t2 =
+  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
+     (diff, res) <- askMRSolver (Just "Querying") sc t1 t2
+     case res of
+       Left _ | dlvl == 0 ->
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         return False
+       Left err ->
+         -- we ignore the MRFailure context here since it will have already
+         -- been printed by the debug trace
+         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         return False
+       Right _ ->
+         printOutLnTop Info (printf "[MRSolver] Success in %s" (show diff)) >>
+         return True
 
 -- | Set the debug level of the 'Prover.MREnv'
 mrSolverSetDebug :: Int -> TopLevel ()

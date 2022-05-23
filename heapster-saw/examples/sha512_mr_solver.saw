@@ -86,10 +86,10 @@ processBlock <- parse_core_mod "SHA512" "processBlock";
 processBlocks <- parse_core_mod "SHA512" "processBlocks";
 
 // Test that every function refines itself
-// mr_solver_prove processBlocks processBlocks;
-// mr_solver_prove processBlock processBlock;
-// mr_solver_prove round_16_80 round_16_80;
-// mr_solver_prove round_00_15 round_00_15;
+// mr_solver_test processBlocks processBlocks;
+// mr_solver_test processBlock processBlock;
+// mr_solver_test round_16_80 round_16_80;
+// mr_solver_test round_00_15 round_00_15;
 
 import "sha512.cry";
 // FIXME: Why aren't we monadifying these automatically when they're used?

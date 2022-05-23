@@ -3191,21 +3191,32 @@ primitives = Map.fromList
     ---------------------------------------------------------------------
 
   , prim "mr_solver_prove" "Term -> Term -> TopLevel ()"
-    (scVal mrSolverProve)
+    (scVal (mrSolverProve True))
     Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
     , " to prove that one monadic term refines another. If this can"
     , " be done, this refinement will be used in future calls to"
-    , " Mr. Solver, and if it cannot, the script will exit." ]
+    , " Mr. Solver, and if it cannot, the script will exit. See also:"
+    , " mr_solver_test, mr_solver_query." ]
 
-  , prim "mr_solver_check" "Term -> Term -> TopLevel Bool"
-    (scVal mrSolverCheck)
+  , prim "mr_solver_test" "Term -> Term -> TopLevel ()"
+    (scVal (mrSolverProve False))
+    Experimental
+    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
+    , " to prove that one monadic term refines another. If this cannot"
+    , " be done, the script will exit. See also: mr_solver_prove,"
+    , " mr_solver_query - unlike the former, this refinement will not"
+    , " be used in future calls to Mr. Solver." ]
+
+  , prim "mr_solver_query" "Term -> Term -> TopLevel Bool"
+    (scVal mrSolverQuery)
     Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
     , " to prove that one monadic term refines another, returning"
-    , " true iff this can be done. Unlike mr_solver_prove, this"
-    , " refinement will not be considered in future calls to"
-    , " Mr. Solver." ]
+    , " true iff this can be done. See also: mr_solver_prove,"
+    , " mr_solver_test - unlike the former, this refinement will not"
+    , " be considered in future calls to Mr. Solver, and unlike both,"
+    , " this command will never fail." ]
 
   , prim "mr_solver_set_debug_level" "Int -> TopLevel ()"
     (pureVal mrSolverSetDebug)
