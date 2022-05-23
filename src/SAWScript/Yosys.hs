@@ -140,7 +140,7 @@ yosysIRToSequential sc ir nm = do
       [ "Could not find module: "
       , nm
       ]
-    Just m -> convertModuleInline sc (ir ^. yosysModules) m
+    Just m -> convertModuleInline sc m
 
 --------------------------------------------------------------------------------
 -- ** Functions visible from SAWScript REPL

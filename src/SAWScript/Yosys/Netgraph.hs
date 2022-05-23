@@ -201,7 +201,8 @@ netgraphToTerms sc env ng inputs
       let sorted = Graph.reverseTopSort $ ng ^. netgraphGraph
       foldM
         ( \acc v -> do
-            let ((_, c), _output, _deps) = ng ^. netgraphNodeFromVertex $ v
+            let ((cnm, c), _output, deps) = ng ^. netgraphNodeFromVertex $ v
+            liftIO . putStrLn $ "Processing cell " <> show cnm <> " with deps: " <> show deps
             let outputFields = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
             if
               -- special handling for $dff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state

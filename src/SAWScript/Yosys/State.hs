@@ -22,6 +22,8 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Graph as Graph
 
+import Numeric.Natural (Natural)
+
 import qualified Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.TypedTerm as SC
 import qualified Verifier.SAW.Name as SC
@@ -36,68 +38,9 @@ import SAWScript.Yosys.Utils
 import SAWScript.Yosys.IR
 import SAWScript.Yosys.Netgraph
 
---------------------------------------------------------------------------------
--- ** Bit identifiers qualified with the name of a module instance.
--- To ensure global uniqueness, since for sequential circuits we use one global
--- graph of cells to properly detect cycles where the breaking DFF is within a
--- submodule.
-
-data QualBitrep
-  = QualBitrepZero
-  | QualBitrepOne
-  | QualBitrepX
-  | QualBitrepZ
-  | QualBitrep Text Integer
-  deriving (Show, Eq, Ord)
-
-qualifyBitrep :: Text -> Bitrep -> QualBitrep
-qualifyBitrep _ BitrepZero = QualBitrepZero
-qualifyBitrep _ BitrepOne = QualBitrepOne
-qualifyBitrep _ BitrepX = QualBitrepX
-qualifyBitrep _ BitrepZ = QualBitrepZ
-qualifyBitrep nm (Bitrep i) = QualBitrep nm i
-
---------------------------------------------------------------------------------
--- ** Constructing a graph of the entire circuit.
-
-type CircgraphNode = ((Text, Cell [QualBitrep]), QualBitrep, [QualBitrep])
-
-rebindQualify :: Text -> Map [Bitrep] [QualBitrep] -> [Bitrep] -> [QualBitrep]
-rebindQualify inm binds bits = case Map.lookup bits binds of
-  Nothing -> qualifyBitrep inm <$> bits
-  Just qbits -> qbits
-
-moduleToInlineNetgraph :: forall m. MonadIO m => Map Text Module -> Module -> m (Netgraph QualBitrep)
-moduleToInlineNetgraph mmap topm = do
-  nodes <- go "top" Map.empty topm
-  let (_netgraphGraph, _netgraphNodeFromVertex, _) = Graph.graphFromEdges nodes
-  pure Netgraph{..}
-  where
-    go :: Text -> Map [Bitrep] [QualBitrep] -> Module -> m [CircgraphNode]
-    go inm binds m = do
-      fmap mconcat . forM (Map.assocs $ m ^. moduleCells) $ \(cnm, fmap (rebindQualify inm binds) -> c) -> do
-        if
-          | c ^. cellType == "$dff"
-            -> pure $ (\(out, _inp) -> ((cnm, c), out, [])) <$> cellToEdges c
-          | Text.isPrefixOf "$" (c ^. cellType)
-            -> pure $ (\(out, inp) -> ((cnm, c), out, inp)) <$> cellToEdges c
-          | Just subm <- Map.lookup (c ^. cellType) mmap
-            -> do
-              sbinds <- forM (Map.assocs $ subm ^. modulePorts) $ \(pnm, p) -> do
-                case Map.lookup pnm (c ^. cellConnections) of
-                  Nothing -> throw . YosysError $ mconcat
-                    [ "Cell \"", cnm, "\" does not provide a connection for port \"", pnm, "\""
-                    ]
-                  Just cbits -> pure (p ^. portBits, cbits)
-              liftIO $ putStrLn $ "Descending into: " <> Text.unpack (c ^. cellType) <> ", binds are " <> show sbinds
-              subcells <- go (inm <> " " <> cnm) (Map.fromList sbinds) subm
-              pure subcells
-          | otherwise
-            -> throw . YosysError $ "No definition for module: " <> (c ^. cellType)
-
 findDffs ::
-  Netgraph QualBitrep ->
-  Map Text (Cell [QualBitrep])
+  Netgraph Bitrep ->
+  Map Text (Cell [Bitrep])
 findDffs ng =
   Map.fromList
   . filter (\(_, c) -> c ^. cellType == "$dff")
@@ -110,6 +53,7 @@ data YosysSequential = YosysSequential
   , _yosysSequentialStateFields :: Map Text (SC.Term, C.Type)
   , _yosysSequentialInputFields :: Map Text (SC.Term, C.Type)
   , _yosysSequentialOutputFields :: Map Text (SC.Term, C.Type)
+  , _yosysSequentialStateWidths :: Map Text Natural
   }
 makeLenses ''YosysSequential
 
@@ -140,21 +84,23 @@ insertStateField sc stateFields fields = do
 convertModuleInline ::
   MonadIO m =>
   SC.SharedContext ->
-  Map Text Module ->
   Module ->
   m YosysSequential
-convertModuleInline sc mmap m = do
-  ng <- moduleToInlineNetgraph mmap m
+convertModuleInline sc m = do
+  let ng = moduleNetgraph m
 
   -- construct SAWCore and Cryptol types
   let dffs = findDffs ng
-  stateFields <- forM dffs $ \c ->
+
+  stateWidths <- forM dffs $ \c ->
     case Map.lookup "Q" $ c ^. cellConnections of
       Nothing -> panic "convertModuleInline" ["Missing expected output name for $dff cell"]
-      Just b -> do
-        t <- liftIO . SC.scBitvector sc . fromIntegral $ length b
-        let cty = C.tWord . C.tNum $ length b
-        pure (t, cty)
+      Just b -> pure . fromIntegral $ length b
+
+  stateFields <- forM stateWidths $ \w -> do
+    t <- liftIO $ SC.scBitvector sc w
+    let cty = C.tWord $ C.tNum w
+    pure (t, cty)
 
   let inputPorts = moduleInputPorts m
   let outputPorts = moduleOutputPorts m
@@ -181,7 +127,7 @@ convertModuleInline sc mmap m = do
 
   derivedInputs <- forM (Map.assocs inputPorts) $ \(nm, inp) -> do
     t <- liftIO $ cryptolRecordSelect sc domainFields domainRecord nm
-    deriveTermsByIndices sc (qualifyBitrep "top" <$> inp) t
+    deriveTermsByIndices sc inp t
 
   preStateRecord <- liftIO $ cryptolRecordSelect sc domainFields domainRecord "__state__"
   derivedPreState <- forM (Map.assocs dffs) $ \(cnm, c) ->
@@ -195,8 +141,8 @@ convertModuleInline sc mmap m = do
   oneTerm <- liftIO $ SC.scBvConst sc 1 1
   let inputs = Map.unions $ mconcat
         [ [ Map.fromList
-            [ ( [QualBitrepZero], zeroTerm)
-            , ( [QualBitrepOne], oneTerm )
+            [ ( [BitrepZero], zeroTerm)
+            , ( [BitrepOne], oneTerm )
             ]
           ]
         , derivedInputs
@@ -214,7 +160,7 @@ convertModuleInline sc mmap m = do
   postStateRecord <- cryptolRecord sc postStateFields
 
   outputRecord <- cryptolRecord sc . Map.insert "__state__" postStateRecord =<< forM outputPorts
-    (\out -> lookupPatternTerm sc (qualifyBitrep "top" <$> out) terms)
+    (\out -> lookupPatternTerm sc out terms)
 
   -- construct result
   t <- liftIO $ SC.scAbstractExts sc [domainRecordEC] outputRecord
@@ -225,6 +171,7 @@ convertModuleInline sc mmap m = do
     , _yosysSequentialStateFields = stateFields
     , _yosysSequentialInputFields = inputFields
     , _yosysSequentialOutputFields = outputFields
+    , _yosysSequentialStateWidths = stateWidths
     }
 
 composeYosysSequential ::
@@ -298,6 +245,9 @@ composeYosysSequential sc s n = do
   stateType <- fieldsToType sc $ s ^. yosysSequentialStateFields
   initialStateMsg <- liftIO $ SC.scString sc "Attempted to read initial state of sequential circuit"
   initialState <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [stateType, initialStateMsg]
+  -- initialStateFields <- forM (s ^. yosysSequentialStateWidths) $ \w -> do
+  --   liftIO $ SC.scBvConst sc w 0
+  -- initialState <- cryptolRecord sc initialStateFields
   (_, outputs) <- foldM (\acc i -> compose1 i acc) (initialState, Map.empty) [0..n]
   outputRecord <- cryptolRecord sc outputs
   res <- liftIO $ SC.scAbstractExts sc [extendedInputRecordEC] outputRecord

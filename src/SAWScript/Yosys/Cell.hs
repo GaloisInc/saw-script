@@ -69,10 +69,38 @@ primCellToTerm sc c args = case c ^. cellType of
     liftIO $ SC.scAbstractExts sc [xEC, yEC] res
   "$reduce_bool" -> bvReduce False =<< do
     liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "or"
-  "$shl" -> bvBinaryOp $ SC.scBvShl sc
-  "$shr" -> bvBinaryOp $ SC.scBvShr sc
-  "$sshl" -> bvBinaryOp $ SC.scBvShl sc -- same as shl
-  "$sshr" -> bvBinaryOp $ SC.scBvSShr sc
+  "$shl" -> do
+    ta <- input "A"
+    nb <- inputNat "B"
+    w <- outputWidth
+    res <- liftIO $ SC.scBvShl sc w ta nb
+    fmap Just . cryptolRecord sc $ Map.fromList
+      [ ("Y", res)
+      ]
+  "$shr" -> do
+    ta <- input "A"
+    nb <- inputNat "B"
+    w <- outputWidth
+    res <- liftIO $ SC.scBvShr sc w ta nb
+    fmap Just . cryptolRecord sc $ Map.fromList
+      [ ("Y", res)
+      ]
+  "$sshl" -> do
+    ta <- input "A"
+    nb <- inputNat "B"
+    w <- outputWidth
+    res <- liftIO $ SC.scBvShl sc w ta nb
+    fmap Just . cryptolRecord sc $ Map.fromList
+      [ ("Y", res)
+      ]
+  "$sshr" -> do
+    ta <- input "A"
+    nb <- inputNat "B"
+    w <- outputWidth
+    res <- liftIO $ SC.scBvSShr sc w ta nb
+    fmap Just . cryptolRecord sc $ Map.fromList
+      [ ("Y", res)
+      ]
   -- "$shift" -> _
   -- "$shiftx" -> _
   "$lt" -> bvBinaryCmp $ SC.scBvULt sc
@@ -87,11 +115,11 @@ primCellToTerm sc c args = case c ^. cellType of
   "$nex" -> bvBinaryCmp $ \w x y -> do
     r <- SC.scBvEq sc w x y
     SC.scNot sc r
-  "$add" -> bvNAryOp $ SC.scBvAdd sc
-  "$sub" -> bvBinaryOp $ SC.scBvSub sc
-  "$mul" -> bvNAryOp $ SC.scBvMul sc
-  "$div" -> bvBinaryOp $ SC.scBvUDiv sc
-  "$mod" -> bvBinaryOp $ SC.scBvURem sc
+  "$add" -> bvBinaryArithOp $ SC.scBvAdd sc
+  "$sub" -> bvBinaryArithOp $ SC.scBvSub sc
+  "$mul" -> bvBinaryArithOp $ SC.scBvMul sc
+  "$div" -> bvBinaryArithOp $ SC.scBvUDiv sc
+  "$mod" -> bvBinaryArithOp $ SC.scBvURem sc
   -- "$modfloor" -> _
   "$logic_not" -> do
     w <- outputWidth
@@ -155,6 +183,14 @@ primCellToTerm sc c args = case c ^. cellType of
       case Map.lookup inpNm args of
         Nothing -> panic "cellToTerm" [Text.unpack $ mconcat [nm, " missing input ", inpNm]]
         Just a -> pure a
+    inputNat :: Text -> m SC.Term
+    inputNat inpNm = do
+      v <- input inpNm
+      w <- connWidth inpNm
+      bool <- liftIO $ SC.scBoolType sc
+      rev <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [w, bool, v]
+      -- note bvToNat is big-endian while yosys shifts expect little-endian
+      liftIO $ SC.scGlobalApply sc "Prelude.bvToNat" [w, rev]
     bvUnaryOp :: (SC.Term -> SC.Term -> IO SC.Term) -> m (Maybe SC.Term)
     bvUnaryOp f = do
       t <- input "A"
@@ -163,14 +199,18 @@ primCellToTerm sc c args = case c ^. cellType of
       fmap Just . cryptolRecord sc $ Map.fromList
         [ ("Y", res)
         ]
-    bvBinaryOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m (Maybe SC.Term)
-    bvBinaryOp f = do
-      ta <- input "A"
-      tb <- input "B"
+    bvBinaryArithOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m (Maybe SC.Term)
+    bvBinaryArithOp f = do
       w <- outputWidth
-      res <- liftIO $ f w ta tb
+      bool <- liftIO $ SC.scBoolType sc
+      ta <- input "A"
+      reva <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [w, bool, ta]
+      tb <- input "B"
+      revb <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [w, bool, tb]
+      res <- liftIO $ f w reva revb
+      revres <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [w, bool, res]
       fmap Just . cryptolRecord sc $ Map.fromList
-        [ ("Y", res)
+        [ ("Y", revres)
         ]
     bvBinaryCmp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m (Maybe SC.Term)
     bvBinaryCmp f = do
