@@ -30,6 +30,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , llvm_return
     , llvm_precond
     , llvm_postcond
+    , llvm_assert
     , llvm_cfg
     , llvm_extract
     , llvm_compositional_extract
@@ -589,7 +590,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
        io $ verifyPrestate opts cc methodSpec globals1
 
      when (detectVacuity opts)
-       $ checkAssumptionsForContradictions cc tactic assumes
+       $ checkAssumptionsForContradictions cc methodSpec tactic assumes
 
      -- save initial path conditions
      frameIdent <- io $ Crucible.pushAssumptionFrame bak
@@ -637,7 +638,14 @@ verifyObligations cc mspec tactic assumes asserts =
        do goal   <- io $ scImplies sc assume assert
           goal'  <- io $ boolToProp sc [] goal
           let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
-              proofgoal = ProofGoal n "vc" goalname goal'
+              proofgoal = ProofGoal
+                          { goalNum  = n
+                          , goalType = "vc"
+                          , goalName = nm
+                          , goalLoc  = show (W4.plSourceLoc ploc) ++ " in " ++ show (W4.plFunction ploc)
+                          , goalDesc = msg
+                          , goalProp = goal'
+                          }
           res <- runProofScript tactic proofgoal (Just ploc) $ Text.unwords
                     ["LLVM verification condition", Text.pack (show n), Text.pack goalname]
           case res of
@@ -795,14 +803,16 @@ verifyPrestate opts cc mspec globals =
 assumptionsContainContradiction ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
   ProofScript () ->
   [Crucible.LabeledPred Term AssumptionReason] ->
   TopLevel Bool
-assumptionsContainContradiction cc tactic assumptions =
+assumptionsContainContradiction cc methodSpec tactic assumptions =
   do
      let sym = cc^.ccSym
      st <- io $ Common.sawCoreState sym
      let sc  = saw_ctx st
+     let ploc = methodSpec^.MS.csLoc
      pgl <- io $
       do
          -- conjunction of all assumptions
@@ -810,7 +820,14 @@ assumptionsContainContradiction cc tactic assumptions =
          -- implies falsehood
          goal  <- scImplies sc assume =<< toSC sym st (W4.falsePred sym)
          goal' <- boolToProp sc [] goal
-         return $ ProofGoal 0 "vc" "vacuousness check" goal'
+         return $ ProofGoal
+                  { goalNum  = 0
+                  , goalType = "vacuousness check"
+                  , goalName = show (methodSpec^.MS.csMethod)
+                  , goalLoc  = show (W4.plSourceLoc ploc) ++ " in " ++ show (W4.plFunction ploc)
+                  , goalDesc = "vacuousness check"
+                  , goalProp = goal'
+                  }
      res <- runProofScript tactic pgl Nothing "vacuousness check"
      case res of
        ValidProof _ _     -> return True
@@ -826,16 +843,17 @@ assumptionsContainContradiction cc tactic assumptions =
 computeMinimalContradictingCore ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
   ProofScript () ->
   [Crucible.LabeledPred Term AssumptionReason] ->
   TopLevel ()
-computeMinimalContradictingCore cc tactic assumes =
+computeMinimalContradictingCore cc methodSpec tactic assumes =
   do
      printOutLnTop Warn "Contradiction detected! Computing minimal core of contradictory assumptions:"
      -- test subsets of assumptions of increasing sizes until we find a
      -- contradictory one
      let cores = sortBy (compare `on` length) (subsequences assumes)
-     findM (assumptionsContainContradiction cc tactic) cores >>= \case
+     findM (assumptionsContainContradiction cc methodSpec tactic) cores >>= \case
       Nothing -> printOutLnTop Warn "No minimal core: the assumptions did not contains a contradiction."
       Just core ->
         forM_ core $ \assume ->
@@ -848,13 +866,14 @@ computeMinimalContradictingCore cc tactic assumes =
 checkAssumptionsForContradictions ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
   ProofScript () ->
   [Crucible.LabeledPred Term AssumptionReason] ->
   TopLevel ()
-checkAssumptionsForContradictions cc tactic assumes =
+checkAssumptionsForContradictions cc methodSpec tactic assumes =
   whenM
-    (assumptionsContainContradiction cc tactic assumes)
-    (computeMinimalContradictingCore cc tactic assumes)
+    (assumptionsContainContradiction cc methodSpec tactic assumes)
+    (computeMinimalContradictingCore cc methodSpec tactic assumes)
 
 -- | Check two MemTypes for register compatiblity.  This is a stricter
 --   check than the memory compatiblity check that is done for points-to
@@ -1350,6 +1369,13 @@ verifyPoststate cc mspec env0 globals ret =
      opts <- getOptions
      io $ W4.setCurrentProgramLoc sym poststateLoc
 
+     -- This discards all the obligations generated during
+     -- symbolic execution itself, i.e., which are not directly
+     -- generated from specification postconditions. This
+     -- is, in general, unsound.
+     skipSafetyProofs <- gets rwSkipSafetyProofs
+     when skipSafetyProofs (io (Crucible.clearProofObligations bak))
+
      let ecs0 = Map.fromList
            [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
@@ -1375,9 +1401,12 @@ verifyPoststate cc mspec env0 globals ret =
      io $ for_ (view osAsserts st) $ \(W4.LabeledPred p r) ->
        Crucible.addAssertion bak (Crucible.LabeledPred p r)
 
-     obligations <- io $ Crucible.getProofObligations bak
-     io $ Crucible.clearProofObligations bak
-     sc_obligations <- io $ mapM (verifyObligation sc) (maybe [] Crucible.goalsToList obligations)
+     obligations <- io $
+       do obls <- Crucible.getProofObligations bak
+          Crucible.clearProofObligations bak
+          return (maybe [] Crucible.goalsToList obls)
+
+     sc_obligations <- io $ mapM (verifyObligation sc) obligations
      return (sc_obligations, st)
 
   where
@@ -1392,7 +1421,8 @@ verifyPoststate cc mspec env0 globals ret =
 
     matchResult opts sc =
       case (ret, mspec ^. MS.csRetValue) of
-        (Just (rty,r), Just expect) -> matchArg opts sc cc mspec PostState r rty expect
+        (Just (rty,r), Just expect) ->
+          matchArg opts sc cc mspec PostState (mspec ^. MS.csLoc) r rty expect
         (Nothing     , Just _ )     ->
           fail "verifyPoststate: unexpected llvm_return specification"
         _ -> return ()
@@ -1418,6 +1448,7 @@ setupLLVMCrucibleContext pathSat lm action =
      what4HashConsing <- gets rwWhat4HashConsing
      laxPointerOrdering <- gets rwLaxPointerOrdering
      laxLoadsAndStores <- gets rwLaxLoadsAndStores
+     pathSatSolver <- gets rwPathSatSolver
      what4Eval <- gets rwWhat4Eval
      allocSymInitCheck <- gets rwAllocSymInitCheck
      crucibleTimeout <- gets rwCrucibleTimeout
@@ -1436,7 +1467,8 @@ setupLLVMCrucibleContext pathSat lm action =
             io $
             do let verbosity = simVerbose opts
                sym <- Common.newSAWCoreExprBuilder sc
-               Common.SomeOnlineBackend bak <- Common.newSAWCoreBackendWithTimeout sym crucibleTimeout
+               Common.SomeOnlineBackend bak <-
+                 Common.newSAWCoreBackendWithTimeout pathSatSolver sym crucibleTimeout
 
                let cfg = W4.getConfiguration sym
                verbSetting <- W4.getOptionSetting W4.verbosity cfg
@@ -1712,6 +1744,12 @@ checkMemTypeCompatibility loc t1 t2 =
 
 --------------------------------------------------------------------------------
 -- Setup builtins
+
+llvm_assert :: TypedTerm -> LLVMCrucibleSetupM ()
+llvm_assert term =
+  LLVMCrucibleSetupM $
+  do loc <- getW4Position "llvm_assert"
+     Setup.addCondition (MS.SetupCond_Pred loc term)
 
 llvm_precond :: TypedTerm -> LLVMCrucibleSetupM ()
 llvm_precond term =

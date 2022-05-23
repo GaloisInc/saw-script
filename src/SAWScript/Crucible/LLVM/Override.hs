@@ -639,7 +639,8 @@ methodSpecHandler_prestate opts sc cc args cs =
        -- todo: fail if list lengths mismatch
        xs <- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
 
-       sequence_ [ matchArg opts sc cc cs PreState x y z | (x, y, z) <- xs]
+       let loc = cs ^. MS.csLoc
+       sequence_ [ matchArg opts sc cc cs PreState loc x y z | (x, y, z) <- xs]
 
        learnCond opts sc cc cs PreState (cs ^. MS.csGlobalAllocs) Map.empty (cs ^. MS.csPreState)
 
@@ -1159,13 +1160,14 @@ matchArg ::
   LLVMCrucibleContext arch {- ^ context for interacting with Crucible -} ->
   MS.CrucibleMethodSpecIR (LLVM arch) {- ^ specification for current function override  -} ->
   PrePost                                                          ->
+  W4.ProgramLoc ->
   Crucible.LLVMVal Sym
                      {- ^ concrete simulation value             -} ->
   Crucible.MemType   {- ^ expected memory type                  -} ->
   SetupValue (LLVM arch)         {- ^ expected specification value          -} ->
   OverrideMatcher (LLVM arch) md ()
 
-matchArg opts sc cc cs prepost actual expectedTy expected =
+matchArg opts sc cc cs prepost loc actual expectedTy expected =
   ccWithBackend cc $ \bak -> do
   let sym = backendGetSym bak
   mem <- readGlobal $ Crucible.llvmMemVar $ ccLLVMContext cc
@@ -1174,20 +1176,20 @@ matchArg opts sc cc cs prepost actual expectedTy expected =
       | TypedTermSchema (Cryptol.Forall [] [] tyexpr) <- ttType expectedTT
       , Right tval <- Cryptol.evalType mempty tyexpr
         -> do failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
-              realTerm <- valueToSC sym (cs ^. MS.csLoc) failMsg tval actual
-              instantiateExtMatchTerm sc cc (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
+              realTerm <- valueToSC sym loc failMsg tval actual
+              instantiateExtMatchTerm sc cc loc prepost realTerm (ttTerm expectedTT)
 
     -- match arrays point-wise
     (Crucible.LLVMValArray _ xs, Crucible.ArrayType _len y, SetupArray () zs)
       | V.length xs >= length zs ->
         sequence_
-          [ matchArg opts sc cc cs prepost x y z
+          [ matchArg opts sc cc cs prepost loc x y z
           | (x, z) <- zip (V.toList xs) zs ]
 
     -- match the fields of struct point-wise
     (Crucible.LLVMValStruct xs, Crucible.StructType fields, SetupStruct () _ zs) ->
       sequence_
-        [ matchArg opts sc cc cs prepost x y z
+        [ matchArg opts sc cc cs prepost loc x y z
         | ((_,x),y,z) <- zip3 (V.toList xs)
                               (V.toList (Crucible.fiType <$> Crucible.siFields fields))
                               zs ]
@@ -1198,7 +1200,7 @@ matchArg opts sc cc cs prepost actual expectedTy expected =
          delta <- exceptToFail $ resolveSetupElemOffset cc tyenv nameEnv v i
          off' <- liftIO $ W4.bvSub sym off
            =<< W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) delta)
-         matchArg opts sc cc cs prepost (Crucible.LLVMValInt blk off') expectedTy v
+         matchArg opts sc cc cs prepost loc (Crucible.LLVMValInt blk off') expectedTy v
 
     (Crucible.LLVMValInt blk off, Crucible.PtrType _, SetupField () v n) ->
       do let tyenv = MS.csAllocations cs
@@ -1209,31 +1211,31 @@ matchArg opts sc cc cs prepost actual expectedTy expected =
          let delta = fromIntegral $ Crucible.fiOffset fld
          off' <- liftIO $ W4.bvSub sym off
                     =<< W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) delta)
-         matchArg opts sc cc cs prepost (Crucible.LLVMValInt blk off') expectedTy v
+         matchArg opts sc cc cs prepost loc (Crucible.LLVMValInt blk off') expectedTy v
 
     (_, _, SetupGlobalInitializer () _) -> resolveAndMatch
 
     (Crucible.LLVMValInt blk off, _, _) ->
       case expected of
         SetupVar var | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
-          do assignVar cc (cs ^. MS.csLoc) var (Crucible.LLVMPointer blk off)
+          do assignVar cc loc var (Crucible.LLVMPointer blk off)
 
         SetupNull () | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
           do p   <- liftIO (Crucible.ptrIsNull sym Crucible.PtrWidth (Crucible.LLVMPointer blk off))
              addAssert p =<<
-               notEqual prepost opts (cs ^. MS.csLoc) cc sc cs expected actual
+               notEqual prepost opts loc cc sc cs expected actual
 
         SetupGlobal () name | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
           do ptr2 <- liftIO $ Crucible.doResolveGlobal bak mem (L.Symbol name)
              pred_ <- liftIO $
                Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
              addAssert pred_ =<<
-               notEqual prepost opts (cs ^. MS.csLoc) cc sc cs expected actual
+               notEqual prepost opts loc cc sc cs expected actual
 
-        _ -> failure (cs ^. MS.csLoc) =<<
+        _ -> failure loc =<<
               mkStructuralMismatch opts cc sc cs actual expected expectedTy
 
-    _ -> failure (cs ^. MS.csLoc) =<<
+    _ -> failure loc =<<
            mkStructuralMismatch opts cc sc cs actual expected expectedTy
 
   where
@@ -1241,14 +1243,14 @@ matchArg opts sc cc cs prepost actual expectedTy expected =
       (ty, val) <- resolveSetupValueLLVM opts cc sc cs expected
       sym  <- Ov.getSymInterface
       if diffMemTypes expectedTy ty /= []
-      then failure (cs ^. MS.csLoc) =<<
+      then failure loc =<<
             mkStructuralMismatch opts cc sc cs actual expected expectedTy
       else liftIO (Crucible.testEqual sym val actual) >>=
         \case
-          Nothing -> failure (cs ^. MS.csLoc) BadEqualityComparison
+          Nothing -> failure loc BadEqualityComparison
           Just pred_ ->
             addAssert pred_ =<<
-              notEqual prepost opts (cs ^. MS.csLoc) cc sc cs expected actual
+              notEqual prepost opts loc cc sc cs expected actual
 
 ------------------------------------------------------------------------
 
@@ -1373,11 +1375,11 @@ matchTerm sc cc loc prepost real expect =
          do t <- liftIO $ scEq sc real expect
             let msg = unlines $
                   [ "Literal equality " ++ stateCond prepost
-                  , "Expected term: " ++ prettyTerm expect
-                  , "Actual term:   " ++ prettyTerm real
+--                  , "Expected term: " ++ prettyTerm expect
+--                  , "Actual term:   " ++ prettyTerm real
                   ]
             addTermEq t $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
-  where prettyTerm = show . ppTermDepth 20
+--  where prettyTerm = show . ppTermDepth 20
 
 
 ------------------------------------------------------------------------
@@ -1500,7 +1502,7 @@ matchPointsToValue opts sc cc spec prepost loc maybe_cond ptr val =
                   Nothing -> return pred_
                 addAssert pred_' $ Crucible.SimError loc $
                   Crucible.AssertFailureSimError (show $ PP.vcat badLoadSummary) ""
-                pure Nothing <* matchArg opts sc cc spec prepost res_val memTy val'
+                pure Nothing <* matchArg opts sc cc spec prepost loc res_val memTy val'
               _ -> do
                 pure $ Just $ describeConcreteMemoryLoadFailure mem badLoadSummary ptr
 
@@ -1652,7 +1654,7 @@ matchPointsToBitfieldValue opts sc cc spec prepost loc ptr bfIndex val =
 
                        -- Match the selected field against the RHS value.
                        let field_val = Crucible.LLVMValInt bfBlk bfFieldBV
-                       pure Nothing <* matchArg opts sc cc spec prepost field_val memTy val
+                       pure Nothing <* matchArg opts sc cc spec prepost loc field_val memTy val
                   _ ->
                     fail $ unlines
                       [ "llvm_points_to_bitfield: RHS value's size must be less then or equal to bitfield's size"

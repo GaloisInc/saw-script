@@ -31,6 +31,7 @@ module SAWScript.Crucible.JVM.Builtins
     , jvm_execute_func
     , jvm_postcond
     , jvm_precond
+    , jvm_assert
     , jvm_modifies_field
     , jvm_modifies_static_field
     , jvm_modifies_elem
@@ -290,7 +291,14 @@ verifyObligations cc mspec tactic assumes asserts =
        goal   <- io $ scImplies sc assume assert
        goal'  <- io $ boolToProp sc [] goal -- TODO, generalize over inputs
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
-           proofgoal = ProofGoal n "vc" goalname goal'
+           proofgoal = ProofGoal
+                       { goalNum = n
+                       , goalType = "vc"
+                       , goalName = nm
+                       , goalLoc  = show ploc
+                       , goalDesc = msg
+                       , goalProp = goal'
+                       }
        res <- runProofScript tactic proofgoal (Just ploc) $ Text.unwords
                  ["JVM verification condition:", Text.pack (show n), Text.pack goalname]
        case res of
@@ -717,6 +725,13 @@ verifyPoststate cc mspec env0 globals ret =
      poststateLoc <- SS.toW4Loc "_SAW_verify_poststate" <$> getPosition
      io $ W4.setCurrentProgramLoc sym poststateLoc
 
+     -- This discards all the obligations generated during
+     -- symbolic execution itself, i.e., which are not directly
+     -- generated from specification postconditions. This
+     -- is, in general, unsound.
+     skipSafetyProofs <- gets rwSkipSafetyProofs
+     when skipSafetyProofs (io (Crucible.clearProofObligations bak))
+
      let ecs0 = Map.fromList
            [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
@@ -763,8 +778,9 @@ setupCrucibleContext jclass =
      jc <- getJVMTrans
      cb <- getJavaCodebase
      sc <- getSharedContext
+     pathSatSolver <- gets rwPathSatSolver
      sym <- io $ newSAWCoreExprBuilder sc
-     bak <- io $ newSAWCoreBackend sym
+     bak <- io $ newSAWCoreBackend pathSatSolver sym
      opts <- getOptions
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
 
@@ -1247,6 +1263,11 @@ generic_array_is ptr mval =
      when (st ^. Setup.csPrePost == PreState && isNothing mval) $
        X.throwM $ JVMArrayModifyPrestate ptr'
      Setup.addPointsTo pt
+
+jvm_assert :: TypedTerm -> JVMSetupM ()
+jvm_assert term = JVMSetupM $ do
+  loc <- SS.toW4Loc "jvm_assert" <$> lift getPosition
+  Setup.addCondition (MS.SetupCond_Pred loc term)
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
 jvm_precond term = JVMSetupM $ do

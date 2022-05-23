@@ -138,6 +138,7 @@ import SAWScript.Proof(boolToProp, Prop)
 import SAWScript.Crucible.Common
   ( newSAWCoreBackend, newSAWCoreExprBuilder
   , sawCoreState, SomeOnlineBackend(..)
+  , PathSatSolver
   )
 
 
@@ -191,19 +192,20 @@ type CallHandler = Sym -> Macaw.LookupFunctionHandle (MacawSimulatorState Sym) S
 -- Should be used when making a standalone proof script.
 proof ::
   (FilePath -> IO ByteString) ->
+  PathSatSolver ->
   ArchitectureInfo X86_64 ->
   FilePath {- ^ ELF binary -} ->
   Maybe FilePath {- ^ Cryptol spec, if any -} ->
   [(ByteString,Integer,Unit)] ->
   Fun ->
   IO (SharedContext,Integer,[Goal])
-proof fileReader archi file mbCry globs fun =
+proof fileReader pss archi file mbCry globs fun =
   do sc  <- mkSharedContext
      halloc  <- newHandleAllocator
      scLoadPreludeModule sc
      scLoadCryptolModule sc
      sym <- newSAWCoreExprBuilder sc
-     SomeOnlineBackend bak <- newSAWCoreBackend sym
+     SomeOnlineBackend bak <- newSAWCoreBackend pss sym
      let ?fileReader = fileReader
      cenv <- loadCry sym mbCry
      mvar <- mkMemVar "saw_x86:llvm_memory" halloc

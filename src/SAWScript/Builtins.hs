@@ -30,6 +30,7 @@ import Data.Monoid
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State
 import qualified Control.Exception as Ex
+import Data.Char (toLower)
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
@@ -118,6 +119,7 @@ import SAWScript.ImportAIG
 import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
 import SAWScript.Proof
+import SAWScript.Crucible.Common (PathSatSolver(..))
 import SAWScript.TopLevel
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
@@ -426,14 +428,39 @@ print_term_depth d t =
      output <- liftIO $ scShowTerm sc opts' t
      printOutLnTop Info output
 
+goalSummary :: ProofGoal -> String
+goalSummary goal = unlines $
+  [ ("Goal " ++ goalName goal ++ " (goal number " ++ (show $ goalNum goal) ++ "): " ++ goalType goal) ++ " at " ++ goalLoc goal ] ++
+  if null (goalDesc goal) then [] else [ goalDesc goal ]
+
+
+write_goal :: String -> ProofScript ()
+write_goal fp =
+  execTactic $ tacticId $ \goal ->
+  do opts <- getTopLevelPPOpts
+     sc <- getSharedContext
+     liftIO $ do
+       output <- liftIO (scShowTerm sc opts =<< propToTerm sc (goalProp goal))
+       writeFile fp (unlines [goalSummary goal, output])
+
 print_goal :: ProofScript ()
 print_goal =
   execTactic $ tacticId $ \goal ->
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
      output <- liftIO (scShowTerm sc opts =<< propToTerm sc (goalProp goal))
-     printOutLnTop Info ("Goal " ++ goalName goal ++ " (goal number " ++ (show $ goalNum goal) ++ "):")
+     printOutLnTop Info (goalSummary goal)
      printOutLnTop Info output
+
+print_goal_summary :: ProofScript ()
+print_goal_summary =
+  execTactic $ tacticId $ \goal ->
+    printOutLnTop Info (goalSummary goal)
+
+goal_num :: ProofScript Int
+goal_num =
+  execTactic $ tacticId $ \goal ->
+    return (goalNum goal)
 
 print_goal_depth :: Int -> ProofScript ()
 print_goal_depth n =
@@ -917,7 +944,15 @@ provePrim script t = do
   io $ checkBooleanSchema (ttType t)
   sc <- getSharedContext
   prop <- io $ predicateToProp sc Universal (ttTerm t)
-  let goal = ProofGoal 0 "prove" "prove" prop
+  pos <- SV.getPosition
+  let goal = ProofGoal
+             { goalNum  = 0
+             , goalType = "prove"
+             , goalName = "prove_prim"
+             , goalLoc  = show pos
+             , goalDesc = ""
+             , goalProp = prop
+             }
   res <- SV.runProofScript script goal Nothing "prove_prim"
   case res of
     UnfinishedProof pst ->
@@ -927,15 +962,24 @@ provePrim script t = do
   return res
 
 proveHelper ::
+  String ->
   ProofScript () ->
   TypedTerm ->
   (Term -> TopLevel Prop) ->
   TopLevel Theorem
-proveHelper script t f = do
+proveHelper nm script t f = do
   prop <- f $ ttTerm t
-  let goal = ProofGoal 0 "prove" "prove" prop
+  pos <- SV.getPosition
+  let goal = ProofGoal
+             { goalNum = 0
+             , goalType = "prove"
+             , goalName = nm
+             , goalLoc  = show pos
+             , goalDesc = ""
+             , goalProp = prop
+             }
   opts <- rwPPOpts <$> getTopLevelRW
-  res <- SV.runProofScript script goal Nothing "prove_print_prim"
+  res <- SV.runProofScript script goal Nothing (Text.pack nm)
   let failProof pst =
          fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                           ++ SV.showsProofResult opts res ""
@@ -952,7 +996,7 @@ provePrintPrim ::
   TopLevel Theorem
 provePrintPrim script t = do
   sc <- getSharedContext
-  proveHelper script t $ io . predicateToProp sc Universal
+  proveHelper "prove_print" script t $ io . predicateToProp sc Universal
 
 provePropPrim ::
   ProofScript () ->
@@ -960,7 +1004,7 @@ provePropPrim ::
   TopLevel Theorem
 provePropPrim script t = do
   sc <- getSharedContext
-  proveHelper script t $ io . termToProp sc
+  proveHelper "prove_extcore" script t $ io . termToProp sc
 
 satPrim ::
   ProofScript () ->
@@ -970,7 +1014,15 @@ satPrim script t =
   do io $ checkBooleanSchema (ttType t)
      sc <- getSharedContext
      prop <- io $ predicateToProp sc Existential (ttTerm t)
-     let goal = ProofGoal 0 "sat" "sat" prop
+     pos <- SV.getPosition
+     let goal = ProofGoal
+                { goalNum = 0
+                , goalType = "sat"
+                , goalName = "sat"
+                , goalLoc  = show pos
+                , goalDesc = ""
+                , goalProp = prop
+                }
      res <- SV.runProofScript script goal Nothing "sat"
      case res of
        InvalidProof stats cex _ -> return (SV.Sat stats cex)
@@ -1441,8 +1493,17 @@ prove_core script input =
   do sc <- getSharedContext
      t <- parseCore input
      p <- io (termToProp sc t)
+     pos <- SV.getPosition
      opts <- rwPPOpts <$> getTopLevelRW
-     res <- SV.runProofScript script (ProofGoal 0 "prove" "prove" p) Nothing "prove_core"
+     let goal = ProofGoal
+                { goalNum = 0
+                , goalType = "prove"
+                , goalName = "prove_core"
+                , goalLoc  = show pos
+                , goalDesc = ""
+                , goalProp = p
+                }
+     res <- SV.runProofScript script goal Nothing "prove_core"
      let failProof pst =
             fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                                   ++ SV.showsProofResult opts res ""
@@ -1766,6 +1827,13 @@ approxmc t = do
   case msg of
     [l] -> io $ putStrLn l
     _ -> fail $ "Garbled result from approxmc\n\n" ++ out
+
+set_path_sat_solver :: String -> TopLevel ()
+set_path_sat_solver nm =
+  case map toLower nm of
+    "z3"    -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Z3 })
+    "yices" -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Yices })
+    _ -> fail $ "Unknown path sat solver: " ++ show nm
 
 summarize_verification :: TopLevel ()
 summarize_verification =
