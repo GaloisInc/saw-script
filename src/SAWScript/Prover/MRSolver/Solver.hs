@@ -799,12 +799,30 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
     matchCoIndHyp hyp args1 args2 >>
     mrRefinesFun k1 k2
 
-  -- If we have an assumption that f1 args' refines some rhs, then prove that
-  -- args1 = args' and then that rhs refines m2
-  (_, Just fassump) ->
-    do (assump_args, assump_rhs) <- instantiateFunAssump fassump
-       zipWithM_ mrAssertProveEq assump_args args1
-       m1' <- normBind assump_rhs k1
+  -- If we have an opaque FunAssump that f1 args1' refines f2 args2', then
+  -- prove that args1 = args1', args2 = args2', and then that k1 refines k2
+  (_, Just (FunAssump ctx args1' (OpaqueFunAssump f2' args2'))) | f2 == f2' ->
+    do evars <- mrFreshEVars ctx
+       (args1'', args2'') <- substTermLike 0 evars (args1', args2')
+       zipWithM_ mrAssertProveEq args1'' args1
+       zipWithM_ mrAssertProveEq args2'' args2
+       mrRefinesFun k1 k2
+
+  -- If we have an opaque FunAssump that f1 refines some f /= f2, and f2
+  -- unfolds and is not recursive in itself, unfold f2 and recurse
+  (_, Just (FunAssump _ _ (OpaqueFunAssump _ _)))
+    | Just (f2_body, False) <- maybe_f2_body ->
+    normBindTerm f2_body k2 >>= \m2' -> mrRefines m1 m2'
+
+  -- If we have a rewrite FunAssump, or we have an opaque FunAssump that
+  -- f1 args1' refines some f args where f /= f2 and f2 does not match the
+  -- case above, treat either case like we have a rewrite FunAssump and prove
+  -- that args1 = args1' and then that f args refines m2
+  (_, Just (FunAssump ctx args1' (funAssumpRHSAsNormComp -> rhs))) ->
+    do evars <- mrFreshEVars ctx
+       (args1'', rhs') <- substTermLike 0 evars (args1', rhs)
+       zipWithM_ mrAssertProveEq args1'' args1
+       m1' <- normBind rhs' k1
        mrRefines m1' m2
 
   -- If f1 unfolds and is not recursive in itself, unfold it and recurse
@@ -839,10 +857,11 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
 
   -- If we have an assumption that f1 args' refines some rhs, then prove that
   -- args1 = args' and then that rhs refines m2
-  Just fassump ->
-    do (assump_args, assump_rhs) <- instantiateFunAssump fassump
-       zipWithM_ mrAssertProveEq assump_args args1
-       m1' <- normBind assump_rhs k1
+  Just (FunAssump ctx args1' (funAssumpRHSAsNormComp -> rhs)) ->
+    do evars <- mrFreshEVars ctx
+       (args1'', rhs') <- substTermLike 0 evars (args1', rhs)
+       zipWithM_ mrAssertProveEq args1'' args1
+       m1' <- normBind rhs' k1
        mrRefines m1' m2
 
   -- Otherwise, see if we can unfold f1
@@ -927,9 +946,14 @@ mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 -- * External Entrypoints
 ----------------------------------------------------------------------
 
+-- | The result of a successful call to Mr. Solver: either a 'FunAssump' to
+-- (optionally) add to the 'MREnv', or 'Nothing' if the left-hand-side was not
+-- a function name
+type MRSolverResult = Maybe (FunName, FunAssump)
+
 -- | The main loop of 'askMRSolver'. The first argument is an accumulator of
 -- variables to introduce, innermost first.
-askMRSolverH :: [Term] -> Term -> Term -> Term -> Term -> MRM MREnv
+askMRSolverH :: [Term] -> Term -> Term -> Term -> Term -> MRM MRSolverResult
 
 -- If we need to introduce a bitvector on one side and a Num on the other,
 -- introduce a bitvector variable and substitute `TCNum` of `bvToNat` of that
@@ -1016,15 +1040,22 @@ askMRSolverH _ (asCompM -> Just _) t1 (asCompM -> Just _) t2 =
   do m1 <- normCompTerm t1 
      m2 <- normCompTerm t2
      mrRefines m1 m2
-     -- If t1 is a named function, add forall xs. f1 xs |= m2 to the env
-     case asApplyAll t1 of
-       ((asGlobalFunName -> Just f1), args) ->
+     case (m1, m2) of
+       -- If t1 and t2 are both named functions, our result is the opaque
+       -- FunAssump that forall xs. f1 xs |= f2 xs'
+       (FunBind f1 args1 CompFunReturn, FunBind f2 args2 CompFunReturn) ->
          mrUVarCtx >>= \uvar_ctx ->
-         let fassump = FunAssump { fassumpCtx = uvar_ctx,
-                                   fassumpArgs = args,
-                                   fassumpRHS = m2 } in
-         mrEnvAddFunAssump f1 fassump <$> mrEnv
-       _ -> mrEnv
+         return $ Just (f1, FunAssump { fassumpCtx = uvar_ctx,
+                                        fassumpArgs = args1,
+                                        fassumpRHS = OpaqueFunAssump f2 args2 })
+       -- If just t1 is a named function, our result is the rewrite FunAssump
+       -- that forall xs. f1 xs |= m2
+       (FunBind f1 args1 CompFunReturn, _) ->
+         mrUVarCtx >>= \uvar_ctx ->
+         return $ Just (f1, FunAssump { fassumpCtx = uvar_ctx,
+                                        fassumpArgs = args1,
+                                        fassumpRHS = RewriteFunAssump m2 })
+       _ -> return Nothing
 
 -- Error if we don't have CompM at the end
 askMRSolverH _ (asCompM -> Just _) _ tp2 _ =
@@ -1038,14 +1069,13 @@ askMRSolverH _ tp1 _ _ _ =
 -- environment.
 askMRSolver ::
   SharedContext ->
-  Int {- ^ The debug level -} ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
-  Term -> Term -> IO (Either MRFailure MREnv)
+  Term -> Term -> IO (Either MRFailure MRSolverResult)
 
-askMRSolver sc dlvl env timeout t1 t2 =
+askMRSolver sc env timeout t1 t2 =
   do tp1 <- scTypeOf sc t1 >>= scWhnf sc
      tp2 <- scTypeOf sc t2 >>= scWhnf sc
-     runMRM sc timeout dlvl env $
+     runMRM sc timeout env $
        mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2 >>
        askMRSolverH [] tp1 t1 tp2 t2
