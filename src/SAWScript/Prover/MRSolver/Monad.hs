@@ -90,6 +90,15 @@ data MRFailure
 pattern TermsNotEq :: Term -> Term -> MRFailure
 pattern TermsNotEq t1 t2 = TermsNotRel False t1 t2
 
+-- | Remove the context from a 'MRFailure', i.e. remove all applications of the 
+-- 'MRFailureLocalVar' and 'MRFailureCtx' constructors
+mrFailureWithoutCtx :: MRFailure -> MRFailure
+mrFailureWithoutCtx (MRFailureLocalVar _ err) = mrFailureWithoutCtx err
+mrFailureWithoutCtx (MRFailureCtx _ err) = mrFailureWithoutCtx err
+mrFailureWithoutCtx (MRFailureDisj err1 err2) =
+  MRFailureDisj (mrFailureWithoutCtx err1) (mrFailureWithoutCtx err2)
+mrFailureWithoutCtx err = err
+
 -- | Pretty-print an object prefixed with a 'String' that describes it
 ppWithPrefix :: PrettyInCtx a => String -> a -> PPInCtxM SawDoc
 ppWithPrefix str a = (pretty str <>) <$> nest 2 <$> (line <>) <$> prettyInCtx a
@@ -160,6 +169,11 @@ instance PrettyInCtx MRFailure where
 -- | Render a 'MRFailure' to a 'String'
 showMRFailure :: MRFailure -> String
 showMRFailure = showInCtx []
+
+-- | Render a 'MRFailure' to a 'String' without its context (see
+-- 'mrFailureWithoutCtx')
+showMRFailureNoCtx :: MRFailure -> String
+showMRFailureNoCtx = showMRFailure . mrFailureWithoutCtx
 
 
 ----------------------------------------------------------------------
@@ -278,9 +292,7 @@ data MRInfo = MRInfo {
   -- note that these have the current UVars free
   mriAssumptions :: Term,
   -- | The current set of 'DataTypeAssump's
-  mriDataTypeAssumps :: DataTypeAssumps,
-  -- | The debug level, which controls debug printing
-  mriDebugLevel :: Int
+  mriDataTypeAssumps :: DataTypeAssumps
 }
 
 -- | State maintained by MR. Solver
@@ -338,9 +350,9 @@ mrAssumptions = mriAssumptions <$> ask
 mrDataTypeAssumps :: MRM DataTypeAssumps
 mrDataTypeAssumps = mriDataTypeAssumps <$> ask
 
--- | Get the current value of 'mriDebugLevel'
+-- | Get the current debug level
 mrDebugLevel :: MRM Int
-mrDebugLevel = mriDebugLevel <$> ask
+mrDebugLevel = mreDebugLevel <$> mriEnv <$> ask
 
 -- | Get the current value of 'mriEnv'
 mrEnv :: MRM MREnv
@@ -351,12 +363,12 @@ mrVars :: MRM MRVarMap
 mrVars = mrsVars <$> get
 
 -- | Run an 'MRM' computation and return a result or an error
-runMRM :: SharedContext -> Maybe Integer -> Int -> MREnv ->
+runMRM :: SharedContext -> Maybe Integer -> MREnv ->
           MRM a -> IO (Either MRFailure a)
-runMRM sc timeout debug env m =
+runMRM sc timeout env m =
   do true_tm <- scBool sc True
      let init_info = MRInfo { mriSC = sc, mriSMTTimeout = timeout,
-                              mriDebugLevel = debug, mriEnv = env,
+                              mriEnv = env,
                               mriUVars = [], mriCoIndHyps = Map.empty,
                               mriAssumptions = true_tm,
                               mriDataTypeAssumps = HashMap.empty }
@@ -895,19 +907,11 @@ withFunAssump fname args rhs m =
                                            fname args CompFunReturn) "|=" rhs
      ctx <- mrUVarCtx
      assumps <- mrFunAssumps
-     let assumps' = Map.insert fname (FunAssump ctx args rhs) assumps
+     let assump = FunAssump ctx args (RewriteFunAssump rhs)
+     let assumps' = Map.insert fname assump assumps
      local (\info ->
              let env' = (mriEnv info) { mreFunAssumps = assumps' } in
              info { mriEnv = env' }) m
-
--- | Generate fresh evars for the context of a 'FunAssump' and substitute them
--- into its arguments and right-hand side
-instantiateFunAssump :: FunAssump -> MRM ([Term], NormComp)
-instantiateFunAssump fassump =
-  do evars <- mrFreshEVars $ fassumpCtx fassump
-     args <- substTermLike 0 evars $ fassumpArgs fassump
-     rhs <- substTermLike 0 evars $ fassumpRHS fassump
-     return (args, rhs)
 
 -- | Get the invariant hint associated with a function name, by unfolding the
 -- name and checking if its body has the form

@@ -3259,16 +3259,41 @@ primitives = Map.fromList
 
     ---------------------------------------------------------------------
 
-  , prim "mr_solver"  "Term -> Term -> TopLevel Bool"
-    (scVal (\sc -> mrSolver sc 0))
+  , prim "mr_solver_prove" "Term -> Term -> TopLevel ()"
+    (scVal (mrSolverProve True))
     Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to ask if one monadic term refines another" ]
+    , " to prove that one monadic term refines another. If this can"
+    , " be done, this refinement will be used in future calls to"
+    , " Mr. Solver, and if it cannot, the script will exit. See also:"
+    , " mr_solver_test, mr_solver_query." ]
 
-  , prim "mr_solver_debug"  "Int -> Term -> Term -> TopLevel Bool"
-    (scVal mrSolver)
+  , prim "mr_solver_test" "Term -> Term -> TopLevel ()"
+    (scVal (mrSolverProve False))
     Experimental
-    [ "Call the monadic-recursive solver at the supplied debug level" ]
+    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
+    , " to prove that one monadic term refines another. If this cannot"
+    , " be done, the script will exit. See also: mr_solver_prove,"
+    , " mr_solver_query - unlike the former, this refinement will not"
+    , " be used in future calls to Mr. Solver." ]
+
+  , prim "mr_solver_query" "Term -> Term -> TopLevel Bool"
+    (scVal mrSolverQuery)
+    Experimental
+    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
+    , " to prove that one monadic term refines another, returning"
+    , " true iff this can be done. See also: mr_solver_prove,"
+    , " mr_solver_test - unlike the former, this refinement will not"
+    , " be considered in future calls to Mr. Solver, and unlike both,"
+    , " this command will never fail." ]
+
+  , prim "mr_solver_set_debug_level" "Int -> TopLevel ()"
+    (pureVal mrSolverSetDebug)
+    Experimental
+    [ "Set the debug level for Mr. Solver; 0 = no debug output,"
+    , " 1 = some debug output, 2 = all debug output" ]
+
+    ---------------------------------------------------------------------
 
   , prim "monadify_term" "Term -> TopLevel Term"
     (scVal monadifyTypedTerm)
