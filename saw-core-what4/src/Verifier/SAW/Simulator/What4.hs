@@ -100,7 +100,6 @@ import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr,
                                  IsExprBuilder,IsSymExprBuilder)
 import qualified What4.Interface as W
 import           What4.BaseTypes
-import           What4.Protocol.Online (OnlineSolver)
 import qualified What4.SWord as SW
 import           What4.SWord (SWord(..))
 
@@ -1172,31 +1171,39 @@ getLabelValues f =
 -- of what4. The term may have any first-order monomorphic function
 -- type. Return a term with the same type.
 w4EvalTerm ::
-  forall n solver fs.
-  OnlineSolver solver =>
-  CS.SAWCoreBackend n solver fs -> SharedContext ->
-  Map Ident (SValue (CS.SAWCoreBackend n solver fs)) -> Set VarIndex -> Term ->
+  forall n st fs.
+  B.ExprBuilder n st fs ->
+  SAWCoreState n ->
+  SharedContext ->
+  Map Ident (SPrim (B.ExprBuilder n st fs)) ->
+  Set VarIndex ->
+  Term ->
   IO Term
-w4EvalTerm sym sc ps unintSet t =
+w4EvalTerm sym st sc ps unintSet t =
   do modmap <- scGetModuleMap sc
      ref <- newIORef Map.empty
-     let eval = w4EvalBasic sym sc modmap ps ref unintSet
+     let eval = w4EvalBasic sym st sc modmap ps ref unintSet
      ty <- eval =<< scTypeOf sc t
      -- evaluate term to an SValue
      val <- eval t
+     tytval <- toTValue ty
      -- convert SValue back into a Term
-     rebuildTerm sym sc (toTValue ty) val
+     rebuildTerm sym st sc tytval val
+  where
+    toTValue :: Value l -> IO (TValue l)
+    toTValue (TValue x) = pure x
+    toTValue _ = fail "toTValue"
 
 rebuildTerm ::
-  OnlineSolver solver =>
-  CS.SAWCoreBackend n solver fs ->
+  B.ExprBuilder n st fs ->
+  SAWCoreState n ->
   SharedContext ->
-  TValue (What4 (CS.SAWCoreBackend n solver fs)) ->
-  SValue (CS.SAWCoreBackend n solver fs) ->
+  TValue (What4 (B.ExprBuilder n st fs)) ->
+  SValue (B.ExprBuilder n st fs) ->
   IO Term
-rebuildTerm sym sc tv =
+rebuildTerm sym st sc tv =
   \case
-    VFun _ ->
+    VFun _ _ ->
       fail "rebuildTerm VFun"
     VUnit ->
       scUnitValue sc
@@ -1205,46 +1212,46 @@ rebuildTerm sym sc tv =
         VPairType tx ty ->
           do vx <- force x
              vy <- force y
-             x' <- rebuildTerm sym sc tx vx
-             y' <- rebuildTerm sym sc ty vy
+             x' <- rebuildTerm sym st sc tx vx
+             y' <- rebuildTerm sym st sc ty vy
              scPairValue sc x' y'
         _ -> fail "panic: rebuildTerm: internal error"
-    VCtorApp _ _ ->
+    VCtorApp _ _ _ ->
       fail "rebuildTerm VCtorApp"
     VVector xs ->
       case tv of
         VVecType _ tx ->
           do vs <- traverse force (V.toList xs)
-             xs' <- traverse (rebuildTerm sym sc tx) vs
+             xs' <- traverse (rebuildTerm sym st sc tx) vs
              tx' <- termOfTValue sc tx
              scVectorReduced sc tx' xs'
         _ -> fail "panic: rebuildTerm: internal error"
     VBool x ->
-      CS.toSC sym x
+      toSC sym st x
     VWord x ->
       case x of
-        DBV w -> CS.toSC sym w
+        DBV w -> toSC sym st w
         ZBV ->
           do z <- scNat sc 0
              scBvNat sc z z
-    VToNat _ ->
-      fail "rebuildTerm VToNat"
+    VBVToNat _ _ ->
+      fail "rebuildTerm VBVToNat"
+    VIntToNat _ ->
+      fail "rebuildTerm VIntToNat"
     VNat n ->
       scNat sc n
     VInt x ->
-      CS.toSC sym x
+      toSC sym st x
     VIntMod _ _ ->
       fail "rebuildTerm VIntMod"
     VArray _ ->
       fail "rebuildTerm VArray"
     VString s ->
       scString sc s
-    VFloat _ ->
-      fail "rebuildTerm VFloat"
-    VDouble _ ->
-      fail "rebuildTerm VDouble"
     VRecordValue _ ->
       fail "rebuildTerm VRecordValue"
+    VRecursor _ _ _ _ _ ->
+      fail "rebuildTerm VRecursor"
     VExtra _ ->
       fail "rebuildTerm VExtra"
     TValue _tval ->

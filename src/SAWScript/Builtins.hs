@@ -90,6 +90,9 @@ import qualified Verifier.SAW.CryptolEnv as CEnv
 -- saw-core-sbv
 import qualified Verifier.SAW.Simulator.SBV as SBVSim
 
+-- saw-core-what4
+import qualified Verifier.SAW.Simulator.What4 as W4Sim
+
 -- sbv
 import qualified Data.SBV.Dynamic as SBV
 
@@ -120,6 +123,7 @@ import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
 import SAWScript.Proof
 import SAWScript.Crucible.Common (PathSatSolver(..))
+import qualified SAWScript.Crucible.Common as Common
 import SAWScript.TopLevel
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
@@ -1115,9 +1119,9 @@ term_eval :: [String] -> TypedTerm -> TopLevel TypedTerm
 term_eval unints (TypedTerm schema t0) =
   do sc <- getSharedContext
      unintSet <- resolveNames unints
-     let gen = globalNonceGenerator
-     sym <- liftIO $ Crucible.newSAWCoreBackend FloatRealRepr sc gen
-     t1 <- liftIO $ W4Sim.w4EvalTerm sym sc Map.empty unintSet t0
+     sym <- liftIO $ Common.newSAWCoreExprBuilder sc
+     st <- liftIO $ Common.sawCoreState sym
+     t1 <- liftIO $ W4Sim.w4EvalTerm sym st sc Map.empty unintSet t0
      pure (TypedTerm schema t1)
 
 addsimp :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
