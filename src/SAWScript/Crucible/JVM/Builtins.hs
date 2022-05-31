@@ -49,6 +49,7 @@ import           Control.Lens
 
 import qualified Control.Monad.Catch as X
 import           Control.Monad.State
+import           Control.Monad.Reader (runReaderT)
 import qualified Control.Monad.State.Strict as Strict
 import           Control.Monad.Trans.Except (runExceptT)
 import qualified Data.BitVector.Sized as BV
@@ -132,7 +133,7 @@ import SAWScript.Crucible.JVM.Override
 import SAWScript.Crucible.JVM.ResolveSetupValue
 import SAWScript.Crucible.JVM.BuiltinsJVM ()
 
-type AssumptionReason = (W4.ProgramLoc, String)
+type AssumptionReason = (MS.ConditionMetadata, String)
 type SetupValue = MS.SetupValue CJ.JVM
 type Lemma = MS.ProvedSpec CJ.JVM
 type MethodSpec = MS.CrucibleMethodSpecIR CJ.JVM
@@ -222,7 +223,10 @@ jvm_verify cls nm lemmas checkSat setup tactic =
 
      -- execute commands of the method spec
      io $ W4.setCurrentProgramLoc sym loc
-     methodSpec <- view Setup.csMethodSpec <$> execStateT (runJVMSetupM setup) st0
+     methodSpec <- view Setup.csMethodSpec <$>
+                     execStateT
+                       (runReaderT (runJVMSetupM setup) Setup.makeCrucibleSetupRO)
+                     st0
 
      -- construct the dynamic class table and declare static fields
      globals1 <- liftIO $ setupGlobalState sym jc
@@ -269,8 +273,8 @@ jvm_unsafe_assume_spec cls nm setup =
      (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
      let loc = SS.toW4Loc "_SAW_assume_spec" pos
      let st0 = initialCrucibleSetupState cc (cls', method) loc
-     ms <- (view Setup.csMethodSpec) <$> execStateT (runJVMSetupM setup) st0
-
+     ms <- (view Setup.csMethodSpec) <$>
+             execStateT (runReaderT (runJVMSetupM setup) Setup.makeCrucibleSetupRO) st0
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty 0)
      returnProof ps
 
@@ -279,7 +283,7 @@ verifyObligations ::
   MethodSpec ->
   ProofScript () ->
   [Crucible.LabeledPred Term AssumptionReason] ->
-  [(String, W4.ProgramLoc, Term)] ->
+  [(String, MS.ConditionMetadata, Term)] ->
   TopLevel (SolverStats, Set TheoremNonce)
 verifyObligations cc mspec tactic assumes asserts =
   do let sym = cc^.jccSym
@@ -287,9 +291,10 @@ verifyObligations cc mspec tactic assumes asserts =
      let sc = saw_ctx st
      assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
      let nm = mspec ^. csMethodName
-     outs <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, ploc, assert)) -> do
+     outs <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, md, assert)) -> do
        goal   <- io $ scImplies sc assume assert
        goal'  <- io $ boolToProp sc [] goal -- TODO, generalize over inputs
+       let ploc = MS.conditionLoc md
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
            proofgoal = ProofGoal
                        { goalNum = n
@@ -298,6 +303,7 @@ verifyObligations cc mspec tactic assumes asserts =
                        , goalLoc  = show ploc
                        , goalDesc = msg
                        , goalProp = goal'
+                       , goalTags = MS.conditionTags md
                        }
        res <- runProofScript tactic proofgoal (Just ploc) $ Text.unwords
                  ["JVM verification condition:", Text.pack (show n), Text.pack goalname]
@@ -643,8 +649,9 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
                            (groupOn (view csMethodName) (map (view MS.psSpec) lemmas))
                    liftIO $ putStrLn "registering assumptions"
                    liftIO $
-                     for_ assumes $ \(Crucible.LabeledPred p (loc, reason)) ->
+                     for_ assumes $ \(Crucible.LabeledPred p (md, reason)) ->
                        do expr <- resolveSAWPred cc p
+                          let loc = MS.conditionLoc md
                           Crucible.addAssumption bak (Crucible.GenericAssumption loc reason expr)
                    liftIO $ putStrLn "simulating function"
                    fnCall
@@ -717,7 +724,7 @@ verifyPoststate ::
   Map AllocIndex JVMRefVal          {- ^ allocation substitution                      -} ->
   Crucible.SymGlobalState Sym       {- ^ global variables                             -} ->
   Maybe (J.Type, JVMVal)            {- ^ optional return value                        -} ->
-  TopLevel [(String, W4.ProgramLoc, Term)] {- ^ generated labels and verification conditions -}
+  TopLevel [(String, MS.ConditionMetadata, Term)] {- ^ generated labels and verification conditions -}
 verifyPoststate cc mspec env0 globals ret =
   jccWithBackend cc $ \bak ->
   do opts <- getOptions
@@ -748,7 +755,9 @@ verifyPoststate cc mspec env0 globals ret =
      st <- case matchPost of
              Left err      -> fail (show err)
              Right (_, st) -> return st
-     io $ for_ (view osAsserts st) $ \assert -> Crucible.addAssertion bak assert
+     io $ forM_ (view osAsserts st) $ \(md, assert) ->
+       -- TODO, use the assertion metadata
+       Crucible.addAssertion bak assert
 
      obligations <- io $ Crucible.getProofObligations bak
      io $ Crucible.clearProofObligations bak
@@ -762,11 +771,22 @@ verifyPoststate cc mspec env0 globals ret =
          hypTerm <- toSC sym st =<< Crucible.assumptionsPred sym hyps
          conclTerm  <- toSC sym st concl
          obligation <- scImplies sc hypTerm conclTerm
-         return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, loc, obligation)
+         let md = MS.ConditionMetadata
+                  { MS.conditionLoc = loc
+                  , MS.conditionTags = mempty -- TODO! propagate tags
+                  , MS.conditionType = "safety assertion"
+                  }
+         return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, md, obligation)
 
     matchResult opts sc =
       case (ret, mspec ^. MS.csRetValue) of
-        (Just (rty,r), Just expect) -> matchArg opts sc cc mspec PostState r rty expect
+        (Just (rty,r), Just expect) ->
+            let md = MS.ConditionMetadata
+                     { MS.conditionLoc = mspec ^. MS.csLoc
+                     , MS.conditionTags = mempty
+                     , MS.conditionType = "return value matching"
+                     } in
+            matchArg opts sc cc mspec PostState md r rty expect
         (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected jvm_return specification"
         _ -> return ()
 
@@ -1042,7 +1062,7 @@ jvm_fresh_var ::
   JVMSetupM TypedTerm {- ^ fresh typed term -}
 jvm_fresh_var name jty =
   JVMSetupM $
-  do sc <- lift getSharedContext
+  do sc <- lift $ lift getSharedContext
      case cryptolTypeOfActual jty of
        Nothing -> X.throwM $ JVMFreshVarInvalidType jty
        Just cty -> Setup.freshVariable sc name cty
@@ -1052,10 +1072,16 @@ jvm_alloc_object ::
   JVMSetupM SetupValue
 jvm_alloc_object cname =
   JVMSetupM $
-  do loc <- SS.toW4Loc "jvm_alloc_object" <$> lift getPosition
+  do loc <- SS.toW4Loc "jvm_alloc_object" <$> lift (lift getPosition)
+     tags <- view Setup.croTags
+     let md = MS.ConditionMetadata
+              { MS.conditionLoc = loc
+              , MS.conditionTags = tags
+              , MS.conditionType = "object allocation"
+              }
      n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?=
-       (loc, AllocObject (parseClassName cname))
+       (md, AllocObject (parseClassName cname))
      return (MS.SetupVar n)
 
 jvm_alloc_array ::
@@ -1064,9 +1090,15 @@ jvm_alloc_array ::
   JVMSetupM SetupValue
 jvm_alloc_array len ety =
   JVMSetupM $
-  do loc <- SS.toW4Loc "jvm_alloc_array" <$> lift getPosition
+  do loc <- SS.toW4Loc "jvm_alloc_array" <$> lift (lift getPosition)
+     tags <- view Setup.croTags
+     let md = MS.ConditionMetadata
+              { MS.conditionLoc = loc
+              , MS.conditionTags = tags
+              , MS.conditionType = "array allocation"
+              }
      n <- Setup.csVarCounter <<%= nextAllocIndex
-     Setup.currentState . MS.csAllocs . at n ?= (loc, AllocArray len (typeOfJavaType ety))
+     Setup.currentState . MS.csAllocs . at n ?= (md, AllocArray len (typeOfJavaType ety))
      return (MS.SetupVar n)
 
 jvm_modifies_field ::
@@ -1089,8 +1121,8 @@ generic_field_is ::
   JVMSetupM ()
 generic_field_is ptr fname mval =
   JVMSetupM $
-  do pos <- lift getPosition
-     loc <- SS.toW4Loc "jvm_field_is" <$> lift getPosition
+  do pos <- lift (lift getPosition)
+     let loc = SS.toW4Loc "jvm_field_is" pos
      ptr' <-
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
@@ -1108,7 +1140,13 @@ generic_field_is ptr fname mval =
          do valTy <- typeOfSetupValue cc env nameEnv val
             unless (registerCompatible (J.fieldIdType fid) valTy) $
               X.throwM $ JVMFieldTypeMismatch fid valTy
-     let pt = JVMPointsToField loc ptr' fid mval
+     tags <- view Setup.croTags
+     let md = MS.ConditionMetadata
+              { MS.conditionLoc = loc
+              , MS.conditionTags = tags
+              , MS.conditionType = "JVM field-is"
+              }
+     let pt = JVMPointsToField md ptr' fid mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMFieldMultiple ptr' fid
@@ -1133,8 +1171,8 @@ generic_static_field_is ::
   JVMSetupM ()
 generic_static_field_is fname mval =
   JVMSetupM $
-  do pos <- lift getPosition
-     loc <- SS.toW4Loc "jvm_static_field_is" <$> lift getPosition
+  do pos <- lift (lift getPosition)
+     let loc = SS.toW4Loc "jvm_static_field_is" pos
      st <- get
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
@@ -1155,7 +1193,13 @@ generic_static_field_is fname mval =
               X.throwM $ JVMStaticTypeMismatch fid valTy
      -- let name = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
      -- liftIO $ putStrLn $ "resolved to: " ++ name
-     let pt = JVMPointsToStatic loc fid mval
+     tags <- view Setup.croTags
+     let md = MS.ConditionMetadata
+              { MS.conditionLoc = loc
+              , MS.conditionTags = tags
+              , MS.conditionType = "JVM field-is (static)"
+              }
+     let pt = JVMPointsToStatic md fid mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMStaticMultiple fid
@@ -1183,7 +1227,7 @@ generic_elem_is ::
   JVMSetupM ()
 generic_elem_is ptr idx mval =
   JVMSetupM $
-  do loc <- SS.toW4Loc "jvm_elem_is" <$> lift getPosition
+  do loc <- SS.toW4Loc "jvm_elem_is" <$> lift (lift getPosition)
      ptr' <-
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
@@ -1204,7 +1248,13 @@ generic_elem_is ptr idx mval =
          do valTy <- typeOfSetupValue cc env nameEnv val
             unless (registerCompatible elTy valTy) $
               X.throwM $ JVMElemTypeMismatch idx elTy valTy
-     let pt = JVMPointsToElem loc ptr' idx mval
+     tags <- view Setup.croTags
+     let md = MS.ConditionMetadata
+              { MS.conditionLoc = loc
+              , MS.conditionTags = tags
+              , MS.conditionType = "JVM elem-is"
+              }
+     let pt = JVMPointsToElem md ptr' idx mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMElemMultiple ptr' idx
@@ -1229,7 +1279,7 @@ generic_array_is ::
   JVMSetupM ()
 generic_array_is ptr mval =
   JVMSetupM $
-  do loc <- SS.toW4Loc "jvm_array_is" <$> lift getPosition
+  do loc <- SS.toW4Loc "jvm_array_is" <$> lift (lift getPosition)
      ptr' <-
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
@@ -1256,7 +1306,13 @@ generic_array_is ptr mval =
               Nothing -> X.throwM (JVMArrayTypeMismatch len elTy schema)
               Just () -> pure ()
 
-     let pt = JVMPointsToArray loc ptr' mval
+     tags <- view Setup.croTags
+     let md = MS.ConditionMetadata
+              { MS.conditionLoc = loc
+              , MS.conditionTags = tags
+              , MS.conditionType = "JVM array-is"
+              }
+     let pt = JVMPointsToArray md ptr' mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMArrayMultiple ptr'
@@ -1266,17 +1322,23 @@ generic_array_is ptr mval =
 
 jvm_assert :: TypedTerm -> JVMSetupM ()
 jvm_assert term = JVMSetupM $ do
-  loc <- SS.toW4Loc "jvm_assert" <$> lift getPosition
-  Setup.addCondition (MS.SetupCond_Pred loc term)
+  loc <- SS.toW4Loc "jvm_assert" <$> lift (lift getPosition)
+  tags <- view Setup.croTags
+  let md = MS.ConditionMetadata
+           { MS.conditionLoc = loc
+           , MS.conditionTags = tags
+           , MS.conditionType = "specification assertion"
+           }
+  Setup.addCondition (MS.SetupCond_Pred md term)
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
 jvm_precond term = JVMSetupM $ do
-  loc <- SS.toW4Loc "jvm_precond" <$> lift getPosition
+  loc <- SS.toW4Loc "jvm_precond" <$> lift (lift getPosition)
   Setup.crucible_precond loc term
 
 jvm_postcond :: TypedTerm -> JVMSetupM ()
 jvm_postcond term = JVMSetupM $ do
-  loc <- SS.toW4Loc "jvm_postcond" <$> lift getPosition
+  loc <- SS.toW4Loc "jvm_postcond" <$> lift (lift getPosition)
   Setup.crucible_postcond loc term
 
 jvm_execute_func :: [SetupValue] -> JVMSetupM ()

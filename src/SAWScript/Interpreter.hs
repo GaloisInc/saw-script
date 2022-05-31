@@ -1476,6 +1476,24 @@ primitives = Map.fromList
     [ "Run the given proof script only when the goal name contains"
     , "the given string."
     ]
+  , prim "goal_has_tags"      "[String] -> ProofScript Bool"
+    (pureVal goal_has_tags)
+    Experimental
+    [ "Returns true if the current goal is tagged with all the tags"
+    , "in the given list. This function returns true for all goals"
+    , "when given an empty list. Tags may be are added to goals using"
+    , "'llvm_setup_with_tag' and similar operations in the specification"
+    , "setup phase."
+    ]
+  , prim "goal_has_some_tag"  "[String] -> ProofScript Bool"
+    (pureVal goal_has_some_tag)
+    Experimental
+    [ "Returns true if the current goal is tagged with any the tags"
+    , "in the given list. This function returns false for all goals"
+    , "when given an empty list. Tags may be are added to goals using"
+    , "'llvm_setup_with_tag' and similar operations in the specification"
+    , "setup phase."
+    ]
   , prim "goal_num_ite"       "{a} Int -> ProofScript a -> ProofScript a -> ProofScript a"
     (pureVal goal_num_ite)
     Experimental
@@ -2682,6 +2700,14 @@ primitives = Map.fromList
     [ "State that the given predicate must hold.  Acts as `llvm_precond`"
     , "or `llvm_postcond` depending on the phase of specification in which"
     , "it appears (i.e., before or after `llvm_execute_func`."
+    ]
+
+  , prim "llvm_setup_with_tag" "String -> LLVMSetup () -> LLVMSetup ()"
+    (pureVal llvm_setup_with_tag)
+    Experimental
+    [ "All conditions (e.g., from points-to or assert statements) executed"
+    , "in the scope of the given setup block will have the provieded string"
+    , "attached as a tag that can later be filtered by proof tactics."
     ]
 
   , prim "llvm_postcond" "Term -> LLVMSetup ()"

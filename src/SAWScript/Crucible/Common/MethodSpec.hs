@@ -279,15 +279,22 @@ type GhostGlobal = Crucible.GlobalVar GhostType
 --------------------------------------------------------------------------------
 -- ** Pre- and post-conditions
 
+data ConditionMetadata =
+  ConditionMetadata
+  { conditionLoc  :: ProgramLoc
+  , conditionTags :: Set String
+  , conditionType :: String
+  }
+ deriving (Show, Eq, Ord)
 
 --------------------------------------------------------------------------------
 -- *** StateSpec
 
 data SetupCondition ext where
-  SetupCond_Equal    :: ProgramLoc -> SetupValue ext -> SetupValue ext -> SetupCondition ext
-  SetupCond_Pred     :: ProgramLoc -> TypedTerm -> SetupCondition ext
+  SetupCond_Equal    :: ConditionMetadata -> SetupValue ext -> SetupValue ext -> SetupCondition ext
+  SetupCond_Pred     :: ConditionMetadata -> TypedTerm -> SetupCondition ext
   SetupCond_Ghost    :: B (HasGhostState ext) ->
-                        ProgramLoc ->
+                        ConditionMetadata ->
                         GhostGlobal ->
                         TypedTerm ->
                         SetupCondition ext

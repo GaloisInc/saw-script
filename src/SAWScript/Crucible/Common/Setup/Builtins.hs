@@ -35,9 +35,15 @@ crucible_precond ::
   CrucibleSetup ext ()
 crucible_precond loc p = do
   st <- get
+  tags <- view croTags
+  let md = MS.ConditionMetadata
+           { MS.conditionLoc = loc
+           , MS.conditionTags = tags
+           , MS.conditionType = "specification assertion"
+           }
   when (st ^. csPrePost == MS.PostState) $
     fail "attempt to use `crucible_precond` in post state"
-  addCondition (MS.SetupCond_Pred loc p)
+  addCondition (MS.SetupCond_Pred md p)
 
 crucible_postcond ::
   W4.ProgramLoc ->
@@ -45,9 +51,15 @@ crucible_postcond ::
   CrucibleSetup ext ()
 crucible_postcond loc p = do
   st <- get
+  tags <- view croTags
+  let md = MS.ConditionMetadata
+           { MS.conditionLoc = loc
+           , MS.conditionTags = tags
+           , MS.conditionType = "specification assertion"
+           }
   when (st ^. csPrePost == MS.PreState) $
     fail "attempt to use `crucible_postcond` in pre state"
-  addCondition (MS.SetupCond_Pred loc p)
+  addCondition (MS.SetupCond_Pred md p)
 
 crucible_return ::
   MS.SetupValue ext ->

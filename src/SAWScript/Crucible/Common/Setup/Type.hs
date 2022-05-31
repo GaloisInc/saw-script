@@ -22,6 +22,9 @@ module SAWScript.Crucible.Common.Setup.Type
   , csMethodSpec
   , csCrucibleContext
   , makeCrucibleSetupState
+  , CrucibleSetupRO(..)
+  , croTags
+  , makeCrucibleSetupRO
   --
   , CrucibleSetupT
   , currentState
@@ -30,12 +33,16 @@ module SAWScript.Crucible.Common.Setup.Type
   , addCondition
   , freshTypedExtCns
   , freshVariable
+  , setupWithTag
   ) where
 
 import           Control.Lens
 import           Control.Monad.State (StateT)
+import           Control.Monad.Reader (ReaderT, withReaderT)
 import           Control.Monad.IO.Class (MonadIO(liftIO))
 import           Data.Text (Text)
+import           Data.Set (Set)
+import qualified Data.Set as Set
 
 import qualified Cryptol.TypeCheck.Type as Cryptol (Type)
 import qualified Verifier.SAW.Cryptol as Cryptol (importType, emptyEnv)
@@ -50,6 +57,15 @@ import qualified SAWScript.Crucible.Common.MethodSpec as MS
 --------------------------------------------------------------------------------
 -- ** CrucibleSetupState
 
+-- | Type of "read only" data maintained in a lexicograpic
+--   manner.
+data CrucibleSetupRO =
+  CrucibleSetupRO
+  { _croTags :: Set String
+  }
+
+makeLenses ''CrucibleSetupRO
+
 -- | The type of state kept in the 'CrucibleSetup' monad
 data CrucibleSetupState ext =
   CrucibleSetupState
@@ -61,6 +77,11 @@ data CrucibleSetupState ext =
   }
 
 makeLenses ''CrucibleSetupState
+
+makeCrucibleSetupRO :: CrucibleSetupRO
+makeCrucibleSetupRO =
+  CrucibleSetupRO
+  { _croTags = mempty }
 
 makeCrucibleSetupState ::
   MS.ResolvedState ext ->
@@ -79,7 +100,8 @@ makeCrucibleSetupState rs cc mspec =
 --------------------------------------------------------------------------------
 -- ** CrucibleSetupT
 
-type CrucibleSetupT ext = StateT (CrucibleSetupState ext)
+type CrucibleSetupT ext m =
+  ReaderT CrucibleSetupRO (StateT (CrucibleSetupState ext) m)
 
 --------------------------------------------------------------------------------
 -- ** State operations
@@ -124,3 +146,8 @@ freshVariable ::
 freshVariable sc name cty =
   do tec <- freshTypedExtCns sc name cty
      liftIO $ typedTermOfExtCns sc tec
+
+setupWithTag :: String -> CrucibleSetupT arch m a -> CrucibleSetupT arch m a
+setupWithTag tag m =
+  withReaderT (croTags %~ Set.insert tag) m
+--  withReaderT (\ro -> ro{ _croTags = Set.insert tag (_croTags ro) }) m
