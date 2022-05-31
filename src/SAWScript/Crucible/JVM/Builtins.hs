@@ -775,6 +775,7 @@ verifyPoststate cc mspec env0 globals ret =
                   { MS.conditionLoc = loc
                   , MS.conditionTags = mempty -- TODO! propagate tags
                   , MS.conditionType = "safety assertion"
+                  , MS.conditionContext = ""
                   }
          return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, md, obligation)
 
@@ -785,6 +786,7 @@ verifyPoststate cc mspec env0 globals ret =
                      { MS.conditionLoc = mspec ^. MS.csLoc
                      , MS.conditionTags = mempty
                      , MS.conditionType = "return value matching"
+                     , MS.conditionContext = ""
                      } in
             matchArg opts sc cc mspec PostState md r rty expect
         (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected jvm_return specification"
@@ -1078,6 +1080,7 @@ jvm_alloc_object cname =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "object allocation"
+              , MS.conditionContext = ""
               }
      n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?=
@@ -1096,6 +1099,7 @@ jvm_alloc_array len ety =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "array allocation"
+              , MS.conditionContext = ""
               }
      n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?= (md, AllocArray len (typeOfJavaType ety))
@@ -1145,6 +1149,7 @@ generic_field_is ptr fname mval =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "JVM field-is"
+              , MS.conditionContext = ""
               }
      let pt = JVMPointsToField md ptr' fid mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
@@ -1198,6 +1203,7 @@ generic_static_field_is fname mval =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "JVM field-is (static)"
+              , MS.conditionContext = ""
               }
      let pt = JVMPointsToStatic md fid mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
@@ -1253,6 +1259,7 @@ generic_elem_is ptr idx mval =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "JVM elem-is"
+              , MS.conditionContext = ""
               }
      let pt = JVMPointsToElem md ptr' idx mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
@@ -1311,6 +1318,7 @@ generic_array_is ptr mval =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "JVM array-is"
+              , MS.conditionContext = ""
               }
      let pt = JVMPointsToArray md ptr' mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
@@ -1328,6 +1336,7 @@ jvm_assert term = JVMSetupM $ do
            { MS.conditionLoc = loc
            , MS.conditionTags = tags
            , MS.conditionType = "specification assertion"
+           , MS.conditionContext = ""
            }
   Setup.addCondition (MS.SetupCond_Pred md term)
 

@@ -608,7 +608,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
        unwords ["Simulating", (methodSpec ^. csName) , "..."]
      top_loc <- toW4Loc "llvm_verify" <$> getPosition
      (ret, globals3) <-
-       io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp
+       io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp mdMap
 
      -- collect the proof obligations
      (asserts, post_override_state) <-
@@ -647,12 +647,17 @@ verifyObligations cc mspec tactic assumes asserts =
        do goal   <- io $ scImplies sc assume assert
           goal'  <- io $ boolToProp sc [] goal
           let ploc = MS.conditionLoc md
+          let gloc = (unwords [show (W4.plSourceLoc ploc)
+                             ,"in"
+                             , show (W4.plFunction ploc)]) ++
+                     (if null (MS.conditionContext md) then [] else
+                        "\n" ++ MS.conditionContext md)
           let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
               proofgoal = ProofGoal
                           { goalNum  = n
                           , goalType = MS.conditionType md
                           , goalName = nm
-                          , goalLoc  = show (W4.plSourceLoc ploc) ++ " in " ++ show (W4.plFunction ploc)
+                          , goalLoc  = gloc
                           , goalDesc = msg
                           , goalProp = goal'
                           , goalTags = MS.conditionTags md
@@ -1123,9 +1128,10 @@ registerOverride ::
   LLVMCrucibleContext arch       ->
   Crucible.SimContext (SAWCruciblePersonality Sym) Sym Crucible.LLVM ->
   W4.ProgramLoc              ->
+  IORef MetadataMap ->
   [MS.CrucibleMethodSpecIR (LLVM arch)]     ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp args ret ()
-registerOverride opts cc sim_ctx top_loc cs =
+registerOverride opts cc sim_ctx _top_loc mdMap cs =
   ccWithBackend cc $ \bak ->
   do let sym = Common.backendGetSym bak
      sc <- saw_ctx <$> liftIO (Common.sawCoreState sym)
@@ -1147,7 +1153,7 @@ registerOverride opts cc sim_ctx top_loc cs =
               Crucible.bindFnHandle h
                 $ Crucible.UseOverride
                 $ Crucible.mkOverride' fn_name retType
-                $ methodSpecHandler opts sc cc top_loc cs h
+                $ methodSpecHandler opts sc cc mdMap cs h 
               mem <- Crucible.readGlobal mvar
               let bindPtr m decl =
                     do printOutLn opts Info $ "  variant `" ++ show (L.decName decl) ++ "`"
@@ -1166,10 +1172,11 @@ registerInvariantOverride ::
   Options ->
   LLVMCrucibleContext arch ->
   W4.ProgramLoc ->
+  IORef MetadataMap ->
   HashMap Crucible.SomeHandle [Crucible.BreakpointName] ->
   [MS.CrucibleMethodSpecIR (LLVM arch)] ->
   IO (Crucible.ExecutionFeature (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp)
-registerInvariantOverride opts cc top_loc all_breakpoints cs =
+registerInvariantOverride opts cc top_loc mdMap all_breakpoints cs =
   do sc <- saw_ctx <$> Common.sawCoreState (cc^.ccSym)
      let name = (head cs) ^. csName
      parent <-
@@ -1191,7 +1198,7 @@ registerInvariantOverride opts cc top_loc all_breakpoints cs =
             breakpoint_name
             arg_types
             ret_type
-            (methodSpecHandler opts sc cc top_loc cs hInvariant)
+            (methodSpecHandler opts sc cc mdMap cs hInvariant)
             all_breakpoints
 
 --------------------------------------------------------------------------------
@@ -1258,8 +1265,9 @@ verifySimulate ::
   Crucible.SymGlobalState Sym ->
   Bool ->
   Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
+  IORef MetadataMap ->
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
-verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp =
+verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp mdMap =
   withCfgAndBlockId cc mspec $ \cfg entryId ->
   ccWithBackend cc $ \bak ->
   do let argTys = Crucible.blockInputs $
@@ -1290,7 +1298,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
 
      invariantExecFeatures <-
        mapM
-       (registerInvariantOverride opts cc top_loc (HashMap.fromList breakpoints))
+       (registerInvariantOverride opts cc top_loc mdMap (HashMap.fromList breakpoints))
        (groupOn (view csName) invLemmas)
 
      additionalFeatures <-
@@ -1304,7 +1312,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
      let initExecState =
            Crucible.InitialState simCtx globals Crucible.defaultAbortHandler retTy $
            Crucible.runOverrideSim retTy $
-           do mapM_ (registerOverride opts cc simCtx top_loc)
+           do mapM_ (registerOverride opts cc simCtx top_loc mdMap)
                     (groupOn (view csName) funcLemmas)
               liftIO $
                 for_ assumes $ \(Crucible.LabeledPred p (md, reason)) ->
@@ -1361,9 +1369,6 @@ scAndList sc = conj . filter nontrivial
     conj (x : xs) = foldM (scAnd sc) x xs
 
 --------------------------------------------------------------------------------
-
-type MetadataMap =
-  Map (W4.SymAnnotation Sym W4.BaseBoolType) MS.ConditionMetadata
 
 verifyPoststate ::
   ( ?lc :: Crucible.TypeContext
@@ -1444,6 +1449,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
                          { MS.conditionLoc = loc
                          , MS.conditionTags = mempty
                          , MS.conditionType = "safety assertion"
+                         , MS.conditionContext = ""
                          }
          let md = fromMaybe defaultMd $
                     do ann <- W4.getAnnotation sym concl
@@ -1457,6 +1463,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
                    { MS.conditionLoc = mspec ^. MS.csLoc
                    , MS.conditionTags = mempty -- TODO? should `llvm_return` track tags?
                    , MS.conditionType = "return value matching"
+                   , MS.conditionContext = ""
                    } in
           matchArg opts sc cc mspec PostState md r rty expect
         (Nothing     , Just _ )     ->
@@ -1790,6 +1797,7 @@ llvm_assert term =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "specification assertion"
+              , MS.conditionContext = ""
               }
      Setup.addCondition (MS.SetupCond_Pred md term)
 
@@ -2048,6 +2056,7 @@ llvm_alloc_with_mutability_and_size mut sz alignment initialization lty =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "fresh allocation"
+              , MS.conditionContext = ""
               }
      llvm_alloc_internal lty $
        LLVMAllocSpec
@@ -2158,6 +2167,7 @@ llvm_symbolic_alloc ro align_bytes sz =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "fresh symbolic allocation"
+              , MS.conditionContext = ""
               }
      let spec = LLVMAllocSpec
            { _allocSpecMut = if ro then Crucible.Immutable else Crucible.Mutable
@@ -2217,6 +2227,7 @@ constructFreshPointer mid loc memTy =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "fresh pointer"
+              , MS.conditionContext = ""
               }
      Setup.currentState . MS.csAllocs . at n ?=
        LLVMAllocSpec { _allocSpecMut = Crucible.Mutable
@@ -2318,6 +2329,7 @@ llvm_points_to_internal mbCheckType cond (getAllLLVM -> ptr) (getAllLLVM -> val)
                    { MS.conditionLoc = loc
                    , MS.conditionTags = tags
                    , MS.conditionType = "LLVM points-to"
+                   , MS.conditionContext = ""
                    }
           Setup.addPointsTo (LLVMPointsTo md cond ptr $ ConcreteSizeValue val)
 
@@ -2363,6 +2375,7 @@ llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
                    { MS.conditionLoc = loc
                    , MS.conditionTags = tags
                    , MS.conditionType = "LLVM points-to (bitfield)"
+                   , MS.conditionContext = ""
                    }
           Setup.addPointsTo (LLVMPointsToBitfield md ptr fieldName val)
 
@@ -2461,6 +2474,7 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
                    { MS.conditionLoc = loc
                    , MS.conditionTags = tags
                    , MS.conditionType = "LLVM points-to (array prefix)"
+                   , MS.conditionContext = ""
                    }
           Setup.addPointsTo (LLVMPointsTo md Nothing ptr $ SymbolicSizeValue arr sz)
 
@@ -2489,6 +2503,7 @@ llvm_equal (getAllLLVM -> val1) (getAllLLVM -> val2) =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "equality specification"
+              , MS.conditionContext = ""
               }
      Setup.addCondition (MS.SetupCond_Equal md val1 val2)
 
@@ -2511,6 +2526,7 @@ llvm_ghost_value ghost val = LLVMCrucibleSetupM $
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "ghost value"
+              , MS.conditionContext = ""
               }
      Setup.addCondition (MS.SetupCond_Ghost () md ghost val)
 

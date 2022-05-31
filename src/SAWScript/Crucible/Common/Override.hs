@@ -53,6 +53,7 @@ module SAWScript.Crucible.Common.Override
   , getSymInterface
   --
   , assignmentToList
+  , MetadataMap
   ) where
 
 import qualified Control.Exception as X
@@ -92,6 +93,10 @@ import qualified What4.ProgramLoc as W4
 import           SAWScript.Exceptions
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec as MS
+
+-- TODO, not sure this is the best place for this definition
+type MetadataMap =
+  Map (W4.SymAnnotation Sym W4.BaseBoolType) MS.ConditionMetadata
 
 --------------------------------------------------------------------------------
 -- ** OverrideState

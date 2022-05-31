@@ -1068,6 +1068,7 @@ assertPost globals env premem preregs = do
                    { MS.conditionLoc = ms ^. MS.csLoc
                    , MS.conditionTags = mempty
                    , MS.conditionType = "return value matching"
+                   , MS.conditionContext = ""
                    }
           pure [LO.matchArg opts sc cc ms MS.PostState md postRAXTrunc retTy expectedRet]
         _ -> throwX86 $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)

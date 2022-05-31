@@ -307,6 +307,7 @@ methodSpecHandler_prestate opts sc cc args cs =
               { MS.conditionLoc = cs ^. MS.csLoc
               , MS.conditionTags = mempty
               , MS.conditionType = "formal argument matching"
+              , MS.conditionContext = ""
               }
 
      sequence_ [ matchArg opts sc cc cs PreState md x y z | (x, y, z) <- xs]
@@ -410,6 +411,7 @@ enforceDisjointness cc loc ss =
               { MS.conditionLoc = loc
               , MS.conditionTags = mempty
               , MS.conditionType = "memory region disjointness"
+              , MS.conditionContext = ""
               }
      -- Ensure that all regions are disjoint from each other.
      sequence_

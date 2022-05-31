@@ -56,6 +56,7 @@ module SAWScript.Crucible.LLVM.Override
   , enableSMTArrayMemoryModel
   ) where
 
+import           Control.Lens ( _2 )
 import           Control.Lens.At
 import           Control.Lens.Each
 import           Control.Lens.Fold
@@ -69,6 +70,7 @@ import           Control.Monad.Except
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_, toList)
 import           Data.List
+import           Data.IORef (IORef, modifyIORef)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Maybe
@@ -145,7 +147,8 @@ data OverrideWithPreconditions arch =
   OverrideWithPreconditions
     { -- TODO: should probably modify this to also carry along the
       -- `ConditionMetadata` as well
-      _owpPreconditions :: [LabeledPred Sym] -- ^ c.f. '_osAsserts'
+      _owpPreconditions :: [(MS.ConditionMetadata, LabeledPred Sym)]
+         -- ^ c.f. '_osAsserts'
     , _owpMethodSpec :: MS.CrucibleMethodSpecIR (LLVM arch)
     , owpState :: OverrideState (LLVM arch)
     }
@@ -266,7 +269,7 @@ partitionOWPsConcrete :: forall arch.
   [OverrideWithPreconditions arch] ->
   IO ([OverrideWithPreconditions arch], [OverrideWithPreconditions arch], [OverrideWithPreconditions arch])
 partitionOWPsConcrete sym =
-  let traversal = owpPreconditions . each . W4.labeledPred
+  let traversal = owpPreconditions . each . _2 . W4.labeledPred
   in W4.partitionByPredsM (Just sym) $
        foldlMOf traversal (W4.andPred sym) (W4.truePred sym)
 
@@ -291,10 +294,10 @@ findFalsePreconditions ::
   OnlineSolver solver =>
   Backend solver ->
   OverrideWithPreconditions arch ->
-  IO [LabeledPred Sym]
+  IO [(MS.ConditionMetadata, LabeledPred Sym)]
 findFalsePreconditions bak owp =
   fromMaybe [] . Map.lookup (Crucible.NoBranch False) <$>
-    partitionBySymbolicPreds bak (view W4.labeledPred) (owp ^. owpPreconditions)
+    partitionBySymbolicPreds bak (view (_2 . W4.labeledPred)) (owp ^. owpPreconditions)
 
 -- | Is this group of predicates collectively unsatisfiable?
 unsatPreconditions ::
@@ -331,7 +334,7 @@ ppFailure owp false =
 ppConcreteFailure :: OverrideWithPreconditions arch -> PP.Doc ann
 ppConcreteFailure owp =
   let (_, false, _) =
-        W4.partitionLabeledPreds (Proxy :: Proxy Sym) (owp ^. owpPreconditions)
+        W4.partitionLabeledPreds (Proxy :: Proxy Sym) (map snd (owp ^. owpPreconditions))
   in ppFailure owp false
 
 -- | Print a message about symbolic failure of an override's preconditions
@@ -399,16 +402,17 @@ methodSpecHandler ::
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
-  W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
+  IORef MetadataMap ->
   [MS.CrucibleMethodSpecIR (LLVM arch)]
     {- ^ specification for current function override  -} ->
   Crucible.FnHandle args ret {- ^ the handle for this function -} ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp args ret
      (Crucible.RegValue Sym ret)
-methodSpecHandler opts sc cc top_loc css h =
+methodSpecHandler opts sc cc mdMap css h =
   ccWithBackend cc $ \bak -> do
   let sym = backendGetSym bak
   let fnName = head css ^. csName
+  call_loc <- liftIO $ W4.getCurrentProgramLoc sym
   liftIO $ printOutLn opts Info $ unwords
     [ "Matching"
     , show (length css)
@@ -455,17 +459,110 @@ methodSpecHandler opts sc cc top_loc css h =
               PP.vcat ["All overrides failed during structural matching:", PP.vcat msgs]
           (_, ss) -> liftIO $
             forM ss $ \(cs,st) ->
-              return (OverrideWithPreconditions (map snd (st^.osAsserts)) cs st)
+              return (OverrideWithPreconditions (st^.osAsserts) cs st)
 
   -- Now we do a second phase of simple compatibility checking: we check to see
   -- if any of the preconditions of the various overrides are concretely false.
   -- If so, there's no use in branching on them with @symbolicBranches@.
   (true, false, unknown) <- liftIO $ partitionOWPsConcrete sym branches
 
+  -- Check if there is only a single override branch that might apply at this
+  -- point.  If so, commit to it and handle that case specially. If there is
+  -- more than one (or zero) branches that might apply, go to the general case.
+  case true ++ unknown of
+    [singleBranch] -> handleSingleOverrideBranch opts sc cc call_loc mdMap css h singleBranch
+    _ -> handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
+
+handleSingleOverrideBranch :: forall arch rtp args ret.
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
+  Options                  {- ^ output/verbosity options                     -} ->
+  SharedContext            {- ^ context for constructing SAW terms           -} ->
+  LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
+  W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
+  IORef MetadataMap ->
+  [MS.CrucibleMethodSpecIR (LLVM arch)]
+    {- ^ specification for current function override  -} ->
+  Crucible.FnHandle args ret {- ^ the handle for this function -} ->
+  OverrideWithPreconditions arch ->
+  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp args ret
+     (Crucible.RegValue Sym ret)
+handleSingleOverrideBranch opts sc cc call_loc mdMap css h (OverrideWithPreconditions preconds cs st) =
+  ccWithBackend cc $ \bak -> do
+  let sym = backendGetSym bak
+  let fnName = cs ^. csName
+  let retTy = Crucible.handleReturnType h
+
+  liftIO $ printOutLn opts Info $ unwords
+    [ "Found a single potential override for"
+    , fnName
+    ]
+
+  -- First assert the override preconditions
+  liftIO $ forM_ preconds $ \(md,W4.LabeledPred p r) ->
+    do (ann,p') <- W4.annotateTerm sym p
+       let caller = unwords ["Override called from:", show (W4.plSourceLoc call_loc)]
+       let md' = md{ MS.conditionContext = MS.conditionContext md ++ caller }
+       modifyIORef mdMap (Map.insert ann md')
+       Crucible.addAssertion bak (Crucible.LabeledPred p' r)
+
+  g <- Crucible.readGlobals
+  res <- liftIO $ runOverrideMatcher sym g
+     (st^.setupValueSub)
+     (st^.termSub)
+     (st^.osFree)
+     (st^.osLocation)
+     (methodSpecHandler_poststate opts sc cc retTy cs)
+  case res of
+    Left (OF loc rsn)  ->
+      -- TODO, better pretty printing for reasons
+      liftIO
+        $ Crucible.abortExecBecause
+        $ Crucible.AssertionFailure
+        $ Crucible.SimError loc
+        $ Crucible.AssertFailureSimError "assumed false" (show rsn)
+    Right (ret,st') ->
+      do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
+           Crucible.addAssumption bak
+            $ Crucible.GenericAssumption (st^.osLocation) "override postcondition" asum
+         Crucible.writeGlobals (st'^.overrideGlobals)
+         Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
+
+handleOverrideBranches :: forall arch rtp args ret.
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
+  Options                  {- ^ output/verbosity options                     -} ->
+  SharedContext            {- ^ context for constructing SAW terms           -} ->
+  LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
+  W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
+  [MS.CrucibleMethodSpecIR (LLVM arch)]
+    {- ^ specification for current function override  -} ->
+  Crucible.FnHandle args ret {- ^ the handle for this function -} ->
+  [OverrideWithPreconditions arch] ->
+  ([OverrideWithPreconditions arch],[OverrideWithPreconditions arch],[OverrideWithPreconditions arch]) ->
+  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp args ret
+     (Crucible.RegValue Sym ret)
+
+handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown) =
+  ccWithBackend cc $ \bak -> do
+  let sym = backendGetSym bak
+  let fnName = head css ^. csName
+  Crucible.RegMap args <- Crucible.getOverrideArgs
+
   -- Collapse the preconditions to a single predicate
   branches' <- liftIO $ forM (true ++ unknown) $
     \(OverrideWithPreconditions preconds cs st) ->
-      W4.andAllOf sym (folded . W4.labeledPred) preconds <&>
+      W4.andAllOf sym (folded . _2 . W4.labeledPred) preconds <&>
         \precond -> (precond, cs, st)
 
   -- Now use crucible's symbolic branching machinery to select between the branches.
@@ -593,12 +690,12 @@ methodSpecHandler opts sc cc top_loc css h =
 
                   unsat <-
                     filterM
-                      (unsatPreconditions bak (owpPreconditions . each . W4.labeledPred))
+                      (unsatPreconditions bak (owpPreconditions . each . _2 . W4.labeledPred))
                       branches
 
                   Crucible.addFailedAssertion bak
                     (Crucible.GenericSimError (e prettyArgs symFalse unsat))
-              , Just (W4.plSourceLoc top_loc)
+              , Just (W4.plSourceLoc call_loc)
               )
          ]))
      (Crucible.RegMap args)
@@ -645,6 +742,7 @@ methodSpecHandler_prestate opts sc cc args cs =
                 { MS.conditionLoc  = cs ^. MS.csLoc
                 , MS.conditionTags = mempty -- TODO? should `execute_func` track tags?
                 , MS.conditionType = "formal argument matching"
+                , MS.conditionContext = ""
                 }
        sequence_ [ matchArg opts sc cc cs PreState md x y z | (x, y, z) <- xs]
 
@@ -928,6 +1026,7 @@ enforceDisjointAllocSpec sc cc sym loc
               { MS.conditionLoc = loc
               , MS.conditionTags = mempty
               , MS.conditionType = "memory disjointness"
+              , MS.conditionContext = ""
               }
      let msg =
            "Memory regions not disjoint:"
@@ -962,6 +1061,7 @@ enforceDisjointAllocGlobal sym loc
               { MS.conditionLoc  = loc
               , MS.conditionTags = mempty
               , MS.conditionType = "global region disjointness"
+              , MS.conditionContext = ""
               }
      addAssert c md $ Crucible.SimError loc $
        Crucible.AssertFailureSimError msg ""

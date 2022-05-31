@@ -284,6 +284,7 @@ data ConditionMetadata =
   { conditionLoc  :: ProgramLoc
   , conditionTags :: Set String
   , conditionType :: String
+  , conditionContext :: String
   }
  deriving (Show, Eq, Ord)
 
