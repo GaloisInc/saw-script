@@ -1,6 +1,8 @@
 
 module SHA512 where
 
+import SpecPrims
+
 // ============================================================================
 // Definitions from cryptol-specs/Primitive/Keyless/Hash/SHA512.cry, with some
 // type annotations added to SIGMA_0, SIGMA_1, sigma_0, and sigma_1 to get
@@ -83,3 +85,70 @@ round_16_80_spec i j a b c d e f g h X T1 =
         X' = update X (j && 15) T1'
         (a', b', c', d', e', f', g', h', T1'') =
           round_00_15_spec (i + j) a b c d e f g h T1'
+
+processBlock_spec : [w] -> [w] -> [w] -> [w] -> [w] -> [w] -> [w] -> [w] ->
+                    [16][w] ->
+                    ([w], [w], [w], [w], [w], [w], [w], [w], [16][w])
+processBlock_spec a b c d e f g h in =
+  processBlock_loop_spec 16 aF bF cF dF eF fF gF hF X T1 in
+  where (a0,b0,c0,d0,e0,f0,g0,h0,_)  = round_00_15_spec  0 a  b  c  d  e  f  g  h  (in @ ( 0 : [w]))
+        (h1,a1,b1,c1,d1,e1,f1,g1,_)  = round_00_15_spec  1 h0 a0 b0 c0 d0 e0 f0 g0 (in @ ( 1 : [w]))
+        (g2,h2,a2,b2,c2,d2,e2,f2,_)  = round_00_15_spec  2 g1 h1 a1 b1 c1 d1 e1 f1 (in @ ( 2 : [w]))
+        (f3,g3,h3,a3,b3,c3,d3,e3,_)  = round_00_15_spec  3 f2 g2 h2 a2 b2 c2 d2 e2 (in @ ( 3 : [w]))
+        (e4,f4,g4,h4,a4,b4,c4,d4,_)  = round_00_15_spec  4 e3 f3 g3 h3 a3 b3 c3 d3 (in @ ( 4 : [w]))
+        (d5,e5,f5,g5,h5,a5,b5,c5,_)  = round_00_15_spec  5 d4 e4 f4 g4 h4 a4 b4 c4 (in @ ( 5 : [w]))
+        (c6,d6,e6,f6,g6,h6,a6,b6,_)  = round_00_15_spec  6 c5 d5 e5 f5 g5 h5 a5 b5 (in @ ( 6 : [w]))
+        (b7,c7,d7,e7,f7,g7,h7,a7,_)  = round_00_15_spec  7 b6 c6 d6 e6 f6 g6 h6 a6 (in @ ( 7 : [w]))
+        (a8,b8,c8,d8,e8,f8,g8,h8,_)  = round_00_15_spec  8 a7 b7 c7 d7 e7 f7 g7 h7 (in @ ( 8 : [w]))
+        (h9,a9,b9,c9,d9,e9,f9,g9,_)  = round_00_15_spec  9 h8 a8 b8 c8 d8 e8 f8 g8 (in @ ( 9 : [w]))
+        (gA,hA,aA,bA,cA,dA,eA,fA,_)  = round_00_15_spec 10 g9 h9 a9 b9 c9 d9 e9 f9 (in @ (10 : [w]))
+        (fB,gB,hB,aB,bB,cB,dB,eB,_)  = round_00_15_spec 11 fA gA hA aA bA cA dA eA (in @ (11 : [w]))
+        (eC,fC,gC,hC,aC,bC,cC,dC,_)  = round_00_15_spec 12 eB fB gB hB aB bB cB dB (in @ (12 : [w]))
+        (dD,eD,fD,gD,hD,aD,bD,cD,_)  = round_00_15_spec 13 dC eC fC gC hC aC bC cC (in @ (13 : [w]))
+        (cE,dE,eE,fE,gE,hE,aE,bE,_)  = round_00_15_spec 14 cD dD eD fD gD hD aD bD (in @ (14 : [w]))
+        (bF,cF,dF,eF,fF,gF,hF,aF,T1) = round_00_15_spec 15 bE cE dE eE fE gE hE aE (in @ (15 : [w]))
+        X = [in @ ( 0 : [w]), in @ ( 1 : [w]), in @ ( 2 : [w]), in @ ( 3 : [w]),
+             in @ ( 4 : [w]), in @ ( 5 : [w]), in @ ( 6 : [w]), in @ ( 7 : [w]),
+             in @ ( 8 : [w]), in @ ( 9 : [w]), in @ (10 : [w]), in @ (11 : [w]),
+             in @ (12 : [w]), in @ (13 : [w]), in @ (14 : [w]), in @ (15 : [w])]
+
+processBlock_loop_spec : [w] ->
+                         [w] -> [w] -> [w] -> [w] -> [w] -> [w] -> [w] -> [w] ->
+                         [16][w] -> [w] -> [16][w] ->
+                         ([w], [w], [w], [w], [w], [w], [w], [w], [16][w])
+processBlock_loop_spec i a b c d e f g h X T1 in =
+  if i < 80 then processBlock_loop_spec (i+16) aF bF cF dF eF fF gF hF XF T1F in
+            else (a,b,c,d,e,f,g,h,in)
+  where (a0,b0,c0,d0,e0,f0,g0,h0,X0,_,_,T10) = round_16_80_spec i  0 a  b  c  d  e  f  g  h  X  T1 
+        (h1,a1,b1,c1,d1,e1,f1,g1,X1,_,_,T11) = round_16_80_spec i  1 h0 a0 b0 c0 d0 e0 f0 g0 X0 T10
+        (g2,h2,a2,b2,c2,d2,e2,f2,X2,_,_,T12) = round_16_80_spec i  2 g1 h1 a1 b1 c1 d1 e1 f1 X1 T11
+        (f3,g3,h3,a3,b3,c3,d3,e3,X3,_,_,T13) = round_16_80_spec i  3 f2 g2 h2 a2 b2 c2 d2 e2 X2 T12
+        (e4,f4,g4,h4,a4,b4,c4,d4,X4,_,_,T14) = round_16_80_spec i  4 e3 f3 g3 h3 a3 b3 c3 d3 X3 T13
+        (d5,e5,f5,g5,h5,a5,b5,c5,X5,_,_,T15) = round_16_80_spec i  5 d4 e4 f4 g4 h4 a4 b4 c4 X4 T14
+        (c6,d6,e6,f6,g6,h6,a6,b6,X6,_,_,T16) = round_16_80_spec i  6 c5 d5 e5 f5 g5 h5 a5 b5 X5 T15
+        (b7,c7,d7,e7,f7,g7,h7,a7,X7,_,_,T17) = round_16_80_spec i  7 b6 c6 d6 e6 f6 g6 h6 a6 X6 T16
+        (a8,b8,c8,d8,e8,f8,g8,h8,X8,_,_,T18) = round_16_80_spec i  8 a7 b7 c7 d7 e7 f7 g7 h7 X7 T17
+        (h9,a9,b9,c9,d9,e9,f9,g9,X9,_,_,T19) = round_16_80_spec i  9 h8 a8 b8 c8 d8 e8 f8 g8 X8 T18
+        (gA,hA,aA,bA,cA,dA,eA,fA,XA,_,_,T1A) = round_16_80_spec i 10 g9 h9 a9 b9 c9 d9 e9 f9 X9 T19
+        (fB,gB,hB,aB,bB,cB,dB,eB,XB,_,_,T1B) = round_16_80_spec i 11 fA gA hA aA bA cA dA eA XA T1A
+        (eC,fC,gC,hC,aC,bC,cC,dC,XC,_,_,T1C) = round_16_80_spec i 12 eB fB gB hB aB bB cB dB XB T1B
+        (dD,eD,fD,gD,hD,aD,bD,cD,XD,_,_,T1D) = round_16_80_spec i 13 dC eC fC gC hC aC bC cC XC T1C
+        (cE,dE,eE,fE,gE,hE,aE,bE,XE,_,_,T1E) = round_16_80_spec i 14 cD dD eD fD gD hD aD bD XD T1D
+        (bF,cF,dF,eF,fF,gF,hF,aF,XF,_,_,T1F) = round_16_80_spec i 15 bE cE dE eE fE gE hE aE XE T1E
+
+processBlocks_spec : {n} Literal n [64] => [8][w] -> [16*n][w] ->
+                     ([8][w], [16*n][w])
+processBlocks_spec = processBlocks_loop_spec 0 `n
+
+processBlocks_loop_spec : {n} Literal n [64] => [w] -> [w] -> [8][w] ->
+                          [16*n][w] -> ([8][w], [16*n][w])
+processBlocks_loop_spec i j state in = invariantHint (i + j == `n) (
+  if j != 0 then processBlocks_loop_spec (i+1) (j-1) state' in
+            else (state, in))
+  where (a,b,c,d,e,f,g,h) = (state @ ( 0 : [w]), state @ ( 1 : [w]),
+                             state @ ( 2 : [w]), state @ ( 3 : [w]),
+                             state @ ( 4 : [w]), state @ ( 5 : [w]),
+                             state @ ( 6 : [w]), state @ ( 7 : [w]))
+        in_i = split in @ i
+        (a',b',c',d',e',f',g',h',_) = processBlock_spec a b c d e f g h in_i
+        state' = [a', b', c', d', e', f', g', h']
