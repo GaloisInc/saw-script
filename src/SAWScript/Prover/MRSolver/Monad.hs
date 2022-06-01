@@ -919,8 +919,8 @@ mrGetFunAssump nm = Map.lookup nm <$> mrFunAssumps
 -- are 'Term's that can have the current uvars free
 withFunAssump :: FunName -> [Term] -> NormComp -> MRM a -> MRM a
 withFunAssump fname args rhs m =
-  do mrDebugPPPrefixSep 1 "withFunAssump" (FunBind
-                                           fname args CompFunReturn) "|=" rhs
+  do k <- CompFunReturn <$> Type <$> mrFunOutType fname args
+     mrDebugPPPrefixSep 1 "withFunAssump" (FunBind fname args k) "|=" rhs
      ctx <- mrUVarCtx
      assumps <- mrFunAssumps
      let assump = FunAssump ctx args (RewriteFunAssump rhs)
@@ -995,6 +995,12 @@ withDataTypeAssump x assump m =
 -- | Get the 'DataTypeAssump' associated to the given term, if one exists
 mrGetDataTypeAssump :: Term -> MRM (Maybe DataTypeAssump)
 mrGetDataTypeAssump x = HashMap.lookup x <$> mrDataTypeAssumps
+
+-- | Convert a 'FunAssumpRHS' to a 'NormComp'
+mrFunAssumpRHSAsNormComp :: FunAssumpRHS -> MRM NormComp
+mrFunAssumpRHSAsNormComp (OpaqueFunAssump f args) =
+  FunBind f args <$> CompFunReturn <$> Type <$> mrFunOutType f args
+mrFunAssumpRHSAsNormComp (RewriteFunAssump rhs) = return rhs
 
 -- | Print a 'String' if the debug level is at least the supplied 'Int'
 debugPrint :: Int -> String -> MRM ()

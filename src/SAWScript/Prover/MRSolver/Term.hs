@@ -131,21 +131,21 @@ data CompFun
      -- | An arbitrary term
   = CompFunTerm Term
     -- | A special case for the term @\ (x:a) -> returnM a x@
-  | CompFunReturn
+  | CompFunReturn Type
     -- | The monadic composition @f >=> g@
   | CompFunComp CompFun CompFun
   deriving (Generic, Show)
 
 -- | Compose two 'CompFun's, simplifying if one is a 'CompFunReturn'
 compFunComp :: CompFun -> CompFun -> CompFun
-compFunComp CompFunReturn f = f
-compFunComp f CompFunReturn = f
+compFunComp (CompFunReturn _) f = f
+compFunComp f (CompFunReturn _) = f
 compFunComp f g = CompFunComp f g
 
 -- | If a 'CompFun' contains an explicit lambda-abstraction, then return the
 -- textual name bound by that lambda
 compFunVarName :: CompFun -> Maybe LocalName
-compFunVarName (CompFunTerm (asLambda -> Just (nm, _, _))) = Just nm
+compFunVarName (CompFunTerm t) = asLambdaName t
 compFunVarName (CompFunComp f _) = compFunVarName f
 compFunVarName _ = Nothing
 
@@ -154,12 +154,8 @@ compFunVarName _ = Nothing
 compFunInputType :: CompFun -> Maybe Type
 compFunInputType (CompFunTerm (asLambda -> Just (_, tp, _))) = Just $ Type tp
 compFunInputType (CompFunComp f _) = compFunInputType f
+compFunInputType (CompFunReturn t) = Just t
 compFunInputType _ = Nothing
-
--- | Returns true iff the given 'CompFun' is 'CompFunReturn'
-isCompFunReturn :: CompFun -> Bool
-isCompFunReturn CompFunReturn = True
-isCompFunReturn _ = False
 
 -- | A computation of type @CompM a@ for some @a@
 data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
@@ -223,6 +219,11 @@ asNonBVVecVectorType :: Recognizer Term (Term, Term)
 asNonBVVecVectorType (asBVVecType -> Just _) = Nothing
 asNonBVVecVectorType t = asVectorType t
 
+-- | Like 'asLambda', but only return's the lambda-bound variable's 'LocalName'
+asLambdaName :: Recognizer Term LocalName
+asLambdaName (asLambda -> Just (nm, _, _)) = Just nm
+asLambdaName _ = Nothing
+
 
 ----------------------------------------------------------------------
 -- * Mr Solver Environments
@@ -232,11 +233,6 @@ asNonBVVecVectorType t = asVectorType t
 -- it is an opaque 'FunAsump', or a 'NormComp', if it is a rewrite 'FunAssump'
 data FunAssumpRHS = OpaqueFunAssump FunName [Term]
                   | RewriteFunAssump NormComp
-
--- | Convert a 'FunAssumpRHS' to a 'NormComp'
-funAssumpRHSAsNormComp :: FunAssumpRHS -> NormComp
-funAssumpRHSAsNormComp (OpaqueFunAssump f args) = FunBind f args CompFunReturn
-funAssumpRHSAsNormComp (RewriteFunAssump rhs) = rhs
 
 -- | An assumption that a named function refines some specification. This has
 -- the form
@@ -490,7 +486,8 @@ instance PrettyInCtx Comp where
 
 instance PrettyInCtx CompFun where
   prettyInCtx (CompFunTerm t) = prettyInCtx t
-  prettyInCtx CompFunReturn = return "returnM"
+  prettyInCtx (CompFunReturn t) =
+    prettyAppList [return "returnM", parens <$> prettyInCtx t]
   prettyInCtx (CompFunComp f g) =
     prettyAppList [prettyInCtx f, return ">=>", prettyInCtx g]
 
@@ -527,7 +524,7 @@ instance PrettyInCtx NormComp where
   prettyInCtx (ForallM tp f) =
     prettyAppList [return "forallM", prettyInCtx tp, return "_",
                    parens <$> prettyInCtx f]
-  prettyInCtx (FunBind f args CompFunReturn) =
+  prettyInCtx (FunBind f args (CompFunReturn _)) =
     prettyTermApp (funNameTerm f) args
   prettyInCtx (FunBind f [] k) =
     prettyAppList [prettyInCtx f, return ">>=", prettyInCtx k]
