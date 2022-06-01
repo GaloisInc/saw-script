@@ -29,5 +29,5 @@ monadify_term {{ processBlock_spec }};
 
 mr_solver_prove round_00_15 {{ round_00_15_spec }};
 mr_solver_prove round_16_80 {{ round_16_80_spec }};
-// mr_solver_assume processBlock {{ processBlock_spec }};
+mr_solver_prove processBlock {{ processBlock_spec }};
 // mr_solver_prove processBlocks {{ processBlocks_spec }};

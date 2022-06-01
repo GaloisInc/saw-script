@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : SAWScript.Prover.MRSolver.SMT
@@ -499,17 +500,6 @@ mrProveRelH' _ _ (asBoolType -> Just _) (asBoolType -> Just _) t1 t2 =
 mrProveRelH' _ _ (asIntegerType -> Just _) (asIntegerType -> Just _) t1 t2 =
   mrProveEqSimple (liftSC2 scIntEq) t1 t2
 
--- For pair types, prove both the left and right projections are related
-mrProveRelH' _ het (asPairType -> Just (tpL1, tpR1))
-                   (asPairType -> Just (tpL2, tpR2)) t1 t2 =
-  do t1L <- liftSC1 scPairLeft t1
-     t2L <- liftSC1 scPairLeft t2
-     t1R <- liftSC1 scPairRight t1
-     t2R <- liftSC1 scPairRight t2
-     condL <- mrProveRelH het tpL1 tpL2 t1L t2L
-     condR <- mrProveRelH het tpR1 tpR2 t1R t2R
-     andTermInCtx condL condR
-
 -- For BVVec types, prove all projections are related by quantifying over an
 -- index variable and proving the projections at that index are related
 mrProveRelH' _ het tp1@(asBVVecType -> Just (n1, len1, tpA1))
@@ -559,42 +549,60 @@ mrProveRelH' _ het tp1@(asNonBVVecVectorType -> Just (m1, tpA1))
      t2' <- mrGenBVVecFromVec m2 tpA2 t2 "mrProveRelH (BVVec/BVVec)" n len
      mrProveRelH het tp1' tp2' t1' t2'
 
--- If our relation is heterogeneous and we have a BVVec on one side and a
--- non-BVVec vector on the other, wrap the non-BVVec vector term in
--- genBVVecFromVec and recurse
-mrProveRelH' _ True tp1@(asBVVecType -> Just (n, len, _))
-                    tp2@(asNonBVVecVectorType -> Just (m, tpA2)) t1 t2 =
-  do m' <- mrBvToNat n len
-     ms_are_eq <- mrConvertible m' m
-     if ms_are_eq then return () else
-       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
-     len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
-     tp2' <- liftSC2 scVecType len' tpA2
-     err_str_tm <- liftSC1 scString "FIXME: mrProveRelH error"
-     err_tm <- liftSC2 scGlobalApply "Prelude.error" [tpA2, err_str_tm]
-     t2'  <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
-                                   [m, tpA2, t2, err_tm, n, len]
-     -- mrDebugPPPrefixSep 2 "mrProveRelH on BVVec/Vec: " t1 "and" t2'
-     mrProveRelH True tp1 tp2' t1 t2'
-mrProveRelH' _ True tp1@(asNonBVVecVectorType -> Just (m, tpA1))
-                    tp2@(asBVVecType -> Just (n, len, _)) t1 t2 =
-  do m' <- mrBvToNat n len
-     ms_are_eq <- mrConvertible m' m
-     if ms_are_eq then return () else
-       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
-     len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
-     tp1' <- liftSC2 scVecType len' tpA1
-     err_str_tm <- liftSC1 scString "FIXME: mrProveRelH error"
-     err_tm <- liftSC2 scGlobalApply "Prelude.error" [tpA1, err_str_tm]
-     t1'  <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
-                                   [m, tpA1, t1, err_tm, n, len]
-     -- mrDebugPPPrefixSep 2 "mrProveRelH on Vec/BVVec: " t1' "and" t2
-     mrProveRelH True tp1' tp2 t1' t2
+mrProveRelH' _ het tp1 tp2 t1 t2 = (het,) <$> matchHet tp1 tp2 >>= \case
 
--- As a fallback, for types we can't handle, just check convertibility
-mrProveRelH' _ _ tp1 tp2 t1 t2 =
-  do success <- mrConvertible t1 t2
-     if success then return () else
-       mrDebugPPPrefixSep 2 "mrProveRelH could not match types: " tp1 "and" tp2 >>
-       mrDebugPPPrefixSep 2 "and could not prove convertible: " t1 "and" t2
-     TermInCtx [] <$> liftSC1 scBool success
+  -- If our relation is heterogeneous and we have a bitvector on one side and
+  -- a Num on the other, ensure that the Num term is TCNum of some Nat, wrap
+  -- the Nat with bvNat, and recurse
+  (True, Just (HetBVNum n))
+    | Just (primName -> "Cryptol.TCNum", [t2']) <- asCtor t2 ->
+    do n_tm <- liftSC1 scNat n
+       t2'' <- liftSC2 scGlobalApply "Prelude.bvNat" [n_tm, t2']
+       mrProveRelH True tp1 tp1 t1 t2''
+    | otherwise -> throwMRFailure (TermsNotEq t1 t2)
+  (True, Just (HetNumBV n))
+    | Just (primName -> "Cryptol.TCNum", [t1']) <- asCtor t1 ->
+    do n_tm <- liftSC1 scNat n
+       t1'' <- liftSC2 scGlobalApply "Prelude.bvNat" [n_tm, t1']
+       mrProveRelH True tp1 tp1 t1'' t2
+    | otherwise -> throwMRFailure (TermsNotEq t1 t2)
+
+  -- If our relation is heterogeneous and we have a BVVec on one side and a
+  -- non-BVVec vector on the other, wrap the non-BVVec vector term in
+  -- genBVVecFromVec and recurse
+  (True, Just (HetBVVecVec (n, len, _) (m, tpA2))) ->
+    do len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
+       tp2' <- liftSC2 scVecType len' tpA2
+       t2' <- mrGenBVVecFromVec m tpA2 t2 "mrProveRelH (BVVec/Vec)" n len
+       -- mrDebugPPPrefixSep 2 "mrProveRelH on BVVec/Vec: " t1 "an`d" t2'
+       mrProveRelH True tp1 tp2' t1 t2'
+  (True, Just (HetVecBVVec (m, tpA1) (n, len, _))) ->
+    do len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
+       tp1' <- liftSC2 scVecType len' tpA1
+       t1' <- mrGenBVVecFromVec m tpA1 t1 "mrProveRelH (Vec/BVVec)" n len
+       -- mrDebugPPPrefixSep 2 "mrProveRelH on Vec/BVVec: " t1' "and" t2
+       mrProveRelH True tp1' tp2 t1' t2
+
+  -- For pair types, prove both the left and right projections are related
+  (_, Just (HetPair (tpL1, tpR1) (tpL2, tpR2))) ->
+    do t1L <- liftSC1 scPairLeft t1
+       t2L <- liftSC1 scPairLeft t2
+       t1R <- liftSC1 scPairRight t1
+       t2R <- liftSC1 scPairRight t2
+       condL <- mrProveRelH het tpL1 tpL2 t1L t2L
+       condR <- mrProveRelH het tpR1 tpR2 t1R t2R
+       liftTermInCtx2 scAnd condL condR
+
+  -- As a fallback, for types we can't handle, just check convertibility (we do
+  -- this in two cases to make sure we catch any missed 'HetRelated' patterns)
+  (True, Nothing) ->
+    do success <- mrConvertible t1 t2
+       if success then return () else
+         mrDebugPPPrefixSep 2 "mrProveRel could not match types: " tp1 "and" tp2 >>
+         mrDebugPPPrefixSep 2 "and could not prove convertible: " t1 "and" t2
+       TermInCtx [] <$> liftSC1 scBool success
+  (False, _)->
+    do success <- mrConvertible t1 t2
+       if success then return () else
+         mrDebugPPPrefixSep 2 "mrProveEq could not prove convertible: " t1 "and" t2
+       TermInCtx [] <$> liftSC1 scBool success

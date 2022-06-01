@@ -59,13 +59,14 @@ import SAWScript.Prover.MRSolver.Term
 -- | The context in which a failure occurred
 data FailCtx
   = FailCtxRefines NormComp NormComp
+  | FailCtxCoIndHyp CoIndHyp
   | FailCtxMNF Term
   deriving Show
 
 -- | That's MR. Failure to you
 data MRFailure
   = TermsNotRel Bool Term Term
-  | TypesNotEq Type Type
+  | TypesNotRel Bool Type Type
   | CompsDoNotRefine NormComp NormComp
   | ReturnNotError Term
   | FunsNotEq FunName FunName
@@ -88,6 +89,9 @@ data MRFailure
 
 pattern TermsNotEq :: Term -> Term -> MRFailure
 pattern TermsNotEq t1 t2 = TermsNotRel False t1 t2
+
+pattern TypesNotEq :: Type -> Type -> MRFailure
+pattern TypesNotEq t1 t2 = TypesNotRel False t1 t2
 
 -- | Remove the context from a 'MRFailure', i.e. remove all applications of the 
 -- 'MRFailureLocalVar' and 'MRFailureCtx' constructors
@@ -118,6 +122,9 @@ instance PrettyInCtx FailCtx where
   prettyInCtx (FailCtxRefines m1 m2) =
     group <$> nest 2 <$>
     ppWithPrefixSep "When proving refinement:" m1 "|=" m2
+  prettyInCtx (FailCtxCoIndHyp hyp) =
+    group <$> nest 2 <$>
+    ppWithPrefix "When doing co-induction with hypothesis:" hyp
   prettyInCtx (FailCtxMNF t) =
     group <$> nest 2 <$> vsepM [return "When normalizing computation:",
                                 prettyInCtx t]
@@ -127,8 +134,10 @@ instance PrettyInCtx MRFailure where
     ppWithPrefixSep "Could not prove terms equal:" t1 "and" t2
   prettyInCtx (TermsNotRel True t1 t2) =
     ppWithPrefixSep "Could not prove terms heterogeneously related:" t1 "and" t2
-  prettyInCtx (TypesNotEq tp1 tp2) =
+  prettyInCtx (TypesNotRel False tp1 tp2) =
     ppWithPrefixSep "Types not equal:" tp1 "and" tp2
+  prettyInCtx (TypesNotRel True tp1 tp2) =
+    ppWithPrefixSep "Types not heterogeneously related:" tp1 "and" tp2
   prettyInCtx (CompsDoNotRefine m1 m2) =
     ppWithPrefixSep "Could not prove refinement: " m1 "|=" m2
   prettyInCtx (ReturnNotError t) =
@@ -236,6 +245,28 @@ coIndHypArg :: CoIndHyp -> Either Int Int -> Term
 coIndHypArg hyp (Left i) = (coIndHypLHS hyp) !! i
 coIndHypArg hyp (Right i) = (coIndHypRHS hyp) !! i
 
+-- | Set the @i@th argument on either the left- or right-hand side of a
+-- coinductive hypothesis to the given value
+coIndHypSetArg :: CoIndHyp -> Either Int Int -> Term -> CoIndHyp
+coIndHypSetArg hyp@(CoIndHyp {..}) (Left i) x =
+  hyp { coIndHypLHS = take i coIndHypLHS ++ x : drop (i+1) coIndHypLHS }
+coIndHypSetArg hyp@(CoIndHyp {..}) (Right i) x =
+  hyp { coIndHypRHS = take i coIndHypRHS ++ x : drop (i+1) coIndHypRHS }
+
+-- | Set all of the arguments in the given list to the given value in a
+-- coinductive hypothesis, using 'coIndHypSetArg'
+coIndHypSetArgs :: CoIndHyp -> [Either Int Int] -> Term -> CoIndHyp
+coIndHypSetArgs hyp specs x =
+  foldl' (\hyp' spec -> coIndHypSetArg hyp' spec x) hyp specs
+
+-- | Add a variable to the context of a coinductive hypothesis, returning the
+-- updated coinductive hypothesis and a 'Term' which is the new variable
+coIndHypWithVar :: CoIndHyp -> LocalName -> Type -> MRM (CoIndHyp, Term)
+coIndHypWithVar (CoIndHyp ctx f1 f2 args1 args2 invar1 invar2) nm (Type tp) =
+  do var <- liftSC1 scLocalVar 0
+     (args1', args2') <- liftTermLike 0 1 (args1, args2)
+     return (CoIndHyp (ctx ++ [(nm,tp)]) f1 f2 args1' args2' invar1 invar2, var)
+  
 -- | A map from pairs of function names to co-inductive hypotheses over those
 -- names
 type CoIndHyps = Map (FunName, FunName) CoIndHyp
@@ -441,6 +472,59 @@ liftSC5 f a b c d e = mrSC >>= \sc -> liftIO (f sc a b c d e)
 
 
 ----------------------------------------------------------------------
+-- * Relating Types Heterogeneously
+----------------------------------------------------------------------
+
+-- | A datatype encapsulating all the way in which we consider two types to
+-- be heterogeneously related: either one is a @Num@ and the other is a @Nat@,
+-- one is a @BVVec@ and the other is a non-@BVVec@ vector (of the same length,
+-- this is checked in 'matchHet'), or both sides are pairs (whose components
+-- are respectively heterogeneously related, this recursion must be done where
+-- 'matchHet' is used, see 'typesHetRelated', for example)
+data HetRelated = HetBVNum Natural
+                | HetNumBV Natural
+                | HetBVVecVec (Term, Term, Term) (Term, Term)
+                | HetVecBVVec (Term, Term) (Term, Term, Term)
+                | HetPair (Term, Term) (Term, Term)
+
+-- | Check to see if the given types match one of the cases of 'HetRelated'
+matchHet :: Term -> Term -> MRM (Maybe HetRelated)
+matchHet (asBitvectorType -> Just n)
+         (asDataType -> Just (primName -> "Cryptol.Num", _)) =
+  return $ Just $ HetBVNum n
+matchHet (asDataType -> Just (primName -> "Cryptol.Num", _))
+         (asBitvectorType -> Just n) =
+  return $ Just $ HetNumBV n
+matchHet (asBVVecType -> Just (n, len, a))
+         (asNonBVVecVectorType -> Just (m, a')) =
+  do m' <- mrBvToNat n len
+     ms_are_eq <- mrConvertible m' m
+     return $ if ms_are_eq then Just $ HetBVVecVec (n, len, a) (m, a')
+                           else Nothing
+matchHet (asNonBVVecVectorType -> Just (m, a'))
+         (asBVVecType -> Just (n, len, a)) =
+  do m' <- mrBvToNat n len
+     ms_are_eq <- mrConvertible m' m
+     return $ if ms_are_eq then Just $ HetVecBVVec (m, a') (n, len, a)
+                           else Nothing
+matchHet (asPairType -> Just (tpL1, tpR1))
+         (asPairType -> Just (tpL2, tpR2)) =
+  return $ Just $ HetPair (tpL1, tpR1) (tpL2, tpR2)
+matchHet _ _ = return $ Nothing
+
+-- | Return true iff the given types are heterogeneously related
+typesHetRelated :: Term -> Term -> MRM Bool
+typesHetRelated tp1 tp2 = matchHet tp1 tp2 >>= \case
+  Just (HetBVNum _) -> return True
+  Just (HetNumBV _) -> return True
+  Just (HetBVVecVec (_, _, a) (_, a')) -> typesHetRelated a a'
+  Just (HetVecBVVec (_, a') (_, _, a)) -> typesHetRelated a' a
+  Just (HetPair (tpL1, tpR1) (tpL2, tpR2)) ->
+    (&&) <$> typesHetRelated tpL1 tpL2 <*> typesHetRelated tpR1 tpR2
+  Nothing -> mrConvertible tp1 tp2
+
+
+----------------------------------------------------------------------
 -- * Functions for Building Terms
 ----------------------------------------------------------------------
 
@@ -504,6 +588,10 @@ funNameType (GlobalName gd projs) =
 mrApplyAll :: Term -> [Term] -> MRM Term
 mrApplyAll f args = liftSC2 scApplyAllBeta f args
 
+-- | Apply a 'Term' to a single argument and beta-reduce in Mr. Monad
+mrApply :: Term -> Term -> MRM Term
+mrApply f arg = mrApplyAll f [arg]
+
 -- | Like 'scBvNat', but if given a bitvector literal it is converted to a
 -- natural number literal
 mrBvToNat :: Term -> Term -> MRM Term
@@ -565,6 +653,18 @@ uniquifyNames [] _ = []
 uniquifyNames (nm:nms) nms_other =
   let nm' = uniquifyName nm nms_other in
   nm' : uniquifyNames nms (nm' : nms_other)
+
+-- | Build a lambda term with the lifting (in the sense of 'incVars') of an
+-- MR Solver term
+mrLambdaLift :: TermLike tm => [(LocalName,Term)] -> tm ->
+                ([Term] -> tm -> MRM Term) -> MRM Term
+mrLambdaLift [] t f = f [] t
+mrLambdaLift ctx t f =
+  do nms <- uniquifyNames (map fst ctx) <$> map fst <$> mrUVars
+     let ctx' = zipWith (\nm (_,tp) -> (nm,tp)) nms ctx
+     vars <- reverse <$> mapM (liftSC1 scLocalVar) [0 .. length ctx - 1]
+     t' <- liftTermLike 0 (length ctx) t
+     f vars t' >>= liftSC2 scLambdaList ctx'
 
 -- | Run a MR Solver computation in a context extended with a universal
 -- variable, which is passed as a 'Term' to the sub-computation. Note that any
@@ -727,6 +827,11 @@ mrCallsFun f = memoFixTermFun $ \recurse t -> case t of
       Nothing -> return False
   (unwrapTermF -> tf) ->
     foldM (\b t' -> if b then return b else recurse t') False tf
+
+
+----------------------------------------------------------------------
+-- * Monadic Operations on Mr. Solver State
+----------------------------------------------------------------------
 
 -- | Make a fresh 'MRVar' of a given type, which must be closed, i.e., have no
 -- free uvars
@@ -1001,6 +1106,11 @@ mrFunAssumpRHSAsNormComp :: FunAssumpRHS -> MRM NormComp
 mrFunAssumpRHSAsNormComp (OpaqueFunAssump f args) =
   FunBind f args <$> CompFunReturn <$> Type <$> mrFunOutType f args
 mrFunAssumpRHSAsNormComp (RewriteFunAssump rhs) = return rhs
+
+
+----------------------------------------------------------------------
+-- * Functions for Debug Output
+----------------------------------------------------------------------
 
 -- | Print a 'String' if the debug level is at least the supplied 'Int'
 debugPrint :: Int -> String -> MRM ()
