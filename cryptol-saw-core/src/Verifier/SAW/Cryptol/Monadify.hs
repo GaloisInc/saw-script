@@ -90,6 +90,7 @@ import Verifier.SAW.Recognizer
 -- import Verifier.SAW.Position
 import Verifier.SAW.Cryptol.PreludeM
 
+import GHC.Stack
 import Debug.Trace
 
 
@@ -345,6 +346,12 @@ typeclassMonMap =
    ("Cryptol.PIntegral", "Cryptol.PIntegral"),
    ("Cryptol.PLiteral", "Cryptol.PLiteral")]
 
+-- | The list of functions that are monadified as themselves in types
+typeLevelOpMonList :: [Ident]
+typeLevelOpMonList = ["Cryptol.tcAdd", "Cryptol.tcSub", "Cryptol.tcMul",
+                      "Cryptol.tcDiv", "Cryptol.tcMod", "Cryptol.tcExp",
+                      "Cryptol.tcMin", "Cryptol.tcMax"]
+
 -- | A context of local variables used for monadifying types, which includes the
 -- variable names, their original types (before monadification), and, if their
 -- types corespond to 'MonKind's, a local 'MonType' that quantifies over them.
@@ -364,25 +371,20 @@ ppTermInTypeCtx ctx t =
 typeCtxPureCtx :: MonadifyTypeCtx -> [(LocalName,Term)]
 typeCtxPureCtx = map (\(x,tp,_) -> (x,tp))
 
--- | Make a monadification type that is to be considered a base type
-mkTermBaseType :: MonadifyTypeCtx -> MonKind -> Term -> MonType
-mkTermBaseType ctx k t =
-  MTyBase k $ openOpenTerm (typeCtxPureCtx ctx) t
-
 -- | Monadify a type and convert it to its corresponding argument type
-monadifyTypeArgType :: MonadifyTypeCtx -> Term -> OpenTerm
+monadifyTypeArgType :: HasCallStack => MonadifyTypeCtx -> Term -> OpenTerm
 monadifyTypeArgType ctx t = toArgType $ monadifyType ctx t
 
 -- | Apply a monadified type to a type or term argument in the sense of
 -- 'applyPiOpenTerm', meaning give the type of applying @f@ of a type to a
 -- particular argument @arg@
-applyMonType :: MonType -> Either MonType ArgMonTerm -> MonType
+applyMonType :: HasCallStack => MonType -> Either MonType ArgMonTerm -> MonType
 applyMonType (MTyArrow _ tp_ret) (Right _) = tp_ret
 applyMonType (MTyForall _ _ f) (Left mtp) = f mtp
 applyMonType _ _ = error "applyMonType: application at incorrect type"
 
 -- | Convert a SAW core 'Term' to a monadification type
-monadifyType :: MonadifyTypeCtx -> Term -> MonType
+monadifyType :: HasCallStack => MonadifyTypeCtx -> Term -> MonType
 {-
 monadifyType ctx t
   | trace ("\nmonadifyType:\n" ++ ppTermInTypeCtx ctx t) False = undefined
@@ -417,15 +419,12 @@ monadifyType ctx (asDataType -> Just (pn, args))
     -- and/or Nums
     MTyBase k_out $ dataTypeOpenTerm (primName pn) (map toArgType margs)
 monadifyType ctx (asVectorType -> Just (len, tp)) =
-  let lenOT = openOpenTerm (typeCtxPureCtx ctx) len in
+  let lenOT = monadifyTypeNat ctx len in
   MTySeq (ctorOpenTerm "Cryptol.TCNum" [lenOT]) $ monadifyType ctx tp
-monadifyType ctx tp@(asApplyAll -> ((asGlobalDef -> Just seq_id), [n, a]))
+monadifyType ctx (asApplyAll -> ((asGlobalDef -> Just seq_id), [n, a]))
   | seq_id == "Cryptol.seq" =
-    case monTypeNum (monadifyType ctx n) of
-      Just n_trm -> MTySeq n_trm (monadifyType ctx a)
-      Nothing ->
-        error ("Monadify type: not a number: " ++ ppTermInTypeCtx ctx n
-               ++ " in type: " ++ ppTermInTypeCtx ctx tp)
+    let nOT = monadifyTypeArgType ctx n in
+    MTySeq nOT $ monadifyType ctx a
 monadifyType ctx (asApp -> Just ((asGlobalDef -> Just f), arg))
   | Just f_trans <- lookup f typeclassMonMap =
     MTyBase (MKType $ mkSort 1) $
@@ -442,14 +441,31 @@ monadifyType ctx (asApplyAll -> (f, args))
     MTyBase k_out (applyOpenTermMulti (globalDefOpenTerm glob) $
                    map toArgType margs)
 -}
-monadifyType ctx tp@(asCtor -> Just (pn, _))
-  | primName pn == "Cryptol.TCNum" || primName pn == "Cryptol.TCInf" =
-    MTyNum $ openOpenTerm (typeCtxPureCtx ctx) tp
+monadifyType _ (asCtor -> Just (pn, []))
+  | primName pn == "Cryptol.TCInf"
+  = MTyNum $ ctorOpenTerm "Cryptol.TCInf" []
+monadifyType ctx (asCtor -> Just (pn, [n]))
+  | primName pn == "Cryptol.TCNum"
+  = MTyNum $ ctorOpenTerm "Cryptol.TCNum" [monadifyTypeNat ctx n]
+monadifyType ctx (asApplyAll -> ((asGlobalDef -> Just f), args))
+  | f `elem` typeLevelOpMonList =
+    MTyNum $
+    applyOpenTermMulti (globalOpenTerm f) $ map (monadifyTypeArgType ctx) args
 monadifyType ctx (asLocalVar -> Just i)
   | i < length ctx
   , (_,_,Just tp) <- ctx!!i = tp
 monadifyType ctx tp =
   error ("monadifyType: not a valid type for monadification: "
+         ++ ppTermInTypeCtx ctx tp)
+
+-- | Monadify a type-level natural number
+monadifyTypeNat :: HasCallStack => MonadifyTypeCtx -> Term -> OpenTerm
+monadifyTypeNat _ (asNat -> Just n) = natOpenTerm n
+monadifyTypeNat ctx (asLocalVar -> Just i)
+  | i < length ctx
+  , (_,_,Just tp) <- ctx!!i = toArgType tp
+monadifyTypeNat ctx tp =
+  error ("monadifyTypeNat: not a valid natural number for monadification: "
          ++ ppTermInTypeCtx ctx tp)
 
 
@@ -814,7 +830,7 @@ assertIsFinite _ =
 ----------------------------------------------------------------------
 
 -- | Monadify a type in the context of the 'MonadifyM' monad
-monadifyTypeM :: Term -> MonadifyM MonType
+monadifyTypeM :: HasCallStack => Term -> MonadifyM MonType
 monadifyTypeM tp =
   do ctx <- monStCtx <$> ask
      return $ monadifyType (ctxToTypeCtx ctx) tp
