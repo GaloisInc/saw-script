@@ -55,6 +55,7 @@ import           Control.Monad.Trans.Except (runExceptT)
 import qualified Data.BitVector.Sized as BV
 import           Data.Foldable (for_)
 import           Data.Function
+import           Data.IORef
 import           Data.List
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -123,6 +124,7 @@ import SAWScript.JavaExpr (JavaType(..))
 
 import qualified SAWScript.Crucible.Common as Common
 import           SAWScript.Crucible.Common
+import           SAWScript.Crucible.Common.Override (MetadataMap)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
@@ -201,6 +203,10 @@ jvm_verify cls nm lemmas checkSat setup tactic =
   do start <- io getCurrentTime
      cb <- getJavaCodebase
      opts <- getOptions
+
+     -- set up the metadata map for tracking proof obligation metadata
+     mdMap <- io $ newIORef mempty
+
      -- allocate all of the handles/static vars that are referenced
      -- (directly or indirectly) by this class
      allRefs <- io $ Set.toList <$> allClassRefs cb (J.className cls)
@@ -240,11 +246,11 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      -- run the symbolic execution
      top_loc <- SS.toW4Loc "jvm_verify" <$> getPosition
      (ret, globals3) <-
-       io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat
+       io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat mdMap
 
      -- collect the proof obligations
      asserts <- verifyPoststate cc
-                    methodSpec env globals3 ret
+                    methodSpec env globals3 ret mdMap
 
      -- restore previous assumption state
      _ <- io $ Crucible.popAssumptionFrame bak frameIdent
@@ -578,9 +584,10 @@ registerOverride ::
   JVMCrucibleContext ->
   Crucible.SimContext (SAWCruciblePersonality Sym) Sym CJ.JVM ->
   W4.ProgramLoc ->
+  IORef MetadataMap {- ^ metadata map -} ->
   [MethodSpec] ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
-registerOverride opts cc _ctx top_loc cs =
+registerOverride opts cc _ctx top_loc mdMap cs =
   do let sym = cc^.jccSym
      let jc = cc^.jccJVMContext
      let c0 = head cs
@@ -599,7 +606,7 @@ registerOverride opts cc _ctx top_loc cs =
               $ Crucible.mkOverride'
                   (Crucible.handleName h)
                   retType
-                  (methodSpecHandler opts sc cc top_loc cs h)
+                  (methodSpecHandler opts sc cc top_loc mdMap cs h)
 
 
 --------------------------------------------------------------------------------
@@ -615,8 +622,9 @@ verifySimulate ::
   [Lemma] ->
   Crucible.SymGlobalState Sym ->
   Bool {- ^ path sat checking -} ->
+  IORef MetadataMap {- ^ metadata map -} ->
   IO (Maybe (J.Type, JVMVal), Crucible.SymGlobalState Sym)
-verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
+verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat mdMap =
   jccWithBackend cc $ \bak ->
   do let jc = cc^.jccJVMContext
      let sym = cc^.jccSym
@@ -645,7 +653,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
                 do liftIO $ putStrLn "registering standard overrides"
                    _ <- Strict.runStateT (mapM_ CJ.register_jvm_override CJ.stdOverrides) jc
                    liftIO $ putStrLn "registering user-provided overrides"
-                   mapM_ (registerOverride opts cc simctx top_loc)
+                   mapM_ (registerOverride opts cc simctx top_loc mdMap)
                            (groupOn (view csMethodName) (map (view MS.psSpec) lemmas))
                    liftIO $ putStrLn "registering assumptions"
                    liftIO $
@@ -724,8 +732,9 @@ verifyPoststate ::
   Map AllocIndex JVMRefVal          {- ^ allocation substitution                      -} ->
   Crucible.SymGlobalState Sym       {- ^ global variables                             -} ->
   Maybe (J.Type, JVMVal)            {- ^ optional return value                        -} ->
+  IORef MetadataMap {- ^ metadata map -} ->
   TopLevel [(String, MS.ConditionMetadata, Term)] {- ^ generated labels and verification conditions -}
-verifyPoststate cc mspec env0 globals ret =
+verifyPoststate cc mspec env0 globals ret mdMap =
   jccWithBackend cc $ \bak ->
   do opts <- getOptions
      sc <- getSharedContext
@@ -755,29 +764,35 @@ verifyPoststate cc mspec env0 globals ret =
      st <- case matchPost of
              Left err      -> fail (show err)
              Right (_, st) -> return st
-     io $ forM_ (view osAsserts st) $ \(_md, assert) ->
-       -- TODO, use the assertion metadata
-       Crucible.addAssertion bak assert
+     io $ forM_ (view osAsserts st) $ \(md, Crucible.LabeledPred p r) ->
+       do (ann,p') <- W4.annotateTerm sym p
+          modifyIORef mdMap (Map.insert ann md)
+          Crucible.addAssertion bak (Crucible.LabeledPred p' r)
 
+     finalMdMap <- io $ readIORef mdMap
      obligations <- io $ Crucible.getProofObligations bak
      io $ Crucible.clearProofObligations bak
-     io $ mapM (verifyObligation sc) (maybe [] Crucible.goalsToList obligations)
+     io $ mapM (verifyObligation sc finalMdMap) (maybe [] Crucible.goalsToList obligations)
 
   where
     sym = cc^.jccSym
 
-    verifyObligation sc (Crucible.ProofGoal hyps (Crucible.LabeledPred concl (Crucible.SimError loc err))) =
+    verifyObligation sc finalMdMap
+      (Crucible.ProofGoal hyps (Crucible.LabeledPred concl (Crucible.SimError loc err))) =
       do st         <- sawCoreState sym
          hypTerm <- toSC sym st =<< Crucible.assumptionsPred sym hyps
          conclTerm  <- toSC sym st concl
          obligation <- scImplies sc hypTerm conclTerm
-         let md = MS.ConditionMetadata
-                  { MS.conditionLoc = loc
-                  , MS.conditionTags = mempty -- TODO! propagate tags
-                  , MS.conditionType = "safety assertion"
-                  , MS.conditionContext = ""
-                  }
-         return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, md, obligation)
+         let defaultMd = MS.ConditionMetadata
+                         { MS.conditionLoc = loc
+                         , MS.conditionTags = mempty
+                         , MS.conditionType = "safety assertion"
+                         , MS.conditionContext = ""
+                         }
+         let md = fromMaybe defaultMd $
+                    do ann <- W4.getAnnotation sym concl
+                       Map.lookup ann finalMdMap
+         return (Crucible.simErrorReasonMsg err, md, obligation)
 
     matchResult opts sc =
       case (ret, mspec ^. MS.csRetValue) of

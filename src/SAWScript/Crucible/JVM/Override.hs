@@ -58,6 +58,7 @@ import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
+import           Data.IORef
 import           Data.List (tails)
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -180,11 +181,16 @@ methodSpecHandler ::
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   JVMCrucibleContext          {- ^ context for interacting with Crucible        -} ->
   W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
+  IORef MetadataMap {- ^ metadata map -} ->
   [CrucibleMethodSpecIR]   {- ^ specification for current function override  -} ->
   Crucible.FnHandle args ret {- ^ a handle for the function -} ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret
      (Crucible.RegValue Sym ret)
-methodSpecHandler opts sc cc top_loc css h =
+methodSpecHandler opts sc cc top_loc _mdMap css h =
+  -- TODO, special case for single-override situations,
+  --  and use the mdMap to keep track of obligations arising
+  --  from override preconditions.
+
   jccWithBackend cc $ \bak -> do
   let sym = backendGetSym bak
   Crucible.RegMap args <- Crucible.getOverrideArgs
