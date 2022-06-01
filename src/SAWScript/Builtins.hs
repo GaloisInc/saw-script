@@ -519,12 +519,14 @@ resolveName sc nm =
                 do resolvedName <- io $ scResolveNameByURI sc uri
                    case resolvedName of
                      Just vi -> pure $ vi:scnms
-                     Nothing -> pure scnms
-              _ -> pure scnms
-       Nothing -> pure scnms
+                     Nothing -> fallback scnms
+              _ -> fallback scnms
+       Nothing -> fallback scnms
 
  where
  tnm = Text.pack nm
+ fallback [] = fail $ "Could not resolve name: " <> show nm
+ fallback scnms = pure scnms
 
 
 normalize_term :: TypedTerm -> TopLevel TypedTerm
