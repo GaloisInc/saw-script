@@ -342,7 +342,13 @@ gatherAssumes msb =
     let loc = msb ^. msbSpec . MS.csLoc
     assumeConds <- liftIO $ forM assumes' $ \pred -> do
         tt <- eval pred >>= SAW.mkTypedTerm sc
-        return $ MS.SetupCond_Pred loc tt
+        let md = MS.ConditionMetadata
+                 { MS.conditionLoc = loc
+                 , MS.conditionTags = mempty
+                 , MS.conditionType = "specification assertion"
+                 , MS.conditionContext = ""
+                 }
+        return $ MS.SetupCond_Pred md tt
     newVars <- liftIO $ gatherVars sym [Some (MethodSpecValue BoolRepr pred) | pred <- assumes']
 
     return $ msb
@@ -396,7 +402,13 @@ gatherAsserts msb =
     let loc = msb ^. msbSpec . MS.csLoc
     assertConds <- liftIO $ forM asserts'' $ \pred -> do
         tt <- eval pred >>= SAW.mkTypedTerm sc
-        return $ MS.SetupCond_Pred loc tt
+        let md = MS.ConditionMetadata
+                 { MS.conditionLoc = loc
+                 , MS.conditionTags = mempty
+                 , MS.conditionType = "specification condition"
+                 , MS.conditionContext = ""
+                 }
+        return $ MS.SetupCond_Pred md tt
 
     return $ msb
         & msbSpec . MS.csPostState . MS.csConditions %~ (++ assertConds)
