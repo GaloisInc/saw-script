@@ -250,9 +250,9 @@ instance PrettyInCtx CoIndHyp where
                    (case invar2 of
                        Just f -> prettyTermApp f args2
                        Nothing -> return "True"), return "=>",
-                   prettyInCtx (FunBind f1 args1 CompFunReturn),
+                   prettyTermApp (funNameTerm f1) args1,
                    return "|=",
-                   prettyInCtx (FunBind f2 args2 CompFunReturn)]
+                   prettyTermApp (funNameTerm f2) args2]
 
 -- | An assumption that something is equal to one of the constructors of a
 -- datatype, e.g. equal to @Left@ of some 'Term' or @Right@ of some 'Term'

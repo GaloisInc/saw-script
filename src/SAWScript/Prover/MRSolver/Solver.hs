@@ -531,8 +531,6 @@ proveCoIndHyp hyp =
            -- NOTE: the state automatically gets reset here because we defined
            -- MRM with ExceptT at a lower level than StateT
            do mrDebugPPPrefixSep 1 "Widening recursive assumption for" nm1' "|=" nm2'
-              debugPrint 2 ("Widening indices: " ++
-                            intercalate ", " (map show new_vars))
               hyp' <- generalizeCoIndHyp hyp new_vars
               proveCoIndHyp hyp'
        e -> throwError e
@@ -542,7 +540,8 @@ proveCoIndHyp hyp =
 -- given arguments, otherwise throw an exception saying that widening is needed
 matchCoIndHyp :: CoIndHyp -> [Term] -> [Term] -> MRM ()
 matchCoIndHyp hyp args1 args2 =
-  do (args1', args2') <- instantiateCoIndHyp hyp
+  do mrDebugPPPrefix 1 "matchCoIndHyp" hyp
+     (args1', args2') <- instantiateCoIndHyp hyp
      eqs1 <- zipWithM mrProveEq args1' args1
      eqs2 <- zipWithM mrProveEq args2' args2
      if and (eqs1 ++ eqs2) then return () else
@@ -556,17 +555,15 @@ generalizeCoIndHyp :: CoIndHyp -> [Either Int Int] -> MRM CoIndHyp
 generalizeCoIndHyp hyp [] = return hyp
 generalizeCoIndHyp hyp all_specs@(arg_spec:arg_specs) =
   withOnlyUVars (coIndHypCtx hyp) $ do
-  mrDebugPPPrefixSep 2 "generalizeCoIndHyp" hyp "with arg specs" (show all_specs)
+  withNoUVars $ mrDebugPPPrefixSep 2 "generalizeCoIndHyp with indices"
+                                     all_specs "on" hyp
   -- Get the arg and type associated with arg_spec
   let arg = coIndHypArg hyp arg_spec
   arg_tp <- mrTypeOf arg
-  ctx <- mrUVarCtx
-  debugPretty 2 ("Current context: " <> ppCtx ctx)
   -- Sort out the other args that equal arg
   eq_uneq_specs <- forM arg_specs $ \spec' ->
     do let arg' = coIndHypArg hyp spec'
        tp' <- mrTypeOf arg'
-       mrDebugPPPrefixSep 2 "generalizeCoIndHyp: the type of" arg' "is" tp'
        tps_eq <- mrConvertible arg_tp tp'
        args_eq <- if tps_eq then mrProveEq arg arg' else return False
        return $ if args_eq then Left spec' else Right spec'
@@ -613,6 +610,8 @@ mrRefines t1 t2 =
   do m1 <- toNormComp t1
      m2 <- toNormComp t2
      mrDebugPPPrefixSep 1 "mrRefines" m1 "|=" m2
+     -- ctx <- reverse . map (\(a,Type b) -> (a,b)) <$> mrUVars
+     -- mrDebugPPPrefix 2 "in context:" $ ppCtx ctx
      withFailureCtx (FailCtxRefines m1 m2) $ mrRefines' m1 m2
 
 -- | The main implementation of 'mrRefines'

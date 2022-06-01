@@ -415,12 +415,12 @@ mrAssertProveEq = mrAssertProveRel False
 mrProveRel :: Bool -> Term -> Term -> MRM Bool
 mrProveRel het t1 t2 =
   do let nm = if het then "mrProveRel" else "mrProveEq"
-     mrDebugPPPrefixSep 1 nm t1 (if het then "~=" else "==") t2
+     mrDebugPPPrefixSep 2 nm t1 (if het then "~=" else "==") t2
      tp1 <- mrTypeOf t1 >>= mrSubstEVars
      tp2 <- mrTypeOf t2 >>= mrSubstEVars
      cond_in_ctx <- mrProveRelH het tp1 tp2 t1 t2
      res <- withTermInCtx cond_in_ctx mrProvable
-     debugPrint 1 $ nm ++ ": " ++ if res then "Success" else "Failure"
+     debugPrint 2 $ nm ++ ": " ++ if res then "Success" else "Failure"
      return res
 
 -- | Prove that two terms are related, heterogeneously iff the first argument,
@@ -461,7 +461,7 @@ mrProveRelH' var_map _ tp1 tp2 (asEVarApp var_map -> Just (evar, args, Nothing))
      t2' <- mrSubstEVars t2
      success <- mrTrySetAppliedEVar evar args t2'
      when success $
-       mrDebugPPPrefixSep 2 "mrProveRelH setting evar" evar "to" t2
+       mrDebugPPPrefixSep 1 "setting evar" evar "to" t2
      TermInCtx [] <$> liftSC1 scBool success
 
 -- If t2 is an instantiated evar, substitute and recurse
@@ -477,7 +477,7 @@ mrProveRelH' var_map _ tp1 tp2 t1 (asEVarApp var_map -> Just (evar, args, Nothin
      t1' <- mrSubstEVars t1
      success <- mrTrySetAppliedEVar evar args t1'
      when success $
-       mrDebugPPPrefixSep 2 "mrProveRelH setting evar" evar "to" t1
+       mrDebugPPPrefixSep 1 "setting evar" evar "to" t1
      TermInCtx [] <$> liftSC1 scBool success
 
 -- For unit types, always return true

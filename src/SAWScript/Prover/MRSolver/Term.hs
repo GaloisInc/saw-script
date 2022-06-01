@@ -384,6 +384,9 @@ instance TermLike Term where
 instance TermLike FunName where
   liftTermLike _ _ = return
   substTermLike _ _ = return
+instance TermLike LocalName where
+  liftTermLike _ _ = return
+  substTermLike _ _ = return
 
 deriving instance TermLike Type
 deriving instance TermLike NormComp
@@ -426,16 +429,15 @@ prettyTermApp f_top args =
 
 -- | FIXME: move this helper function somewhere better...
 ppCtx :: [(LocalName,Term)] -> SawDoc
-ppCtx = helper [] where
-  helper :: [LocalName] -> [(LocalName,Term)] -> SawDoc
-  helper _ [] = ""
+ppCtx = align . sep . helper [] where
+  helper :: [LocalName] -> [(LocalName,Term)] -> [SawDoc]
+  helper _ [] = []
+  helper ns [(n,tp)] =
+    [ppTermInCtx defaultPPOpts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
+     ppTermInCtx defaultPPOpts ns tp]
   helper ns ((n,tp):ctx) =
-    let ns' = n:ns in
-    ppTermInCtx defaultPPOpts ns' (Unshared $ LocalVar 0) <> ":" <>
-    ppTermInCtx defaultPPOpts ns tp <> ", " <> helper ns' ctx
-
-instance PrettyInCtx String where
-  prettyInCtx str = return $ fromString str
+    (ppTermInCtx defaultPPOpts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
+     ppTermInCtx defaultPPOpts ns tp <> ",") : (helper (n:ns) ctx)
 
 instance PrettyInCtx SawDoc where
   prettyInCtx pp = return pp
@@ -446,12 +448,22 @@ instance PrettyInCtx Type where
 instance PrettyInCtx MRVar where
   prettyInCtx (MRVar ec) = return $ ppName $ ecName ec
 
-instance PrettyInCtx [Term] where
+instance PrettyInCtx a => PrettyInCtx [a] where
   prettyInCtx xs = list <$> mapM prettyInCtx xs
+
+instance {-# OVERLAPPING #-} PrettyInCtx String where
+  prettyInCtx str = return $ fromString str
+
+instance PrettyInCtx Int where
+  prettyInCtx i = return $ viaShow i
 
 instance PrettyInCtx a => PrettyInCtx (Maybe a) where
   prettyInCtx (Just x) = (<+>) "Just" <$> prettyInCtx x
   prettyInCtx Nothing = return "Nothing"
+
+instance (PrettyInCtx a, PrettyInCtx b) => PrettyInCtx (Either a b) where
+  prettyInCtx (Left  a) = (<+>) "Left"  <$> prettyInCtx a
+  prettyInCtx (Right b) = (<+>) "Right" <$> prettyInCtx b
 
 instance (PrettyInCtx a, PrettyInCtx b) => PrettyInCtx (a,b) where
   prettyInCtx (x, y) = (\x' y' -> parens (x' <> "," <> y')) <$> prettyInCtx x
