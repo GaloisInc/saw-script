@@ -361,9 +361,10 @@ mrEq' _ _ _ = error "mrEq': unsupported type"
 -- "outside in", meaning the highest deBruijn index comes first
 data TermInCtx = TermInCtx [(LocalName,Term)] Term
 
--- | Conjoin two 'TermInCtx's, assuming they both have Boolean type
-andTermInCtx :: TermInCtx -> TermInCtx -> MRM TermInCtx
-andTermInCtx (TermInCtx ctx1 t1) (TermInCtx ctx2 t2) =
+-- | Lift a binary operation on 'Term's to one on 'TermInCtx's
+liftTermInCtx2 :: (SharedContext -> Term -> Term -> IO Term) ->
+                   TermInCtx -> TermInCtx -> MRM TermInCtx
+liftTermInCtx2 op (TermInCtx ctx1 t1) (TermInCtx ctx2 t2) =
   do
     -- Insert the variables in ctx2 into the context of t1 starting at index 0,
     -- by lifting its variables starting at 0 by length ctx2
@@ -372,7 +373,7 @@ andTermInCtx (TermInCtx ctx1 t1) (TermInCtx ctx2 t2) =
     -- length ctx2, by lifting its variables starting at length ctx2 by length
     -- ctx1
     t2' <- liftTermLike (length ctx2) (length ctx1) t2
-    TermInCtx (ctx1++ctx2) <$> liftSC2 scAnd t1' t2'
+    TermInCtx (ctx1++ctx2) <$> liftSC2 op t1' t2'
 
 -- | Extend the context of a 'TermInCtx' with additional universal variables
 -- bound "outside" the 'TermInCtx'
@@ -520,16 +521,43 @@ mrProveRelH' _ het tp1@(asBVVecType -> Just (n1, len1, tpA1))
   liftSC0 scBoolType >>= \bool_tp ->
   liftSC2 scVecType n1 bool_tp >>= \ix_tp ->
   withUVarLift "eq_ix" (Type ix_tp) (n1,(len1,(tpA1,(tpA2,(t1,t2))))) $
-  \ix' (n1',(len1',(tpA1',(tpA2',(t1',t2'))))) ->
-  liftSC2 scGlobalApply "Prelude.is_bvult" [n1', ix', len1'] >>= \pf_tp ->
-  withUVarLift "eq_pf" (Type pf_tp) (n1',(len1',(tpA1',(tpA2',(ix',(t1',t2')))))) $
-  \pf'' (n1'',(len1'',(tpA1'',(tpA2'',(ix'',(t1'',t2'')))))) ->
-  do t1_prj <- liftSC2 scGlobalApply "Prelude.atBVVec" [n1'', len1'', tpA1'',
-                                                        t1'', ix'', pf'']
-     t2_prj <- liftSC2 scGlobalApply "Prelude.atBVVec" [n1'', len1'', tpA2'',
-                                                        t2'', ix'', pf'']
-     extTermInCtx [("eq_ix",ix_tp),("eq_pf",pf_tp)] <$>
-       mrProveRelH het tpA1'' tpA2'' t1_prj t2_prj
+  \ix (n1',(len1',(tpA1',(tpA2',(t1',t2'))))) ->
+  do ix_bound <- liftSC2 scGlobalApply "Prelude.bvult" [n1', ix, len1']
+     pf <- liftSC2 scGlobalApply "Prelude.unsafeAssertBVULt" [n1', ix, len1']
+     t1_prj <- liftSC2 scGlobalApply "Prelude.atBVVec" [n1', len1', tpA1',
+                                                        t1', ix, pf]
+     t2_prj <- liftSC2 scGlobalApply "Prelude.atBVVec" [n1', len1', tpA2',
+                                                        t2', ix, pf]
+     cond <- mrProveRelH het tpA1' tpA2' t1_prj t2_prj
+     extTermInCtx [("eq_ix",ix_tp)] <$>
+       liftTermInCtx2 scImplies (TermInCtx [] ix_bound) cond
+
+-- For non-BVVec vector types where at least one side is an application of
+-- genFromBVVec, wrap both sides in genBVVecFromVec and recurse
+mrProveRelH' _ het tp1@(asNonBVVecVectorType -> Just (m1, tpA1))
+                   tp2@(asNonBVVecVectorType -> Just (m2, tpA2))
+                   t1@(asGenFromBVVecTerm -> Just (n, len, _, _, _, _)) t2 =
+  do ms_are_eq <- mrConvertible m1 m2
+     if ms_are_eq then return () else
+       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+     len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
+     tp1' <- liftSC2 scVecType len' tpA1
+     tp2' <- liftSC2 scVecType len' tpA2
+     t1' <- mrGenBVVecFromVec m1 tpA1 t1 "mrProveRelH (BVVec/BVVec)" n len
+     t2' <- mrGenBVVecFromVec m2 tpA2 t2 "mrProveRelH (BVVec/BVVec)" n len
+     mrProveRelH het tp1' tp2' t1' t2'
+mrProveRelH' _ het tp1@(asNonBVVecVectorType -> Just (m1, tpA1))
+                   tp2@(asNonBVVecVectorType -> Just (m2, tpA2))
+                   t1 t2@(asGenFromBVVecTerm -> Just (n, len, _, _, _, _)) =
+  do ms_are_eq <- mrConvertible m1 m2
+     if ms_are_eq then return () else
+       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+     len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
+     tp1' <- liftSC2 scVecType len' tpA1
+     tp2' <- liftSC2 scVecType len' tpA2
+     t1' <- mrGenBVVecFromVec m1 tpA1 t1 "mrProveRelH (BVVec/BVVec)" n len
+     t2' <- mrGenBVVecFromVec m2 tpA2 t2 "mrProveRelH (BVVec/BVVec)" n len
+     mrProveRelH het tp1' tp2' t1' t2'
 
 -- If our relation is heterogeneous and we have a BVVec on one side and a
 -- non-BVVec vector on the other, wrap the non-BVVec vector term in
