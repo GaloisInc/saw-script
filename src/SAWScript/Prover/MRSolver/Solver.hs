@@ -296,11 +296,8 @@ normComp (CompTerm t) =
                                                   i)]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
          if n < 1 `shiftL` fromIntegral w then do
-           n' <- mrBvConst w (toInteger n)
-           err_str <- liftSC1 scString "FIXME: normComp (atM) error"
-           err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str]
-           xs' <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
-                                        [n_tm, a, xs, err_tm, w_tm, n'] 
+           n' <- liftSC2 scBvLit w (toInteger n)
+           xs' <- mrGenBVVecFromVec n_tm a xs "normComp (atM)" w_tm n'
            mrApplyAll body [w_tm, n', a, xs', i] >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
@@ -323,11 +320,9 @@ normComp (CompTerm t) =
                                                       i), x]) ->
       do body <- mrGlobalDefBody "CryptolM.fromBVVecUpdateM"
          if n < 1 `shiftL` fromIntegral w then do
-           n' <- mrBvConst w (toInteger n)
-           err_str <- liftSC1 scString "FIXME: normComp (updateM) error"
-           err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str]
-           xs' <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
-                                        [n_tm, a, xs, err_tm, w_tm, n'] 
+           n' <- liftSC2 scBvLit w (toInteger n)
+           xs' <- mrGenBVVecFromVec n_tm a xs "normComp (updateM)" w_tm n'
+           err_tm <- mrErrorTerm a "normComp (updateM)"
            mrApplyAll body [w_tm, n', a, xs', i, x, err_tm, n_tm] >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 

@@ -26,7 +26,6 @@ module SAWScript.Prover.MRSolver.Monad where
 import Data.List (find, findIndex, foldl')
 import qualified Data.Text as T
 import Numeric.Natural (Natural)
-import Data.Bits (testBit)
 import System.IO (hPutStrLn, stderr)
 import Control.Monad.Reader
 import Control.Monad.State
@@ -267,10 +266,6 @@ instance PrettyInCtx DataTypeAssump where
   prettyInCtx (IsNum   x) = prettyInCtx x >>= ppWithPrefix "TCNum"
   prettyInCtx IsInf = return "TCInf"
 
--- | Create a term representing the type @IsFinite n@
-mrIsFinite :: Term -> MRM Term
-mrIsFinite n = liftSC2 scGlobalApply "CryptolM.isFinite" [n]
-
 -- | A map from 'Term's to 'DataTypeAssump's over that term
 type DataTypeAssumps = HashMap Term DataTypeAssump
 
@@ -446,6 +441,35 @@ liftSC5 f a b c d e = mrSC >>= \sc -> liftIO (f sc a b c d e)
 
 
 ----------------------------------------------------------------------
+-- * Functions for Building Terms
+----------------------------------------------------------------------
+
+-- | Create a term representing the type @IsFinite n@
+mrIsFinite :: Term -> MRM Term
+mrIsFinite n = liftSC2 scGlobalApply "CryptolM.isFinite" [n]
+
+-- | Create a term representing an application of @Prelude.error@
+mrErrorTerm :: Term -> T.Text -> MRM Term
+mrErrorTerm a str =
+  do err_str <- liftSC1 scString str
+     liftSC2 scGlobalApply "Prelude.error" [a, err_str]
+
+-- | Create a term representing an application of @Prelude.genBVVecFromVec@,
+-- where the default value argument is @Prelude.error@ of the given 'T.Text' 
+mrGenBVVecFromVec :: Term -> Term -> Term -> T.Text -> Term -> Term -> MRM Term
+mrGenBVVecFromVec m a v def_err_str n len =
+  do err_tm <- mrErrorTerm a def_err_str
+     liftSC2 scGlobalApply "Prelude.genBVVecFromVec" [m, a, v, err_tm, n, len]
+
+-- | Create a term representing an application of @Prelude.genFromBVVec@,
+-- where the default value argument is @Prelude.error@ of the given 'T.Text' 
+mrGenFromBVVec :: Term -> Term -> Term -> Term -> T.Text -> Term -> MRM Term
+mrGenFromBVVec n len a v def_err_str m =
+  do err_tm <- mrErrorTerm a def_err_str
+     liftSC2 scGlobalApply "Prelude.genFromBVVec" [n, len, a, v, err_tm, m]
+
+
+----------------------------------------------------------------------
 -- * Monadic Operations on Terms
 ----------------------------------------------------------------------
 
@@ -487,14 +511,6 @@ mrBvToNat _ (asArrayValue -> Just (asBoolType -> Just _,
                                    mapM asBool -> Just bits)) =
   liftSC1 scNat $ foldl' (\n bit -> if bit then 2*n+1 else 2*n) 0 bits
 mrBvToNat n len = liftSC2 scBvNat n len
-
--- | Like 'scBvConst', but returns a bitvector literal
-mrBvConst :: Natural -> Integer -> MRM Term
-mrBvConst n x =
-  do bool_tp <- liftSC0 scBoolType
-     bits <- mapM (liftSC1 scBool . testBit x)
-                  [(fromIntegral n - 1), (fromIntegral n - 2) .. 0]
-     liftSC2 scVector bool_tp bits
 
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in

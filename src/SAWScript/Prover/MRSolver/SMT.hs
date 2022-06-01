@@ -118,7 +118,7 @@ primBVTermFun sc =
     VExtra (VExtraTerm _ w_tm) -> return w_tm
     VWord (Left (_,w_tm)) -> return w_tm
     VWord (Right bv) ->
-      lift $ scBvConst sc (fromIntegral (Prim.width bv)) (Prim.unsigned bv)
+      lift $ scBvLit sc (fromIntegral (Prim.width bv)) (Prim.unsigned bv)
     VVector vs ->
       lift $
       do tms <- traverse (boolValToTerm sc <=< force) (V.toList vs)
