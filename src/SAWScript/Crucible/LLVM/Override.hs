@@ -470,7 +470,7 @@ methodSpecHandler opts sc cc mdMap css h =
   -- point.  If so, commit to it and handle that case specially. If there is
   -- more than one (or zero) branches that might apply, go to the general case.
   case true ++ unknown of
-    [singleBranch] -> handleSingleOverrideBranch opts sc cc call_loc mdMap css h singleBranch
+    [singleBranch] -> handleSingleOverrideBranch opts sc cc call_loc mdMap h singleBranch
     _ -> handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
 
 handleSingleOverrideBranch :: forall arch rtp args ret.
@@ -486,13 +486,11 @@ handleSingleOverrideBranch :: forall arch rtp args ret.
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
   W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
   IORef MetadataMap ->
-  [MS.CrucibleMethodSpecIR (LLVM arch)]
-    {- ^ specification for current function override  -} ->
   Crucible.FnHandle args ret {- ^ the handle for this function -} ->
   OverrideWithPreconditions arch ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp args ret
      (Crucible.RegValue Sym ret)
-handleSingleOverrideBranch opts sc cc call_loc mdMap css h (OverrideWithPreconditions preconds cs st) =
+handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPreconditions preconds cs st) =
   ccWithBackend cc $ \bak -> do
   let sym = backendGetSym bak
   let fnName = cs ^. csName

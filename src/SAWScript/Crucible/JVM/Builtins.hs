@@ -755,7 +755,7 @@ verifyPoststate cc mspec env0 globals ret =
      st <- case matchPost of
              Left err      -> fail (show err)
              Right (_, st) -> return st
-     io $ forM_ (view osAsserts st) $ \(md, assert) ->
+     io $ forM_ (view osAsserts st) $ \(_md, assert) ->
        -- TODO, use the assertion metadata
        Crucible.addAssertion bak assert
 
