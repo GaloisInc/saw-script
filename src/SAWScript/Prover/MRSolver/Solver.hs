@@ -212,7 +212,7 @@ normComp (CompTerm t) =
   (>>) (mrDebugPPPrefix 3 "normCompTerm:" t) $
   withFailureCtx (FailCtxMNF t) $
   case asApplyAll t of
-    (f@(asLambda -> Just _), args) ->
+    (f@(asLambda -> Just _), args@(_:_)) ->
       mrApplyAll f args >>= normCompTerm
     (isGlobalDef "Prelude.returnM" -> Just (), [_, x]) ->
       return $ ReturnM x
