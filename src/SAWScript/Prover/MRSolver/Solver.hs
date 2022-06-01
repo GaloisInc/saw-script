@@ -1135,14 +1135,15 @@ mrRefinesFunH k _ [] t1 [] t2 = k t1 t2
 -- a function name
 type MRSolverResult = Maybe (FunName, FunAssump)
 
--- | The continuation passed to 'mrRefinesFunH' in 'askMRSolver': normalizes
--- both resulting terms using 'normCompTerm', calls mrRefines on the terms,
--- then returns a 'FunAssump', if possible
-askMRSolverH :: Term -> Term -> MRM MRSolverResult
-askMRSolverH t1 t2 =
+-- | The continuation passed to 'mrRefinesFunH' in 'askMRSolver' and
+-- 'assumeMRSolver': normalizes both resulting terms using 'normCompTerm',
+-- calls the given monadic function, then returns a 'FunAssump', if possible
+askMRSolverH :: (NormComp -> NormComp -> MRM ()) ->
+                Term -> Term -> MRM MRSolverResult
+askMRSolverH f t1 t2 =
   do m1 <- normCompTerm t1
      m2 <- normCompTerm t2
-     mrRefines m1 m2
+     f m1 m2
      case (m1, m2) of
        -- If t1 and t2 are both named functions, our result is the opaque
        -- FunAssump that forall xs. f1 xs |= f2 xs'
@@ -1175,7 +1176,26 @@ askMRSolver sc env timeout t1 t2 =
        mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2 >>
        case (asPiList tp1, asPiList tp2) of
          ((tps1, asCompM -> Just _), (tps2, asCompM -> Just _)) ->
-           mrRefinesFunH askMRSolverH [] tps1 t1 tps2 t2
+           mrRefinesFunH (askMRSolverH mrRefines) [] tps1 t1 tps2 t2
+         ((_, asCompM -> Just _), (_, tp2')) ->
+           throwMRFailure (NotCompFunType tp2')
+         ((_, tp1'), _) ->
+           throwMRFailure (NotCompFunType tp1')
+
+-- | Return the 'FunAssump' to add to the 'MREnv' that would be generated if
+-- 'askMRSolver' succeeded on the given terms.
+assumeMRSolver ::
+  SharedContext ->
+  MREnv {- ^ The Mr Solver environment -} ->
+  Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
+  Term -> Term -> IO (Either MRFailure MRSolverResult)
+assumeMRSolver sc env timeout t1 t2 =
+  do tp1 <- scTypeOf sc t1 >>= scWhnf sc
+     tp2 <- scTypeOf sc t2 >>= scWhnf sc
+     runMRM sc timeout env $
+       case (asPiList tp1, asPiList tp2) of
+         ((tps1, asCompM -> Just _), (tps2, asCompM -> Just _)) ->
+           mrRefinesFunH (askMRSolverH (\_ _ -> return ())) [] tps1 t1 tps2 t2
          ((_, asCompM -> Just _), (_, tp2')) ->
            throwMRFailure (NotCompFunType tp2')
          ((_, tp1'), _) ->

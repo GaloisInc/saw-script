@@ -96,7 +96,8 @@ pattern TypesNotEq t1 t2 = TypesNotRel False t1 t2
 -- | Remove the context from a 'MRFailure', i.e. remove all applications of the 
 -- 'MRFailureLocalVar' and 'MRFailureCtx' constructors
 mrFailureWithoutCtx :: MRFailure -> MRFailure
-mrFailureWithoutCtx (MRFailureLocalVar _ err) = mrFailureWithoutCtx err
+mrFailureWithoutCtx (MRFailureLocalVar x err) =
+  MRFailureLocalVar x (mrFailureWithoutCtx err)
 mrFailureWithoutCtx (MRFailureCtx _ err) = mrFailureWithoutCtx err
 mrFailureWithoutCtx (MRFailureDisj err1 err2) =
   MRFailureDisj (mrFailureWithoutCtx err1) (mrFailureWithoutCtx err2)

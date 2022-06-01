@@ -1656,13 +1656,14 @@ ensureMonadicTerm sc t
       False -> monadifyTypedTerm sc t
 ensureMonadicTerm sc t = monadifyTypedTerm sc t
 
--- | A wrapper for 'Prover.askMRSolver' from @MRSolver.hs@ which if the first
--- argument is @Just str@, prints out @str@ followed by an abridged version
--- of the refinement being asked
-askMRSolver :: Maybe SawDoc -> SharedContext -> TypedTerm -> TypedTerm ->
-               TopLevel (NominalDiffTime,
-                         Either Prover.MRFailure Prover.MRSolverResult)
-askMRSolver printStr sc t1 t2 =
+-- | A wrapper for either 'Prover.askMRSolver' or 'Prover.assumeMRSolver' from
+-- @MRSolver.hs@: if the first argument is @Just str@, prints out @str@
+-- followed by an abridged version of the refinement being asked, then calls
+-- the given function, returning how long it took to execute
+mrSolver :: (SharedContext -> Prover.MREnv -> Maybe Integer -> Term -> Term -> IO a) ->
+            Maybe SawDoc -> SharedContext -> TypedTerm -> TypedTerm ->
+            TopLevel (NominalDiffTime, a)
+mrSolver f printStr sc t1 t2 =
   do env <- rwMRSolverEnv <$> get
      m1 <- collapseEta <$> ttTerm <$> ensureMonadicTerm sc t1
      m2 <- collapseEta <$> ttTerm <$> ensureMonadicTerm sc t2
@@ -1672,7 +1673,7 @@ askMRSolver printStr sc t1 t2 =
          "[MRSolver] " <> str <> ": " <> ppTmHead m1 <>
                                " |= " <> ppTmHead m2
      time1 <- liftIO getCurrentTime
-     res <- io $ Prover.askMRSolver sc env Nothing m1 m2
+     res <- io $ f sc env Nothing m1 m2
      time2 <- liftIO getCurrentTime
      return (diffUTCTime time2 time1, res)
   where -- Turn a term of the form @\x1 ... xn -> f x1 ... xn@ into @f@
@@ -1701,7 +1702,7 @@ mrSolverProve :: Bool -> SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
 mrSolverProve addToEnv sc t1 t2 =
   do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
      let printStr = if addToEnv then "Proving" else "Testing"
-     (diff, res) <- askMRSolver (Just printStr) sc t1 t2
+     (diff, res) <- mrSolver Prover.askMRSolver (Just printStr) sc t1 t2
      case res of
        Left err | dlvl == 0 ->
          io (putStrLn $ Prover.showMRFailure err) >>
@@ -1730,7 +1731,7 @@ mrSolverProve addToEnv sc t1 t2 =
 mrSolverQuery :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel Bool
 mrSolverQuery sc t1 t2 =
   do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
-     (diff, res) <- askMRSolver (Just "Querying") sc t1 t2
+     (diff, res) <- mrSolver Prover.askMRSolver (Just "Querying") sc t1 t2
      case res of
        Left _ | dlvl == 0 ->
          printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
@@ -1744,6 +1745,33 @@ mrSolverQuery sc t1 t2 =
        Right _ ->
          printOutLnTop Info (printf "[MRSolver] Success in %s" (show diff)) >>
          return True
+
+-- | Generate the 'Prover.FunAssump' which corresponds to the given refinement
+-- and add it to the 'Prover.MREnv'
+mrSolverAssume :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
+mrSolverAssume sc t1 t2 =
+  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
+     (_, res) <- mrSolver Prover.assumeMRSolver (Just "Assuming") sc t1 t2
+     case res of
+       Left err | dlvl == 0 ->
+         io (putStrLn $ Prover.showMRFailure err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure") >>
+         io (Exit.exitWith $ Exit.ExitFailure 1)
+       Left err ->
+         -- we ignore the MRFailure context here since it will have already
+         -- been printed by the debug trace
+         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure") >>
+         io (Exit.exitWith $ Exit.ExitFailure 1)
+       Right (Just (fnm, fassump)) ->
+         printOutLnTop Info (
+           printf "[MRSolver] Success, added as an opaque assumption") >>
+         modify (\rw -> rw { rwMRSolverEnv =
+           Prover.mrEnvAddFunAssump fnm fassump (rwMRSolverEnv rw) })
+       _ ->
+         printOutLnTop Info $ printf $
+           "[MRSolver] Failure, given refinement cannot be interpreted as" ++
+                     " an assumption"
 
 -- | Set the debug level of the 'Prover.MREnv'
 mrSolverSetDebug :: Int -> TopLevel ()
