@@ -41,6 +41,7 @@ import Control.Monad.Catch (MonadThrow)
 
 import qualified Data.BitVector.Sized as BV
 import Data.Foldable (foldlM)
+import           Data.IORef
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
 import qualified Data.Text as Text
@@ -79,6 +80,7 @@ import SAWScript.Options
 import SAWScript.X86 hiding (Options)
 import SAWScript.X86Spec
 import SAWScript.Crucible.Common
+import SAWScript.Crucible.Common.Override (MetadataMap)
 
 import qualified SAWScript.Crucible.Common as Common
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
@@ -350,6 +352,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       basic_ss <- getBasicSS
       rw <- getTopLevelRW
       sym <- liftIO $ newSAWCoreExprBuilder sc
+      mdMap <- liftIO $ newIORef mempty
       SomeOnlineBackend bak <- liftIO $
         newSAWCoreBackendWithTimeout pathSatSolver sym $ rwCrucibleTimeout rw
       cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms $ W4.getConfiguration sym
@@ -487,7 +490,8 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                 }
           liftIO $ printOutLn opts Info
             "Examining specification to determine postconditions"
-          liftIO . void . runX86Sim finalState $ assertPost globals' env (preState ^. x86Mem) (preState ^. x86Regs)
+          liftIO . void . runX86Sim finalState $
+            assertPost globals' env (preState ^. x86Mem) (preState ^. x86Regs) mdMap
           pure $ C.regValue r
 
       liftIO $ printOutLn opts Info "Simulating function"
@@ -521,7 +525,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
             ar
         C.TimeoutResult{} -> fail "Execution timed out"
 
-      (stats,thms) <- checkGoals bak opts nm sc tactic
+      (stats,thms) <- checkGoals bak opts nm sc tactic mdMap
 
       end <- io getCurrentTime
       let diff = diffUTCTime end start
@@ -1020,8 +1024,9 @@ assertPost ::
   Map MS.AllocIndex Ptr ->
   Mem {- ^ The state of memory before simulation -} ->
   Regs {- ^ The state of the registers before simulation -} ->
+  IORef MetadataMap {- ^ metadata map -} ->
   X86Sim ()
-assertPost globals env premem preregs = do
+assertPost globals env premem preregs mdMap = do
   SomeOnlineBackend bak <- use x86Backend
   sym <- use x86Sym
   opts <- use x86Options
@@ -1109,9 +1114,10 @@ assertPost globals env premem preregs = do
     Right (_, st) -> pure st
   liftIO . forM_ (view O.osAssumes st) $ \(_md, asum) ->
     C.addAssumption bak $ C.GenericAssumption (st ^. O.osLocation) "precondition" asum
-  liftIO . forM_ (view LO.osAsserts st) $ \(_md, W4.LabeledPred p r) ->
-    -- TODO, use assertion metadata
-    C.addAssertion bak $ C.LabeledPred p r
+  liftIO . forM_ (view LO.osAsserts st) $ \(md, W4.LabeledPred p r) ->
+       do (ann,p') <- W4.annotateTerm sym p
+          modifyIORef mdMap (Map.insert ann md)
+          C.addAssertion bak (W4.LabeledPred p' r)
 
 -- | Assert that a points-to postcondition holds.
 assertPointsTo ::
@@ -1160,9 +1166,10 @@ checkGoals ::
   String ->
   SharedContext ->
   ProofScript () ->
+  IORef MetadataMap {- ^ metadata map -} ->
   TopLevel (SolverStats, Set TheoremNonce)
-checkGoals bak opts nm sc tactic = do
-  gs <- liftIO $ getGoals (SomeBackend bak)
+checkGoals bak opts nm sc tactic mdMap = do
+  gs <- liftIO $ getGoals (SomeBackend bak) mdMap
   liftIO . printOutLn opts Info $ mconcat
     [ "Simulation finished, running solver on "
     , show $ length gs
@@ -1172,12 +1179,12 @@ checkGoals bak opts nm sc tactic = do
     term <- liftIO $ gGoal sc g
     let proofgoal = ProofGoal
                     { goalNum  = n
-                    , goalType = "vc"
+                    , goalType = MS.conditionType (gMd g)
                     , goalName = nm
-                    , goalLoc  = show $ gLoc g
+                    , goalLoc  = show $ MS.conditionLoc (gMd g)
                     , goalDesc = show $ gMessage g
                     , goalProp = term
-                    , goalTags = mempty -- TODO! propagate tags
+                    , goalTags = MS.conditionTags (gMd g)
                     }
     res <- runProofScript tactic proofgoal (Just (gLoc g)) $ Text.unwords
               ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))]
