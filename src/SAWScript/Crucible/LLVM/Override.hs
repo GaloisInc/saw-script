@@ -396,6 +396,7 @@ methodSpecHandler ::
   , ?memOpts::Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
   , ?checkAllocSymInit :: Bool
+  , ?singleOverrideSpecialCase :: Bool
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -470,7 +471,8 @@ methodSpecHandler opts sc cc mdMap css h =
   -- point.  If so, commit to it and handle that case specially. If there is
   -- more than one (or zero) branches that might apply, go to the general case.
   case true ++ unknown of
-    [singleBranch] -> handleSingleOverrideBranch opts sc cc call_loc mdMap h singleBranch
+    [singleBranch] | ?singleOverrideSpecialCase ->
+         handleSingleOverrideBranch opts sc cc call_loc mdMap h singleBranch
     _ -> handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
 
 handleSingleOverrideBranch :: forall arch rtp args ret.

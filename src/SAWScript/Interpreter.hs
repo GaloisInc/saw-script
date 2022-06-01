@@ -496,6 +496,7 @@ buildTopLevelEnv proxy opts =
                    , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
                    , rwPathSatSolver = CC.PathSat_Z3
                    , rwSkipSafetyProofs = False
+                   , rwSingleOverrideSpecialCase = False
                    }
        return (bic, ro0, rw0)
 
@@ -557,6 +558,17 @@ disable_crucible_assert_then_assume :: TopLevel ()
 disable_crucible_assert_then_assume = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwCrucibleAssertThenAssume = False }
+
+enable_single_override_special_case :: TopLevel ()
+enable_single_override_special_case = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwSingleOverrideSpecialCase = True }
+
+disable_single_override_special_case :: TopLevel ()
+disable_single_override_special_case = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwSingleOverrideSpecialCase = False }
+
 
 enable_crucible_profiling :: FilePath -> TopLevel ()
 enable_crucible_profiling f = do
@@ -858,6 +870,23 @@ primitives = Map.fromList
     , "execution. This is unsound! However, it can be useful during"
     , "initial proof construction to focus only on the stated correcness"
     , "specifications."
+    ]
+
+  , prim "enable_single_override_special_case" "TopLevel ()"
+    (pureVal enable_single_override_special_case)
+    Experimental
+    [ "Enable special-case handling when there is exactly one override"
+    , "that appies at a given call site after structural matching."
+    , "This special case handling asserts the override preconditions as separate"
+    , "proof goals, instead of combining them into a single one.  In general,"
+    , "this may produce more, but simpler, goals than when disabled."
+    ]
+
+  , prim "disable_single_override_special_case" "TopLevel ()"
+    (pureVal disable_single_override_special_case)
+    Experimental
+    [ "Disable special case handling for single overrides."
+    , "This is the default behavior."
     ]
 
  , prim "enable_crucible_assert_then_assume" "TopLevel ()"

@@ -463,6 +463,7 @@ data TopLevelRW =
 
   , rwPathSatSolver :: Common.PathSatSolver
   , rwSkipSafetyProofs :: Bool
+  , rwSingleOverrideSpecialCase :: Bool
   }
 
 newtype TopLevel a =

@@ -500,8 +500,17 @@ withMethodSpec ::
   LLVMModule arch ->
   String            {- ^ Name of the function -} ->
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
-  ((?lc :: Crucible.TypeContext, ?memOpts::Crucible.MemOptions, ?w4EvalTactic :: W4EvalTactic, ?checkAllocSymInit :: Bool, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
-   LLVMCrucibleContext arch -> MS.CrucibleMethodSpecIR (LLVM arch) -> TopLevel a) ->
+  (( ?lc :: Crucible.TypeContext
+   , ?memOpts::Crucible.MemOptions
+   , ?w4EvalTactic :: W4EvalTactic
+   , ?checkAllocSymInit :: Bool
+   , ?singleOverrideSpecialCase :: Bool
+   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+   , Crucible.HasLLVMAnn Sym
+   ) =>
+     LLVMCrucibleContext arch ->
+     MS.CrucibleMethodSpecIR (LLVM arch) ->
+     TopLevel a) ->
   TopLevel a
 withMethodSpec pathSat lm nm setup action =
   do (nm', parent) <- resolveSpecName nm
@@ -516,6 +525,9 @@ withMethodSpec pathSat lm nm setup action =
          (Left err, Left _) -> throwTopLevel (displayVerifExceptionOpts opts err)
 
      let ?lc = mtrans ^. Crucible.transContext . Crucible.llvmTypeCtx
+
+     sosp <- rwSingleOverrideSpecialCase <$> getTopLevelRW
+     let ?singleOverrideSpecialCase = sosp
 
      Crucible.llvmPtrWidth (mtrans ^. Crucible.transContext) $ \_ ->
        fmap NE.head $ forM defOrDecls $ \defOrDecl ->
@@ -551,6 +563,7 @@ verifyMethodSpec ::
   , ?memOpts::Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
   , ?checkAllocSymInit :: Bool
+  , ?singleOverrideSpecialCase :: Bool
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -1120,6 +1133,7 @@ registerOverride ::
   , ?memOpts::Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
   , ?checkAllocSymInit :: Bool
+  , ?singleOverrideSpecialCase :: Bool
   , Crucible.HasPtrWidth wptr
   , wptr ~ Crucible.ArchWidth arch
   , Crucible.HasLLVMAnn Sym
@@ -1166,6 +1180,7 @@ registerInvariantOverride ::
   , ?memOpts::Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
   , ?checkAllocSymInit :: Bool
+  , ?singleOverrideSpecialCase :: Bool
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
@@ -1250,6 +1265,7 @@ verifySimulate ::
   , ?memOpts::Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
   , ?checkAllocSymInit :: Bool
+  , ?singleOverrideSpecialCase :: Bool
   , Crucible.HasPtrWidth wptr
   , wptr ~ Crucible.ArchWidth arch
   , Crucible.HasLLVMAnn Sym
