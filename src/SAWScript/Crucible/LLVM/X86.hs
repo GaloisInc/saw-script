@@ -1177,14 +1177,21 @@ checkGoals bak opts nm sc tactic mdMap = do
     ]
   outs <- forM (zip [0..] gs) $ \(n, g) -> do
     term <- liftIO $ gGoal sc g
+    let md = gMd g
+    let ploc = MS.conditionLoc md
+    let gloc = (unwords [show (W4.plSourceLoc ploc)
+                       ,"in"
+                       , show (W4.plFunction ploc)]) ++
+               (if Prelude.null (MS.conditionContext md) then [] else
+                  "\n" ++ MS.conditionContext md)
     let proofgoal = ProofGoal
                     { goalNum  = n
-                    , goalType = MS.conditionType (gMd g)
+                    , goalType = MS.conditionType md
                     , goalName = nm
-                    , goalLoc  = show $ MS.conditionLoc (gMd g)
+                    , goalLoc  = gloc
                     , goalDesc = show $ gMessage g
                     , goalProp = term
-                    , goalTags = MS.conditionTags (gMd g)
+                    , goalTags = MS.conditionTags md
                     }
     res <- runProofScript tactic proofgoal (Just (gLoc g)) $ Text.unwords
               ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))]

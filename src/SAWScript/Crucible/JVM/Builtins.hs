@@ -301,12 +301,17 @@ verifyObligations cc mspec tactic assumes asserts =
        goal   <- io $ scImplies sc assume assert
        goal'  <- io $ boolToProp sc [] goal -- TODO, generalize over inputs
        let ploc = MS.conditionLoc md
+       let gloc = (unwords [show (W4.plSourceLoc ploc)
+                          ,"in"
+                          , show (W4.plFunction ploc)]) ++
+                  (if Prelude.null (MS.conditionContext md) then [] else
+                     "\n" ++ MS.conditionContext md)
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
-           proofgoal = ProofGoal
-                       { goalNum = n
-                       , goalType = "vc"
+       let proofgoal = ProofGoal
+                       { goalNum  = n
+                       , goalType = MS.conditionType md
                        , goalName = nm
-                       , goalLoc  = show ploc
+                       , goalLoc  = gloc
                        , goalDesc = msg
                        , goalProp = goal'
                        , goalTags = MS.conditionTags md
