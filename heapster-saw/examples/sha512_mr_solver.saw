@@ -24,10 +24,10 @@ monadify_term {{ round_00_15_spec }};
 monadify_term {{ round_16_80_spec }};
 monadify_term {{ processBlock_loop_spec }};
 monadify_term {{ processBlock_spec }};
-// monadify_term {{ processBlocks_loop_spec }};
-// monadify_term {{ processBlocks_spec }};
+monadify_term {{ processBlocks_loop_spec }};
+monadify_term {{ processBlocks_spec }};
 
 mr_solver_prove round_00_15 {{ round_00_15_spec }};
 mr_solver_prove round_16_80 {{ round_16_80_spec }};
 mr_solver_prove processBlock {{ processBlock_spec }};
-// mr_solver_prove processBlocks {{ processBlocks_spec }};
+mr_solver_prove processBlocks {{ processBlocks_spec }};
