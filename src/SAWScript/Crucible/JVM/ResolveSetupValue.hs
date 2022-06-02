@@ -41,7 +41,6 @@ import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
---import qualified What4.ProgramLoc as W4
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm

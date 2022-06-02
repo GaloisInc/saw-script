@@ -150,4 +150,3 @@ freshVariable sc name cty =
 setupWithTag :: String -> CrucibleSetupT arch m a -> CrucibleSetupT arch m a
 setupWithTag tag m =
   withReaderT (croTags %~ Set.insert tag) m
---  withReaderT (\ro -> ro{ _croTags = Set.insert tag (_croTags ro) }) m

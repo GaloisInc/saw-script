@@ -1510,7 +1510,7 @@ primitives = Map.fromList
     Experimental
     [ "Returns true if the current goal is tagged with all the tags"
     , "in the given list. This function returns true for all goals"
-    , "when given an empty list. Tags may be are added to goals using"
+    , "when given an empty list. Tags may be added to goals using"
     , "'llvm_setup_with_tag' and similar operations in the specification"
     , "setup phase."
     ]
@@ -1519,7 +1519,7 @@ primitives = Map.fromList
     Experimental
     [ "Returns true if the current goal is tagged with any the tags"
     , "in the given list. This function returns false for all goals"
-    , "when given an empty list. Tags may be are added to goals using"
+    , "when given an empty list. Tags may be added to goals using"
     , "'llvm_setup_with_tag' and similar operations in the specification"
     , "setup phase."
     ]

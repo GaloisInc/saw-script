@@ -145,9 +145,7 @@ type instance Pointer' (LLVM arch) Sym = LLVMPtr (Crucible.ArchWidth arch)
 --   human-readable info about each condition.
 data OverrideWithPreconditions arch =
   OverrideWithPreconditions
-    { -- TODO: should probably modify this to also carry along the
-      -- `ConditionMetadata` as well
-      _owpPreconditions :: [(MS.ConditionMetadata, LabeledPred Sym)]
+    { _owpPreconditions :: [(MS.ConditionMetadata, LabeledPred Sym)]
          -- ^ c.f. '_osAsserts'
     , _owpMethodSpec :: MS.CrucibleMethodSpecIR (LLVM arch)
     , owpState :: OverrideState (LLVM arch)
