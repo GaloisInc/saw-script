@@ -43,6 +43,7 @@ module SAWScript.Crucible.JVM.Builtins
     , jvm_fresh_var
     , jvm_alloc_object
     , jvm_alloc_array
+    , jvm_setup_with_tag
     ) where
 
 import           Control.Lens
@@ -1412,6 +1413,13 @@ jvm_return retVal =
          unless (registerCompatible retTy valTy) $
          X.throwM (JVMReturnTypeMismatch retTy valTy)
      Setup.crucible_return retVal
+
+jvm_setup_with_tag ::
+  String ->
+  JVMSetupM () ->
+  JVMSetupM ()
+jvm_setup_with_tag tag m =
+  JVMSetupM (Setup.setupWithTag tag (runJVMSetupM m))
 
 --------------------------------------------------------------------------------
 

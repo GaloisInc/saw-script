@@ -3279,6 +3279,14 @@ primitives = Map.fromList
     , "jvm_return statement is required if and only if the method"
     , "has a non-void return type." ]
 
+  , prim "jvm_setup_with_tag" "String -> JVMSetup () -> JVMSetup ()"
+    (pureVal jvm_setup_with_tag)
+    Experimental
+    [ "All conditions (e.g., from points-to or assert statements) executed"
+    , "in the scope of the given setup block will have the provieded string"
+    , "attached as a tag that can later be filtered by proof tactics."
+    ]
+
   , prim "jvm_verify"
     "JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec"
     (pureVal jvm_verify)
