@@ -496,6 +496,7 @@ buildTopLevelEnv proxy opts =
                    , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
                    , rwPathSatSolver = CC.PathSat_Z3
                    , rwSkipSafetyProofs = False
+                   , rwSingleOverrideSpecialCase = False
                    }
        return (bic, ro0, rw0)
 
@@ -557,6 +558,17 @@ disable_crucible_assert_then_assume :: TopLevel ()
 disable_crucible_assert_then_assume = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwCrucibleAssertThenAssume = False }
+
+enable_single_override_special_case :: TopLevel ()
+enable_single_override_special_case = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwSingleOverrideSpecialCase = True }
+
+disable_single_override_special_case :: TopLevel ()
+disable_single_override_special_case = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwSingleOverrideSpecialCase = False }
+
 
 enable_crucible_profiling :: FilePath -> TopLevel ()
 enable_crucible_profiling f = do
@@ -858,6 +870,23 @@ primitives = Map.fromList
     , "execution. This is unsound! However, it can be useful during"
     , "initial proof construction to focus only on the stated correcness"
     , "specifications."
+    ]
+
+  , prim "enable_single_override_special_case" "TopLevel ()"
+    (pureVal enable_single_override_special_case)
+    Experimental
+    [ "Enable special-case handling when there is exactly one override"
+    , "that appies at a given call site after structural matching."
+    , "This special case handling asserts the override preconditions as separate"
+    , "proof goals, instead of combining them into a single one.  In general,"
+    , "this may produce more, but simpler, goals than when disabled."
+    ]
+
+  , prim "disable_single_override_special_case" "TopLevel ()"
+    (pureVal disable_single_override_special_case)
+    Experimental
+    [ "Disable special case handling for single overrides."
+    , "This is the default behavior."
     ]
 
  , prim "enable_crucible_assert_then_assume" "TopLevel ()"
@@ -1475,6 +1504,24 @@ primitives = Map.fromList
     Experimental
     [ "Run the given proof script only when the goal name contains"
     , "the given string."
+    ]
+  , prim "goal_has_tags"      "[String] -> ProofScript Bool"
+    (pureVal goal_has_tags)
+    Experimental
+    [ "Returns true if the current goal is tagged with all the tags"
+    , "in the given list. This function returns true for all goals"
+    , "when given an empty list. Tags may be added to goals using"
+    , "'llvm_setup_with_tag' and similar operations in the specification"
+    , "setup phase."
+    ]
+  , prim "goal_has_some_tag"  "[String] -> ProofScript Bool"
+    (pureVal goal_has_some_tag)
+    Experimental
+    [ "Returns true if the current goal is tagged with any the tags"
+    , "in the given list. This function returns false for all goals"
+    , "when given an empty list. Tags may be added to goals using"
+    , "'llvm_setup_with_tag' and similar operations in the specification"
+    , "setup phase."
     ]
   , prim "goal_num_ite"       "{a} Int -> ProofScript a -> ProofScript a -> ProofScript a"
     (pureVal goal_num_ite)
@@ -2684,6 +2731,14 @@ primitives = Map.fromList
     , "it appears (i.e., before or after `llvm_execute_func`."
     ]
 
+  , prim "llvm_setup_with_tag" "String -> LLVMSetup () -> LLVMSetup ()"
+    (pureVal llvm_setup_with_tag)
+    Experimental
+    [ "All conditions (e.g., from points-to or assert statements) executed"
+    , "in the scope of the given setup block will have the provieded string"
+    , "attached as a tag that can later be filtered by proof tactics."
+    ]
+
   , prim "llvm_postcond" "Term -> LLVMSetup ()"
     (pureVal llvm_postcond)
     Current
@@ -3223,6 +3278,14 @@ primitives = Map.fromList
     [ "Specify the given value as the return value of the method. A"
     , "jvm_return statement is required if and only if the method"
     , "has a non-void return type." ]
+
+  , prim "jvm_setup_with_tag" "String -> JVMSetup () -> JVMSetup ()"
+    (pureVal jvm_setup_with_tag)
+    Experimental
+    [ "All conditions (e.g., from points-to or assert statements) executed"
+    , "in the scope of the given setup block will have the provieded string"
+    , "attached as a tag that can later be filtered by proof tactics."
+    ]
 
   , prim "jvm_verify"
     "JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec"

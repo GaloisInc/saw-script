@@ -191,7 +191,13 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
                     ": no arg at index " ++ show i
                 Just x -> return x
             let shp = tyToShapeEq col ty tpr
-            matchArg sym sc eval (ms ^. MS.csPreState . MS.csAllocs) shp rv sv
+            let md = MS.ConditionMetadata
+                     { MS.conditionLoc = loc
+                     , MS.conditionTags = mempty
+                     , MS.conditionType = "formal argument matching"
+                     , MS.conditionContext = ""
+                     }
+            matchArg sym sc eval (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
 
         -- Match PointsTo SetupValues against accessible memory.
         --
@@ -216,8 +222,13 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
                 ref' <- lift $ mirRef_offsetSim (ptr ^. mpType) (ptr ^. mpRef) iSym
                 rv <- lift $ readMirRefSim (ptr ^. mpType) ref'
                 let shp = tyToShapeEq col ty (ptr ^. mpType)
-                matchArg sym sc eval (ms ^. MS.csPreState . MS.csAllocs) shp rv sv
-
+                let md = MS.ConditionMetadata
+                         { MS.conditionLoc = loc
+                         , MS.conditionTags = mempty
+                         , MS.conditionType = "points-to"
+                         , MS.conditionContext = ""
+                         }
+                matchArg sym sc eval (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
 
         -- Validity checks
 
@@ -248,26 +259,27 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
 
         -- Convert preconditions to `osAsserts`
         forM_ (ms ^. MS.csPreState . MS.csConditions) $ \cond -> do
-            term <- condTerm sc cond
+            (md, term) <- condTerm sc cond
             w4VarMap <- liftIO $ readIORef w4VarMapRef
             pred <- liftIO $ termToPred sym sc w4VarMap term
-            MS.addAssert pred $
+            MS.addAssert pred md $
                 SimError loc (AssertFailureSimError (show $ W4.printSymExpr pred) "")
 
         -- Convert postconditions to `osAssumes`
         forM_ (ms ^. MS.csPostState . MS.csConditions) $ \cond -> do
-            term <- condTerm sc cond
+            (md, term) <- condTerm sc cond
             w4VarMap <- liftIO $ readIORef w4VarMapRef
             pred <- liftIO $ termToPred sym sc w4VarMap term
-            MS.addAssume pred
+            MS.addAssume pred md
 
     ((), os) <- case result of
         Left err -> error $ show err
         Right x -> return x
 
-    forM_ (os ^. MS.osAsserts) $ \lp ->
+    forM_ (os ^. MS.osAsserts) $ \(_md, lp) ->
+      -- TODO, track metadata
       liftIO $ addAssertion bak lp
-    forM_ (os ^. MS.osAssumes) $ \p ->
+    forM_ (os ^. MS.osAssumes) $ \(_md, p) ->
       liftIO $ addAssumption bak (GenericAssumption loc "methodspec postcondition" p)
 
     let preAllocMap = os ^. MS.setupValueSub
@@ -337,9 +349,10 @@ matchArg ::
     SAW.SharedContext ->
     (forall tp'. W4.Expr t tp' -> IO SAW.Term) ->
     Map MS.AllocIndex (Some MirAllocSpec) ->
+    MS.ConditionMetadata ->
     TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
     MirOverrideMatcher sym ()
-matchArg sym sc eval allocSpecs shp rv sv = go shp rv sv
+matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MirOverrideMatcher sym ()
@@ -372,7 +385,7 @@ matchArg sym sc eval allocSpecs shp rv sv = go shp rv sv
                         show (W4.exprType expr) ++ " doesn't match SetupValue type " ++
                         show (W4.exprType val)
                 eq <- liftIO $ W4.isEq sym expr val
-                MS.addAssert eq $ SimError loc $
+                MS.addAssert eq md $ SimError loc $
                     AssertFailureSimError
                         ("mismatch on " ++ show (W4.exprType expr) ++ ": expected " ++
                             show (W4.printSymExpr val))
@@ -467,7 +480,7 @@ matchArg sym sc eval allocSpecs shp rv sv = go shp rv sv
                 eq <- lift $ ovrWithBackend $ \bak ->
                         liftIO $ mirRef_eqIO bak ref' (ptr ^. mpRef)
                 let loc = mkProgramLoc "matchArg" InternalPos
-                MS.addAssert eq $
+                MS.addAssert eq md $
                     SimError loc (AssertFailureSimError ("mismatch on " ++ show alloc) "")
               | otherwise -> error $ "mismatched types for " ++ show alloc ++ ": " ++
                     show tpr ++ " does not match " ++ show (ptr ^. mpType)
@@ -543,13 +556,13 @@ condTerm ::
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     SAW.SharedContext ->
     MS.SetupCondition MIR ->
-    MirOverrideMatcher sym SAW.Term
+    MirOverrideMatcher sym (MS.ConditionMetadata, SAW.Term)
 condTerm _sc (MS.SetupCond_Equal _loc _sv1 _sv2) = do
     error $ "learnCond: SetupCond_Equal NYI" -- TODO
-condTerm sc (MS.SetupCond_Pred _loc tt) = do
+condTerm sc (MS.SetupCond_Pred md tt) = do
     sub <- use MS.termSub
     t' <- liftIO $ SAW.scInstantiateExt sc sub $ SAW.ttTerm tt
-    return t'
+    return (md, t')
 condTerm _ (MS.SetupCond_Ghost _ _ _ _) = do
     error $ "learnCond: SetupCond_Ghost is not supported"
 

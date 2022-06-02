@@ -670,6 +670,7 @@ data ProofGoal =
   , goalLoc  :: String
   , goalDesc :: String
   , goalProp :: Prop
+  , goalTags :: Set String
   }
 
 
