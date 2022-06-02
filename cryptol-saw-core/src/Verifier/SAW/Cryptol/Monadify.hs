@@ -607,13 +607,21 @@ failArgMonTerm :: MonType -> String -> ArgMonTerm
 failArgMonTerm tp str = fromArgTerm tp (failOpenTerm str)
 
 -- | Apply a monadified term to a type or term argument
-applyMonTerm :: MonTerm -> Either MonType ArgMonTerm -> MonTerm
+applyMonTerm :: HasCallStack => MonTerm -> Either MonType ArgMonTerm -> MonTerm
 applyMonTerm (ArgMonTerm (FunMonTerm _ _ _ f)) (Right arg) = f arg
 applyMonTerm (ArgMonTerm (ForallMonTerm _ _ f)) (Left mtp) = f mtp
-applyMonTerm _ _ = error "applyMonTerm: application at incorrect type"
+applyMonTerm (ArgMonTerm (FunMonTerm _ _ _ _)) (Left _) =
+  error "applyMonTerm: application of term-level function to type-level argument"
+applyMonTerm (ArgMonTerm (ForallMonTerm _ _ _)) (Right _) =
+  error "applyMonTerm: application of type-level function to term-level argument"
+applyMonTerm (ArgMonTerm (BaseMonTerm _ _)) _ =
+  error "applyMonTerm: application of non-function base term"
+applyMonTerm (CompMonTerm _ _) _ =
+  error "applyMonTerm: application of computational term"
 
 -- | Apply a monadified term to 0 or more arguments
-applyMonTermMulti :: MonTerm -> [Either MonType ArgMonTerm] -> MonTerm
+applyMonTermMulti :: HasCallStack => MonTerm -> [Either MonType ArgMonTerm] ->
+                     MonTerm
 applyMonTermMulti = foldl applyMonTerm
 
 -- | Build a 'MonTerm' from a global of a given argument type
@@ -836,7 +844,7 @@ monadifyTypeM tp =
      return $ monadifyType (ctxToTypeCtx ctx) tp
 
 -- | Monadify a term to a monadified term of argument type
-monadifyArg :: Maybe MonType -> Term -> MonadifyM ArgMonTerm
+monadifyArg :: HasCallStack => Maybe MonType -> Term -> MonadifyM ArgMonTerm
 {-
 monadifyArg _ t
   | trace ("Monadifying term of argument type: " ++ showTerm t) False
@@ -848,7 +856,7 @@ monadifyArg mtp t =
   monadifyTerm' mtp t >>= argifyMonTerm
 
 -- | Monadify a term to argument type and convert back to a term
-monadifyArgTerm :: Maybe MonType -> Term -> MonadifyM OpenTerm
+monadifyArgTerm :: HasCallStack => Maybe MonType -> Term -> MonadifyM OpenTerm
 monadifyArgTerm mtp t = toArgTerm <$> monadifyArg mtp t
 
 -- | Monadify a term
@@ -868,7 +876,7 @@ monadifyTerm mtp t =
 -- (i.e.,, lambdas, pairs, and records), but is optional for elimination forms
 -- (i.e., applications, projections, and also in this case variables). Note that
 -- this means monadification will fail on terms with beta or tuple redexes.
-monadifyTerm' :: Maybe MonType -> Term -> MonadifyM MonTerm
+monadifyTerm' :: HasCallStack => Maybe MonType -> Term -> MonadifyM MonTerm
 monadifyTerm' (Just mtp) t@(asLambda -> Just _) =
   ask >>= \(MonadifyROState { monStEnv = env, monStCtx = ctx }) ->
   return $ monadifyLambdas env ctx mtp t
@@ -954,7 +962,7 @@ monadifyTerm' _ t =
 
 -- | Monadify the application of a monadified term to a list of terms, using the
 -- type of the already monadified to monadify the arguments
-monadifyApply :: MonTerm -> [Term] -> MonadifyM MonTerm
+monadifyApply :: HasCallStack => MonTerm -> [Term] -> MonadifyM MonTerm
 monadifyApply f (t : ts)
   | MTyArrow tp_in _ <- getMonType f =
     do mtrm <- monadifyArg (Just tp_in) t
@@ -969,7 +977,8 @@ monadifyApply f [] = return f
 
 -- | FIXME: documentation; get our type down to a base type before going into
 -- the MonadifyM monad
-monadifyLambdas :: MonadifyEnv -> MonadifyCtx -> MonType -> Term -> MonTerm
+monadifyLambdas :: HasCallStack => MonadifyEnv -> MonadifyCtx ->
+                   MonType -> Term -> MonTerm
 monadifyLambdas env ctx (MTyForall _ k tp_f) (asLambda ->
                                               Just (x, x_tp, body)) =
   -- FIXME: check that monadifyKind x_tp == k
@@ -984,7 +993,8 @@ monadifyLambdas env ctx tp t =
   monadifyEtaExpand env ctx tp tp t []
 
 -- | FIXME: documentation
-monadifyEtaExpand :: MonadifyEnv -> MonadifyCtx -> MonType -> MonType -> Term ->
+monadifyEtaExpand :: HasCallStack => MonadifyEnv -> MonadifyCtx ->
+                     MonType -> MonType -> Term ->
                      [Either MonType ArgMonTerm] -> MonTerm
 monadifyEtaExpand env ctx top_mtp (MTyForall x k tp_f) t args =
   ArgMonTerm $ ForallMonTerm x k $ \mtp ->
