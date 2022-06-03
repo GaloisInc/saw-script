@@ -4,6 +4,8 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns #-}
 
 {- |
 Module      : Verifier.SAW.Cryptol
@@ -17,6 +19,7 @@ Portability : non-portable (language extensions)
 module Verifier.SAW.Cryptol where
 
 import Control.Monad (foldM, join, unless)
+import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
 import Data.List
@@ -43,7 +46,7 @@ import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
-  (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..))
+  (asPrim, asParamName, nameUnique, nameIdent, nameInfo, NameInfo(..))
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..), mkIdent
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
@@ -51,6 +54,7 @@ import qualified Cryptol.Utils.Ident as C
   , ModPath(..), modPathSplit
   )
 import qualified Cryptol.Utils.RecordMap as C
+import Cryptol.TypeCheck.Type as C (Newtype(..))
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
 
@@ -79,10 +83,13 @@ data Env = Env
   , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
   , envS :: [Term]                 -- ^ SAW-Core bound variable environment (for type checking)
   , envRefPrims :: Map C.PrimIdent C.Expr
+  , envPrims :: Map C.PrimIdent Term -- ^ Translations for other primitives
+  , envPrimTypes :: Map C.PrimIdent Term -- ^ Translations for primitive types
   }
 
 emptyEnv :: Env
-emptyEnv = Env Map.empty Map.empty Map.empty Map.empty [] Map.empty
+emptyEnv =
+  Env Map.empty Map.empty Map.empty Map.empty [] Map.empty Map.empty Map.empty
 
 liftTerm :: (Term, Int) -> (Term, Int)
 liftTerm (t, j) = (t, j + 1)
@@ -99,6 +106,8 @@ liftEnv env =
       , envC = envC env
       , envS = envS env
       , envRefPrims = envRefPrims env
+      , envPrims = envPrims env
+      , envPrimTypes = envPrimTypes env
       }
 
 bindTParam :: SharedContext -> C.TParam -> Env -> IO Env
@@ -259,7 +268,11 @@ importType sc env ty =
                                b <- go (tyargs !! 1)
                                scFun sc a b
             C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
-            C.TCAbstract{} -> panic "importType TODO: abstract type" []
+            C.TCAbstract (C.UserTC n _)
+              | Just prim <- C.asPrim n
+              , Just t <- Map.lookup prim (envPrimTypes env) ->
+                scApplyAllBeta sc t =<< traverse go tyargs
+              | True -> panic ("importType: unknown primitive type: " ++ show n) []
         C.PC pc ->
           case pc of
             C.PLiteral -> -- we omit first argument to class Literal
@@ -664,6 +677,9 @@ importPrimitive sc primOpts env n sch
          e <- importExpr sc env expr
          nmi <- importName n
          scConstant' sc nmi e t
+
+  -- lookup primitive in the extra primitive lookup table
+  | Just nm <- C.asPrim n, Just t <- Map.lookup nm (envPrims env) = return t
 
   -- Optionally, create an opaque constant representing the primitive
   -- if it doesn't match one of the ones we know about.
@@ -1409,7 +1425,7 @@ proveEq sc env t1 t2
        t' <- importType sc env t1
        scCtorApp sc "Prelude.Refl" [s, t']
   | otherwise =
-    case (C.tNoUser t1, C.tNoUser t2) of
+    case (tNoUser t1, tNoUser t2) of
       (C.tIsSeq -> Just (n1, a1), C.tIsSeq -> Just (n2, a2)) ->
         do n1' <- importType sc env n1
            n2' <- importType sc env n2
@@ -1456,6 +1472,14 @@ proveEq sc env t1 t2
           proveEq sc env (C.tTuple (map snd (C.canonicalFields tm1))) (C.tTuple (map snd (C.canonicalFields tm2)))
       (_, _) ->
         panic "proveEq" ["Internal type error:", pretty t1, pretty t2]
+
+-- | Resolve user types (type aliases and newtypes) to their simpler SAW-compatible forms.
+tNoUser :: C.Type -> C.Type
+tNoUser initialTy =
+  case C.tNoUser initialTy of
+    C.TNewtype nt _ -> C.TRec $ C.ntFields nt
+    t -> t
+  
 
 -- | Deconstruct a cryptol tuple type as a pair according to the
 -- saw-core tuple type encoding.
@@ -1646,9 +1670,14 @@ asCryptolTypeValue v =
 scCryptolType :: SharedContext -> Term -> IO (Maybe (Either C.Kind C.Type))
 scCryptolType sc t =
   do modmap <- scGetModuleMap sc
-     case SC.evalSharedTerm modmap Map.empty Map.empty t of
-       SC.TValue tv -> return (asCryptolTypeValue tv)
-       _ -> return Nothing
+     catch
+       (case SC.evalSharedTerm modmap Map.empty Map.empty t of
+           -- NOTE: we make sure that asCryptolTypeValue gets evaluated, to
+           -- ensure that any panics in the simulator get caught here
+           SC.TValue tv
+             | Just !ret <- asCryptolTypeValue tv -> return $ Just ret
+           _ -> return Nothing)
+       (\ (_::SomeException) -> return Nothing)
 
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.
@@ -1784,3 +1813,30 @@ importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
 
     _ -> panic "importFirstOrderValue"
                 ["Expected finite value of type:", show t, "but got", show v]
+
+-- | Generate functions to construct newtypes in the term environment.
+-- (I.e., make identity functions that take the record the newtype wraps.)
+genNewtypeConstructors :: SharedContext -> Map C.Name Newtype -> Env -> IO Env
+genNewtypeConstructors sc newtypes env0 =
+  foldM genConstr env0 newtypes
+  where
+    genConstr :: Env -> Newtype -> IO Env
+    genConstr env nt = do
+      constr <- importExpr sc env (newtypeConstr nt)
+      let env' = env { envE = Map.insert (ntName nt) (constr, 0) (envE env)
+                     , envC = Map.insert (ntName nt) (newtypeSchema nt) (envC env)
+                     }
+      return env'
+    newtypeConstr :: Newtype -> C.Expr
+    newtypeConstr nt = foldr tFn fn (C.ntParams nt)
+      where
+        paramName = C.asParamName (ntName nt)
+        recTy = C.TRec $ ntFields nt
+        fn = C.EAbs paramName recTy (C.EVar paramName) -- EAbs Name Type Expr -- ETAbs TParam Expr
+        tFn tp body =
+          if elem (C.tpKind tp) [C.KType, C.KNum]
+            then C.ETAbs tp body
+            else panic "genNewtypeConstructors" ["illegal newtype parameter kind", show (C.tpKind tp)]
+    newtypeSchema :: Newtype -> C.Schema
+    newtypeSchema nt = C.Forall (ntParams nt) (ntConstraints nt)
+                       $ C.TRec (ntFields nt) `C.tFun` C.TRec (ntFields nt)

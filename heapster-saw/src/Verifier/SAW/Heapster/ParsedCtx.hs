@@ -56,12 +56,15 @@ preconsSomeParsedCtx x (Some (tp :: TypeRepr tp)) (Some (ParsedCtx ns tps)) =
 
 -- | Make a 'ParsedCtx' where the string names are @"arg0,arg1,..."@
 mkArgsParsedCtx :: CruCtx ctx -> ParsedCtx ctx
-mkArgsParsedCtx ctx = ParsedCtx (mkArgsParsedCtx' ctx) ctx
+mkArgsParsedCtx = mkPrefixParsedCtx "arg"
 
-mkArgsParsedCtx' :: CruCtx ctx -> RAssign (Constant String) ctx
-mkArgsParsedCtx' CruCtxNil = MNil
-mkArgsParsedCtx' (CruCtxCons ctx _) =
-  mkArgsParsedCtx' ctx :>: Constant ("arg" ++ show (cruCtxLen ctx))
+mkPrefixParsedCtx :: String -> CruCtx ctx -> ParsedCtx ctx
+mkPrefixParsedCtx prefix ctx = ParsedCtx (mkPrefixParsedCtx' prefix ctx) ctx
+
+mkPrefixParsedCtx' :: String -> CruCtx ctx -> RAssign (Constant String) ctx
+mkPrefixParsedCtx' _ CruCtxNil = MNil
+mkPrefixParsedCtx' prefix (CruCtxCons ctx _) =
+  mkPrefixParsedCtx' prefix ctx :>: Constant (prefix ++ show (cruCtxLen ctx))
 
 -- | Change the type of the last element of a 'ParsedCtx'
 parsedCtxSetLastType :: TypeRepr tp -> ParsedCtx (ctx :> tp') ->

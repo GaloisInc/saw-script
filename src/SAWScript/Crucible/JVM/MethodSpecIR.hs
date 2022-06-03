@@ -45,7 +45,7 @@ import qualified Language.JVM.Parser as J
 -- cryptol-saw-core
 import           Verifier.SAW.TypedTerm (TypedTerm)
 
-import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
@@ -58,6 +58,8 @@ type instance MS.HasSetupStruct CJ.JVM = 'False
 type instance MS.HasSetupArray CJ.JVM = 'False
 type instance MS.HasSetupElem CJ.JVM = 'False
 type instance MS.HasSetupField CJ.JVM = 'False
+type instance MS.HasSetupCast CJ.JVM = 'False
+type instance MS.HasSetupUnion CJ.JVM = 'False
 type instance MS.HasSetupGlobalInitializer CJ.JVM = 'False
 
 type instance MS.HasGhostState CJ.JVM = 'False
@@ -67,6 +69,8 @@ type JIdent = String -- FIXME(huffman): what to put here?
 type instance MS.TypeName CJ.JVM = JIdent
 
 type instance MS.ExtType CJ.JVM = J.Type
+type instance MS.CastType CJ.JVM = ()
+type instance MS.ResolvedState CJ.JVM = ()
 
 --------------------------------------------------------------------------------
 -- *** JVMMethodId
@@ -112,7 +116,7 @@ allocationType alloc =
 
 
 -- TODO: We should probably use a more structured datatype (record), like in LLVM
-type instance MS.AllocSpec CJ.JVM = (ProgramLoc, Allocation)
+type instance MS.AllocSpec CJ.JVM = (MS.ConditionMetadata, Allocation)
 
 --------------------------------------------------------------------------------
 -- *** PointsTo
@@ -120,10 +124,10 @@ type instance MS.AllocSpec CJ.JVM = (ProgramLoc, Allocation)
 type instance MS.PointsTo CJ.JVM = JVMPointsTo
 
 data JVMPointsTo
-  = JVMPointsToField ProgramLoc MS.AllocIndex J.FieldId (Maybe (MS.SetupValue CJ.JVM))
-  | JVMPointsToStatic ProgramLoc J.FieldId (Maybe (MS.SetupValue CJ.JVM))
-  | JVMPointsToElem ProgramLoc MS.AllocIndex Int (Maybe (MS.SetupValue CJ.JVM))
-  | JVMPointsToArray ProgramLoc MS.AllocIndex (Maybe TypedTerm)
+  = JVMPointsToField MS.ConditionMetadata MS.AllocIndex J.FieldId (Maybe (MS.SetupValue CJ.JVM))
+  | JVMPointsToStatic MS.ConditionMetadata J.FieldId (Maybe (MS.SetupValue CJ.JVM))
+  | JVMPointsToElem MS.ConditionMetadata MS.AllocIndex Int (Maybe (MS.SetupValue CJ.JVM))
+  | JVMPointsToArray MS.ConditionMetadata MS.AllocIndex (Maybe TypedTerm)
 
 overlapPointsTo :: JVMPointsTo -> JVMPointsTo -> Bool
 overlapPointsTo =
@@ -182,13 +186,24 @@ data JVMCrucibleContext =
   { _jccJVMClass       :: J.Class
   , _jccCodebase       :: CB.Codebase
   , _jccJVMContext     :: CJ.JVMContext
-  , _jccBackend        :: Sym -- This is stored inside field _ctxSymInterface of Crucible.SimContext; why do we need another one?
+  , _jccBackend        :: SomeOnlineBackend
   , _jccHandleAllocator :: Crucible.HandleAllocator
   }
 
 makeLenses ''JVMCrucibleContext
 
 type instance MS.CrucibleContext CJ.JVM = JVMCrucibleContext
+
+
+jccWithBackend ::
+  JVMCrucibleContext ->
+  (forall solver. OnlineSolver solver => Backend solver -> a) ->
+  a
+jccWithBackend cc k =
+  case cc^.jccBackend of SomeOnlineBackend bak -> k bak
+
+jccSym :: Getter JVMCrucibleContext Sym
+jccSym = to (\jcc -> jccWithBackend jcc backendGetSym)
 
 --------------------------------------------------------------------------------
 
@@ -211,7 +226,7 @@ initialCrucibleSetupState ::
   ProgramLoc ->
   Setup.CrucibleSetupState CJ.JVM
 initialCrucibleSetupState cc (cls, method) loc =
-  Setup.makeCrucibleSetupState cc $
+  Setup.makeCrucibleSetupState () cc $
     initialDefCrucibleMethodSpecIR
       (cc ^. jccCodebase)
       (J.className cls)

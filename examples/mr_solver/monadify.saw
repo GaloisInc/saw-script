@@ -1,0 +1,114 @@
+
+enable_experimental;
+import "SpecPrims.cry" as SpecPrims;
+import "monadify.cry";
+load_sawcore_from_file "../../cryptol-saw-core/saw/CryptolM.sawcore";
+set_monadification "SpecPrims::exists" "Prelude.existsM";
+set_monadification "SpecPrims::forall" "Prelude.forallM";
+
+let run_test name cry_term mon_term_expected =
+  do { print (str_concat "Test: " name);
+       print "Original term:";
+       print_term cry_term;
+       mon_term <- monadify_term cry_term;
+       print "Monadified term:";
+       print_term mon_term;
+       success <- is_convertible mon_term mon_term_expected;
+       if success then print "Success - monadified term matched expected\n" else
+         do { print "Test failed - did not match expected monadified term:";
+              print_term mon_term_expected;
+              exit 1; }; };
+
+my_abs <- unfold_term ["my_abs"] {{ my_abs }};
+my_abs_M <- parse_core_mod "CryptolM" "\
+\ \\(x : (mseq (TCNum 64) Bool)) -> \
+\   bindM (isFinite (TCNum 64)) (mseq (TCNum 64) Bool) (assertFiniteM (TCNum 64)) \
+\     (\\(x' : (isFinite (TCNum 64))) -> \
+\        bindM (isFinite (TCNum 64)) (mseq (TCNum 64) Bool) (assertFiniteM (TCNum 64)) \
+\          (\\(x'' : (isFinite (TCNum 64))) -> \
+\             ite (CompM (mseq (TCNum 64) Bool)) \
+\               (ecLt (mseq (TCNum 64) Bool) (PCmpMSeqBool (TCNum 64) x') x \
+\                  (ecNumber (TCNum 0) (mseq (TCNum 64) Bool) (PLiteralSeqBoolM (TCNum 64) x''))) \
+\               (bindM (isFinite (TCNum 64)) (mseq (TCNum 64) Bool) (assertFiniteM (TCNum 64)) \
+\                  (\\(x''' : (isFinite (TCNum 64))) -> \
+\                     returnM (mseq (TCNum 64) Bool) (ecNeg (mseq (TCNum 64) Bool) (PRingMSeqBool (TCNum 64) x''') x))) \
+\               (returnM (mseq (TCNum 64) Bool) x)))";
+run_test "my_abs" my_abs my_abs_M;
+
+err_if_lt0 <- unfold_term ["err_if_lt0"] {{ err_if_lt0 }};
+err_if_lt0_M <- parse_core_mod "CryptolM" "\
+\ \\(x : (mseq (TCNum 64) Bool)) -> \
+\   bindM (isFinite (TCNum 64)) (mseq (TCNum 64) Bool) (assertFiniteM (TCNum 64)) \
+\     (\\(x' : (isFinite (TCNum 64))) -> \
+\        bindM (isFinite (TCNum 64)) (mseq (TCNum 64) Bool) (assertFiniteM (TCNum 64)) \
+\          (\\(x'' : (isFinite (TCNum 64))) -> \
+\             ite (CompM (mseq (TCNum 64) Bool)) \
+\               (ecLt (mseq (TCNum 64) Bool) (PCmpMSeqBool (TCNum 64) x') x \
+\                  (ecNumber (TCNum 0) (mseq (TCNum 64) Bool) (PLiteralSeqBoolM (TCNum 64) x''))) \
+\               (bindM (isFinite (TCNum 8)) (mseq (TCNum 64) Bool) (assertFiniteM (TCNum 8)) \
+\                  (\\(x''' : (isFinite (TCNum 8))) -> \
+\                     ecErrorM (mseq (TCNum 64) Bool) (TCNum 5) \
+\                       (seqToMseq (TCNum 5) (mseq (TCNum 8) Bool) \
+\                          [ ecNumber (TCNum 120) (mseq (TCNum 8) Bool) (PLiteralSeqBoolM (TCNum 8) x''') \
+\                          , (ecNumber (TCNum 32) (mseq (TCNum 8) Bool) (PLiteralSeqBoolM (TCNum 8) x''')) \
+\                          , ecNumber (TCNum 60) (mseq (TCNum 8) Bool) (PLiteralSeqBoolM (TCNum 8) x''') \
+\                          , (ecNumber (TCNum 32) (mseq (TCNum 8) Bool) (PLiteralSeqBoolM (TCNum 8) x''')) \
+\                          , ecNumber (TCNum 48) (mseq (TCNum 8) Bool) (PLiteralSeqBoolM (TCNum 8) x''') ]))) \
+\               (returnM (mseq (TCNum 64) Bool) x)))";
+run_test "err_if_lt0" err_if_lt0 err_if_lt0_M;
+
+/*
+sha1 <- {{ sha1 }};
+print "Test: sha1";
+print "Original term:";
+print_term sha1;
+sha1M <- monadify_term sha1;
+print "Monadified term:";
+print_term sha1M;
+*/
+
+fib <- unfold_term ["fib"] {{ fib }};
+fibM <- parse_core_mod "CryptolM" "\
+\ \\(_x : (mseq (TCNum 64) Bool)) -> \
+\   multiArgFixM (LRT_Fun (mseq (TCNum 64) Bool) (\\(_ : (mseq (TCNum 64) Bool)) -> LRT_Ret (mseq (TCNum 64) Bool))) \
+\     (\\(fib : ((mseq (TCNum 64) Bool) -> (CompM (mseq (TCNum 64) Bool)))) -> \
+\        \\(x : (mseq (TCNum 64) Bool)) -> \
+\          bindM (isFinite (TCNum 64)) (mseq (TCNum 64) Bool) (assertFiniteM (TCNum 64)) \
+\            (\\(x' : (isFinite (TCNum 64))) -> \
+\               bindM (isFinite (TCNum 64)) (mseq (TCNum 64) Bool) (assertFiniteM (TCNum 64)) \
+\                 (\\(x'' : (isFinite (TCNum 64))) -> \
+\                    ite (CompM (mseq (TCNum 64) Bool)) \
+\                      (ecEq (mseq (TCNum 64) Bool) (PEqMSeqBool (TCNum 64) x') x \
+\                         (ecNumber (TCNum 0) (mseq (TCNum 64) Bool) (PLiteralSeqBoolM (TCNum 64) x''))) \
+\                      (bindM (isFinite (TCNum 64)) (mseq (TCNum 64) Bool) (assertFiniteM (TCNum 64)) \
+\                         (\\(x''' : (isFinite (TCNum 64))) -> \
+\                            returnM (mseq (TCNum 64) Bool) \
+\                              (ecNumber (TCNum 1) (mseq (TCNum 64) Bool) \
+\                                 (PLiteralSeqBoolM (TCNum 64) x''')))) \
+\                      (bindM (isFinite (TCNum 64)) (mseq (TCNum 64) Bool) (assertFiniteM (TCNum 64)) \
+\                         (\\(x''' : (isFinite (TCNum 64))) -> \
+\                            bindM (isFinite (TCNum 64)) (mseq (TCNum 64) Bool) (assertFiniteM (TCNum 64)) \
+\                              (\\(x'''' : (isFinite (TCNum 64))) -> \
+\                                 bindM (mseq (TCNum 64) Bool) (mseq (TCNum 64) Bool) \
+\                                   (fib \
+\                                      (ecMinus (mseq (TCNum 64) Bool) (PRingMSeqBool (TCNum 64) x''') x \
+\                                         (ecNumber (TCNum 1) (mseq (TCNum 64) Bool) \
+\                                            (PLiteralSeqBoolM (TCNum 64) x'''')))) \
+\                                   (\\(x''''' : (mseq (TCNum 64) Bool)) -> \
+\                                      returnM (mseq (TCNum 64) Bool) \
+\                                        (ecMul (mseq (TCNum 64) Bool) (PRingMSeqBool (TCNum 64) x''') x \
+\                                           x''''')))))))) \
+\     _x";
+run_test "fib" fib fibM;
+
+noErrors <- unfold_term ["noErrors"] {{ SpecPrims::noErrors }};
+noErrorsM <- parse_core_mod "CryptolM" "\\(a : sort 0) -> existsM a a (\\(x : a) -> returnM a x)";
+run_test "noErrors" noErrors noErrorsM;
+
+fibSpecNoErrors <- unfold_term ["fibSpecNoErrors"] {{ fibSpecNoErrors }};
+fibSpecNoErrorsM <- parse_core_mod "CryptolM" "\
+\ \\(__p1 : (mseq (TCNum 64) Bool)) -> \
+\   existsM (mseq (TCNum 64) Bool) (mseq (TCNum 64) Bool) \
+\     (\\(x : (mseq (TCNum 64) Bool)) -> \
+\        returnM (mseq (TCNum 64) Bool) x)";
+run_test "fibSpecNoErrors" fibSpecNoErrors fibSpecNoErrorsM;

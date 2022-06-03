@@ -64,6 +64,7 @@ import qualified Control.Arrow as A
 
 import Data.Bits
 import Data.IORef
+import Data.Kind (Type)
 import Data.List (genericTake)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -117,7 +118,7 @@ import Verifier.SAW.Simulator.What4.ReturnTrip
 ---------------------------------------------------------------------
 -- empty datatype to index (open) type families
 -- for this backend
-data What4 (sym :: *)
+data What4 (sym :: Type)
 
 -- | A What4 symbolic array where the domain and co-domain types do not appear
 --   in the type
@@ -791,7 +792,7 @@ w4SolveBasic sym sc addlPrims ecMap ref unintSet t =
 ----------------------------------------------------------------------
 -- Uninterpreted function cache
 
-data SymFnWrapper sym :: Ctx.Ctx BaseType -> * where
+data SymFnWrapper sym :: Ctx.Ctx BaseType -> Type where
   SymFnWrapper :: !(W.SymFn sym args ret) -> SymFnWrapper sym (args Ctx.::> ret)
 
 type SymFnCache sym = Map W.SolverSymbol (MapF (Assignment BaseTypeRepr) (SymFnWrapper sym))
@@ -842,7 +843,7 @@ parseUninterpreted ::
 parseUninterpreted sym ref app ty =
   case ty of
     VPiType nm _ body
-      -> pure $ VFun nm $ \x -> 
+      -> pure $ VFun nm $ \x ->
            do x' <- force x
               app' <- applyUnintApp sym app x'
               t2 <- applyPiBody body (ready x')
@@ -960,6 +961,8 @@ applyUnintApp sym app0 v =
     VCtorApp i ps xv          -> foldM (applyUnintApp sym) app' =<< traverse force (ps++xv)
                                    where app' = suffixUnintApp ("_" ++ (Text.unpack (identBaseName (primName i)))) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
+    VBVToNat w v'             -> applyUnintApp sym app' v'
+                                   where app' = suffixUnintApp ("_" ++ show w) app0
     TValue (suffixTValue -> Just s)
                               -> return (suffixUnintApp s app0)
     VFun _ _ ->
@@ -1398,6 +1401,7 @@ data ArgTerm
     -- ^ length, element type, list, index
   | ArgTermPairLeft ArgTerm
   | ArgTermPairRight ArgTerm
+  | ArgTermBVToNat Natural ArgTerm
 
 -- | Reassemble a saw-core term from an 'ArgTerm' and a list of parts.
 -- The length of the list should be equal to the number of
@@ -1467,6 +1471,10 @@ reconstructArgTerm atrm sc ts =
           do (x1, ts1) <- parse at1 ts0
              x <- scPairRight sc x1
              return (x, ts1)
+        ArgTermBVToNat w at1 ->
+          do (x1, ts1) <- parse at1 ts0
+             x <- scBvToNat sc w x1
+             pure (x, ts1)
 
     parseList :: [ArgTerm] -> [Term] -> IO ([Term], [Term])
     parseList [] ts0 = return ([], ts0)
@@ -1517,6 +1525,15 @@ mkArgTerm sc ty val =
     (_, TValue tval) ->
       do x <- termOfTValue sc tval
          pure (ArgTermConst x)
+
+    (_, VNat n) ->
+      do x <- scNat sc n
+         pure (ArgTermConst x)
+
+    (_, VBVToNat w v) ->
+      do let w' = fromIntegral w -- FIXME: make w :: Natural to avoid fromIntegral
+         x <- mkArgTerm sc (VVecType w' VBoolType) v
+         pure (ArgTermBVToNat w' x)
 
     _ -> fail $ "could not create uninterpreted function argument of type " ++ show ty
 

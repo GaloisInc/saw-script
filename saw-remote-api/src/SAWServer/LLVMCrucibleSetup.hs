@@ -138,7 +138,7 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
 
     setupPointsToBitfield ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
-      PointsToBitfield (P.Expr P.PName) ->
+      PointsToBitfield JSONLLVMType (P.Expr P.PName) ->
       LLVMCrucibleSetupM ()
     setupPointsToBitfield env (PointsToBitfield p fieldName v) =
       do ptr <- getSetupVal env p
@@ -173,7 +173,7 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
 
     getSetupVal ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
-      CrucibleSetupVal (P.Expr P.PName) ->
+      CrucibleSetupVal JSONLLVMType (P.Expr P.PName) ->
       LLVMCrucibleSetupM (CMS.AllLLVM MS.SetupValue)
     getSetupVal _ NullValue = LLVMCrucibleSetupM $ return CMS.anySetupNull
     getSetupVal env (ArrayValue elts) =
@@ -185,6 +185,12 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
     getSetupVal env (FieldLValue base fld) =
       do base' <- getSetupVal env base
          LLVMCrucibleSetupM $ return $ CMS.anySetupField base' fld
+    getSetupVal env (CastLValue base ty) =
+      do base' <- getSetupVal env base
+         LLVMCrucibleSetupM $ return $ CMS.anySetupCast base' (llvmType ty)
+    getSetupVal env (UnionLValue base fld) =
+      do base' <- getSetupVal env base
+         LLVMCrucibleSetupM $ return $ CMS.anySetupUnion base' fld
     getSetupVal env (ElementLValue base idx) =
       do base' <- getSetupVal env base
          LLVMCrucibleSetupM $ return $ CMS.anySetupElem base' idx

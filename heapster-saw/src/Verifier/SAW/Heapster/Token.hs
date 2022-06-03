@@ -32,6 +32,8 @@ data Token
   | TUnsignedLe         -- ^ symbol @<=u@
   | TOr                 -- ^ keyword @or@
   | TTrue               -- ^ keyword @true@
+  | TFalse              -- ^ keyword @false@
+  | TAny                -- ^ keyword @any@
   | TEmpty              -- ^ keyword @empty@
   | TExists             -- ^ keyword @exists@
   | TEq                 -- ^ keyword @eq@
@@ -57,6 +59,7 @@ data Token
   | TStruct             -- ^ keyword @struct@
   | TShape              -- ^ keyword @shape@
   | TEmptySh            -- ^ keyword @emptysh@
+  | TFalseSh            -- ^ keyword @falsesh@
   | TEqSh               -- ^ keyword @eqsh@
   | TPtrSh              -- ^ keyword @ptrsh@
   | TFieldSh            -- ^ keyword @fieldsh@
@@ -112,6 +115,8 @@ describeToken t =
     TUnsignedLe         -> "'<=u'"
     TOr                 -> "keyword 'or'"
     TTrue               -> "keyword 'true'"
+    TFalse              -> "keyword 'false'"
+    TAny                -> "keyword 'any'"
     TEmpty              -> "keyword 'empty'"
     TExists             -> "keyword 'exists'"
     TEq                 -> "keyword 'eq'"
@@ -137,6 +142,7 @@ describeToken t =
     TStruct             -> "keyword 'struct'"
     TShape              -> "keyword 'shape'"
     TEmptySh            -> "keyword 'emptysh'"
+    TFalseSh            -> "keyword 'falsesh'"
     TEqSh               -> "keyword 'eqsh'"
     TPtrSh              -> "keyword 'ptrsh'"
     TFieldSh            -> "keyword 'fieldsh'"

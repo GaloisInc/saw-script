@@ -1,5 +1,5 @@
 # Overall configuration notes:
-# - Artifact uploads for binaries are from GHC 8.10.3
+# - Artifact uploads for binaries are from GHC 8.10.7
 # - Builds for Ubuntu happen on 18.04 (would like to include 20.04, in addition)
 # - Builds for macOS builds on 10.15 (to avoid GHC bug on macOS 11; solvable with GHC > 8.10.4)
 # - Docker builds happen nightly, on manual invocation, and on release branch commits
@@ -68,10 +68,15 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-18.04, macos-10.15, windows-latest]
-        ghc: ["8.8.4", "8.10.3"]
+        ghc: ["8.8.4", "8.10.7", "9.0.2"]
         exclude:
           - os: windows-latest
             ghc: "8.8.4"
+          # Exclude 9.0 on Windows for now until
+          # https://github.com/commercialhaskell/stackage/issues/6400
+          # is resolved
+          - os: windows-latest
+            ghc: "9.0.2"
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
@@ -130,10 +135,11 @@ jobs:
           targets: |
             integration_tests
             cryptol-saw-core-tc-test
+            prover_tests
           dest: dist-tests
 
       - uses: actions/upload-artifact@v2
-        if: "matrix.ghc == '8.10.3'"
+        if: "matrix.ghc == '8.10.7'"
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
@@ -150,21 +156,21 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
 
-      - if: matrix.ghc == '8.10.3' && needs.config.outputs.release == 'true'
+      - if: matrix.ghc == '8.10.7'
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME.tar.gz
 
-      - if: matrix.ghc == '8.10.3' && needs.config.outputs.release == 'true'
+      - if: matrix.ghc == '8.10.7'
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME-with-solvers.tar.gz
 
-      - if: matrix.ghc == '8.10.3'
+      - if: matrix.ghc == '8.10.7'
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -172,7 +178,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '8.10.3'
+      - if: matrix.ghc == '8.10.7'
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -180,7 +186,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: "matrix.ghc == '8.10.3'"
+      - if: "matrix.ghc == '8.10.7'"
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
@@ -191,6 +197,40 @@ jobs:
         with:
           name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
           path: "dist/bin/saw"
+
+  mr-solver-tests:
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-10.15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          BUILD_TARGET_OS: ${{ matrix.os }}
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: "${{ runner.os }}-bins"
+          path: dist/bin
+
+      - name: Update PATH to include SAW
+        shell: bash
+        run: |
+          chmod +x dist/bin/*
+          echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
+
+      - working-directory: examples/mr_solver
+        shell: bash
+        run: |
+          saw monadify.saw
+          saw mr_solver_unit_tests.saw
 
   heapster-tests:
     needs: [build]
@@ -228,9 +268,10 @@ jobs:
 
       - run: opam install -y coq=8.13.2 coq-bits=1.1.0
 
-      # FIXME: the following builds the Coq libraries for the SAW core
-      # to Coq translator; if we do other Coq tests, this should become
-      # its own build artifact, to avoid downloading it twice
+      # FIXME: the following steps generate Coq libraries for the SAW core to
+      # Coq translator and builds them; if we do other Coq tests, these steps
+      # should become their own build artifact, to avoid re-compiling the Coq
+      # libraries
       - working-directory: saw-core-coq/coq
         shell: bash
         run: opam exec -- make -j
@@ -459,7 +500,7 @@ jobs:
 
   s2n-tests:
     name: "Test s2n proofs"
-    timeout-minutes: 60
+    timeout-minutes: 120
     needs: build
     runs-on: ubuntu-18.04
     strategy:
@@ -474,7 +515,7 @@ jobs:
           - hmac-failure
           - awslc
           - blst
-        ghc: ["8.10.3"]
+        ghc: ["8.10.7"]
     steps:
       - uses: actions/checkout@v2
       - run: |

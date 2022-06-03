@@ -145,7 +145,7 @@ compileJVMContract fileReader bic cenv0 c =
            GlobalLValue name -> jvm_static_field_is name sv
            _ -> JVMSetupM $ fail "Invalid points-to statement."
 
-    setupPointsToBitfields :: PointsToBitfield (P.Expr P.PName) -> JVMSetupM ()
+    setupPointsToBitfields :: PointsToBitfield JavaType (P.Expr P.PName) -> JVMSetupM ()
     setupPointsToBitfields _ =
       JVMSetupM $ fail "Points-to-bitfield not supported in JVM API."
 
@@ -173,7 +173,7 @@ compileJVMContract fileReader bic cenv0 c =
 
     getSetupVal ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
-      CrucibleSetupVal (P.Expr P.PName) ->
+      CrucibleSetupVal JavaType (P.Expr P.PName) ->
       JVMSetupM (MS.SetupValue CJ.JVM)
     getSetupVal _ NullValue = JVMSetupM $ return (MS.SetupNull ())
     getSetupVal (env, _) (NamedValue n) =
@@ -186,6 +186,10 @@ compileJVMContract fileReader bic cenv0 c =
       JVMSetupM $ fail "Tuple setup values unsupported in JVM API."
     getSetupVal _ (FieldLValue _ _) =
       JVMSetupM $ fail "Field l-values unsupported in JVM API."
+    getSetupVal _ (CastLValue _ _) =
+      JVMSetupM $ fail "Cast l-values unsupported in JVM API."
+    getSetupVal _ (UnionLValue _ _) =
+      JVMSetupM $ fail "Union l-values unsupported in JVM API."
     getSetupVal _ (ElementLValue _ _) =
       JVMSetupM $ fail "Element l-values unsupported in JVM API."
     getSetupVal _ (GlobalInitializer _) =

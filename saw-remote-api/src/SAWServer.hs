@@ -47,7 +47,7 @@ import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
 import SAWScript.Crucible.LLVM.Builtins (CheckPointsToType)
 import SAWScript.Crucible.LLVM.X86 (defaultStackBaseAlign)
-import qualified SAWScript.Crucible.Common as CC (defaultSAWCoreBackendTimeout)
+import qualified SAWScript.Crucible.Common as CC (defaultSAWCoreBackendTimeout, PathSatSolver(..))
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS (ProvedSpec, GhostGlobal)
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModule)
 import SAWScript.Options (Options(..), processEnv, defaultOptions)
@@ -58,6 +58,8 @@ import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibl
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
+import Verifier.SAW.Cryptol.Monadify (defaultMonEnv)
+import SAWScript.Prover.MRSolver (emptyMREnv)
 
 import qualified Argo
 --import qualified CryptolServer (validateServerState, ServerState(..))
@@ -86,13 +88,15 @@ instance Show SAWTask where
   show (JVMSetup n) = "(JVMSetup" ++ show n ++ ")"
 
 
-data CrucibleSetupVal e
+data CrucibleSetupVal ty e
   = NullValue
-  | ArrayValue [CrucibleSetupVal e]
-  | TupleValue [CrucibleSetupVal e]
+  | ArrayValue [CrucibleSetupVal ty e]
+  | TupleValue [CrucibleSetupVal ty e]
   -- | RecordValue [(String, CrucibleSetupVal e)]
-  | FieldLValue (CrucibleSetupVal e) String
-  | ElementLValue (CrucibleSetupVal e) Int
+  | FieldLValue (CrucibleSetupVal ty e) String
+  | CastLValue (CrucibleSetupVal ty e) ty
+  | UnionLValue (CrucibleSetupVal ty e) String
+  | ElementLValue (CrucibleSetupVal ty e) Int
   | GlobalInitializer String
   | GlobalLValue String
   | NamedValue ServerName
@@ -100,26 +104,25 @@ data CrucibleSetupVal e
   deriving stock (Foldable, Functor, Traversable)
 
 data SetupStep ty
-  = SetupReturn (CrucibleSetupVal CryptolAST) -- ^ The return value
+  = SetupReturn (CrucibleSetupVal ty CryptolAST) -- ^ The return value
   | SetupFresh ServerName Text ty -- ^ Server name to save in, debug name, fresh variable type
   | SetupAlloc ServerName ty Bool (Maybe Int) -- ^ Server name to save in, type of allocation, mutability, alignment
   | SetupGhostValue ServerName Text CryptolAST -- ^ Variable, term
-  | SetupPointsTo (CrucibleSetupVal CryptolAST)
-                  (CrucibleSetupVal CryptolAST)
+  | SetupPointsTo (CrucibleSetupVal ty CryptolAST)
+                  (CrucibleSetupVal ty CryptolAST)
                   (Maybe (CheckPointsToType ty))
                   (Maybe CryptolAST)
                   -- ^ The source, the target, the type to check the target,
                   --   and the condition that must hold in order for the source to point to the target
-  | SetupPointsToBitfield (CrucibleSetupVal CryptolAST)
+  | SetupPointsToBitfield (CrucibleSetupVal ty CryptolAST)
                           Text
-                          (CrucibleSetupVal CryptolAST)
+                          (CrucibleSetupVal ty CryptolAST)
                           -- ^ The source bitfield,
                           --   the name of the field within the bitfield,
                           --   and the target.
-  | SetupExecuteFunction [CrucibleSetupVal CryptolAST] -- ^ Function's arguments
+  | SetupExecuteFunction [CrucibleSetupVal ty CryptolAST] -- ^ Function's arguments
   | SetupPrecond CryptolAST -- ^ Function's precondition
   | SetupPostcond CryptolAST -- ^ Function's postcondition
-  deriving stock (Foldable, Functor, Traversable)
 
 instance Show (SetupStep ty) where
   show _ = "⟨SetupStep⟩" -- TODO
@@ -216,6 +219,8 @@ initialState readFileFn =
                 , rwTypedef = mempty
                 , rwDocs = mempty
                 , rwCryptol = cenv
+                , rwMonadify = defaultMonEnv
+                , rwMRSolverEnv = emptyMREnv
                 , rwPPOpts = defaultPPOpts
                 , rwJVMTrans = jvmTrans
                 , rwPrimsAvail = mempty
@@ -234,6 +239,9 @@ initialState readFileFn =
                 , rwPreservedRegs = []
                 , rwAllocSymInitCheck = True
                 , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
+                , rwPathSatSolver = CC.PathSat_Z3
+                , rwSkipSafetyProofs = False
+                , rwSingleOverrideSpecialCase = False
                 }
      return (SAWState emptyEnv bic [] ro rw M.empty)
 

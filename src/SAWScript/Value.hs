@@ -63,6 +63,7 @@ import qualified Data.AIG as AIG
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Exceptions as SS
 import qualified SAWScript.Position as SS
+import qualified SAWScript.Crucible.Common as Common
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
@@ -76,11 +77,13 @@ import SAWScript.JavaPretty (prettyClass)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
+import SAWScript.Prover.MRSolver.Term as MRSolver
 import SAWScript.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))
 
 import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.CryptolEnv as CEnv
+import Verifier.SAW.Cryptol.Monadify as Monadify
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
 import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
@@ -429,6 +432,8 @@ data TopLevelRW =
   , rwTypedef :: Map SS.Name SS.Type
   , rwDocs    :: Map SS.Name String
   , rwCryptol :: CEnv.CryptolEnv
+  , rwMonadify :: Monadify.MonadifyEnv
+  , rwMRSolverEnv :: MRSolver.MREnv
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPOpts
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
@@ -455,6 +460,10 @@ data TopLevelRW =
   , rwAllocSymInitCheck :: Bool
 
   , rwCrucibleTimeout :: Integer
+
+  , rwPathSatSolver :: Common.PathSatSolver
+  , rwSkipSafetyProofs :: Bool
+  , rwSingleOverrideSpecialCase :: Bool
   }
 
 newtype TopLevel a =
@@ -646,7 +655,7 @@ instance Applicative LLVMCrucibleSetupM where
 instance Monad LLVMCrucibleSetupM where
   return = pure
   LLVMCrucibleSetupM m >>= f =
-    LLVMCrucibleSetupM (m >>= runLLVMCrucibleSetupM . f)
+    LLVMCrucibleSetupM (m >>= \x -> runLLVMCrucibleSetupM (f x))
 
 throwCrucibleSetup :: ProgramLoc -> String -> CrucibleSetup ext a
 throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException loc msg
@@ -670,6 +679,8 @@ newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
 newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
  deriving (Functor, Applicative, Monad)
 
+-- TODO: remove the "reason" parameter and compute it from the
+--       initial proof goal instead
 runProofScript :: ProofScript a -> ProofGoal -> Maybe ProgramLoc -> Text -> TopLevel ProofResult
 runProofScript (ProofScript m) gl ploc rsn =
   do pos <- getPosition
@@ -763,8 +774,8 @@ instance IsValue a => IsValue (TopLevel a) where
 instance FromValue a => FromValue (TopLevel a) where
     fromValue (VTopLevel action) = fmap fromValue action
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind _pos m1 v2) = do
-      v1 <- fromValue m1
+    fromValue (VBind pos m1 v2) = do
+      v1 <- withPosition pos (fromValue m1)
       m2 <- applyValue v2 v1
       fromValue m2
     fromValue _ = error "fromValue TopLevel"
@@ -775,10 +786,10 @@ instance IsValue a => IsValue (ProofScript a) where
 instance FromValue a => FromValue (ProofScript a) where
     fromValue (VProofScript m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind _pos m1 v2) = do
-      v1 <- fromValue m1
-      m2 <- scriptTopLevel $ applyValue v2 v1
-      fromValue m2
+    fromValue (VBind pos m1 v2) = ProofScript $ do
+      v1 <- underExceptT (underStateT (withPosition pos)) (unProofScript (fromValue m1))
+      m2 <- lift $ lift $ applyValue v2 v1
+      unProofScript (fromValue m2)
     fromValue _ = error "fromValue ProofScript"
 
 ---------------------------------------------------------------------------------
@@ -790,9 +801,10 @@ instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = LLVMCrucibleSetupM $ do
       -- TODO: Should both of these be run with the new position?
-      v1 <- underStateT (withPosition pos) (runLLVMCrucibleSetupM (fromValue m1))
-      m2 <- lift $ applyValue v2 v1
-      underStateT (withPosition pos) (runLLVMCrucibleSetupM (fromValue m2))
+      v1 <- underReaderT (underStateT (withPosition pos))
+              (runLLVMCrucibleSetupM (fromValue m1))
+      m2 <- lift $ lift $ applyValue v2 v1
+      runLLVMCrucibleSetupM (fromValue m2)
     fromValue _ = error "fromValue CrucibleSetup"
 
 instance IsValue a => IsValue (JVMSetupM a) where
@@ -801,9 +813,10 @@ instance IsValue a => IsValue (JVMSetupM a) where
 instance FromValue a => FromValue (JVMSetupM a) where
     fromValue (VJVMSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind _pos m1 v2) = JVMSetupM $ do
-      v1 <- runJVMSetupM (fromValue m1)
-      m2 <- lift $ applyValue v2 v1
+    fromValue (VBind pos m1 v2) = JVMSetupM $ do
+      v1 <- underReaderT (underStateT (withPosition pos))
+              (runJVMSetupM (fromValue m1))
+      m2 <- lift $ lift $ applyValue v2 v1
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"
 
@@ -1043,7 +1056,8 @@ addTrace str val =
     VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceProofScript str m)
     VBind pos v1 v2  -> VBind pos      (addTrace str v1) (addTrace str v2)
     VLLVMCrucibleSetup (LLVMCrucibleSetupM m) -> VLLVMCrucibleSetup $ LLVMCrucibleSetupM $
-        addTrace str `fmap` underStateT (addTraceTopLevel str) m
+        addTrace str `fmap` underReaderT (underStateT (addTraceTopLevel str)) m
+  -- TODO? JVM setup blocks too?
     _                -> val
 
 -- | Wrap an action with a handler that catches and rethrows user

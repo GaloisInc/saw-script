@@ -382,8 +382,8 @@ Proof.
   (* Most of the remaining cases are taken care of with just bvAdd_id_l and bvAdd_id_r *)
   all: try rewrite bvAdd_id_r; try rewrite bvAdd_id_l; try reflexivity.
   (* The remaining case just needs a few more rewrites *)
-  - rewrite bvAdd_assoc, bvAdd_comm, bvAdd_assoc; reflexivity.
-  - cbn; rewrite transMbox_Mbox_nil_r; reflexivity.
+  - simpl. f_equal. rewrite bvAdd_assoc. f_equal. rewrite bvAdd_comm. f_equal.
+    simpl. rewrite transMbox_Mbox_nil_r. reflexivity.
 Time Qed.
 
 
@@ -467,6 +467,7 @@ Proof.
   - rewrite e_forall0 in e_maybe0.
     discriminate e_maybe0.
   (* TODO Add the sort of reasoning in the next two cases back into the automation? *)
+
   - rewrite a in e_maybe1.
     discriminate e_maybe1.
   - rewrite a1 in e_maybe2.

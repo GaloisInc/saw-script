@@ -33,6 +33,7 @@ module Verifier.SAW.CryptolEnv
   , lookupIn
   , resolveIdentifier
   , meSolverConfig
+  , mkCryEnv
   , C.ImportPrimitiveOptions(..)
   , C.defaultPrimitiveOptions
   )
@@ -125,6 +126,8 @@ data CryptolEnv = CryptolEnv
   , eExtraTypes :: Map T.Name T.Schema  -- ^ Cryptol types for extra names in scope
   , eExtraTSyns :: Map T.Name T.TySyn   -- ^ Extra Cryptol type synonyms in scope
   , eTermEnv    :: Map T.Name Term      -- ^ SAWCore terms for *all* names in scope
+  , ePrims      :: Map C.PrimIdent Term -- ^ SAWCore terms for primitives
+  , ePrimTypes  :: Map C.PrimIdent Term -- ^ SAWCore terms for primitive type names
   }
 
 
@@ -216,6 +219,8 @@ initCryptolEnv sc = do
     , eExtraTypes = Map.empty
     , eExtraTSyns = Map.empty
     , eTermEnv    = termEnv
+    , ePrims      = Map.empty
+    , ePrimTypes  = Map.empty
     }
 
 -- Parse -----------------------------------------------------------------------
@@ -296,6 +301,8 @@ mkCryEnv env =
      let cryEnv = C.emptyEnv
            { C.envE = fmap (\t -> (t, 0)) terms
            , C.envC = types'
+           , C.envPrims = ePrims env
+           , C.envPrimTypes = ePrimTypes env
            }
      return cryEnv
 
@@ -366,7 +373,9 @@ loadCryptolModule sc primOpts env path = do
   let isNew m' = T.mName m' `notElem` oldModNames
   let newModules = filter isNew $ map ME.lmModule $ ME.lmLoadedModules $ ME.meLoadedModules modEnv''
   let newDeclGroups = concatMap T.mDecls newModules
-  newCryEnv <- C.importTopLevelDeclGroups sc primOpts oldCryEnv newDeclGroups
+  let newNewtypes = Map.difference (ME.loadedNewtypes modEnv') (ME.loadedNewtypes modEnv)
+  newCryEnv <- C.genNewtypeConstructors sc newNewtypes oldCryEnv >>= \cEnv ->
+               C.importTopLevelDeclGroups sc primOpts cEnv newDeclGroups
   newTermEnv <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
 
   let names = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
@@ -427,7 +436,9 @@ importModule sc env src as vis imps = do
   let isNew m' = T.mName m' `notElem` oldModNames
   let newModules = filter isNew $ map ME.lmModule $ ME.lmLoadedModules $ ME.meLoadedModules modEnv'
   let newDeclGroups = concatMap T.mDecls newModules
-  newCryEnv <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions oldCryEnv newDeclGroups
+  let newNewtypes = Map.difference (ME.loadedNewtypes modEnv') (ME.loadedNewtypes modEnv)
+  newCryEnv <- C.genNewtypeConstructors sc newNewtypes oldCryEnv >>= \cEnv ->
+               C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cEnv newDeclGroups
   newTermEnv <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
 
   return env { eImports = (vis, P.Import (T.mName m) as imps) : eImports env

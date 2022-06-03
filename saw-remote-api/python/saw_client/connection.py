@@ -239,6 +239,24 @@ class SAWConnection:
         self.most_recent_result = Prove(self, goal, proof_script, timeout)
         return self.most_recent_result
 
+    def eval_int(self,
+              expr: cryptoltypes.CryptolJSON,
+              timeout : Optional[float] = None) -> Command:
+        """Create an instance of the `EvalInt` command. Documentation on the purpose and
+        use of this command is associated with the top-level `eval_int` function.
+        """
+        self.most_recent_result = EvalInt(self, expr, timeout)
+        return self.most_recent_result
+
+    def eval_bool(self,
+              expr: cryptoltypes.CryptolJSON,
+              timeout : Optional[float] = None) -> Command:
+        """Create an instance of the `EvalBool` command. Documentation on the purpose and
+        use of this command is associated with the top-level `eval_bool` function.
+        """
+        self.most_recent_result = EvalBool(self, expr, timeout)
+        return self.most_recent_result
+
     def set_option(self,
                    option : SAWOption,
                    value : bool,

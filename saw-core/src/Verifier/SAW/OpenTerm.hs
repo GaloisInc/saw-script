@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -20,18 +21,22 @@ module Verifier.SAW.OpenTerm (
   -- * Open terms and converting to closed terms
   OpenTerm(..), completeOpenTerm, completeNormOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
-  closedOpenTerm, flatOpenTerm, sortOpenTerm, natOpenTerm,
+  closedOpenTerm, openOpenTerm, failOpenTerm,
+  bindTCMOpenTerm, bindPPOpenTerm, openTermType,
+  flatOpenTerm, sortOpenTerm, natOpenTerm,
   unitOpenTerm, unitTypeOpenTerm,
   stringLitOpenTerm, stringTypeOpenTerm,
   trueOpenTerm, falseOpenTerm, boolOpenTerm, boolTypeOpenTerm,
-  arrayValueOpenTerm, bvLitOpenTerm, bvTypeOpenTerm,
+  arrayValueOpenTerm, vectorTypeOpenTerm, bvLitOpenTerm, bvTypeOpenTerm,
   pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
-  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
-  applyOpenTerm, applyOpenTermMulti,
+  tupleOpenTerm', tupleTypeOpenTerm',
+  recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
+  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, extCnsOpenTerm,
+  applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
+  applyPiOpenTerm, piArgOpenTerm,
   lambdaOpenTerm, lambdaOpenTermMulti, piOpenTerm, piOpenTermMulti,
-  arrowOpenTerm,
-  letOpenTerm, sawLetOpenTerm,
+  arrowOpenTerm, letOpenTerm, sawLetOpenTerm,
   -- * Monadic operations for building terms with binders
   OpenTermM(..), completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
@@ -49,6 +54,7 @@ import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.Module
@@ -78,6 +84,45 @@ completeOpenTermType sc (OpenTerm termM) =
 -- | Embed a closed 'Term' into an 'OpenTerm'
 closedOpenTerm :: Term -> OpenTerm
 closedOpenTerm t = OpenTerm $ typeInferComplete t
+
+-- | Embed a 'Term' in the given typing context into an 'OpenTerm'
+openOpenTerm :: [(LocalName, Term)] -> Term -> OpenTerm
+openOpenTerm ctx t =
+  -- Extend the local type-checking context, wherever this OpenTerm gets used,
+  -- by appending ctx to the end, so that variables 0..length ctx-1 all get
+  -- type-checked with ctx. If these are really the only free variables, then it
+  -- won't matter what the rest of the ambient context is.
+  --
+  -- FIXME: we should check that the free variables of t are all < length ctx
+  OpenTerm $ withCtx ctx $ typeInferComplete t
+
+-- | Build an 'OpenTerm' that 'fail's in the underlying monad when completed
+failOpenTerm :: String -> OpenTerm
+failOpenTerm str = OpenTerm $ fail str
+
+-- | Bind the result of a type-checking computation in building an 'OpenTerm'.
+-- NOTE: this operation should be considered "unsafe" because it can create
+-- malformed 'OpenTerm's if the result of the 'TCM' computation is used as part
+-- of the resulting 'OpenTerm'. For instance, @a@ should not be 'OpenTerm'.
+bindTCMOpenTerm :: TCM a -> (a -> OpenTerm) -> OpenTerm
+bindTCMOpenTerm m f = OpenTerm (m >>= unOpenTerm . f)
+
+-- | Bind the result of pretty-printing an 'OpenTerm' while building another
+bindPPOpenTerm :: OpenTerm -> (String -> OpenTerm) -> OpenTerm
+bindPPOpenTerm (OpenTerm m) f =
+  OpenTerm $
+  do ctx <- askCtx
+     t <- typedVal <$> m
+     unOpenTerm $ f $ renderSawDoc defaultPPOpts $
+       ppTermInCtx defaultPPOpts (map fst ctx) t
+
+-- | Return type type of an 'OpenTerm' as an 'OpenTerm
+openTermType :: OpenTerm -> OpenTerm
+openTermType (OpenTerm m) =
+  OpenTerm $ do TypedTerm _ tp <- m
+                ctx <- askCtx
+                tp_tp <- liftTCM scTypeOf' (map snd ctx) tp
+                return (TypedTerm tp tp_tp)
 
 -- | Build an 'OpenTerm' from a 'FlatTermF'
 flatOpenTerm :: FlatTermF OpenTerm -> OpenTerm
@@ -135,6 +180,10 @@ bvLitOpenTerm :: [Bool] -> OpenTerm
 bvLitOpenTerm bits =
   arrayValueOpenTerm boolTypeOpenTerm $ map boolOpenTerm bits
 
+-- | Create a SAW core term for a vector type
+vectorTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
+vectorTypeOpenTerm n a = applyGlobalOpenTerm "Prelude.Vec" [n,a]
+
 -- | Create a SAW core term for the type of a bitvector
 bvTypeOpenTerm :: Integral a => a -> OpenTerm
 bvTypeOpenTerm n =
@@ -170,6 +219,37 @@ projTupleOpenTerm :: Integer -> OpenTerm -> OpenTerm
 projTupleOpenTerm 0 t = pairLeftOpenTerm t
 projTupleOpenTerm i t = projTupleOpenTerm (i-1) (pairRightOpenTerm t)
 
+-- | Build a right-nested tuple as an 'OpenTerm' but without adding a final unit
+-- as the right-most element
+tupleOpenTerm' :: [OpenTerm] -> OpenTerm
+tupleOpenTerm' [] = unitOpenTerm
+tupleOpenTerm' ts = foldr1 pairTypeOpenTerm ts
+
+-- | Build a right-nested tuple type as an 'OpenTerm'
+tupleTypeOpenTerm' :: [OpenTerm] -> OpenTerm
+tupleTypeOpenTerm' [] = unitTypeOpenTerm
+tupleTypeOpenTerm' ts = foldr1 pairTypeOpenTerm ts
+
+-- | Build a record value as an 'OpenTerm'
+recordOpenTerm :: [(FieldName, OpenTerm)] -> OpenTerm
+recordOpenTerm flds_ts =
+  OpenTerm $ do let (flds,ots) = unzip flds_ts
+                ts <- mapM unOpenTerm ots
+                typeInferComplete $ RecordValue $ zip flds ts
+
+-- | Build a record type as an 'OpenTerm'
+recordTypeOpenTerm :: [(FieldName, OpenTerm)] -> OpenTerm
+recordTypeOpenTerm flds_ts =
+  OpenTerm $ do let (flds,ots) = unzip flds_ts
+                ts <- mapM unOpenTerm ots
+                typeInferComplete $ RecordType $ zip flds ts
+
+-- | Project a field from a record
+projRecordOpenTerm :: OpenTerm -> FieldName -> OpenTerm
+projRecordOpenTerm (OpenTerm m) f =
+  OpenTerm $ do t <- m
+                typeInferComplete $ RecordProj t f
+
 -- | Build an 'OpenTerm' for a constructor applied to its arguments
 ctorOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
 ctorOpenTerm c all_args = OpenTerm $ do
@@ -199,6 +279,10 @@ globalOpenTerm ident =
                tp <- liftTCM scTypeOfGlobal ident
                return $ TypedTerm trm tp)
 
+-- | Build an 'OpenTerm' for an external constant
+extCnsOpenTerm :: ExtCns Term -> OpenTerm
+extCnsOpenTerm ec = OpenTerm (liftTCM scExtCns ec >>= typeInferComplete)
+
 -- | Apply an 'OpenTerm' to another
 applyOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
 applyOpenTerm (OpenTerm f) (OpenTerm arg) =
@@ -207,6 +291,34 @@ applyOpenTerm (OpenTerm f) (OpenTerm arg) =
 -- | Apply an 'OpenTerm' to 0 or more arguments
 applyOpenTermMulti :: OpenTerm -> [OpenTerm] -> OpenTerm
 applyOpenTermMulti = foldl applyOpenTerm
+
+-- | Apply a named global to 0 or more arguments
+applyGlobalOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
+applyGlobalOpenTerm ident = applyOpenTermMulti (globalOpenTerm ident)
+
+-- | Compute the output type of applying a function of a given type to an
+-- argument. That is, given @tp@ and @arg@, compute the type of applying any @f@
+-- of type @tp@ to @arg@.
+applyPiOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
+applyPiOpenTerm (OpenTerm m_f) (OpenTerm m_arg) =
+  OpenTerm $
+  do f <- m_f
+     arg <- m_arg
+     ret <- applyPiTyped (NotFuncTypeInApp f arg) (typedVal f) arg
+     ctx <- askCtx
+     ret_tp <- liftTCM scTypeOf' (map snd ctx) ret
+     return (TypedTerm ret ret_tp)
+
+-- | Get the argument type of a function type, 'fail'ing if the input term is
+-- not a function type
+piArgOpenTerm :: OpenTerm -> OpenTerm
+piArgOpenTerm (OpenTerm m) =
+  OpenTerm $ m >>= \case
+  (unwrapTermF . typedVal -> Pi _ tp _) -> typeInferComplete tp
+  t ->
+    do ctx <- askCtx
+       fail ("piArgOpenTerm: not a pi type: " ++
+             scPrettyTermInCtx defaultPPOpts (map fst ctx) (typedVal t))
 
 -- | Build an 'OpenTerm' for the top variable in the current context, by
 -- building the 'TCM' computation which checks how much longer the context has

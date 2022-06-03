@@ -1,0 +1,77 @@
+enable_experimental;
+
+let eq_bool b1 b2 =
+  if b1 then
+    if b2 then true else false
+  else
+    if b2 then false else true;
+
+let fail = do { print "Test failed"; exit 1; };
+let run_test name test expected =
+  do { if expected then print (str_concat "Test: " name) else
+         print (str_concat (str_concat "Test: " name) " (expecting failure)");
+       actual <- test;
+       if eq_bool actual expected then print "Test passed\n" else
+         do { print "Test failed\n"; exit 1; }; };
+
+// The constant 0 function const0 x = 0
+const0 <- parse_core "\\ (_:Vec 64 Bool) -> returnM (Vec 64 Bool) (bvNat 64 0)";
+
+// The constant 1 function const1 x = 1
+const1 <- parse_core "\\ (_:Vec 64 Bool) -> returnM (Vec 64 Bool) (bvNat 64 1)";
+
+// const0 <= const0
+run_test "const0 |= const0" (mr_solver_query const0 const0) true;
+
+// The function test_fun0 from the prelude = const0
+test_fun0 <- parse_core "test_fun0";
+run_test "const0 |= test_fun0" (mr_solver_query const0 test_fun0) true;
+
+// not const0 <= const1
+run_test "const0 |= const1" (mr_solver_query const0 const1) false;
+
+// The function test_fun1 from the prelude = const1
+test_fun1 <- parse_core "test_fun1";
+run_test "const1 |= test_fun1" (mr_solver_query const1 test_fun1) true;
+run_test "const0 |= test_fun1" (mr_solver_query const0 test_fun1) false;
+
+// ifxEq0 x = If x == 0 then x else 0; should be equal to 0
+ifxEq0 <- parse_core "\\ (x:Vec 64 Bool) -> \
+                       \ ite (CompM (Vec 64 Bool)) (bvEq 64 x (bvNat 64 0)) \
+                       \     (returnM (Vec 64 Bool) x) \
+                       \     (returnM (Vec 64 Bool) (bvNat 64 0))";
+
+// ifxEq0 <= const0
+run_test "ifxEq0 |= const0" (mr_solver_query ifxEq0 const0) true;
+
+// not ifxEq0 <= const1
+run_test "ifxEq0 |= const1" (mr_solver_query ifxEq0 const1) false;
+
+// noErrors1 x = exists x. returnM x
+noErrors1 <- parse_core "\\ (x:Vec 64 Bool) -> \
+                          \ existsM (Vec 64 Bool) (Vec 64 Bool) \
+                          \ (\\ (x:Vec 64 Bool) -> returnM (Vec 64 Bool) x)";
+
+// const0 <= noErrors
+run_test "noErrors1 |= noErrors1" (mr_solver_query noErrors1 noErrors1) true;
+
+// const1 <= noErrors
+run_test "const1 |= noErrors1" (mr_solver_query const1 noErrors1) true;
+
+// noErrorsRec1 x = orM (existsM x. returnM x) (noErrorsRec1 x)
+// Intuitively, this specifies functions that either return a value or loop
+noErrorsRec1 <- parse_core
+  "fixM (Vec 64 Bool) (\\ (_:Vec 64 Bool) -> Vec 64 Bool) \
+      \ (\\ (f: Vec 64 Bool -> CompM (Vec 64 Bool)) (x:Vec 64 Bool) -> \
+          \ orM (Vec 64 Bool) \
+              \ (existsM (Vec 64 Bool) (Vec 64 Bool) \
+                       \ (\\ (x:Vec 64 Bool) -> returnM (Vec 64 Bool) x)) \
+              \ (f x))";
+
+// loop x = loop x
+loop1 <- parse_core
+  "fixM (Vec 64 Bool) (\\ (_:Vec 64 Bool) -> Vec 64 Bool) \
+      \ (\\ (f: Vec 64 Bool -> CompM (Vec 64 Bool)) (x:Vec 64 Bool) -> f x)";
+
+// loop1 <= noErrorsRec1
+run_test "loop1 |= noErrorsRec1" (mr_solver_query loop1 noErrorsRec1) true;

@@ -47,6 +47,8 @@ import Verifier.SAW.Heapster.UntypedAST
 '<=u'           { Located $$ TUnsignedLe                }
 'or'            { Located $$ TOr                        }
 'true'          { Located $$ TTrue                      }
+'false'         { Located $$ TFalse                     }
+'any'           { Located $$ TAny                       }
 'empty'         { Located $$ TEmpty                     }
 'exists'        { Located $$ TExists                    }
 'eq'            { Located $$ TEq                        }
@@ -72,6 +74,7 @@ import Verifier.SAW.Heapster.UntypedAST
 'struct'        { Located $$ TStruct                    }
 'shape'         { Located $$ TShape                     }
 'emptysh'       { Located $$ TEmptySh                   }
+'falsesh'       { Located $$ TFalseSh                   }
 'eqsh'          { Located $$ TEqSh                      }
 'ptrsh'         { Located $$ TPtrSh                     }
 'fieldsh'       { Located $$ TFieldSh                   }
@@ -153,9 +156,10 @@ expr ::                                         { AstExpr }
 -- Shapes
 
   | 'emptysh'                                   { ExEmptySh (pos $1) }
+  | 'falsesh'                                   { ExFalseSh (pos $1) }
   | expr 'orsh' expr                            { ExOrSh (pos $2) $1 $3 }
   | expr ';' expr                               { ExSeqSh (pos $2) $1 $3 }
-  | 'eqsh' '(' expr ')'                         { ExEqSh (pos $1) $3 }
+  | 'eqsh' '(' expr ',' expr ')'                { ExEqSh (pos $1) $3 $5 }
   | lifetime 'ptrsh' '(' expr ',' expr ')'      { ExPtrSh (pos $2) $1 (Just $4) $6 }
   | lifetime 'ptrsh' '('          expr ')'      { ExPtrSh (pos $2) $1 Nothing $4 }
   | 'fieldsh' '(' expr ',' expr ')'             { ExFieldSh (pos $1) (Just $3) $5 }
@@ -167,6 +171,8 @@ expr ::                                         { AstExpr }
 -- Value Permissions
 
   | 'true'                                      { ExTrue (pos $1) }
+  | 'false'                                     { ExFalse (pos $1) }
+  | 'any'                                       { ExAny (pos $1) }
   | expr 'or' expr                              { ExOr (pos $2) $1 $3 }
   | 'eq' '(' expr ')'                           { ExEq (pos $1) $3 }
   | 'exists' IDENT ':' type '.' expr            { ExExists (pos $1) (locThing $2) $4 $6 }

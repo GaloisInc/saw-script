@@ -33,6 +33,7 @@ import Prelude hiding (span)
 import Data.Maybe
 import Data.List hiding (span)
 import GHC.TypeLits
+import qualified Data.BitVector.Sized as BV
 import Data.Functor.Constant
 import Data.Functor.Product
 import Control.Applicative
@@ -47,6 +48,7 @@ import Data.Parameterized.Context (Assignment, IsAppend(..),
                                    incSize, zeroSize, sizeInt,
                                    size, generate, extend)
 import qualified Data.Parameterized.Context as Ctx
+import Data.Parameterized.TraversableF
 
 import Data.Binding.Hobbits
 import Data.Binding.Hobbits.MonadBind
@@ -66,6 +68,56 @@ import Lang.Crucible.LLVM.MemModel hiding (Mutability(..))
 
 import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.Permissions
+
+
+----------------------------------------------------------------------
+-- * Data types and related types
+----------------------------------------------------------------------
+
+-- | A permission of some llvm pointer type
+data SomeLLVMPerm =
+  forall w. (1 <= w, KnownNat w) => SomeLLVMPerm (ValuePerm (LLVMPointerType w))
+
+-- | An 'ArgLayoutPerm' is a set of permissions on a sequence of 0 or more
+-- arguments, given by the @tps@ type-level argument. These permissions are
+-- similar to the language of permissions on a Crucible struct, except that the
+-- langauge is restricted to ensure that they can always be appended.
+--
+-- FIXME: add support for shapes like bool whose size is smaller than a byte,
+-- with the constraint that the end result should only have fields whose sizes
+-- are whole numbers of bytes. The idea would be to allow sub-byte-sized fields
+-- be appended, but to then round their sizes up to whole numbers of bytes at
+-- disjunctions and at the top level.
+data ArgLayoutPerm ctx where
+  ALPerm :: RAssign ValuePerm (CtxToRList ctx) -> ArgLayoutPerm ctx
+  ALPerm_Or :: ArgLayoutPerm ctx -> ArgLayoutPerm ctx -> ArgLayoutPerm ctx
+  ALPerm_Exists :: KnownRepr TypeRepr a =>
+                   Binding a (ArgLayoutPerm ctx) -> ArgLayoutPerm ctx
+
+-- | An argument layout captures how argument values are laid out as a Crucible
+-- struct of 0 or more machine words / fields
+data ArgLayout where
+  ArgLayout :: CtxRepr ctx -> ArgLayoutPerm ctx -> ArgLayout
+
+-- | Like an 'ArgLayout' but with output permissions on arguments as well
+data ArgLayoutIO where
+  ArgLayoutIO :: CtxRepr ctx -> ArgLayoutPerm ctx ->
+                 RAssign ValuePerm (CtxToRList ctx) -> ArgLayoutIO
+
+-- | Function permission that is existential over all types (note that there
+-- used to be 3 type variables instead of 4 for 'FunPerm', thus the name)
+data Some3FunPerm =
+  forall ghosts args gouts ret. Some3FunPerm (FunPerm ghosts args gouts ret)
+
+
+----------------------------------------------------------------------
+-- * Template Haskell–generated instances
+----------------------------------------------------------------------
+
+$(mkNuMatching [t| SomeLLVMPerm |])
+$(mkNuMatching [t| forall ctx. ArgLayoutPerm ctx |])
+$(mkNuMatching [t| ArgLayout |])
+$(mkNuMatching [t| Some3FunPerm |])
 
 
 ----------------------------------------------------------------------
@@ -146,12 +198,6 @@ assocAppend4 :: RAssign f ctx1 -> prx2 ctx2 -> RAssign prx3 ctx3 ->
 assocAppend4 fs1 ctx2 ctx3 ctx4 fs234 =
   let (fs2, fs3, fs4) = rlSplit3 ctx2 ctx3 ctx4 fs234 in
   RL.append (RL.append (RL.append fs1 fs2) fs3) fs4
-
--- | A permission of some llvm pointer type
-data SomeLLVMPerm =
-  forall w. (1 <= w, KnownNat w) => SomeLLVMPerm (ValuePerm (LLVMPointerType w))
-
-$(mkNuMatching [t| SomeLLVMPerm |])
 
 -- | Info used for converting Rust types to shapes
 -- NOTE: @rciRecType@ should probably have some info about lifetimes
@@ -254,11 +300,10 @@ class RsConvert w a b | w a -> b where
 -- * Converting Named Rust Types
 ----------------------------------------------------------------------
 
--- FIXME HERE: I think we no longer need SomeShapeFun
-
--- | A shape function with existentially quantified arguments
-data SomeShapeFun w =
-  forall args. SomeShapeFun (CruCtx args) (Mb args (PermExpr (LLVMShapeType w)))
+-- | A function that builds a shape from a sequence of 'PermExpr' arguments and
+-- a 'String' representation of them for printing errors
+type ShapeFun w =
+  Some TypedPermExprs -> String -> RustConvM (PermExpr (LLVMShapeType w))
 
 -- | A sequence of 'PermExprs' along with their types
 type TypedPermExprs = RAssign (Typed PermExpr)
@@ -284,33 +329,108 @@ typedExprsOfList :: TypeRepr a -> [PermExpr a] -> Some TypedPermExprs
 typedExprsOfList tp =
   foldl (\(Some es) e -> Some (es :>: Typed tp e)) (Some MNil)
 
--- | Apply a 'SomeShapeFun', if possible
-tryApplySomeShapeFun :: SomeShapeFun w -> Some TypedPermExprs ->
+-- | Build a 'ShapeFun' for the given 'RustName' from a function on permission
+-- expressions of the supplied types
+mkShapeFun :: RustName -> CruCtx ctx ->
+              (PermExprs ctx -> PermExpr (LLVMShapeType w)) -> ShapeFun w
+mkShapeFun nm ctx f = \some_exprs exprs_str -> case some_exprs of
+  Some exprs
+    | Just Refl <- testEquality ctx (typedPermExprsCtx exprs) ->
+      return $ f (typedPermExprsExprs exprs)
+  _ ->
+    fail $ renderDoc $ fillSep
+    [ pretty "Converting application of type:" <+> pretty (show nm)
+    , pretty "To arguments:" <+> pretty exprs_str
+    , pretty "Arguments not of expected types:" <+> pretty ctx ]
+
+-- | Build a 'ShapeFun' with no arguments
+constShapeFun :: RustName -> PermExpr (LLVMShapeType w) -> ShapeFun w
+constShapeFun nm sh = mkShapeFun nm CruCtxNil (const sh)
+
+-- | Test if a shape is "option-like", meaning it is a tagged union shape with
+-- two tags, one of which has contents and one which has no contents; i.e., it
+-- is of the form
+--
+-- > (fieldsh(eq(llvmword(bv1)));sh) orsh (fieldsh(eq(llvmword(bv2))))
+--
+-- or
+--
+-- > (fieldsh(eq(llvmword(bv1)))) orsh (fieldsh(eq(llvmword(bv2)));sh)
+--
+-- where @sh@ is non-empty. If so, return the non-empty shape @sh@, called the
+-- "payload" shape.
+matchOptionLikeShape :: PermExpr (LLVMShapeType w) ->
                         Maybe (PermExpr (LLVMShapeType w))
-tryApplySomeShapeFun (SomeShapeFun ctx mb_sh) (Some exprs)
-  | Just Refl <- testEquality ctx (typedPermExprsCtx exprs) =
-    Just $ subst (substOfExprs $ typedPermExprsExprs exprs) mb_sh
-tryApplySomeShapeFun _ _ = Nothing
+matchOptionLikeShape top_sh = case asTaggedUnionShape top_sh of
+  Just (SomeTaggedUnionShape (taggedUnionDisjsNoTags ->
+                              [PExpr_EmptyShape, PExpr_EmptyShape])) -> Nothing
+  Just (SomeTaggedUnionShape (taggedUnionDisjsNoTags ->
+                              [PExpr_EmptyShape, sh])) -> Just sh
+  Just (SomeTaggedUnionShape (taggedUnionDisjsNoTags ->
+                              [sh, PExpr_EmptyShape])) -> Just sh
+  _ -> Nothing
 
--- | Build a 'SomeShapeFun' with no arguments
-constShapeFun :: PermExpr (LLVMShapeType w) -> SomeShapeFun w
-constShapeFun sh = SomeShapeFun CruCtxNil (emptyMb sh)
+-- | Test if a shape-in-binding is "option-like" as per 'matchOptionLikeShape'
+matchMbOptionLikeShape :: Mb ctx (PermExpr (LLVMShapeType w)) ->
+                          Maybe (Mb ctx (PermExpr (LLVMShapeType w)))
+matchMbOptionLikeShape =
+  mbMaybe . mbMapCl $(mkClosed [| matchOptionLikeShape |])
 
--- | Build the shape @fieldsh(exists z:bv sz.eq(llvmword(z))@
-sizedIntShapeFun :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
-                    prx1 w -> prx2 sz -> SomeShapeFun w
-sizedIntShapeFun _ sz =
-  constShapeFun $ PExpr_FieldShape (LLVMFieldShape $
-                                    ValPerm_Exists $ llvmExEqWord sz)
+-- | Test if a shape is a sum type where one branch is empty, i.e., a tagged
+-- union shape with two tags, one of which has the false shape as contents. If
+-- so, return the non-false shape @sh@.
+matchSumFalseShape :: PermExpr (LLVMShapeType w) ->
+                      Maybe (PermExpr (LLVMShapeType w))
+matchSumFalseShape top_sh = case asTaggedUnionShape $ simplifyShape top_sh of
+  Just (SomeTaggedUnionShape (taggedUnionDisjsNoTags -> [sh1, sh2]))
+    | PExpr_FalseShape <- simplifyShape sh1 -> Just sh2
+  Just (SomeTaggedUnionShape (taggedUnionDisjsNoTags -> [sh1, sh2]))
+    | PExpr_FalseShape <- simplifyShape sh2 -> Just sh1
+  _ -> Nothing
 
--- | Build a `SomeShapeFun` from `SomeNamedShape`
-namedShapeShapeFun :: NatRepr w -> SomeNamedShape -> RustConvM (SomeShapeFun w)
-namedShapeShapeFun w (SomeNamedShape nmsh)
-  | Just Refl <- testEquality w (natRepr nmsh) = return $
-    SomeShapeFun (namedShapeArgs nmsh)
-                 (nuMulti (cruCtxProxies (namedShapeArgs nmsh))
-                          (\ns -> PExpr_NamedShape Nothing Nothing nmsh (namesToExprs ns)))
-namedShapeShapeFun w (SomeNamedShape nmsh) =
+
+-- | Build a `ShapeFun` from a `SomeNamedShape`
+namedShapeShapeFun :: (1 <= w, KnownNat w) => RustName -> NatRepr w ->
+                      SomeNamedShape -> RustConvM (ShapeFun w)
+-- For an option-like shape, try to do discriminant elision
+namedShapeShapeFun nm w (SomeNamedShape nmsh)
+  | Just Refl <- testEquality w (natRepr nmsh)
+  , DefinedShapeBody mb_sh <- namedShapeBody nmsh
+  , Just mb_payload_sh <- matchMbOptionLikeShape mb_sh =
+    return $ mkShapeFun nm (namedShapeArgs nmsh) $ \exprs ->
+    case simplifyShape (subst (substOfExprs exprs) mb_payload_sh) of
+
+      -- If the payload is a pointer shape, return payload orsh eq(0)
+      payload_sh@(isLLVMPointerShape -> True) ->
+        PExpr_OrShape payload_sh $ llvmEqWordShape w 0
+
+      -- If the payload is a tagged union shape, add an extra tag with an empty
+      -- shape for its argument
+      (asTaggedUnionShape -> Just (SomeTaggedUnionShape tag_u)) ->
+        let new_tag =
+              foldr max 0 $ map ((1+) . BV.asUnsigned) $
+              taggedUnionTags tag_u in
+        taggedUnionToShape $
+        taggedUnionCons (BV.mkBV knownNat new_tag) (llvmEqWordShape w new_tag)
+        tag_u
+
+      -- Otherwise, just use the named shape itself
+      _ -> PExpr_NamedShape Nothing Nothing nmsh exprs
+
+namedShapeShapeFun nm w (SomeNamedShape nmsh)
+  | Just Refl <- testEquality w (natRepr nmsh) =
+    return $ mkShapeFun nm (namedShapeArgs nmsh) $ \exprs ->
+    case namedShapeBody nmsh of
+      -- Test if nmsh applied to exprs unfolds to a sum with false, and if so,
+      -- return just the non-false payload shape
+      DefinedShapeBody mb_sh
+        | unfolded_sh <- simplifyShape (subst (substOfExprs exprs) mb_sh)
+        , Just sh <- matchSumFalseShape unfolded_sh ->
+          sh
+      -- Otherwise just return the named shape applied to exprs
+      _ -> PExpr_NamedShape Nothing Nothing nmsh exprs
+
+namedShapeShapeFun _ w (SomeNamedShape nmsh) =
   fail $ renderDoc $ fillSep
   [pretty "Incorrect size of shape" <+> pretty (namedShapeName nmsh),
    pretty "Expected:" <+> pretty (intValue w),
@@ -327,15 +447,15 @@ flattenRustName (RustName ids) = concat $ intersperse "::" $ map name ids
 instance Show RustName where
   show = show . flattenRustName
 
-instance RsConvert w RustName (SomeShapeFun w) where
+instance RsConvert w RustName (ShapeFun w) where
   rsConvert w nm =
     do let str = flattenRustName nm
        env <- rciPermEnv <$> ask
        case lookupNamedShape env str of
-         Just nmsh -> namedShapeShapeFun (natRepr w) nmsh
+         Just nmsh -> namedShapeShapeFun nm (natRepr w) nmsh
          Nothing ->
            do n <- lookupName str (LLVMShapeRepr (natRepr w))
-              return $ constShapeFun (PExpr_Var n)
+              return $ constShapeFun nm (PExpr_Var n)
 
 -- | Get the "name" = sequence of identifiers out of a Rust path
 rsPathName :: Path a -> RustName
@@ -361,6 +481,27 @@ isNamedType _ = False
 isNamedParams :: PathParameters a -> Bool
 isNamedParams (AngleBracketed _ tys _ _) = all isNamedType tys
 isNamedParams _ = error "Parenthesized types not supported"
+
+-- | Decide whether a Rust type definition is polymorphic and "Option-like";
+-- that is, it contains only one data-bearing variant, and the data is of the
+-- polymorphic type
+isPolyOptionLike :: Item Span -> Bool
+isPolyOptionLike (Enum _ _ _ variants (Generics _ [TyParam _ t _ _ _] _ _) _) =
+  -- Short-circuit if no variant carries the type parameter. Otherwise check
+  -- that all other variants carry nothing
+  case find containsT variants of
+    Nothing -> False
+    Just v -> all isUnitVariant (delete v variants)
+  where
+    containsT (Variant _ _ (TupleD [StructField _ _ (PathTy _ (Path _ [PathSegment t' _ _] _) _) _ _] _) _ _) =
+      name t == name t'
+    containsT (Variant _ _ (StructD [StructField _ _ (PathTy _ (Path _ [PathSegment t' _ _] _) _) _ _] _) _ _) =
+      name t == name t'
+    containsT _ = False
+
+    isUnitVariant (Variant _ _ (UnitD _) _ _) = True
+    isUnitVariant _ = False
+isPolyOptionLike _ = False
 
 -- | Get all of the 'RustName's of path parameters, if they're angle-bracketed
 pParamNames :: PathParameters a -> [RustName]
@@ -468,17 +609,9 @@ instance RsConvert w (Ty Span) (PermExpr (LLVMShapeType w)) where
          Just (rec_n, _, _)
            | rec_n == rsPathName path -> fail "Arguments do not match"
          _ ->
-           do someShapeFn@(SomeShapeFun expected _ ) <- rsConvert w (rsPathName path)
-              someTypedArgs@(Some tyArgs) <- rsConvert w (rsPathParams path)
-              let actual = typedPermExprsCtx tyArgs
-              case tryApplySomeShapeFun someShapeFn someTypedArgs of
-                Just shTp -> return shTp
-                Nothing ->
-                  fail $ renderDoc $ fillSep
-                  [ pretty "Converting PathTy: " <+> pretty (show $ rsPathName path)
-                  , pretty "Expected arguments:" <+> pretty expected
-                  , pretty "Actual arguments:" <+> pretty actual
-                  ]
+           do shapeFn <- rsConvert w (rsPathName path)
+              someTypedArgs <- rsConvert w (rsPathParams path)
+              shapeFn someTypedArgs $ show (RustPP.prettyUnresolved path)
   rsConvert (w :: prx w) (BareFn _ abi rust_ls2 fn_tp span) =
     do Some3FunPerm fun_perm <- rsConvertMonoFun w span abi rust_ls2 fn_tp
        let args = funPermArgs fun_perm
@@ -607,16 +740,6 @@ instance RsConvert w (StructField Span) (PermExpr (LLVMShapeType w)) where
 -- * Computing the ABI-Specific Layout of Rust Types
 ----------------------------------------------------------------------
 
--- | An 'ArgLayoutPerm' is a set of permissions on a sequence of 0 or more
--- arguments, given by the @tps@ type-level argument. These permissions are
--- similar to the language of permissions on a Crucible struct, except that the
--- langauge is restricted to ensure that they can always be appended.
-data ArgLayoutPerm ctx where
-  ALPerm :: RAssign ValuePerm (CtxToRList ctx) -> ArgLayoutPerm ctx
-  ALPerm_Or :: ArgLayoutPerm ctx -> ArgLayoutPerm ctx -> ArgLayoutPerm ctx
-  ALPerm_Exists :: KnownRepr TypeRepr a =>
-                   Binding a (ArgLayoutPerm ctx) -> ArgLayoutPerm ctx
-
 -- | Build an 'ArgLayoutPerm' that just assigns @true@ to every field
 trueArgLayoutPerm :: Assignment prx ctx -> ArgLayoutPerm ctx
 trueArgLayoutPerm ctx = ALPerm (RL.map (const ValPerm_True) $ assignToRList ctx)
@@ -663,11 +786,6 @@ appendArgLayoutPerms ctx1 ctx2 p (ALPerm_Exists mb_q) =
   ALPerm_Exists $ fmap (\q -> appendArgLayoutPerms ctx1 ctx2 p q) mb_q
 appendArgLayoutPerms ctx1 ctx2 (ALPerm ps) (ALPerm qs) =
   ALPerm $ assignToRListAppend ctx1 ctx2 ps qs
-
--- | An argument layout captures how argument values are laid out as a Crucible
--- struct of 0 or more machine words / fields
-data ArgLayout where
-  ArgLayout :: CtxRepr ctx -> ArgLayoutPerm ctx -> ArgLayout
 
 -- | Count the number of fields of an 'ArgLayout'
 argLayoutNumFields :: ArgLayout -> Int
@@ -733,6 +851,28 @@ argLayoutStructPerm (ArgLayout ghosts args mb_perms)
     valPermExistsMulti ghosts $ fmap (ValPerm_Conj1 . Perm_Struct) mb_perms
 -}
 
+-- | Append two 'ArgLayoutIO's, if possible
+appendArgLayoutIO :: ArgLayoutIO -> ArgLayoutIO -> ArgLayoutIO
+appendArgLayoutIO (ArgLayoutIO ctx1 p1 ps1) (ArgLayoutIO ctx2 p2 ps2) =
+  ArgLayoutIO (ctx1 Ctx.<++> ctx2) (appendArgLayoutPerms ctx1 ctx2 p1 p2)
+  (assignToRListAppend ctx1 ctx2 ps1 ps2)
+
+-- | Convert an 'ArgLayout' to an 'ArgLayoutIO' by adding @true@ output perms
+argLayoutAddTrueOuts :: ArgLayout -> ArgLayoutIO
+argLayoutAddTrueOuts (ArgLayout ctx p) =
+  ArgLayoutIO ctx p $ trueValuePerms $ assignToRList ctx
+
+-- | Construct an 'ArgLayoutIO' for 0 arguments
+argLayoutIO0 :: ArgLayoutIO
+argLayoutIO0 = ArgLayoutIO Ctx.empty (ALPerm MNil) MNil
+
+-- | Create an 'ArgLayoutIO' from a single input and output perm
+argLayoutIO1 :: KnownRepr TypeRepr a => ValuePerm a -> ValuePerm a ->
+                ArgLayoutIO
+argLayoutIO1 p_in p_out =
+  ArgLayoutIO (extend Ctx.empty knownRepr) (ALPerm
+                                            (MNil :>: p_in)) (MNil :>: p_out)
+
 -- | Convert a shape to a writeable block permission with that shape, or fail if
 -- the length of the shape is not defined
 --
@@ -753,11 +893,6 @@ shapeToBlock _ = Nothing
 shapeToBlockPerm :: (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
                     Maybe (ValuePerm (LLVMPointerType w))
 shapeToBlockPerm = fmap ValPerm_LLVMBlock . shapeToBlock
-
--- | Function permission that is existential over all types (note that there
--- used to be 3 type variables instead of 4 for 'FunPerm', thus the name)
-data Some3FunPerm =
-  forall ghosts args gouts ret. Some3FunPerm (FunPerm ghosts args gouts ret)
 
 instance PermPretty Some3FunPerm where
   permPrettyM (Some3FunPerm fun_perm) = permPrettyM fun_perm
@@ -786,6 +921,7 @@ un3SomeFunPerm args ret (Some3FunPerm fun_perm) =
 -- ghost variables in the 'ArgLayout'
 funPerm3FromMbArgLayout :: CtxRepr ctx ->
                            MatchedMb ghosts (ArgLayoutPerm ctx) ->
+                           ValuePerms (CtxToRList ctx) ->
                            CruCtx ghosts -> CtxRepr args ->
                            ValuePerms (CtxToRList args) ->
                            ValuePerms (CtxToRList args) ->
@@ -797,8 +933,8 @@ funPerm3FromMbArgLayout :: CtxRepr ctx ->
 -- is, we build the function permission
 --
 -- (ghosts). arg1:p1, ..., argn:pn -o ret:ret_perm
-funPerm3FromMbArgLayout ctx [nuMP| ALPerm mb_ps_in |]
-  ghosts ctx1 ps1_in ps1_out ret_tp ret_perm
+funPerm3FromMbArgLayout ctx [nuMP| ALPerm mb_ps_in |] ps_out
+                        ghosts ctx1 ps1_in ps1_out ret_tp ret_perm
   | ctx_args <- mkCruCtx (ctx1 Ctx.<++> ctx)
   , ctx_all <- appendCruCtx ghosts ctx_args
   , ghost_perms <- trueValuePerms $ cruCtxProxies ghosts
@@ -809,38 +945,38 @@ funPerm3FromMbArgLayout ctx [nuMP| ALPerm mb_ps_in |]
              RL.append ghost_perms
              (assignToRListAppend ctx1 ctx ps1_in ps_in)) mb_ps_in
   , ps_out_all <-
-      RL.append ghost_perms (assignToRListAppend ctx1 ctx ps1_out $
-                             trueValuePerms $ assignToRList ctx) :>: ret_perm =
+      RL.append ghost_perms (assignToRListAppend
+                             ctx1 ctx ps1_out ps_out) :>: ret_perm =
     return $ Some3FunPerm $
     FunPerm ghosts ctx_args CruCtxNil ret_tp mb_ps_in_all
     (nuMulti (cruCtxProxies ctx_all :>: Proxy) $ \_ -> ps_out_all)
-funPerm3FromMbArgLayout ctx [nuMP| ALPerm_Exists mb_p |]
-  ghosts ctx1 ps1_in ps1_out ret_tp ret_perm =
-  funPerm3FromMbArgLayout ctx (mbMatch $ mbCombine (MNil :>: Proxy) mb_p)
+funPerm3FromMbArgLayout ctx [nuMP| ALPerm_Exists mb_p |] ps_out
+                            ghosts ctx1 ps1_in ps1_out ret_tp ret_perm =
+  funPerm3FromMbArgLayout ctx (mbMatch $ mbCombine (MNil :>: Proxy) mb_p) ps_out
   (CruCtxCons ghosts knownRepr) ctx1 ps1_in ps1_out ret_tp ret_perm
-funPerm3FromMbArgLayout _ctx [nuMP| ALPerm_Or _ _ |]
-  _ghosts _ctx1 _ps1_in _ps1_out _ret_tp _ret_perm =
+funPerm3FromMbArgLayout _ctx [nuMP| ALPerm_Or _ _ |] _ps_out
+                        _ghosts _ctx1 _ps1_in _ps1_out _ret_tp _ret_perm =
   fail "Cannot (yet) handle Rust enums or other disjunctive types in functions"
 
 
--- | Build a function permission from an 'ArgLayout' that describes the
--- arguments and their input permissions and a return permission that describes
--- the output permissions on the return value. The arguments specified by the
--- 'ArgLayout' get no permissions on output. The caller also specifies
--- additional arguments to be prepended to the argument list that do have output
--- permissions as a struct of 0 or more fields along with input and output
--- permissions on those arguments.
-funPerm3FromArgLayout :: ArgLayout -> CtxRepr args ->
+-- | Build a function permission from an 'ArgLayoutIO' that describes the
+-- arguments and their input and output permissions and a return permission that
+-- describes the output permissions on the return value. The caller also
+-- specifies additional arguments to be prepended to the argument list that do
+-- have output permissions as a struct of 0 or more fields along with input and
+-- output permissions on those arguments.
+funPerm3FromArgLayout :: ArgLayoutIO -> CtxRepr args ->
                          ValuePerms (CtxToRList args) ->
                          ValuePerms (CtxToRList args) ->
                          TypeRepr ret -> ValuePerm ret ->
                          RustConvM Some3FunPerm
-funPerm3FromArgLayout (ArgLayout ctx p_in) ctx1 ps1_in ps1_out ret_tp ret_perm =
-  funPerm3FromMbArgLayout ctx (mbMatch $ emptyMb p_in) CruCtxNil
+funPerm3FromArgLayout (ArgLayoutIO
+                       ctx p_in ps_out) ctx1 ps1_in ps1_out ret_tp ret_perm =
+  funPerm3FromMbArgLayout ctx (mbMatch $ emptyMb p_in) ps_out CruCtxNil
   ctx1 ps1_in ps1_out ret_tp ret_perm
 
 -- | Like 'funPerm3FromArgLayout' but with no additional arguments
-funPerm3FromArgLayoutNoArgs :: ArgLayout -> TypeRepr ret -> ValuePerm ret ->
+funPerm3FromArgLayoutNoArgs :: ArgLayoutIO -> TypeRepr ret -> ValuePerm ret ->
                                RustConvM Some3FunPerm
 funPerm3FromArgLayoutNoArgs layout ret ret_perm =
   funPerm3FromArgLayout layout Ctx.empty MNil MNil ret ret_perm
@@ -992,13 +1128,17 @@ layoutArgShapeOrBlock abi sh =
      permPretty ppInfo sh]
 
 -- | Compute the layout of an argument with the given shape as 1 or more
--- register arguments of a function
+-- register arguments of a function. If the argument is laid out as a value,
+-- then it has no output permissions, but if it is laid out as a pointer, the
+-- memory occupied by that pointer is returned with an empty shape.
 layoutArgShape :: (1 <= w, KnownNat w) => Abi ->
-                  PermExpr (LLVMShapeType w) -> RustConvM ArgLayout
+                  PermExpr (LLVMShapeType w) -> RustConvM ArgLayoutIO
 layoutArgShape abi sh =
   layoutArgShapeOrBlock abi sh >>= \case
-  Right layout -> return layout
-  Left bp -> return $ argLayout1 $ ValPerm_LLVMBlock bp
+  Right layout -> return $ argLayoutAddTrueOuts layout
+  Left bp ->
+    return (argLayoutIO1 (ValPerm_LLVMBlock bp)
+            (ValPerm_LLVMBlock $ bp { llvmBlockShape = PExpr_EmptyShape }))
 
 -- | Compute the layout for the inputs and outputs of a function with the given
 -- shapes as arguments and return value as a function permission
@@ -1007,7 +1147,7 @@ layoutFun :: (1 <= w, KnownNat w) => Abi ->
              RustConvM Some3FunPerm
 layoutFun abi arg_shs ret_sh =
   do args_layout <-
-       foldr appendArgLayout argLayout0 <$> mapM (layoutArgShape abi) arg_shs
+       foldr appendArgLayoutIO argLayoutIO0 <$> mapM (layoutArgShape abi) arg_shs
      ret_layout_eith <- layoutArgShapeOrBlock abi ret_sh
      case ret_layout_eith of
 
@@ -1041,78 +1181,45 @@ layoutFun abi arg_shs ret_sh =
 -- * Converting Function Types
 ----------------------------------------------------------------------
 
--- | A name-binding over some list of types
-data SomeTypedMb a where
-  SomeTypedMb :: CruCtx ctx -> Mb ctx a -> SomeTypedMb a
+-- | An 'ExprPerms' with types for the expressions
+data TypedExprPerms ctx = TypedExprPerms (CruCtx ctx) (ExprPerms ctx)
 
-instance Functor SomeTypedMb where
-  fmap f (SomeTypedMb ctx mb_a) = SomeTypedMb ctx (fmap f mb_a)
+-- | Convert a 'TypedDistPerms' to a 'TypedExprPerms'
+typedDistToExprPerms :: TypedDistPerms ctx -> TypedExprPerms ctx
+typedDistToExprPerms perms =
+  TypedExprPerms (typedDistPermsCtx perms) (distPermsToExprPerms $
+                                            unTypeDistPerms perms)
 
-instance Applicative SomeTypedMb where
-  pure a = SomeTypedMb CruCtxNil $ emptyMb a
-  liftA2 f (SomeTypedMb ctx1 mb_a1) (SomeTypedMb ctx2 mb_a2) =
-    SomeTypedMb (appendCruCtx ctx1 ctx2) $
-    mbCombine (cruCtxProxies ctx2) $
-    flip fmap mb_a1 $ \a1 -> flip fmap mb_a2 $ \a2 -> f a1 a2
+-- | Find all portions of an atomic permission containing a lifetime, returning
+-- 'Nothing' if it does not contain the lifetime
+atomicPermForLifetime :: ExprVar LifetimeType -> AtomicPerm a ->
+                         Maybe (AtomicPerm a)
+atomicPermForLifetime l p | not $ NameSet.member l $ freeVars p = Nothing
+atomicPermForLifetime l (Perm_Struct ps) =
+  Just $ Perm_Struct $
+  RL.map (\p -> fromMaybe ValPerm_True (permForLifetime l p)) ps
+atomicPermForLifetime _ p = Just p
 
--- | Abstract over all the read/write and lifetime modalities in an
--- 'LOwnedPerms' sequence
-abstractMbLOPsModalities :: Mb ctx (LOwnedPerms tps) ->
-                            SomeTypedMb (Mb ctx (LOwnedPerms tps))
-abstractMbLOPsModalities mb_lops = case mbMatch mb_lops of
-  [nuMP| MNil |] -> pure mb_lops
-  [nuMP| lops :>: LOwnedPermField mb_e mb_fp |] ->
-    liftA2 (mbMap2 (:>:))
-    (abstractMbLOPsModalities lops)
-    (SomeTypedMb (CruCtxCons (CruCtxCons CruCtxNil RWModalityRepr) LifetimeRepr) $
-     nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: rw :>: l) ->
-      mbMap2 (\e fp ->
-               LOwnedPermField e (fp { llvmFieldRW = PExpr_Var rw,
-                                       llvmFieldLifetime = PExpr_Var l }))
-      mb_e mb_fp)
-  [nuMP| lops :>: LOwnedPermArray mb_e mb_arrp |] ->
-    liftA2 (mbMap2 (:>:))
-    (abstractMbLOPsModalities lops)
-    (SomeTypedMb (CruCtxCons (CruCtxCons CruCtxNil RWModalityRepr) LifetimeRepr) $
-     nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: rw :>: l) ->
-      mbMap2 (\e arrp ->
-               LOwnedPermArray e (arrp { llvmArrayRW = PExpr_Var rw,
-                                         llvmArrayLifetime = PExpr_Var l }))
-      mb_e mb_arrp)
-  [nuMP| lops :>: LOwnedPermBlock mb_e mb_bp |] ->
-    liftA2 (mbMap2 (:>:))
-    (abstractMbLOPsModalities lops)
-    (SomeTypedMb (CruCtxCons (CruCtxCons CruCtxNil RWModalityRepr) LifetimeRepr) $
-     nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: rw :>: l) ->
-      mbMap2 (\e bp ->
-               LOwnedPermBlock e (bp { llvmBlockRW = PExpr_Var rw,
-                                       llvmBlockLifetime = PExpr_Var l }))
-      mb_e mb_bp)
+-- | Find all portions of a permission containing a lifetime, returning
+-- 'Nothing' if it does not contain the lifetime
+permForLifetime :: ExprVar LifetimeType -> ValuePerm a -> Maybe (ValuePerm a)
+permForLifetime l p | not $ NameSet.member l $ freeVars p = Nothing
+permForLifetime l (ValPerm_Conj ps) =
+  Just $ ValPerm_Conj $ mapMaybe (atomicPermForLifetime l) ps
+permForLifetime _ p = Just p
 
-
--- | Find all field or block permissions containing lifetime @l@ and return them
--- as an 'LOwnedPerms' list
-lownedPermsForLifetime :: ExprVar LifetimeType -> DistPerms ctx ->
-                          RustConvM (Some LOwnedPerms)
-lownedPermsForLifetime _ MNil = return (Some MNil)
-lownedPermsForLifetime l (perms :>: VarAndPerm x (ValPerm_LLVMField fp))
-  | NameSet.member l (freeVars fp) =
-    do Some lops <- lownedPermsForLifetime l perms
-       return $ Some $ (lops :>: LOwnedPermField (PExpr_Var x) fp)
-lownedPermsForLifetime l (perms :>: VarAndPerm x (ValPerm_LLVMBlock bp))
-  | NameSet.member l (freeVars bp) =
-    do Some lops <- lownedPermsForLifetime l perms
-       return $ Some $ (lops :>: LOwnedPermBlock (PExpr_Var x) bp)
-lownedPermsForLifetime l (perms :>: VarAndPerm x p)
-  | Nothing <- testEquality x l
-  , not (NameSet.member l $ freeVars p)
-  = lownedPermsForLifetime l perms
-lownedPermsForLifetime l (_ :>: vap) =
-  rsPPInfo >>= \ppInfo ->
-  fail $ renderDoc $ fillSep
-  [pretty "lownedPermsForLifetime: could not compute lowned permissions for "
-   <+> permPretty ppInfo l <+> pretty "in:",
-   permPretty ppInfo vap]
+-- | Find all permissions containing lifetime @l@ and return just those portions
+-- of the these permissions that contain @l@
+lownedPermsForLifetime :: CruCtx ctx -> ExprVar LifetimeType -> DistPerms ctx ->
+                          Some TypedExprPerms
+lownedPermsForLifetime tps l ps =
+  fmapF typedDistToExprPerms $ concatSomeRAssign $
+  RL.mapToList (\case
+                   (Typed tp (VarAndPerm x p))
+                     | Just p' <- permForLifetime l p ->
+                       Some (MNil :>: Typed tp (VarAndPerm x p'))
+                   _ -> Some MNil)
+  (RL.map2 Typed (cruCtxToTypes tps) ps)
 
 -- | Get the 'String' name defined by a 'LifetimeDef'
 lifetimeDefName :: LifetimeDef a -> String
@@ -1146,6 +1253,7 @@ mbLifetimeFunPerm (LifetimeDef _ _ [] _)
      let args_prxs = cruCtxProxies args
      let ret = mbLift $ fmap funPermRet fun_perm
      let l_prxs = MNil :>: (Proxy :: Proxy LifetimeType)
+     let fp_outs = mbLift $ fmap funPermOutCtx fun_perm
      let mb_ps_in =
            mbCombineAssoc l_prxs ghosts_prxs args_prxs $
            fmap (mbValuePermsToDistPerms . funPermIns) fun_perm
@@ -1156,26 +1264,30 @@ mbLifetimeFunPerm (LifetimeDef _ _ [] _)
      let mb_l_out =
            extMbMulti rets_prxs $ extMbMulti args_prxs $
            extMbMulti ghosts_prxs $ nu id
-     [nuMP| Some mb_lops_in |] <-
-       mbMatchM $ mbMap2 lownedPermsForLifetime mb_l mb_ps_in
-     [nuMP| Some mb_lops_out |] <-
-       mbMatchM $ mbMap2 lownedPermsForLifetime mb_l_out mb_ps_out
-     case abstractMbLOPsModalities mb_lops_in of
+     [nuMP| Some (TypedExprPerms mb_tps_in mb_lops_in) |] <-
+       return $ mbMatch $ mbMap2 (lownedPermsForLifetime
+                                  (appendCruCtx ghosts args)) mb_l mb_ps_in
+     [nuMP| Some (TypedExprPerms mb_tps_out mb_lops_out) |] <-
+       return $ mbMatch $
+       mbMap2 (lownedPermsForLifetime fp_outs) mb_l_out mb_ps_out
+     let tps_in = mbLift mb_tps_in
+     let tps_out = mbLift mb_tps_out
+     case abstractModalities mb_lops_in of
        SomeTypedMb ghosts' mb_mb_lops_in_abs ->
          return $ mbGhostsFunPerm3 ghosts' $
          flip fmap mb_mb_lops_in_abs $ \mb_lops_in_abs ->
          Some3FunPerm $
          FunPerm (appendCruCtx
                   (singletonCruCtx LifetimeRepr) ghosts) args gouts ret
-         (mbMap3 (\ps_in lops_in lops_in_abs ->
-                   assocAppend (MNil :>: ValPerm_LOwned [] lops_in lops_in_abs)
+         (mbMap2 (\ps_in lops_in_abs ->
+                   assocAppend (MNil :>: ValPerm_LOwnedSimple tps_in lops_in_abs)
                    ghosts args_prxs $ distPermsToValuePerms ps_in)
-          mb_ps_in mb_lops_in mb_lops_in_abs)
+          mb_ps_in mb_lops_in_abs)
          (mbMap3 (\ps_out lops_out lops_in_abs ->
                    let (ps_ghosts, ps_args, ps_rets) =
                          rlSplit3 ghosts_prxs args_prxs rets_prxs $
                          distPermsToValuePerms ps_out in
-                   (((MNil :>: ValPerm_LOwned [] lops_out lops_in_abs)
+                   (((MNil :>: ValPerm_LOwned [] tps_out tps_in lops_out lops_in_abs)
                      `RL.append` ps_ghosts) `RL.append` ps_args)
                    `RL.append` ps_rets)
           mb_ps_out mb_lops_out (extMbMulti rets_prxs mb_lops_in_abs))
@@ -1474,9 +1586,3 @@ parseNamedShapeFromRustDecl env w str
     fail ("Error parsing top-level item: " ++ show err)
 parseNamedShapeFromRustDecl _ _ str =
   fail ("Malformed Rust type: " ++ str)
-
-
-$(mkNuMatching [t| forall ctx. ArgLayoutPerm ctx |])
-$(mkNuMatching [t| ArgLayout |])
-$(mkNuMatching [t| Some3FunPerm |])
-$(mkNuMatching [t| forall a. NuMatching a => SomeTypedMb a |])

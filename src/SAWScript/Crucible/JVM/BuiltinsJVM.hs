@@ -138,6 +138,7 @@ jvm_extract c mname = do
   sc <- getSharedContext
   cb <- getJavaCodebase
   opts <- getOptions
+  pathSatSolver <- gets rwPathSatSolver
   let verbosity = simVerbose opts
   let gen       = Nonce.globalNonceGenerator
 
@@ -158,7 +159,8 @@ jvm_extract c mname = do
   ctx <- getJVMTrans
 
   io $ do -- only the IO monad, nothing else
-          sym <- newSAWCoreBackend sc
+          sym <- newSAWCoreExprBuilder sc
+          SomeOnlineBackend bak <- newSAWCoreBackend pathSatSolver sym
           st  <- sawCoreState sym
           CJ.setSimulatorVerbosity verbosity sym
 
@@ -166,7 +168,7 @@ jvm_extract c mname = do
 
           (ecs, args) <- setupArgs sc sym h
 
-          res <- CJ.runMethodHandle sym SAWCruciblePersonality halloc
+          res <- CJ.runMethodHandle bak SAWCruciblePersonality halloc
                      ctx verbosity className h args
 
           case res of

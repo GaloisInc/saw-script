@@ -9,6 +9,7 @@ Stability   : provisional
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -22,9 +23,9 @@ module SAWScript.Proof
   , betaReduceProp
   , falseProp
   , termToProp
+  , termToMaybeProp
   , propToTerm
   , propToRewriteRule
-  , propIsTrivial
   , propSize
   , prettyProp
   , ppProp
@@ -53,6 +54,7 @@ module SAWScript.Proof
   , proofByTerm
   , constructTheorem
   , validateTheorem
+  , specializeTheorem
 
   , Evidence(..)
   , checkEvidence
@@ -68,6 +70,7 @@ module SAWScript.Proof
   , tacticId
   , tacticChange
   , tacticSolve
+  , tacticExact
 
   , Quantification(..)
   , predicateToProp
@@ -112,7 +115,7 @@ import Verifier.SAW.TypedAST
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.FiniteValue (FirstOrderValue)
 import Verifier.SAW.Term.Pretty (SawDoc)
-import Verifier.SAW.SCTypeCheck (scTypeCheckError)
+import qualified Verifier.SAW.SCTypeCheck as TC
 
 import Verifier.SAW.Simulator.Concrete (evalSharedTerm)
 import Verifier.SAW.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..))
@@ -141,12 +144,28 @@ unProp (Prop tm) = tm
 --   is a sort.
 termToProp :: SharedContext -> Term -> IO Prop
 termToProp sc tm =
-   do mmap <- scGetModuleMap sc
-      ty <- scTypeOf sc tm
-      case evalSharedTerm mmap mempty mempty ty of
-        TValue (VSort s) | s == propSort -> return (Prop tm)
-        _ -> fail $ unlines [ "termToProp: Term is not a proposition", showTerm tm, showTerm ty ]
+   do ty <- scWhnf sc =<< scTypeOf sc tm
+      case asSort ty of
+        Just s | s == propSort -> return (Prop tm)
+        _ ->
+          case asLambda tm of
+            Just _ ->
+              fail $ unlines [ "termToProp: Term is not a proposition."
+                             , "Note: the given term is a lambda; try using Pi terms instead."
+                             , showTerm tm, showTerm ty
+                             ]
+            Nothing ->
+              fail $ unlines [ "termToProp: Term is not a proposition", showTerm tm, showTerm ty ]
 
+-- | Turn a saw-core term into a proposition under the type-as-propositions
+--   regime.  The given term must be a type, which means that its own type
+--   is a sort.  If it is not, return @Nothing@.
+termToMaybeProp :: SharedContext -> Term -> IO (Maybe Prop)
+termToMaybeProp sc tm =
+   do ty <- scWhnf sc =<< scTypeOf sc tm
+      case asSort ty of
+        Just s | s == propSort -> return (Just (Prop tm))
+        _ -> return Nothing
 
 -- | Turn a boolean-valued saw-core term into a proposition by asserting
 --   that it is equal to the true boolean value.  Generalize the proposition
@@ -223,13 +242,13 @@ evalProp sc unints (Prop p) =
      body' <-
        case asEqTrue body of
          Just t -> pure t
-         Nothing -> fail "goal_eval: expected EqTrue"
+         Nothing -> fail ("goal_eval: expected EqTrue\n" ++ scPrettyTerm defaultPPOpts p)
 
      ecs <- traverse (\(nm, ty) -> scFreshEC sc nm ty) args
      vars <- traverse (scExtCns sc) ecs
      t0 <- instantiateVarList sc 0 (reverse vars) body'
 
-     sym <- Common.newSAWCoreBackend sc
+     sym <- Common.newSAWCoreExprBuilder sc
      st <- Common.sawCoreState sym
      (_names, (_mlabels, p')) <- W4Sim.w4Eval sym st sc mempty unints t0
      t1 <- W4Sim.toSC sym st p'
@@ -253,16 +272,21 @@ falseProp sc = Prop <$> (scEqTrue sc =<< scApplyPrelude_False sc)
 propSize :: Prop -> Integer
 propSize (Prop tm) = scSharedSize tm
 
--- | Test if the given proposition is trivially true.  This holds
---   just when the proposition is a (possibly empty) sequence of
---   Pi-types followed by an @EqTrue@ proposition for a
---   concretely-true boolean value.
-propIsTrivial :: Prop -> Bool
-propIsTrivial (Prop tm) = checkTrue tm
+trivialProofTerm :: SharedContext -> Prop -> IO (Either String Term)
+trivialProofTerm sc (Prop p) = runExceptT (loop =<< lift (scWhnf sc p))
   where
-    checkTrue :: Term -> Bool
-    checkTrue (asPiList -> (_, asEqTrue -> Just (asBool -> Just True))) = True
-    checkTrue _ = False
+    loop (asPi -> Just (nm, tp, tm)) =
+      do pf <- loop =<< lift (scWhnf sc tm)
+         lift $ scLambda sc nm tp pf
+
+    loop (asEq -> Just (tp, x, _y)) =
+      lift $ scCtorApp sc "Prelude.Refl" [tp, x]
+
+    loop _ = throwError $ unlines
+               [ "The trivial tactic can only prove quantified equalities, but"
+               , "the given goal is not in the correct form."
+               , showTerm p
+               ]
 
 -- | Pretty print the given proposition as a string.
 prettyProp :: PPOpts -> Prop -> String
@@ -327,6 +351,7 @@ reachableTheorems db roots =
 
      | otherwise =
          panic "reachableTheorems" ["Could not find theorem with identifier", show (indexValue curr)]
+
 
 -- | Check that the purported theorem is valid.
 --
@@ -396,20 +421,18 @@ data Evidence
     --   user's direction.
   | Admitted Text Pos Prop
 
-    -- | This type of evidence is produced when a given proposition is trivially
-    --   true.
-  | TrivialEvidence
-
     -- | This type of evidence is produced when a proposition can be deconstructed
     --   along a conjunction into two subgoals, each of which is supported by
     --   the included evidence.
   | SplitEvidence Evidence Evidence
 
     -- | This type of evidence is produced when a previously-proved theorem is
-    --   applied via backward reasoning to prove a goal.  Some of the hypotheses
-    --   of the theorem may be discharged via the included list of evidence, and
-    --   then the proposition must match the conclusion of the theorem.
-  | ApplyEvidence Theorem [Evidence]
+    --   applied via backward reasoning to prove a goal.  Pi-quantified variables
+    --   of the theorem may be specialized either by giving an explicit @Term@ to
+    --   instantiate the variable, or by giving @Evidence@ for @Prop@ hypotheses.
+    --   After specializing the given @Theorem@ the result must match the
+    --   current goal.
+  | ApplyEvidence Theorem [Either Term Evidence]
 
     -- | This type of evidence is used to prove an implication.  The included
     --   proposition must match the hypothesis of the goal, and the included
@@ -563,6 +586,29 @@ constructTheorem sc db p e loc ploc rsn elapsed =
        , _thmSummary  = sy
        }
 
+
+-- | Given a theorem with quantified variables, build a new theorem that
+--   specializes the leading quantifiers with the given terms.
+--   This will fail if the given terms to not match the quantifier structure
+--   of the given theorem.
+specializeTheorem :: SharedContext -> TheoremDB -> Pos -> Text -> Theorem -> [Term] -> IO Theorem
+specializeTheorem _sc _db _loc _rsn thm [] = return thm
+specializeTheorem sc db loc rsn thm ts0 =
+  do let p0 = unProp (_thmProp thm)
+     res <- TC.runTCM (loop p0 ts0) sc Nothing []
+     case res of
+       Left err -> fail (unlines (["specialize_theorem: failed to specialize"] ++ TC.prettyTCError err))
+       Right p' ->
+         constructTheorem sc db (Prop p') (ApplyEvidence thm (map Left ts0)) loc Nothing rsn 0
+
+ where
+  loop p [] = return p
+  loop p (t:ts) =
+    do prop <- liftIO (scSort sc propSort)
+       t' <- TC.typeInferComplete t
+       p' <- TC.applyPiTyped (TC.NotFuncTypeInApp (TC.TypedTerm p prop) t') p t'
+       loop p' ts
+
 -- | Admit the given theorem without evidence.
 --   The provided message allows the user to
 --   explain why this proposition is being admitted.
@@ -621,7 +667,10 @@ data ProofGoal =
   { goalNum  :: Int
   , goalType :: String
   , goalName :: String
+  , goalLoc  :: String
+  , goalDesc :: String
   , goalProp :: Prop
+  , goalTags :: Set String
   }
 
 
@@ -679,14 +728,19 @@ psStats :: ProofState -> SolverStats
 psStats = _psStats
 
 -- | Verify that the given evidence in fact supports the given proposition.
---   Returns the identifers of all the theorems depened on while checking evidence.
+--   Returns the identifers of all the theorems depended on while checking evidence.
 checkEvidence :: SharedContext -> TheoremDB -> Evidence -> Prop -> IO (Set TheoremNonce, TheoremSummary)
 checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap db)
                                  check hyps e p
 
   where
     checkApply _hyps (Prop p) [] = return (mempty, mempty, p)
-    checkApply hyps (Prop p) (e:es)
+
+    -- Check a theorem applied to "Evidence".
+    -- The given prop must be an implication
+    -- (i.e., nondependent Pi quantifying over a Prop)
+    -- and the given evidence must match the expected prop.
+    checkApply hyps (Prop p) (Right e:es)
       | Just (_lnm, tp, body) <- asPi p
       , looseVars body == emptyBitSet
       = do (d1,sy1) <- check hyps e =<< termToProp sc tp
@@ -696,6 +750,18 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
            [ "Apply evidence mismatch: non-function or dependent function"
            , showTerm p
            ]
+
+    -- Check a theorem applied to a term. This explicity instantiates
+    -- a Pi binder with the given term.
+    checkApply hyps (Prop p) (Left tm:es) =
+      do propTerm <- scSort sc propSort
+         let m = do tm' <- TC.typeInferComplete tm
+                    let err = TC.NotFuncTypeInApp (TC.TypedTerm p propTerm) tm'
+                    TC.applyPiTyped err p tm'
+         res <- TC.runTCM m sc Nothing []
+         case res of
+           Left msg -> fail (unlines (TC.prettyTCError msg))
+           Right p' -> checkApply hyps (Prop p') es
 
     checkTheorem :: Set TheoremNonce -> Theorem -> IO ()
     checkTheorem hyps (LocalAssumption p loc n) =
@@ -713,8 +779,8 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
       IO (Set TheoremNonce, TheoremSummary)
     check hyps e p@(Prop ptm) = case e of
       ProofTerm tm ->
-        do ty <- scTypeCheckError sc tm
-           ok <- scConvertible sc False ptm ty
+        do ty <- TC.scTypeCheckError sc tm
+           ok <- scConvertible sc True ptm ty
            unless ok $ fail $ unlines
                [ "Proof term does not prove the required proposition"
                , showTerm ptm
@@ -756,13 +822,6 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
                , showTerm p'
                ]
            return (mempty, TestedTheorem n)
-
-      TrivialEvidence ->
-        do unless (propIsTrivial p) $ fail $ unlines
-             [ "Proposition is not trivial"
-             , showTerm ptm
-             ]
-           return mempty
 
       SplitEvidence e1 e2 ->
         splitProp sc p >>= \case
@@ -1001,34 +1060,44 @@ propToSATQuery sc unintSet prop =
          Just fot -> filterFirstOrderVars mmap (Map.insert e fot fovars) absvars es
 
     processTerm mmap vars xs tm =
-      case asPi tm of
-        Just (lnm, tp, body)
-          | Just x <- asEqTrue tp
-          , looseVars body == emptyBitSet ->
-              do processTerm mmap vars (x:xs) body
+      do -- TODO: I would like to WHNF here, but that evalutes too aggressively
+         -- because scWhnf evaluates strictly through the `Eq` datatype former.
+         -- This breaks some proof examples by unfolding things that need to
+         -- be uninterpreted.
+         -- tm' <- scWhnf sc tm
+         let tm' = tm
 
-            -- TODO? Allow universal hypotheses...
+         case asPi tm' of
+           Just (lnm, tp, body) ->
+             do -- same issue with WHNF
+                -- tp' <- scWhnf sc tp
+                let tp' = tp
+                case asEqTrue tp' of
+                  Just x | looseVars body == emptyBitSet ->
+                    processTerm mmap vars (x:xs) body
 
-          | otherwise ->
-              case evalFOT mmap tp of
-                Nothing -> fail ("propToSATQuery: expected first order type: " ++ showTerm tp)
-                Just fot ->
-                  do ec  <- scFreshEC sc lnm tp
-                     etm <- scExtCns sc ec
-                     body' <- instantiateVar sc 0 etm body
-                     processTerm mmap (Map.insert ec fot vars) xs body'
+                    -- TODO? Allow universal hypotheses...
 
-        Nothing ->
-          case asEqTrue tm of
-            Nothing  -> fail $ "propToSATQuery: expected EqTrue, actual " ++ showTerm tm
-            Just tmBool ->
-              do tmNeg <- scNot sc tmBool
-                 return (vars, reverse (tmNeg:xs))
+                  _ ->
+                    case evalFOT mmap tp' of
+                      Nothing -> fail ("propToSATQuery: expected first order type: " ++ showTerm tp')
+                      Just fot ->
+                        do ec  <- scFreshEC sc lnm tp'
+                           etm <- scExtCns sc ec
+                           body' <- instantiateVar sc 0 etm body
+                           processTerm mmap (Map.insert ec fot vars) xs body'
+
+           Nothing ->
+             case asEqTrue tm' of
+               Nothing -> fail $ "propToSATQuery: expected EqTrue, actual " ++ showTerm tm'
+               Just tmBool ->
+                 do tmNeg <- scNot sc tmBool
+                    return (vars, reverse (tmNeg:xs))
 
 -- | Given a goal to prove, attempt to apply the given proposition, producing
 --   new subgoals for any necessary hypotheses of the proposition.  Returns
 --   @Nothing@ if the given proposition does not apply to the goal.
-goalApply :: SharedContext -> Prop-> ProofGoal -> IO (Maybe [ProofGoal])
+goalApply :: SharedContext -> Prop -> ProofGoal -> IO (Maybe [Either Term Prop])
 goalApply sc rule goal = applyFirst (asPiLists (unProp rule))
   where
 
@@ -1040,17 +1109,22 @@ goalApply sc rule goal = applyFirst (asPiLists (unProp rule))
            Just inst ->
              do let inst' = [ Map.lookup i inst | i <- take (length ruleArgs) [0..] ]
                 dummy <- scUnitType sc
-                let mkNewGoals (Nothing : mts) ((_, prop) : args) =
+                let mkNewGoals (Nothing : mts) ((nm, prop) : args) =
                       do c0 <- instantiateVarList sc 0 (map (fromMaybe dummy) mts) prop
-                         cs <- mkNewGoals mts args
-                         return (Prop c0 : cs)
-                    mkNewGoals (Just _ : mts) (_ : args) =
-                      mkNewGoals mts args
+                         mp <- termToMaybeProp sc c0
+                         case mp of
+                           Nothing ->
+                             fail ("goal_apply: could not find instantiation for " ++ show nm)
+                           Just p ->
+                             do cs <- mkNewGoals mts args
+                                return (Right p : cs)
+                    mkNewGoals (Just tm : mts) (_ : args) =
+                      do cs <- mkNewGoals mts args
+                         return (Left tm : cs)
                     mkNewGoals _ _ = return []
+
                 newgoalterms <- mkNewGoals inst' (reverse ruleArgs)
-                -- TODO, change the "ty" field to list the hypotheses?
-                let newgoals = reverse [ goal { goalProp = t } | t <- newgoalterms ]
-                return (Just newgoals)
+                return (Just (reverse newgoalterms))
 
     asPiLists :: Term -> [([(Text, Term)], Term)]
     asPiLists t =
@@ -1110,34 +1184,66 @@ tacticApply :: (F.MonadFail m, MonadIO m) => SharedContext -> Theorem -> Tactic 
 tacticApply sc thm = Tactic \goal ->
   liftIO (goalApply sc (thmProp thm) goal) >>= \case
     Nothing -> fail "apply tactic failed: no match"
-    Just newgoals ->
-      return ((), mempty, newgoals, pure . ApplyEvidence thm)
+    Just newterms ->
+      let newgoals =
+            [ goal{ goalProp = p, goalType = goalType goal ++ ".subgoal" ++ show i }
+            | Right p <- newterms
+            | i <- [0::Integer ..]
+            ] in
+      return ((), mempty, newgoals, \es -> ApplyEvidence thm <$> processEvidence newterms es)
+
+ where
+   processEvidence :: [Either Term Prop] -> [Evidence] -> IO [Either Term Evidence]
+   processEvidence (Left tm : xs) es     = (Left tm :) <$> processEvidence xs es
+   processEvidence (Right _ : xs) (e:es) = (Right e :) <$> processEvidence xs es
+   processEvidence []             []     = pure []
+   processEvidence _ _ = fail "apply tactic failed: evidence mismatch"
 
 -- | Attempt to simplify a goal by splitting it along conjunctions.  If successful,
 --   two subgoals will be produced, representing the two conjuncts to be proved.
 tacticSplit :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
-tacticSplit sc = Tactic \(ProofGoal num ty name prop) ->
-  liftIO (splitProp sc prop) >>= \case
+tacticSplit sc = Tactic \gl ->
+  liftIO (splitProp sc (goalProp gl)) >>= \case
     Nothing -> fail "split tactic failed: goal not a conjunction"
     Just (p1,p2) ->
-      do let g1 = ProofGoal num (ty ++ ".left")  name p1
-         let g2 = ProofGoal num (ty ++ ".right") name p2
+      do let g1 = gl{ goalType = goalType gl ++ ".left", goalProp = p1 }
+         let g2 = gl{ goalType = goalType gl ++ ".right", goalProp = p2 }
          return ((), mempty, [g1,g2], splitEvidence)
 
 -- | Attempt to solve a goal by recognizing it as a trivially true proposition.
 tacticTrivial :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
-tacticTrivial _sc = Tactic \goal ->
-  if (propIsTrivial (goalProp goal)) then
-    return ((), mempty, [], leafEvidence TrivialEvidence)
-  else
-    fail "trivial tactic: not a trivial goal"
+tacticTrivial sc = Tactic \goal ->
+  liftIO (trivialProofTerm sc (goalProp goal)) >>= \case
+    Left err -> fail err
+    Right pf ->
+       do let gp = unProp (goalProp goal)
+          ty <- liftIO $ TC.scTypeCheckError sc pf
+          ok <- liftIO $ scConvertible sc True gp ty
+          unless ok $ fail $ unlines
+            [ "The trivial tactic cannot prove this equality"
+            , showTerm gp
+            ]
+          return ((), mempty, [], leafEvidence (ProofTerm pf))
+
+tacticExact :: (F.MonadFail m, MonadIO m) => SharedContext -> Term -> Tactic m ()
+tacticExact sc tm = Tactic \goal ->
+  do let gp = unProp (goalProp goal)
+     ty <- liftIO $ TC.scTypeCheckError sc tm
+     ok <- liftIO $ scConvertible sc True gp ty
+     unless ok $ fail $ unlines
+         [ "Proof term does not prove the required proposition"
+         , showTerm gp
+         , showTerm tm
+         ]
+     return ((), mempty, [], leafEvidence (ProofTerm tm))
+
 
 -- | Examine the given proof goal and potentially do some work with it,
 --   but do not alter the proof state.
-tacticId :: Monad m => (ProofGoal -> m ()) -> Tactic m ()
+tacticId :: Monad m => (ProofGoal -> m a) -> Tactic m a
 tacticId f = Tactic \gl ->
-  do lift (f gl)
-     return ((), mempty, [gl], passthroughEvidence)
+  do x <- lift (f gl)
+     return (x, mempty, [gl], passthroughEvidence)
 
 data SolveResult
   = SolveSuccess Evidence

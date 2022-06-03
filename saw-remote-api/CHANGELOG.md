@@ -1,6 +1,5 @@
 # Revision history for saw-remote-api
 
-
 ## 0.9.1 -- YYYY-MM-DD
 
 * `SAW/set option`'s `"option"` parameter is now allowed to be `"What4 eval"`,
@@ -16,7 +15,8 @@
   verification, so JVM specifications must leave these lists empty. Attempting
   to provide a non-empty list for either of these fields in a JVM specification
   will result in an error.
-
+* Introduced new methods `SAW/eval int` and `SAW/eval bool` that allow the
+  evaluation of Cryptol expressions into Python values.
 
 ## 0.9.0 -- 2021-11-19
 

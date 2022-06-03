@@ -29,6 +29,8 @@ type instance MS.HasSetupStruct MIR = 'True
 type instance MS.HasSetupArray MIR = 'True
 type instance MS.HasSetupElem MIR = 'True
 type instance MS.HasSetupField MIR = 'True
+type instance MS.HasSetupCast MIR = 'False
+type instance MS.HasSetupUnion MIR = 'False
 type instance MS.HasSetupGlobalInitializer MIR = 'False
 
 type instance MS.HasGhostState MIR = 'False
@@ -39,6 +41,8 @@ type instance MS.ExtType MIR = M.Ty
 type instance MS.MethodId MIR = DefId
 type instance MS.AllocSpec MIR = Some MirAllocSpec
 type instance MS.PointsTo MIR = MirPointsTo
+type instance MS.ResolvedState MIR = ()
+type instance MS.CastType MIR = ()
 
 type instance MS.Codebase MIR = CollectionState
 

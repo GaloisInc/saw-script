@@ -67,6 +67,7 @@ import SAWScript.Value
 import SAWScript.Proof (newTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
+import SAWScript.Prover.MRSolver (emptyMREnv)
 import Verifier.SAW.Conversion
 --import Verifier.SAW.PrettySExp
 import Verifier.SAW.Prim (rethrowEvalError)
@@ -75,6 +76,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST hiding (FlatTermF(..))
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.CryptolEnv as CEnv
+import qualified Verifier.SAW.Cryptol.Monadify as Monadify
 
 import qualified Lang.JVM.Codebase as JCB
 
@@ -258,9 +260,9 @@ interpretStmts env stmts =
     let ?fileReader = BS.readFile in
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind _ (SS.PWild _) _ e] -> interpret env e
-      SS.StmtBind pos pat _ e : ss ->
-          do v1 <- interpret env e
+      [SS.StmtBind pos (SS.PWild _) _ e] -> withPosition pos (interpret env e)
+      SS.StmtBind pos pat _mcxt e : ss ->
+          do v1 <- withPosition pos (interpret env e)
              let f v = interpretStmts (bindPatternLocal pat Nothing v env) ss
              bindValue pos v1 (VLambda f)
       SS.StmtLet _ bs : ss -> interpret env (SS.Let bs (SS.Block ss))
@@ -472,6 +474,8 @@ buildTopLevelEnv proxy opts =
                    , rwTypedef    = Map.empty
                    , rwDocs       = primDocEnv primsAvail
                    , rwCryptol    = ce0
+                   , rwMonadify   = Monadify.defaultMonEnv
+                   , rwMRSolverEnv = emptyMREnv
                    , rwProofs     = []
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwJVMTrans   = jvmTrans
@@ -490,6 +494,9 @@ buildTopLevelEnv proxy opts =
                    , rwStackBaseAlign = defaultStackBaseAlign
                    , rwAllocSymInitCheck = True
                    , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
+                   , rwPathSatSolver = CC.PathSat_Z3
+                   , rwSkipSafetyProofs = False
+                   , rwSingleOverrideSpecialCase = False
                    }
        return (bic, ro0, rw0)
 
@@ -520,6 +527,18 @@ add_primitives lc bic opts = do
   , rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
 
+enable_safety_proofs :: TopLevel ()
+enable_safety_proofs = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw{ rwSkipSafetyProofs = False }
+
+disable_safety_proofs :: TopLevel ()
+disable_safety_proofs = do
+  opts <- getOptions
+  io $ printOutLn opts Warn "Safety proofs disabled! This is unsound!"
+  rw <- getTopLevelRW
+  putTopLevelRW rw{ rwSkipSafetyProofs = True }
+
 enable_smt_array_memory_model :: TopLevel ()
 enable_smt_array_memory_model = do
   rw <- getTopLevelRW
@@ -539,6 +558,17 @@ disable_crucible_assert_then_assume :: TopLevel ()
 disable_crucible_assert_then_assume = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwCrucibleAssertThenAssume = False }
+
+enable_single_override_special_case :: TopLevel ()
+enable_single_override_special_case = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwSingleOverrideSpecialCase = True }
+
+disable_single_override_special_case :: TopLevel ()
+disable_single_override_special_case = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwSingleOverrideSpecialCase = False }
+
 
 enable_crucible_profiling :: FilePath -> TopLevel ()
 enable_crucible_profiling f = do
@@ -826,6 +856,39 @@ primitives = Map.fromList
     Current
     [ "Disable the SMT array memory model." ]
 
+  , prim "enable_safety_proofs" "TopLevel ()"
+    (pureVal enable_safety_proofs)
+    Experimental
+    [ "Restore the default state, where safety obligations"
+    , "encountered during symbolic execution are proofed normally."
+    ]
+
+  , prim "disable_safety_proofs" "TopLevel ()"
+    (pureVal disable_safety_proofs)
+    Experimental
+    [ "Disable checking of safety obligations encountered during symbolic"
+    , "execution. This is unsound! However, it can be useful during"
+    , "initial proof construction to focus only on the stated correcness"
+    , "specifications."
+    ]
+
+  , prim "enable_single_override_special_case" "TopLevel ()"
+    (pureVal enable_single_override_special_case)
+    Experimental
+    [ "Enable special-case handling when there is exactly one override"
+    , "that appies at a given call site after structural matching."
+    , "This special case handling asserts the override preconditions as separate"
+    , "proof goals, instead of combining them into a single one.  In general,"
+    , "this may produce more, but simpler, goals than when disabled."
+    ]
+
+  , prim "disable_single_override_special_case" "TopLevel ()"
+    (pureVal disable_single_override_special_case)
+    Experimental
+    [ "Disable special case handling for single overrides."
+    , "This is the default behavior."
+    ]
+
  , prim "enable_crucible_assert_then_assume" "TopLevel ()"
     (pureVal enable_crucible_assert_then_assume)
     Current
@@ -865,6 +928,13 @@ primitives = Map.fromList
     (pureVal disable_lax_loads_and_stores)
     Current
     [ "Disable relaxed validity checking for memory loads and stores in Crucible." ]
+
+  , prim "set_path_sat_solver" "String -> TopLevel ()"
+    (pureVal set_path_sat_solver)
+    Experimental
+    [ "Set the path satisfiablity solver to use.  Accepted values"
+    , "currently are 'z3' and 'yices'."
+    ]
 
   , prim "enable_debug_intrinsics" "TopLevel ()"
     (pureVal enable_debug_intrinsics)
@@ -1069,10 +1139,15 @@ primitives = Map.fromList
     , "object that can be passed to 'read_sbv'."
     ]
 
+  , prim "is_convertible"  "Term -> Term -> TopLevel Bool"
+    (pureVal isConvertiblePrim)
+    Current
+    [ "Returns true iff the two terms are convertible." ]
+
   , prim "check_convertible"  "Term -> Term -> TopLevel ()"
     (pureVal checkConvertiblePrim)
     Current
-    [ "Check if two terms are convertible." ]
+    [ "Check if two terms are convertible and print the result." ]
 
   , prim "replace"             "Term -> Term -> Term -> TopLevel Term"
     (pureVal replacePrim)
@@ -1304,6 +1379,15 @@ primitives = Map.fromList
     , "if unsuccessful."
     ]
 
+  , prim "prove_extcore"         "ProofScript () -> Term -> TopLevel Theorem"
+    (pureVal provePropPrim)
+    Current
+    [ "Use the given proof script to attempt to prove that a term representing"
+    , "a proposition is valid. For example, this is useful for proving a goal"
+    , "obtained with 'offline_extcore'. Returns a Theorem if successful, and"
+    , "aborts if unsuccessful."
+    ]
+
   , prim "sat"                 "ProofScript () -> Term -> TopLevel SatResult"
     (pureVal satPrim)
     Current
@@ -1390,6 +1474,14 @@ primitives = Map.fromList
     [ "Apply an introduction rule to the current goal. Depending on the"
     , "rule, this will result in zero or more new subgoals."
     ]
+
+  , prim "goal_exact"          "Term -> ProofScript ()"
+    (pureVal goal_exact)
+    Experimental
+    [ "Prove the current goal by giving an explicit proof term."
+    , "This will succeed if the type of the given term matches the current goal."
+    ]
+
   , prim "goal_assume"         "ProofScript Theorem"
     (pureVal goal_assume)
     Experimental
@@ -1413,6 +1505,24 @@ primitives = Map.fromList
     [ "Run the given proof script only when the goal name contains"
     , "the given string."
     ]
+  , prim "goal_has_tags"      "[String] -> ProofScript Bool"
+    (pureVal goal_has_tags)
+    Experimental
+    [ "Returns true if the current goal is tagged with all the tags"
+    , "in the given list. This function returns true for all goals"
+    , "when given an empty list. Tags may be added to goals using"
+    , "'llvm_setup_with_tag' and similar operations in the specification"
+    , "setup phase."
+    ]
+  , prim "goal_has_some_tag"  "[String] -> ProofScript Bool"
+    (pureVal goal_has_some_tag)
+    Experimental
+    [ "Returns true if the current goal is tagged with any the tags"
+    , "in the given list. This function returns false for all goals"
+    , "when given an empty list. Tags may be added to goals using"
+    , "'llvm_setup_with_tag' and similar operations in the specification"
+    , "setup phase."
+    ]
   , prim "goal_num_ite"       "{a} Int -> ProofScript a -> ProofScript a -> ProofScript a"
     (pureVal goal_num_ite)
     Experimental
@@ -1428,7 +1538,23 @@ primitives = Map.fromList
     (pureVal print_goal)
     Current
     [ "Print the current goal that a proof script is attempting to prove." ]
-
+  , prim "write_goal" "String -> ProofScript ()"
+    (pureVal write_goal)
+    Current
+    [ "Write the current goal that a proof script is attempting to prove"
+    , "into the named file."
+    ]
+  , prim "print_goal_summary" "ProofScript ()"
+    (pureVal print_goal_summary)
+    Current
+    [ "Print the number and description of the goal that a proof script"
+    , "is attempting to prove."
+    ]
+  , prim "goal_num" "ProofScript Int"
+    (pureVal goal_num)
+    Current
+    [ "Returns the number of the current proof goal."
+    ]
   , prim "print_goal_depth"    "Int -> ProofScript ()"
     (pureVal print_goal_depth)
     Current
@@ -1656,7 +1782,11 @@ primitives = Map.fromList
   , prim "trivial"             "ProofScript ()"
     (pureVal trivial)
     Current
-    [ "Succeed only if the proof goal is a literal 'True'." ]
+    [ "Succeeds if the goal is trivial. This tactic recognizes goals"
+    , "that are instances of reflexivity, possibly with quantified variables."
+    , "In particular, it will prove goals of the form 'EqTrue x' when 'x' reduces"
+    , "to the constant value 'True'."
+    ]
 
   , prim "w4"                  "ProofScript ()"
     (pureVal w4_z3)
@@ -1855,6 +1985,20 @@ primitives = Map.fromList
     [ "Add a directory to the Cryptol search path. The Cryptol file loader"
     , "will look in this directory when following `import` statements in"
     , "Cryptol source files."
+    ]
+
+  , prim "cryptol_add_prim"    "String -> String -> Term -> TopLevel ()"
+    (pureVal cryptol_add_prim)
+    Experimental
+    [ "cryptol_add_prim mod nm trm sets the translation of Cryptol primitive"
+    , "nm in module mod to trm"
+    ]
+
+  , prim "cryptol_add_prim_type"    "String -> String -> Term -> TopLevel ()"
+    (pureVal cryptol_add_prim_type)
+    Experimental
+    [ "cryptol_add_prim_type mod nm tp sets the translation of Cryptol"
+    , "primitive type nm in module mod to tp"
     ]
 
   -- Java stuff
@@ -2211,6 +2355,13 @@ primitives = Map.fromList
     [ "Parse a Term from a String in SAWCore syntax."
     ]
 
+  , prim "parse_core_mod"      "String -> String -> Term"
+    (funVal2 parse_core_mod)
+    Current
+    [ "Parse a Term from the second supplied String in SAWCore syntax,"
+    , "relative to the module specified by the first String"
+    ]
+
   , prim "prove_core"         "ProofScript () -> String -> TopLevel Theorem"
     (pureVal prove_core)
     Current
@@ -2232,6 +2383,13 @@ primitives = Map.fromList
     (funVal1 core_thm)
     Current
     [ "Create a theorem from the type of the given core expression." ]
+
+  , prim "specialize_theorem" "Theorem -> [Term] -> TopLevel Theorem"
+    (pureVal specialize_theorem)
+    Experimental
+    [ "Specialize a theorem by instantiating universal quantifiers"
+    , "with the given list of terms."
+    ]
 
   , prim "get_opt"            "Int -> String"
     (funVal1 get_opt)
@@ -2565,6 +2723,22 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_precond`." ]
 
+  , prim "llvm_assert" "Term -> LLVMSetup ()"
+    (pureVal llvm_assert)
+    Current
+    [ "State that the given predicate must hold.  Acts as `llvm_precond`"
+    , "or `llvm_postcond` depending on the phase of specification in which"
+    , "it appears (i.e., before or after `llvm_execute_func`."
+    ]
+
+  , prim "llvm_setup_with_tag" "String -> LLVMSetup () -> LLVMSetup ()"
+    (pureVal llvm_setup_with_tag)
+    Experimental
+    [ "All conditions (e.g., from points-to or assert statements) executed"
+    , "in the scope of the given setup block will have the provieded string"
+    , "attached as a tag that can later be filtered by proof tactics."
+    ]
+
   , prim "llvm_postcond" "Term -> LLVMSetup ()"
     (pureVal llvm_postcond)
     Current
@@ -2602,6 +2776,14 @@ primitives = Map.fromList
     (pureVal llvm_return)
     Current
     [ "Legacy alternative name for `llvm_return`." ]
+
+  , prim "llvm_cast_pointer" "SetupValue -> LLVMType -> SetupValue"
+    (pureVal llvm_cast_pointer)
+    Current
+    [ "Cast the type of the given setup value (which must be a pointer value)."
+    , "The resulting setup value will be a pointer to the same location, treated"
+    , "as a pointer to the provided type."
+    ]
 
   , prim "llvm_verify"
     "LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
@@ -2670,6 +2852,15 @@ primitives = Map.fromList
     (pureVal llvm_verify_x86)
     Experimental
     [ "Legacy alternative name for `llvm_verify_x86`." ]
+
+  , prim "llvm_verify_fixpoint_x86"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
+    (pureVal llvm_verify_fixpoint_x86)
+    Experimental
+    [ "An experimental variant of 'llvm_verify_x86'. This variant can prove some properties"
+    , "involving simple loops with the help of a user-provided term that describes how"
+    , "the live variables in the loop evolve as the loop computes."
+    ]
 
   , prim "enable_x86_what4_hash_consing" "TopLevel ()"
     (pureVal enable_x86_what4_hash_consing)
@@ -2793,12 +2984,23 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_elem`." ]
 
+  , prim "llvm_union"
+    "SetupValue -> String -> SetupValue"
+    (pureVal CIR.anySetupUnion)
+    Current
+    [ "Turn a SetupValue representing a union pointer into"
+    , "a pointer to one of the branches of the union by field name."
+    , "Requires debug symbols to resolve union field names."
+    ]
+
   , prim "llvm_field"
     "SetupValue -> String -> SetupValue"
     (pureVal CIR.anySetupField)
     Current
     [ "Turn a SetupValue representing a struct pointer into"
-    , "a pointer to an element of the struct by field name." ]
+    , "a pointer to an element of the struct by field name."
+    , "Requires debug symbols to resolve struct field names."
+    ]
   , prim "crucible_field"
     "SetupValue -> String -> SetupValue"
     (pureVal CIR.anySetupField)
@@ -3043,6 +3245,14 @@ primitives = Map.fromList
     , "method being verified."
     ]
 
+  , prim "jvm_assert" "Term -> JVMSetup ()"
+    (pureVal jvm_assert)
+    Current
+    [ "State that the given predicate must hold.  Acts as `jvm_precond`"
+    , "or `jvm_postcond` depending on the phase of specification in which"
+    , "it appears (i.e., before or after `jvm_execute_func`."
+    ]
+
   , prim "jvm_postcond" "Term -> JVMSetup ()"
     (pureVal jvm_postcond)
     Current
@@ -3068,6 +3278,14 @@ primitives = Map.fromList
     [ "Specify the given value as the return value of the method. A"
     , "jvm_return statement is required if and only if the method"
     , "has a non-void return type." ]
+
+  , prim "jvm_setup_with_tag" "String -> JVMSetup () -> JVMSetup ()"
+    (pureVal jvm_setup_with_tag)
+    Experimental
+    [ "All conditions (e.g., from points-to or assert statements) executed"
+    , "in the scope of the given setup block will have the provieded string"
+    , "attached as a tag that can later be filtered by proof tactics."
+    ]
 
   , prim "jvm_verify"
     "JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec"
@@ -3104,11 +3322,53 @@ primitives = Map.fromList
 
     ---------------------------------------------------------------------
 
-  , prim "test_mr_solver"  "Int -> Int -> TopLevel Bool"
-    (pureVal testMRSolver)
+  , prim "mr_solver_prove" "Term -> Term -> TopLevel ()"
+    (scVal (mrSolverProve True))
     Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to ask if two monadic terms are equal" ]
+    , " to prove that one monadic term refines another. If this can"
+    , " be done, this refinement will be used in future calls to"
+    , " Mr. Solver, and if it cannot, the script will exit. See also:"
+    , " mr_solver_test, mr_solver_query." ]
+
+  , prim "mr_solver_test" "Term -> Term -> TopLevel ()"
+    (scVal (mrSolverProve False))
+    Experimental
+    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
+    , " to prove that one monadic term refines another. If this cannot"
+    , " be done, the script will exit. See also: mr_solver_prove,"
+    , " mr_solver_query - unlike the former, this refinement will not"
+    , " be used in future calls to Mr. Solver." ]
+
+  , prim "mr_solver_query" "Term -> Term -> TopLevel Bool"
+    (scVal mrSolverQuery)
+    Experimental
+    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
+    , " to prove that one monadic term refines another, returning"
+    , " true iff this can be done. See also: mr_solver_prove,"
+    , " mr_solver_test - unlike the former, this refinement will not"
+    , " be considered in future calls to Mr. Solver, and unlike both,"
+    , " this command will never fail." ]
+
+  , prim "mr_solver_set_debug_level" "Int -> TopLevel ()"
+    (pureVal mrSolverSetDebug)
+    Experimental
+    [ "Set the debug level for Mr. Solver; 0 = no debug output,"
+    , " 1 = some debug output, 2 = all debug output" ]
+
+    ---------------------------------------------------------------------
+
+  , prim "monadify_term" "Term -> TopLevel Term"
+    (scVal monadifyTypedTerm)
+    Experimental
+    [ "Monadify a Cryptol term, converting it to a form where all recursion"
+    , " and errors are represented as monadic operators"]
+
+  , prim "set_monadification" "String -> String -> TopLevel Term"
+    (scVal setMonadification)
+    Experimental
+    [ "Set the monadification of a specific Cryptol identifer to a SAW core "
+    , "identifier of monadic type" ]
 
   , prim "heapster_init_env"
     "String -> String -> TopLevel HeapsterEnv"

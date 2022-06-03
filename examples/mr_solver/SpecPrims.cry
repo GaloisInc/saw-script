@@ -1,0 +1,35 @@
+
+module SpecPrims where
+
+/* Specification primitives */
+
+// The specification that holds for f x for some input x
+exists : {a, b} (a -> b) -> b
+exists f = error "Cannot run exists"
+
+// The specification that holds for f x for all inputs x
+forall : {a, b} (a -> b) -> b
+forall f = error "Cannot run forall"
+
+// The specification that a computation has no errors
+noErrors : {a} a
+noErrors = exists (\x -> x)
+
+// The specification that matches any computation. This calls exists at the
+// function type () -> a, which is monadified to () -> CompM a. This means that
+// the exists does not just quantify over all values of type a like noErrors,
+// but it quantifies over all computations of type a, including those that
+// contain errors.
+anySpec : {a} a
+anySpec = exists (\f -> f ())
+
+// The specification which asserts that the first argument is True and then
+// returns the second argument
+asserting : {a} Bit -> a -> a
+asserting b x =
+  if b then x else error "Assertion failed"
+
+// The specification which assumes that the first argument is True and then
+// returns the second argument
+assuming : {a} Bit -> a -> a
+assuming b x = if b then x else anySpec

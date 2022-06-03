@@ -51,10 +51,12 @@ data AstExpr
   | ExStruct Pos [AstExpr]      -- ^ struct literal with field expressions
   | ExLlvmWord Pos AstExpr      -- ^ llvmword with value
   | ExLlvmFrame Pos [(AstExpr, Natural)] -- ^ llvmframe literal
-  | ExOr Pos AstExpr AstExpr
+  | ExOr Pos AstExpr AstExpr    -- ^ or permission
+  | ExFalse Pos                 -- ^ false permission
+  | ExAny Pos                   -- ^ any permission
 
   | ExEmptySh Pos               -- ^ empty shape
-  | ExEqSh Pos AstExpr          -- ^ equal shape
+  | ExEqSh Pos AstExpr AstExpr  -- ^ equal shape
   | ExTrue Pos                  -- ^ trivial permission
   | ExExists Pos String AstType AstExpr -- ^ existentially quantified value
   | ExSeqSh Pos AstExpr AstExpr -- ^ sequenced shapes
@@ -63,6 +65,7 @@ data AstExpr
   | ExFieldSh Pos (Maybe AstExpr) AstExpr -- ^ field shape
   | ExPtrSh Pos (Maybe AstExpr) (Maybe AstExpr) AstExpr -- ^ pointer shape
   | ExArraySh Pos AstExpr AstExpr AstExpr -- ^ array shape
+  | ExFalseSh Pos               -- ^ false shape
 
   | ExEqual Pos AstExpr AstExpr -- ^ equal bitvector proposition
   | ExNotEqual Pos AstExpr AstExpr -- ^ not-equal bitvector proposition
@@ -94,10 +97,12 @@ instance HasPos AstExpr where
   pos (ExStruct     p _        ) = p
   pos (ExLlvmWord   p _        ) = p
   pos (ExEmptySh    p          ) = p
-  pos (ExEqSh       p _        ) = p
+  pos (ExEqSh       p _ _      ) = p
   pos (ExEq         p _        ) = p
   pos (ExOr         p _ _      ) = p
+  pos (ExFalse      p          ) = p
   pos (ExTrue       p          ) = p
+  pos (ExAny        p          ) = p
   pos (ExExists     p _ _ _    ) = p
   pos (ExSeqSh      p _ _      ) = p
   pos (ExOrSh       p _ _      ) = p
@@ -119,6 +124,7 @@ instance HasPos AstExpr where
   pos (ExLlvmFrame  p _        ) = p
   pos (ExArray      p _ _ _ _ _ _) = p
   pos (ExArraySh    p _ _ _    ) = p
+  pos (ExFalseSh    p          ) = p
 
 -- | Returns outermost position
 instance HasPos AstType where

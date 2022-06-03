@@ -37,6 +37,8 @@ import Control.Monad.State.Strict
 import qualified Data.ByteString.Lazy as B
 import Data.ByteString.Lazy.UTF8 (toString)
 import Data.Word (Word8)
+import Data.Bits
+import Data.Char (digitToInt)
 import Numeric.Natural
 
 import Verifier.SAW.Position
@@ -86,6 +88,8 @@ $white+;
 "-}"        { \_ -> TCmntE }
 \" @string* \" { TString . read   }
 @num        { TNat . read }
+"0x"@hex    { TBitvector . readHexBV . drop 2 }
+"0b"[0-1]+  { TBitvector . readBinBV . drop 2 }
 @key        { TKey }
 @ident      { TIdent }
 @ident "#rec" { TRecursor . dropRecSuffix }
@@ -96,6 +100,7 @@ data Token
   = TIdent { tokIdent :: String }   -- ^ Identifier
   | TRecursor { tokRecursor :: String }   -- ^ Recursor
   | TNat { tokNat :: Natural }  -- ^ Natural number literal
+  | TBitvector { tokBits :: [Bool] } -- ^ Bitvector literal
   | TString { tokString :: String } -- ^ String literal
   | TKey String     -- ^ Keyword or predefined symbol
   | TEnd            -- ^ End of file.
@@ -108,12 +113,24 @@ data Token
 dropRecSuffix :: String -> String
 dropRecSuffix str = take (length str - 4) str
 
+-- | Convert a hexadecimal string to a big endian list of bits
+readHexBV :: String -> [Bool]
+readHexBV =
+  concatMap (\c -> let i = digitToInt c in
+                   [testBit i 3, testBit i 2, testBit i 1, testBit i 0])
+
+-- | Convert a binary string to a big endian list of bits
+readBinBV :: String -> [Bool]
+readBinBV = map (\c -> c == '1')
+
 ppToken :: Token -> String
 ppToken tkn =
   case tkn of
     TIdent s -> s
     TRecursor s -> s ++ "#rec"
     TNat n -> show n
+    TBitvector bits ->
+      "0b" ++ map (\b -> if b then '1' else '0') bits
     TString s -> show s
     TKey s -> s
     TEnd -> "END"

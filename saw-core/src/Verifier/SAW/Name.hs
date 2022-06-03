@@ -41,6 +41,7 @@ module Verifier.SAW.Name
   , ExtCns(..)
   , scFreshNameURI
   , PrimName(..)
+  , primNameToExtCns
     -- * Naming Environments
   , SAWNamingEnv(..)
   , emptySAWNamingEnv
@@ -256,7 +257,8 @@ instance Ord (PrimName e) where
 instance Hashable (PrimName e) where
   hashWithSalt x pn = hashWithSalt x (primVarIndex pn)
 
-
+primNameToExtCns :: PrimName e -> ExtCns e
+primNameToExtCns (PrimName varIdx nm tp) = EC varIdx (ModuleIdentifier nm) tp
 
 scFreshNameURI :: Text -> VarIndex -> URI
 scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to constructed name URI", show nm, show i]) $

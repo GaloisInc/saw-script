@@ -46,6 +46,10 @@ heapster_typecheck_fun env "alloc_padded_struct"
 heapster_typecheck_fun env "padded_struct_incr_all"
   "(). arg0:memblock(W,0,32,padded_struct<>) -o arg0:memblock(W,0,32,padded_struct<>)";
 
+// is_little_endian
+heapster_typecheck_fun env "is_little_endian"
+  "(). empty -o ret:int64<>";
+
 /***
  *** Export to Coq
  ***/

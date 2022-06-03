@@ -42,6 +42,7 @@ import Data.String
 import Data.Proxy
 import Data.Reflection
 import Data.Functor.Constant
+import Data.Functor.Compose
 import qualified Data.BitVector.Sized as BV
 import Data.BitVector.Sized (BV)
 import Numeric.Natural
@@ -49,6 +50,8 @@ import GHC.TypeLits
 import Data.Kind
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Control.Applicative hiding (empty)
 import Control.Monad.Identity hiding (ap)
 import Control.Monad.State hiding (ap)
@@ -91,6 +94,877 @@ import Verifier.SAW.Heapster.CruUtil
 
 import GHC.Stack
 import Debug.Trace
+
+
+-- * Helper functions (should be moved to Hobbits)
+
+-- | Append two existentially quantified 'RAssign' lists
+apSomeRAssign :: Some (RAssign f) -> Some (RAssign f) -> Some (RAssign f)
+apSomeRAssign (Some x) (Some y) = Some (RL.append x y)
+
+-- | Concatenate a list of existentially quantified 'RAssign' lists
+concatSomeRAssign :: [Some (RAssign f)] -> Some (RAssign f)
+concatSomeRAssign = foldl apSomeRAssign (Some MNil)
+-- foldl is intentional, appending RAssign matches on the second argument
+
+-- | Map a monadic function over an 'RAssign' list from left to right while
+-- maintaining an "accumulator" that is threaded through the mapping
+rlMapMWithAccum :: Monad m => (forall a. accum -> f a -> m (g a, accum)) ->
+                   accum -> RAssign f tps -> m (RAssign g tps, accum)
+rlMapMWithAccum _ accum MNil = return (MNil, accum)
+rlMapMWithAccum f accum (xs :>: x) =
+  do (ys,accum') <- rlMapMWithAccum f accum xs
+     (y,accum'') <- f accum' x
+     return (ys :>: y, accum'')
+
+-- | Map a monomorphic binary function across a pair of 'RAssign's to create a
+-- standard list, similarly to 'zipWith'
+mapToList2 :: (forall a. f a -> g a -> b) ->
+              RAssign f tps -> RAssign g tps -> [b]
+mapToList2 f fs gs = RL.toList $ RL.map2 (\x y -> Constant $ f x y) fs gs
+
+-- | Convert any 'RAssign' sequence to a sequence of 'Proxy' objects
+rlToProxies :: RAssign f ctx -> RAssign Proxy ctx
+rlToProxies = RL.map (const Proxy)
+
+-- | Extend the context of a name-binding to the left with multiple types
+extMbMultiL :: RAssign Proxy ctx1 -> Mb ctx2 a -> Mb (ctx1 :++: ctx2) a
+extMbMultiL vars mb_a =
+  mbCombine (mbToProxy mb_a) $ nuMulti vars $ const mb_a
+
+
+----------------------------------------------------------------------
+-- * Data types and related types
+----------------------------------------------------------------------
+
+-- | The Haskell type of expression variables
+type ExprVar = (Name :: CrucibleType -> Type)
+
+-- | Crucible type for lifetimes; we give them a Crucible type so they can be
+-- existentially bound in the same way as other Crucible objects
+type LifetimeType = IntrinsicType "Lifetime" EmptyCtx
+
+-- | Crucible type for read/write modalities; we give them a Crucible type so
+-- they can be used as variables in recursive permission definitions
+type RWModalityType = IntrinsicType "RWModality" EmptyCtx
+
+-- | Crucible type for lists of expressions and permissions on them
+type PermListType = IntrinsicType "PermList" EmptyCtx
+
+-- | Crucible type for LLVM stack frame objects
+type LLVMFrameType w = IntrinsicType "LLVMFrame" (EmptyCtx ::> BVType w)
+
+-- | Crucible type for value permissions themselves
+type ValuePermType a = IntrinsicType "Perm" (EmptyCtx ::> a)
+
+-- | Crucible type for LLVM shapes
+type LLVMShapeType w = IntrinsicType "LLVMShape" (EmptyCtx ::> BVType w)
+
+-- | Crucible type for LLVM memory blocks
+type LLVMBlockType w = IntrinsicType "LLVMBlock" (EmptyCtx ::> BVType w)
+
+-- | Expressions that are considered "pure" for use in permissions. Note that
+-- these are in a normal form, that makes them easier to analyze.
+data PermExpr (a :: CrucibleType) where
+  -- | A variable of any type
+  PExpr_Var :: ExprVar a -> PermExpr a
+
+  -- | A unit literal
+  PExpr_Unit :: PermExpr UnitType
+
+  -- | A literal Boolean number
+  PExpr_Bool :: Bool -> PermExpr BoolType
+
+  -- | A literal natural number
+  PExpr_Nat :: Natural -> PermExpr NatType
+
+  -- | A literal string
+  PExpr_String :: String -> PermExpr (StringType Unicode)
+
+  -- | A bitvector expression is a linear expression in @N@ variables, i.e., sum
+  -- of constant times variable factors plus a constant
+  --
+  -- FIXME: make the offset a 'Natural'
+  PExpr_BV :: (1 <= w, KnownNat w) =>
+              [BVFactor w] -> BV w -> PermExpr (BVType w)
+
+  -- | A struct expression is an expression for each argument of the struct type
+  PExpr_Struct :: PermExprs (CtxToRList args) -> PermExpr (StructType args)
+
+  -- | The @always@ lifetime that is always current
+  PExpr_Always :: PermExpr LifetimeType
+
+  -- | An LLVM value that represents a word, i.e., whose region identifier is 0
+  PExpr_LLVMWord :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                    PermExpr (LLVMPointerType w)
+
+  -- | An LLVM value built by adding an offset to an LLVM variable
+  PExpr_LLVMOffset :: (1 <= w, KnownNat w) =>
+                      ExprVar (LLVMPointerType w) ->
+                      PermExpr (BVType w) ->
+                      PermExpr (LLVMPointerType w)
+
+  -- | A literal function pointer
+  PExpr_Fun :: FnHandle args ret -> PermExpr (FunctionHandleType args ret)
+
+  -- | An empty permission list
+  PExpr_PermListNil :: PermExpr PermListType
+
+  -- | A cons of an expression and a permission on it to a permission list
+  PExpr_PermListCons :: TypeRepr a -> PermExpr a -> ValuePerm a ->
+                        PermExpr PermListType -> PermExpr PermListType
+
+  -- | A read/write modality
+  PExpr_RWModality :: RWModality -> PermExpr RWModalityType
+
+  -- | The empty / vacuously true shape
+  PExpr_EmptyShape :: PermExpr (LLVMShapeType w)
+
+  -- | A named shape along with arguments for it, with optional read/write and
+  -- lifetime modalities that are applied to the body of the shape
+  PExpr_NamedShape :: KnownNat w => Maybe (PermExpr RWModalityType) ->
+                      Maybe (PermExpr LifetimeType) ->
+                      NamedShape b args w -> PermExprs args ->
+                      PermExpr (LLVMShapeType w)
+
+  -- | The equality shape, which describes some @N@ bytes of memory that are
+  -- equal to a given LLVM block
+  PExpr_EqShape :: PermExpr (BVType w) -> PermExpr (LLVMBlockType w) ->
+                   PermExpr (LLVMShapeType w)
+
+  -- | A shape for a pointer to another memory block, i.e., a @memblock@
+  -- permission, with a given shape. This @memblock@ permission will have the
+  -- same read/write and lifetime modalities as the @memblock@ permission
+  -- containing this pointer shape, unless they are specifically overridden by
+  -- the pointer shape; i.e., we have that
+  --
+  -- > [l]memblock(rw,off,len,ptrsh(rw',l',sh)) =
+  -- >   [l]memblock(rw,off,len,fieldsh([l']memblock(rw',0,len(sh),sh)))
+  --
+  -- where @rw'@ and/or @l'@ can be 'Nothing', in which case they default to
+  -- @rw@ and @l@, respectively.
+  PExpr_PtrShape :: Maybe (PermExpr RWModalityType) ->
+                    Maybe (PermExpr LifetimeType) ->
+                    PermExpr (LLVMShapeType w) -> PermExpr (LLVMShapeType w)
+
+  -- | A shape for a single field with a given permission
+  PExpr_FieldShape :: (1 <= w, KnownNat w) => LLVMFieldShape w ->
+                      PermExpr (LLVMShapeType w)
+
+  -- | A shape for an array of @len@ individual regions of memory, called "array
+  -- cells"; the size of each cell in bytes is given by the array stride, which
+  -- must be known statically, and each cell has shape given by the supplied
+  -- LLVM shape, also called the cell shape
+  PExpr_ArrayShape :: (1 <= w, KnownNat w) =>
+                      PermExpr (BVType w) -> Bytes ->
+                      PermExpr (LLVMShapeType w) ->
+                      PermExpr (LLVMShapeType w)
+
+  -- | A sequence of two shapes
+  PExpr_SeqShape :: PermExpr (LLVMShapeType w) -> PermExpr (LLVMShapeType w) ->
+                    PermExpr (LLVMShapeType w)
+
+  -- | A disjunctive shape
+  PExpr_OrShape :: PermExpr (LLVMShapeType w) -> PermExpr (LLVMShapeType w) ->
+                   PermExpr (LLVMShapeType w)
+
+  -- | An existential shape
+  PExpr_ExShape :: KnownRepr TypeRepr a =>
+                   Binding a (PermExpr (LLVMShapeType w)) ->
+                   PermExpr (LLVMShapeType w)
+
+  -- | A false shape
+  PExpr_FalseShape :: PermExpr (LLVMShapeType w)
+
+  -- | A permission as an expression
+  PExpr_ValPerm :: ValuePerm a -> PermExpr (ValuePermType a)
+
+-- | A sequence of permission expressions
+type PermExprs = RAssign PermExpr
+
+{-
+data PermExprs (as :: RList CrucibleType) where
+  PExprs_Nil :: PermExprs RNil
+  PExprs_Cons :: PermExprs as -> PermExpr a -> PermExprs (as :> a)
+-}
+
+-- | A bitvector variable, possibly multiplied by a constant
+data BVFactor w where
+  -- | A variable of type @'BVType' w@ multiplied by a constant @i@, which
+  -- should be in the range @0 <= i < 2^w@
+  BVFactor :: (1 <= w, KnownNat w) => BV w -> ExprVar (BVType w) ->
+              BVFactor w
+
+-- | Whether a permission allows reads or writes
+data RWModality
+  = Write
+  | Read
+  deriving Eq
+
+-- | The Haskell type of permission variables, that is, variables that range
+-- over 'ValuePerm's
+type PermVar (a :: CrucibleType) = Name (ValuePermType a)
+
+-- | Ranges @[off,off+len)@ of bitvector values @x@ equal to @off+y@ for some
+-- unsigned @y < len@. Note that ranges are allowed to wrap around 0, meaning
+-- @off+y@ can overflow when testing whether @x@ is in the range. Thus, @x@ is
+-- in range @[off,off+len)@ iff @x-off@ is unsigned less than @len@.
+data BVRange w = BVRange { bvRangeOffset :: PermExpr (BVType w),
+                           bvRangeLength :: PermExpr (BVType w) }
+
+-- | A range of offsets, possibly inside bindings for zero or more existential
+-- variables, that makes sense for a given Crucible type, along with read/write
+-- and lifetime modalities
+data MbRangeForType a where
+  MbRangeForLLVMType ::
+    (1 <= w, KnownNat w) => CruCtx vars ->
+    Mb vars (PermExpr RWModalityType) -> Mb vars (PermExpr LifetimeType) ->
+    Mb vars (BVRange w) -> MbRangeForType (LLVMPointerType w)
+
+-- | Build an 'MbRangeForType' from a 'BVRange'
+rangeForLLVMType :: (1 <= w, KnownNat w) =>
+                    PermExpr RWModalityType -> PermExpr LifetimeType ->
+                    BVRange w -> MbRangeForType (LLVMPointerType w)
+rangeForLLVMType rw l rng =
+  MbRangeForLLVMType CruCtxNil (emptyMb rw) (emptyMb l) (emptyMb rng)
+
+-- | A name-binding over some list of typed existential variables
+data SomeTypedMb a where
+  SomeTypedMb :: CruCtx ctx -> Mb ctx a -> SomeTypedMb a
+
+
+-- | Propositions about bitvectors
+data BVProp w
+    -- | True iff the two expressions are equal
+  = BVProp_Eq (PermExpr (BVType w)) (PermExpr (BVType w))
+    -- | True iff the two expressions are not equal
+  | BVProp_Neq (PermExpr (BVType w)) (PermExpr (BVType w))
+    -- | True iff the first expression is unsigned less-than the second
+  | BVProp_ULt (PermExpr (BVType w)) (PermExpr (BVType w))
+    -- | True iff the first expression is unsigned @<=@ the second
+  | BVProp_ULeq (PermExpr (BVType w)) (PermExpr (BVType w))
+    -- | True iff the first expression is unsigned @<=@ the difference of the
+    -- second minus the third
+  | (1 <= w, KnownNat w) =>
+    BVProp_ULeq_Diff (PermExpr (BVType w)) (PermExpr (BVType w))
+    (PermExpr (BVType w))
+
+-- | An atomic permission is a value permission that is not one of the compound
+-- constructs in the 'ValuePerm' type; i.e., not a disjunction, existential,
+-- recursive, or equals permission. These are the permissions that we can put
+-- together with separating conjuctions.
+data AtomicPerm (a :: CrucibleType) where
+  -- | Gives permissions to a single field pointed to by an LLVM pointer
+  Perm_LLVMField :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
+                    LLVMFieldPerm w sz ->
+                    AtomicPerm (LLVMPointerType w)
+
+  -- | Gives permissions to an array pointer to by an LLVM pointer
+  Perm_LLVMArray :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                    AtomicPerm (LLVMPointerType w)
+
+  -- | Gives read or write access to a memory block, whose contents also give
+  -- some permissions
+  Perm_LLVMBlock :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
+                    AtomicPerm (LLVMPointerType w)
+
+  -- | Says that we have permission to free the memory pointed at by this
+  -- pointer if we have write permission to @e@ words of size @w@
+  Perm_LLVMFree :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                   AtomicPerm (LLVMPointerType w)
+
+  -- | Says that we known an LLVM value is a function pointer whose function has
+  -- the given permissions
+  Perm_LLVMFunPtr :: (1 <= w, KnownNat w) =>
+                     TypeRepr (FunctionHandleType cargs ret) ->
+                     ValuePerm (FunctionHandleType cargs ret) ->
+                     AtomicPerm (LLVMPointerType w)
+
+  -- | Says that a memory block has a given shape
+  Perm_LLVMBlockShape :: (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
+                         AtomicPerm (LLVMBlockType w)
+
+  -- | Says we know an LLVM value is a pointer value, meaning that its block
+  -- value is non-zero. Note that this does not say the pointer is allocated.
+  Perm_IsLLVMPtr :: (1 <= w, KnownNat w) =>
+                    AtomicPerm (LLVMPointerType w)
+
+  -- | A named conjunctive permission
+  Perm_NamedConj :: NameSortIsConj ns ~ 'True =>
+                    NamedPermName ns args a -> PermExprs args ->
+                    PermOffset a -> AtomicPerm a
+
+  -- | Permission to allocate (via @alloca@) on an LLVM stack frame, and
+  -- permission to delete that stack frame if we have exclusive permissions to
+  -- all the given LLVM pointer objects
+  Perm_LLVMFrame :: (1 <= w, KnownNat w) => LLVMFramePerm w ->
+                    AtomicPerm (LLVMFrameType w)
+
+  -- | Ownership permission for a lifetime, including an assertion that it is
+  -- still current and permission to end that lifetime. A lifetime also
+  -- represents a permission "borrow" of some sub-permissions out of some larger
+  -- permissions. For example, we might borrow a portion of an array, or a
+  -- portion of a larger data structure. When the lifetime is ended, you have to
+  -- give back to sub-permissions to get back the larger permissions. Together,
+  -- these are a form of permission implication, so we write lifetime ownership
+  -- permissions as @lowned(Pin -o Pout)@. Intuitively, @Pin@ must be given back
+  -- before the lifetime is ended, and @Pout@ is returned afterwards.
+  -- Additionally, a lifetime may contain some other lifetimes, meaning the all
+  -- must end before the current one can be ended.
+  Perm_LOwned :: [PermExpr LifetimeType] ->
+                 CruCtx ps_in -> CruCtx ps_out ->
+                 ExprPerms ps_in -> ExprPerms ps_out ->
+                 AtomicPerm LifetimeType
+
+  -- | A simplified version of @lowned@, written just @lowned(ps)@, which
+  -- represents a lifetime where the permissions @ps@ have been borrowed and no
+  -- simplifications have been done. Semantically, this is logically equivalent
+  -- to @lowned ([l](R)ps -o ps)@, i.e., an @lowned@ permissions where the input
+  -- and output permissions are the same except that the input permissions are
+  -- the minimal possible versions of @ps@ in lifetime @l@ that could be given
+  -- back when @l@ is ended.
+  Perm_LOwnedSimple :: CruCtx ps -> ExprPerms ps -> AtomicPerm LifetimeType
+
+  -- | Assertion that a lifetime is current during another lifetime;
+  -- @l1:lcurrent l2@ can also be read as @l1@ contains @l2@ as a sub-lifetime
+  Perm_LCurrent :: PermExpr LifetimeType -> AtomicPerm LifetimeType
+
+  -- | Assertion that a lifetime has finished
+  Perm_LFinished :: AtomicPerm LifetimeType
+
+  -- | A struct permission = a sequence of permissions for each field
+  Perm_Struct :: RAssign ValuePerm (CtxToRList ctx) ->
+                 AtomicPerm (StructType ctx)
+
+  -- | A function permission
+  Perm_Fun :: FunPerm ghosts (CtxToRList cargs) gouts ret ->
+              AtomicPerm (FunctionHandleType cargs ret)
+
+  -- | An LLVM permission that asserts a proposition about bitvectors
+  Perm_BVProp :: (1 <= w, KnownNat w) => BVProp w ->
+                 AtomicPerm (LLVMPointerType w)
+
+  -- | A false / unsatisfiable permission from which any permission can be
+  -- proved. This is different from the false permission because it translated
+  -- to the unit type instead of the empty type in specifications, and is used
+  -- in cases where the empty type cannot be proved in specifications
+  Perm_Any :: AtomicPerm a
+
+
+-- | A value permission is a permission to do something with a value, such as
+-- use it as a pointer. This also includes a limited set of predicates on values
+-- (you can think about this as "permission to assume the value satisfies this
+-- predicate" if you like).
+data ValuePerm (a :: CrucibleType) where
+
+  -- | Says that a value is equal to a known static expression
+  ValPerm_Eq :: PermExpr a -> ValuePerm a
+
+  -- | The disjunction of two value permissions
+  ValPerm_Or :: ValuePerm a -> ValuePerm a -> ValuePerm a
+
+  -- | An existential binding of a value in a value permission
+  --
+  -- FIXME: turn the 'KnownRepr' constraint into a normal 'TypeRepr' argument
+  ValPerm_Exists :: KnownRepr TypeRepr a =>
+                    Binding a (ValuePerm b) ->
+                    ValuePerm b
+
+  -- | A named permission
+  ValPerm_Named :: NamedPermName ns args a -> PermExprs args ->
+                   PermOffset a -> ValuePerm a
+
+  -- | A permission variable plus an offset
+  ValPerm_Var :: PermVar a -> PermOffset a -> ValuePerm a
+
+  -- | A separating conjuction of 0 or more atomic permissions, where 0
+  -- permissions is the trivially true permission
+  ValPerm_Conj :: [AtomicPerm a] -> ValuePerm a
+
+  -- | The false / unsatisfiable permission
+  ValPerm_False :: ValuePerm a
+
+-- | A sequence of value permissions
+type ValuePerms = RAssign ValuePerm
+
+-- | A binding of 0 or more variables, each with permissions
+type MbValuePerms ctx = Mb ctx (ValuePerms ctx)
+
+-- | A frame permission is a list of the pointers that have been allocated in
+-- the frame and their corresponding allocation sizes in words of size
+-- @w@. Write permissions of the given sizes are required to these pointers in
+-- order to delete the frame.
+type LLVMFramePerm w = [(PermExpr (LLVMPointerType w), Integer)]
+
+-- | A permission for a pointer to a specific field of a given size
+data LLVMFieldPerm w sz =
+  LLVMFieldPerm { llvmFieldRW :: PermExpr RWModalityType,
+                  -- ^ Whether this is a read or write permission
+                  llvmFieldLifetime :: PermExpr LifetimeType,
+                  -- ^ The lifetime during which this field permission is active
+                  llvmFieldOffset :: PermExpr (BVType w),
+                  -- ^ The offset from the pointer in bytes of this field
+                  llvmFieldContents :: ValuePerm (LLVMPointerType sz)
+                  -- ^ The permissions we get for the value read from this field
+                }
+
+-- | Helper type to represent byte offsets
+--
+-- > stride * ix + off
+--
+-- from the beginning of an array permission. Such an expression refers to
+-- offset @off@, which must be a statically-known constant, in array cell @ix@.
+data LLVMArrayIndex w =
+  LLVMArrayIndex { llvmArrayIndexCell :: PermExpr (BVType w),
+                   llvmArrayIndexOffset :: BV w }
+
+-- | A permission to an array of @len@ individual regions of memory, called
+-- "array cells". The size of each cell in bytes is given by the array /stride/,
+-- which must be known statically, and each cell has shape given by the supplied
+-- LLVM shape, also called the cell shape.
+data LLVMArrayPerm w =
+  LLVMArrayPerm { llvmArrayRW :: PermExpr RWModalityType,
+                  -- ^ Whether this array gives read or write access
+                  llvmArrayLifetime :: PermExpr LifetimeType,
+                  -- ^ The lifetime during which this array permission is valid
+                  llvmArrayOffset :: PermExpr (BVType w),
+                  -- ^ The offset from the pointer in bytes of this array
+                  llvmArrayLen :: PermExpr (BVType w),
+                  -- ^ The number of array blocks
+                  llvmArrayStride :: Bytes,
+                  -- ^ The array stride in bytes
+                  llvmArrayCellShape :: PermExpr (LLVMShapeType w),
+                  -- ^ The shape of each cell in the array
+                  llvmArrayBorrows :: [LLVMArrayBorrow w]
+                  -- ^ Indices or index ranges that are missing from this array
+                }
+
+-- | An index or range of indices that are missing from an array perm
+--
+-- FIXME: think about calling the just @LLVMArrayIndexSet@
+data LLVMArrayBorrow w
+  = FieldBorrow (PermExpr (BVType w))
+    -- ^ Borrow a specific cell of an array permission
+  | RangeBorrow (BVRange w)
+    -- ^ Borrow a range of array cells, where each cell is 'llvmArrayStride'
+    -- bytes long
+
+-- | An LLVM block permission is read or write access to the memory at a given
+-- offset with a given length with a given shape
+data LLVMBlockPerm w =
+  LLVMBlockPerm { llvmBlockRW :: PermExpr RWModalityType,
+                  -- ^ Whether this is a read or write block permission
+                  llvmBlockLifetime :: PermExpr LifetimeType,
+                  -- ^ The lifetime during with this block permission is active
+                  llvmBlockOffset :: PermExpr (BVType w),
+                  -- ^ The offset of the block from the pointer in bytes
+                  llvmBlockLen :: PermExpr (BVType w),
+                  -- ^ The length of the block in bytes
+                  llvmBlockShape :: PermExpr (LLVMShapeType w)
+                  -- ^ The shape of the permissions in the block
+                }
+
+-- | An LLVM shape for a single pointer field of unknown size
+data LLVMFieldShape w =
+  forall sz. (1 <= sz, KnownNat sz) =>
+  LLVMFieldShape (ValuePerm (LLVMPointerType sz))
+
+-- | A pair of an epxression and its permission; we give it its own datatype to
+-- make certain typeclass instances (like pretty-printing) specific to it
+data ExprAndPerm a =
+  ExprAndPerm { exprAndPermExpr :: PermExpr a,
+                exprAndPermPerm :: ValuePerm a }
+
+-- | A list of expressions and associated permissions; different from
+-- 'DistPerms' because the expressions need not be variables
+type ExprPerms = RAssign ExprAndPerm
+
+-- | A function permission is a set of input and output permissions inside a
+-- context of ghost variables @ghosts@ with an additional context of output
+-- ghost variables @gouts@
+data FunPerm ghosts args gouts ret where
+  FunPerm :: CruCtx ghosts -> CruCtx args -> CruCtx gouts -> TypeRepr ret ->
+             MbValuePerms (ghosts :++: args) ->
+             MbValuePerms ((ghosts :++: args) :++: gouts :> ret) ->
+             FunPerm ghosts args gouts ret
+
+-- | A function permission that existentially quantifies the ghost types
+data SomeFunPerm args ret where
+  SomeFunPerm :: FunPerm ghosts args gouts ret -> SomeFunPerm args ret
+
+-- | The different sorts of name, each of which comes with a 'Bool' flag
+-- indicating whether the name can be used as an atomic permission. A recursive
+-- sort also comes with a second flag indicating whether it is a reachability
+-- permission.
+data NameSort = DefinedSort Bool | OpaqueSort Bool | RecursiveSort Bool Bool
+
+type DefinedSort   = 'DefinedSort
+type OpaqueSort    = 'OpaqueSort
+type RecursiveSort = 'RecursiveSort
+
+-- | Test whether a name of a given 'NameSort' is conjoinable
+type family NameSortIsConj (ns::NameSort) :: Bool where
+  NameSortIsConj (DefinedSort b) = b
+  NameSortIsConj (OpaqueSort b) = b
+  NameSortIsConj (RecursiveSort b _) = b
+
+-- | Test whether a name of a given 'NameSort' is a reachability permission
+type family IsReachabilityName (ns::NameSort) :: Bool where
+  IsReachabilityName (DefinedSort _) = 'False
+  IsReachabilityName (OpaqueSort _) = 'False
+  IsReachabilityName (RecursiveSort _ reach) = reach
+
+-- | A singleton representation of 'NameSort'
+data NameSortRepr (ns::NameSort) where
+  DefinedSortRepr :: BoolRepr b -> NameSortRepr (DefinedSort b)
+  OpaqueSortRepr :: BoolRepr b -> NameSortRepr (OpaqueSort b)
+  RecursiveSortRepr :: BoolRepr b -> BoolRepr reach ->
+                       NameSortRepr (RecursiveSort b reach)
+
+-- | A constraint that the last argument of a reachability permission is a
+-- permission argument
+data NameReachConstr ns args a where
+  NameReachConstr :: (IsReachabilityName ns ~ 'True) =>
+                     NameReachConstr ns (args :> a) a
+  NameNonReachConstr :: (IsReachabilityName ns ~ 'False) =>
+                        NameReachConstr ns args a
+
+-- | A name for a named permission
+data NamedPermName ns args a = NamedPermName {
+  namedPermNameName :: String,
+  namedPermNameType :: TypeRepr a,
+  namedPermNameArgs :: CruCtx args,
+  namedPermNameSort :: NameSortRepr ns,
+  namedPermNameReachConstr :: NameReachConstr ns args a
+  }
+
+-- | An existentially quantified 'NamedPermName'
+data SomeNamedPermName where
+  SomeNamedPermName :: NamedPermName ns args a -> SomeNamedPermName
+
+-- | A named LLVM shape is a name, a list of arguments, and a body, where the
+-- Boolean flag @b@ determines whether the shape can be unfolded or not
+data NamedShape b args w = NamedShape {
+  namedShapeName :: String,
+  namedShapeArgs :: CruCtx args,
+  namedShapeBody :: NamedShapeBody b args w
+  }
+
+data NamedShapeBody b args w where
+  -- | A defined shape is just a definition in terms of the arguments
+  DefinedShapeBody :: Mb args (PermExpr (LLVMShapeType w)) ->
+                      NamedShapeBody 'True args w
+
+  -- | An opaque shape has no body, just a length and a translation to a type
+  OpaqueShapeBody :: Mb args (PermExpr (BVType w)) -> Ident ->
+                     NamedShapeBody 'False args w
+
+  -- | A recursive shape body has a one-step unfolding to a shape, which can
+  -- refer to the shape itself via the last bound variable; it also has
+  -- identifiers for the type it is translated to, along with fold and unfold
+  -- functions for mapping to and from this type. The fold and unfold functions
+  -- can be undefined if we are in the process of defining this recusive shape.
+  RecShapeBody :: Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w)) ->
+                  Ident -> Maybe (Ident, Ident) ->
+                  NamedShapeBody 'True args w
+
+-- | An offset that is added to a permission. Only makes sense for llvm
+-- permissions (at least for now...?)
+data PermOffset a where
+  NoPermOffset :: PermOffset a
+  -- | NOTE: the invariant is that the bitvector offset is non-zero
+  LLVMPermOffset :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                    PermOffset (LLVMPointerType w)
+
+-- | The semantics of a named permission, which can can either be an opaque
+-- named permission, a recursive named permission, a defined permission, or an
+-- LLVM shape
+data NamedPerm ns args a where
+  NamedPerm_Opaque :: OpaquePerm b args a -> NamedPerm (OpaqueSort b) args a
+  NamedPerm_Rec :: RecPerm b reach args a ->
+                   NamedPerm (RecursiveSort b reach) args a
+  NamedPerm_Defined :: DefinedPerm b args a -> NamedPerm (DefinedSort b) args a
+
+-- | An opaque named permission is just a name and a SAW core type given by
+-- identifier that it is translated to
+data OpaquePerm b args a = OpaquePerm {
+  opaquePermName :: NamedPermName (OpaqueSort b) args a,
+  opaquePermTrans :: Ident
+  }
+
+-- | The interpretation of a recursive permission as a reachability permission.
+-- Reachability permissions are recursive permissions of the form
+--
+-- > reach<args,x> = eq(x)  |  p
+--
+-- where @reach@ occurs exactly once in @p@ in the form @reach<args,x>@ and @x@
+-- does not occur at all in @p@. This means their interpretations look like a
+-- list type, where the @eq(x)@ is the nil constructor and the @p@ is the
+-- cons. To support the transitivity rule, we need an append function for these
+-- lists, which is given by the transitivity method listed here, which has type
+--
+-- > trans : forall args (x y:A), t args x -> t args y -> t args y
+--
+-- where @args@ are the arguments and @A@ is the translation of type @a@ (which
+-- may correspond to 0 or more arguments)
+data ReachMethods reach args a where
+  ReachMethods :: {
+    reachMethodTrans :: Ident
+    } -> ReachMethods (args :> a) a 'True
+  NoReachMethods :: ReachMethods args a 'False
+
+-- | A recursive permission is a disjunction of 1 or more permissions, each of
+-- which can contain the recursive permission itself. NOTE: it is an error to
+-- have an empty list of cases. A recursive permission is also associated with a
+-- SAW datatype, given by a SAW 'Ident', and each disjunctive permission case is
+-- associated with a constructor of that datatype. The @b@ flag indicates
+-- whether this recursive permission can be used as an atomic permission, which
+-- should be 'True' iff all of the cases are conjunctive permissions as in
+-- 'isConjPerm'. If the recursive permission is a reachability permission, then
+-- it also has a 'ReachMethods' structure.
+data RecPerm b reach args a = RecPerm {
+  recPermName :: NamedPermName (RecursiveSort b reach) args a,
+  recPermTransType :: Ident,
+  recPermFoldFun :: Ident,
+  recPermUnfoldFun :: Ident,
+  recPermReachMethods :: ReachMethods args a reach,
+  recPermCases :: [Mb args (ValuePerm a)]
+  }
+
+-- | A defined permission is a name and a permission to which it is
+-- equivalent. The @b@ flag indicates whether this permission can be used as an
+-- atomic permission, which should be 'True' iff the associated permission is a
+-- conjunctive permission as in 'isConjPerm'.
+data DefinedPerm b args a = DefinedPerm {
+  definedPermName :: NamedPermName (DefinedSort b) args a,
+  definedPermDef :: Mb args (ValuePerm a)
+}
+
+-- | A pair of a variable and its permission; we give it its own datatype to
+-- make certain typeclass instances (like pretty-printing) specific to it
+data VarAndPerm a = VarAndPerm (ExprVar a) (ValuePerm a)
+
+-- | A list of "distinguished" permissions to named variables
+-- FIXME: just call these VarsAndPerms or something like that...
+type DistPerms = RAssign VarAndPerm
+
+-- | A special-purpose 'DistPerms' that specifies a list of permissions needed
+-- to prove that a lifetime is current
+data LifetimeCurrentPerms ps_l where
+  -- | The @always@ lifetime needs no proof that it is current
+  AlwaysCurrentPerms :: LifetimeCurrentPerms RNil
+  -- | A variable @l@ that is @lowned@ is current, requiring perms
+  --
+  -- > l:lowned[ls](ps_in -o ps_out)
+  LOwnedCurrentPerms :: ExprVar LifetimeType -> [PermExpr LifetimeType] ->
+                        CruCtx ps_in -> CruCtx ps_out ->
+                        ExprPerms ps_in -> ExprPerms ps_out ->
+                        LifetimeCurrentPerms (RNil :> LifetimeType)
+  -- | A variable @l@ with a simple @lowned@ perm is also current
+  LOwnedSimpleCurrentPerms :: ExprVar LifetimeType ->
+                              CruCtx ps -> ExprPerms ps ->
+                              LifetimeCurrentPerms (RNil :> LifetimeType)
+
+  -- | A variable @l@ that is @lcurrent@ during another lifetime @l'@ is
+  -- current, i.e., if @ps@ ensure @l'@ is current then we need perms
+  --
+  -- > ps, l:lcurrent(l')
+  CurrentTransPerms :: LifetimeCurrentPerms ps_l -> ExprVar LifetimeType ->
+                       LifetimeCurrentPerms (ps_l :> LifetimeType)
+
+-- | A lifetime functor is a function from a lifetime plus a set of 0 or more
+-- rwmodalities to a permission that satisfies a number of properties discussed
+-- in Issue #62 (FIXME: copy those here). Rather than try to enforce these
+-- properties, we syntactically restrict lifetime functors to one of a few forms
+-- that are guaranteed to satisfy the properties. The @args@ type lists all
+-- arguments (which should all be rwmodalities) other than the lifetime
+-- argument.
+data LifetimeFunctor args a where
+  -- | The functor @\(l,rw) -> [l]ptr((rw,off) |-> p)@
+  LTFunctorField :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
+                    PermExpr (BVType w) -> ValuePerm (LLVMPointerType sz) ->
+                    LifetimeFunctor (RNil :> RWModalityType) (LLVMPointerType w)
+
+  -- | The functor @\(l,rw) -> [l]array(rw,off,<len,*stride,sh,bs)@
+  LTFunctorArray :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                    PermExpr (BVType w) -> Bytes ->
+                    PermExpr (LLVMShapeType w) -> [LLVMArrayBorrow w] ->
+                    LifetimeFunctor (RNil :> RWModalityType) (LLVMPointerType w)
+
+  -- | The functor @\(l,rw) -> [l]memblock(rw,off,len,sh)
+  LTFunctorBlock :: (1 <= w, KnownNat w) =>
+                    PermExpr (BVType w) -> PermExpr (BVType w) ->
+                    PermExpr (LLVMShapeType w) ->
+                    LifetimeFunctor (RNil :> RWModalityType) (LLVMPointerType w)
+
+  -- FIXME: add functors for arrays and named permissions
+
+-- | An 'LLVMBlockPerm' with a proof that its type is valid
+data SomeLLVMBlockPerm a where
+  SomeLLVMBlockPerm :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
+                       SomeLLVMBlockPerm (LLVMPointerType w)
+
+-- | A block permission in a binding at some unknown type
+data SomeBindingLLVMBlockPerm w =
+  forall a. SomeBindingLLVMBlockPerm (Binding a (LLVMBlockPerm w))
+
+-- | A tagged union shape is a shape of the form
+--
+-- > sh1 orsh sh2 orsh ... orsh shn
+--
+-- where each @shi@ is equivalent up to associativity of the @;@ operator to a
+-- shape of the form
+--
+-- > fieldsh(eq(llvmword(bvi)));shi'
+--
+-- That is, each disjunct of the shape starts with an equality permission that
+-- determines which disjunct should be used. These shapes are represented as a
+-- list of the disjuncts, which are tagged with the bitvector values @bvi@ used
+-- in the equality permission.
+data TaggedUnionShape w sz
+  = TaggedUnionShape (NonEmpty (BV sz, PermExpr (LLVMShapeType w)))
+
+-- | A 'TaggedUnionShape' with existentially quantified tag size
+data SomeTaggedUnionShape w
+  = forall sz. (1 <= sz, KnownNat sz) =>
+    SomeTaggedUnionShape (TaggedUnionShape w sz)
+
+-- | Like a substitution but assigns variables instead of arbitrary expressions
+-- to bound variables
+data PermVarSubst (ctx :: RList CrucibleType) where
+  PermVarSubst_Nil :: PermVarSubst RNil
+  PermVarSubst_Cons :: PermVarSubst ctx -> Name tp -> PermVarSubst (ctx :> tp)
+
+-- | An entry in a permission environment that associates a permission and
+-- corresponding SAW identifier with a Crucible function handle
+data PermEnvFunEntry where
+  PermEnvFunEntry :: args ~ CtxToRList cargs => FnHandle cargs ret ->
+                     FunPerm ghosts args gouts ret -> Ident ->
+                     PermEnvFunEntry
+
+-- | An existentially quantified 'NamedPerm'
+data SomeNamedPerm where
+  SomeNamedPerm :: NamedPerm ns args a -> SomeNamedPerm
+
+-- | An existentially quantified LLVM shape with arguments
+data SomeNamedShape where
+  SomeNamedShape :: (1 <= w, KnownNat w) => NamedShape b args w ->
+                    SomeNamedShape
+
+-- | An entry in a permission environment that associates a 'GlobalSymbol' with
+-- a permission and a translation of that permission
+data PermEnvGlobalEntry where
+  PermEnvGlobalEntry :: (1 <= w, KnownNat w) => GlobalSymbol ->
+                        ValuePerm (LLVMPointerType w) -> [OpenTerm] ->
+                        PermEnvGlobalEntry
+
+-- | The different sorts hints for blocks
+data BlockHintSort args where
+  -- | This hint specifies the ghost args and input permissions for a block
+  BlockEntryHintSort ::
+    CruCtx top_args -> CruCtx ghosts ->
+    MbValuePerms ((top_args :++: CtxToRList args) :++: ghosts) ->
+    BlockHintSort args
+
+  -- | This hint says that the input perms for a block should be generalized
+  GenPermsHintSort :: BlockHintSort args
+
+  -- | This hint says that a block should be a join point
+  JoinPointHintSort :: BlockHintSort args
+
+-- | A hint for a block
+data BlockHint blocks init ret args where
+  BlockHint :: FnHandle init ret -> Assignment CtxRepr blocks ->
+               BlockID blocks args -> BlockHintSort args ->
+               BlockHint blocks init ret args
+
+-- | A "hint" from the user for type-checking
+data Hint where
+  Hint_Block :: BlockHint blocks init ret args -> Hint
+
+-- | A permission environment that maps function names, permission names, and
+-- 'GlobalSymbols' to their respective permission structures
+data PermEnv = PermEnv {
+  permEnvFunPerms :: [PermEnvFunEntry],
+  permEnvNamedPerms :: [SomeNamedPerm],
+  permEnvNamedShapes :: [SomeNamedShape],
+  permEnvGlobalSyms :: [PermEnvGlobalEntry],
+  permEnvHints :: [Hint]
+  }
+
+
+----------------------------------------------------------------------
+-- * Template Haskell–generated instances
+----------------------------------------------------------------------
+
+instance NuMatchingAny1 PermExpr where
+  nuMatchingAny1Proof = nuMatchingProof
+
+instance NuMatchingAny1 ValuePerm where
+  nuMatchingAny1Proof = nuMatchingProof
+
+instance NuMatchingAny1 VarAndPerm where
+  nuMatchingAny1Proof = nuMatchingProof
+
+instance NuMatchingAny1 ExprAndPerm where
+  nuMatchingAny1Proof = nuMatchingProof
+
+instance NuMatchingAny1 DistPerms where
+  nuMatchingAny1Proof = nuMatchingProof
+
+$(mkNuMatching [t| forall a . BVFactor a |])
+$(mkNuMatching [t| RWModality |])
+$(mkNuMatching [t| forall b args w. NamedShapeBody b args w |])
+$(mkNuMatching [t| forall b args w. NamedShape b args w |])
+$(mkNuMatching [t| forall w . LLVMFieldShape w |])
+$(mkNuMatching [t| forall a . PermExpr a |])
+$(mkNuMatching [t| forall w. BVRange w |])
+$(mkNuMatching [t| forall a. MbRangeForType a |])
+$(mkNuMatching [t| forall a. NuMatching a => SomeTypedMb a |])
+$(mkNuMatching [t| forall w. BVProp w |])
+$(mkNuMatching [t| forall w sz . LLVMFieldPerm w sz |])
+$(mkNuMatching [t| forall w . LLVMArrayBorrow w |])
+$(mkNuMatching [t| forall w . LLVMArrayPerm w |])
+$(mkNuMatching [t| forall w . LLVMBlockPerm w |])
+$(mkNuMatching [t| forall ns. NameSortRepr ns |])
+$(mkNuMatching [t| forall ns args a. NameReachConstr ns args a |])
+$(mkNuMatching [t| forall ns args a. NamedPermName ns args a |])
+$(mkNuMatching [t| forall a. PermOffset a |])
+$(mkNuMatching [t| forall ghosts args gouts ret. FunPerm ghosts args gouts ret |])
+$(mkNuMatching [t| forall a . AtomicPerm a |])
+$(mkNuMatching [t| forall a . ValuePerm a |])
+-- $(mkNuMatching [t| forall as. ValuePerms as |])
+$(mkNuMatching [t| forall a . VarAndPerm a |])
+$(mkNuMatching [t| forall a . ExprAndPerm a |])
+
+$(mkNuMatching [t| forall w . LLVMArrayIndex w |])
+$(mkNuMatching [t| forall args ret. SomeFunPerm args ret |])
+$(mkNuMatching [t| SomeNamedPermName |])
+$(mkNuMatching [t| forall b args a. OpaquePerm b args a |])
+$(mkNuMatching [t| forall args a reach. ReachMethods args a reach |])
+$(mkNuMatching [t| forall b reach args a. RecPerm b reach args a |])
+$(mkNuMatching [t| forall b args a. DefinedPerm b args a |])
+$(mkNuMatching [t| forall ns args a. NamedPerm ns args a |])
+$(mkNuMatching [t| forall args a. LifetimeFunctor args a |])
+$(mkNuMatching [t| forall ps. LifetimeCurrentPerms ps |])
+$(mkNuMatching [t| forall a. SomeLLVMBlockPerm a |])
+$(mkNuMatching [t| forall w. SomeBindingLLVMBlockPerm w |])
+
+$(mkNuMatching [t| forall w sz. TaggedUnionShape w sz |])
+$(mkNuMatching [t| forall w. SomeTaggedUnionShape w |])
+$(mkNuMatching [t| forall ctx. PermVarSubst ctx |])
+$(mkNuMatching [t| PermEnvFunEntry |])
+$(mkNuMatching [t| SomeNamedPerm |])
+$(mkNuMatching [t| SomeNamedShape |])
+$(mkNuMatching [t| PermEnvGlobalEntry |])
+$(mkNuMatching [t| forall args. BlockHintSort args |])
+$(mkNuMatching [t| forall blocks init ret args.
+                BlockHint blocks init ret args |])
+$(mkNuMatching [t| Hint |])
+$(mkNuMatching [t| PermEnv |])
+
+-- NOTE: this instance would require a NuMatching instance for NameMap...
+-- $(mkNuMatching [t| forall ps. PermSet ps |])
 
 
 ----------------------------------------------------------------------
@@ -250,15 +1124,24 @@ noDebugLevel = DebugLevel 0
 traceDebugLevel :: DebugLevel
 traceDebugLevel = DebugLevel 1
 
--- | Output a debug statement to @stderr@ using 'trace' if the supplied
--- 'DebugLevel' is at least 'traceDebugLevel'
-debugTrace :: DebugLevel -> String -> a -> a
-debugTrace dlevel | dlevel >= traceDebugLevel = trace
-debugTrace _ = const id
+-- | The debug level to enable more verbose tracing
+verboseDebugLevel :: DebugLevel
+verboseDebugLevel = DebugLevel 2
+
+-- | Output a debug statement to @stderr@ using 'trace' if the second
+-- 'DebugLevel' is at least the first, i.e., the first is the required level for
+-- emitting this trace and the second is the current level
+debugTrace :: DebugLevel -> DebugLevel -> String -> a -> a
+debugTrace req dlevel | dlevel >= req = trace
+debugTrace _ _ = const id
+
+-- | Call 'debugTrace' at 'traceDebugLevel'
+debugTraceTraceLvl :: DebugLevel -> String -> a -> a
+debugTraceTraceLvl = debugTrace traceDebugLevel
 
 -- | Like 'debugTrace' but take in a 'Doc' instead of a 'String'
-debugTracePretty :: DebugLevel -> Doc ann -> a -> a
-debugTracePretty dlevel d a = debugTrace dlevel (renderDoc d) a
+debugTracePretty :: DebugLevel -> DebugLevel -> Doc ann -> a -> a
+debugTracePretty req dlevel d a = debugTrace req dlevel (renderDoc d) a
 
 -- | The constant string functor
 newtype StringF a = StringF { unStringF :: String }
@@ -376,6 +1259,15 @@ instance (PermPretty a, PermPretty b, PermPretty c) => PermPretty (a,b,c) where
 instance PermPretty a => PermPretty [a] where
   permPrettyM as = ppEncList False <$> mapM permPrettyM as
 
+instance PermPretty a => PermPretty (Maybe a) where
+  permPrettyM Nothing = return $ pretty "Nothing"
+  permPrettyM (Just a) = do
+    a_pp <- permPrettyM a
+    return (pretty "Just" <+> a_pp)
+
+instance PermPrettyF f => PermPretty (Some f) where
+  permPrettyM (Some x) = permPrettyMF x
+
 instance PermPretty (ExprVar a) where
   permPrettyM x =
     do maybe_str <- NameMap.lookup x <$> ppExprNames <$> ask
@@ -392,6 +1284,10 @@ instance PermPretty (SomeName CrucibleType) where
 instance PermPrettyF f => PermPretty (RAssign f ctx) where
   permPrettyM xs =
     ppCommaSep <$> sequence (RL.mapToList permPrettyMF xs)
+
+instance PermPrettyF f => PermPrettyF (RAssign f) where
+  permPrettyMF xs = permPrettyM xs
+
 
 instance PermPretty (TypeRepr a) where
   permPrettyM UnitRepr = return $ pretty "unit"
@@ -434,14 +1330,24 @@ instance PermPrettyF VarAndType where
   permPrettyMF = permPrettyM
 
 
-permPrettyExprMb :: PermPretty a =>
-                    (RAssign (Constant (Doc ann)) ctx -> PermPPM (Doc ann) -> PermPPM (Doc ann)) ->
-                    Mb (ctx :: RList CrucibleType) a -> PermPPM (Doc ann)
-permPrettyExprMb f mb =
+-- | Pretty-print a name-binding using a function that takes the pretty-printed
+-- names along with the body of the name-binding
+permPrettyMb :: (RAssign (Constant (Doc ann)) ctx -> a -> PermPPM (Doc ann)) ->
+                Mb (ctx :: RList CrucibleType) a -> PermPPM (Doc ann)
+permPrettyMb f mb =
   fmap mbLift $ strongMbM $ flip nuMultiWithElim1 mb $ \ns a ->
   local (ppInfoAddExprNames "z" ns) $
-  do docs <- traverseRAssign (\n -> Constant <$> permPrettyM n) ns
-     PP.group <$> hang 2 <$> f docs (permPrettyM a)
+  do ns_pp <- traverseRAssign (\n -> Constant <$> permPrettyM n) ns
+     PP.group <$> hang 2 <$> f ns_pp a
+
+-- | Pretty-print an expression-like construct in a name-binding using a
+-- function that combines the pretty-printed names along with the pretty-printed
+-- body of the name-binding
+permPrettyExprMb :: PermPretty a =>
+                    (RAssign (Constant (Doc ann)) ctx -> PermPPM (Doc ann) ->
+                     PermPPM (Doc ann)) ->
+                    Mb (ctx :: RList CrucibleType) a -> PermPPM (Doc ann)
+permPrettyExprMb f = permPrettyMb (\ns_pp a -> f ns_pp (permPrettyM a))
 
 instance PermPretty a => PermPretty (Mb (ctx :: RList CrucibleType) a) where
   permPrettyM =
@@ -455,13 +1361,6 @@ instance PermPretty Integer where
 ----------------------------------------------------------------------
 -- * Expressions for Permissions
 ----------------------------------------------------------------------
-
--- | The Haskell type of expression variables
-type ExprVar = (Name :: CrucibleType -> Type)
-
--- | Crucible type for lifetimes; we give them a Crucible type so they can be
--- existentially bound in the same way as other Crucible objects
-type LifetimeType = IntrinsicType "Lifetime" EmptyCtx
 
 -- | The object-level representation of 'LifetimeType'
 lifetimeTypeRepr :: TypeRepr LifetimeType
@@ -478,10 +1377,6 @@ pattern LifetimeRepr <-
 -- | A lifetime is an expression of type 'LifetimeType'
 --type Lifetime = PermExpr LifetimeType
 
--- | Crucible type for read/write modalities; we give them a Crucible type so
--- they can be used as variables in recursive permission definitions
-type RWModalityType = IntrinsicType "RWModality" EmptyCtx
-
 -- | The object-level representation of 'RWModalityType'
 rwModalityTypeRepr :: TypeRepr RWModalityType
 rwModalityTypeRepr = knownRepr
@@ -494,9 +1389,6 @@ pattern RWModalityRepr <-
   Empty
   where RWModalityRepr = IntrinsicRepr knownSymbol Empty
 
--- | Crucible type for lists of expressions and permissions on them
-type PermListType = IntrinsicType "PermList" EmptyCtx
-
 -- | Pattern for building/desctructing permission list types
 pattern PermListRepr :: () => ty ~ PermListType => TypeRepr ty
 pattern PermListRepr <-
@@ -504,9 +1396,6 @@ pattern PermListRepr <-
                  Just Refl) Empty
   where
     PermListRepr = IntrinsicRepr knownSymbol Empty
-
--- | Crucible type for LLVM stack frame objects
-type LLVMFrameType w = IntrinsicType "LLVMFrame" (EmptyCtx ::> BVType w)
 
 -- | Pattern for building/desctructing LLVM frame types
 pattern LLVMFrameRepr :: () => (1 <= w, ty ~ LLVMFrameType w) =>
@@ -518,9 +1407,6 @@ pattern LLVMFrameRepr w <-
   where
     LLVMFrameRepr w = IntrinsicRepr knownSymbol (Ctx.extend Empty (BVRepr w))
 
--- | Crucible type for value permissions themselves
-type ValuePermType a = IntrinsicType "Perm" (EmptyCtx ::> a)
-
 -- | Pattern for building/desctructing permissions as expressions
 pattern ValuePermRepr :: () => (ty ~ ValuePermType a) => TypeRepr a ->
                          TypeRepr ty
@@ -530,9 +1416,6 @@ pattern ValuePermRepr a <-
   (viewAssign -> AssignExtend Empty a)
   where
     ValuePermRepr a = IntrinsicRepr knownSymbol (Ctx.extend Empty a)
-
--- | Crucible type for LLVM shapes
-type LLVMShapeType w = IntrinsicType "LLVMShape" (EmptyCtx ::> BVType w)
 
 -- | Pattern for building/desctructing LLVM frame types
 pattern LLVMShapeRepr :: () => (1 <= w, ty ~ LLVMShapeType w) =>
@@ -544,9 +1427,6 @@ pattern LLVMShapeRepr w <-
   where
     LLVMShapeRepr w = IntrinsicRepr knownSymbol (Ctx.extend Empty (BVRepr w))
 
--- | Crucible type for LLVM memory blocks
-type LLVMBlockType w = IntrinsicType "LLVMBlock" (EmptyCtx ::> BVType w)
-
 -- | Pattern for building/desctructing LLVM frame types
 pattern LLVMBlockRepr :: () => (1 <= w, ty ~ LLVMBlockType w) =>
                          NatRepr w -> TypeRepr ty
@@ -557,124 +1437,6 @@ pattern LLVMBlockRepr w <-
   where
     LLVMBlockRepr w = IntrinsicRepr knownSymbol (Ctx.extend Empty (BVRepr w))
 
-
--- | Expressions that are considered "pure" for use in permissions. Note that
--- these are in a normal form, that makes them easier to analyze.
-data PermExpr (a :: CrucibleType) where
-  -- | A variable of any type
-  PExpr_Var :: ExprVar a -> PermExpr a
-
-  -- | A unit literal
-  PExpr_Unit :: PermExpr UnitType
-
-  -- | A literal Boolean number
-  PExpr_Bool :: Bool -> PermExpr BoolType
-
-  -- | A literal natural number
-  PExpr_Nat :: Natural -> PermExpr NatType
-
-  -- | A literal string
-  PExpr_String :: String -> PermExpr (StringType Unicode)
-
-  -- | A bitvector expression is a linear expression in @N@ variables, i.e., sum
-  -- of constant times variable factors plus a constant
-  --
-  -- FIXME: make the offset a 'Natural'
-  PExpr_BV :: (1 <= w, KnownNat w) =>
-              [BVFactor w] -> BV w -> PermExpr (BVType w)
-
-  -- | A struct expression is an expression for each argument of the struct type
-  PExpr_Struct :: PermExprs (CtxToRList args) -> PermExpr (StructType args)
-
-  -- | The @always@ lifetime that is always current
-  PExpr_Always :: PermExpr LifetimeType
-
-  -- | An LLVM value that represents a word, i.e., whose region identifier is 0
-  PExpr_LLVMWord :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-                    PermExpr (LLVMPointerType w)
-
-  -- | An LLVM value built by adding an offset to an LLVM variable
-  PExpr_LLVMOffset :: (1 <= w, KnownNat w) =>
-                      ExprVar (LLVMPointerType w) ->
-                      PermExpr (BVType w) ->
-                      PermExpr (LLVMPointerType w)
-
-  -- | A literal function pointer
-  PExpr_Fun :: FnHandle args ret -> PermExpr (FunctionHandleType args ret)
-
-  -- | An empty permission list
-  PExpr_PermListNil :: PermExpr PermListType
-
-  -- | A cons of an expression and a permission on it to a permission list
-  PExpr_PermListCons :: TypeRepr a -> PermExpr a -> ValuePerm a ->
-                        PermExpr PermListType -> PermExpr PermListType
-
-  -- | A read/write modality 
-  PExpr_RWModality :: RWModality -> PermExpr RWModalityType
-
-  -- | The empty / vacuously true shape
-  PExpr_EmptyShape :: PermExpr (LLVMShapeType w)
-
-  -- | A named shape along with arguments for it, with optional read/write and
-  -- lifetime modalities that are applied to the body of the shape
-  PExpr_NamedShape :: KnownNat w => Maybe (PermExpr RWModalityType) ->
-                      Maybe (PermExpr LifetimeType) ->
-                      NamedShape b args w -> PermExprs args ->
-                      PermExpr (LLVMShapeType w)
-
-  -- | The equality shape
-  PExpr_EqShape :: PermExpr (LLVMBlockType w) -> PermExpr (LLVMShapeType w)
-
-  -- | A shape for a pointer to another memory block, i.e., a @memblock@
-  -- permission, with a given shape. This @memblock@ permission will have the
-  -- same read/write and lifetime modalities as the @memblock@ permission
-  -- containing this pointer shape, unless they are specifically overridden by
-  -- the pointer shape; i.e., we have that
-  --
-  -- > [l]memblock(rw,off,len,ptrsh(rw',l',sh)) =
-  -- >   [l]memblock(rw,off,len,fieldsh([l']memblock(rw',0,len(sh),sh)))
-  --
-  -- where @rw'@ and/or @l'@ can be 'Nothing', in which case they default to
-  -- @rw@ and @l@, respectively.
-  PExpr_PtrShape :: Maybe (PermExpr RWModalityType) ->
-                    Maybe (PermExpr LifetimeType) ->
-                    PermExpr (LLVMShapeType w) -> PermExpr (LLVMShapeType w)
-
-  -- | A shape for a single field with a given permission
-  PExpr_FieldShape :: (1 <= w, KnownNat w) => LLVMFieldShape w ->
-                      PermExpr (LLVMShapeType w)
-
-  -- | A shape for an array of @len@ individual regions of memory, called "array
-  -- cells"; the size of each cell in bytes is given by the array stride, which
-  -- must be known statically, and each cell has shape given by the supplied
-  -- LLVM shape, also called the cell shape
-  PExpr_ArrayShape :: (1 <= w, KnownNat w) =>
-                      PermExpr (BVType w) -> Bytes ->
-                      PermExpr (LLVMShapeType w) ->
-                      PermExpr (LLVMShapeType w)
-
-  -- | A sequence of two shapes
-  PExpr_SeqShape :: PermExpr (LLVMShapeType w) -> PermExpr (LLVMShapeType w) ->
-                    PermExpr (LLVMShapeType w)
-
-  -- | A disjunctive shape
-  PExpr_OrShape :: PermExpr (LLVMShapeType w) -> PermExpr (LLVMShapeType w) ->
-                   PermExpr (LLVMShapeType w)
-
-  -- | An existential shape
-  PExpr_ExShape :: KnownRepr TypeRepr a =>
-                   Binding a (PermExpr (LLVMShapeType w)) ->
-                   PermExpr (LLVMShapeType w)
-
-  -- | A false shape
-  PExpr_FalseShape :: PermExpr (LLVMShapeType w)
-
-  -- | A permission as an expression
-  PExpr_ValPerm :: ValuePerm a -> PermExpr (ValuePermType a)
-
-
--- | A sequence of permission expressions
-type PermExprs = RAssign PermExpr
 
 -- | Pattern for an empty 'PermExprs' list
 pattern PExprs_Nil :: () => (tps ~ RNil) => PermExprs tps
@@ -689,12 +1451,6 @@ pattern PExprs_Cons es e <- es :>: e
 
 {-# COMPLETE PExprs_Nil, PExprs_Cons #-}
 
-{-
-data PermExprs (as :: RList CrucibleType) where
-  PExprs_Nil :: PermExprs RNil
-  PExprs_Cons :: PermExprs as -> PermExpr a -> PermExprs (as :> a)
--}
-
 -- | Convert a 'PermExprs' to an 'RAssign'
 exprsToRAssign :: PermExprs as -> RAssign PermExpr as
 exprsToRAssign PExprs_Nil = MNil
@@ -703,7 +1459,7 @@ exprsToRAssign (PExprs_Cons es e) = exprsToRAssign es :>: e
 -- | Convert an 'RAssign' to a 'PermExprs'
 rassignToExprs :: RAssign PermExpr as -> PermExprs as
 rassignToExprs MNil = PExprs_Nil
-rassignToExprs (es :>: e) = PExprs_Cons (rassignToExprs es) e 
+rassignToExprs (es :>: e) = PExprs_Cons (rassignToExprs es) e
 
 -- | Convert a list of names to a 'PermExprs' list
 namesToExprs :: RAssign Name as -> PermExprs as
@@ -824,20 +1580,6 @@ findAtomicPermInList x pred plist =
   foldPermListAtomic x (\p rest ->
                          if pred p then Just p else rest) Nothing plist
 
--- | A bitvector variable, possibly multiplied by a constant
-data BVFactor w where
-  -- | A variable of type @'BVType' w@ multiplied by a constant @i@, which
-  -- should be in the range @0 <= i < 2^w@
-  BVFactor :: (1 <= w, KnownNat w) => BV w -> ExprVar (BVType w) ->
-              BVFactor w
-
--- | Whether a permission allows reads or writes
-data RWModality
-  = Write
-  | Read
-  deriving Eq
-
-
 instance Eq (PermExpr a) where
   (PExpr_Var x1) == (PExpr_Var x2) = x1 == x2
   (PExpr_Var _) == _ = False
@@ -900,8 +1642,8 @@ instance Eq (PermExpr a) where
       maybe_rw1 == maybe_rw2 && maybe_l1 == maybe_l2 && args1 == args2
   (PExpr_NamedShape _ _ _ _) == _ = False
 
-  (PExpr_EqShape b1) == (PExpr_EqShape b2) = b1 == b2
-  (PExpr_EqShape _) == _ = False
+  (PExpr_EqShape len1 b1) == (PExpr_EqShape len2 b2) = len1 == len2 && b1 == b2
+  (PExpr_EqShape _ _) == _ = False
 
   (PExpr_PtrShape rw1 l1 sh1) == (PExpr_PtrShape rw2 l2 sh2) =
     rw1 == rw2 && l1 == l2 && sh1 == sh2
@@ -975,8 +1717,10 @@ instance PermPretty (PermExpr a) where
        args_pp <- permPrettyM args
        return (l_pp <> rw_pp <> pretty (namedShapeName nmsh) <>
                pretty '<' <> align (args_pp <> pretty '>'))
-  permPrettyM (PExpr_EqShape b) =
-    ((pretty "eqsh" <>) . parens) <$> permPrettyM b
+  permPrettyM (PExpr_EqShape len b) =
+    do len_pp <- permPrettyM len
+       b_pp <- permPrettyM b
+       return (pretty "eqsh" <> parens (len_pp <> comma <> b_pp))
   permPrettyM (PExpr_PtrShape maybe_rw maybe_l sh) =
     do l_pp <- maybe (return mempty) permPrettyLifetimePrefix maybe_l
        rw_pp <- case maybe_rw of
@@ -1322,6 +2066,11 @@ bvRangeSuffix :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> BVRange w ->
 bvRangeSuffix off' (BVRange off len) =
   BVRange off' (bvSub len (bvSub off' off))
 
+-- | Build the range of offsets not in a 'BVRange'
+bvRangeInvert :: (1 <= w, KnownNat w) => BVRange w -> BVRange w
+bvRangeInvert (BVRange off len) =
+  BVRange (bvAdd off len) (bvSub (bvInt 0) len)
+
 -- | Subtract a bitvector word from the offset of a 'BVRange'
 bvRangeSub :: (1 <= w, KnownNat w) => BVRange w -> PermExpr (BVType w) ->
               BVRange w
@@ -1375,6 +2124,136 @@ bvRangesDelete :: (1 <= w, KnownNat w) => BVRange w -> [BVRange w] ->
 bvRangesDelete rng_top =
   foldr (\rng_del rngs -> concatMap (flip bvRangeDelete rng_del) rngs) [rng_top]
 
+-- | Find all offsets in the first range that could (in the sense of
+-- 'bvPropCouldHold') be in the second. This is an asymmetric form of
+-- intersection, and is equivalent to 'bvRangeDelete' of the complement of the
+-- second range
+bvRangeSubsetTo :: (1 <= w, KnownNat w) => BVRange w -> BVRange w ->
+                   [BVRange w]
+bvRangeSubsetTo rng1 rng2 = bvRangeDelete rng1 $ bvRangeInvert rng2
+
+-- | Find all offsets in any of the first list of ranges that could (in the
+-- sense of 'bvPropCouldHold') be in one of those in the second list
+bvRangesSubsetTo :: (1 <= w, KnownNat w) => [BVRange w] -> [BVRange w] ->
+                    [BVRange w]
+bvRangesSubsetTo rngs1 rngs2 =
+  flip concatMap rngs1 $ \rng1 -> flip concatMap rngs2 $ \rng2 ->
+  bvRangeSubsetTo rng1 rng2
+
+-- | Convert an 'MbRangeForType' in a binding to an 'MbRangeForType'
+mbMbRangeForType :: CruCtx ctx -> Mb ctx (MbRangeForType a) ->
+                    MbRangeForType a
+-- If the range can be lifted out of the binding, do so
+mbMbRangeForType ctx mb_rngft
+  | Just rngft <- partialSubst (emptyPSubst $ cruCtxProxies ctx) mb_rngft
+  = rngft
+-- Otherwise, add the new variables to the existing bound variables
+mbMbRangeForType ctx mb_rngft = case mbMatch mb_rngft of
+  [nuMP| MbRangeForLLVMType vars rw l rng |] ->
+    MbRangeForLLVMType (appendCruCtx ctx $ mbLift vars)
+    (mbCombine (cruCtxProxies $ mbLift vars) rw)
+    (mbCombine (cruCtxProxies $ mbLift vars) l)
+    (mbCombine (cruCtxProxies $ mbLift vars) rng)
+
+-- | Add a 'PermOffset' to an 'MbRangeForType
+offsetMbRangeForType :: PermOffset a -> MbRangeForType a -> MbRangeForType a
+offsetMbRangeForType NoPermOffset rng = rng
+offsetMbRangeForType (LLVMPermOffset off) (MbRangeForLLVMType
+                                           vars mb_rw mb_l mb_rng) =
+  MbRangeForLLVMType vars mb_rw mb_l $ fmap (offsetBVRange off) mb_rng
+
+-- | Test if the first read/write modality in a binding "covers" the second,
+-- meaning a permission relative to the first implies or can be coerced to a
+-- similar permission relative to the second, possibly by instantiating evars on
+-- the right
+mbRWModCovers ::
+  Mb (ctx1 :: RList CrucibleType) (PermExpr RWModalityType) ->
+  Mb (ctx2 :: RList CrucibleType) (PermExpr RWModalityType) -> Bool
+mbRWModCovers [nuP| PExpr_Write |] _ = True
+mbRWModCovers _ [nuP| PExpr_Read |] = True
+mbRWModCovers _ [nuP| PExpr_Var mb_x |]
+  | Left _ <- mbNameBoundP mb_x = True
+mbRWModCovers mb_rw2 mb_rw1 =
+  fromMaybe False ((==) <$> tryLift mb_rw1 <*> tryLift mb_rw2)
+
+-- | Test if the first lifetime in a binding "covers" the second, meaning a
+-- permission relative to the second implies or can be coerced to a similar
+-- permission relative to the first, possibly by instantiating evars on the
+-- right
+mbLifetimeCovers ::
+  Mb (ctx1 :: RList CrucibleType) (PermExpr LifetimeType) ->
+  Mb (ctx2 :: RList CrucibleType) (PermExpr LifetimeType) -> Bool
+mbLifetimeCovers _ [nuP| PExpr_Always |] = True
+mbLifetimeCovers _ [nuP| PExpr_Var mb_x |]
+  | Left _ <- mbNameBoundP mb_x = True
+mbLifetimeCovers mb_l1 mb_l2 =
+  fromMaybe False ((==) <$> tryLift mb_l1 <*> tryLift mb_l2)
+
+-- | Delete one range from another, where the deletion only happens if the
+-- modalities of the RHS cover those of the LHS
+mbRangeFTDelete :: MbRangeForType a -> MbRangeForType a ->
+                   [MbRangeForType a]
+mbRangeFTDelete
+  (MbRangeForLLVMType vars1 mb_rw1 mb_l1 mb_rng1)
+  (MbRangeForLLVMType vars2 mb_rw2 mb_l2 mb_rng2)
+  | mbRWModCovers mb_rw2 mb_rw1
+  , mbLifetimeCovers mb_l2 mb_l1
+  , mb_rw2' <- extMbMultiL (cruCtxProxies vars1) mb_rw2
+  , mb_l2' <- extMbMultiL (cruCtxProxies vars1) mb_l2 =
+    map (MbRangeForLLVMType (appendCruCtx vars1 vars2) mb_rw2' mb_l2') $
+    mbList $ mbCombine (cruCtxProxies vars2) $
+    flip fmap mb_rng1 $ \rng1 -> flip fmap mb_rng2 $ \rng2 ->
+    bvRangeDelete rng1 rng2
+mbRangeFTDelete mb_rng _ = [mb_rng]
+
+-- | Delete all ranges in any of a list of ranges from 
+mbRangeFTsDelete :: [MbRangeForType a] -> [MbRangeForType a] ->
+                    [MbRangeForType a]
+mbRangeFTsDelete rngs_l rngs_r =
+  foldr (\rng_r rngs -> concatMap (flip mbRangeFTDelete rng_r) rngs) rngs_l rngs_r
+
+-- | Find all the offsets in the first 'MbRangeForType' that could be in the
+-- second, in a manner similar to 'bvRangeSubsetTo', preserving the modalities
+-- of the first
+mbRangeFTSubsetTo :: MbRangeForType a -> MbRangeForType a ->
+                     [MbRangeForType a]
+mbRangeFTSubsetTo
+  (MbRangeForLLVMType vars1 mb_rw1 mb_l1 mb_rng1)
+  (MbRangeForLLVMType vars2 _ _ mb_rng2)
+  | mb_rw1' <- extMbMulti (cruCtxProxies vars2) mb_rw1
+  , mb_l1' <- extMbMulti (cruCtxProxies vars2) mb_l1 =
+    map (MbRangeForLLVMType (appendCruCtx vars1 vars2) mb_rw1' mb_l1') $ mbList $
+    mbCombine (cruCtxProxies vars2) $
+    flip fmap mb_rng1 $ \rng1 -> flip fmap mb_rng2 $ \rng2 ->
+    bvRangeSubsetTo rng1 rng2
+
+-- | Find all the offsets in an 'MbRangeForType' in the first list that could be
+-- in one in the second, in a manner similar to 'bvRangesSubsetTo'
+mbRangeFTsSubsetTo :: [MbRangeForType a] -> [MbRangeForType a] ->
+                      [MbRangeForType a]
+mbRangeFTsSubsetTo rngs1 rngs2 =
+  flip concatMap rngs1 $ \rng1 -> flip concatMap rngs2 $ \rng2 ->
+  mbRangeFTSubsetTo rng1 rng2
+
+-- | Test if one 'MbRangeForType' could cover part of another, using
+-- 'mbRWModCovers' and 'mbLifetimeCovers' for the modalities
+mbRangeFTCouldCoverPart :: MbRangeForType a -> MbRangeForType a -> Bool
+mbRangeFTCouldCoverPart
+  (MbRangeForLLVMType _ mb_rw1 mb_l1 mb_rng1)
+  (MbRangeForLLVMType _ mb_rw2 mb_l2 mb_rng2) =
+  mbRWModCovers mb_rw1 mb_rw2 &&
+  mbLifetimeCovers mb_l1 mb_l2 &&
+  (mbLift $ flip fmap mb_rng1 $ \rng1 ->
+    mbLift $ flip fmap mb_rng2 $ \rng2 ->
+    bvRangesCouldOverlap rng1 rng2)
+
+-- | Test if any offsets in one list of 'MbRangeForType's could (as in
+-- 'bvPropCouldHold') covert some offsets in another
+mbRangeFTsCouldCoverPart :: [MbRangeForType a] -> [MbRangeForType a] -> Bool
+mbRangeFTsCouldCoverPart rngs1 rngs2 =
+  or $ flip concatMap rngs1 $ \rng1 ->
+  map (mbRangeFTCouldCoverPart rng1) rngs2
+
 -- | Build a bitvector expression from an integer
 bvInt :: (1 <= w, KnownNat w) => Integer -> PermExpr (BVType w)
 bvInt i = PExpr_BV [] $ BV.mkBV knownNat i
@@ -1417,13 +2296,13 @@ bvConcat LittleEndian bv1 bv2
 -- to determine which is the first versus second part of the split
 bvSplit :: KnownNat sz1 => KnownNat sz2 => EndianForm ->
            NatRepr sz1 -> BV.BV sz2 -> Maybe (BV.BV sz1, BV.BV (sz2 - sz1))
-bvSplit BigEndian sz1 bv2
+bvSplit LittleEndian sz1 bv2
   | n0 <- knownNat @0
   , sz2 <- natRepr bv2
   , Left LeqProof <- decideLeq (addNat n0 sz1) sz2
   , Left LeqProof <- decideLeq (addNat sz1 (subNat sz2 sz1)) sz2 =
     Just (BV.select n0 sz1 bv2, BV.select sz1 (subNat sz2 sz1) bv2)
-bvSplit LittleEndian sz1 bv2
+bvSplit BigEndian sz1 bv2
   | n0 <- knownNat @0
   , sz2 <- natRepr bv2
   , Left LeqProof <- decideLeq sz1 sz2
@@ -1555,153 +2434,8 @@ offsetBVRange off (BVRange off' len) = (BVRange (bvAdd off' off) len)
 -- * Permissions
 ----------------------------------------------------------------------
 
--- | The Haskell type of permission variables, that is, variables that range
--- over 'ValuePerm's
-type PermVar (a :: CrucibleType) = Name (ValuePermType a)
-
--- | Ranges @[off,off+len)@ of bitvector values @x@ equal to @off+y@ for some
--- unsigned @y < len@. Note that ranges are allowed to wrap around 0, meaning
--- @off+y@ can overflow when testing whether @x@ is in the range. Thus, @x@ is
--- in range @[off,off+len)@ iff @x-off@ is unsigned less than @len@.
-data BVRange w = BVRange { bvRangeOffset :: PermExpr (BVType w),
-                           bvRangeLength :: PermExpr (BVType w) }
-               deriving Eq
-
--- | Propositions about bitvectors
-data BVProp w
-    -- | True iff the two expressions are equal
-  = BVProp_Eq (PermExpr (BVType w)) (PermExpr (BVType w))
-    -- | True iff the two expressions are not equal
-  | BVProp_Neq (PermExpr (BVType w)) (PermExpr (BVType w))
-    -- | True iff the first expression is unsigned less-than the second
-  | BVProp_ULt (PermExpr (BVType w)) (PermExpr (BVType w))
-    -- | True iff the first expression is unsigned @<=@ the second
-  | BVProp_ULeq (PermExpr (BVType w)) (PermExpr (BVType w))
-    -- | True iff the first expression is unsigned @<=@ the difference of the
-    -- second minus the third
-  | (1 <= w, KnownNat w) =>
-    BVProp_ULeq_Diff (PermExpr (BVType w)) (PermExpr (BVType w))
-    (PermExpr (BVType w))
-
+deriving instance Eq (BVRange w)
 deriving instance Eq (BVProp w)
-
--- | An atomic permission is a value permission that is not one of the compound
--- constructs in the 'ValuePerm' type; i.e., not a disjunction, existential,
--- recursive, or equals permission. These are the permissions that we can put
--- together with separating conjuctions.
-data AtomicPerm (a :: CrucibleType) where
-  -- | Gives permissions to a single field pointed to by an LLVM pointer
-  Perm_LLVMField :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
-                    LLVMFieldPerm w sz ->
-                    AtomicPerm (LLVMPointerType w)
-
-  -- | Gives permissions to an array pointer to by an LLVM pointer
-  Perm_LLVMArray :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
-                    AtomicPerm (LLVMPointerType w)
-
-  -- | Gives read or write access to a memory block, whose contents also give
-  -- some permissions
-  Perm_LLVMBlock :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
-                    AtomicPerm (LLVMPointerType w)
-
-  -- | Says that we have permission to free the memory pointed at by this
-  -- pointer if we have write permission to @e@ words of size @w@
-  Perm_LLVMFree :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-                   AtomicPerm (LLVMPointerType w)
-
-  -- | Says that we known an LLVM value is a function pointer whose function has
-  -- the given permissions
-  Perm_LLVMFunPtr :: (1 <= w, KnownNat w) =>
-                     TypeRepr (FunctionHandleType cargs ret) ->
-                     ValuePerm (FunctionHandleType cargs ret) ->
-                     AtomicPerm (LLVMPointerType w)
-
-  -- | Says that a memory block has a given shape
-  Perm_LLVMBlockShape :: (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
-                         AtomicPerm (LLVMBlockType w)
-
-  -- | Says we know an LLVM value is a pointer value, meaning that its block
-  -- value is non-zero. Note that this does not say the pointer is allocated.
-  Perm_IsLLVMPtr :: (1 <= w, KnownNat w) =>
-                    AtomicPerm (LLVMPointerType w)
-
-  -- | A named conjunctive permission
-  Perm_NamedConj :: NameSortIsConj ns ~ 'True =>
-                    NamedPermName ns args a -> PermExprs args ->
-                    PermOffset a -> AtomicPerm a
-
-  -- | Permission to allocate (via @alloca@) on an LLVM stack frame, and
-  -- permission to delete that stack frame if we have exclusive permissions to
-  -- all the given LLVM pointer objects
-  Perm_LLVMFrame :: (1 <= w, KnownNat w) => LLVMFramePerm w ->
-                    AtomicPerm (LLVMFrameType w)
-
-  -- | Ownership permission for a lifetime, including an assertion that it is
-  -- still current and permission to end that lifetime. A lifetime also
-  -- represents a permission "borrow" of some sub-permissions out of some larger
-  -- permissions. For example, we might borrow a portion of an array, or a
-  -- portion of a larger data structure. When the lifetime is ended, you have to
-  -- give back to sub-permissions to get back the larger permissions. Together,
-  -- these are a form of permission implication, so we write lifetime ownership
-  -- permissions as @lowned(Pin -o Pout)@. Intuitively, @Pin@ must be given back
-  -- before the lifetime is ended, and @Pout@ is returned afterwards.
-  -- Additionally, a lifetime may contain some other lifetimes, meaning the all
-  -- must end before the current one can be ended.
-  Perm_LOwned :: [PermExpr LifetimeType] ->
-                 LOwnedPerms ps_in -> LOwnedPerms ps_out ->
-                 AtomicPerm LifetimeType
-
-  -- | Assertion that a lifetime is current during another lifetime
-  Perm_LCurrent :: PermExpr LifetimeType -> AtomicPerm LifetimeType
-
-  -- | Assertion that a lifetime has finished
-  Perm_LFinished :: AtomicPerm LifetimeType
-
-  -- | A struct permission = a sequence of permissions for each field
-  Perm_Struct :: RAssign ValuePerm (CtxToRList ctx) ->
-                 AtomicPerm (StructType ctx)
-
-  -- | A function permission
-  Perm_Fun :: FunPerm ghosts (CtxToRList cargs) gouts ret ->
-              AtomicPerm (FunctionHandleType cargs ret)
-
-  -- | An LLVM permission that asserts a proposition about bitvectors
-  Perm_BVProp :: (1 <= w, KnownNat w) => BVProp w ->
-                 AtomicPerm (LLVMPointerType w)
-
-
--- | A value permission is a permission to do something with a value, such as
--- use it as a pointer. This also includes a limited set of predicates on values
--- (you can think about this as "permission to assume the value satisfies this
--- predicate" if you like).
-data ValuePerm (a :: CrucibleType) where
-
-  -- | Says that a value is equal to a known static expression
-  ValPerm_Eq :: PermExpr a -> ValuePerm a
-
-  -- | The disjunction of two value permissions
-  ValPerm_Or :: ValuePerm a -> ValuePerm a -> ValuePerm a
-
-  -- | An existential binding of a value in a value permission
-  --
-  -- FIXME: turn the 'KnownRepr' constraint into a normal 'TypeRepr' argument
-  ValPerm_Exists :: KnownRepr TypeRepr a =>
-                    Binding a (ValuePerm b) ->
-                    ValuePerm b
-
-  -- | A named permission
-  ValPerm_Named :: NamedPermName ns args a -> PermExprs args ->
-                   PermOffset a -> ValuePerm a
-
-  -- | A permission variable plus an offset
-  ValPerm_Var :: PermVar a -> PermOffset a -> ValuePerm a
-
-  -- | A separating conjuction of 0 or more atomic permissions, where 0
-  -- permissions is the trivially true permission
-  ValPerm_Conj :: [AtomicPerm a] -> ValuePerm a
-
-  -- | The false value permission
-  ValPerm_False :: ValuePerm a
 
 -- | Build an equality permission in a binding
 mbValPerm_Eq :: Mb ctx (PermExpr a) -> Mb ctx (ValuePerm a)
@@ -1793,11 +2527,20 @@ pattern ValPerm_LLVMBlockShape sh <- ValPerm_Conj [Perm_LLVMBlockShape sh]
 
 -- | A single @lowned@ permission
 pattern ValPerm_LOwned :: () => (a ~ LifetimeType) => [PermExpr LifetimeType] ->
-                          LOwnedPerms ps_in -> LOwnedPerms ps_out -> ValuePerm a
-pattern ValPerm_LOwned ls ps_in ps_out <- ValPerm_Conj [Perm_LOwned
-                                                        ls ps_in ps_out]
+                          CruCtx ps_in -> CruCtx ps_out ->
+                          ExprPerms ps_in -> ExprPerms ps_out -> ValuePerm a
+pattern ValPerm_LOwned ls tps_in tps_out ps_in ps_out <-
+  ValPerm_Conj [Perm_LOwned ls tps_in tps_out ps_in ps_out]
   where
-    ValPerm_LOwned ls ps_in ps_out = ValPerm_Conj [Perm_LOwned ls ps_in ps_out]
+    ValPerm_LOwned ls tps_in tps_out ps_in ps_out =
+      ValPerm_Conj [Perm_LOwned ls tps_in tps_out ps_in ps_out]
+
+-- | A single simple @lowned@ permission
+pattern ValPerm_LOwnedSimple :: () => (a ~ LifetimeType) =>
+                                CruCtx ps -> ExprPerms ps -> ValuePerm a
+pattern ValPerm_LOwnedSimple tps ps <- ValPerm_Conj [Perm_LOwnedSimple tps ps]
+  where
+    ValPerm_LOwnedSimple tps ps = ValPerm_Conj [Perm_LOwnedSimple tps ps]
 
 -- | A single @lcurrent@ permission
 pattern ValPerm_LCurrent :: () => (a ~ LifetimeType) =>
@@ -1812,14 +2555,17 @@ pattern ValPerm_LFinished <- ValPerm_Conj [Perm_LFinished]
   where
     ValPerm_LFinished = ValPerm_Conj [Perm_LFinished]
 
--- | A sequence of value permissions
-{-
-data ValuePerms as where
-  ValPerms_Nil :: ValuePerms RNil
-  ValPerms_Cons :: ValuePerms as -> ValuePerm a -> ValuePerms (as :> a)
--}
+-- | A single @struct@ permission
+pattern ValPerm_Struct :: () => (a ~ StructType ctx) =>
+                          RAssign ValuePerm (CtxToRList ctx) ->
+                          ValuePerm a
+pattern ValPerm_Struct ps <- ValPerm_Conj [Perm_Struct ps]
+  where
+    ValPerm_Struct ps = ValPerm_Conj [Perm_Struct ps]
 
-type ValuePerms = RAssign ValuePerm
+-- | A single @any@ permission
+pattern ValPerm_Any :: ValuePerm a
+pattern ValPerm_Any = ValPerm_Conj [Perm_Any]
 
 pattern ValPerms_Nil :: () => (tps ~ RNil) => ValuePerms tps
 pattern ValPerms_Nil = MNil
@@ -1851,30 +2597,10 @@ assignToPerms :: RAssign ValuePerm ps -> ValuePerms ps
 assignToPerms MNil = ValPerms_Nil
 assignToPerms (ps :>: p) = ValPerms_Cons (assignToPerms ps) p
 
--- | A binding of 0 or more variables, each with permissions
-type MbValuePerms ctx = Mb ctx (ValuePerms ctx)
-
--- | A frame permission is a list of the pointers that have been allocated in
--- the frame and their corresponding allocation sizes in words of size
--- @w@. Write permissions of the given sizes are required to these pointers in
--- order to delete the frame.
-type LLVMFramePerm w = [(PermExpr (LLVMPointerType w), Integer)]
-
 -- | An LLVM pointer permission is an 'AtomicPerm' of type 'LLVMPointerType'
 type LLVMPtrPerm w = AtomicPerm (LLVMPointerType w)
 
--- | A permission for a pointer to a specific field of a given size
-data LLVMFieldPerm w sz =
-  LLVMFieldPerm { llvmFieldRW :: PermExpr RWModalityType,
-                  -- ^ Whether this is a read or write permission
-                  llvmFieldLifetime :: PermExpr LifetimeType,
-                  -- ^ The lifetime during which this field permission is active
-                  llvmFieldOffset :: PermExpr (BVType w),
-                  -- ^ The offset from the pointer in bytes of this field
-                  llvmFieldContents :: ValuePerm (LLVMPointerType sz)
-                  -- ^ The permissions we get for the value read from this field
-                }
-  deriving Eq
+deriving instance Eq (LLVMFieldPerm w sz)
 
 -- | Helper to get a 'NatRepr' for the size of an 'LLVMFieldPerm'
 llvmFieldSize :: KnownNat sz => LLVMFieldPerm w sz -> NatRepr sz
@@ -1923,42 +2649,12 @@ llvmFieldRange fp =
   BVRange (llvmFieldOffset fp) (bvInt $ llvmFieldSizeBytes fp)
 
 
--- | Helper type to represent byte offsets
---
--- > stride * ix + off
---
--- from the beginning of an array permission. Such an expression refers to
--- offset @off@, which must be a statically-known constant, in array cell @ix@.
-data LLVMArrayIndex w =
-  LLVMArrayIndex { llvmArrayIndexCell :: PermExpr (BVType w),
-                   llvmArrayIndexOffset :: BV w }
-
 -- NOTE: we need a custom instance of Eq so we can use bvEq on the cell
 instance Eq (LLVMArrayIndex w) where
   LLVMArrayIndex e1 i1 == LLVMArrayIndex e2 i2 =
     bvEq e1 e2 && i1 == i2
 
--- | A permission to an array of @len@ individual regions of memory, called
--- "array cells". The size of each cell in bytes is given by the array /stride/,
--- which must be known statically, and each cell has shape given by the supplied
--- LLVM shape, also called the cell shape.
-data LLVMArrayPerm w =
-  LLVMArrayPerm { llvmArrayRW :: PermExpr RWModalityType,
-                  -- ^ Whether this array gives read or write access
-                  llvmArrayLifetime :: PermExpr LifetimeType,
-                  -- ^ The lifetime during which this array permission is valid
-                  llvmArrayOffset :: PermExpr (BVType w),
-                  -- ^ The offset from the pointer in bytes of this array
-                  llvmArrayLen :: PermExpr (BVType w),
-                  -- ^ The number of array blocks
-                  llvmArrayStride :: Bytes,
-                  -- ^ The array stride in bytes
-                  llvmArrayCellShape :: PermExpr (LLVMShapeType w),
-                  -- ^ The shape of each cell in the array
-                  llvmArrayBorrows :: [LLVMArrayBorrow w]
-                  -- ^ Indices or index ranges that are missing from this array
-                }
-  deriving Eq
+deriving instance Eq (LLVMArrayPerm w)
 
 -- | Get the stride of an array in bits
 llvmArrayStrideBits :: LLVMArrayPerm w -> Integer
@@ -1977,9 +2673,22 @@ mbLLVMArrayLifetime = mbMapCl $(mkClosed [| llvmArrayLifetime |])
 mbLLVMArrayOffset :: Mb ctx (LLVMArrayPerm w) -> Mb ctx (PermExpr (BVType w))
 mbLLVMArrayOffset = mbMapCl $(mkClosed [| llvmArrayOffset |])
 
+-- | Get the offset-in-binding of an array permission in binding
+mbLLVMArrayOffsetBytes :: Mb ctx (LLVMArrayPerm w) -> Mb ctx (PermExpr (BVType w))
+mbLLVMArrayOffsetBytes = mbMapCl $(mkClosed [| llvmArrayOffset |])
+
 -- | Get the length-in-binding of an array permission in binding
 mbLLVMArrayLen :: Mb ctx (LLVMArrayPerm w) -> Mb ctx (PermExpr (BVType w))
 mbLLVMArrayLen = mbMapCl $(mkClosed [| llvmArrayLen |])
+
+-- | Get the length-in-binding of an array permission in binding
+mbLLVMArrayLenBytes :: (1 <= w, KnownNat w) => Mb ctx (LLVMArrayPerm w) -> Mb ctx (PermExpr (BVType w))
+mbLLVMArrayLenBytes = mbMapCl $(mkClosed [| llvmArrayLengthBytes |])
+
+-- | Get the range of offsets of an array permission in binding
+mbLLVMArrayRange :: (1 <= w, KnownNat w) => Mb ctx (LLVMArrayPerm w) ->
+                    Mb ctx (BVRange w)
+mbLLVMArrayRange = mbMapCl $(mkClosed [| llvmArrayRange |])
 
 -- | Get the stride of an array permission in binding
 mbLLVMArrayStride :: Mb ctx (LLVMArrayPerm w) -> Bytes
@@ -1994,33 +2703,8 @@ mbLLVMArrayCellShape = mbMapCl $(mkClosed [| llvmArrayCellShape |])
 mbLLVMArrayBorrows :: Mb ctx (LLVMArrayPerm w) -> Mb ctx [LLVMArrayBorrow w]
 mbLLVMArrayBorrows = mbMapCl $(mkClosed [| llvmArrayBorrows |])
 
--- | An index or range of indices that are missing from an array perm
---
--- FIXME: think about calling the just @LLVMArrayIndexSet@
-data LLVMArrayBorrow w
-  = FieldBorrow (PermExpr (BVType w))
-    -- ^ Borrow a specific cell of an array permission
-  | RangeBorrow (BVRange w)
-    -- ^ Borrow a range of array cells, where each cell is 'llvmArrayStride'
-    -- bytes long
-  deriving Eq
-
-
--- | An LLVM block permission is read or write access to the memory at a given
--- offset with a given length with a given shape
-data LLVMBlockPerm w =
-  LLVMBlockPerm { llvmBlockRW :: PermExpr RWModalityType,
-                  -- ^ Whether this is a read or write block permission
-                  llvmBlockLifetime :: PermExpr LifetimeType,
-                  -- ^ The lifetime during with this block permission is active
-                  llvmBlockOffset :: PermExpr (BVType w),
-                  -- ^ The offset of the block from the pointer in bytes
-                  llvmBlockLen :: PermExpr (BVType w),
-                  -- ^ The length of the block in bytes
-                  llvmBlockShape :: PermExpr (LLVMShapeType w)
-                  -- ^ The shape of the permissions in the block
-                }
-  deriving Eq
+deriving instance Eq (LLVMArrayBorrow w)
+deriving instance Eq (LLVMBlockPerm w)
 
 -- | Get the rw-modality-in-binding of a block permission in binding
 mbLLVMBlockRW :: Mb ctx (LLVMBlockPerm w) -> Mb ctx (PermExpr RWModalityType)
@@ -2052,151 +2736,88 @@ llvmBlockRange bp = BVRange (llvmBlockOffset bp) (llvmBlockLen bp)
 mbLLVMBlockRange :: Mb ctx (LLVMBlockPerm w) -> Mb ctx (BVRange w)
 mbLLVMBlockRange = mbMapCl $(mkClosed [| llvmBlockRange |])
 
--- | An LLVM shape for a single pointer field of unknown size
-data LLVMFieldShape w =
-  forall sz. (1 <= sz, KnownNat sz) =>
-  LLVMFieldShape (ValuePerm (LLVMPointerType sz))
-
 instance Eq (LLVMFieldShape w) where
   (LLVMFieldShape p1) == (LLVMFieldShape p2)
     | Just Refl <- testEquality (exprType p1) (exprType p2) = p1 == p2
   _ == _ = False
 
 
--- | A form of permission used in lifetime ownership permissions
-data LOwnedPerm a where
-  LOwnedPermField :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
-                     PermExpr (LLVMPointerType w) -> LLVMFieldPerm w sz ->
-                     LOwnedPerm (LLVMPointerType w)
-  LOwnedPermArray :: (1 <= w, KnownNat w) => PermExpr (LLVMPointerType w) ->
-                     LLVMArrayPerm w -> LOwnedPerm (LLVMPointerType w)
-  LOwnedPermBlock :: (1 <= w, KnownNat w) => PermExpr (LLVMPointerType w) ->
-                     LLVMBlockPerm w -> LOwnedPerm (LLVMPointerType w)
+-- | Convert an 'ExprAndPerm' to a variable plus permission, if possible
+exprPermVarAndPerm :: ExprAndPerm a -> Maybe (VarAndPerm a)
+exprPermVarAndPerm (ExprAndPerm e p)
+  | Just (x, off) <- asVarOffset e =
+    Just $ VarAndPerm x (offsetPerm off p)
+exprPermVarAndPerm _ = Nothing
 
--- | A sequence of 'LOwnedPerm's
-type LOwnedPerms = RAssign LOwnedPerm
+-- | Convert an 'ExprPerms' to a 'DistPerms', if possible
+exprPermsToDistPerms :: ExprPerms ctx -> Maybe (DistPerms ctx)
+exprPermsToDistPerms = traverseRAssign exprPermVarAndPerm
 
-instance TestEquality LOwnedPerm where
-  testEquality (LOwnedPermField e1 fp1) (LOwnedPermField e2 fp2)
-    | Just Refl <- testEquality (exprType e1) (exprType e2)
-    , Just Refl <- testEquality (llvmFieldSize fp1) (llvmFieldSize fp2)
-    , e1 == e2 && fp1 == fp2
-    = Just Refl
-  testEquality (LOwnedPermField _ _) _ = Nothing
-  testEquality (LOwnedPermArray e1 ap1) (LOwnedPermArray e2 ap2)
-    | Just Refl <- testEquality (exprType e1) (exprType e2)
-    , e1 == e2 && ap1 == ap2
-    = Just Refl
-  testEquality (LOwnedPermArray _ _) _ = Nothing
-  testEquality (LOwnedPermBlock e1 bp1) (LOwnedPermBlock e2 bp2)
-    | Just Refl <- testEquality (exprType e1) (exprType e2)
-    , e1 == e2 && bp1 == bp2
-    = Just Refl
-  testEquality (LOwnedPermBlock _ _) _ = Nothing
+-- | Find all permissions in an 'ExprPerms' list for a variable
+exprPermsForVar :: ExprVar a -> ExprPerms ps -> [ValuePerm a]
+exprPermsForVar _ MNil = []
+exprPermsForVar x (ps :>: e_and_p)
+  | Just (VarAndPerm y p) <- exprPermVarAndPerm e_and_p
+  , Just Refl <- testEquality x y
+  = p : exprPermsForVar x ps
+exprPermsForVar x (ps :>: _) = exprPermsForVar x ps
 
-instance Eq (LOwnedPerm a) where
-  lop1 == lop2 | Just Refl <- testEquality lop1 lop2 = True
-  _ == _ = False
+-- | Get the permissions resulting from converting an 'ExprPerms' to a
+-- 'DistPerms', if possible. Note taht this can be different from just getting
+-- the permissions in the 'ExprPerms', because they may be offset by offsets on
+-- variables in the expressions.
+exprPermsToValuePerms :: ExprPerms ctx -> Maybe (ValuePerms ctx)
+exprPermsToValuePerms = fmap distPermsToValuePerms . exprPermsToDistPerms
 
-instance Eq1 LOwnedPerm where
-  eq1 = (==)
+-- | Get the permisisons in an 'ExprPerms' in bindings
+mbExprPermsToValuePerms :: Mb ctx (ExprPerms ps) ->
+                           Maybe (Mb ctx (ValuePerms ps))
+mbExprPermsToValuePerms =
+  mbMaybe . mbMapCl $(mkClosed [| exprPermsToValuePerms |])
 
--- | Convert an 'LOwnedPerm' to the expression plus permission it represents
-lownedPermExprAndPerm :: LOwnedPerm a -> ExprAndPerm a
-lownedPermExprAndPerm (LOwnedPermField e fp) =
-  ExprAndPerm e $ ValPerm_LLVMField fp
-lownedPermExprAndPerm (LOwnedPermArray e ap) =
-  ExprAndPerm e $ ValPerm_LLVMArray ap
-lownedPermExprAndPerm (LOwnedPermBlock e bp) =
-  ExprAndPerm e $ ValPerm_LLVMBlock bp
+-- | Convert an expression plus permission to an 'ExprAndPerm'
+varAndPermExprPerm :: VarAndPerm a -> ExprAndPerm a
+varAndPermExprPerm (VarAndPerm x p) = ExprAndPerm (PExpr_Var x) p
 
--- | Convert an 'LOwnedPerm' to a variable plus permission, if possible
-lownedPermVarAndPerm :: LOwnedPerm a -> Maybe (VarAndPerm a)
-lownedPermVarAndPerm lop
-  | Just (x, off) <- asVarOffset (lownedPermExpr lop) =
-    Just $ VarAndPerm x (offsetPerm off $ lownedPermPerm lop)
-lownedPermVarAndPerm _ = Nothing
+-- | Convert a 'DistPerms' to an 'ExprPerms'
+distPermsToExprPerms :: DistPerms ps -> ExprPerms ps
+distPermsToExprPerms = RL.map varAndPermExprPerm
 
--- | Convert an expression plus permission to an 'LOwnedPerm', if possible
-varAndPermLOwnedPerm :: VarAndPerm a -> Maybe (LOwnedPerm a)
-varAndPermLOwnedPerm (VarAndPerm x (ValPerm_LLVMField fp)) =
-  Just $ LOwnedPermField (PExpr_Var x) fp
-varAndPermLOwnedPerm (VarAndPerm x (ValPerm_LLVMArray ap)) =
-  Just $ LOwnedPermArray (PExpr_Var x) ap
-varAndPermLOwnedPerm (VarAndPerm x (ValPerm_LLVMBlock bp)) =
-  Just $ LOwnedPermBlock (PExpr_Var x) bp
-varAndPermLOwnedPerm _ = Nothing
+-- | Convert a 'DistPerms' in a binding to an 'ExprPerms' in a binding
+mbDistPermsToExprPerms :: Mb ctx (DistPerms ps) -> Mb ctx (ExprPerms ps)
+mbDistPermsToExprPerms = mbMapCl $(mkClosed [| distPermsToExprPerms |])
 
--- | Get the expression part of an 'LOwnedPerm'
-lownedPermExpr :: LOwnedPerm a -> PermExpr a
-lownedPermExpr = exprAndPermExpr . lownedPermExprAndPerm
+-- | Convert the expressions in an 'ExprPerms' to variables, if possible
+exprPermsVars :: ExprPerms ps -> Maybe (RAssign Name ps)
+exprPermsVars = fmap distPermsVars . exprPermsToDistPerms
 
--- | Convert the expression part of an 'LOwnedPerm' to a variable, if possible
-lownedPermVar :: LOwnedPerm a -> Maybe (ExprVar a)
-lownedPermVar lop | PExpr_Var x <- lownedPermExpr lop = Just x
-lownedPermVar _ = Nothing
+-- | Convert the expressions in an 'ExprPerms' to variables, if possible, and
+-- collect them into a list
+exprPermsVarsList :: ExprPerms ps -> [SomeName CrucibleType]
+exprPermsVarsList ps =
+  case exprPermsVars ps of
+    Just ns -> RL.mapToList SomeName ns
+    Nothing -> []
 
--- | Get the permission part of an 'LOwnedPerm'
-lownedPermPerm :: LOwnedPerm a -> ValuePerm a
-lownedPermPerm = exprAndPermPerm . lownedPermExprAndPerm
+-- | Convert the expressions in an 'ExprPerms'-in-binding to variables, if
+-- possible, and collect them into a list
+mbExprPermsVarsList :: Mb ctx (ExprPerms ps) -> [SomeName CrucibleType]
+mbExprPermsVarsList =
+  concatMap (\case
+                [nuP| SomeName mb_n |]
+                  | Right n <- mbNameBoundP mb_n -> [SomeName n]
+                _ -> []) .
+  mbList . mbMapCl $(mkClosed [| exprPermsVarsList |])
 
--- | Convert the permission part of an 'LOwnedPerm' to a block permission on a
--- variable, if possible
-lownedPermVarBlockPerm :: LOwnedPerm a -> Maybe (ExprVar a, SomeLLVMBlockPerm a)
-lownedPermVarBlockPerm lop
-  | Just (x, perm_off) <- asVarOffset (lownedPermExpr lop)
-  , ValPerm_Conj1 p <- lownedPermPerm lop
-  , Just (SomeLLVMBlockPerm bp) <- llvmAtomicPermToSomeBlock p
-  , off <- llvmPermOffsetExpr perm_off =
-    Just (x, SomeLLVMBlockPerm (offsetLLVMBlockPerm off bp))
-lownedPermVarBlockPerm _ = Nothing
+-- | Convert the expressions in an 'ExprPerms' to variables, if possible, and
+-- collect them into a set
+exprPermsVarsSet :: ExprPerms ps -> NameSet CrucibleType
+exprPermsVarsSet = NameSet.fromList . exprPermsVarsList
 
--- | Convert the permission part of an 'LOwnedPerm' in a binding to a block
--- permission on a variable in a binding, if possible
-mbLownedPermVarBlockPerm :: Mb ctx (LOwnedPerm a) ->
-                            Maybe (Mb ctx (ExprVar a, SomeLLVMBlockPerm a))
-mbLownedPermVarBlockPerm =
-  mbMaybe . mbMapCl $(mkClosed [| lownedPermVarBlockPerm |])
-
--- | Get the read/write and lifetime modalities of an 'LOwnedPerm' of LLVM type
-llvmLownedPermModalities :: LOwnedPerm (LLVMPointerType w) ->
-                            (PermExpr RWModalityType, PermExpr LifetimeType)
-llvmLownedPermModalities (LOwnedPermField _ fp) =
-  (llvmFieldRW fp, llvmFieldLifetime fp)
-llvmLownedPermModalities (LOwnedPermArray _ ap) =
-  (llvmArrayRW ap, llvmArrayLifetime ap)
-llvmLownedPermModalities (LOwnedPermBlock _ bp) =
-  (llvmBlockRW bp, llvmBlockLifetime bp)
-
--- | Find an 'LOwnedPerm' for a particular variable in an 'LOwnedPerms' list
-findLOwnedPermForVar :: ExprVar a -> LOwnedPerms ps -> Maybe (LOwnedPerm a)
-findLOwnedPermForVar _ MNil = Nothing
-findLOwnedPermForVar x (_ :>: lop)
-  | Just (y, _) <- asVarOffset (lownedPermExpr lop)
-  , Just Refl <- testEquality x y = Just lop
-findLOwnedPermForVar x (lops :>: _) = findLOwnedPermForVar x lops
-
--- | Find all 'LOwnedPerm's for a specific variable of LLVM pointer type in an
--- 'LOwnedPerms' list, and return the ranges of offsets that each of those cover
-lownedPermsOffsetsForLLVMVar :: (1 <= w, KnownNat w) =>
-                                ExprVar (LLVMPointerType w) -> LOwnedPerms ps ->
-                                [BVRange w]
-lownedPermsOffsetsForLLVMVar _ MNil = []
-lownedPermsOffsetsForLLVMVar x (lops :>: lop)
-  | Just (y, SomeLLVMBlockPerm bp) <- lownedPermVarBlockPerm lop
-  , Just Refl <- testEquality x y =
-    llvmBlockRange bp : lownedPermsOffsetsForLLVMVar x lops
-lownedPermsOffsetsForLLVMVar x (lops :>: _) =
-  lownedPermsOffsetsForLLVMVar x lops
-
--- | A function permission is a set of input and output permissions inside a
--- context of ghost variables @ghosts@ with an additional context of output
--- ghost variables @gouts@
-data FunPerm ghosts args gouts ret where
-  FunPerm :: CruCtx ghosts -> CruCtx args -> CruCtx gouts -> TypeRepr ret ->
-             MbValuePerms (ghosts :++: args) ->
-             MbValuePerms ((ghosts :++: args) :++: gouts :> ret) ->
-             FunPerm ghosts args gouts ret
+-- | Convert the expressions in an 'ExprPerms'-in-binding to variables, if
+-- possible, and collect them in a 'NameSet'
+mbExprPermsVarsSet :: Mb ctx (ExprPerms ps) -> NameSet CrucibleType
+mbExprPermsVarsSet = NameSet.liftNameSet . fmap exprPermsVarsSet
 
 -- | Extract the @args@ context from a function permission
 funPermArgs :: FunPerm ghosts args gouts ret -> CruCtx args
@@ -2232,46 +2853,18 @@ funPermOuts :: FunPerm ghosts args gouts ret ->
                MbValuePerms ((ghosts :++: args) :++: gouts :> ret)
 funPermOuts (FunPerm _ _ _ _ _ perms_out) = perms_out
 
+-- | Build the context of types for the output permissions of a function
+funPermOutCtx :: FunPerm ghosts args gouts ret ->
+                 CruCtx ((ghosts :++: args) :++: gouts :> ret)
+funPermOutCtx fun_perm =
+  appendCruCtx (funPermTops fun_perm) (funPermRets fun_perm)
 
--- | A function permission that existentially quantifies the ghost types
-data SomeFunPerm args ret where
-  SomeFunPerm :: FunPerm ghosts args gouts ret -> SomeFunPerm args ret
-
-
--- | The different sorts of name, each of which comes with a 'Bool' flag
--- indicating whether the name can be used as an atomic permission. A recursive
--- sort also comes with a second flag indicating whether it is a reachability
--- permission.
-data NameSort = DefinedSort Bool | OpaqueSort Bool | RecursiveSort Bool Bool
-
-type DefinedSort   = 'DefinedSort
-type OpaqueSort    = 'OpaqueSort
-type RecursiveSort = 'RecursiveSort
-
--- | Test whether a name of a given 'NameSort' is conjoinable
-type family NameSortIsConj (ns::NameSort) :: Bool where
-  NameSortIsConj (DefinedSort b) = b
-  NameSortIsConj (OpaqueSort b) = b
-  NameSortIsConj (RecursiveSort b _) = b
 
 -- | Test whether a name of a given 'NameSort' can be folded / unfolded
 type family NameSortCanFold (ns::NameSort) :: Bool where
   NameSortCanFold (DefinedSort _) = 'True
   NameSortCanFold (OpaqueSort _) = 'False
   NameSortCanFold (RecursiveSort b _) = 'True
-
--- | Test whether a name of a given 'NameSort' is a reachability permission
-type family IsReachabilityName (ns::NameSort) :: Bool where
-  IsReachabilityName (DefinedSort _) = 'False
-  IsReachabilityName (OpaqueSort _) = 'False
-  IsReachabilityName (RecursiveSort _ reach) = reach
-
--- | A singleton representation of 'NameSort'
-data NameSortRepr (ns::NameSort) where
-  DefinedSortRepr :: BoolRepr b -> NameSortRepr (DefinedSort b)
-  OpaqueSortRepr :: BoolRepr b -> NameSortRepr (OpaqueSort b)
-  RecursiveSortRepr :: BoolRepr b -> BoolRepr reach ->
-                       NameSortRepr (RecursiveSort b reach)
 
 -- | Get a 'BoolRepr' for whether a name sort is conjunctive
 nameSortIsConjRepr :: NameSortRepr ns -> BoolRepr (NameSortIsConj ns)
@@ -2321,29 +2914,12 @@ instance TestEquality NameSortRepr where
     = Just Refl
   testEquality (RecursiveSortRepr _ _) _ = Nothing
 
--- | A constraint that the last argument of a reachability permission is a
--- permission argument
-data NameReachConstr ns args a where
-  NameReachConstr :: (IsReachabilityName ns ~ 'True) =>
-                     NameReachConstr ns (args :> a) a
-  NameNonReachConstr :: (IsReachabilityName ns ~ 'False) =>
-                        NameReachConstr ns args a
-
 -- | Extract a 'BoolRepr' from a 'NameReachConstr' for whether the name it
 -- constrains is a reachability name
 nameReachConstrBool :: NameReachConstr ns args a ->
                        BoolRepr (IsReachabilityName ns)
 nameReachConstrBool NameReachConstr = TrueRepr
 nameReachConstrBool NameNonReachConstr = FalseRepr
-
--- | A name for a named permission
-data NamedPermName ns args a = NamedPermName {
-  namedPermNameName :: String,
-  namedPermNameType :: TypeRepr a,
-  namedPermNameArgs :: CruCtx args,
-  namedPermNameSort :: NameSortRepr ns,
-  namedPermNameReachConstr :: NameReachConstr ns args a
-  }
 
 -- FIXME: NamedPermNames should maybe say something about which arguments are
 -- covariant? Right now we assume lifetime and rwmodalities are covariant
@@ -2366,10 +2942,6 @@ instance Eq (NamedPermName ns args a) where
   n1 == n2 | Just (Refl, Refl, Refl) <- testNamedPermNameEq n1 n2 = True
   _ == _ = False
 
--- | An existentially quantified 'NamedPermName'
-data SomeNamedPermName where
-  SomeNamedPermName :: NamedPermName ns args a -> SomeNamedPermName
-
 instance Eq SomeNamedPermName where
   (SomeNamedPermName n1) == (SomeNamedPermName n2)
     | Just (Refl, Refl, Refl) <- testNamedPermNameEq n1 n2 = True
@@ -2380,14 +2952,6 @@ data SomeNamedConjPermName where
   SomeNamedConjPermName ::
     NameSortIsConj ns ~ 'True => NamedPermName ns args a ->
     SomeNamedConjPermName
-
--- | A named LLVM shape is a name, a list of arguments, and a body, where the
--- Boolean flag @b@ determines whether the shape can be unfolded or not
-data NamedShape b args w = NamedShape {
-  namedShapeName :: String,
-  namedShapeArgs :: CruCtx args,
-  namedShapeBody :: NamedShapeBody b args w
-  }
 
 -- | Test if two 'NamedShapes' of possibly different @b@ and @args@ arguments
 -- are equal
@@ -2402,24 +2966,6 @@ namedShapeEq nmsh1 nmsh2
   , namedShapeBody nmsh1 == namedShapeBody nmsh2 =
     Just (Refl,Refl)
 namedShapeEq _ _ = Nothing
-
-data NamedShapeBody b args w where
-  -- | A defined shape is just a definition in terms of the arguments
-  DefinedShapeBody :: Mb args (PermExpr (LLVMShapeType w)) ->
-                      NamedShapeBody 'True args w
-
-  -- | An opaque shape has no body, just a length and a translation to a type
-  OpaqueShapeBody :: Mb args (PermExpr (BVType w)) -> Ident ->
-                     NamedShapeBody 'False args w
-
-  -- | A recursive shape body has a one-step unfolding to a shape, which can
-  -- refer to the shape itself via the last bound variable; it also has
-  -- identifiers for the type it is translated to, along with fold and unfold
-  -- functions for mapping to and from this type. The fold and unfold functions
-  -- can be undefined if we are in the process of defining this recusive shape.
-  RecShapeBody :: Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w)) ->
-                  Ident -> Maybe (Ident, Ident) ->
-                  NamedShapeBody 'True args w
 
 deriving instance Eq (NamedShapeBody b args w)
 
@@ -2449,14 +2995,6 @@ mbNamedShapeCanUnfoldRepr =
 -- | Whether a 'NamedShape' can be unfolded
 namedShapeCanUnfold :: NamedShape b args w -> Bool
 namedShapeCanUnfold = boolVal . namedShapeCanUnfoldRepr
-
--- | An offset that is added to a permission. Only makes sense for llvm
--- permissions (at least for now...?)
-data PermOffset a where
-  NoPermOffset :: PermOffset a
-  -- | NOTE: the invariant is that the bitvector offset is non-zero
-  LLVMPermOffset :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-                    PermOffset (LLVMPointerType w)
 
 instance Eq (PermOffset a) where
   NoPermOffset == NoPermOffset = True
@@ -2535,15 +3073,6 @@ getPermExprsMembers (PExprs_Cons args _) =
   map (\case Some memb -> Some (Member_Step memb)) (getPermExprsMembers args)
   ++ [Some Member_Base]
 
--- | The semantics of a named permission, which can can either be an opaque
--- named permission, a recursive named permission, a defined permission, or an
--- LLVM shape
-data NamedPerm ns args a where
-  NamedPerm_Opaque :: OpaquePerm b args a -> NamedPerm (OpaqueSort b) args a
-  NamedPerm_Rec :: RecPerm b reach args a ->
-                   NamedPerm (RecursiveSort b reach) args a
-  NamedPerm_Defined :: DefinedPerm b args a -> NamedPerm (DefinedSort b) args a
-
 -- | Extract the name back out of the interpretation of a 'NamedPerm'
 namedPermName :: NamedPerm ns args a -> NamedPermName ns args a
 namedPermName (NamedPerm_Opaque op) = opaquePermName op
@@ -2554,69 +3083,10 @@ namedPermName (NamedPerm_Defined dp) = definedPermName dp
 namedPermArgs :: NamedPerm ns args a -> CruCtx args
 namedPermArgs = namedPermNameArgs . namedPermName
 
--- | An opaque named permission is just a name and a SAW core type given by
--- identifier that it is translated to
-data OpaquePerm b args a = OpaquePerm {
-  opaquePermName :: NamedPermName (OpaqueSort b) args a,
-  opaquePermTrans :: Ident
-  }
-
--- | The interpretation of a recursive permission as a reachability permission.
--- Reachability permissions are recursive permissions of the form
---
--- > reach<args,x> = eq(x)  |  p
---
--- where @reach@ occurs exactly once in @p@ in the form @reach<args,x>@ and @x@
--- does not occur at all in @p@. This means their interpretations look like a
--- list type, where the @eq(x)@ is the nil constructor and the @p@ is the
--- cons. To support the transitivity rule, we need an append function for these
--- lists, which is given by the transitivity method listed here, which has type
---
--- > trans : forall args (x y:A), t args x -> t args y -> t args y
---
--- where @args@ are the arguments and @A@ is the translation of type @a@ (which
--- may correspond to 0 or more arguments)
-data ReachMethods reach args a where
-  ReachMethods :: {
-    reachMethodTrans :: Ident
-    } -> ReachMethods (args :> a) a 'True
-  NoReachMethods :: ReachMethods args a 'False
-
--- | A recursive permission is a disjunction of 1 or more permissions, each of
--- which can contain the recursive permission itself. NOTE: it is an error to
--- have an empty list of cases. A recursive permission is also associated with a
--- SAW datatype, given by a SAW 'Ident', and each disjunctive permission case is
--- associated with a constructor of that datatype. The @b@ flag indicates
--- whether this recursive permission can be used as an atomic permission, which
--- should be 'True' iff all of the cases are conjunctive permissions as in
--- 'isConjPerm'. If the recursive permission is a reachability permission, then
--- it also has a 'ReachMethods' structure.
-data RecPerm b reach args a = RecPerm {
-  recPermName :: NamedPermName (RecursiveSort b reach) args a,
-  recPermTransType :: Ident,
-  recPermFoldFun :: Ident,
-  recPermUnfoldFun :: Ident,
-  recPermReachMethods :: ReachMethods args a reach,
-  recPermCases :: [Mb args (ValuePerm a)]
-  }
-
 -- | Get the @trans@ method from a 'RecPerm' for a reachability permission
 recPermTransMethod :: RecPerm b 'True args a -> Ident
 recPermTransMethod (RecPerm { recPermReachMethods = ReachMethods { .. }}) =
   reachMethodTrans
-
--- | A defined permission is a name and a permission to which it is
--- equivalent. The @b@ flag indicates whether this permission can be used as an
--- atomic permission, which should be 'True' iff the associated permission is a
--- conjunctive permission as in 'isConjPerm'.
-data DefinedPerm b args a = DefinedPerm {
-  definedPermName :: NamedPermName (DefinedSort b) args a,
-  definedPermDef :: Mb args (ValuePerm a)
-}
-
--- | A pair of a variable and its permission; we give it its own datatype to
--- make certain typeclass instances (like pretty-printing) specific to it
-data VarAndPerm a = VarAndPerm (ExprVar a) (ValuePerm a)
 
 -- | Extract the permissions from a 'VarAndPerm'
 varAndPermPerm :: VarAndPerm a -> ValuePerm a
@@ -2624,10 +3094,6 @@ varAndPermPerm (VarAndPerm _ p) = p
 
 -- | A pair that is specifically pretty-printing with a colon
 data ColonPair a b = ColonPair a b
-
--- | A list of "distinguished" permissions to named variables
--- FIXME: just call these VarsAndPerms or something like that...
-type DistPerms = RAssign VarAndPerm
 
 -- | Pattern for an empty 'DistPerms'
 pattern DistPermsNil :: () => (ps ~ RNil) => DistPerms ps
@@ -2651,21 +3117,6 @@ data DistPerms ps where
 -}
 
 type MbDistPerms ps = Mb ps (DistPerms ps)
-
--- | A pair of an epxression and its permission; we give it its own datatype to
--- make certain typeclass instances (like pretty-printing) specific to it
-data ExprAndPerm a =
-  ExprAndPerm { exprAndPermExpr :: PermExpr a,
-                exprAndPermPerm :: ValuePerm a }
-
--- | A list of expressions and associated permissions; different from
--- 'DistPerms' because the expressions need not be variables
-type ExprPerms = RAssign ExprAndPerm
-
--- | Convert a 'DistPerms' to an 'ExprPerms'
-distPermsToExprPerms :: DistPerms ps -> ExprPerms ps
-distPermsToExprPerms =
-  RL.map (\(VarAndPerm x p) -> ExprAndPerm (PExpr_Var x) p)
 
 -- FIXME: change all of the following functions on DistPerms to use the RAssign
 -- combinators
@@ -2709,6 +3160,13 @@ valuePermsToDistPerms (ns :>: n) (ps :>: p) =
 mbValuePermsToDistPerms :: MbValuePerms ps -> MbDistPerms ps
 mbValuePermsToDistPerms = nuMultiWithElim1 valuePermsToDistPerms
 
+-- | Extract the permissions for a particular variable in a 'DistPerms' list
+distPermsForVar :: ExprVar a -> DistPerms ps -> [ValuePerm a]
+distPermsForVar _ MNil = []
+distPermsForVar x (ps :>: VarAndPerm y p)
+  | Just Refl <- testEquality x y = p : distPermsForVar x ps
+distPermsForVar x (ps :>: _) = distPermsForVar x ps
+
 -- | Extract the permissions from a 'DistPerms'
 distPermsToValuePerms :: DistPerms ps -> ValuePerms ps
 distPermsToValuePerms DistPermsNil = ValPerms_Nil
@@ -2731,6 +3189,10 @@ trueDistPerms (ns :>: n) = DistPermsCons (trueDistPerms ns) n ValPerm_True
 
 -- | A list of "distinguished" permissions with types
 type TypedDistPerms = RAssign (Typed VarAndPerm)
+
+-- | Get the 'CruCtx' for a 'TypedDistPerms'
+typedDistPermsCtx :: TypedDistPerms ctx -> CruCtx ctx
+typedDistPermsCtx = cruCtxOfTypes . RL.map typedType
 
 -- | Convert a permission list expression to a 'TypedDistPerms', if possible
 permListToTypedPerms :: PermExpr PermListType -> Maybe (Some TypedDistPerms)
@@ -2769,6 +3231,12 @@ instance Eq (VarAndPerm a) where
 instance Eq1 VarAndPerm where
   eq1 = (==)
 
+instance Eq (ExprAndPerm a) where
+  ExprAndPerm e1 p1 == ExprAndPerm e2 p2 = e1 == e2 && p1 == p2
+
+instance Eq1 ExprAndPerm where
+  eq1 = (==)
+
 {-
 instance TestEquality DistPerms where
   testEquality DistPermsNil DistPermsNil = Just Refl
@@ -2796,37 +3264,21 @@ lcurrentPerm :: PermExpr LifetimeType -> ExprVar LifetimeType ->
 lcurrentPerm PExpr_Always l2 = (l2, ValPerm_True)
 lcurrentPerm (PExpr_Var l) l2 = (l, ValPerm_LCurrent $ PExpr_Var l2)
 
--- | A special-purpose 'DistPerms' that specifies a list of permissions needed
--- to prove that a lifetime is current
-data LifetimeCurrentPerms ps_l where
-  -- | The @always@ lifetime needs no proof that it is current
-  AlwaysCurrentPerms :: LifetimeCurrentPerms RNil
-  -- | A variable @l@ that is @lowned@ is current, requiring perms
-  --
-  -- > l:lowned[ls](ps_in -o ps_out)
-  LOwnedCurrentPerms :: ExprVar LifetimeType -> [PermExpr LifetimeType] ->
-                        LOwnedPerms ps_in -> LOwnedPerms ps_out ->
-                        LifetimeCurrentPerms (RNil :> LifetimeType)
-
-  -- | A variable @l@ that is @lcurrent@ during another lifetime @l'@ is
-  -- current, i.e., if @ps@ ensure @l'@ is current then we need perms
-  --
-  -- > ps, l:lcurrent(l')
-  CurrentTransPerms :: LifetimeCurrentPerms ps_l -> ExprVar LifetimeType ->
-                       LifetimeCurrentPerms (ps_l :> LifetimeType)
-
 -- | Get the lifetime that a 'LifetimeCurrentPerms' is about
 lifetimeCurrentPermsLifetime :: LifetimeCurrentPerms ps_l ->
                                 PermExpr LifetimeType
 lifetimeCurrentPermsLifetime AlwaysCurrentPerms = PExpr_Always
-lifetimeCurrentPermsLifetime (LOwnedCurrentPerms l _ _ _) = PExpr_Var l
+lifetimeCurrentPermsLifetime (LOwnedCurrentPerms l _ _ _ _ _) = PExpr_Var l
+lifetimeCurrentPermsLifetime (LOwnedSimpleCurrentPerms l _ _) = PExpr_Var l
 lifetimeCurrentPermsLifetime (CurrentTransPerms _ l) = PExpr_Var l
 
 -- | Convert a 'LifetimeCurrentPerms' to the 'DistPerms' it represent
 lifetimeCurrentPermsPerms :: LifetimeCurrentPerms ps_l -> DistPerms ps_l
 lifetimeCurrentPermsPerms AlwaysCurrentPerms = DistPermsNil
-lifetimeCurrentPermsPerms (LOwnedCurrentPerms l ls ps_in ps_out) =
-  DistPermsCons DistPermsNil l $ ValPerm_LOwned ls ps_in ps_out
+lifetimeCurrentPermsPerms (LOwnedCurrentPerms l ls tps_in tps_out ps_in ps_out) =
+  DistPermsCons DistPermsNil l $ ValPerm_LOwned ls tps_in tps_out ps_in ps_out
+lifetimeCurrentPermsPerms (LOwnedSimpleCurrentPerms l tps lops) =
+  distPerms1 l $ ValPerm_LOwnedSimple tps lops
 lifetimeCurrentPermsPerms (CurrentTransPerms cur_ps l) =
   DistPermsCons (lifetimeCurrentPermsPerms cur_ps) l $
   ValPerm_Conj1 $ Perm_LCurrent $ lifetimeCurrentPermsLifetime cur_ps
@@ -2836,36 +3288,10 @@ mbLifetimeCurrentPermsProxies :: Mb ctx (LifetimeCurrentPerms ps_l) ->
                                  RAssign Proxy ps_l
 mbLifetimeCurrentPermsProxies mb_l = case mbMatch mb_l of
   [nuMP| AlwaysCurrentPerms |] -> MNil
-  [nuMP| LOwnedCurrentPerms _ _ _ _ |] -> MNil :>: Proxy
+  [nuMP| LOwnedCurrentPerms _ _ _ _ _ _ |] -> MNil :>: Proxy
+  [nuMP| LOwnedSimpleCurrentPerms _ _ _ |] -> MNil :>: Proxy
   [nuMP| CurrentTransPerms cur_ps _ |] ->
     mbLifetimeCurrentPermsProxies cur_ps :>: Proxy
-
--- | A lifetime functor is a function from a lifetime plus a set of 0 or more
--- rwmodalities to a permission that satisfies a number of properties discussed
--- in Issue #62 (FIXME: copy those here). Rather than try to enforce these
--- properties, we syntactically restrict lifetime functors to one of a few forms
--- that are guaranteed to satisfy the properties. The @args@ type lists all
--- arguments (which should all be rwmodalities) other than the lifetime
--- argument.
-data LifetimeFunctor args a where
-  -- | The functor @\(l,rw) -> [l]ptr((rw,off) |-> p)@
-  LTFunctorField :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
-                    PermExpr (BVType w) -> ValuePerm (LLVMPointerType sz) ->
-                    LifetimeFunctor (RNil :> RWModalityType) (LLVMPointerType w)
-
-  -- | The functor @\(l,rw) -> [l]array(rw,off,<len,*stride,sh,bs)@
-  LTFunctorArray :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-                    PermExpr (BVType w) -> Bytes ->
-                    PermExpr (LLVMShapeType w) -> [LLVMArrayBorrow w] ->
-                    LifetimeFunctor (RNil :> RWModalityType) (LLVMPointerType w)
-
-  -- | The functor @\(l,rw) -> [l]memblock(rw,off,len,sh)
-  LTFunctorBlock :: (1 <= w, KnownNat w) =>
-                    PermExpr (BVType w) -> PermExpr (BVType w) ->
-                    PermExpr (LLVMShapeType w) ->
-                    LifetimeFunctor (RNil :> RWModalityType) (LLVMPointerType w)
-
-  -- FIXME: add functors for arrays and named permissions
 
 -- | Apply a functor to its arguments to get out a permission
 ltFuncApply :: LifetimeFunctor args a -> PermExprs args ->
@@ -2877,16 +3303,6 @@ ltFuncApply (LTFunctorArray off len stride sh bs) (MNil :>: rw) l =
 ltFuncApply (LTFunctorBlock off len sh) (MNil :>: rw) l =
   ValPerm_LLVMBlock $ LLVMBlockPerm rw l off len sh
 
--- | Apply a functor to its arguments to get out an 'LOwnedPerm' on a variable
-ltFuncApplyLOP :: ExprVar a -> LifetimeFunctor args a -> PermExprs args ->
-                  PermExpr LifetimeType -> LOwnedPerm a
-ltFuncApplyLOP x (LTFunctorField off p) (MNil :>: rw) l =
-  LOwnedPermField (PExpr_Var x) $ LLVMFieldPerm rw l off p
-ltFuncApplyLOP x (LTFunctorArray off len stride sh bs) (MNil :>: rw) l =
-  LOwnedPermArray (PExpr_Var x) $ LLVMArrayPerm rw l off len stride sh bs
-ltFuncApplyLOP x (LTFunctorBlock off len sh) (MNil :>: rw) l =
-  LOwnedPermBlock (PExpr_Var x) $ LLVMBlockPerm rw l off len sh
-
 -- | Apply a functor to a lifetime and the "minimal" rwmodalities, i.e., with
 -- all read permissions
 ltFuncMinApply :: LifetimeFunctor args a -> PermExpr LifetimeType -> ValuePerm a
@@ -2896,17 +3312,6 @@ ltFuncMinApply (LTFunctorArray off len stride sh bs) l =
   ValPerm_LLVMArray $ LLVMArrayPerm PExpr_Read l off len stride sh bs
 ltFuncMinApply (LTFunctorBlock off len sh) l =
   ValPerm_LLVMBlock $ LLVMBlockPerm PExpr_Read l off len sh
-
--- | Apply a functor to a lifetime and the "minimal" rwmodalities, i.e., with
--- all read permissions, getting out an 'LOwnedPerm'  on a variable
-ltFuncMinApplyLOP :: ExprVar a -> LifetimeFunctor args a ->
-                     PermExpr LifetimeType -> LOwnedPerm a
-ltFuncMinApplyLOP x (LTFunctorField off p) l =
-  LOwnedPermField (PExpr_Var x) $ LLVMFieldPerm PExpr_Read l off p
-ltFuncMinApplyLOP x (LTFunctorArray off len stride sh bs) l =
-  LOwnedPermArray (PExpr_Var x) $ LLVMArrayPerm PExpr_Read l off len stride sh bs
-ltFuncMinApplyLOP x (LTFunctorBlock off len sh) l =
-  LOwnedPermBlock (PExpr_Var x) $ LLVMBlockPerm PExpr_Read l off len sh
 
 -- | Convert a field permission to a lifetime functor and its arguments
 fieldToLTFunc :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
@@ -2973,11 +3378,16 @@ instance Eq (AtomicPerm a) where
   (Perm_LLVMBlockShape _) == _ = False
   (Perm_LLVMFrame frame1) == (Perm_LLVMFrame frame2) = frame1 == frame2
   (Perm_LLVMFrame _) == _ = False
-  (Perm_LOwned ls1 ps_in1 ps_out1) == (Perm_LOwned ls2 ps_in2 ps_out2)
-    | Just Refl <- testEquality ps_in1 ps_in2
-    , Just Refl <- testEquality ps_out1 ps_out2
-    = ls1 == ls2
-  (Perm_LOwned _ _ _) == _ = False
+  (Perm_LOwned
+   ls1 tps_in1 tps_out1 ps_in1 ps_out1) == (Perm_LOwned
+                                            ls2 tps_in2 tps_out2 ps_in2 ps_out2)
+    | Just Refl <- testEquality tps_in1 tps_in2
+    , Just Refl <- testEquality tps_out1 tps_out2
+    = ls1 == ls2 && ps_in1 == ps_in2 && ps_out1 == ps_out2
+  (Perm_LOwned _ _ _ _ _) == _ = False
+  (Perm_LOwnedSimple tps1 lops1) == (Perm_LOwnedSimple tps2 lops2)
+    | Just Refl <- testEquality tps1 tps2 = lops1 == lops2
+  (Perm_LOwnedSimple _ _) == _ = False
   (Perm_LCurrent e1) == (Perm_LCurrent e2) = e1 == e2
   (Perm_LCurrent _) == _ = False
   Perm_LFinished == Perm_LFinished = True
@@ -2993,6 +3403,8 @@ instance Eq (AtomicPerm a) where
   (Perm_NamedConj _ _ _) == _ = False
   (Perm_BVProp p1) == (Perm_BVProp p2) = p1 == p2
   (Perm_BVProp _) == _ = False
+  Perm_Any == Perm_Any = True
+  Perm_Any == _ = False
 
 instance Eq1 ValuePerm where
   eq1 = (==)
@@ -3136,7 +3548,7 @@ instance PermPretty (AtomicPerm a) where
   permPrettyM (Perm_LLVMFrame fperm) =
     do pps <- mapM (\(e,i) -> (<> (colon <> pretty i)) <$> permPrettyM e) fperm
        return (pretty "llvmframe" <+> ppEncList False pps)
-  permPrettyM (Perm_LOwned ls ps_in ps_out) =
+  permPrettyM (Perm_LOwned ls _ _ ps_in ps_out) =
     do pp_in <- permPrettyM ps_in
        pp_out <- permPrettyM ps_out
        ls_pp <- case ls of
@@ -3144,12 +3556,15 @@ instance PermPretty (AtomicPerm a) where
          _ -> ppEncList False <$> mapM permPrettyM ls
        return (pretty "lowned" <> ls_pp <+>
                parens (align $ sep [pp_in, pretty "-o", pp_out]))
+  permPrettyM (Perm_LOwnedSimple _ lops) =
+    (pretty "lowned" <>) <$> parens <$> permPrettyM lops
   permPrettyM (Perm_LCurrent l) = (pretty "lcurrent" <+>) <$> permPrettyM l
   permPrettyM Perm_LFinished = return (pretty "lfinished")
   permPrettyM (Perm_Struct ps) =
     ((pretty "struct" <+>) . parens) <$> permPrettyM ps
   permPrettyM (Perm_Fun fun_perm) = permPrettyM fun_perm
   permPrettyM (Perm_BVProp prop) = permPrettyM prop
+  permPrettyM Perm_Any = return $ pretty "any"
   permPrettyM (Perm_NamedConj n args off) =
     do n_pp <- permPrettyM n
        args_pp <- permPrettyM args
@@ -3161,12 +3576,6 @@ instance PermPretty (PermOffset a) where
   permPrettyM (LLVMPermOffset e) =
     do e_pp <- permPrettyM e
        return (pretty '@' <> parens e_pp)
-
-instance PermPretty (LOwnedPerm a) where
-  permPrettyM = permPrettyM . lownedPermExprAndPerm
-
-instance PermPrettyF LOwnedPerm where
-  permPrettyMF = permPrettyM
 
 instance PermPretty (FunPerm ghosts args gouts ret) where
   permPrettyM (FunPerm ghosts args gouts _ mb_ps_in mb_ps_out) =
@@ -3199,6 +3608,17 @@ instance PermPretty (BVRange w) where
   permPrettyM (BVRange e1 e2) =
     (\pp1 pp2 -> braces (pp1 <> comma <+> pp2))
     <$> permPrettyM e1 <*> permPrettyM e2
+
+instance PermPretty (MbRangeForType a) where
+  permPrettyM (MbRangeForLLVMType _ mb_rw mb_l mb_rng) =
+    permPrettyMb
+    (\ns_pp (rw,l,rng) ->
+      do pp_rw <- permPrettyM rw
+         pp_l_prefix <- permPrettyLifetimePrefix l
+         pp_rng <- permPrettyM rng
+         return (ppEncList True (RL.toList ns_pp) <> dot <> line <>
+                 pp_l_prefix <> parens pp_rw <> pp_rng)) $
+    mbMap3 (,,) mb_rw mb_l mb_rng
 
 instance PermPretty (BVProp w) where
   permPrettyM (BVProp_Eq e1 e2) =
@@ -3270,19 +3690,6 @@ exPermBody tp (ValPerm_Exists (p :: Binding tp' (ValuePerm a)))
   | Just Refl <- testEquality tp (knownRepr :: TypeRepr tp') = p
 exPermBody _ _ = error "exPermBody"
 
--- | A representation of a context of types as a sequence of 'KnownRepr'
--- instances
---
--- FIXME: this can go away when existentials take explicit 'TypeRepr's instead
--- of 'KnownRepr TypeRepr' instances, as per issue #79
-type KnownCruCtx = RAssign (KnownReprObj TypeRepr)
-
--- | Convert a 'KnownCruCtx' to a 'CruCtx'
-knownCtxToCruCtx :: KnownCruCtx ctx -> CruCtx ctx
-knownCtxToCruCtx MNil = CruCtxNil
-knownCtxToCruCtx (ctx :>: KnownReprObj) =
-  CruCtxCons (knownCtxToCruCtx ctx) knownRepr
-
 -- | Construct 0 or more nested existential permissions
 valPermExistsMulti :: KnownCruCtx ctx -> Mb ctx (ValuePerm a) -> ValuePerm a
 valPermExistsMulti MNil mb_p = elimEmptyMb mb_p
@@ -3319,12 +3726,27 @@ isLLVMBlockPerm :: AtomicPerm a -> Bool
 isLLVMBlockPerm (Perm_LLVMBlock _) = True
 isLLVMBlockPerm _ = False
 
+-- | Test if an 'AtomicPerm' is any form of pointer permission
+isLLVMPointerPerm :: AtomicPerm a -> Bool
+isLLVMPointerPerm (Perm_LLVMField _) = True
+isLLVMPointerPerm (Perm_LLVMArray _) = True
+isLLVMPointerPerm (Perm_LLVMBlock _) = True
+isLLVMPointerPerm (Perm_LLVMFunPtr _ _) = True
+isLLVMPointerPerm _ = False
+
 -- | Test if an 'AtomicPerm' is a lifetime permission
 isLifetimePerm :: AtomicPerm a -> Maybe (a :~: LifetimeType)
-isLifetimePerm (Perm_LOwned _ _ _) = Just Refl
+isLifetimePerm (Perm_LOwned _ _ _ _ _) = Just Refl
+isLifetimePerm (Perm_LOwnedSimple _ _) = Just Refl
 isLifetimePerm (Perm_LCurrent _) = Just Refl
 isLifetimePerm Perm_LFinished = Just Refl
 isLifetimePerm _ = Nothing
+
+-- | Test if an 'AtomicPerm' is a lifetime permission that gives ownership
+isLifetimeOwnershipPerm :: AtomicPerm a -> Maybe (a :~: LifetimeType)
+isLifetimeOwnershipPerm (Perm_LOwned _ _ _ _ _) = Just Refl
+isLifetimeOwnershipPerm (Perm_LOwnedSimple _ _) = Just Refl
+isLifetimeOwnershipPerm _ = Nothing
 
 -- | Test if an 'AtomicPerm' is a struct permission
 isStructPerm :: AtomicPerm a -> Bool
@@ -3447,6 +3869,13 @@ mkPermLLVMFunPtrs (_w :: f w) fun_perms@(SomeFunPerm fun_perm:_) =
                        (cruCtxToRepr $ funPermArgs fun_perm)
                        (funPermRet fun_perm))
       (ValPerm_Conj $ map (\(SomeFunPerm fp) -> Perm_Fun fp) fun_perms)
+
+-- | The shape for an @eq(llvmword(w))@ permission
+llvmEqWordShape :: (1 <= w, KnownNat w) => prx w -> Integer ->
+                   PermExpr (LLVMShapeType w)
+llvmEqWordShape w i =
+  PExpr_FieldShape $ LLVMFieldShape $ ValPerm_Eq $
+  PExpr_LLVMWord $ bvIntOfSize w i
 
 -- | Existential permission @x:eq(word(e))@ for some @e@
 llvmExEqWord :: (1 <= w, KnownNat w) => prx w ->
@@ -3628,6 +4057,12 @@ llvmBlockPermToField sz bp
                            llvmFieldContents = p }
 llvmBlockPermToField _ _ = Nothing
 
+-- | Get the range of bytes described by an array permisison. Note that these
+-- bytes may not currently be *in* the array permission, if it has any borrows.
+llvmArrayRange :: (1 <= w, KnownNat w) => LLVMArrayPerm w -> BVRange w
+llvmArrayRange fp =
+  BVRange (llvmArrayOffset fp) (llvmArrayLengthBytes fp)
+
 -- | Convert an array permission with total size @sz@ bits to a field permission
 -- of size @sz@ bits, assuming it has no borrows
 llvmArrayToField :: (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
@@ -3724,10 +4159,11 @@ llvmAtomicPermToBlock (Perm_LLVMArray ap) = llvmArrayPermToBlock ap
 llvmAtomicPermToBlock (Perm_LLVMBlock bp) = Just bp
 llvmAtomicPermToBlock _ = Nothing
 
--- | An 'LLVMBlockPerm' with a proof that its type is valid
-data SomeLLVMBlockPerm a where
-  SomeLLVMBlockPerm :: (1 <= w, KnownNat w) => LLVMBlockPerm w ->
-                       SomeLLVMBlockPerm (LLVMPointerType w)
+-- | Convert an atomic permission to several @memblocks@, if possible
+llvmAtomicPermToBlocks :: AtomicPerm (LLVMPointerType w) ->
+                          Maybe [LLVMBlockPerm w]
+llvmAtomicPermToBlocks (Perm_LLVMArray ap) = llvmArrayToBlocks ap
+llvmAtomicPermToBlocks p = pure <$> llvmAtomicPermToBlock p
 
 -- | Convert an atomic permission whose type is unknown to a @memblock@, if
 -- possible, along with a proof that its type is a valid llvm pointer type
@@ -3746,6 +4182,13 @@ atomicPermLifetime (Perm_LLVMField fp) = Just $ llvmFieldLifetime fp
 atomicPermLifetime (Perm_LLVMArray ap) = Just $ llvmArrayLifetime ap
 atomicPermLifetime (Perm_LLVMBlock bp) = Just $ llvmBlockLifetime bp
 atomicPermLifetime _ = Nothing
+
+-- | Get the modality of an atomic perm if it is a field, array, or memblock
+atomicPermModality :: AtomicPerm a -> Maybe (PermExpr RWModalityType)
+atomicPermModality (Perm_LLVMField fp) = Just $ llvmFieldRW fp
+atomicPermModality (Perm_LLVMArray ap) = Just $ llvmArrayRW ap
+atomicPermModality (Perm_LLVMBlock bp) = Just $ llvmBlockRW bp
+atomicPermModality _ = Nothing
 
 -- | Get the starting offset of an atomic permission, if it has one. This
 -- includes array permissions which may have some cells borrowed.
@@ -3805,6 +4248,64 @@ llvmBlockEndOffset = bvRangeEnd . llvmBlockRange
 llvmFieldShapeLength :: LLVMFieldShape w -> Integer
 llvmFieldShapeLength (LLVMFieldShape p) = exprLLVMTypeBytes p
 
+-- | Simplify a shape, removing any trailing empty shapes and unfolding any
+-- unfoldable named shapes
+simplifyShape :: PermExpr (LLVMShapeType w) -> PermExpr (LLVMShapeType w)
+simplifyShape (PExpr_SeqShape sh PExpr_EmptyShape) = simplifyShape sh
+simplifyShape (PExpr_NamedShape rw l nmsh args)
+  | TrueRepr <- namedShapeCanUnfoldRepr nmsh
+  , Just sh <- unfoldModalizeNamedShape rw l nmsh args =
+    simplifyShape sh
+simplifyShape sh = sh
+
+-- | Test if a shape describes a pointer
+isLLVMPointerShape :: PermExpr (LLVMShapeType w) -> Bool
+isLLVMPointerShape (PExpr_FieldShape (LLVMFieldShape (ValPerm_Conj1 p))) =
+  isLLVMPointerPerm p
+isLLVMPointerShape (PExpr_PtrShape _ _ _) = True
+isLLVMPointerShape _ = False
+
+-- | Find any shapes of the form @fieldsh(eq(y))@ in a shape and return the @y@
+-- variables
+findEqVarFieldsInShape :: PermExpr (LLVMShapeType w) -> NameSet CrucibleType
+findEqVarFieldsInShape sh =
+  runReader (findEqVarFieldsInShapeH sh) Set.empty
+
+-- | Find any shapes of the form @fieldsh(eq(y))@ in a shape and return the @y@
+-- variables, using the supplied 'Set' to indicate recursive named shapes that
+-- have already been unfolded to get the current shape, to avoid infinite loops
+findEqVarFieldsInShapeH :: PermExpr (LLVMShapeType w) ->
+                           Reader (Set String) (NameSet CrucibleType)
+findEqVarFieldsInShapeH (PExpr_NamedShape _ _ nmsh args)
+  | DefinedShapeBody _ <- namedShapeBody nmsh =
+    -- NOTE: we don't need to modalize the unfolding because that doesn't change
+    -- the variable fields
+    findEqVarFieldsInShapeH (unfoldNamedShape nmsh args)
+findEqVarFieldsInShapeH (PExpr_NamedShape _ _ nmsh args)
+  | RecShapeBody _ _ _ <- namedShapeBody nmsh =
+    do seen_names <- ask
+       if Set.member (namedShapeName nmsh) seen_names then
+         return NameSet.empty
+         else
+         -- NOTE: we don't need to modalize the unfolding because that doesn't
+         -- change the variable fields
+         local (Set.insert (namedShapeName nmsh)) $
+         findEqVarFieldsInShapeH (unfoldNamedShape nmsh args)
+findEqVarFieldsInShapeH (PExpr_PtrShape _ _ sh) = findEqVarFieldsInShapeH sh
+findEqVarFieldsInShapeH (PExpr_FieldShape (LLVMFieldShape
+                                           (ValPerm_Eq (PExpr_Var y)))) =
+  return $ NameSet.singleton y
+findEqVarFieldsInShapeH (PExpr_FieldShape _) = return $ NameSet.empty
+findEqVarFieldsInShapeH (PExpr_ArrayShape _ _ sh) = findEqVarFieldsInShapeH sh
+findEqVarFieldsInShapeH (PExpr_SeqShape sh1 sh2) =
+  NameSet.union <$> findEqVarFieldsInShapeH sh1 <*> findEqVarFieldsInShapeH sh2
+findEqVarFieldsInShapeH (PExpr_OrShape sh1 sh2) =
+  NameSet.union <$> findEqVarFieldsInShapeH sh1 <*> findEqVarFieldsInShapeH sh2
+findEqVarFieldsInShapeH (PExpr_ExShape mb_sh) =
+  fmap NameSet.liftNameSet $ strongMbM $
+  fmap findEqVarFieldsInShapeH mb_sh
+findEqVarFieldsInShapeH _ = return $ NameSet.empty
+
 -- | Return the expression for the length of a shape if there is one
 llvmShapeLength :: (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
                    Maybe (PermExpr (BVType w))
@@ -3821,10 +4322,10 @@ llvmShapeLength (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
   -- FIXME: if the recursive shape contains itself *not* under a pointer, then
   -- this could diverge
   llvmShapeLength (unfoldNamedShape nmsh args)
-llvmShapeLength (PExpr_EqShape _) = Nothing
+llvmShapeLength (PExpr_EqShape len _) = Just len
 llvmShapeLength (PExpr_PtrShape _ _ sh)
-  | LLVMShapeRepr w <- exprType sh = Just $ bvInt (intValue w `ceil_div` 8)
-  | otherwise = Nothing
+  | w <- shapeLLVMTypeWidth sh
+  = Just $ bvInt (intValue w `ceil_div` 8)
 llvmShapeLength (PExpr_FieldShape fsh) =
   Just $ bvInt $ llvmFieldShapeLength fsh
 llvmShapeLength (PExpr_ArrayShape len stride _) = Just $ bvMult stride len
@@ -3843,7 +4344,7 @@ llvmShapeLength (PExpr_ExShape mb_sh) =
   -- we cannot return it
   case mbMatch $ fmap llvmShapeLength mb_sh of
     [nuMP| Just mb_len |] ->
-      partialSubst (emptyPSubst $ singletonCruCtx $ knownRepr) mb_len
+      partialSubst (emptyPSubst (MNil :>: Proxy)) mb_len
     _ -> Nothing
 llvmShapeLength PExpr_FalseShape = Just $ bvInt 0
 
@@ -3907,55 +4408,247 @@ matchLLVMFieldShapeSeq (PExpr_SeqShape sh1 sh2) =
   (++) <$> matchLLVMFieldShapeSeq sh1 <*> matchLLVMFieldShapeSeq sh2
 matchLLVMFieldShapeSeq _ = Nothing
 
+-- | Get all the top-level ranges of offsets potentially covered by a permission
+-- in any of its disjunctive branches
+class GetOffsets f where
+  getOffsets :: f a -> [MbRangeForType a]
+
+instance GetOffsets ValuePerm where
+  getOffsets (ValPerm_Eq _) = []
+  getOffsets (ValPerm_Or p1 p2) = getOffsets p1 ++ getOffsets p2
+  getOffsets (ValPerm_Exists mb_p) =
+    map (mbMbRangeForType knownRepr) $
+    mbList $ fmap getOffsets mb_p
+  getOffsets (ValPerm_Named _ _ _) = []
+  getOffsets (ValPerm_Var _ _) = []
+  getOffsets (ValPerm_Conj ps) = concatMap getOffsets ps
+  getOffsets ValPerm_False = []
+
+instance GetOffsets AtomicPerm where
+  getOffsets (Perm_LLVMField fp) =
+    [rangeForLLVMType
+     (llvmFieldRW fp) (llvmFieldLifetime fp) (llvmFieldRange fp)]
+  getOffsets (Perm_LLVMArray ap) =
+    [rangeForLLVMType
+     (llvmArrayRW ap) (llvmArrayLifetime ap) (llvmArrayRange ap)]
+  getOffsets (Perm_LLVMBlock bp) =
+    [rangeForLLVMType
+     (llvmBlockRW bp) (llvmBlockLifetime bp) (llvmBlockRange bp)]
+  getOffsets _ = []
+
+-- | Get the range of offsets potentially covered by a permission in a binding
+mbGetOffsets :: GetOffsets f => CruCtx ctx -> Mb ctx (f a) -> [MbRangeForType a]
+mbGetOffsets ctx =
+  map (mbMbRangeForType ctx) . mbList . mbMapCl $(mkClosed [| getOffsets |])
+
 -- | Add the given read/write and lifetime modalities to all top-level pointer
--- shapes in a shape. Top-level here means we do not recurse inside pointer
--- shapes, as pointer shape modalities also apply recursively to the contained
--- shapes. If there are any top-level variables in the shape, then this fails,
--- since there is no way to modalize a variable shape.
+-- permissions or shapes in a permission or shape. Top-level here means we do
+-- not recurse inside pointer shapes, as pointer shape modalities also apply
+-- recursively to the contained shapes. If there are any top-level variables in
+-- the permission or shape, then this fails, since there is no way to modalize a
+-- variable.
 --
 -- The high-level idea here is that pointer shapes take on the read/write and
 -- lifetime modalities of the @memblock@ permission containing them, and
--- 'modalizeShape' folds these modalities into the shape itself.
-modalizeShape :: Maybe (PermExpr RWModalityType) ->
-                 Maybe (PermExpr LifetimeType) ->
-                 PermExpr (LLVMShapeType w) ->
-                 Maybe (PermExpr (LLVMShapeType w))
-modalizeShape Nothing Nothing sh =
-  -- If neither modality is given, it is a no-op
-  Just sh
-modalizeShape _ _ (PExpr_Var _) =
-  -- Variables cannot be modalized; NOTE: we could fix this if necessary by
-  -- adding a modalized variable shape constructor
-  Nothing
-modalizeShape _ _ PExpr_EmptyShape = Just PExpr_EmptyShape
-modalizeShape _ _ sh@(PExpr_NamedShape _ _ nmsh _)
-  | not (namedShapeCanUnfold nmsh) =
-    -- Opaque shapes are not affected by modalization, because we assume they do
-    -- not have any top-level pointers in them
-    Just sh
-modalizeShape rw l (PExpr_NamedShape rw' l' nmsh args) =
-  -- If a named shape already has modalities, they take precedence
-  Just $ PExpr_NamedShape (rw' <|> rw) (l' <|> l) nmsh args
-modalizeShape _ _ sh@(PExpr_EqShape _) = Just sh
-modalizeShape rw l (PExpr_PtrShape rw' l' sh) =
-  -- If a pointer shape already has modalities, they take precedence
-  Just $ PExpr_PtrShape (rw' <|> rw) (l' <|> l) sh
-modalizeShape _ _ sh@(PExpr_FieldShape _) = Just sh
-modalizeShape _ _ sh@(PExpr_ArrayShape _ _ _) = Just sh
-modalizeShape rw l (PExpr_SeqShape sh1 sh2) =
-  PExpr_SeqShape <$> modalizeShape rw l sh1 <*> modalizeShape rw l sh2
-modalizeShape rw l (PExpr_OrShape sh1 sh2) =
-  PExpr_OrShape <$> modalizeShape rw l sh1 <*> modalizeShape rw l sh2
-modalizeShape rw l (PExpr_ExShape mb_sh) =
-  PExpr_ExShape <$> mbM (fmap (modalizeShape rw l) mb_sh)
-modalizeShape _ _ PExpr_FalseShape = Just PExpr_FalseShape
+-- 'modalize' folds these modalities into the shape itself. This is also used to
+-- compute the least version of a permission when building @lowned@ permissions.
+class Modalize a where
+  modalize :: Maybe (PermExpr RWModalityType) ->
+              Maybe (PermExpr LifetimeType) ->
+              a -> Maybe a
 
--- | Apply 'modalizeShape' to the shape of a block permission, raising an error
--- if 'modalizeShape' cannot be applied
+instance Modalize (PermExpr (LLVMShapeType w)) where
+  modalize Nothing Nothing sh =
+    -- If neither modality is given, it is a no-op
+    Just sh
+  modalize _ _ (PExpr_Var _) =
+    -- Variables cannot be modalized; NOTE: we could fix this if necessary by
+    -- adding a modalized variable shape constructor
+    Nothing
+  modalize _ _ PExpr_EmptyShape = Just PExpr_EmptyShape
+  modalize _ _ sh@(PExpr_NamedShape _ _ nmsh _)
+    | not (namedShapeCanUnfold nmsh) =
+      -- Opaque shapes are not affected by modalization, because we assume they do
+      -- not have any top-level pointers in them
+      Just sh
+  modalize rw l (PExpr_NamedShape rw' l' nmsh args) =
+    -- If a named shape already has modalities, they take precedence
+    Just $ PExpr_NamedShape (rw' <|> rw) (l' <|> l) nmsh args
+  modalize _ _ sh@(PExpr_EqShape _ _) = Just sh
+  modalize rw l (PExpr_PtrShape rw' l' sh) =
+    -- If a pointer shape already has modalities, they take precedence
+    Just $ PExpr_PtrShape (rw' <|> rw) (l' <|> l) sh
+  modalize _ _ sh@(PExpr_FieldShape _) = Just sh
+  modalize _ _ sh@(PExpr_ArrayShape _ _ _) = Just sh
+  modalize rw l (PExpr_SeqShape sh1 sh2) =
+    PExpr_SeqShape <$> modalize rw l sh1 <*> modalize rw l sh2
+  modalize rw l (PExpr_OrShape sh1 sh2) =
+    PExpr_OrShape <$> modalize rw l sh1 <*> modalize rw l sh2
+  modalize rw l (PExpr_ExShape mb_sh) =
+    PExpr_ExShape <$> mbM (fmap (modalize rw l) mb_sh)
+  modalize _ _ PExpr_FalseShape = Just PExpr_FalseShape
+
+instance Modalize (ValuePerm a) where
+  modalize _ _ p@(ValPerm_Eq _) = Just p
+  modalize rw l (ValPerm_Or p1 p2) =
+    ValPerm_Or <$> modalize rw l p1 <*> modalize rw l p2
+  modalize rw l (ValPerm_Exists mb_p) =
+    fmap ValPerm_Exists $ mbMaybe $ fmap (modalize rw l) mb_p
+  modalize _ _ (ValPerm_Named _ _ _) =
+    -- Cannot modalize an arbitrary opaque named permission; this would require
+    -- special-purpose modality arguments to every opaque named permission, so
+    -- we could be sure that changing these would modalize its unfolding
+    Nothing
+  modalize _ _ (ValPerm_Var _ _) = Nothing
+  modalize rw l (ValPerm_Conj ps) = ValPerm_Conj <$> mapM (modalize rw l) ps
+  modalize _ _ ValPerm_False = Just ValPerm_False
+
+instance Modalize (AtomicPerm a) where
+  modalize rw l (Perm_LLVMField fp) =
+    Just $ Perm_LLVMField $
+    fp { llvmFieldRW = fromMaybe (llvmFieldRW fp) rw,
+         llvmFieldLifetime = fromMaybe (llvmFieldLifetime fp) l }
+  modalize rw l (Perm_LLVMArray ap) =
+    Just $ Perm_LLVMArray $
+    ap { llvmArrayRW = fromMaybe (llvmArrayRW ap) rw,
+         llvmArrayLifetime = fromMaybe (llvmArrayLifetime ap) l }
+  modalize rw l (Perm_LLVMBlock bp) =
+    Just $ Perm_LLVMBlock $
+    bp { llvmBlockRW = fromMaybe (llvmBlockRW bp) rw,
+         llvmBlockLifetime = fromMaybe (llvmBlockLifetime bp) l }
+  modalize _ _ p@(Perm_LLVMFree _) = Just p
+  modalize _ _ p@(Perm_LLVMFunPtr _ _) = Just p
+  modalize rw l (Perm_LLVMBlockShape sh) =
+    Perm_LLVMBlockShape <$> modalize rw l sh
+  modalize _ _ p@(Perm_IsLLVMPtr) = Just p
+  modalize _ _ p@(Perm_NamedConj _ _ _) = Just p
+  modalize _ _ p@(Perm_LLVMFrame _) = Just p
+  modalize _ _ p@(Perm_LOwned _ _ _ _ _) = Just p
+  modalize _ _ p@(Perm_LOwnedSimple _ _) = Just p
+  modalize _ _ p@(Perm_LCurrent _) = Just p
+  modalize _ _ p@(Perm_LFinished) = Just p
+  modalize rw l (Perm_Struct ps) =
+    Perm_Struct <$> traverseRAssign (modalize rw l) ps
+  modalize _ _ p@(Perm_Fun _) = Just p
+  modalize _ _ p@(Perm_BVProp _) = Just p
+  modalize _ _ p@Perm_Any = Just p
+
+instance Modalize (ExprAndPerm a) where
+  modalize rw l (ExprAndPerm e p) =
+    ExprAndPerm e <$> modalize rw l p
+
+instance Modalize (ExprPerms ctx) where
+  modalize rw l perms = traverseRAssign (modalize rw l) perms
+
+
+-- | Apply 'modalize' to the shape of a block permission, using the
+-- modalities of that block permission, raising an error if 'modalize'
+-- cannot be applied
 modalizeBlockShape :: LLVMBlockPerm w -> PermExpr (LLVMShapeType w)
 modalizeBlockShape (LLVMBlockPerm {..}) =
   maybe (error "modalizeBlockShape") id $
-  modalizeShape (Just llvmBlockRW) (Just llvmBlockLifetime) llvmBlockShape
+  modalize (Just llvmBlockRW) (Just llvmBlockLifetime) llvmBlockShape
+
+-- | Convert an 'ExprPerms' list @ps@ to the input permission list @[l](R)ps@
+-- used in a simple @lowned@ permission
+lownedPermsSimpleIn :: ExprVar LifetimeType -> ExprPerms ps ->
+                       Maybe (ExprPerms ps)
+lownedPermsSimpleIn l = modalize (Just PExpr_Read) (Just $ PExpr_Var l)
+
+instance Functor SomeTypedMb where
+  fmap f (SomeTypedMb ctx mb_a) = SomeTypedMb ctx (fmap f mb_a)
+
+instance Applicative SomeTypedMb where
+  pure a = SomeTypedMb CruCtxNil $ emptyMb a
+  liftA2 f (SomeTypedMb ctx1 mb_a1) (SomeTypedMb ctx2 mb_a2) =
+    SomeTypedMb (appendCruCtx ctx1 ctx2) $
+    mbCombine (cruCtxProxies ctx2) $
+    flip fmap mb_a1 $ \a1 -> flip fmap mb_a2 $ \a2 -> f a1 a2
+
+-- | Commute a 'SomeTypedMb' out of a name-binding
+mbSomeTypedMb :: NuMatching a => Mb ctx (SomeTypedMb a) ->
+                 SomeTypedMb (Mb ctx a)
+mbSomeTypedMb (mbMatch -> [nuMP| SomeTypedMb ctx mb_a |]) =
+  SomeTypedMb (mbLift ctx) $ mbSwap (cruCtxProxies $ mbLift ctx) mb_a
+
+-- | Generic function to abstract all the read/write and lifetime modalities in
+-- a permission
+class AbstractModalities a where
+  abstractModalities :: a -> SomeTypedMb a
+
+instance (NuMatching a, AbstractModalities a) =>
+         AbstractModalities (Mb ctx a) where
+  abstractModalities mb_a = mbSomeTypedMb $ fmap abstractModalities mb_a
+
+instance AbstractModalities (ExprAndPerm a) where
+  abstractModalities (ExprAndPerm e p) =
+    ExprAndPerm e <$> abstractModalities p
+
+instance AbstractModalities (RAssign ExprAndPerm a) where
+  abstractModalities MNil = pure MNil
+  abstractModalities (eps :>: ep) =
+    (:>:) <$> abstractModalities eps <*> abstractModalities ep
+
+instance AbstractModalities (ValuePerm a) where
+  abstractModalities p@(ValPerm_Eq _) = pure p
+  abstractModalities (ValPerm_Or p1 p2) =
+    ValPerm_Or <$> abstractModalities p1 <*> abstractModalities p2
+  abstractModalities (ValPerm_Exists mb_p) =
+    ValPerm_Exists <$> abstractModalities mb_p
+  abstractModalities p@(ValPerm_Named _ _ _) =
+    -- Cannot abstract modalities out of an arbitrary named permission; this
+    -- would require special-purpose modality arguments to every named
+    -- permission, so we could be sure that abstract these would abstract its
+    -- unfolding
+    pure p
+  abstractModalities p@(ValPerm_Var _ _) = pure p
+  abstractModalities (ValPerm_Conj ps) =
+    ValPerm_Conj <$> traverse abstractModalities ps
+  abstractModalities ValPerm_False = pure ValPerm_False
+
+instance AbstractModalities (AtomicPerm a) where
+  abstractModalities (Perm_LLVMField fp) =
+    SomeTypedMb knownRepr $
+    nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: rw :>: l) ->
+    Perm_LLVMField $ fp { llvmFieldRW = PExpr_Var rw,
+                          llvmFieldLifetime = PExpr_Var l }
+  abstractModalities (Perm_LLVMArray fp) =
+    SomeTypedMb knownRepr $
+    nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: rw :>: l) ->
+    Perm_LLVMArray $ fp { llvmArrayRW = PExpr_Var rw,
+                          llvmArrayLifetime = PExpr_Var l }
+  abstractModalities (Perm_LLVMBlock fp) =
+    SomeTypedMb knownRepr $
+    nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: rw :>: l) ->
+    Perm_LLVMBlock $ fp { llvmBlockRW = PExpr_Var rw,
+                          llvmBlockLifetime = PExpr_Var l }
+  abstractModalities p@(Perm_LLVMFree _) = pure p
+  abstractModalities p@(Perm_LLVMFunPtr _ _) = pure p
+  abstractModalities p@(Perm_LLVMBlockShape _) = pure p
+  abstractModalities p@(Perm_IsLLVMPtr) = pure p
+  abstractModalities p@(Perm_NamedConj _ _ _) = pure p
+  abstractModalities p@(Perm_LLVMFrame _) = pure p
+  abstractModalities p@(Perm_LOwned _ _ _ _ _) = pure p
+  abstractModalities p@(Perm_LOwnedSimple _ _) = pure p
+  abstractModalities p@(Perm_LCurrent _) = pure p
+  abstractModalities p@(Perm_LFinished) = pure p
+  abstractModalities (Perm_Struct ps) =
+    Perm_Struct <$> traverseRAssign abstractModalities ps
+  abstractModalities p@(Perm_Fun _) = pure p
+  abstractModalities p@(Perm_BVProp _) = pure p
+  abstractModalities p@Perm_Any = pure p
+
+
+-- | Extract the shape-in-bindings for an unfoldable shape
+namedShapeBodyShape :: KnownNat w => NamedShape 'True args w ->
+                       Mb args (PermExpr (LLVMShapeType w))
+namedShapeBodyShape (NamedShape _ _ (DefinedShapeBody mb_sh)) = mb_sh
+namedShapeBodyShape sh@(NamedShape _ _ (RecShapeBody mb_sh _ _)) =
+  let (prxs :>: _) = mbToProxy mb_sh in
+  nuMulti prxs $ \ns ->
+  subst (substOfExprs (namesToExprs ns :>:
+                       PExpr_NamedShape Nothing Nothing sh (namesToExprs ns)))
+  mb_sh
 
 -- | Unfold a named shape
 unfoldNamedShape :: KnownNat w => NamedShape 'True args w -> PermExprs args ->
@@ -3965,13 +4658,13 @@ unfoldNamedShape (NamedShape _ _ (DefinedShapeBody mb_sh)) args =
 unfoldNamedShape sh@(NamedShape _ _ (RecShapeBody mb_sh _ _)) args =
   subst (substOfExprs (args :>: PExpr_NamedShape Nothing Nothing sh args)) mb_sh
 
--- | Unfold a named shape and apply 'modalizeShape' to the result
+-- | Unfold a named shape and apply 'modalize' to the result
 unfoldModalizeNamedShape :: KnownNat w => Maybe (PermExpr RWModalityType) ->
                             Maybe (PermExpr LifetimeType) ->
                             NamedShape 'True args w -> PermExprs args ->
                             Maybe (PermExpr (LLVMShapeType w))
 unfoldModalizeNamedShape rw l nmsh args =
-  modalizeShape rw l $ unfoldNamedShape nmsh args
+  modalize rw l $ unfoldNamedShape nmsh args
 
 -- | Unfold the shape of a block permission using 'unfoldModalizeNamedShape' if
 -- it has a named shape
@@ -4005,10 +4698,6 @@ mbDisjBlockToSubShape :: Bool -> Mb ctx (LLVMBlockPerm w) ->
                          Mb ctx (LLVMBlockPerm w)
 mbDisjBlockToSubShape flag =
   mbMapCl ($(mkClosed [| disjBlockToSubShape |]) `clApply` toClosed flag)
-
--- | A block permission in a binding at some unknown type
-data SomeBindingLLVMBlockPerm w =
-  forall a. SomeBindingLLVMBlockPerm (Binding a (LLVMBlockPerm w))
 
 -- | Match an existential shape with the given bidning type
 matchExShape :: TypeRepr a -> PermExpr (LLVMShapeType w) ->
@@ -4066,7 +4755,7 @@ splitLLVMBlockPerm off bp@(llvmBlockShape ->
   , Just sh' <- unfoldModalizeNamedShape maybe_rw maybe_l nmsh args =
     splitLLVMBlockPerm off (bp { llvmBlockShape = sh' })
 splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_NamedShape _ _ _ _) = Nothing
-splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_EqShape _) = Nothing
+splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_EqShape _ _) = Nothing
 splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_PtrShape _ _ _) = Nothing
 splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_FieldShape _) = Nothing
 splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_ArrayShape len stride sh)
@@ -4136,27 +4825,6 @@ remLLVMBLockPermRange rng bp =
        else return bp'
      return (bps_l ++ [bp_r])
 
-
--- | A tagged union shape is a shape of the form
---
--- > sh1 orsh sh2 orsh ... orsh shn
---
--- where each @shi@ is equivalent up to associativity of the @;@ operator to a
--- shape of the form
---
--- > fieldsh(eq(llvmword(bvi)));shi'
---
--- That is, each disjunct of the shape starts with an equality permission that
--- determines which disjunct should be used. These shapes are represented as a
--- list of the disjuncts, which are tagged with the bitvector values @bvi@ used
--- in the equality permission.
-data TaggedUnionShape w sz
-  = TaggedUnionShape (NonEmpty (BV sz, PermExpr (LLVMShapeType w)))
-
--- | A 'TaggedUnionShape' with existentially quantified tag size
-data SomeTaggedUnionShape w
-  = forall sz. (1 <= sz, KnownNat sz) =>
-    SomeTaggedUnionShape (TaggedUnionShape w sz)
 
 -- | Extract the disjunctive shapes from a 'TaggedUnionShape'
 taggedUnionDisjs :: TaggedUnionShape w sz -> [PermExpr (LLVMShapeType w)]
@@ -4236,6 +4904,20 @@ getShapeBVTag :: PermExpr (LLVMShapeType w) -> Maybe SomeBV
 getShapeBVTag sh | Just some_bv <- shapeToTag sh = Just some_bv
 getShapeBVTag (PExpr_SeqShape sh1 _) = getShapeBVTag sh1
 getShapeBVTag _ = Nothing
+
+-- | Remove the leading tag from a shape where 'getShapeBVTag' succeeded
+shapeRemoveTag :: PermExpr (LLVMShapeType w) -> PermExpr (LLVMShapeType w)
+shapeRemoveTag (PExpr_SeqShape sh1 sh2) | isJust (shapeToTag sh1) = sh2
+shapeRemoveTag (PExpr_SeqShape sh1 sh2) =
+  PExpr_SeqShape (shapeRemoveTag sh1) sh2
+shapeRemoveTag sh | isJust (shapeToTag sh) = PExpr_EmptyShape
+shapeRemoveTag sh =
+  error ("shapeRemoveTag: " ++ permPrettyString emptyPPInfo sh)
+
+-- | Extract the disjunctive shapes from a 'TaggedUnionShape' but removing the
+-- leading tags
+taggedUnionDisjsNoTags :: TaggedUnionShape w sz -> [PermExpr (LLVMShapeType w)]
+taggedUnionDisjsNoTags = map shapeRemoveTag . taggedUnionDisjs
 
 -- | Test if a shape is a tagged union shape and, if so, convert it to the
 -- 'TaggedUnionShape' representation
@@ -4341,6 +5023,15 @@ llvmArrayCellsToOffsets :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
 llvmArrayCellsToOffsets ap (BVRange cell num_cells) =
   BVRange (llvmArrayCellToOffset ap cell) (llvmArrayCellToOffset ap num_cells)
 
+-- | Convert a range of absolute byte offsets to a range of cell numbers in an
+-- array permission, if possible
+llvmArrayAbsOffsetsToCells :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                              BVRange w -> Maybe (BVRange w)
+llvmArrayAbsOffsetsToCells ap rng
+  | Just cell <- matchLLVMArrayCell ap (bvRangeOffset rng) =
+    Just $ BVRange cell (bvDiv (bvRangeLength rng) (llvmArrayStride ap))
+llvmArrayAbsOffsetsToCells _ _ = Nothing
+
 -- | Return the clopen range @[0,len)@ of the cells of an array permission
 llvmArrayCells :: (1 <= w, KnownNat w) => LLVMArrayPerm w -> BVRange w
 llvmArrayCells ap = BVRange (bvInt 0) (llvmArrayLen ap)
@@ -4375,9 +5066,66 @@ permForLLVMArrayBorrow ap (FieldBorrow cell) =
   ValPerm_LLVMBlock $ llvmArrayCellPerm ap cell
 permForLLVMArrayBorrow ap (RangeBorrow (BVRange off len)) =
   ValPerm_Conj1 $ Perm_LLVMArray $
-  ap { llvmArrayOffset = llvmArrayCellToOffset ap off,
+  ap { llvmArrayOffset = llvmArrayCellToAbsOffset ap off,
        llvmArrayLen = len,
        llvmArrayBorrows = [] }
+
+-- | Build the borrow corresponding to borrowing a given permission from the array.
+-- This is a partial function as the permission @p@ must be:
+-- (1) An array whose offset corresponds to a cell of @ap@
+-- (2) A field or block corresponding to an array cell
+-- TODO: Extend this to allow blocks that span multiple cells
+permToLLVMArrayBorrow ::
+  forall w. (1 <= w, KnownNat w) =>
+  LLVMArrayPerm w ->
+  AtomicPerm (LLVMPointerType w) ->
+  Maybe (LLVMArrayBorrow w)
+permToLLVMArrayBorrow ap p =
+  case p of
+    Perm_LLVMArray ap'
+      | Just idx <- matchLLVMArrayCell ap (llvmArrayOffset ap') ->
+        Just (RangeBorrow (BVRange idx n))
+        where
+          n = llvmArrayLen ap'
+
+    Perm_LLVMBlock bp
+      | PExpr_ArrayShape len bytes _ <- llvmBlockShape bp
+      , bytes == llvmArrayStride ap
+      , Just idx <- matchLLVMArrayCell ap (llvmBlockOffset bp) ->
+        Just (RangeBorrow (BVRange idx len))
+
+    Perm_LLVMField fp
+      | intValue (llvmFieldSize fp) /= llvmArrayStrideBits ap -> Nothing
+    Perm_LLVMBlock bp
+      | not (bvEq (llvmBlockLen bp) (bvInt (bytesToInteger (llvmArrayStride ap)))) -> Nothing
+
+
+    _ | Just r <- llvmAtomicPermRange p
+      , Just idx <- matchLLVMArrayCell ap (bvRangeOffset r) ->
+        Just (FieldBorrow idx)
+
+    _ -> Nothing
+
+-- | Get the range of offsets spanned by a borrow relative to the start of an
+-- array permission
+llvmArrayBorrowRange :: (1 <= w, KnownNat w) =>
+                        LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
+llvmArrayBorrowRange ap borrow =
+  llvmArrayCellsToOffsets ap (llvmArrayBorrowCells borrow)
+
+-- | Get the "absolute" range of offsets spanned by a borrow relative to the
+-- pointer with this array permission
+llvmArrayAbsBorrowRange :: (1 <= w, KnownNat w) =>
+                           LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
+llvmArrayAbsBorrowRange ap borrow =
+  range { bvRangeOffset = bvAdd (llvmArrayOffset ap) (bvRangeOffset range) }
+  where
+    range = llvmArrayCellsToOffsets ap (llvmArrayBorrowCells borrow)
+
+-- | Get the absolute offset at which an array borrow starts
+llvmArrayBorrowAbsOffset :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                            LLVMArrayBorrow w -> PermExpr (BVType w)
+llvmArrayBorrowAbsOffset ap b = bvRangeOffset $ llvmArrayAbsBorrowRange ap b
 
 -- | Add a borrow to an 'LLVMArrayPerm'
 llvmArrayAddBorrow :: LLVMArrayBorrow w -> LLVMArrayPerm w -> LLVMArrayPerm w
@@ -4442,11 +5190,77 @@ llvmArrayBorrowsPermuteTo ap bs =
 -- | Add a cell offset to an 'LLVMArrayBorrow', meaning we change the borrow to
 -- be relative to an array with that many more cells added to the front
 cellOffsetLLVMArrayBorrow :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-                              LLVMArrayBorrow w -> LLVMArrayBorrow w
+                             LLVMArrayBorrow w -> LLVMArrayBorrow w
 cellOffsetLLVMArrayBorrow off (FieldBorrow ix) =
   FieldBorrow (bvAdd ix off)
 cellOffsetLLVMArrayBorrow off (RangeBorrow rng) =
   RangeBorrow $ offsetBVRange off rng
+
+-- | Produce a @BVRange@ of borrowed cells from a borrow, which will be either a
+-- unit range (in the case of a @FieldBorrow@) or just the ranged spanned by the
+-- given @RangeBorrow@.
+llvmArrayBorrowCells :: (KnownNat w, 1 <= w) => LLVMArrayBorrow w -> BVRange w
+llvmArrayBorrowCells (FieldBorrow idx) = bvRangeOfIndex idx
+llvmArrayBorrowCells (RangeBorrow r) = r
+
+-- FIXME: delete? not used, and should be implementable via bvRangeDelete
+{-
+-- | Given a borrow @borrow@ and range (of borrowed indices) @rng@,
+-- delete @rng@ from @borrow@, and return the borrows that describe
+-- the remaining borrowed cells.
+llvmArrayBorrowRangeDelete ::
+  (HasCallStack, 1 <= w, KnownNat w) =>
+  LLVMArrayBorrow w ->
+  BVRange w ->
+  [LLVMArrayBorrow w]
+llvmArrayBorrowRangeDelete borrow rng =
+  catMaybes (go <$> bvRangeDelete borrow_range rng)
+  where
+    borrow_range = llvmArrayBorrowCells borrow
+
+    go new_range
+      | bvIsZero (bvRangeLength new_range) = Nothing
+      | RangeBorrow _ <- borrow  = Just $ RangeBorrow new_range
+      | FieldBorrow idx <- borrow
+      , bvEq (bvRangeLength new_range) (bvInt 1) = Just $ FieldBorrow idx
+      | otherwise =
+        error "llvmArrayBorrowRangeDelete: found non unit new_range for FieldBorrow"
+-}
+
+-- | Take in a range @rng@ and a list of ranges @rngs@ and try to find a
+-- sequence of non-overlapping but contiguous ranges in @rngs@ that covers the
+-- desired range @rng@
+gatherCoveringRanges :: (1 <= w, KnownNat w) => BVRange w -> [BVRange w] ->
+                        Maybe [BVRange w]
+gatherCoveringRanges rng _ | bvIsZero (bvRangeLength rng) = Just []
+gatherCoveringRanges rng rngs
+  | Just i <- findIndex (bvInRange (bvRangeOffset rng)) rngs
+  , rng' <- rngs!!i =
+    -- If rng' covers all of rng, then we are done
+    if bvRangeSubset rng rng' then Just [rng'] else
+      (rng' :) <$>
+      gatherCoveringRanges (bvRangeSuffix (bvRangeEnd rng') rng)
+                           (deleteNth i rngs)
+gatherCoveringRanges _ _ = Nothing
+
+-- | Test if the borrows in @ap@ cover a given range of offsets. That is, test
+-- if the ranges of the borrows in @ap@ can be arranged as a sequence of
+-- non-overlapping but contiguous ranges that extends at least as far as @len@
+-- (in the sense of @bvLeq@).
+llvmArrayRangeIsBorrowed :: (HasCallStack, 1 <= w, KnownNat w) =>
+                            LLVMArrayPerm w -> BVRange w -> Bool
+llvmArrayRangeIsBorrowed ap rng =
+  isJust $ gatherCoveringRanges rng $
+  map (llvmArrayBorrowAbsOffsets ap) (llvmArrayBorrows ap)
+
+-- | Test whether the borrows in @ap@ cover the range of cells @[0, len)@. That
+-- is, test if the ranges of the borrows in @ap@ can be arranged as a sequence
+-- of non-overlapping but contiguous ranges that extends at least as far as
+-- @len@ (in the sense of @bvLeq@)
+llvmArrayIsBorrowed :: (HasCallStack, 1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                       Bool
+llvmArrayIsBorrowed ap =
+  llvmArrayRangeIsBorrowed ap (llvmArrayAbsOffsets ap)
 
 -- | Test if a byte offset @o@ statically aligns with a statically-known offset
 -- into some array cell, i.e., whether
@@ -4554,6 +5368,36 @@ llvmSubArrayBorrow :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
                       LLVMArrayPerm w -> LLVMArrayBorrow w
 llvmSubArrayBorrow ap1 ap2 = RangeBorrow $ llvmSubArrayRange ap1 ap2
 
+-- | Given atomic permissions ps, filters out any q from ps such that q is
+-- borrowed from some q' also in ps
+filterBorrowedPermissions :: forall w. (1 <= w, KnownNat w) =>
+                             [AtomicPerm (LLVMPointerType w)] ->
+                             [AtomicPerm (LLVMPointerType w)]
+filterBorrowedPermissions ps = filter (not . isABorrow) ps
+  where
+    isABorrow :: AtomicPerm (LLVMPointerType w) -> Bool
+    isABorrow p =
+      case p of
+        (llvmAtomicPermRange -> Just r) ->
+            r `elem` borrowedRanges
+        Perm_LLVMArray a ->
+          llvmArrayAbsOffsets a `elem` borrowedRanges
+        _ -> False
+
+    borrowedRanges :: [BVRange w]
+    borrowedRanges = ps >>= go
+
+    go :: AtomicPerm (LLVMPointerType w) -> [BVRange w]
+    go p =
+      case p of
+        Perm_LLVMArray arrayPerm ->
+          goBorrow arrayPerm <$> llvmArrayBorrows arrayPerm
+        _ -> []
+
+    goBorrow :: LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
+    goBorrow = llvmArrayBorrowOffsets
+
+
 -- | Return the propositions stating that the first array permission @ap@
 -- contains the second @sub_ap@, meaning that array indices that are in @sub_ap@
 -- (in the sense of 'llvmArrayIndexInArray') are in @ap@. This requires that the
@@ -4585,6 +5429,7 @@ llvmMakeSubArray ap off len
   , cell_rng <- BVRange cell len =
     ap { llvmArrayOffset = off, llvmArrayLen = len,
          llvmArrayBorrows =
+           map (cellOffsetLLVMArrayBorrow (bvNegate cell)) $
            filter (not . all bvPropHolds .
                    llvmArrayBorrowsDisjoint (RangeBorrow cell_rng)) $
            llvmArrayBorrows ap }
@@ -4624,22 +5469,41 @@ llvmPermContainsOffsetBool :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
 llvmPermContainsOffsetBool off p =
   maybe False snd $ llvmPermContainsOffset off p
 
--- | Test if an atomic LLVM permission contains (in the sense of 'bvPropHolds')
--- all offsets in a given range
-llvmAtomicPermContainsRange :: (1 <= w, KnownNat w) => BVRange w ->
-                               AtomicPerm (LLVMPointerType w) -> Bool
-llvmAtomicPermContainsRange rng (Perm_LLVMArray ap)
+-- | Build the propositions stating that an atomic LLVM permission contains all
+-- offsets in a given range
+llvmAtomicPermContainsRangeProps :: (1 <= w, KnownNat w) => BVRange w ->
+                                    AtomicPerm (LLVMPointerType w) ->
+                                    Maybe [BVProp w]
+llvmAtomicPermContainsRangeProps rng (Perm_LLVMArray ap)
   | Just ix1 <- matchLLVMArrayIndex ap (bvRangeOffset rng)
   , Just ix2 <- matchLLVMArrayIndex ap (bvRangeEnd rng)
   , props <- llvmArrayBorrowInArray ap (RangeBorrow $ BVRange
                                         (llvmArrayIndexCell ix1)
                                         (llvmArrayIndexCell ix2)) =
+    Just props
+llvmAtomicPermContainsRangeProps rng (Perm_LLVMField fp) =
+  Just $ bvPropRangeSubset rng (llvmFieldRange fp)
+llvmAtomicPermContainsRangeProps rng (Perm_LLVMBlock bp) =
+  Just $ bvPropRangeSubset rng (llvmBlockRange bp)
+llvmAtomicPermContainsRangeProps _ _ = Nothing
+
+-- | Test if an atomic LLVM permission contains (in the sense of 'bvPropHolds')
+-- all offsets in a given range
+llvmAtomicPermContainsRange :: (1 <= w, KnownNat w) => BVRange w ->
+                               AtomicPerm (LLVMPointerType w) -> Bool
+llvmAtomicPermContainsRange rng p
+  | Just props <- llvmAtomicPermContainsRangeProps rng p =
     all bvPropHolds props
-llvmAtomicPermContainsRange rng (Perm_LLVMField fp) =
-  bvRangeSubset rng (llvmFieldRange fp)
-llvmAtomicPermContainsRange rng (Perm_LLVMBlock bp) =
-  bvRangeSubset rng (llvmBlockRange bp)
 llvmAtomicPermContainsRange _ _ = False
+
+-- | Test if an atomic LLVM permission could contain (in the sense of
+-- 'bvPropCouldHold') all offsets in a given range
+llvmAtomicPermCouldContainRange :: (1 <= w, KnownNat w) => BVRange w ->
+                                   AtomicPerm (LLVMPointerType w) -> Bool
+llvmAtomicPermCouldContainRange rng p
+  | Just props <- llvmAtomicPermContainsRangeProps rng p =
+    all bvPropCouldHold props
+llvmAtomicPermCouldContainRange _ _ = False
 
 -- | Test if an atomic LLVM permission has a range that overlaps with (in the
 -- sense of 'bvPropHolds') the offsets in a given range
@@ -4654,6 +5518,20 @@ llvmAtomicPermOverlapsRange rng (Perm_LLVMField fp) =
 llvmAtomicPermOverlapsRange rng (Perm_LLVMBlock bp) =
   bvRangesOverlap rng (llvmBlockRange bp)
 llvmAtomicPermOverlapsRange _ _ = False
+
+-- | Test if an atomic LLVM permission has a range that could overlap with (in the
+-- sense of 'bvPropCouldHold') the offsets in a given range
+llvmAtomicPermCouldOverlapRange :: (1 <= w, KnownNat w) => BVRange w ->
+                               AtomicPerm (LLVMPointerType w) -> Bool
+llvmAtomicPermCouldOverlapRange rng (Perm_LLVMArray ap) =
+  bvRangesCouldOverlap rng (llvmArrayAbsOffsets ap) &&
+  not (null $ bvRangesDelete rng $
+       map (llvmArrayBorrowOffsets ap) (llvmArrayBorrows ap))
+llvmAtomicPermCouldOverlapRange rng (Perm_LLVMField fp) =
+  bvRangesCouldOverlap rng (llvmFieldRange fp)
+llvmAtomicPermCouldOverlapRange rng (Perm_LLVMBlock bp) =
+  bvRangesCouldOverlap rng (llvmBlockRange bp)
+llvmAtomicPermCouldOverlapRange _ _ = False
 
 -- | Return the total length of an LLVM array permission in bytes
 llvmArrayLengthBytes :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
@@ -4680,7 +5558,7 @@ llvmArrayToBlocks _ = Nothing
 llvmArrayBorrowOffsets :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
                           LLVMArrayBorrow w -> BVRange w
 llvmArrayBorrowOffsets ap (FieldBorrow ix) =
-  bvRangeOfIndex $ llvmArrayCellToOffset ap ix
+  BVRange (llvmArrayCellToOffset ap ix) (bvInt $ toInteger $ llvmArrayStride ap)
 llvmArrayBorrowOffsets ap (RangeBorrow r) = llvmArrayCellsToOffsets ap r
 
 -- | Get the range of byte offsets represented by an array borrow relative to
@@ -4839,6 +5717,7 @@ offsetLLVMAtomicPerm _ p@Perm_IsLLVMPtr = Just p
 offsetLLVMAtomicPerm off (Perm_NamedConj n args off') =
   Just $ Perm_NamedConj n args $ addPermOffsets off' (mkLLVMPermOffset off)
 offsetLLVMAtomicPerm _ p@(Perm_BVProp _) = Just p
+offsetLLVMAtomicPerm _ p@Perm_Any = Just p
 
 -- | Add an offset to a field permission
 offsetLLVMFieldPerm :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
@@ -5014,6 +5893,14 @@ distPermsVars :: DistPerms ps -> RAssign Name ps
 distPermsVars DistPermsNil = MNil
 distPermsVars (DistPermsCons ps x _) = distPermsVars ps :>: x
 
+-- | Extract the non-bound variables in a 'DistPerms' in context
+mbDistPermsVars :: Mb ctx (DistPerms ps) -> [Some ExprVar]
+mbDistPermsVars =
+  concat . RL.mapToList (\case
+                            Compose [nuP| VarAndPerm mb_n _ |]
+                              | Right n <- mbNameBoundP mb_n -> [Some n]
+                            _ -> []) . mbRAssign
+
 -- | Append two lists of distinguished permissions
 appendDistPerms :: DistPerms ps1 -> DistPerms ps2 -> DistPerms (ps1 :++: ps2)
 appendDistPerms ps1 DistPermsNil = ps1
@@ -5085,7 +5972,11 @@ permIsCopyable :: ValuePerm a -> Bool
 permIsCopyable (ValPerm_Eq _) = True
 permIsCopyable (ValPerm_Or p1 p2) = permIsCopyable p1 && permIsCopyable p2
 permIsCopyable (ValPerm_Exists mb_p) = mbLift $ fmap permIsCopyable mb_p
-permIsCopyable (ValPerm_Named npn args _) =
+permIsCopyable (ValPerm_Named npn args _offset) =
+  -- FIXME: this is wrong. For transparent perms, should make this just unfold
+  -- the definition; for opaque perms, look at arguments. For recursive perms,
+  -- unfold and assume the recursive call is copyable, then see if the unfolded
+  -- version is still copyable
   namedPermArgsAreCopyable (namedPermNameArgs npn) args
 permIsCopyable (ValPerm_Var _ _) = False
 permIsCopyable (ValPerm_Conj ps) = all atomicPermIsCopyable ps
@@ -5107,12 +5998,14 @@ atomicPermIsCopyable (Perm_LLVMFunPtr _ _) = True
 atomicPermIsCopyable Perm_IsLLVMPtr = True
 atomicPermIsCopyable (Perm_LLVMBlockShape sh) = shapeIsCopyable PExpr_Write sh
 atomicPermIsCopyable (Perm_LLVMFrame _) = False
-atomicPermIsCopyable (Perm_LOwned _ _ _) = False
+atomicPermIsCopyable (Perm_LOwned _ _ _ _ _) = False
+atomicPermIsCopyable (Perm_LOwnedSimple _ _) = False
 atomicPermIsCopyable (Perm_LCurrent _) = True
 atomicPermIsCopyable Perm_LFinished = True
 atomicPermIsCopyable (Perm_Struct ps) = and $ RL.mapToList permIsCopyable ps
 atomicPermIsCopyable (Perm_Fun _) = True
 atomicPermIsCopyable (Perm_BVProp _) = True
+atomicPermIsCopyable Perm_Any = True
 atomicPermIsCopyable (Perm_NamedConj n args _) =
   namedPermArgsAreCopyable (namedPermNameArgs n) args
 
@@ -5148,7 +6041,7 @@ shapeIsCopyable rw (PExpr_NamedShape maybe_rw' _ nmsh args) =
     -- the empty shape for the recursive shape
     RecShapeBody mb_sh _ _ ->
       shapeIsCopyable rw $ subst (substOfExprs (args :>: PExpr_EmptyShape)) mb_sh
-shapeIsCopyable _ (PExpr_EqShape _) = True
+shapeIsCopyable _ (PExpr_EqShape _ _) = True
 shapeIsCopyable rw (PExpr_PtrShape maybe_rw' _ sh) =
   let rw' = maybe rw id maybe_rw' in
   rw' == PExpr_Read && shapeIsCopyable rw' sh
@@ -5163,42 +6056,89 @@ shapeIsCopyable rw (PExpr_ExShape mb_sh) =
 shapeIsCopyable _ PExpr_FalseShape = True
 
 
--- FIXME: need a traversal function for RAssign for the following two funs
+-- | Get the lifetime children of a lifetime permission, returning the empty
+-- list of children for a non-@lowned@ permission
+lownedPermChildren :: ValuePerm LifetimeType -> [PermExpr LifetimeType]
+lownedPermChildren (ValPerm_LOwned ls _ _ _ _) = ls
+lownedPermChildren _ = []
 
--- | Convert an 'LOwnedPerms' list to a 'DistPerms'
-lownedPermsToDistPerms :: LOwnedPerms ps -> Maybe (DistPerms ps)
-lownedPermsToDistPerms MNil = Just MNil
-lownedPermsToDistPerms (lops :>: lop) =
-  (:>:) <$> lownedPermsToDistPerms lops <*> lownedPermVarAndPerm lop
+-- | Topologically sort a list of lifetimes with their ownership permissions so
+-- that child lifetimes come before their parents
+sortLOwnedPerms :: [(ExprVar LifetimeType, ValuePerm LifetimeType)] ->
+                   [(ExprVar LifetimeType, ValuePerm LifetimeType)]
+sortLOwnedPerms ls_ps =
+  evalState (concat <$> mapM visit ls_ps) NameSet.empty where
+  visit :: (ExprVar LifetimeType, ValuePerm LifetimeType) ->
+           State (NameSet CrucibleType) [(ExprVar LifetimeType,
+                                          ValuePerm LifetimeType)]
+  visit (l, p) =
+    (NameSet.member l <$> get) >>= \case
+    True -> return []
+    False ->
+      do
+        -- Mark l as visited
+        modify (NameSet.insert l)
+        -- Find all children of (l,p) with a permission in the initial ls_ps
+        let ls_ps' =
+              mapMaybe (\case
+                           PExpr_Var l' -> (l',) <$> lookup l' ls_ps
+                           _ -> Nothing)
+              (lownedPermChildren p)
+        -- Visit all children of (l,p) and return any of them and their
+        -- recursive children that have not been visited yet
+        rec_ret <- concat <$> mapM visit ls_ps'
+        -- Add (l,p) after all of its children
+        return (rec_ret ++ [(l,p)])
 
--- | Convert the expressions of an 'LOwnedPerms' to variables, if possible
-lownedPermsVars :: LOwnedPerms ps -> Maybe (RAssign Name ps)
-lownedPermsVars = fmap distPermsVars . lownedPermsToDistPerms
+-- | Test if a list of permissions that might be in a lifetime ownership
+-- permission (so not a lifetime permission) could help prove a permission on an
+-- expression in a binding
+lownedPermsCouldProve1 :: CruCtx ctx -> ExprPerms ps_l ->
+                          Mb ctx (ExprAndPerm a) -> Bool
+lownedPermsCouldProve1 ctx ps_l (mbMapCl $(mkClosed [| exprPermVarAndPerm |]) ->
+                                 [nuP| Just (VarAndPerm mb_x mb_p) |])
+  | Right x <- mbNameBoundP mb_x =
+    mbRangeFTsCouldCoverPart (concatMap getOffsets $ exprPermsForVar x ps_l) $
+    mbGetOffsets ctx mb_p
+lownedPermsCouldProve1 _ _ _ = False
 
--- | Test if an 'LOwnedPerm' could help prove any of a list of permissions
-lownedPermCouldProve :: LOwnedPerm a -> DistPerms ps -> Bool
-lownedPermCouldProve (LOwnedPermField (PExpr_Var x) fp) ps =
-  any (\case (llvmAtomicPermRange -> Just rng) ->
-               bvCouldBeInRange (llvmFieldOffset fp) rng
-             _ -> False) $
-  varAtomicPermsInDistPerms x ps
-lownedPermCouldProve (LOwnedPermArray (PExpr_Var x) ap) ps =
-  any (\case (llvmAtomicPermRange -> Just rng) ->
-               bvRangesCouldOverlap (llvmArrayAbsOffsets ap) rng
-             _ -> False) $
-  varAtomicPermsInDistPerms x ps
-lownedPermCouldProve (LOwnedPermBlock (PExpr_Var x) bp) ps =
-  any (\case (llvmAtomicPermRange -> Just rng) ->
-               bvRangesCouldOverlap (llvmBlockRange bp) rng
-             _ -> False) $
-  varAtomicPermsInDistPerms x ps
-lownedPermCouldProve _ _ = False
+-- | Test if a list of permissions that might be in a lifetime ownership
+-- permission (so not a lifetime permission) could help prove any of a list of
+-- permissions on expressions in a binding
+lownedPermsCouldProve :: CruCtx ctx -> ExprPerms ps_l ->
+                         Mb ctx (ExprPerms ps_r) -> Bool
+lownedPermsCouldProve ctx lops =
+  or . RL.mapToList (lownedPermsCouldProve1 ctx lops . getCompose) . mbRAssign
 
--- | Test if an 'LOwnedPerms' list could help prove any of a list of permissions
-lownedPermsCouldProve :: LOwnedPerms ps -> DistPerms ps' -> Bool
-lownedPermsCouldProve lops ps =
-  RL.foldr (\lop rest -> lownedPermCouldProve lop ps || rest) False lops
+-- | Find all lifetimes with ownership permissions in an 'ExprPerms'
+lownedsInExprPerms :: ExprPerms ps -> [ExprVar LifetimeType]
+lownedsInExprPerms =
+  catMaybes . RL.mapToList
+  (\case
+      ExprAndPerm (PExpr_Var l) (ValPerm_Conj ps)
+        | Refl:_ <- mapMaybe isLifetimeOwnershipPerm ps -> Just l
+      _ -> Nothing)
 
+-- | Find all lifetimes with ownership permissions in an 'ExprPerms' in binding
+lownedsInMbExprPerms :: Mb (ctx :: RList CrucibleType) (ExprPerms ps) ->
+                        [ExprVar LifetimeType]
+lownedsInMbExprPerms mb_ps =
+  mapMaybe (\case
+               (mbNameBoundP -> Right l) -> Just l
+               _ -> Nothing) $
+  mbList $ mbMapCl $(mkClosed [| lownedsInExprPerms |]) mb_ps
+
+-- | Find all lifetimes with ownership permissions in a 'DistPerms' in binding
+lownedsInMbDistPerms :: Mb ctx (DistPerms ps) -> [ExprVar LifetimeType]
+lownedsInMbDistPerms =
+  catMaybes . RL.mapToList
+  (\case
+      Compose [nuP| VarAndPerm mb_l (ValPerm_Conj1 mb_p) |]
+        | Just Refl
+          <- mbLift $ mbMapCl $(mkClosed [| isLifetimeOwnershipPerm |]) mb_p
+        , Right l <- mbNameBoundP mb_l -> Just l
+      _ -> Nothing)
+  . mbRAssign
 
 {-
 -- | Convert a 'FunPerm' in a name-binding to a 'FunPerm' that takes those bound
@@ -5280,6 +6220,22 @@ unfoldPerm :: NameSortCanFold ns ~ 'True => NamedPerm ns args a ->
 unfoldPerm (NamedPerm_Defined dp) = unfoldDefinedPerm dp
 unfoldPerm (NamedPerm_Rec rp) = unfoldRecPerm rp
 
+-- | Test if two expressions are definitely unequal
+exprsUnequal :: PermExpr a -> PermExpr a -> Bool
+exprsUnequal (PExpr_Var _) _ = False
+exprsUnequal (PExpr_Bool b1) (PExpr_Bool b2) = b1 /= b2
+exprsUnequal (PExpr_Nat n1) (PExpr_Nat n2) = n1 /= n2
+exprsUnequal (PExpr_String str1) (PExpr_String str2) = str1 /= str2
+exprsUnequal e1@(PExpr_BV _ _) e2 = not $ bvCouldEqual e1 e2
+{- FIXME: we need to prove the types are equal on both sides for this case:
+exprsUnequal (PExpr_Struct es1) (PExpr_Struct es2) =
+  any $ mapToList2 exprsUnequal es1 es2
+-}
+exprsUnequal _ _ =
+  -- FIXME: maybe we want more cases for shapes and even function handles,
+  -- though those shouldn't matter for the current uses of exprsUnequal
+  False
+
 -- | Generic function to get free variables
 class FreeVars a where
   freeVars :: a -> NameSet CrucibleType
@@ -5288,6 +6244,16 @@ class FreeVars a where
 freeVarsRAssign :: FreeVars a => a -> Some (RAssign ExprVar)
 freeVarsRAssign =
   foldl (\(Some ns) (SomeName n) -> Some (ns :>: n)) (Some MNil) . toList . freeVars
+
+-- | Get the bound variables of an expression or permission
+boundVars :: (NuMatching a, FreeVars a) => Mb (ctx :: RList CrucibleType) a ->
+             [Some @CrucibleType (Member ctx)]
+boundVars mb_a =
+  mapMaybe (\case
+               [nuP| SomeName mb_n |]
+                 | Left memb <- mbNameBoundP mb_n -> Just (Some memb)
+               _ -> Nothing) $
+  mbList $ mbMapCl $(mkClosed [| toList . freeVars |]) mb_a
 
 instance FreeVars a => FreeVars (Maybe a) where
   freeVars = maybe NameSet.empty freeVars
@@ -5321,7 +6287,7 @@ instance FreeVars (PermExpr a) where
   freeVars PExpr_EmptyShape = NameSet.empty
   freeVars (PExpr_NamedShape rw l nmsh args) =
     NameSet.unions [freeVars rw, freeVars l, freeVars nmsh, freeVars args]
-  freeVars (PExpr_EqShape b) = freeVars b
+  freeVars (PExpr_EqShape len b) = NameSet.union (freeVars len) (freeVars b)
   freeVars (PExpr_PtrShape maybe_rw maybe_l sh) =
     NameSet.unions [freeVars maybe_rw, freeVars maybe_l, freeVars sh]
   freeVars (PExpr_FieldShape fld) = freeVars fld
@@ -5365,13 +6331,15 @@ instance FreeVars (AtomicPerm tp) where
   freeVars Perm_IsLLVMPtr = NameSet.empty
   freeVars (Perm_LLVMBlockShape sh) = freeVars sh
   freeVars (Perm_LLVMFrame fperms) = freeVars $ map fst fperms
-  freeVars (Perm_LOwned ls ps_in ps_out) =
+  freeVars (Perm_LOwned ls _ _ ps_in ps_out) =
     NameSet.unions [freeVars ls, freeVars ps_in, freeVars ps_out]
+  freeVars (Perm_LOwnedSimple _ lops) = freeVars lops
   freeVars (Perm_LCurrent l) = freeVars l
   freeVars Perm_LFinished = NameSet.empty
   freeVars (Perm_Struct ps) = NameSet.unions $ RL.mapToList freeVars ps
   freeVars (Perm_Fun fun_perm) = freeVars fun_perm
   freeVars (Perm_BVProp prop) = freeVars prop
+  freeVars Perm_Any = NameSet.empty
   freeVars (Perm_NamedConj _ args off) =
     NameSet.union (freeVars args) (freeVars off)
 
@@ -5394,6 +6362,11 @@ instance FreeVars (DistPerms tps) where
   freeVars dperms =
     NameSet.unions $
     RL.mapToList (\(VarAndPerm x p) -> NameSet.insert x (freeVars p)) dperms
+
+instance FreeVars (ExprPerms tps) where
+  freeVars eps =
+    NameSet.unions $
+    RL.mapToList (\(ExprAndPerm e p) -> NameSet.union (freeVars e) (freeVars p)) eps
 
 instance FreeVars (LLVMFieldPerm w sz) where
   freeVars (LLVMFieldPerm {..}) =
@@ -5425,17 +6398,6 @@ instance FreeVars (PermOffset tp) where
   freeVars NoPermOffset = NameSet.empty
   freeVars (LLVMPermOffset e) = freeVars e
 
-instance FreeVars (LOwnedPerm a) where
-  freeVars (LOwnedPermField e fp) =
-    NameSet.unions [freeVars e, freeVars fp]
-  freeVars (LOwnedPermArray e ap) =
-    NameSet.unions [freeVars e, freeVars ap]
-  freeVars (LOwnedPermBlock e bp) =
-    NameSet.unions [freeVars e, freeVars bp]
-
-instance FreeVars (LOwnedPerms ps) where
-  freeVars = NameSet.unions . RL.mapToList freeVars
-
 instance FreeVars (FunPerm ghosts args gouts ret) where
   freeVars (FunPerm _ _ _ _ perms_in perms_out) =
     NameSet.union
@@ -5449,6 +6411,57 @@ instance FreeVars (NamedShapeBody b args w) where
   freeVars (DefinedShapeBody mb_sh) = freeVars mb_sh
   freeVars (OpaqueShapeBody mb_len _) = freeVars mb_len
   freeVars (RecShapeBody mb_sh _ _) = freeVars mb_sh
+
+
+-- | Find all equality permissions @eq(e)@ contained in another permission
+class ContainedEqVars a where
+  containedEqVars :: a -> NameSet CrucibleType
+
+instance ContainedEqVars (ValuePerm a) where
+  containedEqVars (ValPerm_Eq e) = freeVars e
+  containedEqVars (ValPerm_Or p1 p2) =
+    NameSet.union (containedEqVars p1) (containedEqVars p2)
+  containedEqVars (ValPerm_Exists mb_p) =
+    NameSet.liftNameSet $ fmap containedEqVars mb_p
+  containedEqVars (ValPerm_Named _ _ _) =
+    -- FIXME: we should probably unfold named permissions here...
+    NameSet.empty
+  containedEqVars (ValPerm_Var _ _) = NameSet.empty
+  containedEqVars (ValPerm_Conj ps) = NameSet.unions $ map containedEqVars ps
+  containedEqVars ValPerm_False = NameSet.empty
+
+instance ContainedEqVars (AtomicPerm a) where
+  containedEqVars (Perm_LLVMField fp) = containedEqVars (llvmFieldContents fp)
+  containedEqVars (Perm_LLVMArray ap) = containedEqVars (llvmArrayCellShape ap)
+  containedEqVars (Perm_LLVMBlock bp) = containedEqVars (llvmBlockShape bp)
+  containedEqVars (Perm_LLVMBlockShape sh) = containedEqVars sh
+  containedEqVars _ = NameSet.empty
+
+instance ContainedEqVars (PermExpr (LLVMShapeType w)) where
+  containedEqVars (PExpr_Var _) = NameSet.empty
+  containedEqVars PExpr_EmptyShape = NameSet.empty
+  containedEqVars (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
+                                              (DefinedShapeBody _)) args) =
+    containedEqVars (unfoldNamedShape nmsh args)
+  containedEqVars (PExpr_NamedShape _ _ (NamedShape _ _
+                                         (OpaqueShapeBody _ _)) _) =
+    NameSet.empty
+  containedEqVars (PExpr_NamedShape _ _ (NamedShape _ _
+                                         (RecShapeBody mb_sh _ _)) args) =
+    -- NOTE: we unfold the shape with the empty shape substituted for recursive
+    -- occurrences of the shape name, to avoid an infinite loop
+    containedEqVars $ subst (substOfExprs (args :>: PExpr_EmptyShape)) mb_sh
+  containedEqVars (PExpr_EqShape _ blk) = freeVars blk
+  containedEqVars (PExpr_PtrShape _ _ sh) = containedEqVars sh
+  containedEqVars (PExpr_FieldShape (LLVMFieldShape p)) = containedEqVars p
+  containedEqVars (PExpr_ArrayShape _ _ sh) = containedEqVars sh
+  containedEqVars (PExpr_SeqShape sh1 sh2) =
+    NameSet.union (containedEqVars sh1) (containedEqVars sh2)
+  containedEqVars (PExpr_OrShape sh1 sh2) =
+    NameSet.union (containedEqVars sh1) (containedEqVars sh2)
+  containedEqVars (PExpr_ExShape mb_sh) =
+    NameSet.liftNameSet $ fmap containedEqVars mb_sh
+  containedEqVars PExpr_FalseShape = NameSet.empty
 
 
 -- | Test if an expression @e@ is a /determining/ expression, meaning that
@@ -5482,10 +6495,21 @@ instance NeededVars (PermExpr a) where
   -- FIXME: need a better explanation of why this is the right answer...
   neededVars e = if isDeterminingExpr e then NameSet.empty else freeVars e
 
+instance NeededVars (PermExprs args) where
+  neededVars PExprs_Nil = NameSet.empty
+  neededVars (PExprs_Cons es e) = NameSet.union (neededVars es) (neededVars e)
+
 instance NeededVars (ValuePerm a) where
   neededVars (ValPerm_Eq e) = neededVars e
   neededVars (ValPerm_Or p1 p2) = NameSet.union (neededVars p1) (neededVars p2)
   neededVars (ValPerm_Exists mb_p) = NameSet.liftNameSet $ fmap neededVars mb_p
+  neededVars (ValPerm_Named name args offset)
+    | OpaqueSortRepr _ <- namedPermNameSort name =
+      NameSet.union (neededVars args) (freeVars offset)
+  -- FIXME: for non-opaque named permissions, we currently define the
+  -- @neededVars@ as all free variables of @p@, but this is incorrect for
+  -- defined or recursive permissions that do determine their variable arguments
+  -- when unfolded.
   neededVars p@(ValPerm_Named _ _ _) = freeVars p
   neededVars p@(ValPerm_Var _ _) = freeVars p
   neededVars (ValPerm_Conj ps) = neededVars ps
@@ -5496,7 +6520,8 @@ instance NeededVars (AtomicPerm a) where
   neededVars (Perm_LLVMArray ap) = neededVars ap
   neededVars (Perm_LLVMBlock bp) = neededVars bp
   neededVars (Perm_LLVMBlockShape _) = NameSet.empty
-  neededVars p@(Perm_LOwned _ _ _) = freeVars p
+  neededVars p@(Perm_LOwned _ _ _ _ _) = freeVars p
+  neededVars (Perm_LOwnedSimple _ ps) = neededVars $ RL.map exprAndPermPerm ps
   neededVars p = freeVars p
 
 instance NeededVars (LLVMFieldPerm w sz) where
@@ -5534,7 +6559,7 @@ readOnlyShape e@(PExpr_Var _) = e
 readOnlyShape PExpr_EmptyShape = PExpr_EmptyShape
 readOnlyShape (PExpr_NamedShape _ l nmsh args) =
   PExpr_NamedShape (Just PExpr_Read) l nmsh args
-readOnlyShape e@(PExpr_EqShape _) = e
+readOnlyShape e@(PExpr_EqShape _ _) = e
 readOnlyShape e@(PExpr_PtrShape _ (Just _) _) = e
 readOnlyShape (PExpr_PtrShape _ Nothing sh) =
   PExpr_PtrShape (Just PExpr_Read) Nothing $ readOnlyShape sh
@@ -5650,6 +6675,12 @@ genSubstMb p s mbmb =
 instance SubstVar s m => Substable s (Member ctx a) m where
   genSubst _ mb_memb = return $ mbLift mb_memb
 
+instance SubstVar s m => Substable s (TypeRepr a) m where
+  genSubst _ mb_tp = return $ mbLift mb_tp
+
+instance SubstVar s m => Substable s (CruCtx ctx) m where
+  genSubst _ mb_ctx = return $ mbLift mb_ctx
+
 instance (NuMatchingAny1 f, Substable1 s f m) =>
          Substable s (RAssign f ctx) m where
   genSubst s mb_xs = case mbMatch mb_xs of
@@ -5717,8 +6748,8 @@ instance SubstVar s m => Substable s (PermExpr a) m where
     [nuMP| PExpr_NamedShape rw l nmsh args |] ->
       PExpr_NamedShape <$> genSubst s rw <*> genSubst s l <*> genSubst s nmsh
                        <*> genSubst s args
-    [nuMP| PExpr_EqShape b |] ->
-      PExpr_EqShape <$> genSubst s b
+    [nuMP| PExpr_EqShape len b |] ->
+      PExpr_EqShape <$> genSubst s len <*> genSubst s b
     [nuMP| PExpr_PtrShape maybe_rw maybe_l sh |] ->
       PExpr_PtrShape <$> genSubst s maybe_rw <*> genSubst s maybe_l
                      <*> genSubst s sh
@@ -5743,6 +6774,13 @@ instance SubstVar s m => Substable1 s PermExpr m where
 instance SubstVar s m => Substable s (BVRange w) m where
   genSubst s (mbMatch -> [nuMP| BVRange e1 e2 |]) =
     BVRange <$> genSubst s e1 <*> genSubst s e2
+
+instance SubstVar s m => Substable s (MbRangeForType a) m where
+  genSubst s (mbMatch -> [nuMP| MbRangeForLLVMType vars rw l rng |]) =
+    MbRangeForLLVMType (mbLift vars) <$>
+    genSubstMb (cruCtxProxies $ mbLift vars) s rw <*>
+    genSubstMb (cruCtxProxies $ mbLift vars) s l <*>
+    genSubstMb (cruCtxProxies $ mbLift vars) s rng
 
 instance SubstVar s m => Substable s (BVProp w) m where
   genSubst s mb_prop = case mbMatch mb_prop of
@@ -5769,13 +6807,17 @@ instance SubstVar s m => Substable s (AtomicPerm a) m where
     [nuMP| Perm_LLVMBlockShape sh |] ->
       Perm_LLVMBlockShape <$> genSubst s sh
     [nuMP| Perm_LLVMFrame fp |] -> Perm_LLVMFrame <$> genSubst s fp
-    [nuMP| Perm_LOwned ls ps_in ps_out |] ->
-      Perm_LOwned <$> genSubst s ls <*> genSubst s ps_in <*> genSubst s ps_out
+    [nuMP| Perm_LOwned ls tps_in tps_out ps_in ps_out |] ->
+      Perm_LOwned <$> genSubst s ls <*> return (mbLift tps_in) <*>
+      return (mbLift tps_out) <*> genSubst s ps_in <*> genSubst s ps_out
+    [nuMP| Perm_LOwnedSimple tps lops |] ->
+      Perm_LOwnedSimple (mbLift tps) <$> genSubst s lops
     [nuMP| Perm_LCurrent e |] -> Perm_LCurrent <$> genSubst s e
     [nuMP| Perm_LFinished |] -> return Perm_LFinished
     [nuMP| Perm_Struct tps |] -> Perm_Struct <$> genSubst s tps
     [nuMP| Perm_Fun fperm |] -> Perm_Fun <$> genSubst s fperm
     [nuMP| Perm_BVProp prop |] -> Perm_BVProp <$> genSubst s prop
+    [nuMP| Perm_Any |] -> return Perm_Any
     [nuMP| Perm_NamedConj n args off |] ->
       Perm_NamedConj (mbLift n) <$> genSubst s args <*> genSubst s off
 
@@ -5888,16 +6930,11 @@ instance SubstVar s m => Substable s (LLVMFieldShape w) m where
   genSubst s (mbMatch -> [nuMP| LLVMFieldShape p |]) =
     LLVMFieldShape <$> genSubst s p
 
-instance SubstVar s m => Substable s (LOwnedPerm a) m where
-  genSubst s mb_x = case mbMatch mb_x of
-    [nuMP| LOwnedPermField e fp |] ->
-      LOwnedPermField <$> genSubst s e <*> genSubst s fp
-    [nuMP| LOwnedPermArray e ap |] ->
-      LOwnedPermArray <$> genSubst s e <*> genSubst s ap
-    [nuMP| LOwnedPermBlock e bp |] ->
-      LOwnedPermBlock <$> genSubst s e <*> genSubst s bp
+instance SubstVar s m => Substable s (ExprAndPerm a) m where
+  genSubst s (mbMatch -> [nuMP| ExprAndPerm e p |]) =
+    ExprAndPerm <$> genSubst s e <*> genSubst s p
 
-instance SubstVar s m => Substable1 s LOwnedPerm m where
+instance SubstVar s m => Substable1 s ExprAndPerm m where
   genSubst1 = genSubst
 
 instance SubstVar s m => Substable s (FunPerm ghosts args gouts ret) m where
@@ -5920,9 +6957,13 @@ instance SubstVar PermVarSubst m =>
          Substable PermVarSubst (LifetimeCurrentPerms ps) m where
   genSubst s mb_x = case mbMatch mb_x of
     [nuMP| AlwaysCurrentPerms |] -> return AlwaysCurrentPerms
-    [nuMP| LOwnedCurrentPerms l ls ps_in ps_out |] ->
+    [nuMP| LOwnedCurrentPerms l ls tps_in tps_out ps_in ps_out |] ->
       LOwnedCurrentPerms <$> genSubst s l <*> genSubst s ls
+      <*> return (mbLift tps_in) <*> return (mbLift tps_out)
       <*> genSubst s ps_in <*> genSubst s ps_out
+    [nuMP| LOwnedSimpleCurrentPerms l tps ps |] ->
+      LOwnedSimpleCurrentPerms <$> genSubst s l
+      <*> return (mbLift tps) <*> genSubst s ps
     [nuMP| CurrentTransPerms ps l |] ->
       CurrentTransPerms <$> genSubst s ps <*> genSubst s l
 
@@ -6029,12 +7070,6 @@ subst1 e = subst (singletonSubst e)
 -- because there are different ways one might do it, so we need to use
 -- OVERLAPPING and/or INCOHERENT pragmas for them
 
--- | Like a substitution but assigns variables instead of arbitrary expressions
--- to bound variables
-data PermVarSubst (ctx :: RList CrucibleType) where
-  PermVarSubst_Nil :: PermVarSubst RNil
-  PermVarSubst_Cons :: PermVarSubst ctx -> Name tp -> PermVarSubst (ctx :> tp)
-
 emptyVarSubst :: PermVarSubst RNil
 emptyVarSubst = PermVarSubst_Nil
 
@@ -6120,11 +7155,8 @@ newtype PartialSubst ctx =
 
 -- | Build an empty partial substitution for a given set of variables, i.e., the
 -- partial substitution that assigns no expressions to those variables
-emptyPSubst :: CruCtx ctx -> PartialSubst ctx
-emptyPSubst = PartialSubst . helper where
-  helper :: CruCtx ctx -> RAssign PSubstElem ctx
-  helper CruCtxNil = MNil
-  helper (CruCtxCons ctx' _) = helper ctx' :>: PSubstElem Nothing
+emptyPSubst :: RAssign any ctx -> PartialSubst ctx
+emptyPSubst = PartialSubst . RL.map (\_ -> PSubstElem Nothing)
 
 -- | Return the set of variables that have been assigned values by a partial
 -- substitution inside a binding for all of its variables
@@ -6188,6 +7220,10 @@ completePSubst ctx (PartialSubst pselems) = PermSubst $ helper ctx pselems where
 psubstLookup :: PartialSubst ctx -> Member ctx a -> Maybe (PermExpr a)
 psubstLookup (PartialSubst m) memb = unPSubstElem $ RL.get memb m
 
+-- | Get 'Proxy's for the domain of a 'PartialSubst'
+psubstProxies :: PartialSubst ctx -> RAssign Proxy ctx
+psubstProxies (PartialSubst m) = RL.map (const Proxy) m
+
 -- | Append two partial substitutions
 psubstAppend :: PartialSubst ctx1 -> PartialSubst ctx2 ->
                 PartialSubst (ctx1 :++: ctx2)
@@ -6218,6 +7254,12 @@ partialSubstForce :: Substable PartialSubst a Maybe => PartialSubst ctx ->
                      Mb ctx a -> String -> a
 partialSubstForce s mb msg = fromMaybe (error msg) $ partialSubst s mb
 
+-- | Try to lift an expression out of a multi-binding by substituting with the
+-- empty partial substitution
+tryLift :: Substable PartialSubst a Maybe =>
+           Mb (ctx :: RList CrucibleType) a -> Maybe a
+tryLift mb_a = partialSubst (emptyPSubst $ mbToProxy mb_a) mb_a
+
 
 ----------------------------------------------------------------------
 -- * Additional functions involving partial substitutions
@@ -6246,7 +7288,7 @@ mbFactorNameBoundP :: PartialSubst vars ->
 mbFactorNameBoundP psubst (mbMatch -> [nuMP| BVFactor (BV.BV mb_n) mb_z |]) =
   let n = mbLift mb_n in
   case mbNameBoundP mb_z of
-    Left memb -> case psubstLookup psubst memb of 
+    Left memb -> case psubstLookup psubst memb of
                    Nothing -> Left (n, memb)
                    Just e' -> Right (bvMultBV (BV.mkBV knownNat n) e')
     Right z -> Right (bvFactorExpr (BV.mkBV knownNat n) z)
@@ -6463,8 +7505,9 @@ instance AbstractVars (PermExpr a) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 l
     `clMbMbApplyM` abstractPEVars ns1 ns2 nmsh
     `clMbMbApplyM` abstractPEVars ns1 ns2 args
-  abstractPEVars ns1 ns2 (PExpr_EqShape b) =
+  abstractPEVars ns1 ns2 (PExpr_EqShape len b) =
     absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_EqShape |]))
+    `clMbMbApplyM` abstractPEVars ns1 ns2 len
     `clMbMbApplyM` abstractPEVars ns1 ns2 b
   abstractPEVars ns1 ns2 (PExpr_PtrShape maybe_rw maybe_l sh) =
     absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_PtrShape |]))
@@ -6564,11 +7607,17 @@ instance AbstractVars (AtomicPerm a) where
   abstractPEVars ns1 ns2 (Perm_LLVMFrame fp) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMFrame |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 fp
-  abstractPEVars ns1 ns2 (Perm_LOwned ls ps_in ps_out) =
+  abstractPEVars ns1 ns2 (Perm_LOwned ls tps_in tps_out ps_in ps_out) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LOwned |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 ls
+    `clMbMbApplyM` (absVarsReturnH ns1 ns2 $ toClosed tps_in)
+    `clMbMbApplyM` (absVarsReturnH ns1 ns2 $ toClosed tps_out)
     `clMbMbApplyM` abstractPEVars ns1 ns2 ps_in
     `clMbMbApplyM` abstractPEVars ns1 ns2 ps_out
+  abstractPEVars ns1 ns2 (Perm_LOwnedSimple tps lops) =
+    absVarsReturnH ns1 ns2 ($(mkClosed [| Perm_LOwnedSimple |])
+                            `clApply` toClosed tps)
+    `clMbMbApplyM` abstractPEVars ns1 ns2 lops
   abstractPEVars ns1 ns2 (Perm_LCurrent e) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LCurrent |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
@@ -6583,6 +7632,8 @@ instance AbstractVars (AtomicPerm a) where
   abstractPEVars ns1 ns2 (Perm_BVProp prop) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_BVProp |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 prop
+  abstractPEVars ns1 ns2 Perm_Any =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_Any |])
   abstractPEVars ns1 ns2 (Perm_NamedConj n args off) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_NamedConj |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 n
@@ -6691,21 +7742,13 @@ instance AbstractVars (DistPerms ps) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 perms
     `clMbMbApplyM` abstractPEVars ns1 ns2 x `clMbMbApplyM` abstractPEVars ns1 ns2 p
 
-instance AbstractVars (LOwnedPerm a) where
-  abstractPEVars ns1 ns2 (LOwnedPermField e fp) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| LOwnedPermField |])
+instance AbstractVars (ExprAndPerm a) where
+  abstractPEVars ns1 ns2 (ExprAndPerm e p) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ExprAndPerm |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
-    `clMbMbApplyM` abstractPEVars ns1 ns2 fp
-  abstractPEVars ns1 ns2 (LOwnedPermArray e ap) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| LOwnedPermArray |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e
-    `clMbMbApplyM` abstractPEVars ns1 ns2 ap
-  abstractPEVars ns1 ns2 (LOwnedPermBlock e bp) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| LOwnedPermBlock |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e
-    `clMbMbApplyM` abstractPEVars ns1 ns2 bp
+    `clMbMbApplyM` abstractPEVars ns1 ns2 p
 
-instance AbstractVars (LOwnedPerms ps) where
+instance AbstractVars (ExprPerms a) where
   abstractPEVars ns1 ns2 MNil =
     absVarsReturnH ns1 ns2 $(mkClosed [| MNil |])
   abstractPEVars ns1 ns2 (ps :>: p) =
@@ -6828,7 +7871,8 @@ instance AbstractNamedShape w (PermExpr a) where
               -> pure $ nu PExpr_Var
          True -> fail "named shape not applied to its arguments"
          False -> pureBindingM (PExpr_NamedShape maybe_rw maybe_l nmsh args)
-  abstractNSM (PExpr_EqShape b) = fmap PExpr_EqShape <$> abstractNSM b
+  abstractNSM (PExpr_EqShape len b) =
+    mbMap2 PExpr_EqShape <$> abstractNSM len <*> abstractNSM b
   abstractNSM (PExpr_PtrShape rw l sh) =
     mbMap3 PExpr_PtrShape <$> abstractNSM rw <*> abstractNSM l <*> abstractNSM sh
   abstractNSM (PExpr_FieldShape fsh) = fmap PExpr_FieldShape <$> abstractNSM fsh
@@ -6874,17 +7918,20 @@ instance AbstractNamedShape w (AtomicPerm a) where
   abstractNSM (Perm_LLVMFunPtr tp p) = fmap (Perm_LLVMFunPtr tp) <$> abstractNSM p
   abstractNSM (Perm_LLVMBlockShape sh) = fmap Perm_LLVMBlockShape <$> abstractNSM sh
   abstractNSM Perm_IsLLVMPtr = pureBindingM Perm_IsLLVMPtr
-  abstractNSM (Perm_NamedConj n args off) = 
+  abstractNSM (Perm_NamedConj n args off) =
     mbMap2 (Perm_NamedConj n) <$> abstractNSM args <*> abstractNSM off
   abstractNSM (Perm_LLVMFrame fp) = fmap Perm_LLVMFrame <$> abstractNSM fp
-  abstractNSM (Perm_LOwned ls ps_in ps_out) =
-    mbMap3 Perm_LOwned <$> abstractNSM ls <*> abstractNSM ps_in <*>
-    abstractNSM ps_out
+  abstractNSM (Perm_LOwned ls tps_in tps_out ps_in ps_out) =
+    mbMap3 (\ls' -> Perm_LOwned ls' tps_in tps_out) <$>
+    abstractNSM ls <*> abstractNSM ps_in <*> abstractNSM ps_out
+  abstractNSM (Perm_LOwnedSimple tps lops) =
+    fmap (Perm_LOwnedSimple tps) <$> abstractNSM lops
   abstractNSM (Perm_LCurrent e) = fmap Perm_LCurrent <$> abstractNSM e
   abstractNSM Perm_LFinished = pureBindingM Perm_LFinished
   abstractNSM (Perm_Struct ps) = fmap Perm_Struct <$> abstractNSM ps
   abstractNSM (Perm_Fun fp) = fmap Perm_Fun <$> abstractNSM fp
   abstractNSM (Perm_BVProp prop) = pureBindingM (Perm_BVProp prop)
+  abstractNSM Perm_Any = pureBindingM Perm_Any
 
 instance AbstractNamedShape w' (LLVMFieldPerm w sz) where
   abstractNSM (LLVMFieldPerm rw l off p) =
@@ -6912,17 +7959,13 @@ instance AbstractNamedShape w' (LLVMBlockPerm w) where
                          <*> abstractNSM off <*> abstractNSM len
                          <*> abstractNSM sh
 
-instance AbstractNamedShape w (LOwnedPerms ps) where
+instance AbstractNamedShape w (ExprPerms ps) where
   abstractNSM MNil = pureBindingM MNil
-  abstractNSM (fp :>: fps) = mbMap2 (:>:) <$> abstractNSM fp <*> abstractNSM fps
+  abstractNSM (p :>: ps) = mbMap2 (:>:) <$> abstractNSM p <*> abstractNSM ps
 
-instance AbstractNamedShape w (LOwnedPerm a) where
-  abstractNSM (LOwnedPermField e fp) =
-    mbMap2 LOwnedPermField <$> abstractNSM e <*> abstractNSM fp
-  abstractNSM (LOwnedPermArray e ap) =
-    mbMap2 LOwnedPermArray <$> abstractNSM e <*> abstractNSM ap
-  abstractNSM (LOwnedPermBlock e bp) =
-    mbMap2 LOwnedPermBlock <$> abstractNSM e <*> abstractNSM bp
+instance AbstractNamedShape w (ExprAndPerm a) where
+  abstractNSM (ExprAndPerm e p) =
+    mbMap2 ExprAndPerm <$> abstractNSM e <*> abstractNSM p
 
 instance AbstractNamedShape w (ValuePerms as) where
   abstractNSM ValPerms_Nil = pureBindingM ValPerms_Nil
@@ -6934,57 +7977,6 @@ instance AbstractNamedShape w (FunPerm ghosts args gouts ret) where
     mbMap2 (FunPerm ghosts args gouts ret) <$> abstractNSM perms_in
                                            <*> abstractNSM perms_out
 
-
-$(mkNuMatching [t| forall a . PermExpr a |])
-$(mkNuMatching [t| forall a . BVFactor a |])
-$(mkNuMatching [t| forall w. BVRange w |])
-$(mkNuMatching [t| forall w. BVProp w |])
-$(mkNuMatching [t| forall a . AtomicPerm a |])
-$(mkNuMatching [t| forall a . ValuePerm a |])
--- $(mkNuMatching [t| forall as. ValuePerms as |])
-$(mkNuMatching [t| forall a . VarAndPerm a |])
-
-instance NuMatchingAny1 PermExpr where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 ValuePerm where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 VarAndPerm where
-  nuMatchingAny1Proof = nuMatchingProof
-
-$(mkNuMatching [t| forall w sz . LLVMFieldPerm w sz |])
-$(mkNuMatching [t| forall w . LLVMArrayPerm w |])
-$(mkNuMatching [t| forall w . LLVMBlockPerm w |])
-$(mkNuMatching [t| RWModality |])
-$(mkNuMatching [t| forall w . LLVMArrayIndex w |])
-$(mkNuMatching [t| forall w . LLVMArrayBorrow w |])
-$(mkNuMatching [t| forall w . LLVMFieldShape w |])
-$(mkNuMatching [t| forall w . LOwnedPerm w |])
-$(mkNuMatching [t| forall ghosts args gouts ret. FunPerm ghosts args gouts ret |])
-$(mkNuMatching [t| forall args ret. SomeFunPerm args ret |])
-$(mkNuMatching [t| forall ns. NameSortRepr ns |])
-$(mkNuMatching [t| forall ns args a. NameReachConstr ns args a |])
-$(mkNuMatching [t| forall ns args a. NamedPermName ns args a |])
-$(mkNuMatching [t| SomeNamedPermName |])
-$(mkNuMatching [t| forall b args w. NamedShape b args w |])
-$(mkNuMatching [t| forall b args w. NamedShapeBody b args w |])
-$(mkNuMatching [t| forall a. PermOffset a |])
-$(mkNuMatching [t| forall ns args a. NamedPerm ns args a |])
-$(mkNuMatching [t| forall b args a. OpaquePerm b args a |])
-$(mkNuMatching [t| forall args a reach. ReachMethods args a reach |])
-$(mkNuMatching [t| forall b reach args a. RecPerm b reach args a |])
-$(mkNuMatching [t| forall b args a. DefinedPerm b args a |])
-$(mkNuMatching [t| forall args a. LifetimeFunctor args a |])
-$(mkNuMatching [t| forall ps. LifetimeCurrentPerms ps |])
-$(mkNuMatching [t| forall a. SomeLLVMBlockPerm a |])
-$(mkNuMatching [t| forall w. SomeBindingLLVMBlockPerm w |])
-
-instance NuMatchingAny1 LOwnedPerm where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 DistPerms where
-  nuMatchingAny1Proof = nuMatchingProof
 
 instance Liftable RWModality where
   mbLift mb_rw = case mbMatch mb_rw of
@@ -7033,49 +8025,6 @@ instance Liftable (ReachMethods args a reach) where
 -- * Permission Environments
 ----------------------------------------------------------------------
 
--- | An entry in a permission environment that associates a permission and
--- corresponding SAW identifier with a Crucible function handle
-data PermEnvFunEntry where
-  PermEnvFunEntry :: args ~ CtxToRList cargs => FnHandle cargs ret ->
-                     FunPerm ghosts args gouts ret -> Ident ->
-                     PermEnvFunEntry
-
--- | An existentially quantified 'NamedPerm'
-data SomeNamedPerm where
-  SomeNamedPerm :: NamedPerm ns args a -> SomeNamedPerm
-
--- | An existentially quantified LLVM shape with arguments
-data SomeNamedShape where
-  SomeNamedShape :: (1 <= w, KnownNat w) => NamedShape b args w ->
-                    SomeNamedShape
-
--- | An entry in a permission environment that associates a 'GlobalSymbol' with
--- a permission and a translation of that permission
-data PermEnvGlobalEntry where
-  PermEnvGlobalEntry :: (1 <= w, KnownNat w) => GlobalSymbol ->
-                        ValuePerm (LLVMPointerType w) -> [OpenTerm] ->
-                        PermEnvGlobalEntry
-
--- | The different sorts hints for blocks
-data BlockHintSort args where
-  -- | This hint specifies the ghost args and input permissions for a block
-  BlockEntryHintSort ::
-    CruCtx top_args -> CruCtx ghosts ->
-    MbValuePerms ((top_args :++: CtxToRList args) :++: ghosts) ->
-    BlockHintSort args
-
-  -- | This hint says that the input perms for a block should be generalized
-  GenPermsHintSort :: BlockHintSort args
-
-  -- | This hint says that a block should be a join point
-  JoinPointHintSort :: BlockHintSort args
-
--- | A hint for a block
-data BlockHint blocks init ret args where
-  BlockHint :: FnHandle init ret -> Assignment CtxRepr blocks ->
-               BlockID blocks args -> BlockHintSort args ->
-               BlockHint blocks init ret args
-
 -- | Get the 'BlockHintSort' for a 'BlockHint'
 blockHintSort :: BlockHint blocks init ret args -> BlockHintSort args
 blockHintSort (BlockHint _ _ _ sort) = sort
@@ -7095,34 +8044,7 @@ isJoinPointHint :: BlockHintSort args -> Bool
 isJoinPointHint JoinPointHintSort = True
 isJoinPointHint _ = False
 
--- FIXME: all the per-block hints 
-
--- | A "hint" from the user for type-checking
-data Hint where
-  Hint_Block :: BlockHint blocks init ret args -> Hint
-
--- | A permission environment that maps function names, permission names, and
--- 'GlobalSymbols' to their respective permission structures
-data PermEnv = PermEnv {
-  permEnvFunPerms :: [PermEnvFunEntry],
-  permEnvNamedPerms :: [SomeNamedPerm],
-  permEnvNamedShapes :: [SomeNamedShape],
-  permEnvGlobalSyms :: [PermEnvGlobalEntry],
-  permEnvHints :: [Hint]
-  }
-
-$(mkNuMatching [t| forall w sz. TaggedUnionShape w sz |])
-$(mkNuMatching [t| forall w. SomeTaggedUnionShape w |])
-$(mkNuMatching [t| forall ctx. PermVarSubst ctx |])
-$(mkNuMatching [t| PermEnvFunEntry |])
-$(mkNuMatching [t| SomeNamedPerm |])
-$(mkNuMatching [t| SomeNamedShape |])
-$(mkNuMatching [t| PermEnvGlobalEntry |])
-$(mkNuMatching [t| forall args. BlockHintSort args |])
-$(mkNuMatching [t| forall blocks init ret args.
-                BlockHint blocks init ret args |])
-$(mkNuMatching [t| Hint |])
-$(mkNuMatching [t| PermEnv |])
+-- FIXME: all the per-block hints
 
 -- | The empty 'PermEnv'
 emptyPermEnv :: PermEnv
@@ -7410,9 +8332,6 @@ permSetVars =
 distPermSet :: DistPerms ps -> PermSet ps
 distPermSet perms = PermSet NameMap.empty perms
 
--- NOTE: this instance would require a NuMatching instance for NameMap...
--- $(mkNuMatching [t| forall ps. PermSet ps |])
-
 -- | The lens for the permissions associated with a given variable
 varPerm :: ExprVar a -> Lens' (PermSet ps) (ValuePerm a)
 varPerm x =
@@ -7461,10 +8380,14 @@ detVarsClauseAddLHSVar :: ExprVar a -> DetVarsClause -> DetVarsClause
 detVarsClauseAddLHSVar n (DetVarsClause lhs rhs) =
   DetVarsClause (NameSet.insert n lhs) rhs
 
+newtype SeenDetVarsClauses :: CrucibleType -> * where
+  SeenDetVarsClauses :: [DetVarsClause] -> SeenDetVarsClauses tp
+
 -- | Generic function to compute the 'DetVarsClause's for a permission
 class GetDetVarsClauses a where
   getDetVarsClauses ::
-    a -> ReaderT (PermSet ps) (State (NameSet CrucibleType)) [DetVarsClause]
+    a -> ReaderT (PermSet ps) (State (NameMap SeenDetVarsClauses))
+                              [DetVarsClause]
 
 instance GetDetVarsClauses a => GetDetVarsClauses [a] where
   getDetVarsClauses l = concat <$> mapM getDetVarsClauses l
@@ -7476,11 +8399,13 @@ instance GetDetVarsClauses (ExprVar a) where
   getDetVarsClauses x =
     do seen_vars <- get
        perms <- ask
-       if NameSet.member x seen_vars then return [] else
-         do modify (NameSet.insert x)
-            perm_clauses <- getDetVarsClauses (perms ^. varPerm x)
-            return (DetVarsClause NameSet.empty (SomeName x) :
-                    map (detVarsClauseAddLHSVar x) perm_clauses)
+       perm_clauses <- case NameMap.lookup x seen_vars of
+         Just (SeenDetVarsClauses perm_clauses) -> return perm_clauses
+         Nothing -> do perm_clauses <- getDetVarsClauses (perms ^. varPerm x)
+                       modify (NameMap.insert x (SeenDetVarsClauses perm_clauses))
+                       return perm_clauses
+       return (DetVarsClause NameSet.empty (SomeName x) :
+               map (detVarsClauseAddLHSVar x) perm_clauses)
 
 instance GetDetVarsClauses (PermExpr a) where
   getDetVarsClauses e
@@ -7516,7 +8441,9 @@ instance GetDetVarsClauses (AtomicPerm a) where
   getDetVarsClauses (Perm_LLVMBlockShape sh) = getDetVarsClauses sh
   getDetVarsClauses (Perm_LLVMFrame frame_perm) =
     concat <$> mapM (getDetVarsClauses . fst) frame_perm
-  getDetVarsClauses (Perm_LOwned _ _ _) = return []
+  getDetVarsClauses (Perm_LOwned _ _ _ _ _) = return []
+  getDetVarsClauses (Perm_LOwnedSimple _ lops) =
+    getDetVarsClauses $ RL.map exprAndPermPerm lops
   getDetVarsClauses _ = return []
 
 instance (1 <= w, KnownNat w, 1 <= sz, KnownNat sz) =>
@@ -7550,13 +8477,14 @@ instance GetDetVarsClauses (LLVMFieldShape w) where
 -- | Compute the 'DetVarsClause's for a block permission with the given shape
 getShapeDetVarsClauses ::
   (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
-  ReaderT (PermSet ps) (State (NameSet CrucibleType)) [DetVarsClause]
+  ReaderT (PermSet ps) (State (NameMap SeenDetVarsClauses)) [DetVarsClause]
 getShapeDetVarsClauses (PExpr_Var x) =
   getDetVarsClauses x
 getShapeDetVarsClauses (PExpr_NamedShape _ _ _ args) =
   -- FIXME: maybe also include the variables determined by the modalities?
   getDetVarsClauses args
-getShapeDetVarsClauses (PExpr_EqShape e) = getDetVarsClauses e
+getShapeDetVarsClauses (PExpr_EqShape len e) =
+  map (detVarsClauseAddLHS (freeVars len)) <$> getDetVarsClauses e
 getShapeDetVarsClauses (PExpr_PtrShape _ _ sh) =
   -- FIXME: maybe also include the variables determined by the modalities?
   getShapeDetVarsClauses sh
@@ -7575,20 +8503,23 @@ getShapeDetVarsClauses _ = return []
 -- is always a uniquely determined value of @y@ for any proof of @exists y.x:p@.
 determinedVars :: PermSet ps -> RAssign ExprVar ns -> [SomeName CrucibleType]
 determinedVars top_perms vars =
-  let vars_set = NameSet.fromList $ mapToList SomeName vars
+  let vars_map = NameMap.fromList $
+        mapToList (\v -> NameAndElem v (SeenDetVarsClauses [])) vars
+      vars_set = NameSet.fromList $ mapToList SomeName vars
       multigraph =
         evalState (runReaderT (getDetVarsClauses (distPermsToValuePerms $
                                                   varPermsMulti vars top_perms))
                    top_perms)
-        vars_set in
+        vars_map in
   evalState (determinedVarsForGraph multigraph) vars_set
   where
     -- Find all variables that are not already marked as determined in our
     -- NameSet state but that are determined given the current determined
-    -- variables, mark these variables as determiend, and then repeat, returning
+    -- variables, mark these variables as determined, and then repeat, returning
     -- all variables that are found in order
     determinedVarsForGraph :: [DetVarsClause] ->
-                              State (NameSet CrucibleType) [SomeName CrucibleType]
+                              State (NameSet CrucibleType)
+                                    [SomeName CrucibleType]
     determinedVarsForGraph graph =
       do det_vars <- concat <$> mapM determinedVarsForClause graph
          if det_vars == [] then return [] else
@@ -7597,7 +8528,8 @@ determinedVars top_perms vars =
     -- If the LHS of a clause has become determined but its RHS is not, return
     -- its RHS, otherwise return nothing
     determinedVarsForClause :: DetVarsClause ->
-                               State (NameSet CrucibleType) [SomeName CrucibleType]
+                               State (NameSet CrucibleType)
+                                     [SomeName CrucibleType]
     determinedVarsForClause (DetVarsClause lhs_vars (SomeName rhs_var)) =
       do det_vars <- get
          if not (NameSet.member rhs_var det_vars) &&
@@ -7631,11 +8563,18 @@ varPermsTransFreeVars =
             (SomeRAssign ns', Some rest) ->
               Some $ append ns' rest
 
+
+-- | Initialize the primary permission of a variable to the given permission if
+-- the variable is not yet set
+initVarPermWith :: ExprVar a -> ValuePerm a -> PermSet ps -> PermSet ps
+initVarPermWith x p =
+  over varPermMap $ \nmap ->
+  if NameMap.member x nmap then nmap else NameMap.insert x p nmap
+
 -- | Initialize the primary permission of a variable to @true@ if it is not set
 initVarPerm :: ExprVar a -> PermSet ps -> PermSet ps
 initVarPerm x =
-  over varPermMap $ \nmap ->
-  if NameMap.member x nmap then nmap else NameMap.insert x ValPerm_True nmap
+  initVarPermWith x ValPerm_True
 
 -- | Set the primary permissions for a sequence of variables to @true@
 initVarPerms :: RAssign Name (as :: RList CrucibleType) -> PermSet ps ->

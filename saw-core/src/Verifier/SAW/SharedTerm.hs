@@ -108,6 +108,8 @@ module Verifier.SAW.SharedTerm
     -- *** Functions and function application
   , scApply
   , scApplyAll
+  , scApplyBeta
+  , scApplyAllBeta
   , scGlobalApply
   , scFun
   , scFunAll
@@ -1282,6 +1284,17 @@ betaNormalize sc t0 =
 -- | Apply a function 'Term' to zero or more argument 'Term's.
 scApplyAll :: SharedContext -> Term -> [Term] -> IO Term
 scApplyAll sc = foldlM (scApply sc)
+
+-- | Apply a function to an argument, beta-reducing if the function is a lambda
+scApplyBeta :: SharedContext -> Term -> Term -> IO Term
+scApplyBeta sc (asLambda -> Just (_, _, body)) arg =
+  instantiateVar sc 0 arg body
+scApplyBeta sc f arg = scApply sc f arg
+
+-- | Apply a function 'Term' to zero or more arguments, beta reducing any time
+-- the function is a lambda
+scApplyAllBeta :: SharedContext -> Term -> [Term] -> IO Term
+scApplyAllBeta sc = foldlM (scApplyBeta sc)
 
 -- | Returns the defined constant with the given 'Ident'. Fails if no
 -- such constant exists in the module.

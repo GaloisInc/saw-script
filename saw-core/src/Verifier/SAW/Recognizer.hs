@@ -46,6 +46,7 @@ module Verifier.SAW.Recognizer
   , asNat
   , asBvNat
   , asUnsignedConcreteBv
+  , asArrayValue
   , asStringLit
   , asLambda
   , asLambdaList
@@ -59,6 +60,7 @@ module Verifier.SAW.Recognizer
     -- * Prelude recognizers.
   , asBool
   , asBoolType
+  , asNatType
   , asIntegerType
   , asIntModType
   , asBitvectorType
@@ -75,6 +77,7 @@ import Control.Lens
 import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Vector as V
 import Data.Text (Text)
 import Numeric.Natural (Natural)
 
@@ -287,6 +290,11 @@ asUnsignedConcreteBv term = do
   (n :*: v) <- asBvNat term
   return $ mod v (2 ^ n)
 
+asArrayValue :: Recognizer Term (Term, [Term])
+asArrayValue (unwrapTermF -> FTermF (ArrayValue tp tms)) =
+  return (tp, V.toList tms)
+asArrayValue _ = Nothing
+
 asStringLit :: Recognizer Term Text
 asStringLit t = do StringLit i <- asFTermF t; return i
 
@@ -350,6 +358,11 @@ asBool _ = Nothing
 asBoolType :: Recognizer Term ()
 asBoolType = isGlobalDef "Prelude.Bool"
 
+asNatType :: Recognizer Term ()
+asNatType (asDataType -> Just (o, []))
+  | primName o == preludeNatIdent = return ()
+asNatType _ = Nothing
+
 asIntegerType :: Recognizer Term ()
 asIntegerType = isGlobalDef "Prelude.Integer"
 
@@ -382,7 +395,14 @@ asEq t =
        _ -> Nothing
 
 asEqTrue :: Recognizer Term Term
-asEqTrue = isGlobalDef "Prelude.EqTrue" @> return
+asEqTrue t =
+  case (isGlobalDef "Prelude.EqTrue" @> return) t of
+    Just x -> Just x
+    Nothing ->
+      do (a,x,y) <- asEq t
+         isGlobalDef "Prelude.Bool" a
+         isGlobalDef "Prelude.True" y
+         return x
 
 asArrayType :: Recognizer Term (Term :*: Term)
 asArrayType = (isGlobalDef "Prelude.Array" @> return) <@> return

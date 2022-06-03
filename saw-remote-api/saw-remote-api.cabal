@@ -34,7 +34,7 @@ common errors
     -Werror=overlapping-patterns
 
 common deps
-  build-depends: base >=4.11.1.0 && <4.15,
+  build-depends: base >=4.11.1.0 && <4.16,
                  aeson >= 1.4.2 && < 2.0,
                  aig,
                  argo,
@@ -74,6 +74,7 @@ library
                    SAWServer.Data.JVMType,
                    SAWServer.Data.LLVMType,
                    SAWServer.Data.SetupValue,
+                   SAWServer.Eval,
                    SAWServer.Exceptions,
                    SAWServer.Ghost,
                    SAWServer.JVMCrucibleSetup,

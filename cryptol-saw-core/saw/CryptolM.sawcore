@@ -1,0 +1,504 @@
+-------------------------------------------------------------------------------
+-- Cryptol primitives for SAWCore
+
+module CryptolM where
+
+-- import Prelude;
+import Cryptol;
+
+
+--------------------------------------------------------------------------------
+-- Monadic assertions
+
+primitive proveEqNum : (n m:Num) -> Maybe (Eq Num n m);
+
+-- A version of unsafeAssert specialized to the Num type
+numAssertEqM : (n m:Num) -> CompM (Eq Num n m);
+numAssertEqM n m =
+  maybe (Eq Num n m) (CompM (Eq Num n m))
+        (errorM (Eq Num n m) "numAssertEqM: assertion failed")
+        (returnM (Eq Num n m))
+        (proveEqNum n m);
+
+-- A proof that a Num is finite
+isFinite : Num -> Prop;
+isFinite = Num_rec (\ (_:Num) -> Prop) (\ (_:Nat) -> TrueProp) FalseProp;
+
+-- Check whether a Num is finite
+checkFinite : (n:Num) -> Maybe (isFinite n);
+checkFinite =
+  Num_rec (\ (n:Num) -> Maybe (isFinite n))
+          (\ (n:Nat) -> Just (isFinite (TCNum n)) (Refl Bool True))
+          (Nothing (isFinite TCInf));
+
+-- Assert that a Num is finite, or fail
+assertFiniteM : (n:Num) -> CompM (isFinite n);
+assertFiniteM n =
+  maybe (isFinite n) (CompM (isFinite n))
+        (errorM (isFinite n) "assertFiniteM: Num not finite")
+        (returnM (isFinite n))
+        (checkFinite n);
+
+-- Recurse over a Num known to be finite
+Num_rec_fin : (p: Num -> sort 1) -> ((n:Nat) -> p (TCNum n)) ->
+              (n:Num) -> isFinite n -> p n;
+Num_rec_fin p f =
+  Num_rec (\ (n:Num) -> isFinite n -> p n)
+          (\ (n:Nat) (_:TrueProp) -> f n)
+          (efq1 (p TCInf));
+
+
+--------------------------------------------------------------------------------
+-- Monadic Sequences
+
+-- The type of monadified sequences, which are just vectors for finite length
+-- but are sequences of computations for streams
+mseq : Num -> sort 0 -> sort 0;
+mseq num a =
+  Num_rec (\ (_:Num) -> sort 0) (\ (n:Nat) -> Vec n a) (Stream (CompM a)) num;
+
+bvVecMapInvarBindM : (a b c : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
+                     (a -> CompM b) -> BVVec n len a ->
+                     Bool -> (BVVec n len b -> CompM c) -> CompM c;
+bvVecMapInvarBindM a b c n len f xs invar cont =
+  existsM (BVVec n len b) c (\ (ys0:BVVec n len b) ->
+    multiArgFixM
+      (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
+       LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
+       LRT_Ret c)))
+      (\ (rec : Vec n Bool -> BVVec n len b -> CompM c)
+         (i:Vec n Bool) (ys:BVVec n len b) ->
+         invariantHint (CompM c) (and (bvule n i len) invar)
+           (maybe (is_bvult n i len) (CompM c)
+                  (cont ys)
+                  (\ (pf:is_bvult n i len) ->
+                     bindM b c
+                           (f (atBVVec n len a xs i pf))
+                           (\ (y:b) -> rec (bvAdd n i (bvNat n 1))
+                                           (updBVVec n len b ys i y)))
+                  (bvultWithProof n i len)))
+      (bvNat n 0) ys0);
+
+bvVecMapInvarM : (a b : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
+                 (a -> CompM b) -> BVVec n len a ->
+                 Bool -> CompM (BVVec n len b);
+bvVecMapInvarM a b n len f xs invar =
+  bvVecMapInvarBindM a b (BVVec n len b) n len f xs invar
+                                                    (returnM (BVVec n len b));
+
+bvVecMapM : (a b : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
+            (a -> CompM b) -> BVVec n len a -> CompM (BVVec n len b);
+bvVecMapM a b n len f xs = bvVecMapInvarM a b n len f xs True;
+
+vecMapInvarBindM : (a b c : isort 0) -> (n : Nat) -> (a -> CompM b) ->
+                   Vec n a -> Bool -> (Vec n b -> CompM c) -> CompM c;
+vecMapInvarBindM a b c n f xs invar cont =
+  existsM (Vec n b) c (\ (ys0:Vec n b) ->
+    multiArgFixM
+      (LRT_Fun Nat (\ (_:Nat) ->
+       LRT_Fun (Vec n b) (\ (_:Vec n b) ->
+       LRT_Ret c)))
+      (\ (rec : Nat -> Vec n b -> CompM c) (i:Nat) (ys:Vec n b) ->
+         invariantHint (CompM c) (and (ltNat i (Succ n)) invar)
+           (maybe (IsLtNat i n) (CompM c)
+                  (cont ys)
+                  (\ (pf:IsLtNat i n) ->
+                     bindM b c
+                           (f (atWithProof n a xs i pf))
+                           (\ (y:b) -> rec (Succ i)
+                                           (updWithProof n b ys i y pf)))
+                  (proveLtNat i n)))
+      0 ys0);
+
+vecMapInvarM : (a b : isort 0) -> (n : Nat) -> (a -> CompM b) -> Vec n a ->
+               Bool -> CompM (Vec n b);
+vecMapInvarM a b n f xs invar =
+  vecMapInvarBindM a b (Vec n b) n f xs invar (returnM (Vec n b));
+
+vecMapM : (a b : isort 0) -> (n : Nat) -> (a -> CompM b) -> Vec n a ->
+          CompM (Vec n b);
+vecMapM a b n f xs = vecMapInvarM a b n f xs True;
+
+-- Computational version of seqMap
+seqMapM : (a b : sort 0) -> (n : Num) -> (a -> CompM b) -> mseq n a ->
+          CompM (mseq n b);
+seqMapM a b n_top f =
+  Num_rec (\ (n:Num) -> mseq n a -> CompM (mseq n b))
+          (\ (n:Nat) -> vecMapM a b n f)
+          (\ (s:Stream (CompM a)) ->
+             returnM (Stream (CompM b))
+                     (streamMap (CompM a) (CompM b)
+                                (\ (m:CompM a) -> bindM a b m f) s))
+          n_top;
+
+mseq_cong1 : (m : Num) -> (n : Num) -> (a : sort 0) ->
+  Eq Num m n -> Eq (sort 0) (mseq m a) (mseq n a);
+mseq_cong1 m n a eq_mn =
+  eq_cong Num m n eq_mn (sort 0) (\ (x:Num) -> mseq x a);
+
+-- Convert a seq to an mseq
+seqToMseq : (n:Num) -> (a:sort 0) -> seq n a -> mseq n a;
+seqToMseq n_top a =
+  Num_rec (\ (n:Num) -> seq n a -> mseq n a)
+          (\ (n:Nat) (v:Vec n a) -> v)
+          (streamMap a (CompM a) (returnM a))
+          n_top;
+
+
+--------------------------------------------------------------------------------
+-- Auxiliary functions
+
+bvVecAtM : (n : Nat) -> (len : Vec n Bool) -> (a : isort 0) ->
+           BVVec n len a -> Vec n Bool -> CompM a;
+bvVecAtM n len a xs i =
+  maybe (is_bvult n i len) (CompM a)
+        (errorM a "bvVecAtM: invalid sequence index")
+        (\ (pf:is_bvult n i len) -> returnM a (atBVVec n len a xs i pf))
+        (bvultWithProof n i len);
+
+atM : (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> CompM a;
+atM n a xs i =
+  maybe (IsLtNat i n) (CompM a)
+        (errorM a "atM: invalid sequence index")
+        (\ (pf:IsLtNat i n) -> returnM a (atWithProof n a xs i pf))
+        (proveLtNat i n);
+
+bvVecUpdateM : (n : Nat) -> (len : Vec n Bool) -> (a : isort 0) ->
+               BVVec n len a -> Vec n Bool -> a -> CompM (BVVec n len a);
+bvVecUpdateM n len a xs i x =
+  maybe (is_bvult n i len) (CompM (BVVec n len a))
+        (errorM (BVVec n len a) "bvVecUpdateM: invalid sequence index")
+        (\ (_:is_bvult n i len) -> returnM (BVVec n len a)
+                                           (updBVVec n len a xs i x))
+        (bvultWithProof n i len);
+
+fromBVVecUpdateM : (n : Nat) -> (len : Vec n Bool) -> (a : isort 0) ->
+                   BVVec n len a -> Vec n Bool -> a ->
+                   a -> (m : Nat) -> CompM (Vec m a);
+fromBVVecUpdateM n len a xs i x def m =
+  maybe (is_bvult n i len) (CompM (Vec m a))
+        (errorM (Vec m a) "bvVecUpdateM: invalid sequence index")
+        (\ (_:is_bvult n i len) -> returnM (Vec m a)
+                                           (genFromBVVec n len a
+                                             (updBVVec n len a xs i x) def m))
+        (bvultWithProof n i len);
+
+updateM : (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> a -> CompM (Vec n a);
+updateM n a xs i x =
+  maybe (IsLtNat i n) (CompM (Vec n a))
+        (errorM (Vec n a) "updateM: invalid sequence index")
+        (\ (pf:IsLtNat i n) -> returnM (Vec n a) (updWithProof n a xs i x pf))
+        (proveLtNat i n);
+
+eListSelM : (a : isort 0) -> (n : Num) -> mseq n a -> Nat -> CompM a;
+eListSelM a =
+  Num_rec (\ (n:Num) -> mseq n a -> Nat -> CompM a)
+          (\ (n:Nat) -> atM n a)
+          (eListSel (CompM a) TCInf);
+
+
+--------------------------------------------------------------------------------
+-- List comprehensions
+
+-- FIXME
+primitive
+fromM : (a b : sort 0) -> (m n : Num) -> mseq m a -> (a -> CompM (mseq n b)) ->
+        CompM (seq (tcMul m n) (a * b));
+
+-- FIXME
+primitive
+mletM : (a b : sort 0) -> (n : Num) -> a -> (a -> CompM (mseq n b)) ->
+        CompM (mseq n (a * b));
+
+-- FIXME
+primitive
+seqZipM : (a b : sort 0) -> (m n : Num) -> mseq m a -> mseq n b ->
+          CompM (mseq (tcMin m n) (a * b));
+{-
+seqZipM a b m n ms1 ms2 =
+  seqMap
+    (CompM a * CompM b) (CompM (a * b)) (tcMin m n)
+    (\ (p : CompM a * CompM b) ->
+       bindM2 a b (a*b) p.(1) p.(2) (\ (x:a) (y:b) -> returnM (a*b) (x,y)))
+    (seqZip (CompM a) (CompM b) m n ms1 ms2);
+-}
+
+
+--------------------------------------------------------------------------------
+-- Monadic versions of the Cryptol typeclass instances
+
+-- PEq
+PEqMSeq : (n:Num) -> isFinite n -> (a:isort 0) -> PEq a -> PEq (mseq n a);
+PEqMSeq =
+  Num_rec_fin (\ (n:Num) -> (a:isort 0) -> PEq a -> PEq (mseq n a))
+              (\ (n:Nat) -> PEqVec n);
+
+PEqMSeqBool : (n : Num) -> isFinite n -> PEq (mseq n Bool);
+PEqMSeqBool =
+  Num_rec_fin (\ (n:Num) -> PEq (mseq n Bool)) PEqWord;
+
+-- PCmp
+PCmpMSeq : (n:Num) -> isFinite n -> (a:isort 0) -> PCmp a -> PCmp (mseq n a);
+PCmpMSeq =
+  Num_rec_fin (\ (n:Num) -> (a:isort 0) -> PCmp a -> PCmp (mseq n a))
+              (\ (n:Nat) -> PCmpVec n);
+
+PCmpMSeqBool : (n : Num) -> isFinite n -> PCmp (seq n Bool);
+PCmpMSeqBool =
+  Num_rec_fin (\ (n:Num) -> PCmp (seq n Bool)) PCmpWord;
+
+-- PSignedCmp
+PSignedCmpMSeq : (n:Num) -> isFinite n -> (a:isort 0) -> PSignedCmp a ->
+                 PSignedCmp (mseq n a);
+PSignedCmpMSeq =
+  Num_rec_fin (\ (n:Num) -> (a:isort 0) -> PSignedCmp a ->
+                 PSignedCmp (mseq n a))
+              (\ (n:Nat) -> PSignedCmpVec n);
+
+PSignedCmpMSeqBool : (n : Num) -> isFinite n -> PSignedCmp (seq n Bool);
+PSignedCmpMSeqBool =
+  Num_rec_fin (\ (n:Num) -> PSignedCmp (seq n Bool)) PSignedCmpWord;
+
+
+-- PZero
+PZeroCompM : (a : sort 0) -> PZero a -> PZero (CompM a);
+PZeroCompM = returnM;
+
+PZeroMSeq : (n : Num) -> (a : sort 0) -> PZero a -> PZero (mseq n a);
+PZeroMSeq n_top a pa =
+  Num_rec (\ (n:Num) -> PZero (mseq n a))
+          (\ (n:Nat) -> seqConst (TCNum n) a pa)
+          (seqConst TCInf (CompM a) (returnM a pa))
+          n_top;
+
+-- PLogic
+PLogicCompM : (a : sort 0) -> PLogic a -> PLogic (CompM a);
+PLogicCompM a pa =
+  { logicZero = returnM a (pa.logicZero)
+  , and  = fmapM2 a a a (pa.and)
+  , or   = fmapM2 a a a (pa.or)
+  , xor  = fmapM2 a a a (pa.xor)
+  , not  = fmapM a a (pa.not)
+  };
+
+PLogicMSeq : (n : Num) -> (a : isort 0) -> PLogic a -> PLogic (mseq n a);
+PLogicMSeq n_top a pa =
+  Num_rec (\ (n:Num) -> PLogic (mseq n a))
+          (\ (n:Nat) -> PLogicVec n a pa)
+          (PLogicStream (CompM a) (PLogicCompM a pa))
+          n_top;
+
+PLogicMSeqBool : (n : Num) -> isFinite n -> PLogic (mseq n Bool);
+PLogicMSeqBool =
+  Num_rec_fin (\ (n:Num) -> PLogic (mseq n Bool)) PLogicWord;
+
+-- PRing
+PRingCompM : (a : sort 0) -> PRing a -> PRing (CompM a);
+PRingCompM a pa =
+  { ringZero = returnM a (pa.ringZero)
+  , add = fmapM2 a a a (pa.add)
+  , sub = fmapM2 a a a (pa.sub)
+  , mul = fmapM2 a a a (pa.mul)
+  , neg = fmapM a a (pa.neg)
+  , int = \ (i : Integer) -> returnM a (pa.int i)
+  };
+
+PRingMSeq : (n : Num) -> (a : isort 0) -> PRing a -> PRing (mseq n a);
+PRingMSeq n_top a pa =
+  Num_rec (\ (n:Num) -> PRing (mseq n a))
+          (\ (n:Nat) -> PRingVec n a pa)
+          (PRingStream (CompM a) (PRingCompM a pa))
+          n_top;
+
+PRingMSeqBool : (n : Num) -> isFinite n -> PRing (mseq n Bool);
+PRingMSeqBool =
+  Num_rec_fin (\ (n:Num) -> PRing (mseq n Bool)) PRingWord;
+
+-- Integral
+PIntegralMSeqBool : (n : Num) -> isFinite n -> PIntegral (mseq n Bool);
+PIntegralMSeqBool =
+  Num_rec_fin (\ (n:Num) -> PIntegral (mseq n Bool)) PIntegralWord;
+
+-- PLiteral
+PLiteralSeqBoolM : (n : Num) -> isFinite n -> PLiteral (mseq n Bool);
+PLiteralSeqBoolM =
+  Num_rec_fin (\ (n:Num) -> PLiteral (mseq n Bool)) bvNat;
+
+
+--------------------------------------------------------------------------------
+-- Monadic versions of the Cryptol primitives
+
+
+-- Sequences
+
+-- FIXME: a number of the non-monadic versions of these functions contain calls
+-- to finNumRec, which calls error on non-finite numbers. The monadic versions
+-- of these, below, should be reimplemented to not contain finNumRec, but to
+-- just use Num_rec_fin directly, rather than using it and then calling out to
+-- the non-monadic version with finNumRec.
+
+ecShiftLM : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
+            mseq m a -> ix -> mseq m a;
+ecShiftLM =
+  Num_rec (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
+                        mseq m a -> ix -> mseq m a)
+          (\ (m:Nat) -> ecShiftL (TCNum m))
+          (\ (ix a : sort 0) (pix:PIntegral ix) (pa:PZero a) ->
+             ecShiftL TCInf ix (CompM a) pix (PZeroCompM a pa));
+
+ecShiftRM : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
+            mseq m a -> ix -> mseq m a;
+ecShiftRM =
+  Num_rec (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
+                        mseq m a -> ix -> mseq m a)
+          (\ (m:Nat) -> ecShiftR (TCNum m))
+          (\ (ix a : sort 0) (pix:PIntegral ix) (pa:PZero a) ->
+             ecShiftR TCInf ix (CompM a) pix (PZeroCompM a pa));
+
+ecSShiftRM : (n : Num) -> isFinite n -> (ix : sort 0) -> PIntegral ix ->
+             mseq n Bool -> ix -> mseq n Bool;
+ecSShiftRM =
+  Num_rec_fin
+    (\ (n:Num) -> (ix : sort 0) -> PIntegral ix -> mseq n Bool -> ix ->
+                  mseq n Bool)
+    (\ (n:Nat) -> ecSShiftR (TCNum n));
+
+ecRotLM : (m : Num) -> isFinite m -> (ix a : sort 0) -> PIntegral ix ->
+          mseq m a -> ix -> mseq m a;
+ecRotLM =
+  Num_rec_fin
+    (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> mseq m a -> ix -> mseq m a)
+    (\ (m:Nat) -> ecRotL (TCNum m));
+
+ecRotRM : (m : Num) -> isFinite m -> (ix a : sort 0) -> PIntegral ix ->
+          mseq m a -> ix -> mseq m a;
+ecRotRM =
+  Num_rec_fin
+    (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> mseq m a -> ix -> mseq m a)
+    (\ (m:Nat) -> ecRotR (TCNum m));
+
+ecCatM : (m : Num) -> isFinite m -> (n : Num) -> (a : sort 0) ->
+         mseq m a -> mseq n a -> mseq (tcAdd m n) a;
+ecCatM =
+  Num_rec_fin
+    (\ (m:Num) -> (n:Num) -> (a:sort 0) -> mseq m a -> mseq n a ->
+                  mseq (tcAdd m n) a)
+    (\ (m:Nat) ->
+       Num_rec
+         (\ (n:Num) -> (a:isort 0) -> Vec m a -> mseq n a ->
+            mseq (tcAdd (TCNum m) n) a)
+         -- Case for (TCNum m, TCNum n)
+         (\ (n:Nat) -> \ (a:isort 0) -> append m n a)
+         -- Case for (TCNum m, TCInf)
+         (\ (a:isort 0) (v:Vec m a) ->
+            streamAppend (CompM a) m (map a (CompM a) (returnM a) m v)));
+
+-- FIXME
+primitive
+ecTakeM : (m n : Num) -> (a : sort 0) -> mseq (tcAdd m n) a -> mseq m a;
+{-
+ecTakeM =
+  Num_rec (\ (m:Num) -> (n:Num) -> (a:sort 0) -> mseq (tcAdd m n) a -> mseq m a)
+          (\ (m:Nat) -> ecTake (TCNum m))
+          (\ (n:Num) (a:sort 0) (s:Stream (CompM a)) ->
+             ecTake TCInf n (CompM a) s);
+-}
+
+-- FIXME
+primitive
+ecDropM : (m : Num) -> isFinite m -> (n : Num) -> (a : sort 0) ->
+          mseq (tcAdd m n) a -> mseq n a;
+
+-- FIXME
+primitive
+ecJoinM : (m n : Num) -> (a : sort 0) -> mseq m (mseq n a) -> mseq (tcMul m n) a;
+
+-- FIXME
+primitive
+ecSplitM : (m n : Num) -> (a : sort 0) -> mseq (tcMul m n) a ->
+           mseq m (mseq n a);
+
+ecReverseM : (n : Num) -> isFinite n -> (a : sort 0) -> mseq n a -> mseq n a;
+ecReverseM =
+  Num_rec_fin (\ (n:Num) -> (a : sort 0) -> mseq n a -> mseq n a)
+              (\ (n:Nat) -> ecReverse (TCNum n));
+
+-- FIXME
+primitive
+ecTransposeM : (m n : Num) -> (a : sort 0) -> mseq m (mseq n a) ->
+               mseq n (mseq m a);
+
+ecAtM : (n : Num) -> (a : isort 0) -> (ix : sort 0) -> PIntegral ix ->
+        mseq n a -> ix -> CompM a;
+ecAtM n_top a ix pix =
+  Num_rec
+    (\ (n:Num) -> mseq n a -> ix -> CompM a)
+    (\ (n:Nat) (v:Vec n a) ->
+       pix.posNegCases (CompM a) (atM n a v)
+                       (\ (_:Nat) -> errorM a "ecAtM: invalid sequence index"))
+    (\ (s:Stream (CompM a)) ->
+       pix.posNegCases (CompM a) (streamGet (CompM a) s)
+                       (\ (_:Nat) -> errorM a "ecAtM: invalid sequence index"))
+    n_top;
+
+ecUpdateM : (n : Num) -> (a : isort 0) -> (ix : sort 0) -> PIntegral ix ->
+            mseq n a -> ix -> a -> CompM (mseq n a);
+ecUpdateM n_top a ix pix =
+  Num_rec
+    (\ (n:Num) -> mseq n a -> ix -> a -> CompM (mseq n a))
+    (\ (n:Nat) (v:Vec n a) (i:ix) (x:a) ->
+       pix.posNegCases (CompM (Vec n a))
+                       (\ (i:Nat) -> updateM n a v i x)
+                       (\ (_:Nat) -> errorM (Vec n a)
+                                       "ecUpdateM: invalid sequence index") i)
+    (\ (s:Stream (CompM a)) (i:ix) (x:a) ->
+       pix.posNegCases (CompM (Stream (CompM a)))
+                       (\ (i:Nat) -> returnM (Stream (CompM a))
+                                       (streamUpd (CompM a) s i (returnM a x)))
+                       (\ (_:Nat) -> errorM (Stream (CompM a))
+                                       "ecUpdateM: invalid sequence index") i)
+    n_top;
+
+-- FIXME
+primitive
+ecAtBackM : (n : Num) -> isFinite n -> (a ix : sort 0) -> PIntegral ix ->
+            mseq n a -> ix -> CompM a;
+
+-- FIXME
+primitive
+ecFromToM : (first : Num) -> isFinite first -> (last : Num) -> isFinite last ->
+            (a : isort 0) -> PLiteral a ->
+            mseq (tcAdd (TCNum 1) (tcSub last first)) a;
+
+-- FIXME
+primitive
+ecFromToLessThanM : (first : Num) -> isFinite first -> (bound : Num) ->
+                    (a : isort 0) -> PLiteralLessThan a ->
+                    mseq (tcSub bound first) a;
+
+-- FIXME
+primitive
+ecFromThenToM :
+  (first next last : Num) -> (a : sort 0) -> (len : Num) -> isFinite len ->
+  PLiteral a -> PLiteral a -> PLiteral a -> mseq len a;
+
+ecInfFromM : (a : sort 0) -> PIntegral a -> a -> mseq TCInf a;
+ecInfFromM a pa x =
+  MkStream (CompM a)
+           (\ (i : Nat) ->
+              returnM a (pa.integralRing.add x (pa.integralRing.int (natToInt i))));
+
+ecInfFromThenM : (a : sort 0) -> PIntegral a -> a -> a -> mseq TCInf a;
+ecInfFromThenM a pa x y =
+  MkStream (CompM a)
+           (\ (i : Nat) ->
+              returnM a (pa.integralRing.add x
+                         (pa.integralRing.mul (pa.integralRing.sub y x)
+                                              (pa.integralRing.int (natToInt i)))));
+
+ecErrorM : (a : sort 0) -> (len : Num) -> mseq len (Vec 8 Bool) -> CompM a;
+ecErrorM a len msg =
+  errorM a "encountered call to the Cryptol 'error' function";
+
+
+--------------------------------------------------------------------------------

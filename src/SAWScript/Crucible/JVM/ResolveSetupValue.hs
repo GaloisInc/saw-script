@@ -41,7 +41,6 @@ import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
-import qualified What4.ProgramLoc as W4
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
@@ -114,7 +113,7 @@ instance X.Exception JVMTypeOfError
 typeOfSetupValue ::
   X.MonadThrow m =>
   JVMCrucibleContext ->
-  Map AllocIndex (W4.ProgramLoc, Allocation) ->
+  Map AllocIndex (MS.ConditionMetadata, Allocation) ->
   Map AllocIndex JIdent ->
   SetupValue ->
   m J.Type
@@ -144,6 +143,8 @@ typeOfSetupValue _cc env _nameEnv val =
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
+    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
 
 lookupAllocIndex :: Map AllocIndex a -> AllocIndex -> a
@@ -157,7 +158,7 @@ lookupAllocIndex env i =
 resolveSetupVal ::
   JVMCrucibleContext ->
   Map AllocIndex JVMRefVal ->
-  Map AllocIndex (W4.ProgramLoc, Allocation) ->
+  Map AllocIndex (MS.ConditionMetadata, Allocation) ->
   Map AllocIndex JIdent ->
   SetupValue ->
   IO JVMVal
@@ -173,9 +174,11 @@ resolveSetupVal cc env _tyenv _nameEnv val =
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
+    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
   where
-    sym = cc^.jccBackend
+    sym = cc^.jccSym
 
 resolveTypedTerm ::
   JVMCrucibleContext ->
@@ -196,7 +199,7 @@ resolveSAWPred ::
   Term ->
   IO (W4.Pred Sym)
 resolveSAWPred cc tm =
-  do let sym = cc^.jccBackend
+  do let sym = cc^.jccSym
      st <- sawCoreState sym
      bindSAWTerm sym st W4.BaseBoolRepr tm
 
@@ -247,7 +250,7 @@ resolveSAWTerm cc tp tm =
     Cryptol.TVNewtype{} ->
       fail "resolveSAWTerm: unsupported newtype"
   where
-    sym = cc^.jccBackend
+    sym = cc^.jccSym
 
 resolveBitvectorTerm ::
   forall w.
@@ -324,4 +327,4 @@ equalValsPred cc v1 v2 = go (v1, v2)
   go (LVal l1, LVal l2) = W4.bvEq sym l1 l2
   go _ = return (W4.falsePred sym)
 
-  sym = cc^.jccBackend
+  sym = cc^.jccSym

@@ -48,6 +48,7 @@ library
     , haskeline
     , heapster-saw
     , hobbits >= 1.3.1
+    , galois-dwarf >= 0.2.2
     , IfElse
     , jvm-parser
     , lens
@@ -158,6 +159,10 @@ library
     SAWScript.Prover.Util
     SAWScript.Prover.SBV
     SAWScript.Prover.MRSolver
+    SAWScript.Prover.MRSolver.Monad
+    SAWScript.Prover.MRSolver.SMT
+    SAWScript.Prover.MRSolver.Solver
+    SAWScript.Prover.MRSolver.Term
     SAWScript.Prover.RME
     SAWScript.Prover.ABC
     SAWScript.Prover.What4
@@ -216,7 +221,7 @@ executable saw
     , cryptol-saw-core
     , aig
 
-  GHC-options: -O2 -Wall -Werror -threaded -fno-ignore-asserts -fno-spec-constr-count
+  GHC-options: -O2 -Wall -Werror -threaded -fno-ignore-asserts -fno-spec-constr-count -rtsopts
 
 test-suite integration_tests
   type: exitcode-stdio-1.0

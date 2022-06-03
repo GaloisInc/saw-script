@@ -26,6 +26,44 @@
   command.) For more details on how each of these commands should be used,
   consult the "Bitfields" section of the SAW manual.
 
+* A new `llvm_cast_pointer` function has been added that allows users
+  to directly specify that a pointer should be treated as pointing to
+  a particular type. This mainly affects the results of subsequent
+  `llvm_field` and `llvm_elem` calls.  This is especially useful for
+  dealing with C `union` types, as the type information provided by
+  LLVM is imprecise in these cases.
+
+* A new `llvm_union` function has been added that uses debug
+  information to allow users to select fields from `union` types by
+  name. This automates the process of manually applying
+  `llvm_cast_pointer` with the type of the selected union field. Just
+  as with `llvm_field`, debug symbols are required for `llvm_union` to
+  work correctly.
+
+* A new highly experimental `llvm_verify_fixpoint_x86` function that
+  allows partial correctness verification of loops using loop
+  invariants instead of full symbolic unrolling. Only certain very simple
+  styles of loops can currently be accommodated, and the user is
+  required to provide a term that describes how the live variables in
+  the loop evolve over an iteration.
+
+* A new experimental facility for "tagging" proof obligations in
+  specifications and later using those tags to make decisions
+  in proof tactics. See the new `llvm_setup_with_tag`,
+  `goal_has_tags`, and `goal_has_some_tag` commands.
+
+* A new experimental option (toggled via
+  `enable_single_override_special_case` and
+  `disable_single_override_special_case`) which changes the handling
+  for cases where an overriden function has only one override that
+  could possibly apply. When the special case handling is enabled,
+  preconditions for the override are asserted separately, maintaining
+  their individual metadata instead of being combined into a single
+  precondition for the entire override. This may be advantageous if
+  proving the individual goals is easier than the conjunction of all
+  of them, or if different tactics are needed for different subgoals.
+  Currently, this option only applies to LLVM verifications.
+
 # Version 0.9
 
 ## New Features

@@ -645,11 +645,11 @@ and_triv2 (x : Bool) : Eq Bool (and (not x) x) False =
 --------------------------------------------------------------------------------
 -- Converting Booleans to Propositions
 
-FalseProp : Prop;
-FalseProp = Eq Bool True False;
-
 EqTrue : Bool -> Prop;
 EqTrue x = Eq Bool x True;
+
+TrueProp : Prop;
+TrueProp = EqTrue True;
 
 TrueI : EqTrue True;
 TrueI = Refl Bool True;
@@ -680,9 +680,18 @@ Either__rec : (s t : sort 0) -> (p : Either s t -> sort 0) ->
                (e : Either s t) -> p e;
 Either__rec s t p f1 f2 e = Either#rec s t p f1 f2 e;
 
+-- The eliminator for the Either type
 either : (a b c : sort 0) -> (a -> c) -> (b -> c) -> Either a b -> c;
 either a b c f g e =
   Either__rec a b (\ (p: Either a b) -> c) f g e;
+
+-- Eta-expanded version of the Left constructor
+left : (a b : sort 0) -> a -> Either a b;
+left a b x = Left a b x;
+
+-- Eta-expanded version of the Right constructor
+right : (a b : sort 0) -> b -> Either a b;
+right a b x = Right a b x;
 
 eitherCong0 : (t x y : sort 0) -> Eq (sort 0) x y ->
                Eq (sort 0) (Either x t) (Either y t);
@@ -920,6 +929,20 @@ primitive gen : (n : Nat) -> (a : sort 0) -> (Nat -> a) -> Vec n a;
 -- Primitive eliminators for arrays
 primitive head : (n : Nat) -> (a : sort 0) -> Vec (Succ n) a -> a;
 primitive tail : (n : Nat) -> (a : sort 0) -> Vec (Succ n) a -> Vec n a;
+
+-- An implementation for atWithDefault
+--
+-- FIXME: can we replace atWithDefault with this implementation? Or does some
+-- automation rely on atWithDefault being a primitive?
+atWithDefault' : (n : Nat) -> (a : sort 0) -> a -> Vec n a -> Nat -> a;
+atWithDefault' n_top a d =
+  Nat__rec
+    (\ (n:Nat) -> Vec n a -> Nat -> a)
+    (\ (_:Vec 0 a) (_:Nat) -> d)
+    (\ (n:Nat) (rec_f: Vec n a -> Nat -> a) (v:Vec (Succ n) a) (i:Nat) ->
+       Nat_cases a (head n a v)
+                 (\ (i_prev:Nat) (_:a) -> rec_f (tail n a v) i_prev) i)
+    n_top;
 
 primitive atWithDefault : (n : Nat) -> (a : sort 0) -> a -> Vec n a -> Nat -> a;
 
@@ -1680,8 +1703,19 @@ genBVVecFromVec m a v def n len =
   genBVVec n len a (\ (i:Vec n Bool) (_:is_bvult n i len) ->
                       atWithDefault m a def v (bvToNat n i));
 
+-- Generate a vector from the elements of an existing BVVec, using a default
+-- value when we run out of the existing BVVec - the inverse of genBVVecFromVec
+genFromBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+               BVVec n len a -> a -> (m : Nat) -> Vec m a;
+genFromBVVec n len a v def m =
+  gen m a (\ (i:Nat) -> atWithDefault (bvToNat n len) a def v i);
+
+-- The false proposition
+FalseProp : Prop;
+FalseProp = Eq Bool True False;
+
 -- Ex Falso Quodlibet: if True = False then anything is possible
-efq : (a : sort 0) -> Eq Bool True False -> a;
+efq : (a : sort 0) -> FalseProp -> a;
 efq a contra =
   coerce
     #() a
@@ -1696,6 +1730,13 @@ efq a contra =
       (ite_false (sort 0) #() a)
       ))
     ();
+
+-- Ex Falso Quodlibet at sort 1
+efq1 : (a : sort 1) -> Eq Bool True False -> a;
+efq1 a contra =
+  Eq__rec Bit Bit1
+          (\ (b:Bit) (_:Eq Bit Bit1 b) -> Bit#rec (\ (_:Bit) -> sort 1) #() a b)
+          () Bit0 (efq (Eq Bit Bit1 Bit0) contra);
 
 -- Generate an empty BVVec
 emptyBVVec : (n : Nat) -> (a : sort 0) -> BVVec n (bvNat n 0) a;
@@ -2019,7 +2060,6 @@ primitive CompM : sort 0 -> sort 0;
 
 primitive returnM : (a:sort 0) -> a -> CompM a;
 primitive bindM : (a b:sort 0) -> CompM a -> (a -> CompM b) -> CompM b;
-primitive existsM : (a:sort 0) -> (b:sort 0) -> (a -> CompM b) -> CompM b;
 
 -- Raise an error in the computation monad
 primitive errorM : (a:sort 0) -> String -> CompM a;
@@ -2041,6 +2081,28 @@ fmapM2 a b c f m1 m2 = applyM b c (fmapM a (b -> c) f m1) m2;
 fmapM3 : (a b c d: sort 0) -> (a -> b -> c -> d) ->
          CompM a -> CompM b -> CompM c -> CompM d;
 fmapM3 a b c d f m1 m2 m3 = applyM c d (fmapM2 a b (c -> d) f m1 m2) m3;
+
+-- Bind two values and pass them to a binary function
+bindM2 : (a b c: sort 0) -> CompM a -> CompM b -> (a -> b -> CompM c) -> CompM c;
+bindM2 a b c m1 m2 f = bindM a c m1 (\ (x:a) -> bindM b c m2 (f x));
+
+-- Bind three values and pass them to a trinary function
+bindM3 : (a b c d: sort 0) -> CompM a -> CompM b -> CompM c ->
+         (a -> b -> c -> CompM d) -> CompM d;
+bindM3 a b c d m1 m2 m3 f = bindM a d m1 (\ (x:a) -> bindM2 b c d m2 m3 (f x));
+
+-- A version of bind that takes the function first
+bindApplyM : (a b : sort 0) -> (a -> CompM b) -> CompM a -> CompM b;
+bindApplyM a b f m = bindM a b m f;
+
+-- A version of bindM2 that takes the function first
+bindApplyM2 : (a b c: sort 0) -> (a -> b -> CompM c) -> CompM a -> CompM b -> CompM c;
+bindApplyM2 a b c f m1 m2 = bindM a c m1 (\ (x:a) -> bindM b c m2 (f x));
+
+-- A version of bindM3 that takes the function first
+bindApplyM3 : (a b c d: sort 0) -> (a -> b -> c -> CompM d) ->
+              CompM a -> CompM b -> CompM c -> CompM d;
+bindApplyM3 a b c d f m1 m2 m3 = bindM3 a b c d m1 m2 m3 f;
 
 -- Compose two monadic functions
 composeM : (a b c: sort 0) -> (a -> CompM b) -> (b -> CompM c) -> a -> CompM c;
@@ -2096,11 +2158,62 @@ appendCastBVVecM n len1 len2 len3 a v1 v2 =
 -- run the second computation
 -- primitive catchM : (a:sort 0) -> CompM a -> CompM a -> CompM a;
 
--- We can define fixM as let rec f x = ... in f
+-- The computation that nondeterministically chooses a value of type a and
+-- passes it to the supplied function f to get a computation of type b. As a
+-- specification, this is the union of computations f x.
+primitive existsM : (a b:sort 0) -> (a -> CompM b) -> CompM b;
+
+-- The computation that nondeterministically chooses one computation or another.
+-- As a specification, represents the disjunction of two specifications.
+orM : (a : sort 0) -> CompM a -> CompM a -> CompM a;
+orM a m1 m2 = existsM Bool a (\ (b:Bool) -> ite (CompM a) b m1 m2);
+
+-- The specification that matches any computation
+anySpec : (a : sort 0) -> CompM a;
+anySpec a = existsM (CompM a) a (\ (m:CompM a) -> m);
+
+-- The specification formed from the intersection of all computations f x for
+-- all possible inputs x. Computationally, this is sort of like running f for
+-- all possible inputs x at the same time and then raising an error if any of
+-- those computations diverge from each other.
+primitive forallM : (a b:sort 0) -> (a -> CompM b) -> CompM b;
+
+-- The specification which asserts that the first argument is True and then
+-- runs the second argument
+assertingM : (a : sort 0) -> Bool -> CompM a -> CompM a;
+assertingM a b m = ite (CompM a) b m (errorM a "Assertion failed");
+
+-- The specification which assumes that the first argument is True and then
+-- runs the second argument
+assumingM : (a : sort 0) -> Bool -> CompM a -> CompM a;
+assumingM a b m = ite (CompM a) b m (anySpec a);
+
+-- A hint to Mr Solver that a recursive function has the given loop invariant
+invariantHint : (a : sort 0) -> Bool -> a -> a;
+invariantHint _ _ a = a;
+
+-- The version of assertingM which appears in un-monadified Cryptol (this gets
+-- converted to assertingM during monadification, see assertingOrAssumingMacro)
+asserting : (a : isort 0) -> Bool -> a -> a;
+asserting a b x = ite a b x (error a "Assertion failed");
+
+-- The version of assumingM which appears in un-monadified Cryptol (this gets
+-- converted to assumingM during monadification, see assertingOrAssumingMacro)
+assuming : (a : isort 0) -> Bool -> a -> a;
+assuming a b x = ite a b x (error a "Assuming failed");
+
+-- NOTE: for the simplicity and efficiency of MR solver, we define all
+-- fixed-point computations in CompM via a primitive multiFixM, defined below.
+-- Thus, even though fixM is really the primitive operation, we write this file
+-- as if multiFixM is, but I am leaving this version of fixM commented out here
+-- to keep this decision explicitly documented and to make it easier to switch
+-- back to having fixM be primitive if we decide to do so later.
+--
+{-
 primitive fixM : (a:sort 0) -> (b:a -> sort 0) ->
                  (((x:a) -> CompM (b x)) -> ((x:a) -> CompM (b x))) ->
                  (x:a) -> CompM (b x);
--- fixM a b fn x = letRecM1 a b b fn (\ (f:a -> CompM b) -> f x);
+-}
 
 -- A representation of the type (x1:A1) -> ... -> (xn:An) -> CompM (B x1 ... xn)
 data LetRecType : sort 1 where {
@@ -2203,9 +2316,20 @@ lrtTupleType lrts =
   (\ (lrt:LetRecType) (_:LetRecTypes) (rest:sort 0) -> #(lrtToType lrt, rest))
   lrts;
 
--- NOTE: the following are needed to define multiFixM instead of making it a
+-- NOTE: the following are needed to define letRecM instead of making it a
 -- primitive, which we are keeping commented here in case that is needed
 {-
+-- Apply a multi-arity function of type lrtPi lrts B to an lrtTupleType lrts
+lrtApply : (lrts:LetRecTypes) -> (B:sort 0) -> lrtPi lrts B -> lrtTupleType lrts -> B;
+lrtApply top_lrts B =
+  LetRecTypes#rec
+  (\ (lrts:LetRecTypes) -> lrtPi lrts B -> lrtTupleType lrts -> B)
+  (\ (F:B) (_:#()) -> F)
+  (\ (lrt:LetRecType) (lrts:LetRecTypes) (rest:lrtPi lrts B -> lrtTupleType lrts -> B)
+      (F:lrtPi (LRT_Cons lrt lrts) B) (fs:lrtTupleType (LRT_Cons lrt lrts)) ->
+    rest (F fs.(1)) fs.(2))
+  top_lrts;
+
 -- Construct a multi-arity function of type lrtPi lrts B from one of type
 -- lrtTupleType lrts -> B
 lrtLambda : (lrts:LetRecTypes) -> (B:sort 0) -> (lrtTupleType lrts -> B) -> lrtPi lrts B;
@@ -2217,17 +2341,6 @@ lrtLambda top_lrts B =
      (rest:(lrtTupleType lrts -> B) -> lrtPi lrts B)
      (F:lrtTupleType (LRT_Cons lrt lrts) -> B) (f:lrtToType lrt) ->
     rest (\ (fs:lrtTupleType lrts) -> F (f, fs)))
-  top_lrts;
-
--- Apply a multi-arity function of type lrtPi lrts B to an lrtTupleType lrts
-lrtApply : (lrts:LetRecTypes) -> (B:sort 0) -> lrtPi lrts B -> lrtTupleType lrts -> B;
-lrtApply top_lrts B =
-  LetRecTypes#rec
-  (\ (lrts:LetRecTypes) -> lrtPi lrts B -> lrtTupleType lrts -> B)
-  (\ (F:B) (_:#()) -> F)
-  (\ (lrt:LetRecType) (lrts:LetRecTypes) (rest:lrtPi lrts B -> lrtTupleType lrts -> B)
-      (F:lrtPi (LRT_Cons lrt lrts) B) (fs:lrtTupleType (LRT_Cons lrt lrts)) ->
-    rest (F fs.(1)) fs.(2))
   top_lrts;
 
 -- Build a multi-argument fixed-point of type A1 -> ... -> An -> CompM B
@@ -2266,25 +2379,17 @@ multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
             lrtTupleType lrts;
 multiFixM lrts F =
   multiTupleFixM lrts (\ (fs:lrtTupleType lrts) -> lrtApply lrts (lrtTupleType lrts) F fs);
-
--- A letrec construct for binding 0 or more mutually recursive functions
-letRecM : (lrts : LetRecTypes) -> (B:sort 0) -> lrtPi lrts (lrtTupleType lrts) ->
-          lrtPi lrts (CompM B) -> CompM B;
-letRecM lrts B F body = lrtApply lrts (CompM B) body (multiFixM lrts F);
 -}
-
--- Construct a fixed-point for a tuple of mutually-recursive functions
-primitive multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
-                      lrtTupleType lrts;
 
 -- This is like let rec in ML: letRecM defs body defines N recursive functions
 -- in terms of themselves using defs, and then passes them to body. We use this
 -- instead of the more standard fixM because it offers a more compact
 -- representation, and because fixM messes with functional extensionality by
 -- introducing an irreducible term at function type.
-primitive letRecM : (lrts : LetRecTypes) -> (b : sort 0) ->
-                    (lrtPi lrts (lrtTupleType lrts)) ->
-                    (lrtPi lrts (CompM b)) -> CompM b;
+primitive letRecM : (lrts : LetRecTypes) -> (B:sort 0) ->
+                    lrtPi lrts (lrtTupleType lrts) ->
+                    lrtPi lrts (CompM B) -> CompM B;
+-- letRecM lrts B F body = lrtApply lrts (CompM B) body (multiFixM lrts F);
 
 -- This is let rec with exactly one binding
 letRecM1 : (a b c : sort 0) -> ((a -> CompM b) -> (a -> CompM b)) ->
@@ -2294,6 +2399,110 @@ letRecM1 a b c fn body =
     (LRT_Cons (LRT_Fun a (\ (_:a) -> LRT_Ret b)) LRT_Nil) c
     (\ (f:a -> CompM b) -> (fn f, ()))
     (\ (f:a -> CompM b) -> body f);
+
+-- A single-argument fixed-point function
+fixM : (a:sort 0) -> (b:a -> sort 0) ->
+       (((x:a) -> CompM (b x)) -> ((x:a) -> CompM (b x))) ->
+       (x:a) -> CompM (b x);
+fixM a b f x =
+  letRecM (LRT_Cons (LRT_Fun a (\ (y:a) -> LRT_Ret (b y))) LRT_Nil)
+          (b x)
+          (\ (g: (y:a) -> CompM (b y)) -> (f g, ()))
+          (\ (g: (y:a) -> CompM (b y)) -> g x);
+
+
+-- The following commented block allows multiFixM to be defined in terms of and
+-- to reduce to letRecM, which is useful if we want to define all our automated
+-- reasoning in terms of letRecM instead of multiFixM
+
+-- Apply a function the the body of a multi-arity lrtPi function
+{-
+lrtPiMap : (a b : sort 0) -> (f : a -> b) -> (lrts : LetRecTypes) ->
+           lrtPi lrts a -> lrtPi lrts b;
+lrtPiMap a b f lrts_top =
+  LetRecTypes#rec
+  (\ (lrts:LetRecTypes) -> lrtPi lrts a -> lrtPi lrts b)
+  (\ (x:a) -> f x)
+  (\ (lrt:LetRecType) (lrts:LetRecTypes) (rec:lrtPi lrts a -> lrtPi lrts b)
+     (f:lrtToType lrt -> lrtPi lrts a) (g:lrtToType lrt) ->
+     rec (f g))
+  lrts_top;
+
+-- Convert a multi-arity lrtPi that returns a pair to a pair of lrtPi functions
+-- that return the individual arguments
+lrtPiPair : (a b:sort 0) -> (lrts : LetRecTypes) -> lrtPi lrts #(a,b) ->
+            #(lrtPi lrts a, lrtPi lrts b);
+lrtPiPair a b lrts f =
+  (lrtPiMap #(a,b) a (\ (tup:#(a,b)) -> tup.(1)) lrts f,
+   lrtPiMap #(a,b) b (\ (tup:#(a,b)) -> tup.(2)) lrts f);
+
+-- Build a monadic function that takes in its arguments and then calls letRecM.
+-- That is, build a function
+--
+-- \x1 ... xn -> letRecM lrts F (\f1 ... fm -> body f1 ... fm x1 ... xn)
+--
+-- where F recursively defines the fi functions and body defines the computation
+-- for the function we are defining in terms of the fi and the xj arguments.
+letRecFun : (lrts : LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
+            (lrt : LetRecType) -> lrtPi lrts (lrtToType lrt) -> lrtToType lrt;
+letRecFun lrts F lrt_top =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> lrtPi lrts (lrtToType lrt) -> lrtToType lrt)
+  (\ (b:sort 0) (body:lrtPi lrts (CompM b)) ->
+     letRecM lrts b F body)
+  (\ (a:sort 0) (lrtF: a -> LetRecType)
+     (rec: (x:a) -> lrtPi lrts (lrtToType (lrtF x)) -> lrtToType (lrtF x))
+     (body:lrtPi lrts ((x:a) -> lrtToType (lrtF x)))
+     (x:a) ->
+     rec x (lrtPiMap ((y:a) -> lrtToType (lrtF y))
+                     (lrtToType (lrtF x))
+                     (\ (g:(y:a) -> lrtToType (lrtF y)) -> g x)
+                     lrts
+                     body))
+  lrt_top;
+
+-- Build a multi-argument fixed-point of type A1 -> ... -> An -> CompM B
+multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
+               lrtToType lrt;
+multiArgFixM lrt F =
+  letRecFun (LRT_Cons lrt LRT_Nil)
+            (\ (f:lrtToType lrt) -> (F f, ()))
+            lrt
+            (\ (f:lrtToType lrt) -> f);
+
+-- Construct a fixed-point for a tuple of mutually-recursive functions
+multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
+            lrtTupleType lrts;
+multiFixM lrts_top F_top =
+  LetRecTypes#rec
+  (\ (lrts:LetRecTypes) -> lrtPi lrts_top (lrtTupleType lrts) ->
+     lrtTupleType lrts)
+  (\ (_:lrtPi lrts_top #()) -> ())
+  (\ (lrt:LetRecType) (lrts:LetRecTypes)
+     (rec: lrtPi lrts_top (lrtTupleType lrts) -> lrtTupleType lrts)
+     (F: lrtPi lrts_top #(lrtToType lrt, lrtTupleType lrts)) ->
+     (letRecFun
+        lrts_top F_top lrt
+        (lrtPiPair (lrtToType lrt) (lrtTupleType lrts) lrts_top F).(1)
+      ,
+      rec (lrtPiPair (lrtToType lrt) (lrtTupleType lrts) lrts_top F).(2)))
+  lrts_top
+  F_top;
+-}
+
+-- Construct a fixed-point for a tuple of mutually-recursive functions
+--
+-- NOTE: Currently, Mr Solver actually works better with a primitive multiFixM,
+-- so that's what we are going to do for now...
+primitive
+multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
+            lrtTupleType lrts;
+
+-- Build a multi-argument fixed-point of type A1 -> ... -> An -> CompM B
+multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
+               lrtToType lrt;
+multiArgFixM lrt F =
+  (multiFixM (LRT_Cons lrt LRT_Nil) (\ (f:lrtToType lrt) -> (F f, ()))).(1);
 
 
 -- Test computations

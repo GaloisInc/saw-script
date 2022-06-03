@@ -30,6 +30,7 @@ import Data.Monoid
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State
 import qualified Control.Exception as Ex
+import Data.Char (toLower)
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
@@ -54,8 +55,10 @@ import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 
+import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Verifier.SAW.Cryptol as Cryptol
 import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
+import qualified Verifier.SAW.Cryptol.Monadify as Monadify
 
 -- saw-core
 import Verifier.SAW.Grammar (parseSAWTerm)
@@ -68,6 +71,7 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.SATQuery
 import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
 import qualified Verifier.SAW.SCTypeCheck as TC (TypedTerm(..))
+import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
@@ -76,6 +80,7 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (prepareSATQuery, runManyTests)
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.Simulator.TermModel as TM
+import Verifier.SAW.Term.Pretty (SawDoc, renderSawDoc)
 
 import SAWScript.Position
 
@@ -104,7 +109,8 @@ import qualified Cryptol.Backend.Monad as C (runEval)
 import qualified Cryptol.Eval.Type as C (evalType)
 import qualified Cryptol.Eval.Value as C (fromVBit, fromVWord)
 import qualified Cryptol.Eval.Concrete as C (Concrete(..), bvVal)
-import qualified Cryptol.Utils.Ident as C (mkIdent, packModName)
+import qualified Cryptol.Utils.Ident as C (mkIdent, packModName,
+                                           textToModName, PrimIdent(..))
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
 import qualified SAWScript.SBVParser as SBV
@@ -113,6 +119,7 @@ import SAWScript.ImportAIG
 import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
 import SAWScript.Proof
+import SAWScript.Crucible.Common (PathSatSolver(..))
 import SAWScript.TopLevel
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
@@ -321,15 +328,17 @@ hoistIfsPrim t = do
 
   return t{ ttTerm = t' }
 
+isConvertiblePrim :: TypedTerm -> TypedTerm -> TopLevel Bool
+isConvertiblePrim x y = do
+   sc <- getSharedContext
+   io $ scConvertible sc False (ttTerm x) (ttTerm y)
+
 checkConvertiblePrim :: TypedTerm -> TypedTerm -> TopLevel ()
 checkConvertiblePrim x y = do
-   sc <- getSharedContext
-   str <- io $ do
-     c <- scConvertible sc False (ttTerm x) (ttTerm y)
-     pure (if c
-            then "Convertible"
-            else "Not convertible")
-   printOutLnTop Info str
+   c <- isConvertiblePrim x y
+   printOutLnTop Info (if c
+                        then "Convertible"
+                        else "Not convertible")
 
 
 readCore :: FilePath -> TopLevel TypedTerm
@@ -419,14 +428,44 @@ print_term_depth d t =
      output <- liftIO $ scShowTerm sc opts' t
      printOutLnTop Info output
 
+goalSummary :: ProofGoal -> String
+goalSummary goal = unlines $ concat
+  [ [ "Goal " ++ goalName goal ++ " (goal number " ++ (show $ goalNum goal) ++ "): " ++ goalType goal
+    , "at " ++ goalLoc goal
+    ]
+  , if Set.null (goalTags goal) then [] else
+      [ unwords ("Tags:" : map show (Set.toList (goalTags goal)))
+      ]
+  , if null (goalDesc goal) then [] else [ goalDesc goal ]
+  ]
+
+write_goal :: String -> ProofScript ()
+write_goal fp =
+  execTactic $ tacticId $ \goal ->
+  do opts <- getTopLevelPPOpts
+     sc <- getSharedContext
+     liftIO $ do
+       output <- liftIO (scShowTerm sc opts =<< propToTerm sc (goalProp goal))
+       writeFile fp (unlines [goalSummary goal, output])
+
 print_goal :: ProofScript ()
 print_goal =
   execTactic $ tacticId $ \goal ->
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
      output <- liftIO (scShowTerm sc opts =<< propToTerm sc (goalProp goal))
-     printOutLnTop Info ("Goal " ++ goalName goal ++ " (goal number " ++ (show $ goalNum goal) ++ "):")
+     printOutLnTop Info (goalSummary goal)
      printOutLnTop Info output
+
+print_goal_summary :: ProofScript ()
+print_goal_summary =
+  execTactic $ tacticId $ \goal ->
+    printOutLnTop Info (goalSummary goal)
+
+goal_num :: ProofScript Int
+goal_num =
+  execTactic $ tacticId $ \goal ->
+    return (goalNum goal)
 
 print_goal_depth :: Int -> ProofScript ()
 print_goal_depth n =
@@ -459,22 +498,18 @@ printGoalSize =
 resolveNames :: [String] -> TopLevel (Set VarIndex)
 resolveNames nms =
   do sc <- getSharedContext
-     Set.fromList <$> mapM (resolveName sc) nms
+     Set.fromList . mconcat <$> mapM (resolveName sc) nms
 
--- | Given a user-provided name, resolve it to some
---   'ExtCns' that represents an unfoldable 'Constant'
---   value or a fresh uninterpreted constant.
---
---   We first attempt to find the name in the local Cryptol
---   environment; if the name is found, attempt to resolve it to
---   an 'ExtCns' in the SAWCore environment.  If the given name
---   does not resolve to a cryptol value in the current environment that
---  maps to an 'ExtCns', then instead directly look it up
---  in the SAWCore naming environment.  If both stages
---  fail, then throw an exception.
-resolveName :: SharedContext -> String -> TopLevel VarIndex
+-- | Given a user-provided name, resolve it to (potentially several)
+-- 'ExtCns' that each represent an unfoldable 'Constant' value or a
+-- fresh uninterpreted constant.
+-- The given name is searched for in both the local Cryptol environment
+-- and the SAWCore naming environment. If it is found in neither, an
+-- exception is thrown.
+resolveName :: SharedContext -> String -> TopLevel [VarIndex]
 resolveName sc nm =
   do cenv <- rwCryptol <$> getTopLevelRW
+     scnms <- fmap fst <$> io (scResolveName sc tnm)
      let ?fileReader = StrictBS.readFile
      res <- io $ CEnv.resolveIdentifier cenv tnm
      case res of
@@ -484,14 +519,15 @@ resolveName sc nm =
               ImportedName uri _ ->
                 do resolvedName <- io $ scResolveNameByURI sc uri
                    case resolvedName of
-                     Just vi -> pure vi
-                     Nothing -> fallback
-              _ -> fallback
-       Nothing -> fallback
+                     Just vi -> pure $ vi:scnms
+                     Nothing -> fallback scnms
+              _ -> fallback scnms
+       Nothing -> fallback scnms
 
  where
  tnm = Text.pack nm
- fallback = fst <$> io (scResolveUnambiguous sc tnm)
+ fallback [] = fail $ "Could not resolve name: " <> show nm
+ fallback scnms = pure scnms
 
 
 normalize_term :: TypedTerm -> TopLevel TypedTerm
@@ -501,7 +537,7 @@ normalize_term_opaque :: [String] -> TypedTerm -> TopLevel TypedTerm
 normalize_term_opaque opaque tt =
   do sc <- getSharedContext
      modmap <- io (scGetModuleMap sc)
-     idxs <- mapM (resolveName sc) opaque
+     idxs <- mconcat <$> mapM (resolveName sc) opaque
      let opaqueSet = Set.fromList idxs
      tm' <- io (TM.normalizeSharedTerm sc modmap mempty mempty opaqueSet (ttTerm tt))
      pure tt{ ttTerm = tm' }
@@ -552,11 +588,11 @@ extract_uninterp ::
   TopLevel (TypedTerm, [(String,[(TypedTerm,TypedTerm)])])
 extract_uninterp unints opaques tt =
   do sc <- getSharedContext
-     idxs <- mapM (resolveName sc) unints
+     idxs <- mconcat <$> mapM (resolveName sc) unints
      let unintSet = Set.fromList idxs
      mmap <- io (scGetModuleMap sc)
 
-     opaqueSet <- Set.fromList <$> mapM (resolveName sc) opaques
+     opaqueSet <- Set.fromList . mconcat <$> mapM (resolveName sc) opaques
 
      boundECRef <- io (newIORef Set.empty)
      let ?recordEC = \ec -> modifyIORef boundECRef (Set.insert ec)
@@ -627,6 +663,11 @@ goal_apply thm =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticApply sc thm)
 
+goal_exact :: TypedTerm -> ProofScript ()
+goal_exact tm =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticExact sc (ttTerm tm))
+
 goal_assume :: ProofScript Theorem
 goal_assume =
   do sc <- SV.scriptTopLevel getSharedContext
@@ -656,6 +697,20 @@ goal_when str script =
      case psGoals s of
        g : _ | str `isInfixOf` goalName g -> script
        _ -> return ()
+
+goal_has_tags :: [String] -> ProofScript Bool
+goal_has_tags tags =
+  do s <- get
+     case psGoals s of
+       g : _ | Set.isSubsetOf (Set.fromList tags) (goalTags g) -> return True
+       _ -> return False  
+
+goal_has_some_tag :: [String] -> ProofScript Bool
+goal_has_some_tag tags =
+  do s <- get
+     case psGoals s of
+       g : _ | not $ Set.disjoint (Set.fromList tags) (goalTags g) -> return True
+       _ -> return False  
 
 goal_num_ite :: Int -> ProofScript SV.Value -> ProofScript SV.Value -> ProofScript SV.Value
 goal_num_ite n s1 s2 =
@@ -910,7 +965,16 @@ provePrim script t = do
   io $ checkBooleanSchema (ttType t)
   sc <- getSharedContext
   prop <- io $ predicateToProp sc Universal (ttTerm t)
-  let goal = ProofGoal 0 "prove" "prove" prop
+  pos <- SV.getPosition
+  let goal = ProofGoal
+             { goalNum  = 0
+             , goalType = "prove"
+             , goalName = "prove_prim"
+             , goalLoc  = show pos
+             , goalDesc = ""
+             , goalProp = prop
+             , goalTags = mempty
+             }
   res <- SV.runProofScript script goal Nothing "prove_prim"
   case res of
     UnfinishedProof pst ->
@@ -919,16 +983,26 @@ provePrim script t = do
     _ -> return ()
   return res
 
-provePrintPrim ::
+proveHelper ::
+  String ->
   ProofScript () ->
   TypedTerm ->
+  (Term -> TopLevel Prop) ->
   TopLevel Theorem
-provePrintPrim script t = do
-  sc <- getSharedContext
-  prop <- io $ predicateToProp sc Universal (ttTerm t)
-  let goal = ProofGoal 0 "prove" "prove" prop
+proveHelper nm script t f = do
+  prop <- f $ ttTerm t
+  pos <- SV.getPosition
+  let goal = ProofGoal
+             { goalNum = 0
+             , goalType = "prove"
+             , goalName = nm
+             , goalLoc  = show pos
+             , goalDesc = ""
+             , goalProp = prop
+             , goalTags = mempty
+             }
   opts <- rwPPOpts <$> getTopLevelRW
-  res <- SV.runProofScript script goal Nothing "prove_print_prim"
+  res <- SV.runProofScript script goal Nothing (Text.pack nm)
   let failProof pst =
          fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                           ++ SV.showsProofResult opts res ""
@@ -939,6 +1013,22 @@ provePrintPrim script t = do
     InvalidProof _stats _cex pst -> failProof pst
     UnfinishedProof pst -> failProof pst
 
+provePrintPrim ::
+  ProofScript () ->
+  TypedTerm ->
+  TopLevel Theorem
+provePrintPrim script t = do
+  sc <- getSharedContext
+  proveHelper "prove_print" script t $ io . predicateToProp sc Universal
+
+provePropPrim ::
+  ProofScript () ->
+  TypedTerm ->
+  TopLevel Theorem
+provePropPrim script t = do
+  sc <- getSharedContext
+  proveHelper "prove_extcore" script t $ io . termToProp sc
+
 satPrim ::
   ProofScript () ->
   TypedTerm ->
@@ -947,7 +1037,16 @@ satPrim script t =
   do io $ checkBooleanSchema (ttType t)
      sc <- getSharedContext
      prop <- io $ predicateToProp sc Existential (ttTerm t)
-     let goal = ProofGoal 0 "sat" "sat" prop
+     pos <- SV.getPosition
+     let goal = ProofGoal
+                { goalNum = 0
+                , goalType = "sat"
+                , goalName = "sat"
+                , goalLoc  = show pos
+                , goalDesc = ""
+                , goalProp = prop
+                , goalTags = mempty
+                }
      res <- SV.runProofScript script goal Nothing "sat"
      case res of
        InvalidProof stats cex _ -> return (SV.Sat stats cex)
@@ -1026,7 +1125,7 @@ rewritePrim ss (TypedTerm schema t) = do
 unfold_term :: [String] -> TypedTerm -> TopLevel TypedTerm
 unfold_term unints (TypedTerm schema t) = do
   sc <- getSharedContext
-  unints' <- mapM (resolveName sc) unints
+  unints' <- mconcat <$> mapM (resolveName sc) unints
   t' <- io $ scUnfoldConstants sc unints' t
   return (TypedTerm schema t')
 
@@ -1378,8 +1477,8 @@ tailPrim :: [a] -> TopLevel [a]
 tailPrim [] = fail "tail: empty list"
 tailPrim (_ : xs) = return xs
 
-parseCore :: String -> TopLevel Term
-parseCore input =
+parseCoreMod :: String -> String -> TopLevel Term
+parseCoreMod mnm_str input =
   do sc <- getSharedContext
      let base = "<interactive>"
          path = "<interactive>"
@@ -1390,15 +1489,26 @@ parseCore input =
            do let msg = show err
               printOutLnTop Opts.Error msg
               fail msg
-     let mnm = Just $ mkModuleName ["Cryptol"]
-     err_or_t <- io $ runTCM (typeInferComplete uterm) sc mnm []
+     let mnm =
+           mkModuleName $ Text.splitOn (Text.pack ".") $ Text.pack mnm_str
+     _ <- io $ scFindModule sc mnm -- Check that mnm exists
+     err_or_t <- io $ runTCM (typeInferComplete uterm) sc (Just mnm) []
      case err_or_t of
        Left err -> fail (show err)
        Right (TC.TypedTerm x _) -> return x
 
+parseCore :: String -> TopLevel Term
+parseCore = parseCoreMod "Cryptol"
+
 parse_core :: String -> TopLevel TypedTerm
 parse_core input = do
   t <- parseCore input
+  sc <- getSharedContext
+  io $ mkTypedTerm sc t
+
+parse_core_mod :: String -> String -> TopLevel TypedTerm
+parse_core_mod mnm input = do
+  t <- parseCoreMod mnm input
   sc <- getSharedContext
   io $ mkTypedTerm sc t
 
@@ -1407,8 +1517,18 @@ prove_core script input =
   do sc <- getSharedContext
      t <- parseCore input
      p <- io (termToProp sc t)
+     pos <- SV.getPosition
      opts <- rwPPOpts <$> getTopLevelRW
-     res <- SV.runProofScript script (ProofGoal 0 "prove" "prove" p) Nothing "prove_core"
+     let goal = ProofGoal
+                { goalNum = 0
+                , goalType = "prove"
+                , goalName = "prove_core"
+                , goalLoc  = show pos
+                , goalDesc = ""
+                , goalProp = p
+                , goalTags = mempty
+                }
+     res <- SV.runProofScript script goal Nothing "prove_core"
      let failProof pst =
             fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                                   ++ SV.showsProofResult opts res ""
@@ -1435,6 +1555,14 @@ core_thm input =
      db <- roTheoremDB <$> getTopLevelRO
      thm <- io (proofByTerm sc db t pos "core_thm")
      SV.returnProof thm
+
+specialize_theorem :: Theorem -> [TypedTerm] -> TopLevel Theorem
+specialize_theorem thm ts =
+  do sc <- getSharedContext
+     db <- roTheoremDB <$> getTopLevelRO
+     pos <- SV.getPosition
+     thm' <- io (specializeTheorem sc db pos "specialize_theorem" thm (map ttTerm ts))
+     SV.returnProof thm'
 
 get_opt :: Int -> TopLevel String
 get_opt n = do
@@ -1498,23 +1626,204 @@ cryptol_add_path path =
      let rw' = rw { rwCryptol = ce' }
      putTopLevelRW rw'
 
-mr_solver_tests :: [SharedContext -> IO Term]
-mr_solver_tests =
-  let helper nm = \sc -> scGlobalDef sc nm in
-  map helper
-  [ "Prelude.test_fun0", "Prelude.test_fun1", "Prelude.test_fun2"
-  , "Prelude.test_fun3", "Prelude.test_fun4", "Prelude.test_fun5"
-  , "Prelude.test_fun6"]
+cryptol_add_prim :: String -> String -> TypedTerm -> TopLevel ()
+cryptol_add_prim mnm nm trm =
+  do rw <- getTopLevelRW
+     let env = rwCryptol rw
+     let prim_name =
+           C.PrimIdent (C.textToModName $ Text.pack mnm) (Text.pack nm)
+     let env' =
+           env { CEnv.ePrims =
+                   Map.insert prim_name (ttTerm trm) (CEnv.ePrims env) }
+     putTopLevelRW (rw { rwCryptol = env' })
 
-testMRSolver :: Integer -> Integer -> TopLevel ()
-testMRSolver i1 i2 =
-  do sc <- getSharedContext
-     t1 <- liftIO $ (mr_solver_tests !! fromInteger i1) sc
-     t2 <- liftIO $ (mr_solver_tests !! fromInteger i2) sc
-     res <- liftIO $ Prover.askMRSolver sc SBV.z3 Nothing t1 t2
+cryptol_add_prim_type :: String -> String -> TypedTerm -> TopLevel ()
+cryptol_add_prim_type mnm nm tp =
+  do rw <- getTopLevelRW
+     let env = rwCryptol rw
+     let prim_name =
+           C.PrimIdent (C.textToModName $ Text.pack mnm) (Text.pack nm)
+     let env' = env { CEnv.ePrimTypes =
+                        Map.insert prim_name (ttTerm tp) (CEnv.ePrimTypes env) }
+     putTopLevelRW (rw { rwCryptol = env' })
+
+-- | Call 'Cryptol.importSchema' using a 'CEnv.CryptolEnv'
+importSchemaCEnv :: SharedContext -> CEnv.CryptolEnv -> Cryptol.Schema ->
+                    IO Term
+importSchemaCEnv sc cenv schema =
+  do cry_env <- let ?fileReader = StrictBS.readFile in CEnv.mkCryEnv cenv
+     Cryptol.importSchema sc cry_env schema
+
+monadifyTypedTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
+monadifyTypedTerm sc t =
+  do rw <- get
+     let menv = rwMonadify rw
+     (ret_t, menv') <-
+       liftIO $
+       case ttType t of
+         TypedTermSchema schema ->
+           do tp <- importSchemaCEnv sc (rwCryptol rw) schema
+              Monadify.monadifyTermInEnv sc menv (ttTerm t) tp
+         TypedTermKind _ ->
+           fail "monadify_term applied to a type"
+         TypedTermOther tp ->
+           Monadify.monadifyTermInEnv sc menv (ttTerm t) tp
+     modify (\s -> s { rwMonadify = menv' })
+     tp <- liftIO $ scTypeOf sc ret_t
+     return $ TypedTerm (TypedTermOther tp) ret_t
+
+-- | Ensure that a 'TypedTerm' has been monadified
+ensureMonadicTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
+ensureMonadicTerm sc t
+  | TypedTermOther tp <- ttType t =
+    io (Prover.isCompFunType sc tp) >>= \case
+      True -> return t
+      False -> monadifyTypedTerm sc t
+ensureMonadicTerm sc t = monadifyTypedTerm sc t
+
+-- | A wrapper for 'Prover.askMRSolver' from @MRSolver.hs@ which if the first
+-- argument is @Just str@, prints out @str@ followed by an abridged version
+-- of the refinement being asked
+askMRSolver :: Maybe SawDoc -> SharedContext -> TypedTerm -> TypedTerm ->
+               TopLevel (NominalDiffTime,
+                         Either Prover.MRFailure Prover.MRSolverResult)
+askMRSolver printStr sc t1 t2 =
+  do env <- rwMRSolverEnv <$> get
+     m1 <- collapseEta <$> ttTerm <$> ensureMonadicTerm sc t1
+     m2 <- collapseEta <$> ttTerm <$> ensureMonadicTerm sc t2
+     case printStr of
+       Nothing -> return ()
+       Just str -> printOutLnTop Info $ renderSawDoc defaultPPOpts $
+         "[MRSolver] " <> str <> ": " <> ppTmHead m1 <>
+                               " |= " <> ppTmHead m2
+     time1 <- liftIO getCurrentTime
+     res <- io $ Prover.askMRSolver sc env Nothing m1 m2
+     time2 <- liftIO getCurrentTime
+     return (diffUTCTime time2 time1, res)
+  where -- Turn a term of the form @\x1 ... xn -> f x1 ... xn@ into @f@
+        collapseEta :: Term -> Term
+        collapseEta (asLambdaList -> (lamVars,
+                     asApplyAll -> (t@(smallestFreeVar -> Nothing),
+                                    mapM asLocalVar -> Just argVars)))
+          | argVars == [(length lamVars - 1), (length lamVars - 2) .. 0] = t
+        collapseEta t = t
+        -- Pretty-print the name of the top-level function call, followed by
+        -- "..." if it is given any arguments, or just "..." if there is no
+        -- top-level call
+        ppTmHead :: Term -> SawDoc
+        ppTmHead (asLambdaList -> (_,
+                  asApplyAll -> (t@(
+                  Prover.asProjAll -> (
+                  Monadify.asTypedGlobalDef -> Just _, _)), args))) =
+          ppTerm defaultPPOpts t <> if length args > 0 then " ..." else ""
+        ppTmHead _ = "..."
+
+-- | Run Mr Solver to prove that the first term refines the second, adding
+-- any relevant 'Prover.FunAssump's to the 'Prover.MREnv' if the first argument
+-- is true and this can be done, or printing an error message and exiting if it
+-- cannot.
+mrSolverProve :: Bool -> SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
+mrSolverProve addToEnv sc t1 t2 =
+  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
+     let printStr = if addToEnv then "Proving" else "Testing"
+     (diff, res) <- askMRSolver (Just printStr) sc t1 t2
      case res of
-       Just err -> io $ putStrLn $ Prover.showMRFailure err
-       Nothing -> io $ putStrLn "Success!"
+       Left err | dlvl == 0 ->
+         io (putStrLn $ Prover.showMRFailure err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         io (Exit.exitWith $ Exit.ExitFailure 1)
+       Left err ->
+         -- we ignore the MRFailure context here since it will have already
+         -- been printed by the debug trace
+         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         io (Exit.exitWith $ Exit.ExitFailure 1)
+       Right (Just (fnm, fassump)) | addToEnv ->
+         let assump_str = case Prover.fassumpRHS fassump of
+                            Prover.OpaqueFunAssump _ _ -> "an opaque"
+                            Prover.RewriteFunAssump _ -> "a rewrite" in
+         printOutLnTop Info (
+           printf "[MRSolver] Success in %s, added as %s assumption"
+                  (show diff) (assump_str :: String)) >>
+         modify (\rw -> rw { rwMRSolverEnv =
+           Prover.mrEnvAddFunAssump fnm fassump (rwMRSolverEnv rw) })
+       _ ->
+         printOutLnTop Info $ printf "[MRSolver] Success in %s" (show diff)
+
+-- | Run Mr Solver to prove that the first term refines the second, returning
+-- true iff this can be done. This function will not modify the 'Prover.MREnv'.
+mrSolverQuery :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel Bool
+mrSolverQuery sc t1 t2 =
+  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
+     (diff, res) <- askMRSolver (Just "Querying") sc t1 t2
+     case res of
+       Left _ | dlvl == 0 ->
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         return False
+       Left err ->
+         -- we ignore the MRFailure context here since it will have already
+         -- been printed by the debug trace
+         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         return False
+       Right _ ->
+         printOutLnTop Info (printf "[MRSolver] Success in %s" (show diff)) >>
+         return True
+
+-- | Set the debug level of the 'Prover.MREnv'
+mrSolverSetDebug :: Int -> TopLevel ()
+mrSolverSetDebug dlvl =
+  modify (\rw -> rw { rwMRSolverEnv =
+                        Prover.mrEnvSetDebugLevel dlvl (rwMRSolverEnv rw) })
+
+setMonadification :: SharedContext -> String -> String -> TopLevel ()
+setMonadification sc cry_str saw_str =
+  do rw <- get
+
+     -- Step 1: convert the first string to a Cryptol name
+     cry_nm <-
+       let ?fileReader = StrictBS.readFile in
+       liftIO (CEnv.resolveIdentifier
+               (rwCryptol rw) (Text.pack cry_str)) >>= \case
+       Just n -> return n
+       Nothing -> fail ("No such Cryptol identifer: " ++ cry_str)
+     cry_nmi <- liftIO $ Cryptol.importName cry_nm
+
+     -- Step 2: get the monadified type for this Cryptol name
+     --
+     -- FIXME: not sure if this is the correct way to get the type of a Cryptol
+     -- name, so we are falling back on just translating the name to SAW core
+     -- and monadifying its type there
+     cry_saw_tp <-
+       liftIO $
+       case Map.lookup cry_nm (CEnv.eExtraTypes $ rwCryptol rw) of
+         Just schema ->
+           -- putStrLn ("Found Cryptol type for name: " ++ show cry_str) >>
+           importSchemaCEnv sc (rwCryptol rw) schema
+         Nothing
+           | Just cry_nm_trans <- Map.lookup cry_nm (CEnv.eTermEnv $
+                                                     rwCryptol rw) ->
+             -- putStrLn ("No Cryptol type for name: " ++ cry_str) >>
+             scTypeOf sc cry_nm_trans
+         _ -> fail ("Could not find type for Cryptol name: " ++ cry_str)
+     cry_mon_tp <- liftIO $ Monadify.monadifyCompleteArgType sc cry_saw_tp
+
+     -- Step 3: convert the second string to a typed SAW core term, and if it
+     -- has an existing macro, check that it has the same type as the type for
+     -- the cryptol name, or if no macro exists, check that it has the same
+     -- type as the monadified type for the Cryptol name and generate a macro
+     -- which maps the Cryptol name to the SAW core term
+     let saw_ident = parseIdent saw_str
+     saw_trm <- liftIO $ scGlobalDef sc saw_ident
+     saw_tp <- liftIO $ scTypeOf sc saw_trm
+     let (tp_to_check, macro) =
+           case Map.lookup (ModuleIdentifier saw_ident) (rwMonadify rw) of
+             Just existing_macro -> (cry_saw_tp, existing_macro)
+             Nothing -> (cry_mon_tp, Monadify.argGlobalMacro cry_nmi saw_ident)
+     liftIO $ scCheckSubtype sc Nothing (TC.TypedTerm saw_trm saw_tp) tp_to_check
+
+     -- Step 4: Add the generated macro
+     put (rw { rwMonadify = Map.insert cry_nmi macro (rwMonadify rw) })
 
 parseSharpSATResult :: String -> Maybe Integer
 parseSharpSATResult s = parse (lines s)
@@ -1543,6 +1852,13 @@ approxmc t = do
   case msg of
     [l] -> io $ putStrLn l
     _ -> fail $ "Garbled result from approxmc\n\n" ++ out
+
+set_path_sat_solver :: String -> TopLevel ()
+set_path_sat_solver nm =
+  case map toLower nm of
+    "z3"    -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Z3 })
+    "yices" -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Yices })
+    _ -> fail $ "Unknown path sat solver: " ++ show nm
 
 summarize_verification :: TopLevel ()
 summarize_verification =

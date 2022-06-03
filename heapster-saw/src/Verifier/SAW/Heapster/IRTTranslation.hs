@@ -154,12 +154,14 @@ instance ContainsIRTRecName (AtomicPerm a) where
   containsIRTRecName n (Perm_NamedConj _ args _) = containsIRTRecName n args
   containsIRTRecName n (Perm_LLVMFrame fperm) =
     containsIRTRecName n (map fst fperm)
-  containsIRTRecName _ (Perm_LOwned _ _ _) = False
+  containsIRTRecName _ (Perm_LOwned _ _ _ _ _) = False
+  containsIRTRecName _ (Perm_LOwnedSimple _ _) = False
   containsIRTRecName _ (Perm_LCurrent _) = False
   containsIRTRecName _ Perm_LFinished = False
   containsIRTRecName n (Perm_Struct ps) = containsIRTRecName n ps
   containsIRTRecName _ (Perm_Fun _) = False
   containsIRTRecName _ (Perm_BVProp _) = False
+  containsIRTRecName _ Perm_Any = False
 
 instance ContainsIRTRecName (LLVMFieldPerm w sz) where
   containsIRTRecName n fp = containsIRTRecName n $ llvmFieldContents fp
@@ -413,7 +415,9 @@ instance IRTTyVars (AtomicPerm a) where
     [nuMP| Perm_NamedConj npn args off |] ->
       namedPermIRTTyVars mb_p npn args off
     [nuMP| Perm_LLVMFrame _ |] -> return ([], IRTVarsNil)
-    [nuMP| Perm_LOwned _ _ _ |] ->
+    [nuMP| Perm_LOwned _ _ _ _ _ |] ->
+      throwError "lowned permission in an IRT definition!"
+    [nuMP| Perm_LOwnedSimple _ _ |] ->
       throwError "lowned permission in an IRT definition!"
     [nuMP| Perm_LCurrent _ |] -> return ([], IRTVarsNil)
     [nuMP| Perm_LFinished |] -> return ([], IRTVarsNil)
@@ -422,6 +426,8 @@ instance IRTTyVars (AtomicPerm a) where
       throwError "fun perm in an IRT definition!"
     [nuMP| Perm_BVProp _ |] ->
       throwError "BVProp in an IRT definition!"
+    [nuMP| Perm_Any |] ->
+      throwError "any perm in an IRT definition!"
 
 -- | Get all IRT type variables in a shape expression
 instance IRTTyVars (PermExpr (LLVMShapeType w)) where
@@ -457,7 +463,7 @@ instance IRTTyVars (PermExpr (LLVMShapeType w)) where
                   _ -> do sh' <- irtTSubstExt mb_sh
                           let sh_trans = transTupleTerm <$> translate sh'
                           return ([sh_trans], IRTVar ())
-    [nuMP| PExpr_EqShape _ |] -> return ([], IRTVarsNil)
+    [nuMP| PExpr_EqShape _ _ |] -> return ([], IRTVarsNil)
     [nuMP| PExpr_PtrShape _ _ sh |] -> irtTyVars sh
     [nuMP| PExpr_FieldShape fsh |] -> irtTyVars fsh
     [nuMP| PExpr_ArrayShape _ _ sh |] -> irtTyVars sh
@@ -661,7 +667,9 @@ instance IRTDescs (AtomicPerm a) where
     ([nuMP| Perm_NamedConj npn args off |], _) ->
       namedPermIRTDescs npn args off ixs
     ([nuMP| Perm_LLVMFrame _ |], _) -> return []
-    ([nuMP| Perm_LOwned _ _ _ |], _) ->
+    ([nuMP| Perm_LOwned _ _ _ _ _ |], _) ->
+      error "lowned permission made it to IRTDesc translation"
+    ([nuMP| Perm_LOwnedSimple _ _ |], _) ->
       error "lowned permission made it to IRTDesc translation"
     ([nuMP| Perm_LCurrent _ |], _) -> return []
     ([nuMP| Perm_LFinished |], _) -> return []
@@ -671,13 +679,15 @@ instance IRTDescs (AtomicPerm a) where
       error "fun perm made it to IRTDesc translation"
     ([nuMP| Perm_BVProp _ |], _) ->
       error "BVProp made it to IRTDesc translation"
+    ([nuMP| Perm_Any |], _) ->
+      error "any perm made it to IRTDesc translation"
 
 -- | Get the IRTDescs associated to a shape expression
 instance IRTDescs (PermExpr (LLVMShapeType w)) where
   irtDescs mb_expr ixs = case (mbMatch mb_expr, ixs) of
     ([nuMP| PExpr_Var _ |], _) -> irtVarTDesc ixs
     ([nuMP| PExpr_EmptyShape |], _) -> return []
-    ([nuMP| PExpr_EqShape _ |], _) -> return []
+    ([nuMP| PExpr_EqShape _ _ |], _) -> return []
     ([nuMP| PExpr_NamedShape _ _ nmsh args |], _) ->
       case (mbMatch $ namedShapeBody <$> nmsh, ixs) of
         (_, IRTRecVar) ->

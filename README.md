@@ -42,7 +42,7 @@ To build SAWScript and related utilities from source:
   * Ensure that you have the `cabal` and `ghc` executables in your
     `PATH`. If you don't already have them, we recommend using `ghcup`
     to install them: <https://www.haskell.org/ghcup/>. We recommend
-    Cabal 3.4 or newer, and GHC 8.8 or 8.10.
+    Cabal 3.4 or newer, and GHC 8.8, 8.10, or 9.0.
 
   * Ensure that you have the C libraries and header files for
     `terminfo`, which generally comes as part of `ncurses` on most
@@ -148,7 +148,7 @@ unix-time
 
 Much of the work on SAW has been funded by, and lots of design input was
 provided by the team at the [NSA's Laboratory for Advanced Cybersecurity
-Research](https://www.nsa.gov/what-we-do/research/cybersecurity-research/),
+Research](https://www.nsa.gov/Research/NSA-Mission-Oriented-Research/LAC/),
 including Brad Martin, Frank Taylor, and Sean Weaver.
 
 Portions of SAW are also based upon work supported by the Office
