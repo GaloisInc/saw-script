@@ -399,6 +399,12 @@ toplevelSubshell = VLambda $ \_ ->
      env <- getLocalEnv
      return (VTopLevel (toValue <$> withLocalEnv env m))
 
+proofScriptSubshell :: Value
+proofScriptSubshell = VLambda $ \_ ->
+  do m <- roProofSubshell <$> ask
+     env <- getLocalEnv
+     return (VProofScript (toValue <$> withLocalEnvProof env m))
+
 applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x
 applyValue _ _ = throwTopLevel "applyValue"
@@ -477,6 +483,12 @@ data TopLevelRO =
     -- ^ An action for entering a subshell.  This
     --   may raise an error if the current execution
     --   mode doesn't support subshells (e.g., the remote API)
+
+  , roProofSubshell :: ProofScript ()
+    -- ^ An action for entering a subshell in proof mode.  This
+    --   may raise an error if the current execution
+    --   mode doesn't support subshells (e.g., the remote API)
+
   , roLocalEnv      :: LocalEnv
   }
 
@@ -623,6 +635,10 @@ withPosition pos (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roPosition = pos }
 
 withLocalEnv :: LocalEnv -> TopLevel a -> TopLevel a
 withLocalEnv env (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roLocalEnv = env }) m)
+
+withLocalEnvProof :: LocalEnv -> ProofScript a -> ProofScript a
+withLocalEnvProof env (ProofScript m) = 
+  ProofScript (underExceptT (underStateT (withLocalEnv env)) m)
 
 getLocalEnv :: TopLevel LocalEnv
 getLocalEnv = TopLevel_ (asks roLocalEnv)
@@ -915,6 +931,10 @@ instance IsValue a => IsValue (ProofScript a) where
 
 instance FromValue a => FromValue (ProofScript a) where
     fromValue (VProofScript m) = fmap fromValue m
+    -- Inject top-level computations automatically into proof scripts.
+    -- This should really only possible in interactive subshell mode; otherwise
+    --  the type system should keep this from happening.
+    fromValue (VTopLevel m) = ProofScript (lift (lift (fmap fromValue m)))
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = ProofScript $ do
       v1 <- underExceptT (underStateT (withPosition pos)) (unProofScript (fromValue m1))

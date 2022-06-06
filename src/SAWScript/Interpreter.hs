@@ -15,6 +15,7 @@ Stability   : provisional
 {-# LANGUAGE OverlappingInstances #-}
 #endif
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -26,6 +27,7 @@ module SAWScript.Interpreter
   , processFile
   , buildTopLevelEnv
   , primDocEnv
+  , InteractiveMonad(..)
   )
   where
 
@@ -262,7 +264,13 @@ stmtInterpreter :: StmtInterpreter
 stmtInterpreter ro rw stmts =
   fst <$> runTopLevel (withLocalEnv emptyLocal (interpretStmts stmts)) ro rw
 
-processStmtBind :: Bool -> SS.Pattern -> Maybe SS.Type -> SS.Expr -> TopLevel ()
+processStmtBind ::
+  InteractiveMonad m =>
+  Bool ->
+  SS.Pattern ->
+  Maybe SS.Type ->
+  SS.Expr ->
+  m ()
 processStmtBind printBinds pat _mc expr = do -- mx mt
   let (mx, mt) = case pat of
         SS.PWild t -> (Nothing, t)
@@ -270,18 +278,18 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
         _ -> (Nothing, Nothing)
   let it = SS.Located "it" "it" SS.PosREPL
   let lname = maybe it id mx
-  let ctx = SS.tContext SS.TopLevel
+  ctx <- SS.tContext <$> getMonadContext
   let expr' = case mt of
                 Nothing -> expr
                 Just t -> SS.TSig expr (SS.tBlock ctx t)
   let decl = SS.Decl (SS.getPos expr) pat Nothing expr'
-  rw <- getMergedEnv
+  rw <- liftTopLevel getMergedEnv
   let opts = rwPPOpts rw
 
-  ~(SS.Decl _ _ (Just schema) expr'') <-
+  ~(SS.Decl _ _ (Just schema) expr'') <- liftTopLevel $
     either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
 
-  val <- interpret expr''
+  val <- liftTopLevel $ interpret expr''
 
   -- Run the resulting TopLevel action.
   (result, ty) <-
@@ -289,7 +297,7 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
       SS.Forall [] t ->
         case t of
           SS.TyCon SS.BlockCon [c, t'] | c == ctx -> do
-            result <- SAWScript.Value.fromValue val
+            result <- actionFromValue val
             return (result, t')
           _ -> return (val, t)
       _ -> fail $ "Not a monomorphic type: " ++ SS.pShow schema
@@ -299,39 +307,70 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   -- Print non-unit result if it was not bound to a variable
   case pat of
     SS.PWild _ | printBinds && not (isVUnit result) ->
-      printOutLnTop Info (showsPrecValue opts 0 result "")
+      liftTopLevel $ printOutLnTop Info (showsPrecValue opts 0 result "")
     _ -> return ()
 
   -- Print function type if result was a function
   case ty of
-    SS.TyCon SS.FunCon _ -> printOutLnTop Info $ getVal lname ++ " : " ++ SS.pShow ty
+    SS.TyCon SS.FunCon _ ->
+      liftTopLevel $ printOutLnTop Info $ getVal lname ++ " : " ++ SS.pShow ty
     _ -> return ()
 
-  rw' <- getTopLevelRW
-  putTopLevelRW =<< bindPatternEnv pat (Just (SS.tMono ty)) result rw'
+  liftTopLevel $
+   do rw' <- getTopLevelRW
+      putTopLevelRW =<< bindPatternEnv pat (Just (SS.tMono ty)) result rw'
+
+
+class (Monad m, MonadFail m) => InteractiveMonad m where
+  liftTopLevel :: TopLevel a -> m a
+  withTopLevel :: (forall b. TopLevel b -> TopLevel b) -> m a -> m a
+  actionFromValue :: FromValue a => Value -> m a
+  getMonadContext :: m SS.Context
+
+instance InteractiveMonad TopLevel where
+  liftTopLevel m = m
+  withTopLevel f m = f m
+  actionFromValue = fromValue
+  getMonadContext = return SS.TopLevel
+
+instance InteractiveMonad ProofScript where
+  liftTopLevel m = scriptTopLevel m
+  withTopLevel f (ProofScript m) = ProofScript (underExceptT (underStateT f) m)
+  actionFromValue = fromValue
+  getMonadContext = return SS.ProofScript
 
 -- | Interpret a block-level statement in the TopLevel monad.
-interpretStmt ::
+interpretStmt :: InteractiveMonad m =>
   Bool {-^ whether to print non-unit result values -} ->
   SS.Stmt ->
-  TopLevel ()
+  m ()
 interpretStmt printBinds stmt =
   let ?fileReader = BS.readFile in
   case stmt of
-    SS.StmtBind pos pat mc expr -> withPosition pos (processStmtBind printBinds pat mc expr)
-    SS.StmtLet _ dg           -> do rw <- getTopLevelRW
-                                    dg' <- either failTypecheck return $
-                                           checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
-                                    env <- interpretDeclGroup dg'
-                                    withLocalEnv env getMergedEnv >>= putTopLevelRW
-    SS.StmtCode _ lstr        -> do rw <- getTopLevelRW
-                                    sc <- getSharedContext
-                                    --io $ putStrLn $ "Processing toplevel code: " ++ show lstr
-                                    --showCryptolEnv
-                                    cenv' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput lstr
-                                    putTopLevelRW $ rw { rwCryptol = cenv' }
-                                    --showCryptolEnv
+
+    SS.StmtBind pos pat mc expr ->
+      withTopLevel (withPosition pos) (processStmtBind printBinds pat mc expr)
+
+    SS.StmtLet _ dg           ->
+      liftTopLevel $
+      do rw <- getTopLevelRW
+         dg' <- either failTypecheck return $
+                checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
+         env <- interpretDeclGroup dg'
+         withLocalEnv env getMergedEnv >>= putTopLevelRW
+
+    SS.StmtCode _ lstr ->
+      liftTopLevel $
+      do rw <- getTopLevelRW
+         sc <- getSharedContext
+         --io $ putStrLn $ "Processing toplevel code: " ++ show lstr
+         --showCryptolEnv
+         cenv' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput lstr
+         putTopLevelRW $ rw { rwCryptol = cenv' }
+         --showCryptolEnv
+
     SS.StmtImport _ imp ->
+      liftTopLevel $
       do rw <- getTopLevelRW
          sc <- getSharedContext
          --showCryptolEnv
@@ -342,8 +381,10 @@ interpretStmt printBinds stmt =
          putTopLevelRW $ rw { rwCryptol = cenv' }
          --showCryptolEnv
 
-    SS.StmtTypedef _ name ty   -> do rw <- getTopLevelRW
-                                     putTopLevelRW $ addTypedef (getVal name) ty rw
+    SS.StmtTypedef _ name ty ->
+      liftTopLevel $
+      do rw <- getTopLevelRW
+         putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
 interpretFile file runMain = do
@@ -414,6 +455,7 @@ buildTopLevelEnv proxy opts =
                    , roBasicSS = ss
                    , roStackTrace = []
                    , roSubshell = fail "Subshells not supported"
+                   , roProofSubshell = fail "Proof subshells not supported"
                    , roLocalEnv = []
                    }
        let bic = BuiltinContext {
@@ -464,16 +506,20 @@ processFile ::
   Options ->
   FilePath ->
   Maybe (TopLevel ()) ->
+  Maybe (ProofScript ()) ->
   IO ()
-processFile proxy opts file mbSubshell = do
+processFile proxy opts file mbSubshell mbProofSubshell = do
   (_, ro, rw) <- buildTopLevelEnv proxy opts
   let ro' = case mbSubshell of
               Nothing -> ro
               Just m  -> ro{ roSubshell = m }
+  let ro'' = case mbProofSubshell of
+              Nothing -> ro'
+              Just m  -> ro'{ roProofSubshell = m }
   oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
   setCurrentDirectory (takeDirectory file')
-  _ <- runTopLevel (interpretFile file' True) ro' rw
+  _ <- runTopLevel (interpretFile file' True) ro'' rw
             `X.catch` (handleException opts)
   setCurrentDirectory oldpath
   return ()
@@ -814,6 +860,11 @@ primitives = Map.fromList
 
   , prim "subshell"            "() -> TopLevel ()"
     (\_ _ -> toplevelSubshell)
+    Experimental
+    []
+
+  , prim "proof_subshell"      "() -> ProofScript ()"
+    (\ _ _ -> proofScriptSubshell)
     Experimental
     []
 

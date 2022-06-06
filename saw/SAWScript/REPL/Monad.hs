@@ -6,6 +6,7 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -22,7 +23,9 @@ module SAWScript.REPL.Monad (
   , catchOther
   , exceptionProtect
   , liftTopLevel
+  , liftProofScript
   , subshell
+  , proof_subshell
   , Refs(..)
 
     -- ** Errors
@@ -50,6 +53,7 @@ module SAWScript.REPL.Monad (
   , getValueEnvironment
   , getEnvironment, modifyEnvironment, putEnvironment
   , getEnvironmentRef
+  , getProofStateRef
   , getSAWScriptNames
   ) where
 
@@ -69,7 +73,8 @@ import Control.Applicative (Applicative(..), pure, (<*>))
 #endif
 import Control.Monad (unless, ap, void)
 import Control.Monad.Reader (ask)
-import Control.Monad.State (put, get)
+import Control.Monad.State (put, get, StateT(..))
+import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.IO.Class (liftIO)
 import qualified Control.Monad.Fail as Fail
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef, writeIORef)
@@ -91,9 +96,13 @@ import qualified Data.AIG.CompactGraph as AIG
 import SAWScript.AST (Located(getVal))
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.Options (Options)
+import SAWScript.Proof (ProofState, ProofResult(..), psGoals)
 import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel,
                             makeCheckpoint, restoreCheckpoint)
-import SAWScript.Value (AIGProxy(..), mergeLocalEnv, IsValue, Value)
+import SAWScript.Value
+  ( AIGProxy(..), mergeLocalEnv, IsValue, Value
+  , ProofScript(..), showsProofResult, toValue
+  )
 import Verifier.SAW (SharedContext)
 
 deriving instance Typeable AIG.Proxy
@@ -106,6 +115,7 @@ data Refs = Refs
   , eIsBatch    :: Bool
   , eTopLevelRO :: TopLevelRO
   , environment :: IORef TopLevelRW
+  , proofState  :: Maybe (IORef ProofState)
   }
 
 -- | Initial, empty environment.
@@ -119,13 +129,9 @@ defaultRefs isBatch opts =
        , eIsBatch    = isBatch
        , eTopLevelRO = ro
        , environment = rwRef
+       , proofState  = Nothing
        }
 
--- | Build up the prompt for the REPL.
-mkPrompt :: Bool {- ^ is batch -} -> String
-mkPrompt batch
-  | batch     = ""
-  | otherwise = "sawscript> "
 
 mkTitle :: Refs -> String
 mkTitle _refs = "sawscript"
@@ -154,10 +160,32 @@ subshell (REPL m) = TopLevel_ $
                      , eIsBatch  = False
                      , eTopLevelRO = ro
                      , environment = rwRef
+                     , proofState  = Nothing
                      }
           m refs
           readIORef rwRef
      put rw'
+
+proof_subshell :: REPL () -> ProofScript ()
+proof_subshell (REPL m) =
+  ProofScript $ ExceptT $ StateT $ \proofSt ->
+  do ro <- ask
+     rw <- get
+     (rw', outProofSt) <- liftIO $
+       do contRef <- newIORef True
+          rwRef <- newIORef rw
+          proofRef <- newIORef proofSt
+          let refs = Refs
+                     { eContinue = contRef
+                     , eIsBatch  = False
+                     , eTopLevelRO = ro
+                     , environment = rwRef
+                     , proofState  = Just proofRef
+                     }
+          m refs
+          (,) <$> readIORef rwRef <*> readIORef proofRef
+     put rw'
+     return (Right (), outProofSt)
 
 instance Functor REPL where
   {-# INLINE fmap #-}
@@ -292,6 +320,18 @@ liftTopLevel m =
              writeIORef ref rw'
              return v
 
+liftProofScript :: IsValue a => ProofScript a -> IORef ProofState -> REPL Value
+liftProofScript m ref =
+  liftTopLevel $
+  do st <- liftIO $ readIORef ref
+     (res, st') <- runStateT (runExceptT (unProofScript m)) st
+     liftIO $ writeIORef ref st'
+     case res of
+       Left (stats, cex) ->
+         do ppOpts <- rwPPOpts <$> get
+            fail (showsProofResult ppOpts (InvalidProof stats cex st') "")
+       Right x -> return (toValue x)
+
 -- Primitives ------------------------------------------------------------------
 
 io :: IO a -> REPL a
@@ -308,7 +348,15 @@ modifyRef r f = REPL (\refs -> modifyIORef (r refs) f)
 
 -- | Construct the prompt for the current environment.
 getPrompt :: REPL String
-getPrompt = mkPrompt <$> (REPL (return . eIsBatch))
+getPrompt =
+  do batch <- REPL (return . eIsBatch)
+     if batch then return ""
+     else
+       getProofStateRef >>= \case
+         Nothing -> return "sawscript> "
+         Just psr ->
+           do ps <- io (readIORef psr)
+              return ("proof ("++show (length (psGoals ps))++")> ")
 
 shouldContinue :: REPL Bool
 shouldContinue = readRef eContinue
@@ -420,6 +468,9 @@ getTopLevelRO = REPL (return . eTopLevelRO)
 getEnvironmentRef :: REPL (IORef TopLevelRW)
 getEnvironmentRef = environment <$> getRefs
 
+getProofStateRef :: REPL (Maybe (IORef ProofState))
+getProofStateRef = proofState <$> getRefs
+
 getEnvironment :: REPL TopLevelRW
 getEnvironment = readRef environment
 
@@ -449,4 +500,3 @@ data EnvVal
   | EnvNum    !Int
   | EnvBool   Bool
     deriving (Show)
-

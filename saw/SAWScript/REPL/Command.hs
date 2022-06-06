@@ -221,7 +221,11 @@ sawScriptCmd str = do
   let tokens = SAWScript.Lexer.lexSAW replFileName str
   case SAWScript.Parser.parseStmtSemi tokens of
     Left err -> io $ print err
-    Right stmt -> void $ liftTopLevel (interpretStmt True stmt)
+    Right stmt ->
+      do mr <- getProofStateRef
+         case mr of
+           Nothing -> void $ liftTopLevel (interpretStmt True stmt)
+           Just r  -> void $ liftProofScript (interpretStmt True stmt) r
 
 replFileName :: String
 replFileName = "<stdin>"
