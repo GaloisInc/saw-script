@@ -43,12 +43,13 @@ main = do
         [] -> checkZ3 opts'' *> REPL.run opts''
         _ | runInteractively opts'' -> checkZ3 opts'' *> REPL.run opts''
         [file] -> checkZ3 opts'' *>
-          processFile (AIGProxy AIG.compactProxy) opts'' file subsh `catch`
+          processFile (AIGProxy AIG.compactProxy) opts'' file subsh proofSubsh`catch`
           (\(ErrorCall msg) -> err opts'' msg)
         (_:_) -> err opts'' "Multiple files not yet supported."
     (_, _, errs) -> do hPutStrLn stderr (concat errs ++ usageInfo header options)
                        exitProofUnknown
   where subsh = Just (REPL.subshell (REPL.replBody Nothing (return ())))
+        proofSubsh = Just (REPL.proof_subshell (REPL.replBody Nothing (return ())))
         header = "Usage: saw [OPTION...] [-I | file]"
         checkZ3 opts = do
           p <- findExecutable "z3"
