@@ -53,6 +53,8 @@ data YosysSequential = YosysSequential
   , _yosysSequentialStateFields :: Map Text (SC.Term, C.Type)
   , _yosysSequentialInputFields :: Map Text (SC.Term, C.Type)
   , _yosysSequentialOutputFields :: Map Text (SC.Term, C.Type)
+  , _yosysSequentialInputWidths :: Map Text Natural
+  , _yosysSequentialOutputWidths :: Map Text Natural
   , _yosysSequentialStateWidths :: Map Text Natural
   }
 makeLenses ''YosysSequential
@@ -171,6 +173,8 @@ convertModuleInline sc m = do
     , _yosysSequentialStateFields = stateFields
     , _yosysSequentialInputFields = inputFields
     , _yosysSequentialOutputFields = outputFields
+    , _yosysSequentialInputWidths = fromIntegral . length <$> inputPorts
+    , _yosysSequentialOutputWidths = fromIntegral . length <$> outputPorts
     , _yosysSequentialStateWidths = stateWidths
     }
 

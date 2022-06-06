@@ -83,6 +83,8 @@ library
     , unordered-containers
     , utf8-string
     , what4 >= 0.4
+    , what4-transition-system
+    , language-sally
     , vector
     , GraphSCC
     , macaw-base
@@ -180,6 +182,7 @@ library
     SAWScript.Yosys.Netgraph
     SAWScript.Yosys.State
     SAWScript.Yosys.Theorem
+    SAWScript.Yosys.TransitionSystem
     SAWScript.Yosys.Utils
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count

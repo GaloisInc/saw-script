@@ -43,3 +43,6 @@
 [submodule "deps/language-rust"]
 	path = deps/language-rust
 	url = https://github.com/harpocrates/language-rust.git
+[submodule "deps/language-sally"]
+	path = deps/language-sally
+	url = https://github.com/GaloisInc/language-sally

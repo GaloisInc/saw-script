@@ -14,6 +14,7 @@ module SAWScript.Yosys
   , yosys_import_sequential
   , yosys_extract_sequential
   , yosys_extract_sequential_raw
+  , yosys_verify_sequential_sally
   , loadYosysIR
   , yosysIRToTypedTerms
   ) where
@@ -22,14 +23,13 @@ import Control.Lens.TH (makeLenses)
 
 import Control.Lens (view, (^.))
 import Control.Exception (throw)
-import Control.Monad (forM, foldM)
+import Control.Monad (foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
-import qualified Data.Text as Text
 import qualified Data.Graph as Graph
 
 import qualified Text.URI as URI
@@ -43,12 +43,14 @@ import qualified Cryptol.Utils.RecordMap as C
 
 import SAWScript.Value
 import qualified SAWScript.Builtins as Builtins
+import qualified SAWScript.Crucible.Common as Common
 
 import SAWScript.Yosys.Utils
 import SAWScript.Yosys.IR
 import SAWScript.Yosys.Netgraph
 import SAWScript.Yosys.State
 import SAWScript.Yosys.Theorem
+import SAWScript.Yosys.TransitionSystem
 
 --------------------------------------------------------------------------------
 -- ** Building the module graph from Yosys IR
@@ -182,3 +184,10 @@ yosys_extract_sequential s n = do
 
 yosys_extract_sequential_raw :: YosysSequential -> TopLevel SC.TypedTerm
 yosys_extract_sequential_raw s = pure $ s ^. yosysSequentialTerm
+
+yosys_verify_sequential_sally :: YosysSequential -> FilePath -> SC.TypedTerm -> TopLevel ()
+yosys_verify_sequential_sally s path q = do
+  sc <- getSharedContext
+  sym <- liftIO $ Common.newSAWCoreExprBuilder sc
+  scs <- liftIO $ Common.sawCoreState sym
+  queryModelChecker sym scs sc s path q
