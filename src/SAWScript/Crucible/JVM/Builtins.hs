@@ -314,7 +314,7 @@ verifyObligations cc mspec tactic assumes asserts =
                        , goalName = nm
                        , goalLoc  = gloc
                        , goalDesc = msg
-                       , goalProp = goal'
+                       , goalSequent = propToSequent goal'
                        , goalTags = MS.conditionTags md
                        }
        res <- runProofScript tactic proofgoal (Just ploc) $ Text.unwords
