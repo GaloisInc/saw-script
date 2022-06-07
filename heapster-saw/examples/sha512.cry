@@ -138,7 +138,7 @@ processBlock_loop_spec i a b c d e f g h X T1 in =
 
 processBlocks_spec : {n} Literal n [64] => [8][w] -> [16*n][w] ->
                      ([8][w], [16*n][w])
-processBlocks_spec x y = processBlocks_loop_spec 0 `n x y
+processBlocks_spec state in = processBlocks_loop_spec 0 `n state in
 
 processBlocks_loop_spec : {n} Literal n [64] => [w] -> [w] -> [8][w] ->
                           [16*n][w] -> ([8][w], [16*n][w])
