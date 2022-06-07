@@ -1190,7 +1190,7 @@ checkGoals bak opts nm sc tactic mdMap = do
                     , goalName = nm
                     , goalLoc  = gloc
                     , goalDesc = show $ gMessage g
-                    , goalProp = term
+                    , goalSequent = propToSequent term
                     , goalTags = MS.conditionTags md
                     }
     res <- runProofScript tactic proofgoal (Just (gLoc g)) $ Text.unwords

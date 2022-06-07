@@ -29,7 +29,11 @@ import           Verifier.SAW.SATQuery
 import           Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
-import SAWScript.Proof(Prop, propToSATQuery, propSize, goalProp, ProofGoal, goalType, goalNum, CEX)
+import SAWScript.Proof
+  ( Prop, propToSATQuery, sequentToSATQuery, propSize
+  , goalSequent, ProofGoal, goalType, goalNum, CEX
+  , sequentToProp
+  )
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import qualified SAWScript.Prover.Exporter as Exporter
 import SAWScript.Prover.Util (liftCexBB, liftLECexBB)
@@ -166,7 +170,7 @@ abcSatExternal :: MonadIO m =>
   ProofGoal ->
   m (Maybe CEX, SolverStats)
 abcSatExternal proxy sc doCNF execName args g = liftIO $
-  do satq <- propToSATQuery sc mempty (goalProp g)
+  do satq <- sequentToSATQuery sc mempty (goalSequent g)
      let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
      (path, fh) <- openTempFile "." cnfName
      hClose fh -- Yuck. TODO: allow writeCNF et al. to work on handles.
@@ -184,7 +188,8 @@ abcSatExternal proxy sc doCNF execName args g = liftIO $
        let ls = lines out
            sls = filter ("s " `isPrefixOf`) ls
            vls = filter ("v " `isPrefixOf`) ls
-       let stats = solverStats ("external SAT:" ++ execName) (propSize (goalProp g))
+       gp <- sequentToProp sc (goalSequent g)
+       let stats = solverStats ("external SAT:" ++ execName) (propSize gp)
        case (sls, vls) of
          (["s SATISFIABLE"], _) -> do
            let bs = parseDimacsSolution variables vls

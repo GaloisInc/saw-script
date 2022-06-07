@@ -361,13 +361,13 @@ quickcheckGoal sc n = do
   execTactic $ tacticSolve $ \goal -> io $ do
     printOutLn opts Warn $ "WARNING: using quickcheck to prove goal..."
     hFlush stdout
-    satq <- propToSATQuery sc mempty (goalProp goal)
+    satq <- sequentToSATQuery sc mempty (goalSequent goal)
     testGen <- prepareSATQuery sc satq
-    let stats = solverStats "quickcheck" (propSize (goalProp goal))
+    let stats = solverStats "quickcheck" (sequentSize (goalSequent goal))
     runManyTests testGen n >>= \case
        Nothing ->
          do printOutLn opts Info $ "checked " ++ show n ++ " cases."
-            return (stats, SolveSuccess (QuickcheckEvidence n (goalProp goal)))
+            return (stats, SolveSuccess (QuickcheckEvidence n (goalSequent goal)))
        Just cex -> return (stats, SolveCounterexample cex)
 
 assumeValid :: ProofScript ()
@@ -376,8 +376,8 @@ assumeValid =
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is valid"
      pos <- SV.getPosition
      let admitMsg = "assumeValid: " <> Text.pack (goalName goal)
-     let stats = solverStats "ADMITTED" (propSize (goalProp goal))
-     return (stats, SolveSuccess (Admitted admitMsg pos (goalProp goal)))
+     let stats = solverStats "ADMITTED" (sequentSize (goalSequent goal))
+     return (stats, SolveSuccess (Admitted admitMsg pos (goalSequent goal)))
 
 assumeUnsat :: ProofScript ()
 assumeUnsat =
@@ -385,16 +385,16 @@ assumeUnsat =
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is unsat"
      pos <- SV.getPosition
      let admitMsg = "assumeUnsat: " <> Text.pack (goalName goal)
-     let stats = solverStats "ADMITTED" (propSize (goalProp goal))
-     return (stats, SolveSuccess (Admitted admitMsg pos (goalProp goal)))
+     let stats = solverStats "ADMITTED" (sequentSize (goalSequent goal))
+     return (stats, SolveSuccess (Admitted admitMsg pos (goalSequent goal)))
 
 admitProof :: Text -> ProofScript ()
 admitProof msg =
   execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: admitting goal " ++ goalName goal
      pos <- SV.getPosition
-     let stats = solverStats "ADMITTED" (propSize (goalProp goal))
-     return (stats, SolveSuccess (Admitted msg pos (goalProp goal)))
+     let stats = solverStats "ADMITTED" (sequentSize (goalSequent goal))
+     return (stats, SolveSuccess (Admitted msg pos (goalSequent goal)))
 
 trivial :: ProofScript ()
 trivial =
@@ -445,7 +445,8 @@ write_goal fp =
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
      liftIO $ do
-       output <- liftIO (scShowTerm sc opts =<< propToTerm sc (goalProp goal))
+       -- TODO, something better here
+       output <- liftIO (scShowTerm sc opts =<< propToTerm sc =<< sequentToProp sc (goalSequent goal))
        writeFile fp (unlines [goalSummary goal, output])
 
 print_goal :: ProofScript ()
@@ -453,7 +454,8 @@ print_goal =
   execTactic $ tacticId $ \goal ->
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
-     output <- liftIO (scShowTerm sc opts =<< propToTerm sc (goalProp goal))
+     -- TODO, something better here
+     output <- liftIO (scShowTerm sc opts =<< propToTerm sc =<< sequentToProp sc (goalSequent goal))
      printOutLnTop Info (goalSummary goal)
      printOutLnTop Info output
 
@@ -473,7 +475,8 @@ print_goal_depth n =
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
      let opts' = opts { ppMaxDepth = Just n }
-     output <- liftIO (scShowTerm sc opts' =<< propToTerm sc (goalProp goal))
+     -- TODO, something better here
+     output <- liftIO (scShowTerm sc opts' =<< propToTerm sc =<< sequentToProp sc (goalSequent goal))
      printOutLnTop Info ("Goal " ++ goalName goal ++ ":")
      printOutLnTop Info output
 
@@ -481,7 +484,7 @@ printGoalConsts :: ProofScript ()
 printGoalConsts =
   execTactic $ tacticId $ \goal ->
   do sc <- getSharedContext
-     tm <- io (propToTerm sc (goalProp goal))
+     tm <- io (propToTerm sc =<< sequentToProp sc (goalSequent goal))
      mapM_ (printOutLnTop Info) $
        [ show nm
        | (_,(nm,_,_)) <- Map.toList (getConstantSet tm)
@@ -491,7 +494,7 @@ printGoalSize :: ProofScript ()
 printGoalSize =
   execTactic $ tacticId $ \goal ->
   do sc <- getSharedContext
-     t  <- io (propToTerm sc (goalProp goal))
+     t  <- io (propToTerm sc =<< sequentToProp sc (goalSequent goal))
      printOutLnTop Info $ "Goal shared size: " ++ show (scSharedSize t)
      printOutLnTop Info $ "Goal unshared size: " ++ show (scTreeSize t)
 
@@ -547,22 +550,22 @@ unfoldGoal unints =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
      unints' <- resolveNames unints
-     prop' <- io (unfoldProp sc unints' (goalProp goal))
-     return (prop', UnfoldEvidence unints')
+     sqt' <- traverseSequent (io . unfoldProp sc unints') (goalSequent goal)
+     return (sqt', UnfoldEvidence unints')
 
 simplifyGoal :: SV.SAWSimpset -> ProofScript ()
 simplifyGoal ss =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
-     (_,prop') <- io (simplifyProp sc ss (goalProp goal))
-     return (prop', RewriteEvidence ss)
+     sqt' <- traverseSequent (\p -> snd <$> io (simplifyProp sc ss p)) (goalSequent goal)
+     return (sqt', RewriteEvidence ss)
 
 hoistIfsInGoalPrim :: ProofScript ()
 hoistIfsInGoalPrim =
   execTactic $ tacticChange $ \goal ->
     do sc <- getSharedContext
-       p <- io $ hoistIfsInGoal sc (goalProp goal)
-       return (p, HoistIfsEvidence)
+       sqt' <- traverseSequent (io . hoistIfsInGoal sc) (goalSequent goal)
+       return (sqt', HoistIfsEvidence)
 
 term_type :: TypedTerm -> TopLevel C.Schema
 term_type tt =
@@ -578,8 +581,8 @@ goal_eval unints =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
      unintSet <- resolveNames unints
-     prop' <- io (evalProp sc unintSet (goalProp goal))
-     return (prop', EvalEvidence unintSet)
+     sqt' <- traverseSequent (io . evalProp sc unintSet) (goalSequent goal)
+     return (sqt', EvalEvidence unintSet)
 
 extract_uninterp ::
   [String] {- ^ uninterpred identifiers -} ->
@@ -655,8 +658,8 @@ beta_reduce_goal :: ProofScript ()
 beta_reduce_goal =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
-     prop' <- io (betaReduceProp sc (goalProp goal))
-     return (prop', id)
+     sqt' <- traverseSequent (io . betaReduceProp sc) (goalSequent goal)
+     return (sqt', id)
 
 goal_apply :: Theorem -> ProofScript ()
 goal_apply thm =
@@ -668,21 +671,25 @@ goal_exact tm =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticExact sc (ttTerm tm))
 
+{-
 goal_assume :: ProofScript Theorem
 goal_assume =
   do sc <- SV.scriptTopLevel getSharedContext
      pos <- SV.scriptTopLevel SV.getPosition
      execTactic (tacticAssume sc pos)
+-}
 
 goal_intro :: Text -> ProofScript TypedTerm
 goal_intro s =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticIntro sc s)
 
+{-
 goal_insert :: Theorem -> ProofScript ()
 goal_insert thm =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticCut sc thm)
+-}
 
 goal_num_when :: Int -> ProofScript () -> ProofScript ()
 goal_num_when n script =
@@ -732,7 +739,7 @@ satExternal doCNF execName args =
        sc <- SV.getSharedContext
        (mb, stats) <- Prover.abcSatExternal proxy sc doCNF execName args g
        case mb of
-         Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
+         Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
          Just a  -> return (stats, SolveCounterexample a)
 
 writeAIGPrim :: FilePath -> Term -> TopLevel ()
@@ -772,9 +779,10 @@ applyProverToGoal :: (Prop -> TopLevel (Maybe CEX, SolverStats))
                      -> ProofGoal
                      -> TopLevel (SolverStats, SolveResult)
 applyProverToGoal f g = do
-  (mb, stats) <- f (goalProp g)
+  sc <- getSharedContext
+  (mb, stats) <- f =<< io (sequentToProp sc (goalSequent g))
   case mb of
-    Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
+    Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
     Just a  -> return (stats, SolveCounterexample a)
 
 wrapProver ::
@@ -894,8 +902,9 @@ proveWithSATExporter ::
 proveWithSATExporter exporter unintSet path sep ext =
   execTactic $ tacticSolve $ \g ->
   do let file = path ++ sep ++ goalType g ++ show (goalNum g) ++ ext
-     stats <- Prover.proveWithSATExporter exporter unintSet file (goalProp g)
-     return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
+     sc <- getSharedContext
+     stats <- Prover.proveWithSATExporter exporter unintSet file =<< io (sequentToProp sc (goalSequent g))
+     return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
 
 proveWithPropExporter ::
   (FilePath -> Prop -> TopLevel a) ->
@@ -906,8 +915,9 @@ proveWithPropExporter ::
 proveWithPropExporter exporter path sep ext =
   execTactic $ tacticSolve $ \g ->
   do let file = path ++ sep ++ goalType g ++ show (goalNum g) ++ ext
-     stats <- Prover.proveWithPropExporter exporter file (goalProp g)
-     return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
+     sc <- getSharedContext
+     stats <- Prover.proveWithPropExporter exporter file =<< io (sequentToProp sc (goalSequent g))
+     return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
 
 offline_aig :: FilePath -> ProofScript ()
 offline_aig path =
@@ -972,7 +982,7 @@ provePrim script t = do
              , goalName = "prove_prim"
              , goalLoc  = show pos
              , goalDesc = ""
-             , goalProp = prop
+             , goalSequent = propToSequent prop
              , goalTags = mempty
              }
   res <- SV.runProofScript script goal Nothing "prove_prim"
@@ -998,7 +1008,7 @@ proveHelper nm script t f = do
              , goalName = nm
              , goalLoc  = show pos
              , goalDesc = ""
-             , goalProp = prop
+             , goalSequent = propToSequent prop
              , goalTags = mempty
              }
   opts <- rwPPOpts <$> getTopLevelRW
@@ -1044,7 +1054,7 @@ satPrim script t =
                 , goalName = "sat"
                 , goalLoc  = show pos
                 , goalDesc = ""
-                , goalProp = prop
+                , goalSequent = propToSequent prop
                 , goalTags = mempty
                 }
      res <- SV.runProofScript script goal Nothing "sat"
@@ -1177,9 +1187,8 @@ check_goal =
        g : _ ->
          SV.scriptTopLevel $
          do sc <- getSharedContext
-            tm <- io (propToTerm sc (goalProp g))
-            check_term tm
-            return ()
+            opts <- getTopLevelPPOpts
+            io $ checkSequent sc opts (goalSequent g)
 
 fixPos :: Pos
 fixPos = PosInternal "FIXME"
@@ -1525,7 +1534,7 @@ prove_core script input =
                 , goalName = "prove_core"
                 , goalLoc  = show pos
                 , goalDesc = ""
-                , goalProp = p
+                , goalSequent = propToSequent p
                 , goalTags = mempty
                 }
      res <- SV.runProofScript script goal Nothing "prove_core"

@@ -1482,6 +1482,7 @@ primitives = Map.fromList
     , "This will succeed if the type of the given term matches the current goal."
     ]
 
+{-
   , prim "goal_assume"         "ProofScript Theorem"
     (pureVal goal_assume)
     Experimental
@@ -1493,6 +1494,8 @@ primitives = Map.fromList
     Experimental
     [ "Insert a Theorem as a new hypothesis in the current proof goal."
     ]
+-}
+
   , prim "goal_intro"          "String -> ProofScript Term"
     (pureVal goal_intro)
     Experimental

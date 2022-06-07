@@ -30,6 +30,18 @@ module SAWScript.Proof
   , prettyProp
   , ppProp
   , propToSATQuery
+  , checkProp
+
+  , Sequent
+  , SequentState(..)
+  , sequentToProp
+  , sequentToSATQuery
+  , sequentSize
+  , prettySequent
+  , ppSequent
+  , propToSequent
+  , traverseSequent
+  , checkSequent
 
   , TheoremDB
   , newTheoremDB
@@ -62,8 +74,8 @@ module SAWScript.Proof
   , Tactic
   , withFirstGoal
   , tacticIntro
-  , tacticCut
-  , tacticAssume
+--  , tacticCut
+--  , tacticAssume
   , tacticApply
   , tacticSplit
   , tacticTrivial
@@ -204,6 +216,12 @@ splitProp sc (Prop p) =
             t2 <- scPiList sc vars =<< scEqTrue sc p2
             return (Just (Prop t1,Prop t2))
 
+splitSequent :: SharedContext -> Sequent -> IO (Maybe (Sequent, Sequent))
+splitSequent sc (Sequent_ p) =
+  splitProp sc p >>= \case
+    Nothing -> return Nothing
+    Just (x, y) -> return (Just (Sequent_ x, Sequent_ y))
+
 -- | Unfold all the constants appearing in the proposition
 --   whose VarIndex is found in the given set.
 unfoldProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
@@ -216,6 +234,12 @@ simplifyProp :: Ord a => SharedContext -> Simpset a -> Prop -> IO (Set a, Prop)
 simplifyProp sc ss (Prop tm) =
   do (a, tm') <- rewriteSharedTerm sc ss tm
      return (a, Prop tm')
+
+-- | Rewrite in the sequent using the provided Simpset
+simplifySequent :: Ord a => SharedContext -> Simpset a -> Sequent -> IO (Set a, Sequent)
+simplifySequent sc ss (Sequent_ p) =
+  do (a, p') <- simplifyProp sc ss p
+     return (a, Sequent_ p')
 
 hoistIfsInGoal :: SharedContext -> Prop -> IO Prop
 hoistIfsInGoal sc (Prop p) = do
@@ -295,6 +319,53 @@ prettyProp opts (Prop tm) = scPrettyTerm opts tm
 -- | Pretty print the given proposition as a @SawDoc@.
 ppProp :: PPOpts -> Prop -> SawDoc
 ppProp opts (Prop tm) = ppTerm opts tm
+
+
+
+-- Dummy definition for now
+data Sequent = Sequent_ Prop
+
+data SequentState
+  = Unfocused
+  | GoalFocus Prop (Prop -> Sequent)
+  | HypFocus Prop (Prop -> Sequent)
+
+propToSequent :: Prop -> Sequent
+propToSequent p = Sequent_ p
+
+sequentToProp :: SharedContext -> Sequent -> IO Prop
+sequentToProp _sc (Sequent_ p) = return p
+
+sequentToSATQuery :: SharedContext -> Set VarIndex -> Sequent -> IO SATQuery
+sequentToSATQuery sc unintSet sqt =
+  sequentToProp sc sqt >>= propToSATQuery sc unintSet
+
+-- | Pretty print the given proposition as a string.
+prettySequent :: PPOpts -> Sequent -> String
+prettySequent opts (Sequent_ p) = prettyProp opts p
+
+-- | Pretty print the given proposition as a @SawDoc@.
+ppSequent :: PPOpts -> Sequent -> SawDoc
+ppSequent opts (Sequent_ p) = ppProp opts p
+
+sequentState :: Sequent -> SequentState
+sequentState (Sequent_ p) = GoalFocus p Sequent_
+
+sequentSize :: Sequent -> Integer
+sequentSize (Sequent_ p) = propSize p
+
+traverseSequent :: Applicative m => (Prop -> m Prop) -> Sequent -> m Sequent
+traverseSequent f (Sequent_ p) = Sequent_ <$> f p
+
+checkSequent :: SharedContext -> PPOpts -> Sequent -> IO ()
+checkSequent sc ppOpts (Sequent_ p) = checkProp sc ppOpts p
+
+checkProp :: SharedContext -> PPOpts -> Prop -> IO ()
+checkProp sc ppOpts (Prop t) =
+  do ty <- TC.scTypeCheckError sc t
+     case asSort ty of
+        Just s | s == propSort -> return ()
+        _ -> fail $ unlines ["Term is not a prop!", scPrettyTerm ppOpts t, scPrettyTerm ppOpts ty]
 
 type TheoremNonce = Nonce GlobalNonceGenerator Theorem
 
@@ -408,18 +479,18 @@ data Evidence
     --   has been dispatched to a solver which has indicated that it
     --   was able to prove the proposition.  The included @SolverStats@
     --   give some details about the solver run.
-  | SolverEvidence SolverStats Prop
+  | SolverEvidence SolverStats Sequent
 
     -- | This type of evidence is produced when the given proposition
     --   has been randomly tested against input vectors in the style
     --   of quickcheck.  The included number is the number of successfully
     --   passed test vectors.
-  | QuickcheckEvidence Integer Prop
+  | QuickcheckEvidence Integer Sequent
 
     -- | This type of evidence is produced when the given proposition
     --   has been explicitly assumed without other evidence at the
     --   user's direction.
-  | Admitted Text Pos Prop
+  | Admitted Text Pos Sequent
 
     -- | This type of evidence is produced when a proposition can be deconstructed
     --   along a conjunction into two subgoals, each of which is supported by
@@ -438,14 +509,14 @@ data Evidence
     --   proposition must match the hypothesis of the goal, and the included
     --   evidence must match the conclusion of the goal.  The proposition is
     --   allowed to appear inside the evidence as a local assumption.
-  | AssumeEvidence TheoremNonce Prop Evidence
+--  | AssumeEvidence TheoremNonce Prop Evidence
 
     -- | This type of evidence is used to prove a universally-quantified statement.
-  | ForallEvidence (ExtCns Term) Evidence
+  | IntroEvidence (ExtCns Term) Evidence
 
     -- | This type of evidence is used to weaken a goal by adding a hypothesis,
     --   where the hypothesis is proved by the given theorem.
-  | CutEvidence Theorem Evidence
+  -- | CutEvidence Theorem Evidence
 
     -- | This type of evidence is used to modify a goal to prove via rewriting.
     --   The goal to prove is rewritten by the given simpset; then the provided
@@ -523,17 +594,21 @@ splitEvidence :: [Evidence] -> IO Evidence
 splitEvidence [e1,e2] = pure (SplitEvidence e1 e2)
 splitEvidence _ = fail "splitEvidence: expected two evidence values"
 
+{-
 assumeEvidence :: TheoremNonce -> Prop -> [Evidence] -> IO Evidence
 assumeEvidence n p [e] = pure (AssumeEvidence n p e)
 assumeEvidence _ _ _ = fail "assumeEvidence: expected one evidence value"
+-}
 
-forallEvidence :: ExtCns Term -> [Evidence] -> IO Evidence
-forallEvidence x [e] = pure (ForallEvidence x e)
-forallEvidence _ _ = fail "forallEvidence: expected one evidence value"
+introEvidence :: ExtCns Term -> [Evidence] -> IO Evidence
+introEvidence x [e] = pure (IntroEvidence x e)
+introEvidence _ _ = fail "introEvidence: expected one evidence value"
 
+{-
 cutEvidence :: Theorem -> [Evidence] -> IO Evidence
 cutEvidence thm [e] = pure (CutEvidence thm e)
 cutEvidence _ _ = fail "cutEvidence: expected one evidence value"
+-}
 
 -- | Construct a theorem directly via a proof term.
 proofByTerm :: SharedContext -> TheoremDB -> Term -> Pos -> Text -> IO Theorem
@@ -625,7 +700,7 @@ admitTheorem db msg p loc rsn =
        Theorem
        { _thmProp        = p
        , _thmStats       = solverStats "ADMITTED" (propSize p)
-       , _thmEvidence    = Admitted msg loc p
+       , _thmEvidence    = Admitted msg loc (propToSequent p)
        , _thmLocation    = loc
        , _thmProgramLoc  = Nothing
        , _thmReason      = rsn
@@ -650,7 +725,7 @@ solverTheorem db p stats loc rsn elapsed =
        Theorem
        { _thmProp      = p
        , _thmStats     = stats
-       , _thmEvidence  = SolverEvidence stats p
+       , _thmEvidence  = SolverEvidence stats (propToSequent p)
        , _thmLocation  = loc
        , _thmReason    = rsn
        , _thmProgramLoc = Nothing
@@ -669,8 +744,8 @@ data ProofGoal =
   , goalName :: String
   , goalLoc  :: String
   , goalDesc :: String
-  , goalProp :: Prop
   , goalTags :: Set String
+  , goalSequent :: Sequent
   }
 
 
@@ -711,7 +786,7 @@ predicateToProp sc quant = loop []
 data ProofState =
   ProofState
   { _psGoals :: [ProofGoal]
-  , _psConcl :: (Prop,Pos,Maybe ProgramLoc,Text)
+  , _psConcl :: (Sequent,Pos,Maybe ProgramLoc,Text)
   , _psStats :: SolverStats
   , _psTimeout :: Maybe Integer
   , _psEvidence :: [Evidence] -> IO Evidence
@@ -727,24 +802,32 @@ psGoals = _psGoals
 psStats :: ProofState -> SolverStats
 psStats = _psStats
 
+-- | Test if the first given sequent subsumes the
+--   second given sequent. This is a shallow syntactic
+--   check that is sufficent to show that a proof
+--   of the first sequent is sufficent to prove the second
+sequentSubsumes :: SharedContext -> Sequent -> Sequent -> IO Bool
+sequentSubsumes sc (Sequent_ p1) (Sequent_ p2) =
+  scConvertible sc False (unProp p1) (unProp p2)
+
 -- | Verify that the given evidence in fact supports the given proposition.
 --   Returns the identifers of all the theorems depended on while checking evidence.
 checkEvidence :: SharedContext -> TheoremDB -> Evidence -> Prop -> IO (Set TheoremNonce, TheoremSummary)
 checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap db)
-                                 check hyps e p
+                                 check hyps e (propToSequent p)
 
   where
-    checkApply _hyps (Prop p) [] = return (mempty, mempty, p)
+    checkApply _hyps _mkSqt (Prop p) [] = return (mempty, mempty, p)
 
     -- Check a theorem applied to "Evidence".
     -- The given prop must be an implication
     -- (i.e., nondependent Pi quantifying over a Prop)
     -- and the given evidence must match the expected prop.
-    checkApply hyps (Prop p) (Right e:es)
+    checkApply hyps mkSqt (Prop p) (Right e:es)
       | Just (_lnm, tp, body) <- asPi p
       , looseVars body == emptyBitSet
-      = do (d1,sy1) <- check hyps e =<< termToProp sc tp
-           (d2,sy2,p') <- checkApply hyps (Prop body) es
+      = do (d1,sy1) <- check hyps e . mkSqt =<< termToProp sc tp
+           (d2,sy2,p') <- checkApply hyps mkSqt (Prop body) es
            return (Set.union d1 d2, sy1 <> sy2, p')
       | otherwise = fail $ unlines
            [ "Apply evidence mismatch: non-function or dependent function"
@@ -753,7 +836,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
 
     -- Check a theorem applied to a term. This explicity instantiates
     -- a Pi binder with the given term.
-    checkApply hyps (Prop p) (Left tm:es) =
+    checkApply hyps mkSqt (Prop p) (Left tm:es) =
       do propTerm <- scSort sc propSort
          let m = do tm' <- TC.typeInferComplete tm
                     let err = TC.NotFuncTypeInApp (TC.TypedTerm p propTerm) tm'
@@ -761,7 +844,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
          res <- TC.runTCM m sc Nothing []
          case res of
            Left msg -> fail (unlines (TC.prettyTCError msg))
-           Right p' -> checkApply hyps (Prop p') es
+           Right p' -> checkApply hyps mkSqt (Prop p') es
 
     checkTheorem :: Set TheoremNonce -> Theorem -> IO ()
     checkTheorem hyps (LocalAssumption p loc n) =
@@ -775,18 +858,22 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
     check ::
       Set TheoremNonce ->
       Evidence ->
-      Prop ->
+      Sequent ->
       IO (Set TheoremNonce, TheoremSummary)
-    check hyps e p@(Prop ptm) = case e of
+    check hyps e sqt = case e of
       ProofTerm tm ->
-        do ty <- TC.scTypeCheckError sc tm
-           ok <- scConvertible sc True ptm ty
-           unless ok $ fail $ unlines
-               [ "Proof term does not prove the required proposition"
-               , showTerm ptm
-               , showTerm tm
-               ]
-           return (mempty, ProvedTheorem mempty)
+        case sequentState sqt of
+          GoalFocus (Prop ptm) _ ->
+            do ty <- TC.scTypeCheckError sc tm
+               ok <- scConvertible sc True ptm ty
+               unless ok $ fail $ unlines
+                   [ "Proof term does not prove the required proposition"
+                   , showTerm ptm
+                   , showTerm tm
+                   ]
+               return (mempty, ProvedTheorem mempty)
+          _ -> fail "Sequent must be goal-focused for proof term evidence"
+
 
       LocalAssumptionEvidence (Prop l) n ->
         do unless (Set.member n hyps) $ fail $ unlines
@@ -795,83 +882,92 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
              ]
            return (Set.singleton n, ProvedTheorem mempty)
 
-      SolverEvidence stats (Prop p') ->
-        do ok <- scConvertible sc False ptm p'
+      SolverEvidence stats sqt' ->
+        do ok <- sequentSubsumes sc sqt' sqt
            unless ok $ fail $ unlines
-               [ "Solver proof does not prove the required proposition"
-               , showTerm ptm
-               , showTerm p'
+               [ "Solver proof does not prove the required sequent"
+               , prettySequent defaultPPOpts sqt
+               , prettySequent defaultPPOpts sqt'
                ]
            return (mempty, ProvedTheorem stats)
 
-      Admitted msg pos (Prop p') ->
-        do ok <- scConvertible sc False ptm p'
+      Admitted msg pos sqt' ->
+        do ok <- sequentSubsumes sc sqt' sqt
            unless ok $ fail $ unlines
-               [ "Admitted proof does not match the required proposition " ++ show pos
+               [ "Admitted proof does not match the required sequent " ++ show pos
                , Text.unpack msg
-               , showTerm ptm
-               , showTerm p'
+               , prettySequent defaultPPOpts sqt
+               , prettySequent defaultPPOpts sqt'
                ]
            return (mempty, AdmittedTheorem msg)
 
-      QuickcheckEvidence n (Prop p') ->
-        do ok <- scConvertible sc False ptm p'
+      QuickcheckEvidence n sqt' ->
+        do ok <- sequentSubsumes sc sqt' sqt
            unless ok $ fail $ unlines
-               [ "Quickcheck evidence does not match the required proposition"
-               , showTerm ptm
-               , showTerm p'
+               [ "Quickcheck evidence does not match the required sequent"
+               , prettySequent defaultPPOpts sqt
+               , prettySequent defaultPPOpts sqt'
                ]
            return (mempty, TestedTheorem n)
 
       SplitEvidence e1 e2 ->
-        splitProp sc p >>= \case
+        splitSequent sc sqt >>= \case
           Nothing -> fail $ unlines
-                       [ "Split evidence does not apply to non-conjunction prop"
-                       , showTerm ptm
+                       [ "Split evidence does not apply"
+                       , prettySequent defaultPPOpts sqt
                        ]
-          Just (p1,p2) ->
-            do d1 <- check hyps e1 p1
-               d2 <- check hyps e2 p2
+          Just (sqt1,sqt2) ->
+            do d1 <- check hyps e1 sqt1
+               d2 <- check hyps e2 sqt2
                return (d1 <> d2)
 
       ApplyEvidence thm es ->
-        do checkTheorem hyps thm
-           (d,sy,p') <- checkApply hyps (thmProp thm) es
-           ok <- scConvertible sc False ptm p'
-           unless ok $ fail $ unlines
-               [ "Apply evidence does not match the required proposition"
-               , showTerm ptm
-               , showTerm p'
-               ]
-           return (Set.insert (thmNonce thm) d, sy)
+        case sequentState sqt of
+          GoalFocus p mkSqt ->
+            do checkTheorem hyps thm
+               (d,sy,p') <- checkApply hyps mkSqt (thmProp thm) es
+               ok <- scConvertible sc False (unProp p) p'
+               unless ok $ fail $ unlines
+                   [ "Apply evidence does not match the required proposition"
+                   , showTerm (unProp p)
+                   , showTerm p'
+                   ]
+               return (Set.insert (thmNonce thm) d, sy)
+          _ -> fail $ unlines $
+                    [ "Apply evidence requires a goal-focused sequent"
+                    , prettySequent defaultPPOpts sqt
+                    ]
 
+{-
       CutEvidence thm e' ->
         do checkTheorem hyps thm
            p' <- scFun sc (unProp (thmProp thm)) ptm
            (d,sy) <- check hyps e' (Prop p')
            return (Set.insert (thmNonce thm) d, sy)
+-}
 
       UnfoldEvidence vars e' ->
-        do p' <- unfoldProp sc vars p
-           check hyps e' p'
+        do sqt' <- traverseSequent (unfoldProp sc vars) sqt
+           check hyps e' sqt'
 
       RewriteEvidence ss e' ->
-        do (d1,p') <- simplifyProp sc ss p
+        do (d1,sqt') <- simplifySequent sc ss sqt
            unless (Set.isSubsetOf d1 hyps) $ fail $ unlines
              [ "Rewrite step used theorem not in hypothesis database"
              , show (Set.difference d1 hyps)
              ]
-           (d2,sy) <- check hyps e' p'
+           (d2,sy) <- check hyps e' sqt'
            return (Set.union d1 d2, sy)
 
       HoistIfsEvidence e' ->
-        do p' <- hoistIfsInGoal sc p
-           check hyps e' p'
+        do sqt' <- traverseSequent (hoistIfsInGoal sc) sqt
+           check hyps e' sqt'
 
       EvalEvidence vars e' ->
-        do p' <- evalProp sc vars p
-           check hyps e' p'
+        do sqt' <- traverseSequent (evalProp sc vars) sqt
+           check hyps e' sqt'
 
+{-
       AssumeEvidence n (Prop p') e' ->
         case asPi ptm of
           Nothing -> fail $ unlines ["Assume evidence expected function prop", showTerm ptm]
@@ -888,21 +984,27 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
                    ]
                (d,sy) <- check (Set.insert n hyps) e' (Prop body)
                return (Set.delete n d, sy)
+-}
 
-      ForallEvidence x e' ->
-        case asPi ptm of
-          Nothing -> fail $ unlines ["Assume evidence expected function prop", showTerm ptm]
-          Just (_lnm, ty, body) ->
-            do let ty' = ecType x
-               ok <- scConvertible sc False ty ty'
-               unless ok $ fail $ unlines
-                 ["Forall evidence types do not match"
-                 , showTerm ty'
-                 , showTerm ty
-                 ]
-               x' <- scExtCns sc x
-               body' <- instantiateVar sc 0 x' body
-               check hyps e' (Prop body')
+      IntroEvidence x e' ->
+        -- TODO! Check that the given ExtCns is fresh for the sequent
+        case sequentState sqt of
+          Unfocused -> fail "Intro evidence requires a focused sequent"
+          HypFocus _ _ -> fail "Intro evidence apply in hypothesis: TODO: apply to existentials"
+          GoalFocus (Prop ptm) mkSqt ->
+            case asPi ptm of
+              Nothing -> fail $ unlines ["Assume evidence expected function prop", showTerm ptm]
+              Just (_lnm, ty, body) ->
+                do let ty' = ecType x
+                   ok <- scConvertible sc False ty ty'
+                   unless ok $ fail $ unlines
+                     ["Forall evidence types do not match"
+                     , showTerm ty'
+                     , showTerm ty
+                     ]
+                   x' <- scExtCns sc x
+                   body' <- instantiateVar sc 0 x' body
+                   check hyps e' (mkSqt (Prop body'))
 
 passthroughEvidence :: [Evidence] -> IO Evidence
 passthroughEvidence [e] = pure e
@@ -923,7 +1025,7 @@ setProofTimeout to ps = ps { _psTimeout = Just to }
 startProof :: ProofGoal -> Pos -> Maybe ProgramLoc -> Text -> IO ProofState
 startProof g pos ploc rsn =
   do start <- getCurrentTime
-     pure (ProofState [g] (goalProp g,pos,ploc,rsn) mempty Nothing passthroughEvidence start)
+     pure (ProofState [g] (goalSequent g,pos,ploc,rsn) mempty Nothing passthroughEvidence start)
 
 -- | Attempt to complete a proof by checking that all subgoals have been discharged,
 --   and validate the computed evidence to ensure that it supports the original
@@ -934,12 +1036,13 @@ finishProof sc db ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv start) 
   case gs of
     [] ->
       do e <- checkEv []
-         (deps,sy) <- checkEvidence sc db e concl
+         conclProp <- sequentToProp sc concl
+         (deps,sy) <- checkEvidence sc db e conclProp
          n <- freshNonce globalNonceGenerator
          end <- getCurrentTime
          thm <- recordTheorem db
                    Theorem
-                   { _thmProp = concl
+                   { _thmProp = conclProp
                    , _thmStats = stats
                    , _thmEvidence = e
                    , _thmLocation = loc
@@ -1097,13 +1200,13 @@ propToSATQuery sc unintSet prop =
 -- | Given a goal to prove, attempt to apply the given proposition, producing
 --   new subgoals for any necessary hypotheses of the proposition.  Returns
 --   @Nothing@ if the given proposition does not apply to the goal.
-goalApply :: SharedContext -> Prop -> ProofGoal -> IO (Maybe [Either Term Prop])
+goalApply :: SharedContext -> Prop -> Prop -> IO (Maybe [Either Term Prop])
 goalApply sc rule goal = applyFirst (asPiLists (unProp rule))
   where
 
     applyFirst [] = pure Nothing
     applyFirst ((ruleArgs, ruleConcl) : rest) =
-      do result <- scMatch sc ruleConcl (unProp (goalProp goal))
+      do result <- scMatch sc ruleConcl (unProp goal)
          case result of
            Nothing -> applyFirst rest
            Just inst ->
@@ -1141,18 +1244,24 @@ tacticIntro :: (F.MonadFail m, MonadIO m) =>
   Text {- ^ Name to give to the variable.  If empty, will be chosen automatically from the goal. -} ->
   Tactic m TypedTerm
 tacticIntro sc usernm = Tactic \goal ->
-  case asPi (unProp (goalProp goal)) of
-    Just (nm, tp, body) ->
-      do let name = if Text.null usernm then nm else usernm
-         xv <- liftIO $ scFreshEC sc name tp
-         x  <- liftIO $ scExtCns sc xv
-         tt <- liftIO $ mkTypedTerm sc x
-         body' <- liftIO $ instantiateVar sc 0 x body
-         let goal' = goal { goalProp = Prop body' }
-         return (tt, mempty, [goal'], forallEvidence xv)
+  case sequentState (goalSequent goal) of
+    GoalFocus p mkSqt ->
+      case asPi (unProp p) of
+        Just (nm, tp, body) ->
+          do let name = if Text.null usernm then nm else usernm
+             xv <- liftIO $ scFreshEC sc name tp
+             x  <- liftIO $ scExtCns sc xv
+             tt <- liftIO $ mkTypedTerm sc x
+             body' <- liftIO $ instantiateVar sc 0 x body
+             let goal' = goal { goalSequent = mkSqt (Prop body') }
+             return (tt, mempty, [goal'], introEvidence xv)
 
-    _ -> fail "intro tactic failed: not a function"
+        _ -> fail "intro tactic failed: not a function"
 
+    HypFocus _ _ -> fail "TODO: implement intro on hyps"
+    Unfocused -> fail "intro tactic: focus required"
+
+{-
 -- | Attempt to prove an implication goal by introducing a local assumption for
 --   hypothesis.  Return a @Theorem@ representing this local assumption.
 --   This hypothesis should only be used for proving subgoals arising
@@ -1177,20 +1286,25 @@ tacticCut sc thm = Tactic \goal ->
   do body' <- liftIO (scFun sc (unProp (thmProp thm)) (unProp (goalProp goal)))
      let goal' = goal{ goalProp = Prop body' }
      return ((), mempty, [goal'], cutEvidence thm)
+-}
 
 -- | Attempt to prove a goal by applying the given theorem.  Any hypotheses of
 --   the theorem will generate additional subgoals.
 tacticApply :: (F.MonadFail m, MonadIO m) => SharedContext -> Theorem -> Tactic m ()
 tacticApply sc thm = Tactic \goal ->
-  liftIO (goalApply sc (thmProp thm) goal) >>= \case
-    Nothing -> fail "apply tactic failed: no match"
-    Just newterms ->
-      let newgoals =
-            [ goal{ goalProp = p, goalType = goalType goal ++ ".subgoal" ++ show i }
-            | Right p <- newterms
-            | i <- [0::Integer ..]
-            ] in
-      return ((), mempty, newgoals, \es -> ApplyEvidence thm <$> processEvidence newterms es)
+  case sequentState (goalSequent goal) of
+    Unfocused -> fail "apply tactic: focus required"
+    HypFocus _ _ -> fail "apply tactic: cannot apply in a hypothesis"
+    GoalFocus gl mkSqt ->
+      liftIO (goalApply sc (thmProp thm) gl) >>= \case
+        Nothing -> fail "apply tactic failed: no match"
+        Just newterms ->
+          let newgoals =
+                [ goal{ goalSequent = mkSqt p, goalType = goalType goal ++ ".subgoal" ++ show i }
+                | Right p <- newterms
+                | i <- [0::Integer ..]
+                ] in
+          return ((), mempty, newgoals, \es -> ApplyEvidence thm <$> processEvidence newterms es)
 
  where
    processEvidence :: [Either Term Prop] -> [Evidence] -> IO [Either Term Evidence]
@@ -1203,39 +1317,51 @@ tacticApply sc thm = Tactic \goal ->
 --   two subgoals will be produced, representing the two conjuncts to be proved.
 tacticSplit :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
 tacticSplit sc = Tactic \gl ->
-  liftIO (splitProp sc (goalProp gl)) >>= \case
-    Nothing -> fail "split tactic failed: goal not a conjunction"
-    Just (p1,p2) ->
-      do let g1 = gl{ goalType = goalType gl ++ ".left", goalProp = p1 }
-         let g2 = gl{ goalType = goalType gl ++ ".right", goalProp = p2 }
-         return ((), mempty, [g1,g2], splitEvidence)
+  case sequentState (goalSequent gl) of
+    Unfocused -> fail "split tactic: focus required"
+    HypFocus _ _ -> fail "split tactic: TODO implement splitting in hyps"
+    GoalFocus g mkSqt ->
+      liftIO (splitProp sc g) >>= \case
+        Nothing -> fail "split tactic failed: goal not a conjunction"
+        Just (p1,p2) ->
+          do let g1 = gl{ goalType = goalType gl ++ ".left", goalSequent = mkSqt p1 }
+             let g2 = gl{ goalType = goalType gl ++ ".right", goalSequent = mkSqt p2 }
+             return ((), mempty, [g1,g2], splitEvidence)
 
 -- | Attempt to solve a goal by recognizing it as a trivially true proposition.
 tacticTrivial :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
 tacticTrivial sc = Tactic \goal ->
-  liftIO (trivialProofTerm sc (goalProp goal)) >>= \case
-    Left err -> fail err
-    Right pf ->
-       do let gp = unProp (goalProp goal)
-          ty <- liftIO $ TC.scTypeCheckError sc pf
-          ok <- liftIO $ scConvertible sc True gp ty
-          unless ok $ fail $ unlines
-            [ "The trivial tactic cannot prove this equality"
-            , showTerm gp
-            ]
-          return ((), mempty, [], leafEvidence (ProofTerm pf))
+  case sequentState (goalSequent goal) of
+    Unfocused -> fail "trivial tactic: focus required"
+    HypFocus _ _ -> fail "trivial tactic: cannot apply trivial in a hypothesis"
+    GoalFocus g _ ->
+      liftIO (trivialProofTerm sc g) >>= \case
+        Left err -> fail err
+        Right pf ->
+           do let gp = unProp g
+              ty <- liftIO $ TC.scTypeCheckError sc pf
+              ok <- liftIO $ scConvertible sc True gp ty
+              unless ok $ fail $ unlines
+                [ "The trivial tactic cannot prove this equality"
+                , showTerm gp
+                ]
+              return ((), mempty, [], leafEvidence (ProofTerm pf))
 
 tacticExact :: (F.MonadFail m, MonadIO m) => SharedContext -> Term -> Tactic m ()
 tacticExact sc tm = Tactic \goal ->
-  do let gp = unProp (goalProp goal)
-     ty <- liftIO $ TC.scTypeCheckError sc tm
-     ok <- liftIO $ scConvertible sc True gp ty
-     unless ok $ fail $ unlines
-         [ "Proof term does not prove the required proposition"
-         , showTerm gp
-         , showTerm tm
-         ]
-     return ((), mempty, [], leafEvidence (ProofTerm tm))
+  case sequentState (goalSequent goal) of
+    Unfocused -> fail "tactic exact: focus required"
+    HypFocus _ _ -> fail "tactic exact: cannot apply exact in a hypothesis"
+    GoalFocus g _ ->
+      do let gp = unProp g
+         ty <- liftIO $ TC.scTypeCheckError sc tm
+         ok <- liftIO $ scConvertible sc True gp ty
+         unless ok $ fail $ unlines
+             [ "Proof term does not prove the required proposition"
+             , showTerm gp
+             , showTerm tm
+             ]
+         return ((), mempty, [], leafEvidence (ProofTerm tm))
 
 
 -- | Examine the given proof goal and potentially do some work with it,
@@ -1266,7 +1392,7 @@ tacticSolve f = Tactic \gl ->
 --   The tactic should return a new proposition to prove and a method for
 --   transferring evidence for the modified proposition into a evidence for
 --   the original goal.
-tacticChange :: Monad m => (ProofGoal -> m (Prop, Evidence -> Evidence)) -> Tactic m ()
+tacticChange :: Monad m => (ProofGoal -> m (Sequent, Evidence -> Evidence)) -> Tactic m ()
 tacticChange f = Tactic \gl ->
-  do (p, ef) <- lift (f gl)
-     return ((), mempty, [ gl{ goalProp = p } ], updateEvidence ef)
+  do (sqt, ef) <- lift (f gl)
+     return ((), mempty, [ gl{ goalSequent = sqt } ], updateEvidence ef)
