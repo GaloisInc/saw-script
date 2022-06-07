@@ -2,7 +2,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : SAWScript.Prover.MRSolver.SMT
@@ -549,7 +548,7 @@ mrProveRelH' _ het tp1@(asNonBVVecVectorType -> Just (m1, tpA1))
      t2' <- mrGenBVVecFromVec m2 tpA2 t2 "mrProveRelH (BVVec/BVVec)" n len
      mrProveRelH het tp1' tp2' t1' t2'
 
-mrProveRelH' _ het tp1 tp2 t1 t2 = (het,) <$> matchHet tp1 tp2 >>= \case
+mrProveRelH' _ het tp1 tp2 t1 t2 = case (het, matchHet tp1 tp2) of
 
   -- If our relation is heterogeneous and we have a bitvector on one side and
   -- a Num on the other, ensure that the Num term is TCNum of some Nat, wrap
@@ -571,13 +570,21 @@ mrProveRelH' _ het tp1 tp2 t1 t2 = (het,) <$> matchHet tp1 tp2 >>= \case
   -- non-BVVec vector on the other, wrap the non-BVVec vector term in
   -- genBVVecFromVec and recurse
   (True, Just (HetBVVecVec (n, len, _) (m, tpA2))) ->
-    do len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
+    do m' <- mrBvToNat n len
+       ms_are_eq <- mrConvertible m' m
+       if ms_are_eq then return () else
+         throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
+       len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
        tp2' <- liftSC2 scVecType len' tpA2
        t2' <- mrGenBVVecFromVec m tpA2 t2 "mrProveRelH (BVVec/Vec)" n len
        -- mrDebugPPPrefixSep 2 "mrProveRelH on BVVec/Vec: " t1 "an`d" t2'
        mrProveRelH True tp1 tp2' t1 t2'
   (True, Just (HetVecBVVec (m, tpA1) (n, len, _))) ->
-    do len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
+    do m' <- mrBvToNat n len
+       ms_are_eq <- mrConvertible m' m
+       if ms_are_eq then return () else
+         throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
+       len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
        tp1' <- liftSC2 scVecType len' tpA1
        t1' <- mrGenBVVecFromVec m tpA1 t1 "mrProveRelH (Vec/BVVec)" n len
        -- mrDebugPPPrefixSep 2 "mrProveRelH on Vec/BVVec: " t1' "and" t2

@@ -479,9 +479,9 @@ liftSC5 f a b c d e = mrSC >>= \sc -> liftIO (f sc a b c d e)
 -- | A datatype encapsulating all the way in which we consider two types to
 -- be heterogeneously related: either one is a @Num@ and the other is a @Nat@,
 -- one is a @BVVec@ and the other is a non-@BVVec@ vector (of the same length,
--- this is checked in 'matchHet'), or both sides are pairs (whose components
--- are respectively heterogeneously related, this recursion must be done where
--- 'matchHet' is used, see 'typesHetRelated', for example)
+-- which must be checked where 'matchHet' is used), or both sides are pairs
+-- (whose components are respectively heterogeneously related, which must be
+-- checked where 'matchHet' is used). See 'typesHetRelated' for an example.
 data HetRelated = HetBVNum Natural
                 | HetNumBV Natural
                 | HetBVVecVec (Term, Term, Term) (Term, Term)
@@ -489,37 +489,33 @@ data HetRelated = HetBVNum Natural
                 | HetPair (Term, Term) (Term, Term)
 
 -- | Check to see if the given types match one of the cases of 'HetRelated'
-matchHet :: Term -> Term -> MRM (Maybe HetRelated)
+matchHet :: Term -> Term -> Maybe HetRelated
 matchHet (asBitvectorType -> Just n)
          (asDataType -> Just (primName -> "Cryptol.Num", _)) =
-  return $ Just $ HetBVNum n
+  Just $ HetBVNum n
 matchHet (asDataType -> Just (primName -> "Cryptol.Num", _))
          (asBitvectorType -> Just n) =
-  return $ Just $ HetNumBV n
+  Just $ HetNumBV n
 matchHet (asBVVecType -> Just (n, len, a))
          (asNonBVVecVectorType -> Just (m, a')) =
-  do m' <- mrBvToNat n len
-     ms_are_eq <- mrConvertible m' m
-     return $ if ms_are_eq then Just $ HetBVVecVec (n, len, a) (m, a')
-                           else Nothing
+  Just $ HetBVVecVec (n, len, a) (m, a')
 matchHet (asNonBVVecVectorType -> Just (m, a'))
          (asBVVecType -> Just (n, len, a)) =
-  do m' <- mrBvToNat n len
-     ms_are_eq <- mrConvertible m' m
-     return $ if ms_are_eq then Just $ HetVecBVVec (m, a') (n, len, a)
-                           else Nothing
+  Just $ HetVecBVVec (m, a') (n, len, a)
 matchHet (asPairType -> Just (tpL1, tpR1))
          (asPairType -> Just (tpL2, tpR2)) =
-  return $ Just $ HetPair (tpL1, tpR1) (tpL2, tpR2)
-matchHet _ _ = return $ Nothing
+  Just $ HetPair (tpL1, tpR1) (tpL2, tpR2)
+matchHet _ _ = Nothing
 
 -- | Return true iff the given types are heterogeneously related
 typesHetRelated :: Term -> Term -> MRM Bool
-typesHetRelated tp1 tp2 = matchHet tp1 tp2 >>= \case
+typesHetRelated tp1 tp2 = case matchHet tp1 tp2 of
   Just (HetBVNum _) -> return True
   Just (HetNumBV _) -> return True
-  Just (HetBVVecVec (_, _, a) (_, a')) -> typesHetRelated a a'
-  Just (HetVecBVVec (_, a') (_, _, a)) -> typesHetRelated a' a
+  Just (HetBVVecVec (n, len, a) (m, a')) -> mrBvToNat n len >>= \m' ->
+    (&&) <$> mrConvertible m m' <*> typesHetRelated a a'
+  Just (HetVecBVVec (m, a') (n, len, a)) -> mrBvToNat n len >>= \m' ->
+    (&&) <$> mrConvertible m m' <*> typesHetRelated a a'
   Just (HetPair (tpL1, tpR1) (tpL2, tpR2)) ->
     (&&) <$> typesHetRelated tpL1 tpL2 <*> typesHetRelated tpR1 tpR2
   Nothing -> mrConvertible tp1 tp2

@@ -612,7 +612,7 @@ generalizeCoIndHypArgs hyp [(specs, tp)] =
   do (hyp', var) <- coIndHypWithVar hyp "z" (Type tp)
      return $ coIndHypSetArgs hyp' specs var
 
-generalizeCoIndHypArgs hyp [(specs1, tp1), (specs2, tp2)] = matchHet tp1 tp2 >>= \case
+generalizeCoIndHypArgs hyp [(specs1, tp1), (specs2, tp2)] = case matchHet tp1 tp2 of
 
   -- If we need to generalize bitvector arguments with Num arguments, introduce
   -- a bitvector variable and set all of the bitvector arguments to it and
@@ -635,16 +635,20 @@ generalizeCoIndHypArgs hyp [(specs1, tp1), (specs2, tp2)] = matchHet tp1 tp2 >>=
   -- Vec arguments to `genBVVecFromVec` of it
   -- FIXME: Could we handle the a /= a' case here and in mrRefinesFunH?
   Just (HetBVVecVec (n, len, a) (m, a')) ->
-    do as_are_eq <- mrConvertible a a'
-       if as_are_eq then return () else
+    do m' <- mrBvToNat n len
+       ms_are_eq <- mrConvertible m m'
+       as_are_eq <- mrConvertible a a'
+       if ms_are_eq && as_are_eq then return () else
          throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
        (hyp', var) <- coIndHypWithVar hyp "z" (Type tp1)
        bvv_tm <- mrGenFromBVVec n len a var "generalizeCoIndHypArgs (BVVec/Vec)" m
        let hyp'' = coIndHypSetArgs hyp'  specs1 var
        return    $ coIndHypSetArgs hyp'' specs2 bvv_tm
   Just (HetVecBVVec (m, a') (n, len, a)) ->
-    do as_are_eq <- mrConvertible a a'
-       if as_are_eq then return () else
+    do m' <- mrBvToNat n len
+       ms_are_eq <- mrConvertible m m'
+       as_are_eq <- mrConvertible a a'
+       if ms_are_eq && as_are_eq then return () else
          throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
        (hyp', var) <- coIndHypWithVar hyp "z" (Type tp2)
        bvv_tm <- mrGenFromBVVec n len a var "generalizeCoIndHypArgs (Vec/BVVec)" m
@@ -1030,7 +1034,7 @@ mrRefinesFunH :: (Term -> Term -> MRM a) -> [Term] ->
                  [(LocalName,Term)] -> Term -> [(LocalName,Term)] -> Term ->
                  MRM a
 
-mrRefinesFunH k vars ((nm1, tp1):tps1) t1 ((nm2, tp2):tps2) t2 = matchHet tp1 tp2 >>= \case
+mrRefinesFunH k vars ((nm1, tp1):tps1) t1 ((nm2, tp2):tps2) t2 = case matchHet tp1 tp2 of
     
   -- If we need to introduce a bitvector on one side and a Num on the other,
   -- introduce a bitvector variable and substitute `TCNum` of `bvToNat` of that
@@ -1063,8 +1067,10 @@ mrRefinesFunH k vars ((nm1, tp1):tps1) t1 ((nm2, tp2):tps2) t2 = matchHet tp1 tp
   -- variable on the non-BVVec side
   -- FIXME: Could we handle the a /= a' case here and in generalizeCoIndHypArgs?
   Just (HetBVVecVec (n, len, a) (m, a')) ->
-    do as_are_eq <- mrConvertible a a'
-       if as_are_eq then return () else
+    do m' <- mrBvToNat n len
+       ms_are_eq <- mrConvertible m m'
+       as_are_eq <- mrConvertible a a'
+       if ms_are_eq && as_are_eq then return () else
          throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
        let nm = maybe "_" id $ find ((/=) '_' . Text.head)
                              $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
@@ -1076,8 +1082,10 @@ mrRefinesFunH k vars ((nm1, tp1):tps1) t1 ((nm2, tp2):tps2) t2 = matchHet tp1 tp
             t2'' <- mrApplyAll t2' [bvv_tm]
             mrRefinesFunH k (var : vars') tps1 t1'' tps2' t2''
   Just (HetVecBVVec (m, a') (n, len, a)) ->
-    do as_are_eq <- mrConvertible a a'
-       if as_are_eq then return () else
+    do m' <- mrBvToNat n len
+       ms_are_eq <- mrConvertible m m'
+       as_are_eq <- mrConvertible a a'
+       if ms_are_eq && as_are_eq then return () else
          throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
        let nm = maybe "_" id $ find ((/=) '_' . Text.head)
                              $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
