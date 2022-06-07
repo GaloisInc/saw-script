@@ -1016,8 +1016,8 @@ mrRefinesFun :: Term -> CompFun -> Term -> CompFun -> MRM ()
 mrRefinesFun tp1 f1 tp2 f2 =
   do mrDebugPPPrefixSep 1 "mrRefinesFun on types:" tp1 "," tp2
      mrDebugPPPrefixSep 1 "mrRefinesFun" f1 "|=" f2
-     f1' <- compFunToTerm f1
-     f2' <- compFunToTerm f2
+     f1' <- compFunToTerm f1 >>= liftSC1 scWhnf
+     f2' <- compFunToTerm f2 >>= liftSC1 scWhnf
      let lnm = maybe "call_ret_val" id (compFunVarName f1)
          rnm = maybe "call_ret_val" id (compFunVarName f2)
      mrRefinesFunH mrRefines [] [(lnm, tp1)] f1' [(rnm, tp2)] f2'
@@ -1046,7 +1046,10 @@ mrRefinesFunH k vars ((nm1, tp1):tps1) t1 ((nm2, tp2):tps2) t2 = case matchHet t
     withUVarLift nm (Type tp1) (vars, t1, t2) $ \var (vars', t1', t2') ->
     do nat_tm <- liftSC2 scBvToNat n var
        num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
-       tps2' <- substTermLike 0 (num_tm : vars') tps2
+       tps2' <- zipWithM (\i tp -> liftTermLike 0 i num_tm >>= \num_tm' ->
+                                   substTermLike i (num_tm' : vars') tp >>=
+                                   mapM (liftSC1 scWhnf))
+                         [0..] tps2
        t1'' <- mrApplyAll t1' [var]
        t2'' <- mrApplyAll t2' [num_tm]
        mrRefinesFunH k (var : vars') tps1 t1'' tps2' t2''
@@ -1057,7 +1060,10 @@ mrRefinesFunH k vars ((nm1, tp1):tps1) t1 ((nm2, tp2):tps2) t2 = case matchHet t
     withUVarLift nm (Type tp2) (vars, t1, t2) $ \var (vars', t1', t2') ->
     do nat_tm <- liftSC2 scBvToNat n var
        num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
-       tps1' <- substTermLike 0 (num_tm : vars') tps1
+       tps1' <- zipWithM (\i tp -> liftTermLike 0 i num_tm >>= \num_tm' ->
+                                   substTermLike i (num_tm' : vars') tp >>=
+                                   mapM (liftSC1 scWhnf))
+                         [0..] tps1
        t1'' <- mrApplyAll t1' [num_tm]
        t2'' <- mrApplyAll t2' [var]
        mrRefinesFunH k (var : vars') tps1' t1'' tps2 t2''
@@ -1077,7 +1083,10 @@ mrRefinesFunH k vars ((nm1, tp1):tps1) t1 ((nm2, tp2):tps2) t2 = case matchHet t
                                                        , asLambdaName t2 ]
        withUVarLift nm (Type tp1) (vars, t1, t2) $ \var (vars', t1', t2') ->
          do bvv_tm <- mrGenFromBVVec n len a var "mrRefinesFunH (BVVec/Vec)" m
-            tps2' <- substTermLike 0 (bvv_tm : vars') tps2
+            tps2' <- zipWithM (\i tp -> liftTermLike 0 i bvv_tm >>= \bvv_tm' ->
+                                        substTermLike i (bvv_tm' : vars') tp >>=
+                                        mapM (liftSC1 scWhnf))
+                              [0..] tps2
             t1'' <- mrApplyAll t1' [var]
             t2'' <- mrApplyAll t2' [bvv_tm]
             mrRefinesFunH k (var : vars') tps1 t1'' tps2' t2''
@@ -1092,7 +1101,10 @@ mrRefinesFunH k vars ((nm1, tp1):tps1) t1 ((nm2, tp2):tps2) t2 = case matchHet t
                                                        , asLambdaName t2 ]
        withUVarLift nm (Type tp2) (vars, t1, t2) $ \var (vars', t1', t2') ->
          do bvv_tm <- mrGenFromBVVec n len a var "mrRefinesFunH (BVVec/Vec)" m
-            tps1' <- substTermLike 0 (bvv_tm : vars') tps1
+            tps1' <- zipWithM (\i tp -> liftTermLike 0 i bvv_tm >>= \bvv_tm' ->
+                                        substTermLike i (bvv_tm' : vars') tp >>=
+                                        mapM (liftSC1 scWhnf))
+                              [0..] tps1
             t1'' <- mrApplyAll t1' [var]
             t2'' <- mrApplyAll t2' [bvv_tm]
             mrRefinesFunH k (var : vars') tps1' t1'' tps2 t2''
