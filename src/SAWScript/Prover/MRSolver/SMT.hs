@@ -557,18 +557,18 @@ mrProveRelH' _ het tp1@(asNonBVVecVectorType -> Just (m1, tpA1))
      t2' <- mrGenBVVecFromVec m2 tpA2 t2 "mrProveRelH (BVVec/BVVec)" n len
      mrProveRelH het tp1' tp2' t1' t2'
 
-mrProveRelH' _ het tp1 tp2 t1 t2 = case (het, matchHet tp1 tp2) of
+mrProveRelH' _ True tp1 tp2 t1 t2 | Just mh <- matchHet tp1 tp2 = case mh of
 
   -- If our relation is heterogeneous and we have a bitvector on one side and
   -- a Num on the other, ensure that the Num term is TCNum of some Nat, wrap
   -- the Nat with bvNat, and recurse
-  (True, Just (HetBVNum n))
+  HetBVNum n
     | Just (primName -> "Cryptol.TCNum", [t2']) <- asCtor t2 ->
     do n_tm <- liftSC1 scNat n
        t2'' <- liftSC2 scGlobalApply "Prelude.bvNat" [n_tm, t2']
        mrProveRelH True tp1 tp1 t1 t2''
     | otherwise -> throwMRFailure (TermsNotEq t1 t2)
-  (True, Just (HetNumBV n))
+  HetNumBV n
     | Just (primName -> "Cryptol.TCNum", [t1']) <- asCtor t1 ->
     do n_tm <- liftSC1 scNat n
        t1'' <- liftSC2 scGlobalApply "Prelude.bvNat" [n_tm, t1']
@@ -578,7 +578,7 @@ mrProveRelH' _ het tp1 tp2 t1 t2 = case (het, matchHet tp1 tp2) of
   -- If our relation is heterogeneous and we have a BVVec on one side and a
   -- non-BVVec vector on the other, wrap the non-BVVec vector term in
   -- genBVVecFromVec and recurse
-  (True, Just (HetBVVecVec (n, len, _) (m, tpA2))) ->
+  HetBVVecVec (n, len, _) (m, tpA2) ->
     do m' <- mrBvToNat n len
        ms_are_eq <- mrConvertible m' m
        if ms_are_eq then return () else
@@ -588,7 +588,7 @@ mrProveRelH' _ het tp1 tp2 t1 t2 = case (het, matchHet tp1 tp2) of
        t2' <- mrGenBVVecFromVec m tpA2 t2 "mrProveRelH (BVVec/Vec)" n len
        -- mrDebugPPPrefixSep 2 "mrProveRelH on BVVec/Vec: " t1 "an`d" t2'
        mrProveRelH True tp1 tp2' t1 t2'
-  (True, Just (HetVecBVVec (m, tpA1) (n, len, _))) ->
+  HetVecBVVec (m, tpA1) (n, len, _) ->
     do m' <- mrBvToNat n len
        ms_are_eq <- mrConvertible m' m
        if ms_are_eq then return () else
@@ -600,25 +600,35 @@ mrProveRelH' _ het tp1 tp2 t1 t2 = case (het, matchHet tp1 tp2) of
        mrProveRelH True tp1' tp2 t1' t2
 
   -- For pair types, prove both the left and right projections are related
-  (_, Just (HetPair (tpL1, tpR1) (tpL2, tpR2))) ->
+  -- (this should be the same as the pair case below - we have to split them
+  -- up because otherwise GHC 9.0's pattern match checker complains...)
+  HetPair (tpL1, tpR1) (tpL2, tpR2) ->
     do t1L <- liftSC1 scPairLeft t1
        t2L <- liftSC1 scPairLeft t2
        t1R <- liftSC1 scPairRight t1
        t2R <- liftSC1 scPairRight t2
-       condL <- mrProveRelH het tpL1 tpL2 t1L t2L
-       condR <- mrProveRelH het tpR1 tpR2 t1R t2R
+       condL <- mrProveRelH True tpL1 tpL2 t1L t2L
+       condR <- mrProveRelH True tpR1 tpR2 t1R t2R
        liftTermInCtx2 scAnd condL condR
 
-  -- As a fallback, for types we can't handle, just check convertibility (we do
-  -- this in two cases to make sure we catch any missed 'HetRelated' patterns)
-  (True, Nothing) ->
-    do success <- mrConvertible t1 t2
-       if success then return () else
-         mrDebugPPPrefixSep 2 "mrProveRel could not match types: " tp1 "and" tp2 >>
-         mrDebugPPPrefixSep 2 "and could not prove convertible: " t1 "and" t2
-       TermInCtx [] <$> liftSC1 scBool success
-  (False, _)->
-    do success <- mrConvertible t1 t2
-       if success then return () else
-         mrDebugPPPrefixSep 2 "mrProveEq could not prove convertible: " t1 "and" t2
-       TermInCtx [] <$> liftSC1 scBool success
+-- For pair types, prove both the left and right projections are related
+-- (this should be the same as the pair case below - we have to split them
+-- up because otherwise GHC 9.0's pattern match checker complains...)
+mrProveRelH' _ False tp1 tp2 t1 t2
+  | Just (HetPair (tpL1, tpR1) (tpL2, tpR2)) <- matchHet tp1 tp2 =
+    do t1L <- liftSC1 scPairLeft t1
+       t2L <- liftSC1 scPairLeft t2
+       t1R <- liftSC1 scPairRight t1
+       t2R <- liftSC1 scPairRight t2
+       condL <- mrProveRelH False tpL1 tpL2 t1L t2L
+       condR <- mrProveRelH False tpR1 tpR2 t1R t2R
+       liftTermInCtx2 scAnd condL condR
+
+-- As a fallback, for types we can't handle, just check convertibility
+mrProveRelH' _ het tp1 tp2 t1 t2 =
+  do success <- mrConvertible t1 t2
+     if success then return () else
+       if het then mrDebugPPPrefixSep 2 "mrProveRelH' could not match types: " tp1 "and" tp2 >>
+                   mrDebugPPPrefixSep 2 "and could not prove convertible: " t1 "and" t2
+              else mrDebugPPPrefixSep 2 "mrProveEq could not prove convertible: " t1 "and" t2
+     TermInCtx [] <$> liftSC1 scBool success
