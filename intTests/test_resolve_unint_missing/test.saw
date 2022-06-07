@@ -1,0 +1,1 @@
+fails (prove_print (w4_unint_yices ["foo"]) {{ True }});

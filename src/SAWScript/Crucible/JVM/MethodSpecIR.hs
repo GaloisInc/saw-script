@@ -116,7 +116,7 @@ allocationType alloc =
 
 
 -- TODO: We should probably use a more structured datatype (record), like in LLVM
-type instance MS.AllocSpec CJ.JVM = (ProgramLoc, Allocation)
+type instance MS.AllocSpec CJ.JVM = (MS.ConditionMetadata, Allocation)
 
 --------------------------------------------------------------------------------
 -- *** PointsTo
@@ -124,10 +124,10 @@ type instance MS.AllocSpec CJ.JVM = (ProgramLoc, Allocation)
 type instance MS.PointsTo CJ.JVM = JVMPointsTo
 
 data JVMPointsTo
-  = JVMPointsToField ProgramLoc MS.AllocIndex J.FieldId (Maybe (MS.SetupValue CJ.JVM))
-  | JVMPointsToStatic ProgramLoc J.FieldId (Maybe (MS.SetupValue CJ.JVM))
-  | JVMPointsToElem ProgramLoc MS.AllocIndex Int (Maybe (MS.SetupValue CJ.JVM))
-  | JVMPointsToArray ProgramLoc MS.AllocIndex (Maybe TypedTerm)
+  = JVMPointsToField MS.ConditionMetadata MS.AllocIndex J.FieldId (Maybe (MS.SetupValue CJ.JVM))
+  | JVMPointsToStatic MS.ConditionMetadata J.FieldId (Maybe (MS.SetupValue CJ.JVM))
+  | JVMPointsToElem MS.ConditionMetadata MS.AllocIndex Int (Maybe (MS.SetupValue CJ.JVM))
+  | JVMPointsToArray MS.ConditionMetadata MS.AllocIndex (Maybe TypedTerm)
 
 overlapPointsTo :: JVMPointsTo -> JVMPointsTo -> Bool
 overlapPointsTo =

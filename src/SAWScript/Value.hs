@@ -463,6 +463,7 @@ data TopLevelRW =
 
   , rwPathSatSolver :: Common.PathSatSolver
   , rwSkipSafetyProofs :: Bool
+  , rwSingleOverrideSpecialCase :: Bool
   }
 
 newtype TopLevel a =
@@ -800,8 +801,9 @@ instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = LLVMCrucibleSetupM $ do
       -- TODO: Should both of these be run with the new position?
-      v1 <- underStateT (withPosition pos) (runLLVMCrucibleSetupM (fromValue m1))
-      m2 <- lift $ applyValue v2 v1
+      v1 <- underReaderT (underStateT (withPosition pos))
+              (runLLVMCrucibleSetupM (fromValue m1))
+      m2 <- lift $ lift $ applyValue v2 v1
       runLLVMCrucibleSetupM (fromValue m2)
     fromValue _ = error "fromValue CrucibleSetup"
 
@@ -812,8 +814,9 @@ instance FromValue a => FromValue (JVMSetupM a) where
     fromValue (VJVMSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = JVMSetupM $ do
-      v1 <- underStateT (withPosition pos) (runJVMSetupM (fromValue m1))
-      m2 <- lift $ applyValue v2 v1
+      v1 <- underReaderT (underStateT (withPosition pos))
+              (runJVMSetupM (fromValue m1))
+      m2 <- lift $ lift $ applyValue v2 v1
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"
 
@@ -1053,7 +1056,8 @@ addTrace str val =
     VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceProofScript str m)
     VBind pos v1 v2  -> VBind pos      (addTrace str v1) (addTrace str v2)
     VLLVMCrucibleSetup (LLVMCrucibleSetupM m) -> VLLVMCrucibleSetup $ LLVMCrucibleSetupM $
-        addTrace str `fmap` underStateT (addTraceTopLevel str) m
+        addTrace str `fmap` underReaderT (underStateT (addTraceTopLevel str)) m
+  -- TODO? JVM setup blocks too?
     _                -> val
 
 -- | Wrap an action with a handler that catches and rethrows user

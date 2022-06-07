@@ -1,0 +1,37 @@
+enable_experimental;
+
+let f_spec : CrucibleSetup () = llvm_setup_with_tag "f spec" do {
+  i <- llvm_fresh_var "i" (llvm_int 32);
+  llvm_precond {{i < 512}};
+  llvm_execute_func [llvm_term i];
+
+  j <- llvm_fresh_var "j" (llvm_int 32);
+  llvm_return (llvm_term j);
+  llvm_setup_with_tag "post bound"
+    (llvm_postcond {{ j <= 512 }});
+  llvm_setup_with_tag "post eq"
+    (llvm_postcond {{ j == i+1 }});
+};
+
+let tac : ProofScript () = do {
+  isBound <- goal_has_tags ["post bound", "f spec"];
+  isEq    <- goal_has_tags ["post eq", "f spec"];
+
+  if isBound then do {
+    print_goal_summary;
+    yices;
+  } else if isEq then do {
+    print_goal_summary;
+    z3;
+  } else do {
+    // empty tactic should fail here if there are any goals
+    // not handled by the above
+    return ();
+  };
+};
+
+let main : TopLevel () = do {
+  m <- llvm_load_module "test.bc";
+  llvm_verify m "f" [] false f_spec tac;
+  print "done";
+};

@@ -241,6 +241,7 @@ initialState readFileFn =
                 , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
                 , rwPathSatSolver = CC.PathSat_Z3
                 , rwSkipSafetyProofs = False
+                , rwSingleOverrideSpecialCase = False
                 }
      return (SAWState emptyEnv bic [] ro rw M.empty)
 

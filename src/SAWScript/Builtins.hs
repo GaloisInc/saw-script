@@ -429,10 +429,15 @@ print_term_depth d t =
      printOutLnTop Info output
 
 goalSummary :: ProofGoal -> String
-goalSummary goal = unlines $
-  [ ("Goal " ++ goalName goal ++ " (goal number " ++ (show $ goalNum goal) ++ "): " ++ goalType goal) ++ " at " ++ goalLoc goal ] ++
-  if null (goalDesc goal) then [] else [ goalDesc goal ]
-
+goalSummary goal = unlines $ concat
+  [ [ "Goal " ++ goalName goal ++ " (goal number " ++ (show $ goalNum goal) ++ "): " ++ goalType goal
+    , "at " ++ goalLoc goal
+    ]
+  , if Set.null (goalTags goal) then [] else
+      [ unwords ("Tags:" : map show (Set.toList (goalTags goal)))
+      ]
+  , if null (goalDesc goal) then [] else [ goalDesc goal ]
+  ]
 
 write_goal :: String -> ProofScript ()
 write_goal fp =
@@ -515,12 +520,14 @@ resolveName sc nm =
                 do resolvedName <- io $ scResolveNameByURI sc uri
                    case resolvedName of
                      Just vi -> pure $ vi:scnms
-                     Nothing -> pure scnms
-              _ -> pure scnms
-       Nothing -> pure scnms
+                     Nothing -> fallback scnms
+              _ -> fallback scnms
+       Nothing -> fallback scnms
 
  where
  tnm = Text.pack nm
+ fallback [] = fail $ "Could not resolve name: " <> show nm
+ fallback scnms = pure scnms
 
 
 normalize_term :: TypedTerm -> TopLevel TypedTerm
@@ -690,6 +697,20 @@ goal_when str script =
      case psGoals s of
        g : _ | str `isInfixOf` goalName g -> script
        _ -> return ()
+
+goal_has_tags :: [String] -> ProofScript Bool
+goal_has_tags tags =
+  do s <- get
+     case psGoals s of
+       g : _ | Set.isSubsetOf (Set.fromList tags) (goalTags g) -> return True
+       _ -> return False  
+
+goal_has_some_tag :: [String] -> ProofScript Bool
+goal_has_some_tag tags =
+  do s <- get
+     case psGoals s of
+       g : _ | not $ Set.disjoint (Set.fromList tags) (goalTags g) -> return True
+       _ -> return False  
 
 goal_num_ite :: Int -> ProofScript SV.Value -> ProofScript SV.Value -> ProofScript SV.Value
 goal_num_ite n s1 s2 =
@@ -952,6 +973,7 @@ provePrim script t = do
              , goalLoc  = show pos
              , goalDesc = ""
              , goalProp = prop
+             , goalTags = mempty
              }
   res <- SV.runProofScript script goal Nothing "prove_prim"
   case res of
@@ -977,6 +999,7 @@ proveHelper nm script t f = do
              , goalLoc  = show pos
              , goalDesc = ""
              , goalProp = prop
+             , goalTags = mempty
              }
   opts <- rwPPOpts <$> getTopLevelRW
   res <- SV.runProofScript script goal Nothing (Text.pack nm)
@@ -1022,6 +1045,7 @@ satPrim script t =
                 , goalLoc  = show pos
                 , goalDesc = ""
                 , goalProp = prop
+                , goalTags = mempty
                 }
      res <- SV.runProofScript script goal Nothing "sat"
      case res of
@@ -1502,6 +1526,7 @@ prove_core script input =
                 , goalLoc  = show pos
                 , goalDesc = ""
                 , goalProp = p
+                , goalTags = mempty
                 }
      res <- SV.runProofScript script goal Nothing "prove_core"
      let failProof pst =

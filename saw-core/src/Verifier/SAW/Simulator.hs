@@ -156,7 +156,9 @@ evalTermF cfg lam recEval tf env =
       case ftf of
         Primitive pn ->
           do pn' <- traverse evalType pn
-             simPrimitive cfg pn'
+             case simConstant cfg tf (primNameToExtCns pn') of
+               Just m  -> m
+               Nothing -> simPrimitive cfg pn'
 
         UnitValue           -> return VUnit
 

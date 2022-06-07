@@ -53,6 +53,7 @@ module SAWScript.Crucible.Common.Override
   , getSymInterface
   --
   , assignmentToList
+  , MetadataMap
   ) where
 
 import qualified Control.Exception as X
@@ -93,6 +94,10 @@ import           SAWScript.Exceptions
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec as MS
 
+-- TODO, not sure this is the best place for this definition
+type MetadataMap =
+  Map (W4.SymAnnotation Sym W4.BaseBoolType) MS.ConditionMetadata
+
 --------------------------------------------------------------------------------
 -- ** OverrideState
 
@@ -110,16 +115,16 @@ data OverrideState' sym ext = OverrideState
   , _termSub :: Map VarIndex Term
 
     -- | Equalities of SAW Core terms
-  , _termEqs :: [(Term, Crucible.SimError)]
+  , _termEqs :: [(Term, ConditionMetadata, Crucible.SimError)]
 
     -- | Free variables available for unification
   , _osFree :: Set VarIndex
 
     -- | Accumulated assertions
-  , _osAsserts :: [LabeledPred sym]
+  , _osAsserts :: [(ConditionMetadata, LabeledPred sym)]
 
     -- | Accumulated assumptions
-  , _osAssumes :: [W4.Pred sym]
+  , _osAssumes :: [(ConditionMetadata, W4.Pred sym)]
 
     -- | Symbolic simulation state
   , _syminterface :: sym
@@ -320,24 +325,27 @@ runOverrideMatcher sym g a t free loc (OM m) =
 
 addTermEq ::
   Term {- ^ term equality -} ->
+  ConditionMetadata ->
   Crucible.SimError {- ^ reason   -} ->
   OverrideMatcher ext rorw ()
-addTermEq t r =
-  OM (termEqs %= cons (t, r))
+addTermEq t md r =
+  OM (termEqs %= cons (t, md, r))
 
 addAssert ::
   Monad m =>
   W4.Pred sym       {- ^ property -} ->
+  ConditionMetadata ->
   Crucible.SimError {- ^ reason   -} ->
   OverrideMatcher' sym ext rorw m ()
-addAssert p r =
-  OM (osAsserts %= cons (W4.LabeledPred p r))
+addAssert p md r =
+  OM (osAsserts %= cons (md,W4.LabeledPred p r))
 
 addAssume ::
   Monad m =>
   W4.Pred sym       {- ^ property -} ->
+  ConditionMetadata ->
   OverrideMatcher' sym ext rorw m ()
-addAssume p = OM (osAssumes %= cons p)
+addAssume p md = OM (osAssumes %= cons (md,p))
 
 readGlobal ::
   Monad m =>
