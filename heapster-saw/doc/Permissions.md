@@ -16,10 +16,10 @@ In this document, we use the following metavariables to refer to different sorts
                      
                      
 
-Permission types
+Value Types
 ================
 
-A permission type includes regular crucible types as well as heapster-specific types
+The Heapster value types include the regular crucible types as well as heapster-specific types:
 
 | **Permission Types `a`** | **Description** |
 | :---: | :--- |

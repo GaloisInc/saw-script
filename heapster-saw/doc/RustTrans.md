@@ -10,14 +10,15 @@ describe the shape and structure of blocks of memory. Each Rust variable
 designates a block of memory where the value of the variable is stored. The type
 of the variable then describes the shape of that memory. Thus, Rust types are
 translated to Heapster shape expressions, which Heapster uses to describe
-memory. Heapster shapes are documented [here](Permissions.md). The basic
-conversion from Rust is described in the following table, though Rust implements
-a number of layout optimizations, described below, that alter this translation.
-In this table, we write `[| T |]` for the translation of Rust type `T` to a
-Heapster shape, and we write `len(sh)` for the Heapster expression giving the
-length of Heapster shape `sh`, when this is defined. The notation `[\| Name \|]`
-denotes the translation of the type definition associated with type name `Name`,
-as defined in the next section.
+memory. Heapster shapes are documented [here](Permissions.md).
+
+The basic conversion from Rust is described in the following table, though Rust
+implements a number of layout optimizations, described below, that alter this
+translation. In this table, we write `[| T |]` for the translation of Rust type
+`T` to a Heapster shape, and we write `len(sh)` for the Heapster expression
+giving the length of Heapster shape `sh`, when this is defined. The notation
+`[\| Name \|]` denotes the translation of the type definition associated with
+type name `Name`, as defined in the next section.
 
 
 | Rust Type | Translation to a Heapster Shape |
@@ -105,6 +106,94 @@ flagged with the `#[repr(C,u64)]` pragma to indicate that the discriminant is a
 FIXME: Option-like types
 
 ## Translating Function Types
+
+Rust function definitions are written like this:
+
+```
+fn foo <'a1,...,'am,X1,...,Xn> (x1 : T1, ..., xk : Tk) -> T { ... }
+```
+
+This defines `foo` as a function that is polymorphic over `m` lifetimes and `n`
+types that takes `k` input arguments of types `T1` through `Tk` to an output
+value of type `T`. In Heapster, we write the type of this function as:
+
+```
+<'a1,...,'am,X1,...,Xn> fn (x1 : T1, ..., xk : Tk) -> T
+```
+
+where the variable names are optional. For technical reasons, Rust does not
+actually allow polymorphic function types, but only supports non-polymorphic
+functions types, starting with the `fn` keyword, so this is a syntactic
+extension supported by Heapster.
+
+- High-level translation to a Heapster function; make forward reference to
+  layout and to lifetime types
+
+
+### Argument Layout
+
+Argument layout converts a shape, which describes the layout and associated
+permissions of a memory block, to a permission on a sequence of register values,
+if this is possible. In Heapster (as in the underlying Crucible type system),
+sequences of values are called structs and a permission on a sequence of values
+is called a struct permission. More specifically, argument layout is defined as
+a partial function `Lyt(sh)` that maps a Heapster shape `sh` for a particular
+function argument to a permission of type `perm(struct(tp1,...,tpn))` for some
+value types (i.e., Crucible types) `tp1` through `tpn`. When the layout of the
+type `T` of an argument is not defined --- e.g., if `T` is too big to fit in
+registers or it is a slice or other dynamically-sized type that has no
+well-defined size --- then the corresponding argument is represented as a
+pointer to a block of memory with the shape defined by `T`.
+
+In order to define `Lyt(sh)`, we first define two helper operations on structure
+permissions. Both of these are partial functions that take in two structure
+permissions, possibly of different types, and return a structure permission with
+some potentially different type. The first of these is the struct permission
+append operator `p1 ++ p2`, which combines a struct permission `p1` of type
+`perm(struct(tp1,...,tpm))` and `p2` of type `perm(struct(tp1',...,tpn'))` into
+a permission of type `perm(struct(tp1,...,tpm,tp1',...,tpn'))` on the append of
+structs with permissions `p1` and `p2`. This operation is defined as follows:
+
+| Permissions `p1` and `p2` to Append | Resulting Permission `p1++p2` |
+| ------------------------ | --------------------- |
+| `struct(p1,...,pn) ++ struct(q1,...,qm)` = | `struct(p1,...,pn,q1,...,qm)` |
+| `(p1 or p2) ++ q` = | `(p1 ++ q) or (p2 ++ q)` |
+| `p ++ (q1 or q2)` = | `(p ++ q1) or (p ++ q2)` |
+| `(exists z. p) ++ q` = | `exists z. (p ++ q)` |
+| `_ ++ _` = | Undefined otherwise |
+
+The second operation on structure permissions needed here is the disjucntion
+operation `p1 \/ p2`. Intuitively, this operation takes the disjunction of the
+two struct permissions `p1` and `p2` after first equalizing the number of
+registers they refer to. More formally, this `p1 \/ p2` is defined as follows:
+
+* If there is a permission `p1' = p1 ++ struct(true,true,...,true)` of the same
+ type as `p2`, then `p1 \/ p2` is defined as the disjunction `p1' or p2`;
+
+* If there is a permission `p2' = p2 ++ struct(true,true,...,true)` of the same
+ type as `p1`, then `p1 \/ p2` is defined as the disjunction `p1 or p2'`;
+
+* Otherwise, `p1 \/ p2` is undefined.
+
+Using these operations, the layout function `Lyt(sh)` is defined as follows:
+
+| Heapster shape | Its layout as a struct permission |
+|--------------|--------------------------|
+| `Lyt(emptysh)` =           | `struct()` |
+| `Lyt(Name<args>)`  = |  `Lyt(unfold(Name,args))` |
+| `Lyt(fieldsh(p))`       = |  `struct(p)` |
+| `Lyt(arraysh(_,_,_))` = | undefined |
+| `Lyt(sh1 ; sh2)`      = | `Lyt(sh1) ++ Lyt(sh2)` |
+| `Lyt(sh1 orsh sh2)`  = | `Lyt(sh1) \/ Lyt(sh2)` |
+| `Lyt(exsh z. sh)` = | `exists z. Lyt(sh)` |
+| `Lyt(falsesh)` =  | `false` |
+
+FIXME: explain the definition
+
+### Lifetime Permissions
+
+
+
 
 FIXME:
 - explain layout (types that take more than two fields become pointers)
