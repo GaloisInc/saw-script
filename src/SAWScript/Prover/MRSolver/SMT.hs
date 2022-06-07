@@ -350,11 +350,20 @@ mrEq t1 t2 = mrTypeOf t1 >>= \tp -> mrEq' tp t1 t2
 -- are equal, where the first 'Term' gives their type (which we assume is the
 -- same for both). This is like 'scEq' except that it works on open terms.
 mrEq' :: Term -> Term -> Term -> MRM Term
+-- FIXME: For this Nat case, the definition of 'equalNat' in @Prims.hs@ means
+-- that if both sides do not have immediately clear bit-widths (e.g. either
+-- side is is an application of @mulNat@) this will 'error'...
 mrEq' (asNatType -> Just _) t1 t2 = liftSC2 scEqualNat t1 t2
 mrEq' (asBoolType -> Just _) t1 t2 = liftSC2 scBoolEq t1 t2
 mrEq' (asIntegerType -> Just _) t1 t2 = liftSC2 scIntEq t1 t2
 mrEq' (asVectorType -> Just (n, asBoolType -> Just ())) t1 t2 =
   liftSC3 scBvEq n t1 t2
+mrEq' (asDataType -> Just (primName -> "Cryptol.Num", _)) t1 t2 =
+  liftSC1 scWhnf t1 >>= \t1' -> liftSC1 scWhnf t2 >>= \t2' -> case (t1', t2') of
+    (asCtor -> Just (primName -> "Cryptol.TCNum", [t1'']),
+     asCtor -> Just (primName -> "Cryptol.TCNum", [t2''])) ->
+      liftSC0 scNatType >>= \nat_tp -> mrEq' nat_tp t1'' t2''
+    _ -> error "mrEq': Num terms do not normalize to TCNum constructors"
 mrEq' _ _ _ = error "mrEq': unsupported type"
 
 -- | A 'Term' in an extended context of universal variables, which are listed
