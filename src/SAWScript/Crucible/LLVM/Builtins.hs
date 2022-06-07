@@ -799,7 +799,7 @@ verifyObligations cc mspec tactic assumes asserts =
                           , goalName = nm
                           , goalLoc  = gloc
                           , goalDesc = msg
-                          , goalProp = goal'
+                          , goalSequent = propToSequent goal'
                           , goalTags = MS.conditionTags md
                           }
           res <- runProofScript tactic proofgoal (Just ploc) $ Text.unwords
@@ -982,7 +982,7 @@ assumptionsContainContradiction cc methodSpec tactic assumptions =
                   , goalName = show (methodSpec^.MS.csMethod)
                   , goalLoc  = show (W4.plSourceLoc ploc) ++ " in " ++ show (W4.plFunction ploc)
                   , goalDesc = "vacuousness check"
-                  , goalProp = goal'
+                  , goalSequent = propToSequent goal'
                   , goalTags = mempty
                   }
      res <- runProofScript tactic pgl Nothing "vacuousness check"
