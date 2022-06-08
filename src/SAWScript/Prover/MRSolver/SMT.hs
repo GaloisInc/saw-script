@@ -38,7 +38,7 @@ import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Simulator.TermModel
 import Verifier.SAW.Simulator.Prims
 
-import SAWScript.Proof (termToProp, propToTerm, prettyProp)
+import SAWScript.Proof (termToProp, propToTerm, prettyProp, propToSequent)
 import What4.Solver
 import SAWScript.Prover.What4
 
@@ -292,7 +292,7 @@ mrProvableRaw prop_term =
      -- Haskell error - in this case we want to just return False, not stop
      -- execution
      smt_res <- liftIO $
-       (Right <$> proveWhat4_solver z3Adapter sym unints sc prop (return ()))
+       (Right <$> proveWhat4_solver z3Adapter sym unints sc (propToSequent prop) (return ()))
          `X.catch` \case
            UserError msg -> return $ Left msg
            e -> X.throw e

@@ -9,19 +9,19 @@ import Verifier.SAW.FiniteValue
 
 import qualified Verifier.SAW.Simulator.RME as RME
 
-import SAWScript.Proof(Prop, propToSATQuery, propSize, CEX)
+import SAWScript.Proof(Sequent, sequentToSATQuery, sequentSize, CEX)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
 import SAWScript.Value
 
 -- | Bit-blast a proposition and check its validity using RME.
 proveRME ::
-  Prop          {- ^ A proposition to be proved -} ->
+  Sequent {- ^ A proposition to be proved -} ->
   TopLevel (Maybe CEX, SolverStats)
 proveRME goal = getSharedContext >>= \sc -> liftIO $
-  do satq <- propToSATQuery sc mempty goal
+  do satq <- sequentToSATQuery sc mempty goal
      RME.withBitBlastedSATQuery sc Map.empty satq $ \lit shapes ->
-       let stats = solverStats "RME" (propSize goal)
+       let stats = solverStats "RME" (sequentSize goal)
        in case RME.sat lit of
             Nothing -> return (Nothing, stats)
             Just cex -> do
