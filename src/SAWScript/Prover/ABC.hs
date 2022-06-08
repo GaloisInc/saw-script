@@ -32,7 +32,7 @@ import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import SAWScript.Proof
   ( sequentToSATQuery, goalSequent, ProofGoal
   , goalType, goalNum, CEX
-  , Sequent, sequentSize
+  , Sequent, sequentSharedSize
   )
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import qualified SAWScript.Prover.Exporter as Exporter
@@ -55,7 +55,7 @@ proveABC proxy goal = getSharedContext >>= \sc -> liftIO $
      BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \be lit shapes ->
        do let (ecs,fts) = unzip shapes
           res <- getModel ecs fts =<< AIG.checkSat be lit
-          let stats = solverStats "ABC" (sequentSize goal)
+          let stats = solverStats "ABC" (sequentSharedSize goal)
           return (res, stats)
 
 
@@ -130,7 +130,7 @@ w4AbcExternal exporter argFn unints _hashcons goal =
        liftIO $ removeFile tmpCex
 
        -- Parse and report results
-       let stats = solverStats "abc_verilog" (sequentSize goal)
+       let stats = solverStats "abc_verilog" (sequentSharedSize goal)
        res <- if all isSpace cexText
               then return Nothing
               else do cex <- liftIO $ parseAigerCex cexText argTys
@@ -188,7 +188,7 @@ abcSatExternal proxy sc doCNF execName args g = liftIO $
        let ls = lines out
            sls = filter ("s " `isPrefixOf`) ls
            vls = filter ("v " `isPrefixOf`) ls
-       let stats = solverStats ("external SAT:" ++ execName) (sequentSize (goalSequent g))
+       let stats = solverStats ("external SAT:" ++ execName) (sequentSharedSize (goalSequent g))
        case (sls, vls) of
          (["s SATISFIABLE"], _) -> do
            let bs = parseDimacsSolution variables vls

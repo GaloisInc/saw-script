@@ -37,7 +37,8 @@ module SAWScript.Proof
   , SequentState(..)
   , sequentToProp
   , sequentToSATQuery
-  , sequentSize
+  , sequentSharedSize
+  , sequentTreeSize
   , prettySequent
   , ppSequent
   , propToSequent
@@ -511,11 +512,15 @@ sequentState (GoalFocusedSequent hs (gs1,g,gs2)) =
 sequentState (HypFocusedSequent (hs1,h,hs2) gs) =
   HypFocus h (\h' -> HypFocusedSequent (hs1,h',hs2) gs)
 
-sequentSize :: Sequent -> Integer
-sequentSize sqt =
-  case sqt of
-    GoalFocusedSequent [] ([],g,[]) -> propSize g
-    _ -> error "FIXME! implement size counding for sequents"
+sequentSharedSize :: Sequent -> Integer
+sequentSharedSize sqt = scSharedSizeMany (hs ++ gs)
+  where
+   RawSequent hs gs = sequentToRawSequent sqt
+
+sequentTreeSize :: Sequent -> Integer
+sequentTreeSize sqt = scTreeSizeMany (hs ++ gs)
+  where
+   RawSequent hs gs = sequentToRawSequent sqt
 
 traverseSequent :: Applicative m => (Prop -> m Prop) -> Sequent -> m Sequent
 traverseSequent f (UnfocusedSequent hs gs) =

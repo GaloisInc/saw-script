@@ -367,7 +367,7 @@ quickcheckGoal sc n = do
     hFlush stdout
     satq <- sequentToSATQuery sc mempty (goalSequent goal)
     testGen <- prepareSATQuery sc satq
-    let stats = solverStats "quickcheck" (sequentSize (goalSequent goal))
+    let stats = solverStats "quickcheck" (sequentSharedSize (goalSequent goal))
     runManyTests testGen n >>= \case
        Nothing ->
          do printOutLn opts Info $ "checked " ++ show n ++ " cases."
@@ -380,7 +380,7 @@ assumeValid =
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is valid"
      pos <- SV.getPosition
      let admitMsg = "assumeValid: " <> Text.pack (goalName goal)
-     let stats = solverStats "ADMITTED" (sequentSize (goalSequent goal))
+     let stats = solverStats "ADMITTED" (sequentSharedSize (goalSequent goal))
      return (stats, SolveSuccess (Admitted admitMsg pos (goalSequent goal)))
 
 assumeUnsat :: ProofScript ()
@@ -389,7 +389,7 @@ assumeUnsat =
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is unsat"
      pos <- SV.getPosition
      let admitMsg = "assumeUnsat: " <> Text.pack (goalName goal)
-     let stats = solverStats "ADMITTED" (sequentSize (goalSequent goal))
+     let stats = solverStats "ADMITTED" (sequentSharedSize (goalSequent goal))
      return (stats, SolveSuccess (Admitted admitMsg pos (goalSequent goal)))
 
 admitProof :: Text -> ProofScript ()
@@ -397,7 +397,7 @@ admitProof msg =
   execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: admitting goal " ++ goalName goal
      pos <- SV.getPosition
-     let stats = solverStats "ADMITTED" (sequentSize (goalSequent goal))
+     let stats = solverStats "ADMITTED" (sequentSharedSize (goalSequent goal))
      return (stats, SolveSuccess (Admitted msg pos (goalSequent goal)))
 
 trivial :: ProofScript ()
@@ -494,10 +494,8 @@ printGoalConsts =
 printGoalSize :: ProofScript ()
 printGoalSize =
   execTactic $ tacticId $ \goal ->
-  do sc <- getSharedContext
-     t  <- io (propToTerm sc =<< sequentToProp sc (goalSequent goal))
-     printOutLnTop Info $ "Goal shared size: " ++ show (scSharedSize t)
-     printOutLnTop Info $ "Goal unshared size: " ++ show (scTreeSize t)
+  do printOutLnTop Info $ "Goal shared size: " ++ show (sequentSharedSize (goalSequent goal))
+     printOutLnTop Info $ "Goal unshared size: " ++ show (sequentTreeSize (goalSequent goal))
 
 resolveNames :: [String] -> TopLevel (Set VarIndex)
 resolveNames nms =
