@@ -110,6 +110,7 @@ module SAWScript.Proof
 import qualified Control.Monad.Fail as F
 import           Control.Monad.Except
 import           Data.IORef
+import qualified Data.Foldable as Fold
 import           Data.Maybe (fromMaybe)
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -125,11 +126,12 @@ import Verifier.SAW.Prelude (scApplyPrelude_False)
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SATQuery
+import Verifier.SAW.Name (SAWNamingEnv)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.FiniteValue (FirstOrderValue)
-import Verifier.SAW.Term.Pretty (SawDoc)
+import Verifier.SAW.Term.Pretty (SawDoc, renderSawDoc, ppTermWithNames, ppTermContainerWithNames)
 import qualified Verifier.SAW.SCTypeCheck as TC
 
 import Verifier.SAW.Simulator.Concrete (evalSharedTerm)
@@ -349,12 +351,12 @@ trivialProofTerm sc (Prop p) = runExceptT (loop =<< lift (scWhnf sc p))
                ]
 
 -- | Pretty print the given proposition as a string.
-prettyProp :: PPOpts -> Prop -> String
-prettyProp opts (Prop tm) = scPrettyTerm opts tm
+prettyProp :: PPOpts -> SAWNamingEnv -> Prop -> String
+prettyProp opts nenv p = renderSawDoc opts (ppProp opts nenv p)
 
 -- | Pretty print the given proposition as a @SawDoc@.
-ppProp :: PPOpts -> Prop -> SawDoc
-ppProp opts (Prop tm) = ppTerm opts tm
+ppProp :: PPOpts -> SAWNamingEnv -> Prop -> SawDoc
+ppProp opts nenv (Prop tm) = ppTermWithNames opts nenv tm
 
 -- TODO, I'd like to add metadata here
 type SequentBranch = Prop
@@ -364,7 +366,7 @@ data Sequent
   | GoalFocusedSequent [SequentBranch] ([SequentBranch], SequentBranch, [SequentBranch]) 
   | HypFocusedSequent ([SequentBranch], SequentBranch, [SequentBranch]) [SequentBranch] 
 
-sequentToRawSequent :: Sequent -> RawSequent
+sequentToRawSequent :: Sequent -> RawSequent Term
 sequentToRawSequent sqt =
    case sqt of
      UnfocusedSequent   hs gs            -> f hs gs
@@ -383,7 +385,15 @@ sequentConstantSet sqt = foldr (\t m -> Map.union (getConstantSet t) m) mempty (
   where
     RawSequent hs gs = sequentToRawSequent sqt
 
-data RawSequent = RawSequent [Term] [Term]
+data RawSequent a = RawSequent [a] [a]
+
+instance Functor RawSequent where
+  fmap f (RawSequent hs gs) = RawSequent (fmap f hs) (fmap f gs)
+instance Foldable RawSequent where
+  foldMap f (RawSequent hs gs) = Fold.foldMap f (hs ++ gs)
+instance Traversable RawSequent where
+  traverse f (RawSequent hs gs) = RawSequent <$> traverse f hs <*> traverse f gs
+
 data NormalizedSequent = NormSeq (Set Term) (Set Term)
 
 normalizedSequentSubsumes :: NormalizedSequent -> NormalizedSequent -> Bool
@@ -417,7 +427,7 @@ convertibleSequents sc sqt1 sqt2 =
     RawSequent hs2 gs2 = sequentToRawSequent sqt2
 
 
-normalizeSequent :: SharedContext -> RawSequent -> IO NormalizedSequent
+normalizeSequent :: SharedContext -> RawSequent Term -> IO NormalizedSequent
 normalizeSequent sc = loop (NormSeq mempty mempty)
  where
    loop (NormSeq hset gset) (RawSequent (h:hs) gs) =
@@ -495,15 +505,17 @@ sequentToSATQuery sc unintSet sqt =
   sequentToProp sc sqt >>= propToSATQuery sc unintSet
 
 -- | Pretty print the given proposition as a string.
-prettySequent :: PPOpts -> Sequent -> String
-prettySequent opts sqt = show (ppSequent opts sqt)
+prettySequent :: PPOpts -> SAWNamingEnv -> Sequent -> String
+prettySequent opts nenv sqt = renderSawDoc opts (ppSequent opts nenv sqt)
 
 -- | Pretty print the given proposition as a @SawDoc@.
-ppSequent :: PPOpts -> Sequent -> SawDoc
-ppSequent opts sqt =
-  case sqt of
-    GoalFocusedSequent [] ([],g,[]) -> ppProp opts g
-    _ -> error "FIXME! implement printing for sequents"
+ppSequent :: PPOpts -> SAWNamingEnv -> Sequent -> SawDoc
+ppSequent opts nenv sqt =
+  ppTermContainerWithNames ppRawSequent opts nenv (sequentToRawSequent sqt)
+
+ppRawSequent :: RawSequent SawDoc -> SawDoc
+ppRawSequent (RawSequent [] [g]) = g
+ppRawSequent (RawSequent hs gs)  = error "ppRawSequent! implement nontrivial cases!"
 
 sequentState :: Sequent -> SequentState
 sequentState (UnfocusedSequent _ _) = Unfocused
@@ -1020,20 +1032,21 @@ sequentIsAxiom sc sqt =
 --   Returns the identifers of all the theorems depended on while checking evidence.
 checkEvidence :: SharedContext -> TheoremDB -> Evidence -> Prop -> IO (Set TheoremNonce, TheoremSummary)
 checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap db)
-                                 check hyps e (propToSequent p)
+                                 nenv <- scGetNamingEnv sc
+                                 check nenv hyps e (propToSequent p)
 
   where
-    checkApply _hyps _mkSqt (Prop p) [] = return (mempty, mempty, p)
+    checkApply _nenv _hyps _mkSqt (Prop p) [] = return (mempty, mempty, p)
 
     -- Check a theorem applied to "Evidence".
     -- The given prop must be an implication
     -- (i.e., nondependent Pi quantifying over a Prop)
     -- and the given evidence must match the expected prop.
-    checkApply hyps mkSqt (Prop p) (Right e:es)
+    checkApply nenv hyps mkSqt (Prop p) (Right e:es)
       | Just (_lnm, tp, body) <- asPi p
       , looseVars body == emptyBitSet
-      = do (d1,sy1) <- check hyps e . mkSqt =<< termToProp sc tp
-           (d2,sy2,p') <- checkApply hyps mkSqt (Prop body) es
+      = do (d1,sy1) <- check nenv hyps e . mkSqt =<< termToProp sc tp
+           (d2,sy2,p') <- checkApply nenv hyps mkSqt (Prop body) es
            return (Set.union d1 d2, sy1 <> sy2, p')
       | otherwise = fail $ unlines
            [ "Apply evidence mismatch: non-function or dependent function"
@@ -1042,7 +1055,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
 
     -- Check a theorem applied to a term. This explicity instantiates
     -- a Pi binder with the given term.
-    checkApply hyps mkSqt (Prop p) (Left tm:es) =
+    checkApply nenv hyps mkSqt (Prop p) (Left tm:es) =
       do propTerm <- scSort sc propSort
          let m = do tm' <- TC.typeInferComplete tm
                     let err = TC.NotFuncTypeInApp (TC.TypedTerm p propTerm) tm'
@@ -1050,7 +1063,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
          res <- TC.runTCM m sc Nothing []
          case res of
            Left msg -> fail (unlines (TC.prettyTCError msg))
-           Right p' -> checkApply hyps mkSqt (Prop p') es
+           Right p' -> checkApply nenv hyps mkSqt (Prop p') es
 
     checkTheorem :: Set TheoremNonce -> Theorem -> IO ()
     checkTheorem hyps (LocalAssumption p loc n) =
@@ -1062,11 +1075,12 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
     checkTheorem _hyps Theorem{} = return ()
 
     check ::
+      SAWNamingEnv ->
       Set TheoremNonce ->
       Evidence ->
       Sequent ->
       IO (Set TheoremNonce, TheoremSummary)
-    check hyps e sqt = case e of
+    check nenv hyps e sqt = case e of
       ProofTerm tm ->
         case sequentState sqt of
           GoalFocus (Prop ptm) _ ->
@@ -1092,8 +1106,8 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
         do ok <- sequentSubsumes sc sqt' sqt
            unless ok $ fail $ unlines
                [ "Solver proof does not prove the required sequent"
-               , prettySequent defaultPPOpts sqt
-               , prettySequent defaultPPOpts sqt'
+               , prettySequent defaultPPOpts nenv sqt
+               , prettySequent defaultPPOpts nenv sqt'
                ]
            return (mempty, ProvedTheorem stats)
 
@@ -1102,8 +1116,8 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
            unless ok $ fail $ unlines
                [ "Admitted proof does not match the required sequent " ++ show pos
                , Text.unpack msg
-               , prettySequent defaultPPOpts sqt
-               , prettySequent defaultPPOpts sqt'
+               , prettySequent defaultPPOpts nenv sqt
+               , prettySequent defaultPPOpts nenv sqt'
                ]
            return (mempty, AdmittedTheorem msg)
 
@@ -1111,8 +1125,8 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
         do ok <- sequentSubsumes sc sqt' sqt
            unless ok $ fail $ unlines
                [ "Quickcheck evidence does not match the required sequent"
-               , prettySequent defaultPPOpts sqt
-               , prettySequent defaultPPOpts sqt'
+               , prettySequent defaultPPOpts nenv sqt
+               , prettySequent defaultPPOpts nenv sqt'
                ]
            return (mempty, TestedTheorem n)
 
@@ -1120,18 +1134,18 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
         splitSequent sc sqt >>= \case
           Nothing -> fail $ unlines
                        [ "Split evidence does not apply"
-                       , prettySequent defaultPPOpts sqt
+                       , prettySequent defaultPPOpts nenv sqt
                        ]
           Just (sqt1,sqt2) ->
-            do d1 <- check hyps e1 sqt1
-               d2 <- check hyps e2 sqt2
+            do d1 <- check nenv hyps e1 sqt1
+               d2 <- check nenv hyps e2 sqt2
                return (d1 <> d2)
 
       ApplyEvidence thm es ->
         case sequentState sqt of
           GoalFocus p mkSqt ->
             do checkTheorem hyps thm
-               (d,sy,p') <- checkApply hyps mkSqt (thmProp thm) es
+               (d,sy,p') <- checkApply nenv hyps mkSqt (thmProp thm) es
                ok <- scConvertible sc False (unProp p) p'
                unless ok $ fail $ unlines
                    [ "Apply evidence does not match the required proposition"
@@ -1141,7 +1155,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
                return (Set.insert (thmNonce thm) d, sy)
           _ -> fail $ unlines $
                     [ "Apply evidence requires a goal-focused sequent"
-                    , prettySequent defaultPPOpts sqt
+                    , prettySequent defaultPPOpts nenv sqt
                     ]
 
 {-
@@ -1154,7 +1168,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
 
       UnfoldEvidence vars e' ->
         do sqt' <- traverseSequent (unfoldProp sc vars) sqt
-           check hyps e' sqt'
+           check nenv hyps e' sqt'
 
       RewriteEvidence ss e' ->
         do (d1,sqt') <- simplifySequent sc ss sqt
@@ -1162,34 +1176,34 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
              [ "Rewrite step used theorem not in hypothesis database"
              , show (Set.difference d1 hyps)
              ]
-           (d2,sy) <- check hyps e' sqt'
+           (d2,sy) <- check nenv hyps e' sqt'
            return (Set.union d1 d2, sy)
 
       HoistIfsEvidence e' ->
         do sqt' <- traverseSequent (hoistIfsInGoal sc) sqt
-           check hyps e' sqt'
+           check nenv hyps e' sqt'
 
       EvalEvidence vars e' ->
         do sqt' <- traverseSequent (evalProp sc vars) sqt
-           check hyps e' sqt'
+           check nenv hyps e' sqt'
 
       ConversionEvidence sqt' e' ->
         do ok <- convertibleSequents sc sqt sqt'
            unless ok $ fail $ unlines
              [ "Converted sequent does not match goal"
-             , prettySequent defaultPPOpts sqt
-             , prettySequent defaultPPOpts sqt'
+             , prettySequent defaultPPOpts nenv sqt
+             , prettySequent defaultPPOpts nenv sqt'
              ]
-           check hyps e' sqt'
+           check nenv hyps e' sqt'
 
       StructuralEvidence sqt' e' ->
         do ok <- sequentSubsumes sc sqt' sqt
            unless ok $ fail $ unlines
              [ "Restated sequents does not subsume goal"
-             , prettySequent defaultPPOpts sqt
-             , prettySequent defaultPPOpts sqt'
+             , prettySequent defaultPPOpts nenv sqt
+             , prettySequent defaultPPOpts nenv sqt'
              ]
-           check hyps e' sqt'
+           check nenv hyps e' sqt'
 
 {-
       AssumeEvidence n (Prop p') e' ->
@@ -1214,7 +1228,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
         do ok <- sequentIsAxiom sc sqt
            unless ok $ fail $ unlines
              [ "Sequent is not an instance of the sequent calculus axiom"
-             , prettySequent defaultPPOpts sqt
+             , prettySequent defaultPPOpts nenv sqt
              ]
            return (mempty, ProvedTheorem mempty)
 
@@ -1236,7 +1250,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
                      ]
                    x' <- scExtCns sc x
                    body' <- instantiateVar sc 0 x' body
-                   check hyps e' (mkSqt (Prop body'))
+                   check nenv hyps e' (mkSqt (Prop body'))
 
 passthroughEvidence :: [Evidence] -> IO Evidence
 passthroughEvidence [e] = pure e

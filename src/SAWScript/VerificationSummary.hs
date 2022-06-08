@@ -32,6 +32,7 @@ import qualified SAWScript.Crucible.JVM.MethodSpecIR as CMSJVM
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import qualified Verifier.SAW.Term.Pretty as PP
+import Verifier.SAW.Name (SAWNamingEnv)
 import What4.ProgramLoc (ProgramLoc(..))
 import What4.FunctionName
 
@@ -129,8 +130,8 @@ jsonVerificationSummary (VerificationSummary jspecs lspecs thms) =
     lvals = (\(CMSLLVM.SomeLLVM ls) -> msToJSON ls) <$> lspecs -- TODO: why is the type annotation required here?
     thmvals = thmToJSON <$> thms
 
-prettyVerificationSummary :: VerificationSummary -> String
-prettyVerificationSummary vs@(VerificationSummary jspecs lspecs thms) =
+prettyVerificationSummary :: PP.PPOpts -> SAWNamingEnv -> VerificationSummary -> String
+prettyVerificationSummary ppOpts nenv vs@(VerificationSummary jspecs lspecs thms) =
   show $ vsep
   [ prettyJVMSpecs jspecs
   , prettyLLVMSpecs lspecs
@@ -176,7 +177,7 @@ prettyVerificationSummary vs@(VerificationSummary jspecs lspecs thms) =
                  ProvedTheorem{}   -> "Theorem:"
                  TestedTheorem n   -> "Theorem (randomly tested on" <+> viaShow n <+> "samples):"
                  AdmittedTheorem{} -> "Axiom:"
-             , code (indent 2 (ppProp PP.defaultPPOpts (thmProp t)))
+             , code (indent 2 (ppProp ppOpts nenv (thmProp t)))
              , ""
              ]
       prettySolvers ss =
