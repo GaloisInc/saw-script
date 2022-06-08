@@ -90,7 +90,7 @@ import qualified Verifier.SAW.UntypedAST as Un
 import SAWScript.Crucible.Common
 import SAWScript.Crucible.Common.MethodSpec (ppTypedTermType)
 import SAWScript.Proof
-  (Prop, Sequent, propSize, sequentSize, propToTerm, predicateToSATQuery, sequentToSATQuery)
+  (Prop, Sequent, propSize, sequentSharedSize, propToTerm, predicateToSATQuery, sequentToSATQuery)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
 import SAWScript.Prover.What4
@@ -115,7 +115,7 @@ proveWithSATExporter exporter unintSet path goal =
   do sc <- getSharedContext
      satq <- io $ sequentToSATQuery sc unintSet goal
      _ <- exporter path satq
-     let stats = solverStats ("offline: "++ path) (sequentSize goal)
+     let stats = solverStats ("offline: "++ path) (sequentSharedSize goal)
      return stats
 
 

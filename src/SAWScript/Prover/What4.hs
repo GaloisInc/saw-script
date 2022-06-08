@@ -17,7 +17,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.SATQuery (SATQuery(..))
 
-import           SAWScript.Proof(Sequent, sequentToSATQuery, sequentSize, CEX)
+import           SAWScript.Proof(Sequent, sequentToSATQuery, sequentSharedSize, CEX)
 import           SAWScript.Prover.SolverStats
 import           SAWScript.Value (TopLevel, io, getSharedContext)
 
@@ -179,7 +179,7 @@ setupWhat4_solver solver sym unintSet sc goal =
                   (getConfiguration sym)
 
      let stats = solverStats ("W4 ->" ++ solver_adapter_name solver)
-                             (sequentSize goal)
+                             (sequentSharedSize goal)
 
      return (argNames, bvs, lit, stats)
 

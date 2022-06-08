@@ -19,7 +19,7 @@ import qualified Verifier.SAW.Simulator.SBV as SBVSim
 
 import Verifier.SAW.SharedTerm
 
-import SAWScript.Proof(Sequent, sequentSize, sequentToSATQuery, CEX)
+import SAWScript.Proof(Sequent, sequentSharedSize, sequentToSATQuery, CEX)
 import SAWScript.Prover.SolverStats
 import SAWScript.Value
 
@@ -61,7 +61,7 @@ proveUnintSBVIO sc conf unintSet timeout goal =
      SBV.SatResult r <- SBV.satWith conf script
 
      let stats = solverStats ("SBV->" ++ show (SBV.name (SBV.solver conf)))
-                             (sequentSize goal)
+                             (sequentSharedSize goal)
      case r of
        SBV.Unsatisfiable {} -> return (Nothing, stats)
 

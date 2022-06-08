@@ -267,7 +267,11 @@ module Verifier.SAW.SharedTerm
   , scUnfoldConstantSet
   , scUnfoldConstantSet'
   , scSharedSize
+  , scSharedSizeAux
+  , scSharedSizeMany
   , scTreeSize
+  , scTreeSizeAux
+  , scTreeSizeMany
   ) where
 
 import Control.Applicative
@@ -2625,7 +2629,13 @@ scUnfoldConstantSet' sc b names t0 = do
 
 -- | Return the number of DAG nodes used by the given @Term@.
 scSharedSize :: Term -> Integer
-scSharedSize = fst . go (0, Set.empty)
+scSharedSize = fst . scSharedSizeAux (0, Set.empty)
+
+scSharedSizeMany :: [Term] -> Integer
+scSharedSizeMany = fst . foldl scSharedSizeAux (0, Set.empty)
+
+scSharedSizeAux :: (Integer, Set TermIndex) -> Term -> (Integer, Set TermIndex)
+scSharedSizeAux = go
   where
     go (sz, seen) (Unshared tf) = foldl' go (strictPair (sz + 1) seen) tf
     go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf })
@@ -2638,7 +2648,13 @@ strictPair x y = x `seq` y `seq` (x, y)
 -- | Return the number of nodes that would be used by the given
 -- @Term@ if it were represented as a tree instead of a DAG.
 scTreeSize :: Term -> Integer
-scTreeSize = fst . go (0, Map.empty)
+scTreeSize = fst . scTreeSizeAux (0, Map.empty)
+
+scTreeSizeMany :: [Term] -> Integer
+scTreeSizeMany = fst . foldl scTreeSizeAux (0, Map.empty)
+
+scTreeSizeAux :: (Integer, Map TermIndex Integer) -> Term -> (Integer, Map TermIndex Integer)
+scTreeSizeAux = go
   where
     go (sz, seen) (Unshared tf) = foldl' go (sz + 1, seen) tf
     go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf }) =
@@ -2646,7 +2662,6 @@ scTreeSize = fst . go (0, Map.empty)
         Just sz' -> (sz + sz', seen)
         Nothing -> (sz + sz', Map.insert idx sz' seen')
           where (sz', seen') = foldl' go (1, seen) tf
-
 
 -- | `openTerm sc nm ty i body` replaces the loose deBruijn variable `i`
 --   with a fresh external constant (with name `nm`, and type `ty`) in `body`.
