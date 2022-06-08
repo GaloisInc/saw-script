@@ -167,6 +167,9 @@ operation `p1 \/ p2`. Intuitively, this operation takes the disjunction of the
 two struct permissions `p1` and `p2` after first equalizing the number of
 registers they refer to. More formally, this `p1 \/ p2` is defined as follows:
 
+* If `p1=struct(p1')` and `p2=struct(p2')` where `p1'` and `p2'` have the same
+  type, then `p1 \/ p2=struct(p1' or p2')`;
+
 * If there is a permission `p1' = p1 ++ struct(true,true,...,true)` of the same
  type as `p2`, then `p1 \/ p2` is defined as the disjunction `p1' or p2`;
 
@@ -188,7 +191,26 @@ Using these operations, the layout function `Lyt(sh)` is defined as follows:
 | `Lyt(exsh z. sh)` = | `exists z. Lyt(sh)` |
 | `Lyt(falsesh)` =  | `false` |
 
-FIXME: explain the definition
+
+FIXME: explain the above definition
+
+FIXME: define the argument layout function `Arg(sh)` as a function from a shape
+`sh` to a sequence of zero or more ghost variables and regular argument
+variables plus permissions:
+
+* If `Lyt(sh)=struct(p1,...,pn)` for a sequence `p1,...,pn` of 0, 1, or 2
+  permissions, then `Arg(sh)=arg1:p1,...,argn:pn`;
+
+* If `Lyt(sh)=p` for `p` of type `perm(struct(tp1,...,tpn))` for a sequence
+  `tp1,...,tpn` of 0, 1, or 2 types, then
+  `Arg(sh)=ghost:p,arg1:eq_proj(ghost,1),...,argn:eq_proj(ghost,n)`;
+
+* If `Lyt(sh)` is undefined but `len(sh)=ln`, then `Arg(sh)=arg:memblock(W,0,ln,sh)`;
+
+* Otherwise, `Arg(sh)` is undefined.
+
+
+
 
 ### Lifetime Permissions
 
