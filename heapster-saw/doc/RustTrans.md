@@ -110,15 +110,18 @@ FIXME: Option-like types
 Rust function definitions are written like this:
 
 ```
-fn foo <'a1,...,'am,X1,...,Xn> (x1 : T1, ..., xk : Tk) -> T { ... }
+fn foo <'a1,...,'am> (x1 : T1, ..., xn : Tn) -> T { ... }
 ```
 
-This defines `foo` as a function that is polymorphic over `m` lifetimes and `n`
-types that takes `k` input arguments of types `T1` through `Tk` to an output
-value of type `T`. In Heapster, we write the type of this function as:
+This defines `foo` as a function that is polymorphic over `m` lifetimes that
+takes `n` input arguments of types `T1` through `Tn` to an output value of type
+`T`. Note that Rust function types can in general be polymorphic over type
+variables as well, but Rust compilation to LLVM always monomorphizes these
+polymorphic function types, so Heapster, which runs on LLVM code, never sees
+these polymorphic types. In Heapster, we write the type of this function as:
 
 ```
-<'a1,...,'am,X1,...,Xn> fn (x1 : T1, ..., xk : Tk) -> T
+<'a1,...,'am> fn (x1 : T1, ..., xk : Tk) -> T
 ```
 
 where the variable names are optional. For technical reasons, Rust does not
@@ -126,8 +129,11 @@ actually allow polymorphic function types, but only supports non-polymorphic
 functions types, starting with the `fn` keyword, so this is a syntactic
 extension supported by Heapster.
 
-- High-level translation to a Heapster function; make forward reference to
-  layout and to lifetime types
+
+FIXME: give some examples of how some simple Rust function types are translated
+to Heapster
+
+FIXME: summarize the overall steps of the translation
 
 
 ### Argument Layout
@@ -209,14 +215,99 @@ variables plus permissions:
 
 * Otherwise, `Arg(sh)` is undefined.
 
+For any sequence `sh1,...,shn` of shapes for `n` input arguments, we define the
+argument sequence layout function `Args(sh1,...,shn)` as the sequence of
+permissions on regular and ghost arguments given by `Arg(sh1),...,Arg(shn)`, if
+all of these are defined.
+
+We define the return value layout function `Ret(sh)` as a partial function from
+a shape `sh` to a permission on the return value `ret` of a funciton as follows:
+
+* If `Lyt(sh)=struct(p)` for a single permission `p`, then `Ret(sh)=ret:p`;
+
+* If `Lyt(sh)=p` for `p` of type `perm(struct(tp1,...,tpn))` for a sequence
+  `tp1,...,tpn` of 0, 1, or 2 types, then `Ret(sh)=ret:p`;
+
+* Otherwise, `Ret(sh)` is undefined.
+
+We can then define the function type layout `FnLyt(sh1,...,shn,sh)` of a
+sequence of `n` shapes for input arguments and a shape `sh` for the return value
+as follows:
+
+* If `Ret(sh)=ret:p` and `Args(sh1,...,shn)` is defined, then
+  `FnLyt(sh1,...,shn,sh)` is defined as the Heapster function permission
+  `Args(sh1,...,shn) -o ret:p` that takes in the regular and ghost arguments
+  specificed by `Args(sh1,...,shn)` and returns a value `ret` with permission
+  `p`;
+
+* If `Ret(sh)` is undefined but `Args(sh1,...,shn)` is defined and `len(sh)=ln`, then
+  `FnLyt(sh1,...,shn,sh)` is defined as the Heapster function permission
+  ```
+  arg0:memblock(W,0,ln,emptysh),Args(sh1,...,shn) -o  arg0:memblock(W,0,ln,emptysh)
+  ```
+
+* Otherwise, `FnLyt(sh1,...,shn,sh)` is undefined.
 
 
+### Adding Lifetime Permissions
 
-### Lifetime Permissions
+FIXME: explain the two steps, lifetime lifting and building the lifetime
+ownership permissions
 
+The lifetime lifting function `LtLift(p)` maps a permission `p` to a lifted
+permission along with 0 or more fresh ghost variables with permissions on them.
+Intuitively, this operation finds permissions contained inside `p` that use any
+of the lifetime variables of a function type, and lift those permissions to
+permissions on fresh ghost variables. This allows the permission type for a
+function to refer to just those values inside a more complicated type that
+depend on a particular lifetime.
 
+FIXME: example
 
+To define the lifetime lifting function, we first define the lifetime lifting
+contexts as follows:
 
-FIXME:
-- explain layout (types that take more than two fields become pointers)
-- explain lifetimes
+```
+L ::= _ | [l]ptr((rw,off) |-> L) * p1 * ... * pn | [l]memblock(rw,off,len,Lsh) * p1 * ... * pn
+Lsh ::= _ | sh1;Lsh | Lsh;sh2 | fieldsh(L) | ptrsh(rw,l,Lsh)
+```
+
+FIXME: describe the process of lifting
+
+FIXME: explain the operation `LtPerms(a)(x:p)`, defined as follows:
+
+* For conjunctions, the operation returns only those conjuncts that contain
+  lifetime `a`, meaning that `LtPerms(a)(x:p1*...*pn)=x:p(i1)*...*p(ik)` where
+  `i1,...,ik` is the sequence of indices `i` such that `pi` contains lifetime
+  variable `a` free;
+
+* If `p` is not a conjunction but contains `a` free, then `LtPerms(a)(x:p)=x:p`;
+
+* Othersise, `LtPerms(a)(x:p)` is the empty sequence `()`.
+
+To add a lifetime permission to a function type `ps_in -o ps_out`, we define the
+function
+
+```
+AddLt(a)(ps_in -o ps_out) =
+  let a_ps_in = absMods(a)(LtPerms(a)(ps_in)) in
+  a:lowned(a_ps_in), ps_in -o a:lowned(LtPerms(a)(ps_out) -o a_ps_in)
+```
+
+FIXME: explain the above; also define `absMods(a)(ps)` as the funciton that
+abstracts all the read/write and lifetime modalities in `ps`
+
+To add multiple lifetime permissions to a function type, we define
+
+```
+AddLts(a1,...,an)(ps_in -o ps_out) =
+  AddLt(a1)(AddLt(a2)(... AddLt(an)(ps_in -o ps_out)))
+```
+
+Putting all the pieces together, we define the translation of a Rust function
+type as follows:
+
+```
+[| <'a1,...,'am> fn (x1 : T1, ..., xk : Tk) -> T |] =
+  AddLts(a1,...,an)(LtLift(FnLyt([| T1 |], ..., [| Tn |], [| T |])))
+```
