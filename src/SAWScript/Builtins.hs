@@ -483,12 +483,9 @@ print_goal_depth n =
 printGoalConsts :: ProofScript ()
 printGoalConsts =
   execTactic $ tacticId $ \goal ->
-  do sc <- getSharedContext
-     tm <- io (propToTerm sc =<< sequentToProp sc (goalSequent goal))
+  do let cs = sequentConstantSet (goalSequent goal)
      mapM_ (printOutLnTop Info) $
-       [ show nm
-       | (_,(nm,_,_)) <- Map.toList (getConstantSet tm)
-       ]
+       [ show nm | (_,(nm,_,_)) <- Map.toList cs ]
 
 printGoalSize :: ProofScript ()
 printGoalSize =
@@ -659,7 +656,7 @@ beta_reduce_goal =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
      sqt' <- traverseSequent (io . betaReduceProp sc) (goalSequent goal)
-     return (sqt', id)
+     return (sqt', ConversionEvidence sqt')
 
 goal_apply :: Theorem -> ProofScript ()
 goal_apply thm =
@@ -775,24 +772,23 @@ proveUnintSBV conf unints =
      unintSet <- SV.scriptTopLevel (resolveNames unints)
      wrapProver (Prover.proveUnintSBV conf unintSet timeout)
 
-applyProverToGoal :: (Prop -> TopLevel (Maybe CEX, SolverStats))
+applyProverToGoal :: (Sequent -> TopLevel (Maybe CEX, SolverStats))
                      -> ProofGoal
                      -> TopLevel (SolverStats, SolveResult)
 applyProverToGoal f g = do
-  sc <- getSharedContext
-  (mb, stats) <- f =<< io (sequentToProp sc (goalSequent g))
+  (mb, stats) <- f (goalSequent g)
   case mb of
     Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
     Just a  -> return (stats, SolveCounterexample a)
 
 wrapProver ::
-  (Prop -> TopLevel (Maybe CEX, SolverStats)) ->
+  (Sequent -> TopLevel (Maybe CEX, SolverStats)) ->
   ProofScript ()
 wrapProver f = execTactic $ tacticSolve $ applyProverToGoal f
 
 wrapW4Prover ::
   ( Set VarIndex -> Bool ->
-    Prop -> TopLevel (Maybe CEX, SolverStats)) ->
+    Sequent -> TopLevel (Maybe CEX, SolverStats)) ->
   [String] ->
   ProofScript ()
 wrapW4Prover f unints = do
@@ -802,7 +798,7 @@ wrapW4Prover f unints = do
 
 wrapW4ProveExporter ::
   ( Set VarIndex -> Bool -> FilePath ->
-    Prop -> TopLevel (Maybe CEX, SolverStats)) ->
+    Sequent -> TopLevel (Maybe CEX, SolverStats)) ->
   [String] ->
   String ->
   String ->
@@ -902,8 +898,7 @@ proveWithSATExporter ::
 proveWithSATExporter exporter unintSet path sep ext =
   execTactic $ tacticSolve $ \g ->
   do let file = path ++ sep ++ goalType g ++ show (goalNum g) ++ ext
-     sc <- getSharedContext
-     stats <- Prover.proveWithSATExporter exporter unintSet file =<< io (sequentToProp sc (goalSequent g))
+     stats <- Prover.proveWithSATExporter exporter unintSet file (goalSequent g)
      return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
 
 proveWithPropExporter ::
@@ -916,7 +911,8 @@ proveWithPropExporter exporter path sep ext =
   execTactic $ tacticSolve $ \g ->
   do let file = path ++ sep ++ goalType g ++ show (goalNum g) ++ ext
      sc <- getSharedContext
-     stats <- Prover.proveWithPropExporter exporter file =<< io (sequentToProp sc (goalSequent g))
+     p <- io $ sequentToProp sc (goalSequent g)
+     stats <- Prover.proveWithPropExporter exporter file p
      return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
 
 offline_aig :: FilePath -> ProofScript ()
@@ -1407,7 +1403,7 @@ term_theories unints t = do
   unintSet <- resolveNames unints
   hashConsing <- gets SV.rwWhat4HashConsing
   prop <- io (predicateToProp sc Universal (ttTerm t))
-  Prover.what4Theories unintSet hashConsing prop
+  Prover.what4Theories unintSet hashConsing (propToSequent prop)
 
 default_typed_term :: TypedTerm -> TopLevel TypedTerm
 default_typed_term tt = do

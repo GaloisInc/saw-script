@@ -19,7 +19,7 @@ import qualified Verifier.SAW.Simulator.SBV as SBVSim
 
 import Verifier.SAW.SharedTerm
 
-import SAWScript.Proof(Prop, propSize, propToSATQuery, CEX)
+import SAWScript.Proof(Sequent, sequentSize, sequentToSATQuery, CEX)
 import SAWScript.Prover.SolverStats
 import SAWScript.Value
 
@@ -30,7 +30,7 @@ proveUnintSBV ::
   SBV.SMTConfig {- ^ SBV configuration -} ->
   Set VarIndex  {- ^ Uninterpreted functions -} ->
   Maybe Integer {- ^ Timeout in milliseconds -} ->
-  Prop          {- ^ A proposition to be proved -} ->
+  Sequent       {- ^ A proposition to be proved -} ->
   TopLevel (Maybe CEX, SolverStats)
     -- ^ (example/counter-example, solver statistics)
 proveUnintSBV conf unintSet timeout goal =
@@ -42,7 +42,7 @@ proveUnintSBVIO ::
   SBV.SMTConfig {- ^ SBV configuration -} ->
   Set VarIndex  {- ^ Uninterpreted functions -} ->
   Maybe Integer {- ^ Timeout in milliseconds -} ->
-  Prop          {- ^ A proposition to be proved -} ->
+  Sequent       {- ^ A proposition to be proved -} ->
   IO (Maybe CEX, SolverStats)
     -- ^ (example/counter-example, solver statistics)
 proveUnintSBVIO sc conf unintSet timeout goal =
@@ -61,7 +61,7 @@ proveUnintSBVIO sc conf unintSet timeout goal =
      SBV.SatResult r <- SBV.satWith conf script
 
      let stats = solverStats ("SBV->" ++ show (SBV.name (SBV.solver conf)))
-                             (propSize goal)
+                             (sequentSize goal)
      case r of
        SBV.Unsatisfiable {} -> return (Nothing, stats)
 
@@ -87,8 +87,8 @@ proveUnintSBVIO sc conf unintSet timeout goal =
 prepNegatedSBV ::
   SharedContext ->
   Set VarIndex {- ^ Uninterpreted function names -} ->
-  Prop     {- ^ Proposition to prove -} ->
+  Sequent      {- ^ Proposition to prove -} ->
   IO ([SBVSim.Labeler], [ExtCns Term], SBV.Symbolic SBV.SVal)
 prepNegatedSBV sc unintSet goal =
-  do satq <- propToSATQuery sc unintSet goal
+  do satq <- sequentToSATQuery sc unintSet goal
      SBVSim.sbvSATQuery sc mempty satq
