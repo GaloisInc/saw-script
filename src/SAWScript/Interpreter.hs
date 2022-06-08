@@ -304,10 +304,13 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   --io $ putStrLn $ "Top-level bind: " ++ show mx
   --showCryptolEnv
 
+
   -- Print non-unit result if it was not bound to a variable
   case pat of
     SS.PWild _ | printBinds && not (isVUnit result) ->
-      liftTopLevel $ printOutLnTop Info (showsPrecValue opts 0 result "")
+      liftTopLevel $
+      do nenv <- io . scGetNamingEnv =<< getSharedContext
+         printOutLnTop Info (showsPrecValue opts nenv 0 result "")
     _ -> return ()
 
   -- Print function type if result was a function
@@ -385,6 +388,7 @@ interpretStmt printBinds stmt =
       liftTopLevel $
       do rw <- getTopLevelRW
          putTopLevelRW $ addTypedef (getVal name) ty rw
+
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
 interpretFile file runMain = do
@@ -747,7 +751,8 @@ print_value (VTerm t) = do
 
 print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
-  printOutLnTop Info (showsPrecValue opts 0 v "")
+  nenv <- io . scGetNamingEnv =<< getSharedContext
+  printOutLnTop Info (showsPrecValue opts nenv 0 v "")
 
 readSchema :: String -> SS.Schema
 readSchema str =

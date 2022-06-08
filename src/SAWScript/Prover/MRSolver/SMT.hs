@@ -33,6 +33,7 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.OpenTerm
 
 import Verifier.SAW.Prim (EvalError(..))
+import Verifier.SAW.Name (emptySAWNamingEnv)
 import qualified Verifier.SAW.Prim as Prim
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Simulator.TermModel
@@ -286,7 +287,7 @@ mrProvableRaw prop_term =
      prop <- liftSC1 termToProp prop_term
      unints <- Set.map ecVarIndex <$> getAllExtSet <$> liftSC1 propToTerm prop
      debugPrint 2 ("Calling SMT solver with proposition: " ++
-                   prettyProp defaultPPOpts prop)
+                   prettyProp defaultPPOpts emptySAWNamingEnv prop)
      sym <- liftIO $ setupWhat4_sym True
      -- If there are any saw-core `error`s in the term, this will throw a
      -- Haskell error - in this case we want to just return False, not stop
