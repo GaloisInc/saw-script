@@ -320,10 +320,12 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   --io $ putStrLn $ "Top-level bind: " ++ show mx
   --showCryptolEnv
 
+
   -- Print non-unit result if it was not bound to a variable
   case pat of
     SS.PWild _ | printBinds && not (isVUnit result) ->
-      printOutLnTop Info (showsPrecValue opts 0 result "")
+      do nenv <- io . scGetNamingEnv =<< getSharedContext
+         printOutLnTop Info (showsPrecValue opts nenv 0 result "")
     _ -> return ()
 
   -- Print function type if result was a function
@@ -380,13 +382,15 @@ writeVerificationSummary = do
     summary <- io (computeVerificationSummary db jspecs lspecs thms)
     opts <- roOptions <$> getTopLevelRO
     dir <- roInitWorkDir <$> getTopLevelRO
+    nenv <- io . scGetNamingEnv =<< getSharedContext
+    ppOpts <- fmap (sawPPOpts . rwPPOpts) getTopLevelRW
     case summaryFile opts of
       Nothing -> return ()
       Just f -> let
         f' = if hasDrive f then f else dir </> f
         formatSummary = case summaryFormat opts of
                        JSON -> jsonVerificationSummary
-                       Pretty -> prettyVerificationSummary
+                       Pretty -> prettyVerificationSummary ppOpts nenv
         in io $ writeFile f' $ formatSummary summary
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
@@ -737,7 +741,8 @@ print_value (VTerm t) = do
 
 print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
-  printOutLnTop Info (showsPrecValue opts 0 v "")
+  nenv <- io . scGetNamingEnv =<< getSharedContext
+  printOutLnTop Info (showsPrecValue opts nenv 0 v "")
 
 readSchema :: String -> SS.Schema
 readSchema str =

@@ -138,7 +138,8 @@ import SAWScript.VerificationSummary
 showPrim :: SV.Value -> TopLevel String
 showPrim v = do
   opts <- fmap rwPPOpts getTopLevelRW
-  return (SV.showsPrecValue opts 0 v "")
+  nenv <- io . scGetNamingEnv =<< getSharedContext
+  return (SV.showsPrecValue opts nenv 0 v "")
 
 definePrim :: Text -> TypedTerm -> TopLevel TypedTerm
 definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
@@ -445,8 +446,8 @@ write_goal fp =
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
      liftIO $ do
-       -- TODO, something better here
-       output <- liftIO (scShowTerm sc opts =<< propToTerm sc =<< sequentToProp sc (goalSequent goal))
+       nenv <- scGetNamingEnv sc
+       let output = prettySequent opts nenv (goalSequent goal)
        writeFile fp (unlines [goalSummary goal, output])
 
 print_goal :: ProofScript ()
@@ -454,10 +455,9 @@ print_goal =
   execTactic $ tacticId $ \goal ->
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
-     -- TODO, something better here
-     output <- liftIO (scShowTerm sc opts =<< propToTerm sc =<< sequentToProp sc (goalSequent goal))
-     printOutLnTop Info (goalSummary goal)
-     printOutLnTop Info output
+     nenv <- io (scGetNamingEnv sc)
+     let output = prettySequent opts nenv (goalSequent goal)
+     printOutLnTop Info (unlines [goalSummary goal, output])
 
 print_goal_summary :: ProofScript ()
 print_goal_summary =
@@ -475,10 +475,9 @@ print_goal_depth n =
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
      let opts' = opts { ppMaxDepth = Just n }
-     -- TODO, something better here
-     output <- liftIO (scShowTerm sc opts' =<< propToTerm sc =<< sequentToProp sc (goalSequent goal))
-     printOutLnTop Info ("Goal " ++ goalName goal ++ ":")
-     printOutLnTop Info output
+     nenv <- io (scGetNamingEnv sc)
+     let output = prettySequent opts' nenv (goalSequent goal)
+     printOutLnTop Info (unlines [goalSummary goal, output])
 
 printGoalConsts :: ProofScript ()
 printGoalConsts =
@@ -1899,7 +1898,9 @@ summarize_verification =
          thms    = [ t | SV.VTheorem t <- values ]
      db <- roTheoremDB <$> getTopLevelRO
      summary <- io (computeVerificationSummary db jspecs lspecs thms)
-     io $ putStrLn $ prettyVerificationSummary summary
+     opts <- fmap (SV.sawPPOpts . rwPPOpts) getTopLevelRW
+     nenv <- io . scGetNamingEnv =<< getSharedContext
+     io $ putStrLn $ prettyVerificationSummary opts nenv summary
 
 summarize_verification_json :: String -> TopLevel ()
 summarize_verification_json fpath =

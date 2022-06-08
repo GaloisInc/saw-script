@@ -59,6 +59,7 @@ module Verifier.SAW.SharedTerm
   , SharedContext
   , mkSharedContext
   , scGetModuleMap
+  , scGetNamingEnv
     -- ** Low-level generic term constructors
   , scTermF
   , scFlatTermF
@@ -503,6 +504,10 @@ scCtorApp sc c_id args =
   do ctor <- scRequireCtor sc c_id
      let (params,args') = splitAt (ctorNumParams ctor) args
      scCtorAppParams sc (ctorPrimName ctor) params args'
+
+-- | Get the current naming environment
+scGetNamingEnv :: SharedContext -> IO SAWNamingEnv
+scGetNamingEnv sc = readIORef (scNamingEnv sc)
 
 -- | Get the current 'ModuleMap'
 scGetModuleMap :: SharedContext -> IO ModuleMap
