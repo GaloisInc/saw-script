@@ -776,12 +776,18 @@ verifyObligations cc mspec tactic assumes asserts =
   do let sym = cc^.ccSym
      st     <- io $ Common.sawCoreState sym
      let sc  = saw_ctx st
-     assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
+     useSequentGoals <- rwSequentGoals <$> getTopLevelRW
+     let assumeTerms = toListOf (folded . Crucible.labeledPred) assumes
+     assume <- io $ scAndList sc assumeTerms
      let nm  = mspec ^. csName
      outs <-
        forM (zip [(0::Int)..] asserts) $ \(n, (msg, md, assert)) ->
-       do goal   <- io $ scImplies sc assume assert
-          goal'  <- io $ boolToProp sc [] goal
+       do goal  <- io $ scImplies sc assume assert
+          goal' <- io $ boolToProp sc [] goal
+          sqt <- if useSequentGoals then
+                    io $ booleansToSequent sc assumeTerms [assert]
+                 else
+                    return (propToSequent goal')
           let ploc = MS.conditionLoc md
           let gloc = (unwords [show (W4.plSourceLoc ploc)
                              ,"in"
@@ -795,10 +801,10 @@ verifyObligations cc mspec tactic assumes asserts =
                           , goalName = nm
                           , goalLoc  = gloc
                           , goalDesc = msg
-                          , goalSequent = propToSequent goal'
+                          , goalSequent = sqt
                           , goalTags = MS.conditionTags md
                           }
-          res <- runProofScript tactic proofgoal (Just ploc) $ Text.unwords
+          res <- runProofScript tactic goal' proofgoal (Just ploc) $ Text.unwords
                     ["LLVM verification condition", Text.pack (show n), Text.pack goalname]
           case res of
             ValidProof stats thm -> return (stats, thmNonce thm)
@@ -965,14 +971,15 @@ assumptionsContainContradiction cc methodSpec tactic assumptions =
      st <- io $ Common.sawCoreState sym
      let sc  = saw_ctx st
      let ploc = methodSpec^.MS.csLoc
-     pgl <- io $
+     (goal',pgl) <- io $
       do
          -- conjunction of all assumptions
          assume <- scAndList sc (toListOf (folded . Crucible.labeledPred) assumptions)
          -- implies falsehood
          goal  <- scImplies sc assume =<< toSC sym st (W4.falsePred sym)
          goal' <- boolToProp sc [] goal
-         return $ ProofGoal
+         return $ (goal',
+                  ProofGoal
                   { goalNum  = 0
                   , goalType = "vacuousness check"
                   , goalName = show (methodSpec^.MS.csMethod)
@@ -980,8 +987,8 @@ assumptionsContainContradiction cc methodSpec tactic assumptions =
                   , goalDesc = "vacuousness check"
                   , goalSequent = propToSequent goal'
                   , goalTags = mempty
-                  }
-     res <- runProofScript tactic pgl Nothing "vacuousness check"
+                  })
+     res <- runProofScript tactic goal' pgl Nothing "vacuousness check"
      case res of
        ValidProof _ _     -> return True
        InvalidProof _ _ _ -> return False
@@ -1590,14 +1597,6 @@ prepareArgs sym ctx x =
        return (Crucible.RegEntry tr v))
   ctx
 
-
--- | Build a conjunction from a list of boolean terms.
-scAndList :: SharedContext -> [Term] -> IO Term
-scAndList sc = conj . filter nontrivial
-  where
-    nontrivial x = asBool x /= Just True
-    conj [] = scBool sc True
-    conj (x : xs) = foldM (scAnd sc) x xs
 
 --------------------------------------------------------------------------------
 
