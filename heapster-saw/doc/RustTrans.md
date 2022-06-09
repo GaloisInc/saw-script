@@ -129,11 +129,18 @@ actually allow polymorphic function types, but only supports non-polymorphic
 functions types, starting with the `fn` keyword, so this is a syntactic
 extension supported by Heapster.
 
+Rust function types are translated to Heapster function types in two steps. The
+first step is argument layout. Argument layout takes the translations of the
+Rust argument types to Heapster shapes, which describe the shape of memory
+blocks, and lays out those memory block shapes onto register values. At a high
+level, this step can be seen as bridging the gap between Rust types, which
+describe blocks of memory, and LLVM types, which describe values. The second
+step is to add lifetime permissions. This step generates lifetime ownership
+permissions for each of the lifetime variables `'ai` in the Rust function type.
+
 
 FIXME: give some examples of how some simple Rust function types are translated
 to Heapster
-
-FIXME: summarize the overall steps of the translation
 
 
 ### Argument Layout
@@ -191,18 +198,33 @@ Using these operations, the layout function `Lyt(sh)` is defined as follows:
 | `Lyt(emptysh)` =           | `struct()` |
 | `Lyt(Name<args>)`  = |  `Lyt(unfold(Name,args))` |
 | `Lyt(fieldsh(p))`       = |  `struct(p)` |
-| `Lyt(arraysh(_,_,_))` = | undefined |
+| `Lyt(arraysh(k,stride,sh))` = | `Lyt(sh;...;sh)` for `k` copies of `sh`, if `8*len(sh)=stride` |
+| `Lyt(arraysh(_,_,_))` = | undefined otherwise |
 | `Lyt(sh1 ; sh2)`      = | `Lyt(sh1) ++ Lyt(sh2)` |
 | `Lyt(sh1 orsh sh2)`  = | `Lyt(sh1) \/ Lyt(sh2)` |
 | `Lyt(exsh z. sh)` = | `exists z. Lyt(sh)` |
 | `Lyt(falsesh)` =  | `false` |
 
+The empty shape is laid out as a struct permission on an empty list of fields.
+Named shapes are laid out by laying out their unfolding. Field shapes are laid
+out as a struct permission with a single field whose permission is given by the
+permission in the field shape. Array shapes with a known, fixed size `k` are
+laid out as `k` copies of their shape. Otherwise, array shapes with a
+dynamically-determined length are not laid out as arguments. Sequence and
+disjunctive shapes are laid out using the `++` and `\/` operations defined
+above, respectively, while existential shapes are laid out as existential
+permissions and the false shape is laid out as the false permission.
 
-FIXME: explain the above definition
-
-FIXME: define the argument layout function `Arg(sh)` as a function from a shape
-`sh` to a sequence of zero or more ghost variables and regular argument
-variables plus permissions:
+Using the `Lyt(sh)` function, we define the argument layout function `Arg(sh)`
+that maps `sh` to a sequence of arguments and their corresponding permissions.
+The Rust compiler uses the convention that any type that fits in no more than
+two argument values is laid out into argument values, and otherwise is passed by
+pointer. To handle this convention, `Arg(sh)` returns permissions for up to two
+argument values if `Lyt(sh)` returns a struct permission with at most two
+fields, and otherwise returns a `memblock` permission describing a pointer to a
+memory block of shape `sh`. More formally, `Arg(sh)` is a function from shape
+`sh` to a sequence of normal and ghost arguments with permissions, defined as
+follows:
 
 * If `Lyt(sh)=struct(p1,...,pn)` for a sequence `p1,...,pn` of 0, 1, or 2
   permissions, then `Arg(sh)=arg1:p1,...,argn:pn`;
@@ -215,10 +237,17 @@ variables plus permissions:
 
 * Otherwise, `Arg(sh)` is undefined.
 
-For any sequence `sh1,...,shn` of shapes for `n` input arguments, we define the
-argument sequence layout function `Args(sh1,...,shn)` as the sequence of
-permissions on regular and ghost arguments given by `Arg(sh1),...,Arg(shn)`, if
-all of these are defined.
+The complexity of the second case comes from the case where `Lyt(sh)` returns a
+struct permission where the permissions on the individual fields are cannot be
+separated from each other. In this case, `Arg(sh)` returns a ghost variable
+`ghost` to specify the tuple of the arguments, each of which are required to
+equal their corresponding projection of `ghost` using `eq_proj` permissions.
+
+The argument layout function `Arg(sh)` is extended to multiple arguments with
+the argument sequence layout function `Args(sh1,...,shn)`. For any sequence
+`sh1,...,shn` of shapes for `n` input arguments, we define the
+`Args(sh1,...,shn)` as the sequence of permissions on regular and ghost
+arguments given by `Arg(sh1),...,Arg(shn)`, if all of these are defined.
 
 We define the return value layout function `Ret(sh)` as a partial function from
 a shape `sh` to a permission on the return value `ret` of a funciton as follows:
