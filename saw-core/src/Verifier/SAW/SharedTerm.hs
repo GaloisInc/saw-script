@@ -168,6 +168,8 @@ module Verifier.SAW.SharedTerm
   , scXor
   , scBoolEq
   , scIte
+  , scAndList
+  , scOrList
   -- *** Natural numbers
   , scNat
   , scNatType
@@ -1701,6 +1703,25 @@ scBvForall sc w f = scGlobalApply sc "Prelude.bvForall" [w, f]
 scIte :: SharedContext -> Term -> Term ->
          Term -> Term -> IO Term
 scIte sc t b x y = scGlobalApply sc "Prelude.ite" [t, b, x, y]
+
+-- | Build a conjunction from a list of boolean terms.
+scAndList :: SharedContext -> [Term] -> IO Term
+scAndList sc = conj . filter nontrivial
+  where
+    nontrivial x = asBool x /= Just True
+    conj [] = scBool sc True
+    conj [x] = return x
+    conj (x : xs) = foldM (scAnd sc) x xs
+
+-- | Build a conjunction from a list of boolean terms.
+scOrList :: SharedContext -> [Term] -> IO Term
+scOrList sc = disj . filter nontrivial
+  where
+    nontrivial x = asBool x /= Just False
+    disj [] = scBool sc False
+    disj [x] = return x
+    disj (x : xs) = foldM (scOr sc) x xs
+
 
 -- | Create a term applying @Prelude.append@ to two vectors.
 --
