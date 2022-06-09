@@ -147,16 +147,21 @@ to Heapster
 
 Argument layout converts a shape, which describes the layout and associated
 permissions of a memory block, to a permission on a sequence of register values,
-if this is possible. In Heapster (as in the underlying Crucible type system),
-sequences of values are called structs and a permission on a sequence of values
-is called a struct permission. More specifically, argument layout is defined as
-a partial function `Lyt(sh)` that maps a Heapster shape `sh` for a particular
-function argument to a permission of type `perm(struct(tp1,...,tpn))` for some
-value types (i.e., Crucible types) `tp1` through `tpn`. When the layout of the
-type `T` of an argument is not defined --- e.g., if `T` is too big to fit in
-registers or it is a slice or other dynamically-sized type that has no
-well-defined size --- then the corresponding argument is represented as a
-pointer to a block of memory with the shape defined by `T`.
+if this is possible. Note that this concept is different from the Rust concept
+of "type layout", though the two are related. In fact, the notion of argument
+layout described here is very undocumented in Rust, and has in fact been
+determined by consulting a number of blog posts and by much experimentation.
+
+In Heapster (as in the underlying Crucible type system), sequences of values are
+called structs and a permission on a sequence of values is called a struct
+permission. Argument layout is thus defined as a partial function `Lyt(sh)` that
+maps a Heapster shape `sh` for a particular function argument to a permission of
+type `perm(struct(tp1,...,tpn))` for some value types (i.e., Crucible types)
+`tp1` through `tpn`. When the layout of the type `T` of an argument is not
+defined --- e.g., if `T` is too big to fit in registers or it is a slice or
+other dynamically-sized type that has no well-defined size --- then the
+corresponding argument is represented as a pointer to a block of memory with the
+shape defined by `T`.
 
 In order to define `Lyt(sh)`, we first define two helper operations on structure
 permissions. Both of these are partial functions that take in two structure
