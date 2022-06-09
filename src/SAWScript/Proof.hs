@@ -31,6 +31,7 @@ module SAWScript.Proof
   , prettyProp
   , ppProp
   , propToSATQuery
+  , normalizeProp
   , checkProp
 
   , Sequent
@@ -43,8 +44,19 @@ module SAWScript.Proof
   , ppSequent
   , propToSequent
   , traverseSequent
+  , traverseSequentWithFocus
   , checkSequent
   , sequentConstantSet
+  , booleansToSequent
+  , unfocusSequent
+  , focusOnGoal
+  , focusOnHyp
+  , normalizeSequent
+  , filterHyps
+  , filterGoals
+
+  , CofinSet(..)
+  , cofinSetMember
 
   , TheoremDB
   , newTheoremDB
@@ -73,6 +85,7 @@ module SAWScript.Proof
 
   , Evidence(..)
   , checkEvidence
+  , structuralEvidence
 
   , Tactic
   , withFirstGoal
@@ -81,6 +94,7 @@ module SAWScript.Proof
 --  , tacticAssume
   , tacticApply
   , tacticSplit
+  , tacticCut
   , tacticTrivial
   , tacticId
   , tacticChange
@@ -111,6 +125,7 @@ import qualified Control.Monad.Fail as F
 import           Control.Monad.Except
 import           Data.IORef
 import qualified Data.Foldable as Fold
+import           Data.List
 import           Data.Maybe (fromMaybe)
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -119,6 +134,8 @@ import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Time.Clock
+
+import Prettyprinter
 
 import Data.Parameterized.Nonce
 
@@ -131,7 +148,8 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.FiniteValue (FirstOrderValue)
-import Verifier.SAW.Term.Pretty (SawDoc, renderSawDoc, ppTermWithNames, ppTermContainerWithNames)
+import Verifier.SAW.Term.Pretty
+  (SawDoc, renderSawDoc, ppTermWithNames, ppTermContainerWithNames)
 import qualified Verifier.SAW.SCTypeCheck as TC
 
 import Verifier.SAW.Simulator.Concrete (evalSharedTerm)
@@ -142,6 +160,7 @@ import What4.ProgramLoc (ProgramLoc)
 import SAWScript.Position
 import SAWScript.Prover.SolverStats
 import SAWScript.Crucible.Common as Common
+import qualified Verifier.SAW.Simulator.TermModel as TM
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
 import qualified Verifier.SAW.Simulator.What4.ReturnTrip as W4Sim
 import SAWScript.Panic(panic)
@@ -350,6 +369,11 @@ trivialProofTerm sc (Prop p) = runExceptT (loop =<< lift (scWhnf sc p))
                , showTerm p
                ]
 
+normalizeProp :: SharedContext -> ModuleMap -> Set VarIndex -> Prop -> IO Prop
+normalizeProp sc modmap opaqueSet (Prop tm) =
+  do tm' <- TM.normalizeSharedTerm sc modmap mempty mempty opaqueSet tm
+     termToProp sc tm'
+
 -- | Pretty print the given proposition as a string.
 prettyProp :: PPOpts -> SAWNamingEnv -> Prop -> String
 prettyProp opts nenv p = renderSawDoc opts (ppProp opts nenv p)
@@ -363,25 +387,42 @@ type SequentBranch = Prop
 
 data Sequent
   = UnfocusedSequent   [SequentBranch] [SequentBranch]
-  | GoalFocusedSequent [SequentBranch] ([SequentBranch], SequentBranch, [SequentBranch]) 
-  | HypFocusedSequent ([SequentBranch], SequentBranch, [SequentBranch]) [SequentBranch] 
+  | GoalFocusedSequent [SequentBranch] ([SequentBranch], SequentBranch, [SequentBranch])
+  | HypFocusedSequent ([SequentBranch], SequentBranch, [SequentBranch]) [SequentBranch]
 
-sequentToRawSequent :: Sequent -> RawSequent Term
+unfocus :: Sequent -> ([SequentBranch],[SequentBranch])
+unfocus (UnfocusedSequent hs gs) = (hs,gs)
+unfocus (GoalFocusedSequent hs (gs1,g,gs2)) = (hs, gs1 ++ g : gs2)
+unfocus (HypFocusedSequent (hs1,h,hs2) gs)  = (hs1 ++ h : hs2,  gs)
+
+unfocusSequent :: Sequent -> Sequent
+unfocusSequent sqt = UnfocusedSequent hs gs
+  where (hs,gs) = unfocus sqt
+
+focusOnGoal :: Integer -> Sequent -> Maybe Sequent
+focusOnGoal i sqt =
+    let (hs,gs) = unfocus sqt in
+    case genericDrop i gs of
+      (g:gs2) -> Just (GoalFocusedSequent hs (genericTake i gs, g, gs2))
+      []      -> Nothing
+
+focusOnHyp :: Integer -> Sequent -> Maybe Sequent
+focusOnHyp i sqt =
+    let (hs,gs) = unfocus sqt in
+    case genericDrop i hs of
+      (h:hs2) -> Just (HypFocusedSequent (genericTake i hs, h, hs2) gs)
+      []      -> Nothing
+
+sequentToRawSequent :: Sequent -> RawSequent Prop
 sequentToRawSequent sqt =
    case sqt of
-     UnfocusedSequent   hs gs            -> f hs gs
-     GoalFocusedSequent hs (gs1, g, gs2) -> f hs (gs1 ++ g : gs2)
-     HypFocusedSequent  (hs1, h, hs2) gs -> f (hs1 ++ h : hs2) gs
+     UnfocusedSequent   hs gs            -> RawSequent hs gs
+     GoalFocusedSequent hs (gs1, g, gs2) -> RawSequent hs (gs1 ++ g : gs2)
+     HypFocusedSequent  (hs1, h, hs2) gs -> RawSequent (hs1 ++ h : hs2) gs
 
-  where
-    f hs gs = RawSequent (map toRaw hs) (map toRaw gs)
-    toRaw (Prop p) =
-      case asEqTrue p of
-        Just p' -> p'
-        Nothing -> p
 
 sequentConstantSet :: Sequent -> Map VarIndex (NameInfo, Term, Maybe Term)
-sequentConstantSet sqt = foldr (\t m -> Map.union (getConstantSet t) m) mempty (hs++gs)
+sequentConstantSet sqt = foldr (\p m -> Map.union (getConstantSet (unProp p)) m) mempty (hs++gs)
   where
     RawSequent hs gs = sequentToRawSequent sqt
 
@@ -394,87 +435,23 @@ instance Foldable RawSequent where
 instance Traversable RawSequent where
   traverse f (RawSequent hs gs) = RawSequent <$> traverse f hs <*> traverse f gs
 
-data NormalizedSequent = NormSeq (Set Term) (Set Term)
 
-normalizedSequentSubsumes :: NormalizedSequent -> NormalizedSequent -> Bool
-normalizedSequentSubsumes (NormSeq h1 g1) (NormSeq h2 g2) =
-  (h1 `Set.isSubsetOf` h2) && (g1 `Set.isSubsetOf` g2)
-
-normalizedSequentIsAxiom :: SharedContext -> NormalizedSequent -> IO Bool
-normalizedSequentIsAxiom sc (NormSeq hset gset) =
-  loop [ (h,g) | h <- Set.toList hset, g <- Set.toList gset ]
-  where
-    loop [] = return False
-    loop ((h,g):xs) =
-      do ok <- scConvertible sc False h g
-         if ok then return True else loop xs
-
-convertibleTerms :: SharedContext -> [Term] -> [Term] -> IO Bool
-convertibleTerms _sc [] [] = return True
-convertibleTerms sc (p1:ps1) (p2:ps2) =
-  do ok1 <- scConvertible sc False p1 p2
-     ok2 <- convertibleTerms sc ps1 ps2
+convertibleProps :: SharedContext -> [Prop] -> [Prop] -> IO Bool
+convertibleProps _sc [] [] = return True
+convertibleProps sc (p1:ps1) (p2:ps2) =
+  do ok1 <- scConvertible sc True (unProp p1) (unProp p2)
+     ok2 <- convertibleProps sc ps1 ps2
      return (ok1 && ok2)
-convertibleTerms _sc _ _ = return False
+convertibleProps _sc _ _ = return False
 
 convertibleSequents :: SharedContext -> Sequent -> Sequent -> IO Bool
 convertibleSequents sc sqt1 sqt2 =
-  do ok1 <- convertibleTerms sc hs1 hs2
-     ok2 <- convertibleTerms sc gs1 gs2
+  do ok1 <- convertibleProps sc hs1 hs2
+     ok2 <- convertibleProps sc gs1 gs2
      return (ok1 && ok2)
   where
     RawSequent hs1 gs1 = sequentToRawSequent sqt1
     RawSequent hs2 gs2 = sequentToRawSequent sqt2
-
-
-normalizeSequent :: SharedContext -> RawSequent Term -> IO NormalizedSequent
-normalizeSequent sc = loop (NormSeq mempty mempty)
- where
-   loop (NormSeq hset gset) (RawSequent (h:hs) gs) =
-     do body <- scWhnf sc h
-        case () of
-          _ | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) body
-            -> loop (NormSeq hset gset) (RawSequent hs (p1 : gs))
-
-            | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.and" <@> return <@> return) body
-            -> loop (NormSeq hset gset) (RawSequent (p1 : p2 : hs) gs)
-
-            | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.xor" <@> return <@> return) body
-            -> do g1 <- scBoolEq sc p1 p2
-                  loop (NormSeq hset gset) (RawSequent hs (g1:gs))
-
-            | Just _ <- (isGlobalDef "Prelude.True") body
-            -> loop (NormSeq hset gset) (RawSequent hs gs)
-
-            | Just _ <- (isGlobalDef "Prelude.False") body
-            -> return (NormSeq (Set.singleton body) (Set.singleton body))
-
-            | otherwise ->
-                  loop (NormSeq (Set.insert h hset) gset) (RawSequent hs gs)
-
-   loop (NormSeq hset gset) (RawSequent [] (g:gs)) =
-     do body <- scWhnf sc g
-        case () of
-          _ | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) body
-            -> loop (NormSeq hset gset) (RawSequent [p1] gs)
-
-            | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.or" <@> return <@> return) body
-            -> loop (NormSeq hset gset) (RawSequent [] (p1 : p2 : gs))
-
-            | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.xor" <@> return <@> return) body
-            -> do h1 <- scBoolEq sc p1 p2
-                  loop (NormSeq hset gset) (RawSequent [h1] gs)
-
-            | Just _ <- (isGlobalDef "Prelude.False") body
-            -> loop (NormSeq hset gset) (RawSequent [] gs)
-
-            | Just _ <- (isGlobalDef "Prelude.True") body
-            -> return (NormSeq (Set.singleton body) (Set.singleton body))
-
-            | otherwise ->
-                  loop (NormSeq hset (Set.insert g gset)) (RawSequent [] gs)
-
-   loop (NormSeq hset gset) (RawSequent [] []) = return (NormSeq hset gset)
 
 
 
@@ -486,23 +463,29 @@ data SequentState
 propToSequent :: Prop -> Sequent
 propToSequent p = GoalFocusedSequent [] ([], p, [])
 
+booleansToSequent :: SharedContext -> [Term] -> [Term] -> IO Sequent
+booleansToSequent sc hs gs =
+  do hs' <- mapM (boolToProp sc []) hs
+     gs' <- mapM (boolToProp sc []) gs
+     case gs' of
+       [g] -> return (GoalFocusedSequent hs' ([],g,[]))
+       _   -> return (UnfocusedSequent hs' gs')
+
 sequentToProp :: SharedContext -> Sequent -> IO Prop
 sequentToProp sc sqt =
- case sqt of
-   UnfocusedSequent hs [g] -> loop hs g
-   GoalFocusedSequent hs ([],g,[]) -> loop hs g
-   HypFocusedSequent (hs1,h,hs2) [g] -> loop (hs1++h:hs2) g
-   _ -> fail "sequentToProp cannot currently handle multi-conclusion sequents FIXME"
+  do let RawSequent hs gs = sequentToRawSequent sqt
+     case gs of
+       []  -> do g <- boolToProp sc [] =<< scBool sc False
+                 loop hs g
+       [g] -> loop hs g
+              -- TODO, we should add a prop-level disjunction to the SAWCore prelude
+       _   -> fail "seqentToProp: cannot handle multi-conclusion sequents"
 
  where
    loop [] g = return g
    loop (h:hs) g =
      do g' <- loop hs g
         Prop <$> scFun sc (unProp h) (unProp g')
-
-sequentToSATQuery :: SharedContext -> Set VarIndex -> Sequent -> IO SATQuery
-sequentToSATQuery sc unintSet sqt =
-  sequentToProp sc sqt >>= propToSATQuery sc unintSet
 
 -- | Pretty print the given proposition as a string.
 prettySequent :: PPOpts -> SAWNamingEnv -> Sequent -> String
@@ -511,11 +494,90 @@ prettySequent opts nenv sqt = renderSawDoc opts (ppSequent opts nenv sqt)
 -- | Pretty print the given proposition as a @SawDoc@.
 ppSequent :: PPOpts -> SAWNamingEnv -> Sequent -> SawDoc
 ppSequent opts nenv sqt =
-  ppTermContainerWithNames ppRawSequent opts nenv (sequentToRawSequent sqt)
+  ppTermContainerWithNames
+    (ppRawSequent sqt)
+    opts
+    nenv
+    (fmap unProp (sequentToRawSequent sqt))
 
-ppRawSequent :: RawSequent SawDoc -> SawDoc
-ppRawSequent (RawSequent [] [g]) = g
-ppRawSequent (RawSequent hs gs)  = error "ppRawSequent! implement nontrivial cases!"
+ppRawSequent :: Sequent -> RawSequent SawDoc -> SawDoc
+ppRawSequent _sqt (RawSequent [] [g]) = g
+ppRawSequent sqt (RawSequent hs gs)  =
+  align (vcat (map ppHyp (zip [0..] hs) ++ turnstile ++ map ppGoal (zip [0..] gs)))
+ where
+  turnstile  = [ pretty (take 40 (repeat '=')) ]
+  focused doc = "<<" <> doc <> ">>"
+  ppHyp (i, tm)
+    | HypFocusedSequent (hs1,_h,_hs2) _gs <- sqt
+    , length hs1 == i
+    = focused ("H" <> pretty i) <+> tm
+
+    | otherwise
+    = "H" <> pretty i <> ":" <+> tm
+
+  ppGoal (i, tm)
+    | GoalFocusedSequent _hs (gs1,_g,_gs2) <- sqt
+    , length gs1 == i
+    = focused ("G" <> pretty i) <+> tm
+
+    | otherwise
+    = "G" <> pretty i <> ":" <+> tm
+
+
+data CofinSet a
+  = WhiteList (Set a)
+  | BlackList (Set a)
+
+cofinSetMember :: Ord a => a -> CofinSet a -> Bool
+cofinSetMember a (WhiteList xs) = Set.member a xs
+cofinSetMember a (BlackList xs)  = not (Set.member a xs)
+
+filterPosList :: CofinSet Integer -> [a] -> [a]
+filterPosList pss xs = map snd $ filter f $ zip [0..] xs
+  where
+    f (i,_) = cofinSetMember i pss
+
+filterFocusedList :: CofinSet Integer -> ([a],a,[a]) -> Either [a] ([a],a,[a])
+filterFocusedList pss (xs1,x,xs2) =
+   if cofinSetMember idx pss then
+     Right (xs1',x,xs2')
+   else
+     Left (xs1' ++ xs2')
+  where
+    f (i,_) = cofinSetMember i pss
+    idx  = genericLength xs1
+    xs1' = map snd $ filter f $ zip [0..] xs1
+    xs2' = map snd $ filter f $ zip [idx+1..] xs2
+
+filterHyps :: CofinSet Integer -> Sequent -> Sequent
+filterHyps pss (UnfocusedSequent hs gs) =
+  UnfocusedSequent (filterPosList pss hs) gs
+filterHyps pss (GoalFocusedSequent hs gs) =
+  GoalFocusedSequent (filterPosList pss hs) gs
+filterHyps pss (HypFocusedSequent hs gs) =
+  case filterFocusedList pss hs of
+    Left hs'  -> UnfocusedSequent hs' gs
+    Right hs' -> HypFocusedSequent hs' gs
+
+filterGoals :: CofinSet Integer -> Sequent -> Sequent
+filterGoals pss (UnfocusedSequent hs gs) =
+  UnfocusedSequent hs (filterPosList pss gs)
+filterGoals pss (HypFocusedSequent hs gs) =
+  HypFocusedSequent hs (filterPosList pss gs)
+filterGoals pss (GoalFocusedSequent hs gs) =
+  case filterFocusedList pss gs of
+    Left gs'  -> UnfocusedSequent hs gs'
+    Right gs' -> GoalFocusedSequent hs gs'
+
+addHypothesis :: Prop -> Sequent -> Sequent
+addHypothesis p (UnfocusedSequent hs gs)   = UnfocusedSequent (hs ++ [p]) gs
+addHypothesis p (GoalFocusedSequent hs gs) = GoalFocusedSequent (hs ++ [p]) gs
+addHypothesis p (HypFocusedSequent (hs1,h,hs2) gs) = HypFocusedSequent (hs1,h,hs2++[p]) gs
+
+addNewFocusedGoal :: Prop -> Sequent -> Sequent
+addNewFocusedGoal p sqt =
+  let RawSequent hs gs = sequentToRawSequent sqt
+   in GoalFocusedSequent hs (gs,p,[])
 
 sequentState :: Sequent -> SequentState
 sequentState (UnfocusedSequent _ _) = Unfocused
@@ -525,22 +587,35 @@ sequentState (HypFocusedSequent (hs1,h,hs2) gs) =
   HypFocus h (\h' -> HypFocusedSequent (hs1,h',hs2) gs)
 
 sequentSharedSize :: Sequent -> Integer
-sequentSharedSize sqt = scSharedSizeMany (hs ++ gs)
+sequentSharedSize sqt = scSharedSizeMany (map unProp (hs ++ gs))
   where
    RawSequent hs gs = sequentToRawSequent sqt
 
 sequentTreeSize :: Sequent -> Integer
-sequentTreeSize sqt = scTreeSizeMany (hs ++ gs)
+sequentTreeSize sqt = scTreeSizeMany (map unProp (hs ++ gs))
   where
    RawSequent hs gs = sequentToRawSequent sqt
+
+traverseSequentWithFocus :: Applicative m => (Prop -> m Prop) -> Sequent -> m Sequent
+traverseSequentWithFocus f (UnfocusedSequent hs gs) =
+  UnfocusedSequent <$> traverse f hs <*> traverse f gs
+traverseSequentWithFocus f (GoalFocusedSequent hs (gs1, g, gs2)) =
+  (\g' -> GoalFocusedSequent hs (gs1, g', gs2)) <$> f g
+traverseSequentWithFocus f (HypFocusedSequent (hs1, h, hs2) gs) =
+  (\h' -> HypFocusedSequent (hs1, h', hs2) gs) <$> f h
 
 traverseSequent :: Applicative m => (Prop -> m Prop) -> Sequent -> m Sequent
 traverseSequent f (UnfocusedSequent hs gs) =
   UnfocusedSequent <$> traverse f hs <*> traverse f gs
 traverseSequent f (GoalFocusedSequent hs (gs1, g, gs2)) =
-  (\g' -> GoalFocusedSequent hs (gs1, g', gs2)) <$> f g
+  GoalFocusedSequent <$>
+    (traverse f hs) <*>
+    ( (,,) <$> traverse f gs1 <*> f g <*> traverse f gs2)
+
 traverseSequent f (HypFocusedSequent (hs1, h, hs2) gs) =
-  (\h' -> HypFocusedSequent (hs1, h', hs2) gs) <$> f h
+  HypFocusedSequent <$>
+    ( (,,) <$> traverse f hs1 <*> f h <*> traverse f hs2) <*>
+    (traverse f gs)
 
 checkSequent :: SharedContext -> PPOpts -> Sequent -> IO ()
 checkSequent sc ppOpts (UnfocusedSequent hs gs) =
@@ -711,9 +786,10 @@ data Evidence
     -- | This type of evidence is used to prove a universally-quantified statement.
   | IntroEvidence (ExtCns Term) Evidence
 
-    -- | This type of evidence is used to weaken a goal by adding a hypothesis,
-    --   where the hypothesis is proved by the given theorem.
-  -- | CutEvidence Theorem Evidence
+    -- | This type of evidence is used to apply the "cut rule" of sequent calculus.
+    --   The given proposition is added to the hypothesis list in the first
+    --   deriviation, and into the conclusion list in the second, where it is focused.
+  | CutEvidence Prop Evidence Evidence
 
     -- | This type of evidence is used to modify a goal to prove via rewriting.
     --   The goal to prove is rewritten by the given simpset; then the provided
@@ -741,10 +817,20 @@ data Evidence
     -- 'hoistIfsInGoal'.
   | HoistIfsEvidence Evidence
 
-    -- | Change the state of the sequence in some "structural" way. This
-    --   can involve changing focus, or applying reversable sequent calculus
-    --   rules.
+    -- | Change the state of the sequent in some "structural" way. This
+    --   can involve changing focus, reordering or applying weakening rules.
   | StructuralEvidence Sequent Evidence
+
+    -- | Change the state of the sequent in some way that is governed by
+    --   the "reversable" L/R rules of the sequent calculus, e.g.,
+    --   conjunctions in hypotheses can be split into multiple hypotheses,
+    --   negated conclusions become positive hypotheses, etc.
+  | NormalizeSequentEvidence Sequent Evidence
+
+    -- | Change the sate of th sequent by invoking the term evaluator
+    --   on the focused sequent branch (or all branches, if unfocused).
+    --   Treat the given variable indexes as opaque.
+  | NormalizePropEvidence (Set VarIndex) Evidence
 
     -- | This type of evidence is used when the current sequent, after
     --   applying structural rules, is an instance of the basic
@@ -815,11 +901,13 @@ introEvidence :: ExtCns Term -> [Evidence] -> IO Evidence
 introEvidence x [e] = pure (IntroEvidence x e)
 introEvidence _ _ = fail "introEvidence: expected one evidence value"
 
-{-
-cutEvidence :: Theorem -> [Evidence] -> IO Evidence
-cutEvidence thm [e] = pure (CutEvidence thm e)
-cutEvidence _ _ = fail "cutEvidence: expected one evidence value"
--}
+cutEvidence :: Prop -> [Evidence] -> IO Evidence
+cutEvidence p [e1,e2] = pure (CutEvidence p e1 e2)
+cutEvidence _ _ = fail "cutEvidence: expected two evidence values"
+
+structuralEvidence :: Sequent -> Evidence -> Evidence
+structuralEvidence _sqt (StructuralEvidence sqt' e) = StructuralEvidence sqt' e
+structuralEvidence sqt e = StructuralEvidence sqt e
 
 -- | Construct a theorem directly via a proof term.
 proofByTerm :: SharedContext -> TheoremDB -> Term -> Pos -> Text -> IO Theorem
@@ -1013,20 +1101,122 @@ psGoals = _psGoals
 psStats :: ProofState -> SolverStats
 psStats = _psStats
 
+-- forall x in ps1, exists y in ps2 where x == y
+propsSubset :: SharedContext -> [Prop] -> [Prop] -> IO Bool
+propsSubset sc ps1 ps2 =
+  and <$> sequence [ propsElem sc x ps2 | x <- ps1 ]
+
+-- exists y in ps where x == y
+propsElem :: SharedContext -> Prop -> [Prop] -> IO Bool
+propsElem sc x ps =
+  or <$> sequence [ scConvertible sc True (unProp x) (unProp y) | y <- ps ]
+
+sequentIsAxiom :: SharedContext -> Sequent -> IO Bool
+sequentIsAxiom sc sqt =
+  do let RawSequent hs gs = sequentToRawSequent sqt
+     or <$> sequence [ scConvertible sc True (unProp x) (unProp y) | x <- hs, y <- gs ]
+
 -- | Test if the first given sequent subsumes the
 --   second given sequent. This is a shallow syntactic
 --   check that is sufficent to show that a proof
 --   of the first sequent is sufficent to prove the second
 sequentSubsumes :: SharedContext -> Sequent -> Sequent -> IO Bool
 sequentSubsumes sc sqt1 sqt2 =
-  do sqt1' <- normalizeSequent sc (sequentToRawSequent sqt1)
-     sqt2' <- normalizeSequent sc (sequentToRawSequent sqt2)
-     return (normalizedSequentSubsumes sqt1' sqt2')
+  do let RawSequent hs1 gs1 = sequentToRawSequent sqt1
+     let RawSequent hs2 gs2 = sequentToRawSequent sqt2
+     hypsOK  <- propsSubset sc hs1 hs2
+     conclOK <- propsSubset sc gs1 gs2
+     return (hypsOK && conclOK)
 
-sequentIsAxiom :: SharedContext -> Sequent -> IO Bool
-sequentIsAxiom sc sqt =
-  do sqt' <- normalizeSequent sc (sequentToRawSequent sqt)
-     normalizedSequentIsAxiom sc sqt'
+-- | Test if the first given sequent subsumes the
+--   second given sequent. This is a shallow syntactic
+--   check that is sufficent to show that a proof
+--   of the first sequent is sufficent to prove the second
+normalizeSequentSubsumes :: SharedContext -> Sequent -> Sequent -> IO Bool
+normalizeSequentSubsumes sc sqt1 sqt2 =
+  do RawSequent hs1 gs1 <- normalizeRawSequent sc (sequentToRawSequent sqt1)
+     RawSequent hs2 gs2 <- normalizeRawSequent sc (sequentToRawSequent sqt2)
+     hypsOK  <- propsSubset sc hs1 hs2
+     conclOK <- propsSubset sc gs1 gs2
+     return (hypsOK && conclOK)
+
+normalizeSequent :: SharedContext -> Sequent -> IO Sequent
+normalizeSequent sc sqt =
+  -- TODO, if/when we add metadata to sequent branches, this will need to change
+  do RawSequent hs gs <- normalizeRawSequent sc (sequentToRawSequent sqt)
+     return (UnfocusedSequent hs gs)
+
+normalizeRawSequent :: SharedContext -> RawSequent Prop -> IO (RawSequent Prop)
+normalizeRawSequent sc (RawSequent hs gs) =
+  do hs' <- mapM (normalizeHyp sc) hs
+     gs' <- mapM (normalizeGoal sc) gs
+     return (joinSequents (hs' ++ gs'))
+
+joinSequent :: RawSequent Prop -> RawSequent Prop -> RawSequent Prop
+joinSequent (RawSequent hs1 gs1) (RawSequent hs2 gs2) = RawSequent (hs1 ++ hs2) (gs1 ++ gs2)
+
+joinSequents :: [RawSequent Prop] -> RawSequent Prop
+joinSequents = foldl joinSequent (RawSequent [] [])
+
+
+normalizeHyp :: SharedContext -> Prop -> IO (RawSequent Prop)
+normalizeHyp sc p =
+  do t <- scWhnf sc (unProp p)
+     case asEqTrue t of
+       Just b -> normalizeHypBool sc b >>= \case
+                   Just sqt -> return sqt
+                   Nothing  -> return (RawSequent [p] [])
+       _      -> return (RawSequent [p] [])
+
+normalizeGoal :: SharedContext -> Prop -> IO (RawSequent Prop)
+normalizeGoal sc p =
+  do t <- scWhnf sc (unProp p)
+     case asEqTrue t of
+       Just b -> normalizeGoalBool sc b >>= \case
+                   Just sqt -> return sqt
+                   Nothing  -> return (RawSequent [] [p])
+       _      -> return (RawSequent [] [p])
+
+normalizeHypBool :: SharedContext -> Term -> IO (Maybe (RawSequent Prop))
+normalizeHypBool sc b =
+  do body <- scWhnf sc b
+     case () of
+       _ | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) body
+         -> Just <$> normalizeGoalBoolCommit sc p1
+
+         | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.and" <@> return <@> return) body
+         -> Just <$> (joinSequent <$> normalizeHypBoolCommit sc p1 <*> normalizeHypBoolCommit sc p2)
+
+         | otherwise
+         -> return Nothing
+
+normalizeHypBoolCommit :: SharedContext -> Term -> IO (RawSequent Prop)
+normalizeHypBoolCommit sc b =
+  normalizeHypBool sc b >>= \case
+    Just sqt -> return sqt
+    Nothing  -> do p <- boolToProp sc [] b
+                   return (RawSequent [p] [])
+
+normalizeGoalBool :: SharedContext -> Term -> IO (Maybe (RawSequent Prop))
+normalizeGoalBool sc b =
+  do body <- scWhnf sc b
+     case () of
+       _ | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) body
+         -> Just <$> normalizeHypBoolCommit sc p1
+
+         | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.or" <@> return <@> return) body
+         -> Just <$> (joinSequent <$> normalizeGoalBoolCommit sc p1 <*> normalizeGoalBoolCommit sc p2)
+
+         | otherwise
+         -> return Nothing
+
+normalizeGoalBoolCommit :: SharedContext -> Term -> IO (RawSequent Prop)
+normalizeGoalBoolCommit sc b =
+  normalizeGoalBool sc b >>= \case
+    Just sqt -> return sqt
+    Nothing  -> do p <- boolToProp sc [] b
+                   return (RawSequent [] [p])
+
 
 -- | Verify that the given evidence in fact supports the given proposition.
 --   Returns the identifers of all the theorems depended on while checking evidence.
@@ -1158,16 +1348,13 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
                     , prettySequent defaultPPOpts nenv sqt
                     ]
 
-{-
-      CutEvidence thm e' ->
-        do checkTheorem hyps thm
-           p' <- scFun sc (unProp (thmProp thm)) ptm
-           (d,sy) <- check hyps e' (Prop p')
-           return (Set.insert (thmNonce thm) d, sy)
--}
-
       UnfoldEvidence vars e' ->
-        do sqt' <- traverseSequent (unfoldProp sc vars) sqt
+        do sqt' <- traverseSequentWithFocus (unfoldProp sc vars) sqt
+           check nenv hyps e' sqt'
+
+      NormalizePropEvidence opqueSet e' ->
+        do modmap <- scGetModuleMap sc
+           sqt' <- traverseSequentWithFocus (normalizeProp sc modmap opqueSet) sqt
            check nenv hyps e' sqt'
 
       RewriteEvidence ss e' ->
@@ -1180,11 +1367,11 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
            return (Set.union d1 d2, sy)
 
       HoistIfsEvidence e' ->
-        do sqt' <- traverseSequent (hoistIfsInGoal sc) sqt
+        do sqt' <- traverseSequentWithFocus (hoistIfsInGoal sc) sqt
            check nenv hyps e' sqt'
 
       EvalEvidence vars e' ->
-        do sqt' <- traverseSequent (evalProp sc vars) sqt
+        do sqt' <- traverseSequentWithFocus (evalProp sc vars) sqt
            check nenv hyps e' sqt'
 
       ConversionEvidence sqt' e' ->
@@ -1196,10 +1383,19 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
              ]
            check nenv hyps e' sqt'
 
+      NormalizeSequentEvidence sqt' e' ->
+        do ok <- normalizeSequentSubsumes sc sqt' sqt
+           unless ok $ fail $ unlines
+             [ "Normalized sequent does not subsume goal"
+             , prettySequent defaultPPOpts nenv sqt
+             , prettySequent defaultPPOpts nenv sqt'
+             ]
+           check nenv hyps e' sqt'
+
       StructuralEvidence sqt' e' ->
         do ok <- sequentSubsumes sc sqt' sqt
            unless ok $ fail $ unlines
-             [ "Restated sequents does not subsume goal"
+             [ "Sequent does not subsume goal"
              , prettySequent defaultPPOpts nenv sqt
              , prettySequent defaultPPOpts nenv sqt'
              ]
@@ -1231,6 +1427,11 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
              , prettySequent defaultPPOpts nenv sqt
              ]
            return (mempty, ProvedTheorem mempty)
+
+      CutEvidence p ehyp egl ->
+        do d1 <- check nenv hyps ehyp (addHypothesis p sqt)
+           d2 <- check nenv hyps egl  (addNewFocusedGoal p sqt)
+           return (d1 <> d2)
 
       IntroEvidence x e' ->
         -- TODO! Check that the given ExtCns is fresh for the sequent
@@ -1277,20 +1478,20 @@ startProof g pos ploc rsn =
 --   and validate the computed evidence to ensure that it supports the original
 --   proposition.  If successful, return the completed @Theorem@ and a summary
 --   of solver resources used in the proof.
-finishProof :: SharedContext -> TheoremDB -> ProofState -> IO ProofResult
-finishProof sc db ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv start) =
+finishProof :: SharedContext -> TheoremDB -> Prop -> ProofState -> IO ProofResult
+finishProof sc db conclProp ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv start) =
   case gs of
     [] ->
       do e <- checkEv []
-         conclProp <- sequentToProp sc concl
-         (deps,sy) <- checkEvidence sc db e conclProp
+         let e' = NormalizeSequentEvidence concl e
+         (deps,sy) <- checkEvidence sc db e' conclProp
          n <- freshNonce globalNonceGenerator
          end <- getCurrentTime
          thm <- recordTheorem db
                    Theorem
                    { _thmProp = conclProp
                    , _thmStats = stats
-                   , _thmEvidence = e
+                   , _thmEvidence = e'
                    , _thmLocation = loc
                    , _thmProgramLoc = ploc
                    , _thmReason = rsn
@@ -1387,15 +1588,24 @@ predicateToSATQuery sc unintSet tm0 =
 -- | Given a proposition, compute a SAT query which will prove the proposition
 --   iff the SAT query is unsatisfiable.
 propToSATQuery :: SharedContext -> Set VarIndex -> Prop -> IO SATQuery
-propToSATQuery sc unintSet prop =
-    do mmap <- scGetModuleMap sc
-       tm <- propToTerm sc prop
-       (initVars, abstractVars) <- filterFirstOrderVars mmap mempty mempty (getAllExts tm)
-       (finalVars, asserts)     <- processTerm mmap initVars [] tm
+propToSATQuery sc unintSet prop = sequentToSATQuery sc unintSet (propToSequent prop)
+
+-- | Given a proposition, compute a SAT query which will prove the proposition
+--   iff the SAT query is unsatisfiable.
+sequentToSATQuery :: SharedContext -> Set VarIndex -> Sequent -> IO SATQuery
+sequentToSATQuery sc unintSet sqt =
+    do let RawSequent hs gs = sequentToRawSequent sqt
+       mmap <- scGetModuleMap sc
+       let exts = foldMap getAllExtSet (map unProp (hs ++ gs))
+       (initVars, abstractVars) <- filterFirstOrderVars mmap mempty mempty (Set.toList exts)
+       -- NB, the following reversals make the order of assertions more closely match the input sequent,
+       -- but should otherwise not be semantically relevant
+       hypAsserts <- mapM processHyp (reverse (map unProp hs))
+       (finalVars, asserts) <- foldM (processGoal mmap) (initVars, hypAsserts) (map unProp gs)
        return SATQuery
               { satVariables = finalVars
               , satUninterp  = Set.union unintSet abstractVars
-              , satAsserts   = asserts
+              , satAsserts   = reverse asserts
               }
 
   where
@@ -1408,7 +1618,20 @@ propToSATQuery sc unintSet prop =
          Nothing  -> filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es
          Just fot -> filterFirstOrderVars mmap (Map.insert e fot fovars) absvars es
 
-    processTerm mmap vars xs tm =
+    processHyp tm =
+      do -- TODO: I would like to WHNF here, but that evalutes too aggressively
+         -- because scWhnf evaluates strictly through the `Eq` datatype former.
+         -- This breaks some proof examples by unfolding things that need to
+         -- be uninterpreted.
+         -- tm' <- scWhnf sc tm
+         let tm' = tm
+
+         -- TODO? Allow universal hypotheses...
+         case asEqTrue tm' of
+           Nothing -> fail $ "sequentToSATQuery : expected EqTrue in hypothesis, actual " ++ showTerm tm'
+           Just tmBool -> return tmBool
+
+    processGoal mmap (vars,xs) tm =
       do -- TODO: I would like to WHNF here, but that evalutes too aggressively
          -- because scWhnf evaluates strictly through the `Eq` datatype former.
          -- This breaks some proof examples by unfolding things that need to
@@ -1423,7 +1646,7 @@ propToSATQuery sc unintSet prop =
                 let tp' = tp
                 case asEqTrue tp' of
                   Just x | looseVars body == emptyBitSet ->
-                    processTerm mmap vars (x:xs) body
+                    processGoal mmap (vars, x:xs) body
 
                     -- TODO? Allow universal hypotheses...
 
@@ -1434,14 +1657,14 @@ propToSATQuery sc unintSet prop =
                         do ec  <- scFreshEC sc lnm tp'
                            etm <- scExtCns sc ec
                            body' <- instantiateVar sc 0 etm body
-                           processTerm mmap (Map.insert ec fot vars) xs body'
+                           processGoal mmap (Map.insert ec fot vars, xs) body'
 
            Nothing ->
              case asEqTrue tm' of
                Nothing -> fail $ "propToSATQuery: expected EqTrue, actual " ++ showTerm tm'
                Just tmBool ->
                  do tmNeg <- scNot sc tmBool
-                    return (vars, reverse (tmNeg:xs))
+                    return (vars, tmNeg:xs)
 
 -- | Given a goal to prove, attempt to apply the given proposition, producing
 --   new subgoals for any necessary hypotheses of the proposition.  Returns
@@ -1525,13 +1748,6 @@ tacticAssume _sc loc = Tactic \goal ->
 
     _ -> fail "assume tactic failed: not a function, or a dependent function"
 
--- | Attempt to prove a goal by weakening it with a new hypothesis, which is
---   justified by the given theorem.
-tacticCut :: (F.MonadFail m, MonadIO m) => SharedContext -> Theorem -> Tactic m ()
-tacticCut sc thm = Tactic \goal ->
-  do body' <- liftIO (scFun sc (unProp (thmProp thm)) (unProp (goalProp goal)))
-     let goal' = goal{ goalProp = Prop body' }
-     return ((), mempty, [goal'], cutEvidence thm)
 -}
 
 -- | Attempt to prove a goal by applying the given theorem.  Any hypotheses of
@@ -1579,6 +1795,14 @@ tacticSplit sc = Tactic \gl ->
           do let g1 = gl{ goalType = goalType gl ++ ".left", goalSequent = mkSqt p1 }
              let g2 = gl{ goalType = goalType gl ++ ".right", goalSequent = mkSqt p2 }
              return ((), mempty, [g1,g2], splitEvidence)
+
+tacticCut :: (F.MonadFail m, MonadIO m) => SharedContext -> Prop -> Tactic m ()
+tacticCut _sc p = Tactic \gl ->
+  let sqt1 = addHypothesis p (goalSequent gl)
+      sqt2 = addNewFocusedGoal p (goalSequent gl)
+      g1 = gl{ goalType = goalType gl ++ ".cutH", goalSequent = sqt1 }
+      g2 = gl{ goalType = goalType gl ++ ".cutG", goalSequent = sqt2 }
+   in return ((), mempty, [g1, g2], cutEvidence p)
 
 -- | Attempt to solve a goal by recognizing it as a trivially true proposition.
 tacticTrivial :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
