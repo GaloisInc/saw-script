@@ -502,6 +502,7 @@ buildTopLevelEnv proxy opts =
                    , rwPathSatSolver = CC.PathSat_Z3
                    , rwSkipSafetyProofs = False
                    , rwSingleOverrideSpecialCase = False
+                   , rwSequentGoals = False
                    }
        return (bic, ro0, rw0)
 
@@ -552,6 +553,16 @@ disable_safety_proofs = do
   io $ printOutLn opts Warn "Safety proofs disabled! This is unsound!"
   rw <- getTopLevelRW
   putTopLevelRW rw{ rwSkipSafetyProofs = True }
+
+enable_sequent_goals :: TopLevel ()
+enable_sequent_goals = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw{ rwSequentGoals = True }
+
+disable_sequent_goals :: TopLevel ()
+disable_sequent_goals = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw{ rwSequentGoals = False }
 
 enable_smt_array_memory_model :: TopLevel ()
 enable_smt_array_memory_model = do
@@ -947,6 +958,20 @@ primitives = Map.fromList
     (pureVal disable_smt_array_memory_model)
     Current
     [ "Disable the SMT array memory model." ]
+
+  , prim "enable_sequent_goals" "TopLevel ()"
+    (pureVal enable_sequent_goals)
+    Experimental
+    [ "When verifying proof obligations arising from `llvm_verify` and similar"
+    , "generate sequents for the proof obligations instead of a single boolean goal."
+    ]
+
+  , prim "disable_sequent_goals" "TopLevel ()"
+    (pureVal disable_sequent_goals)
+    Experimental
+    [ "Restore the default behavior, which is to generate single boolean goals"
+    , "for proof obligations arising from verification commands."
+    ]
 
   , prim "enable_safety_proofs" "TopLevel ()"
     (pureVal enable_safety_proofs)
@@ -1558,10 +1583,61 @@ primitives = Map.fromList
     Current
     [ "Apply the given simplifier rule set to the current goal." ]
 
+  , prim "unfocus"        "ProofScript ()"
+    (pureVal unfocus)
+    Experimental
+    [ "Remove any sequent focus point." ]
+
+  , prim "focus_concl"      "Int -> ProofScript ()"
+    (pureVal focus_concl)
+    Experimental
+    [ "Focus on the numbered conclusion within a sequent. This will fail if there are"
+    , "not enough goals."
+    ]
+
+  , prim "focus_hyp"       "Int -> ProofScript ()"
+    (pureVal focus_hyp)
+    Experimental
+    [ "Focus on the numbered conclusion with a sequent.  This will fail if there are"
+    , "enough hypotheses."
+    ]
+
+  , prim "normalize_sequent" "ProofScript ()"
+    (pureVal normalize_sequent)
+    Experimental
+    [ "Normalize the current goal sequent by applying reversable sequent calculus rules."
+    , "The resulting sequent will be unfocused."
+    ]
+
+  , prim "goal_cut" "Term -> ProofScript ()"
+    (pureVal goal_cut)
+    Experimental
+    [ "TODO, write docs" ]
+
+  , prim "retain_hyps" "[Int] -> ProofScript ()"
+    (pureVal retain_hyps)
+    Experimental
+    [ "Remove all hypotheses from the current sequent other than the ones listed." ]
+
+  , prim "delete_hyps" "[Int] -> ProofScript ()"
+    (pureVal delete_hyps)
+    Experimental
+    [ "Remove the numbered hypotheses from the current sequent." ]
+
+  , prim "retain_concl" "[Int] -> ProofScript ()"
+    (pureVal retain_concl)
+    Experimental
+    [ "Remove all conclusions from the current sequent other than the ones listed." ]
+
+  , prim "delete_concl" "[Int] -> ProofScript ()"
+    (pureVal delete_concl)
+    Experimental
+    [ "Remove the numbered conclusions from the current sequent." ]
+
   , prim "hoist_ifs_in_goal"            "ProofScript ()"
     (pureVal hoistIfsInGoalPrim)
     Experimental
-    [ "hoist ifs in the current proof goal" ]
+    [ "Hoist ifs in the current proof goal." ]
 
   , prim "normalize_term"      "Term -> Term"
     (funVal1 normalize_term)
@@ -1573,6 +1649,14 @@ primitives = Map.fromList
     Experimental
     [ "Normalize the given term by performing evaluation in SAWCore."
     , "The named values will be treated opaquely and not unfolded during evaluation."
+    ]
+
+  , prim "goal_normalize"  "[String] -> ProofScript ()"
+    (pureVal goal_normalize)
+    Experimental
+    [ "Evaluate the current proof goal by performing evaluation in SAWCore."
+    , "The currently-focused term will be evaluted.  If the sequent is unfocused"
+    , "all terms will be evaluated. The given names will be treated as uninterpreted."
     ]
 
   , prim "goal_eval"           "ProofScript ()"
