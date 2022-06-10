@@ -131,21 +131,21 @@ data CompFun
      -- | An arbitrary term
   = CompFunTerm Term
     -- | A special case for the term @\ (x:a) -> returnM a x@
-  | CompFunReturn
+  | CompFunReturn Type
     -- | The monadic composition @f >=> g@
   | CompFunComp CompFun CompFun
   deriving (Generic, Show)
 
 -- | Compose two 'CompFun's, simplifying if one is a 'CompFunReturn'
 compFunComp :: CompFun -> CompFun -> CompFun
-compFunComp CompFunReturn f = f
-compFunComp f CompFunReturn = f
+compFunComp (CompFunReturn _) f = f
+compFunComp f (CompFunReturn _) = f
 compFunComp f g = CompFunComp f g
 
 -- | If a 'CompFun' contains an explicit lambda-abstraction, then return the
 -- textual name bound by that lambda
 compFunVarName :: CompFun -> Maybe LocalName
-compFunVarName (CompFunTerm (asLambda -> Just (nm, _, _))) = Just nm
+compFunVarName (CompFunTerm t) = asLambdaName t
 compFunVarName (CompFunComp f _) = compFunVarName f
 compFunVarName _ = Nothing
 
@@ -154,12 +154,8 @@ compFunVarName _ = Nothing
 compFunInputType :: CompFun -> Maybe Type
 compFunInputType (CompFunTerm (asLambda -> Just (_, tp, _))) = Just $ Type tp
 compFunInputType (CompFunComp f _) = compFunInputType f
+compFunInputType (CompFunReturn t) = Just t
 compFunInputType _ = Nothing
-
--- | Returns true iff the given 'CompFun' is 'CompFunReturn'
-isCompFunReturn :: CompFun -> Bool
-isCompFunReturn CompFunReturn = True
-isCompFunReturn _ = False
 
 -- | A computation of type @CompM a@ for some @a@
 data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
@@ -223,6 +219,11 @@ asNonBVVecVectorType :: Recognizer Term (Term, Term)
 asNonBVVecVectorType (asBVVecType -> Just _) = Nothing
 asNonBVVecVectorType t = asVectorType t
 
+-- | Like 'asLambda', but only return's the lambda-bound variable's 'LocalName'
+asLambdaName :: Recognizer Term LocalName
+asLambdaName (asLambda -> Just (nm, _, _)) = Just nm
+asLambdaName _ = Nothing
+
 
 ----------------------------------------------------------------------
 -- * Mr Solver Environments
@@ -232,11 +233,6 @@ asNonBVVecVectorType t = asVectorType t
 -- it is an opaque 'FunAsump', or a 'NormComp', if it is a rewrite 'FunAssump'
 data FunAssumpRHS = OpaqueFunAssump FunName [Term]
                   | RewriteFunAssump NormComp
-
--- | Convert a 'FunAssumpRHS' to a 'NormComp'
-funAssumpRHSAsNormComp :: FunAssumpRHS -> NormComp
-funAssumpRHSAsNormComp (OpaqueFunAssump f args) = FunBind f args CompFunReturn
-funAssumpRHSAsNormComp (RewriteFunAssump rhs) = rhs
 
 -- | An assumption that a named function refines some specification. This has
 -- the form
@@ -384,6 +380,9 @@ instance TermLike Term where
 instance TermLike FunName where
   liftTermLike _ _ = return
   substTermLike _ _ = return
+instance TermLike LocalName where
+  liftTermLike _ _ = return
+  substTermLike _ _ = return
 
 deriving instance TermLike Type
 deriving instance TermLike NormComp
@@ -426,16 +425,15 @@ prettyTermApp f_top args =
 
 -- | FIXME: move this helper function somewhere better...
 ppCtx :: [(LocalName,Term)] -> SawDoc
-ppCtx = helper [] where
-  helper :: [LocalName] -> [(LocalName,Term)] -> SawDoc
-  helper _ [] = ""
+ppCtx = align . sep . helper [] where
+  helper :: [LocalName] -> [(LocalName,Term)] -> [SawDoc]
+  helper _ [] = []
+  helper ns [(n,tp)] =
+    [ppTermInCtx defaultPPOpts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
+     ppTermInCtx defaultPPOpts ns tp]
   helper ns ((n,tp):ctx) =
-    let ns' = n:ns in
-    ppTermInCtx defaultPPOpts ns' (Unshared $ LocalVar 0) <> ":" <>
-    ppTermInCtx defaultPPOpts ns tp <> ", " <> helper ns' ctx
-
-instance PrettyInCtx String where
-  prettyInCtx str = return $ fromString str
+    (ppTermInCtx defaultPPOpts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
+     ppTermInCtx defaultPPOpts ns tp <> ",") : (helper (n:ns) ctx)
 
 instance PrettyInCtx SawDoc where
   prettyInCtx pp = return pp
@@ -446,12 +444,22 @@ instance PrettyInCtx Type where
 instance PrettyInCtx MRVar where
   prettyInCtx (MRVar ec) = return $ ppName $ ecName ec
 
-instance PrettyInCtx [Term] where
+instance PrettyInCtx a => PrettyInCtx [a] where
   prettyInCtx xs = list <$> mapM prettyInCtx xs
+
+instance {-# OVERLAPPING #-} PrettyInCtx String where
+  prettyInCtx str = return $ fromString str
+
+instance PrettyInCtx Int where
+  prettyInCtx i = return $ viaShow i
 
 instance PrettyInCtx a => PrettyInCtx (Maybe a) where
   prettyInCtx (Just x) = (<+>) "Just" <$> prettyInCtx x
   prettyInCtx Nothing = return "Nothing"
+
+instance (PrettyInCtx a, PrettyInCtx b) => PrettyInCtx (Either a b) where
+  prettyInCtx (Left  a) = (<+>) "Left"  <$> prettyInCtx a
+  prettyInCtx (Right b) = (<+>) "Right" <$> prettyInCtx b
 
 instance (PrettyInCtx a, PrettyInCtx b) => PrettyInCtx (a,b) where
   prettyInCtx (x, y) = (\x' y' -> parens (x' <> "," <> y')) <$> prettyInCtx x
@@ -478,7 +486,8 @@ instance PrettyInCtx Comp where
 
 instance PrettyInCtx CompFun where
   prettyInCtx (CompFunTerm t) = prettyInCtx t
-  prettyInCtx CompFunReturn = return "returnM"
+  prettyInCtx (CompFunReturn t) =
+    prettyAppList [return "returnM", parens <$> prettyInCtx t]
   prettyInCtx (CompFunComp f g) =
     prettyAppList [prettyInCtx f, return ">=>", prettyInCtx g]
 
@@ -515,7 +524,7 @@ instance PrettyInCtx NormComp where
   prettyInCtx (ForallM tp f) =
     prettyAppList [return "forallM", prettyInCtx tp, return "_",
                    parens <$> prettyInCtx f]
-  prettyInCtx (FunBind f args CompFunReturn) =
+  prettyInCtx (FunBind f args (CompFunReturn _)) =
     prettyTermApp (funNameTerm f) args
   prettyInCtx (FunBind f [] k) =
     prettyAppList [prettyInCtx f, return ">>=", prettyInCtx k]

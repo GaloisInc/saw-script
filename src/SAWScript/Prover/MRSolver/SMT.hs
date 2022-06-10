@@ -118,7 +118,7 @@ primBVTermFun sc =
     VExtra (VExtraTerm _ w_tm) -> return w_tm
     VWord (Left (_,w_tm)) -> return w_tm
     VWord (Right bv) ->
-      lift $ scBvConst sc (fromIntegral (Prim.width bv)) (Prim.unsigned bv)
+      lift $ scBvLit sc (fromIntegral (Prim.width bv)) (Prim.unsigned bv)
     VVector vs ->
       lift $
       do tms <- traverse (boolValToTerm sc <=< force) (V.toList vs)
@@ -350,20 +350,30 @@ mrEq t1 t2 = mrTypeOf t1 >>= \tp -> mrEq' tp t1 t2
 -- are equal, where the first 'Term' gives their type (which we assume is the
 -- same for both). This is like 'scEq' except that it works on open terms.
 mrEq' :: Term -> Term -> Term -> MRM Term
+-- FIXME: For this Nat case, the definition of 'equalNat' in @Prims.hs@ means
+-- that if both sides do not have immediately clear bit-widths (e.g. either
+-- side is is an application of @mulNat@) this will 'error'...
 mrEq' (asNatType -> Just _) t1 t2 = liftSC2 scEqualNat t1 t2
 mrEq' (asBoolType -> Just _) t1 t2 = liftSC2 scBoolEq t1 t2
 mrEq' (asIntegerType -> Just _) t1 t2 = liftSC2 scIntEq t1 t2
 mrEq' (asVectorType -> Just (n, asBoolType -> Just ())) t1 t2 =
   liftSC3 scBvEq n t1 t2
+mrEq' (asDataType -> Just (primName -> "Cryptol.Num", _)) t1 t2 =
+  liftSC1 scWhnf t1 >>= \t1' -> liftSC1 scWhnf t2 >>= \t2' -> case (t1', t2') of
+    (asCtor -> Just (primName -> "Cryptol.TCNum", [t1'']),
+     asCtor -> Just (primName -> "Cryptol.TCNum", [t2''])) ->
+      liftSC0 scNatType >>= \nat_tp -> mrEq' nat_tp t1'' t2''
+    _ -> error "mrEq': Num terms do not normalize to TCNum constructors"
 mrEq' _ _ _ = error "mrEq': unsupported type"
 
 -- | A 'Term' in an extended context of universal variables, which are listed
 -- "outside in", meaning the highest deBruijn index comes first
 data TermInCtx = TermInCtx [(LocalName,Term)] Term
 
--- | Conjoin two 'TermInCtx's, assuming they both have Boolean type
-andTermInCtx :: TermInCtx -> TermInCtx -> MRM TermInCtx
-andTermInCtx (TermInCtx ctx1 t1) (TermInCtx ctx2 t2) =
+-- | Lift a binary operation on 'Term's to one on 'TermInCtx's
+liftTermInCtx2 :: (SharedContext -> Term -> Term -> IO Term) ->
+                   TermInCtx -> TermInCtx -> MRM TermInCtx
+liftTermInCtx2 op (TermInCtx ctx1 t1) (TermInCtx ctx2 t2) =
   do
     -- Insert the variables in ctx2 into the context of t1 starting at index 0,
     -- by lifting its variables starting at 0 by length ctx2
@@ -372,7 +382,7 @@ andTermInCtx (TermInCtx ctx1 t1) (TermInCtx ctx2 t2) =
     -- length ctx2, by lifting its variables starting at length ctx2 by length
     -- ctx1
     t2' <- liftTermLike (length ctx2) (length ctx1) t2
-    TermInCtx (ctx1++ctx2) <$> liftSC2 scAnd t1' t2'
+    TermInCtx (ctx1++ctx2) <$> liftSC2 op t1' t2'
 
 -- | Extend the context of a 'TermInCtx' with additional universal variables
 -- bound "outside" the 'TermInCtx'
@@ -415,12 +425,12 @@ mrAssertProveEq = mrAssertProveRel False
 mrProveRel :: Bool -> Term -> Term -> MRM Bool
 mrProveRel het t1 t2 =
   do let nm = if het then "mrProveRel" else "mrProveEq"
-     mrDebugPPPrefixSep 1 nm t1 (if het then "~=" else "==") t2
+     mrDebugPPPrefixSep 2 nm t1 (if het then "~=" else "==") t2
      tp1 <- mrTypeOf t1 >>= mrSubstEVars
      tp2 <- mrTypeOf t2 >>= mrSubstEVars
      cond_in_ctx <- mrProveRelH het tp1 tp2 t1 t2
      res <- withTermInCtx cond_in_ctx mrProvable
-     debugPrint 1 $ nm ++ ": " ++ if res then "Success" else "Failure"
+     debugPrint 2 $ nm ++ ": " ++ if res then "Success" else "Failure"
      return res
 
 -- | Prove that two terms are related, heterogeneously iff the first argument,
@@ -461,7 +471,7 @@ mrProveRelH' var_map _ tp1 tp2 (asEVarApp var_map -> Just (evar, args, Nothing))
      t2' <- mrSubstEVars t2
      success <- mrTrySetAppliedEVar evar args t2'
      when success $
-       mrDebugPPPrefixSep 2 "mrProveRelH setting evar" evar "to" t2
+       mrDebugPPPrefixSep 1 "setting evar" evar "to" t2
      TermInCtx [] <$> liftSC1 scBool success
 
 -- If t2 is an instantiated evar, substitute and recurse
@@ -477,7 +487,7 @@ mrProveRelH' var_map _ tp1 tp2 t1 (asEVarApp var_map -> Just (evar, args, Nothin
      t1' <- mrSubstEVars t1
      success <- mrTrySetAppliedEVar evar args t1'
      when success $
-       mrDebugPPPrefixSep 2 "mrProveRelH setting evar" evar "to" t1
+       mrDebugPPPrefixSep 1 "setting evar" evar "to" t1
      TermInCtx [] <$> liftSC1 scBool success
 
 -- For unit types, always return true
@@ -498,17 +508,6 @@ mrProveRelH' _ _ (asBoolType -> Just _) (asBoolType -> Just _) t1 t2 =
 mrProveRelH' _ _ (asIntegerType -> Just _) (asIntegerType -> Just _) t1 t2 =
   mrProveEqSimple (liftSC2 scIntEq) t1 t2
 
--- For pair types, prove both the left and right projections are related
-mrProveRelH' _ het (asPairType -> Just (tpL1, tpR1))
-                   (asPairType -> Just (tpL2, tpR2)) t1 t2 =
-  do t1L <- liftSC1 scPairLeft t1
-     t2L <- liftSC1 scPairLeft t2
-     t1R <- liftSC1 scPairRight t1
-     t2R <- liftSC1 scPairRight t2
-     condL <- mrProveRelH het tpL1 tpL2 t1L t2L
-     condR <- mrProveRelH het tpR1 tpR2 t1R t2R
-     andTermInCtx condL condR
-
 -- For BVVec types, prove all projections are related by quantifying over an
 -- index variable and proving the projections at that index are related
 mrProveRelH' _ het tp1@(asBVVecType -> Just (n1, len1, tpA1))
@@ -520,53 +519,116 @@ mrProveRelH' _ het tp1@(asBVVecType -> Just (n1, len1, tpA1))
   liftSC0 scBoolType >>= \bool_tp ->
   liftSC2 scVecType n1 bool_tp >>= \ix_tp ->
   withUVarLift "eq_ix" (Type ix_tp) (n1,(len1,(tpA1,(tpA2,(t1,t2))))) $
-  \ix' (n1',(len1',(tpA1',(tpA2',(t1',t2'))))) ->
-  liftSC2 scGlobalApply "Prelude.is_bvult" [n1', ix', len1'] >>= \pf_tp ->
-  withUVarLift "eq_pf" (Type pf_tp) (n1',(len1',(tpA1',(tpA2',(ix',(t1',t2')))))) $
-  \pf'' (n1'',(len1'',(tpA1'',(tpA2'',(ix'',(t1'',t2'')))))) ->
-  do t1_prj <- liftSC2 scGlobalApply "Prelude.atBVVec" [n1'', len1'', tpA1'',
-                                                        t1'', ix'', pf'']
-     t2_prj <- liftSC2 scGlobalApply "Prelude.atBVVec" [n1'', len1'', tpA2'',
-                                                        t2'', ix'', pf'']
-     extTermInCtx [("eq_ix",ix_tp),("eq_pf",pf_tp)] <$>
-       mrProveRelH het tpA1'' tpA2'' t1_prj t2_prj
+  \ix (n1',(len1',(tpA1',(tpA2',(t1',t2'))))) ->
+  do ix_bound <- liftSC2 scGlobalApply "Prelude.bvult" [n1', ix, len1']
+     pf <- liftSC2 scGlobalApply "Prelude.unsafeAssertBVULt" [n1', ix, len1']
+     t1_prj <- liftSC2 scGlobalApply "Prelude.atBVVec" [n1', len1', tpA1',
+                                                        t1', ix, pf]
+     t2_prj <- liftSC2 scGlobalApply "Prelude.atBVVec" [n1', len1', tpA2',
+                                                        t2', ix, pf]
+     cond <- mrProveRelH het tpA1' tpA2' t1_prj t2_prj
+     extTermInCtx [("eq_ix",ix_tp)] <$>
+       liftTermInCtx2 scImplies (TermInCtx [] ix_bound) cond
 
--- If our relation is heterogeneous and we have a BVVec on one side and a
--- non-BVVec vector on the other, wrap the non-BVVec vector term in
--- genBVVecFromVec and recurse
-mrProveRelH' _ True tp1@(asBVVecType -> Just (n, len, _))
-                    tp2@(asNonBVVecVectorType -> Just (m, tpA2)) t1 t2 =
-  do m' <- mrBvToNat n len
-     ms_are_eq <- mrConvertible m' m
-     if ms_are_eq then return () else
-       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
-     len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
-     tp2' <- liftSC2 scVecType len' tpA2
-     err_str_tm <- liftSC1 scString "FIXME: mrProveRelH error"
-     err_tm <- liftSC2 scGlobalApply "Prelude.error" [tpA2, err_str_tm]
-     t2'  <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
-                                   [m, tpA2, t2, err_tm, n, len]
-     -- mrDebugPPPrefixSep 2 "mrProveRelH on BVVec/Vec: " t1 "and" t2'
-     mrProveRelH True tp1 tp2' t1 t2'
-mrProveRelH' _ True tp1@(asNonBVVecVectorType -> Just (m, tpA1))
-                    tp2@(asBVVecType -> Just (n, len, _)) t1 t2 =
-  do m' <- mrBvToNat n len
-     ms_are_eq <- mrConvertible m' m
+-- For non-BVVec vector types where at least one side is an application of
+-- genFromBVVec, wrap both sides in genBVVecFromVec and recurse
+mrProveRelH' _ het tp1@(asNonBVVecVectorType -> Just (m1, tpA1))
+                   tp2@(asNonBVVecVectorType -> Just (m2, tpA2))
+                   t1@(asGenFromBVVecTerm -> Just (n, len, _, _, _, _)) t2 =
+  do ms_are_eq <- mrConvertible m1 m2
      if ms_are_eq then return () else
        throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
      len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
      tp1' <- liftSC2 scVecType len' tpA1
-     err_str_tm <- liftSC1 scString "FIXME: mrProveRelH error"
-     err_tm <- liftSC2 scGlobalApply "Prelude.error" [tpA1, err_str_tm]
-     t1'  <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
-                                   [m, tpA1, t1, err_tm, n, len]
-     -- mrDebugPPPrefixSep 2 "mrProveRelH on Vec/BVVec: " t1' "and" t2
-     mrProveRelH True tp1' tp2 t1' t2
+     tp2' <- liftSC2 scVecType len' tpA2
+     t1' <- mrGenBVVecFromVec m1 tpA1 t1 "mrProveRelH (BVVec/BVVec)" n len
+     t2' <- mrGenBVVecFromVec m2 tpA2 t2 "mrProveRelH (BVVec/BVVec)" n len
+     mrProveRelH het tp1' tp2' t1' t2'
+mrProveRelH' _ het tp1@(asNonBVVecVectorType -> Just (m1, tpA1))
+                   tp2@(asNonBVVecVectorType -> Just (m2, tpA2))
+                   t1 t2@(asGenFromBVVecTerm -> Just (n, len, _, _, _, _)) =
+  do ms_are_eq <- mrConvertible m1 m2
+     if ms_are_eq then return () else
+       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+     len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
+     tp1' <- liftSC2 scVecType len' tpA1
+     tp2' <- liftSC2 scVecType len' tpA2
+     t1' <- mrGenBVVecFromVec m1 tpA1 t1 "mrProveRelH (BVVec/BVVec)" n len
+     t2' <- mrGenBVVecFromVec m2 tpA2 t2 "mrProveRelH (BVVec/BVVec)" n len
+     mrProveRelH het tp1' tp2' t1' t2'
+
+mrProveRelH' _ True tp1 tp2 t1 t2 | Just mh <- matchHet tp1 tp2 = case mh of
+
+  -- If our relation is heterogeneous and we have a bitvector on one side and
+  -- a Num on the other, ensure that the Num term is TCNum of some Nat, wrap
+  -- the Nat with bvNat, and recurse
+  HetBVNum n
+    | Just (primName -> "Cryptol.TCNum", [t2']) <- asCtor t2 ->
+    do n_tm <- liftSC1 scNat n
+       t2'' <- liftSC2 scGlobalApply "Prelude.bvNat" [n_tm, t2']
+       mrProveRelH True tp1 tp1 t1 t2''
+    | otherwise -> throwMRFailure (TermsNotEq t1 t2)
+  HetNumBV n
+    | Just (primName -> "Cryptol.TCNum", [t1']) <- asCtor t1 ->
+    do n_tm <- liftSC1 scNat n
+       t1'' <- liftSC2 scGlobalApply "Prelude.bvNat" [n_tm, t1']
+       mrProveRelH True tp1 tp1 t1'' t2
+    | otherwise -> throwMRFailure (TermsNotEq t1 t2)
+
+  -- If our relation is heterogeneous and we have a BVVec on one side and a
+  -- non-BVVec vector on the other, wrap the non-BVVec vector term in
+  -- genBVVecFromVec and recurse
+  HetBVVecVec (n, len, _) (m, tpA2) ->
+    do m' <- mrBvToNat n len
+       ms_are_eq <- mrConvertible m' m
+       if ms_are_eq then return () else
+         throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
+       len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
+       tp2' <- liftSC2 scVecType len' tpA2
+       t2' <- mrGenBVVecFromVec m tpA2 t2 "mrProveRelH (BVVec/Vec)" n len
+       -- mrDebugPPPrefixSep 2 "mrProveRelH on BVVec/Vec: " t1 "an`d" t2'
+       mrProveRelH True tp1 tp2' t1 t2'
+  HetVecBVVec (m, tpA1) (n, len, _) ->
+    do m' <- mrBvToNat n len
+       ms_are_eq <- mrConvertible m' m
+       if ms_are_eq then return () else
+         throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
+       len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
+       tp1' <- liftSC2 scVecType len' tpA1
+       t1' <- mrGenBVVecFromVec m tpA1 t1 "mrProveRelH (Vec/BVVec)" n len
+       -- mrDebugPPPrefixSep 2 "mrProveRelH on Vec/BVVec: " t1' "and" t2
+       mrProveRelH True tp1' tp2 t1' t2
+
+  -- For pair types, prove both the left and right projections are related
+  -- (this should be the same as the pair case below - we have to split them
+  -- up because otherwise GHC 9.0's pattern match checker complains...)
+  HetPair (tpL1, tpR1) (tpL2, tpR2) ->
+    do t1L <- liftSC1 scPairLeft t1
+       t2L <- liftSC1 scPairLeft t2
+       t1R <- liftSC1 scPairRight t1
+       t2R <- liftSC1 scPairRight t2
+       condL <- mrProveRelH True tpL1 tpL2 t1L t2L
+       condR <- mrProveRelH True tpR1 tpR2 t1R t2R
+       liftTermInCtx2 scAnd condL condR
+
+-- For pair types, prove both the left and right projections are related
+-- (this should be the same as the pair case below - we have to split them
+-- up because otherwise GHC 9.0's pattern match checker complains...)
+mrProveRelH' _ False tp1 tp2 t1 t2
+  | Just (HetPair (tpL1, tpR1) (tpL2, tpR2)) <- matchHet tp1 tp2 =
+    do t1L <- liftSC1 scPairLeft t1
+       t2L <- liftSC1 scPairLeft t2
+       t1R <- liftSC1 scPairRight t1
+       t2R <- liftSC1 scPairRight t2
+       condL <- mrProveRelH False tpL1 tpL2 t1L t2L
+       condR <- mrProveRelH False tpR1 tpR2 t1R t2R
+       liftTermInCtx2 scAnd condL condR
 
 -- As a fallback, for types we can't handle, just check convertibility
-mrProveRelH' _ _ tp1 tp2 t1 t2 =
+mrProveRelH' _ het tp1 tp2 t1 t2 =
   do success <- mrConvertible t1 t2
      if success then return () else
-       mrDebugPPPrefixSep 2 "mrProveRelH could not match types: " tp1 "and" tp2 >>
-       mrDebugPPPrefixSep 2 "and could not prove convertible: " t1 "and" t2
+       if het then mrDebugPPPrefixSep 2 "mrProveRelH' could not match types: " tp1 "and" tp2 >>
+                   mrDebugPPPrefixSep 2 "and could not prove convertible: " t1 "and" t2
+              else mrDebugPPPrefixSep 2 "mrProveEq could not prove convertible: " t1 "and" t2
      TermInCtx [] <$> liftSC1 scBool success
