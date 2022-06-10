@@ -235,7 +235,7 @@ static void processBlock(uint64_t *a, uint64_t *b, uint64_t *c, uint64_t *d,
                          const uint8_t *in) {
   uint64_t s0, s1, T1;
   uint64_t X[16];
-  int i;
+  uint64_t i;
   
   T1 = X[0] = CRYPTO_load_u64_be(in);
   round_00_15(0, a, b, c, d, e, f, g, h, &T1);

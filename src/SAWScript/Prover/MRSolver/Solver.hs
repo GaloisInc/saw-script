@@ -125,7 +125,8 @@ module SAWScript.Prover.MRSolver.Solver where
 
 import Data.Maybe
 import Data.Either
-import Data.List (findIndices, intercalate)
+import Data.List (find, findIndices)
+import Data.Foldable (foldlM)
 import Data.Bits (shiftL)
 import Control.Monad.Except
 import qualified Data.Map as Map
@@ -134,7 +135,6 @@ import qualified Data.Text as Text
 import Prettyprinter
 
 import Verifier.SAW.Term.Functor
-import Verifier.SAW.Term.CtxTerm (substTerm)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
@@ -212,7 +212,7 @@ normComp (CompTerm t) =
   (>>) (mrDebugPPPrefix 3 "normCompTerm:" t) $
   withFailureCtx (FailCtxMNF t) $
   case asApplyAll t of
-    (f@(asLambda -> Just _), args) ->
+    (f@(asLambda -> Just _), args@(_:_)) ->
       mrApplyAll f args >>= normCompTerm
     (isGlobalDef "Prelude.returnM" -> Just (), [_, x]) ->
       return $ ReturnM x
@@ -296,11 +296,8 @@ normComp (CompTerm t) =
                                                   i)]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
          if n < 1 `shiftL` fromIntegral w then do
-           n' <- mrBvConst w (toInteger n)
-           err_str <- liftSC1 scString "FIXME: normComp (atM) error"
-           err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str]
-           xs' <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
-                                        [n_tm, a, xs, err_tm, w_tm, n'] 
+           n' <- liftSC2 scBvLit w (toInteger n)
+           xs' <- mrGenBVVecFromVec n_tm a xs "normComp (atM)" w_tm n'
            mrApplyAll body [w_tm, n', a, xs', i] >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
@@ -323,11 +320,9 @@ normComp (CompTerm t) =
                                                       i), x]) ->
       do body <- mrGlobalDefBody "CryptolM.fromBVVecUpdateM"
          if n < 1 `shiftL` fromIntegral w then do
-           n' <- mrBvConst w (toInteger n)
-           err_str <- liftSC1 scString "FIXME: normComp (updateM) error"
-           err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str]
-           xs' <- liftSC2 scGlobalApply "Prelude.genBVVecFromVec"
-                                        [n_tm, a, xs, err_tm, w_tm, n'] 
+           n' <- liftSC2 scBvLit w (toInteger n)
+           xs' <- mrGenBVVecFromVec n_tm a xs "normComp (updateM)" w_tm n'
+           err_tm <- mrErrorTerm a "normComp (updateM)"
            mrApplyAll body [w_tm, n', a, xs', i, x, err_tm, n_tm] >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
@@ -358,10 +353,12 @@ normComp (CompTerm t) =
     -- FIXME: substitute for evars if they have been instantiated
     ((asExtCns -> Just ec), args) ->
       do fun_name <- extCnsToFunName ec
-         return $ FunBind fun_name args CompFunReturn
+         fun_tp <- Type <$> mrFunOutType fun_name args
+         return $ FunBind fun_name args (CompFunReturn fun_tp)
 
     ((asGlobalFunName -> Just f), args) ->
-      return $ FunBind f args CompFunReturn
+      do fun_tp <- Type <$> mrFunOutType f args
+         return $ FunBind f args (CompFunReturn fun_tp)
 
     _ -> throwMRFailure (MalformedComp t)
 
@@ -385,22 +382,30 @@ normBind (ForallM tp f) k = return $ ForallM tp (compFunComp f k)
 normBind (FunBind f args k1) k2
   -- Turn `bvVecMapInvarM ... >>= k` into `bvVecMapInvarBindM ... k`
   | GlobalName (globalDefString -> "CryptolM.bvVecMapInvarM") [] <- f
-  , not (isCompFunReturn (compFunComp k1 k2)) =
+  , (a:b:args_rest) <- args =
     do f' <- mrGlobalDef "CryptolM.bvVecMapInvarBindM"
        cont <- compFunToTerm (compFunComp k1 k2)
-       return $ FunBind f' (args ++ [cont]) CompFunReturn
+       c <- compFunReturnType k2
+       return $ FunBind f' ((a:b:c:args_rest) ++ [cont])
+                           (CompFunReturn (Type c))
   -- Turn `bvVecMapInvarBindM ... k1 >>= k2` into
   -- `bvVecMapInvarBindM ... (composeM ... k1 k2)`
   | GlobalName (globalDefString -> "CryptolM.bvVecMapInvarBindM") [] <- f
-  , (args_pre, [cont]) <- splitAt 8 args
-  , not (isCompFunReturn (compFunComp k1 k2)) =
+  , (args_pre, [cont]) <- splitAt 8 args =
     do cont' <- compFunToTerm (compFunComp (compFunComp (CompFunTerm cont) k1) k2)
-       return $ FunBind f (args_pre ++ [cont']) CompFunReturn
+       c <- compFunReturnType k2
+       return $ FunBind f (args_pre ++ [cont']) (CompFunReturn (Type c))
   | otherwise = return $ FunBind f args (compFunComp k1 k2)
 
 -- | Bind a 'Term' for a computation with a function and normalize
 normBindTerm :: Term -> CompFun -> MRM NormComp
 normBindTerm t f = normCompTerm t >>= \m -> normBind m f
+
+-- | Get the return type of a 'CompFun'
+compFunReturnType :: CompFun -> MRM Term
+compFunReturnType (CompFunTerm t) = mrTypeOf t
+compFunReturnType (CompFunComp _ g) = compFunReturnType g
+compFunReturnType (CompFunReturn (Type t)) = return t
 
 -- | Apply a computation function to a term argument to get a computation
 applyCompFun :: CompFun -> Term -> MRM Comp
@@ -408,11 +413,11 @@ applyCompFun (CompFunComp f g) t =
   -- (f >=> g) t == f t >>= g
   do comp <- applyCompFun f t
      return $ CompBind comp g
-applyCompFun CompFunReturn t =
+applyCompFun (CompFunReturn _) t =
   return $ CompReturn t
 applyCompFun (CompFunTerm f) t = CompTerm <$> mrApplyAll f [t]
 
--- | Convert a 'CompFun' which is not a 'CompFunReturn' into a 'Term'
+-- | Convert a 'CompFun' into a 'Term'
 compFunToTerm :: CompFun -> MRM Term
 compFunToTerm (CompFunTerm t) = return t
 compFunToTerm (CompFunComp f g) =
@@ -423,9 +428,16 @@ compFunToTerm (CompFunComp f g) =
      case (f_tp, g_tp) of
        (asPi -> Just (_, a, asCompM -> Just b),
         asPi -> Just (_, _, asCompM -> Just c)) ->
-         liftSC2 scGlobalApply "Prelude.composeM" [a, b, c, f', g']
+         -- we explicitly unfold @Prelude.composeM@ here so @mrApplyAll@ will
+         -- beta-reduce
+         let nm = maybe "ret_val" id (compFunVarName f) in
+         mrLambdaLift [(nm, a)] (b, c, f', g') $ \[arg] (b', c', f'', g'') ->
+           do app <- mrApplyAll f'' [arg]
+              liftSC2 scGlobalApply "Prelude.bindM" [b', c', app, g'']
        _ -> error "compFunToTerm: type(s) not of the form: a -> CompM b"
-compFunToTerm CompFunReturn = error "compFunToTerm: got a CompFunReturn"
+compFunToTerm (CompFunReturn (Type a)) =
+  mrLambdaLift [("ret_val", a)] a $ \[ret_val] (a') ->
+    liftSC2 scGlobalApply "Prelude.returnM" [a', ret_val]
 
 -- | Convert a 'Comp' into a 'Term'
 compToTerm :: Comp -> MRM Term
@@ -433,7 +445,7 @@ compToTerm (CompTerm t) = return t
 compToTerm (CompReturn t) =
    do tp <- mrTypeOf t
       liftSC2 scGlobalApply "Prelude.returnM" [tp, t]
-compToTerm (CompBind m CompFunReturn) = compToTerm m
+compToTerm (CompBind m (CompFunReturn _)) = compToTerm m
 compToTerm (CompBind m f) =
   do m' <- compToTerm m
      f' <- compFunToTerm f
@@ -519,7 +531,7 @@ mrRefinesCoInd f1 args1 f2 args2 =
 -- | Prove the refinement represented by a 'CoIndHyp' coinductively. This is the
 -- main loop implementing 'mrRefinesCoInd'. See that function for documentation.
 proveCoIndHyp :: CoIndHyp -> MRM ()
-proveCoIndHyp hyp =
+proveCoIndHyp hyp = withFailureCtx (FailCtxCoIndHyp hyp) $
   do let f1 = coIndHypLHSFun hyp
          f2 = coIndHypRHSFun hyp
          args1 = coIndHypLHS hyp
@@ -536,8 +548,6 @@ proveCoIndHyp hyp =
            -- NOTE: the state automatically gets reset here because we defined
            -- MRM with ExceptT at a lower level than StateT
            do mrDebugPPPrefixSep 1 "Widening recursive assumption for" nm1' "|=" nm2'
-              debugPrint 2 ("Widening indices: " ++
-                            intercalate ", " (map show new_vars))
               hyp' <- generalizeCoIndHyp hyp new_vars
               proveCoIndHyp hyp'
        e -> throwError e
@@ -547,7 +557,8 @@ proveCoIndHyp hyp =
 -- given arguments, otherwise throw an exception saying that widening is needed
 matchCoIndHyp :: CoIndHyp -> [Term] -> [Term] -> MRM ()
 matchCoIndHyp hyp args1 args2 =
-  do (args1', args2') <- instantiateCoIndHyp hyp
+  do mrDebugPPPrefix 1 "matchCoIndHyp" hyp
+     (args1', args2') <- instantiateCoIndHyp hyp
      eqs1 <- zipWithM mrProveEq args1' args1
      eqs2 <- zipWithM mrProveEq args2' args2
      if and (eqs1 ++ eqs2) then return () else
@@ -561,39 +572,106 @@ generalizeCoIndHyp :: CoIndHyp -> [Either Int Int] -> MRM CoIndHyp
 generalizeCoIndHyp hyp [] = return hyp
 generalizeCoIndHyp hyp all_specs@(arg_spec:arg_specs) =
   withOnlyUVars (coIndHypCtx hyp) $ do
-  mrDebugPPPrefixSep 2 "generalizeCoIndHyp" hyp "with arg specs" (show all_specs)
+  withNoUVars $ mrDebugPPPrefixSep 2 "generalizeCoIndHyp with indices"
+                                     all_specs "on" hyp
   -- Get the arg and type associated with arg_spec
   let arg = coIndHypArg hyp arg_spec
   arg_tp <- mrTypeOf arg
-  ctx <- mrUVarCtx
-  debugPretty 2 ("Current context: " <> ppCtx ctx)
-  -- Sort out the other args that equal arg
+  -- Sort out the other args that are heterogeneously related to arg
   eq_uneq_specs <- forM arg_specs $ \spec' ->
     do let arg' = coIndHypArg hyp spec'
        tp' <- mrTypeOf arg'
-       mrDebugPPPrefixSep 2 "generalizeCoIndHyp: the type of" arg' "is" tp'
-       tps_eq <- mrConvertible arg_tp tp'
-       args_eq <- if tps_eq then mrProveEq arg arg' else return False
-       return $ if args_eq then Left spec' else Right spec'
+       tps_rel <- typesHetRelated arg_tp tp'
+       args_rel <- if tps_rel then mrProveRel True arg arg' else return False
+       return $ if args_rel then Left (spec', tp') else Right spec'
   let (eq_specs, uneq_specs) = partitionEithers eq_uneq_specs
-  -- Add a new variable of type arg_tp, set all eq_specs plus our original
-  -- arg_spec to it, and recurse
-  hyp' <- generalizeCoIndHypArgs hyp arg_tp (arg_spec:eq_specs)
+  -- Group the eq_specs by their type, i.e. turn a list @[(Idx, Type)]@ into a
+  -- list @[([Idx], Type)]@, where all the indices in each pair share the same
+  -- type (as in 'mrConvertible')
+  let addArgByTp :: [([a], Term)] -> (a, Term) -> MRM [([a], Term)]
+      addArgByTp [] (x, tp) = return [([x], tp)]
+      addArgByTp ((xs, tp):xstps) (x, tp') =
+        do tps_eq <- mrConvertible tp' tp
+           if tps_eq then return ((x:xs, tp):xstps)
+                     else ((xs, tp):) <$> addArgByTp xstps (x, tp')
+  eq_specs_gpd <- foldlM addArgByTp [] ((arg_spec,arg_tp):eq_specs)
+  -- Add a new variable, set all the indices in @eq_specs_gpd@ to it as in
+  -- 'generalizeCoIndHypArgs', and recurse
+  hyp' <- generalizeCoIndHypArgs hyp eq_specs_gpd
   generalizeCoIndHyp hyp' uneq_specs
 
--- | Add a new variable of the given type to the context of a coinductive
--- hypothesis and set the specified arguments to that new variable
-generalizeCoIndHypArgs :: CoIndHyp -> Term -> [Either Int Int] -> MRM CoIndHyp
-generalizeCoIndHypArgs (CoIndHyp ctx f1 f2 args1 args2 invar1 invar2) tp specs =
-  do let set_arg i args =
-           take i args ++ (Unshared $ LocalVar 0) : drop (i+1) args
-     let (specs1, specs2) = partitionEithers specs
-     -- NOTE: need to lift the arguments because we are adding a variable
-     args1' <- liftTermLike 0 1 args1
-     args2' <- liftTermLike 0 1 args2
-     let args1'' = foldr set_arg args1' specs1
-         args2'' = foldr set_arg args2' specs2
-     return $ CoIndHyp (ctx ++ [("z",tp)]) f1 f2 args1'' args2'' invar1 invar2
+-- | Assuming all the types in the given list are related by 'typesHetRelated'
+-- and no two of them are convertible, add a new variable and set all of
+-- indices in the given list to it, modulo possibly some wrapper functions
+-- determined by how the types are heterogeneously related
+generalizeCoIndHypArgs :: CoIndHyp -> [([Either Int Int], Term)] -> MRM CoIndHyp
+
+-- If all the arguments we need to generalize have the same type, introduce a
+-- new variable and set all of the given arguments to it
+generalizeCoIndHypArgs hyp [(specs, tp)] =
+  do (hyp', var) <- coIndHypWithVar hyp "z" (Type tp)
+     return $ coIndHypSetArgs hyp' specs var
+
+generalizeCoIndHypArgs hyp [(specs1, tp1), (specs2, tp2)] = case matchHet tp1 tp2 of
+
+  -- If we need to generalize bitvector arguments with Num arguments, introduce
+  -- a bitvector variable and set all of the bitvector arguments to it and
+  -- all of the Num arguments to `TCNum` of `bvToNat` of it
+  Just (HetBVNum n) ->
+    do (hyp', var) <- coIndHypWithVar hyp "z" (Type tp1)
+       nat_tm <- liftSC2 scBvToNat n var
+       num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
+       let hyp'' = coIndHypSetArgs hyp'  specs1 var
+       return    $ coIndHypSetArgs hyp'' specs2 num_tm
+  Just (HetNumBV n) ->
+    do (hyp', var) <- coIndHypWithVar hyp "z" (Type tp2)
+       nat_tm <- liftSC2 scBvToNat n var
+       num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
+       let hyp'' = coIndHypSetArgs hyp'  specs1 num_tm
+       return    $ coIndHypSetArgs hyp'' specs2 var
+
+  -- If we need to generalize BVVec arguments with Vec arguments, introduce a 
+  -- BVVec variable and set all of the BVVec arguments to it and all of the
+  -- Vec arguments to `genBVVecFromVec` of it
+  -- FIXME: Could we handle the a /= a' case here and in mrRefinesFunH?
+  Just (HetBVVecVec (n, len, a) (m, a')) ->
+    do m' <- mrBvToNat n len
+       ms_are_eq <- mrConvertible m m'
+       as_are_eq <- mrConvertible a a'
+       if ms_are_eq && as_are_eq then return () else
+         throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
+       (hyp', var) <- coIndHypWithVar hyp "z" (Type tp1)
+       bvv_tm <- mrGenFromBVVec n len a var "generalizeCoIndHypArgs (BVVec/Vec)" m
+       let hyp'' = coIndHypSetArgs hyp'  specs1 var
+       return    $ coIndHypSetArgs hyp'' specs2 bvv_tm
+  Just (HetVecBVVec (m, a') (n, len, a)) ->
+    do m' <- mrBvToNat n len
+       ms_are_eq <- mrConvertible m m'
+       as_are_eq <- mrConvertible a a'
+       if ms_are_eq && as_are_eq then return () else
+         throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
+       (hyp', var) <- coIndHypWithVar hyp "z" (Type tp2)
+       bvv_tm <- mrGenFromBVVec n len a var "generalizeCoIndHypArgs (Vec/BVVec)" m
+       let hyp'' = coIndHypSetArgs hyp'  specs1 bvv_tm
+       return    $ coIndHypSetArgs hyp'' specs2 var
+
+  -- This case should be unreachable because in 'mrRefinesFunH' we always
+  -- expand all tuples - though in principle we could handle it
+  Just (HetPair _ _) ->
+    debugPrint 0 "generalizeCoIndHypArgs: trying to widen distinct tuple types:" >>
+    throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
+
+  Nothing -> throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
+
+generalizeCoIndHypArgs _ specs = map fst <$> mrUVars >>= \uvar_ctx ->
+  -- Being in this case implies we have types @tp1, tp2, tp3@ which are related
+  -- by 'typesHetRelated' but no two of them are convertible. As of the time of
+  -- writing, the only way this could be possible is if the types are pair
+  -- types related in different components (e.g. @(a,b), (a',b), (a,b')@). In
+  -- 'mrRefinesFunH' we always expand all tuples, so when we hit this function
+  -- no such types should remain.
+  error $ "generalizeCoIndHypArgs: too many distinct types to widen: "
+          ++ showInCtx uvar_ctx specs
 
 
 ----------------------------------------------------------------------
@@ -618,6 +696,8 @@ mrRefines t1 t2 =
   do m1 <- toNormComp t1
      m2 <- toNormComp t2
      mrDebugPPPrefixSep 1 "mrRefines" m1 "|=" m2
+     -- ctx <- reverse . map (\(a,Type b) -> (a,b)) <$> mrUVars
+     -- mrDebugPPPrefix 2 "in context:" $ ppCtx ctx
      withFailureCtx (FailCtxRefines m1 m2) $ mrRefines' m1 m2
 
 -- | The main implementation of 'mrRefines'
@@ -766,7 +846,7 @@ mrRefines' m1@(FunBind (EVarFunName _) _ _) m2 =
 mrRefines' m1 m2@(FunBind (EVarFunName _) _ _) =
   throwMRFailure (CompsDoNotRefine m1 m2)
 {-
-mrRefines' (FunBind (EVarFunName evar) args CompFunReturn) m2 =
+mrRefines' (FunBind (EVarFunName evar) args (CompFunReturn _)) m2 =
   mrGetEVar evar >>= \case
   Just f ->
     (mrApplyAll f args >>= normCompTerm) >>= \m1' ->
@@ -777,12 +857,13 @@ mrRefines' (FunBind (EVarFunName evar) args CompFunReturn) m2 =
 mrRefines' (FunBind (LetRecName f) args1 k1) (FunBind (LetRecName f') args2 k2)
   | f == f' && length args1 == length args2 =
     zipWithM_ mrAssertProveEq args1 args2 >>
-    mrRefinesFun k1 k2
+    mrFunOutType (LetRecName f) args1 >>= \tp ->
+    mrRefinesFun tp k1 tp k2
 
 mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   mrFunOutType f1 args1 >>= \tp1 ->
   mrFunOutType f2 args2 >>= \tp2 ->
-  mrConvertible tp1 tp2 >>= \tps_eq ->
+  typesHetRelated tp1 tp2 >>= \tps_rel ->
   mrFunBodyRecInfo f1 args1 >>= \maybe_f1_body ->
   mrFunBodyRecInfo f2 args2 >>= \maybe_f2_body ->
   mrGetCoIndHyp f1 f2 >>= \maybe_coIndHyp ->
@@ -797,7 +878,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   -- * Otherwise, throw a 'CoIndHypMismatchFailure' error.
   (Just hyp, _) ->
     matchCoIndHyp hyp args1 args2 >>
-    mrRefinesFun k1 k2
+    mrRefinesFun tp1 k1 tp2 k2
 
   -- If we have an opaque FunAssump that f1 args1' refines f2 args2', then
   -- prove that args1 = args1', args2 = args2', and then that k1 refines k2
@@ -806,7 +887,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
        (args1'', args2'') <- substTermLike 0 evars (args1', args2')
        zipWithM_ mrAssertProveEq args1'' args1
        zipWithM_ mrAssertProveEq args2'' args2
-       mrRefinesFun k1 k2
+       mrRefinesFun tp1 k1 tp2 k2
 
   -- If we have an opaque FunAssump that f1 refines some f /= f2, and f2
   -- unfolds and is not recursive in itself, unfold f2 and recurse
@@ -818,11 +899,12 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   -- f1 args1' refines some f args where f /= f2 and f2 does not match the
   -- case above, treat either case like we have a rewrite FunAssump and prove
   -- that args1 = args1' and then that f args refines m2
-  (_, Just (FunAssump ctx args1' (funAssumpRHSAsNormComp -> rhs))) ->
-    do evars <- mrFreshEVars ctx
-       (args1'', rhs') <- substTermLike 0 evars (args1', rhs)
+  (_, Just (FunAssump ctx args1' rhs)) ->
+    do rhs' <- mrFunAssumpRHSAsNormComp rhs
+       evars <- mrFreshEVars ctx
+       (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
        zipWithM_ mrAssertProveEq args1'' args1
-       m1' <- normBind rhs' k1
+       m1' <- normBind rhs'' k1
        mrRefines m1' m2
 
   -- If f1 unfolds and is not recursive in itself, unfold it and recurse
@@ -835,13 +917,13 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
 
   -- If we don't have a co-inducitve hypothesis for f1 and f2, don't have an
   -- assumption that f1 refines some specification, and both f1 and f2 are
-  -- recursive and have the same return type, then try to coinductively prove
-  -- that f1 args1 |= f2 args2 under the assumption that f1 args1 |= f2 args2,
-  -- and then try to prove that k1 |= k2
-  _ | tps_eq
+  -- recursive and have return types which are heterogeneously related, then
+  -- try to coinductively prove that f1 args1 |= f2 args2 under the assumption
+  -- that f1 args1 |= f2 args2, and then try to prove that k1 |= k2
+  _ | tps_rel
     , Just _ <- maybe_f1_body
     , Just _ <- maybe_f2_body ->
-      mrRefinesCoInd f1 args1 f2 args2 >> mrRefinesFun k1 k2
+      mrRefinesCoInd f1 args1 f2 args2 >> mrRefinesFun tp1 k1 tp2 k2
 
   -- If we cannot line up f1 and f2, then making progress here would require us
   -- to somehow split either m1 or m2 into some bind m' >>= k' such that m' is
@@ -857,11 +939,12 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
 
   -- If we have an assumption that f1 args' refines some rhs, then prove that
   -- args1 = args' and then that rhs refines m2
-  Just (FunAssump ctx args1' (funAssumpRHSAsNormComp -> rhs)) ->
-    do evars <- mrFreshEVars ctx
-       (args1'', rhs') <- substTermLike 0 evars (args1', rhs)
+  Just (FunAssump ctx args1' rhs) ->
+    do rhs' <- mrFunAssumpRHSAsNormComp rhs
+       evars <- mrFreshEVars ctx
+       (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
        zipWithM_ mrAssertProveEq args1'' args1
-       m1' <- normBind rhs' k1
+       m1' <- normBind rhs'' k1
        mrRefines m1' m2
 
   -- Otherwise, see if we can unfold f1
@@ -889,7 +972,7 @@ mrRefines' m1 m2@(FunBind f2 args2 k2) =
   -- proving m1 |= f2_body under the assumption that m1 |= f2 args2
   {- FIXME: implement something like this
   Just (f2_body, True)
-    | CompFunReturn <- k2 ->
+    | CompFunReturn _ <- k2 ->
       withFunAssumpR m1 f2 args2 $
    -}
 
@@ -928,18 +1011,139 @@ mrRefines'' (ForallM tp f1) m2 =
 -- If none of the above cases match, then fail
 mrRefines'' m1 m2 = throwMRFailure (CompsDoNotRefine m1 m2)
 
-
 -- | Prove that one function refines another for all inputs
-mrRefinesFun :: CompFun -> CompFun -> MRM ()
-mrRefinesFun CompFunReturn CompFunReturn = return ()
-mrRefinesFun f1 f2
-  | Just nm <- compFunVarName f1 `mplus` compFunVarName f2
-  , Just tp <- compFunInputType f1 `mplus` compFunInputType f2 =
-    withUVarLift nm tp (f1,f2) $ \x (f1', f2') ->
-    do m1' <- applyNormCompFun f1' x
-       m2' <- applyNormCompFun f2' x
-       mrRefines m1' m2'
-mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
+mrRefinesFun :: Term -> CompFun -> Term -> CompFun -> MRM ()
+mrRefinesFun tp1 f1 tp2 f2 =
+  do mrDebugPPPrefixSep 1 "mrRefinesFun on types:" tp1 "," tp2
+     mrDebugPPPrefixSep 1 "mrRefinesFun" f1 "|=" f2
+     f1' <- compFunToTerm f1 >>= liftSC1 scWhnf
+     f2' <- compFunToTerm f2 >>= liftSC1 scWhnf
+     let lnm = maybe "call_ret_val" id (compFunVarName f1)
+         rnm = maybe "call_ret_val" id (compFunVarName f2)
+     mrRefinesFunH mrRefines [] [(lnm, tp1)] f1' [(rnm, tp2)] f2'
+
+-- | The main loop of 'mrRefinesFun' and 'askMRSolver': given a continuation,
+-- two terms of function type, and two equal-length lists representing the
+-- argument types of the two terms, add a uvar for each corresponding pair of
+-- types (assuming the types are either equal or are heterogeneously related,
+-- as in 'HetRelated'), apply the terms to these uvars (modulo possibly some
+-- wrapper functions determined by how the types are heterogeneously related),
+-- and call the continuation on the resulting terms. The second argument is
+-- an accumulator of variables to introduce, innermost first.
+mrRefinesFunH :: (Term -> Term -> MRM a) -> [Term] ->
+                 [(LocalName,Term)] -> Term -> [(LocalName,Term)] -> Term ->
+                 MRM a
+
+mrRefinesFunH k vars ((nm1, tp1):tps1) t1 ((nm2, tp2):tps2) t2 = case matchHet tp1 tp2 of
+    
+  -- If we need to introduce a bitvector on one side and a Num on the other,
+  -- introduce a bitvector variable and substitute `TCNum` of `bvToNat` of that
+  -- variable on the Num side
+  Just (HetBVNum n) ->
+    let nm = maybe "_" id $ find ((/=) '_' . Text.head)
+                          $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
+                                                    , asLambdaName t2 ] in
+    withUVarLift nm (Type tp1) (vars, t1, t2) $ \var (vars', t1', t2') ->
+    do nat_tm <- liftSC2 scBvToNat n var
+       num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
+       tps2' <- zipWithM (\i tp -> liftTermLike 0 i num_tm >>= \num_tm' ->
+                                   substTermLike i (num_tm' : vars') tp >>=
+                                   mapM (liftSC1 scWhnf))
+                         [0..] tps2
+       t1'' <- mrApplyAll t1' [var]
+       t2'' <- mrApplyAll t2' [num_tm]
+       mrRefinesFunH k (var : vars') tps1 t1'' tps2' t2''
+  Just (HetNumBV n) ->
+    let nm = maybe "_" id $ find ((/=) '_' . Text.head)
+                          $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
+                                                    , asLambdaName t2 ] in
+    withUVarLift nm (Type tp2) (vars, t1, t2) $ \var (vars', t1', t2') ->
+    do nat_tm <- liftSC2 scBvToNat n var
+       num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
+       tps1' <- zipWithM (\i tp -> liftTermLike 0 i num_tm >>= \num_tm' ->
+                                   substTermLike i (num_tm' : vars') tp >>=
+                                   mapM (liftSC1 scWhnf))
+                         [0..] tps1
+       t1'' <- mrApplyAll t1' [num_tm]
+       t2'' <- mrApplyAll t2' [var]
+       mrRefinesFunH k (var : vars') tps1' t1'' tps2 t2''
+
+  -- If we need to introduce a BVVec on one side and a non-BVVec vector on the
+  -- other, introduce a BVVec variable and substitute `genBVVecFromVec` of that
+  -- variable on the non-BVVec side
+  -- FIXME: Could we handle the a /= a' case here and in generalizeCoIndHypArgs?
+  Just (HetBVVecVec (n, len, a) (m, a')) ->
+    do m' <- mrBvToNat n len
+       ms_are_eq <- mrConvertible m m'
+       as_are_eq <- mrConvertible a a'
+       if ms_are_eq && as_are_eq then return () else
+         throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
+       let nm = maybe "_" id $ find ((/=) '_' . Text.head)
+                             $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
+                                                       , asLambdaName t2 ]
+       withUVarLift nm (Type tp1) (vars, t1, t2) $ \var (vars', t1', t2') ->
+         do bvv_tm <- mrGenFromBVVec n len a var "mrRefinesFunH (BVVec/Vec)" m
+            tps2' <- zipWithM (\i tp -> liftTermLike 0 i bvv_tm >>= \bvv_tm' ->
+                                        substTermLike i (bvv_tm' : vars') tp >>=
+                                        mapM (liftSC1 scWhnf))
+                              [0..] tps2
+            t1'' <- mrApplyAll t1' [var]
+            t2'' <- mrApplyAll t2' [bvv_tm]
+            mrRefinesFunH k (var : vars') tps1 t1'' tps2' t2''
+  Just (HetVecBVVec (m, a') (n, len, a)) ->
+    do m' <- mrBvToNat n len
+       ms_are_eq <- mrConvertible m m'
+       as_are_eq <- mrConvertible a a'
+       if ms_are_eq && as_are_eq then return () else
+         throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
+       let nm = maybe "_" id $ find ((/=) '_' . Text.head)
+                             $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
+                                                       , asLambdaName t2 ]
+       withUVarLift nm (Type tp2) (vars, t1, t2) $ \var (vars', t1', t2') ->
+         do bvv_tm <- mrGenFromBVVec n len a var "mrRefinesFunH (BVVec/Vec)" m
+            tps1' <- zipWithM (\i tp -> liftTermLike 0 i bvv_tm >>= \bvv_tm' ->
+                                        substTermLike i (bvv_tm' : vars') tp >>=
+                                        mapM (liftSC1 scWhnf))
+                              [0..] tps1
+            t1'' <- mrApplyAll t1' [var]
+            t2'' <- mrApplyAll t2' [bvv_tm]
+            mrRefinesFunH k (var : vars') tps1' t1'' tps2 t2''
+
+  -- We always curry pair values before introducing them (NOTE: we do this even
+  -- when the have the same types to ensure we never have to unify a projection
+  -- of an evar with a non-projected value, i.e. evar.1 == val )
+  Just (HetPair (tpL1, tpR1) (tpL2, tpR2)) ->
+    do let tps1' = (nm1 <> "_1", tpL1):(nm1 <> "_2", tpR1):tps1
+           tps2' = (nm2 <> "_1", tpL2):(nm2 <> "_2", tpR2):tps2
+       t1'' <- mrLambdaLift [(nm1, tpL1), (nm1, tpR1)] t1 $ \[prj1, prj2] t1' ->
+                 liftSC2 scPairValue prj1 prj2 >>= mrApply t1'
+       t2'' <- mrLambdaLift [(nm2, tpL2), (nm2, tpR2)] t2 $ \[prj1, prj2] t2' ->
+                 liftSC2 scPairValue prj1 prj2 >>= mrApply t2'
+       mrRefinesFunH k vars tps1' t1'' tps2' t2''
+
+  -- Introduce variables of the same type together
+  Nothing ->
+    do tps_are_eq <- mrConvertible tp1 tp2
+       if tps_are_eq then return () else
+         throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
+       let nm = maybe "_" id $ find ((/=) '_' . Text.head)
+                             $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
+                                                       , asLambdaName t2 ]
+       withUVarLift nm (Type tp1) (vars, t1, t2) $ \var (vars', t1', t2') ->
+         do t1'' <- mrApplyAll t1' [var]
+            t2'' <- mrApplyAll t2' [var]
+            mrRefinesFunH k (var : vars') tps1 t1'' tps2 t2''
+
+-- Error if we don't have the same number of arguments on both sides
+-- FIXME: Add a specific error for this case
+mrRefinesFunH _ _ ((_,tp1):_) _ [] _ =
+  liftSC0 scUnitType >>= \utp ->
+  throwMRFailure (TypesNotEq (Type tp1) (Type utp))
+mrRefinesFunH _ _ [] _ ((_,tp2):_) _ =
+  liftSC0 scUnitType >>= \utp ->
+  throwMRFailure (TypesNotEq (Type utp) (Type tp2))
+
+mrRefinesFunH k _ [] t1 [] t2 = k t1 t2
 
 
 ----------------------------------------------------------------------
@@ -951,131 +1155,68 @@ mrRefinesFun _ _ = error "mrRefinesFun: unreachable!"
 -- a function name
 type MRSolverResult = Maybe (FunName, FunAssump)
 
--- | The main loop of 'askMRSolver'. The first argument is an accumulator of
--- variables to introduce, innermost first.
-askMRSolverH :: [Term] -> Term -> Term -> Term -> Term -> MRM MRSolverResult
-
--- If we need to introduce a bitvector on one side and a Num on the other,
--- introduce a bitvector variable and substitute `TCNum` of `bvToNat` of that
--- variable on the Num side
-askMRSolverH vars (asPi -> Just (nm1, tp@(asBitvectorType -> Just n), body1)) t1
-                  (asPi -> Just (nm2, asDataType -> Just (primName -> "Cryptol.Num", _), body2)) t2 =
-  let nm = if Text.head nm2 == '_' then nm1 else nm2 in
-  withUVarLift nm (Type tp) (vars, t1, t2) $ \var (vars', t1', t2') ->
-  do nat_tm <- liftSC2 scBvToNat n var
-     num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
-     body2' <- substTerm 0 (num_tm : vars') body2
-     t1'' <- mrApplyAll t1' [var]
-     t2'' <- mrApplyAll t2' [num_tm]
-     askMRSolverH (var : vars') body1 t1'' body2' t2''
-askMRSolverH vars (asPi -> Just (nm1, asDataType -> Just (primName -> "Cryptol.Num", _), body1)) t1
-                  (asPi -> Just (nm2, tp@(asBitvectorType -> Just n), body2)) t2 =
-  let nm = if Text.head nm2 == '_' then nm1 else nm2 in
-  withUVarLift nm (Type tp) (vars, t1, t2) $ \var (vars', t1', t2') ->
-  do nat_tm <- liftSC2 scBvToNat n var
-     num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
-     body1' <- substTerm 0 (num_tm : vars') body1
-     t1'' <- mrApplyAll t1' [num_tm]
-     t2'' <- mrApplyAll t2' [var]
-     askMRSolverH (var : vars') body1' t1'' body2 t2''
-
--- If we need to introduce a BVVec on one side and a non-BVVec vector on the
--- other, introduce a BVVec variable and substitute `genBVVecFromVec` of that
--- variable on the non-BVVec side
-askMRSolverH vars tp1@(asPi -> Just (nm1, tp@(asBVVecType -> Just (n, len, a)), body1)) t1
-                  tp2@(asPi -> Just (nm2, asNonBVVecVectorType -> Just (m, a'), body2)) t2 =
-  do m' <- mrBvToNat n len
-     ms_are_eq <- mrConvertible m' m
-     as_are_eq <- mrConvertible a a'
-     if ms_are_eq && as_are_eq then return () else
-       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
-     let nm = if Text.head nm2 == '_' then nm1 else nm2
-     withUVarLift nm (Type tp) (vars, t1, t2) $ \var (vars', t1', t2') ->
-       do err_str_tm <- liftSC1 scString "FIXME: askMRSolverH error"
-          err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str_tm]
-          bvvec_tm <- liftSC2 scGlobalApply "Prelude.genFromBVVec"
-                                            [n, len, a, var, err_tm, m]
-          body2' <- substTerm 0 (bvvec_tm : vars') body2
-          t1'' <- mrApplyAll t1' [var]
-          t2'' <- mrApplyAll t2' [bvvec_tm]
-          askMRSolverH (var : vars') body1 t1'' body2' t2''
-askMRSolverH vars tp1@(asPi -> Just (nm1, asNonBVVecVectorType -> Just (m, a'), body2)) t1
-                  tp2@(asPi -> Just (nm2, tp@(asBVVecType -> Just (n, len, a)), body1)) t2 =
-  do m' <- mrBvToNat n len
-     ms_are_eq <- mrConvertible m' m
-     as_are_eq <- mrConvertible a a'
-     if ms_are_eq && as_are_eq then return () else
-       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
-     let nm = if Text.head nm2 == '_' then nm1 else nm2
-     withUVarLift nm (Type tp) (vars, t1, t2) $ \var (vars', t1', t2') ->
-       do err_str_tm <- liftSC1 scString "FIXME: askMRSolverH error"
-          err_tm <- liftSC2 scGlobalApply "Prelude.error" [a, err_str_tm]
-          bvvec_tm <- liftSC2 scGlobalApply "Prelude.genFromBVVec"
-                                            [n, len, a, var, err_tm, m]
-          body1' <- substTerm 0 (bvvec_tm : vars') body1
-          t1'' <- mrApplyAll t1' [var]
-          t2'' <- mrApplyAll t2' [bvvec_tm]
-          askMRSolverH (var : vars') body1' t1'' body2 t2''
-
--- Introduce variables of the same type together
-askMRSolverH vars tp11@(asPi -> Just (nm1, tp1, body1)) t1
-                  tp22@(asPi -> Just (nm2, tp2, body2)) t2 =
-  do tps_are_eq <- mrConvertible tp1 tp2
-     if tps_are_eq then return () else
-       throwMRFailure (TypesNotEq (Type tp11) (Type tp22))
-     let nm = if Text.head nm2 == '_' then nm1 else nm2
-     withUVarLift nm (Type tp1) (vars, t1, t2) $ \var (vars', t1', t2') ->
-       do t1'' <- mrApplyAll t1' [var]
-          t2'' <- mrApplyAll t2' [var]
-          askMRSolverH (var : vars') body1 t1'' body2 t2''
-
--- Error if we don't have the same number of arguments on both sides
-askMRSolverH _ tp1@(asPi -> Just _) _ tp2 _ =
-  throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
-askMRSolverH _ tp1 _ tp2@(asPi -> Just _) _ =
-  throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
-
--- The base case: both sides are CompM of the same type
-askMRSolverH _ (asCompM -> Just _) t1 (asCompM -> Just _) t2 =
-  do m1 <- normCompTerm t1 
+-- | The continuation passed to 'mrRefinesFunH' in 'askMRSolver' and
+-- 'assumeMRSolver': normalizes both resulting terms using 'normCompTerm',
+-- calls the given monadic function, then returns a 'FunAssump', if possible
+askMRSolverH :: (NormComp -> NormComp -> MRM ()) ->
+                Term -> Term -> MRM MRSolverResult
+askMRSolverH f t1 t2 =
+  do m1 <- normCompTerm t1
      m2 <- normCompTerm t2
-     mrRefines m1 m2
+     f m1 m2
      case (m1, m2) of
        -- If t1 and t2 are both named functions, our result is the opaque
        -- FunAssump that forall xs. f1 xs |= f2 xs'
-       (FunBind f1 args1 CompFunReturn, FunBind f2 args2 CompFunReturn) ->
+       (FunBind f1 args1 (CompFunReturn _), FunBind f2 args2 (CompFunReturn _)) ->
          mrUVarCtx >>= \uvar_ctx ->
          return $ Just (f1, FunAssump { fassumpCtx = uvar_ctx,
                                         fassumpArgs = args1,
                                         fassumpRHS = OpaqueFunAssump f2 args2 })
        -- If just t1 is a named function, our result is the rewrite FunAssump
        -- that forall xs. f1 xs |= m2
-       (FunBind f1 args1 CompFunReturn, _) ->
+       (FunBind f1 args1 (CompFunReturn _), _) ->
          mrUVarCtx >>= \uvar_ctx ->
          return $ Just (f1, FunAssump { fassumpCtx = uvar_ctx,
                                         fassumpArgs = args1,
                                         fassumpRHS = RewriteFunAssump m2 })
        _ -> return Nothing
 
--- Error if we don't have CompM at the end
-askMRSolverH _ (asCompM -> Just _) _ tp2 _ =
-  throwMRFailure (NotCompFunType tp2)
-askMRSolverH _ tp1 _ _ _ =
-  throwMRFailure (NotCompFunType tp1)
-
-
 -- | Test two monadic, recursive terms for refinement. On success, if the
--- left-hand term is a named function, add the refinement to the 'MREnv'
--- environment.
+-- left-hand term is a named function, returning a 'FunAssump' to add to the
+-- 'MREnv'.
 askMRSolver ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
   Term -> Term -> IO (Either MRFailure MRSolverResult)
-
 askMRSolver sc env timeout t1 t2 =
   do tp1 <- scTypeOf sc t1 >>= scWhnf sc
      tp2 <- scTypeOf sc t2 >>= scWhnf sc
      runMRM sc timeout env $
        mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2 >>
-       askMRSolverH [] tp1 t1 tp2 t2
+       case (asPiList tp1, asPiList tp2) of
+         ((tps1, asCompM -> Just _), (tps2, asCompM -> Just _)) ->
+           mrRefinesFunH (askMRSolverH mrRefines) [] tps1 t1 tps2 t2
+         ((_, asCompM -> Just _), (_, tp2')) ->
+           throwMRFailure (NotCompFunType tp2')
+         ((_, tp1'), _) ->
+           throwMRFailure (NotCompFunType tp1')
+
+-- | Return the 'FunAssump' to add to the 'MREnv' that would be generated if
+-- 'askMRSolver' succeeded on the given terms.
+assumeMRSolver ::
+  SharedContext ->
+  MREnv {- ^ The Mr Solver environment -} ->
+  Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
+  Term -> Term -> IO (Either MRFailure MRSolverResult)
+assumeMRSolver sc env timeout t1 t2 =
+  do tp1 <- scTypeOf sc t1 >>= scWhnf sc
+     tp2 <- scTypeOf sc t2 >>= scWhnf sc
+     runMRM sc timeout env $
+       case (asPiList tp1, asPiList tp2) of
+         ((tps1, asCompM -> Just _), (tps2, asCompM -> Just _)) ->
+           mrRefinesFunH (askMRSolverH (\_ _ -> return ())) [] tps1 t1 tps2 t2
+         ((_, asCompM -> Just _), (_, tp2')) ->
+           throwMRFailure (NotCompFunType tp2')
+         ((_, tp1'), _) ->
+           throwMRFailure (NotCompFunType tp1')
