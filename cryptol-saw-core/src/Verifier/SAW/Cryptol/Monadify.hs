@@ -681,8 +681,11 @@ ppTermInMonCtx :: MonadifyCtx -> Term -> String
 ppTermInMonCtx ctx t =
   scPrettyTermInCtx defaultPPOpts (map (\(x,_,_) -> x) ctx) t
 
--- | A memoization table for monadifying terms
-type MonadifyMemoTable = IntMap MonTerm
+-- | A memoization table for monadifying terms: a map from 'TermIndex'es to
+-- 'MonTerm's and, possibly, corresponding 'ArgMonTerm's. The latter are simply
+-- the result of calling 'argifyMonTerm' on the former, but are only added when
+-- needed (i.e. when 'memoArgMonTerm' is called, e.g. in 'monadifyArg').
+type MonadifyMemoTable = IntMap (MonTerm, Maybe ArgMonTerm)
 
 -- | The empty memoization table
 emptyMemoTable :: MonadifyMemoTable
@@ -752,15 +755,34 @@ runCompleteMonadifyM sc env top_ret_tp m =
   runMonadifyM env [] (toArgType $ monadifyType [] top_ret_tp) m
 
 -- | Memoize a computation of the monadified term associated with a 'TermIndex'
-memoizingM :: TermIndex -> MonadifyM MonTerm -> MonadifyM MonTerm
-memoizingM i m =
+memoMonTerm :: TermIndex -> MonadifyM MonTerm -> MonadifyM MonTerm
+memoMonTerm i m =
   (IntMap.lookup i <$> get) >>= \case
-  Just ret ->
-    return ret
+  Just (mtm, _) ->
+    return mtm
   Nothing ->
-    do ret <- m
-       modify (IntMap.insert i ret)
-       return ret
+    do mtm <- m
+       modify (IntMap.insert i (mtm, Nothing))
+       return mtm
+
+-- | Memoize a computation of the monadified term of argument type associated
+-- with a 'TermIndex', using a memoized 'ArgTerm' directly if it exists or
+-- applying 'argifyMonTerm' to a memoized 'MonTerm' (and memoizing the result)
+-- if it exists
+memoArgMonTerm :: TermIndex -> MonadifyM MonTerm -> MonadifyM ArgMonTerm
+memoArgMonTerm i m =
+  (IntMap.lookup i <$> get) >>= \case
+  Just (_, Just argmtm) ->
+    return argmtm
+  Just (mtm, Nothing) ->
+    do argmtm <- argifyMonTerm mtm
+       modify (IntMap.insert i (mtm, Just argmtm))
+       return argmtm
+  Nothing ->
+    do mtm <- m
+       argmtm <- argifyMonTerm mtm
+       modify (IntMap.insert i (mtm, Just argmtm))
+       return argmtm
 
 -- | Turn a 'MonTerm' of type @CompMT(tp)@ to a term of argument type @MT(tp)@
 -- by inserting a monadic bind if the 'MonTerm' is computational
@@ -799,7 +821,15 @@ monadifyTypeM tp =
 
 -- | Monadify a term to a monadified term of argument type
 monadifyArg :: Maybe MonType -> Term -> MonadifyM ArgMonTerm
-monadifyArg mtp t = monadifyTerm mtp t >>= argifyMonTerm
+{-
+monadifyArg _ t
+  | trace ("Monadifying term of argument type: " ++ showTerm t) False
+  = undefined
+-}
+monadifyArg mtp t@(STApp { stAppIndex = ix }) =
+  memoArgMonTerm ix $ monadifyTerm' mtp t
+monadifyArg mtp t =
+  monadifyTerm' mtp t >>= argifyMonTerm
 
 -- | Monadify a term to argument type and convert back to a term
 monadifyArgTerm :: Maybe MonType -> Term -> MonadifyM OpenTerm
@@ -813,7 +843,7 @@ monadifyTerm _ t
   = undefined
 -}
 monadifyTerm mtp t@(STApp { stAppIndex = ix }) =
-  memoizingM ix $ monadifyTerm' mtp t
+  memoMonTerm ix $ monadifyTerm' mtp t
 monadifyTerm mtp t =
   monadifyTerm' mtp t
 

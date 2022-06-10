@@ -36,10 +36,12 @@ import System.IO (stdout)
 import Control.Exception (throw)
 import Control.Lens (Getter, to, view, use, (&), (^.), (.~), (%~), (.=))
 import Control.Monad.State
+import Control.Monad.Reader (runReaderT)
 import Control.Monad.Catch (MonadThrow)
 
 import qualified Data.BitVector.Sized as BV
 import Data.Foldable (foldlM)
+import           Data.IORef
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
 import qualified Data.Text as Text
@@ -78,6 +80,7 @@ import SAWScript.Options
 import SAWScript.X86 hiding (Options)
 import SAWScript.X86Spec
 import SAWScript.Crucible.Common
+import SAWScript.Crucible.Common.Override (MetadataMap)
 
 import qualified SAWScript.Crucible.Common as Common
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
@@ -338,6 +341,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       start <- io getCurrentTime
       laxLoadsAndStores <- gets rwLaxLoadsAndStores
+      pathSatSolver <- gets rwPathSatSolver
       let ?ptrWidth = knownNat @64
       let ?memOpts = C.LLVM.defaultMemOptions
                        { C.LLVM.laxLoadsAndStores = laxLoadsAndStores
@@ -348,7 +352,9 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       basic_ss <- getBasicSS
       rw <- getTopLevelRW
       sym <- liftIO $ newSAWCoreExprBuilder sc
-      SomeOnlineBackend bak <- liftIO $ newSAWCoreBackendWithTimeout sym $ rwCrucibleTimeout rw
+      mdMap <- liftIO $ newIORef mempty
+      SomeOnlineBackend bak <- liftIO $
+        newSAWCoreBackendWithTimeout pathSatSolver sym $ rwCrucibleTimeout rw
       cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms $ W4.getConfiguration sym
       _ <- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsingX86 rw
       liftIO $ W4.extendConfig
@@ -484,7 +490,8 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                 }
           liftIO $ printOutLn opts Info
             "Examining specification to determine postconditions"
-          liftIO . void . runX86Sim finalState $ assertPost globals' env (preState ^. x86Mem) (preState ^. x86Regs)
+          liftIO . void . runX86Sim finalState $
+            assertPost globals' env (preState ^. x86Mem) (preState ^. x86Regs) mdMap
           pure $ C.regValue r
 
       liftIO $ printOutLn opts Info "Simulating function"
@@ -518,7 +525,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
             ar
         C.TimeoutResult{} -> fail "Execution timed out"
 
-      (stats,thms) <- checkGoals bak opts sc tactic
+      (stats,thms) <- checkGoals bak opts nm sc tactic mdMap
 
       end <- io getCurrentTime
       let diff = diffUTCTime end start
@@ -685,8 +692,10 @@ buildMethodSpec lm nm loc checkSat setup =
       Right x -> pure x
     let initialMethodSpec = MS.makeCrucibleMethodSpecIR @LLVM
           methodId mtargs mtret programLoc lm
-    view Setup.csMethodSpec <$> execStateT (runLLVMCrucibleSetupM setup)
-      (Setup.makeCrucibleSetupState emptyResolvedState cc initialMethodSpec)
+    view Setup.csMethodSpec <$>
+      execStateT
+        (runReaderT (runLLVMCrucibleSetupM setup) Setup.makeCrucibleSetupRO)
+        (Setup.makeCrucibleSetupState emptyResolvedState cc initialMethodSpec)
 
 llvmTypeToMemType ::
   C.LLVM.TypeContext ->
@@ -865,11 +874,12 @@ assumeAllocation ::
   Map MS.AllocIndex Ptr ->
   (MS.AllocIndex, LLVMAllocSpec) {- ^ llvm_alloc statement -} ->
   X86Sim (Map MS.AllocIndex Ptr)
-assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc False initialization) = do
+assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz md False initialization) = do
   SomeOnlineBackend bak <- use x86Backend
   cc <- use x86CrucibleContext
   mem <- use x86Mem
   sz' <- liftIO $ resolveSAWSymBV cc knownNat sz
+  let loc = MS.conditionLoc md
   (ptr, mem') <- liftIO $ LO.doAllocSymInit bak mem mut align sz' (show $ W4.plSourceLoc loc) initialization
   x86Mem .= mem'
   pure $ Map.insert i ptr env
@@ -1014,8 +1024,9 @@ assertPost ::
   Map MS.AllocIndex Ptr ->
   Mem {- ^ The state of memory before simulation -} ->
   Regs {- ^ The state of the registers before simulation -} ->
+  IORef MetadataMap {- ^ metadata map -} ->
   X86Sim ()
-assertPost globals env premem preregs = do
+assertPost globals env premem preregs mdMap = do
   SomeOnlineBackend bak <- use x86Backend
   sym <- use x86Sym
   opts <- use x86Options
@@ -1058,7 +1069,13 @@ assertPost globals env premem preregs = do
                     _ -> pure $ C.LLVM.LLVMValInt base off
                 _ -> throwX86 "Width of return type is zero bits"
           postRAXTrunc <- viewSome truncateRAX (mkNatRepr retTyBits)
-          pure [LO.matchArg opts sc cc ms MS.PostState postRAXTrunc retTy expectedRet]
+          let md = MS.ConditionMetadata
+                   { MS.conditionLoc = ms ^. MS.csLoc
+                   , MS.conditionTags = mempty
+                   , MS.conditionType = "return value matching"
+                   , MS.conditionContext = ""
+                   }
+          pure [LO.matchArg opts sc cc ms MS.PostState md postRAXTrunc retTy expectedRet]
         _ -> throwX86 $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)
     _ -> pure []
 
@@ -1095,10 +1112,12 @@ assertPost globals env premem preregs = do
   st <- case result of
     Left err -> throwX86 $ show err
     Right (_, st) -> pure st
-  liftIO . forM_ (view O.osAssumes st) $
-    C.addAssumption bak . C.GenericAssumption (st ^. O.osLocation) "precondition"
-  liftIO . forM_ (view LO.osAsserts st) $ \(W4.LabeledPred p r) ->
-    C.addAssertion bak $ C.LabeledPred p r
+  liftIO . forM_ (view O.osAssumes st) $ \(_md, asum) ->
+    C.addAssumption bak $ C.GenericAssumption (st ^. O.osLocation) "precondition" asum
+  liftIO . forM_ (view LO.osAsserts st) $ \(md, W4.LabeledPred p r) ->
+       do (ann,p') <- W4.annotateTerm sym p
+          modifyIORef mdMap (Map.insert ann md)
+          C.addAssertion bak (W4.LabeledPred p' r)
 
 -- | Assert that a points-to postcondition holds.
 assertPointsTo ::
@@ -1108,29 +1127,31 @@ assertPointsTo ::
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim (LLVMOverrideMatcher md ())
-assertPointsTo env tyenv nameEnv pointsTo@(LLVMPointsTo loc cond tptr tptval) = do
+assertPointsTo env tyenv nameEnv pointsTo@(LLVMPointsTo md cond tptr tptval) = do
   opts <- use x86Options
   sc <- use x86SharedContext
   cc <- use x86CrucibleContext
   ms <- use x86MethodSpec
+  let loc = MS.conditionLoc md
 
   ptr <- resolvePtrSetupValue env tyenv nameEnv tptr
   pure $ do
-    err <- LO.matchPointsToValue opts sc cc ms MS.PostState loc cond ptr tptval
+    err <- LO.matchPointsToValue opts sc cc ms MS.PostState md cond ptr tptval
     case err of
       Just msg -> do
         doc <- LO.ppPointsToAsLLVMVal opts cc sc ms pointsTo
         O.failure loc (O.BadPointerLoad (Right doc) msg)
       Nothing -> pure ()
-assertPointsTo env tyenv nameEnv pointsTo@(LLVMPointsToBitfield loc tptr fieldName tptval) = do
+assertPointsTo env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md tptr fieldName tptval) = do
   opts <- use x86Options
   sc <- use x86SharedContext
   cc <- use x86CrucibleContext
   ms <- use x86MethodSpec
+  let loc = MS.conditionLoc md
 
   (bfIndex, ptr) <- resolvePtrSetupValueBitfield env tyenv nameEnv tptr fieldName
   pure $ do
-    err <- LO.matchPointsToBitfieldValue opts sc cc ms MS.PostState loc ptr bfIndex tptval
+    err <- LO.matchPointsToBitfieldValue opts sc cc ms MS.PostState md ptr bfIndex tptval
     case err of
       Just msg -> do
         doc <- LO.ppPointsToAsLLVMVal opts cc sc ms pointsTo
@@ -1142,11 +1163,13 @@ checkGoals ::
   IsSymBackend Sym bak =>
   bak ->
   Options ->
+  String ->
   SharedContext ->
   ProofScript () ->
+  IORef MetadataMap {- ^ metadata map -} ->
   TopLevel (SolverStats, Set TheoremNonce)
-checkGoals bak opts sc tactic = do
-  gs <- liftIO $ getGoals (SomeBackend bak)
+checkGoals bak opts nm sc tactic mdMap = do
+  gs <- liftIO $ getGoals (SomeBackend bak) mdMap
   liftIO . printOutLn opts Info $ mconcat
     [ "Simulation finished, running solver on "
     , show $ length gs
@@ -1154,7 +1177,22 @@ checkGoals bak opts sc tactic = do
     ]
   outs <- forM (zip [0..] gs) $ \(n, g) -> do
     term <- liftIO $ gGoal sc g
-    let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
+    let md = gMd g
+    let ploc = MS.conditionLoc md
+    let gloc = (unwords [show (W4.plSourceLoc ploc)
+                       ,"in"
+                       , show (W4.plFunction ploc)]) ++
+               (if Prelude.null (MS.conditionContext md) then [] else
+                  "\n" ++ MS.conditionContext md)
+    let proofgoal = ProofGoal
+                    { goalNum  = n
+                    , goalType = MS.conditionType md
+                    , goalName = nm
+                    , goalLoc  = gloc
+                    , goalDesc = show $ gMessage g
+                    , goalProp = term
+                    , goalTags = MS.conditionTags md
+                    }
     res <- runProofScript tactic proofgoal (Just (gLoc g)) $ Text.unwords
               ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))]
     case res of

@@ -47,6 +47,23 @@
   required to provide a term that describes how the live variables in
   the loop evolve over an iteration.
 
+* A new experimental facility for "tagging" proof obligations in
+  specifications and later using those tags to make decisions
+  in proof tactics. See the new `llvm_setup_with_tag`,
+  `goal_has_tags`, and `goal_has_some_tag` commands.
+
+* A new experimental option (toggled via
+  `enable_single_override_special_case` and
+  `disable_single_override_special_case`) which changes the handling
+  for cases where an overriden function has only one override that
+  could possibly apply. When the special case handling is enabled,
+  preconditions for the override are asserted separately, maintaining
+  their individual metadata instead of being combined into a single
+  precondition for the entire override. This may be advantageous if
+  proving the individual goals is easier than the conjunction of all
+  of them, or if different tactics are needed for different subgoals.
+  Currently, this option only applies to LLVM verifications.
+
 # Version 0.9
 
 ## New Features

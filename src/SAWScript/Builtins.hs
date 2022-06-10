@@ -30,6 +30,7 @@ import Data.Monoid
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State
 import qualified Control.Exception as Ex
+import Data.Char (toLower)
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
@@ -70,6 +71,7 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.SATQuery
 import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
 import qualified Verifier.SAW.SCTypeCheck as TC (TypedTerm(..))
+import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
@@ -78,6 +80,7 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (prepareSATQuery, runManyTests)
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.Simulator.TermModel as TM
+import Verifier.SAW.Term.Pretty (SawDoc, renderSawDoc)
 
 import SAWScript.Position
 
@@ -116,6 +119,7 @@ import SAWScript.ImportAIG
 import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
 import SAWScript.Proof
+import SAWScript.Crucible.Common (PathSatSolver(..))
 import SAWScript.TopLevel
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
@@ -424,14 +428,44 @@ print_term_depth d t =
      output <- liftIO $ scShowTerm sc opts' t
      printOutLnTop Info output
 
+goalSummary :: ProofGoal -> String
+goalSummary goal = unlines $ concat
+  [ [ "Goal " ++ goalName goal ++ " (goal number " ++ (show $ goalNum goal) ++ "): " ++ goalType goal
+    , "at " ++ goalLoc goal
+    ]
+  , if Set.null (goalTags goal) then [] else
+      [ unwords ("Tags:" : map show (Set.toList (goalTags goal)))
+      ]
+  , if null (goalDesc goal) then [] else [ goalDesc goal ]
+  ]
+
+write_goal :: String -> ProofScript ()
+write_goal fp =
+  execTactic $ tacticId $ \goal ->
+  do opts <- getTopLevelPPOpts
+     sc <- getSharedContext
+     liftIO $ do
+       output <- liftIO (scShowTerm sc opts =<< propToTerm sc (goalProp goal))
+       writeFile fp (unlines [goalSummary goal, output])
+
 print_goal :: ProofScript ()
 print_goal =
   execTactic $ tacticId $ \goal ->
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
      output <- liftIO (scShowTerm sc opts =<< propToTerm sc (goalProp goal))
-     printOutLnTop Info ("Goal " ++ goalName goal ++ " (goal number " ++ (show $ goalNum goal) ++ "):")
+     printOutLnTop Info (goalSummary goal)
      printOutLnTop Info output
+
+print_goal_summary :: ProofScript ()
+print_goal_summary =
+  execTactic $ tacticId $ \goal ->
+    printOutLnTop Info (goalSummary goal)
+
+goal_num :: ProofScript Int
+goal_num =
+  execTactic $ tacticId $ \goal ->
+    return (goalNum goal)
 
 print_goal_depth :: Int -> ProofScript ()
 print_goal_depth n =
@@ -486,12 +520,14 @@ resolveName sc nm =
                 do resolvedName <- io $ scResolveNameByURI sc uri
                    case resolvedName of
                      Just vi -> pure $ vi:scnms
-                     Nothing -> pure scnms
-              _ -> pure scnms
-       Nothing -> pure scnms
+                     Nothing -> fallback scnms
+              _ -> fallback scnms
+       Nothing -> fallback scnms
 
  where
  tnm = Text.pack nm
+ fallback [] = fail $ "Could not resolve name: " <> show nm
+ fallback scnms = pure scnms
 
 
 normalize_term :: TypedTerm -> TopLevel TypedTerm
@@ -661,6 +697,20 @@ goal_when str script =
      case psGoals s of
        g : _ | str `isInfixOf` goalName g -> script
        _ -> return ()
+
+goal_has_tags :: [String] -> ProofScript Bool
+goal_has_tags tags =
+  do s <- get
+     case psGoals s of
+       g : _ | Set.isSubsetOf (Set.fromList tags) (goalTags g) -> return True
+       _ -> return False  
+
+goal_has_some_tag :: [String] -> ProofScript Bool
+goal_has_some_tag tags =
+  do s <- get
+     case psGoals s of
+       g : _ | not $ Set.disjoint (Set.fromList tags) (goalTags g) -> return True
+       _ -> return False  
 
 goal_num_ite :: Int -> ProofScript SV.Value -> ProofScript SV.Value -> ProofScript SV.Value
 goal_num_ite n s1 s2 =
@@ -915,7 +965,16 @@ provePrim script t = do
   io $ checkBooleanSchema (ttType t)
   sc <- getSharedContext
   prop <- io $ predicateToProp sc Universal (ttTerm t)
-  let goal = ProofGoal 0 "prove" "prove" prop
+  pos <- SV.getPosition
+  let goal = ProofGoal
+             { goalNum  = 0
+             , goalType = "prove"
+             , goalName = "prove_prim"
+             , goalLoc  = show pos
+             , goalDesc = ""
+             , goalProp = prop
+             , goalTags = mempty
+             }
   res <- SV.runProofScript script goal Nothing "prove_prim"
   case res of
     UnfinishedProof pst ->
@@ -925,15 +984,25 @@ provePrim script t = do
   return res
 
 proveHelper ::
+  String ->
   ProofScript () ->
   TypedTerm ->
   (Term -> TopLevel Prop) ->
   TopLevel Theorem
-proveHelper script t f = do
+proveHelper nm script t f = do
   prop <- f $ ttTerm t
-  let goal = ProofGoal 0 "prove" "prove" prop
+  pos <- SV.getPosition
+  let goal = ProofGoal
+             { goalNum = 0
+             , goalType = "prove"
+             , goalName = nm
+             , goalLoc  = show pos
+             , goalDesc = ""
+             , goalProp = prop
+             , goalTags = mempty
+             }
   opts <- rwPPOpts <$> getTopLevelRW
-  res <- SV.runProofScript script goal Nothing "prove_print_prim"
+  res <- SV.runProofScript script goal Nothing (Text.pack nm)
   let failProof pst =
          fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                           ++ SV.showsProofResult opts res ""
@@ -950,7 +1019,7 @@ provePrintPrim ::
   TopLevel Theorem
 provePrintPrim script t = do
   sc <- getSharedContext
-  proveHelper script t $ io . predicateToProp sc Universal
+  proveHelper "prove_print" script t $ io . predicateToProp sc Universal
 
 provePropPrim ::
   ProofScript () ->
@@ -958,7 +1027,7 @@ provePropPrim ::
   TopLevel Theorem
 provePropPrim script t = do
   sc <- getSharedContext
-  proveHelper script t $ io . termToProp sc
+  proveHelper "prove_extcore" script t $ io . termToProp sc
 
 satPrim ::
   ProofScript () ->
@@ -968,7 +1037,16 @@ satPrim script t =
   do io $ checkBooleanSchema (ttType t)
      sc <- getSharedContext
      prop <- io $ predicateToProp sc Existential (ttTerm t)
-     let goal = ProofGoal 0 "sat" "sat" prop
+     pos <- SV.getPosition
+     let goal = ProofGoal
+                { goalNum = 0
+                , goalType = "sat"
+                , goalName = "sat"
+                , goalLoc  = show pos
+                , goalDesc = ""
+                , goalProp = prop
+                , goalTags = mempty
+                }
      res <- SV.runProofScript script goal Nothing "sat"
      case res of
        InvalidProof stats cex _ -> return (SV.Sat stats cex)
@@ -1439,8 +1517,18 @@ prove_core script input =
   do sc <- getSharedContext
      t <- parseCore input
      p <- io (termToProp sc t)
+     pos <- SV.getPosition
      opts <- rwPPOpts <$> getTopLevelRW
-     res <- SV.runProofScript script (ProofGoal 0 "prove" "prove" p) Nothing "prove_core"
+     let goal = ProofGoal
+                { goalNum = 0
+                , goalType = "prove"
+                , goalName = "prove_core"
+                , goalLoc  = show pos
+                , goalDesc = ""
+                , goalProp = p
+                , goalTags = mempty
+                }
+     res <- SV.runProofScript script goal Nothing "prove_core"
      let failProof pst =
             fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                                   ++ SV.showsProofResult opts res ""
@@ -1593,18 +1681,100 @@ ensureMonadicTerm sc t
       False -> monadifyTypedTerm sc t
 ensureMonadicTerm sc t = monadifyTypedTerm sc t
 
--- | Run Mr Solver with the given debug level to prove that the first term
--- refines the second
-mrSolver :: SharedContext -> Int -> TypedTerm -> TypedTerm -> TopLevel Bool
-mrSolver sc dlvl t1 t2 =
-  do rw <- get
-     m1 <- ttTerm <$> ensureMonadicTerm sc t1
-     m2 <- ttTerm <$> ensureMonadicTerm sc t2
-     let env = rwMRSolverEnv rw
-     res <- liftIO $ Prover.askMRSolver sc dlvl env Nothing m1 m2
+-- | A wrapper for 'Prover.askMRSolver' from @MRSolver.hs@ which if the first
+-- argument is @Just str@, prints out @str@ followed by an abridged version
+-- of the refinement being asked
+askMRSolver :: Maybe SawDoc -> SharedContext -> TypedTerm -> TypedTerm ->
+               TopLevel (NominalDiffTime,
+                         Either Prover.MRFailure Prover.MRSolverResult)
+askMRSolver printStr sc t1 t2 =
+  do env <- rwMRSolverEnv <$> get
+     m1 <- collapseEta <$> ttTerm <$> ensureMonadicTerm sc t1
+     m2 <- collapseEta <$> ttTerm <$> ensureMonadicTerm sc t2
+     case printStr of
+       Nothing -> return ()
+       Just str -> printOutLnTop Info $ renderSawDoc defaultPPOpts $
+         "[MRSolver] " <> str <> ": " <> ppTmHead m1 <>
+                               " |= " <> ppTmHead m2
+     time1 <- liftIO getCurrentTime
+     res <- io $ Prover.askMRSolver sc env Nothing m1 m2
+     time2 <- liftIO getCurrentTime
+     return (diffUTCTime time2 time1, res)
+  where -- Turn a term of the form @\x1 ... xn -> f x1 ... xn@ into @f@
+        collapseEta :: Term -> Term
+        collapseEta (asLambdaList -> (lamVars,
+                     asApplyAll -> (t@(smallestFreeVar -> Nothing),
+                                    mapM asLocalVar -> Just argVars)))
+          | argVars == [(length lamVars - 1), (length lamVars - 2) .. 0] = t
+        collapseEta t = t
+        -- Pretty-print the name of the top-level function call, followed by
+        -- "..." if it is given any arguments, or just "..." if there is no
+        -- top-level call
+        ppTmHead :: Term -> SawDoc
+        ppTmHead (asLambdaList -> (_,
+                  asApplyAll -> (t@(
+                  Prover.asProjAll -> (
+                  Monadify.asTypedGlobalDef -> Just _, _)), args))) =
+          ppTerm defaultPPOpts t <> if length args > 0 then " ..." else ""
+        ppTmHead _ = "..."
+
+-- | Run Mr Solver to prove that the first term refines the second, adding
+-- any relevant 'Prover.FunAssump's to the 'Prover.MREnv' if the first argument
+-- is true and this can be done, or printing an error message and exiting if it
+-- cannot.
+mrSolverProve :: Bool -> SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
+mrSolverProve addToEnv sc t1 t2 =
+  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
+     let printStr = if addToEnv then "Proving" else "Testing"
+     (diff, res) <- askMRSolver (Just printStr) sc t1 t2
      case res of
-       Left err -> io (putStrLn $ Prover.showMRFailure err) >> return False
-       Right env' -> put (rw { rwMRSolverEnv = env' }) >> return True
+       Left err | dlvl == 0 ->
+         io (putStrLn $ Prover.showMRFailure err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         io (Exit.exitWith $ Exit.ExitFailure 1)
+       Left err ->
+         -- we ignore the MRFailure context here since it will have already
+         -- been printed by the debug trace
+         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         io (Exit.exitWith $ Exit.ExitFailure 1)
+       Right (Just (fnm, fassump)) | addToEnv ->
+         let assump_str = case Prover.fassumpRHS fassump of
+                            Prover.OpaqueFunAssump _ _ -> "an opaque"
+                            Prover.RewriteFunAssump _ -> "a rewrite" in
+         printOutLnTop Info (
+           printf "[MRSolver] Success in %s, added as %s assumption"
+                  (show diff) (assump_str :: String)) >>
+         modify (\rw -> rw { rwMRSolverEnv =
+           Prover.mrEnvAddFunAssump fnm fassump (rwMRSolverEnv rw) })
+       _ ->
+         printOutLnTop Info $ printf "[MRSolver] Success in %s" (show diff)
+
+-- | Run Mr Solver to prove that the first term refines the second, returning
+-- true iff this can be done. This function will not modify the 'Prover.MREnv'.
+mrSolverQuery :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel Bool
+mrSolverQuery sc t1 t2 =
+  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
+     (diff, res) <- askMRSolver (Just "Querying") sc t1 t2
+     case res of
+       Left _ | dlvl == 0 ->
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         return False
+       Left err ->
+         -- we ignore the MRFailure context here since it will have already
+         -- been printed by the debug trace
+         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         return False
+       Right _ ->
+         printOutLnTop Info (printf "[MRSolver] Success in %s" (show diff)) >>
+         return True
+
+-- | Set the debug level of the 'Prover.MREnv'
+mrSolverSetDebug :: Int -> TopLevel ()
+mrSolverSetDebug dlvl =
+  modify (\rw -> rw { rwMRSolverEnv =
+                        Prover.mrEnvSetDebugLevel dlvl (rwMRSolverEnv rw) })
 
 setMonadification :: SharedContext -> String -> String -> TopLevel ()
 setMonadification sc cry_str saw_str =
@@ -1682,6 +1852,13 @@ approxmc t = do
   case msg of
     [l] -> io $ putStrLn l
     _ -> fail $ "Garbled result from approxmc\n\n" ++ out
+
+set_path_sat_solver :: String -> TopLevel ()
+set_path_sat_solver nm =
+  case map toLower nm of
+    "z3"    -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Z3 })
+    "yices" -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Yices })
+    _ -> fail $ "Unknown path sat solver: " ++ show nm
 
 summarize_verification :: TopLevel ()
 summarize_verification =

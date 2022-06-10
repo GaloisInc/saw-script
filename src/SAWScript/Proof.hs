@@ -667,7 +667,10 @@ data ProofGoal =
   { goalNum  :: Int
   , goalType :: String
   , goalName :: String
+  , goalLoc  :: String
+  , goalDesc :: String
   , goalProp :: Prop
+  , goalTags :: Set String
   }
 
 
@@ -1199,12 +1202,12 @@ tacticApply sc thm = Tactic \goal ->
 -- | Attempt to simplify a goal by splitting it along conjunctions.  If successful,
 --   two subgoals will be produced, representing the two conjuncts to be proved.
 tacticSplit :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
-tacticSplit sc = Tactic \(ProofGoal num ty name prop) ->
-  liftIO (splitProp sc prop) >>= \case
+tacticSplit sc = Tactic \gl ->
+  liftIO (splitProp sc (goalProp gl)) >>= \case
     Nothing -> fail "split tactic failed: goal not a conjunction"
     Just (p1,p2) ->
-      do let g1 = ProofGoal num (ty ++ ".left")  name p1
-         let g2 = ProofGoal num (ty ++ ".right") name p2
+      do let g1 = gl{ goalType = goalType gl ++ ".left", goalProp = p1 }
+         let g2 = gl{ goalType = goalType gl ++ ".right", goalProp = p2 }
          return ((), mempty, [g1,g2], splitEvidence)
 
 -- | Attempt to solve a goal by recognizing it as a trivially true proposition.
@@ -1237,10 +1240,10 @@ tacticExact sc tm = Tactic \goal ->
 
 -- | Examine the given proof goal and potentially do some work with it,
 --   but do not alter the proof state.
-tacticId :: Monad m => (ProofGoal -> m ()) -> Tactic m ()
+tacticId :: Monad m => (ProofGoal -> m a) -> Tactic m a
 tacticId f = Tactic \gl ->
-  do lift (f gl)
-     return ((), mempty, [gl], passthroughEvidence)
+  do x <- lift (f gl)
+     return (x, mempty, [gl], passthroughEvidence)
 
 data SolveResult
   = SolveSuccess Evidence

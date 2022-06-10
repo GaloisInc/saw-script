@@ -156,14 +156,14 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
 
-      - if: matrix.ghc == '8.10.7' && needs.config.outputs.release == 'true'
+      - if: matrix.ghc == '8.10.7'
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME.tar.gz
 
-      - if: matrix.ghc == '8.10.7' && needs.config.outputs.release == 'true'
+      - if: matrix.ghc == '8.10.7'
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}

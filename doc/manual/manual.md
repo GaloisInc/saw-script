@@ -1886,7 +1886,7 @@ llvm_verify :
   String ->
   [CrucibleMethodSpec] ->
   Bool ->
-  CrucibleSetup () ->
+  LLVMSetup () ->
   ProofScript SatResult ->
   TopLevel CrucibleMethodSpec
 ~~~~
@@ -1915,7 +1915,7 @@ jvm_verify :
   TopLevel JVMMethodSpec
 ~~~~
 
-Now we describe how to construct a value of type `CrucibleSetup ()` (or
+Now we describe how to construct a value of type `LLVMSetup ()` (or
 `JVMSetup ()`).
 
 ## Structure of a Specification
@@ -1929,7 +1929,7 @@ A specifications for Crucible consists of three logical components:
 * A specification of the expected final value of the program state.
 
 These three portions of the specification are written in sequence within
-a `do` block of `CrucibleSetup` (or `JVMSetup`) type. The command
+a `do` block of `LLVMSetup` (or `JVMSetup`) type. The command
 `llvm_execute_func` (or `jvm_execute_func`) separates the
 specification of the initial state from the specification of the final
 state, and specifies the arguments to the function in terms of the
@@ -1946,7 +1946,7 @@ contain fresh variables. These are created in a specification with the
 `llvm_fresh_var` and `jvm_fresh_var` commands rather than
 `fresh_symbolic`.
 
-* `llvm_fresh_var : String -> LLVMType -> CrucibleSetup Term`
+* `llvm_fresh_var : String -> LLVMType -> LLVMSetup Term`
 
 * `jvm_fresh_var : String -> JavaType -> JVMSetup Term`
 
@@ -2022,14 +2022,14 @@ Once the initial state has been configured, the `llvm_execute_func`
 command specifies the parameters of the function being analyzed in terms
 of the state elements already configured.
 
-* `llvm_execute_func : [SetupValue] -> CrucibleSetup ()`
+* `llvm_execute_func : [SetupValue] -> LLVMSetup ()`
 
 ## Return Values
 
 To specify the value that should be returned by the function being
 verified use the `llvm_return` or `jvm_return` command.
 
-* `llvm_return : SetupValue -> CrucibleSetup ()`
+* `llvm_return : SetupValue -> LLVMSetup ()`
 * `jvm_return : JVMValue -> JVMSetup ()`
 
 ## A First Simple Example
@@ -2076,7 +2076,7 @@ and more complex systems than otherwise possible.
 The `llvm_verify` and `jvm_verify` functions return values of
 type `CrucibleMethodSpec` and `JVMMethodSpec`, respectively. These
 values are opaque objects that internally contain both the information
-provided in the associated `JVMSetup` or `CrucibleSetup` blocks and
+provided in the associated `JVMSetup` or `LLVMSetup` blocks and
 the results of the verification process.
 
 Any of these `MethodSpec` objects can be passed in via the third
@@ -2128,7 +2128,7 @@ point to allocated memory before they are called. The `llvm_alloc`
 command allows you to specify that a function expects a particular
 pointer to refer to an allocated region appropriate for a specific type.
 
-* `llvm_alloc : LLVMType -> CrucibleSetup SetupValue`
+* `llvm_alloc : LLVMType -> LLVMSetup SetupValue`
 
 This command returns a `SetupValue` consisting of a pointer to the
 allocated space, which can be used wherever a pointer-valued
@@ -2151,7 +2151,7 @@ In LLVM, it's also possible to construct fresh pointers that do not
 point to allocated memory (which can be useful for functions that
 manipulate pointers but not the values they point to):
 
-* `llvm_fresh_pointer : LLVMType -> CrucibleSetup SetupValue`
+* `llvm_fresh_pointer : LLVMType -> LLVMSetup SetupValue`
 
 The NULL pointer is called `llvm_null` in LLVM and `jvm_null` in
 JVM:
@@ -2161,7 +2161,7 @@ JVM:
 
 One final, slightly more obscure command is the following:
 
-* `llvm_alloc_readonly : LLVMType -> CrucibleSetup SetupValue`
+* `llvm_alloc_readonly : LLVMType -> LLVMSetup SetupValue`
 
 This works like `llvm_alloc` except that writes to the space
 allocated are forbidden. This can be useful for specifying that a
@@ -2181,7 +2181,7 @@ appropriate. In most cases, however, it's more useful to state that a
 pointer points to some specific (usually symbolic) value, which you can
 do with the `llvm_points_to` command.
 
-* `llvm_points_to : SetupValue -> SetupValue -> CrucibleSetup ()`
+* `llvm_points_to : SetupValue -> SetupValue -> LLVMSetup ()`
 takes two `SetupValue` arguments, the first of which must be a pointer,
 and states that the memory specified by that pointer should contain the
 value given in the second argument (which may be any type of
@@ -2196,7 +2196,7 @@ type as another through casts, it can be useful to specify that a
 pointer points to a value that does not agree with its static type.
 
 * `llvm_points_to_untyped : SetupValue -> SetupValue ->
-CrucibleSetup ()` works like `llvm_points_to` but omits type
+LLVMSetup ()` works like `llvm_points_to` but omits type
 checking. Rather than omitting type checking across the board, we
 introduced this additional function to make it clear when a type
 reinterpretation is intentional. As an alternative, one
@@ -2231,7 +2231,7 @@ of `llvm_fresh_var` and `llvm_elem` or `llvm_field` commands.
 However, the following function can simplify the common case
 where you want every element or field to have a fresh value.
 
-* `llvm_fresh_expanded_val : LLVMType -> CrucibleSetup SetupValue`
+* `llvm_fresh_expanded_val : LLVMType -> LLVMSetup SetupValue`
 
 The `llvm_struct_value` function normally creates a `struct` whose layout
 obeys the alignment rules of the platform specified in the LLVM file
@@ -2300,7 +2300,7 @@ special care is required to write SAW specifications involving bitfields. For
 this reason, there is a dedicated `llvm_points_to_bitfield` function for this
 purpose:
 
-* `llvm_points_to_bitfield : SetupValue -> String -> SetupValue -> CrucibleSetup ()`
+* `llvm_points_to_bitfield : SetupValue -> String -> SetupValue -> LLVMSetup ()`
 
 The type of `llvm_points_to_bitfield` is similar that of `llvm_points_to`,
 except that it takes the name of a field within a bitfield as an additional
@@ -2356,7 +2356,7 @@ them.
 Mutable global variables that are accessed in a function must first be allocated
 by calling `llvm_alloc_global` on the name of the global.
 
-* `llvm_alloc_global : String -> CrucibleSetup ()`
+* `llvm_alloc_global : String -> LLVMSetup ()`
 
 This ensures that all global variables that might influence the function are
 accounted for explicitly in the specification: if `llvm_alloc_global` is
@@ -2461,17 +2461,21 @@ rise to specific final conditions. For these cases, you can specify an
 arbitrary predicate as a precondition or post-condition, using any
 values in scope at the time.
 
-* `llvm_precond : Term -> CrucibleSetup ()`
-* `llvm_postcond : Term -> CrucibleSetup ()`
+* `llvm_precond : Term -> LLVMSetup ()`
+* `llvm_postcond : Term -> LLVMSetup ()`
+* `llvm_assert : Term -> LLVMSetup ()`
 * `jvm_precond : Term -> JVMSetup ()`
 * `jvm_postcond : Term -> JVMSetup ()`
+* `jvm_assert : Term -> JVMSetup ()`
 
-These two commands take `Term` arguments, and therefore cannot describe
-the values of pointers. The `llvm_equal` command states that two
-`SetupValue`s should be equal, and can be used in either the initial or
-the final state.
+These commands take `Term` arguments, and therefore cannot describe
+the values of pointers. The "assert" variants will work in either pre-
+or post-conditions, and are useful when defining helper functions
+that, e.g., state datastructure invariants that make sense in both
+phases.  The `llvm_equal` command states that two `SetupValue`s should
+be equal, and can be used in either the initial or the final state.
 
-* `llvm_equal : SetupValue -> SetupValue -> CrucibleSetup ()`
+* `llvm_equal : SetupValue -> SetupValue -> LLVMSetup ()`
 
 The use of `llvm_equal` can also sometimes lead to more efficient
 symbolic execution when the predicate of interest is an equality.
@@ -2487,7 +2491,7 @@ simulation of the function. To skip simulation altogether, one can use:
 
 ~~~
 llvm_unsafe_assume_spec :
-  LLVMModule -> String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec
+  LLVMModule -> String -> LLVMSetup () -> TopLevel CrucibleMethodSpec
 ~~~
 
 Or, in the experimental JVM implementation:
@@ -2634,7 +2638,7 @@ Ghost state variables do not initially have any particluar type, and can
 store data of any type. Given an existing ghost variable the following
 function can be used to specify its value:
 
-* `llvm_ghost_value : Ghost -> Term -> CrucibleSetup ()`
+* `llvm_ghost_value : Ghost -> Term -> LLVMSetup ()`
 
 Currently, this function can only be used for LLVM verification, though
 that will likely be generalized in the future. It can be used in either
@@ -2679,7 +2683,7 @@ above.
 #### Utility Functions
 
 We first define the function
-`alloc_init : LLVMType -> Term -> CrucibleSetup SetupValue`.
+`alloc_init : LLVMType -> Term -> LLVMSetup SetupValue`.
 
 `alloc_init ty v` returns a `SetupValue` consisting of a pointer to memory
 allocated and initialized to a value `v` of type `ty`. `alloc_init_readonly`
@@ -2702,7 +2706,7 @@ let alloc_init_readonly ty v = do {
 ~~~~
 
 We now define
-`ptr_to_fresh : String -> LLVMType -> CrucibleSetup (Term, SetupValue)`.
+`ptr_to_fresh : String -> LLVMType -> LLVMSetup (Term, SetupValue)`.
 
 `ptr_to_fresh n ty` returns a pair `(x, p)` consisting of a fresh symbolic
 variable `x` of type `ty` and a pointer `p` to it. `n` specifies the
@@ -2724,7 +2728,7 @@ let ptr_to_fresh_readonly n ty = do {
 ~~~~
 
 Finally, we define
-`oneptr_update_func : String -> LLVMType -> Term -> CrucibleSetup ()`.
+`oneptr_update_func : String -> LLVMType -> Term -> LLVMSetup ()`.
 
 `oneptr_update_func n ty f` specifies the behavior of a function that takes
 a single pointer (with a printable name given by `n`) to memory containing a
@@ -2753,7 +2757,7 @@ Cryptol implementation and it is asserted that the pointers do in fact point to
 these expected values.
 
 ~~~~
-let quarterround_setup : CrucibleSetup () = do {
+let quarterround_setup : LLVMSetup () = do {
     (y0, p0) <- ptr_to_fresh "y0" (llvm_int 32);
     (y1, p1) <- ptr_to_fresh "y1" (llvm_int 32);
     (y2, p2) <- ptr_to_fresh "y2" (llvm_int 32);

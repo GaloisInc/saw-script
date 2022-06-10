@@ -60,6 +60,7 @@ module Verifier.SAW.Recognizer
     -- * Prelude recognizers.
   , asBool
   , asBoolType
+  , asNatType
   , asIntegerType
   , asIntModType
   , asBitvectorType
@@ -356,6 +357,11 @@ asBool _ = Nothing
 
 asBoolType :: Recognizer Term ()
 asBoolType = isGlobalDef "Prelude.Bool"
+
+asNatType :: Recognizer Term ()
+asNatType (asDataType -> Just (o, []))
+  | primName o == preludeNatIdent = return ()
+asNatType _ = Nothing
 
 asIntegerType :: Recognizer Term ()
 asIntegerType = isGlobalDef "Prelude.Integer"

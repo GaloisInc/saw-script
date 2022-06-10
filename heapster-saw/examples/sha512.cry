@@ -73,14 +73,13 @@ round_00_15_spec i a b c d e f g h T1 =
 
 round_16_80_spec : [w] -> [w] ->
                    [w] -> [w] -> [w] -> [w] -> [w] -> [w] -> [w] -> [w] ->
-                   [16][w] ->
-                   [w] -> [w] -> [w] ->
+                   [16][w] -> [w] ->
                    ([w], [w], [w], [w], [w], [w], [w], [w], [16][w], [w], [w], [w])
-round_16_80_spec i j a b c d e f g h X s0 s1 T1 =
+round_16_80_spec i j a b c d e f g h X T1 =
   (a', b', c', d', e', f', g', h', X', s0', s1', T1'')
   where s0' = sigma_0 (X @ ((j + 1) && 15))
-        s1' = sigma_1 (X @ ((j +  4) && 15))
-        T1' = X @ (j && 15) + s0' + s1' + X @ ((j + 9) && 15)
+        s1' = sigma_1 (X @ ((j + 14) && 15))
+        T1' = (X @ (j && 15)) + s0' + s1' + (X @ ((j + 9) && 15))
         X' = update X (j && 15) T1'
         (a', b', c', d', e', f', g', h', T1'') =
           round_00_15_spec (i + j) a b c d e f g h T1'

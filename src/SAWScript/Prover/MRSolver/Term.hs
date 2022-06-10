@@ -177,16 +177,66 @@ isCompFunType sc t = scWhnf sc t >>= \case
   (asPiList -> (_, asCompM -> Just _)) -> return True
   _ -> return False
 
+
+----------------------------------------------------------------------
+-- * Useful 'Recognizer's for 'Term's
+----------------------------------------------------------------------
+
 -- | Recognize a 'Term' as an application of `bvToNat`
 asBvToNat :: Recognizer Term (Term, Term)
 asBvToNat (asApplyAll -> ((isGlobalDef "Prelude.bvToNat" -> Just ()),
                           [n, x])) = Just (n, x)
 asBvToNat _ = Nothing
 
+-- | Recognize a term as a @Left@ or @Right@
+asEither :: Recognizer Term (Either Term Term)
+asEither (asCtor -> Just (c, [_, _, x]))
+  | primName c == "Prelude.Left"  = return $ Left x
+  | primName c == "Prelude.Right" = return $ Right x
+asEither _ = Nothing
+
+-- | Recognize a term as a @TCNum n@ or @TCInf@
+asNum :: Recognizer Term (Either Term ())
+asNum (asCtor -> Just (c, [n]))
+  | primName c == "Cryptol.TCNum"  = return $ Left n
+asNum (asCtor -> Just (c, []))
+  | primName c == "Cryptol.TCInf"  = return $ Right ()
+asNum _ = Nothing
+
+-- | Recognize a term as being of the form @isFinite n@
+asIsFinite :: Recognizer Term Term
+asIsFinite (asApp -> Just (isGlobalDef "CryptolM.isFinite" -> Just (), n)) =
+  Just n
+asIsFinite _ = Nothing
+
+-- | Test if a 'Term' is a 'BVVec' type
+asBVVecType :: Recognizer Term (Term, Term, Term)
+asBVVecType (asApplyAll ->
+             (isGlobalDef "Prelude.Vec" -> Just _,
+              [(asApplyAll ->
+                (isGlobalDef "Prelude.bvToNat" -> Just _, [n, len])), a])) =
+  Just (n, len, a)
+asBVVecType _ = Nothing
+
+-- | Like 'asVectorType', but returns 'Nothing' if 'asBVVecType' returns 'Just'
+asNonBVVecVectorType :: Recognizer Term (Term, Term)
+asNonBVVecVectorType (asBVVecType -> Just _) = Nothing
+asNonBVVecVectorType t = asVectorType t
+
 
 ----------------------------------------------------------------------
 -- * Mr Solver Environments
 ----------------------------------------------------------------------
+
+-- | The right-hand-side of a 'FunAssump': either a 'FunName' and arguments, if
+-- it is an opaque 'FunAsump', or a 'NormComp', if it is a rewrite 'FunAssump'
+data FunAssumpRHS = OpaqueFunAssump FunName [Term]
+                  | RewriteFunAssump NormComp
+
+-- | Convert a 'FunAssumpRHS' to a 'NormComp'
+funAssumpRHSAsNormComp :: FunAssumpRHS -> NormComp
+funAssumpRHSAsNormComp (OpaqueFunAssump f args) = FunBind f args CompFunReturn
+funAssumpRHSAsNormComp (RewriteFunAssump rhs) = rhs
 
 -- | An assumption that a named function refines some specification. This has
 -- the form
@@ -204,7 +254,7 @@ data FunAssump = FunAssump {
   -- | The argument expressions @e1, ..., en@ over the 'fassumpCtx' uvars
   fassumpArgs :: [Term],
   -- | The right-hand side upper bound @m@ over the 'fassumpCtx' uvars
-  fassumpRHS :: NormComp
+  fassumpRHS :: FunAssumpRHS
 }
 
 -- | A map from function names to function refinement assumptions over that
@@ -217,17 +267,23 @@ type FunAssumps = Map FunName FunAssump
 data MREnv = MREnv {
   -- | The set of function refinements to be assumed by to Mr. Solver (which
   -- have hopefully been proved previously...)
-  mreFunAssumps :: FunAssumps
-  }
+  mreFunAssumps :: FunAssumps,
+  -- | The debug level, which controls debug printing
+  mreDebugLevel :: Int
+}
 
 -- | The empty 'MREnv'
 emptyMREnv :: MREnv
-emptyMREnv = MREnv { mreFunAssumps = Map.empty }
+emptyMREnv = MREnv { mreFunAssumps = Map.empty, mreDebugLevel = 0 }
 
 -- | Add a 'FunAssump' to a Mr Solver environment
 mrEnvAddFunAssump :: FunName -> FunAssump -> MREnv -> MREnv
 mrEnvAddFunAssump f fassump env =
   env { mreFunAssumps = Map.insert f fassump (mreFunAssumps env) }
+
+-- | Set the debug level of a Mr Solver environment
+mrEnvSetDebugLevel :: Int -> MREnv -> MREnv
+mrEnvSetDebugLevel dlvl env = env { mreDebugLevel = dlvl }
 
 
 ----------------------------------------------------------------------
@@ -392,6 +448,14 @@ instance PrettyInCtx MRVar where
 
 instance PrettyInCtx [Term] where
   prettyInCtx xs = list <$> mapM prettyInCtx xs
+
+instance PrettyInCtx a => PrettyInCtx (Maybe a) where
+  prettyInCtx (Just x) = (<+>) "Just" <$> prettyInCtx x
+  prettyInCtx Nothing = return "Nothing"
+
+instance (PrettyInCtx a, PrettyInCtx b) => PrettyInCtx (a,b) where
+  prettyInCtx (x, y) = (\x' y' -> parens (x' <> "," <> y')) <$> prettyInCtx x
+                                                            <*> prettyInCtx y
 
 instance PrettyInCtx TermProj where
   prettyInCtx TermProjLeft = return (pretty '.' <> "1")
