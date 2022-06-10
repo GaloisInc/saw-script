@@ -1,7 +1,13 @@
 
 # Rust-to-Heapster Translation
 
-FIXME: Rust translates to a subset of Heapster, as described in this document
+In this document, we describe the automated translation from Rust types to
+Heapster permissions. Because some of the details of how Rust types are laid out
+in memory are not explicitly defined by the Rust specification, some of this
+translation has been informed by experimentation with how Rust compiles various
+functions and types, so may not be entirely complete or accurate, but it so far
+seems to work in most cases.
+
 
 ## Translating Expression Types
 
@@ -111,10 +117,10 @@ An enumeration type like the above is translated to Heapster as follows:
 
 ```
 Name<a1,...,am,X1,...,Xn> =
-  (fieldsh(eq(0)) ; [| T1_1 |] ; ... ; [| T1_k1 |]) orsh
-  (fieldsh(eq(1)) ; [| T2_1 |] ; ... ; [| T2_k2 |]) orsh
+  (fieldsh(eq(llvmword(0))) ; [| T1_1 |] ; ... ; [| T1_k1 |]) orsh
+  (fieldsh(eq(llvmword(1))) ; [| T2_1 |] ; ... ; [| T2_k2 |]) orsh
   ...
-  (fieldsh(eq(l-1)) ; [| Tl_1 |] ; ... ; [| Tl_kl |])
+  (fieldsh(eq(llvmword(l-1))) ; [| Tl_1 |] ; ... ; [| Tl_kl |])
 ```
 
 (NOTE: Technically speaking, this translation assumes the enum has been
@@ -122,9 +128,41 @@ flagged with the `#[repr(C,u64)]` pragma to indicate that the discriminant is a
 64-bit integer and that the type is laid out in a C-compatible manner.)
 
 
-## Layout Optimizations
+## Niche Optimization
 
-FIXME: Option-like types
+As an optimization, Rust has one exception to the rules given above for enums
+that is called _niche optimization_. To define niche optimization, we first
+define the notion of an _option-like_ enum, which is an enum type that has one
+constructor with a field of some type `T` and one constructor with no fields.
+The type `T` is called the _payload_ of the option-like enum type. The primary
+example is the type `Option<T>`, defined (in the Rust standard library) as
+follows:
+
+```
+enum Option<X> { None, Some (X) }
+```
+
+A _niche_ in a type `T` is any bit pattern with the same size as `T` but that is
+disallowed by the shape requirements of `T`. For instance, the `Box` and
+reference pointer types in Rust are required to be non-null, so the null value
+is a niche for these types. Similarly, an enum type with `N` fields, numbered
+`0` through `N-1`, has a niche where the discriminant is set to the value `N`.
+
+The high-level idea of niche optimization is that the fieldless constructor of
+an option-like type can be represented by a niche value in its payload type.
+This reduces the size of the elements of this type by eliminating the need for
+its discriminant. Thus, for example, the `Option` Rust type is translated to the
+following cases:
+
+```
+Option<[a]ptr((rw,off) |-> p)> = eq(llvmword(0)) or [a]ptr((rw,off) |-> p)
+Option<(fieldsh(eq(llvmword(0)));sh0) orsh ... orsh (fieldsh(eq(llvmword(n)));shn)> =
+  (fieldsh(eq(llvmword(0)));sh0) orsh ... orsh (fieldsh(eq(llvmword(n)));shn)
+  orsh fieldsh(eq(llvmword(n+1)))
+Option<X> =
+  fieldsh(eq(llvmword(0))) orsh (fieldsh(eq(llvmword(1)));X)
+```
+
 
 ## Translating Function Types
 
