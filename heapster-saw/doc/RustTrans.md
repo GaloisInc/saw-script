@@ -299,16 +299,30 @@ The remaining complexity in translating function types to Heapster is in
 handling lifetimes. This works by adding lifetime ownership permissions to both
 the input and output permissions for each lifetime `'a` in the Rust function
 type, indicating that lifetime `'a` is active at the start of the function and
-when it returns. Recall that a lifetime ownership permission has the form
-`a:lowned (ps_in -o ps_out)`. This permission indicates that lifetime `'a`
+when it returns. The input lifetime ownership permission for `'a` says that each
+of the permissions mentioning lifetime `'a` has been borrowed from some other,
+larger lifetime that is outside of `'a`. The output lifetime ownership
+permission for `'a` says that these same permissions are still borrowed by `'a`
+from the same outer lifetimes, but that all of those permissions have been
+"given back" to `'a` except for those permissions in the output permissions that
+still mention `'a`.
+
+In more detail, recall that a lifetime ownership permission has the form
+`a:lowned (ps_in -o ps_out)`. This permission indicates that lifetime `a`
 "holds" or "contains" permissions `ps_out`, and is current "leasing out" or
-"lending" permissions `ps_in`. The input lifetime ownership permission for `'a`
-is constructed to indicate that `'a` is currently lending out all permissions in
-the input type that refer to `'a`, and that it holds versions of these
-permissions that are in some other, bigger lifetimes outside of `'a`. The output
-lifetime ownership permission for `'a` states that `'a` still holds the same
-permissions, but that it is only lending those permissions in the output
-permissions of the Heapster function type containing `'a`.
+"lending" permissions `ps_in`. Once all of the lent permissions `ps_in` are
+returned to lifetime `a`, that lifetime can be ended, and the permissions
+`ps_out` that it holds can be recovered. The input lifetime ownership permission
+used for `a` has the form `a:lowned (ps_a_in -o ps_a_abs)`, where `ps_a_in` is
+the list of all permissions containing `a` in the input of the translated Rust
+function type, and `ps_a_abs` is the result of replacing each occurrence of `a`
+and its accompanying read/write modality with fresh variables. (NOTE: the actual
+input lifetime ownership permission computed by Heapster is the simplified
+lifetime ownership permission `a:lowned(ps_a_abs)`, which is logically
+equivalent to the above but has a simpler translation.) The output
+lifetime ownership permission is `a:lowned (ps_a_out -o ps_a_abs)`, where
+`ps_a_out` is the list of all permissions containing `a` in the output of the
+translated Rust function type.
 
 For example, consider the accessor function
 
@@ -321,17 +335,45 @@ its first element. The translation of the type of `pair_proj1_ref`, which is the
 function type `<'a> fn (&mut 'a Pair64) -> &mut 'a u64`, is the Heapster type
 
 ```
-a:lowned(arg0:[a]ptr((W,0) |-> Pair64<>) -o arg0:[l]ptr((W,0) |-> Pair64<>)),
+a:lowned(arg0:[a]ptr((W,0) |-> Pair64<>) -o arg0:[l]ptr((rw,0) |-> Pair64<>)),
 arg0:[a]ptr((W,0) |-> Pair64<>)
 -o
-a:lowned(ret:[a]ptr((W,0) |-> int64<>) -o arg0:[l]ptr((W,0) |-> Pair64<>)),
+a:lowned(ret:[a]ptr((W,0) |-> int64<>) -o arg0:[l]ptr((rw,0) |-> Pair64<>)),
 ret:[a]ptr((W,0) |-> int64<>)
 ```
 
+The input permissions say that `arg0` is a writeable pointer to a `Pair64`
+structure, that is only valid while lifetime `a` is active. Further, the input
+lifetime ownership permission for `a` says that, when the function is called,
+`a` holds pointer permissions to `arg0` relative to some other lifetime `l`, and
+is currently lending pointer permissions to `arg0` relative to `a`. The output
+permissions say that the return value `ret` is a writeable pointer to a 64-bit
+integer that is relative to lifetime `a`. The output lifetime permission for `a`
+says that `a` holds the same pointer permission relative to lifetime `l` as on
+input, but is only lending out the pointer held by `ret`.
 
-FIXME: keep going...
+If a permission containing lifetime `a` is inside another permission, it is
+lifted to the top level by creating a ghost variable that holds that permission.
+For instance, the type `<'a> fn (Box<&'a u64>) -> u64` is translated to the
+Heapster type
 
-- More complex types containing references, such as Option<ref> out
+```
+a:lowned(z:[a]ptr((R,0) |-> int64<>) -o z:[l]ptr((rw,0) |-> int64<>)),
+arg0:ptr((W,0) |-> eq(z)), z:[a]ptr((R,0) |-> int64<>)
+-o
+a:lowned(empty -o z:[l]ptr((rw,0) |-> int64<>)),
+ret:int64<>
+```
+
+In this case, `z` is a ghost variable used to represent the pointer value
+pointed to by `arg0` for which a pointer permission in lifetime `a` is held. As
+before, the input lifetime ownership permission for `a` specifies that pointer
+permissions for `z` relative to some outer lifetime `l` are held by lifetime
+`a`, which is currently lending out a copy of those permissions relative to
+lifetime `a`. Since there are no occurrences of `a` in the output Rust type, the
+output lifetime ownership permission for `a` indicates that `a` is not lending
+any permissions on return from the function, indicated with the `empty`
+permissions list.
 
 
 ### Argument Layout
@@ -476,30 +518,61 @@ as follows:
 
 ### Adding Lifetime Permissions
 
-FIXME: explain the two steps, lifetime lifting and building the lifetime
-ownership permissions
+Adding lifetime permissions to the translation of a Rust function type is done
+in two steps. The first step, lifetime lifting, lifts permissions containing a
+lifetime to the top level. The second step constructs the required lifetime
+ownership permissions.
 
-The lifetime lifting function `LtLift(p)` maps a permission `p` to a lifted
-permission along with 0 or more fresh ghost variables with permissions on them.
-Intuitively, this operation finds permissions contained inside `p` that use any
-of the lifetime variables of a function type, and lift those permissions to
-permissions on fresh ghost variables. This allows the permission type for a
-function to refer to just those values inside a more complicated type that
-depend on a particular lifetime.
-
-FIXME: example
+For the first step, the lifetime lifting function `LtLift(p)` maps a permission
+`p` to a lifted permission along with 0 or more fresh ghost variables with
+permissions on them. Intuitively, this operation finds permissions contained
+inside `p` that use any of the lifetime variables of a function type, and lift
+those permissions to permissions on fresh ghost variables. This allows the
+permission type for a function to refer to just those values inside a more
+complicated type that depend on a particular lifetime.
 
 To define the lifetime lifting function, we first define the lifetime lifting
 contexts as follows:
 
 ```
 L ::= _ | [l]ptr((rw,off) |-> L) * p1 * ... * pn | [l]memblock(rw,off,len,Lsh) * p1 * ... * pn
-Lsh ::= _ | sh1;Lsh | Lsh;sh2 | fieldsh(L) | ptrsh(rw,l,Lsh)
+Lsh ::= sh1;Lsh | Lsh;sh2 | fieldsh(L) | ptrsh(rw,l,Lsh)
 ```
 
-FIXME: describe the process of lifting
+Each lifetime lifting context `L` is a permission with a single occurrence of a
+"hole" of the form `_`. Similarly, a lifetime lifting shape context `Lsh` is a
+shape containing a single occurrence of a hole inside one of its field
+permissions. We write `L[p]` and `Lsh[p]` for the result of replacing the hole
+`_` with `p` in `L` or `Lsh`, respectively. Intuitively, a hole describes an
+occurrence of a permission inside a larger permission or shape that can be
+lifted to a top-level ghost variable. Holes are only allowed inside a pointer
+permission or the shape of a block permission; specifically, they are not
+allowed inside disjunctive or array permissions, because there could be zero or
+multiple values corresponding to that permission, and lifetime lifting is only
+supposed to lift a single value.
 
-FIXME: explain the operation `LtPerms(a)(x:p)`, defined as follows:
+If any permission `p` can be written as `L[p']` for some `L` that is not the
+trivial context `_` and some `p'` containing a free lifetime variable, then we
+say that the permission `L[eq(z)]` along with the permission assignment `z:p'`
+for fresh ghost variable `z` is a _lifetime lifting_ of `p`. We then define the
+lifetime lifting function `LtLift(p)` from permission `p` to a permission plus
+a sequence of zero or more ghost variables with permissions as follows:
+
+* If `p` has a lifetime lifting `L[eq(z)]` and `z:p'` such that `p'` itself has
+  no lifetime lifting, then `LtLift(p)` returns `LtLift(L[eq(z)])` along with
+  `z:p'`;
+
+* Otherwise, `LtLift(p)` just returns `p` itself.
+
+The `LtLift()` function is then extended to lists of permissions
+`x1:p1,...,xn:pn` by applying it pointwise to the individual permissions `p1`
+through `pn`.
+
+
+For the second step of adding lifetime permissions to the translation of a Rust
+function type, we first define the operation `LtPerms(a)(x:p)` that finds all
+permissions containing lifetime `a` in the permission assignment `x:p`. This is
+defined as follows:
 
 * For conjunctions, the operation returns only those conjuncts that contain
   lifetime `a`, meaning that `LtPerms(a)(x:p1*...*pn)=x:p(i1)*...*p(ik)` where
@@ -515,13 +588,13 @@ function
 
 ```
 AddLt(a)(ps_in -o ps_out) =
-  let a_ps_in = absMods(a)(LtPerms(a)(ps_in)) in
-  a:lowned(a_ps_in), ps_in -o a:lowned(LtPerms(a)(ps_out) -o a_ps_in)
+  let ps_a_in = LtPerms(a)(ps_in) in
+  let ps_a_abs = absMods(a)(ps_a_in) in
+  a:lowned(ps_a_in -o ps_a_abs), ps_in -o a:lowned(LtPerms(a)(ps_out) -o a_ps_in)
 ```
 
-FIXME: explain the above; also define `absMods(a)(ps)` as the funciton that
-abstracts all the read/write and lifetime modalities in `ps`
-
+The function `absMods(a)(ps)` abstracts each occurrence of lifetime `a` and its
+associated read/write modality by instantiating them with fresh ghost variables.
 To add multiple lifetime permissions to a function type, we define
 
 ```
