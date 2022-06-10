@@ -24,14 +24,35 @@ type name `Name`, as defined in the next section.
 | Rust Type | Translation to a Heapster Shape |
 |--------|--------------------|
 | `Box<T>` | `ptr((W,0) \|-> [\| T \|])` |
-| `&mut 'a T` | `[a]ptr((W,0) \|-> [\| T \|])` |
-| `&'a T` | `[a]ptr((R,0) \|-> [\| T \|])` |
-| `[T]` | `exists n:bv 64. arraysh(n, len([\| T \|]), [\| T \|])` |
+| `&mut 'a [T]` | see below |
+| `&mut 'a T` | `[a]ptrsh(W,[\| T \|])` if `T` is not a DST |
+| `&'a [T]` | see below |
+| `&'a T` | `[a]ptrsh(R,[\| T \|])` if `T` is not a DST |
+| `[T;N]` | `arraysh(N, [\| T \|])` |
 | `(T1,...,Tn)` | `[\| T1 \|] ; ... ; [\| Tn \|]` |
 | `Name<'a1,...,'am,T1,...,Tn>` | `[\| Name \|] (a1, ..., am, [\| T1 \|], ..., [\| Tn \|])` |
 | `!` | `falsesh` |
 
-FIXME: describe the above
+
+Types of the form `&mut 'a [T]` and `&'a [T]` are treated specially in Rust,
+because these are references to a slice type `[T]` of unknown size. In Rust,
+types with unknown size are called _dynamically sized types_ or DSTs. These
+require special treatment in order to ensure that dereferences are always
+bounds-checked to be in the bounds of the slice. To make this possible,
+references to DSTs are always "fat pointers" that are a pointer value along with
+an integer value that says how many elements are in the slice pointed to by the
+pointer. Thus, the type `&mut 'a [T]` is translated as follows:
+
+```
+exsh n:bv 64.[a]ptrsh(W,arraysh(n,[| T |]));eq(llvmword(n))
+```
+
+This shape says there exists an `n` such that the first field in a memory block
+of this shape points to an array of `n` elements, each of which have shape
+`[| T |]`, while the second field is an LLVM word value equal to `n`. Read
+references `&'a [T]` to slices are translated similarly, but with read instead
+of write pointer shapes.
+
 
 
 ## Translating Type Definitions
@@ -137,10 +158,180 @@ level, this step can be seen as bridging the gap between Rust types, which
 describe blocks of memory, and LLVM types, which describe values. The second
 step is to add lifetime permissions. This step generates lifetime ownership
 permissions for each of the lifetime variables `'ai` in the Rust function type.
+The remainder of this section illustrates this translation process through some
+examples, and then defines each of the two function type translation steps in
+detail.
 
 
-FIXME: give some examples of how some simple Rust function types are translated
-to Heapster
+### How Function Types are Translated
+
+For function types with no lifetimes whose arguments and return values all fit
+into a single register (which we assume is 64-bits), the translation is
+straightforward. For example, consider the following `box_read` function, that
+reads a 64-bit unsigned value from a `Box` pointer:
+
+```
+fn box_read (p:Box<u64>) -> u64 { *p }
+```
+
+The type of `box_read` is `(Box<u64>) -> u64`, which translates to the Heapster
+function type
+
+```
+arg0:ptr((W,0) |-> exists z. eq(llvmword(z))) -o arg0:true, ret:exists z. eq(llvmword(z))
+```
+
+This type says that the first and only argument, `arg0`, is a pointer to an LLVM
+word value when the function is called. More specifically, the permission
+`exists z.eq(llvmword(z))` describes an LLVM value that is a word, or numeric,
+value, as opposed to a pointer value. Because it is so common, Heapster scripts
+often define the abbreviation `int64<>` for this permission, and we shall use
+this abbreviation in the remaining examples here. The return value `ret` for our
+example is also an LLVM word value. On return, no permissions are held on the
+`arg0` value, reflecting the fact that the `Box` pointer passed into `box_read`
+is deallocated by that function.
+
+If an argument type does not fit into a single register but does fit into two
+registers, Rust will lay it out across two argument values at the LLVM level.
+For example, let us define a struct type `Pair64` of pairs of 64-bit integers
+and a function `pair_proj1` to project out the first element of such a struct as
+follows:
+
+```
+struct Pair64 { proj1 : u64, proj2 : u64 }
+
+fn pair_proj1 (p:Pair64) -> u64 { p.1 }
+```
+
+The `Pair64` structure fits into two 64-bit registers, so the type of
+`pair_proj1` is translated to the Heapster type
+
+```
+arg0:int64<>, arg1:int64<> -o ret:int64<>
+```
+
+Note that, if the input or output permission on an argument is the vacuous
+permission `true`, it can be omitted, so the above permission states that no
+permissions are returned with the argument values `arg0` and `arg1`.
+
+If the return value fits into two registers, Rust returns it as a two-element
+structure, so, for instance, the Rust function type `fn (Pair64) -> Pair64`
+translates to the Heapster type
+
+```
+arg0:int64<>, arg1:int64<> -o struct(int64<>,int64<>)
+```
+
+Fieldless enums, which is the Rust name for enum types where none of the
+constructors has any fields, can be laid out in a single register for the
+discriminant. For enum types with fields, if all the fields of each constructor
+of an enum fit into a single register, then the entire enum is laid out as two
+registers, one for the discriminant and one for the field(s) of the
+corresponding constructor. This type is a little more complicated to represent
+in Heapster, because the disjunction for the enum must apply to multiple values
+at the same time. This is accomplished using a ghost variable of struct type,
+and stating the the individual arguments equal its projections. For example, if
+we define the enum
+
+```
+#[repr(C,u64)] pub enum Sum<X,Y> { Left (X), Right (Y) }
+```
+
+then the type `fn (Sum<(),u64>) -> u64` is translated as follows:
+
+```
+ghost:(struct(eq(llvmword(0)),true) or struct(eq(llvmword(1)),int64<>)),
+arg0:eq_proj(ghost,0), arg1:eq_proj(ghost,1)
+-o
+ret:int64<>
+```
+
+This type says that, on input, the first and second arguments are the first and
+second projections, respectively, of some struct given by a ghost variable
+`ghost`. The permissions on `ghost` say that either its first field equals `0`
+and its second field is unconstrained, corresponding to the `Left` constructor
+of the `Sum` type, or its first field equals `1` and its second field is a
+64-bit integer, corresponding to the `Right` constructor. As before, the output
+permissions are `int64<>` for the return value and no permissions for the input
+arguments.
+
+If the type of an argument does not fit into two registers, Rust passes it by
+pointer. That is, if an argument has a type `T` that does not fit into two
+registers, then it is treated as if it had type `Box<T>`. For example, if we
+define the struct type
+
+```
+struct Triple64 { triple1:u64, triple2:u64, triple3:u64 }
+```
+
+then the type `fn (Triple64) -> u64` is translated to
+
+```
+arg0:memblock(W,0,24,Triple64<>) -o ret:int64<>
+```
+
+where the named shape `Triple64<>` is defined as the sequence
+
+```
+fieldsh(int64<>);fieldsh(int64<>);fieldsh(int64<>)
+```
+
+of three field shapes containing 64-bit integers. The `memblock` input
+permission has size `24` because `Triple64<>` has three 8-byte fields, for a
+total size of 24 bytes.
+
+If the return value does not fit into two registers, its value is written to a
+pointer that is passed as the first argument. So, for instance, the function
+type `fn (Triple64) -> Triple64` is translated to
+
+```
+arg0:memblock(W,0,24,true), arg1:(W,0,24,Triple64<>) -o arg0:(W,0,24,Triple64<>)
+```
+
+This indicates that, on input, `arg0` points to a 24-byte memory block. The
+`true` shape indicates that this block can be uninitialized, i.e., that no
+constraints are made on its shape. The actual input argument of type `Triple64`
+is passed as `arg1`. On output, permissions to `arg1` are dropped, but
+permissions to `arg0` are changed to have the shape `Triple64<>` of the return
+type.
+
+The remaining complexity in translating function types to Heapster is in
+handling lifetimes. This works by adding lifetime ownership permissions to both
+the input and output permissions for each lifetime `'a` in the Rust function
+type, indicating that lifetime `'a` is active at the start of the function and
+when it returns. Recall that a lifetime ownership permission has the form
+`a:lowned (ps_in -o ps_out)`. This permission indicates that lifetime `'a`
+"holds" or "contains" permissions `ps_out`, and is current "leasing out" or
+"lending" permissions `ps_in`. The input lifetime ownership permission for `'a`
+is constructed to indicate that `'a` is currently lending out all permissions in
+the input type that refer to `'a`, and that it holds versions of these
+permissions that are in some other, bigger lifetimes outside of `'a`. The output
+lifetime ownership permission for `'a` states that `'a` still holds the same
+permissions, but that it is only lending those permissions in the output
+permissions of the Heapster function type containing `'a`.
+
+For example, consider the accessor function
+
+```
+fn <'a> pair_proj1_ref (p:&mut 'a Pair64) -> &mut 'a u64 { &mut p.1 }
+```
+
+that takes a mutable reference to a `Pair64` and returns a mutable reference to
+its first element. The translation of the type of `pair_proj1_ref`, which is the
+function type `<'a> fn (&mut 'a Pair64) -> &mut 'a u64`, is the Heapster type
+
+```
+a:lowned(arg0:[a]ptr((W,0) |-> Pair64<>) -o arg0:[l]ptr((W,0) |-> Pair64<>)),
+arg0:[a]ptr((W,0) |-> Pair64<>)
+-o
+a:lowned(ret:[a]ptr((W,0) |-> int64<>) -o arg0:[l]ptr((W,0) |-> Pair64<>)),
+ret:[a]ptr((W,0) |-> int64<>)
+```
+
+
+FIXME: keep going...
+
+- More complex types containing references, such as Option<ref> out
 
 
 ### Argument Layout
