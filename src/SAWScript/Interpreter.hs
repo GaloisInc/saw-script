@@ -3350,6 +3350,12 @@ primitives = Map.fromList
     , " be considered in future calls to Mr. Solver, and unlike both,"
     , " this command will never fail." ]
 
+  , prim "mr_solver_assume" "Term -> Term -> TopLevel Bool"
+    (scVal mrSolverAssume)
+    Experimental
+    [ "Add the refinement of the two given expressions as an assumption"
+    , " which will be used in future calls to Mr. Solver." ]
+
   , prim "mr_solver_set_debug_level" "Int -> TopLevel ()"
     (pureVal mrSolverSetDebug)
     Experimental
