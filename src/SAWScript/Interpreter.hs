@@ -1111,6 +1111,14 @@ primitives = Map.fromList
     Experimental
     [ "Apply Cryptol defaulting rules to the given term." ]
 
+  , prim "congruence_for" "Term -> TopLevel Term"
+    (pureVal congruence_for)
+    Experimental
+    [ "Given a term representing a (nondependent) function, attempt"
+    , "to automatically construct the statement of a congruence lemma"
+    , "for the function."
+    ]
+
   , prim "extract_uninterp" "[String] -> [String] -> Term -> TopLevel (Term, [(String,[(Term, Term)])])"
     (pureVal extract_uninterp)
     Experimental

@@ -72,6 +72,7 @@ import Verifier.SAW.SATQuery
 import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
 import qualified Verifier.SAW.SCTypeCheck as TC (TypedTerm(..))
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Prelude (scEq)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
@@ -634,6 +635,50 @@ extract_uninterp unints opaques tt =
              ] ++ (map ("  "++) vs))
 
      pure (tt', replList)
+
+
+congruence_for :: TypedTerm -> TopLevel TypedTerm
+congruence_for tt =
+  do sc <- getSharedContext
+     congTm <- io $ build_congruence sc (ttTerm tt)
+     io $ mkTypedTerm sc congTm
+
+build_congruence :: SharedContext -> Term -> IO Term
+build_congruence sc tm =
+  do ty <- scTypeOf sc tm
+     case asPiList ty of
+       ([],_) -> fail "congruence_for: Term is not a function"
+       (pis, body) ->
+         if looseVars body == emptyBitSet then
+           loop pis []
+         else
+           fail "congruence_for: cannot build congruence for dependent functions"
+ where
+  loop ((nm,tp):pis) vars =
+    if looseVars tp == emptyBitSet then
+      do l <- scFreshEC sc (nm <> "_1") tp
+         r <- scFreshEC sc (nm <> "_2") tp
+         loop pis ((l,r):vars)
+     else
+       fail "congruence_for: cannot build congruence for dependent functions"
+
+  loop [] vars =
+    do lvars <- mapM (scExtCns sc . fst) (reverse vars)
+       rvars <- mapM (scExtCns sc . snd) (reverse vars)
+       let allVars = concat [ [l,r] | (l,r) <- reverse vars ]
+
+       basel <- scApplyAll sc tm lvars
+       baser <- scApplyAll sc tm rvars
+       baseeq <- scEqTrue sc =<< scEq sc basel baser
+
+       let f x (l,r) =
+             do l' <- scExtCns sc l
+                r' <- scExtCns sc r
+                eq <- scEqTrue sc =<< scEq sc l' r'
+                scFun sc eq x
+       finalEq <- foldM f baseeq vars
+
+       scGeneralizeExts sc allVars finalEq
 
 
 filterCryTerms :: SharedContext -> [Term] -> IO [TypedTerm]
