@@ -986,11 +986,11 @@ provePrim script t = do
 proveHelper ::
   String ->
   ProofScript () ->
-  TypedTerm ->
+  Term ->
   (Term -> TopLevel Prop) ->
   TopLevel Theorem
 proveHelper nm script t f = do
-  prop <- f $ ttTerm t
+  prop <- f t
   pos <- SV.getPosition
   let goal = ProofGoal
              { goalNum = 0
@@ -1008,7 +1008,7 @@ proveHelper nm script t f = do
                           ++ SV.showsProofResult opts res ""
   case res of
     ValidProof _stats thm ->
-      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) $ ttTerm t)
+      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) t)
          SV.returnProof thm
     InvalidProof _stats _cex pst -> failProof pst
     UnfinishedProof pst -> failProof pst
@@ -1019,7 +1019,7 @@ provePrintPrim ::
   TopLevel Theorem
 provePrintPrim script t = do
   sc <- getSharedContext
-  proveHelper "prove_print" script t $ io . predicateToProp sc Universal
+  proveHelper "prove_print" script (ttTerm t) $ io . predicateToProp sc Universal
 
 provePropPrim ::
   ProofScript () ->
@@ -1027,7 +1027,7 @@ provePropPrim ::
   TopLevel Theorem
 provePropPrim script t = do
   sc <- getSharedContext
-  proveHelper "prove_extcore" script t $ io . termToProp sc
+  proveHelper "prove_extcore" script (ttTerm t) $ io . termToProp sc
 
 satPrim ::
   ProofScript () ->

@@ -4,7 +4,7 @@
 
 module SAWServer.Yosys where
 
-import Control.Lens (view)
+import Control.Lens (view, (%=))
 
 import Control.Monad (forM)
 import Control.Monad.IO.Class (liftIO)
@@ -14,12 +14,16 @@ import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.Text (Text)
 import qualified Data.Map as Map
 
+import Cryptol.Utils.Ident (mkIdent)
+
+import qualified Verifier.SAW.CryptolEnv as CEnv
+
 import qualified Argo
 import qualified Argo.Doc as Doc
 
 import CryptolServer.Data.Expression (Expression(..), getCryptolExpr)
 
-import SAWServer (SAWState, ServerName, YosysImport(..), sawTask, setServerVal, getYosysImport, getYosysTheorem)
+import SAWServer (SAWState, ServerName (ServerName), YosysImport(..), sawTask, setServerVal, getYosysImport, getYosysTheorem, getYosysSequential, sawTopLevelRW)
 import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
 import SAWServer.Exceptions (notAtTopLevel)
 import SAWServer.OK (OK, ok)
@@ -27,9 +31,7 @@ import SAWServer.ProofScript (ProofScript, interpretProofScript)
 import SAWServer.TopLevel (tl)
 
 import SAWScript.Value (getSharedContext, getTopLevelRW, rwCryptol)
-import SAWScript.Yosys (loadYosysIR, yosysIRToTypedTerms, yosys_verify)
-
--- newtype YosysModule = YosysModule (Map String ServerName)
+import SAWScript.Yosys (loadYosysIR, yosysIRToTypedTerms, yosys_verify, yosys_import_sequential, yosys_extract_sequential)
 
 data YosysImportParams = YosysImportParams
   { yosysImportPath :: FilePath
@@ -132,3 +134,77 @@ yosysVerify params = do
 yosysVerifyDescr :: Doc.Block
 yosysVerifyDescr =
   Doc.Paragraph [Doc.Text "Verify that the named HDL module meets its specification"]
+
+data YosysImportSequentialParams = YosysImportSequentialParams
+  { yosysImportSequentialModuleName :: Text
+  , yosysImportSequentialPath :: FilePath
+  , yosysImportSequentialServerName :: ServerName
+  }
+
+instance FromJSON YosysImportSequentialParams where
+  parseJSON = withObject "SAW/Yosys/import sequential params" $ \o -> do
+    yosysImportSequentialServerName <- o .: "name"
+    yosysImportSequentialPath <- o .: "path"
+    yosysImportSequentialModuleName <- o .: "module"
+    pure YosysImportSequentialParams{..}
+
+instance Doc.DescribedMethod YosysImportSequentialParams OK where
+  parameterFieldDescription =
+    [ ("name", Doc.Paragraph [Doc.Text "The name to refer to the record of Yosys modules by later."])
+    , ("path", Doc.Paragraph [Doc.Text "The path to the Yosys JSON file to import."])
+    , ("module", Doc.Paragraph [Doc.Text "The sequential module within the Yosys JSON file to analyze."])
+    ]
+  resultFieldDescription = []
+
+yosysImportSequential :: YosysImportSequentialParams -> Argo.Command SAWState OK
+yosysImportSequential params = do
+  tasks <- view sawTask <$> Argo.getState
+  case tasks of
+    (_:_) -> Argo.raise $ notAtTopLevel $ fst <$> tasks
+    [] -> do
+      s <- tl $ do
+        yosys_import_sequential (yosysImportSequentialModuleName params) (yosysImportSequentialPath params)
+      setServerVal (yosysImportSequentialServerName params) s
+      ok
+
+yosysImportSequentialDescr :: Doc.Block
+yosysImportSequentialDescr =
+  Doc.Paragraph [Doc.Text "Import a sequential circuit from a file produced by the Yosys \"write_json\" command"]
+
+data YosysExtractSequentialParams = YosysExtractSequentialParams
+  { yosysExtractSequentialModule :: ServerName
+  , yosysExtractSequentialCycles :: Integer
+  , yosysExtractSequentialServerName :: ServerName
+  }
+
+instance FromJSON YosysExtractSequentialParams where
+  parseJSON = withObject "SAW/Yosys/extract sequential params" $ \o -> do
+    yosysExtractSequentialServerName <- o .: "name"
+    yosysExtractSequentialModule <- o .: "module"
+    yosysExtractSequentialCycles <- o .: "cycles"
+    pure YosysExtractSequentialParams{..}
+
+instance Doc.DescribedMethod YosysExtractSequentialParams OK where
+  parameterFieldDescription =
+    [ ("name", Doc.Paragraph [Doc.Text "The name to refer extracted term by later."])
+    , ("cycles", Doc.Paragraph [Doc.Text "The number of cycles over which to iterate the term."])
+    , ("module", Doc.Paragraph [Doc.Text "The name of the sequential module to analyze."])
+    ]
+  resultFieldDescription = []
+
+yosysExtractSequential :: YosysExtractSequentialParams -> Argo.Command SAWState OK
+yosysExtractSequential params = do
+  tasks <- view sawTask <$> Argo.getState
+  case tasks of
+    (_:_) -> Argo.raise $ notAtTopLevel $ fst <$> tasks
+    [] -> do
+      m <- getYosysSequential $ yosysExtractSequentialModule params
+      s <- tl $ yosys_extract_sequential m (yosysExtractSequentialCycles params)
+      let sn@(ServerName n) = yosysExtractSequentialServerName params
+      sawTopLevelRW %= \rw -> rw { rwCryptol = CEnv.bindTypedTerm (mkIdent n, s) $ rwCryptol rw }
+      setServerVal sn s
+      ok
+
+yosysExtractSequentialDescr :: Doc.Block
+yosysExtractSequentialDescr =
+  Doc.Paragraph [Doc.Text "Extract a term from a sequential circuit"]

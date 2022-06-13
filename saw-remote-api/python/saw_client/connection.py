@@ -229,7 +229,7 @@ class SAWConnection:
             LLVMAssume(self, module, function, contract, lemma_name, timeout)
         return self.most_recent_result
 
-    def yosys_import(self, name: str, path: str, timeout : Optional[float] = None)  -> Command:
+    def yosys_import(self, name: str, path: str, timeout : Optional[float] = None) -> Command:
         self.most_recent_result = YosysImport(self, name, path, timeout)
         return self.most_recent_result
 
@@ -244,6 +244,14 @@ class SAWConnection:
                      timeout : Optional[float] = None) -> Command:
         self.most_recent_result = \
             YosysVerify(self, imp, module, preconds, spec, lemmas, script, lemma_name, timeout)
+        return self.most_recent_result
+
+    def yosys_import_sequential(self, name: str, path: str, module: str, timeout : Optional[float] = None) -> Command:
+        self.most_recent_result = YosysImportSequential(self, name, path, module, timeout)
+        return self.most_recent_result
+
+    def yosys_extract_sequential(self, name: str, module: str, cycles: int, timeout : Optional[float] = None) -> Command:
+        self.most_recent_result = YosysExtractSequential(self, name, module, cycles, timeout)
         return self.most_recent_result
 
     def prove(self,

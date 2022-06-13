@@ -55,6 +55,7 @@ import SAWScript.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
 import SAWScript.Proof (newTheoremDB)
 import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts, SAWSimpset)
+import SAWScript.Yosys.State (YosysSequential)
 import SAWScript.Yosys.Theorem (YosysTheorem)
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
@@ -63,6 +64,8 @@ import Verifier.SAW.Cryptol.Monadify (defaultMonEnv)
 import SAWScript.Prover.MRSolver (emptyMREnv)
 
 import qualified Argo
+--import qualified CryptolServer (validateServerState, ServerState(..))
+--import qualified CryptolServer (validateServerState, ServerState(..))
 --import qualified CryptolServer (validateServerState, ServerState(..))
 --import qualified CryptolServer (validateServerState, ServerState(..))
 import SAWServer.Exceptions
@@ -75,7 +78,7 @@ import SAWServer.Exceptions
       notAJVMClass,
       notAJVMMethodSpecIR,
       notAYosysImport,
-      notAYosysTheorem,
+      notAYosysTheorem, notAYosysSequential
     )
 
 type SAWCont = (SAWEnv, SAWTask)
@@ -316,6 +319,7 @@ data ServerVal
   | VGhostVar CMS.GhostGlobal
   | VYosysImport YosysImport
   | VYosysTheorem YosysTheorem
+  | VYosysSequential YosysSequential 
 
 instance Show ServerVal where
   show (VTerm t) = "(VTerm " ++ show t ++ ")"
@@ -331,6 +335,7 @@ instance Show ServerVal where
   show (VGhostVar x) = "(VGhostVar " ++ show x ++ ")"
   show (VYosysImport _) = "VYosysImport"
   show (VYosysTheorem _) = "VYosysTheorem"
+  show (VYosysSequential _) = "VYosysSequential"
 
 class IsServerVal a where
   toServerVal :: a -> ServerVal
@@ -364,6 +369,9 @@ instance IsServerVal YosysImport where
 
 instance IsServerVal YosysTheorem where
   toServerVal = VYosysTheorem
+
+instance IsServerVal YosysSequential where
+  toServerVal = VYosysSequential
 
 class KnownCrucibleSetupType a where
   knownCrucibleSetupRepr :: CrucibleSetupTypeRepr a
@@ -480,3 +488,10 @@ getYosysTheorem n =
      case v of
        VYosysTheorem t -> return t
        _other -> Argo.raise (notAYosysTheorem n)
+
+getYosysSequential :: ServerName -> Argo.Command SAWState YosysSequential
+getYosysSequential n =
+  do v <- getServerVal n
+     case v of
+       VYosysSequential t -> return t
+       _other -> Argo.raise (notAYosysSequential n)

@@ -59,6 +59,40 @@ class YosysVerify(SAWCommand):
     def process_result(self, res : Any) -> Any:
         return res
 
+class YosysImportSequential(SAWCommand):
+    def __init__(self,
+                 connection : argo.HasProtocolState,
+                 name : str,
+                 path : str,
+                 module : str,
+                 timeout : Optional[float]) -> None:
+        super(YosysImportSequential, self).__init__(
+            'SAW/Yosys/import sequential',
+            {'name': name, 'path': path, 'module': module},
+            connection,
+            timeout=timeout
+        )
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
+class YosysExtractSequential(SAWCommand):
+    def __init__(self,
+                 connection : argo.HasProtocolState,
+                 name : str,
+                 module : str,
+                 cycles : int,
+                 timeout : Optional[float]) -> None:
+        super(YosysExtractSequential, self).__init__(
+            'SAW/Yosys/extract sequential',
+            {'name': name, 'cycles': cycles, 'module': module},
+            connection,
+            timeout=timeout
+        )
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
 class CryptolLoadFile(SAWCommand):
     def __init__(self, connection : argo.HasProtocolState,
                  filename : str,

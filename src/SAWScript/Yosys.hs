@@ -29,7 +29,9 @@ import Control.Monad.IO.Class (MonadIO(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Graph as Graph
 
 import qualified Text.URI as URI
@@ -185,9 +187,9 @@ yosys_extract_sequential s n = do
 yosys_extract_sequential_raw :: YosysSequential -> TopLevel SC.TypedTerm
 yosys_extract_sequential_raw s = pure $ s ^. yosysSequentialTerm
 
-yosys_verify_sequential_sally :: YosysSequential -> FilePath -> SC.TypedTerm -> TopLevel ()
-yosys_verify_sequential_sally s path q = do
+yosys_verify_sequential_sally :: YosysSequential -> FilePath -> SC.TypedTerm -> [String] -> TopLevel ()
+yosys_verify_sequential_sally s path q fixed = do
   sc <- getSharedContext
   sym <- liftIO $ Common.newSAWCoreExprBuilder sc
   scs <- liftIO $ Common.sawCoreState sym
-  queryModelChecker sym scs sc s path q
+  queryModelChecker sym scs sc s path q . Set.fromList $ Text.pack <$> fixed

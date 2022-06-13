@@ -40,7 +40,11 @@ import SAWServer.ProofScript
     ( makeSimpsetDescr, makeSimpset, proveDescr, prove )
 import SAWServer.SaveTerm ( saveTermDescr, saveTerm )
 import SAWServer.SetOption ( setOptionDescr, setOption )
-import SAWServer.Yosys (yosysImportDescr, yosysImport, yosysVerifyDescr, yosysVerify)
+import SAWServer.Yosys
+    ( yosysImportDescr, yosysImport,
+      yosysVerifyDescr, yosysVerify,
+      yosysImportSequentialDescr, yosysImportSequential,
+      yosysExtractSequentialDescr, yosysExtractSequential )
 
 
 main :: IO ()
@@ -119,6 +123,14 @@ sawMethods =
      "SAW/Yosys/verify"
      yosysVerifyDescr
      yosysVerify
+  , Argo.command
+     "SAW/Yosys/import sequential"
+     yosysImportSequentialDescr
+     yosysImportSequential
+  , Argo.command
+     "SAW/Yosys/extract sequential"
+     yosysExtractSequentialDescr
+     yosysExtractSequential
   -- General
   , Argo.command
      "SAW/create ghost variable"
