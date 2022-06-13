@@ -2645,10 +2645,18 @@ orListDisjPerm (OrListDisj p) = p
 orListDisjs :: OrList ps a disjs -> [ValuePerm a]
 orListDisjs = RL.mapToList orListDisjPerm
 
+-- | Extract the disjuncts of an or elimination list in a binding
+mbOrListDisjs :: Mb ctx (OrList ps a disjs) -> [Mb ctx (ValuePerm a)]
+mbOrListDisjs = mbList . mbMapCl $(mkClosed [| orListDisjs |])
+
 -- | Compute the permission eliminated by an 'OrList'
 orListPerm :: OrList ps a disjs -> ValuePerm a
 orListPerm MNil = error "orListPerm: empty disjunct list!"
 orListPerm or_list = foldr1 ValPerm_Or $ orListDisjs or_list
+
+-- | Compute the permission-in-binding eliminated by an 'OrList' in a binding
+mbOrListPerm :: Mb ctx (OrList ps a disj) -> Mb ctx (ValuePerm a)
+mbOrListPerm = mbMapCl $(mkClosed [| orListPerm |])
 
 -- | Build an 'MbPermSets' 
 orListMbPermSets :: PermSet (ps :> a) -> ExprVar a -> OrList ps a disjs ->
@@ -2657,6 +2665,29 @@ orListMbPermSets _ _ MNil = MbPermSets_Nil
 orListMbPermSets ps x (or_list :>: OrListDisj p) =
   MbPermSets_Cons (orListMbPermSets ps x or_list) CruCtxNil $
   emptyMb $ set (topDistPerm x) p ps
+
+-- | If we have an 'MbPermImpls' list associated with a multi-way or
+-- elimination, extract out the list of 'PermImpl's it carries
+orListPermImpls :: OrList ps a disjs -> MbPermImpls r disjs ->
+                   [PermImpl r (ps :> a)]
+orListPermImpls MNil MbPermImpls_Nil = []
+orListPermImpls (or_list :>: OrListDisj _) (MbPermImpls_Cons
+                                            _ mb_impls mb_impl) =
+  orListPermImpls or_list mb_impls ++ [elimEmptyMb mb_impl]
+
+-- | Extract the 'PermImpl's-in-bindings from an 'MbPermImpls'-in-binding
+-- associated with a multi-way or elimination
+mbOrListPermImpls :: NuMatchingAny1 r => Mb ctx (OrList ps a disjs) ->
+                     Mb ctx (MbPermImpls r disjs) ->
+                     [Mb ctx (PermImpl r (ps :> a))]
+mbOrListPermImpls (mbMatch ->
+                   [nuMP| MNil |]) (mbMatch -> [nuMP| MbPermImpls_Nil |]) = []
+mbOrListPermImpls
+  (mbMatch -> [nuMP| mb_or_list :>: OrListDisj _ |])
+  (mbMatch -> [nuMP| MbPermImpls_Cons _ mb_impls mb_impl |])
+  = mbOrListPermImpls mb_or_list mb_impls ++ [mbMapCl
+                                              $(mkClosed [| elimEmptyMb |])
+                                              mb_impl]
 
 -- | Apply a single permission implication step to a permission set
 applyImpl1 :: HasCallStack => PPInfo -> PermImpl1 ps_in ps_outs ->
