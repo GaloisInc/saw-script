@@ -77,6 +77,74 @@ Proof.
   - apply H0; reflexivity.
 Qed.
 
+Lemma refinesM_eithers_nil_l {A} P eith :
+  SAWCorePrelude.eithers (CompM A) (SAWCorePrelude.FunsTo_Nil _) eith |= P.
+Proof.
+  apply SAWCorePrelude.efq; assumption.
+Qed.
+
+Lemma refinesM_eithers_nil_r {A} P eith :
+  P |= SAWCorePrelude.eithers (CompM A) (SAWCorePrelude.FunsTo_Nil _) eith.
+Proof.
+  apply SAWCorePrelude.efq; assumption.
+Qed.
+
+Lemma refinesM_eithers_one_l {A B} (f:A -> CompM B) eith P :
+  f eith |= P ->
+  SAWCorePrelude.eithers
+    (CompM B)
+    (SAWCorePrelude.FunsTo_Cons _ _ f (SAWCorePrelude.FunsTo_Nil _))
+    eith
+    |= P.
+Proof.
+  intro r; apply r.
+Qed.
+
+Lemma refinesM_eithers_one_r {A B} (f:A -> CompM B) eith P :
+  P |= f eith ->
+  P |=
+    SAWCorePrelude.eithers
+    (CompM B)
+    (SAWCorePrelude.FunsTo_Cons _ _ f (SAWCorePrelude.FunsTo_Nil _))
+    eith.
+Proof.
+  intro r; apply r.
+Qed.
+
+Lemma refinesM_eithers_cons_l
+      {A B C} (f:A -> CompM C) (g:B -> CompM C) elims eith P :
+  (forall a, eith = SAWCorePrelude.Left _ _ a -> f a |= P) ->
+  (forall eith',
+      eith = SAWCorePrelude.Right _ _ eith' ->
+      SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Cons _ _ g elims) eith' |= P) ->
+  SAWCorePrelude.eithers
+    (CompM C)
+    (SAWCorePrelude.FunsTo_Cons _ _ f (SAWCorePrelude.FunsTo_Cons _ _ g elims))
+    eith
+    |= P.
+Proof.
+  destruct eith; intros; simpl.
+  - apply H; reflexivity.
+  - apply H0; reflexivity.
+Qed.
+
+Lemma refinesM_eithers_cons_r
+      {A B C} (f:A -> CompM C) (g:B -> CompM C) elims eith P :
+  (forall a, eith = SAWCorePrelude.Left _ _ a -> P |= f a) ->
+  (forall eith',
+      eith = SAWCorePrelude.Right _ _ eith' ->
+      P |= SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Cons _ _ g elims) eith') ->
+  P |=
+  SAWCorePrelude.eithers
+    (CompM C)
+    (SAWCorePrelude.FunsTo_Cons _ _ f (SAWCorePrelude.FunsTo_Cons _ _ g elims))
+    eith.
+Proof.
+  destruct eith; intros; simpl.
+  - apply H; reflexivity.
+  - apply H0; reflexivity.
+Qed.
+
 Lemma refinesM_maybe_l {A B} (x : CompM B) (f : A -> CompM B) mb P :
   (mb = SAWCorePrelude.Nothing _ -> x |= P) ->
   (forall a, mb = SAWCorePrelude.Just _ a -> f a |= P) ->
@@ -114,11 +182,9 @@ Proof. rewrite returnM_if. trivial. Qed.
 Lemma returnM_injective : forall (A : Type) (x y : A),
     returnM (M:=CompM) x ~= returnM y -> x = y.
 Proof.
-  intros. unfold returnM in H. unfold MonadReturnOp_OptionT in H.
-  unfold eqM in H. unfold MonadEqOp_OptionT in H. unfold eqM in H. unfold MonadEqOp_SetM in H.
-  assert (Some x = Some y) as Hxy.
-  { rewrite H. reflexivity. }
-  inversion Hxy; subst. reflexivity.
+  intros. destruct (H (Some x)).
+  assert (Some y = Some x); [ apply H0; reflexivity | ].
+  inversion H2. reflexivity.
 Qed.
 
 
@@ -352,6 +418,59 @@ Hint Extern 1 (SAWCorePrelude.either _ _ _ _ _ _ |= _) =>
   simple apply refinesM_either_l_IntroArg : refinesM.
 Hint Extern 1 (_ |= SAWCorePrelude.either _ _ _ _ _ _) =>
   simple apply refinesM_either_r_IntroArg : refinesM.
+
+
+Definition refinesM_eithers_cons_l_IntroArg
+           {A B C} (f:A -> CompM C) (g:B -> CompM C) elims eith P :
+  (FreshIntroArg Any _ (fun a =>
+    FreshIntroArg Either (eith = SAWCorePrelude.Left _ _ a) (fun _ => f a |= P))) ->
+  (FreshIntroArg Any _ (fun eith' =>
+    FreshIntroArg Either (eith = SAWCorePrelude.Right _ _ eith')
+      (fun _ => SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Cons _ _ g elims) eith' |= P))) ->
+  SAWCorePrelude.eithers
+    (CompM C)
+    (SAWCorePrelude.FunsTo_Cons _ _ f (SAWCorePrelude.FunsTo_Cons _ _ g elims))
+    eith
+    |= P :=
+  refinesM_eithers_cons_l f g elims eith P.
+
+Definition refinesM_eithers_cons_r_IntroArg
+           {A B C} (f:A -> CompM C) (g:B -> CompM C) elims eith P :
+  (FreshIntroArg Any _ (fun a =>
+    FreshIntroArg Either (eith = SAWCorePrelude.Left _ _ a) (fun _ => P |= f a))) ->
+  (FreshIntroArg Any _ (fun eith' =>
+    FreshIntroArg Either (eith = SAWCorePrelude.Right _ _ eith')
+      (fun _ => P |= SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Cons _ _ g elims) eith'))) ->
+  P |=
+    SAWCorePrelude.eithers
+    (CompM C)
+    (SAWCorePrelude.FunsTo_Cons _ _ f (SAWCorePrelude.FunsTo_Cons _ _ g elims))
+    eith :=
+  refinesM_eithers_cons_r f g elims eith P.
+
+Hint Extern 1 (SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Nil _) |= _) =>
+  simple apply refinesM_eithers_nil_l : refinesM.
+Hint Extern 1 (_ |= SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Nil _)) =>
+  simple apply refinesM_eithers_nil_r : refinesM.
+Hint Extern 1 (SAWCorePrelude.eithers
+                 _ (SAWCorePrelude.FunsTo_Cons
+                      _ _ _ (SAWCorePrelude.FunsTo_Nil _)) |= _) =>
+  simple apply refinesM_eithers_one_l : refinesM.
+Hint Extern 1 (_ |= SAWCorePrelude.eithers
+                      _ (SAWCorePrelude.FunsTo_Cons
+                           _ _ _ (SAWCorePrelude.FunsTo_Nil _))) =>
+  simple apply refinesM_eithers_one_r : refinesM.
+Hint Extern 1 (SAWCorePrelude.eithers
+                 _ (SAWCorePrelude.FunsTo_Cons
+                      _ _ _ (SAWCorePrelude.FunsTo_Cons
+                               _ _ _ SAWCorePrelude.FunsTo_Nil _)) |= _) =>
+  simple apply refinesM_eithers_cons_l_IntroArg : refinesM.
+Hint Extern 1 (_ |= SAWCorePrelude.eithers
+                      _ (SAWCorePrelude.FunsTo_Cons
+                           _ _ _ (SAWCorePrelude.FunsTo_Cons
+                                    _ _ _ (SAWCorePrelude.FunsTo_Nil _)))) =>
+  simple apply refinesM_eithers_cons_r_IntroArg : refinesM.
+
 
 Definition refinesM_maybe_l_IntroArg {A B} (x : CompM B) (f : A -> CompM B) mb P :
   (FreshIntroArg Maybe (mb = SAWCorePrelude.Nothing _) (fun _ => x |= P)) ->

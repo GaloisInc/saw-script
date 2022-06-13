@@ -513,11 +513,17 @@ eithersElimTransM :: [TypeTrans tr_in] -> TypeTrans tr_out ->
                      [tr_in -> TransM info ctx OpenTerm] -> OpenTerm ->
                      TransM info ctx OpenTerm
 eithersElimTransM tps tp_ret fs eith =
-  do fs_transs <-
-       zipWithM (\tp f -> lambdaTupleTransM "x_eith_elim" tp f) tps fs
-     let tps_list = listSortOpenTerm $ map typeTransTupleType tps
-     return $ applyOpenTermMulti (globalOpenTerm "Prelude.eithers")
-       ([tps_list, typeTransTupleType tp_ret, eith] ++ fs_transs)
+  foldr (\(tp,f) restM ->
+          do f_trans <- lambdaTupleTransM "x_eith_elim" tp f
+             rest <- restM
+             return (ctorOpenTerm "Prelude.FunsTo_Cons"
+                     [typeTransTupleType tp_ret,
+                      typeTransTupleType tp, f_trans, rest]))
+  (return $ ctorOpenTerm "Prelude.FunsTo_Nil" [typeTransTupleType tp_ret])
+  (zip tps fs)
+  >>= \elims_trans ->
+  return (applyOpenTermMulti (globalOpenTerm "Prelude.eithers")
+          [typeTransTupleType tp_ret, elims_trans, eith])
 
 -- | Build the dependent pair type whose first projection type is the
 -- 'typeTransTupleType' of the supplied 'TypeTrans' and whose second projection
