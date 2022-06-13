@@ -1740,7 +1740,7 @@ primitives = Map.fromList
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
 
   , prim "w4_offline_smtlib2"  "String -> ProofScript ()"
-    (pureVal offline_smtlib2)
+    (pureVal w4_offline_smtlib2)
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
 
@@ -3349,6 +3349,12 @@ primitives = Map.fromList
     , " mr_solver_test - unlike the former, this refinement will not"
     , " be considered in future calls to Mr. Solver, and unlike both,"
     , " this command will never fail." ]
+
+  , prim "mr_solver_assume" "Term -> Term -> TopLevel Bool"
+    (scVal mrSolverAssume)
+    Experimental
+    [ "Add the refinement of the two given expressions as an assumption"
+    , " which will be used in future calls to Mr. Solver." ]
 
   , prim "mr_solver_set_debug_level" "Int -> TopLevel ()"
     (pureVal mrSolverSetDebug)
