@@ -1550,6 +1550,98 @@ listSortDrop = ListSort__rec (\ (_:ListSort) -> Nat -> ListSort)
 
 
 --------------------------------------------------------------------------------
+-- Nested Either types
+
+-- The false proposition
+FalseProp : Prop;
+FalseProp = Eq Bool True False;
+
+-- Ex Falso Quodlibet: if True = False then anything is possible
+efq : (a : sort 0) -> FalseProp -> a;
+efq a contra =
+  coerce
+    #() a
+    (trans
+     (sort 0) #() (ite (sort 0) True #() a) a
+     (sym (sort 0) (ite (sort 0) True #() a) #()
+           (ite_true (sort 0) #() a))
+     (trans
+      (sort 0) (ite (sort 0) True #() a) (ite (sort 0) False #() a) a
+      (eq_cong Bool True False contra (sort 0)
+               (\ (b:Bool) -> ite (sort 0) b #() a))
+      (ite_false (sort 0) #() a)
+      ))
+    ();
+
+-- Ex Falso Quodlibet at sort 1
+efq1 : (a : sort 1) -> Eq Bool True False -> a;
+efq1 a contra =
+  Eq__rec Bit Bit1
+          (\ (b:Bit) (_:Eq Bit Bit1 b) -> Bit#rec (\ (_:Bit) -> sort 1) #() a b)
+          () Bit0 (efq (Eq Bit Bit1 Bit0) contra);
+
+-- An if-then-else that tests if a ListSort is nil
+ifLSNil : (a : sort 1) -> ListSort -> a -> a -> a;
+ifLSNil a l x y =
+  ListSort__rec (\ (_:ListSort) -> a) x (\ (_:sort 0) (_:ListSort) (_:a) -> y) l;
+
+-- A right-nested sequence of Eithers, defined as
+--   Eithers [] = FalseProp
+--   Eithers [tp] = tp
+--   Eithers (tp:tps) = Either tp (Eithers tps)
+Eithers : ListSort -> sort 0;
+Eithers = ListSort__rec
+            (\ (_:ListSort) -> sort 0)
+            FalseProp
+            (\ (tp:sort 0) (tail:ListSort) (rec:sort 0) ->
+               ifLSNil (sort 0) tail tp (Either tp rec));
+
+-- Eliminate the outermost either of an Eithers of cons shape
+eithers1 : (tp:sort 0) -> (tps:ListSort) -> (a:sort 0) ->
+           Eithers (LS_Cons tp tps) -> (tp -> a) -> (Eithers tps -> a) -> a;
+eithers1 tp tps_in a =
+  ListSort__rec
+    (\ (tps:ListSort) ->
+       Eithers (LS_Cons tp tps) -> (tp -> a) -> (Eithers tps -> a) -> a)
+    (\ (eiths:tp) (f:tp -> a) (_:FalseProp -> a) -> f eiths)
+    (\ (tp2:sort 0) (tail:ListSort)
+       (_:Eithers (LS_Cons tp tail) -> (tp -> a) -> (Eithers tail -> a) -> a)
+       (eiths:Either tp (Eithers (LS_Cons tp2 tail)))
+       (f1:tp -> a) (f2:Eithers (LS_Cons tp2 tail) -> a) ->
+       either tp (Eithers (LS_Cons tp2 tail)) a f1 f2 eiths)
+    tps_in;
+
+-- The type of the eliminator for Eithers tp, which maps [tp1,...,tpn] a to
+-- (tp1 -> a) -> ... -> (tpn -> a) -> a
+eithersType : ListSort -> sort 0 -> sort 0;
+eithersType tps a =
+  ListSort__rec (\ (_:ListSort) -> sort 0)
+                a
+                (\ (tp:sort 0) (_:ListSort) (rec:sort 0) -> (tp -> a) -> rec)
+                tps;
+
+-- Lift an a to an eithersType tps a by building a constant function
+liftEithersType : (a:sort 0) -> (tps:ListSort) -> a -> eithersType tps a;
+liftEithersType a =
+  ListSort__rec (\ (tps:ListSort) -> a -> eithersType tps a)
+                (\ (x:a) -> x)
+                (\ (tp:sort 0) (tps:ListSort) (rec:a -> eithersType tps a)
+                   (x:a) (_:tp -> a) -> rec x);
+
+-- An eliminator for the Eithers type
+eithers : (tps:ListSort) -> (a:sort 0) -> Eithers tps -> eithersType tps a;
+eithers tps_top a =
+  ListSort__rec
+    (\ (tps:ListSort) -> Eithers tps -> eithersType tps a)
+    (\ (contra:FalseProp) -> efq a contra)
+    (\ (tp:sort 0) (tps:ListSort) (rec:Eithers tps -> eithersType tps a)
+       (eiths:Eithers (LS_Cons tp tps)) (f:tp -> a) ->
+       eithers1 tp tps (eithersType tps a) eiths
+                       (\ (x:tp) -> liftEithersType a tps (f x)) rec)
+    tps_top;
+
+
+--------------------------------------------------------------------------------
 -- Lists of 64-bit words (for testing Heapster)
 
 data W64List : sort 0 where {
@@ -1709,34 +1801,6 @@ genFromBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
                BVVec n len a -> a -> (m : Nat) -> Vec m a;
 genFromBVVec n len a v def m =
   gen m a (\ (i:Nat) -> atWithDefault (bvToNat n len) a def v i);
-
--- The false proposition
-FalseProp : Prop;
-FalseProp = Eq Bool True False;
-
--- Ex Falso Quodlibet: if True = False then anything is possible
-efq : (a : sort 0) -> FalseProp -> a;
-efq a contra =
-  coerce
-    #() a
-    (trans
-     (sort 0) #() (ite (sort 0) True #() a) a
-     (sym (sort 0) (ite (sort 0) True #() a) #()
-           (ite_true (sort 0) #() a))
-     (trans
-      (sort 0) (ite (sort 0) True #() a) (ite (sort 0) False #() a) a
-      (eq_cong Bool True False contra (sort 0)
-               (\ (b:Bool) -> ite (sort 0) b #() a))
-      (ite_false (sort 0) #() a)
-      ))
-    ();
-
--- Ex Falso Quodlibet at sort 1
-efq1 : (a : sort 1) -> Eq Bool True False -> a;
-efq1 a contra =
-  Eq__rec Bit Bit1
-          (\ (b:Bit) (_:Eq Bit Bit1 b) -> Bit#rec (\ (_:Bit) -> sort 1) #() a b)
-          () Bit0 (efq (Eq Bit Bit1 Bit0) contra);
 
 -- Generate an empty BVVec
 emptyBVVec : (n : Nat) -> (a : sort 0) -> BVVec n (bvNat n 0) a;
