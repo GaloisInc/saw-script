@@ -61,6 +61,10 @@ pub fn two_values_proj1 (x:TwoValues) -> u32 {
     }
 }
 
+pub fn two_values_proj1_ref <'a> (x:&'a mut TwoValues) -> &'a mut u32 {
+    &mut x.1
+}
+
 pub extern fn two_values_proj1_extern (x:TwoValues) -> u32 {
     match x {
         TwoValues(x1,_) => x1
@@ -211,6 +215,10 @@ impl Sum<u64,u64> {
     }
 }
 
+pub fn mk_sum_left_asym (x:u32) -> Sum<u32,u64> {
+    Sum::Left (x)
+}
+
 pub fn mk_string_sum_left (x:&str) -> Sum<String,u64> {
     Sum::Left (x.to_string())
 }
@@ -229,6 +237,14 @@ pub fn mk_sum_sum_left_asym (x:Sum<u32,u64>) -> Sum<Sum<u32,u64>,u64> {
 
 pub extern fn mk_sum_sum_left_asym_extern (x:Sum<u32,u64>) -> Sum<Sum<u32,u64>,u64> {
     Sum::Left (x)
+}
+
+
+pub fn elim_sum_u64_u64 (x:Sum<u64,u64>) -> u64 {
+    match x {
+        Sum::Left (x) => x,
+        Sum::Right (x) => x,
+    }
 }
 
 
@@ -343,6 +359,36 @@ impl fmt::Display for TrueEnum {
     }
 }
 
+
+/***
+ *** Pointers and References
+ ***/
+
+pub fn box_read (p:Box<u64>) -> u64 {
+    *p
+}
+
+
+/***
+ *** Slices and Arrays
+ ***/
+
+pub fn index_one_array (x:[u64; 1]) -> u64 {
+    x[0]
+}
+
+pub fn index_two_array (x:[u64; 2]) -> u64 {
+    x[0]
+}
+
+pub fn index_three_array (x:[u64; 3]) -> u64 {
+    x[0]
+}
+
+
+/***
+ *** Linked Lists
+ ***/
 
 /* A linked list */
 #[derive(Clone, Debug, PartialEq)]
