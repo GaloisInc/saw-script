@@ -448,27 +448,27 @@ Definition refinesM_eithers_cons_r_IntroArg
     eith :=
   refinesM_eithers_cons_r f g elims eith P.
 
-Hint Extern 1 (SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Nil _) |= _) =>
+Hint Extern 1 (SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Nil _) _ |= _) =>
   simple apply refinesM_eithers_nil_l : refinesM.
-Hint Extern 1 (_ |= SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Nil _)) =>
+Hint Extern 1 (_ |= SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Nil _) _) =>
   simple apply refinesM_eithers_nil_r : refinesM.
 Hint Extern 1 (SAWCorePrelude.eithers
                  _ (SAWCorePrelude.FunsTo_Cons
-                      _ _ _ (SAWCorePrelude.FunsTo_Nil _)) |= _) =>
+                      _ _ _ (SAWCorePrelude.FunsTo_Nil _)) _ |= _) =>
   simple apply refinesM_eithers_one_l : refinesM.
 Hint Extern 1 (_ |= SAWCorePrelude.eithers
                       _ (SAWCorePrelude.FunsTo_Cons
-                           _ _ _ (SAWCorePrelude.FunsTo_Nil _))) =>
+                           _ _ _ (SAWCorePrelude.FunsTo_Nil _)) _) =>
   simple apply refinesM_eithers_one_r : refinesM.
 Hint Extern 1 (SAWCorePrelude.eithers
                  _ (SAWCorePrelude.FunsTo_Cons
                       _ _ _ (SAWCorePrelude.FunsTo_Cons
-                               _ _ _ SAWCorePrelude.FunsTo_Nil _)) |= _) =>
+                               _ _ _ (SAWCorePrelude.FunsTo_Nil _))) _ |= _) =>
   simple apply refinesM_eithers_cons_l_IntroArg : refinesM.
 Hint Extern 1 (_ |= SAWCorePrelude.eithers
                       _ (SAWCorePrelude.FunsTo_Cons
                            _ _ _ (SAWCorePrelude.FunsTo_Cons
-                                    _ _ _ (SAWCorePrelude.FunsTo_Nil _)))) =>
+                                    _ _ _ (SAWCorePrelude.FunsTo_Nil _))) _) =>
   simple apply refinesM_eithers_cons_r_IntroArg : refinesM.
 
 
