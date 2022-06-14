@@ -460,12 +460,12 @@ Hint Extern 1 (_ |= SAWCorePrelude.eithers
                       _ (SAWCorePrelude.FunsTo_Cons
                            _ _ _ (SAWCorePrelude.FunsTo_Nil _)) _) =>
   simple apply refinesM_eithers_one_r : refinesM.
-Hint Extern 1 (SAWCorePrelude.eithers
+Hint Extern 2 (SAWCorePrelude.eithers
                  _ (SAWCorePrelude.FunsTo_Cons
                       _ _ _ (SAWCorePrelude.FunsTo_Cons
                                _ _ _ (SAWCorePrelude.FunsTo_Nil _))) _ |= _) =>
   simple apply refinesM_eithers_cons_l_IntroArg : refinesM.
-Hint Extern 1 (_ |= SAWCorePrelude.eithers
+Hint Extern 2 (_ |= SAWCorePrelude.eithers
                       _ (SAWCorePrelude.FunsTo_Cons
                            _ _ _ (SAWCorePrelude.FunsTo_Cons
                                     _ _ _ (SAWCorePrelude.FunsTo_Nil _))) _) =>
@@ -483,9 +483,9 @@ Definition refinesM_maybe_r_IntroArg {A B} (x : CompM B) (f : A -> CompM B) mb P
     FreshIntroArg Maybe (mb = SAWCorePrelude.Just _ a) (fun _ => P |= f a))) ->
   P |= SAWCorePrelude.maybe _ _ x f mb := refinesM_maybe_r x f mb P.
 
-Hint Extern 1 (SAWCorePrelude.maybe _ _ _ _ _ |= _) =>
+Hint Extern 2 (SAWCorePrelude.maybe _ _ _ _ _ |= _) =>
   simple apply refinesM_maybe_l_IntroArg : refinesM.
-Hint Extern 1 (_ |= SAWCorePrelude.maybe _ _ _ _ _) =>
+Hint Extern 2 (_ |= SAWCorePrelude.maybe _ _ _ _ _) =>
   simple apply refinesM_maybe_r_IntroArg : refinesM.
 
 Definition refinesM_sigT_rect_l_IntroArg {A1 A2 B} F P (s: {x:A1 & A2 x}) :
@@ -498,9 +498,9 @@ Definition refinesM_sigT_rect_r_IntroArg {A1 A2 B} F P (s: {x:A1 & A2 x}) :
     FreshIntroArg SigT (s = existT _ a1 a2) (fun _ => P |= F a1 a2)))) ->
   P |= sigT_rect (fun _ => CompM B) F s := refinesM_sigT_rect_r F P s.
 
-Hint Extern 1 (sigT_rect (fun _ => CompM _) _ _ |= _) =>
+Hint Extern 2 (sigT_rect (fun _ => CompM _) _ _ |= _) =>
   simple apply refinesM_sigT_rect_l_IntroArg : refinesM.
-Hint Extern 1 (_ |= sigT_rect (fun _ => CompM _) _ _) =>
+Hint Extern 2 (_ |= sigT_rect (fun _ => CompM _) _ _) =>
   simple apply refinesM_sigT_rect_r_IntroArg : refinesM.
 
 Definition refinesM_if_l_IntroArg {A} (m1 m2:CompM A) b P :
@@ -512,9 +512,9 @@ Definition refinesM_if_r_IntroArg {A} (m1 m2:CompM A) b P :
   (FreshIntroArg If (b = false) (fun _ => P |= m2)) ->
   P |= (if b then m1 else m2) := refinesM_if_r m1 m2 b P.
 
-Hint Extern 1 ((if _ then _ else _) |= _) =>
+Hint Extern 2 ((if _ then _ else _) |= _) =>
   apply refinesM_if_l_IntroArg : refinesM.
-Hint Extern 1 (_ |= (if _ then _ else _)) =>
+Hint Extern 2 (_ |= (if _ then _ else _)) =>
   apply refinesM_if_r_IntroArg : refinesM.
 
 Hint Extern 1 (returnM (if _ then _ else _) |= _) =>
@@ -534,9 +534,9 @@ Hint Extern 1 (assertM _ >> _ |= _) =>
 Hint Extern 1 (_ |= assumingM _ _) =>
   simple eapply refinesM_assumingM_r_IntroArg : refinesM.
 
-Hint Extern 2 (_ |= assertM _ >> _) =>
+Hint Extern 3 (_ |= assertM _ >> _) =>
   simple eapply refinesM_bindM_assertM_r; shelve : refinesM.
-Hint Extern 2 (assumingM _ _ |= _) =>
+Hint Extern 3 (assumingM _ _ |= _) =>
   simple eapply refinesM_assumingM_l; shelve : refinesM.
 
 Definition refinesM_existsM_l_IntroArg A B (P: A -> CompM B) Q :
@@ -546,21 +546,21 @@ Definition refinesM_forallM_r_IntroArg {A B} P (Q: A -> CompM B) :
   (FreshIntroArg Forall _ (fun a => P |= (Q a))) -> P |= (forallM Q) :=
   refinesM_forallM_r P Q.
 
-Hint Extern 2 (existsM _ |= _) =>
+Hint Extern 3 (existsM _ |= _) =>
   simple apply refinesM_existsM_l_IntroArg : refinesM.
-Hint Extern 2 (_ |= forallM _) =>
+Hint Extern 3 (_ |= forallM _) =>
   simple apply refinesM_forallM_r_IntroArg : refinesM.
 
-Hint Extern 3 (_ |= existsM _) =>
+Hint Extern 4 (_ |= existsM _) =>
   simple eapply refinesM_existsM_r; shelve : refinesM.
-Hint Extern 3 (forallM _ |= _) =>
+Hint Extern 4 (forallM _ |= _) =>
   simple eapply refinesM_forallM_l; shelve : refinesM.
 
-Hint Extern 3 (returnM _ |= returnM _) =>
+Hint Extern 4 (returnM _ |= returnM _) =>
   apply refinesM_returnM; (reflexivity || shelve) : refinesM.
 
-Hint Extern 1 (orM _ _ |= _) => simple apply refinesM_orM_l : refinesM.
-Hint Extern 1 (_ |= andM _ _) => simple apply refinesM_andM_r : refinesM.
+Hint Extern 2 (orM _ _ |= _) => simple apply refinesM_orM_l : refinesM.
+Hint Extern 2 (_ |= andM _ _) => simple apply refinesM_andM_r : refinesM.
 (* Note: For the moment, we don't automatically apply refinesM_orM_r or
    refinesM_andM_l - use continue_prove_refinement_left and
    continue_prove_refinement_right. *)
