@@ -1192,14 +1192,16 @@ data SimplImpl ps_in ps_out where
     LLVMBlockPerm w -> PermExpr (LLVMShapeType w) ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
-  -- | Eliminate a block of shape @sh1 orsh sh2@ to a disjunction, where the
-  -- supplied 'LLVMBlockPerm' gives @sh1@ and the additional argument is @sh2@::
+  -- | Eliminate a block of shape @sh1 orsh (sh2 orsh (... orsh shn))@ to an
+  -- n-way disjunctive permission, where the shape of the supplied
+  -- 'LLVMBlockPerm' is ignored, and is replaced by the list of shapes, which
+  -- must be non-empty:
   --
-  -- > x:memblock(rw,l,off,len,sh1 orsh sh2)
-  -- >   -o x:memblock(rw,l,off,len,sh1) or memblock(rw,l,off,len,sh2)
+  -- > x:memblock(rw,l,off,len,sh1 orsh (... orsh shn))
+  -- >   -o x:memblock(rw,l,off,len,sh1) or (... or memblock(rw,l,off,len,shn))
   SImpl_ElimLLVMBlockOr ::
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
-    LLVMBlockPerm w -> PermExpr (LLVMShapeType w) ->
+    LLVMBlockPerm w -> [PermExpr (LLVMShapeType w)] ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
   -- | Prove a block of shape @exsh z:A.sh@ from an existential:
@@ -2145,10 +2147,9 @@ simplImplIn (SImpl_IntroLLVMBlockOr x bp1 sh2) =
   distPerms1 x (ValPerm_Or
                 (ValPerm_Conj1 $ Perm_LLVMBlock bp1)
                 (ValPerm_Conj1 $ Perm_LLVMBlock $ bp1 { llvmBlockShape = sh2 }))
-simplImplIn (SImpl_ElimLLVMBlockOr x bp1 sh2) =
-  let sh1 = llvmBlockShape bp1 in
+simplImplIn (SImpl_ElimLLVMBlockOr x bp shs) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
-                bp1 { llvmBlockShape = PExpr_OrShape sh1 sh2 })
+                bp { llvmBlockShape = foldr1 PExpr_OrShape shs })
 simplImplIn (SImpl_IntroLLVMBlockEx x bp) =
   case llvmBlockShape bp of
     PExpr_ExShape mb_sh ->
@@ -2544,10 +2545,10 @@ simplImplOut (SImpl_IntroLLVMBlockOr x bp1 sh2) =
   let sh1 = llvmBlockShape bp1 in
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
                 bp1 { llvmBlockShape = PExpr_OrShape sh1 sh2 })
-simplImplOut (SImpl_ElimLLVMBlockOr x bp1 sh2) =
-  distPerms1 x (ValPerm_Or
-                (ValPerm_Conj1 $ Perm_LLVMBlock bp1)
-                (ValPerm_Conj1 $ Perm_LLVMBlock $ bp1 { llvmBlockShape = sh2 }))
+simplImplOut (SImpl_ElimLLVMBlockOr x bp shs) =
+  distPerms1 x $
+  foldr1 ValPerm_Or $
+  map (\sh -> ValPerm_Conj1 $ Perm_LLVMBlock $ bp { llvmBlockShape = sh }) shs
 simplImplOut (SImpl_IntroLLVMBlockEx x bp) =
   distPerms1 x (ValPerm_LLVMBlock bp)
 simplImplOut (SImpl_ElimLLVMBlockEx x bp) =
@@ -3130,8 +3131,8 @@ instance SubstVar PermVarSubst m =>
     [nuMP| SImpl_IntroLLVMBlockOr x bp1 sh2 |] ->
       SImpl_IntroLLVMBlockOr <$> genSubst s x <*> genSubst s bp1
                              <*> genSubst s sh2
-    [nuMP| SImpl_ElimLLVMBlockOr x bp1 sh2 |] ->
-      SImpl_ElimLLVMBlockOr <$> genSubst s x <*> genSubst s bp1 <*> genSubst s sh2
+    [nuMP| SImpl_ElimLLVMBlockOr x bp shs |] ->
+      SImpl_ElimLLVMBlockOr <$> genSubst s x <*> genSubst s bp <*> genSubst s shs
     [nuMP| SImpl_IntroLLVMBlockEx x bp |] ->
       SImpl_IntroLLVMBlockEx <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_ElimLLVMBlockEx x bp |] ->
@@ -5442,8 +5443,8 @@ implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
 
 -- For an or shape, eliminate to a disjunctive permisison
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
-                                        PExpr_OrShape sh1 sh2 }) =
-  implSimplM Proxy (SImpl_ElimLLVMBlockOr x (bp { llvmBlockShape = sh1 }) sh2)
+                                        PExpr_OrShape sh1 (matchOrShapes -> shs) }) =
+  implSimplM Proxy (SImpl_ElimLLVMBlockOr x bp (sh1:shs))
 
 -- For an existential shape, eliminate to an existential permisison
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
@@ -5460,6 +5461,11 @@ implElimLLVMBlock _ bp =
                     permPretty i (Perm_LLVMBlock bp)) >>>=
   implFailM
 
+-- | Destruct a shape @sh1 orsh (sh2 orsh (... orsh shn))@ that is a
+-- right-nested disjunctive shape into the list @[sh1,...,shn]@ of disjuncts
+matchOrShapes :: PermExpr (LLVMShapeType w) -> [PermExpr (LLVMShapeType w)]
+matchOrShapes (PExpr_OrShape sh1 (matchOrShapes -> shs)) = sh1 : shs
+matchOrShapes sh = [sh]
 
 -- | Assume the top of the stack contains @x:ps@, which are all the permissions
 -- for @x@. Extract the @i@th conjuct from @ps@, which should be a @memblock@
