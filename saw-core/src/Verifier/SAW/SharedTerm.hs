@@ -212,6 +212,7 @@ module Verifier.SAW.SharedTerm
   , scBvToNat
   , scBvAt
   , scBvConst
+  , scBvLit
   , scFinVal
   , scBvForall
   , scUpdBvFun
@@ -2019,13 +2020,22 @@ scBvToNat sc n x = do
     n' <- scNat sc n
     scGlobalApply sc "Prelude.bvToNat" [n',x]
 
--- | Create a term computing a bitvector of the given length representing the
--- given 'Integer' value (if possible).
+-- | Create a @bvNat@ term computing a bitvector of the given length
+-- representing the given 'Integer' value (if possible).
 scBvConst :: SharedContext -> Natural -> Integer -> IO Term
 scBvConst sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
   x <- scNat sc w
   y <- scNat sc $ fromInteger $ v .&. (1 `shiftL` fromIntegral w - 1)
   scGlobalApply sc "Prelude.bvNat" [x, y]
+
+-- | Create a vector literal term computing a bitvector of the given length
+-- representing the given 'Integer' value (if possible).
+scBvLit :: SharedContext -> Natural -> Integer -> IO Term
+scBvLit sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
+  do bool_tp <- scBoolType sc
+     bits <- mapM (scBool sc . testBit v)
+                  [(fromIntegral w - 1), (fromIntegral w - 2) .. 0]
+     scVector sc bool_tp bits
 
 -- TODO: This doesn't appear to be used anywhere, and "FinVal" doesn't appear
 -- in Prelude.sawcore... can this be deleted?
