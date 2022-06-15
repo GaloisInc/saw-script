@@ -589,6 +589,14 @@ mrApplyAll f args = liftSC2 scApplyAllBeta f args
 mrApply :: Term -> Term -> MRM Term
 mrApply f arg = mrApplyAll f [arg]
 
+-- | Build a constructor application in Mr. Monad
+mrCtorApp :: Ident -> [Term] -> MRM Term
+mrCtorApp = liftSC2 scCtorApp
+
+-- | Build a 'Term' for a global in Mr. Monad
+mrGlobalTerm :: Ident -> MRM Term
+mrGlobalTerm = liftSC1 scGlobalDef
+
 -- | Like 'scBvNat', but if given a bitvector literal it is converted to a
 -- natural number literal
 mrBvToNat :: Term -> Term -> MRM Term

@@ -115,7 +115,7 @@ data NormComp
   = ReturnM Term -- ^ A term @returnM a x@
   | ErrorM Term -- ^ A term @errorM a str@
   | Ite Term Comp Comp -- ^ If-then-else computation
-  | Either Type Type CompFun CompFun Term -- ^ A sum elimination
+  | Eithers [EitherElim] Term -- ^ A multi-way sum elimination
   | MaybeElim Type Comp CompFun Term -- ^ A maybe elimination
   | OrM Comp Comp -- ^ an @orM@ computation
   | AssertingM Term Comp -- ^ an @assertingM@ computation
@@ -125,6 +125,10 @@ data NormComp
   | FunBind FunName [Term] CompFun
     -- ^ Bind a monadic function with @N@ arguments in an @a -> CompM b@ term
   deriving (Generic, Show)
+
+-- | An eliminator for an @Eithers@ type is a pair of the type of the disjunct
+-- and a function from that type to the output type
+type EitherElim = (Type,CompFun)
 
 -- | A computation function of type @a -> CompM b@ for some @a@ and @b@
 data CompFun
@@ -499,12 +503,9 @@ instance PrettyInCtx NormComp where
   prettyInCtx (Ite cond t1 t2) =
     prettyAppList [return "ite", return "_", parens <$> prettyInCtx cond,
                    parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
-  prettyInCtx (Either ltp rtp f g eith) =
-    prettyAppList [return "either",
-                   parens <$> prettyInCtx ltp, parens <$> prettyInCtx rtp,
-                   return (parens "CompM _"),
-                   parens <$> prettyInCtx f, parens <$> prettyInCtx g,
-                   parens <$> prettyInCtx eith]
+  prettyInCtx (Eithers elims eith) =
+    prettyAppList [return "eithers", return (parens "CompM _"),
+                   prettyInCtx (map snd elims), parens <$> prettyInCtx eith]
   prettyInCtx (MaybeElim tp m f mayb) =
     prettyAppList [return "maybe", parens <$> prettyInCtx tp,
                    return (parens "CompM _"), parens <$> prettyInCtx m,

@@ -224,7 +224,11 @@ normComp (CompTerm t) =
     (isGlobalDef "Prelude.ite" -> Just (), [_, cond, then_tm, else_tm]) ->
       return $ Ite cond (CompTerm then_tm) (CompTerm else_tm)
     (isGlobalDef "Prelude.either" -> Just (), [ltp, rtp, _, f, g, eith]) ->
-      return $ Either (Type ltp) (Type rtp) (CompFunTerm f) (CompFunTerm g) eith
+      return $ Eithers [(Type ltp, CompFunTerm f),
+                        (Type rtp, CompFunTerm g)] eith
+    (isGlobalDef "Prelude.eithers" -> Just (),
+     [_, matchEitherElims -> Just elims, eith]) ->
+      return $ Eithers elims eith
     (isGlobalDef "Prelude.maybe" -> Just (), [tp, _, m, f, mayb]) ->
       do tp' <- case asApplyAll tp of
                   -- Always unfold: is_bvult, is_bvule
@@ -369,8 +373,8 @@ normBind (ReturnM t) k = applyNormCompFun k t
 normBind (ErrorM msg) _ = return (ErrorM msg)
 normBind (Ite cond comp1 comp2) k =
   return $ Ite cond (CompBind comp1 k) (CompBind comp2 k)
-normBind (Either ltp rtp f g t) k =
-  return $ Either ltp rtp (compFunComp f k) (compFunComp g k) t
+normBind (Eithers elims t) k =
+  return $ Eithers (map (\(tp,f) -> (tp, compFunComp f k)) elims) t
 normBind (MaybeElim tp m f t) k =
   return $ MaybeElim tp (CompBind m k) (compFunComp f k) t
 normBind (OrM comp1 comp2) k =
@@ -458,7 +462,29 @@ compToTerm (CompBind m f) =
 applyNormCompFun :: CompFun -> Term -> MRM NormComp
 applyNormCompFun f arg = applyCompFun f arg >>= normComp
 
--- | Apply a 'Comp
+-- | Match a term as a static list of eliminators for an Eithers type
+matchEitherElims :: Term -> Maybe [EitherElim]
+matchEitherElims (asCtor ->
+                  Just (primName -> "Prelude.FunsTo_Nil", [_])) = Just []
+matchEitherElims (asCtor -> Just (primName -> "Prelude.FunsTo_Cons",
+                                  [_, tp, f, rest])) =
+  ((Type tp, CompFunTerm f):) <$>
+  matchEitherElims rest
+matchEitherElims _ = Nothing
+
+-- | Construct the type @Eithers tps@ eliminated by a list of 'EitherElim's
+elimsEithersType :: [EitherElim] -> MRM Type
+elimsEithersType elims =
+  Type <$>
+  (do f <- mrGlobalTerm "Prelude.Eithers"
+      tps <-
+        foldr
+        (\(Type tp,_) restM ->
+          restM >>= \rest -> mrCtorApp "Prelude.LS_Cons" [tp,rest])
+        (mrCtorApp "Prelude.LS_Nil" [])
+        elims
+      mrApply f tps)
+
 
 {- FIXME: do these go away?
 -- | Lookup the definition of a function or throw a 'CannotLookupFunDef' if this is
@@ -785,38 +811,50 @@ mrRefines' m1 (Ite cond2 m2 m2') =
     _ -> withAssumption cond2 (mrRefines m1 m2) >>
          withAssumption not_cond2 (mrRefines m1 m2')
 
-mrRefines' (Either ltp1 rtp1 f1 g1 t1) m2 =
+mrRefines' (Eithers [] _) _ = return ()
+mrRefines' _ (Eithers [] _) = return ()
+mrRefines' (Eithers [(_,f)] t1) m2 =
+  applyNormCompFun f t1 >>= \m1 ->
+  mrRefines m1 m2
+mrRefines' m1 (Eithers [(_,f)] t2) =
+  applyNormCompFun f t2 >>= \m2 ->
+  mrRefines m1 m2
+
+mrRefines' (Eithers ((tp,f1):elims) t1) m2 =
   mrNormOpenTerm t1 >>= \t1' ->
   mrGetDataTypeAssump t1' >>= \mb_assump ->
   case (mb_assump, asEither t1') of
     (_, Just (Left  x)) -> applyNormCompFun f1 x >>= flip mrRefines m2
-    (_, Just (Right x)) -> applyNormCompFun g1 x >>= flip mrRefines m2
+    (_, Just (Right x)) -> mrRefines (Eithers elims x) m2
     (Just (IsLeft  x), _) -> applyNormCompFun f1 x >>= flip mrRefines m2
-    (Just (IsRight x), _) -> applyNormCompFun g1 x >>= flip mrRefines m2
+    (Just (IsRight x), _) -> mrRefines (Eithers elims x) m2
     _ -> let lnm = maybe "x_left" id (compFunVarName f1)
-             rnm = maybe "x_right" id (compFunVarName g1)
-         in withUVarLift lnm ltp1 (f1, t1', m2) (\x (f1', t1'', m2') ->
-             applyNormCompFun f1' x >>= withDataTypeAssump t1'' (IsLeft x)
-                                        . flip mrRefines m2') >>
-            withUVarLift rnm rtp1 (g1, t1', m2) (\x (g1', t1'', m2') ->
-             applyNormCompFun g1' x >>= withDataTypeAssump t1'' (IsRight x)
-                                        . flip mrRefines m2')
-mrRefines' m1 (Either ltp2 rtp2 f2 g2 t2) =
+             rnm = "x_right" in
+         elimsEithersType elims >>= \elims_tp ->
+         withUVarLift lnm tp (f1, t1', m2) (\x (f1', t1'', m2') ->
+           applyNormCompFun f1' x >>= withDataTypeAssump t1'' (IsLeft x)
+                                      . flip mrRefines m2') >>
+         withUVarLift rnm elims_tp (elims, t1', m2)
+           (\x (elims', t1'', m2') ->
+             withDataTypeAssump t1'' (IsRight x) (mrRefines (Eithers elims' x) m2'))
+
+mrRefines' m1 (Eithers ((tp,f2):elims) t2) =
   mrNormOpenTerm t2 >>= \t2' ->
   mrGetDataTypeAssump t2' >>= \mb_assump ->
   case (mb_assump, asEither t2') of
     (_, Just (Left  x)) -> applyNormCompFun f2 x >>= mrRefines m1
-    (_, Just (Right x)) -> applyNormCompFun g2 x >>= mrRefines m1
+    (_, Just (Right x)) -> mrRefines m1 (Eithers elims x)
     (Just (IsLeft  x), _) -> applyNormCompFun f2 x >>= mrRefines m1
-    (Just (IsRight x), _) -> applyNormCompFun g2 x >>= mrRefines m1
+    (Just (IsRight x), _) -> mrRefines m1 (Eithers elims x)
     _ -> let lnm = maybe "x_left" id (compFunVarName f2)
-             rnm = maybe "x_right" id (compFunVarName g2)
-         in withUVarLift lnm ltp2 (f2, t2', m1) (\x (f2', t2'', m1') ->
-             applyNormCompFun f2' x >>= withDataTypeAssump t2'' (IsLeft x)
-                                        . mrRefines m1') >>
-            withUVarLift rnm rtp2 (g2, t2', m1) (\x (g2', t2'', m1') ->
-             applyNormCompFun g2' x >>= withDataTypeAssump t2'' (IsRight x)
-                                        . mrRefines m1')
+             rnm = "x_right" in
+         elimsEithersType elims >>= \elims_tp ->
+         withUVarLift lnm tp (f2, t2', m1) (\x (f2', t2'', m1') ->
+           applyNormCompFun f2' x >>= withDataTypeAssump t2'' (IsLeft x)
+                                      . mrRefines m1') >>
+         withUVarLift rnm elims_tp (elims, t2', m1)
+           (\x (elims', t2'', m1') ->
+             withDataTypeAssump t2'' (IsRight x) (mrRefines m1' (Eithers elims' x)))
 
 mrRefines' m1 (AssumingM cond2 m2) =
   withAssumption cond2 $ mrRefines m1 m2
