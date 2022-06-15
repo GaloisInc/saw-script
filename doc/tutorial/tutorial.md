@@ -276,7 +276,7 @@ $include all code/double.c
 In this trivial example, an integer can be doubled either using
 multiplication or shifting. The following SAWScript program (in
 `double.saw`) verifies that the two are equivalent using both internal
-ABC, Yices, and Z3 modes, and by exporting an SMT-Lib theorem to be
+Yices and Z3 modes, and by exporting an SMT-Lib theorem to be
 checked later, by an external SAT solver.
 
 ```
