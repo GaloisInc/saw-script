@@ -460,12 +460,12 @@ Hint Extern 1 (_ |= SAWCorePrelude.eithers
                       _ (SAWCorePrelude.FunsTo_Cons
                            _ _ _ (SAWCorePrelude.FunsTo_Nil _)) _) =>
   simple apply refinesM_eithers_one_r : refinesM.
-Hint Extern 2 (SAWCorePrelude.eithers
+Hint Extern 3 (SAWCorePrelude.eithers
                  _ (SAWCorePrelude.FunsTo_Cons
                       _ _ _ (SAWCorePrelude.FunsTo_Cons
                                _ _ _ (SAWCorePrelude.FunsTo_Nil _))) _ |= _) =>
   simple apply refinesM_eithers_cons_l_IntroArg : refinesM.
-Hint Extern 2 (_ |= SAWCorePrelude.eithers
+Hint Extern 3 (_ |= SAWCorePrelude.eithers
                       _ (SAWCorePrelude.FunsTo_Cons
                            _ _ _ (SAWCorePrelude.FunsTo_Cons
                                     _ _ _ (SAWCorePrelude.FunsTo_Nil _))) _) =>
