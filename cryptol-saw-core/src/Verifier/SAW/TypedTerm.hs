@@ -23,6 +23,7 @@ import Verifier.SAW.Cryptol (scCryptolType)
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.SCTypeCheck (scTypeCheckError)
 
 -- Typed terms -----------------------------------------------------------------
 
@@ -67,22 +68,35 @@ mkTypedTerm sc trm = do
         Just (Right t) -> TypedTermSchema (C.tMono t)
   return (TypedTerm ttt trm)
 
--- | Apply a function-typed 'TypedTerm' to an argument. This operation
--- fails if the first 'TypedTerm' does not have a monomorphic function
--- type.
+-- | Apply a function-typed 'TypedTerm' to an argument.
+--   This operation fails if the type of the argument does
+--   not match the function.
 applyTypedTerm :: SharedContext -> TypedTerm -> TypedTerm -> IO TypedTerm
-applyTypedTerm sc (TypedTerm tp t1) (TypedTerm _ t2)
-  | Just (_,cty') <- C.tIsFun =<< ttIsMono tp
-  = TypedTerm (TypedTermSchema (C.tMono cty')) <$> scApply sc t1 t2
-
--- TODO? extend this to allow explicit application of types?
-applyTypedTerm _ _ _ = fail "applyTypedTerm: not a (monomorphic) function type"
+applyTypedTerm sc (TypedTerm _tp t1) (TypedTerm _ t2) =
+  do trm <- scApply sc t1 t2
+     ty <- scTypeCheckError sc trm
+     ct <- scCryptolType sc ty
+     let ttt = case ct of
+           Nothing        -> TypedTermOther ty
+           Just (Left k)  -> TypedTermKind k
+           Just (Right t) -> TypedTermSchema (C.tMono t)
+     return (TypedTerm ttt trm)
 
 -- | Apply a 'TypedTerm' to a list of arguments. This operation fails
 -- if the first 'TypedTerm' does not have a function type of
--- sufficient arity.
+-- sufficient arity, or if the types of the arguments do not match
+-- the type of the function.
 applyTypedTerms :: SharedContext -> TypedTerm -> [TypedTerm] -> IO TypedTerm
-applyTypedTerms sc = foldM (applyTypedTerm sc)
+applyTypedTerms sc (TypedTerm _ fn) args =
+  do trm <- foldM (scApply sc) fn (map ttTerm args)
+     ty <- scTypeCheckError sc trm
+     ct <- scCryptolType sc ty
+     let ttt = case ct of
+           Nothing        -> TypedTermOther ty
+           Just (Left k)  -> TypedTermKind k
+           Just (Right t) -> TypedTermSchema (C.tMono t)
+     return (TypedTerm ttt trm)
+
 
 -- | Create an abstract defined constant with the specified name and body.
 defineTypedTerm :: SharedContext -> Text -> TypedTerm -> IO TypedTerm

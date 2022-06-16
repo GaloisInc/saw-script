@@ -1246,6 +1246,11 @@ abstractSymbolicPrim (TypedTerm _ t) = do
 bindAllExts :: SharedContext -> Term -> IO Term
 bindAllExts sc body = scAbstractExts sc (getAllExts body) body
 
+term_apply :: TypedTerm -> [TypedTerm] -> TopLevel TypedTerm
+term_apply fn args =
+  do sc <- getSharedContext
+     io $ applyTypedTerms sc fn args
+
 lambda :: TypedTerm -> TypedTerm -> TopLevel TypedTerm
 lambda x = lambdas [x]
 
@@ -1508,6 +1513,44 @@ eval_size s =
         Left C.Inf     -> fail "eval_size: illegal infinite size"
         Right _        -> fail "eval_size: not a numeric type"
     _ -> fail "eval_size: unsupported polymorphic type"
+
+int_to_term :: Int -> TopLevel TypedTerm
+int_to_term i
+  | i < 0 =
+     do sc  <- getSharedContext
+        tm  <- io (scNat sc (fromInteger (negate (toInteger i))))
+        tm' <- io (scIntNeg sc =<< scNatToInt sc tm)
+        io (mkTypedTerm sc tm')
+  | otherwise =
+     do sc  <- getSharedContext
+        tm  <- io (scNat sc (fromIntegral i))
+        tm' <- io (scNatToInt sc tm)
+        io (mkTypedTerm sc tm')
+
+nat_to_term :: Int -> TopLevel TypedTerm
+nat_to_term i
+  | i >= 0 =
+      do sc <- getSharedContext
+         tm <- io $ scNat sc (fromIntegral i)
+         io $ mkTypedTerm sc tm
+
+  | otherwise =
+      fail ("nat_to_term: negative value " ++ show i)
+
+
+size_to_term :: C.Schema -> TopLevel TypedTerm
+size_to_term s =
+  do sc <- getSharedContext
+     tm <- io $ case s of
+                  C.Forall [] [] t ->
+                    case C.evalType mempty t of
+                      Left (C.Nat x) | x >= 0 ->
+                        scCtorApp sc "Cryptol.TCNum" =<< sequence [scNat sc (fromInteger x)]
+                      Left C.Inf -> scCtorApp sc "Cryptol.TCInf" []
+                      _ -> fail "size_to_term: not a numeric type"
+                  _ -> fail "size_to_term: unsupported polymorphic type"
+
+     return (TypedTerm (TypedTermKind C.KNum) tm)
 
 nthPrim :: [a] -> Int -> TopLevel a
 nthPrim [] _ = fail "nth: index too large"
