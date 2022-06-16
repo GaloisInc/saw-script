@@ -16,10 +16,10 @@ In this document, we use the following metavariables to refer to different sorts
                      
                      
 
-Permission types
+Value Types
 ================
 
-A permission type includes regular crucible types as well as heapster-specific types
+The Heapster value types include the regular crucible types as well as heapster-specific types:
 
 | **Permission Types `a`** | **Description** |
 | :---: | :--- |
@@ -75,6 +75,8 @@ In addition to the above expressions, we also have shape expressions, which we s
 | `fieldsh(sz,p)`             | `llvmshape w` | Like `fieldsh(p)`, but where the permission acts on a pointer of size `sz`. |
 | `arraysh(s,len,sh)`         | `llvmshape w` | A shape for an array with the given stride, length (in number of elements = total length / stride), and fields `sh` |
 | `exsh x:a.sh`               | `llvmshape w` | An existential shape |
+| `falsesh`                    | `llvmshape w` | The unsatisfiable or contradictory shape |
+
 
 Value permissions
 =================
@@ -108,6 +110,7 @@ For a variable `x:a`, the proposition `x:p` means "`x` has permission `p`": this
 | `p1 * p2`                                 | `perm(a)`                 | separating conjunction; `p1` and `p2` (both satisfying `perm(a)`) must be atomic permissions (not a disjunction, existential, or equality permission) |
 | `eq(e)`                                   | `perm(a)`                 | a value equal to the expression `e:a` |
 | `exists x:a. p`                           | `perm(b)`                 | there exists some expression `e:a` such that `p[e/x]:perm(b)` holds |
+| `false`                           | `perm(a)`  | The unsatisfiable or contradictory permission |
 | `x<e1,..,e2>@o`                           | `perm(a)`                 | A named permission with expression arguments, with optional offset expression `o`. Named permissions can either be (1) defined permissions (aliases) (2) recursive permissions, or (3) opaque permissions (axioms). |
 | `[l]array(rw, off,<len,*stride,sh)`       | `perm(llvmptr w)`         | a permission for a pointer to an array, where: <ul><li>`l` is the lifetime during which this permission is active;</li> <li>`off` is a permission expression representing the offset of this array from the pointer in bytes;</li> <li>`len` is a permission expression representing the number of cells in the array;</li> <li>`stride` is a permission expression representing the number of bytes in a cell;</li> <li>`sh` is a shape expression representing the shape of elements in the array</li> </ul> |
 | `[l]memblock(rw,o,len,sh)`                | `perm(llvmptr w)`         | gives read or write access to a memory block, whose contents also give some permissions, where: <ul> <li> `rw` indicates whether this is a read or write block permission </li> <li> `l` is the lifetime during which this block permission is active </li> <li> `o` is the offset of the block from the pointer in bytes </li> <li> `len` is the length of the block in bytes </li> <li> `sh` is the shape of the block </li> </ul>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
