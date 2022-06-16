@@ -1075,6 +1075,13 @@ primitives = Map.fromList
     , "is used only for pretty-printing."
     ]
 
+  , prim "term_apply"          "Term -> [Term] -> Term"
+    (funVal2 term_apply)
+    Current
+    [ "Build a term application node that applies the first term"
+    , "(which much be a term representing a function) to given list of arguments."
+    ]
+
   , prim "lambda"              "Term -> Term -> Term"
     (funVal2 lambda)
     Current
@@ -1089,6 +1096,22 @@ primitives = Map.fromList
     , "those variables, and return a new lambda abstraction over the list of"
     , "variables."
     ]
+
+  , prim "size_to_term"      "Type -> Term"
+    (funVal1 size_to_term)
+    Current
+    [ "Convert a Cryptol size type into a Term representation."
+    ]
+
+  , prim "int_to_term"      "Int -> Term"
+    (funVal1 int_to_term)
+    Current
+    [ "Convert a concrete integer value into an integer term." ]
+
+  , prim "nat_to_term"      "Int -> Term"
+    (funVal1 nat_to_term)
+    Current
+    [ "Convert a non-negative integer value into a natural number term." ]
 
   , prim "term_theories" "[String] -> Term -> [String]"
     (funVal2 term_theories)
