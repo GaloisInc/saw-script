@@ -70,6 +70,7 @@ import           Control.Monad.Except
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_, toList)
 import           Data.List
+import qualified Data.List.NonEmpty as NE
 import           Data.IORef (IORef, modifyIORef)
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -402,7 +403,7 @@ methodSpecHandler ::
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
   IORef MetadataMap ->
-  [MS.CrucibleMethodSpecIR (LLVM arch)]
+  NE.NonEmpty (MS.CrucibleMethodSpecIR (LLVM arch))
     {- ^ specification for current function override  -} ->
   Crucible.FnHandle args ret {- ^ the handle for this function -} ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp args ret
@@ -410,7 +411,7 @@ methodSpecHandler ::
 methodSpecHandler opts sc cc mdMap css h =
   ccWithBackend cc $ \bak -> do
   let sym = backendGetSym bak
-  let fnName = head css ^. csName
+  let fnName = NE.head css ^. csName
   call_loc <- liftIO $ W4.getCurrentProgramLoc sym
   liftIO $ printOutLn opts Info $ unwords
     [ "Matching"
@@ -543,7 +544,7 @@ handleOverrideBranches :: forall arch rtp args ret.
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
   W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
-  [MS.CrucibleMethodSpecIR (LLVM arch)]
+  NE.NonEmpty (MS.CrucibleMethodSpecIR (LLVM arch))
     {- ^ specification for current function override  -} ->
   Crucible.FnHandle args ret {- ^ the handle for this function -} ->
   [OverrideWithPreconditions arch] ->
@@ -554,7 +555,7 @@ handleOverrideBranches :: forall arch rtp args ret.
 handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown) =
   ccWithBackend cc $ \bak -> do
   let sym = backendGetSym bak
-  let fnName = head css ^. csName
+  let fnName = NE.head css ^. csName
   Crucible.RegMap args <- Crucible.getOverrideArgs
 
   -- Collapse the preconditions to a single predicate
@@ -684,7 +685,7 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                         ps -> Just (owp, ps))
 
                   prettyArgs <-
-                    ppArgs sym cc (head css) (Crucible.RegMap args)
+                    ppArgs sym cc (NE.head css) (Crucible.RegMap args)
 
                   unsat <-
                     filterM

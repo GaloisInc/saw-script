@@ -35,6 +35,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , llvm_extract
     , llvm_compositional_extract
     , llvm_verify
+    , llvm_refine_spec
     , llvm_array_size_profile
     , llvm_setup_with_tag
     , crucible_setup_val_to_typed_term
@@ -204,6 +205,7 @@ import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 import SAWScript.Crucible.LLVM.Override
 import SAWScript.Crucible.LLVM.ResolveSetupValue
 import SAWScript.Crucible.LLVM.MethodSpecIR
+import SAWScript.Panic (panic)
 
 type AssumptionReason = (MS.ConditionMetadata, String)
 
@@ -287,6 +289,24 @@ llvm_verify (Some lm) nm lemmas checkSat setup tactic =
      lemmas' <- checkModuleCompatibility lm lemmas
      withMethodSpec checkSat lm nm setup $ \cc method_spec ->
        do (stats, deps, _) <- verifyMethodSpec cc method_spec lemmas' checkSat tactic Nothing
+          let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas')
+          end <- io getCurrentTime
+          let diff = diffUTCTime end start
+          ps <- io (MS.mkProvedSpec MS.SpecProved method_spec stats deps lemmaSet diff)
+          returnProof $ SomeLLVM ps
+
+llvm_refine_spec ::
+  Some LLVMModule ->
+  String ->
+  [SomeLLVM MS.ProvedSpec] ->
+  LLVMCrucibleSetupM () ->
+  ProofScript () ->
+  TopLevel (SomeLLVM MS.ProvedSpec)
+llvm_refine_spec (Some lm) nm lemmas setup tactic =
+  do start <- io getCurrentTime
+     lemmas' <- checkModuleCompatibility lm lemmas
+     withMethodSpec False lm nm setup $ \cc method_spec ->
+       do (stats, deps) <- refineMethodSpec cc method_spec lemmas' tactic
           let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas')
           end <- io getCurrentTime
           let diff = diffUTCTime end start
@@ -642,6 +662,85 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
             , deps
             , post_override_state
             )
+
+
+
+
+refineMethodSpec ::
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
+  , ?singleOverrideSpecialCase :: Bool
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
+  LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  [MS.ProvedSpec (LLVM arch)] ->
+  ProofScript () ->
+  TopLevel (SolverStats, Set TheoremNonce)
+refineMethodSpec cc methodSpec lemmas tactic =
+  ccWithBackend cc $ \bak ->
+  do printOutLnTop Info $
+       unwords ["Verifying", (methodSpec ^. csName) , "..."]
+
+     let sym = cc^.ccSym
+
+     profFile <- rwProfilingFile <$> getTopLevelRW
+     (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "llvm_verify" profFile
+
+     -- set up the metadata map for tracking proof obligation metadata
+     mdMap <- io $ newIORef mempty
+
+     -- set up the LLVM memory with a pristine heap
+     let globals = cc^.ccLLVMGlobals
+     let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
+     mem <-
+       case Crucible.lookupGlobal mvar globals of
+         Nothing   -> fail "internal error: LLVM Memory global not found"
+         Just mem0 -> return mem0
+
+     let globals1 = Crucible.llvmGlobals mvar mem
+
+     -- construct the initial state for verifications
+     opts <- getOptions
+     (args, assumes, env, globals2) <-
+       io $ verifyPrestate opts cc methodSpec globals1
+
+     when (detectVacuity opts)
+       $ checkAssumptionsForContradictions cc methodSpec tactic assumes
+
+     -- save initial path conditions
+     frameIdent <- io $ Crucible.pushAssumptionFrame bak
+
+     -- run the symbolic execution
+     printOutLnTop Info $
+       unwords ["Refining spec for", (methodSpec ^. csName) , "..."]
+     top_loc <- toW4Loc "llvm_refine_spec" <$> getPosition
+
+     (ret, globals3) <-
+       io $ refineSimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 mdMap
+
+     -- collect the proof obligations
+     (asserts, _post_override_state) <-
+       verifyPoststate cc
+       methodSpec env globals3 ret
+       mdMap
+
+     -- restore previous assumption state
+     _ <- io $ Crucible.popAssumptionFrame bak frameIdent
+
+     -- attempt to verify the proof obligations
+     printOutLnTop Info $
+       unwords ["Checking proof obligations", (methodSpec ^. csName), "..."]
+     (stats, deps) <- verifyObligations cc methodSpec tactic assumes asserts
+     io $ writeFinalProfile
+
+     return ( stats
+            , deps
+            )
+
 
 verifyObligations :: LLVMCrucibleContext arch
                   -> MS.CrucibleMethodSpecIR (LLVM arch)
@@ -1143,13 +1242,13 @@ registerOverride ::
   Crucible.SimContext (SAWCruciblePersonality Sym) Sym Crucible.LLVM ->
   W4.ProgramLoc              ->
   IORef MetadataMap ->
-  [MS.CrucibleMethodSpecIR (LLVM arch)]     ->
-  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp args ret ()
+  NE.NonEmpty (MS.CrucibleMethodSpecIR (LLVM arch))     ->
+  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp args ret (Crucible.SomeHandle)
 registerOverride opts cc sim_ctx _top_loc mdMap cs =
   ccWithBackend cc $ \bak ->
   do let sym = Common.backendGetSym bak
      sc <- saw_ctx <$> liftIO (Common.sawCoreState sym)
-     let fstr = (head cs)^.csName
+     let fstr = (NE.head cs)^.csName
          fsym = L.Symbol fstr
          llvmctx = ccLLVMContext cc
          mvar = Crucible.llvmMemVar llvmctx
@@ -1167,13 +1266,14 @@ registerOverride opts cc sim_ctx _top_loc mdMap cs =
               Crucible.bindFnHandle h
                 $ Crucible.UseOverride
                 $ Crucible.mkOverride' fn_name retType
-                $ methodSpecHandler opts sc cc mdMap cs h 
+                $ methodSpecHandler opts sc cc mdMap cs h
               mem <- Crucible.readGlobal mvar
               let bindPtr m decl =
                     do printOutLn opts Info $ "  variant `" ++ show (L.decName decl) ++ "`"
                        Crucible.bindLLVMFunPtr bak decl h m
               mem' <- liftIO $ foldM bindPtr mem (d:ds)
               Crucible.writeGlobal mvar mem'
+              return (Crucible.SomeHandle h)
 
 registerInvariantOverride ::
   ( ?lc :: Crucible.TypeContext
@@ -1189,14 +1289,14 @@ registerInvariantOverride ::
   W4.ProgramLoc ->
   IORef MetadataMap ->
   HashMap Crucible.SomeHandle [Crucible.BreakpointName] ->
-  [MS.CrucibleMethodSpecIR (LLVM arch)] ->
+  NE.NonEmpty (MS.CrucibleMethodSpecIR (LLVM arch)) ->
   IO (Crucible.ExecutionFeature (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp)
 registerInvariantOverride opts cc top_loc mdMap all_breakpoints cs =
   do sc <- saw_ctx <$> Common.sawCoreState (cc^.ccSym)
-     let name = (head cs) ^. csName
+     let name = (NE.head cs) ^. csName
      parent <-
-       case nubOrd $ map (view csParentName) cs of
-         [Just unique_parent] -> return unique_parent
+       case neNubOrd $ fmap (view csParentName) cs of
+         (Just unique_parent NE.:| []) -> return unique_parent
          _ -> fail $ "Multiple parent functions for breakpoint: " ++ name
      liftIO $ printOutLn opts Info $ "Registering breakpoint `" ++ name ++ "`"
      withBreakpointCfgAndBlockId cc name parent $ \cfg breakpoint_block_id ->
@@ -1286,11 +1386,12 @@ verifySimulate ::
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp mdMap =
   withCfgAndBlockId cc mspec $ \cfg entryId ->
   ccWithBackend cc $ \bak ->
-  do let argTys = Crucible.blockInputs $
+  do let sym = cc^.ccSym
+     let argTys = Crucible.blockInputs $
            Crucible.getBlock entryId $ Crucible.cfgBlockMap cfg
      let retTy = Crucible.handleReturnType $ Crucible.cfgHandle cfg
 
-     args' <- prepareArgs argTys (map snd args)
+     args' <- prepareArgs sym argTys (map snd args)
      let simCtx = cc^.ccLLVMSimContext
      psatf <-
        Crucible.pathSatisfiabilityFeature sym
@@ -1302,10 +1403,10 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
                      (map (view MS.psSpec) lemmas)
 
      breakpoints <-
-       forM (groupOn (view csParentName) invLemmas) $ \specs ->
-       do let parent = fromJust $ (head specs) ^. csParentName
+       forM (neGroupOn (view csParentName) invLemmas) $ \specs ->
+       do let parent = fromJust $ (NE.head specs) ^. csParentName
           let breakpoint_names = nubOrd $
-                map (Crucible.BreakpointName . Text.pack . view csName) specs
+                map (Crucible.BreakpointName . Text.pack . view csName) (NE.toList specs)
           withCfg cc parent $ \parent_cfg ->
             return
               ( Crucible.SomeHandle (Crucible.cfgHandle parent_cfg)
@@ -1315,7 +1416,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
      invariantExecFeatures <-
        mapM
        (registerInvariantOverride opts cc top_loc mdMap (HashMap.fromList breakpoints))
-       (groupOn (view csName) invLemmas)
+       (neGroupOn (view csName) invLemmas)
 
      additionalFeatures <-
        mapM (Crucible.arraySizeProfile (ccLLVMContext cc)) $ maybeToList asp
@@ -1329,7 +1430,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
            Crucible.InitialState simCtx globals Crucible.defaultAbortHandler retTy $
            Crucible.runOverrideSim retTy $
            do mapM_ (registerOverride opts cc simCtx top_loc mdMap)
-                    (groupOn (view csName) funcLemmas)
+                    (neGroupOn (view csName) funcLemmas)
               liftIO $
                 for_ assumes $ \(Crucible.LabeledPred p (md, reason)) ->
                   do expr <- resolveSAWPred cc p
@@ -1363,18 +1464,116 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
                            , show resultDoc
                            ]
 
-  where
-    sym = cc^.ccSym
-    prepareArgs ::
-      Ctx.Assignment Crucible.TypeRepr xs ->
-      [LLVMVal] ->
-      IO (Crucible.RegMap Sym xs)
-    prepareArgs ctx x =
-      Crucible.RegMap <$>
-      Ctx.traverseWithIndex (\idx tr ->
-        do v <- Crucible.unpackMemValue sym tr (x !! Ctx.indexVal idx)
-           return (Crucible.RegEntry tr v))
-      ctx
+
+refineSimulate ::
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
+  , ?singleOverrideSpecialCase :: Bool
+  , Crucible.HasPtrWidth wptr
+  , wptr ~ Crucible.ArchWidth arch
+  , Crucible.HasLLVMAnn Sym
+  ) =>
+  Options ->
+  LLVMCrucibleContext arch ->
+  [Crucible.GenericExecutionFeature Sym] ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  [(Crucible.MemType, LLVMVal)] ->
+  [Crucible.LabeledPred Term AssumptionReason] ->
+  W4.ProgramLoc ->
+  [MS.ProvedSpec (LLVM arch)] ->
+  Crucible.SymGlobalState Sym ->
+  IORef MetadataMap ->
+  IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
+refineSimulate opts cc pfs mspec args assumes top_loc lemmas globals mdMap =
+  let fstr = mspec^.csName
+      fsym = L.Symbol fstr
+      matches dec = matchingStatics (L.decName dec) fsym
+      simCtx = cc^.ccLLVMSimContext
+      sym = cc^.ccSym
+  in
+  case filter matches (Crucible.allModuleDeclares (ccLLVMModuleAST cc)) of
+    [] -> fail $ "Couldn't find declaration for `" ++ fstr ++ "` when attempting specification refinement."
+    (decl:_ds) ->
+      Crucible.llvmDeclToFunHandleRepr' decl $ \argTys retTy ->
+      ccWithBackend cc $ \bak ->
+      do args' <- prepareArgs sym argTys (map snd args)
+
+         let isRelevant lemma_spec =
+               lemma_spec ^. MS.csMethod == mspec ^.MS.csMethod
+
+         let (relevantLemmas, irrelevantLemmas) =
+               partition isRelevant (map (view MS.psSpec) lemmas)
+
+         unless (null irrelevantLemmas) $
+           fail "Irrelevant lemmas included in specification refinement: TODO better error message here"
+
+         relevantLemmas' <-
+            case relevantLemmas of
+              [] -> fail "No relevant override specifciations included in refinement: TODO better error message here"
+              (x:xs) -> return (x NE.:| xs)
+
+         let execFeatures =
+               map Crucible.genericToExecutionFeature pfs
+
+         let initExecState =
+               Crucible.InitialState simCtx globals Crucible.defaultAbortHandler retTy $
+               Crucible.runOverrideSim retTy $
+               do Crucible.SomeHandle h <- registerOverride opts cc simCtx top_loc mdMap relevantLemmas'
+                  case (testEquality argTys (Crucible.handleArgTypes h),
+                        testEquality retTy (Crucible.handleReturnType h)) of
+                    (Nothing, _) -> panic ("Argument type mismatch when refining specifciation for " ++ fstr)
+                                           [ show argTys, show h ]
+                    (_, Nothing) -> panic ("Return type mismatch when refining specifciation for " ++ fstr)
+                                           [ show retTy, show h ]
+                    (Just Refl, Just Refl) ->
+                      do liftIO $
+                          for_ assumes $ \(Crucible.LabeledPred p (md, reason)) ->
+                           do expr <- resolveSAWPred cc p
+                              let loc = MS.conditionLoc md
+                              Crucible.addAssumption bak
+                                (Crucible.GenericAssumption loc reason expr)
+                         Crucible.regValue <$> (Crucible.callFnVal (Crucible.HandleFnVal h) args')
+         res <- Crucible.executeCrucible execFeatures initExecState
+         case res of
+           Crucible.FinishedResult _ partialResult ->
+             do Crucible.GlobalPair retval globals1 <-
+                  getGlobalPair opts partialResult
+                let ret_ty = mspec ^. MS.csRet
+                retval' <-
+                  case ret_ty of
+                    Nothing -> return Nothing
+                    Just ret_mt ->
+                      do v <- Crucible.packMemValue sym
+                                (fromMaybe (error ("Expected storable type:" ++ show ret_ty))
+                                     (Crucible.toStorableType ret_mt))
+                                (Crucible.regType  retval)
+                                (Crucible.regValue retval)
+                         return (Just (ret_mt, v))
+                return (retval', globals1)
+
+           Crucible.TimeoutResult _ -> fail $ "Symbolic execution timed out"
+
+           Crucible.AbortedResult _ ar ->
+             do let resultDoc = ppAbortedResult cc ar
+                fail $ unlines [ "Symbolic execution failed."
+                               , show resultDoc
+                               ]
+
+
+prepareArgs ::
+  Sym ->
+  Ctx.Assignment Crucible.TypeRepr xs ->
+  [LLVMVal] ->
+  IO (Crucible.RegMap Sym xs)
+prepareArgs sym ctx x =
+  Crucible.RegMap <$>
+  Ctx.traverseWithIndex (\idx tr ->
+    do v <- Crucible.unpackMemValue sym tr (x !! Ctx.indexVal idx)
+       return (Crucible.RegEntry tr v))
+  ctx
+
 
 -- | Build a conjunction from a list of boolean terms.
 scAndList :: SharedContext -> [Term] -> IO Term
@@ -2567,10 +2766,19 @@ crucible_setup_val_to_typed_term (getAllLLVM -> sval) =
 
 --------------------------------------------------------------------------------
 
--- | Sort a list of things and group them into equivalence classes.
-groupOn ::
+neGroupOn ::
   Ord b =>
   (a -> b) {- ^ equivalence class projection -} ->
-  [a] -> [[a]]
-groupOn f = groupBy ((==) `on` f) . sortBy (compare `on` f)
+  [a] -> [NE.NonEmpty a]
+neGroupOn f = NE.groupBy ((==) `on` f) . sortBy (compare `on` f)
 
+neNubOrd ::
+  Ord a =>
+  NE.NonEmpty a ->
+  NE.NonEmpty a
+neNubOrd (hd NE.:| tl) = hd NE.:| loop (Set.singleton hd) tl
+  where
+    loop _prev [] = []
+    loop prev (x:xs)
+      | Set.member x prev = loop prev xs
+      | otherwise         = x : loop (Set.insert x prev) xs
