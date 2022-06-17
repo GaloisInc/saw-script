@@ -132,6 +132,11 @@ Proof.
     vm_compute in e_if0; discriminate e_if0.
   - rewrite e_assuming2, e_assuming3 in e_if0.
     vm_compute in e_if0; discriminate e_if0.
+  - destruct a; inversion e_either. destruct e_assuming; assumption.
+  - destruct a; inversion e_either. destruct e_assuming as [ Ha1 [ Ha2 Ha3 ]].
+    assumption.
+  - destruct a; inversion e_either. destruct e_assuming as [ Ha1 [ Ha2 Ha3 ]].
+    assumption.
 Qed.
 
 (*
@@ -216,6 +221,15 @@ Proof.
     prove_refinement.
     + exact a3.
     + prove_refinement.
+  - destruct a; try discriminate. reflexivity.
+  - destruct a; inversion e_either.
+    destruct e_assuming as [ Ha1 [ Ha2 Ha3 ]]. assumption.
+  - destruct a; inversion e_either.
+    destruct e_assuming as [ Ha1 [ Ha2 Ha3 ]]. assumption.
+  - destruct a; inversion e_either.
+    destruct e_assuming as [ Ha1 [ Ha2 Ha3 ]]. assumption.
+  - destruct a; inversion e_either. simpl. rewrite transMbox_Mbox_nil_r.
+    reflexivity.
 Qed.
 
 
@@ -241,6 +255,17 @@ Proof.
   (* Set Ltac Profiling. *)
   time "mbox_drop_spec_ref" prove_refinement.
   (* Show Ltac Profile. Reset Ltac Profile. *)
+  - simpl. destruct a; try discriminate e_either. reflexivity.
+  - simpl. destruct a; try discriminate e_either.
+    inversion e_either. simpl. rewrite <- H0 in e_if. simpl in e_if.
+    unfold isBvule in e_if. rewrite e_if. simpl.
+    repeat rewrite transMbox_Mbox_nil_r.
+    reflexivity.
+  - destruct a; simpl in e_either; inversion e_either.
+    rewrite <- H0 in e_if. simpl in e_if. simpl.
+    assert (bvule 64 v0 a0 = false); [ apply isBvult_def_opp; assumption | ].
+    rewrite H. simpl. rewrite transMbox_Mbox_nil_r.
+    reflexivity.
 Time Qed.
 
 
@@ -283,6 +308,9 @@ Proof.
   (* Set Ltac Profiling. *)
   time "mbox_concat_spec_ref" prove_refinement.
   (* Show Ltac Profile. Reset Ltac Profile. *)
+  - destruct a; simpl in e_either; try discriminate e_either. reflexivity.
+  - destruct a; simpl in e_either; inversion e_either.
+    rewrite transMbox_Mbox_nil_r. reflexivity.
 Time Qed.
 
 (* Add `mbox_concat_spec_ref` to the hint database. Unfortunately, Coq will not unfold refinesFun
@@ -319,7 +347,17 @@ Proof.
     exact (returnM (transMbox x (Mbox_cons strt len (transMbox next y) d))).
   unfold mbox_concat_chains_spec.
   time "mbox_concat_chains_spec_ref" prove_refinement.
-  simpl; repeat rewrite transMbox_Mbox_nil_r; reflexivity.
+  - destruct a5; simpl in e_either; inversion e_either.
+    repeat rewrite transMbox_Mbox_nil_r; reflexivity.
+  - destruct a5; simpl in e_either; inversion e_either.
+    repeat rewrite transMbox_Mbox_nil_r; reflexivity.
+  - destruct a; simpl in e_either; inversion e_either. reflexivity.
+  - destruct a; simpl in e_either; inversion e_either.
+    destruct a0; simpl in e_either0; inversion e_either0.
+    rewrite transMbox_Mbox_nil_r; reflexivity.
+  - destruct a; simpl in e_either; inversion e_either.
+    destruct a0; simpl in e_either0; inversion e_either0.
+    simpl; repeat rewrite transMbox_Mbox_nil_r; reflexivity.
 Time Qed.
 
 
@@ -343,6 +381,9 @@ Proof.
   (* Set Ltac Profiling. *)
   time "mbox_detach_spec_ref" prove_refinement.
   (* Show Ltac Profile. Reset Ltac Profile. *)
+  - destruct a; simpl in e_either; inversion e_either. reflexivity.
+  - destruct a; simpl in e_either; inversion e_either.
+    rewrite transMbox_Mbox_nil_r; reflexivity.
 Time Qed.
 
 (* Add `mbox_detach_spec_ref` to the hint database. Unfortunately, Coq will not unfold refinesFun
@@ -379,11 +420,13 @@ Proof.
   (* Set Ltac Profiling. *)
   time "mbox_len_spec_ref" prove_refinement.
   (* Show Ltac Profile. Reset Ltac Profile. *)
-  (* Most of the remaining cases are taken care of with just bvAdd_id_l and bvAdd_id_r *)
   all: try rewrite bvAdd_id_r; try rewrite bvAdd_id_l; try reflexivity.
-  (* The remaining case just needs a few more rewrites *)
-  - simpl. f_equal. rewrite bvAdd_assoc. f_equal. rewrite bvAdd_comm. f_equal.
-    simpl. rewrite transMbox_Mbox_nil_r. reflexivity.
+  - destruct a2; simpl in e_either; inversion e_either.
+    repeat rewrite transMbox_Mbox_nil_r. rewrite bvAdd_id_r. reflexivity.
+  - destruct a2; simpl in e_either; inversion e_either.
+    repeat rewrite transMbox_Mbox_nil_r. simpl.
+    rewrite bvAdd_assoc. rewrite (bvAdd_comm _ v0). reflexivity.
+  - repeat rewrite transMbox_Mbox_nil_r. reflexivity.
 Time Qed.
 
 
@@ -447,6 +490,13 @@ Definition mbox_copy_spec : Mbox -> CompM (Mbox * Mbox) :=
   Mbox__rec (fun _ => CompM  (Mbox * Mbox)) (returnM (Mbox_nil, Mbox_nil))
           (fun strt len m _ d => mbox_copy_spec_cons strt len m d).
 
+Lemma eithers2_either {A B C} (f: A -> C) (g: B -> C) e :
+  eithers _ (FunsTo_Cons _ _ f (FunsTo_Cons _ _ g (FunsTo_Nil _))) e =
+  either _ _ _ f g e.
+Proof.
+  destruct e; reflexivity.
+Qed.
+
 Lemma mbox_copy_spec_ref : refinesFun mbox_copy mbox_copy_spec.
 Proof.
   unfold mbox_copy, mbox_copy__tuple_fun, mboxNewSpec.
@@ -462,30 +512,45 @@ Proof.
   time "mbox_copy_spec_ref" prove_refinement with NoRewrite.
   (* Show Ltac Profile. Reset Ltac Profile. *)
   all: try discriminate e_either.
-  - rewrite e_forall in e_maybe.
-    discriminate e_maybe.
-  - rewrite e_forall0 in e_maybe0.
-    discriminate e_maybe0.
-  (* TODO Add the sort of reasoning in the next two cases back into the automation? *)
-
-  - rewrite a in e_maybe1.
-    discriminate e_maybe1.
-  - rewrite a1 in e_maybe2.
-    discriminate e_maybe2.
-  - rewrite transMbox_Mbox_nil_r. (* <- this would go away if we removed "NoRewrite" *)
-    replace a2 with e_forall; [ replace a3 with e_forall0 | ].
-    unfold conjSliceBVVec.
-    reflexivity.
-  - apply BoolDecidableEqDepSet.UIP.
-  - apply BoolDecidableEqDepSet.UIP.
-  - rewrite <- e_assuming in e_if.
-    vm_compute in e_if; discriminate e_if.
-  - rewrite <- isBvult_to_isBvslt_pos in e_if.
-    + rewrite e_forall in e_if.
-      vm_compute in e_if; discriminate e_if.
-    + reflexivity.
-    + apply isBvslt_to_isBvsle.
-      assumption.
+  - destruct a; simpl in e_either; inversion e_either. reflexivity.
+  - simpl in e_either0. discriminate e_either0.
+  - destruct a; simpl in e_either; inversion e_either. simpl.
+    apply refinesM_assumingM_r; intro.
+    apply refinesM_forallM_r; intro.
+    unfold isBvule in a2.
+    rewrite <- H0 in e_maybe; simpl in e_maybe.
+    rewrite a2 in e_maybe. simpl in e_maybe. discriminate e_maybe.
+  - destruct a; simpl in e_either; inversion e_either. simpl.
+    apply refinesM_assumingM_r; intro.
+    apply refinesM_forallM_r; intro.
+    apply refinesM_forallM_r; intro.
+    rewrite <- H0 in e_maybe0. simpl in e_maybe0.
+    unfold isBvule in a4; rewrite a4 in e_maybe0.
+    simpl in e_maybe0. discriminate e_maybe0.
+  - destruct a; simpl in e_either; inversion e_either. simpl.
+    apply refinesM_assumingM_r; intro.
+    apply refinesM_forallM_r; intro.
+    apply refinesM_forallM_r; intro.
+    rewrite <- H0 in e_maybe1. simpl in e_maybe1.
+    unfold isBvule in a4. rewrite a4 in e_maybe1.
+    simpl in e_maybe1. discriminate e_maybe1.
+  - destruct a; simpl in e_either; inversion e_either. simpl.
+    apply refinesM_assumingM_r; intro.
+    apply refinesM_forallM_r; intro.
+    apply refinesM_forallM_r; intro.
+    rewrite <- H0 in e_maybe2. simpl in e_maybe2.
+    unfold isBvule in a6. rewrite a6 in e_maybe2.
+    simpl in e_maybe2. discriminate e_maybe2.
+  - destruct a; simpl in e_either; inversion e_either. simpl.
+    prove_refinement with NoRewrite.
+    subst a0. simpl. repeat rewrite transMbox_Mbox_nil_r.
+    destruct a1; simpl in e_either0; inversion e_either0.
+    simpl. unfold conjSliceBVVec.
+    replace a4 with e_forall; [ replace a5 with e_forall0;
+                                [ reflexivity | ] | ];
+    apply BoolDecidableEqDepSet.UIP.
+  - elimtype False; apply (not_isBvslt_bvsmin _ _ e_if).
+  - elimtype False; apply (not_isBvslt_bvsmax _ _ e_if).
 Time Qed.
 
 Lemma no_errors_mbox_copy

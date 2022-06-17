@@ -64,7 +64,7 @@ Lemma is_elem_fun_ref_manual : refinesFun is_elem is_elem_fun.
 Proof.
   unfold is_elem, is_elem__tuple_fun, is_elem_fun, sawLet_def.
   apply refinesFun_multiFixM_fst; intros x l.
-  apply refinesM_letRecM_Nil_l.
+  apply refinesM_letRecM_Nil_l. simpl.
   apply refinesM_either_l; intros [] e_either.
   all: destruct l; cbn [ unfoldList list_rect ] in *.
   all: try (injection e_either; intros; subst); try discriminate e_either.

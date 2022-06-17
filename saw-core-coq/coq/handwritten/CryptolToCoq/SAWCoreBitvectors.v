@@ -243,6 +243,12 @@ Proof. holds_for_bits_up_to_3. Qed.
 
 (** Other lemmas about bitvector inequalities **)
 
+Definition not_isBvslt_bvsmin w a : ~ isBvslt w a (bvsmin w).
+Proof. holds_for_bits_up_to_3. Qed.
+
+Definition not_isBvslt_bvsmax w a : ~ isBvslt w (bvsmax w) a.
+Proof. holds_for_bits_up_to_3. Qed.
+
 Definition isBvslt_pred_l w a : isBvslt w (bvsmin w) a ->
                                 isBvslt w (bvSub w a (intToBv w 1)) a.
 Proof. holds_for_bits_up_to_3. Qed.
