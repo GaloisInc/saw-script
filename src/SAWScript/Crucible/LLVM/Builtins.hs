@@ -192,6 +192,7 @@ import SAWScript.Value
 import SAWScript.Position
 import SAWScript.Exceptions
 import SAWScript.Options
+import SAWScript.Utils (neGroupOn, neNubOrd)
 
 import qualified SAWScript.Crucible.Common as Common
 import           SAWScript.Crucible.Common (Sym, SAWCruciblePersonality)
@@ -682,13 +683,38 @@ refineMethodSpec ::
   TopLevel (SolverStats, Set TheoremNonce)
 refineMethodSpec cc methodSpec lemmas tactic =
   ccWithBackend cc $ \bak ->
-  do printOutLnTop Info $
-       unwords ["Verifying", (methodSpec ^. csName) , "..."]
+  do let sym = cc^.ccSym
 
-     let sym = cc^.ccSym
+     let fnm = methodSpec ^. MS.csMethod
+
+     let isRelevant lemma_spec =
+           lemma_spec ^. MS.csMethod == fnm
+
+     let (relevantLemmas, irrelevantLemmas) =
+           partition isRelevant (map (view MS.psSpec) lemmas)
+
+     relevantLemmas' <-
+        case relevantLemmas of
+          [] -> fail $ unlines $
+                  [ "No relevant overrides included in specification refinement for " ++ show (pretty fnm) ] ++
+                  (if null irrelevantLemmas then [] else [ "Overrides provided for irrelevant methods:" ]) ++
+                  [ " *  " ++ show (pretty nm)
+                  | nm <- nubOrd $ map (view MS.csMethod) $ irrelevantLemmas
+                  ]
+          (x:xs) -> return (x NE.:| xs)
+
+     printOutLnTop Info $
+       unwords ["Refining specification for", (methodSpec ^. csName) , "..."]
+
+     unless (null irrelevantLemmas) $
+         printOutLnTop Warn $ unlines $
+           [ "Irrelevant overrides included in specification refinement for " ++ show (pretty fnm) ] ++
+           [ " *  " ++ show (pretty nm)
+           | nm <- nubOrd $ map (view MS.csMethod) $ irrelevantLemmas
+           ]
 
      profFile <- rwProfilingFile <$> getTopLevelRW
-     (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "llvm_verify" profFile
+     (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "llvm_refine_spec" profFile
 
      -- set up the metadata map for tracking proof obligation metadata
      mdMap <- io $ newIORef mempty
@@ -715,12 +741,10 @@ refineMethodSpec cc methodSpec lemmas tactic =
      frameIdent <- io $ Crucible.pushAssumptionFrame bak
 
      -- run the symbolic execution
-     printOutLnTop Info $
-       unwords ["Refining spec for", (methodSpec ^. csName) , "..."]
      top_loc <- toW4Loc "llvm_refine_spec" <$> getPosition
 
      (ret, globals3) <-
-       io $ refineSimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 mdMap
+       io $ refineSimulate opts cc pfs methodSpec args assumes top_loc relevantLemmas' globals2 mdMap
 
      -- collect the proof obligations
      (asserts, _post_override_state) <-
@@ -1482,7 +1506,7 @@ refineSimulate ::
   [(Crucible.MemType, LLVMVal)] ->
   [Crucible.LabeledPred Term AssumptionReason] ->
   W4.ProgramLoc ->
-  [MS.ProvedSpec (LLVM arch)] ->
+  NE.NonEmpty (MS.CrucibleMethodSpecIR (LLVM arch)) ->
   Crucible.SymGlobalState Sym ->
   IORef MetadataMap ->
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
@@ -1500,32 +1524,18 @@ refineSimulate opts cc pfs mspec args assumes top_loc lemmas globals mdMap =
       ccWithBackend cc $ \bak ->
       do args' <- prepareArgs sym argTys (map snd args)
 
-         let isRelevant lemma_spec =
-               lemma_spec ^. MS.csMethod == mspec ^.MS.csMethod
-
-         let (relevantLemmas, irrelevantLemmas) =
-               partition isRelevant (map (view MS.psSpec) lemmas)
-
-         unless (null irrelevantLemmas) $
-           fail "Irrelevant lemmas included in specification refinement: TODO better error message here"
-
-         relevantLemmas' <-
-            case relevantLemmas of
-              [] -> fail "No relevant override specifciations included in refinement: TODO better error message here"
-              (x:xs) -> return (x NE.:| xs)
-
          let execFeatures =
                map Crucible.genericToExecutionFeature pfs
 
          let initExecState =
                Crucible.InitialState simCtx globals Crucible.defaultAbortHandler retTy $
                Crucible.runOverrideSim retTy $
-               do Crucible.SomeHandle h <- registerOverride opts cc simCtx top_loc mdMap relevantLemmas'
+               do Crucible.SomeHandle h <- registerOverride opts cc simCtx top_loc mdMap lemmas
                   case (testEquality argTys (Crucible.handleArgTypes h),
                         testEquality retTy (Crucible.handleReturnType h)) of
-                    (Nothing, _) -> panic ("Argument type mismatch when refining specifciation for " ++ fstr)
+                    (Nothing, _) -> panic ("Argument type mismatch when refining specification for " ++ fstr)
                                            [ show argTys, show h ]
-                    (_, Nothing) -> panic ("Return type mismatch when refining specifciation for " ++ fstr)
+                    (_, Nothing) -> panic ("Return type mismatch when refining specification for " ++ fstr)
                                            [ show retTy, show h ]
                     (Just Refl, Just Refl) ->
                       do liftIO $
@@ -1535,6 +1545,7 @@ refineSimulate opts cc pfs mspec args assumes top_loc lemmas globals mdMap =
                               Crucible.addAssumption bak
                                 (Crucible.GenericAssumption loc reason expr)
                          Crucible.regValue <$> (Crucible.callFnVal (Crucible.HandleFnVal h) args')
+
          res <- Crucible.executeCrucible execFeatures initExecState
          case res of
            Crucible.FinishedResult _ partialResult ->
@@ -2763,22 +2774,3 @@ crucible_setup_val_to_typed_term (getAllLLVM -> sval) =
      case mtt of
        Nothing -> throwTopLevel $ "Could not convert a setup value to a term: " ++ show sval
        Just tt -> return tt
-
---------------------------------------------------------------------------------
-
-neGroupOn ::
-  Ord b =>
-  (a -> b) {- ^ equivalence class projection -} ->
-  [a] -> [NE.NonEmpty a]
-neGroupOn f = NE.groupBy ((==) `on` f) . sortBy (compare `on` f)
-
-neNubOrd ::
-  Ord a =>
-  NE.NonEmpty a ->
-  NE.NonEmpty a
-neNubOrd (hd NE.:| tl) = hd NE.:| loop (Set.singleton hd) tl
-  where
-    loop _prev [] = []
-    loop prev (x:xs)
-      | Set.member x prev = loop prev xs
-      | otherwise         = x : loop (Set.insert x prev) xs
