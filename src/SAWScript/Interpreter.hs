@@ -2803,6 +2803,17 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_verify`." ]
 
+  , prim "llvm_refine_spec"
+    "LLVMModule -> String -> [LLVMSpec] -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
+    (pureVal llvm_refine_spec)
+    Experimental
+    [ "Verify that a given specification for a function is a refinement of one or more"
+    , "specifications already proved for a function. This can be useful for situations where"
+    , "it is advantageous to logically restate the specification in some why, or where a more"
+    , "general specification can be constructed from a collection of individual, more specific,"
+    , "specifications."
+    ]
+
   , prim "llvm_unsafe_assume_spec"
     "LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec"
     (pureVal llvm_unsafe_assume_spec)
