@@ -212,6 +212,7 @@ initialState readFileFn =
                 , roBasicSS = ss
                 , roStackTrace = []
                 , roSubshell = fail "SAW server does not support subshells."
+                , roProofSubshell = fail "SAW server does not support subshells."
                 , roLocalEnv = []
                 }
          rw = TopLevelRW
