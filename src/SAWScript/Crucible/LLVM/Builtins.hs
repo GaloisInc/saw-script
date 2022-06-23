@@ -17,9 +17,11 @@ Stability   : provisional
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -130,6 +132,7 @@ import qualified Control.Monad.Trans.Maybe as MaybeT
 import           Data.Parameterized.Classes
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some
+import qualified Data.Parameterized.Context as Ctx
 
 -- cryptol
 import qualified Cryptol.TypeCheck.Type as Cryptol
@@ -164,13 +167,13 @@ import qualified Lang.Crucible.LLVM.Bytes as Crucible
 import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
+import           Lang.Crucible.LLVM.QQ( llvmOvr )
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 
 -- parameterized-utils
 import qualified Data.Parameterized.TraversableFC as Ctx
-import qualified Data.Parameterized.Context as Ctx
 
 -- saw-core
 import Verifier.SAW.FiniteValue (ppFirstOrderValue)
@@ -1782,10 +1785,10 @@ setupLLVMCrucibleContext pathSat lm action =
                let globals  = Crucible.llvmGlobals (Crucible.llvmMemVar ctx) mem
 
                let setupMem =
-                     do -- register the callable override functions
-                        Crucible.register_llvm_overrides llvm_mod [] [] ctx
-                        -- register all the functions defined in the LLVM module
+                     do -- register all the functions defined in the LLVM module
                         Crucible.registerLazyModule (handleTranslationWarning opts) mtrans
+                        -- register the callable override functions
+                        Crucible.register_llvm_overrides llvm_mod saw_llvm_overrides saw_llvm_overrides ctx
 
                let initExecState =
                      Crucible.InitialState simctx globals Crucible.defaultAbortHandler Crucible.UnitRepr $
@@ -1818,6 +1821,31 @@ handleTranslationWarning opts (Crucible.LLVMTranslationWarning s p msg) =
     ]
 
 --------------------------------------------------------------------------------
+
+saw_llvm_overrides ::
+  ( Crucible.IsSymInterface sym, Crucible.HasLLVMAnn sym, Crucible.HasPtrWidth wptr ) =>
+  [Crucible.OverrideTemplate p sym arch rtp l a]
+saw_llvm_overrides =
+  [ Crucible.basic_llvm_override saw_assert_override
+  ]
+
+saw_assert_override ::
+  ( Crucible.IsSymInterface sym, Crucible.HasLLVMAnn sym, Crucible.HasPtrWidth wptr ) =>
+  Crucible.LLVMOverride p sym
+    (Crucible.EmptyCtx Crucible.::> Crucible.BVType 32)
+    Crucible.UnitType
+saw_assert_override =
+  [llvmOvr| void @saw_assert( i32 ) |]
+  (\_memOps bak (Ctx.Empty Ctx.:> p) ->
+     do let sym = Crucible.backendGetSym bak
+        let msg = Crucible.GenericSimError "saw_assert"
+        liftIO $
+          do loc <- W4.getCurrentProgramLoc sym
+             cond <- W4.bvIsNonzero sym (Crucible.regValue p)
+             putStrLn $ unlines ["SAW assert!", show loc, show (W4.printSymExpr cond)]
+             Crucible.addDurableAssertion bak (Crucible.LabeledPred cond (Crucible.SimError loc msg))
+             Crucible.addAssumption bak (Crucible.GenericAssumption loc "crucible_assume" cond)
+  )
 
 baseCryptolType :: Crucible.BaseTypeRepr tp -> Maybe Cryptol.Type
 baseCryptolType bt =
