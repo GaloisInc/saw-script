@@ -1084,7 +1084,7 @@ setupGlobalAllocs cc mspec mem0 = foldM go mem0 $ mspec ^. MS.csGlobalAllocs
     go :: MemImpl -> MS.AllocGlobal (LLVM arch) -> IO MemImpl
     go mem (LLVMAllocGlobal _ symbol@(L.Symbol name)) = do
       let mtrans = ccLLVMModuleTrans cc
-          gimap = Crucible.globalInitMap mtrans
+          gimap = view Crucible.globalInitMap mtrans
       case Map.lookup symbol gimap of
         Just (g, Right (mt, _)) -> ccWithBackend cc $ \bak ->
           do when (L.gaConstant $ L.globalAttrs g) . throwMethodSpec mspec $ mconcat
@@ -1350,8 +1350,8 @@ withCfg ::
   IO a
 withCfg context name k =
   do let function_id = L.Symbol name
-     case Map.lookup function_id (Crucible.cfgMap (ccLLVMModuleTrans context)) of
-       Just (_, Crucible.AnyCFG cfg) -> k cfg
+     Crucible.getTranslatedCFG (ccLLVMModuleTrans context) function_id >>= \case
+       Just (_, Crucible.AnyCFG cfg, _warns) -> k cfg
        Nothing -> fail $ "Unexpected function name: " ++ name
 
 withCfgAndBlockId ::
@@ -1770,16 +1770,19 @@ setupLLVMCrucibleContext pathSat lm action =
                                  intrinsics halloc stdout
                                  bindings (Crucible.llvmExtensionImpl ?memOpts)
                                  Common.SAWCruciblePersonality
-               mem <- Crucible.populateConstGlobals bak (Crucible.globalInitMap mtrans)
+               mem <- Crucible.populateConstGlobals bak (view Crucible.globalInitMap mtrans)
                         =<< Crucible.initializeMemoryConstGlobals bak ctx llvm_mod
 
                let globals  = Crucible.llvmGlobals (Crucible.llvmMemVar ctx) mem
+
+               -- TODO!
+               let handleWarning _warn = return ()
 
                let setupMem =
                      do -- register the callable override functions
                         Crucible.register_llvm_overrides llvm_mod [] [] ctx
                         -- register all the functions defined in the LLVM module
-                        mapM_ (Crucible.registerModuleFn ctx) $ Map.elems $ Crucible.cfgMap mtrans
+                        Crucible.registerLazyModule handleWarning mtrans
 
                let initExecState =
                      Crucible.InitialState simctx globals Crucible.defaultAbortHandler Crucible.UnitRepr $
@@ -1967,9 +1970,9 @@ llvm_extract (Some lm) fn_name =
               throwTopLevel "Type aliases are not supported by `llvm_extract`."
        Left err -> throwTopLevel (displayVerifExceptionOpts opts err)
      setupLLVMCrucibleContext False lm $ \cc ->
-       case Map.lookup (fromString fn_name) (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
+       io (Crucible.getTranslatedCFG (ccLLVMModuleTrans cc) (fromString fn_name)) >>= \case
          Nothing  -> throwTopLevel $ unwords ["function", fn_name, "not found"]
-         Just (_,cfg) -> io $ extractFromLLVMCFG opts sc cc cfg
+         Just (_,cfg,_warns) -> io $ extractFromLLVMCFG opts sc cc cfg
 
 llvm_cfg ::
   Some LLVMModule ->
@@ -1979,9 +1982,9 @@ llvm_cfg (Some lm) fn_name =
   do let ctx = modTrans lm ^. Crucible.transContext
      let ?lc = ctx^.Crucible.llvmTypeCtx
      setupLLVMCrucibleContext False lm $ \cc ->
-       case Map.lookup (fromString fn_name) (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
+       io (Crucible.getTranslatedCFG (ccLLVMModuleTrans cc) (fromString fn_name)) >>= \case
          Nothing  -> throwTopLevel $ unwords ["function", fn_name, "not found"]
-         Just (_,cfg) -> return (LLVM_CFG cfg)
+         Just (_,cfg,_warns) -> return (LLVM_CFG cfg)
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
