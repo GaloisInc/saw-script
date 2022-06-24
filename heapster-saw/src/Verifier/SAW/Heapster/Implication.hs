@@ -1192,14 +1192,16 @@ data SimplImpl ps_in ps_out where
     LLVMBlockPerm w -> PermExpr (LLVMShapeType w) ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
-  -- | Eliminate a block of shape @sh1 orsh sh2@ to a disjunction, where the
-  -- supplied 'LLVMBlockPerm' gives @sh1@ and the additional argument is @sh2@::
+  -- | Eliminate a block of shape @sh1 orsh (sh2 orsh (... orsh shn))@ to an
+  -- n-way disjunctive permission, where the shape of the supplied
+  -- 'LLVMBlockPerm' is ignored, and is replaced by the list of shapes, which
+  -- must be non-empty:
   --
-  -- > x:memblock(rw,l,off,len,sh1 orsh sh2)
-  -- >   -o x:memblock(rw,l,off,len,sh1) or memblock(rw,l,off,len,sh2)
+  -- > x:memblock(rw,l,off,len,sh1 orsh (... orsh shn))
+  -- >   -o x:memblock(rw,l,off,len,sh1) or (... or memblock(rw,l,off,len,shn))
   SImpl_ElimLLVMBlockOr ::
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
-    LLVMBlockPerm w -> PermExpr (LLVMShapeType w) ->
+    LLVMBlockPerm w -> [PermExpr (LLVMShapeType w)] ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
   -- | Prove a block of shape @exsh z:A.sh@ from an existential:
@@ -1399,12 +1401,11 @@ data PermImpl1 ps_in ps_outs where
   Impl1_Pop :: ExprVar a -> ValuePerm a ->
                PermImpl1 (ps :> a) (RNil :> '(RNil, ps))
 
-  -- | Eliminate a disjunction on the top of the stack:
+  -- | Eliminate a sequence of right-nested disjunctions:
   --
-  -- > ps * x:(p1 \/ p2) -o (ps * x:p1) \/ (ps * x:p2)
-  Impl1_ElimOr :: ExprVar a -> ValuePerm a -> ValuePerm a ->
-                  PermImpl1 (ps :> a)
-                  (RNil :> '(RNil, ps :> a) :> '(RNil, ps :> a))
+  -- > ps * x:(p1 \/ (p2 \/ (... \/ pn)))
+  -- >   -o (ps * x:p1) \/ ... \/ (ps * x:pn)
+  Impl1_ElimOrs :: ExprVar a -> OrList ps a disjs -> PermImpl1 (ps :> a) disjs
 
   -- | Eliminate an existential on the top of the stack:
   --
@@ -1537,6 +1538,16 @@ data PermImpl1 ps_in ps_outs where
     String -> PermImpl1 ps (RNil :> '(RNil, ps :> LLVMPointerType w))
 
 
+-- | A single disjunct of type @a@ being eliminated, with permissions @ps@ on
+-- the stack below the disjunction
+data OrListDisj (ps :: RList CrucibleType) a
+     (disj :: (RList CrucibleType, RList CrucibleType)) where
+  OrListDisj :: ValuePerm a -> OrListDisj ps a '(RNil, ps :> a)
+
+-- | A sequence of disjuncts being eliminated, with permissions @ps@ on the
+-- stack below the disjunction
+type OrList ps a = RAssign (OrListDisj ps a)
+
 -- | A @'PermImpl' r ps@ is a proof tree of the judgment
 --
 -- > Gamma | Pl * P |- (Gamma1 | Pl1 * P1) \/ ... \/ (Gamman | Pln * Pn)
@@ -1591,6 +1602,9 @@ instance NuMatchingAny1 EqPerm where
 instance NuMatchingAny1 (LocalImplRet ps) where
   nuMatchingAny1Proof = nuMatchingProof
 
+instance NuMatchingAny1 (OrListDisj ps a) where
+  nuMatchingAny1Proof = nuMatchingProof
+
 -- Many of these types are mutually recursive. Moreover, Template Haskell
 -- declaration splices strictly separate top-level groups, so if we were to
 -- write each $(mkNuMatching [t| ... |]) splice individually, the splices
@@ -1603,6 +1617,7 @@ $(concatMapM mkNuMatching
   , [t| forall ps a. NuMatching a => EqProof ps a |]
   , [t| forall ps_in ps_out. SimplImpl ps_in ps_out |]
   , [t| forall ps_in ps_outs. PermImpl1 ps_in ps_outs |]
+  , [t| forall ps a disj. OrListDisj ps a disj |]
   , [t| forall r bs_pss. NuMatchingAny1 r => MbPermImpls r bs_pss |]
   , [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |]
   , [t| forall ps_in ps_out. LocalPermImpl ps_in ps_out |]
@@ -1619,11 +1634,11 @@ data DistPermsSplit ps where
 
 $(mkNuMatching [t| forall ps. DistPermsSplit ps |])
 
-
+-- FIXME: delete all of this?
+{-
 -- | Compile-time flag for whether to prune failure branches in 'implCatchM'
 pruneFailingBranches :: Bool
 pruneFailingBranches = False
-
 
 -- | Apply the 'PermImpl_Step' constructor to a 'PermImpl1' rule and its
 -- sub-proofs, performing the following simplifications (some of which are
@@ -1671,10 +1686,10 @@ permImplStep impl1@(Impl1_TryProveBVProp _ _ _) mb_impls =
   permImplStepUnary impl1 mb_impls
 
 -- An or elimination fails if both branches fail
-permImplStep (Impl1_ElimOr _ _ _) (MbPermImpls_Cons _
-                                   (MbPermImpls_Cons _ MbPermImpls_Nil
-                                    (matchMbImplFail -> Just msg1))
-                                   (matchMbImplFail -> Just msg2)) =
+permImplStep (Impl1_ElimOrs _ _ _) (MbPermImpls_Cons _
+                                    (MbPermImpls_Cons _ MbPermImpls_Nil
+                                     (matchMbImplFail -> Just msg1))
+                                    (matchMbImplFail -> Just msg2)) =
   PermImpl_Step (Impl1_Fail
                  (msg1 ++ "\n\n--------------------\n\n" ++ msg2))
   MbPermImpls_Nil
@@ -1709,7 +1724,6 @@ permImplStepUnary impl1 (MbPermImpls_Cons MbPermImpls_Nil
 
 -- Default case: just apply PermImpl_Step
 permImplStepUnary impl1 mb_impls = PermImpl_Step impl1 mb_impls
-
 
 -- | Pattern-match an implication inside a binding to see if it is just a
 -- failure, and if so, return the failure message, all without requiring a
@@ -1756,6 +1770,7 @@ permImplCatch pimpl1 pimpl2 =
   PermImpl_Step Impl1_Catch $
   MbPermImpls_Cons knownRepr (MbPermImpls_Cons knownRepr MbPermImpls_Nil $ emptyMb pimpl1) $
   emptyMb pimpl2
+-}
 
 
 -- | Test if a 'PermImpl' "succeeds", meaning there is at least one non-failing
@@ -1774,10 +1789,18 @@ permImplSucceeds (PermImpl_Step (Impl1_Push _ _) (MbPermImpls_Cons _ _ mb_impl))
   mbLift $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_Pop _ _) (MbPermImpls_Cons _ _ mb_impl)) =
   mbLift $ fmap permImplSucceeds mb_impl
+permImplSucceeds (PermImpl_Step (Impl1_ElimOrs _ _ ) mb_impls) =
+  mbImplsSucc mb_impls where
+  mbImplsSucc :: MbPermImpls r ps_outs -> Int
+  mbImplsSucc MbPermImpls_Nil = 0
+  mbImplsSucc (MbPermImpls_Cons _ mb_impls' mb_impl) =
+    max (mbImplsSucc mb_impls') (mbLift $ fmap permImplSucceeds mb_impl)
+{-
 permImplSucceeds (PermImpl_Step (Impl1_ElimOr _ _ _)
                   (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2)) =
   max (mbLift (fmap permImplSucceeds mb_impl1))
   (mbLift (fmap permImplSucceeds mb_impl2))
+-}
 permImplSucceeds (PermImpl_Step (Impl1_ElimExists _ _)
                   (MbPermImpls_Cons _ _ mb_impl)) =
   mbLift $ fmap permImplSucceeds mb_impl
@@ -2124,10 +2147,9 @@ simplImplIn (SImpl_IntroLLVMBlockOr x bp1 sh2) =
   distPerms1 x (ValPerm_Or
                 (ValPerm_Conj1 $ Perm_LLVMBlock bp1)
                 (ValPerm_Conj1 $ Perm_LLVMBlock $ bp1 { llvmBlockShape = sh2 }))
-simplImplIn (SImpl_ElimLLVMBlockOr x bp1 sh2) =
-  let sh1 = llvmBlockShape bp1 in
+simplImplIn (SImpl_ElimLLVMBlockOr x bp shs) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
-                bp1 { llvmBlockShape = PExpr_OrShape sh1 sh2 })
+                bp { llvmBlockShape = foldr1 PExpr_OrShape shs })
 simplImplIn (SImpl_IntroLLVMBlockEx x bp) =
   case llvmBlockShape bp of
     PExpr_ExShape mb_sh ->
@@ -2523,10 +2545,10 @@ simplImplOut (SImpl_IntroLLVMBlockOr x bp1 sh2) =
   let sh1 = llvmBlockShape bp1 in
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
                 bp1 { llvmBlockShape = PExpr_OrShape sh1 sh2 })
-simplImplOut (SImpl_ElimLLVMBlockOr x bp1 sh2) =
-  distPerms1 x (ValPerm_Or
-                (ValPerm_Conj1 $ Perm_LLVMBlock bp1)
-                (ValPerm_Conj1 $ Perm_LLVMBlock $ bp1 { llvmBlockShape = sh2 }))
+simplImplOut (SImpl_ElimLLVMBlockOr x bp shs) =
+  distPerms1 x $
+  foldr1 ValPerm_Or $
+  map (\sh -> ValPerm_Conj1 $ Perm_LLVMBlock $ bp { llvmBlockShape = sh }) shs
 simplImplOut (SImpl_IntroLLVMBlockEx x bp) =
   distPerms1 x (ValPerm_LLVMBlock bp)
 simplImplOut (SImpl_ElimLLVMBlockEx x bp) =
@@ -2616,6 +2638,58 @@ mbPermSets2 :: (KnownRepr CruCtx bs1, KnownRepr CruCtx bs2) =>
 mbPermSets2 ps1 ps2 =
   MbPermSets_Cons (MbPermSets_Cons MbPermSets_Nil knownRepr ps1) knownRepr ps2
 
+-- | Extract the permission in an or elimination disjunct
+orListDisjPerm :: OrListDisj ps a disj -> ValuePerm a
+orListDisjPerm (OrListDisj p) = p
+
+-- | Extract the disjuncts of an or elimination list
+orListDisjs :: OrList ps a disjs -> [ValuePerm a]
+orListDisjs = RL.mapToList orListDisjPerm
+
+-- | Extract the disjuncts of an or elimination list in a binding
+mbOrListDisjs :: Mb ctx (OrList ps a disjs) -> [Mb ctx (ValuePerm a)]
+mbOrListDisjs = mbList . mbMapCl $(mkClosed [| orListDisjs |])
+
+-- | Compute the permission eliminated by an 'OrList'
+orListPerm :: OrList ps a disjs -> ValuePerm a
+orListPerm MNil = error "orListPerm: empty disjunct list!"
+orListPerm or_list = foldr1 ValPerm_Or $ orListDisjs or_list
+
+-- | Compute the permission-in-binding eliminated by an 'OrList' in a binding
+mbOrListPerm :: Mb ctx (OrList ps a disj) -> Mb ctx (ValuePerm a)
+mbOrListPerm = mbMapCl $(mkClosed [| orListPerm |])
+
+-- | Build an 'MbPermSets' 
+orListMbPermSets :: PermSet (ps :> a) -> ExprVar a -> OrList ps a disjs ->
+                    MbPermSets disjs
+orListMbPermSets _ _ MNil = MbPermSets_Nil
+orListMbPermSets ps x (or_list :>: OrListDisj p) =
+  MbPermSets_Cons (orListMbPermSets ps x or_list) CruCtxNil $
+  emptyMb $ set (topDistPerm x) p ps
+
+-- | If we have an 'MbPermImpls' list associated with a multi-way or
+-- elimination, extract out the list of 'PermImpl's it carries
+orListPermImpls :: OrList ps a disjs -> MbPermImpls r disjs ->
+                   [PermImpl r (ps :> a)]
+orListPermImpls MNil MbPermImpls_Nil = []
+orListPermImpls (or_list :>: OrListDisj _) (MbPermImpls_Cons
+                                            _ mb_impls mb_impl) =
+  orListPermImpls or_list mb_impls ++ [elimEmptyMb mb_impl]
+
+-- | Extract the 'PermImpl's-in-bindings from an 'MbPermImpls'-in-binding
+-- associated with a multi-way or elimination
+mbOrListPermImpls :: NuMatchingAny1 r => Mb ctx (OrList ps a disjs) ->
+                     Mb ctx (MbPermImpls r disjs) ->
+                     [Mb ctx (PermImpl r (ps :> a))]
+mbOrListPermImpls (mbMatch ->
+                   [nuMP| MNil |]) (mbMatch -> [nuMP| MbPermImpls_Nil |]) = []
+mbOrListPermImpls
+  (mbMatch -> [nuMP| mb_or_list :>: OrListDisj _ |])
+  (mbMatch -> [nuMP| MbPermImpls_Cons _ mb_impls mb_impl |])
+  = mbOrListPermImpls mb_or_list mb_impls ++ [mbMapCl
+                                              $(mkClosed [| elimEmptyMb |])
+                                              mb_impl]
+
 -- | Apply a single permission implication step to a permission set
 applyImpl1 :: HasCallStack => PPInfo -> PermImpl1 ps_in ps_outs ->
               PermSet ps_in -> MbPermSets ps_outs
@@ -2644,12 +2718,11 @@ applyImpl1 pp_info (Impl1_Pop x p) ps =
       vsep [pretty "applyImpl1: Impl1_Pop: non-empty permissions for variable"
             <+> permPretty pp_info x <> pretty ":",
             permPretty pp_info (ps ^. varPerm x)]
-applyImpl1 _ (Impl1_ElimOr x p1 p2) ps =
-  if ps ^. topDistPerm x == ValPerm_Or p1 p2 then
-    mbPermSets2 (emptyMb $ set (topDistPerm x) p1 ps)
-    (emptyMb $ set (topDistPerm x) p2 ps)
+applyImpl1 _ (Impl1_ElimOrs x or_list) ps =
+  if ps ^. topDistPerm x == orListPerm or_list then
+    orListMbPermSets ps x or_list
   else
-    error "applyImpl1: Impl1_ElimOr: unexpected permission"
+    error "applyImpl1: Impl1_ElimOrs: unexpected permission"
 applyImpl1 _ (Impl1_ElimExists x p_body) ps =
   if ps ^. topDistPerm x == ValPerm_Exists p_body then
     mbPermSets1 (fmap (\p -> set (topDistPerm x) p ps) p_body)
@@ -3058,8 +3131,8 @@ instance SubstVar PermVarSubst m =>
     [nuMP| SImpl_IntroLLVMBlockOr x bp1 sh2 |] ->
       SImpl_IntroLLVMBlockOr <$> genSubst s x <*> genSubst s bp1
                              <*> genSubst s sh2
-    [nuMP| SImpl_ElimLLVMBlockOr x bp1 sh2 |] ->
-      SImpl_ElimLLVMBlockOr <$> genSubst s x <*> genSubst s bp1 <*> genSubst s sh2
+    [nuMP| SImpl_ElimLLVMBlockOr x bp shs |] ->
+      SImpl_ElimLLVMBlockOr <$> genSubst s x <*> genSubst s bp <*> genSubst s shs
     [nuMP| SImpl_IntroLLVMBlockEx x bp |] ->
       SImpl_IntroLLVMBlockEx <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_ElimLLVMBlockEx x bp |] ->
@@ -3116,8 +3189,8 @@ instance SubstVar PermVarSubst m =>
       Impl1_Push <$> genSubst s x <*> genSubst s p
     [nuMP| Impl1_Pop x p |] ->
       Impl1_Pop <$> genSubst s x <*> genSubst s p
-    [nuMP| Impl1_ElimOr x p1 p2 |] ->
-      Impl1_ElimOr <$> genSubst s x <*> genSubst s p1 <*> genSubst s p2
+    [nuMP| Impl1_ElimOrs x or_list |] ->
+      Impl1_ElimOrs <$> genSubst s x <*> genSubst s or_list
     [nuMP| Impl1_ElimExists x p_body |] ->
       Impl1_ElimExists <$> genSubst s x <*> genSubst s p_body
     [nuMP| Impl1_ElimFalse x |] ->
@@ -3165,6 +3238,13 @@ instance (NuMatchingAny1 r, SubstVar PermVarSubst m,
     [nuMP| MbPermImpls_Cons mpx mb_impl mb_impls' |] ->
       let px = mbLift mpx in
       MbPermImpls_Cons px <$> genSubst s mb_impl <*> genSubstMb (cruCtxProxies px) s mb_impls'
+
+instance SubstVar s m => Substable s (OrListDisj ps a disj) m where
+  genSubst s (mbMatch -> [nuMP| OrListDisj mb_p |]) =
+    OrListDisj <$> genSubst s mb_p
+
+instance SubstVar s m => Substable1 s (OrListDisj ps a) m where
+  genSubst1 = genSubst
 
 -- FIXME: shouldn't need the SubstVar PermVarSubst m assumption...
 instance SubstVar PermVarSubst m =>
@@ -3891,15 +3971,25 @@ implPopM x p =
                         permPretty i x <> colon <> permPretty i p]) >>>
   implApplyImpl1 (Impl1_Pop x p) (MNil :>: Impl1Cont (const $ pure ()))
 
--- | Eliminate a disjunctive permission @x:(p1 \/ p2)@, building proof trees
--- that proceed with both @x:p1@ and @x:p2@
-implElimOrM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a -> ValuePerm a ->
-               ImplM vars s r (ps :> a) (ps :> a) ()
-implElimOrM x p1 p2 =
+-- | Pattern-match a permission as a sequence of 1 or more disjuncts
+matchOrList :: ValuePerm a -> Maybe (Some (OrList ps a))
+matchOrList p_top@(ValPerm_Or _ _) = Just (helper MNil p_top) where
+  helper :: OrList ps a disjs -> ValuePerm a -> Some (OrList ps a)
+  helper or_list (ValPerm_Or p1 p2) =
+    helper (or_list :>: OrListDisj p1) p2
+  helper or_list p = Some (or_list :>: OrListDisj p)
+matchOrList _ = Nothing
+
+-- | Eliminate a right-nested disjunction @x:(p1 \/ (p2 \/ (... \/ pn)))@,
+-- building proof trees that proceed with all the @pi@
+implElimOrsM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+                ImplM vars s r (ps :> a) (ps :> a) ()
+implElimOrsM x p@(matchOrList -> Just (Some or_list)) =
   implTraceM (\pp_info -> pretty "Eliminating or:" <+>
-                          permPretty pp_info (ValPerm_Or p1 p2)) >>>
-  implApplyImpl1 (Impl1_ElimOr x p1 p2)
-  (MNil :>: Impl1Cont (const $ pure ()) :>: Impl1Cont (const $ pure ()))
+                          permPretty pp_info p) >>>
+  implApplyImpl1 (Impl1_ElimOrs x or_list)
+  (RL.map (\(OrListDisj _) -> Impl1Cont (const $ pure ())) or_list)
+implElimOrsM _ _ = error "implElimOrsM: malformed input permission"
 
 -- | Eliminate an existential permission @x:(exists (y:tp).p)@ in the current
 -- permission set
@@ -4255,7 +4345,7 @@ elimOrsExistsM :: NuMatchingAny1 r => ExprVar a ->
                   ImplM vars s r (ps :> a) (ps :> a) (ValuePerm a)
 elimOrsExistsM x =
   getTopDistPerm x >>= \case
-    ValPerm_Or p1 p2 -> implElimOrM x p1 p2 >>> elimOrsExistsM x
+    p@(ValPerm_Or _ _) -> implElimOrsM x p >>> elimOrsExistsM x
     ValPerm_Exists mb_p ->
       implElimExistsM x mb_p >>> elimOrsExistsM x
     p -> pure p
@@ -4266,7 +4356,7 @@ elimOrsExistsNamesM :: NuMatchingAny1 r => ExprVar a ->
                        ImplM vars s r (ps :> a) (ps :> a) (ValuePerm a)
 elimOrsExistsNamesM x =
   getTopDistPerm x >>= \case
-    ValPerm_Or p1 p2 -> implElimOrM x p1 p2 >>> elimOrsExistsNamesM x
+    p@(ValPerm_Or _ _) -> implElimOrsM x p >>> elimOrsExistsNamesM x
     ValPerm_Exists mb_p ->
       implElimExistsM x mb_p >>> elimOrsExistsNamesM x
     ValPerm_Named npn args off
@@ -5353,8 +5443,8 @@ implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
 
 -- For an or shape, eliminate to a disjunctive permisison
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
-                                        PExpr_OrShape sh1 sh2 }) =
-  implSimplM Proxy (SImpl_ElimLLVMBlockOr x (bp { llvmBlockShape = sh1 }) sh2)
+                                        PExpr_OrShape sh1 (matchOrShapes -> shs) }) =
+  implSimplM Proxy (SImpl_ElimLLVMBlockOr x bp (sh1:shs))
 
 -- For an existential shape, eliminate to an existential permisison
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
@@ -5371,6 +5461,11 @@ implElimLLVMBlock _ bp =
                     permPretty i (Perm_LLVMBlock bp)) >>>=
   implFailM
 
+-- | Destruct a shape @sh1 orsh (sh2 orsh (... orsh shn))@ that is a
+-- right-nested disjunctive shape into the list @[sh1,...,shn]@ of disjuncts
+matchOrShapes :: PermExpr (LLVMShapeType w) -> [PermExpr (LLVMShapeType w)]
+matchOrShapes (PExpr_OrShape sh1 (matchOrShapes -> shs)) = sh1 : shs
+matchOrShapes sh = [sh]
 
 -- | Assume the top of the stack contains @x:ps@, which are all the permissions
 -- for @x@. Extract the @i@th conjuct from @ps@, which should be a @memblock@
