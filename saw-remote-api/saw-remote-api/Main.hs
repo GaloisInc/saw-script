@@ -40,6 +40,7 @@ import SAWServer.ProofScript
     ( makeSimpsetDescr, makeSimpset, proveDescr, prove )
 import SAWServer.SaveTerm ( saveTermDescr, saveTerm )
 import SAWServer.SetOption ( setOptionDescr, setOption )
+import SAWServer.InteractiveRewriting
 
 
 main :: IO ()
@@ -142,4 +143,13 @@ sawMethods =
      "SAW/clear all states"
      clearAllStatesDescr
      clearAllStates
+
+  , Argo.command
+    "SAW/include sawscript"
+    includeSAWScriptDescr
+    includeSAWScript
+  , Argo.command
+    "SAW/read extcore"
+    readExtcoreDescr
+    readExtcore
   ]

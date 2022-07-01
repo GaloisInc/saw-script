@@ -86,8 +86,12 @@ module SAWScript.Crucible.LLVM.Builtins
 
 import Prelude hiding (fail)
 
+import SAWScript.Prover.Exporter (writeCore)
+
 import qualified Control.Exception as X
 import           Control.Lens
+
+import System.Directory
 
 import           Control.Monad.Extra (findM, whenM)
 import           Control.Monad.State hiding (fail)
@@ -638,8 +642,16 @@ verifyObligations cc mspec tactic assumes asserts =
           goal'  <- io $ boolToProp sc [] goal
           let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
               proofgoal = ProofGoal n "vc" goalname goal'
+          let dir = "/tmp/saw-test-rewrite/" <> goalname
+          liftIO $ createDirectoryIfMissing True dir
+          tm <- liftIO $ propToTerm sc goal'
+          writeCore (dir <> "/term.extcore") tm 
+          modify $ \rw -> rw { rwRewriteSummary = Just dir }
+          writeTacticPreamble
           res <- runProofScript tactic proofgoal (Just ploc) $ Text.unwords
                     ["LLVM verification condition", Text.pack (show n), Text.pack goalname]
+          writeTacticPostamble
+          modify $ \rw -> rw { rwRewriteSummary = Nothing }
           case res of
             ValidProof stats thm -> return (stats, thmNonce thm)
             UnfinishedProof pst ->

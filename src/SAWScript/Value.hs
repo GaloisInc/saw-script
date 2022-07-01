@@ -32,6 +32,8 @@ module SAWScript.Value where
 
 import Prelude hiding (fail)
 
+import System.FilePath
+
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative)
 #endif
@@ -113,6 +115,8 @@ import           What4.ProgramLoc (ProgramLoc(..))
 
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.SAWTranslation (ChecksFlag)
+
+import qualified Data.Text.IO as Text
 
 -- Values ----------------------------------------------------------------------
 
@@ -459,6 +463,8 @@ data TopLevelRW =
   , rwAllocSymInitCheck :: Bool
 
   , rwCrucibleTimeout :: Integer
+
+  , rwRewriteSummary :: Maybe FilePath
   }
 
 newtype TopLevel a =
@@ -477,6 +483,17 @@ instance Wrapped (TopLevel a) where
 
 instance MonadFail TopLevel where
   fail = throwTopLevel
+
+writeTactic :: Text -> TopLevel ()
+writeTactic s = rwRewriteSummary <$> get >>= \case
+  Nothing -> pure ()
+  Just dir -> liftIO $ Text.appendFile (dir </> "main.saw") (s <> "\n")
+
+writeTacticPreamble :: TopLevel ()
+writeTacticPreamble = writeTactic "include \"../rewrites.saw\";\nt <- read_core \"term.extcore\nprove_extcore (do {\n";
+
+writeTacticPostamble :: TopLevel ()
+writeTacticPostamble = writeTactic "}) t;"
 
 runTopLevel :: TopLevel a -> TopLevelRO -> IORef TopLevelRW -> IO a
 runTopLevel (TopLevel m) ro ref =

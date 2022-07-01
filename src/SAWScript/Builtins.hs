@@ -37,7 +37,7 @@ import qualified Data.IntMap as IntMap
 import Data.IORef
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, catMaybes)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -515,11 +515,23 @@ unfoldGoal unints =
      return (prop', UnfoldEvidence unints')
 
 simplifyGoal :: SV.SAWSimpset -> ProofScript ()
-simplifyGoal ss =
-  execTactic $ tacticChange $ \goal ->
-  do sc <- getSharedContext
-     (_,prop') <- io (simplifyProp sc ss (goalProp goal))
-     return (prop', RewriteEvidence ss)
+simplifyGoal ss = do
+  execTactic $ tacticChange $ \goal -> do
+    thms <- fmap catMaybes $ forM (annRewriteRule <$> listRules ss) $ \case
+      Nothing -> pure Nothing
+      Just n -> lookupTheoremName n
+    case thms of
+      [] -> do
+        SV.writeTactic "simplify (cryptol_ss ());"
+      _ -> do
+        SV.writeTactic $ mconcat
+          [ "simplify (addsimps ["
+          , Text.intercalate ", " thms
+          , "] empty_ss);"
+          ]
+    sc <- getSharedContext
+    (_,prop') <- io (simplifyProp sc ss (goalProp goal))
+    return (prop', RewriteEvidence ss)
 
 hoistIfsInGoalPrim :: ProofScript ()
 hoistIfsInGoalPrim =
@@ -541,9 +553,23 @@ goal_eval :: [String] -> ProofScript ()
 goal_eval unints =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
+     SV.writeTactic $ mconcat
+       [ "goal_eval_unint ["
+       , Text.intercalate ", " $ Text.pack . show <$> unints
+       , "];"
+       ]
      unintSet <- resolveNames unints
      prop' <- io (evalProp sc unintSet (goalProp goal))
      return (prop', EvalEvidence unintSet)
+
+prop_eval :: [String] -> TypedTerm -> TopLevel TypedTerm
+prop_eval unints tt =
+  do sc <- getSharedContext
+     prop <- io (termToProp sc $ ttTerm tt)
+     unintSet <- resolveNames unints
+     prop' <- io (evalProp sc unintSet prop)
+     t <- io (propToTerm sc prop')
+     return tt { ttTerm = t }
 
 extract_uninterp ::
   [String] {- ^ uninterpred identifiers -} ->
@@ -1702,3 +1728,14 @@ summarize_verification_json fpath =
      db <- roTheoremDB <$> getTopLevelRO
      summary <- io (computeVerificationSummary db jspecs lspecs thms)
      io (writeFile fpath (jsonVerificationSummary summary))
+
+lookupTheoremName :: TheoremNonce -> TopLevel (Maybe Text)
+lookupTheoremName n = do
+  vals <- rwValues <$> getTopLevelRW
+  let matches = flip filter (Map.assocs vals) $ \(_, v) ->
+        case v of
+          SV.VTheorem thm' | n == thmNonce thm' -> True
+          _ -> False
+  case matches of
+    ((nm, _):_) -> pure $ Just $ Text.pack $ getVal nm
+    _ -> pure Nothing

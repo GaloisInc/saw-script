@@ -26,6 +26,7 @@ module SAWScript.Interpreter
   , processFile
   , buildTopLevelEnv
   , primDocEnv
+  , include_value
   )
   where
 
@@ -494,6 +495,7 @@ buildTopLevelEnv proxy opts =
                    , rwStackBaseAlign = defaultStackBaseAlign
                    , rwAllocSymInitCheck = True
                    , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
+                   , rwRewriteSummary = Nothing
                    }
        return (bic, ro0, rw0)
 
@@ -1386,6 +1388,11 @@ primitives = Map.fromList
     , "The named values will be treated opaquely and not unfolded during evaluation."
     ]
 
+  , prim "prop_eval" "[String] -> Term -> Term"
+    (funVal2 prop_eval)
+    Experimental
+    []
+
   , prim "goal_eval"           "ProofScript ()"
     (pureVal (goal_eval []))
     Current
@@ -2175,12 +2182,12 @@ primitives = Map.fromList
     , "the example will run '<false> {{ () }}'"
     ]
 
-  , prim "undefined"           "{a} a"
-    (\_ _ -> error "interpret: undefined")
-    Current
-    [ "An undefined value of any type. Evaluating 'undefined' makes the"
-    , "program crash."
-    ]
+  -- , prim "undefined"           "{a} a"
+  --   (\_ _ -> error "interpret: undefined")
+  --   Current
+  --   [ "An undefined value of any type. Evaluating 'undefined' makes the"
+  --   , "program crash."
+  --   ]
 
   , prim "exit"                "Int -> TopLevel ()"
     (pureVal exitPrim)

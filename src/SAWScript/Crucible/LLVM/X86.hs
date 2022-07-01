@@ -30,6 +30,9 @@ module SAWScript.Crucible.LLVM.X86
   , defaultStackBaseAlign
   ) where
 
+import System.Directory
+import SAWScript.Prover.Exporter (writeCore)
+
 import Control.Lens.TH (makeLenses)
 
 import System.IO (stdout)
@@ -518,7 +521,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
             ar
         C.TimeoutResult{} -> fail "Execution timed out"
 
-      (stats,thms) <- checkGoals bak opts sc tactic
+      (stats,thms) <- checkGoals bak opts sc nm tactic
 
       end <- io getCurrentTime
       let diff = diffUTCTime end start
@@ -1143,9 +1146,10 @@ checkGoals ::
   bak ->
   Options ->
   SharedContext ->
+  String ->
   ProofScript () ->
   TopLevel (SolverStats, Set TheoremNonce)
-checkGoals bak opts sc tactic = do
+checkGoals bak opts sc nm tactic = do
   gs <- liftIO $ getGoals (SomeBackend bak)
   liftIO . printOutLn opts Info $ mconcat
     [ "Simulation finished, running solver on "
@@ -1155,8 +1159,17 @@ checkGoals bak opts sc tactic = do
   outs <- forM (zip [0..] gs) $ \(n, g) -> do
     term <- liftIO $ gGoal sc g
     let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
+    let goalname = nm <> show n
+    let dir = "/tmp/saw-test-rewrite/" <> goalname
+    liftIO $ createDirectoryIfMissing True dir
+    tm <- liftIO $ propToTerm sc term
+    writeCore (dir <> "/term.extcore") tm 
+    modify $ \rw -> rw { rwRewriteSummary = Just dir }
+    writeTacticPreamble
     res <- runProofScript tactic proofgoal (Just (gLoc g)) $ Text.unwords
               ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))]
+    writeTacticPostamble
+    modify $ \rw -> rw { rwRewriteSummary = Nothing }
     case res of
       ValidProof stats thm -> return (stats, thmNonce thm)
       UnfinishedProof pst -> do

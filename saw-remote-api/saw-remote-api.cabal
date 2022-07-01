@@ -90,6 +90,7 @@ library
                    SAWServer.TopLevel,
                    SAWServer.TrackFile,
                    SAWServer.VerifyCommon
+                   SAWServer.InteractiveRewriting
 
 executable saw-remote-api
   import: general, deps, warnings, errors
