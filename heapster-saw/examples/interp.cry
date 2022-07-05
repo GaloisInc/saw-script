@@ -1,0 +1,25 @@
+module Interp where
+
+import Either
+
+primitive type Var : *
+primitive type FunName : *
+primitive type PrimOp2 : *
+primitive type Expr : *
+primitive type Stmt : *
+
+primitive foldExpr : Either [64] (Either Var (PrimOp2, Expr, Expr)) -> Expr
+primitive unfoldExpr : Expr -> Either [64] (Either Var (PrimOp2, Expr, Expr))
+
+primitive foldStmt : Either Var
+                            (Either ()
+                                    (Either (Var, Expr)
+                                            (Either (Expr, Stmt, Stmt)
+                                                    (Either (Expr, Stmt)
+                                                            (FunName, ???))))) -> Stmt
+primitive unfoldStmt : Stmt -> Either Var
+                                      (Either ()
+                                              (Either (Var, Expr)
+                                                      (Either (Expr, Stmt, Stmt)
+                                                              (Either (Expr, Stmt)
+                                                                      (FunName, ???)))))
