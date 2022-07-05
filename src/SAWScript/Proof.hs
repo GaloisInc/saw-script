@@ -290,12 +290,12 @@ simplifySequent sc ss (UnfocusedSequent hs gs) =
   do (a, hs') <- simplifyProps sc ss hs
      (b, gs') <- simplifyProps sc ss gs
      return (Set.union a b, UnfocusedSequent hs' gs')
-simplifySequent sc ss (GoalFocusedSequent hs (gs1,g,gs2)) =
+simplifySequent sc ss (GoalFocusedSequent hs (FB gs1 g gs2)) =
   do (a, g') <- simplifyProp sc ss g
-     return (a, GoalFocusedSequent hs (gs1, g', gs2))
-simplifySequent sc ss (HypFocusedSequent (hs1, h, hs2) gs) =
+     return (a, GoalFocusedSequent hs (FB gs1 g' gs2))
+simplifySequent sc ss (HypFocusedSequent (FB hs1 h hs2) gs) =
   do (a, h') <- simplifyProp sc ss h
-     return (a, HypFocusedSequent (hs1, h', hs2) gs)
+     return (a, HypFocusedSequent (FB hs1 h' hs2) gs)
 
 
 hoistIfsInGoal :: SharedContext -> Prop -> IO Prop
@@ -385,15 +385,17 @@ ppProp opts nenv (Prop tm) = ppTermWithNames opts nenv tm
 -- TODO, I'd like to add metadata here
 type SequentBranch = Prop
 
+data FocusedBranch = FB ![SequentBranch] !SequentBranch ![SequentBranch]
+
 data Sequent
-  = UnfocusedSequent   [SequentBranch] [SequentBranch]
-  | GoalFocusedSequent [SequentBranch] ([SequentBranch], SequentBranch, [SequentBranch])
-  | HypFocusedSequent ([SequentBranch], SequentBranch, [SequentBranch]) [SequentBranch]
+  = UnfocusedSequent   ![SequentBranch] ![SequentBranch]
+  | GoalFocusedSequent ![SequentBranch] !FocusedBranch
+  | HypFocusedSequent  !FocusedBranch   ![SequentBranch]
 
 unfocus :: Sequent -> ([SequentBranch],[SequentBranch])
 unfocus (UnfocusedSequent hs gs) = (hs,gs)
-unfocus (GoalFocusedSequent hs (gs1,g,gs2)) = (hs, gs1 ++ g : gs2)
-unfocus (HypFocusedSequent (hs1,h,hs2) gs)  = (hs1 ++ h : hs2,  gs)
+unfocus (GoalFocusedSequent hs (FB gs1 g gs2)) = (hs, gs1 ++ g : gs2)
+unfocus (HypFocusedSequent (FB hs1 h hs2) gs)  = (hs1 ++ h : hs2,  gs)
 
 unfocusSequent :: Sequent -> Sequent
 unfocusSequent sqt = UnfocusedSequent hs gs
@@ -403,22 +405,22 @@ focusOnGoal :: Integer -> Sequent -> Maybe Sequent
 focusOnGoal i sqt =
     let (hs,gs) = unfocus sqt in
     case genericDrop i gs of
-      (g:gs2) -> Just (GoalFocusedSequent hs (genericTake i gs, g, gs2))
+      (g:gs2) -> Just (GoalFocusedSequent hs (FB (genericTake i gs) g gs2))
       []      -> Nothing
 
 focusOnHyp :: Integer -> Sequent -> Maybe Sequent
 focusOnHyp i sqt =
     let (hs,gs) = unfocus sqt in
     case genericDrop i hs of
-      (h:hs2) -> Just (HypFocusedSequent (genericTake i hs, h, hs2) gs)
+      (h:hs2) -> Just (HypFocusedSequent (FB (genericTake i hs) h hs2) gs)
       []      -> Nothing
 
 sequentToRawSequent :: Sequent -> RawSequent Prop
 sequentToRawSequent sqt =
    case sqt of
-     UnfocusedSequent   hs gs            -> RawSequent hs gs
-     GoalFocusedSequent hs (gs1, g, gs2) -> RawSequent hs (gs1 ++ g : gs2)
-     HypFocusedSequent  (hs1, h, hs2) gs -> RawSequent (hs1 ++ h : hs2) gs
+     UnfocusedSequent   hs gs             -> RawSequent hs gs
+     GoalFocusedSequent hs (FB gs1 g gs2) -> RawSequent hs (gs1 ++ g : gs2)
+     HypFocusedSequent  (FB hs1 h hs2) gs -> RawSequent (hs1 ++ h : hs2) gs
 
 
 sequentConstantSet :: Sequent -> Map VarIndex (NameInfo, Term, Maybe Term)
@@ -454,21 +456,20 @@ convertibleSequents sc sqt1 sqt2 =
     RawSequent hs2 gs2 = sequentToRawSequent sqt2
 
 
-
 data SequentState
   = Unfocused
   | GoalFocus Prop (Prop -> Sequent)
   | HypFocus Prop (Prop -> Sequent)
 
 propToSequent :: Prop -> Sequent
-propToSequent p = GoalFocusedSequent [] ([], p, [])
+propToSequent p = GoalFocusedSequent [] (FB [] p [])
 
 booleansToSequent :: SharedContext -> [Term] -> [Term] -> IO Sequent
 booleansToSequent sc hs gs =
   do hs' <- mapM (boolToProp sc []) hs
      gs' <- mapM (boolToProp sc []) gs
      case gs' of
-       [g] -> return (GoalFocusedSequent hs' ([],g,[]))
+       [g] -> return (GoalFocusedSequent hs' (FB [] g []))
        _   -> return (UnfocusedSequent hs' gs')
 
 sequentToProp :: SharedContext -> Sequent -> IO Prop
@@ -508,7 +509,7 @@ ppRawSequent sqt (RawSequent hs gs)  =
   turnstile  = [ pretty (take 40 (repeat '=')) ]
   focused doc = "<<" <> doc <> ">>"
   ppHyp (i, tm)
-    | HypFocusedSequent (hs1,_h,_hs2) _gs <- sqt
+    | HypFocusedSequent (FB hs1 _h _hs2) _gs <- sqt
     , length hs1 == i
     = focused ("H" <> pretty i) <+> tm
 
@@ -516,7 +517,7 @@ ppRawSequent sqt (RawSequent hs gs)  =
     = "H" <> pretty i <> ":" <+> tm
 
   ppGoal (i, tm)
-    | GoalFocusedSequent _hs (gs1,_g,_gs2) <- sqt
+    | GoalFocusedSequent _hs (FB gs1 _g _gs2) <- sqt
     , length gs1 == i
     = focused ("G" <> pretty i) <+> tm
 
@@ -537,10 +538,10 @@ filterPosList pss xs = map snd $ filter f $ zip [0..] xs
   where
     f (i,_) = cofinSetMember i pss
 
-filterFocusedList :: CofinSet Integer -> ([a],a,[a]) -> Either [a] ([a],a,[a])
-filterFocusedList pss (xs1,x,xs2) =
+filterFocusedList :: CofinSet Integer -> FocusedBranch -> Either [SequentBranch] FocusedBranch
+filterFocusedList pss (FB xs1 x xs2) =
    if cofinSetMember idx pss then
-     Right (xs1',x,xs2')
+     Right (FB xs1' x xs2')
    else
      Left (xs1' ++ xs2')
   where
@@ -572,19 +573,19 @@ filterGoals pss (GoalFocusedSequent hs gs) =
 addHypothesis :: Prop -> Sequent -> Sequent
 addHypothesis p (UnfocusedSequent hs gs)   = UnfocusedSequent (hs ++ [p]) gs
 addHypothesis p (GoalFocusedSequent hs gs) = GoalFocusedSequent (hs ++ [p]) gs
-addHypothesis p (HypFocusedSequent (hs1,h,hs2) gs) = HypFocusedSequent (hs1,h,hs2++[p]) gs
+addHypothesis p (HypFocusedSequent (FB hs1 h hs2) gs) = HypFocusedSequent (FB hs1 h (hs2++[p])) gs
 
 addNewFocusedGoal :: Prop -> Sequent -> Sequent
 addNewFocusedGoal p sqt =
   let RawSequent hs gs = sequentToRawSequent sqt
-   in GoalFocusedSequent hs (gs,p,[])
+   in GoalFocusedSequent hs (FB gs p [])
 
 sequentState :: Sequent -> SequentState
 sequentState (UnfocusedSequent _ _) = Unfocused
-sequentState (GoalFocusedSequent hs (gs1,g,gs2)) =
-  GoalFocus g (\g' -> GoalFocusedSequent hs (gs1,g',gs2))
-sequentState (HypFocusedSequent (hs1,h,hs2) gs) =
-  HypFocus h (\h' -> HypFocusedSequent (hs1,h',hs2) gs)
+sequentState (GoalFocusedSequent hs (FB gs1 g gs2)) =
+  GoalFocus g (\g' -> GoalFocusedSequent hs (FB gs1 g' gs2))
+sequentState (HypFocusedSequent (FB hs1 h hs2) gs) =
+  HypFocus h (\h' -> HypFocusedSequent (FB hs1 h' hs2) gs)
 
 sequentSharedSize :: Sequent -> Integer
 sequentSharedSize sqt = scSharedSizeMany (map unProp (hs ++ gs))
@@ -599,34 +600,34 @@ sequentTreeSize sqt = scTreeSizeMany (map unProp (hs ++ gs))
 traverseSequentWithFocus :: Applicative m => (Prop -> m Prop) -> Sequent -> m Sequent
 traverseSequentWithFocus f (UnfocusedSequent hs gs) =
   UnfocusedSequent <$> traverse f hs <*> traverse f gs
-traverseSequentWithFocus f (GoalFocusedSequent hs (gs1, g, gs2)) =
-  (\g' -> GoalFocusedSequent hs (gs1, g', gs2)) <$> f g
-traverseSequentWithFocus f (HypFocusedSequent (hs1, h, hs2) gs) =
-  (\h' -> HypFocusedSequent (hs1, h', hs2) gs) <$> f h
+traverseSequentWithFocus f (GoalFocusedSequent hs (FB gs1 g gs2)) =
+  (\g' -> GoalFocusedSequent hs (FB gs1 g' gs2)) <$> f g
+traverseSequentWithFocus f (HypFocusedSequent (FB hs1 h hs2) gs) =
+  (\h' -> HypFocusedSequent (FB hs1 h' hs2) gs) <$> f h
 
 traverseSequent :: Applicative m => (Prop -> m Prop) -> Sequent -> m Sequent
 traverseSequent f (UnfocusedSequent hs gs) =
   UnfocusedSequent <$> traverse f hs <*> traverse f gs
-traverseSequent f (GoalFocusedSequent hs (gs1, g, gs2)) =
+traverseSequent f (GoalFocusedSequent hs (FB gs1 g gs2)) =
   GoalFocusedSequent <$>
     (traverse f hs) <*>
-    ( (,,) <$> traverse f gs1 <*> f g <*> traverse f gs2)
+    ( FB <$> traverse f gs1 <*> f g <*> traverse f gs2)
 
-traverseSequent f (HypFocusedSequent (hs1, h, hs2) gs) =
+traverseSequent f (HypFocusedSequent (FB hs1 h hs2) gs) =
   HypFocusedSequent <$>
-    ( (,,) <$> traverse f hs1 <*> f h <*> traverse f hs2) <*>
+    ( FB <$> traverse f hs1 <*> f h <*> traverse f hs2) <*>
     (traverse f gs)
 
 checkSequent :: SharedContext -> PPOpts -> Sequent -> IO ()
 checkSequent sc ppOpts (UnfocusedSequent hs gs) =
   do forM_ hs (checkProp sc ppOpts)
      forM_ gs (checkProp sc ppOpts)
-checkSequent sc ppOpts (GoalFocusedSequent hs (gs1,g,gs2)) =
+checkSequent sc ppOpts (GoalFocusedSequent hs (FB gs1 g gs2)) =
   do forM_ hs (checkProp sc ppOpts)
      forM_ gs1 (checkProp sc ppOpts)
      checkProp sc ppOpts g
      forM_ gs2 (checkProp sc ppOpts)
-checkSequent sc ppOpts (HypFocusedSequent (hs1,h,hs2) gs) =
+checkSequent sc ppOpts (HypFocusedSequent (FB hs1 h hs2) gs) =
   do forM_ hs1 (checkProp sc ppOpts)
      checkProp sc ppOpts h
      forM_ hs2 (checkProp sc ppOpts)
@@ -740,34 +741,34 @@ instance Semigroup TheoremSummary where
 data Evidence
   = -- | The given term provides a direct programs-as-proofs witness
     --   for the truth of its type (qua proposition).
-    ProofTerm Term
+    ProofTerm !Term
 
     -- | This type of evidence refers to a local assumption that
     --   must have been introduced by a surrounding @AssumeEvidence@
     --   constructor.
-  | LocalAssumptionEvidence Prop TheoremNonce
+  | LocalAssumptionEvidence !Prop !TheoremNonce
 
     -- | This type of evidence is produced when the given proposition
     --   has been dispatched to a solver which has indicated that it
     --   was able to prove the proposition.  The included @SolverStats@
     --   give some details about the solver run.
-  | SolverEvidence SolverStats Sequent
+  | SolverEvidence !SolverStats !Sequent
 
     -- | This type of evidence is produced when the given proposition
     --   has been randomly tested against input vectors in the style
     --   of quickcheck.  The included number is the number of successfully
     --   passed test vectors.
-  | QuickcheckEvidence Integer Sequent
+  | QuickcheckEvidence !Integer !Sequent
 
     -- | This type of evidence is produced when the given proposition
     --   has been explicitly assumed without other evidence at the
     --   user's direction.
-  | Admitted Text Pos Sequent
+  | Admitted !Text !Pos !Sequent
 
     -- | This type of evidence is produced when a proposition can be deconstructed
     --   along a conjunction into two subgoals, each of which is supported by
     --   the included evidence.
-  | SplitEvidence Evidence Evidence
+  | SplitEvidence !Evidence !Evidence
 
     -- | This type of evidence is produced when a previously-proved theorem is
     --   applied via backward reasoning to prove a goal.  Pi-quantified variables
@@ -775,7 +776,7 @@ data Evidence
     --   instantiate the variable, or by giving @Evidence@ for @Prop@ hypotheses.
     --   After specializing the given @Theorem@ the result must match the
     --   current goal.
-  | ApplyEvidence Theorem [Either Term Evidence]
+  | ApplyEvidence !Theorem ![Either Term Evidence]
 
     -- | This type of evidence is used to prove an implication.  The included
     --   proposition must match the hypothesis of the goal, and the included
@@ -784,53 +785,53 @@ data Evidence
 --  | AssumeEvidence TheoremNonce Prop Evidence
 
     -- | This type of evidence is used to prove a universally-quantified statement.
-  | IntroEvidence (ExtCns Term) Evidence
+  | IntroEvidence !(ExtCns Term) !Evidence
 
     -- | This type of evidence is used to apply the "cut rule" of sequent calculus.
     --   The given proposition is added to the hypothesis list in the first
     --   deriviation, and into the conclusion list in the second, where it is focused.
-  | CutEvidence Prop Evidence Evidence
+  | CutEvidence !Prop !Evidence !Evidence
 
     -- | This type of evidence is used to modify a goal to prove via rewriting.
     --   The goal to prove is rewritten by the given simpset; then the provided
     --   evidence is used to check the modified goal.
-  | RewriteEvidence (Simpset TheoremNonce) Evidence
+  | RewriteEvidence !(Simpset TheoremNonce) !Evidence
 
     -- | This type of evidence is used to modify a goal to prove via unfolding
     --   constant definitions.  The goal to prove is modified by unfolding
     --   constants identified via the given set of @VarIndex@; then the provided
     --   evidence is used to check the modified goal.
-  | UnfoldEvidence (Set VarIndex) Evidence
+  | UnfoldEvidence !(Set VarIndex) !Evidence
 
     -- | This type of evidence is used to modify a goal to prove via evaluation
     --   into the the What4 formula representation. During evaluation, the
     --   constants identified by the given set of @VarIndex@ are held
     --   uninterpreted (i.e., will not be unfolded).  Then, the provided
     --   evidence is use to check the modified goal.
-  | EvalEvidence (Set VarIndex) Evidence
+  | EvalEvidence !(Set VarIndex) !Evidence
 
     -- | This type of evidence is used to modify a focused part of the goal.
     --   The modified goal should be equivalent up to conversion.
-  | ConversionEvidence Sequent Evidence
+  | ConversionEvidence !Sequent !Evidence
 
     -- | This type of evidence is used to modify a goal to prove by applying
     -- 'hoistIfsInGoal'.
-  | HoistIfsEvidence Evidence
+  | HoistIfsEvidence !Evidence
 
     -- | Change the state of the sequent in some "structural" way. This
     --   can involve changing focus, reordering or applying weakening rules.
-  | StructuralEvidence Sequent Evidence
+  | StructuralEvidence !Sequent !Evidence
 
     -- | Change the state of the sequent in some way that is governed by
     --   the "reversable" L/R rules of the sequent calculus, e.g.,
     --   conjunctions in hypotheses can be split into multiple hypotheses,
     --   negated conclusions become positive hypotheses, etc.
-  | NormalizeSequentEvidence Sequent Evidence
+  | NormalizeSequentEvidence !Sequent !Evidence
 
     -- | Change the sate of th sequent by invoking the term evaluator
     --   on the focused sequent branch (or all branches, if unfocused).
     --   Treat the given variable indexes as opaque.
-  | NormalizePropEvidence (Set VarIndex) Evidence
+  | NormalizePropEvidence !(Set VarIndex) !Evidence
 
     -- | This type of evidence is used when the current sequent, after
     --   applying structural rules, is an instance of the basic
@@ -1044,7 +1045,7 @@ data ProofGoal =
   , goalLoc  :: String
   , goalDesc :: String
   , goalTags :: Set String
-  , goalSequent :: Sequent
+  , goalSequent :: !Sequent
   }
 
 
@@ -1080,11 +1081,11 @@ predicateToProp sc quant = loop []
            Prop <$> toPi argTs t
 
 
--- | A ProofState represents a sequent, where the collection of goals
--- implies the conclusion.
+-- | A ProofState consists of a sequents of goals, represented by sequents.
+--   If each subgoal is provable, that implies the ultimate conclusion.
 data ProofState =
   ProofState
-  { _psGoals :: [ProofGoal]
+  { _psGoals :: ![ProofGoal]
   , _psConcl :: (Sequent,Pos,Maybe ProgramLoc,Text)
   , _psStats :: SolverStats
   , _psTimeout :: Maybe Integer
@@ -1541,7 +1542,8 @@ withFirstGoal (Tactic f) (ProofState goals concl stats timeout evidenceCont star
                       do let (es1, es2) = splitAt (length gs') es
                          e <- buildTacticEvidence es1
                          evidenceCont (e:es2)
-              return (Right (x, ProofState (gs' <> gs) concl (stats <> stats') timeout evidenceCont' start))
+              let ps' = ProofState (gs' <> gs) concl (stats <> stats') timeout evidenceCont' start
+              seq ps' (return (Right (x, ps')))
 
 predicateToSATQuery :: SharedContext -> Set VarIndex -> Term -> IO SATQuery
 predicateToSATQuery sc unintSet tm0 =
