@@ -2010,11 +2010,13 @@ writeVerificationSummary = do
     summary <- io (computeVerificationSummary db jspecs lspecs thms)
     opts <- roOptions <$> getTopLevelRO
     dir <- roInitWorkDir <$> getTopLevelRO
+    ppOpts <- fmap (SV.sawPPOpts . rwPPOpts) getTopLevelRW
+    nenv <- io . scGetNamingEnv =<< getSharedContext
     case summaryFile opts of
       Nothing -> return ()
       Just f -> let
         f' = if hasDrive f then f else dir </> f
         formatSummary = case summaryFormat opts of
                        JSON -> jsonVerificationSummary
-                       Pretty -> prettyVerificationSummary
+                       Pretty -> prettyVerificationSummary ppOpts nenv
         in io $ writeFile f' $ formatSummary summary

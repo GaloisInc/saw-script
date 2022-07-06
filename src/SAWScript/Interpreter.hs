@@ -308,7 +308,7 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   -- Print non-unit result if it was not bound to a variable
   case pat of
     SS.PWild _ | printBinds && not (isVUnit result) ->
-      do nenv <- io . scGetNamingEnv =<< getSharedContext
+      do nenv <- liftTopLevel (io . scGetNamingEnv =<< getSharedContext)
          liftTopLevel $ printOutLnTop Info (showsPrecValue opts nenv 0 result "")
     _ -> return ()
 
