@@ -1084,7 +1084,7 @@ setupGlobalAllocs cc mspec mem0 = foldM go mem0 $ mspec ^. MS.csGlobalAllocs
     go :: MemImpl -> MS.AllocGlobal (LLVM arch) -> IO MemImpl
     go mem (LLVMAllocGlobal _ symbol@(L.Symbol name)) = do
       let mtrans = ccLLVMModuleTrans cc
-          gimap = Crucible.globalInitMap mtrans
+          gimap = view Crucible.globalInitMap mtrans
       case Map.lookup symbol gimap of
         Just (g, Right (mt, _)) -> ccWithBackend cc $ \bak ->
           do when (L.gaConstant $ L.globalAttrs g) . throwMethodSpec mspec $ mconcat
@@ -1323,7 +1323,7 @@ registerInvariantOverride opts cc top_loc mdMap all_breakpoints cs =
          (Just unique_parent NE.:| []) -> return unique_parent
          _ -> fail $ "Multiple parent functions for breakpoint: " ++ name
      liftIO $ printOutLn opts Info $ "Registering breakpoint `" ++ name ++ "`"
-     withBreakpointCfgAndBlockId cc name parent $ \cfg breakpoint_block_id ->
+     withBreakpointCfgAndBlockId opts cc name parent $ \cfg breakpoint_block_id ->
        do let breakpoint_name = Crucible.BreakpointName $ Text.pack name
           let h = Crucible.cfgHandle cfg
           let arg_types = Crucible.blockInputs $
@@ -1344,27 +1344,31 @@ registerInvariantOverride opts cc top_loc mdMap all_breakpoints cs =
 
 withCfg ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  Options ->
   LLVMCrucibleContext arch ->
   String ->
   (forall blocks init ret . Crucible.CFG Crucible.LLVM blocks init ret -> IO a) ->
   IO a
-withCfg context name k =
+withCfg opts context name k =
   do let function_id = L.Symbol name
-     case Map.lookup function_id (Crucible.cfgMap (ccLLVMModuleTrans context)) of
-       Just (_, Crucible.AnyCFG cfg) -> k cfg
+     Crucible.getTranslatedCFG (ccLLVMModuleTrans context) function_id >>= \case
+       Just (_, Crucible.AnyCFG cfg, warns) ->
+         do mapM_ (handleTranslationWarning opts) warns
+            k cfg
        Nothing -> fail $ "Unexpected function name: " ++ name
 
 withCfgAndBlockId ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  Options ->
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   (forall blocks init args ret . Crucible.CFG Crucible.LLVM blocks init ret -> Crucible.BlockID blocks args -> IO a) ->
   IO a
-withCfgAndBlockId context method_spec k =
+withCfgAndBlockId opts context method_spec k =
   case method_spec ^. csParentName of
-    Nothing -> withCfg context (method_spec ^. csName) $ \cfg ->
+    Nothing -> withCfg opts context (method_spec ^. csName) $ \cfg ->
       k cfg (Crucible.cfgEntryBlockID cfg)
-    Just parent -> withBreakpointCfgAndBlockId
+    Just parent -> withBreakpointCfgAndBlockId opts
       context
       (method_spec ^. csName)
       parent
@@ -1372,14 +1376,15 @@ withCfgAndBlockId context method_spec k =
 
 withBreakpointCfgAndBlockId ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  Options ->
   LLVMCrucibleContext arch ->
   String ->
   String ->
   (forall blocks init args ret . Crucible.CFG Crucible.LLVM blocks init ret -> Crucible.BlockID blocks args -> IO a) ->
   IO a
-withBreakpointCfgAndBlockId context name parent k =
+withBreakpointCfgAndBlockId opts context name parent k =
   do let breakpoint_name = Crucible.BreakpointName $ Text.pack name
-     withCfg context parent $ \cfg ->
+     withCfg opts context parent $ \cfg ->
        case Bimap.lookup breakpoint_name (Crucible.cfgBreakpoints cfg) of
          Just (Some breakpoint_block_id) -> k cfg breakpoint_block_id
          Nothing -> fail $ "Unexpected breakpoint name: " ++ name
@@ -1408,7 +1413,7 @@ verifySimulate ::
   IORef MetadataMap ->
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp mdMap =
-  withCfgAndBlockId cc mspec $ \cfg entryId ->
+  withCfgAndBlockId opts cc mspec $ \cfg entryId ->
   ccWithBackend cc $ \bak ->
   do let sym = cc^.ccSym
      let argTys = Crucible.blockInputs $
@@ -1431,7 +1436,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
        do let parent = fromJust $ (NE.head specs) ^. csParentName
           let breakpoint_names = nubOrd $
                 map (Crucible.BreakpointName . Text.pack . view csName) (NE.toList specs)
-          withCfg cc parent $ \parent_cfg ->
+          withCfg opts cc parent $ \parent_cfg ->
             return
               ( Crucible.SomeHandle (Crucible.cfgHandle parent_cfg)
               , breakpoint_names
@@ -1770,7 +1775,7 @@ setupLLVMCrucibleContext pathSat lm action =
                                  intrinsics halloc stdout
                                  bindings (Crucible.llvmExtensionImpl ?memOpts)
                                  Common.SAWCruciblePersonality
-               mem <- Crucible.populateConstGlobals bak (Crucible.globalInitMap mtrans)
+               mem <- Crucible.populateConstGlobals bak (view Crucible.globalInitMap mtrans)
                         =<< Crucible.initializeMemoryConstGlobals bak ctx llvm_mod
 
                let globals  = Crucible.llvmGlobals (Crucible.llvmMemVar ctx) mem
@@ -1779,7 +1784,7 @@ setupLLVMCrucibleContext pathSat lm action =
                      do -- register the callable override functions
                         Crucible.register_llvm_overrides llvm_mod [] [] ctx
                         -- register all the functions defined in the LLVM module
-                        mapM_ (Crucible.registerModuleFn ctx) $ Map.elems $ Crucible.cfgMap mtrans
+                        Crucible.registerLazyModule (handleTranslationWarning opts) mtrans
 
                let initExecState =
                      Crucible.InitialState simctx globals Crucible.defaultAbortHandler Crucible.UnitRepr $
@@ -1800,6 +1805,16 @@ setupLLVMCrucibleContext pathSat lm action =
                                      , _ccBasicSS = basic_ss
                                      }
           action cc
+
+
+handleTranslationWarning :: Options -> Crucible.LLVMTranslationWarning -> IO ()
+handleTranslationWarning opts (Crucible.LLVMTranslationWarning s p msg) =
+  printOutLn opts Warn $ unwords
+    [ "LLVM bitcode translation warning"
+    , show (L.ppSymbol s)
+    , show p
+    , Text.unpack msg
+    ]
 
 --------------------------------------------------------------------------------
 
@@ -1967,9 +1982,11 @@ llvm_extract (Some lm) fn_name =
               throwTopLevel "Type aliases are not supported by `llvm_extract`."
        Left err -> throwTopLevel (displayVerifExceptionOpts opts err)
      setupLLVMCrucibleContext False lm $ \cc ->
-       case Map.lookup (fromString fn_name) (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
+       io (Crucible.getTranslatedCFG (ccLLVMModuleTrans cc) (fromString fn_name)) >>= \case
          Nothing  -> throwTopLevel $ unwords ["function", fn_name, "not found"]
-         Just (_,cfg) -> io $ extractFromLLVMCFG opts sc cc cfg
+         Just (_,cfg,warns) ->
+           do io $ mapM_ (handleTranslationWarning opts) warns
+              io $ extractFromLLVMCFG opts sc cc cfg
 
 llvm_cfg ::
   Some LLVMModule ->
@@ -1978,10 +1995,13 @@ llvm_cfg ::
 llvm_cfg (Some lm) fn_name =
   do let ctx = modTrans lm ^. Crucible.transContext
      let ?lc = ctx^.Crucible.llvmTypeCtx
+     opts <- getOptions
      setupLLVMCrucibleContext False lm $ \cc ->
-       case Map.lookup (fromString fn_name) (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
+       io (Crucible.getTranslatedCFG (ccLLVMModuleTrans cc) (fromString fn_name)) >>= \case
          Nothing  -> throwTopLevel $ unwords ["function", fn_name, "not found"]
-         Just (_,cfg) -> return (LLVM_CFG cfg)
+         Just (_,cfg,warns) ->
+           do io $ mapM_ (handleTranslationWarning opts) warns
+              return (LLVM_CFG cfg)
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
