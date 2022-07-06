@@ -2,24 +2,106 @@ module Interp where
 
 import Either
 
+// Vecs of unknown size are defined as linked lists
+primitive type Vec : * -> *
+
+primitive foldVec : {a} Either () (a, Vec a) -> Vec a
+primitive unfoldVec : {a} Vec a -> Either () (a, Vec a)
+
+empty : {a} Vec a
+empty = foldVec (Left ())
+
+push : {a} a -> Vec a -> Vec a
+push x v = foldVec (Right (x, v))
+
+// Types defined in the interpreter implementation
 primitive type Var : *
 primitive type FunName : *
 primitive type PrimOp2 : *
-primitive type Expr : *
-primitive type Stmt : *
 
+primitive type Expr : *
 primitive foldExpr : Either [64] (Either Var (PrimOp2, Expr, Expr)) -> Expr
 primitive unfoldExpr : Expr -> Either [64] (Either Var (PrimOp2, Expr, Expr))
 
+primitive type Stmt : *
 primitive foldStmt : Either Var
                             (Either ()
                                     (Either (Var, Expr)
                                             (Either (Expr, Stmt, Stmt)
                                                     (Either (Expr, Stmt)
-                                                            (FunName, ???))))) -> Stmt
+                                                            (FunName, Vec Expr))))) -> Stmt
 primitive unfoldStmt : Stmt -> Either Var
                                       (Either ()
                                               (Either (Var, Expr)
                                                       (Either (Expr, Stmt, Stmt)
                                                               (Either (Expr, Stmt)
-                                                                      (FunName, ???)))))
+                                                                      (FunName, Vec Expr)))))
+
+primitive type Error : *
+primitive type FunDef : *
+primitive type Env : *
+
+// Relevant function specifications
+
+// TODO: How can I do this without concretizing what `Env` means?
+env_lookup_spec : Env -> Var -> Either [64] Error
+env_lookup_spec env x = undefined
+
+// TODO: How can I do this without concretizing what `Env` means?
+env_update_spec : Env -> Var -> [64] -> Env
+env_update_spec env x v = undefined
+
+// TODO: How can I do this without concretizing what `PrimOp2` means?
+eval_primop2_spec : PrimOp2 -> [64] -> [64]
+eval_primop2_spec f v1 v2 = undefined
+
+eval_expr_spec : Env -> Expr -> Either [64] Error
+eval_expr_spec env e =
+  either
+    (\l -> Left l)
+    (\e -> either
+             (\x -> env_lookup_spec env x)
+             (\(f, arg1, arg2) -> either
+                                    (\v1 -> either
+                                              (\v2 -> eval_primop2_spec(f, v1, v2))
+                                              (\err -> Right err)
+                                              (eval_expr_spec env arg2))
+                                    (\err -> Right err)
+                                    (eval_expr_spec env arg1))
+             e)
+    (unfoldExpr e)
+
+eval_stmt_spec : Env -> Stmt -> Either [64] Error
+eval_stmt_spec env stmt =
+  either
+    (\x -> env_lookup_spec env x) // Return
+    (\e -> either
+             (\_ -> Left 0) // Skip
+             (\e -> either
+                      (\(x, e) -> either
+                                    (\v -> Left 0) // TODO: Deal with mutating Env
+                                    (\err -> Right err)
+                                    (eval_expr_spec env e)) // Assign
+                      (\e -> either
+                               (\(e, stmt1, stmt2) -> either
+                                                        (\v -> if v == 0
+                                                               then eval_stmt_spec env stmt2
+                                                               else eval_stmt_spec env stmt1)
+                                                        (\err -> Right err)
+                                                        (eval_expr_spec env e)) // IfStmt
+                               (\e -> either
+                                        (\(e, body) -> either
+                                                         (\v -> if v == 0
+                                                                then Left 0
+                                                                else either
+                                                                       (\_ -> eval_stmt_spec env stmt)
+                                                                       (\err -> Right err)
+                                                                       (eval_stmt_spec env body))
+                                                         (\err -> Right err)
+                                                         (eval_expr_spec env e)) // WhileStmt
+                                        (\(f, args) -> ...) // CallStmt TODO: This is currently unimplemented in the Rust. Scrap?
+                                        e)
+                               e)
+                      e)
+             e)
+    (unfoldStmt stmt)
