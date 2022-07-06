@@ -73,6 +73,7 @@ import Verifier.SAW.SATQuery
 import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
 import qualified Verifier.SAW.SCTypeCheck as TC (TypedTerm(..))
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Prelude (scEq)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
@@ -717,6 +718,50 @@ extract_uninterp unints opaques tt =
      pure (tt', replList)
 
 
+congruence_for :: TypedTerm -> TopLevel TypedTerm
+congruence_for tt =
+  do sc <- getSharedContext
+     congTm <- io $ build_congruence sc (ttTerm tt)
+     io $ mkTypedTerm sc congTm
+
+build_congruence :: SharedContext -> Term -> IO Term
+build_congruence sc tm =
+  do ty <- scTypeOf sc tm
+     case asPiList ty of
+       ([],_) -> fail "congruence_for: Term is not a function"
+       (pis, body) ->
+         if looseVars body == emptyBitSet then
+           loop pis []
+         else
+           fail "congruence_for: cannot build congruence for dependent functions"
+ where
+  loop ((nm,tp):pis) vars =
+    if looseVars tp == emptyBitSet then
+      do l <- scFreshEC sc (nm <> "_1") tp
+         r <- scFreshEC sc (nm <> "_2") tp
+         loop pis ((l,r):vars)
+     else
+       fail "congruence_for: cannot build congruence for dependent functions"
+
+  loop [] vars =
+    do lvars <- mapM (scExtCns sc . fst) (reverse vars)
+       rvars <- mapM (scExtCns sc . snd) (reverse vars)
+       let allVars = concat [ [l,r] | (l,r) <- reverse vars ]
+
+       basel <- scApplyAll sc tm lvars
+       baser <- scApplyAll sc tm rvars
+       baseeq <- scEqTrue sc =<< scEq sc basel baser
+
+       let f x (l,r) =
+             do l' <- scExtCns sc l
+                r' <- scExtCns sc r
+                eq <- scEqTrue sc =<< scEq sc l' r'
+                scFun sc eq x
+       finalEq <- foldM f baseeq vars
+
+       scGeneralizeExts sc allVars finalEq
+
+
 filterCryTerms :: SharedContext -> [Term] -> IO [TypedTerm]
 filterCryTerms sc = loop
   where
@@ -1289,6 +1334,11 @@ abstractSymbolicPrim (TypedTerm _ t) = do
 bindAllExts :: SharedContext -> Term -> IO Term
 bindAllExts sc body = scAbstractExts sc (getAllExts body) body
 
+term_apply :: TypedTerm -> [TypedTerm] -> TopLevel TypedTerm
+term_apply fn args =
+  do sc <- getSharedContext
+     io $ applyTypedTerms sc fn args
+
 lambda :: TypedTerm -> TypedTerm -> TopLevel TypedTerm
 lambda x = lambdas [x]
 
@@ -1552,6 +1602,44 @@ eval_size s =
         Left C.Inf     -> fail "eval_size: illegal infinite size"
         Right _        -> fail "eval_size: not a numeric type"
     _ -> fail "eval_size: unsupported polymorphic type"
+
+int_to_term :: Int -> TopLevel TypedTerm
+int_to_term i
+  | i < 0 =
+     do sc  <- getSharedContext
+        tm  <- io (scNat sc (fromInteger (negate (toInteger i))))
+        tm' <- io (scIntNeg sc =<< scNatToInt sc tm)
+        io (mkTypedTerm sc tm')
+  | otherwise =
+     do sc  <- getSharedContext
+        tm  <- io (scNat sc (fromIntegral i))
+        tm' <- io (scNatToInt sc tm)
+        io (mkTypedTerm sc tm')
+
+nat_to_term :: Int -> TopLevel TypedTerm
+nat_to_term i
+  | i >= 0 =
+      do sc <- getSharedContext
+         tm <- io $ scNat sc (fromIntegral i)
+         io $ mkTypedTerm sc tm
+
+  | otherwise =
+      fail ("nat_to_term: negative value " ++ show i)
+
+
+size_to_term :: C.Schema -> TopLevel TypedTerm
+size_to_term s =
+  do sc <- getSharedContext
+     tm <- io $ case s of
+                  C.Forall [] [] t ->
+                    case C.evalType mempty t of
+                      Left (C.Nat x) | x >= 0 ->
+                        scCtorApp sc "Cryptol.TCNum" =<< sequence [scNat sc (fromInteger x)]
+                      Left C.Inf -> scCtorApp sc "Cryptol.TCInf" []
+                      _ -> fail "size_to_term: not a numeric type"
+                  _ -> fail "size_to_term: unsupported polymorphic type"
+
+     return (TypedTerm (TypedTermKind C.KNum) tm)
 
 nthPrim :: [a] -> Int -> TopLevel a
 nthPrim [] _ = fail "nth: index too large"
