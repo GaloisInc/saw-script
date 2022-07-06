@@ -105,7 +105,6 @@ import qualified Data.Parameterized.Context as Ctx
 import Verifier.SAW.FiniteValue (ppFirstOrderValue)
 import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedTerm
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
@@ -314,10 +313,10 @@ verifyObligations cc mspec tactic assumes asserts =
                        , goalName = nm
                        , goalLoc  = gloc
                        , goalDesc = msg
-                       , goalProp = goal'
+                       , goalSequent = propToSequent goal'
                        , goalTags = MS.conditionTags md
                        }
-       res <- runProofScript tactic proofgoal (Just ploc) $ Text.unwords
+       res <- runProofScript tactic goal' proofgoal (Just ploc) $ Text.unwords
                  ["JVM verification condition:", Text.pack (show n), Text.pack goalname]
        case res of
          ValidProof stats thm -> return (stats, thmNonce thm)
@@ -721,14 +720,6 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
         do v <- prepareArg tr (xs !! Ctx.indexVal idx)
            return (Crucible.RegEntry tr v))
       ctx
-
--- | Build a conjunction from a list of boolean terms.
-scAndList :: SharedContext -> [Term] -> IO Term
-scAndList sc = conj . filter nontrivial
-  where
-    nontrivial x = asBool x /= Just True
-    conj [] = scBool sc True
-    conj (x : xs) = foldM (scAnd sc) x xs
 
 --------------------------------------------------------------------------------
 
