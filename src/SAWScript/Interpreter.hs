@@ -1641,6 +1641,11 @@ primitives = Map.fromList
     Current
     [ "Write the current goal to the given file in SAWCore format." ]
 
+  , prim "write_goal_extcore"          "String -> ProofScript ()"
+    (pureVal write_goal_extcore)
+    Current
+    [ "Write out a representation of the current goal to the given file in SAWCore external format." ]
+
   , prim "offline_smtlib2"     "String -> ProofScript ()"
     (pureVal offline_smtlib2)
     Current

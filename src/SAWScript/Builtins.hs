@@ -885,6 +885,12 @@ proveWithPropExporter exporter path sep ext =
      stats <- Prover.proveWithPropExporter exporter file (goalProp g)
      return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
 
+write_goal_extcore :: FilePath -> ProofScript ()
+write_goal_extcore path = execTactic . tacticId $ \g -> do
+  sc <- getSharedContext
+  tm <- io . propToTerm sc $ goalProp g
+  io . writeFile path $ scWriteExternal tm
+
 offline_aig :: FilePath -> ProofScript ()
 offline_aig path =
   proveWithSATExporter Prover.writeAIG_SAT mempty path "." ".aig"
