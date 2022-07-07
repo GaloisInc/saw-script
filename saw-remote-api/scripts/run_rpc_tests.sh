@@ -33,6 +33,7 @@ export CLASSPATH=$(pwd)/tests/saw/test-files
 
 echo "Running saw-remote-api tests..."
 echo "Using server $SAW_SERVER"
+echo "SAW_SERVER version: $($SAW_SERVER -V)"
 run_test poetry run python -m unittest discover tests/saw
 run_test poetry run python -m unittest discover tests/saw_low_level
 
