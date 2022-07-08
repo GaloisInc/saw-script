@@ -82,6 +82,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , findDecl
     , findDefMaybeStatic
     , setupLLVMCrucibleContext
+    , setupPrestateConditions
     , checkSpecReturnType
     , verifyPrestate
     , verifyPoststate
