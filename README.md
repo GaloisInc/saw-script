@@ -42,7 +42,7 @@ To build SAWScript and related utilities from source:
   * Ensure that you have the `cabal` and `ghc` executables in your
     `PATH`. If you don't already have them, we recommend using `ghcup`
     to install them: <https://www.haskell.org/ghcup/>. We recommend
-    Cabal 3.4 or newer, and GHC 8.8, 8.10, or 9.0.
+    Cabal 3.4 or newer, and GHC 8.8, 8.10, 9.0, or 9.2.
 
   * Ensure that you have the C libraries and header files for
     `terminfo`, which generally comes as part of `ncurses` on most

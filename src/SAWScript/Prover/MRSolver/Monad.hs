@@ -92,7 +92,7 @@ pattern TermsNotEq t1 t2 = TermsNotRel False t1 t2
 pattern TypesNotEq :: Type -> Type -> MRFailure
 pattern TypesNotEq t1 t2 = TypesNotRel False t1 t2
 
--- | Remove the context from a 'MRFailure', i.e. remove all applications of the 
+-- | Remove the context from a 'MRFailure', i.e. remove all applications of the
 -- 'MRFailureLocalVar' and 'MRFailureCtx' constructors
 mrFailureWithoutCtx :: MRFailure -> MRFailure
 mrFailureWithoutCtx (MRFailureLocalVar x err) =
@@ -265,7 +265,7 @@ coIndHypWithVar (CoIndHyp ctx f1 f2 args1 args2 invar1 invar2) nm tp =
      let ctx' = mrVarCtxAppend (singletonMRVarCtx nm tp) ctx
      (args1', args2') <- liftTermLike 0 1 (args1, args2)
      return (CoIndHyp ctx' f1 f2 args1' args2' invar1 invar2, var)
-  
+
 -- | A map from pairs of function names to co-inductive hypotheses over those
 -- names
 type CoIndHyps = Map (FunName, FunName) CoIndHyp
@@ -292,7 +292,7 @@ data DataTypeAssump
   deriving (Generic, Show, TermLike)
 
 instance PrettyInCtx DataTypeAssump where
-  prettyInCtx (IsLeft  x) = prettyInCtx x >>= ppWithPrefix "Left _ _" 
+  prettyInCtx (IsLeft  x) = prettyInCtx x >>= ppWithPrefix "Left _ _"
   prettyInCtx (IsRight x) = prettyInCtx x >>= ppWithPrefix "Right _ _"
   prettyInCtx (IsNum   x) = prettyInCtx x >>= ppWithPrefix "TCNum"
   prettyInCtx IsInf = return "TCInf"
@@ -485,14 +485,14 @@ mrErrorTerm a str =
      liftSC2 scGlobalApply "Prelude.error" [a, err_str]
 
 -- | Create a term representing an application of @Prelude.genBVVecFromVec@,
--- where the default value argument is @Prelude.error@ of the given 'T.Text' 
+-- where the default value argument is @Prelude.error@ of the given 'T.Text'
 mrGenBVVecFromVec :: Term -> Term -> Term -> T.Text -> Term -> Term -> MRM Term
 mrGenBVVecFromVec m a v def_err_str n len =
   do err_tm <- mrErrorTerm a def_err_str
      liftSC2 scGlobalApply "Prelude.genBVVecFromVec" [m, a, v, err_tm, n, len]
 
 -- | Create a term representing an application of @Prelude.genFromBVVec@,
--- where the default value argument is @Prelude.error@ of the given 'T.Text' 
+-- where the default value argument is @Prelude.error@ of the given 'T.Text'
 mrGenFromBVVec :: Term -> Term -> Term -> Term -> T.Text -> Term -> MRM Term
 mrGenFromBVVec n len a v def_err_str m =
   do err_tm <- mrErrorTerm a def_err_str
@@ -629,11 +629,36 @@ mrLambdaLift ctx t f =
      t' <- liftTermLike 0 (length ctx) t
      f vars t' >>= liftSC2 scLambdaList ctx'
 
+-- Specialized versions of mrLambdaLift that expect a certain number of Term
+-- arguments. As an alternative, we could change the type of mrLambdaLift to
+-- take a length-indexed vector instead (thereby avoiding partial pattern
+-- matches), but that is probably overkill for our needs.
+
+-- | Call 'mrLambdaLift' with exactly one 'Term' argument.
+mrLambdaLift1 :: TermLike tm => (LocalName,Term) -> tm ->
+                 (Term -> tm -> MRM Term) -> MRM Term
+mrLambdaLift1 ctx t f =
+  mrLambdaLift [ctx] t $ \vars t' ->
+    case vars of
+      [v] -> f v t'
+      _   -> error "mrLambdaLift1: Expected exactly one Term argument"
+
+-- | Call 'mrLambdaLift' with exactly two 'Term' arguments.
+mrLambdaLift2 :: TermLike tm => (LocalName,Term) -> (LocalName,Term) -> tm ->
+                 (Term -> Term -> tm -> MRM Term) -> MRM Term
+mrLambdaLift2 ctx1 ctx2 t f =
+  mrLambdaLift [ctx1, ctx2] t $ \vars t' ->
+    case vars of
+      [v1, v2] -> f v1 v2 t'
+      _        -> error "mrLambdaLift2: Expected exactly two Term arguments"
+
 -- | Run a MR Solver computation in a context extended with a universal
 -- variable, which is passed as a 'Term' to the sub-computation. Note that any
 -- assumptions made in the sub-computation will be lost when it completes.
 withUVar :: LocalName -> Type -> (Term -> MRM a) -> MRM a
-withUVar nm tp m = withUVars (singletonMRVarCtx nm tp) (\[v] -> m v)
+withUVar nm tp m = withUVars (singletonMRVarCtx nm tp) $ \case
+  [v] -> m v
+  _   -> error "withUVar: impossible"
 
 -- | Run a MR Solver computation in a context extended with a universal variable
 -- and pass it the lifting (in the sense of 'incVars') of an MR Solver term

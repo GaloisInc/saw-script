@@ -85,6 +85,26 @@ classRep (Class r) = UF $ do
             return (Class i)
   impl r []
 
+-- | Look up an equivalence class in a union find structure's map. This checks
+-- the invariant that the index of the class exists in the map and is associated
+-- with a 'Rep', not a 'NonRep'. If this invariant is violated, this function
+-- will throw an error.
+lookupClassRep :: Class d -> UnionFind d -> ([ClassIndex], Int, d)
+lookupClassRep (Class rC) uf =
+  case Map.lookup rC (ufsMap uf) of
+    Just (Rep ne sz d) ->
+      (ne, sz, d)
+    Just (NonRep i) ->
+      errorBecause $ unlines
+        [ "not associated with a class representative,"
+        , "but rather an element with index " ++ show i
+        ]
+    Nothing ->
+      errorBecause "not found in map"
+  where
+    errorBecause msg = error $
+      "lookupClassRep: Equivalence class index " ++ show rC ++ " " ++ msg
+
 -- | Creates a new class with the given descriptor.
 freshClass :: d -> Action d (Class d)
 freshClass d = UF $ do
@@ -118,14 +138,14 @@ setEqual :: Class d
          -> d -- ^ Descriptor for union class.
          -> Action d AssertResult
 setEqual x y d = do
-  Class xr <- classRep x
-  Class yr <- classRep y
+  xc@(Class xr) <- classRep x
+  yc@(Class yr) <- classRep y
   if xr == yr
     then return AssertRedundant
     else do
-      m <- UF $ gets ufsMap
-      let Rep xne xsz _xd = m Map.! xr
-      let Rep yne ysz _yd = m Map.! yr
+      uf <- UF get
+      let (xne, xsz, _xd) = lookupClassRep xc uf
+      let (yne, ysz, _yd) = lookupClassRep yc uf
       xElts <- fmap (map toClassIdx) $ mapM classRep (map Class xne)
       yElts <- fmap (map toClassIdx) $ mapM classRep (map Class yne)
       if xr `elem` yElts || yr `elem` xElts
@@ -151,14 +171,14 @@ setEqual x y d = do
 -- previously set equal.
 setUnequal :: Class d -> Class d -> Action d AssertResult
 setUnequal x y = do
-  Class xr <- classRep x
-  Class yr <- classRep y
+  xc@(Class xr) <- classRep x
+  yc@(Class yr) <- classRep y
   if xr == yr
     then return AssertFailed
     else do
-      m <- UF $ gets ufsMap
-      let Rep xne xsz xd = m Map.! xr
-      let Rep yne _ _ = m Map.! yr
+      uf <- UF get
+      let (xne, xsz, xd) = lookupClassRep xc uf
+      let (yne, _,   _)  = lookupClassRep yc uf
       xElts <- fmap (map toClassIdx) $ mapM classRep (map Class xne)
       yElts <- fmap (map toClassIdx) $ mapM classRep (map Class yne)
       if xr `elem` yElts || yr `elem` xElts
@@ -172,24 +192,23 @@ setUnequal x y = do
 -- | Get a class description
 readClassDesc :: Class d -> Action d d
 readClassDesc c = do
-  Class rC <- classRep c
-  m <- UF $ gets ufsMap
-  let Rep _ _ desc = m Map.! rC
+  rCls <- classRep c
+  s <- UF get
+  let (_, _, desc) = lookupClassRep rCls s
   return desc
 
 -- | Set a class description
 writeClassDesc :: Class d -> d -> Action d ()
 writeClassDesc c d = do
-  Class rC <- classRep c
+  rCls@(Class rC) <- classRep c
   UF $ modify $ \s ->
-    let Rep dis sz _ = (ufsMap s) Map.! rC
+    let (dis, sz, _) = lookupClassRep rCls s
      in s { ufsMap = Map.insert rC (Rep dis sz d) (ufsMap s) }
 
 -- | Modify a class description
 modifyClassDesc :: Class d -> (d -> d) -> Action d ()
 modifyClassDesc c fn = do
-  Class rC <- classRep c
+  rCls@(Class rC) <- classRep c
   UF $ modify $ \s ->
-    let Rep dis sz desc = (ufsMap s) Map.! rC
+    let (dis, sz, desc) = lookupClassRep rCls s
      in s { ufsMap = Map.insert rC (Rep dis sz (fn desc)) (ufsMap s) }
-

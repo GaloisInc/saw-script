@@ -422,7 +422,7 @@ normComp (CompTerm t) =
     -- Always unfold recursors applied to constructors
     (asRecursorApp -> Just (rc, crec, _, arg), args)
       | Just (c, _, cargs) <- asCtorParams arg ->
-      do hd' <- liftSC4 scReduceRecursor rc crec c cargs 
+      do hd' <- liftSC4 scReduceRecursor rc crec c cargs
                   >>= liftSC1 betaNormalize
          t' <- mrApplyAll hd' args
          normCompTerm t'
@@ -521,13 +521,13 @@ compFunToTerm (CompFunComp f g) =
          -- we explicitly unfold @Prelude.composeM@ here so @mrApplyAll@ will
          -- beta-reduce
          let nm = maybe "ret_val" id (compFunVarName f) in
-         mrLambdaLift [(nm, a)] (b, c, f', g') $ \[arg] (b', c', f'', g'') ->
+         mrLambdaLift1 (nm, a) (b, c, f', g') $ \arg (b', c', f'', g'') ->
            do app <- mrApplyAll f'' [arg]
               liftSC2 scGlobalApply "Prelude.bindS" (specMParamsArgs params ++
                                                      [b', c', app, g''])
        _ -> error "compFunToTerm: type(s) not of the form: a -> SpecM b"
 compFunToTerm (CompFunReturn params (Type a)) =
-  mrLambdaLift [("ret_val", a)] a $ \[ret_val] (a') ->
+  mrLambdaLift1 ("ret_val", a) a $ \ret_val a' ->
     liftSC2 scGlobalApply "Prelude.retS" (specMParamsArgs params ++ [a', ret_val])
 
 {-
@@ -715,7 +715,7 @@ generalizeCoIndHyp hyp all_specs@(arg_spec_0:arg_specs) =
   -- we need to do is find a @tp@ (and appropriate conversions) such that the
   -- following diagram holds for all @i@ and @j@ (using the names from the
   -- previous comment):
-  -- 
+  --
   -- > arg_tp_i  arg_tp_0  arg_tp_j
   -- >      ^      ^  ^      ^
   -- >       \    /    \    /
@@ -723,7 +723,7 @@ generalizeCoIndHyp hyp all_specs@(arg_spec_0:arg_specs) =
   -- >           ^      ^
   -- >            \    /
   -- >              tp
-  -- 
+  --
   -- To do this, we simply need to call 'findInjConvs' iteratively as we fold
   -- through @eq_specs@, and compose the injective conversions appropriately.
   -- Each step of this iteration is @cbnConvs@, which can be pictured as:
@@ -737,7 +737,7 @@ generalizeCoIndHyp hyp all_specs@(arg_spec_0:arg_specs) =
   -- >     c1 \      / c2
   -- >         \    /
   -- >           tp'
-  -- 
+  --
   -- where @c1@, @c2@, and @tp'@ come from 'findInjConvs' on @tp@ and @tp_i@,
   -- and the @tp@ and @c_0@ to use for the next (@i+1@th) iteration are @tp'@
   -- and @c_0 <> c1@.
@@ -940,7 +940,7 @@ mrRefines' m1 (OrS m2 m2') =
   mrOr (mrRefines m1 m2) (mrRefines m1 m2')
 mrRefines' (OrS m1 m1') m2 =
   mrRefines m1 m2 >> mrRefines m1' m2
-     
+
 -- FIXME: the following cases don't work unless we either allow evars to be set
 -- to NormComps or we can turn NormComps back into terms
 mrRefines' m1@(FunBind (EVarFunName _) _ _) m2 =
@@ -1140,8 +1140,8 @@ mrRefinesFun tp1 f1 tp2 f2 =
      mrDebugPPPrefixSep 1 "mrRefinesFun" f1' "|=" f2'
      let nm1 = maybe "call_ret_val" id (compFunVarName f1)
          nm2 = maybe "call_ret_val" id (compFunVarName f2)
-     f1'' <- mrLambdaLift [(nm1, tp1)] f1' $ \[var] -> flip mrApply var
-     f2'' <- mrLambdaLift [(nm2, tp2)] f2' $ \[var] -> flip mrApply var
+     f1'' <- mrLambdaLift1 (nm1, tp1) f1' $ flip mrApply
+     f2'' <- mrLambdaLift1 (nm2, tp2) f2' $ flip mrApply
      piTp1 <- mrTypeOf f1''
      piTp2 <- mrTypeOf f2''
      mrRefinesFunH mrRefines [] piTp1 f1'' piTp2 f2''
@@ -1182,9 +1182,9 @@ mrRefinesFunH k vars piTp1 t1 (asPi -> Just (nm2, tp2@(asEq -> Just (asBoolType 
 -- of an evar with a non-projected value, e.g. evar.1 == val)
 mrRefinesFunH k vars (asPi -> Just (nm1, asPairType -> Just (tpL1, tpR1), _)) t1
                      (asPi -> Just (nm2, asPairType -> Just (tpL2, tpR2), _)) t2 =
-  do t1'' <- mrLambdaLift [(nm1, tpL1), (nm1, tpR1)] t1 $ \[prj1, prj2] t1' ->
+  do t1'' <- mrLambdaLift2 (nm1, tpL1) (nm1, tpR1) t1 $ \prj1 prj2 t1' ->
                liftSC2 scPairValue prj1 prj2 >>= mrApply t1'
-     t2'' <- mrLambdaLift [(nm2, tpL2), (nm2, tpR2)] t2 $ \[prj1, prj2] t2' ->
+     t2'' <- mrLambdaLift2 (nm2, tpL2) (nm2, tpR2) t2 $ \prj1 prj2 t2' ->
                liftSC2 scPairValue prj1 prj2 >>= mrApply t2'
      piTp1' <- mrTypeOf t1''
      piTp2' <- mrTypeOf t2''
