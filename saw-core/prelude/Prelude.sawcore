@@ -2121,6 +2121,46 @@ foldIRT As Ds D = IRTDesc__rec As (\ (D:IRTDesc As) -> (Ds:IRTSubsts As) -> Unfo
 
 
 --------------------------------------------------------------------------------
+
+-- ITree Specification monad
+
+primitive SpecM : (sort 0 -> sort 0) -> sort 0 -> sort 0;
+
+primitive retS : (E:sort 0 -> sort 0) -> (a:sort 0) -> a -> SpecM E a;
+
+primitive bindS : (E:sort 0 -> sort 0) -> (a b:sort 0) -> SpecM E a ->
+          (a -> SpecM E b) -> SpecM E b;
+
+subev : (E1 E2:sort 0 -> sort 0) -> sort 1;
+subev E1 E2 = (a:sort 0) -> E1 a -> E2 a;
+
+primitive trigger : (E1 E2: sort 0 -> sort 0) -> subev E1 E2 -> 
+          (a:sort 0) -> E1 a -> SpecM E2 a;
+
+primitive forallS : (E:sort 0 -> sort 0) -> (a:sort 0) ->
+          SpecM E a;
+
+primitive existsS : (E:sort 0 -> sort 0) -> (a:sort 0) ->
+          SpecM E a;
+
+primitive assertS : (E:sort 0 -> sort 0) -> (p:Prop) ->
+          SpecM E UnitType;
+
+primitive assumeS : (E:sort 0 -> sort 0) -> (p:Prop) ->
+          SpecM E UnitType;
+
+hom : (M1 M2:sort 0 -> sort 0) -> sort 1;
+hom M1 M2 = (a : sort 0) -> M1 a -> M2 a;
+-- need to figure out the sort of sumE
+-- I think we should lean on primitives for things we can prove in coq
+data SumE (E1 E2:sort 0 -> sort 0) (a:sort 0) : sort 0 where {
+     SumE_inl : (e:E1 a) -> SumE E1 E2 a;
+     SumE_inr : (e:E2 a) -> SumE E1 E2 a;
+}
+
+primitive mrecS : (D E:sort 0 -> sort 0) -> (hom D (SpecM (\ (a:sort 0) -> SumE D E a))) -> hom D (SpecM E);
+
+--------------------------------------------------------------------------------
 -- Computation monad
 
 primitive CompM : sort 0 -> sort 0;
