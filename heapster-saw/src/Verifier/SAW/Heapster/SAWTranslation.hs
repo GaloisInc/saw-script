@@ -300,6 +300,8 @@ class TransInfo info where
   infoCtx :: info ctx -> ExprTransCtx ctx
   infoEnv :: info ctx -> PermEnv
   extTransInfo :: ExprTrans tp -> info ctx -> info (ctx :> tp)
+  -- TODO: add constraints that it needs to have event type and call stack, and encoding function
+  -- could make helper function that returns SpecM E encodes Gamma
 
 -- | A "translation monad" is a 'Reader' monad with some info type that is
 -- parameterized by a translation context
