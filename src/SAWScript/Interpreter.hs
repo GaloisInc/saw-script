@@ -3180,6 +3180,15 @@ primitives = Map.fromList
     , "the live variables in the loop evolve as the loop computes."
     ]
 
+  , prim "llvm_verify_fixpoint_x86_ex"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> (String, Term) -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
+    (pureVal llvm_verify_fixpoint_x86_ex)
+    Experimental
+    [ "An experimental variant of 'llvm_verify_x86'. This variant can prove some properties"
+    , "involving simple loops with the help of a user-provided term that describes how"
+    , "the live variables in the loop evolve as the loop computes."
+    ]
+
   , prim "enable_x86_what4_hash_consing" "TopLevel ()"
     (pureVal enable_x86_what4_hash_consing)
     Experimental
