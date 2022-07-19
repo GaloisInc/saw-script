@@ -134,6 +134,7 @@ jobs:
         with:
           targets: |
             integration_tests
+            test-sawcore
             cryptol-saw-core-tc-test
             prover_tests
           dest: dist-tests
