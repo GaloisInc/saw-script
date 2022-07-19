@@ -16,7 +16,12 @@ push x v = foldVec (Right (x, v))
 
 // Types defined in the interpreter implementation
 primitive type Var : *
+primitive foldVar : String -> Var
+primitive unfoldVar : Var -> String
+
 primitive type FunName : *
+primitive foldFunName : String -> FunName
+primitive unfoldFunName : FunName -> String
 
 primitive type PrimOp2 : *
 primitive foldPrimOp2 : Either () ()  -> PrimOp2
@@ -54,7 +59,6 @@ primitive unfoldEnv : Env -> (Vec (Var, [64]), Vec (FunName, FunDef))
 
 // Relevant function specifications
 
-// TODO: How can I do this without concretizing what `Env` means?
 env_lookup_spec : Env -> Var -> Either [64] Error
 env_lookup_spec env x = undefined
 
@@ -63,8 +67,12 @@ env_update_spec : Env -> Var -> [64] -> Env
 env_update_spec env x v = undefined
 
 // TODO: How can I do this without concretizing what `PrimOp2` means?
-eval_primop2_spec : PrimOp2 -> [64] -> [64]
-eval_primop2_spec f v1 v2 = undefined
+eval_primop2_spec : PrimOp2 -> [64] -> [64] -> [64]
+eval_primop2_spec f v1 v2 =
+  either
+    (\_ -> v1 + v2)
+    (\_ -> v1 * v2)
+    (unfoldPrimOp2 f)
 
 eval_expr_spec : Env -> Expr -> Either [64] Error
 eval_expr_spec env e =
@@ -74,7 +82,7 @@ eval_expr_spec env e =
              (\x -> env_lookup_spec env x)
              (\(f, arg1, arg2) -> either
                                     (\v1 -> either
-                                              (\v2 -> eval_primop2_spec(f, v1, v2))
+                                              (\v2 -> eval_primop2_spec f v1 v2)
                                               (\err -> Right err)
                                               (eval_expr_spec env arg2))
                                     (\err -> Right err)
