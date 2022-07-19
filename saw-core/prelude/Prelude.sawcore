@@ -2124,41 +2124,41 @@ foldIRT As Ds D = IRTDesc__rec As (\ (D:IRTDesc As) -> (Ds:IRTSubsts As) -> Unfo
 
 -- ITree Specification monad
 
-primitive SpecM : (sort 0 -> sort 0) -> sort 0 -> sort 0;
+-- encoding : sort 2;
+-- encoding = (Esort 1 -> sort 1;
 
-primitive retS : (E:sort 0 -> sort 0) -> (a:sort 0) -> a -> SpecM E a;
+primitive SpecM : (E:sort 1) -> (encodes:E -> sort 1) -> sort 1 -> sort 1;
+primitive retS : (E:sort 1) -> (encodes:E -> sort 1) -> (a:sort 1) -> a -> SpecM E encodes a;
+-- primitive visS : (E:sort 1) -> (encodes:E -> sort 1) -> (a:sort 1) -> (e:E) -> (encodes e -> SpecM E encodes a) -> SpecM   
+primitive bindS : (E:sort 1) -> (encodes:E -> sort 1) -> (a b:sort 1) -> SpecM E encodes a -> (a -> SpecM E encodes b) -> SpecM E encodes b;
 
-primitive bindS : (E:sort 0 -> sort 0) -> (a b:sort 0) -> SpecM E a ->
-          (a -> SpecM E b) -> SpecM E b;
+fmapS : (E:sort 1) -> (encodes:E -> sort 1) -> (a b:sort 1) -> (a -> b) -> SpecM E encodes a -> SpecM E encodes b;
+fmapS E encodes a b f m =
+      bindS E encodes a b m (\ (x:a) -> retS E encodes b (f x));
 
-subev : (E1 E2:sort 0 -> sort 0) -> sort 1;
-subev E1 E2 = (a:sort 0) -> E1 a -> E2 a;
+primitive trigger : (E:sort 1) -> (encodes:E -> sort 1) -> (e:E) -> SpecM E encodes (encodes e);
 
-primitive trigger : (E1 E2: sort 0 -> sort 0) -> subev E1 E2 -> 
-          (a:sort 0) -> E1 a -> SpecM E2 a;
+primitive forallS : (E:sort 1) -> (encodes:E -> sort 1) -> (a:sort 0) -> SpecM E encodes a;
+primitive existsS : (E:sort 1) -> (encodes:E -> sort 1) -> (a:sort 0) -> SpecM E encodes a;
+primitive assumeS : (E:sort 1) -> (encodes:E -> sort 1) -> (p:Prop) -> SpecM E encodes UnitType;
+primitive assertS : (E:sort 1) -> (encodes:E -> sort 1) -> (p:Prop) -> SpecM E encodes UnitType;
 
-primitive forallS : (E:sort 0 -> sort 0) -> (a:sort 0) ->
-          SpecM E a;
-
-primitive existsS : (E:sort 0 -> sort 0) -> (a:sort 0) ->
-          SpecM E a;
-
-primitive assertS : (E:sort 0 -> sort 0) -> (p:Prop) ->
-          SpecM E UnitType;
-
-primitive assumeS : (E:sort 0 -> sort 0) -> (p:Prop) ->
-          SpecM E UnitType;
-
-hom : (M1 M2:sort 0 -> sort 0) -> sort 1;
-hom M1 M2 = (a : sort 0) -> M1 a -> M2 a;
--- need to figure out the sort of sumE
--- I think we should lean on primitives for things we can prove in coq
-data SumE (E1 E2:sort 0 -> sort 0) (a:sort 0) : sort 0 where {
-     SumE_inl : (e:E1 a) -> SumE E1 E2 a;
-     SumE_inr : (e:E2 a) -> SumE E1 E2 a;
+data sumT (a b:sort 1) : sort 1 where {
+     inl : a -> sumT a b;
+     inr : b -> sumT a b;
 }
 
-primitive mrecS : (D E:sort 0 -> sort 0) -> (hom D (SpecM (\ (a:sort 0) -> SumE D E a))) -> hom D (SpecM E);
+primitive iterS : (E:sort 1) -> (encodes:E -> sort 1) -> (a b:sort 1) ->
+          (a -> SpecM E encodes (sumT a b)) -> a -> SpecM E encodes b;
+
+case : (a b:sort 1) -> (c:sort 2) -> (a -> c) -> (b -> c) -> sumT a b -> c;
+case a b c f g s = sumT#rec a b ( \(x:sumT a b) -> c ) f g s;
+
+-- figure out sub event as well
+
+primitive mrec : (D E:sort 1) -> (encodesD:D -> sort 1) -> (encodesE:E -> sort 1) ->
+          ((d:D) -> SpecM (sumT D E) (case D E (sort 1) encodesD encodesE) (encodesD d)) ->
+          (d:D) -> SpecM E encodesE (encodesD d);
 
 --------------------------------------------------------------------------------
 -- Computation monad
