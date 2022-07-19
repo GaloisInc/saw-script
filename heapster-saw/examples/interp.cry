@@ -17,7 +17,10 @@ push x v = foldVec (Right (x, v))
 // Types defined in the interpreter implementation
 primitive type Var : *
 primitive type FunName : *
+
 primitive type PrimOp2 : *
+primitive foldPrimOp2 : Either () ()  -> PrimOp2
+primitive unfoldPrimOp2 : PrimOp2 -> Either () ()
 
 primitive type Expr : *
 primitive foldExpr : Either [64] (Either Var (PrimOp2, Expr, Expr)) -> Expr
@@ -38,8 +41,16 @@ primitive unfoldStmt : Stmt -> Either Var
                                                                       (FunName, Vec Expr)))))
 
 primitive type Error : *
+primitive foldError : Either Var (Either FunName (Either () ())) -> Error
+primitive unfoldError : Error -> Either Var (Either FunName (Either () ()))
+
 primitive type FunDef : *
+primitive foldFunDef : (Vec Var, Stmt) -> FunDef
+primitive unfoldFunDef : FunDef -> (Vec Var, Stmt)
+
 primitive type Env : *
+primitive foldEnv : (Vec (Var, [64]), Vec (FunName, FunDef)) -> Env
+primitive unfoldEnv : Env -> (Vec (Var, [64]), Vec (FunName, FunDef))
 
 // Relevant function specifications
 
