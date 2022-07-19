@@ -565,28 +565,35 @@ natToWord bp w val =
     _ -> panic "natToWord: expected Nat"
 
 -- | A primitive which is a unary operation on a natural argument.
--- The second argument gives this operation for a concrete natural argument.
--- The third argument gives this operation for a natural argument of the given
+-- The second argument gives how to modify the size in bits of this operation's
+-- argument so that no overflow occurs (e.g. 'succ' for 'succ').
+-- The third argument gives this operation for a concrete natural argument.
+-- The fourth argument gives this operation for a natural argument of the given
 -- size in bits.
 unaryNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l ->
+              (Natural -> Natural) ->
               (Natural -> MValue l) ->
               (Int -> VWord l -> MValue l) -> Prim l
-unaryNatOp bp fn fv = maybeNatFun $ \case
+unaryNatOp bp fw fn fv = maybeNatFun $ \case
   Right n -> Prim (fn n)
-  Left v -> Prim $ do x <- natToWord bp (natSize bp v) v
-                      fv (fromIntegral (natSize bp v)) x
+  Left v -> Prim $ do let w = fw (natSize bp v)
+                      x <- natToWord bp w v
+                      fv (fromIntegral w) x
 
 -- | A primitive which is a unary operation on a natural argument and which
 -- returns a natural.
--- The second argument gives this operation for a concrete natural argument.
--- The third argument gives this operation for a natural argument of the given
+-- The second argument gives how to modify the size in bits of this operation's
+-- argument so that no overflow occurs (e.g. 'succ' for 'succ').
+-- The third argument gives this operation for a concrete natural argument.
+-- The fourth argument gives this operation for a natural argument of the given
 -- size in bits.
 unaryNatToNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l ->
                    (Natural -> Natural) ->
+                   (Natural -> Natural) ->
                    (Int -> VWord l -> MWord l) -> Prim l
-unaryNatToNatOp bp fn fv =
-  unaryNatOp bp (\n -> pure (vNat (fn n)))
-                (\w x -> VBVToNat w . VWord <$> fv w x)
+unaryNatToNatOp bp fw fn fv =
+  unaryNatOp bp fw (\n -> pure (vNat (fn n)))
+                   (\w x -> VBVToNat w . VWord <$> fv w x)
 
 -- | A primitive which is a binary operation on natural arguments.
 -- The second argument gives how to combine the the sizes in bits of this
@@ -629,8 +636,8 @@ binNatToNatOp bp fw fn fv =
 
 -- Succ :: Nat -> Nat;
 succOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
-succOp bp = unaryNatToNatOp bp succ (\w x -> do o <- bpBvLit bp w 1
-                                                bpBvAdd bp x o)
+succOp bp = unaryNatToNatOp bp succ succ (\w x -> do o <- bpBvLit bp w 1
+                                                     bpBvAdd bp x o)
 
 -- addNat :: Nat -> Nat -> Nat;
 addNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l

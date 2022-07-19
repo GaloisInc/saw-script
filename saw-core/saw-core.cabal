@@ -135,6 +135,7 @@ test-suite test-sawcore
     Tests.Parser
     Tests.Rewriter
     Tests.SharedTerm
+    Tests.Simulator
 
 executable extcore-info
   main-is: extcore-info.hs
