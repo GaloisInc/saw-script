@@ -1954,7 +1954,7 @@ invalidateMutableAllocs opts sc cc cs =
             | otherwise -> Nothing)
         (Map.elems (Map.intersectionWith (,) sub mutableAllocs))
       mtrans = ccLLVMModuleTrans cc
-      gimap = Crucible.globalInitMap mtrans
+      gimap = view Crucible.globalInitMap mtrans
       mutableGlobals = cs ^. MS.csGlobalAllocs
 
   globalPtrs <- liftIO . fmap catMaybes . forM mutableGlobals $ \(LLVMAllocGlobal loc s@(L.Symbol st)) ->

@@ -288,8 +288,7 @@ loadLLVMModule file halloc =
        Left err -> return (Left err)
        Right llvm_mod ->
          do memVar <- CL.mkMemVar (Text.pack "saw:llvm_memory") halloc
-            -- FIXME: do something with the translation warnings
-            (Some mtrans, _warnings) <- CL.translateModule halloc memVar llvm_mod
+            Some mtrans <- CL.translateModule halloc memVar llvm_mod
             return (Right (Some (LLVMModule file llvm_mod mtrans)))
 
 instance TestEquality LLVMModule where

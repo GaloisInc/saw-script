@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -57,13 +58,13 @@ module SAWScript.HeapsterBuiltins
        ) where
 
 import Data.Maybe
-import qualified Data.Map as Map
 import Data.String
 import Data.List
 import Data.List.Extra (splitOn)
 import Data.IORef
 import Data.Functor.Product
 import Data.Functor.Constant (getConstant)
+import Control.Applicative ( (<|>) )
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
@@ -148,7 +149,7 @@ archReprWidth (X86Repr w) = w
 
 -- | Get the architecture of an LLVM module
 llvmModuleArchRepr :: LLVMModule arch -> ArchRepr arch
-llvmModuleArchRepr lm = llvmArch $ _transContext $ modTrans lm
+llvmModuleArchRepr lm = llvmArch $ view transContext $ modTrans lm
 
 -- | Get the bit width of the architecture of an LLVM module
 llvmModuleArchReprWidth :: LLVMModule arch -> NatRepr (ArchWidth arch)
@@ -163,17 +164,31 @@ lookupFunctionDecl :: LLVMModule arch -> String -> Maybe L.Declare
 lookupFunctionDecl lm nm =
   find ((fromString nm ==) . L.decName) $ L.modDeclares $ modAST lm
 
+-- | Look up the 'L.Define' for a symbol defined in an 'LLVMModule'
+lookupFunctionDef :: LLVMModule arch -> String -> Maybe L.Define
+lookupFunctionDef lm nm =
+  find ((fromString nm ==) . L.defName) $ L.modDefines $ modAST lm
+
+-- | Lookup a the singnature for a symbol in an 'LLVMModule'. This
+--   will find a signaure for either an external symbol, or for
+--   a defined symbol
+lookupFunctionDeclOrDef :: LLVMModule arch -> String -> Maybe L.Declare
+lookupFunctionDeclOrDef lm nm =
+  lookupFunctionDecl lm nm <|> (declareFromDefine <$> lookupFunctionDef lm nm)
+
 -- | Look up the Crucible CFG for a defined symbol in an 'LLVMModule'
-lookupFunctionCFG :: LLVMModule arch -> String -> Maybe (AnyCFG Lang.Crucible.LLVM.Extension.LLVM)
+lookupFunctionCFG :: LLVMModule arch -> String -> IO (Maybe (AnyCFG Lang.Crucible.LLVM.Extension.LLVM))
 lookupFunctionCFG lm nm =
-  snd <$> Map.lookup (fromString nm) (cfgMap $ modTrans lm)
+  getTranslatedCFG (modTrans lm) (fromString nm) >>= \case
+    Nothing -> return Nothing
+    Just (_,cfg,_warns) -> return (Just cfg)
 
 -- | Look up the argument and return types of a named function
 lookupFunctionType :: LLVMModule arch -> String ->
                       TopLevel (Some CtxRepr, Some TypeRepr)
 lookupFunctionType (lm :: LLVMModule arch) nm =
-  case (lookupFunctionDecl lm nm, lookupFunctionCFG lm nm) of
-    (Just decl, _) ->
+  case lookupFunctionDeclOrDef lm nm of
+    Just decl ->
       do let w = llvmModuleArchReprWidth lm
          leq1_proof <- case decideLeq (knownNat @1) w of
            Left pf -> return pf
@@ -186,22 +201,19 @@ lookupFunctionType (lm :: LLVMModule arch) nm =
          withLeqProof leq1_proof $ withLeqProof leq16_proof $
            llvmDeclToFunHandleRepr' @(ArchWidth arch) decl $ \args ret ->
            return (Some args, Some ret)
-    (_, Just (AnyCFG cfg)) ->
-      return (Some (cfgArgTypes cfg), Some (cfgReturnType cfg))
-    (Nothing, Nothing) ->
+    Nothing ->
       fail ("Could not find symbol: " ++ nm)
 
 -- | Look for the LLVM module in a 'HeapsterEnv' where a symbol is defined
 lookupModDefiningSym :: HeapsterEnv -> String -> Maybe (Some LLVMModule)
 lookupModDefiningSym env nm =
-  find (\(Some lm) -> Map.member (fromString nm) (cfgMap $ modTrans lm)) $
+  find (\(Some lm) -> isJust (lookupFunctionDef lm nm)) $
   heapsterEnvLLVMModules env
 
 -- | Look for any LLVM module in a 'HeapsterEnv' containing a symbol
 lookupModContainingSym :: HeapsterEnv -> String -> Maybe (Some LLVMModule)
 lookupModContainingSym env nm =
-  find (\(Some lm) ->
-         isJust (lookupFunctionDecl lm nm) || isJust (lookupFunctionCFG lm nm)) $
+  find (\(Some lm) -> isJust (lookupFunctionDeclOrDef lm nm)) $
   heapsterEnvLLVMModules env
 
 -- | An LLVM module plus a CFG for a specific function in that module
@@ -209,12 +221,13 @@ data ModuleAndCFG arch =
   ModuleAndCFG (LLVMModule arch) (AnyCFG Lang.Crucible.LLVM.Extension.LLVM)
 
 -- | Look up the LLVM module and associated CFG for a symobl
-lookupLLVMSymbolModAndCFG :: HeapsterEnv -> String -> Maybe (Some ModuleAndCFG)
+lookupLLVMSymbolModAndCFG :: HeapsterEnv -> String -> IO (Maybe (Some ModuleAndCFG))
 lookupLLVMSymbolModAndCFG henv nm =
   case lookupModDefiningSym henv nm of
     Just (Some lm) ->
-      (Some . ModuleAndCFG lm) <$> lookupFunctionCFG lm nm
-    Nothing -> Nothing
+      do res <- lookupFunctionCFG lm nm
+         return ((Some . ModuleAndCFG lm) <$> res)
+    Nothing -> return Nothing
 
 heapster_default_env :: PermEnv
 heapster_default_env = emptyPermEnv
@@ -795,8 +808,8 @@ heapster_add_block_hints :: HeapsterEnv -> String -> [Int] ->
 heapster_add_block_hints henv nm blks hintF =
   do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
      Some (ModuleAndCFG _ (AnyCFG cfg)) <-
-       failOnNothing ("Could not find symbol definition: " ++ nm) $
-       lookupLLVMSymbolModAndCFG henv nm
+       failOnNothing ("Could not find symbol definition: " ++ nm) =<<
+         io (lookupLLVMSymbolModAndCFG henv nm)
      let h = cfgHandle cfg
          blocks = fmapFC blockInputs $ cfgBlockMap cfg
          block_idxs = fmapFC (blockIDIndex . blockID) $ cfgBlockMap cfg
@@ -1141,8 +1154,8 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
        Right _ -> fail "PANIC: 1 > 16!"
      some_cfgs_and_perms <- forM fn_names_and_perms $ \(nm, nm_to, perms_string) ->
        do AnyCFG cfg <-
-            failOnNothing ("Could not find symbol definition: " ++ nm) $
-            lookupFunctionCFG lm nm
+            failOnNothing ("Could not find symbol definition: " ++ nm) =<<
+              io (lookupFunctionCFG lm nm)
           env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
           let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
           let ret = handleReturnType $ cfgHandle cfg
@@ -1234,8 +1247,8 @@ heapster_parse_test _bic _opts _some_lm@(Some lm) fn_name perms_string =
   do let env = heapster_default_env -- FIXME: env should be an argument
      let _arch = llvmModuleArchRepr lm
      AnyCFG cfg <-
-       failOnNothing ("Could not find symbol: " ++ fn_name) $
-       lookupFunctionCFG lm fn_name
+       failOnNothing ("Could not find symbol: " ++ fn_name) =<<
+         io (lookupFunctionCFG lm fn_name)
      let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
      let ret = handleReturnType $ cfgHandle cfg
      SomeFunPerm fun_perm <- parseFunPermString "permissions" env args
