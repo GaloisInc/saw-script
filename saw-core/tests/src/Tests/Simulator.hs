@@ -168,7 +168,7 @@ normalizeSharedTermTests = [
    \sc -> bindM2 (scLtNat sc) (scBvToNat sc 8 =<< scBvLit sc 8 4) (scNat sc 9),
    \sc -> scBool sc True)
 
-]
+  ]
 
 
 newtype PrettyTerm = PrettyTerm Term deriving (Eq)
