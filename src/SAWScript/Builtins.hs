@@ -468,6 +468,23 @@ print_goal_summary =
   execTactic $ tacticId $ \goal ->
     printOutLnTop Info (goalSummary goal)
 
+print_focus :: ProofScript ()
+print_focus =
+  execTactic $ tacticId $ \goal ->
+    do opts <- getTopLevelPPOpts
+       sc <- getSharedContext
+       nenv <- io (scGetNamingEnv sc)
+       case sequentGetFocus (goalSequent goal) of
+         Nothing ->
+           printOutLnTop Warn "Sequent is not focused"
+         Just (Left (i,h)) ->
+           let output = ppProp opts nenv h in
+           printOutLnTop Info (unlines ["Hypothesis " ++ show i, show output])
+         Just (Right (i,c)) ->
+           let output = ppProp opts nenv c in
+           printOutLnTop Info (unlines ["Conclusion " ++ show i, show output])
+
+
 goal_num :: ProofScript Int
 goal_num =
   execTactic $ tacticId $ \goal ->
@@ -569,7 +586,7 @@ focus_concl i =
 focus_hyp :: Integer -> ProofScript ()
 focus_hyp i =
   execTactic $ tacticChange $ \goal ->
-    case focusOnGoal i (goalSequent goal) of
+    case focusOnHyp i (goalSequent goal) of
       Nothing -> fail "focus_hyp : not enough hypotheses"
       Just sqt' -> return (sqt', structuralEvidence sqt')
 
@@ -637,7 +654,16 @@ simplifyGoal ss =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
      sqt' <- traverseSequentWithFocus (\p -> snd <$> io (simplifyProp sc ss p)) (goalSequent goal)
-     return (sqt', RewriteEvidence ss)
+     return (sqt', RewriteEvidence [] ss)
+
+simplifyGoalWithLocals :: [Integer] -> SV.SAWSimpset -> ProofScript ()
+simplifyGoalWithLocals hs ss =
+  execTactic $ tacticChange $ \goal ->
+  do sc <- getSharedContext
+     ss' <- io (localHypSimpset (goalSequent goal) hs ss)
+     sqt' <- traverseSequentWithFocus
+               (\p -> snd <$> io (simplifyProp sc ss' p)) (goalSequent goal)
+     return (sqt', RewriteEvidence hs ss)
 
 hoistIfsInGoalPrim :: ProofScript ()
 hoistIfsInGoalPrim =
@@ -1283,6 +1309,13 @@ addsimp thm ss =
      io (propToRewriteRule sc (thmProp thm) (Just (thmNonce thm))) >>= \case
        Nothing -> fail "addsimp: theorem not an equation"
        Just rule -> pure (addRule rule ss)
+
+addsimp_shallow :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
+addsimp_shallow thm ss = 
+  do sc <- getSharedContext
+     io (propToRewriteRule sc (thmProp thm) (Just (thmNonce thm))) >>= \case
+       Nothing -> fail "addsimp: theorem not an equation"
+       Just rule -> pure (addRule (shallowRule rule) ss)
 
 -- TODO: remove this, it implicitly adds axioms
 addsimp' :: Term -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
