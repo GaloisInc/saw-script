@@ -70,7 +70,7 @@ import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
-import Verifier.SAW.SCTypeCheck (scTypeCheckError)
+import Verifier.SAW.SCTypeCheck (scTypeCheck)
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
@@ -676,11 +676,13 @@ setupSimpleLoopFixpointFeature2 sym sc sawst cfg mvar func =
   invariant_func implicit_params invariant_substitution =
     do let subst_pairs = reverse (MapF.toList invariant_substitution)
        let filtered_implicit_params = filter
-             (\(Some variable) ->
+             (\ (Some variable) ->
                not (List.isPrefixOf "creg_join_var" $ show $ W4.printSymExpr variable)
                && not (List.isPrefixOf "cmem_join_var" $ show $ W4.printSymExpr variable)
                && not (List.isPrefixOf "cundefined" $ show $ W4.printSymExpr variable)
-               && not (List.isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable))
+               && not (List.isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "cnoSatisfyingWrite" $ show $ W4.printSymExpr variable)
+             )
              implicit_params
        body_tms <- mapM (viewSome $ toSC sym sawst) filtered_implicit_params
        implicit_params' <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet body_tms
@@ -697,17 +699,28 @@ setupSimpleLoopFixpointFeature2 sym sc sawst cfg mvar func =
        current_tuple <- scTuple sc current_exprs
 
        putStrLn "Loop invariant implicit parameters!"
-       forM_ implicit_params' (\x -> putStrLn (show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts x)))
+       forM_ implicit_params' $ \x ->
+           do putStrLn (show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts x))
+              tp <- scTypeOf sc x
+              putStrLn (show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tp))
 
        inv <- scApplyAll sc (ttTerm func) (implicit_params' ++ [initial_tuple, current_tuple])
 
        -- check that the produced term is type-correct
-       tp <- scTypeCheckError sc inv
-       ok <- scConvertible sc True tp =<< scBoolType sc
-       unless ok $
-         fail $ unlines [ "Loop invaraiant must return a boolean value, but got:"
-                        , show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tp) -- TODO, get ppOpts from the right place
-                        ]
+       res <- scTypeCheck sc Nothing inv
+       case res of
+         Left _tcErr ->
+           do tpType <- scTypeOf sc initial_tuple
+              fail $ unlines [ "Loop invariant has incorrect type! State tuple has type:"
+                             , show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tpType)
+                             ]
+         Right tp ->
+           do ok <- scConvertible sc True tp =<< scBoolType sc
+              unless ok $
+                fail $ unlines [ "Loop invaraiant must return a boolean value, but got:"
+                               , show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tp)
+                                  -- TODO, get ppOpts from the right place
+                               ]
        bindSAWTerm sym sawst W4.BaseBoolRepr inv
 
 {-
