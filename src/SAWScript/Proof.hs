@@ -35,7 +35,7 @@ module SAWScript.Proof
   , checkProp
 
   , Sequent
-  , SequentState(..)
+  , sequentGetFocus
   , sequentToProp
   , sequentToSATQuery
   , sequentSharedSize
@@ -54,6 +54,7 @@ module SAWScript.Proof
   , normalizeSequent
   , filterHyps
   , filterGoals
+  , localHypSimpset
 
   , CofinSet(..)
   , cofinSetMember
@@ -227,6 +228,22 @@ propToRewriteRule _sc (Prop tm) ann =
     Nothing -> pure Nothing
     Just r  -> pure (Just r)
 
+-- | Attempt to split an if/then/else goal.
+--   If it succeeds to find a term like "EqTrue (ite Bool b x y)",
+--   then it returns to pairs consisting of "(EqTrue b, EqTrue x)"
+--   and "(EqTrue (not b), EqTrue y)"
+splitIte :: SharedContext -> Prop -> IO (Maybe ((Prop, Prop), (Prop, Prop)))
+splitIte sc (Prop p) =
+  case (isGlobalDef "Prelude.ite" <@> return <@> return <@> return <@> return) =<< asEqTrue p of
+     Nothing -> pure Nothing
+     Just (_ :*: _tp :*: b :*: x :*: y) -> -- tp must be "Bool"
+       do nb  <- scNot sc b
+          b'  <- scEqTrue sc b
+          nb' <- scEqTrue sc nb
+          x'  <- scEqTrue sc x
+          y'  <- scEqTrue sc y
+          return (Just ((Prop b', Prop x'), (Prop nb', Prop y')))
+
 -- | Attempt to split a conjunctive proposition into two propositions.
 splitConj :: SharedContext -> Prop -> IO (Maybe (Prop, Prop))
 splitConj sc (Prop p) =
@@ -252,16 +269,36 @@ splitDisj sc (Prop p) =
 
 splitSequent :: SharedContext -> Sequent -> IO (Maybe (Sequent, Sequent))
 splitSequent sc sqt =
-  case sequentState sqt of
-    GoalFocus g mkSqt ->
+  case sqt of
+    GoalFocusedSequent hs (FB gs1 g gs2) ->
       splitConj sc g >>= \case
-        Nothing -> return Nothing
-        Just (x, y) -> return (Just (mkSqt x, mkSqt y))
-    HypFocus h mkSqt ->
+        Just (x, y) ->
+            return (Just ( GoalFocusedSequent hs (FB gs1 x gs2)
+                         , GoalFocusedSequent hs (FB gs1 y gs2)
+                         ))
+        Nothing ->
+          splitIte sc g >>= \case
+            Just ((b, x), (nb, y)) ->
+              return (Just ( GoalFocusedSequent (hs ++ [b])  (FB gs1 x gs2)
+                           , GoalFocusedSequent (hs ++ [nb]) (FB gs1 y gs2)
+                           ))
+            Nothing -> return Nothing
+
+    HypFocusedSequent (FB hs1 h hs2) gs ->
       splitDisj sc h >>= \case
-        Nothing -> return Nothing
-        Just (x, y) -> return (Just (mkSqt x, mkSqt y))
-    Unfocused -> fail "split tactic: focus required"
+        Just (x, y) ->
+          return (Just ( HypFocusedSequent (FB hs1 x hs2) gs
+                       , HypFocusedSequent (FB hs1 y hs2) gs
+                       ))
+        Nothing ->
+          splitIte sc h >>= \case
+            Just ((b,x), (nb, y)) ->
+              return (Just ( HypFocusedSequent (FB hs1 x (hs2 ++ [b])) gs
+                           , HypFocusedSequent (FB hs1 y (hs2 ++ [nb])) gs
+                           ))
+            Nothing -> return Nothing
+
+    UnfocusedSequent _ _ -> fail "split tactic: focus required"
 
 -- | Unfold all the constants appearing in the proposition
 --   whose VarIndex is found in the given set.
@@ -283,6 +320,24 @@ simplifyProps sc ss (p:ps) =
   do (a, p')  <- simplifyProp sc ss p
      (b, ps') <- simplifyProps sc ss ps
      return (Set.union a b, p' : ps')
+
+-- | Add hypotheses from the given sequent as rewrite rules
+--   to the given simpset.
+localHypSimpset :: Sequent -> [Integer] -> Simpset a -> IO (Simpset a)
+localHypSimpset sqt hs ss0 = Fold.foldlM processHyp ss0 nhyps
+
+  where
+    processHyp ss (n,h) =
+      case ruleOfProp (unProp h) Nothing of
+        Nothing -> fail $ "Hypothesis " ++ show n ++ "cannot be used as a rewrite rule."
+        Just r  -> return (addRule r ss)
+
+    nhyps = [ (n,h)
+            | (n,h) <- zip [0..] hyps
+            , Set.member n hset
+            ]
+    RawSequent hyps _ = sequentToRawSequent sqt
+    hset = Set.fromList hs
 
 -- | Rewrite in the sequent using the provided Simpset
 simplifySequent :: Ord a => SharedContext -> Simpset a -> Sequent -> IO (Set a, Sequent)
@@ -580,6 +635,18 @@ addNewFocusedGoal p sqt =
   let RawSequent hs gs = sequentToRawSequent sqt
    in GoalFocusedSequent hs (FB gs p [])
 
+-- | If the sequent is focused, return the prop under focus,
+--   together with it's index value.
+--   A @Left@ value indicates a hypothesis under focus, and
+--   a @Right@ value is a goal under focus.
+sequentGetFocus :: Sequent -> Maybe (Either (Integer,Prop) (Integer, Prop))
+sequentGetFocus (UnfocusedSequent _ _) =
+  Nothing
+sequentGetFocus (HypFocusedSequent (FB hs1 h _) _)  =
+  Just (Left (genericLength hs1, h))
+sequentGetFocus (GoalFocusedSequent _ (FB gs1 g _)) =
+  Just (Right (genericLength gs1, g))
+
 sequentState :: Sequent -> SequentState
 sequentState (UnfocusedSequent _ _) = Unfocused
 sequentState (GoalFocusedSequent hs (FB gs1 g gs2)) =
@@ -795,7 +862,9 @@ data Evidence
     -- | This type of evidence is used to modify a goal to prove via rewriting.
     --   The goal to prove is rewritten by the given simpset; then the provided
     --   evidence is used to check the modified goal.
-  | RewriteEvidence !(Simpset TheoremNonce) !Evidence
+    --   The list of integers indicate local hypotheses that should also
+    --   be treated as rewrites.
+  | RewriteEvidence ![Integer] !(Simpset TheoremNonce) !Evidence
 
     -- | This type of evidence is used to modify a goal to prove via unfolding
     --   constant definitions.  The goal to prove is modified by unfolding
@@ -1358,8 +1427,9 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
            sqt' <- traverseSequentWithFocus (normalizeProp sc modmap opqueSet) sqt
            check nenv hyps e' sqt'
 
-      RewriteEvidence ss e' ->
-        do (d1,sqt') <- simplifySequent sc ss sqt
+      RewriteEvidence hs ss e' ->
+        do ss' <- localHypSimpset sqt hs ss
+           (d1,sqt') <- simplifySequent sc ss' sqt
            unless (Set.isSubsetOf d1 hyps) $ fail $ unlines
              [ "Rewrite step used theorem not in hypothesis database"
              , show (Set.difference d1 hyps)
@@ -1781,22 +1851,12 @@ tacticApply sc thm = Tactic \goal ->
 --   two subgoals will be produced, representing the two conjuncts to be proved.
 tacticSplit :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
 tacticSplit sc = Tactic \gl ->
-  case sequentState (goalSequent gl) of
-    Unfocused -> fail "split tactic: focus required"
-    HypFocus h mkSqt ->
-      liftIO (splitDisj sc h) >>= \case
-        Nothing -> fail "split tactic failed: hypothesis not a disjunction"
-        Just (p1,p2) ->
-          do let g1 = gl{ goalType = goalType gl ++ ".left", goalSequent = mkSqt p1 }
-             let g2 = gl{ goalType = goalType gl ++ ".right", goalSequent = mkSqt p2 }
-             return ((), mempty, [g1,g2], splitEvidence)
-    GoalFocus g mkSqt ->
-      liftIO (splitConj sc g) >>= \case
-        Nothing -> fail "split tactic failed: goal not a conjunction"
-        Just (p1,p2) ->
-          do let g1 = gl{ goalType = goalType gl ++ ".left", goalSequent = mkSqt p1 }
-             let g2 = gl{ goalType = goalType gl ++ ".right", goalSequent = mkSqt p2 }
-             return ((), mempty, [g1,g2], splitEvidence)
+  liftIO (splitSequent sc (goalSequent gl)) >>= \case
+    Just (sqt1, sqt2) ->
+      do let g1 = gl{ goalType = goalType gl ++ ".l", goalSequent = sqt1 }
+         let g2 = gl{ goalType = goalType gl ++ ".r", goalSequent = sqt2 }
+         return ((), mempty, [g1,g2], splitEvidence)
+    Nothing -> fail "split tactic failed"
 
 tacticCut :: (F.MonadFail m, MonadIO m) => SharedContext -> Prop -> Tactic m ()
 tacticCut _sc p = Tactic \gl ->

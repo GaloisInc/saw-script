@@ -1539,6 +1539,13 @@ primitives = Map.fromList
     Current
     [ "Apply the given simplifier rule set to the current goal." ]
 
+  , prim "simplify_local"       "[Int] -> Simpset -> ProofScript ()"
+    (pureVal simplifyGoalWithLocals)
+    Current
+    [ "Apply the given simplifier rule set to the current goal."
+    , "Also, use the given numbered hypotheses as rewrites."
+    ]
+
   , prim "unfocus"        "ProofScript ()"
     (pureVal unfocus)
     Experimental
@@ -1716,6 +1723,13 @@ primitives = Map.fromList
     [ "Print the number and description of the goal that a proof script"
     , "is attempting to prove."
     ]
+  , prim "print_focus" "ProofScript ()"
+    (pureVal print_focus)
+    Experimental
+    [ "Print just the focused part of the current goal."
+    , "Prints a message without failing if there is no current focus."
+    ]
+
   , prim "goal_num" "ProofScript Int"
     (pureVal goal_num)
     Current
@@ -2089,6 +2103,14 @@ primitives = Map.fromList
     (funVal2 addsimp)
     Current
     [ "Add a proved equality theorem to a given simplification rule set." ]
+
+  , prim "addsimp_shallow"    "Theorem -> Simpset -> Simpset"
+    (funVal2 addsimp_shallow)
+    Current
+    [ "Add a proved equality theorem to a given simplification rule set."
+    , "The rule is treated as a 'shallow' rewrite, which means that further"
+    , "rewrite rules will not be applied to the result if this rule fires."
+    ]
 
   , prim "addsimps"            "[Theorem] -> Simpset -> Simpset"
     (funVal2 addsimps)
