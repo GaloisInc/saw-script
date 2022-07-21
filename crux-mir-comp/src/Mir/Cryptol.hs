@@ -326,7 +326,11 @@ munge sym shp rv = do
                     W4.justPartExpr sym <$> go shp rv
                 return $ MirVector_PartialVector pv'
             MirVector_Array _ -> error $ "munge: MirVector_Array NYI"
-        -- TODO: StructShape
+        go (StructShape _ _ flds) (AnyValue tr rvs)
+            | StructRepr cr <- tr
+            , Just Refl <- testEquality (fmapFC fieldShapeType flds) cr =
+                AnyValue tr <$> goFields flds rvs
+            | otherwise = error $  "munge: StructShape AnyValue with NYI TypeRepr " ++ show tr
         go (TransparentShape _ shp) rv = go shp rv
         -- TODO: RefShape
         go shp _ = error $ "munge: " ++ show (shapeType shp) ++ " NYI"
