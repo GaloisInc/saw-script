@@ -2126,39 +2126,52 @@ foldIRT As Ds D = IRTDesc__rec As (\ (D:IRTDesc As) -> (Ds:IRTSubsts As) -> Unfo
 
 -- encoding : sort 2;
 -- encoding = (Esort 1 -> sort 1;
+-- SpecM :[(Type,Type)] -> Type -> Type -> Type
 
-primitive SpecM : (E:sort 1) -> (encodes:E -> sort 1) -> sort 1 -> sort 1;
-primitive retS : (E:sort 1) -> (encodes:E -> sort 1) -> (a:sort 1) -> a -> SpecM E encodes a;
--- primitive visS : (E:sort 1) -> (encodes:E -> sort 1) -> (a:sort 1) -> (e:E) -> (encodes e -> SpecM E encodes a) -> SpecM   
-primitive bindS : (E:sort 1) -> (encodes:E -> sort 1) -> (a b:sort 1) -> SpecM E encodes a -> (a -> SpecM E encodes b) -> SpecM E encodes b;
+data SpecCall : sort 2 where {
+     SpecCallIntro : (a:sort 1) -> (a -> sort 1) -> SpecCall;
+}
 
-fmapS : (E:sort 1) -> (encodes:E -> sort 1) -> (a b:sort 1) -> (a -> b) -> SpecM E encodes a -> SpecM E encodes b;
-fmapS E encodes a b f m =
-      bindS E encodes a b m (\ (x:a) -> retS E encodes b (f x));
+data List2 (a:sort 2) : sort 2 where {
+     Nil2 : List2 a;
+     Cons2 : a -> List2 a -> List2 a;
+}
 
-primitive trigger : (E:sort 1) -> (encodes:E -> sort 1) -> (e:E) -> SpecM E encodes (encodes e);
+primitive SpecM : (E:sort 1) -> (encodes:E -> sort 1) -> (List2 SpecCall) -> sort 1 -> sort 2;
+primitive retS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:List2 SpecCall) -> (a:sort 1) -> a -> SpecM E encodes stack a;
+primitive bindS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:List2 SpecCall) -> (a b:sort 1) -> SpecM E encodes stack a -> (a -> SpecM E encodes stack b) -> SpecM E encodes stack b;
 
-primitive forallS : (E:sort 1) -> (encodes:E -> sort 1) -> (a:sort 0) -> SpecM E encodes a;
-primitive existsS : (E:sort 1) -> (encodes:E -> sort 1) -> (a:sort 0) -> SpecM E encodes a;
-primitive assumeS : (E:sort 1) -> (encodes:E -> sort 1) -> (p:Prop) -> SpecM E encodes UnitType;
-primitive assertS : (E:sort 1) -> (encodes:E -> sort 1) -> (p:Prop) -> SpecM E encodes UnitType;
+fmapS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:List2 SpecCall) -> (a b:sort 1) -> (a -> b) -> SpecM E encodes stack a -> SpecM E encodes stack b;
+fmapS E encodes stack a b f m =
+      bindS E encodes stack a b m (\ (x:a) -> retS E encodes stack b (f x));
+
+primitive trigger : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:List2 SpecCall) -> (e:E) -> SpecM E encodes stack (encodes e);
+
+primitive forallS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:List2 SpecCall) -> (a:sort 0) -> SpecM E encodes stack a;
+primitive existsS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:List2 SpecCall) -> (a:sort 0) -> SpecM E encodes stack a;
+primitive assumeS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:List2 SpecCall) -> (p:Prop) -> SpecM E encodes stack UnitType;
+primitive assertS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:List2 SpecCall) -> (p:Prop) -> SpecM E encodes stack UnitType;
 
 data sumT (a b:sort 1) : sort 1 where {
      inl : a -> sumT a b;
      inr : b -> sumT a b;
 }
 
-primitive iterS : (E:sort 1) -> (encodes:E -> sort 1) -> (a b:sort 1) ->
-          (a -> SpecM E encodes (sumT a b)) -> a -> SpecM E encodes b;
+primitive iterS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:List2 SpecCall) -> (a b:sort 1) ->
+          (a -> SpecM E encodes stack (sumT a b)) -> a -> SpecM E encodes stack b;
 
 case : (a b:sort 1) -> (c:sort 2) -> (a -> c) -> (b -> c) -> sumT a b -> c;
 case a b c f g s = sumT#rec a b ( \(x:sumT a b) -> c ) f g s;
 
--- figure out sub event as well
-
-primitive mrec : (D E:sort 1) -> (encodesD:D -> sort 1) -> (encodesE:E -> sort 1) ->
-          ((d:D) -> SpecM (sumT D E) (case D E (sort 1) encodesD encodesE) (encodesD d)) ->
-          (d:D) -> SpecM E encodesE (encodesD d);
+primitive mrecS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:List2 SpecCall) ->
+          (a:sort 1) -> (b:a->sort 1) ->
+          ((x:a) -> SpecM E encodes (Cons2 SpecCall (SpecCallIntro a b) stack) (b x)) ->
+          (x:a) ->
+          SpecM E encodes stack (b x);
+primitive callS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:List2 SpecCall) ->
+          (a:sort 1) -> (b:a->sort 1) ->
+          (x:a) ->
+          SpecM E encodes (Cons2 SpecCall (SpecCallIntro a b) stack) (b x);
 
 --------------------------------------------------------------------------------
 -- Computation monad
