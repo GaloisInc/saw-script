@@ -36,10 +36,10 @@ prelude_bveq_sameL_test =
     let eqs = [ "Prelude.bveq_sameL" ]
     ss <- scSimpset sc0 [] eqs []
     let sc = rewritingSharedContext sc0 ss
-    natType <- scMkTerm sc (mkDataType "Prelude.Nat" [] [])
+    natType <- scNatType sc0
     n <- scFreshGlobal sc "n" natType
-    let boolType = mkDataType "Prelude.Bool" [] []
-    bvType <- scMkTerm sc (mkDataType "Prelude.Vec" [] [pure n, boolType])
+    boolType <- scBoolType sc0
+    bvType <- scVecType sc0 n boolType
     x <- scFreshGlobal sc "x" bvType
     z <- scFreshGlobal sc "z" bvType
     let lhs =
