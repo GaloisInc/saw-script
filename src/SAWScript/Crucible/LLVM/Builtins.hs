@@ -293,11 +293,11 @@ llvm_verify (Some lm) nm lemmas checkSat setup tactic =
   do start <- io getCurrentTime
      lemmas' <- checkModuleCompatibility lm lemmas
      withMethodSpec checkSat lm nm setup $ \cc method_spec ->
-       do (stats, deps, _) <- verifyMethodSpec cc method_spec lemmas' checkSat tactic Nothing
+       do (stats, vcs, _) <- verifyMethodSpec cc method_spec lemmas' checkSat tactic Nothing
           let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas')
           end <- io getCurrentTime
           let diff = diffUTCTime end start
-          ps <- io (MS.mkProvedSpec MS.SpecProved method_spec stats deps lemmaSet diff)
+          ps <- io (MS.mkProvedSpec MS.SpecProved method_spec stats vcs lemmaSet diff)
           returnProof $ SomeLLVM ps
 
 llvm_refine_spec ::
@@ -420,7 +420,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
               , "An output parameter must be bound by llvm_return or llvm_points_to."
               ]
 
-          (stats, deps, post_override_state) <-
+          (stats, vcs, post_override_state) <-
             verifyMethodSpec cc method_spec lemmas' checkSat tactic Nothing
 
           shared_context <- getSharedContext
@@ -488,7 +488,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
 
           end <- io getCurrentTime
           let diff = diffUTCTime end start
-          ps <- io (MS.mkProvedSpec MS.SpecProved extracted_method_spec stats deps lemmaSet diff)
+          ps <- io (MS.mkProvedSpec MS.SpecProved extracted_method_spec stats vcs lemmaSet diff)
           returnProof (SomeLLVM ps)
 
 setupValueAsExtCns :: SetupValue (LLVM arch) -> Maybe (ExtCns Term)
@@ -598,7 +598,7 @@ verifyMethodSpec ::
   Bool ->
   ProofScript () ->
   Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
-  TopLevel (SolverStats, Set TheoremNonce, OverrideState (LLVM arch))
+  TopLevel (SolverStats, [MS.VCStats], OverrideState (LLVM arch))
 verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
   ccWithBackend cc $ \bak ->
   do printOutLnTop Info $
@@ -660,11 +660,11 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      -- attempt to verify the proof obligations
      printOutLnTop Info $
        unwords ["Checking proof obligations", (methodSpec ^. csName), "..."]
-     (stats, deps) <- verifyObligations cc methodSpec tactic assumes asserts
+     (stats, vcstats) <- verifyObligations cc methodSpec tactic assumes asserts
      io $ writeFinalProfile
 
      return ( stats
-            , deps
+            , vcstats
             , post_override_state
             )
 
@@ -684,7 +684,7 @@ refineMethodSpec ::
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   [MS.ProvedSpec (LLVM arch)] ->
   ProofScript () ->
-  TopLevel (SolverStats, Set TheoremNonce)
+  TopLevel (SolverStats, [MS.VCStats])
 refineMethodSpec cc methodSpec lemmas tactic =
   ccWithBackend cc $ \bak ->
   do let sym = cc^.ccSym
@@ -762,11 +762,11 @@ refineMethodSpec cc methodSpec lemmas tactic =
      -- attempt to verify the proof obligations
      printOutLnTop Info $
        unwords ["Checking proof obligations", (methodSpec ^. csName), "..."]
-     (stats, deps) <- verifyObligations cc methodSpec tactic assumes asserts
+     (stats, vcstats) <- verifyObligations cc methodSpec tactic assumes asserts
      io $ writeFinalProfile
 
      return ( stats
-            , deps
+            , vcstats
             )
 
 
@@ -775,7 +775,7 @@ verifyObligations :: LLVMCrucibleContext arch
                   -> ProofScript ()
                   -> [Crucible.LabeledPred Term AssumptionReason]
                   -> [(String, MS.ConditionMetadata, Term)]
-                  -> TopLevel (SolverStats, Set TheoremNonce)
+                  -> TopLevel (SolverStats, [MS.VCStats])
 verifyObligations cc mspec tactic assumes asserts =
   do let sym = cc^.ccSym
      st     <- io $ Common.sawCoreState sym
@@ -813,7 +813,8 @@ verifyObligations cc mspec tactic assumes asserts =
                       ["LLVM verification condition", Text.pack (show n), Text.pack goalname])
                     False -- do not record this theorem in the database
           case res of
-            ValidProof stats thm -> return (stats, thmNonce thm)
+            ValidProof stats thm ->
+              return (stats, (md, stats, thmSummary thm, thmNonce thm, thmDepends thm, thmElapsedTime thm))
             UnfinishedProof pst ->
               do printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
                  throwTopLevel $ "Proof failed " ++ show (length (psGoals pst)) ++ " goals remaining."
@@ -833,8 +834,8 @@ verifyObligations cc mspec tactic assumes asserts =
      printOutLnTop Info $ unwords ["Proof succeeded!", nm]
 
      let stats = mconcat (map fst outs)
-     let deps  = mconcat (map (Set.singleton . snd) outs)
-     return (stats, deps)
+     let vcstats = map snd outs
+     return (stats, vcstats)
 
 throwMethodSpec :: MS.CrucibleMethodSpecIR (LLVM arch) -> String -> IO a
 throwMethodSpec mspec msg = X.throw $ LLVMMethodSpecException (mspec ^. MS.csLoc) msg

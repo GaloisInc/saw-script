@@ -256,13 +256,13 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      _ <- io $ Crucible.popAssumptionFrame bak frameIdent
 
      -- attempt to verify the proof obligations
-     (stats,thms) <- verifyObligations cc methodSpec tactic assumes asserts
+     (stats,vcstats) <- verifyObligations cc methodSpec tactic assumes asserts
      io $ writeFinalProfile
 
      let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas)
      end <- io getCurrentTime
      let diff = diffUTCTime end start
-     ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats thms lemmaSet diff)
+     ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats vcstats lemmaSet diff)
      returnProof ps
 
 
@@ -290,7 +290,7 @@ verifyObligations ::
   ProofScript () ->
   [Crucible.LabeledPred Term AssumptionReason] ->
   [(String, MS.ConditionMetadata, Term)] ->
-  TopLevel (SolverStats, Set TheoremNonce)
+  TopLevel (SolverStats, [MS.VCStats])
 verifyObligations cc mspec tactic assumes asserts =
   do let sym = cc^.jccSym
      st <- io $ sawCoreState sym
@@ -321,7 +321,8 @@ verifyObligations cc mspec tactic assumes asserts =
                  ["JVM verification condition:", Text.pack (show n), Text.pack goalname])
                 False -- do not record in the theorem database
        case res of
-         ValidProof stats thm -> return (stats, thmNonce thm)
+         ValidProof stats thm ->
+           return (stats, (md, stats, thmSummary thm, thmNonce thm, thmDepends thm, thmElapsedTime thm))
          InvalidProof stats vals _pst -> do
            printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
            printOutLnTop Info (show stats)
@@ -337,8 +338,8 @@ verifyObligations cc mspec tactic assumes asserts =
      printOutLnTop Info $ unwords ["Proof succeeded!", nm]
 
      let stats = mconcat (map fst outs)
-     let thms  = mconcat (map (Set.singleton . snd) outs)
-     return (stats, thms)
+     let vcstats = map snd outs
+     return (stats, vcstats)
 
 -- | Evaluate the precondition part of a Crucible method spec:
 --
