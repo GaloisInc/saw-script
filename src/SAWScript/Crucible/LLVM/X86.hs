@@ -61,6 +61,7 @@ import qualified Text.LLVM.AST as LLVM
 import Data.Parameterized.Some
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.NatRepr
+import Data.Parameterized.Nonce (GlobalNonceGenerator)
 import Data.Parameterized.Context hiding (view, zipWithM)
 
 import Verifier.SAW.CryptolEnv
@@ -553,7 +554,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                case Map.lookup loopaddr cfgs of
                  Nothing -> throwX86 $ "Unable to discover looping CFG from address " <> show loopaddr
                  Just (C.SomeCFG loopcfg) ->
-                   do f <- liftIO (setupSimpleLoopFixpointFeature2 sym sc sawst loopcfg mvar func)
+                   do f <- liftIO (setupSimpleLoopFixpointFeature2 sym sc sawst mdMap loopcfg mvar func)
                       return [f]
 
       let execFeatures = simpleLoopFixpointFeature ++ psatf
@@ -657,6 +658,7 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
 setupSimpleLoopFixpointFeature2 ::
   ( sym ~ W4.B.ExprBuilder n st fs
   , C.IsSymInterface sym
+  , n ~ GlobalNonceGenerator
   , ?memOpts::C.LLVM.MemOptions
   , C.LLVM.HasLLVMAnn sym
   , C.IsSyntaxExtension ext
@@ -664,16 +666,17 @@ setupSimpleLoopFixpointFeature2 ::
   sym ->
   SharedContext ->
   SAWCoreState n ->
+  IORef MetadataMap ->
   C.CFG ext blocks init ret ->
   C.GlobalVar C.LLVM.Mem ->
   TypedTerm ->
   IO (C.ExecutionFeature p sym ext rtp)
 
-setupSimpleLoopFixpointFeature2 sym sc sawst cfg mvar func =
+setupSimpleLoopFixpointFeature2 sym sc sawst mdMap cfg mvar func =
   Crucible.LLVM.Fixpoint2.simpleLoopFixpoint sym cfg mvar invariant_func
 
  where
-  invariant_func implicit_params invariant_substitution =
+  invariant_func phase implicit_params invariant_substitution =
     do let subst_pairs = reverse (MapF.toList invariant_substitution)
        let filtered_implicit_params = filter
              (\ (Some variable) ->
@@ -721,70 +724,33 @@ setupSimpleLoopFixpointFeature2 sym sc sawst cfg mvar func =
                                , show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tp)
                                   -- TODO, get ppOpts from the right place
                                ]
-       bindSAWTerm sym sawst W4.BaseBoolRepr inv
+       b <- bindSAWTerm sym sawst W4.BaseBoolRepr inv
 
-{-
-putStrLn "Invariant types!"
-       forM_ (MapF.toList fixpoint_substitution) $ \(MapF.Pair hd _body) ->
-         putStrLn (show (W4.exprType hd))
-       b <- W4.freshConstant sym (W4.safeSymbol "loop_invariant") W4.BaseBoolRepr
-       return b
--}
-
-{-
-
-    do let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
-       let body_exprs = map (mapSome $ Crucible.LLVM.Fixpoint2.bodyValue) (MapF.elems fixpoint_substitution)
-       let uninterpreted_constants = foldMap
-             (viewSome $ Set.map (mapSome $ W4.varExpr sym) . W4.exprUninterpConstants sym)
-             (Some condition : body_exprs)
-       let filtered_uninterpreted_constants = Set.toList $ Set.filter
-             (\(Some variable) ->
-               not (List.isPrefixOf "creg_join_var" $ show $ W4.printSymExpr variable)
-               && not (List.isPrefixOf "cmem_join_var" $ show $ W4.printSymExpr variable)
-               && not (List.isPrefixOf "cundefined" $ show $ W4.printSymExpr variable)
-               && not (List.isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable))
-             uninterpreted_constants
-       body_tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
-       implicit_parameters <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet body_tms
-
-       arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
-         toSC sym sawst $ Crucible.LLVM.Fixpoint2.headerValue fixpoint_entry
-       applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ arguments
-       applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i ->
-         scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
-       result_substitution <- MapF.fromList <$> zipWithM
-         (\(MapF.Pair variable _) applied_func_selector ->
-           MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)
-         fixpoint_substitution_as_list
-         applied_func_selectors
-
-       explicit_parameters <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
-         toSC sym sawst variable
-       inner_func <- case asConstant (ttTerm func) of
-         Just (_, Just (asApplyAll -> (isGlobalDef "Prelude.fix" -> Just (), [_, inner_func]))) ->
-           return inner_func
-         _ -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
-       func_body <- betaNormalize sc
-         =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ explicit_parameters))
-
-       step_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
-         toSC sym sawst $ Crucible.LLVM.Fixpoint2.bodyValue fixpoint_entry
-       tail_applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ step_arguments
-       explicit_parameters_tuple <- scTuple sc explicit_parameters
-       let lhs = Prelude.last step_arguments
-       w <- scNat sc 64
-       rhs <- scBvMul sc w (head implicit_parameters) =<< scBvNat sc w =<< scNat sc 128
-       loop_condition <- scBvULt sc w lhs rhs
-       output_tuple_type <- scTupleType sc =<< mapM (scTypeOf sc) explicit_parameters
-       loop_body <- scIte sc output_tuple_type loop_condition tail_applied_func explicit_parameters_tuple
-
-       induction_step_condition <- scEq sc loop_body func_body
-       result_condition <- bindSAWTerm sym sawst W4.BaseBoolRepr induction_step_condition
-
-       return (result_substitution, result_condition)
--}
-
+       -- Add goal metadata for the initial and inductive invariants
+       case phase of
+         Crucible.LLVM.Fixpoint2.HypotheticalInvariant -> return b
+         Crucible.LLVM.Fixpoint2.InitialInvariant ->
+           do (ann,b') <- W4.annotateTerm sym b
+              loc <- W4.getCurrentProgramLoc sym
+              let md = MS.ConditionMetadata
+                       { MS.conditionLoc = loc
+                       , MS.conditionTags = Set.singleton "initial loop invariant"
+                       , MS.conditionType = "initial loop invariant"
+                       , MS.conditionContext = ""
+                       }
+              modifyIORef mdMap (Map.insert ann md)
+              return b'
+         Crucible.LLVM.Fixpoint2.InductiveInvariant ->
+           do (ann,b') <- W4.annotateTerm sym b
+              loc <- W4.getCurrentProgramLoc sym
+              let md = MS.ConditionMetadata
+                       { MS.conditionLoc = loc
+                       , MS.conditionTags = Set.singleton "inductive loop invariant"
+                       , MS.conditionType = "inductive loop invariant"
+                       , MS.conditionContext = ""
+                       }
+              modifyIORef mdMap (Map.insert ann md)
+              return b'
 
 --------------------------------------------------------------------------------
 -- ** Computing the CFG
