@@ -1143,7 +1143,7 @@ provePrim script t = do
              , goalSequent = propToSequent prop
              , goalTags = mempty
              }
-  res <- SV.runProofScript script prop goal Nothing "prove_prim"
+  res <- SV.runProofScript script prop goal Nothing "prove_prim" True
   case res of
     UnfinishedProof pst ->
       printOutLnTop Info $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)"
@@ -1170,7 +1170,7 @@ proveHelper nm script t f = do
              , goalTags = mempty
              }
   opts <- rwPPOpts <$> getTopLevelRW
-  res <- SV.runProofScript script prop goal Nothing (Text.pack nm)
+  res <- SV.runProofScript script prop goal Nothing (Text.pack nm) True
   let failProof pst =
          fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                           ++ SV.showsProofResult opts res ""
@@ -1215,7 +1215,7 @@ satPrim script t =
                 , goalSequent = propToSequent prop
                 , goalTags = mempty
                 }
-     res <- SV.runProofScript script prop goal Nothing "sat"
+     res <- SV.runProofScript script prop goal Nothing "sat" False
      case res of
        InvalidProof stats cex _ -> return (SV.Sat stats cex)
        ValidProof stats _thm -> return (SV.Unsat stats)
@@ -1746,7 +1746,7 @@ prove_core script input =
                 , goalSequent = propToSequent p
                 , goalTags = mempty
                 }
-     res <- SV.runProofScript script p goal Nothing "prove_core"
+     res <- SV.runProofScript script p goal Nothing "prove_core" True
      let failProof pst =
             fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                                   ++ SV.showsProofResult opts res ""

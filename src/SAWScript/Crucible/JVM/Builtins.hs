@@ -316,8 +316,10 @@ verifyObligations cc mspec tactic assumes asserts =
                        , goalSequent = propToSequent goal'
                        , goalTags = MS.conditionTags md
                        }
-       res <- runProofScript tactic goal' proofgoal (Just ploc) $ Text.unwords
-                 ["JVM verification condition:", Text.pack (show n), Text.pack goalname]
+       res <- runProofScript tactic goal' proofgoal (Just ploc)
+                (Text.unwords
+                 ["JVM verification condition:", Text.pack (show n), Text.pack goalname])
+                False -- do not record in the theorem database
        case res of
          ValidProof stats thm -> return (stats, thmNonce thm)
          InvalidProof stats vals _pst -> do

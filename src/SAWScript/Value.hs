@@ -832,8 +832,15 @@ newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX
 
 -- TODO: remove the "reason" parameter and compute it from the
 --       initial proof goal instead
-runProofScript :: ProofScript a -> Prop -> ProofGoal -> Maybe ProgramLoc -> Text -> TopLevel ProofResult
-runProofScript (ProofScript m) concl gl ploc rsn =
+runProofScript ::
+  ProofScript a ->
+  Prop ->
+  ProofGoal ->
+  Maybe ProgramLoc ->
+  Text ->
+  Bool {- ^ record the theorem in the database? -} ->
+  TopLevel ProofResult
+runProofScript (ProofScript m) concl gl ploc rsn recordThm =
   do pos <- getPosition
      ps <- io (startProof gl pos ploc rsn)
      (r,pstate) <- runStateT (runExceptT m) ps
@@ -842,7 +849,7 @@ runProofScript (ProofScript m) concl gl ploc rsn =
        Right _ ->
          do sc <- getSharedContext
             db <- rwTheoremDB <$> getTopLevelRW
-            io (finishProof sc db concl pstate)
+            io (finishProof sc db concl pstate recordThm)
 
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))

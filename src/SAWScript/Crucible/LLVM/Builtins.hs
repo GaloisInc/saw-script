@@ -808,8 +808,10 @@ verifyObligations cc mspec tactic assumes asserts =
                           , goalSequent = sqt
                           , goalTags = MS.conditionTags md
                           }
-          res <- runProofScript tactic goal' proofgoal (Just ploc) $ Text.unwords
-                    ["LLVM verification condition", Text.pack (show n), Text.pack goalname]
+          res <- runProofScript tactic goal' proofgoal (Just ploc)
+                    (Text.unwords
+                      ["LLVM verification condition", Text.pack (show n), Text.pack goalname])
+                    False -- do not record this theorem in the database
           case res of
             ValidProof stats thm -> return (stats, thmNonce thm)
             UnfinishedProof pst ->
@@ -992,7 +994,7 @@ assumptionsContainContradiction cc methodSpec tactic assumptions =
                   , goalSequent = propToSequent goal'
                   , goalTags = mempty
                   })
-     res <- runProofScript tactic goal' pgl Nothing "vacuousness check"
+     res <- runProofScript tactic goal' pgl Nothing "vacuousness check" False
      case res of
        ValidProof _ _     -> return True
        InvalidProof _ _ _ -> return False

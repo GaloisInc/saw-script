@@ -1199,8 +1199,10 @@ checkGoals bak opts nm sc tactic mdMap = do
                     , goalSequent = propToSequent term
                     , goalTags = MS.conditionTags md
                     }
-    res <- runProofScript tactic term proofgoal (Just (gLoc g)) $ Text.unwords
-              ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))]
+    res <- runProofScript tactic term proofgoal (Just (gLoc g))
+             (Text.unwords
+              ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))])
+             False -- do no record this theorem in the database
     case res of
       ValidProof stats thm -> return (stats, thmNonce thm)
       UnfinishedProof pst -> do
