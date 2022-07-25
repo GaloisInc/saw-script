@@ -1549,8 +1549,19 @@ startProof g pos ploc rsn =
 --   and validate the computed evidence to ensure that it supports the original
 --   proposition.  If successful, return the completed @Theorem@ and a summary
 --   of solver resources used in the proof.
-finishProof :: SharedContext -> TheoremDB -> Prop -> ProofState -> IO ProofResult
-finishProof sc db conclProp ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv start) =
+--
+--   If the final boolean argument is False, the resulting theorem will not be
+--   recored in the theorem database. This should only be done when you are
+--   sure that the theorem will not be used as part of the proof of other theorems,
+--   or later steps will fail.
+finishProof ::
+  SharedContext ->
+  TheoremDB ->
+  Prop ->
+  ProofState ->
+  Bool {- ^ should we record the theorem in the database? -} ->
+  IO ProofResult
+finishProof sc db conclProp ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv start) recordThm =
   case gs of
     [] ->
       do e <- checkEv []
@@ -1558,7 +1569,7 @@ finishProof sc db conclProp ps@(ProofState gs (concl,loc,ploc,rsn) stats _ check
          (deps,sy) <- checkEvidence sc db e' conclProp
          n <- freshNonce globalNonceGenerator
          end <- getCurrentTime
-         thm <- recordTheorem db
+         thm <- (if recordThm then recordTheorem db else return) 
                    Theorem
                    { _thmProp = conclProp
                    , _thmStats = stats
