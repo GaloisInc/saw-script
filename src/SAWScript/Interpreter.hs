@@ -896,6 +896,20 @@ primitives = Map.fromList
     , "subshell and resume execution."
     ]
 
+  , prim "proof_checkpoint"      "ProofScript (() -> ProofScript ())"
+    (pureVal proof_checkpoint)
+    Experimental
+    [ "Capture the current state of the proof and return a"
+    , "ProofScript monadic action that, if invoked, will reset the"
+    , "state of the proof back to to what it was at the"
+    , "moment checkpoint was invoked."
+    , ""
+    , "NOTE that this facility is highly experimental and may not"
+    , "be entirely reliable.  It is intended only for proof development"
+    , "where it can speed up the process of experimenting with"
+    , "mid-proof changes. Finalized proofs should not use this facility."
+    ]
+
   , prim "define"              "String -> Term -> TopLevel Term"
     (pureVal definePrim)
     Current

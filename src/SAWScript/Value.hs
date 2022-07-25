@@ -624,6 +624,15 @@ checkpoint = TopLevel_ $
        do printOutLnTop Info "Restoring state from checkpoint"
           restoreCheckpoint chk
 
+-- | Capture the current proof state and return an
+--   action that, if invoked, resets the state back to that point.
+proof_checkpoint :: ProofScript (() -> ProofScript ())
+proof_checkpoint =
+  do ps <- get
+     return $ \_ ->
+       do scriptTopLevel (printOutLnTop Info "Restoring proof state from checkpoint")
+          put ps
+
 throwTopLevel :: String -> TopLevel a
 throwTopLevel msg = do
   pos <- getPosition
