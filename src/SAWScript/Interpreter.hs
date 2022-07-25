@@ -839,7 +839,7 @@ primitives = Map.fromList
     [ "Call-with-current-continuation."
     , ""
     , "This is a highly experimental control operator that can be used"
-    , "to capure the surrounding top-level computation as a continuation."
+    , "to capture the surrounding top-level computation as a continuation."
     , "The consequences of delaying and reentering the current continuation"
     , "may be somewhat unpredictable, so use this operator with great caution."
     ]
@@ -847,7 +847,7 @@ primitives = Map.fromList
   , prim "checkpoint"          "TopLevel (() -> TopLevel ())"
     (pureVal checkpoint)
     Experimental
-    [ "Capure the current state of the SAW interpreter, and return"
+    [ "Capture the current state of the SAW interpreter, and return"
     , "A TopLevel monadic action that, if invoked, will reset the"
     , "state of the interpreter back to to what it was at the"
     , "moment checkpoint was invoked."
@@ -861,12 +861,40 @@ primitives = Map.fromList
   , prim "subshell"            "() -> TopLevel ()"
     (\_ _ -> toplevelSubshell)
     Experimental
-    []
+    [ "Open an interactive subshell instance in the context where"
+    , "'subshell' was called. This works either from within execution"
+    , "of a outer shell instance, or from interpreting a file in batch"
+    , "mode. Enter the end-of-file character in your terminal (Ctrl^D, usually)"
+    , "to exit the subshell and resume execution."
+    , ""
+    , "This command is especially useful in conjunction with the 'checkpoint'"
+    , "and 'callcc' commands, which allow state reset capabilities and the capturing"
+    , "of the calling context."
+    , ""
+    , "Note that, due to the way the SAW script interpreter works, changes made"
+    , "to a script file in which the 'subshell' command directly appears will"
+    , "NOT affect subsequent execution following a 'checkpoint' or 'callcc' use."
+    , "However, changes made in a file that executed via 'include' WILL affect"
+    , "restarted executions, as the 'include' command will read and parse the"
+    , "file from scratch."
+    ]
 
   , prim "proof_subshell"      "() -> ProofScript ()"
     (\ _ _ -> proofScriptSubshell)
     Experimental
-    []
+    [ "Open an interactive subshell instance in the context of the current proof."
+    , "This allows the user to interactively execute 'ProofScript' tactic commands"
+    , "directly on the command line an examine their effects using, e.g., 'print_goal'."
+    , "In proof mode, the command prompt will change to 'proof (n)', where the 'n'"
+    , "indicates the number of subgoals remaining to proof for the current overall goal."
+    , "In this mode, tactic commands applied will only affect the current subgoal."
+    , "When a particular subgoal is completed, the next subgoal will automatically become"
+    , "the active subgoal. An overall goal is completed when all subgoals are proved"
+    , "and the current number of subgoals is 0."
+    , ""
+    , "Enter the end-of-file character in your terminal (Ctrl^D, usually) to exit the proof"
+    , "subshell and resume execution."
+    ]
 
   , prim "define"              "String -> Term -> TopLevel Term"
     (pureVal definePrim)
