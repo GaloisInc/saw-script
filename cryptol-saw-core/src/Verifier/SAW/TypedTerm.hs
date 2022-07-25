@@ -72,15 +72,7 @@ mkTypedTerm sc trm = do
 --   This operation fails if the type of the argument does
 --   not match the function.
 applyTypedTerm :: SharedContext -> TypedTerm -> TypedTerm -> IO TypedTerm
-applyTypedTerm sc (TypedTerm _tp t1) (TypedTerm _ t2) =
-  do trm <- scApply sc t1 t2
-     ty <- scTypeCheckError sc trm
-     ct <- scCryptolType sc ty
-     let ttt = case ct of
-           Nothing        -> TypedTermOther ty
-           Just (Left k)  -> TypedTermKind k
-           Just (Right t) -> TypedTermSchema (C.tMono t)
-     return (TypedTerm ttt trm)
+applyTypedTerm sc x y = applyTypedTerms sc x [y]
 
 -- | Apply a 'TypedTerm' to a list of arguments. This operation fails
 -- if the first 'TypedTerm' does not have a function type of
@@ -90,6 +82,10 @@ applyTypedTerms :: SharedContext -> TypedTerm -> [TypedTerm] -> IO TypedTerm
 applyTypedTerms sc (TypedTerm _ fn) args =
   do trm <- foldM (scApply sc) fn (map ttTerm args)
      ty <- scTypeCheckError sc trm
+     -- NB, scCryptolType can behave in strange ways due to the non-injectivity
+     -- of the mapping from Cryptol to SAWCore types. Perhaps we would be better
+     -- to combine the incoming type information instead of applying and then
+     -- reconstructing here.
      ct <- scCryptolType sc ty
      let ttt = case ct of
            Nothing        -> TypedTermOther ty

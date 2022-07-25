@@ -643,6 +643,14 @@ congruence_for tt =
      congTm <- io $ build_congruence sc (ttTerm tt)
      io $ mkTypedTerm sc congTm
 
+-- | Given an input term, construct another term that
+--   represents a congruence law for that term.
+--   This term will be a Curry-Howard style theorem statement
+--   that can be dispatched to solvers, and should have
+--   type "Prop".
+--
+--   This will only work for terms that represent non-dependent
+--   functions.
 build_congruence :: SharedContext -> Term -> IO Term
 build_congruence sc tm =
   do ty <- scTypeOf sc tm
