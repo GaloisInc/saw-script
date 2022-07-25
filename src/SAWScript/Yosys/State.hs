@@ -19,7 +19,6 @@ import Data.Bifunctor (bimap)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
-import qualified Data.Text as Text
 import qualified Data.Graph as Graph
 
 import Numeric.Natural (Natural)
