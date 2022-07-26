@@ -2997,7 +2997,7 @@ primitives = Map.fromList
     ]
 
   , prim "llvm_verify_fixpoint_x86_ex"
-    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> (String, Term) -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> (String, Int, Term) -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
     (pureVal llvm_verify_fixpoint_x86_ex)
     Experimental
     [ "An experimental variant of 'llvm_verify_x86'. This variant can prove some properties"
