@@ -339,17 +339,18 @@ llvm_verify_fixpoint_x86_ex ::
   String {- ^ Function's symbol in ELF file -} ->
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
-  (String, TypedTerm) {- ^ Name of the looping symbol, and function specifying the loop -} ->
+  (String, Integer, TypedTerm) {- ^ Name of the looping symbol, and function specifying the loop -} ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_verify_fixpoint_x86_ex llvmModule path nm globsyms checkSat (loopnm,f) =
-  llvm_verify_x86_common llvmModule path nm globsyms checkSat (SimpleFixpoint2 loopnm f)
+llvm_verify_fixpoint_x86_ex llvmModule path nm globsyms checkSat (loopName,loopNum,f) =
+  llvm_verify_x86_common llvmModule path nm globsyms checkSat
+    (SimpleFixpoint2 loopName loopNum f)
 
 data FixpointSelect
  = NoFixpoint
  | SimpleFixpoint TypedTerm
- | SimpleFixpoint2 String TypedTerm
+ | SimpleFixpoint2 String Integer TypedTerm
 
 llvm_verify_x86_common ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
@@ -546,7 +547,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
           SimpleFixpoint func ->
             do f <- liftIO (setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func)
                return [f]
-          SimpleFixpoint2 loopFixpointSymbol func ->
+          SimpleFixpoint2 loopFixpointSymbol loopNum func ->
             do (loopaddr :: Macaw.MemSegmentOff 64) <-
                  case findSymbols (symMap relf) . encodeUtf8 $ Text.pack loopFixpointSymbol of
                    (loopaddr:_) -> pure loopaddr
@@ -554,7 +555,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                case Map.lookup loopaddr cfgs of
                  Nothing -> throwX86 $ "Unable to discover looping CFG from address " <> show loopaddr
                  Just (C.SomeCFG loopcfg) ->
-                   do f <- liftIO (setupSimpleLoopFixpointFeature2 sym sc sawst mdMap loopcfg mvar func)
+                   do f <- liftIO (setupSimpleLoopFixpointFeature2 sym loopNum sc sawst mdMap loopcfg mvar func)
                       return [f]
 
       let execFeatures = simpleLoopFixpointFeature ++ psatf
@@ -664,6 +665,7 @@ setupSimpleLoopFixpointFeature2 ::
   , C.IsSyntaxExtension ext
   ) =>
   sym ->
+  Integer ->
   SharedContext ->
   SAWCoreState n ->
   IORef MetadataMap ->
@@ -672,8 +674,8 @@ setupSimpleLoopFixpointFeature2 ::
   TypedTerm ->
   IO (C.ExecutionFeature p sym ext rtp)
 
-setupSimpleLoopFixpointFeature2 sym sc sawst mdMap cfg mvar func =
-  Crucible.LLVM.Fixpoint2.simpleLoopFixpoint sym cfg mvar invariant_func
+setupSimpleLoopFixpointFeature2 sym loopNum sc sawst mdMap cfg mvar func =
+  Crucible.LLVM.Fixpoint2.simpleLoopFixpoint sym loopNum cfg mvar invariant_func
 
  where
   invariant_func phase implicit_params invariant_substitution =
