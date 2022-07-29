@@ -2160,8 +2160,8 @@ data sumT (a b:sort 1) : sort 1 where {
 primitive iterS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:List2 SpecCall) -> (a b:sort 1) ->
           (a -> SpecM E encodes stack (sumT a b)) -> a -> SpecM E encodes stack b;
 
-case : (a b:sort 1) -> (c:sort 2) -> (a -> c) -> (b -> c) -> sumT a b -> c;
-case a b c f g s = sumT#rec a b ( \(x:sumT a b) -> c ) f g s;
+-- case : (a b:sort 1) -> (c:sort 2) -> (a -> c) -> (b -> c) -> sumT a b -> c;
+-- case a b c f g s = sumT#rec a b ( \(x:sumT a b) -> c ) f g s;
 
 primitive mrecS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:List2 SpecCall) ->
           (a:sort 1) -> (b:a->sort 1) ->
