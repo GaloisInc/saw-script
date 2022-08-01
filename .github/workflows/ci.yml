@@ -294,8 +294,12 @@ jobs:
           - test: saw-remote-api/scripts/run_rpc_tests.sh
             os: ubuntu-18.04
           # TODO: These tests are disabled pending resolution of issue #1699
-          # - test: saw-remote-api/scripts/run_rpc_tests.sh
-          #   os: macos-12
+          - test: |
+              cd saw-remote-api/
+              poetry update
+              poetry install
+              poetry run mypy saw_client/
+            os: macos-12
           - test: saw-remote-api/scripts/check_docs.sh
             os: ubuntu-18.04
     steps:
