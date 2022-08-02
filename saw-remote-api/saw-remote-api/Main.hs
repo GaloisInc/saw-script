@@ -152,4 +152,16 @@ sawMethods =
     "SAW/read extcore"
     readExtcoreDescr
     readExtcore
+  , Argo.command
+    "SAW/simplify term"
+    simplifyTermDescr
+    simplifyTerm
+  , Argo.command
+    "SAW/run solver"
+    runSolverDescr
+    runSolver
+  , Argo.command
+    "SAW/inspect term"
+    inspectTermDescr
+    inspectTerm
   ]

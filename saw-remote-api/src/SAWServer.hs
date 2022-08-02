@@ -72,6 +72,7 @@ import SAWServer.Exceptions
       notATerm,
       notAJVMClass,
       notAJVMMethodSpecIR )
+import SAWScript.Interpreter (buildTopLevelEnv)
 
 type SAWCont = (SAWEnv, SAWTask)
 
@@ -177,7 +178,14 @@ getHandleAlloc :: Argo.Command SAWState Crucible.HandleAllocator
 getHandleAlloc = roHandleAlloc . view sawTopLevelRO <$> Argo.getState
 
 initialState :: (FilePath -> IO ByteString) -> IO SAWState
-initialState readFileFn =
+initialState _readFileFn = do
+  let proxy = AIGProxy AIG.basicProxy
+  opts <- processEnv defaultOptions
+  (bic, ro, rw) <- buildTopLevelEnv proxy opts
+  return (SAWState emptyEnv bic [] ro rw M.empty)
+
+initialState' :: (FilePath -> IO ByteString) -> IO SAWState
+initialState' readFileFn =
   let ?fileReader = readFileFn in
   -- silence prevents output on stdout, which suppresses defaulting
   -- warnings from the Cryptol type checker
@@ -239,6 +247,7 @@ initialState readFileFn =
                 , rwPreservedRegs = []
                 , rwAllocSymInitCheck = True
                 , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
+                , rwRewriteSummary = Nothing
                 }
      return (SAWState emptyEnv bic [] ro rw M.empty)
 

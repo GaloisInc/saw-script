@@ -674,6 +674,26 @@ def set_option(option : option.SAWOption, value : bool) -> None:
     if __designated_connection is not None:
         __designated_connection.set_option(option=option,value=value)
 
+def include_sawscript(path: str) -> None:
+    __get_designated_connection().include_sawscript(path).result()
+    return None
+
+def read_extcore(nm: str, path: str) -> None:
+    __get_designated_connection().read_extcore(nm, path).result()
+    return None
+
+def simplify_term(nm: str, rewrites: List[str], simpset: str) -> None:
+    __get_designated_connection().simplify_term(nm, rewrites, simpset).result()
+    return None
+
+def run_solver(nm: str, solver: str, unints: List[str]) -> None:
+    __get_designated_connection().run_solver(nm, solver, unints).result()
+    return None
+
+def inspect_term(nm: str) -> None:
+    res = __get_designated_connection().inspect_term(nm).result()
+    return res["extcore"]
+
 @atexit.register
 def script_exit() -> None:
     global __designated_views

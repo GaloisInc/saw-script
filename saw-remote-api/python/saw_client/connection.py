@@ -264,3 +264,23 @@ class SAWConnection:
         """Set a boolean-valued SAW option."""
         self.most_recent_result = SAWSetOption(self, option, value, timeout)
         return self.most_recent_result
+
+    def include_sawscript(self, path: str, timeout: Optional[float] = None) -> Command:
+        self.most_recent_result = IncludeSAWScript(self, path, timeout)
+        return self.most_recent_result
+
+    def read_extcore(self, nm: str, path: str, timeout: Optional[float] = None) -> Command:
+        self.most_recent_result = ReadExtcore(self, nm, path, timeout)
+        return self.most_recent_result
+
+    def simplify_term(self, nm: str, rewrites: List[str], simpset: str, timeout: Optional[float] = None) -> Command:
+        self.most_recent_result = SimplifyTerm(self, nm, rewrites, simpset, timeout)
+        return self.most_recent_result
+
+    def run_solver(self, nm: str, solver: str, unints: List[str], timeout: Optional[float] = None) -> Command:
+        self.most_recent_result = RunSolver(self, nm, solver, unints, timeout)
+        return self.most_recent_result
+
+    def inspect_term(self, nm: str, timeout: Optional[float] = None) -> Command:
+        self.most_recent_result = InspectTerm(self, nm, timeout)
+        return self.most_recent_result

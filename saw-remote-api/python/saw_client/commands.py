@@ -236,3 +236,78 @@ class SAWSetOption(SAWCommand):
 
     def process_result(self, _res : Any) -> Any:
         return None
+
+class IncludeSAWScript(SAWCommand):
+    def __init__(self, connection : argo.HasProtocolState,
+                 path : str,
+                 timeout : Optional[float]) -> None:
+        super(IncludeSAWScript, self).__init__(
+            'SAW/include sawscript',
+            {'path': path},
+            connection,
+            timeout=timeout
+        )
+
+    def process_result(self, _res : Any) -> Any:
+        return None
+
+class ReadExtcore(SAWCommand):
+    def __init__(self, connection : argo.HasProtocolState,
+                 name : str,
+                 path : str,
+                 timeout : Optional[float]) -> None:
+        super(ReadExtcore, self).__init__(
+            'SAW/read extcore',
+            {'nm': name, 'path': path},
+            connection,
+            timeout=timeout
+        )
+
+    def process_result(self, _res : Any) -> Any:
+        return None
+
+class SimplifyTerm(SAWCommand):
+    def __init__(self, connection : argo.HasProtocolState,
+                 name : str,
+                 rewrites : List[str],
+                 simpset: str,
+                 timeout : Optional[float]) -> None:
+        super(SimplifyTerm, self).__init__(
+            'SAW/simplify term',
+            {'nm': name, 'rewrites': rewrites, 'simpset': simpset},
+            connection,
+            timeout=timeout
+        )
+
+    def process_result(self, _res : Any) -> Any:
+        return None
+
+class RunSolver(SAWCommand):
+    def __init__(self, connection : argo.HasProtocolState,
+                 name : str,
+                 solver: str,
+                 unints : List[str],
+                 timeout : Optional[float]) -> None:
+        super(RunSolver, self).__init__(
+            'SAW/run solver',
+            {'nm': name, 'solver': solver, 'unints': unints},
+            connection,
+            timeout=timeout
+        )
+
+    def process_result(self, _res : Any) -> Any:
+        return None
+
+class InspectTerm(SAWCommand):
+    def __init__(self, connection : argo.HasProtocolState,
+                 name : str,
+                 timeout : Optional[float]) -> None:
+        super(InspectTerm, self).__init__(
+            'SAW/inspect term',
+            {'nm': name},
+            connection,
+            timeout=timeout
+        )
+
+    def process_result(self, res : Any) -> Any:
+        return res
