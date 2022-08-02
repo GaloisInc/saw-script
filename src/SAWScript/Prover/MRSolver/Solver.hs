@@ -1,10 +1,10 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ViewPatterns      #-}
 
 -- This is to stop GHC 8.8.4's pattern match checker exceeding its limit when
 -- checking the pattern match in the 'CompTerm' case of 'normComp'
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP               #-}
 #if __GLASGOW_HASKELL__ <= 808
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns -fno-warn-overlapping-patterns #-}
 #endif
@@ -123,25 +123,25 @@ C |- F e1 ... en >>= k |= F' e1' ... em' >>= k':
 
 module SAWScript.Prover.MRSolver.Solver where
 
-import Data.Maybe
-import Data.Either
-import Data.List (find, findIndices)
-import Data.Foldable (foldlM)
-import Data.Bits (shiftL)
-import Control.Monad.Except
-import qualified Data.Map as Map
-import qualified Data.Text as Text
+import           Control.Monad.Except
+import           Data.Bits                       (shiftL)
+import           Data.Either
+import           Data.Foldable                   (foldlM)
+import           Data.List                       (find, findIndices)
+import qualified Data.Map                        as Map
+import           Data.Maybe
+import qualified Data.Text                       as Text
 
-import Prettyprinter
+import           Prettyprinter
 
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Recognizer
-import Verifier.SAW.Cryptol.Monadify
+import           Verifier.SAW.Cryptol.Monadify
+import           Verifier.SAW.Recognizer
+import           Verifier.SAW.SharedTerm
+import           Verifier.SAW.Term.Functor
 
-import SAWScript.Prover.MRSolver.Term
-import SAWScript.Prover.MRSolver.Monad
-import SAWScript.Prover.MRSolver.SMT
+import           SAWScript.Prover.MRSolver.Monad
+import           SAWScript.Prover.MRSolver.SMT
+import           SAWScript.Prover.MRSolver.Term
 
 
 ----------------------------------------------------------------------
@@ -185,7 +185,7 @@ mrFreshLetRecVars lrts defs_f =
     defs_tm <- mrApplyAll defs_f fun_tms
     defs <- case asNestedPairs defs_tm of
       Just defs -> return defs
-      Nothing -> throwMRFailure (MalformedDefsFun defs_f)
+      Nothing   -> throwMRFailure (MalformedDefsFun defs_f)
 
     -- Remember the body associated with each fresh function constant
     zipWithM_ (\f body ->
@@ -340,7 +340,7 @@ normComp (CompTerm t) =
     -- Always unfold recursors applied to constructors
     (asRecursorApp -> Just (rc, crec, _, arg), args)
       | Just (c, _, cargs) <- asCtorParams arg ->
-      do hd' <- liftSC4 scReduceRecursor rc crec c cargs 
+      do hd' <- liftSC4 scReduceRecursor rc crec c cargs
                   >>= liftSC1 betaNormalize
          t' <- mrApplyAll hd' args
          normCompTerm t'
@@ -407,8 +407,8 @@ normBindTerm t f = normCompTerm t >>= \m -> normBind m f
 
 -- | Get the return type of a 'CompFun'
 compFunReturnType :: CompFun -> MRM Term
-compFunReturnType (CompFunTerm t) = mrTypeOf t
-compFunReturnType (CompFunComp _ g) = compFunReturnType g
+compFunReturnType (CompFunTerm t)          = mrTypeOf t
+compFunReturnType (CompFunComp _ g)        = compFunReturnType g
 compFunReturnType (CompFunReturn (Type t)) = return t
 
 -- | Apply a computation function to a term argument to get a computation
@@ -656,7 +656,7 @@ generalizeCoIndHypArgs hyp [(specs1, tp1), (specs2, tp2)] = case matchHet tp1 tp
        let hyp'' = coIndHypSetArgs hyp'  specs1 num_tm
        return    $ coIndHypSetArgs hyp'' specs2 var
 
-  -- If we need to generalize BVVec arguments with Vec arguments, introduce a 
+  -- If we need to generalize BVVec arguments with Vec arguments, introduce a
   -- BVVec variable and set all of the BVVec arguments to it and all of the
   -- Vec arguments to `genBVVecFromVec` of it
   -- FIXME: Could we handle the a /= a' case here and in mrRefinesFunH?
@@ -876,7 +876,7 @@ mrRefines' m1 (OrM m2 m2') =
   mrOr (mrRefines m1 m2) (mrRefines m1 m2')
 mrRefines' (OrM m1 m1') m2 =
   mrRefines m1 m2 >> mrRefines m1' m2
-     
+
 -- FIXME: the following cases don't work unless we either allow evars to be set
 -- to NormComps or we can turn NormComps back into terms
 mrRefines' m1@(FunBind (EVarFunName _) _ _) m2 =
@@ -909,11 +909,11 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   case (maybe_coIndHyp, maybe_fassump) of
 
   -- If we have a co-inductive assumption that f1 args1' |= f2 args2':
-  -- * If it is convertible to our goal, continue and prove that k1 |= k2
-  -- * If it can be widened with our goal, restart the current proof branch
-  --   with the widened hypothesis (done by throwing a
-  --   'CoIndHypMismatchWidened' error for 'proveCoIndHyp' to catch)
-  -- * Otherwise, throw a 'CoIndHypMismatchFailure' error.
+  -- If it is convertible to our goal, continue and prove that k1 |= k2
+  -- If it can be widened with our goal, restart the current proof branch
+  -- with the widened hypothesis (done by throwing a
+  -- 'CoIndHypMismatchWidened' error for 'proveCoIndHyp' to catch)
+  -- Otherwise, throw a 'CoIndHypMismatchFailure' error.
   (Just hyp, _) ->
     matchCoIndHyp hyp args1 args2 >>
     mrRefinesFun tp1 k1 tp2 k2
@@ -1073,7 +1073,7 @@ mrRefinesFunH :: (Term -> Term -> MRM a) -> [Term] ->
                  MRM a
 
 mrRefinesFunH k vars ((nm1, tp1):tps1) t1 ((nm2, tp2):tps2) t2 = case matchHet tp1 tp2 of
-    
+
   -- If we need to introduce a bitvector on one side and a Num on the other,
   -- introduce a bitvector variable and substitute `TCNum` of `bvToNat` of that
   -- variable on the Num side
