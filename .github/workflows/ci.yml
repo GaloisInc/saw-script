@@ -294,7 +294,7 @@ jobs:
           - name: Install and test
             test: saw-remote-api/scripts/run_rpc_tests.sh
             os: ubuntu-18.04
-          # TODO: These tests are disabled pending resolution of issue #1699
+          # TODO: saw-remote-api unit tests are disabled pending a fix for #1699
           - name: Install on MacOS
             test: |
               cd saw-remote-api/python/
