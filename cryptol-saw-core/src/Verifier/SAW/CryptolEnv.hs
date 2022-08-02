@@ -87,7 +87,7 @@ import qualified Cryptol.ModuleSystem.Renamer as MR
 import qualified Cryptol.Utils.Ident as C
 
 import Cryptol.Utils.PP hiding ((</>))
-import Cryptol.Utils.Ident (Ident, preludeName, preludeReferenceName
+import Cryptol.Utils.Ident (Ident, preludeName, arrayName, preludeReferenceName
                            , packIdent, interactiveName, identText
                            , packModName, textToModName, modNameChunks
                            , prelPrim)
@@ -189,10 +189,12 @@ initCryptolEnv sc = do
   let modEnv1 = modEnv0 { ME.meSearchPath = cryptolPaths ++
                            (instDir </> "lib") : ME.meSearchPath modEnv0 }
 
-  -- Load Cryptol prelude
+  -- Load Cryptol prelude and magic Array module
   (_, modEnv2) <-
     liftModuleM modEnv1 $
-      MB.loadModuleFrom False (MM.FromModule preludeName)
+      do _ <- MB.loadModuleFrom False (MM.FromModule preludeName)
+         _ <- MB.loadModuleFrom False (MM.FromModule arrayName)
+         return ()
 
   -- Load Cryptol reference implementations
   ((_,refMod), modEnv) <-
@@ -213,6 +215,7 @@ initCryptolEnv sc = do
   return CryptolEnv
     { eImports    = [ (OnlyPublic, P.Import preludeName Nothing Nothing)
                     , (OnlyPublic, P.Import preludeReferenceName (Just preludeReferenceName) Nothing)
+                    , (OnlyPublic, P.Import arrayName Nothing Nothing)
                     ]
     , eModuleEnv  = modEnv
     , eExtraNames = mempty
