@@ -1,0 +1,24 @@
+enable_experimental;
+
+let {{
+  f : [32] -> [100][12] -> Integer
+  f x ys = foldl (\i y -> i + toInteger y) (toInteger x) ys
+
+}};
+
+f_cong_term <- congruence_for {{ f }};
+f_cong_thm  <- prove_extcore (w4_unint_z3 ["f"]) f_cong_term;
+
+thm <- prove_print
+       do {
+         goal_intro "x";
+	 goal_intro "y";
+	 unfolding ["ecEq"];
+	 simplify (cryptol_ss ());
+	 goal_apply f_cong_thm;
+	 z3;
+	 z3;
+       }
+       {{ \x y -> f (x+y) zero == f (y+x) zero }};
+
+print thm;

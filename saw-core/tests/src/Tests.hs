@@ -21,6 +21,7 @@ import Tests.CacheTests
 import Tests.Parser
 import Tests.SharedTerm
 import Tests.Rewriter
+import Tests.Simulator
 
 main :: IO ()
 main = defaultMainWithIngredients ingrs tests
@@ -42,4 +43,5 @@ tests =
    , testGroup "Parser" parserTests
    , testGroup "Rewriter" rewriter_tests
    , testGroup "Cache" cacheTests
+   , testGroup "Simulator" simulatorTests
    ]
