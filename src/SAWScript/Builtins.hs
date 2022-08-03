@@ -130,6 +130,7 @@ import qualified SAWScript.Prover.What4 as Prover
 import qualified SAWScript.Prover.Exporter as Prover
 import qualified SAWScript.Prover.MRSolver as Prover
 import SAWScript.VerificationSummary
+import Data.Parameterized.Nonce (freshNonce, globalNonceGenerator)
 
 showPrim :: SV.Value -> TopLevel String
 showPrim v = do
@@ -991,6 +992,32 @@ provePropPrim ::
 provePropPrim script t = do
   sc <- getSharedContext
   proveHelper script t $ io . termToProp sc
+
+assumePropPrim :: TypedTerm -> TopLevel Theorem
+assumePropPrim t = do
+  sc <- getSharedContext
+  prop <- io . termToProp sc $ ttTerm t
+  n <- io $ freshNonce globalNonceGenerator
+  db <- roTheoremDB <$> getTopLevelRO
+  io $ recordTheorem db
+    Theorem
+    { _thmProp = prop
+    , _thmStats = error "no stats"
+    , _thmEvidence = error "no evidence"
+    , _thmLocation = error "no location"
+    , _thmProgramLoc = error "no programloc"
+    , _thmReason = error "no reason"
+    , _thmNonce = n
+    , _thmDepends = Set.empty
+    , _thmElapsedTime = 0.0
+    , _thmSummary = error "no summary"
+    }
+
+assume_rewrite_extcore :: FilePath -> TopLevel Theorem
+assume_rewrite_extcore p = do
+  tt <- readCore p
+  assumePropPrim tt
+  
 
 satPrim ::
   ProofScript () ->

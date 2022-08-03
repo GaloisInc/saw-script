@@ -1315,6 +1315,11 @@ primitives = Map.fromList
     , "if unsuccessful."
     ]
 
+  , prim "assume_rewrite_extcore"          "String -> TopLevel Theorem"
+    (pureVal assume_rewrite_extcore)
+    Experimental
+    []
+
   , prim "prove_extcore"         "ProofScript () -> Term -> TopLevel Theorem"
     (pureVal provePropPrim)
     Current

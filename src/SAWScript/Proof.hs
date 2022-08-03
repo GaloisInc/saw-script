@@ -35,7 +35,7 @@ module SAWScript.Proof
   , newTheoremDB
   , reachableTheorems
 
-  , Theorem
+  , Theorem(..)
   , thmProp
   , thmStats
   , thmEvidence
@@ -90,6 +90,8 @@ module SAWScript.Proof
   , SolveResult(..)
 
   , predicateToSATQuery
+
+  , recordTheorem
   ) where
 
 import qualified Control.Monad.Fail as F
