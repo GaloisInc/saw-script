@@ -101,6 +101,8 @@ module SAWScript.Proof
   , tacticChange
   , tacticSolve
   , tacticExact
+  , tacticIntroHyps
+  , tacticRevertHyp
 
   , Quantification(..)
   , predicateToProp
@@ -265,6 +267,34 @@ splitDisj sc (Prop p) =
          do t1 <- scPiList sc vars =<< scEqTrue sc p1
             t2 <- scPiList sc vars =<< scEqTrue sc p2
             return (Just (Prop t1,Prop t2))
+
+-- | Attempt to split an implication into a hypothesis and a conclusion
+splitImpl :: SharedContext -> Prop -> IO (Maybe (Prop, Prop))
+splitImpl sc (Prop p)
+  | Just ( _ :*: h :*: c) <- (isGlobalDef "Prelude.implies" <@> return <@> return) =<< asEqTrue p
+  = do h' <- scEqTrue sc h
+       c' <- scEqTrue sc c
+       return (Just (Prop h', Prop c'))
+
+  | Just ( _ :*: (_ :*: h) :*: c) <- (isGlobalDef "Prelude.or" <@> (isGlobalDef "Prelude.not" <@> return) <@> return) =<< asEqTrue p
+  = do h' <- scEqTrue sc h
+       c' <- scEqTrue sc c
+       return (Just (Prop h', Prop c'))
+
+  | Just ( _ :*: c :*: (_ :*: h)) <- (isGlobalDef "Prelude.or" <@> return <@> (isGlobalDef "Prelude.not" <@> return)) =<< asEqTrue p
+  = do h' <- scEqTrue sc h
+       c' <- scEqTrue sc c
+       return (Just (Prop h', Prop c'))
+
+{- TODO? sequent normalization doesn't decompose arrows...
+
+  | Just (_nm, h, c ) <- asPi p
+  , looseVars c == emptyBitSet
+  = return (Just (Prop h, Prop c))
+-}
+
+  | otherwise
+  = return Nothing
 
 
 splitSequent :: SharedContext -> Sequent -> IO (Maybe (Sequent, Sequent))
@@ -1813,6 +1843,45 @@ tacticIntro sc usernm = Tactic \goal ->
     HypFocus _ _ -> fail "TODO: implement intro on hyps"
     Unfocused -> fail "intro tactic: focus required"
 
+
+tacticIntroHyps :: (F.MonadFail m, MonadIO m) => SharedContext -> Integer -> Tactic m ()
+tacticIntroHyps sc n = Tactic \goal ->
+  case goalSequent goal of
+    GoalFocusedSequent hs (FB gs1 g gs2) ->
+      do (newhs, g') <- liftIO (loop n g)
+         let sqt' = GoalFocusedSequent (hs ++ newhs) (FB gs1 g' gs2)
+         let goal' = goal{ goalSequent = sqt' }
+         return ((), mempty, [goal'], updateEvidence (NormalizeSequentEvidence sqt'))
+    _ -> fail "goal_intro_hyps: conclusion focus required"
+
+ where
+   loop i g
+     | i <= 0 = return ([],g)
+     | otherwise =
+         splitImpl sc g >>= \case
+           Nothing -> fail "intro_hyps: could not find enough hypotheses to introduce"
+           Just (h,g') ->
+             do (hs,g'') <- loop (i-1) g'
+                return (h:hs, g'')
+
+tacticRevertHyp :: (F.MonadFail m, MonadIO m) => SharedContext -> Integer -> Tactic m ()
+tacticRevertHyp sc i = Tactic \goal ->
+  case goalSequent goal of
+    GoalFocusedSequent hs (FB gs1 g gs2) ->
+      case genericDrop i hs of
+        (h:_) ->
+          case (asEqTrue (unProp h), asEqTrue (unProp g)) of
+            (Just h', Just g') ->
+              do g'' <- liftIO (Prop <$> (scEqTrue sc =<< scImplies sc h' g'))
+                 let sqt' = GoalFocusedSequent hs (FB gs1 g'' gs2)
+                 let goal' = goal{ goalSequent = sqt' }
+                 return ((), mempty, [goal'], updateEvidence (NormalizeSequentEvidence sqt'))
+
+            _ -> fail "goal_revert_hyp: expected EqTrue props"
+        _ -> fail "goal_revert_hyp: not enough hypotheses"
+    _ -> fail "goal_revert_hyp: conclusion focus required"
+
+
 {-
 -- | Attempt to prove an implication goal by introducing a local assumption for
 --   hypothesis.  Return a @Theorem@ representing this local assumption.
@@ -1868,6 +1937,7 @@ tacticSplit sc = Tactic \gl ->
          let g2 = gl{ goalType = goalType gl ++ ".r", goalSequent = sqt2 }
          return ((), mempty, [g1,g2], splitEvidence)
     Nothing -> fail "split tactic failed"
+
 
 tacticCut :: (F.MonadFail m, MonadIO m) => SharedContext -> Prop -> Tactic m ()
 tacticCut _sc p = Tactic \gl ->
