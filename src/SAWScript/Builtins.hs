@@ -828,6 +828,16 @@ goal_exact tm =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticExact sc (ttTerm tm))
 
+goal_intro_hyps :: Integer -> ProofScript ()
+goal_intro_hyps n =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticIntroHyps sc n)
+
+goal_revert_hyp :: Integer -> ProofScript ()
+goal_revert_hyp i =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticRevertHyp sc i)
+
 {-
 goal_assume :: ProofScript Theorem
 goal_assume =

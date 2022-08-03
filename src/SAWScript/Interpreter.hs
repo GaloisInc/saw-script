@@ -1696,6 +1696,16 @@ primitives = Map.fromList
     , "This will succeed if the type of the given term matches the current goal."
     ]
 
+  , prim "goal_intro_hyps"     "Int -> ProofScript ()"
+    (pureVal goal_intro_hyps)
+    Experimental
+    [ "TODO "]
+
+  , prim "goal_revert_hyp"     "Int -> ProofScript ()"
+    (pureVal goal_revert_hyp)
+    Experimental
+    [ "TODO "]
+
 {-
   , prim "goal_assume"         "ProofScript Theorem"
     (pureVal goal_assume)
