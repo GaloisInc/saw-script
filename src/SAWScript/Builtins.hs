@@ -973,9 +973,14 @@ proveHelper script t f = do
   case res of
     ValidProof _stats thm ->
       do printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) $ ttTerm t)
+         liftIO $ putStrLn "success"
          SV.returnProof thm
-    InvalidProof _stats _cex pst -> failProof pst
-    UnfinishedProof pst -> failProof pst
+    InvalidProof _stats _cex pst -> do
+      liftIO $ putStrLn "failure"
+      failProof pst
+    UnfinishedProof pst -> do
+      liftIO $ putStrLn "failure"
+      failProof pst
 
 provePrintPrim ::
   ProofScript () ->
