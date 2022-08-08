@@ -30,14 +30,15 @@ module SAWScript.REPL.Command (
 
 --import Verifier.SAW.SharedTerm (SharedContext)
 
+
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Trie
 import SAWScript.Position (getPos)
 
 import Cryptol.Parser (ParseError())
-import Cryptol.Utils.PP hiding ((</>))
 
-import Control.Monad (guard)
+import Control.Monad (guard, void)
+
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
 import Data.List (intercalate)
@@ -56,7 +57,7 @@ import SAWScript.MGU (checkDecl)
 import SAWScript.Interpreter (interpretStmt)
 import qualified SAWScript.Lexer (lexSAW)
 import qualified SAWScript.Parser (parseStmtSemi, parseExpression)
-import SAWScript.TopLevel (TopLevelRW(..), runTopLevel)
+import SAWScript.TopLevel (TopLevelRW(..))
 
 
 -- Commands --------------------------------------------------------------------
@@ -139,13 +140,7 @@ genHelp cs = map cmdHelp cs
 runCommand :: Command -> REPL ()
 runCommand c = case c of
 
-  Command cmd -> cmd `SAWScript.REPL.Monad.catch` handlerPP
-                     `SAWScript.REPL.Monad.catchFail` handlerFail
-                     `SAWScript.REPL.Monad.catchOther` handlerPrint
-    where
-    handlerPP re = io (putStrLn "" >> print (pp re))
-    handlerPrint e = io (putStrLn "" >> print e)
-    handlerFail s = io (putStrLn "" >> putStrLn s)
+  Command cmd -> exceptionProtect cmd
 
   Unknown cmd -> io (putStrLn ("Unknown command: " ++ cmd))
 
@@ -161,7 +156,7 @@ typeOfCmd str =
        Left err -> fail (show err)
        Right expr -> return expr
      let decl = SS.Decl (getPos expr) (SS.PWild Nothing) Nothing expr
-     rw <- getEnvironment
+     rw <- getValueEnvironment
      ~(SS.Decl _pos _ (Just schema) _expr') <-
        either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
      io $ putStrLn $ SS.pShow schema
@@ -172,7 +167,7 @@ quitCmd  = stop
 
 envCmd :: REPL ()
 envCmd = do
-  env <- getEnvironment
+  env <- getValueEnvironment
   let showLName = SS.getVal
   io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow v) | (x, v) <- Map.assocs (rwTypes env) ]
 
@@ -227,9 +222,10 @@ sawScriptCmd str = do
   case SAWScript.Parser.parseStmtSemi tokens of
     Left err -> io $ print err
     Right stmt ->
-      do ro <- getTopLevelRO
-         rwRef <- getEnvironmentRef
-         io $ runTopLevel (interpretStmt True stmt) ro rwRef
+      do mr <- getProofStateRef
+         case mr of
+           Nothing -> void $ liftTopLevel (interpretStmt True stmt)
+           Just r  -> void $ liftProofScript (interpretStmt True stmt) r
 
 replFileName :: String
 replFileName = "<stdin>"

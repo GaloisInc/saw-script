@@ -51,6 +51,7 @@ import qualified System.Environment
 import qualified System.Exit as Exit
 import System.IO
 import System.IO.Temp (withSystemTempFile, emptySystemTempFile)
+import System.FilePath (hasDrive, (</>))
 import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
@@ -208,11 +209,13 @@ readSBV path unintlst =
 -- support for latches in the 'AIGNetwork' SAWScript type.
 dsecPrint :: TypedTerm -> TypedTerm -> TopLevel ()
 dsecPrint t1 t2 = do
-  withSystemTempFile ".aig" $ \path1 _handle1 -> do
-  withSystemTempFile ".aig" $ \path2 _handle2 -> do
-  Prover.writeSAIGInferLatches path1 t1
-  Prover.writeSAIGInferLatches path2 t2
-  io $ callCommand (abcDsec path1 path2)
+  write_t1 <- Prover.writeSAIGInferLatches t1
+  write_t2 <- Prover.writeSAIGInferLatches t2
+  io $ withSystemTempFile ".aig" $ \path1 _handle1 ->
+       withSystemTempFile ".aig" $ \path2 _handle2 ->
+        do write_t1 path1
+           write_t2 path2
+           callCommand (abcDsec path1 path2)
   where
     -- The '-w' here may be overkill ...
     abcDsec path1 path2 = printf "abc -c 'read %s; dsec -v -w %s;'" path1 path2
@@ -792,7 +795,9 @@ writeAIGPrim :: FilePath -> Term -> TopLevel ()
 writeAIGPrim = Prover.writeAIG
 
 writeSAIGPrim :: FilePath -> TypedTerm -> TopLevel ()
-writeSAIGPrim = Prover.writeSAIGInferLatches
+writeSAIGPrim file tt =
+  do write_tt <- Prover.writeSAIGInferLatches tt
+     io $ write_tt file
 
 writeSAIGComputedPrim :: FilePath -> Term -> Int -> TopLevel ()
 writeSAIGComputedPrim = Prover.writeSAIG
@@ -1339,10 +1344,9 @@ caseSatResultPrim sr vUnsat vSat = do
       tt <- io $ typedTermOfFirstOrderValue sc fov
       SV.applyValue vSat (SV.toValue tt)
 
-
 envCmd :: TopLevel ()
 envCmd = do
-  m <- rwTypes <$> getTopLevelRW
+  m <- rwTypes <$> SV.getMergedEnv
   opts <- getOptions
   let showLName = getVal
   io $ sequence_ [ printOutLn opts Info (showLName x ++ " : " ++ pShow v) | (x, v) <- Map.assocs m ]
@@ -1375,12 +1379,14 @@ timePrim a = do
   printOutLnTop Info $ printf "Time: %s\n" (show diff)
   return r
 
+failPrim :: String -> TopLevel SV.Value
+failPrim msg = fail msg
+
 failsPrim :: TopLevel SV.Value -> TopLevel ()
 failsPrim m = do
   topRO <- getTopLevelRO
   topRW <- getTopLevelRW
-  ref <- liftIO $ newIORef topRW
-  x <- liftIO $ Ex.try (runTopLevel m topRO ref)
+  x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
   case x of
     Left (ex :: Ex.SomeException) ->
       do liftIO $ putStrLn "== Anticipated failure message =="
@@ -1639,7 +1645,7 @@ core_axiom input =
      pos <- SV.getPosition
      t <- parseCore input
      p <- io (termToProp sc t)
-     db <- roTheoremDB <$> getTopLevelRO
+     db <- SV.getTheoremDB
      thm <- io (admitTheorem db "core_axiom" p pos "core_axiom")
      SV.returnProof thm
 
@@ -1648,14 +1654,14 @@ core_thm input =
   do t <- parseCore input
      sc <- getSharedContext
      pos <- SV.getPosition
-     db <- roTheoremDB <$> getTopLevelRO
+     db <- SV.getTheoremDB
      thm <- io (proofByTerm sc db t pos "core_thm")
      SV.returnProof thm
 
 specialize_theorem :: Theorem -> [TypedTerm] -> TopLevel Theorem
 specialize_theorem thm ts =
   do sc <- getSharedContext
-     db <- roTheoremDB <$> getTopLevelRO
+     db <- SV.getTheoremDB
      pos <- SV.getPosition
      thm' <- io (specializeTheorem sc db pos "specialize_theorem" thm (map ttTerm ts))
      SV.returnProof thm'
@@ -1990,7 +1996,7 @@ summarize_verification =
      let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
-     db <- roTheoremDB <$> getTopLevelRO
+     db <- SV.getTheoremDB
      summary <- io (computeVerificationSummary db jspecs lspecs thms)
      io $ putStrLn $ prettyVerificationSummary summary
 
@@ -2000,6 +2006,26 @@ summarize_verification_json fpath =
      let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
-     db <- roTheoremDB <$> getTopLevelRO
+     db <- SV.getTheoremDB
      summary <- io (computeVerificationSummary db jspecs lspecs thms)
      io (writeFile fpath (jsonVerificationSummary summary))
+
+writeVerificationSummary :: TopLevel ()
+writeVerificationSummary = do
+  do
+    db <- SV.getTheoremDB
+    values <- rwProofs <$> getTopLevelRW
+    let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
+        lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
+        thms    = [ t | SV.VTheorem t <- values ]
+    summary <- io (computeVerificationSummary db jspecs lspecs thms)
+    opts <- roOptions <$> getTopLevelRO
+    dir <- roInitWorkDir <$> getTopLevelRO
+    case summaryFile opts of
+      Nothing -> return ()
+      Just f -> let
+        f' = if hasDrive f then f else dir </> f
+        formatSummary = case summaryFormat opts of
+                       JSON -> jsonVerificationSummary
+                       Pretty -> prettyVerificationSummary
+        in io $ writeFile f' $ formatSummary summary
