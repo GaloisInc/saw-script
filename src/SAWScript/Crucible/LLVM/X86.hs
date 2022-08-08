@@ -27,7 +27,7 @@ Stability   : provisional
 module SAWScript.Crucible.LLVM.X86
   ( llvm_verify_x86
   , llvm_verify_fixpoint_x86
-  , llvm_verify_fixpoint_x86_ex
+  , llvm_verify_x86_with_invariant
   , defaultStackBaseAlign
   ) where
 
@@ -126,7 +126,7 @@ import qualified Lang.Crucible.LLVM.Intrinsics as C.LLVM
 import qualified Lang.Crucible.LLVM.MemModel as C.LLVM
 import qualified Lang.Crucible.LLVM.MemType as C.LLVM
 import qualified Lang.Crucible.LLVM.SimpleLoopFixpoint as Crucible.LLVM.Fixpoint
-import qualified Lang.Crucible.LLVM.SimpleLoopFixpoint2 as Crucible.LLVM.Fixpoint2
+import qualified Lang.Crucible.LLVM.SimpleLoopInvariant as SimpleInvariant
 import qualified Lang.Crucible.LLVM.Translation as C.LLVM
 import qualified Lang.Crucible.LLVM.TypeContext as C.LLVM
 
@@ -333,7 +333,7 @@ llvm_verify_fixpoint_x86 llvmModule path nm globsyms checkSat f =
 -- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
 -- to an LLVM specification. This allows for compositional verification of LLVM
 -- functions that call x86_64 functions (but not the other way around).
-llvm_verify_fixpoint_x86_ex ::
+llvm_verify_x86_with_invariant ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
   String {- ^ Function's symbol in ELF file -} ->
@@ -343,14 +343,14 @@ llvm_verify_fixpoint_x86_ex ::
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_verify_fixpoint_x86_ex llvmModule path nm globsyms checkSat (loopName,loopNum,f) =
+llvm_verify_x86_with_invariant llvmModule path nm globsyms checkSat (loopName,loopNum,f) =
   llvm_verify_x86_common llvmModule path nm globsyms checkSat
-    (SimpleFixpoint2 loopName loopNum f)
+    (SimpleInvariant loopName loopNum f)
 
 data FixpointSelect
  = NoFixpoint
  | SimpleFixpoint TypedTerm
- | SimpleFixpoint2 String Integer TypedTerm
+ | SimpleInvariant String Integer TypedTerm
 
 llvm_verify_x86_common ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
@@ -547,7 +547,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
           SimpleFixpoint func ->
             do f <- liftIO (setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func)
                return [f]
-          SimpleFixpoint2 loopFixpointSymbol loopNum func ->
+          SimpleInvariant loopFixpointSymbol loopNum func ->
             do (loopaddr :: Macaw.MemSegmentOff 64) <-
                  case findSymbols (symMap relf) . encodeUtf8 $ Text.pack loopFixpointSymbol of
                    (loopaddr:_) -> pure loopaddr
@@ -555,7 +555,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                case Map.lookup loopaddr cfgs of
                  Nothing -> throwX86 $ "Unable to discover looping CFG from address " <> show loopaddr
                  Just (C.SomeCFG loopcfg) ->
-                   do f <- liftIO (setupSimpleLoopFixpointFeature2 sym loopNum sc sawst mdMap loopcfg mvar func)
+                   do f <- liftIO (setupSimpleLoopInvariantFeature sym loopNum sc sawst mdMap loopcfg mvar func)
                       return [f]
 
       let execFeatures = simpleLoopFixpointFeature ++ psatf
@@ -656,7 +656,7 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
        return (result_substitution, result_condition)
 
 
-setupSimpleLoopFixpointFeature2 ::
+setupSimpleLoopInvariantFeature ::
   ( sym ~ W4.B.ExprBuilder n st fs
   , C.IsSymInterface sym
   , n ~ GlobalNonceGenerator
@@ -674,8 +674,8 @@ setupSimpleLoopFixpointFeature2 ::
   TypedTerm ->
   IO (C.ExecutionFeature p sym ext rtp)
 
-setupSimpleLoopFixpointFeature2 sym loopNum sc sawst mdMap cfg mvar func =
-  Crucible.LLVM.Fixpoint2.simpleLoopFixpoint sym loopNum cfg mvar invariant_func
+setupSimpleLoopInvariantFeature sym loopNum sc sawst mdMap cfg mvar func =
+  SimpleInvariant.simpleLoopInvariant sym loopNum cfg mvar invariant_func
 
  where
   invariant_func phase implicit_params invariant_substitution =
@@ -693,11 +693,11 @@ setupSimpleLoopFixpointFeature2 sym loopNum sc sawst mdMap cfg mvar func =
        implicit_params' <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet body_tms
        initial_exprs <-
          forM subst_pairs $
-           \ (MapF.Pair _var (Crucible.LLVM.Fixpoint2.FixpointEntry initVal _current)) ->
+           \ (MapF.Pair _var (SimpleInvariant.InvariantEntry initVal _current)) ->
                toSC sym sawst initVal
        current_exprs <-
          forM subst_pairs $
-           \ (MapF.Pair _var (Crucible.LLVM.Fixpoint2.FixpointEntry _init current)) ->
+           \ (MapF.Pair _var (SimpleInvariant.InvariantEntry _init current)) ->
                toSC sym sawst current
 
        initial_tuple <- scTuple sc initial_exprs
@@ -730,8 +730,8 @@ setupSimpleLoopFixpointFeature2 sym loopNum sc sawst mdMap cfg mvar func =
 
        -- Add goal metadata for the initial and inductive invariants
        case phase of
-         Crucible.LLVM.Fixpoint2.HypotheticalInvariant -> return b
-         Crucible.LLVM.Fixpoint2.InitialInvariant ->
+         SimpleInvariant.HypotheticalInvariant -> return b
+         SimpleInvariant.InitialInvariant ->
            do (ann,b') <- W4.annotateTerm sym b
               loc <- W4.getCurrentProgramLoc sym
               let md = MS.ConditionMetadata
@@ -742,7 +742,7 @@ setupSimpleLoopFixpointFeature2 sym loopNum sc sawst mdMap cfg mvar func =
                        }
               modifyIORef mdMap (Map.insert ann md)
               return b'
-         Crucible.LLVM.Fixpoint2.InductiveInvariant ->
+         SimpleInvariant.InductiveInvariant ->
            do (ann,b') <- W4.annotateTerm sym b
               loc <- W4.getCurrentProgramLoc sym
               let md = MS.ConditionMetadata
