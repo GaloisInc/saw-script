@@ -18,6 +18,7 @@ module SAWScript.VerificationSummary
 import Control.Lens ((^.))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Data.String
 import Prettyprinter
 import Data.Aeson (encode, (.=), Value(..), object, toJSON)
@@ -32,6 +33,7 @@ import qualified SAWScript.Crucible.JVM.MethodSpecIR as CMSJVM
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import qualified Verifier.SAW.Term.Pretty as PP
+import Verifier.SAW.Name (SAWNamingEnv)
 import What4.ProgramLoc (ProgramLoc(..))
 import What4.FunctionName
 
@@ -61,8 +63,8 @@ vsAllSolvers vs = Set.union (vsVerifSolvers vs) (vsTheoremSolvers vs)
 computeVerificationSummary :: TheoremDB -> [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> IO VerificationSummary
 computeVerificationSummary db js ls thms =
   do let roots = mconcat (
-                [ j ^. psTheoremDeps | j <- js ] ++
-                [ l ^. psTheoremDeps | CMSLLVM.SomeLLVM l <- ls ] ++
+                [ xs | j <- js, (_,_,_,_,xs,_) <- j^.psVCStats ] ++
+                [ xs | CMSLLVM.SomeLLVM l <- ls, (_,_,_,_,xs,_) <- l^.psVCStats ] ++
                 [ Set.singleton (thmNonce t) | t <- thms ])
      thms' <- Map.elems <$> reachableTheorems db roots
      pure (VerificationSummary js ls thms')
@@ -78,11 +80,22 @@ msToJSON cms = object [
                      SpecAdmitted -> "assumed" :: String
                      SpecProved   -> "verified")
 --    , ("specification" .= ("unknown" :: String)) -- TODO
-    , ("dependencies" .= toJSON
-                           (map indexValue (Set.toList (cms ^. psSpecDeps)) ++
-                            map indexValue (Set.toList (cms ^. psTheoremDeps))))
+    , ("dependencies" .= toJSON (map indexValue (Set.toList (cms ^. psSpecDeps))))
+    , ("vcs"          .= toJSON (map vcToJSON (cms ^. psVCStats)))
     , ("elapsedtime"  .= toJSON (cms ^. psElapsedTime))
-  ]
+    ]
+
+vcToJSON :: CMS.VCStats -> Value
+vcToJSON (cmd, _stats, thmsummary, nonce, deps, elapsedtime) = object ([
+  ("type"  .= ("vc" :: String))
+  , ("id"  .= indexValue nonce)
+  , ("loc" .= show (conditionLoc cmd))
+  , ("reason" .= conditionType cmd)
+  , ("elapsedtime" .= toJSON elapsedtime)
+  , ("dependencies" .= toJSON (map indexValue (Set.toList deps)))
+  , ("tags" .= toJSON (Set.toList (conditionTags cmd)))
+  ] ++ theoremStatus thmsummary
+  )
 
 thmToJSON :: Theorem -> Value
 thmToJSON thm = object ([
@@ -92,13 +105,14 @@ thmToJSON thm = object ([
     , ("reason" .= (thmReason thm))
     , ("dependencies" .= toJSON (map indexValue (Set.toList (thmDepends thm))))
     , ("elapsedtime"  .= toJSON (thmElapsedTime thm))
-  ] ++ theoremStatus
+  ] ++ (theoremStatus (thmSummary thm))
     ++ case thmProgramLoc thm of
          Nothing -> []
          Just ploc -> [("ploc" .= plocToJSON ploc)]
   )
- where
-  theoremStatus = case thmSummary thm of
+
+theoremStatus :: TheoremSummary -> [(Text,Value)]
+theoremStatus summary = case summary of
       ProvedTheorem stats ->
         [ ("status"  .= ("verified" :: String))
         , ("provers" .= toJSON (Set.toList (solverStatsSolvers stats)))
@@ -129,8 +143,8 @@ jsonVerificationSummary (VerificationSummary jspecs lspecs thms) =
     lvals = (\(CMSLLVM.SomeLLVM ls) -> msToJSON ls) <$> lspecs -- TODO: why is the type annotation required here?
     thmvals = thmToJSON <$> thms
 
-prettyVerificationSummary :: VerificationSummary -> String
-prettyVerificationSummary vs@(VerificationSummary jspecs lspecs thms) =
+prettyVerificationSummary :: PP.PPOpts -> SAWNamingEnv -> VerificationSummary -> String
+prettyVerificationSummary ppOpts nenv vs@(VerificationSummary jspecs lspecs thms) =
   show $ vsep
   [ prettyJVMSpecs jspecs
   , prettyLLVMSpecs lspecs
@@ -176,7 +190,7 @@ prettyVerificationSummary vs@(VerificationSummary jspecs lspecs thms) =
                  ProvedTheorem{}   -> "Theorem:"
                  TestedTheorem n   -> "Theorem (randomly tested on" <+> viaShow n <+> "samples):"
                  AdmittedTheorem{} -> "Axiom:"
-             , code (indent 2 (ppProp PP.defaultPPOpts (thmProp t)))
+             , code (indent 2 (ppProp ppOpts nenv (thmProp t)))
              , ""
              ]
       prettySolvers ss =
