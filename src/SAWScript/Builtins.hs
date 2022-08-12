@@ -1122,12 +1122,12 @@ proveByBVInduction script t =
                    t3     <- scPiList sc pis t2
                    scLambda sc "inductionVar" natty t3
 
-            indHyp <- io $
-                do var0 <- scLocalVar sc 0
-                   var1 <- scLocalVar sc 1
-                   lt   <- scGlobalApply sc "Prelude.IsLtNat" [var0, var1]
-                   inner <- scPi sc "m" natty =<< scPi sc "_" lt =<< scApplyBeta sc indMotive var1
-                   scPi sc "n" natty =<< scPi sc "_" inner =<< scApplyBeta sc indMotive var1
+            -- indHyp <- io $
+            --     do var0 <- scLocalVar sc 0
+            --        var1 <- scLocalVar sc 1
+            --        lt   <- scGlobalApply sc "Prelude.IsLtNat" [var0, var1]
+            --        inner <- scPi sc "m" natty =<< scPi sc "_" lt =<< scApplyBeta sc indMotive var1
+            --        scPi sc "n" natty =<< scPi sc "_" inner =<< scApplyBeta sc indMotive var1
 
             indHypProof <- io $   -- scFreshGlobal sc "H" =<< scPi sc "_" thmHyp indHyp
                 do hEC  <- scFreshEC sc "H" thmHyp
