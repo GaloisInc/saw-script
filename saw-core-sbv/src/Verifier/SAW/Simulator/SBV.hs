@@ -664,8 +664,7 @@ mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
 
 sbvSATQuery :: SharedContext -> Map Ident SPrim -> SATQuery -> IO ([Labeler], [ExtCns Term], Symbolic SBool)
 sbvSATQuery sc addlPrims query =
-  do true <- liftIO (scBool sc True)
-     t <- liftIO (foldM (scAnd sc) true (satAsserts query))
+  do t <- liftIO (satQueryAsTerm sc query)
      let qvars = Map.toList (satVariables query)
      let unintSet = satUninterp query
      let ecVars (ec, fot) = newVars (Text.unpack (toShortName (ecName ec))) fot
