@@ -1001,7 +1001,7 @@ predicateToSATQuery sc unintSet tm0 =
        return SATQuery
               { satVariables = finalVars
               , satUninterp  = Set.union unintSet abstractVars
-              , satAsserts   = [tm']
+              , satAsserts   = [BoolAssert tm']
               }
   where
     evalFOT mmap t =
@@ -1059,6 +1059,14 @@ propToSATQuery sc unintSet prop =
          Nothing  -> filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es
          Just fot -> filterFirstOrderVars mmap (Map.insert e fot fovars) absvars es
 
+    processAssert tp = 
+      case asEqTrue tp of
+        Just x -> return (BoolAssert x)
+        _ ->
+          -- TODO? Allow universal hypotheses...
+          fail ("propToSATQuery: expected first order type or assertion:\n" ++ showTerm tp)
+
+
     processTerm mmap vars xs tm =
       do -- TODO: I would like to WHNF here, but that evalutes too aggressively
          -- because scWhnf evaluates strictly through the `Eq` datatype former.
@@ -1072,27 +1080,25 @@ propToSATQuery sc unintSet prop =
              do -- same issue with WHNF
                 -- tp' <- scWhnf sc tp
                 let tp' = tp
-                case asEqTrue tp' of
-                  Just x | looseVars body == emptyBitSet ->
-                    processTerm mmap vars (x:xs) body
-
-                    -- TODO? Allow universal hypotheses...
-
-                  _ ->
-                    case evalFOT mmap tp' of
-                      Nothing -> fail ("propToSATQuery: expected first order type: " ++ showTerm tp')
-                      Just fot ->
-                        do ec  <- scFreshEC sc lnm tp'
-                           etm <- scExtCns sc ec
-                           body' <- instantiateVar sc 0 etm body
-                           processTerm mmap (Map.insert ec fot vars) xs body'
+                case evalFOT mmap tp' of
+                  Just fot ->
+                    do ec  <- scFreshEC sc lnm tp'
+                       etm <- scExtCns sc ec
+                       body' <- instantiateVar sc 0 etm body
+                       processTerm mmap (Map.insert ec fot vars) xs body'
+                  Nothing
+                    | looseVars body == emptyBitSet ->
+                        do asrt <- processAssert tp
+                           processTerm mmap vars (asrt : xs) body
+                    | otherwise ->
+                        fail ("propToSATQuery: expected first order type or assertion:\n" ++ showTerm tp')
 
            Nothing ->
              case asEqTrue tm' of
-               Nothing -> fail $ "propToSATQuery: expected EqTrue, actual " ++ showTerm tm'
+               Nothing -> fail $ "propToSATQuery: expected EqTrue, actual:\n" ++ showTerm tm'
                Just tmBool ->
                  do tmNeg <- scNot sc tmBool
-                    return (vars, reverse (tmNeg:xs))
+                    return (vars, reverse (BoolAssert tmNeg : xs))
 
 -- | Given a goal to prove, attempt to apply the given proposition, producing
 --   new subgoals for any necessary hypotheses of the proposition.  Returns
