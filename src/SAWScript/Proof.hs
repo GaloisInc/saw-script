@@ -1718,7 +1718,7 @@ sequentToSATQuery sc unintSet sqt =
        return SATQuery
               { satVariables = finalVars
               , satUninterp  = Set.union unintSet abstractVars
-              , satAsserts   = reverse asserts
+              , satAsserts   = asserts
               }
 
   where
@@ -1755,13 +1755,13 @@ sequentToSATQuery sc unintSet sqt =
                       case asEqTrue tp' of
                         Just x  -> processUnivAssert mmap vars (x:xs) body
                         Nothing ->
-                          fail ("propToSATQuery: expected first order type or assertion:\n" ++ showTerm tp')
+                          fail ("sequentToSATQuery: expected first order type or assertion:\n" ++ showTerm tp')
                     | otherwise ->
-                        fail ("propToSATQuery: expected first order type or assertion:\n" ++ showTerm tp')
+                        fail ("sequentToSATQuery: expected first order type or assertion:\n" ++ showTerm tp')
 
            Nothing ->
              case asEqTrue tm' of
-               Nothing -> fail $ "propToSATQuery: expected EqTrue, actual:\n" ++ showTerm tm'
+               Nothing -> fail $ "sequentToSATQuery: expected EqTrue, actual:\n" ++ showTerm tm'
                Just tmBool -> return (UniversalAssert (reverse vars) (reverse xs) tmBool)
 
     processGoal mmap (vars,xs) tm =
@@ -1788,11 +1788,11 @@ sequentToSATQuery sc unintSet sqt =
                         do asrt <- processAssert mmap tp
                            processGoal mmap (vars, asrt : xs) body
                     | otherwise ->
-                        fail ("propToSATQuery: expected first order type or assertion:\n" ++ showTerm tp')
+                        fail ("sequentToSATQuery: expected first order type or assertion:\n" ++ showTerm tp')
 
            Nothing ->
              case asEqTrue tm' of
-               Nothing -> fail $ "propToSATQuery: expected EqTrue, actual:\n" ++ showTerm tm'
+               Nothing -> fail $ "sequentToSATQuery: expected EqTrue, actual:\n" ++ showTerm tm'
                Just tmBool ->
                  do tmNeg <- scNot sc tmBool
                     return (vars, reverse (BoolAssert tmNeg : xs))
