@@ -51,7 +51,10 @@ data SATQuery =
 
 data SATAssert
    = BoolAssert Term -- ^ A boolean term to be asserted
-   | UniversalAssert Term -- ^ A univesally-quantified assertion
+   | UniversalAssert [(ExtCns Term, FirstOrderType)] [Term] Term
+          -- ^ A univesally-quantified assertion, consisting of a
+          --   collection of first-order variables, a sequence
+          --   of boolean hypotheses, and a boolean conclusion
 
 -- | The result of a sat query.  In the event a model is found,
 --   return a mapping from the @ExtCns@ variables to values.
@@ -70,7 +73,7 @@ satQueryAsTerm sc satq =
   case satAsserts satq of
          [] -> scBool sc True
          (BoolAssert x:xs) -> loop x xs
-         (UniversalAssert _ : _) -> univFail
+         (UniversalAssert{} : _) -> univFail
  where
    univFail = fail "satQueryAsTerm : Solver backend cannot handle universally-quantifed assertions"
 
@@ -78,4 +81,4 @@ satQueryAsTerm sc satq =
    loop x (BoolAssert y:xs) = 
      do x' <- scAnd sc x y
         loop x' xs
-   loop _ (UniversalAssert _ : _) = univFail
+   loop _ (UniversalAssert{} : _) = univFail

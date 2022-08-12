@@ -8,6 +8,7 @@ module SAWScript.Prover.What4 where
 
 
 import           Control.Lens ((^.))
+import           Data.List (nub)
 import           Data.Set (Set)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -60,9 +61,9 @@ what4Theories unintSet hashConsing goal =
   getSharedContext >>= \sc -> io $
   do sym <- setupWhat4_sym hashConsing
      satq <- propToSATQuery sc unintSet goal
-     (_varMap, lit) <- W.w4Solve sym sc satq
-     let pf = (predicateVarInfo lit)^.problemFeatures
-     return (evalTheories pf)
+     (_varMap, lits) <- W.w4Solve sym sc satq
+     let pf lit = (predicateVarInfo lit)^.problemFeatures
+     return (nub (concatMap evalTheories (map pf lits)))
 
 evalTheories :: ProblemFeatures -> [String]
 evalTheories pf = [ nm | (nm,f) <- xs, hasProblemFeature pf f ]
@@ -103,9 +104,9 @@ proveExportWhat4_sym solver un hashConsing outFilePath t =
   do sym <- setupWhat4_sym hashConsing
 
      -- Write smt out
-     (_, _, lit, stats) <- setupWhat4_solver solver sym un sc t
+     (_, _, lits, stats) <- setupWhat4_solver solver sym un sc t
      withFile outFilePath WriteMode $ \handle ->
-       solver_adapter_write_smt2 solver sym handle [lit]
+       solver_adapter_write_smt2 solver sym handle lits
 
      -- Assume unsat
      return (Nothing, stats)
@@ -164,7 +165,7 @@ setupWhat4_solver :: forall st t ff.
   Prop               {- ^ A proposition to be proved/checked. -} ->
   IO ( [ExtCns Term]
      , [W.Labeler (B.ExprBuilder t st ff)]
-     , Pred (B.ExprBuilder t st ff)
+     , [Pred (B.ExprBuilder t st ff)]
      , SolverStats)
 setupWhat4_solver solver sym unintSet sc goal =
   do
@@ -172,7 +173,7 @@ setupWhat4_solver solver sym unintSet sc goal =
      satq <- propToSATQuery sc unintSet goal
      let varList  = Map.toList (satVariables satq)
      let argNames = map fst varList
-     (varMap, lit) <- W.w4Solve sym sc satq
+     (varMap, lits) <- W.w4Solve sym sc satq
      let bvs = map (fst . snd) varMap
 
      extendConfig (solver_adapter_config_options solver)
@@ -181,7 +182,7 @@ setupWhat4_solver solver sym unintSet sc goal =
      let stats = solverStats ("W4 ->" ++ solver_adapter_name solver)
                              (propSize goal)
 
-     return (argNames, bvs, lit, stats)
+     return (argNames, bvs, lits, stats)
 
 
 -- | Check the validity of a proposition using What4.
@@ -196,7 +197,7 @@ proveWhat4_solver :: forall st t ff.
   -- ^ (example/counter-example, solver statistics)
 proveWhat4_solver solver sym unintSet sc goal extraSetup =
   do
-     (argNames, bvs, lit, stats) <- setupWhat4_solver solver sym unintSet sc goal
+     (argNames, bvs, lits, stats) <- setupWhat4_solver solver sym unintSet sc goal
      extraSetup
 
      -- log to stdout
@@ -205,7 +206,7 @@ proveWhat4_solver solver sym unintSet sc goal extraSetup =
                                   , logReason = "SAW proof" }
 
      -- run solver
-     solver_adapter_check_sat solver sym logData [lit] $ \ r -> case r of
+     solver_adapter_check_sat solver sym logData lits $ \ r -> case r of
          Sat (gndEvalFcn,_) -> do
            mvals <- mapM (getValues @(B.ExprBuilder t st ff) gndEvalFcn)
                          (zip bvs argNames)

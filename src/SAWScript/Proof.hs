@@ -1059,13 +1059,38 @@ propToSATQuery sc unintSet prop =
          Nothing  -> filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es
          Just fot -> filterFirstOrderVars mmap (Map.insert e fot fovars) absvars es
 
-    processAssert tp = 
+    processUnivAssert mmap vars xs tm =
+      do -- TODO: See related TODO in processTerm
+         let tm' = tm
+
+         case asPi tm' of
+           Just (lnm, tp, body) ->
+             do -- TOOD, same issure
+                let tp' = tp
+                case evalFOT mmap tp' of
+                  Just fot ->
+                    do ec  <- scFreshEC sc lnm tp'
+                       etm <- scExtCns sc ec
+                       body' <- instantiateVar sc 0 etm body
+                       processUnivAssert mmap ((ec,fot):vars) xs body'
+                  Nothing
+                    | looseVars body == emptyBitSet ->
+                      case asEqTrue tp' of
+                        Just x  -> processUnivAssert mmap vars (x:xs) body
+                        Nothing ->
+                          fail ("propToSATQuery: expected first order type or assertion:\n" ++ showTerm tp')
+                    | otherwise ->
+                        fail ("propToSATQuery: expected first order type or assertion:\n" ++ showTerm tp')
+
+           Nothing ->
+             case asEqTrue tm' of
+               Nothing -> fail $ "propToSATQuery: expected EqTrue, actual:\n" ++ showTerm tm'
+               Just tmBool -> return (UniversalAssert (reverse vars) (reverse xs) tmBool)
+
+    processAssert mmap tp = 
       case asEqTrue tp of
         Just x -> return (BoolAssert x)
-        _ ->
-          -- TODO? Allow universal hypotheses...
-          fail ("propToSATQuery: expected first order type or assertion:\n" ++ showTerm tp)
-
+        _ -> processUnivAssert mmap [] [] tp
 
     processTerm mmap vars xs tm =
       do -- TODO: I would like to WHNF here, but that evalutes too aggressively
@@ -1088,7 +1113,7 @@ propToSATQuery sc unintSet prop =
                        processTerm mmap (Map.insert ec fot vars) xs body'
                   Nothing
                     | looseVars body == emptyBitSet ->
-                        do asrt <- processAssert tp
+                        do asrt <- processAssert mmap tp
                            processTerm mmap vars (asrt : xs) body
                     | otherwise ->
                         fail ("propToSATQuery: expected first order type or assertion:\n" ++ showTerm tp')
