@@ -1087,7 +1087,7 @@ propToSATQuery sc unintSet prop =
                Nothing -> fail $ "propToSATQuery: expected EqTrue, actual:\n" ++ showTerm tm'
                Just tmBool -> return (UniversalAssert (reverse vars) (reverse xs) tmBool)
 
-    processAssert mmap tp = 
+    processAssert mmap tp =
       case asEqTrue tp of
         Just x -> return (BoolAssert x)
         _ -> processUnivAssert mmap [] [] tp
