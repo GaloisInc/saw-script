@@ -1497,6 +1497,13 @@ primitives = Map.fromList
     , "if unsuccessful."
     ]
 
+  , prim "prove_by_bv_induction"  "ProofScript () -> Term -> TopLevel Theorem"
+    (pureVal proveByBVInduction)
+    Experimental
+    [ "TODO, real docs.  Attempt to prove a fact by induction on the less-than"
+    , "order on bitvectors."
+    ]
+
   , prim "prove_extcore"         "ProofScript () -> Term -> TopLevel Theorem"
     (pureVal provePropPrim)
     Current
