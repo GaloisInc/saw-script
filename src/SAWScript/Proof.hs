@@ -1646,7 +1646,7 @@ sequentToSATQuery sc unintSet sqt =
        (initVars, abstractVars) <- filterFirstOrderVars mmap mempty mempty (Set.toList exts)
        -- NB, the following reversals make the order of assertions more closely match the input sequent,
        -- but should otherwise not be semantically relevant
-       hypAsserts <- mapM processAssert (reverse (map unProp hs))
+       hypAsserts <- mapM (processAssert mmap) (reverse (map unProp hs))
        (finalVars, asserts) <- foldM (processGoal mmap) (initVars, hypAsserts) (map unProp gs)
        return SATQuery
               { satVariables = finalVars
