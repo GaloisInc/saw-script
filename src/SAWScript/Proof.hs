@@ -284,12 +284,12 @@ splitImpl sc (Prop p)
        c' <- scEqTrue sc c
        return (Just (Prop h', Prop c'))
 
-{- TODO? sequent normalization doesn't decompose arrows...
-
-  | Just (_nm, h, c ) <- asPi p
+  -- Handle the case of (H1 -> H2), where H1 and H2 are in Prop
+  | Just (_nm, arg, c) <- asPi p
   , looseVars c == emptyBitSet
-  = return (Just (Prop h, Prop c))
--}
+  = termToMaybeProp sc arg >>= \case
+      Nothing -> return Nothing
+      Just h  -> return (Just (h, Prop c))
 
   | otherwise
   = return Nothing
@@ -1241,7 +1241,17 @@ normalizeGoal sc p =
        Just b -> normalizeGoalBool sc b >>= \case
                    Just sqt -> return sqt
                    Nothing  -> return (RawSequent [] [p])
-       _      -> return (RawSequent [] [p])
+       _ ->
+         -- handle the case of (H1 -> H2), where H1 and H2 are in Prop
+         case asPi t of
+           Just (_nm, arg, body) | looseVars body == emptyBitSet ->
+             termToMaybeProp sc arg >>= \case
+               Nothing -> return (RawSequent [] [p])
+               Just h  ->
+                 do hsqt <- normalizeHyp sc h
+                    gsqt <- normalizeGoal sc (Prop body)
+                    return (joinSequent hsqt gsqt)
+           _ -> return (RawSequent [] [p])
 
 normalizeHypBool :: SharedContext -> Term -> IO (Maybe (RawSequent Prop))
 normalizeHypBool sc b =
