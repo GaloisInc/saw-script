@@ -91,8 +91,6 @@ module SAWScript.Proof
   , Tactic
   , withFirstGoal
   , tacticIntro
---  , tacticCut
---  , tacticAssume
   , tacticApply
   , tacticSplit
   , tacticCut
@@ -756,10 +754,6 @@ data Theorem =
   , _thmSummary :: TheoremSummary
   } -- INVARIANT: the provided evidence is valid for the included proposition
 
-  | LocalAssumption Prop Pos TheoremNonce
-      -- This constructor is used to construct "hypothetical" theorems that
-      -- are intended to be used in local scopes when proving implications.
-
 data TheoremDB =
   TheoremDB
   -- TODO, maybe this should be a summary or something simpler?
@@ -770,8 +764,6 @@ newTheoremDB :: IO TheoremDB
 newTheoremDB = TheoremDB <$> newIORef mempty
 
 recordTheorem :: TheoremDB -> Theorem -> IO Theorem
-recordTheorem _ (LocalAssumption _ pos _) =
-  panic "recordTheorem" ["Tried to record a local assumption as a top-level", show pos]
 recordTheorem db thm@Theorem{ _thmNonce = n } =
   do modifyIORef (theoremMap db) (Map.insert n thm)
      return thm
@@ -805,15 +797,10 @@ reachableTheorems db roots =
 --   propositions and quickchecked propositions as valid.
 validateTheorem :: SharedContext -> TheoremDB -> Theorem -> IO ()
 
-validateTheorem _ _ (LocalAssumption p loc _n) =
-   fail $ unlines
-     [ "Illegal use of unbound local hypothesis generated at " ++ show loc
-     , showTerm (unProp p)
-     ]
-
 validateTheorem sc db Theorem{ _thmProp = p, _thmEvidence = e, _thmDepends = thmDep } =
-   do (deps,_) <- checkEvidence sc db e p
-      unless (Set.isSubsetOf deps thmDep)
+   do hyps <- Map.keysSet <$> readIORef (theoremMap db)
+      (deps,_) <- checkEvidence sc e p
+      unless (Set.isSubsetOf deps thmDep && Set.isSubsetOf thmDep hyps)
              (fail $ unlines ["Theorem failed to declare its depencences correctly"
                              , show deps, show thmDep ])
 
@@ -839,11 +826,6 @@ data Evidence
   = -- | The given term provides a direct programs-as-proofs witness
     --   for the truth of its type (qua proposition).
     ProofTerm !Term
-
-    -- | This type of evidence refers to a local assumption that
-    --   must have been introduced by a surrounding @AssumeEvidence@
-    --   constructor.
-  | LocalAssumptionEvidence !Prop !TheoremNonce
 
     -- | This type of evidence is produced when the given proposition
     --   has been dispatched to a solver which has indicated that it
@@ -939,63 +921,47 @@ data Evidence
 
 -- | The the proposition proved by a given theorem.
 thmProp :: Theorem -> Prop
-thmProp (LocalAssumption p _loc _n) = p
 thmProp Theorem{ _thmProp = p } = p
 
 -- | Retrieve any solver stats from the proved theorem.
 thmStats :: Theorem -> SolverStats
-thmStats (LocalAssumption _ _ _) = mempty
 thmStats Theorem{ _thmStats = stats } = stats
 
 -- | Retrive the evidence associated with this theorem.
 thmEvidence :: Theorem -> Evidence
-thmEvidence (LocalAssumption p _ n) = LocalAssumptionEvidence p n
 thmEvidence Theorem{ _thmEvidence = e } = e
 
 -- | The SAW source location that generated this theorem
 thmLocation :: Theorem -> Pos
-thmLocation (LocalAssumption _p loc _) = loc
 thmLocation Theorem{ _thmLocation = loc } = loc
 
 -- | The program location (if any) of the program under
 --   verification giving rise to this theorem
 thmProgramLoc :: Theorem -> Maybe ProgramLoc
-thmProgramLoc (LocalAssumption{}) = Nothing
 thmProgramLoc Theorem{ _thmProgramLoc = ploc } = ploc
 
 -- | Describes the reason this theorem was generated
 thmReason :: Theorem -> Text
-thmReason (LocalAssumption _ _ _) = "local assumption"
 thmReason Theorem{ _thmReason = r } = r
 
 -- | Returns a unique identifier for this theorem
 thmNonce :: Theorem -> TheoremNonce
-thmNonce (LocalAssumption _ _ n) = n
 thmNonce Theorem{ _thmNonce = n } = n
 
 -- | Returns the set of theorem identifiers that this theorem depends on
 thmDepends :: Theorem -> Set TheoremNonce
-thmDepends LocalAssumption{} = mempty
 thmDepends Theorem { _thmDepends = s } = s
 
 -- | Returns the amount of time elapsed during the proof of this theorem
 thmElapsedTime :: Theorem -> NominalDiffTime
-thmElapsedTime LocalAssumption{} = 0
 thmElapsedTime Theorem{ _thmElapsedTime = tm } = tm
 
 thmSummary :: Theorem -> TheoremSummary
-thmSummary LocalAssumption{} = mempty
 thmSummary Theorem { _thmSummary = sy } = sy
 
 splitEvidence :: [Evidence] -> IO Evidence
 splitEvidence [e1,e2] = pure (SplitEvidence e1 e2)
 splitEvidence _ = fail "splitEvidence: expected two evidence values"
-
-{-
-assumeEvidence :: TheoremNonce -> Prop -> [Evidence] -> IO Evidence
-assumeEvidence n p [e] = pure (AssumeEvidence n p e)
-assumeEvidence _ _ _ = fail "assumeEvidence: expected one evidence value"
--}
 
 introEvidence :: ExtCns Term -> [Evidence] -> IO Evidence
 introEvidence x [e] = pure (IntroEvidence x e)
@@ -1044,7 +1010,7 @@ constructTheorem ::
   NominalDiffTime ->
   IO Theorem
 constructTheorem sc db p e loc ploc rsn elapsed =
-  do (deps,sy) <- checkEvidence sc db e p
+  do (deps,sy) <- checkEvidence sc e p
      n  <- freshNonce globalNonceGenerator
      recordTheorem db
        Theorem
@@ -1320,23 +1286,22 @@ normalizeGoalBoolCommit sc b =
 
 -- | Verify that the given evidence in fact supports the given proposition.
 --   Returns the identifers of all the theorems depended on while checking evidence.
-checkEvidence :: SharedContext -> TheoremDB -> Evidence -> Prop -> IO (Set TheoremNonce, TheoremSummary)
-checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap db)
-                                 nenv <- scGetNamingEnv sc
-                                 check nenv hyps e (propToSequent p)
+checkEvidence :: SharedContext -> Evidence -> Prop -> IO (Set TheoremNonce, TheoremSummary)
+checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
+                              check nenv e (propToSequent p)
 
   where
-    checkApply _nenv _hyps _mkSqt (Prop p) [] = return (mempty, mempty, p)
+    checkApply _nenv _mkSqt (Prop p) [] = return (mempty, mempty, p)
 
     -- Check a theorem applied to "Evidence".
     -- The given prop must be an implication
     -- (i.e., nondependent Pi quantifying over a Prop)
     -- and the given evidence must match the expected prop.
-    checkApply nenv hyps mkSqt (Prop p) (Right e:es)
+    checkApply nenv mkSqt (Prop p) (Right e:es)
       | Just (_lnm, tp, body) <- asPi p
       , looseVars body == emptyBitSet
-      = do (d1,sy1) <- check nenv hyps e . mkSqt =<< termToProp sc tp
-           (d2,sy2,p') <- checkApply nenv hyps mkSqt (Prop body) es
+      = do (d1,sy1) <- check nenv e . mkSqt =<< termToProp sc tp
+           (d2,sy2,p') <- checkApply nenv mkSqt (Prop body) es
            return (Set.union d1 d2, sy1 <> sy2, p')
       | otherwise = fail $ unlines
            [ "Apply evidence mismatch: non-function or dependent function"
@@ -1345,7 +1310,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
 
     -- Check a theorem applied to a term. This explicity instantiates
     -- a Pi binder with the given term.
-    checkApply nenv hyps mkSqt (Prop p) (Left tm:es) =
+    checkApply nenv mkSqt (Prop p) (Left tm:es) =
       do propTerm <- scSort sc propSort
          let m = do tm' <- TC.typeInferComplete tm
                     let err = TC.NotFuncTypeInApp (TC.TypedTerm p propTerm) tm'
@@ -1353,24 +1318,14 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
          res <- TC.runTCM m sc Nothing []
          case res of
            Left msg -> fail (unlines (TC.prettyTCError msg))
-           Right p' -> checkApply nenv hyps mkSqt (Prop p') es
-
-    checkTheorem :: Set TheoremNonce -> Theorem -> IO ()
-    checkTheorem hyps (LocalAssumption p loc n) =
-       unless (Set.member n hyps) $ fail $ unlines
-          [ "Attempt to reference a local hypothesis that is not in scope"
-          , "Generated at " ++ show loc
-          , showTerm (unProp p)
-          ]
-    checkTheorem _hyps Theorem{} = return ()
+           Right p' -> checkApply nenv mkSqt (Prop p') es
 
     check ::
       SAWNamingEnv ->
-      Set TheoremNonce ->
       Evidence ->
       Sequent ->
       IO (Set TheoremNonce, TheoremSummary)
-    check nenv hyps e sqt = case e of
+    check nenv e sqt = case e of
       ProofTerm tm ->
         case sequentState sqt of
           GoalFocus (Prop ptm) _ ->
@@ -1383,14 +1338,6 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
                    ]
                return (mempty, ProvedTheorem mempty)
           _ -> fail "Sequent must be goal-focused for proof term evidence"
-
-
-      LocalAssumptionEvidence (Prop l) n ->
-        do unless (Set.member n hyps) $ fail $ unlines
-             [ "Illegal use of local hypothesis"
-             , showTerm l
-             ]
-           return (Set.singleton n, ProvedTheorem mempty)
 
       SolverEvidence stats sqt' ->
         do ok <- sequentSubsumes sc sqt' sqt
@@ -1427,15 +1374,14 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
                        , prettySequent defaultPPOpts nenv sqt
                        ]
           Just (sqt1,sqt2) ->
-            do d1 <- check nenv hyps e1 sqt1
-               d2 <- check nenv hyps e2 sqt2
+            do d1 <- check nenv e1 sqt1
+               d2 <- check nenv e2 sqt2
                return (d1 <> d2)
 
       ApplyEvidence thm es ->
         case sequentState sqt of
           GoalFocus p mkSqt ->
-            do checkTheorem hyps thm
-               (d,sy,p') <- checkApply nenv hyps mkSqt (thmProp thm) es
+            do (d,sy,p') <- checkApply nenv mkSqt (thmProp thm) es
                ok <- scConvertible sc False (unProp p) p'
                unless ok $ fail $ unlines
                    [ "Apply evidence does not match the required proposition"
@@ -1450,30 +1396,26 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
 
       UnfoldEvidence vars e' ->
         do sqt' <- traverseSequentWithFocus (unfoldProp sc vars) sqt
-           check nenv hyps e' sqt'
+           check nenv e' sqt'
 
       NormalizePropEvidence opqueSet e' ->
         do modmap <- scGetModuleMap sc
            sqt' <- traverseSequentWithFocus (normalizeProp sc modmap opqueSet) sqt
-           check nenv hyps e' sqt'
+           check nenv e' sqt'
 
       RewriteEvidence hs ss e' ->
         do ss' <- localHypSimpset sqt hs ss
            (d1,sqt') <- simplifySequent sc ss' sqt
-           unless (Set.isSubsetOf d1 hyps) $ fail $ unlines
-             [ "Rewrite step used theorem not in hypothesis database"
-             , show (Set.difference d1 hyps)
-             ]
-           (d2,sy) <- check nenv hyps e' sqt'
+           (d2,sy) <- check nenv e' sqt'
            return (Set.union d1 d2, sy)
 
       HoistIfsEvidence e' ->
         do sqt' <- traverseSequentWithFocus (hoistIfsInGoal sc) sqt
-           check nenv hyps e' sqt'
+           check nenv e' sqt'
 
       EvalEvidence vars e' ->
         do sqt' <- traverseSequentWithFocus (evalProp sc vars) sqt
-           check nenv hyps e' sqt'
+           check nenv e' sqt'
 
       ConversionEvidence sqt' e' ->
         do ok <- convertibleSequents sc sqt sqt'
@@ -1482,7 +1424,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
              , prettySequent defaultPPOpts nenv sqt
              , prettySequent defaultPPOpts nenv sqt'
              ]
-           check nenv hyps e' sqt'
+           check nenv e' sqt'
 
       NormalizeSequentEvidence sqt' e' ->
         do ok <- normalizeSequentSubsumes sc sqt' sqt
@@ -1491,7 +1433,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
              , prettySequent defaultPPOpts nenv sqt
              , prettySequent defaultPPOpts nenv sqt'
              ]
-           check nenv hyps e' sqt'
+           check nenv e' sqt'
 
       StructuralEvidence sqt' e' ->
         do ok <- sequentSubsumes sc sqt' sqt
@@ -1500,26 +1442,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
              , prettySequent defaultPPOpts nenv sqt
              , prettySequent defaultPPOpts nenv sqt'
              ]
-           check nenv hyps e' sqt'
-
-{-
-      AssumeEvidence n (Prop p') e' ->
-        case asPi ptm of
-          Nothing -> fail $ unlines ["Assume evidence expected function prop", showTerm ptm]
-          Just (_lnm, ty, body) ->
-            do ok <- scConvertible sc False ty p'
-               unless ok $ fail $ unlines
-                   [ "Assume evidence types do not match"
-                   , showTerm ty
-                   , showTerm p'
-                   ]
-               unless (looseVars body == emptyBitSet) $ fail $ unlines
-                   [ "Assume evidence cannot be used on a dependent proposition"
-                   , showTerm ptm
-                   ]
-               (d,sy) <- check (Set.insert n hyps) e' (Prop body)
-               return (Set.delete n d, sy)
--}
+           check nenv e' sqt'
 
       AxiomEvidence ->
         do ok <- sequentIsAxiom sc sqt
@@ -1530,15 +1453,15 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
            return (mempty, ProvedTheorem mempty)
 
       CutEvidence p ehyp egl ->
-        do d1 <- check nenv hyps ehyp (addHypothesis p sqt)
-           d2 <- check nenv hyps egl  (addNewFocusedGoal p sqt)
+        do d1 <- check nenv ehyp (addHypothesis p sqt)
+           d2 <- check nenv egl  (addNewFocusedGoal p sqt)
            return (d1 <> d2)
 
       IntroEvidence x e' ->
         -- TODO! Check that the given ExtCns is fresh for the sequent
         case sequentState sqt of
           Unfocused -> fail "Intro evidence requires a focused sequent"
-          HypFocus _ _ -> fail "Intro evidence apply in hypothesis: TODO: apply to existentials"
+          HypFocus _ _ -> fail "Intro evidence apply in hypothesis"
           GoalFocus (Prop ptm) mkSqt ->
             case asPi ptm of
               Nothing -> fail $ unlines ["Intro evidence expected function prop", showTerm ptm]
@@ -1552,7 +1475,7 @@ checkEvidence sc db = \e p -> do hyps <- Map.keysSet <$> readIORef (theoremMap d
                      ]
                    x' <- scExtCns sc x
                    body' <- instantiateVar sc 0 x' body
-                   check nenv hyps e' (mkSqt (Prop body'))
+                   check nenv e' (mkSqt (Prop body'))
 
 passthroughEvidence :: [Evidence] -> IO Evidence
 passthroughEvidence [e] = pure e
@@ -1596,7 +1519,7 @@ finishProof sc db conclProp ps@(ProofState gs (concl,loc,ploc,rsn) stats _ check
     [] ->
       do e <- checkEv []
          let e' = NormalizeSequentEvidence concl e
-         (deps,sy) <- checkEvidence sc db e' conclProp
+         (deps,sy) <- checkEvidence sc e' conclProp
          n <- freshNonce globalNonceGenerator
          end <- getCurrentTime
          thm <- (if recordThm then recordTheorem db else return) 
@@ -1840,8 +1763,7 @@ tacticIntro sc usernm = Tactic \goal ->
 
         _ -> fail "intro tactic failed: not a function"
 
-    HypFocus _ _ -> fail "TODO: implement intro on hyps"
-    Unfocused -> fail "intro tactic: focus required"
+    _ -> fail "intro tactic: conclusion focus required"
 
 
 tacticIntroHyps :: (F.MonadFail m, MonadIO m) => SharedContext -> Integer -> Tactic m ()
@@ -1881,26 +1803,6 @@ tacticRevertHyp sc i = Tactic \goal ->
         _ -> fail "goal_revert_hyp: not enough hypotheses"
     _ -> fail "goal_revert_hyp: conclusion focus required"
 
-
-{-
--- | Attempt to prove an implication goal by introducing a local assumption for
---   hypothesis.  Return a @Theorem@ representing this local assumption.
---   This hypothesis should only be used for proving subgoals arising
---   from this call to @tacticAssume@ or evidence verification will later fail.
-tacticAssume :: (F.MonadFail m, MonadIO m) => SharedContext -> Pos -> Tactic m Theorem
-tacticAssume _sc loc = Tactic \goal ->
-  case asPi (unProp (goalProp goal)) of
-    Just (_nm, tp, body)
-      | looseVars body == emptyBitSet ->
-          do let goal' = goal{ goalProp = Prop body }
-             let p     = Prop tp
-             n <- liftIO (freshNonce globalNonceGenerator)
-             let thm'  = LocalAssumption p loc n
-             return (thm', mempty, [goal'], assumeEvidence n p)
-
-    _ -> fail "assume tactic failed: not a function, or a dependent function"
-
--}
 
 -- | Attempt to prove a goal by applying the given theorem.  Any hypotheses of
 --   the theorem will generate additional subgoals.
