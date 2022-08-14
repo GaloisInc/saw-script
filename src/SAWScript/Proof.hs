@@ -92,6 +92,7 @@ module SAWScript.Proof
   , withFirstGoal
   , tacticIntro
   , tacticApply
+  , tacticApplyHyp
   , tacticSplit
   , tacticCut
   , tacticTrivial
@@ -101,6 +102,8 @@ module SAWScript.Proof
   , tacticExact
   , tacticIntroHyps
   , tacticRevertHyp
+  , tacticInsert
+  , tacticSpecializeHyp
 
   , Quantification(..)
   , predicateToProp
@@ -324,7 +327,13 @@ splitSequent sc sqt =
               return (Just ( HypFocusedSequent (FB hs1 x (hs2 ++ [b])) gs
                            , HypFocusedSequent (FB hs1 y (hs2 ++ [nb])) gs
                            ))
-            Nothing -> return Nothing
+            Nothing ->
+              splitImpl sc h >>= \case
+                Just (x, y) ->
+                  return (Just ( HypFocusedSequent (FB hs1 y hs2) gs
+                               , GoalFocusedSequent (hs1 ++ [h] ++ hs2) (FB gs x [])
+                               ))
+                Nothing -> return Nothing
 
     UnfocusedSequent _ _ -> fail "split tactic: focus required"
 
@@ -857,11 +866,13 @@ data Evidence
     --   current goal.
   | ApplyEvidence !Theorem ![Either Term Evidence]
 
-    -- | This type of evidence is used to prove an implication.  The included
-    --   proposition must match the hypothesis of the goal, and the included
-    --   evidence must match the conclusion of the goal.  The proposition is
-    --   allowed to appear inside the evidence as a local assumption.
---  | AssumeEvidence TheoremNonce Prop Evidence
+    -- | This type of evidence is produced when a local hypothesis is applied
+    --   via backward reasoning to prove a goal.  Pi-quantified variables
+    --   of the hypothesis may be specialized either by giving an explicit @Term@ to
+    --   instantiate the variable, or by giving @Evidence@ for @Prop@ hypotheses.
+    --   After specializing the given @Theorem@ the result must match the
+    --   current goal.
+  | ApplyHypEvidence Integer ![Either Term Evidence]
 
     -- | This type of evidence is used to prove a universally-quantified statement.
   | IntroEvidence !(ExtCns Term) !Evidence
@@ -971,6 +982,14 @@ cutEvidence :: Prop -> [Evidence] -> IO Evidence
 cutEvidence p [e1,e2] = pure (CutEvidence p e1 e2)
 cutEvidence _ _ = fail "cutEvidence: expected two evidence values"
 
+insertEvidence :: Theorem -> [Evidence] -> IO Evidence
+insertEvidence thm [e] = pure (CutEvidence (_thmProp thm) e (ApplyEvidence thm []))
+insertEvidence _ _ = fail "insertEvidence: expected one evidence value"
+
+specializeHypEvidence :: Integer -> Prop -> [Term] -> [Evidence] -> IO Evidence
+specializeHypEvidence n h ts [e] = pure (CutEvidence h e (ApplyHypEvidence n (map Left ts)))
+specializeHypEvidence _ _ _ _ = fail "specializeHypEvidence: expected one evidence value"
+
 structuralEvidence :: Sequent -> Evidence -> Evidence
 structuralEvidence _sqt (StructuralEvidence sqt' e) = StructuralEvidence sqt' e
 structuralEvidence sqt e = StructuralEvidence sqt e
@@ -1033,16 +1052,17 @@ constructTheorem sc db p e loc ploc rsn elapsed =
 --   of the given theorem.
 specializeTheorem :: SharedContext -> TheoremDB -> Pos -> Text -> Theorem -> [Term] -> IO Theorem
 specializeTheorem _sc _db _loc _rsn thm [] = return thm
-specializeTheorem sc db loc rsn thm ts0 =
-  do let p0 = unProp (_thmProp thm)
-     res <- TC.runTCM (loop p0 ts0) sc Nothing []
+specializeTheorem sc db loc rsn thm ts =
+  do res <- specializeProp sc (_thmProp thm) ts
      case res of
        Left err -> fail (unlines (["specialize_theorem: failed to specialize"] ++ TC.prettyTCError err))
        Right p' ->
-         constructTheorem sc db (Prop p') (ApplyEvidence thm (map Left ts0)) loc Nothing rsn 0
+         constructTheorem sc db p' (ApplyEvidence thm (map Left ts)) loc Nothing rsn 0
 
+specializeProp :: SharedContext -> Prop -> [Term] -> IO (Either TC.TCError Prop)
+specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) sc Nothing []
  where
-  loop p [] = return p
+  loop p [] = return (Prop p)
   loop p (t:ts) =
     do prop <- liftIO (scSort sc propSort)
        t' <- TC.typeInferComplete t
@@ -1388,6 +1408,29 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
                d2 <- check nenv e2 sqt2
                return (d1 <> d2)
 
+      ApplyHypEvidence n es ->
+        case sqt of
+          GoalFocusedSequent hs (FB gs1 g gs2) ->
+            case genericDrop n hs of
+              (h:_) ->
+                do (d,sy,p') <- checkApply nenv (\g' -> GoalFocusedSequent hs (FB gs1 g' gs2)) h es
+                   ok <- scConvertible sc False (unProp g) p'
+                   unless ok $ fail $ unlines
+                       [ "Apply evidence does not match the required proposition"
+                       , showTerm (unProp g)
+                       , showTerm p'
+                       ]
+                   return (d, sy)
+
+              _ -> fail $ unlines $
+                    [ "Not enough hypotheses in apply hypothesis: " ++ show n
+                    , prettySequent defaultPPOpts nenv sqt
+                    ]
+          _ -> fail $ unlines $
+                    [ "Apply hypothesis evidence requires a goal-focused sequent."
+                    , prettySequent defaultPPOpts nenv sqt
+                    ]
+
       ApplyEvidence thm es ->
         case sequentState sqt of
           GoalFocus p mkSqt ->
@@ -1532,7 +1575,7 @@ finishProof sc db conclProp ps@(ProofState gs (concl,loc,ploc,rsn) stats _ check
          (deps,sy) <- checkEvidence sc e' conclProp
          n <- freshNonce globalNonceGenerator
          end <- getCurrentTime
-         thm <- (if recordThm then recordTheorem db else return) 
+         thm <- (if recordThm then recordTheorem db else return)
                    Theorem
                    { _thmProp = conclProp
                    , _thmStats = stats
@@ -1814,6 +1857,37 @@ tacticRevertHyp sc i = Tactic \goal ->
     _ -> fail "goal_revert_hyp: conclusion focus required"
 
 
+-- | Attempt to prove a goal by applying a local hypothesis.  Any hypotheses of
+--   the applied proposition will generate additional subgoals.
+tacticApplyHyp :: (F.MonadFail m, MonadIO m) => SharedContext -> Integer -> Tactic m ()
+tacticApplyHyp sc n = Tactic \goal ->
+  case goalSequent goal of
+    UnfocusedSequent{} -> fail "apply hyp tactic: focus required"
+    HypFocusedSequent{} -> fail "apply hyp tactic: cannot apply in a hypothesis"
+    GoalFocusedSequent hs (FB gs1 g gs2) ->
+      case genericDrop n hs of
+        (h:_) ->
+          liftIO (goalApply sc h g) >>= \case
+            Nothing -> fail "apply hyp tactic: no match"
+            Just newterms ->
+              let newgoals =
+                    [ goal{ goalSequent = GoalFocusedSequent hs (FB gs1 p gs2)
+                          , goalType = goalType goal ++ ".subgoal" ++ show i
+                          }
+                    | Right p <- newterms
+                    | i <- [0::Integer ]
+                    ] in
+              return ((), mempty, newgoals, \es -> ApplyHypEvidence n <$> processEvidence newterms es)
+        _ -> fail "apply hyp tactic: not enough hypotheses"
+
+ where
+   processEvidence :: [Either Term Prop] -> [Evidence] -> IO [Either Term Evidence]
+   processEvidence (Left tm : xs) es     = (Left tm :) <$> processEvidence xs es
+   processEvidence (Right _ : xs) (e:es) = (Right e :) <$> processEvidence xs es
+   processEvidence []             []     = pure []
+   processEvidence _ _ = fail "apply hyp tactic failed: evidence mismatch"
+
+
 -- | Attempt to prove a goal by applying the given theorem.  Any hypotheses of
 --   the theorem will generate additional subgoals.
 tacticApply :: (F.MonadFail m, MonadIO m) => SharedContext -> Theorem -> Tactic m ()
@@ -1850,6 +1924,27 @@ tacticSplit sc = Tactic \gl ->
          return ((), mempty, [g1,g2], splitEvidence)
     Nothing -> fail "split tactic failed"
 
+
+tacticSpecializeHyp ::
+  (F.MonadFail m, MonadIO m) => SharedContext -> [Term] -> Tactic m ()
+tacticSpecializeHyp sc ts = Tactic \gl ->
+  case goalSequent gl of
+    HypFocusedSequent (FB hs1 h hs2) gs ->
+      do res <- liftIO (specializeProp sc h ts)
+         case res of
+           Left err ->
+             fail (unlines (["specialize_hyp tactic: failed to specialize"] ++ TC.prettyTCError err))
+           Right h' ->
+             do let gl' = gl{ goalSequent = HypFocusedSequent (FB hs1 h (hs2++[h'])) gs }
+                return ((), mempty, [gl'], specializeHypEvidence (genericLength hs1) h' ts)
+    _ -> fail "specialize_hyp tactic failed: requires hypothesis focus"
+
+
+tacticInsert :: (F.MonadFail m, MonadIO m) => SharedContext -> Theorem -> Tactic m ()
+tacticInsert _sc thm = Tactic \gl ->
+  let sqt = addHypothesis (_thmProp thm) (goalSequent gl)
+      gl' = gl{ goalSequent = sqt }
+   in return ((), mempty, [gl'], insertEvidence thm)
 
 tacticCut :: (F.MonadFail m, MonadIO m) => SharedContext -> Prop -> Tactic m ()
 tacticCut _sc p = Tactic \gl ->

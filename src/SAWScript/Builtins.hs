@@ -838,25 +838,25 @@ goal_revert_hyp i =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticRevertHyp sc i)
 
-{-
-goal_assume :: ProofScript Theorem
-goal_assume =
-  do sc <- SV.scriptTopLevel getSharedContext
-     pos <- SV.scriptTopLevel SV.getPosition
-     execTactic (tacticAssume sc pos)
--}
-
 goal_intro :: Text -> ProofScript TypedTerm
 goal_intro s =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticIntro sc s)
 
-{-
 goal_insert :: Theorem -> ProofScript ()
 goal_insert thm =
   do sc <- SV.scriptTopLevel getSharedContext
-     execTactic (tacticCut sc thm)
--}
+     execTactic (tacticInsert sc thm)
+
+goal_specialize_hyp :: [TypedTerm] -> ProofScript ()
+goal_specialize_hyp ts =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticSpecializeHyp sc (map ttTerm ts))
+
+goal_apply_hyp :: Integer -> ProofScript ()
+goal_apply_hyp n =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticApplyHyp sc n)
 
 goal_num_when :: Int -> ProofScript () -> ProofScript ()
 goal_num_when n script =
