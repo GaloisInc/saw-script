@@ -1713,19 +1713,24 @@ primitives = Map.fromList
     Experimental
     [ "TODO "]
 
-{-
-  , prim "goal_assume"         "ProofScript Theorem"
-    (pureVal goal_assume)
-    Experimental
-    [ "Convert the first hypothesis in the current proof goal into a"
-    , "local Theorem."
-    ]
   , prim "goal_insert"         "Theorem -> ProofScript ()"
     (pureVal goal_insert)
     Experimental
     [ "Insert a Theorem as a new hypothesis in the current proof goal."
     ]
--}
+
+  , prim "goal_apply_hyp"      "Int -> ProofScript ()"
+    (pureVal goal_apply_hyp)
+    Experimental
+    [ "Apply the numbered local hypothesis to the focused conclusion." ]
+
+  , prim "goal_specialize_hyp" "[Term] -> ProofScript ()"
+    (pureVal goal_specialize_hyp)
+    Experimental
+    [ "Specialize the focused local hypothesis by supplying the values"
+    , "for universal quantifiers. A new specialized hypothesis will be"
+    , "added to the sequent."
+    ]
 
   , prim "goal_intro"          "String -> ProofScript Term"
     (pureVal goal_intro)
