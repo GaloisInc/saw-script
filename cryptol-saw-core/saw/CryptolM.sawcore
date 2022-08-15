@@ -409,14 +409,65 @@ primitive
 ecDropM : (m : Num) -> isFinite m -> (n : Num) -> (a : sort 0) ->
           mseq (tcAdd m n) a -> mseq n a;
 
--- FIXME
-primitive
 ecJoinM : (m n : Num) -> (a : sort 0) -> mseq m (mseq n a) -> mseq (tcMul m n) a;
+ecJoinM =
+  Num_rec
+    (\ (m:Num) -> (n:Num) -> (a:isort 0) -> mseq m (mseq n a) ->
+       mseq (tcMul m n) a)
+    (\ (m:Nat) ->
+       finNumRec
+         (\ (n:Num) -> (a:isort 0) -> Vec m (mseq n a) ->
+            mseq (tcMul (TCNum m) n) a)
+         -- Case for (TCNum m, TCNum n)
+         (\ (n:Nat) -> \ (a:isort 0) -> join m n a))
+         -- No case for (TCNum m, TCInf), shoudn't happen
+    (finNumRec
+       (\ (n:Num) -> (a:isort 0) -> Stream (CompM (mseq n a)) ->
+          mseq (tcMul TCInf n) a)
+       -- Case for (TCInf, TCNum n)
+       (\ (n:Nat) -> \ (a:isort 0) ->
+          natCase
+            (\ (n':Nat) -> Stream (CompM (Vec n' a)) ->
+               mseq (if0Nat Num n' (TCNum 0) TCInf) a)
+            (\ (s:Stream (CompM (Vec 0 a))) -> EmptyVec a)
+            (\ (n':Nat) -> \ (s:Stream (CompM (Vec (Succ n') a))) ->
+               MkStream (CompM a) (\ (i:Nat) ->
+                  fmapM (Vec (Succ n') a) a
+                    (\ (v:Vec (Succ n') a) -> at (Succ n') a v (modNat i (Succ n')))
+                    (streamGet (CompM (Vec (Succ n') a)) s (divNat i (Succ n'))) ))
+            n));
+       -- No case for (TCInf, TCInf), shouldn't happen
 
--- FIXME
-primitive
 ecSplitM : (m n : Num) -> (a : sort 0) -> mseq (tcMul m n) a ->
            mseq m (mseq n a);
+ecSplitM =
+  Num_rec
+    (\ (m:Num) -> (n:Num) -> (a:isort 0) -> mseq (tcMul m n) a ->
+       mseq m (mseq n a))
+    (\ (m:Nat) ->
+       finNumRec
+         (\ (n:Num) -> (a:isort 0) -> mseq (tcMul (TCNum m) n) a ->
+            Vec m (mseq n a))
+         -- Case for (TCNum m, TCNum n)
+         (\ (n:Nat) -> \ (a:isort 0) -> split m n a))
+         -- No case for (TCNum m, TCInf), shouldn't happen
+    (finNumRec
+       (\ (n:Num) -> (a:isort 0) -> mseq (tcMul TCInf n) a ->
+          Stream (CompM (mseq n a)))
+       -- Case for (TCInf, TCNum n)
+       (\ (n:Nat) -> \ (a:isort 0) ->
+          natCase
+            (\ (n':Nat) ->
+               mseq (if0Nat Num n' (TCNum 0) TCInf) a ->
+               Stream (CompM (Vec n' a)))
+            (\ (xs : Vec 0 a) -> streamConst (CompM (Vec 0 a))
+                                             (returnM (Vec 0 a) xs))
+            (\ (n':Nat) (xs : Stream (CompM a)) -> 
+               streamMap (Vec (Succ n') (CompM a)) (CompM (Vec (Succ n') a))
+                         (vecMapM (CompM a) a (Succ n') (id (CompM a)))
+                         (streamSplit (CompM a) (Succ n') xs))
+            n));
+       -- No case for (TCInf, TCInf), shouldn't happen
 
 ecReverseM : (n : Num) -> isFinite n -> (a : sort 0) -> mseq n a -> mseq n a;
 ecReverseM =
