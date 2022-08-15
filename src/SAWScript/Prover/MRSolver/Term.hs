@@ -36,6 +36,7 @@ import qualified Data.IntMap as IntMap
 import GHC.Generics
 
 import Prettyprinter
+import Data.Text (Text, unpack)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -209,19 +210,24 @@ asIsFinite (asApp -> Just (isGlobalDef "CryptolM.isFinite" -> Just (), n)) =
   Just n
 asIsFinite _ = Nothing
 
--- | Test if a 'Term' is a 'BVVec' type
+-- | Test if a 'Term' is a 'BVVec' type, excluding bitvectors
 asBVVecType :: Recognizer Term (Term, Term, Term)
 asBVVecType (asApplyAll ->
              (isGlobalDef "Prelude.Vec" -> Just _,
               [(asApplyAll ->
-                (isGlobalDef "Prelude.bvToNat" -> Just _, [n, len])), a])) =
-  Just (n, len, a)
+                (isGlobalDef "Prelude.bvToNat" -> Just _, [n, len])), a]))
+  | Just _ <- asBoolType a = Nothing
+  | otherwise = Just (n, len, a)
 asBVVecType _ = Nothing
 
--- | Like 'asVectorType', but returns 'Nothing' if 'asBVVecType' returns 'Just'
+-- | Like 'asVectorType', but returns 'Nothing' if 'asBVVecType' returns
+-- 'Just' or if the given 'Term' is a bitvector type
 asNonBVVecVectorType :: Recognizer Term (Term, Term)
 asNonBVVecVectorType (asBVVecType -> Just _) = Nothing
-asNonBVVecVectorType t = asVectorType t
+asNonBVVecVectorType (asVectorType -> Just (n, a))
+  | Just _ <- asBoolType a = Nothing
+  | otherwise = Just (n, a)
+asNonBVVecVectorType _ = Nothing
 
 -- | Like 'asLambda', but only return's the lambda-bound variable's 'LocalName'
 asLambdaName :: Recognizer Term LocalName
@@ -453,6 +459,9 @@ instance PrettyInCtx a => PrettyInCtx [a] where
 
 instance {-# OVERLAPPING #-} PrettyInCtx String where
   prettyInCtx str = return $ fromString str
+
+instance PrettyInCtx Text where
+  prettyInCtx str = return $ fromString $ unpack str
 
 instance PrettyInCtx Int where
   prettyInCtx i = return $ viaShow i

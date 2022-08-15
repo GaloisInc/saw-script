@@ -163,7 +163,7 @@ bvVecFromBVVecOrLit sc n n' len a (BVVecLit vs) =
      i_tp <- scBitvector sc n
      var0 <- scLocalVar sc 0
      pf_tp <- scGlobalApply sc "Prelude.is_bvult" [n', var0, len]
-     f <- scLambdaList sc [("i", i_tp), ("pf", pf_tp)] body 
+     f <- scLambdaList sc [("i", i_tp), ("pf", pf_tp)] body
      scGlobalApply sc "Prelude.genBVVec" [n', len, a, f]
   where mkBody :: Integer -> [Term] -> IO Term
         mkBody _ [] = error "bvVecFromBVVecOrLit: empty vector"
@@ -310,14 +310,17 @@ mrProvableRaw prop_term =
 mrProvable :: Term -> MRM Bool
 mrProvable (asBool -> Just b) = return b
 mrProvable bool_tm =
-  do assumps <- mrAssumptions
+  do uvarCtx <- mrUVarCtx
+     debugPretty 3 $ "mrProvable uvars:" <> ppCtx uvarCtx
+     assumps <- mrAssumptions
      prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
      prop_inst <- mrSubstEVars prop >>= instantiateUVarsM instUVar
      mrNormTerm prop_inst >>= mrProvableRaw
   where -- | Given a UVar name and type, generate a 'Term' to be passed to
         -- SMT, with special cases for BVVec and pair types
         instUVar :: LocalName -> Term -> MRM Term
-        instUVar nm tp = liftSC1 scWhnf tp >>= \case
+        instUVar nm tp = mrDebugPPPrefix 3 "instUVar" (nm, tp) >>
+                         liftSC1 scWhnf tp >>= \case
           -- For variables of type BVVec, create a @Vec n Bool -> a@ function
           -- as an ExtCns and apply genBVVec to it
           (asBVVecType -> Just (n, len, a)) -> do
@@ -335,6 +338,24 @@ mrProvable bool_tm =
             liftSC2 scPairValue e1 e2
           -- Otherwise, create a global variable with the given name and type
           tp' -> liftSC2 scFreshEC nm tp' >>= liftSC1 scExtCns
+
+
+----------------------------------------------------------------------
+-- * Relating Types Heterogeneously with SMT
+----------------------------------------------------------------------
+
+-- | Return true iff the given types are heterogeneously related
+typesHetRelated :: Term -> Term -> MRM Bool
+typesHetRelated tp1 tp2 = case matchHet tp1 tp2 of
+  Just (HetBVNum _) -> return True
+  Just (HetNumBV _) -> return True
+  Just (HetBVVecVec (n, len, a) (m, a')) -> mrBvToNat n len >>= \m' ->
+    (&&) <$> mrProveEq m m' <*> typesHetRelated a a'
+  Just (HetVecBVVec (m, a') (n, len, a)) -> mrBvToNat n len >>= \m' ->
+    (&&) <$> mrProveEq m m' <*> typesHetRelated a a'
+  Just (HetPair (tpL1, tpR1) (tpL2, tpR2)) ->
+    (&&) <$> typesHetRelated tpL1 tpL2 <*> typesHetRelated tpR1 tpR2
+  Nothing -> mrConvertible tp1 tp2
 
 
 ----------------------------------------------------------------------
@@ -580,7 +601,7 @@ mrProveRelH' _ True tp1 tp2 t1 t2 | Just mh <- matchHet tp1 tp2 = case mh of
   -- genBVVecFromVec and recurse
   HetBVVecVec (n, len, _) (m, tpA2) ->
     do m' <- mrBvToNat n len
-       ms_are_eq <- mrConvertible m' m
+       ms_are_eq <- mrProveEq m' m
        if ms_are_eq then return () else
          throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
        len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
@@ -590,7 +611,7 @@ mrProveRelH' _ True tp1 tp2 t1 t2 | Just mh <- matchHet tp1 tp2 = case mh of
        mrProveRelH True tp1 tp2' t1 t2'
   HetVecBVVec (m, tpA1) (n, len, _) ->
     do m' <- mrBvToNat n len
-       ms_are_eq <- mrConvertible m' m
+       ms_are_eq <- mrProveEq m' m
        if ms_are_eq then return () else
          throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
        len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
@@ -627,8 +648,10 @@ mrProveRelH' _ False tp1 tp2 t1 t2
 -- As a fallback, for types we can't handle, just check convertibility
 mrProveRelH' _ het tp1 tp2 t1 t2 =
   do success <- mrConvertible t1 t2
+     tps_eq <- mrConvertible tp1 tp2
      if success then return () else
-       if het then mrDebugPPPrefixSep 2 "mrProveRelH' could not match types: " tp1 "and" tp2 >>
-                   mrDebugPPPrefixSep 2 "and could not prove convertible: " t1 "and" t2
-              else mrDebugPPPrefixSep 2 "mrProveEq could not prove convertible: " t1 "and" t2
+       if het || not tps_eq
+       then mrDebugPPPrefixSep 2 "mrProveRelH' could not match types: " tp1 "and" tp2 >>
+            mrDebugPPPrefixSep 2 "and could not prove convertible: " t1 "and" t2
+       else mrDebugPPPrefixSep 2 "mrProveEq could not prove convertible: " t1 "and" t2
      TermInCtx [] <$> liftSC1 scBool success

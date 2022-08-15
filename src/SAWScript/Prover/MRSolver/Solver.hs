@@ -662,7 +662,7 @@ generalizeCoIndHypArgs hyp [(specs1, tp1), (specs2, tp2)] = case matchHet tp1 tp
   -- FIXME: Could we handle the a /= a' case here and in mrRefinesFunH?
   Just (HetBVVecVec (n, len, a) (m, a')) ->
     do m' <- mrBvToNat n len
-       ms_are_eq <- mrConvertible m m'
+       ms_are_eq <- mrProveEq m m'
        as_are_eq <- mrConvertible a a'
        if ms_are_eq && as_are_eq then return () else
          throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
@@ -672,7 +672,7 @@ generalizeCoIndHypArgs hyp [(specs1, tp1), (specs2, tp2)] = case matchHet tp1 tp
        return    $ coIndHypSetArgs hyp'' specs2 bvv_tm
   Just (HetVecBVVec (m, a') (n, len, a)) ->
     do m' <- mrBvToNat n len
-       ms_are_eq <- mrConvertible m m'
+       ms_are_eq <- mrProveEq m m'
        as_are_eq <- mrConvertible a a'
        if ms_are_eq && as_are_eq then return () else
          throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
@@ -1056,9 +1056,13 @@ mrRefinesFun tp1 f1 tp2 f2 =
      mrDebugPPPrefixSep 1 "mrRefinesFun" f1 "|=" f2
      f1' <- compFunToTerm f1 >>= liftSC1 scWhnf
      f2' <- compFunToTerm f2 >>= liftSC1 scWhnf
-     let lnm = maybe "call_ret_val" id (compFunVarName f1)
-         rnm = maybe "call_ret_val" id (compFunVarName f2)
-     mrRefinesFunH mrRefines [] [(lnm, tp1)] f1' [(rnm, tp2)] f2'
+     let nm1 = maybe "call_ret_val" id (compFunVarName f1)
+         nm2 = maybe "call_ret_val" id (compFunVarName f2)
+     f1'' <- mrLambdaLift [(nm1, tp1)] f1' $ \[var] -> flip mrApply var
+     f2'' <- mrLambdaLift [(nm2, tp2)] f2' $ \[var] -> flip mrApply var
+     tps1 <- mrTypeOf f1''
+     tps2 <- mrTypeOf f2''
+     mrRefinesFunH mrRefines [] tps1 f1'' tps2 f2''
 
 -- | The main loop of 'mrRefinesFun' and 'askMRSolver': given a continuation,
 -- two terms of function type, and two equal-length lists representing the
@@ -1069,10 +1073,7 @@ mrRefinesFun tp1 f1 tp2 f2 =
 -- and call the continuation on the resulting terms. The second argument is
 -- an accumulator of variables to introduce, innermost first.
 mrRefinesFunH :: (Term -> Term -> MRM a) -> [Term] ->
-                 [(LocalName,Term)] -> Term -> [(LocalName,Term)] -> Term ->
-                 MRM a
-
-mrRefinesFunH k vars ((nm1, tp1):tps1) t1 ((nm2, tp2):tps2) t2 = case matchHet tp1 tp2 of
+                 Term -> Term -> Term -> Term -> MRM a
     
   -- If we need to introduce a bitvector on one side and a Num on the other,
   -- introduce a bitvector variable and substitute `TCNum` of `bvToNat` of that
@@ -1084,13 +1085,11 @@ mrRefinesFunH k vars ((nm1, tp1):tps1) t1 ((nm2, tp2):tps2) t2 = case matchHet t
     withUVarLift nm (Type tp1) (vars, t1, t2) $ \var (vars', t1', t2') ->
     do nat_tm <- liftSC2 scBvToNat n var
        num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
-       tps2' <- zipWithM (\i tp -> liftTermLike 0 i num_tm >>= \num_tm' ->
-                                   substTermLike i (num_tm' : vars') tp >>=
-                                   mapM (liftSC1 scWhnf))
-                         [0..] tps2
        t1'' <- mrApplyAll t1' [var]
        t2'' <- mrApplyAll t2' [num_tm]
-       mrRefinesFunH k (var : vars') tps1 t1'' tps2' t2''
+       tps1' <- mrTypeOf t1''
+       tps2' <- mrTypeOf t2'' >>= liftSC1 scWhnf
+       mrRefinesFunH k (var : vars') tps1' t1'' tps2' t2''
   Just (HetNumBV n) ->
     let nm = maybe "_" id $ find ((/=) '_' . Text.head)
                           $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
@@ -1098,65 +1097,59 @@ mrRefinesFunH k vars ((nm1, tp1):tps1) t1 ((nm2, tp2):tps2) t2 = case matchHet t
     withUVarLift nm (Type tp2) (vars, t1, t2) $ \var (vars', t1', t2') ->
     do nat_tm <- liftSC2 scBvToNat n var
        num_tm <- liftSC2 scCtorApp "Cryptol.TCNum" [nat_tm]
-       tps1' <- zipWithM (\i tp -> liftTermLike 0 i num_tm >>= \num_tm' ->
-                                   substTermLike i (num_tm' : vars') tp >>=
-                                   mapM (liftSC1 scWhnf))
-                         [0..] tps1
        t1'' <- mrApplyAll t1' [num_tm]
        t2'' <- mrApplyAll t2' [var]
-       mrRefinesFunH k (var : vars') tps1' t1'' tps2 t2''
+       tps1' <- mrTypeOf t1'' >>= liftSC1 scWhnf
+       tps2' <- mrTypeOf t2''
+       mrRefinesFunH k (var : vars') tps1' t1'' tps2' t2''
 
   -- If we need to introduce a BVVec on one side and a non-BVVec vector on the
   -- other, introduce a BVVec variable and substitute `genBVVecFromVec` of that
   -- variable on the non-BVVec side
   -- FIXME: Could we handle the a /= a' case here and in generalizeCoIndHypArgs?
   Just (HetBVVecVec (n, len, a) (m, a')) ->
-    do m' <- mrBvToNat n len
-       ms_are_eq <- mrConvertible m m'
+    do lenNat <- mrBvToNat n len
+       ms_are_eq <- mrProveEq m lenNat
        as_are_eq <- mrConvertible a a'
        if ms_are_eq && as_are_eq then return () else
          throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
        let nm = maybe "_" id $ find ((/=) '_' . Text.head)
                              $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
                                                        , asLambdaName t2 ]
-       withUVarLift nm (Type tp1) (vars, t1, t2) $ \var (vars', t1', t2') ->
-         do bvv_tm <- mrGenFromBVVec n len a var "mrRefinesFunH (BVVec/Vec)" m
-            tps2' <- zipWithM (\i tp -> liftTermLike 0 i bvv_tm >>= \bvv_tm' ->
-                                        substTermLike i (bvv_tm' : vars') tp >>=
-                                        mapM (liftSC1 scWhnf))
-                              [0..] tps2
+       withUVarLift nm (Type tp1) (vars, n, len, a, m, t1, t2) $ \var (vars', n', len', a', m', t1', t2') ->
+         do bvv_tm <- mrGenFromBVVec n' len' a' var "mrRefinesFunH (BVVec/Vec)" m'
             t1'' <- mrApplyAll t1' [var]
             t2'' <- mrApplyAll t2' [bvv_tm]
-            mrRefinesFunH k (var : vars') tps1 t1'' tps2' t2''
+            tps1' <- mrTypeOf t1''
+            tps2' <- mrTypeOf t2'' >>= liftSC1 scWhnf
+            mrRefinesFunH k (var : vars') tps1' t1'' tps2' t2''
   Just (HetVecBVVec (m, a') (n, len, a)) ->
-    do m' <- mrBvToNat n len
-       ms_are_eq <- mrConvertible m m'
+    do lenNat <- mrBvToNat n len
+       ms_are_eq <- mrProveEq m lenNat
        as_are_eq <- mrConvertible a a'
        if ms_are_eq && as_are_eq then return () else
          throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
        let nm = maybe "_" id $ find ((/=) '_' . Text.head)
                              $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
                                                        , asLambdaName t2 ]
-       withUVarLift nm (Type tp2) (vars, t1, t2) $ \var (vars', t1', t2') ->
-         do bvv_tm <- mrGenFromBVVec n len a var "mrRefinesFunH (BVVec/Vec)" m
-            tps1' <- zipWithM (\i tp -> liftTermLike 0 i bvv_tm >>= \bvv_tm' ->
-                                        substTermLike i (bvv_tm' : vars') tp >>=
-                                        mapM (liftSC1 scWhnf))
-                              [0..] tps1
-            t1'' <- mrApplyAll t1' [var]
-            t2'' <- mrApplyAll t2' [bvv_tm]
-            mrRefinesFunH k (var : vars') tps1' t1'' tps2 t2''
+       withUVarLift nm (Type tp2) (vars, n, len, a, m, t1, t2) $ \var (vars', n', len', a', m', t1', t2') ->
+         do bvv_tm <- mrGenFromBVVec n' len' a' var "mrRefinesFunH (BVVec/Vec)" m'
+            t1'' <- mrApplyAll t1' [bvv_tm]
+            t2'' <- mrApplyAll t2' [var]
+            tps1' <- mrTypeOf t1'' >>= liftSC1 scWhnf
+            tps2' <- mrTypeOf t2''
+            mrRefinesFunH k (var : vars') tps1' t1'' tps2' t2''
 
   -- We always curry pair values before introducing them (NOTE: we do this even
   -- when the have the same types to ensure we never have to unify a projection
   -- of an evar with a non-projected value, i.e. evar.1 == val )
   Just (HetPair (tpL1, tpR1) (tpL2, tpR2)) ->
-    do let tps1' = (nm1 <> "_1", tpL1):(nm1 <> "_2", tpR1):tps1
-           tps2' = (nm2 <> "_1", tpL2):(nm2 <> "_2", tpR2):tps2
-       t1'' <- mrLambdaLift [(nm1, tpL1), (nm1, tpR1)] t1 $ \[prj1, prj2] t1' ->
+    do t1'' <- mrLambdaLift [(nm1, tpL1), (nm1, tpR1)] t1 $ \[prj1, prj2] t1' ->
                  liftSC2 scPairValue prj1 prj2 >>= mrApply t1'
        t2'' <- mrLambdaLift [(nm2, tpL2), (nm2, tpR2)] t2 $ \[prj1, prj2] t2' ->
                  liftSC2 scPairValue prj1 prj2 >>= mrApply t2'
+       tps1' <- mrTypeOf t1''
+       tps2' <- mrTypeOf t2''
        mrRefinesFunH k vars tps1' t1'' tps2' t2''
 
   -- Introduce variables of the same type together
@@ -1170,18 +1163,26 @@ mrRefinesFunH k vars ((nm1, tp1):tps1) t1 ((nm2, tp2):tps2) t2 = case matchHet t
        withUVarLift nm (Type tp1) (vars, t1, t2) $ \var (vars', t1', t2') ->
          do t1'' <- mrApplyAll t1' [var]
             t2'' <- mrApplyAll t2' [var]
-            mrRefinesFunH k (var : vars') tps1 t1'' tps2 t2''
+            tps1' <- mrTypeOf t1''
+            tps2' <- mrTypeOf t2''
+            mrRefinesFunH k (var : vars') tps1' t1'' tps2' t2''
 
 -- Error if we don't have the same number of arguments on both sides
 -- FIXME: Add a specific error for this case
-mrRefinesFunH _ _ ((_,tp1):_) _ [] _ =
+mrRefinesFunH _ _ (asPi -> Just (_,tp1,_)) _ (asPi -> Nothing) _ =
   liftSC0 scUnitType >>= \utp ->
   throwMRFailure (TypesNotEq (Type tp1) (Type utp))
-mrRefinesFunH _ _ [] _ ((_,tp2):_) _ =
+mrRefinesFunH _ _ (asPi -> Nothing) _ (asPi -> Just (_,tp2,_)) _ =
   liftSC0 scUnitType >>= \utp ->
   throwMRFailure (TypesNotEq (Type utp) (Type tp2))
 
-mrRefinesFunH k _ [] t1 [] t2 = k t1 t2
+-- Error if either side's return type is not CompM
+mrRefinesFunH _ _ tp1@(asCompM -> Nothing) _ _ _ =
+  throwMRFailure (NotCompFunType tp1)
+mrRefinesFunH _ _ _ _ tp2@(asCompM -> Nothing) _ =
+  throwMRFailure (NotCompFunType tp2)
+
+mrRefinesFunH k _ _ t1 _ t2 = k t1 t2
 
 
 ----------------------------------------------------------------------
@@ -1232,13 +1233,7 @@ askMRSolver sc env timeout t1 t2 =
      tp2 <- scTypeOf sc t2 >>= scWhnf sc
      runMRM sc timeout env $
        mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2 >>
-       case (asPiList tp1, asPiList tp2) of
-         ((tps1, asCompM -> Just _), (tps2, asCompM -> Just _)) ->
-           mrRefinesFunH (askMRSolverH mrRefines) [] tps1 t1 tps2 t2
-         ((_, asCompM -> Just _), (_, tp2')) ->
-           throwMRFailure (NotCompFunType tp2')
-         ((_, tp1'), _) ->
-           throwMRFailure (NotCompFunType tp1')
+       mrRefinesFunH (askMRSolverH mrRefines) [] tp1 t1 tp2 t2
 
 -- | Return the 'FunAssump' to add to the 'MREnv' that would be generated if
 -- 'askMRSolver' succeeded on the given terms.
@@ -1251,10 +1246,4 @@ assumeMRSolver sc env timeout t1 t2 =
   do tp1 <- scTypeOf sc t1 >>= scWhnf sc
      tp2 <- scTypeOf sc t2 >>= scWhnf sc
      runMRM sc timeout env $
-       case (asPiList tp1, asPiList tp2) of
-         ((tps1, asCompM -> Just _), (tps2, asCompM -> Just _)) ->
-           mrRefinesFunH (askMRSolverH (\_ _ -> return ())) [] tps1 t1 tps2 t2
-         ((_, asCompM -> Just _), (_, tp2')) ->
-           throwMRFailure (NotCompFunType tp2')
-         ((_, tp1'), _) ->
-           throwMRFailure (NotCompFunType tp1')
+       mrRefinesFunH (askMRSolverH (\_ _ -> return ())) [] tp1 t1 tp2 t2

@@ -507,19 +507,6 @@ matchHet (asPairType -> Just (tpL1, tpR1))
   Just $ HetPair (tpL1, tpR1) (tpL2, tpR2)
 matchHet _ _ = Nothing
 
--- | Return true iff the given types are heterogeneously related
-typesHetRelated :: Term -> Term -> MRM Bool
-typesHetRelated tp1 tp2 = case matchHet tp1 tp2 of
-  Just (HetBVNum _) -> return True
-  Just (HetNumBV _) -> return True
-  Just (HetBVVecVec (n, len, a) (m, a')) -> mrBvToNat n len >>= \m' ->
-    (&&) <$> mrConvertible m m' <*> typesHetRelated a a'
-  Just (HetVecBVVec (m, a') (n, len, a)) -> mrBvToNat n len >>= \m' ->
-    (&&) <$> mrConvertible m m' <*> typesHetRelated a a'
-  Just (HetPair (tpL1, tpR1) (tpL2, tpR2)) ->
-    (&&) <$> typesHetRelated tpL1 tpL2 <*> typesHetRelated tpR1 tpR2
-  Nothing -> mrConvertible tp1 tp2
-
 
 ----------------------------------------------------------------------
 -- * Functions for Building Terms
@@ -597,13 +584,13 @@ mrCtorApp = liftSC2 scCtorApp
 mrGlobalTerm :: Ident -> MRM Term
 mrGlobalTerm = liftSC1 scGlobalDef
 
--- | Like 'scBvNat', but if given a bitvector literal it is converted to a
+-- | Like 'scBvConst', but if given a bitvector literal it is converted to a
 -- natural number literal
 mrBvToNat :: Term -> Term -> MRM Term
 mrBvToNat _ (asArrayValue -> Just (asBoolType -> Just _,
                                    mapM asBool -> Just bits)) =
   liftSC1 scNat $ foldl' (\n bit -> if bit then 2*n+1 else 2*n) 0 bits
-mrBvToNat n len = liftSC2 scBvNat n len
+mrBvToNat n len = liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
 
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in
@@ -622,7 +609,7 @@ mrTypeOf :: Term -> MRM Term
 mrTypeOf t =
   -- NOTE: scTypeOf' wants the type context in the most recently bound var
   -- first, i.e., in the mrUVarCtxRev order
-  mrDebugPPPrefix 3 "mrTypeOf:" t >>
+  -- mrDebugPPPrefix 3 "mrTypeOf:" t >>
   mrUVarCtxRev >>= \ctx -> liftSC2 scTypeOf' (map snd ctx) t
 
 -- | Check if two 'Term's are convertible in the 'MRM' monad
@@ -692,13 +679,14 @@ withUVars :: [(LocalName,Term)] -> ([Term] -> MRM a) -> MRM a
 withUVars [] f = f []
 withUVars ctx f =
   do nms <- uniquifyNames (map fst ctx) <$> map fst <$> mrUVars
-     let ctx_u = zip nms $ map (Type . snd) ctx
+     ctx_u <- zip nms <$> mapM (liftTermLike 0 (length ctx) . Type . snd) ctx
      assumps' <- mrAssumptions >>= liftTerm 0 (length ctx)
      dataTypeAssumps' <- mrDataTypeAssumps >>= mapM (liftTermLike 0 (length ctx))
      vars <- reverse <$> mapM (liftSC1 scLocalVar) [0 .. length ctx - 1]
      local (\info -> info { mriUVars = reverse ctx_u ++ mriUVars info,
                             mriAssumptions = assumps',
                             mriDataTypeAssumps = dataTypeAssumps' }) $
+       mrDebugPPPrefix 3 "withUVars:" ctx_u >>
        foldr (\nm m -> mapMRFailure (MRFailureLocalVar nm) m) (f vars) nms
 
 -- | Run a MR Solver in a top-level context, i.e., with no uvars or assumptions
