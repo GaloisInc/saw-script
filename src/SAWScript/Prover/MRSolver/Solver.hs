@@ -1074,6 +1074,40 @@ mrRefinesFun tp1 f1 tp2 f2 =
 -- an accumulator of variables to introduce, innermost first.
 mrRefinesFunH :: (Term -> Term -> MRM a) -> [Term] ->
                  Term -> Term -> Term -> Term -> MRM a
+
+-- Introduce equalities on either side as assumptions
+mrRefinesFunH k vars tps1@(asPi -> Just (nm1, tp1@(asEq -> Just (asBoolType -> Just (), b1, b2)), _)) t1 tps2 t2 =
+  mrUVars >>= mrDebugPPPrefix 3 "mrRefinesFunH uvars:" >>
+  mrDebugPPPrefixSep 3 "mrRefinesFunH types" tps1 "|=" tps2 >>
+  mrDebugPPPrefixSep 3 "mrRefinesFunH" t1 "|=" t2 >>
+  liftSC2 scBoolEq b1 b2 >>= \eq ->
+  withAssumption eq $
+  let nm = maybe "_" id $ find ((/=) '_' . Text.head)
+                        $ [nm1] ++ catMaybes [ asLambdaName t1 ] in
+  withUVarLift nm (Type tp1) (vars, t1, tps2, t2) $ \var (vars', t1', tps2', t2') ->
+  do t1'' <- mrApplyAll t1' [var]
+     tps1' <- mrTypeOf t1''
+     mrRefinesFunH k (var : vars') tps1' t1'' tps2' t2'
+mrRefinesFunH k vars tps1 t1 tps2@(asPi -> Just (nm2, tp2@(asEq -> Just (asBoolType -> Just (), b1, b2)), _)) t2 =
+  mrUVars >>= mrDebugPPPrefix 3 "mrRefinesFunH uvars:" >>
+  mrDebugPPPrefixSep 3 "mrRefinesFunH types" tps1 "|=" tps2 >>
+  mrDebugPPPrefixSep 3 "mrRefinesFunH" t1 "|=" t2 >>
+  liftSC2 scBoolEq b1 b2 >>= \eq ->
+  withAssumption eq $
+  let nm = maybe "_" id $ find ((/=) '_' . Text.head)
+                        $ [nm2] ++ catMaybes [ asLambdaName t2 ] in
+  withUVarLift nm (Type tp2) (vars, tps1, t1, t2) $ \var (vars', tps1', t1', t2') ->
+  do t2'' <- mrApplyAll t2' [var]
+     tps2' <- mrTypeOf t2''
+     mrRefinesFunH k (var : vars') tps1' t1' tps2' t2''
+
+mrRefinesFunH k vars tps1@(asPi -> Just (nm1, tp1, _)) t1
+                     tps2@(asPi -> Just (nm2, tp2, _)) t2 =
+  mrUVarCtx >>= \uvarCtx ->
+  debugPretty 3 ("mrRefinesFunH uvars:" <> ppCtx uvarCtx) >>
+  mrDebugPPPrefixSep 3 "mrRefinesFunH types" tps1 "|=" tps2 >>
+  mrDebugPPPrefixSep 3 "mrRefinesFunH" t1 "|=" t2 >>
+  case matchHet tp1 tp2 of
     
   -- If we need to introduce a bitvector on one side and a Num on the other,
   -- introduce a bitvector variable and substitute `TCNum` of `bvToNat` of that
