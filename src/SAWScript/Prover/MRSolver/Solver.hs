@@ -547,7 +547,7 @@ proveCoIndHypInvariant hyp =
 -- restored and the computation is re-run with the widened hypothesis.
 mrRefinesCoInd :: FunName -> [Term] -> FunName -> [Term] -> MRM ()
 mrRefinesCoInd f1 args1 f2 args2 =
-  do ctx <- mrUVarCtx
+  do ctx <- mrUVars
      preF1 <- mrGetInvariant f1
      preF2 <- mrGetInvariant f2
      let hyp = CoIndHyp ctx f1 f2 args1 args2 preF1 preF2
@@ -689,7 +689,7 @@ generalizeCoIndHypArgs hyp [(specs1, tp1), (specs2, tp2)] = case matchHet tp1 tp
 
   Nothing -> throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
 
-generalizeCoIndHypArgs _ specs = map fst <$> mrUVars >>= \uvar_ctx ->
+generalizeCoIndHypArgs _ specs = mrUVars >>= \uvar_ctx ->
   -- Being in this case implies we have types @tp1, tp2, tp3@ which are related
   -- by 'typesHetRelated' but no two of them are convertible. As of the time of
   -- writing, the only way this could be possible is if the types are pair
@@ -1103,8 +1103,7 @@ mrRefinesFunH k vars tps1 t1 tps2@(asPi -> Just (nm2, tp2@(asEq -> Just (asBoolT
 
 mrRefinesFunH k vars tps1@(asPi -> Just (nm1, tp1, _)) t1
                      tps2@(asPi -> Just (nm2, tp2, _)) t2 =
-  mrUVarCtx >>= \uvarCtx ->
-  debugPretty 3 ("mrRefinesFunH uvars:" <> ppCtx uvarCtx) >>
+  mrUVars >>= mrDebugPPPrefix 3 "mrRefinesFunH uvars:" >>
   mrDebugPPPrefixSep 3 "mrRefinesFunH types" tps1 "|=" tps2 >>
   mrDebugPPPrefixSep 3 "mrRefinesFunH" t1 "|=" t2 >>
   case matchHet tp1 tp2 of
@@ -1241,14 +1240,14 @@ askMRSolverH f t1 t2 =
        -- If t1 and t2 are both named functions, our result is the opaque
        -- FunAssump that forall xs. f1 xs |= f2 xs'
        (FunBind f1 args1 (CompFunReturn _), FunBind f2 args2 (CompFunReturn _)) ->
-         mrUVarCtx >>= \uvar_ctx ->
+         mrUVars >>= \uvar_ctx ->
          return $ Just (f1, FunAssump { fassumpCtx = uvar_ctx,
                                         fassumpArgs = args1,
                                         fassumpRHS = OpaqueFunAssump f2 args2 })
        -- If just t1 is a named function, our result is the rewrite FunAssump
        -- that forall xs. f1 xs |= m2
        (FunBind f1 args1 (CompFunReturn _), _) ->
-         mrUVarCtx >>= \uvar_ctx ->
+         mrUVars >>= \uvar_ctx ->
          return $ Just (f1, FunAssump { fassumpCtx = uvar_ctx,
                                         fassumpArgs = args1,
                                         fassumpRHS = RewriteFunAssump m2 })

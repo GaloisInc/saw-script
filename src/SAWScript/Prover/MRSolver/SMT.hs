@@ -260,10 +260,10 @@ mrNormTerm t =
 -- removing those lambdas
 mrNormOpenTerm :: Term -> MRM Term
 mrNormOpenTerm body =
-  do ctx <- mrUVarCtx
-     fun_term <- liftSC2 scLambdaList ctx body
+  do length_ctx <- mrVarCtxLength <$> mrUVars
+     fun_term <- lambdaUVarsM body
      normed_fun <- mrNormTerm fun_term
-     return (peel_lambdas (length ctx) normed_fun)
+     return (peel_lambdas length_ctx normed_fun)
        where
          peel_lambdas :: Int -> Term -> Term
          peel_lambdas 0 t = t
@@ -310,8 +310,7 @@ mrProvableRaw prop_term =
 mrProvable :: Term -> MRM Bool
 mrProvable (asBool -> Just b) = return b
 mrProvable bool_tm =
-  do uvarCtx <- mrUVarCtx
-     debugPretty 3 $ "mrProvable uvars:" <> ppCtx uvarCtx
+  do mrUVars >>= mrDebugPPPrefix 3 "mrProvable uvars:"
      assumps <- mrAssumptions
      prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
      prop_inst <- mrSubstEVars prop >>= instantiateUVarsM instUVar
