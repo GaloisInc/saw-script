@@ -679,7 +679,7 @@ withUVars :: [(LocalName,Term)] -> ([Term] -> MRM a) -> MRM a
 withUVars [] f = f []
 withUVars ctx f =
   do nms <- uniquifyNames (map fst ctx) <$> map fst <$> mrUVars
-     ctx_u <- zip nms <$> mapM (liftTermLike 0 (length ctx) . Type . snd) ctx
+     let ctx_u = zip nms $ map (Type . snd) ctx
      assumps' <- mrAssumptions >>= liftTerm 0 (length ctx)
      dataTypeAssumps' <- mrDataTypeAssumps >>= mapM (liftTermLike 0 (length ctx))
      vars <- reverse <$> mapM (liftSC1 scLocalVar) [0 .. length ctx - 1]
