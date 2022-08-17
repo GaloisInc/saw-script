@@ -1471,7 +1471,7 @@ addsimp thm ss =
        Just rule -> pure (addRule rule ss)
 
 addsimp_shallow :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
-addsimp_shallow thm ss = 
+addsimp_shallow thm ss =
   do sc <- getSharedContext
      io (propToRewriteRule sc (thmProp thm) (Just (thmNonce thm))) >>= \case
        Nothing -> fail "addsimp: theorem not an equation"
@@ -1553,6 +1553,29 @@ lambdas vars tt =
       case asTypedExtCns v of
         Just tec -> pure tec
         Nothing -> fail "lambda: argument not a valid symbolic variable"
+
+implies_term :: TypedTerm -> TypedTerm -> TopLevel TypedTerm
+implies_term x y =
+  do sc <- getSharedContext
+     -- check that the given terms are props (TODO? should we relax this?)
+     _ <- io $ termToProp sc (ttTerm x)
+     _ <- io $ termToProp sc (ttTerm y)
+     z <- io $ scFun sc (ttTerm x) (ttTerm y)
+     io $ mkTypedTerm sc z
+
+generalize_term :: [TypedTerm] -> TypedTerm -> TopLevel TypedTerm
+generalize_term vars tt =
+  do tecs <- traverse checkVar vars
+     sc <- getSharedContext
+     tm <- io $ scGeneralizeExts sc (map tecExt tecs) (ttTerm tt)
+     _tp <- io $ scTypeCheckError sc tm -- sanity check the term
+     io $ mkTypedTerm sc tm
+
+  where
+    checkVar v =
+      case asTypedExtCns v of
+        Just tec -> pure tec
+        Nothing -> fail "generalize_term: argument not a valid symbolic variable"
 
 -- | Apply the given Term to the given values, and evaluate to a
 -- final value.

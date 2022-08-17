@@ -1214,6 +1214,20 @@ primitives = Map.fromList
     , "variables."
     ]
 
+  , prim "generalize_term"   "[Term] -> Term -> Term"
+    (funVal2 generalize_term)
+    Experimental
+    [ "Take a list of 'fresh_symbolic' variables and another term containing those"
+    , "variables, and return a new Pi generalization over the list of variables."
+    ]
+
+  , prim "implies_term"      "Term -> Term -> Term"
+    (funVal2 implies_term)
+    Experimental
+    [ "Given to terms, which must be Prop terms, construct the SAWCore implication"
+    , "of those terms."
+    ]
+
   , prim "size_to_term"      "Type -> Term"
     (funVal1 size_to_term)
     Current
