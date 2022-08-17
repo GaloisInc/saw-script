@@ -116,7 +116,11 @@ newtype Type = Type Term deriving (Generic, Show)
 -- | A context of variables, with names and types. To avoid confusion as to
 -- how variables are ordered, do not use this type's constructor directly.
 -- Instead, use the combinators defined below.
-newtype MRVarCtx = MRVarCtx [(LocalName,Type)] deriving (Generic, Show)
+newtype MRVarCtx = MRVarCtx [(LocalName,Type)]
+                   -- ^ Internally, we store these names and types in order
+                   -- from innermost to outermost variable, see
+                   -- 'mrVarCtxInnerToOuter'
+                   deriving (Generic, Show)
 
 -- | Build an empty context of variables
 emptyMRVarCtx :: MRVarCtx
@@ -447,7 +451,6 @@ instance TermLike LocalName where
   substTermLike _ _ = return
 
 deriving anyclass instance TermLike Type
-deriving anyclass instance TermLike MRVarCtx
 deriving instance TermLike NormComp
 deriving instance TermLike CompFun
 deriving instance TermLike Comp
