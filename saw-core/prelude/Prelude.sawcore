@@ -2132,6 +2132,11 @@ data SpecCall : sort 2 where {
      SpecCallIntro : (a:sort 1) -> (a -> sort 1) -> SpecCall;
 }
 
+data List1 (a:sort 1) : sort 1 where {
+     Nil1 : List1 a;
+     Cons1 : a -> List1 a -> List1 a;
+}
+
 data List2 (a:sort 2) : sort 2 where {
      Nil2 : List2 a;
      Cons2 : a -> List2 a -> List2 a;
@@ -2142,6 +2147,10 @@ data LetRecType' : sort 2 where {
      LRT_Fun' : (a:sort 1) -> (a -> LetRecType') -> LetRecType';
 }
 
+data Pair1 (a b:sort 1) : sort 1 where {
+  PairValue1 : a -> b -> Pair1 a b;
+}
+
 FunFrame : sort 2;
 FunFrame = List2 LetRecType';
 
@@ -2150,6 +2159,9 @@ FunStack = List2 FunFrame;
 
 -- TODO: write this as a native saw term
 primitive FunVar : LetRecType' -> FunFrame -> sort 2;
+primitive VarZ : (lrt:LetRecType') -> (frame:FunFrame) -> FunVar lrt (Cons2 LetRecType' lrt frame);
+primitive VarS : (lrt:LetRecType') -> (lrt':LetRecType') -> (frame:FunFrame) ->
+    FunVar lrt frame -> FunVar lrt (Cons2 LetRecType' lrt' frame);
 
 LRTInput : LetRecType' -> sort 1;
 LRTInput lrt =
@@ -2167,7 +2179,7 @@ LRTOutput lrt args =
           (\(r:sort 1) -> \(u:UnitType) -> r)
           (\(a:sort 1) -> (rest:a -> LetRecType') (b:a-> LRTInput (LRT_Fun' a rest) -> sort 1 ) -> \(args:LRTInput (LRT_Fun' a rest)) -> (x:a) -> b x (args x) ));
 -}
-primitive SpecM : (E:sort 1) -> (encodes:E -> sort 1) -> FunStack -> sort 1 -> sort 2;
+primitive SpecM : (E:sort 1) -> (encodes:E -> sort 1) -> FunStack -> sort 1 -> sort 1;
 primitive retS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a:sort 1) -> a -> SpecM E encodes stack a;
 primitive bindS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b:sort 1) -> SpecM E encodes stack a -> (a -> SpecM E encodes stack b) -> SpecM E encodes stack b;
 
@@ -2193,12 +2205,24 @@ primitive iterS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a 
 -- case : (a b:sort 1) -> (c:sort 2) -> (a -> c) -> (b -> c) -> sumT a b -> c;
 -- case a b c f g s = sumT#rec a b ( \(x:sumT a b) -> c ) f g s;
 -- need to define let rec type and replace mrecS with multifixS
+-- Computes a tuple type containing an entry for each LRT bound in frame
+-- containing the corresponding function type
+multiFixSBodies : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (frame:FunFrame) -> sort 1;
+multiFixSBodies E encodes stack frame =
+  List2#rec
+  LetRecType'
+  (\(frame:List2 LetRecType') -> sort 1)
+  UnitType
+  (\(lrt:LetRecType') (_:List2 LetRecType') (frameFun:sort 1) -> 
+    Pair1 ((args : LRTInput lrt) -> SpecM E encodes (Cons2 FunFrame frame stack) (LRTOutput lrt args)) frameFun)
+  frame;
+
 
 primitive callS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (frame:FunFrame) -> (lrt:LetRecType') ->
           FunVar lrt frame -> (args:LRTInput lrt) -> SpecM E encodes (Cons2 FunFrame frame stack) (LRTOutput lrt args);
 
 primitive multiFixS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (frame:FunFrame) ->
-          ((lrt:LetRecType') -> FunVar lrt frame -> (args:LRTInput lrt) -> SpecM E encodes (Cons2 FunFrame frame stack) (LRTOutput lrt args)) ->
+          multiFixSBodies E encodes stack frame ->
           (lrt:LetRecType') -> FunVar lrt frame -> (args:LRTInput lrt) ->
           SpecM E encodes stack (LRTOutput lrt args);
 

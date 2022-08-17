@@ -4888,7 +4888,6 @@ translateEntryBodyCallS mapTrans entry =
 -}
 -- | Translate all the entrypoints in a 'TypedBlockMap' that correspond to
 -- letrec-bound functions to SAW core functions as in 'translateEntryBody'
--- LS: can rewrite to give a list of functions
 translateBlockMapBodies :: PermCheckExtC ext =>
                            TypedBlockMapTrans ext blocks tops rets ->
                            TypedBlockMap TransPhase ext blocks tops rets ->
@@ -4996,15 +4995,14 @@ translateCFG env checks ectx (cfg :: TypedCFG ext blocks ghosts inits gouts ret)
       -- compute new FunFrame 
       -- LS: might be using the wrong version of LetRecTypes
       return funFrame,
-      -- LS: comp
-      -- map accross the entries
-      -- for each entry 
-      --  lambdaOpenTermTransM
-      -- buildFunList (list of functions)
-      -- buildMultiFixFunsFromFuns (map g (zip funFrameList entrylist))
-      -- where g computes an 
-      let f = lambdaOpenTermTransM in
-
+      -- lambdaOpenTermTransM
+      -- Compute a tuple of functions,
+      -- one for each LetRecType bound in funFrame
+      -- capable of making recursive calls
+      -- TODO: compute changes to translation environment
+      local (error "compute environment for recursive calls")
+      (tupleOpenTerm <$>
+        translateBlockMapBodies blkMapTrans blkMap)
         {-}
         -- compute a list of LRT OpenTerms
         lrts <- error "compute"
@@ -5020,14 +5018,13 @@ translateCFG env checks ectx (cfg :: TypedCFG ext blocks ghosts inits gouts ret)
             lrts
         -- tie the body_funs OpenTerms together into one function that
         -- dispatches on each index of lrts using FunVars -}
-        error "" 
       --LS: Remove these terms later
       -- The definitions of the translations of the entrypoints of the CFG
-      , lambdaBlockMap blkMap
-         (\mapTrans -> translateBlockMapBodies mapTrans blkMap)
+      --, lambdaBlockMap blkMap
+      --   (\mapTrans -> translateBlockMapBodies mapTrans blkMap)
 
          -- The main body, that calls the first function with the input vars
-       , lambdaBlockMap blkMap
+      {- , lambdaBlockMap blkMap
          (\mapTrans ->
            let all_membs = RL.members (cruCtxProxies $ appendCruCtx ctx inits)
                inits_membs =
@@ -5043,7 +5040,7 @@ translateCFG env checks ectx (cfg :: TypedCFG ext blocks ghosts inits gouts ret)
             >>
             let px = RL.map (\_ -> Proxy) all_pctx in
             translateCallEntry "CFG" init_entry
-            (nuMulti px id) (nuMulti px (\_ -> MNil))))
+            (nuMulti px id) (nuMulti px (\_ -> MNil)))) -}
 
       ]
 
@@ -5142,7 +5139,7 @@ mkFunVar ::
   [OpenTerm] -> OpenTerm -> Int -> OpenTerm
 mkFunVar (lrt' : lrts) lrt i =
     let lrtsOpenTerm :: OpenTerm =
-          list2OpenTerm lrts (globalOpenTerm "Prelude.LetRecType'") in
+          listToOpenTerm lrts (globalOpenTerm "Prelude.LetRecType'") in
     if i == 0
       then ctorOpenTerm "Prelude.VarZ" [lrt, lrtsOpenTerm]
       else
