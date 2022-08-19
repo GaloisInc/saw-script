@@ -2151,6 +2151,10 @@ data Pair1 (a b:sort 1) : sort 1 where {
   PairValue1 : a -> b -> Pair1 a b;
 }
 
+data DepPair (a:sort 1) (b:a -> sort 1) : sort 1 where {
+  Exist : (x:a) -> b x -> DepPair a b;
+}
+
 FunFrame : sort 2;
 FunFrame = List2 LetRecType';
 
@@ -2168,7 +2172,7 @@ LRTInput lrt =
          LetRecType'#rec 
          (\(lrt:LetRecType') -> sort 1) 
          (\(r:sort 1) -> UnitType) 
-         (\(a:sort 1) (_:a -> LetRecType') (b:a -> sort 1) -> (x:a) -> b x) lrt;
+         (\(a:sort 1) (_:a -> LetRecType') (b:a -> sort 1) -> DepPair a b) lrt;
 
 -- TODO: figure out how to write in native saw
 primitive LRTOutput : (lrt:LetRecType') -> LRTInput lrt -> sort 1;
@@ -2180,6 +2184,15 @@ LRTOutput lrt args =
           (\(a:sort 1) -> (rest:a -> LetRecType') (b:a-> LRTInput (LRT_Fun' a rest) -> sort 1 ) -> \(args:LRTInput (LRT_Fun' a rest)) -> (x:a) -> b x (args x) ));
 -}
 primitive SpecM : (E:sort 1) -> (encodes:E -> sort 1) -> FunStack -> sort 1 -> sort 1;
+
+LRTType : (E:sort 1) -> (encodes:E -> sort 1) -> FunStack -> LetRecType' -> sort 1;
+LRTType E encodes stack lrt =
+  LetRecType'#rec
+  (\(lrt:LetRecType') -> sort 1)
+  (\(r:sort 1) -> SpecM E encodes stack r)
+  (\(a:sort 1) (_:a -> LetRecType') (b:a -> sort 1) -> (x:a) -> b x)
+  lrt;
+
 primitive retS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a:sort 1) -> a -> SpecM E encodes stack a;
 primitive bindS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b:sort 1) -> SpecM E encodes stack a -> (a -> SpecM E encodes stack b) -> SpecM E encodes stack b;
 
@@ -2214,7 +2227,7 @@ multiFixSBodies E encodes stack frame =
   (\(frame:List2 LetRecType') -> sort 1)
   UnitType
   (\(lrt:LetRecType') (_:List2 LetRecType') (frameFun:sort 1) -> 
-    Pair1 ((args : LRTInput lrt) -> SpecM E encodes (Cons2 FunFrame frame stack) (LRTOutput lrt args)) frameFun)
+    Pair1 (LRTType E encodes (Cons2 FunFrame frame stack) lrt) frameFun)
   frame;
 
 
