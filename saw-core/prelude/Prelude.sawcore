@@ -2161,6 +2161,33 @@ FunFrame = List2 LetRecType';
 FunStack : sort 2;
 FunStack = List2 FunFrame;
 
+primitive Vec1 : Nat -> sort 1 -> sort 1;
+
+primitive gen1 : (n:Nat) -> (a:sort 1) -> (Nat -> a) -> Vec1 n a;
+
+primitive head1 : (n:Nat) -> (a:sort 1) -> Vec1 (Succ n) a -> a;
+primitive tail1 : (n:Nat) -> (a:sort 1) -> Vec1 (Succ n) a -> Vec1 n a;
+
+primitive atWithDefault1 : (n:Nat) -> (a:sort 1) -> a -> Vec1 n a -> Nat -> a;
+at1 : (n:Nat) -> (a:isort 1) -> Vec1 n a -> Nat -> a;
+at1 n a v i = atWithDefault1 n a (error a "at1: index out of bounds") v i;
+
+primitive EmptyVec1 : (a:sort 1) -> Vec1 0 a;
+
+ConsVec1 : (a:isort 1) -> a  -> (n:Nat) -> Vec1 n a -> Vec1 (Succ n) a;
+ConsVec1 a x n v =
+  gen1 (Succ n) a (Nat_cases a x (\ (i:Nat) -> \(a':a) -> at1 n a v i));
+
+upd1 : (n:Nat) -> (a:isort 1) -> Vec1 n a -> Nat -> a -> Vec1 n a;
+upd1 n a v j x = gen1 n a (\(i:Nat) -> ite a (equalNat i j) x (at1 n a v i));
+
+map1 : (a:isort 1) -> (b:sort 1) -> (a -> b) -> (n:Nat) -> Vec1 n a -> Vec1 n b;
+map1 a b f n v = gen1 n b (\(i:Nat) -> f (at1 n a v i));
+
+zipWith1 : (a b:isort 1) -> (c:sort 1) -> (a -> b -> c) ->
+  (n:Nat) -> Vec1 n a -> Vec1 n b -> Vec1 n c;
+zipWith1 a b c f n x y = gen1 n c (\(i:Nat) -> f (at1 n a x i) (at1 n b y i));
+
 -- TODO: write this as a native saw term
 primitive FunVar : LetRecType' -> FunFrame -> sort 2;
 primitive VarZ : (lrt:LetRecType') -> (frame:FunFrame) -> FunVar lrt (Cons2 LetRecType' lrt frame);
@@ -2199,6 +2226,80 @@ primitive bindS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a 
 fmapS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b:sort 1) -> (a -> b) -> SpecM E encodes stack a -> SpecM E encodes stack b;
 fmapS E encodes stack a b f m =
       bindS E encodes stack a b m (\ (x:a) -> retS E encodes stack b (f x));
+
+applyS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b:sort 1) ->
+  SpecM E encodes stack (a -> b) -> SpecM E encodes stack a -> SpecM E encodes stack b;
+applyS E encodes stack a b fm m =
+  bindS E encodes stack (a -> b) b fm (\(f:a -> b) -> 
+    bindS E encodes stack a b m (\(x:a) -> retS E encodes stack b (f x)));
+
+fmapS2 : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c:sort 1) -> (a -> b -> c) -> 
+  SpecM E encodes stack a -> SpecM E encodes stack b -> SpecM E encodes stack c;
+fmapS2 E encodes stack a b c f m1 m2 =
+  applyS E encodes stack b c (fmapS E encodes stack a (b -> c) f m1) m2;
+
+fmapS3 : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c d:sort 1) -> (a -> b -> c -> d) ->
+  SpecM E encodes stack a -> SpecM E encodes stack b -> SpecM E encodes stack c -> SpecM E encodes stack d;
+fmapS3 E encodes stack a b c d f m1 m2 m3 =
+  applyS E encodes stack c d (fmapS2 E encodes stack a b (c -> d) f m1 m2) m3;
+
+bindS2 : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c:sort 1) ->
+  SpecM E encodes stack a -> SpecM E encodes stack b -> (a -> b -> SpecM E encodes stack c) ->
+    SpecM E encodes stack c;
+bindS2 E encodes stack a b c m1 m2 k =
+  bindS E encodes stack a c m1 
+  (\(x:a) -> bindS E encodes stack b c m2 (\(y:b) -> k x y));
+
+bindS3 : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c d:sort 1) ->
+  SpecM E encodes stack a -> SpecM E encodes stack b -> SpecM E encodes stack c ->
+    (a -> b -> c -> SpecM E encodes stack d) -> SpecM E encodes stack d;
+bindS3 E encodes stack a b c d m1 m2 m3 k =
+  bindS E encodes stack a d m1 (\(x:a) -> bindS2 E encodes stack b c d m2 m3 (k x));
+
+bindApplyS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b:sort 1) ->
+  (a -> SpecM E encodes stack b) -> SpecM E encodes stack a -> SpecM E encodes stack b;
+bindApplyS E encodes stack a b k m =
+  bindS E encodes stack a b m k;
+
+bindApplyS2 : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c:sort 1) ->
+  (a -> b -> SpecM E encodes stack c) -> SpecM E encodes stack a -> SpecM E encodes stack b ->
+    SpecM E encodes stack c;
+bindApplyS2 E encodes stack a b c k m1 m2 =
+  bindS2 E encodes stack a b c m1 m2 k;
+
+bindApplyS3 : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c d:sort 1) ->
+  (a -> b -> c -> SpecM E encodes stack d) -> SpecM E encodes stack a -> SpecM E encodes stack b ->
+    SpecM E encodes stack c -> SpecM E encodes stack d;
+bindApplyS3 E encodes stack a b c d k m1 m2 m3 =
+  bindS3 E encodes stack a b c d m1 m2 m3 k;
+
+composeS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c:sort 1) ->
+  (a -> SpecM E encodes stack b) -> (b -> SpecM E encodes stack c) -> a -> SpecM E encodes stack c;
+composeS E encodes stack a b c k1 k2 x =
+  bindS E encodes stack b c (k1 x) k2;
+
+tupleSpecMFunBoth : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c:sort 1) ->
+  (a -> SpecM E encodes stack b) -> (c * a -> SpecM E encodes stack (c * b));
+tupleSpecMFunBoth  E encodes stack a b c k =
+  \(x: c * a) ->
+    bindS E encodes stack b (c * b) (k x.(2)) (\(y:b) -> retS E encodes stack (c*b) (x.(1), y));
+
+tupleSpecMFunOut : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c:sort 1) ->
+  c -> (a -> SpecM E encodes stack b) -> (a -> SpecM E encodes stack (c*b));
+tupleSpecMFunOut E encodes stack a b c x f =
+  \(y:a) -> bindS E encodes stack b (c*b) (f y) (\(z:b) -> retS E encodes stack (c*b) (x,z));
+
+mapS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a:sort 1) -> (b:isort 1) ->
+  (a -> SpecM E encodes stack b) -> (n:Nat) -> Vec1 n a -> SpecM E encodes stack (Vec1 n b);
+mapS E encodes stack a b f =
+  Nat__rec
+    (\(n:Nat) -> Vec1 n a -> SpecM E encodes stack (Vec1 n b))
+    (\(_:Vec1 0 a) -> retS E encodes stack (Vec1 0 b) (EmptyVec1 b))
+    (\(n:Nat) (rec_f:Vec1 n a -> SpecM E encodes stack (Vec1 n b)) (v:Vec1 (Succ n) a) ->
+      fmapS2 E encodes stack b (Vec1 n b) (Vec1 (Succ n) b)
+        (\(hd:b) (tl:Vec1 n b) -> ConsVec1 b hd n tl)
+        (f (head1 n a v))
+        (rec_f (tail1 n a v)));
 
 primitive trigger : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (e:E) -> SpecM E encodes stack (encodes e);
 
