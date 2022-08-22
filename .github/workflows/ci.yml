@@ -512,7 +512,18 @@ jobs:
 
   s2n-tests:
     name: "Test s2n proofs"
-    timeout-minutes: 120
+    # 2022.08.22 KWQ: bumped up from 120 because sike tests are failing on PR
+    # #1689 due to hitting 120 minute timeout.
+    #
+    #   s2n proof builds
+    #   ...
+    #   timestamp 1 from start of saw invocation
+    #   ... ~90 minutes ...
+    #   timestamp 2 (last during proof)
+    #   ... "Calling Yices to check sat", "Running check sat" repeated many times
+    #   CI-timeout and cancellation
+    #
+    timeout-minutes: 240
     needs: build
     runs-on: ubuntu-18.04
     strategy:
