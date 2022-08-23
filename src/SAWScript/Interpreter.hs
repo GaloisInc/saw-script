@@ -1544,8 +1544,17 @@ primitives = Map.fromList
   , prim "prove_by_bv_induction"  "ProofScript () -> Term -> TopLevel Theorem"
     (pureVal proveByBVInduction)
     Experimental
-    [ "TODO, real docs.  Attempt to prove a fact by induction on the less-than"
-    , "order on bitvectors."
+    [ "Attempt to prove a fact by induction on the less-than order on bitvectors."
+    , "The give term is expected to be a function of one or more arguments"
+    , "which returns a tuple containing two values: first, a bitvector expression"
+    , "(which will be expression we perform induction on) second, a boolean value"
+    , "defining the theorem to prove."
+    , ""
+    , "This command will attempt to prove the theorem expressed in the second"
+    , "element of the tuple by induction. The goal presented to the user-provided"
+    , "tactic will ask to prove the stated goal and will be provided with an induction"
+    , "hypothesis which states that the goal holds for all values of the varibles"
+    , "where the expression given in the first element of the tuple has decreased."
     ]
 
   , prim "prove_extcore"         "ProofScript () -> Term -> TopLevel Theorem"
@@ -1553,15 +1562,15 @@ primitives = Map.fromList
     Current
     [ "Use the given proof script to attempt to prove that a term representing"
     , "a proposition is valid. For example, this is useful for proving a goal"
-    , "obtained with 'offline_extcore'. Returns a Theorem if successful, and"
-    , "aborts if unsuccessful."
+    , "obtained with 'offline_extcore' or 'parse_core'. Returns a Theorem if"
+    , "successful, and aborts if unsuccessful."
     ]
 
   , prim "sat"                 "ProofScript () -> Term -> TopLevel SatResult"
     (pureVal satPrim)
     Current
     [ "Use the given proof script to attempt to prove that a term is"
-    , "satisfiable (true for any input). Returns a proof result that can"
+    , "satisfiable (is true for some input). Returns a proof result that can"
     , "be analyzed with 'caseSatResult' to determine whether it represents"
     , "a satisfying assignment or an indication of unsatisfiability."
     ]
@@ -1640,7 +1649,12 @@ primitives = Map.fromList
   , prim "goal_cut" "Term -> ProofScript ()"
     (pureVal goal_cut)
     Experimental
-    [ "TODO, write docs" ]
+    [ "Given a term provided by the user (which must be a boolean expression"
+    , "or a Prop) the current goal is split into two subgoals. In the first subgoal,"
+    , "the given proposition is assumed as a new hypothesis. In the second subgoal,"
+    , "the given proposition is a new focused, conclusion. This implements the"
+    , "usual cut rule of sequent calculus."
+    ]
 
   , prim "retain_hyps" "[Int] -> ProofScript ()"
     (pureVal retain_hyps)
@@ -1720,12 +1734,19 @@ primitives = Map.fromList
   , prim "goal_intro_hyps"     "Int -> ProofScript ()"
     (pureVal goal_intro_hyps)
     Experimental
-    [ "TODO "]
+    [ "When focused on a conclusion that represents an implication,"
+    , "simplify the conclusion by removing the implication and introducing"
+    , "a new sequent hypothesis instead. The given number indicates how many"
+    , "hypotheses to introduce."
+    ]
 
   , prim "goal_revert_hyp"     "Int -> ProofScript ()"
     (pureVal goal_revert_hyp)
     Experimental
-    [ "TODO "]
+    [ "When focused on a conclusion, weaken the focused conclustion"
+    , "by introducing an implication using the numbered sequent hypothesis."
+    , "This is essentially the reverse of 'gooal_intro_hyps'."
+    ]
 
   , prim "goal_insert"         "Theorem -> ProofScript ()"
     (pureVal goal_insert)
