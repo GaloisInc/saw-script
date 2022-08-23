@@ -1338,6 +1338,7 @@ checkGoals bak opts nm sc tactic mdMap = do
              (Text.unwords
               ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))])
              False -- do no record this theorem in the database
+             False -- TODO! useSequentGoals
     case res of
       ValidProof stats thm ->
         return (stats, (md, stats, thmSummary thm, thmNonce thm, thmDepends thm, thmElapsedTime thm))
