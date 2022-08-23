@@ -839,8 +839,9 @@ runProofScript ::
   Maybe ProgramLoc ->
   Text ->
   Bool {- ^ record the theorem in the database? -} ->
+  Bool {- ^ do we need to normalize the sequent goal? -} ->
   TopLevel ProofResult
-runProofScript (ProofScript m) concl gl ploc rsn recordThm =
+runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
   do pos <- getPosition
      ps <- io (startProof gl pos ploc rsn)
      (r,pstate) <- runStateT (runExceptT m) ps
@@ -849,7 +850,7 @@ runProofScript (ProofScript m) concl gl ploc rsn recordThm =
        Right _ ->
          do sc <- getSharedContext
             db <- rwTheoremDB <$> getTopLevelRW
-            io (finishProof sc db concl pstate recordThm)
+            io (finishProof sc db concl pstate recordThm useSequentGoals)
 
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))
