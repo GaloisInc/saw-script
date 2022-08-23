@@ -1566,12 +1566,17 @@ finishProof ::
   Prop ->
   ProofState ->
   Bool {- ^ should we record the theorem in the database? -} ->
+  Bool {- ^ do we need to normalize the sequent to match the final goal ? -} ->
   IO ProofResult
-finishProof sc db conclProp ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv start) recordThm =
+finishProof sc db conclProp
+    ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv start)
+    recordThm useSequentGoals =
   case gs of
     [] ->
       do e <- checkEv []
-         let e' = NormalizeSequentEvidence concl e
+         let e' = if useSequentGoals
+                   then NormalizeSequentEvidence concl e
+                   else e
          (deps,sy) <- checkEvidence sc e' conclProp
          n <- freshNonce globalNonceGenerator
          end <- getCurrentTime

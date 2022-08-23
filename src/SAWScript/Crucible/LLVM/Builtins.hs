@@ -811,6 +811,7 @@ verifyObligations cc mspec tactic assumes asserts =
                     (Text.unwords
                       ["LLVM verification condition", Text.pack (show n), Text.pack goalname])
                     False -- do not record this theorem in the database
+                    useSequentGoals
           case res of
             ValidProof stats thm ->
               return (stats, (md, stats, thmSummary thm, thmNonce thm, thmDepends thm, thmElapsedTime thm))
@@ -994,7 +995,8 @@ assumptionsContainContradiction cc methodSpec tactic assumptions =
                   , goalSequent = propToSequent goal'
                   , goalTags = mempty
                   })
-     res <- runProofScript tactic goal' pgl Nothing "vacuousness check" False
+     res <- runProofScript tactic goal' pgl Nothing
+              "vacuousness check" False False
      case res of
        ValidProof _ _     -> return True
        InvalidProof _ _ _ -> return False
