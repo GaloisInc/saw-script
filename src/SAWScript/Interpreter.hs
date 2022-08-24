@@ -962,7 +962,7 @@ primitives = Map.fromList
   , prim "enable_sequent_goals" "TopLevel ()"
     (pureVal enable_sequent_goals)
     Experimental
-    [ "When verifying proof obligations arising from `llvm_verify` and similar"
+    [ "When verifying proof obligations arising from `llvm_verify` and similar commands,"
     , "generate sequents for the proof obligations instead of a single boolean goal."
     ]
 
@@ -1545,9 +1545,9 @@ primitives = Map.fromList
     (pureVal proveByBVInduction)
     Experimental
     [ "Attempt to prove a fact by induction on the less-than order on bitvectors."
-    , "The give term is expected to be a function of one or more arguments"
+    , "The given term is expected to be a function of one or more arguments"
     , "which returns a tuple containing two values: first, a bitvector expression"
-    , "(which will be expression we perform induction on) second, a boolean value"
+    , "(which will be the expression we perform induction on), and second, a boolean value"
     , "defining the theorem to prove."
     , ""
     , "This command will attempt to prove the theorem expressed in the second"
@@ -1697,7 +1697,7 @@ primitives = Map.fromList
     (pureVal goal_normalize)
     Experimental
     [ "Evaluate the current proof goal by performing evaluation in SAWCore."
-    , "The currently-focused term will be evaluted.  If the sequent is unfocused"
+    , "The currently-focused term will be evaluated.  If the sequent is unfocused"
     , "all terms will be evaluated. The given names will be treated as uninterpreted."
     ]
 
@@ -1743,7 +1743,7 @@ primitives = Map.fromList
   , prim "goal_revert_hyp"     "Int -> ProofScript ()"
     (pureVal goal_revert_hyp)
     Experimental
-    [ "When focused on a conclusion, weaken the focused conclustion"
+    [ "When focused on a conclusion, weaken the focused conclusion"
     , "by introducing an implication using the numbered sequent hypothesis."
     , "This is essentially the reverse of 'gooal_intro_hyps'."
     ]

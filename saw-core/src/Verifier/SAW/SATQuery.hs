@@ -52,7 +52,7 @@ data SATQuery =
 data SATAssert
    = BoolAssert Term -- ^ A boolean term to be asserted
    | UniversalAssert [(ExtCns Term, FirstOrderType)] [Term] Term
-          -- ^ A univesally-quantified assertion, consisting of a
+          -- ^ A universally-quantified assertion, consisting of a
           --   collection of first-order variables, a sequence
           --   of boolean hypotheses, and a boolean conclusion
 
@@ -67,7 +67,7 @@ data SATResult
 --   in this SAT query as a single term of type Bool.
 --
 --   This method of reducing a sat query to a boolean
---   cannot be used for univerally-quantified assertions.
+--   cannot be used for universally-quantified assertions.
 satQueryAsTerm :: SharedContext -> SATQuery -> IO Term
 satQueryAsTerm sc satq =
   case satAsserts satq of

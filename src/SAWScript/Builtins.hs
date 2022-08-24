@@ -1186,7 +1186,7 @@ proveHelper nm script t f = do
                           ++ SV.showsProofResult opts res ""
   case res of
     ValidProof _stats thm ->
-      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) $ t)
+      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) t)
          SV.returnProof thm
     InvalidProof _stats _cex pst -> failProof pst
     UnfinishedProof pst -> failProof pst
