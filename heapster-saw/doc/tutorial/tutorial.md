@@ -190,7 +190,7 @@ logo and version number. Then you cna run your first saw command:
 #### 3. Load the file and extract the two function specifications.
    To load the file, we will use `llvm_load_module`. We can check what the function does with 
    
-   ``` bash
+   ```
    sawscript> :? llvm_load_module
    Description
    -----------
