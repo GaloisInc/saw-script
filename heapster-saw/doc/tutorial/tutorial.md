@@ -205,7 +205,9 @@ logo and version number. Then you cna run your first saw command:
    environment. Finally you can allways type `:help` to remember these
    commands.
    
-   So, run `l <- llvm_load_module "ffs.bc"` to load the file and stored in variable `l`. If you print the environment with `:env` you will now see a new variable `l : LLVMModule`.
+   Run `l <- llvm_load_module "ffs.bc"` to load the file and store it
+   in the variable `l`. If you print the environment with `:env` you
+   will now see a new variable `l : LLVMModule`.
    
    Now from `l`, we want to extract the two functions
    
