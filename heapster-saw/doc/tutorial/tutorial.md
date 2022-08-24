@@ -3,12 +3,48 @@
 This tutorial extends the current README with enough details and
 examples to get anyone up to speed with using and hacking on Heapster.
 
+<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
+**Table of Contents**
+
+- [Tutorial to learn the basics of heapster-saw](#tutorial-to-learn-the-basics-of-heapster-saw)
+    - [Building](#building)
+        - [Build Saw](#build-saw)
+        - [Build the Coq backend for Saw](#build-the-coq-backend-for-saw)
+        - [Build all the examples](#build-all-the-examples)
+    - [A quick tour of SAW](#a-quick-tour-of-saw)
+        - [Overview](#overview)
+        - [Running an example](#running-an-example)
+            - [1. Compile the code.](#1-compile-the-code)
+            - [2. Run the saw interpreter](#2-run-the-saw-interpreter)
+            - [3. Load the file and extract the two function specifications.](#3-load-the-file-and-extract-the-two-function-specifications)
+            - [4. Define the equality theorem.](#4-define-the-equality-theorem)
+            - [5. Call the SAT/SMT solver to prove the theorem.](#5-call-the-satsmt-solver-to-prove-the-theorem)
+        - [Batch scripts](#batch-scripts)
+    - [Using Heapster](#using-heapster)
+        - [Overview](#overview-1)
+        - [Running an example](#running-an-example-1)
+            - [1. Generating LLVM bitcode](#1-generating-llvm-bitcode)
+            - [2. Run the SAW interpreter with Heapster](#2-run-the-saw-interpreter-with-heapster)
+            - [3. Load the file and extract the two function specifications.](#3-load-the-file-and-extract-the-two-function-specifications-1)
+            - [4. Writing heapster specifications for your functions](#4-writing-heapster-specifications-for-your-functions)
+                - [Pen and paper specification](#pen-and-paper-specification)
+                - [Defining permission predicates](#defining-permission-predicates)
+            - [5. Writing a SAW script to type-check your code with respect to the sepcification](#5-writing-a-saw-script-to-type-check-your-code-with-respect-to-the-sepcification)
+            - [6. Writing a Coq file to prove things about the generated functional specification(s)](#6-writing-a-coq-file-to-prove-things-about-the-generated-functional-specifications)
+    - [Looking under the hood](#looking-under-the-hood)
+        - [Heapster commands and environments](#heapster-commands-and-environments)
+        - [Permissions](#permissions)
+        - [Type-checking](#type-checking)
+
+<!-- markdown-toc end -->
+
+
 ## Building
 
 We'll start by building everything you need to use Heapster. All the
 commands here are with respect to the top-level saw-script directory.
 
-### Build Saw
+### Build Saw 
 
 You will need to follow the instructions in the top-level README to
 download or build a SAW binary, of which Heapster is a part. In
