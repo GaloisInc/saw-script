@@ -16,7 +16,7 @@ examples to get anyone up to speed with using and hacking on Heapster.
         - [Running an example](#running-an-example)
         - [Batch scripts](#batch-scripts)
     - [Using Heapster](#using-heapster)
-        - [Overview](#overview-1)
+        - [Heapster type-checking overview](#heapster-type-checking-overview)
         - [Running an example](#running-an-example-1)
     - [Looking under the hood](#looking-under-the-hood)
         - [Heapster commands and environments](#heapster-commands-and-environments)
@@ -112,11 +112,11 @@ complex software artifacts.
 In this tutorial we will overview how to use SAW to proof functional
 equality different implementations. The steps are as follows:
 
-1. Compile the code down to llvm bitecode (i.e. `.bc` files)
-2. Run the saw interpreter
-3. Load the file and extract the two function specifications.
-4. Define the equality theorem. 
-5. Call the SAT/SMT solver to prove the theorem.
+[1. Compile the code down to llvm bitecode (i.e. `.bc` files).](#1-compile-the-code)
+[2. Run the saw interpreter](#2-run-the-saw-interpreter)
+[3. Load the file and extract the two function specifications.](#3-load-the-file-and-extract-the-two-function-specifications)
+[4. Define the equality theorem.](#4-define-the-equality-theorem)
+[5. Call the SAT/SMT solver to prove the theorem.](#5-call-the-satsmt-solver-to-prove-the-theorem)
 
 Steps 3-5 can all be written in a single `.saw` file, and batch processed by SAW.
 
@@ -301,7 +301,7 @@ That's it! You know the basics of SAW.
 
 ## Using Heapster
 
-Heapster is a, fundamentally, a type system for extracting functional
+Heapster is, fundamentally, a type system for extracting functional
 specifications from memory-safe imperative programs. The type system,
 defined inside SAW, uses separation types to reason about memory
 safety. Once a program is type-checked as memory-safe, it can be then
@@ -309,7 +309,7 @@ extracted as a functional program to be verified in Coq.
 
 **TODO: Double check this description of Heapster**
 
-### Overview
+### Heapster type-checking overview
 
 Heapster allows us to (1) type check programs with respect to
 types/specifications that can express separation loigc and (2) extract
@@ -317,14 +317,12 @@ the resulting functional program to Coq for further verification.
 
 The process will generally involve
 
-1. Generating LLVM bitcode from your file
-2. Run the saw interpreter with Heapster
-3. Load the file and extract the functions.
-4. Writing heapster specifications for your functions
-5. Writing a SAW script to type-check your code with respect to the
-   sepcification, and
-6. Writing a Coq file to prove things about the generated functional
-   specification(s).
+[1. Generating LLVM bitcode](#1-generating-llvm-bitcode)
+[2. Run the SAW interpreter with Heapster](#2-run-the-saw-interpreter-with-heapster)
+[3. Load the file and extract the two function specifications.](#3-load-the-file-and-extract-the-two-function-specifications-1)
+[4. Writing heapster specifications for your functions](#4-writing-heapster-specifications-for-your-functions)
+[5. Writing a SAW script to type-check your code with respect to the sepcification](#5-writing-a-saw-script-to-type-check-your-code-with-respect-to-the-sepcification)
+[6. Writing a Coq file to prove things about the generated functional specification(s)](#6-writing-a-coq-file-to-prove-things-about-the-generated-functional-specifications)
 
 Just like with SAW, Heapster can be processed in batch. To do so, you
 can combine steps 2-6 in a `.saw` file and use SAW's batch processing.
