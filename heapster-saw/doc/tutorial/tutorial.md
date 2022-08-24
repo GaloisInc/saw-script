@@ -362,6 +362,7 @@ If you print the environment now (wiht `:env`) you will notice a new
 set of commands, all starting with `heapster_*`. You can also start
 typing the name and press tab to see all the functions those are all the Heapster commands.
 
+```
 sawscript> heapster_ [TAB]
 heapster_assume_fun                  heapster_find_symbols
 heapster_assume_fun_multi            heapster_find_symbols_with_type
@@ -382,8 +383,9 @@ heapster_export_coq                  heapster_set_translation_checks
 heapster_find_symbol                 heapster_typecheck_fun
 heapster_find_symbol_commands        heapster_typecheck_fun_rename
 heapster_find_symbol_with_type       heapster_typecheck_mut_funs
+```
 
-You can the use `:?` to see further information for each of them.
+You can then use `:?` to see further information for each of them.
 
 
 #### 3. Load the file and extract the two function specifications.
