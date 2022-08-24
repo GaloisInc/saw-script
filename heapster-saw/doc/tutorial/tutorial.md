@@ -361,7 +361,7 @@ included the binary for all the examples so you don't really need to
 run this command.
 
 ```bash
-clang -g -c -emit-llvm -o ffs.bc ffs.c
+clang -g -c -emit-llvm -o examples/linked_list.bc examples/linked_list.c
 ```
 
 (The alternative command `make examples/linked_list.bc` won't work
