@@ -112,11 +112,11 @@ complex software artifacts.
 In this tutorial we will overview how to use SAW to proof functional
 equality different implementations. The steps are as follows:
 
-[1. Compile the code down to llvm bitecode (i.e. `.bc` files).](#1-compile-the-code)
-[2. Run the saw interpreter](#2-run-the-saw-interpreter)
-[3. Load the file and extract the two function specifications.](#3-load-the-file-and-extract-the-two-function-specifications)
-[4. Define the equality theorem.](#4-define-the-equality-theorem)
-[5. Call the SAT/SMT solver to prove the theorem.](#5-call-the-satsmt-solver-to-prove-the-theorem)
+- [1. Compile the code down to llvm bitecode (i.e. `.bc` files).](#1-compile-the-code)
+- [2. Run the saw interpreter](#2-run-the-saw-interpreter)
+- [3. Load the file and extract the two function specifications.](#3-load-the-file-and-extract-the-two-function-specifications)
+- [4. Define the equality theorem.](#4-define-the-equality-theorem)
+- [5. Call the SAT/SMT solver to prove the theorem.](#5-call-the-satsmt-solver-to-prove-the-theorem)
 
 Steps 3-5 can all be written in a single `.saw` file, and batch processed by SAW.
 
@@ -317,12 +317,12 @@ the resulting functional program to Coq for further verification.
 
 The process will generally involve
 
-[1. Generating LLVM bitcode](#1-generating-llvm-bitcode)
-[2. Run the SAW interpreter with Heapster](#2-run-the-saw-interpreter-with-heapster)
-[3. Load the file and extract the two function specifications.](#3-load-the-file-and-extract-the-two-function-specifications-1)
-[4. Writing heapster specifications for your functions](#4-writing-heapster-specifications-for-your-functions)
-[5. Writing a SAW script to type-check your code with respect to the sepcification](#5-writing-a-saw-script-to-type-check-your-code-with-respect-to-the-sepcification)
-[6. Writing a Coq file to prove things about the generated functional specification(s)](#6-writing-a-coq-file-to-prove-things-about-the-generated-functional-specifications)
+- [1. Generating LLVM bitcode](#1-generating-llvm-bitcode)
+- [2. Run the SAW interpreter with Heapster](#2-run-the-saw-interpreter-with-heapster)
+- [3. Load the file and extract the two function specifications.](#3-load-the-file-and-extract-the-two-function-specifications-1)
+- [4. Writing heapster specifications for your functions](#4-writing-heapster-specifications-for-your-functions)
+- [5. Writing a SAW script to type-check your code with respect to the sepcification](#5-writing-a-saw-script-to-type-check-your-code-with-respect-to-the-sepcification)
+- [6. Writing a Coq file to prove things about the generated functional specification(s)](#6-writing-a-coq-file-to-prove-things-about-the-generated-functional-specifications)
 
 Just like with SAW, Heapster can be processed in batch. To do so, you
 can combine steps 2-6 in a `.saw` file and use SAW's batch processing.
@@ -358,9 +358,9 @@ you can generate it just like before. Note that we have already
 included the binary for all the examples so you don't really need to
 run this command.
 
-   ```bash
-   clang -g -c -emit-llvm -o ffs.bc ffs.c
-   ```
+```bash
+clang -g -c -emit-llvm -o ffs.bc ffs.c
+```
 
 (The alternative command `make examples/linked_list.bc` won't work
 because the shorcut is not defined in the Makefile of heapster.)
@@ -375,9 +375,9 @@ bitcode is generated. If you find an incompatibility, please report it.
 We start by running saw with `cabal run saw`. Once SAW is loaded, you
 can load all the Heapster commands with
 
-   ```bash
-   sawscript> enable_experimental
-   ```
+```bash
+sawscript> enable_experimental
+```
 
 If you print the environment now (wiht `:env`) you will notice a new
 set of commands, all starting with `heapster_*`. You can also start
@@ -525,8 +525,12 @@ The first argument is the Heapster environment, the second is its
 name, the third is its arguments (of which there are none), the fourth
 is the type of value that the permission applies to, and the fifth is
 its definition. the new permission is created and added to the
-environment. **TODO: Can I print the new permission? `print env` does
-not show new permission definintions.**
+environment.
+
+Unfortunately, there is currently no way to print the newly defined
+permissions. If you try to print the environment (`print env`) at this
+point, you will only see the `llvm` definitions. We might add
+functionality for showing permissions in the future.
 
 The permission predicate for lists is a little more complicated
 because it requires a recursive definition. To define
