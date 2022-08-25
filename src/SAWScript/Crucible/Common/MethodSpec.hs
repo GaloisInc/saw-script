@@ -362,7 +362,19 @@ data ProofMethod
 
 type SpecNonce ext = Nonce GlobalNonceGenerator (ProvedSpec ext)
 
-type VCStats = (ConditionMetadata, SolverStats, TheoremSummary, TheoremNonce, Set TheoremNonce, NominalDiffTime)
+-- | Data collected about discharged verification conditions (VCs).
+--   Verification conditions arise when proving function specifications
+--   due to, e.g., safety conditions, specification postconditions, and
+--   preconditions of called override functions.
+data VCStats =
+  VCStats
+  { vcMetadata    :: ConditionMetadata -- ^ Metadata describing why the VC arose
+  , vcSolverStats :: SolverStats       -- ^ Statistics about any solvers used when proving this VC
+  , vcThmSummary  :: TheoremSummary    -- ^ A summary of the proof status of this VC
+  , vcIdent       :: TheoremNonce      -- ^ A unique identifier for this VC
+  , vcDeps        :: Set TheoremNonce  -- ^ A collection of the theorems the proof of this VC relied on
+  , vcElapsedTime :: NominalDiffTime   -- ^ The time required to prove this VC
+  }
 
 data ProvedSpec ext =
   ProvedSpec

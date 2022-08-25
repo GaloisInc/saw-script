@@ -323,7 +323,7 @@ verifyObligations cc mspec tactic assumes asserts =
                 False -- TODO, useSequentGoals...
        case res of
          ValidProof stats thm ->
-           return (stats, (md, stats, thmSummary thm, thmNonce thm, thmDepends thm, thmElapsedTime thm))
+           return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))
          InvalidProof stats vals _pst -> do
            printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
            printOutLnTop Info (show stats)

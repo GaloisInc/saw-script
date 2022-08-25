@@ -1206,7 +1206,7 @@ checkGoals bak opts nm sc tactic mdMap = do
              False -- TODO! useSequentGoals
     case res of
       ValidProof stats thm ->
-        return (stats, (md, stats, thmSummary thm, thmNonce thm, thmDepends thm, thmElapsedTime thm))
+        return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))
       UnfinishedProof pst -> do
         printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
         printOutLnTop Info (show (psStats pst))

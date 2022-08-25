@@ -63,8 +63,8 @@ vsAllSolvers vs = Set.union (vsVerifSolvers vs) (vsTheoremSolvers vs)
 computeVerificationSummary :: TheoremDB -> [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> IO VerificationSummary
 computeVerificationSummary db js ls thms =
   do let roots = mconcat (
-                [ xs | j <- js, (_,_,_,_,xs,_) <- j^.psVCStats ] ++
-                [ xs | CMSLLVM.SomeLLVM l <- ls, (_,_,_,_,xs,_) <- l^.psVCStats ] ++
+                [ vcDeps vc | j <- js, vc <- j^.psVCStats ] ++
+                [ vcDeps vc | CMSLLVM.SomeLLVM l <- ls, vc <- l^.psVCStats ] ++
                 [ Set.singleton (thmNonce t) | t <- thms ])
      thms' <- Map.elems <$> reachableTheorems db roots
      pure (VerificationSummary js ls thms')
@@ -86,15 +86,15 @@ msToJSON cms = object [
     ]
 
 vcToJSON :: CMS.VCStats -> Value
-vcToJSON (cmd, _stats, thmsummary, nonce, deps, elapsedtime) = object ([
+vcToJSON vc = object ([
   ("type"  .= ("vc" :: String))
-  , ("id"  .= indexValue nonce)
-  , ("loc" .= show (conditionLoc cmd))
-  , ("reason" .= conditionType cmd)
-  , ("elapsedtime" .= toJSON elapsedtime)
-  , ("dependencies" .= toJSON (map indexValue (Set.toList deps)))
-  , ("tags" .= toJSON (Set.toList (conditionTags cmd)))
-  ] ++ theoremStatus thmsummary
+  , ("id"  .= indexValue (vcIdent vc))
+  , ("loc" .= show (conditionLoc (vcMetadata vc)))
+  , ("reason" .= conditionType (vcMetadata vc))
+  , ("elapsedtime" .= toJSON (vcElapsedTime vc))
+  , ("dependencies" .= toJSON (map indexValue (Set.toList (vcDeps vc))))
+  , ("tags" .= toJSON (Set.toList (conditionTags (vcMetadata vc))))
+  ] ++ theoremStatus (vcThmSummary vc)
   )
 
 thmToJSON :: Theorem -> Value
