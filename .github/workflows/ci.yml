@@ -8,7 +8,8 @@ name: SAWScript
 on:
   push:
     tags: ["v?[0-9]+.[0-9]+(.[0-9]+)?"]
-    branches: [master, "release-**"]
+    #branches: [master, "release-**"]
+    branches: [stardust-runners]
   pull_request:
   schedule:
     - cron: "0 10 * * *" # 10am UTC -> 2/3am PST
@@ -29,7 +30,7 @@ env:
 
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ubuntu-latest]
     outputs:
       name: ${{ steps.config.outputs.name }}
       version: ${{ steps.config.outputs.version }}
@@ -66,6 +67,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        type: [self-hosted]
         os: [ubuntu-18.04, macos-12, windows-latest]
         ghc: ["8.8.4", "8.10.7", "9.0.2"]
         exclude:
@@ -207,6 +209,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        type: [self-hosted]
         os: [ubuntu-latest, macos-12]
     runs-on: ${{ matrix.os }}
     steps:
@@ -241,6 +244,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        type: [self-hosted]
         os: [ubuntu-latest, macos-12]
     runs-on: ${{ matrix.os }}
     steps:
@@ -293,6 +297,7 @@ jobs:
         include:
           - name: Install and test
             test: saw-remote-api/scripts/run_rpc_tests.sh
+            type: [self-hosted]
             os: ubuntu-18.04
           # TODO: saw-remote-api unit tests are disabled pending a fix for #1699
           - name: Install on MacOS
@@ -301,9 +306,11 @@ jobs:
               poetry update
               poetry install
               poetry run mypy saw_client/
+            type: [self-hosted]
             os: macos-12
           - name: Check docs
             test: saw-remote-api/scripts/check_docs.sh
+            type: [self-hosted]
             os: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
@@ -348,6 +355,7 @@ jobs:
       fail-fast: false
       matrix:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
+        type: [self-hosted]
         os: [ubuntu-18.04]
         continue-on-error: [false]
         include:
@@ -412,7 +420,7 @@ jobs:
           dist-tests/${{ matrix.suite }}
 
   build-push-image:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ubuntu-latest]
     needs: [config]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true'
     strategy:
@@ -514,7 +522,7 @@ jobs:
     name: "Test s2n proofs"
     timeout-minutes: 120
     needs: build
-    runs-on: ubuntu-18.04
+    runs-on: [self-hosted, ubuntu-18.04]
     strategy:
       fail-fast: false
       matrix:
@@ -569,7 +577,7 @@ jobs:
   # - changes to jobs or job instances don't require a mergify config update
   # - dependencies through `needs:` are validated, CI will fail if it's invalid
   mergify:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ubuntu-latest]
     needs:
       - build
       - heapster-tests
