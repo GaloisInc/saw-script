@@ -1191,6 +1191,8 @@ proveHelper nm script t f = do
     InvalidProof _stats _cex pst -> failProof pst
     UnfinishedProof pst -> failProof pst
 
+-- | See the inline help for 'prove_by_bv_induction' in the interpreter
+--   for a description of what this is doing.
 proveByBVInduction ::
   ProofScript () ->
   TypedTerm ->
@@ -1208,9 +1210,18 @@ proveByBVInduction script t =
          -- induction principle for the user-given theorem statement.
          -- I don't know offhand of a less gross way to do this.
 
+         -- The basic pattern closely follows the definition of BV_complete_induction
+         -- from the SAWCore prelude. Here, we reproduce the statement of the corresponding
+         -- parts of BV_complete_induction to give a sense of what term we intend to produce
+         -- in each of the following sub-parts.
+
          do wt  <- io $ scNat sc w
             natty <- io $ scNatType sc
             toNat  <- io $ scGlobalDef sc "Prelude.bvToNat"
+
+            -- The result type of the theorem.
+            --
+            --   (x : Vec w Bool) -> p x
             thmResult <- io $
                 do vars <- reverse <$> mapM (scLocalVar sc) [ 0 .. length pis - 1]
                    t1   <- scApplyAllBeta sc (ttTerm t) vars
@@ -1219,6 +1230,11 @@ proveByBVInduction script t =
                    _    <- scTypeCheckError sc t3 -- sanity check
                    return t3
 
+            -- The type of the main hypothesis to the induction scheme. This is what
+            -- the user will ultimately be asked to prove. Note that this includes
+            -- the induction hypothesis.
+            --
+            --   ((x : Vec w Bool) -> ((y: Vec w Bool) -> is_bvult w y x -> p y) -> p x)
             thmHyp <- io $
                 do vars  <- reverse <$> mapM (scLocalVar sc) [ 0 .. length pis - 1]
                    t1    <- scApplyAllBeta sc (ttTerm t) vars
@@ -1235,6 +1251,9 @@ proveByBVInduction script t =
                    touter <- scPi sc "_" thyp =<< incVars sc 0 1 tbody
                    scPiList sc pis touter
 
+            -- The "motive" we will pass to the 'Nat_complete_induction' principle.
+            --
+            --      (\ (n:Nat) -> (x:Vec w Bool) -> IsLeNat (bvToNat w x) n -> p x)
             indMotive <- io $
                 do vars   <- reverse <$> mapM (scLocalVar sc) [ 0 .. length pis-1 ]
                    indVar <- scLocalVar sc (length pis)
@@ -1247,7 +1266,22 @@ proveByBVInduction script t =
                    t3     <- scPiList sc pis t2
                    scLambda sc "inductionVar" natty t3
 
-            indHypProof <- io $   -- scFreshGlobal sc "H" =<< scPi sc "_" thmHyp indHyp
+            -- This is the most complicated part of building the induction schema. Here we provide
+            -- the proof term required by 'Nat_complete_induction' that shows how to reduce our
+            -- current specific case to induction on natural numbers.
+            --
+            --      \ (H: (x : Vec w Bool) -> ((y: Vec w Bool) -> is_bvult w y x -> p y) -> p x)
+            --      \ (n:Nat) ->
+            --      \ (Hind : (m : Nat) -> (Hm : IsLtNat m n) -> (y : Vec w Bool) ->
+            --                (Hy : IsLeNat (bvToNat w y) m) -> p y) ->
+            --      \ (x : Vec w Bool) ->
+            --      \ (Hx : IsLeNat (bvToNat w x) n) ->
+            --        H x (\ (y:Vec w Bool) -> \ (Hult : is_bvult w y x) ->
+            --               Hind (bvToNat w y)
+            --                 (IsLeNat_transitive (Succ (bvToNat w y)) (bvToNat w x) n (bvultToIsLtNat w y x Hult) Hx)
+            --                 y (IsLeNat_base (bvToNat w y)))
+
+            indHypProof <- io $
                 do hEC  <- scFreshEC sc "H" thmHyp
                    hVar <- scExtCns sc hEC
                    nEC  <- scFreshEC sc "n" natty
@@ -1292,6 +1326,11 @@ proveByBVInduction script t =
 
                    scAbstractExts sc ([hEC, nEC, hindEC] ++ varECs ++ [leEC]) body
 
+            -- Now we put all the pieces together
+            --
+            -- \ (Hind : (x : Vec w Bool) -> ((y: Vec w Bool) -> is_bvult w y x -> p y) -> p x) ->
+            -- \ (x : Vec x Bool) ->
+            --    Nat_complete_induction indMotive (indHypProof Hind) (bvToNat w x) x (IsLeNat_base (bvToNat w x))
             indApp <- io $
                 do vars   <- reverse <$> mapM (scLocalVar sc) [ 0 .. length pis-1 ]
                    varH   <- scLocalVar sc (length pis)
@@ -1309,12 +1348,24 @@ proveByBVInduction script t =
 
             indAppTT <- io $ mkTypedTerm sc indApp
 
+            -- First produce a theorem value for our custom induction schemd by providing the
+            -- above as direct proof term.
             ind_scheme_goal <- io $ scFun sc thmHyp thmResult
             ind_scheme_theorem <- proveHelper "bv_induction_scheme" (goal_exact indAppTT) ind_scheme_goal (io . termToProp sc)
+
+            -- Now, set up a proof to actually prove the statement of interest by first immediately applying
+            -- our constructed induction schema, and then using the user-provided proof script.
             let script' = goal_apply ind_scheme_theorem >> script
             proveHelper "prove_by_bv_induction" script' thmResult (io . termToProp sc)
 
  where
+  -- Here, we expect to see a collection of lambda bound terms, followed
+  -- by a tuple.  The first component must be a bitvector value, defining
+  -- the value we are performing induction on.  The second component is
+  -- a boolean value defining the proposition we are attempting to prove.
+  --
+  -- Return a list of the names and types of the lambda-bound variables,
+  -- and the width of the bitvector we are doing induction on.
   checkInductionScheme sc opts pis ty =
     do ty' <- scWhnf sc ty
        case asPi ty' of
