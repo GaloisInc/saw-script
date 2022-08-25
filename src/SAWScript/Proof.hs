@@ -209,7 +209,7 @@ termToMaybeProp sc tm =
 
 -- | Turn a boolean-valued saw-core term into a proposition by asserting
 --   that it is equal to the true boolean value.  Generalize the proposition
---   by universally quantifing over the variables given in the list.
+--   by universally quantifying over the variables given in the list.
 boolToProp :: SharedContext -> [ExtCns Term] -> Term -> IO Prop
 boolToProp sc vars tm =
   do mmap <- scGetModuleMap sc
@@ -231,9 +231,9 @@ propToRewriteRule _sc (Prop tm) ann =
     Nothing -> pure Nothing
     Just r  -> pure (Just r)
 
--- | Attempt to split an if/then/else goal.
+-- | Attempt to split an if/then/else proposition.
 --   If it succeeds to find a term like "EqTrue (ite Bool b x y)",
---   then it returns to pairs consisting of "(EqTrue b, EqTrue x)"
+--   then it returns two pairs consisting of "(EqTrue b, EqTrue x)"
 --   and "(EqTrue (not b), EqTrue y)"
 splitIte :: SharedContext -> Prop -> IO (Maybe ((Prop, Prop), (Prop, Prop)))
 splitIte sc (Prop p) =
@@ -277,11 +277,13 @@ splitImpl sc (Prop p)
        c' <- scEqTrue sc c
        return (Just (Prop h', Prop c'))
 
+  -- or (not h) c == implies h c
   | Just ( _ :*: (_ :*: h) :*: c) <- (isGlobalDef "Prelude.or" <@> (isGlobalDef "Prelude.not" <@> return) <@> return) =<< asEqTrue p
   = do h' <- scEqTrue sc h
        c' <- scEqTrue sc c
        return (Just (Prop h', Prop c'))
 
+  -- or c (not h) == implies h c
   | Just ( _ :*: c :*: (_ :*: h)) <- (isGlobalDef "Prelude.or" <@> return <@> (isGlobalDef "Prelude.not" <@> return)) =<< asEqTrue p
   = do h' <- scEqTrue sc h
        c' <- scEqTrue sc c
@@ -289,7 +291,7 @@ splitImpl sc (Prop p)
 
   -- Handle the case of (H1 -> H2), where H1 and H2 are in Prop
   | Just (_nm, arg, c) <- asPi p
-  , looseVars c == emptyBitSet
+  , looseVars c == emptyBitSet -- make sure this is a nondependent Pi (AKA arrow type)
   = termToMaybeProp sc arg >>= \case
       Nothing -> return Nothing
       Just h  -> return (Just (h, Prop c))
@@ -298,17 +300,33 @@ splitImpl sc (Prop p)
   = return Nothing
 
 
+-- | Attempt to split a sequent into two subgoals. This will only work
+--   on focused sequents. If the sequent is focused on a hypothesis,
+--   the hypothesis must be a disjunction, if/then/else, or implication term.
+--   If the sequent is focused on a conclusion, the conclusion must be
+--   a conjunction or if/then/else.
+--
+--   If this process succeeds, then a proof of the two included sequents
+--   should be sufficient to prove the input sequent.
 splitSequent :: SharedContext -> Sequent -> IO (Maybe (Sequent, Sequent))
 splitSequent sc sqt =
   case sqt of
     GoalFocusedSequent hs (FB gs1 g gs2) ->
       splitConj sc g >>= \case
+        --     HS |- GS1, X, GS2
+        --     HS |- GS1, Y, GS2
+        --   --------------------------- (Conj-R)
+        --     HS |- GS1, X /\ Y, GS2
         Just (x, y) ->
             return (Just ( GoalFocusedSequent hs (FB gs1 x gs2)
                          , GoalFocusedSequent hs (FB gs1 y gs2)
                          ))
         Nothing ->
           splitIte sc g >>= \case
+            --     HS, B     |- GS1, X, GS2
+            --     HS, not B |- GS1, Y, GS2
+            --   -------------------------------------- (Ite-R)
+            --     HS |- GS1, if B then X else Y, GS2
             Just ((b, x), (nb, y)) ->
               return (Just ( GoalFocusedSequent (hs ++ [b])  (FB gs1 x gs2)
                            , GoalFocusedSequent (hs ++ [nb]) (FB gs1 y gs2)
@@ -317,17 +335,29 @@ splitSequent sc sqt =
 
     HypFocusedSequent (FB hs1 h hs2) gs ->
       splitDisj sc h >>= \case
+        --     HS1, X, HS2 |- GS
+        --     HS1, Y, HS2 |- GS
+        --   --------------------------- (Disj-L)
+        --     HS1, X \/ Y, HS2 |- GS
         Just (x, y) ->
           return (Just ( HypFocusedSequent (FB hs1 x hs2) gs
                        , HypFocusedSequent (FB hs1 y hs2) gs
                        ))
         Nothing ->
+          --     HS1, X, HS2, B     |- GS
+          --     HS1, Y, HS2, not B |- GS
+          --   ------------------------------------- (Ite-L)
+          --     HS1, if B then X else Y, HS2 |- GS
           splitIte sc h >>= \case
             Just ((b,x), (nb, y)) ->
               return (Just ( HypFocusedSequent (FB hs1 x (hs2 ++ [b])) gs
                            , HypFocusedSequent (FB hs1 y (hs2 ++ [nb])) gs
                            ))
             Nothing ->
+              --     HS1, Y, HS2        |- GS
+              --     HS1, X -> Y, HS2   |- GS, X
+              --   ------------------------------ (Impl-L) AKA modus ponens
+              --     HS1, X -> Y, HS2   |- GS
               splitImpl sc h >>= \case
                 Just (x, y) ->
                   return (Just ( HypFocusedSequent (FB hs1 y hs2) gs
@@ -335,7 +365,7 @@ splitSequent sc sqt =
                                ))
                 Nothing -> return Nothing
 
-    UnfocusedSequent _ _ -> fail "split tactic: focus required"
+    UnfocusedSequent _ _ -> return Nothing
 
 -- | Unfold all the constants appearing in the proposition
 --   whose VarIndex is found in the given set.
@@ -477,49 +507,59 @@ ppProp opts nenv (Prop tm) = ppTermWithNames opts nenv tm
 -- TODO, I'd like to add metadata here
 type SequentBranch = Prop
 
+-- | The representation of either hypotheses or conclusions with a focus
+--   point. A @FB xs y zs@ represents a collection of propositions
+--   where @xs@ come before the focus point @y@, and @zs@ is the
+--   collection of propositions following the focus point.
 data FocusedBranch = FB ![SequentBranch] !SequentBranch ![SequentBranch]
 
+-- | This datatype represents sequents in the style of Gentzen.  Sequents
+--   are used to represent the intermediate states of a proof, and are the
+--   primary objects manipulated by the proof tactic system.
+--
+--   A sequent essentially represents a logical claim which is in the process
+--   of being proved.  A sequent has some (possibly 0) number of
+--   "hypotheses" and some number (possibly 0) of "conclusions". In mathematical
+--   notation, the hypotheses are separated from the conclusions by a turnstile
+--   character, and the individual hypotheses and conclusions are separated from
+--   each other by a comma. So, a typical sequent may look like:
+--
+--      H1, H2, H3, |- C1, C2
+--
+--   The logical meaning of a sequent is that the conjunction of all the hypotheses
+--   implies the disjunction of the conclusions. The multi-conclusion form
+--   of sequent (as is presented here) is typical of a classical logic.
+--
+--   In a Gentzen-style proof system (such as the sequent calculus), the method by
+--   which proof proceeds is to apply inference rules. Each rule applies to a goal
+--   sequent (the thing to be proved) and has 0 or more subgoals that must be proved
+--   to apply the rule. Part of a proof is completed when a rule is applied which has 0
+--   subgoals. When doing proofs in SAW using the tactic system, there is a stack of
+--   currently outstanding proof goals (each in the form of a sequent to be proved).
+--   Executing a tactic will modify or apply a proof rule to the top goal on the stack;
+--   if that subgoal is finished, then the next subgoal becomes active.
+--   If applying a rule causes more than one subgoal to be generated, the remaining
+--   ones are pushed onto the stack of goals to be proved. An entire proof is completed
+--   when the stack of outstanding goals to prove is empty.
+--
+--   This particular presentation of sequents is a "focused" sequent calculus.
+--   This means that a sequent may optionally have a focus on a particular
+--   hypothesis or conclusion. Some manipulations of sequents require a focus
+--   point to indicate where some manipulation should be carried out, and others
+--   will apply in both focused or unfocused states.
 data Sequent
-  = UnfocusedSequent   ![SequentBranch] ![SequentBranch]
+  = -- | A sequent in the unfocused state
+    UnfocusedSequent   ![SequentBranch] ![SequentBranch]
+    -- | A sequent focused on a particular conclusion
   | GoalFocusedSequent ![SequentBranch] !FocusedBranch
+    -- | A sequent focused on a particular hypothesis
   | HypFocusedSequent  !FocusedBranch   ![SequentBranch]
 
-unfocus :: Sequent -> ([SequentBranch],[SequentBranch])
-unfocus (UnfocusedSequent hs gs) = (hs,gs)
-unfocus (GoalFocusedSequent hs (FB gs1 g gs2)) = (hs, gs1 ++ g : gs2)
-unfocus (HypFocusedSequent (FB hs1 h hs2) gs)  = (hs1 ++ h : hs2,  gs)
-
-unfocusSequent :: Sequent -> Sequent
-unfocusSequent sqt = UnfocusedSequent hs gs
-  where (hs,gs) = unfocus sqt
-
-focusOnGoal :: Integer -> Sequent -> Maybe Sequent
-focusOnGoal i sqt =
-    let (hs,gs) = unfocus sqt in
-    case genericDrop i gs of
-      (g:gs2) -> Just (GoalFocusedSequent hs (FB (genericTake i gs) g gs2))
-      []      -> Nothing
-
-focusOnHyp :: Integer -> Sequent -> Maybe Sequent
-focusOnHyp i sqt =
-    let (hs,gs) = unfocus sqt in
-    case genericDrop i hs of
-      (h:hs2) -> Just (HypFocusedSequent (FB (genericTake i hs) h hs2) gs)
-      []      -> Nothing
-
-sequentToRawSequent :: Sequent -> RawSequent Prop
-sequentToRawSequent sqt =
-   case sqt of
-     UnfocusedSequent   hs gs             -> RawSequent hs gs
-     GoalFocusedSequent hs (FB gs1 g gs2) -> RawSequent hs (gs1 ++ g : gs2)
-     HypFocusedSequent  (FB hs1 h hs2) gs -> RawSequent (hs1 ++ h : hs2) gs
-
-
-sequentConstantSet :: Sequent -> Map VarIndex (NameInfo, Term, Maybe Term)
-sequentConstantSet sqt = foldr (\p m -> Map.union (getConstantSet (unProp p)) m) mempty (hs++gs)
-  where
-    RawSequent hs gs = sequentToRawSequent sqt
-
+-- | A RawSequent is a data-structure representing a sequent, but without
+--   the ability to focus on a particular hypothesis or conclusion.
+--
+--   This data-structure is parametric in the type of propositions,
+--   which enables some convenient patterns using traversals, etc.
 data RawSequent a = RawSequent [a] [a]
 
 instance Functor RawSequent where
@@ -529,6 +569,35 @@ instance Foldable RawSequent where
 instance Traversable RawSequent where
   traverse f (RawSequent hs gs) = RawSequent <$> traverse f hs <*> traverse f gs
 
+sequentToRawSequent :: Sequent -> RawSequent Prop
+sequentToRawSequent sqt =
+   case sqt of
+     UnfocusedSequent   hs gs             -> RawSequent hs gs
+     GoalFocusedSequent hs (FB gs1 g gs2) -> RawSequent hs (gs1 ++ g : gs2)
+     HypFocusedSequent  (FB hs1 h hs2) gs -> RawSequent (hs1 ++ h : hs2) gs
+
+unfocusSequent :: Sequent -> Sequent
+unfocusSequent sqt = UnfocusedSequent hs gs
+  where RawSequent hs gs = sequentToRawSequent sqt
+
+focusOnGoal :: Integer -> Sequent -> Maybe Sequent
+focusOnGoal i sqt =
+    let RawSequent hs gs = sequentToRawSequent sqt in
+    case genericSplitAt i gs of
+      (gs1, g:gs2) -> Just (GoalFocusedSequent hs (FB gs1 g gs2))
+      (_  , [])    -> Nothing
+
+focusOnHyp :: Integer -> Sequent -> Maybe Sequent
+focusOnHyp i sqt =
+    let RawSequent hs gs = sequentToRawSequent sqt in
+    case genericSplitAt i hs of
+      (hs1,h:hs2) -> Just (HypFocusedSequent (FB hs1 h hs2) gs)
+      (_  , [])   -> Nothing
+
+sequentConstantSet :: Sequent -> Map VarIndex (NameInfo, Term, Maybe Term)
+sequentConstantSet sqt = foldr (\p m -> Map.union (getConstantSet (unProp p)) m) mempty (hs++gs)
+  where
+    RawSequent hs gs = sequentToRawSequent sqt
 
 convertibleProps :: SharedContext -> [Prop] -> [Prop] -> IO Bool
 convertibleProps _sc [] [] = return True
@@ -548,14 +617,24 @@ convertibleSequents sc sqt1 sqt2 =
     RawSequent hs2 gs2 = sequentToRawSequent sqt2
 
 
+-- | A helper data structure for working with sequents when a focus
+--   point is expected. When a conclusion or hypothesis is focused,
+--   return the focused proposition; and return a function which
+--   allows building a new sequent by replacing the proposition under
+--   focus.
 data SequentState
   = Unfocused
   | GoalFocus Prop (Prop -> Sequent)
-  | HypFocus Prop (Prop -> Sequent)
+  | HypFocus  Prop (Prop -> Sequent)
 
+-- | Build a sequent with the given proposition as the
+--   only conclusion, and place it under focus.
 propToSequent :: Prop -> Sequent
 propToSequent p = GoalFocusedSequent [] (FB [] p [])
 
+-- | Give in a collection of boolean terms, construct a sequent
+--   with corresponding hypotheses and conclusions.  If there
+--   is exactly one conclusion term, put it under focus.
 booleansToSequent :: SharedContext -> [Term] -> [Term] -> IO Sequent
 booleansToSequent sc hs gs =
   do hs' <- mapM (boolToProp sc []) hs
@@ -564,6 +643,15 @@ booleansToSequent sc hs gs =
        [g] -> return (GoalFocusedSequent hs' (FB [] g []))
        _   -> return (UnfocusedSequent hs' gs')
 
+-- | Given a sequent, render its semantics as a proposition.
+--
+--   Currently this can only handle sequents with 0 or 1 conclusion
+--   (this is not a fundamental limitation, but we need a Prop-level disjunction
+--   in SAWCore to fix this).
+--
+--   Given a sequent like @H1, H2 ..., Hn |- C@, this will build a corresponding
+--   proposition @H1 -> H2 -> ... Hn -> C@. If the list of conclusions is empty,
+--   the proposition will be @H1 -> H2 -> ... Hn -> False@.
 sequentToProp :: SharedContext -> Sequent -> IO Prop
 sequentToProp sc sqt =
   do let RawSequent hs gs = sequentToRawSequent sqt
@@ -617,19 +705,33 @@ ppRawSequent sqt (RawSequent hs gs)  =
     = "G" <> pretty i <> ":" <+> tm
 
 
+-- | A datatype for representing finte or cofinite sets.
 data CofinSet a
-  = WhiteList (Set a)
+  = -- | A whitelist represents exactly the values in the given set
+    WhiteList (Set a)
+    -- | A blacklist represents all the values NOT found in the given set.
   | BlackList (Set a)
 
+-- | Test for membership in a finite/cofinite set
 cofinSetMember :: Ord a => a -> CofinSet a -> Bool
 cofinSetMember a (WhiteList xs) = Set.member a xs
-cofinSetMember a (BlackList xs)  = not (Set.member a xs)
+cofinSetMember a (BlackList xs) = not (Set.member a xs)
 
-filterPosList :: CofinSet Integer -> [a] -> [a]
-filterPosList pss xs = map snd $ filter f $ zip [0..] xs
+-- | Given a set of positions, filter the given list
+--   so that it retains just those values that are in
+--   positions contained in the set.  The given integer
+--   indicates what position to start counting at.
+filterPosList :: CofinSet Integer -> Integer -> [a] -> [a]
+filterPosList pss start xs = map snd $ filter f $ zip [start..] xs
   where
     f (i,_) = cofinSetMember i pss
 
+-- | Given a set of positions, filter the given focused branch
+--   and retain just those positions in the set.
+--   If the given branch was focused and the focus point was retained,
+--   return a @Right@ value with the new focused branch.  If the
+--   given branch was unfocused to start, or of the focused point
+--   was removed, return a @Left@ value with a bare list.
 filterFocusedList :: CofinSet Integer -> FocusedBranch -> Either [SequentBranch] FocusedBranch
 filterFocusedList pss (FB xs1 x xs2) =
    if cofinSetMember idx pss then
@@ -637,45 +739,50 @@ filterFocusedList pss (FB xs1 x xs2) =
    else
      Left (xs1' ++ xs2')
   where
-    f (i,_) = cofinSetMember i pss
     idx  = genericLength xs1
-    xs1' = map snd $ filter f $ zip [0..] xs1
-    xs2' = map snd $ filter f $ zip [idx+1..] xs2
+    xs1' = filterPosList pss 0 xs1
+    xs2' = filterPosList pss (idx+1) xs2
 
+-- | Filter the list of hypotheses in a sequent, retaining
+--   only those in the given set.
 filterHyps :: CofinSet Integer -> Sequent -> Sequent
 filterHyps pss (UnfocusedSequent hs gs) =
-  UnfocusedSequent (filterPosList pss hs) gs
+  UnfocusedSequent (filterPosList pss 0 hs) gs
 filterHyps pss (GoalFocusedSequent hs gs) =
-  GoalFocusedSequent (filterPosList pss hs) gs
+  GoalFocusedSequent (filterPosList pss 0 hs) gs
 filterHyps pss (HypFocusedSequent hs gs) =
   case filterFocusedList pss hs of
-    Left hs'  -> UnfocusedSequent hs' gs
+    Left  hs' -> UnfocusedSequent hs' gs
     Right hs' -> HypFocusedSequent hs' gs
 
+-- | Filter the list of conclusions in a sequent, retaining
+--   only those in the given set.
 filterGoals :: CofinSet Integer -> Sequent -> Sequent
 filterGoals pss (UnfocusedSequent hs gs) =
-  UnfocusedSequent hs (filterPosList pss gs)
+  UnfocusedSequent hs (filterPosList pss 0 gs)
 filterGoals pss (HypFocusedSequent hs gs) =
-  HypFocusedSequent hs (filterPosList pss gs)
+  HypFocusedSequent hs (filterPosList pss 0 gs)
 filterGoals pss (GoalFocusedSequent hs gs) =
   case filterFocusedList pss gs of
-    Left gs'  -> UnfocusedSequent hs gs'
+    Left  gs' -> UnfocusedSequent hs gs'
     Right gs' -> GoalFocusedSequent hs gs'
 
+-- | Add a new hypothesis to the list of hypotheses in a sequent
 addHypothesis :: Prop -> Sequent -> Sequent
 addHypothesis p (UnfocusedSequent hs gs)   = UnfocusedSequent (hs ++ [p]) gs
 addHypothesis p (GoalFocusedSequent hs gs) = GoalFocusedSequent (hs ++ [p]) gs
 addHypothesis p (HypFocusedSequent (FB hs1 h hs2) gs) = HypFocusedSequent (FB hs1 h (hs2++[p])) gs
 
+-- | Add a new conclusion to the end of the conclusion list and focus on it
 addNewFocusedGoal :: Prop -> Sequent -> Sequent
 addNewFocusedGoal p sqt =
   let RawSequent hs gs = sequentToRawSequent sqt
    in GoalFocusedSequent hs (FB gs p [])
 
 -- | If the sequent is focused, return the prop under focus,
---   together with it's index value.
+--   together with its index value.
 --   A @Left@ value indicates a hypothesis under focus, and
---   a @Right@ value is a goal under focus.
+--   a @Right@ value is a conclusion under focus.
 sequentGetFocus :: Sequent -> Maybe (Either (Integer,Prop) (Integer, Prop))
 sequentGetFocus (UnfocusedSequent _ _) =
   Nothing
@@ -701,6 +808,10 @@ sequentTreeSize sqt = scTreeSizeMany (map unProp (hs ++ gs))
   where
    RawSequent hs gs = sequentToRawSequent sqt
 
+-- | Given an operation on propositions, apply the operation to the sequent.
+--   If the sequent is focused, apply the operation just to the focused
+--   hypothesis or conclusion. If the sequent is unfocused, apply the operation
+--   to all the hypotheses and conclusions in the sequent.
 traverseSequentWithFocus :: Applicative m => (Prop -> m Prop) -> Sequent -> m Sequent
 traverseSequentWithFocus f (UnfocusedSequent hs gs) =
   UnfocusedSequent <$> traverse f hs <*> traverse f gs
@@ -709,6 +820,8 @@ traverseSequentWithFocus f (GoalFocusedSequent hs (FB gs1 g gs2)) =
 traverseSequentWithFocus f (HypFocusedSequent (FB hs1 h hs2) gs) =
   (\h' -> HypFocusedSequent (FB hs1 h' hs2) gs) <$> f h
 
+-- | Given an operation on propositions, apply the operation to all the
+--   hypotheses and conclusions in the sequent.
 traverseSequent :: Applicative m => (Prop -> m Prop) -> Sequent -> m Sequent
 traverseSequent f (UnfocusedSequent hs gs) =
   UnfocusedSequent <$> traverse f hs <*> traverse f gs
@@ -716,12 +829,15 @@ traverseSequent f (GoalFocusedSequent hs (FB gs1 g gs2)) =
   GoalFocusedSequent <$>
     (traverse f hs) <*>
     ( FB <$> traverse f gs1 <*> f g <*> traverse f gs2)
-
 traverseSequent f (HypFocusedSequent (FB hs1 h hs2) gs) =
   HypFocusedSequent <$>
     ( FB <$> traverse f hs1 <*> f h <*> traverse f hs2) <*>
     (traverse f gs)
 
+-- | Typecheck a sequent.  This will typecheck all the terms
+--   appearing in the sequent to ensure that they are propositions.
+--   This check should always succeed, unless some programming
+--   mistake has allowed us to build an ill-typed sequent.
 checkSequent :: SharedContext -> PPOpts -> Sequent -> IO ()
 checkSequent sc ppOpts (UnfocusedSequent hs gs) =
   do forM_ hs (checkProp sc ppOpts)
@@ -737,6 +853,9 @@ checkSequent sc ppOpts (HypFocusedSequent (FB hs1 h hs2) gs) =
      forM_ hs2 (checkProp sc ppOpts)
      forM_ gs  (checkProp sc ppOpts)
 
+-- | Check that a @Prop@ value is actually a proposition.
+--   This check should always succeed, unless some programming
+--   mistake has allowed us to build an ill-typed Prop.
 checkProp :: SharedContext -> PPOpts -> Prop -> IO ()
 checkProp sc ppOpts (Prop t) =
   do ty <- TC.scTypeCheckError sc t
@@ -763,6 +882,10 @@ data Theorem =
   , _thmSummary :: TheoremSummary
   } -- INVARIANT: the provided evidence is valid for the included proposition
 
+-- | A theorem database is intended to track theorems that may be used
+--   in the proof of later theorems or verification conditions. This is
+--   ultimately used to produce verification summaries, which capture
+--   the dependency graph between theorems and verifications.
 data TheoremDB =
   TheoremDB
   -- TODO, maybe this should be a summary or something simpler?
@@ -777,6 +900,10 @@ recordTheorem db thm@Theorem{ _thmNonce = n } =
   do modifyIORef (theoremMap db) (Map.insert n thm)
      return thm
 
+-- | Given a set of root values, find all the theorems in this database
+--   that are transitively used in the proofs of those theorems.
+--   This function will panic if any of the roots or reachable theorems
+--   are not found in the database.
 reachableTheorems :: TheoremDB -> Set TheoremNonce -> IO (Map TheoremNonce Theorem)
 reachableTheorems db roots =
   do m <- readIORef (theoremMap db)
@@ -797,12 +924,10 @@ reachableTheorems db roots =
 
 -- | Check that the purported theorem is valid.
 --
---   This checks that the given theorem object does not correspond
---   to a local assumption that has been leaked from its scope,
---   and validates that the included evidence actually supports
+--   This validates that the included evidence actually supports
 --   the proposition.  Note, however, this validation procedure
 --   does not totally guarantee the theorem is true, as it does
---   not rerun any solver-provided proofs, and it accepts admitted
+--   not verify any solver-provided proofs, and it accepts admitted
 --   propositions and quickchecked propositions as valid.
 validateTheorem :: SharedContext -> TheoremDB -> Theorem -> IO ()
 
@@ -810,7 +935,7 @@ validateTheorem sc db Theorem{ _thmProp = p, _thmEvidence = e, _thmDepends = thm
    do hyps <- Map.keysSet <$> readIORef (theoremMap db)
       (deps,_) <- checkEvidence sc e p
       unless (Set.isSubsetOf deps thmDep && Set.isSubsetOf thmDep hyps)
-             (fail $ unlines ["Theorem failed to declare its depencences correctly"
+             (fail $ unlines ["Theorem failed to declare its dependencies correctly"
                              , show deps, show thmDep ])
 
 data TheoremSummary
@@ -833,81 +958,89 @@ instance Semigroup TheoremSummary where
 -- | This datatype records evidence for the truth of a proposition.
 data Evidence
   = -- | The given term provides a direct programs-as-proofs witness
-    --   for the truth of its type (qua proposition).
+    --   for the truth of its type (qua proposition). This will
+    --   succeed when applied to sequent with a conclusion focus whose
+    --   statement matches the type of the given term.
     ProofTerm !Term
 
-    -- | This type of evidence is produced when the given proposition
+    -- | This type of evidence is produced when the given sequent
     --   has been dispatched to a solver which has indicated that it
-    --   was able to prove the proposition.  The included @SolverStats@
+    --   was able to prove the sequent. The included @SolverStats@
     --   give some details about the solver run.
   | SolverEvidence !SolverStats !Sequent
 
-    -- | This type of evidence is produced when the given proposition
+    -- | This type of evidence is produced when the given sequent
     --   has been randomly tested against input vectors in the style
-    --   of quickcheck.  The included number is the number of successfully
+    --   of quickcheck. The included number is the number of successfully
     --   passed test vectors.
   | QuickcheckEvidence !Integer !Sequent
 
-    -- | This type of evidence is produced when the given proposition
-    --   has been explicitly assumed without other evidence at the
+    -- | This type of evidence is produced when the given sequent
+    --   has been explicitly assumed without other evidence, at the
     --   user's direction.
   | Admitted !Text !Pos !Sequent
 
-    -- | This type of evidence is produced when a proposition can be deconstructed
-    --   along a conjunction into two subgoals, each of which is supported by
-    --   the included evidence.
+    -- | This type of evidence is produced when the focused hypothesis
+    --   or conclusion proposition can be deconstructed (along a
+    --   conjunction, disjunction, if/then/else or implication) into
+    --   two subgoals, each of which is supported by the included
+    --   evidence.
   | SplitEvidence !Evidence !Evidence
 
-    -- | This type of evidence is produced when a previously-proved theorem is
-    --   applied via backward reasoning to prove a goal.  Pi-quantified variables
-    --   of the theorem may be specialized either by giving an explicit @Term@ to
-    --   instantiate the variable, or by giving @Evidence@ for @Prop@ hypotheses.
-    --   After specializing the given @Theorem@ the result must match the
-    --   current goal.
+    -- | This type of evidence is produced when a previously-proved
+    --   theorem is applied via backward reasoning to prove a focused
+    --   conclusion.  Pi-quantified variables of the theorem may be
+    --   specialized either by giving an explicit @Term@ to
+    --   instantiate the variable, or by giving @Evidence@ for @Prop@
+    --   hypotheses. After specializing the given @Theorem@ the
+    --   result must match the current goal.
   | ApplyEvidence !Theorem ![Either Term Evidence]
 
-    -- | This type of evidence is produced when a local hypothesis is applied
-    --   via backward reasoning to prove a goal.  Pi-quantified variables
-    --   of the hypothesis may be specialized either by giving an explicit @Term@ to
-    --   instantiate the variable, or by giving @Evidence@ for @Prop@ hypotheses.
-    --   After specializing the given @Theorem@ the result must match the
-    --   current goal.
+    -- | This type of evidence is produced when a local hypothesis is
+    --   applied via backward reasoning to prove a focused conclusion.
+    --   Pi-quantified variables of the hypothesis may be specialized
+    --   either by giving an explicit @Term@ to instantiate the
+    --   variable, or by giving @Evidence@ for @Prop@ hypotheses.
+    --   After specializing the given @Theorem@ the result must match
+    --   the current goal.
   | ApplyHypEvidence Integer ![Either Term Evidence]
 
-    -- | This type of evidence is used to prove a universally-quantified statement.
+    -- | This type of evidence is used to prove a universally-quantified conclusion.
+    --   The included ExtCns should be a fresh variable used to instantiate the
+    --   quantified proposition.
   | IntroEvidence !(ExtCns Term) !Evidence
 
     -- | This type of evidence is used to apply the "cut rule" of sequent calculus.
     --   The given proposition is added to the hypothesis list in the first
-    --   deriviation, and into the conclusion list in the second, where it is focused.
+    --   derivation, and into the conclusion list in the second, where it is focused.
   | CutEvidence !Prop !Evidence !Evidence
 
-    -- | This type of evidence is used to modify a goal to prove via rewriting.
-    --   The goal to prove is rewritten by the given simpset; then the provided
-    --   evidence is used to check the modified goal.
-    --   The list of integers indicate local hypotheses that should also
-    --   be treated as rewrites.
+    -- | This type of evidence is used to modify a sequent to prove via
+    --   rewriting. The sequent is rewritten by the given
+    --   simpset; then the provided evidence is used to check the
+    --   modified sequent. The list of integers indicate local
+    --   hypotheses that should also be treated as rewrite rules.
   | RewriteEvidence ![Integer] !(Simpset TheoremNonce) !Evidence
 
-    -- | This type of evidence is used to modify a goal to prove via unfolding
-    --   constant definitions.  The goal to prove is modified by unfolding
+    -- | This type of evidence is used to modify a sequent via unfolding
+    --   constant definitions.  The sequent is modified by unfolding
     --   constants identified via the given set of @VarIndex@; then the provided
-    --   evidence is used to check the modified goal.
+    --   evidence is used to check the modified sequent.
   | UnfoldEvidence !(Set VarIndex) !Evidence
 
-    -- | This type of evidence is used to modify a goal to prove via evaluation
+    -- | This type of evidence is used to modify a sequent via evaluation
     --   into the the What4 formula representation. During evaluation, the
     --   constants identified by the given set of @VarIndex@ are held
     --   uninterpreted (i.e., will not be unfolded).  Then, the provided
-    --   evidence is use to check the modified goal.
+    --   evidence is use to check the modified sequent.
   | EvalEvidence !(Set VarIndex) !Evidence
 
-    -- | This type of evidence is used to modify a focused part of the goal.
-    --   The modified goal should be equivalent up to conversion.
+    -- | This type of evidence is used to modify a focused part of the sequent.
+    --   The modified sequent should be equivalent up to conversion.
   | ConversionEvidence !Sequent !Evidence
 
     -- | This type of evidence is used to modify a goal to prove by applying
-    -- 'hoistIfsInGoal'.
+    --   'hoistIfsInGoal'.
   | HoistIfsEvidence !Evidence
 
     -- | Change the state of the sequent in some "structural" way. This
@@ -915,12 +1048,12 @@ data Evidence
   | StructuralEvidence !Sequent !Evidence
 
     -- | Change the state of the sequent in some way that is governed by
-    --   the "reversable" L/R rules of the sequent calculus, e.g.,
+    --   the "reversible" L/R rules of the sequent calculus, e.g.,
     --   conjunctions in hypotheses can be split into multiple hypotheses,
     --   negated conclusions become positive hypotheses, etc.
   | NormalizeSequentEvidence !Sequent !Evidence
 
-    -- | Change the sate of th sequent by invoking the term evaluator
+    -- | Change the state of the sequent by invoking the term evaluator
     --   on the focused sequent branch (or all branches, if unfocused).
     --   Treat the given variable indexes as opaque.
   | NormalizePropEvidence !(Set VarIndex) !Evidence
@@ -1166,7 +1299,7 @@ predicateToProp sc quant = loop []
            Prop <$> toPi argTs t
 
 
--- | A ProofState consists of a sequents of goals, represented by sequents.
+-- | A ProofState consists of a sequence of goals, each represented by a sequent.
 --   If each subgoal is provable, that implies the ultimate conclusion.
 data ProofState =
   ProofState
@@ -1197,6 +1330,9 @@ propsElem :: SharedContext -> Prop -> [Prop] -> IO Bool
 propsElem sc x ps =
   or <$> sequence [ scConvertible sc True (unProp x) (unProp y) | y <- ps ]
 
+-- | Test if a sequent is an instance of the sequent calculus axiom.
+--   This occurs precisely when some hypothesis is convertible
+--   to some conclusion.
 sequentIsAxiom :: SharedContext -> Sequent -> IO Bool
 sequentIsAxiom sc sqt =
   do let RawSequent hs gs = sequentToRawSequent sqt
@@ -1204,8 +1340,8 @@ sequentIsAxiom sc sqt =
 
 -- | Test if the first given sequent subsumes the
 --   second given sequent. This is a shallow syntactic
---   check that is sufficent to show that a proof
---   of the first sequent is sufficent to prove the second
+--   check that is sufficient to show that a proof
+--   of the first sequent is sufficient to prove the second
 sequentSubsumes :: SharedContext -> Sequent -> Sequent -> IO Bool
 sequentSubsumes sc sqt1 sqt2 =
   do let RawSequent hs1 gs1 = sequentToRawSequent sqt1
@@ -1216,8 +1352,8 @@ sequentSubsumes sc sqt1 sqt2 =
 
 -- | Test if the first given sequent subsumes the
 --   second given sequent. This is a shallow syntactic
---   check that is sufficent to show that a proof
---   of the first sequent is sufficent to prove the second
+--   check that is sufficient to show that a proof
+--   of the first sequent is sufficient to prove the second
 normalizeSequentSubsumes :: SharedContext -> Sequent -> Sequent -> IO Bool
 normalizeSequentSubsumes sc sqt1 sqt2 =
   do RawSequent hs1 gs1 <- normalizeRawSequent sc (sequentToRawSequent sqt1)
@@ -1226,6 +1362,29 @@ normalizeSequentSubsumes sc sqt1 sqt2 =
      conclOK <- propsSubset sc gs1 gs2
      return (hypsOK && conclOK)
 
+-- | Computes a "normalized" sequent. This applies the reversible
+--   L/R sequent calculus rules listed below. The resulting sequent
+--   is always unfocused.
+--
+--       HS1, X, Y, HS2   |- GS
+--       ---------------------- (Conj-L)
+--       HS1, X /\ Y, HS2 |- GS
+--
+--       HS |- GS1, X, Y, GS2
+--       ---------------------- (Disj-R)
+--       HS |- GS1, X \/ Y, GS2
+--
+--       HS, X  |- GS1, GS2
+--       -------------------------- (Neg-R)
+--       HS     |- GS1, not X, GS2
+--
+--       HS1, HS2        |- GS, X
+--       -------------------------- (Neg-L)
+--       HS1, not X, HS2 |- GS
+--
+--       HS, X |- GS1, Y, GS2
+--       -------------------------- (Impl-R)
+--       HS    |- GS1, X -> Y, GS2
 normalizeSequent :: SharedContext -> Sequent -> IO Sequent
 normalizeSequent sc sqt =
   -- TODO, if/when we add metadata to sequent branches, this will need to change
@@ -1264,7 +1423,9 @@ normalizeGoal sc p =
        _ ->
          -- handle the case of (H1 -> H2), where H1 and H2 are in Prop
          case asPi t of
-           Just (_nm, arg, body) | looseVars body == emptyBitSet ->
+           Just (_nm, arg, body)
+             -- check that this is non-dependent Pi (AKA arrow type)
+             | looseVars body == emptyBitSet ->
              termToMaybeProp sc arg >>= \case
                Nothing -> return (RawSequent [] [p])
                Just h  ->
@@ -1315,7 +1476,7 @@ normalizeGoalBoolCommit sc b =
 
 
 -- | Verify that the given evidence in fact supports the given proposition.
---   Returns the identifers of all the theorems depended on while checking evidence.
+--   Returns the identifiers of all the theorems depended on while checking evidence.
 checkEvidence :: SharedContext -> Evidence -> Prop -> IO (Set TheoremNonce, TheoremSummary)
 checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
                               check nenv e (propToSequent p)
@@ -1338,7 +1499,7 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
            , showTerm p
            ]
 
-    -- Check a theorem applied to a term. This explicity instantiates
+    -- Check a theorem applied to a term. This explicitly instantiates
     -- a Pi binder with the given term.
     checkApply nenv mkSqt (Prop p) (Left tm:es) =
       do propTerm <- scSort sc propSort
@@ -1556,10 +1717,17 @@ startProof g pos ploc rsn =
 --   proposition.  If successful, return the completed @Theorem@ and a summary
 --   of solver resources used in the proof.
 --
---   If the final boolean argument is False, the resulting theorem will not be
+--   If first boolean argument is False, the resulting theorem will not be
 --   recored in the theorem database. This should only be done when you are
 --   sure that the theorem will not be used as part of the proof of other theorems,
---   or later steps will fail.
+--   or later steps will fail. This is intended for proofs of verification conditions,
+--   which are not exposed for reuse, and where it requires a significant memory
+--   burden to record them.
+--
+--   The final boolean argument indicates if the proof state needs a sequent normalization
+--   step as the final step in its evidence chain to check.  This is useful for goals that
+--   start with a nontrivial sequent (e.g., when enable_sequent_goals is turned on). For some
+--   goals, this step is expensive, so we avoid it unless necessary.
 finishProof ::
   SharedContext ->
   TheoremDB ->
@@ -1718,12 +1886,12 @@ sequentToSATQuery sc unintSet sqt =
         _ -> processUnivAssert mmap [] [] tp
 
     processUnivAssert mmap vars xs tm =
-      do -- TODO: See related TODO in processTerm
+      do -- TODO: See related TODO in processGoal
          let tm' = tm
 
          case asPi tm' of
            Just (lnm, tp, body) ->
-             do -- TOOD, same issure
+             do -- TOOD, same issue
                 let tp' = tp
                 case evalFOT mmap tp' of
                   Just fot ->
@@ -1746,7 +1914,7 @@ sequentToSATQuery sc unintSet sqt =
                Just tmBool -> return (UniversalAssert (reverse vars) (reverse xs) tmBool)
 
     processGoal mmap (vars,xs) tm =
-      do -- TODO: I would like to WHNF here, but that evalutes too aggressively
+      do -- TODO: I would like to WHNF here, but that evaluates too aggressively
          -- because scWhnf evaluates strictly through the `Eq` datatype former.
          -- This breaks some proof examples by unfolding things that need to
          -- be uninterpreted.
@@ -1898,7 +2066,7 @@ tacticApplyHyp sc n = Tactic \goal ->
                           , goalType = goalType goal ++ ".subgoal" ++ show i
                           }
                     | Right p <- newterms
-                    | i <- [0::Integer ]
+                    | i <- [0::Integer ..]
                     ] in
               return ((), mempty, newgoals, \es -> ApplyHypEvidence n <$> processEvidence newterms es)
         _ -> fail "apply hyp tactic: not enough hypotheses"
@@ -1969,6 +2137,15 @@ tacticInsert _sc thm = Tactic \gl ->
       gl' = gl{ goalSequent = sqt }
    in return ((), mempty, [gl'], insertEvidence thm)
 
+-- | This tactic implements the "cut rule" of sequent calculus.  The given
+--   proposition is used to split the current goal into two goals, one where
+--   the given proposition is assumed as a new hypothesis, and a second
+--   where the proposition is added as a new conclusion to prove.
+--
+--         HS, X |- GS
+--         HS    |- GS, X
+--       ------------------ (Cut)
+--         HS    |- GS
 tacticCut :: (F.MonadFail m, MonadIO m) => SharedContext -> Prop -> Tactic m ()
 tacticCut _sc p = Tactic \gl ->
   let sqt1 = addHypothesis p (goalSequent gl)
