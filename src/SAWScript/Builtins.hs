@@ -579,7 +579,7 @@ unfocus =
 focus_concl :: Integer -> ProofScript ()
 focus_concl i =
   execTactic $ tacticChange $ \goal ->
-    case focusOnGoal i (goalSequent goal) of
+    case focusOnConcl i (goalSequent goal) of
       Nothing -> fail "focus_concl : not enough conclusions"
       Just sqt' -> return (sqt', structuralEvidence sqt')
 
@@ -605,13 +605,13 @@ retain_hyps hs =
 delete_concl :: [Integer] -> ProofScript ()
 delete_concl gs =
   execTactic $ tacticChange $ \goal ->
-    let sqt' = filterGoals (BlackList (Set.fromList gs)) (goalSequent goal)
+    let sqt' = filterConcls (BlackList (Set.fromList gs)) (goalSequent goal)
      in return (sqt', structuralEvidence sqt')
 
 retain_concl :: [Integer] -> ProofScript ()
 retain_concl gs =
   execTactic $ tacticChange $ \goal ->
-    let sqt' = filterGoals (WhiteList (Set.fromList gs)) (goalSequent goal)
+    let sqt' = filterConcls (WhiteList (Set.fromList gs)) (goalSequent goal)
      in return (sqt', structuralEvidence sqt')
 
 

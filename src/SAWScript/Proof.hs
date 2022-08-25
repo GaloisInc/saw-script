@@ -49,11 +49,11 @@ module SAWScript.Proof
   , sequentConstantSet
   , booleansToSequent
   , unfocusSequent
-  , focusOnGoal
+  , focusOnConcl
   , focusOnHyp
   , normalizeSequent
   , filterHyps
-  , filterGoals
+  , filterConcls
   , localHypSimpset
 
   , CofinSet(..)
@@ -580,8 +580,8 @@ unfocusSequent :: Sequent -> Sequent
 unfocusSequent sqt = UnfocusedSequent hs gs
   where RawSequent hs gs = sequentToRawSequent sqt
 
-focusOnGoal :: Integer -> Sequent -> Maybe Sequent
-focusOnGoal i sqt =
+focusOnConcl :: Integer -> Sequent -> Maybe Sequent
+focusOnConcl i sqt =
     let RawSequent hs gs = sequentToRawSequent sqt in
     case genericSplitAt i gs of
       (gs1, g:gs2) -> Just (GoalFocusedSequent hs (FB gs1 g gs2))
@@ -757,12 +757,12 @@ filterHyps pss (HypFocusedSequent hs gs) =
 
 -- | Filter the list of conclusions in a sequent, retaining
 --   only those in the given set.
-filterGoals :: CofinSet Integer -> Sequent -> Sequent
-filterGoals pss (UnfocusedSequent hs gs) =
+filterConcls :: CofinSet Integer -> Sequent -> Sequent
+filterConcls pss (UnfocusedSequent hs gs) =
   UnfocusedSequent hs (filterPosList pss 0 gs)
-filterGoals pss (HypFocusedSequent hs gs) =
+filterConcls pss (HypFocusedSequent hs gs) =
   HypFocusedSequent hs (filterPosList pss 0 gs)
-filterGoals pss (GoalFocusedSequent hs gs) =
+filterConcls pss (GoalFocusedSequent hs gs) =
   case filterFocusedList pss gs of
     Left  gs' -> UnfocusedSequent hs gs'
     Right gs' -> GoalFocusedSequent hs gs'
