@@ -1,0 +1,5 @@
+This is a simple test of the "congruence_for" primitive.
+
+We define a simple cryptol function, ask the system to
+automatically define a congruence rule for it; prove
+it is true, and then use it in another proof.

@@ -158,6 +158,29 @@ eq_inv_map a b a1 a2 eq_a f1 f2 eq_f =
     (trans b (f1 a2) (f2 a2) (f2 a1) eq_f
            (eq_cong a a2 a1 (sym a a1 a2 eq_a) b f2));
 
+
+-- Basic axiom about the behavior of "fix"
+axiom fix_unfold :
+  (a : sort 1) ->
+  (f : a -> a) ->
+  Eq a (fix a f) (f (fix a f));
+
+inverse_eta_rule :
+  (a : sort 1) ->
+  (b : sort 1) ->
+  (f : a -> b) ->
+  (g : a -> b) ->
+  (Eq (a -> b) f g) ->
+  (x : a) ->
+  Eq b (f x) (g x);
+inverse_eta_rule a b f g H =
+  Eq__rec (a -> b) f
+    ( \ (g' : a -> b) -> \ (H':Eq (a -> b) f g') ->
+        ( x : a ) -> Eq b (f x) (g' x))
+    (\ (x:a) -> Refl b (f x))
+    g H;
+
+
 -- Unchecked assertion that two types are equal.
 axiom unsafeAssert : (a : sort 1) -> (x : a) -> (y : a) -> Eq a x y;
 

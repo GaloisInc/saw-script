@@ -63,6 +63,7 @@ import Control.Monad.Fix (MonadFix(mfix))
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
+import Data.Bifunctor
 import Data.Bits
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -118,6 +119,17 @@ natFun = PrimFilterFun "expected Nat" r
         r (VCtorApp (primName -> "Prelude.Zero") [] [])  = pure 0
         r (VCtorApp (primName -> "Prelude.Succ") [] [x]) = succ <$> (r =<< lift (force x))
         r _ = mzero
+
+-- | A primitive that requires a natural argument which may or may not be
+-- concrete - like 'natFun' but gives the 'Value' instead of failing if the
+-- argument is not concrete
+maybeNatFun :: VMonad l => (Either (Value l) Natural -> Prim l) -> Prim l
+maybeNatFun = PrimFilterFun "expected Nat" r
+  where r (VNat n) = pure (Right n)
+        r (VCtorApp (primName -> "Prelude.Zero") [] []) = pure (Right 0)
+        r v@(VCtorApp (primName -> "Prelude.Succ") [] [x]) =
+          bimap (const v) succ <$> (r =<< lift (force x))
+        r v = pure (Left v)
 
 -- | A primitive that requires an integer argument
 intFun :: VMonad l => (VInt l -> Prim l) -> Prim l
@@ -313,15 +325,15 @@ constMap bp = Map.fromList
     )
 
   -- Nat
-  , ("Prelude.Succ", succOp)
-  , ("Prelude.addNat", addNatOp)
+  , ("Prelude.Succ", succOp bp)
+  , ("Prelude.addNat", addNatOp bp)
   , ("Prelude.subNat", subNatOp bp)
-  , ("Prelude.mulNat", mulNatOp)
-  , ("Prelude.minNat", minNatOp)
-  , ("Prelude.maxNat", maxNatOp)
-  , ("Prelude.divModNat", divModNatOp)
+  , ("Prelude.mulNat", mulNatOp bp)
+  , ("Prelude.minNat", minNatOp bp)
+  , ("Prelude.maxNat", maxNatOp bp)
+  , ("Prelude.divModNat", divModNatOp bp)
   , ("Prelude.expNat", expNatOp)
-  , ("Prelude.widthNat", widthNatOp)
+  , ("Prelude.widthNat", widthNatOp bp)
   , ("Prelude.natCase", natCaseOp)
   , ("Prelude.equalNat", equalNatOp bp)
   , ("Prelude.ltNat", ltNatOp bp)
@@ -533,79 +545,138 @@ natSize _bp val =
 -- | Convert the given value (which should be of type Nat) to a word
 -- of the given bit-width. The bit-width must be at least as large as
 -- that returned by @natSize@.
-natToWord :: (VMonad l, Show (Extra l)) => BasePrims l -> Int -> Value l -> MWord l
+natToWord :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l ->
+             Natural -> Value l -> MWord l
 natToWord bp w val =
+  unless (w <= fromIntegral (maxBound :: Int))
+         (panic "natToWord" ["width too large", show w]) >>
+  -- TODO, remove the calls to fromIntegral below
   case val of
-    VNat n -> bpBvLit bp w (toInteger n)
+    VNat n -> bpBvLit bp (fromIntegral w) (toInteger n)
     VIntToNat _i -> panic "natToWord of VIntToNat TODO!"
     VBVToNat xsize v ->
       do x <- toWord (bpPack bp) v
-         case compare xsize w of
+         case compare xsize (fromIntegral w) of
            GT -> panic "natToWord: not enough bits"
            EQ -> return x
            LT -> -- zero-extend x to width w
-             do pad <- bpBvLit bp (w - xsize) 0
+             do pad <- bpBvLit bp (fromIntegral w - xsize) 0
                 bpBvJoin bp pad x
     _ -> panic "natToWord: expected Nat"
 
+-- | A primitive which is a unary operation on a natural argument.
+-- The second argument gives how to modify the size in bits of this operation's
+-- argument so that no overflow occurs (e.g. 'succ' for 'succ').
+-- The third argument gives this operation for a concrete natural argument.
+-- The fourth argument gives this operation for a natural argument of the given
+-- size in bits.
+unaryNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l ->
+              (Natural -> Natural) ->
+              (Natural -> MValue l) ->
+              (Int -> VWord l -> MValue l) -> Prim l
+unaryNatOp bp fw fn fv = maybeNatFun $ \case
+  Right n -> Prim (fn n)
+  Left v -> Prim $ do let w = fw (natSize bp v)
+                      x <- natToWord bp w v
+                      fv (fromIntegral w) x
+
+-- | A primitive which is a unary operation on a natural argument and which
+-- returns a natural.
+-- The second argument gives how to modify the size in bits of this operation's
+-- argument so that no overflow occurs (e.g. 'succ' for 'succ').
+-- The third argument gives this operation for a concrete natural argument.
+-- The fourth argument gives this operation for a natural argument of the given
+-- size in bits.
+unaryNatToNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l ->
+                   (Natural -> Natural) ->
+                   (Natural -> Natural) ->
+                   (Int -> VWord l -> MWord l) -> Prim l
+unaryNatToNatOp bp fw fn fv =
+  unaryNatOp bp fw (\n -> pure (vNat (fn n)))
+                   (\w x -> VBVToNat w . VWord <$> fv w x)
+
+-- | A primitive which is a binary operation on natural arguments.
+-- The second argument gives how to combine the the sizes in bits of this
+-- operation's arguments so that no overflow occurs (e.g. 'max' for
+-- comparisons, @(\w1 w2 -> suc (max w1 w2))@ for addition, '(+)' for
+-- multiplication).
+-- The third argument gives this operation for concrete natural arguments.
+-- The fourth argument gives this operation for natural arguments of the size
+-- in bits given by the second argument.
+binNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l ->
+            (Natural -> Natural -> Natural) ->
+            (Natural -> Natural -> MValue l) ->
+            (Int -> VWord l -> VWord l -> MValue l) -> Prim l
+binNatOp bp fw fn fv = maybeNatFun $ \m -> maybeNatFun $ \n -> go m n
+  where go (Right m) (Right n) = Prim (fn m n)
+        go (Right m) (Left v2) = go (Left (VNat m)) (Left v2)
+        go (Left v1) (Right n) = go (Left v1) (Left (VNat n))
+        go (Left v1) (Left v2) = Prim $
+          do let w = fw (natSize bp v1) (natSize bp v2)
+             x1 <- natToWord bp w v1
+             x2 <- natToWord bp w v2
+             fv (fromIntegral w) x1 x2
+
+-- | A primitive which is a binary operation on natural arguments and which
+-- returns a natural.
+-- The second argument gives how to combine the the sizes in bits of this
+-- operation's arguments so that no overflow occurs (e.g. 'max' for
+-- comparisons, @(\w1 w2 -> suc (max w1 w2))@ for addition, '(+)' for
+-- multiplication).
+-- The third argument gives this operation for concrete natural arguments.
+-- The fourth argument gives this operation for natural arguments of the size
+-- in bits given by the second argument.
+binNatToNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l ->
+                 (Natural -> Natural -> Natural) ->
+                 (Natural -> Natural -> Natural) ->
+                 (Int -> VWord l -> VWord l -> MWord l) -> Prim l
+binNatToNatOp bp fw fn fv =
+  binNatOp bp fw (\m n -> pure (vNat (fn m n)))
+                 (\w x1 x2 -> VBVToNat w . VWord <$> fv w x1 x2)
+
 -- Succ :: Nat -> Nat;
-succOp :: VMonad l => Prim l
-succOp =
-  natFun $ \n -> PrimValue (vNat (succ n))
+succOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+succOp bp = unaryNatToNatOp bp succ succ (\w x -> do o <- bpBvLit bp w 1
+                                                     bpBvAdd bp x o)
 
 -- addNat :: Nat -> Nat -> Nat;
-addNatOp :: VMonad l => Prim l
-addNatOp =
-  natFun $ \m ->
-  natFun $ \n ->
-    PrimValue (vNat (m + n))
+addNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+addNatOp bp = binNatToNatOp bp (\w1 w2 -> succ (max w1 w2))
+                               (+) (\_ -> bpBvAdd bp)
 
 -- subNat :: Nat -> Nat -> Nat;
-subNatOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Prim l
-subNatOp bp =
-  strictFun $ \x ->
-  strictFun $ \y -> Prim (g x y)
-  where
-    g (VNat i) (VNat j) = return $ VNat (if i < j then 0 else i - j)
-    g v1 v2 =
-      do let w = toInteger (max (natSize bp v1) (natSize bp v2))
-         unless (w <= toInteger (maxBound :: Int))
-                (panic "subNatOp" ["width too large", show w])
-         x1 <- natToWord bp (fromInteger w) v1
-         x2 <- natToWord bp (fromInteger w) v2
-         lt <- bpBvult bp x1 x2
-         z <- bpBvLit bp (fromInteger w) 0
-         d <- bpBvSub bp x1 x2
-         VBVToNat (fromInteger w) . VWord <$> bpMuxWord bp lt z d -- TODO, boo fromInteger
+subNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+subNatOp bp = binNatToNatOp bp (\w1 w2 -> max w1 w2)
+                               (\i j -> if i < j then 0 else i - j)
+                               (\w x1 x2 -> do lt <- bpBvult bp x1 x2
+                                               z <- bpBvLit bp w 0
+                                               d <- bpBvSub bp x1 x2
+                                               bpMuxWord bp lt z d)
 
 -- mulNat :: Nat -> Nat -> Nat;
-mulNatOp :: VMonad l => Prim l
-mulNatOp =
-  natFun $ \m ->
-  natFun $ \n ->
-    PrimValue (vNat (m * n))
+mulNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+mulNatOp bp = binNatToNatOp bp (+) (*) (\_ -> bpBvMul bp)
 
 -- minNat :: Nat -> Nat -> Nat;
-minNatOp :: VMonad l => Prim l
-minNatOp =
-  natFun $ \m ->
-  natFun $ \n ->
-    PrimValue (vNat (min m n))
+minNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+minNatOp bp = binNatToNatOp bp max min
+                               (\_ x1 x2 -> do lt <- bpBvult bp x1 x2
+                                               bpMuxWord bp lt x1 x2)
 
 -- maxNat :: Nat -> Nat -> Nat;
-maxNatOp :: VMonad l => Prim l
-maxNatOp =
-  natFun $ \m ->
-  natFun $ \n ->
-    PrimValue (vNat (max m n))
+maxNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+maxNatOp bp = binNatToNatOp bp max max
+                               (\_ x1 x2 -> do lt <- bpBvult bp x1 x2
+                                               bpMuxWord bp lt x2 x1)
 
 -- divModNat :: Nat -> Nat -> #(Nat, Nat);
-divModNatOp :: VMonad l => Prim l
-divModNatOp =
-  natFun $ \m ->
-  natFun $ \n -> PrimValue $
-    let (q,r) = divMod m n in
-    vTuple [ready $ vNat q, ready $ vNat r]
+divModNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+divModNatOp bp = binNatOp bp max
+                 (\m n -> let (q,r) = divMod m n in
+                          pure $ vTuple [ready $ vNat q, ready $ vNat r])
+                 (\w x1 x2 -> do q <- VBVToNat w . VWord <$> bpBvUDiv bp x1 x2
+                                 r <- VBVToNat w . VWord <$> bpBvURem bp x1 x2
+                                 pure $ vTuple [ready q, ready r])
 
 -- expNat :: Nat -> Nat -> Nat;
 expNatOp :: VMonad l => Prim l
@@ -615,40 +686,20 @@ expNatOp =
     PrimValue (vNat (m ^ n))
 
 -- widthNat :: Nat -> Nat;
-widthNatOp :: VMonad l => Prim l
-widthNatOp =
-  natFun $ \n ->
-    PrimValue (vNat (widthNat n))
+widthNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+widthNatOp bp = maybeNatFun $ \case
+  Right n -> PrimValue (vNat (widthNat n))
+  Left v -> PrimValue (vNat (natSize bp v))
 
 -- equalNat :: Nat -> Nat -> Bool;
-equalNatOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Prim l
-equalNatOp bp =
-  strictFun $ \x ->
-  strictFun $ \y -> Prim (g x y)
-  where
-    g (VNat i) (VNat j) = VBool <$> bpBool bp (i == j)
-    g v1 v2 =
-      do let w = toInteger (max (natSize bp v1) (natSize bp v2))
-         unless (w <= toInteger (maxBound :: Int))
-                (panic "equalNatOp" ["width too large", show w])
-         x1 <- natToWord bp (fromInteger w) v1
-         x2 <- natToWord bp (fromInteger w) v2
-         VBool <$> bpBvEq bp x1 x2
+equalNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+equalNatOp bp = binNatOp bp max (\i j -> VBool <$> bpBool bp (i == j))
+                                (\_ x1 x2 -> VBool <$> bpBvEq bp x1 x2)
 
 -- ltNat :: Nat -> Nat -> Bool;
-ltNatOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Prim l
-ltNatOp bp =
-  strictFun $ \x ->
-  strictFun $ \y -> Prim (g x y)
-  where
-    g (VNat i) (VNat j) = VBool <$> bpBool bp (i < j)
-    g v1 v2 =
-      do let w = toInteger (max (natSize bp v1) (natSize bp v2))
-         unless (w <= toInteger (maxBound :: Int))
-                (panic "ltNatOp" ["width too large", show w])
-         x1 <- natToWord bp (fromInteger w) v1
-         x2 <- natToWord bp (fromInteger w) v2
-         VBool <$> bpBvult bp x1 x2
+ltNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
+ltNatOp bp = binNatOp bp max (\i j -> VBool <$> bpBool bp (i < j))
+                             (\_ x1 x2 -> VBool <$> bpBvult bp x1 x2)
 
 -- natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n :: Nat) -> p n;
 natCaseOp :: (VMonad l, Show (Extra l)) => Prim l
@@ -1285,12 +1336,10 @@ muxValue bp tp0 b = value tp0
 
     nat :: Value l -> Value l -> MValue l
     nat v1 v2 =
-      do let w = toInteger (max (natSize bp v1) (natSize bp v2))
-         unless (w <= toInteger (maxBound :: Int))
-                (panic "muxValue" ["width too large", show w])
-         x1 <- natToWord bp (fromInteger w) v1
-         x2 <- natToWord bp (fromInteger w) v2
-         VBVToNat (fromInteger w) . VWord <$> bpMuxWord bp b x1 x2
+      do let w = max (natSize bp v1) (natSize bp v2)
+         x1 <- natToWord bp w v1
+         x2 <- natToWord bp w v2
+         VBVToNat (fromIntegral w) . VWord <$> bpMuxWord bp b x1 x2
 
 -- fix :: (a :: sort 0) -> (a -> a) -> a;
 fixOp :: (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) => Prim l

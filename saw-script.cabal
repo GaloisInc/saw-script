@@ -213,6 +213,7 @@ executable saw
     , exceptions
     , filepath
     , haskeline
+    , mtl
     , QuickCheck
     , transformers
     , saw-script

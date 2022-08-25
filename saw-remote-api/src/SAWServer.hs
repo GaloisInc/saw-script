@@ -199,8 +199,7 @@ initialState readFileFn =
      cwd <- getCurrentDirectory
      db <- newTheoremDB
      let ro = TopLevelRO
-                { roSharedContext = sc
-                , roJavaCodebase = jcb
+                { roJavaCodebase = jcb
                 , roOptions = opts
                 , roHandleAlloc = halloc
                 , roPosition = PosInternal "SAWServer"
@@ -211,7 +210,10 @@ initialState readFileFn =
 #endif
                 , roInitWorkDir = cwd
                 , roBasicSS = ss
-                , roTheoremDB = db
+                , roStackTrace = []
+                , roSubshell = fail "SAW server does not support subshells."
+                , roProofSubshell = fail "SAW server does not support subshells."
+                , roLocalEnv = []
                 }
          rw = TopLevelRW
                 { rwValues = mempty
@@ -222,6 +224,8 @@ initialState readFileFn =
                 , rwMonadify = defaultMonEnv
                 , rwMRSolverEnv = emptyMREnv
                 , rwPPOpts = defaultPPOpts
+                , rwTheoremDB = db
+                , rwSharedContext = sc
                 , rwJVMTrans = jvmTrans
                 , rwPrimsAvail = mempty
                 , rwSMTArrayMemoryModel = False

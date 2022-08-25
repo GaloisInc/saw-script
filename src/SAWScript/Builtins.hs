@@ -51,6 +51,7 @@ import qualified System.Environment
 import qualified System.Exit as Exit
 import System.IO
 import System.IO.Temp (withSystemTempFile, emptySystemTempFile)
+import System.FilePath (hasDrive, (</>))
 import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
@@ -72,6 +73,7 @@ import Verifier.SAW.SATQuery
 import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
 import qualified Verifier.SAW.SCTypeCheck as TC (TypedTerm(..))
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Prelude (scEq)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
@@ -207,11 +209,13 @@ readSBV path unintlst =
 -- support for latches in the 'AIGNetwork' SAWScript type.
 dsecPrint :: TypedTerm -> TypedTerm -> TopLevel ()
 dsecPrint t1 t2 = do
-  withSystemTempFile ".aig" $ \path1 _handle1 -> do
-  withSystemTempFile ".aig" $ \path2 _handle2 -> do
-  Prover.writeSAIGInferLatches path1 t1
-  Prover.writeSAIGInferLatches path2 t2
-  io $ callCommand (abcDsec path1 path2)
+  write_t1 <- Prover.writeSAIGInferLatches t1
+  write_t2 <- Prover.writeSAIGInferLatches t2
+  io $ withSystemTempFile ".aig" $ \path1 _handle1 ->
+       withSystemTempFile ".aig" $ \path2 _handle2 ->
+        do write_t1 path1
+           write_t2 path2
+           callCommand (abcDsec path1 path2)
   where
     -- The '-w' here may be overkill ...
     abcDsec path1 path2 = printf "abc -c 'read %s; dsec -v -w %s;'" path1 path2
@@ -636,6 +640,58 @@ extract_uninterp unints opaques tt =
      pure (tt', replList)
 
 
+congruence_for :: TypedTerm -> TopLevel TypedTerm
+congruence_for tt =
+  do sc <- getSharedContext
+     congTm <- io $ build_congruence sc (ttTerm tt)
+     io $ mkTypedTerm sc congTm
+
+-- | Given an input term, construct another term that
+--   represents a congruence law for that term.
+--   This term will be a Curry-Howard style theorem statement
+--   that can be dispatched to solvers, and should have
+--   type "Prop".
+--
+--   This will only work for terms that represent non-dependent
+--   functions.
+build_congruence :: SharedContext -> Term -> IO Term
+build_congruence sc tm =
+  do ty <- scTypeOf sc tm
+     case asPiList ty of
+       ([],_) -> fail "congruence_for: Term is not a function"
+       (pis, body) ->
+         if looseVars body == emptyBitSet then
+           loop pis []
+         else
+           fail "congruence_for: cannot build congruence for dependent functions"
+ where
+  loop ((nm,tp):pis) vars =
+    if looseVars tp == emptyBitSet then
+      do l <- scFreshEC sc (nm <> "_1") tp
+         r <- scFreshEC sc (nm <> "_2") tp
+         loop pis ((l,r):vars)
+     else
+       fail "congruence_for: cannot build congruence for dependent functions"
+
+  loop [] vars =
+    do lvars <- mapM (scExtCns sc . fst) (reverse vars)
+       rvars <- mapM (scExtCns sc . snd) (reverse vars)
+       let allVars = concat [ [l,r] | (l,r) <- reverse vars ]
+
+       basel <- scApplyAll sc tm lvars
+       baser <- scApplyAll sc tm rvars
+       baseeq <- scEqTrue sc =<< scEq sc basel baser
+
+       let f x (l,r) =
+             do l' <- scExtCns sc l
+                r' <- scExtCns sc r
+                eq <- scEqTrue sc =<< scEq sc l' r'
+                scFun sc eq x
+       finalEq <- foldM f baseeq vars
+
+       scGeneralizeExts sc allVars finalEq
+
+
 filterCryTerms :: SharedContext -> [Term] -> IO [TypedTerm]
 filterCryTerms sc = loop
   where
@@ -739,7 +795,9 @@ writeAIGPrim :: FilePath -> Term -> TopLevel ()
 writeAIGPrim = Prover.writeAIG
 
 writeSAIGPrim :: FilePath -> TypedTerm -> TopLevel ()
-writeSAIGPrim = Prover.writeSAIGInferLatches
+writeSAIGPrim file tt =
+  do write_tt <- Prover.writeSAIGInferLatches tt
+     io $ write_tt file
 
 writeSAIGComputedPrim :: FilePath -> Term -> Int -> TopLevel ()
 writeSAIGComputedPrim = Prover.writeSAIG
@@ -1201,6 +1259,11 @@ abstractSymbolicPrim (TypedTerm _ t) = do
 bindAllExts :: SharedContext -> Term -> IO Term
 bindAllExts sc body = scAbstractExts sc (getAllExts body) body
 
+term_apply :: TypedTerm -> [TypedTerm] -> TopLevel TypedTerm
+term_apply fn args =
+  do sc <- getSharedContext
+     io $ applyTypedTerms sc fn args
+
 lambda :: TypedTerm -> TypedTerm -> TopLevel TypedTerm
 lambda x = lambdas [x]
 
@@ -1281,10 +1344,9 @@ caseSatResultPrim sr vUnsat vSat = do
       tt <- io $ typedTermOfFirstOrderValue sc fov
       SV.applyValue vSat (SV.toValue tt)
 
-
 envCmd :: TopLevel ()
 envCmd = do
-  m <- rwTypes <$> getTopLevelRW
+  m <- rwTypes <$> SV.getMergedEnv
   opts <- getOptions
   let showLName = getVal
   io $ sequence_ [ printOutLn opts Info (showLName x ++ " : " ++ pShow v) | (x, v) <- Map.assocs m ]
@@ -1317,12 +1379,14 @@ timePrim a = do
   printOutLnTop Info $ printf "Time: %s\n" (show diff)
   return r
 
+failPrim :: String -> TopLevel SV.Value
+failPrim msg = fail msg
+
 failsPrim :: TopLevel SV.Value -> TopLevel ()
 failsPrim m = do
   topRO <- getTopLevelRO
   topRW <- getTopLevelRW
-  ref <- liftIO $ newIORef topRW
-  x <- liftIO $ Ex.try (runTopLevel m topRO ref)
+  x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
   case x of
     Left (ex :: Ex.SomeException) ->
       do liftIO $ putStrLn "== Anticipated failure message =="
@@ -1464,6 +1528,44 @@ eval_size s =
         Right _        -> fail "eval_size: not a numeric type"
     _ -> fail "eval_size: unsupported polymorphic type"
 
+int_to_term :: Int -> TopLevel TypedTerm
+int_to_term i
+  | i < 0 =
+     do sc  <- getSharedContext
+        tm  <- io (scNat sc (fromInteger (negate (toInteger i))))
+        tm' <- io (scIntNeg sc =<< scNatToInt sc tm)
+        io (mkTypedTerm sc tm')
+  | otherwise =
+     do sc  <- getSharedContext
+        tm  <- io (scNat sc (fromIntegral i))
+        tm' <- io (scNatToInt sc tm)
+        io (mkTypedTerm sc tm')
+
+nat_to_term :: Int -> TopLevel TypedTerm
+nat_to_term i
+  | i >= 0 =
+      do sc <- getSharedContext
+         tm <- io $ scNat sc (fromIntegral i)
+         io $ mkTypedTerm sc tm
+
+  | otherwise =
+      fail ("nat_to_term: negative value " ++ show i)
+
+
+size_to_term :: C.Schema -> TopLevel TypedTerm
+size_to_term s =
+  do sc <- getSharedContext
+     tm <- io $ case s of
+                  C.Forall [] [] t ->
+                    case C.evalType mempty t of
+                      Left (C.Nat x) | x >= 0 ->
+                        scCtorApp sc "Cryptol.TCNum" =<< sequence [scNat sc (fromInteger x)]
+                      Left C.Inf -> scCtorApp sc "Cryptol.TCInf" []
+                      _ -> fail "size_to_term: not a numeric type"
+                  _ -> fail "size_to_term: unsupported polymorphic type"
+
+     return (TypedTerm (TypedTermKind C.KNum) tm)
+
 nthPrim :: [a] -> Int -> TopLevel a
 nthPrim [] _ = fail "nth: index too large"
 nthPrim (x : _) 0 = return x
@@ -1543,7 +1645,7 @@ core_axiom input =
      pos <- SV.getPosition
      t <- parseCore input
      p <- io (termToProp sc t)
-     db <- roTheoremDB <$> getTopLevelRO
+     db <- SV.getTheoremDB
      thm <- io (admitTheorem db "core_axiom" p pos "core_axiom")
      SV.returnProof thm
 
@@ -1552,14 +1654,14 @@ core_thm input =
   do t <- parseCore input
      sc <- getSharedContext
      pos <- SV.getPosition
-     db <- roTheoremDB <$> getTopLevelRO
+     db <- SV.getTheoremDB
      thm <- io (proofByTerm sc db t pos "core_thm")
      SV.returnProof thm
 
 specialize_theorem :: Theorem -> [TypedTerm] -> TopLevel Theorem
 specialize_theorem thm ts =
   do sc <- getSharedContext
-     db <- roTheoremDB <$> getTopLevelRO
+     db <- SV.getTheoremDB
      pos <- SV.getPosition
      thm' <- io (specializeTheorem sc db pos "specialize_theorem" thm (map ttTerm ts))
      SV.returnProof thm'
@@ -1894,7 +1996,7 @@ summarize_verification =
      let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
-     db <- roTheoremDB <$> getTopLevelRO
+     db <- SV.getTheoremDB
      summary <- io (computeVerificationSummary db jspecs lspecs thms)
      io $ putStrLn $ prettyVerificationSummary summary
 
@@ -1904,6 +2006,26 @@ summarize_verification_json fpath =
      let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
-     db <- roTheoremDB <$> getTopLevelRO
+     db <- SV.getTheoremDB
      summary <- io (computeVerificationSummary db jspecs lspecs thms)
      io (writeFile fpath (jsonVerificationSummary summary))
+
+writeVerificationSummary :: TopLevel ()
+writeVerificationSummary = do
+  do
+    db <- SV.getTheoremDB
+    values <- rwProofs <$> getTopLevelRW
+    let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
+        lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
+        thms    = [ t | SV.VTheorem t <- values ]
+    summary <- io (computeVerificationSummary db jspecs lspecs thms)
+    opts <- roOptions <$> getTopLevelRO
+    dir <- roInitWorkDir <$> getTopLevelRO
+    case summaryFile opts of
+      Nothing -> return ()
+      Just f -> let
+        f' = if hasDrive f then f else dir </> f
+        formatSummary = case summaryFormat opts of
+                       JSON -> jsonVerificationSummary
+                       Pretty -> prettyVerificationSummary
+        in io $ writeFile f' $ formatSummary summary

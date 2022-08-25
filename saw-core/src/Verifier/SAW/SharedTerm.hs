@@ -59,6 +59,9 @@ module Verifier.SAW.SharedTerm
   , SharedContext
   , mkSharedContext
   , scGetModuleMap
+  , SharedContextCheckpoint
+  , checkpointSharedContext
+  , restoreSharedContext
     -- ** Low-level generic term constructors
   , scTermF
   , scFlatTermF
@@ -282,7 +285,7 @@ import qualified Data.HashMap.Strict as HMap
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
-import Data.IORef (IORef,newIORef,readIORef,modifyIORef',atomicModifyIORef')
+import Data.IORef (IORef,newIORef,readIORef,modifyIORef',atomicModifyIORef',writeIORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Ref ( C )
@@ -359,6 +362,31 @@ data SharedContext = SharedContext
   , scGlobalEnv      :: IORef (HashMap Ident Term)
   , scFreshGlobalVar :: IO VarIndex
   }
+
+data SharedContextCheckpoint =
+  SCC
+  { sccModuleMap :: ModuleMap
+  , sccNamingEnv :: SAWNamingEnv
+  , sccGlobalEnv :: HashMap Ident Term
+  }
+
+checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
+checkpointSharedContext sc =
+  do mmap <- readIORef (scModuleMap sc)
+     nenv <- readIORef (scNamingEnv sc)
+     genv <- readIORef (scGlobalEnv sc)
+     return SCC
+            { sccModuleMap = mmap
+            , sccNamingEnv = nenv
+            , sccGlobalEnv = genv
+            }
+
+restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO SharedContext
+restoreSharedContext scc sc =
+  do writeIORef (scModuleMap sc) (sccModuleMap scc)
+     writeIORef (scNamingEnv sc) (sccNamingEnv scc)
+     writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
+     return sc
 
 -- | Create a new term from a lower-level 'FlatTermF' term.
 scFlatTermF :: SharedContext -> FlatTermF Term -> IO Term
