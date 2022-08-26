@@ -1017,7 +1017,7 @@ w4SolveAssert sym sc varMap ref uninterp (UniversalAssert vars hyps concl) =
      (svals,bndvars) <- boundFOTs sym vars
      let varMap' = foldl (\m ((ec,_fot), sval) -> Map.insert (ecVarIndex ec) sval m)
                          varMap
-                         (zip vars svals)
+                         (zip vars svals) -- NB, boundFOTs will construct these lists to be the same length
      bval <- w4SolveBasic sym sc mempty varMap' ref uninterp g
      case bval of
        VBool v ->
@@ -1026,6 +1026,19 @@ w4SolveAssert sym sc varMap ref uninterp (UniversalAssert vars hyps concl) =
 
        _ -> fail $ "w4SolveAssert: non-boolean result type. " ++ show bval
 
+-- | Given a list of external constants with first-order types,
+--   descend in to the structure of those types (as needed) and construct
+--   corresponding What4 bound variables so we can bind them using
+--   a forall quantifier. At the same time construct @SValue@s containing
+--   those variables suitable for passing to the term evaluator as substituions
+--   for the given @ExtCns@ values. The length of the @SValue@ list returned
+--   will match the list of the input @ExtCns@ list, but the list of What4
+--   @BoundVar@s might not.
+--
+--   This procedure it capable of handling most first-order types, execpt
+--   that Array types must have base types as index and result types rather
+--   than more general first-order types. (TODO? should we actually restrict the
+--   @FirstOrderType@ in the same way?)
 boundFOTs :: forall sym.
   IsSymExprBuilder sym =>
   sym ->
@@ -1050,10 +1063,13 @@ boundFOTs sym vars =
        FOTBit -> VBool <$> freshBnd ec BaseBoolRepr
        FOTInt -> VInt  <$> freshBnd ec BaseIntegerRepr
        FOTIntMod m -> VIntMod m <$> freshBnd ec BaseIntegerRepr
-       FOTVec 0 FOTBit -> return (VWord ZBV)
-       FOTVec n FOTBit
-         | Just (Some (PosNat nr)) <- somePosNat n ->
-         VWord . DBV <$> freshBnd ec (BaseBVRepr nr)
+
+       FOTVec n FOTBit ->
+         case somePosNat n of
+           Nothing -> -- n == 0
+             return (VWord ZBV)
+           Just (Some (PosNat nr)) ->
+             VWord . DBV <$> freshBnd ec (BaseBVRepr nr)
 
        FOTVec n tp -> -- NB, not Bit
          do vs  <- V.replicateM (fromIntegral n) (handleVar ec tp)
@@ -1076,7 +1092,7 @@ boundFOTs sym vars =
 
          -> VArray . SArray <$> freshBnd ec (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) res_repr)
 
-       _ -> fail ("boundFOTs: cannot handle " ++ show fot)
+         | otherwise -> fail ("boundFOTs: cannot handle " ++ show fot)
 
 
 --
