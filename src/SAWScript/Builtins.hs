@@ -828,6 +828,11 @@ goal_exact tm =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticExact sc (ttTerm tm))
 
+goal_intro_hyp :: ProofScript ()
+goal_intro_hyp =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticIntroHyps sc 1)
+
 goal_intro_hyps :: Integer -> ProofScript ()
 goal_intro_hyps n =
   do sc <- SV.scriptTopLevel getSharedContext
@@ -846,7 +851,12 @@ goal_intro s =
 goal_insert :: Theorem -> ProofScript ()
 goal_insert thm =
   do sc <- SV.scriptTopLevel getSharedContext
-     execTactic (tacticInsert sc thm)
+     execTactic (tacticInsert sc thm [])
+
+goal_insert_and_specialize :: Theorem -> [TypedTerm] -> ProofScript ()
+goal_insert_and_specialize thm tms =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticInsert sc thm (map ttTerm tms))
 
 goal_specialize_hyp :: [TypedTerm] -> ProofScript ()
 goal_specialize_hyp ts =
@@ -1606,7 +1616,7 @@ lambdas vars tt =
 implies_term :: TypedTerm -> TypedTerm -> TopLevel TypedTerm
 implies_term x y =
   do sc <- getSharedContext
-     -- check that the given terms are props (TODO? should we relax this?)
+     -- check that the given terms are props
      _ <- io $ termToProp sc (ttTerm x)
      _ <- io $ termToProp sc (ttTerm y)
      z <- io $ scFun sc (ttTerm x) (ttTerm y)

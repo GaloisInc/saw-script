@@ -1115,9 +1115,9 @@ cutEvidence :: Prop -> [Evidence] -> IO Evidence
 cutEvidence p [e1,e2] = pure (CutEvidence p e1 e2)
 cutEvidence _ _ = fail "cutEvidence: expected two evidence values"
 
-insertEvidence :: Theorem -> [Evidence] -> IO Evidence
-insertEvidence thm [e] = pure (CutEvidence (_thmProp thm) e (ApplyEvidence thm []))
-insertEvidence _ _ = fail "insertEvidence: expected one evidence value"
+insertEvidence :: Theorem -> Prop -> [Term] -> [Evidence] -> IO Evidence
+insertEvidence thm h ts [e] = pure (CutEvidence h e (ApplyEvidence thm (map Left ts)))
+insertEvidence _ _ _ _ = fail "insertEvidence: expected one evidence value"
 
 specializeHypEvidence :: Integer -> Prop -> [Term] -> [Evidence] -> IO Evidence
 specializeHypEvidence n h ts [e] = pure (CutEvidence h e (ApplyHypEvidence n (map Left ts)))
@@ -1672,7 +1672,18 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
            return (d1 <> d2)
 
       IntroEvidence x e' ->
-        -- TODO! Check that the given ExtCns is fresh for the sequent
+        -- TODO! Check that the given ExtCns is fresh for the sequent.
+        --
+        --   On soundness: I am concerned that just checking that 'x' is fresh for 'sqt'
+        --   isn't enough, as 'x' may nonetheless appear in other values in the ambient
+        --   context, such as defined constants, or in the type of other things, etc.
+        --
+        --   The most reliable way to actually do this freshness check, then, is to produce
+        --   a brand-new guaranteed fresh value (call it 'y') and replace 'x' with 'y'
+        --   everywhere in the remaining evidence checking process. This is going to require
+        --   quite a bit of additional infrastructure to do the necessary replacements, and we
+        --   will need to be pretty careful if we want to avoid repeated traversals (which
+        --   could cause substantial performance issues).
         case sequentState sqt of
           Unfocused -> fail "Intro evidence requires a focused sequent"
           HypFocus _ _ -> fail "Intro evidence apply in hypothesis"
@@ -1863,7 +1874,7 @@ sequentToSATQuery sc unintSet sqt =
        -- NB, the following reversals make the order of assertions more closely match the input sequent,
        -- but should otherwise not be semantically relevant
        hypAsserts <- mapM (processAssert mmap) (reverse (map unProp hs))
-       (finalVars, asserts) <- foldM (processGoal mmap) (initVars, hypAsserts) (map unProp gs)
+       (finalVars, asserts) <- foldM (processConcl mmap) (initVars, hypAsserts) (map unProp gs)
        return SATQuery
               { satVariables = finalVars
               , satUninterp  = Set.union unintSet abstractVars
@@ -1886,7 +1897,7 @@ sequentToSATQuery sc unintSet sqt =
         _ -> processUnivAssert mmap [] [] tp
 
     processUnivAssert mmap vars xs tm =
-      do -- TODO: See related TODO in processGoal
+      do -- TODO: See related TODO in processConcl
          let tm' = tm
 
          case asPi tm' of
@@ -1913,7 +1924,7 @@ sequentToSATQuery sc unintSet sqt =
                Nothing -> fail $ "sequentToSATQuery: expected EqTrue, actual:\n" ++ showTerm tm'
                Just tmBool -> return (UniversalAssert (reverse vars) (reverse xs) tmBool)
 
-    processGoal mmap (vars,xs) tm =
+    processConcl mmap (vars,xs) tm =
       do -- TODO: I would like to WHNF here, but that evaluates too aggressively
          -- because scWhnf evaluates strictly through the `Eq` datatype former.
          -- This breaks some proof examples by unfolding things that need to
@@ -1931,11 +1942,11 @@ sequentToSATQuery sc unintSet sqt =
                     do ec  <- scFreshEC sc lnm tp'
                        etm <- scExtCns sc ec
                        body' <- instantiateVar sc 0 etm body
-                       processGoal mmap (Map.insert ec fot vars, xs) body'
+                       processConcl mmap (Map.insert ec fot vars, xs) body'
                   Nothing
                     | looseVars body == emptyBitSet ->
                         do asrt <- processAssert mmap tp
-                           processGoal mmap (vars, asrt : xs) body
+                           processConcl mmap (vars, asrt : xs) body
                     | otherwise ->
                         fail ("sequentToSATQuery: expected first order type or assertion:\n" ++ showTerm tp')
 
@@ -1949,7 +1960,11 @@ sequentToSATQuery sc unintSet sqt =
 -- | Given a goal to prove, attempt to apply the given proposition, producing
 --   new subgoals for any necessary hypotheses of the proposition.  Returns
 --   @Nothing@ if the given proposition does not apply to the goal.
-goalApply :: SharedContext -> Prop -> Prop -> IO (Maybe [Either Term Prop])
+goalApply ::
+  SharedContext ->
+  Prop {- ^ propsition to apply -} ->
+  Prop {- ^ goal to apply the proposition to -} ->
+  IO (Maybe [Either Term Prop])
 goalApply sc rule goal = applyFirst (asPiLists (unProp rule))
   where
 
@@ -1987,7 +2002,7 @@ goalApply sc rule goal = applyFirst (asPiLists (unProp rule))
 
 
 -- | Attempt to prove a universally quantified goal by introducing a fresh variable
---   for the binder.  Return the generated fresh term.
+--   for the binder. Return the generated fresh term.
 tacticIntro :: (F.MonadFail m, MonadIO m) =>
   SharedContext ->
   Text {- ^ Name to give to the variable.  If empty, will be chosen automatically from the goal. -} ->
@@ -2009,7 +2024,9 @@ tacticIntro sc usernm = Tactic \goal ->
 
     _ -> fail "intro tactic: conclusion focus required"
 
-
+-- | Given a focused conclusion, decompose the conclusion along implications by
+--   introducing new hypotheses.  The given integer indicates how many hypotheses
+--   to introduce.
 tacticIntroHyps :: (F.MonadFail m, MonadIO m) => SharedContext -> Integer -> Tactic m ()
 tacticIntroHyps sc n = Tactic \goal ->
   case goalSequent goal of
@@ -2104,8 +2121,9 @@ tacticApply sc thm = Tactic \goal ->
    processEvidence []             []     = pure []
    processEvidence _ _ = fail "apply tactic failed: evidence mismatch"
 
--- | Attempt to simplify a goal by splitting it along conjunctions.  If successful,
---   two subgoals will be produced, representing the two conjuncts to be proved.
+-- | Attempt to simplify a goal by splitting it along conjunctions, disjunctions,
+--   implication or if/then/else.  If successful, two subgoals will be produced,
+--   representing the two subgoals that must be proved.
 tacticSplit :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
 tacticSplit sc = Tactic \gl ->
   liftIO (splitSequent sc (goalSequent gl)) >>= \case
@@ -2115,7 +2133,9 @@ tacticSplit sc = Tactic \gl ->
          return ((), mempty, [g1,g2], splitEvidence)
     Nothing -> fail "split tactic failed"
 
-
+-- | Specialize a focused hypothesis with the given terms. A new specialized
+--   hypothesis will be added to the sequent; the original hypothesis will
+--   remain focused.
 tacticSpecializeHyp ::
   (F.MonadFail m, MonadIO m) => SharedContext -> [Term] -> Tactic m ()
 tacticSpecializeHyp sc ts = Tactic \gl ->
@@ -2131,11 +2151,19 @@ tacticSpecializeHyp sc ts = Tactic \gl ->
     _ -> fail "specialize_hyp tactic failed: requires hypothesis focus"
 
 
-tacticInsert :: (F.MonadFail m, MonadIO m) => SharedContext -> Theorem -> Tactic m ()
-tacticInsert _sc thm = Tactic \gl ->
-  let sqt = addHypothesis (_thmProp thm) (goalSequent gl)
-      gl' = gl{ goalSequent = sqt }
-   in return ((), mempty, [gl'], insertEvidence thm)
+-- | This tactic adds a new hypothesis to the current goal by first specializing the
+--   given theorem with the list of terms provided and then using cut to add the
+--   hypothesis, discharging the produced additional goal by applying the theorem.
+tacticInsert :: (F.MonadFail m, MonadIO m) => SharedContext -> Theorem -> [Term] -> Tactic m ()
+tacticInsert sc thm ts = Tactic \gl ->
+  do res <- liftIO (specializeProp sc (_thmProp thm) ts)
+     case res of
+       Left err ->
+         fail (unlines (["goal_insert_and_specialize tactic: failed to specialize"] ++
+                        TC.prettyTCError err))
+       Right h ->
+         do let gl' = gl{ goalSequent = addHypothesis h (goalSequent gl) }
+            return ((), mempty, [gl'], insertEvidence thm h ts)
 
 -- | This tactic implements the "cut rule" of sequent calculus.  The given
 --   proposition is used to split the current goal into two goals, one where
@@ -2173,6 +2201,7 @@ tacticTrivial sc = Tactic \goal ->
                 ]
               return ((), mempty, [], leafEvidence (ProofTerm pf))
 
+-- | Attempt to prove a goal by giving a direct proof term.
 tacticExact :: (F.MonadFail m, MonadIO m) => SharedContext -> Term -> Tactic m ()
 tacticExact sc tm = Tactic \goal ->
   case sequentState (goalSequent goal) of

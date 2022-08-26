@@ -1629,7 +1629,7 @@ primitives = Map.fromList
     (pureVal focus_concl)
     Experimental
     [ "Focus on the numbered conclusion within a sequent. This will fail if there are"
-    , "not enough goals."
+    , "not enough conclusions."
     ]
 
   , prim "focus_hyp"       "Int -> ProofScript ()"
@@ -1731,6 +1731,14 @@ primitives = Map.fromList
     , "This will succeed if the type of the given term matches the current goal."
     ]
 
+  , prim "goal_intro_hyp"      "ProofScript ()"
+    (pureVal goal_intro_hyp)
+    Experimental
+    [ "When focused on a conclusion that represents an implication,"
+    , "simplify the conclusion by removing the implication and introducing"
+    , "a new sequent hypothesis instead."
+    ]
+
   , prim "goal_intro_hyps"     "Int -> ProofScript ()"
     (pureVal goal_intro_hyps)
     Experimental
@@ -1752,6 +1760,13 @@ primitives = Map.fromList
     (pureVal goal_insert)
     Experimental
     [ "Insert a Theorem as a new hypothesis in the current proof goal."
+    ]
+
+  , prim "goal_insert_and_specialize"  "Theorem -> [Term] -> ProofScript ()"
+    (pureVal goal_insert_and_specialize)
+    Experimental
+    [ "Insert a Theorem as a new hypothesis in the current proof goal, after"
+    , "specializing some of its universal quantifiers using the given terms."
     ]
 
   , prim "goal_apply_hyp"      "Int -> ProofScript ()"
