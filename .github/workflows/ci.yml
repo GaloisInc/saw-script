@@ -292,7 +292,7 @@ jobs:
         run: opam exec -- make -j
 
   saw-remote-api-tests:
-    runs-on: [self-hosted, ${{ matrix.os }}]
+    runs-on: self-hosted, ${{ matrix.os }}
     needs: [build]
     strategy:
       fail-fast: false
@@ -349,7 +349,7 @@ jobs:
           ${{ matrix.test }}
 
   cabal-test:
-    runs-on: [self-hosted, ${{ matrix.os }}]
+    runs-on: self-hosted, ${{ matrix.os }}
     needs: [build]
     strategy:
       fail-fast: false
@@ -419,7 +419,7 @@ jobs:
           dist-tests/${{ matrix.suite }}
 
   build-push-image:
-    runs-on: [self-hosted, ${{ matrix.os }}]
+    runs-on: self-hosted, ${{ matrix.os }}
     needs: [config]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true'
     strategy:
@@ -521,7 +521,7 @@ jobs:
     name: "Test s2n proofs"
     timeout-minutes: 120
     needs: build
-    runs-on: [self-hosted, ${{ matrix.os }}]
+    runs-on: self-hosted, ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -576,7 +576,7 @@ jobs:
   # - changes to jobs or job instances don't require a mergify config update
   # - dependencies through `needs:` are validated, CI will fail if it's invalid
   mergify:
-    runs-on: [self-hosted, ${{ matrix.os }}]
+    runs-on: self-hosted, ${{ matrix.os }}
     needs:
       - build
       - heapster-tests
