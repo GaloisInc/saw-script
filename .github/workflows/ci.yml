@@ -62,7 +62,7 @@ jobs:
           .github/ci.sh output retention-days $($RELEASE && echo 90 || echo 5)
 
   build:
-    runs-on: [self-hosted, ${{ matrix.os }}]
+    runs-on: self-hosted, ${{ matrix.os }}
     needs: [config]
     strategy:
       fail-fast: false
