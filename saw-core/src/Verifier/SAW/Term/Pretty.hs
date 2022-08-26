@@ -36,9 +36,12 @@ module Verifier.SAW.Term.Pretty
   , PPModule(..), PPDecl(..)
   , ppPPModule
   , scTermCount
+  , scTermCountAux
+  , scTermCountMany
   , OccurrenceMap
   , shouldMemoizeTerm
   , ppName
+  , ppTermContainerWithNames
   ) where
 
 import Data.Char (intToDigit, isDigit)
@@ -558,7 +561,17 @@ type OccurrenceMap = IntMap (Term, Int)
 -- side of an application are excluded. (FIXME: why?) The boolean flag indicates
 -- whether to descend under lambdas and other binders.
 scTermCount :: Bool -> Term -> OccurrenceMap
-scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
+scTermCount doBinders t = execState (scTermCountAux doBinders [t]) IntMap.empty
+
+-- | Returns map that associates each term index appearing in the list of terms to the
+-- number of occurrences in the shared term. Subterms that are on the left-hand
+-- side of an application are excluded. (FIXME: why?) The boolean flag indicates
+-- whether to descend under lambdas and other binders.
+scTermCountMany :: Bool -> [Term] -> OccurrenceMap
+scTermCountMany doBinders ts = execState (scTermCountAux doBinders ts)  IntMap.empty
+
+scTermCountAux :: Bool -> [Term] -> State OccurrenceMap ()
+scTermCountAux doBinders = go
   where go :: [Term] -> State OccurrenceMap ()
         go [] = return ()
         go (t:r) =
@@ -575,6 +588,7 @@ scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
                   recurse
           where
             recurse = go (r ++ argsAndSubterms t)
+
         argsAndSubterms (unwrapTermF -> App f arg) = arg : argsAndSubterms f
         argsAndSubterms h =
           case unwrapTermF h of
@@ -589,6 +603,7 @@ scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
                                               [recursorMotive crec] ++
                                               map fst (Map.elems (recursorElims crec))
             tf                             -> Fold.toList tf
+
 
 -- | Return true if the printing of the given term should be memoized; we do not
 -- want to memoize the printing of terms that are "too small"
@@ -615,38 +630,42 @@ shouldMemoizeTerm t =
 ppTermWithMemoTable :: Prec -> Bool -> Term -> PPM SawDoc
 ppTermWithMemoTable prec global_p trm = do
      min_occs <- ppMinSharing <$> ppOpts <$> ask
-     ppLets (occ_map_elems min_occs) [] where
+     let occPairs = IntMap.assocs $ filterOccurenceMap min_occs global_p $ scTermCount global_p trm
+     ppLets global_p occPairs [] (ppTerm' prec trm)
 
-  -- Generate an occurrence map for trm, filtering out terms that only occur
-  -- once, that are "too small" to memoize, and, for the global table, terms
-  -- that are not closed
-  occ_map_elems min_occs =
-    IntMap.assocs $
+-- Filter an occurrence map, filtering out terms that only occur
+-- once, that are "too small" to memoize, and, for the global table, terms
+-- that are not closed
+filterOccurenceMap :: Int -> Bool -> OccurrenceMap -> OccurrenceMap
+filterOccurenceMap min_occs global_p =
     IntMap.filter
-    (\(t,cnt) ->
-      cnt >= min_occs && shouldMemoizeTerm t &&
-      (if global_p then looseVars t == emptyBitSet else True)) $
-    scTermCount global_p trm
+      (\(t,cnt) ->
+        cnt >= min_occs && shouldMemoizeTerm t &&
+        (if global_p then looseVars t == emptyBitSet else True))
 
-  -- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
-  -- Term and then add it to the memoization table of subsequent printing. The
-  -- pretty-printing of these terms is reverse-accumulated in the second
-  -- list. Finally, print trm with a let-binding for the bound terms.
-  ppLets :: [(TermIndex, (Term, Int))] -> [(MemoVar, SawDoc)] -> PPM SawDoc
 
-  -- Special case: don't print let-binding if there are no bound vars
-  ppLets [] [] = ppTerm' prec trm
-  -- When we have run out of (idx,term) pairs, pretty-print a let binding for
-  -- all the accumulated bindings around the term
-  ppLets [] bindings = ppLetBlock (reverse bindings) <$> ppTerm' prec trm
-  -- To add an (idx,term) pair, first check if idx is already bound, and, if
-  -- not, add a new MemoVar bind it to idx
-  ppLets ((idx, (t_rhs,_)):idxs) bindings =
-    do isBound <- isJust <$> memoLookupM idx
-       if isBound then ppLets idxs bindings else
-         do doc_rhs <- ppTerm' prec t_rhs
-            withMemoVar global_p idx $ \memo_var ->
-              ppLets idxs ((memo_var, doc_rhs):bindings)
+-- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
+-- Term and then add it to the memoization table of subsequent printing. The
+-- pretty-printing of these terms is reverse-accumulated in the second
+-- list. Finally, print the given base document in the context of let-bindings
+-- for the bound terms.
+ppLets :: Bool -> [(TermIndex, (Term, Int))] -> [(MemoVar, SawDoc)] -> PPM SawDoc -> PPM SawDoc
+
+-- Special case: don't print let-binding if there are no bound vars
+ppLets _ [] [] baseDoc = baseDoc
+
+-- When we have run out of (idx,term) pairs, pretty-print a let binding for
+-- all the accumulated bindings around the term
+ppLets _ [] bindings baseDoc = ppLetBlock (reverse bindings) <$> baseDoc
+
+-- To add an (idx,term) pair, first check if idx is already bound, and, if
+-- not, add a new MemoVar bind it to idx
+ppLets global_p ((idx, (t_rhs,_)):idxs) bindings baseDoc =
+  do isBound <- isJust <$> memoLookupM idx
+     if isBound then ppLets global_p idxs bindings baseDoc else
+       do doc_rhs <- ppTerm' PrecTerm t_rhs
+          withMemoVar global_p idx $ \memo_var ->
+            ppLets global_p idxs ((memo_var, doc_rhs):bindings) baseDoc
 
 
 -- | Pretty-print a term inside a binder for a variable of the given name,
@@ -732,6 +751,22 @@ ppTermWithNames opts ne trm =
 showTermWithNames :: PPOpts -> SAWNamingEnv -> Term -> String
 showTermWithNames opts ne trm =
   renderSawDoc opts $ ppTermWithNames opts ne trm
+
+
+ppTermContainerWithNames ::
+  (Traversable m) =>
+  (m SawDoc -> SawDoc) ->
+  PPOpts -> SAWNamingEnv -> m Term -> SawDoc
+ppTermContainerWithNames ppContainer opts ne trms =
+  let min_occs = ppMinSharing opts
+      global_p = True
+      occPairs = IntMap.assocs $
+                   filterOccurenceMap min_occs global_p $
+                   flip execState mempty $
+                   traverse (\t -> scTermCountAux global_p [t]) $
+                   trms
+   in runPPM opts ne $ ppLets global_p occPairs []
+        (ppContainer <$> traverse (ppTerm' PrecTerm) trms)
 
 --------------------------------------------------------------------------------
 -- * Pretty-printers for Modules and Top-level Constructs

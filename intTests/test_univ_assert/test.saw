@@ -1,0 +1,33 @@
+enable_experimental;
+
+let {{
+  type vec_t = [384]
+  mul : vec_t -> vec_t -> vec_t
+  mul x y = undefined // this would be e.g. multiplication modulo p
+  add : vec_t -> vec_t -> vec_t
+  add x y = undefined
+
+  term1 x y z1 z2 z3 = add (mul (add (mul (add (mul x y) z1) x) z2) x) z3
+  term2 x y z1 z2 z3 = add (mul y (mul x (mul x x))) (add (mul z1 (mul x x)) (add (mul z2 x) z3))
+}};
+
+// Assume some of the ring axioms
+lemmas <- for
+  [ {{ \x y -> mul x y == mul y x }}
+  , {{ \x y -> add x y == add y x }}
+  , {{ \x y z -> mul (mul x y) z == mul x (mul y z) }}
+  , {{ \x y z -> add (add x y) z == add x (add y z) }}
+  , {{ \x y z -> mul (add x y) z == add (mul x z) (mul y z) }}
+  ]
+  (prove_print assume_unsat);
+
+// Use those axioms to prove a nonmtrivial equality
+thm <- prove_print
+  (do {
+    unfolding ["term1","term2"];
+    for lemmas goal_insert;
+    w4_unint_z3 ["mul","add"];
+  })
+  {{ \x y z1 z2 z3 -> term1 x y z1 z2 z3 == term2 x y z1 z2 z3 }};
+
+print thm;

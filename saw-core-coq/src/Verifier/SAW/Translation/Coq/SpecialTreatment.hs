@@ -302,6 +302,14 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Refl",    mapsTo sawDefinitionsModule "Refl")
   ]
 
+  -- Nat le
+  ++
+  [ ("IsLeNat"     , mapsTo sawDefinitionsModule "IsLeNat")
+  , ("IsLeNat__rec", mapsTo sawDefinitionsModule "IsLeNat__rec")
+  , ("IsLeNat_base", mapsTo sawDefinitionsModule "IsLeNat_base")
+  , ("IsLeNat_succ", mapsTo sawDefinitionsModule "IsLeNat_succ")
+  ]
+
   -- Strings
   ++
   [ ("String", mapsTo sawDefinitionsModule "String")
