@@ -62,11 +62,12 @@ jobs:
           .github/ci.sh output retention-days $($RELEASE && echo 90 || echo 5)
 
   build:
-    runs-on: ["self-hosted", "${{ matrix.os }}"]
+    runs-on: ["${{ matrix.os }}"]
     needs: [config]
     strategy:
       fail-fast: false
       matrix:
+        type: [self-hosted]
         os: [ubuntu-18.04]
         ghc: ["8.8.4", "8.10.7", "9.0.2"]
         include:
@@ -210,10 +211,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        type: [self-hosted]
         os: [ubuntu-latest]
         include:
           - os: macos-12
-    runs-on: ["self-hosted", "${{ matrix.os }}"]
+    runs-on: ["${{ matrix.os }}"]
     steps:
       - uses: actions/checkout@v2
         with:
@@ -246,10 +248,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        type: [self-hosted]
         os: [ubuntu-latest]
         include:
           - os: macos-12
-    runs-on: ["self-hosted", "${{ matrix.os }}"]
+    runs-on: ["${{ matrix.os }}"]
     steps:
       - uses: actions/checkout@v2
         with:
@@ -292,7 +295,7 @@ jobs:
         run: opam exec -- make -j
 
   saw-remote-api-tests:
-    runs-on: ["self-hosted", "${{ matrix.os }}"]
+    runs-on: ["${{ matrix.os }}"]
     needs: [build]
     strategy:
       fail-fast: false
@@ -301,6 +304,7 @@ jobs:
           - name: Install and test
             test: saw-remote-api/scripts/run_rpc_tests.sh
             os: ubuntu-18.04
+            type: self-hosted
           # TODO: saw-remote-api unit tests are disabled pending a fix for #1699
           - name: Install on MacOS
             test: |
@@ -312,6 +316,7 @@ jobs:
           - name: Check docs
             test: saw-remote-api/scripts/check_docs.sh
             os: ubuntu-18.04
+            type: self-hosted
     steps:
       - uses: actions/checkout@v2
         with:
@@ -349,13 +354,15 @@ jobs:
           ${{ matrix.test }}
 
   cabal-test:
-    runs-on: ["self-hosted", "${{ matrix.os }}"]
+    runs-on: ["${{ matrix.os }}"]
     needs: [build]
     strategy:
       fail-fast: false
       matrix:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
+        type: [self-hosted]
         os: [ubuntu-18.04]
+        type: 
         continue-on-error: [false]
         include:
           - suite: integration_tests
@@ -419,7 +426,7 @@ jobs:
           dist-tests/${{ matrix.suite }}
 
   build-push-image:
-    runs-on: ["self-hosted", "${{ matrix.os }}"]
+    runs-on: ["${{ matrix.os }}"]
     needs: [config]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true'
     strategy:
@@ -521,7 +528,7 @@ jobs:
     name: "Test s2n proofs"
     timeout-minutes: 120
     needs: build
-    runs-on: ["self-hosted", "${{ matrix.os }}"]
+    runs-on: ["${{ matrix.os }}"]
     strategy:
       fail-fast: false
       matrix:
@@ -576,7 +583,7 @@ jobs:
   # - changes to jobs or job instances don't require a mergify config update
   # - dependencies through `needs:` are validated, CI will fail if it's invalid
   mergify:
-    runs-on: ["self-hosted", "${{ matrix.os }}"]
+    runs-on: ["${{ matrix.os }}"]
     needs:
       - build
       - heapster-tests
