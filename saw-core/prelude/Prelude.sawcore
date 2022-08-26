@@ -112,6 +112,16 @@ RecordType__rec
 
 
 --------------------------------------------------------------------------------
+-- The Void type
+
+data Void : sort 0 where { }
+
+-- Eliminate a Void to any type
+elimVoid : (a:sort 0) -> Void -> a;
+elimVoid a v = Void#rec (\ (_:Void) -> a) v;
+
+
+--------------------------------------------------------------------------------
 -- Equality proofs.
 
 data Eq (t : sort 1) (x : t) : t -> Prop where {
@@ -1810,8 +1820,8 @@ genBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
            BVVec n len a;
 genBVVec n len a f =
   genWithProof (bvToNat n len) a
-    (\(i:Nat) (pf:IsLtNat i (bvToNat n len)) ->
-      f (bvNat n i) (IsLtNat_to_bvult n len i pf));
+    (\ (i:Nat) (pf:IsLtNat i (bvToNat n len)) ->
+       f (bvNat n i) (IsLtNat_to_bvult n len i pf));
 
 -- Generate a BVVec from the elements of an existing vector, using a default
 -- value when we run out of the existing vector
@@ -1856,7 +1866,7 @@ atBVVec n len a x ix pf =
     (bvult_to_IsLtNat n len (bvToNat n ix)
       (trans Bool (bvult n (bvNat n (bvToNat n ix)) len) (bvult n ix len) True
         (eq_cong (Vec n Bool) (bvNat n (bvToNat n ix)) ix
-          (bvNat_bvToNat_id n ix) Bool (\(y:Vec n Bool) -> bvult n y len))
+          (bvNat_bvToNat_id n ix) Bool (\ (y:Vec n Bool) -> bvult n y len))
         pf));
 
 -- Indexing a generated BVVec just returns the generating function
@@ -2147,221 +2157,234 @@ foldIRT As Ds D = IRTDesc__rec As (\ (D:IRTDesc As) -> (Ds:IRTSubsts As) -> Unfo
 
 -- ITree Specification monad
 
--- encoding : sort 2;
--- encoding = (Esort 1 -> sort 1;
--- SpecM :[(Type,Type)] -> Type -> Type -> Type
-
-data SpecCall : sort 2 where {
-     SpecCallIntro : (a:sort 1) -> (a -> sort 1) -> SpecCall;
-}
-
+-- Lists at sort 1
 data List1 (a:sort 1) : sort 1 where {
-     Nil1 : List1 a;
-     Cons1 : a -> List1 a -> List1 a;
+  Nil1 : List1 a;
+  Cons1 : a -> List1 a -> List1 a;
+
 }
 
+-- Lists at sort 2
 data List2 (a:sort 2) : sort 2 where {
-     Nil2 : List2 a;
-     Cons2 : a -> List2 a -> List2 a;
+  Nil2 : List2 a;
+  Cons2 : a -> List2 a -> List2 a;
 }
 
-data LetRecType' : sort 2 where {
-     LRT_Ret' : sort 1 -> LetRecType';
-     LRT_Fun' : (a:sort 1) -> (a -> LetRecType') -> LetRecType';
+-- A representation of the type (x1:A1) -> ... -> (xn:An) -> SpecM (B x1 ... xn)
+-- but where each of the types Ai can be in sort 1
+data LetRecType1 : sort 2 where {
+  LRT_Ret1 : sort 1 -> LetRecType1;
+  LRT_Fun1 : (a:sort 1) -> (a -> LetRecType1) -> LetRecType1;
 }
 
-data Pair1 (a b:sort 1) : sort 1 where {
-  PairValue1 : a -> b -> Pair1 a b;
-}
+-- A list of 0 or more LetRecType1 representations of monadic function types,
+-- used to describe a collection of mutually recursive functions all bound at
+-- the same time
+LetRecTypes1 : sort 2;
+LetRecTypes1 = List2 LetRecType1;
 
-data DepPair (a:sort 1) (b:a -> sort 1) : sort 1 where {
-  Exist : (x:a) -> b x -> DepPair a b;
-}
+-- Get the nth element of a LetRecTypes list, or void -> void if n is too big
+nthLRT : LetRecTypes1 -> Nat -> LetRecType1;
+nthLRT lrts =
+  List2#rec
+  LetRecType1
+  (\ (lrts:LetRecTypes1) -> Nat -> LetRecType1)
+  (\ (_:Nat) -> LRT_Fun1 Void (\ (_:Void) -> LRT_Ret1 Void))
+  (\ (lrt:LetRecType1) (_:LetRecTypes1) (rec:Nat -> LetRecType1) (n:Nat) ->
+     Nat#rec (\ (_:Nat) -> LetRecType1) lrt (\ (m:Nat) (_:LetRecType1) -> rec m) n)
+  lrts;
 
-FunFrame : sort 2;
-FunFrame = List2 LetRecType';
-
+-- A function stack is a list of values of type LetRecTypes1, which intuitively
+-- represents a stack of bindings of mutually recursive functions
 FunStack : sort 2;
-FunStack = List2 FunFrame;
+FunStack = List2 LetRecTypes1;
 
-primitive Vec1 : Nat -> sort 1 -> sort 1;
+-- Push a frame, represented by a LetRecTypes1 list, onto the top of a FunStack
+pushFunStack : LetRecTypes1 -> FunStack -> FunStack;
+pushFunStack frame stack = Cons2 LetRecTypes1 frame stack;
 
-primitive gen1 : (n:Nat) -> (a:sort 1) -> (Nat -> a) -> Vec1 n a;
+-- The monad for specifications (FIXME: document this!)
+primitive SpecM : (E:sort 1) -> (evRetType:E -> sort 1) -> FunStack ->
+                  sort 1 -> sort 1;
 
-primitive head1 : (n:Nat) -> (a:sort 1) -> Vec1 (Succ n) a -> a;
-primitive tail1 : (n:Nat) -> (a:sort 1) -> Vec1 (Succ n) a -> Vec1 n a;
+-- Return for SpecM
+primitive retS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+                 (a:sort 1) -> a -> SpecM E evRetType stack a;
 
-primitive atWithDefault1 : (n:Nat) -> (a:sort 1) -> a -> Vec1 n a -> Nat -> a;
-at1 : (n:Nat) -> (a:isort 1) -> Vec1 n a -> Nat -> a;
-at1 n a v i = atWithDefault1 n a (error a "at1: index out of bounds") v i;
+-- Bind for SpecM
+primitive bindS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+                  (a b:sort 1) -> SpecM E evRetType stack a ->
+                  (a -> SpecM E evRetType stack b) -> SpecM E evRetType stack b;
 
-primitive EmptyVec1 : (a:sort 1) -> Vec1 0 a;
+-- Trigger an event in type E, returning its return type
+primitive triggerS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+                     (e:E) -> SpecM E evRetType stack (evRetType e);
 
-ConsVec1 : (a:isort 1) -> a  -> (n:Nat) -> Vec1 n a -> Vec1 (Succ n) a;
-ConsVec1 a x n v =
-  gen1 (Succ n) a (Nat_cases a x (\ (i:Nat) -> \(a':a) -> at1 n a v i));
+-- Signal an error in SpecM
+primitive errorS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+                   String -> SpecM E evRetType stack Void;
 
-upd1 : (n:Nat) -> (a:isort 1) -> Vec1 n a -> Nat -> a -> Vec1 n a;
-upd1 n a v j x = gen1 n a (\(i:Nat) -> ite a (equalNat i j) x (at1 n a v i));
+-- The spec that universally quantifies over all return values of type a
+primitive forallS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+                    (a:sort 0) -> SpecM E evRetType stack a;
 
-map1 : (a:isort 1) -> (b:sort 1) -> (a -> b) -> (n:Nat) -> Vec1 n a -> Vec1 n b;
-map1 a b f n v = gen1 n b (\(i:Nat) -> f (at1 n a v i));
+-- The spec that existentially quantifies over all return values of type a
+primitive existsS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+                    (a:sort 0) -> SpecM E evRetType stack a;
 
-zipWith1 : (a b:isort 1) -> (c:sort 1) -> (a -> b -> c) ->
-  (n:Nat) -> Vec1 n a -> Vec1 n b -> Vec1 n c;
-zipWith1 a b c f n x y = gen1 n c (\(i:Nat) -> f (at1 n a x i) (at1 n b y i));
+primitive assumeS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+                    (p:Prop) -> SpecM E evRetType stack #();
+primitive assertS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+                    (p:Prop) -> SpecM E evRetType stack #();
 
--- TODO: write this as a native saw term
-primitive FunVar : LetRecType' -> FunFrame -> sort 2;
-primitive VarZ : (lrt:LetRecType') -> (frame:FunFrame) -> FunVar lrt (Cons2 LetRecType' lrt frame);
-primitive VarS : (lrt:LetRecType') -> (lrt':LetRecType') -> (frame:FunFrame) ->
-    FunVar lrt frame -> FunVar lrt (Cons2 LetRecType' lrt' frame);
-
-LRTInput : LetRecType' -> sort 1;
-LRTInput lrt =
-         LetRecType'#rec 
-         (\(lrt:LetRecType') -> sort 1) 
-         (\(r:sort 1) -> UnitType) 
-         (\(a:sort 1) (_:a -> LetRecType') (b:a -> sort 1) -> DepPair a b) lrt;
-
--- TODO: figure out how to write in native saw
-primitive LRTOutput : (lrt:LetRecType') -> LRTInput lrt -> sort 1;
-{-
-LRTOutput lrt args =
-          LetRecType'#rec
-          (\(lrt:LetRecType') -> LRTInput lrt -> sort 1)
-          (\(r:sort 1) -> \(u:UnitType) -> r)
-          (\(a:sort 1) -> (rest:a -> LetRecType') (b:a-> LRTInput (LRT_Fun' a rest) -> sort 1 ) -> \(args:LRTInput (LRT_Fun' a rest)) -> (x:a) -> b x (args x) ));
--}
-primitive SpecM : (E:sort 1) -> (encodes:E -> sort 1) -> FunStack -> sort 1 -> sort 1;
-
-LRTType : (E:sort 1) -> (encodes:E -> sort 1) -> FunStack -> LetRecType' -> sort 1;
-LRTType E encodes stack lrt =
-  LetRecType'#rec
-  (\(lrt:LetRecType') -> sort 1)
-  (\(r:sort 1) -> SpecM E encodes stack r)
-  (\(a:sort 1) (_:a -> LetRecType') (b:a -> sort 1) -> (x:a) -> b x)
+-- Return the type represented by a LetRecType1
+LRTType : (E:sort 1) -> (evRetType:E -> sort 1) -> FunStack ->
+          LetRecType1 -> sort 1;
+LRTType E evRetType stack lrt =
+  LetRecType1#rec
+  (\ (lrt:LetRecType1) -> sort 1)
+  (\ (r:sort 1) -> SpecM E evRetType stack r)
+  (\ (a:sort 1) (_:a -> LetRecType1) (b:a -> sort 1) -> (x:a) -> b x)
   lrt;
 
-primitive retS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a:sort 1) -> a -> SpecM E encodes stack a;
-primitive bindS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b:sort 1) -> SpecM E encodes stack a -> (a -> SpecM E encodes stack b) -> SpecM E encodes stack b;
-
-fmapS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b:sort 1) -> (a -> b) -> SpecM E encodes stack a -> SpecM E encodes stack b;
-fmapS E encodes stack a b f m =
-      bindS E encodes stack a b m (\ (x:a) -> retS E encodes stack b (f x));
-
-applyS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b:sort 1) ->
-  SpecM E encodes stack (a -> b) -> SpecM E encodes stack a -> SpecM E encodes stack b;
-applyS E encodes stack a b fm m =
-  bindS E encodes stack (a -> b) b fm (\(f:a -> b) -> 
-    bindS E encodes stack a b m (\(x:a) -> retS E encodes stack b (f x)));
-
-fmapS2 : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c:sort 1) -> (a -> b -> c) -> 
-  SpecM E encodes stack a -> SpecM E encodes stack b -> SpecM E encodes stack c;
-fmapS2 E encodes stack a b c f m1 m2 =
-  applyS E encodes stack b c (fmapS E encodes stack a (b -> c) f m1) m2;
-
-fmapS3 : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c d:sort 1) -> (a -> b -> c -> d) ->
-  SpecM E encodes stack a -> SpecM E encodes stack b -> SpecM E encodes stack c -> SpecM E encodes stack d;
-fmapS3 E encodes stack a b c d f m1 m2 m3 =
-  applyS E encodes stack c d (fmapS2 E encodes stack a b (c -> d) f m1 m2) m3;
-
-bindS2 : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c:sort 1) ->
-  SpecM E encodes stack a -> SpecM E encodes stack b -> (a -> b -> SpecM E encodes stack c) ->
-    SpecM E encodes stack c;
-bindS2 E encodes stack a b c m1 m2 k =
-  bindS E encodes stack a c m1 
-  (\(x:a) -> bindS E encodes stack b c m2 (\(y:b) -> k x y));
-
-bindS3 : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c d:sort 1) ->
-  SpecM E encodes stack a -> SpecM E encodes stack b -> SpecM E encodes stack c ->
-    (a -> b -> c -> SpecM E encodes stack d) -> SpecM E encodes stack d;
-bindS3 E encodes stack a b c d m1 m2 m3 k =
-  bindS E encodes stack a d m1 (\(x:a) -> bindS2 E encodes stack b c d m2 m3 (k x));
-
-bindApplyS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b:sort 1) ->
-  (a -> SpecM E encodes stack b) -> SpecM E encodes stack a -> SpecM E encodes stack b;
-bindApplyS E encodes stack a b k m =
-  bindS E encodes stack a b m k;
-
-bindApplyS2 : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c:sort 1) ->
-  (a -> b -> SpecM E encodes stack c) -> SpecM E encodes stack a -> SpecM E encodes stack b ->
-    SpecM E encodes stack c;
-bindApplyS2 E encodes stack a b c k m1 m2 =
-  bindS2 E encodes stack a b c m1 m2 k;
-
-bindApplyS3 : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c d:sort 1) ->
-  (a -> b -> c -> SpecM E encodes stack d) -> SpecM E encodes stack a -> SpecM E encodes stack b ->
-    SpecM E encodes stack c -> SpecM E encodes stack d;
-bindApplyS3 E encodes stack a b c d k m1 m2 m3 =
-  bindS3 E encodes stack a b c d m1 m2 m3 k;
-
-composeS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c:sort 1) ->
-  (a -> SpecM E encodes stack b) -> (b -> SpecM E encodes stack c) -> a -> SpecM E encodes stack c;
-composeS E encodes stack a b c k1 k2 x =
-  bindS E encodes stack b c (k1 x) k2;
-
-tupleSpecMFunBoth : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c:sort 1) ->
-  (a -> SpecM E encodes stack b) -> (c * a -> SpecM E encodes stack (c * b));
-tupleSpecMFunBoth  E encodes stack a b c k =
-  \(x: c * a) ->
-    bindS E encodes stack b (c * b) (k x.(2)) (\(y:b) -> retS E encodes stack (c*b) (x.(1), y));
-
-tupleSpecMFunOut : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b c:sort 1) ->
-  c -> (a -> SpecM E encodes stack b) -> (a -> SpecM E encodes stack (c*b));
-tupleSpecMFunOut E encodes stack a b c x f =
-  \(y:a) -> bindS E encodes stack b (c*b) (f y) (\(z:b) -> retS E encodes stack (c*b) (x,z));
-
-mapS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a:sort 1) -> (b:isort 1) ->
-  (a -> SpecM E encodes stack b) -> (n:Nat) -> Vec1 n a -> SpecM E encodes stack (Vec1 n b);
-mapS E encodes stack a b f =
-  Nat__rec
-    (\(n:Nat) -> Vec1 n a -> SpecM E encodes stack (Vec1 n b))
-    (\(_:Vec1 0 a) -> retS E encodes stack (Vec1 0 b) (EmptyVec1 b))
-    (\(n:Nat) (rec_f:Vec1 n a -> SpecM E encodes stack (Vec1 n b)) (v:Vec1 (Succ n) a) ->
-      fmapS2 E encodes stack b (Vec1 n b) (Vec1 (Succ n) b)
-        (\(hd:b) (tl:Vec1 n b) -> ConsVec1 b hd n tl)
-        (f (head1 n a v))
-        (rec_f (tail1 n a v)));
-
-primitive trigger : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (e:E) -> SpecM E encodes stack (encodes e);
-
-primitive forallS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a:sort 0) -> SpecM E encodes stack a;
-primitive existsS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a:sort 0) -> SpecM E encodes stack a;
-primitive assumeS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (p:Prop) -> SpecM E encodes stack UnitType;
-primitive assertS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (p:Prop) -> SpecM E encodes stack UnitType;
-
-data sumT (a b:sort 1) : sort 1 where {
-     inl : a -> sumT a b;
-     inr : b -> sumT a b;
-}
-
-primitive iterS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (a b:sort 1) ->
-          (a -> SpecM E encodes stack (sumT a b)) -> a -> SpecM E encodes stack b;
-
--- case : (a b:sort 1) -> (c:sort 2) -> (a -> c) -> (b -> c) -> sumT a b -> c;
--- case a b c f g s = sumT#rec a b ( \(x:sumT a b) -> c ) f g s;
--- need to define let rec type and replace mrecS with multifixS
--- Computes a tuple type containing an entry for each LRT bound in frame
--- containing the corresponding function type
-multiFixSBodies : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (frame:FunFrame) -> sort 1;
-multiFixSBodies E encodes stack frame =
+-- Build the right-nested tuple type (T1 * (T2 * ... (Tn * #()))) where each Ti
+-- is the result of calling LRTType on the ith LetRecType1 in a list
+LRTsTuple : (E:sort 1) -> (evRetType:E -> sort 1) -> FunStack ->
+            LetRecTypes1 -> sort 1;
+LRTsTuple E evRetType stack lrts =
   List2#rec
-  LetRecType'
-  (\(frame:List2 LetRecType') -> sort 1)
-  UnitType
-  (\(lrt:LetRecType') (_:List2 LetRecType') (frameFun:sort 1) -> 
-    Pair1 (LRTType E encodes (Cons2 FunFrame frame stack) lrt) frameFun)
-  frame;
+  LetRecType1
+  (\ (_:LetRecTypes1) -> sort 1)
+  #()
+  (\ (lrt:LetRecType1) (_:LetRecTypes1) (rest:sort 1) ->
+     (LRTType E evRetType stack lrt) * rest)
+  lrts;
 
+-- A recursive call to a function in the top frame of a function stack
+primitive CallS :
+  (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+  (frame:LetRecTypes1) -> (n:Nat) ->
+  LRTType E evRetType (pushFunStack frame stack) (nthLRT frame n);
 
-primitive callS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (frame:FunFrame) -> (lrt:LetRecType') ->
-          FunVar lrt frame -> (args:LRTInput lrt) -> SpecM E encodes (Cons2 FunFrame frame stack) (LRTOutput lrt args);
+-- Bind a collection of recursive functions whose types are given by a frame of
+-- LetRecTypes1 and whose bodies are given by an LRTsTuple, and call the nth one
+primitive multiFixS :
+  (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+  (frame:LetRecTypes1) ->
+  LRTsTuple E evRetType (pushFunStack frame stack) frame ->
+  (n:Nat) ->
+  LRTType E evRetType stack (nthLRT frame n);
 
-primitive multiFixS : (E:sort 1) -> (encodes:E -> sort 1) -> (stack:FunStack) -> (frame:FunFrame) ->
-          multiFixSBodies E encodes stack frame ->
-          (lrt:LetRecType') -> FunVar lrt frame -> (args:LRTInput lrt) ->
-          SpecM E encodes stack (LRTOutput lrt args);
+-- Apply a pure function to the result of a computation
+fmapS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+        (a b:sort 1) -> (a -> b) -> SpecM E evRetType stack a ->
+        SpecM E evRetType stack b;
+fmapS E evRetType stack a b f m =
+      bindS E evRetType stack a b m (\ (x:a) -> retS E evRetType stack b (f x));
+
+-- Apply a computation of a function to a computation of an argument
+applyS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+         (a b:sort 1) -> SpecM E evRetType stack (a -> b) ->
+         SpecM E evRetType stack a -> SpecM E evRetType stack b;
+applyS E evRetType stack a b fm m =
+  bindS E evRetType stack (a -> b) b fm (\ (f:a -> b) -> 
+    bindS E evRetType stack a b m (\ (x:a) -> retS E evRetType stack b (f x)));
+
+-- Apply a binary pure function to a computation
+fmapS2 : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+         (a b c:sort 1) -> (a -> b -> c) -> 
+         SpecM E evRetType stack a -> SpecM E evRetType stack b ->
+         SpecM E evRetType stack c;
+fmapS2 E evRetType stack a b c f m1 m2 =
+  applyS E evRetType stack b c (fmapS E evRetType stack a (b -> c) f m1) m2;
+
+-- Apply a trinary pure function to a computation
+fmapS3 : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+         (a b c d:sort 1) -> (a -> b -> c -> d) ->
+         SpecM E evRetType stack a -> SpecM E evRetType stack b ->
+         SpecM E evRetType stack c -> SpecM E evRetType stack d;
+fmapS3 E evRetType stack a b c d f m1 m2 m3 =
+  applyS E evRetType stack c d (fmapS2 E evRetType stack a b (c -> d) f m1 m2) m3;
+
+-- Bind two values and pass them to a binary function
+bindS2 : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+         (a b c:sort 1) -> SpecM E evRetType stack a ->
+         SpecM E evRetType stack b -> (a -> b -> SpecM E evRetType stack c) ->
+         SpecM E evRetType stack c;
+bindS2 E evRetType stack a b c m1 m2 k =
+  bindS E evRetType stack a c m1 
+  (\ (x:a) -> bindS E evRetType stack b c m2 (\ (y:b) -> k x y));
+
+-- Bind three values and pass them to a trinary function
+bindS3 : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+         (a b c d:sort 1) -> SpecM E evRetType stack a ->
+         SpecM E evRetType stack b -> SpecM E evRetType stack c ->
+         (a -> b -> c -> SpecM E evRetType stack d) -> SpecM E evRetType stack d;
+bindS3 E evRetType stack a b c d m1 m2 m3 k =
+  bindS E evRetType stack a d m1
+        (\ (x:a) -> bindS2 E evRetType stack b c d m2 m3 (k x));
+
+-- A version of bind that takes the function first
+bindApplyS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+             (a b:sort 1) -> (a -> SpecM E evRetType stack b) ->
+             SpecM E evRetType stack a -> SpecM E evRetType stack b;
+bindApplyS E evRetType stack a b k m =
+  bindS E evRetType stack a b m k;
+
+-- A version of bindS2 that takes the function first
+bindApplyS2 : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+              (a b c:sort 1) -> (a -> b -> SpecM E evRetType stack c) ->
+              SpecM E evRetType stack a -> SpecM E evRetType stack b ->
+              SpecM E evRetType stack c;
+bindApplyS2 E evRetType stack a b c k m1 m2 =
+  bindS2 E evRetType stack a b c m1 m2 k;
+
+-- A version of bindS3 that takes the function first
+bindApplyS3 : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+              (a b c d:sort 1) -> (a -> b -> c -> SpecM E evRetType stack d) ->
+              SpecM E evRetType stack a -> SpecM E evRetType stack b ->
+              SpecM E evRetType stack c -> SpecM E evRetType stack d;
+bindApplyS3 E evRetType stack a b c d k m1 m2 m3 =
+  bindS3 E evRetType stack a b c d m1 m2 m3 k;
+
+-- Compose two monadic functions
+composeS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+           (a b c:sort 1) -> (a -> SpecM E evRetType stack b) ->
+           (b -> SpecM E evRetType stack c) -> a -> SpecM E evRetType stack c;
+composeS E evRetType stack a b c k1 k2 x =
+  bindS E evRetType stack b c (k1 x) k2;
+
+-- Tuple a type onto the input and output types of a monadic function
+tupleSpecMFunBoth : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
+                    (a b c:sort 1) -> (a -> SpecM E evRetType stack b) ->
+                    (c * a -> SpecM E evRetType stack (c * b));
+tupleSpecMFunBoth E evRetType stack a b c k =
+  \ (x: c * a) ->
+    bindS E evRetType stack b (c * b) (k x.(2))
+          (\ (y:b) -> retS E evRetType stack (c*b) (x.(1), y));
+
+-- Tuple a value onto the output of a monadic function
+tupleSpecMFunOut : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) -> (a b c:sort 1) ->
+  c -> (a -> SpecM E evRetType stack b) -> (a -> SpecM E evRetType stack (c*b));
+tupleSpecMFunOut E evRetType stack a b c x f =
+  \ (y:a) -> bindS E evRetType stack b (c*b) (f y)
+             (\ (z:b) -> retS E evRetType stack (c*b) (x,z));
+
+-- Map a monadic function across a vector
+mapS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) -> (a:sort 0) ->
+       (b:isort 0) -> (a -> SpecM E evRetType stack b) -> (n:Nat) -> Vec n a ->
+       SpecM E evRetType stack (Vec n b);
+mapS E evRetType stack a b f =
+  Nat__rec
+    (\ (n:Nat) -> Vec n a -> SpecM E evRetType stack (Vec n b))
+    (\ (_:Vec 0 a) -> retS E evRetType stack (Vec 0 b) (EmptyVec b))
+    (\ (n:Nat) (rec_f:Vec n a -> SpecM E evRetType stack (Vec n b))
+       (v:Vec (Succ n) a) ->
+      fmapS2 E evRetType stack b (Vec n b) (Vec (Succ n) b)
+        (\ (hd:b) (tl:Vec n b) -> ConsVec b hd n tl)
+        (f (head n a v))
+        (rec_f (tail n a v)));
+
 
 --------------------------------------------------------------------------------
 -- Computation monad
