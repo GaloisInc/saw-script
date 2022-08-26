@@ -213,7 +213,7 @@ jobs:
         os: [ubuntu-latest]
         include:
           - os: macos-12
-    runs-on: [self-hosted, ${{ matrix.os }}]
+    runs-on: self-hosted, ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
         with:
@@ -249,7 +249,7 @@ jobs:
         os: [ubuntu-latest]
         include:
           - os: macos-12
-    runs-on: [self-hosted, ${{ matrix.os }}]
+    runs-on: self-hosted, ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
         with:
