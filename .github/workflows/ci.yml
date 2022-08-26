@@ -77,7 +77,7 @@ jobs:
           - os: windows-latest
             ghc: "8.10.7"
 
-        exclude:
+        #exclude:
           # Exclude 8.8 on macOS 12 due to
           # https://gitlab.haskell.org/ghc/ghc/-/issues/18446
           # Exclude 9.0 on Windows for now until
