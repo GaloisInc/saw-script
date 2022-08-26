@@ -62,7 +62,7 @@ jobs:
           .github/ci.sh output retention-days $($RELEASE && echo 90 || echo 5)
 
   build:
-    runs-on: ${{ self-hosted, matrix.os }}
+    runs-on: [self-hosted, matrix.os]
     needs: [config]
     strategy:
       fail-fast: false
@@ -213,7 +213,7 @@ jobs:
         os: [ubuntu-latest]
         include:
           - os: macos-12
-    runs-on: ${{ self-hosted, matrix.os }}
+    runs-on: [self-hosted, matrix.os]
     steps:
       - uses: actions/checkout@v2
         with:
@@ -249,7 +249,7 @@ jobs:
         os: [ubuntu-latest]
         include:
           - os: macos-12
-    runs-on: ${{ self-hosted, matrix.os }}
+    runs-on: [self-hosted, matrix.os]
     steps:
       - uses: actions/checkout@v2
         with:
@@ -292,7 +292,7 @@ jobs:
         run: opam exec -- make -j
 
   saw-remote-api-tests:
-    runs-on: ${{ self-hosted, matrix.os }}
+    runs-on: [self-hosted, matrix.os]
     needs: [build]
     strategy:
       fail-fast: false
@@ -349,7 +349,7 @@ jobs:
           ${{ matrix.test }}
 
   cabal-test:
-    runs-on: ${{ self-hosted, matrix.os }}
+    runs-on: [self-hosted, matrix.os]
     needs: [build]
     strategy:
       fail-fast: false
@@ -380,7 +380,7 @@ jobs:
       - shell: bash
         run: .github/ci.sh install_system_deps
         env:
-          BUILD_TARGET_OS: ${{ self-hosted, matrix.os }}
+          BUILD_TARGET_OS: ${{ matrix.os }}
 
       - uses: actions/download-artifact@v2
         with:
@@ -397,7 +397,7 @@ jobs:
 
       - uses: actions/download-artifact@v2
         with:
-          name: dist-tests-${{ self-hosted, matrix.os }}
+          name: dist-tests-${{ matrix.os }}
           path: dist-tests
 
       - shell: bash
