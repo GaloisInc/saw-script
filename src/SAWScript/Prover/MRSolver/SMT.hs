@@ -260,7 +260,7 @@ smtNormPrims sc = Map.fromList
     -- @genCryM@ term of the new length, or vector literal into a sequence
     -- of @ite@s defined by the literal
     ("Prelude.genBVVecFromVec",
-     natFun $ \_m -> tvalFun $ \a -> primBVVecFromVecArg sc a $ \eith ->
+     PrimFun $ \_m -> tvalFun $ \a -> primBVVecFromVecArg sc a $ \eith ->
       PrimFun $ \_def -> natFun $ \n -> primBVTermFun sc $ \len ->
       Prim (do n' <- scNat sc n
                a' <- readBackTValueNoConfig "smtNormPrims (genBVVecFromVec)" sc a
@@ -376,11 +376,11 @@ mrProvableRaw prop_term =
          debugPrint 2 ("SMT solver encountered a saw-core error term: " ++ msg)
            >> return False
        Right (Just cex, _) ->
-         debugPrint 2 "SMT solver response: not provable, with counterexample:"
-           >> debugPrint 3 (concatMap (\(x,v) ->
-                " - " ++ renderSawDoc defaultPPOpts (ppTerm defaultPPOpts (Unshared (FTermF (ExtCns x)))) ++
-                " = " ++ renderSawDoc defaultPPOpts (ppFirstOrderValue defaultPPOpts v) ++ "\n") cex)
-           >> return False
+         debugPrint 2 "SMT solver response: not provable" >>
+         debugPrint 3 ("Counterexample:" ++ concatMap (\(x,v) ->
+           "\n - " ++ renderSawDoc defaultPPOpts (ppTerm defaultPPOpts (Unshared (FTermF (ExtCns x)))) ++
+           " = " ++ renderSawDoc defaultPPOpts (ppFirstOrderValue defaultPPOpts v)) cex) >>
+         return False
        Right (Nothing, _) ->
          debugPrint 2 "SMT solver response: provable" >> return True
 
