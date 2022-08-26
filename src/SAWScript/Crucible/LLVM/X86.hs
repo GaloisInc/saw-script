@@ -555,7 +555,9 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                case Map.lookup loopaddr cfgs of
                  Nothing -> throwX86 $ "Unable to discover looping CFG from address " <> show loopaddr
                  Just (C.SomeCFG loopcfg) ->
-                   do f <- liftIO (setupSimpleLoopInvariantFeature sym loopNum sc sawst mdMap loopcfg mvar func)
+                   do let printFn = printOutLn opts Info
+                      f <- liftIO (setupSimpleLoopInvariantFeature sym printFn loopNum
+                                                                   sc sawst mdMap loopcfg mvar func)
                       return [f]
 
       let execFeatures = simpleLoopFixpointFeature ++ psatf
@@ -665,6 +667,7 @@ setupSimpleLoopInvariantFeature ::
   , C.IsSyntaxExtension ext
   ) =>
   sym ->
+  (String -> IO ()) ->
   Integer ->
   SharedContext ->
   SAWCoreState n ->
@@ -674,7 +677,7 @@ setupSimpleLoopInvariantFeature ::
   TypedTerm ->
   IO (C.ExecutionFeature p sym ext rtp)
 
-setupSimpleLoopInvariantFeature sym loopNum sc sawst mdMap cfg mvar func =
+setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func =
   SimpleInvariant.simpleLoopInvariant sym loopNum cfg mvar invariant_func
 
  where
@@ -703,11 +706,12 @@ setupSimpleLoopInvariantFeature sym loopNum sc sawst mdMap cfg mvar func =
        initial_tuple <- scTuple sc initial_exprs
        current_tuple <- scTuple sc current_exprs
 
-       putStrLn "Loop invariant implicit parameters!"
-       forM_ implicit_params' $ \x ->
-           do putStrLn (show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts x))
-              tp <- scTypeOf sc x
-              putStrLn (show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tp))
+       when (phase == SimpleInvariant.InitialInvariant) $
+         do printFn "Loop invariant implicit parameters!"
+            forM_ implicit_params' $ \x ->
+                do printFn (show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts x))
+                   tp <- scTypeOf sc x
+                   printFn (show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tp))
 
        inv <- scApplyAll sc (ttTerm func) (implicit_params' ++ [initial_tuple, current_tuple])
 
