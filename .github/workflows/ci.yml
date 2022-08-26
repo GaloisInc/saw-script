@@ -62,26 +62,27 @@ jobs:
           .github/ci.sh output retention-days $($RELEASE && echo 90 || echo 5)
 
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ self-hosted, matrix.os }}
     needs: [config]
     strategy:
       fail-fast: false
       matrix:
-        type: [self-hosted]
-        os: [ubuntu-18.04, macos-12, windows-latest]
+        os: [ubuntu-18.04]
         ghc: ["8.8.4", "8.10.7", "9.0.2"]
+        include:
+          - os: macos-12
+            ghc: "8.10.7"
+          - os: macos-12
+            ghc: "9.0.2"
+          - os: windows-latest
+            ghc: "8.10.7"
+
         exclude:
           # Exclude 8.8 on macOS 12 due to
           # https://gitlab.haskell.org/ghc/ghc/-/issues/18446
-          - os: macos-12
-            ghc: "8.8.4"
-          - os: windows-latest
-            ghc: "8.8.4"
           # Exclude 9.0 on Windows for now until
           # https://github.com/commercialhaskell/stackage/issues/6400
           # is resolved
-          - os: windows-latest
-            ghc: "9.0.2"
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
@@ -209,9 +210,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        type: [self-hosted]
-        os: [ubuntu-latest, macos-12]
-    runs-on: ${{ matrix.os }}
+        os: [ubuntu-latest]
+        include:
+          - os: macos-12
+    runs-on: ${{ self-hosted, matrix.os }}
     steps:
       - uses: actions/checkout@v2
         with:
@@ -244,9 +246,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        type: [self-hosted]
-        os: [ubuntu-latest, macos-12]
-    runs-on: ${{ matrix.os }}
+        os: [ubuntu-latest]
+        include:
+          - os: macos-12
+    runs-on: ${{ self-hosted, matrix.os }}
     steps:
       - uses: actions/checkout@v2
         with:
@@ -289,7 +292,7 @@ jobs:
         run: opam exec -- make -j
 
   saw-remote-api-tests:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ self-hosted, matrix.os }}
     needs: [build]
     strategy:
       fail-fast: false
@@ -297,7 +300,6 @@ jobs:
         include:
           - name: Install and test
             test: saw-remote-api/scripts/run_rpc_tests.sh
-            type: [self-hosted]
             os: ubuntu-18.04
           # TODO: saw-remote-api unit tests are disabled pending a fix for #1699
           - name: Install on MacOS
@@ -306,11 +308,9 @@ jobs:
               poetry update
               poetry install
               poetry run mypy saw_client/
-            type: [self-hosted]
             os: macos-12
           - name: Check docs
             test: saw-remote-api/scripts/check_docs.sh
-            type: [self-hosted]
             os: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
@@ -349,13 +349,12 @@ jobs:
           ${{ matrix.test }}
 
   cabal-test:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ self-hosted, matrix.os }}
     needs: [build]
     strategy:
       fail-fast: false
       matrix:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
-        type: [self-hosted]
         os: [ubuntu-18.04]
         continue-on-error: [false]
         include:
@@ -381,7 +380,7 @@ jobs:
       - shell: bash
         run: .github/ci.sh install_system_deps
         env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_OS: ${{ self-hosted, matrix.os }}
 
       - uses: actions/download-artifact@v2
         with:
@@ -398,7 +397,7 @@ jobs:
 
       - uses: actions/download-artifact@v2
         with:
-          name: dist-tests-${{ matrix.os }}
+          name: dist-tests-${{ self-hosted, matrix.os }}
           path: dist-tests
 
       - shell: bash
