@@ -585,6 +585,8 @@ matchCoIndHyp :: CoIndHyp -> [Term] -> [Term] -> MRM ()
 matchCoIndHyp hyp args1 args2 =
   do mrDebugPPPrefix 1 "matchCoIndHyp" hyp
      (args1', args2') <- instantiateCoIndHyp hyp
+     mrDebugPPPrefixSep 3 "matchCoIndHyp args" args1 "," args2
+     mrDebugPPPrefixSep 3 "matchCoIndHyp args'" args1' "," args2'
      eqs1 <- zipWithM mrProveEq args1' args1
      eqs2 <- zipWithM mrProveEq args2' args2
      if and (eqs1 ++ eqs2) then return () else
@@ -1140,11 +1142,10 @@ mrRefinesFunH k vars tps1@(asPi -> Just (nm1, tp1, _)) t1
   -- other, introduce a BVVec variable and substitute `genBVVecFromVec` of that
   -- variable on the non-BVVec side
   -- FIXME: Could we handle the a /= a' case here and in generalizeCoIndHypArgs?
-  Just (HetBVVecVec (n, len, a) (m, a')) ->
-    do lenNat <- mrBvToNat n len
-       ms_are_eq <- mrProveEq m lenNat
-       as_are_eq <- mrConvertible a a'
-       if ms_are_eq && as_are_eq then return () else
+  Just (HetBVVecVec (n, len, a) (m, a2)) ->
+    do lens_are_eq <- mrProveEq m =<< mrBvToNat n len
+       as_are_eq <- mrConvertible a a2
+       if lens_are_eq && as_are_eq then return () else
          throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
        let nm = maybe "_" id $ find ((/=) '_' . Text.head)
                              $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
@@ -1156,11 +1157,10 @@ mrRefinesFunH k vars tps1@(asPi -> Just (nm1, tp1, _)) t1
             tps1' <- mrTypeOf t1''
             tps2' <- mrTypeOf t2'' >>= liftSC1 scWhnf
             mrRefinesFunH k (var : vars') tps1' t1'' tps2' t2''
-  Just (HetVecBVVec (m, a') (n, len, a)) ->
-    do lenNat <- mrBvToNat n len
-       ms_are_eq <- mrProveEq m lenNat
-       as_are_eq <- mrConvertible a a'
-       if ms_are_eq && as_are_eq then return () else
+  Just (HetVecBVVec (m, a2) (n, len, a)) ->
+    do lens_are_eq <- mrProveEq m =<< mrBvToNat n len
+       as_are_eq <- mrConvertible a a2
+       if lens_are_eq && as_are_eq then return () else
          throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
        let nm = maybe "_" id $ find ((/=) '_' . Text.head)
                              $ [nm1, nm2] ++ catMaybes [ asLambdaName t1

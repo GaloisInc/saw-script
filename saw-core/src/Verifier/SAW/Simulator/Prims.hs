@@ -63,6 +63,7 @@ import Control.Monad.Fix (MonadFix(mfix))
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
+import Data.Functor
 import Data.Maybe (fromMaybe)
 import Data.Bitraversable
 import Data.Bits
@@ -503,7 +504,8 @@ selectV mux maxValue valueFn v = impl len 0
 bvNatOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Prim l
 bvNatOp bp =
   natFun $ \w ->
-  strictFun $ \v ->
+  -- make sure our nat has a size, i.e. that 'natToWord' will not fail
+  natSizeFun $ either snd VNat <&> \v ->
     Prim (VWord <$> natToWord bp (fromIntegral w) v) -- FIXME check for overflow on w
 
 -- bvToNat : (n : Nat) -> Vec n Bool -> Nat;
@@ -568,7 +570,7 @@ natToWord bp w val =
     VBVToNat xsize v ->
       do x <- toWord (bpPack bp) v
          case compare xsize (fromIntegral w) of
-           GT -> panic $ "natToWord: not enough bits for: " ++ show val
+           GT -> bpBvSlice bp (xsize - fromIntegral w) (fromIntegral w) x
            EQ -> return x
            LT -> -- zero-extend x to width w
              do pad <- bpBvLit bp (fromIntegral w - xsize) 0

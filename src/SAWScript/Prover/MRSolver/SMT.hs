@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : SAWScript.Prover.MRSolver.SMT
@@ -21,6 +22,7 @@ import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 import Control.Monad.Except
 import qualified Control.Exception as X
+import Control.Monad.Trans.Maybe
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -37,6 +39,9 @@ import qualified Verifier.SAW.Prim as Prim
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Simulator.TermModel
 import Verifier.SAW.Simulator.Prims
+import Verifier.SAW.Module
+import Verifier.SAW.Prelude.Constants
+import Verifier.SAW.FiniteValue
 
 import SAWScript.Proof (termToProp, propToTerm, prettyProp)
 import What4.Solver
@@ -70,11 +75,17 @@ genBVVecTerm sc n_tm len_tm a_tm f_tm =
 asGenBVVecTerm :: Recognizer Term (Term, Term, Term, Term)
 asGenBVVecTerm (asApplyAll ->
                    (isGlobalDef "Prelude.genBVVec" -> Just _,
-                    [n, len, a,
-                     (asLambdaList -> ([_,_], e))]))
+                    [n, len, a, f@(asLambdaList -> ([_,_], e))]))
   | not $ inBitSet 0 $ looseVars e
-  = Just (n, len, a, e)
+  = Just (n, len, a, f)
 asGenBVVecTerm _ = Nothing
+
+-- | Match a term of the form @genCryM n a f@
+asGenCryMTerm :: Recognizer Term (Term, Term, Term)
+asGenCryMTerm (asApplyAll -> (isGlobalDef "CryptolM.genCryM" -> Just _,
+                              [n, a, f]))
+  = Just (n, a, f)
+asGenCryMTerm _ = Nothing
 
 -- | Match a term of the form @genFromBVVec n len a v def m@
 asGenFromBVVecTerm :: Recognizer Term (Term, Term, Term, Term, Term, Term)
@@ -94,21 +105,51 @@ boolValToTerm sc (VBool (Right b)) = scBool sc b
 boolValToTerm _ (VExtra (VExtraTerm _tp tm)) = return tm
 boolValToTerm _ v = error ("boolValToTerm: unexpected value: " ++ show v)
 
--- | An implementation of a primitive function that expects a @genBVVec@ term
-primGenBVVec :: SharedContext -> (Term -> TmPrim) -> TmPrim
-primGenBVVec sc f =
-  PrimFilterFun "genBVVecPrim"
+-- | An implementation of a primitive function that expects a term of the form
+-- @genBVVec n _ a _@ or @genCryM (bvToNat n _) a _@, where @n@ is the second
+-- argument, and passes to the continuation the associated function of type
+-- @Vec n Bool -> a@
+primGenBVVec :: SharedContext -> Natural -> (Term -> TmPrim) -> TmPrim
+primGenBVVec sc n =
+  PrimFilterFun "primGenBVVec" $
+  \case
+    VExtra (VExtraTerm _ t) -> primGenBVVecFilter sc n t
+    _ -> mzero
+
+-- | The filter function for 'primGenBVVec', and one case of 'primGenCryM'
+primGenBVVecFilter :: SharedContext -> Natural ->
+                      Term -> MaybeT (EvalM TermModel) Term
+primGenBVVecFilter sc n (asGenBVVecTerm -> Just (asNat -> Just n', _, _, f)) | n == n' = lift $
+  do i_tp <- join $ scVecType sc <$> scNat sc n <*> scBoolType sc
+     let err_tm = error "primGenBVVec: unexpected variable occurrence"
+     i_tm <- scLocalVar sc 0
+     body <- scApplyAllBeta sc f [i_tm, err_tm]
+     scLambda sc "i" i_tp body
+primGenBVVecFilter sc n (asGenCryMTerm -> Just (asBvToNat -> Just (asNat -> Just n', _), _, f)) | n == n' = lift $
+  do i_tp <- join $ scVecType sc <$> scNat sc n <*> scBoolType sc
+     i_tm <- scLocalVar sc 0
+     body <- scApplyBeta sc f =<< scBvToNat sc n i_tm
+     scLambda sc "i" i_tp body
+primGenBVVecFilter _ _ t =
+  error $ "primGenBVVec could not handle: " ++ showInCtx emptyMRVarCtx t
+
+-- | An implementation of a primitive function that expects a term of the form
+-- @genCryM _ a _@, @genFromBVVec ... (genBVVec _ _ a _) ...@, or
+-- @genFromBVVec ... (genCryM (bvToNat _ _) a _) ...@, and passes to the
+-- continuation either @Just n@ and the associated function of type
+-- @Vec n Bool -> a@, or @Nothing@ and the associated function of type
+-- @Nat -> a@
+primGenCryM :: SharedContext -> (Maybe Natural -> Term -> TmPrim) -> TmPrim
+primGenCryM sc =
+  PrimFilterFun "primGenCryM"
   (\case
-      VExtra (VExtraTerm _ (asGenBVVecTerm -> Just (n, _, _, e))) ->
-        -- Generate the function \i -> [i/1,error/0]e
-        lift $
-        do i_tp <- scBoolType sc >>= scVecType sc n
-           let err_tm = error "primGenBVVec: unexpected variable occurrence"
-           i_tm <- scLocalVar sc 0
-           body <- instantiateVarList sc 0 [err_tm,i_tm] e
-           scLambda sc "i" i_tp body
-      _ -> mzero)
-  f
+      VExtra (VExtraTerm _ (asGenCryMTerm -> Just (_, _, f))) ->
+        return (Nothing, f)
+      VExtra (VExtraTerm _ (asGenFromBVVecTerm -> Just (asNat -> Just n, _, _,
+                                                        v, _, _))) ->
+        (Just n,) <$> primGenBVVecFilter sc n v
+      _ -> mzero
+  ) . uncurry
 
 -- | An implementation of a primitive function that expects a bitvector term
 primBVTermFun :: SharedContext -> (Term -> TmPrim) -> TmPrim
@@ -126,39 +167,46 @@ primBVTermFun sc =
          scVectorReduced sc tp tms
     v -> lift (putStrLn ("primBVTermFun: unhandled value: " ++ show v)) >> mzero
 
--- | A datatype representing either a @genFromBVVec n len _ v _ _@ term or
--- a vector literal, the latter being represented as a list of 'Term's
-data FromBVVecOrLit = FromBVVec { fromBVVec_n :: Natural
-                                , fromBVVec_len :: Term
-                                , fromBVVec_vec :: Term }
-                    | BVVecLit [Term]
+-- | A datatype representing the arguments to @genBVVecFromVec@ which can be
+-- normalized: a @genFromBVVec n len _ v _ _@ term, a @genCryM _ _ body@ term,
+-- or a vector literal, the lattermost being represented as a list of 'Term's
+data BVVecFromVecArg = FromBVVec { fromBVVec_n :: Natural
+                                 , fromBVVec_len :: Term
+                                 , fromBVVec_vec :: Term }
+                     | GenCryM Term
+                     | BVVecLit [Term]
 
--- | An implementation of a primitive function that expects either a
--- @genFromBVVec@ term or a vector literal
-primFromBVVecOrLit :: SharedContext -> TValue TermModel ->
-                      (FromBVVecOrLit -> TmPrim) -> TmPrim
-primFromBVVecOrLit sc a =
+-- | An implementation of a primitive function that expects a @genFromBVVec@
+-- term, a @genCryM@ term, or a vector literal
+primBVVecFromVecArg :: SharedContext -> TValue TermModel ->
+                       (BVVecFromVecArg -> TmPrim) -> TmPrim
+primBVVecFromVecArg sc a =
   PrimFilterFun "primFromBVVecOrLit" $
   \case
     VExtra (VExtraTerm _ (asGenFromBVVecTerm -> Just (asNat -> Just n, len, _,
                                                       v, _, _))) ->
       return $ FromBVVec n len v
+    VExtra (VExtraTerm _ (asGenCryMTerm -> Just (_, _, body))) ->
+      return $ GenCryM body
     VVector vs ->
       lift $ BVVecLit <$>
         traverse (readBackValueNoConfig "primFromBVVecOrLit" sc a <=< force)
                  (V.toList vs)
     _ -> mzero
 
--- | Turn a 'FromBVVecOrLit' into a BVVec term, assuming it has the given
+-- | Turn a 'BVVecFromVecArg' into a BVVec term, assuming it has the given
 -- bit-width (given as both a 'Natural' and a 'Term'), length, and element type
 -- FIXME: Properly handle empty vector literals
-bvVecFromBVVecOrLit :: SharedContext -> Natural -> Term -> Term -> Term ->
-                       FromBVVecOrLit -> IO Term
-bvVecFromBVVecOrLit sc n _ len _ (FromBVVec n' len' v) =
+bvVecBVVecFromVecArg :: SharedContext -> Natural -> Term -> Term -> Term ->
+                        BVVecFromVecArg -> IO Term
+bvVecBVVecFromVecArg sc n _ len _ (FromBVVec n' len' v) =
   do len_cvt_len' <- scConvertible sc True len len'
      if n == n' && len_cvt_len' then return v
-     else error "bvVecFromBVVecOrLit: genFromBVVec type mismatch"
-bvVecFromBVVecOrLit sc n n' len a (BVVecLit vs) =
+     else error "bvVecBVVecFromVecArg: genFromBVVec type mismatch"
+bvVecBVVecFromVecArg sc n _ len a (GenCryM body) =
+  do len' <- scBvToNat sc n len
+     scGlobalApply sc "CryptolM.genCryM" [len', a, body]
+bvVecBVVecFromVecArg sc n n' len a (BVVecLit vs) =
   do body <- mkBody 0 vs
      i_tp <- scBitvector sc n
      var0 <- scLocalVar sc 0
@@ -166,7 +214,7 @@ bvVecFromBVVecOrLit sc n n' len a (BVVecLit vs) =
      f <- scLambdaList sc [("i", i_tp), ("pf", pf_tp)] body
      scGlobalApply sc "Prelude.genBVVec" [n', len, a, f]
   where mkBody :: Integer -> [Term] -> IO Term
-        mkBody _ [] = error "bvVecFromBVVecOrLit: empty vector"
+        mkBody _ [] = error "bvVecBVVecFromVecArg: empty vector"
         mkBody _ [x] = return $ x
         mkBody i (x:xs) =
           do var1 <- scLocalVar sc 1
@@ -196,23 +244,29 @@ readBackValueNoConfig err_str sc tv v =
 -- | Implementations of primitives for normalizing Mr Solver terms
 smtNormPrims :: SharedContext -> Map Ident TmPrim
 smtNormPrims sc = Map.fromList
-  [ -- Don't unfold @genBVVec@ when normalizing
+  [ -- Don't unfold @genBVVec@ or @genCryM when normalizing
     ("Prelude.genBVVec",
      Prim (do tp <- scTypeOfGlobal sc "Prelude.genBVVec"
               VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
                 scGlobalDef sc "Prelude.genBVVec")
     ),
-    -- Normalize applications of @genBVVecFromVec@ to a @genFromBVVec@ term or
-    -- a vector literal into the body of the @genFromBVVec@ term or @genBVVec@
-    -- of an sequence of @ite@s defined by the literal, respectively
+    ("CryptolM.genCryM",
+     Prim (do tp <- scTypeOfGlobal sc "CryptolM.genCryM"
+              VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
+                scGlobalDef sc "CryptolM.genCryM")
+    ),
+    -- Normalize applications of @genBVVecFromVec@ to a @genFromBVVec@ term
+    -- into the body of the @genFromBVVec@ term, a @genCryM@ term into a
+    -- @genCryM@ term of the new length, or vector literal into a sequence
+    -- of @ite@s defined by the literal
     ("Prelude.genBVVecFromVec",
-     natFun $ \_m -> tvalFun $ \a -> primFromBVVecOrLit sc a $ \eith ->
+     natFun $ \_m -> tvalFun $ \a -> primBVVecFromVecArg sc a $ \eith ->
       PrimFun $ \_def -> natFun $ \n -> primBVTermFun sc $ \len ->
       Prim (do n' <- scNat sc n
                a' <- readBackTValueNoConfig "smtNormPrims (genBVVecFromVec)" sc a
                tp <- scGlobalApply sc "Prelude.BVVec" [n', len, a']
                VExtra <$> VExtraTerm (VTyTerm (mkSort 0) tp) <$>
-                 bvVecFromBVVecOrLit sc n n' len a' eith)
+                 bvVecBVVecFromVecArg sc n n' len a' eith)
     ),
     -- Don't normalize applications of @genFromBVVec@
     ("Prelude.genFromBVVec",
@@ -230,12 +284,28 @@ smtNormPrims sc = Map.fromList
                tm <- scGlobalApply sc "Prelude.genFromBVVec" [n', len', a', v', def', m']
                return $ VExtra $ VExtraTerm (VVecType m a) tm)
     ),
-    -- Normalize applications of @atBVVec@ to a @genBVVec@ term into an
-    -- application of the body of the @genBVVec@ term to the index
+    -- Normalize applications of @atBVVec@ or @atCryM@ to a @genBVVec@ or
+    -- @genCryM@ term into an application of the body of the term to the index
     ("Prelude.atBVVec",
-     PrimFun $ \_n -> PrimFun $ \_len -> tvalFun $ \a ->
-      primGenBVVec sc $ \f -> primBVTermFun sc $ \ix -> PrimFun $ \_pf ->
-      Prim (VExtra <$> VExtraTerm a <$> scApplyBeta sc f ix)
+     natFun $ \n -> PrimFun $ \_len -> tvalFun $ \a ->
+      primGenBVVec sc n $ \f -> primBVTermFun sc $ \ix -> PrimFun $ \_pf ->
+      Prim (do tm <- scApplyBeta sc f ix
+               tm' <- smtNorm sc tm
+               return $ VExtra $ VExtraTerm a tm')
+    ),
+    ("CryptolM.atCryM",
+     PrimFun $ \_n -> tvalFun $ \a ->
+      primGenCryM sc $ \nMb f -> PrimStrict $ \ix ->
+      Prim (do natDT <- scRequireDataType sc preludeNatIdent
+               let natPN = fmap (const $ VSort (mkSort 0)) (dtPrimName natDT)
+               let nat_tp = VDataType natPN [] []
+               ix' <- readBackValueNoConfig "smtNormPrims (atCryM)" sc nat_tp ix
+               ix'' <- case nMb of
+                         Nothing -> return ix'
+                         Just n -> scNat sc n >>= \n' -> scBvNat sc n' ix'
+               tm <- scApplyBeta sc f ix''
+               tm' <- smtNorm sc tm
+               return $ VExtra $ VExtraTerm a tm') 
     ),
     -- Don't normalize applications of @CompM@
     ("Prelude.CompM",
@@ -247,14 +317,19 @@ smtNormPrims sc = Map.fromList
                  scGlobalApply sc "Prelude.CompM" [tv_trm]))
   ]
 
+-- | A version of 'mrNormTerm' in the 'IO' monad, and which does not add any
+-- debug output
+smtNorm :: SharedContext -> Term -> IO Term
+smtNorm sc t =
+  scGetModuleMap sc >>= \modmap ->
+  normalizeSharedTerm sc modmap (smtNormPrims sc) Map.empty Set.empty t
+
 -- | Normalize a 'Term' using some Mr Solver specific primitives
 mrNormTerm :: Term -> MRM Term
 mrNormTerm t =
   debugPrint 2 "Normalizing term:" >>
   debugPrettyInCtx 2 t >>
-  liftSC0 return >>= \sc ->
-  liftSC0 scGetModuleMap >>= \modmap ->
-  liftSC5 normalizeSharedTerm modmap (smtNormPrims sc) Map.empty Set.empty t
+  liftSC1 smtNorm t
 
 -- | Normalize an open term by wrapping it in lambdas, normalizing, and then
 -- removing those lambdas
@@ -300,8 +375,12 @@ mrProvableRaw prop_term =
        Left msg ->
          debugPrint 2 ("SMT solver encountered a saw-core error term: " ++ msg)
            >> return False
-       Right (Just _, _) ->
-         debugPrint 2 "SMT solver response: not provable" >> return False
+       Right (Just cex, _) ->
+         debugPrint 2 "SMT solver response: not provable, with counterexample:"
+           >> debugPrint 3 (concatMap (\(x,v) ->
+                " - " ++ renderSawDoc defaultPPOpts (ppTerm defaultPPOpts (Unshared (FTermF (ExtCns x)))) ++
+                " = " ++ renderSawDoc defaultPPOpts (ppFirstOrderValue defaultPPOpts v) ++ "\n") cex)
+           >> return False
        Right (Nothing, _) ->
          debugPrint 2 "SMT solver response: provable" >> return True
 
@@ -538,16 +617,18 @@ mrProveRelH' _ het tp1@(asBVVecType -> Just (n1, len1, tpA1))
      throwMRFailure (TypesNotEq (Type tp1) (Type tp2))) >>
   liftSC0 scBoolType >>= \bool_tp ->
   liftSC2 scVecType n1 bool_tp >>= \ix_tp ->
-  withUVarLift "eq_ix" (Type ix_tp) (n1,(len1,(tpA1,(tpA2,(t1,t2))))) $
+  withUVarLift "ix" (Type ix_tp) (n1,(len1,(tpA1,(tpA2,(t1,t2))))) $
   \ix (n1',(len1',(tpA1',(tpA2',(t1',t2'))))) ->
   do ix_bound <- liftSC2 scGlobalApply "Prelude.bvult" [n1', ix, len1']
-     pf <- liftSC2 scGlobalApply "Prelude.unsafeAssertBVULt" [n1', ix, len1']
+     pf_tp <- liftSC1 scEqTrue ix_bound
+     pf <- mrErrorTerm pf_tp "FIXME" -- FIXME replace this with the below?
+     -- pf <- liftSC2 scGlobalApply "Prelude.unsafeAssertBVULt" [n1', ix, len1']
      t1_prj <- liftSC2 scGlobalApply "Prelude.atBVVec" [n1', len1', tpA1',
                                                         t1', ix, pf]
      t2_prj <- liftSC2 scGlobalApply "Prelude.atBVVec" [n1', len1', tpA2',
                                                         t2', ix, pf]
      cond <- mrProveRelH het tpA1' tpA2' t1_prj t2_prj
-     extTermInCtx [("eq_ix",ix_tp)] <$>
+     extTermInCtx [("ix",ix_tp)] <$>
        liftTermInCtx2 scImplies (TermInCtx [] ix_bound) cond
 
 -- For non-BVVec vector types where at least one side is an application of

@@ -331,6 +331,12 @@ PLiteralSeqBoolM =
 
 -- Sequences
 
+-- Alternate versions of gen and at to get around the behavior of the default prims
+genCryM : (n : Nat) -> (a : sort 0) -> (Nat -> a) -> Vec n a;
+genCryM = gen;
+atCryM : (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> a;
+atCryM = at;
+
 -- FIXME: a number of the non-monadic versions of these functions contain calls
 -- to finNumRec, which calls error on non-finite numbers. The monadic versions
 -- of these, below, should be reimplemented to not contain finNumRec, but to
@@ -404,6 +410,15 @@ ecTakeM =
              ecTake TCInf n (CompM a) s);
 -}
 
+-- An alternate version of join from Prelude to get around the default Prim
+joinCryM : (m n : Nat)
+          -> (a : isort 0)
+          -> Vec m (Vec n a)
+          -> Vec (mulNat m n) a;
+joinCryM m n a v =
+  genCryM (mulNat m n) a (\ (i : Nat) ->
+    atCryM n a (at m (Vec n a) v (divNat i n)) (modNat i n));
+
 -- FIXME
 primitive
 ecDropM : (m : Num) -> isFinite m -> (n : Num) -> (a : sort 0) ->
@@ -419,7 +434,7 @@ ecJoinM =
          (\ (n:Num) -> (a:isort 0) -> Vec m (mseq n a) ->
             mseq (tcMul (TCNum m) n) a)
          -- Case for (TCNum m, TCNum n)
-         (\ (n:Nat) -> \ (a:isort 0) -> join m n a))
+         (\ (n:Nat) -> \ (a:isort 0) -> joinCryM m n a))
          -- No case for (TCNum m, TCInf), shoudn't happen
     (finNumRec
        (\ (n:Num) -> (a:isort 0) -> Stream (CompM (mseq n a)) ->
@@ -438,6 +453,13 @@ ecJoinM =
             n));
        -- No case for (TCInf, TCInf), shouldn't happen
 
+-- An alternate version of split from Prelude to get around the default Prim
+splitCryM : (m n : Nat) -> (a : isort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
+splitCryM m n a v =
+  genCryM m (Vec n a) (\ (i : Nat) ->
+    genCryM n a (\ (j : Nat) ->
+      atCryM (mulNat m n) a v (addNat (mulNat i n) j)));
+
 ecSplitM : (m n : Num) -> (a : sort 0) -> mseq (tcMul m n) a ->
            mseq m (mseq n a);
 ecSplitM =
@@ -449,7 +471,7 @@ ecSplitM =
          (\ (n:Num) -> (a:isort 0) -> mseq (tcMul (TCNum m) n) a ->
             Vec m (mseq n a))
          -- Case for (TCNum m, TCNum n)
-         (\ (n:Nat) -> \ (a:isort 0) -> split m n a))
+         (\ (n:Nat) -> \ (a:isort 0) -> splitCryM m n a))
          -- No case for (TCNum m, TCInf), shouldn't happen
     (finNumRec
        (\ (n:Num) -> (a:isort 0) -> mseq (tcMul TCInf n) a ->
