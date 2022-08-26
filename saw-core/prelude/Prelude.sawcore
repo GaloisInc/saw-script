@@ -2170,6 +2170,10 @@ data List2 (a:sort 2) : sort 2 where {
   Cons2 : a -> List2 a -> List2 a;
 }
 
+-- The evRetType function for a SpecM using Void as the event type
+VoidEvRetType : Void -> sort 1;
+VoidEvRetType v = Void#rec (\ (_:Void) -> sort 1) v;
+
 -- A representation of the type (x1:A1) -> ... -> (xn:An) -> SpecM (B x1 ... xn)
 -- but where each of the types Ai can be in sort 1
 data LetRecType1 : sort 2 where {
