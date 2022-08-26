@@ -30,7 +30,7 @@ env:
 
 jobs:
   config:
-    runs-on: [ubuntu-latest]
+    runs-on: [self-hosted, ubuntu-latest]
     outputs:
       name: ${{ steps.config.outputs.name }}
       version: ${{ steps.config.outputs.version }}
@@ -62,7 +62,7 @@ jobs:
           .github/ci.sh output retention-days $($RELEASE && echo 90 || echo 5)
 
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ["self-hosted", "${{ matrix.os }}"]
     needs: [config]
     strategy:
       fail-fast: false
@@ -213,7 +213,7 @@ jobs:
         os: [ubuntu-latest]
         include:
           - os: macos-12
-    runs-on: ${{ matrix.os }}
+    runs-on: ["self-hosted", "${{ matrix.os }}"]
     steps:
       - uses: actions/checkout@v2
         with:
@@ -249,7 +249,7 @@ jobs:
         os: [ubuntu-latest]
         include:
           - os: macos-12
-    runs-on: ${{ matrix.os }}
+    runs-on: ["self-hosted", "${{ matrix.os }}"]
     steps:
       - uses: actions/checkout@v2
         with:
@@ -292,7 +292,7 @@ jobs:
         run: opam exec -- make -j
 
   saw-remote-api-tests:
-    runs-on: ${{ matrix.os }}
+    runs-on: ["self-hosted", "${{ matrix.os }}"]
     needs: [build]
     strategy:
       fail-fast: false
@@ -349,7 +349,7 @@ jobs:
           ${{ matrix.test }}
 
   cabal-test:
-    runs-on: ${{ matrix.os }}
+    runs-on: ["self-hosted", "${{ matrix.os }}"]
     needs: [build]
     strategy:
       fail-fast: false
@@ -419,7 +419,7 @@ jobs:
           dist-tests/${{ matrix.suite }}
 
   build-push-image:
-    runs-on: ${{ matrix.os }}
+    runs-on: ["self-hosted", "${{ matrix.os }}"]
     needs: [config]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true'
     strategy:
@@ -521,7 +521,7 @@ jobs:
     name: "Test s2n proofs"
     timeout-minutes: 120
     needs: build
-    runs-on: ${{ matrix.os }}
+    runs-on: ["self-hosted", "${{ matrix.os }}"]
     strategy:
       fail-fast: false
       matrix:
@@ -576,7 +576,7 @@ jobs:
   # - changes to jobs or job instances don't require a mergify config update
   # - dependencies through `needs:` are validated, CI will fail if it's invalid
   mergify:
-    runs-on: ${{ matrix.os }}
+    runs-on: ["self-hosted", "${{ matrix.os }}"]
     needs:
       - build
       - heapster-tests
