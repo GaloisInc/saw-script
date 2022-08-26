@@ -19,7 +19,7 @@ module SAWScript.Proof
   , splitDisj
   , unfoldProp
   , simplifyProp
-  , hoistIfsInGoal
+  , hoistIfsInProp
   , evalProp
   , betaReduceProp
   , falseProp
@@ -311,15 +311,15 @@ splitImpl sc (Prop p)
 splitSequent :: SharedContext -> Sequent -> IO (Maybe (Sequent, Sequent))
 splitSequent sc sqt =
   case sqt of
-    GoalFocusedSequent hs (FB gs1 g gs2) ->
+    ConclFocusedSequent hs (FB gs1 g gs2) ->
       splitConj sc g >>= \case
         --     HS |- GS1, X, GS2
         --     HS |- GS1, Y, GS2
         --   --------------------------- (Conj-R)
         --     HS |- GS1, X /\ Y, GS2
         Just (x, y) ->
-            return (Just ( GoalFocusedSequent hs (FB gs1 x gs2)
-                         , GoalFocusedSequent hs (FB gs1 y gs2)
+            return (Just ( ConclFocusedSequent hs (FB gs1 x gs2)
+                         , ConclFocusedSequent hs (FB gs1 y gs2)
                          ))
         Nothing ->
           splitIte sc g >>= \case
@@ -328,8 +328,8 @@ splitSequent sc sqt =
             --   -------------------------------------- (Ite-R)
             --     HS |- GS1, if B then X else Y, GS2
             Just ((b, x), (nb, y)) ->
-              return (Just ( GoalFocusedSequent (hs ++ [b])  (FB gs1 x gs2)
-                           , GoalFocusedSequent (hs ++ [nb]) (FB gs1 y gs2)
+              return (Just ( ConclFocusedSequent (hs ++ [b])  (FB gs1 x gs2)
+                           , ConclFocusedSequent (hs ++ [nb]) (FB gs1 y gs2)
                            ))
             Nothing -> return Nothing
 
@@ -361,7 +361,7 @@ splitSequent sc sqt =
               splitImpl sc h >>= \case
                 Just (x, y) ->
                   return (Just ( HypFocusedSequent (FB hs1 y hs2) gs
-                               , GoalFocusedSequent (hs1 ++ [h] ++ hs2) (FB gs x [])
+                               , ConclFocusedSequent (hs1 ++ [h] ++ hs2) (FB gs x [])
                                ))
                 Nothing -> return Nothing
 
@@ -412,21 +412,21 @@ simplifySequent sc ss (UnfocusedSequent hs gs) =
   do (a, hs') <- simplifyProps sc ss hs
      (b, gs') <- simplifyProps sc ss gs
      return (Set.union a b, UnfocusedSequent hs' gs')
-simplifySequent sc ss (GoalFocusedSequent hs (FB gs1 g gs2)) =
+simplifySequent sc ss (ConclFocusedSequent hs (FB gs1 g gs2)) =
   do (a, g') <- simplifyProp sc ss g
-     return (a, GoalFocusedSequent hs (FB gs1 g' gs2))
+     return (a, ConclFocusedSequent hs (FB gs1 g' gs2))
 simplifySequent sc ss (HypFocusedSequent (FB hs1 h hs2) gs) =
   do (a, h') <- simplifyProp sc ss h
      return (a, HypFocusedSequent (FB hs1 h' hs2) gs)
 
 
-hoistIfsInGoal :: SharedContext -> Prop -> IO Prop
-hoistIfsInGoal sc (Prop p) = do
+hoistIfsInProp :: SharedContext -> Prop -> IO Prop
+hoistIfsInProp sc (Prop p) = do
   let (args, body) = asPiList p
   body' <-
     case asEqTrue body of
       Just t -> pure t
-      Nothing -> fail "hoistIfsInGoal: expected EqTrue"
+      Nothing -> fail "hoistIfsInProp: expected EqTrue"
   ecs <- traverse (\(nm, ty) -> scFreshEC sc nm ty) args
   vars <- traverse (scExtCns sc) ecs
   t0 <- instantiateVarList sc 0 (reverse vars) body'
@@ -483,6 +483,8 @@ trivialProofTerm sc (Prop p) = runExceptT (loop =<< lift (scWhnf sc p))
          lift $ scLambda sc nm tp pf
 
     loop (asEq -> Just (tp, x, _y)) =
+      -- NB, we don't check if x is convertable to y here, as that will
+      -- be done later in @tacticTrivial@ during the type-checking step
       lift $ scCtorApp sc "Prelude.Refl" [tp, x]
 
     loop _ = throwError $ unlines
@@ -551,7 +553,7 @@ data Sequent
   = -- | A sequent in the unfocused state
     UnfocusedSequent   ![SequentBranch] ![SequentBranch]
     -- | A sequent focused on a particular conclusion
-  | GoalFocusedSequent ![SequentBranch] !FocusedBranch
+  | ConclFocusedSequent ![SequentBranch] !FocusedBranch
     -- | A sequent focused on a particular hypothesis
   | HypFocusedSequent  !FocusedBranch   ![SequentBranch]
 
@@ -572,9 +574,9 @@ instance Traversable RawSequent where
 sequentToRawSequent :: Sequent -> RawSequent Prop
 sequentToRawSequent sqt =
    case sqt of
-     UnfocusedSequent   hs gs             -> RawSequent hs gs
-     GoalFocusedSequent hs (FB gs1 g gs2) -> RawSequent hs (gs1 ++ g : gs2)
-     HypFocusedSequent  (FB hs1 h hs2) gs -> RawSequent (hs1 ++ h : hs2) gs
+     UnfocusedSequent   hs gs              -> RawSequent hs gs
+     ConclFocusedSequent hs (FB gs1 g gs2) -> RawSequent hs (gs1 ++ g : gs2)
+     HypFocusedSequent  (FB hs1 h hs2) gs  -> RawSequent (hs1 ++ h : hs2) gs
 
 unfocusSequent :: Sequent -> Sequent
 unfocusSequent sqt = UnfocusedSequent hs gs
@@ -584,7 +586,7 @@ focusOnConcl :: Integer -> Sequent -> Maybe Sequent
 focusOnConcl i sqt =
     let RawSequent hs gs = sequentToRawSequent sqt in
     case genericSplitAt i gs of
-      (gs1, g:gs2) -> Just (GoalFocusedSequent hs (FB gs1 g gs2))
+      (gs1, g:gs2) -> Just (ConclFocusedSequent hs (FB gs1 g gs2))
       (_  , [])    -> Nothing
 
 focusOnHyp :: Integer -> Sequent -> Maybe Sequent
@@ -624,13 +626,13 @@ convertibleSequents sc sqt1 sqt2 =
 --   focus.
 data SequentState
   = Unfocused
-  | GoalFocus Prop (Prop -> Sequent)
-  | HypFocus  Prop (Prop -> Sequent)
+  | ConclFocus Prop (Prop -> Sequent)
+  | HypFocus   Prop (Prop -> Sequent)
 
 -- | Build a sequent with the given proposition as the
 --   only conclusion, and place it under focus.
 propToSequent :: Prop -> Sequent
-propToSequent p = GoalFocusedSequent [] (FB [] p [])
+propToSequent p = ConclFocusedSequent [] (FB [] p [])
 
 -- | Give in a collection of boolean terms, construct a sequent
 --   with corresponding hypotheses and conclusions.  If there
@@ -640,7 +642,7 @@ booleansToSequent sc hs gs =
   do hs' <- mapM (boolToProp sc []) hs
      gs' <- mapM (boolToProp sc []) gs
      case gs' of
-       [g] -> return (GoalFocusedSequent hs' (FB [] g []))
+       [g] -> return (ConclFocusedSequent hs' (FB [] g []))
        _   -> return (UnfocusedSequent hs' gs')
 
 -- | Given a sequent, render its semantics as a proposition.
@@ -684,7 +686,7 @@ ppSequent opts nenv sqt =
 ppRawSequent :: Sequent -> RawSequent SawDoc -> SawDoc
 ppRawSequent _sqt (RawSequent [] [g]) = g
 ppRawSequent sqt (RawSequent hs gs)  =
-  align (vcat (map ppHyp (zip [0..] hs) ++ turnstile ++ map ppGoal (zip [0..] gs)))
+  align (vcat (map ppHyp (zip [0..] hs) ++ turnstile ++ map ppConcl (zip [0..] gs)))
  where
   turnstile  = [ pretty (take 40 (repeat '=')) ]
   focused doc = "<<" <> doc <> ">>"
@@ -696,13 +698,13 @@ ppRawSequent sqt (RawSequent hs gs)  =
     | otherwise
     = "H" <> pretty i <> ":" <+> tm
 
-  ppGoal (i, tm)
-    | GoalFocusedSequent _hs (FB gs1 _g _gs2) <- sqt
+  ppConcl (i, tm)
+    | ConclFocusedSequent _hs (FB gs1 _g _gs2) <- sqt
     , length gs1 == i
-    = focused ("G" <> pretty i) <+> tm
+    = focused ("C" <> pretty i) <+> tm
 
     | otherwise
-    = "G" <> pretty i <> ":" <+> tm
+    = "C" <> pretty i <> ":" <+> tm
 
 
 -- | A datatype for representing finte or cofinite sets.
@@ -748,8 +750,8 @@ filterFocusedList pss (FB xs1 x xs2) =
 filterHyps :: CofinSet Integer -> Sequent -> Sequent
 filterHyps pss (UnfocusedSequent hs gs) =
   UnfocusedSequent (filterPosList pss 0 hs) gs
-filterHyps pss (GoalFocusedSequent hs gs) =
-  GoalFocusedSequent (filterPosList pss 0 hs) gs
+filterHyps pss (ConclFocusedSequent hs gs) =
+  ConclFocusedSequent (filterPosList pss 0 hs) gs
 filterHyps pss (HypFocusedSequent hs gs) =
   case filterFocusedList pss hs of
     Left  hs' -> UnfocusedSequent hs' gs
@@ -762,22 +764,22 @@ filterConcls pss (UnfocusedSequent hs gs) =
   UnfocusedSequent hs (filterPosList pss 0 gs)
 filterConcls pss (HypFocusedSequent hs gs) =
   HypFocusedSequent hs (filterPosList pss 0 gs)
-filterConcls pss (GoalFocusedSequent hs gs) =
+filterConcls pss (ConclFocusedSequent hs gs) =
   case filterFocusedList pss gs of
     Left  gs' -> UnfocusedSequent hs gs'
-    Right gs' -> GoalFocusedSequent hs gs'
+    Right gs' -> ConclFocusedSequent hs gs'
 
 -- | Add a new hypothesis to the list of hypotheses in a sequent
 addHypothesis :: Prop -> Sequent -> Sequent
 addHypothesis p (UnfocusedSequent hs gs)   = UnfocusedSequent (hs ++ [p]) gs
-addHypothesis p (GoalFocusedSequent hs gs) = GoalFocusedSequent (hs ++ [p]) gs
+addHypothesis p (ConclFocusedSequent hs gs) = ConclFocusedSequent (hs ++ [p]) gs
 addHypothesis p (HypFocusedSequent (FB hs1 h hs2) gs) = HypFocusedSequent (FB hs1 h (hs2++[p])) gs
 
 -- | Add a new conclusion to the end of the conclusion list and focus on it
-addNewFocusedGoal :: Prop -> Sequent -> Sequent
-addNewFocusedGoal p sqt =
+addNewFocusedConcl :: Prop -> Sequent -> Sequent
+addNewFocusedConcl p sqt =
   let RawSequent hs gs = sequentToRawSequent sqt
-   in GoalFocusedSequent hs (FB gs p [])
+   in ConclFocusedSequent hs (FB gs p [])
 
 -- | If the sequent is focused, return the prop under focus,
 --   together with its index value.
@@ -788,13 +790,13 @@ sequentGetFocus (UnfocusedSequent _ _) =
   Nothing
 sequentGetFocus (HypFocusedSequent (FB hs1 h _) _)  =
   Just (Left (genericLength hs1, h))
-sequentGetFocus (GoalFocusedSequent _ (FB gs1 g _)) =
+sequentGetFocus (ConclFocusedSequent _ (FB gs1 g _)) =
   Just (Right (genericLength gs1, g))
 
 sequentState :: Sequent -> SequentState
 sequentState (UnfocusedSequent _ _) = Unfocused
-sequentState (GoalFocusedSequent hs (FB gs1 g gs2)) =
-  GoalFocus g (\g' -> GoalFocusedSequent hs (FB gs1 g' gs2))
+sequentState (ConclFocusedSequent hs (FB gs1 g gs2)) =
+  ConclFocus g (\g' -> ConclFocusedSequent hs (FB gs1 g' gs2))
 sequentState (HypFocusedSequent (FB hs1 h hs2) gs) =
   HypFocus h (\h' -> HypFocusedSequent (FB hs1 h' hs2) gs)
 
@@ -815,8 +817,8 @@ sequentTreeSize sqt = scTreeSizeMany (map unProp (hs ++ gs))
 traverseSequentWithFocus :: Applicative m => (Prop -> m Prop) -> Sequent -> m Sequent
 traverseSequentWithFocus f (UnfocusedSequent hs gs) =
   UnfocusedSequent <$> traverse f hs <*> traverse f gs
-traverseSequentWithFocus f (GoalFocusedSequent hs (FB gs1 g gs2)) =
-  (\g' -> GoalFocusedSequent hs (FB gs1 g' gs2)) <$> f g
+traverseSequentWithFocus f (ConclFocusedSequent hs (FB gs1 g gs2)) =
+  (\g' -> ConclFocusedSequent hs (FB gs1 g' gs2)) <$> f g
 traverseSequentWithFocus f (HypFocusedSequent (FB hs1 h hs2) gs) =
   (\h' -> HypFocusedSequent (FB hs1 h' hs2) gs) <$> f h
 
@@ -825,8 +827,8 @@ traverseSequentWithFocus f (HypFocusedSequent (FB hs1 h hs2) gs) =
 traverseSequent :: Applicative m => (Prop -> m Prop) -> Sequent -> m Sequent
 traverseSequent f (UnfocusedSequent hs gs) =
   UnfocusedSequent <$> traverse f hs <*> traverse f gs
-traverseSequent f (GoalFocusedSequent hs (FB gs1 g gs2)) =
-  GoalFocusedSequent <$>
+traverseSequent f (ConclFocusedSequent hs (FB gs1 g gs2)) =
+  ConclFocusedSequent <$>
     (traverse f hs) <*>
     ( FB <$> traverse f gs1 <*> f g <*> traverse f gs2)
 traverseSequent f (HypFocusedSequent (FB hs1 h hs2) gs) =
@@ -842,7 +844,7 @@ checkSequent :: SharedContext -> PPOpts -> Sequent -> IO ()
 checkSequent sc ppOpts (UnfocusedSequent hs gs) =
   do forM_ hs (checkProp sc ppOpts)
      forM_ gs (checkProp sc ppOpts)
-checkSequent sc ppOpts (GoalFocusedSequent hs (FB gs1 g gs2)) =
+checkSequent sc ppOpts (ConclFocusedSequent hs (FB gs1 g gs2)) =
   do forM_ hs (checkProp sc ppOpts)
      forM_ gs1 (checkProp sc ppOpts)
      checkProp sc ppOpts g
@@ -993,7 +995,7 @@ data Evidence
     --   specialized either by giving an explicit @Term@ to
     --   instantiate the variable, or by giving @Evidence@ for @Prop@
     --   hypotheses. After specializing the given @Theorem@ the
-    --   result must match the current goal.
+    --   result must match the current focued conclusion.
   | ApplyEvidence !Theorem ![Either Term Evidence]
 
     -- | This type of evidence is produced when a local hypothesis is
@@ -1002,7 +1004,7 @@ data Evidence
     --   either by giving an explicit @Term@ to instantiate the
     --   variable, or by giving @Evidence@ for @Prop@ hypotheses.
     --   After specializing the given @Theorem@ the result must match
-    --   the current goal.
+    --   the current focused conclusion.
   | ApplyHypEvidence Integer ![Either Term Evidence]
 
     -- | This type of evidence is used to prove a universally-quantified conclusion.
@@ -1040,7 +1042,7 @@ data Evidence
   | ConversionEvidence !Sequent !Evidence
 
     -- | This type of evidence is used to modify a goal to prove by applying
-    --   'hoistIfsInGoal'.
+    --   'hoistIfsInProp'.
   | HoistIfsEvidence !Evidence
 
     -- | Change the state of the sequent in some "structural" way. This
@@ -1060,7 +1062,7 @@ data Evidence
 
     -- | This type of evidence is used when the current sequent, after
     --   applying structural rules, is an instance of the basic
-    --   sequent calculus axiom, which connects a hypothesis to a goal.
+    --   sequent calculus axiom, which connects a hypothesis to a conclusion.
   | AxiomEvidence
 
 -- | The the proposition proved by a given theorem.
@@ -1396,7 +1398,7 @@ normalizeSequent sc sqt =
 normalizeRawSequent :: SharedContext -> RawSequent Prop -> IO (RawSequent Prop)
 normalizeRawSequent sc (RawSequent hs gs) =
   do hs' <- mapM (normalizeHyp sc) hs
-     gs' <- mapM (normalizeGoal sc) gs
+     gs' <- mapM (normalizeConcl sc) gs
      return (joinSequents (hs' ++ gs'))
 
 joinSequent :: RawSequent Prop -> RawSequent Prop -> RawSequent Prop
@@ -1415,11 +1417,11 @@ normalizeHyp sc p =
                    Nothing  -> return (RawSequent [p] [])
        _      -> return (RawSequent [p] [])
 
-normalizeGoal :: SharedContext -> Prop -> IO (RawSequent Prop)
-normalizeGoal sc p =
+normalizeConcl :: SharedContext -> Prop -> IO (RawSequent Prop)
+normalizeConcl sc p =
   do t <- scWhnf sc (unProp p)
      case asEqTrue t of
-       Just b -> normalizeGoalBool sc b >>= \case
+       Just b -> normalizeConclBool sc b >>= \case
                    Just sqt -> return sqt
                    Nothing  -> return (RawSequent [] [p])
        _ ->
@@ -1432,7 +1434,7 @@ normalizeGoal sc p =
                Nothing -> return (RawSequent [] [p])
                Just h  ->
                  do hsqt <- normalizeHyp sc h
-                    gsqt <- normalizeGoal sc (Prop body)
+                    gsqt <- normalizeConcl sc (Prop body)
                     return (joinSequent hsqt gsqt)
            _ -> return (RawSequent [] [p])
 
@@ -1441,7 +1443,7 @@ normalizeHypBool sc b =
   do body <- scWhnf sc b
      case () of
        _ | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) body
-         -> Just <$> normalizeGoalBoolCommit sc p1
+         -> Just <$> normalizeConclBoolCommit sc p1
 
          | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.and" <@> return <@> return) body
          -> Just <$> (joinSequent <$> normalizeHypBoolCommit sc p1 <*> normalizeHypBoolCommit sc p2)
@@ -1456,22 +1458,22 @@ normalizeHypBoolCommit sc b =
     Nothing  -> do p <- boolToProp sc [] b
                    return (RawSequent [p] [])
 
-normalizeGoalBool :: SharedContext -> Term -> IO (Maybe (RawSequent Prop))
-normalizeGoalBool sc b =
+normalizeConclBool :: SharedContext -> Term -> IO (Maybe (RawSequent Prop))
+normalizeConclBool sc b =
   do body <- scWhnf sc b
      case () of
        _ | Just (_ :*: p1) <- (isGlobalDef "Prelude.not" <@> return) body
          -> Just <$> normalizeHypBoolCommit sc p1
 
          | Just (_ :*: p1 :*: p2) <- (isGlobalDef "Prelude.or" <@> return <@> return) body
-         -> Just <$> (joinSequent <$> normalizeGoalBoolCommit sc p1 <*> normalizeGoalBoolCommit sc p2)
+         -> Just <$> (joinSequent <$> normalizeConclBoolCommit sc p1 <*> normalizeConclBoolCommit sc p2)
 
          | otherwise
          -> return Nothing
 
-normalizeGoalBoolCommit :: SharedContext -> Term -> IO (RawSequent Prop)
-normalizeGoalBoolCommit sc b =
-  normalizeGoalBool sc b >>= \case
+normalizeConclBoolCommit :: SharedContext -> Term -> IO (RawSequent Prop)
+normalizeConclBoolCommit sc b =
+  normalizeConclBool sc b >>= \case
     Just sqt -> return sqt
     Nothing  -> do p <- boolToProp sc [] b
                    return (RawSequent [] [p])
@@ -1521,7 +1523,7 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
     check nenv e sqt = case e of
       ProofTerm tm ->
         case sequentState sqt of
-          GoalFocus (Prop ptm) _ ->
+          ConclFocus (Prop ptm) _ ->
             do ty <- TC.scTypeCheckError sc tm
                ok <- scConvertible sc True ptm ty
                unless ok $ fail $ unlines
@@ -1530,7 +1532,7 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
                    , showTerm tm
                    ]
                return (mempty, ProvedTheorem mempty)
-          _ -> fail "Sequent must be goal-focused for proof term evidence"
+          _ -> fail "Sequent must be conclusion-focused for proof term evidence"
 
       SolverEvidence stats sqt' ->
         do ok <- sequentSubsumes sc sqt' sqt
@@ -1573,10 +1575,10 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
 
       ApplyHypEvidence n es ->
         case sqt of
-          GoalFocusedSequent hs (FB gs1 g gs2) ->
+          ConclFocusedSequent hs (FB gs1 g gs2) ->
             case genericDrop n hs of
               (h:_) ->
-                do (d,sy,p') <- checkApply nenv (\g' -> GoalFocusedSequent hs (FB gs1 g' gs2)) h es
+                do (d,sy,p') <- checkApply nenv (\g' -> ConclFocusedSequent hs (FB gs1 g' gs2)) h es
                    ok <- scConvertible sc False (unProp g) p'
                    unless ok $ fail $ unlines
                        [ "Apply evidence does not match the required proposition"
@@ -1590,13 +1592,13 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
                     , prettySequent defaultPPOpts nenv sqt
                     ]
           _ -> fail $ unlines $
-                    [ "Apply hypothesis evidence requires a goal-focused sequent."
+                    [ "Apply hypothesis evidence requires a conclusion-focused sequent."
                     , prettySequent defaultPPOpts nenv sqt
                     ]
 
       ApplyEvidence thm es ->
         case sequentState sqt of
-          GoalFocus p mkSqt ->
+          ConclFocus p mkSqt ->
             do (d,sy,p') <- checkApply nenv mkSqt (thmProp thm) es
                ok <- scConvertible sc False (unProp p) p'
                unless ok $ fail $ unlines
@@ -1606,7 +1608,7 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
                    ]
                return (Set.insert (thmNonce thm) d, sy)
           _ -> fail $ unlines $
-                    [ "Apply evidence requires a goal-focused sequent"
+                    [ "Apply evidence requires a conclusion-focused sequent"
                     , prettySequent defaultPPOpts nenv sqt
                     ]
 
@@ -1626,7 +1628,7 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
            return (Set.union d1 d2, sy)
 
       HoistIfsEvidence e' ->
-        do sqt' <- traverseSequentWithFocus (hoistIfsInGoal sc) sqt
+        do sqt' <- traverseSequentWithFocus (hoistIfsInProp sc) sqt
            check nenv e' sqt'
 
       EvalEvidence vars e' ->
@@ -1670,7 +1672,7 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
 
       CutEvidence p ehyp egl ->
         do d1 <- check nenv ehyp (addHypothesis p sqt)
-           d2 <- check nenv egl  (addNewFocusedGoal p sqt)
+           d2 <- check nenv egl  (addNewFocusedConcl p sqt)
            return (d1 <> d2)
 
       IntroEvidence x e' ->
@@ -1689,7 +1691,7 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
         case sequentState sqt of
           Unfocused -> fail "Intro evidence requires a focused sequent"
           HypFocus _ _ -> fail "Intro evidence apply in hypothesis"
-          GoalFocus (Prop ptm) mkSqt ->
+          ConclFocus (Prop ptm) mkSqt ->
             case asPi ptm of
               Nothing -> fail $ unlines ["Intro evidence expected function prop", showTerm ptm]
               Just (_lnm, ty, body) ->
@@ -1961,15 +1963,15 @@ sequentToSATQuery sc unintSet sqt =
                  do tmNeg <- scNot sc tmBool
                     return (vars, reverse (BoolAssert tmNeg : xs))
 
--- | Given a goal to prove, attempt to apply the given proposition, producing
+-- | Given a prop to prove, attempt to apply another given proposition, producing
 --   new subgoals for any necessary hypotheses of the proposition.  Returns
 --   @Nothing@ if the given proposition does not apply to the goal.
-goalApply ::
+propApply ::
   SharedContext ->
-  Prop {- ^ propsition to apply -} ->
+  Prop {- ^ propsition to apply (usually a quantified and/or implication term) -} ->
   Prop {- ^ goal to apply the proposition to -} ->
   IO (Maybe [Either Term Prop])
-goalApply sc rule goal = applyFirst (asPiLists (unProp rule))
+propApply sc rule goal = applyFirst (asPiLists (unProp rule))
   where
 
     applyFirst [] = pure Nothing
@@ -2013,7 +2015,7 @@ tacticIntro :: (F.MonadFail m, MonadIO m) =>
   Tactic m TypedTerm
 tacticIntro sc usernm = Tactic \goal ->
   case sequentState (goalSequent goal) of
-    GoalFocus p mkSqt ->
+    ConclFocus p mkSqt ->
       case asPi (unProp p) of
         Just (nm, tp, body) ->
           do let name = if Text.null usernm then nm else usernm
@@ -2034,9 +2036,9 @@ tacticIntro sc usernm = Tactic \goal ->
 tacticIntroHyps :: (F.MonadFail m, MonadIO m) => SharedContext -> Integer -> Tactic m ()
 tacticIntroHyps sc n = Tactic \goal ->
   case goalSequent goal of
-    GoalFocusedSequent hs (FB gs1 g gs2) ->
+    ConclFocusedSequent hs (FB gs1 g gs2) ->
       do (newhs, g') <- liftIO (loop n g)
-         let sqt' = GoalFocusedSequent (hs ++ newhs) (FB gs1 g' gs2)
+         let sqt' = ConclFocusedSequent (hs ++ newhs) (FB gs1 g' gs2)
          let goal' = goal{ goalSequent = sqt' }
          return ((), mempty, [goal'], updateEvidence (NormalizeSequentEvidence sqt'))
     _ -> fail "goal_intro_hyps: conclusion focus required"
@@ -2054,13 +2056,13 @@ tacticIntroHyps sc n = Tactic \goal ->
 tacticRevertHyp :: (F.MonadFail m, MonadIO m) => SharedContext -> Integer -> Tactic m ()
 tacticRevertHyp sc i = Tactic \goal ->
   case goalSequent goal of
-    GoalFocusedSequent hs (FB gs1 g gs2) ->
+    ConclFocusedSequent hs (FB gs1 g gs2) ->
       case genericDrop i hs of
         (h:_) ->
           case (asEqTrue (unProp h), asEqTrue (unProp g)) of
             (Just h', Just g') ->
               do g'' <- liftIO (Prop <$> (scEqTrue sc =<< scImplies sc h' g'))
-                 let sqt' = GoalFocusedSequent hs (FB gs1 g'' gs2)
+                 let sqt' = ConclFocusedSequent hs (FB gs1 g'' gs2)
                  let goal' = goal{ goalSequent = sqt' }
                  return ((), mempty, [goal'], updateEvidence (NormalizeSequentEvidence sqt'))
 
@@ -2076,14 +2078,14 @@ tacticApplyHyp sc n = Tactic \goal ->
   case goalSequent goal of
     UnfocusedSequent{} -> fail "apply hyp tactic: focus required"
     HypFocusedSequent{} -> fail "apply hyp tactic: cannot apply in a hypothesis"
-    GoalFocusedSequent hs (FB gs1 g gs2) ->
+    ConclFocusedSequent hs (FB gs1 g gs2) ->
       case genericDrop n hs of
         (h:_) ->
-          liftIO (goalApply sc h g) >>= \case
+          liftIO (propApply sc h g) >>= \case
             Nothing -> fail "apply hyp tactic: no match"
             Just newterms ->
               let newgoals =
-                    [ goal{ goalSequent = GoalFocusedSequent hs (FB gs1 p gs2)
+                    [ goal{ goalSequent = ConclFocusedSequent hs (FB gs1 p gs2)
                           , goalType = goalType goal ++ ".subgoal" ++ show i
                           }
                     | Right p <- newterms
@@ -2107,8 +2109,8 @@ tacticApply sc thm = Tactic \goal ->
   case sequentState (goalSequent goal) of
     Unfocused -> fail "apply tactic: focus required"
     HypFocus _ _ -> fail "apply tactic: cannot apply in a hypothesis"
-    GoalFocus gl mkSqt ->
-      liftIO (goalApply sc (thmProp thm) gl) >>= \case
+    ConclFocus gl mkSqt ->
+      liftIO (propApply sc (thmProp thm) gl) >>= \case
         Nothing -> fail "apply tactic failed: no match"
         Just newterms ->
           let newgoals =
@@ -2181,7 +2183,7 @@ tacticInsert sc thm ts = Tactic \gl ->
 tacticCut :: (F.MonadFail m, MonadIO m) => SharedContext -> Prop -> Tactic m ()
 tacticCut _sc p = Tactic \gl ->
   let sqt1 = addHypothesis p (goalSequent gl)
-      sqt2 = addNewFocusedGoal p (goalSequent gl)
+      sqt2 = addNewFocusedConcl p (goalSequent gl)
       g1 = gl{ goalType = goalType gl ++ ".cutH", goalSequent = sqt1 }
       g2 = gl{ goalType = goalType gl ++ ".cutG", goalSequent = sqt2 }
    in return ((), mempty, [g1, g2], cutEvidence p)
@@ -2192,7 +2194,7 @@ tacticTrivial sc = Tactic \goal ->
   case sequentState (goalSequent goal) of
     Unfocused -> fail "trivial tactic: focus required"
     HypFocus _ _ -> fail "trivial tactic: cannot apply trivial in a hypothesis"
-    GoalFocus g _ ->
+    ConclFocus g _ ->
       liftIO (trivialProofTerm sc g) >>= \case
         Left err -> fail err
         Right pf ->
@@ -2211,7 +2213,7 @@ tacticExact sc tm = Tactic \goal ->
   case sequentState (goalSequent goal) of
     Unfocused -> fail "tactic exact: focus required"
     HypFocus _ _ -> fail "tactic exact: cannot apply exact in a hypothesis"
-    GoalFocus g _ ->
+    ConclFocus g _ ->
       do let gp = unProp g
          ty <- liftIO $ TC.scTypeCheckError sc tm
          ok <- liftIO $ scConvertible sc True gp ty

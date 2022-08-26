@@ -669,7 +669,7 @@ hoistIfsInGoalPrim :: ProofScript ()
 hoistIfsInGoalPrim =
   execTactic $ tacticChange $ \goal ->
     do sc <- getSharedContext
-       sqt' <- traverseSequentWithFocus (io . hoistIfsInGoal sc) (goalSequent goal)
+       sqt' <- traverseSequentWithFocus (io . hoistIfsInProp sc) (goalSequent goal)
        return (sqt', HoistIfsEvidence)
 
 term_type :: TypedTerm -> TopLevel C.Schema
