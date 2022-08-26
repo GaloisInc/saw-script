@@ -1202,7 +1202,7 @@ checkGoals bak opts nm sc tactic mdMap = do
     res <- runProofScript tactic term proofgoal (Just (gLoc g))
              (Text.unwords
               ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))])
-             False -- do no record this theorem in the database
+             False -- do not record this theorem in the database
              False -- TODO! useSequentGoals
     case res of
       ValidProof stats thm ->

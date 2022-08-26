@@ -105,7 +105,7 @@ thmToJSON thm = object ([
     , ("reason" .= (thmReason thm))
     , ("dependencies" .= toJSON (map indexValue (Set.toList (thmDepends thm))))
     , ("elapsedtime"  .= toJSON (thmElapsedTime thm))
-  ] ++ (theoremStatus (thmSummary thm))
+  ] ++ theoremStatus (thmSummary thm)
     ++ case thmProgramLoc thm of
          Nothing -> []
          Just ploc -> [("ploc" .= plocToJSON ploc)]

@@ -43,12 +43,16 @@ data SATQuery =
       --   for uninterpreted values.
 
   , satAsserts   :: [SATAssert]
-      -- ^ A collection of assertions.  These should
-      --   all be terms of type @Bool@.  The overall
+      -- ^ A collection of assertions. The overall
       --   query should be understood as the conjunction
       --   of these terms.
   }
 
+-- | The type of assertions we can make to a solver. These
+--   are either boolean terms, or universally-quantified
+--   statements. At present, only the What4 backends can
+--   handle universally quantified statments, and only
+--   some of the solvers will accept them without errors.
 data SATAssert
    = BoolAssert Term -- ^ A boolean term to be asserted
    | UniversalAssert [(ExtCns Term, FirstOrderType)] [Term] Term
@@ -56,7 +60,7 @@ data SATAssert
           --   collection of first-order variables, a sequence
           --   of boolean hypotheses, and a boolean conclusion
 
--- | The result of a sat query.  In the event a model is found,
+-- | The result of a sat query. In the event a model is found,
 --   return a mapping from the @ExtCns@ variables to values.
 data SATResult
   = Unsatisfiable
@@ -67,7 +71,8 @@ data SATResult
 --   in this SAT query as a single term of type Bool.
 --
 --   This method of reducing a sat query to a boolean
---   cannot be used for universally-quantified assertions.
+--   cannot be used for universally-quantified assertions,
+--   and will raise an error if it encounters one.
 satQueryAsTerm :: SharedContext -> SATQuery -> IO Term
 satQueryAsTerm sc satq =
   case satAsserts satq of

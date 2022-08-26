@@ -1124,6 +1124,8 @@ specializeHypEvidence n h ts [e] = pure (CutEvidence h e (ApplyHypEvidence n (ma
 specializeHypEvidence _ _ _ _ = fail "specializeHypEvidence: expected one evidence value"
 
 structuralEvidence :: Sequent -> Evidence -> Evidence
+-- If we apply some structural evidence to an already existing structural evidence, we can
+-- just omit the new one because the checking procedure doesn't need the intermediate state.
 structuralEvidence _sqt (StructuralEvidence sqt' e) = StructuralEvidence sqt' e
 structuralEvidence sqt e = StructuralEvidence sqt e
 
@@ -1728,12 +1730,14 @@ startProof g pos ploc rsn =
 --   proposition.  If successful, return the completed @Theorem@ and a summary
 --   of solver resources used in the proof.
 --
---   If first boolean argument is False, the resulting theorem will not be
+--   If first boolean argument is @False@, the resulting theorem will not be
 --   recored in the theorem database. This should only be done when you are
 --   sure that the theorem will not be used as part of the proof of other theorems,
 --   or later steps will fail. This is intended for proofs of verification conditions,
 --   which are not exposed for reuse, and where it requires a significant memory
---   burden to record them.
+--   burden to record them. In particular commands like @llvm_verify@, @jvm_verify@, etc
+--   that produce and verify verification conditions should set this argument to
+--   @False@ to reduce memory pressure.
 --
 --   The final boolean argument indicates if the proof state needs a sequent normalization
 --   step as the final step in its evidence chain to check.  This is useful for goals that

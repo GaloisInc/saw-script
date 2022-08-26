@@ -304,7 +304,6 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   --io $ putStrLn $ "Top-level bind: " ++ show mx
   --showCryptolEnv
 
-
   -- Print non-unit result if it was not bound to a variable
   case pat of
     SS.PWild _ | printBinds && not (isVUnit result) ->
@@ -388,7 +387,6 @@ interpretStmt printBinds stmt =
       liftTopLevel $
       do rw <- getTopLevelRW
          putTopLevelRW $ addTypedef (getVal name) ty rw
-
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
 interpretFile file runMain = do
@@ -1224,7 +1222,7 @@ primitives = Map.fromList
   , prim "implies_term"      "Term -> Term -> Term"
     (funVal2 implies_term)
     Experimental
-    [ "Given to terms, which must be Prop terms, construct the SAWCore implication"
+    [ "Given two terms, which must be Prop terms, construct the SAWCore implication"
     , "of those terms."
     ]
 

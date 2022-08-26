@@ -84,7 +84,6 @@ Instance Inhabited_unit : Inhabited unit :=
 Instance Inhabited_bool : Inhabited bool :=
   MkInhabited bool false.
 
-
 (* SAW uses an alternate form of eq_rect where the motive function P also
 depends on the equality proof itself *)
 Definition Eq__rec (A : Type) (x : A) (P: forall y, x=y -> Type) (p:P x eq_refl) y (e:x=y) :

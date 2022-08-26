@@ -1396,7 +1396,8 @@ proveByBVInduction script t =
              _ -> return Nothing
 
   badTy opts ty =
-    fail $ unlines [ "Incorrect type for proof by induction"
+    fail $ unlines [ "Incorrect type for proof by induction!"
+                   , "Run `:help prove_by_bv_induction` to see a description of what is expected."
                    , show (ppTerm (SV.sawPPOpts opts) ty)
                    ]
 

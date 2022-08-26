@@ -2668,6 +2668,7 @@ scTreeSizeAux = go
         Nothing -> (sz + sz', Map.insert idx sz' seen')
           where (sz', seen') = foldl' go (1, seen) tf
 
+
 -- | `openTerm sc nm ty i body` replaces the loose deBruijn variable `i`
 --   with a fresh external constant (with name `nm`, and type `ty`) in `body`.
 scOpenTerm :: SharedContext
