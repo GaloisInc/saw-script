@@ -362,7 +362,6 @@ jobs:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
         type: [self-hosted]
         os: [ubuntu-18.04]
-        type: 
         continue-on-error: [false]
         include:
           - suite: integration_tests
