@@ -63,7 +63,7 @@ jobs:
           .github/ci.sh output retention-days $($RELEASE && echo 90 || echo 5)
 
   build:
-    runs-on: [self-hosted, ${{ matrix.os }}]
+    runs-on: ["self-hosted", "${{ matrix.os }}"]
     needs: [config]
     strategy:
       fail-fast: false
@@ -224,7 +224,7 @@ jobs:
         os: [ubuntu-latest]
         include:
           - os: [macos-12]
-    runs-on: [self-hosted, ${{ matrix.os }}]
+    runs-on: ["self-hosted", "${{ matrix.os }}"]
     steps:
       - uses: actions/checkout@v2
         with:
@@ -260,7 +260,7 @@ jobs:
         os: [ubuntu-latest]
         include:
           - os: [macos-12]
-    runs-on: [self-hosted, ${{ matrix.os }}]
+    runs-on: ["self-hosted", "${{ matrix.os }}"]
     steps:
       - uses: actions/checkout@v2
         with:
@@ -303,7 +303,7 @@ jobs:
         run: opam exec -- make -j
 
   saw-remote-api-tests:
-    runs-on: [self-hosted, ${{ matrix.os }}]
+    runs-on: ["self-hosted", "${{ matrix.os }}"]
     needs: [build]
     strategy:
       fail-fast: false
@@ -360,7 +360,7 @@ jobs:
           ${{ matrix.test }}
 
   cabal-test:
-    runs-on: [self-hosted, ${{ matrix.os }}]
+    runs-on: ["self-hosted", "${{ matrix.os }}"]
     needs: [build]
     strategy:
       fail-fast: false
@@ -430,7 +430,7 @@ jobs:
           dist-tests/${{ matrix.suite }}
 
   build-push-image:
-    runs-on: [self-hosted, ubuntu-latest]
+    runs-on: ["self-hosted", "ubuntu-latest"]
     needs: [config]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true'
     strategy:
@@ -532,7 +532,7 @@ jobs:
     name: "Test s2n proofs"
     timeout-minutes: 120
     needs: build
-    runs-on: [self-hosted, ubuntu-18.04]
+    runs-on: ["self-hosted", "ubuntu-18.04"]
     strategy:
       fail-fast: false
       matrix:
@@ -587,7 +587,7 @@ jobs:
   # - changes to jobs or job instances don't require a mergify config update
   # - dependencies through `needs:` are validated, CI will fail if it's invalid
   mergify:
-    runs-on: [self-hosted, ubuntu-latest]
+    runs-on: ["self-hosted", "ubuntu-latest"]
     needs:
       - build
       - heapster-tests
