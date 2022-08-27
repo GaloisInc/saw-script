@@ -63,24 +63,20 @@ jobs:
           .github/ci.sh output retention-days $($RELEASE && echo 90 || echo 5)
 
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: [self-hosted, ${{ matrix.os }}]
     needs: [config]
     strategy:
       fail-fast: false
       matrix:
-        type: [self-hosted]
         os: [ubuntu-18.04]
         ghc: ["8.8.4", "8.10.7", "9.0.2"]
         include:
           - os: macos-12
             ghc: "8.10.7"
-            type: ""
           - os: macos-12
             ghc: "9.0.2"
-            type: ""
           - os: windows-latest
             ghc: "8.10.7"
-            type: ""
         #exclude:
           # Exclude 8.8 on macOS 12 due to
           # https://gitlab.haskell.org/ghc/ghc/-/issues/18446
@@ -225,12 +221,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        type: [self-hosted]
         os: [ubuntu-latest]
         include:
           - os: [macos-12]
-            type: ""
-    runs-on: ${{ matrix.os }}
+    runs-on: [self-hosted, ${{ matrix.os }}]
     steps:
       - uses: actions/checkout@v2
         with:
@@ -263,12 +257,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        type: [self-hosted]
         os: [ubuntu-latest]
         include:
           - os: [macos-12]
-            type: ""
-    runs-on: ${{ matrix.os }}
+    runs-on: [self-hosted, ${{ matrix.os }}]
     steps:
       - uses: actions/checkout@v2
         with:
@@ -311,7 +303,7 @@ jobs:
         run: opam exec -- make -j
 
   saw-remote-api-tests:
-    runs-on: ${{ matrix.os }}
+    runs-on: [self-hosted, ${{ matrix.os }}]
     needs: [build]
     strategy:
       fail-fast: false
@@ -319,7 +311,6 @@ jobs:
         include:
           - name: Install and test
             test: saw-remote-api/scripts/run_rpc_tests.sh
-            type: [self-hosted]
             os: ubuntu-18.04
           # TODO: saw-remote-api unit tests are disabled pending a fix for #1699
           - name: Install on MacOS
@@ -328,11 +319,9 @@ jobs:
               poetry update
               poetry install
               poetry run mypy saw_client/
-            type: ""
             os: macos-12
           - name: Check docs
             test: saw-remote-api/scripts/check_docs.sh
-            type: [self-hosted]
             os: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
@@ -371,23 +360,20 @@ jobs:
           ${{ matrix.test }}
 
   cabal-test:
-    runs-on: ${{ matrix.os }}
+    runs-on: [self-hosted, ${{ matrix.os }}]
     needs: [build]
     strategy:
       fail-fast: false
       matrix:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
-        type: [self-hosted]
         os: [ubuntu-18.04]
         continue-on-error: [false]
         include:
           - suite: integration_tests
             os: macos-12
-            type: ""
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
           - suite: integration_tests
             os: windows-latest
-            type: ""
             timeout-minutes: 60
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
         exclude:
