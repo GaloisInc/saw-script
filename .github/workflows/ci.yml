@@ -25,6 +25,7 @@ env:
   # ./s2nTests/scripts/blst-entrypoint.sh
   # ./s2nTests/docker/saw.dockerfile
   SOLVER_PKG_VERSION: "snapshot-20220721"
+  #SOLVER_PKG_VERSION: "snapshot-20220812"
 
   OCAML_VERSION: 4.09.x
 
@@ -62,7 +63,7 @@ jobs:
           .github/ci.sh output retention-days $($RELEASE && echo 90 || echo 5)
 
   build:
-    runs-on: ["${{ matrix.os }}"]
+    runs-on: ${{ matrix.os }}
     needs: [config]
     strategy:
       fail-fast: false
@@ -73,17 +74,30 @@ jobs:
         include:
           - os: macos-12
             ghc: "8.10.7"
+            type: ""
           - os: macos-12
             ghc: "9.0.2"
+            type: ""
           - os: windows-latest
             ghc: "8.10.7"
-
+            type: ""
         #exclude:
           # Exclude 8.8 on macOS 12 due to
           # https://gitlab.haskell.org/ghc/ghc/-/issues/18446
+          #- os: macos-12
+          #  ghc: "8.8.4"
+          #- os: windows-latest
+          #  ghc: "8.8.4"
           # Exclude 9.0 on Windows for now until
           # https://github.com/commercialhaskell/stackage/issues/6400
           # is resolved
+          #- os: windows-latest
+          #  ghc: "9.0.2"
+          # Exclude self-hosted for OS's that are note supported by stardust
+          #- os: macos-12
+          #  type: "self-hosted"
+          #- os: windows-latest
+          #  type: "self-hosted"
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
@@ -214,8 +228,9 @@ jobs:
         type: [self-hosted]
         os: [ubuntu-latest]
         include:
-          - os: macos-12
-    runs-on: ["${{ matrix.os }}"]
+          - os: [macos-12]
+            type: ""
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
         with:
@@ -251,8 +266,9 @@ jobs:
         type: [self-hosted]
         os: [ubuntu-latest]
         include:
-          - os: macos-12
-    runs-on: ["${{ matrix.os }}"]
+          - os: [macos-12]
+            type: ""
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
         with:
@@ -295,7 +311,7 @@ jobs:
         run: opam exec -- make -j
 
   saw-remote-api-tests:
-    runs-on: ["${{ matrix.os }}"]
+    runs-on: ${{ matrix.os }}
     needs: [build]
     strategy:
       fail-fast: false
@@ -303,8 +319,8 @@ jobs:
         include:
           - name: Install and test
             test: saw-remote-api/scripts/run_rpc_tests.sh
+            type: [self-hosted]
             os: ubuntu-18.04
-            type: self-hosted
           # TODO: saw-remote-api unit tests are disabled pending a fix for #1699
           - name: Install on MacOS
             test: |
@@ -312,11 +328,12 @@ jobs:
               poetry update
               poetry install
               poetry run mypy saw_client/
+            type: ""
             os: macos-12
           - name: Check docs
             test: saw-remote-api/scripts/check_docs.sh
+            type: [self-hosted]
             os: ubuntu-18.04
-            type: self-hosted
     steps:
       - uses: actions/checkout@v2
         with:
@@ -354,7 +371,7 @@ jobs:
           ${{ matrix.test }}
 
   cabal-test:
-    runs-on: ["${{ matrix.os }}"]
+    runs-on: ${{ matrix.os }}
     needs: [build]
     strategy:
       fail-fast: false
@@ -366,9 +383,11 @@ jobs:
         include:
           - suite: integration_tests
             os: macos-12
+            type: ""
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
           - suite: integration_tests
             os: windows-latest
+            type: ""
             timeout-minutes: 60
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
         exclude:
@@ -425,7 +444,7 @@ jobs:
           dist-tests/${{ matrix.suite }}
 
   build-push-image:
-    runs-on: ["${{ matrix.os }}"]
+    runs-on: [self-hosted, ubuntu-latest]
     needs: [config]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true'
     strategy:
@@ -527,7 +546,7 @@ jobs:
     name: "Test s2n proofs"
     timeout-minutes: 120
     needs: build
-    runs-on: ["${{ matrix.os }}"]
+    runs-on: [self-hosted, ubuntu-18.04]
     strategy:
       fail-fast: false
       matrix:
@@ -582,7 +601,7 @@ jobs:
   # - changes to jobs or job instances don't require a mergify config update
   # - dependencies through `needs:` are validated, CI will fail if it's invalid
   mergify:
-    runs-on: ["${{ matrix.os }}"]
+    runs-on: [self-hosted, ubuntu-latest]
     needs:
       - build
       - heapster-tests
