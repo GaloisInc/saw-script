@@ -3185,7 +3185,7 @@ primitives = Map.fromList
     (pureVal llvm_verify_x86_with_invariant)
     Experimental
     [ "An experimental variant of 'llvm_verify_x86'. This variant can prove some properties"
-    , "involving simple loops with the help of a user-provided loop invariant describes"
+    , "involving simple loops with the help of a user-provided loop invariant that describes"
     , "how the live variables in the loop evolve as the loop computes."
     ]
 
