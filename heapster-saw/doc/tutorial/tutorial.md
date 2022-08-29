@@ -32,7 +32,7 @@ We'll start by building everything you need to use Heapster. All the
 commands here are with respect to the top-level saw-script directory.
 
 ### Build Saw 
-
+ 
 You will need to follow the instructions in the top-level README to
 download or build a SAW binary, of which Heapster is a part. In
 particular, make sure you follow the instructions to install Z3. Once `./build.sh`
@@ -62,7 +62,7 @@ sawscript> :quit
 In this tutorial we will also interact with Heapster's Coq output. So you'll need
 to follow the instructions in the README in the `saw-core-coq` subdirectory.
 Specifically, after installing the dependencies, you will need to run the
-following (from this directory):
+following (from the top level directory):
 ```bash
 cd /saw-core-coq/coq
 make
@@ -73,7 +73,7 @@ build should complete without any errors.
 
 **TODO: How do we check if this is properly installed before continuing?**
 
-Before continuing, return to the top-level directory with `cd ..`.
+Before continuing, return to the top-level directory with `cd ../..`.
 
 ### Build all the examples
 
@@ -85,7 +85,9 @@ and build, like so
 cd /heapster-saw/examples
 make
 ```
+
 You will see several files build that looks like this:
+
 ```bash
 COQC global_var_gen.v
 COQC global_var_proofs.v
@@ -94,6 +96,8 @@ COQC sha512_gen.v
 
 It will take several minutes and it should complete without any
 errors. Once it's done, you know you are ready to use Heapser!
+
+Before continuing, return to the top-level directory with `cd ../..`.
 
 ## A quick tour of SAW
 
@@ -310,6 +314,14 @@ safety. Once a program is type-checked as memory-safe, it can be then
 extracted as a functional program to be verified in Coq.
 
 **TODO: Double check this description of Heapster**
+
+This section assumes you are in the `/heapster-saw/examples`
+directory. If you are not, make sure to go there
+
+```bash
+cd /heapster-saw/examples
+make
+```
 
 ### Heapster type-checking overview
 
