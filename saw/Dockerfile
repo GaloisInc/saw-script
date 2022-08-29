@@ -1,6 +1,6 @@
 FROM haskell:8.8.4 AS build
 USER root
-RUN apt-get update && apt-get install -y wget libncurses-dev unzip
+RUN apt-get update && apt-get install -y wget libncurses-dev unzip libgmp
 RUN useradd -m saw
 COPY --chown=saw:saw . /home/saw
 USER saw
