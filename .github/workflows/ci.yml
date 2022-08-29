@@ -8,7 +8,7 @@ name: SAWScript
 on:
   push:
     tags: ["v?[0-9]+.[0-9]+(.[0-9]+)?"]
-    branches: [master, "release-**"]
+    branches: [master, "release-**", "dwest/dependencies"]
   pull_request:
   schedule:
     - cron: "0 10 * * *" # 10am UTC -> 2/3am PST
