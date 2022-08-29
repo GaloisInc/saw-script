@@ -25,7 +25,6 @@ env:
   # ./s2nTests/scripts/blst-entrypoint.sh
   # ./s2nTests/docker/saw.dockerfile
   SOLVER_PKG_VERSION: "snapshot-20220721"
-  #SOLVER_PKG_VERSION: "snapshot-20220812"
 
   OCAML_VERSION: 4.09.x
 
@@ -70,13 +69,13 @@ jobs:
       matrix:
         os: [ubuntu-18.04]
         ghc: ["8.8.4", "8.10.7", "9.0.2"]
-        include:
-          - os: macos-12
-            ghc: "8.10.7"
-          - os: macos-12
-            ghc: "9.0.2"
-          - os: windows-latest
-            ghc: "8.10.7"
+        #include:
+        #  - os: macos-12
+        #    ghc: "8.10.7"
+        #  - os: macos-12
+        #    ghc: "9.0.2"
+        #  - os: windows-latest
+        #    ghc: "8.10.7"
         #exclude:
           # Exclude 8.8 on macOS 12 due to
           # https://gitlab.haskell.org/ghc/ghc/-/issues/18446
@@ -222,8 +221,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        include:
-          - os: [macos-12]
+        #include:
+        #  - os: [macos-12]
     runs-on: ["self-hosted", "${{ matrix.os }}"]
     steps:
       - uses: actions/checkout@v2
@@ -258,8 +257,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        include:
-          - os: [macos-12]
+        #include:
+        #  - os: [macos-12]
     runs-on: ["self-hosted", "${{ matrix.os }}"]
     steps:
       - uses: actions/checkout@v2
@@ -313,13 +312,13 @@ jobs:
             test: saw-remote-api/scripts/run_rpc_tests.sh
             os: ubuntu-18.04
           # TODO: saw-remote-api unit tests are disabled pending a fix for #1699
-          - name: Install on MacOS
-            test: |
-              cd saw-remote-api/python/
-              poetry update
-              poetry install
-              poetry run mypy saw_client/
-            os: macos-12
+          #- name: Install on MacOS
+          #  test: |
+          #    cd saw-remote-api/python/
+          #    poetry update
+          #    poetry install
+          #    poetry run mypy saw_client/
+          #  os: macos-12
           - name: Check docs
             test: saw-remote-api/scripts/check_docs.sh
             os: ubuntu-18.04
@@ -368,21 +367,21 @@ jobs:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
         os: [ubuntu-18.04]
         continue-on-error: [false]
-        include:
-          - suite: integration_tests
-            os: macos-12
-            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
-          - suite: integration_tests
-            os: windows-latest
-            timeout-minutes: 60
-            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
-        exclude:
-          - suite: integration_tests
-            os: macos-12
-            continue-on-error: false
-          - suite: integration_tests
-            os: windows-latest
-            continue-on-error: false
+        #include:
+        #  - suite: integration_tests
+        #    os: macos-12
+        #    continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
+        #  - suite: integration_tests
+        #    os: windows-latest
+        #    timeout-minutes: 60
+        #    continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
+        #exclude:
+        #  - suite: integration_tests
+        #    os: macos-12
+        #    continue-on-error: false
+        #  - suite: integration_tests
+        #    os: windows-latest
+        #    continue-on-error: false
     steps:
       - uses: actions/checkout@v2
         with:
