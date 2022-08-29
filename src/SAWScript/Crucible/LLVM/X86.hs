@@ -737,7 +737,7 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
          Right tp ->
            do ok <- scConvertible sc True tp =<< scBoolType sc
               unless ok $
-                fail $ unlines [ "Loop invaraiant must return a boolean value, but got:"
+                fail $ unlines [ "Loop invariant must return a boolean value, but got:"
                                , show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tp)
                                   -- TODO, get ppOpts from the right place
                                ]
