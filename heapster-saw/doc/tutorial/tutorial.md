@@ -342,15 +342,15 @@ make
 ### Heapster type-checking overview
 
 Heapster allows us to (1) type check programs with respect to
-types/specifications that can express separation loigc and (2) extract
+types that can express separation loigc and (2) extract
 the resulting functional program to Coq for further verification.
 
 The process will generally involve
 
 - [1. Generating LLVM bitcode](#1-generating-llvm-bitcode)
 - [2. Run the SAW interpreter with Heapster](#2-run-the-saw-interpreter-with-heapster)
-- [3. Load the file and extract the two function specifications.](#3-load-the-file-and-extract-the-two-function-specifications-1)
-- [4. Writing heapster specifications for your functions](#4-writing-heapster-specifications-for-your-functions)
+- [3. Load the file and extract the two function types.](#3-load-the-file-and-extract-the-two-function-types-1)
+- [4. Writing heapster types for your functions](#4-writing-heapster-types-for-your-functions)
 - [5. Writing a SAW script to type-check your code with respect to the sepcification](#5-writing-a-saw-script-to-type-check-your-code-with-respect-to-the-sepcification)
 - [6. Writing a Coq file to prove things about the generated functional specification(s)](#6-writing-a-coq-file-to-prove-things-about-the-generated-functional-specifications)
 
@@ -394,8 +394,12 @@ run this command.
 clang -g -c -emit-llvm -o linked_list.bc linked_list.c
 ```
 
-(The alternative command `make linked_list.bc` won't work
-because the shorcut is not defined in the Makefile of heapster.)
+Alternatively, as long as you are in the `heapster-saw/examples` directory, you can also run 
+
+```bash
+make linked_list.bc
+```
+
 
 Be aware that the resulting bitcode may depend on your `clang` version and your
 operating system. In turn, this means the Heapster commands in your SAW script
@@ -411,7 +415,7 @@ can load all the Heapster commands with
 sawscript> enable_experimental
 ```
 
-If you print the environment now (wiht `:env`) you will notice a new
+If you print the environment now (with `:env`) you will notice a new
 set of commands, all starting with `heapster_*`. You can also start
 typing the name and press tab to see all the functions those are all the Heapster commands.
 
@@ -441,39 +445,42 @@ heapster_find_symbol_with_type       heapster_typecheck_mut_funs
 You can then use `:?` to see further information for each of them.
 
 
-#### 3. Load the file and extract the two function specifications.
+#### 3. Load the file and extract the two function types.
 
-To load a file into heapster you can use `heapster_init_env`. Let's
-check it's documentation first
+To load a file into heapster you can use `heapster_init_env_from_file`. Let's
+check its documentation first
 
 ``` bash
-sawscript> :help heapster_init_env
+sawscript> :? heapster_init_env_from_file
 Description
 -----------
 
 EXPERIMENTAL
 
-heapster_init_env : String -> String -> TopLevel HeapsterEnv
+    heapster_init_env_from_file : String -> String -> TopLevel HeapsterEnv
 
-Create a new Heapster environment with the given SAW module name
-from the named LLVM bitcode file.
+Create a new Heapster environment from the named LLVM bitcode file,
+ initialized with the module in the given SAW core file.
 ```
 
-As you see it takes two names. The first, is the name of the SAW core
-module where Heapster will write all the specifications we extract. If
-you start with a fresh name, Heapster will autogenerate a new module
-for you. We will see later how to use existisng modules. The second
-name referse to the bitecode file containing the code we are
-verifying.
+As you see it takes two names. The second name referse to the bitecode
+file containing the code we are verifying. The first, is the name of
+the SAW core module that can contain extra definitions and where
+Heapster will store the new definitions you provide. 
 
 The function returns a Heapster environment that contains all the
 definitions of the module (not to be confused with the SAW environment
 that can be printed wiht `:env`).
 
+Alternatively, if you don't have any extra SAW core definitions, you
+can use `heapster_init_env` which does the same as
+`heapster_init_env_from_file`, except it will create a fresh SAW core
+module for you with the given name.
+
 Let's load our module with
 
 ```
-env <- heapster_init_env "linked_list" "linked_list.bc";
+env <- heapster_init_env_from_file "linked_list.sawcore" "linked_list.bc";
 ```
 
 we have created a new Heapster environment that we can explore. 
@@ -505,12 +512,12 @@ The heapster environment contains all the types, global definitions,
 external references and functions from the loaded module.
 
 
-#### 4. Writing heapster specifications for your functions
+#### 4. Writing heapster types for your functions
 
-##### Pen and paper specification
+##### Pen and paper type
 
 Before we go foward using Heapster, let's think about what the
-specification for `is_elem` should be. As we can check in the
+type for `is_elem` should be. As we can check in the
 environment `env`, `is_elem` takes a 64-bit integer the "element".
 
 ```LLVM
@@ -529,18 +536,18 @@ the inputs after the call we can simplify it to `arg0:true, arg1:
 true, ret:int64`, where `true` is a predicate the is always satisfied.
  
 Then, using the linear implication `-o` we can express the
-specification of `is_elem` as
+type of `is_elem` as
 
 ```
 arg0:int64, arg1: list int64 -o arg0:true, arg1:true, ret:int64
 ```
 
-Notice that this is a memory-safety specification, not a correctness
+Notice that this is a memory-safety type, not a correctness
 predicate. We can reason about the correctness of the function once we
 extract it as a functional program in Coq.
 
 In the next sections, we shall define the predicates necessary to
-write this specification in Heapster.
+write this type in Heapster.
 
 ##### Defining permission predicates
 
@@ -556,18 +563,39 @@ heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x)
 The first argument is the Heapster environment, the second is its
 name, the third is its arguments (of which there are none), the fourth
 is the type of value that the permission applies to, and the fifth is
-its definition. the new permission is created and added to the
-environment.
+its permision type. The new permission is created and added to the
+environment. 
+
+Uses of this named permission are written `int64<>` where the `<>` is
+the empty list of arguments.
 
 Unfortunately, there is currently no way to print the newly defined
 permissions. If you try to print the environment (`print env`) at this
 point, you will only see the `llvm` definitions. We might add
 functionality for showing permissions in the future.
 
-The permission predicate for lists is a little more complicated
-because it requires a recursive definition. To define
-[permissions](doc/Permissions.md) which can describe unbounded data
-structures, you can use the `heapster_define_recursive_perm`
+Before we look at the definition of a `List64<rw>` lets focus on its
+permission type. First of all, `List64<rw>` takes a single argumetn
+`rw` which determines if the list is readable or writable. It's type
+should look something like this
+
+```
+["eq(llvmword(0))", "ptr((rw,0) |-> int64<>) * ptr((rw,8) |-> List64<rw>)"]
+```
+
+the definition shows the diferent cases for a list, separated by a
+coma. In the first case, a `List64` is can be a null pointer,
+expressed with the type `eq(llvmword(0))`. In the second case, a list
+is a pointer where offset 0 is the head, an `Int64`, and offset `8`
+it's the tail, another `List64`, i.e., it is recursively a
+`List64<rw>` . In the later case, both elements are tagged with `rw`,
+describing if they are readable or writable, as determined by the
+argument to `List64<rw>`.
+
+You might have noticed that the permission predicate for lists is
+recursive, since it must refer to it's tail which is itself a list. To
+define [permissions](doc/Permissions.md) which can describe unbounded
+data structures, you can use the `heapster_define_recursive_perm`
 command. As an example, here is how to describe a linked list of
 64-bit words using this command:
 
@@ -584,14 +612,12 @@ heapster_define_recursive_perm
 ```
 
 Its first four arguments are the same as for `heapster_define_perm`,
-its fifth argument contains its different inductive cases (in this
-case, a `List64` is either a null pointer, or a pointer to an `Int64`
-and another `List64`), and its final three arguments are its
-translation into SAW core. Here the SAW core definitions used are from
-the SAW core prelude which are included by default when Heapster
-autogenerates a a module for you. If you need new SAW core
-definitions, you will need to use the following command instead of
-`heapster_init_env`:
+its fifth argument contains its different inductive cases which we
+describe below, and its final three arguments are its translation into
+SAW core. Here the SAW core definitions used are from the SAW core
+prelude which are included by default when Heapster autogenerates a a
+module for you. If you need new SAW core definitions, you will need to
+use the following command instead of `heapster_init_env`:
 
 ```
 env <- heapster_init_env_from_file "my_file.sawcore" "my_file.bc";
@@ -605,9 +631,11 @@ reference on the syntax and meaning of heapster permissions.
 We begin by converting the pen-and-paper specification of `is_elem`
 into a Heapster specification. First, every heapster type begins with
 the declaration of a ghost environment. Our specification doesn't use
-any ghost variable so that is `().` Moreover, for every predicate we
-use, we must specify whether the location is readble-only `<R>` or
-both readable and writable `<>`. Whith this we can write our specification as 
+any ghost variable so that is `().` Moreover, every named definition
+takes it's arguments within angled braces `<args>`. For `int64`, which
+takes no arguments that is just `<>`, and for `List` which takes a an
+arguments to define that it is a readable list, it is `<R>`. Whith
+this we can write our specification as
 
 ```
 ().arg0:int64<>, arg1:List64<R> -o arg0:true, arg1:true,
