@@ -63,8 +63,9 @@ In this tutorial we will also interact with Heapster's Coq output. So you'll nee
 to follow the instructions in the README in the `saw-core-coq` subdirectory.
 Specifically, after installing the dependencies, you will need to run the
 following (from the top level directory):
+
 ```bash
-cd /saw-core-coq/coq
+cd saw-core-coq/coq
 make
 ```
 
@@ -86,7 +87,22 @@ cd /heapster-saw/examples
 make
 ```
 
-You will see several files build that looks like this:
+If this is the first time you run make in this folder, you will see `cabal run saw` called multiple times like so
+
+```
+/Path/To/Saw/
+[16:59:41.084] Loading file "/Path/To/Saw/saw-script/heapster-saw/examples/linked_list.saw"
+cabal run saw xor_swap.saw
+Up to date
+
+
+
+[16:59:42.974] Loading file "/Path/To/Saw/saw-script/heapster-saw/examples/xor_swap.saw"
+cabal run saw xor_swap_rust.saw
+Up to date
+```
+
+Eventually it should start making the coq files
 
 ```bash
 COQC global_var_gen.v
@@ -94,7 +110,7 @@ COQC global_var_proofs.v
 COQC sha512_gen.v
 ```
 
-It will take several minutes and it should complete without any
+It might take several minutes but it should complete without any
 errors. Once it's done, you know you are ready to use Heapser!
 
 Before continuing, return to the top-level directory with `cd ../..`.
@@ -344,9 +360,11 @@ can combine steps 2-6 in a `.saw` file and use SAW's batch processing.
 ### Running an example
 
 This section will walk through the process of using Heapster to write
-and verify some C code. Specifially, we want to verify the function
+and verify some C code. 
+
+Specifially, we want to verify the function
 `is_elem`, which tests if a specific value is in a list. The function,
-together with others, can be found in `examples/linked_list.c`.
+together with others, can be found in `linked_list.c`.
 
 ```C
 typedef struct list64_t {
@@ -373,10 +391,10 @@ included the binary for all the examples so you don't really need to
 run this command.
 
 ```bash
-clang -g -c -emit-llvm -o examples/linked_list.bc examples/linked_list.c
+clang -g -c -emit-llvm -o linked_list.bc linked_list.c
 ```
 
-(The alternative command `make examples/linked_list.bc` won't work
+(The alternative command `make linked_list.bc` won't work
 because the shorcut is not defined in the Makefile of heapster.)
 
 Be aware that the resulting bitcode may depend on your `clang` version and your
@@ -455,14 +473,14 @@ that can be printed wiht `:env`).
 Let's load our module with
 
 ```
-env <- heapster_init_env "linked_list" "examples/linked_list.bc";
+env <- heapster_init_env "linked_list" "linked_list.bc";
 ```
 
 we have created a new Heapster environment that we can explore. 
 
 ```
 sawscript> print env
-[20:19:48.436] Module: examples/linked_list.bc
+[20:19:48.436] Module: linked_list.bc
 Types:
   %struct.list64_t = type { i64, %struct.list64_t* }
 
@@ -612,7 +630,7 @@ the `heapster_typecheck_fun` command to succeed. In the case of functions with
 loops, this hint corresponds to a loop invariant. Additionally, such examples
 will also often require your unbounded data structure to be defined as a
 reachability permission, using `heapster_define_reachability_perm`, instead of
-just as a recursive permission. See `examples/iter_linked_list.saw` for some
+just as a recursive permission. See `iter_linked_list.saw` for some
 examples of using the commands mentioned in this paragraph.
 
 Once you're finished, use the following command to export all the type-checked
