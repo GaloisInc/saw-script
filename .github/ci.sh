@@ -76,7 +76,7 @@ build() {
 
 install_system_deps() {
   # OS Specific Packages
-  if $BUILD_TARGET_OS == 'ubuntu-18.04'; then
+  if [[ $BUILD_TARGET_OS == 'ubuntu-18.04']]; then
     apt update
     apt install -y software-properties-common apt-transport-https ca-certificates wget \
       curl zlibc zlib1g zlib1g-dev git zip libgmp3-dev build-essential libtinfo-dev autoconf automake gperf cmake locales \
