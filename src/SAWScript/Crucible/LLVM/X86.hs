@@ -658,6 +658,10 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
        return (result_substitution, result_condition)
 
 
+-- | This procedure sets up the simple loop fixpoint feature.
+--   Its main task is to massage the user-provided invariant
+--   term into the form expected by the Crucible exeuction
+--   feature.
 setupSimpleLoopInvariantFeature ::
   ( sym ~ W4.B.ExprBuilder n st fs
   , C.IsSymInterface sym
@@ -667,14 +671,14 @@ setupSimpleLoopInvariantFeature ::
   , C.IsSyntaxExtension ext
   ) =>
   sym ->
-  (String -> IO ()) ->
-  Integer ->
+  (String -> IO ()) {- ^ logging function -} ->
+  Integer {- ^ Which loop are we targeting? -} ->
   SharedContext ->
   SAWCoreState n ->
   IORef MetadataMap ->
   C.CFG ext blocks init ret ->
   C.GlobalVar C.LLVM.Mem ->
-  TypedTerm ->
+  TypedTerm {- ^ user-provided invariant term -} ->
   IO (C.ExecutionFeature p sym ext rtp)
 
 setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func =
@@ -685,6 +689,10 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
     do let subst_pairs = reverse (MapF.toList invariant_substitution)
        let filtered_implicit_params = filter
              (\ (Some variable) ->
+               -- We filter variables with the following special names from appearing as
+               -- implicit arguments to the loop invariant.  These are basically all various
+               -- kinds of underspecification appearing from various underlying components
+               -- and don't make sense as arguments to the loop invariant.
                not (List.isPrefixOf "creg_join_var" $ show $ W4.printSymExpr variable)
                && not (List.isPrefixOf "cmem_join_var" $ show $ W4.printSymExpr variable)
                && not (List.isPrefixOf "cundefined" $ show $ W4.printSymExpr variable)
@@ -706,6 +714,8 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
        initial_tuple <- scTuple sc initial_exprs
        current_tuple <- scTuple sc current_exprs
 
+       -- use the provided logging function to print the discovered
+       -- implicit parameters
        when (phase == SimpleInvariant.InitialInvariant) $
          do printFn "Loop invariant implicit parameters!"
             forM_ implicit_params' $ \x ->
@@ -713,6 +723,7 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
                    tp <- scTypeOf sc x
                    printFn (show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tp))
 
+       -- actually apply the arguments to the given term
        inv <- scApplyAll sc (ttTerm func) (implicit_params' ++ [initial_tuple, current_tuple])
 
        -- check that the produced term is type-correct
