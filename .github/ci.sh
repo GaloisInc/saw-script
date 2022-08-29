@@ -75,6 +75,16 @@ build() {
 }
 
 install_system_deps() {
+  # OS Specific Packages
+  if [[ $BUILD_TARGET_OS == 'ubuntu-18.04' ]] ; then
+    sudo apt update
+    sudo apt install -y software-properties-common apt-transport-https ca-certificates wget \
+      curl zlibc zlib1g zlib1g-dev git zip libgmp3-dev build-essential libtinfo-dev autoconf automake gperf cmake locales \
+      python3-distutils python-setuptools antlr3 libantlr3c-dev libtool libtool-bin libboost-all-dev python3-pip libfftw3-dev
+    sudo locale-gen en_US.UTF-8
+  fi
+
+  # Install Solvers Packages
   (cd $BIN && curl -o bins.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/$SOLVER_PKG_VERSION/$BUILD_TARGET_OS-bin.zip" && unzip -o bins.zip && rm bins.zip)
   chmod +x $BIN/*
   cp $BIN/yices_smt2$EXT $BIN/yices-smt2$EXT
