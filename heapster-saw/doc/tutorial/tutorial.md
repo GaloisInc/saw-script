@@ -621,11 +621,18 @@ Open up the new `tutorial_c_gen.v` file in your examples
 directory. You should see a handfull of auto-generated imports and four
 definitions.
 
-The first definition, `add__tuple_fun`, contains the tuple with the
-proof the proof of correctness of the extracted code. The second
-definition, `add`, is just the extracted functional specification of
-the llvm function of the same name, obtained from projecting from
-`add__tuple_fun`.
+The first two definitions `add__tuple_fun` and `add` might have a
+scary looking types, but they simplify to
+
+```
+add__tuple_fun : (bitvector 64 -> bitvector 64 -> CompM (bitvector 64)) * unit
+add : bitvector 64 -> bitvector 64 -> CompM (bitvector 64)
+```
+
+That is, `add__tuple_fun` if a pair containing the `add` function and
+a unit `()`.  The `add` function takes two integers (as 64-bit
+vectors) and returns another one (under the `CompM` monoid that
+accepts failure).
 
 The other two definitions are the equivalent definitions for the
 `add_mistyped` function. However, in `add_mistyped__tuple_fun` you
