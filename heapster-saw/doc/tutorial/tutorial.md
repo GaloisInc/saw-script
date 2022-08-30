@@ -17,7 +17,10 @@ examples to get anyone up to speed with using and hacking on Heapster.
         - [Batch scripts](#batch-scripts)
     - [Using Heapster](#using-heapster)
         - [Heapster type-checking overview](#heapster-type-checking-overview)
-        - [Running an example](#running-an-example-1)
+        - [First example](#first-example)
+        - [Pointers](#pointers)
+        - [Structs](#structs)
+        - [Recursive data structures](#recursive-data-structures)
     - [Looking under the hood](#looking-under-the-hood)
         - [Heapster commands and environments](#heapster-commands-and-environments)
         - [Permissions](#permissions)
@@ -73,6 +76,11 @@ It is expected that you will see a large number of warnings, but the
 build should complete without any errors.
 
 **TODO: How do we check if this is properly installed before continuing?**
+
+For the sake of this tutorial, it will also be useful to install a
+[user interface](https://coq.inria.fr/user-interfaces.html) to
+interact with extracted Coq code. I recomment installing [Proof
+General](https://proofgeneral.github.io/).
 
 Before continuing, return to the top-level directory with `cd ../..`.
 
@@ -132,7 +140,7 @@ complex software artifacts.
 In this tutorial we will overview how to use SAW to proof functional
 equality different implementations. The steps are as follows:
 
-- [1. Compile the code down to llvm bitecode (i.e. `.bc` files).](#1-compile-the-code)
+- [1. Compile the code.](#1-compile-the-code)
 - [2. Run the saw interpreter](#2-run-the-saw-interpreter)
 - [3. Load the file and extract the two function specifications.](#3-load-the-file-and-extract-the-two-function-specifications)
 - [4. Define the equality theorem.](#4-define-the-equality-theorem)
@@ -351,60 +359,48 @@ The process will generally involve
 - [2. Run the SAW interpreter with Heapster](#2-run-the-saw-interpreter-with-heapster)
 - [3. Load the file and extract the two function types.](#3-load-the-file-and-extract-the-two-function-types-1)
 - [4. Writing heapster types for your functions](#4-writing-heapster-types-for-your-functions)
-- [5. Writing a SAW script to type-check your code with respect to the sepcification](#5-writing-a-saw-script-to-type-check-your-code-with-respect-to-the-sepcification)
+- [5. Type-check your program](#5-writing-a-saw-script-to-type-check-your-code-with-respect-to-the-sepcification)
 - [6. Writing a Coq file to prove things about the generated functional specification(s)](#6-writing-a-coq-file-to-prove-things-about-the-generated-functional-specifications)
 
 Just like with SAW, Heapster can be processed in batch. To do so, you
 can combine steps 2-6 in a `.saw` file and use SAW's batch processing.
 
-### Running an example
+### First example
 
-This section will walk through the process of using Heapster to write
-and verify some C code. 
-
-Specifially, we want to verify the function
-`is_elem`, which tests if a specific value is in a list. The function,
-together with others, can be found in `linked_list.c`.
+This section will walk through the process of using Heapster to write,
+typecheck and verify some C code. We will start by type-checking the
+simple `add` function, wich you can find in `tutorial_c.c` in the
+examples directory.
 
 ```C
-typedef struct list64_t {
-  int64_t data;
-  struct list64_t *next;
-} list64_t;
-
-int64_t is_elem (int64_t x, list64_t *l) {
-  if (l == NULL) {
-    return 0;
-  } else if (l->data == x) {
-    return 1;
-  } else {
-    return is_elem (x, l->next);
-  }
-}
+uint64_t add (uint64_t x, uint64_t y) { return x + y; }
 ```
+
+We will type-check the rest of the function in that file, plus some
+recursive functions later in the tutorial.
+
 
 #### 1. Generating LLVM bitcode
 
-Just like with SAW, we want to work with the LLVM bitcode (`.bc`), so
-you can generate it just like before. Note that we have already
-included the binary for all the examples so you don't really need to
-run this command.
+Just like with SAW, we want to work with the LLVM bitcode
+(`.bc`). 
 
 ```bash
-clang -g -c -emit-llvm -o linked_list.bc linked_list.c
+clang -g -c -emit-llvm -o tutorial_c.bc tutorial_c.c
 ```
 
 Alternatively, as long as you are in the `heapster-saw/examples` directory, you can also run 
 
 ```bash
-make linked_list.bc
+make tutorial_c.bc
 ```
 
-
-Be aware that the resulting bitcode may depend on your `clang` version and your
-operating system. In turn, this means the Heapster commands in your SAW script
-and the proofs in your Coq file may also be dependent on how and where the
-bitcode is generated. If you find an incompatibility, please report it.
+Be aware that the resulting bitcode may depend on your `clang` version
+and your operating system. In turn, this means the Heapster commands
+in your SAW script and the proofs in your Coq file may also be
+dependent on how and where the bitcode is generated. If you find an
+incompatibility, please report it. For all other examples, the binary
+code has been provided already to avoid incompatibilities.
 
 #### 2. Run the SAW interpreter with Heapster
 
@@ -417,7 +413,8 @@ sawscript> enable_experimental
 
 If you print the environment now (with `:env`) you will notice a new
 set of commands, all starting with `heapster_*`. You can also start
-typing the name and press tab to see all the functions those are all the Heapster commands.
+typing the name and press tab to see all the functions. These are all
+the Heapster commands.
 
 ```
 sawscript> heapster_ [TAB]
@@ -444,46 +441,393 @@ heapster_find_symbol_with_type       heapster_typecheck_mut_funs
 
 You can then use `:?` to see further information for each of them.
 
+#### 3. Load the file.
 
-#### 3. Load the file and extract the two function types.
-
-To load a file into heapster you can use `heapster_init_env_from_file`. Let's
+To load a file into heapster you can use `heapster_init_env`. Let's
 check its documentation first
 
-``` bash
-sawscript> :? heapster_init_env_from_file
+```
+sawscript> :? heapster_init_env
 Description
 -----------
 
 EXPERIMENTAL
 
-    heapster_init_env_from_file : String -> String -> TopLevel HeapsterEnv
+    heapster_init_env : String -> String -> TopLevel HeapsterEnv
 
-Create a new Heapster environment from the named LLVM bitcode file,
- initialized with the module in the given SAW core file.
+Create a new Heapster environment with the given SAW module name
+ from the named LLVM bitcode file.
+sawscript> 
 ```
 
 As you see it takes two names. The second name referse to the bitecode
-file containing the code we are verifying. The first, is the name of
-the SAW core module that can contain extra definitions and where
-Heapster will store the new definitions you provide. 
+file containing the code we are verifying. The first, is the name we
+want to give our SAW core module. That is the place where Heapster
+will store all our type checked functions and their extracted
+functional specification. By convention we use the same name as the
+llvm file.
 
 The function returns a Heapster environment that contains all the
 definitions of the module (not to be confused with the SAW environment
 that can be printed wiht `:env`).
 
-Alternatively, if you don't have any extra SAW core definitions, you
-can use `heapster_init_env` which does the same as
-`heapster_init_env_from_file`, except it will create a fresh SAW core
-module for you with the given name.
+```
+env <- heapster_init_env "tutorial_c" "tutorial_c.bc"
+```
 
-Let's load our module with
+we have created a new Heapster environment that we can explore. 
+
+```
+sawscript> env
+[20:07:14.272] Module: tutorial_c.bc
+Types:
+  %struct.vector3d = type { i64, i64, i64 }
+
+Globals:
+
+External references:
+  declare default void @llvm.dbg.declare(metadata, metadata,
+                                         metadata)
+
+Definitions:
+  i64 @add(i64 %0, i64 %1)
+  i64 @add_mistyped(i64 %0, i64 %1)
+  void @incr_ptr(i64* %0)
+  i64 @norm_vector(%struct.vector3d* %0)
+```
+
+The heapster environment contains all the types, global definitions,
+external references and functions from the loaded module. In our first
+example we will focus on the `add` function. 
+
+
+#### 4. Writing heapster types for your functions
+
+The Heapster type for the `add` function is rather simpl: 
+
+```
+"().arg0:int64<>, arg1:int64<> -o arg0:true, arg1:true, ret:int64<>"
+```
+
+It starts with an empty parenthesis `().` that contains the local
+ghost environment. Since this function doesn't require ghost
+variables, it is empty.
+
+The rest of the type is composed of two parts separated by the linear
+implication operator `-o`, sometimes known as lollipop. The left hand
+side of the operator, refers to the state of memory before the
+function executes. And it says that the two arguments passed to `add`,
+`arg0` and `arg1`, are 64-bit integers. The predicate `int64`, which
+we will define in a moment, takes no arguments as represented by the
+empty angled brackets `<>`.
+
+The right hand side describes the memory after the function
+executes. It says nothing about about the arguments (other than they
+exists), with `true`, the predicate that is always satisfied. It also
+says that the return value `ret` is another 64-bit integer.
+
+Notice, in particular, that the type does not assert that the return
+value is the sum of the inputs. That's because Hepaster is not a
+correcness logic. It is a memory safety type system. However, as you
+will shortly see, after checking for memory safety, we can extract
+`add` as a functional program and verify it's correctness in Coq.
+
+##### Defining permission predicates
+
+Before we tell Heapster the type of `add`, as described above, we
+need to define the predicate `int64` with the following type 
+
+```
+exists x:bv 64.eq(llvmword(x))
+```
+
+It says that there exist some bit-vector of length 64 (`bv 64`) which
+is equal, as an llvm word, to the "current variable". In other words,
+it says that the current variable is equal to some number that can be
+described as a bit-vector of size 64.
+
+To notify Heapster of this predicate we use the command
+`heapster_define_perm`, which defines a new named permission which can
+then be used in Heapster types. 
+
+```
+heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))"
+```
+
+The first argument is the Heapster environment, the second is its
+name, the third is its arguments (of which there are none), the fourth
+is the type of value that the permission applies to, and the fifth is
+its permision type. Notice how in Heapster, most of the arguments are
+passed as strings. 
+
+With this, the new permission is created and added to the
+environment. Uses of this named permission are written `int64<>` where
+the `<>` is the empty list of arguments, as seen in the type of `add`
+above. Unfortunately, there is currently no way to print the newly defined
+permissions. If you try to print the environment (`print env`) at this
+point, you will only see the `llvm` definitions. We might add
+functionality for showing permissions in the future.
+
+#### 5. Type-check your program
+   
+Armed with the `int64` predicate, we can write the type for `add` and
+ask Heapster to type check it.
+
+```
+heapster_typecheck_fun env "add" "().arg0:int64<>, arg1:int64<> -o arg0:true, arg1:true, ret:int64<>"
+```
+
+The `heapster_typecheck_fun` command takes the environment, the name
+of the function to typecheck and its permision type. The command then
+attempts to typecheck the function and extracts its functional
+specification. The functional specification is then added to the SAW
+core module `tutorial_c` with the sufix `__tuple_fun`, in this case
+`add__tuple_fun`.
+
+The function `add_mistyped`, in the same `tutorial_bc` and already
+loaded in the Heapster environment, is identical to `add` so we can
+experiment with misstyping. Try running the following command
+
+```
+heapster_typecheck_fun env "add_mistyped" "().arg0:true, arg1:int64<> -o arg0:true, arg1:true, ret:int64<>"
+```
+
+The first argument is typed as `true`, but we know it is an `i64`
+which can't be proven from the trivial `true`. So this type check
+should fail, but it silently terminates! What gives?
+
+Heapster allows for the typechecker to fail in parts of
+the function and the extraction will translate those parts into the
+error specification. The user could then, for example, prove that
+those locations are not reachable in the program, for full
+correctness. Unfortunately, this means that the typechecking will fail
+silently and an error won't be caught until we check the Coq
+extraction, as we show in the next section.
+
+#### 6. Writing a Coq file to prove things about the generated functional specification(s)
+
+Once you're finished, use the following command to export all the
+type-checked functions in the current environment as functional
+specifications in Coq. By convention, we add a `_gen` suffix to the
+filename.
+
+```
+heapster_export_coq env "tutorial_c_gen.v";
+```
+
+Open up the new `tutorial_c_gen.v` file in your examples
+directory. You should see a handfull of auto-generated imports and four
+definitions.
+
+The first definition, `add__tuple_fun`, contains the tuple with the
+proof the proof of correctness of the extracted code. The second
+definition, `add`, is just the extracted functional specification of
+the llvm function of the same name, obtained from projecting from
+`add__tuple_fun`.
+
+The other two definitions are the equivalent definitions for the
+`add_mistyped` function. However, in `add_mistyped__tuple_fun` you
+will find a call to `errorM` with an error message 
+
+```
+implUnfoldOrFail: Could not prove
+  top_ptr1:true -o (). is_llvmptr
+```
+
+explaining that, for the first pointer (that is `arg0`) it couldn't
+prove that `true -o (). is_llvmptr`, as we expected. The function
+couldn't be typechecked with the given type.  The lack of calls to
+`errorM` in `add__tuple_fun` confirms that it was correctly
+typechecked.
+
+Notice that the converse is not true: there are some well-typed
+functions that will still use `errorM` in their extracted function to,
+for example, dynamically check for memory bounds. We will see those
+examples in later sections. **TODO: Make sure we do this. Perhaps add
+an array example?**
+
+**TODO: how do you interact with these coq types.**
+
+### Pointers
+
+The next function we will type-check is a simple function that
+increments the value in a pointer
+
+```C
+void incr_ptr (uint64_t *x) { *x += 1; }
+```
+
+Assuming you completed the last section, you should have interactive
+saw open, the `tutorial_c.bc` loaded in the environment `env`, so
+`incr_ptr` should already be in your environment, but you can double
+check by printing `env`. We can then skip the steps 1-3 and go
+directly to writing heapster types for the function. 
+
+The type for this function should be
+
+```
+(). arg0:ptr((W,0) |-> int64<>) -o arg0:ptr((W,0) |-> int64<>)
+```
+
+As before, the ghost environment is ommited and both sides of the
+implication are identical, since the function doesn't change the shape
+of memory. The return value is `void`, so we can omit it or add a
+trivial `ret:true`.
+
+The permission for pointers `ptr` takes three arguments. First, it
+describes the read-write modality. In this case the
+pointer is writable `W`, since it will be modified. The second
+argument describes the pointer offset, here `0`. Finaly, the third
+argument describes the content of the pointer, in this case a 64-bit
+integer `int64<>`.
+
+Then we can type-check the function with
+
+```
+heapster_typecheck_fun env "incr_ptr" "(). arg0:ptr((W,0) |-> int64<>) -o arg0:ptr((W,0) |-> int64<>)"
+```
+
+**TODO: How do I know if the type-checking was successful?**
+
+Finally we can generate the functional specification in Coq with 
+
+```
+heapster_export_coq env "tutorial_c_gen.v";
+```
+
+The old file should be overwritten and now contains the functional
+specification of `add`, `add_misstyped` and `incr_ptr`. As you can see
+the definition of `incr_ptr__tuple_fun` has no references to `errorM`,
+so we know it was correctly type checked.
+
+### Structs
+
+The next function we will type-check deals with structs. In our
+example, we defined a function that can compute the norm of a 3D
+vector
+
+``` C
+// Struct that represents the three coordinates fora 3D vector
+typedef struct { uint64_t x; uint64_t y; uint64_t z; } vector3d;
+
+// function that computes the norm of a 3D vector
+// || (x,y,z) || = x^2+y^2+z^2
+uint64_t norm_vector (vector3d *v) { return (v->x * v->x + v->y * v->y + v->z * v->z); }
+```
+
+Again, we assume that you still have the definitions from the previous
+sections so we can start defining the type for the function.
+
+Let's start by defining a predicate for `vector3d` like so
+
+```
+heapster_define_perm env "vec3d" "rw:rwmodality" "llvmptr 64" "ptr((rw,0) |-> int64<>) * ptr((rw,8) |-> int64<>) * ptr((rw,16) |-> int64<>)"
+```
+
+First, notice that we added an arguments `rw` of type
+`rwmodality`. This is such that we can control if the vector is
+readable or writable. Second, notice that the predicate still applies
+to 64-bit pointers. Finally, the type describes three integers, all
+with the read-write modality given by the argument `rw`, at offsets
+`0`, `8` and `16` and each with an `int64`.
+
+Then we can define the type of `norm_vector` as
+
+```
+(). arg0:vec3d<R> -o arg0:vec3d<R>, ret:int64<>
+```
+
+which says that the function takes a readable 3d vector, and returns
+an integer. Notice that the `arg0` on the right hand side could also
+be written as `arg0:true`. However, we still want to express that the
+function does change that memory so we make it explicit.
+
+Then we can type-check the function with 
+
+```
+heapster_typecheck_fun env "norm_vector" "(). arg0:vec3d<R> -o arg0:vec3d<R>, ret:int64<>"
+```
+
+Finally we can generate the functional specification in Coq with 
+
+```
+heapster_export_coq env "tutorial_c_gen.v";
+```
+
+The functional specification of `norm_vector` should have been added
+to the `tutorial_c_gen.v` file.
+
+
+### Recursive data structures
+
+We will now typecheck a function over lists, a recursive data
+structure. You can start a fresh SAW session with `cabal run saw`
+(quit any current session with `:q`), but make sure you do so from the
+`heapster-saw/examples` directory.
+
+Specifically, we want to verify the function `is_elem`,
+which tests if a specific value is in a list. The function, together
+with others, can be found in `linked_list.c`, in the examples
+directory.
+
+```C
+typedef struct list64_t {
+  int64_t data;
+  struct list64_t *next;
+} list64_t;
+
+int64_t is_elem (int64_t x, list64_t *l) {
+  if (l == NULL) {
+    return 0;
+  } else if (l->data == x) {
+    return 1;
+  } else {
+    return is_elem (x, l->next);
+  }
+}
+```
+
+#### 1. Generating LLVM bitcode
+
+We have already included the binary for all the examples, but if you
+want to generate it yourself, you can run
+
+```bash
+make linked_list.bc
+```
+
+#### 2. Run the SAW interpreter with Heapster
+
+Load the Heapster commands
+
+```bash
+sawscript> enable_experimental
+```
+
+#### 3. Load the file and extract the function types.
+
+To work with lists, we need add the SAW core definition of lists to
+our SAW core module. The definition is 
+
+```
+List_def : (a:sort 0) -> sort 0;
+List_def a = List a;
+```
+
+**TODO: what is this definition? Why can't we just use `List a`**
+
+We can add such definitions to a SAW core file. One has already been
+created for you at `linked_list.sawcore`. Then we start our environment with
 
 ```
 env <- heapster_init_env_from_file "linked_list.sawcore" "linked_list.bc";
 ```
 
-we have created a new Heapster environment that we can explore. 
+Very much like `heapster_init_env`, `heapster_init_env_from_file`
+creates a new environment but, instead of creating a fresh SAW core
+module, it initialises the module with the given file, here
+`linked_list.sawcore`. Just as before, this creates a new Heapster
+environment that we can explore.
 
 ```
 sawscript> print env
@@ -508,48 +852,32 @@ Definitions:
                                              %struct.list64_t* %1)
 ```
 
-The heapster environment contains all the types, global definitions,
-external references and functions from the loaded module.
-
-
 #### 4. Writing heapster types for your functions
 
-##### Pen and paper type
-
-Before we go foward using Heapster, let's think about what the
-type for `is_elem` should be. As we can check in the
-environment `env`, `is_elem` takes a 64-bit integer the "element".
+We can check in the environment `env` for the LLVM type of the function we
+are type checkingt. 
 
 ```LLVM
 i64 @is_elem(i64 %0, %struct.list64_t* %1)
 ```
 
-Hence, precondition to the function should reflect these two inputs
-like so `arg0:int64, arg1: list int64`, for some predicates `int64`
-and `list` that express a single integer and a list of them.
-
-Moreover, the function returns a new i64-bit integer and, as we can
-see in the code of `is_elem`, the arguments are not modified. So the
-postcondition, of the function could be described by `arg0:int64,
-arg1: list int64, ret:int64`. Alternatively, if we don't care about
-the inputs after the call we can simplify it to `arg0:true, arg1:
-true, ret:int64`, where `true` is a predicate the is always satisfied.
- 
-Then, using the linear implication `-o` we can express the
-type of `is_elem` as
+The function `is_elem` takes a 64-bit integer and a list of 64-bit
+integers, and returns another 64-bit integer. After the return, we
+don't care about the inputs, so we can write the type like this
 
 ```
-arg0:int64, arg1: list int64 -o arg0:true, arg1:true, ret:int64
+().arg0:int64<>, arg1:List64<R> -o arg0:true, arg1:true, ret:int64<>
 ```
 
-Notice that this is a memory-safety type, not a correctness
-predicate. We can reason about the correctness of the function once we
-extract it as a functional program in Coq.
+We know how to define `int64`, as we did before, 
 
-In the next sections, we shall define the predicates necessary to
-write this type in Heapster.
+```
+sawscript> heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))"
+```
 
-##### Defining permission predicates
+but we need a new predicate for lists. 
+
+##### Defining list permissions
 
 One of the simplest Heapster commands is `heapster_define_perm`, which defines
 a new named permission which can then be used in Heapster types. As an
