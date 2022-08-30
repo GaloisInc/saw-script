@@ -20,6 +20,7 @@ examples to get anyone up to speed with using and hacking on Heapster.
         - [First example](#first-example)
         - [Pointers](#pointers)
         - [Structs](#structs)
+        - [Batch scripts](#batch-scripts-1)
         - [Recursive data structures](#recursive-data-structures)
     - [Looking under the hood](#looking-under-the-hood)
         - [Heapster commands and environments](#heapster-commands-and-environments)
@@ -36,7 +37,7 @@ commands here are with respect to the top-level saw-script directory.
 
 ### Build Saw 
  
-You will need to follow the instructions in the top-level README to
+You will need to follow the instructions in the top-level [README](../../README.md) to
 download or build a SAW binary, of which Heapster is a part. In
 particular, make sure you follow the instructions to install Z3. Once `./build.sh`
 succeeds it should report 
@@ -62,10 +63,11 @@ sawscript> :quit
 
 ### Build the Coq backend for Saw
 
-In this tutorial we will also interact with Heapster's Coq output. So you'll need
-to follow the instructions in the README in the `saw-core-coq` subdirectory.
-Specifically, after installing the dependencies, you will need to run the
-following (from the top level directory):
+In this tutorial we will also interact with Heapster's Coq output. So
+you'll need to follow the instructions in the
+[README](../../../saw-core-coq/README.md) in the `saw-core-coq`
+subdirectory.  Specifically, after installing the dependencies, you
+will need to run the following (from the top level directory):
 
 ```bash
 cd saw-core-coq/coq
@@ -407,7 +409,7 @@ code has been provided already to avoid incompatibilities.
 We start by running saw with `cabal run saw`. Once SAW is loaded, you
 can load all the Heapster commands with
 
-```bash
+```
 sawscript> enable_experimental
 ```
 
@@ -737,7 +739,7 @@ Then we can define the type of `norm_vector` as
 (). arg0:vec3d<R> -o arg0:vec3d<R>, ret:int64<>
 ```
 
-which says that the function takes a readable 3d vector, and returns
+which says that the function takes a readable 3D vector, and returns
 an integer. Notice that the `arg0` on the right hand side could also
 be written as `arg0:true`. However, we still want to express that the
 function does change that memory so we make it explicit.
@@ -757,6 +759,58 @@ heapster_export_coq env "tutorial_c_gen.v";
 The functional specification of `norm_vector` should have been added
 to the `tutorial_c_gen.v` file.
 
+
+### Batch scripts
+
+Notice that, just like in saw, Heapster scripts can be processed in
+batch. You can create a file `tutorial_c.saw` with all the commands so
+far. It should look something like this
+
+```
+enable_experimental
+env <- heapster_init_env "tutorial_c" "tutorial_c.bc"
+print "File loaded"
+
+heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))"
+print "Defined an 64-bit integer."
+
+heapster_typecheck_fun env "add" "().arg0:int64<>, arg1:int64<> -o arg0:true, arg1:true, ret:int64<>"
+print "Type checked add."
+
+heapster_typecheck_fun env "add_mistyped" "().arg0:true, arg1:int64<> -o arg0:true, arg1:true, ret:int64<>"
+print "Type checked add_mistyped. This will produce an error in the output."
+
+heapster_typecheck_fun env "incr_ptr" "(). arg0:ptr((W,0) |-> int64<>) -o arg0:ptr((W,0) |-> int64<>)"
+print "Type checked incr_ptr."
+
+
+heapster_define_perm env "vec3d" "rw:rwmodality" "llvmptr 64" "ptr((rw,0) |-> int64<>) * ptr((rw,8) |-> int64<>) * ptr((rw,16) |-> int64<>)"
+heapster_typecheck_fun env "norm_vector" "(). arg0:vec3d<R> -o arg0:vec3d<R>, ret:int64<>"
+print "Type checked incr_ptr."
+
+heapster_export_coq env "tutorial_c_gen.v";
+print "Export to Coq."
+
+print "Done."
+```
+
+then you can process it with just
+
+```
+% cabal run saw -- tutorial_c.saw
+Up to date
+
+
+
+[16:41:49.222] Loading file "/Users/Santiago/Projects/saw-script/heapster-saw/examples/tutorial_c.saw"
+[16:41:49.230] File loaded
+[16:41:49.245] Type checked add.
+[16:41:49.249] Type checked add_mistyped. This will produce an error in the output.
+[16:41:49.257] Type checked incr_ptr.
+[16:41:49.312] Type checked norm_vector.
+[16:41:49.329] Export to Coq.
+[16:41:49.329] Done.
+```
 
 ### Recursive data structures
 
@@ -817,17 +871,26 @@ List_def a = List a;
 **TODO: what is this definition? Why can't we just use `List a`**
 
 We can add such definitions to a SAW core file. One has already been
-created for you at `linked_list.sawcore`. Then we start our environment with
+created for you at `linked_list.sawcore`. Every SAW core file starts
+with the declaration of the module name and, most files, import the
+Prelude.
+
+```
+module linked_list where
+
+import Prelude;
+```
+
+With this file created, we start our environment with
 
 ```
 env <- heapster_init_env_from_file "linked_list.sawcore" "linked_list.bc";
 ```
 
-Very much like `heapster_init_env`, `heapster_init_env_from_file`
-creates a new environment but, instead of creating a fresh SAW core
-module, it initialises the module with the given file, here
-`linked_list.sawcore`. Just as before, this creates a new Heapster
-environment that we can explore.
+which, much like `heapster_init_env`, creates a new environment but,
+instead of creating a fresh SAW core module, it initialises the module
+with the given file, here `linked_list.sawcore`. Just as before, this
+creates a new Heapster environment that we can explore.
 
 ```
 sawscript> print env
@@ -855,7 +918,7 @@ Definitions:
 #### 4. Writing heapster types for your functions
 
 We can check in the environment `env` for the LLVM type of the function we
-are type checkingt. 
+are type checking. 
 
 ```LLVM
 i64 @is_elem(i64 %0, %struct.list64_t* %1)
@@ -869,63 +932,38 @@ don't care about the inputs, so we can write the type like this
 ().arg0:int64<>, arg1:List64<R> -o arg0:true, arg1:true, ret:int64<>
 ```
 
+But we will need to define the predicates for `int64` and `List64`
+
+##### Defining list permissions
+
 We know how to define `int64`, as we did before, 
 
 ```
 sawscript> heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))"
 ```
 
-but we need a new predicate for lists. 
-
-##### Defining list permissions
-
-One of the simplest Heapster commands is `heapster_define_perm`, which defines
-a new named permission which can then be used in Heapster types. As an
-example, the following defines the permission which describes a 64-bit integer
-value:
-
-```
-heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))"
-```
-
-The first argument is the Heapster environment, the second is its
-name, the third is its arguments (of which there are none), the fourth
-is the type of value that the permission applies to, and the fifth is
-its permision type. The new permission is created and added to the
-environment. 
-
-Uses of this named permission are written `int64<>` where the `<>` is
-the empty list of arguments.
-
-Unfortunately, there is currently no way to print the newly defined
-permissions. If you try to print the environment (`print env`) at this
-point, you will only see the `llvm` definitions. We might add
-functionality for showing permissions in the future.
-
-Before we look at the definition of a `List64<rw>` lets focus on its
-permission type. First of all, `List64<rw>` takes a single argumetn
-`rw` which determines if the list is readable or writable. It's type
-should look something like this
+but we need a new predicate for lists.  Before we look at the
+definition of a `List64<rw>` lets focus on its permission type. First
+of all, `List64<rw>` takes a single argument `rw:rwmodality` which
+determines if the list is readable or writable, jus like 3D
+vectors. It's type should look something like this
 
 ```
 ["eq(llvmword(0))", "ptr((rw,0) |-> int64<>) * ptr((rw,8) |-> List64<rw>)"]
 ```
 
 the definition shows the diferent cases for a list, separated by a
-coma. In the first case, a `List64` is can be a null pointer,
-expressed with the type `eq(llvmword(0))`. In the second case, a list
-is a pointer where offset 0 is the head, an `Int64`, and offset `8`
-it's the tail, another `List64`, i.e., it is recursively a
-`List64<rw>` . In the later case, both elements are tagged with `rw`,
-describing if they are readable or writable, as determined by the
-argument to `List64<rw>`.
+coma. In the first case, a `List64` can be a null pointer, expressed
+with the type `eq(llvmword(0))`. In the second case, a list is a
+pointer where offset `0` is the head, an `Int64`, and offset `8` it's
+the tail, is recursively a `List64<rw>`. In the later case,
+both elements are tagged with `rw`, describing if they are readable or
+writable, as determined by the argument to `List64<rw>`.
 
-You might have noticed that the permission predicate for lists is
-recursive, since it must refer to it's tail which is itself a list. To
-define [permissions](doc/Permissions.md) which can describe unbounded
-data structures, you can use the `heapster_define_recursive_perm`
-command. As an example, here is how to describe a linked list of
-64-bit words using this command:
+To define [permissions](doc/Permissions.md) which can describe
+unbounded data structures, you can use the
+`heapster_define_recursive_perm` command. here is how to use the
+command to define lists.
 
 ```
 heapster_define_recursive_perm
@@ -934,45 +972,23 @@ heapster_define_recursive_perm
   "rw:rwmodality"
   "llvmptr 64"
   ["eq(llvmword(0))", "ptr((rw,0) |-> int64<>) * ptr((rw,8) |-> List64<rw>)"]
-  "List (Vec 64 Bool)"
-  "foldList (Vec 64 Bool)"
-  "unfoldList (Vec 64 Bool)";
+  "List_def" "foldList" "unfoldList";
 ```
 
 Its first four arguments are the same as for `heapster_define_perm`,
-its fifth argument contains its different inductive cases which we
-describe below, and its final three arguments are its translation into
-SAW core. Here the SAW core definitions used are from the SAW core
-prelude which are included by default when Heapster autogenerates a a
-module for you. If you need new SAW core definitions, you will need to
-use the following command instead of `heapster_init_env`:
+namely the environment, the name, the arguments and the type of value
+that the permission applies to. The fifth argument is its permision
+type. The final three arguments are its translation into SAW core. As
+you might remember, this is the `List_def` we defined in our SAW core
+file which is now loaded in the module. The other two `foldList` and
+`unfoldList` are **TODO: What are these???**
 
-```
-env <- heapster_init_env_from_file "my_file.sawcore" "my_file.bc";
-```
-
-See this [additional documentation](doc/Permissions.md) for a
+See this [additional documentation](../Permissions.md) for a
 reference on the syntax and meaning of heapster permissions.
 
-#### 5. Writing a SAW script to type-check your code with respect to the sepcification
+#### 5. Type-check your program
    
-We begin by converting the pen-and-paper specification of `is_elem`
-into a Heapster specification. First, every heapster type begins with
-the declaration of a ghost environment. Our specification doesn't use
-any ghost variable so that is `().` Moreover, every named definition
-takes it's arguments within angled braces `<args>`. For `int64`, which
-takes no arguments that is just `<>`, and for `List` which takes a an
-arguments to define that it is a readable list, it is `<R>`. Whith
-this we can write our specification as
-
-```
-().arg0:int64<>, arg1:List64<R> -o arg0:true, arg1:true,
-ret:int64<>
-```
-   
-Finally, to actually type-check a function you can use
-`heapster_typecheck_fun`. That takes the environment, the name of the
-function to type-check and the type, like so
+Just as before you only need to run
 
 ``` 
 heapster_typecheck_fun env "is_elem"
@@ -1002,8 +1018,16 @@ heapster_export_coq env "my_file_gen.v";
 
 ## Looking under the hood
 
+**TODO**
+
 ### Heapster commands and environments
+
+**TODO**
 
 ### Permissions
 
+**TODO**
+
 ### Type-checking
+
+**TODO**
