@@ -80,7 +80,7 @@ install_system_deps() {
     sudo apt update
     sudo apt install -y software-properties-common apt-transport-https ca-certificates wget \
       curl zlibc zlib1g zlib1g-dev git zip libgmp3-dev build-essential libtinfo-dev autoconf automake gperf cmake locales \
-      python3-distutils python-setuptools antlr3 libantlr3c-dev libtool libtool-bin libboost-all-dev python3-pip libfftw3-dev
+      antlr3 libantlr3c-dev libtool libtool-bin libboost-all-dev libfftw3-dev
     sudo locale-gen en_US.UTF-8
   fi
 
