@@ -78,11 +78,28 @@ install_system_deps() {
   # OS Specific Packages
   if [[ $BUILD_TARGET_OS == 'ubuntu-18.04' ]] ; then
     sudo apt update
-    sudo apt install -y zlibc zlib1g zlib1g-dev git zip libgmp3-dev build-essential libtinfo-dev autoconf automake cmake \
-      locales libtool libtool-bin libboost-all-dev libfftw3-dev
-    #sudo apt install -y curl wget ioftware-properties-common apt-transport-https ca-certificates wget \
-    #  curl zlibc zlib1g zlib1g-dev git zip libgmp3-dev build-essential libtinfo-dev autoconf automake gperf cmake locales \
-    #  antlr3 libantlr3c-dev libtool libtool-bin libboost-all-dev libfftw3-dev
+    sudo apt install -y \
+      apt-transport-https \
+      autoconf \
+      automake \
+      build-essential \
+      ca-certificates \
+      cmake \
+      curl \
+      git \
+      gperf \
+      software-properties-common \
+      libfftw3-dev \
+      libgmp3-dev \
+      libtinfo-dev \
+      libtool \
+      libtool-bin \
+      locales \
+      wget \
+      zip \
+      zlib1g \
+      zlib1g-dev \
+      zlibc
     sudo locale-gen en_US.UTF-8
   fi
 
