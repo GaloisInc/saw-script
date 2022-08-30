@@ -537,11 +537,11 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
             ar
         C.TimeoutResult{} -> fail "Execution timed out"
 
-      (stats,thms) <- checkGoals bak opts nm sc tactic mdMap
+      (stats,vcstats) <- checkGoals bak opts nm sc tactic mdMap
 
       end <- io getCurrentTime
       let diff = diffUTCTime end start
-      ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats thms mempty diff)
+      ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats vcstats mempty diff)
       returnProof $ SomeLLVM ps
 
   | otherwise = fail "LLVM module must be 64-bit"
@@ -1173,7 +1173,7 @@ checkGoals ::
   SharedContext ->
   ProofScript () ->
   IORef MetadataMap {- ^ metadata map -} ->
-  TopLevel (SolverStats, Set TheoremNonce)
+  TopLevel (SolverStats, [MS.VCStats])
 checkGoals bak opts nm sc tactic mdMap = do
   gs <- liftIO $ getGoals (SomeBackend bak) mdMap
   liftIO . printOutLn opts Info $ mconcat
@@ -1196,13 +1196,17 @@ checkGoals bak opts nm sc tactic mdMap = do
                     , goalName = nm
                     , goalLoc  = gloc
                     , goalDesc = show $ gMessage g
-                    , goalProp = term
+                    , goalSequent = propToSequent term
                     , goalTags = MS.conditionTags md
                     }
-    res <- runProofScript tactic proofgoal (Just (gLoc g)) $ Text.unwords
-              ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))]
+    res <- runProofScript tactic term proofgoal (Just (gLoc g))
+             (Text.unwords
+              ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))])
+             False -- do not record this theorem in the database
+             False -- TODO! useSequentGoals
     case res of
-      ValidProof stats thm -> return (stats, thmNonce thm)
+      ValidProof stats thm ->
+        return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))
       UnfinishedProof pst -> do
         printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
         printOutLnTop Info (show (psStats pst))
@@ -1223,5 +1227,5 @@ checkGoals bak opts nm sc tactic mdMap = do
   liftIO $ printOutLn opts Info "All goals succeeded"
 
   let stats = mconcat (map fst outs)
-  let thms  = mconcat (map (Set.singleton . snd) outs)
-  return (stats, thms)
+  let vcstats = map snd outs
+  return (stats, vcstats)

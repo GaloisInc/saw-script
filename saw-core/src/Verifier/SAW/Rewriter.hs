@@ -45,6 +45,7 @@ module Verifier.SAW.Rewriter
   , addConvs
   , scSimpset
   , listRules
+  , shallowRule
   -- * Term rewriting
   , rewriteSharedTerm
   , rewriteSharedTermTypeSafe
@@ -85,15 +86,22 @@ import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.Prelude.Constants
 
 data RewriteRule a
-  = RewriteRule { ctxt :: [Term], lhs :: Term, rhs :: Term, permutative :: Bool, annotation :: Maybe a }
+  = RewriteRule
+    { ctxt :: [Term]
+    , lhs :: Term
+    , rhs :: Term
+    , permutative :: Bool
+    , shallow :: Bool
+    , annotation :: Maybe a
+    }
   deriving (Show)
 -- ^ Invariant: The set of loose variables in @lhs@ must be exactly
 -- @[0 .. length ctxt - 1]@. The @rhs@ may contain a subset of these.
 
 -- NB, exclude the annotation from equality tests
 instance Eq (RewriteRule a) where
-  RewriteRule c1 l1 r1 p1 _a1 == RewriteRule c2 l2 r2 p2 _a2 =
-    c1 == c2 && l1 == l2 && r1 == r2 && p1 == p2
+  RewriteRule c1 l1 r1 p1 s1 _a1 == RewriteRule c2 l2 r2 p2 s2 _a2 =
+    c1 == c2 && l1 == l2 && r1 == r2 && p1 == p2 && s1 == s2
 
 ctxtRewriteRule :: RewriteRule a -> [Term]
 ctxtRewriteRule = ctxt
@@ -108,7 +116,7 @@ annRewriteRule :: RewriteRule a -> Maybe a
 annRewriteRule = annotation
 
 instance Net.Pattern (RewriteRule a) where
-  toPat (RewriteRule _ lhs _ _ _) = Net.toPat lhs
+  toPat (RewriteRule _ lhs _ _ _ _) = Net.toPat lhs
 
 ----------------------------------------------------------------------
 -- Matching
@@ -316,7 +324,7 @@ ruleOfTerm t ann =
       -- NOTE: this assumes the Coq-style equality type Eq X x y, where both X
       -- (the type of x and y) and x are parameters, and y is an index
       FTermF (DataTypeApp dt [_, x] [y])
-          | primName dt == eqIdent -> mkRewriteRule [] x y ann
+          | primName dt == eqIdent -> mkRewriteRule [] x y False ann
       Pi _ ty body -> rule { ctxt = ty : ctxt rule }
           where rule = ruleOfTerm body ann
       _ -> error "ruleOfSharedTerm: Illegal argument"
@@ -332,14 +340,21 @@ rulePermutes lhs rhs =
             Nothing -> False -- but here we have a looping rule, not good!
             Just _ -> True
 
-mkRewriteRule :: [Term] -> Term -> Term -> Maybe a -> RewriteRule a
-mkRewriteRule c l r ann =
-    RewriteRule {ctxt = c, lhs = l, rhs = r , permutative = rulePermutes l r, annotation = ann}
+mkRewriteRule :: [Term] -> Term -> Term -> Bool -> Maybe a -> RewriteRule a
+mkRewriteRule c l r shallow ann =
+    RewriteRule
+    { ctxt = c
+    , lhs = l
+    , rhs = r
+    , permutative = rulePermutes l r
+    , shallow = shallow
+    , annotation = ann
+    }
 
 -- | Converts a universally quantified equality proposition between the
 -- two given terms to a RewriteRule.
 ruleOfTerms :: Term -> Term -> RewriteRule a
-ruleOfTerms l r = mkRewriteRule [] l r Nothing
+ruleOfTerms l r = mkRewriteRule [] l r False Nothing
 
 -- | Converts a parameterized equality predicate to a RewriteRule,
 -- returning 'Nothing' if the predicate is not an equation.
@@ -351,24 +366,24 @@ ruleOfProp (R.asLambda -> Just (_, ty, body)) ann =
   do rule <- ruleOfProp body ann
      Just rule { ctxt = ty : ctxt rule }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef ecEqIdent -> Just (), [_, _, x, y])) ann =
-  Just $ mkRewriteRule [] x y ann
+  Just $ mkRewriteRule [] x y False ann
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef bvEqIdent -> Just (), [_, x, y])) ann =
-  Just $ mkRewriteRule [] x y ann
+  Just $ mkRewriteRule [] x y False ann
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef equalNatIdent -> Just (), [x, y])) ann =
-  Just $ mkRewriteRule [] x y ann
+  Just $ mkRewriteRule [] x y False ann
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) ann =
-  Just $ mkRewriteRule [] x y ann
+  Just $ mkRewriteRule [] x y False ann
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) ann =
-  Just $ mkRewriteRule [] x y ann
+  Just $ mkRewriteRule [] x y False ann
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef arrayEqIdent -> Just (), [_, _, x, y])) ann =
-  Just $ mkRewriteRule [] x y ann
+  Just $ mkRewriteRule [] x y False ann
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef intEqIdent -> Just (), [x, y])) ann =
-  Just $ mkRewriteRule [] x y ann
+  Just $ mkRewriteRule [] x y False ann
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef intModEqIdent -> Just (), [_, x, y])) ann =
-  Just $ mkRewriteRule [] x y ann
+  Just $ mkRewriteRule [] x y False ann
 ruleOfProp (unwrapTermF -> Constant _ (Just body)) ann = ruleOfProp body ann
 ruleOfProp (R.asEq -> Just (_, x, y)) ann =
-  Just $ mkRewriteRule [] x y ann
+  Just $ mkRewriteRule [] x y False ann
 ruleOfProp (R.asEqTrue -> Just body) ann = ruleOfProp body ann
 ruleOfProp _ _ = Nothing
 
@@ -387,18 +402,18 @@ scEqsRewriteRules sc = mapM (scEqRewriteRule sc)
 -- * If the rhs is a recursor, then split into a separate rule for each constructor.
 -- * If the rhs is a record, then split into a separate rule for each accessor.
 scExpandRewriteRule :: SharedContext -> RewriteRule a -> IO (Maybe [RewriteRule a])
-scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ ann) =
+scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow ann) =
   case rhs of
     (R.asLambda -> Just (_, ty, body)) ->
       do let ctxt' = ctxt ++ [ty]
          lhs1 <- incVars sc 0 1 lhs
          var0 <- scLocalVar sc 0
          lhs' <- scApply sc lhs1 var0
-         return $ Just [mkRewriteRule ctxt' lhs' body ann]
+         return $ Just [mkRewriteRule ctxt' lhs' body shallow ann]
     (R.asRecordValue -> Just m) ->
       do let mkRule (k, x) =
                do l <- scRecordSelect sc lhs k
-                  return (mkRewriteRule ctxt l x ann)
+                  return (mkRewriteRule ctxt l x shallow ann)
          Just <$> traverse mkRule (Map.assocs m)
     (R.asApplyAll ->
      (R.asRecursorApp -> Just (rec, crec, _ixs, R.asLocalVar -> Just i),
@@ -439,9 +454,9 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ ann) =
                   rhs2 <- scApplyAll sc rhs1 more'
                   rhs3 <- betaReduce rhs2
                   -- re-fold recursive occurrences of the original rhs
-                  let ss = addRule (mkRewriteRule ctxt rhs lhs Nothing) emptySimpset
+                  let ss = addRule (mkRewriteRule ctxt rhs lhs shallow Nothing) emptySimpset
                   (_,rhs') <- rewriteSharedTerm sc (ss :: Simpset ()) rhs3
-                  return (mkRewriteRule ctxt' lhs' rhs' ann)
+                  return (mkRewriteRule ctxt' lhs' rhs' shallow ann)
          dt <- scRequireDataType sc (primName (recursorDataType crec))
          rules <- traverse ctorRule (dtCtors dt)
          return (Just rules)
@@ -482,8 +497,14 @@ scDefRewriteRules _ (Def { defBody = Nothing }) = return []
 scDefRewriteRules sc (Def { defIdent = ident, defBody = Just body }) =
   do lhs <- scGlobalDef sc ident
      rhs <- scSharedTerm sc body
-     scExpandRewriteRules sc [mkRewriteRule [] lhs rhs Nothing]
+     scExpandRewriteRules sc [mkRewriteRule [] lhs rhs False Nothing]
 
+
+-- | A "shallow" rule is one where further
+--   rewrites are not applied to the result
+--   of a rewrite.
+shallowRule :: RewriteRule a -> RewriteRule a
+shallowRule r = r{ shallow = True }
 
 ----------------------------------------------------------------------
 -- Simpsets
@@ -662,7 +683,7 @@ rewriteSharedTerm sc ss t0 =
     apply :: (?cache :: Cache IO TermIndex Term, ?annSet :: IORef (Set a)) =>
              [Either (RewriteRule a) Conversion] -> Term -> IO Term
     apply [] t = return t
-    apply (Left (RewriteRule {ctxt, lhs, rhs, permutative, annotation}) : rules) t = do
+    apply (Left (RewriteRule {ctxt, lhs, rhs, permutative, shallow, annotation}) : rules) t = do
       result <- scMatch sc lhs t
       case result of
         Nothing -> apply rules t
@@ -683,6 +704,10 @@ rewriteSharedTerm sc ss t0 =
               case termWeightLt t' t of
                 True -> recordAnn annotation >> rewriteAll t' -- keep the result only if it is "smaller"
                 False -> apply rules t
+          | shallow ->
+            -- do not to further rewriting to the result of a "shallow" rule
+            do recordAnn annotation
+               instantiateVarList sc 0 (Map.elems inst) rhs
           | otherwise ->
             do -- putStrLn "REWRITING:"
                -- print lhs
@@ -807,7 +832,7 @@ rewritingSharedContext sc ss = sc'
              Term -> IO Term
     apply [] (Unshared tf) = scTermF sc tf
     apply [] STApp{ stAppTermF = tf } = scTermF sc tf
-    apply (Left (RewriteRule _ l r _ _ann) : rules) t =
+    apply (Left (RewriteRule _ l r _ _shallow _ann) : rules) t =
       case first_order_match l t of
         Nothing -> apply rules t
         Just inst

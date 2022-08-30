@@ -96,7 +96,7 @@ import Verifier.SAW.TypedAST (FieldName, ModuleMap, toShortName, ctorPrimName, i
 import qualified What4.Expr.Builder as B
 import           What4.Expr.GroundEval
 import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr,
-                                 IsExprBuilder,IsSymExprBuilder)
+                                 IsExprBuilder,IsSymExprBuilder, BoundVar)
 import qualified What4.Interface as W
 import           What4.BaseTypes
 import qualified What4.SWord as SW
@@ -983,17 +983,117 @@ w4Solve :: forall sym.
   sym ->
   SharedContext ->
   SATQuery ->
-  IO ([(ExtCns Term, (Labeler sym, SValue sym))], SBool sym)
+  IO ([(ExtCns Term, (Labeler sym, SValue sym))], [SBool sym])
 w4Solve sym sc satq =
-  do t <- satQueryAsTerm sc satq
-     let varList  = Map.toList (satVariables satq)
+  do let varList  = Map.toList (satVariables satq)
      vars <- evalStateT (traverse (traverse (newVarFOT sym)) varList) 0
      let varMap   = Map.fromList [ (ecVarIndex ec, v) | (ec, (_,v)) <- vars ]
      ref <- newIORef Map.empty
-     bval <- w4SolveBasic sym sc mempty varMap ref (satUninterp satq) t
+
+     bvals <- mapM (w4SolveAssert sym sc varMap ref (satUninterp satq)) (satAsserts satq)
+     return (vars, bvals)
+
+
+w4SolveAssert :: forall sym.
+  IsSymExprBuilder sym =>
+  sym ->
+  SharedContext ->
+  Map VarIndex (SValue sym) {- ^ bindings for ExtCns values -} ->
+  IORef (SymFnCache sym) {- ^ cache for uninterpreted function symbols -} ->
+  Set VarIndex {- ^ variables to hold uninterpreted -} ->
+  SATAssert ->
+  IO (SBool sym)
+w4SolveAssert sym sc varMap ref uninterp (BoolAssert x) =
+  do bval <- w4SolveBasic sym sc mempty varMap ref uninterp x
      case bval of
-       VBool v -> return (vars, v)
-       _ -> fail $ "w4Solve: non-boolean result type. " ++ show bval
+       VBool v -> return v
+       _ -> fail $ "w4SolveAssert: non-boolean result type. " ++ show bval
+
+w4SolveAssert sym sc varMap ref uninterp (UniversalAssert vars hyps concl) =
+  do g <- case hyps of
+            [] -> return concl
+            _  -> do h <- scAndList sc hyps
+                     scImplies sc h concl
+     (svals,bndvars) <- boundFOTs sym vars
+     let varMap' = foldl (\m ((ec,_fot), sval) -> Map.insert (ecVarIndex ec) sval m)
+                         varMap
+                         (zip vars svals) -- NB, boundFOTs will construct these lists to be the same length
+     bval <- w4SolveBasic sym sc mempty varMap' ref uninterp g
+     case bval of
+       VBool v ->
+         do final <- foldM (\p (Some bndvar) -> W.forallPred sym bndvar p) v bndvars
+            return final
+
+       _ -> fail $ "w4SolveAssert: non-boolean result type. " ++ show bval
+
+-- | Given a list of external constants with first-order types,
+--   descend in to the structure of those types (as needed) and construct
+--   corresponding What4 bound variables so we can bind them using
+--   a forall quantifier. At the same time construct @SValue@s containing
+--   those variables suitable for passing to the term evaluator as substituions
+--   for the given @ExtCns@ values. The length of the @SValue@ list returned
+--   will match the list of the input @ExtCns@ list, but the list of What4
+--   @BoundVar@s might not.
+--
+--   This procedure it capable of handling most first-order types, execpt
+--   that Array types must have base types as index and result types rather
+--   than more general first-order types. (TODO? should we actually restrict the
+--   @FirstOrderType@ in the same way?)
+boundFOTs :: forall sym.
+  IsSymExprBuilder sym =>
+  sym ->
+  [(ExtCns Term, FirstOrderType)] ->
+  IO ([SValue sym], [Some (BoundVar sym)])
+boundFOTs sym vars =
+  do (svals,(bndvars,_)) <- runStateT (mapM (uncurry handleVar) vars) ([], 0)
+     return (svals, bndvars)
+
+ where
+   freshBnd :: ExtCns Term -> W.BaseTypeRepr tp -> StateT ([Some (BoundVar sym)],Integer) IO (SymExpr sym tp)
+   freshBnd ec tpr =
+     do (vs,n) <- get
+        let nm = Text.unpack (toShortName (ecName ec)) ++ "." ++ show n
+        bvar <- lift (W.freshBoundVar sym (W.safeSymbol nm) tpr)
+        put (Some bvar : vs, n+1)
+        return (W.varExpr sym bvar)
+
+   handleVar :: ExtCns Term -> FirstOrderType -> StateT ([Some (BoundVar sym)], Integer) IO (SValue sym)
+   handleVar ec fot =
+     case fot of
+       FOTBit -> VBool <$> freshBnd ec BaseBoolRepr
+       FOTInt -> VInt  <$> freshBnd ec BaseIntegerRepr
+       FOTIntMod m -> VIntMod m <$> freshBnd ec BaseIntegerRepr
+
+       FOTVec n FOTBit ->
+         case somePosNat n of
+           Nothing -> -- n == 0
+             return (VWord ZBV)
+           Just (Some (PosNat nr)) ->
+             VWord . DBV <$> freshBnd ec (BaseBVRepr nr)
+
+       FOTVec n tp -> -- NB, not Bit
+         do vs  <- V.replicateM (fromIntegral n) (handleVar ec tp)
+            vs' <- traverse (return . ready) vs
+            return (VVector vs')
+
+       FOTRec tm ->
+         do vs  <- traverse (handleVar ec) tm
+            vs' <- traverse (return . ready) vs
+            return (vRecord vs')
+
+       FOTTuple ts ->
+         do vs  <- traverse (handleVar ec) ts
+            vs' <- traverse (return . ready) vs
+            return (vTuple vs')
+
+       FOTArray idx res
+         | Just (Some idx_repr) <- fotToBaseType idx
+         , Just (Some res_repr) <- fotToBaseType res
+
+         -> VArray . SArray <$> freshBnd ec (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) res_repr)
+
+         | otherwise -> fail ("boundFOTs: cannot handle " ++ show fot)
+
 
 --
 -- Pull out argument types until bottoming out at a non-Pi type

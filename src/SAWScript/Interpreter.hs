@@ -307,7 +307,9 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   -- Print non-unit result if it was not bound to a variable
   case pat of
     SS.PWild _ | printBinds && not (isVUnit result) ->
-      liftTopLevel $ printOutLnTop Info (showsPrecValue opts 0 result "")
+      liftTopLevel $
+      do nenv <- io . scGetNamingEnv =<< getSharedContext
+         printOutLnTop Info (showsPrecValue opts nenv 0 result "")
     _ -> return ()
 
   -- Print function type if result was a function
@@ -498,6 +500,7 @@ buildTopLevelEnv proxy opts =
                    , rwPathSatSolver = CC.PathSat_Z3
                    , rwSkipSafetyProofs = False
                    , rwSingleOverrideSpecialCase = False
+                   , rwSequentGoals = False
                    }
        return (bic, ro0, rw0)
 
@@ -548,6 +551,16 @@ disable_safety_proofs = do
   io $ printOutLn opts Warn "Safety proofs disabled! This is unsound!"
   rw <- getTopLevelRW
   putTopLevelRW rw{ rwSkipSafetyProofs = True }
+
+enable_sequent_goals :: TopLevel ()
+enable_sequent_goals = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw{ rwSequentGoals = True }
+
+disable_sequent_goals :: TopLevel ()
+disable_sequent_goals = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw{ rwSequentGoals = False }
 
 enable_smt_array_memory_model :: TopLevel ()
 enable_smt_array_memory_model = do
@@ -747,7 +760,8 @@ print_value (VTerm t) = do
 
 print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
-  printOutLnTop Info (showsPrecValue opts 0 v "")
+  nenv <- io . scGetNamingEnv =<< getSharedContext
+  printOutLnTop Info (showsPrecValue opts nenv 0 v "")
 
 readSchema :: String -> SS.Schema
 readSchema str =
@@ -942,6 +956,20 @@ primitives = Map.fromList
     (pureVal disable_smt_array_memory_model)
     Current
     [ "Disable the SMT array memory model." ]
+
+  , prim "enable_sequent_goals" "TopLevel ()"
+    (pureVal enable_sequent_goals)
+    Experimental
+    [ "When verifying proof obligations arising from `llvm_verify` and similar commands,"
+    , "generate sequents for the proof obligations instead of a single boolean goal."
+    ]
+
+  , prim "disable_sequent_goals" "TopLevel ()"
+    (pureVal disable_sequent_goals)
+    Experimental
+    [ "Restore the default behavior, which is to generate single boolean goals"
+    , "for proof obligations arising from verification commands."
+    ]
 
   , prim "enable_safety_proofs" "TopLevel ()"
     (pureVal enable_safety_proofs)
@@ -1182,6 +1210,20 @@ primitives = Map.fromList
     [ "Take a list of 'fresh_symbolic' variable and another term containing"
     , "those variables, and return a new lambda abstraction over the list of"
     , "variables."
+    ]
+
+  , prim "generalize_term"   "[Term] -> Term -> Term"
+    (funVal2 generalize_term)
+    Experimental
+    [ "Take a list of 'fresh_symbolic' variables and another term containing those"
+    , "variables, and return a new Pi generalization over the list of variables."
+    ]
+
+  , prim "implies_term"      "Term -> Term -> Term"
+    (funVal2 implies_term)
+    Experimental
+    [ "Given two terms, which must be Prop terms, construct the SAWCore implication"
+    , "of those terms."
     ]
 
   , prim "size_to_term"      "Type -> Term"
@@ -1497,20 +1539,36 @@ primitives = Map.fromList
     , "if unsuccessful."
     ]
 
+  , prim "prove_by_bv_induction"  "ProofScript () -> Term -> TopLevel Theorem"
+    (pureVal proveByBVInduction)
+    Experimental
+    [ "Attempt to prove a fact by induction on the less-than order on bitvectors."
+    , "The given term is expected to be a function of one or more arguments"
+    , "which returns a tuple containing two values: first, a bitvector expression"
+    , "(which will be the expression we perform induction on), and second, a boolean value"
+    , "defining the theorem to prove."
+    , ""
+    , "This command will attempt to prove the theorem expressed in the second"
+    , "element of the tuple by induction. The goal presented to the user-provided"
+    , "tactic will ask to prove the stated goal and will be provided with an induction"
+    , "hypothesis which states that the goal holds for all values of the varibles"
+    , "where the expression given in the first element of the tuple has decreased."
+    ]
+
   , prim "prove_extcore"         "ProofScript () -> Term -> TopLevel Theorem"
     (pureVal provePropPrim)
     Current
     [ "Use the given proof script to attempt to prove that a term representing"
     , "a proposition is valid. For example, this is useful for proving a goal"
-    , "obtained with 'offline_extcore'. Returns a Theorem if successful, and"
-    , "aborts if unsuccessful."
+    , "obtained with 'offline_extcore' or 'parse_core'. Returns a Theorem if"
+    , "successful, and aborts if unsuccessful."
     ]
 
   , prim "sat"                 "ProofScript () -> Term -> TopLevel SatResult"
     (pureVal satPrim)
     Current
     [ "Use the given proof script to attempt to prove that a term is"
-    , "satisfiable (true for any input). Returns a proof result that can"
+    , "satisfiable (is true for some input). Returns a proof result that can"
     , "be analyzed with 'caseSatResult' to determine whether it represents"
     , "a satisfying assignment or an indication of unsatisfiability."
     ]
@@ -1553,10 +1611,73 @@ primitives = Map.fromList
     Current
     [ "Apply the given simplifier rule set to the current goal." ]
 
+  , prim "simplify_local"       "[Int] -> Simpset -> ProofScript ()"
+    (pureVal simplifyGoalWithLocals)
+    Current
+    [ "Apply the given simplifier rule set to the current goal."
+    , "Also, use the given numbered hypotheses as rewrites."
+    ]
+
+  , prim "unfocus"        "ProofScript ()"
+    (pureVal unfocus)
+    Experimental
+    [ "Remove any sequent focus point." ]
+
+  , prim "focus_concl"      "Int -> ProofScript ()"
+    (pureVal focus_concl)
+    Experimental
+    [ "Focus on the numbered conclusion within a sequent. This will fail if there are"
+    , "not enough conclusions."
+    ]
+
+  , prim "focus_hyp"       "Int -> ProofScript ()"
+    (pureVal focus_hyp)
+    Experimental
+    [ "Focus on the numbered conclusion with a sequent.  This will fail if there are"
+    , "enough hypotheses."
+    ]
+
+  , prim "normalize_sequent" "ProofScript ()"
+    (pureVal normalize_sequent)
+    Experimental
+    [ "Normalize the current goal sequent by applying reversable sequent calculus rules."
+    , "The resulting sequent will be unfocused."
+    ]
+
+  , prim "goal_cut" "Term -> ProofScript ()"
+    (pureVal goal_cut)
+    Experimental
+    [ "Given a term provided by the user (which must be a boolean expression"
+    , "or a Prop) the current goal is split into two subgoals. In the first subgoal,"
+    , "the given proposition is assumed as a new hypothesis. In the second subgoal,"
+    , "the given proposition is a new focused, conclusion. This implements the"
+    , "usual cut rule of sequent calculus."
+    ]
+
+  , prim "retain_hyps" "[Int] -> ProofScript ()"
+    (pureVal retain_hyps)
+    Experimental
+    [ "Remove all hypotheses from the current sequent other than the ones listed." ]
+
+  , prim "delete_hyps" "[Int] -> ProofScript ()"
+    (pureVal delete_hyps)
+    Experimental
+    [ "Remove the numbered hypotheses from the current sequent." ]
+
+  , prim "retain_concl" "[Int] -> ProofScript ()"
+    (pureVal retain_concl)
+    Experimental
+    [ "Remove all conclusions from the current sequent other than the ones listed." ]
+
+  , prim "delete_concl" "[Int] -> ProofScript ()"
+    (pureVal delete_concl)
+    Experimental
+    [ "Remove the numbered conclusions from the current sequent." ]
+
   , prim "hoist_ifs_in_goal"            "ProofScript ()"
     (pureVal hoistIfsInGoalPrim)
     Experimental
-    [ "hoist ifs in the current proof goal" ]
+    [ "Hoist ifs in the current proof goal." ]
 
   , prim "normalize_term"      "Term -> Term"
     (funVal1 normalize_term)
@@ -1568,6 +1689,14 @@ primitives = Map.fromList
     Experimental
     [ "Normalize the given term by performing evaluation in SAWCore."
     , "The named values will be treated opaquely and not unfolded during evaluation."
+    ]
+
+  , prim "goal_normalize"  "[String] -> ProofScript ()"
+    (pureVal goal_normalize)
+    Experimental
+    [ "Evaluate the current proof goal by performing evaluation in SAWCore."
+    , "The currently-focused term will be evaluated.  If the sequent is unfocused"
+    , "all terms will be evaluated. The given names will be treated as uninterpreted."
     ]
 
   , prim "goal_eval"           "ProofScript ()"
@@ -1600,17 +1729,57 @@ primitives = Map.fromList
     , "This will succeed if the type of the given term matches the current goal."
     ]
 
-  , prim "goal_assume"         "ProofScript Theorem"
-    (pureVal goal_assume)
+  , prim "goal_intro_hyp"      "ProofScript ()"
+    (pureVal goal_intro_hyp)
     Experimental
-    [ "Convert the first hypothesis in the current proof goal into a"
-    , "local Theorem."
+    [ "When focused on a conclusion that represents an implication,"
+    , "simplify the conclusion by removing the implication and introducing"
+    , "a new sequent hypothesis instead."
     ]
+
+  , prim "goal_intro_hyps"     "Int -> ProofScript ()"
+    (pureVal goal_intro_hyps)
+    Experimental
+    [ "When focused on a conclusion that represents an implication,"
+    , "simplify the conclusion by removing the implication and introducing"
+    , "a new sequent hypothesis instead. The given number indicates how many"
+    , "hypotheses to introduce."
+    ]
+
+  , prim "goal_revert_hyp"     "Int -> ProofScript ()"
+    (pureVal goal_revert_hyp)
+    Experimental
+    [ "When focused on a conclusion, weaken the focused conclusion"
+    , "by introducing an implication using the numbered sequent hypothesis."
+    , "This is essentially the reverse of 'gooal_intro_hyps'."
+    ]
+
   , prim "goal_insert"         "Theorem -> ProofScript ()"
     (pureVal goal_insert)
     Experimental
     [ "Insert a Theorem as a new hypothesis in the current proof goal."
     ]
+
+  , prim "goal_insert_and_specialize"  "Theorem -> [Term] -> ProofScript ()"
+    (pureVal goal_insert_and_specialize)
+    Experimental
+    [ "Insert a Theorem as a new hypothesis in the current proof goal, after"
+    , "specializing some of its universal quantifiers using the given terms."
+    ]
+
+  , prim "goal_apply_hyp"      "Int -> ProofScript ()"
+    (pureVal goal_apply_hyp)
+    Experimental
+    [ "Apply the numbered local hypothesis to the focused conclusion." ]
+
+  , prim "goal_specialize_hyp" "[Term] -> ProofScript ()"
+    (pureVal goal_specialize_hyp)
+    Experimental
+    [ "Specialize the focused local hypothesis by supplying the values"
+    , "for universal quantifiers. A new specialized hypothesis will be"
+    , "added to the sequent."
+    ]
+
   , prim "goal_intro"          "String -> ProofScript Term"
     (pureVal goal_intro)
     Experimental
@@ -1668,6 +1837,13 @@ primitives = Map.fromList
     [ "Print the number and description of the goal that a proof script"
     , "is attempting to prove."
     ]
+  , prim "print_focus" "ProofScript ()"
+    (pureVal print_focus)
+    Experimental
+    [ "Print just the focused part of the current goal."
+    , "Prints a message without failing if there is no current focus."
+    ]
+
   , prim "goal_num" "ProofScript Int"
     (pureVal goal_num)
     Current
@@ -2041,6 +2217,14 @@ primitives = Map.fromList
     (funVal2 addsimp)
     Current
     [ "Add a proved equality theorem to a given simplification rule set." ]
+
+  , prim "addsimp_shallow"    "Theorem -> Simpset -> Simpset"
+    (funVal2 addsimp_shallow)
+    Current
+    [ "Add a proved equality theorem to a given simplification rule set."
+    , "The rule is treated as a 'shallow' rewrite, which means that further"
+    , "rewrite rules will not be applied to the result if this rule fires."
+    ]
 
   , prim "addsimps"            "[Theorem] -> Simpset -> Simpset"
     (funVal2 addsimps)

@@ -53,7 +53,7 @@ import           Verifier.SAW.SharedTerm as SAWVerifier
 import           SAWScript.Options
 import           SAWScript.Prover.SolverStats
 import           SAWScript.Utils (bullets)
-import           SAWScript.Proof (TheoremNonce)
+import           SAWScript.Proof (TheoremNonce, TheoremSummary)
 
 -- | How many allocations have we made in this method spec?
 newtype AllocIndex = AllocIndex Int
@@ -362,13 +362,29 @@ data ProofMethod
 
 type SpecNonce ext = Nonce GlobalNonceGenerator (ProvedSpec ext)
 
+-- | Data collected about discharged verification conditions (VCs).
+--   Verification conditions arise when proving function specifications
+--   due to, e.g., safety conditions, specification postconditions, and
+--   preconditions of called override functions.
+data VCStats =
+  VCStats
+  { vcMetadata    :: ConditionMetadata -- ^ Metadata describing why the VC arose
+  , vcSolverStats :: SolverStats       -- ^ Statistics about any solvers used when proving this VC
+  , vcThmSummary  :: TheoremSummary    -- ^ A summary of the proof status of this VC
+  , vcIdent       :: TheoremNonce      -- ^ A unique identifier for this VC
+  , vcDeps        :: Set TheoremNonce  -- ^ A collection of the theorems the proof of this VC relied on
+  , vcElapsedTime :: NominalDiffTime   -- ^ The time required to prove this VC
+  }
+
 data ProvedSpec ext =
   ProvedSpec
   { _psSpecIdent   :: Nonce GlobalNonceGenerator (ProvedSpec ext)
   , _psProofMethod :: ProofMethod
   , _psSpec        :: CrucibleMethodSpecIR ext
   , _psSolverStats :: SolverStats -- ^ statistics about the proof that produced this
-  , _psTheoremDeps :: Set TheoremNonce -- ^ theorems depended on by this proof
+  , _psVCStats     :: [VCStats]
+       -- ^ Stats about the individual verification conditions produced
+       --   by the proof of this specification
   , _psSpecDeps    :: Set (SpecNonce ext)
                         -- ^ Other proved specifications this proof depends on
   , _psElapsedTime :: NominalDiffTime -- ^ The time elapsed during the proof of this specification
@@ -380,13 +396,13 @@ mkProvedSpec ::
   ProofMethod ->
   CrucibleMethodSpecIR ext ->
   SolverStats ->
-  Set TheoremNonce ->
+  [VCStats] ->
   Set (SpecNonce ext) ->
   NominalDiffTime ->
   IO (ProvedSpec ext)
-mkProvedSpec m mspec stats thms sps elapsed =
+mkProvedSpec m mspec stats vcStats sps elapsed =
   do n <- freshNonce globalNonceGenerator
-     let ps = ProvedSpec n m mspec stats thms sps elapsed
+     let ps = ProvedSpec n m mspec stats vcStats sps elapsed
      return ps
 
 -- TODO: remove when what4 switches to prettyprinter
