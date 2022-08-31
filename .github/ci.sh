@@ -79,6 +79,7 @@ install_system_deps() {
   if [[ $BUILD_TARGET_OS == 'ubuntu-18.04' ]] ; then
     sudo apt update
     sudo apt install -y \
+      antlr3 \
       apt-transport-https \
       autoconf \
       automake \
@@ -90,7 +91,8 @@ install_system_deps() {
       docker-compose \
       git \
       gperf \
-      software-properties-common \
+      libantlr3c-dev \
+      libboost-all-dev \
       libfftw3-dev \
       libgmp3-dev \
       libreadline-dev \
@@ -99,6 +101,10 @@ install_system_deps() {
       libtool-bin \
       locales \
       readline-common \
+      python3-distutils \
+      python3-pip \
+      python-setuptools \
+      software-properties-common \
       wget \
       zip \
       zlib1g \
