@@ -836,7 +836,9 @@ data PermVarSubst (ctx :: RList CrucibleType) where
   PermVarSubst_Cons :: PermVarSubst ctx -> Name tp -> PermVarSubst (ctx :> tp)
 
 -- | An entry in a permission environment that associates a permission and
--- corresponding SAW identifier with a Crucible function handle
+-- translation with a Crucible function handle; the translation can either be a
+-- SAW core identifier or an 'Int' that specifies a recursive call to the @i@th
+-- function in the most recent frame of recursive funcionts
 data PermEnvFunEntry where
   PermEnvFunEntry :: args ~ CtxToRList cargs => FnHandle cargs ret ->
                      FunPerm ghosts args gouts ret -> Ident ->
@@ -882,6 +884,20 @@ data BlockHint blocks init ret args where
 data Hint where
   Hint_Block :: BlockHint blocks init ret args -> Hint
 
+-- | A representation of an event / effect type for a SpecM computation, which
+-- includes a type for events along with a function to map each event to its
+-- return type. See the @SpecM@ monad for more details.
+data SpecMEventType = SpecMEventType
+  {
+    specMEventType :: Ident,
+    specMEventRetType :: Ident
+  }
+
+-- | The default 'SpecMEventType' uses the @Void@ type for events
+defaultSpecMEventType :: SpecMEventType
+defaultSpecMEventType =
+  SpecMEventType (fromString "Prelude.Void") (fromString "Prelude.VoidEvRetType")
+
 -- | A permission environment that maps function names, permission names, and
 -- 'GlobalSymbols' to their respective permission structures
 data PermEnv = PermEnv {
@@ -889,7 +905,8 @@ data PermEnv = PermEnv {
   permEnvNamedPerms :: [SomeNamedPerm],
   permEnvNamedShapes :: [SomeNamedShape],
   permEnvGlobalSyms :: [PermEnvGlobalEntry],
-  permEnvHints :: [Hint]
+  permEnvHints :: [Hint],
+  permEnvSpecMEventType :: SpecMEventType
   }
 
 
@@ -961,6 +978,7 @@ $(mkNuMatching [t| forall args. BlockHintSort args |])
 $(mkNuMatching [t| forall blocks init ret args.
                 BlockHint blocks init ret args |])
 $(mkNuMatching [t| Hint |])
+$(mkNuMatching [t| SpecMEventType |])
 $(mkNuMatching [t| PermEnv |])
 
 -- NOTE: this instance would require a NuMatching instance for NameMap...
@@ -8048,7 +8066,7 @@ isJoinPointHint _ = False
 
 -- | The empty 'PermEnv'
 emptyPermEnv :: PermEnv
-emptyPermEnv = PermEnv [] [] [] [] []
+emptyPermEnv = PermEnv [] [] [] [] [] defaultSpecMEventType
 
 -- | Add a 'NamedPerm' to a permission environment
 permEnvAddNamedPerm :: PermEnv -> NamedPerm ns args a -> PermEnv
