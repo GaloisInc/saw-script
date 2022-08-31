@@ -328,7 +328,7 @@ jobs:
           name: ${{ runner.os }}-bins
 
   mr-solver-tests:
-    needs: [build]
+    needs: [build, build-github-runners]
     strategy:
       fail-fast: false
       matrix:
@@ -364,7 +364,7 @@ jobs:
           saw mr_solver_unit_tests.saw
 
   heapster-tests:
-    needs: [build]
+    needs: [build, build-github-runners]
     strategy:
       fail-fast: false
       matrix:
@@ -415,7 +415,7 @@ jobs:
 
   saw-remote-api-tests:
     runs-on: ["self-hosted", "${{ matrix.os }}"]
-    needs: [build]
+    needs: [build, build-github-runners]
     strategy:
       fail-fast: false
       matrix:
@@ -472,7 +472,7 @@ jobs:
 
   cabal-test:
     runs-on: ["self-hosted", "${{ matrix.os }}"]
-    needs: [build]
+    needs: [build, build-github-runners]
     strategy:
       fail-fast: false
       matrix:
@@ -642,7 +642,7 @@ jobs:
   s2n-tests:
     name: "Test s2n proofs"
     timeout-minutes: 120
-    needs: build
+    needs: [build, build-github-runners]
     runs-on: ["self-hosted", "ubuntu-18.04"]
     strategy:
       fail-fast: false
@@ -701,6 +701,7 @@ jobs:
     runs-on: ["self-hosted", "ubuntu-latest"]
     needs:
       - build
+      - build-github-runners
       - heapster-tests
       - saw-remote-api-tests
       - cabal-test
