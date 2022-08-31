@@ -93,7 +93,6 @@ install_system_deps() {
       software-properties-common \
       libfftw3-dev \
       libgmp3-dev \
-      libreadline7 \
       libreadline-dev \
       libtinfo-dev \
       libtool \
