@@ -69,30 +69,6 @@ jobs:
       matrix:
         os: [ubuntu-18.04]
         ghc: ["8.8.4", "8.10.7", "9.0.2"]
-        #include:
-        #  - os: macos-12
-        #    ghc: "8.10.7"
-        #  - os: macos-12
-        #    ghc: "9.0.2"
-        #  - os: windows-latest
-        #    ghc: "8.10.7"
-        #exclude:
-          # Exclude 8.8 on macOS 12 due to
-          # https://gitlab.haskell.org/ghc/ghc/-/issues/18446
-          #- os: macos-12
-          #  ghc: "8.8.4"
-          #- os: windows-latest
-          #  ghc: "8.8.4"
-          # Exclude 9.0 on Windows for now until
-          # https://github.com/commercialhaskell/stackage/issues/6400
-          # is resolved
-          #- os: windows-latest
-          #  ghc: "9.0.2"
-          # Exclude self-hosted for OS's that are note supported by stardust
-          #- os: macos-12
-          #  type: "self-hosted"
-          #- os: windows-latest
-          #  type: "self-hosted"
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
@@ -214,6 +190,142 @@ jobs:
         with:
           name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
           path: "dist/bin/saw"
+
+  build-github-runners:
+    runs-on: ["${{ matrix.os }}"]
+    needs: [config]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-12, windows-latest]
+        ghc: ["8.8.4", "8.10.7", "9.0.2"]
+        exclude:
+          # Exclude 8.8 on macOS 12 due to
+          # https://gitlab.haskell.org/ghc/ghc/-/issues/18446
+          - os: macos-12
+            ghc: "8.8.4"
+          - os: windows-latest
+            ghc: "8.8.4"
+          # Exclude 9.0 on Windows for now until
+          # https://github.com/commercialhaskell/stackage/issues/6400
+          # is resolved
+          - os: windows-latest
+            ghc: "9.0.2"
+    outputs:
+      cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
+    steps:
+
+      - uses: actions/checkout@v2
+      - run: |
+           git submodule update --init
+
+      - id: config
+        shell: bash
+        run: |
+          NAME="${{ needs.config.outputs.name }}-${{ runner.os }}-x86_64"
+          .github/ci.sh output name $NAME
+          echo "NAME=${{ needs.config.outputs.name }}-${{ runner.os }}-x86_64" >> $GITHUB_ENV
+
+      - uses: haskell/actions/setup@v1
+        id: setup-haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          BUILD_TARGET_OS: ${{ matrix.os }}
+
+      - uses: actions/cache@v2
+        name: Cache cabal store
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: ${{ env.CACHE_VERSION }}-cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.CACHE_VERSION }}-cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
+
+      - if: needs.config.outputs.release == 'true'
+        shell: bash
+        run: |
+          sed -i.bak \
+            -e 's/^hashText = .*$/hashText = ""/' \
+            -e '/import GitRev.*$/d' \
+            saw/SAWScript/Version.hs
+          rm -f saw/SAWScript/Version.hs.bak
+
+      - shell: bash
+        run: .github/ci.sh build
+
+      - shell: bash
+        env:
+          RELEASE: ${{ needs.config.outputs.release }}
+        run: .github/ci.sh build_cryptol
+
+      - uses: GaloisInc/.github/actions/cabal-collect-bins@v1
+        id: cabal-test-suites
+        with:
+          targets: |
+            integration_tests
+            test-sawcore
+            cryptol-saw-core-tc-test
+            prover_tests
+          dest: dist-tests
+
+      - uses: actions/upload-artifact@v2
+        if: "matrix.ghc == '8.10.7'"
+        with:
+          path: dist-tests
+          name: dist-tests-${{ matrix.os }}
+
+      - shell: bash
+        run: .github/ci.sh setup_dist_bins
+
+      - shell: bash
+        run: .github/ci.sh bundle_files
+
+      - shell: bash
+        run: .github/ci.sh zip_dist $NAME
+
+      - shell: bash
+        run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
+
+      - if: matrix.ghc == '8.10.7' && github.event.pull_request.head.repo.fork == false
+        shell: bash
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: .github/ci.sh sign $NAME.tar.gz
+
+      - if: matrix.ghc == '8.10.7' && github.event.pull_request.head.repo.fork == false
+        shell: bash
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: .github/ci.sh sign $NAME-with-solvers.tar.gz
+
+      - if: matrix.ghc == '8.10.7'
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
+          path: "${{ steps.config.outputs.name }}.tar.gz*"
+          if-no-files-found: error
+          retention-days: ${{ needs.config.outputs.retention-days }}
+
+      - if: matrix.ghc == '8.10.7'
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
+          path: "${{ steps.config.outputs.name }}-with-solvers.tar.gz*"
+          if-no-files-found: error
+          retention-days: ${{ needs.config.outputs.retention-days }}
+
+      - if: "matrix.ghc == '8.10.7'"
+        uses: actions/upload-artifact@v2
+        with:
+          path: dist/bin
+          name: ${{ runner.os }}-bins
 
   mr-solver-tests:
     needs: [build]
