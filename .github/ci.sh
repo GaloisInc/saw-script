@@ -94,11 +94,11 @@ install_system_deps() {
       libfftw3-dev \
       libgmp3-dev \
       libreadline-dev \
-      libreadline7 \
       libtinfo-dev \
       libtool \
       libtool-bin \
       locales \
+      readline-common \
       wget \
       zip \
       zlib1g \
