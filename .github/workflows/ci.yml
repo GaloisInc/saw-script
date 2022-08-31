@@ -448,11 +448,13 @@ jobs:
         run: echo "Where the hell is libreadline.so.7?" ; find / -name libreadline.so.7
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
+        continue-on-error: true
 
       - shell: bash
         run: echo "What is my PATH?" ; echo $PATH ; echo "What is my LD_LIBRARY_PATH?" ; echo $LD_LIBRARY_PATH
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
+        continue-on-error: true
 
       - uses: actions/download-artifact@v2
         with:
