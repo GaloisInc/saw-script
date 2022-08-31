@@ -421,41 +421,51 @@ simplifySequent sc ss (HypFocusedSequent (FB hs1 h hs2) gs) =
 
 
 hoistIfsInProp :: SharedContext -> Prop -> IO Prop
-hoistIfsInProp sc (Prop p) = do
-  let (args, body) = asPiList p
+hoistIfsInProp sc p = do
+  (ecs, body) <- unbindProp sc p
   body' <-
     case asEqTrue body of
       Just t -> pure t
       Nothing -> fail "hoistIfsInProp: expected EqTrue"
-  ecs <- traverse (\(nm, ty) -> scFreshEC sc nm ty) args
-  vars <- traverse (scExtCns sc) ecs
-  t0 <- instantiateVarList sc 0 (reverse vars) body'
-  t1 <- hoistIfs sc t0
+  t1 <- hoistIfs sc body'
   t2 <- scEqTrue sc t1
   t3 <- scGeneralizeExts sc ecs t2
   return (Prop t3)
+
+-- | Turn any leading Pi binders in the given prop into
+--   fresh ExtCns values, being careful to ensure that
+--   dependent types are properly substituted.
+unbindProp :: SharedContext -> Prop -> IO ([ExtCns Term], Term)
+unbindProp sc (Prop p0) = loop [] [] p0
+  where
+    loop ecs vs p =
+      case asPi p of
+        Nothing ->
+          case vs of
+            [] -> return ([], p)
+            _  -> do p' <- instantiateVarList sc 0 vs p
+                     return (reverse ecs, p')
+        Just (nm, tp, tm) ->
+          do tp' <- instantiateVarList sc 0 vs tp
+             ec  <- scFreshEC sc nm tp'
+             v   <- scExtCns sc ec
+             loop (ec:ecs) (v:vs) tm
 
 -- | Evaluate the given proposition by round-tripping
 --   through the What4 formula representation.  This will
 --   perform a variety of simplifications and rewrites.
 evalProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
-evalProp sc unints (Prop p) =
-  do let (args, body) = asPiList p
-
+evalProp sc unints p =
+  do (ecs, body) <- unbindProp sc p
      body' <-
        case asEqTrue body of
          Just t -> pure t
-         Nothing -> fail ("goal_eval: expected EqTrue\n" ++ scPrettyTerm defaultPPOpts p)
-
-     ecs <- traverse (\(nm, ty) -> scFreshEC sc nm ty) args
-     vars <- traverse (scExtCns sc) ecs
-     t0 <- instantiateVarList sc 0 (reverse vars) body'
+         Nothing -> fail ("goal_eval: expected EqTrue\n" ++ scPrettyTerm defaultPPOpts (unProp p))
 
      sym <- Common.newSAWCoreExprBuilder sc
      st <- Common.sawCoreState sym
-     (_names, (_mlabels, p')) <- W4Sim.w4Eval sym st sc mempty unints t0
+     (_names, (_mlabels, p')) <- W4Sim.w4Eval sym st sc mempty unints body'
      t1 <- W4Sim.toSC sym st p'
-
      t2 <- scEqTrue sc t1
      -- turn the free variables we generated back into pi-bound variables
      t3 <- scGeneralizeExts sc ecs t2
