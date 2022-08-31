@@ -84,13 +84,17 @@ install_system_deps() {
       automake \
       build-essential \
       ca-certificates \
+      clang \
       cmake \
       curl \
+      docker-compose \
       git \
       gperf \
       software-properties-common \
       libfftw3-dev \
       libgmp3-dev \
+      libreadline7 \
+      libreadline-dev \
       libtinfo-dev \
       libtool \
       libtool-bin \
