@@ -2265,7 +2265,7 @@ LRTsTuple E evRetType stack lrts =
   lrts;
 
 -- A recursive call to a function in the top frame of a function stack
-primitive CallS :
+primitive callS :
   (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
   (frame:LetRecTypes1) -> (n:Nat) ->
   LRTType E evRetType (pushFunStack frame stack) (nthLRT frame n);
