@@ -94,8 +94,9 @@ translateLLVMValue w _ (L.ValSymbol sym) =
   do env <- llvmTransInfoEnv <$> ask
      -- (p, ts) <- lift (lookupGlobalSymbol env (GlobalSymbol sym) w)
      (p, t) <- case (lookupGlobalSymbol env (GlobalSymbol sym) w) of
-       Just (p,[t]) -> return (p,t)
-       Just (p,ts) -> return (p,tupleOpenTerm ts)
+       Just (p,False,[t]) -> return (p,t)
+       Just (p,False,ts) -> return (p,tupleOpenTerm ts)
+       Just (_,True,_) -> error "translateLLVMValue: Unexpected recursive call"
        Nothing -> traceAndZeroM ("Could not find symbol: " ++ show sym)
      return (PExpr_FieldShape (LLVMFieldShape p), t)
 translateLLVMValue w _ (L.ValArray tp elems) =
@@ -254,4 +255,4 @@ permEnvAddGlobalConst sc mod_name dlevel endianness w env global =
          let p = ValPerm_LLVMBlock $ llvmReadBlockOfShape sh
          let t_ident = globalOpenTerm ident
          return $ permEnvAddGlobalSyms env
-           [PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p [t_ident]]
+           [PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p False [t_ident]]

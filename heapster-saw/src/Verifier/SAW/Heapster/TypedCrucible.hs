@@ -3545,7 +3545,7 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_LoadHandle _ _ ptr args ret) =
 tcEmitLLVMStmt _arch ctx loc (LLVM_ResolveGlobal w _ gsym) =
   (stPermEnv <$> top_get) >>>= \env ->
   case lookupGlobalSymbol env gsym w of
-    Just (p, _) ->
+    Just (p, _, _) ->
       nextDebugName >>>= \name ->
       withKnownNat ?ptrWidth $
       emitLLVMStmt knownRepr name loc (TypedLLVMResolveGlobal gsym p) >>>= \ret ->
