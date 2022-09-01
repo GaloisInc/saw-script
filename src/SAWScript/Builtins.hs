@@ -5,6 +5,7 @@ License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
+
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -72,6 +73,7 @@ import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
 import qualified Verifier.SAW.SCTypeCheck as TC (TypedTerm(..))
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
+import qualified Verifier.SAW.Name as Name
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter
@@ -479,9 +481,11 @@ resolveName sc nm =
      scnms <- fmap fst <$> io (scResolveName sc tnm)
      let ?fileReader = StrictBS.readFile
      res <- io $ CEnv.resolveIdentifier cenv tnm
+     liftIO $ print (res, scnms)
      case res of
        Just cnm ->
          do importedName <- io $ Cryptol.importName cnm
+            liftIO $ print (cnm, importedName)
             case importedName of
               ImportedName uri _ ->
                 do resolvedName <- io $ scResolveNameByURI sc uri
@@ -494,6 +498,12 @@ resolveName sc nm =
  where
  tnm = Text.pack nm
 
+
+dump_names :: TopLevel ()
+dump_names = do
+  sc <- getSharedContext
+  env <- liftIO $ readIORef $ scNamingEnv $ sc
+  liftIO $ print $ Name.resolvedNames env
 
 normalize_term :: TypedTerm -> TopLevel TypedTerm
 normalize_term tt = normalize_term_opaque [] tt
@@ -511,7 +521,13 @@ unfoldGoal :: [String] -> ProofScript ()
 unfoldGoal unints =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
+     SV.writeTactic $ mconcat
+       [ "unfolding ["
+       , Text.intercalate ", " $ Text.pack . show <$> unints
+       , "];"
+       ]
      unints' <- resolveNames unints
+     liftIO $ print unints'
      prop' <- io (unfoldProp sc unints' (goalProp goal))
      return (prop', UnfoldEvidence unints')
 
@@ -521,13 +537,14 @@ simplifyGoal ss = do
     thms <- fmap catMaybes $ forM (annRewriteRule <$> listRules ss) $ \case
       Nothing -> pure Nothing
       Just n -> lookupTheoremName n
+    forM_ thms $ uncurry Prover.saveRewrite
     case thms of
       [] -> do
         SV.writeTactic "simplify (cryptol_ss ());"
       _ -> do
         SV.writeTactic $ mconcat
           [ "simplify (addsimps ["
-          , Text.intercalate ", " thms
+          , Text.intercalate ", " $ fst <$> thms
           , "] empty_ss);"
           ]
     sc <- getSharedContext
@@ -760,11 +777,15 @@ wrapProver ::
 wrapProver f = execTactic $ tacticSolve $ applyProverToGoal f
 
 wrapW4Prover ::
+  String ->
   ( Set VarIndex -> Bool ->
     Prop -> TopLevel (Maybe CEX, SolverStats)) ->
   [String] ->
   ProofScript ()
-wrapW4Prover f unints = do
+wrapW4Prover nm f unints = do
+  SV.scriptTopLevel $ do
+    io $ putStrLn "w4_unint"
+    SV.writeTactic . Text.pack $ "w4_unint_" <> nm <> " " <> show unints <> ";"
   hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
   unintSet <- SV.scriptTopLevel $ resolveNames unints
   wrapProver $ f unintSet hashConsing
@@ -820,34 +841,34 @@ proveUnintYices = proveUnintSBV SBV.yices
 
 --------------------------------------------------
 w4_abc_smtlib2 :: ProofScript ()
-w4_abc_smtlib2 = wrapW4Prover Prover.proveWhat4_abc []
+w4_abc_smtlib2 = wrapW4Prover "abc" Prover.proveWhat4_abc []
 
 w4_boolector :: ProofScript ()
-w4_boolector = wrapW4Prover Prover.proveWhat4_boolector []
+w4_boolector = wrapW4Prover "boolector" Prover.proveWhat4_boolector []
 
 w4_z3 :: ProofScript ()
-w4_z3 = wrapW4Prover Prover.proveWhat4_z3 []
+w4_z3 = wrapW4Prover "z3" Prover.proveWhat4_z3 []
 
 w4_cvc4 :: ProofScript ()
-w4_cvc4 = wrapW4Prover Prover.proveWhat4_cvc4 []
+w4_cvc4 = wrapW4Prover "cvc4" Prover.proveWhat4_cvc4 []
 
 w4_yices :: ProofScript ()
-w4_yices = wrapW4Prover Prover.proveWhat4_yices []
+w4_yices = wrapW4Prover "yices" Prover.proveWhat4_yices []
 
 w4_unint_boolector :: [String] -> ProofScript ()
-w4_unint_boolector = wrapW4Prover Prover.proveWhat4_boolector
+w4_unint_boolector = wrapW4Prover "boolector" Prover.proveWhat4_boolector
 
 w4_unint_z3 :: [String] -> ProofScript ()
-w4_unint_z3 = wrapW4Prover Prover.proveWhat4_z3
+w4_unint_z3 = wrapW4Prover "z3" Prover.proveWhat4_z3
 
 w4_unint_z3_using :: String -> [String] -> ProofScript ()
-w4_unint_z3_using tactic = wrapW4Prover (Prover.proveWhat4_z3_using tactic)
+w4_unint_z3_using tactic = wrapW4Prover "z3" (Prover.proveWhat4_z3_using tactic)
 
 w4_unint_cvc4 :: [String] -> ProofScript ()
-w4_unint_cvc4 = wrapW4Prover Prover.proveWhat4_cvc4
+w4_unint_cvc4 = wrapW4Prover "cvc4" Prover.proveWhat4_cvc4
 
 w4_unint_yices :: [String] -> ProofScript ()
-w4_unint_yices = wrapW4Prover Prover.proveWhat4_yices
+w4_unint_yices = wrapW4Prover "yices" Prover.proveWhat4_yices
 
 offline_w4_unint_z3 :: [String] -> String -> ProofScript ()
 offline_w4_unint_z3 unints path =
@@ -930,10 +951,10 @@ offline_verilog path =
   proveWithSATExporter Prover.writeVerilogSAT mempty path "." ".v"
 
 w4_abc_aiger :: ProofScript ()
-w4_abc_aiger = wrapW4Prover Prover.w4AbcAIGER []
+w4_abc_aiger = wrapW4Prover "abc_aiger" Prover.w4AbcAIGER []
 
 w4_abc_verilog :: ProofScript ()
-w4_abc_verilog = wrapW4Prover Prover.w4AbcVerilog []
+w4_abc_verilog = wrapW4Prover "abc_verilog" Prover.w4AbcVerilog []
 
 set_timeout :: Integer -> ProofScript ()
 set_timeout to = modify (setProofTimeout to)
@@ -1767,7 +1788,7 @@ summarize_verification_json fpath =
      summary <- io (computeVerificationSummary db jspecs lspecs thms)
      io (writeFile fpath (jsonVerificationSummary summary))
 
-lookupTheoremName :: TheoremNonce -> TopLevel (Maybe Text)
+lookupTheoremName :: TheoremNonce -> TopLevel (Maybe (Text, Term))
 lookupTheoremName n = do
   vals <- rwValues <$> getTopLevelRW
   let matches = flip filter (Map.assocs vals) $ \(_, v) ->
@@ -1775,5 +1796,8 @@ lookupTheoremName n = do
           SV.VTheorem thm' | n == thmNonce thm' -> True
           _ -> False
   case matches of
-    ((nm, _):_) -> pure $ Just $ Text.pack $ getVal nm
+    ((nm, SV.VTheorem thm):_) -> do
+      sc <- getSharedContext
+      tm <- io . propToTerm sc $ thmProp thm
+      pure $ Just (Text.pack $ getVal nm, tm)
     _ -> pure Nothing

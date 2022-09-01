@@ -33,6 +33,7 @@ module SAWScript.Value where
 import Prelude hiding (fail)
 
 import System.FilePath
+import System.Directory
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative)
@@ -116,7 +117,9 @@ import           What4.ProgramLoc (ProgramLoc(..))
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.SAWTranslation (ChecksFlag)
 
+import qualified Data.Text as Text
 import qualified Data.Text.IO as Text
+import Control.Monad (unless)
 
 -- Values ----------------------------------------------------------------------
 
@@ -485,12 +488,12 @@ instance MonadFail TopLevel where
   fail = throwTopLevel
 
 writeTactic :: Text -> TopLevel ()
-writeTactic s = rwRewriteSummary <$> get >>= \case
+writeTactic s = gets rwRewriteSummary >>= \case
   Nothing -> pure ()
   Just dir -> liftIO $ Text.appendFile (dir </> "main.saw") (s <> "\n")
 
 writeTacticPreamble :: TopLevel ()
-writeTacticPreamble = writeTactic "include \"../rewrites.saw\";\nt <- read_core \"term.extcore\nprove_extcore (do {\n";
+writeTacticPreamble = writeTactic "include \"../rewrites.saw\";\nt <- read_core \"term.extcore\";\nprove_extcore (do {\n";
 
 writeTacticPostamble :: TopLevel ()
 writeTacticPostamble = writeTactic "}) t;"

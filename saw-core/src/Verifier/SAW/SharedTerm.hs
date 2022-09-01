@@ -56,7 +56,7 @@ module Verifier.SAW.SharedTerm
   , scPrettyTerm
   , scPrettyTermInCtx
     -- * SharedContext interface for building shared terms
-  , SharedContext
+  , SharedContext(scNamingEnv)
   , mkSharedContext
   , scGetModuleMap
     -- ** Low-level generic term constructors

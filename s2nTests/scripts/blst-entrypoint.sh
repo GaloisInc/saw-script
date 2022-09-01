@@ -20,6 +20,6 @@ yices-smt2 --version
 ./scripts/build_x86.sh
 ./scripts/build_llvm.sh
 
-saw proof/memory_safety.saw
+saw proof/entry.saw
 
 ./scripts/check.sh | if grep False; then exit 1; fi

@@ -30,6 +30,9 @@ module SAWScript.Crucible.LLVM.X86
   , defaultStackBaseAlign
   ) where
 
+import qualified Data.UUID as UUID
+import qualified Data.UUID.V4 as UUID
+
 import System.Directory
 import SAWScript.Prover.Exporter (writeCore)
 
@@ -1160,7 +1163,14 @@ checkGoals bak opts sc nm tactic = do
     term <- liftIO $ gGoal sc g
     let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
     let goalname = nm <> show n
-    let dir = "/tmp/saw-test-rewrite/" <> goalname
+    -- let predir = "/tmp/saw-test-rewrite/" <> goalname
+    -- let loop d = doesDirectoryExist d >>= \case
+    --       True -> loop $ d <> "_"
+    --       False -> pure d
+    -- dir <- liftIO $ loop predir
+    uuid <- liftIO $ UUID.nextRandom
+    let dir = "/tmp/saw-test-rewrite/goals/" <> goalname <> "_" <> UUID.toString uuid
+    liftIO $ putStrLn $ mconcat [ "Writing to: ", dir ]
     liftIO $ createDirectoryIfMissing True dir
     tm <- liftIO $ propToTerm sc term
     writeCore (dir <> "/term.extcore") tm 

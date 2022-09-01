@@ -807,6 +807,11 @@ primitives = Map.fromList
     , "uninterpreted function during proofs."
     ]
 
+  , prim "dump_names" "TopLevel ()"
+    (pureVal dump_names)
+    Current
+    []
+
   , prim "include"             "String -> TopLevel ()"
     (pureVal include_value)
     Current

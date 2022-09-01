@@ -42,6 +42,7 @@ module SAWScript.Prover.Exporter
 
     -- * Misc
   , bitblastPrim
+  , saveRewrite
   ) where
 
 import Data.Foldable(toList)
@@ -56,11 +57,11 @@ import Data.Parameterized.Some (Some(..))
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.SBV.Dynamic as SBV
-import System.Directory (removeFile)
+import System.Directory (removeFile, doesFileExist, createDirectoryIfMissing)
 import System.FilePath (takeBaseName)
 import System.IO
 import System.IO.Temp(emptySystemTempFile)
-import Data.Text (pack)
+import Data.Text (pack, Text, unpack)
 import qualified Data.Vector as V
 import Prettyprinter (vcat)
 import Prettyprinter.Render.Text
@@ -103,6 +104,7 @@ import What4.Protocol.SMTLib2.Response (smtParseOptions)
 import What4.Protocol.VerilogWriter (exprsVerilog)
 import What4.Solver.Adapter
 import qualified What4.SWord as W4Sim
+import Control.Monad.IO.Class (liftIO)
 
 proveWithSATExporter ::
   (FilePath -> SATQuery -> TopLevel a) ->
@@ -546,3 +548,11 @@ bitblastPrim proxy sc t = do
 -}
   BBSim.withBitBlastedTerm proxy sc mempty t $ \be ls -> do
     return (AIG.Network be (toList ls))
+
+saveRewrite :: Text -> Term -> TopLevel ()
+saveRewrite nm t = do
+  let dir = "/tmp/saw-test-rewrite/rewrites/"
+  liftIO $ createDirectoryIfMissing True dir
+  let path = dir <> "/" <> unpack nm <> ".extcore"
+  exists <- liftIO $ doesFileExist path
+  unless exists $ writeCore path t

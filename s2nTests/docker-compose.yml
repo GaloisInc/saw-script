@@ -32,3 +32,4 @@ services:
     image: blst
     volumes:
       - ${PWD:-.}/bin:/saw-bin:rw
+      - ${PWD:-.}/dataset:/tmp/saw-test-rewrite:rw

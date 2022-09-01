@@ -86,6 +86,9 @@ module SAWScript.Crucible.LLVM.Builtins
 
 import Prelude hiding (fail)
 
+import qualified Data.UUID as UUID
+import qualified Data.UUID.V4 as UUID
+
 import SAWScript.Prover.Exporter (writeCore)
 
 import qualified Control.Exception as X
@@ -642,7 +645,14 @@ verifyObligations cc mspec tactic assumes asserts =
           goal'  <- io $ boolToProp sc [] goal
           let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
               proofgoal = ProofGoal n "vc" goalname goal'
-          let dir = "/tmp/saw-test-rewrite/" <> goalname
+          -- let predir = "/tmp/saw-test-rewrite/goals/" <> goalname
+          -- let loop d = doesDirectoryExist d >>= \case
+          --       True -> loop $ d <> "_"
+          --       False -> pure d
+          -- dir <- liftIO $ loop predir
+          uuid <- liftIO $ UUID.nextRandom
+          let dir = "/tmp/saw-test-rewrite/goals/" <> goalname <> "_" <> UUID.toString uuid
+          liftIO $ putStrLn $ mconcat [ "Writing to: ", dir ]
           liftIO $ createDirectoryIfMissing True dir
           tm <- liftIO $ propToTerm sc goal'
           writeCore (dir <> "/term.extcore") tm 

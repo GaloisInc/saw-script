@@ -16,5 +16,6 @@ RUN git clone https://github.com/GaloisInc/blst-verification.git /workdir && \
 WORKDIR /workdir
 
 COPY scripts/blst-entrypoint.sh /entrypoint.sh
+COPY entry.saw /workdir/proof/entry.saw
 ENTRYPOINT [ "/entrypoint.sh" ]
 CMD [ "/bin/bash" ]
