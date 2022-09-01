@@ -116,10 +116,12 @@ install_system_deps() {
       sudo ln -s /lib/$(arch)-linux-gnu/libreadline.so.8 /lib/$(arch)-linux-gnu/libreadline.so.7
     fi
     # Install libtinfo6
+    ls -l /lib/$(arch)-linux-gnu/libtinfo*
     if ! [[ -f /lib/$(arch)-linux-gnu/libtinfo.so.6 ]] ; then
       wget http://mirrors.cat.pdx.edu/ubuntu/pool/main/n/ncurses/libtinfo6_6.2-0ubuntu2_$(arch).deb
       dpkg -i libtinfo6_6.2-0ubuntu2_$(arch).deb
     fi
+    ls -l /lib/$(arch)-linux-gnu/libtinfo*
 
   fi
 
