@@ -111,7 +111,9 @@ install_system_deps() {
       zlib1g-dev \
       zlibc
     sudo locale-gen en_US.UTF-8
-    ln -s /lib/$(arch)-linux-gnu/libreadline.so.8.0 /lib/$(arch)-linux-gnu/libreadline.so.7
+    if ! [[ -f /lib/$(arch)-linux-gnu/libreadline.so.7 ]] ; then
+      sudo ln -s /lib/$(arch)-linux-gnu/libreadline.so.8 /lib/$(arch)-linux-gnu/libreadline.so.7
+    fi
   fi
 
   # Install Solvers Packages
