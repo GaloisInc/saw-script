@@ -111,9 +111,16 @@ install_system_deps() {
       zlib1g-dev \
       zlibc
     sudo locale-gen en_US.UTF-8
+    # Symlink libreadline.so.7
     if ! [[ -f /lib/$(arch)-linux-gnu/libreadline.so.7 ]] ; then
       sudo ln -s /lib/$(arch)-linux-gnu/libreadline.so.8 /lib/$(arch)-linux-gnu/libreadline.so.7
     fi
+    # Install libtinfo6
+    if ! [[ -f /lib/$(arch)-linux-gnu/libtinfo.so.6 ]] ; then
+      wget http://mirrors.cat.pdx.edu/ubuntu/pool/main/n/ncurses/libtinfo6_6.2-0ubuntu2_$(arch).deb
+      dpkg -i libtinfo6_6.2-0ubuntu2_$(arch).deb
+    fi
+
   fi
 
   # Install Solvers Packages
