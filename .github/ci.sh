@@ -78,7 +78,7 @@ install_system_deps() {
   # OS Specific Packages
   if [[ $BUILD_TARGET_OS == 'ubuntu-18.04' ]] ; then
     # Assume yes for all packages
-    sudo echo -e "APT::Get::Assume-Yes \"true\";\nAPT::Get::force-yes \"true\";" > /etc/apt/apt.conf.d/90forceyes
+    sudo echo -e "APT::Get::Assume-Yes \"true\";\nAPT::Get::force-yes \"true\";" | sudo tee /etc/apt/apt.conf.d/90forceyes
     sudo apt update
     sudo apt install \
       antlr3 \
