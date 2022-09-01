@@ -110,12 +110,8 @@ install_system_deps() {
       zlib1g \
       zlib1g-dev \
       zlibc
-    apt policy libreadline7
-    ls -la /lib/x86_64-linux-gnu/libreadline*
-    sudo apt install -y \
-      libreadline7
     sudo locale-gen en_US.UTF-8
-    apt policy libreadline7
+    ln -s /lib/$(arch)-linux-gnu/libreadline.so.8.0 /lib/$(arch)-linux-gnu/libreadline.so.7
   fi
 
   # Install Solvers Packages
