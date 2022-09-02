@@ -2543,6 +2543,16 @@ pattern ValPerm_LLVMBlockShape sh <- ValPerm_Conj [Perm_LLVMBlockShape sh]
   where
     ValPerm_LLVMBlockShape sh = ValPerm_Conj [Perm_LLVMBlockShape sh]
 
+-- | The conjunction of exactly 1 @llvmfunptr@ permission
+pattern ValPerm_LLVMFunPtr :: () =>
+                              (a ~ LLVMPointerType w, 1 <= w, KnownNat w) =>
+                              TypeRepr (FunctionHandleType cargs ret) ->
+                              ValuePerm (FunctionHandleType cargs ret) ->
+                              ValuePerm a
+pattern ValPerm_LLVMFunPtr tp p <- ValPerm_Conj [Perm_LLVMFunPtr tp p]
+  where
+    ValPerm_LLVMFunPtr tp p = ValPerm_Conj [Perm_LLVMFunPtr tp p]
+
 -- | A single @lowned@ permission
 pattern ValPerm_LOwned :: () => (a ~ LifetimeType) => [PermExpr LifetimeType] ->
                           CruCtx ps_in -> CruCtx ps_out ->
@@ -2584,6 +2594,14 @@ pattern ValPerm_Struct ps <- ValPerm_Conj [Perm_Struct ps]
 -- | A single @any@ permission
 pattern ValPerm_Any :: ValuePerm a
 pattern ValPerm_Any = ValPerm_Conj [Perm_Any]
+
+-- | A single function permission
+pattern ValPerm_Fun :: () => (a ~ FunctionHandleType cargs ret) =>
+                       FunPerm ghosts (CtxToRList cargs) gouts ret ->
+                       ValuePerm a
+pattern ValPerm_Fun fun_perm <- ValPerm_Conj [Perm_Fun fun_perm]
+  where
+    ValPerm_Fun fun_perm = ValPerm_Conj [Perm_Fun fun_perm]
 
 pattern ValPerms_Nil :: () => (tps ~ RNil) => ValuePerms tps
 pattern ValPerms_Nil = MNil

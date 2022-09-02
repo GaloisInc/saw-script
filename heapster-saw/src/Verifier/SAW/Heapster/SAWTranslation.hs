@@ -78,10 +78,6 @@ import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.TypedCrucible
 
 import GHC.Stack
-import qualified Verifier.SAW.Prelude as Prelude
-import GHC.Event (Event)
-import Lang.Crucible.Simulator.CallFrame (frameBlockID)
-import Data.Type.RList (mapRAssign)
 
 
 -- | FIXME: document and move to Hobbits
@@ -717,14 +713,6 @@ instance (Translate info ctx a tr, NuMatching a) =>
          Translate info ctx [a] [tr] where
   translate = mapM translate . mbList
 
--- |- computes the application of a @SpecM@ function, i.e. @retS@, @bindS@, to given arguments,
--- automatically supplying the arguments for for event type, event encoding, and function stack
-applyMultiSpecMTransM :: Ident -> [TypeTransM ctx OpenTerm] -> TypeTransM ctx OpenTerm
-applyMultiSpecMTransM name args =
-  applyMultiTransM (return $ globalOpenTerm name) $
-    [askttiEventType, askttiEventEncoding, askttiFunStack] ++
-    args
-
 
 ----------------------------------------------------------------------
 -- * Translating Types
@@ -884,10 +872,19 @@ lambdaExprCtx ctx m =
   lambdaTransM "e" tptrans (\ectx -> inCtxTransM ectx m)
 
 -- | Translate all types in a Crucible context and pi-abstract over them
-piExprCtx :: TransInfo info => CruCtx ctx2 ->
-             TransM info (ctx :++: ctx2) OpenTerm ->
-             TransM info ctx OpenTerm
+piExprCtx :: TransInfo info => CruCtx ctx ->
+             TransM info ctx OpenTerm ->
+             TransM info RNil OpenTerm
 piExprCtx ctx m =
+  translateClosed ctx >>= \tptrans ->
+  piTransM "e" tptrans (\ectx -> inCtxTransM ectx m)
+
+-- | Like 'piExprCtx' but append the newly bound variables to the current
+-- context, rather than running in the empty context
+piExprCtxApp :: TransInfo info => CruCtx ctx2 ->
+                TransM info (ctx :++: ctx2) OpenTerm ->
+                TransM info ctx OpenTerm
+piExprCtxApp ctx m =
   translateClosed ctx >>= \tptrans ->
   piTransM "e" tptrans (\ectx -> inExtMultiTransM ectx m)
 
@@ -1989,7 +1986,7 @@ instance TransInfo info =>
     case RL.appendAssoc ctx tops_prxs rets_prxs of
       Refl ->
         -- FIXME HERE NOW: change to SpecM
-        piExprCtx tops $
+        piExprCtxApp tops $
         piPermCtx (mbCombine tops_prxs perms_in) $ \_ ->
         applyTransM (return $ globalOpenTerm "Prelude.CompM") $
         translateRetType rets $
@@ -2145,7 +2142,7 @@ impTransM :: forall ctx ps ext blocks tops rets a.
              ImpTransM ext blocks tops rets ps ctx a ->
              TypeTransM ctx a
 impTransM pvars pctx mapTrans stack retType =
-  withInfoM $ \(TypeTransInfo ectx penv pflag evctx) ->
+  withInfoM $ \(TypeTransInfo ectx penv pflag) ->
   ImpTransInfo { itiExprCtx = ectx,
                  itiPermCtx = RL.map (const $ PTrans_True) ectx,
                  itiPermStack = pctx,
@@ -2162,7 +2159,7 @@ impTransM pvars pctx mapTrans stack retType =
 tpTransM :: TypeTransM ctx a -> ImpTransM ext blocks tops rets ps ctx a
 tpTransM =
   withInfoM (\(ImpTransInfo {..}) ->
-              TypeTransInfo itiExprCtx itiPermEnv itiChecksFlag itiEntreeEventType)
+              TypeTransInfo itiExprCtx itiPermEnv itiChecksFlag)
 
 -- | Run an implication translation computation in an "empty" environment, where
 -- there are no variables in scope and no permissions held anywhere
@@ -4472,7 +4469,7 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
        ectx_outer <- itiExprCtx <$> ask
        funStack <- itiFunStack <$> ask
        let (f, rec_p) = case f_trans of
-             PTrans_Conj [APTrans_Fun _ rec_p f_trm] -> (f_trm, rec_p)
+             PTrans_Conj [APTrans_Fun _ rec_p' f_trm] -> (f_trm, rec_p')
              _ -> error "translateStmt: TypedCall: unexpected function permission"
        let rets = mbLift $ mbMapCl $(mkClosed [| funPermRets |]) fun_perm
        let rets_prxs = cruCtxProxies rets
@@ -4641,22 +4638,23 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
     withKnownNat ?ptrWidth $
     inExtTransM ETrans_LLVM $
     do env <- infoEnv <$> ask
-       ptrans <- translate $ extMb p
        let w :: NatRepr w = knownRepr
        case lookupGlobalSymbol env (mbLift gsym) w of
          Nothing -> error ("translateLLVMStmt: TypedLLVMResolveGlobal: "
                            ++ " no translation of symbol "
                            ++ globalSymbolName (mbLift gsym))
          Just (_, True, [t])
-           | [nuP| Perm_LLVMFunPtr fun_tp (Perm_Fun fun_perm) |] <- p ->
-             let p = PTrans_Conj [APTrans_LLVMFunPtr (mbLift fun_tp) $
-                                  APTrans_Fun fun_perm True t] in
-             withPermStackM (:>: Member_Base) (:>: p) m
+           | [nuP| ValPerm_LLVMFunPtr fun_tp (ValPerm_Fun fun_perm) |] <- p ->
+             let ptrans = PTrans_Conj [APTrans_LLVMFunPtr (mbLift fun_tp) $
+                                       PTrans_Conj [APTrans_Fun
+                                                    fun_perm True t]] in
+             withPermStackM (:>: Member_Base) (:>: extPermTrans ptrans) m
          Just (_, True, _) ->
            error ("translateLLVMStmt: TypedLLVMResolveGlobal: "
                   ++ " unexpected recursive call translation for symbol "
                   ++ globalSymbolName (mbLift gsym))
          Just (_, False, ts) ->
+           translate (extMb p) >>= \ptrans ->
            withPermStackM (:>: Member_Base) (:>: typeTransF ptrans ts) m
 
   [nuMP| TypedLLVMIte _ mb_r1 _ _ |] ->
@@ -4807,15 +4805,17 @@ translateEntryLRT env entry@(TypedEntry {..}) =
 -- entrypoints in a 'TypedBlockMap' that will be bound as recursive functions
 translateBlockMapLRTs :: PermEnv ->
                          TypedBlockMap TransPhase ext blocks tops rets ->
-                         TypeTransM ctx [OpenTerm]
-translateBlockMapLRTs env = mapBlockMapLetRec (translateEntryLRT env)
+                         [OpenTerm]
+translateBlockMapLRTs env blkMap =
+  mapBlockMapLetRec (translateEntryLRT env) blkMap
 
 -- | Return a @LetRecType1@ value for the translation of the function permission
 -- of a CFG
-translateCFGInitLRT :: PermEnv -> TypedCFG ext blocks ghosts inits gouts ret ->
-                       OpenTerm
-translateCFGInitLRT env (tpcfgFunPerm ->
-                         (FunPerm ghosts args gouts ret perms_in perms_out)) =
+translateCFGInitEntryLRT :: PermEnv ->
+                            TypedCFG ext blocks ghosts inits gouts ret ->
+                            OpenTerm
+translateCFGInitEntryLRT env (tpcfgFunPerm ->
+                              (FunPerm ghosts args gouts ret perms_in perms_out)) =
   runNilTypeTransM env noChecks $
   translateClosed (appendCruCtx ghosts args) >>= \ctx_trans ->
   piLRTTransM "arg" ctx_trans $ \ectx ->
@@ -4829,17 +4829,17 @@ translateCFGInitLRT env (tpcfgFunPerm ->
 translateCFGLRTs :: PermEnv -> TypedCFG ext blocks ghosts inits gouts ret ->
                     [OpenTerm]
 translateCFGLRTs env cfg =
-  translateCFGInitEntryLRT env cfg : translateBlockMapLRTs (tpcfgBlockMap cfg)
+  translateCFGInitEntryLRT env cfg :
+  translateBlockMapLRTs env (tpcfgBlockMap cfg)
 
 
 -- | Apply the @callS@ operation to a recursive function stack, top-level frame
 -- of recursive functions, and natural number index @i@ into that frame, to get
 -- a call to the @i@th function in that frame
-applyCallS :: OpenTerm -> OpenTerm -> Int ->
-              Some (TypedEntry TransPhase ext blocks tops rets args) ->
-              TypeTransM ctx OpenTerm
+applyCallS :: OpenTerm -> OpenTerm -> Int -> TypeTransM ctx OpenTerm
 applyCallS prev_stack frame i =
-  applyEventOpM (globalOpenTerm "Prelude.callS") [prev_stack, frame, i]
+  applyEventOpM (globalOpenTerm "Prelude.callS") [prev_stack, frame,
+                                                  natOpenTerm (fromIntegral i)]
 
 -- | FIXME HERE NOW: docs
 translateTypedEntry ::
@@ -4850,7 +4850,7 @@ translateTypedEntry prev_stack frame (Some entry) =
   if typedEntryHasMultiInDegree entry then
     do i <- get
        put (i+1)
-       call_tm <- applyCallS prev_stack frame i
+       call_tm <- lift $ applyCallS prev_stack frame i
        return (Some (TypedEntryTrans entry $ Just call_tm))
   else return $ Some (TypedEntryTrans entry Nothing)
 
@@ -4867,10 +4867,9 @@ translateTypedBlock prev_stack frame blk =
 -- | Translate a @TypedBlockMap@ to a @TypedBlockMapTrans@ by generating
 -- @CallS@ calls for each of the entrypoints that represents a recursive call
 translateTypedBlockMap ::
-  OpenTerm -> OpenTerm -> Int ->
-  TypedBlockMap TransPhase ext blocks tops rets ->
+  OpenTerm -> OpenTerm -> TypedBlockMap TransPhase ext blocks tops rets ->
   StateT Int (TypeTransM ctx) (TypedBlockMapTrans ext blocks tops rets)
-translateTypedBlockMap prev_stack frame start_ix blkMap =
+translateTypedBlockMap prev_stack frame blkMap =
   traverseRAssign (translateTypedBlock prev_stack frame) blkMap
 
 -- | Translate the typed statements of an entrypoint to a function
@@ -4884,7 +4883,6 @@ translateEntryBody :: PermCheckExtC ext =>
                       TypedEntry TransPhase ext blocks tops rets args ghosts ->
                       TypeTransM RNil OpenTerm
 translateEntryBody stack mapTrans entry =
-  let stack = pushFunStackOpenTerm frame prev_stack in
   lambdaExprCtx (typedEntryAllArgs entry) $
   lambdaPermCtx (typedEntryPermsIn entry) $ \pctx ->
   do retType <- translateEntryRetType entry
@@ -4897,23 +4895,24 @@ translateBlockMapBodies :: PermCheckExtC ext => OpenTerm ->
                            TypedBlockMapTrans ext blocks tops rets ->
                            TypedBlockMap TransPhase ext blocks tops rets ->
                            TypeTransM RNil [OpenTerm]
-translateBlockMapBodies stack mapTrans =
-  sequence $ mapBlockMapLetRec (translateEntryBody stack mapTrans)
+translateBlockMapBodies stack mapTrans blkMap =
+  sequence $ mapBlockMapLetRec (translateEntryBody stack mapTrans) blkMap
 
 -- | FIXME HERE NOW: docs
-translateCFGInitEntryBody :: PermCheckExtC ext => OpenTerm ->
-                             TypedBlockMapTrans ext blocks tops rets ->
-                             TypedCFG ext blocks ghosts inits gouts ret ->
-                             TypeTransM RNil OpenTerm
-translateCFGInitEntryBody stack mapTrans cfg =
+translateCFGInitEntryBody ::
+  PermCheckExtC ext => OpenTerm ->
+  TypedBlockMapTrans ext blocks (ghosts :++: inits) (gouts :> ret) ->
+  TypedCFG ext blocks ghosts inits gouts ret ->
+  TypeTransM RNil OpenTerm
+translateCFGInitEntryBody stack mapTrans (cfg :: TypedCFG ext blocks ghosts inits gouts ret) =
   let fun_perm = tpcfgFunPerm cfg
+      h = tpcfgHandle cfg
       ctx = typedFnHandleAllArgs h
       inits = typedFnHandleArgs h
       ghosts = typedFnHandleGhosts h
       retTypes = typedFnHandleRetTypes h in
   lambdaExprCtx ctx $
   translateRetType retTypes (tpcfgOutputPerms cfg) >>= \retTypeTrans ->
-  lambdaPermCtx (funPermIns fun_perm) $ \pctx ->
 
   -- Extend the expr context to contain another copy of the initial arguments
   -- inits, since the initial entrypoint for the entire function takes two
@@ -4922,20 +4921,13 @@ translateCFGInitEntryBody stack mapTrans cfg =
   -- the same as those top-level arguments and so get eq perms to relate them
   inExtMultiTransCopyLastM ghosts (cruCtxProxies inits) $
 
-  let all_membs = RL.members (cruCtxProxies $ appendCruCtx ctx inits)
-      inits_membs =
-        snd $ RL.split ghosts (cruCtxProxies inits) $
-        fst $ RL.split ctx (cruCtxProxies inits) all_membs
-      inits_eq_perms = eqPermTransCtx all_membs inits_membs
-      all_pctx = RL.append pctx inits_eq_perms
-      px = RL.map (\_ -> Proxy) all_pctx
+  lambdaPermCtx (funPermToBlockInputs fun_perm) $ \pctx ->
+  let all_membs = RL.members pctx
+      all_px = RL.map (\_ -> Proxy) pctx
       init_entry = lookupEntryTransCast (tpcfgEntryID cfg) CruCtxNil mapTrans in
-  impTransM all_membs all_pctx mapTrans stack retTypeTrans
-  (assertPermStackEqM "translateCFG" (mbValuePermsToDistPerms $
-                                      funPermToBlockInputs fun_perm)
-   >>
-   translateCallEntry "CFG" init_entry (nuMulti all_px id) (nuMulti all_px $
-                                                            const MNil))
+  impTransM all_membs pctx mapTrans stack retTypeTrans $
+  translateCallEntry "CFG" init_entry (nuMulti all_px id) (nuMulti all_px $
+                                                           const MNil)
 
 -- | FIXME HERE NOW: docs
 translateCFGBodies :: PermCheckExtC ext => OpenTerm -> OpenTerm -> Int ->
@@ -4946,7 +4938,7 @@ translateCFGBodies prev_stack frame start_ix cfg =
      let stack = pushFunStackOpenTerm frame prev_stack
      mapTrans <-
        evalStateT (translateTypedBlockMap prev_stack frame blkMap) (start_ix+1)
-     bodies <- translateBlockMapBodies stack mapTrans
+     bodies <- translateBlockMapBodies stack mapTrans blkMap
      init_body <- translateCFGInitEntryBody stack mapTrans cfg
      return (init_body : bodies)
 
@@ -4982,11 +4974,11 @@ translateCFG :: PermEnv -> OpenTerm -> OpenTerm -> Int ->
                 TypedCFG ext blocks ghosts inits gouts ret ->
                 OpenTerm
 translateCFG env frame bodiesF i cfg =
-  lambdaCFGArgs (\args prev_stack ->
-                  applyEventOpM (globalOpenTerm "Prelude.multiFixS")
-                  ([prev_stack, frame, applyOpenTerm bodiesF prev_stack,
-                    natOpenTerm (fromIntegral i)]
-                   ++ args))
+  lambdaCFGArgs env cfg (\args prev_stack ->
+                          applyEventOpM (globalOpenTerm "Prelude.multiFixS")
+                          ([prev_stack, frame, applyOpenTerm bodiesF prev_stack,
+                            natOpenTerm (fromIntegral i)]
+                           ++ args))
 
 
 ----------------------------------------------------------------------
@@ -5015,6 +5007,21 @@ someCFGAndPermSym (SomeCFGAndPerm sym _ _ _) = sym
 someCFGAndPermToName :: SomeCFGAndPerm ext -> String
 someCFGAndPermToName (SomeCFGAndPerm _ nm _ _) = nm
 
+-- | Helper function to build an LLVM function permission from a 'FunPerm'
+mkPtrFunPerm :: HasPtrWidth w => FunPerm ghosts args gouts ret ->
+                ValuePerm (LLVMPointerType w)
+mkPtrFunPerm fun_perm =
+  withKnownNat ?ptrWidth $ ValPerm_Conj1 $ mkPermLLVMFunPtr ?ptrWidth fun_perm
+
+-- | Map a 'SomeCFGAndPerm' to a 'PermEnvGlobalEntry' with no translation, i.e.,
+-- with an 'error' term for the translation
+someCFGAndPermGlobalEntry :: HasPtrWidth w => SomeCFGAndPerm ext ->
+                             PermEnvGlobalEntry
+someCFGAndPermGlobalEntry (SomeCFGAndPerm sym _ _ fun_perm) =
+  withKnownNat ?ptrWidth $
+  PermEnvGlobalEntry sym (mkPtrFunPerm fun_perm) True $
+  error "someCFGAndPermGlobalEntry: unexpected translation during type-checking"
+
 -- | Convert the 'FunPerm' of a 'SomeCFGAndPerm' to an inductive @LetRecType@
 -- description of the SAW core type it translates to
 someCFGAndPermLRT :: PermEnv -> SomeCFGAndPerm ext -> OpenTerm
@@ -5033,9 +5040,7 @@ someCFGAndPermLRT env (SomeCFGAndPerm _ _ _
 -- pointer values
 someTypedCFGPtrPerm :: HasPtrWidth w => SomeTypedCFG LLVM ->
                        ValuePerm (LLVMPointerType w)
-someTypedCFGPtrPerm (SomeTypedCFG _ _ cfg) =
-  withKnownNat ?ptrWidth $ ValPerm_Conj1 $ mkPermLLVMFunPtr ?ptrWidth $
-  tpcfgFunPerm cfg
+someTypedCFGPtrPerm (SomeTypedCFG _ _ cfg) = mkPtrFunPerm $ tpcfgFunPerm cfg
 
 -- | Transform a list of 'OpenTerm' values of type @tp@ into a @List2 tp@
 list2OpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
@@ -5046,7 +5051,7 @@ list2OpenTerm tp trms =
 
 -- | Make a term of type @LetRecTypes1@ from a list of @LetRecType@ terms
 lrtsOpenTerm :: [OpenTerm] -> OpenTerm
-lrtsOpenTerm = list2OpenTerm (dataTypeOpenTerm "Prelude.LetRecType1")
+lrtsOpenTerm = list2OpenTerm (dataTypeOpenTerm "Prelude.LetRecType1" [])
 
 -- | FIXME HERE NOW: docs
 tcTranslateAddCFGs ::
@@ -5054,14 +5059,21 @@ tcTranslateAddCFGs ::
   EndianForm -> DebugLevel -> [SomeCFGAndPerm LLVM] ->
   IO PermEnv
 tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
+  withKnownNat ?ptrWidth $
   do
-    -- First, we type-check all the CFGs, mapping them to SomeTypedCFGs
+    -- First, we type-check all the CFGs, mapping them to SomeTypedCFGs; this
+    -- uses a temporary PermEnv where all the function symbols being
+    -- type-checked are assigned their permissions, but no translation yet
+    let tmp_env1 =
+          permEnvAddGlobalSyms env $
+          map someCFGAndPermGlobalEntry cfgs_and_perms
     let tcfgs =
           flip map cfgs_and_perms $ \(SomeCFGAndPerm gsym nm cfg fun_perm) ->
-          debugTraceTraceLvl dlevel ("Type-checking " ++ show sym) $
+          SomeTypedCFG gsym nm $
+          debugTraceTraceLvl dlevel ("Type-checking " ++ show gsym) $
           debugTrace verboseDebugLevel dlevel
           ("With type:\n" ++ permPrettyString emptyPPInfo fun_perm) $
-          tcCFG ?ptrWidth env' endianness dlevel fun_perm cfg
+          tcCFG ?ptrWidth tmp_env1 endianness dlevel fun_perm cfg
 
     -- Next, generate a list of all the LetRecTypes in all of the functions,
     -- along with a list of indices into that list of where the LRTs of each
@@ -5072,7 +5084,6 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
         gen_lrts_ixs _ [] = []
     let (fun_ixs, lrtss) = unzip $ gen_lrts_ixs 0 tcfgs
     let lrts = concat lrtss
-    let fun_lrts = map head lrtss
     let frame = lrtsOpenTerm lrts
 
     -- Now, generate a SAW core lambda that takes in the previous stack and
@@ -5087,13 +5098,13 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
       -- lambda for prev_stack
       do tmp_env <-
            permEnvAddGlobalSyms env <$>
-           zipWithM (\some_tpcfg@(SomeTypedCFG sym _ cfg) i ->
+           zipWithM (\some_tpcfg@(SomeTypedCFG sym _ _) i ->
                       do call_tm <- applyCallS prev_stack frame i
                          let fun_p = someTypedCFGPtrPerm some_tpcfg
                          return $ PermEnvGlobalEntry sym fun_p True [call_tm])
            tcfgs fun_ixs
          bodiess <-
-           local (\info -> into { ttiPermEnv = tmp_env }) $
+           local (\info -> info { ttiPermEnv = tmp_env }) $
            zipWithM (\i (SomeTypedCFG _ _ cfg) ->
                       translateCFGBodies prev_stack frame i cfg) fun_ixs tcfgs
          return $ tupleOpenTerm $ concat bodiess
@@ -5106,7 +5117,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
       completeNormOpenTerm sc $
       runNilTypeTransM env checks $ piFunStackM $ \prev_stack ->
       let stack = pushFunStackOpenTerm prev_stack frame in
-      applyEventOpM "Prelude.LRTsTuple" [stack, frame]
+      applyEventOpM (globalOpenTerm "Prelude.LRTsTuple") [stack, frame]
     scInsertDef sc mod_name bodiesF_ident bodiesF_tp bodiesF_tm
     let bodiesF = globalOpenTerm bodiesF_ident
 
@@ -5116,7 +5127,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
       zipWithM
       (\(SomeTypedCFG sym nm cfg) i ->
         do tp <-
-             completeNormOpenTerm sc $ piCFGArgs env cfg $ \args prev_stack ->
+             completeNormOpenTerm sc $ piCFGArgs env cfg $ \_ prev_stack ->
              let fun_perm = tpcfgFunPerm cfg in
              translateRetType (funPermRets fun_perm) (funPermOuts fun_perm) >>=
              specMTypeTransM prev_stack
@@ -5124,9 +5135,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
              translateCFG env frame bodiesF i cfg
            let ident = mkSafeIdent mod_name nm
            scInsertDef sc mod_name ident tp tm
-           let perm =
-                 withKnownNat ?ptrWidth $ ValPerm_Conj1 $
-                 mkPermLLVMFunPtr ?ptrWidth $ tpcfgFunPerm cfg
+           let perm = mkPtrFunPerm $ tpcfgFunPerm cfg
            return $ PermEnvGlobalEntry sym perm False [globalOpenTerm ident])
       tcfgs fun_ixs
     return $ permEnvAddGlobalSyms env new_entries
@@ -5156,8 +5165,7 @@ translateCompleteTypeInCtx :: SharedContext -> PermEnv ->
 translateCompleteTypeInCtx sc env args ret =
   completeNormOpenTerm sc $
   runNilTypeTransM env noChecks (piExprCtx args (typeTransType1 <$>
-                                                 translate ret'))
-  where ret' = mbCombine (cruCtxProxies args) . emptyMb $ ret
+                                                 translate ret))
 
 -- | Translate an input list of 'ValuePerms' and an output 'ValuePerm' to a SAW
 -- core function type in a manner similar to 'translateCompleteFunPerm', except
@@ -5169,8 +5177,5 @@ translateCompletePureFun :: SharedContext -> PermEnv
                          -> IO Term
 translateCompletePureFun sc env ctx args ret =
   completeNormOpenTerm sc $ runNilTypeTransM env noChecks $
-  piExprCtx ctx $ piPermCtx args' $ const $
-  typeTransTupleType <$> translate ret'
-  where args' = mbCombine pxys . emptyMb $ args
-        ret'  = mbCombine pxys . emptyMb $ ret
-        pxys  = cruCtxProxies ctx
+  piExprCtx ctx $ piPermCtx args $ const $
+  typeTransTupleType <$> translate ret
