@@ -153,7 +153,6 @@ install_system_deps() {
       wget \
       zip \
       zlib1g \
-      #zlib2g-dev \
       zlibc
     sudo locale-gen en_US.UTF-8
     # Symlink libreadline.so.7
