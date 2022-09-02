@@ -83,6 +83,7 @@ install_system_deps() {
     sudo apt install \
       antlr3 \
       apt-transport-https \
+      apt-utils \
       autoconf \
       automake \
       build-essential \

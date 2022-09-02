@@ -8,6 +8,7 @@ RUN apt-get update -y -q && \
     curl \
     gcc \
     git \
+    libtinfo-dev \
     llvm-3.9 \
     make \
     sudo \
