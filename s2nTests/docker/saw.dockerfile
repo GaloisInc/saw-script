@@ -2,7 +2,7 @@ FROM debian:stretch AS solvers
 
 # Install needed packages for building
 RUN apt-get update \
-    && apt-get install -y curl cmake gcc g++ git libreadline-dev unzip
+    && apt-get install -y curl cmake gcc g++ git libtinfo* libtinfo-dev libreadline-dev unzip
 RUN useradd -m user
 RUN install -d -o user -g user /solvers
 USER user
@@ -41,7 +41,7 @@ RUN chmod +x rootfs/usr/local/bin/*
 
 FROM haskell:8.8.4-stretch AS build
 USER root
-RUN apt-get update && apt-get install -y wget libncurses-dev unzip
+RUN apt-get update && apt-get install -y wget libncurses-dev unzip libtinfo* libtinfo-dev
 COPY --from=solvers /solvers/rootfs /
 RUN useradd -m saw
 COPY --chown=saw:saw . /home/saw
@@ -60,7 +60,7 @@ RUN chown -R root:root /home/saw/rootfs
 
 FROM debian:stretch-slim
 RUN apt-get update \
-    && apt-get install -y libgmp10 libgomp1 libffi6 wget libncurses5 unzip
+    && apt-get install -y libgmp10 libgomp1 libffi6 wget libncurses5 unzip libtinfo* libtinfo-dev
 COPY --from=build /home/saw/rootfs /
 COPY --from=solvers /solvers/rootfs /
 RUN useradd -m saw && chown -R saw:saw /home/saw
