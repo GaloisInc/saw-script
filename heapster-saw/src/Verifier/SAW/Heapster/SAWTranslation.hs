@@ -4781,7 +4781,7 @@ piLRTTransM :: String -> TypeTrans tr -> (tr -> TransM info ctx OpenTerm) ->
                TransM info ctx OpenTerm
 piLRTTransM x tps body_f =
   foldr (\(i,tp) rest_f vars ->
-          (\t -> ctorOpenTerm "Prelude.LRT_Fun'" [tp, t]) <$>
+          (\t -> ctorOpenTerm "Prelude.LRT_Fun1" [tp, t]) <$>
           lambdaOpenTermTransM (x ++ show (i :: Integer)) tp
           (\var -> rest_f (vars ++ [var])))
   (body_f . typeTransF tps) (zip [0..] $ typeTransTypes tps) []
@@ -4799,7 +4799,7 @@ translateEntryLRT env entry@(TypedEntry {..}) =
   translate typedEntryPermsIn >>= \perms_in_tps ->
   piLRTTransM "p" perms_in_tps $ \_ ->
   translateEntryRetType entry >>= \retType ->
-  return $ ctorOpenTerm "Prelude.LRT_Ret'" [retType]
+  return $ ctorOpenTerm "Prelude.LRT_Ret1" [retType]
 
 -- | Build a list of @LetRecType1@ values that describe the types of all of the
 -- entrypoints in a 'TypedBlockMap' that will be bound as recursive functions
@@ -4823,7 +4823,7 @@ translateCFGInitEntryLRT env (tpcfgFunPerm ->
   translate perms_in >>= \perms_trans ->
   piLRTTransM "perm" perms_trans $ \_ ->
   translateRetType (CruCtxCons gouts ret) perms_out >>= \ret_tp ->
-  return $ ctorOpenTerm "Prelude.LRT_Ret" [ret_tp]
+  return $ ctorOpenTerm "Prelude.LRT_Ret1" [ret_tp]
 
 -- | FIXME HERE NOW: docs
 translateCFGLRTs :: PermEnv -> TypedCFG ext blocks ghosts inits gouts ret ->
@@ -5034,7 +5034,7 @@ someCFGAndPermLRT env (SomeCFGAndPerm _ _ _
   translate perms_in >>= \perms_trans ->
   piLRTTransM "perm" perms_trans $ \_ ->
   translateRetType (CruCtxCons gouts ret) perms_out >>= \ret_tp ->
-  return $ ctorOpenTerm "Prelude.LRT_Ret" [ret_tp]
+  return $ ctorOpenTerm "Prelude.LRT_Ret1" [ret_tp]
 
 -- | Extract the 'FunPerm' of a 'SomeTypedCFG' as a permission on LLVM function
 -- pointer values
@@ -5116,7 +5116,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
     bodiesF_tp <-
       completeNormOpenTerm sc $
       runNilTypeTransM env checks $ piFunStackM $ \prev_stack ->
-      let stack = pushFunStackOpenTerm prev_stack frame in
+      let stack = pushFunStackOpenTerm frame prev_stack in
       applyEventOpM (globalOpenTerm "Prelude.LRTsTuple") [stack, frame]
     scInsertDef sc mod_name bodiesF_ident bodiesF_tp bodiesF_tm
     let bodiesF = globalOpenTerm bodiesF_ident
