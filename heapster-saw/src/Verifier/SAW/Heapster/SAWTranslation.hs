@@ -135,6 +135,10 @@ mkTypeTrans0 tr = TypeTrans [] (\[] -> tr)
 mkTypeTrans1 :: OpenTerm -> (OpenTerm -> tr) -> TypeTrans tr
 mkTypeTrans1 tp f = TypeTrans [tp] (\[t] -> f t)
 
+-- | Build a 'TypeTrans' for an 'OpenTerm' of a given type
+openTermTypeTrans :: OpenTerm -> TypeTrans OpenTerm
+openTermTypeTrans tp = mkTypeTrans1 tp id
+
 -- | Extract out the single SAW type associated with a 'TypeTrans', or the unit
 -- type if it has 0 SAW types. It is an error if it has 2 or more SAW types.
 typeTransType1 :: HasCallStack => TypeTrans tr -> OpenTerm
@@ -344,8 +348,8 @@ inExtTransSAWLetBindM :: TransInfo info => TypeTrans (ExprTrans tp) -> OpenTerm 
                          ExprTrans tp -> TransM info (ctx :> tp) OpenTerm ->
                          TransM info ctx OpenTerm
 inExtTransSAWLetBindM tp_trans tp_ret etrans m =
-  sawLetTransMultiM "z" (typeTransTypes tp_trans) tp_ret (transTerms etrans) $ \var_tms ->
-  inExtTransM (typeTransF tp_trans var_tms) m
+  sawLetTransMultiM "z" (typeTransTypes tp_trans) tp_ret (transTerms etrans) $
+  \var_tms -> inExtTransM (typeTransF tp_trans var_tms) m
 
 -- | Run a translation computation in context @(ctx1 :++: ctx2) :++: ctx2@ by
 -- copying the @ctx2@ portion of the current context
@@ -1678,39 +1682,38 @@ setLLVMArrayTransSlice arr_trans sub_arr_trans off_tm =
       (globalOpenTerm "Prelude.updSliceBVVec")
       [natOpenTerm w, len_tm, elem_tp, arr_tm, off_tm, len'_tm, sub_arr_tm] }
 
--- | Weaken a monadic function of type @(T1*...*Tn) -> CompM(U1*...*Um)@ to one
--- of type @(V*T1*...*Tn) -> CompM(V*U1*...*Um)@, @n@-ary tuple types are built
+-- | Weaken a monadic function of type @(T1*...*Tn) -> SpecM(U1*...*Um)@ to one
+-- of type @(V*T1*...*Tn) -> SpecM(V*U1*...*Um)@, @n@-ary tuple types are built
 -- using 'tupleOfTypes'
 weakenMonadicFun1 :: OpenTerm -> [OpenTerm] -> [OpenTerm] -> OpenTerm ->
-                     OpenTerm
+                     ImpTransM ext blocks tops rets ps ctx OpenTerm
 weakenMonadicFun1 v ts us f =
-  -- First form a term f1 of type V*(T1*...*Tn) -> CompM(V*(U1*...*Um))
-  let t_tup = tupleOfTypes ts
-      u_tup = tupleOfTypes us
-      f1 =
-        applyOpenTermMulti (globalOpenTerm "Prelude.tupleCompMFunBoth")
-        [t_tup, u_tup, v, f] in
+  -- First form a term f1 of type V*(T1*...*Tn) -> SpecM(V*(U1*...*Um))
+  do let t_tup = tupleOfTypes ts
+         u_tup = tupleOfTypes us
+     f1 <- applyNamedSpecOpM "Prelude.tupleSpecMFunBoth" [t_tup, u_tup, v, f]
 
-  let f2 = case ts of
-        -- If ts is empty, form the term \ (x:V) -> f1 (x, ()) to coerce f1 from
-        -- type V*#() -> CompM(V*Us) to type V -> CompM(V*Us)
-        [] ->
-          lambdaOpenTerm "x" v $ \x ->
-          applyOpenTerm f1 (pairOpenTerm x unitOpenTerm)
-        -- Otherwise, leave f1 unchanged
-        _ -> f1 in
+     let f2 = case ts of
+           -- If ts is empty, form the term \ (x:V) -> f1 (x, ()) to coerce f1
+           -- from type V*#() -> SpecM(V*Us) to type V -> SpecM(V*Us)
+           [] ->
+             lambdaOpenTerm "x" v $ \x ->
+             applyOpenTerm f1 (pairOpenTerm x unitOpenTerm)
+           -- Otherwise, leave f1 unchanged
+           _ -> f1
 
-  case us of
-    -- If us is empty, compose f2 with \ (x:V*#()) -> returnM V x.(1) to coerce
-    -- from V*Us -> CompM (V*#()) to V*Us -> CompM V
-    [] ->
-      applyOpenTermMulti (globalOpenTerm "Prelude.composeM")
-      [tupleOfTypes (v:ts), pairTypeOpenTerm v unitTypeOpenTerm, v, f2,
-       lambdaOpenTerm "x" (pairTypeOpenTerm v unitTypeOpenTerm)
-       (\x -> applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
-              [v, pairLeftOpenTerm x])]
-    -- Otherwise, leave f2 unchanged
-    _ -> f2
+     case us of
+       -- If us is empty, compose f2 with \ (x:V*#()) -> returnM V x.(1) to
+       -- coerce from V*Us -> SpecM (V*#()) to V*Us -> SpecM V
+       [] ->
+         do fun_tm <-
+              lambdaOpenTermTransM "x" (pairTypeOpenTerm v unitTypeOpenTerm)
+              (\x -> applyNamedSpecOpM "Prelude.returnS" [v, pairLeftOpenTerm x])
+            applyNamedSpecOpM "Prelude.composeS"
+              [tupleOfTypes (v:ts), pairTypeOpenTerm v unitTypeOpenTerm,
+               v, f2, fun_tm]
+       -- Otherwise, leave f2 unchanged
+       _ -> return f2
 
 
 -- | Weaken a monadic function of type @(T1*...*Tn) -> CompM(U1*...*Um)@ to one
@@ -1718,20 +1721,23 @@ weakenMonadicFun1 v ts us f =
 -- of 2 or more types are right-nested and and in a unit type, i.e., have the
 -- form @(T1 * (T2 * (... * (Tn * #()))))@
 weakenMonadicFun :: [OpenTerm] -> [OpenTerm] -> [OpenTerm] -> OpenTerm ->
-                    OpenTerm
+                    ImpTransM ext blocks tops rets ps ctx OpenTerm
 weakenMonadicFun vs ts_top us_top f_top =
-  let (_,_,ret) =
-        foldr (\v (ts,us,f) -> (v:ts, v:us, weakenMonadicFun1 v ts us f))
-        (ts_top, us_top, f_top)
-        vs in
-  ret
+  foldr (\v rest_m ->
+          do (ts,us,f) <- rest_m
+             f' <- weakenMonadicFun1 v ts us f
+             return (v:ts, v:us, f'))
+  (return (ts_top, us_top, f_top))
+  vs
+  >>= \(_,_,ret) -> return ret
 
 -- | Weaken a monadic function which is the translation of an ownership
 -- permission @lowned(ps_in -o ps_out)@ to @lowned(P * ps_in -o P * ps_out)@
 weakenLifetimeFun :: TypeTrans (PermTrans ctx a) ->
                      TypeTrans (PermTransCtx ctx ps_in) ->
                      TypeTrans (PermTransCtx ctx ps_out) ->
-                     OpenTerm -> OpenTerm
+                     OpenTerm ->
+                     ImpTransM ext blocks tops rets ps ctx OpenTerm
 weakenLifetimeFun tp_trans ps_in_trans ps_out_trans f =
   weakenMonadicFun (transTerms
                     tp_trans) (transTerms
@@ -1985,12 +1991,12 @@ instance TransInfo info =>
     (infoCtx <$> ask) >>= \ctx ->
     case RL.appendAssoc ctx tops_prxs rets_prxs of
       Refl ->
-        -- FIXME HERE NOW: change to SpecM
         piExprCtxApp tops $
         piPermCtx (mbCombine tops_prxs perms_in) $ \_ ->
-        applyTransM (return $ globalOpenTerm "Prelude.CompM") $
-        translateRetType rets $
-        mbCombine (RL.append tops_prxs rets_prxs) perms_out
+        piFunStackM $ \stack ->
+        specMTypeTransM stack =<<
+        translateRetType rets (mbCombine
+                               (RL.append tops_prxs rets_prxs) perms_out)
 
 -- | Lambda-abstraction over a permission
 lambdaPermTrans :: TransInfo info => String -> Mb ctx (ValuePerm a) ->
@@ -2306,28 +2312,55 @@ clearVarPermsM =
   local $ \info -> info { itiPermCtx =
                             RL.map (const PTrans_True) $ itiPermCtx info }
 
+-- | Apply an 'OpenTerm' to the current event type @E@, @evRetType@, @stack@,
+-- and a list of other arguments
+applySpecOpM :: OpenTerm -> [OpenTerm] ->
+                ImpTransM ext blocks tops rets ps ctx OpenTerm
+applySpecOpM f args =
+  do stack <- itiFunStack <$> ask
+     applyEventOpM f (stack : args)
+
+-- | Like 'applySpecOpM' but where the function is given by name
+applyNamedSpecOpM :: Ident -> [OpenTerm] ->
+                     ImpTransM ext blocks tops rets ps ctx OpenTerm
+applyNamedSpecOpM f args = applySpecOpM (globalOpenTerm f) args
+
+-- | Generate the type @SpecM E evRetType stack A@ using the current event type
+-- and @stack@ and the supplied type @A@. This is different from
+-- 'specMTypeTransM' because it uses the current @stack@ in an 'ImpTransM'
+-- computation, and so does not need it passed as an argument.
+specMImpTransM :: OpenTerm -> ImpTransM ext blocks tops rets ps ctx OpenTerm
+specMImpTransM tp = applyNamedSpecOpM "Prelude.SpecM" [tp]
+
+-- | Build a term @bindS m k@ with the given @m@ of type @m_tp@ and where @k@
+-- is build as a lambda with the given variable name and body
+bindSpecMTransM :: OpenTerm -> TypeTrans tr -> String ->
+                   (tr -> ImpTransM ext blocks tops rets ps ctx OpenTerm) ->
+                   ImpTransM ext blocks tops rets ps ctx OpenTerm
+bindSpecMTransM m m_tp str f =
+  do ret_tp <- returnTypeM
+     k_tm <- lambdaTransM str m_tp f
+     applyNamedSpecOpM "Prelude.bindS" [typeTransType1 m_tp, ret_tp, m, k_tm]
+
 -- | The current non-monadic return type
 returnTypeM :: ImpTransM ext blocks tops rets ps_out ctx OpenTerm
 returnTypeM = itiReturnType <$> ask
 
--- | Build the monadic return type @CompM ret@, where @ret@ is the current
--- return type in 'itiReturnType'
+-- | Build the monadic return type @SpecM E evRetType stack ret@, where @ret@ is
+-- the current return type in 'itiReturnType'
 compReturnTypeM :: ImpTransM ext blocks tops rets ps_out ctx OpenTerm
-compReturnTypeM =
-  applyOpenTerm (globalOpenTerm "Prelude.CompM") <$> returnTypeM
+compReturnTypeM = returnTypeM >>= specMImpTransM
 
 -- | Like 'compReturnTypeM' but build a 'TypeTrans'
 compReturnTypeTransM ::
   ImpTransM ext blocks tops rets ps_out ctx (TypeTrans OpenTerm)
-compReturnTypeTransM =
-  flip mkTypeTrans1 id <$> compReturnTypeM
+compReturnTypeTransM = flip mkTypeTrans1 id <$> compReturnTypeM
 
--- LS: will need to be changed to work with ITrees
--- | Build an @errorM@ computation with the given error message
-mkErrorCompM :: String -> ImpTransM ext blocks tops rets ps_out ctx OpenTerm
-mkErrorCompM msg =
-  applyMultiTransM (return $ globalOpenTerm "Prelude.errorM")
-  [returnTypeM, return $ stringLitOpenTerm $ pack msg]
+-- | Build an @errorS@ computation with the given error message
+mkErrorComp :: String -> ImpTransM ext blocks tops rets ps_out ctx OpenTerm
+mkErrorComp msg =
+  do ret_tp <- returnTypeM
+     applyNamedSpecOpM "Prelude.errorS" [ret_tp, stringLitOpenTerm (pack msg)]
 
 -- | The typeclass for the implication translation of a functor at any
 -- permission set inside any binding to an 'OpenTerm'
@@ -2763,12 +2796,9 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
              (globalOpenTerm "Prelude.appendCastBVVecM")
              [w_term, len1_tm, len2_tm, len3_tm, elem_tp,
               transTerm1 ptrans1, transTerm1 ptrans2]
-       applyMultiTransM (return $ globalOpenTerm "Prelude.bindM")
-         [return (typeTransType1 tp_trans), returnTypeM,
-          return arr_out_comp_tm,
-          lambdaTransM "appended_array" tp_trans $ \ptrans_arr' ->
-           withPermStackM RL.tail (\(pctx :>: _ :>: _) ->
-                                    pctx :>: ptrans_arr') m]
+       bindSpecMTransM arr_out_comp_tm tp_trans "appended_array" $ \ptrans_arr' ->
+         withPermStackM RL.tail (\(pctx :>: _ :>: _) ->
+                                  pctx :>: ptrans_arr') m
 
 
   [nuMP| SImpl_LLVMArrayRearrange _ _ _ |] ->
@@ -2919,13 +2949,10 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
              (globalOpenTerm "Prelude.mapBVVecM")
              [elem_tp, typeTransType1 cell_out_trans, impl_tm,
               w_term, len_term, transTerm1 ptrans_arr]
-       -- Now use bindM to bind the result of arr_out_comp_tm in the remaining
+       -- Now use bindS to bind the result of arr_out_comp_tm in the remaining
        -- computation
-       applyMultiTransM (return $ globalOpenTerm "Prelude.bindM")
-         [return (typeTransType1 p_out_trans), returnTypeM,
-          return arr_out_comp_tm,
-          lambdaTransM "mapped_array" p_out_trans $ \ptrans_arr' ->
-           withPermStackM id (\(pctx :>: _) -> pctx :>: ptrans_arr') m]
+       bindSpecMTransM arr_out_comp_tm p_out_trans "mapped_array" $ \ptrans_arr' ->
+         withPermStackM id (\(pctx :>: _) -> pctx :>: ptrans_arr') m
 
   [nuMP| SImpl_LLVMFieldIsPtr x _ |] ->
     withPermStackM (:>: translateVar x)
@@ -2951,15 +2978,16 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        ps_out_trans <- translate ps_out
        -- FIXME: write a fun to translate-and-apply a lifetimefunctor
        x_tp_trans <- translate (mbMap3 ltFuncApply f args l)
+       ptrans_l <- getTopPermM
+       f_tm <-
+         weakenLifetimeFun x_tp_trans ps_in_trans ps_out_trans $
+         transTerm1 ptrans_l
        withPermStackM
          (\(ns :>: x :>: _ :>: l2) -> ns :>: x :>: l2)
-         (\(pctx :>: ptrans_x :>: _ :>: ptrans_l) ->
+         (\(pctx :>: ptrans_x :>: _ :>: _) ->
            -- The permission for x does not change type, just its lifetime; the
            -- permission for l has the (tupled) type of x added as a new input and
-           -- output with tupleCompMFunBoth
-           let f_tm =
-                 weakenLifetimeFun x_tp_trans ps_in_trans ps_out_trans $
-                 transTerm1 ptrans_l in
+           -- output with tupleSpecMFunBoth
            RL.append pctx $
            typeTransF pctx_out_trans (transTerms ptrans_x ++ [f_tm]))
          m
@@ -3044,15 +3072,14 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        impl_out_tm <-
          translateCurryLocalPermImpl "Error mapping lifetime output perms:" impl_out
          pctx2 vars2 ps_out_trans ps_out_vars ps_out'_trans
-       let l_res_tm =
-             applyOpenTermMulti
-             (globalOpenTerm "Prelude.composeM")
-             [typeTransType1 ps_in'_trans, typeTransType1 ps_in_trans,
-              typeTransType1 ps_out'_trans, impl_in_tm,
-              applyOpenTermMulti
-              (globalOpenTerm "Prelude.composeM")
-              [typeTransType1 ps_in_trans, typeTransType1 ps_out_trans,
-               typeTransType1 ps_out'_trans, transTerm1 ptrans_l, impl_out_tm]]
+       l_res_tm_h <-
+         applyNamedSpecOpM "Prelude.composeS"
+         [typeTransType1 ps_in_trans, typeTransType1 ps_out_trans,
+          typeTransType1 ps_out'_trans, transTerm1 ptrans_l, impl_out_tm]
+       l_res_tm <-
+         applyNamedSpecOpM "Prelude.composeS"
+         [typeTransType1 ps_in'_trans, typeTransType1 ps_in_trans,
+          typeTransType1 ps_out'_trans, impl_in_tm, l_res_tm_h]
 
        -- Finally, update the permissions
        withPermStackM
@@ -3081,16 +3108,16 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
 
        -- Now we apply the lifetime ownerhip function to ps_in and bind its output
        -- in the rest of the computation
-       applyMultiTransM (return $ globalOpenTerm "Prelude.bindM")
-         [return (typeTransType1 ps_out_trans), returnTypeM,
-          return (applyOpenTerm (transTerm1 ptrans_l)
-                  (transTupleTerm pctx_in)),
-          lambdaTransM "endl_ps" ps_out_trans $ \pctx_out ->
+       bindSpecMTransM
+         (applyOpenTerm (transTerm1 ptrans_l) (transTupleTerm pctx_in))
+         ps_out_trans
+         "endl_ps"
+         (\pctx_out ->
            withPermStackM
            (\(_ :>: l) -> vars_out :>: l)
            (\_ -> RL.append pctx_ps pctx_out :>:
                   PTrans_Conj [APTrans_LFinished])
-           m]
+           m)
 
   [nuMP| SImpl_IntroLOwnedSimple _ _ _ |] ->
     do let prx_ps_l = mbRAssignProxies $ mbSimplImplIn mb_simpl
@@ -3104,10 +3131,9 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
   [nuMP| SImpl_ElimLOwnedSimple _ _ mb_lops |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
        lops_tp <- typeTransTupleType <$> translate mb_lops
-       let f_tm =
-             lambdaOpenTerm "ps" lops_tp $ \x ->
-             applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
-             [lops_tp, x]
+       f_tm <-
+         lambdaOpenTermTransM "ps" lops_tp $ \x ->
+         applyNamedSpecOpM "Prelude.returnS" [lops_tp, x]
        withPermStackM id
          (\(pctx0 :>: _) -> pctx0 :>: typeTransF ttrans [f_tm])
          m
@@ -3829,10 +3855,9 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
     inExtTransM ETrans_Lifetime $
     do tp_trans <- translateClosed (ValPerm_LOwned
                                     [] CruCtxNil CruCtxNil MNil MNil)
-       let id_fun =
-             lambdaOpenTerm "ps_empty" unitTypeOpenTerm $ \x ->
-             applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
-             [unitTypeOpenTerm, x]
+       id_fun <-
+         lambdaOpenTermTransM "ps_empty" unitTypeOpenTerm $ \x ->
+         applyNamedSpecOpM "Prelude.returnS" [unitTypeOpenTerm, x]
        withPermStackM (:>: Member_Base) (:>: typeTransF tp_trans [id_fun]) m
 
   -- If e1 and e2 are already equal, short-circuit the proof construction and then
@@ -4033,8 +4058,7 @@ instance ImplTranslateF (LocalImplRet ps) ext blocks ps_in rets where
   translateF _ =
     do pctx <- itiPermStack <$> ask
        ret_tp <- returnTypeM
-       return $ applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
-         [ret_tp, transTupleTerm pctx]
+       applyNamedSpecOpM "Prelude.returnS" [ret_tp, transTupleTerm pctx]
 
 -- | Translate a local implication to its output, adding an error message
 translateLocalPermImpl :: String -> Mb ctx (LocalPermImpl ps_in ps_out) ->
@@ -4490,10 +4514,9 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
                                    ++ if rec_p then [] else [funStack])
        fret_tp <- sigmaTypeTransM "ret" rets_trans (flip inExtMultiTransM
                                                     (translate perms_out))
-       applyMultiTransM (return $ globalOpenTerm "Prelude.bindM")
-         [return fret_tp, returnTypeM, return fret_trm,
-          lambdaOpenTermTransM "call_ret_val" fret_tp $ \ret_val ->
-           sigmaElimTransM "elim_call_ret_val" rets_trans
+       bindSpecMTransM
+         fret_trm (openTermTypeTrans fret_tp) "call_ret_val" $ \ret_val ->
+         sigmaElimTransM "elim_call_ret_val" rets_trans
            (flip inExtMultiTransM (translate perms_out)) compReturnTypeTransM
            (\rets_ectx pctx ->
              inExtMultiTransM rets_ectx $
@@ -4505,14 +4528,14 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
                suffixMembers ectx_outer rets_prxs)
              (const pctx)
              m)
-           ret_val]
+           ret_val
 
   -- FIXME HERE: figure out why these asserts always translate to ite True
   [nuMP| TypedAssert e _ |] ->
     applyMultiTransM (return $ globalOpenTerm "Prelude.ite")
     [compReturnTypeM, translate1 e, m,
-     mkErrorCompM ("Failed Assert at " ++
-                   renderDoc (ppShortFileName (plSourceLoc loc)))]
+     mkErrorComp ("Failed Assert at " ++
+                  renderDoc (ppShortFileName (plSourceLoc loc)))]
 
   [nuMP| TypedLLVMStmt stmt |] -> translateLLVMStmt stmt m
 
@@ -4692,9 +4715,7 @@ instance PermCheckExtC ext =>
          (flip inExtMultiTransM $
           translate $ mbCombine rets_prxs mb_perms)
          rets_ns_trans (itiPermStack <$> ask)
-       return $
-         applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
-         [ret_tp, sigma_trm]
+       applyNamedSpecOpM "Prelude.returnS" [ret_tp, sigma_trm]
 
 instance PermCheckExtC ext =>
          ImplTranslateF (TypedRet tops rets) ext blocks tops rets where
@@ -4711,9 +4732,9 @@ instance PermCheckExtC ext =>
        translate impl_tgt1, translate impl_tgt2]
     [nuMP| TypedReturn impl_ret |] -> translate impl_ret
     [nuMP| TypedErrorStmt (Just str) _ |] ->
-      mkErrorCompM ("Error: " ++ mbLift str)
+      mkErrorComp ("Error: " ++ mbLift str)
     [nuMP| TypedErrorStmt Nothing _ |] ->
-      mkErrorCompM "Error (unknown message)"
+      mkErrorComp "Error (unknown message)"
 
 
 instance PermCheckExtC ext =>
@@ -5169,7 +5190,7 @@ translateCompleteTypeInCtx sc env args ret =
 
 -- | Translate an input list of 'ValuePerms' and an output 'ValuePerm' to a SAW
 -- core function type in a manner similar to 'translateCompleteFunPerm', except
--- that the returned function type is not in the @CompM@ monad.
+-- that the returned function type is not in the @SpecM@ monad.
 translateCompletePureFun :: SharedContext -> PermEnv
                          -> CruCtx ctx -- ^ Type arguments
                          -> Mb ctx (ValuePerms args) -- ^ Input perms
