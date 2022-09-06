@@ -2226,7 +2226,7 @@ primitive triggerS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) -
 
 -- Signal an error in SpecM
 primitive errorS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
-                   String -> SpecM E evRetType stack Void;
+                   (a:sort 1) -> String -> SpecM E evRetType stack a;
 
 -- The spec that universally quantifies over all return values of type a
 primitive forallS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
