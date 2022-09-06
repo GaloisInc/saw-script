@@ -474,6 +474,23 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("letRecM",              mapsToExpl compMModule "letRecM")
   ]
 
+  -- The specification monad
+  ++
+  [ ("SpecM",                mapsToExpl compMModule "SpecM")
+  , ("retS",                 mapsToExpl compMModule "RetS")
+  , ("bindS",                mapsToExpl compMModule "BindS")
+  , ("errorS",               mapsToExpl compMModule "ErrorS")
+  , ("existsS",              mapsToExpl compMModule "ExistsS")
+  , ("forallS",              mapsToExpl compMModule "ForallS")
+  , ("LetRecType1",          mapsTo compMModule "LetRecType")
+  , ("LRT_Ret1",             mapsTo compMModule "LRT_Ret")
+  , ("LRT_Fun1",             mapsTo compMModule "LRT_Fun")
+  , ("LRTType",              mapsTo compMModule "LRTType")
+  , ("LRTsTuple",            mapsTo compMModule "LRTsTuple")
+  , ("callS",                mapsTo compMModule "CallS")
+  , ("multiFixS",            mapsTo compMModule "MultiFixS")
+  ]
+
   -- Dependent pairs
   ++
   [ ("Sigma", replace (Coq.ExplVar "sigT"))
@@ -489,6 +506,20 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Nil", replace (Coq.ExplVar "Datatypes.nil"))
   , ("Cons", replace (Coq.ExplVar "Datatypes.cons"))
   , ("List__rec", replace (Coq.ExplVar "Datatypes.list_rect"))
+  ]
+
+  -- Lists at sort 1
+  ++
+  [ ("List1", replace (Coq.ExplVar "Datatypes.list"))
+  , ("Nil1", replace (Coq.ExplVar "Datatypes.nil"))
+  , ("Cons1", replace (Coq.ExplVar "Datatypes.cons"))
+  ]
+
+  -- Lists at sort 2
+  ++
+  [ ("List2", replace (Coq.ExplVar "Datatypes.list"))
+  , ("Nil2", replace (Coq.ExplVar "Datatypes.nil"))
+  , ("Cons2", replace (Coq.ExplVar "Datatypes.cons"))
   ]
 
 constantsRenamingMap :: [(String, String)] -> Map.Map String String
