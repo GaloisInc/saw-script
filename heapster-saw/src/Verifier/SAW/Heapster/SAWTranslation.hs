@@ -811,15 +811,15 @@ instance TransInfo info =>
     [nuMP| LifetimeRepr |] ->
       return $ mkTypeTrans0 ETrans_Lifetime
     [nuMP| PermListRepr |] ->
-      returnType1 (sortOpenTerm $ mkSort 0)
+      returnType1 (sortOpenTerm $ mkSort 1)
     [nuMP| RWModalityRepr |] ->
       return $ mkTypeTrans0 ETrans_RWModality
 
     -- Permissions and LLVM shapes translate to types
     [nuMP| ValuePermRepr _ |] ->
-      returnType1 (sortOpenTerm $ mkSort 0)
+      returnType1 (sortOpenTerm $ mkSort 1)
     [nuMP| LLVMShapeRepr _ |] ->
-      returnType1 (sortOpenTerm $ mkSort 0)
+      returnType1 (sortOpenTerm $ mkSort 1)
 
     -- We can't handle any other special-purpose types
     [nuMP| IntrinsicRepr _ _ |] ->
@@ -1708,7 +1708,7 @@ weakenMonadicFun1 v ts us f =
        [] ->
          do fun_tm <-
               lambdaOpenTermTransM "x" (pairTypeOpenTerm v unitTypeOpenTerm)
-              (\x -> applyNamedSpecOpM "Prelude.returnS" [v, pairLeftOpenTerm x])
+              (\x -> applyNamedSpecOpM "Prelude.retS" [v, pairLeftOpenTerm x])
             applyNamedSpecOpM "Prelude.composeS"
               [tupleOfTypes (v:ts), pairTypeOpenTerm v unitTypeOpenTerm,
                v, f2, fun_tm]
@@ -3133,7 +3133,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        lops_tp <- typeTransTupleType <$> translate mb_lops
        f_tm <-
          lambdaOpenTermTransM "ps" lops_tp $ \x ->
-         applyNamedSpecOpM "Prelude.returnS" [lops_tp, x]
+         applyNamedSpecOpM "Prelude.retS" [lops_tp, x]
        withPermStackM id
          (\(pctx0 :>: _) -> pctx0 :>: typeTransF ttrans [f_tm])
          m
@@ -3857,7 +3857,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
                                     [] CruCtxNil CruCtxNil MNil MNil)
        id_fun <-
          lambdaOpenTermTransM "ps_empty" unitTypeOpenTerm $ \x ->
-         applyNamedSpecOpM "Prelude.returnS" [unitTypeOpenTerm, x]
+         applyNamedSpecOpM "Prelude.retS" [unitTypeOpenTerm, x]
        withPermStackM (:>: Member_Base) (:>: typeTransF tp_trans [id_fun]) m
 
   -- If e1 and e2 are already equal, short-circuit the proof construction and then
@@ -4058,7 +4058,7 @@ instance ImplTranslateF (LocalImplRet ps) ext blocks ps_in rets where
   translateF _ =
     do pctx <- itiPermStack <$> ask
        ret_tp <- returnTypeM
-       applyNamedSpecOpM "Prelude.returnS" [ret_tp, transTupleTerm pctx]
+       applyNamedSpecOpM "Prelude.retS" [ret_tp, transTupleTerm pctx]
 
 -- | Translate a local implication to its output, adding an error message
 translateLocalPermImpl :: String -> Mb ctx (LocalPermImpl ps_in ps_out) ->
@@ -4715,7 +4715,7 @@ instance PermCheckExtC ext =>
          (flip inExtMultiTransM $
           translate $ mbCombine rets_prxs mb_perms)
          rets_ns_trans (itiPermStack <$> ask)
-       applyNamedSpecOpM "Prelude.returnS" [ret_tp, sigma_trm]
+       applyNamedSpecOpM "Prelude.retS" [ret_tp, sigma_trm]
 
 instance PermCheckExtC ext =>
          ImplTranslateF (TypedRet tops rets) ext blocks tops rets where
