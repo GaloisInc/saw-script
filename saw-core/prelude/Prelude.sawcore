@@ -18,7 +18,7 @@ id _ x = x;
 -- FIXME: We eventually need to remove this, as it violates soundness...
 primitive fix : (a : sort 1) -> (a -> a) -> a;
 
-sawLet : (a b : sort 0) -> a -> (a -> b) -> b;
+sawLet : (a b : sort 1) -> a -> (a -> b) -> b;
 sawLet _ _ x f = f x;
 
 
@@ -2210,6 +2210,7 @@ pushFunStack frame stack = Cons2 LetRecTypes1 frame stack;
 -- The monad for specifications (FIXME: document this!)
 primitive SpecM : (E:sort 1) -> (evRetType:E -> sort 1) -> FunStack ->
                   sort 1 -> sort 1;
+
 
 -- Return for SpecM
 primitive retS : (E:sort 1) -> (evRetType:E -> sort 1) -> (stack:FunStack) ->
