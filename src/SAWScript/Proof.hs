@@ -422,7 +422,7 @@ simplifySequent sc ss (HypFocusedSequent (FB hs1 h hs2) gs) =
 
 hoistIfsInProp :: SharedContext -> Prop -> IO Prop
 hoistIfsInProp sc p = do
-  (ecs, body) <- unbindProp sc p
+  (ecs, body) <- unbindAndFreshenProp sc p
   body' <-
     case asEqTrue body of
       Just t -> pure t
@@ -435,8 +435,8 @@ hoistIfsInProp sc p = do
 -- | Turn any leading Pi binders in the given prop into
 --   fresh ExtCns values, being careful to ensure that
 --   dependent types are properly substituted.
-unbindProp :: SharedContext -> Prop -> IO ([ExtCns Term], Term)
-unbindProp sc (Prop p0) = loop [] [] p0
+unbindAndFreshenProp :: SharedContext -> Prop -> IO ([ExtCns Term], Term)
+unbindAndFreshenProp sc (Prop p0) = loop [] [] p0
   where
     loop ecs vs p =
       case asPi p of
@@ -456,7 +456,7 @@ unbindProp sc (Prop p0) = loop [] [] p0
 --   perform a variety of simplifications and rewrites.
 evalProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
 evalProp sc unints p =
-  do (ecs, body) <- unbindProp sc p
+  do (ecs, body) <- unbindAndFreshenProp sc p
      body' <-
        case asEqTrue body of
          Just t -> pure t
