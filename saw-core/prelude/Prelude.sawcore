@@ -2170,6 +2170,13 @@ data List2 (a:sort 2) : sort 2 where {
   Cons2 : a -> List2 a -> List2 a;
 }
 
+-- The recursor for List2
+List2__rec :
+  (a : sort 2) -> (P : List2 a -> sort 2) -> P (Nil2 a) ->
+  ((x : a) -> (l : List2 a) -> P l -> P (Cons2 a x l)) ->
+  (l : List2 a) -> P l;
+List2__rec a P f1 f2 l = List2#rec a P f1 f2 l;
+
 -- The evRetType function for a SpecM using Void as the event type
 VoidEvRetType : Void -> sort 1;
 VoidEvRetType v = Void#rec (\ (_:Void) -> sort 1) v;

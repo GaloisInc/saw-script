@@ -5,6 +5,7 @@ From Coq Require Import Lists.List.
 From Coq Require        Numbers.NatInt.NZLog.
 From Coq Require Import Strings.String.
 From CryptolToCoq Require Export CompM.
+From EnTree Require Export Ref.SpecM.
 
 Definition sawLet_def A B (x : A) (y : A -> B) := y x.
 

@@ -169,6 +169,9 @@ sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 compMModule :: ModuleName
 compMModule = mkModuleName ["CompM"]
 
+specMModule :: ModuleName
+specMModule = mkModuleName ["SpecM"]
+
 sawVectorDefinitionsModule :: TranslationConfiguration -> ModuleName
 sawVectorDefinitionsModule (TranslationConfiguration {..}) =
   mkModuleName [Text.pack vectorModule]
@@ -476,19 +479,20 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- The specification monad
   ++
-  [ ("SpecM",                mapsToExpl compMModule "SpecM")
-  , ("retS",                 mapsToExpl compMModule "RetS")
-  , ("bindS",                mapsToExpl compMModule "BindS")
-  , ("errorS",               mapsToExpl compMModule "ErrorS")
-  , ("existsS",              mapsToExpl compMModule "ExistsS")
-  , ("forallS",              mapsToExpl compMModule "ForallS")
-  , ("LetRecType1",          mapsTo compMModule "LetRecType")
-  , ("LRT_Ret1",             mapsTo compMModule "LRT_Ret")
-  , ("LRT_Fun1",             mapsTo compMModule "LRT_Fun")
-  , ("LRTType",              mapsTo compMModule "LRTType")
-  , ("LRTsTuple",            mapsTo compMModule "LRTsTuple")
-  , ("callS",                mapsTo compMModule "CallS")
-  , ("multiFixS",            mapsTo compMModule "MultiFixS")
+  [ ("SpecM",                mapsToExpl specMModule "SpecM")
+  , ("retS",                 mapsToExpl specMModule "RetS")
+  , ("bindS",                mapsToExpl specMModule "BindS")
+  , ("errorS",               mapsToExpl specMModule "ErrorS")
+  , ("existsS",              mapsToExpl specMModule "ExistsS")
+  , ("forallS",              mapsToExpl specMModule "ForallS")
+  , ("LetRecType1",          mapsTo specMModule "LetRecType")
+  , ("LRT_Ret1",             mapsTo specMModule "LRT_Ret")
+  , ("LRT_Fun1",             mapsTo specMModule "LRT_Fun")
+  , ("nthLRT",               mapsToExpl specMModule "nthLRT")
+  , ("LRTType",              mapsToExpl specMModule "LRTType")
+  , ("LRTsTuple",            mapsToExpl specMModule "LRTsTuple")
+  , ("callS",                mapsToExpl specMModule "CallS")
+  , ("multiFixS",            mapsToExpl specMModule "MultiFixS")
   ]
 
   -- Dependent pairs
@@ -520,6 +524,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("List2", replace (Coq.ExplVar "Datatypes.list"))
   , ("Nil2", replace (Coq.ExplVar "Datatypes.nil"))
   , ("Cons2", replace (Coq.ExplVar "Datatypes.cons"))
+  , ("List2__rec", replace (Coq.ExplVar "Datatypes.list_rect"))
   ]
 
 constantsRenamingMap :: [(String, String)] -> Map.Map String String
