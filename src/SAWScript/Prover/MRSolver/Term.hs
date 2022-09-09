@@ -35,6 +35,7 @@ import Data.String
 import Data.IORef
 import Control.Monad.Reader
 import qualified Data.IntMap as IntMap
+import Numeric.Natural (Natural)
 import GHC.Generics
 
 import Prettyprinter
@@ -447,6 +448,9 @@ instance TermLike FunName where
   liftTermLike _ _ = return
   substTermLike _ _ = return
 instance TermLike LocalName where
+  liftTermLike _ _ = return
+  substTermLike _ _ = return
+instance TermLike Natural where
   liftTermLike _ _ = return
   substTermLike _ _ = return
 

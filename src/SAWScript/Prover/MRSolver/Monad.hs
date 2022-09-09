@@ -25,7 +25,6 @@ module SAWScript.Prover.MRSolver.Monad where
 
 import Data.List (find, findIndex, foldl')
 import qualified Data.Text as T
-import Numeric.Natural (Natural)
 import System.IO (hPutStrLn, stderr)
 import Control.Monad.Reader
 import Control.Monad.State
@@ -252,12 +251,6 @@ coIndHypSetArg hyp@(CoIndHyp {..}) (Left i) x =
 coIndHypSetArg hyp@(CoIndHyp {..}) (Right i) x =
   hyp { coIndHypRHS = take i coIndHypRHS ++ x : drop (i+1) coIndHypRHS }
 
--- | Set all of the arguments in the given list to the given value in a
--- coinductive hypothesis, using 'coIndHypSetArg'
-coIndHypSetArgs :: CoIndHyp -> [Either Int Int] -> Term -> CoIndHyp
-coIndHypSetArgs hyp specs x =
-  foldl' (\hyp' spec -> coIndHypSetArg hyp' spec x) hyp specs
-
 -- | Add a variable to the context of a coinductive hypothesis, returning the
 -- updated coinductive hypothesis and a 'Term' which is the new variable
 coIndHypWithVar :: CoIndHyp -> LocalName -> Type -> MRM (CoIndHyp, Term)
@@ -472,42 +465,6 @@ liftSC5 f a b c d e = mrSC >>= \sc -> liftIO (f sc a b c d e)
 
 
 ----------------------------------------------------------------------
--- * Relating Types Heterogeneously
-----------------------------------------------------------------------
-
--- | A datatype encapsulating all the way in which we consider two types to
--- be heterogeneously related: either one is a @Num@ and the other is a @Nat@,
--- one is a @BVVec@ and the other is a non-@BVVec@ vector (of the same length,
--- which must be checked where 'matchHet' is used), or both sides are pairs
--- (whose components are respectively heterogeneously related, which must be
--- checked where 'matchHet' is used). See 'typesHetRelated' for an example.
-data HetRelated = HetBVNum Natural
-                | HetNumBV Natural
-                | HetBVVecVec (Term, Term, Term) (Term, Term)
-                | HetVecBVVec (Term, Term) (Term, Term, Term)
-                | HetPair (Term, Term) (Term, Term)
-
--- | Check to see if the given types match one of the cases of 'HetRelated'
-matchHet :: Term -> Term -> Maybe HetRelated
-matchHet (asBitvectorType -> Just n)
-         (asDataType -> Just (primName -> "Cryptol.Num", _)) =
-  Just $ HetBVNum n
-matchHet (asDataType -> Just (primName -> "Cryptol.Num", _))
-         (asBitvectorType -> Just n) =
-  Just $ HetNumBV n
-matchHet (asBVVecType -> Just (n, len, a))
-         (asNonBVVecVectorType -> Just (m, a')) =
-  Just $ HetBVVecVec (n, len, a) (m, a')
-matchHet (asNonBVVecVectorType -> Just (m, a'))
-         (asBVVecType -> Just (n, len, a)) =
-  Just $ HetVecBVVec (m, a') (n, len, a)
-matchHet (asPairType -> Just (tpL1, tpR1))
-         (asPairType -> Just (tpL2, tpR2)) =
-  Just $ HetPair (tpL1, tpR1) (tpL2, tpR2)
-matchHet _ _ = Nothing
-
-
-----------------------------------------------------------------------
 -- * Functions for Building Terms
 ----------------------------------------------------------------------
 
@@ -542,6 +499,10 @@ mrGenFromBVVec n len a v def_err_str m =
 
 -- | Apply a 'TermProj' to perform a projection on a 'Term'
 doTermProj :: Term -> TermProj -> MRM Term
+doTermProj (asPairValue -> Just (t, _)) TermProjLeft = return t
+doTermProj (asPairValue -> Just (_, t)) TermProjRight = return t
+doTermProj (asRecordValue -> Just t_map) (TermProjRecord fld)
+  | Just t <- Map.lookup fld t_map = return t
 doTermProj t TermProjLeft = liftSC1 scPairLeft t
 doTermProj t TermProjRight = liftSC1 scPairRight t
 doTermProj t (TermProjRecord fld) = liftSC2 scRecordSelect t fld
