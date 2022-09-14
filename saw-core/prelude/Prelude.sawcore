@@ -797,6 +797,15 @@ data IsLeNat (n:Nat) : Nat -> Prop where {
 IsLtNat : Nat -> Nat -> Prop;
 IsLtNat m n = IsLeNat (Succ m) n;
 
+-- | Restate the recursor on IsLeNat
+IsLeNat__rec :
+  (n  : Nat) ->
+  (p  : (x : Nat) -> IsLeNat n x -> Prop) ->
+  (Hbase : p n (IsLeNat_base n)) ->
+  (Hstep : (x : Nat) -> (H : IsLeNat n x) -> p x H -> p (Succ x) (IsLeNat_succ n x H)) ->
+  (m : Nat) -> (Hm : IsLeNat n m) -> p m Hm;
+IsLeNat__rec n p Hbase Hstep m Hm = IsLeNat#rec n p Hbase Hstep m Hm;
+
 -- | Test if m < n or n <= m
 -- FIXME: implement this!
 primitive natCompareLe : (m n : Nat) -> Either (IsLtNat m n) (IsLeNat n m);
@@ -935,6 +944,77 @@ if0Nat a n x y = natCase (\ (_:Nat) -> a) x (\ (_:Nat) -> y) n;
 -- the multiplication operation, the base of the exponent
 -- and the number of times to multiply.
 primitive expByNat : (a:sort 0) -> a -> (a -> a -> a) -> a -> Nat -> a;
+
+
+-- | LeNat is transitive
+IsLeNat_transitive :
+  (n m o:Nat) ->
+  IsLeNat n m ->
+  IsLeNat m o ->
+  IsLeNat n o;
+IsLeNat_transitive n m o Hnm Hmo =
+  IsLeNat__rec m
+    (\ (x:Nat) -> \(H:IsLeNat m x) -> IsLeNat n x)
+    Hnm
+    (\ (x:Nat) -> \ (H1:IsLeNat m x) -> \ (H2:IsLeNat n x) -> IsLeNat_succ n x H2)
+  o Hmo;
+
+-- No Nat is strictly less than zero
+IsLtNat_Zero_absurd :
+  (p:Prop) ->
+  (m:Nat) ->
+  IsLtNat m Zero ->
+  p;
+IsLtNat_Zero_absurd p m HSmZ =
+  IsLeNat__rec (Succ m)
+    ( \ (x : Nat) -> \ (H:IsLeNat (Succ m) x) -> if0Nat Prop x p TrueProp)
+    TrueI
+    ( \ (x : Nat) -> \ (H1:IsLeNat (Succ m) x) -> \ (H2 : if0Nat Prop x p TrueProp) -> TrueI)
+    Zero HSmZ;
+
+IsLeNat_SuccSucc :
+  (n m:Nat) ->
+  IsLeNat (Succ n) (Succ m) ->
+  IsLeNat n m;
+IsLeNat_SuccSucc n m HSS =
+  IsLeNat__rec (Succ n)
+    ( \ (x : Nat) -> \ (H:IsLeNat (Succ n) x) -> IsLeNat n (pred x))
+    (IsLeNat_base n)
+    (Nat__rec
+      ( \ (x : Nat) -> IsLeNat (Succ n) x -> IsLeNat n (pred x) -> IsLeNat n x)
+      ( \ (H1 : IsLeNat (Succ n) Zero) -> \ (H2 : IsLeNat n (pred Zero)) -> H2)
+      ( \ (x : Nat) ->
+        \ (Hind : IsLeNat (Succ n) x -> IsLeNat n (pred x) -> IsLeNat n x) ->
+        \ (H1 : IsLeNat (Succ n) (Succ x)) ->
+	\ (H2 : IsLeNat n (pred (Succ x))) ->
+	IsLeNat_succ n x H2)
+    )
+  (Succ m) HSS;
+
+-- | The complete induction principle on natural numbers
+Nat_complete_induction :
+  (p : Nat -> Prop) ->
+  ((n : Nat) -> ((m : Nat) -> IsLtNat m n -> p m) -> p n) ->
+  (n : Nat) -> p n;
+
+Nat_complete_induction p f n0 =
+  Nat__rec ( \ (n:Nat) -> (m:Nat) -> IsLeNat m n -> p m)
+    (\ (n:Nat) ->
+     \ (Hn:IsLeNat n 0) ->
+     f n (\ (m:Nat) -> \ (Hm : IsLeNat (Succ m) n) ->
+            IsLtNat_Zero_absurd (p m) m (IsLeNat_transitive (Succ m) n 0 Hm Hn))
+    )
+   (\ (n:Nat) ->
+     \ (Hind : (m:Nat) -> IsLeNat m n -> p m) ->
+     \ (r:Nat) ->
+     \ (Hr:IsLeNat r (Succ n)) ->
+       f r (\ (m:Nat) -> \ (Hm: IsLeNat (Succ m) r) ->
+             Hind m (IsLeNat_SuccSucc m n (IsLeNat_transitive (Succ m) r (Succ n) Hm Hr)))
+    )
+    n0 n0 (IsLeNat_base n0);
+
+
+
 
 --------------------------------------------------------------------------------
 -- Operations on string values
@@ -1945,6 +2025,29 @@ appendBVVec n len1 len2 a v1 v2 =
             atBVVec n len2 a v2 (bvSub n i len1)
                     (bvult_sum_bvult_sub n i len1 len2 pf12 not_pf1))
          (Refl Bool (bvult n i len1)));
+
+
+-- | The complete induction principle on bitvectors
+BV_complete_induction :
+  (w: Nat) ->
+  (p: Vec w Bool -> Prop) ->
+  ((x : Vec w Bool) -> ((y: Vec w Bool) -> is_bvult w y x -> p y) -> p x) ->
+  (x : Vec w Bool) -> p x;
+BV_complete_induction w p f x0 =
+  Nat_complete_induction
+    (\ (n:Nat) -> (x:Vec w Bool) -> IsLeNat (bvToNat w x) n -> p x)
+    (\ (n:Nat) ->
+     \ (Hind : (m : Nat) -> (Hm : IsLtNat m n) -> (y : Vec w Bool) ->
+               (Hy : IsLeNat (bvToNat w y) m) -> p y) ->
+     \ (x : Vec w Bool) ->
+     \ (Hx : IsLeNat (bvToNat w x) n) ->
+       f x (\ (y:Vec w Bool) -> \ (Hult : is_bvult w y x) ->
+              Hind (bvToNat w y)
+	        (IsLeNat_transitive (Succ (bvToNat w y)) (bvToNat w x) n (bvultToIsLtNat w y x Hult) Hx)
+	        y (IsLeNat_base (bvToNat w y))
+	   )
+    )
+    (bvToNat w x0) x0 (IsLeNat_base (bvToNat w x0));
 
 
 --------------------------------------------------------------------------------

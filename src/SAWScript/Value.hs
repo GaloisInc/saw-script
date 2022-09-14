@@ -81,15 +81,14 @@ import SAWScript.Prover.MRSolver.Term as MRSolver
 import SAWScript.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))
 
-import Verifier.SAW.Name (toShortName)
+import Verifier.SAW.Name (toShortName, SAWNamingEnv, emptySAWNamingEnv)
 import Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.Cryptol.Monadify as Monadify
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
 import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
                                        ppTerm, scPrettyTerm)
-import qualified Verifier.SAW.SharedTerm as SAWCorePP (PPOpts(..), defaultPPOpts,
-                                                       ppTerm, scPrettyTerm)
+import qualified Verifier.SAW.Term.Pretty as SAWCorePP
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.Term.Functor (ModuleName)
 
@@ -292,24 +291,24 @@ showSimpset opts ss =
     ppTerm t = SAWCorePP.ppTerm opts' t
     opts' = sawPPOpts opts
 
-showsPrecValue :: PPOpts -> Int -> Value -> ShowS
-showsPrecValue opts p v =
+showsPrecValue :: PPOpts -> SAWNamingEnv -> Int -> Value -> ShowS
+showsPrecValue opts nenv p v =
   case v of
     VBool True -> showString "true"
     VBool False -> showString "false"
     VString s -> shows s
     VInteger n -> shows n
-    VArray vs -> showBrackets $ commaSep $ map (showsPrecValue opts 0) vs
-    VTuple vs -> showParen True $ commaSep $ map (showsPrecValue opts 0) vs
-    VMaybe (Just v') -> showString "(Just " . showsPrecValue opts 0 v' . showString ")"
+    VArray vs -> showBrackets $ commaSep $ map (showsPrecValue opts nenv 0) vs
+    VTuple vs -> showParen True $ commaSep $ map (showsPrecValue opts nenv 0) vs
+    VMaybe (Just v') -> showString "(Just " . showsPrecValue opts nenv 0 v' . showString ")"
     VMaybe Nothing -> showString "Nothing"
     VRecord m -> showBraces $ commaSep $ map showFld (M.toList m)
                    where
                      showFld (n, fv) =
-                       showString n . showString "=" . showsPrecValue opts 0 fv
+                       showString n . showString "=" . showsPrecValue opts nenv 0 fv
 
     VLambda {} -> showString "<<function>>"
-    VTerm t -> showString (SAWCorePP.scPrettyTerm opts' (ttTerm t))
+    VTerm t -> showString (SAWCorePP.showTermWithNames opts' nenv (ttTerm t))
     VType sig -> showString (pretty sig)
     VReturn {} -> showString "<<monadic>>"
     VBind {} -> showString "<<monadic>>"
@@ -318,7 +317,7 @@ showsPrecValue opts p v =
     VProofScript {} -> showString "<<proof script>>"
     VTheorem thm ->
       showString "Theorem " .
-      showParen True (showString (prettyProp opts' (thmProp thm)))
+      showParen True (showString (prettyProp opts' nenv (thmProp thm)))
     VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
     VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
     VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
@@ -347,7 +346,7 @@ showsPrecValue opts p v =
     opts' = sawPPOpts opts
 
 instance Show Value where
-    showsPrec p v = showsPrecValue defaultPPOpts p v
+    showsPrec p v = showsPrecValue defaultPPOpts emptySAWNamingEnv p v
 
 indexValue :: Value -> Value -> Value
 indexValue (VArray vs) (VInteger x)
@@ -534,6 +533,7 @@ data TopLevelRW =
   , rwPathSatSolver :: Common.PathSatSolver
   , rwSkipSafetyProofs :: Bool
   , rwSingleOverrideSpecialCase :: Bool
+  , rwSequentGoals :: Bool
   }
 
 newtype TopLevel a =
@@ -832,8 +832,16 @@ newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX
 
 -- TODO: remove the "reason" parameter and compute it from the
 --       initial proof goal instead
-runProofScript :: ProofScript a -> ProofGoal -> Maybe ProgramLoc -> Text -> TopLevel ProofResult
-runProofScript (ProofScript m) gl ploc rsn =
+runProofScript ::
+  ProofScript a ->
+  Prop ->
+  ProofGoal ->
+  Maybe ProgramLoc ->
+  Text ->
+  Bool {- ^ record the theorem in the database? -} ->
+  Bool {- ^ do we need to normalize the sequent goal? -} ->
+  TopLevel ProofResult
+runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
   do pos <- getPosition
      ps <- io (startProof gl pos ploc rsn)
      (r,pstate) <- runStateT (runExceptT m) ps
@@ -842,7 +850,7 @@ runProofScript (ProofScript m) gl ploc rsn =
        Right _ ->
          do sc <- getSharedContext
             db <- rwTheoremDB <$> getTopLevelRW
-            io (finishProof sc db pstate)
+            io (finishProof sc db concl pstate recordThm useSequentGoals)
 
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))

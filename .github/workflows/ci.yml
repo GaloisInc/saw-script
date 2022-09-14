@@ -100,6 +100,14 @@ jobs:
         with:
           ghc-version: ${{ matrix.ghc }}
 
+      - name: Post-GHC installation fixups on Windows
+        shell: bash
+        if: runner.os == 'Windows'
+        run: |
+          # A workaround for https://github.com/Mistuke/CabalChoco/issues/5
+          cabal user-config update -a "extra-include-dirs: \"\""
+          cabal user-config update -a "extra-lib-dirs: \"\""
+
       - shell: bash
         run: .github/ci.sh install_system_deps
         env:
