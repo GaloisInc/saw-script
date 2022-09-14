@@ -629,10 +629,13 @@ add__tuple_fun : (bitvector 64 -> bitvector 64 -> CompM (bitvector 64)) * unit
 add : bitvector 64 -> bitvector 64 -> CompM (bitvector 64)
 ```
 
-That is, `add__tuple_fun` if a pair containing the `add` function and
-a unit `()`.  The `add` function takes two integers (as 64-bit
-vectors) and returns another one (under the `CompM` monoid that
-accepts failure).
+That is, `add__tuple_fun` if a list of definitions, encoded as a
+tuple. Saw uses these heterogeneous lists to encode functions, or
+parts of them, that depend on each other.  In this case, there is only
+the function `add` function and a unit `()`, representing the end of
+the list (similar to `nil`).  The `add` function takes two integers
+(as 64-bit vectors) and returns another one (under the `CompM` monoid
+that accepts failure).
 
 The other two definitions are the equivalent definitions for the
 `add_mistyped` function. However, in `add_mistyped__tuple_fun` you
@@ -655,7 +658,75 @@ for example, dynamically check for memory bounds. We will see those
 examples in later sections. **TODO: Make sure we do this. Perhaps add
 an array example?**
 
-**TODO: how do you interact with these coq types.**
+Before we continue, make sure to build the `.vo` file, so we can
+import the definitions in `tutorial_c_gen.v` from other files. Do so with 
+
+```
+make tutorial_c_gen.vo
+```
+
+This should produce a new file `tutorial_c_gen.vo`.
+
+
+##### Writting your own proofs
+
+Open a new coq file `tutorial_c_proofs.v` in the same folder
+(i.e. `heapster-saw/examples/`) and the following preamble
+
+```
+From CryptolToCoq Require Import SAWCoreScaffolding.
+From CryptolToCoq Require Import SAWCorePrelude.
+From CryptolToCoq Require Import CompMExtra.
+
+(* The following line enables pretty printing*)
+Import CompMExtraNotation. Open Scope fun_syntax.
+
+Require Import Examples.tutorial_c_gen.
+Import tutorial_c.
+```
+
+It first imports all the SAW functionality we need and enables pretty
+printing. Then it imports our new definitions (e.g. `add`).
+
+Our first proof, will claim that the function `add`, produces no
+errors. Morr specifically, it says that for all inputs (that's what
+`refinesFun` quantifies) `add` allways refines to `noErrorsSpec`, that
+is it returns a pure value.
+
+```
+Lemma no_errors_add
+  : refinesFun add (fun _ _ => noErrorsSpec).
+Proof.
+```
+
+We will use our automation to quickly prove the lemma, but we must
+first unfold those definitions the the automation is unfamiliar with.
+
+```
+unfold add, add__tuple_fun, noErrorsSpec.
+```
+
+Then our function `prove_refinement` will deal with the proof.
+
+```
+  prove_refinement.
+Qed.
+```
+
+You can also attempt the same proof with `add_mistyped`, which
+obviously will fail, since `add_mistyped` has an error.
+
+```
+Lemma no_errors_add_mistyped
+  : refinesFun add_mistyped (fun _ => noErrorsSpec).
+Proof.
+  unfold add_mistyped, add_mistyped__tuple_fun, noErrorsSpec.
+  prove_refinement. 
+  (* Fails to solve the goal. *)
+Abort.
+```
+
+Congratulations you have written your first Coq proofs with Heapster!
 
 ### Pointers
 
@@ -696,8 +767,6 @@ Then we can type-check the function with
 heapster_typecheck_fun env "incr_ptr" "(). arg0:ptr((W,0) |-> int64<>) -o arg0:ptr((W,0) |-> int64<>)"
 ```
 
-**TODO: How do I know if the type-checking was successful?**
-
 Finally we can generate the functional specification in Coq with 
 
 ```
@@ -708,6 +777,19 @@ The old file should be overwritten and now contains the functional
 specification of `add`, `add_misstyped` and `incr_ptr`. As you can see
 the definition of `incr_ptr__tuple_fun` has no references to `errorM`,
 so we know it was correctly type checked.
+
+You will have to generate the `.vo` again to write proofs about
+`incr_ptr`. After you do so, we can easily prove that `incr_ptr`
+produces no errors.
+
+```
+Lemma no_errors_incr_ptr
+  : refinesFun incr_ptr (fun _ => noErrorsSpec).
+Proof.
+  unfold incr_ptr, incr_ptr__tuple_fun.
+  prove_refinement.
+Qed.
+```
 
 ### Structs
 
@@ -764,8 +846,10 @@ heapster_export_coq env "tutorial_c_gen.v";
 ```
 
 The functional specification of `norm_vector` should have been added
-to the `tutorial_c_gen.v` file.
-
+to the `tutorial_c_gen.v` file. You will have to generate the `.vo`
+again to write proofs about `norm_vector`. After you do so, we can
+easily prove that `norm_vector` produces no errors. The statement and
+the proof, follow exactly the last two lemmas.
 
 ### Batch scripts
 
@@ -819,12 +903,160 @@ Up to date
 [16:41:49.329] Done.
 ```
 
+
+### Arrays
+
+We will briefly explore arrays, which have slightly more intersting
+memory restrictions. Namely, array access must be in bounds. The code
+in this section are already generated for you and you can find them,
+together with more examples in the files `arrays.c`, `arrays.saw`,
+`arrays_gen.v` and `arrays_proofs.v`.
+
+We will consider the function `zero_array` which rewrite all the
+values in an array to be `0`, by looking over the length of the array
+(see code in `arrays.c`).
+
+```C
+void zero_array (int64_t *arr, uint64_t len) {
+  for (uint64_t i = 0; i < len; ++i) {
+    arr[i] = 0;
+  }
+}
+```
+
+The type for this function is relatively simple, it only assumes that
+`len` is actually the length for the given array `arr`. This is
+achieved by used a shared or ghost variable `len` which is both the
+lenght of the array and equal to the second argument (see the code in `arrays.saw`)
+
+```
+heapster_typecheck_fun env "zero_array"
+  "(len:bv 64). arg0:int64array<len>, arg1:eq(llvmword(len)) -o \
+              \ arg0:int64array<len>, arg1:true, ret:true";
+```
+
+Heapster also expects a loop invariant hint for every loop. Loop
+invariants look just like function types, taking the loop variables as
+arguments. In this case the loop introduces a new variable `i` which
+is the ofset into the array. We represent that with a new ghost
+variable
+
+```
+heapster_typecheck_fun env "zero_array_from"
+  "(len:bv 64, off:bv 64). arg0:int64array<len>, arg1:eq(llvmword(len)), arg2:eq(llvmword(off)) -o \
+                         \ arg0:int64array<len>, arg1:true, arg2:true, ret:true";
+```
+
+Certainly function correctness must ensure that all the writes to the
+array (i.e. `arr[i] = 0`) happen within bounds. However this is a
+dynamic property which is not part of type-checking. Instead, Heapster
+adds dynamic checks on the extracted code which we will see in the coq
+code. 
+
+Let's go to `arrays_gen.v` and look for the definition of
+`zero_array__tuple_fun`. You will notice that it calls `errorM` but,
+in this case that's not a sign of a typing error! This error call
+corresponds to the case where the array is accessed out of bounds. The
+code below is a simplification of the `zero_array__tuple_fun` with
+some notation for readability (see below for how to enable such pritty printing).
+
+```
+zero_array__tuple_fun = 
+    (* ... Some ommited code ... *) 
+    LetRec f:=
+     (fun (e1 e2 : int64) (p1 : Vector int64 e1)
+        (_ _ _ : unit : Type) =>
+        (* ... Some ommited code ... *) 
+        let var__4 := (0)[1] in
+        let var__6 := e2 < e1 in
+		(*... Some ommited code ...*)
+	  if
+       not
+         ((if var__6 then 1 else var__4) ==
+          var__4)
+      then
+       if
+        ((17293822569102704640)[64] <= e2) &&
+        (e2 <= (1152921504606846975)[64])
+       then
+        If e2 <P e1
+        Then f e1 (e2 + (1)[64])
+               (p1 [e2 <- (0)[64]]) tt tt tt
+        Else errorM "ghost_bv <u top_bv"
+       else
+        errorM "Failed Assert at arrays.c:61:5"
+      else returnM p1, tt)
+      InBody (f e0 (0)[64] p0 tt tt tt), tt))
+```
+ 
+The arguments `e1`, `e2` and `p1` correspond to the length `len`, the
+offset `i`, and the array `arr`. You can see there are several tests
+done before any computation. The first two tests, which are within `if
+then else`, checks that the offset is less than the array length `e2 <
+e1`, and that the index `i` is within the bounds
+of machine integers. 
+
+The last check, which is within uppercase `If Then Else` (which
+handles option types) is not part of the original function but
+inserted by Heapster. It checks that the array access is within bounds
+`e2 <P e1`. The operator `<P` returns an optional proof of the array
+access being safe. If the check fails, the function reports a runtime
+error `errorM "ghost_bv <u top_bv"`.
+
+If all the checks pass, then the function simply recursive calls
+itself, with the next index and array with a new entry zeroed out.
+
+```
+f e1 (e2 + (1)[64]) (p1 [e2 <- (0)[64]]) tt tt tt
+```
+
+The extra `tt` are artifacts that get inserted by Heapster, but you
+can ignore.
+
+**Pritty printing:** you can enable this pretty printing by adding
+`Import CompMExtraNotation. Open Scope fun_syntax.` after the files
+imports. Then, after processing the file you can write `Print
+zero_array__tuple_fun`, after the function has been defined, and you
+should see the pretty printed version appear in the response. You
+don't really modify `arrays_gen.v` so you can do this exploration in
+`arrays_proofs.v` or just remember to clean up `arrays_gen.v` after
+you are done.
+
+
+We shall now prove that this function in fact should never return an
+error if the inputs are correct. Go to `array_proofs.v` and look at the proof 
+
+```
+Lemma no_errors_zero_array
+  : refinesFun zero_array (fun x _ => assumingM (zero_array_precond x) noErrorsSpec).
+Proof
+```
+
+It claims that, assuming the precondition `zero_array_precond` is
+satisfied, then the function `zero_array` produces no errors. The
+precondition simply says that the length of the array is within
+computable integers.
+
+```
+Definition zero_array_precond x
+  := 64 <= x /\ x <= bvMem_hi.
+```
+
+
+We will not go into detail about the proof, but notice that the
+important steps are handled by custom automation. Namely we use the
+commands `prove_refinement_match_letRecM_l` and `prove_refinement` to
+handle refinments with and without recursion (respectively). The rest
+of the proof, consists of discharging simple inequalities and a couple
+of trivial entailments, where the left hand side is an error (and thus
+entails anything).
+
 ### Recursive data structures
 
 We will now typecheck a function over lists, a recursive data
 structure. You can start a fresh SAW session with `cabal run saw`
-(quit any current session with `:q`), but make sure you do so from the
-`heapster-saw/examples` directory.
+(quit any current session with `:q` if you are in one), but make sure
+you do so from the `heapster-saw/examples` directory.
 
 Specifically, we want to verify the function `is_elem`,
 which tests if a specific value is in a list. The function, together
@@ -1018,23 +1250,3 @@ convention, we add a `_gen` suffix to the filename.
 ```
 heapster_export_coq env "my_file_gen.v";
 ```
-
-#### 6. Writing a Coq file to prove things about the generated functional specification(s)
-
-**TODO**
-
-## Looking under the hood
-
-**TODO**
-
-### Heapster commands and environments
-
-**TODO**
-
-### Permissions
-
-**TODO**
-
-### Type-checking
-
-**TODO**
