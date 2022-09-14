@@ -359,7 +359,7 @@ The process will generally involve
 
 - [1. Generating LLVM bitcode](#1-generating-llvm-bitcode)
 - [2. Run the SAW interpreter with Heapster](#2-run-the-saw-interpreter-with-heapster)
-- [3. Load the file and extract the two function types.](#3-load-the-file-and-extract-the-two-function-types-1)
+- [3. Load the file and extract the function types.](#3-load-the-file-and-extract-the-two-function-types-1)
 - [4. Writing heapster types for your functions](#4-writing-heapster-types-for-your-functions)
 - [5. Type-check your program](#5-writing-a-saw-script-to-type-check-your-code-with-respect-to-the-sepcification)
 - [6. Writing a Coq file to prove things about the generated functional specification(s)](#6-writing-a-coq-file-to-prove-things-about-the-generated-functional-specifications)
@@ -378,7 +378,7 @@ examples directory.
 uint64_t add (uint64_t x, uint64_t y) { return x + y; }
 ```
 
-We will type-check the rest of the function in that file, plus some
+We will type-check the rest of the functions in that file, plus some
 recursive functions later in the tutorial.
 
 
