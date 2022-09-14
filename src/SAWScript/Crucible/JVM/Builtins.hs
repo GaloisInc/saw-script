@@ -105,7 +105,6 @@ import qualified Data.Parameterized.Context as Ctx
 import Verifier.SAW.FiniteValue (ppFirstOrderValue)
 import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedTerm
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
@@ -257,13 +256,13 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      _ <- io $ Crucible.popAssumptionFrame bak frameIdent
 
      -- attempt to verify the proof obligations
-     (stats,thms) <- verifyObligations cc methodSpec tactic assumes asserts
+     (stats,vcstats) <- verifyObligations cc methodSpec tactic assumes asserts
      io $ writeFinalProfile
 
      let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas)
      end <- io getCurrentTime
      let diff = diffUTCTime end start
-     ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats thms lemmaSet diff)
+     ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats vcstats lemmaSet diff)
      returnProof ps
 
 
@@ -291,7 +290,7 @@ verifyObligations ::
   ProofScript () ->
   [Crucible.LabeledPred Term AssumptionReason] ->
   [(String, MS.ConditionMetadata, Term)] ->
-  TopLevel (SolverStats, Set TheoremNonce)
+  TopLevel (SolverStats, [MS.VCStats])
 verifyObligations cc mspec tactic assumes asserts =
   do let sym = cc^.jccSym
      st <- io $ sawCoreState sym
@@ -314,13 +313,17 @@ verifyObligations cc mspec tactic assumes asserts =
                        , goalName = nm
                        , goalLoc  = gloc
                        , goalDesc = msg
-                       , goalProp = goal'
+                       , goalSequent = propToSequent goal'
                        , goalTags = MS.conditionTags md
                        }
-       res <- runProofScript tactic proofgoal (Just ploc) $ Text.unwords
-                 ["JVM verification condition:", Text.pack (show n), Text.pack goalname]
+       res <- runProofScript tactic goal' proofgoal (Just ploc)
+                (Text.unwords
+                 ["JVM verification condition:", Text.pack (show n), Text.pack goalname])
+                False -- do not record in the theorem database
+                False -- TODO, useSequentGoals...
        case res of
-         ValidProof stats thm -> return (stats, thmNonce thm)
+         ValidProof stats thm ->
+           return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))
          InvalidProof stats vals _pst -> do
            printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
            printOutLnTop Info (show stats)
@@ -336,8 +339,8 @@ verifyObligations cc mspec tactic assumes asserts =
      printOutLnTop Info $ unwords ["Proof succeeded!", nm]
 
      let stats = mconcat (map fst outs)
-     let thms  = mconcat (map (Set.singleton . snd) outs)
-     return (stats, thms)
+     let vcstats = map snd outs
+     return (stats, vcstats)
 
 -- | Evaluate the precondition part of a Crucible method spec:
 --
@@ -721,14 +724,6 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
         do v <- prepareArg tr (xs !! Ctx.indexVal idx)
            return (Crucible.RegEntry tr v))
       ctx
-
--- | Build a conjunction from a list of boolean terms.
-scAndList :: SharedContext -> [Term] -> IO Term
-scAndList sc = conj . filter nontrivial
-  where
-    nontrivial x = asBool x /= Just True
-    conj [] = scBool sc True
-    conj (x : xs) = foldM (scAnd sc) x xs
 
 --------------------------------------------------------------------------------
 
