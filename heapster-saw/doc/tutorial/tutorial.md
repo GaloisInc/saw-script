@@ -401,8 +401,9 @@ Be aware that the resulting bitcode may depend on your `clang` version
 and your operating system. In turn, this means the Heapster commands
 in your SAW script and the proofs in your Coq file may also be
 dependent on how and where the bitcode is generated. If you find an
-incompatibility, please report it. For all other examples, the binary
-code has been provided already to avoid incompatibilities.
+incompatibility, please report it. For all other examples byond this
+simple tuorial file, the binary code has been provided already to
+avoid incompatibilities.
 
 #### 2. Run the SAW interpreter with Heapster
 
@@ -516,7 +517,7 @@ ghost environment. Since this function doesn't require ghost
 variables, it is empty.
 
 The rest of the type is composed of two parts separated by the linear
-implication operator `-o`, sometimes known as lollipop. The left hand
+implication operator `-o`, sometimes known as "lollipop". The left hand
 side of the operator, refers to the state of memory before the
 function executes. And it says that the two arguments passed to `add`,
 `arg0` and `arg1`, are 64-bit integers. The predicate `int64`, which
@@ -912,9 +913,8 @@ in this section are already generated for you and you can find them,
 together with more examples in the files `arrays.c`, `arrays.saw`,
 `arrays_gen.v` and `arrays_proofs.v`.
 
-We will consider the function `zero_array` which rewrite all the
-values in an array to be `0`, by looking over the length of the array
-(see code in `arrays.c`).
+We will consider the function `zero_array` which zero's out all the
+values in an array (see code in `arrays.c`).
 
 ```C
 void zero_array (int64_t *arr, uint64_t len) {
@@ -953,12 +953,14 @@ dynamic property which is not part of type-checking. Instead, Heapster
 adds dynamic checks on the extracted code which we will see in the coq
 code. 
 
-Let's go to `arrays_gen.v` and look for the definition of
-`zero_array__tuple_fun`. You will notice that it calls `errorM` but,
-in this case that's not a sign of a typing error! This error call
-corresponds to the case where the array is accessed out of bounds. The
-code below is a simplification of the `zero_array__tuple_fun` with
-some notation for readability (see below for how to enable such pritty printing).
+Let's go to `arrays_gen.v` (which has already been generatred for you)
+and look for the definition of `zero_array__tuple_fun`. You will
+notice that it calls `errorM` twice but, in this case that's not a
+sign of a typing error! Heapster includes these errors to catch
+out-of-bounds array accesses and a unrepresentable indices (i.e. index
+that can't be written as a machine integer). The code below is a
+simplification of the `zero_array__tuple_fun` with some notation for
+readability (see below for how to enable such pritty printing).
 
 ```
 zero_array__tuple_fun = 
@@ -990,11 +992,13 @@ zero_array__tuple_fun =
 ```
  
 The arguments `e1`, `e2` and `p1` correspond to the length `len`, the
-offset `i`, and the array `arr`. You can see there are several tests
-done before any computation. The first two tests, which are within `if
-then else`, checks that the offset is less than the array length `e2 <
-e1`, and that the index `i` is within the bounds
-of machine integers. 
+offset `i`, and the array `arr`. Notice most of that the function
+performs several tests before executing any computation. The first two
+tests, which are within `if then else` blocks, check that the offset
+is less than the array length `e2 < e1`, and that the index `i` is
+within the bounds of machine integers. The former is part of the loop
+condition, the second is added by heapster to ensure the ghost
+variable represents a machine integer.
 
 The last check, which is within uppercase `If Then Else` (which
 handles option types) is not part of the original function but
