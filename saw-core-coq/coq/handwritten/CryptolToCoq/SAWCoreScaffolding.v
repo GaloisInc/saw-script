@@ -172,6 +172,22 @@ Instance Inhabited_nat : Inhabited nat :=
 Global Hint Resolve (0%nat : nat) : inh.
 Global Hint Resolve (0%nat : Nat) : inh.
 
+Definition IsLeNat := @le.
+Definition IsLeNat_base (n:Nat) : IsLeNat n n := le_n n.
+Definition IsLeNat_succ (n m:Nat) : IsLeNat n m -> IsLeNat n (S m) := le_S n m.
+
+Definition IsLeNat__rec
+  (n : Nat)
+  (p : forall (x : Nat), IsLeNat n x -> Prop)
+  (Hbase : p n (IsLeNat_base n))
+  (Hstep : forall (x : Nat) (H : IsLeNat n x), p x H -> p (S x) (IsLeNat_succ n x H))
+  : forall (m : Nat) (Hm : IsLeNat n m), p m Hm :=
+  fix rec (m:Nat) (Hm : IsLeNat n m) {struct Hm} : p m Hm :=
+            match Hm as Hm' in le _ m' return p m' Hm' with
+            | le_n _ => Hbase
+            | le_S _ m H => Hstep m H (rec m H)
+            end.
+
 (* Definition minNat := Nat.min. *)
 
 Definition uncurry (a b c : Type) (f : a -> b -> c) (p : a * (b * unit)) : c  :=

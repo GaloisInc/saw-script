@@ -16,6 +16,7 @@ module Verifier.SAW.CryptolEnv
   , loadCryptolModule
   , bindCryptolModule
   , lookupCryptolModule
+  , combineCryptolEnv
   , importModule
   , bindTypedTerm
   , bindType
@@ -87,7 +88,7 @@ import qualified Cryptol.ModuleSystem.Renamer as MR
 import qualified Cryptol.Utils.Ident as C
 
 import Cryptol.Utils.PP hiding ((</>))
-import Cryptol.Utils.Ident (Ident, preludeName, preludeReferenceName
+import Cryptol.Utils.Ident (Ident, preludeName, arrayName, preludeReferenceName
                            , packIdent, interactiveName, identText
                            , packModName, textToModName, modNameChunks
                            , prelPrim)
@@ -189,10 +190,12 @@ initCryptolEnv sc = do
   let modEnv1 = modEnv0 { ME.meSearchPath = cryptolPaths ++
                            (instDir </> "lib") : ME.meSearchPath modEnv0 }
 
-  -- Load Cryptol prelude
+  -- Load Cryptol prelude and magic Array module
   (_, modEnv2) <-
     liftModuleM modEnv1 $
-      MB.loadModuleFrom False (MM.FromModule preludeName)
+      do _ <- MB.loadModuleFrom False (MM.FromModule preludeName)
+         _ <- MB.loadModuleFrom False (MM.FromModule arrayName)
+         return ()
 
   -- Load Cryptol reference implementations
   ((_,refMod), modEnv) <-
@@ -213,6 +216,7 @@ initCryptolEnv sc = do
   return CryptolEnv
     { eImports    = [ (OnlyPublic, P.Import preludeName Nothing Nothing)
                     , (OnlyPublic, P.Import preludeReferenceName (Just preludeReferenceName) Nothing)
+                    , (OnlyPublic, P.Import arrayName Nothing Nothing)
                     ]
     , eModuleEnv  = modEnv
     , eExtraNames = mempty
@@ -341,6 +345,15 @@ genTermEnv sc modEnv cryEnv0 = do
   traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv)
 
 --------------------------------------------------------------------------------
+
+
+combineCryptolEnv :: CryptolEnv -> CryptolEnv -> IO CryptolEnv
+combineCryptolEnv chkEnv newEnv =
+  do let newMEnv = eModuleEnv newEnv
+     let chkMEnv = eModuleEnv chkEnv
+     let menv' = chkMEnv{ ME.meNameSeeds = ME.meNameSeeds newMEnv }
+     return chkEnv{ eModuleEnv = menv' }
+
 
 checkNotParameterized :: T.Module -> IO ()
 checkNotParameterized m =

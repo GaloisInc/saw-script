@@ -474,12 +474,24 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
               , C._cruciblePersonality = Macaw.MacawSimulatorState
               , C._profilingMetrics = Map.empty
               }
-        globals = C.insertGlobal mvar (preState ^. x86Mem) C.emptyGlobals
+
+      (globals, assumes) <-
+          do let globals0 = C.insertGlobal mvar (preState ^. x86Mem) C.emptyGlobals
+             liftIO $ setupPrestateConditions methodSpec cc (preState ^. x86Mem) env globals0
+                       (methodSpec ^. MS.csPreState . MS.csConditions)
+
+      let
         macawStructRepr = C.StructRepr $ Macaw.crucArchRegTypes Macaw.x86_64MacawSymbolicFns
         initial = C.InitialState ctx globals C.defaultAbortHandler macawStructRepr
                   $ C.runOverrideSim macawStructRepr
                   $ Macaw.crucGenArchConstraints Macaw.x86_64MacawSymbolicFns
                   $ do
+          liftIO $
+            forM_ assumes $ \(C.LabeledPred p (md, reason)) ->
+              do expr <- resolveSAWPred cc p
+                 let loc = MS.conditionLoc md
+                 C.addAssumption bak
+                   (C.GenericAssumption loc reason expr)
           r <- C.callCFG cfg . C.RegMap . singleton . C.RegEntry macawStructRepr $ preState ^. x86Regs
           globals' <- C.readGlobals
           mem' <- C.readGlobal mvar
@@ -525,11 +537,11 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
             ar
         C.TimeoutResult{} -> fail "Execution timed out"
 
-      (stats,thms) <- checkGoals bak opts nm sc tactic mdMap
+      (stats,vcstats) <- checkGoals bak opts nm sc tactic mdMap
 
       end <- io getCurrentTime
       let diff = diffUTCTime end start
-      ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats thms mempty diff)
+      ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats vcstats mempty diff)
       returnProof $ SomeLLVM ps
 
   | otherwise = fail "LLVM module must be 64-bit"
@@ -1083,9 +1095,6 @@ assertPost globals env premem preregs mdMap = do
   pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)
     $ assertPointsTo env tyenv nameEnv
 
-  let setupConditionMatchesPre = fmap -- assume preconditions
-        (LO.executeSetupCondition opts sc cc ms)
-        $ ms ^. MS.csPreState . MS.csConditions
   let setupConditionMatchesPost = fmap -- assert postconditions
         (LO.learnSetupCondition opts sc cc ms MS.PostState)
         $ ms ^. MS.csPostState . MS.csConditions
@@ -1105,15 +1114,12 @@ assertPost globals env premem preregs mdMap = do
     . sequence_ $ mconcat
     [ returnMatches
     , pointsToMatches
-    , setupConditionMatchesPre
     , setupConditionMatchesPost
     , [LO.assertTermEqualities sc cc]
     ]
   st <- case result of
     Left err -> throwX86 $ show err
     Right (_, st) -> pure st
-  liftIO . forM_ (view O.osAssumes st) $ \(_md, asum) ->
-    C.addAssumption bak $ C.GenericAssumption (st ^. O.osLocation) "precondition" asum
   liftIO . forM_ (view LO.osAsserts st) $ \(md, W4.LabeledPred p r) ->
        do (ann,p') <- W4.annotateTerm sym p
           modifyIORef mdMap (Map.insert ann md)
@@ -1167,7 +1173,7 @@ checkGoals ::
   SharedContext ->
   ProofScript () ->
   IORef MetadataMap {- ^ metadata map -} ->
-  TopLevel (SolverStats, Set TheoremNonce)
+  TopLevel (SolverStats, [MS.VCStats])
 checkGoals bak opts nm sc tactic mdMap = do
   gs <- liftIO $ getGoals (SomeBackend bak) mdMap
   liftIO . printOutLn opts Info $ mconcat
@@ -1190,13 +1196,17 @@ checkGoals bak opts nm sc tactic mdMap = do
                     , goalName = nm
                     , goalLoc  = gloc
                     , goalDesc = show $ gMessage g
-                    , goalProp = term
+                    , goalSequent = propToSequent term
                     , goalTags = MS.conditionTags md
                     }
-    res <- runProofScript tactic proofgoal (Just (gLoc g)) $ Text.unwords
-              ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))]
+    res <- runProofScript tactic term proofgoal (Just (gLoc g))
+             (Text.unwords
+              ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))])
+             False -- do not record this theorem in the database
+             False -- TODO! useSequentGoals
     case res of
-      ValidProof stats thm -> return (stats, thmNonce thm)
+      ValidProof stats thm ->
+        return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))
       UnfinishedProof pst -> do
         printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
         printOutLnTop Info (show (psStats pst))
@@ -1217,5 +1227,5 @@ checkGoals bak opts nm sc tactic mdMap = do
   liftIO $ printOutLn opts Info "All goals succeeded"
 
   let stats = mconcat (map fst outs)
-  let thms  = mconcat (map (Set.singleton . snd) outs)
-  return (stats, thms)
+  let vcstats = map snd outs
+  return (stats, vcstats)

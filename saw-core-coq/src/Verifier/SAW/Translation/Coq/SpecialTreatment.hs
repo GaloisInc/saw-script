@@ -217,6 +217,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   ++
   [ ("error",             mapsTo sawDefinitionsModule "error")
   , ("fix",               skip)
+  , ("fix_unfold",        skip)
   , ("unsafeAssert",      replaceDropArgs 3 $ Coq.Ltac "solveUnsafeAssert")
   , ("unsafeAssertBVULt", replaceDropArgs 3 $ Coq.Ltac "solveUnsafeAssertBVULt")
   , ("unsafeAssertBVULe", replaceDropArgs 3 $ Coq.Ltac "solveUnsafeAssertBVULe")
@@ -299,6 +300,14 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("Eq",      mapsTo sawDefinitionsModule "Eq")
   , ("Eq__rec", mapsTo sawDefinitionsModule "Eq__rec")
   , ("Refl",    mapsTo sawDefinitionsModule "Refl")
+  ]
+
+  -- Nat le
+  ++
+  [ ("IsLeNat"     , mapsTo sawDefinitionsModule "IsLeNat")
+  , ("IsLeNat__rec", mapsTo sawDefinitionsModule "IsLeNat__rec")
+  , ("IsLeNat_base", mapsTo sawDefinitionsModule "IsLeNat_base")
+  , ("IsLeNat_succ", mapsTo sawDefinitionsModule "IsLeNat_succ")
   ]
 
   -- Strings

@@ -55,30 +55,17 @@ handleNodes o ns = TL.writeFile o (GV.renderDot (GV.toDot dot))
     nodeMap :: Map Integer SummaryNode
     nodeMap = Map.fromList [ (summaryNodeId n, n) | n <- ns ]
 
-    revMethodDep :: Map Integer Integer
-    revMethodDep = Map.fromList $
-                     do MethodSummary i s <- ns
-                        t <- methodDeps s
-                        Just (TheoremSummary _ _) <- pure (Map.lookup t nodeMap)
-                        pure (t, i)
-
     nodes :: [(Integer,SummaryNode)]
     nodes = do n <- ns
-               if isVCGoal (summaryNodeId n) then [] else pure (summaryNodeId n, n)
-
-    isVCGoal :: Integer -> Bool
-    isVCGoal i = isJust (Map.lookup i revMethodDep)
+               pure (summaryNodeId n, n)
 
     uniqEdges :: [(Integer,Integer,())]
     uniqEdges = Set.toList (Set.fromList edges)
 
     edges :: [(Integer,Integer,())]
     edges = do n <- ns
-               let i = case n of
-                         TheoremSummary i thm
-                           | Just parent <- Map.lookup i revMethodDep -> parent
-                         _ -> summaryNodeId n
-               n' <- filter (not . isVCGoal) (summaryNodeDeps n)
+               let i = summaryNodeId n
+               n' <- summaryNodeDeps n
                pure (i,n',())
 
     fmt :: (Integer, SummaryNode) -> GV.Attributes
@@ -117,24 +104,22 @@ fmtMethod nodeMap mn = [ GV.Label (GV.HtmlLabel top), GV.Shape GV.PlainText ]
    subsTab :: HTML.Cell
    subsTab = HTML.LabelCell [] (HTML.Table (HTML.HTable Nothing [HTML.Border 0, HTML.CellBorder 1] [HTML.Cells subs]))
 
-   vcs = do d <- methodDeps mn
-            Just (TheoremSummary i thm) <- pure (Map.lookup d nodeMap)
-            pure (i,thm)
+   vcs = methodVCs mn
 
    subs :: [HTML.Cell]
-   subs = map (uncurry mkSub) vcs
+   subs = map mkSub vcs
 
-   mkSub :: Integer -> TheoremNode -> HTML.Cell
-   mkSub i thm = HTML.LabelCell attrs (HTML.Text [ HTML.Str (TL.fromStrict (T.pack (show (thmElapsedTime thm)))) ])
+   mkSub :: VCNode -> HTML.Cell
+   mkSub vc = HTML.LabelCell attrs (HTML.Text [ HTML.Str (TL.fromStrict (T.pack (show (vcElapsedTime vc)))) ])
      where
      attrs =
-       [ HTML.BGColor (thmColor thm)
-       , HTML.Title (TL.fromStrict (thmStatusText thm <> "\n" <> thmTooltip thm))
+       [ HTML.BGColor (vcColor vc)
+       , HTML.Title (TL.fromStrict (vcTooltip vc))
        , HTML.HRef "#"
        ]
 
    fillcol = statusColor $
-     foldr (<>) (methodToStatus mn) (map (thmToStatus . snd) vcs)
+     foldr (<>) (methodToStatus mn) (map vcToStatus vcs)
 
    maintext =
       T.intercalate "\n"
@@ -165,6 +150,12 @@ thmToStatus thm = case thmStatus thm of
                     TheoremTested{}   -> Tested
                     TheoremAdmitted{} -> Assumed
 
+vcToStatus :: VCNode -> Status
+vcToStatus vc = case vcStatus vc of
+                    TheoremVerified{} -> Proved
+                    TheoremTested{}   -> Tested
+                    TheoremAdmitted{} -> Assumed
+
 methodToStatus :: MethodNode -> Status
 methodToStatus mn = case methodStatus mn of
                       MethodAssumed -> Assumed
@@ -173,6 +164,9 @@ methodToStatus mn = case methodStatus mn of
 thmColor :: TheoremNode -> GV.Color
 thmColor = statusColor . thmToStatus
 
+vcColor :: VCNode -> GV.Color
+vcColor = statusColor . vcToStatus
+
 thmStatusText :: TheoremNode -> Text
 thmStatusText thm = T.intercalate "\n" $
    case thmStatus thm of
@@ -180,6 +174,11 @@ thmStatusText thm = T.intercalate "\n" $
      TheoremTested nm    -> [T.unwords ["tested:", T.pack (show nm)]]
      TheoremAdmitted msg -> ["Admitted!", msg]
 
+vcTooltip :: VCNode -> Text
+vcTooltip vc = T.intercalate "\n" $
+          [ vcReason vc
+          , vcLoc vc
+          ]
 
 thmTooltip :: TheoremNode -> Text
 thmTooltip thm = T.intercalate "\n" $
@@ -210,6 +209,7 @@ parseMethodNode o =
     o .: "loc" <*>
     parseMethodStatus o <*>
     parseDeps o <*>
+    parseVCs o <*>
     o .: "elapsedtime"
 
 parseMethodStatus :: Object -> Parser MethodStatus
@@ -220,8 +220,22 @@ parseMethodStatus o =
        "verified" -> pure MethodVerified
        _ -> fail ("Unexpected moethod status " ++ show st)
 
+parseVCs :: Object -> Parser [VCNode]
+parseVCs o =
+  (o .: "vcs") >>= parseJSONList >>= mapM parseVCNode
+
 parseDeps :: Object -> Parser [Integer]
 parseDeps o = (o .: "dependencies") >>= parseJSONList
+
+parseVCNode :: Object -> Parser VCNode
+parseVCNode o =
+  VCNode <$>
+    o .: "loc" <*>
+    parseTheoremStatus o <*>
+    o .: "reason" <*>
+    o .: "elapsedtime" <*>
+    parseDeps o <*>
+    o .: "tags"
 
 parseTheoremNode :: Object -> Parser TheoremNode
 parseTheoremNode o =
@@ -259,7 +273,8 @@ summaryNodeId (MethodSummary i _)  = i
 
 summaryNodeDeps :: SummaryNode -> [Integer]
 summaryNodeDeps (TheoremSummary _ s) = thmDeps s
-summaryNodeDeps (MethodSummary _ s)  = methodDeps s
+summaryNodeDeps (MethodSummary _ s)  =
+  methodDeps s ++ (vcDeps =<< methodVCs s)
 
 
 data TheoremNode =
@@ -270,6 +285,17 @@ data TheoremNode =
   , thmStatus :: TheoremStatus
   , thmPLoc :: Maybe (Text, Text)
   , thmDeps :: [Integer]
+ }
+ deriving (Show)
+
+data VCNode =
+  VCNode
+  { vcLoc :: Text
+  , vcStatus :: TheoremStatus
+  , vcReason :: Text
+  , vcElapsedTime :: NominalDiffTime
+  , vcDeps :: [Integer]
+  , vcTags :: [String]
   }
  deriving (Show)
 
@@ -285,6 +311,7 @@ data MethodNode =
   , methodLoc :: Text
   , methodStatus :: MethodStatus
   , methodDeps :: [Integer]
+  , methodVCs :: [VCNode]
   , methodElapsedtime :: NominalDiffTime
   }
  deriving (Show)

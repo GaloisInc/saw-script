@@ -64,6 +64,28 @@
   of them, or if different tactics are needed for different subgoals.
   Currently, this option only applies to LLVM verifications.
 
+* Experimental interactive features. Using the new `subshell`
+  and `proof_subshell` commands, a user can regain a command-line
+  interface in the middle of a running script for experimentation
+  and exploration purposes. In addition `callcc` and `checkpoint`
+  allow the user to have more flexibility with restoring prior states
+  and executing the remaining context of a proof in such an
+  interactive session.
+
+* A significant overhaul of the SAW proof and tactics system.  Under
+  the hood, tactics now manipulate _sequents_ instead of just
+  propositions. This allows more the user to specify more precise goal
+  rearrangements, and provides a much nicer interface for proof
+  exploration (especially with the new `proof_subshell`). There are a
+  variety of new tactics that provide the user with control over proof
+  steps that is similar to that found in an interactive theorem prover.
+  Proofs that do not make use of the new experimental tactics should
+  see no substantive changes, so this is expected to be a highly
+  backward-compatible change.
+
+* The experimental and rarely-used `goal_assume` tactic has been
+  removed. The use case it was targeting is better solved via sequents.
+
 # Version 0.9
 
 ## New Features
