@@ -15,7 +15,9 @@ import Control.Exception (throw)
 import Control.Monad.Catch (MonadThrow)
 
 import qualified Data.Text as Text
+import Data.Text (Text)
 import qualified Data.Set as Set
+import Data.Map (Map)
 
 import qualified Text.URI as URI
 
@@ -29,6 +31,8 @@ import qualified Verifier.SAW.Cryptol as CSC
 import qualified Cryptol.TypeCheck.Type as C
 
 import SAWScript.Yosys.Utils
+
+newtype YosysImport = YosysImport { yosysImport :: Map Text SC.TypedTerm }
 
 data YosysTheorem = YosysTheorem
   { _theoremURI :: URI.URI -- URI identifying overridden module

@@ -56,7 +56,7 @@ import SAWScript.Prover.Rewrite (basic_ss)
 import SAWScript.Proof (newTheoremDB)
 import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts, SAWSimpset)
 import SAWScript.Yosys.State (YosysSequential)
-import SAWScript.Yosys.Theorem (YosysTheorem)
+import SAWScript.Yosys.Theorem (YosysImport, YosysTheorem)
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
@@ -307,8 +307,6 @@ instance FromJSON ServerName where
 data CrucibleSetupTypeRepr :: Type -> Type where
   UnitRepr :: CrucibleSetupTypeRepr ()
   TypedTermRepr :: CrucibleSetupTypeRepr TypedTerm
-
-newtype YosysImport = YosysImport { yosysImport :: Map Text TypedTerm }
 
 data ServerVal
   = VTerm TypedTerm

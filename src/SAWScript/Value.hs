@@ -81,7 +81,7 @@ import SAWScript.Prover.MRSolver.Term as MRSolver
 import SAWScript.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))
 import SAWScript.Yosys.IR
-import SAWScript.Yosys.Theorem (YosysTheorem)
+import SAWScript.Yosys.Theorem (YosysImport, YosysTheorem)
 import SAWScript.Yosys.State (YosysSequential)
 
 import Verifier.SAW.Name (toShortName, SAWNamingEnv, emptySAWNamingEnv)
@@ -166,6 +166,7 @@ data Value
   | VCFG SAW_CFG
   | VGhostVar CMS.GhostGlobal
   | VYosysModule YosysIR
+  | VYosysImport YosysImport
   | VYosysSequential YosysSequential
   | VYosysTheorem YosysTheorem
 
@@ -346,6 +347,7 @@ showsPrecValue opts nenv p v =
     VGhostVar x -> showParen (p > 10)
                  $ showString "Ghost " . showsPrec 11 x
     VYosysModule _ -> showString "<<Yosys module>>"
+    VYosysImport _ -> showString "<<Yosys import>>"
     VYosysSequential _ -> showString "<<Yosys sequential>>"
     VYosysTheorem _ -> showString "<<Yosys theorem>>"
     VJVMSetup _      -> showString "<<JVM Setup>>"
@@ -1217,6 +1219,13 @@ instance IsValue YosysIR where
 instance FromValue YosysIR where
   fromValue (VYosysModule ir) = ir
   fromValue v = error ("fromValue YosysIR: " ++ show v)
+
+instance IsValue YosysImport where
+  toValue = VYosysImport
+
+instance FromValue YosysImport where
+  fromValue (VYosysImport i) = i
+  fromValue v = error ("fromValue YosysImport: " ++ show v)
 
 instance IsValue YosysSequential where
   toValue = VYosysSequential

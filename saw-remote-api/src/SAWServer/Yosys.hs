@@ -23,7 +23,7 @@ import qualified Argo.Doc as Doc
 
 import CryptolServer.Data.Expression (Expression(..), getCryptolExpr)
 
-import SAWServer (SAWState, ServerName (ServerName), YosysImport(..), sawTask, setServerVal, getYosysImport, getYosysTheorem, getYosysSequential, sawTopLevelRW)
+import SAWServer (SAWState, ServerName (ServerName), sawTask, setServerVal, getYosysImport, getYosysTheorem, getYosysSequential, sawTopLevelRW)
 import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
 import SAWServer.Exceptions (notAtTopLevel)
 import SAWServer.OK (OK, ok)
@@ -32,6 +32,7 @@ import SAWServer.TopLevel (tl)
 
 import SAWScript.Value (getSharedContext, getTopLevelRW, rwCryptol)
 import SAWScript.Yosys (loadYosysIR, yosysIRToTypedTerms, yosys_verify, yosys_import_sequential, yosys_extract_sequential)
+import SAWScript.Yosys.Theorem (YosysImport(..))
 
 data YosysImportParams = YosysImportParams
   { yosysImportPath :: FilePath
