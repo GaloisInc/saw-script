@@ -1,3 +1,4 @@
+{-# Language CPP #-}
 {-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
 {-# Language LambdaCase #-}
@@ -16,6 +17,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Graph as Graph
 
 import qualified Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.TypedTerm as SC
@@ -89,6 +91,14 @@ instance Show YosysError where
 
 mapForWithKeyM :: Monad m => Map k a -> (k -> a -> m b) -> m (Map k b)
 mapForWithKeyM m f = sequence $ Map.mapWithKey f m
+
+reverseTopSort :: Graph.Graph -> [Graph.Vertex]
+reverseTopSort =
+#if MIN_VERSION_containers(6,4,1)
+  Graph.reverseTopSort
+#else
+  reverse . Graph.topSort
+#endif
 
 cryptolRecordType ::
   MonadIO m =>

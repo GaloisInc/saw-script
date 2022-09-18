@@ -86,7 +86,7 @@ convertYosysIR ::
   m (Map Text ConvertedModule)
 convertYosysIR sc ir = do
   let mg = yosysIRModgraph ir
-  let sorted = Graph.reverseTopSort $ mg ^. modgraphGraph
+  let sorted = reverseTopSort $ mg ^. modgraphGraph
   foldM
     (\env v -> do
         let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
