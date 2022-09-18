@@ -26,6 +26,7 @@ import qualified Data.Text as Text
 import qualified Data.Graph as Graph
 
 import qualified Verifier.SAW.SharedTerm as SC
+import qualified Verifier.SAW.Name as SC
 
 import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.Ident as C
@@ -165,10 +166,11 @@ deriveTermsByIndices sc rep t = do
 lookupPatternTerm ::
   (MonadIO m, Ord b, Show b) =>
   SC.SharedContext ->
+  YosysBitvecConsumer ->
   [b] ->
   Map [b] SC.Term ->
   m SC.Term
-lookupPatternTerm sc pat ts =
+lookupPatternTerm sc loc pat ts =
   case Map.lookup pat ts of
     Just t -> pure t
     Nothing -> do
@@ -179,8 +181,7 @@ lookupPatternTerm sc pat ts =
       bits <- forM pat $ \b -> do
         case Map.lookup [b] ts of
           Just t -> pure t
-          Nothing -> do
-            throw . YosysError $ "Failed to find output bitvec: " <> Text.pack (show b)
+          Nothing -> throw $ YosysErrorNoSuchOutputBitvec (Text.pack $ show b) loc
       vecBits <- liftIO $ SC.scVector sc vecty bits
       liftIO $ SC.scJoin sc many one boolty vecBits
 
@@ -201,20 +202,20 @@ netgraphToTerms sc env ng inputs
       let sorted = Graph.reverseTopSort $ ng ^. netgraphGraph
       foldM
         ( \acc v -> do
-            let ((_cnm, c), _output, _deps) = ng ^. netgraphNodeFromVertex $ v
+            let ((cnm, c), _output, _deps) = ng ^. netgraphNodeFromVertex $ v
             let outputFields = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
             if
               -- special handling for $dff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state
               | c ^. cellType == "$dff"
               , Just dffout <- Map.lookup "Q" $ c ^. cellConnections -> do
-                  r <- lookupPatternTerm sc dffout acc
+                  r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") dffout acc
                   ts <- deriveTermsByIndices sc dffout r
                   pure $ Map.union ts acc
               | otherwise -> do
-                  args <- forM (cellInputConnections c) $ \i -> do -- for each input bit pattern
+                  args <- fmap Map.fromList . forM (Map.assocs $ cellInputConnections c) $ \(inm, i) -> do -- for each input bit pattern
                     -- if we can find that pattern exactly, great! use that term
                     -- otherwise, find each individual bit and append the terms
-                    lookupPatternTerm sc i acc
+                    (inm,) <$> lookupPatternTerm sc (YosysBitvecConsumerCell cnm inm) i acc
 
                   r <- primCellToTerm sc c args >>= \case
                     Just r -> pure r
@@ -222,7 +223,7 @@ netgraphToTerms sc env ng inputs
                       Just cm -> do
                         r <- cryptolRecord sc args
                         liftIO $ SC.scApply sc (cm ^. convertedModuleTerm) r
-                      Nothing -> throw . YosysError $ "No definition for module: " <> (c ^. cellType)
+                      Nothing -> throw $ YosysErrorNoSuchCellType (c ^. cellType) cnm
 
                   -- once we've built a term, insert it along with each of its bits
                   ts <- forM (Map.assocs $ cellOutputConnections c) $ \(out, o) -> do
@@ -264,18 +265,25 @@ convertModule sc env m = do
 
   zeroTerm <- liftIO $ SC.scBvConst sc 1 0
   oneTerm <- liftIO $ SC.scBvConst sc 1 1
+  oneBitType <- liftIO $ SC.scBitvector sc 1
+  xMsg <- liftIO $ SC.scString sc "Attempted to read X bit"
+  xTerm <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, xMsg]
+  zMsg <- liftIO $ SC.scString sc "Attempted to read Z bit"
+  zTerm <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, zMsg]
   let inputs = Map.unions $ mconcat
         [ [ Map.fromList
             [ ( [BitrepZero], zeroTerm)
             , ( [BitrepOne], oneTerm )
+            , ( [BitrepX], xTerm )
+            , ( [BitrepZ], zTerm )
             ]
           ]
         , derivedInputs
         ]
 
   terms <- netgraphToTerms sc env ng inputs
-  outputRecord <- cryptolRecord sc =<< forM outputPorts
-    (\out -> lookupPatternTerm sc out terms)
+  outputRecord <- cryptolRecord sc =<< mapForWithKeyM outputPorts
+    (\onm out -> lookupPatternTerm sc (YosysBitvecConsumerOutputPort onm) out terms)
 
   t <- liftIO $ SC.scAbstractExts sc [inputRecordEC] outputRecord
   ty <- liftIO $ SC.scFun sc inputRecordType outputRecordType

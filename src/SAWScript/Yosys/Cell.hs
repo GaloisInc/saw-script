@@ -12,6 +12,7 @@ module SAWScript.Yosys.Cell where
 import Control.Lens ((^.))
 import Control.Monad (foldM)
 import Control.Monad.IO.Class (MonadIO(..))
+import Control.Exception (throw)
 
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
@@ -160,7 +161,17 @@ primCellToTerm sc c args = case c ^. cellType of
     fmap Just . cryptolRecord sc $ Map.fromList
       [ ("Y", res)
       ]
-  -- "$pmux" -> _
+  "$pmux" -> throw YosysErrorUnsupportedPmux
+  "$adff" -> throw $ YosysErrorUnsupportedFF "$adff"
+  "$sdff" -> throw $ YosysErrorUnsupportedFF "$sdff"
+  "$aldff" -> throw $ YosysErrorUnsupportedFF "$aldff"
+  "$dffsr" -> throw $ YosysErrorUnsupportedFF "$dffsr"
+  "$dffe" -> throw $ YosysErrorUnsupportedFF "$dffe"
+  "$adffe" -> throw $ YosysErrorUnsupportedFF "$adffe"
+  "$sdffe" -> throw $ YosysErrorUnsupportedFF "$sdffe"
+  "$sdffce" -> throw $ YosysErrorUnsupportedFF "$sdffce"
+  "$aldffe" -> throw $ YosysErrorUnsupportedFF "$aldffe"
+  "$dffsre" -> throw $ YosysErrorUnsupportedFF "$dffsre"
   -- "$bmux" -> _
   -- "$demux" -> _
   -- "$lut" -> _

@@ -36,6 +36,8 @@ import qualified Data.Graph as Graph
 
 import qualified Text.URI as URI
 
+import qualified Data.Parameterized.Nonce as Nonce
+
 import qualified Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.TypedTerm as SC
 
@@ -90,12 +92,14 @@ convertYosysIR sc ir = do
         let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
         -- liftIO . putStrLn . Text.unpack $ mconcat ["Converting module: ", nm]
         cm <- convertModule sc env m
+        n <- liftIO $ Nonce.freshNonce Nonce.globalNonceGenerator
+        let frag = Text.pack . show $ Nonce.indexValue n
         let uri = URI.URI
               { URI.uriScheme = URI.mkScheme "yosys"
               , URI.uriAuthority = Left True
               , URI.uriPath = (False,) <$> mapM URI.mkPathPiece (nm NE.:| [])
               , URI.uriQuery = []
-              , URI.uriFragment = Nothing
+              , URI.uriFragment = URI.mkFragment frag
               }
         let ni = SC.ImportedName uri [nm]
         tc <- liftIO $ SC.scConstant' sc ni (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)

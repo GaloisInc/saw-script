@@ -140,10 +140,17 @@ convertModuleInline sc m = do
 
   zeroTerm <- liftIO $ SC.scBvConst sc 1 0
   oneTerm <- liftIO $ SC.scBvConst sc 1 1
+  oneBitType <- liftIO $ SC.scBitvector sc 1
+  xMsg <- liftIO $ SC.scString sc "Attempted to read X bit"
+  xTerm <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, xMsg]
+  zMsg <- liftIO $ SC.scString sc "Attempted to read Z bit"
+  zTerm <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, zMsg]
   let inputs = Map.unions $ mconcat
         [ [ Map.fromList
             [ ( [BitrepZero], zeroTerm)
             , ( [BitrepOne], oneTerm )
+            , ( [BitrepX], xTerm )
+            , ( [BitrepZ], zTerm )
             ]
           ]
         , derivedInputs
@@ -152,16 +159,16 @@ convertModuleInline sc m = do
 
   terms <- netgraphToTerms sc Map.empty ng inputs
 
-  postStateFields <- forM dffs $ \c ->
+  postStateFields <- mapForWithKeyM dffs $ \cnm c ->
     case Map.lookup "D" $ c ^. cellConnections of
       Nothing -> panic "convertModuleInline" ["Missing expected input name for $dff cell"]
       Just b -> do
-        t <- lookupPatternTerm sc b terms
+        t <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "D") b terms
         pure t
   postStateRecord <- cryptolRecord sc postStateFields
 
-  outputRecord <- cryptolRecord sc . Map.insert "__state__" postStateRecord =<< forM outputPorts
-    (\out -> lookupPatternTerm sc out terms)
+  outputRecord <- cryptolRecord sc . Map.insert "__state__" postStateRecord =<< mapForWithKeyM outputPorts
+    (\onm out -> lookupPatternTerm sc (YosysBitvecConsumerOutputPort onm) out terms)
 
   -- construct result
   t <- liftIO $ SC.scAbstractExts sc [domainRecordEC] outputRecord

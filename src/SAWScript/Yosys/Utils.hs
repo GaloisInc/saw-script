@@ -24,10 +24,71 @@ import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.Ident as C
 import qualified Cryptol.Utils.RecordMap as C
 
-newtype YosysError = YosysError Text
+reportBugText :: Text
+reportBugText = "You should report this issue at: https://github.com/GaloisInc/saw-script/issues"
+
+consultYosysManual :: Text
+consultYosysManual = "More information is available in the Yosys manual, at: https://yosyshq.net/yosys/documentation.html"
+
+data YosysBitvecConsumer
+  = YosysBitvecConsumerOutputPort Text
+  | YosysBitvecConsumerCell Text Text
+
+data YosysError
+  = YosysError Text
+  | YosysErrorNoSuchOutputBitvec Text YosysBitvecConsumer
+  | YosysErrorNoSuchCellType Text Text
+  | YosysErrorUnsupportedPmux
+  | YosysErrorUnsupportedFF Text
 instance Exception YosysError
 instance Show YosysError where
-  show (YosysError msg) = Text.unpack $ "Error: " <> msg
+  show (YosysError msg) = Text.unpack $ "Error: " <> msg <> "\n" <> reportBugText
+  show (YosysErrorNoSuchOutputBitvec bvec (YosysBitvecConsumerOutputPort onm)) = Text.unpack $ mconcat
+    [ "Error: Could not find the output bitvector ", bvec
+    , ", which is connected to a module output port \"", onm
+    , "\".\n"
+    , "This may represent a bug in SAW.\n"
+    , reportBugText
+    ]
+  show (YosysErrorNoSuchOutputBitvec bvec (YosysBitvecConsumerCell cnm inm)) = Text.unpack $ mconcat
+    [ "Error: Could not find the output bitvector ", bvec
+    , ", which is connected to the input \"", inm
+    , "\" of the cell with name \"", cnm
+    , "\".\n"
+    , "It is possible that this represents an undetected cycle in the netgraph.\n"
+    , reportBugText
+    ]
+  show (YosysErrorNoSuchCellType mnm cnm)
+    | Just ('$', _) <- Text.uncons mnm
+    = Text.unpack $ mconcat
+      [ "Error: The cell type \"", mnm
+      , "\", which is the type of the cell with name \"", cnm
+      , "\", is not a supported primitive cell type.\n"
+      , reportBugText
+      ]
+    | otherwise = Text.unpack $ mconcat
+      [ "Error: The cell type \"", mnm
+      , "\", which is the type of the cell with name \"", cnm
+      , "\", refers to a submodule of the circuit.\n"
+      , "Using such submodules during translation of sequential circuits is not currently supported by SAW.\n"
+      , "It may be helpful to use the \"flatten\" tactic within Yosys.\n"
+      , consultYosysManual
+      ]
+  show YosysErrorUnsupportedPmux = Text.unpack $ mconcat
+    [ "Error: The circuit contains cells with type \"$pmux\".\n"
+    , "These cells are not currently supported by SAW.\n"
+    , "It may be helpful to replace $pmux cells using the \"pmuxtree\" tactic within Yosys.\n"
+    , consultYosysManual
+    ]
+  show (YosysErrorUnsupportedFF mnm) = Text.unpack $ mconcat
+    [ "Error: The circuit contains cells with type \"", mnm, "\".\n"
+    , "These cells are not currently supported by SAW.\n"
+    , "It may be helpful to replace certain stateful cells using the \"memory\", \"dffunmap\", and \"async2sync\" tactics within Yosys.\n"
+    , consultYosysManual
+    ]
+
+mapForWithKeyM :: Monad m => Map k a -> (k -> a -> m b) -> m (Map k b)
+mapForWithKeyM m f = sequence $ Map.mapWithKey f m
 
 cryptolRecordType ::
   MonadIO m =>
