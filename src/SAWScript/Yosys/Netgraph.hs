@@ -199,7 +199,7 @@ netgraphToTerms sc env ng inputs
   = do
       throw $ YosysError "Network graph contains a cycle after splitting on DFFs; SAW does not currently support analysis of this circuit"
   | otherwise = do
-      let sorted = Graph.reverseTopSort $ ng ^. netgraphGraph
+      let sorted = reverseTopSort $ ng ^. netgraphGraph
       foldM
         ( \acc v -> do
             let ((cnm, c), _output, _deps) = ng ^. netgraphNodeFromVertex $ v
