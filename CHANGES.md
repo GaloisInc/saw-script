@@ -86,6 +86,10 @@
 * The experimental and rarely-used `goal_assume` tactic has been
   removed. The use case it was targeting is better solved via sequents.
 
+* A new experimental `llvm_verify_x86_with_invariant` command that
+  allows verification certain kinds of simple loops by using a
+  user-provided loop invariant.
+
 # Version 0.9
 
 ## New Features
