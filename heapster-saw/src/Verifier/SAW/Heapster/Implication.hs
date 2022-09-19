@@ -5586,12 +5586,12 @@ implElimLLVMBlockForOffset x bp imprecise_p off mb_p =
 -- as the one we are trying to prove.
 implGetLLVMPermForOffset ::
   (1 <= w, KnownNat w, NuMatchingAny1 r) =>
-  ExprVar (LLVMPointerType w) -> {- ^ the variable @x@ -}
-  [AtomicPerm (LLVMPointerType w)] -> {- ^ the permissions held for @x@ -}
-  Bool -> {- ^ whether imprecise matches are allowed -}
-  Bool -> {- ^ whether block permissions should be eliminated -}
-  PermExpr (BVType w) -> {- ^ the offset we are looking for -}
-  Mb vars (ValuePerm (LLVMPointerType w)) -> {- ^ the perm we want to prove -}
+  ExprVar (LLVMPointerType w) {- ^ the variable @x@ -} ->
+  [AtomicPerm (LLVMPointerType w)]  {- ^ the permissions held for @x@ -} ->
+  Bool {- ^ whether imprecise matches are allowed -} -> 
+  Bool  {- ^ whether block permissions should be eliminated -} ->
+  PermExpr (BVType w) {- ^ the offset we are looking for -} ->
+  Mb vars (ValuePerm (LLVMPointerType w)) {- ^ the perm we want to prove -} ->
   ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w)
   (AtomicPerm (LLVMPointerType w))
 

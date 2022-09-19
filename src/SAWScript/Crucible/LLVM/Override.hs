@@ -5,27 +5,26 @@ License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ParallelListComp #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ImplicitParams             #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE MultiWayIf                 #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE ParallelListComp           #-}
+{-# LANGUAGE PatternGuards              #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE UndecidableInstances       #-}
 
 module SAWScript.Crucible.LLVM.Override
   ( OverrideMatcher
@@ -56,7 +55,8 @@ module SAWScript.Crucible.LLVM.Override
   , enableSMTArrayMemoryModel
   ) where
 
-import           Control.Lens ( _2 )
+import           Control.Exception                         as X
+import           Control.Lens                              (_2)
 import           Control.Lens.At
 import           Control.Lens.Each
 import           Control.Lens.Fold
@@ -64,79 +64,85 @@ import           Control.Lens.Getter
 import           Control.Lens.Lens
 import           Control.Lens.Setter
 import           Control.Lens.TH
-import           Control.Exception as X
 import           Control.Monad
 import           Control.Monad.Except
-import           Data.Either (partitionEithers)
-import           Data.Foldable (for_, traverse_, toList)
+import           Data.Either                               (partitionEithers)
+import           Data.Foldable                             (for_, toList,
+                                                            traverse_)
+import           Data.IORef                                (IORef, modifyIORef)
 import           Data.List
-import qualified Data.List.NonEmpty as NE
-import           Data.IORef (IORef, modifyIORef)
-import           Data.Map (Map)
-import qualified Data.Map as Map
+import qualified Data.List.NonEmpty                        as NE
+import           Data.Map                                  (Map)
+import qualified Data.Map                                  as Map
 import           Data.Maybe
 import           Data.Proxy
-import           Data.Set (Set)
-import qualified Data.Set as Set
-import           Data.Text (Text, pack)
-import qualified Data.Vector as V
-import           GHC.Generics (Generic)
+import           Data.Set                                  (Set)
+import qualified Data.Set                                  as Set
+import           Data.Text                                 (Text, pack)
+import qualified Data.Vector                               as V
+import           GHC.Generics                              (Generic)
 import           Numeric.Natural
-import qualified Prettyprinter as PP
+import qualified Prettyprinter                             as PP
 
-import qualified Text.LLVM.AST as L
+import qualified Text.LLVM.AST                             as L
 
-import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
-import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
-import qualified Cryptol.Utils.PP as Cryptol (pp)
+import qualified Cryptol.Eval.Type                         as Cryptol (TValue (..),
+                                                                       evalType)
+import qualified Cryptol.TypeCheck.AST                     as Cryptol (Schema (..))
+import qualified Cryptol.Utils.PP                          as Cryptol (pp)
 
-import qualified Lang.Crucible.Backend as Crucible
-import qualified Lang.Crucible.Backend.Online as Crucible
-import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr))
-import qualified Lang.Crucible.FunctionHandle as Crucible
-import qualified Lang.Crucible.LLVM.Bytes as Crucible
-import qualified Lang.Crucible.LLVM.DataLayout as Crucible
-import qualified Lang.Crucible.LLVM.MemModel as Crucible
-import qualified Lang.Crucible.LLVM.MemType as Crucible
-import qualified Lang.Crucible.LLVM.Translation as Crucible
-import qualified Lang.Crucible.Simulator.GlobalState as Crucible
-import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
-import qualified Lang.Crucible.Simulator.RegMap as Crucible
-import qualified Lang.Crucible.Simulator.SimError as Crucible
+import qualified Lang.Crucible.Backend                     as Crucible
+import qualified Lang.Crucible.Backend.Online              as Crucible
+import qualified Lang.Crucible.CFG.Core                    as Crucible (TypeRepr (UnitRepr))
+import qualified Lang.Crucible.FunctionHandle              as Crucible
+import qualified Lang.Crucible.LLVM.Bytes                  as Crucible
+import qualified Lang.Crucible.LLVM.DataLayout             as Crucible
+import qualified Lang.Crucible.LLVM.MemModel               as Crucible
+import qualified Lang.Crucible.LLVM.MemType                as Crucible
+import qualified Lang.Crucible.LLVM.Translation            as Crucible
+import qualified Lang.Crucible.Simulator.GlobalState       as Crucible
+import qualified Lang.Crucible.Simulator.OverrideSim       as Crucible
+import qualified Lang.Crucible.Simulator.RegMap            as Crucible
+import qualified Lang.Crucible.Simulator.SimError          as Crucible
 
-import qualified What4.BaseTypes as W4
-import qualified What4.Config as W4
-import qualified What4.Expr.Builder as W4
-import qualified What4.Interface as W4
-import qualified What4.LabeledPred as W4
-import qualified What4.ProgramLoc as W4
-import qualified What4.Symbol as W4
+import qualified What4.BaseTypes                           as W4
+import qualified What4.Config                              as W4
+import qualified What4.Expr.Builder                        as W4
+import qualified What4.Interface                           as W4
+import qualified What4.LabeledPred                         as W4
+import qualified What4.ProgramLoc                          as W4
+import qualified What4.Symbol                              as W4
 
-import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
+import qualified SAWScript.Crucible.LLVM.CrucibleLLVM      as Crucible
 
-import qualified Data.Parameterized.Context as Ctx
+import qualified Data.BitVector.Sized                      as BV
+import qualified Data.Parameterized.Context                as Ctx
 import           Data.Parameterized.NatRepr
-import           Data.Parameterized.Some (Some(..))
-import qualified Data.BitVector.Sized as BV
+import           Data.Parameterized.Some                   (Some (..))
 
-import           Verifier.SAW.Prelude (scEq)
-import           Verifier.SAW.SharedTerm
-import           Verifier.SAW.TypedAST
+import           Verifier.SAW.Prelude                      (scEq)
 import           Verifier.SAW.Recognizer
+import           Verifier.SAW.SharedTerm
+import           Verifier.SAW.Simulator.What4.ReturnTrip   (SAWCoreState (..),
+                                                            bindSAWTerm, toSC)
+import           Verifier.SAW.TypedAST
 import           Verifier.SAW.TypedTerm
-import           Verifier.SAW.Simulator.What4.ReturnTrip (SAWCoreState(..), toSC, bindSAWTerm)
 
 import           SAWScript.Crucible.Common
-import           SAWScript.Crucible.Common.MethodSpec (SetupValue(..), PointsTo)
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
-import           SAWScript.Crucible.Common.Override hiding (getSymInterface)
-import qualified SAWScript.Crucible.Common.Override as Ov (getSymInterface)
+import           SAWScript.Crucible.Common.MethodSpec      (PointsTo,
+                                                            SetupValue (..))
+import           SAWScript.Crucible.Common.MethodSpec      (AllocIndex (..),
+                                                            PrePost (..))
+import qualified SAWScript.Crucible.Common.MethodSpec      as MS
+import           SAWScript.Crucible.Common.Override        hiding
+                                                            (getSymInterface)
+import qualified SAWScript.Crucible.Common.Override        as Ov (getSymInterface)
 import           SAWScript.Crucible.LLVM.MethodSpecIR
 import           SAWScript.Crucible.LLVM.ResolveSetupValue
 import           SAWScript.Options
 import           SAWScript.Panic
-import           SAWScript.Utils (bullets, handleException)
+import           SAWScript.Utils                           (bullets,
+                                                            handleException)
 
 type LabeledPred sym = W4.LabeledPred (W4.Pred sym) Crucible.SimError
 
@@ -148,8 +154,8 @@ data OverrideWithPreconditions arch =
   OverrideWithPreconditions
     { _owpPreconditions :: [(MS.ConditionMetadata, LabeledPred Sym)]
          -- ^ c.f. '_osAsserts'
-    , _owpMethodSpec :: MS.CrucibleMethodSpecIR (LLVM arch)
-    , owpState :: OverrideState (LLVM arch)
+    , _owpMethodSpec    :: MS.CrucibleMethodSpecIR (LLVM arch)
+    , owpState          :: OverrideState (LLVM arch)
     }
   deriving (Generic)
 
@@ -945,7 +951,7 @@ checkMemLoad sym mem ptr sz align =
       maybe_allocation_array <- Crucible.asMemAllocationArrayStore sym Crucible.PtrWidth ptr (Crucible.memImplHeap mem)
       case maybe_allocation_array of
         Just (ok, _arr, _sz) -> return $ Just ok
-        Nothing -> return Nothing
+        Nothing              -> return Nothing
 
 ------------------------------------------------------------------------
 
@@ -1122,7 +1128,7 @@ matchPointsTos opts sc cc spec prepost = go False []
 
     -- determine if a precondition is ready to be checked
     checkPointsTo :: PointsTo (LLVM arch) -> OverrideMatcher (LLVM arch) md Bool
-    checkPointsTo (LLVMPointsTo _loc _ p _) = checkSetupValue p
+    checkPointsTo (LLVMPointsTo _loc _ p _)         = checkSetupValue p
     checkPointsTo (LLVMPointsToBitfield _loc p _ _) = checkSetupValue p
 
     checkSetupValue :: SetupValue (LLVM arch) -> OverrideMatcher (LLVM arch) md Bool
@@ -1722,8 +1728,8 @@ matchPointsToBitfieldValue opts sc cc spec prepost md ptr bfIndex val =
          case res_val of
            -- This will only work if:
            --
-           -- * The bitfield is in fact a bitvector, and
-           -- * The width of the RHS type is less than the width of the
+           -- The bitfield is in fact a bitvector, and
+           -- The width of the RHS type is less than the width of the
            --   bitfield type.
            --
            -- We check these criteria in this case.
@@ -1848,7 +1854,7 @@ describeConcreteMemoryLoadFailure mem badLoadSummary ptr = do
 ------------------------------------------------------------------------
 
 stateCond :: PrePost -> String
-stateCond PreState = "precondition"
+stateCond PreState  = "precondition"
 stateCond PostState = "postcondition"
 
 -- | Process an @llvm_equal@ statement from the precondition
@@ -2323,8 +2329,8 @@ storePointsToBitfieldValue opts cc env tyenv nameEnv base_mem ptr bfIndex val =
       case (bfVal, rhsVal) of
         -- This will only work if:
         --
-        -- * Both the bitfield and the RHS value are bitvectors, and
-        -- * The width of the RHS type is less than or equal to the width
+        -- Both the bitfield and the RHS value are bitvectors, and
+        -- The width of the RHS type is less than or equal to the width
         --   of the bitfield type.
         --
         -- We check these criteria in this case.
