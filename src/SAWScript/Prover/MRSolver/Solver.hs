@@ -1104,6 +1104,8 @@ mrRefinesFunH k vars (asPi -> Just (nm1, tp1, _)) t1
   -- @tp2@, introduce a variable of type @tp@, apply both conversions to it,
   -- and substitute the results on the left and right sides, respectively
   Just (tp, c1, c2) ->
+    mrDebugPPPrefixSep 3 "mrRefinesFunH calling findInjConvs" tp1 "," tp2 >>
+    mrDebugPPPrefix 3 "mrRefinesFunH got type" tp >>
     let nm = maybe "_" id $ find ((/=) '_' . Text.head)
                           $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
                                                     , asLambdaName t2 ] in
@@ -1151,7 +1153,8 @@ type MRSolverResult = Maybe (FunName, FunAssump)
 askMRSolverH :: (NormComp -> NormComp -> MRM ()) ->
                 Term -> Term -> MRM MRSolverResult
 askMRSolverH f t1 t2 =
-  do m1 <- normCompTerm t1
+  do mrUVars >>= mrDebugPPPrefix 1 "askMRSolverH uvars:"
+     m1 <- normCompTerm t1
      m2 <- normCompTerm t2
      f m1 m2
      case (m1, m2) of

@@ -405,6 +405,21 @@ mrProvable bool_tm =
         instUVar :: LocalName -> Term -> MRM Term
         instUVar nm tp = mrDebugPPPrefix 3 "instUVar" (nm, tp) >>
                          liftSC1 scWhnf tp >>= \case
+          (asNonBVVecVectorType -> Just (m, a)) ->
+             liftSC1 smtNorm m >>= \m' -> case asBvToNat m' of
+               -- For variables of type Vec of length which normalizes to
+               -- a bvToNat term, recurse and wrap the result in genFromBVVec
+               Just (n, len) -> do
+                 tp' <- liftSC2 scVecType m' a
+                 tm' <- instUVar nm tp'
+                 mrGenFromBVVec n len a tm' "instUVar" m
+               -- Otherwise for variables of type Vec, create a @Nat -> a@
+               -- function as an ExtCns and apply genBVVec to it
+               Nothing -> do
+                 nat_tp <- liftSC0 scNatType
+                 tp' <- liftSC3 scPi "_" nat_tp =<< liftTermLike 0 1 a
+                 tm' <- instUVar nm tp'
+                 liftSC2 scGlobalApply "CryptolM.genCryM" [m, a, tm']
           -- For variables of type BVVec, create a @Vec n Bool -> a@ function
           -- as an ExtCns and apply genBVVec to it
           (asBVVecType -> Just (n, len, a)) -> do
@@ -499,23 +514,26 @@ nonTrivialConv (ConvComp cs) = not (null cs)
 -- and the arguments to those constructors are convertible via 'mrConvertible'
 mrConvsConvertible :: InjConversion -> InjConversion -> MRM Bool
 mrConvsConvertible (ConvComp cs1) (ConvComp cs2) =
-  and <$> zipWithM mrSingleConvsConvertible cs1 cs2
-  where mrSingleConvsConvertible :: SingleInjConversion -> SingleInjConversion -> MRM Bool
-        mrSingleConvsConvertible SingleNatToNum SingleNatToNum = return True
-        mrSingleConvsConvertible (SingleBVToNat n1) (SingleBVToNat n2) = return $ n1 == n2
-        mrSingleConvsConvertible (SingleBVVecToVec n1 len1 a1 m1)
-                                 (SingleBVVecToVec n2 len2 a2 m2) =
-          do ns_are_eq <- mrConvertible n1 n2
-             lens_are_eq <- mrConvertible len1 len2
-             as_are_eq <- mrConvertible a1 a2
-             ms_are_eq <- mrConvertible m1 m2
-             return $ ns_are_eq && lens_are_eq && as_are_eq && ms_are_eq
-        mrSingleConvsConvertible (SinglePairToPair cL1 cR1)
-                                 (SinglePairToPair cL2 cR2) =
-          do cLs_are_eq <- mrConvsConvertible cL1 cL2
-             cRs_are_eq <- mrConvsConvertible cR1 cR2
-             return $ cLs_are_eq && cRs_are_eq
-        mrSingleConvsConvertible _ _ = return False
+  if length cs1 /= length cs2 then return False
+  else and <$> zipWithM mrSingleConvsConvertible cs1 cs2
+
+-- | Used in the definition of 'mrConvsConvertible'
+mrSingleConvsConvertible :: SingleInjConversion -> SingleInjConversion -> MRM Bool
+mrSingleConvsConvertible SingleNatToNum SingleNatToNum = return True
+mrSingleConvsConvertible (SingleBVToNat n1) (SingleBVToNat n2) = return $ n1 == n2
+mrSingleConvsConvertible (SingleBVVecToVec n1 len1 a1 m1)
+                         (SingleBVVecToVec n2 len2 a2 m2) =
+  do ns_are_eq <- mrConvertible n1 n2
+     lens_are_eq <- mrConvertible len1 len2
+     as_are_eq <- mrConvertible a1 a2
+     ms_are_eq <- mrConvertible m1 m2
+     return $ ns_are_eq && lens_are_eq && as_are_eq && ms_are_eq
+mrSingleConvsConvertible (SinglePairToPair cL1 cR1)
+                         (SinglePairToPair cL2 cR2) =
+  do cLs_are_eq <- mrConvsConvertible cL1 cL2
+     cRs_are_eq <- mrConvsConvertible cR1 cR2
+     return $ cLs_are_eq && cRs_are_eq
+mrSingleConvsConvertible _ _ = return False
 
 -- | Apply the given 'InjConversion' to the given term, where compositions
 -- @c1 <> c2 <> ... <> cn@ are applied from right to left as in function
@@ -540,11 +558,16 @@ mrApplyInvConv (ConvComp cs) = flip (foldlM go) cs
         go t SingleNatToNum = case asNum t of
           Just (Left t') -> return t'
           _ -> error "mrApplyInvConv: Num term does not normalize to TCNum constructor"
-        go t (SingleBVToNat n) =
-          do n_tm <- liftSC1 scNat n
-             liftSC2 scGlobalApply "Prelude.bvNat" [n_tm, t]
-        go t (SingleBVVecToVec n len a m) =
-          mrGenBVVecFromVec m a t "mrApplyInvConv" n len
+        go t (SingleBVToNat n) = case asBvToNat t of
+          Just (asNat -> Just n', t') | n == n' -> return t'
+          _ -> do n_tm <- liftSC1 scNat n
+                  liftSC2 scGlobalApply "Prelude.bvNat" [n_tm, t]
+        go t c@(SingleBVVecToVec n len a m) = case asGenFromBVVecTerm t of
+          Just (n', len', a', t', _, m') ->
+            do eq <- mrSingleConvsConvertible c (SingleBVVecToVec n' len' a' m')
+               if eq then return t'
+               else mrGenBVVecFromVec m a t "mrApplyInvConv" n len
+          _ -> mrGenBVVecFromVec m a t "mrApplyInvConv" n len
         go t (SinglePairToPair c1 c2) =
           do t1 <- mrApplyInvConv c1 =<< doTermProj t TermProjLeft
              t2 <- mrApplyInvConv c2 =<< doTermProj t TermProjRight
@@ -635,16 +658,18 @@ findInjConvs tp1 t1 (asNonBVVecVectorType -> Just (m, _))
 -- bit-width from the other side
 findInjConvs (asNonBVVecVectorType -> Just (m, a')) _
              (asBVVecType -> Just (n, len, a)) _ =
-  do bvvec_tp <- liftSC2 scVecType n a
-     lens_are_eq <- mrProveEq m =<< mrBvToNat n len
+  do len_nat <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
+     bvvec_tp <- liftSC2 scVecType len_nat a
+     lens_are_eq <- mrProveEq m len_nat
      as_are_eq <- mrConvertible a a'
      if lens_are_eq && as_are_eq
      then return $ Just (bvvec_tp, BVVecToVec n len a m, NoConv)
      else return $ Nothing
 findInjConvs (asBVVecType -> Just (n, len, a)) _
              (asNonBVVecVectorType -> Just (m, a')) _ =
-  do bvvec_tp <- liftSC2 scVecType n a
-     lens_are_eq <- mrProveEq m =<< mrBvToNat n len
+  do len_nat <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
+     bvvec_tp <- liftSC2 scVecType len_nat a
+     lens_are_eq <- mrProveEq m len_nat
      as_are_eq <- mrConvertible a a'
      if lens_are_eq && as_are_eq
      then return $ Just (bvvec_tp, NoConv, BVVecToVec n len a m)
@@ -761,10 +786,12 @@ mrProveRel het t1 t2 =
      mrDebugPPPrefixSep 2 nm t1 (if het then "~=" else "==") t2
      tp1 <- mrTypeOf t1 >>= mrSubstEVars
      tp2 <- mrTypeOf t2 >>= mrSubstEVars
-     cond_in_ctx <- mrProveRelH het tp1 tp2 t1 t2
-     res <- withTermInCtx cond_in_ctx mrProvable
-     debugPrint 2 $ nm ++ ": " ++ if res then "Success" else "Failure"
-     return res
+     tps_eq <- mrConvertible tp1 tp2
+     if not het && not tps_eq then return False
+     else do cond_in_ctx <- mrProveRelH het tp1 tp2 t1 t2
+             res <- withTermInCtx cond_in_ctx mrProvable
+             debugPrint 2 $ nm ++ ": " ++ if res then "Success" else "Failure"
+             return res
 
 -- | Prove that two terms are related, heterogeneously iff the first argument,
 -- is true, instantiating evars if necessary, or throwing an error if this is
@@ -883,7 +910,7 @@ mrProveRelH' _ het tp1 tp2 t1 t2 = findInjConvs tp1 (Just t1) tp2 (Just t2) >>= 
   -- injective conversions from a type @tp@ to @tp1@ and @tp2@, apply the
   -- inverses of these conversions to @t1@ and @t2@ and continue checking
   -- equality on the results
-  Just (tp, c1, c2) | het, nonTrivialConv c1 || nonTrivialConv c2 -> do
+  Just (tp, c1, c2) | nonTrivialConv c1 || nonTrivialConv c2 -> do
     t1' <- mrApplyInvConv c1 t1
     t2' <- mrApplyInvConv c2 t2
     mrProveRelH True tp tp t1' t2'
