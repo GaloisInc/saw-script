@@ -14,6 +14,11 @@ examples to get anyone up to speed with using and hacking on Heapster.
     - [A quick tour of SAW](#a-quick-tour-of-saw)
         - [Overview](#overview)
         - [Running an example](#running-an-example)
+            - [1. Compile the code.](#1-compile-the-code)
+            - [2. Run the saw interpreter](#2-run-the-saw-interpreter)
+            - [3. Load the file and extract the two function specifications.](#3-load-the-file-and-extract-the-two-function-specifications)
+            - [4. Define the equality theorem.](#4-define-the-equality-theorem)
+            - [5. Call the SAT/SMT solver to prove the theorem.](#5-call-the-satsmt-solver-to-prove-the-theorem)
         - [Batch scripts](#batch-scripts)
     - [Using Heapster](#using-heapster)
         - [Heapster type-checking overview](#heapster-type-checking-overview)
@@ -21,11 +26,14 @@ examples to get anyone up to speed with using and hacking on Heapster.
         - [Pointers](#pointers)
         - [Structs](#structs)
         - [Batch scripts](#batch-scripts-1)
+        - [Arrays](#arrays)
         - [Recursive data structures](#recursive-data-structures)
-    - [Looking under the hood](#looking-under-the-hood)
-        - [Heapster commands and environments](#heapster-commands-and-environments)
-        - [Permissions](#permissions)
-        - [Type-checking](#type-checking)
+            - [1. Generating LLVM bitcode](#1-generating-llvm-bitcode-1)
+            - [2. Run the SAW interpreter with Heapster](#2-run-the-saw-interpreter-with-heapster-1)
+            - [3. Load the file and extract the function types.](#3-load-the-file-and-extract-the-function-types)
+            - [4. Writing heapster types for your functions](#4-writing-heapster-types-for-your-functions-1)
+                - [Defining list permissions](#defining-list-permissions)
+            - [5. Type-check your program](#5-type-check-your-program-1)
 
 <!-- markdown-toc end -->
 
@@ -357,13 +365,14 @@ the resulting functional program to Coq for further verification.
 
 The process will generally involve
 
+
 - [1. Generating LLVM bitcode](#1-generating-llvm-bitcode)
 - [2. Run the SAW interpreter with Heapster](#2-run-the-saw-interpreter-with-heapster)
-- [3. Load the file and extract the function types.](#3-load-the-file-and-extract-the-two-function-types-1)
+- [3. Load the file.](#3-load-the-file)
 - [4. Writing heapster types for your functions](#4-writing-heapster-types-for-your-functions)
-- [5. Type-check your program](#5-writing-a-saw-script-to-type-check-your-code-with-respect-to-the-sepcification)
-- [6. Writing a Coq file to prove things about the generated functional specification(s)](#6-writing-a-coq-file-to-prove-things-about-the-generated-functional-specifications)
-
+- [5. Type-check your program](#5-type-check-your-program)
+- [6. Extract Coq specifications and write proofs](#6-writing-a-coq-file-to-prove-things-about-the-generated-functional-specifications)
+				
 Just like with SAW, Heapster can be processed in batch. To do so, you
 can combine steps 2-6 in a `.saw` file and use SAW's batch processing.
 
