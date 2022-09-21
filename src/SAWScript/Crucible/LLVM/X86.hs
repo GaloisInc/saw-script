@@ -27,6 +27,7 @@ Stability   : provisional
 module SAWScript.Crucible.LLVM.X86
   ( llvm_verify_x86
   , llvm_verify_fixpoint_x86
+  , llvm_verify_x86_with_invariant
   , defaultStackBaseAlign
   ) where
 
@@ -60,6 +61,7 @@ import qualified Text.LLVM.AST as LLVM
 import Data.Parameterized.Some
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.NatRepr
+import Data.Parameterized.Nonce (GlobalNonceGenerator)
 import Data.Parameterized.Context hiding (view, zipWithM)
 
 import Verifier.SAW.CryptolEnv
@@ -69,6 +71,7 @@ import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
+import Verifier.SAW.SCTypeCheck (scTypeCheck)
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
@@ -86,7 +89,6 @@ import qualified SAWScript.Crucible.Common as Common
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Override as O
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
-
 import SAWScript.Crucible.LLVM.Builtins
 import SAWScript.Crucible.LLVM.MethodSpecIR hiding (LLVM)
 import SAWScript.Crucible.LLVM.ResolveSetupValue
@@ -106,6 +108,7 @@ import qualified Lang.Crucible.Analysis.Postdom as C
 import qualified Lang.Crucible.Backend as C
 import qualified Lang.Crucible.Backend.Online as C
 import qualified Lang.Crucible.CFG.Core as C
+import qualified Lang.Crucible.CFG.Extension as C
 import qualified Lang.Crucible.FunctionHandle as C
 import qualified Lang.Crucible.Simulator.EvalStmt as C
 import qualified Lang.Crucible.Simulator.ExecutionTree as C
@@ -123,6 +126,7 @@ import qualified Lang.Crucible.LLVM.Intrinsics as C.LLVM
 import qualified Lang.Crucible.LLVM.MemModel as C.LLVM
 import qualified Lang.Crucible.LLVM.MemType as C.LLVM
 import qualified Lang.Crucible.LLVM.SimpleLoopFixpoint as Crucible.LLVM.Fixpoint
+import qualified Lang.Crucible.LLVM.SimpleLoopInvariant as SimpleInvariant
 import qualified Lang.Crucible.LLVM.Translation as C.LLVM
 import qualified Lang.Crucible.LLVM.TypeContext as C.LLVM
 
@@ -308,7 +312,7 @@ llvm_verify_x86 ::
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
 llvm_verify_x86 llvmModule path nm globsyms checkSat =
-  llvm_verify_x86_common llvmModule path nm globsyms checkSat Nothing
+  llvm_verify_x86_common llvmModule path nm globsyms checkSat NoFixpoint
 
 -- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
 -- to an LLVM specification. This allows for compositional verification of LLVM
@@ -324,7 +328,29 @@ llvm_verify_fixpoint_x86 ::
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
 llvm_verify_fixpoint_x86 llvmModule path nm globsyms checkSat f =
-  llvm_verify_x86_common llvmModule path nm globsyms checkSat (Just f)
+  llvm_verify_x86_common llvmModule path nm globsyms checkSat (SimpleFixpoint f)
+
+-- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
+-- to an LLVM specification. This allows for compositional verification of LLVM
+-- functions that call x86_64 functions (but not the other way around).
+llvm_verify_x86_with_invariant ::
+  Some LLVMModule {- ^ Module to associate with method spec -} ->
+  FilePath {- ^ Path to ELF file -} ->
+  String {- ^ Function's symbol in ELF file -} ->
+  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Bool {- ^ Whether to enable path satisfiability checking -} ->
+  (String, Integer, TypedTerm) {- ^ Name of the looping symbol, and function specifying the loop -} ->
+  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  ProofScript () {- ^ Tactic used to use when discharging goals -} ->
+  TopLevel (SomeLLVM MS.ProvedSpec)
+llvm_verify_x86_with_invariant llvmModule path nm globsyms checkSat (loopName,loopNum,f) =
+  llvm_verify_x86_common llvmModule path nm globsyms checkSat
+    (SimpleInvariant loopName loopNum f)
+
+data FixpointSelect
+ = NoFixpoint
+ | SimpleFixpoint TypedTerm
+ | SimpleInvariant String Integer TypedTerm
 
 llvm_verify_x86_common ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
@@ -332,11 +358,11 @@ llvm_verify_x86_common ::
   String {- ^ Function's symbol in ELF file -} ->
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
-  Maybe TypedTerm ->
+  FixpointSelect ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat maybeFixpointFunc setup tactic
+llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat fixpointSelect setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       start <- io getCurrentTime
@@ -516,11 +542,23 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
            pure []
 
       simpleLoopFixpointFeature <-
-        case maybeFixpointFunc of
-          Nothing -> return []
-          Just func ->
+        case fixpointSelect of
+          NoFixpoint -> return []
+          SimpleFixpoint func ->
             do f <- liftIO (setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func)
                return [f]
+          SimpleInvariant loopFixpointSymbol loopNum func ->
+            do (loopaddr :: Macaw.MemSegmentOff 64) <-
+                 case findSymbols (symMap relf) . encodeUtf8 $ Text.pack loopFixpointSymbol of
+                   (loopaddr:_) -> pure loopaddr
+                   _ -> fail $ mconcat ["Could not find symbol \"", nm, "\""]
+               case Map.lookup loopaddr cfgs of
+                 Nothing -> throwX86 $ "Unable to discover looping CFG from address " <> show loopaddr
+                 Just (C.SomeCFG loopcfg) ->
+                   do let printFn = printOutLn opts Info
+                      f <- liftIO (setupSimpleLoopInvariantFeature sym printFn loopNum
+                                                                   sc sawst mdMap loopcfg mvar func)
+                      return [f]
 
       let execFeatures = simpleLoopFixpointFeature ++ psatf
 
@@ -553,6 +591,7 @@ setupSimpleLoopFixpointFeature ::
   , C.IsSymInterface sym
   , ?memOpts::C.LLVM.MemOptions
   , C.LLVM.HasLLVMAnn sym
+  , C.IsSyntaxExtension ext
   ) =>
   sym ->
   SharedContext ->
@@ -618,6 +657,117 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
 
        return (result_substitution, result_condition)
 
+
+-- | This procedure sets up the simple loop fixpoint feature.
+--   Its main task is to massage the user-provided invariant
+--   term into the form expected by the Crucible exeuction
+--   feature.
+setupSimpleLoopInvariantFeature ::
+  ( sym ~ W4.B.ExprBuilder n st fs
+  , C.IsSymInterface sym
+  , n ~ GlobalNonceGenerator
+  , ?memOpts::C.LLVM.MemOptions
+  , C.LLVM.HasLLVMAnn sym
+  , C.IsSyntaxExtension ext
+  ) =>
+  sym ->
+  (String -> IO ()) {- ^ logging function -} ->
+  Integer {- ^ Which loop are we targeting? -} ->
+  SharedContext ->
+  SAWCoreState n ->
+  IORef MetadataMap ->
+  C.CFG ext blocks init ret ->
+  C.GlobalVar C.LLVM.Mem ->
+  TypedTerm {- ^ user-provided invariant term -} ->
+  IO (C.ExecutionFeature p sym ext rtp)
+
+setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func =
+  SimpleInvariant.simpleLoopInvariant sym loopNum cfg mvar invariant_func
+
+ where
+  invariant_func phase implicit_params invariant_substitution =
+    do let subst_pairs = reverse (MapF.toList invariant_substitution)
+       let filtered_implicit_params = filter
+             (\ (Some variable) ->
+               -- We filter variables with the following special names from appearing as
+               -- implicit arguments to the loop invariant.  These are basically all various
+               -- kinds of underspecification appearing from various underlying components
+               -- and don't make sense as arguments to the loop invariant.
+               not (List.isPrefixOf "creg_join_var" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "cmem_join_var" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "cundefined" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "cnoSatisfyingWrite" $ show $ W4.printSymExpr variable)
+             )
+             implicit_params
+       body_tms <- mapM (viewSome $ toSC sym sawst) filtered_implicit_params
+       implicit_params' <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet body_tms
+       initial_exprs <-
+         forM subst_pairs $
+           \ (MapF.Pair _var (SimpleInvariant.InvariantEntry initVal _current)) ->
+               toSC sym sawst initVal
+       current_exprs <-
+         forM subst_pairs $
+           \ (MapF.Pair _var (SimpleInvariant.InvariantEntry _init current)) ->
+               toSC sym sawst current
+
+       initial_tuple <- scTuple sc initial_exprs
+       current_tuple <- scTuple sc current_exprs
+
+       -- use the provided logging function to print the discovered
+       -- implicit parameters
+       when (phase == SimpleInvariant.InitialInvariant) $
+         do printFn "Loop invariant implicit parameters!"
+            forM_ implicit_params' $ \x ->
+                do printFn (show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts x))
+                   tp <- scTypeOf sc x
+                   printFn (show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tp))
+
+       -- actually apply the arguments to the given term
+       inv <- scApplyAll sc (ttTerm func) (implicit_params' ++ [initial_tuple, current_tuple])
+
+       -- check that the produced term is type-correct
+       res <- scTypeCheck sc Nothing inv
+       case res of
+         Left _tcErr ->
+           do tpType <- scTypeOf sc initial_tuple
+              fail $ unlines [ "Loop invariant has incorrect type! State tuple has type:"
+                             , show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tpType)
+                             ]
+         Right tp ->
+           do ok <- scConvertible sc True tp =<< scBoolType sc
+              unless ok $
+                fail $ unlines [ "Loop invariant must return a boolean value, but got:"
+                               , show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tp)
+                                  -- TODO, get ppOpts from the right place
+                               ]
+       b <- bindSAWTerm sym sawst W4.BaseBoolRepr inv
+
+       -- Add goal metadata for the initial and inductive invariants
+       case phase of
+         SimpleInvariant.HypotheticalInvariant -> return b
+         SimpleInvariant.InitialInvariant ->
+           do (ann,b') <- W4.annotateTerm sym b
+              loc <- W4.getCurrentProgramLoc sym
+              let md = MS.ConditionMetadata
+                       { MS.conditionLoc = loc
+                       , MS.conditionTags = Set.singleton "initial loop invariant"
+                       , MS.conditionType = "initial loop invariant"
+                       , MS.conditionContext = ""
+                       }
+              modifyIORef mdMap (Map.insert ann md)
+              return b'
+         SimpleInvariant.InductiveInvariant ->
+           do (ann,b') <- W4.annotateTerm sym b
+              loc <- W4.getCurrentProgramLoc sym
+              let md = MS.ConditionMetadata
+                       { MS.conditionLoc = loc
+                       , MS.conditionTags = Set.singleton "inductive loop invariant"
+                       , MS.conditionType = "inductive loop invariant"
+                       , MS.conditionContext = ""
+                       }
+              modifyIORef mdMap (Map.insert ann md)
+              return b'
 
 --------------------------------------------------------------------------------
 -- ** Computing the CFG
