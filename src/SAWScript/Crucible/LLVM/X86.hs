@@ -104,6 +104,7 @@ import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Expr.Builder as W4.B
 
+import qualified Lang.Crucible.Analysis.Fixpoint.Components as C
 import qualified Lang.Crucible.Analysis.Postdom as C
 import qualified Lang.Crucible.Backend as C
 import qualified Lang.Crucible.Backend.Online as C
@@ -417,6 +418,14 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
         else fail $ mconcat ["Address of \"", nm, "\" is not an absolute address"]
       let maxAddr = addrInt + toInteger (Macaw.segmentSize $ Macaw.segoffSegment addr)
 
+      let as_scc = \case
+           C.SCC scc -> Just (C.wtoHead scc, C.wtoComps scc)
+           C.Vertex{} -> Nothing
+      let loops = mapMaybe as_scc $ C.cfgWeakTopologicalOrdering cfg
+      let foo = length loops
+      let bar = any (\(_wtoHead, wtoComps) -> (not . Prelude.null) $ mapMaybe as_scc wtoComps) loops
+      liftIO $ printOutLn opts Info $ "loops: function=`" ++ nm ++ "`" ++ ", loops=" ++ show foo ++ ", nested=" ++ show bar
+
       let
         cc :: LLVMCrucibleContext x
         cc = LLVMCrucibleContext
@@ -602,7 +611,7 @@ setupSimpleLoopFixpointFeature ::
   IO (C.ExecutionFeature p sym ext rtp)
 
 setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
-  Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar fixpoint_func
+  Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $ Just fixpoint_func
 
  where
   fixpoint_func fixpoint_substitution condition =

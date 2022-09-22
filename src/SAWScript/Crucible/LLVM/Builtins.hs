@@ -130,6 +130,7 @@ import qualified Control.Monad.Trans.Maybe as MaybeT
 -- parameterized-utils
 import           Data.Parameterized.Classes
 import           Data.Parameterized.NatRepr
+import qualified Data.Parameterized.Map as PM
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.Context as Ctx
 
@@ -146,8 +147,12 @@ import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
+import qualified What4.Protocol.SMTLib2 as W4
+import qualified What4.Protocol.SMTWriter as W4
+import qualified What4.Solver as W4
 
 -- crucible
+import qualified Lang.Crucible.Analysis.Fixpoint.Components as Crucible
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
@@ -167,6 +172,7 @@ import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
 import           Lang.Crucible.LLVM.QQ( llvmOvr )
+import qualified Lang.Crucible.LLVM.SimpleLoopFixpoint as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
@@ -1435,6 +1441,14 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
            Crucible.getBlock entryId $ Crucible.cfgBlockMap cfg
      let retTy = Crucible.handleReturnType $ Crucible.cfgHandle cfg
 
+     let as_scc = \case
+          Crucible.SCC scc -> Just (Crucible.wtoHead scc, Crucible.wtoComps scc)
+          Crucible.Vertex{} -> Nothing
+     let loops = mapMaybe as_scc $ Crucible.cfgWeakTopologicalOrdering cfg
+     let foo = length loops
+     let bar = any (\(_wtoHead, wtoComps) -> (not . null) $ mapMaybe as_scc wtoComps) loops
+     printOutLn opts Info $ "loops: function=`" ++ mspec ^. csName ++ "`" ++ ", loops=" ++ show foo ++ ", nested=" ++ show bar
+
      args' <- prepareArgs sym argTys (map snd args)
      let simCtx = cc^.ccLLVMSimContext
      psatf <-
@@ -1462,11 +1476,14 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
        (registerInvariantOverride opts cc top_loc mdMap (HashMap.fromList breakpoints))
        (neGroupOn (view csName) invLemmas)
 
+     simpleLoopFixpointFeature <- Crucible.simpleLoopFixpoint sym cfg (Crucible.llvmMemVar $ ccLLVMContext cc) Nothing
+
      additionalFeatures <-
        mapM (Crucible.arraySizeProfile (ccLLVMContext cc)) $ maybeToList asp
 
      let execFeatures =
            invariantExecFeatures ++
+           [simpleLoopFixpointFeature] ++
            map Crucible.genericToExecutionFeature (patSatGenExecFeature ++ pfs) ++
            additionalFeatures
 
@@ -1638,6 +1655,42 @@ verifyPoststate cc mspec env0 globals ret mdMap =
      skipSafetyProofs <- gets rwSkipSafetyProofs
      when skipSafetyProofs (io (Crucible.clearProofObligations bak))
 
+     W4.SomeSymFn uninterp_inv_fn <- io $ head <$> W4.symExprBuilderFns sym
+     horn_clauses <- io $ Crucible.proofObligationsAsHornClauses bak
+     liftIO $ putStrLn $ "Horn clauses:" ++ show horn_clauses
+     horn_clauses' <- io $ W4.exprFoo sym horn_clauses
+     io $ withFile "foo.smt2" WriteMode $ \handle ->
+       W4.solver_adapter_write_smt2 W4.z3Adapter sym handle horn_clauses'
+     -- log to stdout
+     let logger _ = putStrLn
+     let log_data = W4.defaultLogData { W4.logCallbackVerbose = logger
+                                      , W4.logReason = "SAW inv" }
+     z3_path <- io $ W4.defaultSolverPath W4.Z3 sym
+     W4.SomeSymFn inv_fn <- io $ W4.withZ3 sym z3_path log_data $ \session -> do
+       W4.setLogic (W4.sessionWriter session) W4.horn_logic
+       mapM_ (W4.assume (W4.sessionWriter session)) horn_clauses'
+       W4.runCheckSat session $ \case
+         W4.Sat{} -> do
+           sexp <- W4.runGetValue session $ W4.fromText "inv"
+           putStrLn $ "inv = " ++ show sexp
+           W4.exprBar sym =<< W4.getSymFnValue session sym "inv"
+         W4.Unsat{} -> fail "Prover returned Unsat"
+         W4.Unknown -> fail "Prover returned Unknown"
+
+     pair <- case (testEquality (W4.symFnArgTypes uninterp_inv_fn) (W4.symFnArgTypes inv_fn), testEquality (W4.symFnReturnType uninterp_inv_fn) (W4.symFnReturnType inv_fn)) of
+       (Just Refl, Just Refl) -> return $ PM.Pair (W4.ArgsRetSymFn uninterp_inv_fn) (W4.ArgsRetSymFn inv_fn)
+       _ -> fail "Invariant function types don't match"
+     obligations' <- io $ mapM (W4.substituteSymFns sym [pair]) =<<
+       mapM (W4.notPred sym) =<<
+       Crucible.proofObligationsAsImplications bak
+     
+     io $ forM_ obligations' $ \obligation' -> do
+       W4.solver_adapter_write_smt2 W4.z3Adapter sym stderr [obligation']
+       W4.runZ3InOverride sym log_data [obligation'] $ \case
+         W4.Unsat{} -> return ()
+         W4.Sat{} -> fail "Prover returned Sat"
+         W4.Unknown -> fail "Prover returned Unknown"
+
      let ecs0 = Map.fromList
            [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
@@ -1671,8 +1724,9 @@ verifyPoststate cc mspec env0 globals ret mdMap =
           return (maybe [] Crucible.goalsToList obls)
 
      finalMdMap <- io $ readIORef mdMap
-     sc_obligations <- io $ mapM (verifyObligation sc finalMdMap) obligations
-     return (sc_obligations, st)
+     -- sc_obligations <- io $ mapM (verifyObligation sc finalMdMap) obligations
+     -- return (sc_obligations, st)
+     return ([], st)
 
   where
     sym = cc^.ccSym
