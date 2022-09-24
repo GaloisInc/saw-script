@@ -10,11 +10,10 @@
 module SAWScript.Yosys.Cell where
 
 import Control.Lens ((^.))
-import Control.Monad (foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
 
-import qualified Data.Foldable as Foldable
+import Data.Char (digitToInt)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -47,10 +46,10 @@ primCellToTerm sc c args = case c ^. cellType of
       [ ("Y", res)
       ]
   "$neg" -> bvUnaryOp $ SC.scBvNeg sc
-  "$and" -> bvNAryOp $ SC.scBvAnd sc
-  "$or" -> bvNAryOp $ SC.scBvOr sc
-  "$xor" -> bvNAryOp $ SC.scBvXor sc
-  "$xnor" -> bvNAryOp $ \w x y -> do
+  "$and" -> bvBinaryOp $ SC.scBvAnd sc
+  "$or" -> bvBinaryOp $ SC.scBvOr sc
+  "$xor" -> bvBinaryOp $ SC.scBvXor sc
+  "$xnor" -> bvBinaryOp $ \w x y -> do
     r <- SC.scBvXor sc w x y
     SC.scBvNot sc w r
   "$reduce_and" -> bvReduce True =<< do
@@ -180,6 +179,15 @@ primCellToTerm sc c args = case c ^. cellType of
   _ -> pure Nothing
   where
     nm = c ^. cellType
+    textBinNat :: Text -> Natural
+    textBinNat = fromIntegral . Text.foldl' (\a x -> digitToInt x + a * 2) 0
+    connParams :: Text -> m (Maybe Natural, Bool)
+    connParams onm = do
+      let width = fmap textBinNat . Map.lookup (onm <> "_WIDTH") $ c ^. cellParameters
+      signed <- case Map.lookup (onm <> "_SIGNED") $ c ^. cellParameters of
+        Just t -> pure $ textBinNat t > 0
+        Nothing -> pure False
+      pure (width, signed)
     connWidthNat :: Text -> Natural
     connWidthNat onm =
       case Map.lookup onm $ c ^. cellConnections of
@@ -189,11 +197,31 @@ primCellToTerm sc c args = case c ^. cellType of
     connWidth onm = liftIO . SC.scNat sc $ connWidthNat onm
     outputWidthNat = connWidthNat "Y"
     outputWidth = connWidth "Y"
+    extTrunc :: Text -> SC.Term -> m SC.Term
+    extTrunc onm t = do
+      let bvw = connWidthNat onm
+      (mwidth, signed) <- connParams onm
+      case mwidth of
+        Just width
+          | bvw > width -> do
+              wterm <- liftIO $ SC.scNat sc width
+              diffterm <- liftIO . SC.scNat sc $ bvw - width
+              liftIO $ SC.scBvTrunc sc diffterm wterm t
+          | width > bvw && signed -> do
+              bvwpredterm <- liftIO . SC.scNat sc $ bvw - 1
+              diffterm <- liftIO . SC.scNat sc $ width - bvw
+              liftIO $ SC.scBvSExt sc diffterm bvwpredterm t
+          | width > bvw && not signed -> do
+              bvwterm <- liftIO $ SC.scNat sc bvw
+              diffterm <- liftIO . SC.scNat sc $ width - bvw
+              liftIO $ SC.scBvUExt sc diffterm bvwterm t
+        _ -> pure t
     input :: Text -> m SC.Term
-    input inpNm =
-      case Map.lookup inpNm args of
+    input inpNm = do
+      raw <- case Map.lookup inpNm args of
         Nothing -> panic "cellToTerm" [Text.unpack $ mconcat [nm, " missing input ", inpNm]]
         Just a -> pure a
+      extTrunc inpNm raw
     inputNat :: Text -> m SC.Term
     inputNat inpNm = do
       v <- input inpNm
@@ -207,6 +235,15 @@ primCellToTerm sc c args = case c ^. cellType of
       t <- input "A"
       w <- outputWidth
       res <- liftIO $ f w t
+      fmap Just . cryptolRecord sc $ Map.fromList
+        [ ("Y", res)
+        ]
+    bvBinaryOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m (Maybe SC.Term)
+    bvBinaryOp f = do
+      w <- outputWidth
+      ta <- input "A"
+      tb <- input "B"
+      res <- liftIO $ f w ta tb
       fmap Just . cryptolRecord sc $ Map.fromList
         [ ("Y", res)
         ]
@@ -234,16 +271,6 @@ primCellToTerm sc c args = case c ^. cellType of
       fmap Just . cryptolRecord sc $ Map.fromList
         [ ("Y", res)
         ]
-    bvNAryOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m (Maybe SC.Term)
-    bvNAryOp f =
-      case Foldable.toList args of
-        [] -> panic "cellToTerm" [Text.unpack $ mconcat [nm, " cell given no inputs"]]
-        (t:rest) -> do
-          w <- outputWidth
-          res <- liftIO $ foldM (f w) t rest
-          fmap Just . cryptolRecord sc $ Map.fromList
-            [ ("Y", res)
-            ]
     bvReduce :: Bool -> SC.Term -> m (Maybe SC.Term)
     bvReduce boolIdentity boolFun = do
       t <- input "A"
