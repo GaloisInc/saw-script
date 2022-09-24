@@ -42,6 +42,11 @@ data YosysError
   | YosysErrorNoSuchCellType Text Text
   | YosysErrorUnsupportedPmux
   | YosysErrorUnsupportedFF Text
+  | YosysErrorInvalidOverrideTarget
+  | YosysErrorOverrideNameNotFound Text
+  | YosysErrorInvalidStateFieldWidth Text
+  | YosysErrorTransitionSystemMissingField Text
+  | YosysErrorTransitionSystemBadType
 instance Exception YosysError
 instance Show YosysError where
   show (YosysError msg) = Text.unpack $ "Error: " <> msg <> "\n" <> reportBugText
@@ -87,6 +92,30 @@ instance Show YosysError where
     , "These cells are not currently supported by SAW.\n"
     , "It may be helpful to replace certain stateful cells using the \"memory\", \"dffunmap\", and \"async2sync\" tactics within Yosys.\n"
     , consultYosysManual
+    ]
+  show YosysErrorInvalidOverrideTarget = Text.unpack $ mconcat
+    [ "Error: The first argument to \"yosys_verify\" could not be identified as a Yosys module.\n"
+    , "This argument should typically take the form {{ m.module_name }}, where \"m\" is a record term returned by \"yosys_import\""
+    ]
+  show (YosysErrorOverrideNameNotFound nm) = Text.unpack $ mconcat
+    [ "Error: The name \"", nm, "\" could not be found while applying overrides.\n"
+    , "This may represent a bug in SAW.\n"
+    , reportBugText
+    ]
+  show (YosysErrorInvalidStateFieldWidth nm) = Text.unpack $ mconcat
+    [ "Error: The state field \"", nm, "\" has an invalid width.\n"
+    , "This may represent a bug in SAW.\n"
+    , reportBugText
+    ]
+  show (YosysErrorTransitionSystemMissingField nm) = Text.unpack $ mconcat
+    [ "Error: While translating a sequential circuit to a Sally transition system, could not find the field \"", nm, "\".\n"
+    , "This may represent a bug in SAW.\n"
+    , reportBugText
+    ]
+  show YosysErrorTransitionSystemBadType = Text.unpack $ mconcat
+    [ "Error: While translating a sequential circuit to a Sally transition system, an intermediate What4 predicate was not a boolean.\n"
+    , "This may represent a bug in SAW.\n"
+    , reportBugText
     ]
 
 mapForWithKeyM :: Monad m => Map k a -> (k -> a -> m b) -> m (Map k b)

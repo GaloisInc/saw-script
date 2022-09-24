@@ -91,7 +91,7 @@ sequentialReprs fs = do
               }
         Some rest <- go ns
         pure $ Some $ Ctx.extend rest field
-      _ -> throw . YosysError $ "Invalid width for state field: " <> nm
+      _ -> throw $ YosysErrorInvalidStateFieldWidth nm
 
 ecBindingsOfFields ::
   MonadIO m =>
@@ -112,7 +112,7 @@ ecBindingsOfFields sym sc pfx fs s inp = fmap Map.fromList . forM (Map.assocs fs
         -> do
           inpExpr <- liftIO $ W4.structField sym inp idx
           pure . Sim.VWord $ W4.DBV inpExpr
-    _ -> throw . YosysError $ "Invalid field binding: " <> nm
+    _ -> throw $ YosysErrorTransitionSystemMissingField  nm
   pure (baseName, (ec, val))
 
 queryModelChecker ::
@@ -153,7 +153,7 @@ queryModelChecker sym _scs sc sequential path query fixedInputs = do
             curInternalBindings <- ecBindingsOfFields sym sc "internal_" internalFields stateFields cur
             cycleVal <- case Map.lookup "cycle" curInternalBindings of
               Just (ec, _) -> SC.scExtCns sc ec
-              Nothing -> throw $ YosysError "Invalid current cycle field"
+              Nothing -> throw $ YosysErrorTransitionSystemMissingField "cycle"
             zero <- SC.scBvConst sc 8 0
             wnat <- SC.scNat sc 8
             cyclePred <- SC.scBvEq sc wnat cycleVal zero
@@ -164,7 +164,7 @@ queryModelChecker sym _scs sc sequential path query fixedInputs = do
             sval <- SimW4.w4SolveBasic sym sc Map.empty args ref Set.empty cyclePred
             case sval of
               Sim.VBool b -> pure b
-              _ -> throw . YosysError $ "Invalid type when converting predicate to What4: " <> Text.pack (show sval)
+              _ -> throw YosysErrorTransitionSystemBadType
         , W4.stateTransitions = \input cur next -> do
             inputBindings <- ecBindingsOfFields sym sc "" (fst <$> variableInputFields) inputFields input
             curBindings <- ecBindingsOfFields sym sc "" (fst <$> (sequential ^. yosysSequentialStateFields)) stateFields cur
@@ -178,7 +178,7 @@ queryModelChecker sym _scs sc sequential path query fixedInputs = do
               let bindings = if Set.member nm fixedInputs then curFixedInputBindings else inputBindings
               in case Map.lookup nm bindings of
                 Just (ec, _) -> (nm,) <$> SC.scExtCns sc ec
-                Nothing -> throw . YosysError $ "Invalid input field: " <> nm
+                Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
             states <- forM curBindings $ \(ec, _) -> SC.scExtCns sc ec
             inpst <- cryptolRecord sc states
             domainRec <- cryptolRecord sc $ Map.insert "__state__" inpst inps
@@ -190,34 +190,34 @@ queryModelChecker sym _scs sc sequential path query fixedInputs = do
               wnat <- SC.scNat sc w
               new <- case Map.lookup nm nextBindings of
                 Just (ec, _) -> SC.scExtCns sc ec
-                Nothing -> throw . YosysError $ "Invalid state update field: " <> nm
+                Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
               liftIO $ SC.scBvEq sc wnat new val
             outputPreds <- forM (Map.assocs $ sequential ^. yosysSequentialOutputWidths) $ \(nm, w) -> do
               val <- cryptolRecordSelect sc codomainFields codomainRec nm
               wnat <- SC.scNat sc w
               new <- case Map.lookup nm nextOutputBindings of
                 Just (ec, _) -> SC.scExtCns sc ec
-                Nothing -> throw . YosysError $ "Invalid output update field: " <> nm
+                Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
               liftIO $ SC.scBvEq sc wnat new val
             fixedInputPreds <- forM (Map.assocs fixedInputWidths) $ \(nm, w) -> do
               wnat <- SC.scNat sc w
               val <- case Map.lookup nm curFixedInputBindings of
                 Just (ec, _) -> SC.scExtCns sc ec
-                Nothing -> throw . YosysError $ "Invalid current fixed input field: " <> nm
+                Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
               new <- case Map.lookup nm nextFixedInputBindings of
                 Just (ec, _) -> SC.scExtCns sc ec
-                Nothing -> throw . YosysError $ "Invalid next fixed input field: " <> nm
+                Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
               liftIO $ SC.scBvEq sc wnat new val
             cycleIncrement <- do
               wnat <- SC.scNat sc 8
               val <- case Map.lookup "cycle" curInternalBindings of
                 Just (ec, _) -> SC.scExtCns sc ec
-                Nothing -> throw $ YosysError "Invalid current cycle field"
+                Nothing -> throw $ YosysErrorTransitionSystemMissingField "cycle"
               one <- SC.scBvConst sc 8 1
               incremented <- SC.scBvAdd sc wnat val one
               new <- case Map.lookup "cycle" nextInternalBindings of
                 Just (ec, _) -> SC.scExtCns sc ec
-                Nothing -> throw $ YosysError "Invalid next cycle field"
+                Nothing -> throw $ YosysErrorTransitionSystemMissingField "cycle"
               liftIO $ SC.scBvEq sc wnat new incremented
             identity <- SC.scBool sc True
             conj <- foldM (SC.scAnd sc) identity $ stPreds <> outputPreds <> fixedInputPreds <> [cycleIncrement]
@@ -235,7 +235,7 @@ queryModelChecker sym _scs sc sequential path query fixedInputs = do
             sval <- SimW4.w4SolveBasic sym sc Map.empty args ref Set.empty conj
             w4Conj <- case sval of
               Sim.VBool b -> pure b
-              _ -> throw . YosysError $ "Invalid type when converting predicate to What4: " <> Text.pack (show sval)
+              _ -> throw YosysErrorTransitionSystemBadType
             pure
               [ (W4.systemSymbol "default!", w4Conj)
               ]
@@ -245,15 +245,15 @@ queryModelChecker sym _scs sc sequential path query fixedInputs = do
             curInternalBindings <- ecBindingsOfFields sym sc "internal_" internalFields stateFields cur
             fixedInps <- fmap Map.fromList . forM (Map.assocs fixedInputWidths) $ \(nm, _) ->
               case Map.lookup nm curFixedInputBindings of
-                Nothing -> throw . YosysError $ "Invalid fixed input field: " <> nm
+                Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
                 Just (ec, _) -> (nm,) <$> SC.scExtCns sc ec
             outputs <- fmap Map.fromList . forM (Map.assocs $ sequential ^. yosysSequentialOutputWidths) $ \(nm, _) ->
               case Map.lookup nm curOutputBindings of
-                Nothing -> throw . YosysError $ "Invalid output field: " <> nm
+                Nothing -> throw $ YosysErrorTransitionSystemMissingField nm
                 Just (ec, _) -> (nm,) <$> SC.scExtCns sc ec
             cycleVal <- case Map.lookup "cycle" curInternalBindings of
               Just (ec, _) -> SC.scExtCns sc ec
-              Nothing -> throw $ YosysError "Invalid current cycle field"
+              Nothing -> throw $ YosysErrorTransitionSystemMissingField "cycle"
             fixedInputRec <- cryptolRecord sc fixedInps
             outputRec <- cryptolRecord sc outputs
             result <- liftIO $ SC.scApplyAll sc (query ^. SC.ttTermLens) [cycleVal, fixedInputRec, outputRec]

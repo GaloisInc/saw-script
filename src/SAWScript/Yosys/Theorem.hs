@@ -94,34 +94,18 @@ buildTheorem ::
 buildTheorem sc ymod newmod precond body = do
   cty <- case SC.ttType ymod of
     SC.TypedTermSchema (C.Forall [] [] cty) -> pure cty
-    _ -> throw . YosysError $ mconcat
-      [ "Term\n"
-      , Text.pack . SC.showTerm $ SC.ttTerm ymod
-      , "\ncannot be used as an override, as it does not have a monomorphic Cryptol type."
-      ]
+    _ -> throw YosysErrorInvalidOverrideTarget
   (cinpTy, coutTy) <- case cty of
     C.TCon (C.TC C.TCFun) [ci, co] -> pure (ci, co)
-    _ -> throw . YosysError $ mconcat
-      [ "Term\n"
-      , Text.pack . SC.showTerm $ SC.ttTerm ymod
-      , "\ndoes not have a Cryptol function type."
-      ]
+    _ -> throw YosysErrorInvalidOverrideTarget
   inpTy <- liftIO $ CSC.importType sc CSC.emptyEnv cinpTy
   outTy <- liftIO $ CSC.importType sc CSC.emptyEnv coutTy
   idx <- case SC.ttTerm ymod of
     (R.asConstant -> Just (SC.EC idx _ _, _)) -> pure idx
-    _ -> throw . YosysError $ mconcat
-      [ "Term\n"
-      , Text.pack . SC.showTerm $ SC.ttTerm ymod
-      , "\nis not a Yosys module."
-      ]
+    _ -> throw YosysErrorInvalidOverrideTarget
   uri <- liftIO (SC.scLookupNameInfo sc idx) >>= \case
     Just (SC.ImportedName uri _) -> pure uri
-    _ -> throw . YosysError $ mconcat
-      [ "Term\n"
-      , Text.pack . SC.showTerm $ SC.ttTerm ymod
-      , "\ndoes not call a Yosys module on either side of an equality."
-      ]
+    _ -> throw YosysErrorInvalidOverrideTarget
   pure YosysTheorem
     { _theoremURI = uri
     , _theoremInputCryptolType = cinpTy
@@ -148,7 +132,7 @@ applyOverride ::
   m SC.Term
 applyOverride sc thm t = do
   tidx <- liftIO (SC.scResolveNameByURI sc $ thm ^. theoremURI) >>= \case
-    Nothing -> throw . YosysError $ "Could not resolve name " <> Text.pack (show $ thm ^. theoremURI)
+    Nothing -> throw . YosysErrorOverrideNameNotFound . URI.render $ thm ^. theoremURI
     Just i -> pure i
   unfolded <- liftIO $ SC.scUnfoldConstantSet sc False (Set.singleton tidx) t
   cache <- liftIO SC.newCache
