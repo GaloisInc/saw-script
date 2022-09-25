@@ -21,6 +21,7 @@ import qualified Data.Graph as Graph
 
 import qualified Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.TypedTerm as SC
+import qualified Verifier.SAW.SCTypeCheck as SC.TC
 
 import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.Ident as C
@@ -38,6 +39,7 @@ data YosysBitvecConsumer
 
 data YosysError
   = YosysError Text
+  | YosysErrorTypeError Text Text
   | YosysErrorNoSuchOutputBitvec Text YosysBitvecConsumer
   | YosysErrorNoSuchCellType Text Text
   | YosysErrorUnsupportedPmux
@@ -50,6 +52,13 @@ data YosysError
 instance Exception YosysError
 instance Show YosysError where
   show (YosysError msg) = Text.unpack $ "Error: " <> msg <> "\n" <> reportBugText
+  show (YosysErrorTypeError msg err) = Text.unpack $ mconcat
+    [ "Error: An internal term failed to type-check.\n"
+    , "This occured while ", msg, ".\n"
+    , "The type error was:\n", err
+    , "This may represent a bug in SAW.\n"
+    , reportBugText
+    ]
   show (YosysErrorNoSuchOutputBitvec bvec (YosysBitvecConsumerOutputPort onm)) = Text.unpack $ mconcat
     [ "Error: Could not find the output bitvector ", bvec
     , ", which is connected to a module output port \"", onm
@@ -128,6 +137,16 @@ reverseTopSort =
 #else
   reverse . Graph.topSort
 #endif
+
+validateTerm :: MonadIO m => SC.SharedContext -> Text -> SC.Term -> m SC.Term
+validateTerm sc msg t = liftIO (SC.TC.scTypeCheck sc Nothing t) >>= \case
+  Right _ -> pure t
+  Left err ->
+    throw
+    . YosysErrorTypeError msg
+    . Text.pack
+    . unlines
+    $ SC.TC.prettyTCError err
 
 cryptolRecordType ::
   MonadIO m =>

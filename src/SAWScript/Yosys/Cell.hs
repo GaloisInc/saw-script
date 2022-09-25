@@ -38,7 +38,7 @@ primCellToTerm ::
   Cell [b] {- ^ Cell type -} ->
   Map Text SC.Term {- ^ Mapping of input names to input terms -} ->
   m (Maybe SC.Term)
-primCellToTerm sc c args = case c ^. cellType of
+primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^. cellType of
   "$not" -> bvUnaryOp $ SC.scBvNot sc
   "$pos" -> do
     res <- input "A"
@@ -179,6 +179,10 @@ primCellToTerm sc c args = case c ^. cellType of
   _ -> pure Nothing
   where
     nm = c ^. cellType
+    typeCheckMsg :: Text
+    typeCheckMsg = mconcat
+      [ "translating a cell with type \"", nm, "\""
+      ]
     textBinNat :: Text -> Natural
     textBinNat = fromIntegral . Text.foldl' (\a x -> digitToInt x + a * 2) 0
     connParams :: Text -> m (Maybe Natural, Bool)
