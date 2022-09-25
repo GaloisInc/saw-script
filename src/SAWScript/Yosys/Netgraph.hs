@@ -177,12 +177,12 @@ lookupPatternTerm sc loc pat ts =
       one <- liftIO $ SC.scNat sc 1
       boolty <- liftIO $ SC.scBoolType sc
       many <- liftIO . SC.scNat sc . fromIntegral $ length pat
-      vecty <- liftIO $ SC.scVecType sc many boolty
+      onety <- liftIO $ SC.scBitvector sc 1
       bits <- forM pat $ \b -> do
         case Map.lookup [b] ts of
           Just t -> pure t
           Nothing -> throw $ YosysErrorNoSuchOutputBitvec (Text.pack $ show b) loc
-      vecBits <- liftIO $ SC.scVector sc vecty bits
+      vecBits <- liftIO $ SC.scVector sc onety bits
       liftIO $ SC.scJoin sc many one boolty vecBits
 
 -- | Given a netgraph and an initial map from bit patterns to terms, populate that map with terms
