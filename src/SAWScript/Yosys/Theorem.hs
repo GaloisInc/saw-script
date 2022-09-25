@@ -14,7 +14,6 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
 import Control.Monad.Catch (MonadThrow)
 
-import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Data.Set as Set
 import Data.Map (Map)
@@ -64,7 +63,10 @@ theoremProp sc thm = do
       liftIO $ SC.scImplies sc pcr equality
   func <- liftIO $ SC.scAbstractExts sc [ec] res
   let cty = C.tFun (thm ^. theoremInputCryptolType) C.tBit
-  pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) func
+  SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty)
+    <$> validateTerm sc
+    ("constructing a proposition while verifying " <> URI.render (thm ^. theoremURI))
+    func
 
 theoremReplacement ::
   (MonadIO m, MonadThrow m) =>
@@ -81,7 +83,10 @@ theoremReplacement sc thm = do
       thenCase <- liftIO $ SC.scApply sc (thm ^. theoremBody) r
       elseCase <- liftIO $ SC.scApply sc (thm ^. theoremModule) r
       liftIO $ SC.scIte sc (thm ^. theoremOutputType) precond thenCase elseCase
-  liftIO $ SC.scAbstractExts sc [ec] body
+  ft <- liftIO $ SC.scAbstractExts sc [ec] body
+  validateTerm sc
+    ("constructing an override replacement for " <> URI.render (thm ^. theoremURI))
+    ft
 
 buildTheorem ::
   (MonadIO m, MonadThrow m) =>
@@ -148,4 +153,7 @@ applyOverride sc thm t = do
         | idx == tidx -> theoremReplacement sc thm
         | otherwise -> pure s
       _ -> SC.scTermF sc =<< traverse go tf
-  liftIO $ go unfolded
+  ft <- liftIO $ go unfolded
+  validateTerm sc
+    ("applying an override for " <> URI.render (thm ^. theoremURI))
+    ft

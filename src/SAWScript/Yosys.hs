@@ -159,7 +159,9 @@ yosys_import :: FilePath -> TopLevel SC.TypedTerm
 yosys_import path = do
   sc <- getSharedContext
   ir <- loadYosysIR path
-  yosysIRToRecordTerm sc ir
+  tt <- yosysIRToRecordTerm sc ir
+  _ <- validateTerm sc "translating combinational circuits" $ SC.ttTerm tt
+  pure tt
 
 yosys_verify :: SC.TypedTerm -> [SC.TypedTerm] -> SC.TypedTerm -> [YosysTheorem] -> ProofScript () -> TopLevel YosysTheorem
 yosys_verify ymod preconds other specs tactic = do
@@ -186,7 +188,9 @@ yosys_import_sequential nm path = do
 yosys_extract_sequential :: YosysSequential -> Integer -> TopLevel SC.TypedTerm
 yosys_extract_sequential s n = do
   sc <- getSharedContext
-  composeYosysSequential sc s n
+  tt <- composeYosysSequential sc s n
+  _ <- validateTerm sc "composing a sequential term" $ SC.ttTerm tt
+  pure tt
 
 yosys_extract_sequential_raw :: YosysSequential -> TopLevel SC.TypedTerm
 yosys_extract_sequential_raw s = pure $ s ^. yosysSequentialTerm
