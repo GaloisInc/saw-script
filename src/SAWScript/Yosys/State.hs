@@ -191,14 +191,14 @@ convertModuleInline sc m = do
     , _yosysSequentialStateWidths = stateWidths
     }
 
-composeYosysSequential ::
+composeYosysSequentialHelper ::
   forall m.
   MonadIO m =>
   SC.SharedContext ->
   YosysSequential ->
   Integer ->
-  m SC.TypedTerm
-composeYosysSequential sc s n = do
+  m (SC.Term, C.Type)
+composeYosysSequentialHelper sc s n = do
   let t = SC.ttTerm $ s ^. yosysSequentialTerm
 
   width <- liftIO . SC.scNat sc $ fromIntegral n
@@ -260,13 +260,39 @@ composeYosysSequential sc s n = do
       pure (st', mergedOuts)
 
   stateType <- fieldsToType sc $ s ^. yosysSequentialStateFields
+  initialStateEC <- liftIO $ SC.scFreshEC sc "initial_state" stateType
+  initialState <- liftIO $ SC.scExtCns sc initialStateEC
+  (_, outputs) <- foldM (\acc i -> compose1 i acc) (initialState, Map.empty) [0..n]
+
+  outputRecord <- cryptolRecord sc outputs
+  res <- liftIO $ SC.scAbstractExts sc [initialStateEC, extendedInputRecordEC] outputRecord
+  let cty = C.tFun extendedInputCryptolType extendedOutputCryptolType
+
+  pure (res, cty)
+
+composeYosysSequential ::
+  forall m.
+  MonadIO m =>
+  SC.SharedContext ->
+  YosysSequential ->
+  Integer ->
+  m SC.TypedTerm
+composeYosysSequential sc s n = do
+  (t, cty) <- composeYosysSequentialHelper sc s n
+  stateType <- fieldsToType sc $ s ^. yosysSequentialStateFields
   initialStateMsg <- liftIO $ SC.scString sc "Attempted to read initial state of sequential circuit"
   initialState <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [stateType, initialStateMsg]
-  -- initialStateFields <- forM (s ^. yosysSequentialStateWidths) $ \w -> do
-  --   liftIO $ SC.scBvConst sc w 0
-  -- initialState <- cryptolRecord sc initialStateFields
-  (_, outputs) <- foldM (\acc i -> compose1 i acc) (initialState, Map.empty) [0..n]
-  outputRecord <- cryptolRecord sc outputs
-  res <- liftIO $ SC.scAbstractExts sc [extendedInputRecordEC] outputRecord
-  let cty = C.tFun extendedInputCryptolType extendedOutputCryptolType
+  res <- liftIO $ SC.scApply sc t initialState
   pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) res
+
+composeYosysSequentialWithState ::
+  forall m.
+  MonadIO m =>
+  SC.SharedContext ->
+  YosysSequential ->
+  Integer ->
+  m SC.TypedTerm
+composeYosysSequentialWithState sc s n = do
+  (t, cty) <- composeYosysSequentialHelper sc s n
+  scty <- fieldsToCryptolType $ s ^. yosysSequentialStateFields
+  pure $ SC.TypedTerm (SC.TypedTermSchema . C.tMono $ C.tFun scty cty) t

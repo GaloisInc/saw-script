@@ -3681,6 +3681,12 @@ primitives = Map.fromList
     , "This term can be used like a normal SAW term - it may be embedded in Cryptol expressions, used in prove and sat, etc."
     ]
 
+  , prim "yosys_extract_sequential_with_state"  "YosysSequential -> Int -> TopLevel Term"
+    (pureVal yosys_extract_sequential_with_state)
+    Experimental
+    [ "Like yosys_extract_sequential, but the resulting term has an additional parameter to specify the initial state."
+    ]
+
   , prim "yosys_extract_sequential_raw"  "YosysSequential -> TopLevel Term"
     (pureVal yosys_extract_sequential_raw)
     Experimental

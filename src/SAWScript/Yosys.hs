@@ -13,6 +13,7 @@ module SAWScript.Yosys
   , yosys_verify
   , yosys_import_sequential
   , yosys_extract_sequential
+  , yosys_extract_sequential_with_state
   , yosys_extract_sequential_raw
   , yosys_verify_sequential_sally
   , loadYosysIR
@@ -190,6 +191,13 @@ yosys_extract_sequential s n = do
   sc <- getSharedContext
   tt <- composeYosysSequential sc s n
   _ <- validateTerm sc "composing a sequential term" $ SC.ttTerm tt
+  pure tt
+
+yosys_extract_sequential_with_state :: YosysSequential -> Integer -> TopLevel SC.TypedTerm
+yosys_extract_sequential_with_state s n = do
+  sc <- getSharedContext
+  tt <- composeYosysSequentialWithState sc s n
+  _ <- validateTerm sc "composing a sequential term with state" $ SC.ttTerm tt
   pure tt
 
 yosys_extract_sequential_raw :: YosysSequential -> TopLevel SC.TypedTerm
