@@ -1203,13 +1203,14 @@ cryptolURI (p:ps) (Just uniq) =
   fromMaybe (panic "cryptolURI" ["Could not make URI from the given path", show (p:ps), show uniq]) $
   do sch <- mkScheme "cryptol"
      path' <- mapM mkPathPiece (p:|ps)
-     frag <- mkFragment (Text.pack (show uniq))
+     _frag <- mkFragment (Text.pack (show uniq))
      pure URI
        { uriScheme = Just sch
        , uriAuthority = Left False -- relative path
        , uriPath = Just (False, path')
        , uriQuery = []
-       , uriFragment = Just frag
+       -- , uriFragment = Just frag
+       , uriFragment = Nothing
        }
 
 -- | Tests if the given 'NameInfo' represents a name imported

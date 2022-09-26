@@ -1169,7 +1169,10 @@ checkGoals bak opts sc nm tactic = do
     --       False -> pure d
     -- dir <- liftIO $ loop predir
     uuid <- liftIO $ UUID.nextRandom
-    let dir = "/tmp/saw-test-rewrite/goals/" <> goalname <> "_" <> UUID.toString uuid
+    heading <- gets rwRewriteSummaryHeading >>= \case
+      Nothing -> pure ""
+      Just heading -> pure $ heading <> "/"
+    let dir = "/tmp/saw-test-rewrite/" <> heading <> "goals/" <> goalname <> "_" <> UUID.toString uuid
     liftIO $ putStrLn $ mconcat [ "Writing to: ", dir ]
     liftIO $ createDirectoryIfMissing True dir
     tm <- liftIO $ propToTerm sc term

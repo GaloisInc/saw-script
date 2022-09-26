@@ -31,7 +31,7 @@ module SAWScript.Proof
   , ppProp
   , propToSATQuery
 
-  , TheoremDB
+  , TheoremDB(..)
   , newTheoremDB
   , reachableTheorems
 

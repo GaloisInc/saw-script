@@ -1,3 +1,4 @@
+{-# Language LambdaCase #-}
 {-# Language GADTs #-}
 {-# Language ImplicitParams #-}
 {-# Language NamedFieldPuns #-}
@@ -43,6 +44,7 @@ module SAWScript.Prover.Exporter
     -- * Misc
   , bitblastPrim
   , saveRewrite
+  , saveExtractedTerm
   ) where
 
 import Data.Foldable(toList)
@@ -105,6 +107,7 @@ import What4.Protocol.VerilogWriter (exprsVerilog)
 import What4.Solver.Adapter
 import qualified What4.SWord as W4Sim
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.State (gets)
 
 proveWithSATExporter ::
   (FilePath -> SATQuery -> TopLevel a) ->
@@ -551,7 +554,21 @@ bitblastPrim proxy sc t = do
 
 saveRewrite :: Text -> Term -> TopLevel ()
 saveRewrite nm t = do
-  let dir = "/tmp/saw-test-rewrite/rewrites/"
+  heading <- gets rwRewriteSummaryHeading >>= \case
+    Nothing -> pure ""
+    Just heading -> pure $ heading <> "/"
+  let dir = "/tmp/saw-test-rewrite/" <> heading <> "rewrites/"
+  liftIO $ createDirectoryIfMissing True dir
+  let path = dir <> "/" <> unpack nm <> ".extcore"
+  exists <- liftIO $ doesFileExist path
+  unless exists $ writeCore path t
+
+saveExtractedTerm :: Text -> Term -> TopLevel ()
+saveExtractedTerm nm t = do
+  heading <- gets rwRewriteSummaryHeading >>= \case
+    Nothing -> pure ""
+    Just heading -> pure $ heading <> "/"
+  let dir = "/tmp/saw-test-rewrite/" <> heading <> "extracted/"
   liftIO $ createDirectoryIfMissing True dir
   let path = dir <> "/" <> unpack nm <> ".extcore"
   exists <- liftIO $ doesFileExist path

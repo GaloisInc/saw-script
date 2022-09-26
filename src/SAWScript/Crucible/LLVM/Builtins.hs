@@ -32,6 +32,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , llvm_postcond
     , llvm_cfg
     , llvm_extract
+    , define_core_llvm
     , llvm_compositional_extract
     , llvm_verify
     , llvm_array_size_profile
@@ -89,7 +90,7 @@ import Prelude hiding (fail)
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
 
-import SAWScript.Prover.Exporter (writeCore)
+import SAWScript.Prover.Exporter (writeCore, saveExtractedTerm)
 
 import qualified Control.Exception as X
 import           Control.Lens
@@ -340,6 +341,13 @@ llvmURI symbol_name =
 llvmNameInfo :: String -> NameInfo
 llvmNameInfo symbol_name = ImportedName (llvmURI symbol_name) [ Text.pack symbol_name ]
 
+define_core_llvm :: String -> TypedTerm -> TopLevel ()
+define_core_llvm nm tt = do
+  shared_context <- getSharedContext
+  let nmi = llvmNameInfo nm
+  _ <- io $ scConstant' shared_context nmi (ttTerm tt) =<< scTypeOf shared_context (ttTerm tt)
+  pure ()
+
 llvm_compositional_extract ::
   Some LLVMModule ->
   String ->
@@ -451,6 +459,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
                 MS.csRetValue .~ extracted_ret_value &
                 MS.csPostState . MS.csPointsTos .~ extracted_post_state_points_tos
 
+          saveExtractedTerm (Text.pack func_name) extracted_func_const
           typed_extracted_func_const <- io $ mkTypedTerm shared_context extracted_func_const
           rw <- getTopLevelRW
           rw' <-
@@ -651,7 +660,10 @@ verifyObligations cc mspec tactic assumes asserts =
           --       False -> pure d
           -- dir <- liftIO $ loop predir
           uuid <- liftIO $ UUID.nextRandom
-          let dir = "/tmp/saw-test-rewrite/goals/" <> goalname <> "_" <> UUID.toString uuid
+          heading <- gets rwRewriteSummaryHeading >>= \case
+            Nothing -> pure ""
+            Just heading -> pure $ heading <> "/"
+          let dir = "/tmp/saw-test-rewrite/" <> heading <> "goals/" <> goalname <> "_" <> UUID.toString uuid
           liftIO $ putStrLn $ mconcat [ "Writing to: ", dir ]
           liftIO $ createDirectoryIfMissing True dir
           tm <- liftIO $ propToTerm sc goal'

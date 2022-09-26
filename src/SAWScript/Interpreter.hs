@@ -495,6 +495,7 @@ buildTopLevelEnv proxy opts =
                    , rwStackBaseAlign = defaultStackBaseAlign
                    , rwAllocSymInitCheck = True
                    , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
+                   , rwRewriteSummaryHeading = Nothing
                    , rwRewriteSummary = Nothing
                    }
        return (bic, ro0, rw0)
@@ -525,6 +526,11 @@ add_primitives lc bic opts = do
   , rwDocs       = rwDocs rw `Map.union` primDocEnv lcs
   , rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
+
+set_rewrite_heading :: FilePath -> TopLevel ()
+set_rewrite_heading p = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwRewriteSummaryHeading = Just p }
 
 enable_smt_array_memory_model :: TopLevel ()
 enable_smt_array_memory_model = do
@@ -807,6 +813,11 @@ primitives = Map.fromList
     , "uninterpreted function during proofs."
     ]
 
+  , prim "define_core_llvm"              "String -> Term -> TopLevel ()"
+    (pureVal define_core_llvm)
+    Current
+    []
+
   , prim "dump_names" "TopLevel ()"
     (pureVal dump_names)
     Current
@@ -826,6 +837,11 @@ primitives = Map.fromList
     (bicVal (add_primitives Experimental))
     Current
     [ "Enable the use of experimental commands." ]
+
+  , prim "set_rewrite_heading" "String -> TopLevel ()"
+    (pureVal set_rewrite_heading)
+    Current
+    []
 
   , prim "enable_smt_array_memory_model" "TopLevel ()"
     (pureVal enable_smt_array_memory_model)

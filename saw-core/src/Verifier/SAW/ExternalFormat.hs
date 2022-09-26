@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternGuards #-}
@@ -263,26 +264,27 @@ scReadExternal sc input =
 
     readEC' :: VarIndex -> Term -> ReadM (ExtCns Term)
     readEC' vi t' =
-      do (_ts, nms, vs) <- State.get
+      do (ts, nms, vs) <- State.get
          nmi <- case Map.lookup vi nms of
                   Just nmi -> pure nmi
                   Nothing -> lift $ fail $ "scReadExternal: ExtCns missing name info: " ++ show vi
-         liftIO $ print (vi, nmi)
+         -- liftIO $ print (vi, nmi)
          case nmi of
            ModuleIdentifier ident ->
              lift (scResolveNameByURI sc (moduleIdentToURI ident)) >>= \case
                Just vi' -> pure (EC vi' nmi t')
                Nothing  -> lift $ fail $ "scReadExternal: missing module identifier: " ++ show ident
            ImportedName uri _aliases -> do
-             liftIO $ print =<< scResolveNameByURI sc uri
+             -- liftIO $ print =<< scResolveNameByURI sc uri
              lift (scResolveNameByURI sc uri) >>= \case
                Just vi' -> pure (EC vi' nmi t')
                Nothing -> case Map.lookup vi vs of
                  Just vi' -> pure $ EC vi' nmi t'
-                 Nothing -> lift $ fail $ "scReadExternal: missing URI-based name: " ++ show uri
-                   -- do vi' <- lift $ scFreshGlobalVar sc
-                   --    State.put (ts, nms, Map.insert vi vi' vs)
-                   --    pure $ EC vi' nmi t'
+                 Nothing | fmap unRText (uriScheme uri) == Just "fresh" -> 
+                   do vi' <- lift $ scFreshGlobalVar sc
+                      State.put (ts, nms, Map.insert vi vi' vs)
+                      pure $ EC vi' nmi t'
+                 _ -> lift $ fail $ "scReadExternal: missing URI-based name: " ++ show uri
 
     readEC :: String -> String -> ReadM (ExtCns Term)
     readEC i t =

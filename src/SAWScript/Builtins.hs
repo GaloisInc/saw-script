@@ -132,7 +132,7 @@ import qualified SAWScript.Prover.What4 as Prover
 import qualified SAWScript.Prover.Exporter as Prover
 import qualified SAWScript.Prover.MRSolver as Prover
 import SAWScript.VerificationSummary
-import Data.Parameterized.Nonce (freshNonce, globalNonceGenerator)
+import Data.Parameterized.Nonce (freshNonce, globalNonceGenerator, indexValue)
 
 showPrim :: SV.Value -> TopLevel String
 showPrim v = do
@@ -485,7 +485,7 @@ resolveName sc nm =
      case res of
        Just cnm ->
          do importedName <- io $ Cryptol.importName cnm
-            liftIO $ print (cnm, importedName)
+            -- liftIO $ print (cnm, importedName)
             case importedName of
               ImportedName uri _ ->
                 do resolvedName <- io $ scResolveNameByURI sc uri
@@ -1790,6 +1790,7 @@ summarize_verification_json fpath =
 
 lookupTheoremName :: TheoremNonce -> TopLevel (Maybe (Text, Term))
 lookupTheoremName n = do
+  sc <- getSharedContext
   vals <- rwValues <$> getTopLevelRW
   let matches = flip filter (Map.assocs vals) $ \(_, v) ->
         case v of
@@ -1797,7 +1798,13 @@ lookupTheoremName n = do
           _ -> False
   case matches of
     ((nm, SV.VTheorem thm):_) -> do
-      sc <- getSharedContext
       tm <- io . propToTerm sc $ thmProp thm
       pure $ Just (Text.pack $ getVal nm, tm)
-    _ -> pure Nothing
+    _ -> do
+      db <- liftIO . readIORef =<< (theoremMap . roTheoremDB <$> getTopLevelRO)
+      case Map.lookup n db of
+        Nothing -> pure Nothing
+        Just thm -> do
+          tm <- io . propToTerm sc $ thmProp thm
+          let nm = "anonymous_theorem" <> show (indexValue n)
+          pure $ Just (Text.pack nm, tm)

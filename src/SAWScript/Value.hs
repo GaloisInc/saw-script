@@ -467,6 +467,7 @@ data TopLevelRW =
 
   , rwCrucibleTimeout :: Integer
 
+  , rwRewriteSummaryHeading :: Maybe FilePath
   , rwRewriteSummary :: Maybe FilePath
   }
 
