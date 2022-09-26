@@ -42,9 +42,7 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
   "$not" -> bvUnaryOp $ SC.scBvNot sc
   "$pos" -> do
     res <- input "A"
-    fmap Just . cryptolRecord sc $ Map.fromList
-      [ ("Y", res)
-      ]
+    output res
   "$neg" -> bvUnaryOp $ SC.scBvNeg sc
   "$and" -> bvBinaryOp $ SC.scBvAnd sc
   "$or" -> bvBinaryOp $ SC.scBvOr sc
@@ -74,33 +72,25 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     nb <- inputNat "B"
     w <- outputWidth
     res <- liftIO $ SC.scBvShl sc w ta nb
-    fmap Just . cryptolRecord sc $ Map.fromList
-      [ ("Y", res)
-      ]
+    output res
   "$shr" -> do
     ta <- input "A"
     nb <- inputNat "B"
     w <- outputWidth
     res <- liftIO $ SC.scBvShr sc w ta nb
-    fmap Just . cryptolRecord sc $ Map.fromList
-      [ ("Y", res)
-      ]
+    output res
   "$sshl" -> do
     ta <- input "A"
     nb <- inputNat "B"
     w <- outputWidth
     res <- liftIO $ SC.scBvShl sc w ta nb
-    fmap Just . cryptolRecord sc $ Map.fromList
-      [ ("Y", res)
-      ]
+    output res
   "$sshr" -> do
     ta <- input "A"
     nb <- inputNat "B"
     w <- outputWidth
     res <- liftIO $ SC.scBvSShr sc w ta nb
-    fmap Just . cryptolRecord sc $ Map.fromList
-      [ ("Y", res)
-      ]
+    output res
   -- "$shift" -> _
   -- "$shiftx" -> _
   "$lt" -> bvBinaryCmp $ SC.scBvULt sc
@@ -126,9 +116,7 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     ta <- input "A"
     anz <- liftIO $ SC.scBvNonzero sc w ta
     res <- liftIO $ SC.scNot sc anz
-    fmap Just . cryptolRecord sc $ Map.fromList
-      [ ("Y", res)
-      ]
+    output res
   "$logic_and" -> do
     w <- outputWidth
     ta <- input "A"
@@ -136,9 +124,7 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     anz <- liftIO $ SC.scBvNonzero sc w ta
     bnz <- liftIO $ SC.scBvNonzero sc w tb
     res <- liftIO $ SC.scAnd sc anz bnz
-    fmap Just . cryptolRecord sc $ Map.fromList
-      [ ("Y", res)
-      ]
+    output res
   "$logic_or" -> do
     w <- outputWidth
     ta <- input "A"
@@ -146,9 +132,7 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     anz <- liftIO $ SC.scBvNonzero sc w ta
     bnz <- liftIO $ SC.scBvNonzero sc w tb
     res <- liftIO $ SC.scOr sc anz bnz
-    fmap Just . cryptolRecord sc $ Map.fromList
-      [ ("Y", res)
-      ]
+    output res
   "$mux" -> do
     ta <- input "A"
     tb <- input "B"
@@ -157,9 +141,7 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     snz <- liftIO $ SC.scBvNonzero sc swidth ts
     ty <- liftIO $ SC.scBitvector sc outputWidthNat
     res <- liftIO $ SC.scIte sc ty snz tb ta
-    fmap Just . cryptolRecord sc $ Map.fromList
-      [ ("Y", res)
-      ]
+    output res
   "$pmux" -> throw YosysErrorUnsupportedPmux
   "$adff" -> throw $ YosysErrorUnsupportedFF "$adff"
   "$sdff" -> throw $ YosysErrorUnsupportedFF "$sdff"
@@ -185,13 +167,11 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       ]
     textBinNat :: Text -> Natural
     textBinNat = fromIntegral . Text.foldl' (\a x -> digitToInt x + a * 2) 0
-    connParams :: Text -> m (Maybe Natural, Bool)
-    connParams onm = do
-      let width = fmap textBinNat . Map.lookup (onm <> "_WIDTH") $ c ^. cellParameters
-      signed <- case Map.lookup (onm <> "_SIGNED") $ c ^. cellParameters of
-        Just t -> pure $ textBinNat t > 0
-        Nothing -> pure False
-      pure (width, signed)
+    connSigned :: Text -> Bool
+    connSigned onm =
+      case Map.lookup (onm <> "_SIGNED") $ c ^. cellParameters of
+        Just t -> textBinNat t > 0
+        Nothing -> False
     connWidthNat :: Text -> Natural
     connWidthNat onm =
       case Map.lookup onm $ c ^. cellConnections of
@@ -204,66 +184,69 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     extTrunc :: Text -> SC.Term -> m SC.Term
     extTrunc onm t = do
       let bvw = connWidthNat onm
-      (mwidth, signed) <- connParams onm
-      case mwidth of
-        Just width
-          | bvw > width -> do
-              wterm <- liftIO $ SC.scNat sc width
-              diffterm <- liftIO . SC.scNat sc $ bvw - width
-              liftIO $ SC.scBvTrunc sc diffterm wterm t
-          | width > bvw && signed -> do
-              bvwpredterm <- liftIO . SC.scNat sc $ bvw - 1
-              diffterm <- liftIO . SC.scNat sc $ width - bvw
-              liftIO $ SC.scBvSExt sc diffterm bvwpredterm t
-          | width > bvw && not signed -> do
-              bvwterm <- liftIO $ SC.scNat sc bvw
-              diffterm <- liftIO . SC.scNat sc $ width - bvw
-              liftIO $ SC.scBvUExt sc diffterm bvwterm t
-        _ -> pure t
-    input :: Text -> m SC.Term
-    input inpNm = do
-      raw <- case Map.lookup inpNm args of
+      let width = outputWidthNat
+      let signed = connSigned onm
+      if
+        | bvw > width -> do
+            wterm <- liftIO $ SC.scNat sc width
+            diffterm <- liftIO . SC.scNat sc $ bvw - width
+            liftIO $ SC.scBvTrunc sc diffterm wterm t
+        | width > bvw && signed -> do
+            bvwpredterm <- liftIO . SC.scNat sc $ bvw - 1
+            diffterm <- liftIO . SC.scNat sc $ width - bvw
+            liftIO $ SC.scBvSExt sc diffterm bvwpredterm t
+        | width > bvw && not signed -> do
+            bvwterm <- liftIO $ SC.scNat sc bvw
+            diffterm <- liftIO . SC.scNat sc $ width - bvw
+            liftIO $ SC.scBvUExt sc diffterm bvwterm t
+        | otherwise -> pure t
+    inputRaw :: Text -> m SC.Term
+    inputRaw inpNm =
+      case Map.lookup inpNm args of
         Nothing -> panic "cellToTerm" [Text.unpack $ mconcat [nm, " missing input ", inpNm]]
         Just a -> pure a
-      extTrunc inpNm raw
-    inputNat :: Text -> m SC.Term
-    inputNat inpNm = do
-      v <- input inpNm
+    input :: Text -> m SC.Term
+    input inpNm = extTrunc inpNm =<< inputRaw inpNm
+    inputRev :: Text -> m SC.Term
+    inputRev inpNm = do
+      raw <- inputRaw inpNm
       w <- connWidth inpNm
       bool <- liftIO $ SC.scBoolType sc
-      rev <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [w, bool, v]
-      -- note bvToNat is big-endian while yosys shifts expect little-endian
+      rev <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [w, bool, raw]
+      extTrunc inpNm rev
+    inputNat :: Text -> m SC.Term
+    inputNat inpNm = do
+      w <- connWidth inpNm
+      rev <- inputRev inpNm -- note bvToNat is big-endian while yosys shifts expect little-endian
       liftIO $ SC.scGlobalApply sc "Prelude.bvToNat" [w, rev]
+    output :: SC.Term -> m (Maybe SC.Term)
+    output res = do
+      eres <- extTrunc "Y" res
+      fmap Just . cryptolRecord sc $ Map.fromList
+        [ ("Y", eres)
+        ]
     bvUnaryOp :: (SC.Term -> SC.Term -> IO SC.Term) -> m (Maybe SC.Term)
     bvUnaryOp f = do
       t <- input "A"
       w <- outputWidth
       res <- liftIO $ f w t
-      fmap Just . cryptolRecord sc $ Map.fromList
-        [ ("Y", res)
-        ]
+      output res
     bvBinaryOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m (Maybe SC.Term)
     bvBinaryOp f = do
       w <- outputWidth
       ta <- input "A"
       tb <- input "B"
       res <- liftIO $ f w ta tb
-      fmap Just . cryptolRecord sc $ Map.fromList
-        [ ("Y", res)
-        ]
+      output res
     bvBinaryArithOp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m (Maybe SC.Term)
     bvBinaryArithOp f = do
       w <- outputWidth
       bool <- liftIO $ SC.scBoolType sc
-      ta <- input "A"
-      reva <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [w, bool, ta]
-      tb <- input "B"
-      revb <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [w, bool, tb]
-      res <- liftIO $ f w reva revb
+      ta <- inputRev "A"
+      tb <- inputRev "B"
+      res <- liftIO $ f w ta tb
       revres <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [w, bool, res]
-      fmap Just . cryptolRecord sc $ Map.fromList
-        [ ("Y", revres)
-        ]
+      output revres
     bvBinaryCmp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m (Maybe SC.Term)
     bvBinaryCmp f = do
       ta <- input "A"
@@ -272,9 +255,7 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       bit <- liftIO $ f w ta tb
       boolty <- liftIO $ SC.scBoolType sc
       res <- liftIO $ SC.scSingle sc boolty bit
-      fmap Just . cryptolRecord sc $ Map.fromList
-        [ ("Y", res)
-        ]
+      output res
     bvReduce :: Bool -> SC.Term -> m (Maybe SC.Term)
     bvReduce boolIdentity boolFun = do
       t <- input "A"
@@ -285,6 +266,4 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       bit <- liftIO $ SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]
       boolty <- liftIO $ SC.scBoolType sc
       res <- liftIO $ SC.scSingle sc boolty bit
-      fmap Just . cryptolRecord sc $ Map.fromList
-        [ ("Y", res)
-        ]
+      output res
