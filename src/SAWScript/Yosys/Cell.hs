@@ -136,7 +136,7 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
   "$mux" -> do
     ta <- input "A"
     tb <- input "B"
-    ts <- input "S"
+    ts <- inputRaw "S"
     swidth <- connWidth "S"
     snz <- liftIO $ SC.scBvNonzero sc swidth ts
     ty <- liftIO $ SC.scBitvector sc outputWidthNat
@@ -216,8 +216,11 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       extTrunc inpNm rev
     inputNat :: Text -> m SC.Term
     inputNat inpNm = do
+      raw <- inputRaw inpNm
       w <- connWidth inpNm
-      rev <- inputRev inpNm -- note bvToNat is big-endian while yosys shifts expect little-endian
+      bool <- liftIO $ SC.scBoolType sc
+      rev <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [w, bool, raw]
+      -- note bvToNat is big-endian while yosys shifts expect little-endian
       liftIO $ SC.scGlobalApply sc "Prelude.bvToNat" [w, rev]
     output :: SC.Term -> m (Maybe SC.Term)
     output res = do

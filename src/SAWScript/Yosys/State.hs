@@ -19,9 +19,12 @@ import Data.Bifunctor (bimap)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Graph as Graph
 
 import Numeric.Natural (Natural)
+
+import Text.Encoding.Z (zEncodeString)
 
 import qualified Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.TypedTerm as SC
@@ -37,13 +40,16 @@ import SAWScript.Yosys.Utils
 import SAWScript.Yosys.IR
 import SAWScript.Yosys.Netgraph
 
+cellIdentifier :: Text -> Text
+cellIdentifier = Text.pack . zEncodeString . Text.unpack
+
 findDffs ::
   Netgraph Bitrep ->
   Map Text (Cell [Bitrep])
 findDffs ng =
   Map.fromList
   . filter (\(_, c) -> c ^. cellType == "$dff")
-  . fmap (\v -> let (n, _, _) = ng ^. netgraphNodeFromVertex $ v in n)
+  . fmap (\v -> let ((nm, n), _, _) = ng ^. netgraphNodeFromVertex $ v in (cellIdentifier nm, n))
   . Graph.vertices
   $ ng ^. netgraphGraph
 
