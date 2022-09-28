@@ -93,6 +93,7 @@ convertYosysIR sc ir = do
         let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
         -- liftIO . putStrLn . Text.unpack $ mconcat ["Converting module: ", nm]
         cm <- convertModule sc env m
+        _ <- validateTerm sc ("translating the combinational circuit \"" <> nm <> "\"") $ cm ^. convertedModuleTerm
         n <- liftIO $ Nonce.freshNonce Nonce.globalNonceGenerator
         let frag = Text.pack . show $ Nonce.indexValue n
         let uri = URI.URI

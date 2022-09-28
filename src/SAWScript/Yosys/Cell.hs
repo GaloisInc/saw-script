@@ -116,15 +116,15 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     ta <- input "A"
     anz <- liftIO $ SC.scBvNonzero sc w ta
     res <- liftIO $ SC.scNot sc anz
-    output res
+    outputBit res
   "$logic_and" -> do
     w <- outputWidth
-    ta <- input "A"
-    tb <- input "B"
+    ta <- inputRaw "A"
+    tb <- inputRaw "B"
     anz <- liftIO $ SC.scBvNonzero sc w ta
     bnz <- liftIO $ SC.scBvNonzero sc w tb
     res <- liftIO $ SC.scAnd sc anz bnz
-    output res
+    outputBit res
   "$logic_or" -> do
     w <- outputWidth
     ta <- input "A"
@@ -132,7 +132,7 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     anz <- liftIO $ SC.scBvNonzero sc w ta
     bnz <- liftIO $ SC.scBvNonzero sc w tb
     res <- liftIO $ SC.scOr sc anz bnz
-    output res
+    outputBit res
   "$mux" -> do
     ta <- input "A"
     tb <- input "B"
@@ -228,6 +228,13 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       fmap Just . cryptolRecord sc $ Map.fromList
         [ ("Y", eres)
         ]
+    outputBit :: SC.Term -> m (Maybe SC.Term)
+    outputBit res = do
+      bool <- liftIO $ SC.scBoolType sc
+      vres <- liftIO $ SC.scSingle sc bool res
+      fmap Just . cryptolRecord sc $ Map.fromList
+        [ ("Y", vres)
+        ]
     bvUnaryOp :: (SC.Term -> SC.Term -> IO SC.Term) -> m (Maybe SC.Term)
     bvUnaryOp f = do
       t <- input "A"
@@ -252,9 +259,9 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       output revres
     bvBinaryCmp :: (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> m (Maybe SC.Term)
     bvBinaryCmp f = do
-      ta <- input "A"
-      tb <- input "B"
-      w <- outputWidth
+      ta <- inputRaw "A"
+      tb <- inputRaw "B"
+      w <- connWidth "A"
       bit <- liftIO $ f w ta tb
       boolty <- liftIO $ SC.scBoolType sc
       res <- liftIO $ SC.scSingle sc boolty bit
@@ -267,6 +274,4 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       identity <- liftIO $ SC.scBool sc boolIdentity
       scFoldr <- liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "foldr"
       bit <- liftIO $ SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]
-      boolty <- liftIO $ SC.scBoolType sc
-      res <- liftIO $ SC.scSingle sc boolty bit
-      output res
+      outputBit bit
