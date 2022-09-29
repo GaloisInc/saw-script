@@ -70,7 +70,7 @@ heapster_typecheck_fun env "processBlock"
 heapster_set_translation_checks env false;
 heapster_typecheck_fun env "processBlocks"
   "(num:bv 64). arg0:array(W,0,<8,*8,fieldsh(int64<>)), \
-              \ arg1:array(R,0,<16*num,*8,fieldsh(int64<>)), \
+              \ arg1:(num <u 1152921504606846976) * array(R,0,<16*num,*8,fieldsh(int64<>)), \
               \ arg2:eq(llvmword(num)) -o \
               \ arg0:array(W,0,<8,*8,fieldsh(int64<>)), \
               \ arg1:array(R,0,<16*num,*8,fieldsh(int64<>)), \
