@@ -8,6 +8,7 @@ module SAWScript.Prover.What4 where
 
 
 import           Control.Lens ((^.))
+import           Data.List (nub)
 import           Data.Set (Set)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -17,7 +18,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.SATQuery (SATQuery(..))
 
-import           SAWScript.Proof(Prop, propToSATQuery, propSize, CEX)
+import           SAWScript.Proof(Sequent, sequentToSATQuery, sequentSharedSize, CEX)
 import           SAWScript.Prover.SolverStats
 import           SAWScript.Value (TopLevel, io, getSharedContext)
 
@@ -54,15 +55,15 @@ setupWhat4_sym hashConsing =
 what4Theories ::
   Set VarIndex ->
   Bool ->
-  Prop ->
+  Sequent ->
   TopLevel [String]
 what4Theories unintSet hashConsing goal =
   getSharedContext >>= \sc -> io $
   do sym <- setupWhat4_sym hashConsing
-     satq <- propToSATQuery sc unintSet goal
-     (_varMap, lit) <- W.w4Solve sym sc satq
-     let pf = (predicateVarInfo lit)^.problemFeatures
-     return (evalTheories pf)
+     satq <- sequentToSATQuery sc unintSet goal
+     (_varMap, lits) <- W.w4Solve sym sc satq
+     let pf lit = (predicateVarInfo lit)^.problemFeatures
+     return (nub (concatMap evalTheories (map pf lits)))
 
 evalTheories :: ProblemFeatures -> [String]
 evalTheories pf = [ nm | (nm,f) <- xs, hasProblemFeature pf f ]
@@ -84,7 +85,7 @@ proveWhat4_sym ::
   SolverAdapter St ->
   Set VarIndex ->
   Bool ->
-  Prop ->
+  Sequent ->
   TopLevel (Maybe CEX, SolverStats)
 proveWhat4_sym solver un hashConsing t =
   getSharedContext >>= \sc -> io $
@@ -96,16 +97,16 @@ proveExportWhat4_sym ::
   Set VarIndex ->
   Bool ->
   FilePath ->
-  Prop ->
+  Sequent->
   TopLevel (Maybe CEX, SolverStats)
 proveExportWhat4_sym solver un hashConsing outFilePath t =
   getSharedContext >>= \sc -> io $
   do sym <- setupWhat4_sym hashConsing
 
      -- Write smt out
-     (_, _, lit, stats) <- setupWhat4_solver solver sym un sc t
+     (_, _, lits, stats) <- setupWhat4_solver solver sym un sc t
      withFile outFilePath WriteMode $ \handle ->
-       solver_adapter_write_smt2 solver sym handle [lit]
+       solver_adapter_write_smt2 solver sym handle lits
 
      -- Assume unsat
      return (Nothing, stats)
@@ -115,7 +116,7 @@ proveWhat4_z3, proveWhat4_boolector, proveWhat4_cvc4,
   proveWhat4_abc ::
   Set VarIndex  {- ^ Uninterpreted functions -} ->
   Bool          {- ^ Hash-consing of What4 terms -}->
-  Prop          {- ^ A proposition to be proved -} ->
+  Sequent       {- ^ A proposition to be proved -} ->
   TopLevel (Maybe CEX, SolverStats)
 
 proveWhat4_z3        = proveWhat4_sym z3Adapter
@@ -130,7 +131,7 @@ proveWhat4_z3_using ::
   String        {- ^ Solver tactic -} ->
   Set VarIndex  {- ^ Uninterpreted functions -} ->
   Bool          {- ^ Hash-consing of What4 terms -}->
-  Prop          {- ^ A proposition to be proved -} ->
+  Sequent       {- ^ A proposition to be proved -} ->
   TopLevel (Maybe CEX, SolverStats)
 proveWhat4_z3_using tactic un hashConsing t =
   getSharedContext >>= \sc -> io $
@@ -145,7 +146,7 @@ proveExportWhat4_z3, proveExportWhat4_boolector, proveExportWhat4_cvc4,
   Set VarIndex  {- ^ Uninterpreted functions -} ->
   Bool          {- ^ Hash-consing of ExportWhat4 terms -}->
   FilePath      {- ^ Path of file to write SMT to -}->
-  Prop          {- ^ A proposition to be proved -} ->
+  Sequent       {- ^ A proposition to be proved -} ->
   TopLevel (Maybe CEX, SolverStats)
 
 proveExportWhat4_z3        = proveExportWhat4_sym z3Adapter
@@ -161,27 +162,27 @@ setupWhat4_solver :: forall st t ff.
   B.ExprBuilder t st ff {- ^ The glorious sym -}  ->
   Set VarIndex       {- ^ Uninterpreted functions -} ->
   SharedContext      {- ^ Context for working with terms -} ->
-  Prop               {- ^ A proposition to be proved/checked. -} ->
+  Sequent            {- ^ A proposition to be proved/checked. -} ->
   IO ( [ExtCns Term]
      , [W.Labeler (B.ExprBuilder t st ff)]
-     , Pred (B.ExprBuilder t st ff)
+     , [Pred (B.ExprBuilder t st ff)]
      , SolverStats)
 setupWhat4_solver solver sym unintSet sc goal =
   do
      -- symbolically evaluate
-     satq <- propToSATQuery sc unintSet goal
+     satq <- sequentToSATQuery sc unintSet goal
      let varList  = Map.toList (satVariables satq)
      let argNames = map fst varList
-     (varMap, lit) <- W.w4Solve sym sc satq
+     (varMap, lits) <- W.w4Solve sym sc satq
      let bvs = map (fst . snd) varMap
 
      extendConfig (solver_adapter_config_options solver)
                   (getConfiguration sym)
 
      let stats = solverStats ("W4 ->" ++ solver_adapter_name solver)
-                             (propSize goal)
+                             (sequentSharedSize goal)
 
-     return (argNames, bvs, lit, stats)
+     return (argNames, bvs, lits, stats)
 
 
 -- | Check the validity of a proposition using What4.
@@ -190,13 +191,13 @@ proveWhat4_solver :: forall st t ff.
   B.ExprBuilder t st ff {- ^ The glorious sym -}  ->
   Set VarIndex       {- ^ Uninterpreted functions -} ->
   SharedContext      {- ^ Context for working with terms -} ->
-  Prop               {- ^ A proposition to be proved/checked. -} ->
+  Sequent            {- ^ A proposition to be proved/checked. -} ->
   IO ()              {- ^ Extra setup actions -} ->
   IO (Maybe CEX, SolverStats)
   -- ^ (example/counter-example, solver statistics)
 proveWhat4_solver solver sym unintSet sc goal extraSetup =
   do
-     (argNames, bvs, lit, stats) <- setupWhat4_solver solver sym unintSet sc goal
+     (argNames, bvs, lits, stats) <- setupWhat4_solver solver sym unintSet sc goal
      extraSetup
 
      -- log to stdout
@@ -205,7 +206,7 @@ proveWhat4_solver solver sym unintSet sc goal extraSetup =
                                   , logReason = "SAW proof" }
 
      -- run solver
-     solver_adapter_check_sat solver sym logData [lit] $ \ r -> case r of
+     solver_adapter_check_sat solver sym logData lits $ \ r -> case r of
          Sat (gndEvalFcn,_) -> do
            mvals <- mapM (getValues @(B.ExprBuilder t st ff) gndEvalFcn)
                          (zip bvs argNames)

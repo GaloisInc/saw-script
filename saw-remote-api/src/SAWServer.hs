@@ -246,6 +246,7 @@ initialState readFileFn =
                 , rwPathSatSolver = CC.PathSat_Z3
                 , rwSkipSafetyProofs = False
                 , rwSingleOverrideSpecialCase = False
+                , rwSequentGoals = False
                 }
      return (SAWState emptyEnv bic [] ro rw M.empty)
 

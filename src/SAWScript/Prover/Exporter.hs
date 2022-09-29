@@ -89,12 +89,14 @@ import qualified Verifier.SAW.UntypedAST as Un
 
 import SAWScript.Crucible.Common
 import SAWScript.Crucible.Common.MethodSpec (ppTypedTermType)
-import SAWScript.Proof (Prop, propSize, propToTerm, predicateToSATQuery, propToSATQuery)
+import SAWScript.Proof
+  (Prop, Sequent, propSize, sequentSharedSize, propToTerm, predicateToSATQuery, sequentToSATQuery)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
 import SAWScript.Prover.What4
 import SAWScript.Value
 
+import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
 import What4.Config (extendConfig)
 import What4.Interface (getConfiguration, IsSymExprBuilder)
@@ -108,13 +110,13 @@ proveWithSATExporter ::
   (FilePath -> SATQuery -> TopLevel a) ->
   Set VarIndex ->
   String ->
-  Prop ->
+  Sequent ->
   TopLevel SolverStats
 proveWithSATExporter exporter unintSet path goal =
   do sc <- getSharedContext
-     satq <- io $ propToSATQuery sc unintSet goal
+     satq <- io $ sequentToSATQuery sc unintSet goal
      _ <- exporter path satq
-     let stats = solverStats ("offline: "++ path) (propSize goal)
+     let stats = solverStats ("offline: "++ path) (sequentSharedSize goal)
      return stats
 
 
@@ -303,11 +305,11 @@ writeSMTLib2 f satq = getSharedContext >>= \sc -> io $
 writeSMTLib2What4 :: FilePath -> SATQuery -> TopLevel ()
 writeSMTLib2What4 f satq = getSharedContext >>= \sc -> io $
   do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
-     (_varMap, lit) <- W.w4Solve sym sc satq
+     (_varMap, lits) <- W.w4Solve sym sc satq
      let cfg = getConfiguration sym
      extendConfig smtParseOptions cfg
      withFile f WriteMode $ \h ->
-       writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features Nothing sym h [lit]
+       writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features Nothing sym h lits
 
 writeCore :: FilePath -> Term -> TopLevel ()
 writeCore path t = io $ writeFile path (scWriteExternal t)
@@ -324,7 +326,8 @@ writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
      let varList  = Map.toList (satVariables satq)
      let argNames = map fst varList
      let argTys = map snd varList
-     (vars, bval) <- W.w4Solve sym sc satq
+     (vars, bvals) <- W.w4Solve sym sc satq
+     bval <- W4.andAllOf sym traverse bvals
      let f fot = case toFiniteType fot of
                    Nothing -> fail $ "writeVerilogSAT: Unsupported argument type " ++ show fot
                    Just ft -> return ft

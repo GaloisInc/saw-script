@@ -62,6 +62,7 @@ module Verifier.SAW.SharedTerm
   , SharedContextCheckpoint
   , checkpointSharedContext
   , restoreSharedContext
+  , scGetNamingEnv
     -- ** Low-level generic term constructors
   , scTermF
   , scFlatTermF
@@ -168,6 +169,8 @@ module Verifier.SAW.SharedTerm
   , scXor
   , scBoolEq
   , scIte
+  , scAndList
+  , scOrList
   -- *** Natural numbers
   , scNat
   , scNatType
@@ -265,7 +268,11 @@ module Verifier.SAW.SharedTerm
   , scUnfoldConstantSet
   , scUnfoldConstantSet'
   , scSharedSize
+  , scSharedSizeAux
+  , scSharedSizeMany
   , scTreeSize
+  , scTreeSizeAux
+  , scTreeSizeMany
   ) where
 
 import Control.Applicative
@@ -525,6 +532,10 @@ scCtorApp sc c_id args =
   do ctor <- scRequireCtor sc c_id
      let (params,args') = splitAt (ctorNumParams ctor) args
      scCtorAppParams sc (ctorPrimName ctor) params args'
+
+-- | Get the current naming environment
+scGetNamingEnv :: SharedContext -> IO SAWNamingEnv
+scGetNamingEnv sc = readIORef (scNamingEnv sc)
 
 -- | Get the current 'ModuleMap'
 scGetModuleMap :: SharedContext -> IO ModuleMap
@@ -1702,6 +1713,25 @@ scIte :: SharedContext -> Term -> Term ->
          Term -> Term -> IO Term
 scIte sc t b x y = scGlobalApply sc "Prelude.ite" [t, b, x, y]
 
+-- | Build a conjunction from a list of boolean terms.
+scAndList :: SharedContext -> [Term] -> IO Term
+scAndList sc = conj . filter nontrivial
+  where
+    nontrivial x = asBool x /= Just True
+    conj [] = scBool sc True
+    conj [x] = return x
+    conj (x : xs) = foldM (scAnd sc) x xs
+
+-- | Build a conjunction from a list of boolean terms.
+scOrList :: SharedContext -> [Term] -> IO Term
+scOrList sc = disj . filter nontrivial
+  where
+    nontrivial x = asBool x /= Just False
+    disj [] = scBool sc False
+    disj [x] = return x
+    disj (x : xs) = foldM (scOr sc) x xs
+
+
 -- | Create a term applying @Prelude.append@ to two vectors.
 --
 -- > append : (m n : Nat) -> (e : sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
@@ -2604,7 +2634,13 @@ scUnfoldConstantSet' sc b names t0 = do
 
 -- | Return the number of DAG nodes used by the given @Term@.
 scSharedSize :: Term -> Integer
-scSharedSize = fst . go (0, Set.empty)
+scSharedSize = fst . scSharedSizeAux (0, Set.empty)
+
+scSharedSizeMany :: [Term] -> Integer
+scSharedSizeMany = fst . foldl scSharedSizeAux (0, Set.empty)
+
+scSharedSizeAux :: (Integer, Set TermIndex) -> Term -> (Integer, Set TermIndex)
+scSharedSizeAux = go
   where
     go (sz, seen) (Unshared tf) = foldl' go (strictPair (sz + 1) seen) tf
     go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf })
@@ -2617,7 +2653,13 @@ strictPair x y = x `seq` y `seq` (x, y)
 -- | Return the number of nodes that would be used by the given
 -- @Term@ if it were represented as a tree instead of a DAG.
 scTreeSize :: Term -> Integer
-scTreeSize = fst . go (0, Map.empty)
+scTreeSize = fst . scTreeSizeAux (0, Map.empty)
+
+scTreeSizeMany :: [Term] -> Integer
+scTreeSizeMany = fst . foldl scTreeSizeAux (0, Map.empty)
+
+scTreeSizeAux :: (Integer, Map TermIndex Integer) -> Term -> (Integer, Map TermIndex Integer)
+scTreeSizeAux = go
   where
     go (sz, seen) (Unshared tf) = foldl' go (sz + 1, seen) tf
     go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf }) =
