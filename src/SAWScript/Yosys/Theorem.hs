@@ -1,3 +1,11 @@
+{- |
+Module      : SAWScript.Yosys.Theorem
+Description : Utilities for rewriting/compositional verification of HDL modules
+License     : BSD3
+Maintainer  : sbreese
+Stability   : experimental
+-}
+
 {-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
 {-# Language LambdaCase #-}
@@ -34,17 +42,19 @@ import SAWScript.Yosys.Utils
 newtype YosysImport = YosysImport { yosysImport :: Map Text SC.TypedTerm }
 
 data YosysTheorem = YosysTheorem
-  { _theoremURI :: URI.URI -- URI identifying overridden module
-  , _theoremInputCryptolType :: C.Type -- cryptol type of r
-  , _theoremOutputCryptolType :: C.Type -- cryptol type of (module r)
-  , _theoremInputType :: SC.Term -- type of r
-  , _theoremOutputType :: SC.Term -- type of (module r)
-  , _theoremModule :: SC.Term -- {{ \r -> module r }}
-  , _theoremPrecond :: Maybe SC.Term -- {{ \r -> precond r }}
-  , _theoremBody :: SC.Term -- {{ \r -> other r }}
+  { _theoremURI :: URI.URI -- ^ URI identifying overridden module
+  , _theoremInputCryptolType :: C.Type -- ^ cryptol type of r
+  , _theoremOutputCryptolType :: C.Type -- ^ cryptol type of (module r)
+  , _theoremInputType :: SC.Term -- ^ type of r
+  , _theoremOutputType :: SC.Term -- ^ type of (module r)
+  , _theoremModule :: SC.Term -- ^ {{ \r -> module r }}
+  , _theoremPrecond :: Maybe SC.Term -- ^ {{ \r -> precond r }}
+  , _theoremBody :: SC.Term -- ^ {{ \r -> other r }}
   } 
 makeLenses ''YosysTheorem
 
+-- | Construct a SAWCore proposition for the given theorem.
+-- In pseudo-Cryptol, this looks like {{ \r -> precond r ==> (module r == body r) }}
 theoremProp ::
   (MonadIO m, MonadThrow m) =>
   SC.SharedContext ->
@@ -68,6 +78,8 @@ theoremProp sc thm = do
     ("constructing a proposition while verifying " <> URI.render (thm ^. theoremURI))
     func
 
+-- | Construct a SAWCore proposition for the given theorem.
+-- In pseudo-Cryptol, this looks like {{ \r -> if precond r then body r else module r }}
 theoremReplacement ::
   (MonadIO m, MonadThrow m) =>
   SC.SharedContext ->
@@ -88,6 +100,8 @@ theoremReplacement sc thm = do
     ("constructing an override replacement for " <> URI.render (thm ^. theoremURI))
     ft
 
+-- | Given a SAWCore term corresponding to an HDL module, a specification, and a precondition:
+-- Construct a theorem summarizing the relationship between the module and the specification.
 buildTheorem ::
   (MonadIO m, MonadThrow m) =>
   SC.SharedContext ->
@@ -126,7 +140,7 @@ buildTheorem sc ymod newmod precond body = do
 --  1) unfold all names except thm.theoremURI in t
 --  2) traverse t, looking for constants named thm.theoremURI
 --  4) replace the constant term with either thm.theoremBody, or
---     {{ \x -> if thm.theoremPrecond r then thm.theoremBody else thm.theoremURI }}
+--     {{ \r -> if thm.theoremPrecond r then thm.theoremBody r else thm.theoremURI r }}
 --     in the presence of a precondition
 applyOverride ::
   forall m.

@@ -1,3 +1,11 @@
+{- |
+Module      : SAWScript.Yosys.TransitionSystem
+Description : Exporting stateful HDL circuits to model checkers
+License     : BSD3
+Maintainer  : sbreese
+Stability   : experimental
+-}
+
 {-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
 {-# Language TupleSections #-}
@@ -54,18 +62,21 @@ import qualified Language.Sally.TransitionSystem as Sally
 import SAWScript.Yosys.Utils
 import SAWScript.Yosys.State
 
+-- | A named field with the given What4 base type.
 data SequentialField tp = SequentialField
   { _sequentialFieldName :: Text
   , _sequentialFieldTypeRepr :: W4.BaseTypeRepr tp
   }
 makeLenses ''SequentialField
 
+-- | A typed record associating field names with What4 base types.
 data SequentialFields ctx = SequentialFields
   { _sequentialFields :: Ctx.Assignment SequentialField ctx
   , _sequentialFieldsIndex :: Map Text (Some (Ctx.Index ctx))
   }
 makeLenses ''SequentialFields
 
+-- | Convert a mapping from names to widths into a typed mapping from those names to What4 bitvectors of those widths.
 sequentialReprs ::
   forall m.
   MonadIO m =>
@@ -93,14 +104,17 @@ sequentialReprs fs = do
         pure $ Some $ Ctx.extend rest field
       _ -> throw $ YosysErrorInvalidStateFieldWidth nm
 
+-- | Given information about field names and types alongside an appropriately-typed What4 struct value,
+-- explode that struct into a mapping from field names to fresh typed SAWCore constants and SAWCore What4 simulator values.
+-- (This is used to unpack a What4 struct into a representation that is more convenient to manipulate in SAWCore.)
 ecBindingsOfFields ::
   MonadIO m =>
   W4.B.ExprBuilder n st fs ->
   SC.SharedContext ->
-  Text ->
-  Map Text SC.Term ->
-  SequentialFields ctx ->
-  W4.SymStruct (W4.B.ExprBuilder n st fs) ctx ->
+  Text {- ^ Prefix to prepend to all field names -} ->
+  Map Text SC.Term {- ^ Mapping from field names to SAWCore types -} ->
+  SequentialFields ctx {- ^ Mapping from field names to What4 base types -} ->
+  W4.SymStruct (W4.B.ExprBuilder n st fs) ctx {- ^ What4 record to deconstruct -} ->
   m (Map Text (SC.ExtCns SC.Term, SimW4.SValue (W4.B.ExprBuilder n st fs)))
 ecBindingsOfFields sym sc pfx fs s inp = fmap Map.fromList . forM (Map.assocs fs) $ \(baseName, ty) -> do
   let nm = pfx <> baseName
@@ -112,29 +126,37 @@ ecBindingsOfFields sym sc pfx fs s inp = fmap Map.fromList . forM (Map.assocs fs
         -> do
           inpExpr <- liftIO $ W4.structField sym inp idx
           pure . Sim.VWord $ W4.DBV inpExpr
-    _ -> throw $ YosysErrorTransitionSystemMissingField  nm
+    _ -> throw $ YosysErrorTransitionSystemMissingField nm
   pure (baseName, (ec, val))
 
+-- | Given a sequential circuit and a query, construct and write to disk a Sally transition system encoding that query.
 queryModelChecker ::
   MonadIO m =>
   W4.B.ExprBuilder n st fs ->
-  SimW4.SAWCoreState n ->
   SC.SharedContext ->
   YosysSequential ->
-  FilePath ->
-  SC.TypedTerm ->
-  Set.Set Text ->
+  FilePath {- ^ Path to write the resulting Sally input -} ->
+  SC.TypedTerm {- ^ A boolean function of three parameters: an 8-bit cycle counter, a record of "fixed" inputs, and a record of circuit outputs -} ->
+  Set.Set Text {- ^ Names of circuit inputs that are fixed -}->
   m ()
-queryModelChecker sym _scs sc sequential path query fixedInputs = do
+queryModelChecker sym sc sequential path query fixedInputs = do
+  -- there are 5 classes of field:
+  --  - fixed inputs (inputs from the circuit named in the fixed set, assumed to be constant across cycles
+  --  - variable inputs (all other inputs from the circuit)
+  --  - outputs (all outputs from the circuit)
+  --  - state (all circuit flip-flop states)
+  --  - internal (right now, just a cycle counter)
   let (fixedInputWidths, variableInputWidths) = Map.partitionWithKey (\nm _ -> Set.member nm fixedInputs) $ sequential ^. yosysSequentialInputWidths
   let (fixedInputFields, variableInputFields) = Map.partitionWithKey (\nm _ -> Set.member nm fixedInputs) $ sequential ^. yosysSequentialInputFields
   let internalWidths = Map.singleton "cycle" 8
   internalFields <- forM internalWidths $ \w -> liftIO $ SC.scBitvector sc w
 
+  -- the "inputs" for our transition system are exclusively the circuit's variable inputs
   Some inputFields <- sequentialReprs variableInputWidths
   let inputReprs = TraversableFC.fmapFC (view sequentialFieldTypeRepr) $ inputFields ^. sequentialFields
   let inputNames = TraversableFC.fmapFC (Const . W4.safeSymbol . Text.unpack . view sequentialFieldName) $ inputFields ^. sequentialFields
 
+  -- while the transition system "states" are everything else: flip-flop states, fixed inputs, all outputs, and the cycle counter
   let combinedWidths = Map.unions
         [ sequential ^. yosysSequentialStateWidths
         , Map.mapKeys ("stateinput_"<>) fixedInputWidths
@@ -150,6 +172,7 @@ queryModelChecker sym _scs sc sequential path query fixedInputs = do
         , W4.stateReprs = stateReprs
         , W4.stateNames = stateNames
         , W4.initialStatePredicate = \cur -> do
+            -- initially , we assert that cycle = 0
             curInternalBindings <- ecBindingsOfFields sym sc "internal_" internalFields stateFields cur
             cycleVal <- case Map.lookup "cycle" curInternalBindings of
               Just (ec, _) -> SC.scExtCns sc ec
@@ -166,6 +189,12 @@ queryModelChecker sym _scs sc sequential path query fixedInputs = do
               Sim.VBool b -> pure b
               _ -> throw YosysErrorTransitionSystemBadType
         , W4.stateTransitions = \input cur next -> do
+            -- there is exactly one state transition, defined by the SAWCore function f representing the circuit
+            -- here, we assert that:
+            --  - the new value of each state field is equal to the same field in f(<previous state + all inputs>)
+            --  - the new value of each output is equal to the same output in f(<previous state + all inputs>)
+            --  - the new value of each fixed input is equal to the old value of that fixed input
+            --  - the new cycle counter is equal to the old cycle counter plus one
             inputBindings <- ecBindingsOfFields sym sc "" (fst <$> variableInputFields) inputFields input
             curBindings <- ecBindingsOfFields sym sc "" (fst <$> (sequential ^. yosysSequentialStateFields)) stateFields cur
             curFixedInputBindings <- ecBindingsOfFields sym sc "stateinput_" (fst <$> fixedInputFields) stateFields cur
@@ -240,6 +269,11 @@ queryModelChecker sym _scs sc sequential path query fixedInputs = do
               [ (W4.systemSymbol "default!", w4Conj)
               ]
         , W4.queries = \cur -> do
+            -- here we generate a single query, corresponding to the provided query term q
+            -- this is q applied to:
+            --  - the cycle counter (an 8-bit bitvector)
+            --  - a record of the fixed inputs (as usual really a SAWCore tuple, ordered per the Cryptol record type)
+            --  - a record of the outputs
             curFixedInputBindings <- ecBindingsOfFields sym sc "stateinput_" (fst <$> fixedInputFields) stateFields cur
             curOutputBindings <- ecBindingsOfFields sym sc "stateoutput_" (fst <$> (sequential ^. yosysSequentialOutputFields)) stateFields cur
             curInternalBindings <- ecBindingsOfFields sym sc "internal_" internalFields stateFields cur

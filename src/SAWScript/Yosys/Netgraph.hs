@@ -1,3 +1,11 @@
+{- |
+Module      : SAWScript.Yosys.Netgraph
+Description : Translating graphs of Yosys cells into SAWCore
+License     : BSD3
+Maintainer  : sbreese
+Stability   : experimental
+-}
+
 {-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
 {-# Language RecordWildCards #-}

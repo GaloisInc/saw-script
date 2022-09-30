@@ -1,3 +1,11 @@
+{- |
+Module      : SAWScript.Yosys.Utils
+Description : Miscellaneous utilities used when working with HDL
+License     : BSD3
+Maintainer  : sbreese
+Stability   : experimental
+-}
+
 {-# Language CPP #-}
 {-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
@@ -138,6 +146,7 @@ reverseTopSort =
   reverse . Graph.topSort
 #endif
 
+-- | Check that a SAWCore term is well-typed, throwing an exception otherwise.
 validateTerm :: MonadIO m => SC.SharedContext -> Text -> SC.Term -> m SC.Term
 validateTerm sc msg t = liftIO (SC.TC.scTypeCheck sc Nothing t) >>= \case
   Right _ -> pure t
@@ -148,6 +157,7 @@ validateTerm sc msg t = liftIO (SC.TC.scTypeCheck sc Nothing t) >>= \case
     . unlines
     $ SC.TC.prettyTCError err
 
+-- | Produce a SAWCore tuple type corresponding to a Cryptol record type with the given fields.
 cryptolRecordType ::
   MonadIO m =>
   SC.SharedContext ->
@@ -156,6 +166,7 @@ cryptolRecordType ::
 cryptolRecordType sc fields =
   liftIO $ SC.scTupleType sc (fmap snd . C.canonicalFields . C.recordFromFields $ Map.assocs fields)
 
+-- | Produce a SAWCore tuple corresponding to a Cryptol record with the given fields.
 cryptolRecord ::
   MonadIO m =>
   SC.SharedContext ->
@@ -164,6 +175,7 @@ cryptolRecord ::
 cryptolRecord sc fields =
   liftIO $ SC.scTuple sc (fmap snd . C.canonicalFields . C.recordFromFields $ Map.assocs fields)
 
+-- | Produce a SAWCore tuple index corresponding to a lookup in a Cryptol record with the given fields.
 cryptolRecordSelect ::
   MonadIO m =>
   SC.SharedContext ->
@@ -184,6 +196,8 @@ cryptolRecordSelect sc fields r nm =
       ]
   where ord = fmap fst . C.canonicalFields . C.recordFromFields $ Map.assocs fields
 
+-- | Produce a SAWCore tuple index corresponding to a lookup in a Cryptol record.
+-- The record fields are inferred from the Cryptol type attached to the `TypedTerm`.
 cryptolRecordSelectTyped ::
   MonadIO m =>
   SC.SharedContext ->
@@ -209,6 +223,8 @@ cryptolRecordSelectTyped sc r nm = do
   t <- cryptolRecordSelect sc fields (SC.ttTerm r) nm
   pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) t
 
+-- | Construct a SAWCore expression asserting equality between each field of two records.
+-- Both records should be tuples corresponding to the specified Cryptol record type.
 eqBvRecords ::
   (MonadIO m, MonadThrow m) =>
   SC.SharedContext ->

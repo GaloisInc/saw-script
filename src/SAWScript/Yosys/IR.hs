@@ -1,3 +1,11 @@
+{- |
+Module      : SAWScript.Yosys.IR
+Description : Representation for Yosys JSON output
+License     : BSD3
+Maintainer  : sbreese
+Stability   : experimental
+-}
+
 {-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
 {-# Language RecordWildCards #-}
@@ -24,6 +32,7 @@ import SAWScript.Yosys.Utils
 --------------------------------------------------------------------------------
 -- ** Representing and loading the Yosys JSON IR
 
+-- | The direction of a module port.
 data Direction
   = DirectionInput
   | DirectionOutput
@@ -35,12 +44,13 @@ instance Aeson.FromJSON Direction where
   parseJSON (Aeson.String "inout") = pure DirectionInout
   parseJSON v = fail $ "Failed to parse direction: " <> show v
 
+-- | The value of a connection
 data Bitrep
-  = BitrepZero
-  | BitrepOne
-  | BitrepX
-  | BitrepZ
-  | Bitrep Integer
+  = BitrepZero -- ^ Constant zero bit
+  | BitrepOne -- ^ Constant one bit
+  | BitrepX -- ^ Undefined bit X
+  | BitrepZ -- ^ Undefined bit Z
+  | Bitrep Integer -- ^ The signal bit with the given index
   deriving (Show, Eq, Ord)
 instance Aeson.FromJSON Bitrep where
   parseJSON (Aeson.String "0") = pure BitrepZero
@@ -50,11 +60,12 @@ instance Aeson.FromJSON Bitrep where
   parseJSON vn@Aeson.Number{} = Bitrep <$> Aeson.parseJSON vn
   parseJSON v = fail $ "Failed to parse bits: " <> show v
 
+-- ^ A module input/output port.
 data Port = Port
   { _portDirection :: Direction
-  , _portBits :: [Bitrep]
-  , _portOffset :: Integer
-  , _portUpto :: Bool
+  , _portBits :: [Bitrep] -- ^ Which bit indices within the module are associated with the port
+  , _portOffset :: Integer -- currently unused
+  , _portUpto :: Bool -- currently unused
   } deriving (Show, Eq, Ord)
 makeLenses ''Port
 instance Aeson.FromJSON Port where
@@ -69,13 +80,14 @@ instance Aeson.FromJSON Port where
       _ -> pure False
     pure Port{..}
 
+-- | A cell within an HDL module.
 data Cell bs = Cell
-  { _cellHideName :: Bool
-  , _cellType :: Text
-  , _cellParameters :: Map Text Text
-  , _cellAttributes :: Aeson.Value
-  , _cellPortDirections :: Map Text Direction
-  , _cellConnections :: Map Text bs
+  { _cellHideName :: Bool -- ^ Whether the cell's name is human-readable
+  , _cellType :: Text -- ^ The cell type
+  , _cellParameters :: Map Text Text -- ^ Metadata parameters
+  , _cellAttributes :: Aeson.Value -- currently unused
+  , _cellPortDirections :: Map Text Direction -- ^ Direction for each cell connection
+  , _cellConnections :: Map Text bs -- ^ Bitrep for each cell connection
   } deriving (Show, Eq, Ord, Functor)
 makeLenses ''Cell
 instance Aeson.FromJSON (Cell [Bitrep]) where
@@ -90,8 +102,9 @@ instance Aeson.FromJSON (Cell [Bitrep]) where
     _cellConnections <- o Aeson..: "connections"
     pure Cell{..}
 
+-- | A single HDL module.
 data Module = Module
-  { _moduleAttributes :: Aeson.Value
+  { _moduleAttributes :: Aeson.Value -- currently unused
   , _modulePorts :: Map Text Port
   , _moduleCells :: Map Text (Cell [Bitrep])
   } deriving (Show, Eq, Ord)
@@ -103,6 +116,7 @@ instance Aeson.FromJSON Module where
     _moduleCells <- o Aeson..: "cells"
     pure Module{..}
 
+-- | A collection of multiple HDL modules (possibly with dependencies on each other).
 data YosysIR = YosysIR
   { _yosysCreator :: Text
   , _yosysModules :: Map Text Module
@@ -114,6 +128,7 @@ instance Aeson.FromJSON YosysIR where
     _yosysModules <- o Aeson..: "modules"
     pure YosysIR{..}
 
+-- | Read a collection of HDL modules from a file produced by Yosys' write_json command.
 loadYosysIR :: MonadIO m => FilePath -> m YosysIR
 loadYosysIR p = liftIO $ Aeson.eitherDecodeFileStrict p >>= \case
   Left err -> throw . YosysError $ Text.pack err

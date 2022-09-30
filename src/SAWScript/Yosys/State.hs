@@ -1,3 +1,11 @@
+{- |
+Module      : SAWScript.Yosys.State
+Description : Representing and manipulating stateful HDL circuits
+License     : BSD3
+Maintainer  : sbreese
+Stability   : experimental
+-}
+
 {-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
 {-# Language RecordWildCards #-}
@@ -40,9 +48,13 @@ import SAWScript.Yosys.Utils
 import SAWScript.Yosys.IR
 import SAWScript.Yosys.Netgraph
 
+-- | Encode the given string such that is a valid Cryptol identifier. 
+-- Since Yosys cell names often look like "\42", this makes it much easier to manipulate state records,
+-- which are keyed by cell name.
 cellIdentifier :: Text -> Text
 cellIdentifier = Text.pack . zEncodeString . Text.unpack
 
+-- | Find all of the flip-flop cells in a network graph.
 findDffs ::
   Netgraph Bitrep ->
   Map Text (Cell [Bitrep])
@@ -53,17 +65,19 @@ findDffs ng =
   . Graph.vertices
   $ ng ^. netgraphGraph
 
+-- ^ A SAWCore translation of an HDL module alongside some type information that is useful to keep around.
 data YosysSequential = YosysSequential
-  { _yosysSequentialTerm :: SC.TypedTerm
-  , _yosysSequentialStateFields :: Map Text (SC.Term, C.Type)
-  , _yosysSequentialInputFields :: Map Text (SC.Term, C.Type)
-  , _yosysSequentialOutputFields :: Map Text (SC.Term, C.Type)
-  , _yosysSequentialInputWidths :: Map Text Natural
-  , _yosysSequentialOutputWidths :: Map Text Natural
-  , _yosysSequentialStateWidths :: Map Text Natural
+  { _yosysSequentialTerm :: SC.TypedTerm -- ^ The "raw" SAWCore term derived from the module, which includes a __state__ field in the input and output.
+  , _yosysSequentialStateFields :: Map Text (SC.Term, C.Type) -- ^ A mapping from each state field name to a SAWCore and Cryptol type.
+  , _yosysSequentialInputFields :: Map Text (SC.Term, C.Type) -- ^ A mapping from each input to a SAWCore and Cryptol type.
+  , _yosysSequentialOutputFields :: Map Text (SC.Term, C.Type) -- ^ A mapping from each output to a SAWCore and Cryptol type.
+  , _yosysSequentialInputWidths :: Map Text Natural -- ^ A mapping from each input to a width.
+  , _yosysSequentialOutputWidths :: Map Text Natural -- ^ A mapping from each output to a width.
+  , _yosysSequentialStateWidths :: Map Text Natural -- ^ A mapping from each state field to a width.
   }
 makeLenses ''YosysSequential
 
+-- | Build a SAWCore type corresponding to the Cryptol record type with the given field types
 fieldsToType ::
   MonadIO m =>
   SC.SharedContext ->
@@ -71,23 +85,26 @@ fieldsToType ::
   m SC.Term
 fieldsToType sc = cryptolRecordType sc . fmap fst
 
+-- | Build a Cryptol record type with the given field types
 fieldsToCryptolType ::
   MonadIO m =>
   Map Text (SC.Term, C.Type) ->
   m C.Type
 fieldsToCryptolType fields = pure . C.tRec . C.recordFromFields $ bimap C.mkIdent snd <$> Map.assocs fields
 
+-- | Add a record-typed field named __states__ to the given mapping of field names to types.
 insertStateField ::
   MonadIO m =>
   SC.SharedContext ->
-  Map Text (SC.Term, C.Type) ->
-  Map Text (SC.Term, C.Type) ->
+  Map Text (SC.Term, C.Type) {- ^ The field types of "__states__" -} ->
+  Map Text (SC.Term, C.Type) {- ^ The mapping to update -} ->
   m (Map Text (SC.Term, C.Type))
 insertStateField sc stateFields fields = do
   stateRecordType <- fieldsToType sc stateFields
   stateRecordCryptolType <- fieldsToCryptolType stateFields
   pure $ Map.insert "__state__" (stateRecordType, stateRecordCryptolType) fields
 
+-- | Translate a stateful HDL module into SAWCore
 convertModuleInline ::
   MonadIO m =>
   SC.SharedContext ->
@@ -191,6 +208,8 @@ convertModuleInline sc m = do
     , _yosysSequentialStateWidths = stateWidths
     }
 
+-- | Given a SAWCore term with an explicit state, iterate the term the given number of times.
+-- | The resulting term has a parameter for the initial state, the resulting Cryptol types does not.
 composeYosysSequentialHelper ::
   forall m.
   MonadIO m =>
@@ -270,6 +289,8 @@ composeYosysSequentialHelper sc s n = do
 
   pure (res, cty)
 
+-- | Given a SAWCore term with an explicit state, iterate the term the given number of times.
+-- | Accessing the initial state produces an error.
 composeYosysSequential ::
   forall m.
   MonadIO m =>
@@ -285,6 +306,8 @@ composeYosysSequential sc s n = do
   res <- liftIO $ SC.scApply sc t initialState
   pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) res
 
+-- | Given a SAWCore term with an explicit state, iterate the term the given number of times.
+-- | The resulting term has a parameter for the initial state.
 composeYosysSequentialWithState ::
   forall m.
   MonadIO m =>

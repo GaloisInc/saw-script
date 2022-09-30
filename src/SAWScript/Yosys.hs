@@ -1,3 +1,11 @@
+{- |
+Module      : SAWScript.Yosys
+Description : Loading and manipulating HDL programs
+License     : BSD3
+Maintainer  : sbreese
+Stability   : experimental
+-}
+
 {-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
 {-# Language RecordWildCards #-}
@@ -67,6 +75,7 @@ data Modgraph = Modgraph
   }
 makeLenses ''Modgraph
 
+-- | Given a Yosys IR, construct a graph of intermodule dependencies.
 yosysIRModgraph :: YosysIR -> Modgraph
 yosysIRModgraph ir =
   let
@@ -91,7 +100,6 @@ convertYosysIR sc ir = do
   foldM
     (\env v -> do
         let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
-        -- liftIO . putStrLn . Text.unpack $ mconcat ["Converting module: ", nm]
         cm <- convertModule sc env m
         _ <- validateTerm sc ("translating the combinational circuit \"" <> nm <> "\"") $ cm ^. convertedModuleTerm
         n <- liftIO $ Nonce.freshNonce Nonce.globalNonceGenerator
@@ -157,6 +165,9 @@ yosysIRToSequential sc ir nm = do
 
 {-# ANN module ("HLint: ignore Use camelCase" :: String) #-}
 
+-- | Produces a Term given the path to a JSON file produced by the Yosys write_json command.
+-- The resulting term is a Cryptol record, where each field corresponds to one HDL module exported by Yosys.
+-- Each HDL module is in turn represented by a function from a record of input port values to a record of output port values.
 yosys_import :: FilePath -> TopLevel SC.TypedTerm
 yosys_import path = do
   sc <- getSharedContext
@@ -165,7 +176,17 @@ yosys_import path = do
   _ <- validateTerm sc "translating combinational circuits" $ SC.ttTerm tt
   pure tt
 
-yosys_verify :: SC.TypedTerm -> [SC.TypedTerm] -> SC.TypedTerm -> [YosysTheorem] -> ProofScript () -> TopLevel YosysTheorem
+-- | Proves equality between a combinational HDL module and a specification.
+-- Note that terms derived from HDL modules are first class, and are not restricted to yosys_verify:
+-- they may also be used with SAW's typical Term infrastructure like sat, prove_print, term rewriting, etc.
+-- yosys_verify simply provides a convenient and familiar interface, similar to llvm_verify or jvm_verify.
+yosys_verify ::
+  SC.TypedTerm {- ^ Term corresponding to the HDL module -} ->
+  [SC.TypedTerm] {- ^ Preconditions for the equality -} ->
+  SC.TypedTerm {- ^ Specification term of the same type as the HDL module -} ->
+  [YosysTheorem] {- ^ Overrides to apply -} ->
+  ProofScript () ->
+  TopLevel YosysTheorem
 yosys_verify ymod preconds other specs tactic = do
   sc <- getSharedContext
   newmod <- foldM (flip $ applyOverride sc)
@@ -181,32 +202,54 @@ yosys_verify ymod preconds other specs tactic = do
   _ <- Builtins.provePrintPrim tactic prop
   pure thm
 
-yosys_import_sequential :: Text -> FilePath -> TopLevel YosysSequential
+-- | Import a single sequential HDL module.
+-- N.B. SAW expects the sequential module to exist entirely within a single Yosys module.
+yosys_import_sequential ::
+  Text {- ^ Name of the HDL module -} ->
+  FilePath {- ^ Path to the Yosys JSON file -} ->
+  TopLevel YosysSequential
 yosys_import_sequential nm path = do
   sc <- getSharedContext
   ir <- loadYosysIR path
   yosysIRToSequential sc ir nm
 
-yosys_extract_sequential :: YosysSequential -> Integer -> TopLevel SC.TypedTerm
+-- | Extracts a term from the given sequential module with the state eliminated by iterating the term over the given concrete number of cycles.
+-- The resulting term has no state field in the inputs or outputs.
+-- Each input and output field is replaced with an array of that field's type (array length being the number of cycles specified).
+yosys_extract_sequential ::
+  YosysSequential ->
+  Integer {- ^ Number of cycles to iterate term -} ->
+  TopLevel SC.TypedTerm
 yosys_extract_sequential s n = do
   sc <- getSharedContext
   tt <- composeYosysSequential sc s n
   _ <- validateTerm sc "composing a sequential term" $ SC.ttTerm tt
   pure tt
 
-yosys_extract_sequential_with_state :: YosysSequential -> Integer -> TopLevel SC.TypedTerm
+-- | Like `yosys_extract_sequential`, but the resulting term has an additional parameter to specify the initial state.
+yosys_extract_sequential_with_state ::
+  YosysSequential ->
+  Integer {- ^ Number of cycles to iterate term -} ->
+  TopLevel SC.TypedTerm
 yosys_extract_sequential_with_state s n = do
   sc <- getSharedContext
   tt <- composeYosysSequentialWithState sc s n
   _ <- validateTerm sc "composing a sequential term with state" $ SC.ttTerm tt
   pure tt
 
+-- | Extracts a term from the given sequential module.
+-- This term has explicit fields for the state of the circuit in the input and output record types.
 yosys_extract_sequential_raw :: YosysSequential -> TopLevel SC.TypedTerm
 yosys_extract_sequential_raw s = pure $ s ^. yosysSequentialTerm
 
-yosys_verify_sequential_sally :: YosysSequential -> FilePath -> SC.TypedTerm -> [String] -> TopLevel ()
+-- | Export a query over the given sequential module to an input file for the Sally model checker.
+yosys_verify_sequential_sally ::
+  YosysSequential ->
+  FilePath {- ^ Path to write the resulting Sally input -} ->
+  SC.TypedTerm {- ^ A boolean function of three parameters: an 8-bit cycle counter, a record of "fixed" inputs, and a record of circuit outputs -} ->
+  [String] {- ^ Names of circuit inputs that are fixed -} ->
+  TopLevel ()
 yosys_verify_sequential_sally s path q fixed = do
   sc <- getSharedContext
   sym <- liftIO $ Common.newSAWCoreExprBuilder sc
-  scs <- liftIO $ Common.sawCoreState sym
-  queryModelChecker sym scs sc s path q . Set.fromList $ Text.pack <$> fixed
+  queryModelChecker sym sc s path q . Set.fromList $ Text.pack <$> fixed

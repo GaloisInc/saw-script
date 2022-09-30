@@ -1,3 +1,11 @@
+{- |
+Module      : SAWScript.Yosys.Cell
+Description : Translating Yosys cells into SAWCore
+License     : BSD3
+Maintainer  : sbreese
+Stability   : experimental
+-}
+
 {-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
 {-# Language RecordWildCards #-}
