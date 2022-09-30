@@ -48,7 +48,6 @@ import qualified Verifier.SAW.TypedTerm as SC
 
 import qualified Verifier.SAW.Simulator.Value as Sim
 import qualified Verifier.SAW.Simulator.What4 as SimW4
-import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SimW4
 
 import qualified What4.Interface as W4
 import qualified What4.Symbol as W4
