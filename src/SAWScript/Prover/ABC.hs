@@ -29,7 +29,11 @@ import           Verifier.SAW.SATQuery
 import           Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
-import SAWScript.Proof(Prop, propToSATQuery, propSize, goalProp, ProofGoal, goalType, goalNum, CEX)
+import SAWScript.Proof
+  ( sequentToSATQuery, goalSequent, ProofGoal
+  , goalType, goalNum, CEX
+  , Sequent, sequentSharedSize
+  )
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import qualified SAWScript.Prover.Exporter as Exporter
 import SAWScript.Prover.Util (liftCexBB, liftLECexBB)
@@ -44,14 +48,14 @@ import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 proveABC ::
   (AIG.IsAIG l g) =>
   AIG.Proxy l g ->
-  Prop ->
+  Sequent ->
   TopLevel (Maybe CEX, SolverStats)
 proveABC proxy goal = getSharedContext >>= \sc -> liftIO $
-  do satq <- propToSATQuery sc mempty goal
+  do satq <- sequentToSATQuery sc mempty goal
      BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \be lit shapes ->
        do let (ecs,fts) = unzip shapes
           res <- getModel ecs fts =<< AIG.checkSat be lit
-          let stats = solverStats "ABC" (propSize goal)
+          let stats = solverStats "ABC" (sequentSharedSize goal)
           return (res, stats)
 
 
@@ -83,7 +87,7 @@ getModel argNames shapes satRes =
 w4AbcVerilog ::
   Set VarIndex ->
   Bool ->
-  Prop ->
+  Sequent ->
   TopLevel (Maybe CEX, SolverStats)
 w4AbcVerilog = w4AbcExternal Exporter.writeVerilogSAT cmd
   where cmd tmp tmpCex = "%read " ++ tmp ++
@@ -93,7 +97,7 @@ w4AbcVerilog = w4AbcExternal Exporter.writeVerilogSAT cmd
 w4AbcAIGER ::
   Set VarIndex ->
   Bool ->
-  Prop ->
+  Sequent ->
   TopLevel (Maybe CEX, SolverStats)
 w4AbcAIGER =
   do w4AbcExternal Exporter.writeAIG_SAT cmd
@@ -104,7 +108,7 @@ w4AbcExternal ::
   (String -> String -> String) ->
   Set VarIndex ->
   Bool ->
-  Prop ->
+  Sequent ->
   TopLevel (Maybe CEX, SolverStats)
 w4AbcExternal exporter argFn unints _hashcons goal =
        -- Create temporary files
@@ -114,7 +118,7 @@ w4AbcExternal exporter argFn unints _hashcons goal =
        tmp <- liftIO $ emptySystemTempFile tpl
        tmpCex <- liftIO $ emptySystemTempFile tplCex
 
-       satq <- liftIO $ propToSATQuery sc unints goal
+       satq <- liftIO $ sequentToSATQuery sc unints goal
        (argNames, argTys) <- unzip <$> exporter tmp satq
 
        -- Run ABC and remove temporaries
@@ -126,7 +130,7 @@ w4AbcExternal exporter argFn unints _hashcons goal =
        liftIO $ removeFile tmpCex
 
        -- Parse and report results
-       let stats = solverStats "abc_verilog" (propSize goal)
+       let stats = solverStats "abc_verilog" (sequentSharedSize goal)
        res <- if all isSpace cexText
               then return Nothing
               else do cex <- liftIO $ parseAigerCex cexText argTys
@@ -166,7 +170,7 @@ abcSatExternal :: MonadIO m =>
   ProofGoal ->
   m (Maybe CEX, SolverStats)
 abcSatExternal proxy sc doCNF execName args g = liftIO $
-  do satq <- propToSATQuery sc mempty (goalProp g)
+  do satq <- sequentToSATQuery sc mempty (goalSequent g)
      let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
      (path, fh) <- openTempFile "." cnfName
      hClose fh -- Yuck. TODO: allow writeCNF et al. to work on handles.
@@ -184,7 +188,7 @@ abcSatExternal proxy sc doCNF execName args g = liftIO $
        let ls = lines out
            sls = filter ("s " `isPrefixOf`) ls
            vls = filter ("v " `isPrefixOf`) ls
-       let stats = solverStats ("external SAT:" ++ execName) (propSize (goalProp g))
+       let stats = solverStats ("external SAT:" ++ execName) (sequentSharedSize (goalSequent g))
        case (sls, vls) of
          (["s SATISFIABLE"], _) -> do
            let bs = parseDimacsSolution variables vls

@@ -25,7 +25,6 @@ module SAWScript.Prover.MRSolver.Monad where
 
 import Data.List (find, findIndex, foldl')
 import qualified Data.Text as T
-import Numeric.Natural (Natural)
 import System.IO (hPutStrLn, stderr)
 import Control.Monad.Reader
 import Control.Monad.State
@@ -177,7 +176,7 @@ instance PrettyInCtx MRFailure where
 
 -- | Render a 'MRFailure' to a 'String'
 showMRFailure :: MRFailure -> String
-showMRFailure = showInCtx []
+showMRFailure = showInCtx emptyMRVarCtx
 
 -- | Render a 'MRFailure' to a 'String' without its context (see
 -- 'mrFailureWithoutCtx')
@@ -220,10 +219,8 @@ asEVarApp _ _ = Nothing
 -- for some universal context @x1:T1, ..., xn:Tn@ and some lists of argument
 -- expressions @y1, ..., ym@ and @z1, ..., zl@ over the universal context.
 data CoIndHyp = CoIndHyp {
-  -- | The uvars that were in scope when this assmption was created, in order
-  -- from outermost to innermost; that is, the uvars as "seen from outside their
-  -- scope", which is the reverse of the order of 'mrUVars', below
-  coIndHypCtx :: [(LocalName,Term)],
+  -- | The uvars that were in scope when this assmption was created
+  coIndHypCtx :: MRVarCtx,
   -- | The LHS function name
   coIndHypLHSFun :: FunName,
   -- | The RHS function name
@@ -254,19 +251,14 @@ coIndHypSetArg hyp@(CoIndHyp {..}) (Left i) x =
 coIndHypSetArg hyp@(CoIndHyp {..}) (Right i) x =
   hyp { coIndHypRHS = take i coIndHypRHS ++ x : drop (i+1) coIndHypRHS }
 
--- | Set all of the arguments in the given list to the given value in a
--- coinductive hypothesis, using 'coIndHypSetArg'
-coIndHypSetArgs :: CoIndHyp -> [Either Int Int] -> Term -> CoIndHyp
-coIndHypSetArgs hyp specs x =
-  foldl' (\hyp' spec -> coIndHypSetArg hyp' spec x) hyp specs
-
 -- | Add a variable to the context of a coinductive hypothesis, returning the
 -- updated coinductive hypothesis and a 'Term' which is the new variable
 coIndHypWithVar :: CoIndHyp -> LocalName -> Type -> MRM (CoIndHyp, Term)
-coIndHypWithVar (CoIndHyp ctx f1 f2 args1 args2 invar1 invar2) nm (Type tp) =
+coIndHypWithVar (CoIndHyp ctx f1 f2 args1 args2 invar1 invar2) nm tp =
   do var <- liftSC1 scLocalVar 0
+     let ctx' = mrVarCtxAppend (singletonMRVarCtx nm tp) ctx
      (args1', args2') <- liftTermLike 0 1 (args1, args2)
-     return (CoIndHyp (ctx ++ [(nm,tp)]) f1 f2 args1' args2' invar1 invar2, var)
+     return (CoIndHyp ctx' f1 f2 args1' args2' invar1 invar2, var)
   
 -- | A map from pairs of function names to co-inductive hypotheses over those
 -- names
@@ -274,8 +266,9 @@ type CoIndHyps = Map (FunName, FunName) CoIndHyp
 
 instance PrettyInCtx CoIndHyp where
   prettyInCtx (CoIndHyp ctx f1 f2 args1 args2 invar1 invar2) =
-    local (const $ map fst $ reverse ctx) $
-    prettyAppList [return (ppCtx ctx <> "."),
+    -- ignore whatever context we're in and use `ctx` instead
+    return $ flip runPPInCtxM ctx $
+    prettyAppList [prettyInCtx ctx, return ".",
                    (case invar1 of
                        Just f -> prettyTermApp f args1
                        Nothing -> return "True"), return "=>",
@@ -307,10 +300,8 @@ data MRInfo = MRInfo {
   mriSC :: SharedContext,
   -- | SMT timeout for SMT calls made by Mr. Solver
   mriSMTTimeout :: Maybe Integer,
-  -- | The current context of universal variables, which are free SAW core
-  -- variables, in order from innermost to outermost, i.e., where element @0@
-  -- corresponds to deBruijn index @0@
-  mriUVars :: [(LocalName,Type)],
+  -- | The current context of universal variables
+  mriUVars :: MRVarCtx,
   -- | The top-level Mr Solver environment
   mriEnv :: MREnv,
   -- | The current set of co-inductive hypotheses
@@ -358,7 +349,7 @@ mrSMTTimeout :: MRM (Maybe Integer)
 mrSMTTimeout = mriSMTTimeout <$> ask
 
 -- | Get the current value of 'mriUVars'
-mrUVars :: MRM [(LocalName,Type)]
+mrUVars :: MRM MRVarCtx
 mrUVars = mriUVars <$> ask
 
 -- | Get the current function assumptions
@@ -396,7 +387,8 @@ runMRM sc timeout env m =
   do true_tm <- scBool sc True
      let init_info = MRInfo { mriSC = sc, mriSMTTimeout = timeout,
                               mriEnv = env,
-                              mriUVars = [], mriCoIndHyps = Map.empty,
+                              mriUVars = emptyMRVarCtx,
+                              mriCoIndHyps = Map.empty,
                               mriAssumptions = true_tm,
                               mriDataTypeAssumps = HashMap.empty }
      let init_st = MRState { mrsVars = Map.empty }
@@ -473,55 +465,6 @@ liftSC5 f a b c d e = mrSC >>= \sc -> liftIO (f sc a b c d e)
 
 
 ----------------------------------------------------------------------
--- * Relating Types Heterogeneously
-----------------------------------------------------------------------
-
--- | A datatype encapsulating all the way in which we consider two types to
--- be heterogeneously related: either one is a @Num@ and the other is a @Nat@,
--- one is a @BVVec@ and the other is a non-@BVVec@ vector (of the same length,
--- which must be checked where 'matchHet' is used), or both sides are pairs
--- (whose components are respectively heterogeneously related, which must be
--- checked where 'matchHet' is used). See 'typesHetRelated' for an example.
-data HetRelated = HetBVNum Natural
-                | HetNumBV Natural
-                | HetBVVecVec (Term, Term, Term) (Term, Term)
-                | HetVecBVVec (Term, Term) (Term, Term, Term)
-                | HetPair (Term, Term) (Term, Term)
-
--- | Check to see if the given types match one of the cases of 'HetRelated'
-matchHet :: Term -> Term -> Maybe HetRelated
-matchHet (asBitvectorType -> Just n)
-         (asDataType -> Just (primName -> "Cryptol.Num", _)) =
-  Just $ HetBVNum n
-matchHet (asDataType -> Just (primName -> "Cryptol.Num", _))
-         (asBitvectorType -> Just n) =
-  Just $ HetNumBV n
-matchHet (asBVVecType -> Just (n, len, a))
-         (asNonBVVecVectorType -> Just (m, a')) =
-  Just $ HetBVVecVec (n, len, a) (m, a')
-matchHet (asNonBVVecVectorType -> Just (m, a'))
-         (asBVVecType -> Just (n, len, a)) =
-  Just $ HetVecBVVec (m, a') (n, len, a)
-matchHet (asPairType -> Just (tpL1, tpR1))
-         (asPairType -> Just (tpL2, tpR2)) =
-  Just $ HetPair (tpL1, tpR1) (tpL2, tpR2)
-matchHet _ _ = Nothing
-
--- | Return true iff the given types are heterogeneously related
-typesHetRelated :: Term -> Term -> MRM Bool
-typesHetRelated tp1 tp2 = case matchHet tp1 tp2 of
-  Just (HetBVNum _) -> return True
-  Just (HetNumBV _) -> return True
-  Just (HetBVVecVec (n, len, a) (m, a')) -> mrBvToNat n len >>= \m' ->
-    (&&) <$> mrConvertible m m' <*> typesHetRelated a a'
-  Just (HetVecBVVec (m, a') (n, len, a)) -> mrBvToNat n len >>= \m' ->
-    (&&) <$> mrConvertible m m' <*> typesHetRelated a a'
-  Just (HetPair (tpL1, tpR1) (tpL2, tpR2)) ->
-    (&&) <$> typesHetRelated tpL1 tpL2 <*> typesHetRelated tpR1 tpR2
-  Nothing -> mrConvertible tp1 tp2
-
-
-----------------------------------------------------------------------
 -- * Functions for Building Terms
 ----------------------------------------------------------------------
 
@@ -556,6 +499,10 @@ mrGenFromBVVec n len a v def_err_str m =
 
 -- | Apply a 'TermProj' to perform a projection on a 'Term'
 doTermProj :: Term -> TermProj -> MRM Term
+doTermProj (asPairValue -> Just (t, _)) TermProjLeft = return t
+doTermProj (asPairValue -> Just (_, t)) TermProjRight = return t
+doTermProj (asRecordValue -> Just t_map) (TermProjRecord fld)
+  | Just t <- Map.lookup fld t_map = return t
 doTermProj t TermProjLeft = liftSC1 scPairLeft t
 doTermProj t TermProjRight = liftSC1 scPairRight t
 doTermProj t (TermProjRecord fld) = liftSC2 scRecordSelect t fld
@@ -597,33 +544,32 @@ mrCtorApp = liftSC2 scCtorApp
 mrGlobalTerm :: Ident -> MRM Term
 mrGlobalTerm = liftSC1 scGlobalDef
 
--- | Like 'scBvNat', but if given a bitvector literal it is converted to a
+-- | Like 'scBvConst', but if given a bitvector literal it is converted to a
 -- natural number literal
 mrBvToNat :: Term -> Term -> MRM Term
 mrBvToNat _ (asArrayValue -> Just (asBoolType -> Just _,
                                    mapM asBool -> Just bits)) =
   liftSC1 scNat $ foldl' (\n bit -> if bit then 2*n+1 else 2*n) 0 bits
-mrBvToNat n len = liftSC2 scBvNat n len
+mrBvToNat n len = liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
 
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in
 -- the order as seen "from the outside"
-mrUVarCtx :: MRM [(LocalName,Term)]
-mrUVarCtx = reverse <$> mrUVarCtxRev
+mrUVarsOuterToInner :: MRM [(LocalName,Term)]
+mrUVarsOuterToInner = mrVarCtxOuterToInner <$> mrUVars
 
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the most recently bound uvar first, i.e., in
 -- the order as seen "from the inside"
-mrUVarCtxRev :: MRM [(LocalName,Term)]
-mrUVarCtxRev = map (\(nm,Type tp) -> (nm,tp)) <$> mrUVars
+mrUVarsInnerToOuter :: MRM [(LocalName,Term)]
+mrUVarsInnerToOuter = mrVarCtxInnerToOuter <$> mrUVars
 
 -- | Get the type of a 'Term' in the current uvar context
 mrTypeOf :: Term -> MRM Term
 mrTypeOf t =
-  -- NOTE: scTypeOf' wants the type context in the most recently bound var
-  -- first, i.e., in the mrUVarCtxRev order
-  mrDebugPPPrefix 3 "mrTypeOf:" t >>
-  mrUVarCtxRev >>= \ctx -> liftSC2 scTypeOf' (map snd ctx) t
+  -- NOTE: scTypeOf' wants the type context in the most recently bound var first
+  -- mrDebugPPPrefix 3 "mrTypeOf:" t >>
+  mrUVarsInnerToOuter >>= \ctx -> liftSC2 scTypeOf' (map snd ctx) t
 
 -- | Check if two 'Term's are convertible in the 'MRM' monad
 mrConvertible :: Term -> Term -> MRM Bool
@@ -665,7 +611,9 @@ mrLambdaLift :: TermLike tm => [(LocalName,Term)] -> tm ->
                 ([Term] -> tm -> MRM Term) -> MRM Term
 mrLambdaLift [] t f = f [] t
 mrLambdaLift ctx t f =
-  do nms <- uniquifyNames (map fst ctx) <$> map fst <$> mrUVars
+  do -- uniquifyNames doesn't care about the order of the names in its second,
+     -- argument, thus either inner-to-outer or outer-to-inner would work
+     nms <- uniquifyNames (map fst ctx) <$> map fst <$> mrUVarsInnerToOuter
      let ctx' = zipWith (\nm (_,tp) -> (nm,tp)) nms ctx
      vars <- reverse <$> mapM (liftSC1 scLocalVar) [0 .. length ctx - 1]
      t' <- liftTermLike 0 (length ctx) t
@@ -675,7 +623,7 @@ mrLambdaLift ctx t f =
 -- variable, which is passed as a 'Term' to the sub-computation. Note that any
 -- assumptions made in the sub-computation will be lost when it completes.
 withUVar :: LocalName -> Type -> (Term -> MRM a) -> MRM a
-withUVar nm (Type tp) m = withUVars [(nm,tp)] (\[v] -> m v)
+withUVar nm tp m = withUVars (singletonMRVarCtx nm tp) (\[v] -> m v)
 
 -- | Run a MR Solver computation in a context extended with a universal variable
 -- and pass it the lifting (in the sense of 'incVars') of an MR Solver term
@@ -686,54 +634,63 @@ withUVarLift nm tp t m =
 
 -- | Run a MR Solver computation in a context extended with a list of universal
 -- variables, passing 'Term's for those variables to the supplied computation.
--- The variables are bound "outside in", meaning the first variable in the list
--- is bound outermost, and so will have the highest deBruijn index.
-withUVars :: [(LocalName,Term)] -> ([Term] -> MRM a) -> MRM a
-withUVars [] f = f []
+withUVars :: MRVarCtx -> ([Term] -> MRM a) -> MRM a
+withUVars (mrVarCtxLength -> 0) f = f []
 withUVars ctx f =
-  do nms <- uniquifyNames (map fst ctx) <$> map fst <$> mrUVars
-     let ctx_u = zip nms $ map (Type . snd) ctx
-     assumps' <- mrAssumptions >>= liftTerm 0 (length ctx)
-     dataTypeAssumps' <- mrDataTypeAssumps >>= mapM (liftTermLike 0 (length ctx))
-     vars <- reverse <$> mapM (liftSC1 scLocalVar) [0 .. length ctx - 1]
-     local (\info -> info { mriUVars = reverse ctx_u ++ mriUVars info,
+  do -- for uniquifyNames, we want to consider the oldest names first, thus we
+     -- must pass the first argument in outer-to-inner order. uniquifyNames
+     -- doesn't care about the order of the names in its second, argument, thus
+     -- either inner-to-outer or outer-to-inner would work
+     let ctx_l = mrVarCtxOuterToInner ctx
+     nms <- uniquifyNames (map fst ctx_l) <$> map fst <$> mrUVarsInnerToOuter
+     let ctx_u = mrVarCtxFromOuterToInner $ zip nms $ map snd ctx_l
+     -- lift all the variables in our assumptions by the number of new uvars
+     -- we're adding (we do not have to lift the types in our uvar context
+     -- itself, since each type is in the context of all older uvars - see the
+     -- definition of MRVarCtx)
+     assumps' <- mrAssumptions >>= liftTerm 0 (mrVarCtxLength ctx)
+     dataTypeAssumps' <- mrDataTypeAssumps >>= mapM (liftTermLike 0 (mrVarCtxLength ctx))
+     -- make terms for our new uvars, extend the context, and continue
+     vars <- reverse <$> mapM (liftSC1 scLocalVar) [0 .. mrVarCtxLength ctx - 1]
+     local (\info -> info { mriUVars = mrVarCtxAppend ctx_u (mriUVars info),
                             mriAssumptions = assumps',
                             mriDataTypeAssumps = dataTypeAssumps' }) $
+       mrDebugPPPrefix 3 "withUVars:" ctx_u >>
        foldr (\nm m -> mapMRFailure (MRFailureLocalVar nm) m) (f vars) nms
 
 -- | Run a MR Solver in a top-level context, i.e., with no uvars or assumptions
 withNoUVars :: MRM a -> MRM a
 withNoUVars m =
   do true_tm <- liftSC1 scBool True
-     local (\info -> info { mriUVars = [], mriAssumptions = true_tm,
+     local (\info -> info { mriUVars = emptyMRVarCtx, mriAssumptions = true_tm,
                             mriDataTypeAssumps = HashMap.empty }) m
 
 -- | Run a MR Solver in a context of only the specified UVars, no others -
 -- note that this also clears all assumptions
-withOnlyUVars :: [(LocalName,Term)] -> MRM a -> MRM a
+withOnlyUVars :: MRVarCtx -> MRM a -> MRM a
 withOnlyUVars vars m = withNoUVars $ withUVars vars $ const m
 
 -- | Build 'Term's for all the uvars currently in scope, ordered from least to
 -- most recently bound
 getAllUVarTerms :: MRM [Term]
 getAllUVarTerms =
-  (length <$> mrUVars) >>= \len ->
+  (mrVarCtxLength <$> mrUVars) >>= \len ->
   mapM (liftSC1 scLocalVar) [len-1, len-2 .. 0]
 
 -- | Lambda-abstract all the current uvars out of a 'Term', with the least
 -- recently bound variable being abstracted first
 lambdaUVarsM :: Term -> MRM Term
-lambdaUVarsM t = mrUVarCtx >>= \ctx -> liftSC2 scLambdaList ctx t
+lambdaUVarsM t = mrUVarsOuterToInner >>= \ctx -> liftSC2 scLambdaList ctx t
 
 -- | Pi-abstract all the current uvars out of a 'Term', with the least recently
 -- bound variable being abstracted first
 piUVarsM :: Term -> MRM Term
-piUVarsM t = mrUVarCtx >>= \ctx -> liftSC2 scPiList ctx t
+piUVarsM t = mrUVarsOuterToInner >>= \ctx -> liftSC2 scPiList ctx t
 
 -- | Instantiate all uvars in a term using the supplied function
 instantiateUVarsM :: TermLike a => (LocalName -> Term -> MRM Term) -> a -> MRM a
 instantiateUVarsM f a =
-  do ctx <- mrUVarCtx
+  do ctx <- mrUVarsOuterToInner
      -- Remember: the uvar context is outermost to innermost, so we bind
      -- variables from left to right, substituting earlier ones into the types
      -- of later ones, but all substitutions are in reverse order, since
@@ -862,15 +819,15 @@ mrFreshEVar nm (Type tp) =
      mrSetVarInfo var (EVarInfo Nothing)
      mrVarTerm var
 
--- | Return a fresh sequence of existential variables for a context of variable
--- names and types, assuming each variable is free in the types that occur after
--- it in the list. Return the new evars all applied to the current uvars.
-mrFreshEVars :: [(LocalName,Term)] -> MRM [Term]
-mrFreshEVars = helper [] where
+-- | Return a fresh sequence of existential variables from a 'MRVarCtx'.
+-- Return the new evars all applied to the current uvars.
+mrFreshEVars :: MRVarCtx -> MRM [Term]
+mrFreshEVars = helper [] . mrVarCtxOuterToInner where
   -- Return fresh evars for the suffix of a context of variable names and types,
   -- where the supplied Terms are evars that have already been generated for the
   -- earlier part of the context, and so must be substituted into the remaining
-  -- types in the context
+  -- types in the context. Since we want to make fresh evars for the oldest
+  -- variables first, the second argument must be in outer-to-inner order.
   helper :: [Term] -> [(LocalName,Term)] -> MRM [Term]
   helper evars [] = return evars
   helper evars ((nm,tp):ctx) =
@@ -1031,7 +988,7 @@ withFunAssump :: FunName -> [Term] -> NormComp -> MRM a -> MRM a
 withFunAssump fname args rhs m =
   do k <- CompFunReturn <$> Type <$> mrFunOutType fname args
      mrDebugPPPrefixSep 1 "withFunAssump" (FunBind fname args k) "|=" rhs
-     ctx <- mrUVarCtx
+     ctx <- mrUVars
      assumps <- mrFunAssumps
      let assump = FunAssump ctx args (RewriteFunAssump rhs)
      let assumps' = Map.insert fname assump assumps
@@ -1130,13 +1087,11 @@ debugPretty i pp = debugPrint i $ renderSawDoc defaultPPOpts pp
 -- | Pretty-print an object in the current context if the current debug level is
 -- at least the supplied 'Int'
 debugPrettyInCtx :: PrettyInCtx a => Int -> a -> MRM ()
-debugPrettyInCtx i a =
-  mrUVars >>= \ctx -> debugPrint i (showInCtx (map fst ctx) a)
+debugPrettyInCtx i a = mrUVars >>= \ctx -> debugPrint i (showInCtx ctx a)
 
 -- | Pretty-print an object relative to the current context
 mrPPInCtx :: PrettyInCtx a => a -> MRM SawDoc
-mrPPInCtx a =
-  runReader (prettyInCtx a) <$> map fst <$> mrUVars
+mrPPInCtx a = runPPInCtxM (prettyInCtx a) <$> mrUVars
 
 -- | Pretty-print the result of 'ppWithPrefix' relative to the current uvar
 -- context to 'stderr' if the debug level is at least the 'Int' provided
@@ -1144,7 +1099,7 @@ mrDebugPPPrefix :: PrettyInCtx a => Int -> String -> a -> MRM ()
 mrDebugPPPrefix i pre a =
   mrUVars >>= \ctx ->
   debugPretty i $
-  flip runReader (map fst ctx) (group <$> nest 2 <$> ppWithPrefix pre a)
+  runPPInCtxM (group <$> nest 2 <$> ppWithPrefix pre a) ctx
 
 -- | Pretty-print the result of 'ppWithPrefixSep' relative to the current uvar
 -- context to 'stderr' if the debug level is at least the 'Int' provided
@@ -1153,5 +1108,4 @@ mrDebugPPPrefixSep :: (PrettyInCtx a, PrettyInCtx b) =>
 mrDebugPPPrefixSep i pre a1 sp a2 =
   mrUVars >>= \ctx ->
   debugPretty i $
-  flip runReader (map fst ctx) (group <$> nest 2 <$>
-                                ppWithPrefixSep pre a1 sp a2)
+  runPPInCtxM (group <$> nest 2 <$> ppWithPrefixSep pre a1 sp a2) ctx
