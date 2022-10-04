@@ -9,7 +9,7 @@ uint64_t add_mistyped (uint64_t x, uint64_t y) { return x + y; }
 // Simple function that increments the value in a pointer
 void incr_ptr (uint64_t *x) { *x += 1; }
 
-// Struct that represents the three coordinates fora 3D vector
+// Struct that represents the three coordinates for a 3D vector
 typedef struct { uint64_t x; uint64_t y; uint64_t z; } vector3d;
 
 // function that computes the norm of a 3D vector

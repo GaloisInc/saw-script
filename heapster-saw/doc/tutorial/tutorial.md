@@ -41,7 +41,7 @@ examples to get anyone up to speed with using and hacking on Heapster.
 ## Building
 
 We'll start by building everything you need to use Heapster. All the
-commands here are with respect to the top-level saw-script directory.
+commands here are with respect to the top-level `saw-script` directory.
 
 ### Build Saw 
  
@@ -129,7 +129,7 @@ COQC sha512_gen.v
 ```
 
 It might take several minutes but it should complete without any
-errors. Once it's done, you know you are ready to use Heapser!
+errors. Once it's done, you know you are ready to use Heapster!
 
 Before continuing, return to the top-level directory with `cd ../..`.
 
@@ -147,8 +147,8 @@ Galois to help orchestrate and track the results of the large
 collection of proof tools necessary for analysis and verification of
 complex software artifacts.
 
-In this tutorial we will overview how to use SAW to proof functional
-equality different implementations. The steps are as follows:
+In this tutorial we will overview how to use SAW to prove the functional
+equality of different implementations. The steps are as follows:
 
 - [1. Compile the code.](#1-compile-the-code)
 - [2. Run the saw interpreter](#2-run-the-saw-interpreter)
@@ -164,10 +164,10 @@ We will use the same `ffs` example used in the [SAW
 tutorial](https://saw.galois.com/tutorial.html). Head over to the
 `saw-script/doc/tutorial/code` directory to find the file.
 
-Our aim is to prove functional equivalence of two implementatinos fo
-`ffs` (there are more implementations in that file). The function is
-should return the index of the first non-zero bit of it's input and
-can be implemented in the follwoing two ways.
+Our aim is to prove functional equivalence of two implementations of
+`ffs` (there are more implementations in that file). The function
+should return the index of the first non-zero bit of its input and
+can be implemented in the following two ways.
 
 ```C
 uint32_t ffs_ref(uint32_t word) {
@@ -205,8 +205,8 @@ where there is a 1.
    
    Where the options mean:
    * The `-g` flag instructs clang to include debugging information, which is useful in SAW to refer to variables and struct fields using the same names as in C.
-   * The `-c` flag asks clang to only run preprocess, compile, and assemble steps.
-   * `-emit-llvm` requests llvm bitecode as output.
+   * The `-c` flag asks clang to only run the preprocess, compile, and assemble steps.
+   * `-emit-llvm` requests LLVM bitcode as output.
    * `-o ffs.bc` tells clang to write the output into `ffs.bc`
    
 Luckily, SAW has some code to do all of this for you in the `Makefile`. You can simply run 
@@ -218,7 +218,7 @@ to get the same effect.
 #### 2. Run the saw interpreter
 
 Run `cabal run saw` to start the interpreter. You should see the SAW
-logo and version number. Then you cna run your first saw command:
+logo and version number. Then you can run your first saw command:
 
    ```bash
    sawscript> print "Hello World"
@@ -238,9 +238,9 @@ logo and version number. Then you cna run your first saw command:
    Load an LLVM bitcode file and return a handle to it.
    ```
    
-   Also, if you ever forget the name of a function, you cna find it by
+   Also, if you ever forget the name of a function, you can find it by
    running `:env` which will display the current sawscript
-   environment. Finally you can allways type `:help` to remember these
+   environment. Finally you can always type `:help` to remember these
    commands.
    
    Run `l <- llvm_load_module "ffs.bc"` to load the file and store it
@@ -259,7 +259,7 @@ logo and version number. Then you cna run your first saw command:
    
 #### 4. Define the equality theorem.
    
-   Our theorem can now refer to the two recently created terms. since
+   Our theorem can now refer to the two recently created terms. Since
    we want to prove functional equivalence, we just state that the
    functions are equal for all inputs.
    
@@ -290,7 +290,7 @@ Notice that it takes a `ProofScript`. You can look at the
 environment (`:env`) and look at all the proof scripts (searching
 for `ProofScript`), such as `abc`, `cvc4`, `mathsat`, and `z3`. If
 you want to play with different solvers you would have to install
-them. For now, since we have `z3` installed we can call.
+them. For now, since we have `z3` installed we can use it:
 
 ```bash
 sawscript> result <- prove z3 thm1
@@ -298,7 +298,7 @@ sawscript> print result
 [16:39:47.506] Valid
 ```
 
-Which tells us that z3 managed to prove the functional equality!
+Which tells us that `z3` managed to prove the functional equality!
 
 ### Batch scripts
 
@@ -410,8 +410,8 @@ Be aware that the resulting bitcode may depend on your `clang` version
 and your operating system. In turn, this means the Heapster commands
 in your SAW script and the proofs in your Coq file may also be
 dependent on how and where the bitcode is generated. If you find an
-incompatibility, please report it. For all other examples byond this
-simple tuorial file, the binary code has been provided already to
+incompatibility, please report it. For all other examples beyond this
+simple tutorial file, the binary code has been provided already to
 avoid incompatibilities.
 
 #### 2. Run the SAW interpreter with Heapster
@@ -472,12 +472,12 @@ Create a new Heapster environment with the given SAW module name
 sawscript> 
 ```
 
-As you see it takes two names. The second name referse to the bitecode
-file containing the code we are verifying. The first, is the name we
+As you see it takes two names. The second name refers to the bitcode
+file containing the code we are verifying. The first is the name we
 want to give our SAW core module. That is the place where Heapster
 will store all our type checked functions and their extracted
 functional specification. By convention we use the same name as the
-llvm file.
+LLVM file.
 
 The function returns a Heapster environment that contains all the
 definitions of the module (not to be confused with the SAW environment
@@ -508,14 +508,14 @@ Definitions:
   i64 @norm_vector(%struct.vector3d* %0)
 ```
 
-The heapster environment contains all the types, global definitions,
+The Heapster environment contains all the types, global definitions,
 external references and functions from the loaded module. In our first
 example we will focus on the `add` function. 
 
 
 #### 4. Writing heapster types for your functions
 
-The Heapster type for the `add` function is rather simpl: 
+The Heapster type for the `add` function is rather simple: 
 
 ```
 "().arg0:int64<>, arg1:int64<> -o arg0:true, arg1:true, ret:int64<>"
@@ -535,14 +535,14 @@ empty angled brackets `<>`.
 
 The right hand side describes the memory after the function
 executes. It says nothing about about the arguments (other than they
-exists), with `true`, the predicate that is always satisfied. It also
+exist), with `true`, the predicate that is always satisfied. It also
 says that the return value `ret` is another 64-bit integer.
 
 Notice, in particular, that the type does not assert that the return
 value is the sum of the inputs. That's because Hepaster is not a
-correcness logic. It is a memory safety type system. However, as you
+correctness logic. It is a memory safety type system. However, as you
 will shortly see, after checking for memory safety, we can extract
-`add` as a functional program and verify it's correctness in Coq.
+`add` as a functional program and verify its correctness in Coq.
 
 ##### Defining permission predicates
 
@@ -554,7 +554,7 @@ exists x:bv 64.eq(llvmword(x))
 ```
 
 It says that there exist some bit-vector of length 64 (`bv 64`) which
-is equal, as an llvm word, to the "current variable". In other words,
+is equal, as an LLVM word, to the "current variable". In other words,
 it says that the current variable is equal to some number that can be
 described as a bit-vector of size 64.
 
@@ -590,7 +590,7 @@ heapster_typecheck_fun env "add" "().arg0:int64<>, arg1:int64<> -o arg0:true, ar
 ```
 
 The `heapster_typecheck_fun` command takes the environment, the name
-of the function to typecheck and its permision type. The command then
+of the function to typecheck and its permission type. The command then
 attempts to typecheck the function and extracts its functional
 specification. The functional specification is then added to the SAW
 core module `tutorial_c` with the sufix `__tuple_fun`, in this case
@@ -598,7 +598,7 @@ core module `tutorial_c` with the sufix `__tuple_fun`, in this case
 
 The function `add_mistyped`, in the same `tutorial_bc` and already
 loaded in the Heapster environment, is identical to `add` so we can
-experiment with misstyping. Try running the following command
+experiment with mistyping. Try running the following command
 
 ```
 heapster_typecheck_fun env "add_mistyped" "().arg0:true, arg1:int64<> -o arg0:true, arg1:true, ret:int64<>"
@@ -628,7 +628,7 @@ heapster_export_coq env "tutorial_c_gen.v";
 ```
 
 Open up the new `tutorial_c_gen.v` file in your examples
-directory. You should see a handfull of auto-generated imports and four
+directory. You should see a handful of auto-generated imports and four
 definitions.
 
 The first two definitions `add__tuple_fun` and `add` might have a
@@ -642,7 +642,7 @@ add : bitvector 64 -> bitvector 64 -> CompM (bitvector 64)
 That is, `add__tuple_fun` if a list of definitions, encoded as a
 tuple. Saw uses these heterogeneous lists to encode functions, or
 parts of them, that depend on each other.  In this case, there is only
-the function `add` function and a unit `()`, representing the end of
+the `add` function and a unit `()`, representing the end of
 the list (similar to `nil`).  The `add` function takes two integers
 (as 64-bit vectors) and returns another one (under the `CompM` monoid
 that accepts failure).
@@ -698,10 +698,10 @@ Import tutorial_c.
 It first imports all the SAW functionality we need and enables pretty
 printing. Then it imports our new definitions (e.g. `add`).
 
-Our first proof, will claim that the function `add`, produces no
-errors. Morr specifically, it says that for all inputs (that's what
-`refinesFun` quantifies) `add` allways refines to `noErrorsSpec`, that
-is it returns a pure value.
+Our first proof will claim that the function `add` produces no
+errors. More specifically, it says that for all inputs (that's what
+`refinesFun` quantifies) `add` always refines to `noErrorsSpec`. That
+is, it returns a pure value.
 
 ```
 Lemma no_errors_add
@@ -759,7 +759,7 @@ The type for this function should be
 (). arg0:ptr((W,0) |-> int64<>) -o arg0:ptr((W,0) |-> int64<>)
 ```
 
-As before, the ghost environment is ommited and both sides of the
+As before, the ghost environment is omitted and both sides of the
 implication are identical, since the function doesn't change the shape
 of memory. The return value is `void`, so we can omit it or add a
 trivial `ret:true`.
@@ -767,7 +767,7 @@ trivial `ret:true`.
 The permission for pointers `ptr` takes three arguments. First, it
 describes the read-write modality. In this case the
 pointer is writable `W`, since it will be modified. The second
-argument describes the pointer offset, here `0`. Finaly, the third
+argument describes the pointer offset, here `0`. Finally, the third
 argument describes the content of the pointer, in this case a 64-bit
 integer `int64<>`.
 
@@ -784,7 +784,7 @@ heapster_export_coq env "tutorial_c_gen.v";
 ```
 
 The old file should be overwritten and now contains the functional
-specification of `add`, `add_misstyped` and `incr_ptr`. As you can see
+specification of `add`, `add_mistyped` and `incr_ptr`. As you can see
 the definition of `incr_ptr__tuple_fun` has no references to `errorM`,
 so we know it was correctly type checked.
 
@@ -808,7 +808,7 @@ example, we defined a function that can compute the norm of a 3D
 vector
 
 ``` C
-// Struct that represents the three coordinates fora 3D vector
+// Struct that represents the three coordinates for a 3D vector
 typedef struct { uint64_t x; uint64_t y; uint64_t z; } vector3d;
 
 // function that computes the norm of a 3D vector
@@ -916,13 +916,13 @@ Up to date
 
 ### Arrays
 
-We will briefly explore arrays, which have slightly more intersting
+We will briefly explore arrays, which have slightly more interesting
 memory restrictions. Namely, array access must be in bounds. The code
 in this section are already generated for you and you can find them,
 together with more examples in the files `arrays.c`, `arrays.saw`,
 `arrays_gen.v` and `arrays_proofs.v`.
 
-We will consider the function `zero_array` which zero's out all the
+We will consider the function `zero_array` which zeroes out all the
 values in an array (see code in `arrays.c`).
 
 ```C
@@ -936,7 +936,7 @@ void zero_array (int64_t *arr, uint64_t len) {
 The type for this function is relatively simple, it only assumes that
 `len` is actually the length for the given array `arr`. This is
 achieved by used a shared or ghost variable `len` which is both the
-lenght of the array and equal to the second argument (see the code in `arrays.saw`)
+length of the array and equal to the second argument (see the code in `arrays.saw`)
 
 ```
 heapster_typecheck_fun env "zero_array"
@@ -947,7 +947,7 @@ heapster_typecheck_fun env "zero_array"
 Heapster also expects a loop invariant hint for every loop. Loop
 invariants look just like function types, taking the loop variables as
 arguments. In this case the loop introduces a new variable `i` which
-is the ofset into the array. We represent that with a new ghost
+is the offset into the array. We represent that with a new ghost
 variable
 
 ```
@@ -959,14 +959,14 @@ heapster_typecheck_fun env "zero_array_from"
 Certainly function correctness must ensure that all the writes to the
 array (i.e. `arr[i] = 0`) happen within bounds. However this is a
 dynamic property which is not part of type-checking. Instead, Heapster
-adds dynamic checks on the extracted code which we will see in the coq
+adds dynamic checks on the extracted code which we will see in the Coq
 code. 
 
-Let's go to `arrays_gen.v` (which has already been generatred for you)
+Let's go to `arrays_gen.v` (which has already been generated for you)
 and look for the definition of `zero_array__tuple_fun`. You will
 notice that it calls `errorM` twice but, in this case that's not a
 sign of a typing error! Heapster includes these errors to catch
-out-of-bounds array accesses and a unrepresentable indices (i.e. index
+out-of-bounds array accesses and unrepresentable indices (i.e. index
 that can't be written as a machine integer). The code below is a
 simplification of the `zero_array__tuple_fun` with some notation for
 readability (see below for how to enable such pritty printing).
@@ -1006,7 +1006,7 @@ performs several tests before executing any computation. The first two
 tests, which are within `if then else` blocks, check that the offset
 is less than the array length `e2 < e1`, and that the index `i` is
 within the bounds of machine integers. The former is part of the loop
-condition, the second is added by heapster to ensure the ghost
+condition, the second is added by Heapster to ensure the ghost
 variable represents a machine integer.
 
 The last check, which is within uppercase `If Then Else` (which
@@ -1016,15 +1016,15 @@ inserted by Heapster. It checks that the array access is within bounds
 access being safe. If the check fails, the function reports a runtime
 error `errorM "ghost_bv <u top_bv"`.
 
-If all the checks pass, then the function simply recursive calls
-itself, with the next index and array with a new entry zeroed out.
+If all the checks pass, then the function simply calls
+itself recursively, with the next index and array with a new entry zeroed out.
 
 ```
 f e1 (e2 + (1)[64]) (p1 [e2 <- (0)[64]]) tt tt tt
 ```
 
 The extra `tt` are artifacts that get inserted by Heapster, but you
-can ignore.
+can ignore them.
 
 **Pritty printing:** you can enable this pretty printing by adding
 `Import CompMExtraNotation. Open Scope fun_syntax.` after the files
@@ -1059,7 +1059,7 @@ Definition zero_array_precond x
 We will not go into detail about the proof, but notice that the
 important steps are handled by custom automation. Namely we use the
 commands `prove_refinement_match_letRecM_l` and `prove_refinement` to
-handle refinments with and without recursion (respectively). The rest
+handle refinements with and without recursion (respectively). The rest
 of the proof, consists of discharging simple inequalities and a couple
 of trivial entailments, where the left hand side is an error (and thus
 entails anything).
@@ -1197,24 +1197,24 @@ sawscript> heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(
 but we need a new predicate for lists.  Before we look at the
 definition of a `List64<rw>` lets focus on its permission type. First
 of all, `List64<rw>` takes a single argument `rw:rwmodality` which
-determines if the list is readable or writable, jus like 3D
+determines if the list is readable or writable, just like 3D
 vectors. It's type should look something like this
 
 ```
 ["eq(llvmword(0))", "ptr((rw,0) |-> int64<>) * ptr((rw,8) |-> List64<rw>)"]
 ```
 
-the definition shows the diferent cases for a list, separated by a
-coma. In the first case, a `List64` can be a null pointer, expressed
+The definition shows the diferent cases for a list, separated by a
+comma. In the first case, a `List64` can be a null pointer, expressed
 with the type `eq(llvmword(0))`. In the second case, a list is a
-pointer where offset `0` is the head, an `Int64`, and offset `8` it's
+pointer where offset `0` is the head, an `Int64`, and offset `8` is
 the tail, is recursively a `List64<rw>`. In the later case,
 both elements are tagged with `rw`, describing if they are readable or
 writable, as determined by the argument to `List64<rw>`.
 
 To define [permissions](doc/Permissions.md) which can describe
 unbounded data structures, you can use the
-`heapster_define_recursive_perm` command. here is how to use the
+`heapster_define_recursive_perm` command. Here is how to use the
 command to define lists.
 
 ```
@@ -1229,7 +1229,7 @@ heapster_define_recursive_perm
 
 Its first four arguments are the same as for `heapster_define_perm`,
 namely the environment, the name, the arguments and the type of value
-that the permission applies to. The fifth argument is its permision
+that the permission applies to. The fifth argument is its permission
 type. The final three arguments are its translation into SAW core. As
 you might remember, this is the `List_def` we defined in our SAW core
 file which is now loaded in the module. The other two `foldList` and
