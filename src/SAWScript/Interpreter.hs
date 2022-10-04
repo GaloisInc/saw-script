@@ -3779,7 +3779,8 @@ primitives = Map.fromList
     (pureVal mrSolverSetDebug)
     Experimental
     [ "Set the debug level for Mr. Solver; 0 = no debug output,"
-    , " 1 = some debug output, 2 = all debug output" ]
+    , " 1 = basic debug output, 2 = verbose debug output,"
+    , " 3 = all debug output" ]
 
     ---------------------------------------------------------------------
 
