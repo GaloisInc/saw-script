@@ -811,15 +811,15 @@ instance TransInfo info =>
     [nuMP| LifetimeRepr |] ->
       return $ mkTypeTrans0 ETrans_Lifetime
     [nuMP| PermListRepr |] ->
-      returnType1 (sortOpenTerm $ mkSort 1)
+      returnType1 (sortOpenTerm $ mkSort 0)
     [nuMP| RWModalityRepr |] ->
       return $ mkTypeTrans0 ETrans_RWModality
 
     -- Permissions and LLVM shapes translate to types
     [nuMP| ValuePermRepr _ |] ->
-      returnType1 (sortOpenTerm $ mkSort 1)
+      returnType1 (sortOpenTerm $ mkSort 0)
     [nuMP| LLVMShapeRepr _ |] ->
-      returnType1 (sortOpenTerm $ mkSort 1)
+      returnType1 (sortOpenTerm $ mkSort 0)
 
     -- We can't handle any other special-purpose types
     [nuMP| IntrinsicRepr _ _ |] ->
@@ -4802,7 +4802,7 @@ piLRTTransM :: String -> TypeTrans tr -> (tr -> TransM info ctx OpenTerm) ->
                TransM info ctx OpenTerm
 piLRTTransM x tps body_f =
   foldr (\(i,tp) rest_f vars ->
-          (\t -> ctorOpenTerm "Prelude.LRT_Fun1" [tp, t]) <$>
+          (\t -> ctorOpenTerm "Prelude.LRT_Fun" [tp, t]) <$>
           lambdaOpenTermTransM (x ++ show (i :: Integer)) tp
           (\var -> rest_f (vars ++ [var])))
   (body_f . typeTransF tps) (zip [0..] $ typeTransTypes tps) []
@@ -4820,9 +4820,9 @@ translateEntryLRT env entry@(TypedEntry {..}) =
   translate typedEntryPermsIn >>= \perms_in_tps ->
   piLRTTransM "p" perms_in_tps $ \_ ->
   translateEntryRetType entry >>= \retType ->
-  return $ ctorOpenTerm "Prelude.LRT_Ret1" [retType]
+  return $ ctorOpenTerm "Prelude.LRT_Ret" [retType]
 
--- | Build a list of @LetRecType1@ values that describe the types of all of the
+-- | Build a list of @LetRecType@ values that describe the types of all of the
 -- entrypoints in a 'TypedBlockMap' that will be bound as recursive functions
 translateBlockMapLRTs :: PermEnv ->
                          TypedBlockMap TransPhase ext blocks tops rets ->
@@ -4830,7 +4830,7 @@ translateBlockMapLRTs :: PermEnv ->
 translateBlockMapLRTs env blkMap =
   mapBlockMapLetRec (translateEntryLRT env) blkMap
 
--- | Return a @LetRecType1@ value for the translation of the function permission
+-- | Return a @LetRecType@ value for the translation of the function permission
 -- of a CFG
 translateCFGInitEntryLRT :: PermEnv ->
                             TypedCFG ext blocks ghosts inits gouts ret ->
@@ -4844,7 +4844,7 @@ translateCFGInitEntryLRT env (tpcfgFunPerm ->
   translate perms_in >>= \perms_trans ->
   piLRTTransM "perm" perms_trans $ \_ ->
   translateRetType (CruCtxCons gouts ret) perms_out >>= \ret_tp ->
-  return $ ctorOpenTerm "Prelude.LRT_Ret1" [ret_tp]
+  return $ ctorOpenTerm "Prelude.LRT_Ret" [ret_tp]
 
 -- | FIXME HERE NOW: docs
 translateCFGLRTs :: PermEnv -> TypedCFG ext blocks ghosts inits gouts ret ->
@@ -5055,7 +5055,7 @@ someCFGAndPermLRT env (SomeCFGAndPerm _ _ _
   translate perms_in >>= \perms_trans ->
   piLRTTransM "perm" perms_trans $ \_ ->
   translateRetType (CruCtxCons gouts ret) perms_out >>= \ret_tp ->
-  return $ ctorOpenTerm "Prelude.LRT_Ret1" [ret_tp]
+  return $ ctorOpenTerm "Prelude.LRT_Ret" [ret_tp]
 
 -- | Extract the 'FunPerm' of a 'SomeTypedCFG' as a permission on LLVM function
 -- pointer values
@@ -5063,16 +5063,12 @@ someTypedCFGPtrPerm :: HasPtrWidth w => SomeTypedCFG LLVM ->
                        ValuePerm (LLVMPointerType w)
 someTypedCFGPtrPerm (SomeTypedCFG _ _ cfg) = mkPtrFunPerm $ tpcfgFunPerm cfg
 
--- | Transform a list of 'OpenTerm' values of type @tp@ into a @List2 tp@
-list2OpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
-list2OpenTerm tp trms =
-  foldr (\hd tl -> ctorOpenTerm "Prelude.Cons2" [tp, hd, tl])
-  (ctorOpenTerm "Prelude.Nil2" [tp])
-  trms
-
--- | Make a term of type @LetRecTypes1@ from a list of @LetRecType@ terms
+-- | Make a term of type @LetRecTypes@ from a list of @LetRecType@ terms
 lrtsOpenTerm :: [OpenTerm] -> OpenTerm
-lrtsOpenTerm = list2OpenTerm (dataTypeOpenTerm "Prelude.LetRecType1" [])
+lrtsOpenTerm lrts =
+  foldr (\hd tl -> ctorOpenTerm "Prelude.LRT_Cons" [hd, tl])
+  (ctorOpenTerm "Prelude.LRT_Nil" [])
+  lrts
 
 -- | FIXME HERE NOW: docs
 tcTranslateAddCFGs ::
