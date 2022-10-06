@@ -36,21 +36,21 @@ Tactic Notation "unfold_projs" "in" "*" :=
 
 Ltac split_prod_hyps :=
   repeat match goal with
-         | H: _ /\ _        |- _ => destruct H as [?H ?H]
-         | p: { _ : _ & _ } |- _ => destruct p as [?p ?p]
-         | p: _ * _         |- _ => destruct p as [?p ?p]
-         | u: unit          |- _ => destruct u
-         | u: True          |- _ => destruct u
-         end.
+    | H: _ /\ _        |- _ => destruct H as [?H ?H]
+    | p: { _ : _ & _ } |- _ => destruct p as [?p ?p]
+    | p: _ * _         |- _ => destruct p as [?p ?p]
+    | u: unit          |- _ => destruct u
+    | u: True          |- _ => destruct u
+    end.
 
 Ltac split_prod_goal :=
   repeat match goal with
-         | |- _ /\ _        => split
-         | |- { _ : _ & _ } => split
-         | |- _ * _         => split
-         | |- unit          => exact tt
-         | |- True          => trivial
-         end.
+    | |- _ /\ _        => split
+    | |- { _ : _ & _ } => split
+    | |- _ * _         => split
+    | |- unit          => exact tt
+    | |- True          => trivial
+    end.
 
 
 (***
@@ -112,7 +112,7 @@ Proof.
 Qed.
 
 Lemma refinesM_eithers_cons_l
-      {A B C} (f:A -> CompM C) (g:B -> CompM C) elims eith P :
+  {A B C} (f:A -> CompM C) (g:B -> CompM C) elims eith P :
   (forall a, eith = SAWCorePrelude.Left _ _ a -> f a |= P) ->
   (forall eith',
       eith = SAWCorePrelude.Right _ _ eith' ->
@@ -129,13 +129,13 @@ Proof.
 Qed.
 
 Lemma refinesM_eithers_cons_r
-      {A B C} (f:A -> CompM C) (g:B -> CompM C) elims eith P :
+  {A B C} (f:A -> CompM C) (g:B -> CompM C) elims eith P :
   (forall a, eith = SAWCorePrelude.Left _ _ a -> P |= f a) ->
   (forall eith',
       eith = SAWCorePrelude.Right _ _ eith' ->
       P |= SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Cons _ _ g elims) eith') ->
   P |=
-  SAWCorePrelude.eithers
+    SAWCorePrelude.eithers
     (CompM C)
     (SAWCorePrelude.FunsTo_Cons _ _ f (SAWCorePrelude.FunsTo_Cons _ _ g elims))
     eith.
@@ -200,12 +200,12 @@ Hint Extern 999 (_ |= _) => shelve : refinesM.
 Hint Resolve refinesM_letRecM_Nil_l : refinesM.
 
 Hint Extern 1 (@letRecM ?lrts _ _ _ |= @letRecM ?lrts _ (lrtLambda (fun _ => _)) _) =>
-  apply refinesM_letRecM_const_r; try apply ProperLRTFun_any;
-  try (apply refinesFunTuple_multiFixM; unfold refinesFunTuple; split_prod_goal);
-  unfold lrtApply, lrtLambda; unfold_projs : refinesM.
+       apply refinesM_letRecM_const_r; try apply ProperLRTFun_any;
+try (apply refinesFunTuple_multiFixM; unfold refinesFunTuple; split_prod_goal);
+unfold lrtApply, lrtLambda; unfold_projs : refinesM.
 
 Inductive ArgName := Any | SAWLet | Either | Maybe | SigT | If | If0 |
-                     Assert | Assuming | Exists | Forall.
+                  Assert | Assuming | Exists | Forall.
 Ltac argName n :=
   match n with
   | Any      => fresh "a"
@@ -310,7 +310,7 @@ Proof. intros eq; discriminate eq. Qed.
 
 Ltac IntroArg_intro_dependent_destruction n :=
   let e := argName n in
-    IntroArg_intro e; dependent destruction e.
+  IntroArg_intro e; dependent destruction e.
 
 (* Hint Extern 1 (IntroArg ?n (eq (SAWCorePrelude.Nothing _) (SAWCorePrelude.Nothing _)) _) => *)
 (*   IntroArg_forget : refinesFun. *)
@@ -354,19 +354,19 @@ Hint Extern 1 (IntroArg ?n ?A ?g) => IntroArg_base_tac n A g : refinesFun.
 
 Ltac IntroArg_rewrite_bool_eq n :=
   let e := fresh in
-    IntroArg_intro e; repeat rewrite e in *;
-    apply (IntroArg_fold n _ _ e); clear e.
+  IntroArg_intro e; repeat rewrite e in *;
+  apply (IntroArg_fold n _ _ e); clear e.
 
 Hint Extern 2 (IntroArg ?n (@eq bool _ _) _) =>
-  progress (IntroArg_rewrite_bool_eq n) : refinesFun.
+       progress (IntroArg_rewrite_bool_eq n) : refinesFun.
 
 Hint Extern 4 (IntroArg SAWLet _ _) =>
-  let e := argName SAWLet in IntroArg_intro e : refinesFun.
+       let e := argName SAWLet in IntroArg_intro e : refinesFun.
 Hint Extern 5 (IntroArg ?n (?x = ?y) _) =>
-  let e := argName n in IntroArg_intro e;
-    try first [ is_var x; subst x | is_var y; subst y ] : refinesFun.
+       let e := argName n in IntroArg_intro e;
+try first [ is_var x; subst x | is_var y; subst y ] : refinesFun.
 Hint Extern 6 (IntroArg ?n _ _) =>
-  let e := argName n in IntroArg_intro e : refinesFun.
+       let e := argName n in IntroArg_intro e : refinesFun.
 
 Definition refinesM_sawLet_const_l {A B} (x : A) (m : CompM B) P :
   m |= P -> sawLet_def _ _ x (fun _ => m) |= P := fun pf => pf.
@@ -375,12 +375,12 @@ Definition refinesM_sawLet_const_r {A B} (x : A) (m : CompM B) P :
 
 Definition refinesM_sawLet_bv_l_IntroArg {w B} x (m : bitvector w -> CompM B) P :
   (FreshIntroArg Any _ (fun a =>
-     FreshIntroArg SAWLet (a = x) (fun _ => m a |= P))) ->
+                          FreshIntroArg SAWLet (a = x) (fun _ => m a |= P))) ->
   sawLet_def _ _ x m |= P.
 Proof. do 3 intro; eapply H; eauto. Qed.
 Definition refinesM_sawLet_bv_r_IntroArg {w B} x (m : bitvector w -> CompM B) P :
   (FreshIntroArg Any _ (fun a =>
-     FreshIntroArg SAWLet (a = x) (fun _ => P |= m a))) ->
+                          FreshIntroArg SAWLet (a = x) (fun _ => P |= m a))) ->
   P |= sawLet_def _ _ x m.
 Proof. do 3 intro; eapply H; eauto. Qed.
 
@@ -403,30 +403,30 @@ Hint Extern 1 (_ |= sawLet_def _ _ _ _ ) => refinesM_sawLet_r : refinesM.
 
 Definition refinesM_either_l_IntroArg {A B C} (f:A -> CompM C) (g:B -> CompM C) eith P :
   (FreshIntroArg Any _ (fun a =>
-    FreshIntroArg Either (eith = SAWCorePrelude.Left _ _ a) (fun _ => f a |= P))) ->
+                          FreshIntroArg Either (eith = SAWCorePrelude.Left _ _ a) (fun _ => f a |= P))) ->
   (FreshIntroArg Any _ (fun b =>
-    FreshIntroArg Either (eith = SAWCorePrelude.Right _ _ b) (fun _ => g b |= P))) ->
+                          FreshIntroArg Either (eith = SAWCorePrelude.Right _ _ b) (fun _ => g b |= P))) ->
   SAWCorePrelude.either _ _ _ f g eith |= P := refinesM_either_l f g eith P.
 Definition refinesM_either_r_IntroArg {A B C} (f:A -> CompM C) (g:B -> CompM C) eith P :
   (FreshIntroArg Any _ (fun a =>
-    FreshIntroArg Either (eith = SAWCorePrelude.Left _ _ a) (fun _ => P |= f a))) ->
+                          FreshIntroArg Either (eith = SAWCorePrelude.Left _ _ a) (fun _ => P |= f a))) ->
   (FreshIntroArg Any _ (fun b =>
-    FreshIntroArg Either (eith = SAWCorePrelude.Right _ _ b) (fun _ => P |= g b))) ->
+                          FreshIntroArg Either (eith = SAWCorePrelude.Right _ _ b) (fun _ => P |= g b))) ->
   P |= SAWCorePrelude.either _ _ _ f g eith := refinesM_either_r f g eith P.
 
 Hint Extern 1 (SAWCorePrelude.either _ _ _ _ _ _ |= _) =>
-  simple apply refinesM_either_l_IntroArg : refinesM.
+       simple apply refinesM_either_l_IntroArg : refinesM.
 Hint Extern 1 (_ |= SAWCorePrelude.either _ _ _ _ _ _) =>
-  simple apply refinesM_either_r_IntroArg : refinesM.
+       simple apply refinesM_either_r_IntroArg : refinesM.
 
 
 Definition refinesM_eithers_cons_l_IntroArg
-           {A B C} (f:A -> CompM C) (g:B -> CompM C) elims eith P :
+  {A B C} (f:A -> CompM C) (g:B -> CompM C) elims eith P :
   (FreshIntroArg Any _ (fun a =>
-    FreshIntroArg Either (eith = SAWCorePrelude.Left _ _ a) (fun _ => f a |= P))) ->
+                          FreshIntroArg Either (eith = SAWCorePrelude.Left _ _ a) (fun _ => f a |= P))) ->
   (FreshIntroArg Any _ (fun eith' =>
-    FreshIntroArg Either (eith = SAWCorePrelude.Right _ _ eith')
-      (fun _ => SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Cons _ _ g elims) eith' |= P))) ->
+                          FreshIntroArg Either (eith = SAWCorePrelude.Right _ _ eith')
+                            (fun _ => SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Cons _ _ g elims) eith' |= P))) ->
   SAWCorePrelude.eithers
     (CompM C)
     (SAWCorePrelude.FunsTo_Cons _ _ f (SAWCorePrelude.FunsTo_Cons _ _ g elims))
@@ -435,12 +435,12 @@ Definition refinesM_eithers_cons_l_IntroArg
   refinesM_eithers_cons_l f g elims eith P.
 
 Definition refinesM_eithers_cons_r_IntroArg
-           {A B C} (f:A -> CompM C) (g:B -> CompM C) elims eith P :
+  {A B C} (f:A -> CompM C) (g:B -> CompM C) elims eith P :
   (FreshIntroArg Any _ (fun a =>
-    FreshIntroArg Either (eith = SAWCorePrelude.Left _ _ a) (fun _ => P |= f a))) ->
+                          FreshIntroArg Either (eith = SAWCorePrelude.Left _ _ a) (fun _ => P |= f a))) ->
   (FreshIntroArg Any _ (fun eith' =>
-    FreshIntroArg Either (eith = SAWCorePrelude.Right _ _ eith')
-      (fun _ => P |= SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Cons _ _ g elims) eith'))) ->
+                          FreshIntroArg Either (eith = SAWCorePrelude.Right _ _ eith')
+                            (fun _ => P |= SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Cons _ _ g elims) eith'))) ->
   P |=
     SAWCorePrelude.eithers
     (CompM C)
@@ -449,59 +449,59 @@ Definition refinesM_eithers_cons_r_IntroArg
   refinesM_eithers_cons_r f g elims eith P.
 
 Hint Extern 1 (SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Nil _) _ |= _) =>
-  simple apply refinesM_eithers_nil_l : refinesM.
+       simple apply refinesM_eithers_nil_l : refinesM.
 Hint Extern 1 (_ |= SAWCorePrelude.eithers _ (SAWCorePrelude.FunsTo_Nil _) _) =>
-  simple apply refinesM_eithers_nil_r : refinesM.
+       simple apply refinesM_eithers_nil_r : refinesM.
 Hint Extern 1 (SAWCorePrelude.eithers
                  _ (SAWCorePrelude.FunsTo_Cons
                       _ _ _ (SAWCorePrelude.FunsTo_Nil _)) _ |= _) =>
-  simple apply refinesM_eithers_one_l : refinesM.
+       simple apply refinesM_eithers_one_l : refinesM.
 Hint Extern 1 (_ |= SAWCorePrelude.eithers
-                      _ (SAWCorePrelude.FunsTo_Cons
-                           _ _ _ (SAWCorePrelude.FunsTo_Nil _)) _) =>
-  simple apply refinesM_eithers_one_r : refinesM.
+                 _ (SAWCorePrelude.FunsTo_Cons
+                      _ _ _ (SAWCorePrelude.FunsTo_Nil _)) _) =>
+       simple apply refinesM_eithers_one_r : refinesM.
 Hint Extern 3 (SAWCorePrelude.eithers
                  _ (SAWCorePrelude.FunsTo_Cons
                       _ _ _ (SAWCorePrelude.FunsTo_Cons
                                _ _ _ (SAWCorePrelude.FunsTo_Nil _))) _ |= _) =>
-  simple apply refinesM_eithers_cons_l_IntroArg : refinesM.
+       simple apply refinesM_eithers_cons_l_IntroArg : refinesM.
 Hint Extern 3 (_ |= SAWCorePrelude.eithers
-                      _ (SAWCorePrelude.FunsTo_Cons
-                           _ _ _ (SAWCorePrelude.FunsTo_Cons
-                                    _ _ _ (SAWCorePrelude.FunsTo_Nil _))) _) =>
-  simple apply refinesM_eithers_cons_r_IntroArg : refinesM.
+                 _ (SAWCorePrelude.FunsTo_Cons
+                      _ _ _ (SAWCorePrelude.FunsTo_Cons
+                               _ _ _ (SAWCorePrelude.FunsTo_Nil _))) _) =>
+       simple apply refinesM_eithers_cons_r_IntroArg : refinesM.
 
 
 Definition refinesM_maybe_l_IntroArg {A B} (x : CompM B) (f : A -> CompM B) mb P :
   (FreshIntroArg Maybe (mb = SAWCorePrelude.Nothing _) (fun _ => x |= P)) ->
   (FreshIntroArg Any _ (fun a =>
-    FreshIntroArg Maybe (mb = SAWCorePrelude.Just _ a) (fun _ => f a |= P))) ->
+                          FreshIntroArg Maybe (mb = SAWCorePrelude.Just _ a) (fun _ => f a |= P))) ->
   SAWCorePrelude.maybe _ _ x f mb |= P := refinesM_maybe_l x f mb P.
 Definition refinesM_maybe_r_IntroArg {A B} (x : CompM B) (f : A -> CompM B) mb P :
   (FreshIntroArg Maybe (mb = SAWCorePrelude.Nothing _) (fun _ => P |= x)) ->
   (FreshIntroArg Any _ (fun a =>
-    FreshIntroArg Maybe (mb = SAWCorePrelude.Just _ a) (fun _ => P |= f a))) ->
+                          FreshIntroArg Maybe (mb = SAWCorePrelude.Just _ a) (fun _ => P |= f a))) ->
   P |= SAWCorePrelude.maybe _ _ x f mb := refinesM_maybe_r x f mb P.
 
 Hint Extern 2 (SAWCorePrelude.maybe _ _ _ _ _ |= _) =>
-  simple apply refinesM_maybe_l_IntroArg : refinesM.
+       simple apply refinesM_maybe_l_IntroArg : refinesM.
 Hint Extern 2 (_ |= SAWCorePrelude.maybe _ _ _ _ _) =>
-  simple apply refinesM_maybe_r_IntroArg : refinesM.
+       simple apply refinesM_maybe_r_IntroArg : refinesM.
 
 Definition refinesM_sigT_rect_l_IntroArg {A1 A2 B} F P (s: {x:A1 & A2 x}) :
   (FreshIntroArg Any _ (fun a1 => FreshIntroArg Any _ (fun a2 =>
-    FreshIntroArg SigT (s = existT _ a1 a2) (fun _ => F a1 a2 |= P)))) ->
+                                                         FreshIntroArg SigT (s = existT _ a1 a2) (fun _ => F a1 a2 |= P)))) ->
   sigT_rect (fun _ => CompM B) F s |= P := refinesM_sigT_rect_l F P s.
 
 Definition refinesM_sigT_rect_r_IntroArg {A1 A2 B} F P (s: {x:A1 & A2 x}) :
   (FreshIntroArg Any _ (fun a1 => FreshIntroArg Any _ (fun a2 =>
-    FreshIntroArg SigT (s = existT _ a1 a2) (fun _ => P |= F a1 a2)))) ->
+                                                         FreshIntroArg SigT (s = existT _ a1 a2) (fun _ => P |= F a1 a2)))) ->
   P |= sigT_rect (fun _ => CompM B) F s := refinesM_sigT_rect_r F P s.
 
 Hint Extern 2 (sigT_rect (fun _ => CompM _) _ _ |= _) =>
-  simple apply refinesM_sigT_rect_l_IntroArg : refinesM.
+       simple apply refinesM_sigT_rect_l_IntroArg : refinesM.
 Hint Extern 2 (_ |= sigT_rect (fun _ => CompM _) _ _) =>
-  simple apply refinesM_sigT_rect_r_IntroArg : refinesM.
+       simple apply refinesM_sigT_rect_r_IntroArg : refinesM.
 
 Definition refinesM_if_l_IntroArg {A} (m1 m2:CompM A) b P :
   (FreshIntroArg If (b = true) (fun _ => m1 |= P)) ->
@@ -513,14 +513,14 @@ Definition refinesM_if_r_IntroArg {A} (m1 m2:CompM A) b P :
   P |= (if b then m1 else m2) := refinesM_if_r m1 m2 b P.
 
 Hint Extern 2 ((if _ then _ else _) |= _) =>
-  apply refinesM_if_l_IntroArg : refinesM.
+       apply refinesM_if_l_IntroArg : refinesM.
 Hint Extern 2 (_ |= (if _ then _ else _)) =>
-  apply refinesM_if_r_IntroArg : refinesM.
+       apply refinesM_if_r_IntroArg : refinesM.
 
 Hint Extern 1 (returnM (if _ then _ else _) |= _) =>
-  simple apply refinesM_returnM_if_l : refinesM.
+       simple apply refinesM_returnM_if_l : refinesM.
 Hint Extern 1 (_ |= returnM (if _ then _ else _)) =>
-  simple apply refinesM_returnM_if_r : refinesM.
+       simple apply refinesM_returnM_if_r : refinesM.
 
 Definition refinesM_bindM_assertM_l_IntroArg {A} (P:Prop) (m1 m2: CompM A) :
   (FreshIntroArg Assert P (fun _ => m1 |= m2)) -> assertM P >> m1 |= m2 :=
@@ -530,14 +530,14 @@ Definition refinesM_assumingM_r_IntroArg {A} (P:Prop) (m1 m2: CompM A) :
   refinesM_assumingM_r P m1 m2.
 
 Hint Extern 1 (assertM _ >> _ |= _) =>
-  simple eapply refinesM_bindM_assertM_l_IntroArg : refinesM.
+       simple eapply refinesM_bindM_assertM_l_IntroArg : refinesM.
 Hint Extern 1 (_ |= assumingM _ _) =>
-  simple eapply refinesM_assumingM_r_IntroArg : refinesM.
+       simple eapply refinesM_assumingM_r_IntroArg : refinesM.
 
 Hint Extern 3 (_ |= assertM _ >> _) =>
-  simple eapply refinesM_bindM_assertM_r; shelve : refinesM.
+       simple eapply refinesM_bindM_assertM_r; shelve : refinesM.
 Hint Extern 3 (assumingM _ _ |= _) =>
-  simple eapply refinesM_assumingM_l; shelve : refinesM.
+       simple eapply refinesM_assumingM_l; shelve : refinesM.
 
 Definition refinesM_existsM_l_IntroArg A B (P: A -> CompM B) Q :
   (FreshIntroArg Exists _ (fun a => P a |= Q)) -> existsM P |= Q :=
@@ -547,17 +547,17 @@ Definition refinesM_forallM_r_IntroArg {A B} P (Q: A -> CompM B) :
   refinesM_forallM_r P Q.
 
 Hint Extern 3 (existsM _ |= _) =>
-  simple apply refinesM_existsM_l_IntroArg : refinesM.
+       simple apply refinesM_existsM_l_IntroArg : refinesM.
 Hint Extern 3 (_ |= forallM _) =>
-  simple apply refinesM_forallM_r_IntroArg : refinesM.
+       simple apply refinesM_forallM_r_IntroArg : refinesM.
 
 Hint Extern 4 (_ |= existsM _) =>
-  simple eapply refinesM_existsM_r; shelve : refinesM.
+       simple eapply refinesM_existsM_r; shelve : refinesM.
 Hint Extern 4 (forallM _ |= _) =>
-  simple eapply refinesM_forallM_l; shelve : refinesM.
+       simple eapply refinesM_forallM_l; shelve : refinesM.
 
 Hint Extern 4 (returnM _ |= returnM _) =>
-  apply refinesM_returnM; (reflexivity || shelve) : refinesM.
+       apply refinesM_returnM; (reflexivity || shelve) : refinesM.
 
 Hint Extern 2 (orM _ _ |= _) => simple apply refinesM_orM_l : refinesM.
 Hint Extern 2 (_ |= andM _ _) => simple apply refinesM_andM_r : refinesM.
@@ -643,9 +643,9 @@ Lemma refinesM_bindM_returnM_sigT_unit_r A P (m:CompM {_:A & unit}) :
 Proof. rewrite bindM_returnM_sigT_unit; eauto. Qed.
 
 Hint Extern 1 ((_ >>= (fun _ => returnM (existT _ (projT1 _) _))) |= _) =>
-  simple apply refinesM_bindM_returnM_sigT_unit_l : refinesM.
+       simple apply refinesM_bindM_returnM_sigT_unit_l : refinesM.
 Hint Extern 1 (_ |= (_ >>= (fun _ => returnM  (existT _ (projT1 _) _)))) =>
-  simple apply refinesM_bindM_returnM_sigT_unit_r : refinesM.
+       simple apply refinesM_bindM_returnM_sigT_unit_r : refinesM.
 
 Lemma refinesM_forallM_bindM_l A B C (P: A -> CompM B) (Q: B -> CompM C) (R : CompM C) :
   forallM (fun a => P a >>= Q) |= R -> (forallM P) >>= Q |= R.
@@ -659,7 +659,7 @@ Hint Extern 1 (((assumingM _ _) >>= _) |= _) => simple apply refinesM_assumingM_
 
 Create HintDb refinement_proofs.
 Hint Extern 1 (_ _ >>= _ |= _) =>
-  progress (try (rewrite_strat (outermost (hints refinement_proofs)))) : refinesM.
+       progress (try (rewrite_strat (outermost (hints refinement_proofs)))) : refinesM.
 
 Definition DidInduction {A} (a : A) : Type := unit.
 
@@ -681,16 +681,16 @@ Ltac list_induction l l' := induction l as [| ? l'].
 Ltac list_simpl := simpl SAWCorePrelude.unfoldList in *; simpl list_rect in *.
 
 Hint Extern 2 (IntroArg ?n (eq (SAWCorePrelude.unfoldList _ ?l)
-                               (SAWCorePrelude.Left _ _ _)) _) =>
-  doDestruction (list_destruct) (list_simpl) l : refinesFun.
+                              (SAWCorePrelude.Left _ _ _)) _) =>
+       doDestruction (list_destruct) (list_simpl) l : refinesFun.
 Hint Extern 2 (IntroArg ?n (eq (SAWCorePrelude.unfoldList _ ?l)
-                               (SAWCorePrelude.Right _ _ _)) _) =>
-  doDestruction (list_destruct) (list_simpl) l : refinesFun.
+                              (SAWCorePrelude.Right _ _ _)) _) =>
+       doDestruction (list_destruct) (list_simpl) l : refinesFun.
 
 Hint Extern 9 (list_rect _ _ _ ?l |= _) =>
-  doInduction (list_induction) (list_simpl) l : refinesM.
+       doInduction (list_induction) (list_simpl) l : refinesM.
 Hint Extern 9 (_ |= list_rect _ _ _ ?l) =>
-  doInduction (list_induction) (list_simpl) l : refinesM.
+       doInduction (list_induction) (list_simpl) l : refinesM.
 
 (***
  *** Rewriting rules
@@ -714,7 +714,7 @@ Lemma function_eta A B (f:A -> B) : pointwise_relation A eq (fun x => f x) f.
 Proof.
   intro; reflexivity.
 Qed.
-*)
+ *)
 
 (* Specialized versions of monad laws for CompM to make rewriting faster,
 probably because Coq doesn't have to search for the instances...? *)
@@ -746,7 +746,7 @@ From Coq Require Import Nat.
 Lemma bvEq_eqb n x y : bvEq n (bvNat n x) (bvNat n y) = eqb x y.
   admit.
 Admitted.
-*)
+ *)
 
 
 (***
@@ -768,8 +768,8 @@ Hint Extern 999 (refinesFun _ _) => shelve : refinesFun.
 (* Definition noDestructArg A a (goal:Prop) : goal -> MaybeDestructArg A a goal := fun g => g. *)
 
 Definition refinesFun_multiFixM_fst' lrt (F:lrtPi (LRT_Cons lrt LRT_Nil)
-                                                  (lrtTupleType (LRT_Cons lrt LRT_Nil))) f
-      (ref_f:refinesFun (SAWCoreScaffolding.fst (F f)) f) :
+                                              (lrtTupleType (LRT_Cons lrt LRT_Nil))) f
+  (ref_f:refinesFun (SAWCoreScaffolding.fst (F f)) f) :
   refinesFun (fst (multiFixM F)) f := refinesFun_multiFixM_fst lrt F f ref_f.
 
 Definition refinesFun_fst lrt B f1 (fs:B) f2 (r:@refinesFun lrt f1 f2) :
@@ -807,14 +807,14 @@ Hint Resolve refinesFun_multiFixM_fst' | 1 : refinesFun.
 
 Definition refinesFunBase B m1 m2 (r: m1 |= m2) : @refinesFun (LRT_Ret B) m1 m2 := r.
 Definition refinesFunStep A lrtF f1 f2
-           (r: IntroArg Any _ (fun a => @refinesFun (lrtF a) (f1 a) (f2 a))) :
+  (r: IntroArg Any _ (fun a => @refinesFun (lrtF a) (f1 a) (f2 a))) :
   @refinesFun (LRT_Fun A lrtF) f1 f2 := r.
 
 Hint Extern 5 (@refinesFun (LRT_Ret _) _ _) =>
-  simple apply refinesFunBase; unfold_projs : refinesFun.
+       simple apply refinesFunBase; unfold_projs : refinesFun.
 
 Hint Extern 5 (@refinesFun (LRT_Fun _ _) _ _) =>
-  simple apply refinesFunStep : refinesFun.
+       simple apply refinesFunStep : refinesFun.
 
 
 (***
@@ -894,7 +894,7 @@ Hint Opaque letRecM : refinesM refinesFun.
 Ltac rewrite_refinesM :=
   try ((rewrite returnM_bindM || rewrite bindM_returnM || rewrite bindM_bindM ||
         rewrite errorM_bindM || rewrite existsM_bindM); rewrite_refinesM).
-*)
+ *)
 
 
 (*** FIXME: old stuff below ***)
@@ -916,21 +916,21 @@ Ltac old_prove_refinesM :=
 
   (* either *)
   | |- SAWCorePrelude.either _ _ _ _ _ _ |= _ =>
-    apply refinesM_either_l; intros; old_prove_refinesM
+      apply refinesM_either_l; intros; old_prove_refinesM
   | |- _ |= SAWCorePrelude.either _ _ _ _ _ _ =>
-    apply refinesM_either_r; intros; old_prove_refinesM
+      apply refinesM_either_r; intros; old_prove_refinesM
   | |- sigT_rect _ _ _ |= _ =>
 
-  (* sigT_rect *)
-    apply refinesM_sigT_rect_l; intros; old_prove_refinesM
+      (* sigT_rect *)
+      apply refinesM_sigT_rect_l; intros; old_prove_refinesM
   | |- _ |= sigT_rect _ _ _ =>
-    apply refinesM_sigT_rect_r; intros; old_prove_refinesM
+      apply refinesM_sigT_rect_r; intros; old_prove_refinesM
 
   (* if *)
   | |- (if _ then _ else _) |= _ =>
-    apply refinesM_if_l; intros; old_prove_refinesM
+      apply refinesM_if_l; intros; old_prove_refinesM
   | |- _ |= (if _ then _ else _) =>
-    apply refinesM_if_r; intros; old_prove_refinesM
+      apply refinesM_if_r; intros; old_prove_refinesM
 
   (* quantifiers *)
   | |- existsM _ |= _ => apply refinesM_existsM_l; intros; old_prove_refinesM
@@ -945,3 +945,52 @@ Ltac old_prove_refinesM :=
 
 Ltac old_prove_refinesFun :=
   apply refinesFun_multiFixM_fst; simpl; intros; old_prove_refinesM.
+
+
+Module CompMExtraNotation.
+  Declare Scope fun_syntax.
+
+
+  Infix "&&" := SAWCoreScaffolding.and : fun_syntax.
+  Infix "<=" := (SAWCoreVectorsAsCoqVectors.bvsle _) : fun_syntax.
+  Notation " a <P b" := (SAWCorePrelude.bvultWithProof _ a b) (at level 98) : fun_syntax.
+  Notation " a == b" := (SAWCorePrelude.bvEq _ a b) (at level 100) : fun_syntax.
+  Notation " a < b" := (SAWCoreVectorsAsCoqVectors.bvult _ a b) (at level 70) : fun_syntax.
+
+  Notation "( x ) [ bits ]" := (SAWCoreVectorsAsCoqVectors.intToBv bits x) : fun_syntax.
+  Notation "'If' m 'As' x 'Then' f 'Else' default " := (SAWCorePrelude.maybe _ _ default (fun x => f) m) (at level 100) : fun_syntax.
+  Notation "'If' m 'Then' f 'Else' default " := (SAWCorePrelude.maybe _ _ default (fun _ => f) m) (at level 99) : fun_syntax.
+  Notation "v [ ix <- elem ]" := (SAWCorePrelude.updBVVec _ _ _ v ix elem) (at level 100) : fun_syntax.
+  Infix "+" := (SAWCoreVectorsAsCoqVectors.bvAdd _) : fun_syntax.
+  Notation "'Forall' x : T , f" := (LRT_Fun T (fun x => f)) (at level 100, format " 'Forall'  x : T ,  '/ ' f") : fun_syntax.
+  Notation "T ->> f" := (LRT_Fun T (fun _ => f)) (at level 99, right associativity, format "T '/'  ->>  '/' f") : fun_syntax.
+  Notation "x" := (LRT_Ret x) (at level 99, only printing) : fun_syntax.
+  Notation "'Vector' T len":= (SAWCorePrelude.BVVec _ len T) (at level 98) : fun_syntax.
+  Notation "[[ x1 ]]":= ((LRT_Cons x1 LRT_Nil )) (at level 7,  format "[[ '[' x1 ']' ]]") : fun_syntax.
+  Notation "[[ x1 ; x2 ; .. ; xn ]]":= ((LRT_Cons x1 (LRT_Cons x2 .. (LRT_Cons xn LRT_Nil) .. )))
+                                         (at level 7, format "[[ '[' x1 ; '/' x2 ; '/' .. ; '/' xn ']' ]]") : fun_syntax.
+  Notation "[ x1 ]__lrt":= (lrtTupleType (LRT_Cons x1 LRT_Nil )) (at level 7, format "[ '[' x1 ']' ]__lrt") : fun_syntax.
+  Notation "[ x1 ; x2 ; .. ; xn ]__lrt":= (lrtTupleType (LRT_Cons x1 (LRT_Cons x2 .. (LRT_Cons xn LRT_Nil) .. )))
+                                            (at level 7, format "[ '[' x1 ; '/' x2 ; '/' .. ; '/' xn ']' ]__lrt") : fun_syntax.
+  Notation "'int64'" := (SAWCoreVectorsAsCoqVectors.bitvector 64) (at level 97) : fun_syntax.
+  Notation "'int32'" := (SAWCoreVectorsAsCoqVectors.bitvector 32)  (at level 97) : fun_syntax.
+  Notation "'bool'" := (SAWCoreVectorsAsCoqVectors.bitvector 1) (at level 97) : fun_syntax.
+  Notation "[ x ]__ty" := (lrtToType x) (only printing) : fun_syntax.
+  Notation "'LetRec'  x := f 'InBody' ( body )" :=
+    (letRecM _ (fun x => f) (fun x => body))
+      (at level 0, only printing,
+        format "'[ ' 'LetRec'  x := '//' '[' f ']' '//'  'InBody'  '/' ( '[' body ']' ) ']'") : fun_syntax.
+  (* Visualy simplifies trivial `letRecM`*)
+  Notation "x" := (letRecM LRT_Nil tt x)
+                    (at level 99, only printing) : fun_syntax.
+  (* Notation "[Functions: f1 := f1_body ]"  :=
+    (multiFixM  (fun f1 => (f1_body, tt)))
+      (at level 100, only printing, format "[Functions: '//' f1  :=  '[' f1_body ']' ]") : fun_syntax.
+  Notation "[Functions: f1 := f1_body f2 := f2_body ]"  :=
+    (multiFixM (fun f1 f2 => (f1_body, f2_body, tt)))
+      (at level 100, only printing,
+        format "[Functions: '//' f1  :=  '[' f1_body ']' '//' f2  :=  '[' f2_body ']' ]") : fun_syntax.
+   *)
+  Delimit Scope fun_syntax with sytx.
+
+End CompMExtraNotation.
