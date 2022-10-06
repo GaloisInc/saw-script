@@ -650,20 +650,24 @@ sigmaElimPermTransM x tp_l p_cbn tp_ret_m f sigma = case mbMatch p_cbn of
 applyEventOpM :: TransInfo info => OpenTerm -> [OpenTerm] ->
                  TransM info ctx OpenTerm
 applyEventOpM f args =
-  do ev <- permEnvSpecMEventType <$> infoEnv <$> ask
+  do evType <- permEnvSpecMEventType <$> infoEnv <$> ask
+     let ev_tp = identOpenTerm (specMEventType evType)
      return $ applyOpenTermMulti f
-       ([identOpenTerm (specMEventType ev),
-         identOpenTerm (specMEventRetType ev)] ++ args)
+       ([ev_tp,
+         -- FIXME HERE NOW: the following eta-expansion is a workaround to issue
+         -- #1748 in the Coq translator; can replace it with the following when
+         -- that issue is fixed:
+         -- identOpenTerm (specMEventRetType evType)
+         lambdaOpenTerm "ev" ev_tp
+         (\ev -> applyOpenTerm (identOpenTerm (specMEventRetType evType)) ev)]
+        ++ args)
 
 -- | Generate the type @SpecM E evRetType stack A@ using the current event type
 -- and the supplied @stack@ and type @A@
 specMTypeTransM :: TransInfo info => OpenTerm -> OpenTerm ->
                    TransM info ctx OpenTerm
 specMTypeTransM stack tp =
-  do ev <- permEnvSpecMEventType <$> infoEnv <$> ask
-     return $ applyGlobalOpenTerm "Prelude.SpecM"
-       [identOpenTerm (specMEventType ev), identOpenTerm (specMEventRetType ev),
-        stack, tp]
+  applyEventOpM (globalOpenTerm "Prelude.SpecM") [stack,tp]
 
 -- | Generate the type @SpecM E evRetType emptyFunStack A@ using the current
 -- event type and the supplied type @A@
@@ -3554,8 +3558,7 @@ forceImplTrans (Just trans) k = trans k
 forceImplTrans Nothing (ImplFailContTerm errM) = return errM
 forceImplTrans Nothing (ImplFailContMsg str) =
   returnTypeM >>= \tp ->
-  return (applyOpenTermMulti (globalOpenTerm "Prelude.errorM")
-          [tp, stringLitOpenTerm (pack str)])
+  applyNamedSpecOpM "Prelude.errorS" [tp, stringLitOpenTerm (pack str)]
 
 -- | Perform a failure by jumping to a failure continuation or signaling an
 -- error, using an alternate error message in the latter case
@@ -3564,8 +3567,7 @@ implTransAltErr :: String -> ImplFailCont ->
 implTransAltErr _ (ImplFailContTerm errM) = return errM
 implTransAltErr str (ImplFailContMsg _) =
   returnTypeM >>= \tp ->
-  return (applyOpenTermMulti (globalOpenTerm "Prelude.errorM")
-          [tp, stringLitOpenTerm (pack str)])
+  applyNamedSpecOpM "Prelude.errorS" [tp, stringLitOpenTerm (pack str)]
 
 -- | Translate a normal unary 'PermImpl1' rule that succeeds and applies the
 -- translation function if the argument succeeds and fails if the translation of
@@ -5066,8 +5068,9 @@ someTypedCFGPtrPerm (SomeTypedCFG _ _ cfg) = mkPtrFunPerm $ tpcfgFunPerm cfg
 -- | Make a term of type @LetRecTypes@ from a list of @LetRecType@ terms
 lrtsOpenTerm :: [OpenTerm] -> OpenTerm
 lrtsOpenTerm lrts =
-  foldr (\hd tl -> ctorOpenTerm "Prelude.LRT_Cons" [hd, tl])
-  (ctorOpenTerm "Prelude.LRT_Nil" [])
+  let tp = dataTypeOpenTerm "Prelude.LetRecType" [] in
+  foldr (\hd tl -> ctorOpenTerm "Prelude.Cons1" [tp, hd, tl])
+  (ctorOpenTerm "Prelude.Nil1" [tp])
   lrts
 
 -- | FIXME HERE NOW: docs
