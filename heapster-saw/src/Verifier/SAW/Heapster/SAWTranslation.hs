@@ -651,15 +651,9 @@ applyEventOpM :: TransInfo info => OpenTerm -> [OpenTerm] ->
                  TransM info ctx OpenTerm
 applyEventOpM f args =
   do evType <- permEnvSpecMEventType <$> infoEnv <$> ask
-     let ev_tp = identOpenTerm (specMEventType evType)
      return $ applyOpenTermMulti f
-       ([ev_tp,
-         -- FIXME HERE NOW: the following eta-expansion is a workaround to issue
-         -- #1748 in the Coq translator; can replace it with the following when
-         -- that issue is fixed:
-         -- identOpenTerm (specMEventRetType evType)
-         lambdaOpenTerm "ev" ev_tp
-         (\ev -> applyOpenTerm (identOpenTerm (specMEventRetType evType)) ev)]
+       ([identOpenTerm (specMEventType evType),
+         identOpenTerm (specMEventRetType evType)]
         ++ args)
 
 -- | Generate the type @SpecM E evRetType stack A@ using the current event type
