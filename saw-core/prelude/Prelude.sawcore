@@ -2787,23 +2787,24 @@ VoidEvRetType : Void -> sort 0;
 VoidEvRetType v = Void#rec (\ (_:Void) -> sort 0) v;
 
 -- Get the nth element of a LetRecTypes list, or void -> void if n is too big
-nthLRT : LetRecTypes -> Nat -> LetRecType;
+nthLRT : List1 LetRecType -> Nat -> LetRecType;
 nthLRT lrts =
-  LetRecTypes#rec
-  (\ (lrts:LetRecTypes) -> Nat -> LetRecType)
+  List1#rec
+  LetRecType
+  (\ (lrts:List1 LetRecType) -> Nat -> LetRecType)
   (\ (_:Nat) -> LRT_Fun Void (\ (_:Void) -> LRT_Ret Void))
-  (\ (lrt:LetRecType) (_:LetRecTypes) (rec:Nat -> LetRecType) (n:Nat) ->
+  (\ (lrt:LetRecType) (_:List1 LetRecType) (rec:Nat -> LetRecType) (n:Nat) ->
      Nat#rec (\ (_:Nat) -> LetRecType) lrt (\ (m:Nat) (_:LetRecType) -> rec m) n)
   lrts;
 
 -- A function stack is a list of values of type LetRecTypes, which intuitively
 -- represents a stack of bindings of mutually recursive functions
 FunStack : sort 1;
-FunStack = List1 LetRecTypes;
+FunStack = List1 (List1 LetRecType);
 
 -- Push a frame, represented by a LetRecTypes list, onto the top of a FunStack
-pushFunStack : LetRecTypes -> FunStack -> FunStack;
-pushFunStack frame stack = Cons1 LetRecTypes frame stack;
+pushFunStack : List1 LetRecType -> FunStack -> FunStack;
+pushFunStack frame stack = Cons1 (List1 LetRecType) frame stack;
 
 -- The monad for specifications (FIXME: document this!)
 primitive SpecM : (E:sort 0) -> (evRetType:E -> sort 0) -> FunStack ->
@@ -2853,26 +2854,27 @@ LRTType E evRetType stack lrt =
 -- Build the right-nested tuple type (T1 * (T2 * ... (Tn * #()))) where each Ti
 -- is the result of calling LRTType on the ith LetRecType in a list
 LRTsTuple : (E:sort 0) -> (evRetType:E -> sort 0) -> FunStack ->
-            LetRecTypes -> sort 0;
+            List1 LetRecType -> sort 0;
 LRTsTuple E evRetType stack lrts =
-  LetRecTypes#rec
-  (\ (_:LetRecTypes) -> sort 0)
+  List1#rec
+  LetRecType
+  (\ (_:List1 LetRecType) -> sort 0)
   #()
-  (\ (lrt:LetRecType) (_:LetRecTypes) (rest:sort 0) ->
+  (\ (lrt:LetRecType) (_:List1 LetRecType) (rest:sort 0) ->
      (LRTType E evRetType stack lrt) * rest)
   lrts;
 
 -- A recursive call to a function in the top frame of a function stack
 primitive callS :
   (E:sort 0) -> (evRetType:E -> sort 0) -> (stack:FunStack) ->
-  (frame:LetRecTypes) -> (n:Nat) ->
+  (frame:List1 LetRecType) -> (n:Nat) ->
   LRTType E evRetType (pushFunStack frame stack) (nthLRT frame n);
 
 -- Bind a collection of recursive functions whose types are given by a frame of
 -- LetRecTypes and whose bodies are given by an LRTsTuple, and call the nth one
 primitive multiFixS :
   (E:sort 0) -> (evRetType:E -> sort 0) -> (stack:FunStack) ->
-  (frame:LetRecTypes) ->
+  (frame:List1 LetRecType) ->
   LRTsTuple E evRetType (pushFunStack frame stack) frame ->
   (n:Nat) ->
   LRTType E evRetType stack (nthLRT frame n);
