@@ -168,6 +168,8 @@ runTermTranslationMonad configuration r globalDecls localEnv =
 errorTermM :: TermTranslationMonad m => String -> m Coq.Term
 errorTermM str = return $ Coq.App (Coq.Var "error") [Coq.StringLit str]
 
+-- | Translate an 'Ident' with a given list of arguments to a Coq term, using
+-- any special treatment for that identifier and qualifying it if necessary
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Coq.Term
 translateIdentWithArgs i args = do
   currentModuleName <- asks (view currentModule . otherConfiguration)
@@ -202,9 +204,52 @@ translateIdentWithArgs i args = do
         ]
       )
 
+-- | Helper for 'translateIdentWithArgs' with no arguments
 translateIdent :: TermTranslationMonad m => Ident -> m Coq.Term
 translateIdent i = translateIdentWithArgs i []
 
+-- | Translate a constant with optional body to a Coq term. If the constant is
+-- named with an 'Ident', then it already has a top-level translation from
+-- translating the SAW core module containing that 'Ident'. If the constant is
+-- an 'ImportedName', however, then it might not have a Coq definition already,
+-- so add a definition of it to the top-level translation state.
+translateConstant :: TermTranslationMonad m => ExtCns Term -> Maybe Term ->
+                     m Coq.Term
+translateConstant ec _
+  | ModuleIdentifier ident <- ecName ec = translateIdent ident
+translateConstant ec maybe_body =
+  do -- First, apply the constant renaming to get the name for this constant
+     configuration <- asks translationConfiguration
+     -- TODO short name seems wrong
+     let nm_str = Text.unpack $ toShortName $ ecName ec
+     let renamed =
+           escapeIdent $ fromMaybe nm_str $
+           lookup nm_str $ constantRenaming configuration
+
+     -- Next, test if we should add a definition of this constant
+     alreadyTranslatedDecls <- getNamesOfAllDeclarations
+     let skip_def =
+           elem renamed alreadyTranslatedDecls ||
+           elem renamed (constantSkips configuration)
+
+     -- Add the definition if we aren't skipping it
+     case maybe_body of
+       _ | skip_def -> return ()
+       Just body ->
+         -- If the definition has a body, add it as a definition
+         do b <- withTopTranslationState $ translateTermLet body
+            modify $ over topLevelDeclarations $ (mkDefinition renamed b :)
+       Nothing ->
+         -- If not, add it as a Coq Variable declaration
+         do tp <- withTopTranslationState $ translateTermLet (ecType ec)
+            modify (over topLevelDeclarations (Coq.Variable renamed tp :))
+
+     -- Finally, return the constant as a Coq variable
+     pure (Coq.Var renamed)
+
+
+-- | Translate an 'Ident' and see if the result maps to a SAW core 'Ident',
+-- returning the latter 'Ident' if so
 translateIdentToIdent :: TermTranslationMonad m => Ident -> m (Maybe Ident)
 translateIdentToIdent i =
   (atUseSite <$> findSpecialTreatment i) >>= \case
@@ -294,24 +339,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       return (Coq.App (Coq.Var "Vector.of_list") [Coq.List elems])
     StringLit s -> pure (Coq.Scope (Coq.StringLit (Text.unpack s)) "string")
 
-    ExtCns ec ->
-      do configuration <- asks translationConfiguration
-         let renamed = translateConstant (notations configuration) ec
-         alreadyTranslatedDecls <- getNamesOfAllDeclarations
-         let definitionsToSkip = skipDefinitions configuration
-         if elem renamed alreadyTranslatedDecls || elem renamed definitionsToSkip
-           then Coq.Var <$> pure renamed
-           else do
-             tp <-
-              -- Translate type in a top-level name scope
-              withLocalTranslationState $
-              do modify $ set localEnvironment []
-                 modify $ set unavailableIdents reservedIdents
-                 modify $ set sharedNames IntMap.empty
-                 modify $ set nextSharedName "var__0"
-                 translateTermLet (ecType ec)
-             modify $ over topLevelDeclarations $ (Coq.Variable renamed tp :)
-             Coq.Var <$> pure renamed
+    ExtCns ec -> translateConstant ec Nothing
 
     -- The translation of a record type {fld1:tp1, ..., fldn:tpn} is
     -- RecordTypeCons fld1 tp1 (... (RecordTypeCons fldn tpn RecordTypeNil)...).
@@ -384,6 +412,16 @@ withLocalTranslationState action = do
     , _nextSharedName = view nextSharedName before
     })
   return result
+
+-- | Run a translation in the top-level translation state
+withTopTranslationState :: TermTranslationMonad m => m a -> m a
+withTopTranslationState m =
+  withLocalTranslationState $
+  do modify $ set localEnvironment []
+     modify $ set unavailableIdents reservedIdents
+     modify $ set sharedNames IntMap.empty
+     modify $ set nextSharedName "var__0"
+     m
 
 mkDefinition :: Coq.Ident -> Coq.Term -> Coq.Decl
 mkDefinition name (Coq.Lambda bs t) = Coq.Definition name bs Nothing t
@@ -581,45 +619,8 @@ translateTermUnshared t = withLocalTranslationState $ do
       | n < length env -> Coq.Var <$> pure (env !! n)
       | otherwise -> Except.throwError $ LocalVarOutOfBounds t
 
-    -- Constants with no body
-    Constant n Nothing -> do
-      configuration <- asks translationConfiguration
-      let renamed = translateConstant (notations configuration) n
-      alreadyTranslatedDecls <- getNamesOfAllDeclarations
-      let definitionsToSkip = skipDefinitions configuration
-      if elem renamed alreadyTranslatedDecls || elem renamed definitionsToSkip
-        then Coq.Var <$> pure renamed
-        else do
-          tp <-
-           -- Translate type in a top-level name scope
-           withLocalTranslationState $
-           do modify $ set localEnvironment []
-              modify $ set unavailableIdents reservedIdents
-              modify $ set sharedNames IntMap.empty
-              modify $ set nextSharedName "var__0"
-              translateTermLet (ecType n)
-          modify $ over topLevelDeclarations $ (Coq.Variable renamed tp :)
-          Coq.Var <$> pure renamed
-
-    -- Constants with a body
-    Constant n (Just body) -> do
-      configuration <- asks translationConfiguration
-      let renamed = translateConstant (notations configuration) n
-      alreadyTranslatedDecls <- getNamesOfAllDeclarations
-      let definitionsToSkip = skipDefinitions configuration
-      if elem renamed alreadyTranslatedDecls || elem renamed definitionsToSkip
-        then Coq.Var <$> pure renamed
-        else do
-        b <-
-          -- Translate body in a top-level name scope
-          withLocalTranslationState $
-          do modify $ set localEnvironment []
-             modify $ set unavailableIdents reservedIdents
-             modify $ set sharedNames IntMap.empty
-             modify $ set nextSharedName "var__0"
-             translateTermLet body
-        modify $ over topLevelDeclarations $ (mkDefinition renamed b :)
-        Coq.Var <$> pure renamed
+    -- Constants
+    Constant n maybe_body -> translateConstant n maybe_body
 
   where
     badTerm          = Except.throwError $ BadTerm t
