@@ -5,6 +5,7 @@
 From Coq Require Import Program.Basics.
 From Coq Require Export Morphisms Setoid.
 From Coq Require Import Strings.String.
+From EnTree Require Export Ref.SpecM.
 
 (***
  *** The Monad Typeclasses
@@ -418,10 +419,13 @@ Polymorphic Definition CompM : Type -> Type := OptionT SetM.
  ***)
 
 (* An inductive description of a type A1 -> A2 -> ... -> An -> CompM B *)
+(*
 Inductive LetRecType : Type :=
 | LRT_Ret (B:Type) : LetRecType
 | LRT_Fun (A:Type) (lrtF:A -> LetRecType) : LetRecType
 .
+*)
+Definition LetRecType := SpecM.LetRecType.
 
 (* Convert a LetRecType to the type it represents *)
 Fixpoint lrtToType (lrt:LetRecType) : Type :=
