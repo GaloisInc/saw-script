@@ -54,6 +54,7 @@ class NotAJVMClass(ServerValueError): pass
 class NotAJVMMethodSpecIR(ServerValueError): pass
 class NotASimpset(ServerValueError): pass
 class NotATerm(ServerValueError): pass
+class NotAYosysTheorem(ServerValueError): pass
 
 # Setup errors:
 class SetupError(SAWException): pass
@@ -85,6 +86,7 @@ error_code_table : Dict[int, Type[SAWException]] = {
     10070: NotATerm,
     10080: NotAJVMClass,
     10090: NotAJVMMethodSpecIR,
+    10130: NotAYosysTheorem,
     # Setup errors:
     10100: NotSettingUpCryptol,
     10110: NotSettingUpCrucibleLLVM,
