@@ -400,11 +400,11 @@ coqTranslationConfiguration ::
   [(String, String)] ->
   [String] ->
   Coq.TranslationConfiguration
-coqTranslationConfiguration notations skips = Coq.TranslationConfiguration
-  { Coq.notations = notations
+coqTranslationConfiguration renamings skips = Coq.TranslationConfiguration
+  { Coq.constantRenaming = renamings
+  , Coq.constantSkips = skips
   , Coq.monadicTranslation = False
   , Coq.postPreamble = []
-  , Coq.skipDefinitions = skips
   , Coq.vectorModule = "SAWCoreVectorsAsCoqVectors"
   }
 
