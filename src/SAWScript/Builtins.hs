@@ -1523,19 +1523,29 @@ beta_reduce_term (TypedTerm schema t) = do
   t' <- io $ betaNormalize sc t
   return (TypedTerm schema t')
 
+addSimpWith :: (forall a. RewriteRule a -> RewriteRule a) -> Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
+addSimpWith f thm ss =
+  do  sc <- getSharedContext
+      mkRule sc (thmProp thm)
+  where
+    mkRule sc prop =
+      io (propToRewriteRule sc prop (Just (thmNonce thm))) >>= \case
+        Right Nothing -> fail "addsimp: cannot interpret theorem as equation"
+        Right (Just rule) -> pure (addRule (f rule) ss)
+        Left nmi ->
+          case Cryptol.isCryptolName nmi of
+            Nothing -> fail "addsimp: cannot unfold a non-cryptol term"
+            Just name ->
+              do  idx <- resolveName sc (Text.unpack name)
+                  prop' <- io $ unfoldProp sc (Set.fromList idx) prop
+                  prop'' <- io $ betaReduceProp sc prop'
+                  mkRule sc prop''
+
 addsimp :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
-addsimp thm ss =
-  do sc <- getSharedContext
-     io (propToRewriteRule sc (thmProp thm) (Just (thmNonce thm))) >>= \case
-       Nothing -> fail "addsimp: theorem not an equation"
-       Just rule -> pure (addRule rule ss)
+addsimp = addSimpWith id
 
 addsimp_shallow :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
-addsimp_shallow thm ss =
-  do sc <- getSharedContext
-     io (propToRewriteRule sc (thmProp thm) (Just (thmNonce thm))) >>= \case
-       Nothing -> fail "addsimp: theorem not an equation"
-       Just rule -> pure (addRule (shallowRule rule) ss)
+addsimp_shallow = addSimpWith shallowRule
 
 -- TODO: remove this, it implicitly adds axioms
 addsimp' :: Term -> SV.SAWSimpset -> TopLevel SV.SAWSimpset

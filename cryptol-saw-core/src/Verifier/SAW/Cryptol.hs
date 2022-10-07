@@ -1214,6 +1214,20 @@ cryptolURI (p:ps) (Just uniq) =
        }
 
 -- | Tests if the given 'NameInfo' represents a name imported
+--   from Cryptol. If so, return the unqualified identifier
+--   associated with that 'NameInfo'.
+isCryptolName :: NameInfo -> Maybe Text
+isCryptolName (ImportedName uri _)
+  | Just sch <- uriScheme uri
+  , unRText sch == "cryptol"
+  , Left True <- uriAuthority uri
+  , Just (False, x :| xs) <- uriPath uri
+  , [] <- uriQuery uri
+  , Nothing <- uriFragment uri
+  = Just (unRText (last (x:xs)))
+isCryptolName _ = Nothing
+
+-- | Tests if the given 'NameInfo' represents a name imported
 --   from the given Cryptol module name.  If so, it returns
 --   the identifier within that module.  Note, this does
 --   not match dynamic identifiers from the \"\<interactive\>\"
