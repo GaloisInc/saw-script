@@ -491,6 +491,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("retS",                 mapsToExpl specMModule "RetS")
   , ("bindS",                mapsToExpl specMModule "BindS")
   , ("errorS",               mapsToExpl specMModule "ErrorS")
+  , ("liftStackS",           mapsToExpl specMModule "liftStackS")
   , ("existsS",              mapsToExpl specMModule "ExistsS")
   , ("forallS",              mapsToExpl specMModule "ForallS")
   , ("FunStack",             mapsTo specMModule "FunStack")

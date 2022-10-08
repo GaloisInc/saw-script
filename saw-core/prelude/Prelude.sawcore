@@ -2802,6 +2802,10 @@ nthLRT lrts =
 FunStack : sort 1;
 FunStack = List1 (List1 LetRecType);
 
+-- The empty FunStack
+emptyFunStack : FunStack;
+emptyFunStack = Nil1 (List1 LetRecType);
+
 -- Push a frame, represented by a LetRecTypes list, onto the top of a FunStack
 pushFunStack : List1 LetRecType -> FunStack -> FunStack;
 pushFunStack frame stack = Cons1 (List1 LetRecType) frame stack;
@@ -2840,6 +2844,10 @@ primitive assumeS : (E:sort 0) -> (evRetType:E -> sort 0) -> (stack:FunStack) ->
                     (p:Prop) -> SpecM E evRetType stack #();
 primitive assertS : (E:sort 0) -> (evRetType:E -> sort 0) -> (stack:FunStack) ->
                     (p:Prop) -> SpecM E evRetType stack #();
+
+primitive liftStackS :
+  (E:sort 0) -> (evRetType:E -> sort 0) -> (stack:FunStack) -> (A:sort 0) ->
+  SpecM E evRetType emptyFunStack A -> SpecM E evRetType stack A;
 
 -- Return the type represented by a LetRecType
 LRTType : (E:sort 0) -> (evRetType:E -> sort 0) -> FunStack ->
