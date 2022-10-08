@@ -1,0 +1,4 @@
+import "test.cry";
+
+p <- prove_print z3 {{ XorInvolutes }};
+let rules = addsimp p empty_ss;
