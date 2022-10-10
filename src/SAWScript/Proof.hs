@@ -224,16 +224,12 @@ boolToProp sc vars tm =
 propToTerm :: SharedContext -> Prop -> IO Term
 propToTerm _sc (Prop tm) = pure tm
 
--- | Attempt to interpret a proposition as a rewrite rule. If interpretation
--- fails, check if a (sub)term can be unfolded.
-propToRewriteRule :: SharedContext -> Prop -> Maybe a -> IO (Either NameInfo (Maybe (RewriteRule a)))
+-- | Attempt to interpret a proposition as a rewrite rule.
+propToRewriteRule :: SharedContext -> Prop -> Maybe a -> IO (Maybe (RewriteRule a))
 propToRewriteRule _sc (Prop tm) ann =
   case ruleOfProp tm ann of
-    Just r  -> pure (Right (Just r))
-    Nothing ->
-      case unfoldableTerm tm of
-        Left nmi -> pure (Left nmi)
-        Right () -> pure (Right Nothing)
+    Nothing -> pure Nothing
+    Just r  -> pure (Just r)
 
 -- | Attempt to split an if/then/else proposition.
 --   If it succeeds to find a term like "EqTrue (ite Bool b x y)",
@@ -401,7 +397,6 @@ localHypSimpset sqt hs ss0 = Fold.foldlM processHyp ss0 nhyps
     processHyp ss (n,h) =
       case ruleOfProp (unProp h) Nothing of
         Nothing -> fail $ "Hypothesis " ++ show n ++ "cannot be used as a rewrite rule."
-        -- check `unfoldableTerm`?
         Just r  -> return (addRule r ss)
 
     nhyps = [ (n,h)

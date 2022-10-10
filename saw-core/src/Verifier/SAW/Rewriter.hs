@@ -30,7 +30,6 @@ module Verifier.SAW.Rewriter
   , ruleOfTerm
   , ruleOfTerms
   , ruleOfProp
-  , unfoldableTerm
   , scDefRewriteRules
   , scEqsRewriteRules
   , scEqRewriteRule
@@ -395,27 +394,6 @@ scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfGlobal sc i <*> pure Nothing
 -- | Collects rewrite rules from named constants, whose types must be equations.
 scEqsRewriteRules :: SharedContext -> [Ident] -> IO [RewriteRule a]
 scEqsRewriteRules sc = mapM (scEqRewriteRule sc)
-
--- | Finds the first named constant in the term that may be amenable to
--- unfolding
-unfoldableTerm :: Term -> Either NameInfo ()
-unfoldableTerm t
-  | Just _ <- R.asFTermF t =
-    Right ()
-  | Just _ <- R.asLocalVar t =
-    Right ()
-  | Just (EC _ nmi _, Just _body) <- R.asConstant t =
-    -- is matching (Just _body) too strict?
-    Left nmi
-  | Just (_, _, body) <- R.asLambda t =
-    unfoldableTerm body
-  | Just (_, _, body) <- R.asPi t =
-    unfoldableTerm body
-  | Just body <- R.asEqTrue t =
-    unfoldableTerm body
-  | Just (f, x) <- R.asApp t =
-    unfoldableTerm f >> unfoldableTerm x
-  | otherwise = Right ()
 
 -- | Transform the given rewrite rule to a set of one or more
 -- equivalent rewrite rules, if possible.
