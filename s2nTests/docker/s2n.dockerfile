@@ -1,14 +1,14 @@
-FROM ubuntu:18.04
+FROM ubuntu:22.04
 
 RUN apt-get update -y -q && \
     apt-get install -y software-properties-common && \
     apt-get update -q -y && \
     apt install -y \
-    clang-3.9 \
+    clang-12 \
     curl \
     gcc \
     git \
-    llvm-3.9 \
+    llvm-12 \
     make \
     sudo \
     && \
