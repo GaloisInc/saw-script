@@ -15,7 +15,7 @@ heapster_define_perm env "true_ptr" "rw:rwmodality" "llvmptr 64" "ptr((rw,0) |->
 heapster_assume_fun env "CRYPTO_load_u64_be"
   "(). arg0:ptr((R,0) |-> int64<>) -o \
      \ arg0:ptr((R,0) |-> int64<>), ret:int64<>"
-  "\\ (x:Vec 64 Bool) -> returnM (Vec 64 Bool * Vec 64 Bool) (x, x)";
+  "\\ (x:Vec 64 Bool) -> retS Void VoidEvRetType emptyFunStack (Vec 64 Bool * Vec 64 Bool) (x, x)";
 
 /*
 heapster_typecheck_fun env "return_state"
