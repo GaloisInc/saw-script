@@ -1689,7 +1689,7 @@ weakenMonadicFun1 v ts us f =
   -- First form a term f1 of type V*(T1*...*Tn) -> SpecM(V*(U1*...*Um))
   do let t_tup = tupleOfTypes ts
          u_tup = tupleOfTypes us
-     f1 <- applyNamedSpecOpM "Prelude.tupleSpecMFunBoth" [t_tup, u_tup, v, f]
+     f1 <- applyNamedSpecOpEmptyM "Prelude.tupleSpecMFunBoth" [t_tup, u_tup, v, f]
 
      let f2 = case ts of
            -- If ts is empty, form the term \ (x:V) -> f1 (x, ()) to coerce f1
@@ -1706,18 +1706,24 @@ weakenMonadicFun1 v ts us f =
        [] ->
          do fun_tm <-
               lambdaOpenTermTransM "x" (pairTypeOpenTerm v unitTypeOpenTerm)
-              (\x -> applyNamedSpecOpM "Prelude.retS" [v, pairLeftOpenTerm x])
-            applyNamedSpecOpM "Prelude.composeS"
+              (\x -> applyNamedSpecOpEmptyM "Prelude.retS" [v, pairLeftOpenTerm x])
+            applyNamedSpecOpEmptyM "Prelude.composeS"
               [tupleOfTypes (v:ts), pairTypeOpenTerm v unitTypeOpenTerm,
                v, f2, fun_tm]
        -- Otherwise, leave f2 unchanged
        _ -> return f2
 
 
--- | Weaken a monadic function of type @(T1*...*Tn) -> CompM(U1*...*Um)@ to one
--- of type @(V1*...*Vk*T1*...*Tn) -> CompM(V1*...*Vk*U1*...*Um)@, where tuples
--- of 2 or more types are right-nested and and in a unit type, i.e., have the
--- form @(T1 * (T2 * (... * (Tn * #()))))@
+-- | Weaken a monadic function of type
+--
+-- > (T1*...*Tn) -> SpecM e eTp emptyFunStack (U1*...*Um)
+--
+-- to one of type
+--
+-- > (V1*...*Vk*T1*...*Tn) -> SpecM e eTp emptyFunStack (V1*...*Vk*U1*...*Um)
+--
+-- where tuples of 2 or more types are right-nested and and in a unit type,
+-- i.e., have the form @(T1 * (T2 * (... * (Tn * #()))))@
 weakenMonadicFun :: [OpenTerm] -> [OpenTerm] -> [OpenTerm] -> OpenTerm ->
                     ImpTransM ext blocks tops rets ps ctx OpenTerm
 weakenMonadicFun vs ts_top us_top f_top =
@@ -2324,6 +2330,13 @@ applySpecOpM f args =
 applyNamedSpecOpM :: Ident -> [OpenTerm] ->
                      ImpTransM ext blocks tops rets ps ctx OpenTerm
 applyNamedSpecOpM f args = applySpecOpM (globalOpenTerm f) args
+
+-- | Apply a named @SpecM@ operation to the current event type @E@ and
+-- @evRetType@, to the empty function stack, and to additional arguments
+applyNamedSpecOpEmptyM :: Ident -> [OpenTerm] ->
+                          ImpTransM ext blocks tops rets ps ctx OpenTerm
+applyNamedSpecOpEmptyM f args =
+  applyEventOpM (globalOpenTerm f) (emptyStackOpenTerm : args)
 
 -- | Generate the type @SpecM E evRetType stack A@ using the current event type
 -- and @stack@ and the supplied type @A@. This is different from
@@ -3073,11 +3086,11 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          translateCurryLocalPermImpl "Error mapping lifetime output perms:" impl_out
          pctx2 vars2 ps_out_trans ps_out_vars ps_out'_trans
        l_res_tm_h <-
-         applyNamedSpecOpM "Prelude.composeS"
+         applyNamedSpecOpEmptyM "Prelude.composeS"
          [typeTransType1 ps_in_trans, typeTransType1 ps_out_trans,
           typeTransType1 ps_out'_trans, transTerm1 ptrans_l, impl_out_tm]
        l_res_tm <-
-         applyNamedSpecOpM "Prelude.composeS"
+         applyNamedSpecOpEmptyM "Prelude.composeS"
          [typeTransType1 ps_in'_trans, typeTransType1 ps_in_trans,
           typeTransType1 ps_out'_trans, impl_in_tm, l_res_tm_h]
 
@@ -3108,8 +3121,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
 
        -- Now we apply the lifetime ownerhip function to ps_in and bind its output
        -- in the rest of the computation
+       lifted_m <-
+         applyNamedSpecOpM "Prelude.liftStackS"
+         [typeTransType1 ps_out_trans,
+          applyOpenTerm (transTerm1 ptrans_l) (transTupleTerm pctx_in)]
        bindSpecMTransM
-         (applyOpenTerm (transTerm1 ptrans_l) (transTupleTerm pctx_in))
+         lifted_m
          ps_out_trans
          "endl_ps"
          (\pctx_out ->
@@ -3133,7 +3150,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        lops_tp <- typeTransTupleType <$> translate mb_lops
        f_tm <-
          lambdaOpenTermTransM "ps" lops_tp $ \x ->
-         applyNamedSpecOpM "Prelude.retS" [lops_tp, x]
+         applyNamedSpecOpEmptyM "Prelude.retS" [lops_tp, x]
        withPermStackM id
          (\(pctx0 :>: _) -> pctx0 :>: typeTransF ttrans [f_tm])
          m
@@ -4067,8 +4084,9 @@ translateLocalPermImpl err (mbMatch -> [nuMP| LocalPermImpl impl |]) =
 -- | Translate a local implication over two sequences of permissions (already
 -- translated to types) to a monadic function with the first sequence of
 -- permissions as free variables and that takes in the second permissions as
--- arguments. Note that the translations of the second input permissions and the
--- output permissions must have exactly one type, i.e., already be tupled.
+-- arguments. This monadic function is relative to the empty function stack.
+-- Note that the translations of the second input permissions and the output
+-- permissions must have exactly one type, i.e., already be tupled.
 translateCurryLocalPermImpl ::
   String -> Mb ctx (LocalPermImpl (ps1 :++: ps2) ps_out) ->
   PermTransCtx ctx ps1 -> RAssign (Member ctx) ps1 ->
@@ -4077,7 +4095,8 @@ translateCurryLocalPermImpl ::
   ImpTransM ext blocks tops rets ps ctx OpenTerm
 translateCurryLocalPermImpl err impl pctx1 vars1 tp_trans2 vars2 tp_trans_out =
   lambdaTransM "x_local" tp_trans2 $ \pctx2 ->
-  local (\info -> info { itiReturnType = typeTransType1 tp_trans_out }) $
+  local (\info -> info { itiReturnType = typeTransType1 tp_trans_out,
+                         itiFunStack = emptyStackOpenTerm }) $
   withPermStackM
     (const (RL.append vars1 vars2))
     (const (RL.append pctx1 pctx2))
