@@ -42,14 +42,18 @@ getDeclsCryptol path = do
       forM_ warnings $ liftF . flip Warning () . pretty
       case result of
          Left err -> liftF $ Failure True (pretty err) Nothing
-         Right ((_, AST.Module{mDecls}), _) ->
-            let stdDecls = catMaybes . for (concatMap flattenDeclGroup mDecls) $
-                  \(AST.Decl{dName, dSignature, dDefinition}) -> do
-                     funcName <- sourceName dName
-                     argNames <- mapM sourceName =<< tupleLambdaBindings =<< declDefExpr dDefinition
-                     (argTypes, retType) <- tupleFunctionType (AST.sType dSignature)
-                     return $ Decl funcName retType (zipWith Arg argNames argTypes)
-            in return $ Just (stdDecls :: [Decl])
+         Right ((_, top), _) ->
+            case top of
+              AST.TCTopSignature {} ->
+                 liftF $ Failure True "Expected a module but found an intreface" Nothing
+              AST.TCTopModule AST.Module { mDecls } ->
+                let stdDecls = catMaybes . for (concatMap flattenDeclGroup mDecls) $
+                      \(AST.Decl{dName, dSignature, dDefinition}) -> do
+                         funcName <- sourceName dName
+                         argNames <- mapM sourceName =<< tupleLambdaBindings =<< declDefExpr dDefinition
+                         (argTypes, retType) <- tupleFunctionType (AST.sType dSignature)
+                         return $ Decl funcName retType (zipWith Arg argNames argTypes)
+                in return $ Just (stdDecls :: [Decl])
 
 -- All this is just sifting through the Cryptol typechecker's AST to get the information we want:
 
@@ -78,6 +82,7 @@ whereBindings _                       = Nothing
 declDefExpr :: AST.DeclDef -> Maybe AST.Expr
 declDefExpr = \case
    AST.DPrim      -> Nothing
+   AST.DForeign {} -> Nothing
    AST.DExpr expr -> Just expr
 
 -- | If a lambda is of the form @\(a,b,...,z) -> ...)@ then give the list of names bound in the tuple

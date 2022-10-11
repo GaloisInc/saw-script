@@ -16,7 +16,27 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Cryptol where
+module Verifier.SAW.Cryptol
+  ( scCryptolType
+  , Env(..)
+  , emptyEnv
+
+  , isErasedProp
+  , proveProp
+
+
+  , ImportPrimitiveOptions(..)
+  , importName
+  , importExpr
+  , importTopLevelDeclGroups
+  , importDeclGroups
+  , importType
+  , importSchema
+
+  , defaultPrimitiveOptions
+  , genNewtypeConstructors
+  , exportValueWithSchema
+  ) where
 
 import Control.Monad (foldM, join, unless)
 import Control.Exception (catch, SomeException)
@@ -46,12 +66,13 @@ import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
-  (asPrim, asParamName, nameUnique, nameIdent, nameInfo, NameInfo(..))
+  (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..), asLocal)
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..), mkIdent
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
   , ModName, modNameToText, identText, interactiveName
-  , ModPath(..), modPathSplit
+  , ModPath(..), modPathSplit, ogModule, Namespace(NSValue)
+  , modNameChunksText
   )
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.Type as C (Newtype(..))
@@ -1050,6 +1071,9 @@ importExpr sc env expr =
     C.ELocated _ e ->
       importExpr sc env e
 
+    C.EPropGuards {} ->
+      error "Using contsraint guards is not yet supported by SAW."
+
   where
     the :: Maybe a -> IO a
     the = maybe (panic "importExpr" ["internal type error"]) return
@@ -1063,6 +1087,9 @@ importExpr sc env expr =
 importExpr' :: SharedContext -> Env -> C.Schema -> C.Expr -> IO Term
 importExpr' sc env schema expr =
   case expr of
+    C.EPropGuards {} ->
+      error "Using contsraint guards is not yet supported by SAW."
+
     C.ETuple es ->
       do ty <- the (C.isMono schema)
          ts <- the (C.tIsTuple ty)
@@ -1252,26 +1279,25 @@ isCryptolInteractiveName (ImportedName uri _)
 isCryptolInteractiveName _ = Nothing
 
 
-
 importName :: C.Name -> IO NameInfo
 importName cnm =
   case C.nameInfo cnm of
-    C.Parameter -> fail ("Cannot import non-top-level name: " ++ show cnm)
-    C.Declared modNm _
-      | modNm == C.TopModule C.interactiveName ->
+    C.LocalName {} -> fail ("Cannot import non-top-level name: " ++ show cnm)
+    C.GlobalName _ns og
+      | C.ogModule og == C.TopModule C.interactiveName ->
           let shortNm = C.identText (C.nameIdent cnm)
               aliases = [shortNm]
               uri = cryptolURI [shortNm] (Just (C.nameUnique cnm))
            in pure (ImportedName uri aliases)
 
       | otherwise ->
-          let (topMod, nested) = C.modPathSplit modNm
-              modNmTxt = C.modNameToText topMod
-              modNms   = (Text.splitOn "::" modNmTxt) ++ map C.identText nested
-              shortNm  = C.identText (C.nameIdent cnm)
-              longNm   = Text.intercalate "::" ([modNmTxt] ++ map C.identText nested ++ [shortNm])
-              aliases  = [shortNm, longNm]
-              uri      = cryptolURI (modNms ++ [shortNm]) Nothing
+          let (topMod, nested) = C.modPathSplit (C.ogModule og)
+              topChunks = C.modNameChunksText topMod
+              modNms    = topChunks ++ map C.identText nested
+              shortNm   = C.identText (C.nameIdent cnm)
+              longNm    = Text.intercalate "::" (modNms ++ [shortNm])
+              aliases   = [shortNm, longNm]
+              uri       = cryptolURI (modNms ++ [shortNm]) Nothing
            in pure (ImportedName uri aliases)
 
 -- | Currently this imports declaration groups by inlining all the
@@ -1284,6 +1310,10 @@ importDeclGroup declOpts sc env (C.Recursive [decl]) =
   case C.dDefinition decl of
     C.DPrim ->
       panic "importDeclGroup" ["Primitive declarations cannot be recursive:", show (C.dName decl)]
+
+    C.DForeign {} ->
+      error "`foreign` imports may not be used in SAW specifications"
+
     C.DExpr expr ->
       do env1 <- bindName sc (C.dName decl) (C.dSignature decl) env
          t' <- importSchema sc env (C.dSignature decl)
@@ -1329,6 +1359,8 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
      let extractDeclExpr decl =
            case C.dDefinition decl of
              C.DExpr expr -> importExpr' sc env2 (C.dSignature decl) expr
+             C.DForeign {} ->
+               error "`foreign` imports may not be used in SAW specifications"
              C.DPrim ->
                 panic "importDeclGroup"
                         [ "Primitive declarations cannot be recursive:"
@@ -1366,6 +1398,9 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
 
 importDeclGroup declOpts sc env (C.NonRecursive decl) =
   case C.dDefinition decl of
+    C.DForeign {} ->
+      error "`foreign` imports may not be used in SAW specifications"
+
     C.DPrim
      | TopLevelDeclGroup primOpts <- declOpts -> do
         rhs <- importPrimitive sc primOpts env (C.dName decl) (C.dSignature decl)
@@ -1596,6 +1631,10 @@ importMatches sc env [C.Let decl]
 
 importMatches sc env (C.Let decl : matches) =
   case C.dDefinition decl of
+
+    C.DForeign {} ->
+      error "`foreign` imports may not be used in SAW specifications"
+
     C.DPrim -> do
      panic "importMatches" ["Primitive declarations not allowed in 'let':", show (C.dName decl)]
     C.DExpr expr -> do
@@ -1831,7 +1870,8 @@ genNewtypeConstructors sc newtypes env0 =
     newtypeConstr :: Newtype -> C.Expr
     newtypeConstr nt = foldr tFn fn (C.ntParams nt)
       where
-        paramName = C.asParamName (ntName nt)
+        paramName = C.asLocal C.NSValue (ntName nt)
+
         recTy = C.TRec $ ntFields nt
         fn = C.EAbs paramName recTy (C.EVar paramName) -- EAbs Name Type Expr -- ETAbs TParam Expr
         tFn tp body =
