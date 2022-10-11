@@ -668,7 +668,7 @@ specMTypeTransM stack tp =
 emptyStackSpecMTypeTransM :: TransInfo info => OpenTerm ->
                              TransM info ctx OpenTerm
 emptyStackSpecMTypeTransM tp =
-  specMTypeTransM (globalOpenTerm "Prelude.EmptyFunStack") tp
+  specMTypeTransM (globalOpenTerm "Prelude.emptyFunStack") tp
 
 -- | Lambda-abstract a function stack variable of type @FunStack@
 lambdaFunStackM :: (OpenTerm -> TransM info ctx OpenTerm) ->
