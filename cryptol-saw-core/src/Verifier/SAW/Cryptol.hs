@@ -16,7 +16,27 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Cryptol where
+module Verifier.SAW.Cryptol
+  ( scCryptolType
+  , Env(..)
+  , emptyEnv
+
+  , isErasedProp
+  , proveProp
+
+
+  , ImportPrimitiveOptions(..)
+  , importName
+  , importExpr
+  , importTopLevelDeclGroups
+  , importDeclGroups
+  , importType
+  , importSchema
+
+  , defaultPrimitiveOptions
+  , genNewtypeConstructors
+  , exportValueWithSchema
+  ) where
 
 import Control.Monad (foldM, join, unless)
 import Control.Exception (catch, SomeException)
@@ -46,12 +66,13 @@ import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
-  (asPrim, asParamName, nameUnique, nameIdent, nameInfo, NameInfo(..))
+  (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..), asLocal)
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..), mkIdent
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
   , ModName, modNameToText, identText, interactiveName
-  , ModPath(..), modPathSplit
+  , ModPath(..), modPathSplit, ogModule, Namespace(NSValue)
+  , modNameChunksText
   )
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.Type as C (Newtype(..))
@@ -1258,26 +1279,25 @@ isCryptolInteractiveName (ImportedName uri _)
 isCryptolInteractiveName _ = Nothing
 
 
-
 importName :: C.Name -> IO NameInfo
 importName cnm =
   case C.nameInfo cnm of
-    C.Parameter -> fail ("Cannot import non-top-level name: " ++ show cnm)
-    C.Declared modNm _
-      | modNm == C.TopModule C.interactiveName ->
+    C.LocalName {} -> fail ("Cannot import non-top-level name: " ++ show cnm)
+    C.GlobalName _ns og
+      | C.ogModule og == C.TopModule C.interactiveName ->
           let shortNm = C.identText (C.nameIdent cnm)
               aliases = [shortNm]
               uri = cryptolURI [shortNm] (Just (C.nameUnique cnm))
            in pure (ImportedName uri aliases)
 
       | otherwise ->
-          let (topMod, nested) = C.modPathSplit modNm
-              modNmTxt = C.modNameToText topMod
-              modNms   = (Text.splitOn "::" modNmTxt) ++ map C.identText nested
-              shortNm  = C.identText (C.nameIdent cnm)
-              longNm   = Text.intercalate "::" ([modNmTxt] ++ map C.identText nested ++ [shortNm])
-              aliases  = [shortNm, longNm]
-              uri      = cryptolURI (modNms ++ [shortNm]) Nothing
+          let (topMod, nested) = C.modPathSplit (C.ogModule og)
+              topChunks = C.modNameChunksText topMod
+              modNms    = topChunks ++ map C.identText nested
+              shortNm   = C.identText (C.nameIdent cnm)
+              longNm    = Text.intercalate "::" (modNms ++ [shortNm])
+              aliases   = [shortNm, longNm]
+              uri       = cryptolURI (modNms ++ [shortNm]) Nothing
            in pure (ImportedName uri aliases)
 
 -- | Currently this imports declaration groups by inlining all the
@@ -1850,7 +1870,8 @@ genNewtypeConstructors sc newtypes env0 =
     newtypeConstr :: Newtype -> C.Expr
     newtypeConstr nt = foldr tFn fn (C.ntParams nt)
       where
-        paramName = C.asParamName (ntName nt)
+        paramName = C.asLocal C.NSValue (ntName nt)
+
         recTy = C.TRec $ ntFields nt
         fn = C.EAbs paramName recTy (C.EVar paramName) -- EAbs Name Type Expr -- ETAbs TParam Expr
         tFn tp body =
