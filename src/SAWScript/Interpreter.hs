@@ -4060,7 +4060,7 @@ primitives = Map.fromList
     "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_assume_fun)
     Experimental
-    [ "heapster_assume_fun nm perms trans assumes that function nm has"
+    [ "heapster_assume_fun env nm perms trans assumes that function nm has"
     , " permissions perms and translates to the SAW core term trans"
     ]
 
@@ -4068,7 +4068,7 @@ primitives = Map.fromList
     "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_assume_fun_rename)
     Experimental
-    [ "heapster_assume_fun_rename nm nm_to perms trans assumes that function nm"
+    [ "heapster_assume_fun_rename env nm nm_to perms trans assumes that function nm"
     , " has permissions perms and translates to the SAW core term trans. If"
     , " trans is not an identifier then it is bound to the defined name nm_to."
     ]
@@ -4078,7 +4078,7 @@ primitives = Map.fromList
     (bicVal heapster_assume_fun_rename_prim)
     Experimental
     [
-      "heapster_assume_fun_rename_prim nm nm_to perms assumes that function nm"
+      "heapster_assume_fun_rename_prim env nm nm_to perms assumes that function nm"
     , " has permissions perms as a primitive."
     ]
 
@@ -4086,7 +4086,7 @@ primitives = Map.fromList
     "HeapsterEnv -> String -> [(String, String)] -> TopLevel HeapsterEnv"
     (bicVal heapster_assume_fun_multi)
     Experimental
-    [ "heapster_assume_fun_multi nm [(perm1, trans1), ...] assumes that function"
+    [ "heapster_assume_fun_multi env nm [(perm1, trans1), ...] assumes that function"
     , " nm can be typed with 0 or more permissions, each with the corresponding"
     , " translation to SAW core"
     ]
