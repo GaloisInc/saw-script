@@ -26,7 +26,8 @@ heapster_assume_fun env "malloc"
   "(sz:bv 64). arg0:eq(llvmword(8*sz)) -o \
              \ arg0:true, ret:array(W,0,<sz,*8,fieldsh(true))"
   "\\ (sz:Vec 64 Bool) -> \
-    \ returnM (BVVec 64 sz #()) \
+    \ retS Void VoidEvRetType emptyFunStack \
+            \ (BVVec 64 sz #()) \
             \ (genBVVec 64 sz #() (\\ (i:Vec 64 Bool) (_:is_bvult 64 i sz) -> ()))";
 
 
