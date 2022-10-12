@@ -487,7 +487,11 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- The specification monad
   ++
-  [ ("SpecM",                mapsToExpl specMModule "SpecM")
+  [ ("EvType",               mapsTo specMModule "EvType")
+  , ("Build_EvType",         mapsTo specMModule "Build_EvType")
+  , ("evTypeType",           mapsTo specMModule "evTypeType")
+  , ("evRetType",            mapsTo specMModule "evRetType")
+  , ("SpecM",                mapsToExpl specMModule "SpecM")
   , ("retS",                 mapsToExpl specMModule "RetS")
   , ("bindS",                mapsToExpl specMModule "BindS")
   , ("errorS",               mapsToExpl specMModule "ErrorS")

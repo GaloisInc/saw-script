@@ -645,16 +645,13 @@ sigmaElimPermTransM x tp_l p_cbn tp_ret_m f sigma = case mbMatch p_cbn of
   _ -> sigmaElimTransM x tp_l (flip inExtTransM $ translate p_cbn)
                        tp_ret_m f sigma
 
--- | Apply an 'OpenTerm' to the current event type @E@ and @evRetType@ and to a
+-- | Apply an 'OpenTerm' to the current event type @E@ and to a
 -- list of other arguments
 applyEventOpM :: TransInfo info => OpenTerm -> [OpenTerm] ->
                  TransM info ctx OpenTerm
 applyEventOpM f args =
-  do evType <- permEnvSpecMEventType <$> infoEnv <$> ask
-     return $ applyOpenTermMulti f
-       ([identOpenTerm (specMEventType evType),
-         identOpenTerm (specMEventRetType evType)]
-        ++ args)
+  do evType <- identOpenTerm <$> permEnvSpecMEventType <$> infoEnv <$> ask
+     return $ applyOpenTermMulti f (evType : args)
 
 -- | Generate the type @SpecM E evRetType stack A@ using the current event type
 -- and the supplied @stack@ and type @A@

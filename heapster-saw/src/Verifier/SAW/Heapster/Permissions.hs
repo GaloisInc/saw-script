@@ -884,19 +884,9 @@ data BlockHint blocks init ret args where
 data Hint where
   Hint_Block :: BlockHint blocks init ret args -> Hint
 
--- | A representation of an event / effect type for a SpecM computation, which
--- includes a type for events along with a function to map each event to its
--- return type. See the @SpecM@ monad for more details.
-data SpecMEventType = SpecMEventType
-  {
-    specMEventType :: Ident,
-    specMEventRetType :: Ident
-  }
-
--- | The default 'SpecMEventType' uses the @Void@ type for events
-defaultSpecMEventType :: SpecMEventType
-defaultSpecMEventType =
-  SpecMEventType (fromString "Prelude.Void") (fromString "Prelude.VoidEvRetType")
+-- | The default event type uses the @Void@ type for events
+defaultSpecMEventType :: Ident
+defaultSpecMEventType = fromString "Prelude.VoidEv"
 
 -- | A permission environment that maps function names, permission names, and
 -- 'GlobalSymbols' to their respective permission structures
@@ -906,7 +896,7 @@ data PermEnv = PermEnv {
   permEnvNamedShapes :: [SomeNamedShape],
   permEnvGlobalSyms :: [PermEnvGlobalEntry],
   permEnvHints :: [Hint],
-  permEnvSpecMEventType :: SpecMEventType
+  permEnvSpecMEventType :: Ident
   }
 
 
@@ -978,7 +968,6 @@ $(mkNuMatching [t| forall args. BlockHintSort args |])
 $(mkNuMatching [t| forall blocks init ret args.
                 BlockHint blocks init ret args |])
 $(mkNuMatching [t| Hint |])
-$(mkNuMatching [t| SpecMEventType |])
 $(mkNuMatching [t| PermEnv |])
 
 -- NOTE: this instance would require a NuMatching instance for NameMap...
