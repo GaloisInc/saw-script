@@ -26,13 +26,13 @@ heapster_assume_fun env "llvm.uadd.with.overflow.i64"
   "(). arg0:int64<>, arg1:int64<> -o \
      \ ret:struct(int64<>,int1<>)"
   "\\ (x y:Vec 64 Bool) -> \
-    \ retS Void VoidEvRetType emptyFunStack (Vec 64 Bool * Vec 1 Bool) \
+    \ retS VoidEv emptyFunStack (Vec 64 Bool * Vec 1 Bool) \
     \      (bvAdd 64 x y, gen 1 Bool (\\ (_:Nat) -> bvCarry 64 x y))";
 
 // llvm.expect.i1
 heapster_assume_fun env "llvm.expect.i1"
   "().arg0:int1<>, arg1:int1<> -o ret:int1<>"
-  "\\ (x y:Vec 1 Bool) -> retS Void VoidEvRetType emptyFunStack (Vec 1 Bool) x";
+  "\\ (x y:Vec 1 Bool) -> retS VoidEv emptyFunStack (Vec 1 Bool) x";
 
 // core::panicking::panic
 //panic_sym <- heapster_find_symbol env "5panic";

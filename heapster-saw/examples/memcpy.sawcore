@@ -4,7 +4,7 @@ module memcpy where
 import Prelude;
 
 mallocSpec : (sz:Vec 64 Bool) ->
-             SpecM Void VoidEvRetType emptyFunStack (BVVec 64 sz #());
+             SpecM VoidEv emptyFunStack (BVVec 64 sz #());
 mallocSpec sz =
-  retS Void VoidEvRetType emptyFunStack (BVVec 64 sz #())
+  retS VoidEv emptyFunStack (BVVec 64 sz #())
        (genBVVec 64 sz #() (\ (i:Vec 64 Bool) (_:is_bvult 64 i sz) -> ()));

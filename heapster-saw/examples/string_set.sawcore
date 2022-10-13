@@ -4,15 +4,15 @@ module string_set where
 import Prelude;
 
 listInsertM : (a : sort 0) -> List a -> a ->
-              SpecM Void VoidEvRetType emptyFunStack (List a);
+              SpecM VoidEv emptyFunStack (List a);
 listInsertM a l s =
-  retS Void VoidEvRetType emptyFunStack (List a) (Cons a s l);
+  retS VoidEv emptyFunStack (List a) (Cons a s l);
 
 listRemoveM : (a : sort 0) -> (a -> a -> Bool) -> List a -> a ->
-              SpecM Void VoidEvRetType emptyFunStack (List a * a);
+              SpecM VoidEv emptyFunStack (List a * a);
 listRemoveM a test_eq l s =
   retS
-    Void VoidEvRetType emptyFunStack
+    VoidEv emptyFunStack
     (List a * a)
     (List__rec
       a (\ (_:List a) -> List a)
@@ -29,15 +29,15 @@ stringList : sort 0;
 stringList = List String;
 
 stringListInsertM : List String -> String ->
-                    SpecM Void VoidEvRetType emptyFunStack (List String);
+                    SpecM VoidEv emptyFunStack (List String);
 stringListInsertM l s =
-  retS Void VoidEvRetType emptyFunStack (List String) (Cons String s l);
+  retS VoidEv emptyFunStack (List String) (Cons String s l);
 
 stringListRemoveM : List String -> String ->
-                    SpecM Void VoidEvRetType emptyFunStack (stringList * String);
+                    SpecM VoidEv emptyFunStack (stringList * String);
 stringListRemoveM l s =
   retS
-    Void VoidEvRetType emptyFunStack
+    VoidEv emptyFunStack
     (stringList * String)
     (List__rec
       String (\ (_:List String) -> List String)
