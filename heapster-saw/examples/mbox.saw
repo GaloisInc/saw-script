@@ -68,13 +68,13 @@ heapster_define_perm env "boolean" " " "llvmptr 1" "exists x:bv 1.eq(llvmword(x)
 //     \ returnM (BVVec 64 len (Vec 8 Bool) * (BVVec 64 len (Vec 8 Bool) * #())) (y, (y, ()))";
 
 heapster_assume_fun env "llvm.objectsize.i64.p0i8" "().empty -o empty"
-                    "retS Void VoidEvRetType emptyFunStack #() ()";
+                    "retS VoidEv emptyFunStack #() ()";
 
 heapster_assume_fun env "__memcpy_chk"
   "(len:bv 64). arg0:byte_array<W,len>, arg1:byte_array<W,len>, arg2:eq(llvmword (len)) -o \
               \ arg0:byte_array<W,len>, arg1:byte_array<W,len>"
   "\\ (len:Vec 64 Bool) (_ src : BVVec 64 len (Vec 8 Bool)) -> \
-    \ retS Void VoidEvRetType emptyFunStack \
+    \ retS VoidEv emptyFunStack \
          \ (BVVec 64 len (Vec 8 Bool) * BVVec 64 len (Vec 8 Bool)) (src, src)";
 
 
