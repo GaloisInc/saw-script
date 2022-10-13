@@ -5,7 +5,15 @@ From Coq Require Import Lists.List.
 From Coq Require        Numbers.NatInt.NZLog.
 From Coq Require Import Strings.String.
 From CryptolToCoq Require Export CompM.
-From EnTree Require Export Ref.SpecM.
+
+From EnTree Require Export
+     Basics.HeterogeneousRelations
+     Basics.QuantType
+     Ref.SpecM.
+
+(***
+ *** sawLet
+ ***)
 
 Definition sawLet_def A B (x : A) (y : A -> B) := y x.
 
@@ -13,6 +21,11 @@ Global Notation "'sawLet' v ':=' x 'in' y" := (sawLet_def _ _ x (fun v => y))
   (at level 70, v at level 99, right associativity).
 Global Notation "'sawLet' v ':' A ':=' x 'in' y" := (sawLet_def A _ x (fun v => y))
   (at level 70, v at level 99, right associativity).
+
+
+(***
+ *** The Inhabited typeclass
+ ***)
 
 (** A typeclass we use to restrict applications of the "error" axiom
   * to inhabited types. This allows the axiom to be realizable, and
@@ -42,6 +55,11 @@ Instance Inhabited_Intro (a:Type) (b:a -> Type) (Hb: forall x, Inhabited (b x))
 
 Global Hint Extern 5 (Inhabited ?A) =>
   (apply (@MkInhabited A); intuition (eauto with typeclass_instances inh)) : typeclass_instances.
+
+
+(***
+ *** Definitions for things in the Prelude
+ ***)
 
 Definition String := String.string.
 
@@ -218,6 +236,11 @@ Instance Inhabited_Pair (a b:Type) {Ha : Inhabited a} {Hb : Inhabited b} : Inhab
 Instance Inhabited_prod (a b:Type) {Ha : Inhabited a} {Hb : Inhabited b} : Inhabited (prod a b) :=
     MkInhabited (prod a b) (pair inhabitant inhabitant).
 
+
+(***
+ *** Integers
+ ***)
+
 Definition Integer := Z.
 Definition intAdd : Integer -> Integer -> Integer := Z.add.
 Definition intSub : Integer -> Integer -> Integer := Z.sub.
@@ -242,6 +265,10 @@ Instance Inhabited_Z : Inhabited Z :=
 Global Hint Resolve (0%Z : Z) : inh.
 Global Hint Resolve (0%Z : Integer) : inh.
 
+
+(***
+ *** IntMod
+ ***)
 
 (* NOTE: the following will be nonsense for values of n <= 1 *)
 Definition IntMod (n : nat) := Z.
@@ -349,3 +376,59 @@ Definition recordTest4 :=
  RecordCons "id_fun" (fun (X:Type) (x:X) => x) RecordNil.
 
 Definition recordTest5 := RecordProj recordTest4 "id_fun" nat 0.
+
+
+(***
+ *** QuantType Instances
+ ***)
+
+(** Simple QuantType Instances **)
+
+Program Instance QuantType_Bool : QuantType Bool :=
+  { quantEnc := QEnc_nat;
+    quantEnum := fun n => match n with
+                          | 0 => false
+                          | S _ => true
+                          end;
+    quantEnumInv := fun b => if b then 1 else 0 }.
+Next Obligation.
+  destruct a; reflexivity.
+Defined.
+
+
+(** QuantType Vec Instance **)
+
+(* Build the encoding of the N-tuple of a given encoding *)
+Fixpoint QEnc_NTuple n (qenc : QuantEnc) : QuantEnc :=
+  match n with
+  | 0 => QEnc_prop True
+  | S n' => QEnc_pair qenc (QEnc_NTuple n' qenc)
+  end.
+
+(* The quantEnum function for Vec n a *)
+Definition quantEnum_Vec n A `{QuantType A} :
+  encodes (QEnc_NTuple n (quantEnc (A:=A))) -> Vec n A :=
+  nat_rect
+    (fun n => encodes (QEnc_NTuple n (quantEnc (A:=A))) -> Vec n A)
+    (fun _ => VectorDef.nil _)
+    (fun n enumF x => VectorDef.cons _ (quantEnum (fst x)) _ (enumF (snd x)))
+    n.
+
+(* The quantEnumInv function for Vec n a *)
+Definition quantEnumInv_Vec n A `{QuantType A} :
+  Vec n A -> encodes (QEnc_NTuple n (quantEnc (A:=A))) :=
+  nat_rect
+    (fun n => Vec n A -> encodes (QEnc_NTuple n (quantEnc (A:=A))))
+    (fun _ => I)
+    (fun n enumInvF x => (quantEnumInv (VectorDef.hd x), enumInvF (VectorDef.tl x)))
+    n.
+
+Program Instance QuantType_Vec n A `{QuantType A} : QuantType (Vec n A) :=
+  { quantEnc := QEnc_NTuple n (quantEnc (A:=A));
+    quantEnum := quantEnum_Vec n A;
+    quantEnumInv := quantEnumInv_Vec n A }.
+Next Obligation.
+  induction a.
+  - reflexivity.
+  - simpl. rewrite quantEnumSurjective. rewrite IHa. reflexivity.
+Defined.
