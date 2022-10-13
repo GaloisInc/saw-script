@@ -192,10 +192,12 @@ translateIdentWithArgs i args = do
           mkIdent (fromMaybe (translateModuleName $ identModule i) targetModule)
           (Text.pack targetName))
           <$> mapM translateTerm args
-    applySpecialTreatment _identToCoq (UseReplaceDropArgs n replacement)
-      | length args >= n =
-        Coq.App replacement <$> mapM translateTerm (drop n args)
-    applySpecialTreatment _identToCoq (UseReplaceDropArgs n _) =
+    applySpecialTreatment _identToCoq (UseMacro n macroFun)
+      | length args >= n
+      , (m_args, args') <- splitAt n args =
+        do f <- macroFun <$> mapM translateTerm m_args
+           Coq.App f <$> mapM translateTerm args'
+    applySpecialTreatment _identToCoq (UseMacro n _) =
       errorTermM (unwords
         [ "Identifier"
         , show i
@@ -256,7 +258,7 @@ translateIdentToIdent i =
     UsePreserve -> return $ Just (mkIdent translatedModuleName (identBaseName i))
     UseRename   targetModule targetName _ ->
       return $ Just $ mkIdent (fromMaybe translatedModuleName targetModule) (Text.pack targetName)
-    UseReplaceDropArgs _ _ -> return Nothing
+    UseMacro _ _ -> return Nothing
   where
     translatedModuleName = translateModuleName (identModule i)
 

@@ -66,9 +66,9 @@ data UseSiteTreatment
     --   symbol, which indicates to Coq that all implicit arguments should be
     --   treated as explicit.
   | UseRename   (Maybe ModuleName) String Bool
-    -- | Drop the first @n@ SAWCore arguments to this identifier, then replace
-    --   the occurence with the given Coq term.
-  | UseReplaceDropArgs  Int Coq.Term
+    -- | Apply a macro function to the translations of the first @n@ SAWCore
+    -- arguments of this identifier
+  | UseMacro Int ([Coq.Term] -> Coq.Term)
 
 data IdentSpecialTreatment = IdentSpecialTreatment
   { atDefSite :: DefSiteTreatment
@@ -101,7 +101,7 @@ findSpecialTreatment ident = do
         }
   pure $ Map.findWithDefault defaultTreatment (identName ident) moduleMap
 
--- Use `mapsTo` for identifiers whose definition has a matching definition
+-- | Use `mapsTo` for identifiers whose definition has a matching definition
 -- already on the Coq side.  As such, their definition can be skipped, and use
 -- sites can be replaced by the appropriate call.
 mapsTo :: ModuleName -> String -> IdentSpecialTreatment
@@ -110,17 +110,27 @@ mapsTo targetModule targetName = IdentSpecialTreatment
   , atUseSite = UseRename (Just targetModule) targetName False
   }
 
--- Like @mapsTo@ but use an explicit variable reference so
+-- | Like 'mapsTo' but use an explicit variable reference so
 -- that all implicit arguments must be provided.
 mapsToExpl :: ModuleName -> String -> IdentSpecialTreatment
 mapsToExpl targetModule targetName = IdentSpecialTreatment
   { atDefSite = DefSkip
   , atUseSite = UseRename (Just targetModule) targetName True
   }
--- Use `realize` for axioms that can be realized, or for primitives that must be
--- realized.  While some primitives can be written directly in a standalone Coq
--- module, some primitives depend on code from the extracted module, and are
--- depended upon by following code in the same module.  Such primitives can
+
+-- | Like 'mapsToExpl' but add an @n@th argument that is inferred by Coq
+mapsToExplInferArg :: String -> Int -> IdentSpecialTreatment
+mapsToExplInferArg targetName argNum = IdentSpecialTreatment
+  { atDefSite = DefSkip
+  , atUseSite = UseMacro argNum (\args ->
+                                  Coq.App (Coq.ExplVar targetName)
+                                  (args ++ [Coq.Var "_"]))
+  }
+
+-- | Use `realize` for axioms that can be realized, or for primitives that must
+-- be realized. While some primitives can be written directly in a standalone
+-- Coq module, some primitives depend on code from the extracted module, and are
+-- depended upon by following code in the same module. Such primitives can
 -- therefore *neither* be defined a priori, *nor* a posteriori, and must be
 -- realized where they were originally declared.
 realize :: String -> IdentSpecialTreatment
@@ -129,9 +139,9 @@ realize code = IdentSpecialTreatment
   , atUseSite = UsePreserve
   }
 
--- Use `rename` for identifiers whose definition can be translated, but has to
--- be renamed.  This is useful for certain definitions whose name on the
--- SAWCore/Cryptol side clashes with names on the Coq side.  For instance, `at`
+-- | Use `rename` for identifiers whose definition can be translated, but has to
+-- be renamed. This is useful for certain definitions whose name on the
+-- SAWCore/Cryptol side clashes with names on the Coq side. For instance, `at`
 -- is a reserved Coq keyword, but is used as a function name in SAWCore Prelude.
 -- Also useful for translation notations, until they are better supported.
 rename :: String -> IdentSpecialTreatment
@@ -140,23 +150,23 @@ rename ident = IdentSpecialTreatment
   , atUseSite = UseRename Nothing ident False
   }
 
--- Replace any occurrences of identifier applied to @n@ arguments with the
+-- | Replace any occurrences of identifier applied to @n@ arguments with the
 -- supplied Coq term. If @n=0@ and the supplied Coq term is an identifier then
 -- this is the same as 'rename'.
 replaceDropArgs :: Int -> Coq.Term -> IdentSpecialTreatment
 replaceDropArgs n term = IdentSpecialTreatment
   { atDefSite = DefSkip
-  , atUseSite = UseReplaceDropArgs n term
+  , atUseSite = UseMacro n (const term)
   }
 
--- A version of 'replaceDropArgs' that drops no arguments; i.e., just replaces
+-- | A version of 'replaceDropArgs' that drops no arguments; i.e., just replaces
 -- an identifier with the supplied Coq term
 replace :: Coq.Term -> IdentSpecialTreatment
 replace = replaceDropArgs 0
 
 
--- Use `skip` for identifiers that are already defined in the appropriate module
--- on the Coq side.
+-- | Use `skip` for identifiers that are already defined in the appropriate
+-- module on the Coq side.
 skip :: IdentSpecialTreatment
 skip = IdentSpecialTreatment
   { atDefSite = DefSkip
@@ -496,8 +506,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("bindS",                mapsToExpl specMModule "BindS")
   , ("errorS",               mapsToExpl specMModule "ErrorS")
   , ("liftStackS",           mapsToExpl specMModule "liftStackS")
-  , ("existsS",              mapsToExpl specMModule "ExistsS")
-  , ("forallS",              mapsToExpl specMModule "ForallS")
+  , ("existsS",              mapsToExplInferArg "SpecM.ExistsS" 3)
+  , ("forallS",              mapsToExplInferArg "SpecM.ForallS" 3)
   , ("FunStack",             mapsTo specMModule "FunStack")
   , ("nthLRT",               mapsToExpl specMModule "nthLRT")
   , ("LRTType",              mapsToExpl specMModule "LRTType")
