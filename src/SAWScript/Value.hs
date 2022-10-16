@@ -80,6 +80,9 @@ import SAWScript.Prover.SolverStats
 import SAWScript.Prover.MRSolver.Term as MRSolver
 import SAWScript.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))
+import SAWScript.Yosys.IR
+import SAWScript.Yosys.Theorem (YosysImport, YosysTheorem)
+import SAWScript.Yosys.State (YosysSequential)
 
 import Verifier.SAW.Name (toShortName, SAWNamingEnv, emptySAWNamingEnv)
 import Verifier.SAW.CryptolEnv as CEnv
@@ -162,6 +165,10 @@ data Value
   | VAIG AIGNetwork
   | VCFG SAW_CFG
   | VGhostVar CMS.GhostGlobal
+  | VYosysModule YosysIR
+  | VYosysImport YosysImport
+  | VYosysSequential YosysSequential
+  | VYosysTheorem YosysTheorem
 
 type SAWSimpset = Simpset TheoremNonce
 
@@ -339,6 +346,10 @@ showsPrecValue opts nenv p v =
     VCFG (JVM_CFG g) -> showString (show g)
     VGhostVar x -> showParen (p > 10)
                  $ showString "Ghost " . showsPrec 11 x
+    VYosysModule _ -> showString "<<Yosys module>>"
+    VYosysImport _ -> showString "<<Yosys import>>"
+    VYosysSequential _ -> showString "<<Yosys sequential>>"
+    VYosysTheorem _ -> showString "<<Yosys theorem>>"
     VJVMSetup _      -> showString "<<JVM Setup>>"
     VJVMMethodSpec _ -> showString "<<JVM MethodSpec>>"
     VJVMSetupValue x -> shows x
@@ -1201,6 +1212,34 @@ instance IsValue CMS.GhostGlobal where
 instance FromValue CMS.GhostGlobal where
   fromValue (VGhostVar r) = r
   fromValue v = error ("fromValue GlobalVar: " ++ show v)
+
+instance IsValue YosysIR where
+  toValue = VYosysModule
+
+instance FromValue YosysIR where
+  fromValue (VYosysModule ir) = ir
+  fromValue v = error ("fromValue YosysIR: " ++ show v)
+
+instance IsValue YosysImport where
+  toValue = VYosysImport
+
+instance FromValue YosysImport where
+  fromValue (VYosysImport i) = i
+  fromValue v = error ("fromValue YosysImport: " ++ show v)
+
+instance IsValue YosysSequential where
+  toValue = VYosysSequential
+
+instance FromValue YosysSequential where
+  fromValue (VYosysSequential s) = s
+  fromValue v = error ("fromValue YosysSequential: " ++ show v)
+
+instance IsValue YosysTheorem where
+  toValue = VYosysTheorem
+
+instance FromValue YosysTheorem where
+  fromValue (VYosysTheorem thm) = thm
+  fromValue v = error ("fromValue YosysTheorem: " ++ show v)
 
 -- Error handling --------------------------------------------------------------
 

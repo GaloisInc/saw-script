@@ -1,0 +1,21 @@
+enable_experimental;
+
+let {{
+  cryfull :  {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
+  cryfull inp = { cout = [cout], s = [s] }
+    where [cout, s] = zext inp.a + zext inp.b + zext inp.cin
+  
+  cryadd4 : {a : [4], b : [4]} -> {res : [4]}
+  cryadd4 inp = { res = inp.a + inp.b }
+  
+  cryfullnocarry :  {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
+  cryfullnocarry inp = { cout = [cout], s = [s] }
+    where [cout, s] = zext inp.a + zext inp.b
+}};
+
+m <- yosys_import "test.json";
+
+full_spec <- yosys_verify {{ m.full }} [] {{ cryfull }} [] w4;
+yosys_verify {{ m.add4 }} [] {{ cryadd4 }} [full_spec] w4;
+full_nocarry_spec <- yosys_verify {{ m.full }} [{{\(inp : {a : [1], b : [1], cin : [1]}) -> inp.cin == 0}}] {{ cryfullnocarry }} [] w4;
+yosys_verify {{ m.add4 }} [] {{ cryadd4 }} [full_nocarry_spec] w4;

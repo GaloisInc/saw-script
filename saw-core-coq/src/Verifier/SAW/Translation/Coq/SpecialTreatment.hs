@@ -499,25 +499,12 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("List__rec", replace (Coq.ExplVar "Datatypes.list_rect"))
   ]
 
-constantsRenamingMap :: [(String, String)] -> Map.Map String String
-constantsRenamingMap notations = Map.fromList notations
-
 escapeIdent :: String -> String
 escapeIdent str
   | all okChar str = str
   | otherwise      = "Op_" ++ zEncodeString str
  where
    okChar x = isAlphaNum x || x `elem` ("_'" :: String)
-
--- TODO: Now that ExtCns contains a unique identifier, it might make sense
--- to check those here to avoid some captures?
-translateConstant :: [(String, String)] -> ExtCns e -> String
-translateConstant notations (EC {..}) =
-  escapeIdent $
-    Map.findWithDefault
-      (Text.unpack (toShortName ecName))
-      (Text.unpack (toShortName ecName))
-      (constantsRenamingMap notations) -- TODO short name doesn't seem right
 
 zipSnippet :: String
 zipSnippet = [i|

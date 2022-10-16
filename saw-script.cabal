@@ -23,6 +23,7 @@ library
   default-language: Haskell2010
   build-depends:
       base >= 4
+    , aeson >= 1.4.2 && < 2.0
     , aig
     , array
     , binary
@@ -38,12 +39,14 @@ library
     , crucible-llvm >= 0.2
     , deepseq
     , either
+    , elf-edit
     , exceptions
     , executable-path
     , extra
     , directory >= 1.2.4.0
     , fgl
     , filepath
+    , flexdis86
     , free
     , haskeline
     , heapster-saw
@@ -51,9 +54,14 @@ library
     , galois-dwarf >= 0.2.2
     , IfElse
     , jvm-parser
+    , language-sally
     , lens
     , llvm-pretty >= 0.8
     , llvm-pretty-bc-parser >= 0.1.3.1
+    , macaw-base
+    , macaw-x86
+    , macaw-symbolic
+    , macaw-x86-symbolic
     , modern-uri >= 0.3.2 && < 0.4
     , mtl >= 2.1
     , old-locale
@@ -65,6 +73,7 @@ library
     , prettyprinter
     , pretty-show
     , process
+    , reflection
     , rme
     , saw-core
     , saw-core-aig
@@ -82,17 +91,10 @@ library
     , transformers-compat
     , unordered-containers
     , utf8-string
-    , what4 >= 0.4
     , vector
-    , GraphSCC
-    , macaw-base
-    , macaw-x86
-    , macaw-symbolic
-    , macaw-x86-symbolic
-    , flexdis86
-    , elf-edit
-    , reflection
-    , aeson >= 1.4.2 && < 2.0
+    , what4 >= 0.4
+    , what4-transition-system
+    , zenc
 
   hs-source-dirs: src
 
@@ -173,6 +175,15 @@ library
 
     SAWScript.X86
     SAWScript.X86Spec
+
+    SAWScript.Yosys
+    SAWScript.Yosys.Cell
+    SAWScript.Yosys.IR
+    SAWScript.Yosys.Netgraph
+    SAWScript.Yosys.State
+    SAWScript.Yosys.Theorem
+    SAWScript.Yosys.TransitionSystem
+    SAWScript.Yosys.Utils
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
