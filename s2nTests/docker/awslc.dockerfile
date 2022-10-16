@@ -1,7 +1,10 @@
 FROM ubuntu:22.04
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
-RUN apt-get update && apt-get install -y wget unzip git cmake clang llvm golang python3-pip libncurses6 quilt
+RUN apt-get update && apt-get install -y curl wget unzip git cmake golang python3-pip libncurses6 libncurses5 libtinfo-dev quilt file
 RUN pip3 install wllvm
+RUN curl -OL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang+llvm-10.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && \
+    tar xf clang+llvm-10.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && \
+    cp -r clang+llvm-10.0.0-x86_64-linux-gnu-ubuntu-18.04/* /usr
 
 WORKDIR /saw-script
 RUN mkdir -p /saw-script && \
