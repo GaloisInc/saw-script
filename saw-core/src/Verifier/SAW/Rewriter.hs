@@ -382,13 +382,13 @@ ruleOfProp sc term ann
     pure $ Just $ mkRewriteRule [] x y False ann
   | (R.isGlobalDef intModEqIdent -> Just (), [_, x, y]) <- R.asApplyAll term =
     pure $ Just $ mkRewriteRule [] x y False ann
-  | (R.asConstant -> Just (_, Just body), as) <- R.asApplyAll term =
-    do  app <- scApplyAllBeta sc body as
-        ruleOfProp sc app ann
   | Constant _ (Just body) <- unwrapTermF term = ruleOfProp sc body ann
   | Just (_, x, y) <- R.asEq term =
     pure $ Just $ mkRewriteRule [] x y False ann
   | Just body <- R.asEqTrue term = ruleOfProp sc body ann
+  | (R.asConstant -> Just (_, Just body), as) <- R.asApplyAll term =
+    do  app <- scApplyAllBeta sc body as
+        ruleOfProp sc app ann
   | otherwise = pure Nothing
 
 -- | Generate a rewrite rule from the type of an identifier, using 'ruleOfTerm'
