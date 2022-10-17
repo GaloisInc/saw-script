@@ -1,58 +1,80 @@
 # Nightly
 
-* New commands `enable_what4_eval` and `disable_what4_eval` to enable or
-  disable What4 translation for SAWCore expressions during Crucible symbolic
-  execution.
+# Version 0.10
 
-* New command `llvm_alloc_sym_init` like `llvm_alloc`, but assume that the
-  allocation is initialized with symbolic bytes.  New commands
-  `disable_alloc_sym_init_check` and `enable_alloc_sym_init_check` to
-  disable or enable the allocation initialization check associated with
-  `llvm_alloc_sym_init` during override application.
+## New Features
 
-* New command `set_crucible_timeout` to set the timeout for the SMT solver
-  during the LLVM and X86 Crucible symbolic execution. This is used for
-  path-sat checks, and sat checks when applying overrides.
+* Added Heapster, a type system for extracting functional
+  specifications from memory-safe imperative programs. More information
+  can be found [here](./heapster-saw/doc/tutorial/tutorial.md).
 
-* New command `w4_unint_z3_using` like `w4_unint_z3`, but use the given Z3
-  tactic.
+* Added new commands `enable_what4_eval` and `disable_what4_eval` to
+  enable or disable What4 translation for SAWCore expressions during
+  Crucible symbolic execution.
 
-* A new `llvm_points_to_bitfield` command has been introduced, providing a
+* Added a new command `llvm_alloc_sym_init`. This command is like
+  `llvm_alloc`, but assumes that the allocation is initialized with
+  symbolic bytes. The new commands `disable_alloc_sym_init_check` and
+  `enable_alloc_sym_init_check` disable or enable the allocation
+  initialization check associated with `llvm_alloc_sym_init` during
+  override application.
+
+* Added a new command `set_crucible_timeout` to set the timeout for the
+  SMT solver during the LLVM and X86 Crucible symbolic execution. This
+  is used for path-SAT checks, and SAT checks when applying overrides.
+
+* Added a new command `w4_unint_z3_using` that behaves like
+  `w4_unint_z3`, but using the given Z3 tactic.
+
+* Added a new command `llvm_points_to_bitfield`, which provides a
   version of `llvm_points_to` that is specifically tailored for structs
-  containing bitfields. In order to use `llvm_points_to_bitfield`, one must
-  also use the new `enable_lax_loads_and_stores` command, which relaxes some
-  of Crucible's assumptions about reading from uninitialized memory. (This
-  command also comes with a corresponding `disable_lax_loads_and_stores`
-  command.) For more details on how each of these commands should be used,
-  consult the "Bitfields" section of the SAW manual.
+  containing bitfields. In order to use `llvm_points_to_bitfield`, one
+  must also use the new `enable_lax_loads_and_stores` command, which
+  relaxes some of Crucible's assumptions about reading from
+  uninitialized memory. (This command also comes with a corresponding
+  `disable_lax_loads_and_stores` command.) For more details on how each
+  of these commands should be used, consult the "Bitfields" section of
+  the SAW manual.
 
-* A new `llvm_cast_pointer` function has been added that allows users
-  to directly specify that a pointer should be treated as pointing to
-  a particular type. This mainly affects the results of subsequent
-  `llvm_field` and `llvm_elem` calls.  This is especially useful for
+* Added a new `llvm_cast_pointer` function that allows users to
+  directly specify that a pointer should be treated as pointing to a
+  particular type. This mainly affects the results of subsequent
+  `llvm_field` and `llvm_elem` calls. This is especially useful for
   dealing with C `union` types, as the type information provided by
   LLVM is imprecise in these cases.
 
-* A new `llvm_union` function has been added that uses debug
-  information to allow users to select fields from `union` types by
-  name. This automates the process of manually applying
-  `llvm_cast_pointer` with the type of the selected union field. Just
-  as with `llvm_field`, debug symbols are required for `llvm_union` to
-  work correctly.
+* Added a new `llvm_union` function that uses debug information to
+  allow users to select fields from `union` types by name. This
+  automates the process of manually applying `llvm_cast_pointer` with
+  the type of the selected union field. Just as with `llvm_field`,
+  debug symbols are required for `llvm_union` to work correctly.
 
-* A new highly experimental `llvm_verify_fixpoint_x86` function that
-  allows partial correctness verification of loops using loop
-  invariants instead of full symbolic unrolling. Only certain very simple
-  styles of loops can currently be accommodated, and the user is
+* Added a new highly experimental `llvm_verify_fixpoint_x86` function
+  that allows partial correctness verification of loops using loop
+  invariants instead of full symbolic unrolling. Only certain very
+  simple styles of loops can currently be accommodated, and the user is
   required to provide a term that describes how the live variables in
   the loop evolve over an iteration.
 
-* A new experimental facility for "tagging" proof obligations in
-  specifications and later using those tags to make decisions
-  in proof tactics. See the new `llvm_setup_with_tag`,
-  `goal_has_tags`, and `goal_has_some_tag` commands.
+* A new highly experimental `llvm_refine_spec` function that allows a
+  collection of already-proved specifications to be combined into a
+  single specification, or to logically restate the conditions of a
+  specification.
 
-* A new experimental option (toggled via
+* Added several new utility functions for constructing SAWCore terms,
+  such as `term_apply`, `size_to_term`, `int_to_term`, and
+  `nat_to_term`.
+
+* Added a new experimental `congruence_for` function that builds a
+  proposition term representing a congruence lemma for a function term,
+  which can then be proved and later applied with `goal_apply`.
+
+* Added a new experimental facility for "tagging" proof obligations in
+  specifications and later using those tags to make decisions in proof
+  tactics. See the new `llvm_setup_with_tag`, `goal_has_tags`, and
+  `goal_has_some_tag` commands.
+
+* Added a new experimental option (toggled via
   `enable_single_override_special_case` and
   `disable_single_override_special_case`) which changes the handling
   for cases where an overriden function has only one override that
@@ -64,17 +86,28 @@
   of them, or if different tactics are needed for different subgoals.
   Currently, this option only applies to LLVM verifications.
 
-* Experimental interactive features. Using the new `subshell`
-  and `proof_subshell` commands, a user can regain a command-line
-  interface in the middle of a running script for experimentation
-  and exploration purposes. In addition `callcc` and `checkpoint`
-  allow the user to have more flexibility with restoring prior states
-  and executing the remaining context of a proof in such an
-  interactive session.
+* Added some experimental interactive proof features. Using the new
+  `subshell` and `proof_subshell` commands, a user can regain a
+  command-line interface in the middle of a running script for
+  experimentation and exploration purposes. In addition `callcc` and
+  `checkpoint` allow the user to have more flexibility with restoring
+  prior states and executing the remaining context of a proof in such
+  an interactive session.
 
-* A significant overhaul of the SAW proof and tactics system.  Under
-  the hood, tactics now manipulate _sequents_ instead of just
-  propositions. This allows more the user to specify more precise goal
+* Added a new experimental `llvm_verify_x86_with_invariant` command
+  that allows verification of certain kinds of simple loops by using a
+  user-provided loop invariant.
+
+* Added experimental support for manipulating VHDL/Verilog modules (via
+  [Yosys](https://yosyshq.net/yosys/)) as `Term` values. For more
+  information, see the `yosys_import` and `yosys_import_sequential`
+  commands.
+
+## Changes
+
+* Significantly overhauled the SAW proof and tactics system. Under the
+  hood, tactics now manipulate *sequents* instead of just propositions.
+  This allows more the user to specify more precise goal
   rearrangements, and provides a much nicer interface for proof
   exploration (especially with the new `proof_subshell`). There are a
   variety of new tactics that provide the user with control over proof
@@ -83,12 +116,17 @@
   see no substantive changes, so this is expected to be a highly
   backward-compatible change.
 
-* The experimental and rarely-used `goal_assume` tactic has been
-  removed. The use case it was targeting is better solved via sequents.
+* Removed the experimental and rarely-used `goal_assume` tactic.
+  The use case it was targeting is better solved via sequents.
 
-* A new experimental `llvm_verify_x86_with_invariant` command that
-  allows verification certain kinds of simple loops by using a
-  user-provided loop invariant.
+## Bug Fixes
+
+* Closed issues #288, #300, #415, #695, #705, #718, #722, #736, #737,
+  #738, #739, #740, #1037, #1155, #1259, #1316, #1358, #1409, #1460,
+  #1461, #1462, #1472, #1493, #1494, #1502, #1507, #1520, #1533, #1537,
+  #1558, #1561, #1562, #1565, #1566, #1567, #1579, #1584, #1588, #1591,
+  #1618, #1619, #1635, #1644, #1647, #1662, #1668, #1669, #1678, #1680,
+  #1684, #1691, #1702, #1726, #1748
 
 # Version 0.9
 
