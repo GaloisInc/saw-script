@@ -1,4 +1,13 @@
 import "test.cry";
 
-p <- prove_print z3 {{ XorInvolutes }};
-let rules = addsimp p empty_ss;
+// Existing capability
+p1 <- prove_print z3 {{ \(x: [8]) (y: [8]) -> (x ^ y) ^ y == x }};
+let r1 = addsimp p1 empty_ss;
+
+// New capability
+p2 <- prove_print z3 {{ XorInvolutes }};
+let r2 = addsimp p2 empty_ss;
+
+// New capability
+p3 <- prove_print z3 {{ \x y -> XorInvolutes x y }};
+let r3 = addsimp p3 empty_ss;
