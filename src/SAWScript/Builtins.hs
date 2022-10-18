@@ -660,7 +660,7 @@ simplifyGoalWithLocals :: [Integer] -> SV.SAWSimpset -> ProofScript ()
 simplifyGoalWithLocals hs ss =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
-     ss' <- io (localHypSimpset (goalSequent goal) hs ss)
+     ss' <- io (localHypSimpset sc (goalSequent goal) hs ss)
      sqt' <- traverseSequentWithFocus
                (\p -> snd <$> io (simplifyProp sc ss' p)) (goalSequent goal)
      return (sqt', RewriteEvidence hs ss)
@@ -1540,9 +1540,10 @@ addsimp_shallow thm ss =
 -- TODO: remove this, it implicitly adds axioms
 addsimp' :: Term -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimp' t ss =
-  case ruleOfProp t Nothing of
-    Nothing -> fail "addsimp': theorem not an equation"
-    Just rule -> pure (addRule rule ss)
+  do  sc <- getSharedContext
+      io (ruleOfProp sc t Nothing) >>= \case
+        Nothing -> fail "addsimp': theorem not an equation"
+        Just rule -> pure (addRule rule ss)
 
 addsimps :: [Theorem] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimps thms ss = foldM (flip addsimp) ss thms
