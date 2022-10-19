@@ -68,7 +68,7 @@ type instance EvalM Concrete = Identity
 type instance VBool Concrete = Bool
 type instance VWord Concrete = BitVector
 type instance VInt  Concrete = Integer
-type instance VArray Concrete = ()
+type instance VArray Concrete = Value Concrete -> Value Concrete
 type instance Extra Concrete = CExtra
 
 type CValue = Value Concrete -- (WithM Identity Concrete)
@@ -210,9 +210,15 @@ prims =
   , Prims.bpIntMax = pure2 max
 
     -- Array operations
-  , Prims.bpArrayConstant = unsupportedConcretePrimitive "bpArrayConstant"
-  , Prims.bpArrayLookup = unsupportedConcretePrimitive "bpArrayLookup"
-  , Prims.bpArrayUpdate = unsupportedConcretePrimitive "bpArrayUpdate"
+  , Prims.bpArrayConstant = \_ity _oty v -> do
+      pure $ const v
+  , Prims.bpArrayLookup = \arr idx -> do
+      pure $ arr idx
+  , Prims.bpArrayUpdate = \arr idx v -> do
+      pure $ \idx' ->
+        case (idx, idx') of
+          (VWord ibv, VWord ibv') | unsigned ibv == unsigned ibv' -> v
+          _ -> arr idx'
   , Prims.bpArrayEq = unsupportedConcretePrimitive "bpArrayEq"
   , Prims.bpArrayCopy = unsupportedConcretePrimitive "bpArrayCopy"
   , Prims.bpArraySet = unsupportedConcretePrimitive "bpArraySet"
