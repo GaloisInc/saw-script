@@ -47,16 +47,16 @@ let SHA512_CTX_SIZE = llvm_sizeof m (llvm_struct "struct.sha512_state_st");
  *
  * A function call description tells SAW how to call the function being
  * specified.  It has the form:
- *     crucible_execute_func [<list of arguments>]
+ *     llvm_execute_func [<list of arguments>]
  * These arguments are typically from the preconditions, specification inputs,
  * global variables, and literals.  SAW does not actually execute the function,
  * but rather uses symbolic execution to examine all possible executions
  * through the function, subject to precondition constraints.  For example,
  * if a precondition states that a variable `sha_ptr` is a pointer to an
  * `sha512_state_st` struct:
- *     ctx_ptr <- crucible_alloc (llvm_struct "struct.sha512_state_st");
+ *     ctx_ptr <- llvm_alloc (llvm_struct "struct.sha512_state_st");
  * And the function call description takes `sha_ptr` as an input:
- *     crucible_execute_func [sha_ptr];
+ *     llvm_execute_func [sha_ptr];
  * Then SAW will reason about the function over all possible `sha512_state_st`
  * structs.  We call `sha_ptr` a symbol because SAW does not evaluate it, but
  * rather treats it as the set of all possible `sha512_state_st` structs.
@@ -79,35 +79,35 @@ let SHA512_CTX_SIZE = llvm_sizeof m (llvm_struct "struct.sha512_state_st");
  * Specifications of functions Sigma0, Sigma1, sigma0, sigma1, and Ch
  */
 let Sigma0_spec = do {
-  x <- crucible_fresh_var "x" i64;
-  crucible_execute_func [crucible_term x];
-  crucible_return (crucible_term {{ S0 x }});
+  x <- llvm_fresh_var "x" i64;
+  llvm_execute_func [llvm_term x];
+  llvm_return (llvm_term {{ S0 x }});
 };
 
 let Sigma1_spec = do {
-  x <- crucible_fresh_var "x" i64;
-  crucible_execute_func [crucible_term x];
-  crucible_return (crucible_term {{ S1 x }});
+  x <- llvm_fresh_var "x" i64;
+  llvm_execute_func [llvm_term x];
+  llvm_return (llvm_term {{ S1 x }});
 };
 
 let sigma0_spec = do {
-  x <- crucible_fresh_var "x" i64;
-  crucible_execute_func [crucible_term x];
-  crucible_return (crucible_term {{ s0 x }});
+  x <- llvm_fresh_var "x" i64;
+  llvm_execute_func [llvm_term x];
+  llvm_return (llvm_term {{ s0 x }});
 };
 
 let sigma1_spec = do {
-  x <- crucible_fresh_var "x" i64;
-  crucible_execute_func [crucible_term x];
-  crucible_return (crucible_term {{ s1 x }});
+  x <- llvm_fresh_var "x" i64;
+  llvm_execute_func [llvm_term x];
+  llvm_return (llvm_term {{ s1 x }});
 };
 
 let Ch_spec = do {
-  x <- crucible_fresh_var "x" i64;
-  y <- crucible_fresh_var "y" i64;
-  z <- crucible_fresh_var "z" i64;
-  crucible_execute_func [crucible_term x, crucible_term y, crucible_term z];
-  crucible_return (crucible_term {{ Ch x y z }});
+  x <- llvm_fresh_var "x" i64;
+  y <- llvm_fresh_var "y" i64;
+  z <- llvm_fresh_var "z" i64;
+  llvm_execute_func [llvm_term x, llvm_term y, llvm_term z];
+  llvm_return (llvm_term {{ Ch x y z }});
 };
 
 /*
@@ -121,12 +121,12 @@ let sha512_block_data_order_spec = do {
   (data, data_ptr) <- ptr_to_fresh_readonly "data" (llvm_array SHA512_CBLOCK i8);
 
   // Call function with `state_ptr`, `data_ptr`, and the value `1`
-  crucible_execute_func [state_ptr, data_ptr, crucible_term {{ 1 : [64] }}];
+  llvm_execute_func [state_ptr, data_ptr, llvm_term {{ 1 : [64] }}];
 
   // Postcondition: The data pointed to by `state_ptr` is equivalent to the
   // return value of the processBlock_Common Cryptol spec function applied to `state`
   // and `data`.
-  crucible_points_to state_ptr (crucible_term {{ processBlock_Common state (split (join data)) }});
+  llvm_points_to state_ptr (llvm_term {{ processBlock_Common state (split (join data)) }});
 };
 
 
@@ -136,7 +136,7 @@ let sha512_block_data_order_spec = do {
 /*
  * The next functions all specify structs used in the C SHA implementation.
  * Most of the statements in these are of the form:
- *    crucible_points_to (crucible_field ptr "name") (crucible_term {{ term }})
+ *    llvm_points_to (llvm_field ptr "name") (llvm_term {{ term }})
  * which indicates that the field `name` of the struct pointed to by `ptr`
  * contains the value `term`.
  * All statements that do not match these two forms are documented inline
@@ -144,10 +144,10 @@ let sha512_block_data_order_spec = do {
 
 // Specify the sha512_state_st struct from a SHAState
 let points_to_sha512_state_st_common ptr (h, sz, block, n) num = do {
-  crucible_points_to (crucible_field ptr "h") (crucible_term h);
+  llvm_points_to (llvm_field ptr "h") (llvm_term h);
 
   // Specify `sha512_state_st.Nl` and `sha512_state_st.Nh` contain `sz`
-  llvm_points_to_at_type (crucible_field ptr "Nl") i128 (crucible_term sz);
+  llvm_points_to_at_type (llvm_field ptr "Nl") i128 (llvm_term sz);
 
   if eval_bool {{ `num == 0 }} then do {
     // Do not specify anything about `sha512_state_st.p`
@@ -157,32 +157,30 @@ let points_to_sha512_state_st_common ptr (h, sz, block, n) num = do {
     // first `num` bits of `state.block`.
     // Untyped check because the size of `sha512_state_st.p` does not match
     // the size of (take`{num} state.block) unless `num` == `SHA512_CBLOCK`
-    crucible_points_to_untyped (crucible_field ptr "p") (crucible_term block);
+    llvm_points_to_untyped (llvm_field ptr "p") (llvm_term block);
   };
 
-  crucible_points_to (crucible_field ptr "num") (crucible_term n);
-  crucible_points_to
-    (crucible_field ptr "md_len")
-    (crucible_term {{ `SHA512_DIGEST_LENGTH : [32] }});
+  llvm_points_to (llvm_field ptr "num") (llvm_term n);
+  llvm_points_to (llvm_field ptr "md_len") (llvm_term {{ `SHA512_DIGEST_LENGTH : [32] }});
 };
 
 let pointer_to_fresh_sha512_state_st name n = do {
   // Hash value
-  h <- crucible_fresh_var (str_concat name ".h") (llvm_array 8 i64);
+  h <- llvm_fresh_var (str_concat name ".h") (llvm_array 8 i64);
   // Message block
   block <- if eval_bool {{ `n == 0 }} then do {
     // Do not specify anything about `sha512_state_st.p`
     return {{ [] : [0][8] }};
   } else do {
-    crucible_fresh_var (str_concat name ".block") (llvm_array n i8);
+    llvm_fresh_var (str_concat name ".block") (llvm_array n i8);
   };
   // Size
-  sz <- crucible_fresh_var (str_concat name ".sz") i128;
+  sz <- llvm_fresh_var (str_concat name ".sz") i128;
   // Build SHAState, padding `block` with zeros to fit
   let state = {{ { h = h, block = (block # zero) : [SHA512_CBLOCK][8], n = `n : [32], sz = sz } }};
 
   // `ptr` is a pointer to a `sha512_state_st` struct
-  ptr <- crucible_alloc (llvm_struct "struct.sha512_state_st");
+  ptr <- llvm_alloc (llvm_struct "struct.sha512_state_st");
   points_to_sha512_state_st_common ptr (h, sz, block, {{ `n : [32]}}) n;
 
   return (state, ptr);
@@ -202,10 +200,10 @@ let points_to_sha512_state_st ptr state num = do {
  */
 let SHA512_Init_spec = do {
   // Precondition: `sha_ptr` is a pointer to a `sha512_state_st` struct
-  sha_ptr <- crucible_alloc (llvm_struct "struct.sha512_state_st");
+  sha_ptr <- llvm_alloc (llvm_struct "struct.sha512_state_st");
 
   // Call function with `sha_ptr`
-  crucible_execute_func [sha_ptr];
+  llvm_execute_func [sha_ptr];
 
   // Postcondition: `sha_ptr` holds an initialized SHA512 context
   points_to_sha512_state_st
@@ -214,7 +212,7 @@ let SHA512_Init_spec = do {
     0;
 
   // Postcondition: The function returns 1
-  crucible_return (crucible_term {{ 1 : [32] }});
+  llvm_return (llvm_term {{ 1 : [32] }});
 };
 
 let SHA512_Update_spec num len = do {
@@ -229,7 +227,7 @@ let SHA512_Update_spec num len = do {
   (data, data_ptr) <- ptr_to_fresh_readonly "data" (llvm_array len i8);
 
   // Call function with `sha_ptr`, `data_ptr`, and `len` as arguments.
-  crucible_execute_func [sha_ptr, data_ptr, crucible_term {{ `len : [64] }}];
+  llvm_execute_func [sha_ptr, data_ptr, llvm_term {{ `len : [64] }}];
 
   // Postcondition: The context `sha_ptr` points to matches the result
   // of executing the cryptol function `SHAUpdate` on `sha512_ctx` and
@@ -242,13 +240,13 @@ let SHA512_Update_spec num len = do {
     {{ SHAUpdate sha512_ctx data }} (eval_size {| (num + len) % SHA512_CBLOCK |});
 
   // Postcondition: The function returns 1
-  crucible_return (crucible_term {{ 1 : [32] }});
+  llvm_return (llvm_term {{ 1 : [32] }});
 };
 
 let SHA512_Final_spec num = do {
   // Precondition: `out_ptr` is allocated and points to an array
   // of `SHA512_DIGEST_LENGTH` bytes.
-  out_ptr <- crucible_alloc (llvm_array SHA512_DIGEST_LENGTH i8);
+  out_ptr <- llvm_alloc (llvm_array SHA512_DIGEST_LENGTH i8);
 
   // Precondition: `sha_ptr` is a pointer to a `sha512_state_st` struct
   // Precondition: `sha512_ctx` is a fresh Cryptol SHAState
@@ -257,18 +255,16 @@ let SHA512_Final_spec num = do {
   (sha512_ctx, sha_ptr) <- pointer_to_fresh_sha512_state_st "sha512_ctx" num;
   
   // Call function with `out_ptr`, and `sha_ptr`.
-  crucible_execute_func [out_ptr, sha_ptr];
+  llvm_execute_func [out_ptr, sha_ptr];
   
   // Postcondition: The data pointed to by `out_ptr` matches the message
   // digest returned by the Cryptol function `SHAFinal`.  The reverses,
   // splits, and joins transform the Cryptol function's big endian output to
   // little endian.
-  crucible_points_to
-    out_ptr
-    (crucible_term {{ split`{SHA512_DIGEST_LENGTH} (SHAFinal sha512_ctx) }});
+  llvm_points_to out_ptr (llvm_term {{ split`{SHA512_DIGEST_LENGTH} (SHAFinal sha512_ctx) }});
 
   // Postcondition: The function returns 1
-  crucible_return (crucible_term {{ 1 : [32] }});
+  llvm_return (llvm_term {{ 1 : [32] }});
 };
 
 let SHA512_spec len = do {
@@ -278,12 +274,12 @@ let SHA512_spec len = do {
 
   // Precondition: `out_ptr` is allocated and points to an array
   // of `SHA512_DIGEST_LENGTH` bytes.
-  out_ptr <- crucible_alloc (llvm_array SHA512_DIGEST_LENGTH i8);
+  out_ptr <- llvm_alloc (llvm_array SHA512_DIGEST_LENGTH i8);
     
   // Call function with arguments data_ptr, len, and out_ptr.
-  crucible_execute_func
+  llvm_execute_func
     [ data_ptr
-    , crucible_term {{ `len : [64] }}
+    , llvm_term {{ `len : [64] }}
     , out_ptr
     ];
   
@@ -291,10 +287,10 @@ let SHA512_spec len = do {
   // digest returned by the Cryptol function `SHAImp`.  The reverses,
   // splits, and joins transform the Cryptol function's big endian output to
   // little endian.
-  crucible_points_to out_ptr (crucible_term {{ split`{SHA512_DIGEST_LENGTH} (SHAImp data) }});
+  llvm_points_to out_ptr (llvm_term {{ split`{SHA512_DIGEST_LENGTH} (SHAImp data) }});
 
   // Postcondition: The function returns the pointer `out_ptr`.
-  crucible_return out_ptr;
+  llvm_return out_ptr;
 };
 
 
