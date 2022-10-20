@@ -2803,7 +2803,70 @@ evRetType e =
 VoidEv : EvType;
 VoidEv = Build_EvType Void (elimVoid (sort 0));
 
--- Get the nth element of a LetRecTypes list, or void -> void if n is too big
+-- Build the dependent type { a1:A1 & { a2:A2 & ... { an:An & unit } ... }} of
+-- inputs to the LetRecType (LRT_Fun A1 (\ a1 -> ...))
+LRTInput : LetRecType -> sort 0;
+LRTInput lrt =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> sort 0)
+  (\ (_:sort 0) -> #())
+  (\ (a:sort 0) (_: a -> LetRecType) (b: a -> sort 0) -> Sigma a b)
+  lrt;
+
+-- Build the output type (R a1 ... an) of the application of a LetRecType
+-- (LRT_Fun A1 (\ a1 -> ... (LRT_Fun An (\ an -> LRT_Ret R a1 ... an))))
+-- function to the arguments a1 ... an in an LRTInput
+LRTOutput : (lrt:LetRecType) -> LRTInput lrt -> sort 0;
+LRTOutput lrt =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> LRTInput lrt -> sort 0)
+  (\ (R:sort 0) (_:LRTInput (LRT_Ret R)) -> R)
+  (\ (a:sort 0) (lrtF : a -> LetRecType)
+     (rec : (x:a) -> LRTInput (lrtF x) -> sort 0)
+     (args: Sigma a (\ (x:a) -> LRTInput (lrtF x))) ->
+     rec (Sigma_proj1 a (\ (x:a) -> LRTInput (lrtF x)) args)
+         (Sigma_proj2 a (\ (x:a) -> LRTInput (lrtF x)) args))
+  lrt;
+
+-- Build the function type (a1:A1) -> ... -> (an:An) -> B from the LetRecType
+-- (LRT_Fun A1 (\ a1 -> ...))
+lrt1Pi : (lrt:LetRecType) -> (LRTInput lrt -> sort 0) -> sort 0;
+lrt1Pi lrt_top =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> (LRTInput lrt -> sort 0) -> sort 0)
+  (\ (_:sort 0) (F:#() -> sort 0) -> F ())
+  (\ (a:sort 0) (lrtF: a -> LetRecType)
+     (rec: (x:a) -> (LRTInput (lrtF x) -> sort 0) -> sort 0)
+     (F : LRTInput (LRT_Fun a lrtF) -> sort 0) ->
+     (x:a) -> rec x (\ (args : LRTInput (lrtF x)) ->
+                       F (exists a (\ (y:a) -> LRTInput (lrtF y)) x args)))
+  lrt_top;
+
+-- Build an lrtPi function from a unary function on an LRTInput
+lrtLambda : (lrt:LetRecType) -> (F: LRTInput lrt -> sort 0) ->
+            ((args: LRTInput lrt) -> F args) -> lrt1Pi lrt F;
+lrtLambda lrt_top =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> (F: LRTInput lrt -> sort 0) ->
+                         ((args: LRTInput lrt) -> F args) -> lrt1Pi lrt F)
+  (\ (_:sort 0) -> \ (F: #() -> sort 0) (f : (args:#()) -> F args) -> f ())
+  (\ (a:sort 0) (lrtF: a -> LetRecType)
+     (rec: (x:a) -> (F: LRTInput (lrtF x) -> sort 0) ->
+                    ((args: LRTInput (lrtF x)) -> F args) -> lrt1Pi (lrtF x) F)
+     (F: LRTInput (LRT_Fun a lrtF) -> sort 0)
+     (f : (args: LRTInput (LRT_Fun a lrtF)) -> F args) (x:a) ->
+     rec x (\ (args:LRTInput (lrtF x)) ->
+              F (exists a (\ (y:a) -> LRTInput (lrtF y)) x args))
+           (\ (args:LRTInput (lrtF x)) ->
+              f (exists a (\ (y:a) -> LRTInput (lrtF y)) x args)))
+  lrt_top;
+
+-- A recursive frame is a list of types for recursive functions all bound
+-- same time
+RecFrame : sort 1;
+RecFrame = (List1 LetRecType);
+
+-- Get the nth element of a RecFrame, or void -> void if n is too big
 nthLRT : List1 LetRecType -> Nat -> LetRecType;
 nthLRT lrts =
   List1#rec
@@ -2813,6 +2876,28 @@ nthLRT lrts =
   (\ (lrt:LetRecType) (_:List1 LetRecType) (rec:Nat -> LetRecType) (n:Nat) ->
      Nat#rec (\ (_:Nat) -> LetRecType) lrt (\ (m:Nat) (_:LetRecType) -> rec m) n)
   lrts;
+
+-- A recursive call to one of the functions in a RecFrame
+data FrameCall (frame : RecFrame) : sort 0 where {
+  FrameCallOfArgs : (n:Nat) -> LRTInput (nthLRT frame n) -> FrameCall frame;
+}
+
+-- Make a recursive call from its individual arguments
+mkFrameCall : (frame:RecFrame) -> (n:Nat) ->
+              lrt1Pi (nthLRT frame n) (\ (_:LRTInput (nthLRT frame n)) ->
+                                         FrameCall frame);
+mkFrameCall frame n =
+  lrtLambda (nthLRT frame n) (\ (_:LRTInput (nthLRT frame n)) -> FrameCall frame)
+            (\ (args:LRTInput (nthLRT frame n)) -> FrameCallOfArgs frame n args);
+
+-- The return type for calling a recursive function in a RecFrame
+FrameCallRet : (frame:RecFrame) -> FrameCall frame -> sort 0;
+FrameCallRet frame call =
+  FrameCall#rec
+  frame
+  (\ (_:FrameCall frame) -> sort 0)
+  (\ (n:Nat) (args:LRTInput (nthLRT frame n)) -> LRTOutput (nthLRT frame n) args)
+  call;
 
 -- A function stack is a list of values of type LetRecTypes, which intuitively
 -- represents a stack of bindings of mutually recursive functions
@@ -2875,8 +2960,8 @@ LRTType E stack lrt =
 
 -- Build the right-nested tuple type (T1 * (T2 * ... (Tn * #()))) where each Ti
 -- is the result of calling LRTType on the ith LetRecType in a list
-LRTsTuple : (E:EvType) -> FunStack -> List1 LetRecType -> sort 0;
-LRTsTuple E stack lrts =
+FrameTuple : (E:EvType) -> FunStack -> List1 LetRecType -> sort 0;
+FrameTuple E stack lrts =
   List1#rec
   LetRecType
   (\ (_:List1 LetRecType) -> sort 0)
@@ -2887,16 +2972,17 @@ LRTsTuple E stack lrts =
 
 -- A recursive call to a function in the top frame of a function stack
 primitive callS :
-  (E:EvType) -> (stack:FunStack) -> (frame:List1 LetRecType) -> (n:Nat) ->
-  LRTType E (pushFunStack frame stack) (nthLRT frame n);
+  (E:EvType) -> (stack:FunStack) -> (frame:List1 LetRecType) ->
+  (call : FrameCall frame) ->
+  SpecM E (pushFunStack frame stack) (FrameCallRet frame call);
 
 -- Bind a collection of recursive functions whose types are given by a frame of
--- LetRecTypes and whose bodies are given by an LRTsTuple, and call the nth one
+-- LetRecTypes and whose bodies are given by an FrameTuple, and call the nth one
 primitive multiFixS :
   (E:EvType) -> (stack:FunStack) -> (frame:List1 LetRecType) ->
-  LRTsTuple E (pushFunStack frame stack) frame ->
-  (n:Nat) ->
-  LRTType E stack (nthLRT frame n);
+  FrameTuple E (pushFunStack frame stack) frame ->
+  (call : FrameCall frame) ->
+  SpecM E stack (FrameCallRet frame call);
 
 -- Apply a pure function to the result of a computation
 fmapS : (E:EvType) -> (stack:FunStack) -> (a b:sort 0) -> (a -> b) ->
