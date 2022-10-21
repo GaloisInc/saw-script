@@ -852,12 +852,13 @@ data SomeNamedShape where
                     SomeNamedShape
 
 -- | An entry in a permission environment that associates a 'GlobalSymbol' with
--- a permission and a translation of that permission; the 'Bool' flag indicates
--- if the global is locally bound to a recursive call in the most recently bound
--- frame of recursive functions
+-- a permission and a translation of that permission to either a list of terms
+-- or a recursive call to the @n@th function in the most recently bound frame of
+-- recursive functions
 data PermEnvGlobalEntry where
   PermEnvGlobalEntry :: (1 <= w, KnownNat w) => GlobalSymbol ->
-                        ValuePerm (LLVMPointerType w) -> Bool -> [OpenTerm] ->
+                        ValuePerm (LLVMPointerType w) ->
+                        Either Natural [OpenTerm] ->
                         PermEnvGlobalEntry
 
 -- | The different sorts hints for blocks
@@ -8185,7 +8186,7 @@ permEnvAddGlobalSymFun :: (1 <= w, KnownNat w) => PermEnv -> GlobalSymbol ->
 permEnvAddGlobalSymFun env sym (w :: f w) fun_perm t =
   let p = ValPerm_Conj1 $ mkPermLLVMFunPtr w fun_perm in
   env { permEnvGlobalSyms =
-          PermEnvGlobalEntry sym p False [t] : permEnvGlobalSyms env }
+          PermEnvGlobalEntry sym p (Right [t]) : permEnvGlobalSyms env }
 
 -- | Add a global symbol with 0 or more function permissions to a 'PermEnv'
 permEnvAddGlobalSymFunMulti :: (1 <= w, KnownNat w) => PermEnv ->
@@ -8194,7 +8195,7 @@ permEnvAddGlobalSymFunMulti :: (1 <= w, KnownNat w) => PermEnv ->
 permEnvAddGlobalSymFunMulti env sym (w :: f w) ps_ts =
   let p = ValPerm_Conj1 $ mkPermLLVMFunPtrs w $ map fst ps_ts in
   env { permEnvGlobalSyms =
-          PermEnvGlobalEntry sym p False (map snd ps_ts) : permEnvGlobalSyms env }
+          PermEnvGlobalEntry sym p (Right $ map snd ps_ts) : permEnvGlobalSyms env }
 
 -- | Add some 'PermEnvGlobalEntry's to a 'PermEnv'
 permEnvAddGlobalSyms :: PermEnv -> [PermEnvGlobalEntry] -> PermEnv
@@ -8275,15 +8276,16 @@ lookupNamedShape env nm =
 -- | Look up the permissions and translation for a 'GlobalSymbol' at a
 -- particular machine word width
 lookupGlobalSymbol :: PermEnv -> GlobalSymbol -> NatRepr w ->
-                      Maybe (ValuePerm (LLVMPointerType w), Bool, [OpenTerm])
+                      Maybe (ValuePerm (LLVMPointerType w),
+                             Either Natural [OpenTerm])
 lookupGlobalSymbol env = helper (permEnvGlobalSyms env) where
   helper :: [PermEnvGlobalEntry] -> GlobalSymbol -> NatRepr w ->
-            Maybe (ValuePerm (LLVMPointerType w), Bool, [OpenTerm])
+            Maybe (ValuePerm (LLVMPointerType w), Either Natural [OpenTerm])
   helper  (PermEnvGlobalEntry sym'
-            (p :: ValuePerm (LLVMPointerType w')) rec_p t:_) sym w
+            (p :: ValuePerm (LLVMPointerType w')) tr:_) sym w
     | sym' == sym
     , Just Refl <- testEquality w (knownNat :: NatRepr w') =
-      Just (p, rec_p, t)
+      Just (p, tr)
   helper (_:entries) sym w = helper entries sym w
   helper [] _ _ = Nothing
 
