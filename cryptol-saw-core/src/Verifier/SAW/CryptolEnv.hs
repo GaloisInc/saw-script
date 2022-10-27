@@ -97,6 +97,7 @@ import Cryptol.Utils.Logger (quietLogger)
 
 --import SAWScript.REPL.Monad (REPLException(..))
 import Verifier.SAW.TypedTerm
+import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
 -- import SAWScript.Utils (Pos(..))
 -- import SAWScript.AST (Located(getVal, locatedPos), Import(..))
 
@@ -304,7 +305,7 @@ mkCryEnv env =
        do prims <- MB.getPrimMap
           -- noIfaceParams because we don't support translating functors yet
           TM.inpVars `fmap` MB.genInferInput P.emptyRange prims
-            Map.empty ifaceDecls
+            NoParams ifaceDecls
      let types' = Map.union (eExtraTypes env) types
      let terms = eTermEnv env
      let cryEnv = C.emptyEnv
@@ -387,7 +388,7 @@ loadCryptolModule sc primOpts env path = do
   let ifaceDecls = getAllIfaceDecls modEnv'
   (types, modEnv'') <- liftModuleM modEnv' $ do
     prims <- MB.getPrimMap
-    TM.inpVars `fmap` MB.genInferInput P.emptyRange prims Map.empty ifaceDecls
+    TM.inpVars `fmap` MB.genInferInput P.emptyRange prims NoParams ifaceDecls
 
   -- Regenerate SharedTerm environment.
   oldCryEnv <- mkCryEnv env
@@ -567,7 +568,7 @@ parseTypedTerm sc env input = do
     let range = fromMaybe P.emptyRange (P.getLoc re)
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
-    tcEnv <- MB.genInferInput range prims Map.empty ifDecls
+    tcEnv <- MB.genInferInput range prims NoParams ifDecls
     let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraTypes env) (TM.inpVars tcEnv)
                        , TM.inpTSyns = Map.union (eExtraTSyns env) (TM.inpTSyns tcEnv)
                        }
@@ -611,7 +612,7 @@ parseDecls sc env input = do
     let range = fromMaybe P.emptyRange (P.getLoc rdecls)
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
-    tcEnv <- MB.genInferInput range prims Map.empty ifaceDecls
+    tcEnv <- MB.genInferInput range prims NoParams ifaceDecls
     let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraTypes env) (TM.inpVars tcEnv)
                        , TM.inpTSyns = Map.union (eExtraTSyns env) (TM.inpTSyns tcEnv)
                        }
@@ -653,7 +654,7 @@ parseSchema env input = do
     let range = fromMaybe P.emptyRange (P.getLoc rschema)
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
-    tcEnv <- MB.genInferInput range prims Map.empty ifDecls
+    tcEnv <- MB.genInferInput range prims NoParams ifDecls
     let tcEnv' = tcEnv { TM.inpTSyns = Map.union (eExtraTSyns env) (TM.inpTSyns tcEnv) }
     let infer =
           case rschema of
