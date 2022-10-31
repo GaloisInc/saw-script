@@ -220,7 +220,10 @@ prims =
           (VWord ibv, VWord ibv') | unsigned ibv == unsigned ibv' -> v
           _ -> arr idx'
   , Prims.bpArrayEq = unsupportedConcretePrimitive "bpArrayEq"
-  , Prims.bpArrayCopy = unsupportedConcretePrimitive "bpArrayCopy"
+  , Prims.bpArrayCopy = \dest_arr dest_idx src_arr src_idx len -> do
+      pure $ \case
+        VWord idx | unsigned idx >= unsigned dest_idx && unsigned idx < unsigned dest_idx + unsigned len -> src_arr $ VWord $ bv 64 (unsigned idx - unsigned dest_idx + unsigned src_idx)
+        vidx -> dest_arr vidx
   , Prims.bpArraySet = unsupportedConcretePrimitive "bpArraySet"
   , Prims.bpArrayRangeEq = unsupportedConcretePrimitive "bpArrayRangeEq"
   }
