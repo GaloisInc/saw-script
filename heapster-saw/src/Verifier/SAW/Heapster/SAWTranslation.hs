@@ -3001,7 +3001,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        -- mapBVVecM monadic combinator
        ptrans_arr <- getTopPermM
        arr_out_comp_tm <-
-         applyNamedSpecOpM "Prelude.mapBVVecM"
+         applyNamedSpecOpM "Prelude.mapBVVecS"
            [elem_tp, typeTransType1 cell_out_trans, impl_tm,
             w_term, len_term, transTerm1 ptrans_arr]
        -- Now use bindS to bind the result of arr_out_comp_tm in the remaining
