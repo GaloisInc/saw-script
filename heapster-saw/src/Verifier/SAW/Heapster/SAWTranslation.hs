@@ -2849,7 +2849,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          fmap distPermsHeadPerm $ mbSimplImplOut mb_simpl
        (_ :>: ptrans1 :>: ptrans2) <- itiPermStack <$> ask
        arr_out_comp_tm  <-
-         applyNamedSpecOpM "Prelude.appendCastBVVecM"
+         applyNamedSpecOpM "Prelude.appendCastBVVecS"
            [w_term, len1_tm, len2_tm, len3_tm, elem_tp,
             transTerm1 ptrans1, transTerm1 ptrans2]
        bindSpecMTransM arr_out_comp_tm tp_trans "appended_array" $ \ptrans_arr' ->
