@@ -3093,6 +3093,31 @@ mapS E stack a b f =
         (f (head n a v))
         (rec_f (tail n a v)));
 
+-- Map a monadic function across a BVVec
+mapBVVecS : (E:EvType) -> (stack:FunStack) ->
+            (a : sort 0) -> (b : isort 0) -> (a -> SpecM E stack b) ->
+            (n : Nat) -> (len : Vec n Bool) -> BVVec n len a ->
+            SpecM E stack (BVVec n len b);
+mapBVVecS E stack a b f n len = mapS E stack a b f (bvToNat n len);
+
+-- Append two BVVecs and cast the resulting size, if possible
+appendCastBVVecS : (E:EvType) -> (stack:FunStack) ->
+                   (n : Nat) -> (len1 len2 len3 : Vec n Bool) -> (a : sort 0) ->
+                   BVVec n len1 a -> BVVec n len2 a ->
+                   SpecM E stack (BVVec n len3 a);
+appendCastBVVecS E stack n len1 len2 len3 a v1 v2 =
+  maybe
+    (Eq (Vec n Bool) (bvAdd n len1 len2) len3) (SpecM E stack (BVVec n len3 a))
+    (errorS E stack (BVVec n len3 a) "Could not cast BVVec")
+    (\ (pf:Eq (Vec n Bool) (bvAdd n len1 len2) len3) ->
+       retS
+         E stack (BVVec n len3 a)
+         (coerce (BVVec n (bvAdd n len1 len2) a) (BVVec n len3 a)
+                 (eq_cong (Vec n Bool) (bvAdd n len1 len2) len3 pf
+                          (sort 0) (\ (l:Vec n Bool) -> BVVec n l a))
+                 (appendBVVec n len1 len2 a v1 v2)))
+    (bvEqWithProof n (bvAdd n len1 len2) len3);
+
 
 --------------------------------------------------------------------------------
 -- SMT Array

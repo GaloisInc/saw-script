@@ -2848,11 +2848,10 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                                       llvmArrayLen ap) $
          fmap distPermsHeadPerm $ mbSimplImplOut mb_simpl
        (_ :>: ptrans1 :>: ptrans2) <- itiPermStack <$> ask
-       let arr_out_comp_tm =
-             applyOpenTermMulti
-             (globalOpenTerm "Prelude.appendCastBVVecM")
-             [w_term, len1_tm, len2_tm, len3_tm, elem_tp,
-              transTerm1 ptrans1, transTerm1 ptrans2]
+       arr_out_comp_tm  <-
+         applyNamedSpecOpM "Prelude.appendCastBVVecM"
+           [w_term, len1_tm, len2_tm, len3_tm, elem_tp,
+            transTerm1 ptrans1, transTerm1 ptrans2]
        bindSpecMTransM arr_out_comp_tm tp_trans "appended_array" $ \ptrans_arr' ->
          withPermStackM RL.tail (\(pctx :>: _ :>: _) ->
                                   pctx :>: ptrans_arr') m
@@ -3001,11 +3000,10 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        -- Build the computation that maps impl_tm over the input array using the
        -- mapBVVecM monadic combinator
        ptrans_arr <- getTopPermM
-       let arr_out_comp_tm =
-             applyOpenTermMulti
-             (globalOpenTerm "Prelude.mapBVVecM")
-             [elem_tp, typeTransType1 cell_out_trans, impl_tm,
-              w_term, len_term, transTerm1 ptrans_arr]
+       arr_out_comp_tm <-
+         applyNamedSpecOpM "Prelude.mapBVVecM"
+           [elem_tp, typeTransType1 cell_out_trans, impl_tm,
+            w_term, len_term, transTerm1 ptrans_arr]
        -- Now use bindS to bind the result of arr_out_comp_tm in the remaining
        -- computation
        bindSpecMTransM arr_out_comp_tm p_out_trans "mapped_array" $ \ptrans_arr' ->
