@@ -100,7 +100,22 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     res <- liftIO $ SC.scBvSShr sc w ta nb
     output res
   -- "$shift" -> _
-  -- "$shiftx" -> _
+  "$shiftx" -> do
+    ta <- input "A"
+    tbrev <- inputRev "B"
+    w <- outputWidth
+    tbn <- liftIO $ SC.scGlobalApply sc "Prelude.bvToNat" [w, tbrev]
+    tbneg <- liftIO $ SC.scBvNeg sc w tbrev
+    tbnegn <- liftIO $ SC.scGlobalApply sc "Prelude.bvToNat" [w, tbneg]
+    zero <- liftIO $ SC.scBvConst sc outputWidthNat 0
+    cond <- liftIO $ SC.scBvSGe sc w tbrev zero
+    tcase <- liftIO $ SC.scBvShr sc w ta tbn
+    ecase <- liftIO $ SC.scBvShl sc w ta tbnegn
+    ty <- liftIO $ SC.scBitvector sc outputWidthNat
+    res <- if connSigned "B"
+      then liftIO $ SC.scIte sc ty cond tcase ecase
+      else pure tcase
+    output res
   "$lt" -> bvBinaryCmp $ SC.scBvULt sc
   "$le" -> bvBinaryCmp $ SC.scBvULe sc
   "$gt" -> bvBinaryCmp $ SC.scBvUGt sc
