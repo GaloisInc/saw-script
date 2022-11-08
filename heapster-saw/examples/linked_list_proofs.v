@@ -6,17 +6,133 @@ From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Import SAWCoreBitvectors.
 
 From CryptolToCoq Require Import SAWCorePrelude.
-From CryptolToCoq Require Import CompMExtra.
+From CryptolToCoq Require Import SpecMExtra.
+From EnTree       Require Import Automation.
+Import SAWCorePrelude.
+Import SpecMNotations.
+Local Open Scope entree_scope.
 
 Require Import Examples.linked_list_gen.
 Import linked_list.
 
-Import SAWCorePrelude.
+
+(* FIXME move to EnTree.Automation *)
+
+Lemma spec_refines_either_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  RR A B f g eith (P : SpecM E2 Γ2 R2) :
+  (forall a, eith = Left _ _ a -> spec_refines RPre RPost RR (f a) P) ->
+  (forall b, eith = Right _ _ b -> spec_refines RPre RPost RR (g b) P) ->
+  spec_refines RPre RPost RR (either A B (SpecM E1 Γ1 R1) f g eith) P.
+Proof. destruct eith; intros; eauto. Qed.
+
+Lemma spec_refines_either_r (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  RR (P : SpecM E1 Γ1 R1) A B f g eith :
+  (forall a, eith = Left _ _ a -> spec_refines RPre RPost RR P (f a)) ->
+  (forall b, eith = Right _ _ b -> spec_refines RPre RPost RR P (g b)) ->
+  spec_refines RPre RPost RR P (either A B (SpecM E2 Γ2 R2) f g eith).
+Proof. destruct eith; intros; eauto. Qed.
+
+Definition spec_refines_either_l_IntroArg (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  RR A B f g eith (P : SpecM E2 Γ2 R2) :
+  (IntroArg Any A (fun a =>
+   IntroArg Hyp (eith = Left _ _ a) (fun _ =>
+   spec_refines RPre RPost RR (f a) P))) ->
+  (IntroArg Any B (fun b =>
+   IntroArg Hyp (eith = Right _ _ b) (fun _ =>
+   spec_refines RPre RPost RR (g b) P))) ->
+  spec_refines RPre RPost RR (either A B (SpecM E1 Γ1 R1) f g eith) P :=
+  spec_refines_either_l E1 E2 Γ1 Γ2 R1 R2 RPre RPost RR A B f g eith P.
+
+Definition spec_refines_either_r_IntroArg (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  RR A B f g eith (P : SpecM E1 Γ1 R1) :
+  (IntroArg Any A (fun a =>
+   IntroArg Hyp (eith = Left _ _ a) (fun _ =>
+   spec_refines RPre RPost RR P (f a)))) ->
+  (IntroArg Any B (fun b =>
+   IntroArg Hyp (eith = Right _ _ b) (fun _ =>
+   spec_refines RPre RPost RR P (g b)))) ->
+  spec_refines RPre RPost RR P (either A B (SpecM E2 Γ2 R2) f g eith) :=
+  spec_refines_either_r E1 E2 Γ1 Γ2 R1 R2 RPre RPost RR P A B f g eith.
+
+#[global] Hint Extern 101 (spec_refines _ _ _ (either _ _ _ _ _ _) _) =>
+  simple apply spec_refines_either_l_IntroArg : refines.
+#[global] Hint Extern 101 (spec_refines _ _ _ _ (either _ _ _ _ _ _)) =>
+  simple apply spec_refines_either_r_IntroArg : refines.
+
+Lemma IntroArg_eq_Left_const n A B (x y : A) (goal : Prop)
+  : IntroArg n (x = y) (fun _ => goal) ->
+    IntroArg n (Left A B x = Left A B y) (fun _ => goal).
+Proof. intros H eq; apply H; injection eq; eauto. Qed.
+Lemma IntroArg_eq_Right_const n A B (x y : B) (goal : Prop)
+  : IntroArg n (x = y) (fun _ => goal) ->
+    IntroArg n (Right A B x = Right A B y) (fun _ => goal).
+Proof. intros H eq; apply H; injection eq; eauto. Qed.
+Lemma IntroArg_eq_Left_Right n A B (x : A) (y : B) goal
+  : IntroArg n (Left A B x = Right A B y) goal.
+Proof. intros eq; discriminate eq. Qed.
+Lemma IntroArg_eq_Right_Left n A B (x : A) (y : B) goal
+  : IntroArg n (Right A B y = Left A B x) goal.
+Proof. intros eq; discriminate eq. Qed.
+
+#[global] Hint Extern 101 (IntroArg _ (Left _ _ _ = Left _ _ _) _) =>
+  simple apply IntroArg_eq_Left_const : refines.
+#[global] Hint Extern 101 (IntroArg _ (Right _ _ _ = Right _ _ _) _) =>
+  simple apply IntroArg_eq_Right_const : refines.
+#[global] Hint Extern 101 (IntroArg _ (Left _ _ _ = Right _ _ _) _) =>
+  idtac "1hi"; simple apply IntroArg_eq_Left_Right; idtac "1ho?" : refines.
+#[global] Hint Extern 101 (IntroArg _ (Right _ _ _ = Left _ _ _) _) =>
+  idtac "2hi"; simple apply IntroArg_eq_Right_Left; idtac "2ho?" : refines.
+
+(* List destruction automation *)
+Ltac list_destruction l :=
+  let l' := fresh l in destruct l as [| ? l'];
+  simpl SAWCorePrelude.unfoldList in *.
+#[global] Hint Extern 102 (IntroArg ?n (eq (SAWCorePrelude.unfoldList _ ?l)
+                                           (Left _ _ _)) _) =>
+  list_destruction l : refines.
+#[global] Hint Extern 102 (IntroArg ?n (eq (SAWCorePrelude.unfoldList _ ?l)
+                                           (Right _ _ _)) _) =>
+  list_destruction l : refines.
+
+(* QOL: nicer names for bitvector and list arguments *)
+#[local] Hint Extern 901 (IntroArg Any (bitvector _) _) =>
+  let e := fresh "x" in IntroArg_intro e : refines prepostcond. 
+#[local] Hint Extern 901 (IntroArg Any (list _) _) =>
+  let e := fresh "l" in IntroArg_intro e : refines prepostcond. 
+#[local] Hint Extern 901 (IntroArg Any (List_def _) _) =>
+  let e := fresh "l" in IntroArg_intro e : refines prepostcond. 
 
 
-Lemma no_errors_is_elem : refinesFun is_elem (fun _ _ => noErrorsSpec).
+Lemma is_elem_spec_ref x l :
+  spec_refines eqPreRel eqPostRel eq
+    (is_elem x l)
+    (total_spec (fun _ => True)
+                (fun '(x, l) r => (~ List.In x l /\ r = intToBv 64 0)
+                                  \/ (List.In x l /\ r = intToBv 64 1))
+                (x, l)).
 Proof.
-  unfold is_elem, is_elem__tuple_fun, noErrorsSpec.
+  unfold is_elem, is_elem__bodies.
+  prove_refinement.
+  - wellfounded_decreasing_nat.
+    exact (length l0).
+  - prepost_case 0 0.
+    + exact (x0 = x1 /\ l0 = l1).
+    + exact (r = r0).
+    + prepost_exclude_remaining.
+  - time "is_elem_spec_ref" prove_refinement_continue.
+    all: try (left; easy || right; easy).
+
+
+(* =============== OLD BELOW =============== *)
+
+Lemma no_errors_is_elem x l :
+  spec_refines eqPreRel eqPostRel eq (is_elem x l) no_errors_spec.
+Proof.
+  unfold is_elem, no_errors_spec.
   time "no_errors_is_elem" prove_refinement.
 Qed.
 
