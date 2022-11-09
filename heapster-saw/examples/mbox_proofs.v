@@ -5,43 +5,122 @@ From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
-From CryptolToCoq Require Import CompMExtra.
+From CryptolToCoq Require Import SpecMExtra.
+From EnTree       Require Import Automation.
+Import SAWCorePrelude.
+Import SpecMNotations.
+Local Open Scope entree_scope.
 
-(* All of this for BoolDecidableEqDepSet.UIP, from:
+(* (* All of this for BoolDecidableEqDepSet.UIP, from:
    https://stackoverflow.com/questions/50924127/record-equality-in-coq *)
 From Coq Require Import Logic.Eqdep_dec.
 Module BoolDecidableSet <: DecidableSet.
 Definition U := bool.
 Definition eq_dec := Bool.bool_dec.
 End BoolDecidableSet.
-Module BoolDecidableEqDepSet := DecidableEqDepSet BoolDecidableSet.
+Module BoolDecidableEqDepSet := DecidableEqDepSet BoolDecidableSet. *)
 
 Require Import Examples.mbox_gen.
 Import mbox.
 
-Import SAWCorePrelude.
+
+(* FIXME move to EnTree.Automation *)
+
+Lemma spec_refines_either_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  RR A B f g eith (P : SpecM E2 Γ2 R2) :
+  (forall a, eith = Left _ _ a -> spec_refines RPre RPost RR (f a) P) ->
+  (forall b, eith = Right _ _ b -> spec_refines RPre RPost RR (g b) P) ->
+  spec_refines RPre RPost RR (either A B (SpecM E1 Γ1 R1) f g eith) P.
+Proof. destruct eith; intros; eauto. Qed.
+
+Lemma spec_refines_either_r (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  RR (P : SpecM E1 Γ1 R1) A B f g eith :
+  (forall a, eith = Left _ _ a -> spec_refines RPre RPost RR P (f a)) ->
+  (forall b, eith = Right _ _ b -> spec_refines RPre RPost RR P (g b)) ->
+  spec_refines RPre RPost RR P (either A B (SpecM E2 Γ2 R2) f g eith).
+Proof. destruct eith; intros; eauto. Qed.
+
+Definition spec_refines_either_l_IntroArg (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  RR A B f g eith (P : SpecM E2 Γ2 R2) :
+  (IntroArg Any A (fun a =>
+   IntroArg Hyp (eith = Left _ _ a) (fun _ =>
+   spec_refines RPre RPost RR (f a) P))) ->
+  (IntroArg Any B (fun b =>
+   IntroArg Hyp (eith = Right _ _ b) (fun _ =>
+   spec_refines RPre RPost RR (g b) P))) ->
+  spec_refines RPre RPost RR (either A B (SpecM E1 Γ1 R1) f g eith) P :=
+  spec_refines_either_l E1 E2 Γ1 Γ2 R1 R2 RPre RPost RR A B f g eith P.
+
+Definition spec_refines_either_r_IntroArg (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  RR A B f g eith (P : SpecM E1 Γ1 R1) :
+  (IntroArg Any A (fun a =>
+   IntroArg Hyp (eith = Left _ _ a) (fun _ =>
+   spec_refines RPre RPost RR P (f a)))) ->
+  (IntroArg Any B (fun b =>
+   IntroArg Hyp (eith = Right _ _ b) (fun _ =>
+   spec_refines RPre RPost RR P (g b)))) ->
+  spec_refines RPre RPost RR P (either A B (SpecM E2 Γ2 R2) f g eith) :=
+  spec_refines_either_r E1 E2 Γ1 Γ2 R1 R2 RPre RPost RR P A B f g eith.
+
+#[global] Hint Extern 101 (spec_refines _ _ _ (either _ _ _ _ _ _) _) =>
+  simple apply spec_refines_either_l_IntroArg : refines.
+#[global] Hint Extern 101 (spec_refines _ _ _ _ (either _ _ _ _ _ _)) =>
+  simple apply spec_refines_either_r_IntroArg : refines.
+
+Lemma IntroArg_eq_Left_const n A B (x y : A) (goal : Prop)
+  : IntroArg n (x = y) (fun _ => goal) ->
+    IntroArg n (Left A B x = Left A B y) (fun _ => goal).
+Proof. intros H eq; apply H; injection eq; eauto. Qed.
+Lemma IntroArg_eq_Right_const n A B (x y : B) (goal : Prop)
+  : IntroArg n (x = y) (fun _ => goal) ->
+    IntroArg n (Right A B x = Right A B y) (fun _ => goal).
+Proof. intros H eq; apply H; injection eq; eauto. Qed.
+Lemma IntroArg_eq_Left_Right n A B (x : A) (y : B) goal
+  : IntroArg n (Left A B x = Right A B y) goal.
+Proof. intros eq; discriminate eq. Qed.
+Lemma IntroArg_eq_Right_Left n A B (x : A) (y : B) goal
+  : IntroArg n (Right A B y = Left A B x) goal.
+Proof. intros eq; discriminate eq. Qed.
+
+#[global] Hint Extern 101 (IntroArg _ (Left _ _ _ = Left _ _ _) _) =>
+  simple apply IntroArg_eq_Left_const : refines.
+#[global] Hint Extern 101 (IntroArg _ (Right _ _ _ = Right _ _ _) _) =>
+  simple apply IntroArg_eq_Right_const : refines.
+#[global] Hint Extern 101 (IntroArg _ (Left _ _ _ = Right _ _ _) _) =>
+  apply IntroArg_eq_Left_Right : refines.
+#[global] Hint Extern 101 (IntroArg _ (Right _ _ _ = Left _ _ _) _) =>
+  apply IntroArg_eq_Right_Left : refines.
+
+(* List destruction automation *)
+Ltac list_destruction l :=
+  let l' := fresh l in destruct l as [| ? l'];
+  simpl SAWCorePrelude.unfoldList in *.
+#[global] Hint Extern 102 (IntroArg ?n (eq (SAWCorePrelude.unfoldList _ ?l)
+                                           (Left _ _ _)) _) =>
+  list_destruction l : refines.
+#[global] Hint Extern 102 (IntroArg ?n (eq (SAWCorePrelude.unfoldList _ ?l)
+                                           (Right _ _ _)) _) =>
+  list_destruction l : refines.
 
 
-Definition unfoldMbox_nil :
-  unfoldMbox Mbox_nil = Left _ _ tt :=
-  reflexivity _.
-Definition unfoldMbox_cons strt len m d :
-  unfoldMbox (Mbox_cons strt len m d) = Right _ _ (strt, (len, (m, d))) :=
-  reflexivity _.
+(* Mbox destruction automation *)
 
-Ltac Mbox_destruct m m' := destruct m as [| ?strt ?len m' ?d].
-Ltac Mbox_induction m m' := induction m as [| ?strt ?len m' ? ?d].
-Ltac Mbox_simpl := try rewrite unfoldMbox_nil; try rewrite unfoldMbox_cons; simpl Mbox__rec in *.
-                   (* simpl unfoldMbox in *; simpl foldMbox in *; simpl Mbox__rec in *. *)
-
-Lemma refinesM_either_unfoldMbox_nil_l {C} f g (P : CompM C) :
-  f tt |= P ->
-  SAWCorePrelude.either _ _ _ f g (unfoldMbox Mbox_nil) |= P.
+Lemma refinesM_either_unfoldMbox_nil_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  (RR : Rel R1 R2) f g (P : SpecM E2 Γ2 R2) :
+  spec_refines RPre RPost RR (f tt) P ->
+  spec_refines RPre RPost RR (either _ _ _ f g (unfoldMbox Mbox_nil)) P.
 Proof. eauto. Qed.
 
-Lemma refinesM_either_unfoldMbox_cons_l {C} strt len m d f g (P : CompM C) :
-  g (strt, (len, (m, d))) |= P ->
-  SAWCorePrelude.either _ _ _ f g (unfoldMbox (Mbox_cons strt len m d)) |= P.
+Lemma refinesM_either_unfoldMbox_cons_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  (RR : Rel R1 R2) strt len m d f g (P : SpecM E2 Γ2 R2) :
+  spec_refines RPre RPost RR (g (strt, (len, (m, d)))) P ->
+  spec_refines RPre RPost RR (either _ _ _ f g (unfoldMbox (Mbox_cons strt len m d))) P.
 Proof. eauto. Qed.
 
 Ltac either_unfoldMbox m :=
@@ -56,13 +135,15 @@ Ltac either_unfoldMbox m :=
          let d    := fresh "d" in destruct m as [| strt len m0 d ];
                                   [ either_unfoldMbox Mbox_nil
                                   | either_unfoldMbox (Mbox_cons strt len m0 d) ];
-                                  simpl foldMbox; simpl Mbox__rec in *; unfold_projs
+                                  simpl foldMbox; simpl Mbox__rec in *;
+                                  unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd;
+                                  cbn [ Datatypes.fst Datatypes.snd projT1 ]
   end.
 
-Global Hint Extern 0 (SAWCorePrelude.either _ _ _ _ _ (unfoldMbox ?m) |= _) =>
-  either_unfoldMbox m : refinesM.
-Global Hint Extern 0 (_ |= SAWCorePrelude.either _ _ _ _ _ (unfoldMbox ?m)) =>
-  either_unfoldMbox m : refinesM.
+Global Hint Extern 100 (spec_refines _ _ _ (SAWCorePrelude.either _ _ _ _ _ (unfoldMbox ?m)) _) =>
+  either_unfoldMbox m : refines.
+Global Hint Extern 100 (spec_refines _ _ _ _ (SAWCorePrelude.either _ _ _ _ _ (unfoldMbox ?m))) =>
+  either_unfoldMbox m : refines.
 
 Lemma transMbox_Mbox_nil_r m : transMbox m Mbox_nil = m.
 Proof.
@@ -77,7 +158,7 @@ Proof.
   simpl; f_equal; eauto.
 Qed.
 
-Hint Rewrite transMbox_Mbox_nil_r transMbox_assoc : refinesM.
+Hint Rewrite transMbox_Mbox_nil_r transMbox_assoc : refines.
 
 
 (* ========================================================================== *)

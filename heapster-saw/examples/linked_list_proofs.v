@@ -83,9 +83,9 @@ Proof. intros eq; discriminate eq. Qed.
 #[global] Hint Extern 101 (IntroArg _ (Right _ _ _ = Right _ _ _) _) =>
   simple apply IntroArg_eq_Right_const : refines.
 #[global] Hint Extern 101 (IntroArg _ (Left _ _ _ = Right _ _ _) _) =>
-  idtac "1hi"; simple apply IntroArg_eq_Left_Right; idtac "1ho?" : refines.
+  apply IntroArg_eq_Left_Right : refines.
 #[global] Hint Extern 101 (IntroArg _ (Right _ _ _ = Left _ _ _) _) =>
-  idtac "2hi"; simple apply IntroArg_eq_Right_Left; idtac "2ho?" : refines.
+  apply IntroArg_eq_Right_Left : refines.
 
 (* List destruction automation *)
 Ltac list_destruction l :=
