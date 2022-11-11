@@ -226,10 +226,7 @@ propToTerm _sc (Prop tm) = pure tm
 
 -- | Attempt to interpret a proposition as a rewrite rule.
 propToRewriteRule :: SharedContext -> Prop -> Maybe a -> IO (Maybe (RewriteRule a))
-propToRewriteRule _sc (Prop tm) ann =
-  case ruleOfProp tm ann of
-    Nothing -> pure Nothing
-    Just r  -> pure (Just r)
+propToRewriteRule sc (Prop tm) = ruleOfProp sc tm
 
 -- | Attempt to split an if/then/else proposition.
 --   If it succeeds to find a term like "EqTrue (ite Bool b x y)",
@@ -390,12 +387,12 @@ simplifyProps sc ss (p:ps) =
 
 -- | Add hypotheses from the given sequent as rewrite rules
 --   to the given simpset.
-localHypSimpset :: Sequent -> [Integer] -> Simpset a -> IO (Simpset a)
-localHypSimpset sqt hs ss0 = Fold.foldlM processHyp ss0 nhyps
+localHypSimpset :: SharedContext -> Sequent -> [Integer] -> Simpset a -> IO (Simpset a)
+localHypSimpset sc sqt hs ss0 = Fold.foldlM processHyp ss0 nhyps
 
   where
     processHyp ss (n,h) =
-      case ruleOfProp (unProp h) Nothing of
+      ruleOfProp sc (unProp h) Nothing >>= \case
         Nothing -> fail $ "Hypothesis " ++ show n ++ "cannot be used as a rewrite rule."
         Just r  -> return (addRule r ss)
 
@@ -1632,7 +1629,7 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
            check nenv e' sqt'
 
       RewriteEvidence hs ss e' ->
-        do ss' <- localHypSimpset sqt hs ss
+        do ss' <- localHypSimpset sc sqt hs ss
            (d1,sqt') <- simplifySequent sc ss' sqt
            (d2,sy) <- check nenv e' sqt'
            return (Set.union d1 d2, sy)

@@ -419,6 +419,145 @@ No return fields
 
 
 
+SAW/Yosys/import (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Import a file produced by the Yosys "write_json" command
+
+Parameter fields
+++++++++++++++++
+
+
+``name``
+  The name to refer to the record of Yosys modules by later.
+  
+  
+
+``path``
+  The path to the Yosys JSON file to import.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
+SAW/Yosys/verify (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Verify that the named HDL module meets its specification
+
+Parameter fields
+++++++++++++++++
+
+
+``import``
+  The imported Yosys file.
+  
+  
+
+``module``
+  The HDL module to verify.
+  
+  
+
+``preconds``
+  Any preconditions for the verificatiion.
+  
+  
+
+``spec``
+  The specification to verify for the module.
+  
+  
+
+``lemmas``
+  The lemmas to use for other modules during this verification.
+  
+  
+
+``script``
+  The script to use to prove the validity of the resulting verification conditions.
+  
+  
+
+``lemma name``
+  The name to refer to the result by later.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
+SAW/Yosys/import sequential (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Import a sequential circuit from a file produced by the Yosys "write_json" command
+
+Parameter fields
+++++++++++++++++
+
+
+``name``
+  The name to refer to the record of Yosys modules by later.
+  
+  
+
+``path``
+  The path to the Yosys JSON file to import.
+  
+  
+
+``module``
+  The sequential module within the Yosys JSON file to analyze.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
+SAW/Yosys/extract sequential (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Extract a term from a sequential circuit
+
+Parameter fields
+++++++++++++++++
+
+
+``name``
+  The name to refer extracted term by later.
+  
+  
+
+``cycles``
+  The number of cycles over which to iterate the term.
+  
+  
+
+``module``
+  The name of the sequential module to analyze.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
 SAW/create ghost variable (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

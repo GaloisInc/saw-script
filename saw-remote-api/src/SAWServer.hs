@@ -55,6 +55,8 @@ import SAWScript.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
 import SAWScript.Proof (newTheoremDB)
 import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts, SAWSimpset)
+import SAWScript.Yosys.State (YosysSequential)
+import SAWScript.Yosys.Theorem (YosysImport, YosysTheorem)
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
@@ -62,6 +64,9 @@ import Verifier.SAW.Cryptol.Monadify (defaultMonEnv)
 import SAWScript.Prover.MRSolver (emptyMREnv)
 
 import qualified Argo
+--import qualified CryptolServer (validateServerState, ServerState(..))
+--import qualified CryptolServer (validateServerState, ServerState(..))
+--import qualified CryptolServer (validateServerState, ServerState(..))
 --import qualified CryptolServer (validateServerState, ServerState(..))
 import SAWServer.Exceptions
     ( serverValNotFound,
@@ -71,7 +76,10 @@ import SAWServer.Exceptions
       notASimpset,
       notATerm,
       notAJVMClass,
-      notAJVMMethodSpecIR )
+      notAJVMMethodSpecIR,
+      notAYosysImport,
+      notAYosysTheorem, notAYosysSequential
+    )
 
 type SAWCont = (SAWEnv, SAWTask)
 
@@ -312,6 +320,9 @@ data ServerVal
   | VJVMMethodSpecIR (CMS.ProvedSpec CJ.JVM)
   | VLLVMMethodSpecIR (CMS.SomeLLVM CMS.ProvedSpec)
   | VGhostVar CMS.GhostGlobal
+  | VYosysImport YosysImport
+  | VYosysTheorem YosysTheorem
+  | VYosysSequential YosysSequential 
 
 instance Show ServerVal where
   show (VTerm t) = "(VTerm " ++ show t ++ ")"
@@ -325,6 +336,9 @@ instance Show ServerVal where
   show (VLLVMMethodSpecIR _) = "VLLVMMethodSpecIR"
   show (VJVMMethodSpecIR _) = "VJVMMethodSpecIR"
   show (VGhostVar x) = "(VGhostVar " ++ show x ++ ")"
+  show (VYosysImport _) = "VYosysImport"
+  show (VYosysTheorem _) = "VYosysTheorem"
+  show (VYosysSequential _) = "VYosysSequential"
 
 class IsServerVal a where
   toServerVal :: a -> ServerVal
@@ -352,6 +366,15 @@ instance IsServerVal JSS.Class where
 
 instance IsServerVal CMS.GhostGlobal where
   toServerVal = VGhostVar
+
+instance IsServerVal YosysImport where
+  toServerVal = VYosysImport
+
+instance IsServerVal YosysTheorem where
+  toServerVal = VYosysTheorem
+
+instance IsServerVal YosysSequential where
+  toServerVal = VYosysSequential
 
 class KnownCrucibleSetupType a where
   knownCrucibleSetupRepr :: CrucibleSetupTypeRepr a
@@ -454,3 +477,24 @@ getGhosts :: Argo.Command SAWState [(ServerName, CMS.GhostGlobal)]
 getGhosts =
   do SAWEnv serverEnv <- view sawEnv <$> Argo.getState
      return [ (n, g) | (n, VGhostVar g) <- M.toList serverEnv ]
+
+getYosysImport :: ServerName -> Argo.Command SAWState YosysImport
+getYosysImport n =
+  do v <- getServerVal n
+     case v of
+       VYosysImport t -> return t
+       _other -> Argo.raise (notAYosysImport n)
+
+getYosysTheorem :: ServerName -> Argo.Command SAWState YosysTheorem
+getYosysTheorem n =
+  do v <- getServerVal n
+     case v of
+       VYosysTheorem t -> return t
+       _other -> Argo.raise (notAYosysTheorem n)
+
+getYosysSequential :: ServerName -> Argo.Command SAWState YosysSequential
+getYosysSequential n =
+  do v <- getServerVal n
+     case v of
+       VYosysSequential t -> return t
+       _other -> Argo.raise (notAYosysSequential n)
