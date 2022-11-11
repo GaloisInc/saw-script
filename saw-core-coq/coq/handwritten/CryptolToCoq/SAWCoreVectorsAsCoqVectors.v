@@ -115,35 +115,35 @@ Fixpoint atWithDefault (n : nat) (a : Type) (default : a) (v : Vec n a) (index :
   ).
 Defined.
 
-Definition map (a b : Type) (f : a -> b) (n : Nat) (xs : Vec n a) :=
+Definition map (a b : Type) (f : a -> b) (n : nat) (xs : Vec n a) :=
   VectorDef.map f xs.
 
-Fixpoint foldr (a b : Type) (n : Nat) (f : a -> b -> b) (base : b) (v : Vec n a) : b :=
+Fixpoint foldr (a b : Type) (n : nat) (f : a -> b -> b) (base : b) (v : Vec n a) : b :=
   match v with
   | Vector.nil => base
   | Vector.cons hd _ tl => f hd (foldr _ _ _ f base tl)
   end.
 
-Fixpoint foldl (a b : Type) (n : Nat) (f : b -> a -> b) (acc : b) (v : Vec n a) : b :=
+Fixpoint foldl (a b : Type) (n : nat) (f : b -> a -> b) (acc : b) (v : Vec n a) : b :=
   match v with
   | Vector.nil => acc
   | Vector.cons hd _ tl => foldl _ _ _ f (f acc hd) tl
   end.
 
-Fixpoint scanl (a b : Type) (n : Nat) (f : b -> a -> b) (acc : b) (v : Vec n a) : Vec (S n) b :=
+Fixpoint scanl (a b : Type) (n : nat) (f : b -> a -> b) (acc : b) (v : Vec n a) : Vec (S n) b :=
   match v in VectorDef.t _ n return Vec (S n) b with
   | Vector.nil => [ acc ]
   | Vector.cons h n' tl => Vector.cons b acc (S n') (scanl a b n' f (f acc h) tl)
   end.
 
-Fixpoint foldl_dep (a : Type) (b : Nat -> Type) (n : Nat)
+Fixpoint foldl_dep (a : Type) (b : nat -> Type) (n : nat)
          (f : forall n, b n -> a -> b (S n)) (base : b O) (v : Vec n a) : b n :=
   match v with
   | Vector.nil => base
   | Vector.cons hd _ tl => foldl_dep a (fun n => b (S n)) _ (fun n => f (S n)) (f _ base hd) tl
   end.
 
-Fixpoint tuple_foldl_dep (a : Type) (b : Nat -> Type) (n : Nat)
+Fixpoint tuple_foldl_dep (a : Type) (b : nat -> Type) (n : nat)
          (f : forall n, b n -> a -> b (S n)) (base : b O) (t : n .-tuple a) : b n :=
   match n, t with
   | O, _ => base
@@ -153,7 +153,7 @@ Fixpoint tuple_foldl_dep (a : Type) (b : Nat -> Type) (n : Nat)
 
 Definition EmptyVec := Vector.nil.
 
-Definition coerceVec (a : sort 0) (m n : Nat) (H : Eq Nat m n) (v : Vec m a) : Vec n a :=
+Definition coerceVec (a : sort 0) (m n : nat) (H : m = n) (v : Vec m a) : Vec n a :=
   match
     eq_sym H in eq _ n'
     return Vec n' a -> Vec n a
@@ -177,7 +177,7 @@ Qed.
 
 (* NOTE: This version of `zip` accepts two vectors of different size, unlike the
  * one in `CoqVectorsExtra.v` *)
-Fixpoint zipFunctional (a b : sort 0) (m n : Nat) (xs : Vec m a) (ys : Vec n b)
+Fixpoint zipFunctional (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
   : Vec (Nat.min m n) (a * b) :=
   match
     xs in Vector.t _ m'
@@ -196,10 +196,10 @@ Fixpoint zipFunctional (a b : sort 0) (m n : Nat) (xs : Vec m a) (ys : Vec n b)
 .
 
 Definition zipWithFunctional
-           (a b c : Type) (f : a -> b -> c) (n : Nat) (xs : Vec n a) (ys : Vec n b) :=
+           (a b c : Type) (f : a -> b -> c) (n : nat) (xs : Vec n a) (ys : Vec n b) :=
   VectorDef.map (fun p => f (fst p) (snd p)) (zipFunctional _ _ _ _ xs ys).
 
-Notation bitvector n := (Vec n Bool).
+Notation bitvector n := (Vec n bool).
 
 (* NOTE BITS are stored in reverse order than bitvector *)
 Definition bvToBITS {size : nat} : bitvector size -> BITS size
@@ -218,23 +218,23 @@ Definition joinLSB {n} (v : bitvector n) (lsb : bool) : bitvector n.+1 :=
 
 Definition bvToNatFolder (n : nat) (b : bool) := b + n.*2.
 
-Definition bvToNat (size : Nat) (v : bitvector size) : Nat :=
+Definition bvToNat (size : nat) (v : bitvector size) : nat :=
   Vector.fold_left bvToNatFolder 0 v.
 
 (* This is used to write literals of bitvector type, e.g. intToBv 64 3 *)
-Definition intToBv (n : Nat) (z : Z) : bitvector n := bitsToBv (fromZ z).
+Definition intToBv (n : nat) (z : Z) : bitvector n := bitsToBv (fromZ z).
 
 Arguments intToBv : simpl never.
 
 (* NOTE This can cause Coq to stack overflow, avoid it as much as possible! *)
-Definition bvNat (size : Nat) (number : Nat) : bitvector size :=
+Definition bvNat (size : nat) (number : nat) : bitvector size :=
   intToBv size (Z.of_nat number).
 
 Arguments bvNat /.
 
-Definition bvToInt (n : Nat) (b : bitvector n) : Z := toPosZ (bvToBITS b).
+Definition bvToInt (n : nat) (b : bitvector n) : Z := toPosZ (bvToBITS b).
 
-Definition sbvToInt (n : Nat) (b : bitvector n) : Z
+Definition sbvToInt (n : nat) (b : bitvector n) : Z
   := match n, b with
      | O, _ => 0
      | S n, b => toZ (bvToBITS b)
@@ -346,47 +346,47 @@ Definition shiftR (n : nat) (A : Type) (x : A) (v : Vector.t A n) (i : nat) : Ve
   iter i (shiftR1 n A x) v.
 
 (* This is annoying to implement, so using BITS conversion *)
-Definition bvult (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
+Definition bvult (n : nat) (a : bitvector n) (b : bitvector n) : bool :=
   ltB (bvToBITS a) (bvToBITS b).
 Global Opaque bvult.
 
-Definition bvugt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
+Definition bvugt (n : nat) (a : bitvector n) (b : bitvector n) : bool :=
   bvult n b a.
 
 (* This is annoying to implement, so using BITS conversion *)
-Definition bvule (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
+Definition bvule (n : nat) (a : bitvector n) (b : bitvector n) : bool :=
   leB (bvToBITS a) (bvToBITS b).
 Global Opaque bvule.
 
-Definition bvuge (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
+Definition bvuge (n : nat) (a : bitvector n) (b : bitvector n) : bool :=
   bvule n b a.
 
-Definition sign {n : nat} (a : bitvector n) : Bool :=
+Definition sign {n : nat} (a : bitvector n) : bool :=
   match a with
   | Vector.nil => false
   | Vector.cons b _ _ => b
   end.
 
-Definition bvslt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
+Definition bvslt (n : nat) (a : bitvector n) (b : bitvector n) : bool :=
   let c := bvSub n a b
    in ((sign a && ~~ sign b) || (sign a && sign c) || (~~ sign b && sign c))%bool.
       (* ^ equivalent to: boolEq (bvSBorrow s a b) (sign (bvSub n a b))  *)
 Global Opaque bvslt.
 
-Definition bvsgt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
+Definition bvsgt (n : nat) (a : bitvector n) (b : bitvector n) : bool :=
   bvslt n b a.
 
-Definition bvsle (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
+Definition bvsle (n : nat) (a : bitvector n) (b : bitvector n) : bool :=
   (bvslt n a b || (Vector.eqb _ eqb a b))%bool.
 Global Opaque bvsle.
 
-Definition bvsge (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
+Definition bvsge (n : nat) (a : bitvector n) (b : bitvector n) : bool :=
   bvsle n b a.
 
-Definition bvAddOverflow n (a : bitvector n) (b : bitvector n) : Bool :=
+Definition bvAddOverflow n (a : bitvector n) (b : bitvector n) : bool :=
   let c := bvAdd n a b
    in ((sign a && sign b && ~~ sign c) || (~~ sign a && ~~ sign b && sign c))%bool.
 
-Definition bvSubOverflow n (a : bitvector n) (b : bitvector n) : Bool :=
+Definition bvSubOverflow n (a : bitvector n) (b : bitvector n) : bool :=
   let c := bvSub n a b
    in ((sign a && ~~ sign b && ~~ sign c) || (~~ sign a && sign b && sign c))%bool.

@@ -23,15 +23,12 @@ Tactic Notation "dependent" "destruction" ident(H) :=
 (*   match goal with H: _ |- _ => constr:(H) end. *)
 
 Tactic Notation "unfold_projs" :=
-  unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd;
   cbn [ Datatypes.fst Datatypes.snd projT1 ].
 
 Tactic Notation "unfold_projs" "in" constr(N) :=
-  unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd in N;
   cbn [ Datatypes.fst Datatypes.snd projT1 ] in N.
 
 Tactic Notation "unfold_projs" "in" "*" :=
-  unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd in *;
   cbn [ Datatypes.fst Datatypes.snd projT1 ] in *.
 
 Ltac split_prod_hyps :=
@@ -769,11 +766,11 @@ Hint Extern 999 (refinesFun _ _) => shelve : refinesFun.
 
 Definition refinesFun_multiFixM_fst' lrt (F:lrtPi (LRT_Cons lrt LRT_Nil)
                                               (lrtTupleType (LRT_Cons lrt LRT_Nil))) f
-  (ref_f:refinesFun (SAWCoreScaffolding.fst (F f)) f) :
+  (ref_f:refinesFun (fst (F f)) f) :
   refinesFun (fst (multiFixM F)) f := refinesFun_multiFixM_fst lrt F f ref_f.
 
 Definition refinesFun_fst lrt B f1 (fs:B) f2 (r:@refinesFun lrt f1 f2) :
-  refinesFun (SAWCoreScaffolding.fst (f1, fs)) f2 := r.
+  refinesFun (fst (f1, fs)) f2 := r.
 
 Hint Resolve refinesFun_fst | 1 : refinesFun.
 Hint Resolve refinesFun_multiFixM_fst' | 1 : refinesFun.
@@ -849,7 +846,7 @@ Ltac prove_refinement_core := prove_refinement_core with Default.
    form` P |= Q`, where P,Q may contain matching calls to `letRecM`. *)
 
 Tactic Notation "prove_refinement" "with" constr(opts) :=
-  unfold_projs; unfold Eq, Refl, SAWCoreScaffolding.Bool;
+  unfold_projs;
   apply StartAutomation_fold;
   prove_refinement_core with opts.
 
@@ -951,7 +948,7 @@ Module CompMExtraNotation.
   Declare Scope fun_syntax.
 
 
-  Infix "&&" := SAWCoreScaffolding.and : fun_syntax.
+  Infix "&&" := andb : fun_syntax.
   Infix "<=" := (SAWCoreVectorsAsCoqVectors.bvsle _) : fun_syntax.
   Notation " a <P b" := (SAWCorePrelude.bvultWithProof _ a b) (at level 98) : fun_syntax.
   Notation " a == b" := (SAWCorePrelude.bvEq _ a b) (at level 100) : fun_syntax.
