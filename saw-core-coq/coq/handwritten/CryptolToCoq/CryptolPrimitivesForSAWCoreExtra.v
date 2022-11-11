@@ -22,7 +22,7 @@ Coercion TCNum : Nat >-> Num.
 Definition natToNat (n : nat) : Nat := n.
 Coercion natToNat : nat >-> Nat.
 
-Theorem Eq_TCNum a b : a = b -> Eq _ (TCNum a) (TCNum b).
+Theorem Eq_TCNum a b : a = b -> eq (TCNum a) (TCNum b).
 Proof.
   intros EQ.
   apply f_equal.

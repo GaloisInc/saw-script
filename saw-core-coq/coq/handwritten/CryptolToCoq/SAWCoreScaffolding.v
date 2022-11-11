@@ -30,12 +30,12 @@ Proof. intros; exact inhabitant. Qed.
 
 Definition sort (n : nat) := Type.
 
-Instance Inhabited_Type : Inhabited Type :=
+Global Instance Inhabited_Type : Inhabited Type :=
   MkInhabited Type unit.
-Instance Inhabited_sort (n:nat) : Inhabited (sort n) :=
+Global Instance Inhabited_sort (n:nat) : Inhabited (sort n) :=
   MkInhabited (sort n) unit.
 
-Instance Inhabited_Intro (a:Type) (b:a -> Type) (Hb: forall x, Inhabited (b x))
+Global Instance Inhabited_Intro (a:Type) (b:a -> Type) (Hb: forall x, Inhabited (b x))
   : Inhabited (forall x, b x)
   := MkInhabited (forall x, b x) (fun x => @inhabitant (b x) (Hb x)).
 
@@ -44,9 +44,9 @@ Global Hint Extern 5 (Inhabited ?A) =>
 
 Definition String := String.string.
 
-Instance Inhabited_String : Inhabited String :=
+Global Instance Inhabited_String : Inhabited String :=
   MkInhabited String ""%string.
-Instance Inhabited_string : Inhabited String.string :=
+Global Instance Inhabited_string : Inhabited String.string :=
   MkInhabited String.string ""%string.
 
 Definition equalString (s1 s2: String) : bool :=
@@ -62,26 +62,14 @@ Definition Unit        := tt.
 Definition UnitType    := unit.
 Definition UnitType__rec := unit_rect.
 
-Definition Bool   := bool.
-Definition Eq     := @eq.
-Definition Refl   := @eq_refl.
-Definition true      := true.
-Definition ite (a : Type) (b : Bool) (t e : a) : a := if b then t else e.
-Definition and    := andb.
-Definition false      := false.
-Definition not      := negb.
-Definition or     := orb.
-Definition xor    := xorb.
+Definition ite (a : Type) (b : bool) (t e : a) : a := if b then t else e.
 Definition boolEq := Coq.Bool.Bool.eqb.
 
-Instance Inhabited_Unit : Inhabited UnitType :=
+Global Instance Inhabited_Unit : Inhabited UnitType :=
   MkInhabited UnitType tt.
-Instance Inhabited_Bool : Inhabited Bool :=
-  MkInhabited Bool false.
-
-Instance Inhabited_unit : Inhabited unit :=
+Global Instance Inhabited_unit : Inhabited unit :=
   MkInhabited unit tt.
-Instance Inhabited_bool : Inhabited bool :=
+Global Instance Inhabited_bool : Inhabited bool :=
   MkInhabited bool false.
 
 (* SAW uses an alternate form of eq_rect where the motive function P also
@@ -91,66 +79,66 @@ Definition Eq__rec (A : Type) (x : A) (P: forall y, x=y -> Type) (p:P x eq_refl)
   dependent inversion e; assumption.
 Defined.
 
-Theorem boolEq__eq (b1 b2:Bool) : Eq Bool (boolEq b1 b2) (ite Bool b1 b2 (not b2)).
+Theorem boolEq__eq (b1 b2:bool) : (boolEq b1 b2) = (ite bool b1 b2 (negb b2)).
 Proof.
   destruct b1, b2; reflexivity.
 Qed.
 
-Definition coerce (a b : sort 0) (p : Eq (sort 0) a b) (x : a) : b :=
+Definition coerce (a b : sort 0) (p : @eq (sort 0) a b) (x : a) : b :=
   match p in eq _ a' return a' with
   | eq_refl _ => x
   end
 .
 
-(* SAW's prelude defines iteDep as a Bool eliminator whose arguments are
+(* SAW's prelude defines iteDep as a bool eliminator whose arguments are
 reordered to look more like if-then-else. *)
-Definition iteDep (P : Bool -> Type) (b : Bool) : P true -> P false -> P b :=
+Definition iteDep (P : bool -> Type) (b : bool) : P true -> P false -> P b :=
   fun Ptrue Pfalse => bool_rect P Ptrue Pfalse b.
 
-Definition ite_eq_iteDep : forall (a : Type) (b : Bool) (x y : a),
+Definition ite_eq_iteDep : forall (a : Type) (b : bool) (x y : a),
     @eq a (ite a b x y) (iteDep (fun _ => a) b x y).
 Proof.
   reflexivity.
 Defined.
 
-Definition iteDep_True : forall (p : Bool -> Type), forall (f1 : p true), forall (f2 : p false), (@eq (p true) (iteDep p true f1 f2)) f1.
+Definition iteDep_True : forall (p : bool -> Type), forall (f1 : p true), forall (f2 : p false), (@eq (p true) (iteDep p true f1 f2)) f1.
 Proof.
   reflexivity.
 Defined.
 
-Definition iteDep_False : forall (p : Bool -> Type), forall (f1 : p true), forall (f2 : p false), (@eq (p false) (iteDep p false f1 f2)) f2.
+Definition iteDep_False : forall (p : bool -> Type), forall (f1 : p true), forall (f2 : p false), (@eq (p false) (iteDep p false f1 f2)) f2.
 Proof.
   reflexivity.
 Defined.
 
-Definition not__eq (b : Bool) : @eq Bool (not b) (ite Bool b false true).
+Definition not__eq (b : bool) : @eq bool (negb b) (ite bool b false true).
 Proof.
   reflexivity.
 Defined.
 
-Definition and__eq (b1 b2 : Bool) : @eq Bool (and b1 b2) (ite Bool b1 b2 false).
+Definition and__eq (b1 b2 : bool) : @eq bool (andb b1 b2) (ite bool b1 b2 false).
 Proof.
   reflexivity.
 Defined.
 
-Definition or__eq (b1 b2 : Bool) : @eq Bool (or b1 b2) (ite Bool b1 true b2).
+Definition or__eq (b1 b2 : bool) : @eq bool (orb b1 b2) (ite bool b1 true b2).
 Proof.
   reflexivity.
 Defined.
 
-Definition xor__eq (b1 b2 : Bool) : @eq Bool (xor b1 b2) (ite Bool b1 (not b2) b2).
+Definition xor__eq (b1 b2 : bool) : @eq bool (xorb b1 b2) (ite bool b1 (negb b2) b2).
 Proof.
   destruct b1; destruct b2; reflexivity.
 Defined.
 
 (*
-Definition eq__eq (b1 b2 : Bool) : @eq Bool (eq b1 b2) (ite Bool b1 b2 (not b2)).
+Definition eq__eq (b1 b2 : bool) : @eq bool (eq b1 b2) (ite bool b1 b2 (negb b2)).
 Proof.
   destruct b1; destruct b2; reflexivity.
 Defined.
 *)
 
-Theorem ite_bit (b c d : Bool) : Eq Bool (ite Bool b c d) (and (or (not b) c) (or b d)).
+Theorem ite_bit (b c d : bool) : @eq bool (ite bool b c d) (andb (orb (negb b) c) (orb b d)).
 Proof.
   destruct b, c, d; reflexivity.
 Qed.
@@ -164,9 +152,9 @@ Definition sawUnsafeCoerce (a b : Type) (x : a) := x.
 Definition Nat := nat.
 Definition Nat_rect := nat_rect.
 
-Instance Inhabited_Nat : Inhabited Nat :=
+Global Instance Inhabited_Nat : Inhabited Nat :=
   MkInhabited Nat 0%nat.
-Instance Inhabited_nat : Inhabited nat :=
+Global Instance Inhabited_nat : Inhabited nat :=
   MkInhabited nat 0%nat.
 
 Global Hint Resolve (0%nat : nat) : inh.
@@ -207,14 +195,17 @@ Definition id := @id.
 Definition PairType := prod.
 Definition PairValue := @pair.
 Definition Pair__rec := prod_rect.
-Definition fst {A B} := @fst A B.
-Definition snd {A B} := @snd A B.
 Definition Zero := O.
 Definition Succ := S.
 
-Instance Inhabited_Pair (a b:Type) {Ha : Inhabited a} {Hb : Inhabited b} : Inhabited (PairType a b) :=
+(* NOTE: SAW core pair projections do not take type arguments, so these must be
+implicit arguments in the translation *)
+Arguments fst {_ _}.
+Arguments snd {_ _}.
+
+Global Instance Inhabited_Pair (a b:Type) {Ha : Inhabited a} {Hb : Inhabited b} : Inhabited (PairType a b) :=
     MkInhabited (PairType a b) (PairValue a b inhabitant inhabitant).
-Instance Inhabited_prod (a b:Type) {Ha : Inhabited a} {Hb : Inhabited b} : Inhabited (prod a b) :=
+Global Instance Inhabited_prod (a b:Type) {Ha : Inhabited a} {Hb : Inhabited b} : Inhabited (prod a b) :=
     MkInhabited (prod a b) (pair inhabitant inhabitant).
 
 Definition Integer := Z.
@@ -227,15 +218,15 @@ Definition intMin : Integer -> Integer -> Integer := Z.min.
 Definition intMax : Integer -> Integer -> Integer := Z.max.
 Definition intNeg : Integer -> Integer := Z.opp.
 Definition intAbs : Integer -> Integer := Z.abs.
-Definition intEq : Integer -> Integer -> Bool := Z.eqb.
-Definition intLe : Integer -> Integer -> Bool := Z.leb.
-Definition intLt : Integer -> Integer -> Bool := Z.ltb.
+Definition intEq : Integer -> Integer -> bool := Z.eqb.
+Definition intLe : Integer -> Integer -> bool := Z.leb.
+Definition intLt : Integer -> Integer -> bool := Z.ltb.
 Definition intToNat : Integer -> Nat := Z.to_nat.
 Definition natToInt : Nat -> Integer := Z.of_nat.
 
-Instance Inhabited_Intger : Inhabited Integer :=
+Global Instance Inhabited_Intger : Inhabited Integer :=
   MkInhabited Integer 0%Z.
-Instance Inhabited_Z : Inhabited Z :=
+Global Instance Inhabited_Z : Inhabited Z :=
   MkInhabited Z 0%Z.
 
 Global Hint Resolve (0%Z : Z) : inh.
@@ -247,7 +238,7 @@ Definition IntMod (n : nat) := Z.
 Definition toIntMod (n : Nat) : Integer -> IntMod n := fun i => Z.modulo i (Z.of_nat n).
 Definition fromIntMod (n : Nat) : (IntMod n) -> Integer := ZModulo.to_Z (Pos.of_nat n).
 Local Notation "[| a |]_ n" := (to_Z (Pos.of_nat n) a) (at level 0, a at level 99).
-Definition intModEq (n : Nat) (a : IntMod n) (b : IntMod n) : Bool
+Definition intModEq (n : Nat) (a : IntMod n) (b : IntMod n) : bool
   := Z.eqb [| a |]_n [| b |]_n.
 Definition intModAdd : forall (n : Nat), (IntMod n) -> (IntMod n) -> IntMod n
   := fun _ => ZModulo.add.
@@ -258,7 +249,7 @@ Definition intModMul : forall (n : Nat), (IntMod n) -> (IntMod n) -> IntMod n
 Definition intModNeg : forall (n : Nat), (IntMod n) -> IntMod n
   := fun _ => ZModulo.opp.
 
-Instance Inhabited_IntMod (n:nat) : Inhabited (IntMod n) :=
+Global Instance Inhabited_IntMod (n:nat) : Inhabited (IntMod n) :=
   MkInhabited (IntMod n) 0%Z.
 
 (***
@@ -280,9 +271,9 @@ Variant RecordTypeCons (str:String.string) (tp:Type) (rest_tp:Type) : Type :=
 Arguments RecordTypeCons str%string_scope tp rest_tp.
 Arguments RecordCons str%string_scope {tp rest_tp} x rest.
 
-Instance Inhabited_RecordNil : Inhabited RecordTypeNil :=
+Global Instance Inhabited_RecordNil : Inhabited RecordTypeNil :=
     MkInhabited RecordTypeNil RecordNil.
-Instance Inhabited_RecordCons (fnm:String.string) (tp rest_tp:Type)
+Global Instance Inhabited_RecordCons (fnm:String.string) (tp rest_tp:Type)
   {Htp : Inhabited tp} {Hrest : Inhabited rest_tp}
   : Inhabited (RecordTypeCons fnm tp rest_tp)
   := MkInhabited (RecordTypeCons fnm tp rest_tp) (RecordCons fnm inhabitant inhabitant).
@@ -307,7 +298,7 @@ Inductive IsRecordField (str:String) : Type -> Type :=
 
 (* We want to use this as a typeclass, with its constructors for instances *)
 Existing Class IsRecordField.
-Hint Constructors IsRecordField : typeclass_instances.
+Global Hint Constructors IsRecordField : typeclass_instances.
 
 (* If str is a field in record type rtp, get its associated type *)
 Fixpoint getRecordFieldType rtp str `{irf:IsRecordField str rtp} : Type :=
