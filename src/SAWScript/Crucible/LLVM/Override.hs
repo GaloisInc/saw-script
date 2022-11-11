@@ -124,6 +124,7 @@ import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedAST
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
+import           Verifier.SAW.Simulator.TermModel
 import           Verifier.SAW.Simulator.What4.ReturnTrip (SAWCoreState(..), toSC, bindSAWTerm)
 
 import           SAWScript.Crucible.Common
@@ -1684,7 +1685,29 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
 
                    return Nothing
 
-              _ -> return $ Just errMsg
+              _ ->
+                do sub <- OM (use termSub)
+                   modmap <- liftIO $ scGetModuleMap sc
+                   instantiated_expected_sz_tm <- liftIO $ scInstantiateExt sc sub $ ttTerm expected_sz_tm
+                   normalized_expected_sz_tm <- liftIO $
+                     normalizeSharedTerm sc modmap mempty mempty mempty instantiated_expected_sz_tm
+                   case asUnsignedConcreteBv normalized_expected_sz_tm of
+                     Just sz_nat ->
+                       do sz_bv <- liftIO $
+                            W4.bvLit sym Crucible.PtrWidth $ BV.mkBV Crucible.PtrWidth $ fromIntegral sz_nat
+                          maybe_matching_array <- liftIO $
+                            Crucible.asMemMatchingArrayStore sym Crucible.PtrWidth ptr sz_bv (Crucible.memImplHeap mem)
+                          case maybe_matching_array of
+                            Just (ok, arr) ->
+                              do addAssert ok md $ Crucible.SimError loc $ Crucible.GenericSimError $ show errMsg
+                                 st <- liftIO (sawCoreState sym)
+                                 arr_tm <- liftIO $ toSC sym st arr
+                                 instantiateExtMatchTerm sc cc md prepost arr_tm $ ttTerm expected_arr_tm
+                                 return Nothing
+
+                            _ -> return $ Just errMsg
+
+                     _ -> return $ Just errMsg
 
 -- | Like 'matchPointsToValue', but specifically geared towards the needs
 -- of fields within bitfields. In particular, this performs all of the
