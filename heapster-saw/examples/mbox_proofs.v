@@ -23,88 +23,8 @@ Module BoolDecidableEqDepSet := DecidableEqDepSet BoolDecidableSet. *)
 Require Import Examples.mbox_gen.
 Import mbox.
 
-
-(* FIXME move to EnTree.Automation *)
-
-Lemma spec_refines_either_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
-  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
-  RR A B f g eith (P : SpecM E2 Γ2 R2) :
-  (forall a, eith = Left _ _ a -> spec_refines RPre RPost RR (f a) P) ->
-  (forall b, eith = Right _ _ b -> spec_refines RPre RPost RR (g b) P) ->
-  spec_refines RPre RPost RR (either A B (SpecM E1 Γ1 R1) f g eith) P.
-Proof. destruct eith; intros; eauto. Qed.
-
-Lemma spec_refines_either_r (E1 E2 : EvType) Γ1 Γ2 R1 R2
-  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
-  RR (P : SpecM E1 Γ1 R1) A B f g eith :
-  (forall a, eith = Left _ _ a -> spec_refines RPre RPost RR P (f a)) ->
-  (forall b, eith = Right _ _ b -> spec_refines RPre RPost RR P (g b)) ->
-  spec_refines RPre RPost RR P (either A B (SpecM E2 Γ2 R2) f g eith).
-Proof. destruct eith; intros; eauto. Qed.
-
-Definition spec_refines_either_l_IntroArg (E1 E2 : EvType) Γ1 Γ2 R1 R2
-  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
-  RR A B f g eith (P : SpecM E2 Γ2 R2) :
-  (IntroArg Any A (fun a =>
-   IntroArg Hyp (eith = Left _ _ a) (fun _ =>
-   spec_refines RPre RPost RR (f a) P))) ->
-  (IntroArg Any B (fun b =>
-   IntroArg Hyp (eith = Right _ _ b) (fun _ =>
-   spec_refines RPre RPost RR (g b) P))) ->
-  spec_refines RPre RPost RR (either A B (SpecM E1 Γ1 R1) f g eith) P :=
-  spec_refines_either_l E1 E2 Γ1 Γ2 R1 R2 RPre RPost RR A B f g eith P.
-
-Definition spec_refines_either_r_IntroArg (E1 E2 : EvType) Γ1 Γ2 R1 R2
-  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
-  RR A B f g eith (P : SpecM E1 Γ1 R1) :
-  (IntroArg Any A (fun a =>
-   IntroArg Hyp (eith = Left _ _ a) (fun _ =>
-   spec_refines RPre RPost RR P (f a)))) ->
-  (IntroArg Any B (fun b =>
-   IntroArg Hyp (eith = Right _ _ b) (fun _ =>
-   spec_refines RPre RPost RR P (g b)))) ->
-  spec_refines RPre RPost RR P (either A B (SpecM E2 Γ2 R2) f g eith) :=
-  spec_refines_either_r E1 E2 Γ1 Γ2 R1 R2 RPre RPost RR P A B f g eith.
-
-#[global] Hint Extern 101 (spec_refines _ _ _ (either _ _ _ _ _ _) _) =>
-  simple apply spec_refines_either_l_IntroArg : refines.
-#[global] Hint Extern 101 (spec_refines _ _ _ _ (either _ _ _ _ _ _)) =>
-  simple apply spec_refines_either_r_IntroArg : refines.
-
-Lemma IntroArg_eq_Left_const n A B (x y : A) (goal : Prop)
-  : IntroArg n (x = y) (fun _ => goal) ->
-    IntroArg n (Left A B x = Left A B y) (fun _ => goal).
-Proof. intros H eq; apply H; injection eq; eauto. Qed.
-Lemma IntroArg_eq_Right_const n A B (x y : B) (goal : Prop)
-  : IntroArg n (x = y) (fun _ => goal) ->
-    IntroArg n (Right A B x = Right A B y) (fun _ => goal).
-Proof. intros H eq; apply H; injection eq; eauto. Qed.
-Lemma IntroArg_eq_Left_Right n A B (x : A) (y : B) goal
-  : IntroArg n (Left A B x = Right A B y) goal.
-Proof. intros eq; discriminate eq. Qed.
-Lemma IntroArg_eq_Right_Left n A B (x : A) (y : B) goal
-  : IntroArg n (Right A B y = Left A B x) goal.
-Proof. intros eq; discriminate eq. Qed.
-
-#[global] Hint Extern 101 (IntroArg _ (Left _ _ _ = Left _ _ _) _) =>
-  simple apply IntroArg_eq_Left_const : refines.
-#[global] Hint Extern 101 (IntroArg _ (Right _ _ _ = Right _ _ _) _) =>
-  simple apply IntroArg_eq_Right_const : refines.
-#[global] Hint Extern 101 (IntroArg _ (Left _ _ _ = Right _ _ _) _) =>
-  apply IntroArg_eq_Left_Right : refines.
-#[global] Hint Extern 101 (IntroArg _ (Right _ _ _ = Left _ _ _) _) =>
-  apply IntroArg_eq_Right_Left : refines.
-
-(* List destruction automation *)
-Ltac list_destruction l :=
-  let l' := fresh l in destruct l as [| ? l'];
-  simpl SAWCorePrelude.unfoldList in *.
-#[global] Hint Extern 102 (IntroArg ?n (eq (SAWCorePrelude.unfoldList _ ?l)
-                                           (Left _ _ _)) _) =>
-  list_destruction l : refines.
-#[global] Hint Extern 102 (IntroArg ?n (eq (SAWCorePrelude.unfoldList _ ?l)
-                                           (Right _ _ _)) _) =>
-  list_destruction l : refines.
+Instance QuantType_Mbox : QuantType Mbox.
+Admitted.
 
 
 (* Mbox destruction automation *)
@@ -128,21 +48,21 @@ Ltac either_unfoldMbox m :=
   | Mbox_nil =>
     simple apply refinesM_either_unfoldMbox_nil_l
   | Mbox_cons ?strt ?len ?m0 ?d =>
-    simple apply (refinesM_either_unfoldMbox_cons_l strt len m0 d)
+    simple apply (refinesM_either_unfoldMbox_cons_l _ _ _ _ _ _ _ _ _ strt len m0 d)
   | _ => let strt := fresh "strt" in
          let len  := fresh "len" in
          let m0   := fresh m in
-         let d    := fresh "d" in destruct m as [| strt len m0 d ];
+         let d    := fresh "d" in idtac "!" m; destruct m as [| strt len m0 d ];
                                   [ either_unfoldMbox Mbox_nil
                                   | either_unfoldMbox (Mbox_cons strt len m0 d) ];
-                                  simpl foldMbox; simpl Mbox__rec in *;
+                                  simpl foldMbox; cbn [ Mbox__rec Mbox_rect ] in *;
                                   unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd;
                                   cbn [ Datatypes.fst Datatypes.snd projT1 ]
   end.
 
-Global Hint Extern 100 (spec_refines _ _ _ (SAWCorePrelude.either _ _ _ _ _ (unfoldMbox ?m)) _) =>
+Global Hint Extern 100 (spec_refines _ _ _ (either _ _ _ _ _ (unfoldMbox ?m)) _) =>
   either_unfoldMbox m : refines.
-Global Hint Extern 100 (spec_refines _ _ _ _ (SAWCorePrelude.either _ _ _ _ _ (unfoldMbox ?m))) =>
+Global Hint Extern 100 (spec_refines _ _ _ _ (either _ _ _ _ _ (unfoldMbox ?m))) =>
   either_unfoldMbox m : refines.
 
 Lemma transMbox_Mbox_nil_r m : transMbox m Mbox_nil = m.
@@ -159,6 +79,42 @@ Proof.
 Qed.
 
 Hint Rewrite transMbox_Mbox_nil_r transMbox_assoc : refines.
+
+
+(* QOL: nicer names for bitvector and mbox arguments *)
+#[local] Hint Extern 901 (IntroArg Any (bitvector _) _) =>
+  let e := fresh "x" in IntroArg_intro e : refines prepostcond. 
+#[local] Hint Extern 901 (IntroArg Any Mbox _) =>
+  let e := fresh "m" in IntroArg_intro e : refines prepostcond. 
+#[local] Hint Extern 901 (IntroArg Any Mbox_def _) =>
+  let e := fresh "m" in IntroArg_intro e : refines prepostcond.
+
+
+Definition mbox_chain_length := 
+  Mbox_rect (fun _ => nat) O (fun _ _ _ rec _ => S rec).
+
+Lemma mbox_free_chain_spec_ref m
+  : spec_refines eqPreRel eqPostRel eq
+      (mbox_free_chain m)
+      (total_spec (fun _ => True) (fun _ r => r = intToBv 32 0) (1, m)).
+Proof.
+  unfold mbox_free_chain, mbox_free_chain__bodies, mboxFreeSpec.
+  prove_refinement.
+  - wellfounded_decreasing_nat.
+    exact (a + mbox_chain_length m0).
+  - prepost_case 0 0.
+    + exact (m0 = m1 /\ a = 1).
+    + exact (r = r0).
+    prepost_case 1 0.
+    + exact (m0 = m1 /\ a = 0).
+    + exact (r = r0).
+    prepost_exclude_remaining.
+  - prove_refinement_continue.
+    all: eauto.
+Qed.
+
+
+
 
 
 (* ========================================================================== *)
