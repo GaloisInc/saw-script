@@ -103,13 +103,14 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
   "$shiftx" -> do
     ta <- inputRaw "A"
     taw <- connWidth "A"
-    tbrev <- inputRev "B"
-    w <- outputWidth
-    tbn <- liftIO $ SC.scGlobalApply sc "Prelude.bvToNat" [w, tbrev]
-    tbneg <- liftIO $ SC.scBvNeg sc w tbrev
-    tbnegn <- liftIO $ SC.scGlobalApply sc "Prelude.bvToNat" [w, tbneg]
+    tb <- inputRaw "B"
+    tbw <- connWidth "B"
+    bool <- liftIO $ SC.scBoolType sc
+    tbrev <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [tbw, bool, tb]
+    tbn <- inputNat "B"
+    tbnegn <- inputNatNeg "B"
     zero <- liftIO $ SC.scBvConst sc outputWidthNat 0
-    cond <- liftIO $ SC.scBvSGe sc w tbrev zero
+    cond <- liftIO $ SC.scBvSGe sc tbw tbrev zero
     tcase <- liftIO $ SC.scBvShr sc taw ta tbn
     ecase <- liftIO $ SC.scBvShl sc taw ta tbnegn
     ty <- liftIO . SC.scBitvector sc $ connWidthNat "A"
@@ -253,6 +254,15 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       -- note bvToNat is big-endian while yosys shifts expect little-endian
       rev <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [w, bool, raw]
       liftIO $ SC.scGlobalApply sc "Prelude.bvToNat" [w, rev]
+    inputNatNeg :: Text -> m SC.Term
+    inputNatNeg inpNm = do
+      raw <- inputRaw inpNm
+      w <- connWidth inpNm
+      bool <- liftIO $ SC.scBoolType sc
+      -- note bvToNat is big-endian while yosys shifts expect little-endian
+      rev <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [w, bool, raw]
+      neg <- liftIO $ SC.scBvNeg sc w rev
+      liftIO $ SC.scGlobalApply sc "Prelude.bvToNat" [w, neg]
     output :: SC.Term -> m (Maybe SC.Term)
     output res = do
       eres <- extTrunc "Y" res
