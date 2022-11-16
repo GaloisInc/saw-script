@@ -209,19 +209,26 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       let bvw = connWidthNat onm
       let width = outputWidthNat
       let signed = connSigned onm
+      bool <- liftIO $ SC.scBoolType sc
+      wterm <- liftIO $ SC.scNat sc width
+      bvwterm <- liftIO $ SC.scNat sc bvw
       if
         | bvw > width -> do
-            wterm <- liftIO $ SC.scNat sc width
             diffterm <- liftIO . SC.scNat sc $ bvw - width
-            liftIO $ SC.scBvTrunc sc diffterm wterm t
+            rev <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [bvwterm, bool, t]
+            res <- liftIO $ SC.scBvTrunc sc diffterm wterm rev
+            liftIO $ SC.scGlobalApply sc "Prelude.reverse" [wterm, bool, res]
         | width > bvw && signed -> do
             bvwpredterm <- liftIO . SC.scNat sc $ bvw - 1
             diffterm <- liftIO . SC.scNat sc $ width - bvw
-            liftIO $ SC.scBvSExt sc diffterm bvwpredterm t
+            rev <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [bvwterm, bool, t]
+            res <- liftIO $ SC.scBvSExt sc diffterm bvwpredterm rev
+            liftIO $ SC.scGlobalApply sc "Prelude.reverse" [wterm, bool, res]
         | width > bvw && not signed -> do
-            bvwterm <- liftIO $ SC.scNat sc bvw
             diffterm <- liftIO . SC.scNat sc $ width - bvw
-            liftIO $ SC.scBvUExt sc diffterm bvwterm t
+            rev <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [bvwterm, bool, t]
+            res <- liftIO $ SC.scBvUExt sc diffterm bvwterm rev
+            liftIO $ SC.scGlobalApply sc "Prelude.reverse" [wterm, bool, res]
         | otherwise -> pure t
     inputRaw :: Text -> m SC.Term
     inputRaw inpNm =
@@ -242,8 +249,8 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       raw <- inputRaw inpNm
       w <- connWidth inpNm
       bool <- liftIO $ SC.scBoolType sc
-      rev <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [w, bool, raw]
       -- note bvToNat is big-endian while yosys shifts expect little-endian
+      rev <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [w, bool, raw]
       liftIO $ SC.scGlobalApply sc "Prelude.bvToNat" [w, rev]
     output :: SC.Term -> m (Maybe SC.Term)
     output res = do
