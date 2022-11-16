@@ -116,7 +116,7 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     res <- if connSigned "B"
       then liftIO $ SC.scIte sc ty cond tcase ecase
       else pure tcase
-    output res
+    output =<< extTrunc "A" res
   "$lt" -> bvBinaryCmp $ SC.scBvULt sc
   "$le" -> bvBinaryCmp $ SC.scBvULe sc
   "$gt" -> bvBinaryCmp $ SC.scBvUGt sc
