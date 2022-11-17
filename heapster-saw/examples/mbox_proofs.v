@@ -90,7 +90,7 @@ Qed.
 Hint Rewrite transMbox_Mbox_nil_r (*transMbox_assoc*) : refines.
 
 
-(* mbox_chain_length *)
+(* Helper functions and lemmas *)
 
 Definition mbox_chain_length := 
   Mbox_rect (fun _ => nat) O (fun _ _ _ rec _ => S rec).
@@ -98,6 +98,10 @@ Definition mbox_chain_length :=
 Lemma mbox_chain_length_transMbox m1 m2 :
   mbox_chain_length (transMbox m1 m2) = mbox_chain_length m1 + mbox_chain_length m2.
 Proof. induction m1; simpl; eauto. Qed.
+
+Lemma simpl_llvm_bool_eq (b : bool) :
+  not (bvEq 1 (if b then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b.
+Proof. destruct b; eauto. Qed.
 
 
 (** * mbox_free_chain *)
@@ -230,6 +234,36 @@ Proof.
     + exact (r = r0).
     prepost_exclude_remaining.
   - prove_refinement_continue.
+Qed.
+
+
+(** * mbox_drop *)
+
+Definition mbox_drop_spec : Mbox -> bitvector 64 -> Mbox :=
+  Mbox_rect _ (fun _ => Mbox_nil) (fun strt len next rec d ix =>
+    if bvule 64 len ix
+    then Mbox_cons (intToBv 64 0) (intToBv 64 0) (rec (bvSub 64 ix len)) d
+    else Mbox_cons (bvAdd 64 strt ix) (bvSub 64 len ix) next d).
+
+Lemma mbox_drop_spec_ref m x
+  : spec_refines eqPreRel eqPostRel eq
+      (mbox_drop m x)
+      (total_spec (fun _ => True)
+                  (fun '(m, x) r => r = mbox_drop_spec m x)
+                  (m, x)).
+Proof.
+  unfold mbox_drop, mbox_drop__bodies.
+  prove_refinement.
+  - wellfounded_decreasing_nat.
+    exact (mbox_chain_length m0).
+  - prepost_case 0 0.
+    + exact (m0 = m1 /\ x0 = x1).
+    + exact (r = r0).
+    prepost_exclude_remaining.
+  - prove_refinement_continue; eauto.
+    all: rewrite simpl_llvm_bool_eq in e_if.
+    + rewrite e_if, H1, H0; eauto.
+    + rewrite e_if; eauto.
 Qed.
 
 
