@@ -118,8 +118,7 @@ Proof.
     + exact (m0 = m1 /\ a = 0).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue.
-    all: eauto.
+  - prove_refinement_continue; eauto.
 Qed.
 
 
@@ -208,6 +207,29 @@ Proof.
       rewrite mbox_rect_identity.
       rewrite transMbox_assoc; eauto.
     + rewrite H1, H0, transMbox_assoc; eauto.
+Qed.
+
+
+(** * mbox_detach *)
+
+Definition mbox_detach_spec : Mbox -> Mbox * Mbox :=
+  Mbox_rect _ (Mbox_nil, Mbox_nil)
+              (fun strt len next _ d => (next, (Mbox_cons strt len Mbox_nil d))).
+
+Lemma mbox_detach_spec_ref m
+  : spec_refines eqPreRel eqPostRel eq
+      (mbox_detach m)
+      (total_spec (fun _ => True)
+                  (fun m r => r = mbox_detach_spec m) m).
+Proof.
+  unfold mbox_detach, mbox_detach__bodies.
+  prove_refinement.
+  - wellfounded_none.
+  - prepost_case 0 0.
+    + exact (m0 = m1).
+    + exact (r = r0).
+    prepost_exclude_remaining.
+  - prove_refinement_continue.
 Qed.
 
 
