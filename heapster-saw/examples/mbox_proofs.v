@@ -27,6 +27,15 @@ Instance QuantType_Mbox : QuantType Mbox.
 Admitted.
 
 
+(* QOL: nicer names for bitvector and mbox arguments *)
+#[local] Hint Extern 901 (IntroArg Any (bitvector _) _) =>
+  let e := fresh "x" in IntroArg_intro e : refines prepostcond. 
+#[local] Hint Extern 901 (IntroArg Any Mbox _) =>
+  let e := fresh "m" in IntroArg_intro e : refines prepostcond. 
+#[local] Hint Extern 901 (IntroArg Any Mbox_def _) =>
+  let e := fresh "m" in IntroArg_intro e : refines prepostcond.
+
+
 (* Mbox destruction automation *)
 
 Lemma refinesM_either_unfoldMbox_nil_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
@@ -81,17 +90,17 @@ Qed.
 Hint Rewrite transMbox_Mbox_nil_r transMbox_assoc : refines.
 
 
-(* QOL: nicer names for bitvector and mbox arguments *)
-#[local] Hint Extern 901 (IntroArg Any (bitvector _) _) =>
-  let e := fresh "x" in IntroArg_intro e : refines prepostcond. 
-#[local] Hint Extern 901 (IntroArg Any Mbox _) =>
-  let e := fresh "m" in IntroArg_intro e : refines prepostcond. 
-#[local] Hint Extern 901 (IntroArg Any Mbox_def _) =>
-  let e := fresh "m" in IntroArg_intro e : refines prepostcond.
-
+(* mbox_chain_length *)
 
 Definition mbox_chain_length := 
   Mbox_rect (fun _ => nat) O (fun _ _ _ rec _ => S rec).
+
+Lemma mbox_chain_length_transMbox m1 m2 :
+  mbox_chain_length (transMbox m1 m2) = mbox_chain_length m1 + mbox_chain_length m2.
+Proof. induction m1; simpl; eauto. Qed.
+
+
+(** * mbox_free_chain *)
 
 Lemma mbox_free_chain_spec_ref m
   : spec_refines eqPreRel eqPostRel eq
@@ -114,6 +123,66 @@ Proof.
 Qed.
 
 
+(** * mbox_concat *)
+
+Definition mbox_concat_spec (x y : Mbox) : Mbox :=
+  Mbox_rect _ Mbox_nil (fun strt len _ _ d => Mbox_cons strt len y d) x.
+
+Lemma mbox_concat_spec_ref m1 m2
+  : spec_refines eqPreRel eqPostRel eq
+      (mbox_concat m1 m2)
+      (total_spec (fun _ => True)
+                  (fun '(m1', m2') r => r = mbox_concat_spec m1' m2')
+                  (m1, m2)).
+Proof.
+  unfold mbox_concat, mbox_concat__bodies.
+  prove_refinement.
+  - wellfounded_none.
+  - prepost_case 0 0.
+    + exact (m = m3 /\ m0 = m4).
+    + exact (r = r0).
+    prepost_exclude_remaining.
+  - prove_refinement_continue.
+Qed.
+
+#[local] Hint Extern 101 (spec_refines _ _ _ (liftStackS _ (mbox_concat ?m1 ?m2) >>= _) _) =>
+  eapply (spec_refines_liftStackS_trans_bind_l (mbox_concat_spec_ref m1 m2)) : refines.
+
+
+(** * mbox_concat_chains *)
+
+Lemma mbox_rect_identity m :
+  Mbox_rect _ Mbox_nil (fun strt len _ rec d => Mbox_cons strt len rec d) m = m.
+Proof. induction m; simpl; try f_equal; eauto. Qed. 
+
+Definition mbox_concat_chains_spec (m1 m2 : Mbox) : Mbox :=
+  if mbox_chain_length m1 =? 0 then Mbox_nil else transMbox m1 m2.
+
+Lemma mbox_concat_chains_spec_ref m1 m2
+  : spec_refines eqPreRel eqPostRel eq
+      (mbox_concat_chains m1 m2)
+      (total_spec (fun _ => True)
+                  (fun '(_, m1', m2') r => r = mbox_concat_chains_spec m1' m2')
+                  (mbox_chain_length m1, m1, m2)).
+Proof.
+  unfold mbox_concat_chains, mbox_concat_chains__bodies, mbox_concat_chains_spec.
+  prove_refinement.
+  - wellfounded_decreasing_nat.
+    exact a.
+  - prepost_case 0 0.
+    + exact (m = m3 /\ m0 = m4 /\ a = mbox_chain_length m).
+    + exact (r = r0).
+    prepost_case 1 0.
+    + exact (transMbox m (Mbox_cons x x0 m3 a) = m4 /\ m0 = m5 /\
+             a0 = mbox_chain_length m3).
+    + exact (r = r0).
+    prepost_exclude_remaining.
+  - prove_refinement_continue; eauto.
+    + rewrite H1, H0; eauto.
+    + rewrite mbox_chain_length_transMbox, Nat.add_comm; simpl.
+      rewrite mbox_rect_identity; eauto.
+    + rewrite H1, H0, transMbox_assoc; eauto.
+Qed.
 
 
 
