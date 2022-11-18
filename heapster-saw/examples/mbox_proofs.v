@@ -267,6 +267,86 @@ Proof.
 Qed.
 
 
+(** * mbox_len *)
+
+Definition mbox_len_spec : Mbox -> bitvector 64 :=
+  Mbox__rec (fun _ =>  bitvector 64) (intToBv 64 0)
+          (fun strt len m rec d => bvAdd 64 rec len).
+
+Lemma mbox_len_spec_transMbox m1 m2 :
+  mbox_len_spec (transMbox m1 m2) =
+  bvAdd 64 (mbox_len_spec m1) (mbox_len_spec m2).
+Proof.
+  induction m1 as [|strt len m1' IH d]; simpl.
+  - rewrite bvAdd_id_l.
+    reflexivity.
+  - rewrite IH.
+    rewrite 2 bvAdd_assoc.
+    rewrite (bvAdd_comm _ len).
+    reflexivity.
+Qed.
+
+Lemma mbox_len_spec_ref__dec_args m
+  : spec_refines eqPreRel eqPostRel eq
+      (mbox_len m)
+      (total_spec (fun _ => True)
+                  (fun '(_, m1', m2') r => r = (transMbox m1' m2', mbox_len_spec (transMbox m1' m2')))
+                  (1, Mbox_nil, m)).
+Proof.
+  unfold mbox_len, mbox_len__bodies.
+  prove_refinement.
+  - wellfounded_decreasing_nat.
+    exact (a + mbox_chain_length m1).
+  - prepost_case 0 0.
+    + exact (m0 = m2 /\ m1 = Mbox_nil /\ 1 = a).
+    + exact (r = r0).
+  - prepost_case 1 0.
+    + exact (m0 = m2 /\ m1 = m3 /\ 0 = a
+              /\ mbox_len_spec m0 = x).
+    + exact (r = r0).
+    prepost_exclude_remaining.
+  - prove_refinement_continue; eauto.
+    + rewrite mbox_len_spec_transMbox.
+      simpl.
+      rewrite bvAdd_id_l.
+      reflexivity.
+    + rewrite -> H1, H0.
+      rewrite transMbox_assoc.
+      reflexivity.
+    + rewrite -> H1, H0. reflexivity.
+Qed.
+
+Lemma mbox_len_spec_ref__fuel m
+  : spec_refines eqPreRel eqPostRel eq
+      (mbox_len m)
+      (total_spec (fun _ => True)
+                  (fun '(_, _, m') r => r = (m', mbox_len_spec m'))
+                  (1, mbox_chain_length m, m)).
+Proof.
+  unfold mbox_len, mbox_len__bodies.
+  prove_refinement.
+  - wellfounded_decreasing_nat.
+    exact (a + a0).
+  - prepost_case 0 0.
+    + exact (m0 = m1 /\ 1 = a /\ mbox_chain_length m0 = a0).
+    + exact (r = r0).
+  - prepost_case 1 0.
+    + exact (transMbox m0 m1 = m2 /\ 0 = a /\ mbox_chain_length m1 = a0
+              /\ mbox_len_spec m0 = x).
+    + exact (r = r0).
+    prepost_exclude_remaining.
+  - prove_refinement_continue; eauto.
+    + rewrite mbox_len_spec_transMbox.
+      simpl.
+      rewrite bvAdd_id_l.
+      reflexivity.
+    + rewrite -> H1, H0.
+      rewrite transMbox_assoc.
+      reflexivity.
+    + rewrite -> H1, H0. reflexivity.
+Qed.
+
+
 
 (* ========================================================================== *)
 
