@@ -36,6 +36,21 @@ Admitted.
   let e := fresh "m" in IntroArg_intro e : refines prepostcond.
 
 
+(* Boolean equality automation *)
+
+Lemma simpl_llvm_bool_eq (b : bool) :
+  not (bvEq 1 (if b then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b.
+Proof. destruct b; eauto. Qed.
+
+Definition simpl_llvm_bool_eq_IntroArg n (b1 b2 : bool) (goal : Prop) :
+  IntroArg n (b1 = b2) (fun _ => goal) ->
+  IntroArg n (not (bvEq 1 (if b1 then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b2) (fun _ => goal).
+Proof. rewrite simpl_llvm_bool_eq; eauto. Defined.
+
+#[local] Hint Extern 101 (IntroArg _ (not (bvEq 1 (if _ then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = _) _) =>
+  simple eapply simpl_llvm_bool_eq_IntroArg : refines.
+
+
 (* Mbox destruction automation *)
 
 Lemma refinesM_either_unfoldMbox_nil_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
@@ -99,10 +114,6 @@ Lemma mbox_chain_length_transMbox m1 m2 :
   mbox_chain_length (transMbox m1 m2) = mbox_chain_length m1 + mbox_chain_length m2.
 Proof. induction m1; simpl; eauto. Qed.
 
-Lemma simpl_llvm_bool_eq (b : bool) :
-  not (bvEq 1 (if b then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b.
-Proof. destruct b; eauto. Qed.
-
 
 (** * mbox_free_chain *)
 
@@ -122,7 +133,7 @@ Proof.
     + exact (m0 = m1 /\ a = 0).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue; eauto.
+  - prove_refinement_continue.
 Qed.
 
 
@@ -178,12 +189,11 @@ Proof.
     + exact (m = m4 /\ Mbox_cons x x0 m3 a = m5 /\ m0 = m6 /\ a0 = 0).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue; eauto.
-    + rewrite H1, H0; eauto.
+  - prove_refinement_continue.
     + rewrite mbox_chain_length_transMbox, Nat.add_comm; simpl.
       rewrite mbox_rect_identity.
-      rewrite transMbox_assoc; eauto.
-    + rewrite H1, H0, transMbox_assoc; eauto.
+      rewrite transMbox_assoc; reflexivity.
+    + rewrite transMbox_assoc; reflexivity.
 Qed.
 
 Lemma mbox_concat_chains_spec_ref__fuel m1 m2
@@ -205,12 +215,11 @@ Proof.
              a0 = mbox_chain_length m3).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue; eauto.
-    + rewrite H1, H0; eauto.
+  - prove_refinement_continue.
     + rewrite mbox_chain_length_transMbox, Nat.add_comm; simpl.
       rewrite mbox_rect_identity.
-      rewrite transMbox_assoc; eauto.
-    + rewrite H1, H0, transMbox_assoc; eauto.
+      rewrite transMbox_assoc; reflexivity.
+    + rewrite transMbox_assoc; reflexivity.
 Qed.
 
 
@@ -252,7 +261,7 @@ Lemma mbox_drop_spec_ref m x
                   (fun '(m, x) r => r = mbox_drop_spec m x)
                   (m, x)).
 Proof.
-  unfold mbox_drop, mbox_drop__bodies.
+  unfold mbox_drop, mbox_drop__bodies, mbox_drop_spec.
   prove_refinement.
   - wellfounded_decreasing_nat.
     exact (mbox_chain_length m0).
@@ -260,10 +269,8 @@ Proof.
     + exact (m0 = m1 /\ x0 = x1).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue; eauto.
-    all: rewrite simpl_llvm_bool_eq in e_if.
-    + rewrite e_if, H1, H0; eauto.
-    + rewrite e_if; eauto.
+  - prove_refinement_continue.
+    all: rewrite e_if; reflexivity.
 Qed.
 
 
@@ -305,15 +312,13 @@ Proof.
               /\ mbox_len_spec m0 = x).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue; eauto.
+  - prove_refinement_continue.
     + rewrite mbox_len_spec_transMbox.
       simpl.
       rewrite bvAdd_id_l.
       reflexivity.
-    + rewrite -> H1, H0.
-      rewrite transMbox_assoc.
+    + rewrite transMbox_assoc.
       reflexivity.
-    + rewrite -> H1, H0. reflexivity.
 Qed.
 
 Lemma mbox_len_spec_ref__fuel m
@@ -335,15 +340,13 @@ Proof.
               /\ mbox_len_spec m0 = x).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue; eauto.
+  - prove_refinement_continue.
     + rewrite mbox_len_spec_transMbox.
       simpl.
       rewrite bvAdd_id_l.
       reflexivity.
-    + rewrite -> H1, H0.
-      rewrite transMbox_assoc.
+    + rewrite transMbox_assoc.
       reflexivity.
-    + rewrite -> H1, H0. reflexivity.
 Qed.
 
 
