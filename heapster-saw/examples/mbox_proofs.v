@@ -179,11 +179,11 @@ Proof.
     + exact (r = r0).
     prepost_exclude_remaining.
   - prove_refinement_continue; eauto.
-    + rewrite H1, H0; eauto.
     + rewrite mbox_chain_length_transMbox, Nat.add_comm; simpl.
       rewrite mbox_rect_identity.
       rewrite transMbox_assoc; eauto.
     + rewrite H1, H0, transMbox_assoc; eauto.
+    + rewrite H1, H0; eauto.
 Qed.
 
 Lemma mbox_concat_chains_spec_ref__fuel m1 m2
@@ -206,11 +206,11 @@ Proof.
     + exact (r = r0).
     prepost_exclude_remaining.
   - prove_refinement_continue; eauto.
-    + rewrite H1, H0; eauto.
     + rewrite mbox_chain_length_transMbox, Nat.add_comm; simpl.
       rewrite mbox_rect_identity.
       rewrite transMbox_assoc; eauto.
     + rewrite H1, H0, transMbox_assoc; eauto.
+    + rewrite H1, H0; eauto.
 Qed.
 
 
