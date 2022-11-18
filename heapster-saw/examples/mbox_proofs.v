@@ -36,6 +36,71 @@ Admitted.
   let e := fresh "m" in IntroArg_intro e : refines prepostcond.
 
 
+(* Maybe automation - FIXME move to EnTree.Automation *)
+
+Lemma spec_refines_maybe_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  RR A t1 k1 mb (t2 : SpecM E2 Γ2 R2) :
+  (mb = Nothing _ -> spec_refines RPre RPost RR t1 t2) ->
+  (forall a, mb = Just _ a -> spec_refines RPre RPost RR (k1 a) t2) ->
+  spec_refines RPre RPost RR (maybe A (SpecM E1 Γ1 R1) t1 k1 mb) t2.
+Proof. destruct mb; intros; eauto. Qed.
+
+Lemma spec_refines_maybe_r (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  RR (t1 : SpecM E1 Γ1 R1) A t2 k2 mb :
+  (mb = Nothing _ -> spec_refines RPre RPost RR t1 t2) ->
+  (forall a, mb = Just _ a -> spec_refines RPre RPost RR t1 (k2 a)) ->
+  spec_refines RPre RPost RR t1 (maybe A (SpecM E2 Γ2 R2) t2 k2 mb).
+Proof. destruct mb; intros; eauto. Qed.
+
+Definition spec_refines_maybe_l_IntroArg (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  RR A t1 k1 mb (t2 : SpecM E2 Γ2 R2) :
+  (IntroArg Hyp (mb = Nothing _) (fun _ => spec_refines RPre RPost RR t1 t2)) ->
+  (IntroArg Any A (fun a => IntroArg Hyp (mb = Just _ a) (fun _ =>
+   spec_refines RPre RPost RR (k1 a) t2))) ->
+  spec_refines RPre RPost RR (maybe A (SpecM E1 Γ1 R1) t1 k1 mb) t2 :=
+  spec_refines_maybe_l E1 E2 Γ1 Γ2 R1 R2 RPre RPost RR A t1 k1 mb t2.
+
+Definition spec_refines_maybe_r_IntroArg (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  RR (t1 : SpecM E1 Γ1 R1) A t2 k2 mb :
+  (IntroArg Hyp (mb = Nothing _) (fun _ => spec_refines RPre RPost RR t1 t2)) ->
+  (IntroArg Any A (fun a => IntroArg Hyp (mb = Just _ a) (fun _ =>
+   spec_refines RPre RPost RR t1 (k2 a)))) ->
+  spec_refines RPre RPost RR t1 (maybe A (SpecM E2 Γ2 R2) t2 k2 mb) :=
+  spec_refines_maybe_r E1 E2 Γ1 Γ2 R1 R2 RPre RPost RR t1 A t2 k2 mb.
+
+#[global] Hint Extern 101 (spec_refines _ _ _ (maybe _ _ _ _ _) _) =>
+  simple apply spec_refines_maybe_l_IntroArg : refines.
+#[global] Hint Extern 101 (spec_refines _ _ _ _ (maybe _ _ _ _ _)) =>
+  simple apply spec_refines_maybe_r_IntroArg : refines.
+
+Lemma IntroArg_eq_Nothing_const n A (goal : Prop)
+  : goal -> IntroArg n (Nothing A = Nothing A) (fun _ => goal).
+Proof. intros H eq; eauto. Qed.
+Lemma IntroArg_eq_Just_const n A (x y : A) (goal : Prop)
+  : IntroArg n (x = y) (fun _ => goal) ->
+    IntroArg n (Just A x = Just A y) (fun _ => goal).
+Proof. intros H eq; apply H; injection eq; eauto. Qed.
+Lemma IntroArg_eq_Nothing_Just n A (x : A) goal
+  : IntroArg n (Nothing A = Just A x) goal.
+Proof. intros eq; discriminate eq. Qed.
+Lemma IntroArg_eq_Just_Nothing n A (x : A) goal
+  : IntroArg n (Just A x = Nothing A) goal.
+Proof. intros eq; discriminate eq. Qed.
+
+#[global] Hint Extern 101 (IntroArg _ (Nothing _ = Nothing _) _) =>
+  simple apply IntroArg_eq_Nothing_const : refines.
+#[global] Hint Extern 101 (IntroArg _ (Just _ _ = Just _ _) _) =>
+  simple apply IntroArg_eq_Just_const : refines.
+#[global] Hint Extern 101 (IntroArg _ (Nothing _ = Just _ _) _) =>
+  apply IntroArg_eq_Nothing_Just : refines.
+#[global] Hint Extern 101 (IntroArg _ (Just _ _ = Nothing _) _) =>
+  apply IntroArg_eq_Just_Nothing : refines.
+
+  
 (* Boolean equality automation *)
 
 Lemma simpl_llvm_bool_eq (b : bool) :
@@ -348,6 +413,76 @@ Proof.
     + rewrite transMbox_assoc.
       reflexivity.
 Qed.
+
+(** * mbox_randomize *)
+
+Definition mbox_head_len_sub_strt : Mbox -> nat :=
+  Mbox_rect (fun _ => nat) 0 (fun strt len _ _ _ =>
+    bvToNat 64 (bvSub 64 len strt)).
+
+Definition mbox_randomize_precond : Mbox -> Prop :=
+  Mbox_rect (fun _ => Prop) True (fun strt len _ _ _ =>
+    (* 0 <= strt <= len < 128 *)
+    isBvsle 64 (intToBv 64 0) strt /\ isBvsle 64 strt len /\
+    isBvslt 64 len (intToBv 64 128)).
+
+Definition SUCCESS         := intToBv 32 0.
+Definition MBOX_NULL_ERROR := intToBv 32 23.
+
+(* - If `m` is non-null, the function returns `SUCCESS` and `m->data` is set to
+     some `data'` such that `m->data[i] = data'[i]` for all `i` such that
+     `i < m->strt` or `i >= m->len`.
+   - Otherwise, the function returns `MBOX_NULL_ERROR`. *)
+Definition mbox_randomize_postcond m r : Prop :=
+  Mbox_rect (fun _ => Prop)
+            (r = (Mbox_nil, MBOX_NULL_ERROR))
+            (fun strt len m _ d =>
+              exists d', (forall i (pf : isBvult 64 i bv64_128),
+                           isBvslt 64 i strt \/ isBvsle 64 len i ->
+                           atBVVec _ _ _ d i pf = atBVVec _ _ _ d' i pf)
+                         /\ r = (Mbox_cons strt len m d', SUCCESS)) m.
+
+Definition mbox_randomize_invar (strt len i : bitvector 64) : Prop :=
+  (* strt <= i <= len *)
+  isBvsle 64 strt i /\ isBvsle 64 i len.
+
+Lemma mbox_randomize_spec_ref m
+  : spec_refines eqPreRel eqPostRel eq
+      (mbox_randomize m)
+      (total_spec (fun '(_, m') => mbox_randomize_precond m')
+                  (fun '(_, m') r => mbox_randomize_postcond m' r)
+                  (1 + mbox_head_len_sub_strt m, m)).
+Proof.
+  unfold mbox_randomize, mbox_randomize__bodies, randSpec.
+  prove_refinement.
+  - wellfounded_decreasing_nat.
+    exact a.
+  - prepost_case 0 0.
+    + exact (m0 = m1 /\ a = 1 + mbox_head_len_sub_strt m0).
+    + exact (r = r0).
+    prepost_case 1 0.
+    + exact (mbox_randomize_invar x x0 x1 /\
+             Mbox_cons x x0 m0 a = m1 /\
+             a0 = bvToNat 64 (bvSub 64 x0 x1)).
+    + exact (r = r0).
+    prepost_exclude_remaining.
+  - unfold mbox_head_len_sub_strt, mbox_randomize_precond,
+           mbox_randomize_postcond, mbox_randomize_invar in *.
+    prove_refinement_continue.
+    (* FIXME: Why don't these `Mbox_rect`s get unfolded?? *)
+    all: cbn [ Mbox_rect ] in * |-;
+         try match goal with
+         | |- Mbox_rect _ _ _ _ => cbn [ Mbox_rect ] in *; split; eauto
+         end.
+    (* FIXME: Once the above is fixed, add automatic destruction of exists, etc. *)
+    all: try (destruct H2 as [d' []]); try (eexists; split; intros).
+    + apply H2; eauto.
+    + rewrite transMbox_Mbox_nil_r in H3; eauto.
+    + apply H2; eauto.
+    + rewrite transMbox_Mbox_nil_r in H3; eauto.
+    all: admit.
+Admitted.
+
 
 
 
