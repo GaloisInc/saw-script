@@ -38,6 +38,7 @@ import Data.Traversable hiding ( mapM )
 import Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
+import Control.Monad.Catch (catch, throwM)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
@@ -392,9 +393,14 @@ interpretStmt printBinds stmt =
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
 interpretFile file runMain = do
   opts <- getOptions
-  stmts <- io $ SAWScript.Import.loadFile opts file
-  mapM_ stmtWithPrint stmts
-  when runMain interpretMain
+  oldPath <- io getCurrentDirectory
+  backtrack oldPath $
+    do  { io $ setCurrentDirectory (takeDirectory file)
+        ; stmts <- io $ SAWScript.Import.loadFile opts file
+        ; mapM_ stmtWithPrint stmts
+        ; when runMain interpretMain
+        ; io $ setCurrentDirectory oldPath
+        }
   writeVerificationSummary
   where
     stmtWithPrint s = do let withPos str = unlines $
@@ -406,6 +412,12 @@ interpretFile file runMain = do
                                                           printOutFn o lvl (withPos str) })
                                   (interpretStmt False s)
                            else interpretStmt False s
+
+    backtrack :: FilePath -> TopLevel a -> TopLevel a
+    backtrack oldPath action =
+      action
+        `catch`
+        (\(e :: X.SomeException) -> io (setCurrentDirectory oldPath) >> throwM e)
 
 -- | Evaluate the value called 'main' from the current environment.
 interpretMain :: TopLevel ()
@@ -520,12 +532,9 @@ processFile proxy opts file mbSubshell mbProofSubshell = do
   let ro'' = case mbProofSubshell of
               Nothing -> ro'
               Just m  -> ro'{ roProofSubshell = m }
-  oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
-  setCurrentDirectory (takeDirectory file')
   _ <- runTopLevel (interpretFile file' True) ro'' rw
             `X.catch` (handleException opts)
-  setCurrentDirectory oldpath
   return ()
 
 -- Primitives ------------------------------------------------------------------
@@ -711,11 +720,8 @@ set_crucible_timeout t = do
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
-  oldpath <- io $ getCurrentDirectory
   file' <- io $ canonicalizePath file
-  io $ setCurrentDirectory (takeDirectory file')
   interpretFile file' False
-  io $ setCurrentDirectory oldpath
 
 set_ascii :: Bool -> TopLevel ()
 set_ascii b = do
