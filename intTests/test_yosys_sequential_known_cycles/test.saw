@@ -1,0 +1,13 @@
+enable_experimental;
+m <- yosys_import_sequential "seqgen" "test.json";
+t <- yosys_extract_sequential m 10;
+
+sat_print w4 {{ \(c : Bit) (g : Bit) (x : Bit) ->
+  (t {
+    clk = repeat 1,
+    reset = [1] # zero,
+    C = [0, 1, 1, 1, [c]] # zero,
+    G = [0, 0, 0, 0, [g]] # repeat 1,
+    P = [0, 1, 1, 1, [x]] # zero
+  }).S ! 0 == 1
+}};

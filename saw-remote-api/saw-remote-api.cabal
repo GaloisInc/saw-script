@@ -86,10 +86,10 @@ library
                    SAWServer.ProofScript,
                    SAWServer.SaveTerm,
                    SAWServer.SetOption,
-                   SAWServer.Term,
                    SAWServer.TopLevel,
                    SAWServer.TrackFile,
-                   SAWServer.VerifyCommon
+                   SAWServer.VerifyCommon,
+                   SAWServer.Yosys
 
 executable saw-remote-api
   import: general, deps, warnings, errors

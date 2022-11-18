@@ -63,7 +63,9 @@ import Control.Monad.Fix (MonadFix(mfix))
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
-import Data.Bifunctor
+import Data.Functor
+import Data.Maybe (fromMaybe)
+import Data.Bitraversable
 import Data.Bits
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -119,17 +121,6 @@ natFun = PrimFilterFun "expected Nat" r
         r (VCtorApp (primName -> "Prelude.Zero") [] [])  = pure 0
         r (VCtorApp (primName -> "Prelude.Succ") [] [x]) = succ <$> (r =<< lift (force x))
         r _ = mzero
-
--- | A primitive that requires a natural argument which may or may not be
--- concrete - like 'natFun' but gives the 'Value' instead of failing if the
--- argument is not concrete
-maybeNatFun :: VMonad l => (Either (Value l) Natural -> Prim l) -> Prim l
-maybeNatFun = PrimFilterFun "expected Nat" r
-  where r (VNat n) = pure (Right n)
-        r (VCtorApp (primName -> "Prelude.Zero") [] []) = pure (Right 0)
-        r v@(VCtorApp (primName -> "Prelude.Succ") [] [x]) =
-          bimap (const v) succ <$> (r =<< lift (force x))
-        r v = pure (Left v)
 
 -- | A primitive that requires an integer argument
 intFun :: VMonad l => (VInt l -> Prim l) -> Prim l
@@ -333,7 +324,7 @@ constMap bp = Map.fromList
   , ("Prelude.maxNat", maxNatOp bp)
   , ("Prelude.divModNat", divModNatOp bp)
   , ("Prelude.expNat", expNatOp)
-  , ("Prelude.widthNat", widthNatOp bp)
+  , ("Prelude.widthNat", widthNatOp)
   , ("Prelude.natCase", natCaseOp)
   , ("Prelude.equalNat", equalNatOp bp)
   , ("Prelude.ltNat", ltNatOp bp)
@@ -416,23 +407,25 @@ toBool x = panic $ unwords ["Verifier.SAW.Simulator.toBool", show x]
 type Pack l   = Vector (VBool l) -> MWord l
 type Unpack l = VWord l -> EvalM l (Vector (VBool l))
 
-toWord :: (VMonad l, Show (Extra l)) => Pack l -> Value l -> MWord l
+toWord :: (HasCallStack, VMonad l, Show (Extra l))
+       => Pack l -> Value l -> MWord l
 toWord _ (VWord w) = return w
 toWord pack (VVector vv) = pack =<< V.mapM (liftM toBool . force) vv
 toWord _ x = panic $ unwords ["Verifier.SAW.Simulator.toWord", show x]
 
-toWordPred :: (VMonad l, Show (Extra l)) => Value l -> VWord l -> MBool l
+toWordPred :: (HasCallStack, VMonad l, Show (Extra l))
+           => Value l -> VWord l -> MBool l
 toWordPred (VFun _ f) = fmap toBool . f . ready . VWord
 toWordPred x = panic $ unwords ["Verifier.SAW.Simulator.toWordPred", show x]
 
-toBits :: (VMonad l, Show (Extra l)) => Unpack l -> Value l ->
-                                                  EvalM l (Vector (VBool l))
+toBits :: (HasCallStack, VMonad l, Show (Extra l))
+       => Unpack l -> Value l -> EvalM l (Vector (VBool l))
 toBits unpack (VWord w) = unpack w
 toBits _ (VVector v) = V.mapM (liftM toBool . force) v
 toBits _ x = panic $ unwords ["Verifier.SAW.Simulator.toBits", show x]
 
-toVector :: (VMonad l, Show (Extra l)) => Unpack l
-         -> Value l -> ExceptT Text (EvalM l) (Vector (Thunk l))
+toVector :: (HasCallStack, VMonad l, Show (Extra l))
+         => Unpack l -> Value l -> ExceptT Text (EvalM l) (Vector (Thunk l))
 toVector _ (VVector v) = return v
 toVector unpack (VWord w) = lift (liftM (fmap (ready . VBool)) (unpack w))
 toVector _ x = throwE $ "Verifier.SAW.Simulator.toVector " <> Text.pack (show x)
@@ -443,7 +436,7 @@ vecIdx err v n =
     Just a -> a
     Nothing -> err
 
-toArray :: (VMonad l, Show (Extra l)) => Value l -> MArray l
+toArray :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MArray l
 toArray (VArray f) = return f
 toArray x = panic $ unwords ["Verifier.SAW.Simulator.toArray", show x]
 
@@ -511,7 +504,8 @@ selectV mux maxValue valueFn v = impl len 0
 bvNatOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Prim l
 bvNatOp bp =
   natFun $ \w ->
-  strictFun $ \v ->
+  -- make sure our nat has a size, i.e. that 'natToWord' will not fail
+  natSizeFun $ either snd VNat <&> \v ->
     Prim (VWord <$> natToWord bp (fromIntegral w) v) -- FIXME check for overflow on w
 
 -- bvToNat : (n : Nat) -> Vec n Bool -> Nat;
@@ -534,13 +528,32 @@ coerceOp =
 
 -- | Return the number of bits necessary to represent the given value,
 -- which should be a value of type Nat.
-natSize :: HasCallStack => BasePrims l -> Value l -> Natural
-natSize _bp val =
+natSizeMaybe :: HasCallStack => Value l -> Maybe Natural
+natSizeMaybe val =
   case val of
-    VNat n -> widthNat n
-    VBVToNat n _ -> fromIntegral n -- TODO, remove this fromIntegral
+    VNat n -> Just $ widthNat n
+    VBVToNat n _ -> Just $ fromIntegral n -- TODO, remove this fromIntegral
     VIntToNat _ -> panic "natSize: symbolic integer (TODO)"
-    _ -> panic "natSize: expected Nat"
+    _ -> Nothing
+
+-- | Return the number of bits necessary to represent the given value,
+-- which should be a value of type Nat, calling 'panic' if this cannot be done.
+natSize :: (HasCallStack, Show (Extra l)) => Value l -> Natural
+natSize val = fromMaybe (panic $ "natSize: expected Nat, got: " ++ show val)
+                        (natSizeMaybe val)
+
+-- | A primitive that requires a natural argument, returning its value as a
+-- 'Natural' if the argument is concrete, or a pair of a size in bits and a
+-- 'Value', if 'natSizeMaybe' returns 'Just'
+natSizeFun :: (HasCallStack, VMonad l) =>
+              (Either (Natural, Value l) Natural -> Prim l) -> Prim l
+natSizeFun = PrimFilterFun "expected Nat" r
+  where r (VNat n) = pure (Right n)
+        r (VCtorApp (primName -> "Prelude.Zero") [] []) = pure (Right 0)
+        r v@(VCtorApp (primName -> "Prelude.Succ") [] [x]) =
+          lift (force x) >>= r >>= bimapM (const (szPr v)) (pure . succ)
+        r v = Left <$> szPr v
+        szPr v = maybe mzero (pure . (,v)) (natSizeMaybe v)
 
 -- | Convert the given value (which should be of type Nat) to a word
 -- of the given bit-width. The bit-width must be at least as large as
@@ -557,12 +570,12 @@ natToWord bp w val =
     VBVToNat xsize v ->
       do x <- toWord (bpPack bp) v
          case compare xsize (fromIntegral w) of
-           GT -> panic "natToWord: not enough bits"
+           GT -> bpBvSlice bp (xsize - fromIntegral w) (fromIntegral w) x
            EQ -> return x
            LT -> -- zero-extend x to width w
              do pad <- bpBvLit bp (fromIntegral w - xsize) 0
                 bpBvJoin bp pad x
-    _ -> panic "natToWord: expected Nat"
+    _ -> panic $ "natToWord: expected Nat, got: " ++ show val
 
 -- | A primitive which is a unary operation on a natural argument.
 -- The second argument gives how to modify the size in bits of this operation's
@@ -574,11 +587,11 @@ unaryNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l ->
               (Natural -> Natural) ->
               (Natural -> MValue l) ->
               (Int -> VWord l -> MValue l) -> Prim l
-unaryNatOp bp fw fn fv = maybeNatFun $ \case
+unaryNatOp bp fw fn fv = natSizeFun $ \case
   Right n -> Prim (fn n)
-  Left v -> Prim $ do let w = fw (natSize bp v)
-                      x <- natToWord bp w v
-                      fv (fromIntegral w) x
+  Left (w1,v) -> Prim $ do let w = fw w1
+                           x <- natToWord bp w v
+                           fv (fromIntegral w) x
 
 -- | A primitive which is a unary operation on a natural argument and which
 -- returns a natural.
@@ -607,12 +620,12 @@ binNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l ->
             (Natural -> Natural -> Natural) ->
             (Natural -> Natural -> MValue l) ->
             (Int -> VWord l -> VWord l -> MValue l) -> Prim l
-binNatOp bp fw fn fv = maybeNatFun $ \m -> maybeNatFun $ \n -> go m n
+binNatOp bp fw fn fv = natSizeFun (natSizeFun . go)
   where go (Right m) (Right n) = Prim (fn m n)
-        go (Right m) (Left v2) = go (Left (VNat m)) (Left v2)
-        go (Left v1) (Right n) = go (Left v1) (Left (VNat n))
-        go (Left v1) (Left v2) = Prim $
-          do let w = fw (natSize bp v1) (natSize bp v2)
+        go (Right m) (Left pr) = go (Left (widthNat m, VNat m)) (Left pr)
+        go (Left pr) (Right n) = go (Left pr) (Left (widthNat n, VNat n))
+        go (Left (w1,v1)) (Left (w2,v2)) = Prim $
+          do let w = fw w1 w2
              x1 <- natToWord bp w v1
              x2 <- natToWord bp w v2
              fv (fromIntegral w) x1 x2
@@ -686,10 +699,10 @@ expNatOp =
     PrimValue (vNat (m ^ n))
 
 -- widthNat :: Nat -> Nat;
-widthNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
-widthNatOp bp = maybeNatFun $ \case
+widthNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => Prim l
+widthNatOp = natSizeFun $ \case
   Right n -> PrimValue (vNat (widthNat n))
-  Left v -> PrimValue (vNat (natSize bp v))
+  Left (w,_) -> PrimValue (vNat w)
 
 -- equalNat :: Nat -> Nat -> Bool;
 equalNatOp :: (HasCallStack, VMonad l, Show (Extra l)) => BasePrims l -> Prim l
@@ -1336,7 +1349,7 @@ muxValue bp tp0 b = value tp0
 
     nat :: Value l -> Value l -> MValue l
     nat v1 v2 =
-      do let w = max (natSize bp v1) (natSize bp v2)
+      do let w = max (natSize v1) (natSize v2)
          x1 <- natToWord bp w v1
          x2 <- natToWord bp w v2
          VBVToNat (fromIntegral w) . VWord <$> bpMuxWord bp b x1 x2

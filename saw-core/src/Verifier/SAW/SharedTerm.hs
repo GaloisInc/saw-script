@@ -41,6 +41,7 @@ module Verifier.SAW.SharedTerm
   , alphaEquiv
   , alistAllFields
   , scRegisterName
+  , scLookupNameInfo
   , scResolveName
   , scResolveNameByURI
   , scResolveUnambiguous
@@ -416,6 +417,11 @@ scRegisterName sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> (f env, (
       case registerName i nmi env of
         Left uri -> throw (DuplicateNameException uri)
         Right env' -> env'
+
+scLookupNameInfo :: SharedContext -> VarIndex -> IO (Maybe NameInfo)
+scLookupNameInfo sc i = do
+  env <- readIORef $ scNamingEnv sc
+  pure . Map.lookup i $ resolvedNames env
 
 scResolveUnambiguous :: SharedContext -> Text -> IO (VarIndex, NameInfo)
 scResolveUnambiguous sc nm =

@@ -1,0 +1,4 @@
+enable_experimental;
+m <- yosys_import "test.json";
+m' <- yosys_import "test.json";
+prove_print w4 {{ m.add4 === m'.add4 }};

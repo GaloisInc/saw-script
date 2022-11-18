@@ -69,6 +69,7 @@ import SAWScript.Proof (newTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
 import SAWScript.Prover.MRSolver (emptyMREnv)
+import SAWScript.Yosys
 import Verifier.SAW.Conversion
 --import Verifier.SAW.PrettySExp
 import Verifier.SAW.Prim (rethrowEvalError)
@@ -3675,6 +3676,71 @@ primitives = Map.fromList
 
     ---------------------------------------------------------------------
 
+  , prim "yosys_import"  "String -> TopLevel Term"
+    (pureVal yosys_import)
+    Experimental
+    [ "Produces a `Term` given the path to a JSON file produced by the Yosys `write_json` command."
+    , "The resulting term is a Cryptol record, where each field corresponds to one HDL module exported by Yosys."
+    , "Each HDL module is in turn represented by a function from a record of input port values to a record of output port values."
+    ]
+
+  , prim "yosys_verify"  "Term -> [Term] -> Term -> [YosysTheorem] -> ProofScript () -> TopLevel YosysTheorem"
+    (pureVal yosys_verify)
+    Experimental
+    [ "Proves equality between a combinational HDL module and a specification."
+    , "The first parameter is the HDL module - given a record m from yosys_import, this will typically look something like `{{ m.foo }}`."
+    , "The second parameter is a list of preconditions for the equality."
+    , "The third parameter is the specification, a term of the same type as the HDL module, which will typically be some Cryptol function or another HDL module."
+    , "The fourth parameter is a list of overrides, which witness the results of previous yosys_verify proofs."
+    , "These overrides can be used to simplify terms by replacing use sites of submodules with their specifications."
+    , "Note that terms derived from HDL modules are first class, and are not restricted to yosys_verify: they may also be used with SAW's typical Term infrastructure like sat, prove_print, term rewriting, etc."
+    , "yosys_verify simply provides a convenient and familiar interface, similar to llvm_verify or jvm_verify."
+    ]
+
+  , prim "yosys_import_sequential"  "String -> String -> TopLevel YosysSequential"
+    (pureVal yosys_import_sequential)
+    Experimental
+    [ "Imports a particular sequential HDL module."
+    , "The first parameter is the module name, the second is the path to the Yosys JSON file."
+    , "The resulting value is an opaque representation of the sequential circuit that can be extracted to a Term or sent to solvers in various ways."
+    , "SAW expects the sequential module to exist entirely within a single Yosys module - the Yosys \"flatten\" command will collapse the module hierarchy into a single module."
+    , "The only supported sequential element is the basic $dff cell."
+    , "Memory cells and more complex flip-flops can be translated into $dff using the \"memory\" and \"dffunmap\" Yosys commands."
+    ]
+
+  , prim "yosys_extract_sequential"  "YosysSequential -> Int -> TopLevel Term"
+    (pureVal yosys_extract_sequential)
+    Experimental
+    [ "Extracts a term from the given sequential module with the state eliminated by iterating the term over the given concrete number of cycles."
+    , "The resulting term has no state field in the inputs or outputs, and each input and output field is replaced with an array of that field's type (array length being the number of cycles)."
+    , "This term can be used like a normal SAW term - it may be embedded in Cryptol expressions, used in prove and sat, etc."
+    ]
+
+  , prim "yosys_extract_sequential_with_state"  "YosysSequential -> Int -> TopLevel Term"
+    (pureVal yosys_extract_sequential_with_state)
+    Experimental
+    [ "Like yosys_extract_sequential, but the resulting term has an additional parameter to specify the initial state."
+    ]
+
+  , prim "yosys_extract_sequential_raw"  "YosysSequential -> TopLevel Term"
+    (pureVal yosys_extract_sequential_raw)
+    Experimental
+    [ "Extracts a term from the given sequential module."
+    , "This term has explicit fields for the state of the circuit in the input and output record types."
+    ]
+
+  , prim "yosys_verify_sequential_offline_sally"  "YosysSequential -> String -> Term -> [String] -> TopLevel ()"
+    (pureVal yosys_verify_sequential_sally)
+    Experimental
+    [ "Export a query over the given sequential module to an input file for the Sally model checker."
+    , "The first parameter is the sequential module."
+    , "The second parameter is the path to write the resulting Sally input."
+    , "The third parameter is the query, which should be a boolean function of three parameters: an 8-bit cycle counter, a record of \"fixed\" inputs, and a record of circuit outputs."
+    , "The fourth parameter is a list of strings specifying certain circuit inputs as fixed - these inputs are assumed to remain unchanged across cycles, and are therefore accesible from the query function."
+    ]
+
+    ---------------------------------------------------------------------
+
   , prim "mr_solver_prove" "Term -> Term -> TopLevel ()"
     (scVal (mrSolverProve True))
     Experimental
@@ -3713,7 +3779,8 @@ primitives = Map.fromList
     (pureVal mrSolverSetDebug)
     Experimental
     [ "Set the debug level for Mr. Solver; 0 = no debug output,"
-    , " 1 = some debug output, 2 = all debug output" ]
+    , " 1 = basic debug output, 2 = verbose debug output,"
+    , " 3 = all debug output" ]
 
     ---------------------------------------------------------------------
 

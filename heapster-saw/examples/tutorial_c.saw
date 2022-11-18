@@ -1,0 +1,23 @@
+enable_experimental;
+env <- heapster_init_env "tutorial_c" "tutorial_c.bc";
+print "File loaded";
+
+heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
+heapster_typecheck_fun env "add" "().arg0:int64<>, arg1:int64<> -o arg0:true, arg1:true, ret:int64<>";
+print "Type checked add.";
+
+heapster_typecheck_fun env "add_mistyped" "().arg0:true, arg1:int64<> -o arg0:true, arg1:true, ret:int64<>";
+print "Type checked add_mistyped. This will produce an error in the output.";
+
+heapster_typecheck_fun env "incr_ptr" "(). arg0:ptr((W,0) |-> int64<>) -o arg0:ptr((W,0) |-> int64<>)";
+print "Type checked incr_ptr.";
+
+heapster_define_perm env "vec3d" "rw:rwmodality" "llvmptr 64" "ptr((rw,0) |-> int64<>) * ptr((rw,8) |-> int64<>) * ptr((rw,16) |-> int64<>)";
+heapster_typecheck_fun env "norm_vector" "(). arg0:vec3d<R> -o arg0:vec3d<R>, ret:int64<>";
+print "Type checked norm_vector.";
+
+heapster_export_coq env "tutorial_c_gen.v";
+print "Export to Coq.";
+
+print "Done.";
+
