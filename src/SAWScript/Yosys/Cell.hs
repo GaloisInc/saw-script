@@ -109,7 +109,7 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     tbrev <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [tbw, bool, tb]
     tbn <- inputNat "B"
     tbnegn <- inputNatNeg "B"
-    zero <- liftIO $ SC.scBvConst sc outputWidthNat 0
+    zero <- liftIO $ SC.scBvConst sc (connWidthNat "B") 0
     cond <- liftIO $ SC.scBvSGe sc tbw tbrev zero
     tcase <- liftIO $ SC.scBvShr sc taw ta tbn
     ecase <- liftIO $ SC.scBvShl sc taw ta tbnegn
