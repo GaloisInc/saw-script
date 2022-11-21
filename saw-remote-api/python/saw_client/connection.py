@@ -284,3 +284,11 @@ class SAWConnection:
     def inspect_term(self, nm: str, timeout: Optional[float] = None) -> Command:
         self.most_recent_result = InspectTerm(self, nm, timeout)
         return self.most_recent_result
+
+    def eval_term(self, nm: str, unints: List[str], timeout: Optional[float] = None) -> Command:
+        self.most_recent_result = EvalTerm(self, nm, unints, timeout)
+        return self.most_recent_result
+
+    def unfold_term(self, nm: str, names: List[str], timeout: Optional[float] = None) -> Command:
+        self.most_recent_result = UnfoldTerm(self, nm, names, timeout)
+        return self.most_recent_result

@@ -164,4 +164,12 @@ sawMethods =
     "SAW/inspect term"
     inspectTermDescr
     inspectTerm
+  , Argo.command
+    "SAW/eval term"
+    evalTermDescr
+    evalTerm
+  , Argo.command
+    "SAW/unfold term"
+    unfoldTermDescr
+    unfoldTerm
   ]

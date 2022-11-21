@@ -24,7 +24,7 @@ import qualified Verifier.SAW.ExternalFormat as SC
 
 import qualified SAWScript.AST as AST
 import SAWScript.Interpreter (include_value)
-import SAWScript.Builtins (readCore, rewritePrim, addsimps, provePropPrim)
+import SAWScript.Builtins (readCore, rewritePrim, addsimps, provePropPrim, prop_eval, unfold_term)
 import SAWScript.Value (TopLevelRW(..), Value(..))
 import SAWScript.TopLevel (getTopLevelRW) 
 import Control.Monad (void)
@@ -219,3 +219,63 @@ instance Doc.DescribedMethod InspectTermParams InspectTermResult where
       , Doc.Paragraph [Doc.Text "The external SAWCore representation of the term."]
       )
     ]
+
+evalTermDescr :: Doc.Block
+evalTermDescr =
+  Doc.Paragraph [Doc.Text "Simplify a term via What4."]
+
+evalTerm :: EvalTermParams -> Argo.Command SAWState OK
+evalTerm (EvalTermParams nm unints) = do
+  t <- getTerm nm
+  t' <- tl $ prop_eval (Text.unpack <$> unints) t
+  setServerVal nm t'
+  ok
+
+data EvalTermParams = EvalTermParams ServerName [Text]
+
+instance FromJSON EvalTermParams where
+  parseJSON = withObject "parameters for simplifying a term via What4" $ \o ->
+    EvalTermParams
+    <$> o .: "nm"
+    <*> o .: "unints"
+
+instance Doc.DescribedMethod EvalTermParams OK where
+  parameterFieldDescription =
+    [ ( "nm"
+      , Doc.Paragraph [Doc.Text "The name of the term."]
+      )
+    , ( "unints"
+      , Doc.Paragraph [Doc.Text "A list of uninterpreted names."]
+      )
+    ]
+  resultFieldDescription = []
+
+unfoldTermDescr :: Doc.Block
+unfoldTermDescr =
+  Doc.Paragraph [Doc.Text "Unfold names within a term."]
+
+unfoldTerm :: UnfoldTermParams -> Argo.Command SAWState OK
+unfoldTerm (UnfoldTermParams nm names) = do
+  t <- getTerm nm
+  t' <- tl $ unfold_term (Text.unpack <$> names) t
+  setServerVal nm t'
+  ok
+
+data UnfoldTermParams = UnfoldTermParams ServerName [Text]
+
+instance FromJSON UnfoldTermParams where
+  parseJSON = withObject "parameters for unfolding names within a term" $ \o ->
+    UnfoldTermParams
+    <$> o .: "nm"
+    <*> o .: "names"
+
+instance Doc.DescribedMethod UnfoldTermParams OK where
+  parameterFieldDescription =
+    [ ( "nm"
+      , Doc.Paragraph [Doc.Text "The name of the term."]
+      )
+    , ( "names"
+      , Doc.Paragraph [Doc.Text "A list of names to unfold."]
+      )
+    ]
+  resultFieldDescription = []

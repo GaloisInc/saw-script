@@ -694,6 +694,14 @@ def inspect_term(nm: str) -> None:
     res = __get_designated_connection().inspect_term(nm).result()
     return res["extcore"]
 
+def eval_term(nm: str, unints: List[str]) -> None:
+    __get_designated_connection().eval_term(nm, unints).result()
+    return None
+
+def unfold_term(nm: str, names: List[str]) -> None:
+    __get_designated_connection().unfold_term(nm, names).result()
+    return None
+
 @atexit.register
 def script_exit() -> None:
     global __designated_views

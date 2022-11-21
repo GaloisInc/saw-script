@@ -248,6 +248,7 @@ initialState' readFileFn =
                 , rwAllocSymInitCheck = True
                 , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
                 , rwRewriteSummary = Nothing
+                , rwRewriteSummaryHeading = Nothing
                 }
      return (SAWState emptyEnv bic [] ro rw M.empty)
 

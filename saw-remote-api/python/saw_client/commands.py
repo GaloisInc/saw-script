@@ -311,3 +311,33 @@ class InspectTerm(SAWCommand):
 
     def process_result(self, res : Any) -> Any:
         return res
+
+class EvalTerm(SAWCommand):
+    def __init__(self, connection : argo.HasProtocolState,
+                 name : str,
+                 unints : List[str],
+                 timeout : Optional[float]) -> None:
+        super(EvalTerm, self).__init__(
+            'SAW/eval term',
+            {'nm': name, 'unints': unints},
+            connection,
+            timeout=timeout
+        )
+
+    def process_result(self, _res : Any) -> Any:
+        return None
+
+class UnfoldTerm(SAWCommand):
+    def __init__(self, connection : argo.HasProtocolState,
+                 name : str,
+                 names : List[str],
+                 timeout : Optional[float]) -> None:
+        super(UnfoldTerm, self).__init__(
+            'SAW/unfold term',
+            {'nm': name, 'names': names},
+            connection,
+            timeout=timeout
+        )
+
+    def process_result(self, _res : Any) -> Any:
+        return None
