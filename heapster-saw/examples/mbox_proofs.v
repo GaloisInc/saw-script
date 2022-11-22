@@ -365,7 +365,7 @@ Lemma mbox_len_spec_ref__dec_args m
                   (fun '(_, m1', m2') r => r = (transMbox m1' m2', mbox_len_spec (transMbox m1' m2')))
                   (1, Mbox_nil, m)).
 Proof.
-  unfold mbox_len, mbox_len__bodies.
+  unfold mbox_len, mbox_len__bodies, Mbox_def.
   prove_refinement.
   - wellfounded_decreasing_nat.
     exact (a + mbox_chain_length m1).
@@ -378,11 +378,16 @@ Proof.
     + exact (r = r0).
     prepost_exclude_remaining.
   - prove_refinement_continue.
+    + rewrite H.
+      rewrite transMbox_Mbox_nil_r.
+      reflexivity.
     + rewrite mbox_len_spec_transMbox.
       simpl.
       rewrite bvAdd_id_l.
       reflexivity.
-    + rewrite transMbox_assoc.
+    + rewrite H.
+      rewrite transMbox_Mbox_nil_r.
+      rewrite transMbox_assoc.
       reflexivity.
 Qed.
 
@@ -393,7 +398,7 @@ Lemma mbox_len_spec_ref__fuel m
                   (fun '(_, _, m') r => r = (m', mbox_len_spec m'))
                   (1, mbox_chain_length m, m)).
 Proof.
-  unfold mbox_len, mbox_len__bodies.
+  unfold mbox_len, mbox_len__bodies, Mbox_def.
   prove_refinement.
   - wellfounded_decreasing_nat.
     exact (a + a0).
@@ -406,11 +411,16 @@ Proof.
     + exact (r = r0).
     prepost_exclude_remaining.
   - prove_refinement_continue.
+    + rewrite H.
+      rewrite transMbox_Mbox_nil_r.
+      reflexivity.
     + rewrite mbox_len_spec_transMbox.
       simpl.
       rewrite bvAdd_id_l.
       reflexivity.
-    + rewrite transMbox_assoc.
+    + rewrite H.
+      rewrite transMbox_Mbox_nil_r.
+      rewrite transMbox_assoc.
       reflexivity.
 Qed.
 
