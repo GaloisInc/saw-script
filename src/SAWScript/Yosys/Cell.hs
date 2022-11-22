@@ -101,11 +101,12 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     output res
   -- "$shift" -> _
   "$shiftx" -> do
-    ta <- inputRaw "A"
     taw <- connWidth "A"
+    bool <- liftIO $ SC.scBoolType sc
+    taraw <- inputRaw "A"
+    ta <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [taw, bool, taraw]
     tb <- inputRaw "B"
     tbw <- connWidth "B"
-    bool <- liftIO $ SC.scBoolType sc
     tbrev <- liftIO $ SC.scGlobalApply sc "Prelude.reverse" [tbw, bool, tb]
     tbn <- inputNat "B"
     tbnegn <- inputNatNeg "B"
