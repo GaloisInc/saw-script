@@ -377,6 +377,7 @@ loadCryptolModule ::
   FilePath ->
   IO (CryptolModule, CryptolEnv)
 loadCryptolModule sc primOpts env path = do
+
   let modEnv = eModuleEnv env
   (mtop, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath True path)
   m <- case mtop of
@@ -392,23 +393,44 @@ loadCryptolModule sc primOpts env path = do
 
   -- Regenerate SharedTerm environment.
   oldCryEnv <- mkCryEnv env
-  let oldModNames = map ME.lmName $ ME.lmLoadedModules $ ME.meLoadedModules modEnv
-  let isNew m' = T.mName m' `notElem` oldModNames
-  let newModules = filter isNew $ map ME.lmModule $ ME.lmLoadedModules $ ME.meLoadedModules modEnv''
+  let oldModNames = map ME.lmName
+                  $ ME.lmLoadedModules
+                  $ ME.meLoadedModules modEnv
+
+  let isNew m'    = T.mName m' `notElem` oldModNames
+  let newModules  = filter isNew
+                  $ map ME.lmModule
+                  $ ME.lmLoadedModules
+                  $ ME.meLoadedModules modEnv''
+
   let newDeclGroups = concatMap T.mDecls newModules
-  let newNewtypes = Map.difference (ME.loadedNewtypes modEnv') (ME.loadedNewtypes modEnv)
-  newCryEnv <- C.genNewtypeConstructors sc newNewtypes oldCryEnv >>= \cEnv ->
-               C.importTopLevelDeclGroups sc primOpts cEnv newDeclGroups
-  newTermEnv <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
+  let newNewtypes   = Map.difference (ME.loadedNewtypes modEnv')
+                                     (ME.loadedNewtypes modEnv)
+
+  newTermEnv <-
+    do cEnv <- C.genNewtypeConstructors sc newNewtypes oldCryEnv
+       newCryEnv <- C.importTopLevelDeclGroups sc primOpts cEnv newDeclGroups
+       traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
 
   let names = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
-  let tm' = Map.filterWithKey (\k _ -> Set.member k names) $
-            Map.intersectionWith (\t x -> TypedTerm (TypedTermSchema t) x) types newTermEnv
+
+  let tm'   = Map.filterWithKey (\k _ -> Set.member k names) $
+              Map.intersectionWith
+                (\t x -> TypedTerm (TypedTermSchema t) x)
+                types
+                newTermEnv
+
   let env' = env { eModuleEnv = modEnv''
                  , eTermEnv = newTermEnv
                  }
-  let sm' = Map.filterWithKey (\k _ -> Set.member k (MEx.exported C.NSType (T.mExports m))) (T.mTySyns m)
+
+  let sm' = Map.filterWithKey
+              (\k _ -> Set.member k (MEx.exported C.NSType (T.mExports m)))
+              (T.mTySyns m)
+
   return (CryptolModule sm' tm', env')
+
+
 
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
@@ -459,18 +481,30 @@ importModule sc env src as vis imps = do
 
   -- Regenerate SharedTerm environment.
   oldCryEnv <- mkCryEnv env
-  let oldModNames = map ME.lmName $ ME.lmLoadedModules $ ME.meLoadedModules modEnv
-  let isNew m' = T.mName m' `notElem` oldModNames
-  let newModules = filter isNew $ map ME.lmModule $ ME.lmLoadedModules $ ME.meLoadedModules modEnv'
+  let oldModNames   = map ME.lmName
+                    $ ME.lmLoadedModules
+                    $ ME.meLoadedModules modEnv
+  let isNew m'      = T.mName m' `notElem` oldModNames
+  let newModules    = filter isNew
+                    $ map ME.lmModule
+                    $ ME.lmLoadedModules
+                    $ ME.meLoadedModules modEnv'
   let newDeclGroups = concatMap T.mDecls newModules
-  let newNewtypes = Map.difference (ME.loadedNewtypes modEnv') (ME.loadedNewtypes modEnv)
-  newCryEnv <- C.genNewtypeConstructors sc newNewtypes oldCryEnv >>= \cEnv ->
-               C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cEnv newDeclGroups
-  newTermEnv <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
+  let newNewtypes   = Map.difference (ME.loadedNewtypes modEnv')
+                                     (ME.loadedNewtypes modEnv)
 
-  return env { eImports = (vis, P.Import (T.mName m) as imps Nothing) : eImports env
-             , eModuleEnv = modEnv'
-             , eTermEnv = newTermEnv }
+  newTermEnv <-
+    do cEnv      <- C.genNewtypeConstructors sc newNewtypes oldCryEnv
+       newCryEnv <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions
+                                                            cEnv newDeclGroups
+       traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
+
+  return
+    env { eImports   = (vis, P.Import (T.mName m) as imps Nothing)
+                     : eImports env
+        , eModuleEnv = modEnv'
+        , eTermEnv   = newTermEnv
+        }
 
 bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
 bindIdent ident env = (name, env')
@@ -561,6 +595,7 @@ parseTypedTerm sc env input = do
 
     -- Resolve names
     let nameEnv = getNamingEnv env
+
     re <- MM.interactive (MB.rename interactiveName nameEnv (MR.rename npe))
 
     -- Infer types
