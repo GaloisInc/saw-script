@@ -1,6 +1,7 @@
 # Overall configuration notes:
 # - Artifact uploads for binaries are from GHC 8.10.7
-# - Builds for Ubuntu happen on 18.04 (would like to include 20.04, in addition)
+# - Builds for Ubuntu happen on 22.04. We also include a single configuration
+#   for 20.04 to increase our Linux coverage.
 # - Docker builds happen nightly, on manual invocation, and on release branch commits
 # Please update this comment as those details change.
 
@@ -23,13 +24,13 @@ env:
   # ./saw-remote-api/Dockerfile
   # ./s2nTests/scripts/blst-entrypoint.sh
   # ./s2nTests/docker/saw.dockerfile
-  SOLVER_PKG_VERSION: "snapshot-20220721"
+  SOLVER_PKG_VERSION: "snapshot-20220902"
 
   OCAML_VERSION: 4.09.x
 
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       name: ${{ steps.config.outputs.name }}
       version: ${{ steps.config.outputs.version }}
@@ -66,20 +67,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-18.04, macos-12, windows-latest]
+        os: [ubuntu-22.04, macos-12, windows-latest]
         ghc: ["8.8.4", "8.10.7", "9.0.2"]
+        run-tests: [true]
+        include:
+          - os: ubuntu-20.04
+            ghc: "8.10.7"
+            run-tests: false
         exclude:
           # Exclude 8.8 on macOS 12 due to
           # https://gitlab.haskell.org/ghc/ghc/-/issues/18446
           - os: macos-12
             ghc: "8.8.4"
+            run-tests: true
           - os: windows-latest
             ghc: "8.8.4"
+            run-tests: true
           # Exclude 9.0 on Windows for now until
           # https://github.com/commercialhaskell/stackage/issues/6400
           # is resolved
           - os: windows-latest
             ghc: "9.0.2"
+            run-tests: false
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
@@ -91,9 +100,9 @@ jobs:
       - id: config
         shell: bash
         run: |
-          NAME="${{ needs.config.outputs.name }}-${{ runner.os }}-x86_64"
+          NAME="${{ needs.config.outputs.name }}-${{ matrix.os }}-x86_64"
           .github/ci.sh output name $NAME
-          echo "NAME=${{ needs.config.outputs.name }}-${{ runner.os }}-x86_64" >> $GITHUB_ENV
+          echo "NAME=${{ needs.config.outputs.name }}-${{ matrix.os }}-x86_64" >> $GITHUB_ENV
 
       - uses: haskell/actions/setup@v1
         id: setup-haskell
@@ -119,9 +128,9 @@ jobs:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
-          key: ${{ env.CACHE_VERSION }}-cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
+          key: ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
           restore-keys: |
-            ${{ env.CACHE_VERSION }}-cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
+            ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
       - if: needs.config.outputs.release == 'true'
         shell: bash
@@ -198,7 +207,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: "matrix.ghc == '8.10.7'"
+      - if: matrix.ghc == '8.10.7' && matrix.run-tests
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
@@ -209,7 +218,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-12]
+        os: [ubuntu-22.04, macos-12]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -243,7 +252,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-12]
+        os: [ubuntu-22.04, macos-12]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -295,7 +304,7 @@ jobs:
         include:
           - name: Install and test
             test: saw-remote-api/scripts/run_rpc_tests.sh
-            os: ubuntu-18.04
+            os: ubuntu-22.04
           # TODO: saw-remote-api unit tests are disabled pending a fix for #1699
           - name: Install on MacOS
             test: |
@@ -306,7 +315,7 @@ jobs:
             os: macos-12
           - name: Check docs
             test: saw-remote-api/scripts/check_docs.sh
-            os: ubuntu-18.04
+            os: ubuntu-22.04
     steps:
       - uses: actions/checkout@v2
         with:
@@ -350,7 +359,7 @@ jobs:
       fail-fast: false
       matrix:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
-        os: [ubuntu-18.04]
+        os: [ubuntu-22.04]
         continue-on-error: [false]
         include:
           - suite: integration_tests
@@ -414,7 +423,7 @@ jobs:
           dist-tests/${{ matrix.suite }}
 
   build-push-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [config]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true'
     strategy:
@@ -516,7 +525,7 @@ jobs:
     name: "Test s2n proofs"
     timeout-minutes: 120
     needs: build
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -569,7 +578,7 @@ jobs:
   # - changes to jobs or job instances don't require a mergify config update
   # - dependencies through `needs:` are validated, CI will fail if it's invalid
   mergify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs:
       - build
       - heapster-tests

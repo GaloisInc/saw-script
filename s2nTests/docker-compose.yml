@@ -3,8 +3,8 @@ services:
   saw-script:
     build:
       context: ..
-      dockerfile: ${PWD:-.}/docker/saw.dockerfile
-    entrypoint: ["cp", "/usr/local/bin/saw", "/saw-bin"]
+      dockerfile: ${PWD:-.}/../saw/Dockerfile
+    entrypoint: ["cp", "/usr/local/bin/saw", "/usr/local/bin/abc", "/saw-bin"]
     user: root
     volumes:
       - ${PWD:-}/bin:/saw-bin:rw
